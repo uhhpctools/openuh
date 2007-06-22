@@ -1,0 +1,164 @@
+Installing Open64
+=================
+
+
+Introduction
+------------
+
+This document explains how to compile and install Open64 on an IA64/X86_64 
+based system. The documentation is split into 5 steps:
+
+    * Prerequisites
+    * Obtaining the Source Code
+    * Compiling
+    * Environment Variables
+    * Installation
+
+We encourage you to pay attention to the Prerequisites in order to avoid un-
+necessary problems later in the build process. Should you ever encounter any
+problems with one of the steps, please take a look in the FAQ, the forum or
+leave a comment on our web site http://www.open64.net.
+
+
+Prerequisites
+-------------
+
+In order to compile Open64 successfully, you should meet the following 
+requirements:
+
+    * Linux based OS
+      Currently, Open64 is intensively tested on Linux on IA64/X86_64/IA32.
+
+    * IA64/X86_64/IA32 based machine
+      In this release, Open64 is supported and tested for the Itanium 2 and  
+      X86_64 architectures. Itanium 1 and generic IA32 is also supported, but 
+      not tested carefully.
+
+    * GNU Make
+      You should use a up to date version of Make. Unfortunately the current GNU
+      Make version 3.81, which is shipped with the latest Linux distributions,
+      causes some trouble--this version leads to a Makefile error. To solve this
+      problem, just run the Makefile again and the error will not appear. To 
+      avoid this error, please install GNU Make version 3.80. This version has 
+      been tested and works with our Makefile.
+
+    * GCC (GNU Compiler Collection)
+      In order to compile the Open64 source code, you need GCC 3.2.x - 3.4.x. 
+      Support for GCC 2.x has been dropped since release 1.0 and is not yet 
+      available for GCC 4.x. If you don't have any of the suggested GCC versions
+      above, we recommend that you to install GCC 3.4.6.
+      Open64 has been tested and successfully compiled with GCC 3.3.x and 3.4.x.
+
+    * IFC (Intel Fortran Compiler)
+      To compile and use the Open64 Fortran compiler, you need to install the 
+      Intel Fortran Compiler. A free version for noncommercial use is available
+      from Intel.
+      (http://www3.intel.com/cd/software/products/asmo-na/eng/download/download/index.htm)
+      
+      Depending on the path where you have installed IFC, you may have to adapt
+      the Open64 Makefile. Please go to open64/kpro64/linux/make/gcommondefs and
+      check the defines for F90 and F90_RTLIBS and adjust them if necessary. 
+      Please also add the path to the IFC libraries to your library path.
+        
+        export LD_LIBRARY_PATH=/path/to/IFC/lib:$LD_LIBRARY_PATH
+
+      To build the Fortran Compiler, another environment INTEL_COMPILER_FC_HOME
+      is also needed. Please set it to the home directory of the IFC.
+
+        export INTEL_COMPILER_FC_HOME=/path/to/IFC
+
+
+Obtaining the Source Code
+-------------------------
+
+To compile Open64 you need to obtain the source code first.
+
+There are two ways:
+
+    * Obtain the Source Code as Archive
+      You can download the source code from Sourceforge.net
+      You will find the links to the different versions in our download section.
+      (http://www.open64.net/download.html)
+
+      You have to obtain the source code and the prebuild libraries/binaries!
+
+      Extract the source code and the prebuild binaries/libraries
+        
+        tar xzf open64-4.0.tar.gz
+        tar xzf open64-4.0-prebuild.tar.gz
+
+    * Obtain the Source Code from our Subversion Repository
+      You can also obtain the latest version of our source code from the sub-
+      version repository.
+      To get the latest version issue the following command:
+        
+        svn export https://svn.open64.net/svnroot/open64/trunk open64
+
+      This will copy the latest code to the directory open64.
+
+      You can also surf through our subversion repository online.
+      (http://svn.open64.net)
+
+      You also need to obtain the prebuild libraries/binaries and extract them 
+      to the root directory of the Open64 source code.
+
+
+Compiling
+---------
+
+Switch to the Open64 directory and execute the following command:
+  
+  gmake all
+
+If you want to build a debugable version of Open64, please use the following 
+command:
+
+  gmake all BUILD_OPTIMIZE=DEBUG
+
+
+Environment Variables
+---------------------
+
+Before the installation, and later when you want use Open64, the environment 
+variable TOOLROOT should always be set. If the TOOLROOT is not set, a path 
+will be prompted during installation.
+
+Depending on whether you are root or a user add the following lines to your 
+/etc/bashrc or ~/.bashrc:
+
+  export TOOLROOT=/opt/open64 or
+  export TOOLROOT=/home/{user name}/local/open64 or
+  export TOOLROOT=/somewhere/you/have/write/permission
+ 
+This defines where to install the Open64 and where later Open64 has to search 
+for libraries and binaries.
+
+You should also add the Open64 binary directory to you path.
+
+  export PATH=$TOOLROOT/bin:$PATH
+ 
+Don't forget to source your updated .bashrc file.
+
+  source ~/.bashrc
+ 
+Warning!!!
+If you have more the one version of Open64 installed, be aware of the following 
+fact:
+Lets assume that one version is installed in /opt/open64-1 and the other in 
+/opt/open64-2 and that your TOOLROOT is set to /opt/open64-1. Now, even if you 
+start Open64 in /opt/open64-2, it will execute Open64 in /opt/open64-1 because 
+the TOOLROOT is set to this directory.
+
+
+Installation
+------------
+
+We are almost done. Now, you have just to start the install script and Open64 
+will be installed in the directory defined by the environment variable TOOLROOT.
+
+  make install
+
+Congratulations. You have succsessfully installed Open64. Have fun.
+
+Your Open64 Team
+

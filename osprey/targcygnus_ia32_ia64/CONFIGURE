@@ -1,0 +1,31 @@
+#! /bin/csh -f
+#
+#       invoke cygnus configure to set up this directory as an
+#       ia32-host ia64-target build area
+#
+
+if ( ! ${?TARG_ISA_INCLUDE} ) then
+    set TARG_ISA_INCLUDE=/usr/sgi/include/
+    set TARG_ISA_LIB=/usr/sgi/lib64
+endif
+if ( ! ${?SGIDEFS_INCLUDE} ) then
+    set SGIDEFS_INCLUDE=/usr/ia64-sgi-linux/include/
+    set SGIDEFS_LIB=/usr/ia64-sgi-linux/lib
+endif
+
+#CFLAGS=" -g -I$TARG_ISA_INCLUDE -I$SGIDEFS_INCLUDE
+#export CFLAGS
+setenv CFLAGS " -g -O2 -D__MIPS_AND_IA64_ELF_H -I$TARG_ISA_INCLUDE -L$TARG_ISA_LIB"
+
+set     SRC_DIR         = ../cygnus
+set	INSTALL_DIR	= /usr/ia64-sgi-linux
+set     CONFIGURE       = ${SRC_DIR}/configure
+set     HOST            = i586-linux-gnu
+set     BUILD           = i586-linux-gnu
+set     TARG            = ia64-sgi-linux
+
+${CONFIGURE}                   \
+    --srcdir=${SRC_DIR}        \
+    --prefix=${INSTALL_DIR}    \
+    --host=${HOST}             \
+    --target=${TARG}

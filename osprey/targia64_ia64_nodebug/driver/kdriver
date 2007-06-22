@@ -1,0 +1,76 @@
+#!/bin/sh
+# 
+# This is a wraper around opencc to be compatible with gcc just for:
+# Itanium II native, Linux kernel build, tested version: 2.6.9
+# Useage:
+#	make CC=kopencc 
+
+ARGS=$@
+
+#optimize -O2
+OPENCC_OPTS=" -O2 "
+#speculation off for kernel compilation
+OPENCC_OPTS=" $OPENCC_OPTS -Wb,-IPFEC:spec=off -IPFEC:spec=off "
+#swp off for kernel
+OPENCC_OPTS=" $OPENCC_OPTS -OPT:swp=off -OPT:Olimit=0 "
+#for debug, can use these options to show compilation process and keep inter-files
+# OPENCC_OPTS=" $OPENCC_OPTS -show -keep"
+#for kernel
+OPENCC_OPTS=" $OPENCC_OPTS -U__i386__  -D__KERNEL__ "
+
+NEWARGS="$OPENCC_OPTS "
+
+if [ -z "$GCC" ] 
+then
+	GCC=/usr/bin/gcc
+fi
+
+for ARG in $@  
+do
+
+case $ARG in
+-D__KERNEL__ )
+	NEWARGS="$NEWARGS $KERNEL_OPTS $ARG"
+	;;
+
+-O1 | -O2 | -O3 )
+	;;
+
+-v )
+	opencc -v
+	exit 0
+	;;
+
+-help )
+	opencc -help
+	echo
+	echo kopencc: Wrapper around opencc for gcc compatibility
+	exit  $?
+	;;
+
+# ignore these gcc options
+-Wstrict-prototypes | -Wwrite-strings | -Winline | -Wno-uninitialized 	\
+| -Wno-format | -Wno-trigraphs | -Wno-unused | -nostdinc | -Wall	\
+| -fno-inline-functions | -finhibit-size-directive | -fno-exceptions 	\
+| -fno-inline | -ffloat-store | -fno-builtin | -fexceptions | -pipe 	\
+| -fomit-frame-pointer | --param | max-inline-insns=* 			\
+| -frename-registers | -falign-functions=* | -fno-strict-aliasing 	\
+| -fno-common | -ffixed-r13 | -mb-step | -traditional 			\
+| -mpreferred-stack-boundary=2 | -march=* | -malign-functions=* 	\
+| -malign-jumps=* | -malign-loops=* | -gstabs				\
+| -fno-optimize-sibling-calls \
+| -mconstant-gp \
+| -mtune=* \
+| -dynamic-linker )
+	;;
+
+* )
+	NEWARGS="$NEWARGS $ARG"
+	;;
+esac
+
+done
+
+opencc $NEWARGS 
+
+exit $?

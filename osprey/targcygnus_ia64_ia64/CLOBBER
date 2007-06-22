@@ -1,0 +1,7 @@
+#! /bin/bash
+
+# Clobber everything except ptools-controlled files
+SRC_DIR=../cygnus
+
+rm -rf b* c* l* o* s* Makefile 
+rm -f  ${SRC_DIR}/bfd/po/*.gmo ${SRC_DIR}/opcodes/po/*.gmo ${SRC_DIR}/ld/po/*.gmo

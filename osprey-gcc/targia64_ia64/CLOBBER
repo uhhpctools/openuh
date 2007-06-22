@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# Clobber everything excpet the CONFIGURE FILE
+rm -rf build-*-linux-gnu libcpp fixincludes libiberty gcc
+rm -f libgspin.a
+rm -f config.cache config.log config.status serdep.tmp Makefile
+
