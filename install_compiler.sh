@@ -112,6 +112,8 @@ PHASEPATH=${ROOT}/${INTERPOSE}/lib/gcc-lib/${PHASE_DIR_PREFIX}-open64-linux/${VE
 NATIVE_LIB_DIR=${PHASEPATH}
 BIN_DIR=${ROOT}/${INTERPOSE}/bin
 ALT_BIN_DIR=${ROOT}/${INTERPOSE}/altbin
+# for omp.h etc. 
+INC_DIR=${ROOT}/include
 
 # install commands
 INSTALL="/usr/bin/install -D"
@@ -282,6 +284,9 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
     fi 
+    #install .h files
+    INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
+
     return 0
 }
 
