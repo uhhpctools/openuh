@@ -370,7 +370,8 @@ __ompc_init_rtl(int num_threads)
 
   /* determine number of threads to create*/
   threads_to_create = num_threads == 0 ? __omp_nthreads_var : num_threads;
-
+ /*keep it as nthreads-var suggested in spec. Liao*/
+  __omp_nthreads_var = threads_to_create;
   /* setup pthread attributes */
   pthread_attr_init(&__omp_pthread_attr);
   pthread_attr_setscope(&__omp_pthread_attr, PTHREAD_SCOPE_SYSTEM);
@@ -638,6 +639,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     current_u_thread = __ompc_get_current_u_thread();
     original_v_thread = current_u_thread->task;
 
+    //inherit the thread number from the 1st level. Liao
+    if (num_threads ==0 ) num_threads = __omp_level_1_team_size;
     temp_team.team_size = num_threads;
     temp_team.is_nested = 1;
     temp_team.team_level = original_v_thread->team->team_level + 1;
@@ -721,6 +724,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     current_u_thread = __ompc_get_current_u_thread();
     original_v_thread = current_u_thread->task;
 
+    //bug 361, get_local_thread_num() return garbage value, Liao
+    temp_v_thread.vthread_id = 0; 
     temp_v_thread.team_size = 1;
     temp_v_thread.single_count = 0;
     temp_v_thread.loop_count = 0;

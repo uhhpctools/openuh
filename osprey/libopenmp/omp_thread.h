@@ -65,10 +65,33 @@ inline int __ompc_get_nested(void)
 
 inline int __ompc_get_max_threads(void)
 {
+  /*Could be called in 1. sequential part or 2. parallel region
+
+  1.  for sequential part invoking: 
+    return the value of OMP_NUM_THREADS or
+		    number of available processors
+    cannot use the internal var because the RTL may not yet been initialized!!
+  2. for a parallel region: return the initialized internal var.
+    By Liao. 8/30/2006 bug 157
+  */
+        char *env_var_str;
+        int  env_var_val;
+
   if (__omp_rtl_initialized == 1)
     return __omp_nthreads_var;
-  else
-    return Get_SMP_CPU_num();
+  else {
+       env_var_str = getenv("OMP_NUM_THREADS");
+       if (env_var_str != NULL)
+          {
+              sscanf(env_var_str, "%d", &env_var_val);
+            Is_Valid(env_var_val > 0, ("OMP_NUM_THREAD should > 0"));
+            if (env_var_val > __omp_max_num_threads)
+                env_var_val = __omp_max_num_threads;
+            return env_var_val;
+           } 
+       else
+          return Get_SMP_CPU_num();
+  }
 }
 
 inline int __ompc_get_num_procs(void)
@@ -134,6 +157,8 @@ static inline void __ompc_remove_from_hash_table(pthread_t uthread_id)
     while (uthread_next != NULL) {
       if (uthread_next->uthread_id == uthread_id) {
 	uthread_temp->hash_next = uthread_next->hash_next;
+        // release the lock before returning!! bug 359 Liao
+        pthread_mutex_unlock(&__omp_hash_table_lock);
 	return;
       } else {
 	uthread_temp = uthread_next;
