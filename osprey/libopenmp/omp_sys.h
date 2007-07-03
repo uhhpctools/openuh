@@ -31,7 +31,8 @@
 #ifndef __omp_sys_included
 #define __omp_sys_included
 
-#  ifdef TARG_X8664
+#  ifndef TARG_IA64
+//#  ifdef TARG_X8664 // IA32 will fall through to the Itanium branch!
 
 static inline void
 __ompc_spin_lock(volatile int* lock)

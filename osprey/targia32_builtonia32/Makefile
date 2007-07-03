@@ -52,12 +52,12 @@ LIBRARY_SUBDIRS := \
 	libfortran \
 	libF77 \
 	libu \
-	libmv \
 	libinstr2 \
 	libm \
+	libmv \
+	libopenmp \
 	#libfoobar \
 	#libpscrt \
-	#libopenmp
 
 #
 #  Finally, the compiler tools (components) are built.

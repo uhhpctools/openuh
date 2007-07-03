@@ -218,8 +218,8 @@ INSTALL_WHIRL_STUFF () {
     INSTALL_EXEC_SUB  ${AREA}/whirl2c/whirl2c.so ${PHASEPATH}/whirl2c.so
     INSTALL_EXEC_SUB  ${AREA}/whirl2f/whirl2f.so ${PHASEPATH}/whirl2f.so
 
-    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be whirl2c_be) 
-    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be whirl2f_be) 
+    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be ${PHASEPATH}/whirl2c_be) 
+    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be ${PHASEPATH}/whirl2f_be) 
 
     INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_b2a    ${BIN_DIR}/ir_b2a
     INSTALL_EXEC_SUB  ${AREA}/libspin/gspin      ${BIN_DIR}/gspin
@@ -283,6 +283,7 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.a          ${PHASEPATH}/32/libffio.a
         INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a           ${PHASEPATH}/32/libopenmp.a
     fi 
     #install .h files
     INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
