@@ -109,6 +109,7 @@ boolean drop_option;
 boolean link_with_mathlib;
 #endif
 
+boolean Epilog_Flag;
 const char compiler_version[] = INCLUDE_STAMP;
 static void set_executable_dir (void);
 
@@ -215,6 +216,8 @@ main (int argc, char *argv[])
 
 		set_current_arg_pos(i);
 		if (argv[i][0] == '-' && !dashdash_flag) {
+                       if(strcasecmp(argv[i],"-epilog") == 0)
+                                 Epilog_Flag = TRUE;
 			flag = get_option(&i, argv);
 			if (flag == O_Unrecognized) { 
 				if (print_warnings) {

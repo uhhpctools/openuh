@@ -84,6 +84,7 @@ int default_olevel = 2;
 static int default_isa = UNDEFINED;
 static int default_proc = UNDEFINED;
 int instrumentation_invoked = UNDEFINED;
+int selective_instrumentation_invoked = UNDEFINED;
 int profile_type = 0;
 boolean ftz_crt = FALSE;
 //int isa = UNDEFINED;
@@ -1106,6 +1107,18 @@ Process_fb_create ( char *fname )
      flag = add_string_option (O_OPT_, "instr=on:instr_unique_output=on");
    }
    add_option_seen (flag);
+}
+
+void
+Process_fb_selective(char *fname)
+{
+
+  int flag;
+  fb_selective_file = string_copy(fname);
+  toggle ( &selective_instrumentation_invoked, TRUE );
+  flag = add_string_option (O_OPT_, "instr_selective=on");
+  add_option_seen(flag);
+
 }
 
 

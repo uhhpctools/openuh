@@ -103,6 +103,7 @@ extern BOOL Run_autopar;
 extern BOOL Run_MemCtr;
 static BOOL Dsm_Recompile = FALSE;
 
+extern BOOL Epilog_Flag;
 
 /*
  * Handle_Phase_Specific_Options
@@ -291,6 +292,10 @@ Process_Command_Line (INT argc, char **argv)
 			Global_File_Name = cp + 2;
 			break;
 
+                    case 'z':
+                        Set_Selective_Instrumentation_File_Name(cp + 2);
+                        break;
+
 		    default:
 			ErrMsg ( EC_File_Flag, *cp, argv[i] );
 			break;
@@ -351,6 +356,8 @@ Process_Command_Line (INT argc, char **argv)
 		if (!strcmp( cp, "xceptions" )) {
 		  CXX_Exceptions_On = TRUE;
 		}
+                else if (strcmp (cp, "pilog") == 0)
+                    Epilog_Flag = TRUE;
 		else {
 		  ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );
 		}

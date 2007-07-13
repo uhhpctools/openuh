@@ -45,6 +45,7 @@ extern boolean multiple_source_files;
 
 extern char *outfile;		/* outfile for -o */
 extern char *prof_file;        /*  executable file for prof to work upon */
+extern char *fb_selective_file;  /* feedback selective file for -fb_selective*/
 extern char *fb_file;		/* feedback file for -fb_create */
 extern char *internal_fb_file;	/* feedback file for -fb */
 extern char *opt_file;		/* feedback file for -fb_opt */

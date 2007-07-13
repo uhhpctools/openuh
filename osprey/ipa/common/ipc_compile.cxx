@@ -132,7 +132,7 @@ extern char *psclp_arg;
 
 // makefile_name is a full pathname, as is outfiles_fullpath, 
 // all of the others are basename only.
-
+extern int Epilog_Flag;
 static char* makefile_name = 0;         // name of the makefile
 static FILE* makefile = 0; 
 
@@ -918,6 +918,19 @@ void ipacom_doit (const char* ipaa_filename)
 	  ((p = strstr(*i, "/crtn.o")) && p[7] == '\0')) {
 	continue;
       }
+          if (strcmp(*i,"-lgcc")==0)
+        {
+          if(Feedback_Filename!=NULL) {
+           /* need to enabled the feedback  for ther faces via flags */
+            if (!Epilog_Flag) {
+            fputs("-linstr", cmdfile);
+            fputs(" \n", cmdfile);
+            fputs("-lstdc++", cmdfile);
+            fputs(" \n", cmdfile);
+             }
+          }
+        }
+
 #endif
       // Since we're using gcc to link, we must mangle linker
       // directives that we know about so they are acceptable to it,

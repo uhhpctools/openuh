@@ -691,6 +691,8 @@ extern BOOL Indexed_Loads_Allowed; /* enable generation of indexed loads/stores 
 extern BOOL Early_MP_Processing; /* Do MP lowering before LNO/PREOPT */
 extern BOOL Implied_Do_Io_Opt;   /* Do implied-do loop optimization for I/O */
 
+extern BOOL Epilog_Flag;
+
 /* back end phases options */
 #ifdef BACK_END
 extern BOOL Run_lno;		    /* run loop-nest optimizer */

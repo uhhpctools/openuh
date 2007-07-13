@@ -64,6 +64,7 @@ static int orig_iargc_size = 10;
 static char char_opt[] = {'a','A','b','c','e','f','F','G','h','l','L','m','o','O','R','T','u','y','Y','z','0'};
 
 extern string outfilename;
+extern int Epilog_Flag;
 extern void ipa_insert_whirl_obj_marker(void);
 
 /* 
@@ -668,6 +669,12 @@ ipa_search_command_line(int argc,
 		blank_arg(argv,i);
 		continue;
 	    }
+            else if ((strcmp(string,"-epilog")) == 0) {
+                Epilog_Flag = TRUE;
+                    /* Blank out argument */
+                blank_arg(argv,i);
+                continue;
+            }
 	    else if ((strcmp(string,"-o")) == 0) {
     	    	outfilename = MALLOC(strlen(argv[i+1])+3);
     	    	MALLOC_ASSERT(outfilename);

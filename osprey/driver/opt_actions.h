@@ -115,6 +115,8 @@ extern int ofast;		/* Ofast has been set */
 
 extern int instrumentation_invoked;	/* Instrument whirl */
 
+extern int selective_instrumentation_invoked;   /* Selective Instrument whirl */
+
 extern boolean ftz_crt;		/* add flush-to-zero crt */
 
 #ifdef KEY

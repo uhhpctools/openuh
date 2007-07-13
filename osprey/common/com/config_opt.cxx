@@ -244,6 +244,23 @@ OPTION_LIST *Feedback_Option = NULL;
 BOOL Outlining_Enabled = FALSE;
 BOOL Instrumentation_Enabled_Before = FALSE;
 
+BOOL Instrumentation_Procedures = FALSE;
+BOOL Instrumentation_Loops = FALSE;
+BOOL Instrumentation_Branches = FALSE;
+BOOL Instrumentation_Callsites = FALSE;
+BOOL Instrumentation_Switches = FALSE;
+BOOL Instrumentation_Cselects = FALSE;
+BOOL Instrumentation_Shortcircuits = FALSE;
+BOOL Instrumentation_Gotos = FALSE;
+BOOL Instrumentation_Multiplies = FALSE;
+BOOL Instrumentation_Reminder_Division_Modulus = FALSE;
+BOOL Instrumentation_All = FALSE;
+BOOL Instrumentation_Selective = FALSE;
+INT32 Instrumentation_Nesting_Level = -1;
+BOOL Instrumentation_Tau = FALSE;
+BOOL Instrumentation_Epilog = FALSE;
+
+
 #ifdef KEY
 BOOL   Asm_Memory = FALSE;
 BOOL   Align_Unsafe = FALSE; 
@@ -729,6 +746,51 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_BOOL,	OV_INTERNAL,	FALSE,	"instr_unique_output",	"",
     0, 0, 0,	&Instrumentation_Unique_Output,	NULL,
     "Always create a unique name for the profile data file" },
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_proc",   "",
+    0, 0, 0,    &Instrumentation_Procedures,    NULL,
+    "Allow instrumentation of procedures/program units entries/exits" },
+
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_loop",   "",
+    0, 0, 0,    &Instrumentation_Loops, NULL,
+    "Allow instrumentation of loops entries/exits" },
+
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_call",   "",
+    0, 0, 0,    &Instrumentation_Callsites,     NULL,
+    "Allow instrumentation of callsites entries/exits" },
+
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_switch", "",
+    0, 0, 0,    &Instrumentation_Switches,      NULL,
+    "Allow instrumentation of switches entries/exits" },
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_cselect",        "",
+    0, 0, 0,    &Instrumentation_Cselects,      NULL,
+    "Allow instrumentation of Cselect entries/exits" },
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_circuits",       "",
+    0, 0, 0,    &Instrumentation_Shortcircuits, NULL,
+    "Allow instrumentation of short circuits entries only" },
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_gotos",  "",
+    0, 0, 0,    &Instrumentation_Gotos, NULL,
+    "Allow instrumentation of Gotos/Compute Gotos entries only" },
+   { OVK_BOOL,  OV_VISIBLE,     TRUE,   "instr_mult",   "",
+    0, 0, 0,    &Instrumentation_Gotos, NULL,
+    "Allow instrumentation of multiplication operations entries only" },
+   { OVK_BOOL,  OV_VISIBLE,     TRUE,   "instr_rem_div_mod",    "",
+    0, 0, 0,    &Instrumentation_Reminder_Division_Modulus,     NULL,
+    "Allow instrumentation of reminder/division/modulus operations entries only" },
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_branch", "",
+    0, 0, 0,    &Instrumentation_Branches,      NULL,
+    "Allow instrumentation of branches entries/exits" },
+
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_selective",      "",
+    0, 0, 0,    &Instrumentation_Selective,     NULL,
+    "Allow selective instrumentation" },
+
+  { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_all",    "",
+    0, 0, 0,    &Instrumentation_All,   NULL,
+    "Allow selective instrumentation" },
+
+  { OVK_INT32,  OV_VISIBLE,     TRUE, "instr_nest",       "",
+    0, 0, 100,    &Instrumentation_Nesting_Level, NULL,
+    "Allow instrumentation to a given nesting level" },
 
   { OVK_LIST,	OV_VISIBLE,	TRUE, 	"feedback",		"feed",
     0, 0, 0,	&Feedback_Option,	NULL,

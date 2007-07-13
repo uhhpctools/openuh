@@ -70,6 +70,16 @@ extern void IR_Dwarf_Gen_File_Table (BOOL dump_filenames);
 extern void IR_Srcpos_Filename (SRCPOS srcpos,         /* in */
 				const char **fname,    /* out */
 				const char **dirname); /* out */
+extern void IPA_IR_Srcpos_Filename (SRCPOS srcpos,         /* in */
+                                const char **fname,    /* out */
+                                const char **dirname); /* out */
+
+extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
+                                     char *&fname,   /* out */
+                                    char *&dirname);
+
+
+
 
 /* for debugging */
 struct ALIAS_MANAGER;    /* forward declaration */

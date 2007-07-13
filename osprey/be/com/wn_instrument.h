@@ -7,13 +7,6 @@
 // ====================================================================
 // ====================================================================
 //
-// Module: wn_instrument.h
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/wn_instrument.h,v $
-//
-// ====================================================================
 //
 // Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 //
@@ -120,6 +113,8 @@ extern void WN_Annotate(   WN *wn, PROFILE_PHASE phase,
 
 extern void Set_Instrumentation_File_Name( char *fname );
 
+extern void Set_Selective_Instrumentation_File_Name(char *fname);
+
 
 // ====================================================================
 //
@@ -136,26 +131,31 @@ extern void Set_Instrumentation_File_Name( char *fname );
 
 #define INVOKE_INIT_NAME          "__profile_invoke_init"
 #define INVOKE_INSTRUMENT_NAME    "__profile_invoke"
+#define INVOKE_EXIT_INSTRUMENT_NAME    "__profile_invoke_exit"
 #define BRANCH_INIT_NAME          "__profile_branch_init"
 #define BRANCH_INSTRUMENT_NAME    "__profile_branch"
+#define BRANCH_EXIT_INSTRUMENT_NAME "__profile_branch_exit"
 #define LOOP_INIT_NAME            "__profile_loop_init"
 #define LOOP_INSTRUMENT_NAME      "__profile_loop"
+#define LOOP_EXIT_INSTRUMENT_NAME "__profile_loop_exit"
 #define LOOP_INST_ITER_NAME       "__profile_loop_iter"
 #define SHORT_CIRCUIT_INIT_NAME   "__profile_short_circuit_init"
 #define SHORT_CIRCUIT_INST_NAME   "__profile_short_circuit"
 #define CALL_INIT_NAME            "__profile_call_init"
 #define ICALL_INIT_NAME           "__profile_icall_init"
-#define ICALL_INSTRUMENT_NAME     "__profile_icall"
+#define ICALL_INSTRUMENT_NAME      "__profile_icall"
+#define ICALL_ENTRY_INSTRUMENT_NAME "__profile_icall_entry"
+#define ICALL_EXIT_INSTRUMENT_NAME "__profile_icall_exit"
 #define CALL_INST_ENTRY_NAME      "__profile_call_entry"
 #define CALL_INST_EXIT_NAME       "__profile_call_exit"
 #define SWITCH_INIT_NAME          "__profile_switch_init"
 #define SWITCH_INSTRUMENT_NAME    "__profile_switch"
+#define SWITCH_EXIT_INSTRUMENT_NAME "__profile_switch_exit"
 #define COMPGOTO_INIT_NAME        "__profile_compgoto_init"
 #define COMPGOTO_INSTRUMENT_NAME  "__profile_compgoto"
 #ifdef KEY
 #define VALUE_FP_BIN_INIT_NAME          "__profile_value_fp_bin_init"
 #define VALUE_FP_BIN_INSTRUMENT_NAME    "__profile_value_fp_bin"
-
 #define VALUE_INIT_NAME          "__profile_value_init"
 #define VALUE_INSTRUMENT_NAME    "__profile_value"
 #endif

@@ -113,6 +113,8 @@ bfd_boolean add_needed = TRUE;
 /* TRUE if we should demangle symbol names.  */
 bfd_boolean demangling;
 
+int Epilog_Flag;
+
 args_type command_line;
 
 ld_config_type config;

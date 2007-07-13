@@ -72,6 +72,7 @@
 char *outfile = NULL;		/* from -o <outfile> */
 char *prof_file = NULL;	/* executable file for prof to work upon */
 char *fb_file = NULL;		/* from -fb_create <feedback-file> */
+char *fb_selective_file=NULL; /* from -fb_selective <selective_file> */
 char *internal_fb_file = NULL;	/* from -fb <feedback-file> */
 char *opt_file = NULL;		/* from -fb_opt <feedback-file> */
 char *fb_xdir = NULL;		/* dir where pixie emits dso's */
@@ -104,6 +105,7 @@ boolean expand_ftpp_macros = FALSE;
 #endif
 int     fortran_line_length = 72; /* Fortran line length */
 char roundoff=0;
+extern boolean Epilog_Flag;
 boolean nocpp_flag = FALSE;
 
 char *global_toolroot = NULL;
@@ -111,6 +113,8 @@ char *ld_library_path = NULL;
 char *ld_libraryn32_path = NULL;
 char *orig_program_name = NULL;
 char *old_ld_library_path = NULL;
+char *papi_path = NULL;
+char *tau_path = NULL;
 
 extern void turn_down_opt_level (int new_olevel, char *msg);
 
@@ -1226,6 +1230,19 @@ add_file_args (string_list_t *args, phases_t index)
                   else
 		    sprintf (buf, "-fi,a.out.instr");
 		  add_string(args,buf);
+
+                 if(selective_instrumentation_invoked == TRUE) {
+                  if (strcmp(fb_selective_file,"default")!=0 && fb_selective_file != NULL)
+                    sprintf(buf, "-fz,%s.select", fb_selective_file);
+                  else if (source_file != NULL)
+                    sprintf (buf, "-fz,%s.select", source_file);
+                  else if (outfile != NULL)
+                    sprintf (buf, "-fz,%s.select", outfile);
+                  else
+                    sprintf (buf, "-fz,a.out.select");
+                  add_string(args,buf);
+
+                  }
                 }
 		else if (opt_file != NULL) {
 		  /* pass feedback file */
@@ -1315,6 +1332,20 @@ add_file_args (string_list_t *args, phases_t index)
 		    sprintf (buf, "-fi,a.out.instr");
 		  add_string(args,buf);
                 }
+
+                 if(selective_instrumentation_invoked == TRUE) {
+                  if (strcmp(fb_selective_file,"default")!=0 && fb_selective_file != NULL)
+                    sprintf(buf, "-fz,%s.select", fb_selective_file);
+                  else if (source_file != NULL)
+                    sprintf (buf, "-fz,%s.select", source_file);
+                  else if (outfile != NULL)
+                    sprintf (buf, "-fz,%s.select", outfile);
+                  else
+                    sprintf (buf, "-fz,a.out.select");
+                  add_string(args,buf);
+
+                  }
+
 		else if (opt_file != NULL) {
 		  /* pass feedback file */
 		  sprintf(buf, "-ff,%s.instr", opt_file);
@@ -2304,7 +2335,36 @@ add_instr_archive (string_list_t* args)
 	add_library (args,"cginstr");
       }
 
-      add_library (args, "instr");
+           if (profile_type & WHIRL_PROFILE) {
+              if (!Epilog_Flag)
+               add_library (args, "instr");
+              else
+              {   char buff[300];
+                  char buff2[300];
+                  tau_path = getenv("TAU_ROOT");
+                  papi_path =getenv("PAPI_ROOT");
+                  add_library(args,"epilog");
+
+                  strcpy(buff,"-L");
+                  strcat(buff,papi_path);
+                  strcat(buff,"/lib");
+
+                  add_string(args,buff);
+                   add_library (args,"pfm");
+                  add_library (args,"papi");
+
+                  strcpy(buff2,"-L");
+                  strcat(buff2,tau_path);
+                  strcat(buff2,"/ia64/lib");
+
+                  add_string(args,buff2);
+                  add_library (args,"tau-callpath-linuxtimers-papiwallclock-multiplecounters-papivirtual-orcc-mpi-compensate-papi-openmp-opari");
+
+              }
+
+            }
+     add_library (args, "stdc++");
+
 #ifndef TARG_IA64
       if (!option_was_seen(O_static))
 	add_libgcc_s (args);

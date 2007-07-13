@@ -919,6 +919,7 @@ BOOL Enable_GDSE = FALSE;       /* Allow global dead store elimination */
 BOOL Enable_CG_Peephole =FALSE;	/* Enable peephole optimization in cgprep */
 BOOL Enable_EBO_Post_Proc_Rgn = TRUE ;
 
+BOOL Epilog_Flag = FALSE;
 #ifdef BACK_END
 /* back end phases options */
 BOOL Run_lno = FALSE;		    /* run loop-nest optimizer */

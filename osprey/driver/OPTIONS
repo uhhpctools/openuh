@@ -154,7 +154,8 @@
 -help:%s	save_name(&help_pattern,optargs); 	ALL	NONE	""
 	"print list of possible options that contain given string"
 %
-
+-epilog                     ;   ALL     bij    self
+        "epilog flag used to instrument and link with KOJAK"
 -show	{show_flag = TRUE; }	ALL	GRP	self
 	"show phases as they are being invoked"
 -show1	{show_flag = TRUE; }	ALL	NONE	""
@@ -323,7 +324,8 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 
 -fb_create%s Process_fb_create(optargs);        ALL     N       ""
         ""
-
+-fb_selective%s Process_fb_selective(optargs);        ALL     N       ""
+        ""
 -fb-create%s Process_fb_create(optargs);        ALL     N       ""
         "Option needed for SPEC feedback file generation"
 

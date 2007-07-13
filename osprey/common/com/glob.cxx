@@ -129,6 +129,7 @@ char *Irb_File_Name = NULL;	/* ACIR	intermediate file */
 char *Asm_File_Name = NULL;	/* Assembly file */
 char *Obj_File_Name = NULL;	/* Relocatable object file */
 char *Instrumentation_File_Name = NULL; /* instrumentation file */
+char *Selective_Instrumentation_File_Name = NULL; /* instrumentation file */
 char *Feedback_File_Name = NULL; /* Feedback file */
 char *call_graph_file_name = NULL; /* Function call graph file */
 char *cord_output_file_name = NULL; /* Output file name after function layout */

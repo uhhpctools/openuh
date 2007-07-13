@@ -137,6 +137,8 @@ extern char *call_graph_file_name; /* Function call graph file */
 extern char *cord_output_file_name; /* Output file name after function layout */
 extern char *cord_obj_file_name;  /* Object file name which will be reorder function layout */
 extern char *Instrumentation_File_Name; /* instrumentation file */
+extern int selective_instrumentation_invoked;   /* Selective Instrument whirl */
+extern char *Selective_Instrumentation_File_Name; /*selective instrumentation file */
 extern char *Feedback_File_Name;/* feedback file produced from prof */
 #ifndef MONGOOSE_BE
 extern char *Lib_File_Name;	/* Program library file */
