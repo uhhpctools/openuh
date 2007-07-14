@@ -224,6 +224,7 @@ private:
   PU_PROFILE_HANDLE _fb_handle_merged;
   ST               *_profile_init_struct_st;
   ST               *_profile_gen_struct_st; 
+  ST               *_profile_gen_struct_st_invoke;
   // Instrumentation initialization code will be inserted just before
   // the WN_PRAGMA_PREAMBLE_END pragma that occurs after each entry's
   // preamble.  During the tree walk:
@@ -1665,10 +1666,11 @@ WN_INSTRUMENT_WALKER::Instrument_Invoke_Exit( WN *wn, INT32 id, WN *block, int m
   
   // find_endline(wn2,endline);
    
-   _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+  // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+   _profile_gen_struct_st = _profile_gen_struct_st_invoke;
    WN *instr = Gen_Call( INVOKE_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
                       
-    Instrument_With_Gen_Struct(1,mode,
+    Instrument_With_Gen_Struct(0,mode,
                              instr, 
                              wn,
                              block,            
@@ -1709,6 +1711,7 @@ void WN_INSTRUMENT_WALKER::Instrument_Invoke( WN *wn, INT32 id, WN *block )
   find_endline(wn2,endline);
 
       _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+      _profile_gen_struct_st_invoke = _profile_gen_struct_st;
       WN *instr = Gen_Call(INVOKE_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
   WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
   Instrument_With_Gen_Struct(1, 1, /*after? */
