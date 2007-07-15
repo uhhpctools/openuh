@@ -82,6 +82,20 @@ char* Irb_Output_Name = NULL;
 
 BOOL Verbose = FALSE;
 
+//dragon merge
+/*************************************
+        Lei Huang 11/23/02
+   The Dragon_CFG_Phase is used in f90_lower() in cfg_ipl phase. 
+however,the f90_lower() is also used in this independent program -- 
+inlining phase. So I set the Dragon_CFG_Phase as FALSE in inlining 
+program.
+******************************/
+BOOL Dragon_CFG_Phase=FALSE;
+
+/*Yi Wen added on 06/19/2003*/
+extern BOOL New_CG;
+
+
 /* This isn't implemented in the standalone inliner (i.e. we don't
  * actually build the list), but we check it, so we need the variable
  * to be defined.
@@ -123,7 +137,9 @@ Process_Command_Line (INT argc, char **argv)
 	    case 'c':
 		i = argc;	    /* stop processing */
 		break;
-
+ 
+            case 'e': // accept epilog flag
+               break; 
 	    case 'g':
 		switch (argv[i][2]) {
 		case '0':
@@ -164,7 +180,10 @@ Process_Command_Line (INT argc, char **argv)
 
 	    case 'm':		    /* accept and ignore the -m1, -m0 flags */
 		break;
-
+            //Yi Wen added at 06/19/2003
+            case 'n':
+                New_CG=TRUE;
+                break;
 	    case 's':
 		if (strcmp (argv[i]+1, "show") == 0)
 		    Verbose = TRUE;
