@@ -225,6 +225,8 @@ private:
   ST               *_profile_init_struct_st;
   ST               *_profile_gen_struct_st; 
   ST               *_profile_gen_struct_st_invoke;
+  ST               *_profile_gen_struct_st_loop;
+  ST               *_profile_gen_struct_st_branch;
   // Instrumentation initialization code will be inserted just before
   // the WN_PRAGMA_PREAMBLE_END pragma that occurs after each entry's
   // preamble.  During the tree walk:
@@ -1192,7 +1194,10 @@ WN_INSTRUMENT_WALKER::WN_INSTRUMENT_WALKER( BOOL instrumenting,
     _switch_case_values( local_mempool ),
     _compgoto_num_targets( local_mempool ),
     _profile_init_struct_st( NULL),
-     _profile_gen_struct_st(NULL),
+    _profile_gen_struct_st(NULL),
+    _profile_gen_struct_st_invoke(NULL),
+    _profile_gen_struct_st_loop(NULL),
+    _profile_gen_struct_st_branch(NULL),
     Inst_Parent_Map(WN_MAP_UNDEFINED)
 {
   if ( _instrumenting ) {
@@ -1818,11 +1823,11 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
               location(wn,source_file,endline,filename); 
 
 	     if (branch) {
-	               _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                       WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+	         //      _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+                       WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
                        WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
 
-                       Instrument_With_Gen_Struct(1,0, /*after? */
+                       Instrument_With_Gen_Struct(0,0, /*after? */
                              instr3, 
                              wn,
                              block,            
@@ -1842,11 +1847,11 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
  	     }
 	     else
 	     { 
-               _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-              WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+              // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+              WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
               WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
 
-              Instrument_With_Gen_Struct(1,0, /*after? */
+              Instrument_With_Gen_Struct(0,0, /*after? */
                              instr4, 
                              wn,
                              block,            
@@ -1885,11 +1890,11 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
                        char *filename = NULL; 
                        location(wn,source_file,endline,filename); 
 		       if(branch) {
-                       _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                         WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+                       // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+                         WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
                        WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
 
-                       Instrument_With_Gen_Struct(1,0, /*after? */
+                       Instrument_With_Gen_Struct(0,0, /*after? */
                              instr3, 
                              wn,
                              block,            
@@ -1906,12 +1911,12 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
         
 		       }
                         else
-	               {     _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+	               {    // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
 		               
-                               WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+                               WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
                                WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
 
-                              Instrument_With_Gen_Struct(1,0, /*after? */
+                              Instrument_With_Gen_Struct(0,0, /*after? */
                                                          instr4, 
 							 wn,
 							 block,            
@@ -1941,10 +1946,10 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
 			char *filename=NULL;
                       location(wn,source_file,endline,filename); 
 			if (branch) {
-			  _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                           WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+			   // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+                           WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
                        WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
-                       Instrument_With_Gen_Struct(1,0, /*after? */
+                       Instrument_With_Gen_Struct(0,0, /*after? */
                              instr3, 
                              wn,
                              block,            
@@ -1960,11 +1965,11 @@ void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *bloc
                              0,NULL);
 			}
                        else
-	                {   _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-	                         WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
+	                {  // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+	                         WN *instr4 =  Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
                                  WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
 
-                                 Instrument_With_Gen_Struct(1,0, /*after? */
+                                 Instrument_With_Gen_Struct(0,0, /*after? */
 							    instr4, 
 							    wn,
 							    block,            
@@ -2023,6 +2028,7 @@ WN_INSTRUMENT_WALKER::Instrument_Branch( WN *wn, INT32 id, WN *block, WN *stmt )
 			     WN_Intconst( MTYPE_I4, 0 ) );
 
      _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+     _profile_gen_struct_st_branch = _profile_gen_struct_st;
     WN *instr = Gen_Call(BRANCH_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
   WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
 
@@ -2190,6 +2196,7 @@ WN_INSTRUMENT_WALKER::Instrument_Loop( WN *wn, INT32 id, WN *block, WN *stmt )
   // profile_loop( handle, id ) before loop.
  
    _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
+   _profile_gen_struct_st_loop = _profile_gen_struct_st;
     WN *instr2 = Gen_Call(LOOP_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
   WN_Set_Linenum(instr2,WN_Get_Linenum(wn)); 
 
