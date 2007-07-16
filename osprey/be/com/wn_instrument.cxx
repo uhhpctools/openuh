@@ -3317,6 +3317,7 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
        if (HasGotos==FALSE) {
       _instrument_count++;
       INT32 id = _count_loop++;
+     
       if ( _instrumenting)
       { 
  	  Instrument_Loop( wn, id, block,stmt );

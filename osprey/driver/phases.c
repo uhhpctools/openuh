@@ -2336,29 +2336,32 @@ add_instr_archive (string_list_t* args)
       }
 
            if (profile_type & WHIRL_PROFILE) {
-              if (!Epilog_Flag)
+              if (!Epilog_Flag) {
                add_library (args, "instr");
+              }
               else
               {   char buff[300];
                   char buff2[300];
                   tau_path = getenv("TAU_ROOT");
                   papi_path =getenv("PAPI_ROOT");
-                  add_library(args,"epilog");
+             //     add_string(args,"/home/oscarh/local/lib/libpfm.a");
+             //     add_library(args,"epilog");
+             //     add_string(args,"/home/oscarh/local/lib/libpfm.a");
+             //     add_string(args,"/home/oscarh/local/lib/libpapi.a");
+               //   strcpy(buff,"-L");
+               //   strcat(buff,papi_path);
+               //   strcat(buff,"/lib");
 
-                  strcpy(buff,"-L");
-                  strcat(buff,papi_path);
-                  strcat(buff,"/lib");
+                //  add_string(args,buff);
+                 // add_library (args,"pfm");
+                //  add_library (args,"papi");
 
-                  add_string(args,buff);
-                   add_library (args,"pfm");
-                  add_library (args,"papi");
+                 // strcpy(buff2,"-L");
+                 // strcat(buff2,tau_path);
+                 // strcat(buff2,"/ia64/lib");
 
-                  strcpy(buff2,"-L");
-                  strcat(buff2,tau_path);
-                  strcat(buff2,"/ia64/lib");
-
-                  add_string(args,buff2);
-                  add_library (args,"tau-callpath-linuxtimers-papiwallclock-multiplecounters-papivirtual-orcc-mpi-compensate-papi-openmp-opari");
+                 // add_string(args,buff2);
+               //  add_string(args,"/home/oscarh/local/tau/ia64/lib/libtau-callpath-linuxtimers-papiwallclock-multiplecounters-papivirtual-orcc-mpi-compensate-papi-openmp-opari.a");
 
               }
 

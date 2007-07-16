@@ -153,11 +153,18 @@ INSTALL_DRIVER () {
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhCC
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhf90
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhf95
-#    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/opencc-${VERSION}
-#    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openCC-${VERSION}
-#    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90-${VERSION}
-#    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95-${VERSION}
-
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/opencc-${VERSION}
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openCC-${VERSION}
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90-${VERSION}
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95-${VERSION}
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/orcc
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/orCC
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/orf90
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/orf95
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/opencc
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openCC
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95
     INSTALL_EXEC_SUB ${AREA}/driver/kdriver ${BIN_DIR}/kopencc
 
     return 0
@@ -243,6 +250,8 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         d="osprey/targ${TARG_HOST}/"
         INSTALL_DATA_SUB $d/libcginstr/libcginstr.a  ${PHASEPATH}/libcginstr.a  
         INSTALL_DATA_SUB $d/libinstr/libinstr.a      ${PHASEPATH}/libinstr.a 
+        INSTALL_DATA_SUB $d/libepilog/libepilog.a    ${PHASEPATH}/libepilog.a
+
 
         #  SGI implementation for turning on FLUSH to ZERO
         INSTALL_DATA_SUB $d/init/ftz.o     ${PHASEPATH}/ftz.o

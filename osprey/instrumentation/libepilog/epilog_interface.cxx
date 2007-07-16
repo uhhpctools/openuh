@@ -56,6 +56,7 @@
 #include <stdio.h>
 #include <vector>
 #include <Profile/Profiler.h>
+// using namespace tau;
 #include <omp.h>
 using std::vector;
 
@@ -165,8 +166,8 @@ void __profile_invoke_exit(struct profile_gen_struct *d)
   char *pu_name = d->pu_name;
   INT32 linenum = d->linenum; 
   char *file_name = d->file_name; */
- TAU_GLOBAL_TIMER_STOP();  
-   
+ // TAU_GLOBAL_TIMER_STOP();  
+  Tau_stop_timer(d->data);
 }
 void
 __profile_invoke(struct profile_gen_struct *d)
@@ -182,9 +183,11 @@ __profile_invoke(struct profile_gen_struct *d)
  INT32 taken = d->taken; 
  INT32 target = d->target;
  INT32 num_targets = d->num_targets;
- void *data = d->data;
+ void **data = &(d->data);
  void *called_fun_address = d->called_fun_address;
 
+ Tau_profile_c_timer(data, d->pu_name, "", TAU_DEFAULT, "TAU_DEFAULT");  
+ Tau_start_timer(d->data, 0);
 /* 
 printf("%d,%d,%d,%d,%d,%d",invoke_id,linenum,endline,taken,target,num_targets);
  if (pu_handle==NULL) printf("pu_handle=NULL,");
@@ -198,8 +201,8 @@ printf("%d,%d,%d,%d,%d,%d",invoke_id,linenum,endline,taken,target,num_targets);
  //   Tau_create_top_level_timer_if_necessary();
  
   
-    omp_set_lock(&tau_regdescr_lock);
-     if(d->data!=NULL)
+ //   omp_set_lock(&tau_regdescr_lock);
+ /*    if(d->data!=NULL)
     { 
        Profiler *p = new Profiler ((FunctionInfo *)d->data, TAU_DEFAULT, true, RtsLayer::myThread());
        p->Start();
@@ -217,8 +220,8 @@ printf("%d,%d,%d,%d,%d,%d",invoke_id,linenum,endline,taken,target,num_targets);
     Profiler *p = new Profiler (f, TAU_DEFAULT, true, RtsLayer::myThread());
     p->Start();
     }
-    omp_unset_lock(&tau_regdescr_lock);
-   
+  //  omp_unset_lock(&tau_regdescr_lock);
+   */
  
 }
 
@@ -376,8 +379,8 @@ __profile_loop_init(void *pu_handle, INT32 num_loops)
 
 void __profile_loop(struct profile_gen_struct *d)
 {
-  
-     omp_set_lock(&tau_regdescr_lock);
+  /*
+  //   omp_set_lock(&tau_regdescr_lock);
       if(d->data!=NULL)
     { 
        Profiler *p = new Profiler ((FunctionInfo *)d->data, TAU_DEFAULT, true, RtsLayer::myThread());
@@ -402,8 +405,17 @@ void __profile_loop(struct profile_gen_struct *d)
     p->Start();
    
     }
-   omp_unset_lock(&tau_regdescr_lock);
-  
+  // omp_unset_lock(&tau_regdescr_lock);
+  */
+   
+    char rname[256], rtype[1024];
+    sprintf(rname, "%s%d", "LOOP #",d->id);
+    sprintf(rtype, "[file:%s <%d, %d>]",
+        d->file_name, d->linenum, d->endline);
+   void **data = &(d->data);
+   Tau_profile_c_timer(data, rname, rtype, TAU_DEFAULT, "TAU_DEFAULT");
+   Tau_start_timer(d->data, 0);
+
 }
 
 void
@@ -416,8 +428,9 @@ __profile_loop_exit(struct profile_gen_struct *d)
   INT32 endline = d->endline;
   char *file_name = d->file_name;
  */
- TAU_GLOBAL_TIMER_STOP(); 
- 
+ // TAU_GLOBAL_TIMER_STOP(); 
+ //Tau_stop_timer(var);
+   Tau_stop_timer(d->data);
 }
 
 // Gather profile information from a Loop Iteration

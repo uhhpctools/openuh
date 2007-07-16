@@ -93,7 +93,7 @@ program.
 BOOL Dragon_CFG_Phase=FALSE;
 
 /*Yi Wen added on 06/19/2003*/
-extern BOOL New_CG;
+// extern BOOL New_CG;
 
 
 /* This isn't implemented in the standalone inliner (i.e. we don't
@@ -182,7 +182,7 @@ Process_Command_Line (INT argc, char **argv)
 		break;
             //Yi Wen added at 06/19/2003
             case 'n':
-                New_CG=TRUE;
+ //               New_CG=TRUE;
                 break;
 	    case 's':
 		if (strcmp (argv[i]+1, "show") == 0)
