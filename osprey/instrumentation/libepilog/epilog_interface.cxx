@@ -89,7 +89,7 @@ void __profile_init(struct profile_init_struct *d)
 
     first_called=FALSE;
 
-     omp_init_lock(&tau_regdescr_lock);
+ //    omp_init_lock(&tau_regdescr_lock);
     TAU_PROFILE_SET_NODE(0);
   }
   
@@ -167,7 +167,7 @@ void __profile_invoke_exit(struct profile_gen_struct *d)
   INT32 linenum = d->linenum; 
   char *file_name = d->file_name; */
  // TAU_GLOBAL_TIMER_STOP();  
-  Tau_stop_timer(d->data);
+   Tau_stop_timer(d->data);
 }
 void
 __profile_invoke(struct profile_gen_struct *d)
@@ -187,7 +187,7 @@ __profile_invoke(struct profile_gen_struct *d)
  void *called_fun_address = d->called_fun_address;
 
  Tau_profile_c_timer(data, d->pu_name, "", TAU_DEFAULT, "TAU_DEFAULT");  
- Tau_start_timer(d->data, 0);
+ Tau_start_timer(d->data, 0); 
 /* 
 printf("%d,%d,%d,%d,%d,%d",invoke_id,linenum,endline,taken,target,num_targets);
  if (pu_handle==NULL) printf("pu_handle=NULL,");
@@ -415,7 +415,7 @@ void __profile_loop(struct profile_gen_struct *d)
    void **data = &(d->data);
    Tau_profile_c_timer(data, rname, rtype, TAU_DEFAULT, "TAU_DEFAULT");
    Tau_start_timer(d->data, 0);
-
+  
 }
 
 void
@@ -430,7 +430,7 @@ __profile_loop_exit(struct profile_gen_struct *d)
  */
  // TAU_GLOBAL_TIMER_STOP(); 
  //Tau_stop_timer(var);
-   Tau_stop_timer(d->data);
+  Tau_stop_timer(d->data);
 }
 
 // Gather profile information from a Loop Iteration
