@@ -2079,13 +2079,14 @@ determine_phase_order (void)
 	else
 		link_phase = P_ld;
 
+/***LH: BUG:439: comment it out temporarily for using the old gcc frontend only for OpenMP purpose 
 #ifdef KEY
 	phases_t c_fe = (gnu_version == 4) ? P_spin_cc1 : P_c_gfe;
 	phases_t cplus_fe = (gnu_version == 4) ? P_spin_cc1plus : P_cplus_gfe;
-#else
+#else  ****/
 	phases_t c_fe = P_c_gfe;
 	phases_t cplus_fe = P_cplus_gfe;
-#endif
+/*LH #endif */
 
 	switch (source_kind) {
 	case S_c:

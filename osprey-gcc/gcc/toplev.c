@@ -1267,7 +1267,7 @@ set_target_switch (const char *name)
       }
 #endif
 
-  if (!valid_target_option)
+  if (!valid_target_option && strcmp(name,"p"))
     error ("invalid option %qs", name);
 }
 
