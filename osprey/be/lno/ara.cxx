@@ -65,6 +65,10 @@
 #include "parids.h"
 #include "cond.h"
 
+// Laks 07.03.07 add UH additional feature
+#include "uh_ara.h"
+#include "uh_lno.h"
+
 #pragma weak Anl_File_Path
 
 MEM_POOL ARA_memory_pool;
@@ -245,8 +249,12 @@ void Perform_ARA_and_Parallelization(PU_Info* current_pu,
   // Print their ARA info
   ARA_Print_Loops(root);
 
-  for (INT i = 0; i < root->Children().Elements(); ++i) 
+  for (INT i = 0; i < root->Children().Elements(); ++i) {
+    // LAks 2007.03.07 add autoscoping here if needed
+    if(UH_Apocost_Flag || UH_Autoscope_Flag)
+       root->Children().Bottom_nth(i)->Autoscope();
     root->Children().Bottom_nth(i)->Generate_Parallel_Pragma();
+  }
 
   if (Eliminate_Dead_SCF(func_nd, LWN_Delete_Tree))
     Mark_Code(func_nd, FALSE, FALSE);

@@ -89,7 +89,8 @@
 #include "ipa_lno_read.h" 
 #include "lnodriver.h" 
 #include "ipa_lno_cost.h" 
-
+// Laks: use UH utils for retrieving the line number
+#include "uh_util.h"
 
 #pragma weak New_Construct_Id 
 
@@ -2534,8 +2535,16 @@ void ARA_LOOP_INFO::Bad_Array_Dependence(WN* wn_source,
 {
   if (!LNO_Analysis && !Run_prompf && !LNO_Prompl) 
     return;
-  INT ln_source = WN_Whirl_Linenum(wn_source); 
-  INT ln_sink = WN_Whirl_Linenum(wn_sink); 
+/*
+ * Laks: We need to avoid to use WN_Whirl_Linenum since it returns wrong line number
+ *       Please use the UH function instead
+
+  INT ln_source = WN_Whirl_Linenum(wn_source);
+  INT ln_sink = WN_Whirl_Linenum(wn_sink);
+*/
+  INT ln_source = UH_GetLineNumber(wn_source);
+  INT ln_sink = UH_GetLineNumber(wn_sink);
+
   WN* wn_array_source = WN_Array_Symbol(wn_source);
   WN* wn_array_sink = WN_Array_Symbol(wn_sink);
   // Unknown reason should be printed in the following case. 
@@ -2761,7 +2770,9 @@ extern void Walk_Loop_Dependence(WN * func_nd)
 	    ARA_LOOP_INFO* ali = dli->ARA_Info;
 	    Is_True(ali,("Walk_Loop_Dependence: No ARA_LOOP_INFO")); 
 	    if (Run_prompf || LNO_Prompl) {
-	      INT ln = WN_Whirl_Linenum(wn); 
+              // INT ln = WN_Whirl_Linenum(wn);
+              INT ln = UH_GetLineNumber(wn);    // Laks: temp solution, we call UH util
+
 	      if (OPCODE_is_call(WN_opcode(wn))) {  
 		const char* call_name = WB_Whirl_Symbol(wn);
 		if (call_name == NULL)

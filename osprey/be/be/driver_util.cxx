@@ -377,6 +377,15 @@ Process_Command_Line (INT argc, char **argv)
 		/* else fall through */
 				    /* CG-specific flags */
 	    case 'a':		    /* -align(8,16,32,64) */
+                /* Laks 08/11/06 UH flags */
+                if (strcmp (cp, "utoscope") == 0) {
+                    UH_Autoscope_Flag = TRUE; /* autoscope */
+                    break;
+                } else if (strcmp (cp, "pocost") == 0) {
+                    UH_Apocost_Flag = TRUE; /* autoscope */
+                    break;
+                }
+
 	    case 'S':		    /* -S: Produce assembly file: */
 		add_phase_args (PHASE_CG, argv[i]);
 		break;

@@ -116,6 +116,8 @@ static INT Parallelizable(WN* wn_outer, INT permutation[], INT nloops,
 #ifdef KEY
   INT Last_Apo_Loop_Id = 0;
 #endif
+// laks 09.07.06
+PU_Info *LNO_Current_PU = NULL;
 
 //-----------------------------------------------------------------------
 // NAME: Cannot_Concurrentize 
@@ -2307,6 +2309,8 @@ extern void Auto_Parallelization(PU_Info* current_pu,
 
   Last_Apo_Loop_Id = 0; // initialize per PU
 #endif
+
+  LNO_Current_PU = current_pu;  // laks 09.07.06
 
   extern BOOL running_cross_loop_analysis;
 

@@ -143,6 +143,9 @@
 #include "lnodriver.h"
 #include "ipa_lno_read.h"
 
+// Laks 06.29.06: include UH stuffs here
+#include "uh_lno.h"
+
 #pragma weak Prompf_Emit_Whirl_to_Source__GP7pu_infoP2WN
 #pragma weak Anl_File_Path  
 #pragma weak Print_file__16PROJECTED_REGIONGP8__file_s
@@ -581,6 +584,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   MEM_POOL_Initialize(&ARA_memory_pool, "ARA_memory_pool", FALSE);
   MEM_POOL_Push(&ARA_memory_pool);
   
+  // Laks 06.29.06: fix bug by identifying if Perform_ARA is executed or not
+  //                    if not, let's browse the WHIRL
+  BOOL UH_Perform_ARA_executed = FALSE;  // no by default
+  // end Laks -----
 #ifdef KEY
   static INT pu_num = 0;
   
@@ -647,6 +654,9 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
 
     MEM_POOL_Pop(&ARA_memory_pool);
     MEM_POOL_Delete(&ARA_memory_pool);
+        // Laks 06.29.06 why do we need to exit ?
+      UH_PrintUnitInfo(current_pu,func_nd);
+        // end of Laks dirty bug fix
     return func_nd;
   }
 
@@ -951,8 +961,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
     BOOL do_ara = ((Get_Trace(TP_LNOPT2,TT_LNO_RUN_ARA) 
       || Run_autopar && LNO_Run_AP > 0)
       && Get_Trace(TP_LNOPT2, TT_LNO_NO_AUTO_PARALLEL));
-    if (do_ara) 
+    if (do_ara) {
       Perform_ARA_and_Parallelization(current_pu, func_nd);
+      UH_Perform_ARA_executed = TRUE; // Laks 06.29.06: mark that Perform_ARA has been executed
+    }
   
     if (LNO_Run_Lego) {
       Lego_Skew_Indices(func_nd); 
@@ -1068,6 +1080,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   
   }
 return_point:
+  // ---- Laks 06.29.06: Browse in case Perform_ARA is not executed
+  if(UH_Perform_ARA_executed == FALSE) {
+      UH_PrintUnitInfo(current_pu,func_nd);
+  } // --------- End Laks
 
   if (Alloca_Dealloca_On && PU_has_alloca(Get_Current_PU())) {
     Convert_Intrinsic_To_Alloca_Dealloca (func_nd);

@@ -472,6 +472,10 @@ public:
   void Determine_Last_Value();
   void Determine_Peel(); 
   INT Peel_Value(); 
+  void Autoscope(FILE *fp); /* Laksono: add autoscoping in this class instead in the derived class since it harms
+                        the performance (though it will be more elegant solution) */
+  void Autoscope();
+
   void Generate_Parallel_Pragma();
   void Generate_Copyout_Loop();
   void Merge_then_else(ARA_LOOP_INFO *ara_then, ARA_LOOP_INFO *ara_else);

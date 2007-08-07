@@ -286,7 +286,12 @@ BE_LNOPT_NLX_CXX_SRCS = \
   cross_snl.cxx			\
   cross_cache.cxx		\
   lnotarget.cxx			\
-  init.cxx	
+  init.cxx	                \
+  uh_ara.cxx                    \
+  uh_apo.cxx                    \
+  uh_lno.cxx                    \
+  uh_util.cxx
+
 
 ifeq ($(BUILD_TARGET), X8664)
 BE_LNOPT_NLX_CXX_SRCS += simd.cxx
