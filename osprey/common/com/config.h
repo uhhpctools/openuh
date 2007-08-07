@@ -691,6 +691,9 @@ extern BOOL Indexed_Loads_Allowed; /* enable generation of indexed loads/stores 
 extern BOOL Early_MP_Processing; /* Do MP lowering before LNO/PREOPT */
 extern BOOL Implied_Do_Io_Opt;   /* Do implied-do loop optimization for I/O */
 
+/* Laks: UH additional flags */
+extern BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
+extern BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
 extern BOOL Epilog_Flag;
 
 /* back end phases options */

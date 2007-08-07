@@ -919,6 +919,9 @@ BOOL Enable_GDSE = FALSE;       /* Allow global dead store elimination */
 BOOL Enable_CG_Peephole =FALSE;	/* Enable peephole optimization in cgprep */
 BOOL Enable_EBO_Post_Proc_Rgn = TRUE ;
 
+/* UH additional flags */
+BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
+BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
 BOOL Epilog_Flag = FALSE;
 #ifdef BACK_END
 /* back end phases options */
