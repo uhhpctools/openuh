@@ -65,6 +65,10 @@ static char char_opt[] = {'a','A','b','c','e','f','F','G','h','l','L','m','o','O
 
 extern string outfilename;
 extern int Epilog_Flag;
+/* Laksono 08.29.06 autoscoping flag */
+extern int UH_Autoscope_Flag;
+extern int UH_Apocost_Flag; /* Laks 09.13.06 Apocost flag */
+
 extern void ipa_insert_whirl_obj_marker(void);
 
 /* 
@@ -675,6 +679,21 @@ ipa_search_command_line(int argc,
                 blank_arg(argv,i);
                 continue;
             }
+                /* ------------------  laks 09.13.06: add apocost */
+            else if ((strcmp(string,"-apocost")) == 0) {
+                UH_Apocost_Flag = TRUE;
+                /* Blank out argument */
+                blank_arg(argv,i);
+                continue;
+            }
+                /* ------------------- laks 08.29.06: add autoscoping */
+            else if ((strcmp(string,"-autoscope")) == 0) {
+                UH_Autoscope_Flag = TRUE;
+                /* Blank out argument */
+                blank_arg(argv,i);
+                continue;
+            }
+
 	    else if ((strcmp(string,"-o")) == 0) {
     	    	outfilename = MALLOC(strlen(argv[i+1])+3);
     	    	MALLOC_ASSERT(outfilename);

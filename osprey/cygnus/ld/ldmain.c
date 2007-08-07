@@ -114,6 +114,8 @@ bfd_boolean add_needed = TRUE;
 bfd_boolean demangling;
 
 int Epilog_Flag;
+int UH_Autoscope_Flag; /* Laks 08/11/06 */
+int UH_Apocost_Flag; /* Laks 08/11/06 */
 
 args_type command_line;
 
