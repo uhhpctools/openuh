@@ -587,6 +587,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   // Laks 06.29.06: fix bug by identifying if Perform_ARA is executed or not
   //                    if not, let's browse the WHIRL
   BOOL UH_Perform_ARA_executed = FALSE;  // no by default
+  // For unknown reason, when apolist flag is ON, the scalar reduction is OFF
+  if (UH_Apocost_Flag) {
+    LNO_Build_Scalar_Reductions = TRUE; // this is dirty fix ! to do in the future
+  }
   // end Laks -----
 #ifdef KEY
   static INT pu_num = 0;

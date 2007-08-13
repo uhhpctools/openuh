@@ -243,6 +243,9 @@ static void UH_Print_LoopCost(WN *wn, std::string sStart)
 //-----------------------------------------------------------------
 extern WN* UH_PrintUnitInfo(PU_Info* current_pu, WN *func_nd)
 {
+  // is -apocost flag ON ?
+  if(!UH_Apocost_Flag)
+  	return NULL; // not in this case, we return immediately
   char *filename, *dirname;
   SRCPOS srcpos = WN_Get_Linenum(func_nd);
   USRCPOS linepos;
