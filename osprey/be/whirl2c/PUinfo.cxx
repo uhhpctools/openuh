@@ -127,7 +127,10 @@ UINT               PUinfo_local_decls_indent = 0;/*Indentation for local decls*/
 typedef enum Preg_Usage_Kind
 {
    PREG_AS_UNKNOWN,
-   PREG_AS_INT8,   /* FIRST_PREG_USAGE_KIND, SMALLEST_iPREG_USAGE_KIND */
+  /*PREG_AS_BOOL is added by zdu in ORC, merged by Liao
+    * It seems that BOOL var may be stored in preg too*/
+   PREG_AS_BOOL,   /* FIRST_PREG_USAGE_KIND, SMALLEST_iPREG_USAGE_KIND */
+   PREG_AS_INT8,   
    PREG_AS_UINT8,
    PREG_AS_INT16,
    PREG_AS_UINT16,
@@ -145,7 +148,8 @@ typedef enum Preg_Usage_Kind
    PREG_AS_CQ       /* LAST_PREG_USAGE_KIND */
 } PREG_USAGE_KIND;
 
-#define FIRST_PREG_USAGE_KIND     PREG_AS_INT8
+#define FIRST_PREG_USAGE_KIND     PREG_AS_BOOL
+//#define FIRST_PREG_USAGE_KIND     PREG_AS_INT8
 #define SMALLEST_iPREG_USAGE_KIND FIRST_PREG_USAGE_KIND
 #define LARGEST_iPREG_USAGE_KIND  PREG_AS_UINT64
 #define LAST_PREG_USAGE_KIND      PREG_AS_CQ
@@ -153,6 +157,7 @@ typedef enum Preg_Usage_Kind
 static const MTYPE Ukind_to_Mtype[LAST_PREG_USAGE_KIND+1] =
 {
    MTYPE_UNKNOWN, /* PREG_AS_UNKNOWN */
+   MTYPE_B,  /* PREG_AS_BOOL */
    MTYPE_I1, /* PREG_AS_INT8 */
    MTYPE_U1, /* PREG_AS_UINT8 */
    MTYPE_I2, /* PREG_AS_INT16 */
@@ -191,6 +196,8 @@ struct Preg_Info
 static PREG_INFO *Preg_Info_Hash_Tbl[PREG_INFO_HASH_TABLE_SIZE];
 static PREG_INFO *Free_Preg_Info = NULL;
 
+extern int debug_requested;
+
 
 static BOOL
 WN_in_ioitem(const WN *wn)
@@ -225,6 +232,10 @@ Mtype_to_Ukind(MTYPE mtype)
    
    switch (mtype)
    {
+   /*MTYPE_B is added to support PREG_AS_BOOL, by Liao, bug189*/
+   case MTYPE_B:
+      ukind = PREG_AS_BOOL;
+      break;
    case MTYPE_I1: 
       ukind = PREG_AS_INT8;
       break;
@@ -740,6 +751,15 @@ Append_CallSite(WN_ITER *stmt_iter, const WN *next_stmt)
    /* Determine how the return value is distributed between return
     * registers to hold the value of the function call.
     */
+#ifdef COMPILE_UPC
+   /* When s2s debugging is enabled the return type of functions is not lowered
+      to shared_ptr_t. Need to fake the lowering here otherwise there's a mismatch
+      in the sizes of the return pregs. */
+   if(debug_requested && Type_Is_Shared_Ptr(return_ty))
+     return_ty = TY_To_Sptr_Idx(return_ty);
+
+#endif
+
    return_preg = PUinfo_Get_ReturnPreg(return_ty);
 
    /* Update next_stmt to denote the statement following the call_wn */
@@ -1379,7 +1399,21 @@ PUinfo_Get_ReturnPreg(TY_IDX return_ty)
       RETURN_INFO return_info = Get_Return_Info (return_ty,
 						 Use_Simulated);
 
-      if (RETURN_INFO_count(return_info) <= 2) {
+      //merged from UPC 2.2, Liao
+      if ( TY_mtype(return_ty) == MTYPE_M) {
+	//fake the return pregs for functions returning structs
+	//fprintf(stderr, "returning struct type:\n");
+	//Print_TY(stderr, return_ty);
+	RETURN_PREG_mtype(return_preg_ptr, 0) = MTYPE_M;
+	RETURN_PREG_mtype(return_preg_ptr, 1) = MTYPE_V;
+	preg_num1 = -1;
+      } else if (RETURN_INFO_count(return_info) <= 2) {
+	
+	RETURN_PREG_mtype(return_preg_ptr, 0) = RETURN_INFO_mtype (return_info, 0);
+	RETURN_PREG_mtype(return_preg_ptr, 1) = RETURN_INFO_mtype (return_info, 1);
+	preg_num1 = RETURN_INFO_preg (return_info, 0);
+	preg_num2 = RETURN_INFO_preg (return_info, 1);
+
 
 	 RETURN_PREG_mtype(return_preg_ptr, 0) = RETURN_INFO_mtype (return_info, 0);
 	 RETURN_PREG_mtype(return_preg_ptr, 1) = RETURN_INFO_mtype (return_info, 1);
@@ -1387,8 +1421,13 @@ PUinfo_Get_ReturnPreg(TY_IDX return_ty)
 	 preg_num2 = RETURN_INFO_preg (return_info, 1);
       }
 
+      //#if 0
+      /* This could happen when a function return a struct.  Instead of crashing, 
+       * We use tmp variables instead inside */
       else
-	 Fail_FmtAssertion ("PUinfo_Get_ReturnPreg: more than 2 return registers");
+	  Fail_FmtAssertion ("PUinfo_Get_ReturnPreg: more than 2 return registers");
+      //#endif
+
    }
 
    else {

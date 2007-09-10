@@ -52,7 +52,9 @@
 #include <cmplrs/rcodes.h>
 #include "defs.h"
 
-
+/*for capturing output of 'which whirl2c'*/
+#include <fstream>
+using namespace std;
 char path[PATH_MAX];
 static const char *libpath[3] = 
 {"LD_LIBRARY_PATH",
@@ -167,6 +169,7 @@ Usage (const char *progname)
 } /* Usage */
 
 
+int
 main (INT argc,                   /* Number of command line arguments */
       const char *const argv[],   /* Array of command line arguments */
       const char *const envp[])   /* Array of environment pointers */
@@ -184,7 +187,7 @@ main (INT argc,                   /* Number of command line arguments */
     register INT         argidx;
     register BOOL        dash_fB_option = FALSE; /* Any -fB option? */
     char                *newlibpath[3];
-
+    int retValue;
     program_name = argv[0];
 
     if (argc == 1)
@@ -197,7 +200,29 @@ main (INT argc,                   /* Number of command line arguments */
     if (p = strrchr(path, '/'))
 	p[0] = 0;
     else
-	strcpy (path, ".");
+	//strcpy (path, "."); by Liao, for correct path when using standalone
+    {
+     system("which whirl2c>temp_whirl2c_path");
+ 
+     ifstream pathfile("temp_whirl2c_path");
+     if (!pathfile.is_open())
+    {
+      printf("Fatal error: cannot  opening whirl2c path file\n");
+    }  
+     pathfile.getline(path,PATH_MAX);   
+     pathfile.close();
+     if (strlen(path)==0)
+       strcpy (path, ".");
+     else 
+     { 
+      /* eliminate the trailing '/whirl2c' in the path */
+      int pathlen=strlen(path);
+      path[pathlen-8]='\0';
+     }
+ 
+     system("rm temp_whirl2c_path");
+    }
+
 
     for (i = 0; i<3; i++)
     {
@@ -283,8 +308,7 @@ main (INT argc,                   /* Number of command line arguments */
     strcat (path, "/whirl2c_be");
 
     execv (path, new_argv);
-    error("%s: fail to execute %s: %s.\n", argv[0], path,
-	  strerror(errno));
+    error("%s: fail to execute %s: %s.\n", argv[0], path, strerror(errno));
     exit(RC_SYSTEM_ERROR);
 } /* main */
 

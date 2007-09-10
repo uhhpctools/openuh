@@ -45,6 +45,7 @@
 extern WN_MAP Prompf_Id_Map; /* Maps WN constructs to unique identifiers */
 
 #pragma weak W2C_Should_Emit_Nested_PUs
+#pragma weak W2C_Should_Before_CG  /*  Liao */
 #pragma weak W2C_Outfile_Translate_Pu
 #pragma weak W2F_Should_Emit_Nested_PUs
 #pragma weak W2F_Outfile_Translate_Pu

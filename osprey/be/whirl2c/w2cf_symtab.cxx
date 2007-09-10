@@ -255,7 +255,10 @@ static W2CF_SYMBOL       *Symbol_Free_List = NULL;
 static const char W2CF_Anonymous_Fld[] = "fld";
 static const char W2CF_Anonymous_Ty[] = "ty";
 static const char W2CF_Anonymous_St[] = "anon";
-static const char W2CF_Anonymous_Tempvar[] = "tmp";
+/* FIXME: probably want a failproof way to ensure 
+ * whirl2c's tmp variables will not have conflicts with user defined variables
+ */
+static const char W2CF_Anonymous_Tempvar[] = "_tmp";
 static const char W2CF_Anonymous_Preg[] = "reg";
 
 
@@ -416,6 +419,13 @@ W2CF_Avoid_Suffix(W2CF_SYMBOL *symbol )
 	avoid = TRUE;
     }
 #endif
+  //WEI: shouldn't suffixs  be avoided for TY entries???
+//  if (Compile_Upc) {
+    if (W2CF_SYMBOL_kind(symbol) == SYMKIND_TY) {
+      avoid = TRUE;
+    }
+//  }
+
   return avoid;
 }
 
@@ -876,16 +886,41 @@ W2CF_Symtab_Nameof_St(const ST *st)
    {
       valid_name = W2CF_Get_Ftn_St_Name(st, valid_name);
    }
+
+   //WEI: again, don't think there's any reason to rename function names
+   if (ST_sym_class(st) == CLASS_FUNC) {
+     return valid_name;
+   }
+
    symname = Get_Name_Buf_Slot(strlen(valid_name) + 32);
    W2CF_Get_Basename(valid_name, symname, &symid);
-   
    /* Get the associated symbol entry (with a possibly modified symid).
     */
    W2CF_SYMBOL_symid(&match_symbol) = symid;
    W2CF_SYMBOL_kind(&match_symbol)  = SYMKIND_ST;
    W2CF_SYMBOL_st(&match_symbol)    = st;
    W2CF_Get_Symbol(&symtab, &symhdr, &symbol, &match_symbol, symname);
-   
+  //TODO: Liao, merge UPC stuff later, varialbe conflict 
+#ifdef COMPILE_UPC
+
+   //fprintf(stderr, "%s %s\n", W2CF_SYMBOL_name_string(symtab, symbol), ST_name(st));
+
+   char * name =  W2CF_SYMBOL_name_string(symtab, symbol);
+   if (Compile_Upc && !ST_is_temp_var(st) && strcmp(name, ST_name(st)) != 0) {
+     //An user variable's name has been mangled by whirl2c.  To avoid conflicts with other user variables,
+     //we add a "_bupc_" prefix to it.
+     //Note that this is safe because the content of buf has been copied (via Append_Token_String)
+     //before Nameof_St is invoked the next time
+     static char buf[256];
+     memset (buf, 0, sizeof(buf));
+     //     fprintf(stderr, "add bupc\n");
+     strcpy(buf, "_bupc_");
+     strncat(buf, W2CF_SYMBOL_name_string(symtab, symbol), 248);
+     return buf;
+   } else {
+     return name;
+   }
+#endif
    /* Return the resultant disambiguated name */
    return W2CF_SYMBOL_name_string(symtab, symbol);
    
@@ -953,6 +988,11 @@ W2CF_Symtab_Nameof_Ty(TY_IDX ty)
    W2CF_SYMBOL_kind(&match_symbol)  = SYMKIND_TY;
    W2CF_SYMBOL_ty(&match_symbol)    = ty;
    W2CF_Get_Symbol(&symtab, &symhdr, &symbol, &match_symbol, symname);
+   //WEI: for structs, we output the valid_name directly
+   //(so different structs will have different names)
+   if (TY_kind(ty) == KIND_STRUCT) {
+     return valid_name;
+   }
    
    /* Return the resultant disambiguated name */
    return W2CF_SYMBOL_name_string(symtab, symbol);
@@ -982,7 +1022,11 @@ W2CF_Symtab_Nameof_Fld(FLD_HANDLE fld)
    }
    symname = Get_Name_Buf_Slot(strlen(valid_name) + 32);
    W2CF_Get_Basename(valid_name, symname, &symid);
-   
+//     if (Compile_Upc) {
+     return valid_name;
+//   }
+   //WEI: is this really necessary? I think there's no need to rename fields in a struct
+   //(How could you possibly get conflicts?)
    /* Get the associated symbol entry (with a possibly modified symid).
     */
    W2CF_SYMBOL_symid(&match_symbol) = symid;
@@ -1092,7 +1136,6 @@ W2CF_Symtab_Nameof_Preg(const TY_IDX preg_ty, PREG_NUM preg_num)
    }
    symname = Get_Name_Buf_Slot(strlen(valid_name) + 32);
    W2CF_Get_Basename(valid_name, symname, &symid);
-   
    /* Get the associated symbol entry (with a possibly modified symid).
     */
    W2CF_SYMBOL_symid(&match_symbol)    = symid;
@@ -1100,10 +1143,17 @@ W2CF_Symtab_Nameof_Preg(const TY_IDX preg_ty, PREG_NUM preg_num)
    W2CF_SYMBOL_preg_ty(&match_symbol)  = preg_ty;
    W2CF_SYMBOL_preg_num(&match_symbol) = preg_num;
    W2CF_Get_Symbol(&symtab, &symhdr, &symbol, &match_symbol, symname);
+
+#ifdef COMPILE_UPC
+   static char buf[256];
+   memset (buf, 0, sizeof(buf));
+   strcpy(buf, "_bupc_");
+   strncat(buf, W2CF_SYMBOL_name_string(symtab, symbol), 248);
+#endif
    
    /* Return the resultant disambiguated name */
    return W2CF_SYMBOL_name_string(symtab, symbol);
-   
+  // TODO:Liao, merge preg stuff from UPC later 
 } /* W2CF_Symtab_Nameof_Preg */
 
 
@@ -1312,5 +1362,19 @@ W2CF_Dump_Symbol(W2CF_SYMBOL *sym,W2CF_SYMTAB *symtab)
    }
    printf("\n") ;
   }
+}
+
+/*Merged from upc_symtab_utils.h by Liao*/
+
+
+TY_IDX Get_Inner_Array_Type( TY_IDX idx) {
+  
+  Is_True(TY_kind(idx) == KIND_ARRAY,("",""));
+  TY_IDX eidx = TY_etype(idx);
+  while (TY_kind(eidx) == KIND_ARRAY)
+    eidx = TY_etype(eidx);
+
+  return eidx;
+  
 }
 

@@ -81,13 +81,25 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/whirl2c.c,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
+  #include <errno.h>                  /* for sys_errlist */
+
 #include <elf.h>              /* for wn.h */
 #include "whirl2c_common.h"
+  #include "mempool.h"
+  #include "stab.h"
+
 #include "glob.h"             /* Irb_File_Name */
 #include "flags.h"	      /* for OPTION_GROUP */
 #include "pu_info.h"          /* For PU_Info */
+  #include "irbdata.h"
+  #include "ir_reader.h"              /* for IR_reader_init(), etc. */
+  #include "ir_bwrite.h"              /* for WN_open_output(), etc. */
+
 #include "ir_bread.h"         /* Binary WHIRL reader */
+   #include "dwarf_DST_dump.h"
+
 #include "err_host.tab"       /* Include the error tables in the driver */
+  #include "errors.h"
 
 #include "pu_info.h"          /* For PU_Info */
 #include "file_util.h"        /* for New_Extension () */
@@ -216,7 +228,8 @@ void
 Local_Terminate ( void )
 {
   /* Close and delete whirl2c specific files before calling Terminate() */
-  W2C_Fini(FALSE/*emit_global_decls*/);
+  W2C_Outfile_Fini(FALSE/*emit_global_decls*/);
+ //  W2C_Fini(FALSE/*emit_global_decls*/);
 }
 
 
@@ -297,6 +310,8 @@ main (INT argc,       /* Number of command line arguments */
    * possible upon start-up.
    */
    MEM_Initialize();
+/* Set_Error_Tables (Phases, host_errlist);
+*/
    Init_Error_Handler(10);
    Set_Error_Line(ERROR_LINE_UNKNOWN);
    Set_Error_Phase("Whirl2c");
@@ -327,10 +342,18 @@ main (INT argc,       /* Number of command line arguments */
        * to C.
        */
       (void)Open_Input_Info(Irb_File_Name);
-      pu_tree = Read_Global_Info(NULL);
-      W2C_Process_Command_Line(argc, argv, argc, argv);
-      W2C_Init(TRUE/*emit_global_decls*/);
+/*by Liao*/ 
+Initialize_Symbol_Tables (FALSE);
+New_Scope (GLOBAL_SYMTAB, Malloc_Mem_Pool, FALSE);
 
+      pu_tree = Read_Global_Info(NULL);
+
+IR_reader_init();
+IR_Dwarf_Gen_File_Table(TRUE);
+
+      W2C_Process_Command_Line(argc, argv, argc, argv);
+      //W2C_Init(TRUE/*emit_global_decls*/);
+      W2C_Outfile_Init(TRUE);
       /* Loop thru all the PUs */
       for (current_pu = pu_tree;
 	   current_pu != NULL;
@@ -338,10 +361,15 @@ main (INT argc,       /* Number of command line arguments */
 
 	 Current_PU_Info = current_pu;
 	 MEM_POOL_Push (MEM_pu_nz_pool_ptr);
+	 MEM_POOL_Push(MEM_pu_pool_ptr);
+
 	 Read_Local_Info (MEM_pu_nz_pool_ptr, current_pu);
 	 pu = PU_Info_tree_ptr(current_pu);
 
-	 W2C_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+
+	 W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+	 //	 W2C_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+
 
 	 if (PU_Info_child(current_pu)) {
 	    fprintf(stderr, "WARNING: ignoring nested procedures in \"%s\"\n",
@@ -350,9 +378,14 @@ main (INT argc,       /* Number of command line arguments */
 
 	 Free_Local_Info (current_pu);
 	 MEM_POOL_Pop (MEM_pu_nz_pool_ptr);
+
+	 MEM_POOL_Pop(MEM_pu_pool_ptr);
+
       } /* for each PU */
 
-      W2C_Fini(TRUE/*emit_global_decls*/);
+      W2C_Outfile_Fini(TRUE/*emit_global_decls*/);
+	  //     W2C_Fini(TRUE/*emit_global_decls*/);
+
       Cleanup_Files(TRUE, FALSE);
    }
    

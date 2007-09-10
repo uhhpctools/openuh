@@ -112,7 +112,6 @@ static char *config_clist_h_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
-
 /* ====================================================================
  *
  * -CLIST: option group
@@ -139,6 +138,7 @@ typedef struct clist_flags {
    BOOL        emit_all_regions;/* Emit cmplr-generated regions */
    BOOL        emit_linedirs;   /* Emit preproc line-directives */
    BOOL        emit_nested_pus; /* Emit code for nested PUs */
+   BOOL        before_cg;       /* Invoke whirl2c right before CG,Liao */
    BOOL        emit_frequency;  /* Emit feedback frequency info */
    BOOL        emit_cgtag;      /* Tag loops with loop_info address */
    BOOL        lower_ftn;       /* Lower fortran intermediate */
@@ -154,7 +154,6 @@ typedef struct clist_flags {
   INT32 buffer[16];	/* Buffer space -- initialize to FALSE */
 } CLIST_FLAGS;
 
-
 /* ====================================================================
  *
  * -CLIST: option group
@@ -180,6 +179,7 @@ extern CLIST_FLAGS *Current_CLIST;
 #define CLIST_emit_all_regions  Current_CLIST->emit_all_regions
 #define CLIST_emit_linedirs     Current_CLIST->emit_linedirs
 #define CLIST_emit_nested_pus   Current_CLIST->emit_nested_pus
+#define CLIST_before_cg         Current_CLIST->before_cg
 #define CLIST_emit_frequency    Current_CLIST->emit_frequency
 #define CLIST_emit_cgtag        Current_CLIST->emit_cgtag
 #define CLIST_lower_ftn         Current_CLIST->lower_ftn

@@ -65,7 +65,17 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/ty2
 #include "PUinfo.h"
 #include "ty2c.h"
 #include "tcon2c.h"
-
+/*
+#if defined(__GNUC__) && (__GNUC__ == 3)
+#define USING_HASH_SET 1
+#include <ext/hash_set>
+using namespace __gnu_cxx;
+#elif defined(__sgi) && !defined(__GNUC__)
+#define USING_HASH_SET 1
+#else
+#include <set>
+#endif
+*/
 
 /*------------------ macros, types, and local state -------------------*/
 /*---------------------------------------------------------------------*/
@@ -101,6 +111,10 @@ static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
    {{"void",               Name_Unknown_Type},  /* MTYPE_UNKNOWN 0 */
     {"char",               "_BOOLEAN"},         /* MTYPE_B = 1 */
     {"signed char",        "_INT8"},            /* MTYPE_I1 = 2 */
+    //TODO Liao, {"signed char",        "char"},  // We use "char" to represnet I1, since the translator frequently uses 
+                                     // a pointer to the predefined I1 whenever it wants to generate a cast to (char *).
+                                     // explicit use of "signed char" should be handled by the front end
+                                     // and should not use the predefined I1.
     {"signed short",       "_INT16"},           /* MTYPE_I2 = 3 */
     {"signed int",         "_INT32"},           /* MTYPE_I4 = 4 */
     {"signed long long",   "_INT64"},           /* MTYPE_I8 = 5 */
@@ -129,8 +143,8 @@ static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
     {"_Complex long double", "_COMPLEX80"},	/* MTYPE_C10 = 24 */
     {Name_Unknown_Type,        ""},             /* MTYPE_C16 = 25 */
     {Name_Unknown_Type,        ""},             /* MTYPE_I16 = 26 */
-    {Name_Unknown_Type,        ""}		/* MTYPE_U16 = 27 */
-   ,{Name_Unknown_Type,        "_CMPLX8[2]"},   /* MTYPE_V16C4 = 24 */
+    {Name_Unknown_Type,        ""},		/* MTYPE_U16 = 27 */
+    {Name_Unknown_Type,        "_CMPLX8[2]"},   /* MTYPE_V16C4 = 24 */
     {Name_Unknown_Type,        "_CMPLX16[1]"},  /* MTYPE_V16C8 = 25 */
     {"signed char[16]",        "_INT8[16]"},    /* MTYPE_V16I1 = 26 */
     {"signed short[8]",        "_INT16[8]"},    /* MTYPE_V16I2 = 27 */
@@ -167,6 +181,10 @@ const char Special_ComplexQD_TypeName[] = "_COMPLEXQD";
 
 #define PTR_OR_ALIGNED_WITH_STRUCT(fld_ty, struct_align) \
    (TY_Is_Pointer(fld_ty) || TY_align(fld_ty) <= struct_align)
+
+
+//TODO, Liao#define PTR_OR_ALIGNED_WITH_STRUCT(fld_ty, struct_align) true
+
 
 /* Some forward declarations */
 static void TY2C_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context);
@@ -206,7 +224,6 @@ static const TY2C_HANDLER_FUNC
  */
 const char *TY2C_Complex_Realpart_Name = "realpart";
 const char *TY2C_Complex_Imagpart_Name = "imagpart";
-
 
 /*--------------------- hidden utility routines -----------------------*/
 /*---------------------------------------------------------------------*/
@@ -252,15 +269,32 @@ Write_Typedef(FILE       *ofile,
 static void 
 TY2C_prepend_qualifiers(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
-   if (!CONTEXT_unqualified_ty2c(context))
-   {
-      if (TY_is_const(ty))
-	 Prepend_Token_String(decl_tokens, "const");
+
+  if (!CONTEXT_unqualified_ty2c(context))
+    {
+      if (TY_is_const(ty) && CONTEXT_const(context)) {
+	Prepend_Token_String(decl_tokens, "const");
+      }
       if (TY_is_volatile(ty))
 	 Prepend_Token_String(decl_tokens, "volatile");
       if (TY_is_restrict(ty))
 	 Prepend_Token_String(decl_tokens, "restrict");
    }
+  /*
+	Prepend_Token_String(decl_tokens, "volatile");
+      if (TY_is_restrict(ty)) {
+	TY_IDX real_ty = TY_To_Sptr_Idx(ty);
+	if (real_ty == pshared_ptr_idx) {
+	  Prepend_Token_String(decl_tokens, "UPCR_RESTRICT_PSHARED");
+	} else if (real_ty == shared_ptr_idx) {
+	  Prepend_Token_String(decl_tokens, "UPCR_RESTRICT_SHARED");
+	} else {
+	  Prepend_Token_String(decl_tokens, "UPCR_RESTRICT");
+	}
+      }
+    }
+  */
+
 } /* TY2C_prepend_qualifiers */
 
 
@@ -332,6 +366,11 @@ skip_till_next_field(FLD_HANDLE  this_fld,
 static void
 TY2C_prepend_filler_field(TOKEN_BUFFER decl_tokens, INT64 byte_size)
 {
+  //TOOD, Liao
+  //if (Portable_compile) {
+  //  return;  //Do not output filler field to aid debugging 
+  //}
+
    /* Declare a filler field, uniquely named "fill".
     */
    TOKEN_BUFFER field_tokens;
@@ -426,6 +465,7 @@ TY2C_prepend_FLD_list(TOKEN_BUFFER decl_tokens,
       /* Emit this_fld declaration */
       fld_tokens = New_Token_Buffer();
       Append_Token_String(fld_tokens, W2CF_Symtab_Nameof_Fld(fld));
+    //CONTEXT_set_incomplete_ty2c(context);//Liao,
       TY2C_translate(fld_tokens, FLD_type(fld), context);
       Append_Token_Special(fld_tokens, ';');
       Prepend_And_Reclaim_Token_List(decl_tokens, &fld_tokens);
@@ -471,6 +511,8 @@ TY2C_prototype_params(TOKEN_BUFFER decl_tokens,
 		      CONTEXT      context)
 {
    TOKEN_BUFFER param_tokens;
+   /* We want the const qualifer for function prototypes */
+   CONTEXT_set_const(context);
 
    if (Tylist_Table[params] == 0)
    {
@@ -489,6 +531,7 @@ TY2C_prototype_params(TOKEN_BUFFER decl_tokens,
 	    Append_Token_Special(decl_tokens, ',');
       }
    }
+   CONTEXT_reset_const(context);
 } /* TY2C_prototype_params */
 
 
@@ -511,8 +554,29 @@ TY2C_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    }
    else
    {
+#ifndef COMPILE_UPC
       Prepend_Token_String(decl_tokens, 
 			   Scalar_C_Names[TY_mtype(ty)].pseudo_name);
+#else
+     //WEI:
+     //For shared_ptr_idx, we want to print the name directly
+     if ((TY_is_shared(ty) && !TY_is_pshared(ty)) || strcmp(TY_name(ty),"shared_ptr_struct") == 0) {
+       Prepend_Token_String(decl_tokens, "upcr_shared_ptr_t");
+     } else if ((TY_is_shared(ty) && TY_is_pshared(ty)) || strcmp(TY_name(ty),"pshared_ptr_struct") == 0) {
+       Prepend_Token_String(decl_tokens, "upcr_pshared_ptr_t");
+     } else if (Type_Is_Shared_Ptr(ty)) {
+       Prepend_Token_String(decl_tokens, 
+			    (TY_To_Sptr_Idx(ty) == pshared_ptr_idx) ? "upcr_pshared_ptr_t" : "upcr_shared_ptr_t");
+     } else if (ty == upc_hsync_mem_ty) {
+       Prepend_Token_String(decl_tokens, "upcr_handle_t");
+     } else if (Compile_Upc && TY_is_logical(ty)) {
+       Prepend_Token_String(decl_tokens, TY_name(ty));
+     } else {
+	 Prepend_Token_String(decl_tokens, 
+			      Scalar_C_Names[TY_mtype(ty)].pseudo_name);
+     }
+#endif
+
    }
    TY2C_prepend_qualifiers(decl_tokens, ty, context);
 } /* TY2C_scalar */
@@ -591,6 +655,12 @@ TY2C_array(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
        */
       CONTEXT_reset_incomplete_ty2c(context);
    }
+
+   //WEI: if elt type is a struct, make sure it's output as incomplete
+   if (TY_kind(TY_AR_etype(ty)) == KIND_STRUCT) {
+     CONTEXT_set_incomplete_ty2c(context);
+   }
+
    
    /* Add the element type tokens and combine the array and element
     * qualifiers.
@@ -599,10 +669,8 @@ TY2C_array(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    TY2C_prepend_qualifiers(decl_tokens, ty, context);
 } /* TY2C_array */
 
+static void TY2C_complete_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context) {
 
-static void 
-TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
-{
    /* We need to get the alignment right for structs containing
     * equivalence fields; i.e. overlapping fields, only one of which
     * will be declared by whirl2f.  One way to accomplish this is
@@ -634,15 +702,20 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    if (!declare_incomplete) /* flag it as having been translated to C */
       Set_TY_is_translated_to_c(ty);
 
-   /* Declare all the struct fields, unless the incomplete type is all
-    * that is needed.
-    */
-   if (!declare_incomplete && !TY_flist(Ty_Table[ty]).Is_Null ())
-   {
+    BOOL    is_anonymous = (strncmp (TY_name(ty), "T ", 2) == 0); //whether struct is anonymous
+    BOOL    do_write = FALSE;
+    if (!TY_flist(Ty_Table[ty]).Is_Null ()) {
+      do_write = TRUE;
+      /* Declare all the struct fields, unless the incomplete type is all
+       * that is needed.
+       */
+      // if (!declare_incomplete && !TY_flist(Ty_Table[ty]).Is_Null ())
+      //{
       fld_context = context;
       CONTEXT_reset_unqualified_ty2c(fld_context);
-      CONTEXT_reset_incomplete_ty2c(fld_context);
-
+      CONTEXT_set_incomplete_ty2c(fld_context);
+      //CONTEXT_reset_incomplete_ty2c(fld_context);
+      
       if (is_equivalenced)
       {
 	 /* Prepend the end-of-union character, on a new line following
@@ -665,6 +738,17 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
        */
       Prepend_Token_Special(decl_tokens, '}');
       Prepend_Indented_Newline(decl_tokens, 1);
+      
+      //fix bug579.
+      //In the front end, a forward declared struct has an align of 1,
+      //and here we need to fix it back to the correct alignment
+      if (TY_align(ty) == 1) {
+	FLD_HANDLE first_fld = TY_flist(Ty_Table[ty]);
+	if (!first_fld.Is_Null()) {
+	  Set_TY_align(ty, TY_align(FLD_type(first_fld)));
+	}
+      }
+
 
       /* prepend fields, where each field is preceeded by a newline 
        * and is indented.
@@ -691,37 +775,129 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 	 Decrement_Indentation();
 	 Prepend_Token_Special(decl_tokens, '{');
       }
-      Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
-   }
-   else if (!declare_incomplete && TY_size(ty) == 1)
-   {
+      if (!is_anonymous) {
+	Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
+      }
+    } else if (TY_size(ty) == 0) {// 0 size structure,not 1. Liao,
+      //   else if (!declare_incomplete && TY_size(ty) == 1)
+
       /* A special struct with no fields, which may sometimes
        * occur for C++ lowered into C.
        */
       Prepend_Token_Special(decl_tokens, '}');
       Prepend_Indented_Newline(decl_tokens, 1);
-
       Prepend_Token_Special(decl_tokens, ';');
       Prepend_Token_String(decl_tokens, W2CF_Symtab_Unique_Name("dummy"));
       TY2C_translate(decl_tokens, Stab_Mtype_To_Ty(MTYPE_U1), context);
-
       Increment_Indentation();
       Prepend_Indented_Newline(decl_tokens, 1);
       Prepend_Token_Special(decl_tokens, '{');
       Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
       Decrement_Indentation();
-   }
-   else
-   {
-      Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
-   }
-   
-   if (TY_is_union(ty) || is_equivalenced)
-      Prepend_Token_String(decl_tokens, "union");
-   else
-      Prepend_Token_String(decl_tokens, "struct");
+      do_write = TRUE;
+    }
 
-   TY2C_prepend_qualifiers(decl_tokens, ty, context);
+    if(do_write) { 
+      if (TY_is_union(ty) || is_equivalenced)
+	Prepend_Token_String(decl_tokens, "union");
+      else
+	Prepend_Token_String(decl_tokens, "struct");
+    }
+    if (is_anonymous) {
+      Prepend_Token_String(decl_tokens, "typedef ");
+      Append_Token_String(decl_tokens, " ");
+      Append_Token_String(decl_tokens, TY_name(ty) + 2);
+    }
+}
+
+/* code to avoid duplication of struct output.  This could happen e.g. if the struct type is used both for 
+   shaerd and non-shared variables */
+
+//  static hash_set<STR_IDX> struct_names;
+
+
+//If the given type is a user-defined struct, 
+//This function outputs it complete declaration to the w2c.h file
+static void TY2C_Output_Struct_Type(TY_IDX ty,
+			     INT lines_between_decls,
+			     CONTEXT context) {
+
+
+//TODO, Liao  if (struct_names.find(Save_Str(TY_name(ty))) != struct_names.end()
+//      || !TY_is_written(ty)) {
+    //don't output duplicate struct definitions
+//TODO    return;
+//  }
+
+
+  //it seems that the intention here is to avoid writing duplicate declarations
+  //for structs that appear as both local and shared types.
+  //However - if  they appear only as shared we do not get any types printed - we
+  //need them for debug. The above test should be strong enough ...
+  //if (!TY_is_shared(ty)) {
+    Set_TY_is_translated_to_c(ty);  //need to force all later struct type decl to be incomplete
+ //   struct_names.insert(Save_Str(TY_name(ty)));
+
+    TOKEN_BUFFER tmp_tokens = New_Token_Buffer(); 
+    CONTEXT_reset_incomplete_ty2c(context); 
+    TY2C_complete_struct(tmp_tokens, ty, context);
+    Append_Token_Special(tmp_tokens, ';'); 
+    Append_Indented_Newline(tmp_tokens, lines_between_decls);
+    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+			     NULL,
+			     &tmp_tokens);
+   CONTEXT_set_incomplete_ty2c(context);//Liao
+    //}
+}
+
+
+/*
+ * WEI: This function is modified to output only incomplete struct types.
+ * Complete struct type will be output by TY2C_complete_struct, through TY2C_Output_Struct_Type
+ */
+static void 
+TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
+{
+  BOOL    declare_incomplete ; 
+  declare_incomplete = CONTEXT_incomplete_ty2c(context) ;
+  if (( !declare_incomplete) && (!TY_is_translated_to_c(ty)) ) {
+    //Add this struct type to the global w2c.h
+    CONTEXT_reset_incomplete_ty2c (context);
+    TY2C_Output_Struct_Type(ty, 1, context);
+  } 
+#ifdef COMPILE_UPC  
+  //if (Compile_Upc) {
+    //WEI: special case for shared types
+    if (strcmp(W2CF_Symtab_Nameof_Ty(ty),"pshared_ptr_struct") == 0) {
+      Prepend_Token_String(decl_tokens, "upcr_pshared_ptr_t");
+      TY2C_prepend_qualifiers(decl_tokens, ty, context);
+      return;
+    }
+    if (strcmp(W2CF_Symtab_Nameof_Ty(ty),"shared_ptr_struct") == 0) {
+      Prepend_Token_String(decl_tokens, "upcr_shared_ptr_t");
+      TY2C_prepend_qualifiers(decl_tokens, ty, context);
+      return;
+    }
+  //}
+
+#endif
+  if (declare_incomplete){
+  BOOL is_anonymous = (strncmp(TY_name(ty), "T ", 2) == 0);
+  if (!is_anonymous) {
+    /* the normal case */
+    Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
+  
+    BOOL    is_equivalenced = Stab_Is_Equivalenced_Struct(ty);
+    if (TY_is_union(ty) || is_equivalenced)
+      Prepend_Token_String(decl_tokens, "union");
+    else
+      Prepend_Token_String(decl_tokens, "struct");
+  } else {
+    Prepend_Token_String(decl_tokens, TY_name(ty) + 2);
+  }
+    
+  TY2C_prepend_qualifiers(decl_tokens, ty, context);
+  }//end if
 } /* TY2C_struct */
 
 
@@ -732,7 +908,9 @@ TY2C_function(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 
    /* A function cannot be qualified! */
    CONTEXT_reset_unqualified_ty2c(context);
-   
+
+   /* WEI: struct types in a function had better be incomplete */
+   CONTEXT_set_incomplete_ty2c(context);
    /* Append the parameter type list to the right of the decl_tokens */
    Append_Token_Special(decl_tokens, '(');
    if (TY_has_prototype(ty))
@@ -754,6 +932,8 @@ TY2C_function(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 static void 
 TY2C_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
+
+  TY_IDX sptr_idx = 0;
    /* Add qualifiers to the rhs of the '*' and to the left of the
     * decl_tokens.
     */
@@ -761,11 +941,46 @@ TY2C_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    Prepend_Token_Special(decl_tokens, '*');
 
    if (TY_Is_Array_Or_Function(TY_pointed(ty)))
+#ifdef COMPILE_UPC
+   //WEI: If ty is a local pointer to shared, don't output *
+   //TODO:Liao, double check pointer translation, 
+   //i.e., we want shared_ptr_t, not shared_ptr_t*
+   if (!TY_is_shared(TY_pointed(ty))) {
+     Prepend_Token_Special(decl_tokens, '*');
+   } else
+     //Shouldn't see shared ptr types in this stage - BE bug
+     //However, until we fix it, patch these here.
+     if(Type_Is_Shared_Ptr(ty)) {
+       sptr_idx = TY_To_Sptr_Idx(ty);
+     }
+
+
+   if (TY_Is_Array_Or_Function(TY_pointed(ty)) && 
+       !(sptr_idx && Compile_Upc && debug_requested) )
+#endif
       WHIRL2C_parenthesize(decl_tokens);
    
    CONTEXT_reset_unqualified_ty2c(context); /* Always qualify pointee type */
    CONTEXT_set_incomplete_ty2c(context); /* Pointee can be incomplete */
    TY2C_translate(decl_tokens, TY_pointed(ty), context);
+   /* TODO, Liao
+   bool old_const = CONTEXT_const(context);
+   CONTEXT_set_const(context);
+   if(!sptr_idx)
+     TY2C_translate(decl_tokens, TY_pointed(ty), context);
+   else {
+     if(Compile_Upc && debug_requested) {
+       static char mangled_name[256];
+       strcpy(mangled_name,"__BMN_");
+       strcat(mangled_name, Mangle_Type(ty).data());
+       Prepend_Token_String(decl_tokens, mangled_name);
+     }
+     else 
+       TY2C_translate(decl_tokens, sptr_idx, context);
+   }
+   if (!old_const) {
+     CONTEXT_reset_const(context);
+     } */
 } /* TY2C_pointer */
 
 
@@ -840,6 +1055,11 @@ TY2C_translate_unqualified(TOKEN_BUFFER decl_tokens, TY_IDX ty)
 
    CONTEXT_reset(context);
    CONTEXT_set_unqualified_ty2c(context);
+   //WEI: in this cast the struct type should definitely be incomplete
+   if ( TY_kind(ty) == KIND_STRUCT) {
+     CONTEXT_set_incomplete_ty2c(context);
+   }
+
    TY2C_translate(decl_tokens, ty, context);
 } /* TY2C_translate_unqualified */
 

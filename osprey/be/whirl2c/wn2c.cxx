@@ -81,6 +81,26 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/wn2
 #include "tcon2c.h"
 #include "wn2c_pragma.h"
 
+#include "ir_reader.h"
+#include "inttypes.h"
+#include "stdarg.h"
+
+#ifdef COMPILE_UPC
+#include "upc_wn_util.h"
+#endif
+
+/*
+#if defined(__GNUC__) && (__GNUC__ == 3)
+#define USING_HASH_SET 1
+#include <ext/hash_set>
+using namespace __gnu_cxx;
+#elif defined(__sgi) && !defined(__GNUC__)
+#define USING_HASH_SET 1
+#include <hash_set>
+#else
+#include <set>
+#endif
+*/
 
 #define WN_pragma_nest(wn) WN_pragma_arg1(wn)
 
@@ -165,6 +185,13 @@ static BOOL       WN2C_Used_Return_Value = FALSE;
 static const RETURNSITE *WN2C_Next_ReturnSite = NULL;
 static const CALLSITE   *WN2C_Prev_CallSite = NULL;
 
+static char last_ret_tmp[64]; //Liao
+
+
+#ifdef COMPILE_UPC
+extern char upc_debug_line[1024];
+extern BOOL upc_debug_seen ;
+#endif
 
 static BOOL 
 WN2C_Skip_Stmt(const WN *stmt)
@@ -255,7 +282,14 @@ static STATUS WN2C_rcomma(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context);
 static STATUS WN2C_alloca(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context);
 static STATUS WN2C_dealloca(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context);
 
+#ifdef COMPILE_UPC
+static STATUS WN2C_dumpasm(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context);
+#endif
+
 typedef STATUS (*WN2C_HANDLER_FUNC)(TOKEN_BUFFER, const WN*, CONTEXT);
+
+typedef const WN * CWN;
+CWN *last_loc;
 
 /* WN2C_Opr_Handle[] maps an OPR (../common/com/opcode_gen_core.h)
  * to the function that translates it to C.  It is dynamically 
@@ -376,7 +410,10 @@ static const OPR2HANDLER WN2C_Opr_Handler_Map[] =
    {OPR_COMMA, &WN2C_comma},
    {OPR_RCOMMA, &WN2C_rcomma},
    {OPR_ALLOCA, &WN2C_alloca},
-   {OPR_DEALLOCA, &WN2C_dealloca}
+   {OPR_DEALLOCA, &WN2C_dealloca},
+#ifdef COMPILE_UPC
+   {OPR_ASM_STMT, &WN2C_dumpasm}
+#endif
 }; /* WN2C_Opr_Handler_Map */
 
 
@@ -769,6 +806,7 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
   {OPC_I4FQEQ, "=="},
   {OPC_I4I8EQ, "=="},
   {OPC_I4U4EQ, "=="},
+  {OPC_U4U4EQ, "=="},
   {OPC_I4CQEQ, "=="},
   {OPC_I4F8EQ, "=="},
   {OPC_I4C8EQ, "=="},
@@ -1108,6 +1146,45 @@ static const OPC2CNAME_MAP WN2C_Opc2cname_Map[] =
 // << WHIRL 0.30: Replaced OPC_T1{EQ,NE,GT,GE,LT,LE} by OP_BT1 and OPC_I4T1 variants
 }; /* WN2C_Opc2Cname_Map */
 
+static bool 
+WN2C_is_void_ptr (TY_IDX idx) {
+  return TY_kind(idx) == KIND_POINTER && TY_kind(TY_pointed(idx)) == KIND_VOID;
+}
+
+//For union accesses, we have to fake its offset as it were a struct, 
+//so that whirl2c can function correctly
+//see bug944/910.
+static UINT 
+WN2C_get_union_offset(TY_IDX ty, UINT field_id) {
+  
+  UINT cur_field_id = 0;
+  FLD_HANDLE fld = FLD_get_to_field(ty, field_id, cur_field_id);
+  return FLD_ofst(fld);
+}
+  static SRCPOS last_source_line;
+
+
+
+//handle internal translator warnings.
+//This is generally for situations where there's a code generation bug,
+//but the user program may still work.
+static void 
+translator_warning(const char * str, ...) {
+
+  va_list vp;
+  va_start(vp, str);
+
+  USRCPOS cpos;
+  USRCPOS_srcpos(cpos) = last_source_line;  
+  const char *fname, *dirname;
+  IR_Srcpos_Filename(USRCPOS_srcpos(cpos), &fname, &dirname);
+  fprintf(stderr, "internal translator warning (from %s:%d): ",
+	  fname, USRCPOS_linenum(cpos));
+  vfprintf(stderr, str, vp);
+  fprintf(stderr, "\n");
+  va_end(vp);
+}
+
 
 /*------------------ Statement newline directives ----------------------*/
 /*----------------------------------------------------------------------*/
@@ -1116,6 +1193,11 @@ static void
 WN2C_Stmt_Newline(TOKEN_BUFFER tokens,
 		  SRCPOS       srcpos)
 {
+  static int init = 0;
+  if(!init) {
+    IR_Dwarf_Gen_File_Table (FALSE);
+    init = 1;
+  }
    if (W2C_Emit_Linedirs)
       Append_Srcpos_Directive(tokens, srcpos);
    Append_Indented_Newline(tokens, 1);
@@ -1174,7 +1256,16 @@ WN2C_generate_cast(TY_IDX cast_to,         /* Cast expr to this ty */
     *   (<cast_to>)<tokens>
     */
    TOKEN_BUFFER ty_buffer = New_Token_Buffer();
-   
+#ifdef COMPILE_UPC
+
+   // Check for explicit casts to upcr_{p}shared_ptr_t
+   if (WN2C_TY_is_shared(TY_To_Sptr_Idx(cast_to)) && !pointer_to_type) {
+     if (TY_kind(TY_To_Sptr_Idx(cast_to)) != KIND_SCALAR)
+       translator_warning("Attempt to directly cast to upcr_{p}shared_ptr_t");
+   }
+
+#endif
+
    if (pointer_to_type)
       Append_Token_Special(ty_buffer, '*');
    if (TY_Is_Array_Or_Function(cast_to))
@@ -1239,7 +1330,16 @@ WN2C_Translate_Arithmetic_Operand(const WN*wn,
 				  CONTEXT  context)
 {
    TOKEN_BUFFER opnd_tokens = New_Token_Buffer();
-   TY_IDX       opnd_ty = WN_Tree_Type(wn);
+//   TY_IDX       opnd_ty = WN_Tree_Type(wn);
+  TY_IDX       opnd_ty;
+   
+   //for address arithmetic we need to generate casts to the correct pointer type
+   //see bug649 - multidimensional arrays
+   //hopefully the only special case needs to be LDA (array_base)
+   if(WN_operator(wn) == OPR_LDA) 
+     opnd_ty = WN_ty(wn);
+   else
+     opnd_ty = WN_Tree_Type(wn);
 
    if (!WN2C_arithmetic_compatible_types(result_ty, opnd_ty))
    {
@@ -1318,9 +1418,12 @@ WN2C_address_add(TOKEN_BUFFER tokens,
        * to a (void*).
        */
       top_level_expr = FALSE;
-      WN2C_append_cast(tokens, 
-			Stab_Mtype_To_Ty(MTYPE_V), TRUE/*ptr_to_type*/);
+//      WN2C_append_cast(tokens, 
+//			Stab_Mtype_To_Ty(MTYPE_V), TRUE/*ptr_to_type*/);
 
+      //WEI: cast to expr_ty instead of void *
+      WN2C_append_cast(tokens, expr_ty, FALSE);
+      
       if (TY_Is_Pointer(wn0_ty))
 	 wn0_ty = Stab_Pointer_To(Stab_Mtype_To_Ty(MTYPE_U1));
       else
@@ -1415,7 +1518,9 @@ WN2C_address_add(TOKEN_BUFFER tokens,
 
    Append_Token_Special(tokens, '+');
 
-   if (TY_Is_Pointer(wn0_ty) && given_lvalue_ty != (TY_IDX) 0)
+//   if (TY_Is_Pointer(wn0_ty) && given_lvalue_ty != (TY_IDX) 0)
+   //TODO, Liao, double check it if (TY_Is_Pointer(wn0_ty) && given_lvalue_ty != (TY_IDX) 0)
+   if (!TY_Is_Pointer(wn0_ty) && given_lvalue_ty != (TY_IDX) 0)
       CONTEXT_set_lvalue_type(context);
    opnd_tokens = WN2C_Translate_Arithmetic_Operand(wn1, wn1_ty, context);
    Append_And_Reclaim_Token_List(tokens, &opnd_tokens);
@@ -1648,7 +1753,11 @@ WN2C_MemAccess_Type(TY_IDX      base_ty,
    else if (!TY_Is_Structured(base_ty) || 
 	    WN2C_compatible_lvalues(load_ty, base_ty))
    {
-      return base_ty;
+    //return base_ty;
+     //Fix bug834.
+     //we want the load_ty instead of the base_ty,
+     //so that we will use the right pointer type for the memory access
+     return load_ty;
    }
    else
    {
@@ -1700,6 +1809,12 @@ WN2C_SymAccess_Type(TY_IDX     *base_addr_ty,
     */
    TY2C_FLD_INFO fld_info;
    TY_IDX        actual_loaded_ty = Stab_Mtype_To_Ty(load_mtype);
+
+#ifdef COMPILE_UPC
+   /* Need to do this since shared pointer is now not lowered 
+      by the backend (see Bug345)*/
+   base_ty = TY_To_Sptr_Idx(base_ty);
+#endif
 
    if (TY_Is_Array(base_ty) &&
        WN2C_compatible_lvalues(load_ty, TY_AR_etype(base_ty)))
@@ -1887,6 +2002,16 @@ WN2C_based_lvalue(TOKEN_BUFFER expr_tokens,    /* lvalue or addr expr */
    incompat_addr_tys = !WN2C_assignment_compatible_types(addr_ty, expr_ty);
    incompat_obj_tys = !WN2C_compatible_lvalues(object_ty, base_obj_ty);
 
+ /*bug 209, Liao*/
+   if (!TY_ptr_as_array(Ty_Table[addr_ty]) && 
+	TY_Is_Array(TY_pointed(addr_ty))&& 
+	TY_kind(object_ty)==KIND_SCALAR)
+    {   TY_IDX t2=addr_ty;
+       while (TY_AR_etype(t2)!=KIND_INVALID) t2= TY_AR_etype(t2);
+       incompat_obj_tys =!WN2C_arithmetic_compatible_types(t2,object_ty);
+	
+    }
+
    /* Correct the address of the base object, if necessary.  Note that
     * we permit any kind of expr_ty, while the addr_ty must always be
     * a pointer type.
@@ -1942,7 +2067,11 @@ WN2C_based_lvalue(TOKEN_BUFFER expr_tokens,    /* lvalue or addr expr */
     * struct/class/union at the given offset, in which case we
     * should use field-selection instead of an offset calculation.
     */
-   if (incompat_obj_tys && TY_Is_Structured(base_obj_ty))
+  //if (incompat_obj_tys && TY_Is_Structured(base_obj_ty))
+   /* If we're reading into a struct with an offset,
+    * always try to use field selection instead of pointer arithmetic
+    */
+   if ((addr_offset != 0 || incompat_obj_tys) && TY_Is_Structured(base_obj_ty))
    {
       field_info =
 	 TY2C_get_field_info(base_obj_ty, 
@@ -1966,9 +2095,25 @@ WN2C_based_lvalue(TOKEN_BUFFER expr_tokens,    /* lvalue or addr expr */
    }
    else if (addr_offset != (STAB_OFFSET) 0 || incompat_obj_tys)
    {
-      if (expr_is_lvalue)
-	 Prepend_Token_Special(expr_tokens, '&');
+//      if (expr_is_lvalue)
+//	 Prepend_Token_Special(expr_tokens, '&');
 
+     if (expr_is_lvalue) {    
+       if (TY_Is_Array(TY_pointed(addr_ty)) &&
+	   WN2C_arithmetic_compatible_types(Get_Inner_Array_Type(TY_pointed(addr_ty)), object_ty)) {
+	 /* For multidimensional arrays like int aa[N][M], we transform an array access aa[i][j] to 
+	  * *((int*) aa) + (i * M) + j), without the '&' so it would be vectorizable.
+	  */
+       } else if (addr_offset == 0 && TY_kind(object_ty) == KIND_SCALAR && TY_kind(base_obj_ty) == KIND_SCALAR) {
+	 //Do not use indirection when converting between integral types
+	 WN2C_prepend_cast(expr_tokens, object_ty, FALSE);
+	 goto ret_point;
+       }
+       else {
+	 Prepend_Token_Special(expr_tokens, '&');
+       }
+     }
+     
       if (addr_offset != 0 && TY_size(object_ty) != 0 && addr_offset%TY_size(object_ty) != 0)
       {
 	 /* Use cast and pointer arithmetics to give us:
@@ -1982,7 +2127,14 @@ WN2C_based_lvalue(TOKEN_BUFFER expr_tokens,    /* lvalue or addr expr */
 	 WN2C_append_addr_plus_const(expr_tokens, 
 				     TY_size(Stab_Mtype_To_Ty(MTYPE_I1)),
 				     addr_offset);
-	 WN2C_prepend_cast(expr_tokens, object_ty, TRUE/*ptr_to_type*/);
+//	 WN2C_prepend_cast(expr_tokens, object_ty, TRUE/*ptr_to_type*/);
+	 TY_IDX tty = object_ty;
+	 /* do not cast to array types, since it creates a pointer
+	  to the array*/
+	 if(TY_kind(tty) == KIND_ARRAY) {
+	   tty = Get_Inner_Array_Type(object_ty);
+	 }
+	 WN2C_prepend_cast(expr_tokens, tty, TRUE/*ptr_to_type*/);
       }
       else
       {
@@ -2003,7 +2155,12 @@ WN2C_based_lvalue(TOKEN_BUFFER expr_tokens,    /* lvalue or addr expr */
       }
       expr_is_lvalue = FALSE;
    } /* if (use-cast-and-ptr-arithmetics) */
-
+   else if (TY_is_logical(base_obj_ty) && !TY_is_logical(object_ty)) {
+     // treat long and int as differnt types, even if they have the same size for ia32
+     // See bug383
+     WN2C_prepend_cast(expr_tokens, object_ty, FALSE);
+   }
+   ret_point:
    if (expr_is_lvalue)
       STATUS_set_lvalue(status);
    return status;
@@ -2057,8 +2214,29 @@ WN2C_lvalue_st(TOKEN_BUFFER tokens,
 	 st = ST_full(st);
 	 addr_ty = Stab_Pointer_To(ST_type(st));
       }
+#ifdef COMPILE_UPC
+      //cerr << "ST: " << ST_name(st) << " TY:  " << TY_name(ST_type(st)) << endl; 
+      bool is_TLD = use_TLD && ST_keep_name_w2f(st) && !WN2C_TY_is_shared(ST_type(st))
+	&& ST_sym_class(st) != CLASS_FUNC && ST_sclass(st) != SCLASS_AUTO 
+	&& ST_sclass(st) != SCLASS_FORMAL && strstr(ST_name(st), ".init") == NULL;
+      if (is_TLD) {
+	/* we have a TLD variable */
+	Append_Token_String(tokens, "UPCR_TLD_ADDR(");
+      }
+#endif
 
       ST2C_use_translate(tokens, st, context);
+#ifdef COMPILE_UPC
+      if (is_TLD) {
+	Append_Token_String(tokens, ")");
+	WN2C_prepend_cast(tokens, ST_type(st), true);
+	WHIRL2C_parenthesize(tokens);
+	Prepend_Token_String(tokens, "*");
+	//Need this to ensure that * binds before []/->/.
+	WHIRL2C_parenthesize(tokens);
+      }
+#endif      
+      
       base_ptr_ty = Stab_Pointer_To(ST_sym_class(st) == CLASS_FUNC ?
                                                  ST_pu_type(st) : ST_type(st));
 
@@ -2073,6 +2251,38 @@ WN2C_lvalue_st(TOKEN_BUFFER tokens,
    }
    return status;
 } /* WN2C_lvalue_st */
+
+//TODO: Liao, double check it
+static STATUS WN2C_ptr_array_wn(TOKEN_BUFFER tokens,
+				const WN    *wn,
+				TY_IDX object_ty,
+				STAB_OFFSET  addr_offset,
+				CONTEXT      context) 
+
+{
+  /*
+   *
+   * A special case for accessing pointer of array with 
+   * a constant offset (e.g. a[0][1]).  The front end folds the constant offset,
+   * so the expressino becomes a LDID of the variable plus a constant offset.
+   * This node, however, does not work under whirl2c's generic framework (see bug892).
+   * Instead, we catch this as a special case and generate *((DATA*) a + K) 
+   */
+  STATUS        status = EMPTY_STATUS;
+  FmtAssert(WN_operator(wn) == OPR_LDID, ("Expecting LDID node in function %s\n", __func__));
+#ifdef COMPILE_UPC
+  object_ty = TY_To_Sptr_Idx(object_ty);
+#endif
+  ST2C_use_translate(tokens, WN_st(wn), context);
+  WN2C_prepend_cast(tokens, object_ty, TRUE);
+  if (addr_offset != 0) {
+    WN2C_append_addr_plus_const(tokens,
+				TY_size(object_ty),
+				addr_offset);
+    WHIRL2C_parenthesize(tokens);
+  }
+  return status;
+}
 
 
 static STATUS
@@ -2132,9 +2342,47 @@ WN2C_lvalue_wn(TOKEN_BUFFER tokens,
       CONTEXT_set_lvalue_type(context);
       CONTEXT_set_given_lvalue_ty(context, object_ty);
       addr_ty = tree_type = Stab_Pointer_To(object_ty);
+   } else if (WN_operator(wn) == OPR_LDID) {
+     TY_IDX wn_ty = ST_type(WN_st(wn));
+     if (TY_Is_Pointer(wn_ty) && TY_Is_Array(TY_pointed(wn_ty))) {
+       TY_IDX base_ty = Get_Inner_Array_Type(TY_pointed(wn_ty));
+       if (WN2C_assignment_compatible_types(base_ty, object_ty)) {
+	 //fprintf(stderr, "we have ptr of arrays\n");
+	 return WN2C_ptr_array_wn(tokens, wn, base_ty, addr_offset, context);
+       }
+     }
    }
 
    status = WN2C_translate(tokens, wn, context);
+   
+      if (WN_operator(wn) == OPR_ILOAD &&
+       WN_field_id(wn) != 0) {
+     TY_IDX fld_ty = WN_ty(wn);
+     if (TY_kind(fld_ty) == KIND_POINTER
+	 && TY_kind(TY_pointed(fld_ty)) == KIND_VOID) {
+       /* When loading a void * inside a struct, 
+	* sometimes the front end does not generate a TAS 
+	* In this case we have to manually cast it to the desired 
+	* type to avoid directly loading from a void *
+        */
+       WN2C_prepend_cast(tokens, addr_ty, FALSE);
+     }
+   }
+
+   if (WN_operator(wn) == OPR_LDA) {
+     //wei: we're accessing the elements in an array, and the array itself 
+     //is not an lvalue.
+     //see bug575.
+     //fprintf(stderr, "ST is: %s\n", ST_name(WN_st(wn)));
+     //Print_TY(stderr, object_ty);
+     BOOL reset = FALSE; 
+	reset= TY_Is_Array((ST_type(WN_st(wn))));
+     if(WN_field_id(wn) && TY_Is_Array(Get_Field_Type(ST_type(WN_st(wn)), WN_field_id(wn))))
+       reset = TRUE;
+     if (reset)
+       STATUS_reset_lvalue(status);
+   }
+   
 
    /* Get the object as an lvalue or as an address expression.
     */
@@ -2262,6 +2510,10 @@ WN2C_Append_Assignment(TOKEN_BUFFER  tokens,
    TOKEN_BUFFER rhs_buffer = New_Token_Buffer();
    TY_IDX       rhs_ty = WN_Tree_Type(rhs);
 
+#ifdef COMPILE_UPC
+   rhs_ty = TY_To_Sptr_Idx(rhs_ty);
+   assign_ty = TY_To_Sptr_Idx(assign_ty);
+#endif
    /* Get the rhs expression */
    if (!WN2C_assignment_compatible_types(assign_ty, rhs_ty))
    {
@@ -2278,6 +2530,20 @@ WN2C_Append_Assignment(TOKEN_BUFFER  tokens,
 	 /* Assign the rhs to a temporary, cast the address of the
 	  * temporary to the assign_ty, then dereference.
 	  */
+
+#ifdef COMPILE_UPC
+	/* Handle the special case where pointer-to-shared is assigned to NULL
+	   (see bug389)
+	 */
+	bool null_shared = false;
+	if (WN2C_TY_is_shared(assign_ty)) {
+	  if (WN_operator(rhs) == OPR_INTCONST && WN_const_val(rhs) == 0) {
+	    null_shared = true;
+	    rhs_ty = assign_ty;
+	  }
+	}
+#endif	 	  
+	  
 	 const UINT  tmp_idx = Stab_Lock_Tmpvar(rhs_ty, 
 						ST2C_Declare_Tempvar);
 	 const char *tmpvar_name = W2CF_Symtab_Nameof_Tempvar(tmp_idx);
@@ -2363,6 +2629,220 @@ WN2C_append_label_name(TOKEN_BUFFER tokens, const WN *wn)
    Append_Token_String(tokens, WHIRL2C_number_as_c_name(WN_label_number(wn)));
 } /* WN2C_append_label_name */
 
+#ifdef COMPILE_UPC
+static void emit_s2s_shared_typedef(TOKEN_BUFFER tokens, TY_IDX ty)
+{
+  
+  if(Type_Not_Mangled(ty)) {
+    
+    if(TY_kind(ty) == KIND_ARRAY || TY_kind(ty) == KIND_POINTER) {
+      //should I follow also pointers?
+      TY_IDX ety;
+      if(TY_kind(ty) == KIND_POINTER) {
+	ety = TY_pointed(ty);
+	while(ety) {
+	  emit_s2s_shared_typedef(tokens, ety);
+	  if(TY_kind(ety) == KIND_POINTER)
+	    ety = TY_pointed(ety);
+	  if(TY_kind(ety) != KIND_POINTER || !Type_Is_Shared_Ptr(ety))
+	    ety = 0;
+	}
+	
+      } else { //array
+	ety = TY_etype(ty);
+	while (TY_kind(ety) == KIND_ARRAY) {
+	  emit_s2s_shared_typedef(tokens, ety);
+	  ety = TY_etype(ety);
+	}
+	emit_s2s_shared_typedef(tokens, ety);
+      }
+    }
+    
+    if(Type_Is_Shared_Ptr(ty) && 
+       TY_For_Name(Mangle_Type(ty)) == (ty & (~TY_ALIGN))  ) {
+      Append_Token_String(tokens, "typedef ");
+      Append_Token_String(tokens,  
+			  TY_To_Sptr_Idx(ty) == shared_ptr_idx ?
+			  "upcr_shared_ptr_t" : "upcr_pshared_ptr_t");
+      static char mangled_name[256];
+      strcpy(mangled_name,"__BMN_");
+      strcat(mangled_name, Mangle_Type(ty).data());
+      Append_Token_String(tokens, mangled_name);
+      Append_Token_Special(tokens, ';');
+      Append_Indented_Newline(tokens, 1);
+    }
+  }
+}
+
+static TOKEN_BUFFER struct_field_types;
+void emit_s2s_debug_type_info(ST *st, TOKEN_BUFFER tokens) 
+{
+  
+  ST *tst;
+  int i;
+  TY_IDX etype;
+  etype = ST_type(st);
+  switch(ST_class(st)) {
+  case CLASS_VAR:
+    if(Type_Is_Shared_Ptr(etype)) {
+      emit_s2s_shared_typedef(tokens, etype); 
+    } else if (TY_kind(etype) == KIND_POINTER) {
+      if(Type_Is_Shared_Ptr(TY_pointed(etype))) {
+	emit_s2s_shared_typedef(tokens, TY_pointed(etype));
+      } else if(TY_kind(TY_pointed(etype)) == KIND_FUNCTION) {
+	TYLIST_IDX idx = TY_tylist(TY_pointed(etype));
+	while(Tylist_Table [idx]) {
+	  TY_IDX tidx = Tylist_Table[idx];
+	  if (Type_Is_Shared_Ptr(tidx)) {
+	    emit_s2s_shared_typedef(tokens, tidx);
+	  } else if (TY_kind(tidx) == KIND_POINTER) {
+	    if(Type_Is_Shared_Ptr(TY_pointed(tidx))) {
+	      emit_s2s_shared_typedef(tokens, TY_pointed(tidx));
+	    }
+	  }
+	  idx++;
+	}
+      }
+    } else if(TY_kind(etype) == KIND_ARRAY) {
+      etype = TY_etype(etype);
+      while(TY_kind(etype) == KIND_ARRAY)
+	etype = TY_etype(etype);
+      if(Type_Is_Shared_Ptr(etype))
+	emit_s2s_shared_typedef(tokens, ST_type(st)); 
+    }
+      
+    break;
+  case CLASS_FUNC: 
+    {
+      TYLIST_IDX idx = TY_tylist(ST_pu_type(st));
+      while(Tylist_Table [idx]) {
+	TY_IDX tidx = Tylist_Table[idx];
+	if (Type_Is_Shared_Ptr(tidx)) {
+	  emit_s2s_shared_typedef(tokens, tidx);
+	} else if (TY_kind(tidx) == KIND_POINTER) {
+	  if(Type_Is_Shared_Ptr(TY_pointed(tidx))) {
+	    emit_s2s_shared_typedef(tokens, TY_pointed(tidx));
+	  }
+	}
+	idx++;
+      }
+      //can't lower PU_symtabs here since they are read in per PU basis
+    }
+    break;
+  }
+   
+}
+
+static TOKEN_BUFFER patch_types_tokens; 
+struct mangle_shared_types 
+{
+  void operator() (UINT32 idx, TY *ty) const {
+    TY_IDX ty_idx = idx << 8;
+    switch (TY_kind(ty_idx)) {
+    case KIND_SCALAR:
+      if(Type_Is_Shared_Ptr(ty_idx)) {
+	emit_s2s_shared_typedef(patch_types_tokens, ty_idx);
+      } 
+      break;
+    case KIND_POINTER:
+      if(Type_Is_Shared_Ptr(ty_idx)) {
+	emit_s2s_shared_typedef(patch_types_tokens, ty_idx); 
+      } else if (TY_kind(ty_idx) == KIND_POINTER) {
+	if(Type_Is_Shared_Ptr(TY_pointed(ty_idx))) {
+	  emit_s2s_shared_typedef(patch_types_tokens, TY_pointed(ty_idx));
+      }
+      break;
+    case KIND_ARRAY:
+     
+	ty_idx = TY_etype(ty_idx);
+	while(TY_kind(ty_idx) == KIND_ARRAY)
+	  ty_idx = TY_etype(ty_idx);
+	if(Type_Is_Shared_Ptr(ty_idx))
+	  emit_s2s_shared_typedef(patch_types_tokens, idx<<8); 
+     
+      break;
+    case KIND_FUNCTION:
+      TYLIST_IDX lidx = TY_tylist(ty_idx);
+      while(Tylist_Table [lidx]) {
+	TY_IDX tidx = Tylist_Table[lidx];
+	if (Type_Is_Shared_Ptr(tidx)) {
+	  emit_s2s_shared_typedef(patch_types_tokens, tidx);
+	} else if (TY_kind(tidx) == KIND_POINTER) {
+	  if(Type_Is_Shared_Ptr(TY_pointed(tidx))) {
+	    emit_s2s_shared_typedef(patch_types_tokens, TY_pointed(tidx));
+	  }
+	}
+	lidx++;
+      }
+      break;
+      }
+    }
+  }
+};
+
+struct mangle_field_types
+{
+  void operator() (UINT32 idx, TY* ty) const {
+    TY_IDX fld_ty;
+    TY_IDX etype;
+    if (TY_kind(*ty) == KIND_STRUCT  )    
+      {
+	FLD_ITER fiter = Make_fld_iter(TY_fld(*ty));
+	FLD_HANDLE fh;
+	do  {
+	  fh = FLD_HANDLE(fiter);
+	  fld_ty = FLD_type(fh);
+	  // Ty_Table[fld_ty].Print(stderr);
+// 	  Ty_Table[FLD_orig_type(fh)].Print(stderr);
+	  if(Type_Is_Shared_Ptr(fld_ty) && Type_Not_Mangled(fld_ty)) {
+	    emit_s2s_shared_typedef(struct_field_types, fld_ty);
+	  } if(TY_kind(fld_ty) == KIND_POINTER)
+	    emit_s2s_shared_typedef(struct_field_types, TY_pointed(fld_ty));
+	  else if (TY_kind(fld_ty) == KIND_ARRAY) {
+	    etype = TY_etype(fld_ty);
+	    while(TY_kind(etype) == KIND_ARRAY)
+	      etype = TY_etype(etype);
+	    if(Type_Is_Shared_Ptr(etype))
+	      emit_s2s_shared_typedef(struct_field_types, fld_ty); 
+	  }
+	  fiter++;
+	} while ( !FLD_last_field(fh));
+      }
+  }
+};
+
+
+extern int debug_requested;
+static void Emit_S2S_Global_Debug_Type_Info()
+{
+  
+  TOKEN_BUFFER tokens;
+  ST *st;
+  int i;
+
+  if(!debug_requested)
+	return;
+ 
+  tokens = New_Token_Buffer();
+
+  FOREACH_SYMBOL(GLOBAL_SYMTAB, st, i)
+    emit_s2s_debug_type_info(st, tokens);
+
+  // now do a pass over the type_table and make sure that
+  // all aggregate fields have the mangled name 'typedefed'
+  TY_IDX ty, fld_ty;
+  struct_field_types = tokens;
+  For_all_entries(Ty_tab, mangle_field_types(), 1);
+  patch_types_tokens = tokens;
+  For_all_entries(Ty_tab, mangle_shared_types(), 1);
+  tokens = struct_field_types;
+    
+  Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+			   NULL, /* No srcpos map */
+			   &tokens);
+}
+
+#endif
 
 static void
 WN2C_Append_Symtab_Types(TOKEN_BUFFER tokens, UINT lines_between_decls)
@@ -2373,7 +2853,11 @@ WN2C_Append_Symtab_Types(TOKEN_BUFFER tokens, UINT lines_between_decls)
     */
    TY_IDX       ty;
    TOKEN_BUFFER tmp_tokens;
-   
+#ifdef COMPILE_UPC  //TODO, Liao
+   Emit_S2S_Global_Debug_Type_Info();
+   //WEI: This code is obviously broken, but should we fix it?
+#endif
+      
    /* Declare structure types. */
    for (ty = 1; ty < TY_Table_Size(); ty++)
    {
@@ -2431,6 +2915,252 @@ WN2C_Append_Symtab_Consts(TOKEN_BUFFER tokens,
    }
 } /* WN2C_Append_Symtab_Consts */
 
+#ifdef COMPILE_UPC
+
+static hash_set<const char*, hash<const char*>, eqstr> upcr_internal;
+static bool init = false;
+
+static bool lookup(const char* s) {
+  return upcr_internal.find(s) != upcr_internal.end(); 
+}
+
+static void init_map() {
+  
+  if (init) {
+    return;
+  }
+
+  upcr_internal.clear();
+
+  //initialize the table
+  upcr_internal.insert("UPCR_ALLOC");
+  upcr_internal.insert("UPCR_LOCAL_ALLOC");
+  upcr_internal.insert("UPCR_GLOBAL_ALLOC");
+  upcr_internal.insert("UPCR_ALL_ALLOC");
+  upcr_internal.insert("UPCR_FREE");
+  upcr_internal.insert("UPCR_GLOBAL_LOCK_ALLOC");
+  upcr_internal.insert("UPCR_ALL_LOCK_ALLOC");
+  upcr_internal.insert("UPCR_LOCK");
+  upcr_internal.insert("UPCR_LOCK_ATTEMPT");
+  upcr_internal.insert("UPCR_UNLOCK");
+  upcr_internal.insert("UPCR_LOCK_FREE");
+  upcr_internal.insert("UPCR_PUT_SHARED");
+  upcr_internal.insert("UPCR_PUT_PSHARED");
+  upcr_internal.insert("UPCR_PUT_NB_SHARED");
+  upcr_internal.insert("UPCR_PUT_NB_PSHARED");
+  upcr_internal.insert("UPCR_GET_SHARED");
+  upcr_internal.insert("UPCR_GET_NB_SHARED");
+  upcr_internal.insert("UPCR_GET_PSHARED");
+  upcr_internal.insert("UPCR_GET_NB_PSHARED");
+  upcr_internal.insert("UPCR_WAIT_SYNCNB");
+  upcr_internal.insert("UPCR_TRY_SYNCNB");
+  upcr_internal.insert("UPCR_PUT_SHARED_VAL");
+  upcr_internal.insert("UPCR_PUT_NB_SHARED_VAL");
+  upcr_internal.insert("UPCR_PUT_PSHARED_VAL");
+  upcr_internal.insert("UPCR_PUT_NB_PSHARED_VAL");
+  upcr_internal.insert("UPCR_GET_SHARED_VAL");
+  upcr_internal.insert("UPCR_GET_NB_SHARED_VAL");
+  upcr_internal.insert("UPCR_GET_PSHARED_VAL");
+  upcr_internal.insert("UPCR_GET_NB_PSHARED_VAL");
+  upcr_internal.insert("UPCR_WAIT_SYNCNB_VALGET");
+  upcr_internal.insert("UPCR_PUT_SHARED_FLOATVAL");
+  upcr_internal.insert("UPCR_PUT_PSHARED_FLOATVAL");
+  upcr_internal.insert("UPCR_PUT_SHARED_DOUBLEVAL");
+  upcr_internal.insert("UPCR_PUT_PSHARED_DOUBLEVAL");
+  upcr_internal.insert("UPCR_GET_SHARED_FLOATVAL");
+  upcr_internal.insert("UPCR_GET_PSHARED_FLOATVAL");
+  upcr_internal.insert("UPCR_GET_SHARED_DOUBLEVAL");
+  upcr_internal.insert("UPCR_GET_PSHARED_DOUBLEVAL");
+  upcr_internal.insert("UPCR_MEMGET");
+  upcr_internal.insert("UPCR_MEMPUT");
+  upcr_internal.insert("UPCR_MEMSET");
+  upcr_internal.insert("UPCR_NB_MEMGET");
+  upcr_internal.insert("UPCR_NB_MEMPUT");
+  upcr_internal.insert("UPCR_NB_MEMSET");
+  upcr_internal.insert("UPCR_MEMCPY");
+  upcr_internal.insert("UPCR_NB_MEMCPY");
+  upcr_internal.insert("UPCR_ISNULL_SHARED");
+  upcr_internal.insert("UPCR_ISNULL_PSHARED");
+  upcr_internal.insert("UPCR_SHARED_TO_LOCAL");
+  upcr_internal.insert("UPCR_PSHARED_TO_LOCAL");
+  upcr_internal.insert("UPCR_SHARED_TO_PSHARED");
+  upcr_internal.insert("UPCR_PSHARED_TO_SHARED");
+  upcr_internal.insert("UPCR_SHARED_RESETPHASE");
+  upcr_internal.insert("UPCR_THREADOF_SHARED");
+  upcr_internal.insert("UPCR_THREADOF_PSHARED");
+  upcr_internal.insert("UPCR_PHASEOF_SHARED");
+  upcr_internal.insert("UPCR_PHASEOF_PSHARED");
+  upcr_internal.insert("UPCR_ADDRFIELD_SHARED");
+  upcr_internal.insert("UPCR_ADDRFIELD_PSHARED");
+  upcr_internal.insert("UPCR_ADD_SHARED");
+  upcr_internal.insert("UPCR_ADD_PSHAREDI");
+  upcr_internal.insert("UPCR_ADD_PSHARED1");
+  upcr_internal.insert("UPCR_ISEQUAL_SHARED_SHARED");
+  upcr_internal.insert("UPCR_ISEQUAL_SHARED_PSHARED");
+  upcr_internal.insert("UPCR_ISEQUAL_PSHARED_PSHARED");
+  upcr_internal.insert("UPCR_SUB_SHARED");
+  upcr_internal.insert("UPCR_SUB_PSHAREDI");
+  upcr_internal.insert("UPCR_SUB_PSHARED1");
+  upcr_internal.insert("upcr_hasAffinity");
+  upcr_internal.insert("upcr_barrier");
+  upcr_internal.insert("upcr_affinitysize");
+  upcr_internal.insert("upcr_global_exit");
+
+#if 1
+/* bug 1109: all of the following entries exist solely to suppress prototypes
+ * in the generated code, and are unnecessary starting in runtime version 2.1.14
+ * they can all be deleted from here after runtime 2.2 becomes widely deployed 
+ */
+
+  /* DOB: library fns declared in upc.h, which should not be given prototypes in output
+   * (because they are declared in upcr.h as macros)
+   */
+  upcr_internal.insert("bupc_ptradd");
+
+  upcr_internal.insert("upcri_trace_printf_user");
+  upcr_internal.insert("upcri_srcpos");
+
+  upcr_internal.insert("bupc_waitsync");
+  upcr_internal.insert("bupc_trysync");
+  upcr_internal.insert("bupc_memcpy_async");
+  upcr_internal.insert("bupc_memput_async");
+  upcr_internal.insert("bupc_memget_async");
+  upcr_internal.insert("bupc_memset_async");
+
+  upcr_internal.insert("bupc_memcpy_vlist");
+  upcr_internal.insert("bupc_memput_vlist");
+  upcr_internal.insert("bupc_memget_vlist");
+  upcr_internal.insert("bupc_memcpy_vlist_async");
+  upcr_internal.insert("bupc_memput_vlist_async");
+  upcr_internal.insert("bupc_memget_vlist_async");
+  
+  upcr_internal.insert("bupc_memcpy_ilist");
+  upcr_internal.insert("bupc_memput_ilist");
+  upcr_internal.insert("bupc_memget_ilist");
+  upcr_internal.insert("bupc_memcpy_ilist_async");
+  upcr_internal.insert("bupc_memput_ilist_async");
+  upcr_internal.insert("bupc_memget_ilist_async");
+  
+  upcr_internal.insert("bupc_memcpy_strided");
+  upcr_internal.insert("bupc_memput_strided");
+  upcr_internal.insert("bupc_memget_strided");
+  upcr_internal.insert("bupc_memcpy_strided_async");
+  upcr_internal.insert("bupc_memput_strided_async");
+  upcr_internal.insert("bupc_memget_strided_async");
+  
+  upcr_internal.insert("bupc_memcpy_fstrided");
+  upcr_internal.insert("bupc_memput_fstrided");
+  upcr_internal.insert("bupc_memget_fstrided");
+  upcr_internal.insert("bupc_memcpy_fstrided_async");
+  upcr_internal.insert("bupc_memput_fstrided_async");
+  upcr_internal.insert("bupc_memget_fstrided_async");
+
+  upcr_internal.insert("bupc_sem_alloc");
+  upcr_internal.insert("bupc_sem_free");
+  upcr_internal.insert("bupc_sem_post");
+  upcr_internal.insert("bupc_sem_postN");
+  upcr_internal.insert("bupc_sem_wait");
+  upcr_internal.insert("bupc_sem_waitN");
+  upcr_internal.insert("bupc_sem_try");
+  upcr_internal.insert("bupc_sem_tryN");
+  upcr_internal.insert("bupc_memput_signal");
+  upcr_internal.insert("bupc_memput_signal_async");
+  
+  /* PHH: library fns declared in upc_collective.h, which should not be given prototypes in output
+   * (because they are declared in upcr_collective.h as macros)
+   */
+  upcr_internal.insert("bupc_all_broadcast");
+  upcr_internal.insert("bupc_all_scatter");
+  upcr_internal.insert("bupc_all_gather");
+  upcr_internal.insert("bupc_all_gather_all");
+  upcr_internal.insert("bupc_all_exchange");
+  upcr_internal.insert("bupc_all_permute");
+
+  upcr_internal.insert("bupc_all_reduceC");
+  upcr_internal.insert("bupc_all_reduceUC");
+  upcr_internal.insert("bupc_all_reduceS");
+  upcr_internal.insert("bupc_all_reduceUS");
+  upcr_internal.insert("bupc_all_reduceI");
+  upcr_internal.insert("bupc_all_reduceUI");
+  upcr_internal.insert("bupc_all_reduceL");
+  upcr_internal.insert("bupc_all_reduceUL");
+  upcr_internal.insert("bupc_all_reduceF");
+  upcr_internal.insert("bupc_all_reduceD");
+  upcr_internal.insert("bupc_all_reduceLD");
+
+  upcr_internal.insert("bupc_all_prefix_reduceC");
+  upcr_internal.insert("bupc_all_prefix_reduceUC");
+  upcr_internal.insert("bupc_all_prefix_reduceS");
+  upcr_internal.insert("bupc_all_prefix_reduceUS");
+  upcr_internal.insert("bupc_all_prefix_reduceI");
+  upcr_internal.insert("bupc_all_prefix_reduceUI");
+  upcr_internal.insert("bupc_all_prefix_reduceL");
+  upcr_internal.insert("bupc_all_prefix_reduceUL");
+  upcr_internal.insert("bupc_all_prefix_reduceF");
+  upcr_internal.insert("bupc_all_prefix_reduceD");
+  upcr_internal.insert("bupc_all_prefix_reduceLD");
+
+  upcr_internal.insert("bupc_all_reduce_allC");
+  upcr_internal.insert("bupc_all_reduce_allUC");
+  upcr_internal.insert("bupc_all_reduce_allS");
+  upcr_internal.insert("bupc_all_reduce_allUS");
+  upcr_internal.insert("bupc_all_reduce_allI");
+  upcr_internal.insert("bupc_all_reduce_allUI");
+  upcr_internal.insert("bupc_all_reduce_allL");
+  upcr_internal.insert("bupc_all_reduce_allUL");
+  upcr_internal.insert("bupc_all_reduce_allF");
+  upcr_internal.insert("bupc_all_reduce_allD");
+  upcr_internal.insert("bupc_all_reduce_allLD");
+
+  /* DOB: library fns declared in upc_io.h, which should not be given prototypes in output
+   * (because they are declared in upcr_io.h as macros)
+   */
+  upcr_internal.insert("bupc_all_fopen"); 
+  upcr_internal.insert("bupc_all_fclose"); 
+  upcr_internal.insert("bupc_all_fsync"); 
+  upcr_internal.insert("bupc_all_fseek"); 
+  upcr_internal.insert("bupc_all_fset_size"); 
+  upcr_internal.insert("bupc_all_fget_size"); 
+  upcr_internal.insert("bupc_all_fpreallocate"); 
+  upcr_internal.insert("bupc_all_fcntl"); 
+
+  upcr_internal.insert("bupc_all_fread_local"); 
+  upcr_internal.insert("bupc_all_fread_shared"); 
+  upcr_internal.insert("bupc_all_fwrite_local"); 
+  upcr_internal.insert("bupc_all_fwrite_shared"); 
+  upcr_internal.insert("bupc_all_fread_list_local"); 
+  upcr_internal.insert("bupc_all_fread_list_shared"); 
+  upcr_internal.insert("bupc_all_fwrite_list_local"); 
+  upcr_internal.insert("bupc_all_fwrite_list_shared"); 
+
+  upcr_internal.insert("bupc_all_fread_local_async"); 
+  upcr_internal.insert("bupc_all_fread_shared_async"); 
+  upcr_internal.insert("bupc_all_fwrite_local_async"); 
+  upcr_internal.insert("bupc_all_fwrite_shared_async"); 
+  upcr_internal.insert("bupc_all_fread_list_local_async"); 
+  upcr_internal.insert("bupc_all_fread_list_shared_async"); 
+  upcr_internal.insert("bupc_all_fwrite_list_local_async"); 
+  upcr_internal.insert("bupc_all_fwrite_list_shared_async"); 
+  upcr_internal.insert("bupc_all_fwait_async"); 
+  upcr_internal.insert("bupc_all_ftest_async"); 
+
+#endif /* suppress prototypes definitions */
+
+  init = true;
+}
+
+#endif //COMPILE_UPC
+static TY_IDX WN2C_get_base_type(TY_IDX idx) {
+  
+  switch(TY_kind(idx)) {
+  case KIND_POINTER:
+    return TY_pointed(idx);
+  case KIND_ARRAY:
+    return TY_etype(idx);
+  default:
+    return idx;
+  }
+}
 
 static void
 WN2C_Append_Symtab_Vars(TOKEN_BUFFER tokens, 
@@ -2444,7 +3174,10 @@ WN2C_Append_Symtab_Vars(TOKEN_BUFFER tokens,
    const ST    *st;
    TOKEN_BUFFER tmp_tokens;
    ST_IDX       st_idx;
-      
+
+#ifdef COMPILE_UPC
+   init_map();
+#endif            
    /* Declare identifiers from the new symbol table, provided they
     * represent functions or variables that are either defining
     * global definition or that have been referenced in this 
@@ -2663,6 +3396,21 @@ WN2C_Function_Call_Lhs(TOKEN_BUFFER rhs_tokens,  /* The function call */
       }
       else if (result_var != NULL)
       {
+	//for runtime function calls like GET_SHARED_VAL, 
+	//a scalar value(reg_val_t) is returned. 
+	//This causes a warning if lhs expects an incompatible type (say a pointer)
+	//In this case we cast it to the type of lhs
+	if (!WN2C_assignment_compatible_types(return_ty, ST_type(result_var))) {
+	  WN2C_prepend_cast(rhs_tokens, ST_type(result_var), false);
+	}
+#ifdef COMPILE_UPC
+         else if (WN2C_TY_is_shared(ST_type(result_var)) && 
+		   !WN2C_TY_is_shared(return_ty)) {
+	  //This is for the case of valget functions on 64-bit platforms, 
+	  //where we need a cast from upcr_register_value_t to upcr_pshared_ptr_t 
+	  WN2C_prepend_cast(rhs_tokens, ST_type(result_var), false);
+	}
+#endif      
 	 STAB_OFFSET var_offset = CALLSITE_var_offset(WN2C_Prev_CallSite);
 	 TY_IDX      var_ty = ST_type(result_var);
 
@@ -2693,14 +3441,25 @@ WN2C_Function_Call_Lhs(TOKEN_BUFFER rhs_tokens,  /* The function call */
 	 }
 	 else
 	 {
-	    status = WN2C_lvalue_st(lhs_tokens,
-				    result_var,              /* base address */
-				    Stab_Pointer_To(var_ty), /* base type */
-				    return_ty, /* type object to be loaded */
-				    var_offset,
-				    context);
-	    if (!STATUS_is_lvalue(status))
-	       Prepend_Token_Special(lhs_tokens, '*');
+#ifdef COMPILE_UPC
+	   if (Compile_Upc) {
+	     /* WEI: for ansi-compliance, we need to cast every runtime function that 
+		returns integer values (e.g., handle_t) into the appropriate integer types that its temporary variable uses
+	     */
+	     if (strcmp(TY_name(ST_type(result_var)), "reg_handle_t") == 0 ||
+		 strcmp(TY_name(ST_type(result_var)), "mem_handle_t") == 0) {
+	       WN2C_prepend_cast(rhs_tokens, ST_type(result_var), FALSE);
+	     }
+	   }
+#endif
+	   status = WN2C_lvalue_st(lhs_tokens,
+				   result_var,              /* base address */
+				   Stab_Pointer_To(var_ty), /* base type */
+				   ST_type(result_var), //return_ty, /* type object to be loaded */ TODO, Double check here
+				   var_offset,
+				   context);
+	   if (!STATUS_is_lvalue(status))
+	       	       Prepend_Token_Special(lhs_tokens, '*');
 	 }
       }
       else if (result_store != NULL)
@@ -2781,40 +3540,48 @@ WN2C_Function_Call_Lhs(TOKEN_BUFFER rhs_tokens,  /* The function call */
 	 /* The lhs is simply the tmpvar */
 	 Append_Token_String(lhs_tokens, tmpvar_name);
 
-	 /* Load the first register off the tmpvar_name after assigning the
-	  * rhs to the lhs.
-	  */
-	 Append_Token_Special(rhs_tokens, ';');
-	 WN2C_Stmt_Newline(rhs_tokens, CONTEXT_srcpos(context));
-	 WN2C_Load_Return_Reg(rhs_tokens,
-			      return_ty, /* Type of tmpvar_name */
-			      tmpvar_name, 
-			      0,         /* Offset in tmpvar_name */
-			      preg_mtype,
-			      preg_offset,
-			      context);
-	    
-	 if (RETURN_PREG_num_pregs(return_info_ptr) > 1)
-	 {
-	    /* Get the offset into the value from which the second preg
-	     * needs to be loaded.
-	     */
-	    value_offset = TY_size(Stab_Mtype_To_Ty(preg_mtype));
-
-	    /* Load the second register */
-	    Append_Token_Special(rhs_tokens, ';');
-	    WN2C_Stmt_Newline(rhs_tokens, CONTEXT_srcpos(context));
-	    preg_offset = RETURN_PREG_offset(return_info_ptr, 1);
-	    preg_mtype = RETURN_PREG_mtype(return_info_ptr, 1);
-	    WN2C_Load_Return_Reg(rhs_tokens,
-				 return_ty,   /* Type of tmpvar_name */
-				 tmpvar_name, 
-				 value_offset, /* Offset in tmpvar_name */
-				 preg_mtype, 
-				 preg_offset, 
-				 context);
-	 } /* if save call-value into both return pregs */
-
+	 if (TY_kind(return_ty) == KIND_STRUCT) { //Liao, TODO, double check 
+	   /* Wei: For structs we simply use the tmp variable, since it may take
+	    *  arbitrary number of registers
+	    */
+	   strncpy(last_ret_tmp, tmpvar_name, 64);
+	 } else {
+	   /* Load the first register off the tmpvar_name after assigning the
+	    * rhs to the lhs.
+	    */
+	   Append_Token_Special(rhs_tokens, ';');
+	   WN2C_Stmt_Newline(rhs_tokens, CONTEXT_srcpos(context));
+	   WN2C_Load_Return_Reg(rhs_tokens,
+				return_ty, /* Type of tmpvar_name */
+				tmpvar_name, 
+				0,         /* Offset in tmpvar_name */
+				preg_mtype,
+				preg_offset,
+				context);
+	   
+	   if (RETURN_PREG_num_pregs(return_info_ptr) > 1)
+	     {
+	       /* Get the offset into the value from which the second preg
+		* needs to be loaded.
+		*/
+	       value_offset = TY_size(Stab_Mtype_To_Ty(preg_mtype));
+	       
+	       /* Load the second register */
+	       Append_Token_Special(rhs_tokens, ';');
+	       WN2C_Stmt_Newline(rhs_tokens, CONTEXT_srcpos(context));
+	       preg_offset = RETURN_PREG_offset(return_info_ptr, 1);
+	       preg_mtype = RETURN_PREG_mtype(return_info_ptr, 1);
+	       WN2C_Load_Return_Reg(rhs_tokens,
+				    return_ty,   /* Type of tmpvar_name */
+				    tmpvar_name, 
+				    value_offset, /* Offset in tmpvar_name */
+				    preg_mtype, 
+				    preg_offset, 
+				    context);
+	     } /* if save call-value into both return pregs */
+	   
+	 }
+	 
 	 Stab_Unlock_Tmpvar(tmp_idx);
 
       } /* if return into registers */
@@ -3074,7 +3841,8 @@ WN2C_Translate_Stmt_Sequence(TOKEN_BUFFER  tokens,
 	     WN_operator(stmt) != OPR_TRAP &&
 	     WN_operator(stmt) != OPR_ASSERT &&
 	     WN_operator(stmt) != OPR_FORWARD_BARRIER &&
-	     WN_operator(stmt) != OPR_BACKWARD_BARRIER)
+	     WN_operator(stmt) != OPR_BACKWARD_BARRIER && 
+	     WN_operator(stmt) != OPR_COMMENT)
 	    Append_Token_Special(tokens, ';');
 
 	 /* Append frequency feedback info in a comment
@@ -3359,6 +4127,24 @@ WN2C_ignore(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    return EMPTY_STATUS;
 } /* WN2C_ignore */
 
+#ifdef COMPILE_UPC
+static STATUS 
+WN2C_dumpasm(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
+{
+ //  Is_True(*last_loc, ("Can't determine synatx for inline assemby",""));
+ //  fdump_tree(stderr, *last_loc);
+//  if(upc_debug_seen) {
+    // char loc[5];
+//     int a;
+//     int b;
+//     char asm_stmt[1000];
+//     sscanf(upc_debug_line, " %s %d %d %s\n", loc,  &a, &b, asm_stmt);
+//     printf("%s\n%s\n", asm_stmt, upc_debug_line);
+    Append_Token_String(tokens ,index(index(index(index(upc_debug_line,' ')+1,' ')+1,' ')+1,' '));
+  }
+  return EMPTY_STATUS;
+}
+#endif
 
 static STATUS
 WN2C_unsupported(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
@@ -3427,6 +4213,11 @@ WN2C_unaryop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 static STATUS
 WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 {
+#ifdef COMPILE_UPC //TODO, Liao
+  if (!ST_keep_name_w2f(WN_st(wn))) {
+    return EMPTY_STATUS;
+  }
+#endif
    /* Add tokens for the function header and body to "tokens".  Note
     * that all the tokens will be added to the buffer, while the task
     * of writing the tokens to file and freeing up the buffer is left
@@ -3476,6 +4267,12 @@ WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    /* Write function header, and begin the body on a new line */
    CONTEXT_set_srcpos(context, WN_Get_Linenum(wn));
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
+#ifdef COMPILE_UPC //TODO, Liao header
+   //WEI: don't output the complete type declaration at the function header
+   if (Compile_Upc) {
+     CONTEXT_set_incomplete_ty2c(context);
+   }
+#endif      
    ST2C_func_header(tokens, WN_st(wn), param_st, context);
    
    /* Write out the function body */
@@ -3483,6 +4280,17 @@ WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
    Append_Token_Special(tokens, '{');
    Increment_Indentation();
+   
+#ifdef COMPILE_UPC
+
+   //WEI: write the BEGIN_FUNCTION
+   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
+   if (Compile_Upc) {
+     Append_Token_String(tokens, "UPCR_BEGIN_FUNCTION();");
+   }
+
+#endif   
+   
    (void)WN2C_translate(tokens, WN_func_body(wn), context);
    if (!W2C_No_Pragmas)
       WN2C_pragma_list_end(tokens, 
@@ -3522,6 +4330,7 @@ WN2C_block(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    TOKEN_BUFFER stmt_tokens;
    const BOOL   new_func_scope = CONTEXT_new_func_scope(context);
    const BOOL   new_symtab = WN2C_new_symtab();
+   BOOL   has_nested ; /*if current PU has nested PU(s), Liao*/
    UINT         current_indent;
    STATUS       status;
    ST_IDX       st_idx;
@@ -3640,6 +4449,14 @@ WN2C_block(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	 WN2C_Append_Purple_Funcinfo(tokens);
 	 Append_Token_String(tokens, "#>");
       }
+       /*By Liao, for landmark of the beginning of a nested PU*/
+      has_nested = PU_has_nested(Get_Current_PU());
+      if (has_nested && W2C_Should_Emit_Nested_PUs()) {
+         Append_Indented_Newline(tokens, 1);
+         Append_Token_String(tokens, "/*Begin_of_nested_PU(s)*/");
+         Append_Indented_Newline(tokens, 1);
+       }
+
    }
    
    /* Append the statements to the tokens */
@@ -4286,14 +5103,25 @@ WN2C_istore(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    else
    {
-      WN2C_memref_lhs(lhs_tokens, 
-		      &stored_ty,
-		      WN_kid1(wn),         /* lhs address */
-		      WN_store_offset(wn), /* offset from this address */
-		      WN_ty(wn),           /* ref type for stored object */
-		      TY_pointed(WN_ty(wn)), /* type for stored object */
-		      WN_opc_dtype(wn),    /* base-type for stored object */
-		      context);
+     //WEI:  if lhs is a field access (e.g. f1->x), we want the type of the field 
+     //instead of the struct
+     TY_IDX base_ty = TY_pointed(WN_ty(wn));
+     TY_IDX actual_ty = (WN_field_id(wn) > 0) ? Make_Pointer_Type(Get_Field_Type(base_ty, WN_field_id(wn))) : WN_ty(wn);
+
+     STAB_OFFSET offt = WN_store_offset(wn);
+     if (TY_is_union(base_ty) && WN_field_id(wn) > 0) {
+       offt = WN2C_get_union_offset(base_ty, WN_field_id(wn));
+     }
+
+     WN2C_memref_lhs(lhs_tokens, 
+		     &stored_ty,
+		     WN_kid1(wn),         /* lhs address */
+		     //WN_store_offset(wn), /* offset from this address */
+		     offt,
+		     actual_ty,
+		     TY_pointed(actual_ty),
+		     WN_opc_dtype(wn),    /* base-type for stored object */
+		     context);
    }
    
    /* Do the assignment */
@@ -4378,11 +5206,26 @@ WN2C_mstore(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    if (!TY_Is_Pointer(base_ty))
       base_ty = WN_ty(wn);
    stored_ty = TY_pointed(WN_ty(wn));
-   stored_ty = 
-      WN2C_MemAccess_Type(TY_pointed(base_ty),  /* base_type */
-			  stored_ty,            /* preferred type */
-			  MTYPE_M,              /* required mtype */
-			  WN_store_offset(wn)); /* offset from base */
+
+   if (WN_field_id(wn) != 0) {
+     //use the field's type instead
+     stored_ty = Get_Field_Type(stored_ty, WN_field_id(wn));
+   } else {
+     stored_ty = 
+       WN2C_MemAccess_Type(TY_pointed(base_ty),  /* base_type */
+			   stored_ty,            /* preferred type */
+			   MTYPE_M,              /* required mtype */
+			   WN_store_offset(wn)); /* offset from base */
+   }
+#ifdef COMPILE_UPC
+   //WEI: an ugly hack that should probably go in be, but I can't get it work there
+   //without breaking other stuff(threadof, affinity, etc)...
+   if (WN_operator(WN_kid0(wn)) == OPR_TAS) {
+     if(Type_Is_Shared_Ptr(WN_ty(WN_kid0(wn))))
+       WN_kid0((WN*) wn) = Strip_TAS(WN_kid0(wn));
+     
+   }
+#endif
 
    if (WN_operator(WN_kid0(wn)) == OPR_MLOAD)
    {
@@ -4523,15 +5366,26 @@ WN2C_stid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    else
    {
-      /* Get the lhs expression */
-      lhs_tokens = New_Token_Buffer();
-      WN2C_stid_lhs(lhs_tokens,
-		    &stored_ty,          /* Corrected stored type */
-		    WN_st(wn),           /* base symbol */
-		    WN_store_offset(wn), /* offset from base */
-		    WN_ty(wn),           /* stored type */
-		    WN_opc_dtype(wn),    /* stored mtype */
-		    context);
+
+     //FIX: for field accesses, change stored type to that of the field
+     TY_IDX stored_ty = WN_ty(wn);
+     STAB_OFFSET offt = WN_store_offset(wn);
+     if (WN_field_id(wn) != 0) {
+       if (TY_is_union(stored_ty)) {
+	 offt = WN2C_get_union_offset(stored_ty, WN_field_id(wn));       
+       }
+       stored_ty = Get_Field_Type(stored_ty, WN_field_id(wn));
+     }
+     /* Get the lhs expression */
+     lhs_tokens = New_Token_Buffer();
+     WN2C_stid_lhs(lhs_tokens,
+		   &stored_ty,          /* Corrected stored type */
+		   WN_st(wn),           /* base symbol */
+		   //WN_store_offset(wn), /* offset from base */
+		   offt,
+		   stored_ty,           /* stored type */
+		   WN_opc_dtype(wn),    /* stored mtype */
+		   context);
 
       /* Do the assignment */
       WN2C_Append_Assignment(tokens, 
@@ -4593,7 +5447,8 @@ WN2C_call(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       (void)WN2C_translate(call_tokens, 
 			   WN_kid(wn, WN_kid_count(wn) - 1), 
 			   context);
-
+      //WEI: Need to paranthesize the address of the function
+      WHIRL2C_parenthesize(call_tokens);
       /* The function type used be:
        *
        *    TY_pointed(WN_Tree_Type(WN_kid(wn,WN_kid_count(wn) - 1)));
@@ -4659,8 +5514,9 @@ WN2C_call(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 				     TYLIST_item(Tylist_Table[param_tylist]));
       else
 	 CONTEXT_set_given_lvalue_ty(context,
-				     WN_Tree_Type(WN_kid(wn, arg_idx)));
-      
+				     //WN_Tree_Type(WN_kid(wn, arg_idx)));
+				     TY_IDX_ZERO); /* means no prototype TODO, Liao*/
+            
       Is_True(WN_operator(WN_kid(wn, arg_idx)) == OPR_PARM,
 	      ("Expected OPR_PARM as CALL argument"));
       
@@ -4769,12 +5625,20 @@ WN2C_prefetch(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 static STATUS 
 WN2C_comment(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 {
-   Is_True(WN_operator(wn) == OPR_COMMENT, 
-	   ("Invalid operator for WN2C_comment()"));
-
-   Append_Token_String(tokens, 
+   char * s;
+  Is_True(WN_operator(wn) == OPR_COMMENT, 
+	  ("Invalid operator for WN2C_comment()"));
+  
+  s = Index_To_Str(WN_GetComment(wn));
+  if (strncmp(s, "#pragma", 7) == 0) {
+    /* We overload the comment to preserve pragmas that are not interpreted 
+       by the translator but instead passed to backend C compiler.
+     */
+    Append_Token_String(tokens, s);
+  } else {
+       Append_Token_String(tokens,
 		       Concat3_Strings("/* ", Index_To_Str(WN_GetComment(wn)), " */"));
-
+  }
    return EMPTY_STATUS;
 } /* WN2C_comment */
 
@@ -4825,22 +5689,30 @@ WN2C_iload(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    else
    {
-      WN2C_memref_lhs(expr_tokens, 
-		      &loaded_ty,
-		      WN_kid0(wn),         /* address */
-		      WN_load_offset(wn),  /* offset from this address */
-		      WN_load_addr_ty(wn), /* ref type for loaded object */
-		      WN_ty(wn),           /* type for loaded object */
-		      WN_opc_dtype(wn),    /* base-type for stored object */
-		      context);
-
+// Liao, handle structure type
+     STAB_OFFSET offt = WN_load_offset(wn);
+     TY_IDX base_ty = TY_pointed(WN_load_addr_ty(wn));
+     if (TY_is_union(base_ty) && WN_field_id(wn) > 0) {
+       offt = WN2C_get_union_offset(base_ty, WN_field_id(wn));
+     }
+     
+     WN2C_memref_lhs(expr_tokens, 
+		     &loaded_ty,
+		     WN_kid0(wn),         /* address */
+		     //WN_load_offset(wn),  /* offset from this address */
+		     offt,
+		     WN_field_id(wn) != 0 ? Make_Pointer_Type(WN_ty(wn)) : WN_load_addr_ty(wn),
+		     WN_ty(wn),           /* type for loaded object */
+		     WN_opc_dtype(wn),    /* base-type for stored object */
+		     context);
    }
 
+   TY_IDX type_loaded = WN_Tree_Type(wn);
    /* Cast the resultant value to the expected result type if 
     * different from the type of value loaded.
     */
-   if (!WN2C_arithmetic_compatible_types(loaded_ty, WN_ty(wn)))
-      WN2C_prepend_cast(expr_tokens, WN_ty(wn), FALSE/*pointer_to_type*/);
+   if (!WN2C_arithmetic_compatible_types(loaded_ty, type_loaded))
+     WN2C_prepend_cast(expr_tokens, type_loaded, FALSE/*pointer_to_type*/);
    
    Append_And_Reclaim_Token_List(tokens, &expr_tokens);
 
@@ -4927,13 +5799,18 @@ WN2C_mload(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    base_ty = WN_Tree_Type(WN_kid0(wn));
    if (!TY_Is_Pointer(base_ty))
       base_ty = WN_ty(wn);
-   loaded_ty = TY_pointed(WN_ty(wn));
-   loaded_ty = 
-      WN2C_MemAccess_Type(TY_pointed(base_ty), /* base_type */
-			  loaded_ty,           /* preferred type */
-			  MTYPE_M,             /* required mtype */
-			  WN_load_offset(wn)); /* offset from base */
-
+ 
+    if (WN_field_id(wn) != 0) {
+     loaded_ty = Get_Field_Type(TY_pointed(WN_ty(wn)), WN_field_id(wn));
+   } else {
+     loaded_ty = TY_pointed(WN_ty(wn));
+     loaded_ty = 
+       WN2C_MemAccess_Type(TY_pointed(base_ty), /* base_type */
+			   loaded_ty,           /* preferred type */
+			   MTYPE_M,             /* required mtype */
+			   WN_load_offset(wn)); /* offset from base */
+   }
+ 
    /* Get the lvalue or address of the data to be loaded */
    expr_tokens = New_Token_Buffer();
    load_status = WN2C_lvalue_wn(expr_tokens, 
@@ -4973,6 +5850,55 @@ WN2C_array(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 
    Is_True(WN_operator(wn) == OPR_ARRAY,
 	   ("Invalid operator for WN2C_array()"));
+
+   int num_dim = 0;
+   const WN* base_wn;
+   for (base_wn = wn; WN_operator(base_wn) == OPR_ARRAY; base_wn = WN_kid0(base_wn)) {
+     num_dim++;
+   }
+
+   if (num_dim > 1 && WN_operator(base_wn) == OPR_LDA &&
+       WN_field_id(base_wn) != 0) {
+     /* we have a array of struct containing arrays, e.g. a[i].x[j]
+      * The front end puts the field id as part of the base address, so we get here
+      *     LDA <id>
+      *    ARRAY
+      *   ARRAY
+      * This unfortunately means the existing whirl2c code would not work,
+      * since it would put the field access in the wrong place.
+      * Instead, we'll have to linearize the array address expression, i.e.,
+      * generate *((char*) base_st + offset)
+      * see bug912
+      * TODO: it may be worthwhile to see if we can rebuild the a[i].x[i] directly,
+      *       , at least for the simple case where there are only two arrays,
+      *       instead of resorting to linearizing it
+      */
+     //TY_IDX base_ty = Get_Field_Type(TY_pointed(WN_ty(base_wn)), WN_field_id(base_wn));
+       
+     WN* offset = WN_Mpy(Integer_type, WN_array_index(wn, 0), WN_Intconst(Integer_type, WN_element_size(wn)));
+     for (WN* tmp = WN_kid0(wn); WN_operator(tmp) == OPR_ARRAY; tmp = WN_kid0(tmp)) {
+       offset = WN_Add(Integer_type, offset, 
+		       WN_Mpy(Integer_type, WN_array_index(tmp, 0), 
+			      WN_Intconst(Integer_type, WN_element_size(tmp))));
+     }
+     
+     offset = WN_Add(Integer_type, offset, WN_Intconst(Integer_type, WN_offset(base_wn)));
+     //fdump_tree(stderr, offset);
+     ST2C_use_translate(tokens, WN_st(base_wn), context);
+     if (TY_kind(ST_type(WN_st(base_wn))) == KIND_STRUCT) {
+       //case of a.b[i].c[j], need a cast
+       Prepend_Token_Special(tokens, '&');
+     }
+     WN2C_prepend_cast(tokens,
+		       Stab_Mtype_To_Ty(MTYPE_I1),
+		       TRUE/*ptr_to_type*/);
+     
+     TOKEN_BUFFER offset_buffer = New_Token_Buffer();
+     WN2C_translate(offset_buffer, offset, context);
+     WN2C_append_addr_plus_expr(tokens, 1, &offset_buffer);
+     return return_status;
+   }
+
 
    /* Specially handle the case when we have an implicit ptr_as_array
     * case, identified when the pointed type appears to be the type
@@ -5053,7 +5979,7 @@ WN2C_array(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	 Prepend_Token_Special(tmp_tokens, '*');
 	 WHIRL2C_parenthesize(tmp_tokens);
       }
-   }
+   } //Liao, 1-dimension array will always be treated as (*) here
 
    /* Generate an address or an lvalue, as requested from the 
     * context of this ARRAY node.
@@ -5206,6 +6132,16 @@ WN2C_cvt(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    CONTEXT_reset_needs_lvalue(context); /* no need for an lvalue */
    (void)WN2C_translate(expr_tokens, WN_kid0(wn), context);
    WHIRL2C_parenthesize(expr_tokens);
+#ifdef COMPILE_UPC // TODO, Liao
+   //if converting from a pointer to an integer, need an additional cast to prevent C compiler warnings
+   //see bug 469
+   if (TY_kind(WN_Tree_Type(WN_kid0(wn))) == KIND_POINTER &&
+       WN_rtype(WN_kid0(wn)) != WN_opc_rtype(wn)) {
+     Prepend_Token_String(expr_tokens, "(intptr_t)");
+     WHIRL2C_parenthesize(expr_tokens);
+   }
+#endif
+   
    WN2C_prepend_cast(expr_tokens, 
 		     Stab_Mtype_To_Ty(WN_opc_rtype(wn)), 
 		     FALSE/*pointer_to_type*/);
@@ -5508,7 +6444,22 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	   (WN_operator(wn) == OPR_LDA && 
 	    ST_sclass(WN_st(wn)) == SCLASS_FORMAL_REF),
 	   ("Invalid operator for WN2C_ldid()"));
-
+#ifdef COMPILE_UPC
+   if (WN_operator(wn) == OPR_LDID) {
+     if (strcmp(ST_name(WN_st(wn)), "THREADS") == 0) {
+       Append_Token_String(tokens, "((int)");
+       Append_Token_String(tokens, WN_intrinsic_name(INTRN_THREADS));
+       Append_Token_String(tokens, "() )");
+       return EMPTY_STATUS;
+     }
+     if (strcmp(ST_name(WN_st(wn)), "MYTHREAD") == 0) {
+       Append_Token_String(tokens, "((int)");
+       Append_Token_String(tokens, WN_intrinsic_name(INTRN_MYTHREAD));
+       Append_Token_String(tokens, "() )");
+       return EMPTY_STATUS;
+     }
+   }
+#endif
    /* Special case for Purple */
    if (W2C_Only_Mark_Loads && !TY_Is_Pointer(WN_ty(wn)))
    {
@@ -5530,6 +6481,7 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    /* Get the load expression */
    addr_offset = WN_load_offset(wn);
    expr_tokens = New_Token_Buffer();   
+   TY_IDX prefered_ty = WN_Tree_Type(wn);
    if (ST_sym_class(WN_st(wn)) == CLASS_PREG)
    {
       /* When loading a preg, always load it as a value of the type
@@ -5562,8 +6514,10 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	    Append_Token_String(expr_tokens, buffer); 
 	    break;
 	 case MTYPE_M: 
-	    Fail_FmtAssertion ("MLDID of Return_Val_Preg not allowed in middle"
-	       " of expression");
+     /* this affects the rare case when a function returns a struct */
+	     sprintf(buffer, "%s", last_ret_tmp);
+	     Append_Token_String(expr_tokens, buffer);
+	     object_ty = prefered_ty; /* okay since we use a tmp variable with same type */
 	    break; 
 	 default:
             Fail_FmtAssertion ("Unexpected type in WN2C_ldid()");
@@ -5581,6 +6535,9 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    else
    {
+     if (TY_is_union(WN_ty(wn)) && WN_field_id(wn) > 0) {
+       addr_offset = WN2C_get_union_offset(WN_ty(wn), WN_field_id(wn));
+     }
       /* Get the lhs, preferably as an lvalue, but possibly as an address.
        */
       WN2C_SymAccess_Type(&base_addr_ty,
@@ -5606,9 +6563,20 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    /* Cast the resultant value to the expected result type if different 
     * from the type of value loaded.
     */
-   if (!WN2C_arithmetic_compatible_types(object_ty, WN_ty(wn)))
+     if (!WN2C_arithmetic_compatible_types(object_ty, prefered_ty))
+//   if (!WN2C_arithmetic_compatible_types(object_ty, WN_ty(wn)))
    {
       
+#ifdef COMPILE_UPC
+     if (WN2C_TY_is_shared(prefered_ty)) {
+       /* Add error check here if it attempts to
+	  cast a private scalar type into a pointer-to-shared
+       */
+       if (TY_kind(object_ty) == KIND_SCALAR && !WN2C_TY_is_shared(object_ty)) {
+	 translator_warning("BUG369: Attempt to cast %s to pointer-to-shared\n", TY_name(object_ty));
+       }
+     }
+#endif
       if (!TY_Is_Structured(object_ty) && !TY_Is_Structured(WN_ty(wn)))
 	 WN2C_prepend_cast(expr_tokens, WN_ty(wn), FALSE/*pointer_to_type*/);
       else
@@ -5636,6 +6604,15 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	 Append_Token_Special(expr_tokens, ')');
 	 Stab_Unlock_Tmpvar(tmp_idx);
       }
+         } else {
+     //check the case where p's declared type is a void * and therefore requires an explicit cast
+     //see bug238.
+#ifdef COMPILE_UPC
+     TY_IDX exp_ty = TY_To_Sptr_Idx(ST_type(WN_st(wn)));
+     if (WN2C_is_void_ptr(exp_ty) && !WN2C_is_void_ptr(object_ty)) {
+       WN2C_prepend_cast(expr_tokens, object_ty, FALSE);
+     }
+#endif
    }
    Append_And_Reclaim_Token_List(tokens, &expr_tokens);
 
@@ -5715,6 +6692,7 @@ WN2C_lda(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    else /* The normal case */
    {
+      TY_IDX prefered_ty = TY_pointed(WN_ty(wn));
       lda_offset = WN_lda_offset(wn);
       if (ST_sym_class(WN_st(wn)) == CLASS_CONST &&
 	  TCON_ty(STC_val(WN_st(wn))) == MTYPE_STRING)
@@ -5728,10 +6706,27 @@ WN2C_lda(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       {
          TY_IDX wn_st_type = ST_sym_class(WN_st(wn)) == CLASS_FUNC ?
                                     ST_pu_type(WN_st(wn)) : ST_type(WN_st(wn));
+	 if (TY_kind(wn_st_type) == KIND_ARRAY &&
+	     TY_size(wn_st_type) == 0) {
+	   /* This can happen when wn_st is an incomplete type, e.g. 
+	      extern T st[];
+	      In this case, we want the type to be T for the object pointed to
+	    */
+	   prefered_ty = TY_etype(wn_st_type);
+	 }
+	 
+	 if (WN_field_id(wn) > 0) {
+           if (TY_Is_Structured(prefered_ty)) {
+	     //case of a.x[i]
+             prefered_ty = Get_Field_Type(prefered_ty, WN_field_id(wn));
+           } 
+	 }				    
+				    
 	 object_ty =
 	    WN2C_MemAccess_Type(
                wn_st_type,                   /* base_type */
-	       TY_pointed(WN_ty(wn)),        /* preferred type */
+	      // TY_pointed(WN_ty(wn)),        /* preferred type */
+	      	prefered_ty,
 	       TY_mtype(wn_st_type),         /* required mtype */
 	       lda_offset);                  /* offset from base */
       }
@@ -5754,17 +6749,22 @@ WN2C_lda(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 
       /* Convert an lvalue into an address value, if necessary.*/
       if (!TY_Is_Pointer(WN_ty(wn)) ||
-	  !WN2C_arithmetic_compatible_types(object_ty, TY_pointed(WN_ty(wn))))
+//	  !WN2C_arithmetic_compatible_types(object_ty, TY_pointed(WN_ty(wn))))
+	  !WN2C_arithmetic_compatible_types(object_ty, prefered_ty))
       {
 	 if (STATUS_is_lvalue(lda_status))
 	    Prepend_Token_Special(expr_tokens, '&');
-	 
-	 WN2C_prepend_cast(expr_tokens, WN_ty(wn), FALSE/*ptr_to_type*/);
+	/* WEI: Do not add cast for string literals */
+	 if (!(ST_sym_class(WN_st(wn)) == CLASS_CONST &&
+	       TCON_ty(STC_val(WN_st(wn))) == MTYPE_STRING)) 
+           WN2C_prepend_cast(expr_tokens, WN_ty(wn), FALSE/*ptr_to_type*/);
 	 STATUS_reset_lvalue(lda_status); /* Not returning an lvalue */
       }
       else if (STATUS_is_lvalue(lda_status) && !CONTEXT_needs_lvalue(context))
       {
-	 Prepend_Token_Special(expr_tokens, '&');
+	  /* Do not take address for LDA of an array symbol */	
+ 	if (TY_kind(object_ty) != KIND_ARRAY) 
+            Prepend_Token_Special(expr_tokens, '&');
 	 STATUS_reset_lvalue(lda_status); /* We not returning an lvalue */
       }
    }
@@ -5871,6 +6871,32 @@ WN2C_rcomma(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Append_Token_Special(tokens, ')');
    return EMPTY_STATUS;
 } /* WN2C_rcomma */
+/* Check if we need to perform explicit integer downcasts between the two types (for bug383) */
+/* Note this function is only called for function parameters, where we need more strict requirements 
+   than assignment compatiblity to avoid backend compiler warnings 
+*/
+
+static BOOL WN2C_int_downcast(TY_IDX from, TY_IDX to) {
+
+  if (TY_kind(from) == KIND_SCALAR &&
+      TY_kind(to) == KIND_SCALAR) {
+    if (TY_size(from) > TY_size(to)) {
+      /* downcasts */
+      return true;
+    } else if (MTYPE_is_signed(TY_mtype(from)) ^ MTYPE_is_signed(TY_mtype(to))) {
+      /* the case of casting between signed/unsigned type.
+	 Should be caught by front end/lowering phase, just in case
+      */
+      return true;
+    } else if (/* TY_is_logical(from) && */ TY_is_logical(to) ) {
+      /* Handle the case when two distinct integer types have 
+	 the same sign/size (e.g. long and int on ia32)
+       */
+      return strcmp(TY_name(from), TY_name(to)) != 0;
+    }
+  }
+  return false;
+}
 
 
 static STATUS
@@ -5889,6 +6915,9 @@ WN2C_parm(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(wn) == OPR_PARM,
 	   ("Invalid operator for WN2C_parm()"));
 
+   TY_IDX arg_ty = WN_Tree_Type(WN_kid0(wn));
+
+   bool volatile_arg = false;
    if (parm_ty == TY_IDX_ZERO)
    {
       // Not provided by context (e.g. for intrinsic_op).
@@ -5916,7 +6945,8 @@ WN2C_alloca(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 {
   STATUS status ;
 
-  Append_Token_String(tokens,"__opr_alloca");
+//  Append_Token_String(tokens,"__opr_alloca");
+  Append_Token_String(tokens,"alloca");
   Append_Token_Special(tokens,'(');
   status = WN2C_translate(tokens,WN_kid0(wn),context);
   Append_Token_Special(tokens,')');
@@ -6042,14 +7072,15 @@ WN2C_translate_file_scope_defs(CONTEXT context)
      */
    CURRENT_SYMTAB = GLOBAL_SYMTAB;
    WN2C_new_symtab();
-
+   //WEI: don't see why this needs to be called
+#if 0
    Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
 		"/* File-level symbolic constants */\n");
    WN2C_Append_Symtab_Consts(NULL, /* token_buffer */ 
 			     TRUE, /* use const_tab */
 			     2,    /* lines between decls */
 			     context);
-
+#endif
    Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
 		"/* File-level vars and routines */\n");
    WN2C_Append_Symtab_Vars(NULL, /* token_buffer */
@@ -6208,8 +7239,23 @@ WN2C_memref_lhs(TOKEN_BUFFER tokens,
    /* Dereference the address into which we are storing, if 
     * necessary.
     */
-   if (!STATUS_is_lvalue(lhs_status))
+/*   if (!STATUS_is_lvalue(lhs_status)) Liao, superfluous *array[] */
+   if (!STATUS_is_lvalue(lhs_status) && (WN_operator(lhs)!=OPR_ARRAY))
       Prepend_Token_Special(tokens, '*');
+   /* Special case :
+      int d[][3];
+      d[1][0] = ...
+      Gets  translated into 
+        ldid d (ptr to array of int)
+      istore 12 (ptr to int)
+      
+      Need an extra dereference for this case.
+   */
+/*
+   if(WN_operator(lhs) == OPR_LDID && TY_kind(WN_ty(lhs)) == KIND_POINTER &&
+      TY_kind(TY_pointed(WN_ty(lhs))) == KIND_ARRAY && memref_ofst)
+     Prepend_Token_Special(tokens, '*'); */
+           
 } /* WN2C_memref_lhs */
 
 

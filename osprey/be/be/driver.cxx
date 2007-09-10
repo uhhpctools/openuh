@@ -135,6 +135,10 @@
 #include "output_func_start_profiler.h"
 #endif
 
+// added by Liao, for possible IR manipulation at driver level
+#include "symtab.h"
+
+// 
 extern ERROR_DESC EDESC_BE[], EDESC_CG[];
 
 #ifdef KEY
@@ -914,13 +918,17 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
     
     /* Only run w2c and w2f on top-level PUs, unless otherwise requested.
      */
+// Liao, add -CLIST:before_cg to control whirl2c before CG after wopt
     if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
-	if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
+      if (!W2C_Should_Before_CG()){// the order of two IF matters here!
+        if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
 	    if (Cur_PU_Feedback)
 		W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
 	    W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
 	}
+      }
     }
+
     if (Run_w2f && !Run_w2fc_early && !Run_prompf) {
 	if (W2F_Should_Emit_Nested_PUs() || is_user_visible_pu) {
 	    if (Cur_PU_Feedback)
@@ -968,6 +976,12 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
     REGION_CS_ITER rgn_iter;
     BOOL Run_region_bounds;
     BOOL cg_one_time = TRUE;
+  //by Liao, for whirl2c translation right before CG
+    BOOL is_user_visible_pu = (CURRENT_SYMTAB == GLOBAL_SYMTAB + 1) ||
+                              ((Language == LANG_F90) &&
+                               (CURRENT_SYMTAB == GLOBAL_SYMTAB + 2) &&
+                               (!Is_Set_PU_Info_flags(current_pu, PU_IS_COMPILER_GENERATED))) ;
+
 
     /* look over whole PU and set up stack model */
     Initialize_Stack_Frame (pu);	
@@ -1075,6 +1089,19 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
 	  U64_lower_wn(rwn, FALSE);
 #endif
       }
+      /*by Liao, enable whirl2c right before cg*/
+   if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
+     if (W2C_Should_Before_CG()){
+	if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
+	    if (Cur_PU_Feedback)
+		W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
+      if (Run_wopt) 
+	    W2C_Outfile_Translate_Pu(rwn, TRUE/*emit_global_decls*/);
+       else
+	    W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+	}
+      }
+    }
 
       /* we may still have to print the .O file:		   */
       /* (Olimit stops optimization for one PU but not all)	   */
@@ -1668,7 +1695,6 @@ Preprocess_PU (PU_Info *current_pu)
   } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_VHO] ) {
     WN_Annotate(pu, PROFILE_PHASE_BEFORE_VHO, &MEM_pu_pool);
   }
-
   Set_Error_Phase ( "VHO Processing" );
   pu = VHO_Lower_Driver (current_pu, pu);
 

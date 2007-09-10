@@ -69,6 +69,7 @@ extern const char *(*W2C_Get_Transformed_Src_Path_p)(void);
 extern void (*W2C_Reset_Purple_Emission_p)(void);
 extern void (*W2C_Set_Purple_Emission_p)(void);
 extern BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
+extern BOOL (*W2C_Should_Before_CG_p)(void);
 extern void (*W2C_Translate_Global_Defs_p)(FILE *outfile);
 extern void (*W2C_Translate_Global_Types_p)(FILE *outfile);
 extern void (*W2C_Translate_Istore_Lhs_p)(char *strbuf,
@@ -103,6 +104,7 @@ struct W2C_INIT
       W2C_Reset_Purple_Emission_p = W2C_Reset_Purple_Emission;
       W2C_Set_Purple_Emission_p = W2C_Set_Purple_Emission;
       W2C_Should_Emit_Nested_PUs_p = W2C_Should_Emit_Nested_PUs;
+      W2C_Should_Before_CG_p = W2C_Should_Before_CG;
       W2C_Translate_Global_Defs_p = W2C_Translate_Global_Defs;
       W2C_Translate_Global_Types_p = W2C_Translate_Global_Types;
       W2C_Translate_Istore_Lhs_p = W2C_Translate_Istore_Lhs;

@@ -150,6 +150,7 @@ typedef struct Context
 #define CONTEXT_ARRAY_BASETYPE 0x000000020   /* Context suggests array type */
 #define CONTEXT_LVALUE_TYPE 0x000000040      /* Context suggests lvalue type */
 #define CONTEXT_OMP_PRAGMA 0x000000080       /* Processing an Open MP pragma */
+#define CONTEXT_CONST_TY2C 0x000000100       /* Whether const is output for this TY */
 
 /* Accessor macros */
 #define CONTEXT_reset_flags(c)  ((c).flags = 0U)
@@ -201,6 +202,11 @@ typedef struct Context
    ((c).flags = (c).flags | CONTEXT_OMP_PRAGMA)
 #define CONTEXT_reset_omp(c) \
    ((c).flags = (c).flags  & ~CONTEXT_OMP_PRAGMA)
+#define CONTEXT_const(c) ((c).flags & CONTEXT_CONST_TY2C)
+#define CONTEXT_set_const(c) \
+   ((c).flags = (c).flags | CONTEXT_CONST_TY2C)
+#define CONTEXT_reset_const(c) \
+   ((c).flags = (c).flags  & ~CONTEXT_CONST_TY2C)
 
 
                      /* Identifier naming */

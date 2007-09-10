@@ -121,5 +121,7 @@ UINT32 W2CF_Symtab_Unique_Label(void);
 void W2CF_Symtab_Free(void);
 void W2CF_Symtab_Terminate(void);
 
+/*upc symtab util*/
+extern TY_IDX Get_Inner_Array_Type( TY_IDX idx);
 
 #endif /* w2cf_symtab */

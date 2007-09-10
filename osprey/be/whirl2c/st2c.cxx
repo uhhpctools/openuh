@@ -325,11 +325,13 @@ ST2C_Get_Common_Ty2c_List(COMMON_BLOCK *common,
       Set_Current_Indentation(0);
       Increment_Indentation(); /* One of many common block variations */
       TY2C_LIST_tokens(ty2c_list) = New_Token_Buffer();
-      Reset_TY_is_translated_to_c(ty);
+      if (TY_kind(ty) != KIND_STRUCT) {  //Avoid outputting duplicate struct types (see bug574) , Liao
+	Reset_TY_is_translated_to_c(ty);
+      }
       STR_IDX name_idx = TY_name_idx(Ty_Table[ty]);
-      Set_TY_name_idx(Ty_Table[ty], 0);
+      //Set_TY_name_idx(Ty_Table[ty], 0); Liao, keep original name
       TY2C_translate(TY2C_LIST_tokens(ty2c_list), ty, context);
-      Set_TY_name_idx(Ty_Table[ty], name_idx);
+      //Set_TY_name_idx(Ty_Table[ty], name_idx);
       Set_TY_is_translated_to_c(ty);
       Set_Current_Indentation(indentation);
 
@@ -383,43 +385,53 @@ ST2C_Define_A_Common_Block(TOKEN_BUFFER  tokens,
     */
    union_tokens = New_Token_Buffer();
    Increment_Indentation();
+
    ordinal = 0;
    for (ty2c_list = COMMON_BLOCK_variations(common);
 	ty2c_list != NULL;
 	ty2c_list = TY2C_LIST_next(ty2c_list), ordinal++)
    {
-      variation_name = COMMON_BLOCK_MEMBER_NAME(ordinal);
-      if (COMMON_BLOCK_initialized(common) == ty2c_list)
-      {
-	 if (ordinal > 0)
-	    Prepend_Indented_Newline(union_tokens, 1/*Lines between decls*/);
+     variation_name = COMMON_BLOCK_MEMBER_NAME(ordinal);
+     //WEI: WE DON'T WANT TO PUT GLOBAL TYPE DECLS IN A UNION, CODE
+     //COMMMENTED OUT
+     //TODO, Liao, we output the structure in local w2c.h currently,
+
+     if (COMMON_BLOCK_initialized(common) == ty2c_list)
+       {
+	 //if (ordinal > 0)
+	 //  Prepend_Indented_Newline(union_tokens, 1);
 	 Prepend_Token_Special(union_tokens, ';');
-	 Prepend_Token_String(union_tokens, variation_name);
+	 //Prepend_Token_String(union_tokens, variation_name);
 	 Prepend_And_Reclaim_Token_List(union_tokens, 
 					&TY2C_LIST_tokens(ty2c_list));
-      }
-      else
-      {
+       }
+     else
+       {
 	 Append_And_Reclaim_Token_List(union_tokens, 
 				       &TY2C_LIST_tokens(ty2c_list));
-	 Append_Token_String(union_tokens, variation_name);
-	 Append_Token_Special(union_tokens, ';');
-	 if (TY2C_LIST_next(ty2c_list) != NULL)
-	    Append_Indented_Newline(union_tokens, 1/*Lines between decls*/);
-      }
+	 //Append_Token_String(union_tokens, variation_name);
+	 Append_Token_String(union_tokens, //Liao, struct type name 
+			W2CF_Symtab_Nameof_Ty(TY2C_LIST_common_ty(ty2c_list)));
+	 //Append_Token_Special(union_tokens, ';');
+
+	 //if (TY2C_LIST_next(ty2c_list) != NULL)
+	 //  Append_Indented_Newline(union_tokens, 1);
+       }
    }
 
    /* Prepend the union declaration before the members */
-   Prepend_Indented_Newline(union_tokens, 1/*Lines between decls*/);
-   Prepend_Token_Special(union_tokens, '{');
-   Prepend_Token_String(union_tokens, base_name);
-   Prepend_Token_String(union_tokens, "union");
+   //Prepend_Indented_Newline(union_tokens, 1/*Lines between decls*/);
+   //Prepend_Token_Special(union_tokens, '{');
+  // TY2C_LIST_common_ty()
+   Append_Token_String(union_tokens, base_name);
+   //Prepend_Token_String(union_tokens, "union");
+   Prepend_Token_String(union_tokens, "struct");
    Decrement_Indentation();
 
    /* Append the union definition after the members */
-   Append_Indented_Newline(union_tokens, 1/*Lines between decls*/);
-   Append_Token_Special(union_tokens, '}');
-   Append_Token_String(union_tokens, base_name);
+   //Append_Indented_Newline(union_tokens, 1/*Lines between decls*/);
+   //Append_Token_Special(union_tokens, ' ');
+   //Append_Token_String(union_tokens, base_name);
 
    /* Do initialization */
    if (COMMON_BLOCK_initialized(common) != NULL)
@@ -431,7 +443,6 @@ ST2C_Define_A_Common_Block(TOKEN_BUFFER  tokens,
    Append_Token_Special(union_tokens, ';');
    Append_And_Reclaim_Token_List(tokens, &union_tokens);
 } /* ST2C_Define_A_Common_Block */
-
 
 static const char *
 ST2C_Get_Common_Block_Name(const ST *st)
@@ -450,15 +461,22 @@ ST2C_Get_Common_Block_Name(const ST *st)
 					 st, ST_type(st));
    base_name = WHIRL2C_make_valid_c_name(COMMON_BLOCK_name(common));
 
-   ordinal = 0;
-   for (ty2c_list_iter = COMMON_BLOCK_variations(common);
-	ty2c_list_iter != ty2c_list;
-	ty2c_list_iter = ty2c_list_iter->next)
-   {
-      ordinal++;
-   }
-   return Concat3_Strings(base_name, ".", 
-			  COMMON_BLOCK_MEMBER_NAME(ordinal));
+   //WEI: Since we're not putting global type decls in unions anymore, 
+   //name should be identical to the symbol's name(no need to append ".u0")
+   return base_name;
+
+   /*
+     ordinal = 0;
+     for (ty2c_list_iter = COMMON_BLOCK_variations(common);
+     ty2c_list_iter != ty2c_list;
+     ty2c_list_iter = ty2c_list_iter->next)
+     {
+     ordinal++;
+     }
+
+     return Concat3_Strings(base_name, ".", 
+  		  COMMON_BLOCK_MEMBER_NAME(ordinal));
+   */
 } /* ST2C_Get_Common_Block_Name */
 
 
@@ -480,6 +498,7 @@ ST2C_formal_ref_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
    Append_And_Reclaim_Token_List(tokens, &decl_tokens);
 } /* ST2C_formal_ref_decl */
 
+extern int debug_requested;
 
 static void
 ST2C_basic_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
@@ -488,6 +507,33 @@ ST2C_basic_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
    
    Append_Token_String(decl_tokens, 
 		       W2CF_Symtab_Nameof_St(st));    /* name */
+   
+   //WEI:
+   //If type of st is struct, make it incomplete because the complete type will be 
+   //declared in w2c.h (see WN2C_Append_Symtab_Types)
+   TY_IDX ty = ST_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+
+//   if (Compile_Upc) {
+     if (TY_kind(ty) == KIND_STRUCT ||
+	 (TY_kind(ty) == KIND_FUNCTION && 
+	  TY_kind(Func_Return_Type(ty)) == KIND_STRUCT)) {
+       CONTEXT_set_incomplete_ty2c(context);
+     }
+//   }
+   
+   CONTEXT_reset_unqualified_ty2c(context);
+   TY_IDX tidx = ST_sym_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st);
+
+#ifdef COMPILE_UPC
+   if(Compile_Upc && debug_requested && Type_Is_Shared_Ptr(tidx)) {
+     static char mangled_name[256];
+     strcpy(mangled_name,"__BMN_");
+     strcat(mangled_name, Mangle_Type(tidx).data());
+     Prepend_Token_String(decl_tokens, mangled_name);
+   } else 
+#endif
+     //TY2C_translate(decl_tokens, tidx, context); /* type */
+
    TY2C_translate(decl_tokens,
                   ST_sym_class(st) == CLASS_FUNC ? ST_pu_type(st) : ST_type(st),
                   context); /* type */
@@ -518,7 +564,6 @@ ST2C_basic_decl(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
 
    Append_And_Reclaim_Token_List(tokens, &decl_tokens);
 } /* ST2C_basic_decl */
-
 
 static void
 ST2C_Define_Preg(const char *name, TY_IDX ty, CONTEXT context)
@@ -589,6 +634,13 @@ ST2C_decl_var(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
       if (ST_sclass(st) == SCLASS_AUTO)
 	 CONTEXT_set_unqualified_ty2c(context);
       ST2C_basic_decl(tokens, st, context); /*type, name, storage class*/
+#ifdef COMPILE_UPC
+      if (ST_type(st) == upc_hsync_mem_ty) {
+	Append_Token_Special(tokens, '=');
+	Append_Token_String(tokens, " UPCR_INVALID_HANDLE");
+      }
+#endif
+
    }
 } /* ST2C_decl_var */
 
@@ -633,6 +685,9 @@ ST2C_use_var(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
    Is_True(ST_sym_class(st)==CLASS_VAR, ("expected CLASS_VAR ST"));
 
    if (Stab_Is_Common_Block(st))
+   //WEI: when compiling UPC, don't output the initialization expression of DGLOBAL vars 
+     // TODO, Liao  if (Stab_Is_Common_Block(st) && !(Compile_Upc && ST_sclass(st) == SCLASS_DGLOBAL))
+
    {
       /* Do not mark the variable as referenced, since we do not
        * want to declare it in the local scope.
@@ -747,10 +802,27 @@ ST2C_weakext_translate(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
    }
 } /* ST2C_weakext_translate */
 
+/*
+static TY_IDX WN2C_get_base_type(TY_IDX idx) {
+  
+  switch(TY_kind(idx)) {
+  case KIND_POINTER:
+    return TY_pointed(idx);
+  case KIND_ARRAY:
+    return TY_etype(idx);
+  default:
+    return idx;
+  }
+}
+*/
 
 void 
 ST2C_use_translate(TOKEN_BUFFER tokens, const ST *st, CONTEXT context)
 { 
+
+//by Liao, defer the translation of structure to file_scope_defs,
+//  if (Is_Structure_Type(WN2C_get_base_type(ST_type(st)))) return;
+
    ST2C_Use_Handle[ST_sym_class(st)](tokens, st, context);
 } /* ST2C_use_translate */
 
@@ -799,6 +871,12 @@ ST2C_func_header(TOKEN_BUFFER  tokens,
 	    Append_Token_Special(header_tokens, ',');
       }
       Append_Token_Special(header_tokens, ')');
+
+      //WEI:  If a struct appears in the function return type, it must be declared as incomplete
+//      if (Compile_Upc) {
+	CONTEXT_set_incomplete_ty2c(context);
+//      }
+
       TY2C_translate(header_tokens, Func_Return_Type(funtype), context);
 
       /* Emit parameter declarations, indented and on a new line */
@@ -813,15 +891,18 @@ ST2C_func_header(TOKEN_BUFFER  tokens,
    }
    else // (has_prototype)
    {
-      /* Emit parameter declarations, indented and on a new line */
-      TYLIST_IDX param_tylist = TY_parms(funtype);
-      Increment_Indentation();
-      for (param = first_param; params[param] != NULL; param++)
+      /* We want the const qualifer for function prototypes */
+      CONTEXT_set_const(context);
+
+     /* Emit parameter declarations, indented and on a new line */
+     TYLIST_IDX param_tylist = TY_parms(funtype);
+     Increment_Indentation();
+     for (param = first_param; params[param] != NULL; param++)
       {
-	 Append_Indented_Newline(header_tokens, 1);
-	 if (FALSE/*Turn this off for now*/ &&
-	     Tylist_Table[param_tylist] != TY_IDX_ZERO)
-	 {
+	Append_Indented_Newline(header_tokens, 1);
+	if (FALSE/*Turn this off for now*/ &&
+	    Tylist_Table[param_tylist] != TY_IDX_ZERO)
+	  {
 	    // Use prototype types, rather than trusting the parameter types.
 	    //
 	    TY_IDX param_ty_idx = ST_type(params[param]);
@@ -837,6 +918,7 @@ ST2C_func_header(TOKEN_BUFFER  tokens,
 	 if (params[param+1] != NULL)
 	    Append_Token_Special(header_tokens, ',');
       }
+     CONTEXT_reset_const(context);  
 
       /* Finish off the parameter list, with varargs if appropriate */
       if (TY_is_varargs(funtype))
@@ -849,11 +931,27 @@ ST2C_func_header(TOKEN_BUFFER  tokens,
       TY2C_translate(header_tokens, Func_Return_Type(funtype), context);
    }
    
-   if (PU_is_inline_function(Pu_Table[ST_pu(st)]))
-      Prepend_Token_String(header_tokens, "__inline");
-   if (ST_sclass(st) == SCLASS_FSTATIC)
+   if (PU_is_inline_function(Pu_Table[ST_pu(st)])) {
+     /*     if (Compile_Upc) {
+       char inline_buf[300];
+       strcpy(inline_buf, "UPCRI_INLINE");
+       strcat(inline_buf, "(");
+       strncat(inline_buf, ST_name(st), 256);
+       strcat(inline_buf, ")");
+       Prepend_Token_String(header_tokens, inline_buf);
+       } else {*/
+      Prepend_Token_String(header_tokens, "inline");
+      //     }
+   } else if (ST_export(st) == EXPORT_LOCAL) {
+     //at this point, any static function will be SCLASS_TEXT,
+     //so we look at its export scopt instead.  See bug 476.
       Prepend_Token_String(header_tokens, "static");
 
+   } else {
+     //all non-static functions in C should have external linkage
+     Prepend_Token_String(header_tokens, "extern");
+   }
+      
    Append_And_Reclaim_Token_List(tokens, &header_tokens);
 } /* ST2C_func_header */
 

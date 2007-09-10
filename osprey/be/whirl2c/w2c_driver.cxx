@@ -82,12 +82,193 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/w2c
 #include "wn2c.h"
 #include "w2c_driver.h"
 
+/*----------------------------------------------------*/
+//-----------------------------------------------------------
+//  This class is intended to move text blocks in a c source file
+//  particularly to move nested PUs back to their parent functions'
+//  scopes for the whirl2c output file
+//
+// Several important assumptions
+// 1. a nest PU starts with "void __ompdo_xxxn" , "void __ompregion_xxxn" ,
+//             ends with "} /* xxx */"
+// 2. its parent PU has a landmark for the last variable
+//   declaration statement
+//
+// It needs some enhancement to be more flexible to handle any nested PUs.
+//
+// Typical usage: 
+//  1. read source file into member variable list <string>
+//      TextProcessor tproc ("test1.c");
+//  2. process file
+//      tproc.process ();
+//  3. output the change source to a file
+//      tproc.Output ("result.c");
+//
+//  Author: Chunhua Liao, University of Houston, 
+//  May, 17 2005
+//  Modified: June, 9
+//  This source file is formated using 'indent' command.
+//-----------------------------------------------------------
 
+#include <iostream>
+#include <string>
+#include <list>
+#include <algorithm>
+#include <iterator>
+#include <fstream>
+#include <stdio.h>
+
+using namespace std;
+
+// A class to store source files, move text blocks and write it back.
+
+class TextProcessor
+{
+public:
+  string mfilename;
+  int lineCount;
+    list < string > srcLines;
+    TextProcessor ()
+  {
+  };
+  // Read file into list of strings
+  TextProcessor (string filename)
+  {
+    string s;
+    ifstream in (filename.c_str ());
+
+    srcLines.clear ();
+    mfilename = filename;
+    while (getline (in, s))
+      srcLines.push_back (s);
+    in.close ();
+  }
+
+  int getLineCount ()
+  {
+    return srcLines.size ();
+  }
+
+  // move a text block from f to l to position after target in the srcLines list
+  bool moveBlock (list < string >::iterator f,
+		  list < string >::iterator l,
+		  list < string >::iterator target);
+
+  //move all nested pus back to their parents
+  bool process ();
+
+  // write result to a file
+  void Output (const string & filename)
+  {
+    ofstream out (filename.c_str ());
+    copy (srcLines.begin (), srcLines.end (), ostream_iterator < string >
+	  (out, "\n"));
+    out.close ();
+  };
+
+// search function for a pattern from iter_begin in normal or reverse order
+// return the iterator for the first match
+  list < string >::iterator find_pattern (char *ipattern,
+			   list <string >::iterator iter_begin=NULL, 
+		           list <string >::iterator iter_end=NULL,
+                             bool forder = true)
+  {
+    list < string >::iterator iter;
+    if (iter_begin == NULL)
+	  iter_begin = srcLines.begin ();
+    if (iter_end == NULL)
+          iter_end = srcLines.end ();
+    if (forder)
+      {				// normal search
+	for (iter = iter_begin; iter != iter_end; iter++)
+	  {
+	    string::size_type pos = (*iter).find (ipattern);
+	    if (pos != string::npos)
+	      return iter;
+	  }
+      }
+    else			// reverse search
+      {
+	for (iter = iter_end; iter != iter_begin; iter--)
+	  {
+	    string::size_type pos = (*iter).find (ipattern);
+	    if (pos != string::npos)
+	      return iter;
+	  }
+      }
+
+    return NULL;
+  }
+
+};
+
+// move a text block from f to l to position after target in the srcLines list
+bool
+  TextProcessor::moveBlock (list < string >::iterator f,
+			    list < string >::iterator l,
+			    list < string >::iterator target)
+{
+  list < string > tempList;
+  if ((f == NULL) || (l == NULL) || (target == NULL))
+    return false;
+  tempList.clear ();
+  tempList.splice (tempList.begin (), srcLines, f, ++l);	// ++l to include l, original is [f,l)
+  srcLines.splice (++target, tempList);	//insert after target
+  return true;
+
+}
+
+bool TextProcessor::process ()
+{
+
+//1. search for the start  of a nested pu 
+
+  list < string >::iterator iter1, iter2, iter3,iter4, iter_next;
+  iter1 = find_pattern ("void __omp");
+
+  if (iter1 != NULL)
+    {
+      do
+	{
+//2. search for the end iterators of a nested pu
+	  iter2 = find_pattern ("} /* __omp", iter1,NULL);
+	  iter_next = iter2;	// mark start point for next search
+	  iter_next++;
+//2.5 change the pattern inside the nested pu just in case,add one more space
+          iter4 = find_pattern ("  /*Begin_of_nested_PU(s)*/", iter1, iter2, false);
+          if (iter4 != NULL ) (*iter4).insert(9," ");
+//3. find its parent pu via traverse back from the begining of the block
+          iter3 = find_pattern ("  /*Begin_of_nested_PU(s)*/", NULL, iter1, false);
+
+//4. move the nested pu back to its parent pu
+
+	  moveBlock (iter1, iter2, iter3);
+//5. search for the next one
+	  iter1 = find_pattern ("void __omp", iter_next,NULL);
+	}
+      while (iter1 != NULL);
+    }				//end if
+
+  return true;
+}
+
+/*----------------------------------------------------*/
+
+#ifdef COMPILE_UPC
+#include <upc_symtab_utils.h>
+#endif
 /* Avoid errors due to uses of "int" in stdio.h macros.
  */
 #undef int
 
+//TODO: Liao global_data.c
+//the maximum line length for the global_data.c file
+#define MAX_LINE_LEN 2000
 
+
+#ifdef COMPILE_UPC
+extern void fdump_tree(FILE *f, WN *wn);
+#endif
 /* ====================================================================
  *
  * Local data and macros.
@@ -101,7 +282,10 @@ static const char *W2C_File_Extension[W2C_NUM_FILES] =
    ".c",       /* original input file */
    ".w2c.h",   /* .h output file */
    ".w2c.c",   /* .c output file */
-   ".w2c.loc"  /* .loc output file */
+   ".w2c.loc",  /* .loc output file */
+#ifdef COMPILE_UPC
+   ".global_data.c", /* initialization input file */
+#endif // TODO:Liao
 };
 
 /* CITE extensions for input/outfile files: */
@@ -110,7 +294,8 @@ static const char *W2C_Cite_Extension[W2C_NUM_FILES] =
    ".c",	        /* original input file */
    "-after-lno.h",	/* .c output file */
    "-after-lno.c",	/* .h output file */
-   ".loc"	        /* .loc output file */
+   ".loc",	        /* .loc output file */
+   //TODO   ".global_data.c", /* initialization input file */
 };
 
 /* ProMPF extensions for input/outfile files: */
@@ -144,6 +329,7 @@ static const char *W2C_File_Name[W2C_NUM_FILES] =
                                           {NULL, NULL, NULL, NULL};
 static BOOL        File_Is_Created[W2C_NUM_FILES] = 
                                           {FALSE, FALSE, FALSE, FALSE};
+//TODO                                          {FALSE, FALSE, FALSE, FALSE, FALSE};
 static MEM_POOL     W2C_Parent_Pool;
 
 /* External data set through command-line options */
@@ -156,6 +342,7 @@ BOOL  W2C_Emit_Prefetch = FALSE;    /* Emit comments for prefetches */
 BOOL  W2C_Emit_All_Regions = FALSE; /* Emit cmplr-generated regions */
 BOOL  W2C_Emit_Linedirs = FALSE;    /* Emit preproc line-directives */
 BOOL  W2C_Emit_Nested_PUs = FALSE;  /* Emit code for nested PUs */
+BOOL  W2C_Before_CG = FALSE;        /* Invoke whirl2c before CG , Liao*/
 BOOL  W2C_Emit_Frequency = FALSE;   /* Emit feedback frequency info */
 BOOL  W2C_Emit_Cgtag = FALSE;       /* Emit codegen tags for loop */
 BOOL  W2C_Lower_Fortran = FALSE;    /* Lower Fortran intrinsics and io */
@@ -283,6 +470,14 @@ Process_Filename_Options(const char *src_filename, const char *irb_filename)
 	    New_Extension(fname, W2C_Extension(W2C_LOC_FILE));
       }
    }
+   //TODO, LIAO
+   /*
+   if (W2C_File_Name[W2C_DATA_FILE] == NULL) {
+     W2C_File_Name[W2C_DATA_FILE] = 
+       New_Extension ( fname, W2C_Extension(W2C_DATA_FILE) );
+   }
+   */
+
 } /* Process_Filename_Options */
 
 
@@ -621,6 +816,12 @@ W2C_Should_Emit_Nested_PUs(void)
 } /* W2C_Should_Emit_Nested_PUs */
 
 
+BOOL
+W2C_Should_Before_CG(void)
+{
+   return W2C_Before_CG;
+} /* W2C_Should_Before_CG */
+
 
 void
 W2C_Process_Command_Line (INT phase_argc, char * const phase_argv[],
@@ -643,10 +844,15 @@ W2C_Process_Command_Line (INT phase_argc, char * const phase_argv[],
    W2C_Verbose = CLIST_verbose;
    W2C_No_Pragmas = CLIST_no_pragmas;
    W2C_Emit_Adims = CLIST_emit_adims;
-   W2C_Emit_Prefetch = CLIST_emit_prefetch;
+
+   // need reconsideration for -portable when multiple backends available,Liao
+   //if (!Portable_compile) {
+   //  W2C_Emit_Prefetch = CLIST_emit_prefetch;
+   //}
    W2C_Emit_All_Regions = CLIST_emit_all_regions;
    W2C_Emit_Linedirs = CLIST_emit_linedirs;
    W2C_Emit_Nested_PUs = CLIST_emit_nested_pus;
+   W2C_Before_CG = CLIST_before_cg;
    W2C_Emit_Frequency = CLIST_emit_frequency;
    W2C_Emit_Cgtag = CLIST_emit_cgtag;
    W2C_Lower_Fortran = CLIST_lower_ftn;
@@ -854,6 +1060,14 @@ W2C_Translate_Global_Types(FILE *outfile)
 } /* W2C_Translate_Global_Types */
 
 
+void W2C_write_init(FILE *outfile) {
+
+  if (!Check_Initialized("W2C_write_init")) {
+    return;
+  }
+  
+}
+
 void
 W2C_Translate_Global_Defs(FILE *outfile)
 {
@@ -1046,6 +1260,7 @@ W2C_Fini(void)
       W2C_Emit_All_Regions = FALSE; /* Emit cmplr-generated regions */
       W2C_Emit_Linedirs = FALSE;    /* Emit preproc line-directives */
       W2C_Emit_Nested_PUs = FALSE;  /* Emit code for nested PUs */
+      W2C_Before_CG = FALSE;        /* Invoke whirl2c before CG */
       W2C_Emit_Frequency = FALSE;   /* Emit feedback frequency info */
       W2C_Lower_Fortran = FALSE;    /* Lower Fortran intrinsics and io */
       W2C_Line_Length = 0;   /* Max output line length; zero==default */
@@ -1168,6 +1383,69 @@ W2C_Outfile_Init(BOOL emit_global_decls)
 		   W2C_File_Name[W2C_DOTH_FILE]);
       Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
 		   "\"\n\n");
+#ifdef COMPILE_UPC //TODO, Liao, for include system headers and others
+      if(Compile_Upc) 
+	/* Include <whirl2c.h> in the .h file */
+	Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
+		     "/* Include builtin types and operators */\n"
+		     //WEI: Took external_defs out, use upc_proxy instead
+		     "#include \"upcr_proxy.h\"\n#include<upcr.h>\n#include <whirl2c.h>\n\n");
+      else {
+	/* Include <whirl2c.h> in the .h file */
+	Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
+		     "/* Include builtin types and operators */\n"
+		     "#include \"whirl2c.h\"\n\n");
+	/* Include the .h file in the .c file */
+	Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		     "/* Include file-level type and variable decls */\n"
+		     "#include \"");
+	Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		     W2C_File_Name[W2C_DOTH_FILE]);
+	Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		     "\"\n\n");  
+      }
+   }
+
+   if (Compile_Upc) {
+     //Add UPC runtime version info
+     char buf[MAX_LINE_LEN];
+     sprintf(buf, "/* UPC Runtime specification expected: %d.%d */\n", UPCR_SPEC_MAJOR, UPCR_SPEC_MINOR);
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], buf);
+
+     sprintf(buf, "#define UPCR_WANT_MAJOR %d\n", UPCR_SPEC_MAJOR);
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], buf);
+
+     sprintf(buf, "#define UPCR_WANT_MINOR %d\n", UPCR_SPEC_MINOR);
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], buf);
+
+     //Add translator build version
+     sprintf(buf, "/* UPC translator version: release 2.2.0, built on %s at %s */\n",
+		  __DATE__, __TIME__);
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], buf);
+
+     // add the init file to output
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		  "/* Included code from the initialization script */\n");
+     
+     FILE* in = fopen(W2C_File_Name[W2C_DATA_FILE], "r");
+     
+     FmtAssert(in, ("Could not open static data file"));
+     
+     while (fgets(buf, MAX_LINE_LEN, in) != NULL) {
+       if (strncmp(buf, "###", 3) == 0) {
+	 /* Include the .h file in the .c file after the system headers 
+	    and other non upc headers are included */
+	 Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		      "#include \"");
+	 Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		      W2C_File_Name[W2C_DOTH_FILE]);
+	 Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE],
+		      "\"\n\n");  
+       } else {
+	 Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], buf);
+       }
+     }
+#endif
    }
 
    if (emit_global_decls)
@@ -1177,7 +1455,6 @@ W2C_Outfile_Init(BOOL emit_global_decls)
 
 } /* W2C_Outfile_Init */
 
-
 void
 W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
 {
@@ -1185,6 +1462,8 @@ W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
    LOWER_ACTIONS      lower_actions = LOWER_NULL;
    const BOOL         pu_is_pushed = (PUinfo_current_func != NULL);
    const char * const caller_err_phase = Get_Error_Phase ();
+
+   static int globals_done = 0;
 
    if (!Check_Outfile_Initialized("W2C_Outfile_Translate_Pu"))
       return;
@@ -1211,11 +1490,60 @@ W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls)
 
    Start_Timer (T_W2C_CU);
    Set_Error_Phase ("WHIRL To C");
-
    if (!pu_is_pushed)
       W2C_Push_PU(pu, WN_func_body(pu));
 
    tokens = New_Token_Buffer();
+#ifdef COMPILE_UPC
+   if(Compile_Upc && debug_requested) {
+     ST* tst;
+     int i;
+     FOREACH_SYMBOL(PU_lexical_level (Pu_Table[ST_pu (St_Table[WN_st_idx(pu)])]), tst, i) {
+       emit_s2s_debug_type_info(tst, tokens);
+    
+       //change the types in the symbol table, otherwise the translation
+       //code gets cinfused
+       if (ST_class(tst) == CLASS_VAR) {
+	 Set_ST_type((ST*)tst, TY_To_Sptr_Idx(ST_type(tst)));
+       } else if (ST_class(tst) == CLASS_FUNC) {
+	 TYLIST_IDX idx;
+	 idx = TY_tylist(ST_pu_type(tst));
+	 ST *lst;
+	 while(Tylist_Table [idx]) {
+	   TY_IDX tidx = Tylist_Table[idx];
+	   if (Type_Is_Shared_Ptr(tidx)) {
+	     Set_TYLIST_type (Tylist_Table [idx], TY_To_Sptr_Idx(tidx));
+	     idx++;
+	   }
+	   else idx++;
+	 }
+       }
+      
+     }     
+     if(!globals_done) {
+       globals_done = 1;
+       FOREACH_SYMBOL(GLOBAL_SYMTAB, tst, i) {
+       if (ST_class(tst) == CLASS_VAR) {
+	 Set_ST_type((ST*)tst, TY_To_Sptr_Idx(ST_type(tst)));
+       } else if (ST_class(tst) == CLASS_FUNC) {
+	 TYLIST_IDX idx;
+	 idx = TY_tylist(ST_pu_type(tst));
+	 ST *lst;
+	 while(Tylist_Table [idx]) {
+	   TY_IDX tidx = Tylist_Table[idx];
+	   if (Type_Is_Shared_Ptr(tidx)) {
+	     Set_TYLIST_type (Tylist_Table [idx], TY_To_Sptr_Idx(tidx));
+	     idx++;
+	   }
+	   else idx++;
+	 }
+       }
+     }
+       
+     }
+  
+ } 
+#endif
    (void)WN2C_translate(tokens, pu, Global_Context);
    Write_And_Reclaim_Tokens(W2C_File[W2C_DOTC_FILE], 
 			    W2C_File[W2C_LOC_FILE], 
@@ -1248,6 +1576,11 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
    if (emit_global_decls)
       Open_W2c_Output_File(W2C_DOTH_FILE);
 
+#ifdef COMPILE_UPC
+   if (Compile_Upc) {
+     Write_String(W2C_File[W2C_DOTC_FILE], W2C_File[W2C_LOC_FILE], "#line 1 \"_SYSTEM\"");
+   }
+#endif
    if (emit_global_decls)
    {
       TOKEN_BUFFER tokens = New_Token_Buffer();
@@ -1255,14 +1588,32 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
       WN2C_translate_file_scope_defs(Global_Context);
 
       ST2C_Define_Common_Blocks(tokens, Global_Context);
+#ifndef COMPILE_UPC
       Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
 			       W2C_File[W2C_LOC_FILE], 
 			       &tokens);
+#else
+      //WEI: Don't think we need this anymore, since Append_Symtab_Var now does this.
+      //Could be wrong, though...
+      if (!Compile_Upc) {
+	Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
+	W2C_File[W2C_LOC_FILE], 
+	&tokens);
+      }
+#endif  //TODO, Liao, Append_Symtab_Var
    }
 
    Close_W2c_Output_File(W2C_LOC_FILE);
    Close_W2c_Output_File(W2C_DOTH_FILE);
    Close_W2c_Output_File(W2C_DOTC_FILE);
+
+ /*  move a nested PU back to its parent's scope, by Liao */
+ // TODO: add a new sub option within CLIST to activate this 
+ if (W2C_Emit_Nested_PUs) {
+    TextProcessor tproc(W2C_File_Name[W2C_DOTC_FILE]);
+    tproc.process();
+    tproc.Output (W2C_File_Name[W2C_DOTC_FILE]);
+    }
 
    /* All files must be closed before doing a partial 
     * finalization, except W2C_LOC_FILE.

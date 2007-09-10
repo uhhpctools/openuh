@@ -65,6 +65,7 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/sta
 #include "ty2c.h"
 #include "cxx_memory.h"
 
+extern void fdump_tree(FILE *f, const WN *wn);
 
 /*------------------- Reserved Names Information -----------------
  *----------------------------------------------------------------*/
@@ -324,6 +325,7 @@ public:
   {
     _size  = sz ;
     _flags = CXX_NEW_ARRAY(char,sz,Malloc_Mem_Pool);
+    memset(_flags, 0, sz);
   }
 
   ~W2FC_FLAG_ARRAY()
@@ -423,9 +425,24 @@ Stab_Compare_Types(TY_IDX t1,
     * in common/com/ttype.h.
     */
   INT i; /* Array dimensions */
+#ifdef COMPILE_UPC
+  TY_IDX t1_s = TY_To_Sptr_Idx(t1);
+  TY_IDX t2_s = TY_To_Sptr_Idx(t2);
+#endif
 
   if (t1 == t2)
      return TRUE;
+#ifdef COMPILE_UPC
+  /* 
+   * For some annoying reason, t1_s and t2_s may both be upcr_shared_ptr_t,
+   * but with t1_s != t2_s (I believe one is coming from be, while the other from whirl2c)
+   * So we need to also compare the actual ty entry here.
+   * See bug498.
+   */
+  else if (t1_s == t2_s || &Ty_Table[t1_s] == &Ty_Table[t2_s]) {
+    return TRUE;
+  }
+#endif
   else if (TY_kind(t1) == KIND_INVALID || 
 	   TY_kind(t2) == KIND_INVALID ||
 	   (check_quals && !Stab_Identical_Quals(t1, t2)) ||
@@ -445,6 +462,10 @@ Stab_Compare_Types(TY_IDX t1,
 	else if (ptrs_as_scalars)
 	   return (TY_Is_Pointer_Or_Scalar(t2) &&
 		   (!check_scalars || TY_mtype(t1) == TY_mtype(t2)));
+//	else if (TY_Is_Array(t2)){ /*scalar to array element, bug 209 Liao*/
+//	   while(TY_AR_etype(t2)!=KIND_INVALID) t2= TY_AR_etype(t2);
+//	   return (!check_scalars || TY_mtype(t1) == TY_mtype(t2));
+//	   }
 	else
 	   return (TY_Is_Scalar(t2) &&
 		   (!check_scalars || TY_mtype(t1) == TY_mtype(t2)));
@@ -700,7 +721,7 @@ Stab_Get_Mload_Ty(TY_IDX base, STAB_OFFSET offset, STAB_OFFSET size)
       
       Is_True(! this_fld.Is_Null () &&
 	      FLD_ofst(this_fld) <= offset           &&
-	      FLD_ofst(next_fld) >= offset           &&
+	      (next_fld.Is_Null () || FLD_ofst(next_fld) >= offset)           &&
 	      (TY_Is_Structured(FLD_type(this_fld))) &&
 	      TY_size(FLD_type(this_fld)) >= size, 
 	      ("Could not find a field as expected in TY2C_Get_Mload_Ty()"));

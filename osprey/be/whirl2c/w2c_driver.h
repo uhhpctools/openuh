@@ -259,6 +259,7 @@ typedef enum W2C_File_Kind
    W2C_DOTH_FILE, /* W2C generated .h file */
    W2C_DOTC_FILE, /* W2C generated .c file */
    W2C_LOC_FILE,  /* W2C generated source-to-source location mapping file */
+   //TODO, Liao, global_data.c  W2C_DATA_FILE, /* Initailization file for shared and TLD variables */
    W2C_NUM_FILES  /* Number of elements in this enumeration */
 } W2C_FILE_KIND;
 
@@ -271,6 +272,7 @@ extern FILE *W2C_File[W2C_NUM_FILES];
   /* Note that we also export some utilities from W2CF_symtab.h */
 
 extern BOOL W2C_Should_Emit_Nested_PUs(void);
+extern BOOL W2C_Should_Before_CG(void);
 extern void W2C_Process_Command_Line(INT phase_argc, char * const phase_argv[],
 				     INT argc, char * const argv[]);
 extern void W2C_Init(void);

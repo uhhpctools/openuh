@@ -199,6 +199,7 @@ const char *(*W2C_Get_Transformed_Src_Path_p)(void);
 void (*W2C_Set_Purple_Emission_p)(void);
 void (*W2C_Reset_Purple_Emission_p)(void);
 BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
+BOOL (*W2C_Should_Before_CG_p)(void);
 void (*W2C_Translate_Global_Defs_p)(FILE *outfile);
 void (*W2C_Translate_Global_Types_p)(FILE *outfile);
 void (*W2C_Translate_Istore_Lhs_p)(char *strbuf,

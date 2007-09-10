@@ -56,6 +56,7 @@ extern void (*W2C_Push_PU_p)(const WN *pu, WN *body_part_of_interest);
 extern void (*W2C_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern void (*W2C_Set_Prompf_Emission_p)(const WN_MAP *construct_map);
 extern BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
+extern BOOL (*W2C_Should_Before_CG_p)(void);
 extern void (*W2C_Translate_Istore_Lhs_p)(char *strbuf,
   UINT bufsize, const WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty,
   TYPE_ID istore_mtype);
@@ -72,6 +73,7 @@ extern void (*W2C_Translate_Wn_p)(FILE *outfile, const WN *wn);
 #define W2C_Set_Prompf_Emission (*W2C_Set_Prompf_Emission_p)
 #define W2C_Set_Frequency_Map (*W2C_Set_Frequency_Map_p)
 #define W2C_Should_Emit_Nested_PUs (*W2C_Should_Emit_Nested_PUs_p)
+#define W2C_Should_Before_CG (*W2C_Should_Before_CG_p)
 #define W2C_Translate_Istore_Lhs (*W2C_Translate_Istore_Lhs_p)
 #define W2C_Translate_Wn (*W2C_Translate_Wn_p)
 
@@ -88,6 +90,7 @@ extern void (*W2C_Translate_Wn_p)(FILE *outfile, const WN *wn);
 #pragma weak W2C_Set_Frequency_Map
 #pragma weak W2C_Set_Prompf_Emission
 #pragma weak W2C_Should_Emit_Nested_PUs
+#pragma weak W2C_Should_Before_CG
 #pragma weak W2C_Translate_Istore_Lhs
 #pragma weak W2C_Translate_Wn
 #pragma weak W2C_Translate_Wn_Str

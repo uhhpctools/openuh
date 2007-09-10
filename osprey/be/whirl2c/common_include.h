@@ -61,7 +61,7 @@
 #include <stdio.h>
 
 #include "defs.h"          /* Basic types, such as INT32 */
-#include "config.h"
+#include "../common/com/config.h" /*Liao*/
 #include "erglob.h"        /* For errors.h and EC definitions */
 #include "wn.h"            /* WN nodes */
 #include "symtab.h"        /* TY and ST nodes */
