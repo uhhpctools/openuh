@@ -2409,6 +2409,7 @@ WN2F_call(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    BOOL         return_to_param;
    BOOL         is_user_call = FALSE;
 
+
    /* Emit any relevant call-site directives
     */
    if (WN_operator(wn) == OPR_CALL || WN_operator(wn) == OPR_PICCALL)
@@ -2485,6 +2486,11 @@ WN2F_call(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
 
       if (WN_operator(wn) == OPR_CALL)
       {
+
+     //shilpa - added this condition to eliminate call to the _END() subroutine   
+     if(! strcmp(ST_name(WN_st(wn)), "_END") )
+         return EMPTY_WN2F_STATUS;
+     
 	 ST2F_use_translate(call_tokens, WN_st(wn));
 	 func_ty = ST_pu_type(WN_st(wn));
 	 last_arg_idx = WN_kid_count(wn) - 1;
@@ -2502,6 +2508,7 @@ WN2F_call(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
 	 ASSERT_DBG_FATAL(WN_operator(wn) == OPR_PICCALL, 
 			  (DIAG_W2F_UNEXPECTED_OPC, "WN2F_call"));
 	 ST2F_use_translate(call_tokens, WN_st(wn));
+
 	 func_ty = ST_type(WN_st(wn));
 	 last_arg_idx = WN_kid_count(wn) - 2;
       } /* if OPR_CALL */
@@ -2538,7 +2545,7 @@ WN2F_call(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    for (arg_idx = first_arg_idx, implicit_args = 0; 
 	arg_idx <= last_arg_idx - implicit_args; 
 	arg_idx++)
-   {
+   {  
       arg_ty = WN_Tree_Type(WN_kid(wn, arg_idx));
 
       if (WN_operator(wn) == OPR_INTRINSIC_CALL &&
@@ -2686,7 +2693,7 @@ WN2F_prefetch(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    set_WN2F_CONTEXT_deref_addr(context);
    Append_F77_Comment_Newline(tokens, 1/*empty-lines*/, TRUE/*indent*/);
 
-   /* Get the prefetch identifier and address expression */
+   /* gET THE PRefetch identifier and address expression */
    if (WN_operator(wn) == OPR_PREFETCH)
    {
       Append_Token_String(tokens, 

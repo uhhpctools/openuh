@@ -205,6 +205,7 @@ ST2F_decl_var(TOKEN_BUFFER tokens, ST *st)
 		    (DIAG_W2F_UNEXPECTED_SYMCLASS, 
 		     ST_sym_class(st), "ST2F_decl_var"));
 
+
    if (Current_scope > GLOBAL_SYMTAB) 
    {
        ASSERT_DBG_FATAL(!PUINFO_RETURN_TO_PARAM || st != PUINFO_RETURN_PARAM, 
@@ -365,8 +366,11 @@ ST2F_decl_func(TOKEN_BUFFER tokens, ST *st)
 
    if (ST_sclass(st) == SCLASS_EXTERN)
    {
-      Append_Token_String(tokens, "EXTERNAL");
-      Append_Token_String(tokens, func_name);
+      if(strcmp(func_name, "_END") != 0)  /*shilpa - added this condition to eliminate the call to the external _END subroutine */
+      { 
+        Append_Token_String(tokens, "EXTERNAL");
+        Append_Token_String(tokens, func_name);
+      }
    }
 
    /* Specify the function return type, unless it is void */

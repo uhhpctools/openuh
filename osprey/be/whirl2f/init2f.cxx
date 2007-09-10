@@ -905,7 +905,6 @@ INIT2F_Translate_Array_Ref(TOKEN_BUFFER         tokens,
    UINT              first_idx = aseg->first_idx;
    INITV_IDX         first_initv = aseg->initv_array[first_idx];
 
-
    if (aseg->num_initvs == 1 &&
        INIT2F_is_string_initv(Initv_Table[first_initv],aseg->etype))
    {

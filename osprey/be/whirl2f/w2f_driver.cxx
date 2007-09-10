@@ -166,7 +166,6 @@ BOOL    W2F_Prompf_Emission = FALSE; /* Emitting prompf transformed sources */
 WN_MAP *W2F_Construct_Map = NULL;    /* Construct id mapping for prompf */
 WN_MAP  W2F_Frequency_Map = WN_MAP_UNDEFINED; /* Frequency mapping */
 
-
 /* ====================================================================
  *
  * Process_Filename_Options()
@@ -1223,9 +1222,15 @@ W2F_Outfile_Translate_Pu(WN *pu)
 
    // indented nested f90 routines, close CONTAINS for f90, if reqd..
 
-   BOOL nested = PU_is_nested_func(pucur) && !(PU_mp(pucur)) ;
+   //shilpa - added condition to determine if PU is nested or not
+   BOOL nested;
+   if(W2F_Emit_Nested_PUs)   
+      nested = PU_is_nested_func(pucur) ;
+   else
+      nested = PU_is_nested_func(pucur) && !(PU_mp(pucur)) ;
+   
 
-   tokens = New_Token_Buffer();
+   tokens= New_Token_Buffer();
 
    if (nested) 
    {
@@ -1235,7 +1240,6 @@ W2F_Outfile_Translate_Pu(WN *pu)
       WN2F_Emit_End_Stmt(tokens,FALSE);
 
    
-
    (void)WN2F_translate(tokens, pu, Global_Context);
    Write_And_Reclaim_Tokens(W2F_File[W2F_FTN_FILE], 
 			    W2F_File[W2F_LOC_FILE], 
@@ -1251,7 +1255,8 @@ W2F_Outfile_Translate_Pu(WN *pu)
 
    Stop_Timer(T_W2F_CU);
    Diag_Set_Phase(caller_err_phase);
-} /* W2F_Outfile_Translate_Pu */
+} /* W2F_Outfile_Translate_Pted = PU_is_nested_func(pucur) && !(PU_mp(pucur)) ;
+*/
 
 
 void
