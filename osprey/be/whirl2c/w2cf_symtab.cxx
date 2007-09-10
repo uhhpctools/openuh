@@ -874,7 +874,6 @@ W2CF_Symtab_Nameof_St(const ST *st)
     * suffix (symid).  Create a name-buffer large enough to hold the
     * name appended to the suffix (hence the "+32").
     */
-   
    if (ST_sym_class(st) != CLASS_CONST) 
 	   valid_name = W2FC_Valid_Name(ST_name(st),WN2F_F90_pu && !ST_is_temp_var(st));
 
@@ -894,6 +893,7 @@ W2CF_Symtab_Nameof_St(const ST *st)
 
    symname = Get_Name_Buf_Slot(strlen(valid_name) + 32);
    W2CF_Get_Basename(valid_name, symname, &symid);
+
    /* Get the associated symbol entry (with a possibly modified symid).
     */
    W2CF_SYMBOL_symid(&match_symbol) = symid;
@@ -945,17 +945,20 @@ W2CF_Symtab_Nameof_St_Pointee(const ST *st)
    pointee_name = Concat2_Strings("deref_", W2CF_Symtab_Nameof_St(st));
    symname = Get_Name_Buf_Slot(strlen(pointee_name) + 32);
    W2CF_Get_Basename(pointee_name, symname, &symid);
-   
+
    /* Get the associated symbol entry (with a possibly modified symid).
     */
    W2CF_SYMBOL_symid(&match_symbol)  = symid;
    W2CF_SYMBOL_kind(&match_symbol)   = SYMKIND_ST_POINTEE;
    W2CF_SYMBOL_st_ptr(&match_symbol) = st;
    W2CF_Get_Symbol(&symtab, &symhdr, &symbol, &match_symbol, symname);
-   
+
    /* Return the resultant disambiguated name */
-   return W2CF_SYMBOL_name_string(symtab, symbol);
-   
+   char* s =  W2CF_SYMBOL_name_string(symtab, symbol);
+
+   //printf("\n symname: %s", s);
+
+   return s;
 } /* W2CF_Symtab_Nameof_St_Pointee */
 
 

@@ -311,6 +311,8 @@ static char   F77_Directive_Continuation[MAX_F77_DIRECTIVE_PREFIX_SIZE+1];
  */
 static BOOL Emit_Prompf_Srcpos_Map = FALSE;
 
+//shilpa - added this global variable to indicate if the source code is FORTRAN
+extern bool ISSRCFORTRAN;
 
 /*--------------- routines for debugging a token buffer ---------------*/
 /*---------------------------------------------------------------------*/
@@ -1189,6 +1191,9 @@ write_token(FILE        *ofile,   /* NULL if strbuf!=NULL */
    STRING_IDX  ch_idx;
    TOKEN      *a_token = &buffer->tokens[this_token];
    
+   int tokenlen;    /* shilpa - added these 2 variables */
+   char* current_token;
+   
    Is_True(this_token != NO_TOKEN_IDX, ("Cannot write non-existent token"));
    
    switch (TOKEN_kind(a_token))
@@ -1205,13 +1210,38 @@ write_token(FILE        *ofile,   /* NULL if strbuf!=NULL */
 	 Output_Character(ofile, strbuf, strlen, str[ch_idx]);
       break;
 
+   /* old code    
    case STRING_TOKEN:
       str = TOKEN_BUFFER_get_char_string(buffer, a_token);
       for (ch_idx = 0; ch_idx < TOKEN_string_size(a_token); ch_idx++)
 	 Output_Character(ofile, strbuf, strlen, str[ch_idx]);
       last_split_pt = write_buffer_next;
-      break;
+      break; */
 
+   /* shilpa - new code to get rid of leading underscores in variable names
+    * for FORTRAN */
+   case STRING_TOKEN:
+         str = TOKEN_BUFFER_get_char_string(buffer, a_token);
+         tokenlen = TOKEN_string_size(a_token);
+
+         if(PU_src_lang(Get_Current_PU()) == PU_F77_LANG || PU_src_lang(Get_Current_PU()) == PU_F90_LANG) //Source is FORTRAN
+         { 
+            for(ch_idx = 0; ch_idx < tokenlen; ch_idx++)             //shilpa - this eliminates leading underscores from fortran tokens
+            {    if(str[ch_idx] != '_')
+                     break;
+            }
+
+            for(; ch_idx < tokenlen; ch_idx++)
+                 Output_Character(ofile, strbuf, strlen, str[ch_idx]);
+         }
+         else  //C/C++ source code
+         {
+            for (ch_idx = 0; ch_idx < tokenlen; ch_idx++)
+                Output_Character(ofile, strbuf, strlen, str[ch_idx]);
+         }
+        last_split_pt = write_buffer_next;
+        break;
+                                    
    case SEPARATOR_TOKEN:
       str = TOKEN_BUFFER_get_char_string(buffer, a_token);
       for (ch_idx = 0; ch_idx < TOKEN_string_size(a_token); ch_idx++)
