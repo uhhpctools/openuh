@@ -138,7 +138,7 @@ TY2F_Append_Array_Bnd_Ph(TOKEN_BUFFER decl_tokens,
    }
    
    // Would prefer
-   // sprintf(ptr_string, p, W2CF_Symtab_Nameof_St(ST_ptr(arbnd)));
+   //   sprintf(ptr_string, p, W2CF_Symtab_Nameof_St(ST_ptr(arbnd)));
    // but mfef77 assigns auto varbls of same name in skip list. So 
    // assignments to bounds  don't get printed & the bounds look a 
    // little odd. eg: try
@@ -148,9 +148,6 @@ TY2F_Append_Array_Bnd_Ph(TOKEN_BUFFER decl_tokens,
    // mfef90 uses unique names, so ST_name is ok.
 
    sprintf(ptr_string, p, ST_name(ST_ptr(arbnd)));
-   
-   //printf("\n array ptr_str new: %s", ptr_string);
-
    Append_Token_String(decl_tokens, ptr_string);
 
 } /* TY2F_Append_Array_Bnd_Ph */
@@ -208,7 +205,6 @@ TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb, BOOL purple_assumed_si
 	 TY2F_Append_Array_Bnd_Ph(decl_tokens, 
 				  ARB_lbnd_var(arb), 
 				  purple_assumed_size);
-     
 	 Append_Token_Special(decl_tokens, ')');
       }
       else if (ARB_const_lbnd(arb))

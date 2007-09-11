@@ -295,9 +295,6 @@ main (INT argc,       /* Number of command line arguments */
    INT32        inp_file_count;
    PU_Info     *pu_tree, *current_pu;
 
-
-   printf("\n\n in plain main... \n ");
-
    /* Here are things that every process driver should do as soon as
    * possible upon start-up.
    */

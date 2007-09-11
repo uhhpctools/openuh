@@ -170,8 +170,6 @@ main (INT argc,       /* Number of command line arguments */
     register BOOL dash_fB_option = FALSE; /* Any -fB option? */
     char *newlibpath[3];
 
-    printf("\n\n in whirl2f main!! ");
-
     if (argc == 1)
     {
        Usage(argv[0]);
