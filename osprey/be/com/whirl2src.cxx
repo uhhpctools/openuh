@@ -90,7 +90,6 @@ Whirl2C_Init (WN* func_nd)
 extern void 
 Whirl2F_Init (WN* func_nd) 
 {
-  printf("\n\n in com/whirl2src w2f_init");
   w2src_func_nd = func_nd;
   if (!init_whirl2f) {
     if (W2F_Process_Command_Line == NULL) {
@@ -100,7 +99,6 @@ Whirl2F_Init (WN* func_nd)
       str = "";
       load_so("whirl2f.so", W2F_Path, Show_Progress);
       W2F_Process_Command_Line(0, &str, 0, &str);
-
       W2F_Init ();
     }
     init_whirl2f = TRUE;
@@ -157,7 +155,6 @@ Whirl2C_Emit (FILE* fp, WN* wn)
 extern void 
 Whirl2F_Emit (FILE* fp, WN* wn) 
 {
-  printf("\n\n emitting... ");
   if (!init_whirl2f) {
     Is_True (FALSE, ("Whirl2F_Emit: whirl2f not initialized\n"));
     return;

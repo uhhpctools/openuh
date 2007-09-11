@@ -426,11 +426,6 @@ typedef INT32 MPID_TABLE;
 typedef HASH_TABLE<WN *, BOOL> WN_TO_BOOL_HASH;
 static const mINT32 NUM_HASH_ELEMENTS = 1021;
 
-
-//external char * W2CF_Symtab_Nameof_St(const ST *st);
-//external char * W2CF_Symtab_Nameof_St_Pointee(const ST *st);
-  
-
 /*
 Template for simple fixed-size vector with bounds-checking (if compiled for
 debugging).  Why did we have to re-invent the wheel here?  Because neither
@@ -1822,12 +1817,8 @@ Gen_Threadpriv_Func(WN* prags, WN* block, BOOL prepend)
     if (ST_is_not_used(WN_st(prags)))
       Clear_ST_is_not_used(WN_st(prags));
     WN_kid(wn, 2) = WN_CreateParm( Pointer_type, 
-                    WN_Lda( Pointer_type, 0, ST_ptr(WN_st_idx(prags)) ),
-                    Be_Type_Tbl( Pointer_type ), WN_PARM_BY_REFERENCE );
-
-    printf("\n st name: %s", ST_name(WN_st_idx(prags)));
-    //printf("\n symtab name name; %s", W2CF_Symtab_Nameof_St(ST_ptr(WN_st_idx(prags))));
-    //printf("\n pointee name: %s", W2CF_Symtab_Nameof_St_Pointee(ST_ptr(WN_st_idx(prags))));
+                     WN_Lda( Pointer_type, 0, ST_ptr(WN_st_idx(prags)) ),
+                     Be_Type_Tbl( Pointer_type ), WN_PARM_BY_REFERENCE );
 
 //    if (prepend != TRUE)
 //      gtid_st = Extract_Gtid_ST(block);
