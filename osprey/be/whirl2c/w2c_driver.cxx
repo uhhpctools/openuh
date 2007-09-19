@@ -122,12 +122,13 @@ using namespace std;
 
 // A class to store source files, move text blocks and write it back.
 
+/*
 class TextProcessor
 {
 public:
   string mfilename;
   int lineCount;
-    list < string > srcLines;
+    list<string> srcLines;
     TextProcessor ()
   {
   };
@@ -168,16 +169,20 @@ public:
 
 // search function for a pattern from iter_begin in normal or reverse order
 // return the iterator for the first match
-  list < string >::iterator find_pattern (char *ipattern,
-			   list <string >::iterator iter_begin=NULL, 
-		           list <string >::iterator iter_end=NULL,
+  list < string >::iterator find_pattern (const char *ipattern,
+			   list <string >::iterator iter_begin, 
+		           list <string >::iterator iter_end,
                              bool forder = true)
   {
     list < string >::iterator iter;
-    if (iter_begin == NULL)
-	  iter_begin = srcLines.begin ();
-    if (iter_end == NULL)
-          iter_end = srcLines.end ();
+     
+ //   if (iter_begin == srcLines.end())
+	//  iter_begin = srcLines.begin (); 
+//
+//    if (iter_end == srcLines.end()) {
+//          iter_end = srcLines.end ();
+//    } 
+//
     if (forder)
       {				// normal search
 	for (iter = iter_begin; iter != iter_end; iter++)
@@ -189,7 +194,11 @@ public:
       }
     else			// reverse search
       {
-	for (iter = iter_end; iter != iter_begin; iter--)
+  
+        Is_True(iter_end!=srcLines.end(),"w2c_driver: iterator is illegal"); 
+          
+        
+	for (iter=iter_end; iter != iter_begin; iter--)
 	  {
 	    string::size_type pos = (*iter).find (ipattern);
 	    if (pos != string::npos)
@@ -197,7 +206,7 @@ public:
 	  }
       }
 
-    return NULL;
+    return srcLines.end();
   }
 
 };
@@ -209,8 +218,8 @@ bool
 			    list < string >::iterator target)
 {
   list < string > tempList;
-  if ((f == NULL) || (l == NULL) || (target == NULL))
-    return false;
+//  if ((f == NULL) || (l == NULL) || (target == NULL))
+//    return false;
   tempList.clear ();
   tempList.splice (tempList.begin (), srcLines, f, ++l);	// ++l to include l, original is [f,l)
   srcLines.splice (++target, tempList);	//insert after target
@@ -223,35 +232,37 @@ bool TextProcessor::process ()
 
 //1. search for the start  of a nested pu 
 
-  list < string >::iterator iter1, iter2, iter3,iter4, iter_next;
-  iter1 = find_pattern ("void __omp");
+  list < string >::iterator iter1, iter2, iter3,iter4, iter_next, tmp;
+  iter1 = find_pattern ("void __omp",iter2,iter3);
 
-  if (iter1 != NULL)
-    {
+//  if (iter1 != NULL)
+//    {
       do
 	{
 //2. search for the end iterators of a nested pu
-	  iter2 = find_pattern ("} /* __omp", iter1,NULL);
+	  iter2 = find_pattern ("}//  __omp", iter1,tmp);
 	  iter_next = iter2;	// mark start point for next search
 	  iter_next++;
 //2.5 change the pattern inside the nested pu just in case,add one more space
-          iter4 = find_pattern ("  /*Begin_of_nested_PU(s)*/", iter1, iter2, false);
-          if (iter4 != NULL ) (*iter4).insert(9," ");
+          iter4 = find_pattern ("  // Begin_of_nested_PU(s)", iter1, iter2, false);
+//          if (iter4) 
+          (*iter4).insert(9," ");
 //3. find its parent pu via traverse back from the begining of the block
-          iter3 = find_pattern ("  /*Begin_of_nested_PU(s)*/", NULL, iter1, false);
+          iter3 = find_pattern ("  // Begin_of_nested_PU(s)", tmp, iter1, false);
 
 //4. move the nested pu back to its parent pu
 
 	  moveBlock (iter1, iter2, iter3);
 //5. search for the next one
-	  iter1 = find_pattern ("void __omp", iter_next,NULL);
+	  iter1 = find_pattern ("void __omp", iter_next,tmp);
 	}
-      while (iter1 != NULL);
-    }				//end if
+      while (iter1);
+ //   }				//end if
 
   return true;
 }
 
+*/
 /*----------------------------------------------------*/
 
 #ifdef COMPILE_UPC
@@ -1609,12 +1620,12 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
 
  /*  move a nested PU back to its parent's scope, by Liao */
  // TODO: add a new sub option within CLIST to activate this 
- if (W2C_Emit_Nested_PUs) {
+/* if (W2C_Emit_Nested_PUs) {
     TextProcessor tproc(W2C_File_Name[W2C_DOTC_FILE]);
     tproc.process();
     tproc.Output (W2C_File_Name[W2C_DOTC_FILE]);
     }
-
+*/
    /* All files must be closed before doing a partial 
     * finalization, except W2C_LOC_FILE.
     */
