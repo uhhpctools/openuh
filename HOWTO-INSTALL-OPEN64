@@ -92,7 +92,7 @@ There are two ways:
       version repository.
       To get the latest version issue the following command:
         
-        svn export https://svn.open64.net/svnroot/open64/trunk open64
+        svn co http://svn.open64.net/svnroot/open64/branches/OpenUH/
 
       This will copy the latest code to the directory open64.
 
