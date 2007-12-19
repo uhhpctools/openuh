@@ -160,5 +160,11 @@ will be installed in the directory defined by the environment variable TOOLROOT.
 
 Congratulations. You have succsessfully installed Open64. Have fun.
 
+
+Note: to compile OpenMP C/C++ programs, you need to use -gnu3 to enable the GNU 3.3 frontend that supports OpenMP 
+directives. 
+
+% uhcc -O3 -mp -gnu3 test.c
+
 Your Open64 Team
 
