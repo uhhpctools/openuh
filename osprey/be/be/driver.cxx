@@ -1984,12 +1984,12 @@ main (INT argc, char **argv)
   }
 #endif
 
-#ifndef KEY
+// #ifndef KEY
   if ( List_Enabled ) {
     Prepare_Listing_File ();
     List_Compile_Options ( Lst_File, "", FALSE, List_All_Options, FALSE );
   }
-#endif
+// #endif
 
   Init_Operator_To_Opcode_Table();
     
@@ -2135,11 +2135,11 @@ main (INT argc, char **argv)
 #ifdef KEY
   //Bug 10252: move list options to here (the end of BE), so that
   // it can show appropriate target-dependent options
-  if ( List_Enabled ) {
-    Mhd_Options.Merge_Options(Mhd);
-    Prepare_Listing_File ();
-    List_Compile_Options ( Lst_File, "", FALSE, List_All_Options, FALSE );
-  }
+//  if ( List_Enabled ) {
+//    Mhd_Options.Merge_Options(Mhd);
+//    Prepare_Listing_File ();
+//    List_Compile_Options ( Lst_File, "", FALSE, List_All_Options, FALSE );
+//  }
 #endif
 
 
