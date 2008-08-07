@@ -311,14 +311,16 @@ typedef enum {
 
   MPR_OMP_CRITICAL		= 64,
   MPR_OMP_END_CRITICAL		= 65,
-  MPR_OMP_ORDERED		= 66,
-  MPR_OMP_END_ORDERED		= 67,
+  MPR_OMP_REDUCTION             = 66,
+  MPR_OMP_END_REDUCTION         = 67,
+  MPR_OMP_ORDERED		= 68,
+  MPR_OMP_END_ORDERED		= 69,
 
-  MPR_OMP_FLUSH			= 68,	/* Not really needed? to be deleted*/
+  MPR_OMP_FLUSH			= 70,	/* Not really needed? to be deleted*/
 #ifdef KEY
-  MPR_OMP_GET_THDPRV            = 69,
-  MPR_OMP_COPYIN_THDPRV         = 70,
-  MPR_OMP_COPYPRIVATE           = 71,
+  MPR_OMP_GET_THDPRV            = 71,
+  MPR_OMP_COPYIN_THDPRV         = 72,
+  MPR_OMP_COPYPRIVATE           = 73,
 
   MPRUNTIME_LAST = MPR_OMP_COPYPRIVATE
 #else
@@ -711,6 +713,8 @@ static char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_barrier",             /* MPR_OMP_BARRIER */
   "__ompc_critical",            /* MPR_OMP_CRITICAL */
   "__ompc_end_critical",        /* MPR_OMP_END_CRITICAL */
+  "__ompc_reduction",           /* MPR_OMP_REDUCTION */
+  "__ompc_end_reduction",       /* MPR_OMP_END_REDUCTION */
   "__ompc_ordered",             /* MPR_OMP_ORDERED */
   "__ompc_end_ordered",         /* MPR_OMP_ORDERED */
   "__ompc_flush",               /* MPR_OMP_FLUSH  */
@@ -793,6 +797,8 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_BARRIER */
   ST_IDX_ZERO,   /* MPR_OMP_CRITICAL */
   ST_IDX_ZERO,   /* MPR_OMP_END_CRITICAL */
+  ST_IDX_ZERO,   /* MPR_OMP_REDUCTION */
+  ST_IDX_ZERO,   /* MPR_OMP_END_REDUCTION */
   ST_IDX_ZERO,   /* MPR_OMP_ORDERED */
   ST_IDX_ZERO,   /* MPR_OMP_END_ORDERED */
   ST_IDX_ZERO,   /* MPR_OMP_FLUSH */
@@ -1405,10 +1411,14 @@ static WN * Gen_Barrier ( ST* gtid );
 * Generate RT calls to start critical section
 */
 static WN *
-Gen_Critical (ST *gtid, ST *lck)
+Gen_Critical (ST *gtid, ST *lck, BOOL isReduction)
 {
   WN *wn = WN_Create(OPC_VCALL, 2);
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_CRITICAL);
+
+  if(isReduction)
+   WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_REDUCTION);
+  else
+    WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_CRITICAL);
   
   WN_Set_Call_Non_Data_Mod(wn);
   WN_Set_Call_Non_Data_Ref(wn);
@@ -1482,9 +1492,12 @@ Gen_Critical (ST *gtid, ST *lck)
 * Generate RT calls to end critical section
 */
 static WN *
-Gen_End_Critical (ST *gtid, ST *lck)
+Gen_End_Critical (ST *gtid, ST *lck, BOOL isReduction=FALSE)
 {
   WN *wn = WN_Create(OPC_VCALL, 2);
+  if(isReduction)
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_REDUCTION);
+  else
   WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_CRITICAL);
   
   WN_Set_Call_Non_Data_Mod(wn);
@@ -2816,7 +2829,13 @@ The lowered WHIRL for the guarding MP constructs is as follows:
       end_st = GET_MPRUNTIME_ST(MPR_OMP_END_CRITICAL);
         // call has one PARM child that's an LDA of the lock var.
       end_name_st = WN_st_idx(WN_kid0(WN_kid0(tree)));
-    } else
+    } else if (WN_st_idx(tree) == GET_MPRUNTIME_ST(MPR_OMP_REDUCTION))
+    {
+      end_st = GET_MPRUNTIME_ST(MPR_OMP_END_REDUCTION);
+        // call has one PARM child that's an LDA of the lock var.
+      end_name_st = WN_st_idx(WN_kid0(WN_kid0(tree)));
+
+     } else
       return;
     break;
   default:
@@ -6538,8 +6557,8 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
       // insert critical section at start of *store_block
       ST *mplock = Create_Critical_Lock( );
       WN_INSERT_BlockFirst( *store_block, 
-	                  Gen_Critical( local_gtid, mplock ));
-      unlock = Gen_End_Critical ( local_gtid, mplock );
+	                  Gen_Critical( local_gtid, mplock, TRUE ));
+      unlock = Gen_End_Critical ( local_gtid, mplock,TRUE );
       WN_INSERT_BlockLast( *store_block, unlock );
       // Does this barrier necessary?
       WN_INSERT_BlockLast( *store_block, Gen_Barrier(local_gtid));
@@ -7475,10 +7494,10 @@ Delayed_MP_Translation( WN * tree )
           lock_stack[lptr++] = lock_st;
           if(lock_st){
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_Critical( local_gtid, lock_st );
+            new_kid = Gen_Critical( local_gtid, lock_st,FALSE ); /*oscar attempt 1*/
           } else {
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_Critical( local_gtid, unnamed_lock_st );
+            new_kid = Gen_Critical( local_gtid, unnamed_lock_st,FALSE );
           }
           if (WN_prev(kid))
             WN_next(WN_prev(kid)) = new_kid;
@@ -7501,10 +7520,10 @@ Delayed_MP_Translation( WN * tree )
           }
           if (lock_st) {
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_End_Critical (local_gtid, lock_st);
+            new_kid = Gen_End_Critical (local_gtid, lock_st,FALSE);
           } else {
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_End_Critical (local_gtid, unnamed_lock_st);
+            new_kid = Gen_End_Critical (local_gtid, unnamed_lock_st, FALSE);
           }
           if (WN_prev(kid))
             WN_next(WN_prev(kid)) = new_kid;
@@ -8312,9 +8331,9 @@ Copy_Non_MP_Tree_Rec ( WN * tree , V_STACK *mp_vertices,
           lock_stack[lptr++] = lock_st;
           Create_Gtid_ST( );
           if (lock_st)
-            new_kid = Gen_Critical( local_gtid, lock_st );
+            new_kid = Gen_Critical( local_gtid, lock_st,FALSE );
           else
-            new_kid = Gen_Critical( local_gtid, unnamed_lock_st );
+            new_kid = Gen_Critical( local_gtid, unnamed_lock_st,FALSE );
           WN_prev(new_kid) = prev_kid;
           if (prev_kid)
             WN_next(prev_kid) = new_kid;
@@ -8324,9 +8343,9 @@ Copy_Non_MP_Tree_Rec ( WN * tree , V_STACK *mp_vertices,
         } else if (WN_pragma(kid) == WN_PRAGMA_CRITICAL_SECTION_END) {
           lock_st = lock_stack[--lptr];
           if (lock_st)
-            new_kid = Gen_End_Critical(local_gtid, lock_st);
+            new_kid = Gen_End_Critical(local_gtid, lock_st,FALSE);
           else
-            new_kid = Gen_End_Critical(local_gtid, unnamed_lock_st);
+            new_kid = Gen_End_Critical(local_gtid, unnamed_lock_st,FALSE);
           WN_prev(new_kid) = prev_kid;
           if (prev_kid)
             WN_next(prev_kid) = new_kid;
@@ -9720,10 +9739,10 @@ Transform_Parallel_Block ( WN * tree )
 	  }
 	  if (lock_st) {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-	    wn = Gen_Critical (local_gtid, lock_st);
+	    wn = Gen_Critical (local_gtid, lock_st,0);
 	  } else {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-            wn = Gen_Critical (local_gtid, unnamed_lock_st);
+            wn = Gen_Critical (local_gtid, unnamed_lock_st,0);
 	  }
 	  if (prev_node)
 	    WN_next(prev_node) = wn;
@@ -9755,10 +9774,10 @@ Transform_Parallel_Block ( WN * tree )
 		      "missing pragma (CRITICAL_SECTION_END) in MP processing");
 	  if (lock_st) {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-	    wn = Gen_End_Critical(local_gtid, lock_st);
+	    wn = Gen_End_Critical(local_gtid, lock_st,FALSE);
 	  } else {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-      wn = Gen_End_Critical(local_gtid, unnamed_lock_st);
+      wn = Gen_End_Critical(local_gtid, unnamed_lock_st,FALSE);
 	  }
 	  WN_next(WN_prev(cur_node)) = wn;
 	  WN_prev(wn) = WN_prev(cur_node);
@@ -12129,17 +12148,17 @@ lower_mp ( WN * block, WN * node, INT32 actions )
         // also the line number for the unlock isn't set correctly
       Linenum_Pusher p(WN_Get_Linenum(node));
       WN_INSERT_BlockLast ( replace_block, Gen_Store_Gtid());
-      WN_INSERT_BlockLast ( replace_block, Gen_Critical (local_gtid, lock_st));
+      WN_INSERT_BlockLast ( replace_block, Gen_Critical (local_gtid, lock_st,FALSE));
       Strip_Nested_MP ( stmt_block, FALSE );
       WN_INSERT_BlockLast ( replace_block, stmt_block );
-      WN_INSERT_BlockLast ( replace_block, Gen_End_Critical (local_gtid, lock_st));
+      WN_INSERT_BlockLast ( replace_block, Gen_End_Critical (local_gtid, lock_st,FALSE));
     } else {
       Linenum_Pusher p(WN_Get_Linenum(node));
       WN_INSERT_BlockLast (replace_block, Gen_Store_Gtid());
-      WN_INSERT_BlockLast (replace_block, Gen_Critical (local_gtid, unnamed_lock_st));
+      WN_INSERT_BlockLast (replace_block, Gen_Critical (local_gtid, unnamed_lock_st,FALSE));
       Strip_Nested_MP ( stmt_block, FALSE );
       WN_INSERT_BlockLast ( replace_block, stmt_block );
-      WN_INSERT_BlockLast ( replace_block, Gen_End_Critical (local_gtid, unnamed_lock_st));
+      WN_INSERT_BlockLast ( replace_block, Gen_End_Critical (local_gtid, unnamed_lock_st,FALSE));
     }
 
     WN_DELETE_Tree ( node );
