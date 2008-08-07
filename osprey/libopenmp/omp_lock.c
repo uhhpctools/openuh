@@ -191,6 +191,30 @@ __ompc_end_critical(int gtid, volatile omp_lock_t **lck)
 {
   __ompc_unlock((volatile omp_lock_t *)*lck);
 }
+inline void
+__ompc_reduction(int gtid, volatile omp_lock_t **lck)
+{
+  /* __ompc_critical(gtid,lck); */
+  if (*lck ==NULL) {
+    __ompc_lock(&_ompc_thread_lock);
+    if ((omp_lock_t*)*lck == NULL){
+      *lck = (omp_lock_t *)malloc(sizeof(omp_lock_t));
+      Is_True(*lck!=NULL,
+              ("Cannot allocate lock memory for critical"));
+    }
+    __ompc_init_lock (*lck);
+    __ompc_unlock (&_ompc_thread_lock);
+  }
+  __ompc_lock((volatile omp_lock_t *)*lck);
+
+}
+inline void
+__ompc_end_reduction(int gtid, volatile omp_lock_t **lck)
+{
+ /* __ompc_end_critical(gtid,lck); */
+
+  __ompc_unlock((volatile omp_lock_t *)*lck);
+}
 
 
 inline void

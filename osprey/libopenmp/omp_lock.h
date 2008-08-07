@@ -62,5 +62,8 @@ extern int __ompc_test_nest_lock (volatile omp_nest_lock_t *);
 extern void __ompc_critical(int gtid, volatile omp_lock_t **lck);
 extern void __ompc_end_critical(int gtid, volatile omp_lock_t **lck);
 
+extern void __ompc_reduction(int gtid, volatile omp_lock_t **lck);
+extern void __ompc_end_reduction(int gtid, volatile omp_lock_t **lck);
+
 #endif
 
