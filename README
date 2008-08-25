@@ -110,3 +110,5 @@ To use OpenMP, you need to add -gnu3 to enable the gnu 3.3 frontend that support
 
 % uhcc -O3 -mp -gnu3 test.c
 
+
+This is the OpenUH branch. 
