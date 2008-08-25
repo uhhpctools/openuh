@@ -34,14 +34,33 @@
 #  ifndef TARG_IA64
 //#  ifdef TARG_X8664 // IA32 will fall through to the Itanium branch!
 
-static inline void
-__ompc_spin_lock(volatile int* lock)
+static inline void __ompc_spin_lock_s(volatile int* lock)
 {
   int result = 1;
-  do {
+ 
+   __asm__ __volatile__ ("xchgl %0,(%1)":"=r"(result):"r"(lock),"0"(result));
+   if (result)
+   { 
+     __ompc_set_state(THR_CTWT_STATE); 
+    do
+    {
     __asm__ __volatile__ ("xchgl %0,(%1)":"=r"(result):"r"(lock),"0"(result));
-  } while (result);
+    } while(result);
+  }
+  
 }
+
+static inline void __ompc_spin_lock(volatile int* lock)
+{
+  int result = 1;
+
+    do {
+    __asm__ __volatile__ ("xchgl %0,(%1)":"=r"(result):"r"(lock),"0"(result));
+    }while(result);
+  }
+
+}
+
 
 static inline void
 __ompc_spin_unlock(volatile int* lock)
@@ -100,6 +119,22 @@ __ompc_spin_lock(volatile int* lock)
     __asm__ __volatile__ ("xchg4 %0=[%1],%2":"=r"(result):"r"(lock),"0"(result));
   } while (result);
 }
+
+static inline void __ompc_spin_lock_s(volatile int* lock)
+{
+  int result = 1;
+    __asm__ __volatile__ ("xchg4 %0=[%1],%2":"=r"(result):"r"(lock),"0"(result));
+   if (result)
+   {
+     __ompc_set_state(THR_CTWT_STATE);
+    do
+    {
+       __asm__ __volatile__ ("xchg4 %0=[%1],%2":"=r"(result):"r"(lock),"0"(result));
+    } while(result);
+  }
+
+}
+
 
 static inline void
 __ompc_spin_unlock(volatile int* lock)

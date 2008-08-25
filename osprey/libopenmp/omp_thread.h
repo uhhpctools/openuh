@@ -299,29 +299,77 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 
 }
 
+
+
 /* vthread_id is of no use in this implementation*/
 /* exposed to outer world, should be unified*/
 inline void __ompc_barrier(void)
 {
   omp_v_thread_t *temp_v_thread;
-  if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
+  __ompc_set_state(THR_IBAR_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR); 
+ if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
     //		if (__omp_level_1_team_size != 1)
     //		{
     __ompc_barrier_wait(&__omp_level_1_team_manager);
+    __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+     __ompc_set_state(THR_WORK_STATE);
     return;
     //		}
     //		else
     //			return;
-  } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)
-    return;
-
+  } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+    __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+    __ompc_set_state(THR_WORK_STATE); 
+   return;
+   }
   /* other situations*/
   temp_v_thread = __ompc_get_current_v_thread();
-  if(temp_v_thread->team_size == 1)
+  if(temp_v_thread->team_size == 1) {
+    __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+     __ompc_set_state(THR_WORK_STATE);
     return;
+  }
   else {
     __ompc_barrier_wait(temp_v_thread->team);
   }
+  __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+   __ompc_set_state(THR_WORK_STATE);
+}
+
+inline void __ompc_ebarrier(void)
+{
+  omp_v_thread_t *temp_v_thread;
+  __ompc_set_state(THR_EBAR_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_BEGIN_EBAR);
+  if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
+    //          if (__omp_level_1_team_size != 1)
+    //          {
+    __ompc_barrier_wait(&__omp_level_1_team_manager);
+    __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
+    __ompc_set_state(THR_WORK_STATE);
+    return;
+    //          }
+    //          else 
+    //                  return;
+                     
+  } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+     __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
+      __ompc_set_state(THR_WORK_STATE);
+     return;
+    }
+  /* other situations*/
+  temp_v_thread = __ompc_get_current_v_thread();
+  if(temp_v_thread->team_size == 1) {
+    __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
+     __ompc_set_state(THR_WORK_STATE);
+    return;
+    }
+  else {
+    __ompc_barrier_wait(temp_v_thread->team);
+  }
+   __ompc_set_state(THR_WORK_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
 }
 
 /* Check the _num_threads against __omp_max_num_threads*/

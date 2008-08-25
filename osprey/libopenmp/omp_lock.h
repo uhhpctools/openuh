@@ -50,12 +50,21 @@ typedef struct {
 extern void __ompc_init_lock (volatile omp_lock_t *);
 extern void __ompc_lock (volatile omp_lock_t *);
 extern void __ompc_unlock (volatile omp_lock_t *);
+extern void __ompc_init_lock_s (volatile omp_lock_t *);
+extern void __ompc_lock_s (volatile omp_lock_t *);
+extern void __ompc_unlock_s (volatile omp_lock_t *);
+
 extern void __ompc_destroy_lock (volatile omp_lock_t *);
 extern int __ompc_test_lock (volatile omp_lock_t *);
 
 extern void __ompc_init_nest_lock (volatile omp_nest_lock_t *);
 extern void __ompc_nest_lock (volatile omp_nest_lock_t *);
 extern void __ompc_nest_unlock (volatile omp_nest_lock_t *);
+extern void __ompc_init_nest_lock_s (volatile omp_nest_lock_t *);
+extern void __ompc_nest_lock_s(volatile omp_nest_lock_t *);
+extern void __ompc_nest_unlock_s(volatile omp_nest_lock_t *);
+
+
 extern void __ompc_destroy_nest_lock (volatile omp_nest_lock_t *);
 extern int __ompc_test_nest_lock (volatile omp_nest_lock_t *);
 

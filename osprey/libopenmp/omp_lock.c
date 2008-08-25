@@ -38,22 +38,53 @@
 static omp_lock_t atomic_lock;
 
 
+omp_int_t omp_get_thread_num(void);
 inline void 
 __ompc_init_lock (volatile omp_lock_t *lp)
 {
   pthread_mutex_init((pthread_mutex_t *)lp, NULL);
 }
 
+inline void
+__ompc_init_lock_s(volatile omp_lock_t *lp)
+{
+  pthread_mutex_init((pthread_mutex_t *)lp, NULL);
+}
+
 
 inline void 
-__ompc_lock (volatile omp_lock_t *lp)
+__ompc_lock_s(volatile omp_lock_t *lp)
+{
+   int status = pthread_mutex_trylock((pthread_mutex_t *)lp);
+   if(status!=0) {
+      __ompc_set_state(THR_LKWT_STATE);
+      __ompc_event_callback(OMP_EVENT_THR_BEGIN_LKWT);
+      pthread_mutex_lock((pthread_mutex_t *)lp);
+      __ompc_event_callback(OMP_EVENT_THR_END_LKWT);
+  }
+
+   __ompc_set_state(THR_WORK_STATE);
+}
+
+
+inline void
+__ompc_lock(volatile omp_lock_t *lp)
 {
   pthread_mutex_lock((pthread_mutex_t *)lp);
 }
 
 
+
 inline void 
 __ompc_unlock (volatile omp_lock_t *lp)
+{
+  pthread_mutex_unlock((pthread_mutex_t *)lp);
+
+
+}
+
+inline void
+__ompc_unlock_s(volatile omp_lock_t *lp)
 {
   pthread_mutex_unlock((pthread_mutex_t *)lp);
 }
@@ -75,6 +106,14 @@ __ompc_test_lock (volatile omp_lock_t *lp)
 
 void 
 __ompc_init_nest_lock (volatile omp_nest_lock_t *lp)
+{
+  __ompc_init_lock (&lp->lock);
+  __ompc_init_lock (&lp->wait);
+  lp->count = 0;
+}
+
+void
+__ompc_init_nest_lock_s (volatile omp_nest_lock_t *lp)
 {
   __ompc_init_lock (&lp->lock);
   __ompc_init_lock (&lp->wait);
@@ -117,9 +156,57 @@ __ompc_nest_lock (volatile omp_nest_lock_t *lp)
   __ompc_unlock(&lp->lock);
 }
 
+void
+__ompc_nest_lock_s (volatile omp_nest_lock_t *lp)
+{
+  pthread_t id = pthread_self();
+  int nest;
+
+  if( (lp->count > 0) && (lp->thread_id == id) ) {
+    nest = 1;
+  } else {
+  wait_nest_lock:
+    __ompc_lock_s(&lp->wait); /* be blocked here */
+    nest = 0;
+  }
+  __ompc_lock(&lp->lock);
+  if(nest) {
+    if( lp->count == 0 ) { /* the 'wait' lock be released */
+      if(!__ompc_test_lock(&lp->wait)) {
+        __ompc_unlock(&lp->lock);
+        goto wait_nest_lock;
+      }
+      lp->thread_id = id;
+    } else { /* lp->count > 0 */
+      if(lp->thread_id != id) {
+        __ompc_unlock(&lp->lock);
+        goto wait_nest_lock;
+      }
+    }
+    lp->count++;
+  }  else { /* get the 'wait' lock. Assert:( lp->count == 0 ) */
+    lp->thread_id = id;
+    lp->count = 1;
+  }
+  __ompc_unlock(&lp->lock);
+}
+
 
 void 
 __ompc_nest_unlock (volatile omp_nest_lock_t *lp)
+{
+  __ompc_lock (&lp->lock);
+  if(lp->count > 0){
+    lp->count--;
+    if(lp->count == 0){
+      __ompc_unlock_s(&lp->wait);
+    }
+  }
+  __ompc_unlock (&lp->lock);
+}
+
+void
+__ompc_nest_unlock_s (volatile omp_nest_lock_t *lp)
 {
   __ompc_lock (&lp->lock);
   if(lp->count > 0){
@@ -173,6 +260,7 @@ __ompc_test_nest_lock (volatile omp_nest_lock_t *lp)
 inline void
 __ompc_critical(int gtid, volatile omp_lock_t **lck)
 {
+  __ompc_set_state(THR_OVHD_STATE);
   if (*lck ==NULL) {
     __ompc_lock(&_ompc_thread_lock);
     if ((omp_lock_t*)*lck == NULL){
@@ -181,20 +269,34 @@ __ompc_critical(int gtid, volatile omp_lock_t **lck)
 	      ("Cannot allocate lock memory for critical"));
     }
     __ompc_init_lock (*lck);
-    __ompc_unlock (&_ompc_thread_lock);
+    __ompc_unlock(&_ompc_thread_lock);
   }
-  __ompc_lock((volatile omp_lock_t *)*lck);
+ // __ompc_lock((volatile omp_lock_t *)*lck);
+
+   int status = pthread_mutex_trylock((pthread_mutex_t *)lck);
+   if(status!=0) {
+      __ompc_set_state(THR_CTWT_STATE);
+      __ompc_event_callback(OMP_EVENT_THR_BEGIN_CTWT);
+      pthread_mutex_lock((pthread_mutex_t *)lck);
+       __ompc_event_callback(OMP_EVENT_THR_END_CTWT);
+  }
+
+   __ompc_set_state(THR_WORK_STATE);
+
 }
 
 inline void
 __ompc_end_critical(int gtid, volatile omp_lock_t **lck)
 {
   __ompc_unlock((volatile omp_lock_t *)*lck);
+  __ompc_set_state(THR_WORK_STATE);
 }
 inline void
 __ompc_reduction(int gtid, volatile omp_lock_t **lck)
 {
   /* __ompc_critical(gtid,lck); */
+
+    __ompc_set_state(THR_OVHD_STATE);
   if (*lck ==NULL) {
     __ompc_lock(&_ompc_thread_lock);
     if ((omp_lock_t*)*lck == NULL){
@@ -207,6 +309,8 @@ __ompc_reduction(int gtid, volatile omp_lock_t **lck)
   }
   __ompc_lock((volatile omp_lock_t *)*lck);
 
+  __ompc_set_state(THR_REDUC_STATE);
+
 }
 inline void
 __ompc_end_reduction(int gtid, volatile omp_lock_t **lck)
@@ -214,17 +318,19 @@ __ompc_end_reduction(int gtid, volatile omp_lock_t **lck)
  /* __ompc_end_critical(gtid,lck); */
 
   __ompc_unlock((volatile omp_lock_t *)*lck);
+  __ompc_set_state(THR_WORK_STATE);
 }
 
 
 inline void
 __ompc_critical_light(int gtid, volatile omp_lock_t **lck)
 {
-  __ompc_spin_lock((void*)lck);
+  __ompc_spin_lock_s((void*)lck);
 }
 
 inline void
 __ompc_end_critical_light(int gtid, volatile omp_lock_t **lck)
 {
   __ompc_spin_unlock((void*)lck);
+ __ompc_set_state(THR_WORK_STATE);
 }

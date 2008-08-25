@@ -155,7 +155,7 @@ omp_int_t omp_get_nested_(void);
 inline void
 omp_init_lock(volatile omp_lock_t *lock)
 {
-  __ompc_init_lock(lock);
+  __ompc_init_lock_s(lock);
 }
 
 
@@ -193,7 +193,7 @@ void omp_destroy_nest_lock_(volatile omp_nest_lock_t *);
 inline void
 omp_set_lock(volatile omp_lock_t *lock)
 {
-  __ompc_lock(lock);
+  __ompc_lock_s(lock);
 }
 
 
@@ -202,7 +202,7 @@ void omp_set_lock_(volatile omp_lock_t *);
 inline void
 omp_set_nest_lock(volatile omp_nest_lock_t *lock)
 {
-  __ompc_nest_lock(lock);
+  __ompc_nest_lock_s(lock);
 }
 
 
@@ -211,7 +211,7 @@ void omp_set_nest_lock_(volatile omp_nest_lock_t *);
 inline void
 omp_unset_lock(volatile omp_lock_t *lock)
 {
-  __ompc_unlock(lock);
+  __ompc_unlock_s(lock);
 }
 
 
@@ -220,7 +220,7 @@ void omp_unset_lock_(volatile omp_lock_t *);
 inline void
 omp_unset_nest_lock(volatile omp_nest_lock_t *lock)
 {
-  __ompc_nest_unlock(lock);
+  __ompc_nest_unlock_s(lock);
 }
 
 

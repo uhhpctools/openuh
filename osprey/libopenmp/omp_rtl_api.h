@@ -128,7 +128,7 @@ extern "C" {
   extern void __ompc_end_master(omp_int32 global_tid);
 
   extern void __ompc_barrier(void);
-
+  extern void __ompc_ebarrier(void);
   extern void __ompc_ordered(omp_int32 global_tid);
   extern void __ompc_end_ordered(omp_int32 global_tid);
 

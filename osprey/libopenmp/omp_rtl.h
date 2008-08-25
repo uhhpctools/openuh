@@ -38,6 +38,8 @@
 #include "omp_type.h"
 #include <pthread.h>
 #include "omp_lock.h"
+#include "omp_collector_api.h"
+
 
 /* machine dependent values*/
 /* parameters for Itanium2 */
@@ -94,7 +96,9 @@ typedef enum {
 /* The entry function prototype is nolonger 
  * the seem as GUIDE*/
 typedef void (*omp_micro)(int, frame_pointer_t);
+typedef void (*callback) (OMP_COLLECTORAPI_EVENT e);
 typedef void* (*pthread_entry)(void *);
+extern int ompc_req_start; 
 
 /* global variables used in RTL, declared in omp_thread.c */
 extern volatile int __omp_nested;	  /* nested enable/disable */
@@ -129,6 +133,7 @@ typedef enum {
   OMP_EXE_MODE_EXE_PARALLEL 	= 6,
   OMP_EXE_MODE_IN_PARALLEL 	= 14
 } omp_exe_mode_t;
+
 
 /* current execution mode*/
 extern volatile omp_exe_mode_t __omp_exe_mode;
@@ -203,13 +208,14 @@ struct omp_team{
   volatile int new_task;
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
-  int stuff_byte[7];
+  callback callbacks[OMP_EVENT_THR_END_ATWT];
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)))
 
 /* user thread*/
 /* Should be 64 Byte, currently 64 Byte*/
 struct omp_v_thread {
   int	vthread_id;
+  int   state;
   int	team_size;	/* redundant with team->team_size */
   
   omp_u_thread_t *executor;	/* needed? used anywhere?*/
@@ -250,6 +256,9 @@ extern omp_v_thread_t	 __omp_root_v_thread; /* necessary?*/
 extern omp_u_thread_t *	 __omp_root_u_thread; /* Where do theyshould be initialized somewhere */
 extern omp_team_t	 __omp_root_team;     /* hold information for sequential part*/
 
+extern void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state);
+extern void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event);
+
 /* prototypes, implementations are defined in omp_thread.h */
 extern void __ompc_set_nested(const int __nested);
 extern void __ompc_set_dynamic(const int __dynamic);
@@ -268,6 +277,7 @@ extern int __ompc_get_num_threads(void);
 extern omp_team_t * __ompc_get_current_team(void);
 extern void __ompc_barrier_wait(omp_team_t *team);
 extern void __ompc_barrier(void);
+extern void __ompc_ebarrier(void);
 extern void __ompc_flush(void *p);
 extern int __ompc_ok_to_fork(void);
 extern void __ompc_begin(void);
