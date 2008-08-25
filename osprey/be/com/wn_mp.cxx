@@ -308,19 +308,19 @@ typedef enum {
   MPR_OMP_END_MASTER		  = 62,
   
   MPR_OMP_BARRIER		  = 63,
+  MPR_OMP_EBARRIER              = 64,
+  MPR_OMP_CRITICAL		= 65,
+  MPR_OMP_END_CRITICAL		= 66,
+  MPR_OMP_REDUCTION             = 67,
+  MPR_OMP_END_REDUCTION         = 68,
+  MPR_OMP_ORDERED		= 69,
+  MPR_OMP_END_ORDERED		= 70,
 
-  MPR_OMP_CRITICAL		= 64,
-  MPR_OMP_END_CRITICAL		= 65,
-  MPR_OMP_REDUCTION             = 66,
-  MPR_OMP_END_REDUCTION         = 67,
-  MPR_OMP_ORDERED		= 68,
-  MPR_OMP_END_ORDERED		= 69,
-
-  MPR_OMP_FLUSH			= 70,	/* Not really needed? to be deleted*/
+  MPR_OMP_FLUSH			= 71,	/* Not really needed? to be deleted*/
 #ifdef KEY
-  MPR_OMP_GET_THDPRV            = 71,
-  MPR_OMP_COPYIN_THDPRV         = 72,
-  MPR_OMP_COPYPRIVATE           = 73,
+  MPR_OMP_GET_THDPRV            = 72,
+  MPR_OMP_COPYIN_THDPRV         = 73,
+  MPR_OMP_COPYPRIVATE           = 74,
 
   MPRUNTIME_LAST = MPR_OMP_COPYPRIVATE
 #else
@@ -711,6 +711,7 @@ static char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_master",              /* MPR_OMP_MASTER */
   "__ompc_end_master",          /* MPR_OMP_END_MASTER */
   "__ompc_barrier",             /* MPR_OMP_BARRIER */
+  "__ompc_ebarrier",            /* MPR_OMP_EBARRIER */
   "__ompc_critical",            /* MPR_OMP_CRITICAL */
   "__ompc_end_critical",        /* MPR_OMP_END_CRITICAL */
   "__ompc_reduction",           /* MPR_OMP_REDUCTION */
@@ -795,6 +796,7 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_MASTER */
   ST_IDX_ZERO,   /* MPR_OMP_END_MASTER */
   ST_IDX_ZERO,   /* MPR_OMP_BARRIER */
+  ST_IDX_ZERO,   /* MPR_OMP_EBARRIER */
   ST_IDX_ZERO,   /* MPR_OMP_CRITICAL */
   ST_IDX_ZERO,   /* MPR_OMP_END_CRITICAL */
   ST_IDX_ZERO,   /* MPR_OMP_REDUCTION */
@@ -1406,7 +1408,7 @@ static void Create_Preg_or_Temp ( TYPE_ID mtype, char *name, ST **st,
                                   WN_OFFSET *ofst );
 static WN * Gen_MP_Load ( ST * st, WN_OFFSET offset, BOOL scalar_only = FALSE );
 static WN * Gen_Barrier ( ST* gtid );
-
+static WN * Gen_EBarrier ( ST* gtid);
 /*
 * Generate RT calls to start critical section
 */
@@ -5642,6 +5644,24 @@ Gen_Barrier (ST* gtid)
   return (wn);
 }
 
+static WN *
+Gen_EBarrier (ST* gtid)
+{
+  WN *wn;
+
+  wn = WN_Create ( OPC_VCALL, 0 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST ( MPR_OMP_EBARRIER );
+  WN_Set_Call_Non_Data_Mod ( wn );
+  WN_Set_Call_Non_Data_Ref ( wn );
+  WN_Set_Call_Non_Parm_Mod ( wn );
+  WN_Set_Call_Non_Parm_Ref ( wn );
+  WN_Set_Call_Parm_Ref ( wn );
+  WN_linenum(wn) = line_number;
+
+  return (wn);
+}
+
+
 /*
 copyin_wn must be a COPYIN pragma from an OpenMP PARALLEL or
 combined worksharing directive.
@@ -9662,7 +9682,7 @@ Transform_Parallel_Block ( WN * tree )
 	case WN_PRAGMA_BARRIER:
 
     //      wn = Gen_MP_Barrier (WN_pragma_omp(cur_node));
-    wn = Gen_Barrier(local_gtid);
+          wn = Gen_EBarrier(local_gtid);
 	  if (prev_node)
 	    WN_next(prev_node) = wn;
 	  else
@@ -11667,7 +11687,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       {
 	store_gtid = WN_CreateBlock();
       }
-      call = Gen_Barrier(local_gtid);
+      call = Gen_EBarrier(local_gtid);
       WN_INSERT_BlockLast( store_gtid, call );
       WN_next(call) = wn;
       if (wn) WN_prev(wn) = call;
