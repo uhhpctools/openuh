@@ -842,6 +842,8 @@ LNO_Processing (PU_Info *current_pu, WN *pu)
     BOOL is_mp = PU_mp (Get_Current_PU ());
     BOOL needs_lno = PU_mp_needs_lno (Get_Current_PU ());
 
+   // LH:
+    //Early_MP_Processing = true;
     if (!is_mp || Early_MP_Processing) {
       if (Run_lno || Run_autopar || (Run_Distr_Array && needs_lno)) {
 
@@ -1441,7 +1443,13 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 #endif
 
     Verify_SYMTAB (CURRENT_SYMTAB);
-
+// LH: moving from before PREOPT to after it
+  if (PU_has_mp (Get_Current_PU ()) && !FILE_INFO_ipa (File_info)) {
+    Set_Error_Phase("OMP Pre-lowering");
+    WB_OMP_Initialize(pu, Prompf_Id_Map);
+    pu = OMP_Prelower(current_pu, pu);
+    WB_OMP_Terminate(); 
+  }
     /* If no early mp processing has been requested, then do it after running
      * lno/preopt. Do this whether or not wopt is to be run.
      * If we were just running LNO,
@@ -1452,6 +1460,7 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
      * maybe we can just move the call to the lowerer before
      * Post_LNO_Processing.
      */
+    /* LH: disable MP lowering */
     has_mp = PU_has_mp (Get_Current_PU ());
     if (has_mp && !Early_MP_Processing) {
 	Set_Error_Phase ( "MP Lowering" );
@@ -1464,6 +1473,7 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 #endif
         WB_LWR_Terminate();
     }
+
 
 #ifdef KEY
     if (PU_cxx_lang (Get_Current_PU()))
@@ -1506,6 +1516,7 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
     Set_Error_Phase ( "Post Backend Processing" );
     Post_Process_Backend (current_pu, pu);
 
+
 #ifdef KEY
     if (need_options_pop)
       Options_Stack->Pop_Current_Options();
@@ -1513,6 +1524,21 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
 #ifdef KEY // bug 9651
     WN_Reset_Num_Delete_Cleanup_Fns();
 #endif
+
+/* LH: move MP lowering after WOPT *
+    has_mp = PU_has_mp (Get_Current_PU ());
+    if (has_mp && !Early_MP_Processing) {
+	Set_Error_Phase ( "MP Lowering" );
+        WB_LWR_Initialize(pu, NULL);
+	pu = WN_Lower (pu, LOWER_MP, NULL, "Before MP Lowering");
+#ifdef KEY
+// Bug 4411
+        extern void Post_MP_Processing (WN *);
+        Post_MP_Processing (PU_Info_tree_ptr(Current_PU_Info));
+#endif
+        WB_LWR_Terminate();
+    }
+* LH: end of movement */
 } /* Backend_Processing */
 
 static WN *
@@ -1814,13 +1840,15 @@ Preorder_Process_PUs (PU_Info *current_pu)
    * and therefore already done OMP_prelowering.
    * So don't do it again.
    */
-  if (PU_has_mp (Get_Current_PU ()) && !FILE_INFO_ipa (File_info)) {
+//LH:  if (PU_has_mp (Get_Current_PU ()) && !FILE_INFO_ipa (File_info)) {
+/*
+  if (PU_has_mp (Get_Current_PU ()) && !FILE_INFO_ipa (File_info) && Run_wopt && !Run_preopt) {
     Set_Error_Phase("OMP Pre-lowering");
     WB_OMP_Initialize(pu, Prompf_Id_Map);
     pu = OMP_Prelower(current_pu, pu);
     WB_OMP_Terminate(); 
   }
-
+*/
   if (Run_ipl) {
     Ipl_Processing (current_pu, pu);
     Verify_SYMTAB (CURRENT_SYMTAB);

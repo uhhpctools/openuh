@@ -3888,8 +3888,10 @@ STMTREP::Enter_lhs(CODEMAP *htable, OPT_STAB *opt_stab, COPYPROP *copyprop)
 	       (regionbb = htable->Cfg()->Find_enclosing_parallel_region_bb(regionbb)) != NULL)
 	  is_mp_local = Symbol_mp_local_in_region(regionbb, opt_stab, Lhs()->Aux_id());
       }
+ /* LH: disable it for testing compiler optimizations 
       if (! is_mp_local)
 	Lhs()->Set_mp_shared();
+*/
     }
 #endif
 
