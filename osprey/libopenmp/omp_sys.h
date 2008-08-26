@@ -57,7 +57,7 @@ static inline void __ompc_spin_lock(volatile int* lock)
     do {
     __asm__ __volatile__ ("xchgl %0,(%1)":"=r"(result):"r"(lock),"0"(result));
     }while(result);
-  }
+  
 
 }
 
