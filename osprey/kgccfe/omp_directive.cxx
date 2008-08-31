@@ -288,6 +288,7 @@ expand_start_parallel (struct parallel_clause_list * clause_list)
      ST_list *copyin_clause_st = NULL;
      WN_list *reduction_clause_wn = NULL;
 
+
      check_parallel_directive(clause_list); 
 
      for (cl = clause_list; cl != NULL; cl = cl->next)
@@ -369,6 +370,7 @@ expand_start_parallel (struct parallel_clause_list * clause_list)
 	 if_clause_wn = WN_NE (WN_rtype (if_clause_wn),
 	                       val, if_clause_wn);
      }
+
      
      if (num_threads_clause_tree) 
     	 num_threads_clause_wn = WFE_Expand_Expr (num_threads_clause_tree);
@@ -407,6 +409,7 @@ expand_end_parallel ( )
 }
 
 
+
 ///////// for directive ////////
 
 void
@@ -415,6 +418,7 @@ check_for_directive(struct for_clause_list * clause_list )
      struct for_clause_list *cl = NULL;
      int count_schedule = 0, count_ordered = 0, count_nowait = 0;
      
+
 	 for (cl = clause_list; cl != NULL; cl = cl->next)
        {
           if ( cl->type == f_schedule_1 || cl->type == f_schedule_2 ) count_schedule++;
@@ -705,8 +709,7 @@ expand_start_sections (struct sections_clause_list * clause_list)
      
      prepare_com_clause ( firstprivate_clause_tree, &firstprivate_clause_st );
 
-     prepare_com_clause ( lastprivate_clause_tree, &lastprivate_clause_st );
-     
+     prepare_com_clause (lastprivate_clause_tree, &lastprivate_clause_st );
      prepare_reduction_clause ( reduction_clause_list, &reduction_clause_wn );    
 
 
@@ -1474,6 +1477,138 @@ void  expand_threadprivate ( tree threadprivate_variables)
     WFE_expand_threadprivate (threadprivate_st);
 }
 
+///////// task construct ////////
+
+void check_task_directive(struct task_clause_list * clause_list)
+{
+  struct task_clause_list *cl = NULL;
+  int count_untied=0;
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if(cl->type == task_untied) count_untied++;
+    }
+
+  if(count_untied > 1)
+    {
+      printf("Too many UNTIED clauses.\n");
+      SRCPOS srcpos = Get_Srcpos();
+      Fail_FmtAssertion ("Invalid syntax in the #PRAGMA OMP TASK directive at line: %d, file number: %d.!\n", 
+               SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+    }
+}
+
+void expand_start_task(struct task_clause_list * clause_list)
+{
+
+  struct Task_clause_wn_type * task_clause_wn;
+
+  tree private_clause_tree = NULL;
+  tree firstprivate_clause_tree = NULL;
+  tree if_clause_tree = NULL;
+  tree shared_clause_tree = NULL;
+  enum default_type default_clause_value = no_default;
+  bool untied_clause_value = false;
+
+  WN *if_clause_wn = NULL;
+
+  struct task_clause_list *cl = NULL;
+
+  ST_list *private_clause_st = NULL;
+  ST_list *firstprivate_clause_st = NULL;
+  ST_list *shared_clause_st = NULL;
+
+  check_task_directive(clause_list);
+
+  for(cl = clause_list; cl !=NULL; cl = cl->next)
+    {
+      if(cl->type == task_private){
+	private_clause_tree = chainon (private_clause_tree, cl->node.var_list);
+      }
+    }
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if(cl->type == task_firstprivate){
+	firstprivate_clause_tree = chainon (firstprivate_clause_tree, cl->node.var_list);
+      }
+    }
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if (cl->type == task_if) {
+	if_clause_tree = cl->node.expr_no_commas;
+      }
+    }
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if(cl->type == task_shared) {
+	shared_clause_tree = chainon(shared_clause_tree, cl->node.var_list);
+      }
+    }
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if(cl->type == task_default){
+	default_clause_value = cl->node.defaulttype;
+	break;
+      }
+    }
+
+  for(cl = clause_list; cl != NULL; cl = cl->next)
+    {
+      if(cl->type == task_untied) {
+	untied_clause_value = true;
+	break;
+      }
+    }
+
+  if (if_clause_tree) 
+    {
+     	 if_clause_wn = WFE_Expand_Expr (if_clause_tree);
+	 TYPE_ID type = WN_rtype (if_clause_wn);
+	 WN * val = (MTYPE_is_integral (type)) ? WN_Intconst (type, 0) :
+	                                         WN_Floatconst (type, 0);
+	 if_clause_wn = WN_NE (WN_rtype (if_clause_wn),
+	                       val, if_clause_wn);
+    }
+
+  prepare_com_clause ( private_clause_tree, &private_clause_st );
+
+  prepare_com_clause ( firstprivate_clause_tree, &firstprivate_clause_st );
+
+  prepare_com_clause (shared_clause_tree, &shared_clause_st);
+
+  task_clause_wn = (struct Task_clause_wn_type *) malloc(sizeof(Task_clause_wn_type));
+
+  task_clause_wn-> if_clause = if_clause_wn;
+  task_clause_wn-> private_clause = private_clause_st;
+  task_clause_wn-> firstprivate_clause = firstprivate_clause_st;
+  task_clause_wn-> shared_clause = shared_clause_st;
+  task_clause_wn-> untied_clause = untied_clause_value;
+  task_clause_wn-> default_clause = default_clause_value;
+
+  WFE_expand_start_task (task_clause_wn);
+  free(task_clause_wn);
+
+
+
+}
+
+void expand_end_task ()
+{
+  WFE_expand_end_task();
+}
+
+///////// taskwait directive ////////
+
+
+void  expand_taskwait ()         
+{
+     WFE_expand_taskwait ();
+}
+
 
 ///////// do loop expander ////////
 
@@ -2034,5 +2169,56 @@ build_parallel_sections_clause_list (tree t, parallel_sections_clause_type p_typ
 
   return result;
 }
+
+///////// build clause list for TASK directive //////////
+
+struct task_clause_list *
+chain_task_list_on (struct task_clause_list * tclause_list, struct task_clause_list * tclause)
+{
+  struct task_clause_list *tcl;
+  if(tclause_list)
+    {
+      for(tcl = tclause_list; tcl->next != NULL; tcl = tcl->next);
+      tcl->next = tclause;
+      return tclause_list;
+    }
+
+  return tclause;
+}
+
+struct task_clause_list *
+build_task_clause_list (tree t,
+			task_clause_type t_type,
+			default_type d_type)
+{
+  seen_omp_paren = FALSE;
+
+  task_clause_list * result = (task_clause_list *) malloc (sizeof(task_clause_list));
+
+  result->type = t_type;
+  result->next = NULL;
+  switch(t_type)
+    {
+    case task_if:
+      result->node.expr_no_commas = t;
+      break;
+    case task_private:
+    case task_firstprivate:
+    case task_shared:
+      result->node.var_list = t;
+      break;
+    case task_default:
+      result->node.defaulttype = d_type;
+      break;
+    case task_untied:
+      result->node.untied = 0;
+      break;
+    default:
+      Fail_FmtAssertion ("Unexpected task-clause-type");
+    }
+
+  return result;
+}
+
 
 }//extern "C"

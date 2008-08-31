@@ -1372,7 +1372,7 @@ __ompc_get_thdprv(void *** thdprv_p, omp_int64 size, void *datap,omp_int32 globa
   int num_threads;
  
   num_threads=OMP_MAX_NUM_THREADS;
-
+//  printf("ompc_get_thdprv: num_threads = %d\n", num_threads);
   if((pp = *thdprv_p) == NULL) {
     __ompc_lock(&_ompc_thread_lock);
 
@@ -1391,6 +1391,7 @@ __ompc_get_thdprv(void *** thdprv_p, omp_int64 size, void *datap,omp_int32 globa
       p = (void *)malloc((int)size);
     pp[global_tid] = p;
   }
+//  printf("ompc_get_thdprv: pp[%d] = %d\n", global_tid, *((int *)p));
   return 1;
 }
 

@@ -21,6 +21,7 @@
  * Temple Place - Suite 330, Boston MA 02111-1307, USA.
  */
 
+
 #ifndef _GCCFE_WFE_OMP_DIRECIVES_H_
 #define _GCCFE_WFE_OMP_DIRECIVES_H_
 
@@ -77,6 +78,28 @@ WFE_expand_start_for (struct For_clause_wn_type * for_clause_wn);
 
 extern void 
 WFE_expand_end_for( );
+
+
+
+//Task_clause_wn_type
+struct Task_clause_wn_type
+{
+   ST_list *private_clause;
+   ST_list *firstprivate_clause;
+   ST_list *shared_clause;
+   WN *if_clause;
+   enum default_type default_clause;   // needs to specify how to value 
+   bool untied_clause;
+};
+
+extern void 
+WFE_expand_start_task (struct Task_clause_wn_type * task_clause_wn);
+
+extern void 
+WFE_expand_end_task( );
+//end of Task_clause_wn_type
+
+
 
 struct Sections_clause_wn_type
 {
@@ -178,6 +201,7 @@ extern void WFE_expand_start_do_loop (WN *, WN *, WN *, WN *, struct nesting *);
 
 extern void WFE_expand_end_do_loop (struct nesting *);
 
+extern void WFE_expand_taskwait();
 extern BOOL Trace_Omp;
 #endif
 

@@ -34,14 +34,14 @@
 #include "omp_rtl.h"
 #include "omp_sys.h"
 #include "omp_util.h"
-
+#include "pcl.h"
+#include <time.h>
 /* Interfaces have already been defined in omp_rtl.h.
  * Since implementations are included here, not include
  * this file anymore. Use omp_rtl.h instead.
  */
 
 extern pthread_mutex_t __omp_hash_table_lock;
-
 inline void __ompc_set_nested(const int __nested)
 {
   /* A lock is needed here to protect it?*/
@@ -258,6 +258,7 @@ inline omp_team_t * __ompc_get_current_team(void)
   }
 }
 
+extern __thread int total_tasks;
 /* Should not be called directly, use __ompc_barrier instead*/
 inline void __ompc_barrier_wait(omp_team_t *team)
 {
@@ -266,6 +267,22 @@ inline void __ompc_barrier_wait(omp_team_t *team)
   int reset_barrier = 0;
   int new_count;
   int i, j;
+
+
+    omp_task_t *next;
+
+    __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
+
+    while(__omp_level_1_team_manager.num_tasks != 0)
+    {
+	__ompc_task_schedule(&next);
+	if(next != NULL) {
+	  __ompc_task_switch(__omp_level_1_team_tasks[__omp_myid], next);
+	}
+
+    }
+
+
 
   barrier_flag = team->barrier_flag;
   new_count = __ompc_atomic_inc(&team->barrier_count);
@@ -277,7 +294,7 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
     for (i = 0; i < 300; i++)
       if (team->barrier_count2 == team->team_size) {
-	return;
+	goto barrier_exit;
       }
     pthread_mutex_lock(&(team->barrier_lock));
     pthread_mutex_unlock(&(team->barrier_lock));
@@ -289,13 +306,16 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     for (i = 0; i < 5000; i++)
       if (team->barrier_flag != barrier_flag) {
 	__ompc_atomic_inc(&team->barrier_count2);
-	return;
+	goto barrier_exit;
       }
     pthread_mutex_lock(&(team->barrier_lock));
     while (team->barrier_flag == barrier_flag)
       pthread_cond_wait(&(team->barrier_cond), &(team->barrier_lock));
     pthread_mutex_unlock(&(team->barrier_lock));
   }
+
+ barrier_exit:
+  __ompc_atomic_inc(&__omp_level_1_team_manager.num_tasks);
 
 }
 

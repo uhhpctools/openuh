@@ -114,7 +114,6 @@
 #  PSC is PathScale EKOPath and GNU is gcc.
 #  Temporarily, allow no BUILD_COMPILER, which defaults to GNU.
 #
-
 ifndef BUILD_COMPILER
   BUILD_COMPILER = GNU
 endif

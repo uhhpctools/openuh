@@ -317,14 +317,16 @@ typedef enum {
   MPR_OMP_END_ORDERED		= 70,
 
   MPR_OMP_FLUSH			= 71,	/* Not really needed? to be deleted*/
+  MPR_OMP_TASKWAIT              = 71,
+  MPR_OMP_TASK                  = 72,
+  MPR_OMP_END_TASK              = 73,
 #ifdef KEY
-  MPR_OMP_GET_THDPRV            = 72,
-  MPR_OMP_COPYIN_THDPRV         = 73,
-  MPR_OMP_COPYPRIVATE           = 74,
-
+  MPR_OMP_GET_THDPRV            = 74,
+  MPR_OMP_COPYIN_THDPRV         = 75,
+  MPR_OMP_COPYPRIVATE           = 76,
   MPRUNTIME_LAST = MPR_OMP_COPYPRIVATE
 #else
-  MPRUNTIME_LAST = MPR_OMP_FLUSH
+  MPRUNTIME_LAST = MPR_OMP_END_TASK
 #endif
 
 } MPRUNTIME;
@@ -719,6 +721,9 @@ static char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_ordered",             /* MPR_OMP_ORDERED */
   "__ompc_end_ordered",         /* MPR_OMP_ORDERED */
   "__ompc_flush",               /* MPR_OMP_FLUSH  */
+  "__ompc_task_wait",           /* MPR_OMP_TASKWAIT */
+  "__ompc_task",                /* MPR_OMP_TASK */
+  "__ompc_end_task",            /* MPR_OMP_END_TASK */
 #ifdef KEY
   "__ompc_get_thdprv",          /* MPR_OMP_GET_THDPRV */
   "__ompc_copyin_thdprv",       /* MPR_OMP_COPYIN_THDPRV */
@@ -804,6 +809,9 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_ORDERED */
   ST_IDX_ZERO,   /* MPR_OMP_END_ORDERED */
   ST_IDX_ZERO,   /* MPR_OMP_FLUSH */
+  ST_IDX_ZERO,   /* MPR_OMP_TASKWAIT */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK */
+  ST_IDX_ZERO,   /* MPR_OMP_END_TASK */
 #ifdef KEY
   ST_IDX_ZERO,   /* MPR_OMP_GET_THDPRV */
   ST_IDX_ZERO,   /* MPR_OMP_COPYIN_THDPRV */
@@ -1409,6 +1417,8 @@ static void Create_Preg_or_Temp ( TYPE_ID mtype, char *name, ST **st,
 static WN * Gen_MP_Load ( ST * st, WN_OFFSET offset, BOOL scalar_only = FALSE );
 static WN * Gen_Barrier ( ST* gtid );
 static WN * Gen_EBarrier ( ST* gtid);
+static WN * Gen_Taskwait(void);
+
 /*
 * Generate RT calls to start critical section
 */
@@ -5644,6 +5654,25 @@ Gen_Barrier (ST* gtid)
   return (wn);
 }
 
+
+static WN *
+Gen_Taskwait (void)
+{
+  WN *wn;
+
+  wn = WN_Create (OPC_VCALL, 0);
+  WN_st_idx(wn) = GET_MPRUNTIME_ST (MPR_OMP_TASKWAIT );
+  WN_Set_Call_Non_Data_Mod ( wn );
+  WN_Set_Call_Non_Data_Ref ( wn );
+  WN_Set_Call_Non_Parm_Mod ( wn );
+  WN_Set_Call_Non_Parm_Ref ( wn );
+  WN_Set_Call_Parm_Ref ( wn );
+  WN_linenum(wn) = line_number;
+
+  return (wn);
+}
+
+
 static WN *
 Gen_EBarrier (ST* gtid)
 {
@@ -5660,6 +5689,7 @@ Gen_EBarrier (ST* gtid)
 
   return (wn);
 }
+
 
 
 /*
@@ -7619,6 +7649,9 @@ Strip_Nested_MP ( WN * tree, BOOL pcf_ok )
         } else if ((WN_pragma(kid) == WN_PRAGMA_BARRIER) &&
 		   (pcf_nest == 0) && pcf_ok) {
 	  /* allow barrier nodes to remain */
+	} else if ((WN_pragma(kid) == WN_PRAGMA_TASKWAIT) &&
+		   (pcf_nest == 0) && pcf_ok) {
+	  /* allow taskwait nodes to remain */
 	} else if ((WN_pragma(kid) == WN_PRAGMA_ENTER_GATE) &&
 		   (pcf_nest == 0) && pcf_ok) {
 	  /* allow enter_gate nodes to remain */
@@ -9697,6 +9730,23 @@ Transform_Parallel_Block ( WN * tree )
 	  WN_Delete ( cur_node );
 	  break;
 
+      case WN_PRAGMA_TASKWAIT:
+
+        wn = Gen_Taskwait();
+        if(prev_node)
+          WN_next(prev_node) = wn;
+        else
+          WN_first(tree) = wn;
+        WN_prev(wn) = prev_node;
+        WN_next(wn) = next_node;
+        if(next_node)
+          WN_prev(next_node) = wn;
+        else
+          WN_last(tree) = wn;
+
+        WN_Delete (cur_node);
+        break;
+
 /* What is GATE ?  lg */
 	case WN_PRAGMA_ENTER_GATE:
 
@@ -11698,7 +11748,26 @@ lower_mp ( WN * block, WN * node, INT32 actions )
         WN_next(call), NULL);
       return return_wn;
 
-    } else if (WN_pragma(node) == WN_PRAGMA_CHUNKSIZE) {
+    } 
+    else if (WN_pragma(node) == WN_PRAGMA_TASKWAIT) {
+      //orphaned taskwait, cca 06/27/08
+      WN *call, *block;
+      wn = WN_next(node);
+      block = WN_CreateBlock();
+      call = Gen_Taskwait();
+
+      WN_INSERT_BlockLast(block, call);
+
+      WN_next(call) = wn;
+      if (wn) WN_prev(wn) = call;
+      WN *return_wn = WN_first(block);
+      WN_DELETE_Tree(node);
+      WN_Delete(block);
+      verify_mp_lowered.Set_replace_block_and_nested_pu(return_wn, WN_next(call\
+									   ), NULL);
+      return return_wn;
+    }
+    else if (WN_pragma(node) == WN_PRAGMA_CHUNKSIZE) {
       pu_chunk_node = node;
       verify_mp_lowered.Set_replace_block_and_nested_pu(NULL, NULL, NULL);
       return (WN_next(node));

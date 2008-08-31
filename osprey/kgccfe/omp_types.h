@@ -52,7 +52,10 @@ enum omp_tree_type
   ordered_cons_b,
   ordered_cons_e,
   options_dir,
-  exec_freq_dir
+  exec_freq_dir,
+  task_cons_b,
+  task_cons_e,
+  taskwait_dir
 };
 
 ///////////////////////////////////////////////////////////////////
@@ -259,5 +262,33 @@ struct parallel_sections_clause_list
 	union parallel_sections_clause_node node;
 	struct parallel_sections_clause_list * next;
 };
-#endif
 
+
+enum task_clause_type
+{
+  task_if,
+  task_untied,
+  task_default,
+  task_private,
+  task_firstprivate,
+  task_shared
+};
+
+union task_clause_node
+{
+  tree expr_no_commas;
+  tree var_list;
+  enum default_type defaulttype;
+  int untied;
+};
+
+struct task_clause_list
+{
+  enum task_clause_type type;
+  union task_clause_node node;
+  struct task_clause_list * next;
+};
+
+
+
+#endif

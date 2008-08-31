@@ -47,28 +47,39 @@ VPATH    =  $(SRC_DIRS)
 # Compiler options
 LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCDEFS = $(HOSTDEFS) $(TARGDEFS)
-LCINCS = -I$(SRC_DIRS) -I$(BUILD_BASE)
+LCINCS = -I$(SRC_DIRS) -I$(BUILD_BASE)  
 
 # HOSTDEFS += -DHAVE_CONFIG_H
 # HOSTDEFS += -DLONGLONG
 
 CFLAGS += -DTARG_$(BUILD_TARGET)
+#CFLAGS += -fgnu89-inline
 
 CFILES = \
 	omp_lib.c \
 	omp_lock.c\
 	omp_runtime.c\
 	omp_thread.c\
-	omp_util.c
+	omp_util.c \
+	omp_queue.c \
+	omp_task.c \
+	pcl.c
+
+
 
 default: first $(TARGETS) last
 
 first : 
+	@echo ${COMMONRULES}
+	@echo ${BUILD_COMPILER}
+	@echo ${OBJECTS}
 	$(call submake,$(BUILD_AREA)/include)
+	@echo ${BUILD_COMPILER}
 
 last : make_libdeps
 
 $(LIBRARY): $(OBJECTS)
+	@echo ${BUILD_COMPILER}
 	$(ar) cru $@ $^
 
 include $(COMMONRULES)

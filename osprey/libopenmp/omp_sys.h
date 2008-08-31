@@ -31,6 +31,17 @@
 #ifndef __omp_sys_included
 #define __omp_sys_included
 
+
+#define GCC_VERSION (__GNUC__ * 10000 \
+                               + __GNUC_MINOR__ * 100 \
+                               + __GNUC_PATCHLEVEL__)
+
+
+#if GCC_VERSION >= 40100
+#define OMP_USE_GCC_ATOMIC_BUILTINS
+#endif
+
+
 #  ifndef TARG_IA64
 //#  ifdef TARG_X8664 // IA32 will fall through to the Itanium branch!
 
@@ -73,23 +84,31 @@ __ompc_spin_unlock(volatile int* lock)
 static inline int
 __ompc_atomic_inc(volatile int* value)
 {
+#ifdef OMP_USE_GCC_ATOMIC_BUILTINS
+  return __sync_add_and_fetch(value, 1);
+#else
   int result;
   static int lock = 0;
   __ompc_spin_lock(&lock);
   result = ++(*value);
   __ompc_spin_unlock(&lock);
   return result;
+#endif
 }
 
 static inline int
 __ompc_atomic_dec(volatile int* value)
 {
+#ifdef OMP_USE_GCC_ATOMIC_BUILTINS
+  return __sync_add_and_fetch(value, -1);
+#else
   int result;
   static int lock = 0;
   __ompc_spin_lock(&lock);
   result = --(*value);
   __ompc_spin_unlock(&lock);
   return result;
+#endif
 }
 
 

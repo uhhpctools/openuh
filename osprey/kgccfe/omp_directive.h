@@ -54,6 +54,22 @@ extern struct for_clause_list *
 	                       enum schedule_kind_type,
 			       enum reduction_op_type);
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+extern void expand_start_task(struct task_clause_list * clause_list);
+extern void expand_end_task();
+extern struct task_clause_list * chain_task_list_on
+	(struct task_clause_list * tclause_list, struct task_clause_list *tclause);
+
+extern struct task_clause_list *
+	build_task_clause_list (tree, enum task_clause_type,
+				enum default_type);
+
+
+extern void expand_taskwait ();
+
+				
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 extern void expand_start_sections (struct sections_clause_list * clause_list);
 extern void expand_end_sections ();

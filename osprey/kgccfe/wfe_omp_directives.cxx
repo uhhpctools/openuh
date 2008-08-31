@@ -39,6 +39,7 @@
 #include "const.h"
 #include "erglob.h"
 
+
 BOOL Trace_Omp = FALSE;
 
 // Put in per-file OpenMP specific initializations here.
@@ -91,6 +92,8 @@ void WFE_omp_error(CHECK_STMT* cs, bool chkflag, char * msg)
     case wfe_omp_parallel_sections: sprintf(dirname,"#1PRAGMA OMP PARRALLEL SECTIONS");
 						 break;	
     case wfe_omp_parallel_for: sprintf(dirname,"#PRAGMA OMP PARRALLEL FOR");
+						break;
+  case wfe_omp_taskwait: sprintf(dirname, "#PRAGMA OMP TASKWAIT");
 						break;
     default: sprintf(dirname,"OTHER DIRECTIVES ");
   }
@@ -2435,6 +2438,89 @@ void  WFE_expand_barrier ()
        WFE_CS_pop(wfe_omp_barrier);
 }
 
+//////////taskwait directive////////////
+
+void WFE_check_taskwait ( )
+{
+//   (1)  A barrier directive may not appear as the immediate subordinate of a C/C++ control statement
+//         (if, switch, while, do, for), and it can not be labeled (with either a user or a
+//         case/default label). 
+//   (2) The smallest statement that contains a barrier directive must be a block (or
+//         compound-statement).
+
+        //deal with (1) listed above
+       bool chkflag=false;
+       char * msg = NULL;
+ 
+       CHECK_STMT* cs = WFE_CS_top ();
+       SRCPOS srcpos = Get_Srcpos();
+       WFE_Set_LFnum(cs, SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+
+       
+       if(WFE_is_top(wfe_cscf))
+       {
+         msg = "A taskwait directive appeared as the immediate  \
+           	subordinate of a C/C++ control statement if, switch, while, do, for.";
+           chkflag=true;
+      	}
+
+       WN* wn1;                     //deal with (2) listed above
+       wn1=WFE_Stmt_Top();
+       if(WN_operator(wn1)!=OPR_BLOCK)
+       {
+  	   msg = "The smallest statement that contains a barrier directive must be a block (or \
+		         compound-statement).";
+		chkflag=true;
+       }
+
+       /*CCA 11/26/2007*/
+       /*I believe that taskwait can be embedded inside any directive, if this is true the following code is not needed*/
+       /*If this turns out to be false, then the following code should be modified and then included */
+#if 0
+       //barrier directives are not permitted in the dynamic extent of for, ordered,
+       // sections, single, master, and critical regions if the directives bind to the 
+       //same parallel as the regions.
+       if( WFE_bind_to_same(wfe_omp_barrier,wfe_omp_for,wfe_omp_parallel)||
+       	   WFE_bind_to_same(wfe_omp_barrier,wfe_omp_ordered,wfe_omp_parallel)||
+           WFE_bind_to_same(wfe_omp_barrier,wfe_omp_sections,wfe_omp_parallel)||
+           WFE_bind_to_same(wfe_omp_barrier,wfe_omp_single,wfe_omp_parallel)||
+           WFE_bind_to_same(wfe_omp_barrier,wfe_omp_master,wfe_omp_parallel)||
+           WFE_bind_to_same(wfe_omp_barrier,wfe_omp_critical,wfe_omp_parallel))
+        
+    {
+      msg = "taskwait directives are not permitted in the dynamic extent of for, ordered, \
+          sections, single, master, and critical regions if the directives bind to the  \
+          same parallel as the regions."; 
+        chkflag=true;
+    }
+#endif
+    WFE_omp_error(cs, chkflag, msg);   
+    return;
+       
+};
+
+void  WFE_expand_taskwait ()
+{
+       WN *wn;
+       wn = WN_CreatePragma(WN_PRAGMA_TASKWAIT, 
+                             (ST_IDX) NULL,
+                             0,
+                             0);   
+       WN_set_pragma_omp(wn);
+       WFE_Stmt_Append (wn, Get_Srcpos());
+       //////////////// OPENMP CHECK STACK /////////////
+       SRCPOS srcpos = Get_Srcpos();
+       WFE_CS_push(wfe_omp_taskwait,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+    
+      WFE_check_taskwait();
+ 
+       /////required?///////
+       Set_PU_has_mp (Get_Current_PU ());
+       Set_FILE_INFO_has_mp (File_info);
+       Set_PU_uplevel (Get_Current_PU ());
+       
+       WFE_CS_pop(wfe_omp_taskwait);
+}
 
 ///////// flush directive ////////
 
@@ -2459,7 +2545,8 @@ void WFE_check_flush ( )
          chkflag=true;
       	}
 
-       WN* wn1;                     //deal with (2) listed above
+     //deal with (2) listed above
+       WN* wn1;                   
        wn1=WFE_Stmt_Top();
        if(WN_operator(wn1)!=OPR_BLOCK)
        {
@@ -2617,3 +2704,178 @@ void WFE_expand_end_do_loop (struct nesting * nest)
 }
 
 
+///////// task directive ////////
+void WFE_check_task(WN *task_wn)
+{
+     bool chkflag=false;
+     char * msg = NULL;
+       
+     WN* wn1,*wn2,*wn3,*wn4;
+    CHECK_STMT *cs1,*cs2;
+    
+    if (WN_operator(task_wn)!=OPR_BLOCK)
+    {
+    	fprintf(stderr,"WFE_check_task can't deal with Non-block item!\n");
+    	chkflag=true;
+    }
+    
+    
+        	
+    cs1=WFE_CS_top();
+    wn1=cs1->wn_prag;
+    wn2=WN_first(wn1);
+    while(wn2!=NULL)
+    {
+
+      if(WN_st(wn2)==NULL)
+      {
+        wn2=WN_next(wn2);
+        continue;
+      }
+      if(ST_is_thread_private(* WN_st(wn2)) )
+      {
+      	if(WN_pragma(wn2)!=WN_PRAGMA_IF)
+      	{
+          msg = "A threadprivate variable must not appear in any clause except the if clause.";
+	  chkflag=true;
+      	}
+      }
+      
+       //task private clause
+      if(WN_pragma(wn2)==WN_PRAGMA_LOCAL)
+      WFE_check_private(wn2,chkflag);
+      //task firstprivate clause
+      if(WN_pragma(wn2)==WN_PRAGMA_FIRSTPRIVATE)
+      WFE_check_firstprivate(wn2,chkflag);
+      //task default clause
+      if(WN_pragma(wn2)==WN_PRAGMA_DEFAULT)
+      	WFE_check_default(wn2,chkflag);
+
+      wn2=WN_next(wn2);
+  
+    }       
+    WFE_omp_error(WFE_CS_top(), chkflag, msg);
+    return;
+   
+};
+
+
+void WFE_expand_start_task ( struct Task_clause_wn_type * task_clause_wn )
+{
+       /* create a region on current block */
+       
+       WN * region = WFE_region(REGION_KIND_MP);
+
+       WN *wn, *expr;
+       WN_list *wn_list;
+       ST *st;
+       ST_list *st_list;
+
+       wn = WN_CreatePragma(WN_PRAGMA_TASK_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);
+       WN_set_pragma_omp(wn);
+       WFE_Stmt_Append (wn, Get_Srcpos());
+       /////////  omp ///////////////////////////
+       SRCPOS srcpos = Get_Srcpos();
+       WFE_CS_push(wfe_omp_task,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+       WFE_Set_Prag(WFE_Stmt_Top());
+       WFE_Set_Region (region);
+
+ 
+       /////required?///////
+       Set_PU_has_mp (Get_Current_PU ());
+       Set_FILE_INFO_has_mp (File_info);
+       Set_PU_uplevel (Get_Current_PU ());
+      
+       // Add all other clasuses needed.
+
+       /********task if_clause ***************/
+       expr = task_clause_wn->if_clause;
+       if (expr)
+         {
+            wn = WN_CreateXpragma(WN_PRAGMA_IF, (ST_IDX) NULL, 1);
+            WN_kid0(wn) = expr;
+            WN_set_pragma_omp(wn);  
+            WFE_Stmt_Append (wn, Get_Srcpos());
+         }
+
+       /********Task untied_clause ***************/
+       if(task_clause_wn->untied_clause)
+       	{
+       	   WFE_Set_Cflag(clause_untied);   //set clause flag for check
+       	}
+       if(task_clause_wn->untied_clause)
+	 {
+	   wn = WN_CreatePragma(WN_PRAGMA_UNTIED, (ST_IDX)NULL,0,0);
+	   WN_set_pragma_omp(wn);
+	   WFE_Stmt_Append(wn, Get_Srcpos());
+	 }
+       /********Task default_clause ***************/
+       enum default_type  default_value = task_clause_wn->default_clause;
+       if (default_value != no_default)
+         {
+            wn = WN_CreatePragma(WN_PRAGMA_DEFAULT, 
+            	                  (ST_IDX) NULL, 
+            	                  default_value,
+            	                  0);    //To be completed for arg1 amd arg2.
+            	                  
+            WN_set_pragma_omp(wn);  
+            WFE_Stmt_Append (wn, Get_Srcpos());
+         }
+
+
+       /********For private_clause ***************/
+       if(task_clause_wn->private_clause!=NULL)
+       	{
+       	   WFE_Set_Cflag(clause_private);   //set clause flag for check
+       	}
+       for (st_list = task_clause_wn->private_clause; st_list != NULL; st_list = st_list->next)
+         {
+            st = st_list->st;
+            wn = WN_CreatePragma(WN_PRAGMA_LOCAL, st, 0, 0);
+            
+            WN_set_pragma_omp(wn);  
+            
+            WFE_Stmt_Append (wn, Get_Srcpos());
+            
+         }
+       /********For firstprivate_clause ***************/
+       if(task_clause_wn->firstprivate_clause!=NULL)
+       	   WFE_Set_Cflag(clause_firstprivate); 
+       
+       for (st_list = task_clause_wn->firstprivate_clause; st_list != NULL;st_list = st_list->next)
+         {
+            st = st_list->st;
+            wn = WN_CreatePragma(WN_PRAGMA_FIRSTPRIVATE, st, 0, 0);
+            WN_set_pragma_omp(wn);
+            WFE_Stmt_Append (wn, Get_Srcpos());
+       
+         }
+
+       /********For shared_clause ***************/
+       if(task_clause_wn->shared_clause!=NULL)
+       	{
+       	   WFE_Set_Cflag(clause_shared); 
+       	}
+       for (st_list = task_clause_wn->shared_clause; st_list != NULL; st_list = st_list->next)
+         {
+            st = st_list->st;
+            wn = WN_CreatePragma(WN_PRAGMA_SHARED, st, 0, 0);
+            WN_set_pragma_omp(wn);
+            WFE_Stmt_Append (wn, Get_Srcpos());
+
+         }       
+            
+       WFE_Stmt_Pop (wfe_stmk_region_pragmas);  
+       
+}
+
+void WFE_expand_end_task ( )
+{
+    WN *wn = WFE_Stmt_Top ();
+    WFE_check_task (wn);
+    WFE_Stmt_Pop (wfe_stmk_scope);
+    WFE_CS_pop(wfe_omp_task);
+};

@@ -123,6 +123,7 @@ do {									\
 	struct single_clause_list * single_clause_type;
 	struct parallel_for_clause_list * parallel_for_clause_type;
 	struct parallel_sections_clause_list * parallel_sections_clause_type;
+        struct task_clause_list * task_clause_type;
 	}
 
 /* All identifiers that are not reserved words
@@ -165,6 +166,9 @@ do {									\
 %token NOWAIT PRAGMA_OMP PARALLEL NUM_THREADS SECTIONS SECTION
 %token SINGLE MASTER CRITICAL BARRIER
 %token ATOMIC FLUSH THREADPRIVATE
+
+%token TASK TASKWAIT
+%token UNTIED
 
 /* the reserved words */
 /* SCO include files test "ASM", so use something else. */
@@ -282,6 +286,9 @@ do {									\
 %type <single_clause_type> single_clause single_clause_list single_directive
 %type <parallel_for_clause_type> parallel_for_clause parallel_for_clause_list parallel_for_directive
 %type <parallel_sections_clause_type> parallel_sections_clause parallel_sections_clause_list parallel_sections_directive
+%type <ttype> task_construct
+%type <ttype> taskwait_directive
+%type <task_clause_type> task_clause_list task_clause task_directive
 
 
 
@@ -2322,7 +2329,6 @@ for_init_stmt:
 	;
 
 
-
 openmp_construct:
           parallel_construct
         |  for_construct
@@ -2334,17 +2340,19 @@ openmp_construct:
         |  critical_construct
         |  atomic_construct
         |  ordered_construct
+	|  task_construct
         ;
-                                                                                
+                                                                               
 pragma_directives:
         barrier_directive
         | flush_directive
         | threadprivate_directive
-        {}
+	{}
+	| taskwait_directive
         | options_directive
 	| exec_freq_directive
-        ;
-                                                                                
+	;
+                                                       
 options_directive:
         PRAGMA_OPTIONS STRING '\n'
 	{ add_stmt (build_omp_stmt (options_dir, $2)); $$ = NULL; }
@@ -2604,6 +2612,54 @@ section_construct:
 section_directive:
         PRAGMA_OMP  SECTION '\n'
         ;
+
+task_construct:
+	task_directive
+	{
+	  add_stmt (build_omp_stmt (task_cons_b, $1));
+	  $$ = NULL;
+	
+	}
+	structured_block
+	{
+	  add_stmt (build_omp_stmt (task_cons_e, NULL));
+	  $$ = NULL;
+	}
+
+task_directive:
+        PRAGMA_OMP TASK '\n'
+	{ $$ = NULL; }
+	| PRAGMA_OMP TASK task_clause_list '\n'
+	{ $$ = $3; }
+        ;
+
+task_clause_list:
+	task_clause
+	{ $$ = $1; }
+	| task_clause_list task_clause
+	{ $$ = chain_task_list_on ($1, $2); }
+	;
+
+task_clause:
+	PRIVATE '(' variable_list ')'
+	{ $$ = build_task_clause_list($3, task_private, 0); }
+	| FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_task_clause_list($3, task_firstprivate, 0); }
+	| SHARED '(' variable_list ')'
+	{ $$ = build_task_clause_list($3, task_shared, 0); }
+	| UNTIED
+	{ $$ = build_task_clause_list(NULL, task_untied, 0); }
+	| IF '(' expr_no_commas ')'
+	{ $$ = build_task_clause_list(NULL, task_if, 0); }
+	| DEFAULT '(' NONE ')'
+	{ $$ = build_task_clause_list(NULL, task_default, default_none); }
+	| DEFAULT '(' SHARED ')'
+	{ $$ = build_task_clause_list(NULL, task_default, default_shared); }
+	;
+
+taskwait_directive:
+	PRAGMA_OMP TASKWAIT '\n'
+        { add_stmt (build_omp_stmt (taskwait_dir, NULL)); $$ = NULL; }
                                                                                 
 single_construct:
         single_directive
@@ -2639,7 +2695,7 @@ single_clause:
         |  NOWAIT
         { $$ = build_single_clause_list(NULL, single_nowait); }
         ;
-                                                                                
+
 parallel_for_construct:
         parallel_for_directive
         {
@@ -3676,6 +3732,12 @@ check_omp_string (char * s, bool * status)
     return FLUSH;
   if (!strcmp (s, "threadprivate") && !seen_omp_paren)
     return THREADPRIVATE;
+  if (!strcmp (s, "task") && !seen_omp_paren)
+    return TASK;
+  if (!strcmp (s, "taskwait") && !seen_omp_paren)
+    return TASKWAIT;
+  if(!strcmp (s, "untied"))
+    return UNTIED;
 
   // this must be last, return anything
   *status = false;

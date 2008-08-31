@@ -21,6 +21,7 @@
  * Temple Place - Suite 330, Boston MA 02111-1307, USA.
  */
 
+
 #ifndef _GCCFE_WFE_OMP_CHECK_STACK_H_
 #define _GCCFE_WFE_OMP_CHECK_STACK_H_
 
@@ -41,8 +42,11 @@ typedef enum {
    wfe_omp_barrier,
    wfe_omp_flush,
    wfe_omp_atomic,
-   wfe_omp_threadprivate
+   wfe_omp_threadprivate,
+   wfe_omp_taskwait,
+   wfe_omp_task
 }  WFE_CHECK_KIND;
+
 typedef enum{
    clause_none          =0x0 ,
    clause_default        =0x1 ,
@@ -55,7 +59,8 @@ typedef enum{
    clause_private        =0x80,
    clause_reduction      =0x100,
    clause_schedule      =0x200,
-   clause_shared        =0x400   
+   clause_shared        =0x400,   
+   clause_untied        =0x800
 
 }WFE_CLAUSE_KIND;
 

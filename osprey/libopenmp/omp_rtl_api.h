@@ -37,7 +37,7 @@
  * include it in the RTL implementation.
  */
 
-#define frame_pointer_t char*
+#define frame_pointer_t void*
 
 typedef int omp_int32;
 typedef long long omp_int64;
@@ -47,6 +47,8 @@ typedef double omp_real64;
 typedef omp_int32 omp_tid;
 
 typedef void (*omp_micro)(omp_int32 , frame_pointer_t);
+typedef void (*omp_task_func)(void *args);
+typedef void (*omp_cond_func)();
 
 typedef enum {
   OMP_SCHED_UNKNOWN             = 0,
@@ -148,7 +150,15 @@ extern "C" {
   extern  omp_int32 __ompc_copyin_thdprv(int num,...);
   extern omp_int32 __ompc_copyprivate(omp_int32 mpsp_status, void *cppriv, \
 				      void(*cp)(void* src, void* dst));
-				
+
+
+/*added by Cody Addison, University of Houston, April 2, 2008 */				
+  extern int __ompc_task_create( omp_task_func func, void *args, int is_tied);
+  extern void __ompc_task_wait();
+  extern void __ompc_task_exit();
+  extern omp_cond_func __ompc_task_create_cond;
+
+
 #ifdef __cplusplus
 }
 #endif

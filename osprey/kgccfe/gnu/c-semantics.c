@@ -910,6 +910,15 @@ process_omp_stmt (tree t)
     case exec_freq_dir:
       WFE_Expand_Pragma (t);
       break;
+  case task_cons_b:
+    expand_start_task((struct task_clause_list *)(tree)t->omp.omp_clause_list);
+    break;
+  case task_cons_e:
+    expand_end_task();
+    break;
+  case taskwait_dir:
+    expand_taskwait();
+    break;
 
     default:
       abort();

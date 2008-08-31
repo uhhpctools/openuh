@@ -373,6 +373,10 @@ typedef enum {
   WN_PRAGMA_PWORKSHARE_BEGIN, /* by jhs, 2004/3/10 */
   WN_PRAGMA_PWORKSHARE_END, /* by jhs, 2004/3/10 */
   WN_PRAGMA_THREADPRIVATE, /* by jhs, 02.9.18 */
+  WN_PRAGMA_TASK_BEGIN, /* by cca, 11/20/2007 */
+  WN_PRAGMA_TASK_END, /* by cca, 11/20/2007 */
+  WN_PRAGMA_TASKWAIT, /*by cca, 11/20/2007 */
+  WN_PRAGMA_UNTIED, /*by cca, 11/20/2007 */
   MAX_WN_PRAGMA			/* last one in enum			*/
 } WN_PRAGMA_ID;
 
