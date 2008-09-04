@@ -317,13 +317,13 @@ typedef enum {
   MPR_OMP_END_ORDERED		= 70,
 
   MPR_OMP_FLUSH			= 71,	/* Not really needed? to be deleted*/
-  MPR_OMP_TASKWAIT              = 71,
-  MPR_OMP_TASK                  = 72,
-  MPR_OMP_END_TASK              = 73,
+  MPR_OMP_TASKWAIT              = 72,
+  MPR_OMP_TASK                  = 73,
+  MPR_OMP_END_TASK              = 74,
 #ifdef KEY
-  MPR_OMP_GET_THDPRV            = 74,
-  MPR_OMP_COPYIN_THDPRV         = 75,
-  MPR_OMP_COPYPRIVATE           = 76,
+  MPR_OMP_GET_THDPRV            = 75,
+  MPR_OMP_COPYIN_THDPRV         = 76,
+  MPR_OMP_COPYPRIVATE           = 77,
   MPRUNTIME_LAST = MPR_OMP_COPYPRIVATE
 #else
   MPRUNTIME_LAST = MPR_OMP_END_TASK
