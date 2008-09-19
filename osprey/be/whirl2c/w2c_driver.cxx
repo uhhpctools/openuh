@@ -64,6 +64,17 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/w2c_driver.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
+#include <iostream>
+#include <string>
+#include <list>
+#include <algorithm>
+#include <iterator>
+#include <fstream>
+#include <stdio.h>
+
+using namespace std;
+
+#include <iterator>
 #include <sys/elf_whirl.h>  /* for WHIRL_REVISION */
 #include <time.h>
 #include "whirl2c_common.h" /* For defs.h, config.h, erglob.h, etc. */
@@ -110,15 +121,6 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/w2c
 //  This source file is formated using 'indent' command.
 //-----------------------------------------------------------
 
-#include <iostream>
-#include <string>
-#include <list>
-#include <algorithm>
-#include <iterator>
-#include <fstream>
-#include <stdio.h>
-
-using namespace std;
 
 // A class to store source files, move text blocks and write it back.
 
@@ -127,7 +129,7 @@ class TextProcessor
 public:
   string mfilename;
   int lineCount;
-    list < string > srcLines;
+  static list < string > srcLines;
     TextProcessor ()
   {
   };
@@ -150,9 +152,11 @@ public:
   }
 
   // move a text block from f to l to position after target in the srcLines list
-  bool moveBlock (list < string >::iterator f,
-		  list < string >::iterator l,
-		  list < string >::iterator target);
+
+
+ bool moveBlock (list < string >::iterator f,
+                  list < string >::iterator l,
+                  list < string >::iterator target);
 
   //move all nested pus back to their parents
   bool process ();
@@ -162,42 +166,42 @@ public:
   {
     ofstream out (filename.c_str ());
     copy (srcLines.begin (), srcLines.end (), ostream_iterator < string >
-	  (out, "\n"));
+          (out, "\n"));
     out.close ();
   };
 
 // search function for a pattern from iter_begin in normal or reverse order
 // return the iterator for the first match
   list < string >::iterator find_pattern (char *ipattern,
-			   list <string >::iterator iter_begin=NULL, 
-		           list <string >::iterator iter_end=NULL,
+                           list <string >::iterator iter_begin=srcLines.begin(),
+                           list <string >::iterator iter_end=srcLines.end(),
                              bool forder = true)
   {
     list < string >::iterator iter;
-    if (iter_begin == NULL)
-	  iter_begin = srcLines.begin ();
-    if (iter_end == NULL)
-          iter_end = srcLines.end ();
+ /*   if (iter_begin==NULL)
+          iter_begin = srcLines.begin ();
+    if (iter_end==NULL)
+          iter_end = srcLines.end (); */
     if (forder)
-      {				// normal search
-	for (iter = iter_begin; iter != iter_end; iter++)
-	  {
-	    string::size_type pos = (*iter).find (ipattern);
-	    if (pos != string::npos)
-	      return iter;
-	  }
+      {                         // normal search
+        for (iter = iter_begin; iter != iter_end; iter++)
+          {
+            string::size_type pos = (*iter).find (ipattern);
+            if (pos != string::npos)
+              return iter;
+          }
       }
-    else			// reverse search
+    else                        // reverse search
       {
-	for (iter = iter_end; iter != iter_begin; iter--)
-	  {
-	    string::size_type pos = (*iter).find (ipattern);
-	    if (pos != string::npos)
-	      return iter;
-	  }
+        for (iter = iter_end; iter != iter_begin; iter--)
+          {
+            string::size_type pos = (*iter).find (ipattern);
+            if (pos != string::npos)
+              return iter;
+          }
       }
 
-    return NULL;
+    return srcLines.end();
   }
 
 };
@@ -205,15 +209,15 @@ public:
 // move a text block from f to l to position after target in the srcLines list
 bool
   TextProcessor::moveBlock (list < string >::iterator f,
-			    list < string >::iterator l,
-			    list < string >::iterator target)
+                            list < string >::iterator l,
+                            list < string >::iterator target)
 {
   list < string > tempList;
-  if ((f == NULL) || (l == NULL) || (target == NULL))
+  if ((f == srcLines.end()) || (l == srcLines.end()) || (target == srcLines.end()))
     return false;
   tempList.clear ();
-  tempList.splice (tempList.begin (), srcLines, f, ++l);	// ++l to include l, original is [f,l)
-  srcLines.splice (++target, tempList);	//insert after target
+  tempList.splice (tempList.begin (), srcLines, f, ++l);        // ++l to include l, original is [f,l)
+  srcLines.splice (++target, tempList); //insert after target
   return true;
 
 }
@@ -221,37 +225,38 @@ bool
 bool TextProcessor::process ()
 {
 
-//1. search for the start  of a nested pu 
+//1. search for the start  of a nested pu
 
   list < string >::iterator iter1, iter2, iter3,iter4, iter_next;
   iter1 = find_pattern ("void __omp");
 
-  if (iter1 != NULL)
+  if (iter1 != srcLines.end())
     {
       do
-	{
+        {
 //2. search for the end iterators of a nested pu
-	  iter2 = find_pattern ("} /* __omp", iter1,NULL);
-	  iter_next = iter2;	// mark start point for next search
-	  iter_next++;
+          iter2 = find_pattern ("} /* __omp", iter1,srcLines.end());
+          iter_next = iter2;    // mark start point for next search
+          iter_next++;
 //2.5 change the pattern inside the nested pu just in case,add one more space
           iter4 = find_pattern ("  /*Begin_of_nested_PU(s)*/", iter1, iter2, false);
-          if (iter4 != NULL ) (*iter4).insert(9," ");
+          if (iter4 != srcLines.end() ) (*iter4).insert(9," ");
 //3. find its parent pu via traverse back from the begining of the block
-          iter3 = find_pattern ("  /*Begin_of_nested_PU(s)*/", NULL, iter1, false);
+          iter3 = find_pattern ("  /*Begin_of_nested_PU(s)*/", srcLines.end(), iter1, false);
 
 //4. move the nested pu back to its parent pu
 
-	  moveBlock (iter1, iter2, iter3);
+          moveBlock (iter1, iter2, iter3);
 //5. search for the next one
-	  iter1 = find_pattern ("void __omp", iter_next,NULL);
-	}
-      while (iter1 != NULL);
-    }				//end if
+          iter1 = find_pattern ("void __omp", iter_next,srcLines.end());
+        }
+      while (iter1 != srcLines.end());
+    }                           //end if
 
   return true;
 }
 
+list < string > TextProcessor::srcLines;
 /*----------------------------------------------------*/
 
 #ifdef COMPILE_UPC
