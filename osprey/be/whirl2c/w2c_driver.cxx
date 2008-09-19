@@ -229,6 +229,8 @@ bool TextProcessor::process ()
 
   list < string >::iterator iter1, iter2, iter3,iter4, iter_next;
   iter1 = find_pattern ("void __omp");
+  if(iter1!=srcLines.end())
+  (*iter1).erase(0,6); /* removed the static from the nested procedure declaration since it is obsolete in gcc4*/
 
   if (iter1 != srcLines.end())
     {
@@ -249,6 +251,8 @@ bool TextProcessor::process ()
           moveBlock (iter1, iter2, iter3);
 //5. search for the next one
           iter1 = find_pattern ("void __omp", iter_next,srcLines.end());
+          if(iter1!=srcLines.end())
+          (*iter1).erase(0,6); /* removed the static from the nested procedure declaration since it is obsolete in gcc4*/
         }
       while (iter1 != srcLines.end());
     }                           //end if
