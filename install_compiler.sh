@@ -296,6 +296,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
     fi 
     #install .h files
     INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
+    INSTALL_DATA_SUB ./osprey/include/whirl2c.h     ${INC_DIR}/whirl2c.h
+    INSTALL_DATA_SUB ./osprey/include/whirl2f.h     ${INC_DIR}/whirl2f.h
 
     return 0
 }
