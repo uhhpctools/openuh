@@ -653,7 +653,7 @@ __ompc_fini_rtl(void)
       total_tasks_stolen += __omp_task_stats[i].tasks_stolen;
       total_tasks_started += __omp_task_stats[i].tasks_started;
       */
-
+/* commented by Oscar
       fprintf(file, "thread %d:\n", i);
       fprintf(file, "\ttasks_created = %u\n", 
 	      __omp_task_stats[i].tasks_created);
@@ -664,13 +664,14 @@ __ompc_fini_rtl(void)
       fprintf(file, "\ttasks_stolen = %u\n", 
 	      __omp_task_stats[i].tasks_stolen);
 
+*/
     }
-
+/* commented  by Oscar
   fprintf(file, "Average of all threads:\n");
   fprintf(file, "\ttasks_created = %f\n", avg_tasks_created);
   fprintf(file, "\ttasks_skipped = %f\n", avg_tasks_skipped);
   fprintf(file, "\ttasks_started = %f\n", avg_tasks_started);
-  fprintf(file, "\ttasks_stolen = %f\n", avg_tasks_stolen);
+  fprintf(file, "\ttasks_stolen = %f\n", avg_tasks_stolen); */
   /*
   fprintf(file, "Total of all threads:\n");
   fprintf(file, "\ttasks_created = %f\n", total_tasks_created);
