@@ -37,7 +37,7 @@
                                + __GNUC_PATCHLEVEL__)
 
 
-#if GCC_VERSION >= 40100
+#if GCC_VERSION > 40101
 #define OMP_USE_GCC_ATOMIC_BUILTINS
 #endif
 
