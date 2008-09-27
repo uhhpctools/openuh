@@ -202,17 +202,17 @@ OMP_COLLECTORAPI_EC __ompc_req_start(void)
 void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state)
 {
 
-  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
-  p_vthread->state = state;
-  if(debug) printf("Thread %d STATE=%d\n",p_vthread->vthread_id,(int) state);
+ // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+//  p_vthread->state = state;
+//  if(debug) printf("Thread %d STATE=%d\n",p_vthread->vthread_id,(int) state);
  
 }
 void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event)
 {
-  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+//  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
 //  if(debug) printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,(int) event, (int) p_vthread->state);
-  if( __omp_level_1_team_manager.callbacks[event])
-     __omp_level_1_team_manager.callbacks[event](event);
+//  if( __omp_level_1_team_manager.callbacks[event])
+//     __omp_level_1_team_manager.callbacks[event](event);
 }
 
 void 
