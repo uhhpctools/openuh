@@ -298,6 +298,9 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
     INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
     INSTALL_DATA_SUB ./osprey/include/whirl2c.h     ${INC_DIR}/whirl2c.h
     INSTALL_DATA_SUB ./osprey/include/whirl2f.h     ${INC_DIR}/whirl2f.h
+    INSTALL_DATA_SUB ./osprey/f90modules/OMP_LIB_KINDS.mod  ${ROOT}/lib/f90modules/OMP_LIB_KINDS.mod 
+    INSTALL_DATA_SUB ./osprey/f90modules/OMP_LIB.mod        ${ROOT}/lib/f90modules/OMP_LIB.mod
+
 
     return 0
 }
