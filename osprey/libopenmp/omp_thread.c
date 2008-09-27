@@ -75,7 +75,7 @@ omp_u_thread_t * __omp_level_1_pthread = NULL;
 int		 __omp_level_1_team_size = 1;
 int		 __omp_level_1_team_alloc_size = 1;
 omp_team_t	 __omp_level_1_team_manager;
-omp_team_t       temp_team;
+// omp_team_t       temp_team;
 
 omp_u_thread_t * __omp_uthread_hash_table[UTHREAD_HASH_SIZE];
 
@@ -190,7 +190,7 @@ OMP_COLLECTORAPI_EC __ompc_req_start(void)
   for (i=0; i< OMP_EVENT_THR_END_ATWT; i++)
   {
    __omp_level_1_team_manager.callbacks[i]= &dummyfunc;
-   temp_team.callbacks[i] = &dummyfunc;
+ //  temp_team.callbacks[i] = &dummyfunc;
   }
   ompc_req_start = 1;
   return OMP_ERRCODE_OK;
