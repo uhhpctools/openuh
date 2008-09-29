@@ -179,7 +179,7 @@ char OMP_STATE_NAME[11][50]= {
 
 void dummyfunc(OMP_COLLECTORAPI_EVENT event)
 {
-  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+ // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
  // printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
 
 }
