@@ -1618,12 +1618,13 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
 
  /*  move a nested PU back to its parent's scope, by Liao */
  // TODO: add a new sub option within CLIST to activate this 
+ /*
  if (W2C_Emit_Nested_PUs) {
     TextProcessor tproc(W2C_File_Name[W2C_DOTC_FILE]);
     tproc.process();
     tproc.Output (W2C_File_Name[W2C_DOTC_FILE]);
     }
-
+ */
    /* All files must be closed before doing a partial 
     * finalization, except W2C_LOC_FILE.
     */
