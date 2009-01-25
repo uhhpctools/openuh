@@ -7305,9 +7305,9 @@ static WN *Lower_Master( WN *master_region )
   WN_INSERT_BlockLast( mp_master_block, if_wn );
 
   // end_master call.
-#ifndef KEY
+// #ifndef KEY
   WN_INSERT_BlockLast( mp_master_block, Gen_End_Master(local_gtid));
-#endif
+// #endif
 
   return mp_master_block;
 } // Lower_Master()
