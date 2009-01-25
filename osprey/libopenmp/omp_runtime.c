@@ -1337,9 +1337,9 @@ omp_int32
 __ompc_master (omp_int32 global_tid) 
 {
   __ompc_set_state(THR_OVHD_STATE);
-  __ompc_event_callback(OMP_EVENT_THR_BEGIN_MASTER);
   if (global_tid == 0) 
   {
+   __ompc_event_callback(OMP_EVENT_THR_BEGIN_MASTER);
    __ompc_set_state(THR_WORK_STATE);
    return 1;
   }
@@ -1349,7 +1349,9 @@ __ompc_master (omp_int32 global_tid)
 void 
 __ompc_end_master (omp_int32 global_tid) 
 { 
+  if(global_tid ==0) {
   __ompc_event_callback(OMP_EVENT_THR_END_MASTER);
+  }
   __ompc_set_state(THR_WORK_STATE);
   /* Do nothing*/
 }
