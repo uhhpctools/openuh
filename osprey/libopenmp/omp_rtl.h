@@ -79,6 +79,17 @@
 */
 
 
+struct collector_message
+{
+   int sz;
+   int r;
+   int ec;   
+   int rsz;
+   char *mem;
+};
+
+
+
 typedef enum {
   OMP_SCHED_UNKNOWN 	= 0,
   OMP_SCHED_STATIC 	= 1,
@@ -237,7 +248,7 @@ struct omp_team{
   */
   volatile int  num_tasks;
 
-  callback callbacks[OMP_EVENT_THR_END_ATWT];
+  callback callbacks[OMP_EVENT_THR_END_ATWT+1];
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)))
 
 
