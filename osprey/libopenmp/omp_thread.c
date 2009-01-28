@@ -36,12 +36,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <malloc.h>
+#include <Profile/Profiler.h>
 #include "omp_thread.h"
 //#include "uth.h"
 #include "pcl.h"
 /*To align with the Pathscale OMP lowering, CWG */
 int __ompc_sug_numthreads = 1;
-
+//int regionid =0;
 #define debug 0
 #define MAX_COUNTER  20000
 __thread int __omp_myid;
@@ -175,24 +176,164 @@ char OMP_STATE_NAME[11][50]= {
     "THR_ODWT_STATE",          /* Waiting to execute an ordered region */
     "THR_ATWT_STATE"};         /* Waiting to enter an atomic region */
 
+static void *idletimer=NULL;
+static void *forktimer=NULL;
+static void *ibarriertimer=NULL;
+static void *ebarriertimer=NULL;
+static void *locktimer=NULL;
+static void *criticaltimer=NULL;
+static void *odwttimer=NULL;
+static void *mastertimer=NULL;
+static void *singletimer=NULL;
+static void *orderedtimer=NULL;
 
+/*
+void forkevent(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&forktimer, "FORK/JOIN: OMP_EVENT_FORK/OMP_EVENT_JOIN ", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(forktimer, 0);
+}
+void joinevent(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(forktimer);
+}
+
+void ibarrier(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&ibarriertimer, "IMPLICIT BARRIER: OMP_EVENT_THR_BEGIN_IBAR / OMP_EVENT_THR_END_IBAR", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(ibarriertimer, 0);
+}
+void end_ibarrier(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(ibarriertimer);
+}
+
+void ebarrier(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&ebarriertimer, "EXPLICIT BARRIER: OMP_EVENT_THR_BEGIN_EBAR / OMP_EVENT_THR_END_EBAR", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(ebarriertimer, 0);
+}
+void end_ebarrier(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(ebarriertimer);
+}
+
+void locke(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&locktimer, "WAITING ON LOCK: OMP_EVENT_THR_BEGIN_LKWT / OMP_EVENT_THR_END_LKWT", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(locktimer, 0);
+}
+
+
+void end_locke(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(locktimer);
+}
+
+void criticale(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&criticaltimer, "WAITING ON CRITICAL: OMP_EVENT_THR_BEGIN_CTWT / OMP_EVENT_THR_END_CTWT", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(criticaltimer, 0);
+}
+
+void end_criticale(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(criticaltimer);
+}
+
+void odwte(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&odwttimer, "WAITING ON ORDERED: OMP_EVENT_THR_BEGIN_ODWT / OMP_EVENT_THR_END_ODWT", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(odwttimer, 0);
+}
+
+void end_odwte(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(odwttimer);
+}
+void mastere(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&mastertimer, "MASTER: OMP_EVENT_THR_BEGIN_MASTER / OMP_EVENT_THR_END_MASTER", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(mastertimer, 0);
+}
+
+void end_mastere(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(mastertimer);
+}
+
+void singlee(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&singletimer, "SINGLE: OMP_EVENT_THR_BEGIN_SINGLE / OMP_EVENT_THR_END_SINGLE", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(singletimer, 0);
+}
+
+void end_singlee(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(singletimer);
+}
+void orderede(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&orderedtimer, "ORDERED: OMP_EVENT_THR_BEGIN_ORDERED / OMP_EVENT_THR_END_ORDERED", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(orderedtimer, 0);
+}
+
+void end_orderede(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(orderedtimer);
+}
+
+void idlee(OMP_COLLECTORAPI_EVENT event)
+{
+  Tau_profile_c_timer(&idletimer, "IDLE: OMP_EVENT_THR_BEGIN_IDLE / OMP_EVENT_THR_END_IDLE", "", TAU_DEFAULT, "TAU_DEFAULT");
+  Tau_start_timer(idletimer, 0);
+}
+
+void end_idlee(OMP_COLLECTORAPI_EVENT event)
+{
+   Tau_stop_timer(idletimer);
+}
+
+*/
 
 void dummyfunc(OMP_COLLECTORAPI_EVENT event)
 {
- // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
- // printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
+  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+  printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
 
 }
 OMP_COLLECTORAPI_EC __ompc_req_start(void)
 {
   int i;
   if(ompc_req_start==0) {
-  for (i=0; i< OMP_EVENT_THR_END_ATWT; i++)
+  for (i=0; i< OMP_EVENT_THR_END_ATWT+1; i++)
   {
-   __omp_level_1_team_manager.callbacks[i]= &dummyfunc;
+   __omp_level_1_team_manager.callbacks[i]= NULL;
  //  temp_team.callbacks[i] = &dummyfunc;
-  }
-  ompc_req_start = 1;
+  } // note check callback boundaries.
+/* 
+ __omp_level_1_team_manager.callbacks[OMP_EVENT_FORK] = &forkevent; 
+  __omp_level_1_team_manager.callbacks[OMP_EVENT_JOIN] = &joinevent;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_IBAR] = &ibarrier;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_IBAR] = &end_ibarrier;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_EBAR] = &ebarrier;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_EBAR] = &end_ebarrier;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_LKWT] = &locke;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_LKWT] = &end_locke; 
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_CTWT] = &criticale;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_CTWT] = &end_criticale;
+   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_ODWT] = &odwte;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_ODWT] = &end_odwte;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_MASTER] = &mastere;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_MASTER] = &end_mastere;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_SINGLE] = &singlee;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_SINGLE] = &end_singlee;
+     __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_ORDERED] = &orderede;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_ORDERED] = &end_orderede;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_IDLE] = &idlee;
+    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_IDLE] = &end_idlee;
+*/
+ompc_req_start = 1;
   return OMP_ERRCODE_OK;
   }
   else
@@ -201,7 +342,8 @@ OMP_COLLECTORAPI_EC __ompc_req_start(void)
 
 void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state)
 {
-
+  omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+   p_vthread->state = state;
  // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
 //  p_vthread->state = state;
 //  if(debug) printf("Thread %d STATE=%d\n",p_vthread->vthread_id,(int) state);
@@ -211,8 +353,8 @@ void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event)
 {
 //  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
 //  if(debug) printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,(int) event, (int) p_vthread->state);
-//  if( __omp_level_1_team_manager.callbacks[event])
-//     __omp_level_1_team_manager.callbacks[event](event);
+  if( __omp_level_1_team_manager.callbacks[event])
+     __omp_level_1_team_manager.callbacks[event](event);
 }
 
 void 
@@ -488,6 +630,9 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   Is_True((vthread != NULL) && (vthread->team != NULL), 
 	  ("bad vthread or vthread->team in nested groups"));
 
+   __ompc_set_state(THR_IBAR_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
+
   pthread_mutex_lock(&(vthread->team->barrier_lock));
   vthread->team->barrier_count += 1;
   pthread_mutex_unlock(&(vthread->team->barrier_lock));
@@ -496,6 +641,8 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   if(vthread->vthread_id == 0) {
     OMPC_WAIT_WHILE(vthread->team->barrier_count != vthread->team->team_size);
   }
+ 
+   __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
 }
 
 /* The thread function for level_1 slaves*/
@@ -505,7 +652,7 @@ __ompc_level_1_slave(void * _uthread_index)
   long uthread_index;
   int counter;
   int task_expect = 1;
-
+  int initial_idle=1;
   __omp_seed = uthread_index;
   uthread_index = (long) _uthread_index;
   __omp_myid = uthread_index;
@@ -514,6 +661,13 @@ __ompc_level_1_slave(void * _uthread_index)
   __omp_tasks_skipped = 0;
   __omp_tasks_created = 0;
   __omp_tasks_stolen = 0;
+
+    __ompc_set_state(THR_IDLE_STATE);
+//  if(initial_idle) {
+   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
+   //  printf("first level_1_slave\n");
+   initial_idle = 0;
+//  }
 
   pthread_mutex_lock(&__omp_level_1_mutex);
   __omp_level_1_pthread_count++;
@@ -554,6 +708,7 @@ __ompc_level_1_slave(void * _uthread_index)
     */
 
     if ( __omp_level_1_team[uthread_index].entry_func != NULL) {
+         
 	
       //	__omp_level_1_team_tasks[uthread_index] = uth_self();
       __omp_level_1_team_tasks[uthread_index] = co_current();
@@ -593,9 +748,17 @@ __ompc_nested_slave(void * _v_thread)
   omp_v_thread_t * my_vthread = (omp_v_thread_t *) _v_thread;
   /* need to wait for others ready? */
 
+   __ompc_set_state(THR_IDLE_STATE);
+  printf("IDLE called from nested\n");
+//  __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
+
+
   OMPC_WAIT_WHILE(my_vthread->team->new_task != 1);
   /* The relationship between vthread, uthread, and team should be OK here*/
 
+  __ompc_event_callback(OMP_EVENT_THR_END_IDLE);
+  __ompc_set_state(THR_WORK_STATE);
+ 
   my_vthread->entry_func(my_vthread->vthread_id,
 			 (char *)my_vthread->frame_pointer);
 
@@ -837,6 +1000,7 @@ __ompc_init_rtl(int num_threads)
     __omp_level_1_team[i].vthread_id = i;
     __omp_level_1_team[i].single_count = 0;
     __omp_level_1_team[i].loop_count = 0;
+     __omp_level_1_team[i].state = THR_OVHD_STATE;
     /* the corresponding relationship is fixed*/
     __omp_level_1_team[i].executor = &(__omp_level_1_pthread[i]);
     __omp_level_1_pthread[i].task = &(__omp_level_1_team[i]);
@@ -864,6 +1028,7 @@ __ompc_init_rtl(int num_threads)
   __omp_root_u_thread->hash_next = NULL;
   __ompc_insert_into_hash_table(__omp_root_u_thread);
 
+  __ompc_event_callback(OMP_EVENT_FORK);
 
   for (i=1; i< threads_to_create; i++) {
     return_value = pthread_create( &(__omp_level_1_pthread[i].uthread_id),
@@ -940,12 +1105,13 @@ __ompc_expand_level_1_team(int new_num_threads)
   memset(&(__omp_level_1_team[__omp_level_1_team_alloc_size]), 0,
 	 sizeof(omp_v_thread_t) * (new_num_threads - __omp_level_1_team_alloc_size));
   __omp_level_1_team_manager.team_size = new_num_threads;
-
+  __ompc_event_callback(OMP_EVENT_FORK);
   for (i=__omp_level_1_team_alloc_size; i<new_num_threads; i++) {
     /* for v_thread */
     __omp_level_1_team[i].team = &__omp_level_1_team_manager;
     __omp_level_1_team[i].single_count = 0;
     __omp_level_1_team[i].loop_count = 0;
+     __omp_level_1_team[i].state = THR_OVHD_STATE;
     __omp_level_1_team[i].vthread_id = i;
     __omp_level_1_team[i].executor = &__omp_level_1_pthread[i];
     __omp_level_1_pthread[i].task = &__omp_level_1_team[i];
@@ -983,6 +1149,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_u_thread_t *current_u_thread;
   omp_v_thread_t *original_v_thread;
 
+ // regionid++;
+  __ompc_req_start();
   /* TODO: We still need to check the limitation before real fork?*/
   if ( num_threads !=0) {
     num_threads = __ompc_check_num_threads(num_threads);
@@ -998,8 +1166,15 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
   if (__omp_rtl_initialized == 0 ) {
     /* first fork, initial rtl*/
+    __omp_root_v_thread.state=THR_OVHD_STATE;
     __ompc_init_rtl(num_threads);
   }
+  else
+  {
+    __ompc_set_state(THR_OVHD_STATE);
+    __ompc_event_callback(OMP_EVENT_FORK);
+  }
+
 
   if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
     __omp_exe_mode = OMP_EXE_MODE_NORMAL;
@@ -1051,7 +1226,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     __ompc_init_lock(&__omp_current_task->lock);
 
 
-
+     __ompc_set_state(THR_WORK_STATE);
     micro_task(0, frame_pointer);
 
     __ompc_level_1_barrier(0);
@@ -1102,6 +1277,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* A lock is needed to protect global variables */
     /* TODO: need a global lock*/
     __omp_max_num_threads -= num_threads - 1;
+     __ompc_event_callback(OMP_EVENT_FORK);
     for (i=1; i<num_threads; i++) {
       nest_v_thread_team[i].vthread_id = i;
       nest_v_thread_team[i].single_count = 0;
@@ -1136,7 +1312,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     /* execution */
     /* A start barrier should also be presented here?*/
-
+    __ompc_set_state(THR_WORK_STATE);
     micro_task(0, frame_pointer);
 
     __ompc_exit_barrier(&(nest_v_thread_team[0]));
@@ -1183,7 +1359,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* a lock should be added here */
     __omp_exe_mode = OMP_EXE_MODE_NESTED_SEQUENTIAL;
     /* execute the task */
-
+    __ompc_set_state(THR_WORK_STATE);
     micro_task(0, frame_pointer);
 
     /* lock should be added here */
@@ -1197,6 +1373,10 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     __ompc_destroy_lock(&(temp_team.schedule_lock));
     __ompc_destroy_lock(&(temp_team.single_lock));
   }
+
+  __ompc_set_state(THR_SERIAL_STATE);
+  __ompc_event_callback(OMP_EVENT_JOIN);
+
 }
 
 /* How about Critical/Atomic? */

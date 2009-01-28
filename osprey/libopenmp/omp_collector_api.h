@@ -180,9 +180,23 @@ extern "C" {
  */
 
 
+
+/* Collector API message data structure */
+
+struct OMP_COLLECTOR_MESSAGE {
+    int sz;
+    int r;
+    int  *ec;
+    int rsz;
+    char *mem;
+};
+
+typedef struct OMP_COLLECTOR_MESSAGE omp_collector_message;
+
 /******************************************************************
  *  Request Codes
  ******************************************************************/
+
 
 typedef enum {
 	OMP_REQ_START = 0,

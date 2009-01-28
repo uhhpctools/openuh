@@ -435,13 +435,13 @@ extern cond_func __ompc_task_create_cond;
 
 /*Interal tasking functions */
 extern void __ompc_task_schedule(omp_task_t **next);
-extern void __ompc_task_switch(omp_task_t *old, omp_task_t *new);
+extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
 extern void __ompc_task_wait2(omp_task_state_t state);
 
 /*API into underlying task representation library (PCL) */
 extern inline omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize);
 extern inline void __ompc_task_delete(omp_task_t *task);
-extern inline void __ompc_task_switch(omp_task_t *old, omp_task_t *new);
+extern inline void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
 extern inline void __ompc_init_vp();
 
 extern volatile unsigned long int __omp_task_stack_size;

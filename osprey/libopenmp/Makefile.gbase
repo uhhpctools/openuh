@@ -63,7 +63,9 @@ CFILES = \
 	omp_util.c \
 	omp_queue.c \
 	omp_task.c \
-	pcl.c
+	pcl.c 
+
+CXXFILES = omp_collector_util.cxx
 
 
 
