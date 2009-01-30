@@ -32,7 +32,6 @@
  
 #include <stdlib.h>
 #include <errno.h>
-#include <pthreads.h>
 #include "omp_lock.h"
 #include "omp_rtl.h"
 #include "omp_sys.h"
