@@ -36,7 +36,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <malloc.h>
-#include <Profile/Profiler.h>
+// #include <Profile/Profiler.h>
 #include "omp_thread.h"
 //#include "uth.h"
 #include "pcl.h"
@@ -582,12 +582,13 @@ __ompc_level_1_barrier(const int vthread_id)
     __ompc_set_state(THR_IBAR_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
 
+/*
     omp_task_t *next;
 
 
 
     __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
-
+    
 
     while(__omp_level_1_team_manager.num_tasks != 0)
     {
@@ -603,7 +604,7 @@ __ompc_level_1_barrier(const int vthread_id)
     __omp_task_stats[__omp_myid].tasks_stolen += __omp_tasks_stolen;
     __omp_task_stats[__omp_myid].tasks_created += __omp_tasks_created;
 
-
+*/
 
   pthread_mutex_lock(&__omp_level_1_barrier_mutex);
   __omp_level_1_exit_count++;

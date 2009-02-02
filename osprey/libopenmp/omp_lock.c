@@ -56,19 +56,19 @@ __ompc_init_lock_s(volatile omp_lock_t *lp)
 inline void 
 __ompc_lock_s(volatile omp_lock_t *lp)
 {
-   volatile int status = pthread_mutex_trylock((pthread_mutex_t *)lp);
+ 
+  volatile int status = pthread_mutex_trylock((pthread_mutex_t *)lp);
    if(status==EBUSY) {
       __ompc_set_state(THR_LKWT_STATE);
       __ompc_event_callback(OMP_EVENT_THR_BEGIN_LKWT);
       pthread_mutex_lock((pthread_mutex_t *)lp);
       __ompc_event_callback(OMP_EVENT_THR_END_LKWT);
   }
-
    __ompc_set_state(THR_WORK_STATE);
 }
 
 
-inline void
+void
 __ompc_lock(volatile omp_lock_t *lp)
 {
   pthread_mutex_lock((pthread_mutex_t *)lp);
@@ -272,7 +272,7 @@ __ompc_critical(int gtid, volatile omp_lock_t **lck)
     __ompc_init_lock (*lck);
     __ompc_unlock(&_ompc_thread_lock);
   }
-//    __ompc_lock((volatile omp_lock_t *)*lck); // before was commented
+//   __ompc_lock((volatile omp_lock_t *)*lck); // before was commented
 
    volatile int status = pthread_mutex_trylock((pthread_mutex_t *)(volatile omp_lock_t *)*lck);
    if(status==EBUSY) {

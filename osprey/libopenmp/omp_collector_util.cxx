@@ -10,13 +10,13 @@ int process_top_request(void);
 int register_event(omp_collector_message &req);
 int unregister_event(omp_collector_message &req);
 extern omp_v_thread_t * __omp_level_1_team;
-int omp_collector_api(int *arg)
+int omp_collector_api(void *arg)
 {
     if(arg!=NULL)
     {
         char *traverse = (char *) arg;
- /*
-        while((int)(*traverse)=!0)
+ 
+        while((int)(*traverse)!=0)
         {
             omp_collector_message req;
             req.sz = (int)(*traverse); // todo: add check for consistency    
@@ -31,7 +31,7 @@ int omp_collector_api(int *arg)
             traverse+=req.rsz;
             pending_requests.push(req);
         } 
-*/
+
        while(pending_requests.empty()) {
               process_top_request();  
                  }

@@ -268,7 +268,7 @@ inline void __ompc_barrier_wait(omp_team_t *team)
   int new_count;
   int i, j;
 
-
+/*
     omp_task_t *next;
 
     __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
@@ -282,7 +282,7 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 
     }
 
-
+*/
 
   barrier_flag = team->barrier_flag;
   new_count = __ompc_atomic_inc(&team->barrier_count);
