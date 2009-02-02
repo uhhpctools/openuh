@@ -176,125 +176,6 @@ char OMP_STATE_NAME[11][50]= {
     "THR_ODWT_STATE",          /* Waiting to execute an ordered region */
     "THR_ATWT_STATE"};         /* Waiting to enter an atomic region */
 
-static void *idletimer=NULL;
-static void *forktimer=NULL;
-static void *ibarriertimer=NULL;
-static void *ebarriertimer=NULL;
-static void *locktimer=NULL;
-static void *criticaltimer=NULL;
-static void *odwttimer=NULL;
-static void *mastertimer=NULL;
-static void *singletimer=NULL;
-static void *orderedtimer=NULL;
-
-/*
-void forkevent(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&forktimer, "FORK/JOIN: OMP_EVENT_FORK/OMP_EVENT_JOIN ", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(forktimer, 0);
-}
-void joinevent(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(forktimer);
-}
-
-void ibarrier(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&ibarriertimer, "IMPLICIT BARRIER: OMP_EVENT_THR_BEGIN_IBAR / OMP_EVENT_THR_END_IBAR", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(ibarriertimer, 0);
-}
-void end_ibarrier(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(ibarriertimer);
-}
-
-void ebarrier(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&ebarriertimer, "EXPLICIT BARRIER: OMP_EVENT_THR_BEGIN_EBAR / OMP_EVENT_THR_END_EBAR", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(ebarriertimer, 0);
-}
-void end_ebarrier(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(ebarriertimer);
-}
-
-void locke(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&locktimer, "WAITING ON LOCK: OMP_EVENT_THR_BEGIN_LKWT / OMP_EVENT_THR_END_LKWT", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(locktimer, 0);
-}
-
-
-void end_locke(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(locktimer);
-}
-
-void criticale(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&criticaltimer, "WAITING ON CRITICAL: OMP_EVENT_THR_BEGIN_CTWT / OMP_EVENT_THR_END_CTWT", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(criticaltimer, 0);
-}
-
-void end_criticale(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(criticaltimer);
-}
-
-void odwte(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&odwttimer, "WAITING ON ORDERED: OMP_EVENT_THR_BEGIN_ODWT / OMP_EVENT_THR_END_ODWT", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(odwttimer, 0);
-}
-
-void end_odwte(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(odwttimer);
-}
-void mastere(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&mastertimer, "MASTER: OMP_EVENT_THR_BEGIN_MASTER / OMP_EVENT_THR_END_MASTER", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(mastertimer, 0);
-}
-
-void end_mastere(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(mastertimer);
-}
-
-void singlee(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&singletimer, "SINGLE: OMP_EVENT_THR_BEGIN_SINGLE / OMP_EVENT_THR_END_SINGLE", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(singletimer, 0);
-}
-
-void end_singlee(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(singletimer);
-}
-void orderede(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&orderedtimer, "ORDERED: OMP_EVENT_THR_BEGIN_ORDERED / OMP_EVENT_THR_END_ORDERED", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(orderedtimer, 0);
-}
-
-void end_orderede(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(orderedtimer);
-}
-
-void idlee(OMP_COLLECTORAPI_EVENT event)
-{
-  Tau_profile_c_timer(&idletimer, "IDLE: OMP_EVENT_THR_BEGIN_IDLE / OMP_EVENT_THR_END_IDLE", "", TAU_DEFAULT, "TAU_DEFAULT");
-  Tau_start_timer(idletimer, 0);
-}
-
-void end_idlee(OMP_COLLECTORAPI_EVENT event)
-{
-   Tau_stop_timer(idletimer);
-}
-
-*/
 
 void dummyfunc(OMP_COLLECTORAPI_EVENT event)
 {
@@ -302,43 +183,7 @@ void dummyfunc(OMP_COLLECTORAPI_EVENT event)
   printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
 
 }
-OMP_COLLECTORAPI_EC __ompc_req_start(void)
-{
-  int i;
-  if(ompc_req_start==0) {
-  for (i=0; i< OMP_EVENT_THR_END_ATWT+1; i++)
-  {
-   __omp_level_1_team_manager.callbacks[i]= NULL;
- //  temp_team.callbacks[i] = &dummyfunc;
-  } // note check callback boundaries.
-/* 
- __omp_level_1_team_manager.callbacks[OMP_EVENT_FORK] = &forkevent; 
-  __omp_level_1_team_manager.callbacks[OMP_EVENT_JOIN] = &joinevent;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_IBAR] = &ibarrier;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_IBAR] = &end_ibarrier;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_EBAR] = &ebarrier;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_EBAR] = &end_ebarrier;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_LKWT] = &locke;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_LKWT] = &end_locke; 
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_CTWT] = &criticale;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_CTWT] = &end_criticale;
-   __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_ODWT] = &odwte;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_ODWT] = &end_odwte;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_MASTER] = &mastere;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_MASTER] = &end_mastere;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_SINGLE] = &singlee;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_SINGLE] = &end_singlee;
-     __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_ORDERED] = &orderede;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_ORDERED] = &end_orderede;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_BEGIN_IDLE] = &idlee;
-    __omp_level_1_team_manager.callbacks[OMP_EVENT_THR_END_IDLE] = &end_idlee;
-*/
-ompc_req_start = 1;
-  return OMP_ERRCODE_OK;
-  }
-  else
-  return OMP_ERRCODE_SEQUENCE_ERR;
-}
+
 
 void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state)
 {
@@ -353,8 +198,8 @@ void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event)
 {
 //  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
 //  if(debug) printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,(int) event, (int) p_vthread->state);
-  if( __omp_level_1_team_manager.callbacks[event])
-     __omp_level_1_team_manager.callbacks[event](event);
+//  if( __omp_level_1_team_manager.callbacks[event])
+//     __omp_level_1_team_manager.callbacks[event](event);
 }
 
 void 
@@ -1151,7 +996,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_v_thread_t *original_v_thread;
 
  // regionid++;
-  __ompc_req_start();
+ // __ompc_req_start();
   /* TODO: We still need to check the limitation before real fork?*/
   if ( num_threads !=0) {
     num_threads = __ompc_check_num_threads(num_threads);
