@@ -42,7 +42,16 @@
 #include "pcl.h"
 /*To align with the Pathscale OMP lowering, CWG */
 int __ompc_sug_numthreads = 1;
-//int regionid =0;
+
+long current_region_id=0;
+long current_parent_id=0;
+long thr_lkwt_state_id=0;
+long thr_ctwt_state_id=0;
+long thr_atwt_state_id=0;
+long thr_ibar_state_id=0;
+long thr_ebar_state_id=0;
+long thr_odwt_state_id=0;
+
 #define debug 0
 #define MAX_COUNTER  20000
 __thread int __omp_myid;
@@ -198,8 +207,8 @@ void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event)
 {
 //  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
 //  if(debug) printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,(int) event, (int) p_vthread->state);
-//  if( __omp_level_1_team_manager.callbacks[event])
-//     __omp_level_1_team_manager.callbacks[event](event);
+if( __omp_level_1_team_manager.callbacks[event] && collector_initialized && (!collector_paused))
+     __omp_level_1_team_manager.callbacks[event](event);
 }
 
 void 
@@ -994,7 +1003,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_u_thread_t *nest_u_thread_team;
   omp_u_thread_t *current_u_thread;
   omp_v_thread_t *original_v_thread;
-
+  
+  unsigned int region_used = 0; // TODO: make it one-bit.
  // regionid++;
  // __ompc_req_start();
   /* TODO: We still need to check the limitation before real fork?*/
@@ -1027,6 +1037,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* level 1 thread fork */
     /* How about num_threads < __omp_level_1_team_size */
     /* TODO: fix this condition*/
+     
     if (num_threads > __omp_level_1_team_alloc_size) {
       Is_True( __omp_max_num_threads >0,
 	       ("reach thread number limit, no more new threads"));
@@ -1039,8 +1050,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __omp_level_1_team_size = __omp_nthreads_var;
       __omp_level_1_team_manager.team_size = __omp_nthreads_var;
     }
-
-        __omp_level_1_team_manager.num_tasks = __omp_level_1_team_size;
+    current_region_id++;
+        
+     __omp_level_1_team_manager.num_tasks = __omp_level_1_team_size;
 	//        __omp_level_1_team_manager.num_active_tasks = __omp_level_1_team_size;
     for (i=0; i<__omp_level_1_team_size; i++) {
       __omp_level_1_team[i].frame_pointer = frame_pointer;

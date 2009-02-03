@@ -1,6 +1,7 @@
+extern "C" {
 #include "omp_rtl.h"
+}
 #include "omp_collector_api.h"
-
 #include <queue>
 using namespace std;
 int collector_initialized=0;
@@ -9,6 +10,10 @@ queue<omp_collector_message> pending_requests;
 int process_top_request(void);
 int register_event(omp_collector_message &req);
 int unregister_event(omp_collector_message &req);
+int return_state(omp_collector_message &req);
+int return_current_prid(omp_collector_message &req);
+int return_parent_prid(omp_collector_message &req);
+
 extern omp_v_thread_t * __omp_level_1_team;
 
 int omp_collector_api(void *arg)
@@ -62,8 +67,6 @@ int check_consistency(omp_collector_message &req)
 {
      //req
 
-
-
 }
 
 int process_top_request(void)
@@ -87,12 +90,15 @@ int process_top_request(void)
           break; 
           
           case OMP_REQ_STATE:
+	  return_state(req);
           break; 
 
           case OMP_REQ_CURRENT_PRID:
+	  return_current_prid(req);
 	  break;
 
           case OMP_REQ_PARENT_PRID:
+	  return_parent_prid(req);
 	  break;
 
           case OMP_REQ_STOP:
@@ -105,19 +111,21 @@ int process_top_request(void)
 
           case OMP_REQ_RESUME:
 	  collector_paused = 0;
-	  break;  
+	  break;
 
+          default:
+	    *(req.ec) = OMP_ERRCODE_UNKNOWN;   
+	  break;
       }
       return 1;
    
-
 }
 int register_event(omp_collector_message &req)
 {
     
-    OMP_COLLECTORAPI_EVENT  *event = (OMP_COLLECTORAPI_EVENT *)req.mem;
-    void (*func)(OMP_COLLECTORAPI_EVENT e) = (void (*)(OMP_COLLECTORAPI_EVENT))(req.mem+sizeof(OMP_COLLECTORAPI_EVENT));
-    __omp_level_1_team_manager.callbacks[*event] = func;
+   OMP_COLLECTORAPI_EVENT  *event = (OMP_COLLECTORAPI_EVENT *)req.mem;
+   void (*func)(OMP_COLLECTORAPI_EVENT e) = (void (*)(OMP_COLLECTORAPI_EVENT))(req.mem+sizeof(OMP_COLLECTORAPI_EVENT));
+   __omp_level_1_team_manager.callbacks[*event] = func;
 
   return 1;
 }
@@ -132,5 +140,87 @@ int unregister_event(omp_collector_message &req)
   return 1;
 }
 
+/* needs to be thread safe */
+int return_state_id(omp_collector_message &req,long id)
+{
+  bool possible_mem_prob = req.rsz < (sizeof(OMP_COLLECTOR_API_THR_STATE)+sizeof(long)); 
+   if(!possible_mem_prob) *(req.mem+sizeof(OMP_COLLECTOR_API_THR_STATE))=id;
+   else {
+        *(req.ec) = OMP_ERRCODE_MEM_TOO_SMALL;
+        return 0;
+   }
+  return 1;
+}
+int return_state(omp_collector_message &req)
+{
 
+  if(req.rsz < sizeof(OMP_COLLECTOR_API_THR_STATE)) {
+    *(req.ec) = OMP_ERRCODE_MEM_TOO_SMALL;
+     return 0;
+  }
+  else {
+   
+   omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid); 
+   *(req.mem) = p_vthread->state;
+   switch(p_vthread->state) {
+  
+   case THR_IBAR_STATE:
+     return return_state_id(req,thr_ibar_state_id);
+  
+   case THR_EBAR_STATE:    	      
+   return return_state_id(req,thr_ebar_state_id);    
+ 
+	  	
+   case THR_LKWT_STATE:
+     return return_state_id(req,thr_lkwt_state_id);     
+	       
+   case THR_CTWT_STATE:
+     return return_state_id(req,thr_ctwt_state_id);
+	       
+   case THR_ODWT_STATE:
+   return return_state_id(req,thr_odwt_state_id);
+       
+   case THR_ATWT_STATE:
+   return return_state_id(req,thr_atwt_state_id);
+ 
+   default:
+   return 1;
+   break; 
+ 
+   }
+  }
 
+  return 1;
+}
+
+int return_current_prid(omp_collector_message &req)
+{ 
+    if(req.rsz < sizeof(long)) {
+    *(req.ec) = OMP_ERRCODE_MEM_TOO_SMALL;
+     return 0;
+    }
+    else {
+      if(__ompc_in_parallel()) {
+	*(req.mem) = current_region_id; }
+	else *(req.mem) = 0;
+
+    }
+    return 1;
+}       
+
+int return_parent_prid(omp_collector_message &req)
+{
+     if(req.rsz < sizeof(long)) {
+        *(req.ec) = OMP_ERRCODE_MEM_TOO_SMALL;
+        return 0;
+    }
+    else {
+      if(__ompc_in_parallel()) {
+	*(req.mem) = current_region_id; }
+	else *(req.mem) = 0;   
+    }
+     return 1;
+}
+       
+       
+       

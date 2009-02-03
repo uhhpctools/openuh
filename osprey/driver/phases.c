@@ -1758,6 +1758,7 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
 	    if (option_was_seen(O_mp) ||
 		option_was_seen(O_apo)) {	// bug 6334
                 add_string(args, "-lopenmp");
+                add_string(args, "-lstdc++");
             }
 #else
 	    if (option_was_seen(O_mp)) {
