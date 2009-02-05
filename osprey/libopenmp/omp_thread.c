@@ -36,21 +36,15 @@
 #include <string.h>
 #include <ctype.h>
 #include <malloc.h>
-// #include <Profile/Profiler.h>
 #include "omp_thread.h"
-//#include "uth.h"
 #include "pcl.h"
+#include "omp_collector_validation.h"
 /*To align with the Pathscale OMP lowering, CWG */
 int __ompc_sug_numthreads = 1;
 
-long current_region_id=0;
-long current_parent_id=0;
-long thr_lkwt_state_id=0;
-long thr_ctwt_state_id=0;
-long thr_atwt_state_id=0;
-long thr_ibar_state_id=0;
-long thr_ebar_state_id=0;
-long thr_odwt_state_id=0;
+unsigned long current_region_id=0;
+unsigned long current_parent_id=0;
+
 
 #define debug 0
 #define MAX_COUNTER  20000
@@ -109,7 +103,10 @@ volatile int	 __omp_level_1_exit_count = 0;
 
 omp_team_t	 __omp_root_team;
 omp_u_thread_t * __omp_root_u_thread;
-omp_v_thread_t	 __omp_root_v_thread;
+omp_v_thread_t	 __omp_root_v_thread={0,THR_SERIAL_STATE,0,NULL,NULL,0,NULL,0,0,0,0,0,0,0,0,0,0,0};
+
+// __omp_root_v_thread->state=6;
+
 pthread_t	 __omp_root_thread_id = -1;
 
 int		  __omp_rtl_initialized = 0;
@@ -147,51 +144,6 @@ void *__ompc_nested_slave(void *_v_thread);
 
 
 
-char OMP_EVENT_NAME[22][50]= {
-        "OMP_EVENT_FORK",
-        "OMP_EVENT_JOIN",
-        "OMP_EVENT_THR_BEGIN_IDLE",
-        "OMP_EVENT_THR_END_IDLE",
-        "OMP_EVENT_THR_BEGIN_IBAR",
-        "OMP_EVENT_THR_END_IBAR",
-        "OMP_EVENT_THR_BEGIN_EBAR",
-        "OMP_EVENT_THR_END_EBAR",
-        "OMP_EVENT_THR_BEGIN_LKWT",
-        "OMP_EVENT_THR_END_LKWT",
-        "OMP_EVENT_THR_BEGIN_CTWT",
-        "OMP_EVENT_THR_END_CTWT",
-        "OMP_EVENT_THR_BEGIN_ODWT",
-        "OMP_EVENT_THR_END_ODWT",
-        "OMP_EVENT_THR_BEGIN_MASTER",
-        "OMP_EVENT_THR_END_MASTER",
-        "OMP_EVENT_THR_BEGIN_SINGLE",
-        "OMP_EVENT_THR_END_SINGLE",
-        "OMP_EVENT_THR_BEGIN_ORDERED",
-        "OMP_EVENT_THR_END_ORDERED",
-        "OMP_EVENT_THR_BEGIN_ATWT",
-        "OMP_EVENT_THR_END_ATWT" };
-
-
-char OMP_STATE_NAME[11][50]= {
-    "THR_OVHD_STATE",          /* Overhead */
-    "THR_WORK_STATE",          /* Useful work, excluding reduction, master, single, critical */
-    "THR_IBAR_STATE",          /* In an implicit barrier */
-    "THR_EBAR_STATE",          /* In an explicit barrier */
-    "THR_IDLE_STATE",          /* Slave waiting for work */
-    "THR_SERIAL_STATE",        /* thread not in any OMP parallel region (initial thread only) */
-    "THR_REDUC_STATE",         /* Reduction */
-    "THR_LKWT_STATE",          /* Waiting for lock */
-    "THR_CTWT_STATE",          /* Waiting to enter critical region */
-    "THR_ODWT_STATE",          /* Waiting to execute an ordered region */
-    "THR_ATWT_STATE"};         /* Waiting to enter an atomic region */
-
-
-void dummyfunc(OMP_COLLECTORAPI_EVENT event)
-{
-  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
-  printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
-
-}
 
 
 void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state)
@@ -431,9 +383,9 @@ __ompc_environment_variables()
 void
 __ompc_level_1_barrier(const int vthread_id)
 {
-
-
-    __ompc_set_state(THR_IBAR_STATE);
+    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_ebar_state_id++; 
+     __ompc_set_state(THR_IBAR_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
 
 /*
@@ -484,8 +436,10 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   // Assuming that vthread->team_size != 1 
   Is_True((vthread != NULL) && (vthread->team != NULL), 
 	  ("bad vthread or vthread->team in nested groups"));
-
-   __ompc_set_state(THR_IBAR_STATE);
+  
+    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_ibar_state_id++;
+     __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
 
   pthread_mutex_lock(&(vthread->team->barrier_lock));
@@ -852,10 +806,17 @@ __ompc_init_rtl(int num_threads)
   for (i=0; i<threads_to_create; i++) {
     __omp_level_1_team[i].team = &__omp_level_1_team_manager;
     __omp_level_1_team[i].team_size = threads_to_create;
-    __omp_level_1_team[i].vthread_id = i;
+    __omp_level_1_team[i].vthread_id = i;  
     __omp_level_1_team[i].single_count = 0;
     __omp_level_1_team[i].loop_count = 0;
-     __omp_level_1_team[i].state = THR_OVHD_STATE;
+    __omp_level_1_team[i].state = THR_OVHD_STATE;
+    __omp_level_1_team[i].thr_lkwt_state_id=0;     
+    __omp_level_1_team[i].thr_ctwt_state_id=0;
+    __omp_level_1_team[i].thr_atwt_state_id=0;
+    __omp_level_1_team[i].thr_ibar_state_id=0;
+    __omp_level_1_team[i].thr_ebar_state_id=0;
+    __omp_level_1_team[i].thr_odwt_state_id=0;
+
     /* the corresponding relationship is fixed*/
     __omp_level_1_team[i].executor = &(__omp_level_1_pthread[i]);
     __omp_level_1_pthread[i].task = &(__omp_level_1_team[i]);
@@ -966,7 +927,13 @@ __ompc_expand_level_1_team(int new_num_threads)
     __omp_level_1_team[i].team = &__omp_level_1_team_manager;
     __omp_level_1_team[i].single_count = 0;
     __omp_level_1_team[i].loop_count = 0;
-     __omp_level_1_team[i].state = THR_OVHD_STATE;
+    __omp_level_1_team[i].state = THR_OVHD_STATE;
+    __omp_level_1_team[i].thr_lkwt_state_id=0;     
+    __omp_level_1_team[i].thr_ctwt_state_id=0;
+    __omp_level_1_team[i].thr_atwt_state_id=0;
+    __omp_level_1_team[i].thr_ibar_state_id=0;
+    __omp_level_1_team[i].thr_ebar_state_id=0;
+    __omp_level_1_team[i].thr_odwt_state_id=0;
     __omp_level_1_team[i].vthread_id = i;
     __omp_level_1_team[i].executor = &__omp_level_1_pthread[i];
     __omp_level_1_pthread[i].task = &__omp_level_1_team[i];
@@ -1005,8 +972,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_v_thread_t *original_v_thread;
   
   unsigned int region_used = 0; // TODO: make it one-bit.
- // regionid++;
- // __ompc_req_start();
+
+  
   /* TODO: We still need to check the limitation before real fork?*/
   if ( num_threads !=0) {
     num_threads = __ompc_check_num_threads(num_threads);
@@ -1022,14 +989,12 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
   if (__omp_rtl_initialized == 0 ) {
     /* first fork, initial rtl*/
+    current_region_id++;
     __omp_root_v_thread.state=THR_OVHD_STATE;
-    __ompc_init_rtl(num_threads);
+    /*   init_collector(); */ 
+     __ompc_init_rtl(num_threads);
   }
-  else
-  {
-    __ompc_set_state(THR_OVHD_STATE);
-    __ompc_event_callback(OMP_EVENT_FORK);
-  }
+ 
 
 
   if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
@@ -1037,7 +1002,17 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* level 1 thread fork */
     /* How about num_threads < __omp_level_1_team_size */
     /* TODO: fix this condition*/
-     
+    static int first_time = 0;
+    if(first_time) {
+     current_region_id++;
+    __ompc_set_state(THR_OVHD_STATE);
+    __ompc_event_callback(OMP_EVENT_FORK);
+    
+    } else
+    {
+      first_time=1;
+
+    } 
     if (num_threads > __omp_level_1_team_alloc_size) {
       Is_True( __omp_max_num_threads >0,
 	       ("reach thread number limit, no more new threads"));
@@ -1050,7 +1025,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __omp_level_1_team_size = __omp_nthreads_var;
       __omp_level_1_team_manager.team_size = __omp_nthreads_var;
     }
-    current_region_id++;
+   
         
      __omp_level_1_team_manager.num_tasks = __omp_level_1_team_size;
 	//        __omp_level_1_team_manager.num_active_tasks = __omp_level_1_team_size;
@@ -1088,7 +1063,16 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     micro_task(0, frame_pointer);
 
     __ompc_level_1_barrier(0);
+    /* the reason for the overhead state  is so that the collector 
+       can query for a region id at join without returning 0 when the threads goes to 
+       a serial state according to the white paper. 
+       This is important for the callstack creation. */
 
+     __ompc_set_state(THR_OVHD_STATE);
+     
+    __ompc_event_callback(OMP_EVENT_JOIN);
+    __ompc_set_state(THR_SERIAL_STATE);
+    __omp_root_v_thread.state=THR_SERIAL_STATE;
 
     __omp_exe_mode = OMP_EXE_MODE_SEQUENTIAL;
     __omp_level_1_pthread[0].task = &__omp_root_v_thread;
@@ -1232,8 +1216,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     __ompc_destroy_lock(&(temp_team.single_lock));
   }
 
-  __ompc_set_state(THR_SERIAL_STATE);
-  __ompc_event_callback(OMP_EVENT_JOIN);
+ 
 
 }
 

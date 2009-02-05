@@ -1235,6 +1235,8 @@ __ompc_ordered (omp_int32 global_tid)
 
   pthread_mutex_lock(&(p_team->schedule_lock));
   while (p_team->ordered_count != p_vthread->ordered_count) {
+     omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_odwt_state_id++;
     __ompc_set_state(THR_ODWT_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_ODWT);
     pthread_cond_wait(&(p_team->ordered_cond), &(p_team->schedule_lock));

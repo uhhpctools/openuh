@@ -81,6 +81,24 @@ __ompc_spin_unlock(volatile int* lock)
 
 
 //TODO implement the following two functions as atomic operation
+
+static inline unsigned long
+__ompc_atomic_inc_unsigned_long(volatile unsigned long*value)
+{
+#ifdef OMP_USE_GCC_ATOMIC_BUILTINS
+  return __sync_add_and_fetch(value, 1);
+#else
+  unsigned long  result;
+  static int lock = 0;
+  __ompc_spin_lock(&lock);
+  result = ++(*value);
+  __ompc_spin_unlock(&lock);
+  return result;
+#endif
+}
+
+
+
 static inline int
 __ompc_atomic_inc(volatile int* value)
 {
@@ -95,6 +113,8 @@ __ompc_atomic_inc(volatile int* value)
   return result;
 #endif
 }
+
+
 
 static inline int
 __ompc_atomic_dec(volatile int* value)
@@ -113,8 +133,16 @@ __ompc_atomic_dec(volatile int* value)
 
 
 #  else
+/* under observation not sure if next function works */
+static inline unsigned long
+__ompc_atomic_inc_unsigned_long(volatile unsigned long*value)
+{
+  unsigned long result;
+  __asm__ __volatile__ ("fetchadd8.rel %0=[%1],1":"=r"(result):"r"(value));
+  return result +1;
+}
 
-static inline int
+
 __ompc_atomic_inc(volatile int* value)
 {
   int result;

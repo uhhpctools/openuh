@@ -326,6 +326,8 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 inline void __ompc_barrier(void)
 {
   omp_v_thread_t *temp_v_thread;
+   omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_ibar_state_id++;
   __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR); 
  if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
@@ -360,6 +362,8 @@ inline void __ompc_barrier(void)
 inline void __ompc_ebarrier(void)
 {
   omp_v_thread_t *temp_v_thread;
+   omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_ebar_state_id++;
   __ompc_set_state(THR_EBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_EBAR);
   if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {

@@ -183,13 +183,7 @@ extern "C" {
 
 /* Collector API message data structure */
 
-struct OMP_COLLECTOR_MESSAGE {
-    int sz;
-    int r;
-    int  *ec;
-    int rsz;
-    char *mem;
-};
+
 
 typedef struct OMP_COLLECTOR_MESSAGE omp_collector_message;
 
@@ -574,6 +568,13 @@ typedef enum {
  *	nested, so a single state is inappropriate.
  */
 
+struct OMP_COLLECTOR_MESSAGE {
+    int sz;
+    OMP_COLLECTORAPI_REQUEST r;
+    OMP_COLLECTORAPI_EC  *ec;
+    int *rsz;
+    char *mem;
+};
 
 #ifdef __cplusplus
 }

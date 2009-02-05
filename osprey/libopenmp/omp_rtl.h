@@ -278,6 +278,12 @@ struct omp_v_thread {
   int	loop_count;
   /* for 'lastprivate'? used ?*/
   //	int is_last;
+   unsigned long thr_lkwt_state_id;
+   unsigned long thr_ctwt_state_id;
+   unsigned long thr_atwt_state_id;
+   unsigned long thr_ibar_state_id;
+   unsigned long thr_ebar_state_id;
+   unsigned long thr_odwt_state_id;
 
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
@@ -498,14 +504,9 @@ extern char *__omp_task_stats_filename;
 extern volatile int __omp_empty_flags[OMP_MAX_NUM_THREADS];
 
 
-extern long current_region_id;
-extern long current_parent_id;
-extern long thr_lkwt_state_id;
-extern long thr_ctwt_state_id;
-extern long thr_atwt_state_id;
-extern long thr_ibar_state_id;
-extern long thr_ebar_state_id;
-extern long thr_odwt_state_id;
+extern unsigned long current_region_id;
+extern unsigned long current_parent_id;
+
 
 extern int collector_initialized;
 extern int collector_paused;

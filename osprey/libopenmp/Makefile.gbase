@@ -56,6 +56,7 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
 
 CFILES = \
+	omp_collector_validation.c \
 	omp_lib.c \
 	omp_lock.c\
 	omp_runtime.c\
