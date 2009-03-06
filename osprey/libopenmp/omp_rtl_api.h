@@ -82,6 +82,8 @@ extern "C" {
 			  frame_pointer_t fp);
   extern void __ompc_critical(omp_int32 gtid, omp_int32 **lck);
   extern void __ompc_end_critical(omp_int32 gtid, omp_int32 **lck);
+
+ /* added by Oscar Hernandez at the University of Houston 2009 */
   extern void __ompc_reduction(omp_int32 gtid, omp_int32 **lck);
   extern void __ompc_end_reduction(omp_int32 gtid, omp_int32 **lck);
 
