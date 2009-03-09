@@ -47,7 +47,7 @@ void fill_register(void *message, OMP_COLLECTORAPI_EVENT event, int append_func,
   if(append_func) {
          unsigned long *lmem = (unsigned long *) mem;
    /* need a better solution to eliminate compiler warning*/
-    (void (*)(OMP_COLLECTORAPI_EVENT))(*lmem) = func;
+   /*  (void (*)(OMP_COLLECTORAPI_EVENT))(*lmem) = func;  */
   }
 
      if(append_zero) {
