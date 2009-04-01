@@ -965,6 +965,7 @@ ST2C_Use_Preg(TOKEN_BUFFER tokens,
    /* Append the name of the preg to the token-list and declare the
     * preg in the current PU context unless it is already declared.
     */
+static int sflag=0, gflag=0;		//Bhargav: flags for recording frame pointer & thread id
    const char *preg_name;
 
    preg_ty = PUinfo_Preg_Type(preg_ty, preg_idx);
@@ -977,7 +978,20 @@ ST2C_Use_Preg(TOKEN_BUFFER tokens,
       PUinfo_Set_Preg_Declared(preg_ty, preg_idx);
    }
 
+if( strcmp(preg_name, "__ompv_slink_a0") == 0 )	//Bhargav: for assigning frame pointer value passed in function
+	sflag = 1;
+if( strcmp(preg_name, "__ompv_gtid_a0") == 0 ) //Bhargav: for assigning thread id passed in function
+        gflag = 1;
+
+if(sflag && strcmp(preg_name, "reg6") == 0)
+	Append_Token_String(tokens, "__ompv_slink_a");
+else if(gflag && strcmp(preg_name, "reg5") == 0)
+	 Append_Token_String(tokens, "__ompv_gtid_a");
+else
+
    Append_Token_String(tokens, preg_name);
+
+
 } /* ST2C_Use_Preg */
 
 
