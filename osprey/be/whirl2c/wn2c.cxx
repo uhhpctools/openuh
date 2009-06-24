@@ -5528,8 +5528,8 @@ WN2C_call(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       if (arg_idx < last_arg_idx)
 	{
 	 Append_Token_Special(call_tokens, ',');
-		if( strcmp( ST_name(WN_st(wn)), "__ompc_fork" ) == 0 && arg_idx == 1 )       //Bhargav: for frame pointer bug(insert '&' before reg3)
-		 	Append_Token_Special(call_tokens, '&');
+//		if( strcmp( ST_name(WN_st(wn)), "__ompc_fork" ) == 0 && arg_idx == 1 )       //Bhargav: for frame pointer bug(insert '&' before reg3)
+//		 	Append_Token_Special(call_tokens, '&');                                 //commented as it was just a temporary solution
 	}
    }
    Append_Token_Special(call_tokens, ')');
