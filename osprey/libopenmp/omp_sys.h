@@ -142,7 +142,7 @@ __ompc_atomic_inc_unsigned_long(volatile unsigned long*value)
   return result +1;
 }
 
-
+static inline int
 __ompc_atomic_inc(volatile int* value)
 {
   int result;
