@@ -44,7 +44,7 @@
 #
 BUILD_AREA     = ..
 BUILD_TOT      = ../..
-BUILD_BASE     = ../../instrumentation/libinstr2
+BUILD_BASE     = ../../instrumentation/libepilog
 BUILD_ROOTS    = TARGET
 BUILD_ABI      = 64BIT
 BUILD_ARCH     = X8664
