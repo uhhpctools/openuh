@@ -38,6 +38,9 @@
 
 class WN;
 
+extern void Vho_Init();
+extern void Vho_Fini();
+
 extern WN *VHO_Lower_Driver (struct pu_info*, WN *);
 extern WN *VHO_Lower (WN *);
 extern WN *VHO_Lower_Mstore (WN *);

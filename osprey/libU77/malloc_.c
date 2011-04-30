@@ -30,7 +30,11 @@
 /* $Header: /proj/osprey/CVS/open64/osprey1.0/libU77/malloc_.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
 
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /*
 #define NaN_single 0x7fbfffff;

@@ -48,6 +48,7 @@ $Date: 2005/10/21 19:00:00 $
 
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_named_init_fd_xtnd  = _xlate_named_init_fd_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_named_init_fd  = _xlate_named_init_fd
 #endif
@@ -65,7 +66,7 @@ xlate_named_init_fd(int fd, const char *section_name,
 	return XLATE_TB_STATUS_ELF_VERSION_BAD;
    }
 
-#ifdef linux
+#if defined(linux) || defined(BUILD_OS_DARWIN)
    elf = elf_begin(fd,ELF_C_READ,NULL);
 #else
    elf = elf_begin(fd,ELF_C_READ_MMAP,NULL);

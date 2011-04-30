@@ -1661,6 +1661,12 @@ duplicate_decls (tree newdecl, tree olddecl)
       TREE_READONLY (olddecl) = TREE_READONLY (newdecl);
       TREE_THIS_VOLATILE (olddecl) = TREE_THIS_VOLATILE (newdecl);
       TREE_SIDE_EFFECTS (olddecl) = TREE_SIDE_EFFECTS (newdecl);
+#ifdef OPEN64_SPIN
+      if (flag_spin_file) {
+          TREE_TO_TRANSLATED_GS(olddecl) = TREE_TO_TRANSLATED_GS(newdecl);
+          FULLY_TRANSLATED_TO_GS(olddecl) = FULLY_TRANSLATED_TO_GS(newdecl);
+      }
+#endif
     }
 
   /* Merge the storage class information.  */
@@ -1764,7 +1770,12 @@ duplicate_decls (tree newdecl, tree olddecl)
       if (! types_match)
 	{
 	  SET_DECL_LANGUAGE (olddecl, DECL_LANGUAGE (newdecl));
-	  COPY_DECL_ASSEMBLER_NAME (newdecl, olddecl);
+#ifdef OPEN64_SPIN
+	  if (flag_spin_file)
+	      SET_DECL_ASSEMBLER_NAME (olddecl, DECL_ASSEMBLER_NAME(newdecl));
+	  else 
+#endif
+	      COPY_DECL_ASSEMBLER_NAME (newdecl, olddecl);
 	  COPY_DECL_RTL (newdecl, olddecl);
 	}
       if (! types_match || new_defines_function)
@@ -1805,7 +1816,13 @@ duplicate_decls (tree newdecl, tree olddecl)
   TREE_ADDRESSABLE (newdecl) = TREE_ADDRESSABLE (olddecl);
   TREE_ASM_WRITTEN (newdecl) = TREE_ASM_WRITTEN (olddecl);
   DECL_COMMON (newdecl) = DECL_COMMON (olddecl);
-  COPY_DECL_ASSEMBLER_NAME (olddecl, newdecl);
+#ifdef OPEN64_SPIN
+  if (flag_spin_file)
+      SET_DECL_ASSEMBLER_NAME (newdecl, 
+              DECL_ASSEMBLER_NAME_SET_P(olddecl) ? DECL_ASSEMBLER_NAME(olddecl) : NULL);
+  else
+#endif
+      COPY_DECL_ASSEMBLER_NAME (olddecl, newdecl);
 
   /* Warn about conflicting visibility specifications.  */
   if (DECL_VISIBILITY_SPECIFIED (olddecl) 
@@ -6836,7 +6853,22 @@ grokdeclarator (const cp_declarator *declarator,
 	  && !same_type_p (TYPE_MAIN_VARIANT (type), wchar_type_node)))
     {
       if (longlong)
-	type = long_long_unsigned_type_node;
+    {
+#ifdef TARG_SL
+      if (Long_Long_Support == TRUE)
+      {
+        type = long_long_unsigned_type_node;
+      }
+      else
+      {
+        warning("\"unsigned long long\" is mapped to \"unsinged long\" in declaration %s, "
+                "Please use \"-mlong-long\" option to enbale long long type supporting", name);
+    	  type = long_unsigned_type_node;
+      }
+#else
+      type = long_long_unsigned_type_node;
+#endif
+    }
       else if (long_p)
 	type = long_unsigned_type_node;
       else if (short_p)
@@ -6851,7 +6883,22 @@ grokdeclarator (const cp_declarator *declarator,
   else if (signed_p && type == char_type_node)
     type = signed_char_type_node;
   else if (longlong)
+  {
+#ifdef TARG_SL
+      if (Long_Long_Support == TRUE)
+      {
+        type = long_long_integer_type_node;
+      }
+      else
+      {
+        warning("\"long long\" is mapped to \"long\" in declaration %s, "
+                "Please use \"-mlong-long\" option to enbale long long type supporting", name);
+    	  type = long_integer_type_node;
+      }
+#else
     type = long_long_integer_type_node;
+#endif
+  }
   else if (long_p)
     type = long_integer_type_node;
   else if (short_p)
@@ -6859,6 +6906,9 @@ grokdeclarator (const cp_declarator *declarator,
 
   if (declspecs->specs[(int)ds_complex])
     {
+#ifdef TARG_SL
+      error("Unsupported type: \"complex\"");
+#endif
       if (TREE_CODE (type) != INTEGER_TYPE && TREE_CODE (type) != REAL_TYPE)
 	error ("complex invalid for %qs", name);
       /* If we just have "complex", it is equivalent to
@@ -6880,6 +6930,25 @@ grokdeclarator (const cp_declarator *declarator,
       else
 	type = build_complex_type (type);
     }
+
+#ifdef TARG_SL
+      if (TREE_CODE(type) == REAL_TYPE)
+      {
+        if (TYPE_MAIN_VARIANT(type) == double_type_node || TYPE_MAIN_VARIANT(type) == float_type_node)
+        {
+          if (Float_Point_Support == FALSE)
+          {
+            error("\"float/double\" type is not supported in default mode, "
+                  "Please use \"-msoft-float\" option to enable float point emulation");
+          }
+        }
+        else
+        {
+          warning("Unsupported real type");
+        }
+      }
+#endif
+
 
   type_quals = TYPE_UNQUALIFIED;
   if (declspecs->specs[(int)ds_const])
@@ -10655,6 +10724,9 @@ finish_function (int flags)
 	  && (outer = BLOCK_SUBBLOCKS (DECL_INITIAL (fndecl)))
 	  /* Skip the artificial function body block.  */
 	  && (outer = BLOCK_SUBBLOCKS (outer))
+#if defined(KEY) && defined(TARG_X8664)
+	  && (TREE_CODE(TREE_TYPE(TREE_TYPE(fndecl))) != VECTOR_TYPE)
+#endif
 	  && chain_member (r, BLOCK_VARS (outer)))
 	finalize_nrv (&DECL_SAVED_TREE (fndecl), r, DECL_RESULT (fndecl));
 

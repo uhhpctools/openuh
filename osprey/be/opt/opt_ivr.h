@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
@@ -140,7 +144,7 @@ private:
   CODEREP  *_incr_var;  
   CODEREP  *_init_value;
   CODEREP  *_step_value;  // the value that the var incremented every time
-  MTYPE     _dtype;
+  MTYPE     _dtype : 8;
   BOOL      _is_primary;
 
   IV_CAND(const IV_CAND&);
@@ -264,9 +268,6 @@ private:
   // Update the value of the secondary IV at the merge block if the trip-count is determined.
   void Update_exit_stmt(const IV_CAND *secondary, BB_NODE *bb_merge, BB_LOOP *loop);
 
-  // Identify all IV candidates
-  void Ident_all_iv_cands(const BB_LOOP *loop, const BB_NODE *bb);
-
   // to be moved to opt_loop.cxx
   BB_LOOP *Ident_loop  (BB_NODE *first,// Identify the do loop for
 			BB_NODE *last, // the region between first
@@ -312,6 +313,8 @@ private:
 
   void     Set_rebuild_loops(void) { _rebuild_loops = TRUE; }
 
+  void     Canon_loop_end_br (BB_LOOP*, IV_CAND*);
+
 public:
   IVR(COMP_UNIT *cu, BOOL trace);
   ~IVR(void);
@@ -329,6 +332,10 @@ public:
   
   // Perform IVR for one loop
   BOOL     Process_one_loop(BB_LOOP *);
+
+  // Identify all IV candidates
+  void Ident_all_iv_cands(const BB_LOOP *loop, const BB_NODE *bb);
+  vector<IV_CAND*> &Get_iv_candidates(void) { return iv_cand_container; }
 };
 
 #endif  // Opt_ivr_INCLUDED

@@ -160,6 +160,13 @@ MOVBITZ(void *a, _f_int8 *az, _f_int8 *nb, void *b, _f_int8 *bz)
 	bf_bit = b0 & BITMASK;
 	al_byte = (ua.u + ((a0 +n -1)>> 3) );
 	bl_byte = (ub.u + ((b0 +n -1)>> 3) );
+#ifdef KEY /* Bug 11713 */
+	/* Initialize otherwise uninitialized variable to prevent adjustment
+	 * of final byte, which we never want when called from ia2mips/mips2ia
+	 * anyway. If this function is ever called with fractions of a byte,
+	 * a more elaborate fix will be needed. */
+	blast = 0;
+#endif /* KEY Bug 11713 */
 	afwa = (uint64 *) af_byte;
 	bfwa = (uint64 *) bf_byte;
 #else

@@ -139,6 +139,30 @@ ISA_SUBSET ISA_Subset_Create( ISA_SUBSET parent, const char* name )
   return result;
 }
 
+void ISA_Subset_Create_Only_One( const char* name )
+/////////////////////////////////////
+//  See interface description.
+/////////////////////////////////////
+{
+  ISA_SUBSET result = new isa_subset;
+
+  result->name = name;
+  result->index = isa_subset_count++;
+  result->superset = NULL;
+  result->members = std::vector<unsigned char>(bit_vector_sizeof,0);
+
+  subsets.push_front(result);
+
+  // put all the topcodes into this subset
+  int opcode;
+  for ( opcode = 0; opcode < TOP_count; ++opcode ) {
+    int byte_index = ((unsigned int) opcode) / 8;
+    int bit_index = ((unsigned int) opcode) % 8;
+    result->members[byte_index] |= (1 << bit_index);
+    opcode_subset[opcode] = result;
+  }
+}
+
 /////////////////////////////////////
 void Instruction_Group( ISA_SUBSET subset, ... )
 /////////////////////////////////////
@@ -239,8 +263,18 @@ void ISA_Subset_End(void)
     ISA_SUBSET subset = *isi;
 
     fprintf(cfile,"  { /* %s */\n", subset->name);
-    for ( int i = 0; i < bit_vector_sizeof; ++i ) {
-      int members = subset->members[i];
+    for ( unsigned int i = 0; i < bit_vector_sizeof; ++i ) {
+      int members = 0;
+      for (int j = 0; j < 8; ++j ) {
+        TOP top = (TOP) ((i * 8) + j);
+        ISA_SUBSET ss;
+        for (ss = subset; ss != NULL ; ss = ss->superset) {
+          if (opcode_subset[top] == ss) {
+            members |= 1 << j;
+            break;
+          }
+        }
+      }
       fprintf(cfile,"    0%03o, /* ",members);
       for (int j = 0; j < 8; ++j) {
 	if (members & (1 << j)) {
@@ -270,4 +304,8 @@ void ISA_Subset_End(void)
 	  "}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

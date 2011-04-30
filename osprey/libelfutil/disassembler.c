@@ -51,7 +51,11 @@
 #include <disassembler.h>
 #include <string.h>
 #include "libelf.h"
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 extern int dis_asm(char *, unsigned long long int);
 
@@ -285,6 +289,7 @@ static char *cop2func_name[64] = {
 #pragma weak fp_register_name = __fp_register_name32
 #pragma weak disassembler = __disassembler32
 #pragma weak disassembler32 = __disassembler32
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak disasm64 = __disasm64
 #pragma weak dis_init64 = __dis_init64
@@ -457,11 +462,6 @@ F_DISASM(char *buffer, ELF_ADDR address, Elf32_Addr  iword, Elf32_Addr *regmask,
 	      F_REGISTER_NAME(i.r_format.rd, regmask),
 	      F_REGISTER_NAME(i.r_format.rs, regmask));
 	  
-#if 0
-        sprintf(bufptr, "move\t%s,%s",
-	      F_REGISTER_NAME(i.r_format.rd, regmask),
-	      F_REGISTER_NAME(i.r_format.rs, regmask));
-#endif
       } /* else { */
       bufptr += strlen(bufptr);
       break;
@@ -1178,47 +1178,6 @@ F_DISASM(char *buffer, ELF_ADDR address, Elf32_Addr  iword, Elf32_Addr *regmask,
     
   case cop2_op:
     {
-#if 0
-The only form of cop2 ops supported are the SigProc Instructions.
-      unsigned int which_cop = i.j_format.opcode - cop0_op;
-      
-      switch (i.r_format.rs) {
-      case bc_op:
-	sprintf(bufptr, "bc%u%c\t", which_cop,
-		bc_name[i.r_format.rt]);
-	do_b_displacement = true;
-	break;
-      case dmtc_op:
-        sprintf(bufptr, "d");
-        bufptr++;		/* fall thru */
-      case mtc_op:
-	sprintf(bufptr, "mtc%u\t%s,$%d", which_cop,
-		F_REGISTER_NAME(i.r_format.rt, regmask),
-		i.r_format.rd);
-	break;
-    case dmfc_op:
-      sprintf(bufptr, "d");
-      bufptr++;		/* fall thru */
-      case mfc_op:
-	sprintf(bufptr, "mfc%u\t%s,$%d", which_cop,
-		F_REGISTER_NAME(i.r_format.rt, regmask),
-		i.r_format.rd);
-	break;
-      case cfc_op:
-	sprintf(bufptr, "cfc%u\t%s,$%d", which_cop,
-		F_REGISTER_NAME(i.r_format.rt, regmask),
-		i.r_format.rd);
-	break;
-      case ctc_op:
-	sprintf(bufptr, "ctc%u\t%s,$%d", which_cop,
-		F_REGISTER_NAME(i.r_format.rt, regmask),
-		i.r_format.rd);
-	break;
-      default:
-        sprintf(bufptr, "c%u.%d\t%d", which_cop,i.r_format.rs, i.r_format.func);
-        break;
-      }
-#endif
       switch (i.v_format.func) {
 	case valni_qh_op:
 	case valni_ob_op:

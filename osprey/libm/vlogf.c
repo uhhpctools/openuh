@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: vlogf.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/vlogf.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:20-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/SCCS/s.vlogf.c $
  *
  * Revision history:
  *  02-Dec-94 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/vlogf.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/SCCS/s.vlogf.c $ $Revision: 1.5 $";
 
 #include "libm.h"
 
@@ -71,7 +71,14 @@ extern	void	vlogf(float *, float *, long, long, long);
 #pragma weak vlogf = __vlogf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern void __vlogf( float *x, float *y, long count, long stridex,
+  long stridey );
+#pragma weak vlogf
+void vlogf( float *x, float *y, long count, long stridex, long stridey ) {
+  __vlogf(x, y, count, stridex, stridey);
+}
+#elif defined(__GNUC__)
 extern  void  __vlogf(float *, float *, long, long, long);
 void    vlogf() __attribute__ ((weak, alias ("__vlogf")));
 #endif

@@ -41,10 +41,10 @@
 // =======================================================================
 //
 //  Module: cg_thr.cxx
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_thr.cxx,v $
+//  $Revision: 1.9 $
+//  $Date: 05/12/05 08:59:04-08:00 $
+//  $Author: bos@eng-24.pathscale.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_thr.cxx $
 //
 //  Description:
 //  ============
@@ -58,7 +58,7 @@
 #include <math.h>
 #include "defs.h"
 #include "config.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "mempool.h"
 #include "bb.h"
 #include "bb_set.h"
@@ -238,7 +238,7 @@ CG_THR::OP_Has_Restrictions(OP *pred_op, OP *succ_op, BOOL before_regalloc)
       if (TNs_Are_Equivalent(succ_result_tn, succ_base_tn)) return TRUE;
     }
 
-#if !defined(TARG_MIPS) && !defined(TARG_X8664)
+#if !defined(TARG_MIPS) && !defined(TARG_X8664) && !defined(TARG_PPC32)
     //TODO: Need to add support for post-increment loads as well.
     if (OP_load(succ_op) && 
 	TOP_Find_Operand_Use(OP_code(succ_op), OU_postincr) >= 0)

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -44,7 +48,7 @@ static char USMID[] = "\n@(#)5.0_pl/sources/main.c	5.15	10/14/99 15:25:09\n";
 
 # include "defines.h"		/* Machine dependent ifdefs */
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))	/* Needed for timing information. */
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) || defined(_HOST_OS_DARWIN)	/* Needed for timing information. */
 # include <sys/time.h>
 # include <sys/resource.h>
 # endif
@@ -84,9 +88,6 @@ extern	void	print_buffered_messages (void);
 |* function prototypes of static functions declared in this file *|
 \*****************************************************************/
  
-# if 0
-static void check_license (void);
-# endif
 
 # ifdef _DEBUG
 static void check_defines_compatibility (void);
@@ -100,6 +101,11 @@ static void	init_release_level (void);
 static void	make_table_changes (void);
 static void	print_id_line (void);
 static void	set_compile_info_for_target (void);
+
+# if defined(_WHIRL_HOST64_TARGET64) && defined(TARG_X8664)
+/* OSP_467, #5, fixup the stride_multi_unit_in_bits array */
+static void     fixup_unit_length_in_bits(void);
+# endif
 
 
 /******************************************************************************\
@@ -135,7 +141,7 @@ int main (int	 argc,
    char	       *msg_name;
    int		save_statement_number = 0;
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) || defined(_HOST_OS_DARWIN)
    		double		end_time;
    		double		start_time;
 		/* char		time[20]; */
@@ -205,7 +211,7 @@ int main (int	 argc,
    start_time = (float) time(NULL);
    clock();
 
-# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) || defined(_HOST_OS_DARWIN)
 
    getrusage (RUSAGE_SELF, &ru);
    start_time = (double) ru.ru_utime.tv_sec +
@@ -395,7 +401,7 @@ PREPROCESS_ONLY_SKIP:
    end_time  = (float) time(NULL);
    end_clock = clock();
 
-# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) || defined(_HOST_OS_DARWIN)
 
    getrusage(RUSAGE_SELF, &ru);
    end_time = (double) ru.ru_utime.tv_sec +
@@ -442,7 +448,7 @@ PREPROCESS_ONLY_SKIP:
                    end_clock,
                    (some_scp_in_err) ? -3 : max_field_len);
 
-# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) 
+# elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) || defined(_HOST_OS_DARWIN)
 
                    (long) 0,
                    (some_scp_in_err) ? -3 : max_field_len/4);
@@ -483,7 +489,7 @@ PREPROCESS_ONLY_SKIP:
       PRINTMSG (0, 104, Log_Summary, 0, (double) end_clock/1000000.0);
       msg_name	= "cf90";
 
-# elif defined(_HOST_OS_LINUX)
+# elif defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 #ifdef PSC_TO_OPEN64
       msg_name	= OPEN64_NAME_PREFIX "f95";
 #endif
@@ -520,7 +526,7 @@ PREPROCESS_ONLY_SKIP:
 
       PRINTMSG (0, 105, Log_Summary, 0, max_field_len);
 
-# elif ! (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif ! (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 
       /* LRR  4/28/97  In an email message from Rich Shapiro to me, he stated */
       /* he did not want this line in the summary lines.		      */
@@ -532,7 +538,7 @@ PREPROCESS_ONLY_SKIP:
 
       /* Number of source lines compiled.				      */
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) && !defined(_TARGET_SV2)
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)) && !defined(_TARGET_SV2)
 
       PRINTMSG (0, 1401, Log_Summary, 0, --curr_glb_line);
 
@@ -545,7 +551,7 @@ PREPROCESS_ONLY_SKIP:
 
       /* Number of messages issued.					      */
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) && !defined(_TARGET_SV2)
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)) && !defined(_TARGET_SV2)
 
       PRINTMSG (0, 1403, Log_Summary, 0,
                 num_errors,
@@ -668,9 +674,6 @@ static void init_compiler (int	 argc,
    check_enums_for_change();	        /* Some enums must not be changed.    */
 # endif
 
-# if 0
-   check_license();
-# endif
 
    /* allocate memory for data structures required across compilation units.  */
    /* These must preceed process_cmd_line.                                    */
@@ -737,7 +740,7 @@ static void init_compiler (int	 argc,
 
    debug_file_name[0] = NULL_CHAR;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    /* sgi_cmd_line does some option manipulation, process SGI specific        */
    /* command line options, and strips out things that the front-end doesn't  */
    /* need to see.                                                            */
@@ -752,6 +755,14 @@ static void init_compiler (int	 argc,
    process_cmd_line (argc, argv);	/* pass input args		      */
 #endif /* KEY Bug 5089 */
 
+
+# if defined(_WHIRL_HOST64_TARGET64) && defined(TARG_X8664)
+  /* OSP_467, #5, fixup the stride_multi_unit_in_bits array */
+  if ( Is_Target_32bit() ) {
+    /* compile 32-bit application with 64-bit compiler */
+    fixup_unit_length_in_bits();
+  }
+# endif
 
 # if defined(_INTEGER_1_AND_2)
 
@@ -880,6 +891,44 @@ static void init_compiler (int	 argc,
  
 }  /* init_compiler */
 
+
+/******************************************************************************\
+ * |*                                                                            *|
+ * |* Description:                                                               *|
+ * |*      fix up the unit length in bits, OSP_467                               *|
+ * |*      if we compile 32-bit application with 64bit compiler,                 *|
+ * |*      some unit length in bits is wrong because the default length is only  *|
+ * |*      right for building 64-bit applications                                *|
+ * |*                                                                            *|
+ * |* Input parameters:                                                          *|
+ * |*      NONE                                                                  *|
+ * |*                                                                            *|
+ * |* Output parameters:                                                         *|
+ * |*      NONE                                                                  *|
+ * |*                                                                            *|
+ * |* Returns:                                                                   *|
+ * |*      NOTHING                                                               *|
+ * |*                                                                            *|
+ * \******************************************************************************/
+# if defined(_WHIRL_HOST64_TARGET64) && defined(TARG_X8664)
+static void fixup_unit_length_in_bits()
+{
+   if ( Is_Target_32bit() ) {
+      /* These constants should be fixed up to build 32-bit apps */
+      stride_mult_unit_in_bits[Typeless_8]   = 32;
+      stride_mult_unit_in_bits[Integer_8]    = 32;
+      stride_mult_unit_in_bits[Real_8]       = 32;
+      stride_mult_unit_in_bits[Real_16]      = 32;
+      stride_mult_unit_in_bits[Complex_4]    = 32;
+      stride_mult_unit_in_bits[Complex_8]    = 32;
+      stride_mult_unit_in_bits[Complex_16]   = 32;
+      stride_mult_unit_in_bits[CRI_Ptr_8]    = 32;
+      stride_mult_unit_in_bits[Logical_8]    = 32;
+      stride_mult_unit_in_bits[CRI_Ch_Ptr_8] = 32;
+   }
+}
+# endif
+
 
 /******************************************************************************\
 |*									      *|
@@ -950,44 +999,6 @@ static void init_date_time_info (void)
 |*      NOTHING								      *|
 |*									      *|
 \******************************************************************************/
-# if 0
-
-static void check_license (void)
- 
-{
-# define	CRAY_LM_NQE	1
-# define	CRAY_LM_DPE	2
-# define	CRAY_LM_F90E	3
-
-# define	LM_NOWAIT	0
-# define	LM_WAIT		1
-
-   extern	int	cray_lm_checkout(int, char *, int, int, char *, double);
-		int	ignore		= 0;
-		double	version		= 1.0;
-
-
-   TRACE (Func_Entry, "check_license", NULL);
-
-# if defined(_TARGET_OS_UNICOS) || defined(_TARGET_OS_MAX)
-   if (cray_lm_checkout(CRAY_LM_DPE, "", LM_NOWAIT, ignore, "", version)) {
-# else
-   if (cray_lm_checkout(CRAY_LM_F90E, "", LM_NOWAIT, ignore, "", version)) {
-# endif
-
-      /* This compiler is not licensed on this hardware. */
-
-      PRINTMSG(0, 631, Log_Error, 0);
-      exit_compiler(RC_USER_ERROR);
-   }
-
-   TRACE (Func_Exit, "check_license", NULL);
-
-   return;
-
-}  /* check_license */
-
-# endif
 
 
 /******************************************************************************\
@@ -1044,18 +1055,6 @@ static void check_defines_compatibility(void)
             "_TARGET_BYTE_ADDRESS");
 # endif
 
-# if 0
-  /* Make sure at least one defines of a pair is set. */
-
-# if !defined(_MODULE_TO_DOT_o) && !defined(_MODULE_TO_DOT_M)
-
-   if (!on_off_flags.module_to_mod) {  /* Need -em or one of these defined */
-      PRINTMSG(1, 1116, Internal, 0,
-               "_MODULE_TO_DOT_o",
-               "_MODULE_TO_DOT_M");
-   }
-# endif
-# endif
 
 # if !defined(_HEAP_REQUEST_IN_BYTES) && !defined(_HEAP_REQUEST_IN_WORDS)
    PRINTMSG(1, 1116, Internal, 0,
@@ -1291,7 +1290,7 @@ static	void	print_id_line(void)
    /*								              */
    /* The id line for other platforms may vary somewhat from this.            */
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) && !defined(_TARGET_SV2)
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)) && !defined(_TARGET_SV2)
    sprintf(version_string, "%s%s", fe_vers_ID(), fe_vers_number());
 # elif defined(_HOST_OS_SOLARIS)
    sprintf(version_string, "%s%s%s%s%s%s%s%s",
@@ -1308,7 +1307,7 @@ static	void	print_id_line(void)
 # endif
 
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) && (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)) && (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    PRINTMSG (0, 1402, Log_Summary, 0,
              release_level,
@@ -1449,6 +1448,8 @@ static void set_compile_info_for_target (void)
    target_os = Target_Unicos;
 # elif defined(_TARGET_OS_LINUX)
    target_os = Target_Linux;
+# elif defined(_TARGET_OS_DARWIN)
+   target_os = Target_Darwin;
 # elif defined(_TARGET_OS_MAX)
    target_os = Target_Max;
 # elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
@@ -1582,7 +1583,7 @@ static void set_compile_info_for_target (void)
       max_character_length	= 2097151;		/* In byte size */
    }
 
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    max_character_length		= 268435455;		/* (2**28) -1 chars */
 
@@ -1638,16 +1639,16 @@ static void init_release_level (void)
 
       TBL_REALLOC_CK(str_pool, length);
 
-      strcpy(&str_pool[str_idx].name_char, location);
+      strcpy((char *)&str_pool[str_idx], location);
 
-      char_ptr	= strrchr(&str_pool[str_idx].name_char, SLASH);
+      char_ptr	= strrchr((char *)&str_pool[str_idx], SLASH);
 
       if (char_ptr == NULL) {
          release_file_ptr = fopen("version.string", "r");
       }
       else {
          strcpy(++char_ptr, "version.string");
-         release_file_ptr = fopen(&str_pool[str_idx].name_char, "r");
+         release_file_ptr = fopen((char *)&str_pool[str_idx], "r");
       }
 
       /* If not found - default to initial value in release_level #.x.x.x */
@@ -1717,16 +1718,6 @@ static void check_enums_for_change(void)
        Omp_In_Parallel_Opr != 454 ||
        Io_Item_Type_Code_Opr != 479 ||
        Copyin_Bound_Opr != 484) { /* modified by jhs, 02.8.31 */
-# if 0
-      printf("Char_Opr %d\n ", Char_Opr);
-      printf("Stop_Opr %d\n ", Stop_Opr);
-      printf("Aloc_Opr %d\n ", Aloc_Opr);
-      printf("Prefertask_Cdir_Opr %d\n ", Prefertask_Cdir_Opr);
-      printf("Local_Pe_Dim_Opr %d\n ", Local_Pe_Dim_Opr);
-      printf("Fetch_And_Nand_Opr %d\n ", Fetch_And_Nand_Opr);
-      printf("Omp_In_Parallel_Opr %d\n ", Omp_In_Parallel_Opr);
-      printf("Copyin_Bound_Opr %d\n ", Copyin_Bound_Opr);
-# endif
 
       PRINTMSG(1, 1643, Internal, 0, "Operator");
    }

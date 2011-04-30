@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -71,15 +75,14 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: be/lno/SCCS/s.dep.cxx $ $Revision: 1.6 $";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source: be/lno/SCCS/s.dep.cxx $ $Revision: 1.6 $";
 
 #include <sys/types.h>
 #include "pu_info.h"
@@ -2281,7 +2284,30 @@ DEP_RESULT DEPV_COMPUTE::Base_Test(const WN *ref1,  ARA_REF *ara_ref1,
         return DEP_DEPENDENT;
       }
     }
-  } else {
+  }
+  else if (ob1 == OPR_ILOAD) {
+    // The bases of array1 and array2 are both indirect loads.
+    // Continue if the indirect loads are loop invariants
+    // and the addresses of indirect loads are the same.
+
+    if (WN_offset(base1) != WN_offset(base2))
+      return DEP_DEPENDENT;
+
+    if (!Is_Loop_Invariant_Indir(base1)
+	|| !Is_Loop_Invariant_Indir(base2))
+      return DEP_DEPENDENT;
+
+    WN * addr1 = WN_kid0(base1);
+    WN * addr2 = WN_kid0(base2);
+
+    if (WN_Simp_Compare_Trees(addr1, addr2) != 0)
+      return DEP_DEPENDENT;
+
+    if (Base_Test(base1, NULL, base2, NULL) != DEP_CONTINUE)
+      return DEP_DEPENDENT;
+
+  }
+  else {
     return (DEP_DEPENDENT);
   }
 

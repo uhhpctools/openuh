@@ -3762,11 +3762,6 @@ scan_paradoxical_subregs (x)
   switch (code)
     {
     case REG:
-#if 0
-      if (SMALL_REGISTER_CLASSES && REGNO (x) < FIRST_PSEUDO_REGISTER
-	  && REG_USERVAR_P (x))
-	SET_HARD_REG_BIT (bad_spill_regs_global, REGNO (x));
-#endif
       return;
 
     case CONST_INT:
@@ -5395,21 +5390,6 @@ choose_reload_regs (chain)
 		      && true_regnum (rld[r].in) < FIRST_PSEUDO_REGISTER)))
 	    continue;
 
-#if 0 /* No longer needed for correct operation.
-	 It might give better code, or might not; worth an experiment?  */
-	  /* If this is an optional reload, we can't inherit from earlier insns
-	     until we are sure that any non-optional reloads have been allocated.
-	     The following code takes advantage of the fact that optional reloads
-	     are at the end of reload_order.  */
-	  if (rld[r].optional != 0)
-	    for (i = 0; i < j; i++)
-	      if ((rld[reload_order[i]].out != 0
-		   || rld[reload_order[i]].in != 0
-		   || rld[reload_order[i]].secondary_p)
-		  && ! rld[reload_order[i]].optional
-		  && rld[reload_order[i]].reg_rtx == 0)
-		allocate_reload_reg (chain, reload_order[i], 0);
-#endif
 
 	  /* First see if this pseudo is already available as reloaded
 	     for a previous insn.  We cannot try to inherit for reloads
@@ -5463,14 +5443,6 @@ choose_reload_regs (chain)
 		  mode = GET_MODE (XEXP (rld[r].in_reg, 0));
 		  rld[r].out = rld[r].in;
 		}
-#endif
-#if 0
-	      /* This won't work, since REGNO can be a pseudo reg number.
-		 Also, it takes much more hair to keep track of all the things
-		 that can invalidate an inherited reload of part of a pseudoreg.  */
-	      else if (GET_CODE (rld[r].in) == SUBREG
-		       && GET_CODE (SUBREG_REG (rld[r].in)) == REG)
-		regno = subreg_regno (rld[r].in);
 #endif
 
 	      if (regno >= 0 && reg_last_reload_reg[regno] != 0)
@@ -5784,40 +5756,6 @@ choose_reload_regs (chain)
 	  if (rld[r].reg_rtx != 0 || rld[r].optional != 0)
 	    continue;
 
-#if 0
-	  /* No longer needed for correct operation.  Might or might
-	     not give better code on the average.  Want to experiment?  */
-
-	  /* See if there is a later reload that has a class different from our
-	     class that intersects our class or that requires less register
-	     than our reload.  If so, we must allocate a register to this
-	     reload now, since that reload might inherit a previous reload
-	     and take the only available register in our class.  Don't do this
-	     for optional reloads since they will force all previous reloads
-	     to be allocated.  Also don't do this for reloads that have been
-	     turned off.  */
-
-	  for (i = j + 1; i < n_reloads; i++)
-	    {
-	      int s = reload_order[i];
-
-	      if ((rld[s].in == 0 && rld[s].out == 0
-		   && ! rld[s].secondary_p)
-		  || rld[s].optional)
-		continue;
-
-	      if ((rld[s].class != rld[r].class
-		   && reg_classes_intersect_p (rld[r].class,
-					       rld[s].class))
-		  || rld[s].nregs < rld[r].nregs)
-		break;
-	    }
-
-	  if (i == n_reloads)
-	    continue;
-
-	  allocate_reload_reg (chain, r, j == n_reloads - 1);
-#endif
 	}
 
       /* Now allocate reload registers for anything non-optional that
@@ -6906,13 +6844,6 @@ do_input_reload (chain, rl, j)
       && rl->reg_rtx
       && GET_CODE (rl->reg_rtx) == REG
       && spill_reg_store[REGNO (rl->reg_rtx)] != 0
-#if 0
-      /* There doesn't seem to be any reason to restrict this to pseudos
-	 and doing so loses in the case where we are copying from a
-	 register of the wrong class.  */
-      && (REGNO (spill_reg_stored_to[REGNO (rl->reg_rtx)])
-	  >= FIRST_PSEUDO_REGISTER)
-#endif
       /* The insn might have already some references to stackslots
 	 replaced by MEMs, while reload_out_reg still names the
 	 original pseudo.  */

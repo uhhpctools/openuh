@@ -164,12 +164,6 @@ struct	mem_segs
 #define	MAXSEGS		(10)			/* max number of segment allowed */
 #define	MEMSEGSIZE	(sizeof(struct mem_segs))/* size of mem_segs structure */
 
-#if 0
-#define BRK_RD		(0x01)			/* break on memory read */
-#define BRK_WR		(0x02)			/* break on memory write */
-#define BRK_EXEC	(0x04)			/* break on execution */
-#define	BRK_CNT		(0x08)			/* break on terminal count */
-#endif
 
 struct mem_wrd
 {

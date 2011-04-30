@@ -1,5 +1,9 @@
 /*
- * Copyright 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: wn2f_load_store.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_load_store.cxx,v $
+ * $Revision: 1.5 $
+ * $Date: 05/12/05 08:59:32-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2f/SCCS/s.wn2f_load_store.cxx $
  *
  * Revision history:
  *  12-Apr-95 - Original Version
@@ -62,7 +66,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_load_store.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2f/SCCS/s.wn2f_load_store.cxx $ $Revision: 1.5 $";
 #endif
 
 #include "whirl2f_common.h"
@@ -712,13 +716,6 @@ WN2F_mstore(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
     */
    ASSERT_DBG_FATAL(WN_opc_operator(wn) == OPR_MSTORE, 
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_mstore"));
-#if 0
-   ASSERT_DBG_WARN(WN_opc_operator(WN_kid0(wn)) == OPR_MLOAD,
-		    (DIAG_W2F_UNEXPECTED_OPC, "rhs of WN2F_mstore"));
-
-   //TODO: scalar expression allowed, but array/structure assignment assumed
-   // with constant ie: should put out doloop?... call OFFSET_Memref?
-#endif
 
    /* Get the base address into which we are storing a value */
    base_ty = WN_Tree_Type(WN_kid1(wn));
@@ -1177,12 +1174,6 @@ WN2F_array(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
       set_WN2F_CONTEXT_deref_addr(context);
 
    }
-#if 0
- else
-      ASSERT_DBG_WARN(deref,
-		      (DIAG_UNIMPLEMENTED, 
-		       "taking the address of an array element"));
-#endif
 
    /* Get the array or, for ptr-as-array types, the element type */
 

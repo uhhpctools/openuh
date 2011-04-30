@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -37,10 +41,10 @@
  * ====================================================================
  *
  * Module: variants.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/variants.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:28-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.variants.cxx $
  *
  * Description:
  *
@@ -51,7 +55,7 @@
  */
 
 #ifdef _KEEP_RCS_ID
-static const char rcs_id[] = "$Source$ $Revision$";
+static const char rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.variants.cxx $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "defs.h"
@@ -141,7 +145,7 @@ Negate_BR_Variant(VARIANT variant)
   case V_BR_DLT:
   case V_BR_DLE:
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   case V_BR_XEQ:
   case V_BR_XNE:
   case V_BR_XGT:
@@ -156,6 +160,10 @@ Negate_BR_Variant(VARIANT variant)
   case V_BR_QGE:
   case V_BR_QLT:
   case V_BR_QLE:
+  case V_BR_FOR:
+  case V_BR_DOR:
+  case V_BR_DUO:
+  case V_BR_FUO:
     // changing the variant will effect the comparison if NaNs are
     // involved, so just flip the sense.
     is_false = !is_false;
@@ -235,7 +243,7 @@ Invert_BR_Variant(VARIANT variant)
   case V_BR_DLT: variant = V_BR_DGT; break;
   case V_BR_DLE: variant = V_BR_DGE; break;
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   case V_BR_XEQ: variant = V_BR_XEQ; break;
   case V_BR_XNE: variant = V_BR_XNE; break;
   case V_BR_XGT: variant = V_BR_XLT; break;
@@ -372,7 +380,7 @@ BR_Variant_Name(VARIANT variant)
   case V_BR_DLT:     return is_false ? "!DLT"     : "DLT";
   case V_BR_DLE:     return is_false ? "!DLE"     : "DLE";
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   case V_BR_XEQ:     return is_false ? "!XEQ"     : "XEQ";
   case V_BR_XNE:     return is_false ? "!XNE"     : "XNE";
   case V_BR_XGT:     return is_false ? "!XGT"     : "XGT";

@@ -558,7 +558,10 @@ static rtx last_scheduled_insn;
    non-negative encoding.  The scheduler using only DFA description
    should never use the following function.  */
 
-HAIFA_INLINE int
+#ifndef KEY
+HAIFA_INLINE /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+int
 insn_unit (insn)
      rtx insn;
 {
@@ -672,7 +675,10 @@ clear_units ()
 /* Return the issue-delay of an insn.  The scheduler using only DFA
    description should never use the following function.  */
 
-HAIFA_INLINE int
+#ifndef KEY
+HAIFA_INLINE /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+int
 insn_issue_delay (insn)
      rtx insn;
 {
@@ -703,7 +709,10 @@ insn_issue_delay (insn)
    was COST.  The scheduler using only DFA description should never
    use the following function.  */
 
-HAIFA_INLINE int
+#ifndef KEY
+HAIFA_INLINE /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+int
 actual_hazard_this_instance (unit, instance, insn, clock, cost)
      int unit, instance, clock, cost;
      rtx insn;
@@ -871,7 +880,10 @@ potential_hazard (unit, insn, cost)
    This is the number of cycles between instruction issue and
    instruction results.  */
 
-HAIFA_INLINE int
+#ifndef KEY
+HAIFA_INLINE /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+int
 insn_cost (insn, link, used)
      rtx insn, link, used;
 {
@@ -1132,7 +1144,10 @@ ready_lastpos (ready)
 /* Add an element INSN to the ready list so that it ends up with the lowest
    priority.  */
 
-HAIFA_INLINE void
+#ifndef KEY
+HAIFA_INLINE /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+void
 ready_add (ready, insn)
      struct ready_list *ready;
      rtx insn;

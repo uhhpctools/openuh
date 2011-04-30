@@ -1,8 +1,4 @@
 /*
- * Copyright 2006.  QLogic Corporation.  All Rights Reserved.
- */
-
-/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -170,7 +166,7 @@
 //	void GRA_Trace_Split_Sub_Priority(GRA_BB* gbb, BOOL is_store) 
 //	    Print message when blocks add to or deduct from lrange priority
 //
-//	void GRA_Trace_Split_Priority_On(char* msg)
+//	void GRA_Trace_Split_Priority_On(const char* msg)
 //	    Turn on above splitting if tracing splits, and print msg
 //	void GRA_Trace_Split_Priority_Off()
 //	    Turn off above splitting
@@ -181,10 +177,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_trace.h,v $
+//  $Revision: 1.6 $
+//  $Date: 05/12/05 08:59:10-08:00 $
+//  $Author: bos@eng-24.pathscale.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_trace.h $
 
 
 #ifndef GRA_TRACE_INCLUDED
@@ -192,7 +188,7 @@
 #ifndef GRA_TRACE_RCS_ID
 #define GRA_TRACE_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *gra_trace_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_trace.h,v $ $Revision: 1.1.1.1 $";
+static char *gra_trace_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_trace.h $ $Revision: 1.6 $";
 #endif
 #endif
 
@@ -245,8 +241,8 @@ BOOL GRA_Trace_Loops();
 void GRA_Trace_Homing(TN *tn, BB* bb);					   
 void GRA_Trace_Home_Removal( TN* tn, GRA_BB *gbb, OP *op );
 void GRA_Init_Trace_Memory();					   
-void GRA_Trace_Memory(char *string);					   
-void GRA_Trace_Memory_Realloc(char *string);
+void GRA_Trace_Memory(const char *string);
+void GRA_Trace_Memory_Realloc(const char *string);
 void GRA_Trace_Memory_Counts();
 void GRA_Trace_Split_LUNIT_Spill(LUNIT *lunit);
 BOOL GRA_Trace_Check_Splits();
@@ -254,19 +250,19 @@ void GRA_Trace_Grant_Unused_Caller_Saved();
 void GRA_Trace_Split_Removing_Block(GRA_BB* gbb);
 void GRA_Trace_Split_Add_Priority(GRA_BB* gbb, BOOL is_store);
 void GRA_Trace_Split_Sub_Priority(GRA_BB* gbb, BOOL is_store);
-#ifndef TARG_IA64
+#ifdef KEY
 void GRA_Trace_Split_Reclaim_Add_Priority(GRA_BB* gbb, BOOL is_store,
 					  float priority);
 void GRA_Trace_Split_Reclaim_Sub_Priority(GRA_BB* gbb, BOOL is_store,
 					  float priority);
 #endif
-void GRA_Trace_Split_Priority_On(char* msg);
+void GRA_Trace_Split_Priority_On(const char* msg);
 void GRA_Trace_Split_Priority_Off();
 void GRA_Trace_Preference_Conflict(LRANGE* lrange0,
 				   LRANGE* lrange1,
 				   GRA_BB* gbb );
 void GRA_Trace_LRANGE_Allocate(LRANGE* lrange);
-#ifndef TARG_IA64
+#ifdef KEY
 void GRA_Trace_LRANGE_Choose(LRANGE* lrange, REGISTER_SET allowed);
 void GRA_Trace_LRANGE_Choose_Reclaimable(LRANGE* lrange, REGISTER_SET allowed);
 #endif

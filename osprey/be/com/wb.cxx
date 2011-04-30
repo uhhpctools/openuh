@@ -38,7 +38,6 @@
 
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
@@ -58,16 +57,27 @@
 #include "wb_browser.h" 
 #include "wb.h"
 
-#pragma weak _Z11s_lno_debugPc
-#pragma weak _Z9cg_sdebugPc
+#if defined(TARG_NVISA) || defined(TARG_SL) || defined(TARG_X8664)
+// this is in ipa, and we don't build it, so ignore
+extern "C" void cg_sdebug(const char init_buffer[]) { 
+	FmtAssert(FALSE, ("NYI"));
+}
+// this is in lno, and we don't build it, so ignore
+extern "C" void s_lno_debug(const char init_buffer[]) { 
+	FmtAssert(FALSE, ("NYI"));
+}
+#else
+#pragma weak _Z11s_lno_debugPKc
+#pragma weak _Z9cg_sdebugPKc
+#endif
 
-extern void s_f90_lower_debug(char init_buffer[]); 
-extern void s_omp_debug(char init_buffer[]); 
-extern void s_lno_debug(char init_buffer[]); 
-extern void s_lwr_debug(char init_buffer[]); 
-extern void s_anl_debug(char init_buffer[]); 
-extern void s_ipl_debug(char init_buffer[]);
-extern void cg_sdebug(char init_buffer[]);
+extern void s_f90_lower_debug(const char init_buffer[]); 
+extern void s_omp_debug(const char init_buffer[]); 
+extern void s_lno_debug(const char init_buffer[]); 
+extern void s_lwr_debug(const char init_buffer[]); 
+extern void s_anl_debug(const char init_buffer[]); 
+extern void s_ipl_debug(const char init_buffer[]);
+extern void cg_sdebug(const char init_buffer[]);
 
 static WB_PHASE WB_Current_Phase = WBP_NONE; 
 
@@ -182,7 +192,7 @@ extern void WB_Set_Phase(WB_PHASE WB_Phase)
   WB_Current_Phase = WB_Phase; 
 } 
 
-extern void sdebug(char init_buffer[])
+extern void sdebug(const char init_buffer[])
 {
   switch(WB_Current_Phase) { 
   case WBP_F90_LOWER: 

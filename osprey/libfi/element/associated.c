@@ -105,6 +105,9 @@ _ASSOCIATED (DopeVectorType * pointer,
 		for (loopj = 0; loopj < rank; loopj++) {
 			if((pointer->dimension[loopj].extent !=
 			    target->dimension[loopj].extent) ||
+#ifdef KEY /* Bug 11834 */
+                            (target->dimension[loopj].extent <= 0) ||
+#endif /* KEY Bug 11834 */
 			   (pointer->dimension[loopj].stride_mult !=
 			    target->dimension[loopj].stride_mult))
 				return(_btol(iresult));
@@ -177,6 +180,9 @@ _ASSOCIATED_4 (DopeVectorType * pointer,
 		for (loopj = 0; loopj < rank; loopj++) {
 			if((pointer->dimension[loopj].extent !=
 			    target->dimension[loopj].extent) ||
+#ifdef KEY /* Bug 11834 */
+                            (target->dimension[loopj].extent <= 0) ||
+#endif /* KEY Bug 11834 */
 			   (pointer->dimension[loopj].stride_mult !=
 			    target->dimension[loopj].stride_mult))
 				return(_btol(iresult));
@@ -252,6 +258,9 @@ _ASSOCIATED_8 (DopeVectorType * pointer,
 		for (loopj = 0; loopj < rank; loopj++) {
 			if((pointer->dimension[loopj].extent !=
 			    target->dimension[loopj].extent) ||
+#ifdef KEY /* Bug 11834 */
+                            (target->dimension[loopj].extent <= 0) ||
+#endif /* KEY Bug 11834 */
 			   (pointer->dimension[loopj].stride_mult !=
 			    target->dimension[loopj].stride_mult))
 				return(_btol(iresult));

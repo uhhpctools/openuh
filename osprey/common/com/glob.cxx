@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -110,7 +114,7 @@ char *Fe_Version = NULL;
 /*add by cbq */
 int pu_number = 0;
 int bb_number = 0;
-char *Output_h_File_Name = "cycle_output.h";        /* Cycle_Counting Output.h file */
+const char *Output_h_File_Name = "cycle_output.h";        /* Cycle_Counting Output.h file */
 FILE *Output_h_File = NULL;           /* Cycle counting output.h file */
 FILE *Call_graph_file = NULL; 	      /* Call graph file */
 char * pu_string[1000]; 
@@ -140,8 +144,10 @@ char *Lib_File_Name = NULL;	/* Program library file	*/
 char *Lib_Lock_Name = NULL;	/* Program library lock	file */
 char *DSTdump_File_Name = NULL; /* Dwarf (i.e. DST) dump file */
 char *Global_File_Name = NULL;	/* Global symbol table file */
+void *Global_PU_Tree = NULL; /* global tree of all the pu's */
 
 char *License_File_Name = NULL ;	/* license file */
+char *Whirl2C_File_Name = NULL ;	/* whirl2c output file */
 
 /* Current file	handles	if open, NULL otherwise: */
 FILE *Src_File = NULL;		/* Source file */

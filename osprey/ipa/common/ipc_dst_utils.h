@@ -167,7 +167,7 @@ inline DST_COMPILE_UNIT*
 DST_get_compile_unit_attr(DST_TYPE dst, DST_INFO* info) {
   DST_IDX attr_idx = DST_INFO_attributes(info);
   Is_True(DST_INFO_tag(info) == DW_TAG_compile_unit, ("Not a compile unit"));
-  Is_True(attr_idx != DST_INVALID_IDX, ("Compile unit attr idx is null"));
+  Is_True( !DST_ARE_EQUAL(attr_idx, DST_INVALID_IDX), ("Compile unit attr idx is null"));
   return static_cast<DST_COMPILE_UNIT*>(DST_IDX_to_ptr(dst, attr_idx));
 }
 
@@ -177,21 +177,21 @@ inline DST_SUBPROGRAM*
 DST_get_subprogram_attr(DST_TYPE dst, DST_INFO* info) {
   DST_IDX attr_idx = DST_INFO_attributes(info);
   Is_True(DST_INFO_tag(info) == DW_TAG_subprogram, ("Not a subprogram"));
-  Is_True(attr_idx != DST_INVALID_IDX, ("Subprogram unit attr idx is null"));
+  Is_True( !DST_ARE_EQUAL(attr_idx, DST_INVALID_IDX), ("Subprogram unit attr idx is null"));
   return static_cast<DST_SUBPROGRAM*>(DST_IDX_to_ptr(dst, attr_idx));
 }
 
 // Converts a DST_IDX to an include dir node.  
 inline DST_INCLUDE_DIR* DST_get_include_dir(DST_TYPE dst, DST_IDX idx) {
   Is_True(dst != 0, ("DST_get_include_dir: null dst pointer"));
-  Is_True(idx != DST_INVALID_IDX, ("DST_get_include_dir: bad dst index"));
+  Is_True( !DST_ARE_EQUAL(idx, DST_INVALID_IDX), ("DST_get_include_dir: bad dst index"));
   return static_cast<DST_INCLUDE_DIR*>(DST_IDX_to_ptr(dst, idx));
 }
 
 // Converts a DST_IDX to a file name node.
 inline DST_FILE_NAME* DST_get_file_name(DST_TYPE dst, DST_IDX idx) {
   Is_True(dst != 0, ("DST_get_file_name: null dst pointer"));
-  Is_True(idx != DST_INVALID_IDX, ("DST_get_file_name: bad dst index"));
+  Is_True( !DST_ARE_EQUAL(idx, DST_INVALID_IDX), ("DST_get_file_name: bad dst index"));
   return static_cast<DST_FILE_NAME*>(DST_IDX_to_ptr(dst, idx));
 }
 
@@ -409,7 +409,7 @@ struct DST_file_scope_iter {
     dst = static_cast<DST_Type*>(dst_vptr);
     cu_idx = cu_index;
     idx = index;
-    Is_True(cu_idx == DST_INVALID_IDX ||
+    Is_True( DST_ARE_EQUAL(cu_idx, DST_INVALID_IDX) ||
             DST_INFO_tag(DST_get_info(dst, cu_idx)) == DW_TAG_compile_unit,
             ("Not a compile unit"));
   }
@@ -430,7 +430,7 @@ struct DST_file_scope_iter {
   // Increment and defererence.
   const DST_IDX& operator*() const {
     Is_True(dst != 0, ("Iterator is singular"));
-    Is_True(idx == DST_INVALID_IDX, ("Iterator is past-the-end"));
+    Is_True( DST_ARE_EQUAL(idx, DST_INVALID_IDX), ("Iterator is past-the-end"));
     return idx;
   }
 
@@ -445,10 +445,10 @@ struct DST_file_scope_iter {
 
   DST_file_scope_iter& operator++() {
     idx = DST_INFO_sibling(this->to_info_ptr());
-    if (idx == DST_INVALID_IDX) {
+    if( DST_ARE_EQUAL(idx,DST_INVALID_IDX) ){
       DST_INFO* old_cu_info = DST_get_info(dst, cu_idx);
       cu_idx = DST_INFO_sibling(old_cu_info);
-      if (cu_idx != DST_INVALID_IDX) {
+      if( !DST_ARE_EQUAL(cu_idx, DST_INVALID_IDX)) {
         DST_INFO* cu_info = DST_get_info(dst, cu_idx);
         DST_COMPILE_UNIT* cu = DST_get_compile_unit_attr(dst, cu_info);
         idx = DST_COMPILE_UNIT_first_child(cu);
@@ -464,10 +464,10 @@ struct DST_file_scope_iter {
   }
 
   bool operator== (const DST_file_scope_iter& x) const {
-    return dst == x.dst && cu_idx == x.cu_idx && idx == x.idx;
+    return dst == x.dst && DST_ARE_EQUAL(cu_idx, x.cu_idx) && DST_ARE_EQUAL(idx, x.idx);
   }
   bool operator!= (const DST_file_scope_iter& x) const {
-    return dst != x.dst || cu_idx != x.cu_idx || idx != x.idx;
+    return dst != x.dst || !DST_ARE_EQUAL(cu_idx, x.cu_idx) || !DST_ARE_EQUAL(idx, x.idx);
   }
 
 private:

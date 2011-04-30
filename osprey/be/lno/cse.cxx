@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -111,15 +115,14 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: be/lno/SCCS/s.cse.cxx $ $Revision: 1.13 $";
+static const char *source_file = __FILE__;
+static const char *rcs_id = "$Source: be/lno/SCCS/s.cse.cxx $ $Revision: 1.13 $";
 
 #include <sys/types.h>
 #include "lnopt_main.h"
@@ -128,6 +131,8 @@ static char *rcs_id = "$Source: be/lno/SCCS/s.cse.cxx $ $Revision: 1.13 $";
 #include "lwn_util.h"
 #include "opt_du.h"
 #include "cse.h"
+#include "reduc.h"
+#include "ir_reader.h"
 
 enum EQUIVALENCE_TYPE { EQ_NONE=0, EQ_ADD, EQ_MPY, EQ_MIN, EQ_MAX, EQ_RECIP, EQ_DIV,
 			EQ_RSQRT,EQ_SQRT,EQ_LOAD };
@@ -1234,3 +1239,922 @@ static void  Add_Invariant_Deps()
   }
   MEM_POOL_Pop(&LNO_local_pool);
 }
+
+#ifdef KEY
+#include "const.h"
+#include "wn_simp.h"
+#include "glob.h"
+
+static REDUCTION_MANAGER *reduc_mgr=NULL;
+static MEM_POOL FACT_default_pool; 
+static INT current_level=0;
+static int local_num=0;
+
+extern WN* Find_Stmt_Under(WN* stmt,WN* body);
+extern BOOL Fully_Unroll_Short_Loops(WN *);
+//don't do invariant factorization if current level >=3
+#define STOP_LEVEL 3
+#define GOOD_FACTORS 4
+ 
+static BOOL unrolled = FALSE;
+static INT In_Invar_Stack(WN *wn, STACK_OF_WN *invar_stack)
+{
+  for(INT i=0; i<invar_stack->Elements(); i++){
+    WN *tmp = invar_stack->Top_nth(i);
+    if(Tree_Equiv(wn,tmp)){
+        if(wn==tmp) return 2;
+        else return 1;
+    }
+   }
+  return 0;
+}
+
+//build invariant and variant tree---- how
+static void Split_Var_Tree(WN *mult, WN *loop, STACK_OF_WN *invar_stack)
+{
+   TYPE_ID type = WN_rtype(mult);
+   OPERATOR opr = WN_operator(mult);
+   switch(opr){
+    case OPR_ADD: case OPR_MPY:
+         Split_Var_Tree(WN_kid0(mult),loop,invar_stack);
+         Split_Var_Tree(WN_kid1(mult),loop,invar_stack);
+         break;
+    case OPR_LDID:
+    case OPR_ILOAD:
+       {
+         INT ret_num = In_Invar_Stack(mult, invar_stack);
+         if(ret_num){
+           TCON tcon; ST* st;
+           tcon = Host_To_Targ_Float(type, 1.0);//may be integer here
+           st = New_Const_Sym (Enter_tcon(tcon), Be_Type_Tbl(type));
+           WN *const_wn = WN_CreateConst(OPR_CONST, type, MTYPE_V, st);
+           WN *parent = LWN_Get_Parent(mult);
+           INT which_kid=1;
+           if(mult == WN_kid0(parent))
+              which_kid = 0;
+           WN_kid(parent, which_kid) = const_wn;
+           LWN_Set_Parent(const_wn, parent);
+           LWN_Parentize(parent);
+         //------- how to deal with this, it will cause segfault
+         //if you delete. Otherwise, dangling point here
+         //  if(ret_num==1)
+         //   LWN_Delete_Tree(mult);
+          }
+           break;
+         }
+      default:
+          FmtAssert(FALSE,("Not an vaild term!"));
+          break;
+     }
+}
+
+static WN *Build_Invar_Tree(STACK_OF_WN *invar_stack)
+{
+  WN *invar_tree = NULL;
+  OPCODE mpy_opc;
+  for(INT i=0; i< invar_stack->Elements(); i++){
+    WN *wn = invar_stack->Top_nth(i);
+    if(invar_tree==NULL)
+      invar_tree = wn;
+    else{
+      mpy_opc = OPCODE_make_op(OPR_MPY, WN_rtype(wn), MTYPE_V);
+      invar_tree = LWN_CreateExp2(mpy_opc, invar_tree, wn);
+    }
+  }
+ return invar_tree;  
+}
+
+static BOOL Well_Formed_Mult(WN *mpy)
+{
+  if(WN_rtype(mpy) != MTYPE_F8 && WN_rtype(mpy) != MTYPE_F4)
+    return FALSE; //handle only fp for now
+
+  if((WN_operator(mpy)==OPR_MPY)
+     || WN_operator(mpy)==OPR_ADD){
+    if(!Well_Formed_Mult(WN_kid0(mpy)) || !Well_Formed_Mult(WN_kid1(mpy)))
+     return FALSE;
+    else return TRUE;
+  }else if(WN_operator(mpy)==OPR_ILOAD || WN_operator(mpy)==OPR_LDID)
+    return TRUE;
+  else return FALSE; //CVT should also be good?
+}
+
+static BOOL Well_Formed_Terms(WN *reduction_term)
+{
+  if(WN_operator(reduction_term)==OPR_ADD){
+     if(!Well_Formed_Terms(WN_kid0(reduction_term)) ||
+        !Well_Formed_Terms(WN_kid1(reduction_term)))
+        return FALSE;
+     else 
+        return TRUE;
+  }else if(WN_operator(reduction_term)==OPR_MPY)
+      return Well_Formed_Mult(reduction_term);
+     else 
+      return FALSE;
+}
+
+static STACK_OF_WN *Invar_Stack_Intersection(STACK_OF_WN *one, STACK_OF_WN *two)
+{
+ STACK_OF_WN *tmp_stack=CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                &FACT_default_pool);
+ for(INT i=0; i<one->Elements(); i++){
+   WN *ele1 = one->Top_nth(i);
+   for(INT j=0; j<two->Elements();j++){
+     WN *ele2 = two->Top_nth(j);
+     if(Tree_Equiv(ele1,ele2))
+      tmp_stack->Push(ele1);
+    }
+ }
+ //CXX_DELETE(one, &FACT_default_pool);
+ //CXX_DELETE(two, &FACT_default_pool);
+ return tmp_stack;
+}
+
+//duplicate invars in one terms
+static BOOL Gather_Term_Invars(WN *term, STACK_OF_WN *invar_stack, WN *loop)
+{
+  if(((WN_operator(term)==OPR_LDID)
+      || (WN_operator(term)==OPR_ILOAD))
+     && Is_Loop_Invariant_Exp(term, loop)){ 
+     for(INT ii=0; ii<invar_stack->Elements(); ii++)
+        if(Tree_Equiv(invar_stack->Bottom_nth(ii), term))
+          return FALSE;
+     invar_stack->Push(term);
+  }
+  else if(WN_operator(term)==OPR_MPY){
+    if(!Gather_Term_Invars(WN_kid0(term), invar_stack, loop))
+      return FALSE;
+    if(!Gather_Term_Invars(WN_kid1(term), invar_stack, loop))
+      return FALSE;
+  }
+ return TRUE;
+}
+
+static BOOL Build_Term_Stack(WN *term, STACK_OF_WN *term_stack)
+{
+  if(WN_operator(term)==OPR_MPY){
+    term_stack->Push(term);
+  }else if(WN_operator(term)==OPR_ADD ||
+           WN_operator(term)==OPR_SUB){
+  if(!Build_Term_Stack(WN_kid0(term), term_stack))
+    return FALSE;
+  if(!Build_Term_Stack(WN_kid1(term), term_stack))
+    return FALSE;
+ }else return FALSE;
+ return TRUE;
+}
+
+
+static BOOL Gather_Stmt_Common_Invar(WN *stmt, STACK_OF_WN *common_invar, WN *loop)
+{
+ 
+ FmtAssert(common_invar && common_invar->Elements()==0, 
+           ("Expect an initialized but empty stack!"));
+ STACK_OF_WN *term_stack = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                 &FACT_default_pool);
+ if(!Build_Term_Stack(WN_kid1(WN_kid0(stmt)), term_stack))
+   return FALSE;
+ if(term_stack->Elements()==0) //no terms? 
+    return FALSE;
+ STACK_OF_WN *ret_invar; 
+ for(INT ii=0; ii< term_stack->Elements(); ii++){
+   WN *term = term_stack->Bottom_nth(ii);
+   STACK_OF_WN *tmp_invar = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                     &FACT_default_pool);
+   if(!Gather_Term_Invars(term, tmp_invar, loop))
+      return FALSE;
+   if(tmp_invar->Elements()==0) 
+      return FALSE;
+   if(ii==0)
+      ret_invar = tmp_invar;
+   else
+      ret_invar = Invar_Stack_Intersection(ret_invar, tmp_invar);
+   if(ret_invar->Elements()==0)
+      return FALSE;
+ }
+
+ while(ret_invar->Elements()>0)
+   common_invar->Push(ret_invar->Pop());
+ return TRUE;
+}
+
+
+static WN *Find_Reduction_Variable(WN *add)
+{
+  FmtAssert(WN_operator(add)==OPR_ADD,("Not an addition!"));
+ if(WN_operator(WN_kid0(add))==OPR_LDID &&
+   reduc_mgr->Which_Reduction(WN_kid0(add))==RED_ADD)
+   return WN_kid0(add);
+ else if(WN_operator(WN_kid1(add))==OPR_LDID &&
+   reduc_mgr->Which_Reduction(WN_kid1(add))==RED_ADD)
+   return WN_kid1(add);
+
+ if(WN_operator(WN_kid0(add))==OPR_ADD){
+   WN *reduc = Find_Reduction_Variable(WN_kid0(add));
+   if(reduc) return reduc;
+ }
+
+ if(WN_operator(WN_kid1(add))==OPR_ADD){
+   WN *reduc = Find_Reduction_Variable(WN_kid1(add));
+   if(reduc) return reduc;
+ }
+ return NULL;
+}
+
+
+static BOOL Well_Formed_Reduction_Stmt(WN *stmt, WN *loop)
+{
+  //requie reduction on stid and an add.sub reduction
+  if(WN_operator(stmt) != OPR_STID ||
+     reduc_mgr->Which_Reduction(stmt) != RED_ADD)
+  return FALSE;
+
+  WN *kid0 = WN_kid0(stmt);
+  WN *terms=NULL;
+  INT which_kid;
+  //exchange kid?
+  if(WN_operator(kid0)==OPR_ADD){
+    WN *reduc = Find_Reduction_Variable(kid0);
+    if(!reduc) 
+       return FALSE;
+    INT which_path=0;
+    WN *parent = LWN_Get_Parent(reduc);
+    if(WN_kid1(parent)==reduc)
+      which_path=1;
+    WN *tmp = reduc;
+    while(LWN_Get_Parent(tmp) != kid0)
+      tmp = LWN_Get_Parent(tmp);
+     FmtAssert(tmp, ("Error!"));
+  if(tmp==WN_kid0(kid0)){//exchange kid 1 with reduc
+    if(tmp!=reduc){
+    WN *temp = WN_kid1(kid0);
+    WN_kid(parent, which_path) = temp;
+    LWN_Set_Parent(temp, parent);
+    WN_kid1(kid0)=tmp;
+    LWN_Set_Parent(tmp, kid0);
+    WN_kid0(kid0)=reduc;
+    LWN_Set_Parent(reduc, kid0);
+    LWN_Parentize(kid0);
+    LWN_Parentize(parent);
+    }
+   }else{//tmp = WN_kid1(kid0)
+   WN *temp = WN_kid0(kid0);
+    WN_kid0(kid0)=reduc;
+    LWN_Set_Parent(reduc, kid0);
+    WN_kid(parent, which_path) = temp;
+    LWN_Set_Parent(temp, parent);
+    LWN_Parentize(kid0);
+    LWN_Parentize(parent);
+  }
+  terms = WN_kid1(kid0);
+  which_kid = 1;
+ }else if(WN_operator(kid0)==OPR_SUB){
+  //TODO: need to consider SUB
+  return FALSE;
+  FmtAssert(WN_operator(WN_kid0(kid0))==OPR_LDID &&
+            reduc_mgr->Which_Reduction(WN_kid0(kid0))==RED_ADD,
+            ("Wrong reduction!"));
+  terms = WN_kid1(kid0);
+  which_kid = 1;
+ }else//TODO: ---:) 
+    return FALSE;
+ //terms are formed as expected
+ if(!Well_Formed_Terms(terms))
+   return FALSE;
+
+ //now need to consider def use relation here
+ if (!Du_Mgr)
+      return FALSE;
+ USE_LIST* use_list=Du_Mgr->Du_Get_Use(stmt);
+ if (!use_list) return FALSE;
+ WN *body = WN_do_body(loop);
+ USE_LIST_ITER uiter(use_list);
+ for (DU_NODE* u = uiter.First(); !uiter.Is_Empty(); u=uiter.Next()){
+    WN* use=u->Wn();
+    if (Wn_Is_Inside(use, loop)) {
+      WN* stmt1 = Find_Stmt_Under(use, body);
+        if (reduc_mgr->Which_Reduction(stmt1) == RED_NONE ||
+            (WN_operator(stmt1) == OPR_STID &&
+             (WN_st(stmt1) != WN_st(stmt) ||
+              WN_store_offset(stmt1) != WN_store_offset(stmt)))){
+          return FALSE;
+         }
+      }
+   }
+ DEF_LIST *def_list = Du_Mgr->Ud_Get_Def(WN_kid(kid0, 1-which_kid));
+ if (!def_list) return FALSE;
+ DEF_LIST_ITER diter(def_list);
+ for (DU_NODE* d = diter.First(); !diter.Is_Empty(); d=diter.Next()){
+ WN* def=d->Wn();
+ if (Wn_Is_Inside(def, loop)){
+  WN* stmt1 = Find_Stmt_Under(def, body);
+  if (reduc_mgr->Which_Reduction(stmt1) == RED_NONE ||
+            (WN_operator(stmt1) == OPR_STID &&
+             (WN_st(stmt1) != WN_st(stmt) ||
+              WN_store_offset(stmt1) != WN_store_offset(stmt)))){
+          return FALSE;
+         }
+      }
+  }
+ return TRUE;
+}
+
+// This method factorizes each statement one at a time.
+// Consider a statement inside a Loop L is the form
+//
+//    L:
+//        X = X + a*xi + b*yi + ci 
+//  a and b are invariants and xi and yi and ci are variants.
+//
+//
+//  The algorithm will introduce three temporaries t0, t1 and t2 to 
+//  accumulate  xi and yi, and ci.  The multiplications are performed
+//  outside the loop.
+//  The resulting code will look like
+//  
+//   t0 = 0;
+//   t1 = 0;
+//   t2 = 0;
+//   L:
+//       t0 = t0 + xi
+//       t1 = t1 + yi
+//       t2 = t2 + ci
+//   END
+//   X  = X + a*t0 + b*t1 + t2
+//
+//  The multiplications that got hoisted into the outer loop
+//  can be considered for further factorization in the outer loop.
+//
+// The previous implemenation of Factorization (Factorize_Statements)
+// Can not factorize this example if a and b are different or have 
+// no common factors. 
+
+
+static BOOL  Factorize_Single_Statement(WN *stmt, WN *loop)
+{
+ STACK_OF_WN *term_stack = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                 &FACT_default_pool);
+
+ if(!Build_Term_Stack(WN_kid1(WN_kid0(stmt)), term_stack))
+   return FALSE;
+ if(term_stack->Elements()==0) //no terms? 
+   return FALSE;
+
+ BOOL factorized = FALSE; 
+ WN *invar_tree = NULL;
+
+ STACK_OF_WN *variant_term_stack = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                 &FACT_default_pool);
+
+ TYPE_ID type = WN_rtype(WN_kid1(WN_kid0(stmt)));
+
+ for(INT i=0; i<term_stack->Elements(); i++){
+
+    WN *subterm = term_stack->Bottom_nth(i);
+
+    STACK_OF_WN *invar_stack = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                 &FACT_default_pool);
+
+    if (!Gather_Term_Invars(subterm, invar_stack, loop)
+        || (invar_stack->Elements()==0))
+      continue;
+
+    // The statement has subterms that have invariant terms.
+
+    //          introduce t1 = 0, outside the loop
+    //          replace the invariant factor in the term by 1
+    //          add X = X + t1*inv outside the loop. 
+
+    factorized = TRUE;
+    WN_OFFSET preg_num=0;
+    ST *preg_st=0;
+    char preg_name[20];
+    preg_st = MTYPE_To_PREG(type);
+    sprintf(preg_name,"invar_fact%d",local_num++);
+    preg_num = Create_Preg(type,preg_name);
+    OPCODE preg_s_opcode = OPCODE_make_op(OPR_STID,MTYPE_V,type);
+    OPCODE preg_l_opcode = OPCODE_make_op(OPR_LDID,type,type);
+    OPCODE add_opc= OPCODE_make_op(OPR_ADD,type, MTYPE_V);
+    OPCODE sub_opc= OPCODE_make_op(OPR_SUB,type, MTYPE_V);
+    TCON tcon;
+    ST* st;
+    tcon = Host_To_Targ_Float(type, 0.0);
+    st = New_Const_Sym (Enter_tcon(tcon), Be_Type_Tbl(type));
+    WN *const_wn = WN_CreateConst(OPR_CONST, type, MTYPE_V, st);
+    WN *preg_store_in_preheader = LWN_CreateStid(preg_s_opcode,preg_num,
+                       preg_st, Be_Type_Tbl(type),const_wn);
+    LWN_Insert_Block_Before(LWN_Get_Parent(loop),loop,preg_store_in_preheader); //t = 0
+
+    Split_Var_Tree(subterm, loop, invar_stack);
+    WN *var_tree = WN_Simplify_Tree(subterm);
+
+
+    WN *preg_load_in_loop = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+    Du_Mgr->Add_Def_Use(preg_store_in_preheader,preg_load_in_loop);
+    WN *add = LWN_CreateExp2(WN_operator(WN_kid0(stmt))==OPR_ADD?add_opc:sub_opc,preg_load_in_loop,var_tree);
+    WN *preg_store_in_loop = LWN_CreateStid(preg_s_opcode,preg_num, //t = t + var
+                       preg_st, Be_Type_Tbl(type),add);
+    LWN_Insert_Block_Before(LWN_Get_Parent(stmt),stmt,preg_store_in_loop);
+    WN *invar = Build_Invar_Tree(invar_stack);
+    WN *preg_load_outside_loop = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+    Du_Mgr->Add_Def_Use(preg_store_in_loop,preg_load_outside_loop);
+    OPCODE mpy_opc = OPCODE_make_op(OPR_MPY,WN_rtype(invar),MTYPE_V);
+    invar = LWN_CreateExp2(mpy_opc, invar, preg_load_outside_loop);  
+    if (invar_tree == NULL) 
+    { 
+      invar_tree = invar;
+    } 
+    else
+    { 
+      invar_tree = LWN_CreateExp2(WN_operator(WN_kid0(stmt))==OPR_ADD?add_opc:sub_opc, invar_tree, invar);  
+    } 
+ }
+
+ if (factorized)
+ { 
+    WN *variant_tree = NULL;
+    WN *expr = invar_tree;
+    OPCODE opc= WN_operator(WN_kid0(stmt))==OPR_ADD ? OPCODE_make_op(OPR_ADD,type, MTYPE_V) 
+                                                  : OPCODE_make_op(OPR_SUB,type, MTYPE_V);
+    for(INT i=0; i<variant_term_stack->Elements(); i++){
+      WN *subterm = variant_term_stack->Bottom_nth(i);
+      if (variant_tree == NULL) 
+      { 
+        variant_tree = subterm;
+      } 
+      else
+      { 
+        variant_tree = LWN_CreateExp2(opc, variant_tree, subterm);  
+      } 
+    }
+
+    if (variant_tree)
+    { 
+      // we have a reduction statement where some terms have invariant factors
+      // and some don't.  variant_tree contains all terms with no invariant factors. 
+      // we have to accumulate these in a separate tempory var, similar to what
+      // we did for separating invariant factors. 
+
+      WN_OFFSET preg_num=0;
+      ST *preg_st=0;
+      char preg_name[20];
+      preg_st = MTYPE_To_PREG(type);
+      sprintf(preg_name,"variant_term%d",local_num++);
+      preg_num = Create_Preg(type,preg_name);
+      OPCODE preg_s_opcode = OPCODE_make_op(OPR_STID,MTYPE_V,type);
+      OPCODE preg_l_opcode = OPCODE_make_op(OPR_LDID,type,type);
+      OPCODE add_opc= OPCODE_make_op(OPR_ADD,type, MTYPE_V);
+      OPCODE sub_opc= OPCODE_make_op(OPR_SUB,type, MTYPE_V);
+      TCON tcon;
+      ST* st;
+      tcon = Host_To_Targ_Float(type, 0.0);
+      st = New_Const_Sym (Enter_tcon(tcon), Be_Type_Tbl(type));
+      WN *const_wn = WN_CreateConst(OPR_CONST, type, MTYPE_V, st);
+      WN *preg_store_in_preheader = LWN_CreateStid(preg_s_opcode,preg_num,
+                         preg_st, Be_Type_Tbl(type),const_wn);
+      LWN_Insert_Block_Before(LWN_Get_Parent(loop),loop,preg_store_in_preheader); //t = 0
+
+      WN *preg_load_in_loop = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+      Du_Mgr->Add_Def_Use(preg_store_in_preheader,preg_load_in_loop);
+      WN *add = LWN_CreateExp2(WN_operator(WN_kid0(stmt))==OPR_ADD?add_opc:sub_opc,preg_load_in_loop,variant_tree);
+      WN *preg_store_in_loop = LWN_CreateStid(preg_s_opcode,preg_num, //t = t + var
+                          preg_st, Be_Type_Tbl(type),add);
+      LWN_Insert_Block_Before(LWN_Get_Parent(stmt),stmt,preg_store_in_loop);
+      WN *preg_load_outside_loop = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+      Du_Mgr->Add_Def_Use(preg_store_in_loop,preg_load_outside_loop);
+      expr = LWN_CreateExp2(WN_operator(WN_kid0(stmt))==OPR_ADD?add_opc:sub_opc,invar_tree, preg_load_outside_loop);  
+    } 
+
+    WN_kid1(WN_kid0(stmt))=expr;
+    LWN_Set_Parent(expr, WN_kid0(stmt));
+    LWN_Parentize(WN_kid0(stmt));
+    LWN_Extract_From_Block(LWN_Get_Parent(stmt), stmt);
+    LWN_Insert_Block_After(LWN_Get_Parent(loop),loop,stmt);// x = x + t *invar
+ }
+ return factorized; 
+}
+
+
+
+//-----------------------------------------------------------------------------
+// the cool part, we actually do thing here
+//-----------------------------------------------------------------------------
+static void  Handle_Stmt(STACK_OF_WN *group, STACK_OF_WN *common_invar, WN *loop)
+{
+ WN *first = group->Bottom_nth(0);
+ TYPE_ID type = WN_rtype(WN_kid1(WN_kid0(first)));
+ WN_OFFSET preg_num=0;
+ ST *preg_st=0;
+ char preg_name[20];
+ preg_st = MTYPE_To_PREG(type);
+ sprintf(preg_name,"invar_fact%d",local_num++);
+ preg_num = Create_Preg(type,preg_name);
+ OPCODE preg_s_opcode = OPCODE_make_op(OPR_STID,MTYPE_V,type);
+ OPCODE preg_l_opcode = OPCODE_make_op(OPR_LDID,type,type);
+ OPCODE add_opc= OPCODE_make_op(OPR_ADD,type, MTYPE_V);
+ OPCODE sub_opc= OPCODE_make_op(OPR_SUB,type, MTYPE_V);
+ WN *preg_store;
+ WN *preg_load;
+ for(INT i=0; i<group->Elements(); i++){
+  WN *stmt = group->Bottom_nth(i);
+  if(i==0){//first stmt, we need to generate t = 0, and insert before the loop
+  TCON tcon;
+  ST* st;
+  tcon = Host_To_Targ_Float(type, 0.0);
+  st = New_Const_Sym (Enter_tcon(tcon), Be_Type_Tbl(type));
+  WN *const_wn = WN_CreateConst(OPR_CONST, type, MTYPE_V, st);
+  preg_store = LWN_CreateStid(preg_s_opcode,preg_num,
+                     preg_st, Be_Type_Tbl(type),const_wn);
+  LWN_Insert_Block_Before(LWN_Get_Parent(loop),loop,preg_store); //t = 0
+  }
+ 
+  WN *terms = WN_kid1(WN_kid0(stmt));
+  
+  Split_Var_Tree(terms, loop, common_invar);
+  WN *var_tree = WN_Simplify_Tree(terms);
+  //only the last one need to build an invar tree
+  WN *preg_load = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+  Du_Mgr->Add_Def_Use(preg_store,preg_load);
+  WN *add = LWN_CreateExp2(WN_operator(WN_kid0(stmt))==OPR_ADD?add_opc:sub_opc,preg_load,var_tree);
+  preg_store = LWN_CreateStid(preg_s_opcode,preg_num, //t = t + var
+                     preg_st, Be_Type_Tbl(type),add);
+  LWN_Insert_Block_Before(LWN_Get_Parent(stmt),stmt,preg_store);
+
+  if(i==group->Elements()-1){
+   WN *invar_tree = Build_Invar_Tree(common_invar);
+   WN *preg_load = WN_CreateLdid(preg_l_opcode,preg_num, preg_st, Be_Type_Tbl(type));
+   Du_Mgr->Add_Def_Use(preg_store,preg_load);
+   OPCODE mpy_opc = OPCODE_make_op(OPR_MPY,WN_rtype(invar_tree),MTYPE_V);
+   invar_tree = LWN_CreateExp2(mpy_opc, invar_tree, preg_load);  
+   WN_kid1(WN_kid0(stmt))=invar_tree;
+   LWN_Set_Parent(invar_tree, WN_kid0(stmt));
+   LWN_Parentize(WN_kid0(stmt));
+   LWN_Extract_From_Block(LWN_Get_Parent(stmt), stmt);
+   LWN_Insert_Block_After(LWN_Get_Parent(loop),loop,stmt);// x = x + t *invar
+  }else{
+    WN_kid1(WN_kid0(stmt))=NULL;
+    LWN_Parentize(WN_kid0(stmt));
+    LWN_Extract_From_Block(LWN_Get_Parent(stmt), stmt);
+    LWN_Delete_Tree(stmt);
+   }
+  }
+}
+
+
+
+//let's assume it can
+static BOOL Factorize_Statement(STACK_OF_WN *current_stmt_group, WN *loop)
+{
+ //get_reduction_invariant of the first statement
+ STACK_OF_WN *common_invar; 
+ for(INT ii=0; ii<current_stmt_group->Elements(); ii++){
+    WN * stmt=current_stmt_group->Bottom_nth(ii);
+    STACK_OF_WN *tmp_invar = CXX_NEW(STACK_OF_WN(&FACT_default_pool),
+                                     &FACT_default_pool);
+    if(!Gather_Stmt_Common_Invar(stmt, tmp_invar, loop))
+      return FALSE;
+    if(tmp_invar->Elements()==0) 
+        return FALSE; //no invar in this statement
+    if(ii == 0) //the first
+        common_invar = tmp_invar;
+    else
+        common_invar = Invar_Stack_Intersection(common_invar, tmp_invar);
+    if(common_invar->Elements()==0) 
+        return FALSE; //no common invar
+ }
+if (LNO_Invar_Factor_Verbose){
+     printf("  %d statements with %d common_invariants have been factorized.\n", 
+           current_stmt_group->Elements(),
+           common_invar->Elements());
+}
+ Handle_Stmt(current_stmt_group, common_invar, loop);
+ return TRUE;
+}
+
+static BOOL Under_Same_Level(WN_OFFSET offset, ST *st, 
+                             WN *loop, WN* body)
+{
+  for (LWN_ITER* itr = LWN_WALK_TreeIter(loop);
+       itr;
+       itr = LWN_WALK_TreeNext(itr)){
+      WN* wn = itr->wn;
+     if (WN_operator(wn) == OPR_STID &&
+         WN_st(wn) == st             &&
+         WN_store_offset(wn)==offset){
+         if(LWN_Get_Parent(wn) != body)
+          return FALSE;
+     }
+   }
+  return TRUE;
+}
+
+static BOOL Already_Passed_Stid(WN *stid, STACK_OF_WN *stmt_stack)
+{ 
+  for(INT ii=0; ii<stmt_stack->Elements(); ii++){
+     WN *wn = stmt_stack->Top_nth(ii);
+     if(WN_st(stid) == WN_st(wn) &&
+        WN_store_offset(stid) == WN_store_offset(wn))
+        return TRUE;
+  }
+ return FALSE;
+}
+
+
+static 
+BOOL Factorize_Stmts(WN *loop, BOOL group)
+{ 
+  WN *body = WN_do_body(loop);
+
+  //for a stmt
+  STACK_OF_WN *stid_stmt_list = CXX_NEW
+                 (STACK_OF_WN(&FACT_default_pool),&FACT_default_pool);
+  //first pass -- collecting stids
+  WN *stmt;
+  for(stmt=WN_first(body); stmt; stmt=WN_next(stmt)){
+   if(WN_operator(stmt) == OPR_STID){
+    if(!Already_Passed_Stid(stmt, stid_stmt_list))
+      { 
+      stid_stmt_list->Push(stmt);
+      }
+   }
+  }
+
+  BOOL has_factorization = FALSE;
+
+  //second pass, whether this stid is good, if yes, then factorize it 
+  for (INT ii=0; ii<stid_stmt_list->Elements(); ii++)
+  {
+     WN *orig_stmt = stid_stmt_list->Bottom_nth(ii);    
+     WN_OFFSET offset = WN_store_offset(orig_stmt);
+     ST *st = WN_st(orig_stmt);
+     if(!Under_Same_Level(offset, st, loop, body))
+       continue;
+
+     STACK_OF_WN *current_stmt_group=CXX_NEW(STACK_OF_WN(&FACT_default_pool),&FACT_default_pool);
+     BOOL everything_good = TRUE;
+     for(stmt=WN_first(body); stmt; stmt=WN_next(stmt))
+     {
+         if(WN_operator(stmt)==OPR_STID &&
+            WN_store_offset(stmt)==offset &&
+            WN_st(stmt)==st) 
+         {
+            if (Well_Formed_Reduction_Stmt(stmt, loop))
+               current_stmt_group->Push(stmt);
+            else
+            {
+               everything_good = FALSE;
+               break;
+            }
+         }
+     }
+     if(!everything_good) continue;
+
+     if (group)
+     { 
+       BOOL factorized = Factorize_Statement(current_stmt_group,loop);
+       if(factorized)
+          has_factorization = TRUE;
+     } 
+     else
+     { 
+       // factorize each statement independently
+       for(INT ii=0; ii<current_stmt_group->Elements(); ii++)
+       { 
+         WN * stmt=current_stmt_group->Bottom_nth(ii);
+         BOOL factorized = Factorize_Single_Statement(stmt,loop);
+         if(factorized)
+            has_factorization = TRUE;
+       }
+     }
+  }
+
+  return has_factorization;
+}
+     
+
+static BOOL
+contains_loop_with_delayed_unrolling(WN *loop)
+{
+  for (LWN_ITER* itr = LWN_WALK_TreeIter(loop);
+       itr; itr=LWN_WALK_TreeNext(itr))
+  {
+     WN *wn = itr->wn;
+     if (WN_operator(wn)==OPR_DO_LOOP)
+     {
+        DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+        if (dli && dli->Delay_Full_Unroll == TRUE)
+          return TRUE;
+     }
+  }
+  return FALSE;
+}
+
+//need to determine which loops are good candidates
+static BOOL Factorize_Loop(WN *loop)
+{
+ if(WN_operator(loop) != OPR_DO_LOOP  ||
+           Do_Loop_Has_Calls(loop)    ||
+           Do_Loop_Has_Exits(loop)    ||
+           Do_Loop_Has_Gotos(loop)    ||
+           Do_Loop_Is_Mp(loop)        ||
+           Is_Nested_Doacross(loop)   ||
+           !Do_Loop_Is_Good(loop))
+   return FALSE;
+  //what about a statement is good, or bad
+
+ DO_LOOP_INFO *dli = Get_Do_Loop_Info(loop);
+ if (LNO_Invar_Factor_Verbose){
+   printf("About to factorize Loop at Line %d (Id %d) \n",
+		  Srcpos_To_Line(WN_Get_Linenum(loop)), dli->Get_Id());
+ }
+ 
+ BOOL has_factorization = FALSE;
+ if(current_level < STOP_LEVEL){
+
+   // The previous factorization algorithm finds common factors among a 
+   // group of reductions of the same variable. 
+   // The new factorization algorithm finds common factors 
+   // treating each reduction independently. The new factorization 
+   // algorithm is enabled by default using the configuration variable
+   // LNO_New_Invariant_Factorization.  The second parameter of 
+   // Factorize_Stmts helps us choose either one of the algorithms.
+   // The old one can be useful in triaging problems with the new algorithm.
+
+   BOOL factorize_groups = !LNO_New_Invariant_Factorization;
+
+   has_factorization = Factorize_Stmts(loop, factorize_groups);
+ }
+
+ if(has_factorization){//try next level of loop
+   current_level++;
+   WN *parent = LWN_Get_Parent(loop);
+   WN *outer_loop = Enclosing_Do_Loop(parent);
+   if(outer_loop)
+     Factorize_Loop(outer_loop);
+ }
+ else
+ { 
+   if (contains_loop_with_delayed_unrolling(loop))
+   {
+      BOOL u = Fully_Unroll_Short_Loops(loop);
+      unrolled |= u;
+   }
+ }
+
+ return has_factorization;
+}
+
+static INT Factors_In_Mult_Tree(WN *mpy)
+{
+ if(WN_operator(mpy) != OPR_MPY)
+  return 0;
+ return (Factors_In_Mult_Tree(WN_kid0(mpy)) + 
+         Factors_In_Mult_Tree(WN_kid1(mpy)) + 1);  
+}
+
+static INT Factors_In_Terms(WN *terms)
+{
+  if(WN_operator(terms)==OPR_ADD){
+   INT left = Factors_In_Terms(WN_kid0(terms));
+   INT right = Factors_In_Terms(WN_kid1(terms));
+   return (left > right ? right : left);
+  }else if(WN_operator(terms)==OPR_MPY)
+    return Factors_In_Mult_Tree(terms);
+ return 0;
+}
+
+//remember that we do not know any reduction now, so only an extimation now
+static INT Statement_Invariant_Factors(WN *stmt, WN *innerloop)
+{
+  if(WN_operator(stmt)!=OPR_STID && WN_operator(stmt)!=OPR_ISTORE)
+    return 0;  
+  WN *terms;
+  WN *kid0 = WN_kid0(stmt);
+  if(WN_operator(kid0) != OPR_ADD)
+    return 0;
+  if(WN_operator(stmt)==OPR_STID){ 
+    if(WN_operator(WN_kid0(kid0))==OPR_LDID                   && 
+    //   SYMBOL(stmt)==SYMBOL(WN_kid0(kid0))                    &&
+       WN_st(stmt)==WN_st(WN_kid0(kid0))                      &&
+       WN_store_offset(stmt) == WN_load_offset(WN_kid0(kid0)) &&
+       WN_field_id(stmt) == WN_field_id(WN_kid0(kid0)))
+      terms = WN_kid1(kid0);
+    else if(WN_operator(WN_kid1(kid0))==OPR_LDID              &&
+    //   SYMBOL(stmt)==SYMBOL(WN_kid1(kid0))                    &&
+       WN_st(stmt)==WN_st(WN_kid1(kid0))                      &&
+       WN_store_offset(stmt) == WN_load_offset(WN_kid1(kid0)) &&
+       WN_field_id(stmt) == WN_field_id(WN_kid1(kid0)))
+      terms = WN_kid0(kid0);
+    else return 0;
+  }else if(WN_operator(stmt)==OPR_ISTORE){
+   WN *array_to = WN_kid1(stmt);
+   if(WN_operator(array_to) != OPR_ARRAY)
+     return 0;
+    WN *array_from;
+    if(WN_operator(WN_kid0(kid0))==OPR_ILOAD &&
+       WN_operator(WN_kid0(WN_kid0(kid0))) == OPR_ARRAY){
+       array_from = WN_kid0(WN_kid0(kid0));
+       terms = WN_kid1(kid0);
+     }else if(WN_operator(WN_kid1(kid0))==OPR_ILOAD &&
+       WN_operator(WN_kid0(WN_kid1(kid0))) == OPR_ARRAY){
+       array_from = WN_kid0(WN_kid1(kid0));
+       terms = WN_kid0(kid0);
+     }else return 0;
+     if(!Tree_Equiv(array_from, array_to))
+      return 0;
+  }//end istore
+ if(!Well_Formed_Terms(terms))
+  return 0;
+ return Factors_In_Terms(terms);
+}
+
+//whether the loop is possible to be factorized
+static BOOL Invar_Factor_Candidate(WN *innerloop)
+{   
+  INT invar_factors = 0;
+  INT stmt_invar_factors;
+  WN *body = WN_do_body(innerloop);
+  for(WN *stmt=WN_first(body); stmt; stmt=WN_next(stmt)){
+      stmt_invar_factors = Statement_Invariant_Factors(stmt, innerloop);
+      if(stmt_invar_factors > invar_factors)
+       invar_factors = stmt_invar_factors;
+  }
+ return (invar_factors >= GOOD_FACTORS);
+}
+
+extern BOOL Is_Invariant_Factorization_Beneficial(WN *loop){
+
+  if(!LNO_Invariant_Factorization     || //do not do factorization
+     Roundoff_Level < ROUNDOFF_ASSOC  || //reassociation is not allowed
+     Get_Trace(TP_LNOPT, TT_LNO_GUARD))  //loop is not guarded
+    return FALSE;
+
+  //collecting inner do loops (inner does are important)
+  STACK_OF_WN *innerdo_stack = CXX_NEW
+          (STACK_OF_WN(&LNO_default_pool),&LNO_default_pool);
+ for (LWN_ITER* itr = LWN_WALK_TreeIter(WN_do_body(loop));
+       itr;
+       itr = LWN_WALK_TreeNext(itr)){
+     WN* wn = itr->wn;
+     if (WN_operator(wn) == OPR_DO_LOOP){
+       DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+     if(dli && dli->Is_Inner)
+       innerdo_stack->Push(wn);
+     }
+  }
+  for(INT ii=0; ii<innerdo_stack->Elements(); ii++){
+     WN *innerloop = innerdo_stack->Bottom_nth(ii);
+     if(Invar_Factor_Candidate(innerloop))
+      return TRUE;
+  }
+ return FALSE;
+}
+
+static BOOL pool_initialized = FALSE;
+
+extern BOOL Invariant_Factorization(WN *func_nd)
+{ 
+  unrolled = FALSE;
+  if(!pool_initialized){ 
+   MEM_POOL_Initialize(&FACT_default_pool,"FACT_default_pool",FALSE);
+   MEM_POOL_Push(&FACT_default_pool);
+   pool_initialized = TRUE;
+  }
+  reduc_mgr = CXX_NEW
+          (REDUCTION_MANAGER(&FACT_default_pool), &FACT_default_pool);
+  reduc_mgr->Build(func_nd,TRUE,FALSE); //build scalar reductions
+
+  INT factorized_loops = 0;
+  //collecting inner do loops
+  STACK_OF_WN *inner_do_stack = CXX_NEW
+          (STACK_OF_WN(&FACT_default_pool),&FACT_default_pool);
+ for (LWN_ITER* itr = LWN_WALK_TreeIter(func_nd);
+       itr;
+       itr = LWN_WALK_TreeNext(itr)){
+     WN* wn = itr->wn;
+     if (WN_operator(wn) == OPR_DO_LOOP){
+       DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+     if(dli && dli->Is_Inner)
+       inner_do_stack->Push(wn);
+     }
+  }
+
+ for(INT ii=0; ii<inner_do_stack->Elements(); ii++){
+   WN *loop = inner_do_stack->Bottom_nth(ii);
+   current_level=0;
+   if(Factorize_Loop(loop)){    
+      if (LNO_Invar_Factor_Verbose){
+        printf("(%s:%d) Loop invariants were factorized.\n", Src_File_Name,
+          Srcpos_To_Line(WN_Get_Linenum(loop)));
+      }
+     factorized_loops++;
+    }
+  }
+
+ return unrolled;
+  
+  //MEM_POOL_Pop(&FACT_default_pool);
+  //MEM_POOL_Delete(&FACT_default_pool);  //memory to be cleaned
+}
+#endif
+

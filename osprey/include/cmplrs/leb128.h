@@ -68,6 +68,14 @@
 extern "C" {
 #endif
 
+#ifdef __MINGW32__
+#include "sgidefs.h"
+typedef __int32_t int32_t;
+typedef __uint32_t u_int32_t;
+typedef __int64_t int64_t;
+typedef __uint64_t u_int64_t;
+#endif /* __MINGW32__ */
+
 #ifndef __GNUC__
 
 extern int _leb128_unsigned_encode64(__uint64_t /*number*/, char* /*buffer*/);

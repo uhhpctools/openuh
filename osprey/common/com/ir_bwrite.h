@@ -40,6 +40,13 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#ifdef __MINGW32__
+#include<WINDOWS.H> /* for HANDLE */
+/* ideally should move def of output_file to private header
+ * so this windows.h doesn't percolate to callers.
+ * Problem is that windows.h needs to be included before defs.h
+ * due to conflict with mUINT32, but defs.h usually before ir_bwrite.h */
+#endif /* __MINGW32__ */
 				       
 /*
  * This flag is usually FALSE, but bedriver may set it to TRUE so that
@@ -49,6 +56,7 @@ extern "C" {
 extern BOOL Write_BE_Maps;
 extern BOOL Write_AC_INTERNAL_Map;
 extern BOOL Write_ALIAS_CLASS_Map;
+extern BOOL Write_ALIAS_CGNODE_Map;
 #endif /* BACK_END */
 
 
@@ -62,14 +70,19 @@ extern BOOL Write_ALIAS_CLASS_Map;
 
 
 typedef struct section {
-    char *name;			    /* section name */
+    const char *name;		    /* section name */
     Elf64_Shdr shdr;		    /* Elf section */
 } Section;
 
 
 typedef struct output_file {
     char *file_name;
+#ifdef __MINGW32__
+    int output_fd;		    /* handle for output file */
+    HANDLE mapHd;		    /* Handle for mapped region */
+#else
     INT output_fd;		    /* file id for output file */
+#endif /* __MINGW32__ */
     char *map_addr; 		    /* base address of the mapped region */
     off_t mapped_size;		    /* max. size of the mapped region */
     off_t file_size;
@@ -87,6 +100,8 @@ extern Output_File *WN_open_output (char *file_name);
 extern void WN_close_output (Output_File *fl);
 extern void WN_close_file (void *fl);
 
+extern Section *
+get_section (Elf64_Word sh_info, const char *name, Output_File *fl);
 
 /*
  * Write global tables to their own Elf sections.  These should only be
@@ -104,8 +119,9 @@ extern void IPA_copy_PU(PU_Info *pu, char *section_base, Output_File *outfile);
 extern void WN_write_flags (INT argc, char **argv, Output_File *fl);
 extern void WN_write_revision (Output_File *fl);
 extern void WN_close_file (void *this_fl);
-
-
+#if defined(TARG_SL)
+extern void WN_write_isr_cg (vector<mINT32>& cg, Output_File *fl);
+#endif
 
 /*
  * Write PU section header.  This must be called after writing out all the
@@ -139,6 +155,7 @@ extern void WN_write_voidptr_map(PU_Info     *pu,
 				 INT32        subsection_type,
 				 WN_MAP       value_map,
 				 const char  *subsection_name);
+extern void WN_write_SSA(PU_Info *pu, Output_File *fl);
 #ifndef OWN_ERROR_PACKAGE
 
 /*

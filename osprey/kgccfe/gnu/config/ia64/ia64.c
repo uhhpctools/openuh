@@ -5968,15 +5968,6 @@ cycle_end_fill_slots (dump)
 
   /* This isn't right - there's no need to pad out until the forced split;
      the CPU will automatically split if an insn isn't ready.  */
-#if 0
-  while (slot < sched_data.split)
-    {
-      sched_data.types[slot] = packet->t[slot];
-      sched_data.insns[slot] = 0;
-      sched_data.stopbit[slot] = 0;
-      slot++;
-    }
-#endif
 
   sched_data.first_slot = sched_data.cur = slot;
 }

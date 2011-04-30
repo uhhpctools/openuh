@@ -101,29 +101,5 @@ __powll( _f_int8 x,
 /* do not use these unless needed for compatibility with f77
  * and call by address.
  */
-#if 0
-_f_int8
-pow_ll( _f_int8 *x,
-	_f_int8 *y )
-{
-	return(_ITOI(*x, *y));
-}
-
-_f_int8
-pow_il( _f_int4 *x,
-	_f_int8 *y )
-{
-	_f_int8	xtemp	= *x;
-	return(_ITOI(xtemp, *y));
-}
-
-_f_int8
-pow_li( _f_int8 *x,
-	_f_int4 *y )
-{
-	_f_int8	ytemp	= *y;
-	return(_ITOI(*x, ytemp));
-}
-#endif	/* end of if 0 */
 
 #endif	/* end of mips or little endian */

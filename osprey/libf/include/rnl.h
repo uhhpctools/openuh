@@ -61,7 +61,11 @@
 #define WCOMP	50
 
 #define MAXDIMS	10	/* Maximum number of dimensions for an array	*/
+#ifdef KEY /* Bug 14479 */
+#define MAXNAML	63	/* Maximum length of namelist name		*/
+#else /* KEY Bug 14479 */
 #define MAXNAML	31	/* Maximum length of namelist name		*/
+#endif /* KEY Bug 14479 */
 
 /* Error processing */
 

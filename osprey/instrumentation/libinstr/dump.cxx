@@ -254,14 +254,6 @@ namespace {
 
 	  const INT64 positive = first->invocation_count - zero_trips;
 	  const INT64 back = first->total_trip_count - first->invocation_count + zero_trips;
-#if 0
-	  FB_Info_Loop loop (FB_FREQ (zero_trips),
-			     FB_FREQ ( tmp),
-			     FB_FREQ (FB_FREQ_TYPE_UNKNOWN),
-			     FB_FREQ (tmp1));
-
-	   dest.push_back(loop);
-#endif
 	dest.push_back(FB_Info_Loop(FB_FREQ (zero_trips),
 				    FB_FREQ (positive),
 				    FB_FREQ (FB_FREQ_TYPE_UNKNOWN),

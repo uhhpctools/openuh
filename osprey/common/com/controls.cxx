@@ -83,7 +83,7 @@
 #define FOR_ALL_CONTROLS(i) for (i=CONTROL_FIRST; i<CONTROL_LAST; i++)
 
 typedef struct str_list {
-  char* item;
+  const char* item;
   struct str_list *next;
 } STR_LIST;
 
@@ -93,7 +93,7 @@ typedef struct str_list {
 
 /* Define a structure describing the supported controls: */
 typedef struct {
-  char    *name;
+  const char    *name;
   CONTROL index;   /* used to verify that the table is in order */
   INT16   flags;
   INTPS first_def; /* first default */
@@ -123,8 +123,8 @@ typedef struct {
 # define CI_SCOPE_COMPILATION	0x0500 /*	per compilation	*/
 #define CI_HAS_CHANGED		0x1000 /* Changed by a pragma */
 
-char *ci_int_type_message = "Control %s expects integer values";
-char *ci_nlist_type_message = "Control %s expects namelist values";
+const char *ci_int_type_message = "Control %s expects integer values";
+const char *ci_nlist_type_message = "Control %s expects namelist values";
 
 #define IS_INT_TYPED(ci) (Is_True(((ci)->flags&CI_NAMELIST_TYPE)==0,\
 			 (ci_int_type_message, ci->name)),(ci))
@@ -334,12 +334,12 @@ CONTROL_INFO Aflag_Tbl[] = {
  */
 
 typedef struct o_gr_exp {
-  char *name;
-  char *val;
+  const char *name;
+  const char *val;
 } O_GR_EXP;
 
 typedef struct {
-  char    *name;
+  const char    *name;
   INT16   flags, sec_def, min_val, max_val;
   O_GR_EXP   *expansion;
 } CONTROL_GROUP_INFO;
@@ -440,7 +440,7 @@ is_nlist_typed ( char *name )
  */
 
 INT
-Process_Control_Opt ( char *save_a, INT flags )
+Process_Control_Opt ( const char *save_a, INT flags )
 {
   char *name, ch, *s, *a;
   INT nlist_ctrl, found_lpar;
@@ -549,7 +549,7 @@ same_name_lists ( STR_LIST *a, STR_LIST *b )
     return FALSE;
   while (a) {
     BOOL found = FALSE;
-    char *ai = a->item;
+    const char *ai = a->item;
     for (p = b; p; p = p->next) 
       if (strcmp(p->item, ai) == 0) {
 	found = TRUE;
@@ -621,7 +621,7 @@ store_ctrl ( char *name, STR_LIST *name_list, INT flags )
   if (name_list == NULL) {
     ok_int = TRUE;
   } else if (name_list->next == NULL) {
-    char *v = name_list->item;
+    const char *v = name_list->item;
     if (*v == '-') v++;
     else if (*v == '+') v++;
     while (v[0] >= '0' && v[0] <= '9') v++;
@@ -1006,7 +1006,7 @@ Get_Int_Ctrl_Val ( CONTROL a )
   return CI_int((Aflag_Tbl+ (INT)a),cur_val);
 }
 
-char *
+const char *
 Get_Name_Ctrl_Val ( CONTROL a )
 {
 #ifdef Is_True_On
@@ -1077,7 +1077,8 @@ Process_Pragma ( char *x )
 
   /* pick substrings and call Process_Control_Opt for them */
   while (1) {
-    char *r, ch;
+    const char *r;
+    char ch;
     while (x[0] == ' ' || x[0] == '\t') x++;
     if (x[0] == '\0') return rv;
     r = x;
@@ -1102,7 +1103,7 @@ Process_Pragma ( char *x )
  */
 
 void
-Print_Controls ( FILE *fp, char *tag, BOOL def )
+Print_Controls ( FILE *fp, const char *tag, BOOL def )
 {
   CONTROL_INFO *a;
   BOOL defaulted;

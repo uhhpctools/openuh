@@ -37,10 +37,10 @@
 //============================================================================
 //
 // Module: rail.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/region/rail.cxx,v $
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:58-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/region/SCCS/s.rail.cxx $
 //
 // Revision history:
 //  24-AUG-95 dahl - Original Version
@@ -55,7 +55,7 @@
 
 #define rail_CXX	"rail.cxx"
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = rail_CXX"$Revision$";
+static char *rcs_id = rail_CXX"$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "wn.h"			/* WN type		*/

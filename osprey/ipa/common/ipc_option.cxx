@@ -52,18 +52,26 @@
  * =====================================================================
  */
 
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifndef __MINGW32__
 #include <sys/mman.h>
+#endif
 #include <ctype.h>
 #include <string.h>
 #include <ar.h>         /* for support of -INLINE:library= */
+#ifndef __MINGW32__
 #include <sys/errno.h>  /* for EBADF */
+#endif // __MINGW32__
 #include "defs.h"
 #include "config.h"
 #include "config_ipa.h"	/* -INLINE/-IPA group options */
@@ -342,7 +350,7 @@ template <class DATA, class ACTION>
 static void
 Add_Symbols(char *args, DATA data, ACTION perform_action
 #ifdef KEY
-, char * opt
+, const char * opt
 #endif
 )
 {
@@ -374,7 +382,7 @@ Add_Symbols(char *args, DATA data, ACTION perform_action
 }
 
 
-
+#ifndef __MINGW32__
 
 /* ====================================================================
  *
@@ -391,7 +399,7 @@ Add_Symbols(char *args, DATA data, ACTION perform_action
  */
 
 static void
-Process_Option_File ( char *file_name , char *type_name)
+Process_Option_File ( const char *file_name , const char *type_name)
 {
   INT fd;
   struct stat stat_buf;
@@ -451,6 +459,7 @@ Process_Option_File ( char *file_name , char *type_name)
 
   close ( fd );
 }
+#endif /* __MINGW32__ */
 
 /* ====================================================================
  *
@@ -467,6 +476,7 @@ Process_Inline_Options ( void )
 {
   OPTION_LIST *ol;
 
+#ifndef __MINGW32__
   /* Walk the specfile list.  Since new -INLINE:specfile options add
    * the element to the end of the list, this will handle nested
    * references just fine.  We also use the general common group
@@ -478,6 +488,7 @@ Process_Inline_Options ( void )
       Process_Option_File ( OLIST_val(ol), "INLINE" );
     }
   }
+#endif /* __MINGW32__ */
 
   /* Walk the list of must/never options: */
 #ifdef KEY
@@ -497,7 +508,7 @@ Process_Inline_Options ( void )
       INLINE_None = TRUE;
       Add_Symbols( OLIST_val(ol), USER_MUST_INLINE, Hash_Edges_For_Inlining(), "edge" );
     }
-    else if ( strcmp ( OLIST_opt(ol), "in" ) == 0 ) {
+    else if ( strcmp ( OLIST_opt(ol), "in_edge" ) == 0 ) {
       Add_Symbols( OLIST_val(ol), USER_MUST_INLINE, Hash_Edges_For_Inlining(), "in" );
     }
 #ifdef _STANDALONE_INLINER
@@ -530,7 +541,7 @@ Process_Inline_Options ( void )
       INLINE_None = TRUE;
       Add_Symbols( OLIST_val(ol), USER_MUST_INLINE, Hash_Edges_For_Inlining() );
     }
-    else if ( strcmp ( OLIST_opt(ol), "in" ) == 0 ) {
+    else if ( strcmp ( OLIST_opt(ol), "in_edge" ) == 0 ) {
       Add_Symbols( OLIST_val(ol), USER_MUST_INLINE, Hash_Edges_For_Inlining() );
     }
 #ifdef _STANDALONE_INLINER
@@ -556,6 +567,7 @@ Process_Inline_Options ( void )
   }
 }
 
+#ifndef __MINGW32__
 /* ====================================================================
  *
  * Process_IPA_Skip_Options
@@ -631,3 +643,4 @@ Process_IPA_Specfile_Options ( void )
 }
 
 #endif /* !_STANDALONE_INLINER */
+#endif /* __MINGW32__ */

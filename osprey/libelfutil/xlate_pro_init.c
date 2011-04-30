@@ -62,6 +62,7 @@
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_pro_init_xtnd = _xlate_pro_init_xtnd
 #pragma weak xlate_pro_finish_xtnd = _xlate_pro_finish_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_pro_init = _xlate_pro_init
 #pragma weak xlate_pro_finish = _xlate_pro_finish
@@ -116,7 +117,7 @@ int xlate_pro_init(xlate_table_pro *    ret_table,
    if(newtab == NULL) {
         return XLATE_TB_STATUS_ALLOC_FAIL;
    }
-   bzero(newtab,sizeof(struct xlate_table_pro_s));
+   BZERO(newtab,sizeof(struct xlate_table_pro_s));
 
    newtab->tb_con_table = compose_with_table;
    newtab->tb_is64bit = is64Bit;

@@ -60,6 +60,9 @@
 #elif defined(UNIX_NAMING_CONVENTION)
 #define SUBNAME1 _SGEMMX
 #define SUBNAME2 _SGEMVX
+#elif defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME1 underscore_sgemmx__
+#define SUBNAME2 underscore_sgemvx__
 #else
 #define SUBNAME1 _sgemmx__
 #define SUBNAME2 _sgemvx__

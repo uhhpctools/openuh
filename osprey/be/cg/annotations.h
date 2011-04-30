@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -42,10 +46,10 @@
  * =======================================================================
  *
  *  Module: annotations.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/annotations.h,v $
+ *  $Revision: 1.9 $
+ *  $Date: 05/12/05 08:59:02-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.annotations.h $
  *
  *  Description:
  *  ============
@@ -136,7 +140,8 @@ typedef enum {
   ANNOT_LOOPINFO  = 6,
   ANNOT_SWITCH 	  = 7,
   ANNOT_ROTATING_KERNEL = 8,
-  ANNOT_ASMINFO   = 9
+  ANNOT_ASMINFO   = 9,
+  ANNOT_INLINE    = 10
 } ANNOTATION_KIND;
 
 class WN;
@@ -164,18 +169,21 @@ typedef struct annotation {
 #define ANNOT_switch(a)		((ST *)ANNOT_info(a))
 #define ANNOT_rotating_kernel(a)   ((ROTATING_KERNEL_INFO*)ANNOT_info(a))
 #define ANNOT_asminfo(a)	((ASMINFO *)ANNOT_info(a))
+#define ANNOT_inline(a)         ((LABEL_IDX)(INTPTR)ANNOT_info(a))
 
 
 typedef struct loopinfo {
  WN *wn;			/* LOOP_INFO WHIRL node */
  struct tn *trip_count_tn;	/* TN holding trip count (if any) */
  SRCPOS srcpos;			/* source position of start of body */
+ BOOL   is_multiversion;
 } LOOPINFO;
 
 #define LOOPINFO_wn(x)			((x)->wn)
 #define LOOPINFO_srcpos(x)		((x)->srcpos)
 #define LOOPINFO_line(x)		(Srcpos_To_Line(LOOPINFO_srcpos(x)))
 #define LOOPINFO_trip_count_tn(x)	((x)->trip_count_tn)
+#define LOOPINFO_multiversion(x)	((x)->is_multiversion)
 
 
 typedef	struct entryinfo {
@@ -221,9 +229,9 @@ struct ROTATING_KERNEL_INFO {
   struct ti_res_count *res_counts;
   REGISTER_SET live_in[ISA_REGISTER_CLASS_MAX+1];
   REGISTER_SET kill[ISA_REGISTER_CLASS_MAX+1];
-  std::vector<struct tn *> copyin;
-  std::vector<struct tn *> copyout;
-  std::vector<struct tn *> localdef;
+  vector<struct tn *> copyin;
+  vector<struct tn *> copyout;
+  vector<struct tn *> localdef;
 };
 
 #define ROTATING_KERNEL_INFO_succeeded(x)     ((x)->succeeded)
@@ -242,7 +250,7 @@ struct ROTATING_KERNEL_INFO {
 #define ROTATING_KERNEL_INFO_copyout(x)       ((x)->copyout)
 #define ROTATING_KERNEL_INFO_localdef(x)      ((x)->localdef)
 
-
+#ifdef KEY 
 typedef struct asminfo {
   REGISTER_SET livein[ISA_REGISTER_CLASS_MAX+1];
   REGISTER_SET liveout[ISA_REGISTER_CLASS_MAX+1];
@@ -252,7 +260,7 @@ typedef struct asminfo {
 #define ASMINFO_livein(x)	((x)->livein)
 #define ASMINFO_liveout(x)	((x)->liveout)
 #define ASMINFO_kill(x)		((x)->kill)
-
+#endif
 
 extern ANNOTATION *ANNOT_Add (
   ANNOTATION *annot_list, 
@@ -269,6 +277,10 @@ extern ANNOTATION *ANNOT_Get (ANNOTATION *annot_list, ANNOTATION_KIND kind);
 #define ANNOT_First(list,kind)	(ANNOT_Get (list, kind))
 #define ANNOT_Next(list,kind)	(ANNOT_Get (ANNOT_next(list), kind))
 
+/***********************************************************************/
+// ASM_OP_ANNOT is an annotation on an OP rather than a BB.
+// ANNOT_asminfo on a bb can get you to the asm op,
+// then use ASM_OP_* to access these fields.
 
 #define ASM_OP_size	50
 

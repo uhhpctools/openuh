@@ -83,6 +83,9 @@ extern WN* WFE_Expand_Expr_With_Sequence_Point (tree exp, TYPE_ID mtype,
  */
 extern WN * WFE_Lhs_Of_Modify_Expr (tree_code assign_code,
 				    tree lhs,
+#ifdef TARG_SL
+                                    tree rhs,
+#endif
 				    bool need_result,
 				    TY_IDX component_ty_idx,
 				    INT64 component_offset,

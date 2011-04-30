@@ -47,4 +47,11 @@ typedef int boolean;
 typedef char buffer_t[512];
 #define NIL '\0'
 
+#if defined(_WIN32)
+/* get these from libiberty */
+#include <stdarg.h>
+extern int asprintf(char **strp, const char *fmt, ...);
+extern int vasprintf(char **strp, const char *fmt, va_list ap);
+#endif
+
 #endif

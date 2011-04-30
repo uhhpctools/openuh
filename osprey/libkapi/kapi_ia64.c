@@ -677,14 +677,8 @@ kapi_InitBidAndSyllable( knobs_t *pknobs )
       pchBid = KAPI_EnumName( pknobs, bid, "bid_t" );
       if ( 1 != KAPI_GetIntegerVariable( pknobs, "AllowAlternateBids", 0 ) ) {
          if ( strcmp( pchBid, pknobs->dmpbidinfoTable[ bid ].pchBID ) ) {
-#if 0
-            if ( bid == bidMMF && 0 == strcmp( pchBID, "bidRESERVED_7" ) ) {
-            } else  {
-            }
-#else
             kapi_Error_i1( kapi_cLine, 0,
                "Enumeration constant at position %d of 'bid_t' not defined according to EAS 2.5", bid );
-#endif
          }
       }
    }
@@ -1791,11 +1785,6 @@ kapi_ProcessInterclusterLatency( knobs_t *pknobs )
       if ( fOk ) {
          pknobs->dmpebyInterTable[ idx ] = ebyTmp;
          idx++; 
-#if 0
-printf("INTERCLUSTER %d/%d/%d/%d : %d/%d/%d/%d = %d\n",
-       ebyTmp.clusterSrc, ebyTmp.fuSrc, ebyTmp.oppSrc, ebyTmp.cportSrc,
-       ebyTmp.clusterDest, ebyTmp.fuDest, ebyTmp.oppDest, ebyTmp.cportDest, ebyTmp.iValue );
-#endif
       } else {
          kapi_Warning_pch1( 0, 0, "INTERCLUSTER dropped '%s'\n", pch );
       }
@@ -1851,12 +1840,6 @@ kapi_ProcessIntraclusterLatency( knobs_t *pknobs )
          pknobs->dmpabyIntraTable[ idx ] = abyTmp;
          pknobs->dmpabyIntraTable[ idx ].pchEntry = pch;
          idx++; 
-#if 0
-printf("INTRACLUSTER %d\\ %d/%d/%d : %d/%d/%d = %d\n",
-       abyTmp.cluster, 
-       abyTmp.fuSrc, abyTmp.oppSrc, abyTmp.cutportSrc,
-       abyTmp.fuDest, abyTmp.oppDest, abyTmp.cutportDest, abyTmp.iValue );
-#endif
       } else {
          pknobs->dmpabyIntraTable[ idx ].pchEntry = NULL;
          kapi_Warning_pch1( 0, 0, "INTRACLUSTER dropped '%s'\n", pch );

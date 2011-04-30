@@ -38,7 +38,7 @@
 
 include	$(COMMONDEFS)
 
-LCOPTS += -ansi -DTARG_IA64 -I. -I$(BUILD_TOT)/clibinc -D _LITTLE_ENDIAN -D__mips
+LCOPTS += -ansi -I. -I$(BUILD_TOT)/clibinc -D _LITTLE_ENDIAN -D__mips
 LCOPTS += $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 
 ifeq ($(BUILD_OPTIMIZE), DEBUG)
@@ -46,7 +46,15 @@ LCDEFS += -DInsist_On -DDEBUG_IR
 endif
 
 ifeq ($(BUILD_ARCH),IA32)
-F90 += -m32 -mno-sse2
+LCOPTS += -DTARG_X8664
+endif
+
+ifeq ($(BUILD_ARCH),X8664)
+LCOPTS += -DTARG_X8664
+endif
+
+ifeq ($(BUILD_ARCH),IA64)
+LCOPTS += -DTARG_IA64
 endif
 
 F90FLAGS = $(OPTIMIZER) $(CSTYLE)
@@ -105,13 +113,25 @@ ARITH_SRC += \
 	native.c \
 	test_ar_intrin.c
 else
+ifeq ($(BUILD_TARGET), SL)
+ARITH_SRC += \
+	native.c \
+	test_ar_intrin.c
+else
 ifeq ($(BUILD_TARGET), X8664)
+ARITH_SRC += \
+	native.c \
+	test_ar_intrin.c
+else
+ifeq ($(BUILD_TARGET), LOONGSON)
 ARITH_SRC += \
 	native.c \
 	test_ar_intrin.c
 else
 ARITH_SRC += \
 	simulate.c
+endif
+endif
 endif
 endif
 endif
@@ -150,6 +170,25 @@ FFILES= \
 	dummy_dc.f \
 	fintrin.f
 endif
+ifeq ($(BUILD_TARGET), SL)
+#
+# these files have the routines stubed out.
+# When we can fold these and compile with f90
+# we will use the regular files.
+#
+#FFILES= \
+#	fintrin_dc_irix.f \
+#	fintrin_irix.f
+FFILES= \
+	fintrin_dc_irix_tmp.f \
+	fintrin_irix_tmp.f
+endif
+ifeq ($(BUILD_TARGET), IA32)
+FFILES= \
+	dummy_dc.f \
+	fintrin.f
+endif
+
 ifeq ($(BUILD_TARGET), X8664)
 #
 # these files have the routines stubed out.
@@ -164,8 +203,33 @@ FFILES= \
 	fintrin_irix_tmp.f
 endif
 
+ifeq ($(BUILD_TARGET), LOONGSON)
+#
+# these files have the routines stubed out.
+# When we can fold these and compile with f90
+# we will use the regular files.
+#
+FFILES= \
+        fintrin_dc_irix_tmp.f \
+        fintrin_irix_tmp.f
+endif
 
-default: $(TARGETS) last
+
+
+FC_COMPILER = $(shell echo $(FC) | awk '{print $$1}' )
+WHICH_FC = $(shell basename `which $(FC_COMPILER) 2>/dev/null` 2>/dev/null )
+
+ifneq (X$(WHICH_FC), X)
+default:
+	$(MAKE)  $(TARGETS)
+	$(MAKE)  last
+else
+default:
+	@echo "--------------------------------------------"
+	@echo "Warning: arith is not build!"
+	@echo "  Can not find the $(FC_COMPILER)"
+	@echo "--------------------------------------------"
+endif
 
 exports: default
 	$(INSTALL) $(STD_INSTALL_READ_MASK) -F $(STD_LIBRARY_LOC) $(TARGETS)

@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -134,7 +137,7 @@ boolean resolve_ext_opr(opnd_type 	*opnd,
    int		col;
    int		darg_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		false_list_idx 		= NULL_IDX;
 # endif
 
@@ -671,7 +674,7 @@ boolean resolve_ext_opr(opnd_type 	*opnd,
              (cmd_line_flags.runtime_argument ||
              cmd_line_flags.runtime_arg_call)) {
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             list1_idx = IR_IDX_R(ir_idx);
             list2_idx = NULL_IDX;
 
@@ -731,7 +734,7 @@ boolean resolve_ext_opr(opnd_type 	*opnd,
                (IR_LIST_CNT_R(ir_idx))++;
             }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             if (false_list_idx != NULL_IDX) {
                IL_NEXT_LIST_IDX(list2_idx) = false_list_idx;
                list1_idx = false_list_idx;
@@ -2550,7 +2553,11 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
 
    CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
    TYP_TYPE(TYP_WORK_IDX)	= Typeless;
+#if defined (TARG_X8664) && defined (_HOST64)
+   TYP_BIT_LEN(TYP_WORK_IDX)    = num_words * ((SET_POINTER_SIZE)?64:32);
+#else
    TYP_BIT_LEN(TYP_WORK_IDX)	= num_words * TARGET_BITS_PER_WORD;
+#endif
    type_idx			= ntr_type_tbl();
 
    const_idx	= ntr_const_tbl(type_idx, FALSE, NULL);
@@ -2736,6 +2743,21 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
       }
    }
 
+#ifdef KEY /* Bug 9608 */
+   /*
+    * When we set assoc=0 for an array, we also set contig=1 so that
+    * copyinout doesn't blow up if user (illegally) passes the null
+    * pointer to a procedure lacking an explicit interface, in the
+    * (unjustified) expectation that the pointer won't be
+    * dereferenced if the procedure doesn't refer to the dummy
+    * argument. This seems cheaper than adding a test for null
+    * before and after every call.
+    */
+   if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX && !DV_ASSOC(*dv_ptr)) {
+     DV_SET_A_CONTIG(*dv_ptr, 1);
+   }
+#endif /* KEY Bug 9608 */
+
    TRACE (Func_Exit, "gen_static_dv_whole_def", NULL);
 
    return;
@@ -2920,7 +2942,7 @@ void gen_entry_dope_code(int	 attr_idx)
    }
    else if (ATD_IN_COMMON(attr_idx)) {
 
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       func = gen_common_dv_init;
       opr = Init_Opr;
 # else
@@ -2945,7 +2967,7 @@ void gen_entry_dope_code(int	 attr_idx)
       goto EXIT;
    }
 
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    if (ATP_PGM_UNIT(SCP_ATTR_IDX(curr_scp_idx)) == Module &&
        ATD_IN_COMMON(attr_idx)) {
@@ -4298,10 +4320,6 @@ static void gen_dv_stride_mult(opnd_type	*stride_opnd,
    }
    else {
       res_sm_unit_in_bits = sm_unit_in_bits(exp_desc->type_idx);
-# ifdef _WHIRL_HOST64_TARGET64
-      if (res_sm_unit_in_bits > 32)
-        res_sm_unit_in_bits = 32;
-# endif /* _WHIRL_HOST64_TARGET64 */
    }
 
    /* src_sm_unit_in_bits describes the sm unit for the arrays bd entry */
@@ -4882,7 +4900,19 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
       IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
    }
    else {
+#ifdef KEY /* Bug 9608 */
+      /*
+       * When we set assoc=0 for an array, we also set contig=1 so that
+       * copyinout doesn't blow up if user (illegally) passes the null pointer
+       * to a procedure lacking an explicit interface, in the (unjustified)
+       * expectation that the pointer won't be dereferenced if the procedure
+       * doesn't refer to the dummy argument. This seems cheaper than adding
+       * a test for null before and after every call.
+       */
+      IL_IDX(list_idx) = rank ? CN_INTEGER_ONE_IDX : CN_INTEGER_ZERO_IDX;
+#else /* KEY Bug 9608 */
       IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+#endif /* KEY Bug 9608 */
    }
    IL_LINE_NUM(list_idx) = line;
    IL_COL_NUM(list_idx)  = col;
@@ -5440,7 +5470,7 @@ void    short_circuit_branch(void)
             if (IR_SHORT_CIRCUIT_L(log_idx)) {
                left_is_worse = TRUE;
             }
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             else {
                left_is_worse = FALSE;
             }
@@ -7096,7 +7126,7 @@ boolean	gen_internal_dope_vector(int_dope_type		*dope_vec,
 
    dope_vec->unused_1 = 0;
 
-# if defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    /*************\
    |* UNUSED 2  *|
    \*************/
@@ -7111,7 +7141,7 @@ boolean	gen_internal_dope_vector(int_dope_type		*dope_vec,
 
    dope_vec->num_dims = exp_desc->rank;
 
-# if defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifndef _TYPE_CODE_64_BIT
    /*************\
    |* UNUSED 3  *|
@@ -7228,11 +7258,6 @@ void	transform_char_sequence_ref(opnd_type		*top_opnd,
    size_offset_type	num_chars;
    opnd_type   		opnd;
 
-# if 0
-   int			attr_idx;
-   int			bd_idx;
-   int			i;
-# endif
 
    TRACE (Func_Entry, "transform_char_sequence_ref", NULL);
 
@@ -7354,71 +7379,6 @@ REFERENCE:
 
    size_offset_binary_calc(&length, &num_chars, Div_Opr, &num_chars);
 
-# if 0
-   while (TYP_TYPE(type_idx) == Structure) {
-
-      attr_idx = SN_ATTR_IDX(ATT_FIRST_CPNT_IDX(TYP_IDX(type_idx)));
-
-      NTR_IR_TBL(ir_idx);
-      IR_OPR(ir_idx) = Struct_Opr;
-      IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(attr_idx);
-      IR_LINE_NUM(ir_idx) = line;
-      IR_COL_NUM(ir_idx) = col;  
-      COPY_OPND(IR_OPND_L(ir_idx), (*top_opnd));
-      OPND_FLD((*top_opnd)) = IR_Tbl_Idx;
-      OPND_IDX((*top_opnd)) = ir_idx;
-
-      IR_FLD_R(ir_idx) = AT_Tbl_Idx;
-      IR_IDX_R(ir_idx) = attr_idx;
-      IR_LINE_NUM_R(ir_idx) = line;
-      IR_COL_NUM_R(ir_idx)  = col;
-
-      if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX) {
-         bd_idx = ATD_ARRAY_IDX(attr_idx);
-
-         NTR_IR_TBL(ir_idx);
-         IR_OPR(ir_idx) = Subscript_Opr;
-         IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(attr_idx);
-         IR_LINE_NUM(ir_idx) = line;
-         IR_COL_NUM(ir_idx) = col;
-         COPY_OPND(IR_OPND_L(ir_idx), (*top_opnd));
-         OPND_FLD((*top_opnd)) = IR_Tbl_Idx;
-         OPND_IDX((*top_opnd)) = ir_idx;
-
-         NTR_IR_LIST_TBL(list_idx);
-         IR_FLD_R(ir_idx) = IL_Tbl_Idx;
-         IR_IDX_R(ir_idx) = list_idx;
-         IR_LIST_CNT_R(ir_idx) = BD_RANK(bd_idx);
-
-         IL_FLD(list_idx) = BD_LB_FLD(bd_idx, 1);
-         IL_IDX(list_idx) = BD_LB_IDX(bd_idx, 1);
-         IL_LINE_NUM(list_idx) = line;
-         IL_COL_NUM(list_idx)  = col;
-
-         if (IL_FLD(list_idx) == AT_Tbl_Idx) {
-            ADD_TMP_TO_SHARED_LIST(IL_IDX(list_idx));
-         }
-
-         for (i = 2; i <= BD_RANK(bd_idx); i++) {
-
-            NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
-            IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
-            list_idx = IL_NEXT_LIST_IDX(list_idx);
-
-            IL_FLD(list_idx) = BD_LB_FLD(bd_idx, i);
-            IL_IDX(list_idx) = BD_LB_IDX(bd_idx, i);
-            IL_LINE_NUM(list_idx) = line;
-            IL_COL_NUM(list_idx)  = col;
-
-            if (IL_FLD(list_idx) == AT_Tbl_Idx) {
-               ADD_TMP_TO_SHARED_LIST(IL_IDX(list_idx));
-            }
-         }
-      }
-
-      type_idx = ATD_TYPE_IDX(attr_idx);
-   }
-# endif
 
    NTR_IR_TBL(ir_idx);
    IR_OPR(ir_idx) = Substring_Opr;
@@ -8249,6 +8209,8 @@ void insert_init_stmt_for_tmp(int		tmp_idx)
    int		list_idx;
    int		save_curr_stmt_sh_idx;
    int		sub_idx;
+   char		*endptr;
+   int		tmpnum;
 
 
    TRACE (Func_Entry, "insert_init_stmt_for_tmp", NULL);
@@ -8366,6 +8328,25 @@ void insert_init_stmt_for_tmp(int		tmp_idx)
 
    ATD_TMP_INIT_NOT_DONE(tmp_idx) = FALSE;
 
+   /* Fix for bug 677, compiler temp names used for data initialization
+    * need to to have their own namespace, since they can be exported
+    * though module files.
+    */
+   if (strncmp(AT_OBJ_NAME_PTR(tmp_idx), compiler_tmp_prefix, COMPILER_TMP_PREFIX_LEN) == 0
+       && strtod(AT_OBJ_NAME_PTR(tmp_idx) + COMPILER_TMP_PREFIX_LEN, &endptr)
+       && *endptr == 0) {
+      char buf[1000];
+      int length;
+      int np_idx;
+
+      sprintf(buf, "%s%s", AT_OBJ_NAME_PTR(tmp_idx),
+              SB_NAME_PTR(ATD_STOR_BLK_IDX(tmp_idx)));
+      length = strlen(buf);
+      NTR_NAME_POOL((long *)buf, length, np_idx);
+      AT_NAME_LEN(tmp_idx) = length;
+      AT_NAME_IDX(tmp_idx) = np_idx;
+   }
+
    TRACE (Func_Exit, "insert_init_stmt_for_tmp", NULL);
 
    return;
@@ -8400,7 +8381,7 @@ int gen_static_integer_array_tmp(int	size,
 
    TRACE (Func_Entry, "gen_static_integer_array_tmp", NULL);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx = CG_INTEGER_DEFAULT_TYPE;
@@ -8521,7 +8502,7 @@ int cast_typeless_constant(int		cn_idx,
          if (k < 0) {
             break;
          }
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_MIPS)
          the_constant[new_word_size-1-i] = CP_CONSTANT(CN_POOL_IDX(cn_idx) + k);
 #else
          the_constant[i] = CP_CONSTANT(CN_POOL_IDX(cn_idx) + k);
@@ -8532,8 +8513,8 @@ int cast_typeless_constant(int		cn_idx,
       while (i >= 0) {
          /* fill in pad */
          if (zero_pad) {
-#ifdef TARG_X8664
-// Bug 1819
+#if defined(TARG_X8664) || defined(TARG_MIPS)
+// Bug 1819 (also 10769 for MIPS)
             the_constant[new_word_size-1-i] = 0;
 #else
             the_constant[i] = 0;
@@ -9034,7 +9015,7 @@ int	set_up_logical_constant(long_type	*the_constant,
 
 /* BRIANJ KAYKAY - Should this use arith? */
 
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (TYP_LINEAR(type_idx) == Logical_8) {
 # if defined(_HOST_LITTLE_ENDIAN) && defined(_TARGET_LITTLE_ENDIAN)
       *(long long *)the_constant = value;
@@ -9595,11 +9576,6 @@ void gen_runtime_bounds(int	sub_idx)
             IR_BOUNDS_DONE(sub_idx) = TRUE;
          }
       }
-# if 0
-      else if (IL_VECTOR_SUBSCRIPT(list_idx)) {
-         /* not supported yet. These are pulled off of IO */
-      }
-# endif
       else if (IL_FLD(list_idx) != CN_Tbl_Idx ||
                OPND_FLD(lb_opnd) != CN_Tbl_Idx ||
                OPND_FLD(ub_opnd) != CN_Tbl_Idx) {
@@ -10922,7 +10898,19 @@ static void reshape_reference_subscripts(opnd_type *result_opnd)
 \******************************************************************************/
 
 boolean check_for_legal_define(opnd_type	*top_opnd)
+#ifdef KEY /* Bug 14150 */
+{
+  return check_for_legal_assignment_define(top_opnd, FALSE);
+}
 
+/*
+ * top_opnd		Top operand of operation which defines lvalue
+ * pointer_assign	True if assignment is "=>" not "=" or other defining
+ *			operation
+ */
+boolean check_for_legal_assignment_define(opnd_type *top_opnd,
+  boolean pointer_assign)
+#endif /* KEY Bug 14150 */
 {
    int		attr_idx;
    int		col;
@@ -10956,6 +10944,10 @@ boolean check_for_legal_define(opnd_type	*top_opnd)
          ok = FALSE;
       }
       else if (ATD_CLASS(attr_idx) == Dummy_Argument   &&
+#ifdef KEY /* Bug 14150 */
+	       /* "l = expr" is ok, "l => expr" is not */
+               ((!ATD_POINTER(attr_idx)) || pointer_assign) &&
+#endif /* KEY Bug 14150 */
                ATD_INTENT(attr_idx) == Intent_In) {
          PRINTMSG(line, 890, Error, col,
                   AT_OBJ_NAME_PTR(attr_idx));
@@ -11757,7 +11749,7 @@ void runtime_ptr_chk_driver(void)
 void gen_copyin_bounds_stmt(int	attr_idx)
 
 {
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		col;
    int		ir_idx;
    int		line;

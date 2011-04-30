@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -116,6 +124,29 @@ enum ST_EXPORT
 					// checking 
 }; // ST_EXPORT
 
+#ifdef TARG_NVISA
+enum ST_MEMORY
+{
+    MEMORY_UNKNOWN = 0,
+    MEMORY_GLOBAL = 1,
+    MEMORY_LOCAL = 2,
+    MEMORY_SHARED = 3,
+    MEMORY_CONSTANT = 4,
+    MEMORY_TEXTURE = 5,
+    MEMORY_PARAM = 6,
+    MEMORY_COUNT = 7
+}; // ST_MEMORY
+#else
+enum ST_TLS_MODEL {
+    TLS_NONE,
+    TLS_EMULATED, /* for emulated tls */
+    TLS_REAL,
+    TLS_GLOBAL_DYNAMIC = TLS_REAL,
+    TLS_LOCAL_DYNAMIC,
+    TLS_INITIAL_EXEC,
+    TLS_LOCAL_EXEC,
+}; // TLS_MODEL
+#endif /* TARG_NVISA */
 
 enum ST_FLAGS
 {
@@ -170,6 +201,19 @@ enum ST_FLAGS_EXT
                                         // when st-class is CLASS_FUNC	
     ST_IS_THIS_PTR      = 0x20, 	// ST is "this"-pointer
     ST_IS_PURE_VFUNC    = 0x40,         // ST is pure virtual function
+    ST_IS_THREAD_LOCAL  = 0x80,         // ST is Thread-Local_Storage, __thread
+    ST_IS_ARRAY_REMAPPING_CANDIDATE = 0x100,
+    ST_IS_ARRAY_REMAPPING_CANDIDATE_MALLOC = 0x200, // storage for the remapped
+                                        // array is from malloc()
+#if defined(TARG_SL)
+    ST_IN_V1BUF = 0x400,                // ST is vector1 variable
+    ST_IN_V2BUF = 0x800,                // ST is vector2 variable 
+    ST_IN_V4BUF = 0x1000,               // ST is vector4 variable 
+    ST_IN_SDRAM = 0x2000,               // ST is sdram variable 
+    ST_IN_SBUF =  0x4000,               // ST is explcitly declared sbuf so 
+    ST_IS_VBUF_OFFSET = 0x8000,  // represent this symbol means offset instead of a absolute address
+    ST_IS_SBUF_OFFSET = 0x10000, // same as above and will be deleted for we don't have sbuf in the future.
+#endif     
 }; // ST_FLAGS_EXT
 #endif
 
@@ -184,18 +228,31 @@ public:
 
     mUINT32 flags;			// misc. attributes
 
-    mUINT8 flags_ext;			// more attributes
+#if defined(TARG_SL)
+    mUINT32 flags_ext;			// more attributes
+#else
+    mUINT16 flags_ext;			// more attributes
+#endif
 
     ST_CLASS sym_class : 8;		// class info
     ST_SCLASS storage_class : 8;	// storage info
-    ST_EXPORT export_class : 8;		// export class of the symbol
-
+    ST_EXPORT export_class : 4;		// export class of the symbol
+#ifdef TARG_NVISA
+    ST_MEMORY memory_space: 4;		// memory space of the symbol
+#else
+    ST_TLS_MODEL tls_model: 4;		// Thread-Local-Storage(TLS) model
+#endif
     union {
 	TY_IDX type;			// idx to high-level type
 	PU_IDX pu;			// idx to program unit table
 	BLK_IDX blk;			// idx to block table
     } u2;
 
+#ifdef KEY
+    // bug 14141: we need to ensure the pad bytes are zero so that
+    // byte-comparison in IPA does not fail.
+    mUINT32 pad;			// 4 pad bytes (initialize to zero)
+#endif
     mUINT64 offset;			// offset from base
 
     ST_IDX base_idx;			// base of the allocated block
@@ -211,7 +268,9 @@ public:
     void Print(FILE *f, BOOL verbose = TRUE) const;
     
     BOOL operator==(ST &st) const;
-    
+
+    friend std::ostream& operator<<(std::ostream &os, const ST& st);
+
 }; // ST
 
 
@@ -344,7 +403,7 @@ struct ARB
 #ifdef really_call_bzero	// don't call bzero if it is poisoned
     ARB () { really_call_bzero (this, sizeof(ARB)); }
 #else
-    ARB () { bzero (this, sizeof(ARB)); }
+    ARB () { BZERO (this, sizeof(ARB)); }
 #endif
 
     void Verify (mUINT16 dim) const;
@@ -508,7 +567,15 @@ enum TY_FLAGS
     TY_IS_INCOMPLETE    = 0x2000,       // Type is incomplete, used by wgen to
                                         // mark VLA types when used as function
                                         // arguments.
+    TY_NO_SPLIT         = 0x4000,       // May be used by any phase after
+                                        // front-end for TY that should not
+                                        // be split.
 #endif
+#ifdef TARG_NVISA
+    TY_CAN_BE_VECTOR	= 0x8000,	// vector type like int4
+#endif
+    TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE = 0x0001, // it's OK to share this
+      // with TY_IS_CHARACTER above for now, since this has to be a struct
 };
 
 
@@ -517,7 +584,15 @@ enum TY_PU_FLAGS
 {
     TY_RETURN_TO_PARAM	= 0x00000001,	// return value through first param
     TY_IS_VARARGS	= 0x00000002,	// variable number of arguments
-    TY_HAS_PROTOTYPE	= 0x00000004	// has ansi-style prototype
+    TY_HAS_PROTOTYPE	= 0x00000004,	// has ansi-style prototype
+#ifdef TARG_X8664
+    TY_HAS_SSEREG_PARM	= 0x00000008,	// SSE register parameters under i386
+    TY_HAS_1_REG_PARM	= 0x00000010,	// 1 register parameter under i386
+    TY_HAS_2_REG_PARM	= 0x00000020,	// 2 register parameters under i386
+    TY_HAS_3_REG_PARM	= 0x00000030,	// 3 register parameters under i386
+    TY_HAS_STDCALL      = 0x00000040,   // stdcall calling convention under i386
+    TY_HAS_FASTCALL     = 0x00000080    // fastcall calling convention under i386
+#endif
 };
 
 class TY
@@ -545,11 +620,6 @@ public:
 	ST_IDX copy_constructor;	// copy constructor X(X&) (record only)
 #endif
     } u2;
-
-    union {
-        INITV_IDX  vtable;              // initial virtual table, for virtual class type
-        TY_IDX     baseclass;           // the base class, for member function of class
-    } u3;
 
     // access function for unions
 
@@ -643,33 +713,45 @@ public:
 						//   pragmas
 #define	PU_HAS_USER_ALLOCA	0x0000000100000000LL
 						// PU has user alloca in it
-#define	PU_HAS_UNKNOWN_CONTROL_FLOW	0x0000000200000000LL
+#define	PU_HAS_UNKNOWN_CONTROL_FLOW \
+                          	0x0000000200000000LL
 						// PU has unknown control flow
 						//  which disables tail call 
 						// optimization
 #define PU_IS_THUNK		0x0000000400000000LL // pu is a C++ thunk
 
 #ifdef KEY
-#define PU_NEEDS_MANUAL_UNWINDING	0x0000000800000000LL // PU has cleanups in outermost scope and hence needs to call _Unwind_Resume itself
+#define PU_NEEDS_MANUAL_UNWINDING \
+                                0x0000000800000000LL // PU has cleanups in outermost scope and hence needs to call _Unwind_Resume itself
 #endif
+
 #ifdef TARG_X8664
 #define PU_FF2C_ABI		0x0000001000000000LL // PU use g77 linkage convention for returns of complex and float
 #endif
+
 #ifdef KEY
 #define PU_IS_EXTERN_INLINE	0x0000002000000000LL // PU is marked extern _inline_ in C
-#define PU_MP_LOWER_GENERATED 0x0000004000000000LL // PU generated by mp-lowerer
-#define PU_IS_OPERATOR        0x0000010000000000LL // PU is overload of operator
-#define PU_IS_MARKED_INLINE   0x0000008000000000LL
+#define PU_MP_LOWER_GENERATED   0x0000004000000000LL // PU generated by mp-lowerer
+#define PU_IS_MARKED_INLINE     0x0000008000000000LL
                                                    // C/C++: inline keyword used. Note
                                                    // PU_IS_INLINE_FUNCTION just
                                                    // indicates GNU inlining decision.
-
+#define PU_NO_INSTRUMENT        0x0000010000000000LL // -finstrument-functions will skip PU
 #endif
-#define PU_IS_MALLOC          0x0000020000000000LL // PU is malloc/calloc/... or their wrapper
-#define PU_HAS_ATTR_MALLOC  0x0000020000000000LL // __attribute__((malloc)) semantic 
-#define PU_HAS_ATTR_PURE    0x0000040000000000LL // __attribute__((pure)) semantic 
-#define PU_HAS_ATTR_NORETURN 0x0000080000000000LL // __attribute__((noreturn)) semantic
-#define PU_IS_CONSTRUCTOR    0x0000100000000000LL  // PU is a constructor of a class
+
+#define PU_HAS_ATTR_MALLOC      0x0000020000000000LL // __attribute__((malloc)) semantic 
+#define PU_HAS_ATTR_PURE        0x0000040000000000LL // __attribute__((pure)) semantic 
+#define PU_HAS_ATTR_NORETURN    0x0000080000000000LL // __attribute__((noreturn)) semantic
+#define PU_IS_CONSTRUCTOR       0x0000100000000000LL  // PU is a constructor of a class
+#define PU_IS_OPERATOR          0x0000200000000000LL // PU is overload of operator
+
+#define PU_NEED_TRAMPOLINE      0x0000400000000000LL // a nested function whose address is taken
+#define PU_HAS_NONLOCAL_GOTO_LABEL	\
+                                0x0000800000000000LL // has a label jumped to directly from a nested function
+#define PU_HAS_GOTO_OUTER_BLOCK	0x0001000000000000LL // has GOTO_OUTER_BLOCK stmt
+#define PU_IS_CDECL             0x0002000000000000LL // __attribute__((cdecl)) semantic
+#define PU_NOTHROW              0x0004000000000000LL // doesn't throw, e.g. decl as "void foo() throw()".
+#define PU_HAS_APPLY_ARGS       0x0008000000000000LL // __builtin_apply_args
 
 enum PU_SRC_LANG_FLAGS
 {
@@ -688,12 +770,16 @@ struct PU
 					// information
 
     TY_IDX prototype;			// function prototype
-    SYMTAB_IDX lexical_level;		// lexical level (of nested proc).
+    TY_IDX base_class;                  // the class type which this PU belongs to if this PU is a member function
+    SYMTAB_IDX lexical_level;		// lexical level (of nested proc). 8-bits
+    INITO_IDX misc;		        // store misc such EH related TYPE/TYPE_SPEC info. 32bits
+#ifdef TARG_NVISA
+    mUINT16 thread_limit;
+    mUINT16 block_limit;
+#endif
     mUINT8 gp_group;			// gp_group id
     mUINT8 src_lang;			// source language
-// TODO:  can put flags in 40-bit unused field and remove 64-bit flag field.
-// TODO:  do this when can make incompatible change.
-    mUINT64 unused : 40;		// for alignment for flags
+    mUINT8 unused : 8;		        // for alignment 
     mUINT64 flags;			// misc. attributes about this func.
 
     // operations
@@ -728,7 +814,7 @@ public:
 #ifdef really_call_bzero	// don't call bzero if it is poisoned
 	void Init (void)	{ really_call_bzero (this, sizeof(BLK)); }
 #else
-	void Init (void)	{ bzero (this, sizeof(BLK)); }
+	void Init (void)	{ BZERO (this, sizeof(BLK)); }
 #endif
 
 public:
@@ -874,6 +960,13 @@ struct SCOPE_TAB_INITO_ACCESS {
     { return (*scope_tab)[level].inito_tab; }
 };
 
+struct SCOPE_TAB_LABEL_ACCESS {
+  SCOPE_TAB_LABEL_ACCESS(void) { }
+
+  LABEL_TAB *operator()(SCOPE **scope_tab, SYMTAB_IDX level)
+    { return (*scope_tab)[level].label_tab; }
+};
+
 // The global scope table
 extern SCOPE		*Scope_tab;
 
@@ -888,11 +981,10 @@ typedef TABLE_INDEXED_BY_LEVEL8_AND_INDEX24<INITO, INITO_IDX, SYMTAB_IDX,
 					    SCOPE_TAB_INITO_ACCESS>
         INITO_TABLE;
 
-struct LABEL_TABLE
-{
-  inline LABEL& operator[] (LABEL_IDX idx);
-  inline LABEL& operator() (SYMTAB_IDX level, LABEL_IDX idx);
-};
+typedef TABLE_INDEXED_BY_LEVEL8_AND_INDEX24<LABEL, LABEL_IDX, SYMTAB_IDX,
+                                            SCOPE *, &Scope_tab,
+					    SCOPE_TAB_LABEL_ACCESS>
+        LABEL_TABLE;
 
 struct PREG_TABLE
 {
@@ -1008,7 +1100,7 @@ struct SYMTAB_HEADER_TABLE
 #ifdef really_call_bzero	// don't call bzero if it is poisoned
 	really_call_bzero (header, sizeof(header));
 #else
-	bzero (header, sizeof(header));
+	BZERO (header, sizeof(header));
 #endif
     }
 

@@ -76,7 +76,8 @@ extern WN * WFE_Expand_Expr (tree exp,
 			     TY_IDX component_ty_idx = 0,
 			     INT64 component_offset = 0,
 			     UINT32 field_id = 0,
-			     bool is_bit_field = FALSE); 
+			     bool is_bit_field = FALSE,
+			     bool expect_boolean = FALSE); 
 
 extern WN  *WFE_Rcomma_Block;
 extern int  WFE_Disable_Rcomma;
@@ -87,6 +88,9 @@ extern WN* WFE_Expand_Expr_With_Sequence_Point (tree exp, TYPE_ID mtype);
  */
 extern WN * WFE_Lhs_Of_Modify_Expr (tree_code assign_code,
 				    tree lhs,
+#ifdef TARG_SL
+				    tree rhs,
+#endif
 				    bool need_result,
 				    TY_IDX component_ty_idx,
 				    INT64 component_offset,

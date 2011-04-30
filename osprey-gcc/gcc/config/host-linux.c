@@ -189,7 +189,12 @@ linux_gt_pch_use_address (void *base, size_t size, int fd, size_t offset)
 
   /* Try to make an anonymous private mmap at the desired location.  */
   addr = mmap (base, size, PROT_READ | PROT_WRITE,
-	       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#if defined(BUILD_OS_DARWIN)
+	       MAP_PRIVATE | MAP_ANON,
+#else /* defined(BUILD_OS_DARWIN) */
+	       MAP_PRIVATE | MAP_ANONYMOUS,
+#endif /* defined(BUILD_OS_DARWIN) */
+	       -1, 0);
 
   if (addr != base)
     {

@@ -52,6 +52,12 @@
 
 #include <stamp.h>
 
+/* location of internal gcc binaries, relative to installation root */
+#define INTERNAL_GCC_BIN "open64-gcc-4.2.0/bin"
+
+#if defined(VENDOR_OSP)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #include "pathscale_defs.h"
 
 #if defined(linux) && (defined(TARG_IA64) || defined(TARG_X8664))
@@ -92,16 +98,148 @@
     #define PHASEPATH	 "/ia32-sgi-linux/bin"
     #define GNUPHASEPATH "/lib"
 
-#else
-#define NAMEPREFIX	""
-#ifdef PSC_TO_OPEN64
-#define BINPATH		OPEN64_INSTALL_PREFIX "/bin"
+#elif defined(TARG_PPC32)
+#define NAMEPREFIX	 ""
+#define BINPATH		"/bin"
 #define ALTBINPATH	BINPATH
-#define LIBPATH		OPEN64_INSTALL_PREFIX "/lib"
+#define LIBPATH		"/lib/gcc-lib/ppc32-open64-linux/" OPEN64_FULL_VERSION
 #define ALTLIBPATH	LIBPATH
-#define PHASEPATH	OPEN64_INSTALL_PREFIX "/lib"
-#define GNUPHASEPATH	OPEN64_INSTALL_PREFIX "/lib/gcc-lib/" OPEN64_TARGET "/" OPEN64_GCC_VERSION
+#define PHASEPATH	"/lib/gcc-lib/ppc32-open64-linux/" OPEN64_FULL_VERSION
+#define GNUPHASEPATH	"/lib/gcc-lib/ppc32-open64-linux/" OPEN64_FULL_VERSION
+
+#elif defined(TARG_LOONGSON)
+    #ifndef CROSS_COMPILATION
+       #define CROSS_COMPILATION
+    #endif
+    #define NAMEPREFIX 	 "mips64el-n32-linux-"
+    #define INTERPOSE	 	 OPEN64_TARGET
+    #define BINPATH     	 "/"INTERPOSE "/bin"
+    #define ALTBINPATH  	 BINPATH
+    #define LIBPATH      	 "/"INTERPOSE"/lib"
+    #define ALTLIBPATH  	 LIBPATH
+    #define PHASEPATH    	 "/"INTERPOSE"/lib"
+    #define GNUPHASEPATH	 PHASEPATH
+	
+	
+#else
+    #define NAMEPREFIX	""
+    #ifdef PSC_TO_OPEN64
+    #define BINPATH		OPEN64_INSTALL_PREFIX "/bin"
+    #define ALTBINPATH	BINPATH
+    #define LIBPATH		OPEN64_INSTALL_PREFIX "/lib"
+    #define ALTLIBPATH	LIBPATH
+    #define PHASEPATH	OPEN64_INSTALL_PREFIX "/lib"
+    #define GNUPHASEPATH	OPEN64_INSTALL_PREFIX "/lib/gcc-lib/" OPEN64_TARGET "/" OPEN64_GCC_VERSION
+    #endif
 #endif
+
+#elif defined(VENDOR_SL)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    #ifndef CROSS_COMPILATION
+    #if defined(TARG_MIPS) || defined(TARG_X8664_SOCC)
+    #define CROSS_COMPILATION
+    #endif
+    #endif
+
+    #define OPEN64_VERSION OPEN64_CMPLR_NAME_PREFIX VERSION
+    #define OPEN64_GCC_VERSION "3.2"
+    #define OPEN64_INSTALL_PREFIX "/"
+
+
+#if defined(linux) 
+    #ifdef CROSS_COMPILATION
+        #define NAMEPREFIX	""
+	#define INTERPOSE   OPEN64_TARGET
+        #define BINPATH		"/usr/" INTERPOSE "/bin"
+        #define ALTBINPATH  "/usr/" INTERPOSE "/altbin"
+    #else
+	#define NAMEPREFIX	""
+	#define INTERPOSE   ""
+        #define BINPATH		"/usr/" INTERPOSE "/bin"
+        #define ALTBINPATH  BINPATH
+    #endif 
+
+    #if !defined(TARG_SL)
+        #define LIBPATH	"/usr/" INTERPOSE "/lib/gcc-lib/" OPEN64_TARGET VERSION
+    #else
+        #define LIBPATH	"/usr/" INTERPOSE "/lib"
+    #endif
+
+    #define ALTLIBPATH	"/usr/" INTERPOSE "/lib"
+
+    #ifdef TARG_IA64
+      #define PHASEPATH       LIBPATH
+    #else
+      #define PHASEPATH	    OPEN64_PHASE_PATH
+    #endif
+      #define GNUPHASEPATH	LIBPATH
+
+#else
+    #define NAMEPREFIX	""
+    #define BINPATH		"/usr/bin"
+    #define ALTBINPATH   BINPATH
+    #define LIBPATH		"/usr/lib"
+    #define ALTLIBPATH	LIBPATH
+    #define PHASEPATH	"/usr/lib32/cmplrs"
+    #define GNUPHASEPATH	PHASEPATH
 #endif
+#endif /* defined(VENDOR_XXX) */
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#undef OPEN64_TARGET
+
+#ifdef TARG_IA64
+    #define OPEN64_TARGET "ia64-orc-linux"
+    #define VERSION "2.1"
+    #define OPEN64_PHASE_PATH ""
+    #define OPEN64_CMPLR_NAME_PREFIX "or"
+    #define OPEN64_TARGET_NAME "ia64"  // for lang_defs.c
+#elif defined(TARG_X8664)
+    #ifdef BUILD_ARCH_IA32  // fix bug 469
+        #define OPEN64_TARGET "x86_32-linux" 
+    #else 
+        #define OPEN64_TARGET "x86_64-linux" 
+    #endif 
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "x8664-linux/bin"
+    #define OPEN64_CMPLR_NAME_PREFIX "open"
+    #define OPEN64_TARGET_NAME "x8664"
+#elif defined(TARG_IA32)
+    #define OPEN64_TARGET ""
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "ia32-sgi-linux/bin"
+    #define OPEN64_CMPLR_NAME_PREFIX "sgi"
+    #define OPEN64_TARGET_NAME "ia32"
+#elif defined(TARG_X8664_SOCC)
+    #define OPEN64_TARGET "socc-linux/bin"
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "usr/socc-linux/bin"
+    #define OPEN64_CMPLR_NAME_PREFIX "so"
+    #define OPEN64_TARGET_NAME "so"
+#elif defined(TARG_SL)
+    #define OPEN64_TARGET ""
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "/usr/bin"
+    #define OPEN64_CMPLR_NAME_PREFIX ""
+    #define OPEN64_TARGET_NAME "sl"
+#elif defined(TARG_MIPS)
+    #define OPEN64_TARGET "mips-linux"
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "/usr/mips-linux/bin"
+    #define OPEN64_CMPLR_NAME_PREFIX "mips"
+    #define OPEN64_TARGET_NAME "mips"
+#elif defined(TARG_PPC32)
+    #define OPEN64_TARGET "ppc32-linux"
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH "bin"
+    #define OPEN64_CMPLR_NAME_PREFIX ""
+    #define OPEN64_TARGET_NAME "ppc32"
+#elif defined(TARG_LOONGSON)
+    #define OPEN64_TARGET "loongson-linux"
+    #define VERSION ""
+    #define OPEN64_PHASE_PATH ""
+    #define OPEN64_NAME_PREFIX "loong"
+    #define OPEN64_CMPLR_NAME_PREFIX "loong"
+    #define OPEN64_TARGET_NAME "loongson"
+#endif // TARG_IA64
 
 #endif /* lib_phase_dir_INCLUDED */

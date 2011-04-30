@@ -47,6 +47,7 @@ extern char *optarg;
 #define FAILED 1
 #define BYTES_PER_INSTRUCTION 4
 
+#if ! defined(BUILD_OS_DARWIN)
 static string process_args(int argc, char *argv[]);
 static void print_infos(Dwarf_Debug dbg);
 
@@ -589,6 +590,12 @@ print_infos(Dwarf_Debug dbg)
 	fprintf(stderr, "attempting to continue.\n");
     }
 }
+
+#else /* ! defined(BUILD_OS_DARWIN) */
+static string program_name = "";
+boolean ellipsis = FALSE;
+int main() { fprintf(stderr, "Not yet supported on Mac OS\n"); return 1; }
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /* ARGSUSED */
 void

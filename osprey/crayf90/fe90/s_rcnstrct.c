@@ -851,7 +851,7 @@ boolean	create_runtime_array_constructor(opnd_type	*top_opnd,
 
       the_constant = 2;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(ATD_TYPE_IDX(allocate_tmp_idx)) == Integer_4) {
          the_constant++;
       }
@@ -1218,51 +1218,6 @@ boolean	create_runtime_array_constructor(opnd_type	*top_opnd,
          ok = gen_whole_substring(top_opnd, exp_desc->rank) && ok;
       }
 
-# if 0
-     /* call the dope vector dump routine dump_dv */
-
-     dump_dv_idx = create_lib_entry_attr("DUMP_DV",
-                                         7,
-                                         line,
-                                         col);
-
-      ADD_ATTR_TO_LOCAL_LIST(dump_dv_idx);
-
-      NTR_IR_TBL(call_idx);
-      IR_OPR(call_idx) = Call_Opr;
-      IR_TYPE_IDX(call_idx) = SA_INTEGER_DEFAULT_TYPE;
-      IR_LINE_NUM(call_idx) = line;
-      IR_COL_NUM(call_idx) = col;
-      IR_FLD_L(call_idx) = AT_Tbl_Idx;
-      IR_IDX_L(call_idx) = dump_dv_idx;
-      IR_LINE_NUM_L(call_idx) = line;
-      IR_COL_NUM_L(call_idx) = col;
-
-      NTR_IR_LIST_TBL(list_idx);
-      IR_FLD_R(call_idx) = IL_Tbl_Idx;
-      IR_IDX_R(call_idx) = list_idx;
-      IR_LIST_CNT_R(call_idx) = 1;
-
-      NTR_IR_TBL(loc_idx);
-      IR_OPR(loc_idx) = Aloc_Opr;
-      IR_TYPE_IDX(loc_idx) = CRI_Ptr_8;
-      IR_LINE_NUM(loc_idx)   = line;
-      IR_COL_NUM(loc_idx)    = col;
-      IL_FLD(list_idx) = IR_Tbl_Idx;
-      IL_IDX(list_idx) = loc_idx;
-
-      IR_FLD_L(loc_idx) = AT_Tbl_Idx;
-      IR_IDX_L(loc_idx) = tmp_idx;
-      IR_LINE_NUM_L(loc_idx)   = line;
-      IR_COL_NUM_L(loc_idx)    = col;
-
-      gen_sh(Before, Call_Stmt, stmt_start_line,
-             stmt_start_col, FALSE, FALSE, TRUE);
-
-      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
-      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-
-# endif
 
       if (glb_tbl_idx[Dealloc_Attr_Idx] == NULL_IDX) {
          glb_tbl_idx[Dealloc_Attr_Idx] = create_lib_entry_attr(
@@ -1301,7 +1256,7 @@ boolean	create_runtime_array_constructor(opnd_type	*top_opnd,
       IL_FLD(list_idx) = CN_Tbl_Idx;
       the_constant     = 2L;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(ATD_TYPE_IDX(allocate_tmp_idx)) == Integer_4) {
          the_constant++;
       }

@@ -29,7 +29,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
 /* Define to `<elf.h>' or `<sys/elf.h>' if one of them is present */
+#if defined(BUILD_OS_DARWIN)
+#define __LIBELF_HEADER_ELF_H "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #define __LIBELF_HEADER_ELF_H <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define if Elf32_Dyn is declared in <link.h> */
 /* #undef __LIBELF_NEED_LINK_H */

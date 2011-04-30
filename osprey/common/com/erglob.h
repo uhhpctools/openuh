@@ -133,6 +133,8 @@ static char *erglob_rcs_id = "$Source: common/com/SCCS/s.erglob.h $ $Revision: 1
 #ifdef KEY
 /* Error for unimplemented features: */
 #define EC_Unimplemented_Feature EC_Undef_Code+24 /* str */
+/* Abort due to misc user-caused reason: */
+#define EC_Misc_User_Abort       EC_Undef_Code+25 /* str */
 #endif // KEY
 
 /* Trace package errors: */
@@ -346,6 +348,7 @@ static char *erglob_rcs_id = "$Source: common/com/SCCS/s.erglob.h $ $Revision: 1
 #ifdef KEY
 /* ASM operands: */
 #define EC_Inv_Asm_Opnd EC_Undef_Code+340       /* none */
+#define EC_Misc_Asm EC_Undef_Code+341		/* str */
 #endif
 
 

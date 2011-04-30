@@ -145,8 +145,8 @@ extern INT64 cwh_cray_type_from_MTYPE(TYPE_ID ty);
 extern BOOL  cwh_types_is_dope(TY_IDX ty) ;
 extern FLD_HANDLE cwh_types_dope_dims_FLD(TY_IDX ty);
 
-extern char * cwh_types_mk_anon_name (char * p) ;
-extern TY_IDX cwh_types_array_util(INT16 rank, TY_IDX ta, INT32 align, INT64 size,char *name, 
+extern char * cwh_types_mk_anon_name (const char * p) ;
+extern TY_IDX cwh_types_array_util(INT16 rank, TY_IDX ta, INT32 align, INT64 size, const char *name, 
 				   BOOL alloc_arbs);
 
 extern void  cwh_types_init_target(void);

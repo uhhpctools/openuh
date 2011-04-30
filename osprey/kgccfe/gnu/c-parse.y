@@ -160,6 +160,7 @@ do {									\
 %token ELLIPSIS
 
 %token PRAGMA_OPTIONS PRAGMA_EXEC_FREQ FREQ_NEVER FREQ_INIT FREQ_FREQUENT
+%token PRAGMA_UNROLL
 
 %token PRIVATE COPYPRIVATE FIRSTPRIVATE LASTPRIVATE SHARED DEFAULT NONE
 %token REDUCTION COPYIN DYNAMIC GUIDED RUNTIME ORDERED SCHEDULE
@@ -269,6 +270,7 @@ do {									\
 
 %type <ttype> options_directive pragma_directives exec_freq_directive
 %type <ttype> exec_freq_directive_ignore
+%type <ttype> unroll_directive
 
 %type <ttype> freq_hint
 
@@ -289,6 +291,11 @@ do {									\
 %type <ttype> task_construct
 %type <ttype> taskwait_directive
 %type <task_clause_type> task_clause_list task_clause task_directive
+
+/* sl2 fork_joint */ 
+%token SL2_SECTIONS SL2_MINOR_SECTIONS SL2_SECTION PRAGMA_SL2 SL2_MINOR_SECTION 
+%type <ttype> sl2_sections_construct sl2_section_scope sl2_maybe_section_sequence
+%type <ttype> sl2_section_sequence sl2_maybe_structured_block sl2_section_construct 
 
 
 
@@ -1740,7 +1747,7 @@ enum_head:
 
 structsp_attr:
 	  struct_head identifier '{'
-		{ $$ = start_struct (RECORD_TYPE, $2);
+		{ $<ttype>$ = start_struct (RECORD_TYPE, $2);
 		  /* Start scope of tag before parsing components.  */
 		}
 	  component_decl_list '}' maybe_attribute
@@ -1750,7 +1757,7 @@ structsp_attr:
 				      $3, chainon ($1, $5));
 		}
 	| union_head identifier '{'
-		{ $$ = start_struct (UNION_TYPE, $2); }
+		{ $<ttype>$ = start_struct (UNION_TYPE, $2); }
 	  component_decl_list '}' maybe_attribute
 		{ $$ = finish_struct ($<ttype>4, $5, chainon ($1, $7)); }
 	| union_head '{' component_decl_list '}' maybe_attribute
@@ -1758,12 +1765,12 @@ structsp_attr:
 				      $3, chainon ($1, $5));
 		}
 	| enum_head identifier '{'
-		{ $$ = start_enum ($2); }
+		{ $<ttype>$ = start_enum ($2); }
 	  enumlist maybecomma_warn '}' maybe_attribute
 		{ $$ = finish_enum ($<ttype>4, nreverse ($5),
 				    chainon ($1, $8)); }
 	| enum_head '{'
-		{ $$ = start_enum (NULL_TREE); }
+		{ $<ttype>$ = start_enum (NULL_TREE); }
 	  enumlist maybecomma_warn '}' maybe_attribute
 		{ $$ = finish_enum ($<ttype>3, nreverse ($4),
 				    chainon ($1, $7)); }
@@ -2340,19 +2347,104 @@ openmp_construct:
         |  critical_construct
         |  atomic_construct
         |  ordered_construct
-	|  task_construct
+        |  sl2_sections_construct
+        |  task_construct
         ;
-                                                                               
+
+sl2_sections_construct:
+        PRAGMA_SL2 SL2_SECTIONS '\n'
+	 {
+#ifdef TARG_SL
+           add_stmt(build_omp_stmt(sl2_sections_cons_b, NULL));
+#endif
+	 }
+
+	 sl2_section_scope
+	 { 
+#ifdef TARG_SL
+	   add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;
+#endif
+}
+	 | PRAGMA_SL2 SL2_MINOR_SECTIONS '\n'
+	 {
+#ifdef TARG_SL
+           add_stmt(build_omp_stmt(sl2_minor_sections_cons_b, NULL));
+#endif
+	 }
+	 sl2_section_scope
+	 { 
+#ifdef TARG_SL
+	   add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;
+#endif
+}
+	 	
+	 ;
+
+sl2_section_scope:
+        '{'
+        sl2_maybe_section_sequence 
+        '}'
+        ;
+
+sl2_maybe_section_sequence:
+	sl2_section_sequence
+      | sl2_maybe_structured_block
+      | sl2_maybe_structured_block sl2_section_sequence
+      ;
+
+sl2_maybe_structured_block:
+      structured_block
+	;
+
+sl2_section_sequence:
+	sl2_section_construct
+	| sl2_section_sequence sl2_section_construct
+	;
+
+sl2_section_construct:
+        PRAGMA_SL2 SL2_SECTION '\n'
+        {
+#ifdef TARG_SL
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+#endif
+        }
+        structured_block
+        {
+#ifdef TARG_SL
+	  add_stmt (build_omp_stmt (sl2_section_cons_e, NULL));
+#endif
+        }
+      | PRAGMA_SL2 SL2_MINOR_SECTION '\n'
+        {
+#ifdef TARG_SL
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_minor_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+#endif
+        }
+        structured_block
+        {
+#ifdef TARG_SL
+	  add_stmt (build_omp_stmt (sl2_minor_section_cons_e, NULL));
+#endif
+        }      	   
+        ;
+
 pragma_directives:
         barrier_directive
         | flush_directive
         | threadprivate_directive
-	{}
+    {}
 	| taskwait_directive
         | options_directive
 	| exec_freq_directive
-	;
-                                                       
+	| unroll_directive
+        ;
+                                                                                
 options_directive:
         PRAGMA_OPTIONS STRING '\n'
 	{ add_stmt (build_omp_stmt (options_dir, $2)); $$ = NULL; }
@@ -2379,6 +2471,13 @@ freq_hint:
 	| FREQ_FREQUENT { $$ = build_string (9, "frequent"); }
 	;
 
+unroll_directive:
+	PRAGMA_UNROLL '\n'
+	{ add_stmt (build_omp_stmt (unroll_dir, NULL)); $$ = NULL; }
+	| PRAGMA_UNROLL CONSTANT '\n'
+	{ add_stmt (build_omp_stmt (unroll_dir, $2)); $$ = NULL; }
+	;
+
 structured_block:
         stmt
         ;
@@ -2386,7 +2485,7 @@ structured_block:
 parallel_construct:
         parallel_directive
         {
-	    $$ = add_stmt (build_omp_stmt (parallel_dir_b, $1));
+	    $<ttype>$ = add_stmt (build_omp_stmt (parallel_dir_b, $1));
 	    In_MP_Region = true;
 	    mp_nesting++;
 	    if (mp_nesting == MAX_MP_NESTING)
@@ -2453,7 +2552,7 @@ for_construct:
         for_directive
         {
 	    add_stmt (build_omp_stmt (for_dir_b, $1));
-	    $$ = NULL;
+	    $<ttype>$ = NULL;
         }
                                                                                 
         iteration_statement
@@ -2533,7 +2632,7 @@ sections_construct:
         sections_directive
         {
 	    add_stmt (build_omp_stmt (sections_cons_b, $1));
-	    $$ = NULL;
+	    $<ttype>$ = NULL;
         }
         section_scope
         { add_stmt (build_omp_stmt (sections_cons_e, NULL)); $$ = NULL; }
@@ -2617,8 +2716,6 @@ task_construct:
 	task_directive
 	{
 	  add_stmt (build_omp_stmt (task_cons_b, $1));
-	  $$ = NULL;
-	
 	}
 	structured_block
 	{
@@ -2665,7 +2762,7 @@ single_construct:
         single_directive
         {
 	    add_stmt (build_omp_stmt (single_cons_b, $1));
-	    $$ = NULL;
+	    $<ttype>$ = NULL;
         }
         structured_block
         { add_stmt (build_omp_stmt (single_cons_e, NULL)); $$ = NULL; }
@@ -2699,7 +2796,7 @@ single_clause:
 parallel_for_construct:
         parallel_for_directive
         {
-	    $$ = add_stmt (build_omp_stmt (par_for_cons_b, $1));
+	    $<ttype>$ = add_stmt (build_omp_stmt (par_for_cons_b, $1));
 	    In_MP_Region = true;
 	    mp_nesting++;
 	    if (mp_nesting == MAX_MP_NESTING)
@@ -2775,7 +2872,7 @@ parallel_for_clause:
 parallel_sections_construct:
         parallel_sections_directive
         {
-	    $$ = add_stmt (build_omp_stmt (par_sctn_cons_b, $1));
+	    $<ttype>$ = add_stmt (build_omp_stmt (par_sctn_cons_b, $1));
 	    In_MP_Region = true;
 	    mp_nesting++;
 	    if (mp_nesting == MAX_MP_NESTING)
@@ -2844,7 +2941,7 @@ parallel_sections_clause:
                                                                                 
 master_construct:
         master_directive
-        { add_stmt (build_omp_stmt (master_cons_b, NULL)); $$ = NULL; }
+        { add_stmt (build_omp_stmt (master_cons_b, NULL)); $<ttype>$ = NULL; }
         structured_block
         { add_stmt (build_omp_stmt (master_cons_e, NULL)); $$ = NULL; }
         ;
@@ -2855,7 +2952,7 @@ master_directive:
                                                                                 
 critical_construct:
         critical_directive
-        { add_stmt (build_omp_stmt (critical_cons_b, $1)); $$ = NULL; }
+        { add_stmt (build_omp_stmt (critical_cons_b, $1)); $<ttype>$ = NULL; }
         structured_block
         { add_stmt (build_omp_stmt (critical_cons_e, NULL)); $$ = NULL; }
         ;
@@ -2899,7 +2996,7 @@ flush_directive:
 
 ordered_construct:
         ordered_directive
-        { add_stmt (build_omp_stmt (ordered_cons_b, NULL)); $$ = NULL; }
+        { add_stmt (build_omp_stmt (ordered_cons_b, NULL)); $<ttype>$ = NULL; }
         structured_block
         { add_stmt (build_omp_stmt (ordered_cons_e, NULL)); $$ = NULL; }
         ;
@@ -3357,6 +3454,13 @@ static const struct resword reswords[] =
   { "long",		RID_LONG,	0 },
   { "register",		RID_REGISTER,	0 },
   { "restrict",		RID_RESTRICT,	D_C89 },
+#ifdef TARG_SL
+  { "__sbuf",           RID_SBUF,       0 },
+  { "__sdram",          RID_SDRAM,      0 },
+  { "__v1buf",          RID_V1BUF,      0 },
+  { "__v2buf",          RID_V2BUF,      0 },
+  { "__v4buf",          RID_V4BUF,      0 },
+#endif
   { "return",		RID_RETURN,	0 },
   { "short",		RID_SHORT,	0 },
   { "signed",		RID_SIGNED,	0 },
@@ -3392,6 +3496,14 @@ static const short rid_to_yy[RID_MAX] =
   /* RID_SIGNED */	TYPESPEC,
   /* RID_AUTO */	SCSPEC,
   /* RID_RESTRICT */	TYPE_QUAL,
+
+#ifdef TARG_SL
+  /* RID_SBUF */     TYPE_QUAL,
+  /* RID_SDRAM */    TYPE_QUAL,
+  /* RID_V1BUF */ TYPE_QUAL, 
+  /* RID_V2BUF */ TYPE_QUAL, 
+  /* RID_V4BUF */ TYPE_QUAL, 
+#endif
 
   /* C extensions */
   /* RID_BOUNDED */	TYPE_QUAL,
@@ -3659,7 +3771,10 @@ check_omp_string (char * s, bool * status)
 {
   *status = true;
 
-  if (!strcmp (s, "\n"))
+  /* Windows systems use \r\n not \n, so check for that
+   * but return \n since that is what grammar is checking for.
+   */
+  if (!strcmp (s, "\n") || !strcmp(s,"\r"))
   {
     in_omp_pragma = seen_omp_paren = FALSE;
     return '\n';
@@ -3675,6 +3790,8 @@ check_omp_string (char * s, bool * status)
     return FREQ_FREQUENT;
   if (!strcmp (s, "options") && !seen_omp_paren)
     return PRAGMA_OPTIONS;
+  if (!strcmp (s, "unroll") && !seen_omp_paren)
+    return PRAGMA_UNROLL;
   if (!strcmp (s, "private") && !seen_omp_paren)
     return PRIVATE;
   if (!strcmp (s, "parallel") && !seen_omp_paren)
@@ -3738,6 +3855,20 @@ check_omp_string (char * s, bool * status)
     return TASKWAIT;
   if(!strcmp (s, "untied"))
     return UNTIED;
+
+#ifdef TARG_SL //fork_joint
+  if(!strcmp(s, "sl2") && !seen_omp_paren) 
+  return PRAGMA_SL2;
+  if(!strcmp(s, "sl2_major_sections") && !seen_omp_paren)
+  return SL2_SECTIONS;
+  if(!strcmp(s, "sl2_minor_sections") && !seen_omp_paren)
+  return SL2_MINOR_SECTIONS;
+  if(!strcmp(s, "sl2_major_section") && !seen_omp_paren)
+  return SL2_SECTION;
+  if(!strcmp(s, "sl2_minor_section") && !seen_omp_paren)
+  return SL2_MINOR_SECTION;
+#endif 
+
 
   // this must be last, return anything
   *status = false;
@@ -3815,10 +3946,12 @@ _yylex ()
 	  return yylexstring ();
 	else if (ret == IDENTIFIER && in_omp_pragma)
 	{
-          if (TREE_CODE (yylval.ttype) != IDENTIFIER_NODE) abort();
-	  char * omp_name = IDENTIFIER_POINTER (yylval.ttype);
+ 	  char *omp_name;
 	  bool valid = false;
-	  int code = check_omp_string (omp_name, &valid);
+	  int code;
+          if (TREE_CODE (yylval.ttype) != IDENTIFIER_NODE) abort();
+	  omp_name = IDENTIFIER_POINTER (yylval.ttype);
+	  code = check_omp_string (omp_name, &valid);
 	  if (valid) return code;
 	}
 	return ret;

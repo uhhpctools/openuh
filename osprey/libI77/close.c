@@ -374,12 +374,6 @@ f_exit ()
 ftnint
 t_runc (unit *ftnunit, flag xerr) {
    extern void     exit();	/* DAG -- added */
-#if 0 /* not used. */
-   char            buf[128], nm[16];
-   FILE           *tmp;
-   int             n, m;
-   int             fd;
-#endif
 
 #ifdef _BSD
    off_t           ftell();

@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -475,7 +479,10 @@ static char *model_rcs_id = "$Source: ../../be/lno/SCCS/s.model.h $ $Revision: 1
 #ifndef MODEL_DELCARE
 #define MODEL_DELCARE
 
-#ifdef TARG_MIPS
+#if defined(TARG_MIPS) || defined(TARG_LOONGSON)
+#define	Target_INTRs	32
+#endif
+#ifdef TARG_PPC32
 #define	Target_INTRs	32
 #endif
 #ifdef TARG_IA64
@@ -501,6 +508,8 @@ extern BOOL Is_Bad_Array(WN* wn_ref, INT nloops);
 #ifdef TARG_X8664
 extern BOOL Is_Vectorizable_Loop(WN* loop);
 extern BOOL Is_Vectorization_Beneficial(WN* loop);
+
+// bug 5880
 extern BOOL Is_Aggressive_Vintr_Loop(WN *loop);
 #endif
 

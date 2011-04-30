@@ -32,10 +32,6 @@
 static char sccsid[] = "@(#)gmon.c	5.3 (Berkeley) 5/22/91";
 #endif /* not lint */
 
-#if 0
-#include <unistd.h>
-
-#endif
 #ifdef DEBUG
 #include <stdio.h>
 #endif

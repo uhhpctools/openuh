@@ -2297,42 +2297,18 @@ ffestd_R542_finish ()
    Verify that EQUIVALENCE is valid here, and begin accepting items in the
    list.  */
 
-#if 0
-void
-ffestd_R544_start ()
-{
-  ffestd_check_start_ ();
-}
-
-#endif
 /* ffestd_R544_item -- EQUIVALENCE statement assignment
 
    ffestd_R544_item(exprlist);
 
    Make sure the equivalence is valid, then implement it.  */
 
-#if 0
-void
-ffestd_R544_item (ffesttExprList exprlist)
-{
-  ffestd_check_item_ ();
-}
-
-#endif
 /* ffestd_R544_finish -- EQUIVALENCE statement list complete
 
    ffestd_R544_finish();
 
    Just wrap up any local activities.  */
 
-#if 0
-void
-ffestd_R544_finish ()
-{
-  ffestd_check_finish_ ();
-}
-
-#endif
 /* ffestd_R547_start -- COMMON statement list begin
 
    ffestd_R547_start();

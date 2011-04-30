@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: iter.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/be/iter.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:18-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/be/SCCS/s.iter.cxx $
  *
  * Revision history:
  *  3-MAR-96 dahl - Original Version
@@ -54,10 +54,12 @@
 
 #define rbi_CXX	"iter.c"
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = iter_C"$Revision: 1.1.1.1 $";
+static char *rcs_id = iter_C"$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>	/* for Elf64_Word */
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "stab.h"
 #include "pu_info.h"	/* PU_Info */

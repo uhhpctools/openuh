@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -37,10 +41,10 @@
 /* ====================================================================
  *
  * Module: region_util.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/region/region_util.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:58-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/region/SCCS/s.region_util.h $
  *
  * Revision history:
  *  31-MAY-95 wdl - Original Version
@@ -85,6 +89,7 @@ typedef	enum {
   RL_RGN_INIT,  /* processed by REGION_initialize in driver	*/
   RL_IPA_PREOPT,/* processed by IPA controlled Preopt		*/
   RL_LNO_PREOPT,/* processed by LNO controlled Preopt		*/
+  RL_LNO1_PREOPT, /* processed by LNO controlled Preopt	        */
   RL_LNO,	/* processed by LNO				*/
   RL_DU_PREOPT,	/* processed by LNO DU checking			*/
   RL_RAIL,	/* processed by RAIL				*/
@@ -99,7 +104,7 @@ typedef	enum {
 } REGION_LEVEL;
 
 struct region_flags_struct {
-  mUINT16 level : 4;	       /* how far the region has been processed*/
+  mUINT16 level : 5;	       /* how far the region has been processed*/
   mUINT16 gra_flags : 4;
   mUINT16 return_flag : 1;     /* region contains a return	       */
   mUINT16 glue_code_flag : 1;  /* glue code region created by cg       */
@@ -139,7 +144,10 @@ typedef enum {
   RID_TYPE_rpi	      = 0x20,  /* it's a RPI region			     */
   RID_TYPE_cold       = 0x40,  /* it's a cold region (transparent)	     */
   RID_TYPE_swp	      = 0x80,  /* it's a SWP loop (transparent)		     */
-
+#ifdef TARG_SL2 //fork_joint
+  RID_TYPE_major  = 0x100, /* region type for major region */
+  RID_TYPE_minor = 0x200,  /* region type for minor region*/
+#endif 
   RID_TYPE_eh	        = 0x3f000, /* EH region mask (all EH are transparent)*/
   RID_TYPE_try	        = 0x01000, /* it's a try-block			     */
   RID_TYPE_cleanup      = 0x02000, /* it's a cleanup region		     */
@@ -251,6 +259,7 @@ typedef struct region_id {
 
   LOWER_ACTIONS	lowered; /* lowerer actions already applied to region	*/
   struct EH_RANGE  *eh_range_ptr; /* pointer to current EH range   	*/
+  INT32 num_eh_ranges;   /* how many eh_ranges in this eh region        */
 
 } RID;
 
@@ -270,6 +279,7 @@ typedef struct region_id {
 #define RID_rloop(r)         	((r)->rloop)
 #define RID_lowered(r)       	((r)->lowered)
 #define RID_eh_range_ptr(r) 	((r)->eh_range_ptr)
+#define RID_num_eh_ranges(r)    ((r)->num_eh_ranges)
 #define RID_type(r)          	((r)->rid_type)
 
 /* flag macros */
@@ -352,6 +362,20 @@ typedef struct region_id {
 #define RID_TYPE_swp_Reset(r)        (RID_type(r) = \
 				     (RID_TYPE)(RID_type(r) & ~RID_TYPE_swp))
 
+#ifdef TARG_SL2 //fork_joint
+#define RID_TYPE_major(r)     (RID_type(r) & RID_TYPE_major)
+#define RID_TYPE_major_Set(r)         (RID_type(r) = \
+				     (RID_TYPE)(RID_type(r) | RID_TYPE_major))
+#define RID_TYPE_major_Reset(r)       (RID_type(r) = \
+				     (RID_TYPE)(RID_type(r) & ~RID_TYPE_major))
+#define RID_TYPE_minor(r)     (RID_type(r) & RID_TYPE_minor)
+#define RID_TYPE_minor_Set(r)         (RID_type(r) = \
+				     (RID_TYPE)(RID_type(r) | RID_TYPE_minor))
+#define RID_TYPE_minor_Reset(r)       (RID_type(r) = \
+				     (RID_TYPE)(RID_type(r) & ~RID_TYPE_minor))
+#endif 
+				     
+
 #define RID_TYPE_eh(r)               (RID_type(r) & RID_TYPE_eh)
 /* makes no sense to have set for EH, it is a mask */
 
@@ -398,7 +422,10 @@ typedef struct region_id {
 				 || RID_TYPE_swp(r) \
 				 || RID_TYPE_cold(r))
 
-
+#if defined(TARG_SL2)
+#define RID_TYPE_sl2_para(r)   ( RID_TYPE_major(r) \
+	                     || RID_TYPE_minor(r))
+#endif
 /* RID tree iterator */
 /* the type tells what loop we are doing:
    loop/func_entry: regions introduced by RAIL, loop around MainOpt/CG
@@ -539,6 +566,11 @@ extern BOOL REGION_is_EH(WN *);
 /* tell if a region is an MP region based on WHIRL pragmas */
 extern BOOL REGION_is_mp(WN *);
 
+#if defined(TARG_SL2)
+/* tell if a region is an SL2 region based on WHIRL kind */
+extern BOOL REGION_is_sl2_para(WN*); 
+#endif
+
 /* tell if a region is an EH region based on WHIRL kind */
 extern BOOL REGION_is_EH(WN *);
 
@@ -572,6 +604,8 @@ extern void RID_Fprint(FILE *, RID *);
 
 /* Print the tree of RIDs rooted at rid to TFile */
 extern void RID_Tree_Print(FILE *, RID *);
+
+extern bool RID_is_valid(RID *, RID*);
 
 /* Print the tree of RIDs rooted at the RID of the given WN to TFile */
 extern void RID_WN_Tree_Print(FILE *, WN *);

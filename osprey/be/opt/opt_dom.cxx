@@ -167,6 +167,7 @@ class DOM_INFO {
 
     class DOM_REC {
       friend class DOM_INFO;
+      DECL_CXX_ALLOC_AS_FRIEND(DOM_REC);
       private:
 	IDTYPE	parent;		// block which is parent of this block
 	IDTYPE	ancestor;	// furthest ancestor in the tree

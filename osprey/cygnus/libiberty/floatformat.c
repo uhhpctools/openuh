@@ -575,16 +575,6 @@ ieee_test (n)
       || (n >= 0 && result < 0))
     printf ("Differ(from): %.20g -> %.20g\n", n, result);
 
-#if 0
-  {
-    char exten[16];
-
-    floatformat_from_double (&floatformat_m68881_ext, &n, exten);
-    floatformat_to_double (&floatformat_m68881_ext, exten, &result);
-    if (n != result)
-      printf ("Differ(to+from): %.20g -> %.20g\n", n, result);
-  }
-#endif
 
 #if IEEE_DEBUG > 1
   /* This is to be run on a host which uses 68881 format.  */

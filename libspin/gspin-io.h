@@ -28,4 +28,4 @@ extern gs_void_t gs_write (const gs_string_t filename);
 extern gs_unsigned_char_t *gs_read (const gs_string_t filename);
 extern gs_t gs_read_file (const gs_string_t filename);
 
-#endif // __GSPIN_IO_H__
+#endif /* __GSPIN_IO_H__ */

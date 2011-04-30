@@ -2525,9 +2525,6 @@ final_scan_insn (insn, file, optimize, prescan, nopeepholes)
 
 	if (optimize)
 	  {
-#if 0
-	    rtx set = single_set (insn);
-#endif
 
 	    if (set
 		&& GET_CODE (SET_DEST (set)) == CC0
@@ -2837,14 +2834,6 @@ final_scan_insn (insn, file, optimize, prescan, nopeepholes)
 #endif
 #endif
 
-#if 0
-	/* It's not at all clear why we did this and doing so interferes
-	   with tests we'd like to do to use REG_WAS_0 notes, so let's try
-	   with this out.  */
-
-	/* Mark this insn as having been output.  */
-	INSN_DELETED_P (insn) = 1;
-#endif
 
 	/* Emit information for vtable gc.  */
 	note = find_reg_note (insn, REG_VTABLE_REF, NULL_RTX);
@@ -3140,7 +3129,20 @@ alter_cond (cond)
 
 /* Report inconsistency between the assembler template and the operands.
    In an `asm', it's the user's fault; otherwise, the compiler's fault.  */
-
+#ifdef __MINGW32__
+void
+output_operand_lossage (msgid)
+     const char *msgid;
+{
+  if (this_is_asm_operands)
+    error_for_asm (this_is_asm_operands, "invalid `asm': %s", _(msgid));
+  else
+    {
+      error ("output_operand: %s", _(msgid));
+      abort ();
+    }
+}
+#else
 void
 output_operand_lossage VPARAMS ((const char *msgid, ...))
 {
@@ -3163,6 +3165,7 @@ output_operand_lossage VPARAMS ((const char *msgid, ...))
   free (new_message);
   VA_CLOSE (ap);
 }
+#endif /* __MINGW32__ */
 
 /* Output of assembler code from a template, and its subroutines.  */
 

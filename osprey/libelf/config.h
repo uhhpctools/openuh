@@ -9,7 +9,9 @@
 /* #undef const */
 
 /* Define if you have a working `mmap' system call.  */
+#ifndef __MINGW32__
 #define HAVE_MMAP 1
+#endif /* __MINGW32__ */
 
 /* Define to `long' if <sys/types.h> doesn't define.  */
 /* #undef off_t */
@@ -30,7 +32,13 @@
 /* #undef HAVE_CATGETS */
 
 /* Define if you have the gettext function. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_GETTEXT
+#else /* defined(BUILD_OS_DARWIN) */
+#if !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__APPLE__)
 #define HAVE_GETTEXT 1
+#endif
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define if you have the memset function.  */
 #define HAVE_MEMSET 1
@@ -42,7 +50,11 @@
 /* #undef __LIBELF_NEED_LINK_H */
 
 /* Define to `<elf.h>' or `<sys/elf.h>' if one of them is present */
+#if defined(BUILD_OS_DARWIN)
+#define __LIBELF_HEADER_ELF_H "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #define __LIBELF_HEADER_ELF_H <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define if you want 64-bit support (and your system supports it) */
 #define __LIBELF64 1

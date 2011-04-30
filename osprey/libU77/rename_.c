@@ -51,7 +51,11 @@ char	id_rename[] = "@(#)rename_.c	1.2";
 
 #include <sys/types.h>
 #include <stdio.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/param.h>
 #ifndef	MAXPATHLEN
 #define MAXPATHLEN	128

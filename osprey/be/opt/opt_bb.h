@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
@@ -514,8 +518,6 @@
 //                ending condition for repeat statement
 //          BB_SUMMARY
 //                summary BB
-//
-// ====================================================================
 // ====================================================================
 
 #if !defined(opt_bb_INCLUDED) || defined(opt_bb_CXX)
@@ -526,6 +528,9 @@ static char *opt_bbrcs_id =  opt_bb_INCLUDED"$Revision$";
 
 #ifndef opt_base_INCLUDED
 #include "cxx_base.h"
+#endif
+#ifndef cxx_template_INCLUDED
+#include "cxx_template.h"
 #endif
 #ifndef opt_defs_INCLUDED
 #include "opt_defs.h"
@@ -570,6 +575,8 @@ class OPT_STAB;
 class PHI_LIST;
 class RVI_ANN_LIST;
 class EXP_OCCURS_CONTAINER;
+class SC_NODE;
+class SC_LIST;
 
 class BB_IFINFO {
 private:
@@ -602,6 +609,10 @@ public:
   BB_NODE *Then(void) const      { return _then; }
   BB_NODE *Else(void) const      { return _else; }
   BB_NODE *Merge(void) const     { return _merge; }
+  void     Set_then(BB_NODE * i) { _then = i; }
+  void     Set_else(BB_NODE * i) { _else = i; }
+  void     Set_merge(BB_NODE * i) { _merge = i; }
+  void     Set_cond(BB_NODE * i) { _cond = i; }
 };
 
 enum LOOP_FLAGS {
@@ -621,9 +632,16 @@ enum LOOP_FLAGS {
 				  // occurrence of the current
 				  // expression (for LFTR termination
 				  // guarantee).
+  LOOP_HAS_MV_ALIAS    = 0x200,   // Memory references in this loop are
+                                  // associated with loop multi-version
+                                  // alias groups
 };
 
 enum MP_TY { MP_REGION, MP_DOACROSS = 0x40, MP_PDO = 0x80};
+
+#if defined(TARG_SL) //PARA_EXTENSION
+enum SL2_PARA_TY { SL2_PARA_REGION};
+#endif
 
 class BB_LOOP : public SLIST_NODE{
 private:
@@ -699,49 +717,24 @@ private:
 
 public:
   BB_LOOP(void);
-  BB_LOOP(    WN      *index,
-	      BB_NODE *start,
-	      BB_NODE *end,
-	      BB_NODE *body,
-	      BB_NODE *step,
-	      BB_NODE *merge)       { 
-		_child = NULL;
-		_parent = NULL;
-		_loopstmt = NULL;
-		_index = index;
-		_u1._start = start;
-		_end = end;
-		_body = body;
-		_step = step;
-		_u2._merge = merge;
-		_body_set = NULL;
-		_true_body_set = NULL;
-		_trip_count_stmt = NULL;
-		_trip_count_expr = NULL;
-		_entry_test = NULL;
-		_wn_trip_count = NULL;
-		_iv = NULL;
-		_iv_replacement = NULL;
-		_lftr_non_candidates = NULL;
-		_flags = LOOP_EMPTY;
-		_orig_wn = NULL;
-		_promoted_do = FALSE;
-		has_entry_guard = FALSE;
-		well_formed = FALSE;
-		_valid_doloop = TRUE;
-		header = NULL;
-                _size_estimate = 0;  
-  }
-  ~BB_LOOP(void);
+  BB_LOOP (WN *index, BB_NODE *start, BB_NODE *end, BB_NODE *body,
+	       BB_NODE *step, BB_NODE *merge);
+  ~BB_LOOP(void) {};
   BB_LOOP     *Child(void) const    { return _child;}
   BB_LOOP     *Parent(void) const   { return _parent;}
   WN          *Loopstmt(void) const { return _loopstmt; }
   WN          *Index(void) const    { return _index; }
+  void         Set_index(WN *p) { _index = p; }
   BB_NODE     *Start(void) const    { return _u1._start; }
+  void         Set_start(BB_NODE *p) { _u1._start = p; }
   BB_NODE     *Dohead(void) const   { return _u1._dohead; }
   BB_NODE     *End(void) const      { return _end; }
+  void         Set_end(BB_NODE *p) { _end = p; }
   BB_NODE     *Body(void) const     { return _body; }
+  void         Set_body(BB_NODE *p) { _body = p; }
   BB_NODE     *Step(void) const     { return _step; }
+  void         Set_step(BB_NODE *p) { _step = p; }
+  void         Set_merge(BB_NODE *b){ _u2._merge = b; }
   BB_NODE     *Merge(void) const    { return _u2._merge; }
   BB_NODE     *Dotail(void) const   { return _u2._dotail; }
   BB_NODE     *Header(void) const   { return header; }
@@ -814,7 +807,7 @@ public:
 
   LOOP_FLAGS   Flags(void) const             { return _flags; }
   void         Set_flag(LOOP_FLAGS  f)       { _flags =(LOOP_FLAGS)(_flags|f);}
-  BOOL         Is_flag_set(LOOP_FLAGS f)const{ return _flags & f; }
+  BOOL         Is_flag_set(LOOP_FLAGS f)const{ return ((_flags & f) == f); }
   void         Clear_flag(LOOP_FLAGS f)      { _flags = (LOOP_FLAGS) (_flags & ~f); }
   CODEREP     *Iv(void) const                { return _iv; }
   void         Set_iv(CODEREP *cr)           { _iv = cr; }
@@ -983,7 +976,11 @@ enum BB_FLAG {
   BB_VN_PROCESSED = 0x200,  // block has been processed by SSA's Value_number()
   BB_MP_REGION = 0x400, // block is inside a MP region
   BB_TLBS_PROCESSING = 0x800, // being processed by Compute_true_loop_body_set
-  BB_REGIONEND = 0x1000 // is (or was) the Region_end() of an BB_REGION
+  BB_REGIONEND = 0x1000, // is (or was) the Region_end() of an BB_REGION
+#if defined(TARG_SL) //PARA_EXTENSION
+  BB_SL2_PARA_REGION = 0x2000, // block is inside a SL2 parallel region
+#endif
+  BB_EH_REGION = 0x4000,
 };
 
 #define BB_VISIT    (BB_DFORDER)
@@ -1064,6 +1061,9 @@ private:
   IDTYPE       _pdom_dfs_last;// _pdom_dfs_id number of last post-dominated block
   BB_NODE_SET *_dom_frontier;// point to dominance frontier set
   BB_NODE_SET *_rcfg_dom_frontier;// point to dominance frontier set for reverse CFG
+  IDTYPE       _layout_id;          // it is used to represent where to place BB in reconstrucing CFG
+  RID         *_rid;          // which region BB belongs to, cannot use _rid_id because it may not be unique
+  
   // structure containing everything related to the label for this bb
   struct {
     mINT32     _labnam;      // label number in the WN node
@@ -1139,7 +1139,6 @@ private:
 
   	       BB_NODE& operator = (const BB_NODE&);
 
-
 public:
   void         Clear(void);
 
@@ -1150,6 +1149,7 @@ public:
   ~BB_NODE(void)                           {}
 
   void         Print(FILE *fp=stderr) const;// print the bb structure
+  void         PrintVis(void) const;            // print the bb structure
   void         Print_wn(FILE *fp=stderr) const;  // print the bb structure
   void         Print_ssa(FILE *fp=stderr) const; // print the bb structure
   void         Print_head(FILE *fp=stderr) // print the cfg info of the bb
@@ -1158,7 +1158,7 @@ public:
                              *fp=stderr);  // print the local attributes
   void         Validate(FILE *fp = stderr) // validate assumptions in bb
                const;
-  void         Gen_wn(EMITTER *);          // generate the WHIRL stmt
+  void         Gen_wn(EMITTER *, BOOL copy_phi=TRUE); // generate the WHIRL stmt
 		                           // list from the stmtlist
   void	       Gen_insertions(MAIN_EMITTER *); // process inserts at end of BB
   WN          *Find_outermost_loopstmt     // Find the outermost
@@ -1171,6 +1171,8 @@ public:
 			   MEM_POOL *pool) { _pred = _pred->Append(bb,pool); }
   void         Append_succ(BB_NODE *bb,
 			   MEM_POOL *pool) { _succ = _succ->Append(bb,pool); }
+  void         Prepend_pred(BB_NODE * bb, MEM_POOL * pool) { _pred = _pred->Prepend(bb, pool); }
+  void         Prepend_succ(BB_NODE *bb, MEM_POOL * pool) { _succ = _succ->Prepend(bb, pool); }
   void         Remove_pred(BB_NODE *bb, MEM_POOL *pool) 
 			{ if (_pred != NULL)
 			    _pred = _pred->Remove(bb,pool); 
@@ -1179,6 +1181,8 @@ public:
 			{ if (_succ != NULL)
 			    _succ = _succ->Remove(bb,pool);
 			}
+  void         Remove_preds(MEM_POOL * pool);
+  void         Remove_succs(MEM_POOL * pool);
   void         Replace_pred( BB_NODE *old_pred, BB_NODE *new_pred );
   void         Replace_succ( BB_NODE *old_succ, BB_NODE *new_succ );
 
@@ -1228,6 +1232,8 @@ public:
   void         Set_loopdepth(mUINT8 dep){ _loopdepth = dep;}
   mUINT16      Rid_id(void)         const  { return _rid_id;}
   void         Set_rid_id(mUINT16 id)   { _rid_id = id;}
+  RID          *Rid(void)          const{ return _rid;}
+  void         Set_rid(RID* rid)        { _rid = rid; }
   BB_FLAG      Flag(void)        const  { return _flags; }
   BOOL         Willexit(void)    const  { return (_flags & BB_WILLEXIT);}
   void         Set_willexit(void)       { _flags=(BB_FLAG)(_flags|BB_WILLEXIT);}
@@ -1260,6 +1266,23 @@ public:
   BOOL         MP_region(void)   const  { return (_flags & BB_MP_REGION);}
   void         Set_MP_region(void)      { _flags=(BB_FLAG)(_flags|BB_MP_REGION);}
   void         Reset_MP_region(void)    { _flags=(BB_FLAG)(_flags&~BB_MP_REGION);}
+
+  BOOL         EH_region(void)   const  { return (_flags & BB_EH_REGION);}
+  void         Set_EH_region(void)      { _flags=(BB_FLAG)(_flags|BB_EH_REGION);}
+  void         Reset_EH_region(void)    { _flags=(BB_FLAG)(_flags&~BB_EH_REGION);}
+
+  IDTYPE       layout_Id(void)          const  { return _layout_id;}
+  void         Set_layout_id(IDTYPE i )        { _layout_id = i;}
+  void         Set_layout_id(BB_NODE * node)   { _layout_id = node->layout_Id() ? node->layout_Id() : node->Id(); }
+    
+#if defined(TARG_SL) //PARA_EXTENSION
+  BOOL         SL2_para_region(void) const    { return (_flags & BB_SL2_PARA_REGION);}
+  void         Set_SL2_para_region(void)      { _flags=(BB_FLAG)(_flags|BB_SL2_PARA_REGION);}
+  void         Reset_SL2_para_region(void)    { _flags=(BB_FLAG)(_flags&~BB_SL2_PARA_REGION);}
+  BOOL         Parallel_Region(void)    { return (SL2_para_region() || MP_region()); }
+#else 
+  BOOL         Parallel_Region(void)    { return  MP_region(); }
+#endif  
   BOOL         TLBS_processing(void) const { return (_flags & BB_TLBS_PROCESSING);}
   void         Set_TLBS_processing(void) { _flags=(BB_FLAG)(_flags|BB_TLBS_PROCESSING);}
   void         Reset_TLBS_processing(void)    { _flags=(BB_FLAG)(_flags&~BB_TLBS_PROCESSING);}
@@ -1278,6 +1301,7 @@ public:
   void         Set_pred(BB_LIST *bblst) { _pred = bblst;}
   BB_NODE     *Nth_pred(INT32)   const;
   BB_NODE     *Nth_succ(INT32)   const;
+  BB_NODE     *Last_succ();
   BB_LIST     *Succ(void)        const  { return _succ;}
   void         Set_succ(BB_LIST *bblst) { _succ = bblst;}
 
@@ -1463,9 +1487,8 @@ public:
 						  ("Illegal use of loop"));
 					  return (_loop)?
 					    _loop->Dotail() : NULL; }
-  BB_IFINFO   *Ifinfo(void)    const    { Is_True(Kind() == BB_LOGIF || Ifmerge(),
-						  ("Illegal use of ifinfo"));
-					  return _hi._ifinfo;}
+  BB_IFINFO   *Ifinfo(void)    const    { return (Kind() == BB_LOGIF || Ifmerge()) ? 
+                                              _hi._ifinfo : NULL ; }
   void         Set_ifinfo(BB_IFINFO
 			    *ii)        { Is_True((Kind() == BB_LOGIF) || Ifmerge(),
 						  ("Illegal use of ifinfo"));
@@ -1600,6 +1623,8 @@ public:
   PHI_LIST    *Phi_list(void)    const  { return _phi_list; }
   void         Set_phi_list(PHI_LIST *p){ _phi_list = p; }
   void         Remove_phi_reference( INT32 whichpred );
+  BOOL         Has_valid_phi();
+  BOOL         Only_fall_through_phi();
 
   EXP_PHI_LIST
               *Iphi_list(void)   const  { return _iphi_list; }
@@ -1617,8 +1642,29 @@ public:
 
   // Can this BB be cloned?
   BOOL         Clonable(BOOL           allow_loop_cloning, 
-			const BVECTOR *cr_vol_map = NULL);
+			const BVECTOR *cr_vol_map = NULL,
+			BOOL allow_clone_calls=FALSE);
   INT32        Code_size_est(void) const;
+
+  // Does this BB dominate every BB in the given  SC_NODE?
+  BOOL Is_dom(SC_NODE *);
+  // Does this BB post-dominate every BB in the given SC_NODE?
+  BOOL Is_postdom(SC_NODE *);
+  // Is every pair of WN statements in this BB_NODE and the given BB_NODE identical?
+  BOOL Compare_Trees(BB_NODE *);
+
+  // Count of executable statements in this BB_NODE.
+  int  Executable_stmt_count();
+  // Does this BB_NODE end with a branch targeting the given BB_NODE?
+  BOOL Is_branch_to(BB_NODE *);
+  // Find first executable statement in this BB_NODE.
+  WN * First_executable_stmt();
+
+#if defined(TARG_SL)
+  // if predecessors of current bb are from different region, this function  
+  // is used to set expression phi not downsafe to prevent code motion 
+  BOOL  Preds_or_succs_from_different_region(BOOL is_pred = TRUE); 
+#endif
 }; // end BB_NODE class
 
 
@@ -1657,7 +1703,7 @@ public:
     _region_line_num(linenum),
     _orig_wn(orig_wn)
   {
-    _region_num_exits = RID_num_exits(_rid); //PPP is this needed?
+    _region_num_exits = RID_num_exits(_rid); // PPP is this needed?
 
     // need to copy the WHIRL nodes for the pragmas and exits
     // we never use the same whirl that came in (mmapped)

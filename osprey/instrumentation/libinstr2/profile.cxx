@@ -196,7 +196,7 @@ void Incr_Branch_Not_Taken(PU_PROFILE_HANDLE pu_handle, INT32 id)
 void
 Profile_Switch_Init(PU_PROFILE_HANDLE pu_handle,
 		    INT32 num_switches, INT32 *switch_num_targets,
-		    INT32 num_case_values, INT64 *case_values)
+		    INT32 num_case_values, FB_NUM_TYPE *case_values)
 {
   Switch_Profile_Vector& Switch_Table = pu_handle->Get_Switch_Table();
 
@@ -490,18 +490,18 @@ Profile_Icall(PU_PROFILE_HANDLE pu_handle, INT32 icall_id, void * called_fun_add
   ptnv->_flag = 0;
   ptnv->_clear_counter++;
 
-  UINT64 value = (UINTPS)called_fun_address;
+  FB_VALUE_TYPE value = (UINTPS)called_fun_address;
  
        //now the tnv table info update.
        //We use the first 6 items as "steady part", the last 4 items as "clear part".
        // clear_interval is the sum of _exec_counter of the middle two in the steady part.
         INT i, j;
-        UINT64 clear_interval = ptnv->_counters[3] + ptnv->_counters[4]; 
+        FB_VALUE_TYPE clear_interval = ptnv->_counters[3] + ptnv->_counters[4]; 
         if (ptnv->_clear_counter >= clear_interval)
         {
         	ptnv->_clear_counter = 0;
         	//resort tnv
-        	UINT64 tmpvalues[10], tmpcounters[10];
+        	FB_VALUE_TYPE tmpvalues[10], tmpcounters[10];
         	for (i=0; i<10; i++)
         	{
         		tmpvalues[i] = ptnv->_values[i];
@@ -559,7 +559,7 @@ Profile_Icall(PU_PROFILE_HANDLE pu_handle, INT32 icall_id, void * called_fun_add
                         j = i;
                         while (j>0 && ptnv->_counters[j-1]<ptnv->_counters[j])
                         {
-                                UINT64 tmp;
+                                FB_VALUE_TYPE tmp;
                                 tmp = ptnv->_values[j-1];
                                 ptnv->_values[j-1] = ptnv->_values[j];
                                 ptnv->_values[j] = tmp;
@@ -567,6 +567,8 @@ Profile_Icall(PU_PROFILE_HANDLE pu_handle, INT32 icall_id, void * called_fun_add
                                 tmp = ptnv->_counters[j-1];
                                 ptnv->_counters[j-1] = ptnv->_counters[j];
                                 ptnv->_counters[j] = tmp;
+
+                                j--;
                         }
                         break;
                 }
@@ -594,7 +596,7 @@ Profile_Icall(PU_PROFILE_HANDLE pu_handle, INT32 icall_id, void * called_fun_add
                         j = i;
                         while (j>6 && ptnv->_counters[j-1]<ptnv->_counters[j])
                         {
-                                UINT64 tmp;
+                                FB_VALUE_TYPE tmp;
                                 tmp = ptnv->_values[j-1];
                                 ptnv->_values[j-1] = ptnv->_values[j];
                                 ptnv->_values[j] = tmp;
@@ -602,6 +604,8 @@ Profile_Icall(PU_PROFILE_HANDLE pu_handle, INT32 icall_id, void * called_fun_add
                                 tmp = ptnv->_counters[j-1];
                                 ptnv->_counters[j-1] = ptnv->_counters[j];
                                 ptnv->_counters[j] = tmp;
+
+                                j--;
                         }
                         break;
                 }
@@ -643,7 +647,7 @@ void Profile_Value_Init( PU_PROFILE_HANDLE pu_handle, INT32 num_values )
 
 // Update appropriate profile information for a value.
 
-void Profile_Value( PU_PROFILE_HANDLE pu_handle, INT32 inst_id, INT64 value )
+void Profile_Value( PU_PROFILE_HANDLE pu_handle, INT32 inst_id, FB_NUM_TYPE value )
 {
   Value_Profile_Vector& Value_Table = pu_handle->Get_Value_Table();
   Value_Profile* entry = &Value_Table[inst_id];
@@ -657,8 +661,8 @@ void Profile_Value( PU_PROFILE_HANDLE pu_handle, INT32 inst_id, INT64 value )
 	if( entry->freq[j] >= entry->freq[i] )
 	  break;
 
-	const INT64 tmp_value = entry->value[j];
-	const INT64 tmp_freq  = entry->freq[j];
+	const FB_NUM_TYPE tmp_value = entry->value[j];
+	const FB_NUM_TYPE tmp_freq  = entry->freq[j];
 
 	entry->freq[j] = entry->freq[i];
 	entry->value[j] = entry->value[i];
@@ -685,6 +689,7 @@ void Profile_Value( PU_PROFILE_HANDLE pu_handle, INT32 inst_id, INT64 value )
   }    
 }
 
+#if !(defined(TARG_SL) && defined(__SL__))
 void Profile_Value_FP_Bin_Init( PU_PROFILE_HANDLE pu_handle, INT32 num_values )
 {
   Value_FP_Bin_Profile_Vector& Value_FP_Bin_Table = 
@@ -710,6 +715,7 @@ void Profile_Value_FP_Bin( PU_PROFILE_HANDLE pu_handle, INT32 inst_id,
   if (value_fp_0 == 1.0) entry->uopnd0 ++;
   if (value_fp_1 == 1.0) entry->uopnd1 ++;
 }
+#endif // !TARG_sl
 #endif
 
 }

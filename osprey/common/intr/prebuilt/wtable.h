@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 #include "wintrinsic.h"
 
 #ifndef FALSE
@@ -33,6 +37,7 @@ typedef enum INTR_RETURN_KIND {
   RETURN_SZT,	/* size_t */
   RETURN_PC,	/* Pointer to char */
   RETURN_F10 	/* Double extended precision floating point */
+  RETURN_C10 	/* Double extended precision complex */
 } INTR_RETURN_KIND;
 typedef struct intr_map_info {
 #ifdef DEBUG
@@ -14209,14 +14214,7 @@ EXTERN intr_map_info intr_map[INTRINSIC_LAST+1]
    /* is_pure = */		TRUE,
    /* has_no_side_effects = */	TRUE,
    /* never_returns = */	FALSE,
-#ifdef KEY /* Bug 11103 */
-  /* The GNU libm -m32 version of "nextafter" fails to set exceptions. If that
-   * bug is fixed, we could resume calling "nextafter" directly, and for that
-   * matter, we could call "nextafterf" for F4NEXTAFTER. */
-   /* runtime_name = */		"_IEEE_NEXT_AFTER"
-#else /* KEY Bug 11103 */
    /* runtime_name = */		"nextafter"
-#endif /* KEY Bug 11103 */
  },
  { /* 614 */
 #ifdef DEBUG
@@ -14400,15 +14398,7 @@ EXTERN intr_map_info intr_map[INTRINSIC_LAST+1]
    /* is_pure = */		TRUE,
    /* has_no_side_effects = */	TRUE,
    /* never_returns = */	FALSE,
-#ifdef KEY /* Bug 10261 */
-  /* GNU libm drem and remainder have a bug: they don't ignore the rounding
-   * mode as required by C99 (and F90 ieee_rem.) Using "remainder" instead of
-   * "drem" causes pathcc (and pathf90) to link the version provided by
-   * libmpath, which works correctly. */
-   /* runtime_name = */		"remainder"
-#else /* KEY Bug 10261 */
    /* runtime_name = */		"drem"
-#endif /* KEY Bug 10261 */
  },
  { /* 622 */
 #ifdef DEBUG
@@ -14431,12 +14421,7 @@ EXTERN intr_map_info intr_map[INTRINSIC_LAST+1]
    /* is_pure = */		TRUE,
    /* has_no_side_effects = */	TRUE,
    /* never_returns = */	FALSE,
-#ifdef KEY /* Bug 10261 */
-   /* See comment earlier in file */
-   /* runtime_name = */		"remainder"
-#else /* KEY Bug 10261 */
    /* runtime_name = */		"drem"
-#endif /* KEY Bug 10261 */
  },
  { /* 623 */
 #ifdef DEBUG

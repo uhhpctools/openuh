@@ -5263,7 +5263,7 @@ fi
 
 trap 'rm -f $CONFIG_STATUS conftest*; exit 1' 1 2 15
 
-DEFS="-DHAVE_CONFIG_H -DIPA_LINK -DKEY"
+DEFS="-DHAVE_CONFIG_H -DIPA_LINK -DKEY -DOSP_OPT"
 
 # Without the "./", some shells look in PATH for config.status.
 : ${CONFIG_STATUS=./config.status}

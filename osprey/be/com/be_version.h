@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: be_version.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/be_version.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:34-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.be_version.h $
  *
  * Revision history:
  *  06-Dec -95 - Original Version
@@ -62,7 +62,7 @@
 #define BE_VERSION "1.01"           /* define current be version */
 
 #ifdef __cplusplus
-extern "C" char *Get_BE_Version(void);	/* version of be and be.so */
+extern "C" const char *Get_BE_Version(void);	/* version of be and be.so */
 #else
-extern char *Get_BE_Version(void);	/* version of be and be.so */
+extern const char *Get_BE_Version(void);	/* version of be and be.so */
 #endif

@@ -50,7 +50,7 @@ extern void CGEMIT_Relocs_In_Object (
 // add events and relocs as needed for call.
 extern void CGEMIT_Add_Call_Information (
 	OP *op, BB *bb, INT32 PC, pSCNINFO PU_section);
-#if defined(TARG_MIPS) || defined(TARG_X8664)
+#if defined(TARG_MIPS) || defined(TARG_X8664) || defined(TARG_NVISA)
 extern void
 CGEMIT_Prn_Scn_In_Asm (ST *st, ST *cur_section);
 extern void CGEMIT_Change_Origin_In_Asm (ST *st, INT64 offset);
@@ -89,8 +89,21 @@ extern void CGEMIT_Weak_Alias (ST *sym, ST *strongsym);
 
 // generate alias directive.
 extern void CGEMIT_Alias (ST *sym, ST *strongsym);
-extern INT CGEMIT_Print_Inst( OP* op, const char* result[], const char* opnd[], FILE* f );
 
-#ifdef TARG_X8664
+extern INT CGEMIT_Print_Inst( OP* op, const char* result[], const char* opnd[], FILE* f );
 extern void CGEMIT_Setup_Ctrl_Register( FILE* f );
+
+#ifdef TARG_SL
+extern void CGEMIT_Prn_Used_Callersaved_In_Asm (void);
+#endif
+#ifdef TARG_NVISA
+// emit any global declarations (e.g. regs) at top of file
+extern void CGEMIT_Global_Decls (void);
+// emit prototype and info about registers used
+extern void CGEMIT_Function_Definition (ST *);
+// emit call instruction with parameters
+extern void CGEMIT_Call (OP *);
+// emit info about variable memory
+extern void CGEMIT_Print_Variable (ST *);
+extern void CGEMIT_Print_Initialized_Variable (ST *, INITO *);
 #endif

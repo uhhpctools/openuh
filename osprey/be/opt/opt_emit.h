@@ -85,6 +85,7 @@ class E_REGION;
 class OPT_STAB;
 class RVI;
 class VER_LIST;
+class WHIRL_SSA_EMITTER;
 
 class EMITTER {
 private:
@@ -93,6 +94,7 @@ private:
   OPT_STAB   *_opt_stab;
   ALIAS_MANAGER *_alias_mgr;
   DU_MANAGER    *_du_mgr;
+  WHIRL_SSA_EMITTER *_wssa_emitter;  // WSSA emitter
   WN         *_opt_func;
   MEM_POOL   *_loc_pool;
   MEM_POOL   *_mem_pool;
@@ -150,6 +152,7 @@ public:
   CODEMAP  *Htable(void) const              { return _htable; }
   ALIAS_MANAGER *Alias_Mgr(void) const      { return _alias_mgr; }
   DU_MANAGER    *Du_Mgr(void) const         { return _du_mgr; }
+  WHIRL_SSA_EMITTER *WSSA_Emitter(void) const { return _wssa_emitter;}
   WN_MAP   *Wn_to_cr_map(void)              { return &_wn_to_cr_map; }
   void      Set_has_do_loop(void)	    { _has_do_loop = TRUE; }
   BOOL      Has_do_loop(void) const	    { return _has_do_loop; }

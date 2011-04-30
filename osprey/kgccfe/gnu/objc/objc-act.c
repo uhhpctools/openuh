@@ -7315,22 +7315,6 @@ finish_method_def ()
   objc_method_context = NULL_TREE;
 }
 
-#if 0
-int
-lang_report_error_function (decl)
-      tree decl;
-{
-  if (objc_method_context)
-    {
-      fprintf (stderr, "In method `%s'\n",
-	       IDENTIFIER_POINTER (METHOD_SEL_NAME (objc_method_context)));
-      return 1;
-    }
-
-  else
-    return 0;
-}
-#endif
 
 static int
 is_complex_decl (type)

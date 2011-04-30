@@ -728,6 +728,14 @@ FB_CFG::Walk_WN_statement( WN *wn )
       FB_NODEX nx_target;
       FB_FREQ freq_branch;
 
+#if defined(TARG_SL) && defined(TARG_SL2)
+      if(WN_is_compgoto_for_minor ( wn ) || WN_is_compgoto_para ( wn )) {
+        FB_NODEX head = New_node ( FB_EDGE_SWITCH_DEFAULT, wn, FB_FREQ_UNINIT, FB_FREQ_UNINIT);
+        Add_edge(Curr(), head);
+        Set_curr ( head ); 
+      }
+#endif
+
       // Walk through expression
       Walk_WN_expression(WN_kid0(wn));
 
@@ -739,8 +747,7 @@ FB_CFG::Walk_WN_statement( WN *wn )
 	freq_branch = Cur_PU_Feedback->Query( wn, FB_EDGE_SWITCH( count ) );
 
 	nx_target = New_node( FB_EDGE_SWITCH( count ), wn, freq_branch );
-	
-        if ( FB_NODEX_VALID( Curr() ) )
+	if(FB_NODEX_VALID(Curr()))
 	  Add_edge( Curr(), nx_target );
 	Add_delayed_edge( nx_target, wn2 );
 	count += 1;
@@ -758,7 +765,7 @@ FB_CFG::Walk_WN_statement( WN *wn )
 
 	freq_branch = Cur_PU_Feedback->Query( wn, FB_EDGE_SWITCH_DEFAULT );
 	nx_target = New_node( FB_EDGE_SWITCH_DEFAULT, wn, freq_branch );
-        if ( FB_NODEX_VALID( Curr() ) )
+	if(FB_NODEX_VALID(Curr()))
 	  Add_edge( Curr(), nx_target );
 	Add_delayed_edge( nx_target, wn2 );
       }
@@ -793,6 +800,9 @@ FB_CFG::Walk_WN_statement( WN *wn )
 
   case OPR_RETURN:
   case OPR_RETURN_VAL:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     {
       FB_FREQ freq_default =
 	Cur_PU_Feedback->Query( wn, FB_EDGE_INCOMING );
@@ -951,11 +961,37 @@ FB_CFG::Walk_WN_statement( WN *wn )
     break;
   case OPR_REGION:
     {
+#if defined (TARG_SL) && defined(TARG_SL2)
+      FB_FREQ freq_entry = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_INCOMING );
+      FB_NODEX nx_entry = New_node( FB_EDGE_CALL_INCOMING, wn, freq_entry );
+      if ( FB_NODEX_VALID( Curr() ) )
+	Add_edge( Curr(), nx_entry );
+      Set_curr( nx_entry );
+
+      Walk_WN_statement( WN_region_body(wn) );
+
+      FB_FREQ freq_exit  = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_OUTGOING );
+      if(Curr() == nx_entry && freq_entry.Initialized() && freq_exit.Initialized()) {
+	    //add a fake node when the region freqs have been known, but we must maintain the fb_cfg consistence
+	  FB_NODEX fn;
+	  if(Cur_PU_Feedback->Same_in_out(wn)) 
+          fn = New_node ( FB_EDGE_CALL_OUTGOING, wn, freq_exit);
+	  else
+          fn = New_node ( FB_EDGE_CALL_OUTGOING, wn, freq_entry, freq_exit);
+        Add_edge(Curr(), fn);
+        Set_curr ( fn ); 
+      }
+
+      FB_NODEX nx_exit = New_node( FB_EDGE_CALL_OUTGOING, wn, freq_exit );	  
+      Add_edge( Curr(), nx_exit );
+      Set_curr( nx_exit );
+#else
       FB_NODEX nx_body = New_node();
       if ( FB_NODEX_VALID( Curr() ) )
 	Add_edge( Curr(), nx_body );
       Set_curr( nx_body );
       Walk_WN_statement( WN_region_body(wn) );
+#endif	  
     }
     break;
 #endif
@@ -2011,7 +2047,7 @@ void dV_view_fb_cfg( const FB_CFG& cfg, WN *root_wn, const char *caller )
 {
   const char *trace_fname = getenv( "DV_TRACE_FILE" );
   FILE       *trace_fp    = NULL;
-  char       *func_name   = "<unknown func>";
+  const char *func_name   = "<unknown func>";
   char        title[100];
 
   if ( ! DaVinci::enabled( true ) ) return;

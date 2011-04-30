@@ -102,7 +102,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 /* sgi includes */
 
@@ -496,16 +496,6 @@ cwh_mp_region(       WN_PRAGMA_ID wn_pragma_id,
     cwh_directive_add_pragma_to_loop(wn,is_omp);
     datacount--;
   }
-#if 0
-  while (ontocount) {
-    /* pop the expressions */
-    wn = WN_CreateXpragma( WN_PRAGMA_ONTO, (ST_IDX) NULL, 1);
-    if (is_omp) WN_set_pragma_omp(wn);
-    WN_kid0(wn) = cwh_expr_operand(NULL);
-    cwh_block_append(wn);
-    ontocount--;
-  }
-#endif
   /* pop off the affinity pragmas */
   while(task_affinity_count) {
     wn = cwh_stk_pop_WN();
@@ -2365,12 +2355,7 @@ fei_endsingle_open_mp       ( int nowait )
   while (task_var_count) {
     wn = cwh_stk_pop_WN();
 
-#if 0
-    if ((WN_operator(wn) == OPR_PRAGMA) && 
-	(WN_pragma(wn) == WN_PRAGMA_COPYPRIVATE)) 
-#else
     if (WN_operator(wn) == OPR_PRAGMA)
-#endif
       cwh_block_append(wn);
     task_var_count--;
   }

@@ -474,37 +474,6 @@ _OPEN(struct open_spec_list *o)
 }
 
 
-#if 0	/* ifdef it out.   Remove it when we're really sure it's not needed. */
-/*
- *	_OPN - Obsolete Fortran-90 runtime open routine.  Processes an OPEN 
- *	statement.
- */
-
-int
-_OPN(
-_f_int	*unitn,
-_f_int	*iostat,
-int	*errf,
-_fcd	file,
-_fcd	status,
-_fcd	access,
-_fcd	form,
-_f_int	*recl,
-_fcd	blank,
-_fcd	position,
-_fcd	action_arg,
-_fcd	delim_arg,
-_fcd	pad_arg)
-{
-/*
- *	Pass value of 1 in argument #16 to indicate that this is a Fortran-90
- *	OPEN.
- */
-	return( __OPN(unitn, iostat, errf, file, status, access, form, recl, \
-		     blank, position, action_arg, delim_arg, pad_arg,
-		     NULL, NULL, 1) );
-}
-#endif /* 0 */
 
 /*
  *	findmatch - does a case-insensitive match of Fortran string fortstring 

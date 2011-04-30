@@ -75,11 +75,7 @@ do_ui(unit *ftnunit, XINT *number, register char *ptr, ftnlen len)
 }
 
 static int
-#if 11
 s_rsue_com (cilist64 *a, unit **fu)
-#else
-s_rsue_com (cilist *a, unit **fu)
-#endif
 {
    int             n;
    unit           *ftnunit;
@@ -173,28 +169,19 @@ s_rsue_com (cilist *a, unit **fu)
 int
 s_rsue (cilist *a)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsue_com(&dst, &f77curunit);
-#else
-    return( s_rsue_com( a, &f77curunit) );
-#endif
 }
 
 int
 s_rsue_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsue_com(&dst, fu);
-#else
-    return( s_rsue_com( a, fu) );
-#endif
 }
 
-#if 11
 
 int
 s_rsue64 (cilist64 *a)
@@ -208,15 +195,10 @@ s_rsue64_mp (cilist64 *a, unit **fu)
     return( s_rsue_com( a, fu) );
 }
 
-#endif /* -64 and -n32 */
 
 
 int
-#if 11
 wsue (cilist64 *a, unit **fu)
-#else
-wsue (cilist *a, unit **fu)
-#endif
 {
    int             n;
    unit *ftnunit;
@@ -236,11 +218,7 @@ wsue (cilist *a, unit **fu)
 }
 
 static int
-#if 11
 s_wsue_com (cilist64 *a, unit **fu)
-#else
-s_wsue_com (cilist *a, unit **fu)
-#endif
 {
    unit		  *ftnunit;
    int             n;
@@ -281,28 +259,19 @@ s_wsue_com (cilist *a, unit **fu)
 int
 s_wsue (cilist *a)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsue_com(&dst, &f77curunit);
-#else
-    return( s_wsue_com( a, &f77curunit) );
-#endif
 }
 
 int
 s_wsue_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsue_com(&dst, fu);
-#else
-    return( s_wsue_com( a, fu) );
-#endif
 }
 
-#if 11
 
 int
 s_wsue64 (cilist64 *a)
@@ -316,14 +285,9 @@ s_wsue64_mp (cilist64 *a, unit **fu)
     return( s_wsue_com( a, fu) );
 }
 
-#endif /* -64 and -n32 */
 
 int
-#if 11
 c_sue (cilist64 *a, unit **fu)
-#else
-c_sue (cilist *a, unit **fu)
-#endif
 {
    unit *ftnunit;
    
@@ -420,7 +384,5 @@ between two unformatted records */
    return (0);
 }
 
-#if 11
 #pragma weak e_rsue64 = e_rsue		/* extern int e_rsue64(void); */
 #pragma weak e_rsue64_mp = e_rsue_mp	/* extern int e_rsue64_mp(unit**); */
-#endif

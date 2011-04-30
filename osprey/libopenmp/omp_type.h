@@ -1,26 +1,29 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
- */
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_type.h
@@ -35,14 +38,16 @@
  * the RTL.
  */
 
-typedef int 		omp_int32;
-typedef long long 	omp_int64;
-typedef float		omp_real32;
-typedef double		omp_real64;
-typedef int		omp_bool;
+typedef int 	  omp_int32;
+typedef long long omp_int64;
+typedef float	  omp_real32;
+typedef double	  omp_real64;
+typedef int	  omp_bool;
 
-typedef int omp_int_t;
-typedef double omp_wtime_t;
+typedef int       omp_int_t;
+typedef double    omp_wtime_t;
+typedef void     *omp_lock_t; 
+typedef void     *omp_nest_lock_t; 
 
 #define TRUE	1
 #define FALSE	0

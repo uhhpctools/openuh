@@ -441,14 +441,6 @@ copy_body_r (tp, walk_subtrees, data)
   id = (inline_data *) data;
   fn = VARRAY_TOP_TREE (id->fns);
 
-#if 0
-  /* All automatic variables should have a DECL_CONTEXT indicating
-     what function they come from.  */
-  if ((TREE_CODE (*tp) == VAR_DECL || TREE_CODE (*tp) == LABEL_DECL)
-      && DECL_NAMESPACE_SCOPE_P (*tp))
-    if (! DECL_EXTERNAL (*tp) && ! TREE_STATIC (*tp))
-      abort ();
-#endif
 
 #ifdef INLINER_FOR_JAVA
   if (TREE_CODE (*tp) == BLOCK)
@@ -517,11 +509,6 @@ copy_body_r (tp, walk_subtrees, data)
       STRIP_TYPE_NOPS (new_decl);
       *tp = new_decl;
     }
-#if 0
-  else if (nonstatic_local_decl_p (*tp)
-	   && DECL_CONTEXT (*tp) != VARRAY_TREE (id->fns, 0))
-    abort ();
-#endif
   else if (TREE_CODE (*tp) == SAVE_EXPR)
     remap_save_expr (tp, id->decl_map, VARRAY_TREE (id->fns, 0),
 		     walk_subtrees);
@@ -959,6 +946,19 @@ inlinable_function_p (fn, id)
   int inlinable;
   int currfn_insns;
   int max_inline_insns_single = MAX_INLINE_INSNS_SINGLE;
+
+#ifdef TARG_NVISA
+  if (flag_really_no_inline) {
+  	/* Ran into a gnu inlining bug missing a break,
+	 * and we have to run open64 inliner anyways to inline everything
+	 * (since no calling convention yet), so just turn off gnu inlining.
+	 * Open64 inliner provides better srcpos info, 
+	 * and easier to debug, even produces better code in one test.
+	 * Have to force early return else always_inline will trigger inlining.
+	 */
+  	return 0;
+  }
+#endif
 
   /* If we've already decided this function shouldn't be inlined,
      there's no need to check again.  */

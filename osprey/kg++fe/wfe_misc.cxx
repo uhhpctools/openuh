@@ -37,7 +37,7 @@
 #include "config.h"
 #include "config_debug.h"
 #include "config_list.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "controls.h"
 #include "erglob.h"
 #include "erlib.h"
@@ -150,7 +150,7 @@ mUINT32 Cif_Level = 0;       	/* CIF level */
 static INT32 Argc;		/* Copy of argc */
 static char **Argv;		/* Copy of argv */
 static INT32 Source_Arg = 0;	/* Number of current source arg */
-static INT32 Src_Count = 0;	/* Number of source files seen */
+static INT32 Src_Count = 0;		/* Number of source files seen */
 static char Dash [] = "-";
 
 /* Internal flags: */
@@ -398,6 +398,13 @@ WFE_Init (INT argc, char **argv, char **envp )
 #endif
 #if defined(TARG_IA32) || defined(TARG_X8664)
   if (TARGET_64BIT)
+    ABI_Name = "n64";
+  else ABI_Name = "n32";
+#endif
+#ifdef TARG_LOONGSON
+   // ABI_Name is valued here for Configure() to choose right Target_ABI
+   // mips_abi is valued in set_target_switch() as a middle value
+  if (mips_abi == ABI_n64)
     ABI_Name = "n64";
   else ABI_Name = "n32";
 #endif
@@ -779,4 +786,32 @@ WFE_Find_Stmt_In_Stack (WFE_STMT_KIND kind)
   Is_True (sp->wn, ("Null WN stmt in apparently valid stack location"));
   return sp->wn;
 }
+
+// To assist in WFE_Lhs_Of_Modify_Expr
+// This was included as a special case for the torture test
+// 990130-1.c where the call to the function bar() has to happen
+// before the asm is executed. But, the front-end would
+// append the call after the asm using WFE_Stmt_Append (without
+// this function).
+void
+WFE_Stmt_Prepend_Last (WN* wn, SRCPOS srcpos)
+{
+  WN * body;
+  WN * last;
+
+  if (srcpos) {
+    WN_Set_Linenum ( wn, srcpos );
+    if (WN_operator(wn) == OPR_BLOCK && WN_first(wn) != NULL)
+    	WN_Set_Linenum ( WN_first(wn), srcpos );
+  }
+
+  body = WFE_Stmt_Top ();
+
+  if (body) {
+
+    last = WN_last(body);
+    WN_INSERT_BlockBefore (body, last, wn);
+  }
+} /* WFE_Stmt_Prepend_Last */
+
 #endif

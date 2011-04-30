@@ -71,7 +71,9 @@ typedef enum {
   ABI_64,
   ABI_I32,
   ABI_I64,
-  ABI_IA32
+  ABI_IA32,
+  ABI_W64,
+  ABI_P32
 } ABI;
 typedef enum {
   ISA_NONE      = 0,
@@ -86,11 +88,24 @@ typedef enum {
   ISA_IA641     = 11,
   ISA_IA32      = 12,
   ISA_X8664     = 13,
+  ISA_COMPUTE_10 = 14,
+  ISA_COMPUTE_11 = 15,
+  ISA_COMPUTE_12 = 16,
+  ISA_COMPUTE_13 = 17,
+  ISA_SL         = 18,
+  ISA_PPC32	= 19,
+#ifdef TARG_LOONGSON /* add support for 2e,2f and 3 decoding*/
+  ISA_LOONGSON2e =14,
+  ISA_LOONGSON2f =15,
+  ISA_LOONGSON3 =16
+#endif
 } ISA;
 
 extern boolean debug;		/* debugging turned on */
 
 extern boolean nostdinc;	/* no standard include directory */
+
+extern boolean print_help;	/* print help message */
 
 extern char *help_pattern;	/* pattern string for help file */
 
@@ -154,6 +169,9 @@ extern boolean flag_is_superceded (int optflag);
 extern void check_convert_name(char *name);
 #endif /* KEY bug 4260 */
 
+/* check the tls-model is acceptable */
+extern void check_opt_tls_model(char *model);
+
 /* check if there is a -- and _XPG is set */
 extern void check_dashdash ( void );
 
@@ -162,6 +180,8 @@ extern void set_dsm_options (void);
 
 extern void Process_Mp (void);
 extern void Process_Cray_Mp (void);
+
+extern void toggle_inline_on (void);
 
 extern void print_file_path (char *, int);	/* print path to named file */
 

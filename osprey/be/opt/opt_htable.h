@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -104,6 +108,8 @@
 #include "opt_ssa.h"
 
 #include <vector>
+#include <map>
+#include "be_memop_annot.h"
 
 using idmap::ID_MAP;
 
@@ -206,6 +212,11 @@ enum CR_FLAG {
   CF_IS_ZERO_VERSION= 0x80,// is a zero version
   CF_FOLDED_LDID   = 0x100,// is folded from (ILOAD(LDA)) 
   CF_MADEUP_TYPE   = 0x200,// the type is made up by SSA
+#ifdef TARG_SL
+  // offset relative to internal memory (vbuf & sbuf)  and used as parameter 
+  // in intrinisc_vbuf_offset and intrinsic_sbuf_offset
+  CF_INTERNAL_MEM_OFFSET = 0x400, 
+#endif 
   // do not add new values without checking CODEREP's flags field
 };
 
@@ -233,6 +244,9 @@ enum ISOP_FLAG {
   				// Fold_lda_iload_istore
   ISOP_LDAFOLD2_VISITED = 0x10000,// has been visited during second pass of
   				// Fold_lda_iload_istore
+  ISOP_MTYPE_B_CR_VISITED = 0x20000,  // has been visited during m_mtype_b_cr
+  ISOP_VERIFY_EXPR_VISITED = 0x40000, // has been visited during verify_version_expr
+  ISOP_DEF_BEFORE_VISITED = 0x80000,  // has been visited during Def_before_use     
   // at most 22 bits for this enumeration, due to size of isop_flags field
 };
 
@@ -246,6 +260,10 @@ enum ISVAR_FLAG {
   ISVAR_MP_SHARED	      = 0x08,   // shared variable in MP region
 #endif
 };
+
+enum ISCONST_FLAG {
+  ISCONST_RVI_CANDIDATE = 0x1,    // used by TARG_SL 
+}; 
 
 // return value of Propagatable to tell whether an expression can be
 // propagated to the current point in the code
@@ -298,10 +316,17 @@ private:
   CODEKIND  kind:7;                  // code kind
   MTYPE     _dtyp:6;                 // data type
   MTYPE     dsctyp:6;                // descriptor type for various opcode
+#ifdef TARG_SL
+  UINT32    usecnt:12;               // number of times this node's
+                                     // expression appears.
+                                     // not used for ISCONST and ISLDA
+  CR_FLAG   flags:11;                
+#else
   UINT32    usecnt:13;               // number of times this node's
                                      // expression appears.
                                      // not used for ISCONST and ISLDA
-  CR_FLAG   flags:10;                
+  CR_FLAG   flags:10;    
+#endif            
   UINT32   _is_sign_extd:1;          // load is sign
   UINT32    is_lcse:1;               // one bit for lcse, also used for IVE
   UINT32    is_saved:1;              // another bit for already saved
@@ -362,7 +387,14 @@ private:
     } islda;
     union {                          // ISCONST ISRCONST
       ST        *const_id;            // symbolic constant or constant, ISRCONST
+#if defined(TARG_SL)
+      struct {
+        INT64    const_val;           // constant value, ISCONST
+        mUINT16  _isconst_flags; 
+      }isconst_val; 
+#else 
       INT64     const_val;           // constant value, ISCONST
+#endif
     } isconst;
     // KEY: added fields _asm_input_dtyp, _asm_input_dsctyp, _unused
     struct {                         // for code kind ISOP
@@ -372,14 +404,16 @@ private:
       mINT32    kid_count:14;        // number of kids
       MTYPE     _asm_input_dtyp:6;                  // data type
       MTYPE     _asm_input_dsctyp:6;                // descriptor type for various opcode
-      mINT32    _unused:6;	     // unused
+      mINT32    _num_of_min_max:6;   // number of minmax, collectively
       mUINT8    max_depth;           // used in estimating rehash cost (SSAPRE)
       IDTYPE    _temp_id:24;         // processing this CR in new PRE step1
+      void * node_cache;             // Hold CR or BB pointer for parents on new differnt paths       
       CODEREP  *kids[3];             // array of kid pointers
     } isop;
     struct {                         // for code kind IVAR(ILOD)
       OPERATOR  _opr:8;	             // 
-      mINT32    _unused:8;     	     // unused
+      mINT32    _num_of_min_max:6;   // number of minmax, collectively
+      mINT32    _unused:2;     	     // unused
       mUINT16   ifieldid;	     // field id
       MU_NODE  *mu_node;	     // MU-list for this memory ref
       STMTREP  *defstmt;             // defining stmt for ILOD
@@ -421,7 +455,24 @@ private:
       Reset_flags();
       if (ck == CK_IVAR) 
 	Set_ivar_mu_node(NULL);
+      if (ck == CK_OP || ck == CK_IVAR) 
+	Set_Num_MinMax(-1);
     }
+
+  INT32	Num_MinMax(void) const
+  {
+      CODEKIND ck = Kind();
+      if (ck == CK_IVAR) return u2.isivar._num_of_min_max;
+      if (ck == CK_OP)   return u2.isop._num_of_min_max;
+      return 0;
+  }
+
+  void Set_Num_MinMax(INT32 v) 
+  {
+      CODEKIND ck = Kind();
+      if (ck == CK_IVAR) u2.isivar._num_of_min_max = v ;
+      if (ck == CK_OP)   u2.isop._num_of_min_max = v ;
+  }
 
   // All opnds of the mu_list is defined by STMTREP *
   BOOL Match_mu_and_def(STMTREP *, INT32, OPT_STAB *) const;
@@ -434,6 +485,8 @@ public:
   CODEREP(void)			{}
   CODEREP(const CODEREP &cr)	{ Copy(cr); }
   ~CODEREP(void)		{}
+
+  INT32       Count_MinMax(void);
 
   // this has to be a define because it is sometimes used before the CR exists
 #define Alloc_stack_cr(cnt) ((CODEREP*)alloca(sizeof(CODEREP)+(cnt)*sizeof(CODEREP *)))
@@ -463,12 +516,16 @@ public:
     {
       Init(CK_LDA); Set_dtyp(wt);  Set_lda_ty(tt); Set_offset(ofst);
       Set_lda_aux_id(st); Set_lda_base_st(bas); Set_afield_id(field_id);
+#ifdef KEY
+      Set_dsctyp(MTYPE_V);
+#endif
+
     }
 
   void Init_const(MTYPE wt, INT64 v)
     {
       Init(CK_CONST); 
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) && !defined(TARG_NVISA)
       if (wt == MTYPE_U4 || wt == MTYPE_I4) 
 	Set_dtyp_const_val(wt, (v << 32) >> 32);
 #else
@@ -478,11 +535,20 @@ public:
 	Set_dtyp_const_val(wt, (UINT64) ((UINT64) v << 32) >> 32);
 #endif
       else Set_dtyp_const_val(wt, v);
+
+#ifdef KEY
+      Set_dsctyp(MTYPE_V);
+#endif
+
     }
 
   void Init_rconst(MTYPE wt, ST *v)
     {
       Init(CK_RCONST); Set_dtyp(wt); Set_const_id(v);
+#ifdef KEY
+      Set_dsctyp(MTYPE_V);
+#endif
+
     }
 
   void Init_op(OPCODE c, mINT16 kcnt)
@@ -494,6 +560,7 @@ public:
       Set_temp_id(0);
       Reset_isop_flags();
       Set_max_depth(0);
+      Set_ISOP_mtype_b_cache(NULL);
     }
 
   void Init_var(MTYPE wt, IDTYPE st, mUINT16 ver, MTYPE dt, mINT32 ofst,
@@ -591,7 +658,33 @@ public:
   void      Set_asm_input_rtype(MTYPE dt)   { u2.isop._asm_input_dtyp = dt; }
   MTYPE     Asm_input_dsctype(void) const   { return u2.isop._asm_input_dsctyp; }
   MTYPE     Set_asm_input_dsctype(MTYPE dt) {  u2.isop._asm_input_dsctyp = dt; }
-#endif  
+#endif
+#if defined(TARG_SL) || defined(TARG_NVISA)
+  void	    Set_dtyp_const_val(MTYPE dt, INT64 v) { 
+					Is_True(Kind() == CK_CONST,
+					    ("CODEREP::Set_dtyp_const_val, illegal kind"));
+					// use given mtype if value fits
+#if defined(TARG_SL)
+					if ((dt == MTYPE_U4 || dt == MTYPE_I4) && (v == (v << 32) >> 32))
+					  _dtyp = MTYPE_I4;
+#else
+					if (dt == MTYPE_U4
+					  && (v == ((UINT64) v << 32) >> 32))
+					  _dtyp = MTYPE_U4;
+					else if (dt == MTYPE_I4
+					  && (v == ((INT64) v << 32) >> 32))
+					  _dtyp = MTYPE_I4;
+#endif // TARG_SL
+					else if (dt == MTYPE_U8)
+					  _dtyp = MTYPE_U8;
+					else 
+					  _dtyp = MTYPE_I8;
+#if defined(TARG_SL)
+					u2.isconst.isconst_val.const_val = v; }
+#else
+					u2.isconst.const_val = v; }
+#endif // TARG_SL
+#else  // TARG_X8664 || TARG_IA64
 #ifndef TARG_X8664
   void	    Set_dtyp_const_val(MTYPE dt, INT64 v) { Is_True(Kind() == CK_CONST,
 					    ("CODEREP::Set_dtyp_const_val, illegal kind"));
@@ -607,6 +700,7 @@ public:
 					else _dtyp = MTYPE_I8;
 					u2.isconst.const_val = v; }
 #endif
+#endif // TARG_SL || TARG_NVISA
   void      Set_dtyp_strictly(MTYPE dt) { _dtyp = dt; }
   MTYPE     Dsctyp(void) const        { return dsctyp; }
   void      Set_dsctyp(const MTYPE t) { dsctyp = t; }
@@ -653,6 +747,10 @@ public:
   void      Set_elm_siz(INT64 siz)    { u1.elm_siz = siz; }
   INTRINSIC Intrinsic(void) const     { return u1.nonarr.u11.intrinsic; }
   void      Set_intrinsic(INTRINSIC i) { u1.nonarr.u11.intrinsic = i; }
+#if defined(TARG_SL)
+  BOOL      Is_C3_Intrinsic()         { return ((u1.nonarr.u11.intrinsic >= INTRN_C3_INTRINSIC_BEGIN) &&
+			                (u1.nonarr.u11.intrinsic <= INTRN_C3_INTRINSIC_END)); };
+#endif
 #ifdef KEY
   ST_IDX    Call_op_aux_id(void) const { return u1.nonarr.u11.call_op_aux_id; }
   void      Set_call_op_aux_id(ST_IDX i) { u1.nonarr.u11.call_op_aux_id = i; }
@@ -779,6 +877,18 @@ public:
     return u2.isvar._isvar_flags & ISVAR_MP_SHARED;
   }
 #endif
+#if defined(TARG_SL)
+  void Set_RVI_Candidate() {
+    u2.isconst.isconst_val._isconst_flags |= ISCONST_RVI_CANDIDATE; 
+  }
+  BOOL RVI_Candidate() {
+    return u2.isconst.isconst_val._isconst_flags & ISCONST_RVI_CANDIDATE; 
+  }
+  void Reset_RVI_Candidate() {
+    u2.isconst.isconst_val._isconst_flags &= ~ISCONST_RVI_CANDIDATE; 
+  }
+
+#endif
 
   void Reset_field_id(void) 	     { u2.isvar.fieldid = 0; }
 
@@ -862,12 +972,20 @@ public:
     					return u2.islda.afieldid; }
   void      Set_const_val(INT64 v)    { Is_True(Kind() == CK_CONST,
 				     ("CODEREP::Set_const_val, illegal kind"));
+#if defined(TARG_SL)
+					u2.isconst.isconst_val.const_val = v; }
+#else
 					u2.isconst.const_val = v; }
+#endif
   INT64     Const_val(void) const     { Is_True(Kind() == CK_CONST,
 					 ("CODEREP::Const_val, illegal kind"));
 					Is_True(!MTYPE_float(_dtyp),
 					 ("CODEREP::Const_val, illegal type"));
+#if defined(TARG_SL)
+					return u2.isconst.isconst_val.const_val; }
+#else
 					return u2.isconst.const_val; }
+#endif
   // return the floating point value of a CK_RCONST
   // the Is_True checks are in Const_ftcon because that is the
   // 	routine that is always called
@@ -1168,6 +1286,32 @@ public:
 
   WN       *Rvi_home_wn( OPT_STAB *opt_stab ) const;
   BOOL      Contains_only_constants(void) const;
+  BOOL	    Has_volatile_content(void) const;
+
+  /* Functions [G,S]et_ISOP_mtype_b_cache and [G,S]et_ISOP_def_before_use_cache
+   * get and set the node cache in the ISOP structure. This cache is used to two
+   * ways. In Do_mtype_b_cr it is used to hold the new CR node created for other
+   * parents on differing paths. In Def_before_use it is used to cache the last
+   * BB_NODE that reached "this" node thus limiting redundant calls.
+   */
+
+  CODEREP*  Set_ISOP_mtype_b_cache (const CODEREP* CR)
+  {
+      u2.isop.node_cache = (void *)CR;
+      return  (CODEREP*) u2.isop.node_cache;
+  }
+
+  CODEREP*  Get_ISOP_mtype_b_cache () const 
+  { return (CODEREP*) u2.isop.node_cache; }
+
+  BB_NODE*  Set_ISOP_def_before_use_cache (const BB_NODE* CR)
+  {
+      u2.isop.node_cache =(void*)CR;
+      return   (BB_NODE*)u2.isop.node_cache;
+  }
+
+  BB_NODE*  Get_ISOP_def_before_use_cache () const
+  { return (BB_NODE*) u2.isop.node_cache; }
 }; // end of class CODEREP
 
 // Functions to tell how much extra space should be allocated with a
@@ -1367,7 +1511,6 @@ private:
   BOOL                        _phi_hash_valid;
   ID_MAP<PHI_NODE *, PHI_KEY> _phi_id_map;
 
-
   CODEMAP(void);
   CODEMAP(const CODEMAP&);
   CODEMAP& operator = (const CODEMAP&);
@@ -1439,7 +1582,11 @@ public:
   // hash functions that search htable and create new node if not found
   CODEREP    *Hash_Lda(CODEREP *cr)
     { Is_True(cr->Kind() == CK_LDA,("CODEMAP::Hash_Lda, wrong kind"));
+#ifdef TARG_SL
+      IDX_32 hash_idx = Hash_lda(cr->Lda_base_st(),(IDTYPE)(cr->Offset() + cr->Is_flag_set(CF_INTERNAL_MEM_OFFSET)));
+#else 
       IDX_32 hash_idx = Hash_lda(cr->Lda_base_st(),(IDTYPE)cr->Offset());
+#endif
       return Find_or_append_CR(hash_idx,cr,0);
     }
   CODEREP    *Hash_Const(CODEREP *cr)
@@ -1728,6 +1875,10 @@ private:
   BB_NODE  *bb;               // the BB that it belongs to
   SRCPOS    _linenum;         // source position information
 
+  // Store the constraint graph call site id for the Nystrom alias analyzer
+  // so as to restore it during CODEMAP -> WHIRL translation
+  mUINT32 _constraint_graph_callsite_id;
+
   union {
     UINT32     _label_flags;  // the label flags
 #ifndef KEY
@@ -1749,7 +1900,14 @@ private:
   UINT32      _str_red_num: 4;  // for IV update stmts, # of induction exprs
   				// injured by it during EPRE
   UINT32      _asm_stmt_flags:3;  // the ASM_STMT flags
+#ifdef TARG_SL //fork_joint
+ BOOL       _sl2_compgoto_para : 1; //used to mark if the stmt is a compgoto for sl2 major fork. 
+ BOOL       _sl2_compgoto_for_minor : 1; // used to mark if the stmt is a compgoto for sl2 minor fork. 
+ BOOL       _sl2_internal_mem_ofst : 1; // mark if the stmt is an istore
+ UINT       _unused : 2;      // allocate new flag bits from here.
+#else  
   UINT        _unused : 5;      // allocate new flag bits from here.
+#endif
 #else
   UINT        _unused : 12;      // allocate new flag bits from here.
 #endif
@@ -1778,6 +1936,10 @@ private:
 				  // analysis is done, we will emit
 				  // the stmt unchanged.
 				  _proj_op_uses = 2;
+#if defined(TARG_SL)
+				  _sl2_internal_mem_ofst = 0;
+#endif
+                                  _constraint_graph_callsite_id = 0;
 				}
 
   STMTREP (const STMTREP&);
@@ -2034,6 +2196,16 @@ public:
   UINT32     Str_red_num(void) const	{ return _str_red_num; }
   void	     Inc_str_red_num(void)	{ _str_red_num++; }
 
+#ifdef TARG_SL //fork_joint
+  // we need passing fork compgoto flag from whirl node to stmtrep 
+  BOOL      Fork_stmt_flags(void) const       { return _sl2_compgoto_para; }
+  void      Set_fork_stmt_flags(BOOL f)       { _sl2_compgoto_para = f; }
+  BOOL      Minor_fork_stmt_flags(void) const { return _sl2_compgoto_for_minor; } 
+  void      Set_minor_fork_stmt_flags(BOOL f) { _sl2_compgoto_for_minor = f; } 
+  BOOL      SL2_internal_mem_ofst(void) const { return _sl2_internal_mem_ofst; }
+  void      Set_SL2_internal_mem_ofst(BOOL f) { _sl2_internal_mem_ofst = f; }
+#endif 
+
   // for the ASM_STMT flags
 #ifdef KEY
   UINT32     Asm_stmt_flags(void) const    { return _asm_stmt_flags; }
@@ -2102,6 +2274,16 @@ public:
 
   void      Clone(STMTREP *, CODEMAP *, MEM_POOL *pool);
 
+  // For the Nystrom alias analyzer
+  mUINT32   Get_constraint_graph_callsite_id() const 
+  {
+    return _constraint_graph_callsite_id;
+  }
+  void      Set_constraint_graph_callsite_id(mUINT32 c)
+  {
+    _constraint_graph_callsite_id = c;
+  }
+
 }; // end of class STMTREP
 
 //============================================================================
@@ -2124,6 +2306,9 @@ public:
   CODEREP  *Convert2cr(WN *wn,
                        CODEMAP *htable,
                        BOOL     foldit) const;
+  CODEREP  *Convert2cr(MTYPE typ, OPERATOR opr, OPCODE opc, 
+                       CODEMAP *htable, BOOL foldit) const;
+
   void      Trim_to_16bits(WN *wn,
 			   CODEMAP *htable);
 
@@ -2160,5 +2345,97 @@ void traverseSR(STMTREP *stmt, traverseCR &traverse_cr)
       traverse_cr(lhs, stmt, 1);
 }
 
+///////////////////////////////////////////////////////////////////////////
+//
+//   MEMOP_ANNOT_CR_SR_MAP is a map between CODEREP/STMTREP to their 
+// corresponding annotations. 
+//
+///////////////////////////////////////////////////////////////////////////
+//
+struct cr_cmp {
+  bool operator () (const CODEREP* cr1, const CODEREP* cr2) const {
+    Is_True (cr1->Coderep_id() != 0 && cr2->Coderep_id() != 0, ("CODEREP does not has ID"));
+    return cr1->Coderep_id() < cr2->Coderep_id(); 
+  }
+};
+ 
+typedef std::pair<const CODEREP*, MEMOP_ANNOT*> CR_MEMANNOT_PAIR;
+typedef mempool_allocator<CR_MEMANNOT_PAIR> CR_ANNOT_MAP_ALLOC;
+typedef std::map<const CODEREP*, MEMOP_ANNOT*, cr_cmp, CR_ANNOT_MAP_ALLOC> CR_2_MEM_ANNOT_MAP;
+
+struct sr_cmp {
+  bool operator () (const STMTREP* sr1, const STMTREP* sr2) const {
+    return sr1 < sr2;
+  }
+};
+
+typedef std::pair<const STMTREP*, MEMOP_ANNOT*> SR_MEMANNOT_PAIR;
+typedef mempool_allocator<SR_MEMANNOT_PAIR>    SR_ANNOT_MAP_ALLOC;
+typedef std::map<const STMTREP*, MEMOP_ANNOT*, sr_cmp, SR_ANNOT_MAP_ALLOC>
+        SR_2_MEM_ANNOT_MAP;
+
+class MEMOP_ANNOT_CR_SR_MGR : public MEMOP_ANNOT_MGR {
+private:
+  CR_2_MEM_ANNOT_MAP _cr_map;
+  SR_2_MEM_ANNOT_MAP _sr_map;
+  BOOL _trace;
+  BS* _imported;
+  BS* _exported;
+
+  void Set_imported (MEMOP_ANNOT* a) 
+        { _imported = BS_Union1D (_imported, a->Id(), _mp); }
+  BOOL Is_imported (MEMOP_ANNOT* a) const 
+        { return BS_MemberP (_imported, a->Id());}
+
+  void Set_exported (MEMOP_ANNOT* a)
+        { _exported = BS_Union1D (_exported, a->Id(), _mp); }
+  BOOL Is_exported (MEMOP_ANNOT* a)
+        { return BS_MemberP (_exported, a->Id()); }
+
+public:
+  MEMOP_ANNOT_CR_SR_MGR (MEM_POOL* mp, BOOL trace);
+
+  // Lookup the corresponding annotation 
+  MEMOP_ANNOT*      Get_annot (CODEREP* cr);
+  MEMOP_ANNOT_ITEM* Get_annot (CODEREP* cr, MEM_ANNOT_KIND kind) ;
+  MEMOP_ANNOT*      Get_annot (STMTREP* sr) ;
+  MEMOP_ANNOT_ITEM* Get_annot (STMTREP* sr, MEM_ANNOT_KIND kind);
+
+  // Associate a MEMOP_ANNOT with given WN/CODEREP/STMTREP
+  void Add_annot (CODEREP* cr, const MEMOP_ANNOT_ITEM& annot_item);
+  void Add_annot (STMTREP* stmt, const MEMOP_ANNOT_ITEM& annot_item);
+  void Set_annot (CODEREP* cr, MEMOP_ANNOT* annot);
+  void Set_annot (STMTREP* sr, MEMOP_ANNOT* annot);
+
+  // Import annotation from WN=>MEMOP_ANNOT map.
+  MEMOP_ANNOT* Import_annot (CODEREP* cr, MEMOP_ANNOT* annot) ;
+  MEMOP_ANNOT* Import_annot (STMTREP* sr, MEMOP_ANNOT* annot) ;
+  MEMOP_ANNOT* Import_annot (MEMOP_ANNOT* annot) ;
+
+  // Export the annotation associated with any descendant of <tree> 
+  // to MEMOP_ANNOT_WN_MAP. If there is only one annotation, we have two
+  // options:
+  //   - inline the annotation in POINTS_TO, or 
+  //   - allocate annot structure and associate it with corresponding WN
+  //
+  //  Of couse, the 2nd option is more expensive than the 1st.However, 
+  //  we have to do that when this function is invoked by LNO preopt because
+  //  POINTS_TOs will be discarded soon make the annotation lost. However, 
+  //  the life-time of annotation structures is under control of preopt/wopt.
+  //
+  //  2nd option should be used when <inline_annot> is set, otherwise, 
+  //  1st option is used.
+  //
+  void Export_annot (WN* tree, const ALIAS_MANAGER*, 
+                     BOOL inline_annot, BOOL trace);
+
+  // When active WN_MEMOP_ANNOT_MGR is NULL, we need to discard the "offline" 
+  // annotation in that "offline" data structure is supposed to be allocated by 
+  // WN_MEMOP_ANNOT_MGR.
+  //
+  void Discard_offline_annot (WN*, const ALIAS_MANAGER*, BOOL trace);
+
+  void Print (FILE* f, BOOL verbose=FALSE) const;
+};
 
 #endif  /* // opt_htable_INCLUDED */

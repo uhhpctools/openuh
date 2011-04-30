@@ -1,5 +1,8 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
+ */
+/*
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +44,10 @@
  * ====================================================================
  *
  * Module: c_a_to_q
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_a_to_q.c,v $
+ * $Revision: 1.6 $
+ * $Date: 04/12/21 14:57:27-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/common/util/SCCS/s.c_a_to_q.c $
  *
  * Revision history:
  *  28-jun-93 - Original Version
@@ -56,7 +59,7 @@
  */
 
 static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_a_to_q.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/common/util/SCCS/s.c_a_to_q.c $ $Revision: 1.6 $";
 
 /* Macros to pull apart parts of single and  double precision
  * floating point numbers in IEEE format
@@ -66,7 +69,7 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_
 
 typedef  union {
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int  lo	:32;
 		unsigned int  hi	:20;
 		unsigned int  exp	:11;
@@ -79,7 +82,7 @@ typedef  union {
 #endif
 	} fparts;
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int  lo	:32;
 		unsigned int  hi	:19;
 		unsigned int  qnan_bit	:1;
@@ -94,7 +97,7 @@ typedef  union {
 #endif
 	} nparts;
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int lo;
 		unsigned int hi;
 #else
@@ -136,8 +139,14 @@ static	QUAD	c_atoq(char *buffer, INT32 ndigit, INT32 exp);
 
 /* ascii to quad */
 
+#if defined(BUILD_OS_DARWIN)
+/* Can't use "pragma weak" to create aliases in Mach-O */
+QUAD c_a_to_q(char *s, INT *p_err );
+QUAD __c_a_to_q(char *s, INT *p_err) { return c_a_to_q(s, p_err); }
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak c_a_to_q = __c_a_to_q
 #define	c_a_to_q __c_a_to_q
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #define MAXDIGITS 34
 

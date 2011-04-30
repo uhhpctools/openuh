@@ -198,14 +198,6 @@ do {									\
 } while (0)
 
 /* This doesn't work for non-GNU C due to the way CODE is macro expanded.  */
-#if 0
-/* For any allocno that conflicts with IN_ALLOCNO, set OUT_ALLOCNO to
-   the conflicting allocno, and execute CODE.  This macro assumes that
-   mirror_conflicts has been run.  */
-#define EXECUTE_IF_CONFLICT(IN_ALLOCNO, OUT_ALLOCNO, CODE)\
-  EXECUTE_IF_SET_IN_ALLOCNO_SET (conflicts + (IN_ALLOCNO) * allocno_row_words,\
-				 OUT_ALLOCNO, (CODE))
-#endif
 
 /* Set of hard regs currently live (during scan of all insns).  */
 
@@ -266,16 +258,6 @@ static INT_TYPE *allocnos_live;
    Then there is a way to record that (reg:DI 108) may start at 10
    but not at 9 or 11.  There is still the question of how to record
    this semi-conflict between two pseudos.  */
-#if 0
-/* Reg pairs for which conflict after the current insn
-   is inhibited by a REG_NO_CONFLICT note.
-   If the table gets full, we ignore any other notes--that is conservative.  */
-#define NUM_NO_CONFLICT_PAIRS 4
-/* Number of pairs in use in this insn.  */
-int n_no_conflict_pairs;
-static struct { int allocno1, allocno2;}
-  no_conflict_pairs[NUM_NO_CONFLICT_PAIRS];
-#endif /* 0 */
 
 /* Record all regs that are set in any one insn.
    Communication from mark_reg_{store,clobber} and global_conflicts.  */
@@ -574,10 +556,6 @@ global_alloc (file)
   /* Do the reloads now while the allocno data still exist, so that we can
      try to assign new hard regs to any pseudo regs that are spilled.  */
 
-#if 0 /* We need to eliminate regs even if there is no rtl code,
-	 for the sake of debugging information.  */
-  if (n_basic_blocks > 0)
-#endif
     {
       build_insn_chain (get_insns ());
       retval = reload (get_insns (), 1);
@@ -741,20 +719,6 @@ global_conflicts ()
 	  if (code == INSN || code == CALL_INSN || code == JUMP_INSN)
 	    {
 
-#if 0
-	      int i = 0;
-	      for (link = REG_NOTES (insn);
-		   link && i < NUM_NO_CONFLICT_PAIRS;
-		   link = XEXP (link, 1))
-		if (REG_NOTE_KIND (link) == REG_NO_CONFLICT)
-		  {
-		    no_conflict_pairs[i].allocno1
-		      = reg_allocno[REGNO (SET_DEST (PATTERN (insn)))];
-		    no_conflict_pairs[i].allocno2
-		      = reg_allocno[REGNO (XEXP (link, 0))];
-		    i++;
-		  }
-#endif /* 0 */
 
 	      /* Mark any registers clobbered by INSN as live,
 		 so they conflict with the inputs.  */
@@ -1353,15 +1317,6 @@ record_one_conflict (regno)
       IOR_HARD_REG_SET (allocno[ialloc].hard_reg_conflicts, hard_regs_live);
       for (j = allocno_row_words - 1; j >= 0; j--)
 	{
-#if 0
-	  int k;
-	  for (k = 0; k < n_no_conflict_pairs; k++)
-	    if (! ((j == no_conflict_pairs[k].allocno1
-		    && ialloc == no_conflict_pairs[k].allocno2)
-		   ||
-		   (j == no_conflict_pairs[k].allocno2
-		    && ialloc == no_conflict_pairs[k].allocno1)))
-#endif /* 0 */
 	      conflicts[ialloc_prod + j] |= allocnos_live[j];
 	}
     }

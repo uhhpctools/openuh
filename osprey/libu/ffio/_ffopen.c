@@ -1,5 +1,5 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -113,7 +113,16 @@ extern int ffiolock();
 #pragma weak _ffopen=__ffopen
 #elif defined(_LITTLE_ENDIAN)
 extern _ffopen_t __ffopen(const char *name, int flags, mode_t mode, union spec_u *spek, struct ffsw *stat, long cbits, int cblks, struct fdinfo *pa_fio, struct gl_o_inf *oinf);
+# if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+_ffopen_t _ffopen(const char *name, int flags, mode_t mode, union spec_u *spek,
+  struct ffsw *stat, long cbits, int cblks, struct fdinfo *pa_fio,
+  struct gl_o_inf *oinf) {
+  return __ffopen(name, flags, mode, spek, stat, cbits, cblks, pa_fio, oinf);
+}
+# else /* defined(BUILD_OS_DARWIN) */
 _ffopen_t _ffopen() __attribute__ ((weak, alias ("__ffopen")));
+# endif /* defined(BUILD_OS_DARWIN) */
 #endif
 
 _ffopen_t

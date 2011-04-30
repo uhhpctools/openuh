@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -97,6 +105,11 @@ struct skiplist;
 extern BOOL Show_OPT_Warnings;		/* Display OPT warning messages */
 
 /***** Aliasing control *****/
+extern OPTION_LIST* Alias_Option;
+extern INT32 Alias_Query_Limit;
+extern char *Alias_Query_File;
+extern INT32 Alias_Nystrom_Solver_Track;
+extern BOOL  Alias_Nystrom_Global_Cycle_Detection;
 extern BOOL Alias_Pointer_Parms;	/* Reference parms indep? */
 extern BOOL Alias_Pointer_Types;	/* Ptrs to distinct basic types indep? */
 extern BOOL Alias_Not_In_Union;	/* Ptrs point to non-union types */
@@ -108,6 +121,7 @@ extern BOOL Alias_Pointer_Cray;         /* Cray pointer semantics? */
 extern BOOL Alias_Common_Scalar;        /* Distinguish scalar from other array
                                            in a common block */
 extern BOOL  Alias_F90_Pointer_Unaliased;  /* Are F90 pointers unaliased? */
+extern BOOL Alias_Nystrom_Analyzer;     /* Are we using Nystrom alias analysis? */
 
 /***** Expression folding options *****/
 extern BOOL Enable_Cfold_Float;		/* FP constant folding? */
@@ -178,11 +192,12 @@ extern BOOL Instrumentation_Tau;
 extern BOOL Instrumentation_Epilog;
 extern INT32 Instrumentation_Nesting_Level;
 #ifdef KEY
+extern INT32 OPT_Cyg_Instrument;
 extern BOOL profile_arcs;
 extern BOOL Asm_Memory;
 extern BOOL Align_Unsafe;
 extern INT32 Enable_WN_Simp_Expr_Limit;
-extern BOOL OPT_Lower_To_Memlib;
+extern UINT32 OPT_Lower_To_Memlib;
 extern INT32 OPT_Threshold_To_Memlib;
 extern INT32 OPT_Enable_Lower_To_Memlib_Limit;
 extern BOOL OPT_Enable_Simp_Fold;
@@ -194,10 +209,22 @@ extern BOOL OPT_Icall_Instr;
 extern BOOL OPT_Int_Value_Instr;
 extern BOOL OPT_FP_Value_Instr;
 extern BOOL OPT_Ffast_Math;
+extern BOOL OPT_Scale;
 extern BOOL OPT_Funsafe_Math_Optimizations;
 
 extern BOOL OPT_Float_Via_Int;
 extern UINT32 OPT_Malloc_Alg;
+extern INT32 OPT_Hugepage_Heap_Limit;
+extern BOOL OPT_Hugepage_Heap_Set;
+extern INT32 OPT_Hugepage_Attr;
+extern BOOL OPT_Malloc_Alg_Set;
+extern BOOL Early_Goto_Conversion;
+extern BOOL Early_Goto_Conversion_Set;
+extern INT32 OPT_Madd_Height;
+
+extern BOOL OPT_Enable_WHIRL_SSA;  // enable SSA on WHIRL
+extern BOOL OPT_Enable_BUILD_WHIRL_SSA; // enable build WSSA driect from WHIRL
+
 #endif
 #ifdef __cplusplus
 }

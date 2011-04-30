@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -37,10 +40,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
 #include <sys/elf_whirl.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
 #include "defs.h"
 #include "mtypes.h"

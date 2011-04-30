@@ -281,7 +281,16 @@ int		*status)	/* Status return is either CNT or EOR */
 		register int	uoff;
 		register int64	bits;
 		register int64	totbits;
-		unsigned char	tbuf[TBFSZ], *tp; /* Conversion buffer */
+#ifdef KEY /* Bug 13352 */
+/* Conversion buffer; ia2mips() assumes alignment */
+                unsigned long long tbuf[
+                  (TBFSZ + sizeof(unsigned long long) - 1) /
+                  sizeof(unsigned long long)];
+                unsigned char *tp = (unsigned char *) tbuf;
+#else /* KEY Bug 13352 */
+                unsigned char   tbuf[TBFSZ], *tp; /* Conversion buffer */
+#endif /* KEY Bug 13352 */
+
 		_f_int		dctype;
 		int		(* cvt_fun)();	/* Conversion function */
 
@@ -301,8 +310,9 @@ int		*status)	/* Status return is either CNT or EOR */
 			errno	= FDC_ERR_NCVRT;
 			return(IOERR);
 		}
-
+#ifndef KEY /* Bug 13352 */
 		tp	= tbuf;
+#endif /* KEY Bug 13352 */
 		buflim	= ((TBFSZ << 3) / fdsize) * fdsize;
 
 /*

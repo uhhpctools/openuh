@@ -80,11 +80,6 @@ extern int target_flags;
 #define TARGET_MASK_MANGLE_CPU 1
 #define TARGET_MANGLE_CPU (target_flags & TARGET_MASK_MANGLE_CPU)
 
-#if 0
-/* Mangle libgcc symbols by adding a suffix for the specified cpu.  */
-#define TARGET_MASK_MANGLE_CPU_LIBGCC 2
-#define TARGET_MANGLE_CPU_LIBGCC (target_flags & TARGET_MASK_MANGLE_CPU_LIBGCC)
-#endif
 
 /* Align loops to 32 byte boundaries (cache line size).  */
 #define TARGET_MASK_ALIGN_LOOPS 4
@@ -531,11 +526,6 @@ extern enum reg_class arc_regno_reg_class[FIRST_PSEUDO_REGISTER];
    C.  If C is not defined as an extra constraint, the value returned should
    be 0 regardless of VALUE.  */
 /* ??? This currently isn't used.  Waiting for PIC.  */
-#if 0
-#define EXTRA_CONSTRAINT(VALUE, C) \
-((C) == 'R' ? (SYMBOL_REF_FLAG (VALUE) || GET_CODE (VALUE) == LABEL_REF) \
- : 0)
-#endif
 
 /* Stack layout and stack pointer usage.  */
 
@@ -582,15 +572,6 @@ extern enum reg_class arc_regno_reg_class[FIRST_PSEUDO_REGISTER];
    is defined.  */
 /* The current return address is in r31.  The return address of anything
    farther back is at [%fp,4].  */
-#if 0 /* The default value should work.  */
-#define RETURN_ADDR_RTX(COUNT, FRAME) \
-(((COUNT) == -1)							\
- ? gen_rtx_REG (Pmode, 31)						\
- : copy_to_reg (gen_rtx_MEM (Pmode,					\
-			     memory_address (Pmode,			\
-					     plus_constant ((FRAME),	\
-							    UNITS_PER_WORD)))))
-#endif
 
 /* Register to use for pushing function arguments.  */
 #define STACK_POINTER_REGNUM 28
@@ -1248,21 +1229,6 @@ do {				\
 /* A C statement (sans semicolon) to output on FILE an assembler pseudo-op to
    declare a library function name external.  The name of the library function
    is given by SYMREF, which has type RTX and is a SYMBOL_REF.  */
-#if 0
-/* On the ARC we want to have libgcc's for multiple cpus in one binary.
-   We can't use `assemble_name' here as that will call ASM_OUTPUT_LABELREF
-   and we'll get another suffix added on if -mmangle-cpu.  */
-extern const char *arc_mangle_cpu;
-#define ASM_OUTPUT_EXTERNAL_LIBCALL(FILE, SYMREF) \
-do {							\
-  if (TARGET_MANGLE_CPU_LIBGCC)				\
-    {							\
-      fprintf (FILE, "\t.rename\t_%s, _%s%s\n",		\
-	       XSTR (SYMREF, 0), XSTR (SYMREF, 0),	\
-	       arc_mangle_suffix);			\
-    }							\
-} while (0)
-#endif
 
 /* This is how to output a reference to a user-level label named NAME.
    `assemble_name' uses this.  */

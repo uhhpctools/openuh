@@ -45,7 +45,11 @@
 #include <stddef.h>
 #endif
 
+#if defined(BUILD_OS_DARWIN)
+extern char **environ;
+#else /* defined(BUILD_OS_DARWIN) */
 extern char **_environ;
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /*
  *  PXFCLEARENV  -- clear all environment variables
@@ -77,9 +81,15 @@ _PXFCLEARENV(
 {
   int i;
 
+#if defined(BUILD_OS_DARWIN)
+  for(i=0; environ[i] != NULL; i++) {
+    environ[i] = NULL;
+  }
+#else /* defined(BUILD_OS_DARWIN) */
   for(i=0; _environ[i] != NULL; i++) {
     _environ[i] = NULL;
   }
+#endif /* defined(BUILD_OS_DARWIN) */
 
   *IERROR = 0;
 }

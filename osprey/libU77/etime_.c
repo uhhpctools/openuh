@@ -50,7 +50,7 @@
 
 struct tb { float usrtime; float systime; };
 
-#if defined(sgi) || defined (__linux)
+#if defined(sgi) || defined (__linux) || defined(BUILD_OS_DARWIN)
 #include <sys/time.h>
 #include <sys/resource.h>
 

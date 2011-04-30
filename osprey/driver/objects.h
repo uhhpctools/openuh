@@ -43,7 +43,7 @@ extern void init_objects (void);
 
 /* need to init crt paths if doing ipa link */
 extern void init_crt_paths (void);
-extern void init_stdc_plus_plus_path( void );
+extern void init_stdc_plus_plus_path( boolean is_shared );
 
 /*
  * Whether option is an object or not.
@@ -79,6 +79,9 @@ extern int prof_lib_exists (const char *lib);
 
 /* add library to path */
 extern void add_library (string_list_t *list, const char *lib);
+
+/* search library_dirs for the object file provided by the compiler */
+extern char *find_obj_path (char *objname);
 
 /* search library_dirs for the crt file */
 extern char *find_crt_path (char *crtname);

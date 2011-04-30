@@ -520,7 +520,19 @@ _f_open(
 	if (stdfn) {
 		FILE	*stdf;
 
-#if	defined(_LITTLE_ENDIAN) && !defined(__sv2)
+#if	defined(BUILD_OS_DARWIN)
+		switch(stdfnum) {
+		case(STDIN_FILENO):
+			stdf	= stdin;
+			break;
+		case(STDOUT_FILENO):
+			stdf	= stdout;
+			break;
+		default:
+			stdf	= stderr;
+			break;
+		}
+#elif	defined(_LITTLE_ENDIAN) && !defined(__sv2)
 		/* iob not the same on non-sv2 little endian systems.
 		 * Use the following:
 		 */

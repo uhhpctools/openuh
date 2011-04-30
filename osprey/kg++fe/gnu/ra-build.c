@@ -101,9 +101,6 @@ static unsigned int parts_to_webs_1 PARAMS ((struct df *, struct web_link **,
 					     struct df_link *));
 static void parts_to_webs PARAMS ((struct df *));
 static void reset_conflicts PARAMS ((void));
-#if 0
-static void check_conflict_numbers PARAMS ((void));
-#endif
 static void conflicts_between_webs PARAMS ((struct df *));
 static void remember_web_was_spilled PARAMS ((struct web *));
 static void detect_spill_temps PARAMS ((void));
@@ -2192,24 +2189,6 @@ reset_conflicts ()
 /* For each web check it's num_conflicts member against that
    number, as calculated from scratch from all neighbors.  */
 
-#if 0
-static void
-check_conflict_numbers ()
-{
-  unsigned int i;
-  for (i = 0; i < num_webs; i++)
-    {
-      struct web *web = ID2WEB (i);
-      int new_conf = 0 * web->add_hardregs;
-      struct conflict_link *cl;
-      for (cl = web->conflict_list; cl; cl = cl->next)
-	if (cl->t->type != SELECT && cl->t->type != COALESCED)
-	  new_conf += 1 + cl->t->add_hardregs;
-      if (web->type != PRECOLORED && new_conf != web->num_conflicts)
-	abort ();
-    }
-}
-#endif
 
 /* Convert the conflicts between web parts to conflicts between full webs.
 
@@ -3002,11 +2981,6 @@ handle_asm_insn (df, insn)
 	     For us it looks like two normal references with different DEFs,
 	     so they conflict, and as they both need the same color, the
 	     graph becomes uncolorable.  */
-#if 0
-	  for (c = 0; c < FIRST_PSEUDO_REGISTER; c++)
-	    if (TEST_HARD_REG_BIT (conflict, c))
-	      record_conflict (web, hardreg2web[c]);
-#endif
 	}
       if (rtl_dump_file)
 	{

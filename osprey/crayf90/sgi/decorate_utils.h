@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -29,7 +32,9 @@ extern void parse_decorate_script(const char *);
 #if defined(__cplusplus)
 extern "C" {
 #endif /* __cplusplus */
-const char *get_symbol_decoration(char *key);
+const char *get_symbol_decoration(const char *);
+void put_external_label(const char *, void *);
+void *get_external_label(const char *);
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */

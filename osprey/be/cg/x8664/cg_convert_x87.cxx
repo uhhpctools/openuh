@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -96,7 +104,7 @@ static inline Stack* Get_Stack_Info( BB* bb )
 static bool OP_refs_x87( OP* op )
 {
   // An x87 operation will access x87-stack definitely.
-  if( TOP_is_uses_stack(OP_code(op)) )
+  if( TOP_is_x87(OP_code(op)) )
     return true;
 
   // The return value could be stored in %st0
@@ -118,9 +126,7 @@ static bool OP_refs_x87( OP* op )
     for( int i = 0; i < RETURN_INFO_count(return_info); i++ ){
       const TYPE_ID type = RETURN_INFO_mtype( return_info, i );
 
-      if( MTYPE_is_quad( type ) ||
-	  ( MTYPE_is_float( type ) &&
-	    Is_Target_32bit() ) ){
+      if( MTYPE_refs_x87( type ) ) {
 	return TRUE;
       }
     }
@@ -347,13 +353,6 @@ static void Print_Stack( Stack* stack )
 
   fprintf( TFile, "x87 stack [" );
 
-#if 0
-  REGISTER reg;
-
-  FOR_ALL_REGISTER_SET_members( stack->reg_set, reg ){
-    fprintf( TFile, " %s ", REGISTER_name(ISA_REGISTER_CLASS_x87,reg) );
-  }
-#endif
 
   for( int i = 0; i <= stack->top; i++ ){
     fprintf( TFile, " %s",
@@ -369,6 +368,9 @@ static void Print_Stack( Stack* stack )
 */
 static void Expand_Fxch( Stack* stack, OP* op, TN* dest )
 {
+  Is_True(TN_register_class(dest) == ISA_REGISTER_CLASS_x87,
+	  ("Expand_Fxch: invalid register class"));
+
   const int st_idx = Get_Stack_Index( stack, TN_register(dest) );
   FmtAssert( st_idx >= 0, ("NYI") );
   
@@ -758,9 +760,7 @@ static void Repair_Call_BB( BB* bb )
 
   for( int i = 0; i < RETURN_INFO_count(return_info); i++ ){
     const TYPE_ID type = RETURN_INFO_mtype( return_info, i );
-    if( MTYPE_is_quad( type ) ||
-	( MTYPE_is_float( type ) &&
-	  Is_Target_32bit() ) ){
+    if( MTYPE_refs_x87( type ) ) {
       const PREG_NUM retpreg = RETURN_INFO_preg (return_info, i);
       ISA_REGISTER_CLASS cl;
 
@@ -1044,9 +1044,7 @@ static void Convert_Regs( BB* bb )
       for( int i = 0; i < RETURN_INFO_count(return_info); i++ ){
 	const TYPE_ID type = RETURN_INFO_mtype( return_info, i );
 
-	if( MTYPE_is_quad( type ) ||
-	    ( MTYPE_is_float( type ) &&
-	      Is_Target_32bit() ) ){
+        if( MTYPE_refs_x87( type ) ) {
 	  if( !REGISTER_SET_MemberP( stack->live_out, reg ) )
 	    stack->live_out = REGISTER_SET_Union1( stack->live_out, reg );
 	  stack->reg[++stack->top] = reg--;
@@ -1575,15 +1573,6 @@ void Convert_x87_Regs( MEM_POOL* _mem_pool )
     Adjust_Input_Stack( bb, true );
   }
 
-#if 0
-  /* TODO:
-     Turn it on to see whether cflow can optimize the final pu a bit.
-  */
-  if( CG_opt_level > 0 && CFLOW_opt_after_cgprep && new_bbs > 5 ){
-    CFLOW_Optimize( CFLOW_BRANCH | CFLOW_MERGE | CFLOW_FREQ_ORDER,
-		    "CFLOW (from cg_convert_x87)" );
-  }
-#endif
 
   BB_MAP_Delete( bb_stack_info_map );
   BB_MAP_Delete( dfs_map );

@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -91,25 +95,52 @@ CODEREP*
 CANON_CR::Convert2cr(WN *wn, CODEMAP *htable, BOOL foldit) const
 {
   const OPERATOR opr = WN_operator(wn);
+  CODEREP *cr;
   MTYPE typ = WN_rtype(wn);
+
   if (typ == MTYPE_V) 
     typ = WN_desc(wn);
 #ifdef TARG_X8664
-  else if (WN_opcode(wn) == OPC_U8U4CVT)
+  else if (WN_opcode(wn) == OPC_U8U4CVT ||
+           WN_opcode(wn) == OPC_U8U4LDID || // bug 13382
+	   WN_opcode(wn) == OPC_U8U4ILOAD)
     typ = MTYPE_U4; // U8U4CVT is deleted in Canon_cvt; otherwise will 
     		       // generate U8ADD instead of U4ADD which is wrong
 #endif
+  cr = Convert2cr(typ,opr,WN_opcode(wn),htable,foldit);
+  return cr;
+}
 
+CODEREP*
+CANON_CR::Convert2cr(MTYPE typ, OPERATOR opr, OPCODE opc, CODEMAP *htable, BOOL foldit) const
+{
+  CODEREP *cr;
+   
   if (Tree() && Scale() != 0) {
-    return htable->Add_bin_node_and_fold
+    cr = htable->Add_bin_node_and_fold
       (OPCODE_make_op(OPR_ADD, typ, MTYPE_V),
+#if defined(TARG_SL) || defined(TARG_NVISA)
+       Tree(), htable->Add_const(typ, Scale()));
+#else
        Tree(), htable->Add_const(MTYPE_I8, Scale()));
+#endif
+
+    return cr;
   }
-  if (Tree()) 
+
+  if (Tree())
     return Tree();
 
   // return a CK_CONST node
-  CODEREP *cr =  htable->Add_const(MTYPE_I8, Scale());
+  // PathScale forced a I8 type here,
+  // but we want smaller type when don't have native I8,
+  // and this is what original code had.
+#if defined(TARG_SL) || defined(TARG_NVISA)
+  cr =  htable->Add_const(typ, Scale());
+#else
+  cr =  htable->Add_const(MTYPE_I8, Scale());
+#endif
+
   return cr;
 }
 
@@ -132,8 +163,9 @@ CANON_CR::Trim_to_16bits(WN *wn, CODEMAP *htable)
   if (Tree() == NULL) {
     // iload of a constant cannot be canonicalized. Very likely
     // doing some memory mapped I/O.
-    Set_tree(htable->Add_const(typ, Scale()));
-    Set_scale(0);
+    multiple32K = ((Scale() + 0x8000) >> 16) << 16;
+    Set_tree(htable->Add_const(typ, multiple32K));
+    Set_scale(Scale()-multiple32K);
     return;
   }
   

@@ -44,19 +44,6 @@ extern "C" {
 
 #include <ar.h>
 
-#if 0
-extern void unread_sections (an_object_file_ptr);
-
-extern char read_headers (an_object_file_ptr, int, int);
-
-extern void unread_obj (an_object_file_ptr, int);
-
-extern void read_one_section (int, an_object_file_ptr);
-
-extern UNSIGNED objs_mapped_total_size (void);
-
-extern char *copy_section(an_object_file_ptr, int, an_elf_section_header *);
-#endif
 
 #ifdef __cplusplus
 }

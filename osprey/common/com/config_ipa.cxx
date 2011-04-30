@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -78,10 +86,11 @@ SKIPLIST *Build_Skiplist ( OPTION_LIST *olist );
 const float DEFAULT_MIN_PROBABILITY = 0.20;
 #endif
 
+
 #define DEFAULT_BLOAT_FACTOR	100
 #define DEFAULT_PU_LIMIT	2500
-#define DEFAULT_HARD_LIMIT	(2500 + (2500 >> 2))
 #define DEFAULT_SMALL_PU	30
+#define DEFAULT_HARD_LIMIT	(DEFAULT_PU_LIMIT + (DEFAULT_PU_LIMIT >> 2))
 #define DEFAULT_SMALL_CALLEE	500
 #define DEFAULT_MIN_FREQ	100
 #define DEFAULT_MIN_HOTNESS	10
@@ -142,6 +151,7 @@ UINT32 IPA_Common_Pad_Size = 0;	        /* Amount by which to pad commons */
 
 BOOL IPA_Enable_Cloning = TRUE;         /* Enable Cloning in conjunction */
                                         /* with constant propagation     */
+BOOL IPA_Enable_Partial_Inline = TRUE; /* Enable partial inlining */
 BOOL IPA_Enable_Lang = FALSE;           /* support inlining across language */
 BOOL IPA_Enable_Relocatable_Opt = FALSE;/* support -call_shared optimizations of relocatable objects */
 BOOL IPA_Enable_Split_Common = TRUE;    /* Enable split common inside IPA */
@@ -265,6 +275,12 @@ BOOL IPA_Consult_Inliner_For_Icall_Opt = TRUE; // Check inlining heuristics
 UINT32 IPA_Icall_Min_Freq = DEFAULT_ICALL_MIN_FREQ; // Min freq for icall opt
                                                     // used in IPL.
 BOOL IPA_Enable_Source_PU_Order = FALSE;
+#ifdef TARG_X8664
+UINT32 IPA_Enable_Struct_Opt = 1;
+#else
+UINT32 IPA_Enable_Struct_Opt = 0;
+#endif
+UINT32 IPA_Update_Struct = 0;		/* temporary, should be removed */
 #else
 BOOL IPA_Enable_Cord = TRUE;		/* Enable procedure reordering. */
 #endif
@@ -299,10 +315,21 @@ UINT32 IPA_Max_Output_File_Size = DEFAULT_OUTPUT_FILE_SIZE;
 INT32 IPA_Output_File_Size = 0;
 
 /* This flag is to use the old type merge phase. It should be removed when the old type merge is removed. */
+#if !defined(TARG_SL)
 BOOL IPA_Enable_Old_Type_Merge = FALSE;  
+#else
+BOOL IPA_Enable_Old_Type_Merge = TRUE;  //jczhang: Not enabled in SL
+#endif
 
 /* enable devirtualization */
 BOOL IPA_Enable_Devirtualization = FALSE;
+BOOL IPA_Enable_Fast_Static_Analysis_VF = TRUE;
+
+/* assert whole program mode to enable more aggressive ipo */
+BOOL IPA_Enable_Whole_Program_Mode = FALSE;
+BOOL IPA_Enable_Whole_Program_Mode_Set = FALSE;
+
+BOOL IPA_Enable_Scale = FALSE;
 
 static OPTION_DESC Options_IPA[] = {
     { OVK_BOOL,	OV_VISIBLE,	FALSE, "addressing",	"",
@@ -363,6 +390,9 @@ static OPTION_DESC Options_IPA[] = {
     { OVK_BOOL,	OV_VISIBLE,	FALSE, "clone",	"",
 	  0, 0, 0,		&IPA_Enable_Cloning,	NULL,
 	  "Enable subprogram cloning" },
+    { OVK_BOOL,	OV_VISIBLE,	FALSE, "partial_inl",	"",
+	  0, 0, 0,		&IPA_Enable_Partial_Inline,	NULL,
+	  "Enable partial inlining" },
     { OVK_UINT32, OV_INTERNAL,	FALSE, "multi_clone",   "",
            0, 0, UINT32_MAX, &IPA_Max_Node_Clones, &IPA_Max_Node_Clones_Set,
  	  "Maximum clones per call graph node" },
@@ -578,14 +608,34 @@ static OPTION_DESC Options_IPA[] = {
 	  DEFAULT_ICALL_MIN_FREQ, 1, UINT32_MAX, &IPA_Icall_Min_Freq, NULL,
 	  "Min freq of icall for icall optimization"},
     { OVK_BOOL, OV_INTERNAL,    FALSE, "source_pu_order",  "",
-          0, 0, 0,              &IPA_Enable_Source_PU_Order, NULL,
-          "Maintain source-code PU ordering in IPA output"},
+      0, 0, 0,              &IPA_Enable_Source_PU_Order, NULL,
+      "Maintain source-code PU ordering in IPA output"},
     { OVK_BOOL, OV_INTERNAL,    FALSE, "ipa_enable_old_type_merge", "",
-          0, 0, 0,              &IPA_Enable_Old_Type_Merge, NULL,
-          "Use the old type merge phase in IPA"},
-    { OVK_BOOL, OV_INTERNAL,    FALSE, "enable_devirtualization", "",
-          0, 0, 0,              &IPA_Enable_Devirtualization, NULL,
-          "Use devirtualization phase"},
+      0, 0, 0,              &IPA_Enable_Old_Type_Merge, NULL,
+      "Use the old type merge phase in IPA"},
+    { OVK_BOOL, OV_INTERNAL,    TRUE, "devirtual_CHA", "",
+      0, 0, 0,              &IPA_Enable_Fast_Static_Analysis_VF, NULL,
+      "Use devirtualization phase"},
+    { OVK_BOOL, OV_VISIBLE,     FALSE, "whole_program_mode", "",
+      0, 0, 0,              &IPA_Enable_Whole_Program_Mode,
+                            &IPA_Enable_Whole_Program_Mode_Set,
+      "Assert whole program mode"},
+    { OVK_BOOL, OV_VISIBLE,     FALSE, "scale", "",
+      0, 0, 0,              &IPA_Enable_Scale, NULL,
+      "Enable multi-core scalability optimizations"},
+
+#ifdef TARG_X8664
+    { OVK_UINT32, OV_INTERNAL,	FALSE, "optimize_struct",	"",
+	  1, 0, UINT32_MAX, &IPA_Enable_Struct_Opt, NULL,
+#else
+    { OVK_UINT32, OV_INTERNAL,	FALSE, "optimize_struct",	"",
+	  0, 0, UINT32_MAX, &IPA_Enable_Struct_Opt, NULL,
+#endif
+	  "Enable IPA struct optimizations"},
+    /* The following option is temporary, and should be removed soon */
+    { OVK_UINT32, OV_INTERNAL,	FALSE, "update_struct",	"",
+	  0, 0, UINT32_MAX, &IPA_Update_Struct, NULL,
+	  "Struct update"},
 #endif // KEY
     { OVK_COUNT }	    /* List terminator -- must be last */
 };
@@ -612,6 +662,7 @@ BOOL	INLINE_Preemptible = FALSE;	/* Inline preemptible PUs? */
 BOOL	INLINE_Static = FALSE;	        /* Inline static fns? */
 BOOL    INLINE_Static_Set = FALSE;	/* ... explicitly set? */
 BOOL	INLINE_Aggressive = FALSE; /* inline even non-leaf, out-of-loop calls */
+BOOL    INLINE_First_Inline_Calls_In_Loops = TRUE;  /* inline calls in loops more proactively */
 BOOL    INLINE_Enable_Split_Common = TRUE;  /* Enable split common: inliner */
 BOOL    INLINE_Enable_Auto_Inlining = TRUE; /* Enable automatic inlining analysis */
 BOOL	INLINE_Enable_Restrict_Pointers = FALSE; // Allow restrict pointers
@@ -650,6 +701,8 @@ static OPTION_DESC Options_INLINE[] = {
 	  "Enable subprogram inlining" },
     { OVK_BOOL, OV_SHY,		FALSE, "aggressive",	"",
 	  0, 0, 0,	&INLINE_Aggressive,	NULL },
+    { OVK_BOOL, OV_SHY,		FALSE, "bias_calls_in_loops",	"",
+	  0, 0, 0,	&INLINE_First_Inline_Calls_In_Loops,	NULL },
     { OVK_BOOL,	OV_VISIBLE,	FALSE, "all",	"a",
 	  0, 0, 0,	&INLINE_All,	NULL,
 	  "Attempt to inline all subprograms" },
@@ -764,7 +817,7 @@ static OPTION_DESC Options_INLINE[] = {
     { OVK_BOOL, OV_INTERNAL,    FALSE, "var_dim_array",             "",
           0, 0, 0,              &IPA_Enable_Inline_Var_Dim_Array,   NULL,
           "Enable inlining of PU with param that is variable-dim array " },
-    { OVK_LIST,	OV_VISIBLE,	FALSE, "in",	"",
+    { OVK_LIST,	OV_VISIBLE,	FALSE, "in_edge",	"",
 	  0, 0, 0,	&INLINE_List_Names,	NULL,
 	  "Inline requested CG edges " },
     { OVK_BOOL, OV_INTERNAL,    FALSE, "array_bounds",             "",

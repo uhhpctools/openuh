@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: atanf.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/atanf.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:21-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.atanf.c $
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/atanf.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.atanf.c $ $Revision: 1.5 $";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -74,7 +74,13 @@ extern	float	atanf(float);
 #pragma weak atanf = __atanf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __atanf(float);
+#pragma weak atanf
+float atanf( float x ) {
+  return __atanf( x );
+}
+#elif defined(__GNUC__)
 extern  float  __atanf(float);
 float    atanf(float) __attribute__ ((weak, alias ("__atanf")));
 #endif

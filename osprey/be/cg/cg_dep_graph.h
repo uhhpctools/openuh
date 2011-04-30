@@ -1,8 +1,4 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -45,10 +41,10 @@
  * =======================================================================
  *
  *  Module: cg_dep_graph.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_dep_graph.h,v $
+ *  $Revision: 1.6 $
+ *  $Date: 05/12/05 08:59:03-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_dep_graph.h $
  *
  *  Revision comments:
  *
@@ -332,17 +328,12 @@
  *    INT16 CG_DEP_Oper_Latency(TOP pred_oper, TOP succ_oper,
  *				CG_DEP_KIND kind, UINT8 opnd)
  *
- *  To inquire the cycle of operator , use:
- *  Note: we use result cycle as the cycle of the op, I am not sure it's right
- *
- *    INT16 CG_DEP_Oper_cycle(TOP oper, CG_DEP_KIND kind);
- *                                                                  
  *
  *  To delete the dependence graph for a BB or a HB (hyperblock), call:
  *
  *    void CG_DEP_Delete_Graph(void *item)
  *
- *  Software pipelining and Hyperblock scheduling require "prebranch" 
+ *  Software pipelining and Hyberblock scheduling require "prebranch" 
  *  (CG_DEP_PREBR) arcs in
  *  the cyclic graph.  To avoid the expense of maintaining these all the
  *  time, we provide: <comp_func> is a filter function to provide clients
@@ -350,7 +341,7 @@
  *    void CG_DEP_Add_PREBR_Arcs(BB* bb, COMPARE_FUNCTION comp_func, 
  *                               BOOL ignore_latency);
  *
- *  Hyperblock scheduling also requires "postbranch" (CG_DEP_POSTBR) arcs
+ *  Hyberblock scheduling also requires "postbranch" (CG_DEP_POSTBR) arcs
  *  between the predecessor branch node and the successor op node (in the
  *  context of single-entry multiple-exit BBs). 
  *    void CG_DEP_Add_POSTBR_Arcs(list<BB*>, COMPARE_FUNCTION comp_func, 
@@ -395,7 +386,7 @@
 #define CG_DEP_GRAPH_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *cg_dep_graph_rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/cg/SCCS/s.cg_dep_graph.h $ $Revision: 1.5 $";
+static char *cg_dep_graph_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_dep_graph.h $ $Revision: 1.6 $";
 #endif /* _KEEP_RCS_ID */
 
 #include <list>
@@ -426,10 +417,9 @@ static char *cg_dep_graph_rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/cg/S
 #define PRUNE_PREDICATE_ARCS TRUE
 #define NO_PRUNE_PREDICATE_ARCS FALSE
 
-#define delete_gtn_use_arcs() { \
-  TN_MAP_Delete(gtn_use_map); \
-  gtn_use_map = NULL; \
-}
+#if defined(TARG_IA64)
+#define delete_gtn_use_arcs() { TN_MAP_Delete(gtn_use_map); gtn_use_map = NULL; }
+#endif
 
 /* Exported types and accessors */
 
@@ -470,19 +460,16 @@ typedef enum cg_dep_kind {
   CG_DEP_SCC,		/* Strongly connected component arcs */
 
 #ifdef TARG_IA64
-  CG_DEP_PRECHK,    /* Pre-chk: the succ is a check op  */
-  CG_DEP_POSTCHK,   /* Post-chk: the pred is a check op */
-  CG_DEP_CTLSPEC, /* control speculation, a special dep between a cmp 
-  				* and its guarded operations. */
+  CG_DEP_PRECHK,        /* Pre-chk: the succ is a check op  */
+  CG_DEP_POSTCHK,       /* Post-chk: the pred is a check op */
+  CG_DEP_CTLSPEC,       /* control speculation, a special dep */ 
+			/* between a cmp and its guarded operations. */
 #endif
-
   CG_DEP_MISC,		/* Everything else: the pred must be issued
 			 * before the succ. */
   CG_DEP_NUM_KIND	/* Number (count) of defined CG_DEP_KINDs */
 } CG_DEP_KIND;
 
-enum { PRUNE_NONE, PRUNE_NON_CYCLIC, PRUNE_NON_CYCLIC_WITH_REG,
-       PRUNE_CYCLIC_0, PRUNE_CYCLIC_1 };
 
 /* In addition to the essential ARC attributes (pred, succ, latency,
  * kind, opnd), this implementation of ARCs keeps two "next" pointers:
@@ -596,9 +583,6 @@ inline BOOL ARC_is_anti(ARC *arc)
   CG_DEP_KIND kind = ARC_kind(arc);
   return kind == CG_DEP_REGANTI || kind == CG_DEP_MEMANTI;
 }
-
-
-
 
 /* ---------------------------------------------------------------------
  * Some internal globals and types (not exported):
@@ -751,9 +735,9 @@ BOOL CG_DEP_Call_Aliases(OP *call_op, OP *op, BOOL read, BOOL write);
 BOOL CG_DEP_Can_OP_Move_Across_Call(OP *cur_op, OP *call_op, BOOL forw, BOOL Ignore_TN_Dep);
 
 extern BOOL OP_has_subset_predicate(const void *value1, const void *value2);
+extern BOOL OP_has_disjoint_predicate(const OP *value1, const OP *value2);
 
-extern BOOL OP_has_disjoint_predicate(OP *value1, OP *value2);
-#ifdef TARG_IA64
+#if defined(TARG_IA64)
 inline BOOL TN_is_predicate (TN * tn) 
 {
   return TN_is_register(tn) && TN_register_class(tn) == ISA_REGISTER_CLASS_predicate; 
@@ -762,8 +746,9 @@ inline BOOL TN_is_predicate (TN * tn)
 
 extern void CG_DEP_Detach_Arc(ARC *arc);
 
-#ifdef TARG_IA64
-extern ARC *new_arc(CG_DEP_KIND kind, OP *pred, OP *succ, UINT8 omega, UINT8 opnd, BOOL is_definite);
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
+extern ARC *new_arc(CG_DEP_KIND kind, OP *pred, OP *succ, UINT8 omega,
+		    UINT8 opnd, BOOL is_definite);
 #endif
 
 #endif /* CG_DEP_GRAPH_INCLUDED */

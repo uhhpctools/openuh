@@ -56,7 +56,9 @@
 #include <elf.h>
 #include "defs.h"
 #include "errors.h"
+extern "C" {
 #include "gnu_config.h"
+}
 #ifdef KEY	// get HW_WIDE_INT for flags.h
 #include "gnu/hwint.h"
 #endif	/* KEY */
@@ -72,6 +74,9 @@ extern "C" {
 #endif // KEY
 }
 #undef TARGET_PENTIUM // hack around macro definition in gnu
+#if defined(TARG_PPC32)
+#undef TARGET_POWERPC
+#endif /* TARG_PPC32 */
 #include "glob.h"
 #include "wn.h"
 #include "wn_util.h"
@@ -90,6 +95,7 @@ extern "C" {
 #ifdef KEY
 #include "wfe_dst.h" // DST_enter_member_function
 #endif
+#include "targ_sim.h" // PUSH_RETURN_ADDRESS_ON_STACK
 
 extern "C" void check_gnu_errors (int *, int *);
 #ifdef KEY
@@ -107,6 +113,9 @@ static void WFE_Handle_Named_Return_Value(tree fn);
 // IMPORTANT:  Doesn't work for nested functions.
 tree named_ret_obj_initializer;
 extern "C" BOOL pragma_implementation_seen, pragma_interface_seen;
+
+/* ST to represent EXC_PTR_EXPR if C++ exceptions are disabled */
+ST * Dummy_Exc_Ptr_Expr = NULL;
 #endif /* KEY */
 
 static tree *deferred_function_stack;
@@ -845,7 +854,7 @@ Setup_Entry_For_EH (void)
                                 0)), 1);
     Set_INITV_next (tinfo, eh_spec);
 
-    Get_Current_PU().unused = New_INITO (ST_st_idx (etable), exc_ptr_iv);
+    Set_PU_misc_info (Get_Current_PU(), New_INITO (ST_st_idx (etable), exc_ptr_iv));
 }
 
 // Generate WHIRL representing an asm at file scope (between functions).
@@ -1078,17 +1087,14 @@ WFE_Start_Function (tree fndecl)
           DECL_IMPLICIT_INSTANTIATION (fndecl) &&
           DECL_NAMESPACE_SCOPE_P (fndecl))))
       eclass = EXPORT_INTERNAL; // bug 7550
-    else if (TREE_PUBLIC(fndecl) || DECL_WEAK(fndecl)) {
-#ifdef TARG_IA64
-      if (Gp_Save_Restore_Opt && Use_Call_Shared_Link &&
-          (DECL_INLINE(fndecl) || !DECL_WEAK(fndecl)))
-#else
-      if (DECL_INLINE(fndecl) || !DECL_WEAK(fndecl))
-#endif
-	eclass = EXPORT_PROTECTED;
-      else eclass = EXPORT_PREEMPTIBLE;
-    }
-    else eclass = EXPORT_LOCAL;
+    else if (DECL_WEAK(fndecl)) 
+      eclass = EXPORT_PREEMPTIBLE;
+    else if (!TREE_PUBLIC(fndecl))
+      eclass = EXPORT_LOCAL;
+    else if (DECL_INLINE(fndecl))
+      eclass = EXPORT_PROTECTED;
+    else 
+      eclass = EXPORT_PREEMPTIBLE;
 #else
     ST_EXPORT  eclass = TREE_PUBLIC(fndecl) && !DECL_INLINE(fndecl)
 			 || DECL_WEAK(fndecl) ?
@@ -1120,6 +1126,11 @@ WFE_Start_Function (tree fndecl)
     Set_PU_cxx_lang (Pu_Table [ST_pu (func_st)]);
 
 #ifdef KEY
+    if (lookup_attribute("used", DECL_ATTRIBUTES (fndecl)))  // bug 3697
+      Set_PU_no_delete (Pu_Table [ST_pu (func_st)]);
+
+    if (DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (fndecl))
+      Set_PU_no_instrument (Pu_Table [ST_pu (func_st)]);  // Bug 750
     if (DECL_DECLARED_INLINE_P(fndecl))
       Set_PU_is_marked_inline (Pu_Table [ST_pu (func_st)]);
 #endif
@@ -1141,6 +1152,8 @@ WFE_Start_Function (tree fndecl)
 // inliner/ipa, and back-end.
     if (key_exceptions)
 	Setup_Entry_For_EH ();
+    else
+        Dummy_Exc_Ptr_Expr = NULL;
 
     if (func_PU_uplevel(fndecl))
       Set_PU_uplevel (Get_Current_PU ());
@@ -1337,6 +1350,12 @@ WFE_Start_Function (tree fndecl)
       Set_TY_is_varargs (ty_idx);
       Set_TY_has_prototype (ty_idx);
       Set_PU_prototype (pu, ty_idx);
+
+	  tree fntype = TREE_TYPE(fndecl);
+      if (TREE_CODE(fntype) == METHOD_TYPE) {
+          TY_IDX base = Get_TY(TYPE_METHOD_BASETYPE(fntype));
+          Set_PU_base_class(pu, base);
+      }
     }
 
     if (!thunk && DECL_GLOBAL_CTOR_P(fndecl)) {
@@ -1452,8 +1471,9 @@ WFE_Finish_Function (void)
     // Insert a RETURN if it does not exist
     WN * wn = WN_last (WFE_Stmt_Top ());
     if (wn == NULL || WN_operator (wn) != OPR_RETURN &&
-		      WN_operator (wn) != OPR_RETURN_VAL)
+	WN_operator (wn) != OPR_RETURN_VAL) {
       WFE_Stmt_Append (WN_CreateReturn (), Get_Srcpos ());
+    }
 
     // Add any handler code
     Do_Handlers ();
@@ -1483,6 +1503,14 @@ WFE_Finish_Function (void)
     if (Return_Address_ST [CURRENT_SYMTAB]) {
       Set_PU_has_return_address (Get_Current_PU ());
       Set_PU_no_inline (Get_Current_PU ());
+#ifdef KEY
+      if (PU_must_inline(Get_Current_PU())) {
+	DevWarn("Disabling must_inline for PU %s",
+		ST_name(Get_Current_PU_ST()));
+	Clear_PU_must_inline(Get_Current_PU());
+      }
+#endif
+
       Return_Address_ST [CURRENT_SYMTAB] = NULL;
     }
 
@@ -1661,6 +1689,7 @@ WFE_Add_Aggregate_Init_Real (REAL_VALUE_TYPE real, INT size)
 // KEY is already defined above, but this is just to keep what we had earlier
   int     buffer [4];
 #endif // KEY
+  INT32    rbuf_w[4]; // this is needed when long is 64-bit
   switch (size) {
     case 4:
       REAL_VALUE_TO_TARGET_SINGLE (real, t1);
@@ -1669,14 +1698,34 @@ WFE_Add_Aggregate_Init_Real (REAL_VALUE_TYPE real, INT size)
     case 8:
       REAL_VALUE_TO_TARGET_DOUBLE (real, buffer);
       WFE_Convert_To_Host_Order(buffer);
-      tc = Host_To_Targ_Float (MTYPE_F8, *(double *) &buffer);
+#if (SIZEOF_LONG != 4)
+      for (int i = 0; i < 4; i++)
+	rbuf_w[i] = buffer[i];
+      tc = Host_To_Targ_Float (MTYPE_F8, *(double *) rbuf_w);
+#else
+      tc = Host_To_Targ_Float (MTYPE_F8, *(double *) buffer);
+#endif
       break;
 #ifdef KEY
     case 12:
     case 16:
       REAL_VALUE_TO_TARGET_LONG_DOUBLE (real, buffer);
       WFE_Convert_To_Host_Order(buffer);
-      tc = Host_To_Targ_Quad (*(long double *) &buffer);
+#if (SIZEOF_LONG != 4)
+      for (int i = 0; i < 4; i++)
+	rbuf_w[i] = buffer[i];
+#ifdef TARG_LOONGSON
+      tc = Host_To_Targ_Quad (*(QUAD_TYPE *) rbuf_w);
+#else
+      tc = Host_To_Targ_Quad (*(long double *) rbuf_w);
+#endif
+#else
+#ifdef TARG_LOONGSON
+      tc = Host_To_Targ_Quad (*(QUAD_TYPE *) buffer);
+#else
+      tc = Host_To_Targ_Quad (*(long double *) buffer);
+#endif
+#endif
       break;
 #endif
     default:
@@ -1733,10 +1782,25 @@ WFE_Add_Aggregate_Init_Complex (REAL_VALUE_TYPE rval, REAL_VALUE_TYPE ival, INT 
         WFE_Convert_Internal_Real_to_IEEE_Double (ival));
       break;
     case 32:
+#ifdef TARG_LOONGSON
+      long     buffer [4];
+      REAL_VALUE_TO_TARGET_LONG_DOUBLE (rval, buffer);
+      WFE_Convert_To_Host_Order(buffer);
+      INT32 rbuf_w[4]; // this is needed when long is 64-bit
+      int i;
+      for (i = 0; i < 4; i++)
+             rbuf_w[i] = buffer[i];
+      QUAD_TYPE qval;
+      for(i = 0; i < 4; i++)
+             qval.qval[i] = rbuf_w[i];
+      rtc = Host_To_Targ_Quad (qval);
+      itc = Host_To_Targ_Quad (qval);
+#else
       rtc = Host_To_Targ_Quad (
         WFE_Convert_Internal_Real_to_IEEE_Double_Extended (rval));
       itc = Host_To_Targ_Quad (
         WFE_Convert_Internal_Real_to_IEEE_Double_Extended (ival));
+#endif
       break;
     default:
       FmtAssert(FALSE, ("WFE_Add_Aggregate_Init_Complex unexpected size"));
@@ -2020,23 +2084,6 @@ Add_Initv_For_Tree (tree val, UINT size)
 			TREE_STRING_POINTER(val), size);
 #endif
 		break;
-#if 0
-	case PLUS_EXPR:
-		if ( TREE_CODE(TREE_OPERAND(val,0)) == ADDR_EXPR
-		     && TREE_CODE(TREE_OPERAND(val,1)) == INTEGER_CST)
-		{
-			tree addr_kid = TREE_OPERAND(TREE_OPERAND(val,0),0);
-			FmtAssert(TREE_CODE(addr_kid) == VAR_DECL
-				  || TREE_CODE(addr_kid) == FUNCTION_DECL,
-				("expected decl under plus_expr"));
-			WFE_Add_Aggregate_Init_Symoff ( Get_ST (addr_kid),
-			Get_Integer_Value(TREE_OPERAND(val,1)) );
-		}
-		else
-			FmtAssert(FALSE, ("unexpected tree code %s", 
-				tree_code_name[TREE_CODE(val)]));
-		break;
-#endif
 	case NOP_EXPR:
 		tree kid;
 		kid = TREE_OPERAND(val,0);
@@ -2228,7 +2275,13 @@ Add_Bitfield_Initv_For_Tree (tree val, FLD_HANDLE fld, INT &bytes)
 // "bytes" will be updated with the additional bytes that this invocation
 // generates stores into
 static void
-Gen_Assign_Of_Init_Val (ST *st, tree init, UINT offset, UINT array_elem_offset,
+Gen_Assign_Of_Init_Val (
+#ifdef NEW_INITIALIZER
+        WN *target,
+#else
+        ST *st, 
+#endif
+        tree init, UINT offset, UINT array_elem_offset,
 	TY_IDX ty, BOOL is_bit_field, UINT field_id, FLD_HANDLE fld, INT &bytes)
 {
 #ifdef KEY
@@ -2236,8 +2289,35 @@ Gen_Assign_Of_Init_Val (ST *st, tree init, UINT offset, UINT array_elem_offset,
     // memory, then tell the call expr to put the result directly into ST.
     if (TY_return_in_mem(ty) &&
 	TREE_CODE(init) == CALL_EXPR) {
+#ifndef NEW_INITIALIZER
       WN *target = WN_Lda (Pointer_Mtype, 0, st, 0);
+      bytes += TY_size(ty);
+#endif
       WFE_Expand_Expr (init, TRUE, 0, 0, 0, 0, FALSE, FALSE, target);
+      return;
+    }
+#endif
+
+#ifdef NEW_INITIALIZER
+    if (TY_return_in_mem(ty) &&
+        TREE_CODE(init) == TARGET_EXPR) {
+      // We can not pass the offset to WGEN_Expand_Expr,
+      //  because it's not handled in that function, so we make an add here
+      Is_True ((WN_operator(target) == OPR_LDID ||
+                WN_operator(target) == OPR_LDA),
+               ("Bad operator for target") );
+      if (WN_offset(target) != 0 || offset != 0) {
+          TY_IDX targ_ty = WN_ty(target);
+          ST* addr_st = Gen_Temp_Symbol (TY_mtype(targ_ty), "target");
+          WN* wn = WN_Stid (TY_mtype(targ_ty), 0, addr_st, targ_ty,
+                            WN_Binary (OPR_ADD, Pointer_Mtype, 
+				       WN_CopyNode(target),
+                                       WN_Intconst(MTYPE_I4, offset) ) );
+          WFE_Stmt_Append (wn, Get_Srcpos());
+          target = WN_Ldid (TY_mtype(targ_ty), 0, addr_st, targ_ty);
+      }
+      WFE_Expand_Expr (init, TRUE, 0, 0, 0, 0, FALSE, FALSE, target);
+      bytes += TY_size(ty);
       return;
     }
 #endif
@@ -2257,33 +2337,47 @@ Gen_Assign_Of_Init_Val (ST *st, tree init, UINT offset, UINT array_elem_offset,
 	// rather than directy copy assignment,
 	// so need special code.
 	UINT size = TY_size(ty);
+	// OSP, string size > ty_size, only init ty_size
+	// Replace TREE_STRING_LENGTH with load_size
+	// Althrough C++ prohibit str_lenth longer than ty_size,
+	// we still change the code here. ( consistent with C part )
+	UINT load_size = ( size > TREE_STRING_LENGTH(init) ) ?
+					TREE_STRING_LENGTH(init) : size;
 	TY_IDX ptr_ty = Make_Pointer_Type(ty);
 	WN *load_wn = WN_CreateMload (0, ptr_ty, init_wn,
 #ifdef KEY // bug 3188
-			      WN_Intconst(MTYPE_I4, TREE_STRING_LENGTH(init)));
+			      WN_Intconst(MTYPE_I4, load_size));
 #else
 				      WN_Intconst(MTYPE_I4, size));
 #endif
+#ifdef NEW_INITIALIZER
+        WN *addr_wn = target;
+#else
 	WN *addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
 	WFE_Stmt_Append(
 		WN_CreateMstore (offset, ptr_ty,
 				 load_wn,
 				 addr_wn,
 #ifdef KEY // bug 3188
-                              WN_Intconst(MTYPE_I4, TREE_STRING_LENGTH(init))),
+                              WN_Intconst(MTYPE_I4, load_size)),
 #else
 				 WN_Intconst(MTYPE_I4,size)),
 #endif
 		Get_Srcpos());
 #ifdef KEY // bug 3247
-	if (size - TREE_STRING_LENGTH(init)) {
+	if (size - load_size > 0) {
 	  load_wn = WN_Intconst(MTYPE_U4, 0);
+#ifdef NEW_INITIALIZER
+          addr_wn = target;
+#else
 	  addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
 	  WFE_Stmt_Append(
-		  WN_CreateMstore (offset+TREE_STRING_LENGTH(init), ptr_ty,
+		  WN_CreateMstore (offset+load_size, ptr_ty,
 				   load_wn,
 				   addr_wn,
-			   WN_Intconst(MTYPE_I4,size-TREE_STRING_LENGTH(init))),
+			   WN_Intconst(MTYPE_I4,size-load_size)),
 		  Get_Srcpos());
 	}
 #endif
@@ -2296,8 +2390,26 @@ Gen_Assign_Of_Init_Val (ST *st, tree init, UINT offset, UINT array_elem_offset,
 	} else
 	    field_id = 0;	// uses offset instead
 	WFE_Set_ST_Addr_Saved (init_wn);
+#ifdef NEW_INITIALIZER
+        //TY_IDX ptr_ty = Make_Pointer_Type(ty);
+        //WN *wn = WN_CreateMstore(offset, ty, init_wn, target, WN_Intconst(MTYPE_I4, TY_size(ty)) );
+        WN* wn = NULL;
+        Is_True( (WN_operator(target) == OPR_LDID ||
+                  WN_operator(target) == OPR_LDA),
+                 ("Invalid operator for target"));
+        if( WN_operator(target) == OPR_LDID ) {
+            TY_IDX ptr_ty = Make_Pointer_Type(ty);
+            wn = WN_Istore(mtype, offset, ptr_ty, target, init_wn, field_id);
+        }
+        else { // OPR_LDA
+            ST *st = WN_st(target);
+            wn = WN_Stid (mtype, WN_lda_offset(target) + offset, st,
+                          ty, init_wn, field_id);
+        }
+#else
 	WN *wn = WN_Stid (mtype, ST_ofst(st) + offset, st,
 		ty, init_wn, field_id);
+#endif
 	WFE_Stmt_Append(wn, Get_Srcpos());
 	if (! is_bit_field) 
 	  bytes += TY_size(ty);
@@ -2315,12 +2427,22 @@ Gen_Assign_Of_Init_Val (ST *st, tree init, UINT offset, UINT array_elem_offset,
 
 UINT
 Traverse_Aggregate_Constructor (
-  ST   *st, tree init_list, tree type, BOOL gen_initv,
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
+  ST   *st, 
+#endif
+  tree init_list, tree type, BOOL gen_initv,
   UINT current_offset, UINT array_elem_offset, UINT field_id);
 
 UINT
 Traverse_Aggregate_Struct (
-  ST   *st, tree init_list, tree type, BOOL gen_initv,
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
+  ST   *st, 
+#endif
+  tree init_list, tree type, BOOL gen_initv,
   UINT current_offset, UINT array_elem_offset, UINT field_id);
 
 // For the specified symbol, generate padding at the offset specified.
@@ -2329,7 +2451,11 @@ Traverse_Aggregate_Struct (
 
 void
 Traverse_Aggregate_Pad (
+#ifdef NEW_INITIALIZER
+  WN     *target,
+#else
   ST     *st,
+#endif
   BOOL   gen_initv,
   UINT   pad,
   UINT   current_offset)
@@ -2340,7 +2466,11 @@ Traverse_Aggregate_Pad (
   else {
     WN *zero_wn = WN_Intconst(MTYPE_U4, 0);
     WN *pad_wn = WN_Intconst(MTYPE_U4, pad);
+#ifdef NEW_INITIALIZER
+    WN *addr_wn = target;
+#else
     WN *addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
     TY_IDX mstore_ty = Make_Pointer_Type(MTYPE_To_TY(MTYPE_U1)); // char *
     WFE_Stmt_Append (WN_CreateMstore (current_offset, mstore_ty,
                                       zero_wn, addr_wn, pad_wn),
@@ -2355,7 +2485,11 @@ Traverse_Aggregate_Pad (
 
 void
 Traverse_Aggregate_Array (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,            // symbol being initialized
+#endif
   tree init_list,      // list of initializers for each array element
   tree type,           // type of array
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
@@ -2386,7 +2520,11 @@ Traverse_Aggregate_Array (
       // recursively process nested ARRAYs and STRUCTs
       // update array_elem_offset to current_offset to
       // keep track of where each array element starts
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Constructor (target, init_value, TREE_TYPE(type),
+#else
       Traverse_Aggregate_Constructor (st, init_value, TREE_TYPE(type),
+#endif
                                       gen_initv, current_offset, current_offset,
                                       0);
       emitted_bytes += esize;
@@ -2414,7 +2552,11 @@ Traverse_Aggregate_Array (
 	}
       }
       else
+#ifdef NEW_INITIALIZER
+        Gen_Assign_Of_Init_Val (target, TREE_VALUE(init), current_offset, 0,
+#else
         Gen_Assign_Of_Init_Val (st, TREE_VALUE(init), current_offset, 0,
+#endif
                                 ety, FALSE, 0, FLD_HANDLE (), emitted_bytes);
     }
 
@@ -2425,7 +2567,11 @@ Traverse_Aggregate_Array (
   pad = TY_size (ty) - emitted_bytes;
 
   if (pad > 0)
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
     Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
 
 } /* Traverse_Aggregate_Array */
 
@@ -2439,7 +2585,11 @@ Traverse_Aggregate_Array (
 
 UINT
 Traverse_Aggregate_Struct (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,               // symbol being initialized
+#endif
   tree init_list,         // list of initializers for elements in STRUCT
   tree type,              // type of struct
   BOOL gen_initv,         // TRUE if initializing with INITV, FALSE for statements
@@ -2521,7 +2671,11 @@ Traverse_Aggregate_Struct (
     pad = FLD_ofst (fld) - emitted_bytes;
 
     if (pad > 0) {
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
       Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
       current_offset += pad;
       emitted_bytes  += pad;
     }
@@ -2531,7 +2685,11 @@ Traverse_Aggregate_Struct (
       // recursively process nested ARRAYs and STRUCTs
       tree element_type;
       element_type = TREE_TYPE(field);
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, TREE_VALUE(init),
+#else
       field_id = Traverse_Aggregate_Constructor (st, TREE_VALUE(init),
+#endif
                                                  element_type, gen_initv,
                                                  current_offset,
                                                  array_elem_offset, field_id);
@@ -2545,7 +2703,11 @@ Traverse_Aggregate_Struct (
       tree element_type;
       element_type = TREE_TYPE(field);
       tree t = cplus_expand_constant(TREE_VALUE(init));
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, t,
+#else
       field_id = Traverse_Aggregate_Constructor (st, t,
+#endif
                                                  element_type, gen_initv,
                                                  current_offset,
                                                  array_elem_offset, field_id);
@@ -2566,7 +2728,11 @@ Traverse_Aggregate_Struct (
         }
       }
       else {
+#ifdef NEW_INITIALIZER
+        Gen_Assign_Of_Init_Val (target, TREE_VALUE(init),
+#else
         Gen_Assign_Of_Init_Val (st, TREE_VALUE(init),
+#endif
                                 current_offset, array_elem_offset,
                                 is_bit_field ? ty : fld_ty,
                                 is_bit_field, field_id, fld, emitted_bytes);
@@ -2597,7 +2763,11 @@ Traverse_Aggregate_Struct (
   pad = TY_size (ty) - emitted_bytes;
 
   if (pad > 0)
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
     Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
 
   return field_id;
 } /* Traverse_Aggregate_Struct */
@@ -2608,7 +2778,11 @@ Traverse_Aggregate_Struct (
 // If gen_initv is FALSE generate a sequence of stores.
 void
 Traverse_Aggregate_Vector (
+#ifdef NEW_INITIALIZER
+  WN * target,
+#else
   ST * st,             // symbol being initialized
+#endif
   tree init_list,      // list of initializers for units in vector
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
   UINT current_offset, // offset from start of symbol for current vector
@@ -2637,7 +2811,11 @@ Traverse_Aggregate_Vector (
       emitted_bytes += esize;
     }
     else
+#ifdef NEW_INITIALIZER
+      Gen_Assign_Of_Init_Val (target, TREE_VALUE(init),
+#else
       Gen_Assign_Of_Init_Val (st, TREE_VALUE(init),
+#endif
                               current_offset, 0,
                               Get_TY(unit_type),
                               0, 0, FLD_HANDLE(), emitted_bytes);
@@ -2647,12 +2825,20 @@ Traverse_Aggregate_Vector (
 
 void
 Traverse_Aggregate_Vector_Const (
+#ifdef NEW_INITIALIZER
+  WN * target,
+#else
   ST * st,             // symbol being initialized
+#endif
   tree init_list,      // list of initializers for units in vector
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
   UINT current_offset) // offset from start of symbol for current vector
 {
+#ifdef NEW_INITIALIZER
+  Traverse_Aggregate_Vector (target, init_list, gen_initv, current_offset, TRUE);
+#else
   Traverse_Aggregate_Vector (st, init_list, gen_initv, current_offset, TRUE);
+#endif
 }
 #endif
 
@@ -2668,7 +2854,11 @@ Traverse_Aggregate_Vector_Const (
 
 UINT
 Traverse_Aggregate_Constructor (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,               // symbol being initialized
+#endif
   tree init_list,         // list of initilaizers for this aggregate
   tree type,              // type of aggregate being initialized
   BOOL gen_initv,         // TRUE  if initializing with INITV,
@@ -2692,7 +2882,11 @@ Traverse_Aggregate_Constructor (
 
   if (TY_kind (ty) == KIND_STRUCT) {
 
+#ifdef NEW_INITIALIZER
+    field_id = Traverse_Aggregate_Struct (target, init_list, type, gen_initv,
+#else
     field_id = Traverse_Aggregate_Struct (st, init_list, type, gen_initv,
+#endif
                                           current_offset, array_elem_offset,
                                           field_id);
   }
@@ -2700,14 +2894,22 @@ Traverse_Aggregate_Constructor (
   else
   if (TY_kind (ty) == KIND_ARRAY) {
 
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Array (target, init_list, type, gen_initv, current_offset);
+#else
     Traverse_Aggregate_Array (st, init_list, type, gen_initv, current_offset);
+#endif
   }
 
 #ifdef KEY // bug 9550
   else
   if (TY_kind (ty) == KIND_SCALAR && MTYPE_is_vector (TY_mtype (ty))) {
 
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Vector (target, init_list, gen_initv, current_offset);
+#else
     Traverse_Aggregate_Vector (st, init_list, gen_initv, current_offset);
+#endif
   }
 #endif
 
@@ -2734,7 +2936,12 @@ Add_Inito_For_Tree (tree init, ST *st)
   case INTEGER_CST:
 	UINT64 val;
 	val = Get_Integer_Value (init);
-	if (val == 0) {
+#ifdef TARG_SL
+// we don't put vbuf variable, which is initialized with zero, into bss section
+	if (val == 0 && !ST_in_vbuf(st) && !ST_in_sbuf(st)) {
+#else 	
+	if (val == 0 ) {
+#endif 		
 		Set_ST_init_value_zero(st);
 		if (ST_sclass(st) == SCLASS_DGLOBAL)
 			Set_ST_sclass(st, SCLASS_UGLOBAL);
@@ -2822,7 +3029,12 @@ Add_Inito_For_Tree (tree init, ST *st)
 	aggregate_inito = New_INITO (st);
 	not_at_root = FALSE;
 	last_aggregate_initv = 0;
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, st, 0);
+        Traverse_Aggregate_Constructor (target, init, TREE_TYPE(init),
+#else
 	Traverse_Aggregate_Constructor (st, init, TREE_TYPE(init),
+#endif
 					TRUE /*gen_initv*/, 0, 0, 0);
 	return;
   }
@@ -2911,7 +3123,12 @@ WFE_Generate_Temp_For_Initialized_Aggregate (tree init, char * name)
   {
 	// do sequence of stores to temp
 	Set_ST_sclass(temp, SCLASS_AUTO);	// put on stack
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+        Traverse_Aggregate_Constructor (target, init, TREE_TYPE(init),
+#else
 	Traverse_Aggregate_Constructor (temp, init, TREE_TYPE(init),
+#endif
                                         FALSE /*gen_initv*/, 0, 0, 0);
   }
   else {
@@ -2920,12 +3137,59 @@ WFE_Generate_Temp_For_Initialized_Aggregate (tree init, char * name)
 	aggregate_inito = New_INITO (temp);
 	not_at_root = FALSE;
 	last_aggregate_initv = 0;
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+        Traverse_Aggregate_Constructor (target, init, TREE_TYPE(init),
+#else
 	Traverse_Aggregate_Constructor (temp, init, TREE_TYPE(init),
+#endif
                                         TRUE /*gen_initv*/, 0, 0, 0);
 	WFE_Finish_Aggregate_Init ();
   }
   return temp;
 }
+
+#ifdef NEW_INITIALIZER
+ST* WFE_Generate_Initialized_Aggregate (WN * target, tree init)
+{
+  Is_True(TREE_CODE(init) == CONSTRUCTOR,
+          ("wrong tree code for target"));
+  Is_True((WN_operator(target) == OPR_LDID ||
+           WN_operator(target) == OPR_LDA),
+          ("Invalid target operator"));
+  ST* target_st = WN_st(target);
+
+  if (TREE_CODE(init) == CONSTRUCTOR
+        && ! Use_Static_Init_For_Aggregate (target_st, init))
+  {
+        Traverse_Aggregate_Constructor (target, init, TREE_TYPE(init),
+                                        FALSE /*gen_initv*/, 0, 0, 0);
+        return target_st;
+  }
+  else {
+        // TODO: We do not need to create a temp ST in all cases.
+        //  if ST_class(target_st) is FORMAL, we need it indeed.
+        DevWarn ("Static initialize %s(%s)\n",
+                 ST_name(target_st), Sclass_Name(ST_sclass(target_st)));
+        TY_IDX ty_idx = Get_TY(TREE_TYPE(init));
+        ST *temp = New_ST (CURRENT_SYMTAB);
+        ST_Init (temp,
+                Save_Str2 (ST_name(target_st), ".init"),
+                CLASS_VAR, SCLASS_PSTATIC, EXPORT_LOCAL,
+                ty_idx );
+        // setup inito for target_st
+        Set_ST_is_initialized(temp);
+        aggregate_inito = New_INITO (temp);
+        not_at_root = FALSE;
+        last_aggregate_initv = 0;
+        WN* temp_target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+        Traverse_Aggregate_Constructor (temp_target, init, TREE_TYPE(init),
+                                        TRUE /*gen_initv*/, 0, 0, 0);
+        WFE_Finish_Aggregate_Init ();
+        return temp;
+  }
+}
+#endif
 
 static tree init_decl = NULL;
 
@@ -2964,28 +3228,6 @@ WFE_Initialize_Decl (tree decl)
 			Add_Inito_For_Tree (DECL_INITIAL(init_decl),
 					    Get_ST(init_decl));
 		}
-                // Set the virtual table entry of a TY when creating vtable INITO
-                if (vtable_decl_p(decl, 0)) {
-                    INITV_IDX vfunc = Inito_Table[aggregate_inito].val;
-                    while (vfunc > 0) {
-#ifndef TARG_IA64
-                        if (INITV_kind(vfunc) == INITVKIND_SYMOFF)
-#else
-                        if (INITV_kind(vfunc) == INITVKIND_SYMIPLT) 
-#endif
-                        {
-                            ST& initv_st = St_Table[INITV_st(vfunc)];
-                            if (ST_sym_class(initv_st) == CLASS_FUNC)
-                                break;
-                        }
-                        vfunc = (INITV_kind(vfunc) == INITVKIND_BLOCK) ?
-                                 INITV_blk(vfunc) : INITV_next(vfunc);
-                    }
-                    if (vfunc > 0) {
-                        TY_IDX base_tyi = Get_TY(DECL_CONTEXT(decl));
-                        Set_TY_vtable(base_tyi, vfunc);
-                    }
-                }
 		init_decl = NULL;
 	}
 	if (TREE_READONLY(decl))
@@ -3009,13 +3251,23 @@ WFE_Initialize_Decl (tree decl)
 		}
 		else {
 			// do sequence of stores for each element
+#ifdef NEW_INITIALIZER
+			WN* target = WN_Lda(Pointer_Mtype, 0, st, 0);
+                        Traverse_Aggregate_Constructor (target, init, TREE_TYPE(init),
+#else
 			Traverse_Aggregate_Constructor (st, init, TREE_TYPE(init),
+#endif
                                 FALSE /*gen_initv*/, 0, 0, 0);
 		}
 	}
 	else {
 		INT emitted_bytes;
+#ifdef NEW_INITIALIZER
+		WN* target = WN_Lda(Pointer_Mtype, 0, st, 0);
+		Gen_Assign_Of_Init_Val (target, init,
+#else
 		Gen_Assign_Of_Init_Val (st, init, 
+#endif
 			0 /*offset*/, 0 /*array_elem_offset*/,
 			ST_type(st), FALSE, 0 /*field_id*/,
 			FLD_HANDLE(), emitted_bytes);
@@ -3070,7 +3322,12 @@ WFE_Initialize_Nested_Decl (tree decl)
 		}
 		else {
 			// do sequence of stores for each element
+#ifdef NEW_INITIALIZER
+			WN* target = WN_Lda(Pointer_Mtype, 0, st, 0);
+                        Traverse_Aggregate_Constructor (target, init,
+#else
 			Traverse_Aggregate_Constructor (st, init, 
+#endif
 							TREE_TYPE(init),
 							FALSE /*gen_initv*/, 
 							0, 0, 0);
@@ -3079,7 +3336,12 @@ WFE_Initialize_Nested_Decl (tree decl)
 	}
 	else {
 		INT emitted_bytes;
+#ifdef NEW_INITIALIZER
+		WN* target = WN_Lda(Pointer_Mtype, 0, st, 0);
+                Gen_Assign_Of_Init_Val (target, init,
+#else
 		Gen_Assign_Of_Init_Val (st, init, 
+#endif
 			0 /*offset*/, 0 /*array_elem_offset*/,
 			ST_type(st), FALSE, 0 /*field_id*/,
 			FLD_HANDLE(), emitted_bytes);
@@ -3186,54 +3448,6 @@ WFE_Assemble_Alias (tree decl, tree target)
 */
 } /* WFE_Assemble_Alias */
 
-#if 0
-void
-WFE_Assemble_Constructor (char *name)
-{
-  DevWarn ("__attribute__ ((constructor)) encountered at line %d", lineno);
-  tree func_decl = lookup_name (get_identifier (name), 1);
-  ST *func_st = Get_ST (func_decl);
-  INITV_IDX initv = New_INITV ();
-  INITV_Init_Symoff (initv, func_st, 0, 1);
-  ST *init_st = New_ST (GLOBAL_SYMTAB);
-  ST_Init (init_st, Save_Str2i ("__ctors", "_", ++__ctors),
-           CLASS_VAR, SCLASS_FSTATIC,
-           EXPORT_LOCAL, Make_Pointer_Type (ST_pu_type (func_st), FALSE));
-  Set_ST_is_initialized (init_st);
-  INITO_IDX inito = New_INITO (init_st, initv);
-  ST_ATTR_IDX st_attr_idx;
-  ST_ATTR&    st_attr = New_ST_ATTR (GLOBAL_SYMTAB, st_attr_idx);
-  ST_ATTR_Init (st_attr, ST_st_idx (init_st), ST_ATTR_SECTION_NAME,
-                Save_Str (".ctors"));
-  Set_PU_no_inline (Pu_Table [ST_pu (func_st)]);
-  Set_PU_no_delete (Pu_Table [ST_pu (func_st)]);
-  Set_ST_addr_saved (func_st);
-}
-
-void
-WFE_Assemble_Destructor (char *name)
-{
-  DevWarn ("__attribute__ ((destructor)) encountered at line %d", lineno);
-  tree func_decl = lookup_name (get_identifier (name), 1);
-  ST *func_st = Get_ST (func_decl);
-  INITV_IDX initv = New_INITV ();
-  INITV_Init_Symoff (initv, func_st, 0, 1);
-  ST *init_st = New_ST (GLOBAL_SYMTAB);
-  ST_Init (init_st, Save_Str2i ("__dtors", "_", ++__dtors),
-           CLASS_VAR, SCLASS_FSTATIC,
-           EXPORT_LOCAL, Make_Pointer_Type (ST_pu_type (func_st), FALSE));
-  Set_ST_is_initialized (init_st);
-  INITO_IDX inito = New_INITO (init_st, initv);
-  ST_ATTR_IDX st_attr_idx;
-  ST_ATTR&    st_attr = New_ST_ATTR (GLOBAL_SYMTAB, st_attr_idx);
-  ST_ATTR_Init (st_attr, ST_st_idx (init_st), ST_ATTR_SECTION_NAME,
-                Save_Str (".dtors"));
-  Set_PU_no_inline (Pu_Table [ST_pu (func_st)]);
-  Set_PU_no_delete (Pu_Table [ST_pu (func_st)]);
-  Set_ST_addr_saved (func_st);
-}
-
-#endif
 
 ST *
 WFE_Get_Return_Address_ST (int level)
@@ -3242,8 +3456,8 @@ WFE_Get_Return_Address_ST (int level)
   if (return_address_st == NULL) {
     return_address_st = New_ST (CURRENT_SYMTAB - level);
     ST_Init (return_address_st, Save_Str ("__return_address"), CLASS_VAR,
-             SCLASS_AUTO, EXPORT_LOCAL, 
-             Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE));
+	     (PUSH_RETURN_ADDRESS_ON_STACK ? SCLASS_FORMAL : SCLASS_AUTO),
+	     EXPORT_LOCAL, Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE));
     Set_ST_is_return_var (return_address_st);
     Return_Address_ST [CURRENT_SYMTAB - level] = return_address_st;
   }
@@ -3278,7 +3492,7 @@ WFE_Alloca_ST (tree decl)
   Set_ST_is_temp_var (alloca_st);
   Set_ST_pt_to_unique_mem (alloca_st);
   Set_ST_base_idx (st, ST_st_idx (alloca_st));
-  WN *swn = WFE_Expand_Expr (TYPE_SIZE(TREE_TYPE(decl)));
+  WN *swn = WFE_Expand_Expr (TYPE_SIZE_UNIT(TREE_TYPE(decl)));
   WN *wn  = WN_CreateAlloca (swn);
   wn = WN_Stid (Pointer_Mtype, 0, alloca_st, ST_type (alloca_st), wn);
   WFE_Stmt_Append (wn, Get_Srcpos());
@@ -3504,16 +3718,6 @@ WFE_Process_Template_Decl (tree decl)
 {
 //fprintf(stderr, "TEMPLATE_DECL: %s\n", IDENTIFIER_POINTER(DECL_NAME(decl)));
   tree gentemp = most_general_template(decl);
-#if 0
-  for (tree t = DECL_TEMPLATE_SPECIALIZATIONS(gentemp);
-       t; t = TREE_CHAIN(t))
-    if (TREE_CODE(TREE_VALUE(t)) == FUNCTION_DECL &&
-        DECL_SAVED_TREE(TREE_VALUE(t))            &&
-        !DECL_EXTERNAL(TREE_VALUE(t))             &&
-        !uses_template_parms (TREE_VALUE(t)))
-      st = Get_ST (TREE_VALUE(t));
-    DECL_TEMPLATE_SPECIALIZATIONS(gentemp) = 0; // don't do these twice
-#endif
   for (tree t = DECL_TEMPLATE_INSTANTIATIONS(gentemp);
        t; t = TREE_CHAIN(t)) {
     tree val = TREE_VALUE(t);

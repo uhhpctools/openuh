@@ -38,7 +38,11 @@
  */
 #define USE_STANDARD_TYPES
 #include <stdarg.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdio.h>
 #include <string.h>
 #include "vstring.h"

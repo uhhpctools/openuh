@@ -511,29 +511,6 @@ do_allocate_exception (type)
 					     NULL_TREE));
 }
 
-#if 0
-/* Call __cxa_free_exception from a cleanup.  This is never invoked
-   directly, but see the comment for stabilize_throw_expr.  */
-
-static tree
-do_free_exception (ptr)
-     tree ptr;
-{
-  tree fn;
-
-  fn = get_identifier ("__cxa_free_exception");
-  if (IDENTIFIER_GLOBAL_VALUE (fn))
-    fn = IDENTIFIER_GLOBAL_VALUE (fn);
-  else
-    {
-      /* Declare void __cxa_free_exception (void *).  */
-      fn = push_void_library_fn (fn, tree_cons (NULL_TREE, ptr_type_node,
-						void_list_node));
-    }
-
-  return build_function_call (fn, tree_cons (NULL_TREE, ptr, NULL_TREE));
-}
-#endif
 
 /* Wrap all cleanups for TARGET_EXPRs in MUST_NOT_THROW_EXPR.
    Called from build_throw via walk_tree_without_duplicates.  */

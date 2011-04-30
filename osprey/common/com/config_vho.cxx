@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -84,6 +92,9 @@ INT32   VHO_Switch_If_Else_Limit        = 6;
 INT32   VHO_Switch_Compgoto_Limit       = 3;
 BOOL    VHO_Switch_Opt                  = TRUE;
 INT32   VHO_Switch_Opt_Threshold        = 25;
+#ifdef KEY
+BOOL    VHO_Switch_Reduce_Branch        = FALSE;
+#endif
 BOOL    VHO_Cselect_Opt                 = FALSE;
 #ifdef KEY
 BOOL    VHO_Cselect_Opt_Set             = FALSE;
@@ -103,11 +114,12 @@ BOOL    VHO_Icall_Devir			= TRUE;
 BOOL    VHO_Check_Tree                  = FALSE;
 BOOL    VHO_Single_Loop_Test            = FALSE;
 BOOL    VHO_Use_Do_While                = FALSE;
+BOOL    VHO_Disable_Copy_Field_Element  = FALSE;
 #ifdef KEY
-#ifdef TARG_IA64
-BOOL    VHO_Enable_Simple_If_Conv = FALSE;   
+#if defined(TARG_IA64) || defined(TARG_PPC32)
+BOOL  VHO_Enable_Simple_If_Conv = FALSE;
 #else
-BOOL    VHO_Enable_Simple_If_Conv = TRUE;   
+BOOL  VHO_Enable_Simple_If_Conv = TRUE;
 #endif
 
 /* maximum overhead allowed after If-Conversion */
@@ -133,6 +145,10 @@ INT32 	VHO_Disable_MP_Local_Equal = 10000;
 BOOL	VHO_Generate_Rrotate = FALSE;
 BOOL	VHO_Generate_Rrotate_Set = FALSE;
 #endif
+
+/* Debugging Flags for VHO */
+OPTION_LIST* VHO_Skip = NULL; /* Skip option list */
+SKIPLIST* VHO_Skip_List = NULL;      /* Processed skiplist */
 
 /* List of global variables to turn on and off various optimizations */
 
@@ -163,6 +179,10 @@ static OPTION_DESC Options_VHO[] = {
     10, 1, INT32_MAX,    &VHO_Switch_Opt_Threshold,   NULL },
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "switch_opt",         "switch",
     TRUE, 0, 0,  &VHO_Switch_Opt,      NULL },
+#ifdef KEY
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "switch_reduce_branch", "switch_reduce_branch",
+    TRUE, 0, 0,  &VHO_Switch_Reduce_Branch,      NULL },
+#endif
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "cselect_opt",        "cselect",
     TRUE, 0, 0,  &VHO_Cselect_Opt,      &VHO_Cselect_Opt_Set },
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "iload_opt",          "iload",
@@ -179,6 +199,8 @@ static OPTION_DESC Options_VHO[] = {
     TRUE, 0, 0,  &VHO_Single_Loop_Test,      NULL },
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "use_do_while",       "use_do_while",
     TRUE, 0, 0,  &VHO_Use_Do_While,      NULL },
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "disable_copy_field_element",       "disable_copy_field_element",
+    TRUE, 0, 0,  &VHO_Disable_Copy_Field_Element,      NULL },
 #ifdef KEY
   { OVK_BOOL,   OV_INTERNAL,    TRUE, "if_conv",                "",
     0, 0, 0,    &VHO_Enable_Simple_If_Conv, NULL },
@@ -210,5 +232,14 @@ static OPTION_DESC Options_VHO[] = {
   { OVK_BOOL,   OV_INTERNAL,    TRUE, "rotate", "",
     0, 0, 0,    &VHO_Generate_Rrotate, &VHO_Generate_Rrotate_Set },
 #endif
+
+  /* Debugging flags for VHO */
+  { OVK_LIST,   OV_SHY,        FALSE, "skip_equal",          "skip_e",
+    0, 0, 4096, &VHO_Skip,      NULL },
+  { OVK_LIST,   OV_SHY,        FALSE, "skip_before",         "skip_b",
+    0, 0, 4096, &VHO_Skip,      NULL },
+  { OVK_LIST,   OV_SHY,        FALSE, "skip_after",          "skip_a",
+    0, 0, 4096, &VHO_Skip,      NULL },
+
   { OVK_COUNT }		/* List terminator -- must be last */
 };

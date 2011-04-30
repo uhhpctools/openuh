@@ -102,8 +102,16 @@ enum assign_modes {
 /* SGI historically provided this  function, but we don't want it to collide
  * with a user-coded Fortran procedure "assign" which will also emit "assign_"
  */
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+extern void __assign(char *, _f_int *ier, int);
+void assign_(char *cmdargs_ptr, _f_int *ier, int cmdargs_len) {
+  __assign(cmdargs_ptr, ier, cmdargs_len);
+}
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak assign_ = __assign
 extern void assign_(char *, _f_int *ier, int);
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif  /* KEY Bug 8391 */
 
 void

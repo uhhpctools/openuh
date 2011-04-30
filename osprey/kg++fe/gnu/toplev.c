@@ -158,6 +158,14 @@ static void print_switch_values PARAMS ((FILE *, int, int, const char *,
 /* Nonzero to dump debug info whilst parsing (-dy option).  */
 static int set_yydebug;
 
+#ifdef TARG_SL
+/* Supporting long long type. -mlong-long */
+bool Long_Long_Support = FALSE;
+
+/* Supporting float point emulation. -msoft-float */
+bool Float_Point_Support = FALSE;
+#endif
+
 /* Length of line when printing switch values.  */
 #define MAX_LINE 75
 
@@ -1356,6 +1364,13 @@ documented_lang_options[] =
   { "-fshort-wchar",
     N_("Override the underlying type for wchar_t to `unsigned short'") },
   { "-fno-short-wchar", "" },
+
+#ifdef TARG_SL
+  {"-mlong-long",
+    N_("Long long supported") },
+  {"-msoft-float",
+    N_("Float point emulation supported") },
+#endif
 
   { "-Wall",
     N_("Enable most warning messages") },
@@ -4595,7 +4610,24 @@ independent_decode_option (argc, argv)
       break;
 
     case 'm':
+#ifdef TARG_SL
+      /* Handle -mlong-long option to supporting long long type */
+      if(!strcmp(arg, "mlong-long"))
+      {
+        Long_Long_Support = TRUE;	
+      } 
+      else if(!strcmp(arg, "msoft-float"))
+        /* Handle -msoft-float option to supporting float point emulation */
+      {
+        Float_Point_Support = TRUE;	
+      }
+      else 
+      {
+        set_target_switch (arg + 1);
+      }
+#else
       set_target_switch (arg + 1);
+#endif
       break;
 
     case 'f':
@@ -5316,15 +5348,6 @@ parse_options_and_default_flags (argc, argv)
 	}
     }
 
-#if 0
-  // undo fix of bug 2254
-  if (key_exceptions)
-  {
-      set_param_value ("max-inline-insns", 440);
-      set_param_value ("max-inline-insns-single", 220);
-      set_param_value ("min-inline-insns", 80);
-  }
-#endif
 
   if (flag_pie)
     flag_pic = flag_pie;

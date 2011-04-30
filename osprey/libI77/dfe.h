@@ -54,7 +54,6 @@ extern int e_rdfe_mp(unit **);
 extern int e_wdfe();
 extern int e_wdfe_mp(unit **);
 
-#if 11
 extern int s_rdfe64(cilist64 *);
 extern int s_rdfe64_mp(cilist64 *, unit **);
 extern int s_wdfe64(cilist64 *);
@@ -63,7 +62,6 @@ extern int e_rdfe64();
 extern int e_rdfe64_mp(unit **);
 extern int e_wdfe64();
 extern int e_wdfe64_mp(unit **);
-#endif
 
 extern int y_rsk(unit *);
 extern int yrd_SL(unit *);

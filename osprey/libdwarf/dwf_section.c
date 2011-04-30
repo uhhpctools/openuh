@@ -110,7 +110,7 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	char buff1[ENCODE_SPACE_NEEDED];
 	char buff2[ENCODE_SPACE_NEEDED];
 	char buff3[ENCODE_SPACE_NEEDED];
-	char *augmentation;
+	const char *augmentation;
 	char *augmented_al;
 	long augmented_fields_length;
 	int  a_bytes;
@@ -272,7 +272,7 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	data += uwordb_size;
 
 	/*cie-id is a special value. */
-#ifdef TARG_X8664
+#ifdef KEY
 	// Bug 5357 - g++ uses 0 as the CIE_ID for eh_frame section and
 	// 0xffffffff as the CIE_ID in the debug_frame section.
 	du = 0x0LL;
@@ -308,44 +308,35 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	    data += a_bytes;
 	}
 
-#ifdef TARG_IA64
-	// personality format
-	db = Personality_Format;
-	WRITE_UNALIGNED(dbg, (void *)data, (const void *)&db,
-			sizeof(db), sizeof(Dwarf_Ubyte));
-	data += sizeof(Dwarf_Ubyte);
-	// personality routine offset
-#endif
 	if (personality) {
-	    // bug 9177: Emit personality format only if there is
-	    // personality information.
-	    //
-	    // personality format
-#ifndef TARG_IA64
-	    db = Personality_Format;
-	    WRITE_UNALIGNED(dbg, (void *)data, (const void *)&db,
-			    sizeof(db), sizeof(Dwarf_Ubyte));
-	    data += sizeof(Dwarf_Ubyte);
-#endif
-	    // personality routine offset
-	    Dwarf_Unsigned p = 0;
-	    WRITE_UNALIGNED(dbg, (void *)data, (const void *)&p,
-			    sizeof(p), upointer_size);
-	    data += upointer_size;
+        // bug 9177: Emit personality format only if there is
+        // personality information.
+        //
+        // personality format
+        db = Personality_Format;
+        WRITE_UNALIGNED(dbg, (void *)data, (const void *)&db,
+                sizeof(db), sizeof(Dwarf_Ubyte));
+        data += sizeof(Dwarf_Ubyte);
+        // personality routine offset
+        Dwarf_Unsigned p = 0;
+        WRITE_UNALIGNED(dbg, (void *)data, (const void *)&p,
+                sizeof(p), upointer_size);
+        data += upointer_size;
 
-	    if (generate_fpic_dwarf) {
-		p = 0x1b;
-	    }
-	    // lsda encoding
+        if (generate_fpic_dwarf) {
+        p = 0x1b;
+        }
+        // lsda encoding
+        WRITE_UNALIGNED(dbg, (void *)data, (const void *)&p,
+                sizeof(p), sizeof(Dwarf_Ubyte));
+        data += sizeof(Dwarf_Ubyte);
+	}
+	if (generate_fpic_dwarf) {
+	    // FDE encoding should be added for all languages (bug 12323).
+	    Dwarf_Unsigned p = 0x1b;
 	    WRITE_UNALIGNED(dbg, (void *)data, (const void *)&p,
 			    sizeof(p), sizeof(Dwarf_Ubyte));
 	    data += sizeof(Dwarf_Ubyte);
-	    if (generate_fpic_dwarf) {
-		// fde encoding
-		WRITE_UNALIGNED(dbg, (void *)data, (const void *)&p,
-				sizeof(p), sizeof(Dwarf_Ubyte));
-		data += sizeof(Dwarf_Ubyte);
-	    }
 	}
 	memcpy((void *)data, (const void *)curcie->cie_inst, curcie->cie_inst_bytes);
 	data += curcie->cie_inst_bytes;
@@ -373,9 +364,7 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	Dwarf_Word  cie_index, index;
 	int oet_length, afl_length, res;
 	int v0_augmentation = 0;
-#if 0
-	unsigned char *fde_start_point;
-#endif
+	int pic_augmentation = 0;
 	unsigned char *fde_start_point;
 
 	char afl_buff[ENCODE_SPACE_NEEDED];
@@ -415,6 +404,28 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 		upointer_size +	/* address range */
 		afl_length        +   /* augmented field length */
 		oet_length;   /* exception_table offset */
+	}
+	else if (!strcmp(cie_ptr->cie_aug,
+	                 PIC_NONCPLUS_DW_CIE_AUGMENTER_STRING_V0) &&
+	         generate_fpic_dwarf) {
+	    // "zR" augmentation for non-C++ PIC, insert augmentation
+ 	    // size (bug 12323).
+    	    pic_augmentation = 1;
+    	    oet_length = 0;
+    	    /* encode the length of augmented fields. */
+    	    res = _dwarf_pro_encode_leb128_nm(
+   	    		oet_length,
+			&afl_length, afl_buff,
+			sizeof(afl_buff));
+	    if (res != DW_DLV_OK) {
+ 		DWARF_P_DBG_ERROR(dbg,DW_DLE_CIE_OFFS_ALLOC,-1);
+	    }
+
+	    fde_length = curfde->fde_n_bytes +
+			uwordb_size +      /* cie pointer */
+			upointer_size +    /* initial loc */
+			upointer_size +    /* address range */
+			afl_length;        /* augmented field length */
 	}
 	else {
 	    fde_length = curfde->fde_n_bytes +
@@ -501,9 +512,6 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	/* write out fde */
 	GET_CHUNK(dbg,elfsectno,data,fde_length+uwordb_size +
 		  extension_size, error);
-#if 0
-	fde_start_point = data;
-#endif
 	fde_start_point = data;
 	du = fde_length;
 	{
@@ -575,7 +583,11 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 			    sizeof(dsw), upointer_size);
 	    data += upointer_size;
 	}
-
+	else if (pic_augmentation) {
+	    /* write the encoded augmented field length. */
+	    memcpy((void *)data, (const void *)afl_buff, afl_length);
+    	    data += afl_length;
+    	}
 	curinst = curfde->fde_inst;
 	while (curinst) {
 	    db = curinst->dfp_opcode;
@@ -601,23 +613,6 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 		    {_dwarf_p_error(dbg, error, DW_DLE_ALLOC_FAIL); return(0);}
 		}
 	    }
-#if 0
-	    if (curinst->dfp_sym_index) {
-		int res;
-		res = dbg->de_reloc_name(dbg,
-					 EH_FRAME,
-					 (data-fde_start_point)
-					 + cur_off+
-					 uwordb_size,  /* r_offset */
-					 curinst->dfp_sym_index,
-					 dwarf_drt_data_reloc,
-					 upointer_size);
-		if (res != DW_DLV_OK) {
-		    {_dwarf_p_error(dbg, error, DW_DLE_ALLOC_FAIL);
-			return(0);}
-		}
-	    }
-#endif
 	    if (DW_CFA_advance_loc4 == db) {
 		data[0] = 0;
 		data[1] = 0;

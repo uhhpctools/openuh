@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: phase.c
- * $Revision$
- * $Date$
- * $Author$
- * $Source$
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:38-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.phase.cxx $
  *
  * Revision history:
  *  17-Feb -95 - Original Version

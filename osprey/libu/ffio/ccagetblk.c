@@ -39,7 +39,12 @@
 
 #include <stdio.h>
 #include <ffio.h>
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#define MAXLONG	LONG_MAX
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <errno.h>
 #include "ccaio.h"
 

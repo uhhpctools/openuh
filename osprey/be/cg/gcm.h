@@ -41,10 +41,10 @@
  * =======================================================================
  *
  *  Module: gcm.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gcm.h,v $
+ *  $Revision: 1.7 $
+ *  $Date: 05/12/05 08:59:06-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.gcm.h $
  *
  *  Description:
  *  ============
@@ -58,6 +58,15 @@
 #define gcm_INCLUDED
 
 #include "hb_sched.h" 	/* for HBS_TYPE */
+
+// Trace flag
+#define GCM_TRACE_NORMAL        0x01
+#define GCM_TRACE_DUMP_IR       0x10
+#define GCM_TRACE_PREPROCESS    0x20
+#define GCM_TRACE_LICM          0x40
+#define GCM_TRACE_DCE           0x80
+#define GCM_TRACE_RCE           0x100
+#define GCM_TRACE_MERGE_BBS     0x200
 
 /* Define the different priority conditions for choosing the basic blocks 
    for GCM phase */
@@ -90,6 +99,15 @@ typedef UINT8	GCM_TYPE;
 #define GCM_CIRC_ABOVE 		0x0040 // do circular code motion (above) the
                                        // loop branch back condition
 #define GCM_EQUIV          	(GCM_EQUIV_FWD | GCM_EQUIV_BKWD)
+
+#define Motion_Is_GCM_NONE(m)   ( m == GCM_NONE )
+#define Motion_Is_EQUIV_FWD(m)  ( m == GCM_EQUIV_FWD )
+#define Motion_Is_EQUIV_BKWD(m) ( m == GCM_EQUIV_BKWD )
+#define Motion_Is_SPEC_ABOVE(m) ( m == GCM_SPEC_ABOVE )
+#define Motion_Is_SPEC_BELOW(m) ( m == GCM_SPEC_BELOW )
+#define Motion_Is_DUP_ABOVE(m)  ( m == GCM_DUP_ABOVE )
+#define Motion_Is_DUP_BELOW(m)  ( m == GCM_DUP_BELOW )
+#define Motion_Is_CIRC_ABOVE(m) ( m == GCM_CIRC_ABOVE )
 
 // GCM internal flags: 
 #define GCM_SCHED_BB            0x1000 // need to schedule/reschedule bb
@@ -176,5 +194,7 @@ extern INT32 GCM_BB_Limit;
 extern void GCM_Schedule_Region (HBS_TYPE locs_type);
 
 extern void GCM_Fill_Branch_Delay_Slots (void);
-
+#ifdef TARG_SL
+extern BB* Loop_Is_Zdl( LOOP_DESCR *loop );
+#endif
 #endif /* gcm_INCLUDED */

@@ -112,10 +112,6 @@ struct adj_list
   unsigned int on_tree : 1;
   unsigned int fake : 1;
   unsigned int fall_through : 1;
-#if 0
-  /* Not needed for gcov, but defined in profile.c.  */
-  rtx branch_insn;
-#endif
   struct adj_list *pred_next;
   struct adj_list *succ_next;
 };
@@ -132,10 +128,6 @@ struct bb_info
   gcov_type exec_count;
   unsigned int count_valid : 1;
   unsigned int on_tree : 1;
-#if 0
-  /* Not needed for gcov, but defined in profile.c.  */
-  rtx first_insn;
-#endif
 };
 
 /* When outputting branch probabilities, one of these structures is created

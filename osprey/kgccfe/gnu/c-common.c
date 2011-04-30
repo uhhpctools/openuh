@@ -414,7 +414,11 @@ int warn_main;
 
 /* Nonzero means warn about possible violations of sequence point rules.  */
 
+#ifdef TARG_SL
+int warn_sequence_point = 1;
+#else
 int warn_sequence_point;
+#endif
 
 /* Nonzero means to warn about compile-time division by zero.  */
 int warn_div_by_zero = 1;
@@ -793,6 +797,30 @@ static tree handle_syscall_linkage_attribute PARAMS ((tree *, tree, tree, int,
 static tree handle_widenretval_attribute     PARAMS ((tree *, tree, tree, int,
 						     bool *));
 #endif
+
+static tree handle_cdecl_attribute      PARAMS ((tree *, tree, tree, int,
+						 bool *));
+#ifdef TARG_NVISA
+static tree handle_global_attribute     PARAMS ((tree *, tree, tree, int,
+						 bool *));
+static tree handle_shared_attribute     PARAMS ((tree *, tree, tree, int,
+						 bool *));
+static tree handle_local_attribute      PARAMS ((tree *, tree, tree, int,
+						 bool *));
+static tree handle_constant_attribute   PARAMS ((tree *, tree, tree, int,
+						 bool *));
+static tree handle_texture_attribute    PARAMS ((tree *, tree, tree, int,
+						 bool *));
+static tree handle_launch_bounds_attribute   PARAMS ((tree *, tree, tree, int,
+						 bool *));
+#endif /* TARG_NVISA */
+
+#if defined(TARG_SL)
+static tree handle_sl_model_attribute PARAMS ((tree *, tree, tree, int,
+						     bool *));
+#endif 
+
+
 static tree vector_size_helper PARAMS ((tree, tree));
 
 static void check_function_nonnull	PARAMS ((tree, tree));
@@ -891,6 +919,29 @@ const struct attribute_spec c_common_attribute_table[] =
   { "widenretval",            0, 0, true, false, false, 
                               handle_widenretval_attribute },
 #endif
+#if defined(TARG_SL) 
+  {"sl_model",               1, 1, true, false, false, 
+                             handle_sl_model_attribute }, 
+#endif
+  { "cdecl",                 0, 0, false, false, false, 
+                              handle_cdecl_attribute },
+#ifdef TARG_NVISA
+  { "global",                 0, 0, false, false, false, 
+                              handle_global_attribute },
+  { "device",                 0, 0, false, false, false, 
+                              handle_global_attribute },
+  { "shared",                 0, 0, false, false, false, 
+                              handle_shared_attribute },
+  { "local",                  0, 0, false, false, false, 
+                              handle_local_attribute },
+  { "constant",               0, 0, false, false, false, 
+                              handle_constant_attribute },
+  { "texture",                0, 0, false, false, false, 
+                              handle_texture_attribute },
+  { "launch_bounds",          2, 2, false, false, false, 
+                              handle_launch_bounds_attribute },
+#endif /* TARG_NVISA */
+
   { NULL,                     0, 0, false, false, false, NULL }
 };
 
@@ -1525,7 +1576,68 @@ static int warning_candidate_p PARAMS ((tree));
 static void warn_for_collisions PARAMS ((struct tlist *));
 static void warn_for_collisions_1 PARAMS ((tree, tree, struct tlist *, int));
 static struct tlist *new_tlist PARAMS ((struct tlist *, tree, tree));
+#ifdef TARG_SL
+void verify_sequence_points PARAMS ((tree));
+#else
 static void verify_sequence_points PARAMS ((tree));
+#endif
+
+#ifdef TARG_SL
+static bool var_expr_equal(tree arg1, tree arg2)
+{
+  if ((arg1 == NULL && arg2 != NULL)
+      || (arg1 != NULL && arg2 == NULL))
+    return FALSE;
+
+  if (arg1 == arg2)
+    return TRUE;
+
+  enum tree_code code_1 = TREE_CODE (arg1);
+  enum tree_code code_2 = TREE_CODE (arg2);
+
+  if (code_1 != code_2)
+    return FALSE;
+
+  switch (code_1)
+  {
+    case VAR_DECL:
+    case PARM_DECL:
+    case FIELD_DECL:
+      return (arg1 == arg2);
+    case INDIRECT_REF:
+      return var_expr_equal (TREE_OPERAND (arg1, 0), TREE_OPERAND (arg2, 0));
+    case COMPONENT_REF:
+      return (var_expr_equal (TREE_OPERAND (arg1, 0), TREE_OPERAND (arg2, 0))
+          && var_expr_equal (TREE_OPERAND (arg1, 1), TREE_OPERAND (arg2, 1)));
+    default:
+      return 0;
+  }
+}
+
+/* Get variable name */
+static char * var_expr_name(tree var)
+{
+  if (var == NULL) return NULL;
+
+  enum tree_code code = TREE_CODE (var);
+
+  switch (code)
+  {
+    case VAR_DECL:
+    case PARM_DECL:
+    case FIELD_DECL:
+      return (IDENTIFIER_POINTER (DECL_NAME (var)));
+    case INDIRECT_REF:
+      return (IDENTIFIER_POINTER (DECL_NAME (TREE_OPERAND (var, 0))));
+    case COMPONENT_REF:
+      /* Just return the filed name */
+      return var_expr_name (TREE_OPERAND (var, 1));
+    default:
+      return NULL;
+  }
+
+}
+#endif
 
 /* Create a new struct tlist and fill in its fields.  */
 static struct tlist *
@@ -1587,7 +1699,11 @@ merge_tlist (to, add, copy)
       struct tlist *next = add->next;
 
       for (tmp2 = *to; tmp2; tmp2 = tmp2->next)
+#ifdef TARG_SL
+	if (var_expr_equal(tmp2->expr, add->expr))
+#else
 	if (tmp2->expr == add->expr)
+#endif
 	  {
 	    found = 1;
 	    if (! tmp2->writer)
@@ -1617,18 +1733,35 @@ warn_for_collisions_1 (written, writer, list, only_writes)
 
   /* Avoid duplicate warnings.  */
   for (tmp = warned_ids; tmp; tmp = tmp->next)
+#ifdef TARG_SL
+    if (var_expr_equal(tmp->expr, written))
+#else
     if (tmp->expr == written)
+#endif
       return;
 
   while (list)
     {
+#ifdef TARG_SL
+      if (var_expr_equal(list->expr, written)
+#else
       if (list->expr == written
+#endif
 	  && list->writer != writer
 	  && (! only_writes || list->writer))
 	{
 	  warned_ids = new_tlist (warned_ids, written, NULL_TREE);
+#ifdef TARG_SL
+	  if (TREE_CODE(list->expr) == COMPONENT_REF)
+	  error ("operation on structure field `%s' may be undefined",
+		   var_expr_name (list->expr));
+	  else
+	  error ("operation on `%s' may be undefined",
+		   IDENTIFIER_POINTER (DECL_NAME (list->expr)));
+#else
 	  warning ("operation on `%s' may be undefined",
 		   IDENTIFIER_POINTER (DECL_NAME (list->expr)));
+#endif
 	}
       list = list->next;
     }
@@ -1656,7 +1789,13 @@ static int
 warning_candidate_p (x)
      tree x;
 {
+#ifdef TARG_SL
+  /* Treat COMPONENT_REF as a whole */
+  return TREE_CODE (x) == VAR_DECL || TREE_CODE (x) == PARM_DECL
+      || TREE_CODE (x) == COMPONENT_REF;
+#else
   return TREE_CODE (x) == VAR_DECL || TREE_CODE (x) == PARM_DECL;
+#endif
 }
 
 /* Walk the tree X, and record accesses to variables.  If X is written by the
@@ -1882,7 +2021,11 @@ verify_tree (x, pbefore_sp, pno_sp, writer)
 /* Try to warn for undefined behavior in EXPR due to missing sequence
    points.  */
 
+#ifdef TARG_SL
+void
+#else
 static void
+#endif
 verify_sequence_points (expr)
      tree expr;
 {
@@ -2767,27 +2910,13 @@ c_common_truthvalue_conversion (expr)
   if (TREE_CODE (expr) == ERROR_MARK)
     return expr;
 
-#if 0 /* This appears to be wrong for C++.  */
-  /* These really should return error_mark_node after 2.4 is stable.
-     But not all callers handle ERROR_MARK properly.  */
-  switch (TREE_CODE (TREE_TYPE (expr)))
-    {
-    case RECORD_TYPE:
-      error ("struct type value used where scalar is required");
-      return boolean_false_node;
 
-    case UNION_TYPE:
-      error ("union type value used where scalar is required");
-      return boolean_false_node;
-
-    case ARRAY_TYPE:
-      error ("array type value used where scalar is required");
-      return boolean_false_node;
-
-    default:
-      break;
-    }
-#endif /* 0 */
+#ifdef TARG_SL
+    /* Verify sequence points for cond expr, Warning for undefined behaviors */
+    extern void verify_sequence_points (tree expr);
+    if (warn_sequence_point)
+      verify_sequence_points (expr);
+#endif
 
   switch (TREE_CODE (expr))
     {
@@ -3227,6 +3356,13 @@ c_common_nodes_and_builtins ()
 #define DEF_FUNCTION_TYPE_2(NAME, RETURN, ARG1, ARG2) NAME,
 #define DEF_FUNCTION_TYPE_3(NAME, RETURN, ARG1, ARG2, ARG3) NAME,
 #define DEF_FUNCTION_TYPE_4(NAME, RETURN, ARG1, ARG2, ARG3, ARG4) NAME,
+#if defined(TARG_SL)
+#define DEF_FUNCTION_TYPE_5(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) NAME,
+#define DEF_FUNCTION_TYPE_6(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6) NAME,
+#define DEF_FUNCTION_TYPE_7(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7) NAME,
+#define DEF_FUNCTION_TYPE_8(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8) NAME,
+#define DEF_FUNCTION_TYPE_9(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8, ARG9) NAME,
+#endif // TARG_SL
 #define DEF_FUNCTION_TYPE_VAR_0(NAME, RETURN) NAME,
 #define DEF_FUNCTION_TYPE_VAR_1(NAME, RETURN, ARG1) NAME,
 #define DEF_FUNCTION_TYPE_VAR_2(NAME, RETURN, ARG1, ARG2) NAME,
@@ -3239,6 +3375,13 @@ c_common_nodes_and_builtins ()
 #undef DEF_FUNCTION_TYPE_2
 #undef DEF_FUNCTION_TYPE_3
 #undef DEF_FUNCTION_TYPE_4
+#if defined(TARG_SL)
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
+#undef DEF_FUNCTION_TYPE_7
+#undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#endif // TARG_SL
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
@@ -3541,6 +3684,107 @@ c_common_nodes_and_builtins ()
 			      tree_cons (NULL_TREE,			\
 					 builtin_types[(int) ARG4],	\
 					 void_list_node)))));
+#if defined(TARG_SL)
+#define DEF_FUNCTION_TYPE_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5)\
+  builtin_types[(int) ENUM]						\
+    = build_function_type						\
+      (builtin_types[(int) RETURN],					\
+       tree_cons (NULL_TREE,						\
+	 builtin_types[(int) ARG1],			            	\
+	 tree_cons (NULL_TREE,					        \
+	   builtin_types[(int) ARG2],			                \
+	   tree_cons(NULL_TREE,				                \
+	     builtin_types[(int) ARG3],	 	                        \
+             tree_cons (NULL_TREE,			                \
+	       builtin_types[(int) ARG4],	                        \
+               tree_cons (NULL_TREE,		                \
+	           builtin_types[(int) ARG5],	                        \
+					 void_list_node))))));
+
+
+
+#define DEF_FUNCTION_TYPE_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6)\
+  builtin_types[(int) ENUM]						\
+    = build_function_type						\
+      (builtin_types[(int) RETURN],					\
+       tree_cons (NULL_TREE,						\
+	 builtin_types[(int) ARG1],			            	\
+	 tree_cons (NULL_TREE,					        \
+	   builtin_types[(int) ARG2],			                \
+	   tree_cons(NULL_TREE,				                \
+	     builtin_types[(int) ARG3],	 	                        \
+             tree_cons (NULL_TREE,			                \
+	       builtin_types[(int) ARG4],	                        \
+               tree_cons (NULL_TREE,			                \
+	         builtin_types[(int) ARG5],	                        \
+                   tree_cons (NULL_TREE,		                \
+	           builtin_types[(int) ARG6],	                        \
+					 void_list_node)))))));
+#define DEF_FUNCTION_TYPE_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7)\
+  builtin_types[(int) ENUM]						\
+    = build_function_type						\
+      (builtin_types[(int) RETURN],					\
+       tree_cons (NULL_TREE,						\
+	 builtin_types[(int) ARG1],			            	\
+	 tree_cons (NULL_TREE,					        \
+	   builtin_types[(int) ARG2],			                \
+	   tree_cons(NULL_TREE,				                \
+	     builtin_types[(int) ARG3],	 	                        \
+             tree_cons (NULL_TREE,			                \
+	       builtin_types[(int) ARG4],	                        \
+               tree_cons (NULL_TREE,			                \
+	         builtin_types[(int) ARG5],	                        \
+                 tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG6],	                        \
+                   tree_cons (NULL_TREE,		                \
+	             builtin_types[(int) ARG7],	                        \
+					 void_list_node))))))));
+#define DEF_FUNCTION_TYPE_8(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8)\
+  builtin_types[(int) ENUM]						\
+    = build_function_type						\
+      (builtin_types[(int) RETURN],					\
+       tree_cons (NULL_TREE,						\
+	 builtin_types[(int) ARG1],			            	\
+	 tree_cons (NULL_TREE,					        \
+	   builtin_types[(int) ARG2],			                \
+	   tree_cons(NULL_TREE,				                \
+	     builtin_types[(int) ARG3],	 	                        \
+             tree_cons (NULL_TREE,			                \
+	       builtin_types[(int) ARG4],	                        \
+               tree_cons (NULL_TREE,			                \
+	         builtin_types[(int) ARG5],	                        \
+                 tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG6],	                        \
+                   tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG7],	                        \
+                   tree_cons (NULL_TREE,		                \
+	             builtin_types[(int) ARG8],	                        \
+					 void_list_node)))))))));
+#define DEF_FUNCTION_TYPE_9(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8, ARG9)\
+  builtin_types[(int) ENUM]						\
+    = build_function_type						\
+      (builtin_types[(int) RETURN],					\
+       tree_cons (NULL_TREE,						\
+	 builtin_types[(int) ARG1],			            	\
+	 tree_cons (NULL_TREE,					        \
+	   builtin_types[(int) ARG2],			                \
+	   tree_cons(NULL_TREE,				                \
+	     builtin_types[(int) ARG3],	 	                        \
+             tree_cons (NULL_TREE,			                \
+	       builtin_types[(int) ARG4],	                        \
+               tree_cons (NULL_TREE,			                \
+	         builtin_types[(int) ARG5],	                        \
+                 tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG6],	                        \
+                   tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG7],	                        \
+                   tree_cons (NULL_TREE,			                \
+	           builtin_types[(int) ARG8],	                        \
+                   tree_cons (NULL_TREE,		                \
+	             builtin_types[(int) ARG9],	                        \
+					 void_list_node))))))))));
+				
+#endif // TARG_SL
 #define DEF_FUNCTION_TYPE_VAR_0(ENUM, RETURN)				\
   builtin_types[(int) ENUM]						\
     = build_function_type (builtin_types[(int) RETURN], NULL_TREE);
@@ -3582,6 +3826,13 @@ c_common_nodes_and_builtins ()
 #undef DEF_FUNCTION_TYPE_2
 #undef DEF_FUNCTION_TYPE_3
 #undef DEF_FUNCTION_TYPE_4
+#if defined(TARG_SL)
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
+#undef DEF_FUNCTION_TYPE_7
+#undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#endif // TARG_SL
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
@@ -6483,6 +6734,140 @@ handle_widenretval_attribute (node, name, args, flags, no_add_attrs)
   DECL_WIDEN_RETVAL (decl) = 1;
 }
 #endif /* SGI_MONGOOSE */
+
+/* want to preserve cdecl info if invoking whirl2c */
+static tree
+handle_cdecl_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  tree decl = *node;
+  if (TREE_CODE (decl) != FUNCTION_DECL)
+    {
+      error_with_decl (decl, "cdecl specified for non-function `%s'");
+      return NULL_TREE;
+    }
+  DECL_CDECL (decl) = 1;
+
+  return NULL_TREE;
+}
+
+#ifdef TARG_NVISA
+/* this code operates on generated code only, so there's no
+need for error checking whatsoever */
+static tree
+handle_global_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_GLOBAL (*node) = 1;
+
+  return NULL_TREE;
+}
+
+static tree
+handle_shared_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_SHARED (*node) = 1;
+
+  return NULL_TREE;
+}
+
+static tree
+handle_local_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_LOCAL (*node) = 1;
+
+  return NULL_TREE;
+}
+
+static tree
+handle_constant_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_CONSTANT (*node) = 1;
+
+  return NULL_TREE;
+}
+
+static tree
+handle_texture_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_TEXTURE (*node) = 1;
+
+  return NULL_TREE;
+}
+
+static tree
+handle_launch_bounds_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+  DECL_THREAD_LIMIT (*node) = TREE_INT_CST_LOW (TREE_VALUE (args));
+  DECL_BLOCK_LIMIT (*node)  = TREE_INT_CST_LOW (TREE_VALUE (TREE_CHAIN (args)));
+
+  return NULL_TREE;
+}
+
+#endif /* TARG_NVISA */
+
+#if defined(TARG_SL)
+static tree
+handle_sl_model_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+
+  tree decl = *node;
+
+  if ((TREE_CODE (decl) == VAR_DECL)
+     && TREE_CODE (TREE_VALUE (args)) == STRING_CST)
+  {
+    DECL_SL_MODEL_NAME (decl) = TREE_VALUE (args);
+  }
+  else
+  {
+    error_with_decl (*node,
+      "sl model attribute not allowed for `%s'");
+    *no_add_attrs = true;
+  }
+  
+  return NULL_TREE;
+}
+#endif 
+
+
 
 /* HACK.  GROSS.  This is absolutely disgusting.  I wish there was a
    better way.

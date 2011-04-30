@@ -2006,7 +2006,12 @@ cp_cannot_inline_tree_fn (tree* fnp)
     }
 
   if (flag_really_no_inline
-      && lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn)) == NULL)
+      && (
+#ifdef KEY
+    /* Bug 11730: Disable inlining of always_inline functions in GNU fe. */
+          flag_spin_file ||
+#endif
+          lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn)) == NULL))
     return 1;
 
   /* Don't auto-inline anything that might not be bound within

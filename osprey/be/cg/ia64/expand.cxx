@@ -1149,8 +1149,14 @@ Expand_Multiply (TN *result, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops, OPCODE
     return;
   }
 
+#ifdef KEY
+  if (CGEXP_cvrt_int_mult_to_add_shift &&
+      (TN_has_value(src1) || TN_has_value(src2) ||
+       TN_is_rematerializable(src1) ||TN_is_rematerializable(src2))) {
+#else
   if (!Disable_Const_Mult_Opt && (TN_has_value(src1) || TN_has_value(src2) ||
-				  TN_is_rematerializable(src1) ||TN_is_rematerializable(src2))) {
+      TN_is_rematerializable(src1) ||TN_is_rematerializable(src2))) {
+#endif
     TN *var_tn;
     if ( TN_has_value(src1) || TN_is_rematerializable(src1) ) {
       constant = TN_has_value(src1) ? TN_value(src1) : WN_const_val(TN_home(src1));
@@ -1574,19 +1580,29 @@ Expand_Bool_Comparison (BOOL equals, TN *dest, TN *src1, TN *src2, OPS *ops)
     // return result of comparison in a predicate register
     TOP action = equals ? TOP_cmp_ne : TOP_cmp_eq;
     TN *p1 = dest;
-    TN *p2 = Get_Complement_TN(dest);
+    TN *p2 = Get_Complement_TN (dest);
     TN *tn = Build_TN_Of_Mtype (MTYPE_I4);
 
     // generate: tn = (src1 == src2)
-    Build_OP (TOP_mov_i, tn, True_TN, Gen_Literal_TN(1, 4), ops);
-    Build_OP (TOP_xor_i, tn, src1, Gen_Literal_TN(1, 4), tn, ops);
-    Build_OP (TOP_xor_i, tn, src2, Gen_Literal_TN(1, 4), tn, ops);
+    Build_OP (TOP_mov_i, tn, True_TN, Gen_Literal_TN (1, 4), ops);
+    Build_OP (TOP_xor_i, tn, src1, Gen_Literal_TN (1, 4), tn, ops);
+    Build_OP (TOP_xor_i, tn, src2, Gen_Literal_TN (1, 4), tn, ops);
 
     Build_OP (action, p1, p2, True_TN, tn, Zero_TN, ops);
-  } else {
-    Build_OP (TOP_mov_i, dest, True_TN, Gen_Literal_TN(equals, 4), ops);
-    Build_OP (TOP_xor_i, dest, src1, Gen_Literal_TN(1, 4), dest, ops);
-    Build_OP (TOP_xor_i, dest, src2, Gen_Literal_TN(1, 4), dest, ops);
+  } 
+  else if (TN_is_dedicated (dest)) {
+    TN *tn = Build_TN_Of_Mtype (MTYPE_I4);
+    
+    Build_OP (TOP_mov_i, tn, True_TN, Gen_Literal_TN (equals, 4), ops);
+    Build_OP (TOP_xor_i, tn, src1, Gen_Literal_TN (1, 4), tn, ops);
+    Build_OP (TOP_xor_i, tn, src2, Gen_Literal_TN (1, 4), tn, ops);
+    
+    Build_OP (TOP_mov, dest, True_TN, tn, ops); 
+  }
+  else {
+    Build_OP (TOP_mov_i, dest, True_TN, Gen_Literal_TN (equals, 4), ops);
+    Build_OP (TOP_xor_i, dest, src1, Gen_Literal_TN (1, 4), dest, ops);
+    Build_OP (TOP_xor_i, dest, src2, Gen_Literal_TN (1, 4), dest, ops);
   }
 }
 
@@ -1679,7 +1695,59 @@ Expand_Float_To_Int_Trunc (TN *dest, TN *src, TYPE_ID imtype, TYPE_ID fmtype, OP
 void
 Expand_Float_To_Int_Floor (TN *dest, TN *src, TYPE_ID imtype, TYPE_ID fmtype, OPS *ops)
 {
+    Is_True ( MTYPE_is_float(fmtype), ("fmtype is not floating-point"));
+    // OSP, Expand_Float_To_Int does not support the src larger than 2^64
+    if ( MTYPE_is_integral(imtype) ) {
         Expand_Float_To_Int (ROUND_NEG_INF, dest, src, imtype, fmtype, ops);
+    }
+    else {
+        // new implementation for fp
+        TN* expmask = Build_TN_Of_Mtype(MTYPE_I4);
+        Build_OP(TOP_mov_i, expmask, True_TN, Gen_Literal_TN(0x1FFFF, 4), ops);
+
+        TN* sigwidth = Build_TN_Of_Mtype(MTYPE_I4);
+        switch(fmtype) {
+            default:
+                FmtAssert(FALSE, ("Invalid fmtype in ..."));
+            case MTYPE_F4:
+                // single precision, 23 bits significand
+                Build_OP(TOP_mov_i, sigwidth, True_TN, Gen_Literal_TN(0x10016, 4), ops);
+                break;
+            case MTYPE_F8:
+                // double precision, 52 bits significand
+                Build_OP(TOP_mov_i, sigwidth, True_TN, Gen_Literal_TN(0x10033, 4), ops);
+                break;
+            case MTYPE_F10:
+                // double extended, 63 bits fraction
+                Build_OP(TOP_mov_i, sigwidth, True_TN, Gen_Literal_TN(0x1003E, 4), ops);
+                break;
+        }
+
+        TN* exp = Build_TN_Of_Mtype(MTYPE_I4);
+        Build_OP (TOP_getf_exp, exp, True_TN, src, ops);
+
+        TN* trunc_val = Build_RCLASS_TN(ISA_REGISTER_CLASS_float);
+        Build_OP (TOP_fcvt_fx_trunc, trunc_val, True_TN, 
+                  Gen_Enum_TN(ECV_sf_s1), src, ops);
+
+        Build_OP (TOP_fmerge_s, dest, True_TN, 
+                  src, src, ops);
+
+        Build_OP (TOP_fcvt_xf, trunc_val, True_TN, trunc_val, ops);
+        Build_OP (TOP_and, exp, True_TN, expmask, exp, ops);
+
+        TN *p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+        TN *p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+     
+        //TN* dest_fp = Build_RCLASS_TN(ISA_REGISTER_CLASS_float);
+        Build_OP (TOP_cmp_geu_unc, True_TN, p1, True_TN, exp, sigwidth, ops);
+        Build_OP (TOP_fcmp_nlt_unc, p2, p1, p1, 
+                  Gen_Enum_TN(ECV_sf_s1), src, trunc_val, ops);
+        Build_OP (TOP_fsub_d, dest, p1, 
+                  Gen_Enum_TN(ECV_sf_s1), trunc_val, FOne_TN, ops);
+        Build_OP (TOP_fmerge_s, dest, p2, src, trunc_val, ops);
+        //Build_OP (TOP_getf_sig, dest, True_TN, dest_fp, ops);
+    }
 }
 
 void
@@ -2870,6 +2938,12 @@ Expand_Sqrt (TN *result, TN *src, TYPE_ID mtype, OPS *ops)
   static BOOL initialized;
   static void (*exp_sqrt)(TN *, TN *, TYPE_ID, OPS *) = Expand_SGI_Sqrt;
 
+  // SGI_Sqrt does not support F10
+  if (mtype == MTYPE_F10) {
+    Expand_Intel_F10_Sqrt(result, src, ops);
+    return;
+  }
+
   if (!initialized) {
     const char * const alg = CGEXP_sqrt_algorithm;
     if (strcasecmp(alg, "intel_max_thr") == 0) {
@@ -2887,17 +2961,18 @@ Expand_Sqrt (TN *result, TN *src, TYPE_ID mtype, OPS *ops)
 
 
 static void
-Expand_Float_Compares(TOP cmp_opcode, TN *dest, TN *src1, TN *src2, OPS *ops)
+Expand_Float_Compares(TOP cmp_opcode, TN *dest, TN *src1, TN *src2, OPS *ops, BOOL disable_exception = FALSE)
 {
+  TN* sf = (disable_exception == TRUE) ? Gen_Enum_TN(ECV_sf_s1) : Gen_Enum_TN(ECV_sf_s0);
   if (TN_register_class(dest) == ISA_REGISTER_CLASS_predicate) {
     // return result of comparison in a predicate register
     TN *p1 = dest;
     TN *p2 = Get_Complement_TN(dest);
-    Build_OP (cmp_opcode, p1, p2, True_TN, Gen_Enum_TN(ECV_sf_s0), src1, src2, ops);
+    Build_OP (cmp_opcode, p1, p2, True_TN, sf, src1, src2, ops);
   } else {
     TN *p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
     TN *p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
-    Build_OP (cmp_opcode, p1, p2, True_TN, Gen_Enum_TN(ECV_sf_s0), src1, src2, ops);
+    Build_OP (cmp_opcode, p1, p2, True_TN, sf, src1, src2, ops);
     // can either do unconditional copy of 0,
     // or predicated copy of 0 followed by predicated copy of 1.
     // Expand_Copy (dest, Zero_TN, MTYPE_I8, ops);
@@ -3135,7 +3210,6 @@ Init_CG_Expand (void)
   Trace_Exp = Get_Trace (TP_CGEXP, 1);
   /* whirl2ops uses -ttexp:2 */
   Trace_Exp2 = Get_Trace (TP_CGEXP, 4);
-  Disable_Const_Mult_Opt = Get_Trace (TP_CGEXP, 32);
   /* calls.c use -ttexp:64 */
 
   if (Initialized) return;
@@ -3245,14 +3319,51 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN * op1, OPS *ops)
       Build_OP (TOP_popcnt, result, p2, t2, ops);
     }
     break;
+  case INTRN_ISGREATER:
+    Expand_Float_Compares(TOP_fcmp_gt, result, op0, op1, ops, TRUE /* disable exception */);
+    break;
+  case INTRN_ISGREATEREQUAL:
+    Expand_Float_Compares(TOP_fcmp_ge, result, op0, op1, ops, TRUE /* disable exception */);
+    break;
+  case INTRN_ISLESS:
+    Expand_Float_Compares(TOP_fcmp_lt, result, op0, op1, ops, TRUE /* disable exception */);
+    break;
+  case INTRN_ISLESSEQUAL:
+    Expand_Float_Compares(TOP_fcmp_le, result, op0, op1, ops, TRUE /* disable exception */);
+    break;
   case INTRN_ISLESSGREATER:
-    // This is the final place to expand this intrinsic
-    // If Expand it in FE can get more optimization opportunity,
-    // please handle it in FE.
-    Expand_Float_Compares(TOP_fcmp_neq, result, op0, op1, ops); 
+    Expand_Float_Compares(TOP_fcmp_neq, result, op0, op1, ops, TRUE /* disable exception */); 
     break;
   case INTRN_ISUNORDERED:
-    Expand_Float_Compares(TOP_fcmp_unord, result, op0, op1, ops);
+    Expand_Float_Compares(TOP_fcmp_unord, result, op0, op1, ops, TRUE /* disable exception */);
+    break;
+  case INTRN_CLZ32:
+    // expand the intrinsic __builtin_clz, which Returns the number of leading 0-bits in X, 
+    // starting at the most significant bit position.
+    //
+    {
+      TN* t1 = Build_TN_Of_Mtype (MTYPE_F8);
+      TN* t2 = Build_TN_Of_Mtype (MTYPE_F8);
+      TN* t3 = Build_TN_Of_Mtype (MTYPE_I4);
+      Build_OP (TOP_setf_sig, t1, True_TN, op0, ops);
+      Build_OP (TOP_fcvt_xuf, t2, True_TN, Gen_Enum_TN(ECV_sf_s0), t1, ops);
+      Build_OP (TOP_getf_exp, t3, True_TN, t2, ops);
+      Build_OP (TOP_mov_i, result, True_TN, Gen_Literal_TN(65598, 4), ops);
+      Build_OP (TOP_sub, result, True_TN, result, t3, ops);
+      Build_OP (TOP_adds, result, True_TN, Gen_Literal_TN(-32, 4), result, ops);
+    }
+    break;
+  case INTRN_CTZ:
+    // Bug fix for OSP_433
+    // expand the intrinsic __builtin_ctzl, which returns the bit index of the least significant bit
+    //
+    {
+      TN* tn1 = Build_TN_Of_Mtype (MTYPE_I8);
+      Build_OP (TOP_adds, tn1, True_TN, Gen_Literal_TN(-1, 8), op0, ops);
+      Build_OP (TOP_andcm_i, op0, True_TN, Gen_Literal_TN(-1, 8), op0, ops);
+      Build_OP (TOP_and, op0, True_TN, op0, tn1, ops);
+      Build_OP (TOP_popcnt, result, True_TN, op0, ops);
+    }
     break;
   default:
     #pragma mips_frequency_hint NEVER

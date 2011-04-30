@@ -227,9 +227,6 @@ append_arg (arg)
 {
   static int newargsize;
 
-#if 0
-  fprintf (stderr, "`%s'\n", arg);
-#endif
 
   if (g77_newargv == g77_xargv
       && g77_newargc < g77_xargc
@@ -295,12 +292,6 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
   int n_infiles = 0;
   int n_outfiles = 0;
 
-#if 0
-  fprintf (stderr, "Incoming:");
-  for (i = 0; i < argc; i++)
-    fprintf (stderr, " %s", argv[i]);
-  fprintf (stderr, "\n");
-#endif
 
   g77_xargc = argc;
   g77_xargv = argv;

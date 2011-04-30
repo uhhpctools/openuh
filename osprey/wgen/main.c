@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /* 
@@ -58,10 +58,17 @@ char *Spin_File_Name = NULL;
 FILE *Spin_File = NULL;
 BOOL flag_no_common = FALSE;
 int pstatic_as_global = 0;
-int key_exceptions = 0;
+int emit_exceptions = -1;
 BOOL opt_regions = 0;
 BOOL lang_cplus = FALSE;
 BOOL c_omit_external = TRUE;
+BOOL keep_inline_functions=FALSE;
+BOOL gen_pic_code = FALSE;
+BOOL tls_stress_test = FALSE;
+extern void Process_TLS_Stress_Model(const char *p);
+#ifdef FE_GNU_4_2_0
+BOOL enable_cxx_openmp = TRUE;
+#endif
 gs_t program;
 /*       MAX_DEBUG_LEVEL        2  :: Defined in flags.h */
 # define DEF_DEBUG_LEVEL        0
@@ -71,6 +78,9 @@ extern void WGEN_Weak_Finish(void);
 extern void WGEN_Expand_Top_Level_Decl(gs_t);
 extern void WGEN_Expand_Defers(void);
 extern void WGEN_Expand_Decl(gs_t, BOOL);
+#ifdef KEY
+extern void WGEN_Alias_Finish(void);
+#endif
 
 //*******************************************************
 // Process the command line arguments.
@@ -87,12 +97,16 @@ Process_Command_Line(INT argc, char **argv)
 
 	  switch ( *cp++ ) {
 
-	  case 'f':		    /* file options */
+	  case 'f':
 	      if (*cp == 0)
 		  ;
+	      else if (strcmp(cp, "no-emit-exceptions") == 0) 
+		  emit_exceptions = 0;
+              else if (strcmp(cp, "tls-stress-test") == 0)
+                  tls_stress_test = TRUE;
 	      else if (*(cp+1) != ',' && *(cp+1) != ':')
 		  ;
-	      else {
+	      else {                /* file options */
 		  switch (*cp) {
 		  case 'f':
 		      Feedback_File_Name = cp + 2;
@@ -125,6 +139,9 @@ Process_Command_Line(INT argc, char **argv)
 		Process_Command_Line_Group (cp-1, Common_Option_Groups);
 	      break;
 	    
+          case 't':
+              Process_Trace_Option(cp-2);
+              break;
 	  case 'v':
 	      Show_Progress = TRUE;
 	      break;
@@ -154,9 +171,11 @@ Process_Cc1_Command_Line(gs_t arg_list)
   argv = gs_s(gs_index(arg_list, 0));
   char *command = Last_Pathname_Component(argv);
 //printf("%s\n", command);
-  lang_cplus = !strcmp(command, "cc1plus");
-  if (lang_cplus)
-    key_exceptions = 1;
+  lang_cplus = !strncmp(command, "cc1plus", strlen("cc1plus"));
+
+  // if not set by the command line, set default value by language
+  if (emit_exceptions == -1)
+    emit_exceptions = (lang_cplus) ? 1 : 0;
 
   for (i = 1; i < argc; i++) {
       argv = gs_s(gs_index(arg_list, i));
@@ -181,19 +200,18 @@ Process_Cc1_Command_Line(gs_t arg_list)
 
 	  case 'e':
 	      if (lang_cplus && !strcmp( cp, "xceptions" ))
-		key_exceptions = TRUE;
+		emit_exceptions = 1;
 	      break;
 
 	  case 'f':
 	      if (!strcmp( cp, "no-exceptions" )) {
-		key_exceptions = FALSE;
+		emit_exceptions = 0;
 	      }
+              if (!strcmp( cp, "pic" ) || !strcmp( cp, "PIC") ) {
+                gen_pic_code = TRUE;
+              }
 	      else if (lang_cplus && !strcmp( cp, "exceptions" )) {
-		key_exceptions = TRUE;
-	      }
-	      else if (!strcmp( cp, "no-gnu-exceptions")) {
-		// GNU exceptions off, turn off exception here also.
-		key_exceptions = FALSE;
+		emit_exceptions = 1;
 	      }
 	      else if (!lang_cplus && !strcmp( cp, "no-c-omit-external")) {
 		c_omit_external = FALSE;
@@ -201,6 +219,20 @@ Process_Cc1_Command_Line(gs_t arg_list)
 	      else if (!lang_cplus && !strcmp( cp, "c-omit-external")) {
 		c_omit_external = TRUE;
 	      }
+#ifdef FE_GNU_4_2_0
+	      else if (!strcmp( cp, "no-cxx-openmp")) {
+	        enable_cxx_openmp = FALSE;
+	      }
+	      else if (lang_cplus && !strcmp( cp, "cxx-openmp")) {
+	        enable_cxx_openmp = TRUE;
+	      }
+#endif
+              else if (!strcmp( cp, "keep-inline-functions")) {
+                keep_inline_functions = TRUE;
+              }
+              else if (!strncmp( cp, "tls-model=", sizeof("tls-model") ) ) {
+                Process_TLS_Stress_Model( cp + sizeof("tls-model") );
+              }
 	      break;
 
 	  case 'g':		    /* Debug level: */
@@ -223,6 +255,24 @@ Process_Cc1_Command_Line(gs_t arg_list)
 	      else if (!strcmp( cp, "64" )) {
 		TARGET_64BIT = TRUE;
 	      }
+#ifdef TARG_X8664
+	      else if (!strncmp( cp, "regparm=", 8 )) {
+	        cp += 8;
+	        Reg_Parm_Count = Get_Numeric_Flag (&cp, 0, 3, 0, argv ); 
+	      }
+	      else if (!strcmp( cp, "sseregparm" )) {
+	        SSE_Reg_Parm = TRUE;
+	      }
+	      else if (!strncmp( cp, "mmx", 3 )) {
+	        Target_MMX = TRUE;
+	      }
+	      else if (!strncmp( cp, "sse", 3 )) {
+	        Target_SSE = TRUE;
+	      }
+	      else if (!strncmp( cp, "avx", 3 )) {
+	        Target_SSE = TRUE;
+	      }
+#endif
 #else
 	      // 11953: MIPS expects -mabi=n32 or -mabi=64
 	      if (!strcmp( cp, "abi=n32" )) {
@@ -286,6 +336,7 @@ main ( INT argc, char **argv, char **envp)
       struct stat sbuf;
       int st;
 
+      Disable_Simplification_For_FE = TRUE;
       Set_Error_Tables ( Phases, host_errlist );
       Process_Command_Line(argc, argv);
 
@@ -315,6 +366,13 @@ main ( INT argc, char **argv, char **envp)
 #endif
 	}
 
+        // expand global-scope asms for C program and C++ program without any DECL
+        WGEN_Expand_Top_Level_Decl(list);
+
+#ifdef KEY
+	if (!lang_cplus)
+	  WGEN_Alias_Finish();
+#endif
 	WGEN_Weak_Finish();
 	WGEN_File_Finish ();
 	WGEN_Finish ();

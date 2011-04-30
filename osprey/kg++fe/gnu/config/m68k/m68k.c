@@ -1918,11 +1918,6 @@ symbolic_operand (op, mode)
 	       || GET_CODE (XEXP (op, 0)) == LABEL_REF)
 	      && GET_CODE (XEXP (op, 1)) == CONST_INT);
 
-#if 0 /* Deleted, with corresponding change in m68k.h,
-	 so as to fit the specs.  No CONST_DOUBLE is ever symbolic.  */
-    case CONST_DOUBLE:
-      return GET_MODE (op) == mode;
-#endif
 
     default:
       return 0;
@@ -2948,10 +2943,6 @@ notice_update_cc (exp, insn)
       {
       case PLUS: case MINUS: case MULT:
       case DIV: case UDIV: case MOD: case UMOD: case NEG:
-#if 0 /* These instructions always clear the overflow bit */
-      case ASHIFT: case ASHIFTRT: case LSHIFTRT:
-      case ROTATE: case ROTATERT:
-#endif
 	if (GET_MODE (cc_status.value2) != VOIDmode)
 	  cc_status.flags |= CC_NO_OVERFLOW;
 	break;
@@ -3680,21 +3671,6 @@ print_operand_address (file, addr)
 	      }
 	    addr = 0;
 	  }
-#if 0	/* for OLD_INDEXING */
-	else if (GET_CODE (addr) == PLUS)
-	  {
-	    if (GET_CODE (XEXP (addr, 0)) == REG)
-	      {
-		reg2 = XEXP (addr, 0);
-		addr = XEXP (addr, 1);
-	      }
-	    else if (GET_CODE (XEXP (addr, 1)) == REG)
-	      {
-		reg2 = XEXP (addr, 1);
-		addr = XEXP (addr, 0);
-	      }
-	  }
-#endif
 	if (offset != 0)
 	  {
 	    if (addr != 0)

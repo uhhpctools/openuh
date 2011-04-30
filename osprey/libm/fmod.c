@@ -85,7 +85,13 @@ extern	double	fmod(double, double);
 #pragma weak fmod = __fmod
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __fmod( double arg1, double arg2 );
+#pragma weak fmod
+double fmod( double arg1, double arg2 ) {
+  return __fmod(arg1, arg2);
+}
+#elif defined(__GNUC__)
 extern  double  __fmod(double, double);
 double    fmod() __attribute__ ((weak, alias ("__fmod")));
 
@@ -465,7 +471,12 @@ last:	if ( (arg1 < 0.0) && (x == 0.0) )
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+long double fmodl(long double arg1, long double arg2) {
+  return __fmodl(arg1, arg2);
+}
+#pragma weak fmodl
+#elif defined(__GNUC__)
 extern  long double  __fmodl(long double, long double);
 
 long double    fmodl() __attribute__ ((weak, alias ("__fmodl")));

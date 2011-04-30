@@ -79,7 +79,8 @@ static char *c_int_model_rcs_id = "$Source: /home/bos/bk/kpro64-pending/kgccfe/S
 typedef enum {
   TARGET_INT_ILP32 = 0,
   TARGET_INT_LP64  = 1,
-  TARGET_INT_ILP64 = 2
+  TARGET_INT_ILP64 = 2,
+  TARGET_INT_P64 = 3
 } TARGET_INT_MODEL;
 extern TARGET_INT_MODEL Target_Int_Model;
 

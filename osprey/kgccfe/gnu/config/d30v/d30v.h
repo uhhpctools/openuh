@@ -2550,25 +2550,7 @@ do {									\
 /* On the d30v, consider operatnds that fit in a short instruction very
    cheap.  However, at this time, it causes cse to generate incorrect
    code, so disable it for now.  */
-#if 0
-#define CONST_COSTS(X, CODE, OUTER_CODE)				\
-  case CONST_INT:							\
-    if (IN_RANGE_P (INTVAL (X), 0, 31))					\
-      return 0;								\
-    else if ((OUTER_CODE) == LEU && (OUTER_CODE) == LTU			\
-	     && (OUTER_CODE) == GEU && (OUTER_CODE) == GTU)		\
-      return IN_RANGE_P (INTVAL (X), 32, 63) ? 0 : COSTS_N_INSNS (2);	\
-    else								\
-      return IN_RANGE_P (INTVAL (X), -31, -1) ? 0 : COSTS_N_INSNS (2);	\
-  case SYMBOL_REF:							\
-  case LABEL_REF:							\
-  case CONST:								\
-    return COSTS_N_INSNS (2);						\
-  case CONST_DOUBLE:							\
-    return COSTS_N_INSNS ((GET_MODE (X) == SFmode) ? 2 : 4);
-#else
 #define CONST_COSTS(X, CODE, OUTER_CODE)
-#endif
 
 /* Like `CONST_COSTS' but applies to nonconstant RTL expressions.  This can be
    used, for example, to indicate how costly a multiply instruction is.  In

@@ -97,8 +97,8 @@
 
 #ifdef __PROCESS_H__
 extern int create_tmpdir (int) __attribute__((weak));
-extern string create_unique_file (string, char) __attribute__((weak));
-extern string create_tmp_file (string) __attribute__((weak));
+extern string create_unique_file (const string, char) __attribute__((weak));
+extern string create_tmp_file (const string) __attribute__((weak));
 extern void add_to_tmp_file_list (string) __attribute__((weak));
 extern string tmpdir __attribute__((weak));
 extern string *get_command_line (an_object_file_ptr, string, string, int*) __attribute__((weak));

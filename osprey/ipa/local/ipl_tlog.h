@@ -60,5 +60,5 @@
 #include "srcpos.h"
 #endif /* srcpos_INCLUDED */
 // TLOG interface
-extern "C" void Ipl_record_tlog( char *keyword, SRCPOS srcpos, const char *fmt, ... );
+extern "C" void Ipl_record_tlog( const char *keyword, SRCPOS srcpos, const char *fmt, ... );
 #endif // ipl_tlog_INCLUDED

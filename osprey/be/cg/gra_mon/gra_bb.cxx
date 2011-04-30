@@ -1,5 +1,5 @@
 /*
- * Copyright 2006.  QLogic Corporation.  All Rights Reserved.
+ * Copyright 2006, 2007.  QLogic Corporation.  All Rights Reserved.
  */
 
 /*
@@ -50,10 +50,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_bb.cxx,v $
+//  $Revision: 1.15 $
+//  $Date: 05/06/01 16:54:32-07:00 $
+//  $Author: tkong@hyalite.keyresearch $
+//  $Source: be/cg/gra_mon/SCCS/s.gra_bb.cxx $
 
 #ifdef USE_PCH
 #include "cg_pch.h"
@@ -96,8 +96,10 @@ GRA_BB::Register_Girth( ISA_REGISTER_CLASS rc )
 {
   INT rr = LRA_Register_Request(bb,rc);
   INT rs = REGISTER_SET_Size(REGISTER_CLASS_allocatable(rc));
-  if ( rr < GRA_local_forced_max && rr != 0 )
-    rr = GRA_local_forced_max;
+#ifndef TARG_X8664  // Don't understand why we should inflate register request.
+  if ( rr < GRA_LOCAL_FORCED_MAX(rc) && rr != 0 )
+    rr = GRA_LOCAL_FORCED_MAX(rc);
+#endif
   return rr <= rs ? rr : rs; 
 }
 
@@ -121,22 +123,14 @@ GRA_BB::Add_LUNIT( LUNIT*  lunit)
 /////////////////////////////////////
 // Add <reg> to the set of registers used in the given <gbb> and <rc>.
 void
-#ifdef TARG_IA64
-GRA_BB::Make_Register_Used( ISA_REGISTER_CLASS  rc, REGISTER reg)
-#else
 GRA_BB::Make_Register_Used( ISA_REGISTER_CLASS  rc, REGISTER reg,
-			      LRANGE* lrange, BOOL reclaim )
-#endif
+			    LRANGE* lrange, BOOL reclaim )
 {
   region-> Make_Register_Used(rc,reg);
-#ifdef TARG_IA64
-  loop->Make_Register_Used(rc, reg);
-#else
   loop->Make_Register_Used(rc, reg, reclaim);
-#endif
   registers_used[rc] = REGISTER_SET_Union1(registers_used[rc],reg);
 
-#ifndef TARG_IA64
+#ifdef KEY
   // Record that REG is owned by LRANGE.
   if (GRA_reclaim_register)
     Set_LRANGE_Owner(rc, reg, lrange);
@@ -455,8 +449,6 @@ GRA_BB::Make_Register_Used( ISA_REGISTER_CLASS  rc, REGISTER reg,
     }
   }
 #endif
-
-
 }
 
 
@@ -476,7 +468,7 @@ GRA_BB::Registers_Used( ISA_REGISTER_CLASS  rc)
   }
 }
 
-#ifndef TARG_IA64
+#ifdef KEY
 /////////////////////////////////////
 // Add <reg> to the set of registers referenced in the given <gbb> and <rc>.
 void
@@ -589,6 +581,10 @@ GBB_MGR::Initialize(void)
   map = BB_MAP_Create();
   blocks_with_calls = BB_SET_Create_Empty(PU_BB_Count + 2,GRA_pool);
   blocks_with_rot_reg_clob = BB_SET_Create_Empty(PU_BB_Count + 2,GRA_pool);
+#ifdef TARG_X8664
+  blocks_with_x87_OP = BB_SET_Create_Empty(PU_BB_Count + 2,GRA_pool);
+  blocks_with_mmx_OP = BB_SET_Create_Empty(PU_BB_Count + 2,GRA_pool);
+#endif
 }
 
 
@@ -630,7 +626,7 @@ GBB_MGR::Create(BB* bb, GRA_REGION* region)
     gbb->unpreferenced_wired_lranges[rc] = NULL;
     gbb->spill_above[rc] = NULL;
     gbb->restore_below[rc] = NULL;
-#ifndef TARG_IA64
+#ifdef KEY
     if (GRA_optimize_boundary) {
       gbb->usage_live_in[rc] = REGISTER_SET_EMPTY_SET;
       gbb->usage_live_out[rc] = REGISTER_SET_EMPTY_SET;
@@ -673,12 +669,19 @@ GBB_MGR::Create(BB* bb, GRA_REGION* region)
     gra_savexmms_op = BB_last_op(bb);
   }
 
-  // Count the number of OPs in the BB.
   mUINT16 OPs_count = 0;
   for (OP *op = BB_first_op(bb); op != NULL; op = OP_next(op)) {
-    OPs_count++;
+    OPs_count++;		// Count the number of OPs in the BB.
+    if (OP_x87(op))
+      gbb->x87_OP_Set();
+    else if (OP_mmx(op))
+      gbb->mmx_OP_Set();
   }
   gbb->OPs_count = OPs_count;
+  if (gbb->x87_OP())
+    blocks_with_x87_OP = BB_SET_Union1D(blocks_with_x87_OP, bb, GRA_pool);
+  if (gbb->mmx_OP())
+    blocks_with_mmx_OP = BB_SET_Union1D(blocks_with_mmx_OP, bb, GRA_pool);
 #endif
 
   return gbb;
@@ -696,11 +699,7 @@ GRA_BB::Create_Local_LRANGEs(ISA_REGISTER_CLASS rc, INT32 count)
   // requested.  So they won't need live ranges.  See gra_color for the actual
   // preallocateion.
   //
-#ifdef TARG_IA64
-  count -= GRA_local_forced_max;
-#else
   count -= GRA_LOCAL_FORCED_MAX(rc);
-#endif
   if ( count <= 0 )
     return;
 

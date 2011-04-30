@@ -1142,7 +1142,12 @@ int		catcherr)
  *		for tty files.  In both cases, stdio picks appropriate
  *		buffer sizes.
  */
-#if     defined(_LITTLE_ENDIAN) && !defined(__sv2)
+#if     defined(BUILD_OS_DARWIN)
+		if (cup->ufp.std->_bf._base == NULL &&
+		    fileno(cup->ufp.std) != STDERR_FILENO &&
+		    ! isatty(fileno(cup->ufp.std)))
+			(void) setvbuf(cup->ufp.std, NULL, _IOFBF, bs);
+#elif     defined(_LITTLE_ENDIAN) && !defined(__sv2)
 		if (cup->ufp.std->_IO_buf_base == NULL &&
 		    fileno(cup->ufp.std) != STDERR_FILENO &&
 		    ! isatty(fileno(cup->ufp.std)))

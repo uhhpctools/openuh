@@ -84,7 +84,11 @@ extern void push_mp_local_vars (tree);
 extern tree pop_mp_local_vars (void);
 
 // Initialize a vector.
+#ifdef NEW_INITIALIZER
+extern void Traverse_Aggregate_Vector_Const (WN *, tree, BOOL, UINT);
+#else
 extern void Traverse_Aggregate_Vector_Const (ST *, tree, BOOL, UINT);
+#endif /* NEW_INITIALIZER */
 #endif /* KEY */
 
 /* called for each aggregate initialization */
@@ -111,6 +115,10 @@ extern void WFE_Finish_Aggregate_Init (void);
 /* generate a temp with extension 'name' having the initialization as specified
    by 'init' */
 extern ST *WFE_Generate_Temp_For_Initialized_Aggregate (tree init, char *name);
+
+#ifdef NEW_INITIALIZER
+extern ST *WFE_Generate_Initialized_Aggregate (WN *target, tree init);
+#endif
 
 /* handle __attribute__ ((alias)) */
 #ifdef KEY
@@ -173,6 +181,9 @@ extern WN *Current_Entry_WN(void);
  * the DECL_INITIAL in the object's VAR_DECL.
  */
 extern tree named_ret_obj_initializer;
+
+/* ST to represent EXC_PTR_EXPR if C++ exceptions are disabled */
+extern ST * Dummy_Exc_Ptr_Expr;
 #endif
 
 #ifdef REAL_VALUE_TYPE

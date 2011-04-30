@@ -296,12 +296,6 @@ ffelex_backslash_ (int c, ffewhereColumnNumber col)
 	case '\\': case '\'': case '"':
 	  return c;
 
-#if 0	/* Inappropriate for Fortran. */
-	case '\n':
-	  ffelex_next_line_ ();
-	  *ignore_ptr = 1;
-	  return 0;
-#endif
 
 	case 'n':
 	  return TARGET_NEWLINE;
@@ -333,10 +327,6 @@ ffelex_backslash_ (int c, ffewhereColumnNumber col)
 	  return TARGET_BELL;
 
 	case 'v':
-#if 0 /* Vertical tab is present in common usage compilers.  */
-	  if (flag_traditional)
-	    return c;
-#endif
 	  return TARGET_VT;
 
 	case 'e':
@@ -680,10 +670,6 @@ ffelex_cfebackslash_ (int *use_d, int *d, FILE *finput)
       return TARGET_BELL;
 
     case 'v':
-#if 0 /* Vertical tab is present in common usage compilers.  */
-      if (flag_traditional)
-	return c;
-#endif
       return TARGET_VT;
 
     case 'e':
@@ -1085,42 +1071,6 @@ ffelex_hash_ (FILE *finput)
 	      && ((c = getc (finput)) == ' ' || c == '\t' || c == '\n'
 		  || c == EOF))
 	    {
-#if 0	/* g77 doesn't handle pragmas, so ignores them FOR NOW. */
-	      static char buffer [128];
-	      char * buff = buffer;
-
-	      /* Read the pragma name into a buffer.
-		 ISSPACE() may evaluate its argument more than once!  */
-	      while (((c = getc (finput)), ISSPACE(c)))
-		continue;
-
-	      do
-		{
-		  * buff ++ = c;
-		  c = getc (finput);
-		}
-	      while (c != EOF && ! ISSPACE (c) && c != '\n'
-		     && buff < buffer + 128);
-
-	      pragma_ungetc (c);
-
-	      * -- buff = 0;
-#ifdef HANDLE_PRAGMA
-	      if (HANDLE_PRAGMA (pragma_getc, pragma_ungetc, buffer))
-		goto skipline;
-#endif /* HANDLE_PRAGMA */
-#ifdef HANDLE_GENERIC_PRAGMAS
-	      if (handle_generic_pragma (buffer))
-		goto skipline;
-#endif /* !HANDLE_GENERIC_PRAGMAS */
-
-	      /* Issue a warning message if we have been asked to do so.
-		 Ignoring unknown pragmas in system header file unless
-		 an explcit -Wunknown-pragmas has been given. */
-	      if (warn_unknown_pragmas > 1
-		  || (warn_unknown_pragmas && ! in_system_header))
-		warning ("ignoring pragma: %s", token_buffer);
-#endif /* 0 */
 	      goto skipline;
 	    }
 	}
@@ -1286,11 +1236,6 @@ ffelex_hash_ (FILE *finput)
 	  ffewhere_file_set (wf, TRUE, (ffewhereLineNumber) l);
 	}
 
-#if 0	/* Not sure what g77 should do with this yet. */
-      /* Each change of file name
-	 reinitializes whether we are now in a system header.  */
-      in_system_header = 0;
-#endif
 
       if (main_input_filename == 0)
 	main_input_filename = input_filename;
@@ -1355,12 +1300,6 @@ ffelex_hash_ (FILE *finput)
 
       /* `3' after file name means this is a system header file.  */
 
-#if 0	/* Not sure what g77 should do with this yet. */
-      if ((token != NULL)
-	  && (ffelex_token_type (token) == FFELEX_typeNUMBER)
-	  && (atoi (ffelex_token_text (token)) == 3))
-	in_system_header = 1;
-#endif
 
       while (c == ' ' || c == '\t')
 	c = getc (finput);

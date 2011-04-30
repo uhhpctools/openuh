@@ -64,20 +64,3 @@ BOOL WN_Simplifier_Enable(BOOL enable)
    return (r);
 }
 
-#if 0	/* mpm:  now defined in wn_simp? */
-WN * WN_SimplifyExp1(OPCODE opc, MEM_POOL * pool, WN * k0)
-{
-   return (WN *) NULL;
-}
-
-WN * WN_SimplifyExp2(OPCODE opc, MEM_POOL * pool, WN * k0, WN * k1)
-{
-   return (WN *) NULL;
-}
-
-WN *WN_SimplifyCvtl(OPCODE opc, INT16 cvtl_bits, WN *k0)
-{
-   return (WN *) NULL;
-}
-
-#endif

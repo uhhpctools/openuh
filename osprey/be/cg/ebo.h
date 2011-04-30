@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * =======================================================================
  *
  *  Module: ebo.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/ebo.h,v $
+ *  $Revision: 1.7 $
+ *  $Date: 05/12/05 08:59:06-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.ebo.h $
  *
  *  Revision comments:
  *
@@ -118,6 +122,7 @@
 #ifndef EBO_INCLUDED
 #define EBO_INCLUDED
 
+class LOOP_DESCR;
 
 void EBO_Init(void);
 
@@ -125,11 +130,17 @@ void EBO_Pre_Process_Region(RID *rid);
 
 void EBO_before_unrolling(BB_REGION *bbr);
 
-void EBO_after_unrolling(BB_REGION *bbr);
+void EBO_after_unrolling(BB_REGION *bbr, LOOP_DESCR *loop, INT loop_iter_size);
 
 void EBO_Process_Region(RID *rid);
 
 void EBO_Post_Process_Region(RID *rid);
+
+#ifdef KEY
+void EBO_Post_Process_Region_2(RID *rid);
+#endif
+
+void EBO_Compute_To( BB *bb );
 
 void EBO_Finalize(void);
 
@@ -138,7 +149,9 @@ extern BOOL OP_ld_st_unat(OP *op);
 #endif
 extern INT32 EBO_Opt_Level_Default;
 extern INT32 EBO_Opt_Level;
-#ifndef TARG_IA64
+#ifdef KEY
+extern BOOL EBO_can_delete_branch_delay_OP;
+extern BOOL EBO_no_liveness_info_available;
 extern INT32 EBO_Opt_Mask;
 #define EBO_CAN_MERGE_INTO_OFFSET 	0x1
 #define EBO_COMBINE_L1_L2_PREFETCH  	0x2
@@ -169,5 +182,6 @@ extern INT32 EBO_Opt_Mask;
 #define EBO_FOLD_LOAD_DUPLICATE     	0x4000000
 #endif
 extern BOOL  CG_skip_local_ebo;
+extern bool Op_has_side_effect(OP *op);
 
 #endif /* EBO_INCLUDED */

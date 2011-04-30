@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -820,7 +820,7 @@ void    assign_stmt_semantics (void)
    int			loc_idx;
    int			msg_num;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int			tmp_idx;
 # endif
 
@@ -881,7 +881,7 @@ void    assign_stmt_semantics (void)
                       ATL_CLASS(label_idx) == Lbl_Format) {
                      IR_OPR(ir_idx)         = Asg_Opr;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
                      if (storage_bit_size_tbl[asg_var_desc.linear_type] !=
                             storage_bit_size_tbl[SA_INTEGER_DEFAULT_TYPE]) {
@@ -1948,14 +1948,24 @@ void do_stmt_semantics (void)
          if (cdir_switches.doall_sh_idx ||
              cdir_switches.doacross_sh_idx ||
              cdir_switches.pdo_sh_idx ||
+#ifndef KEY /* Bug 12687 */
+	     /* OpenMP standard doesn't prohibit calls to internal procedures */
              cdir_switches.do_omp_sh_idx ||
              cdir_switches.paralleldo_omp_sh_idx ||
+#endif /* KEY Bug 12687 */
              cdir_switches.paralleldo_sh_idx) {
 
             cdir_switches.parallel_region = TRUE;
             cdir_switches.no_internal_calls = TRUE;
             SH_DOALL_LOOP_END(IR_IDX_L(SH_IR_IDX(do_sh_idx))) = TRUE;
          }
+#ifdef KEY /* Bug 12687 */
+	 else if (cdir_switches.do_omp_sh_idx ||
+             cdir_switches.paralleldo_omp_sh_idx) {
+            cdir_switches.parallel_region = TRUE;
+            SH_DOALL_LOOP_END(IR_IDX_L(SH_IR_IDX(do_sh_idx))) = TRUE;
+	 }
+#endif /* KEY Bug 12687 */
 
          if (cdir_switches.do_omp_sh_idx ||
              cdir_switches.paralleldo_omp_sh_idx) {
@@ -2058,14 +2068,6 @@ void do_stmt_semantics (void)
                                                                stmt_start_col;
             insert_sh_chain_before(cdir_switches.doacross_sh_idx);
 
-# if 0
-            if (do_var_idx != NULL_IDX &&
-                ATD_TASK_SHARED(do_var_idx)) {
-
-               PRINTMSG(IL_LINE_NUM(lc_il_idx), 961, Error, 
-                        IL_COL_NUM(lc_il_idx));
-            }
-# endif
 
             cdir_switches.doacross_sh_idx = NULL_IDX;
          }
@@ -2076,14 +2078,6 @@ void do_stmt_semantics (void)
                                                                stmt_start_col;
             insert_sh_chain_before(cdir_switches.paralleldo_sh_idx);
 
-# if 0
-            if (do_var_idx != NULL_IDX &&
-                ATD_TASK_SHARED(do_var_idx)) {
-
-               PRINTMSG(IL_LINE_NUM(lc_il_idx), 961, Error,
-                        IL_COL_NUM(lc_il_idx));
-            }
-# endif
 
             cdir_switches.paralleldo_sh_idx = NULL_IDX;
          }
@@ -2094,14 +2088,6 @@ void do_stmt_semantics (void)
                                                                stmt_start_col;
             insert_sh_chain_before(cdir_switches.pdo_sh_idx);
 
-# if 0
-            if (do_var_idx != NULL_IDX &&
-                ATD_TASK_SHARED(do_var_idx)) {
-
-               PRINTMSG(IL_LINE_NUM(lc_il_idx), 961, Error,
-                        IL_COL_NUM(lc_il_idx));
-            }
-# endif
 
             cdir_switches.pdo_sh_idx = NULL_IDX;
          }
@@ -4814,6 +4800,27 @@ void nullify_stmt_semantics (void)
 
                SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))		= dv_idx;
                SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx))	= TRUE;
+#ifdef KEY /* Bug 9608 */
+	      /*
+	       * When we set assoc=0 for an array, we also set contig=1 so that
+	       * copyinout doesn't blow up if user (illegally) passes the null
+	       * pointer to a procedure lacking an explicit interface, in the
+	       * (unjustified) expectation that the pointer won't be
+	       * dereferenced if the procedure doesn't refer to the dummy
+	       * argument. This seems cheaper than adding a test for null
+	       * before and after every call.
+	       */
+	      if (exp_desc.rank) {
+		gen_sh(Before, Assignment_Stmt, line, column, FALSE, FALSE,
+		  TRUE);
+		int contig_stmt_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+		SH_IR_IDX(contig_stmt_idx) = gen_ir(
+		  IR_FLD_L(OPND_IDX(opnd)), IR_IDX_L(OPND_IDX(opnd)),
+		  Dv_Set_A_Contig, CG_INTEGER_DEFAULT_TYPE, line, column,
+		  CN_Tbl_Idx, CN_INTEGER_ONE_IDX);
+		SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+	      }
+#endif /* KEY Bug 9608 */
             }
             else {
                PRINTMSG(line, 626, Internal, column,
@@ -5555,7 +5562,7 @@ void stop_pause_stmt_semantics (void)
    }
    else {  /* no stop code exits - pass a blank */
       
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       /* send a zero length string on irix */
 
       CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
@@ -7049,7 +7056,7 @@ static  int calculate_iteration_count(int	do_sh_idx,
 
          /* Convert the iteration count to integer.                           */
 
-# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 # ifdef _TARGET_OS_UNICOS
 
 # ifdef _DEBUG
@@ -7148,7 +7155,7 @@ static  int calculate_iteration_count(int	do_sh_idx,
          }
 
 
-# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 # ifdef _TARGET_OS_UNICOS
 # ifdef _DEBUG
    
@@ -7215,7 +7222,7 @@ static  int calculate_iteration_count(int	do_sh_idx,
       }
 
 
-# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if !(defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 # ifdef _TARGET_OS_UNICOS
 
       /* Now that the iteration count has been converted to integer, if       */
@@ -7981,7 +7988,7 @@ int	create_alloc_descriptor(int	count,
 
    TRACE (Func_Entry, "create_alloc_descriptor", NULL);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx = CG_INTEGER_DEFAULT_TYPE;
@@ -8002,7 +8009,7 @@ int	create_alloc_descriptor(int	count,
 
    the_constant			= 1 + count;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    /* the version/count item is always 64 bits */
    if (TYP_LINEAR(type_idx) == Integer_4) {
       the_constant++;
@@ -8069,7 +8076,7 @@ int	create_alloc_descriptor(int	count,
    SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
    SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (TYP_LINEAR(type_idx) == Integer_4) {
       NTR_IR_TBL(asg_idx);
       IR_OPR(asg_idx) = Asg_Opr;
@@ -8180,13 +8187,15 @@ typedef struct AllocHead {
 
 
    if (TYP_LINEAR(type_idx) == Integer_4) {
+      /* OSP_467, #1, sizeof(long_type) == 64 on TARGET64 */
+      int *p_version = (int *) version;
       cn_idx = ntr_const_tbl(type_idx,
                              FALSE,
-                             version);
+                             (long_type *)p_version);
 
       *second_cn_idx = ntr_const_tbl(type_idx,
                                      FALSE,
-                                     &(version[1]));
+                                     (long_type *)(p_version+1));
    }
    else {
       *second_cn_idx = NULL_IDX;
@@ -8269,7 +8278,7 @@ void	set_directives_on_label(int	label_attr)
       ATL_PATTERN(label_attr)	= TRUE;
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (cdir_switches.notask_region) {
       ATL_NOTASK(label_attr)	= TRUE;
    }
@@ -8880,7 +8889,7 @@ static boolean check_stat_variable(int          ir_idx,
    int                  stat_line;
 
 # if defined(_TARGET_OS_MAX) || defined(_TARGET_OS_SOLARIS) || \
-     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int                  asg_idx;
    int                  tmp_idx;
 # endif
@@ -8936,7 +8945,7 @@ static boolean check_stat_variable(int          ir_idx,
          find_opnd_line_and_column(&opnd, &line, &col);
 
 # if defined(_TARGET_OS_MAX) || defined(_TARGET_OS_SOLARIS) || \
-     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _TARGET_OS_MAX
          if (exp_desc.linear_type == Integer_1 ||
              exp_desc.linear_type == Integer_2 ||
@@ -9161,7 +9170,7 @@ void set_up_allocate_as_call(int                ir_idx,
    list_idx = IR_IDX_L(ir_idx);
    the_constant = 2;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (TYP_LINEAR(ATD_TYPE_IDX(tmp_array_idx)) == Integer_4) {
       the_constant++;
    }

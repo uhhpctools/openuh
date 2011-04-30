@@ -1,26 +1,33 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
+
+/*
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_thread.c
@@ -37,17 +44,20 @@
 #include <ctype.h>
 #include <malloc.h>
 #include "omp_thread.h"
+#include "omp_sys.h"
+
+#define SPIN_COUNT_DEFAULT 20000
 #include "pcl.h"
+#include "omp_collector_util.h"
 #include "omp_collector_validation.h"
+
 /*To align with the Pathscale OMP lowering, CWG */
-int __ompc_sug_numthreads = 1;
 
 unsigned long current_region_id=0;
 unsigned long current_parent_id=0;
 
 
 #define debug 0
-#define MAX_COUNTER  20000
 __thread int __omp_myid;
 __thread int __omp_seed;
 volatile int __omp_nested = OMP_NESTED_DEFAULT;          /* nested enable/disable */
@@ -56,8 +66,19 @@ volatile int __omp_dynamic = OMP_DYNAMIC_DEFAULT;         /* dynamic enable/disa
 volatile int __omp_max_num_threads = OMP_MAX_NUM_THREADS - 1;
 /* stores the number of threads requested for future parallel regions. */
 volatile int __omp_nthreads_var;
-/* num of processors available*/
+
+/* num of hardware processors */
+int __omp_num_hardware_processors;
+
+/* num of available processors */
 int __omp_num_processors;
+
+/* num of cores that used in affinity setting*/
+int __omp_core_list_size;
+
+/* list of the available processors */
+int * __omp_list_processors;
+
 /* default schedule type and chunk size of runtime schedule*/
 omp_sched_t  __omp_rt_sched_type = OMP_SCHED_DEFAULT;
 int  __omp_rt_sched_size = OMP_CHUNK_SIZE_DEFAULT;
@@ -78,13 +99,13 @@ omp_task_t **     __omp_level_1_team_tasks = NULL;
 omp_u_thread_t * __omp_level_1_pthread = NULL;
 int		 __omp_level_1_team_size = 1;
 int		 __omp_level_1_team_alloc_size = 1;
-omp_team_t	 __omp_level_1_team_manager;
+volatile omp_team_t	 __omp_level_1_team_manager;
 // omp_team_t       temp_team;
 
 omp_u_thread_t * __omp_uthread_hash_table[UTHREAD_HASH_SIZE];
 
 
-/*Cody - Task Queues */
+/* Cody - Task Queues */
 omp_task_q_t    __omp_global_task_q;
 omp_task_q_t *__omp_private_task_q;
 omp_task_q_t    *__omp_local_task_q;
@@ -97,19 +118,27 @@ char *__omp_task_stats_filename = NULL;
 cond_func __ompc_task_create_cond = OMP_TASK_CREATE_COND_DEFAULT;
 
 /* use once for pthread creation */
-volatile int	 __omp_level_1_pthread_count = 1;
+volatile int __attribute__ ((__aligned__(CACHE_LINE_SIZE)))__omp_level_1_pthread_count = 1;
 /* use for level_1 team end microtask synchronization */
-volatile int	 __omp_level_1_exit_count = 0;
+volatile int __attribute__ ((__aligned__(CACHE_LINE_SIZE)))__omp_level_1_exit_count = 0;
+
+int __attribute__ ((__aligned__(CACHE_LINE_SIZE)))__omp_spin_user_lock = 0;
 
 omp_team_t	 __omp_root_team;
 omp_u_thread_t * __omp_root_u_thread;
 omp_v_thread_t	 __omp_root_v_thread={0,THR_SERIAL_STATE,0,NULL,NULL,0,NULL,0,0,0,0,0,0,0,0,0,0,0};
 
-// __omp_root_v_thread->state=6;
 
 pthread_t	 __omp_root_thread_id = -1;
 
 int		  __omp_rtl_initialized = 0;
+
+// control variable for spin lock, it can be set by O64_OMP_SPIN_COUNT
+long int __omp_spin_count = SPIN_COUNT_DEFAULT;
+
+// control variable for whether binding thread to cpu
+// it can be reset by O64_OMP_SET_AFFINITY
+int             __omp_set_affinity = 1;
 
 unsigned int numtasks = 0;
 //static volatile int __omp_global_team_count = 0;
@@ -138,7 +167,7 @@ void __ompc_level_1_barrier(const int vthread_id);
 void __ompc_exit_barrier(omp_v_thread_t *_v_thread);
 void __ompc_fini_rtl();
 int  __ompc_init_rtl(int num_threads);
-int  __ompc_expand_level_1_team(int new_num_threads);
+void __ompc_expand_level_1_team(int new_num_threads);
 void *__ompc_level_1_slave(void *_u_thread_id);
 void *__ompc_nested_slave(void *_v_thread); 
 
@@ -149,18 +178,23 @@ void *__ompc_nested_slave(void *_v_thread);
 void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state)
 {
   omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
-   p_vthread->state = state;
- // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
-//  p_vthread->state = state;
-//  if(debug) printf("Thread %d STATE=%d\n",p_vthread->vthread_id,(int) state);
+  p_vthread->state = state;
+
+  // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+  //  p_vthread->state = state;
+  //  if(debug) printf("Thread %d STATE=%d\n",p_vthread->vthread_id,(int) state);
  
 }
 void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event)
 {
-//  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
-//  if(debug) printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,(int) event, (int) p_vthread->state);
-if( __omp_level_1_team_manager.callbacks[event] && collector_initialized && (!collector_paused))
-     __omp_level_1_team_manager.callbacks[event](event);
+  //  omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
+  //  if(debug) 
+  //      printf("Thread %d EVENT=%d STATE=%d\n",p_vthread->vthread_id,
+  //                              (int) event, (int) p_vthread->state);
+
+  if( __omp_level_1_team_manager.callbacks[event] && 
+                  collector_initialized && (!collector_paused))
+    __omp_level_1_team_manager.callbacks[event](event);
 }
 
 void 
@@ -172,7 +206,7 @@ __ompc_environment_variables()
   env_var_str = getenv("OMP_NUM_THREADS");
   if (env_var_str != NULL) {
     sscanf(env_var_str, "%d", &env_var_val);
-    Is_Valid(env_var_val > 0, ("OMP_NUM_THREAD should > 0"));
+    Is_Valid(env_var_val > 0, ("OMP_NUM_THREADS should be positive")); 
     if (env_var_val > __omp_max_num_threads)
       env_var_val = __omp_max_num_threads;
     __omp_nthreads_var = env_var_val;
@@ -230,13 +264,13 @@ __ompc_environment_variables()
 		
     if (*env_var_str != '\0') {
       Is_Valid(*env_var_str == ',', 
-	       ("An ',' is expected before the chunksize"));
+	       ("a ',' is expected before the chunksize"));
       env_var_str = Trim_Leading_Spaces(++env_var_str);
       Is_Valid(isdigit((int)(*env_var_str)),
-	       ("number expected for chunksize"));
+	       ("positive number expected for chunksize"));
       sscanf(env_var_str, "%d", &env_var_val);
       Is_Valid(env_var_val > 0, 
-	       ("Positive number expected"));
+	       ("positive number expected for chunksize"));
       __omp_rt_sched_size = env_var_val;
     } else { /* no chunk size specified */
       if(__omp_rt_sched_type == OMP_SCHED_STATIC)
@@ -280,6 +314,45 @@ __ompc_environment_variables()
     __omp_stack_size = stack_size;
   }
 
+  env_var_str = getenv("O64_OMP_SPIN_COUNT");
+  if (env_var_str != NULL) {
+    long int spin_count;
+    sscanf(env_var_str, "%ld", &spin_count);
+    Is_Valid(spin_count > 0, ("spin count must be positive"));
+    __omp_spin_count = spin_count;
+  }
+
+  env_var_str = getenv("O64_OMP_SPIN_USER_LOCK");
+  if (env_var_str != NULL) {
+    env_var_val = strncasecmp(env_var_str, "true", 4);
+
+    if (env_var_val == 0) {
+      __omp_spin_user_lock = 1;
+    } else {
+      env_var_val = strncasecmp(env_var_str, "false", 4);
+      if (env_var_val == 0) {
+        __omp_spin_user_lock = 0;
+      } else {
+        Not_Valid("O64_OMP_SPIN_USER_LOCK should be set to: true/false");
+      }
+    }
+  }
+ 
+  env_var_str = getenv("O64_OMP_SET_AFFINITY");
+  if (env_var_str != NULL) {
+    env_var_val = strncasecmp(env_var_str, "true", 4);
+
+    if (env_var_val == 0) {
+      __omp_set_affinity = 1;
+    } else {
+      env_var_val = strncasecmp(env_var_str, "false", 4);
+      if (env_var_val == 0) {
+        __omp_set_affinity = 0;
+      } else {
+        Not_Valid("O64_OMP_SET_AFFINITY should be set to: true/false");
+      }
+    }
+  }
 
   env_var_str = getenv("OMP_TASK_STACK_SIZE");
   if (env_var_str != NULL) {
@@ -343,37 +416,35 @@ __ompc_environment_variables()
   }
 
   env_var_str = getenv("OMP_TASK_CREATE_COND");
-  if(env_var_str != NULL)
-    {
-      if(!strcmp(env_var_str, "depth")) {
-	fprintf(stderr, "TASK_CREATE_COND = DEPTH\n");
-	__ompc_task_create_cond = __ompc_task_depth_cond;
-      }
-      else if(!strcmp(env_var_str, "numtasks")) {
-	  fprintf(stderr, "TASK_CREATE_COND = NUMTASKS\n");
-	  __ompc_task_create_cond = __ompc_task_numtasks_cond;
-      }
-      else if(!strcmp(env_var_str, "depthmod")) {
-	fprintf(stderr, "TASK_CREATE_COND = DEPTHMOD\n");
-	__ompc_task_create_cond = __ompc_task_depthmod_cond;
-      }
-      else if(!strcmp(env_var_str, "queue")){
-	fprintf(stderr, "TASK_CREATE_COND = QUEUE\n");
-	__ompc_task_create_cond = __ompc_task_queue_cond;
-      }
-      else if(!strcmp(env_var_str, "true")) {
-	fprintf(stderr, "TASK_CREATE_COND = TRUE\n");
-	__ompc_task_create_cond = __ompc_task_true_cond;
-      }
-      else if(!strcmp(env_var_str, "false")) { 
-	fprintf(stderr, "TASK_CREATE_COND = FALSE\n");
-	__ompc_task_create_cond = __ompc_task_false_cond;
-      }
-      else {
-	Warning("OMP_TASK_CREATE_COND invalid using task create condition: true");
-      }
-	 
+  if(env_var_str != NULL) {
+    if(!strcmp(env_var_str, "depth")) {
+      fprintf(stderr, "TASK_CREATE_COND = DEPTH\n");
+      __ompc_task_create_cond = __ompc_task_depth_cond;
     }
+    else if(!strcmp(env_var_str, "numtasks")) {
+      fprintf(stderr, "TASK_CREATE_COND = NUMTASKS\n");
+      __ompc_task_create_cond = __ompc_task_numtasks_cond;
+    }
+    else if(!strcmp(env_var_str, "depthmod")) {
+      fprintf(stderr, "TASK_CREATE_COND = DEPTHMOD\n");
+      __ompc_task_create_cond = __ompc_task_depthmod_cond;
+    }
+    else if(!strcmp(env_var_str, "queue")){
+      fprintf(stderr, "TASK_CREATE_COND = QUEUE\n");
+      __ompc_task_create_cond = __ompc_task_queue_cond;
+    }
+    else if(!strcmp(env_var_str, "true")) {
+      fprintf(stderr, "TASK_CREATE_COND = TRUE\n");
+      __ompc_task_create_cond = __ompc_task_true_cond;
+    }
+    else if(!strcmp(env_var_str, "false")) { 
+      fprintf(stderr, "TASK_CREATE_COND = FALSE\n");
+      __ompc_task_create_cond = __ompc_task_false_cond;
+    }
+    else {
+      Warning("OMP_TASK_CREATE_COND invalid using task create condition: true");
+    }
+  }
 }
 
 
@@ -383,26 +454,29 @@ __ompc_environment_variables()
 void
 __ompc_level_1_barrier(const int vthread_id)
 {
+  long int counter;
+  int team_size = __omp_level_1_team_size;
+  long int max_count = __omp_spin_count;
+  int myrank;
     omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    omp_task_t *next;
+
     p_vthread->thr_ebar_state_id++; 
      __ompc_set_state(THR_IBAR_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
-
-/*
-    omp_task_t *next;
-
-
-
+    
+    /*
     __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
     
 
     while(__omp_level_1_team_manager.num_tasks != 0)
     {
-	__ompc_task_schedule(&next);
-	if(next != NULL) {
-	  __ompc_task_switch(__omp_current_task, next);
-	}
+      __ompc_task_schedule(&next);
+      if(next != NULL) {
+        __ompc_task_switch(__omp_current_task, next);
+      }
     }
+    */
 
 
     __omp_task_stats[__omp_myid].tasks_started += __omp_tasks_started;
@@ -410,19 +484,30 @@ __ompc_level_1_barrier(const int vthread_id)
     __omp_task_stats[__omp_myid].tasks_stolen += __omp_tasks_stolen;
     __omp_task_stats[__omp_myid].tasks_created += __omp_tasks_created;
 
-*/
 
-  pthread_mutex_lock(&__omp_level_1_barrier_mutex);
-  __omp_level_1_exit_count++;
+  myrank = 1 + __sync_fetch_and_add(&__omp_level_1_exit_count,1);
+  /* myrank = __ompc_atomic_inc(&__omp_level_1_exit_count); */
+
   if (vthread_id == 0) {
-    while (__omp_level_1_exit_count != __omp_level_1_team_size)
-      pthread_cond_wait(&__omp_level_1_barrier_cond, &__omp_level_1_barrier_mutex);
-    // reset for next usage, Warning: No need to lock it.
+    if (myrank != team_size)
+    {
+      for( counter = 0; __omp_level_1_exit_count != team_size; counter++) {
+        if (counter > max_count) {
+          pthread_mutex_lock(&__omp_level_1_barrier_mutex);
+          while (__omp_level_1_exit_count != team_size)
+            pthread_cond_wait(&__omp_level_1_barrier_cond, &__omp_level_1_barrier_mutex);
+          pthread_mutex_unlock(&__omp_level_1_barrier_mutex);
+        }
+      }
+    }
     __omp_level_1_exit_count = 0;
-    __omp_level_1_team_manager.barrier_flag = 0;
-  } else if (__omp_level_1_exit_count == __omp_level_1_team_size)
+  } else if (myrank == team_size ) {
+    // here we do need the mutex lock! otherwise, 
+    // Otherwise, it's possible that cond_signal may fail to wake up the master thread.
+    pthread_mutex_lock(&__omp_level_1_barrier_mutex);
     pthread_cond_signal(&__omp_level_1_barrier_cond);
-  pthread_mutex_unlock(&__omp_level_1_barrier_mutex);
+    pthread_mutex_unlock(&__omp_level_1_barrier_mutex);
+  }
 
   __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
 }
@@ -442,9 +527,7 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
      __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
 
-  pthread_mutex_lock(&(vthread->team->barrier_lock));
-  vthread->team->barrier_count += 1;
-  pthread_mutex_unlock(&(vthread->team->barrier_lock));
+  __sync_fetch_and_add(&(vthread->team->barrier_count),1);
 
   // Master wait all slaves arrived
   if(vthread->vthread_id == 0) {
@@ -459,7 +542,7 @@ void*
 __ompc_level_1_slave(void * _uthread_index)
 {
   long uthread_index;
-  int counter;
+  long int counter;
   int task_expect = 1;
   int initial_idle=1;
   __omp_seed = uthread_index;
@@ -471,32 +554,24 @@ __ompc_level_1_slave(void * _uthread_index)
   __omp_tasks_created = 0;
   __omp_tasks_stolen = 0;
 
-    __ompc_set_state(THR_IDLE_STATE);
-//  if(initial_idle) {
-   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
-   //  printf("first level_1_slave\n");
-   initial_idle = 0;
-//  }
+  __ompc_set_state(THR_IDLE_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
+  initial_idle = 0;
 
-  pthread_mutex_lock(&__omp_level_1_mutex);
-  __omp_level_1_pthread_count++;
-  pthread_mutex_unlock(&__omp_level_1_mutex);
+  __sync_fetch_and_add(&__omp_level_1_pthread_count,1);
+  /* __ompc_atomic_inc(&(vthread->team->barrier_count)); */
 
-/*initialize virtual processor - Cody*/
+  /*initialize virtual processor - Cody*/
   __ompc_init_vp();
 
   for(;;) {
-
-    if (__omp_level_1_team_manager.new_task != task_expect) {
-      for( counter = 0; __omp_level_1_team_manager.new_task != task_expect; counter++) {
-	if (counter > MAX_COUNTER) {
-	  pthread_mutex_lock(&__omp_level_1_mutex);
-	  while (__omp_level_1_team_manager.new_task != task_expect) {
-	    pthread_cond_wait(&__omp_level_1_cond, &__omp_level_1_mutex);
-	  }
-	  pthread_mutex_unlock(&__omp_level_1_mutex);
-	  counter = 0;
-	}
+    for( counter = 0; __omp_level_1_team_manager.new_task != task_expect; counter++) {
+      if (counter > __omp_spin_count) {
+        pthread_mutex_lock(&__omp_level_1_mutex);
+        while (__omp_level_1_team_manager.new_task != task_expect) {
+          pthread_cond_wait(&__omp_level_1_cond, &__omp_level_1_mutex);
+        }
+        pthread_mutex_unlock(&__omp_level_1_mutex);
       }
     }
 
@@ -519,33 +594,29 @@ __ompc_level_1_slave(void * _uthread_index)
     if ( __omp_level_1_team[uthread_index].entry_func != NULL) {
          
 	
-      //	__omp_level_1_team_tasks[uthread_index] = uth_self();
       __omp_level_1_team_tasks[uthread_index] = co_current();
-      //	printf("__omp_level_1_team_tasks[%d] = %X\n", uthread_index, __omp_level_1_team_tasks[uthread_index]);
-	__omp_current_task = __omp_level_1_team_tasks[uthread_index];
-	__omp_current_task->is_parallel_task = 1;
-	__omp_current_task->creator = NULL;
-	__omp_current_task->num_children = 0;
-	__omp_current_task->depth = 0;
-	__omp_current_task->threadid = __omp_myid;
-	__ompc_init_lock(&__omp_current_task->lock);
+      __omp_current_task = __omp_level_1_team_tasks[uthread_index];
+      __omp_current_task->is_parallel_task = 1;
+      __omp_current_task->creator = NULL;
+      __omp_current_task->num_children = 0;
+      __omp_current_task->depth = 0;
+      __omp_current_task->threadid = __omp_myid;
+      pthread_mutex_init(&__omp_current_task->lock, NULL);
 
       __ompc_event_callback(OMP_EVENT_THR_END_IDLE);
       __ompc_set_state(THR_WORK_STATE);
-	__omp_level_1_team[uthread_index].entry_func(uthread_index, (void *) __omp_level_1_team[uthread_index].frame_pointer);
+      __omp_level_1_team[uthread_index].entry_func(
+              uthread_index, 
+              (void *) __omp_level_1_team[uthread_index].frame_pointer);
 
       __omp_level_1_team[uthread_index].entry_func = NULL;
       __ompc_level_1_barrier(uthread_index);
 
       __ompc_set_state(THR_IDLE_STATE);
-     // idle_count++;
       __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
-     //  printf("IDLE count=%d\n",idle_count);
-
 
     }
   }
-
 
   return NULL;
 }
@@ -557,19 +628,16 @@ __ompc_nested_slave(void * _v_thread)
   omp_v_thread_t * my_vthread = (omp_v_thread_t *) _v_thread;
   /* need to wait for others ready? */
 
-   __ompc_set_state(THR_IDLE_STATE);
-  printf("IDLE called from nested\n");
-//  __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
-
+  __ompc_set_state(THR_IDLE_STATE);
 
   OMPC_WAIT_WHILE(my_vthread->team->new_task != 1);
   /* The relationship between vthread, uthread, and team should be OK here*/
 
   __ompc_event_callback(OMP_EVENT_THR_END_IDLE);
   __ompc_set_state(THR_WORK_STATE);
- 
+
   my_vthread->entry_func(my_vthread->vthread_id,
-			 (char *)my_vthread->frame_pointer);
+      (char *)my_vthread->frame_pointer);
 
   /*TODO: fix the barrier call for nested threads*/
   __ompc_exit_barrier(my_vthread);
@@ -581,8 +649,7 @@ __ompc_nested_slave(void * _v_thread)
 void
 __ompc_fini_rtl(void) 
 {
-
-  /*print task stats*/
+  /* print task stats */
 
   int i;
   double avg_tasks_created=0;
@@ -601,10 +668,7 @@ __ompc_fini_rtl(void)
   else
     file = stdout;
 
-  for(i=0; i<__omp_level_1_team_manager.team_size;i++)
-    {
-
-
+  for(i=0; i<__omp_level_1_team_manager.team_size;i++) {
       double temp, size;
       size = (double) __omp_level_1_team_manager.team_size;
 
@@ -619,13 +683,13 @@ __ompc_fini_rtl(void)
 
       temp = (double) __omp_task_stats[i].tasks_started;
       avg_tasks_started += temp/size;
-      /*
+
+#ifdef TASK_DEBUG      
       total_tasks_created += __omp_task_stats[i].tasks_created;
       total_tasks_skipped += __omp_task_stats[i].tasks_skipped;
       total_tasks_stolen += __omp_task_stats[i].tasks_stolen;
       total_tasks_started += __omp_task_stats[i].tasks_started;
-      */
-/* commented by Oscar
+     
       fprintf(file, "thread %d:\n", i);
       fprintf(file, "\ttasks_created = %u\n", 
 	      __omp_task_stats[i].tasks_created);
@@ -635,33 +699,22 @@ __ompc_fini_rtl(void)
 	      __omp_task_stats[i].tasks_started);
       fprintf(file, "\ttasks_stolen = %u\n", 
 	      __omp_task_stats[i].tasks_stolen);
+#endif
 
-*/
     }
-/* commented  by Oscar
-  fprintf(file, "Average of all threads:\n");
-  fprintf(file, "\ttasks_created = %f\n", avg_tasks_created);
-  fprintf(file, "\ttasks_skipped = %f\n", avg_tasks_skipped);
-  fprintf(file, "\ttasks_started = %f\n", avg_tasks_started);
-  fprintf(file, "\ttasks_stolen = %f\n", avg_tasks_stolen); */
-  /*
-  fprintf(file, "Total of all threads:\n");
-  fprintf(file, "\ttasks_created = %f\n", total_tasks_created);
-  fprintf(file, "\ttasks_skipped = %f\n", total_tasks_skipped);
-  fprintf(file, "\ttasks_started = %f\n", total_tasks_started);
-  fprintf(file, "\ttasks_stolen = %f\n", total_tasks_stolen);
-  
-  */
+
   if(file != stdout)
     fclose(file);
 
   /* clean up job*/
   if (__omp_level_1_team != NULL)
-    free(__omp_level_1_team);
+    aligned_free(__omp_level_1_team);
   if (__omp_level_1_pthread != NULL)
-    free(__omp_level_1_pthread);
+    aligned_free(__omp_level_1_pthread);
 
   /* Other mutex, conditions, locks , should be destroyed here*/
+  if (__omp_list_processors != NULL)
+    aligned_free(__omp_list_processors);
 
 }
 
@@ -672,18 +725,31 @@ __ompc_init_rtl(int num_threads)
   int threads_to_create;
   int i;
   int return_value;
+  void *stack_pointer;
 
 
   Is_True(__omp_rtl_initialized == 0, 
 	  (" RTL has been initialized yet!"));
 
 
-  /* set default thread number to processor number */
-  __omp_num_processors = Get_SMP_CPU_num();
+  /* get the number of hardware processors */
+  __omp_num_hardware_processors = Get_SMP_CPU_num();
+
+  /* get the number of available processors. It can be smaller than
+     __omp_num_hardware_processors, because user can use numactl to 
+     control which processors to run. Set default thread number to
+     the number of available processors */
+  __omp_num_processors = __omp_get_cpu_num();
   __omp_nthreads_var = __omp_num_processors;
+
+  /* get the list of available processors, later we can bind pthreads
+     to the available processors */ 
+  __omp_get_available_processors();
 
   /* parse OpenMP environment variables */
   __ompc_environment_variables();
+  __ompc_sug_numthreads = __omp_nthreads_var;
+  __ompc_cur_numthreads = __omp_nthreads_var;
 
   /* register the finalize function*/
   atexit(__ompc_fini_rtl);
@@ -694,12 +760,11 @@ __ompc_init_rtl(int num_threads)
   if(threads_to_create == 1)
       __ompc_task_create_cond = __ompc_task_false_cond;
 
- /*keep it as nthreads-var suggested in spec. Liao*/
+  /*keep it as nthreads-var suggested in spec. Liao*/
   __omp_nthreads_var = threads_to_create;
   /* setup pthread attributes */
   pthread_attr_init(&__omp_pthread_attr);
   pthread_attr_setscope(&__omp_pthread_attr, PTHREAD_SCOPE_SYSTEM);
-  pthread_attr_setstacksize(&__omp_pthread_attr, __omp_stack_size);
   /* need to set up barrier attributes */
 
   /* initial global locks*/
@@ -708,29 +773,17 @@ __ompc_init_rtl(int num_threads)
   pthread_mutex_init(&__omp_hash_table_lock, NULL);
   pthread_cond_init(&__omp_level_1_cond, NULL);
   pthread_cond_init(&__omp_level_1_barrier_cond, NULL);
-  __ompc_init_lock(&_ompc_thread_lock);
+  __ompc_init_spinlock(&_ompc_thread_lock);
 
-
-/*initialize uth library Cody */
-//  fprintf(stderr,"task_stack_size = %ld\n", __omp_task_stack_size);
-
-  /*
-  for(i=0; i<threads_to_create; i++)
-    __omp_empty_flags[i] = 1;
-  */
-
-  //  uth_init(__omp_task_stack_size);
-  //  uth_vp_init(0, NULL);
 
   __omp_task_limit = OMP_TASK_LIMIT_DEFAULT;
 
-  for(i=0; i<threads_to_create; i++)
-    {
-      __omp_task_stats[i].tasks_started = 0;
-      __omp_task_stats[i].tasks_created = 0;
-      __omp_task_stats[i].tasks_skipped = 0;
-      __omp_task_stats[i].tasks_stolen = 0;
-    }
+  for(i=0; i<threads_to_create; i++) {
+    __omp_task_stats[i].tasks_started = 0;
+    __omp_task_stats[i].tasks_created = 0;
+    __omp_task_stats[i].tasks_skipped = 0;
+    __omp_task_stats[i].tasks_stolen = 0;
+  }
 
   __ompc_init_vp();
   __omp_myid = 0;
@@ -740,12 +793,8 @@ __ompc_init_rtl(int num_threads)
 
   __ompc_task_q_init(&__omp_global_task_q);
 
-  /*
-  __omp_local_task_q = malloc(sizeof(omp_task_q_t) * threads_to_create);
-  */
-
-    __omp_local_task_q = calloc(threads_to_create, sizeof(omp_task_q_t));
-    __omp_private_task_q = calloc(threads_to_create, sizeof(omp_task_q_t));
+  __omp_local_task_q = calloc(threads_to_create, sizeof(omp_task_q_t));
+  __omp_private_task_q = calloc(threads_to_create, sizeof(omp_task_q_t));
   
   Is_True(__omp_local_task_q != NULL,
 	  ("Can't allocate __omp_local_task_q"));
@@ -753,8 +802,6 @@ __ompc_init_rtl(int num_threads)
   Is_True(__omp_private_task_q != NULL,
 	  ("Can't allocate __omp_private_task_q"));
 
-
-  
   for(i=0; i<threads_to_create; i++)
     {
       __ompc_task_q_init(&__omp_local_task_q[i]);
@@ -766,14 +813,12 @@ __ompc_init_rtl(int num_threads)
 
 
   /* create level 1 team */
-  __omp_level_1_pthread = 
-    (omp_u_thread_t *) malloc(sizeof(omp_u_thread_t) * threads_to_create);
+  __omp_level_1_pthread = aligned_malloc(sizeof(omp_u_thread_t) * threads_to_create, CACHE_LINE_SIZE);
   Is_True(__omp_level_1_pthread != NULL, 
 	  ("Can't allocate __omp_level_1_pthread"));
   memset(__omp_level_1_pthread, 0, sizeof(omp_u_thread_t) * threads_to_create);
 
-  __omp_level_1_team = 
-    (omp_v_thread_t *) malloc(sizeof(omp_v_thread_t) * threads_to_create);
+  __omp_level_1_team = aligned_malloc(sizeof(omp_v_thread_t) * threads_to_create, CACHE_LINE_SIZE);
   Is_True(__omp_level_1_team != NULL, 
 	  ("Can't allocate __omp_level_1_team"));
   memset(__omp_level_1_team, 0, sizeof(omp_v_thread_t) * threads_to_create);
@@ -793,10 +838,10 @@ __ompc_init_rtl(int num_threads)
   __omp_level_1_team_manager.single_count = 0;
   __omp_level_1_team_manager.new_task = 0;
   __omp_level_1_team_manager.loop_count = 0;
-/*Cody - initialize num tasks to 0 */
+  /*Cody - initialize num tasks to 0 */
   __omp_level_1_team_manager.num_tasks = 0;
 	
-  __ompc_init_lock(&(__omp_level_1_team_manager.schedule_lock));
+  __ompc_init_spinlock(&(__omp_level_1_team_manager.schedule_lock));
   pthread_cond_init(&(__omp_level_1_team_manager.ordered_cond), NULL);
   __ompc_init_lock(&(__omp_level_1_team_manager.single_lock));
   pthread_mutex_init(&(__omp_level_1_team_manager.barrier_lock), NULL);
@@ -806,7 +851,7 @@ __ompc_init_rtl(int num_threads)
   for (i=0; i<threads_to_create; i++) {
     __omp_level_1_team[i].team = &__omp_level_1_team_manager;
     __omp_level_1_team[i].team_size = threads_to_create;
-    __omp_level_1_team[i].vthread_id = i;  
+    __omp_level_1_team[i].vthread_id = i;
     __omp_level_1_team[i].single_count = 0;
     __omp_level_1_team[i].loop_count = 0;
     __omp_level_1_team[i].state = THR_OVHD_STATE;
@@ -844,13 +889,55 @@ __ompc_init_rtl(int num_threads)
   __omp_root_u_thread->hash_next = NULL;
   __ompc_insert_into_hash_table(__omp_root_u_thread);
 
+
+  if (__omp_set_affinity) {
+    //bind the current thread to the first available cpu 
+    __ompc_bind_pthread_to_cpu(__omp_root_thread_id);
+  }
+
   __ompc_event_callback(OMP_EVENT_FORK);
 
+/*
+ * This routine is called by dynamic loader, which is before
+ * user-defined main() where various bits in mxcsr are set.
+ * This means those bits are not set to the threads
+ * created here.
+ * Here I only do a paritial fix that sets flush-to-zero
+ * bit in X86.
+ * ToDo:
+ * 1. fix other bits in X86 (like masks controlled by options)
+ * 2. fix for other platforms
+ * We should have checked if SSE is avaliable as
+ * x87 uses a different register.
+ */
+#if defined(TARG_X8664) || defined(TARG_IA32)
+
+#define MM_FLUSH_ZERO_ON     0x8000
+  {
+    unsigned int cr;
+    __asm__  __volatile__("stmxcsr %0" : "=m" (*&cr));
+    cr = cr | MM_FLUSH_ZERO_ON; 
+    __asm__  __volatile__("ldmxcsr %0" : : "m" (*&cr));
+  }
+#endif
+
   for (i=1; i< threads_to_create; i++) {
+    stack_pointer = malloc(__omp_stack_size);
+    Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
+    return_value = pthread_attr_setstack(&__omp_pthread_attr, stack_pointer, __omp_stack_size); 
+    Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
     return_value = pthread_create( &(__omp_level_1_pthread[i].uthread_id),
 				   &__omp_pthread_attr, (pthread_entry) __ompc_level_1_slave, 
 				   (void *)((unsigned long int)i));
-    Is_True(return_value == 0, ("Can not create more pthread"));
+    Is_True(return_value == 0, ("Cannot create more pthreads"));
+
+    __omp_level_1_pthread[i].stack_pointer = stack_pointer;
+
+    if (__omp_set_affinity) {
+      // bind pthread to a specific cpu
+      __ompc_bind_pthread_to_cpu(__omp_level_1_pthread[i].uthread_id);
+    }
+
     __ompc_insert_into_hash_table(&(__omp_level_1_pthread[i]));
   }
 
@@ -862,25 +949,32 @@ __ompc_init_rtl(int num_threads)
   __omp_level_1_team_size = threads_to_create;
   __omp_level_1_team_alloc_size = threads_to_create;
   __omp_max_num_threads -= threads_to_create;
+
+  __omp_collector_init();
+
   __omp_rtl_initialized = 1;
   return threads_to_create;
 }
 
 /* Expand level_1_team to new_num_threads.
- * Original size: __omp_level_1_team_alloc_size.
- * return: the real allocated size( expect new_num_threads */
-int
+   The caller must make sure the validity of new_num_threads. */
+
+void
 __ompc_expand_level_1_team(int new_num_threads)
 {
   int i;
   int return_value;
   omp_u_thread_t *new_u_team;
   omp_v_thread_t *new_v_team;
+  void *stack_pointer;
 
-  new_u_team = (omp_u_thread_t *) realloc((void *) __omp_level_1_pthread,
-					  sizeof(omp_u_thread_t) * new_num_threads);
+  new_u_team = (omp_u_thread_t *) aligned_realloc((void *) __omp_level_1_pthread,
+                        sizeof(omp_u_thread_t) * __omp_level_1_team_alloc_size, 
+                        sizeof(omp_u_thread_t) * new_num_threads,
+                        CACHE_LINE_SIZE);
+                        
 
-  Is_True(new_u_team != NULL, ("Can not realloc level 1 pthread data structure"));
+  Is_True(new_u_team != NULL, ("Cannot realloc level 1 pthread data structure"));
 
   if (new_u_team != __omp_level_1_pthread) {
     /* squash hash_table */
@@ -901,10 +995,12 @@ __ompc_expand_level_1_team(int new_num_threads)
 
   }
 
-  new_v_team = (omp_v_thread_t *) realloc((void *) __omp_level_1_team, 
-					  sizeof(omp_v_thread_t) * new_num_threads);
+  new_v_team = (omp_v_thread_t *) aligned_realloc((void *) __omp_level_1_team, 
+                      sizeof(omp_v_thread_t) * __omp_level_1_team_alloc_size,
+					  sizeof(omp_v_thread_t) * new_num_threads, 
+                      CACHE_LINE_SIZE);
 
-  Is_True(new_v_team != NULL, ("Can not realloc level 1 team data structure"));
+  Is_True(new_v_team != NULL, ("Cannot realloc level 1 team data structure"));
 
   if (new_v_team != __omp_level_1_team) {
     __omp_level_1_team = new_v_team;
@@ -939,10 +1035,22 @@ __ompc_expand_level_1_team(int new_num_threads)
     __omp_level_1_pthread[i].task = &__omp_level_1_team[i];
 
     /* for u_thread */
+    stack_pointer = malloc(__omp_stack_size);
+    Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
+    return_value = pthread_attr_setstack(&__omp_pthread_attr, stack_pointer, __omp_stack_size);
+    Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
     return_value = pthread_create( &(__omp_level_1_pthread[i].uthread_id),
 				   &__omp_pthread_attr, (pthread_entry) __ompc_level_1_slave, 
 				   (void *)((unsigned long int)i));
-    Is_True(return_value == 0, ("Can not create more pthread"));
+    Is_True(return_value == 0, ("Cannot create more pthreads"));
+
+    __omp_level_1_pthread[i].stack_pointer = stack_pointer;
+
+    if (__omp_set_affinity) {
+      // bind pthread to a specific cpu
+      __ompc_bind_pthread_to_cpu(__omp_level_1_pthread[i].uthread_id);
+    }
+
     __ompc_insert_into_hash_table(&(__omp_level_1_pthread[i]));
   }
 
@@ -951,9 +1059,10 @@ __ompc_expand_level_1_team(int new_num_threads)
   /* TODO: wait for all slaves*/
 
   __omp_max_num_threads -= new_num_threads - __omp_level_1_team_alloc_size;
+  Is_True(__omp_max_num_threads >= 0, "Invalid number of thread to expand");
+
   __omp_level_1_team_size = new_num_threads;
   __omp_level_1_team_alloc_size = new_num_threads;
-  return new_num_threads;
 }
 
 /* The main fork API. at the first fork, initialize the RTL*/
@@ -970,32 +1079,16 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_u_thread_t *nest_u_thread_team;
   omp_u_thread_t *current_u_thread;
   omp_v_thread_t *original_v_thread;
-  
+  void * stack_pointer;
   unsigned int region_used = 0; // TODO: make it one-bit.
 
   
-  /* TODO: We still need to check the limitation before real fork?*/
-  if ( num_threads !=0) {
+  Is_True(__omp_rtl_initialized != 0,
+          (" RTL should have been initialized!"));
+
+  // check the validity of num_threads
+  if (num_threads != 0) 
     num_threads = __ompc_check_num_threads(num_threads);
-  } else {
-    /* no valid num_threads provided, using default, still
-     * need to check the validity against __omp_max_num_threads*/
-    /*		num_threads = __omp_num_threads;
-		this is a bug causing 4 threads are always created by default, 
-		let init_rtl to decide  right threads number and save it as __omp_num_threads
-		Liao*/
-  }
-
-
-  if (__omp_rtl_initialized == 0 ) {
-    /* first fork, initial rtl*/
-    current_region_id++;
-    __omp_root_v_thread.state=THR_OVHD_STATE;
-    /*   init_collector(); */ 
-     __ompc_init_rtl(num_threads);
-  }
- 
-
 
   if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
     __omp_exe_mode = OMP_EXE_MODE_NORMAL;
@@ -1003,32 +1096,31 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* How about num_threads < __omp_level_1_team_size */
     /* TODO: fix this condition*/
     static int first_time = 0;
-    if(first_time) {
-     current_region_id++;
-    __ompc_set_state(THR_OVHD_STATE);
-    __ompc_event_callback(OMP_EVENT_FORK);
-    
-    } else
-    {
-      first_time=1;
+    if (first_time) {
+      current_region_id++;
+      __ompc_set_state(THR_OVHD_STATE);
+      __ompc_event_callback(OMP_EVENT_FORK);
 
+    } else {
+      first_time=1;
     } 
-    if (num_threads > __omp_level_1_team_alloc_size) {
-      Is_True( __omp_max_num_threads >0,
-	       ("reach thread number limit, no more new threads"));
-      __ompc_expand_level_1_team(num_threads);
-    } else if(num_threads>0) {
-      __omp_level_1_team_size = num_threads;
-      __omp_level_1_team_manager.team_size = num_threads;
-    } else if (num_threads==0) {
-      /* use default thread number decided from processor number and environment variable*/
+
+    // Adjust the number of the number of thread in the team
+    if (num_threads == 0) {
+     /* use default thread number decided from processor number and environment variable*/
       __omp_level_1_team_size = __omp_nthreads_var;
       __omp_level_1_team_manager.team_size = __omp_nthreads_var;
+    } else {
+      // expand the team when there is not enough threads
+      if (num_threads > __omp_level_1_team_alloc_size)
+        __ompc_expand_level_1_team(num_threads);
+      __omp_level_1_team_size = num_threads;
+      __omp_level_1_team_manager.team_size = num_threads;
     }
    
         
      __omp_level_1_team_manager.num_tasks = __omp_level_1_team_size;
-	//        __omp_level_1_team_manager.num_active_tasks = __omp_level_1_team_size;
+
     for (i=0; i<__omp_level_1_team_size; i++) {
       __omp_level_1_team[i].frame_pointer = frame_pointer;
       __omp_level_1_team[i].team_size = __omp_level_1_team_size;
@@ -1048,7 +1140,6 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     __omp_level_1_pthread[0].task = &(__omp_level_1_team[0]);
 
-    //    __omp_level_1_team_tasks[0] = uth_self();
     __omp_level_1_team_tasks[0] = co_current();
     __omp_current_task = __omp_level_1_team_tasks[0];
     __omp_current_task->is_parallel_task = 1;
@@ -1056,10 +1147,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     __omp_current_task->num_children = 0;
     __omp_current_task->depth = 0;
     __omp_current_task->threadid = 0;
-    __ompc_init_lock(&__omp_current_task->lock);
+    pthread_mutex_init(&__omp_current_task->lock, NULL);
 
-
-     __ompc_set_state(THR_WORK_STATE);
+    __ompc_set_state(THR_WORK_STATE);
     micro_task(0, frame_pointer);
 
     __ompc_level_1_barrier(0);
@@ -1099,27 +1189,25 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     temp_team.loop_count = 0;
     temp_team.single_count = 0;
 
-    __ompc_init_lock(&(temp_team.schedule_lock));
+    __ompc_init_spinlock(&(temp_team.schedule_lock));
     pthread_cond_init(&(__omp_level_1_team_manager.ordered_cond), NULL);
     __ompc_init_lock(&(temp_team.single_lock));
     pthread_mutex_init(&(temp_team.barrier_lock), NULL);
     pthread_cond_init(&(temp_team.barrier_cond), NULL);
- 
-    nest_v_thread_team = (omp_v_thread_t *)malloc(
-						  sizeof(omp_v_thread_t) * num_threads);
+
+    nest_v_thread_team = aligned_malloc(sizeof(omp_v_thread_t) * num_threads, CACHE_LINE_SIZE); 
     Is_True(nest_v_thread_team != NULL, 
-	    ("Can't allocate nested v_thread team"));
+	    ("Cannot allocate nested v_thread team"));
 
     /* nest_u_thread_team[0] is of no use currently*/
-    nest_u_thread_team = (omp_u_thread_t *)malloc(
-						  sizeof(omp_u_thread_t) * num_threads );
+    nest_u_thread_team = aligned_malloc(sizeof(omp_u_thread_t) * num_threads, CACHE_LINE_SIZE);
     Is_True(nest_u_thread_team != NULL,
-	    ("Can't allocate nested u_thread team"));
+	    ("Cannot allocate nested u_thread team"));
 
     /* A lock is needed to protect global variables */
     /* TODO: need a global lock*/
     __omp_max_num_threads -= num_threads - 1;
-     __ompc_event_callback(OMP_EVENT_FORK);
+    __ompc_event_callback(OMP_EVENT_FORK);
     for (i=1; i<num_threads; i++) {
       nest_v_thread_team[i].vthread_id = i;
       nest_v_thread_team[i].single_count = 0;
@@ -1132,10 +1220,19 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
       nest_u_thread_team[i].hash_next = NULL;
       nest_u_thread_team[i].task = &(nest_v_thread_team[i]);
+
+      stack_pointer = malloc(__omp_stack_size);
+      Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
+      return_value = pthread_attr_setstack(&__omp_pthread_attr, stack_pointer, __omp_stack_size);
+      Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
+  
       return_value = pthread_create(&(nest_u_thread_team[i].uthread_id),
 				    &__omp_pthread_attr, (pthread_entry) __ompc_nested_slave, 
 				    (void *)(&(nest_v_thread_team[i])));
-      Is_True(return_value == 0, ("Can not create more pthread"));
+      Is_True(return_value == 0, ("Cannot create more pthreads"));
+
+      // TODO: may need to bind pthread to a specific cpu for nested threads
+
       __ompc_insert_into_hash_table(&(nest_u_thread_team[i]));
     }
 
@@ -1163,8 +1260,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __ompc_remove_from_hash_table(nest_u_thread_team[i].uthread_id);
     }
 
-    free(nest_v_thread_team);
-    free(nest_u_thread_team);
+    aligned_free(nest_v_thread_team);
+    aligned_free(nest_u_thread_team);
 
     current_u_thread->task = original_v_thread;
 			
@@ -1176,6 +1273,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     //bug 361, get_local_thread_num() return garbage value, Liao
     temp_v_thread.vthread_id = 0; 
     temp_v_thread.team_size = 1;
+    temp_v_thread.vthread_id = 0;
     temp_v_thread.single_count = 0;
     temp_v_thread.loop_count = 0;
     temp_v_thread.executor = current_u_thread;
@@ -1192,7 +1290,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     temp_team.loop_count = 0;
     temp_team.single_count = 0;
 
-    __ompc_init_lock(&(temp_team.schedule_lock));
+    __ompc_init_spinlock(&(temp_team.schedule_lock));
     __ompc_init_lock(&(temp_team.single_lock));
 
     current_u_thread->task = &temp_v_thread;
@@ -1212,8 +1310,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __omp_exe_mode = OMP_EXE_MODE_NORMAL;
     */
 
-    __ompc_destroy_lock(&(temp_team.schedule_lock));
+    __ompc_destroy_spinlock(&(temp_team.schedule_lock));
     __ompc_destroy_lock(&(temp_team.single_lock));
+    current_u_thread->task = original_v_thread;
   }
 
  

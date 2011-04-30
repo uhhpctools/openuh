@@ -41,10 +41,10 @@
  * =======================================================================
  *
  *  Module: op_map.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/op_map.cxx,v $
+ *  $Revision: 1.6 $
+ *  $Date: 05/12/05 08:59:08-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.op_map.cxx $
  *
  *  Revision comments:
  *
@@ -66,7 +66,7 @@
 
 #ifdef _KEEP_RCS_ID
 static const char *source_file = __FILE__;
-static const char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/op_map.cxx,v $ $Revision: 1.1.1.1 $";
+static const char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.op_map.cxx $ $Revision: 1.6 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "defs.h"
@@ -224,7 +224,7 @@ static HASH_ENTRY *free_entries;		/* list of free entries */
 
 static void init_hash_tables(void)
 {
-  bzero(free_tables, sizeof(free_tables));
+  BZERO(free_tables, sizeof(free_tables));
   free_entries = NULL;
 }
 
@@ -250,7 +250,7 @@ static HASH_TABLE *hash_table_create(UINT8 length_log2)
     tbl->gen += 1;
     if (tbl->gen == 0) {
       DevWarn("(Performance) OP_MAP generation overflow - zeroing");
-      bzero(tbl->bucket_gens, sizeof(mUINT32) * (1 << length_log2));
+      BZERO(tbl->bucket_gens, sizeof(mUINT32) * (1 << length_log2));
       tbl->gen = 1;
     }
   } else {
@@ -383,7 +383,7 @@ inline HASH_ENTRY *hash_table_entry(HASH_TABLE *tbl, const OP *key, BOOL create)
  */
 
 struct op_map {
-  _OP_MAP_KIND kind;			/* for error checking only */
+  OP_MAP_KIND kind;			/* for error checking only */
   HASH_TABLE *tbl;
   struct op_map *next_free;
 };
@@ -406,7 +406,7 @@ void OP_MAP_Finish(void)
 }
 
 
-OP_MAP _OP_MAP_Create(_OP_MAP_KIND kind)
+OP_MAP _OP_MAP_Create(OP_MAP_KIND kind)
 /* -----------------------------------------------------------------------
  * Return a new global map of the given <kind>.
  * -----------------------------------------------------------------------
@@ -418,8 +418,8 @@ OP_MAP _OP_MAP_Create(_OP_MAP_KIND kind)
   if (free_maps) {
     result = free_maps;
     free_maps = next_free_map(free_maps);
-    Is_True(result->kind == _DELETED,
-	    ("map from free list not marked _DELETED"));
+    Is_True(result->kind == OP_MAP_DELETED,
+	    ("map from free list not marked OP_MAP_DELETED"));
   } else {
     /* Allocate a new one */
     result = TYPE_MEM_POOL_ALLOC(struct op_map, &MEM_phase_nz_pool);
@@ -440,7 +440,7 @@ void OP_MAP_Delete(OP_MAP map)
 
   /* Put <map> on front of free list and mark deleted (for debug).
    */
-  map->kind = _DELETED;
+  map->kind = OP_MAP_DELETED;
   next_free_map(map) = free_maps;
   free_maps = map;
 }
@@ -448,15 +448,15 @@ void OP_MAP_Delete(OP_MAP map)
 #ifdef TARG_IA64
 BOOL OP_MAP_Is_Delete(OP_MAP map)
 {
-   return map->kind == _DELETED;
+   return map->kind == OP_MAP_DELETED;
 }
 #endif
 
 void OP_MAP_Set(OP_MAP map, OP *op, void *value)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, TRUE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _PTR, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_PTR, ("OP_MAP is of wrong kind"));
   entry->val.ptr = value;
 }
 
@@ -464,8 +464,8 @@ void OP_MAP_Set(OP_MAP map, OP *op, void *value)
 void OP_MAP32_Set(OP_MAP map, OP *op, INT32 value)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, TRUE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _I32, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_I32, ("OP_MAP is of wrong kind"));
   entry->val.i32 = value;
 }
 
@@ -473,8 +473,8 @@ void OP_MAP32_Set(OP_MAP map, OP *op, INT32 value)
 void OP_MAP64_Set(OP_MAP map, OP *op, INT64 value)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, TRUE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _I64, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_I64, ("OP_MAP is of wrong kind"));
   entry->val.i64 = value;
 }
 
@@ -482,8 +482,8 @@ void OP_MAP64_Set(OP_MAP map, OP *op, INT64 value)
 void *OP_MAP_Get(OP_MAP map, const OP *op)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, FALSE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _PTR, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_PTR, ("OP_MAP is of wrong kind"));
   return entry ? entry->val.ptr : NULL;
 }
 
@@ -491,8 +491,8 @@ void *OP_MAP_Get(OP_MAP map, const OP *op)
 INT32 OP_MAP32_Get(OP_MAP map, const OP *op)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, FALSE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _I32, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_I32, ("OP_MAP is of wrong kind"));
   return entry ? entry->val.i32 : 0;
 }
 
@@ -500,8 +500,8 @@ INT32 OP_MAP32_Get(OP_MAP map, const OP *op)
 INT64 OP_MAP64_Get(OP_MAP map, const OP *op)
 {
   HASH_ENTRY *entry = hash_table_entry(map->tbl, op, FALSE);
-  Is_True(map->kind != _DELETED, ("accessing deleted OP_MAP"));
-  Is_True(map->kind == _I64, ("OP_MAP is of wrong kind"));
+  Is_True(map->kind != OP_MAP_DELETED, ("accessing deleted OP_MAP"));
+  Is_True(map->kind == OP_MAP_I64, ("OP_MAP is of wrong kind"));
   return entry ? entry->val.i64 : 0;
 }
 
@@ -515,7 +515,7 @@ INT64 OP_MAP64_Get(OP_MAP map, const OP *op)
  * =====================================================================
  */
 
-BB_OP_MAP BB_OP_MAP_Create_Kind(BB *bb, MEM_POOL *pool, _OP_MAP_KIND kind)
+BB_OP_MAP BB_OP_MAP_Create_Kind(BB *bb, MEM_POOL *pool, OP_MAP_KIND kind)
 /* -----------------------------------------------------------------------
  * Return a new local map of the given <kind>.
  * -----------------------------------------------------------------------
@@ -535,22 +535,22 @@ BB_OP_MAP BB_OP_MAP_Create_Kind(BB *bb, MEM_POOL *pool, _OP_MAP_KIND kind)
   new_map->nelem = nelem;
 
   switch (kind) {
-  case _I32:
+  case OP_MAP_I32:
     size = nelem * sizeof(INT32);
     break;
-  case _I64:
+  case OP_MAP_I64:
     size = nelem * sizeof(INT64);
     break;
   default:
     FmtAssert(FALSE, ("unexpected BB_OP_MAP kind"));
     /*NOTREACHED*/
-  case _PTR:
+  case OP_MAP_PTR:
     size = nelem * sizeof(void *);
     break;
   }
 
   new_map->themap.ptr = (void **) MEM_POOL_Alloc(pool, size);
-  if (!MEM_POOL_Zeroed(pool)) bzero(new_map->themap.ptr, size);
+  if (!MEM_POOL_Zeroed(pool)) BZERO (new_map->themap.ptr, size);
 
   return new_map;
 }
@@ -575,13 +575,13 @@ void BB_OP_MAP_Extend_Map(BB_OP_MAP map, OP *op)
     FmtAssert(new_nelem > idx, ("OP map index is out of range"));
 
     switch (map->kind) {
-    case _I32:
+    case OP_MAP_I32:
       elem_size = sizeof(INT32);
       break;
-    case _I64:
+    case OP_MAP_I64:
       elem_size = sizeof(INT64);
       break;
-    case _PTR:
+    case OP_MAP_PTR:
       elem_size = sizeof(void *);
       break;
     }
@@ -591,7 +591,7 @@ void BB_OP_MAP_Extend_Map(BB_OP_MAP map, OP *op)
 				    old_nelem * elem_size,
 				    new_nelem * elem_size);
     if (!MEM_POOL_Zeroed(map->pool)) {
-      bzero((char *)map->themap.ptr + (old_nelem * elem_size),
+      BZERO((char *)map->themap.ptr + (old_nelem * elem_size),
 	    elem_size * (new_nelem - old_nelem));
     }
 

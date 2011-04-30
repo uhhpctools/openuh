@@ -488,6 +488,39 @@ maybe_apply_renaming_pragma (decl, asmname)
   return asmname;
 }
 
+/* #pragam {frequency_hint|mips_frequency_hint} {never|init|frequent} */
+static void
+handle_pragma_freq_hint (dummy)
+     cpp_reader *dummy ATTRIBUTE_UNUSED;
+{
+  tree hint, pragma_stmt, tmp;
+  enum cpp_ttype t; /* token */
+  const char* hint_name;
+
+  /* it should be one of the "never" "init" and "frequent" */
+  if (c_lex (&hint) != CPP_NAME) 
+    GCC_BAD ("malformed #pragma frequency_hint, ignored");
+
+  if (c_lex (&tmp) != CPP_EOF) 
+    {
+      /* note: the trailing junk will be skipped in _cpp_handle_directive()*/
+      warning ("junk at end of #pragma weak");
+    }
+
+  hint_name = IDENTIFIER_POINTER(hint);
+  if (strcmp (hint_name, "never") && 
+      strcmp (hint_name, "init") && 
+      strcmp (hint_name, "frequent"))
+    {
+      GCC_BAD ("frequency hint should be one of \"never\",\"init\",\"frequent\", ignored");
+      return;
+    }
+
+  pragma_stmt = build_stmt (FREQ_HINT_STMT, 
+          build_string (strlen (hint_name) + 1, hint_name));
+  add_stmt (pragma_stmt);
+}
+
 void
 init_pragma ()
 {
@@ -505,6 +538,11 @@ init_pragma ()
   cpp_register_pragma (parse_in, 0, "extern_prefix",
 		       handle_pragma_extern_prefix);
 #endif
+
+  cpp_register_pragma (parse_in, 0, "frequency_hint",
+		       handle_pragma_freq_hint);
+  cpp_register_pragma (parse_in, 0, "mips_frequency_hint",
+		       handle_pragma_freq_hint);
 
 #ifdef REGISTER_TARGET_PRAGMAS
   REGISTER_TARGET_PRAGMAS (parse_in);

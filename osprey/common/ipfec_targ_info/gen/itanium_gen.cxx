@@ -109,57 +109,57 @@ void Itanium_Generator(void *pknobs, GEN_MODE mode, MACHINE_TYPE type)
                       kapi_utM, 0,
                       kapi_utM, 1,
                       kapi_utM, 2,
-                      kapi_utM, 3, -1);
+                      kapi_utM, 3, -1, -1);
     EKAPI_MapResource(pknobs, "memory", 0,
                       kapi_utM, 0,
                       kapi_utM, 1,
                       kapi_utM, 2,
-                      kapi_utM, 3, -1);
+                      kapi_utM, 3, -1, -1);
     EKAPI_MapResource(pknobs, "memory_ld", 0,
                       kapi_utM, 0,
-                      kapi_utM, 1, -1);
+                      kapi_utM, 1, -1, -1);
     EKAPI_MapResource(pknobs, "memory_st", 0,
                       kapi_utM, 2,
-                      kapi_utM, 3, -1);
+                      kapi_utM, 3, -1, -1);
     EKAPI_MapResource(pknobs, "memory0", 0,
-                      kapi_utM, 0, -1);
+                      kapi_utM, 0, -1, -1);
     EKAPI_MapResource(pknobs, "memory2", 0,
-                      kapi_utM, 2, -1);
+                      kapi_utM, 2, -1, -1);
 
     } else {/* Itanium */
     EKAPI_MapResource(pknobs, "integer_or_memory", 0, 
                       kapi_utI, 0,
                       kapi_utI, 1,
                       kapi_utM, 0,
-                      kapi_utM, 1, -1);
+                      kapi_utM, 1, -1, -1);
     EKAPI_MapResource(pknobs, "memory", 0,
                       kapi_utM, 0,
-                      kapi_utM, 1, -1);
+                      kapi_utM, 1, -1, -1);
     EKAPI_MapResource(pknobs, "memory0", 0,
-                      kapi_utM, 0, -1);
+                      kapi_utM, 0, -1, -1);
     }
     EKAPI_MapResource(pknobs, "floating-point", 0,
                       kapi_utF, 0,
-                      kapi_utF, 1, -1); 
+                      kapi_utF, 1, -1, -1); 
     EKAPI_MapResource(pknobs, "floating-point0", 0,
-                      kapi_utF, 0, -1);                  
+                      kapi_utF, 0, -1, -1);                  
     EKAPI_MapResource(pknobs, "integer", 0,
                       kapi_utI, 0,
-                      kapi_utI, 1, -1); 
+                      kapi_utI, 1, -1, -1); 
     EKAPI_MapResource(pknobs, "integer0", 0,
-                      kapi_utI, 0, -1);                      
+                      kapi_utI, 0, -1, -1);                      
     EKAPI_MapResource(pknobs, "branch", 0,
                       kapi_utB, 0,
                       kapi_utB, 1,
-                      kapi_utB, 2, -1); 
+                      kapi_utB, 2, -1, -1); 
     EKAPI_MapResource(pknobs, "B0_or_B1", 0,
                       kapi_utB, 0,
-                      kapi_utB, 1, -1);
+                      kapi_utB, 1, -1, -1);
     EKAPI_MapResource(pknobs, "B0_or_B2", 0,
                       kapi_utB, 0,
-                      kapi_utB, 2, -1);
+                      kapi_utB, 2, -1, -1);
     EKAPI_MapResource(pknobs, "B2", 0,
-                      kapi_utB, 2, -1);
+                      kapi_utB, 2, -1, -1);
     
     
    // EKAPI_MapResource(pknobs, "");

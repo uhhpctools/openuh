@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -46,7 +50,6 @@
 *** tions. 
 ***/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -54,7 +57,7 @@
 #pragma hdrstop
 
 #define snl_CXX      "snl.cxx"
-static char *rcs_id =   snl_CXX "$Revision: 1.8 $";
+const static char *rcs_id =   snl_CXX "$Revision: 1.8 $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -550,8 +553,8 @@ extern void Print_Interchange(FILE* file,
   }
   fprintf(file, ") at ("); 
   for (i = 0; i < nloops; i++) {
-    fprintf(file, "%d", (INT) WN_linenum(SNL_Get_Inner_Snl_Loop(outer_loop, 
-      i + 1)));
+    fprintf(file, "%d", Srcpos_To_Line(WN_linenum(SNL_Get_Inner_Snl_Loop(outer_loop, 
+      i + 1))));
     if (i < nloops - 1)
       fprintf(file, ",");
   }

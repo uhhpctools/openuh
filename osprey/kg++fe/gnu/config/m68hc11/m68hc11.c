@@ -2550,42 +2550,6 @@ m68hc11_expand_compare_and_branch (code, op0, op1, label)
 				  pc_rtx);
       emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx, tmp));
       return 0;
-#if 0
-
-      /* SCz: from i386.c  */
-    case SFmode:
-    case DFmode:
-      /* Don't expand the comparison early, so that we get better code
-         when jump or whoever decides to reverse the comparison.  */
-      {
-	rtvec vec;
-	int use_fcomi;
-
-	code = m68hc11_prepare_fp_compare_args (code, &m68hc11_compare_op0,
-						&m68hc11_compare_op1);
-
-	tmp = gen_rtx_fmt_ee (code, m68hc11_fp_compare_mode (code),
-			      m68hc11_compare_op0, m68hc11_compare_op1);
-	tmp = gen_rtx_IF_THEN_ELSE (VOIDmode, tmp,
-				    gen_rtx_LABEL_REF (VOIDmode, label),
-				    pc_rtx);
-	tmp = gen_rtx_SET (VOIDmode, pc_rtx, tmp);
-
-	use_fcomi = ix86_use_fcomi_compare (code);
-	vec = rtvec_alloc (3 + !use_fcomi);
-	RTVEC_ELT (vec, 0) = tmp;
-	RTVEC_ELT (vec, 1)
-	  = gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (CCFPmode, 18));
-	RTVEC_ELT (vec, 2)
-	  = gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (CCFPmode, 17));
-	if (!use_fcomi)
-	  RTVEC_ELT (vec, 3)
-	    = gen_rtx_CLOBBER (VOIDmode, gen_rtx_SCRATCH (HImode));
-
-	emit_jump_insn (gen_rtx_PARALLEL (VOIDmode, vec));
-	return;
-      }
-#endif
 
     case SImode:
       /* Expand SImode branch into multiple compare+branch.  */

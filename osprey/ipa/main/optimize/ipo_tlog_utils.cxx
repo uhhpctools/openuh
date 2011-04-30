@@ -88,9 +88,9 @@ const INT32 MAX_WARN_LEN = 1024;
 // tracing routine.
 // ====================================================================
 
-static void Ipa_Inline_tlog2( char *, INT64, char * );
+static void Ipa_Inline_tlog2( const char *, INT64, char * );
 
-static char *tlog_phase = NULL;
+static const char *tlog_phase = NULL;
 
 static BOOL
 Ipa_tlog_trace( void )
@@ -107,7 +107,7 @@ Inline_tlog_trace( void )
 
 
 static void 
-Ipa_Inline_tlog( char *keyword, INT64 srcpos, const char *fmt,va_list vp)
+Ipa_Inline_tlog( const char *keyword, INT64 srcpos, const char *fmt,va_list vp)
 {
   char msg_buf[MAX_WARN_LEN];
   INT32 len;
@@ -122,7 +122,7 @@ Ipa_Inline_tlog( char *keyword, INT64 srcpos, const char *fmt,va_list vp)
   Ipa_Inline_tlog2( keyword, srcpos, msg_buf );
 }
 
-static  void Ipa_Inline_tlog2(char *keyword, INT64 srcpos, char *msg )
+static  void Ipa_Inline_tlog2(const char *keyword, INT64 srcpos, char *msg )
 {
   // use the keyword as both the transformation name and keyword
   Generate_Tlog( tlog_phase, keyword, (SRCPOS)srcpos, keyword, msg, "","" );
@@ -154,7 +154,7 @@ Get_ipa_tlog_phase(void)
 #endif
 
 extern "C" void 
-Ipa_tlog(char *keyword, SRCPOS srcpos, const char *fmt, ...)
+Ipa_tlog(const char *keyword, SRCPOS srcpos, const char *fmt, ...)
 {
   va_list ap; 
   va_start(ap, fmt);
@@ -167,7 +167,7 @@ Ipa_tlog(char *keyword, SRCPOS srcpos, const char *fmt, ...)
 }
 
 extern "C" void 
-Inline_tlog( char *keyword, SRCPOS srcpos, const char *fmt, ...)
+Inline_tlog(const char *keyword, SRCPOS srcpos, const char *fmt, ...)
 {
   va_list ap; 
   va_start(ap, fmt);

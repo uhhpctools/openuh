@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -90,3 +94,32 @@
 		   strcpy (_nmp++, SUFFIX);				       \
 		}							       \
 	}
+
+# define ARRAY_LEN(ARRAY)						       \
+                (sizeof(ARRAY) / sizeof((ARRAY)[0]))
+
+/* Generate a compile-time error if the constant EXPR is false. */
+# define ASSERT_FALSE(EXPR)						       \
+                ((void)sizeof(char[1 - 2 * !!(EXPR)]))
+
+/* Copy a constant string STR of known length LEN into the fixed-length buffer
+ * BUF and then append the character TERM.  To null-terminate the string, TERM
+ * should be NULL_CHAR.  Issues a compile-time error if BUF is too small. */
+# define COPY_STR_WITH_LEN(BUF, POS, STR, LEN, TERM)			       \
+                ASSERT_FALSE(POS + LEN > ARRAY_LEN(BUF));		       \
+                strncpy(&BUF[POS], STR, LEN - 1);			       \
+                BUF[POS + LEN - 1] = TERM
+
+/* Copy a constant string into the fixed-length buffer "msg_str" and terminate
+ * the string with the character TERM. */
+# define COPY_MSG_STR(POS, STR, TERM)					       \
+                COPY_STR_WITH_LEN(msg_str, POS, STR, ARRAY_LEN(STR), TERM)
+
+/* Copy the *_lvl_str constant string selected by PREFIX and LVL into the
+ * fixed-length buffer "msg_str" and terminate the string with the character
+ * TERM.  The length of the string is determined at compilation time by using a
+ * representative example. */
+# define COPY_LVL_STR(POS, PREFIX, LVL, TERM)				       \
+                COPY_STR_WITH_LEN(msg_str, POS, PREFIX##_lvl_str[LVL],	       \
+                                  ARRAY_LEN(PREFIX##_lvl_str[0]), TERM)
+

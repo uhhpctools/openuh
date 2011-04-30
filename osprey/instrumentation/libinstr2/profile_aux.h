@@ -60,13 +60,20 @@
 
 namespace Instr {
 
+#if defined(TARG_SL) && defined(__SL__)
+typedef INT32 FB_NUM_TYPE;
+typedef UINT32 FB_VALUE_TYPE;
+#else
+typedef INT64 FB_NUM_TYPE;
+typedef UINT64 FB_VALUE_TYPE;
+#endif
 // All the information about an invoke node is stored in the
 // Invoke_Profile structure. Currently for each invokation
 // we maintain information on the number of time the invokation
 // occured
 
 struct Invoke_Profile {
-   INT64 invoke_count;
+   FB_NUM_TYPE invoke_count;
    Invoke_Profile() : invoke_count(0) {}
 };
 
@@ -77,8 +84,8 @@ struct Invoke_Profile {
 // taken or not
 
 struct Branch_Profile {
-   INT64 taken;
-   INT64 not_taken;
+   FB_NUM_TYPE taken;
+   FB_NUM_TYPE not_taken;
    Branch_Profile() : taken(0), not_taken(0) {}
 };
 
@@ -90,10 +97,10 @@ struct Branch_Profile {
 // is accessed through the lifetime of the program.
 
 struct Value_Profile {
-  INT64 num_values;
-  INT64 exe_counter;
-  INT64 value[TNV];
-  INT64 freq[TNV];
+  FB_NUM_TYPE num_values;
+  FB_NUM_TYPE exe_counter;
+  FB_NUM_TYPE value[TNV];
+  FB_NUM_TYPE freq[TNV];
   Value_Profile() : num_values(0), exe_counter(0) {}
 };
 
@@ -124,7 +131,7 @@ struct Value_FP_Bin_Profile {
 // target i of the Compgoto.
 
 struct Compgoto_Profile {
-    typedef vector<INT64> value_type;
+    typedef vector<FB_NUM_TYPE> value_type;
     value_type targets_profile;
 
     value_type& Get_Targets_Profile () {
@@ -139,8 +146,8 @@ struct Compgoto_Profile {
 // in the Short_Circuit_Profile structure.
 
 struct Short_Circuit_Profile {
-   INT64 right_taken_count;
-   INT64 neither_taken_count;
+   FB_NUM_TYPE right_taken_count;
+   FB_NUM_TYPE neither_taken_count;
 
    Short_Circuit_Profile() : right_taken_count(0), neither_taken_count(0) {}
 };
@@ -149,8 +156,8 @@ struct Short_Circuit_Profile {
 // Call_Profile structure.
 
 struct Call_Profile {
-   INT64 entry_count;
-   INT64 exit_count;
+   FB_NUM_TYPE entry_count;
+   FB_NUM_TYPE exit_count;
 
    Call_Profile() : entry_count(0), exit_count(0) {}
 };
@@ -163,12 +170,12 @@ struct Icall_Profile {
 // in the Loop_Profile structure.
 
 struct Loop_Profile {
-   INT64 invocation_count; // total times the loop is invoked
-   INT64 total_trip_count; // total trip count from all invocations
-   INT64 last_trip_count;  // trip count from last invocation
-   INT64 min_trip_count;   // minimum trip count from previous invocations
-   INT64 max_trip_count;   // maximum trip count from previous invocations
-   INT64 num_zero_trips;   // Number of times the loop had a zero trip
+   FB_NUM_TYPE invocation_count; // total times the loop is invoked
+   FB_NUM_TYPE total_trip_count; // total trip count from all invocations
+   FB_NUM_TYPE last_trip_count;  // trip count from last invocation
+   FB_NUM_TYPE min_trip_count;   // minimum trip count from previous invocations
+   FB_NUM_TYPE max_trip_count;   // maximum trip count from previous invocations
+   FB_NUM_TYPE num_zero_trips;   // Number of times the loop had a zero trip
 
    Loop_Profile () :
        invocation_count(0), total_trip_count(0), last_trip_count(0),
@@ -188,7 +195,7 @@ struct Loop_Profile {
 // Note that   targets_profile.size () == targets_case_value.size () + 1
 
 struct Switch_Profile {
-    typedef vector<INT64> value_type;
+    typedef vector<FB_NUM_TYPE> value_type;
     value_type targets_profile;
     value_type targets_case_value;
     Switch_Profile() {}
@@ -246,7 +253,7 @@ struct PU_Profile_Handle {
     char *file_name;
     char *pu_name;
     INT32 pu_size;
-    UINT64 runtime_fun_address;
+    FB_VALUE_TYPE runtime_fun_address;
 
     PU_Profile_Handle() : checksum(0) {}
     

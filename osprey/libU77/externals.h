@@ -99,6 +99,20 @@ extern void _cleanup (void);			/* unknown */
 #define ARGV f__xargv 
 #endif
 
+#if defined(BUILD_OS_DARWIN)
+/* Unlike the Linux environment, Darwin stores argc and argv into globals prior
+ * to calling "main". By using those globals instead of the ones that the
+ * Fortran runtime sets up, we can ensure that the Fortran intrinsic functions
+ * which rely on them will work even if the main program is not written in
+ * Fortan, and even if Fortran runtime library initialization code doesn't
+ * execute.
+ */
+extern int NXArgc;
+extern char **NXArgv;
+#define ARGC NXArgc
+#define ARGV NXArgv
+#endif /* defined(BUILD_OS_DARWIN) */
+
 
 /* these are set and used within libU77 */
 extern char *bufarg;

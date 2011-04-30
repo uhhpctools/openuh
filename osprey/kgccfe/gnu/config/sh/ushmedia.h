@@ -989,17 +989,10 @@ sh_media_FVADD_S (const void *fvg, const void *fvh, void *fvf)
 {
   const float *g = fvg, *h = fvh;
   float *f = fvf;
-#if 1
   int i;
 
   for (i = 0; i < 4; i++)
     f[i] = g[i] + h[i];
-#else
-  f[0] = g[0] + h[0];
-  f[1] = g[1] + h[1];
-  f[2] = g[2] + h[2];
-  f[3] = g[3] + h[3];
-#endif
 }
 
 __inline__ static
@@ -1008,17 +1001,10 @@ sh_media_FVSUB_S (const void *fvg, const void *fvh, void *fvf)
 {
   const float *g = fvg, *h = fvh;
   float *f = fvf;
-#if 1
   int i;
 
   for (i = 0; i < 4; i++)
     f[i] = g[i] - h[i];
-#else
-  f[0] = g[0] - h[0];
-  f[1] = g[1] - h[1];
-  f[2] = g[2] - h[2];
-  f[3] = g[3] - h[3];
-#endif
 }
 
 __inline__ static
@@ -1036,17 +1022,10 @@ sh_media_FMTRXADD_S (const void *mtrxg, const void *mtrxh, void *mtrxf)
 {
   const __GCC_FV *g = mtrxg, *h = mtrxh;
   __GCC_FV *f = mtrxf;
-#if 1
   int i;
 
   for (i = 0; i < 4; i++)
     sh_media_FVADD_S (&g[i], &h[i], &f[i]);
-#else
-  sh_media_FVADD_S (&g[0], &h[0], &f[0]);
-  sh_media_FVADD_S (&g[1], &h[1], &f[1]);
-  sh_media_FVADD_S (&g[2], &h[2], &f[2]);
-  sh_media_FVADD_S (&g[3], &h[3], &f[3]);
-#endif
 }
 
 __inline__ static
@@ -1055,17 +1034,10 @@ sh_media_FMTRXSUB_S (const void *mtrxg, const void *mtrxh, void *mtrxf)
 {
   const __GCC_FV *g = mtrxg, *h = mtrxh;
   __GCC_FV *f = mtrxf;
-#if 1
   int i;
 
   for (i = 0; i < 4; i++)
     sh_media_FVSUB_S (&g[i], &h[i], &f[i]);
-#else
-  sh_media_FVSUB_S (&g[0], &h[0], &f[0]);
-  sh_media_FVSUB_S (&g[1], &h[1], &f[1]);
-  sh_media_FVSUB_S (&g[2], &h[2], &f[2]);
-  sh_media_FVSUB_S (&g[3], &h[3], &f[3]);
-#endif
 }
 
 __inline__ static
@@ -1090,17 +1062,10 @@ sh_media_FMTRXMUL_S (const void *mtrxg, const void *mtrxh, void *mtrxf)
 {
   const __GCC_FV *g = mtrxg;
   __GCC_FV *f = mtrxf;
-#if 1
   int j;
 
   for (j = 0; j < 4; j++)
     sh_media_FTRV_S (mtrxh, &g[j], &f[j]);
-#else
-  sh_media_FTRV_S (mtrxh, &g[0], &f[0]);
-  sh_media_FTRV_S (mtrxh, &g[1], &f[1]);
-  sh_media_FTRV_S (mtrxh, &g[2], &f[2]);
-  sh_media_FTRV_S (mtrxh, &g[3], &f[3]);
-#endif
 }
 
 __inline__ static
@@ -1109,17 +1074,10 @@ sh_media_FMTRXMULADD_S (const void *mtrxg, const void *mtrxh, const void *mtrxi,
 {
   const __GCC_FV *g = mtrxg, *i = mtrxi;
   __GCC_FV *f = mtrxf;
-#if 1
   int j;
 
   for (j = 0; j < 4; j++)
     sh_media_FTRVADD_S (mtrxh, &g[j], &i[j], &f[j]);
-#else
-  sh_media_FTRVADD_S (mtrxh, &g[0], &i[0], &f[0]);
-  sh_media_FTRVADD_S (mtrxh, &g[1], &i[1], &f[1]);
-  sh_media_FTRVADD_S (mtrxh, &g[2], &i[2], &f[2]);
-  sh_media_FTRVADD_S (mtrxh, &g[3], &i[3], &f[3]);
-#endif
 }
 
 __inline__ static
@@ -1128,17 +1086,10 @@ sh_media_FMTRXMULSUB_S (const void *mtrxg, const void *mtrxh, const void *mtrxi,
 {
   const __GCC_FV *g = mtrxg, *i = mtrxi;
   __GCC_FV *f = mtrxf;
-#if 1
   int j;
 
   for (j = 0; j < 4; j++)
     sh_media_FTRVSUB_S (mtrxh, &g[j], &i[j], &f[j]);
-#else
-  sh_media_FTRVSUB_S (mtrxh, &g[0], &i[0], &f[0]);
-  sh_media_FTRVSUB_S (mtrxh, &g[1], &i[1], &f[1]);
-  sh_media_FTRVSUB_S (mtrxh, &g[2], &i[2], &f[2]);
-  sh_media_FTRVSUB_S (mtrxh, &g[3], &i[3], &f[3]);
-#endif
 }
 #endif /* ! __SH4_NOFPU__ */
 

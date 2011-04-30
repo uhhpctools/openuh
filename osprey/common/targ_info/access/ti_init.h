@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -50,7 +54,7 @@
  *
  *	Misc. functions:
  *
- *	    void TI_Initialize( ABI_PROPERTIES_ABI, ISA_SUBSET, PROCESSOR, target-path)
+ *	    void TI_Initialize( ABI_PROPERTIES_ABI, ISA_SUBSET, PROCESSOR )
  *
  *		Initialize the package.  Needs to be called once per run
  *		of the backend, before any other operations in the
@@ -75,13 +79,8 @@ static const char ti_init_rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0
 extern "C" {
 #endif
 
-#ifdef TARG_IA64
 extern void
-TI_Initialize (ABI_PROPERTIES_ABI, ISA_SUBSET, PROCESSOR, char *tpath, char* version);
-#else
-extern void
-TI_Initialize (ABI_PROPERTIES_ABI, ISA_SUBSET, PROCESSOR, char *tpath);
-#endif
+TI_Initialize (ABI_PROPERTIES_ABI, ISA_SUBSET, PROCESSOR);
 
 #ifdef __cplusplus
 }

@@ -391,10 +391,15 @@ extern int x86_prefetch_sse;
 #define TARGET_TLS_DIRECT_SEG_REFS_DEFAULT 0
 #endif
 
+#ifdef TARG_NVISA
+/* want 64-bit aligned doubles */
+#define TARGET_DEFAULT MASK_ALIGN_DOUBLE
+#else
 /* Once GDB has been enhanced to deal with functions without frame
    pointers, we can change this to allow for elimination of
    the frame pointer in leaf functions.  */
 #define TARGET_DEFAULT 0
+#endif
 
 /* This is not really a target flag, but is done this way so that
    it's analogous to similar code for Mach-O on PowerPC.  darwin.h
@@ -680,7 +685,15 @@ extern int x86_prefetch_sse;
 #define SHORT_TYPE_SIZE 16
 #define INT_TYPE_SIZE 32
 #define FLOAT_TYPE_SIZE 32
+#ifdef WIN64
+/* For win64 we have 32 bit long but 64bit pointer,
+ * which doesn't fit existing m32/m64 model, so hack it here 
+ * and use WIN64 which is defined in gcommondefs.
+ */
+#define LONG_TYPE_SIZE _MIPS_SZLONG
+#else
 #define LONG_TYPE_SIZE BITS_PER_WORD
+#endif
 #define MAX_WCHAR_TYPE_SIZE 32
 #define DOUBLE_TYPE_SIZE 64
 #define LONG_LONG_TYPE_SIZE 64

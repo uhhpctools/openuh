@@ -61,7 +61,7 @@
 
 #include <errno.h>
 
-#if defined(mips) && !defined(__linux__)
+#if defined(mips) && !(defined(__linux__) || defined(BUILD_OS_DARWIN))
 #include <sgidefs.h>
 #include <svr4_math.h>
 
@@ -234,7 +234,7 @@ int	round(double);
 
 #endif /* mips */
 
-#if defined(__linux__) 
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 
 extern	float	fabsf(float);
 
@@ -317,24 +317,6 @@ typedef union
 #define	_64BIT_MACHINE
 
 //Workaround, since these builtin function are not supported by our compiler currently. 
-#if 0
-#define	ROUNDF(f)	__builtin_round_f2ll(f)
-#define	ROUND(d)	__builtin_round_d2ll(d)
-#define	ROUNDED(ed)	__builtin_round_ed2ll(ed)
-
-#define	FLT2INT(x, n)	n = __builtin_cast_f2i(x)
-#define	INT2FLT(n, x)	x = __builtin_cast_i2f(n)
-
-#define	DBL2LL(x, n)	n = __builtin_cast_d2ll(x)
-#define	LL2DBL(n, x)	x = __builtin_cast_ll2d(n)
-
-#define	EDHI2INT(x, n)	n = __builtin_getf_exp(x)
-#define	INT2EDHI(n, x)	x = __builtin_setf_exp(x, n)
-#define	EDLO2LL(x, n)	n = __builtin_getf_sig(x)
-#define	LL2EDLO(n, x)	x = __builtin_setf_sig(x, n)
-
-#define	FMERGE(x, y)	__builtin_fmerge_se(x, y)
-#else
 #define	ROUND(d)	(int)(((d) >= 0.0) ? ((d) + 0.5) : ((d) - 0.5))
 
 #define	ROUNDF(d)	(int)((d) >= 0.0f ? ((d) + 0.5f) : ((d) - 0.5f))
@@ -356,7 +338,6 @@ long long tmpmac; \
 tmpmac = l; \
 x = *(double *)&tmpmac; \
 }
-#endif
 
 #define	INT	long long
 #define	UINT	unsigned long long

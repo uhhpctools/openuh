@@ -49,16 +49,11 @@ Boston, MA 02111-1307, USA.  */
   "%{m68030} %{m68040} %{fpic:-k} %{fPIC:-k}"
 
 #undef LIB_SPEC
-#if 1
 /* We no longer link with libc_p.a or libg.a by default.  If you want
    to profile or debug the GNU/Linux C library, please add -lc_p or -ggdb
    to LDFLAGS at the link time, respectively.  */
 #define LIB_SPEC \
   "%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
-#else
-#define LIB_SPEC \
-  "%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}"
-#endif
 
 /* We want to pass -v to linker */
 #undef LINK_SPEC

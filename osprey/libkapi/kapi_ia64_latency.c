@@ -128,21 +128,11 @@ cutportCons )
          continue;
       }
 
-#if 0
-      printf( "Found: %d %d %d %d --> %d %d %d %d = %d\n",
-          fuProd, oppProd, utProd, cutportProd,
-          fuCons, oppCons, utCons, cutportCons, paby->iValue);
-#endif
 
       return( paby->iValue );
    }
 
    /* default */
-#if 0
-   printf( "NOT Found: %d %d %d %d --> %d %d %d %d = %d\n",
-          fuProd, oppProd, utProd, cutportProd,
-          fuCons, oppCons, utCons, cutportCons, 0);
-#endif
    return( 0 );
 }
 
@@ -401,14 +391,6 @@ KAPI_MinIntraClusterTotalLatency( void *pConfig, kapi_cluster_t cluster,
    kapi_ut_t utSrc, utDest;
    int oppProdTmp,oppConsTmp,oppProdStart,oppProdEnd,oppConsStart,oppConsEnd;
 
-#if 0
-   papair_t *ppapair, *ppapairList;
-   int nbypass;
-   ppapairList = KAPI_IntraClusterBypassList( pConfig, cluster,
-                          fuProd, oppProd, -1, -1,
-                          fuCons, oppCons, -1, -1,
-                          &nbypass );
-#endif
 
    minlatbypass = 10000;
 

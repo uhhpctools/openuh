@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -40,10 +43,10 @@
 //-*-c++-*-
 /* ====================================================================
  * Module: privatize_common.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/privatize_common.cxx,v $
+ * $Revision: 1.22 $
+ * $Date: 06/02/01 15:18:44-08:00 $
+ * $Author: gautam@jacinth.keyresearch $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.privatize_common.cxx $
  *
  * Revision history:
  *  11-12-97 : First created by Dave Kohr
@@ -56,7 +59,11 @@
  * ==================================================================== */
 
 #include <alloca.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdio.h>
 
 #include "privatize_common.h"
@@ -90,7 +97,12 @@ RENAMING_SCOPE::~RENAMING_SCOPE()
  * Must be F77/F90, either SCLASS_COMMON or SCLASS_DGLOBAL (for initialized)
  ***********************************************************************/
 
-static BOOL ST_Is_Common_Block (ST *st)
+#ifdef TARG_LOONGSON
+BOOL
+#else
+static BOOL
+#endif 
+ST_Is_Common_Block (ST *st)
 {
 
     // N.B.: COMMON blocks are always in the global symtab
@@ -419,7 +431,7 @@ Rename_Privatized_COMMON(WN *wn, RENAMING_STACK *stack)
 static ST *Create_Local_Threadprivate_Symbol(ST *old_st)
 {
   ST_SCLASS sclass = ST_sclass(old_st);
-  Is_True(SCLASS_Is_Not_PU_Local(sclass),
+  Is_True(sclass != SCLASS_AUTO,
           ("Create_Local_Symbol() called for ST with sclass %d",
            (INT) sclass ) );
 
@@ -461,8 +473,9 @@ static ST *Create_Global_Threadprivate_Symbol(ST *old_st)
 
   ST *new_thdprv_st = New_ST(GLOBAL_SYMTAB); 
 
-  ST_SCLASS sclass = (ST_sclass (old_st) == SCLASS_FSTATIC) ?
-                                SCLASS_FSTATIC : SCLASS_COMMON;
+  ST_SCLASS sclass = ((ST_sclass (old_st) == SCLASS_FSTATIC
+		      || ST_sclass (old_st) == SCLASS_PSTATIC) ?
+		      SCLASS_FSTATIC : SCLASS_COMMON);
 
   TY_IDX old_ty_idx, new_ty_idx;
 
@@ -498,9 +511,11 @@ Rename_Threadprivate_COMMON(WN* pu, WN* parent, WN *wn, RENAMING_STACK *stack, R
   if (st) {
     ST *split_block;
     ST *common_block = ST_Source_Block(st, &split_block);
-    if (ST_is_thread_private(st) || 
-       (split_block && ST_is_thread_private(split_block)) ||
-       (common_block && ST_is_thread_private(common_block))) {
+
+    // Note that symbols in blocks are now marked to be thread private
+    // since it is possible that some symbols can be referenced as thread
+    // private and some as global.
+    if (ST_is_thread_private(st)) {
       ST *new_st; // renamed version of st
       ST *new_st_for_common_blk;
 
@@ -508,6 +523,10 @@ Rename_Threadprivate_COMMON(WN* pu, WN* parent, WN *wn, RENAMING_STACK *stack, R
       if (!new_st_for_common_blk) {
         new_st_for_common_blk = Create_Global_Threadprivate_Symbol(common_block);
         common_blk_scope->map.Enter(common_block, new_st_for_common_blk);
+	// Keep track of local symbols, whose mappings need to be removed before
+	// processing the next PU.
+	if (ST_IDX_level(ST_st_idx(common_block)) != GLOBAL_SYMTAB)
+	  common_blk_scope->local_mappings.push_front(common_block);
       }
 
       new_st = scope->map.Find(common_block);
@@ -579,8 +598,8 @@ Rename_Threadprivate_COMMON(WN* pu, WN* parent, WN *wn, RENAMING_STACK *stack, R
                                   WN_rtype(wn), 
                                   WN_desc(wn)),
                    ofst,
-                   Be_Type_Tbl(TY_mtype(ST_type(st))),
-                   Make_Pointer_Type(Be_Type_Tbl(TY_mtype(ST_type(st))),FALSE),
+                   ST_type(st),
+                   Make_Pointer_Type(ST_type(st),FALSE),
                    WN_CreateLdid(
                      OPCODE_make_op(OPR_LDID,
                                     TY_mtype(ST_type(new_st)),
@@ -597,7 +616,7 @@ Rename_Threadprivate_COMMON(WN* pu, WN* parent, WN *wn, RENAMING_STACK *stack, R
         new_wn = WN_CreateIstore(
                    OPCODE_make_op(OPR_ISTORE,WN_rtype(wn),WN_desc(wn)),
                    ofst,
-                   Make_Pointer_Type(Be_Type_Tbl(TY_mtype(ST_type(st))),FALSE),
+                   Make_Pointer_Type(ST_type(st),FALSE),
                    WN_COPY_Tree(WN_kid(wn,0)),
                    WN_CreateLdid(
                      OPCODE_make_op(OPR_LDID,

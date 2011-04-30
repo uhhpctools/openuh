@@ -42,6 +42,9 @@
 
 enum		attr_values	{Allocatable_Attr,
 				 Automatic_Attr,
+#ifdef KEY /* Bug 14150 */
+				 Bind_Attr,
+#endif /* KEY Bug 14150 */
 				 Co_Array_Attr,
 				 Dimension_Attr,
 				 External_Attr,
@@ -54,13 +57,19 @@ enum		attr_values	{Allocatable_Attr,
 				 Public_Attr,
 				 Save_Attr,
 				 Target_Attr,
+#ifdef KEY /* Bug 14150 */
+				 Value_Attr,
+#endif /* KEY Bug 14150 */
 				 Volatile_Attr,
 				 End_Attr = Volatile_Attr };
 
 typedef	enum	 attr_values	attr_type;
 
-static	char	*attr_str[Volatile_Attr+1] =	{"ALLOCATABLE",
+static	char	*attr_str[End_Attr+1] =		{"ALLOCATABLE",
 						 "AUTOMATIC",
+#ifdef KEY /* Bug 14150 */
+						 "BIND",
+#endif /* KEY Bug 14150 */
 						 "CO-ARRAY",
 						 "DIMENSION",
 						 "EXTERNAL",
@@ -73,11 +82,15 @@ static	char	*attr_str[Volatile_Attr+1] =	{"ALLOCATABLE",
 						 "PUBLIC",
 						 "SAVE",
 						 "TARGET",
+						 "VALUE",
 						 "VOLATILE" };
 
-static	long	 err_attrs[Volatile_Attr+1] =       {
+static	long	 err_attrs[End_Attr+1] =       {
 
 		 /* Allocatable_Attr */		((1 << Allocatable_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Automatic_Attr) |
 						 (1 << External_Attr) |
 #ifndef KEY /* Bug 6845 */
@@ -94,23 +107,59 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 
 		 /* Automatic_Attr */		((1 << Allocatable_Attr) |
 						 (1 << Automatic_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Co_Array_Attr) |
 						 (1 << External_Attr) |
 						 (1 << Intent_Attr) |
 						 (1 << Intrinsic_Attr) |
 						 (1 << Optional_Attr) |
 						 (1 << Parameter_Attr) |
-						 (1 << Save_Attr)),
+						 (1 << Save_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
+#ifdef KEY /* Bug 14150 */
+		 /* Bind_Attr */		(
+		 			         (1 << Allocatable_Attr) |
+						 (1 << Automatic_Attr) |
+						 (1 << Bind_Attr) |
+						 (0 << Co_Array_Attr) |
+						 (0 << Dimension_Attr) |
+						 (0 << External_Attr) |
+						 (1 << Intent_Attr) |
+						 (1 << Intrinsic_Attr) |
+						 (1 << Optional_Attr) |
+						 (1 << Parameter_Attr) |
+						 (1 << Pointer_Attr) |
+						 (0 << Private_Attr) |
+						 (0 << Public_Attr) |
+						 (0 << Save_Attr) |
+						 (0 << Target_Attr) |
+						 (0 << Volatile_Attr) |
+						 (1 << Value_Attr)
+						 ),
+#endif /* KEY Bug 14150 */
 		 /* Co_Array_Attr */		((1 << Automatic_Attr) |
 						 (1 << Co_Array_Attr) |
 						 (1 << External_Attr) |
 						 (1 << Intrinsic_Attr) |
 						 (1 << Optional_Attr) |
 						 (1 << Parameter_Attr) |
-						 (1 << Pointer_Attr)),
+						 (1 << Pointer_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
-		 /* Dimension_Attr */		 (1 << Dimension_Attr),
+		 /* Dimension_Attr */		((1 << Dimension_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
 		 /* External_Attr */		((1 << Allocatable_Attr) |
 						 (1 << Automatic_Attr) |
@@ -122,6 +171,9 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 						 (1 << Pointer_Attr) |
 						 (1 << Save_Attr) |
 						 (1 << Target_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Volatile_Attr)),
 
 		 /* Intent_Attr */		(
@@ -130,15 +182,24 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 		                                 (1 << Allocatable_Attr) |
 #endif /* KEY Bug 6845 */
 						 (1 << Automatic_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << External_Attr) |
 						 (1 << Intent_Attr) |
 						 (1 << Intrinsic_Attr) |
 						 (1 << Parameter_Attr) |
+#ifndef KEY /* Bug 14150 */
+						 /* F2003 allows this */
 						 (1 << Pointer_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Save_Attr)),
 
 		 /* Intrinsic_Attr */		((1 << Allocatable_Attr) |
 						 (1 << Automatic_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Co_Array_Attr) |
 						 (1 << External_Attr) |
 						 (1 << Intent_Attr) |
@@ -148,6 +209,9 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 						 (1 << Pointer_Attr) |
 						 (1 << Save_Attr) |
 						 (1 << Target_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Volatile_Attr)),
 
 		 /* Optional_Attr */		(
@@ -156,6 +220,9 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 		                                 (1 << Allocatable_Attr) |
 #endif /* KEY Bug 6845 */
 						 (1 << Automatic_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Intrinsic_Attr) |
 						 (1 << Optional_Attr) |
 						 (1 << Parameter_Attr) |
@@ -163,6 +230,9 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 
 		 /* Parameter_Attr */		((1 << Allocatable_Attr) |
 						 (1 << Automatic_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Co_Array_Attr) |
 						 (1 << External_Attr) |
 						 (1 << Intent_Attr) |
@@ -172,24 +242,44 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 						 (1 << Pointer_Attr) |
 						 (1 << Save_Attr) |
 						 (1 << Target_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Volatile_Attr)),
 
 		 /* Pointer_Attr */		((1 << Allocatable_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Bind_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Co_Array_Attr) |
 						 (1 << External_Attr) |
+#ifndef KEY /* Bug 14150 */
 						 (1 << Intent_Attr) |
+#endif /* KEY Bug 14150 */
 						 (1 << Intrinsic_Attr) |
 						 (1 << Parameter_Attr) |
 						 (1 << Pointer_Attr) |
-						 (1 << Target_Attr)),
+						 (1 << Target_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
 		 /* Private_Attr */		((1 << Private_Attr) |
 						 (1 << Automatic_Attr) |
-						 (1 << Public_Attr)),
+						 (1 << Public_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
 		 /* Public_Attr */		((1 << Private_Attr) |
 						 (1 << Automatic_Attr) |
-						 (1 << Public_Attr)),
+						 (1 << Public_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
 		 /* Save_Attr */		((1 << External_Attr) |
 						 (1 << Automatic_Attr) |
@@ -197,7 +287,11 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 						 (1 << Intrinsic_Attr) |
 						 (1 << Parameter_Attr) |
 						 (1 << Optional_Attr) |
-						 (1 << Save_Attr)),
+						 (1 << Save_Attr) |
+#ifdef KEY /* Bug 14150 */
+						 (1 << Value_Attr)
+#endif /* KEY Bug 14150 */
+						 ),
 
 		 /* Target_Attr */		((1 << External_Attr) |
 						 (1 << Intrinsic_Attr) |
@@ -205,7 +299,28 @@ static	long	 err_attrs[Volatile_Attr+1] =       {
 						 (1 << Pointer_Attr) |
 						 (1 << Target_Attr)),
 
+#ifdef KEY /* Bug 14150 */
+		 /* Value_Attr */		((1 << Allocatable_Attr) |
+						 (1 << Automatic_Attr) |
+						 (1 << Bind_Attr) |
+						 (1 << Co_Array_Attr) |
+						 (1 << Dimension_Attr) |
+						 (1 << External_Attr) |
+						 (0 << Intent_Attr) |
+						 (1 << Intrinsic_Attr) |
+						 (0 << Optional_Attr) |
+						 (1 << Parameter_Attr) |
+						 (0 << Private_Attr) |
+						 (0 << Public_Attr) |
+						 (1 << Pointer_Attr) |
+						 (1 << Save_Attr) |
+						 (0 << Target_Attr) |
+						 (1 << Value_Attr) |
+						 (1 << Volatile_Attr)),
+#endif /* KEY Bug 14150 */
+
 		 /* Volatile_Attr */		((1 << External_Attr) |
 						 (1 << Intrinsic_Attr) |
 						 (1 << Parameter_Attr))
+
 					       };

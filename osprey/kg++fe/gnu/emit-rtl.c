@@ -542,25 +542,6 @@ gen_rtx_REG (mode, regno)
 	return stack_pointer_rtx;
     }
 
-#if 0
-  /* If the per-function register table has been set up, try to re-use
-     an existing entry in that table to avoid useless generation of RTL.
-
-     This code is disabled for now until we can fix the various backends
-     which depend on having non-shared hard registers in some cases.   Long
-     term we want to re-enable this code as it can significantly cut down
-     on the amount of useless RTL that gets generated.
-
-     We'll also need to fix some code that runs after reload that wants to
-     set ORIGINAL_REGNO.  */
-
-  if (cfun
-      && cfun->emit
-      && regno_reg_rtx
-      && regno < FIRST_PSEUDO_REGISTER
-      && reg_raw_mode[regno] == mode)
-    return regno_reg_rtx[regno];
-#endif
 
   return gen_raw_REG (mode, regno);
 }
@@ -593,11 +574,6 @@ gen_rtx_SUBREG (mode, reg, offset)
   /* This check isn't usable right now because combine will
      throw arbitrary crap like a CALL into a SUBREG in
      gen_lowpart_for_combine so we must just eat it.  */
-#if 0
-  /* Check for this too.  */
-  if (offset >= GET_MODE_SIZE (GET_MODE (reg)))
-    abort ();
-#endif
   return gen_rtx_raw_SUBREG (mode, reg, offset);
 }
 
@@ -4668,10 +4644,6 @@ emit_line_note (file, line)
 {
   set_file_and_line_for_stmt (file, line);
 
-#if 0
-  if (no_line_numbers)
-    return 0;
-#endif
 
   return emit_note (file, line);
 }

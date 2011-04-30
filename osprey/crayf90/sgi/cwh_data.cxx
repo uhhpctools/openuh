@@ -55,7 +55,7 @@
   *====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/crayf90/sgi/SCCS/s.cwh_data.cxx $ $Revision: 1.7 $";
@@ -154,6 +154,11 @@ fei_static_base(INTPTR sym_idx)
      current_pos = offset;
      init_common_or_module = TRUE; 
    }
+
+#ifdef KEY // bug 13276
+   if (ST_sclass(base) == SCLASS_FORMAL_REF)
+     return;
+#endif
  
    Set_ST_is_initialized(current_st);
 
@@ -390,7 +395,7 @@ b_and_o get_base_and_offset(WN *wn)
       r.base = WN_st(wn);
       r.offset = WN_offset(wn);
 
-# ifdef linux
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
       /* Check for based as a symbol in common */
       while (ST_base(r.base) != r.base) {
          r.offset += ST_ofst(r.base);

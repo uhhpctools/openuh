@@ -1687,9 +1687,6 @@ if (REG_P (OP1) && ! REG_P (OP0))			\
 /* Do not use .init section so __main will be called on startup. This will
    call __do_global_ctors and prepare for __do_global_dtors on exit.  */
 
-#if 0
-#define INIT_SECTION_ASM_OP  "\t.sect\t\".init\""
-#endif
 
 #define FINI_SECTION_ASM_OP  "\t.sect\t\".fini\""
 

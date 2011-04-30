@@ -136,22 +136,27 @@ UTILS_OBJECTS = $(UTILS_CFILES:.c=.o)
 PRODUCER_OBJECTS = $(UTILS_OBJECTS) $(PRODUCER_CFILES:.c=.o)
 CONSUMER_OBJECTS = $(UTILS_OBJECTS) $(CONSUMER_CFILES:.c=.o)
 
-LDIRT = $(UTILS_OBJECTS) $(PRODUCER_OBJECTS) $(CONSUMER_OBJECTS)
+LDIRT = $(UTILS_OBJECTS) $(PRODUCER_OBJECTS) $(CONSUMER_OBJECTS) 
 
 VPATH =  $(BUILD_BASE)/utils $(BUILD_BASE)/producer $(BUILD_BASE)/consumer \
 	$(BUILD_BASE)/../common/com $(BUILD_BASE)/../common/com/$(BUILD_TARGET_DIR)
 
-default: first $(TARGETS) last
+.PHONY: default first last install
 
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
+	
 include $(COMMONRULES)
 
 first :
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(BUILD_AREA)/include)
-ifeq ($(BUILD_VARIANT), PRODUCER)
+ ifeq ($(BUILD_VARIANT), PRODUCER)
 	$(call submake,$(BUILD_AREA)/targ_info)
+ endif
 endif
-#	$(call submake,$(BUILD_AREA)/libelf)
-#	$(call submake,$(BUILD_AREA)/libelfutil)
 
 last:  make_libdeps
 

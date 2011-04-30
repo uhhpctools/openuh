@@ -951,23 +951,6 @@ dbxout_type_methods (type)
 
   type_encoding = DECL_NAME (TYPE_NAME (type));
 
-#if 0
-  /* C++: Template classes break some assumptions made by this code about
-     the class names, constructor names, and encodings for assembler
-     label names.  For now, disable output of dbx info for them.  */
-  {
-    const char *ptr = IDENTIFIER_POINTER (type_encoding);
-    /* This should use index.  (mrs) */
-    while (*ptr && *ptr != '<') ptr++;
-    if (*ptr != 0)
-      {
-	static int warned;
-	if (!warned)
-	    warned = 1;
-	return;
-      }
-  }
-#endif
 
   type_identifier_length = IDENTIFIER_LENGTH (type_encoding);
 
@@ -1557,13 +1540,6 @@ dbxout_type (type, full)
 	       and let the definition come when the name is defined.  */
 	    fputs ((TREE_CODE (type) == RECORD_TYPE) ? "xs" : "xu", asmfile);
 	    CHARS (2);
-#if 0 /* This assertion is legitimately false in C++.  */
-	    /* We shouldn't be outputting a reference to a type before its
-	       definition unless the type has a tag name.
-	       A typedef name without a tag name should be impossible.  */
-	    if (TREE_CODE (TYPE_NAME (type)) != IDENTIFIER_NODE)
-	      abort ();
-#endif
 	    if (TYPE_NAME (type) != 0)
 	      dbxout_type_name (type);
 	    else
@@ -2005,18 +1981,6 @@ dbxout_symbol (decl, local)
       break;
 
     case TYPE_DECL:
-#if 0
-      /* This seems all wrong.  Outputting most kinds of types gives no name
-	 at all.  A true definition gives no name; a cross-ref for a
-	 structure can give the tag name, but not a type name.
-	 It seems that no typedef name is defined by outputting a type.  */
-
-      /* If this typedef name was defined by outputting the type,
-	 don't duplicate it.  */
-      if (typevec[TYPE_SYMTAB_ADDRESS (type)].status == TYPE_DEFINED
-	  && TYPE_NAME (TREE_TYPE (decl)) == decl)
-	return 0;
-#endif
       /* Don't output the same typedef twice.
          And don't output what language-specific stuff doesn't want output.  */
       if (TREE_ASM_WRITTEN (decl) || TYPE_DECL_SUPPRESS_DEBUG (decl))
@@ -2092,10 +2056,6 @@ dbxout_symbol (decl, local)
 		    putc ('T', asmfile);
 		    TREE_ASM_WRITTEN (TYPE_NAME (type)) = 1;
 		  }
-#if 0 /* Now we generate the tag for this case up above.  */
-		else
-		  tag_needed = 1;
-#endif
 	      }
 
 	    putc ('t', asmfile);

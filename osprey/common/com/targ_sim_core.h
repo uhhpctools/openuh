@@ -55,6 +55,8 @@ extern "C" {
 #ifdef TARG_X8664
 #define Preg_Offset_Is_X87(n) \
         ((n) >= X87_Preg_Min_Offset && (n) <= X87_Preg_Max_Offset)
+#define Preg_Offset_Is_MMX(n) \
+        ((n) >= MMX_Preg_Min_Offset && (n) <= MMX_Preg_Max_Offset)
 #endif // x86
 #define Preg_Offset_Is_Int(n) \
         ((n) >= Int_Preg_Min_Offset && (n) <= Int_Preg_Max_Offset)

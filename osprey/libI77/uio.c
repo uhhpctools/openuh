@@ -272,7 +272,6 @@ do_uio_1dim (	char *ptr, flex *do_idx,
 }
 
 /* do_uio64_1dim is identical to do_uio_1dim in 32 bit mode */
-#if 11
 int
 do_uio64_1dim (	char *ptr, flex *do_idx, 
 		XINT *lb, XINT *ub, 
@@ -282,7 +281,6 @@ do_uio64_1dim (	char *ptr, flex *do_idx,
  return(do_uio_1dim_work(ptr, do_idx, *lb, *ub, *step, &f77curunit, len, idxlen));
 }
 
-#endif
 
 void
 set_do_idx( flex *idx, ftnlen len, ftnll val )
@@ -336,7 +334,6 @@ do_uio_mp (ftnint *number, char *ptr, unit **fu, ftnlen len)
 #endif
 }
 
-#if 11
 
 int
 do_uio64 (XINT *number, char *ptr, ftnlen len)
@@ -350,7 +347,6 @@ do_uio64_mp (XINT *number, char *ptr, unit **fu, ftnlen len)
     return( do_uio_com( number, ptr,  fu, len ) );
 }
 
-#endif
 
 int
 do_ud (unit *ftnunit, XINT *number, char *ptr, ftnlen len)

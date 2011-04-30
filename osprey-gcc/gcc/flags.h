@@ -95,6 +95,16 @@ extern int optimize_size;
 
 extern bool extra_warnings;
 
+#ifdef TARG_SL
+/* Supporting long long type. -mlong-long */
+
+extern bool Long_Long_Support;
+
+/* Supporting float point emulation. -msoft-float */
+
+extern bool Float_Point_Support;
+#endif
+
 /* Nonzero to warn about unused variables, functions et.al.  Use
    set_Wunused() to update the -Wunused-* flags that correspond to the
    -Wunused option.  */

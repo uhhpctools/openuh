@@ -39,10 +39,10 @@
  * ====================================================================
  *
  * Module: w2cf_symtab.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/w2cf_symtab.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:42:00-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.w2cf_symtab.h $
  *
  * Revision history:
  *  07-Oct-95 - Original Version
@@ -113,7 +113,7 @@ const char * W2CF_Symtab_Nameof_Ty(TY_IDX ty);
 const char * W2CF_Symtab_Nameof_Fld(FLD_HANDLE fld);
 const char * W2CF_Symtab_Nameof_Fld_Pointee(FLD_HANDLE fld);
 const char * W2CF_Symtab_Nameof_Tempvar(INT32 tempvar_id);
-const char * W2CF_Symtab_Nameof_Preg(TY_IDX preg_ty, PREG_NUM preg_num);
+const char * W2CF_Symtab_Nameof_Preg(const TY_IDX preg_ty, PREG_NUM preg_num);
 
 const char * W2CF_Symtab_Unique_Name(const char *name);
 UINT32 W2CF_Symtab_Unique_Label(void);

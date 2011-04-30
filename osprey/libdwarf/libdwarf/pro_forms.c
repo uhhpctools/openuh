@@ -651,7 +651,7 @@ dwarf_add_AT_flag(Dwarf_P_Debug dbg,
 Dwarf_P_Attribute
 dwarf_add_AT_string(Dwarf_P_Debug dbg,
 		    Dwarf_P_Die ownerdie,
-		    Dwarf_Half attr, char *string, Dwarf_Error * error)
+		    Dwarf_Half attr, const char *string, Dwarf_Error * error)
 {
     Dwarf_P_Attribute new_attr;
 

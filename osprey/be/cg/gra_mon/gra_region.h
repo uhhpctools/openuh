@@ -35,9 +35,9 @@
 //  GRA region encapsulation
 
 //  $revision: $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_region.h,v $
+//  $Date: 02/11/07 23:41:30-00:00 $
+//  $Author: fchow@keyresearch.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_region.h $
 
 #ifndef GRA_REGION_INCLUDED
 #define GRA_REGION_INCLUDED
@@ -45,7 +45,7 @@
 #ifndef GRA_REGION_RCS_ID
 #define GRA_REGION_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *gra_region_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_region.h,v $ $Revision: 1.1.1.1 $";
+static char *gra_region_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_region.h $ $Revision: 1.2 $";
 #endif
 #endif
 

@@ -73,11 +73,11 @@
 #include "stab.h"
 #include "const.h"
 #include "targ_const.h"
-extern char * Targ_Print ( char *fmt, TCON c );
 #include "strtab.h"
 #include "wio.h"
 #include "wintrinsic.h"
 #include "wutil.h"
+#include "intrn_info.h"
 #include "wn_pragmas.h"
 
 #include "opt_base.h"
@@ -497,7 +497,7 @@ id_sup_search(WN *wn)
 /* Generate a string that uniquely identifies the given WHIRL node.
  */
 
-static char *
+static const char *
 id_str(WN *wn)
 
 {
@@ -644,10 +644,9 @@ dV_close_WN(WN *wn, DU_MANAGER *du_mgr)
  */
 
 static void
-dV_place_arc(char *node_id, DV_ARC_TYPE arc_type, char *label)
-
+dV_place_arc(const char *node_id, DV_ARC_TYPE arc_type, const char *label)
 {
-  char *color;
+  const char *color;
 
   switch (arc_type) {
   case DV_ARC_KID:

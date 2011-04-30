@@ -206,7 +206,9 @@ typedef struct debug_flags {
   BOOL zero_uv;			/* Enable setting local vars to 0 */
   BOOL zero_uv_set;		/* ... option explicitly set ... */
 #endif
-
+#ifdef TARG_SL
+  BOOL stack_check;             /* Stack Check for SL */
+#endif
   /* This buffer area allows references to new fields to be added in
    * later revisions, from other DSOs, without requiring a new be.so
    * or running the risk of referencing illegal data.  Assuming that
@@ -306,6 +308,18 @@ extern DEBUG_FLAGS Initial_DEBUG;
 #define DEBUG_Emit_Ehframe              (Current_DEBUG->emit_ehframe)
 #define DEBUG_Zero_Uv			(Current_DEBUG->zero_uv)
 #define DEBUG_Zero_Uv_Set		(Current_DEBUG->zero_uv_set)
+#endif
+#ifdef TARG_SL
+/* Values for stack check option -- independent bits (3 => both): */
+#define STACK_ENTRY_CHECK 1
+#define STACK_EXIT_CHECK 2
+#define STACK_FUNC_START_CHECK 4
+#define STACK_FUNC_END_CHECK 8
+
+#define INSERT_BEGIN_FUNC_NAME "__stackcheck"
+#define INSERT_END_FUNC_NAME   "__stackcheck_end"
+
+#define DEBUG_Stack_Check               (Current_DEBUG->stack_check)
 #endif
 
 

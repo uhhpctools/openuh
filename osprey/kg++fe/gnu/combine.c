@@ -1092,14 +1092,6 @@ can_combine_p (insn, i3, pred, succ, pdest, psrc)
       /* Don't substitute into an incremented register.  */
       || FIND_REG_INC_NOTE (i3, dest)
       || (succ && FIND_REG_INC_NOTE (succ, dest))
-#if 0
-      /* Don't combine the end of a libcall into anything.  */
-      /* ??? This gives worse code, and appears to be unnecessary, since no
-	 pass after flow uses REG_LIBCALL/REG_RETVAL notes.  Local-alloc does
-	 use REG_RETVAL notes for noconflict blocks, but other code here
-	 makes sure that those insns don't disappear.  */
-      || find_reg_note (insn, REG_RETVAL, NULL_RTX)
-#endif
       /* Make sure that DEST is not used after SUCC but before I3.  */
       || (succ && ! all_adjacent
 	  && reg_used_between_p (dest, succ, i3))
@@ -1333,9 +1325,6 @@ combinable_i3pat (i3, loc, i2dest, i1dest, i1_not_in_src, pi3dest_killed)
       rtx src = SET_SRC (set);
       rtx inner_dest = dest;
 
-#if 0
-      rtx inner_src = src;
-#endif
 
       SUBST (*loc, set);
 
@@ -1346,27 +1335,6 @@ combinable_i3pat (i3, loc, i2dest, i1dest, i1_not_in_src, pi3dest_killed)
 
   /* We probably don't need this any more now that LIMIT_RELOAD_CLASS
      was added.  */
-#if 0
-      while (GET_CODE (inner_src) == STRICT_LOW_PART
-	     || GET_CODE (inner_src) == SUBREG
-	     || GET_CODE (inner_src) == ZERO_EXTRACT)
-	inner_src = XEXP (inner_src, 0);
-
-      /* If it is better that two different modes keep two different pseudos,
-	 avoid combining them.  This avoids producing the following pattern
-	 on a 386:
-	  (set (subreg:SI (reg/v:QI 21) 0)
-	       (lshiftrt:SI (reg/v:SI 20)
-	           (const_int 24)))
-	 If that were made, reload could not handle the pair of
-	 reg 20/21, since it would try to get any GENERAL_REGS
-	 but some of them don't handle QImode.  */
-
-      if (rtx_equal_p (inner_src, i2dest)
-	  && GET_CODE (inner_dest) == REG
-	  && ! MODES_TIEABLE_P (GET_MODE (i2dest), GET_MODE (inner_dest)))
-	return 0;
-#endif
 
       /* Check for the case where I3 modifies its output, as
 	 discussed above.  */
@@ -1565,11 +1533,6 @@ try_combine (i3, i2, i1, new_direct_jump_p)
       /* We also can't do anything if I3 has a
 	 REG_LIBCALL note since we don't want to disrupt the contiguity of a
 	 libcall.  */
-#if 0
-      /* ??? This gives worse code, and appears to be unnecessary, since no
-	 pass after flow uses REG_LIBCALL/REG_RETVAL notes.  */
-      || find_reg_note (i3, REG_LIBCALL, NULL_RTX)
-#endif
       )
     return 0;
 
@@ -1826,14 +1789,6 @@ try_combine (i3, i2, i1, new_direct_jump_p)
      which is a famous insn on the PDP-11 where the value of r3 used as the
      source was model-dependent.  Avoid this sort of thing.  */
 
-#if 0
-  if (!(GET_CODE (PATTERN (i3)) == SET
-	&& GET_CODE (SET_SRC (PATTERN (i3))) == REG
-	&& GET_CODE (SET_DEST (PATTERN (i3))) == MEM
-	&& (GET_CODE (XEXP (SET_DEST (PATTERN (i3)), 0)) == POST_INC
-	    || GET_CODE (XEXP (SET_DEST (PATTERN (i3)), 0)) == POST_DEC)))
-    /* It's not the exception.  */
-#endif
 #ifdef AUTO_INC_DEC
     for (link = REG_NOTES (i3); link; link = XEXP (link, 1))
       if (REG_NOTE_KIND (link) == REG_INC
@@ -8382,26 +8337,12 @@ nonzero_bits1 (x, mode, known_x, known_mode, known_ret)
       break;
 
     case NEG:
-#if 0
-      /* Disabled to avoid exponential mutual recursion between nonzero_bits
-	 and num_sign_bit_copies.  */
-      if (num_sign_bit_copies (XEXP (x, 0), GET_MODE (x))
-	  == GET_MODE_BITSIZE (GET_MODE (x)))
-	nonzero = 1;
-#endif
 
       if (GET_MODE_SIZE (GET_MODE (x)) < mode_width)
 	nonzero |= (GET_MODE_MASK (mode) & ~GET_MODE_MASK (GET_MODE (x)));
       break;
 
     case ABS:
-#if 0
-      /* Disabled to avoid exponential mutual recursion between nonzero_bits
-	 and num_sign_bit_copies.  */
-      if (num_sign_bit_copies (XEXP (x, 0), GET_MODE (x))
-	  == GET_MODE_BITSIZE (GET_MODE (x)))
-	nonzero = 1;
-#endif
       break;
 
     case TRUNCATE:

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -67,21 +71,35 @@
 #define TCON_v1(c)	((c).vals.ival.v1)
 #define TCON_v2(c)	((c).vals.ival.v2)
 #define TCON_v3(c)	((c).vals.ival.v3)
+#define TCON_v4(c)	((c).vals.ival.v4)
+#define TCON_v5(c)	((c).vals.ival.v5)
+#define TCON_v6(c)	((c).vals.ival.v6)
+#define TCON_v7(c)	((c).vals.ival.v7)
 #define TCON_iv0(c)	((c).cmplxval.ival.v0)
 #define TCON_iv1(c)	((c).cmplxval.ival.v1)
 #define TCON_iv2(c)	((c).cmplxval.ival.v2)
 #define TCON_iv3(c)	((c).cmplxval.ival.v3)
+#define TCON_iv4(c)	((c).cmplxval.ival.v4)
+#define TCON_iv5(c)	((c).cmplxval.ival.v5)
+#define TCON_iv6(c)	((c).cmplxval.ival.v6)
+#define TCON_iv7(c)	((c).cmplxval.ival.v7)
 #define TCON_word0(c)	((c).vals.word0)
 #define TCON_u0(c)	((c).vals.uval.u0)
 #define TCON_u1(c)	((c).vals.uval.u1)
 #define TCON_u2(c)	((c).vals.uval.u2)
 #define TCON_u3(c)	((c).vals.uval.u3)
+#define TCON_u4(c)	((c).vals.uval.u4)
+#define TCON_u5(c)	((c).vals.uval.u5)
+#define TCON_u6(c)	((c).vals.uval.u6)
+#define TCON_u7(c)	((c).vals.uval.u7)
 #define TCON_I4(c)	TCON_v0(c)
 #define TCON_U4(c)	TCON_u0(c)
 #define TCON_I8(c)	((c).vals.i0)
 #define TCON_U8(c)	((c).vals.k0)
 #define TCON_ll0(c)     ((c).vals.llval.ll0)
 #define TCON_ll1(c)     ((c).vals.llval.ll1)
+#define TCON_ll2(c)     ((c).vals.llval.ll2)
+#define TCON_ll3(c)     ((c).vals.llval.ll3)
 
 /* special TCON accessors for simplifier:
 	I8I4CVT and U8I4CVT are nops for MIPS III and above and are removed.
@@ -91,9 +109,11 @@
 		    ((TCON_ty(c) == MTYPE_U8) ? TCON_U8(c) : TCON_U4(c)))
 
 #define TCON_R8(c)	((c).vals.dval)
+#define TCON_R10(c)	((c).vals.ldval)
 #define TCON_R16(c)	((c).vals.qval)
 
 #define TCON_IR8(c)	((c).cmplxval.dival)
+#define TCON_IR10(c)	((c).cmplxval.ldival)
 #define TCON_IR16(c)	((c).cmplxval.qival)
 /* The internal representation of 32-bit floats may be double: */
 #ifdef TCON_R4_IS_DOUBLE
@@ -109,9 +129,11 @@
 
 #define Set_TCON_R4(c,v)	(TCON_R4(c) = v)
 #define Set_TCON_R8(c,v)	(TCON_R8(c) = v)
+#define Set_TCON_R10(c,v)	(TCON_R10(c) = v)
 #define Set_TCON_R16(c,v)	(TCON_R16(c) = v)
 #define Set_TCON_IR4(c,v)	(TCON_IR4(c) = v)
 #define Set_TCON_IR8(c,v)	(TCON_IR8(c) = v)
+#define Set_TCON_IR10(c,v)	(TCON_IR10(c) = v)
 #define Set_TCON_IR16(c,v)	(TCON_IR16(c) = v)
 /* WARNING:  We haven't carefully checked the implications of using
  * doubles for 32-bit floats -- must be done if turned on.

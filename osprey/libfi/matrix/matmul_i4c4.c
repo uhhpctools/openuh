@@ -50,6 +50,8 @@
  */
 #if defined(UNICOS) || defined(UNIX_NAMING_CONVENTION)
 #define SUBNAME _I4S4GEMMX
+#elif defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME underscore_i4sgemmx__
 #else
 #define SUBNAME _i4s4gemmx__
 #endif

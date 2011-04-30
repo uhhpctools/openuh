@@ -37,12 +37,16 @@
 
 #ident  "$Header: /proj/osprey/CVS/open64/osprey1.0/libcsup/msgnew/catgetmsg.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $"
 
+#if ! defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't implement aliases; Linux version ignores these anyway
+ * because there's no C declaration of the alias id */
 #if defined(__STDC__) && defined(_LITTLE_ENDIAN)
 	#pragma weak _catgetmsg = catgetmsg
 #else				/* else STDC and _LITTLE_ENDIAN */
 #if defined(__STDC__) && !defined(_LIBU)
         #pragma weak catgetmsg = _catgetmsg
         #pragma weak __catgetmsg_error_code = ___catgetmsg_error_code
+#endif
 #endif
 #endif				/* end STDC and _LITTLE_ENDIAN */
 

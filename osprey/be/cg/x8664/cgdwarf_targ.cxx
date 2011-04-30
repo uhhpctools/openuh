@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
+ */
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -35,7 +38,6 @@
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -185,17 +187,21 @@ Check_Dwarf_Rela(const Elf32_Rela &current_reloc)
 	    ("Unimplemented 32-bit relocation type %d",
 	     REL32_type(current_reloc)));
 }
-static char *drop_these[] = {
+static const char *drop_these[] = {
+#if ! defined(BUILD_OS_DARWIN)
       // Assembler generates .debug_line from directives itself, so we
       // don't output it.
-	".debug_line",
-#if 0
+	DEBUG_LINE_SECTNAME,
+#endif /* defined(BUILD_OS_DARWIN) */
+#if defined(BUILD_OS_DARWIN)
+     /* Note following comment: if gdb doesn't use them, why aren't we omitting
+      * them? */
      // gdb does not use the MIPS sections
      // debug_weaknames, etc.
-	".debug_varnames",
-	".debug_typenames",
-	".debug_weaknames",
-	".debug_funcnames",
+	DEBUG_VARNAMES_SECTNAME,
+	DEBUG_TYPENAMES_SECTNAME,
+	DEBUG_WEAKNAMES_SECTNAME,
+	DEBUG_FUNCNAMES_SECTNAME,
      // we don't use debug_frame in IA-64.
 #endif
 	0
@@ -211,7 +217,13 @@ extern BOOL Is_Dwarf_Section_To_Emit(const char *name)
 	  }
 	}
         // Bug 1516 - do not emit .debug_* sections if not -g
-	if (Debug_Level < 1 && strncmp(name, ".debug_", 7) == 0)
+	if (Debug_Level < 1 &&
+#if defined(BUILD_OS_DARWIN)
+	is_debug_section(name)
+#else /* defined(BUILD_OS_DARWIN) */
+	strncmp(name, ".debug_", 7) == 0
+#endif /* defined(BUILD_OS_DARWIN) */
+	)
 	  return FALSE;
         return TRUE;
 }

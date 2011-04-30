@@ -3496,10 +3496,6 @@ uniq_sort_alt_states (alt_states_list)
             prev_unique_state_ind++;
             result_ptr [prev_unique_state_ind] = result_ptr [i];
           }
-#if 0
-      for (i = prev_unique_state_ind + 1; i < VLA_PTR_LENGTH (alt_states); i++)
-        free_alt_state (result_ptr [i]);
-#endif
       VLA_PTR_SHORTEN (alt_states, i - prev_unique_state_ind - 1);
       result_ptr = VLA_PTR_BEGIN (alt_states);
       for (i = 1; i < VLA_PTR_LENGTH (alt_states); i++)
@@ -7247,9 +7243,6 @@ output_chip_definitions ()
       fprintf (output_file, ";\n");
     }
   fprintf (output_file, "};\n\n");
-#if 0
-  fprintf (output_file, "static struct %s %s;\n\n", CHIP_NAME, CHIP_NAME);
-#endif
 }
 
 

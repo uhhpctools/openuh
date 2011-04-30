@@ -40,6 +40,16 @@ struct FB_TNV{
   UINT32 _id; // instruction id.
   INT32 _flag; //0 for integer type, 1 for float type.
   //Note: for "float" type, we just put it here as an "integer". Because they have same size.
+#ifdef TARG_SL
+  UINT32 _address; //record previous address
+  UINT32 _exec_counter; // how many times does this instruction executed.
+  UINT32 _clear_counter;
+  UINT32 _sample_counter; //do stride profile sample
+  UINT32 _stride_steps;
+  UINT32 _zero_std_counter;
+  UINT32 _values[FB_TNV_SIZE]; //top 10 values.
+  UINT32 _counters[FB_TNV_SIZE]; //counters for top 10 values.
+#else
   UINT64 _address; //record previous address
   UINT64 _exec_counter; // how many times does this instruction executed.
   UINT64 _clear_counter;
@@ -48,7 +58,7 @@ struct FB_TNV{
   UINT64 _zero_std_counter;
   UINT64 _values[FB_TNV_SIZE]; //top 10 values. 
   UINT64 _counters[FB_TNV_SIZE]; //counters for top 10 values.
-
+#endif
   FB_TNV():_address(0),_sample_counter(0),_zero_std_counter(0),_stride_steps(0){}
     
   void Print( FILE *fp ) const {

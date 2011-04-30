@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -204,7 +208,7 @@
 ***
 ***  To delete node "wn" from a BLOCK node. Note, WN_DELETE_Tree is called 
 ***  which is a recursive delete, it deletes all the kids.
-*** 
+***
 ***  WN *WN_EXTRACT_FromBlock(
 ***       WN *parent,
 ***       WN *item)

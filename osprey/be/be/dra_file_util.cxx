@@ -50,7 +50,11 @@
 #include <fcntl.h>              // open()
 #include <unistd.h>             // close()
 #include <sys/stat.h>           // fstat() 
+#ifdef __MINGW32__
+#include <windows.h>
+#else
 #include <sys/mman.h>           // mmap()
+#endif /* __MINGW32__ */
 #include <sys/types.h>          // off_t, size_t
 #include <sys/param.h>          // MAXPATHLEN
 
@@ -75,6 +79,9 @@ char *DRA_file_mmap = NULL;
 
 char DRA_file_name[MAXPATHLEN];
 
+#ifdef __MINGW32__
+HANDLE DRA_file_mmap_handle = NULL;
+#endif /* __MINGW32__ */
 
 // =====================================================================
 // 
@@ -84,9 +91,9 @@ char DRA_file_name[MAXPATHLEN];
 
 static void DRA_Make_File_Name();
 
-static char* basename(char *const s);
+static char* get_base_name(char *const s);
 
-static char* dirname(char *const s);
+static char* get_dir_name(char *const s);
 
 
 // =====================================================================
@@ -137,6 +144,21 @@ DRA_Open_And_Map_File()
 	return;
   }
 
+#ifdef __MINGW32__
+  DRA_file_mmap = NULL;
+  DRA_file_mmap_handle =
+	CreateFileMapping((HANDLE) _get_osfhandle(DRA_file_desc), NULL,
+			  PAGE_READWRITE, 0, stat_buf.st_size, DRA_file_name);
+  if (DRA_file_mmap_handle)
+	DRA_file_mmap = (char *) MapViewOfFileEx(DRA_file_mmap_handle,
+						 FILE_MAP_COPY,
+						 0, 0, stat_buf.st_size, 0);
+  if (DRA_file_mmap == NULL) {
+	close(DRA_file_desc);
+	ErrMsg(EC_DRA_rii_file_io, DRA_file_name, GetLastError());
+	return;
+  }
+#else
   DRA_file_mmap = (char *) mmap(0, 
                                 stat_buf.st_size, 
                                 PROT_READ|PROT_WRITE, 
@@ -149,6 +171,7 @@ DRA_Open_And_Map_File()
 	ErrMsg(EC_DRA_rii_file_io, DRA_file_name, errno);
 	return;
   }
+#endif /* __MINGW32__ */
 
   close(DRA_file_desc);
 
@@ -237,7 +260,12 @@ DRA_Set_Write_Location(void)
 void 
 DRA_Mem_Unmap_File()
 {
+#ifdef __MINGW32__
+  (void) UnmapViewOfFile(DRA_file_mmap);
+  (void) CloseHandle(DRA_file_mmap_handle);
+#else
   (void) munmap((void *)DRA_file_mmap, (size_t)DRA_file_size);
+#endif /* __MINGW32__ */
 }
 
 
@@ -285,11 +313,11 @@ DRA_Make_File_Name()
   char *obj_file_name = Obj_File_Name ? 
     Obj_File_Name : New_Extension (Src_File_Name, ".o");
   
-  char *dir = dirname(obj_file_name);
+  char *dir = get_dir_name(obj_file_name);
   strcpy (DRA_file_name, dir);
   strcat (DRA_file_name, DRA_DIRECTORY);
 
-  char *base = basename(obj_file_name);
+  char *base = get_base_name(obj_file_name);
   INT baselen = strlen(base);
   
   if (base[baselen-2] == '.' && base[baselen-1] == 'o')
@@ -307,7 +335,7 @@ static char tempbuf[MAXPATHLEN];
 
 
 static char*
-basename(char *const s)
+get_base_name(char *const s)
 {
   register char *p;
   register char *const t = tempbuf;
@@ -329,7 +357,7 @@ basename(char *const s)
 
 
 static char*
-dirname(char *const s)
+get_dir_name(char *const s)
 {
   register char *p;
   register char *const t = tempbuf;

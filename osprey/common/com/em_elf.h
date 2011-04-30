@@ -104,7 +104,7 @@ Em_End_File (void);
 */
 extern pSCNINFO 
 Em_New_Section (
-    char *scnname,
+    const char *scnname,
     Elf64_Word scntype,
     Elf64_Xword scnflags,
     Elf64_Xword scnentsize,

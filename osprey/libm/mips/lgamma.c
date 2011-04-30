@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: lgamma.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/lgamma.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.lgamma.c $
  *
  * Revision history:
  *  28-May-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-/* $Header: /proj/osprey/CVS/open64/osprey1.0/libm/mips/lgamma.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
+/* $Header: /home/bos/bk/kpro64-pending/libm/mips/lgamma.c 1.5 04/12/21 14:58:22-08:00 bos@eng-25.internal.keyresearch.com $ */
 
 /*
 	C program for floating point log Gamma function
@@ -87,7 +87,20 @@ extern	double	lgamma(double);
 #pragma weak lgamma = __lgamma
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __gamma(double);
+extern double __lgamma(double);
+#pragma weak gamma
+#pragma weak lgamma
+#pragma weak signgam
+double gamma(double arg) {
+  return __gamma(arg);
+}
+double lgamma( double arg ) {
+  return __lgamma( arg );
+}
+int signgam = 0;
+#elif defined(__GNUC__)
 extern  double  __gamma(double);
 
 double    gamma() __attribute__ ((weak, alias ("__gamma")));
@@ -195,6 +208,9 @@ struct exception	exstruct;
 #endif
 
 	signgam = 1;
+#if defined(BUILD_OS_DARWIN)
+	__signgam = signgam;
+#endif /* defined(BUILD_OS_DARWIN) */
 
 	if ( arg != arg )
 	{
@@ -400,8 +416,12 @@ struct exception	exstruct;
 
 	/* if floor(arg) is odd, sign(gamma(arg)) is negative */
 
-	if ( n&1 )
+	if ( n&1 ) {
 		signgam = -1;
+#if defined(BUILD_OS_DARWIN)
+		__signgam = signgam;
+#endif /* defined(BUILD_OS_DARWIN) */
+	}
 
 	h = arg - z;	/* 0.0 < h < 1.0 */
 
@@ -550,7 +570,19 @@ double result;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern  long double  __gammal(long double);
+extern  long double  __lgammal(long double);
+#pragma weak gammal
+#pragma weak lgammal
+#pragma weak signgaml
+long double gammal(long double arg) {
+  return __gammal(arg);
+}
+long double lgammal( long double arg ) {
+  return __lgammal( arg );
+}
+#elif defined(__GNUC__)
 extern  long double  __gammal(long double);
 
 long double    gammal() __attribute__ ((weak, alias ("__gammal")));
@@ -565,7 +597,10 @@ extern	int  signgaml  __attribute__ ((weak, alias ("__signgaml")));
 
 #endif
 
-#if (__GNUC__ > 3)
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+int __signgaml = 0;
+int signgaml = 0;
+#elif (__GNUC__ > 3)
 int	__signgaml = 0;
 #else
 int	signgaml = 0;
@@ -577,6 +612,10 @@ __gammal(long double arg)
 double	result;
 
 	result = __gamma((double)arg);
+#ifdef KEY /* Mac port */
+	/* Bug in all versions--signgaml doesn't get set */
+        signgaml = __signgaml = __signgam;
+#endif /* KEY Mac port */
 
 	return (long double)result;
 }
@@ -585,7 +624,12 @@ double	result;
 long double
 __lgammal( long double arg )
 {
-	return ( (long double)__lgamma((double)arg) );
+	long double result = (long double)__lgamma((double)arg);
+#ifdef KEY /* Mac port */
+	/* Bug in all versions--signgaml doesn't get set */
+        signgaml = __signgaml = __signgam;
+#endif /* KEY Mac port */
+	return result;
 }
 
 #endif

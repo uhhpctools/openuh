@@ -41,9 +41,6 @@
 #ifdef NEED_DECLARATION_ERRNO
 extern int errno;
 #endif
-#if 0
-#include <stdlib.h>
-#endif
 #include "ansidecl.h"
 #include "safe-ctype.h"
 

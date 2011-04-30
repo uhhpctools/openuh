@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: dso.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/dso.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:57 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/dso.h,v $
  *
  * Revision history:
  *  16-Feb-95 - Original Version
@@ -62,7 +62,7 @@ extern "C" {
  * Load dso of given name in given path.
  * If verbose and non-standard path, then print path on stderr.
  */
-extern void load_so (char *soname, char *path, BOOL verbose);
+extern void load_so (const char *soname, char *path, BOOL verbose);
 
 #ifdef __cplusplus
 }

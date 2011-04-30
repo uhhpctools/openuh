@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -177,6 +181,7 @@ enum option_values
   OPTION_OPT_GROUP,
   OPTION_TENV_GROUP,
   OPTION_LINKER_ONLY,
+  OPTION_ALLOW_MIXED_LIBRARIES,
 #endif
 };
 
@@ -569,6 +574,8 @@ static const struct ld_option ld_options[] =
       '\0', NULL, N_("Target environment options passed to backend during ipa phase"), TWO_DASHES },
   { {"pg", no_argument, NULL, OPTION_LINKER_ONLY},
       '\0', NULL, N_("-pg flag passed to ipa_link should be passed over to the final linker"), ONE_DASH },
+  { {"allow-mixed-objects-in-libraries", no_argument, NULL, OPTION_ALLOW_MIXED_LIBRARIES},
+      '\0', NULL, N_("Allow Whirl IR and normal objects in the same library."), TWO_DASHES },
 #endif
 };
 
@@ -1468,6 +1475,10 @@ parse_args (unsigned argc, char **argv)
           break;
 
 #ifdef IPA_LINK
+        case OPTION_ALLOW_MIXED_LIBRARIES:
+          allow_mixed_libraries = 1;
+          break;
+
         /* These are options that just get passed to ipa */
         case OPTION_KEEP:
         case OPTION_DEFAULT_GROUP:

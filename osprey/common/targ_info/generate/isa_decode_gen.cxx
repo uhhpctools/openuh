@@ -417,4 +417,8 @@ void ISA_Decode_End(void)
   }
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

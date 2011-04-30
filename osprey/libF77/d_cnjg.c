@@ -57,4 +57,9 @@ dcomplex d_cnjg_(dcomplex *z)
   return __dconjg(z->dreal, z->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+dcomplex d_cnjg(dcomplex *z) { return d_cnjg_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(d_cnjg_, d_cnjg);
+#endif /* defined(BUILD_OS_DARWIN) */

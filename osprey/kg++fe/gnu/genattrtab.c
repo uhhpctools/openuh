@@ -381,9 +381,6 @@ static rtx check_attr_value	PARAMS ((rtx, struct attr_desc *));
 static rtx convert_set_attr_alternative PARAMS ((rtx, struct insn_def *));
 static rtx convert_set_attr	PARAMS ((rtx, struct insn_def *));
 static void check_defs		PARAMS ((void));
-#if 0
-static rtx convert_const_symbol_ref PARAMS ((rtx, struct attr_desc *));
-#endif
 static rtx make_canonical	PARAMS ((struct attr_desc *, rtx));
 static struct attr_value *get_attr_value PARAMS ((rtx, struct attr_desc *, int));
 static rtx copy_rtx_unchanging	PARAMS ((rtx));
@@ -402,9 +399,6 @@ static rtx one_fn		PARAMS ((rtx));
 static rtx max_fn		PARAMS ((rtx));
 static void write_length_unit_log PARAMS ((void));
 static rtx simplify_cond	PARAMS ((rtx, int, int));
-#if 0
-static rtx simplify_by_alternatives PARAMS ((rtx, int, int));
-#endif
 static rtx simplify_by_exploding PARAMS ((rtx));
 static int find_and_mark_used_attributes PARAMS ((rtx, rtx *, int *));
 static void unmark_used_attributes PARAMS ((rtx, struct dimension *, int));
@@ -1387,57 +1381,6 @@ check_defs ()
     }
 }
 
-#if 0
-/* Given a constant SYMBOL_REF expression, convert to a COND that
-   explicitly tests each enumerated value.  */
-
-static rtx
-convert_const_symbol_ref (exp, attr)
-     rtx exp;
-     struct attr_desc *attr;
-{
-  rtx condexp;
-  struct attr_value *av;
-  int i;
-  int num_alt = 0;
-
-  for (av = attr->first_value; av; av = av->next)
-    num_alt++;
-
-  /* Make a COND with all tests but the last, and in the original order.
-     Select the last value via the default.  Note that the attr values
-     are constructed in reverse order.  */
-
-  condexp = rtx_alloc (COND);
-  XVEC (condexp, 0) = rtvec_alloc ((num_alt - 1) * 2);
-  av = attr->first_value;
-  XEXP (condexp, 1) = av->value;
-
-  for (i = num_alt - 2; av = av->next, i >= 0; i--)
-    {
-      char *p, *string;
-      rtx value;
-
-      string = p = (char *) oballoc (2
-				     + strlen (attr->name)
-				     + strlen (XSTR (av->value, 0)));
-      strcpy (p, attr->name);
-      strcat (p, "_");
-      strcat (p, XSTR (av->value, 0));
-      for (; *p != '\0'; p++)
-	*p = TOUPPER (*p);
-
-      value = attr_rtx (SYMBOL_REF, string);
-      ATTR_IND_SIMPLIFIED_P (value) = 1;
-
-      XVECEXP (condexp, 0, 2 * i) = attr_rtx (EQ, exp, value);
-
-      XVECEXP (condexp, 0, 2 * i + 1) = av->value;
-    }
-
-  return condexp;
-}
-#endif
 
 /* Given a valid expression for an attribute value, remove any IF_THEN_ELSE
    expressions by converting them into a COND.  This removes cases from this
@@ -1475,21 +1418,8 @@ make_canonical (attr, exp)
 	 This makes the COND something that won't be considered an arbitrary
 	 expression by walk_attr_value.  */
       ATTR_IND_SIMPLIFIED_P (exp) = 1;
-#if 0
-      /* ??? Why do we do this?  With attribute values { A B C D E }, this
-         tends to generate (!(x==A) && !(x==B) && !(x==C) && !(x==D)) rather
-	 than (x==E).  */
-      exp = convert_const_symbol_ref (exp, attr);
-      ATTR_IND_SIMPLIFIED_P (exp) = 1;
-      exp = check_attr_value (exp, attr);
-      /* Goto COND case since this is now a COND.  Note that while the
-         new expression is rescanned, all symbol_ref notes are marked as
-	 unchanging.  */
-      goto cond;
-#else
       exp = check_attr_value (exp, attr);
       break;
-#endif
 
     case IF_THEN_ELSE:
       newexp = rtx_alloc (COND);
@@ -3603,13 +3533,6 @@ optimize_attrs ()
 	    continue;
 
 	  rtl_obstack = temp_obstack;
-#if 0 /* This was intended as a speed up, but it was slower.  */
-	  if (insn_n_alternatives[ie->insn_code] > 6
-	      && count_sub_rtxs (av->value, 200) >= 200)
-	    newexp = simplify_by_alternatives (av->value, ie->insn_code,
-					       ie->insn_index);
-	  else
-#endif
 	  newexp = av->value;
 	  while (GET_CODE (newexp) == COND)
 	    {
@@ -3636,38 +3559,6 @@ optimize_attrs ()
   free (insn_code_values - 2);
 }
 
-#if 0
-static rtx
-simplify_by_alternatives (exp, insn_code, insn_index)
-     rtx exp;
-     int insn_code, insn_index;
-{
-  int i;
-  int len = insn_n_alternatives[insn_code];
-  rtx newexp = rtx_alloc (COND);
-  rtx ultimate;
-
-  XVEC (newexp, 0) = rtvec_alloc (len * 2);
-
-  /* It will not matter what value we use as the default value
-     of the new COND, since that default will never be used.
-     Choose something of the right type.  */
-  for (ultimate = exp; GET_CODE (ultimate) == COND;)
-    ultimate = XEXP (ultimate, 1);
-  XEXP (newexp, 1) = ultimate;
-
-  for (i = 0; i < insn_n_alternatives[insn_code]; i++)
-    {
-      current_alternative_string = attr_numeral (i);
-      XVECEXP (newexp, 0, i * 2) = make_alternative_compare (1 << i);
-      XVECEXP (newexp, 0, i * 2 + 1)
-	= simplify_cond (exp, insn_code, insn_index);
-    }
-
-  current_alternative_string = 0;
-  return simplify_cond (newexp, insn_code, insn_index);
-}
-#endif
 
 /* If EXP is a suitable expression, reorganize it by constructing an
    equivalent expression that is a COND with the tests being all combinations
@@ -5983,10 +5874,6 @@ static rtx
 copy_rtx_unchanging (orig)
      rtx orig;
 {
-#if 0
-  rtx copy;
-  RTX_CODE code;
-#endif
 
   if (ATTR_IND_SIMPLIFIED_P (orig) || ATTR_CURR_SIMPLIFIED_P (orig))
     return orig;
@@ -5994,28 +5881,6 @@ copy_rtx_unchanging (orig)
   ATTR_CURR_SIMPLIFIED_P (orig) = 1;
   return orig;
 
-#if 0
-  code = GET_CODE (orig);
-  switch (code)
-    {
-    case CONST_INT:
-    case CONST_DOUBLE:
-    case SYMBOL_REF:
-    case CODE_LABEL:
-      return orig;
-
-    default:
-      break;
-    }
-
-  copy = rtx_alloc (code);
-  PUT_MODE (copy, GET_MODE (orig));
-  ATTR_IND_SIMPLIFIED_P (copy) = 1;
-
-  memcpy (&XEXP (copy, 0), &XEXP (orig, 0),
-	  GET_RTX_LENGTH (GET_CODE (copy)) * sizeof (rtx));
-  return copy;
-#endif
 }
 
 /* Determine if an insn has a constant number of delay slots, i.e., the

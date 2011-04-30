@@ -97,13 +97,5 @@ __powdi( _f_real8 x,
 }
 
 /* if needed for compatibility with f77 and pass by address */
-#if 0
-_f_real8
-pow_di( _f_real8 *x,
-	_f_int4 *y )
-{
-	return(_RTON(*x, *y));
-}
-#endif	/* end of if 0 */
 
 #endif	/* end of mips or little endian */

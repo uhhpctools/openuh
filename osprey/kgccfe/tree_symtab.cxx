@@ -51,7 +51,11 @@
 
 /* translate gnu decl trees to symtab references */
 
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "errors.h"
 #include "gnu_config.h"
@@ -70,6 +74,11 @@ extern "C" {
 // with the enumeration in common/com/ia32/config_targ.h
 #undef TARGET_PENTIUM
 #endif /* TARG_IA32 */
+#if defined(TARG_PPC32)
+// the definition in gnu/config/ppc32/rs6000.h causes problem
+// with the enumeration in common/com/ppc32/config_targ.h
+#undef TARGET_POWERPC
+#endif /* TARG_PPC32 */
 
 #ifdef KEY 
 #ifdef TARG_MIPS
@@ -91,6 +100,7 @@ extern "C" {
 #ifdef KEY
 #include "erfe.h"
 #endif
+#include "config_asm.h"
 
 extern FILE *tree_dump_file; // For debugging only
 
@@ -100,22 +110,52 @@ static char*
 Get_Name (tree node)
 {
 	static UINT anon_num = 0;
-	static char buf[64];
+	static char buf[256];
 
-	if (node == NULL) {
-		++anon_num;
-		sprintf(buf, ".anonymous.%d", anon_num);
-		return buf;
-	}
-	else if (TREE_CODE (node) == IDENTIFIER_NODE)
+	if (node != NULL) {
+	    if (TREE_CODE (node) == IDENTIFIER_NODE)
 		return IDENTIFIER_POINTER (node);
-	else if (TREE_CODE (node) == TYPE_DECL)
+	    else if (TREE_CODE (node) == TYPE_DECL)
 		// If type has a typedef-name, the TYPE_NAME is a TYPE_DECL.
 		return IDENTIFIER_POINTER (DECL_NAME (node));
-	else
-		FmtAssert(FALSE, ("Get_Name unexpected tree"));
-		return NULL;
+  	    else if (DECL_NAME (node)) {
+		// e.g. var_decl or function_decl
+		return IDENTIFIER_POINTER (DECL_NAME (node));
+	    }
+	}
+	// null node or null decl_name,
+	// e.g. from compiler temporaries
+	++anon_num;
+	sprintf(buf, "%sanonymous%s%d", Label_Name_Separator, Label_Name_Separator, anon_num);
+	return buf;
 }
+
+#ifdef TARG_SL
+/* this function only return signed mtype and the function MTYPE_complement will do 
+ * conversion from signed type to unsigned type if current type is unsigned type */
+TYPE_ID
+Get_Mtype_For_Integer_Type(tree type_tree, INT64 tsize) 
+{
+     TYPE_ID mtype;
+     switch(tsize) {
+       case 1:
+         mtype = MTYPE_I1;
+         break;
+       case 2:
+         mtype = MTYPE_I2;
+         break;
+       case 4: 
+         mtype = MTYPE_I4;
+         break;
+       case 8:
+         DevWarn("8 byte types being used");
+         mtype = MTYPE_I8;
+         break;
+    }
+    return mtype;
+}
+#endif 
+
 
 #ifdef KEY
 extern void WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_ID, ST *);
@@ -158,6 +198,83 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 	    TREE_CODE(TYPE_NAME(type_tree)) == TYPE_DECL &&
 	    TYPE_MAIN_VARIANT(type_tree) != type_tree) {
 		idx = Get_TY (TYPE_MAIN_VARIANT(type_tree));
+#ifdef TARG_NVISA
+		if (TREE_CODE(type_tree) == RECORD_TYPE) {
+		   char *name = Get_Name(TYPE_NAME(type_tree));
+		   if (strcmp(name, "char1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uchar1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "char2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uchar2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "char3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uchar3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "char4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uchar4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "short1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ushort1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "short2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ushort2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "short3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ushort3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "short4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ushort4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "int1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uint1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "int2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uint2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "int3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uint3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "int4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "uint4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "long1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ulong1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "long2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ulong2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "long3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ulong3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "long4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "ulong4") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "float1") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "float2") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "float3") == 0)
+			   Set_TY_can_be_vector(idx);
+		   else if (strcmp(name, "float4") == 0)
+			   Set_TY_can_be_vector(idx);
+		}
+#endif
 		if (TYPE_READONLY(type_tree))
 			Set_TY_is_const (idx);
 		if (TYPE_VOLATILE(type_tree))
@@ -231,11 +348,38 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 	case BOOLEAN_TYPE:
 	case INTEGER_TYPE:
 		switch (tsize) {
-		case 1:  mtype = MTYPE_I1; break;
-		case 2:  mtype = MTYPE_I2; break;
-		case 4:  mtype = MTYPE_I4; break;
-		case 8:  mtype = MTYPE_I8; break;
-#if !defined(TARG_X8664) && !defined(TARG_IA64) 
+		case 1: 
+#ifdef TARG_SL		
+		  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else  
+		  mtype = MTYPE_I1;
+#endif 
+		  break;
+		case 2: 
+#ifdef TARG_SL 
+                  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+	     	  mtype = MTYPE_I2; 
+#endif 
+		  break;
+
+		case 4: 
+#ifdef TARG_SL 
+                  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+                  mtype = MTYPE_I4; 
+#endif 
+                  break;
+
+		case 8: 
+#ifdef TARG_SL 
+		  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+		  mtype = MTYPE_I8; 
+#endif 
+		  break;
+
+#if !defined(TARG_X8664) && !defined(TARG_IA64) && !defined(TARG_MIPS) && !defined(TARG_LOONGSON)
 #ifdef _LP64
 		case 16:  mtype = MTYPE_I8; break;
 #endif /* _LP64 */
@@ -260,10 +404,34 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		  TY_Init (ty, tsize, KIND_SCALAR, mtype, 
 		           Save_Str(Get_Name(TYPE_NAME(type_tree))) );
 		  Set_TY_no_ansi_alias (ty);
+#if defined(TARG_SL)
+		  // for -m32, it is not the predefined type, alignment shoule be set.
+		  // Corresponding to following code about bug#2932.
+		  if (!TARGET_64BIT)  
+		    Set_TY_align (idx, align);
+#endif
+
  		} else
 #endif
+#ifdef TARG_NVISA
+		// In C/C++, char is a separate type from signed char
+		// or unsigned char.  WHIRL doesn't distinguish this
+		// because what we emit needs a sign property, 
+		// but whirl2c needs to be able to distinguish.
+		// So override the TY_is_character flag (which was previously
+		// only used for Fortran) to say that this is a plain char.
+		// Gnu creates a "char_type_node" for this purpose.
+		if (tsize == 1 && type_tree == char_type_node) {
+		  // create a new type with this flag
+		  TY &ty = New_TY (idx);
+		  TY_Init (ty, tsize, KIND_SCALAR, mtype,
+			Save_Str(Get_Name(TYPE_NAME(type_tree))) );
+		  Set_TY_is_character(ty);
+		} else
+#endif
 		idx = MTYPE_To_TY (mtype);	// use predefined type
-#ifdef TARG_X8664
+
+#if defined(TARG_X8664) || defined(TARG_SL)
 		/* At least for -m32, the alignment is not the same as the data
 		   type's natural size. (bug#2932)
 		*/
@@ -293,7 +461,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 #if defined(TARG_IA64)
 		case 12:
 		case 16: mtype = MTYPE_F10; break;
-#elif defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664)
+#elif defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664) || defined(TARG_NVISA) || defined(TARG_LOONGSON)
 		case 12:
 		case 16: mtype = MTYPE_FQ; break;
 #else
@@ -311,7 +479,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 #endif
 		case  8: mtype = MTYPE_C4; break;
 		case 16: mtype = MTYPE_C8; break;
-#if defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664)
+#if defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664) || defined(TARG_LOONGSON)
 		case 32: mtype = MTYPE_CQ; break;
 #endif /* TARG_MIPS */
 #ifdef TARG_IA64
@@ -361,12 +529,11 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		if (TREE_CODE(TYPE_SIZE(TREE_TYPE(type_tree))) == INTEGER_CST) {
 			Set_ARB_const_stride (arb);
 			Set_ARB_stride_val (arb, 
-				Get_Integer_Value (TYPE_SIZE(TREE_TYPE(type_tree))) 
-				/ BITSPERBYTE);
+				Get_Integer_Value (TYPE_SIZE_UNIT(TREE_TYPE(type_tree))));
 		}
 		else {
 			WN *swn;
-			swn = WFE_Expand_Expr (TYPE_SIZE(TREE_TYPE(type_tree)));
+			swn = WFE_Expand_Expr (TYPE_SIZE_UNIT(TREE_TYPE(type_tree)));
 			if (WN_opcode (swn) == OPC_U4I4CVT ||
 			    WN_opcode (swn) == OPC_U8I8CVT) {
 				swn = WN_kid0 (swn);
@@ -377,9 +544,9 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			// and use LDID of that stored address as swn.
 			// Copied from Wfe_Save_Expr in wfe_expr.cxx
 			if (WN_operator (swn) != OPR_LDID) {
-			  TY_IDX    ty_idx  = 
-			    Get_TY (TREE_TYPE (type_size));
-			  TYPE_ID   mtype   = TY_mtype (ty_idx);
+
+			  TYPE_ID   mtype   = WN_rtype(swn);
+			  TY_IDX    ty_idx  = MTYPE_To_TY(mtype);
 			  ST       *st;
 			  st = Gen_Temp_Symbol (ty_idx, "__save_expr");
 #ifdef KEY
@@ -438,9 +605,9 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			// and use LDID of that stored address as uwn.
 			// Copied from Wfe_Save_Expr in wfe_expr.cxx
 			if (WN_operator (uwn) != OPR_LDID) {
-			  TY_IDX    ty_idx  = 
-			    Get_TY (TREE_TYPE (type_size));
-			  TYPE_ID   mtype   = TY_mtype (ty_idx);
+        
+			  TYPE_ID   mtype   = WN_rtype(uwn);
+			  TY_IDX    ty_idx  = MTYPE_To_TY(mtype);
 			  ST       *st;
 			  st = Gen_Temp_Symbol (ty_idx, "__save_expr");
 #ifdef KEY
@@ -483,7 +650,9 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 #endif
 		   ) {
 			WN *swn, *wn;
-			swn = WFE_Expand_Expr (type_size);
+
+			swn = WFE_Expand_Expr (TYPE_SIZE_UNIT(type_tree));
+
 			if (TY_size(TY_etype(ty))) {
 				if (WN_opcode (swn) == OPC_U4I4CVT ||
 				    WN_opcode (swn) == OPC_U8I8CVT) {
@@ -495,9 +664,8 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				// and use LDID of that stored address as swn.
 				// Copied from Wfe_Save_Expr in wfe_expr.cxx
 				if (WN_operator (swn) != OPR_LDID) {
-				  TY_IDX    ty_idx  = 
-				    Get_TY (TREE_TYPE (type_size));
-				  TYPE_ID   mtype   = TY_mtype (ty_idx);
+				  TYPE_ID   mtype   = WN_rtype(swn);
+				  TY_IDX    ty_idx  = MTYPE_To_TY(mtype);
 				  ST       *st;
 				  st = Gen_Temp_Symbol (ty_idx, "__save_expr");
 #ifdef KEY
@@ -515,7 +683,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				ST *st = WN_st (swn);
 				TY_IDX ty_idx = ST_type (st);
 				TYPE_ID mtype = TY_mtype (ty_idx);
-				swn = WN_Div (mtype, swn, WN_Intconst (mtype, BITSPERBYTE));
+
 				wn = WN_Stid (mtype, 0, st, ty_idx, swn);
 				WFE_Stmt_Append (wn, Get_Srcpos());
 			}
@@ -838,6 +1006,18 @@ Create_ST_For_Tree (tree decl_node)
     if (*name == '*' ) name++;
   }
   else if (DECL_NAME (decl_node)) {
+#ifdef TARG_NVISA
+   if (TREE_CODE(decl_node) == PARM_DECL) {
+	static char buf[256];
+	// have to mangle parameter names since referred to by name;
+	// need to mangle such that params in different functions are unique.
+	sprintf(buf, "__cudaparm_%s_%s",
+		ST_name(Get_Current_PU_ST()),
+		IDENTIFIER_POINTER (DECL_NAME (decl_node)));
+	name = buf;
+   }
+   else
+#endif
     name = IDENTIFIER_POINTER (DECL_NAME (decl_node));
   }
   //end - fix for bug OSP 204
@@ -882,6 +1062,9 @@ Create_ST_For_Tree (tree decl_node)
 
         st = New_ST (GLOBAL_SYMTAB);
 
+	if (DECL_CDECL(decl_node))
+	  Set_PU_is_cdecl(pu_idx);
+
 #ifdef KEY	// Fix bug # 34
 // gcc sometimes adds a '*' and itself handles it this way while outputing
 	char * check_for_star = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (
@@ -916,7 +1099,8 @@ Create_ST_For_Tree (tree decl_node)
 	      if (DECL_INITIAL(decl_node))
 		sclass = SCLASS_DGLOBAL;
 	      else if (TREE_STATIC(decl_node)) {
-		if (flag_no_common || DECL_SECTION_NAME(decl_node))
+		if (flag_no_common || DECL_SECTION_NAME(decl_node) ||
+                    DECL_THREAD_LOCAL(decl_node) )
               	  sclass = SCLASS_UGLOBAL;
 		else
               	  sclass = SCLASS_COMMON;
@@ -943,6 +1127,22 @@ Create_ST_For_Tree (tree decl_node)
             else {
               	sclass = SCLASS_FSTATIC;
 		eclass = EXPORT_LOCAL;
+#ifdef TARG_NVISA
+		if (TREE_CODE(TREE_TYPE(decl_node)) == ARRAY_TYPE
+		  && TYPE_SIZE(TREE_TYPE(decl_node)) == NULL)
+		{
+		    // HACK WARNING:
+		    // cudafe is generating these as fake pointers,
+		    // which it later allocates all to the same memory;
+		    // because they are static wopt thinks they are already
+		    // allocated and don't alias, but they do, 
+		    // so change them to be common preemptible
+		    // (ideally cudafe should probably do this itself).
+		    DevWarn("static array of unknown size, change to common");
+              	    sclass = SCLASS_COMMON;
+		    eclass = EXPORT_PREEMPTIBLE;
+		}
+#endif
             }
             level = GLOBAL_SYMTAB;
           }
@@ -997,6 +1197,7 @@ Create_ST_For_Tree (tree decl_node)
 		Set_TY_is_const (ty_idx);
 	if (TREE_THIS_VOLATILE(decl_node))
 		Set_TY_is_volatile (ty_idx);
+
 #ifdef KEY
 	// Handle aligned attribute (bug 7331)
 	if (DECL_USER_ALIGN (decl_node))
@@ -1011,6 +1212,17 @@ Create_ST_For_Tree (tree decl_node)
         if (TREE_CODE(decl_node) == PARM_DECL) {
 		Set_ST_is_value_parm(st);
         }
+        if (TREE_CODE(decl_node) == VAR_DECL && TREE_READONLY(decl_node) 
+		// const_var doesn't apply to stack variables.
+		// we are really doing this mainly for external const
+		// (if initialized then just replaced with initial value).
+		&& ST_sclass(st) != SCLASS_AUTO) 
+	{
+		Set_ST_is_const_var(st);
+	}
+	if (TREE_CODE(decl_node) == VAR_DECL && DECL_THREAD_LOCAL(decl_node)) {
+		Set_ST_is_thread_local (st);
+	}
       }
       break;
 
@@ -1031,6 +1243,32 @@ Create_ST_For_Tree (tree decl_node)
 */
   }
 
+#ifdef TARG_NVISA
+  if (DECL_GLOBAL(decl_node)) {
+    Set_ST_in_global_mem (st);
+  }
+  if (DECL_LOCAL(decl_node)) {
+    Set_ST_in_local_mem (st);
+  }
+  if (DECL_SHARED(decl_node)) {
+    Set_ST_in_shared_mem (st);
+    if (ST_sclass(st) == SCLASS_FORMAL)
+    	Set_ST_is_const_var(st);	/* param space is readonly */
+  }
+  if (DECL_CONSTANT(decl_node)) {
+    Set_ST_in_constant_mem (st);
+    Set_ST_is_const_var(st);
+  }
+  if (DECL_TEXTURE(decl_node)) {
+    Set_ST_in_texture_mem (st);
+  }
+  if (DECL_THREAD_LIMIT (decl_node) != 0 &&
+      DECL_BLOCK_LIMIT (decl_node) != 0 ) {
+    Set_PU_thread_limit (Pu_Table [ST_pu(st)], DECL_THREAD_LIMIT (decl_node));
+    Set_PU_block_limit (Pu_Table [ST_pu(st)], DECL_BLOCK_LIMIT (decl_node));
+  }
+#endif /* TARG_NVISA */
+
   if (DECL_SECTION_NAME (decl_node)) {
     if (TREE_CODE (decl_node) == FUNCTION_DECL)
       level = GLOBAL_SYMTAB;
@@ -1044,6 +1282,22 @@ Create_ST_For_Tree (tree decl_node)
   if (DECL_SYSCALL_LINKAGE (decl_node)) {
 	Set_PU_has_syscall_linkage (Pu_Table [ST_pu(st)]);
   }
+
+#if defined(TARG_SL)
+  if(DECL_SL_MODEL_NAME(decl_node)) {
+    if(TREE_CODE(decl_node) == VAR_DECL && 
+       TREE_CODE(DECL_SL_MODEL_NAME(decl_node)) == STRING_CST) 
+    {
+      if(!strcmp(TREE_STRING_POINTER(DECL_SL_MODEL_NAME(decl_node)), "small"))
+        Set_ST_gprel(st); 
+      else if(!strcmp(TREE_STRING_POINTER(DECL_SL_MODEL_NAME(decl_node)), "large"))
+        Set_ST_not_gprel(st); 
+      else 
+        Fail_FmtAssertion("incorrect model type for sl data model"); 
+    }
+  }
+#endif 
+
   if(Debug_Level >= 2) {
 #ifdef KEY
     // Bug 559
@@ -1064,8 +1318,7 @@ Create_ST_For_Tree (tree decl_node)
 	DST_INFO *info_ptr = DST_INFO_IDX_TO_PTR(dst_idx);
 	DST_ATTR_IDX attr_idx = DST_INFO_attributes(info_ptr);
 	DST_VARIABLE *attr = DST_ATTR_IDX_TO_PTR(attr_idx, DST_VARIABLE);
-	DST_ASSOC_INFO_fe_ptr(DST_VARIABLE_def_st(attr)) = 
-	  (void *)(INTPTR)ST_st_idx(st);
+	DST_ASSOC_INFO_st_idx(DST_VARIABLE_def_st(attr)) = ST_st_idx(st);
       } else {
 	struct mongoose_gcc_DST_IDX dst =
 	  Create_DST_decl_For_Tree(decl_node,st);
@@ -1078,5 +1331,75 @@ Create_ST_For_Tree (tree decl_node)
      DECL_DST_IDX(decl_node) = dst;
 #endif
   }
+
+/* NOTES:
+ * Following code is temporarily used since mtype isn't 
+ * ready for now. After mtype handling has been finished we will
+ * use new normal method to handle section assignment. */
+
+/* Description:
+ * Set ST Flags for variant internal buffer type 
+ * VBUF is only to be file scope variable and gp-relative
+ * SBUF need to decide if SBUF is explicitly declared. If 
+ * declared the flag Set_ST_in_sbuf need to be set to indicate 
+ * the variable will be processed by CP2. */
+#ifdef TARG_SL 
+	const char* section_name;
+	int has_assigned_section = 0;
+	if(DECL_VBUF(decl_node)) // || DECL_SBUF(decl_node))
+	{
+           if(DECL_V1BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node))) 
+          { 
+             Set_ST_in_v1buf(st);
+             Set_ST_gprel(st);
+          }	 
+          else if(DECL_V2BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node)))
+          {
+            Set_ST_in_v2buf(st);
+       	    Set_ST_gprel(st);
+
+            TY_IDX st_ty_idx=ST_type(st);
+            Set_TY_size (st_ty_idx, TY_size(st_ty_idx)*2);
+
+          }
+          else if(DECL_V4BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node))) 
+          {
+            Set_ST_in_v4buf(st);       
+            Set_ST_gprel(st);
+
+            TY_IDX st_ty_idx=ST_type(st);
+            Set_TY_size (st_ty_idx, TY_size(st_ty_idx)*4);
+
+          }
+	}
+	else if(DECL_SBUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+		&& !POINTER_TYPE_P(TREE_TYPE(decl_node))) {
+	  if(TREE_CODE(TREE_TYPE(decl_node)) == ARRAY_TYPE)
+	  {
+	     tree element_type = TREE_TYPE(decl_node); 
+	     while(TREE_CODE(element_type) == ARRAY_TYPE)
+	       element_type = TREE_TYPE(element_type); 
+
+	     if(!POINTER_TYPE_P(element_type))
+	     {
+                Set_ST_in_sbuf(st);
+ 	        Set_ST_gprel(st); 
+	     }
+	  }
+	  else 
+	  {
+	     Set_ST_in_sbuf(st);
+ 	     Set_ST_gprel(st); 
+	  }
+	}
+	else if(DECL_SDRAM(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+          && !POINTER_TYPE_P(TREE_TYPE(decl_node))) {
+              Set_ST_in_sdram(st);
+	}
+#endif  // TARG_SL
+
   return st;
 }

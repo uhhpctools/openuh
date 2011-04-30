@@ -123,7 +123,7 @@ public:
   // the ST of this variable
   ST   *St( void ) const;
   // the name of this variable
-  char *Name( void ) const;
+  const char *Name( void ) const;
   // a new WN representing the home of this variable
   WN *New_home_wn( ALIAS_MANAGER * ) const;
 

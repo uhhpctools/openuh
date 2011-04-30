@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -324,8 +328,12 @@
 #endif
 
 #include "fb_whirl.h"
+#include "cxx_hash.h"
 
 extern WN_MAP Parent_Map;
+#ifdef LNO
+extern HASH_TABLE<WN*, BOOL> *Deleted_Loop_Map;
+#endif
 
 #define LWN_Get_Parent(wn)	((WN*)WN_MAP_Get(Parent_Map, (WN*)wn))
 #define LWN_Set_Parent(wn, p)	(WN_MAP_Set(Parent_Map, wn, (void *)p))

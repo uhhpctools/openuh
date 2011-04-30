@@ -96,22 +96,6 @@ Boston, MA 02111-1307, USA.
     fprintf ((FILE), "\t.set .,.+%u\n", (ROUNDED));	\
   } while (0)
 
-#if 0 /* For now, let's leave these machine-specific.  */
-/* Use crt1.o as a startup file and crtn.o as a closing file.  */
-
-#define STARTFILE_SPEC  \
-  "%{pg:gcrt1.o%s}%{!pg:%{p:mcrt1.o%s}%{!p:crt1.o%s}}"
-
-#ifdef CROSS_COMPILE
-#define LIB_SPEC "-lc crtn.o%s"
-#else
-#define LIB_SPEC "%{p:-L/usr/lib/libp}%{pg:-L/usr/lib/libp} -lc crtn.o%s"
-#endif
-
-/* Special flags for the linker.  I don't know what they do.  */
-
-#define LINK_SPEC "%{T*} %{z:-lm}"
-#endif
 
 /* Output #ident as a .ident.  */
 

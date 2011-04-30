@@ -52,10 +52,17 @@ CFILES = \
 	array_alloc.c \
 	make_depend.c
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 first:
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(BUILD_AREA)/include)
+endif
 
 last: make_libdeps
 

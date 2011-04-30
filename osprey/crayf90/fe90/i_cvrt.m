@@ -118,7 +118,7 @@ fprintf(debug_file, "i_cvrt(%5d):     %-20s= %-30lo (octal)\n", __LINE__, STR1, 
 
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_MONGOOSE)
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) || defined(_TARGET_MONGOOSE)
 # define PDG_DBG_PRINT_T(STR1, VAR1)					       \
 fprintf(debug_file, "i_cvrt(%5d):     %-20s= %1o %1o %1o %1o %1o %1o %1o %1o " \
 		"%d %d %d %1o %d\n", __LINE__, STR1,			       \

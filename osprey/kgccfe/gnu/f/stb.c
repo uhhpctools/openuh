@@ -9121,10 +9121,6 @@ ffestb_R10012_ (ffelexToken t)
       return (ffelexHandler) ffestb_R100113_;
 
     case FFELEX_typeAPOSTROPHE:
-#if 0				/* No apparent need for this, and not killed
-				   anywhere. */
-      ffesta_tokens[1] = ffelex_token_use (t);
-#endif
       ffelex_set_expecting_hollerith (-1, '\'',
 				      ffelex_token_where_line (t),
 				      ffelex_token_where_column (t));	/* Don't have to unset
@@ -9391,10 +9387,6 @@ ffestb_R10014_ (ffelexToken t)
       ffebad_finish ();
       ffelex_token_kill (ffestb_local_.format.pre.t);
       ffesta_confirmed ();
-#if 0				/* No apparent need for this, and not killed
-				   anywhere. */
-      ffesta_tokens[1] = ffelex_token_use (t);
-#endif
       ffelex_set_expecting_hollerith (-1, '\"',
 				      ffelex_token_where_line (t),
 				      ffelex_token_where_column (t));	/* Don't have to unset
@@ -9408,10 +9400,6 @@ ffestb_R10014_ (ffelexToken t)
 		   ffelex_token_where_column (ffestb_local_.format.pre.t));
       ffebad_finish ();
       ffelex_token_kill (ffestb_local_.format.pre.t);
-#if 0				/* No apparent need for this, and not killed
-				   anywhere. */
-      ffesta_tokens[1] = ffelex_token_use (t);
-#endif
       ffelex_set_expecting_hollerith (-1, '\'', ffelex_token_where_line (t),
 				      ffelex_token_where_column (t));	/* Don't have to unset
 									   this one. */
@@ -14335,14 +14323,6 @@ ffestb_R9044_ (ffelexToken t)
 	  ffestb_local_.open.context = FFEEXPR_contextFILEINT;
 	  break;
 
-#if 0				/* Haven't added support for expression
-				   context yet (though easy). */
-	case FFESTR_openKEY:
-	  ffestb_local_.open.ix = FFESTP_openixKEY;
-	  ffestb_local_.open.left = FALSE;
-	  ffestb_local_.open.context = FFEEXPR_contextFILEKEY;
-	  break;
-#endif
 
 	case FFESTR_openMAXREC:
 	  ffestb_local_.open.ix = FFESTP_openixMAXREC;

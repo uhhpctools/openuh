@@ -43,7 +43,7 @@
 // This file define initialization of pointer variables to symbols defined
 // in lno.so but referenced in be/be.so.
 
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 
 #include "defs.h"
 #include "wn.h"

@@ -121,6 +121,66 @@ static int64 non_repeatable[2] = {
 #define	E_WITH_D_NON_ANSI	DW_IS_NON_ANSI
 #endif
 
+
+#ifndef __LITTLE_ENDIAN
+
+// Byte 3 swaps with byte 0, and byte 2 swaps with byte 1
+static void inline byte_swap (unsigned int *) __attribute__ ((always_inline));
+
+static void inline byte_swap (unsigned int * iptr)
+{
+  unsigned char tmp;
+#ifdef KEY /* Mac port */
+  unsigned char * cptr = (unsigned char *) iptr;
+#else /* KEY Mac port */
+  unsigned char * cptr = (char *) iptr;
+#endif /* KEY Mac port */
+
+  tmp = cptr[0];
+  cptr[0] = cptr[3];
+  cptr[3] = tmp;
+
+  tmp = cptr[1];
+  cptr[1] = cptr[2];
+  cptr[2] = tmp;
+}
+
+// 'in' is an array of length 'length' of struct fmt_entry. For each
+// array element, convert little-endian field assignments to big-endian
+// format. Skip array elements determined by STRING_ED.
+static void
+big_endian_store (struct fmt_entry * in, int length)
+{
+  unsigned int * iptr;
+  struct fmt_entry tmp;
+  int i = 0;
+
+  while (i < length)
+  {
+    iptr = (unsigned int *) (&in[i]);
+    bzero (&tmp, sizeof (struct fmt_entry));
+    memcpy (&tmp, &in[i], sizeof (struct fmt_entry));
+    bzero (&in[i], sizeof (struct fmt_entry));
+    iptr[0] = (tmp.op_code << 25) | (tmp.default_digits << 24) | tmp.digits_field;
+    iptr[1] = (tmp.exponent << 26) | (tmp.reserved2 << 24) | tmp.field_width;
+    iptr[2] = (tmp.rgcdedf << 31) | (tmp.reserved3 << 16) | tmp.offset;
+    iptr[3] = tmp.rep_count;
+
+    byte_swap (&iptr[0]);
+    byte_swap (&iptr[1]);
+    byte_swap (&iptr[2]);
+    byte_swap (&iptr[3]);
+
+    if (tmp.op_code == STRING_ED)
+      i += ((tmp.field_width + FMT_ENTRY_BYTE_SIZE - 1) / FMT_ENTRY_BYTE_SIZE) + 1;
+    else 
+      i++;
+  }
+}
+
+#endif
+
+
 /*
  *	_fmt_parse()
  *
@@ -263,7 +323,10 @@ _fmt_parse(
 	}
 
 	*fmt_str_len	= length * FMT_ENTRY_WORD_SIZE;
-
+#ifndef __LITTLE_ENDIAN
+	if (pfmt->caller != LIB_CALL)
+	  big_endian_store (pfmt->parsed, length);
+#endif
 	return(pfmt->parsed);
 
 } /* _parsfmt */

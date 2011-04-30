@@ -64,6 +64,10 @@ extern WN *Perform_Preopt_Optimization (WN *, WN *);
 
 extern WN *Perform_Global_Optimization (WN *, WN *, struct ALIAS_MANAGER *);
 
+#ifdef TARG_NVISA
+extern WN *Perform_Preopt_CMC_Optimization(WN *pu_wn, WN *region_wn);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

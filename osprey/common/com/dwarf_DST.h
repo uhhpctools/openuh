@@ -96,9 +96,12 @@ extern "C" {
 #define DST_flag_allocatable       0x00200000 /* true if symbol is allocatable*/
 #define DST_flag_assumed_shape     0x00400000 /* true if symbol is assumed shape*/
 #define DST_flag_assumed_size      0x00800000 /* true if symbol is assumed size*/
+#if !defined(TARG_NVISA)
+//Obsolete
 #define DST_flag_assoc_fe          0x10000000 /* pointer to front-end entity */
 #define DST_flag_assoc_be          0x20000000 /* pointer to back-end entity */
 #define DST_flag_assoc_idx         0x40000000 /* index to back-end entity */
+#endif
 
 #define DST_flag_info_mark         0x80000000 /* DST_info mark for traversal */
 #define DST_flag_static		   0x100000000LL /* Has no AT_data_member_location */
@@ -130,9 +133,11 @@ extern "C" {
 #define DST_SET_allocatable(flag) (flag |= DST_flag_allocatable)
 #define DST_SET_assumed_shape(flag) (flag |= DST_flag_assumed_shape)
 #define DST_SET_assumed_size(flag) (flag |= DST_flag_assumed_size)
+#if !defined(TARG_NVISA)
 #define DST_SET_assoc_fe(flag) (flag |= DST_flag_assoc_fe)
 #define DST_SET_assoc_be(flag) (flag |= DST_flag_assoc_be)
 #define DST_SET_assoc_idx(flag) (flag |= DST_flag_assoc_idx)
+#endif
 #define DST_SET_info_mark(flag) (flag |= DST_flag_info_mark)
 #define DST_SET_static(flag) (flag |= DST_flag_static)
 #ifdef TARG_X8664
@@ -163,9 +168,11 @@ extern "C" {
 #define DST_RESET_allocatable(flag) (flag &= ~DST_flag_allocatable)
 #define DST_RESET_assumed_shape(flag) (flag &= ~DST_flag_assumed_shape)
 #define DST_RESET_assumed_size(flag) (flag &= ~DST_flag_assumed_size)
+#if !defined(TARG_NVISA)
 #define DST_RESET_assoc_fe(flag) (flag &= ~DST_flag_assoc_fe)
 #define DST_RESET_assoc_be(flag) (flag &= ~DST_flag_assoc_be)
 #define DST_RESET_assoc_idx(flag) (flag &= ~DST_flag_assoc_idx)
+#endif
 #define DST_RESET_info_mark(flag) (flag &= ~DST_flag_info_mark)
 #define DST_RESET_static(flag) (flag &= ~DST_flag_static)
 #ifdef TARG_X8664
@@ -195,9 +202,11 @@ extern "C" {
 #define DST_IS_allocatable(flag) (flag & DST_flag_allocatable)
 #define DST_IS_assumed_shape(flag) (flag & DST_flag_assumed_shape)
 #define DST_IS_assumed_size(flag) (flag & DST_flag_assumed_size)
+#if !defined(TARG_NVISA)
 #define DST_IS_assoc_fe(flag) (flag & DST_flag_assoc_fe)
 #define DST_IS_assoc_be(flag) (flag & DST_flag_assoc_be)
 #define DST_IS_assoc_idx(flag) (flag & DST_flag_assoc_idx)
+#endif
 #define DST_IS_info_mark(flag) (flag & DST_flag_info_mark)
 #define DST_IS_static(flag) (flag & DST_flag_static)
 #ifdef TARG_X8664
@@ -249,23 +258,30 @@ typedef union DST_assoc_info
 {
    ST_IDX  st_idx;	/* idx to symbol table */
    ST     *st_ptr;	/* A temporary ptr used by fe */
+#if !defined(TARG_NVISA)
+   /* obsolete */
    union 
    {
      void *fe_ptr;
      UINTPS fe_uint;
    } st_u;
+#endif
 } DST_ASSOC_INFO;
 #define DST_ASSOC_INFO_st_idx(p) ((p).st_idx)
 #define DST_ASSOC_INFO_st_level(p) (ST_IDX_level((p).st_idx))
 #define DST_ASSOC_INFO_st_index(p) (ST_IDX_index((p).st_idx))
 #define DST_ASSOC_INFO_st_ptr(p) ((p).st_ptr)
+#if !defined(TARG_NVISA)
 #define DST_ASSOC_INFO_fe_ptr(p) ((p).st_u.fe_ptr)
+#endif
 
 #define pDST_ASSOC_INFO_st_idx(p) ((p)->st_idx)
 #define pDST_ASSOC_INFO_st_level(p) (ST_IDX_level((p)->st_idx))
 #define pDST_ASSOC_INFO_st_index(p) (ST_IDX_index((p)->st_idx))
 #define pDST_ASSOC_INFO_st_ptr(p) ((p)->st_ptr)
+#if !defined(TARG_NVISA)
 #define pDST_ASSOC_INFO_fe_ptr(p) ((p)->st_u.fe_ptr)
+#endif
 
 
                   /*--------------------*

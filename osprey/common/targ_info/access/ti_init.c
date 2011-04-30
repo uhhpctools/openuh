@@ -1,4 +1,15 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -38,9 +49,7 @@ static const char source_file[] = __FILE__;
 static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/targ_info/access/ti_init.c,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
-#include <alloca.h>
 #include <string.h>
-#include <ctype.h>
 
 #include "defs.h"
 #include "targ_isa_subset.h"
@@ -48,7 +57,8 @@ static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/
 #include "targ_isa_registers.h"
 #include "targ_abi_properties.h"
 #include "targ_proc.h"
-#include "dso.h"
+#include "targ_si.h"
+#include "errors.h"
 
 #include "ti_init.h"
 
@@ -61,33 +71,25 @@ static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/
  * ====================================================================
  */
 void
-#ifdef TARG_IA64
-TI_Initialize(ABI_PROPERTIES_ABI tabi, ISA_SUBSET tisa, PROCESSOR tproc, char *tpath, char* version)
-#else
-TI_Initialize(ABI_PROPERTIES_ABI tabi, ISA_SUBSET tisa, PROCESSOR tproc, char *tpath)
-#endif
+TI_Initialize(ABI_PROPERTIES_ABI tabi, ISA_SUBSET tisa, PROCESSOR tproc)
 {
   static BOOL initialized;
 
   if ( !initialized ) {
+#ifndef TARG_NVISA /* no scheduling info for NVISA */
     INT                i;
+    BOOL               found_targ    = FALSE;
     const char        *targ_name     = PROCESSOR_Name(tproc);
-#ifdef TARG_IA64
-    INT                targ_name_len = strlen(targ_name) + strlen(version);
-#else
-    INT                targ_name_len = strlen(targ_name);
-#endif
-    char              *targ_so_name  = alloca(targ_name_len + strlen(".so") + 1);
 
-    for (i = 0; i < targ_name_len; i++) {
-      targ_so_name[i] = tolower(targ_name[i]);
+    for (i = 0; i < (sizeof(si_machines) / sizeof(si_machines[0])); i++) {
+      if (strcmp(targ_name, si_machines[i].name) == 0) {
+        si_current_machine = i;
+        found_targ = TRUE;
+        break;
+      }
     }
-#ifdef TARG_IA64
-    if (strlen(version) > 0)  strcat(targ_so_name, version);
+    Is_True(found_targ, ("Scheduling info missing for target %s", targ_name));
 #endif
-    strcpy(targ_so_name + targ_name_len, ".so");
-
-    load_so(targ_so_name, tpath, FALSE /*verbose*/);
 
     ISA_SUBSET_Value = tisa;
     PROCESSOR_Value = tproc;
@@ -96,6 +98,7 @@ TI_Initialize(ABI_PROPERTIES_ABI tabi, ISA_SUBSET tisa, PROCESSOR tproc, char *t
     ABI_PROPERTIES_Initialize();
     ISA_HAZARD_Initialize();
     ISA_REGISTER_Initialize();
+
 
     initialized = TRUE;
   }

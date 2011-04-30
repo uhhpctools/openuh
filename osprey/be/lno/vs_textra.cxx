@@ -50,7 +50,6 @@
 *** $Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.vs_textra.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -58,7 +57,7 @@
 #pragma hdrstop
 
 #define vs_textra_CXX      "vs_textra.cxx"
-static char *rcs_id =   vs_textra_CXX "$Revision: 1.6 $";
+const static char *rcs_id =   vs_textra_CXX "$Revision: 1.6 $";
 
 
 #include <sys/types.h>

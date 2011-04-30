@@ -83,11 +83,7 @@ ftnint          match_type[NTYPES - 4] =	/* -4 because TYLONGLONG, TYLOGICAL8,	*
 };
 
 static int
-#if 11
 s_wsle_com (cilist64 *a, unit **fu)
-#else
-s_wsle_com (cilist *a, unit **fu)
-#endif
 {
    int             n;
    unit		  *ftnunit;
@@ -115,27 +111,18 @@ s_wsle_com (cilist *a, unit **fu)
 
 int s_wsle (cilist *a)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsle_com(&dst, &f77curunit);
-#else
-    return( s_wsle_com( a, &f77curunit ) );
-#endif
 }
 
 int s_wsle_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsle_com(&dst, fu);
-#else
-    return( s_wsle_com( a, fu ) );
-#endif
 }
 
-#if 11
 int s_wsle64 (cilist64 *a)
 {
     return( s_wsle_com( a, &f77curunit ) );
@@ -145,15 +132,10 @@ int s_wsle64_mp (cilist64 *a, unit **fu)
 {
     return( s_wsle_com( a, fu ) );
 }
-#endif
 
 
 static
-#if 11
 int s_wsli_com (icilist64 *a, unit **fu)
-#else
-int s_wsli_com (icilist *a, unit **fu)
-#endif
 {
    int             n;
    unit 	*ftnunit;
@@ -176,27 +158,18 @@ int s_wsli_com (icilist *a, unit **fu)
 
 int s_wsli (icilist *a)
 {
-#if 11
    icilist64 dst;
    get_icilist64(&dst, a);
    return(s_wsli_com(&dst, &f77curunit));
-#else
-    return(s_wsli_com(a, &f77curunit));
-#endif
 }
 
 int s_wsli_mp (icilist *a, unit **fu)
 {
-#if 11
    icilist64 dst;
    get_icilist64(&dst, a);
    return(s_wsli_com(&dst, fu));
-#else
-    return(s_wsli_com(a, fu));
-#endif
 }
 
-#if 11
 int s_wsli64 (icilist64 *a)
 {
     return(s_wsli_com(a, &f77curunit));
@@ -206,7 +179,6 @@ int s_wsli64_mp (icilist64 *a, unit **fu)
 {
     return(s_wsli_com(a, fu));
 }
-#endif
 
 
 int e_wsle (void)
@@ -844,22 +816,16 @@ do_Lio_com(ftnint *type, XINT *number, flex *ptr, unit **fu, ftnlen len)
 int
 do_Lio (ftnint *type, ftnint *number, flex *ptr, ftnlen len)
 {
-#if 11
     XINT xnumber;
     xnumber = *number;
     return( do_Lio_com( type, &xnumber, ptr, &f77curunit, len ) );
-#else
-    return( do_Lio_com( type, number, ptr, &f77curunit, len ) );
-#endif
 }
 
-#if 11
 int
 do_Lio64 (ftnint *type, XINT *number, flex *ptr, ftnlen len)
 {
     return( do_Lio_com( type, number, ptr, &f77curunit, len ) );
 }
-#endif
 
 static int
 do_Lio_1dim_com( ftnint *type, flex *ptr, 
@@ -953,22 +919,16 @@ do_Lio64_mp_1dim(ftnint *type, flex *ptr,
 int
 do_Lio_mp (ftnint *type, ftnint *number, flex *ptr, unit **fu, ftnlen len)
 {
-#if 11
     XINT xnumber;
     xnumber = *number;
     return( do_Lio_com( type, &xnumber, ptr, fu, len ) );
-#else
-    return (do_Lio_com(type, number, ptr, fu, len ));
-#endif
 }
 
-#if 11
 int
 do_Lio64_mp (ftnint *type, XINT *number, flex *ptr, unit **fu, ftnlen len)
 {
 	return (do_Lio_com(type, number, ptr, fu, len ));
 }
-#endif
 
 
 int
@@ -982,14 +942,12 @@ do_lio (ftnint *type, ftnint *number, flex *ptr, ftnlen len)
    return( do_Lio_com( &match_type[*type], &numb, ptr, &f77curunit, len ) );
 }
 
-#if 11
 #pragma weak e_wsle64 = e_wsle		/* extern int e_wsle64(void); */
 #pragma weak e_wsle64_mp = e_wsle_mp	/* extern int e_wsle64_mp(unit **); */
 #pragma weak e_xsle64 = e_xsle		/* extern int e_xsle64(void); */
 #pragma weak e_xsle64_mp = e_xsle_mp	/* extern int e_xsle64_mp(unit **); */
 #pragma weak e_wsli64 = e_wsli		/* extern int e_wsli64(void); */
 #pragma weak e_wsli64_mp = e_wsli_mp	/* extern int e_wsli64_mp(void); */
-#endif
 
 
 #pragma weak do_lio90_mp = do_Lio_mp

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -68,7 +72,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -718,7 +721,7 @@ extern void LNO_Print_Access(FILE *fp, WN *wn)
 //  'wn_loop', returns FALSE otherwise. 
 //-----------------------------------------------------------------------
 
-static BOOL Exp_Node_Varies_In_Loop(WN* wn_node, 
+extern BOOL Exp_Node_Varies_In_Loop(WN* wn_node, 
 				    WN* wn_loop)
 { 
   DU_MANAGER* du = Du_Mgr; 
@@ -729,7 +732,7 @@ static BOOL Exp_Node_Varies_In_Loop(WN* wn_node,
     for (; itr != NULL; itr = LWN_WALK_TreeNext(itr)) {
       WN* wn = itr->wn;
       if (OPCODE_is_store(WN_opcode(wn))
-          && Overlapped_base(Alias_Mgr, wn_node, wn) != NOT_ALIASED)
+          && Aliased(Alias_Mgr, wn_node, wn) != NOT_ALIASED)
         return TRUE;
       if (OPCODE_is_call(WN_opcode(wn))
           && Aliased_with_region(Alias_Mgr, wn_node, wn, WRITE) != NOT_ALIASED)

@@ -56,11 +56,7 @@
 
 extern int lnblnk_ (char *s, int len); /* in libF77 */
 
-#if 11
 int32 wsfe (cilist64 *a, unit **fu, int f90sw)
-#else
-int32 wsfe (cilist *a, unit **fu, int f90sw)
-#endif
 {
    int32             n;
    unit             *ftnunit;
@@ -116,11 +112,7 @@ int32 wsfe (cilist *a, unit **fu, int f90sw)
    return 0;
 }
 
-#if 11
 static int32 s_wsfe_com (cilist64 *a, unit **fu)
-#else
-static int32 s_wsfe_com (cilist *a, unit **fu)
-#endif
 {
    unit           *ftnunit;
    int             n = wsfe(a, fu, 0);
@@ -146,27 +138,18 @@ static int32 s_wsfe_com (cilist *a, unit **fu)
 int32 s_wsfe (cilist *a)
 {
 
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsfe_com(&dst, &f77curunit);
-#else
-    return( s_wsfe_com( a, &f77curunit ) );
-#endif
 }
 
 int32 s_wsfe_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_wsfe_com(&dst, fu);
-#else
-    return( s_wsfe_com( a, fu ) );
-#endif
 }
 
-#if 11
 int s_wsfe64 (cilist64 *a)
 {
     return( s_wsfe_com( a, &f77curunit ) );
@@ -176,7 +159,6 @@ int s_wsfe64_mp (cilist64 *a, unit **fu)
 {
     return( s_wsfe_com( a, fu ) );
 }
-#endif
 
 
 

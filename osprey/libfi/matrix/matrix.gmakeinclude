@@ -37,7 +37,12 @@
 
 ## on linux - no blas for now..
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS), DARWIN)
+CFLAGS+=-DBUILD_COMPILER_GNU
+FFLAGS+=-DBUILD_COMPILER_GNU
+endif
+
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 USE_NEW_MATMUL = NO
 endif
 ifeq ($(BUILD_OS), IRIX)
@@ -212,7 +217,7 @@ CFILES += \
 # 	matmul_zs4.c 
 
 ## on linux - no real16 for now.. get rid of *dgemm..
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN),TRUE)
 FFILES += \
 	c4gemmx.f \
 	c4gemvx.f \

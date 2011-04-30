@@ -1,5 +1,12 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -90,7 +97,7 @@ static void	pgm_unit_semantics(void);
 static void     reset_stmt_tmp_tbl(void);
 static void	storage_blk_resolution(void);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 static void	gen_user_code_start_opr(void);
 static void	insert_global_sh(void);
 # endif
@@ -157,7 +164,7 @@ void semantics_pass_driver (void)
 
    curr_scp_idx = save_curr_scp_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (insert_global_directives &&
        global_stmt_sh_idx != NULL_IDX) {
 
@@ -460,9 +467,14 @@ scp_or_parent_uses_ieee(int scp_idx) {
   for (int s = scp_idx; s; s = SCP_PARENT_IDX(s)) {
     if (SCP_USES_IEEE(s)) {
       int attr_idx = SCP_ATTR_IDX(scp_idx);
+      pgm_unit_type put = ATP_PGM_UNIT(attr_idx);
+      /* F2003 requires save/restore of FP state only for function or
+       * subroutine, but with -apo the FP state doesn't start cleanly, so as
+       * a favor to the user we call this in the main program too so the
+       * flags start out clear.
+       */
       if (Pgm_Unit == AT_OBJ_CLASS(attr_idx) &&
-	(Function == ATP_PGM_UNIT(attr_idx) ||
-	Subroutine == ATP_PGM_UNIT(attr_idx))) {
+	(Function == put || Program == put || Subroutine == put)) {
 	return TRUE;
       }
     }
@@ -513,7 +525,7 @@ PROCESS_SIBLING:
       idx                                       = AL_NEXT_IDX(idx);
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) 
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) 
    gen_user_code_start_opr();
 # endif
 
@@ -738,7 +750,7 @@ static void	attr_link_resolution(void)
          continue;
       }
 
-      host_idx = srch_host_sym_tbl(&name_pool[LN_NAME_IDX(name_idx)].name_char,
+      host_idx = srch_host_sym_tbl(LN_NAME_PTR(name_idx),
                                    LN_NAME_LEN(name_idx),
                                    &host_name_idx,
                                    FALSE);
@@ -982,7 +994,7 @@ void	host_associated_attr_semantics(int	attr_idx,
          break;
       }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (ATD_IM_A_DOPE(attr_idx)                                   &&
              ATD_CLASS(attr_idx)                     == Dummy_Argument &&
              ATD_ARRAY_IDX(attr_idx)                                   &&
@@ -1775,7 +1787,7 @@ void label_def_stmt_semantics(void)
       ATL_NOVECTOR(label_idx)  = TRUE;
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (cdir_switches.notask_region) {
       ATL_NOTASK(label_idx)    = TRUE;
    }
@@ -3089,22 +3101,6 @@ static void	check_and_allocate_common_storage(int	sb_idx)
                   "SECTION_NON_GP");
          SB_DCL_ERR(sb_idx)	= TRUE;
       }
-# if 0
-      else if (SB_ALIGN_SYMBOL(sb_idx)) {
-         PRINTMSG(SB_DEF_LINE(sb_idx), 1502, Error,
-                  SB_DEF_COLUMN(sb_idx), 
-                  SB_NAME_PTR(sb_idx),
-                  "ALIGN_SYMBOL");
-         SB_DCL_ERR(sb_idx)	= TRUE;
-      }
-      else if (SB_FILL_SYMBOL(sb_idx)) {
-         PRINTMSG(SB_DEF_LINE(sb_idx), 1502, Error,
-                  SB_DEF_COLUMN(sb_idx), 
-                  SB_NAME_PTR(sb_idx),
-                  "FILL_SYMBOL");
-         SB_DCL_ERR(sb_idx)	= TRUE;
-      }
-# endif
       else if (SB_DCL_COMMON_DIR(sb_idx)) {
          SB_DCL_ERR(sb_idx)	= TRUE;
          PRINTMSG(SB_DEF_LINE(sb_idx), 1128, Error,
@@ -3160,7 +3156,13 @@ static void	check_and_allocate_common_storage(int	sb_idx)
          /* We do not do equivalence processing if we found any errors in */
          /* this program unit.  Error recovery doesn't work too well.     */
 
+#ifdef KEY /* Bug 14150 */
+         assign_bind_c_offset(attr_idx,
+	   AT_OBJ_CLASS(attr_idx) == Data_Obj && ATD_IN_COMMON(attr_idx) &&
+	   SB_BIND_ATTR(ATD_STOR_BLK_IDX(attr_idx)));
+#else /* KEY Bug 14150 */
          assign_offset(attr_idx);       /* Equivalence */
+#endif /* KEY Bug 14150 */
          ATD_OFFSET_ASSIGNED(attr_idx)	= TRUE;
          ATD_EQUIV(attr_idx)		= equived;
       }
@@ -3366,7 +3368,7 @@ FOUND:
                         SB_LEN_IDX(sb_idx)  = result.idx;
                      }
 
-# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
                     /* -a dalign is always on for IRIX and there is no */
                     /* way to shut it off, so we do not need to issue  */
@@ -3650,42 +3652,76 @@ static void	storage_blk_resolution()
 
                   if (SB_ALIGN_SYMBOL(sb_idx) ^ GAC_ALIGN_SYMBOL(gac_idx)) {
                      same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
                      PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
                               SB_DEF_COLUMN(sb_idx),
                               SB_NAME_PTR(sb_idx),
-                              "ALIGN_SYMBOL");
+                              "ALIGN_SYMBOL", fal);
+		     free(fal);
                   }
 
                   if (SB_FILL_SYMBOL(sb_idx) ^ GAC_FILL_SYMBOL(gac_idx)) {
                      same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
                      PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
                               SB_DEF_COLUMN(sb_idx),
                               SB_NAME_PTR(sb_idx),
-                              "FILL_SYMBOL");
+                              "FILL_SYMBOL", fal);
+		     free(fal);
                   }
 
                   if (SB_SECTION_GP(sb_idx) ^ GAC_SECTION_GP(gac_idx)) {
                      same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
                      PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
                               SB_DEF_COLUMN(sb_idx),
                               SB_NAME_PTR(sb_idx),
-                              "SECTION_GP");
+                              "SECTION_GP", fal);
+		     free(fal);
                   }
+#ifdef KEY /* Bug 14150 */
+                  if (SB_BIND_ATTR(sb_idx) ^ GA_BIND_ATTR(gac_idx)) {
+                     same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
+                     PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
+                              SB_DEF_COLUMN(sb_idx),
+                              SB_NAME_PTR(sb_idx),
+                              "BIND", fal);
+		     free(fal);
+                  }
+		  else if (SB_BIND_ATTR(sb_idx)) {
+		    const char *ga_binding_label = GA_BINDING_LABEL(gac_idx);
+		    int ga_binding_label_len = strlen(ga_binding_label);
+		    if (SB_EXT_NAME_LEN(sb_idx) != ga_binding_label_len ||
+		      strncmp(ga_binding_label, SB_EXT_NAME_PTR(sb_idx),
+		        ga_binding_label_len)) {
+		      char *fal = file_and_line(GA_DEF_LINE(gac_idx));
+		      PRINTMSG(SB_DEF_LINE(sb_idx), 1700, Error,
+			SB_DEF_COLUMN(sb_idx), SB_NAME_PTR(sb_idx),
+			ga_binding_label, fal);
+		      free(fal);
+		    }
+		  }
+#endif /* KEY Bug 14150 */
 
                   if (SB_SECTION_NON_GP(sb_idx) ^ GAC_SECTION_NON_GP(gac_idx)) {
                      same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
                      PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
                               SB_DEF_COLUMN(sb_idx),
                               SB_NAME_PTR(sb_idx),
-                              "SECTION_NON_GP");
+                              "SECTION_NON_GP", fal);
+		     free(fal);
                   }
 
                   if (SB_CACHE_ALIGN(sb_idx) ^ GAC_CACHE_ALIGN(gac_idx)) {
                      same_common_block	= FALSE;
+		     char *fal = file_and_line(GA_DEF_LINE(gac_idx));
                      PRINTMSG(SB_DEF_LINE(sb_idx), 1602, Warning,
                               SB_DEF_COLUMN(sb_idx),
                               SB_NAME_PTR(sb_idx),
-                              "CACHE_ALIGN");
+                              "CACHE_ALIGN", fal);
+		     free(fal);
                   }
 
                   /* Check to make sure all the members have the same type */
@@ -3705,11 +3741,6 @@ static void	storage_blk_resolution()
                                                    NULL_IDX,
                                                    TRUE)) {
                         same_common_block	= FALSE;
-# if 0
-                        PRINTMSG(AT_DEF_LINE(attr_idx), 1603, Caution,
-                                 AT_DEF_COLUMN(attr_idx),
-                                 SB_NAME_PTR(sb_idx));
-# endif
                         break;
                      }
                      attr_idx	= ATD_NEXT_MEMBER_IDX(attr_idx);
@@ -5347,7 +5378,7 @@ void set_up_which_entry_tmp(void)
 |*									      *|
 \******************************************************************************/
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) 
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) 
 static void gen_user_code_start_opr(void)
 
 {
@@ -5419,7 +5450,7 @@ static void gen_user_code_start_opr(void)
 |*									      *|
 \******************************************************************************/
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 static void insert_global_sh(void)
 
 {
@@ -5457,6 +5488,38 @@ static void insert_global_sh(void)
 }  /* insert_global_sh */
 # endif
 
+#ifdef KEY /* Bug 14150 */
+/*
+ * def_ga_idx		Index into global_attr_tbl for definition
+ * ref_bind_attr	True if reference has "bind" attribute
+ * ref_binding_label	Value of reference binding label
+ * ref_binding_label_len	Length of reference binding label
+ * ref_line		Reference source line number
+ * ref_column		Reference source column number
+ * ref_name_ptr		Reference name
+ * line_name		Line/column of other appearance
+ */
+static void
+check_bind_attr(int def_ga_idx, int ref_bind_attr,
+  const char *ref_binding_label, int ref_binding_label_len, int ref_line,
+  int ref_column, const char *ref_name_ptr, const char *line_name) {
+  if (GA_BIND_ATTR(def_ga_idx) ^ ref_bind_attr) {
+     PRINTMSG(ref_line, 1624, Error, ref_column,
+	      ref_name_ptr,
+	      line_name,
+	      "BIND");
+  }
+  else if (ref_bind_attr) {
+    const char *ga_binding_label = GA_BINDING_LABEL(def_ga_idx);
+    int ga_binding_label_len = strlen(ga_binding_label);
+    if (ref_binding_label_len != ga_binding_label_len ||
+      strncmp(ga_binding_label, ref_binding_label, ref_binding_label_len)) {
+      PRINTMSG(ref_line, 1700, Error, ref_column, ref_name_ptr,
+	ga_binding_label, line_name);
+    }
+  }
+}
+#endif /* KEY Bug 14150 */
 /******************************************************************************\
 |*									      *|
 |* Description:								      *|
@@ -5537,6 +5600,11 @@ void	global_name_semantics(int	def_ga_idx,
    int			ref_column;
    boolean		ref_defined;
    boolean		ref_elemental;
+#ifdef KEY /* Bug 14150 */
+   boolean		ref_bind_attr = 0;
+   const char *		ref_binding_label = 0;
+   int			ref_binding_label_len = 0;
+#endif /* KEY Bug 14150 */
    boolean		ref_global_dir;
 #ifdef KEY /* Bug 10177 */
    int			ref_hollerith = 0;
@@ -5600,6 +5668,10 @@ void	global_name_semantics(int	def_ga_idx,
       ref_recursive		= GAP_RECURSIVE(ref_ga_idx);
       ref_vfunction		= GAP_VFUNCTION(ref_ga_idx);
       ref_global_dir		= GAP_GLOBAL_DIR(ref_ga_idx);
+#ifdef KEY /* Bug 14150 */
+      ref_bind_attr		= GA_BIND_ATTR(ref_ga_idx);
+      ref_binding_label		= GA_BINDING_LABEL(ref_ga_idx);
+#endif /* KEY Bug 14150 */
 
       if (ref_rslt_idx == NULL_IDX) {
          ref_rank	= 0;
@@ -5611,6 +5683,9 @@ void	global_name_semantics(int	def_ga_idx,
 
          if (ref_defined &&
             (GAD_POINTER(ref_rslt_idx) || ref_rank != 0 ||
+#ifdef KEY /* Bug 14110 */
+            GAD_VOLATILE(ref_rslt_idx) ||
+#endif /* KEY Bug 14110 */
             (ref_type == Character && 
              GT_CHAR_CLASS(GAD_TYPE_IDX(ref_rslt_idx)) == Var_Len_Char))) {
             need_expl_itrfc	= TRUE;
@@ -5630,6 +5705,11 @@ void	global_name_semantics(int	def_ga_idx,
       ref_recursive		= ATP_RECURSIVE(attr_idx);
       ref_vfunction		= ATP_VFUNCTION(attr_idx);
       ref_global_dir		= FALSE;
+#ifdef KEY /* Bug 14150 */
+      ref_bind_attr		= AT_BIND_ATTR(attr_idx);
+      ref_binding_label		= ATP_EXT_NAME_PTR(attr_idx);
+      ref_binding_label_len	= ATP_EXT_NAME_LEN(attr_idx);
+#endif /* KEY Bug 14150 */
 
       /* Skip past the extra argument if necessary. */
 
@@ -5690,6 +5770,11 @@ void	global_name_semantics(int	def_ga_idx,
       ref_recursive		= ATP_RECURSIVE(spec_idx);
       ref_vfunction		= ATP_VFUNCTION(spec_idx);
       ref_global_dir		= FALSE;
+#ifdef KEY /* Bug 14150 */
+      ref_bind_attr		= AT_BIND_ATTR(spec_idx);
+      ref_binding_label		= ATP_EXT_NAME_PTR(spec_idx);
+      ref_binding_label_len	= ATP_EXT_NAME_LEN(spec_idx);
+#endif /* KEY Bug 14150 */
 
       if (ref_defined && ATP_EXTRA_DARG(spec_idx)) {
          ref_num_dargs--;
@@ -5717,6 +5802,11 @@ void	global_name_semantics(int	def_ga_idx,
          }
       }
    }
+
+#ifdef KEY /* Bug 14150 */
+   check_bind_attr(def_ga_idx, ref_bind_attr, ref_binding_label,
+     ref_binding_label_len, ref_line, ref_column, ref_name_ptr, line_name);
+#endif /* KEY Bug 14150 */
 
    if ((GAP_PGM_UNIT(def_ga_idx) != ref_pgm_unit) ||
        (GAP_PGM_UNIT_DEFINED(def_ga_idx) && ref_defined && !ref_in_interface)){
@@ -5901,6 +5991,14 @@ void	global_name_semantics(int	def_ga_idx,
                   "ELEMENTAL");
       }
 
+#ifdef KEY /* Bug 14150 */
+      /* May want to experiment with testing GAP_ELEMENTAL here, too, since
+       * it seems not be detected on forward reference */
+      if (GA_BIND_ATTR(def_ga_idx)) {
+        need_expl_itrfc = TRUE;
+      }
+#endif /* KEY Bug 14150 */
+
       /* There is a rule in f95 before NOTE 12.4 that states that */
       /* the interface may specify a procedure that is not pure   */
       /* if the procedure is defined to be pure.                  */
@@ -5958,6 +6056,9 @@ void	global_name_semantics(int	def_ga_idx,
                                   GAD_HOLLERITH(ref_ga_idx) : Not_Hollerith;
 
             if (GAD_POINTER(ref_arg_idx) || GAD_TARGET(ref_arg_idx) ||
+#ifdef KEY /* Bug 14110 */
+                GAD_VOLATILE(ref_arg_idx) ||
+#endif /* KEY Bug 14110 */
                 GAD_ASSUMED_SHAPE_ARRAY(ref_arg_idx)) {
                need_expl_itrfc	= TRUE;
             }
@@ -5995,6 +6096,9 @@ void	global_name_semantics(int	def_ga_idx,
                                  CN_HOLLERITH_TYPE(ATD_CONST_IDX(arg_attr_idx));
 
             if (ATD_POINTER(arg_attr_idx) || ATD_TARGET(arg_attr_idx) ||
+#ifdef KEY /* Bug 14110 */
+                ATD_VOLATILE(arg_attr_idx) ||
+#endif /* KEY Bug 14110 */
                 (ATD_ARRAY_IDX(arg_attr_idx) != NULL_IDX &&
                  BD_ARRAY_CLASS(ATD_ARRAY_IDX(arg_attr_idx)) == Assumed_Shape)){
                need_expl_itrfc	= TRUE;

@@ -7621,11 +7621,7 @@ ffestc_R528_start ()
 
   ffesta_set_outpooldisp (FFESTA_pooldispPRESERVE);
 
-#if 1
   ffestc_local_.data.objlist = NULL;
-#else
-  ffestd_R528_start_ ();
-#endif
 
   ffestc_ok_ = TRUE;
 }
@@ -7643,15 +7639,11 @@ ffestc_R528_item_object (ffebld expr, ffelexToken expr_token UNUSED)
   if (!ffestc_ok_)
     return;
 
-#if 1
   if (ffestc_local_.data.objlist == NULL)
     ffebld_init_list (&ffestc_local_.data.objlist,
 		      &ffestc_local_.data.list_bottom);
 
   ffebld_append_item (&ffestc_local_.data.list_bottom, expr);
-#else
-  ffestd_R528_item_object_ (expr, expr_token);
-#endif
 }
 
 /* ffestc_R528_item_startvals -- DATA statement start list of values
@@ -7667,13 +7659,9 @@ ffestc_R528_item_startvals ()
   if (!ffestc_ok_)
     return;
 
-#if 1
   assert (ffestc_local_.data.objlist != NULL);
   ffebld_end_list (&ffestc_local_.data.list_bottom);
   ffedata_begin (ffestc_local_.data.objlist);
-#else
-  ffestd_R528_item_startvals_ ();
-#endif
 }
 
 /* ffestc_R528_item_value -- DATA statement source value
@@ -7692,7 +7680,6 @@ ffestc_R528_item_value (ffebld repeat, ffelexToken repeat_token,
   if (!ffestc_ok_)
     return;
 
-#if 1
   if (repeat == NULL)
     rpt = 1;
   else if (ffebld_op (repeat) == FFEBLD_opCONTER)
@@ -7710,9 +7697,6 @@ ffestc_R528_item_value (ffebld repeat, ffelexToken repeat_token,
 				    : repeat_token)))
     ffedata_end (TRUE, NULL);
 
-#else
-  ffestd_R528_item_value_ (repeat, value);
-#endif
 }
 
 /* ffestc_R528_item_endvals -- DATA statement start list of values
@@ -7729,12 +7713,8 @@ ffestc_R528_item_endvals (ffelexToken t)
   if (!ffestc_ok_)
     return;
 
-#if 1
   ffedata_end (!ffestc_ok_, t);
   ffestc_local_.data.objlist = NULL;
-#else
-  ffestd_R528_item_endvals_ (t);
-#endif
 }
 
 /* ffestc_R528_finish -- DATA statement list complete
@@ -7748,10 +7728,6 @@ ffestc_R528_finish ()
 {
   ffestc_check_finish_ ();
 
-#if 1
-#else
-  ffestd_R528_finish_ ();
-#endif
 }
 
 /* ffestc_R537_start -- PARAMETER statement list begin
@@ -8087,10 +8063,6 @@ ffestc_R542_item_nitem (ffelexToken name)
 	ffesymbol_set_state (s, FFESYMBOL_stateSEEN);
       ffesymbol_set_namelisted (s, TRUE);
       ffesymbol_signal_unreported (s);
-#if 0				/* No need to establish type yet! */
-      if (!ffeimplic_establish_symbol (s))
-	ffesymbol_error (s, name);
-#endif
     }
 
   if (ffestc_parent_ok_)
@@ -9137,10 +9109,6 @@ ffestc_R810 (ffesttCaseList cases, ffelexToken name)
 
   if (ffestw_state (ffestw_stack_top ()) == FFESTV_stateSELECT0)
     {
-#if 0				/* Not sure we want to have msgs point here
-				   instead of SELECT CASE. */
-      ffestw_update (NULL);	/* Update state line/col info. */
-#endif
       ffestw_set_state (ffestw_stack_top (), FFESTV_stateSELECT1);
     }
 
@@ -9659,17 +9627,6 @@ ffestc_R820A (ffelexToken construct_name, ffebld var, ffelexToken var_token,
   incr = ffeexpr_convert_expr (incr, incr_token, var, var_token,
 			       FFEEXPR_contextLET);
 
-#if 0
-  if ((ffebld_op (incr) == FFEBLD_opCONTER)
-      && (ffebld_constant_is_zero (ffebld_conter (incr))))
-    {
-      ffebad_start (FFEBAD_DO_STEP_ZERO);
-      ffebad_here (0, ffelex_token_where_line (incr_token),
-		   ffelex_token_where_column (incr_token));
-      ffebad_string ("Iterative DO loop");
-      ffebad_finish ();
-    }
-#endif
 
   ffestd_R819A (construct_name, NULL, var,
 		start, start_token,
@@ -11985,14 +11942,7 @@ ffestc_R1208_item (ffelexToken name)
       if (ffeintrin_is_intrinsic (ffelex_token_text (name), name, TRUE,
 				  &gen, &spec, &imp)
 	  && ((imp == FFEINTRIN_impNONE)
-#if 0	/* Don't bother with this for now. */
-	      || ((ffeintrin_basictype (spec)
-		   == ffesymbol_basictype (s))
-		  && (ffeintrin_kindtype (spec)
-		      == ffesymbol_kindtype (s)))
-#else
 	      || 1
-#endif
 	      || !(sa & FFESYMBOL_attrsTYPE)))
 	na = sa | FFESYMBOL_attrsINTRINSIC;
       else

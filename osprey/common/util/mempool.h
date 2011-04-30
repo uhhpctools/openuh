@@ -41,10 +41,10 @@
  * ====================================================================
  *
  * Module: mempool.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/mempool.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:56 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/mempool.h,v $
  *
  * Revision history:
  *  19-Sep-89 - Original Version
@@ -443,10 +443,6 @@ extern "C" {
 #define TYPE_ALLOCA(type) ((type *)alloca(sizeof(type)))
 #define TYPE_ALLOCA_N(type,n) ((type *)alloca(sizeof(type) * (n)))
 
-#if 0
-#define TYPE_MALLOC(type) ((type *) malloc(sizeof(type)))
-#define TYPE_MALLOC_N(type,n) ((type *) malloc(sizeof(type) * (n)))
-#endif
 
 #define Malloc_Mem_Pool  (MEM_POOL *) 1
 #define Default_Mem_Pool  (MEM_POOL *) 0
@@ -475,7 +471,7 @@ typedef struct mem_pure_stack MEM_PURE_STACK;
  */
 typedef struct mem_pool MEM_POOL;
 struct mem_pool {
-  char            *name;            /* Name of the pool for
+  const char      *name;            /* Name of the pool for
                                      * debugging only.
                                      */
   MEM_POOL_BLOCKS *blocks;          /* Current top of allocation
@@ -607,7 +603,7 @@ extern void
 MEM_POOL_Initialize_P
 (
   MEM_POOL     *pool,
-  char         *name,
+  const char   *name,
   BOOL          bz
   MEM_STAT_ARGS(line,file)
 );
@@ -767,7 +763,7 @@ class CXX_MEM_POOL {
 public:
   MEM_POOL *operator()() { return &mem_pool; }
 
-  CXX_MEM_POOL(char *name, BOOL do_bzero) {
+  CXX_MEM_POOL(const char *name, BOOL do_bzero) {
     mem_pool.magic_num = 0;		/* force it to be uninitialized */
     MEM_POOL_Initialize(&mem_pool, name, do_bzero);
     MEM_POOL_Push(&mem_pool);
@@ -790,7 +786,7 @@ private:
 
 public:
 
-    MEM_POOL_Constructor (MEM_POOL* p, char* name, BOOL zero) : pool (p) {
+    MEM_POOL_Constructor (MEM_POOL* p, const char* name, BOOL zero) : pool (p) {
 	MEM_POOL_Initialize (pool, name, zero);
 	MEM_POOL_Push (pool);
     }

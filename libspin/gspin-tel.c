@@ -1,5 +1,8 @@
 /*
-  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2007. PathScale, LLC.  All rights reserved.
+ */
+/*
+  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
   under the terms of version 2 of the GNU General Public License as
@@ -258,9 +261,11 @@ gs_attribute_name (gs_int_t attribute, gs_tree_code_class_t tree_code_class,
 	}
 	return (gs_string_t) NULL;
 
+#ifndef FE_GNU_4_2_0
       case GS_CONSTRUCTOR:
 	if (attribute == GS_CONSTRUCTOR_ELTS)
 	  return "GS_CONSTRUCTOR_ELTS";
+#endif
 	return (gs_string_t) "NONAME";
 
       case GS_DECL_EXPR:
@@ -467,6 +472,20 @@ gs_attribute_name (gs_int_t attribute, gs_tree_code_class_t tree_code_class,
 	}
 	return (gs_string_t) NULL;
 
+#ifdef FE_GNU_4_2_0
+      case GS_CONSTRUCTOR:
+	switch (attribute) {
+	  case GS_CONSTRUCTOR_LENGTH:      return "GS_CONSTRUCTOR_LENGTH";
+	  case GS_CONSTRUCTOR_ELTS_INDEX:  return "GS_CONSTRUCTOR_ELTS_INDEX";
+	  case GS_CONSTRUCTOR_ELTS_VALUE:  return "GS_CONSTRUCTOR_ELTS_VALUE";
+	}
+	return (gs_string_t) NULL;
+
+      case GS_OMP_CLAUSE:
+        if (attribute == GS_OMP_CLAUSE_DECL)
+	  return "GS_OMP_CLAUSE_DECL";
+	return (gs_string_t) NULL;
+#endif
       default:
         break;
     }
@@ -588,6 +607,9 @@ gs_flag_name (gs_code_t constructor, gs_int_t attribute, gs_count_t flag,
 	case GS_TYPE_LANG_SPECIFIC:	return "GS_TYPE_LANG_SPECIFIC";
         case GS_POINTER_TYPE_P:	        return "GS_POINTER_TYPE_P";
         case GS_AGGREGATE_VALUE_P:      return "GS_AGGREGATE_VALUE_P";
+        case GS_TYPE_BIG_ENDIAN:        return "GS_TYPE_BIG_ENDIAN";
+        case GS_TYPE_LITTLE_ENDIAN:     return "GS_TYPE_LITTLE_ENDIAN";
+        case GS_TYPE_EXPLICIT_ENDIAN:     return "GS_TYPE_EXPLICIT_ENDIAN";
       }
 
       // Differentiate the GS_...'s that share the same numerical ID.
@@ -677,6 +699,15 @@ gs_flag_name (gs_code_t constructor, gs_int_t attribute, gs_count_t flag,
       case GS_DECL_COPY_CONSTRUCTOR_P:		return "GS_DECL_COPY_CONSTRUCTOR_P";
       case GS_DECL_IMPLICIT_INSTANTIATION:	return "GS_DECL_IMPLICIT_INSTANTIATION";
       case GS_DECL_NAMESPACE_SCOPE_P:		return "GS_DECL_NAMESPACE_SCOPE_P";
+#ifdef FE_GNU_4_2_0
+      case GS_CP_DECL_THREADPRIVATE_P:
+        return constructor == GS_FUNCTION_DECL ? "GS_DECL_CONSTRUCTOR_P" :
+                                                 "GS_CP_DECL_THREADPRIVATE_P";
+      case GS_DECL_COMPLETE_DESTRUCTOR_P:       return "GS_DECL_COMPLETE_DESTRUCTOR_P";
+      case GS_DECL_HAS_IN_CHARGE_PARM_P:        return "GS_DECL_HAS_IN_CHARGE_PARM_P";
+      case GS_DECL_HAS_VTT_PARM_P:              return "GS_DECL_HAS_VTT_PARM_P";
+      case GS_DECL_ASSIGNMENT_OPERATOR_P:       return "GS_DECL_ASSIGNMENT_OPERATOR_P";
+#endif
       case GS_DECL_COMPLETE_CONSTRUCTOR_P:	return "GS_DECL_COMPLETE_CONSTRUCTOR_P";
       case GS_DECL_REALLY_EXTERN:		return "GS_DECL_REALLY_EXTERN";
       case GS_DECL_USE_TEMPLATE:		return "GS_DECL_USE_TEMPLATE";
@@ -699,6 +730,13 @@ gs_flag_name (gs_code_t constructor, gs_int_t attribute, gs_count_t flag,
       case GS_ANON_UNION_TYPE_P:        return "GS_ANON_UNION_TYPE_P";
       case GS_CLASSTYPE_TEMPLATE_SPECIALIZATION:
 				return "GS_CLASSTYPE_TEMPLATE_SPECIALIZATION";
+#ifdef FE_GNU_4_2_0
+      case GS_CLASSTYPE_NON_POD_P:      return "GS_CLASSTYPE_NON_POD_P";
+      case GS_TYPE_HAS_DEFAULT_CONSTRUCTOR:
+                                return "GS_TYPE_HAS_DEFAULT_CONSTRUCTOR";
+      case GS_TYPE_HAS_IMPLICIT_COPY_CONSTRUCTOR:
+                                return "GS_TYPE_HAS_IMPLICIT_COPY_CONSTRUCTOR";
+#endif
       default:	GS_ASSERT(gs_false, ("gs_flag_name: missing flag name"));
     }
 
@@ -818,7 +856,10 @@ gs_build_decl(gs_code_t code, gs_t node2)
   return res;
 }
 
-static inline gs_t
+#ifndef FE_GNU_4_2_0
+static inline
+#endif
+gs_t
 gs_build_2(gs_tree_code_class_t code_class, gs_code_t code, gs_t k0, gs_t k1)
 {
   gs_t root = gs_build_0(code_class, code);
@@ -891,9 +932,13 @@ gs_t gs_build_pointer_type(gs_t to_type)
 
   t = gs_build_type(GS_POINTER_TYPE);
   gs_set_operand(t, GS_TREE_TYPE, to_type);
-  gs_set_operand(t, GS_TYPE_MODE, ptr_type);
+  {
+    gs_t type_mode = __gs(IB_STRING);
+    _gs_s (type_mode, ptr_type_mode, 1 + strlen((char *)ptr_type_mode));
+    gs_set_operand(t, GS_TYPE_MODE, type_mode);
+  }
   gs_set_type_ref_can_alias_all(t, 0);
-  gs_set_operand(t, GS_TYPE_NEXT_PTR_TO, to_type);
+  gs_set_operand(t, GS_TYPE_NEXT_PTR_TO, gs_type_pointer_to(to_type));
   gs_set_operand(to_type, GS_TYPE_POINTER_TO, t);
 
   // Copy pointer attributes from the generic pointer.

@@ -731,33 +731,6 @@ next_insn_tests_no_inequality (insn)
 	  && ! inequality_comparisons_p (PATTERN (next)));
 }
 
-#if 0  /* This is useless since the insn that sets the cc's
-	  must be followed immediately by the use of them.  */
-/* Return 1 if the CC value set up by INSN is not used.  */
-
-int
-next_insns_test_no_inequality (insn)
-     rtx insn;
-{
-  rtx next = NEXT_INSN (insn);
-
-  for (; next != 0; next = NEXT_INSN (next))
-    {
-      if (GET_CODE (next) == CODE_LABEL
-	  || GET_CODE (next) == BARRIER)
-	return 1;
-      if (GET_CODE (next) == NOTE)
-	continue;
-      if (inequality_comparisons_p (PATTERN (next)))
-	return 0;
-      if (sets_cc0_p (PATTERN (next)) == 1)
-	return 1;
-      if (! reg_mentioned_p (cc0_rtx, PATTERN (next)))
-	return 1;
-    }
-  return 1;
-}
-#endif
 #endif
 
 /* This is used by find_single_use to locate an rtx that contains exactly one

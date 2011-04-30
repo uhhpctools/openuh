@@ -37,9 +37,12 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <cmplrs/host.h>
 #include "assert.h"
 #define USE_STANDARD_TYPES         
@@ -1566,7 +1569,7 @@ void CG_BROWSER::Invoke_Command(char ch)
 //   'init_buffer' as the initial set of commands.
 //-----------------------------------------------------------------------
 
-void CG_BROWSER::Sdebug(char init_buffer[])
+void CG_BROWSER::Sdebug(const char init_buffer[])
 {
   char ch;
   BOOL reload;

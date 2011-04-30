@@ -41,10 +41,10 @@
  * =======================================================================
  *
  *  Module: reg_live.cxx
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/reg_live.cxx,v $
+ *  $Revision: 1.11 $
+ *  $Date: 05/12/05 08:59:09-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.reg_live.cxx $
  *
  *  Description:
  *  ============
@@ -75,14 +75,15 @@
 #include "dominate.h"
 #include "findloops.h"
 #include "cg_vector.h"
+#ifndef TARG_NVISA
 #include "gtn_universe.h"
 #include "gtn_set.h"
+#endif
 #include "data_layout.h"
 
 #include "reg_live.h"
 
 static BOOL Trace_Register_Liveness = FALSE;
-
 
 static REGSET Register_Livein;
 static REGSET Register_Kill;
@@ -221,6 +222,17 @@ Compute_Parameter_Regs (TY_IDX call_ty, WN *call_wn, REGSET parms)
     while (PLOC_is_nonempty(ploc)) {
     	if (PLOC_on_stack(ploc)) break;	// no more register parameters.
 	Add_PREG_To_REGSET (PLOC_reg(ploc), parms);
+#if defined(TARG_SL)
+        if (MTYPE_byte_size(TY_mtype(parm_ty)) == 8) { //I8/U8/F8
+          Add_PREG_To_REGSET (PLOC_reg(ploc)+1, parms);
+        }
+#endif   
+#if defined(TARG_PPC32)
+      if (MTYPE_I8 ==TY_mtype(parm_ty) || 
+        MTYPE_U8 == TY_mtype(parm_ty)) {
+        Add_PREG_To_REGSET (PLOC_reg(ploc)+1, parms);
+      }
+#endif
         ploc = func_entry ? Next_Input_PLOC_Reg (ploc)
                           : Next_Output_PLOC_Reg (ploc);
     }
@@ -233,11 +245,7 @@ Compute_Parameter_Regs (TY_IDX call_ty, WN *call_wn, REGSET parms)
 }
 
 static void
-#ifdef TARG_IA64
-Compute_Return_Regs (TY_IDX call_ty, REGSET return_regs)
-#else
 Compute_Return_Regs (ST *call_st, TY_IDX call_ty, REGSET return_regs)
-#endif
 {
 
   PREG_NUM retpreg[MAX_NUMBER_OF_REGISTERS_FOR_RETURN];
@@ -260,6 +268,13 @@ Compute_Return_Regs (ST *call_st, TY_IDX call_ty, REGSET return_regs)
 	retpreg[i] = RETURN_INFO_preg (return_info, i);
 	Add_PREG_To_REGSET (retpreg[i], return_regs);
     }
+#if defined(TARG_SL)
+    if (MTYPE_byte_size(TY_mtype(TY_ret_type(call_ty))) == 8) { //I8/U8/F8
+      FmtAssert (RETURN_INFO_count(return_info) <= 1, 
+        ("Compute_Return_Regs:  more return registers than can handle"));
+      Add_PREG_To_REGSET (RETURN_INFO_preg(return_info, 0)+1, return_regs);
+    }
+#endif   
   }
 
   else {
@@ -282,6 +297,7 @@ static void Compute_PU_Regs (REGSET livein, REGSET liveout)
     // Add all the formal parameters to the livein set.
     Compute_Parameter_Regs (ST_pu_type(pu_st), 
 	PU_Info_tree_ptr(Current_PU_Info), livein);
+#ifndef TARG_NVISA
     // add sp, gp, ep, ra to the livein set.
     livein[REGISTER_CLASS_sp] = 
 	REGISTER_SET_Union1 (livein[REGISTER_CLASS_sp], REGISTER_sp);
@@ -296,6 +312,7 @@ static void Compute_PU_Regs (REGSET livein, REGSET liveout)
       livein[rc] = REGISTER_SET_Union (livein[rc], 
 					REGISTER_CLASS_callee_saves(rc));
     }
+#endif
     // If current procedure is a nested function, add the static-link 
     // register to the livein set for the procedure.
     if (PU_is_nested_func(Pu_Table[ST_pu(pu_st)])) {
@@ -307,11 +324,7 @@ static void Compute_PU_Regs (REGSET livein, REGSET liveout)
 
   // Find the return registers for the current procedure.
   if (liveout != NULL) {
-#ifdef TARG_IA64
-    Compute_Return_Regs (ST_pu_type(pu_st), liveout);
-#else
     Compute_Return_Regs (pu_st, ST_pu_type(pu_st), liveout);
-#endif
 
     // check return regs for each entry
     if (PU_has_altentry(Get_Current_PU())) {
@@ -322,11 +335,7 @@ static void Compute_PU_Regs (REGSET livein, REGSET liveout)
 		bb = BB_LIST_first(bbl);
 		ant = ANNOT_Get (BB_annotations(bb), ANNOT_ENTRYINFO);
 		pu_st = ENTRYINFO_name(ANNOT_entryinfo(ant));
-#ifdef TARG_IA64
-	  Compute_Return_Regs (ST_pu_type(pu_st), liveout);
-#else
-          Compute_Return_Regs (pu_st, ST_pu_type(pu_st), liveout);
-#endif
+		Compute_Return_Regs(pu_st, ST_pu_type(pu_st), liveout);
 	}
     }
 
@@ -337,6 +346,7 @@ static void Compute_PU_Regs (REGSET livein, REGSET liveout)
     }
 
     // add sp to list of liveout registers.
+    if (REGISTER_sp != REGISTER_UNDEFINED)
     liveout[REGISTER_CLASS_sp] = 
 	REGISTER_SET_Union1 (liveout[REGISTER_CLASS_sp], REGISTER_sp);
   }
@@ -383,6 +393,7 @@ Compute_Call_Regs (BB *bb, REGSET livein, REGSET liveout, REGSET kill)
       livein[REGISTER_CLASS_gp] = 
 	REGISTER_SET_Union1 (livein[REGISTER_CLASS_gp], REGISTER_gp);
     }
+    if (REGISTER_sp != REGISTER_UNDEFINED)
     livein[REGISTER_CLASS_sp] = 
 		REGISTER_SET_Union1 (livein[REGISTER_CLASS_sp], REGISTER_sp);
 
@@ -407,11 +418,7 @@ Compute_Call_Regs (BB *bb, REGSET livein, REGSET liveout, REGSET kill)
   }
 
   if (liveout != NULL) {
-#ifdef TARG_IA64
-    Compute_Return_Regs (call_ty, liveout);
-#else
     Compute_Return_Regs (call_st, call_ty, liveout);
-#endif
   }
 
   if (kill != NULL) {
@@ -627,6 +634,7 @@ void REG_LIVE_Analyze_Region(void)
   }
 }
 
+#ifndef TARG_NVISA
 /* =======================================================================
  *
  *  REG_LIVE_Prolog_Temps
@@ -663,8 +671,8 @@ REG_LIVE_Prolog_Temps(
 	 tn != GTN_SET_CHOOSE_FAILURE;
 	 tn = GTN_SET_Choose_Next(BB_live_out(bb), tn)
     ) {
-        FmtAssert(TN_is_global_reg(tn),("TN%d is not global",TN_number(tn)));
-        if (TN_register(tn) != REGISTER_UNDEFINED) {
+      FmtAssert(TN_is_global_reg(tn),("TN%d is not global",TN_number(tn)));
+      if (TN_register(tn) != REGISTER_UNDEFINED) {
 	cl = TN_register_class(tn);
 	live[cl] = REGISTER_SET_Union1(live[cl], TN_register(tn));
       }
@@ -760,9 +768,7 @@ REG_LIVE_Epilog_Temps(
 
   /* Get the return registers for the exit block.  */
   REGSET_CLEAR(temps);
-#ifdef TARG_IA64
-  Compute_Return_Regs (ST_pu_type(pu_st), temps);
-#endif
+  Compute_Return_Regs (pu_st, ST_pu_type(pu_st), temps);
 
   /* The set of available temps at the end of the exit block is
    * the caller saved regs with the return regs removed.
@@ -796,6 +802,7 @@ REG_LIVE_Epilog_Temps(
     }
   }
 }
+#endif // ! TARG_NVISA
 
 // Returns true if there is an implicit use of <cl,reg> out of <bb>.
 // The implicit uses are for function call parameters and return registers.
@@ -808,11 +815,8 @@ BOOL REG_LIVE_Implicit_Use_Outof_BB (ISA_REGISTER_CLASS cl, REGISTER reg, BB *bb
 #endif
   // Always mark unallocatable registers as liveout. This includes
   // registers like sp, fp, gp and dedicated register variables.
-#ifdef TARG_IA64
-  if ((!REGISTER_allocatable (cl, reg))&&(!((cl==ISA_REGISTER_CLASS_branch)&&(reg==1)))) return TRUE;
-#else
   if (!REGISTER_allocatable (cl, reg)) return TRUE;
-#endif
+
   REGISTER_SET use[ISA_REGISTER_CLASS_MAX+1];
 
   REGSET_CLEAR(use);
@@ -835,11 +839,7 @@ BOOL REG_LIVE_Implicit_Def_Into_BB (ISA_REGISTER_CLASS cl, REGISTER reg, BB *bb)
 {
   // Always mark unallocatable registers as an implicit def into all bbs. 
   // This includes registers like sp, fp, gp and dedicated register variables.
-#ifdef TARG_IA64
-  if ((!REGISTER_allocatable (cl, reg))&&(!((cl==ISA_REGISTER_CLASS_branch)&&(reg==1)))) return TRUE;
-#else
   if (!REGISTER_allocatable (cl, reg)) return TRUE;
-#endif
 
   REGISTER_SET def[ISA_REGISTER_CLASS_MAX+1];
   REGSET_CLEAR (def);

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -124,6 +128,8 @@
 #include <math.h>
 #include <stdarg.h>
 #include <set>
+#include <vector>
+#include <list>
 #include <utility>
 
 #include "defs.h"
@@ -131,7 +137,6 @@
 #include "errors.h"
 #include "mempool.h"
 #include "cg_flags.h"
-#include "ipfec_options.h"
 #include "cgir.h"
 #include "tracing.h"
 #include "config_asm.h"
@@ -183,7 +188,18 @@
 #include "hb.h"
 #include "gra_live.h"
 
-#ifdef TARG_IA64
+#if defined(TARG_SL)
+#include "tag.h"
+#include "label_util.h"
+#include "profile_util.h"
+#include "cflow.h"
+#endif
+
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
+#include "region.h"
+#include "region_bb_util.h"
+#endif
+#if defined(TARG_IA64)
 #include "ipfec_options.h"
 #include "if_conv.h"
 #include "region_bb_util.h"
@@ -204,7 +220,13 @@ BB *CG_LOOP_epilog_end;
 OP_MAP _CG_LOOP_info_map;
   
 BOOL CG_LOOP_unroll_fully = TRUE;
+UINT32 CG_LOOP_unroll_level = 1;
+#if defined(TARG_SL)
+BOOL CG_LOOP_unroll_remainder_fully = FALSE;
+#else
 BOOL CG_LOOP_unroll_remainder_fully = TRUE;
+#endif
+BOOL CG_LOOP_unroll_fb_required = FALSE;
 UINT32 CG_LOOP_unroll_min_trip = 5;
 
 #ifdef MIPS_UNROLL
@@ -244,6 +266,7 @@ UINT32 CG_LOOP_unrolled_size_max;
 static BOOL unroll_names_valid = FALSE;
 
 static CG_LOOP_BACKPATCH *prolog_backpatches, *epilog_backpatches;
+static BOOL sort_topologically(LOOP_DESCR *loop, BB **result);
 
 /* Statically check a few assumptions .. */
 #if MAX_OMEGA > 255
@@ -264,6 +287,12 @@ void CG_LOOP_Init(void)
   // No loop optimizations at -O0 and -O1
   if (CG_opt_level < 2) return;
   unroll_names_valid = FALSE;
+#ifdef TARG_SL
+  if (CG_sl2) 
+    CG_zdl_enabled_level = 4;
+  else
+    CG_zdl_enabled_level = 2;
+  #endif
 }
 
 void CG_LOOP_Init_Op(OP *op)
@@ -985,6 +1014,43 @@ BOOL CG_LOOP_DEF::Is_invariant(TN *tn)
 
 /* =======================================================================
  *
+ * CG_LOOP_DEF::CG_LOOP_DEF(LOOP_DESCR *)
+ *   Allocate TN_MAP and setup the TN -> first_def_op mapping.
+ *
+ * =======================================================================
+ */
+CG_LOOP_DEF::CG_LOOP_DEF(LOOP_DESCR *loop)
+{
+  tn_map = TN_MAP_Create();
+  BB *bb;
+  OP *op;
+#ifdef TARG_X8664
+  static TN* rflags = Rflags_TN();
+#endif
+
+  FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), bb)
+  {
+    FOR_ALL_BB_OPs(bb, op) {
+
+      for (INT i = 0; i < OP_results(op); i++) {
+        TN *res = OP_result(op,i);
+        if (TN_is_register(res) && 
+	    !TN_is_const_reg(res) &&
+	    !Get(res))
+	  TN_MAP_Set(tn_map, res, op);
+#ifdef TARG_X8664
+        if( TOP_is_change_rflags( OP_code(op) ) &&
+	    !Get( rflags ) ){
+	  TN_MAP_Set( tn_map, rflags, op );
+        }
+#endif
+      }
+    }
+  }
+}
+
+/* =======================================================================
+ *
  * CG_LOOP_DEF::CG_LOOP_DEF(BB *)
  *   Allocate TN_MAP and setup the TN -> first_def_op mapping.
  *
@@ -1040,10 +1106,8 @@ CG_LOOP_DEF::~CG_LOOP_DEF()
  *
  * =======================================================================
  */
-void CG_LOOP::Build_CG_LOOP_Info()
+void CG_LOOP::Build_CG_LOOP_Info(BOOL single_bb)
 {
-  Is_True(Single_BB(), ("LOOP has multiple BB."));
-
   // Build_CG_LOOP_Info might be called multiple times.
   if (_CG_LOOP_info_map) {
     OP_MAP_Delete(_CG_LOOP_info_map);
@@ -1056,49 +1120,134 @@ void CG_LOOP::Build_CG_LOOP_Info()
   op_map = _CG_LOOP_info_map;
 
   BB *body = Loop_header();
+  BB *bb;
   BB *prolog = Prolog_end();
   BB *epilog = Epilog_start();
 
-  CG_LOOP_DEF tn_def(body);
+  if (single_bb) {
+    CG_LOOP_DEF tn_def(body);
 
-  /* Create _CG_LOOP_info_map entries.  For exposed uses, fill in
-   * omega=1 and create a prolog backpatch.  For live-out defs, create
-   * an epilog backpatch.
-   */
-  OP *op;
-  FOR_ALL_BB_OPs(body, op) {
-    CG_LOOP_Init_Op(op);
-    for (INT i = 0; i < OP_results(op); i++) {
-      TN *res = OP_result(op,i);
-      if (TN_is_register(res) &&
-	  !TN_is_const_reg(res)) {
-	if (GTN_SET_MemberP(BB_live_in(epilog), res)) {
-	  Is_True(TN_is_global_reg(res), ("TN in GTN_SET not a global_reg."));
+    /* Create _CG_LOOP_info_map entries.  For exposed uses, fill in
+     * omega=1 and create a prolog backpatch.  For live-out defs, create
+     * an epilog backpatch.
+     */
+    OP *op;
+    FOR_ALL_BB_OPs(body, op) {
+      CG_LOOP_Init_Op(op);
+      for (INT i = 0; i < OP_results(op); i++) {
+        TN *res = OP_result(op,i);
+        if (TN_is_register(res) &&
+  	    !TN_is_const_reg(res)) {
+	  if (GTN_SET_MemberP(BB_live_in(epilog), res)) {
+	    Is_True(TN_is_global_reg(res), ("TN in GTN_SET not a global_reg."));
 
-	  if (!TN_is_dedicated(res))
-	    CG_LOOP_Backpatch_Add(epilog, res, res, 0);
-
-	  if (GTN_SET_MemberP(BB_live_in(body), res))
 	    if (!TN_is_dedicated(res))
-	      CG_LOOP_Backpatch_Add(prolog, res, res, 1);
-	}
+	      CG_LOOP_Backpatch_Add(epilog, res, res, 0);
+
+	    if (GTN_SET_MemberP(BB_live_in(body), res))
+	      if (!TN_is_dedicated(res))
+	        CG_LOOP_Backpatch_Add(prolog, res, res, 1);
+	  }
+        }
+      }
+      for (INT opnd = 0; opnd < OP_opnds(op); opnd++) {
+        TN *tn = OP_opnd(op,opnd);
+        if (TN_is_register(tn) &&
+	    !TN_is_const_reg(tn)) {
+	  OP *def_op = tn_def.Get(tn);
+	  // TN is not an invariant and
+	  // TN is not defined before this OP.
+	  if (def_op && 
+	      !OP_Precedes(def_op, op)) {
+	    if ( !CG_LOOP_Backpatch_Find_Non_Body_TN(prolog, tn, 1) )
+	      if (!TN_is_dedicated(tn))
+	        CG_LOOP_Backpatch_Add(prolog, tn, tn, 1);
+	    Set_OP_omega(op, opnd, 1);
+	  }
+        }
       }
     }
-    for (INT opnd = 0; opnd < OP_opnds(op); opnd++) {
-      TN *tn = OP_opnd(op,opnd);
-      if (TN_is_register(tn) &&
-	  !TN_is_const_reg(tn)) {
-	OP *def_op = tn_def.Get(tn);
-	// TN is not an invariant and
-	// TN is not defined before this OP.
-	if (def_op && 
-	    !OP_Precedes(def_op, op)) {
-	  if ( !CG_LOOP_Backpatch_Find_Non_Body_TN(prolog, tn, 1) )
-	    if (!TN_is_dedicated(tn))
-	      CG_LOOP_Backpatch_Add(prolog, tn, tn, 1);
-	  Set_OP_omega(op, opnd, 1);
-	}
+  } else {
+    CG_LOOP_DEF tn_def(loop);
+    BOOL can_compute_pred = TRUE;
+    BB **orig_bbs;
+    UINT32 num_bbs = BB_SET_Size(LOOP_DESCR_bbset(loop));
+
+    /* Create _CG_LOOP_info_map entries.  For exposed uses, fill in
+     * omega=1 and create a prolog backpatch.  For live-out defs, create
+     * an epilog backpatch.
+     */
+
+    // Top sort the loop to answer the question of def preceeds op?
+    MEM_POOL_Push(&MEM_local_nz_pool);
+    orig_bbs = TYPE_MEM_POOL_ALLOC_N(BB *, &MEM_local_nz_pool, num_bbs);
+    if (!sort_topologically(loop, orig_bbs)) {
+      can_compute_pred = FALSE;
+    }
+
+
+    OP *op;
+    FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), bb)
+    {
+      FOR_ALL_BB_OPs(bb, op) {
+        CG_LOOP_Init_Op(op);
+        for (INT i = 0; i < OP_results(op); i++) {
+          TN *res = OP_result(op,i);
+          if (TN_is_register(res) &&
+  	      !TN_is_const_reg(res)) {
+	    if (GTN_SET_MemberP(BB_live_in(epilog), res)) {
+	      Is_True(TN_is_global_reg(res), ("TN in GTN_SET not a global_reg."));
+
+	      if (!TN_is_dedicated(res))
+	        CG_LOOP_Backpatch_Add(epilog, res, res, 0);
+
+	      if (GTN_SET_MemberP(BB_live_in(bb), res))
+	        if (!TN_is_dedicated(res))
+	          CG_LOOP_Backpatch_Add(prolog, res, res, 1);
+	    }
+          }
+        }
+        for (INT opnd = 0; opnd < OP_opnds(op); opnd++) {
+          TN *tn = OP_opnd(op,opnd);
+          if (TN_is_register(tn) &&
+	      !TN_is_const_reg(tn)) {
+	    OP *def_op = tn_def.Get(tn);
+	    // TN is not an invariant and
+	    // TN is not defined before this OP.
+	    if (def_op && 
+                (OP_bb(def_op) == OP_bb(op)) &&
+	        !OP_Precedes(def_op, op)) {
+	      if ( !CG_LOOP_Backpatch_Find_Non_Body_TN(prolog, tn, 1) )
+	        if (!TN_is_dedicated(tn))
+	          CG_LOOP_Backpatch_Add(prolog, tn, tn, 1);
+	      Set_OP_omega(op, opnd, 1);
+            } else if (def_op &&
+                       can_compute_pred &&
+                       (OP_bb(def_op) != OP_bb(op))) {
+              BB *def_bb = OP_bb(def_op);
+              for (int bbi = 0; bbi < num_bbs; bbi++) {
+                BB *orig_bb = orig_bbs[bbi];
+
+                // does def_op preceed the op?
+                if (orig_bb == def_bb) break;
+
+                // If we pass this test, the def_op block was not seen
+                // yet in the topological sort.
+                if (orig_bb == bb) {
+	          if ( !CG_LOOP_Backpatch_Find_Non_Body_TN(prolog, tn, 1) )
+	            if (!TN_is_dedicated(tn))
+	              CG_LOOP_Backpatch_Add(prolog, tn, tn, 1);
+	          Set_OP_omega(op, opnd, 1);
+                  break;
+                }
+              }
+            }
+          }
+        }
       }
+
+      // now clear the top sort allocation
+      MEM_POOL_Pop(&MEM_local_nz_pool);
     }
   }
 
@@ -1628,7 +1777,11 @@ static TN_LIST *Count_Copies_Needed(BB *body, hTN_MAP tn_def_map,
     for (INT opnd = OP_opnds(op) - 1; opnd >= 0; --opnd) {
       TN *tn = OP_opnd(op, opnd);
       if ( ! TN_is_register(tn)) continue;
-      INT copies = OP_omega(op, opnd);
+      INT copies;
+      if( NULL == _CG_LOOP_info(op))
+        copies=0;
+      else
+        copies = OP_omega(op, opnd);
       OP *tn_def_op = (OP *) hTN_MAP_Get(tn_def_map, tn);
       if (tn_def_op == NULL || (tn_def_op == op && copies == 1))
 	--copies;
@@ -2086,6 +2239,11 @@ void CG_LOOP_Clear_SCCs(LOOP_DESCR *loop)
  *   <loop> <ntimes>.  Allocates memory from <pool> that must not be
  *   released until unroll_names_finish is called.
  *
+ * void unroll_names_init_mb(LOOP_DESCR *loop, UINT16 ntimes, MEM_POOL *pool)
+ *   Initialization function to be called before attempting to unroll
+ *   <loop> <ntimes>.  Allocates memory from <pool> that must not be
+ *   released until unroll_names_finish is called.
+ *
  * TN *unroll_names_get(TN *tn, UINT16 unrolling)
  *   Requires: unrolling < ntimes (from last call to unroll_names_init).
  *   Return a TN representing <tn> in the given <unrolling>.  If <tn>
@@ -2149,7 +2307,10 @@ static void unroll_names_init_tn(TN *result, UINT16 ntimes, MEM_POOL *pool)
        in the loop epilog, where <result> is a gra homeable non_body tn;
        otherwise, redundant spill code could be generated.
      */
-    else if( unrolling == ntimes - 1 && 
+     /* bug 13064: Because Dup_TN "Reset_TN_is_global_reg", we don't keep
+        the original TN for the last iteration if it is global. Instead, we
+        make a duplicate TN as other iterations below */
+    else if( unrolling == ntimes - 1 && /*!TN_is_global_reg(result) &&*/ 
 	     TN_is_gra_homeable(result) ){
       entry[unrolling] = result;
     }
@@ -2172,6 +2333,14 @@ static void unroll_names_init_tn(TN *result, UINT16 ntimes, MEM_POOL *pool)
   }
 }
 
+static BOOL TN_is_cond_def(OP *op, TN *tn)
+{
+#if defined(TARG_SL)
+  return OP_cond_def(op) || (OP_same_res(op) && OP_Refs_TN(op, tn));
+#else
+  return OP_cond_def(op);
+#endif
+}
 // Bug 1064 & Bug 1221
 #ifdef KEY
 static BOOL TN_is_cond_def_of_another_op(BB *bb, TN *tn, OP *cand_op)
@@ -2180,7 +2349,7 @@ static BOOL TN_is_cond_def_of_another_op(BB *bb, TN *tn, OP *cand_op)
   FOR_ALL_BB_OPs(bb, op) {
     if (cand_op == op)
       break;
-    if (!OP_cond_def(op))
+    if (!TN_is_cond_def(op, tn))
       continue;
     for (INT i = 0; i < OP_results(op); ++i) {
       TN *result_tn = OP_result(op,i);
@@ -2200,7 +2369,6 @@ static void unroll_names_init(LOOP_DESCR *loop, UINT16 ntimes, MEM_POOL *pool)
 {
   BB_SET *bbs = LOOP_DESCR_bbset(loop);
   Is_True(BB_SET_Size(bbs) == 1, ("unroll_names_init:  only support single BB loop."));
-
   BB *bb = LOOP_DESCR_loophead(loop);
   OP *op;
 
@@ -2212,14 +2380,13 @@ static void unroll_names_init(LOOP_DESCR *loop, UINT16 ntimes, MEM_POOL *pool)
   FOR_ALL_BB_OPs(bb, op) {
     for (INT i = 0; i < OP_results(op); ++i) {
       TN *result_tn = OP_result(op,i);
-      
-      if (!OP_cond_def(op) || 
-	  !TN_is_global_reg(result_tn)) {
+     
+      if (!TN_is_cond_def(op, result_tn) || !TN_is_global_reg(result_tn)) {
 	
 	if (OP_base_update_kind(op) == NO_BASE_UPDATE || 
 	    (OP_load(op) && i == 0))  // prevent renaming of base-update incr
 #ifdef KEY
-          if (!TN_MAP_Get(unroll_names, result_tn) && !TN_is_cond_def_of_another_op(bb, result_tn, op))
+          if (!TN_MAP_Get(unroll_names, result_tn) && !TN_is_cond_def_of_another_op(bb, result_tn, op)) 
 #else
           if (!TN_MAP_Get(unroll_names, result_tn))
 #endif
@@ -2236,6 +2403,62 @@ static void unroll_names_init(LOOP_DESCR *loop, UINT16 ntimes, MEM_POOL *pool)
 	  OP_omega(op, i) >= 2)
 	Is_True(TN_MAP_Get(unroll_names, tn),
 		("unroll_names_init: must rename omega TN."));
+    }
+  }
+#endif
+}
+
+
+static void unroll_names_init_mb(LOOP_DESCR *loop, 
+                                 UINT16 ntimes, 
+                                 MEM_POOL *pool)
+/* -----------------------------------------------------------------------
+ * See above for interface description.
+ * -----------------------------------------------------------------------
+ */
+{
+  BB_SET *bbs = LOOP_DESCR_bbset(loop);
+  BB *head = LOOP_DESCR_loophead(loop);
+  BB *bb;
+  OP *op;
+
+  Is_True(!unroll_names_valid, ("unroll_names_finish not called."));
+
+  unroll_names = TN_MAP_Create();
+  unroll_names_valid = TRUE;
+
+  FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), bb) {
+    FOR_ALL_BB_OPs(bb, op) {
+      for (INT i = 0; i < OP_results(op); ++i) {
+        TN *result_tn = OP_result(op,i);
+        BOOL can_record = (bb == head) ?
+           (!TN_is_cond_def(op, result_tn) || !TN_is_global_reg(result_tn)) :
+           (!TN_is_cond_def(op, result_tn) && !TN_is_global_reg(result_tn));
+        if (can_record) {
+	  if (OP_base_update_kind(op) == NO_BASE_UPDATE || 
+	      (OP_load(op) && i == 0))  // prevent renaming of base-update incr
+#ifdef KEY
+            if (!TN_MAP_Get(unroll_names, result_tn) && 
+                !TN_is_cond_def_of_another_op(bb, result_tn, op))
+#else
+            if (!TN_MAP_Get(unroll_names, result_tn))
+#endif
+	      unroll_names_init_tn(result_tn, ntimes, pool);
+        }
+      }
+    }
+  }
+
+#ifdef Is_True_On
+  FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), bb) {
+    FOR_ALL_BB_OPs(bb, op) {
+      for (INT i = 0; i < OP_opnds(op); ++i) {
+        TN *tn = OP_opnd(op,i);
+        if (TN_is_register(tn) &&
+	    OP_omega(op, i) >= 2)
+	  Is_True(TN_MAP_Get(unroll_names, tn),
+		  ("unroll_names_init_mb: must rename omega TN."));
+      }
     }
   }
 #endif
@@ -2399,7 +2622,7 @@ static void note_not_unrolled(BB *head, const char *reason, ...)
 
 
 
-inline UINT16 log2(UINT32 n)
+inline UINT16 log2_u32(UINT32 n)
 /* -----------------------------------------------------------------------
  * Requires: n > 0.
  * Return the base-2 logarithm of <n> (truncated if <n> isn't a power of
@@ -2451,22 +2674,37 @@ static void unroll_guard_unrolled_body(LOOP_DESCR *loop,
 
     /* We know <orig_trip_count_tn's> value is positive, and <ntimes> is a power
    * of two, so we can divide <orig_trip_count_tn> by <ntimes> with:
-   *   <new_trip_count_tn> <- [d]sra <orig_trip_count_tn> log2(ntimes)
+   *   <new_trip_count_tn> <- [d]sra <orig_trip_count_tn> log2_u32(ntimes)
    * and guard the unrolled loop with:
    *   beq continuation_lbl <new_trip_count_tn> 0
    */
     Exp_OP2(trip_size == 4 ? OPC_I4ASHR : OPC_I8ASHR,
 	    new_trip_count_tn,
 	    orig_trip_count_tn,
-	    Gen_Literal_TN(log2(ntimes), trip_size),
+	    Gen_Literal_TN(log2_u32(ntimes), trip_size),
 	    &ops);
+#ifdef TARG_X8664 //bug 12956: x8664/exp_branch.cxx does not accept Zero_TN
+    Exp_OP3v(OPC_FALSEBR,
+             NULL,
+             Gen_Label_TN(continuation_lbl,0),
+             new_trip_count_tn,
+             Gen_Literal_TN(0,4),
+             trip_size == 4 ? V_BR_I4EQ : V_BR_I8EQ,
+             &ops);
+#else
     Exp_OP3v(OPC_FALSEBR,
 	     NULL,
 	     Gen_Label_TN(continuation_lbl,0),
 	     new_trip_count_tn,
+#if defined(TARG_PPC32)
+	     Gen_Literal_TN(0, 4),
+	     (trip_size == 4) ? V_BR_I4EQ : V_BR_I8EQ,
+#else
 	     Zero_TN,
 	     V_BR_I8EQ,
+#endif
 	     &ops);
+#endif
     BB_Append_Ops(CG_LOOP_prolog, &ops);
     Link_Pred_Succ_with_Prob(CG_LOOP_prolog, continuation_bb, ztrip_prob);
     Change_Succ_Prob(CG_LOOP_prolog, BB_next(CG_LOOP_prolog), 1.0 - ztrip_prob);
@@ -2500,6 +2738,7 @@ static void unroll_xfer_annotations(BB *unrolled_bb, BB *orig_bb)
 {
   if (BB_has_pragma(orig_bb)) {
     BB_Copy_Annotations(unrolled_bb, orig_bb, ANNOT_PRAGMA);
+    BB_Copy_Annotations(unrolled_bb, orig_bb, ANNOT_INLINE);
   }
 
   if (BB_exit(orig_bb)) {
@@ -2594,7 +2833,10 @@ static BB *Unroll_Replicate_Body(LOOP_DESCR *loop, INT32 ntimes, BOOL unroll_ful
    */
   for (unrolling = 0; unrolling < ntimes; unrolling++) {
     FOR_ALL_BB_OPs(body, op) {
-
+#if defined(TARG_PPC32)
+      if (OP_icmp(op) && op == BB_last_op(body) && unrolling != (ntimes - 1) )
+        continue;
+#endif
       // Perform Prefetch pruning at unroll time
       if (OP_prefetch(op)) {
 
@@ -3045,7 +3287,7 @@ void Unroll_Make_Remainder_Loop(CG_LOOP& cl, INT32 ntimes)
 	      &prolog_ops);
     
     continuation_label = Gen_Label_For_BB(remainder_tail);
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_PPC32)
     Exp_OP3v(OPC_FALSEBR,
 	     NULL,
 	     Gen_Label_TN(continuation_label,0),
@@ -3114,7 +3356,7 @@ void Unroll_Make_Remainder_Loop(CG_LOOP& cl, INT32 ntimes)
 		new_trip_count,
 		Gen_Literal_TN(-1, trip_size),
 		&body_ops);
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_PPC32)
 	Exp_OP3v(OPC_TRUEBR,
 		 NULL,
 		 Gen_Label_TN(continuation_label,0),
@@ -3140,6 +3382,10 @@ void Unroll_Make_Remainder_Loop(CG_LOOP& cl, INT32 ntimes)
 	OP *op;
 	FOR_ALL_BB_OPs(body, op) {
 	  // keep the prefetches ops of the first unrolling
+#if defined(TARG_PPC32)
+    if (OP_icmp(op) && op == BB_last_op(body))
+      continue;
+#endif
 	  if (OP_prefetch(op) && unrolling != unroll_times)
 	    continue;
 	  OP *new_op = Dup_OP(op);
@@ -3224,14 +3470,23 @@ void Unroll_Make_Remainder_Loop(CG_LOOP& cl, INT32 ntimes)
 	       Gen_Literal_TN(-1, trip_size),
 	       &body_ops );
 
+#ifdef TARG_X8664 //bug 12956: x8664/exp_branch.cxx does not accept Zero_TN
       Exp_OP3v( OPC_TRUEBR,
 		NULL,
 		Gen_Label_TN( Gen_Label_For_BB(new_body),0 ),
 		var_trip_count,
-		Zero_TN,
-		V_BR_I8NE,
+		Gen_Literal_TN(0,4),
+		trip_size == 4 ? V_BR_I4NE : V_BR_I8NE,
 		&body_ops );
-
+#else
+      Exp_OP3v( OPC_TRUEBR,
+                NULL,
+                Gen_Label_TN( Gen_Label_For_BB(new_body),0 ),
+                var_trip_count,
+                Zero_TN,
+                V_BR_I8NE,
+                &body_ops );
+#endif
       float exit_prob = 1.0 / ntimes;
       Link_Pred_Succ_with_Prob( new_body, new_body, 1.0 - exit_prob );
       //Link_Pred_Succ_with_Prob( new_body, remainder_tail, exit_prob );
@@ -3239,6 +3494,10 @@ void Unroll_Make_Remainder_Loop(CG_LOOP& cl, INT32 ntimes)
       body = new_body;
 #endif
 
+#if defined(TARG_SL)
+      if(info)
+        BB_Add_Annotation(body, ANNOT_LOOPINFO, info);
+#endif
       BB_Append_Ops(CG_LOOP_prolog, &prolog_ops);
       BB_Append_Ops(CG_LOOP_prolog, &zero_trip_guard_ops);
       BB_Append_Ops(body, &body_ops);
@@ -3548,13 +3807,28 @@ static BOOL unroll_multi_make_remainder_loop(LOOP_DESCR *loop, UINT8 ntimes,
 	    trip_count,
 	    Gen_Literal_TN(ntimes-1, trip_size),
 	    &ops);
+#ifdef TARG_X8664 //bug 12956: x8664/exp_branch.cxx does not accept Zero_TN
+    Exp_OP3v(OPC_FALSEBR,
+             NULL,
+             Gen_Label_TN(continuation_label,0),
+             new_trip_count,
+             Gen_Literal_TN(0,4),
+             trip_size == 4 ? V_BR_I4EQ : V_BR_I8EQ,
+             &ops);
+#else
     Exp_OP3v(OPC_FALSEBR,
 	     NULL,
 	     Gen_Label_TN(continuation_label,0),
 	     new_trip_count,
+#if defined(TARG_PPC32)
+	     Gen_Literal_TN(0, 4),
+	     (trip_size == 4) ? V_BR_I4EQ : V_BR_I8EQ,
+#else
 	     Zero_TN,
 	     V_BR_I8EQ,
+#endif
 	     &ops);
+#endif
     BB_Append_Ops(CG_LOOP_prolog, &ops);
     Link_Pred_Succ_with_Prob(CG_LOOP_prolog, remainder_epilog, ztrip_prob);
     if (freqs)
@@ -3689,6 +3963,15 @@ static BOOL unroll_multi_make_remainder_loop(LOOP_DESCR *loop, UINT8 ntimes,
 	    trip_counter,
 	    Gen_Literal_TN(-1, trip_size),
 	    &ops);
+#ifdef TARG_X8664 //bug 12956: x8664/exp_branch.cxx does not accept Zero_TN
+    Exp_OP3v(OPC_TRUEBR,
+             NULL,
+             Gen_Label_TN(Gen_Label_For_BB(head), 0),
+             trip_counter,
+             Gen_Literal_TN(0,4),
+             trip_size == 4 ? V_BR_I4NE : V_BR_I8NE,
+             &ops);
+#else
     Exp_OP3v(OPC_TRUEBR,
 	     NULL,
 	     Gen_Label_TN(Gen_Label_For_BB(head), 0),
@@ -3696,6 +3979,7 @@ static BOOL unroll_multi_make_remainder_loop(LOOP_DESCR *loop, UINT8 ntimes,
 	     Zero_TN,
 	     V_BR_I8NE,
 	     &ops);
+#endif
     BB_Append_Ops(tail, &ops);
     if (dbnum > 0) {
       FOR_ALL_OPS_OPs(&ops, op) DB_Initialize_OP(op, dbnum);
@@ -3731,6 +4015,7 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
  * -----------------------------------------------------------------------
  */
 {
+  BOOL trace_general = Get_Trace(TP_CGLOOP, 1);
   BB *head = LOOP_DESCR_loophead(loop);
   UINT32 num_bbs = BB_SET_Size(LOOP_DESCR_bbset(loop));
   BB *replicas;
@@ -3739,7 +4024,7 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
   float *orig_br_probs;
   float orig_head_freq = BB_freq(head);
   BB_MAP orig_bb_index_map;
-  UINT32 bbi, i, unrolling;
+  UINT32 bbi, i, unrolling, num_instrs;
   BOOL unrolling_fully = FALSE;
   ANNOTATION *annot = ANNOT_Get(BB_annotations(head), ANNOT_LOOPINFO);
   LOOPINFO *info = annot ? ANNOT_loopinfo(annot) : NULL;
@@ -3753,7 +4038,7 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
   MEM_POOL_Push(&MEM_local_nz_pool);
   orig_bbs = TYPE_MEM_POOL_ALLOC_N(BB *, &MEM_local_nz_pool, num_bbs);
   if (!sort_topologically(loop, orig_bbs)) {
-    char *reason = "loop has irreducible flow graph";
+    const char *reason = "loop has irreducible flow graph";
     MEM_POOL_Pop(&MEM_local_nz_pool);
     if (Get_Trace(TP_CGLOOP, 2))
 	fprintf(TFile, "<unroll> aborting; %s\n", reason);
@@ -3790,6 +4075,9 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
   if (unrolled_info)
     BB_Add_Annotation(&replicas[0], ANNOT_LOOPINFO, unrolled_info);
   Set_BB_unrollings(&replicas[0], ntimes);
+
+  /* Initialize the TN renamer */
+  unroll_names_init_mb(loop, ntimes, &MEM_phase_nz_pool);
 
   /* Setup some data structures, such that, for all 0 <= bbi < num_bbs:
    *   BB_MAP32_Get(orig_bb_index_map, orig_bbs[bbi]) is <bbi> + 1
@@ -3880,6 +4168,8 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
    */
   replica = &replicas[0];
   for (unrolling = 0; unrolling < ntimes; unrolling++) {
+    // count instructions from orig on first pass
+    if (unrolling == 0) num_instrs = 0;
     for (bbi = 0; bbi < num_bbs; bbi++, replica++) {
       BB *orig_bb = orig_bbs[bbi];
       BB *br_targ = orig_br_targ_bbs[bbi];
@@ -3895,6 +4185,8 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
       BB_rid(replica) = BB_rid(head);
       if (BB_freq_fb_based(orig_bb)) Set_BB_freq_fb_based(replica);
 
+      if (unrolling == 0) num_instrs += BB_length(orig_bb);
+
       /* Replicate OPs from <orig_bb> into <replica>, renaming TNs as we go
        */
       FOR_ALL_BB_OPs(orig_bb, op) {
@@ -3908,18 +4200,13 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
 	Copy_WN_For_Memory_OP(rop, op);
         for (resi = 0; resi < OP_results(rop); resi++) {
 	  TN *res = OP_result(rop,resi);
-	  if (!TN_is_global_reg(res)) {
-	    TN *new_res = unroll_names_get(res, unrolling);
-	    Set_OP_result(rop, resi, new_res);
-	  }
+	  TN *new_res = unroll_names_get(res, unrolling);
+	  Set_OP_result(rop, resi, new_res);
 	}
 	for (opi = 0; opi < OP_opnds(rop); opi++) {
 	  TN *opnd = OP_opnd(rop, opi);
-	  if (TN_is_register(opnd)) {
-	    if (!TN_is_global_reg(opnd)) {
-	      Set_OP_opnd(rop, opi, unroll_names_get(opnd, unrolling));
-	    }
-	  }
+          TN *new_tn = unroll_names_get(opnd, unrolling);
+	  Set_OP_opnd(rop, opi, new_tn);
 	}
 	BB_Append_Op(replica, rop);
 	if (OP_br(rop)) replica_br_op = rop;
@@ -4103,6 +4390,22 @@ static BOOL unroll_multi_bb(LOOP_DESCR *loop, UINT8 ntimes)
     unroll_guard_unrolled_body(loop, unrolled_info, trip_count_tn, ntimes);
   }
 
+  /* Fixup epilog backpatches.  Replace body TNs and omegas as if
+   * they're uses in the last unrolling.
+   */
+  unroll_rename_backpatches(CG_LOOP_Backpatch_First(CG_LOOP_epilog, NULL),
+                           ntimes-1, ntimes);
+   
+  CG_LOOP_Remove_Notations(loop, CG_LOOP_prolog, CG_LOOP_epilog);
+  
+  unroll_names_finish();
+
+  if (trace_general) {
+    fprintf(TFile, 
+            "loop (%d blks : %d instrs): unrolled %d times, max = %d\n", 
+            num_bbs, num_instrs, ntimes, CG_LOOP_unroll_times_max);
+  }
+
   BB_MAP_Delete(orig_bb_index_map);
   MEM_POOL_Pop(&MEM_local_nz_pool);
   return TRUE;
@@ -4281,7 +4584,7 @@ void Unroll_Do_Loop_guard(LOOP_DESCR *loop,
   continuation_bb = CG_LOOP_epilog;
   continuation_lbl = Gen_Label_For_BB(continuation_bb);
 
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_PPC32)
   Exp_OP3v(OPC_FALSEBR,
 	   NULL,
 	   Gen_Label_TN(continuation_lbl,0),
@@ -4355,7 +4658,7 @@ void Unroll_Do_Loop(CG_LOOP& cl, UINT32 ntimes)
       Exp_OP2(trip_size == 4 ? OPC_I4ASHR : OPC_I8ASHR,
 	      unrolled_trip_count,
 	      trip_count_tn,
-	      Gen_Literal_TN(log2(ntimes), trip_size),
+	      Gen_Literal_TN(log2_u32(ntimes), trip_size),
 	      &ops);
     else
       Exp_OP2(trip_size == 4 ? OPC_U4DIV : OPC_U8DIV,
@@ -4706,7 +5009,7 @@ void Unroll_Dowhile_Loop(LOOP_DESCR *loop, UINT32 ntimes)
  *   (b1) unrolled size <= OPT:unroll_size, or
  *   (b2) OPT:unroll_size=0 and OPT:unroll_times_max >= trip count
  */
-bool CG_LOOP::Determine_Unroll_Fully()
+bool CG_LOOP::Determine_Unroll_Fully(BOOL count_multi_bb)
 {
   if (!CG_LOOP_unroll_fully) 
     return false;
@@ -4728,7 +5031,61 @@ bool CG_LOOP::Determine_Unroll_Fully()
     return false;
 
   INT32 const_trip_count = TN_value(trip_count_tn);
-  INT32 body_len = BB_length(head);
+  INT32 body_len = 0;
+
+  if (CG_PU_Has_Feedback) {
+    double cold_threshold = Gen_PIC_Shared ? 0.005 : 0.01;
+    if (CFLOW_cold_threshold && CFLOW_cold_threshold[0] != '\0') {
+      double d = atof(CFLOW_cold_threshold);
+      if (d >= 0.0) {
+        cold_threshold = d;
+      }
+    }
+    // If we are fdo optimized, and this head is below the threshold, do
+    // nothing.  Before unrolling the trip count is part of the threshold.
+    if (BB_freq_fb_based(head) <= (const_trip_count * cold_threshold)) {
+      return false;
+    }
+  } else if (CG_LOOP_unroll_fb_required) {
+    return false;
+  }
+
+  // filter out those loops in which indirect branch has a succ
+  // that is inside the loop, because unroll_multi_bb could not
+  // handle such loops. Here, the check is  
+  // the same as in line 4214 (i.e., not yet retargeting
+  // intra-loop indirect branches)
+  BB *loop_bb;
+  FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), loop_bb) {
+    WN *stmt = BB_branch_wn(loop_bb);
+    OP *br_op = BB_branch_op(loop_bb);
+    if (stmt != NULL && 
+        (!br_op || !TN_is_label(OP_opnd(br_op, Branch_Target_Operand(br_op)))))
+    {
+      BBLIST *succs;
+      FOR_ALL_BB_SUCCS(loop_bb, succs) {
+        BB *succ = BBLIST_item(succs);
+        if (BB_SET_MemberP(LOOP_DESCR_bbset(loop), succ))
+        {
+          return false;
+        }
+      }
+    }
+ }   
+  
+  // This preserves the legacy behavior
+  if (count_multi_bb) {
+    BB *cur_bb;
+    FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), cur_bb) {
+      body_len += BB_length(cur_bb);
+      // Unrolling the loop will break the lsda table info.
+      if (BB_handler(cur_bb) || BB_Has_Exc_Label(cur_bb)) {
+        return false;
+      }
+    }
+  } else {
+    body_len = BB_length(head);
+  }
 
   if (body_len * const_trip_count <= CG_LOOP_unrolled_size_max ||
       CG_LOOP_unrolled_size_max == 0 &&
@@ -4756,7 +5113,7 @@ void CG_LOOP::Determine_Unroll_Factor()
   Set_unroll_factor(1);
 
   if (BB_Has_Exc_Label(head)) {
-    char *reason = "in exception region or handler";
+    const char *reason = "in exception region or handler";
     note_not_unrolled(head, reason);
     if (trace) fprintf(TFile, "<unroll> not unrolling; %s\n", reason);
     return;
@@ -4766,7 +5123,7 @@ void CG_LOOP::Determine_Unroll_Factor()
   if( Is_Target_32bit() ){
     for( OP* op = BB_first_op(head); op != NULL; op = OP_next(op) ){
       if( TOP_is_change_x87_cw(OP_code(op)) ){
-	char* reason = "fldcw/fnstcw slows down the performance";
+	const char* reason = "fldcw/fnstcw slows down the performance";
 	note_not_unrolled( head, reason );
 	if( trace )
 	  fprintf(TFile, "<unroll> not unrolling; %s\n", reason);
@@ -4826,10 +5183,18 @@ void CG_LOOP::Determine_Unroll_Factor()
       Set_unroll_fully();
       Set_unroll_factor(const_trip_count);
     } else {
+#if defined(TARG_SL)	
+      if(FREQ_Frequencies_Computed() && BB_freq_fb_based(head))  { 
+        float loop_entry_freq = BB_freq(head); //or head
+        if (CG_LOOP_unroll_min_trip >= loop_entry_freq) {
+            return;
+        }
+      }
+#endif
       UINT32 ntimes = OPT_unroll_times;
       ntimes = MIN(ntimes, CG_LOOP_unroll_times_max);
       if (!is_power_of_two(ntimes)) {
-	ntimes = 1 << log2(ntimes); 
+	ntimes = 1 << log2_u32(ntimes); 
 	if (trace)
 	  fprintf(TFile, "<unroll> rounding down to power of two = %d times\n", ntimes);
       }
@@ -5327,7 +5692,7 @@ void CG_LOOP::Determine_SWP_Unroll_Factor()
     }
   
   INT unroll_times = SWP_Options.Min_Unroll_Times;
-  INT loop_size_limit = MIN(SWP_OPS_LIMIT, CG_LOOP_unrolled_size_max);
+  INT loop_size_limit = MIN(SWP_Options.OPS_Limit, CG_LOOP_unrolled_size_max);
   for (i = min_unr; i <= max_unr; i++) {
     if (i * loop_size < loop_size_limit) {
       if (swp_cycles[i] < (swp_cycles[unroll_times] * (1.0 - (i - unroll_times) * 0.01)))
@@ -5335,7 +5700,7 @@ void CG_LOOP::Determine_SWP_Unroll_Factor()
     }
   }
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64)
  INT old_computed;
  
  {
@@ -5496,7 +5861,7 @@ void CG_LOOP::EBO_After_Unrolling()
     }
 
     // TODO: call ebo_after_unrolling(bb_region) here
-    EBO_after_unrolling(&bb_region);
+    EBO_after_unrolling(&bb_region, loop, unroll_factor);
   }
   MEM_POOL_Pop(&MEM_local_pool);
 }
@@ -5514,7 +5879,7 @@ void CG_LOOP::Print(FILE *fp)
 
 static BOOL Skip_Loop_For_Reason(LOOP_DESCR *loop)
 {
-  char	*reason = NULL;
+  const char	*reason = NULL;
   BB	*bb;
   BOOL trace_general = Get_Trace(TP_CGLOOP, 1);
 
@@ -5583,7 +5948,7 @@ static BOOL Skip_Loop_For_Reason(LOOP_DESCR *loop)
     {
       reason = "loop never exits";
     }
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
     else if( BB_freq_fb_based(head) && BB_freq(head) < 0.01 ){
       reason = "loop is barely executed";
     }
@@ -5735,7 +6100,7 @@ make_pair(BB* a, CG_LOOP_BACKPATCH* b)
 
 void Fix_Backpatches(CG_LOOP& cl, bool trace)
 {
-  std::vector<std::pair<BB*, CG_LOOP_BACKPATCH *> > dead_bp;
+  vector<pair<BB*, CG_LOOP_BACKPATCH *> > dead_bp;
   std::set<TN*> epilog_tns;
   BB *body = cl.Loop_header();
   BB *prolog = CG_LOOP_prolog;
@@ -5744,7 +6109,7 @@ void Fix_Backpatches(CG_LOOP& cl, bool trace)
   for (bp = CG_LOOP_Backpatch_First(epilog, NULL); bp; bp = CG_LOOP_Backpatch_Next(bp)) {
     TN *body_tn = CG_LOOP_BACKPATCH_body_tn(bp);
     if (!GTN_SET_MemberP(BB_defreach_out(body), body_tn))
-      dead_bp.push_back(std::make_pair(epilog,bp));
+      dead_bp.push_back(make_pair(epilog,bp));
     else
       epilog_tns.insert(body_tn);
   }
@@ -5753,7 +6118,7 @@ void Fix_Backpatches(CG_LOOP& cl, bool trace)
     if (!GTN_SET_MemberP(BB_live_in(body), body_tn) &&
 	!(GTN_SET_MemberP(BB_defreach_out(body), body_tn) &&
 	  epilog_tns.find(body_tn) != epilog_tns.end()))
-      dead_bp.push_back(std::make_pair(prolog,bp));
+      dead_bp.push_back(make_pair(prolog,bp));
   }
   while (!dead_bp.empty()) {
     BB *bb = (*(dead_bp.end()-1)).first;
@@ -5917,7 +6282,7 @@ Do_Loop_Determine_SWP_Or_Unroll (CG_LOOP& cg_loop, BOOL trace) {
  */
 static BOOL
 Do_Loop_Perform_SWP_or_Unroll (BOOL perform_swp, CG_LOOP& cg_loop,
-     std::vector<SWP_FIXUP>& fixup, BOOL trace_loop_opt) {
+     vector<SWP_FIXUP>& fixup, BOOL trace_loop_opt) {
 
    LOOP_DESCR* loop = cg_loop.Loop ();
 
@@ -5940,10 +6305,10 @@ Do_Loop_Perform_SWP_or_Unroll (BOOL perform_swp, CG_LOOP& cg_loop,
       Rename_TNs_For_BB(cg_loop.Loop_header(), NULL);
       cg_loop.Recompute_Liveness();
 
-      cg_loop.Build_CG_LOOP_Info();
+      cg_loop.Build_CG_LOOP_Info(TRUE);
       cg_loop.Recompute_Liveness();
 
-      if (cg_loop.Determine_Unroll_Fully()) {
+      if (cg_loop.Determine_Unroll_Fully(FALSE)) {
         Unroll_Do_Loop_Fully(loop, cg_loop.Unroll_factor());
         cg_loop.Recompute_Liveness();
         return TRUE;
@@ -6038,7 +6403,7 @@ Do_Loop_Perform_SWP_or_Unroll (BOOL perform_swp, CG_LOOP& cg_loop,
       if (!Remove_Non_Definite_Dependence(cg_loop, false, trace_loop_opt))
         return FALSE;
 
-      cg_loop.Build_CG_LOOP_Info();
+      cg_loop.Build_CG_LOOP_Info(TRUE);
 
       if (trace_loop_opt)
         CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_DOLOOP_UNROLL ***");
@@ -6074,8 +6439,8 @@ Do_Loop_Perform_SWP_or_Unroll (BOOL perform_swp, CG_LOOP& cg_loop,
 
 // Perform loop optimizations for one loop
 //
-#ifdef TARG_IA64
-BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, std::vector<SWP_FIXUP>& fixup,
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
+BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, vector<SWP_FIXUP>& fixup,
                       void **par_rgn=NULL,
                       void *rgn_loop_update=NULL)
 #else
@@ -6094,6 +6459,7 @@ BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, std::vector<SWP_FIXUP>& fixup,
     SINGLE_BB_WHILELOOP_UNROLL,
     MULTI_BB_DOLOOP
   };
+  BOOL have_multiversion = FALSE;
 
 #ifdef TARG_IA64  
   if(IPFEC_Enable_Region_Formation){
@@ -6101,6 +6467,15 @@ BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, std::vector<SWP_FIXUP>& fixup,
           return FALSE;
   }
 #endif
+
+#ifdef TARG_X8664
+  LOOPINFO *info = LOOP_DESCR_loopinfo(loop);
+  UINT32 saved_unrolled_size_max;
+  UINT32 saved_unroll_times_max;
+#endif
+
+  if (CG_LOOP_unroll_level == 0)
+    return FALSE;
 
   //    if (Is_Inner_Loop(loop)) {
   if (!BB_innermost(LOOP_DESCR_loophead(loop))) 
@@ -6127,7 +6502,7 @@ BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, std::vector<SWP_FIXUP>& fixup,
 
   if (!single_bb && 
       CG_LOOP_force_ifc > 0 &&
-      Loop_Amenable_For_SWP(loop, trace_loop_opt)) {
+      Loop_Amenable_For_SWP (loop, trace_loop_opt)) {
 
     BB *new_single_bb;
 #ifdef TARG_IA64
@@ -6175,12 +6550,23 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
            return FALSE;
   }
 #endif
+
+#ifdef TARG_X8664
+  if (info && LOOPINFO_multiversion(info)) {
+    saved_unrolled_size_max = CG_LOOP_unrolled_size_max;
+    saved_unroll_times_max = CG_LOOP_unroll_times_max;
+    have_multiversion = TRUE;
+    CG_LOOP_unrolled_size_max = 256;
+    CG_LOOP_unroll_times_max = 8;
+  }
+#endif
+
   switch (action) {
 #ifdef TARG_IA64
   case SINGLE_BB_DOLOOP_SWP_OR_UNROLL:
     {
       CG_LOOP cg_loop(loop);
-      cg_loop.Build_CG_LOOP_Info ();
+      cg_loop.Build_CG_LOOP_Info (TRUE);
 
       BOOL perform_swp = Do_Loop_Determine_SWP_Or_Unroll
           (cg_loop, trace_loop_opt);
@@ -6209,10 +6595,10 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
       Rename_TNs_For_BB(cg_loop.Loop_header(), NULL);
       cg_loop.Recompute_Liveness();
 
-      cg_loop.Build_CG_LOOP_Info();
+      cg_loop.Build_CG_LOOP_Info(TRUE);
       cg_loop.Recompute_Liveness();
 
-      if (cg_loop.Determine_Unroll_Fully()) {
+      if (cg_loop.Determine_Unroll_Fully(FALSE)) {
 	Unroll_Do_Loop_Fully(loop, cg_loop.Unroll_factor());
 	cg_loop.Recompute_Liveness();
 	return TRUE;
@@ -6311,7 +6697,7 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
       if (!Remove_Non_Definite_Dependence(cg_loop, false, trace_loop_opt))
 	return FALSE;
 
-      cg_loop.Build_CG_LOOP_Info();
+      cg_loop.Build_CG_LOOP_Info(TRUE);
 
       if (trace_loop_opt) 
 	CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_DOLOOP_UNROLL ***");
@@ -6362,7 +6748,7 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
 	Gen_SWP_Branch(cg_loop, false/*is_doloop*/);
 
 	cg_loop.Recompute_Liveness();
-	cg_loop.Build_CG_LOOP_Info();
+	cg_loop.Build_CG_LOOP_Info(TRUE);
 
 	// Break recurrences will compute dep-graph itself
 	cg_loop.Recompute_Liveness();
@@ -6376,13 +6762,6 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
 
 	Convert_While_Loop_to_Fully_Predicated_Form(cg_loop);
 
-#if 0
-	if (SWP_Options.Predicate_Promotion) {
-	  std::list<BB*> bbl;
-	  bbl.push_front(cg_loop.Loop_header());
-	  CG_DEP_Prune_Dependence_Arcs(bbl, TRUE, trace_loop_opt);
-	}
-#endif
 
 	if (trace_loop_opt) 
 	  CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_WHILELOOP_SWP ***");
@@ -6412,7 +6791,7 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
       if (trace_loop_opt) 
 	CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_WHILELOOP_UNROLL ***");
 
-      cg_loop.Build_CG_LOOP_Info();
+      cg_loop.Build_CG_LOOP_Info(TRUE);
       cg_loop.Determine_Unroll_Factor();
       Unroll_Dowhile_Loop(loop, cg_loop.Unroll_factor());
       cg_loop.Recompute_Liveness();
@@ -6432,6 +6811,29 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
       }
 
       Gen_Counted_Loop_Branch(cg_loop);
+      if ((CG_LOOP_unroll_level == 2) || (have_multiversion)) {
+
+        cg_loop.Recompute_Liveness();
+        cg_loop.Build_CG_LOOP_Info(FALSE);
+        cg_loop.Recompute_Liveness();
+
+        if (cg_loop.Determine_Unroll_Fully(TRUE)) {
+          if (unroll_multi_bb(loop, cg_loop.Unroll_factor())) {
+            BB *head = LOOP_DESCR_loophead(loop); 
+            Set_Multibb_Loop(loop);
+            cg_loop.Recompute_Liveness();
+            cg_loop.EBO_After_Unrolling();
+            if (trace_loop_opt) {
+              if (CG_PU_Has_Feedback) {
+                int freq = BB_freq_fb_based(head);
+                fprintf(TFile, "loop fully unrolled : freq = %d\n", freq);
+              } else {
+                fprintf(TFile, "loop fully unrolled(no feedback)\n");
+              }
+            }
+          }
+        }
+      }
 
       if (trace_loop_opt) {
 	CG_LOOP_Trace_Loop(loop, "*** After MULTI_BB_DOLOOP ***");
@@ -6445,6 +6847,13 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
   default:
     Is_True(FALSE, ("unknown loop opt action."));
   }
+
+#ifdef TARG_X8664
+  if (info && LOOPINFO_multiversion(info)) {
+    CG_LOOP_unrolled_size_max = saved_unrolled_size_max;
+    CG_LOOP_unroll_times_max =  saved_unroll_times_max;
+  }
+#endif
 
   return TRUE;
 }
@@ -6524,11 +6933,882 @@ void CG_LOOP_Statistics(LOOP_DESCR *loop)
 }
 
 
+#if defined(TARG_SL)
+static BOOL enable_zdl_with_branch = FALSE;
+static int zdl_seq_no = 0;
+
+static void Dead_Code_Elimination_Within_BB(TN* probably_not_liveout_tn)
+{
+  for (BB *bb = REGION_First_BB; bb != NULL; bb = BB_next(bb))
+  {
+     OP* next_op;
+
+     if (GRA_LIVE_TN_Live_Outof_BB(probably_not_liveout_tn, bb))
+ 	continue;
+     for (OP* op = BB_first_op(bb); op!=NULL; op = next_op)
+     {
+       next_op = OP_next(op);
+       //check every local TN in BB
+       bool can_be_removed = TRUE;
+       if (OP_results(op)==1)
+       {
+ 	   TN* result = OP_result(op,0);
+	   if (!TN_is_register(result)) continue;
+       }
+       if (OP_results(op)== 1 && TNs_Are_Equivalent(probably_not_liveout_tn,OP_result(op,0)))
+       {
+          for (OP* op_after = OP_next(op); op_after != NULL; op_after = OP_next(op_after))
+          {
+              for (int i = 0; i < OP_opnds(op_after); i++)
+              {
+                 if (TNs_Are_Equivalent(probably_not_liveout_tn, OP_opnd(op_after, i)))
+                   can_be_removed = FALSE;
+              }
+              if (can_be_removed == FALSE)
+	        break;
+          }
+	  if (can_be_removed == TRUE)
+	  {
+  	     if (Get_Trace(TP_CGLOOP,0x1))
+	     {
+	        fprintf(TFile,"--------------Dead_Code_Elimination_Within-----------\n");
+	        Print_OP(op);
+		fprintf(TFile,"----------------------------------------\n\n");
+	     }
+	  }
+          if (can_be_removed == TRUE)
+              BB_Remove_Op( bb, op );
+       }
+    }
+  } 
+}
+
+/* This is procedure to generate detail code for zdl
+ * It is called by CG_LOOP_Zdl_Ident_Rec 
+ */
+static OP* 
+CG_LOOP_Zdl_Internal_Gen_Code( CG_LOOP& cl)
+{
+  TN* trip_count_tn = cl.Trip_count_tn();
+  BB* prolog = cl.Prolog_end();
+  BB* epilog = cl.Epilog_start();
+  BB* head  = cl.Loop_header();
+  BB* tail = LOOP_DESCR_Find_Unique_Tail(cl.Loop()); 
+  BOOL using_mvtci = FALSE;
+  Is_True( prolog, ("No prolog for the loop"));
+  Is_True( epilog, ("No epilog for the loop"));
+
+  /* This may not be the first place to do zdl
+   * since we enter CG_LOOP_Optimizes for many times,
+   * and each time, we iteration the whole loop_tree
+   */
+  Is_True(BB_length(tail)>0, ("empty tail bb"));
+  OP* br_op = BB_branch_op( tail );
+  Is_True(OP_code(br_op) != TOP_loop, ("branch op is top_loop"));
+  Is_True(br_op!=NULL || BB_has_tag(tail), ("tail bb has neither br nor tag "));
+  
+  /* Since mvtc can use only gpr, i need to create a OP
+   * to define the gpr using the value of trip_count_tn
+   */
+  TN* gpr_tn;
+  OP* set_gpr_op = NULL;
+  OP* set_gpr_op_1 = NULL;
+  gpr_tn = Gen_Register_TN( ISA_REGISTER_CLASS_integer, 4 );
+
+  if (TN_is_constant(trip_count_tn) && TN_has_value(trip_count_tn)){
+    /* For literal constant trip count tn, I need to consider many different
+     * ranges, so to use different OPCode
+     */
+    INT32 val = TN_value(trip_count_tn);
+
+    if (ISA_LC_Value_In_Class(val, LC_uimm10)) {
+      set_gpr_op = NULL;
+      using_mvtci = TRUE;
+    } else if (ISA_LC_Value_In_Class (val, LC_simm16)){
+      set_gpr_op = Mk_OP(TOP_addiu, gpr_tn, Zero_TN, trip_count_tn);
+    } else if (ISA_LC_Value_In_Class (val, LC_uimm16)){
+      set_gpr_op = Mk_OP(TOP_ori, gpr_tn, Zero_TN, trip_count_tn);
+    } else if(val >= 32768 && val <= INT32_MAX ) {
+      /* I don't know where is best to #define INT16_MAX, so I hand coded it */
+      if((val & 0xffff) == 0) {
+        set_gpr_op = Mk_OP(TOP_lui, gpr_tn, Gen_Literal_TN((val >> 16) & 0xffff, 4));
+      } else {
+        set_gpr_op = Mk_OP(TOP_lui, gpr_tn, Gen_Literal_TN((val >> 16) & 0xffff,4));
+        set_gpr_op_1 = Mk_OP(TOP_ori, gpr_tn, gpr_tn,
+                             Gen_Literal_TN(val & 0xffff, 4));
+      }
+    }
+  } else {
+     gpr_tn = trip_count_tn;
+     set_gpr_op = NULL;
+     set_gpr_op_1 = NULL;
+  }
+
+  /* Set the loop counter, using mvtc */
+  TN* lc_tn;
+  INT lc_idx = LOOP_DESCR_lcidx(cl.Loop());
+  switch(lc_idx) {
+    case 1: lc_tn = LC0_TN; break;
+    case 2: lc_tn = LC1_TN; break;
+    case 3: lc_tn = LC2_TN; break;
+    case 4: lc_tn = LC3_TN; break;
+    default:
+            Is_True(0, ("invalide loop-counter-index"));
+  }
+  OP* mvtc_op;
+  if (using_mvtci) {
+    mvtc_op = Mk_OP(TOP_mvtc_i, lc_tn, trip_count_tn);
+  } else {
+    mvtc_op = Mk_OP(TOP_mvtc, lc_tn, gpr_tn);
+  }
+
+  LABEL_IDX loop_targ_label = br_op == NULL? Get_BB_Tag( tail ) : Gen_Tag();
+  TN* label_tn = Gen_Label_TN( loop_targ_label, 0 );
+  TN* lc_index_tn = Gen_Literal_TN( lc_idx-1, 4 );
+  OP* loop_op = Mk_OP( TOP_loop, lc_index_tn, label_tn, lc_tn);
+  Set_BB_Tag(tail, loop_targ_label);
+  Set_BB_has_tag(tail);
+
+  if(set_gpr_op) {
+     BB_Append_Op( prolog, set_gpr_op );
+  }
+  if(set_gpr_op_1) {
+     BB_Append_Op( prolog, set_gpr_op_1 );
+  }
+  BB_Append_Op( prolog, mvtc_op );
+  BB_Append_Op( prolog, loop_op );
+
+  /* remove the old branch op*/
+  if (br_op)
+  {
+    MEM_POOL TN_mempool;
+    MEM_POOL_Initialize(&TN_mempool, "branch_tn_probably_not_liveout", TRUE);
+    int opnd_num = OP_opnds(br_op);
+    TN **use_value = CXX_NEW_ARRAY(TN*, opnd_num, &TN_mempool);
+    //first,  copy TNs in branch-op
+    for (int i = 0; i < opnd_num; i++)
+      use_value[i] = OP_opnd(br_op, i);
+    //second, remove branch-op
+    BB_Remove_Op( tail, br_op );
+    //third, re-calculate live-out
+    GRA_LIVE_Init(NULL);
+    MEM_POOL_Delete(&TN_mempool);
+  }
+
+  /* Set the tag of the last op in the tail BB of loop */
+
+  /* There is also another complex situation, where two nest
+   * level will have only one BB for their loop body, see
+   * the test case two_loop.
+   * What we need to do is to modify the label in one of loop
+   * instruction to refer the already tagged op
+   */
+
+  Set_BB_zdl_prolog( prolog );
+  Set_BB_zdl_body( tail );
+
+  return br_op;
+}
+
+/* Returns TRUE : if OPs following cur_op use tn
+ *         FALSE: otherwise
+ */
+static BOOL TN_Used_In_Following_OPs( TN *tn, OP *cur_op ) 
+{
+  BOOL used = FALSE;
+  OP* op = cur_op;
+  while( op=OP_next(op) ) {
+    if( OP_Refs_TN( op, tn ) )
+      return TRUE;
+  }
+  return FALSE;
+}
+#endif
+
+/* return how many ops that use the tn in bb */
+#if defined(TARG_SL)
+static INT Use_OPs_Num_Of_TN(TN* tn, BB* bb)
+{
+  OP* op;
+  INT num = 0;
+  FOR_ALL_BB_OPs_FWD(bb,op) {
+    if( OP_Refs_TN(op, tn) )
+      num++;
+  }
+  return num;
+}
+  
+/* HD - This function is mostly for deleting GTN, the index TN in fact.
+ *      The other dead code will be removed else where
+ */
+static void 
+CG_LOOP_ZDL_Remove_Idx_GTN( LOOP_DESCR * loop, CG_LOOP &cl, OP* br_op )
+{
+  /* if there is no br_op, that means ZDL failed , so no need to do DCE */
+  if( !br_op )
+    return;
+  
+  BB_SET* bbset = loop->bbset;
+  BB *bb;
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN);
+  BB* prolog = cl.Prolog_end();
+  BB* epilog = cl.Epilog_start();
+  BB* head  = cl.Loop_header();
+  BB* tail = BB_Other_Predecessor(head, prolog);
+  int bb_num = 0;
+
+  Is_True( epilog && prolog, ("epilog or prolog not exist") );
+
+  if( trace ) {
+    fprintf( TFile, "===== Before CG_LOOP_ZDL_Remove_Idx_GTN =====\n");
+    fprintf( TFile, "loop contains BBs: " );
+  }
+  
+  for (bb = BB_SET_Choose(bbset); bb != BB_SET_CHOOSE_FAILURE;
+       bb = BB_SET_Choose_Next(bbset, bb) ) {
+    /* only branches to BBs in the loop body are admitted */
+    OP *br = BB_branch_op(bb);
+    if(br){
+      INT targ_opnd = Branch_Target_Operand(br);
+      if( TN_is_label(OP_opnd(br, targ_opnd)) ){
+        LABEL_IDX label = TN_label(OP_opnd(br, targ_opnd));
+        BB *succ = Get_Label_BB(label);
+        Is_True( BB_SET_MemberP(bbset, succ) , ("zdl loop body bb contains branch, targeting outside of loop") );
+      }
+    }
+    if( trace ) {
+      fprintf( TFile, "%i ", BB_id(bb) );
+    }
+    bb_num++;
+  }
+
+  if( trace ) {
+    fprintf( TFile, "\n                prolog:%i, epilog:%i, head:%i, tail:%i\n", BB_id(prolog), BB_id(epilog), BB_id(head), BB_id(tail) );
+  }
+
+  extern void Print_OP_No_SrcLine(const OP* op);
+  if(trace)
+    fprintf( TFile, "Remove OPs:\n" );
+
+  /* Consider  the simplest situation: induction var
+   * GTN is used only to control loop count. THAT IMPLIES, induction
+   * var GTN should NORMALLY be live_use in only one single BB, 
+   * which normally contains branch OP (deleted already)
+   * TO MAKE LIFE EASIER, WE DONT CARE ANY OTHER SITUATIONS.
+   */
+  TN* ind_var_gtn[2] = { NULL, NULL };
+  INT gtn_num = 0;
+  for( int i=0; i < OP_opnds(br_op); i++ ){
+    TN* tn = OP_opnd(br_op, i);
+    if( TN_is_global_reg(tn) && !TN_is_constant(tn) ) {
+      ind_var_gtn[gtn_num] = tn;
+      gtn_num ++;
+    }
+  }
+
+  /* continue to find induction variable */
+  if(gtn_num == 0) {
+    OP * op;
+    FOR_ALL_BB_OPs_REV(tail, op) {
+      if (((OP_code(op) == TOP_slti) || (OP_code(op) == TOP_sltiu)
+         || (OP_code(op) == TOP_slt) || (OP_code(op) == TOP_sltu))
+        && ((OP_result(op, 0) == OP_opnd(br_op, 0)) || (OP_result(op, 0) == OP_opnd(br_op, 1)))) {
+        for(int i = 0; i < OP_opnds(op); i++) {
+          TN* tn = OP_opnd(op, i);
+          if( TN_is_global_reg(tn) && !TN_is_constant(tn) ) {
+            ind_var_gtn[gtn_num] = tn;
+            gtn_num ++;
+          }
+        }
+        if(!GTN_SET_MemberP(BB_live_in(epilog), OP_result(op, 0)))
+          BB_Remove_Op(tail, op);
+      }
+      
+      if(gtn_num > 0) break;
+    }
+  }
+
+  /* there are some cases that have no global induction var,
+   * like the dowhile_loop in my test cases lib
+   */
+  if(gtn_num == 0)
+    return;
+
+  if (Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN)) {
+    fprintf(TFile, "There are %d induction variable: ", gtn_num);
+    for (int i = 0; i < gtn_num; i++) {
+      Print_TN(ind_var_gtn[i], FALSE);
+      fprintf(TFile, ",");
+    }
+  }
+
+  for(int num = 0; num < gtn_num; num ++) { 
+
+    TN * ind_var_gtn_t = ind_var_gtn[num];
+
+    /* if the induction var is used outside the loop body, it
+     * cannot be deleted
+     */
+    if( GTN_SET_MemberP(BB_live_in(epilog), ind_var_gtn_t) )
+      continue;
+    /* from now on, we only consider the special situation: 
+     * inducton GTN is only used in the loop body 
+     */
+    bb = tail;
+    int live_use_bbs = 0;
+    BB* live_use_bb = NULL;
+    for(; bb && BB_SET_MemberP(bbset, bb); bb = BB_prev(bb) ) {
+      if( GTN_SET_MemberP( BB_live_use(bb), ind_var_gtn_t ) ) {
+        live_use_bb = bb;
+        live_use_bbs++;
+      }
+    }
+    if (Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN)) {
+      fprintf(TFile, "induction_variable[%d] live-use-bb count: %d\n", num, live_use_bbs);
+    }
+
+
+    if( live_use_bbs > 1 ){
+      continue;
+    } 
+    /* now, zdl should contains the only BB which both uses and 
+     * defines the induction var GTN 
+     * But there are some cases, induction var is not used in 
+     * any BB. 
+     */
+    if( live_use_bbs == 0 ){
+      DevWarn( ("induction var GTN not used in any BB") );
+      continue;
+    }
+
+    Is_True( live_use_bbs == 1 && ind_var_gtn_t,  ("induction var GTN not used in any BB") );
+
+    /* Now there is also a undeletable situation like :
+     *   for( i=0; i<10; i++ ){
+     *     ...=i+1;
+     *   }
+     * So, we only consider the simplest situation, only two 
+     * types of OPs will use or defines the induction var gtn: 
+     * one type defines induction var; the other type uses 
+     * induction var and defines a local tn, which is (at last,
+     * maybe through a long definition chain) used by the 
+     * induction var definition op.
+     */
+
+    /* get the def/ref op */
+    std::vector<OP *> def_ops;
+    std::vector<OP *> use_ops;
+    OP *op;
+    FOR_ALL_BB_OPs_FWD( live_use_bb, op ){
+      if( OP_Defs_TN(op, ind_var_gtn_t) )
+        def_ops.push_back(op);
+      if( OP_Refs_TN(op, ind_var_gtn_t) )
+        use_ops.push_back(op);
+    }
+
+    /* the use ops are used for computing induction var at last 
+     * through a long def-use chain. THESE NEED A COMPLEX 
+     * USE-DEF-MAP  LIKE THOSE IN CG_DEP_GRAPH. 
+     * I only consider the one-step chain, that means the def tn
+     * of the use op is used directly in the induction var def 
+     * op.
+     */
+    BOOL cannot_dce = FALSE;
+    for( std::vector<OP*>::iterator it1 = use_ops.begin();
+         it1 != use_ops.end(); 
+         ++it1 ) {
+      OP * op = *it1;
+      for( int i=0; i < OP_results( op ); i++ ){
+        TN* tn = OP_result(op, i);
+        
+        /* if induction var is used to define other GTN, it can not be deleted */
+        if (TN_is_global_reg(tn) && !TNs_Are_Equivalent(tn, ind_var_gtn_t)) {
+          cannot_dce = TRUE;
+          break;
+        }
+
+        INT usenum = 0;
+        for( std::vector<OP*>::iterator it2 = def_ops.begin();
+             it2 != def_ops.end();
+             ++it2 ) {
+          if( OP_Refs_TN( *it2, tn ) )
+            usenum++;
+        }
+        /* some other OPs use these intermediate TNs */
+        if( usenum != Use_OPs_Num_Of_TN(tn, live_use_bb) ) {
+          cannot_dce = TRUE;
+          break;
+        }
+      } 
+      if( cannot_dce )
+        break;
+    }
+
+    if( cannot_dce ) {
+      continue;
+    }
+
+    /* Now, we can delete all these def/use ops directly */
+    for( std::vector<OP*>::iterator it1 = use_ops.begin();
+         it1 != use_ops.end(); 
+         ++it1 ){
+      if( !OP_has_tag(*it1) ){
+        BB_Remove_Op( live_use_bb, *it1 );
+        if( trace ) {
+          fprintf( TFile, "ZDL: in BB:%i , delete:", BB_id(live_use_bb) );
+          Print_OP_No_SrcLine( *it1 );
+        }
+      }
+    }
+    for( std::vector<OP*>::iterator it1 = def_ops.begin();
+         it1 != def_ops.end(); 
+         ++it1 ) {
+      if( (*it1)->bb == live_use_bb ) {
+        if( !OP_has_tag(*it1) ){     
+          BB_Remove_Op( live_use_bb, *it1 );
+          if( trace ){
+            fprintf( TFile, "ZDL: in BB:%i , delete:", BB_id(live_use_bb) );
+            Print_OP_No_SrcLine( *it1 );
+          }
+        }
+      }
+    }
+    GRA_LIVE_Init(NULL);
+    Dead_Code_Elimination_Within_BB(ind_var_gtn_t); 
+  }
+  return;
+}
+#endif
+
+#ifdef TARG_SL
+/* This is used after CG_LOOP_ZDL_Remove_Idx_GTN, to remove some ops which
+ * define the unused local tn
+ */
+static void CG_LOOP_ZDL_Remove_LTN( LOOP_DESCR * loop, CG_LOOP &cl, OP* br_op )
+{
+  /* if there is no br_op, that means ZDL failed , so no need to do DCE */
+  if( !br_op )
+    return;
+  
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN);
+  BB_SET* bbset = loop->bbset;
+  BB *bb;
+  OP *op;
+  for( bb = BB_SET_Choose(bbset); bb != BB_SET_CHOOSE_FAILURE;
+       bb = BB_SET_Choose_Next(bbset, bb) ) {
+    BOOL changed = TRUE;
+    while( changed ){
+      changed = FALSE;
+      FOR_ALL_BB_OPs_REV( bb, op ){
+        if(   OP_has_result(op) 
+           && !OP_has_implicit_interactions(op)
+           && !OP_store(op)
+           && !CGTARG_Is_OP_Intrinsic(op) ){
+          BOOL op_used = FALSE;
+          for( int i = 0; i < OP_results(op) ; i++ ){
+            TN * tn = OP_result(op, i);
+            if(   TN_Used_In_Following_OPs(tn, op)
+               || TN_is_dedicated(tn) 
+               || TN_is_global_reg(tn) ){
+              op_used = TRUE;
+              break;
+            }
+          }
+          /* op is not useful, so we can remove it */
+          if( !op_used ){
+            if( trace ){
+              fprintf( TFile, "Remove_LTN remove OP:" );
+              Print_OP_No_SrcLine( op );
+              fprintf( TFile, "in BB:%i\n", BB_id(bb) );
+              if( BB_length(bb)==1 && OP_has_tag(op) )
+                fprintf(TFile, "it should NOT be removed!\n" );
+            }
+            BB_Remove_Op( bb, op );
+            if( !( BB_length(bb)==1 && OP_has_tag(op) ) )
+              changed = TRUE;
+          }
+        } 
+      }
+    }
+  }
+}
+
+/* 1. Determine whether there are branches inside the loop body,
+ *    and whether it branches to outside of the loop body.
+ * 2. We don't support branch to outside, including calls
+ * 3. The original loop-branch OPs of inner loops should be
+ *    deleted already if they can be ZDLed, so we won't get any branch
+ *    if the inner loop is ZDLed
+ */
+void Check_Branch( LOOP_DESCR* loop, BOOL& br_out, BOOL& br_in )
+{
+  BB *loop_head = LOOP_DESCR_loophead(loop);
+  BB* loop_bb = NULL;
+  FOR_ALL_BB_SET_members( LOOP_DESCR_bbset(loop) , loop_bb) {
+    if (BB_zdl_body(loop_bb)) {
+      continue;
+    }
+
+    if( BB_call(loop_bb) || BB_asm(loop_bb) ){
+      br_out = TRUE;
+      return;
+    }
+    OP *br_op = BB_branch_op(loop_bb);
+    if( br_op && ( OP_fork(br_op) || OP_ijump(br_op) ) ){
+      br_out = TRUE;
+      return;
+    }
+
+    // decide if this is an internal branch
+    BB *succ = NULL;
+    if( br_op ){
+      INT targ_opnd = Branch_Target_Operand(br_op);
+      if( TN_is_label(OP_opnd(br_op, targ_opnd)) ){
+        LABEL_IDX label = TN_label(OP_opnd(br_op, targ_opnd));
+        succ = Get_Label_BB(label);
+        if( !BB_SET_MemberP( LOOP_DESCR_bbset(loop), succ ) ){
+          br_out = TRUE;
+          return;
+        } else if (succ != loop_head) {
+          br_in = TRUE;
+        }
+      }
+    }
+  }
+
+}
+
+void ZDL_Loop_Num_Incr()
+{
+  zdl_seq_no++;
+}
+
+BOOL ZDL_Skip_Loop ()
+{
+  if( zdl_seq_no == CG_zdl_skip_e || zdl_seq_no < CG_zdl_skip_b ||
+      zdl_seq_no > CG_zdl_skip_a )
+    return TRUE;
+  else
+    return FALSE;
+}
+
+
+/* This is the internal procedure of create zero-delay-loop.
+ * It goes iterating the loop-tree, in dfs, and generates zdl
+ * from inside to outside.
+ *
+ * It returns  0:  fail to generate zdl
+ *            >0:  the reverse nested level, with the inner
+ *                 most loop returning 1.
+ */
+static void 
+CG_LOOP_Zdl_Ident_Rec( LOOP_DESCR* loop )
+{
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN);
+  BOOL trace_seq_no = Get_Trace(TP_CGLOOP, TRACE_ZDL_SEQ_NO);
+  Is_True( loop, ("loop is NULL") );
+
+  int curr_rnl = 1;       // this loop's reverse nested level
+
+  /* We generate zdl's for children loop at first, and do the
+   * checking for being suitable of the father self later.
+   * In this way, we can avoid some unnecessary work.
+   */
+  for (INT i = 0; i < VECTOR_count( loop->children ); i++) {
+    LOOP_DESCR * child_loop = (LOOP_DESCR*) VECTOR_element( loop->children, i );
+    Is_True( child_loop, ("child_loop is NULL") );
+    CG_LOOP_Zdl_Ident_Rec( child_loop ); // return child's reverse nested level
+
+    if (Can_Zero_Delay(child_loop) && curr_rnl > 0) {
+      curr_rnl = curr_rnl > LOOP_DESCR_lcidx(child_loop) + 1 ?
+                curr_rnl : LOOP_DESCR_lcidx(child_loop) + 1;
+    } else
+      curr_rnl = 0;
+  }
+
+  if( trace ) {
+    fprintf( TFile, "%s", DBar );
+    fprintf( TFile, "    Begin ZDL for one loop   \n");
+  }
+
+  /* since one of the child cannot be zdl'ed, the father loop
+   * cannot be zdl'ed too.
+   */
+  if( curr_rnl <= 0 ) {
+    if( trace ){
+      LOOP_DESCR_Dump_Loop_Brief( loop );
+      fprintf( TFile, "        --- can NOT be zdl\n");
+      fprintf( TFile, "        --- because one child failed\n");
+    }
+    return;
+  }
+
+  /* Determin whether it contains trip count TN.
+   * There are many cases that cause NO trip count TN
+   * for example, there is internal branches to outside, like:
+   *       for(i=0;i<10;i++){
+   *          if(...) break;
+   *       }
+   */
+  TN * trip_count_tn = CG_LOOP_Trip_Count( loop );
+  if(!trip_count_tn) {
+    if( trace ){
+      LOOP_DESCR_Dump_Loop_Brief( loop );
+      fprintf( TFile, "        --- can NOT be zdl,\n");
+      fprintf( TFile, "        --- because no trip count.\n");
+    }
+    return;
+  }
+
+  /* since sl1 only support 4 level zdl, so if current rnl
+   * is bigger than 4, it cannot be zdl'ed
+   */
+  if( curr_rnl > CG_zdl_enabled_level ) {
+    if( trace ){
+      LOOP_DESCR_Dump_Loop_Brief( loop );
+      fprintf( TFile, "        --- can NOT be zdl,\n");
+      fprintf( TFile, "        --- because rnl=%i\n", curr_rnl );
+      fprintf( TFile, "        --- zdl_enabled_level=%i\n", CG_zdl_enabled_level );
+    }
+    return;
+  }
+
+
+  BOOL has_outside_br = FALSE;
+  BOOL has_inside_br = FALSE;
+  Check_Branch(loop, has_outside_br, has_inside_br);
+
+  /* If branch to outside of the loop, they we cannot generate ZDL
+   */
+  if( has_outside_br) {
+    if( trace ){
+      LOOP_DESCR_Dump_Loop_Brief( loop );
+      fprintf( TFile, "        --- can NOT be zdl,\n");
+      fprintf( TFile, "        --- because branch to outside.\n");
+    }
+    return;
+  }
+
+  if (!enable_zdl_with_branch && has_inside_br) {
+      if( trace ){
+        LOOP_DESCR_Dump_Loop_Brief( loop );
+        fprintf( TFile, "        --- can NOT be zdl\n");
+        fprintf( TFile, "        --- because having branch inside\n");
+      }
+      return;
+  }
+
+  // for case: OspreyTest/SingleSource/gcc.c.torture/double/compile/920710-2.c
+  if ( LOOP_DESCR_Find_Unique_Tail(loop) == NULL )
+  {
+	if( trace ){
+	  LOOP_DESCR_Dump_Loop_Brief( loop );
+	  fprintf( TFile, " 	   --- can NOT be zdl\n");
+	  fprintf( TFile, " 	   --- because tail not unique \n");
+	}
+    return;
+  }
+  if( trace ){
+    LOOP_DESCR_Dump_Loop_Brief( loop );
+    fprintf( TFile, "        --- can be zdl, rnl=%i\n", curr_rnl );
+  }
+
+  if( trace_seq_no ){
+    fprintf( TFile, "   the sequential number of this loop : %i\n", zdl_seq_no );
+    ST* cur_pu = Get_Current_PU_ST();
+    char* pu_name = ST_name( cur_pu );
+    fprintf( TFile, "      in the PU : %s\n", pu_name );
+  }
+
+  ZDL_Loop_Num_Incr();
+
+  if (ZDL_Skip_Loop()) {
+    if( trace_seq_no ) {
+      fprintf( TFile, "      it's skipped by the zdl_skip_xxx option\n" );
+    }
+    return;
+  }
+
+  Set_Can_Zero_Delay( loop );
+  LOOP_DESCR_lcidx(loop) = curr_rnl;
+  BB* tail = LOOP_DESCR_Find_Unique_Tail(loop);
+  FmtAssert(BB_length(tail)>0, ("empty tail bb of loop"));
+  Set_BB_zdl_body(tail);
+  return;
+}
+
+static void
+CG_LOOP_Adjust_Zdl_Body( CG_LOOP& cg_loop )
+{
+  BB *tail=LOOP_DESCR_Find_Unique_Tail(cg_loop.Loop());
+  if(BB_length(tail) != 0)
+    return;
+
+  BB *new_tail=tail;
+  while( new_tail && BB_length(new_tail)==0 ) {
+    DevWarn( ("One bb in the loop is empty, dangerous") );
+    new_tail = BB_prev(new_tail);
+  }
+  FmtAssert(new_tail && new_tail != tail &&
+        BB_SET_MemberP( LOOP_DESCR_bbset(cg_loop.Loop()), new_tail ),
+        ("CG_LOOP_Adjust_Zdl_Body::wrong new tail found"));
+
+  if(BB_zdl_body(new_tail)) {
+    FmtAssert(BB_has_tag(new_tail), ("CG_LOOP_Adjust_Zdl_Body::zdl body has no tag"));
+    LABEL_IDX tag = Get_BB_Tag(new_tail);
+    TN* tag_tn = Gen_Label_TN( tag, 0 );
+
+    BB *prolog = cg_loop.Prolog_end();
+    OP *loop_op = BB_last_op(prolog);
+    FmtAssert(OP_code(loop_op) == TOP_loop, ("CG_LOOP_Adjust_Zdl_Body::cannot find loop op"));
+    Set_OP_opnd( loop_op, 1, tag_tn );
+
+  } else {
+    LABEL_IDX tag = Get_BB_Tag(tail);
+    Set_BB_Tag(new_tail, tag);
+    Set_BB_has_tag(new_tail);
+    Set_BB_zdl_body(new_tail);
+  }
+
+  Reset_BB_has_tag(tail);
+  Reset_BB_zdl_body(tail);
+
+  return;
+}
+
+static void
+CG_LOOP_Zdl_Gen_Rec( LOOP_DESCR* loop )
+{
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_GEN);
+  BOOL trace_seq_no = Get_Trace(TP_CGLOOP, TRACE_ZDL_SEQ_NO);
+
+  Is_True( loop, ("loop is NULL") );
+
+  /* We generate zdl's for children loop at first, and do the
+   * checking for being suitable of the father self later.
+   * In this way, we can avoid some unnecessary work.
+   */
+  for( INT i = 0; i < VECTOR_count( loop->children ); i++ ){
+    LOOP_DESCR * child_loop = (LOOP_DESCR*) VECTOR_element( loop->children, i );
+    Is_True( child_loop, ("child_loop is NULL") );
+    CG_LOOP_Zdl_Gen_Rec( child_loop ); // return child's reverse nested level
+  }
+
+  if( trace ) {
+    fprintf( TFile, "%s", DBar );
+    fprintf( TFile, "    Begin ZDL for one loop   \n");
+  }
+
+  /* if this is the innermost loop, and it is NOT a single BB
+   * this implies there are branches inside, we dont generate
+   * zdl for it
+   */
+  if(!Can_Zero_Delay( loop ))
+    return;
+  /* Now, it's time to generate zdl */
+  CG_LOOP cg_loop( loop );
+
+  /* for loop which do NOT have prolog-BB or epilog-BB, we can't perform ZDL for them. */
+  if (!cg_loop.Has_prolog_epilog()) {
+    Reset_Can_Zero_Delay( loop );
+    BB* tail = LOOP_DESCR_Find_Unique_Tail(loop);
+    FmtAssert(BB_length(tail)>0, ("empty tail bb of loop"));
+    Reset_BB_zdl_body(tail);
+    return;
+  }
+
+  OP* br_op = CG_LOOP_Zdl_Internal_Gen_Code( cg_loop );
+
+  /* recomputing liveness is necessary, since we need the NEW
+   * liveness info when we do DCE later.
+   */
+  cg_loop.Recompute_Liveness();
+
+
+  CG_LOOP_ZDL_Remove_Idx_GTN( loop, cg_loop, br_op );
+
+  /* recomputing liveness is necessary */
+  cg_loop.Recompute_Liveness();
+
+  /* EBO is not turned yet, 2007-08-18. I'll remove some more dead code
+   * by myself
+   */
+  CG_LOOP_ZDL_Remove_LTN( loop, cg_loop, br_op );
+
+ /* after CG_LOOP_ZDL_Remove_Idx_GTN & Remove_LTN, it may produce some new
+   * dead code, call EBO again.
+   */
+  int oldvalue = EBO_Opt_Level;
+  EBO_Opt_Level = 2;
+  EBO_Process_Region(NULL);
+  EBO_Opt_Level = oldvalue;
+
+  /* adjust tail bb tag if tail bb become empty */
+  if(BB_length(LOOP_DESCR_Find_Unique_Tail(loop))==0) {
+    CG_LOOP_Adjust_Zdl_Body(cg_loop);
+  }
+  /* for loop body which contain multiple bb, we need to merge prolog, loop body,
+   * epilog into a single BB. otherwise, code emit will probably emit loop-body 
+   * before prolog.
+   */
+  CFLOW_Optimize(CFLOW_MERGE, "In Zero-Delay-Loop(merge zero-delay-loop into one BB)");
+  return;
+}
+
+/* the driver procedure of generating zdl
+ */
+void CG_LOOP_Zdl_Ident()
+{
+  int i;
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_IR);
+  if( trace ) {
+    fprintf( TFile, "%s\n", DBar );
+    fprintf( TFile, " Before zero delay loop identification\n" );
+    fprintf( TFile, "%s\n", DBar );
+    CG_Dump_Cur_Region();
+  }
+
+  for( i = 0; i < VECTOR_count(loop_tree_roots); i++ ){
+    CG_LOOP_Zdl_Ident_Rec( (LOOP_DESCR*)VECTOR_element(loop_tree_roots,i) );
+  }
+
+  if( trace ) {
+    fprintf( TFile, "%s\n", DBar );
+    fprintf( TFile, " After zero delay loop identification\n" );
+    fprintf( TFile, "%s\n", DBar );
+    CG_Dump_Cur_Region();
+  }
+}
+
+void CG_LOOP_Zdl_Gen()
+{
+  int i;
+  BOOL trace = Get_Trace(TP_CGLOOP, TRACE_ZDL_IR);
+  if( trace ) {
+    fprintf( TFile, "%s\n", DBar );
+    fprintf( TFile, " Before zero delay loop generation\n" );
+    fprintf( TFile, "%s\n", DBar );
+    CG_Dump_Cur_Region();
+  }
+
+  for( i = 0; i < VECTOR_count(loop_tree_roots); i++ ){
+    CG_LOOP_Zdl_Gen_Rec( (LOOP_DESCR*)VECTOR_element(loop_tree_roots,i) );
+  }
+
+  if( trace ) {
+    fprintf( TFile, "%s\n", DBar );
+    fprintf( TFile, " After zero delay loop generation\n" );
+    fprintf( TFile, "%s\n", DBar );
+    CG_Dump_Cur_Region();
+  }
+}
+#endif
+
 
 // Perform loop optimizations for all inner loops
 // in the PU.
 //
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
 void Perform_Loop_Optimizations(void *rgn_loop_update)
 #else
 void Perform_Loop_Optimizations()
@@ -6606,6 +7886,24 @@ void Perform_Loop_Optimizations()
     // Let GRA knows how many rotating register are needed!
     REGISTER_Request_Stacked_Rotating_Register();
   }
+#endif
+
+#if defined(TARG_SL)
+  if (CG_opt_level > 1 && CG_enable_zero_delay_loop) {
+    Free_Dominators_Memory ();  	
+    Calculate_Dominators();		/* needed for loop recognition */
+    LOOP_DESCR_Detect_Loops(&loop_descr_pool);
+    LOOP_DESCR_Create_Loop_Tree(&loop_descr_pool);
+    if(trace_general){
+      LOOP_DESCR_Dump_Loop_Tree();
+    }
+
+    /* zero delay loop identification */ 
+    CG_LOOP_Zdl_Ident();
+    /* zero delay loop generation */ 
+    CG_LOOP_Zdl_Gen(); 
+  }
+
 #endif
   
   MEM_POOL_Pop (&loop_descr_pool);

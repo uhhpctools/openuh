@@ -82,7 +82,7 @@ extern void Incr_Branch_Not_Taken(PU_PROFILE_HANDLE pu_handle, INT32 id);
 
 extern void Profile_Switch_Init(PU_PROFILE_HANDLE pu_handle,
 				INT32 num_switches, INT32 *switch_num_targets,
-				INT32 num_case_values, INT64 *case_values);
+				INT32 num_case_values, FB_NUM_TYPE *case_values);
 
 extern void Profile_Switch(PU_PROFILE_HANDLE pu_handle, INT32 switch_id,
 			   INT32 target, INT32 num_targets);
@@ -99,7 +99,7 @@ extern void Profile_Compgoto(PU_PROFILE_HANDLE pu_handle, INT32 compgoto_id,
 extern void Profile_Value_Init( PU_PROFILE_HANDLE pu_handle, INT32 num_values );
 
 extern void Profile_Value( PU_PROFILE_HANDLE pu_handle,
-			   INT32 inst_id, INT64 value );
+			   INT32 inst_id, FB_NUM_TYPE value );
 
 extern void Profile_Value_FP_Bin_Init( PU_PROFILE_HANDLE pu_handle, 
 				       INT32 num_values );

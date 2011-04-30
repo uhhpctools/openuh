@@ -581,7 +581,7 @@ Form_Hyperblocks(HB_CAND_TREE*        cand,
 
 /////////////////////////////////////
 void
-HB_Form_Hyperblocks(RID *rid, const BB_REGION& bb_region)
+HB_Form_Hyperblocks(RID *rid, const BB_REGION* bb_region)
 /////////////////////////////////////
 //  See interface description.
 /////////////////////////////////////

@@ -51,6 +51,9 @@ extern INT IPO_Internal_Sym_Count;
 extern INT IPO_Hidden_Sym_Count;
 extern INT IPO_Protected_Sym_Count;
 extern BOOL one_got;
+#if defined(TARG_SL)
+extern vector<mINT32> ipisr_cg;
+#endif
 
 extern void Perform_Interprocedural_Optimization (void);
 

@@ -57,6 +57,8 @@
 #ifdef KEY
 #include "ipl_reorder.h"
 #endif
+#include "wb_browser.h"
+#include "loop_info.h"
 
 // from ipa/local/ipl_main.cxx
 extern void (*Ipl_Extra_Output_p) (Output_File *);
@@ -65,6 +67,8 @@ extern void (*Ipl_Fini_p) ();
 extern void (*ipl_main_p) (INT, char **);
 extern void (*Perform_Procedure_Summary_Phase_p) (WN*, DU_MANAGER*,
 						  ALIAS_MANAGER*, void*);
+extern void (*WB_BROWSER_Summary_p) (FILE*, WB_BROWSER*);
+extern void (*Print_DO_LOOP_INFO_BASE_p) (FILE*, DO_LOOP_INFO_BASE*);
 #ifdef KEY
 extern void (*Preprocess_struct_access_p) (void);
 #endif
@@ -77,6 +81,8 @@ struct IPL_INIT
 	Ipl_Fini_p = Ipl_Fini;
 	ipl_main_p = ipl_main;
 	Perform_Procedure_Summary_Phase_p = Perform_Procedure_Summary_Phase;
+	WB_BROWSER_Summary_p = WB_BROWSER_Summary;
+	Print_DO_LOOP_INFO_BASE_p = Print_DO_LOOP_INFO_BASE;
 #ifdef KEY	// bug 3672
 	Preprocess_struct_access_p = Preprocess_struct_access;
 #endif

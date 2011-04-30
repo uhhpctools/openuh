@@ -37,10 +37,10 @@
 * ====================================================================
 *
 * Module: opt_alias_interface.h
-* $Revision$
-* $Date$
-* $Author$
-* $Source$
+* $Revision: 1.2 $
+* $Date: 02/11/07 23:41:38-00:00 $
+* $Author: fchow@keyresearch.com $
+* $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_alias_interface.h $
 *
 * Revision history:
 *  07-APR-95 lo - spilt from opt_alias.h
@@ -54,7 +54,7 @@
 #ifndef opt_alias_interface_INCLUDED
 #define opt_alias_interface_INCLUDED	"opt_alias_interface.h"
 #ifdef _KEEP_RCS_ID
-static char *opt_alias_interfacercs_id = 	opt_alias_interface_INCLUDED"$Revision$";
+static char *opt_alias_interfacercs_id = 	opt_alias_interface_INCLUDED"$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 
@@ -331,7 +331,7 @@ typedef enum {
 
 typedef UINT32 ALIAS_CONTEXT;
 
-struct ALIAS_MANAGER *Create_Alias_Manager(MEM_POOL *);
+struct ALIAS_MANAGER *Create_Alias_Manager(MEM_POOL *, WN *);
 
 void Delete_Alias_Manager(struct ALIAS_MANAGER *, MEM_POOL *);
 

@@ -54,10 +54,21 @@
  * ====================================================================
  */
 
+
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+
 #include <sys/types.h>		    // for pid_t
 #include <unistd.h>		    // for fork(), pipe(), etc.
 #include <signal.h>		    // for SIGINT
+#ifndef __MINGW32__
+#if defined(BUILD_OS_DARWIN) || defined(__CYGWIN__) || defined(__APPLE__)
+#include <sys/wait.h>		    // for waitpid()
+#else 
 #include <wait.h>		    // for waitpid()
+#endif /* defined(BUILD_OS_DARWIN) */
+#endif /* __MINGW32__ */
 #include <stdarg.h>                 // for varargs.
 #include <time.h>
 #include <string.h>
@@ -69,6 +80,15 @@
 
 #define CALLBACK_DEBUG
 
+ std::queue<EVENT_T>  DaVinci::_event_q_socket[MAX_VIEW_NUM];
+ INT                  DaVinci::_tcp_socket = 0;
+ INT                  DaVinci::_davinci_count =0;
+ INT                  DaVinci::_contex_count = 0;
+ CONTEX_TYPE          DaVinci::_contex_use_array[MAX_VIEW_NUM];
+ INT                  DaVinci::_current_contex = -1;
+ bool                 DaVinci::_use_socket = false;
+
+
 // ------------------------------------------------------------------------
 //         CALLBACK HOOKS -- default handlers.
 // ------------------------------------------------------------------------
@@ -78,7 +98,7 @@ DaVinci_Callback::Node_Select(const INT n_ids, const NODE_ID id_array[])
 {
 #ifdef CALLBACK_DEBUG
   fprintf(stderr, "Node_Select([");
-  char *sep = " ";
+  const char *sep = " ";
   for (INT i = 0; i < n_ids; ++i) {
     fprintf(stderr, "%s%p", sep, id_array[i]);
     sep = ", ";
@@ -186,7 +206,7 @@ Menu_info::Set(const char *cp, Item_status status)
 
 DaVinci::IO::~IO()
 {
-    Close ();
+    if(!_use_socket || _davinci_count==0) Close ();
 }
 
 void
@@ -242,6 +262,13 @@ DaVinci::IO::In_Line()
     } else {
       fprintf(stderr, "in_line truncation! (%.50s ..)\n", buf);
     }
+    if(_use_socket){
+      np = strchr( rp, '\r' );
+      if ( np ) {
+        *np = '\0';
+      } 
+    }
+
     if (strlen(rp) >= sizeof(buf) ) {
       fprintf(stderr, "INTERNAL ERROR! DaVinci::IO:in_line buf overflow\n");
       abort();
@@ -288,7 +315,7 @@ DaVinci::IO::In_Line()
 const char *
 DaVinci::Ft_Str(const FTAG ftag)
 {
-  char *s = "<<ft_str: unknown tag>>";
+  const char *s = "<<ft_str: unknown tag>>";
 
   switch ( ftag ) {
   case FT_DAVINCI:          s = "DaVinci";           break;
@@ -324,7 +351,7 @@ DaVinci::Usage_Error(FTAG curr, FTAGS prereq)
   } else {
     fprintf(stderr, "preceeding %s expected member of {", Ft_Str(_ftag_last));
     FTAGS fts   = prereq;
-    char *comma = "";
+    const char *comma = "";
     for (FTAGS ft = FT_DAVINCI; fts != 0; ft <<= 1) {
       if ( ft & fts ) {
 	fprintf(stderr, "%s %s", comma, Ft_Str(ft));
@@ -350,6 +377,15 @@ DaVinci::Wait_For_Ack()
   //       In particular, should keep a side queue for OK/COM_ERROR msgs ..
 
   while ( (line = _io.In_Line()) != NULL ) {
+    if(_use_socket){
+      if(line[0] == 'c' && line[1] == 'o' && line[2] == 'n' && line[3] == 't'
+        && line[4] == 'e' && line[5] == 'x' && line[6] == 't'){
+        if(line[9] >='0' && line[9] <= '9'){
+          sscanf(line, "context(\"%d\")", &_current_contex);
+        }
+        continue;
+      }
+    }
     if ( Parse_Event( line, &event ) ) {
       switch ( event.kind ) {
       case EK_OK:
@@ -357,7 +393,11 @@ DaVinci::Wait_For_Ack()
       case EK_COM_ERROR:
 	return event.u.com_error.msg;
       default:
-	_event_q.push( event );
+        if(_use_socket){
+          _event_q_socket[_current_contex].push( event );
+        }else{
+	   _event_q.push( event );
+        }
       }
     }
   }
@@ -456,7 +496,9 @@ static struct {
   const char *name;     // order by name - for binary search.
   EVENT_KIND  kind;
 } Event_Tbl[] = {
+  { "close",                   EK_CLOSE   },
   { "communication_error",     EK_COM_ERROR },
+  { "disconnect",              EK_DISCONNECT},
   { "edge_selection_label",    EK_SEL_EDGE  },
   { "menu_selection",          EK_SEL_MENU  },
   { "node_selections_labels",  EK_SEL_NODES },
@@ -468,7 +510,7 @@ static struct {
 bool
 DaVinci::Parse_Event(const char *line, EVENT_T *event)
 {
-  char *epfx;  // immediately after '(' or at end of reply.
+  const char *epfx;  // immediately after '(' or at end of reply.
 
   epfx = strchr( line, '(' );
   if ( epfx == NULL ) {
@@ -507,6 +549,8 @@ DaVinci::Parse_Event(const char *line, EVENT_T *event)
     break;
   case EK_QUIT:
   case EK_OK:
+  case EK_CLOSE:
+  case EK_DISCONNECT:
     // no add'l data.
     break;
   case EK_SEL_EDGE:
@@ -555,9 +599,9 @@ DaVinci::Emit_Menu(INT n_items, const MENU_INFO *items)
 }
 
 void
-DaVinci::Emit_Attr(const NODE_TYPE& nt, char **comma)
+DaVinci::Emit_Attr(const NODE_TYPE& nt, const char **comma)
 {
-  char *val = NULL;
+  const char *val = NULL;
 
   if ( nt._node_color[0] != '\0' ) {
     _io.Out_Fmt( ",a(\"COLOR\",\"%s\")", nt._node_color);
@@ -610,8 +654,8 @@ void
 DaVinci::Emit_Attr(const EDGE_TYPE& et)
 {
 
-  char *val   = NULL;
-  char *comma = "";
+  const char *val   = NULL;
+  const char *comma = "";
 
   if ( et._edge_color[0] != '\0' ) {
     _io.Out_Fmt( "a(\"EDGECOLOR\",\"%s\")", et._edge_color );
@@ -651,7 +695,15 @@ void
 DaVinci::Menu_Basic_Do( const char *label )
 {
   if ( strcmp( label, "exit_event_loop" ) == 0 ) {
-    Exit_Event_Loop();
+    if(_use_socket){
+      char s[100];
+      sprintf(s, "multi(set_context(\"%d\"))", _contex);
+      Emit_Do(s);
+      _io.Out_Fmt( "menu(file(close))");
+      _io.Out_Fmt( "\n" );
+    }else{
+      Exit_Event_Loop();
+    }
   }
 }
 
@@ -680,19 +732,21 @@ DaVinci::Kill_Davinci()
     INT stat;
     
     _display_ok = false;
+#ifndef __MINGW32__
     kill (_pid, SIGINT);
     waitpid (_pid, &stat, WNOHANG);  // capture any SIGCHLD so not to
 				    // confuse master.
+#endif /* __MINGW32__ */
     _io.Close();
 }
 
 // ------------------------------------------------------------------------
 //         DaVinci public members.
 // ------------------------------------------------------------------------
-
 DaVinci::DaVinci(MEM_POOL *m, FILE *_trace_fp, bool usage_check) :
   _menu_state(m)
 {
+#ifndef __MINGW32__
   _m                = m;
   _basic_menu_added = false;
   _in_event_loop    = false;
@@ -701,70 +755,154 @@ DaVinci::DaVinci(MEM_POOL *m, FILE *_trace_fp, bool usage_check) :
   _ftag_last        = FT_DAVINCI;
   _node_cnt         = 0;
   _edge_cnt         = 0;
+  FILE *from_display; 
+  FILE *to_display;   
 
-  INT read_pipe[2];
-  INT write_pipe[2];
-
-  if ( pipe( read_pipe ) == -1 || pipe(write_pipe) == -1 ) {
-    perror( "DaVinci" );
-    return;
-  }
-  FILE *from_display = fdopen(read_pipe[0],  "r");
-  FILE *to_display   = fdopen(write_pipe[1], "w");
-  char *logfile      = getenv("DAVINCI_LOGFILE");
-
-  setbuf(from_display, NULL);  // more: line buffer better ?
-  setbuf(to_display,   NULL);
-
-  switch ( _pid = fork() ) {
-  case -1:		       // can't fork
-    fprintf(stderr, "Unable to fork (for daVinci)\n");
-    close (read_pipe[0]);
-    close (read_pipe[1]);
-    close (write_pipe[0]);
-    close (write_pipe[1]);
-    return;
-  case 0:			// child
-    dup2 (write_pipe[0], 0);    // reset stdin, stdout, and stderr
-    dup2 (read_pipe[1], 1);
-    dup2 (read_pipe[1], 2);
+  if(_use_socket){
+    _davinci_count++;
     
-    close (write_pipe[0]);	// close unused pipes.
-    close (read_pipe[1]);	// leave the other pair opened so that
-				// daVinci does not die when master exits
-    if ( logfile ) {
-      char fname[1000];
-      // append time to avoid overwriting previous log file,
-      // which would happen if daVinci is started more than
-      // once in a session.
-      sprintf(fname, "%s.%ld", logfile, time(NULL));
-      execlp ("daVinci", "daVinci", "-pipe", "-log", fname, NULL);
-    } else {
-      execlp ("daVinci", "daVinci", "-pipe", NULL);
+    if(_davinci_count == 1){
+      for(int i =0; i  < MAX_VIEW_NUM; i++) {
+        _contex_use_array[i] = CONTEX_UNUSE;
+      }
+      struct sockaddr_in addr_server;
+      /* Create a TCP/IP socket. */
+      _tcp_socket = socket(PF_INET, SOCK_STREAM, 0);
+      if (_tcp_socket < 0) {
+        perror( "DaVinci" );
+        return;
+      }
+      /* Create address for uDraw(Graph) server. */
+      /* Family for TCP/IP is "Internet". */
+      addr_server.sin_family = AF_INET;
+      /* IANA registered port for uDraw(Graph). The following two
+        values have to be converted from host byte order to network byte
+        order. */
+      addr_server.sin_port = htons(2542);
+      /* Use IP address of localhost assuming uDraw(Graph) is running locally. */
+      /* TODO: This has to be extend to show an example for remote
+        communication too. */
+      FILE *ip_fp;
+      char ip_address[100];
+      if(!(ip_fp = fopen(getenv("UDRAWIP"), "r"))){
+        fprintf(stderr, "Can't get the ip address of DaVinci server!\n");
+        perror( "DaVinci" );
+        return;
+      }
+      fscanf(ip_fp, "%s", ip_address);
+      addr_server.sin_addr.s_addr = inet_addr(ip_address);
+      bzero(&(addr_server.sin_zero),8);
+ 
+      if (connect(_tcp_socket, (struct sockaddr *)&addr_server, sizeof(addr_server)) < 0)
+      {
+        fprintf(stderr, "Can't connect to  %s:2542, please start using this commandline:\n"
+                "uDrawGraph -server\n", ip_address);
+        perror( "DaVinci" );
+        return;
+      }
+      
     }
-    // error to stdout so it appears on pipe read by parent proc.
-    // use message syntax that DaVinci::Parse_Event() recognizes.
-    //   more? detected if errno out of range for sys_errlist.
-    printf("communication_error(\"execlp of daVinci: %s %s\")\n",
-	   strerror(errno), "(define $DAVINCIHOME; need daVinci on $PATH)");
-    exit (1);
+    from_display = fdopen(_tcp_socket,  "r");
+    to_display   = fdopen(_tcp_socket, "w");
+    char *tracefile   = getenv("UDRAW_TRACEFILE");
+ 
+    setbuf(from_display, NULL);  // more: line buffer better ?
+    setbuf(to_display,   NULL);
+    _io.Init( to_display, from_display );
+    if(_trace_fp == NULL && tracefile){
+      _trace_fp = fopen(tracefile, "a");
+    }    
+    _io.Trace( _trace_fp );
+    if(_davinci_count == 1){
+      DA_ACK msg = Wait_For_Ack();
+      if ( msg ) {
+        fprintf(stderr, "DaVinci connection failed: %s\n", msg);
+        return;
+      }
+    }
 
-  default:	                // parent
-    close (read_pipe[1]);
-    close (write_pipe[0]);
+    _display_ok = true;
+    //build a new view
+    INT i;
+    for( i = 0; i < MAX_VIEW_NUM; i++){
+      if(_contex_use_array[i] == CONTEX_UNUSE){
+        char s[100];
+        sprintf(s, "multi(open_context(\"%d\"))", i);
+        Emit_Do( s);
+        _contex_use_array[i] = CONTEX_ACTIVE;
+        _contex_count++;
+        _contex = i;
+        break;
+      }
+    }
+    if(i == MAX_VIEW_NUM) {
+      fprintf(stderr, "DaVinci:reach the max view size");
+    }
+  }else{
+    INT read_pipe[2];
+    INT write_pipe[2];
+ 
+    if ( pipe( read_pipe ) == -1 || pipe(write_pipe) == -1 ) {
+      perror( "DaVinci" );
+      return;
+    }
+    from_display = fdopen(read_pipe[0],  "r");
+    to_display   = fdopen(write_pipe[1], "w");
+    char *logfile      = getenv("DAVINCI_LOGFILE");
+ 
+    setbuf(from_display, NULL);  // more: line buffer better ?
+    setbuf(to_display,   NULL);
+ 
+    switch ( _pid = fork() ) {
+    case -1:		       // can't fork
+      fprintf(stderr, "Unable to fork (for daVinci)\n");
+      close (read_pipe[0]);
+      close (read_pipe[1]);
+      close (write_pipe[0]);
+      close (write_pipe[1]);
+      return;
+    case 0:			// child
+      dup2 (write_pipe[0], 0);    // reset stdin, stdout, and stderr
+      dup2 (read_pipe[1], 1);
+      dup2 (read_pipe[1], 2);
+      
+      close (write_pipe[0]);	// close unused pipes.
+      close (read_pipe[1]);	// leave the other pair opened so that
+          			// daVinci does not die when master exits
+      if ( logfile ) {
+        char fname[1000];
+        // append time to avoid overwriting previous log file,
+        // which would happen if daVinci is started more than
+        // once in a session.
+        sprintf(fname, "%s.%ld", logfile, time(NULL));
+        execlp ("daVinci", "daVinci", "-pipe", "-log", fname, NULL);
+      } else {
+        execlp ("daVinci", "daVinci", "-pipe", NULL);
+      }
+      // error to stdout so it appears on pipe read by parent proc.
+      // use message syntax that DaVinci::Parse_Event() recognizes.
+      //   more? detected if errno out of range for sys_errlist.
+      printf("communication_error(\"execlp of daVinci: %s %s\")\n",
+             strerror(errno), "(define $DAVINCIHOME; need daVinci on $PATH)");
+      exit (1);
+ 
+    default:	                // parent
+      close (read_pipe[1]);
+      close (write_pipe[0]);
+    }
+    _io.Init( to_display, from_display );
+    _io.Trace( _trace_fp );
+ 
+    DA_ACK msg = Wait_For_Ack();
+    if ( msg ) {
+      fprintf(stderr, "DaVinci connection failed: %s\n", msg);
+      return;
+    }
+    _display_ok = true;
   }
-  _io.Init( to_display, from_display );
-  _io.Trace( _trace_fp );
-
-  DA_ACK msg = Wait_For_Ack();
-  if ( msg ) {
-    fprintf(stderr, "DaVinci connection failed: %s\n", msg);
-    return;
-  }
-  _display_ok = true;
-
+  
 #ifdef TARG_IA64
-  Emit_Do( "set(font_size(10))" );  // more? provide external control.
+  Emit_Do( "set(font_size(12))" );  // more? provide external control.
   Emit_Do( "set(gap_height(10))" );
   Emit_Do( "set(gap_width(10))" );
 #else
@@ -772,10 +910,15 @@ DaVinci::DaVinci(MEM_POOL *m, FILE *_trace_fp, bool usage_check) :
   Emit_Do( "set(gap_height(40))" );
   Emit_Do( "set(gap_width(20))" );
 #endif
+#endif /* __MINGW32__ */
 }
 
 DaVinci::~DaVinci()
 {
+  if(_use_socket){
+    _davinci_count--;
+    if(_davinci_count ==0) close(_tcp_socket);
+  }
   // more? wish to allow DaVinci to stay up.  is it possible close pipes.
 }
 
@@ -800,6 +943,7 @@ DaVinci::Event_Loop(DaVinci_Callback *cb_hook)
   if ( cb_hook == NULL ) {
     cb_hook = &dflt_cb_hook;
   }
+  
   if ( ! _basic_menu_added ) {
     DA_ACK msg = Menu_Create( N_MENU_BASIC, Menu_basic );
     if ( msg ) {
@@ -812,9 +956,15 @@ DaVinci::Event_Loop(DaVinci_Callback *cb_hook)
   _in_event_loop = true;
 
   while ( _display_ok ) {
-    while ( ! _event_q.empty() ) {
-      event = _event_q.front();
-      _event_q.pop();
+    while ( (_use_socket && !_event_q_socket[_contex].empty()) ||
+            (!_use_socket && !_event_q.empty())) {
+      if(_use_socket){
+        event = _event_q_socket[_contex].front();
+        _event_q_socket[_contex].pop();
+      }else{
+        event = _event_q.front();
+        _event_q.pop();
+      }
       switch ( event.kind ) {
       case EK_COM_ERROR:
 	fprintf(stderr, "event_loop: Unexpected: %s\n", event.u.com_error.msg);
@@ -845,8 +995,22 @@ DaVinci::Event_Loop(DaVinci_Callback *cb_hook)
 			      event.u.sel_nodes.node_ids );
 	break;
       case EK_QUIT:
-	_display_ok    = false;  // DaVinci exited.
-	_in_event_loop = false;
+      case EK_CLOSE:
+        if(_use_socket){
+  	   _contex_use_array[_contex] = CONTEX_UNUSE;
+          _contex_count--;
+          if(_contex_count == 0){
+            close(_tcp_socket);
+          }
+    	   _display_ok    = false;  // DaVinci exited.
+    	   _in_event_loop = false;
+        }else{
+          _display_ok    = false;  // DaVinci exited.
+          _in_event_loop = false;
+        }
+        break;
+      case EK_DISCONNECT:
+        fprintf(stderr, "EVENT: EK_DISCONNET\n");
 	break;
       default:
 	fprintf(stderr, "ERROR: event_loop missing event case %d\n",
@@ -856,14 +1020,33 @@ DaVinci::Event_Loop(DaVinci_Callback *cb_hook)
 	return;
       }
     }
+
+    
     char *line = _io.In_Line();
 
     if ( line == NULL ) {
       _display_ok = false;
       break;
     }
+    
+    if(_use_socket && line[0] == 'c' && line[1] == 'o' && line[2] == 'n' 
+      && line[3] == 't' && line[4] == 'e' && line[5] == 'x' && line[6] == 't'){
+      if(line[9] >='0' && line[9] <= '9'){
+        sscanf(line, "context(\"%d\")", &_current_contex);
+      }
+      continue;
+    }
     if ( Parse_Event( line, &event ) ) {
-      _event_q.push( event );
+      if(_use_socket){
+        if(event.kind == EK_QUIT  || event.kind ==EK_CLOSE){
+          while ( ! _event_q_socket[_current_contex].empty() ) {
+            _event_q_socket[_current_contex].pop();
+          }
+        }
+        _event_q_socket[_current_contex].push( event );
+      }else{
+        _event_q.push( event );
+      }
     }
   }
   // more? flush event queue ? -- might reenter event loop later ..
@@ -963,12 +1146,12 @@ DaVinci::Node_Begin(NODE_ID id, const char *label, const NODE_TYPE& node_type)
       _node_def_set.insert(id);
     }
   }
-  _io.Out_Fmt( "%sl(\"%x\",n(\"%s\",[a(\"OBJECT\",\"%s\")",
+  _io.Out_Fmt( "%sl(\"%p\",n(\"%s\",[a(\"OBJECT\",\"%s\")",
 	       ( _node_cnt > 0 ? "," : "" ),
 	       id, node_type._type_name, label);
   _node_cnt += 1;
   _edge_cnt =  0;           // i.e., out edges for this node decl.
-  char *comma = ",";
+  const char *comma = ",";
   Emit_Attr( node_type, &comma );
   _io.Out_Fmt( "],[" );     // end node attributes, begin out_edges.
 
@@ -984,13 +1167,13 @@ DaVinci::Out_Edge(const EDGE_ID&   edge_id,
   if ( _usage_check ) {
     _node_ref_set.insert(edge_id.dst);
   }
-  _io.Out_Fmt( "%sl(\"%x:%x\",e(\"%s\",[",
+  _io.Out_Fmt( "%sl(\"%p:%p\",e(\"%s\",[",
 	       ( _edge_cnt > 0 ? "," : "" ),
 	       edge_id.src, edge_id.dst, edge_type._type_name);
   _edge_cnt += 1;
 
   Emit_Attr( edge_type );
-  _io.Out_Fmt( "],r(\"%x\")))", dest_id);
+  _io.Out_Fmt( "],r(\"%p\")))", dest_id);
 }
 
 void
@@ -1030,9 +1213,9 @@ DaVinci::Change_Attr(const NODE_ID     id,
 {
   if ( ! Usage_Ok( FT_CHANGE_ATTR, BASE_SET ) ) return "Usage-error";
 
-  char *comma = "";
+  const char *comma = "";
 
-  _io.Out_Fmt( "graph(change_attr([node(\"%x\",[", id);
+  _io.Out_Fmt( "graph(change_attr([node(\"%p\",[", id);
 
   if ( new_label ) {
     _io.Out_Fmt( "a(\"OBJECT\",\"%s\")", new_label );
@@ -1050,7 +1233,7 @@ DaVinci::Change_Attr(const EDGE_ID& edge_id, const EDGE_TYPE& et)
 {
   if ( ! Usage_Ok( FT_CHANGE_ATTR, BASE_SET ) ) return "Usage-error";
 
-  _io.Out_Fmt( "graph(change_attr([edge(\"%x:%x\",[",
+  _io.Out_Fmt( "graph(change_attr([edge(\"%p:%p\",[",
 	       edge_id.src, edge_id.dst );
   Emit_Attr( et );
   _io.Out_Fmt( "])]))\n");
@@ -1078,9 +1261,9 @@ DaVinci::New_Node(NODE_ID id, const char *label, const NODE_TYPE& nt )
     fprintf(stderr, "Skipping this node to avoid DaVinci error.\n");
     return;
   }
-  _io.Out_Fmt( "%snew_node(\"%x\",[a(\"OBJECT\",\"%s\")",
+  _io.Out_Fmt( "%snew_node(\"%p\",[a(\"OBJECT\",\"%s\")",
 	       (_node_cnt > 0 ? "," : ""), id, label );
-  char *comma = ",";
+  const char *comma = ",";
   Emit_Attr( nt, &comma );
   _node_cnt += 1;
 }
@@ -1097,10 +1280,10 @@ DaVinci::New_Edge(const EDGE_ID&   id,
   if ( _edge_cnt == 0 ) {
     _io.Out_Fmt( "],[" );  // end new_node + begin new_edge list.
   }
-  _io.Out_Fmt( "%snew_edge(\"%x:%x\",\"\",[", (_edge_cnt > 0 ? "," : ""),
+  _io.Out_Fmt( "%snew_edge(\"%p:%p\",\"\",[", (_edge_cnt > 0 ? "," : ""),
 	       id.src, id.dst );
   Emit_Attr( et );
-  _io.Out_Fmt( "],\"%x\",\"%x\")", src, dst);
+  _io.Out_Fmt( "],\"%p\",\"%p\")", src, dst);
   _edge_cnt += 1;
 }
 
@@ -1114,7 +1297,7 @@ DaVinci::Delete_Edge(const EDGE_ID&   id)
   if ( _edge_cnt == 0 ) {
     _io.Out_Fmt( "],[" );  // end new_node + begin new_edge list.
   }
-  _io.Out_Fmt( "%sdelete_edge(\"%x:%x\")", (_edge_cnt > 0 ? "," : ""),
+  _io.Out_Fmt( "%sdelete_edge(\"%p:%p\")", (_edge_cnt > 0 ? "," : ""),
 	       id.src, id.dst );
   _edge_cnt += 1;
 }

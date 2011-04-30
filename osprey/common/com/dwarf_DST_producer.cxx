@@ -501,8 +501,8 @@ DST_end_PU(void)
 /* Creates a DW_TAG_inlined_subroutine entry and returns its idx.
 */
 DST_INFO_IDX 
-DST_mk_inlined_subroutine(void		*low_pc,    /* ptr to front-end label */
-			  void		*high_pc,   /* ptr to front-end label */
+DST_mk_inlined_subroutine(ST_IDX	low_pc,    /* ptr to front-end label */
+			  ST_IDX	high_pc,   /* ptr to front-end label */
 			  DST_INFO_IDX   abstract_origin)
 {
    DST_INFO_IDX            info_idx;
@@ -520,21 +520,8 @@ DST_mk_inlined_subroutine(void		*low_pc,    /* ptr to front-end label */
    attr_idx = DST_mk_attr(DST_INLINED_SUBROUTINE);
    attr = DST_ATTR_IDX_TO_PTR(attr_idx, DST_INLINED_SUBROUTINE);
 
-#if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER)
-   /* for IPA, low_pc and high_pc are pointers 
-    * to struct st_idx
-    *	Get_ST_id ((ST *)low_pc, &id, &index);
-    * has already been called before calling this routine
-    */
-   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_low_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)low_pc);
-   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_high_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)high_pc);
-#else
-   DST_ASSOC_INFO_fe_ptr(DST_INLINED_SUBROUTINE_low_pc (attr)) = low_pc;
-   DST_ASSOC_INFO_fe_ptr(DST_INLINED_SUBROUTINE_high_pc(attr)) = high_pc;
-   DST_SET_assoc_fe(flag);
-#endif
+   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_low_pc (attr)) = low_pc;
+   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_high_pc(attr)) = high_pc;
    DST_INLINED_SUBROUTINE_abstract_origin(attr) = abstract_origin;
    DST_INLINED_SUBROUTINE_first_child(attr) = DST_INVALID_IDX;
    DST_INLINED_SUBROUTINE_last_child(attr) = DST_INVALID_IDX;
@@ -542,6 +529,7 @@ DST_mk_inlined_subroutine(void		*low_pc,    /* ptr to front-end label */
    return DST_init_info(info_idx, DW_TAG_inlined_subroutine, 
 		       flag, attr_idx);
 }
+
 
 #if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER)
     /* These are not needed with _LEGO_CLONER */
@@ -697,8 +685,8 @@ DST_get_cross_inlined_file_id
 
 DST_INFO_IDX 
 DST_mk_cross_inlined_subroutine(
-			  void		*low_pc,    	    /* ptr to front-end label */
-			  void		*high_pc,   	    /* ptr to front-end label */
+			  ST_IDX	 low_pc,    	    /* ptr to front-end label */
+			  ST_IDX	 high_pc,   	    /* ptr to front-end label */
 			  char		*name,	    	    /* ptr to parent routine's name */		
 			  /* the following are all for new file entry */
 			  mUINT16 	*file_index,	    /* returns the file_index of entry created for filename */
@@ -727,15 +715,8 @@ DST_mk_cross_inlined_subroutine(
    DST_set_last_include_dir();
    DST_set_last_file_name();
 
-   /* for IPA, low_pc and high_pc are pointers 
-    * to struct st_idx
-    *	Get_ST_id ((ST *)low_pc, &id, &index);
-    * has already been called before calling this routine
-    */
-   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_low_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)low_pc);
-   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_high_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)high_pc);
+   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_low_pc (attr)) = low_pc;
+   DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_high_pc(attr)) = high_pc;
 
    DST_INLINED_SUBROUTINE_abstract_name(attr) = DST_mk_name(name);
 
@@ -766,7 +747,7 @@ DST_mk_cross_inlined_subroutine(
 */
 DST_INFO_IDX 
 DST_mk_subprogram_memdef(USRCPOS      decl,  /* Source location */
-			 void        *subpr, /* front-end routine */
+			 ST_IDX	subpr, 
 			 BOOL         is_prototyped,
 			 DST_INFO_IDX spec)  /* decl in class */
 {
@@ -786,11 +767,7 @@ DST_mk_subprogram_memdef(USRCPOS      decl,  /* Source location */
    DST_SUBPROGRAM_memdef_decl(attr) = decl;
    DST_SUBPROGRAM_memdef_spec(attr) = spec;
 
-   /* "st" starts off pointing to a front-end routine, which is
-    * later converted to point to the corrsponding back-end ST entry.
-   */
-   DST_ASSOC_INFO_fe_ptr(DST_SUBPROGRAM_memdef_st(attr)) = subpr;
-   DST_SET_assoc_fe(flag);
+   DST_ASSOC_INFO_st_idx(DST_SUBPROGRAM_memdef_st(attr)) = subpr;
 
    DST_SUBPROGRAM_memdef_first_child(attr) = DST_INVALID_IDX;
    DST_SUBPROGRAM_memdef_last_child(attr) = DST_INVALID_IDX;
@@ -811,7 +788,7 @@ DST_mk_subprogram(USRCPOS      decl,
 		  char        *name,
 		  DST_INFO_IDX type,
 		  DST_INFO_IDX origin,
-		  void        *subpr,   /* front-end routine */
+		  ST_IDX       subpr, 
 		  DST_inline   inlin,
 		  DST_virtuality virtuality,
 		  DST_vtable_elem_location vtable_elem_location,
@@ -859,11 +836,7 @@ DST_mk_subprogram(USRCPOS      decl,
       DST_SUBPROGRAM_def_specification(attr) = DST_INVALID_IDX;
       DST_SUBPROGRAM_def_type(attr) = type;
 
-      /* "st" starts off pointing to a front-end routine, which is
-       * later converted to point to the corrsponding back-end ST entry.
-       */
-      DST_ASSOC_INFO_fe_ptr(DST_SUBPROGRAM_def_st(attr)) = subpr;
-      DST_SET_assoc_fe(flag);
+      DST_ASSOC_INFO_st_idx(DST_SUBPROGRAM_def_st(attr)) = subpr;
 
       DST_SUBPROGRAM_def_inline(attr) = inlin;
 #ifdef CPLUSPLUSIL
@@ -936,7 +909,7 @@ DST_mk_cloned_subprogram(USRCPOS      decl,
 		  char        *name,
 		  DST_INFO_IDX type,
 		  DST_INFO_IDX clone_origin,
-		  void        *subst,   /* front-end st */
+		  ST_IDX       subst,   /* front-end st */
 		  DST_inline   inlin,
 		  DST_virtuality virtuality)
 {
@@ -959,8 +932,7 @@ DST_mk_cloned_subprogram(USRCPOS      decl,
    /* "st" starts off pointing to a front-end routine, which is
     * later converted to point to the corrsponding back-end ST entry.
     */
-   DST_ASSOC_INFO_st_idx(DST_SUBPROGRAM_def_st (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)subst);
+   DST_ASSOC_INFO_st_idx(DST_SUBPROGRAM_def_st (attr)) = subst;
 
   /* cloned subprogram are not declared inline or inlined initially
    * even if the original subprogram has been declared inline or has been
@@ -1113,7 +1085,7 @@ DST_INFO_IDX
 DST_mk_entry_point(USRCPOS      decl,
 		  char        *name,
 		  DST_INFO_IDX type,
-		  void        *subpr)   /* front-end routine */
+		  ST_IDX	subpr)
 {
    DST_INFO_IDX    info_idx;
    DST_ATTR_IDX    attr_idx;
@@ -1133,8 +1105,7 @@ DST_mk_entry_point(USRCPOS      decl,
    DST_ENTRY_POINT_decl(attr) = decl;
    DST_ENTRY_POINT_first_child(attr) = DST_INVALID_IDX;
    DST_ENTRY_POINT_last_child(attr) = DST_INVALID_IDX;
-   DST_ASSOC_INFO_fe_ptr(DST_ENTRY_POINT_st(attr)) = subpr;
-   DST_SET_assoc_fe(flag);
+   DST_ASSOC_INFO_st_idx(DST_ENTRY_POINT_st(attr)) = subpr;
    return DST_init_info(info_idx, DW_TAG_entry_point, flag, attr_idx);
 }
 
@@ -1143,7 +1114,7 @@ DST_mk_entry_point(USRCPOS      decl,
 */
 DST_INFO_IDX 
 DST_mk_common_block(char	*name,
-		    void 	*subpr)
+		    ST_IDX	subpr)
 {
    DST_INFO_IDX    info_idx;
    DST_ATTR_IDX    attr_idx;
@@ -1160,8 +1131,7 @@ DST_mk_common_block(char	*name,
    DST_COMMON_BLOCK_name(attr) = DST_mk_name(name);
    DST_COMMON_BLOCK_first_child(attr) = DST_INVALID_IDX;
    DST_COMMON_BLOCK_last_child(attr) = DST_INVALID_IDX;
-   DST_ASSOC_INFO_fe_ptr(DST_COMMON_BLOCK_st(attr)) = subpr;
-   DST_SET_assoc_fe(flag);
+   DST_ASSOC_INFO_st_idx(DST_COMMON_BLOCK_st(attr)) = subpr;
    return DST_init_info(info_idx, DW_TAG_common_block, flag, attr_idx);
 }
 
@@ -1251,8 +1221,8 @@ DST_mk_module(USRCPOS decl, /* source location */
 */
 DST_INFO_IDX 
 DST_mk_lexical_block(char         *name,         /* NULL if unnamed */
-		     void         *low_pc,       /* ptr to front-end label */
-                     void         *high_pc,      /* ptr to front-end label */
+		     ST_IDX        low_pc, 
+                     ST_IDX        high_pc,
 		     DST_INFO_IDX  abstract_origin) /* NULL if none */
 {
    DST_INFO_IDX       info_idx;
@@ -1267,26 +1237,10 @@ DST_mk_lexical_block(char         *name,         /* NULL if unnamed */
    attr_idx = DST_mk_attr(DST_LEXICAL_BLOCK);
    attr = DST_ATTR_IDX_TO_PTR(attr_idx, DST_LEXICAL_BLOCK);
    DST_LEXICAL_BLOCK_name(attr) = DST_mk_name(name);
-   if (low_pc != NULL && high_pc != NULL)
+   if (low_pc != ST_IDX_ZERO && high_pc != ST_IDX_ZERO)
    {
-      /* pc fields points to front-end labels, and are later converted
-       * to point to the corresponding back-end LABELs.
-      */
-#if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER) || defined(_LEGO_CLONER)
-   /* for IPA, low_pc and high_pc are pointers
-    * to struct st_idx
-    *   Get_ST_id ((ST *)low_pc, &id, &index);
-    * has already been called before calling this routine
-    */
-      DST_ASSOC_INFO_st_idx(DST_LEXICAL_BLOCK_low_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)low_pc);
-      DST_ASSOC_INFO_st_idx(DST_LEXICAL_BLOCK_high_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)high_pc);
-#else
-      DST_ASSOC_INFO_fe_ptr(DST_LEXICAL_BLOCK_low_pc(attr)) = low_pc;
-      DST_ASSOC_INFO_fe_ptr(DST_LEXICAL_BLOCK_high_pc(attr)) = high_pc;
-      DST_SET_assoc_fe(flag);
-#endif
+      DST_ASSOC_INFO_st_idx(DST_LEXICAL_BLOCK_low_pc(attr)) = low_pc;
+      DST_ASSOC_INFO_st_idx(DST_LEXICAL_BLOCK_high_pc(attr)) = high_pc;
    }
    DST_LEXICAL_BLOCK_abstract_origin(attr) = abstract_origin;
    DST_LEXICAL_BLOCK_first_child(attr) = DST_INVALID_IDX;
@@ -1301,7 +1255,7 @@ DST_mk_lexical_block(char         *name,         /* NULL if unnamed */
 */
 extern DST_INFO_IDX 
 DST_mk_label(char         *name,            /* NULL if unnamed */
-	     void         *low_pc,          /* ptr to front-end label */
+	     ST_IDX        low_pc,          /* ptr to front-end label */
 	     DST_INFO_IDX  abstract_origin) /* NULL if none */
 {
    DST_INFO_IDX info_idx;
@@ -1309,7 +1263,7 @@ DST_mk_label(char         *name,            /* NULL if unnamed */
    DST_flag     flag = DST_no_flag;
    DST_LABEL   *attr;
 
-   DST_ASSERT(low_pc != NULL, "Missing low_pc value for label");
+   DST_ASSERT(low_pc != ST_IDX_ZERO, "Missing low_pc value for label");
    
 #if !(defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER))
    DST_enter_mk(DST_making_dbg_info, last_info_idx);   
@@ -1319,21 +1273,7 @@ DST_mk_label(char         *name,            /* NULL if unnamed */
    attr = DST_ATTR_IDX_TO_PTR(attr_idx, DST_LABEL);
    DST_LABEL_name(attr) = DST_mk_name(name);
 
-   /* pc fields points to front-end labels, and are later converted
-    * to point to the corresponding back-end LABELs.
-    */
-#if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER) || defined(_LEGO_CLONER)
-   /* for IPA, low_pc is pointer
-    * to struct st_idx
-    *	Get_ST_id ((ST *)low_pc, &id, &index);
-    * has already been called before calling this routine
-    */
-   DST_ASSOC_INFO_st_idx(DST_LABEL_low_pc (attr)) 
-	= pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)low_pc);
-#else
-   DST_ASSOC_INFO_fe_ptr(DST_LABEL_low_pc(attr)) = low_pc;
-   DST_SET_assoc_fe(flag);
-#endif
+   DST_ASSOC_INFO_st_idx(DST_LABEL_low_pc(attr)) = low_pc;
 
    DST_LABEL_abstract_origin(attr) = abstract_origin;
    return DST_init_info(info_idx, DW_TAG_label, flag, attr_idx);
@@ -1383,7 +1323,7 @@ DST_INFO_IDX
 DST_mk_variable_comm( USRCPOS         decl, /* Source location */
 		      char           *name,    /* Name of const variable */
 		      DST_INFO_IDX    type,    /* Type of const variable */
-		      void 	     *feptr,    /* front end pointer */
+		      ST_IDX	      var, 
 		      UINT64 	      offset)    /* offset from common block */
 {
    DST_INFO_IDX  info_idx;
@@ -1401,8 +1341,7 @@ DST_mk_variable_comm( USRCPOS         decl, /* Source location */
    DST_VARIABLE_comm_decl(attr) = decl;
    DST_VARIABLE_comm_name(attr) = DST_mk_name(name);
    DST_VARIABLE_comm_type(attr) = type;
-   DST_ASSOC_INFO_fe_ptr(DST_VARIABLE_comm_st(attr)) = feptr;
-   DST_SET_assoc_fe(flag);
+   DST_ASSOC_INFO_st_idx(DST_VARIABLE_comm_st(attr)) = var;
    DST_VARIABLE_comm_offs(attr) = offset;
    DST_SET_comm(flag);
    return DST_init_info(info_idx, DW_TAG_variable, flag, attr_idx);
@@ -1413,7 +1352,7 @@ DST_mk_variable_comm( USRCPOS         decl, /* Source location */
 */
 DST_INFO_IDX 
 DST_mk_variable_memdef(USRCPOS      decl, /* Source location */
-		       void        *var,  /* a front-end variable */
+		       ST_IDX var,
 		       DST_INFO_IDX spec) /* Class member decl */
 {
    DST_INFO_IDX  info_idx;
@@ -1432,8 +1371,7 @@ DST_mk_variable_memdef(USRCPOS      decl, /* Source location */
    DST_VARIABLE_memdef_spec(attr) = spec;
 
    /* location is obtained through the back-end version of st */
-   DST_ASSOC_INFO_fe_ptr(DST_VARIABLE_memdef_st(attr)) = var;
-   DST_SET_assoc_fe(flag);
+   DST_ASSOC_INFO_st_idx(DST_VARIABLE_memdef_st(attr)) = var;
 
    DST_SET_memdef(flag);
    return DST_init_info(info_idx, DW_TAG_variable, flag, attr_idx);
@@ -1448,7 +1386,7 @@ DST_mk_variable(USRCPOS      decl,     /* Source location */
 		char        *name,     /* Name of variable */
 		DST_INFO_IDX type,     /* Type of variable */
 		UINT64	     offs,     /* offset from front end variable */
-		void        *var,      /* a front-end variable */
+		ST_IDX       var, 
 		DST_INFO_IDX abstract_origin, /* for inlined proc */
 		BOOL         is_declaration,
 		BOOL         is_automatic,
@@ -1490,33 +1428,8 @@ DST_mk_variable(USRCPOS      decl,     /* Source location */
       DST_VARIABLE_def_linkage_name(attr) = DST_INVALID_IDX;
 #endif
 
-#if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER)
-   /* for IPA, low_pc is pointer
-    * to struct st_idx
-    *	Get_ST_id ((ST *)low_pc, &id, &index);
-    * has already been called before calling this routine
-    */
-      DST_ASSOC_INFO_st_idx(DST_VARIABLE_def_st (attr)) = 
-        pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)var);
-#else
-#ifdef _LEGO_CLONER
-      if (var != NULL) {
-        DST_ASSOC_INFO_st_idx(DST_VARIABLE_def_st (attr)) = 
-          pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)var);
-      }
-      else {
-        /* this should only be reached from lower_mp(), */
-        /* since var passed from there is always NULL   */
-        /* location is obtained through the back-end version of st */
-        DST_ASSOC_INFO_fe_ptr(DST_VARIABLE_def_st(attr)) = var;
-        DST_SET_assoc_fe(flag);
-      }
-#else /* Front End */
       /* location is obtained through the back-end version of st */
-      DST_ASSOC_INFO_fe_ptr(DST_VARIABLE_def_st(attr)) = var;
-      DST_SET_assoc_fe(flag);
-#endif
-#endif
+      DST_ASSOC_INFO_st_idx(DST_VARIABLE_def_st(attr)) = var;
    }   
    if (is_automatic)
       DST_SET_automatic(flag);
@@ -1534,7 +1447,7 @@ DST_INFO_IDX
 DST_mk_formal_parameter(USRCPOS       decl,        /* Source location */
 			char         *name,        /* Name of parm */
 			DST_INFO_IDX  type,        /* Type of parm */
-			void         *parm,        /* front-end parameter */
+			ST_IDX	      parm,        /* symbol */
                         DST_INFO_IDX  abstract_origin, /* For inlined proc */
 			DST_INFO_IDX  default_val, /* (C++) param value */
 			BOOL          is_optional, /* Optional param (C++) */
@@ -1567,31 +1480,7 @@ DST_mk_formal_parameter(USRCPOS       decl,        /* Source location */
    DST_FORMAL_PARAMETER_type(attr) = type;
 
    /* location is obtained through a pointer to back-end ST entry */
-#if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER)
-   /* for IPA, parm is pointer
-    * to struct st_idx
-    *	Get_ST_id ((ST *)parm, &id, &index);
-    * has already been called before calling this routine
-    */
-   DST_ASSOC_INFO_st_idx(DST_FORMAL_PARAMETER_st (attr)) = 
-     pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)parm);
-#else
-#ifdef _LEGO_CLONER
-   if (parm != NULL) {
-     DST_ASSOC_INFO_st_idx(DST_FORMAL_PARAMETER_st (attr)) = 
-       pDST_ASSOC_INFO_st_idx((DST_ASSOC_INFO *)parm);
-   }
-   else { 
-     /* this should only be reached from lower_mp(), */
-     /* since parm passed from there is always NULL  */
-     DST_ASSOC_INFO_fe_ptr(DST_FORMAL_PARAMETER_st(attr)) = parm;
-   }
-#else /* Front End */
-   DST_ASSOC_INFO_fe_ptr(DST_FORMAL_PARAMETER_st(attr)) = parm;
-   if (parm != NULL)
-     DST_SET_assoc_fe(flag);
-#endif
-#endif
+   DST_ASSOC_INFO_st_idx(DST_FORMAL_PARAMETER_st(attr)) = parm;
    
    DST_FORMAL_PARAMETER_default_val(attr) = default_val;
    DST_FORMAL_PARAMETER_abstract_origin(attr) = abstract_origin;
@@ -1699,7 +1588,7 @@ DST_mk_constant_decl(USRCPOS       decl,  /* Source location */
 /* Creates a DW_TAG_basetype entry.
 */
 DST_INFO_IDX 
-DST_mk_basetype(char            *name,      /* Name of type */
+DST_mk_basetype(const char      *name,      /* Name of type */
 		DST_ATE_encoding encoding,  /* How to encode/interpret data */
 		DST_size_t       byte_size) /* Size of object */
 {

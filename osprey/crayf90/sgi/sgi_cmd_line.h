@@ -94,7 +94,7 @@ extern BOOL process_cri_mp_pragmas;
 
 extern BOOL FE_Call_Never_Return;
 
-extern void add_cray_args ( char * );
+extern void add_cray_args ( const char * );
 extern void Cray_Woff ( char * );
 
 #ifdef __cplusplus

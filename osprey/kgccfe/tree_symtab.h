@@ -165,8 +165,11 @@ Get_ST (tree decl_tree)
 		if (TREE_CODE(decl_tree) == VAR_DECL) {
 		  TY_IDX ty_idx = Get_TY(TREE_TYPE(decl_tree));
 		  if (ty_idx && 
-		      TY_IDX_index(ty_idx) != TY_IDX_index(st->u2.type))
-		    st->u2.type = ty_idx;
+                      (TY_IDX_index(ty_idx) != TY_IDX_index(ST_type(st))) ||
+		      // Update alignment.  Bug 13186.
+		      (TY_align(ty_idx) != TY_align(ST_type(st)))) {
+		    Set_ST_type(st, ty_idx);
+		  }
 		}
 #endif
         }
@@ -184,6 +187,14 @@ Get_ST (tree decl_tree)
 			Set_ST_has_nested_ref (base_st);
 		}
 	}
+#ifdef KEY
+	if (ST_is_thread_private(st) && CURRENT_SYMTAB != GLOBAL_SYMTAB)
+		Set_PU_has_mp(Get_Current_PU());
+#endif
+	Is_True(ST_st_idx(st) != 0, ("st_idx is 0?"));
+	Is_True(ST_st_idx(st) != -1, ("st_idx is -1?"));
+	Is_True(ST_IDX_level(ST_st_idx(st)) != 0, ("st_level is 0?"));
+	Is_True(ST_IDX_index(ST_st_idx(st)) != 0, ("st_index is 0?"));
 	return st;
 }
 

@@ -172,14 +172,6 @@ do {								\
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
   fprintf (FILE, "%s%u\n", SPACE_ASM_OP, (SIZE))
 
-#if 0
-/* SVR4 m68k assembler is bitching on the `comm i,1,1' which askes for 
-   1 byte alignment. Don't generate alignment for COMMON seems to be
-   safer until we the assembler is fixed.  */
-#undef ASM_OUTPUT_ALIGNED_COMMON
-/* Same problem with this one.  */
-#undef ASM_OUTPUT_ALIGNED_LOCAL
-#endif
 
 /* The `string' directive on m68k svr4 does not handle string with
    escape char (ie., `\') right. Use normal way to output ASCII bytes

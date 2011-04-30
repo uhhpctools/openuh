@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: pow.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/pow.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.pow.c $
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/pow.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.pow.c $ $Revision: 1.5 $";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -82,7 +82,13 @@ extern	double	pow(double, double);
 #pragma weak pow = __pow
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __pow(double, double);
+#pragma weak pow
+double pow( double arg1, double arg2) {
+  return __pow( arg1, arg2 );
+}
+#elif defined(__GNUC__)
 extern  double  __pow(double, double);
 
 double    pow() __attribute__ ((weak, alias ("__pow")));
@@ -1281,7 +1287,12 @@ overunder:
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __powl(long double, long double);
+long double powl( long double arg1, long double arg2) {
+  return ( (long double)__pow((double)arg1, (double)arg2) );
+}
+#elif defined(__GNUC__)
 extern  long double  __powl(long double, long double);
 
 long double    powl() __attribute__ ((weak, alias ("__powl")));

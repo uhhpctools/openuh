@@ -78,6 +78,7 @@ typedef enum {
 	S_S,
 	S_I,
 	S_B,
+	S_P,
 	S_N,
 	S_O,
 	S_o,
@@ -132,7 +133,10 @@ typedef enum {
 	p_any_ipl,	/* either ipl or inline */
 
 	P_be,		/* composite optimizing back-end */
-
+#if defined(TARG_NVISA)
+	P_bec,		/* simple w2c back-end */
+	P_any_be,	/* generic union of all be's */
+#endif
 	P_as,		/* gnu assembler */
 	P_gas,		/* gnu assembler */
 	P_any_as,	/* generic union of all asm's */
@@ -150,6 +154,9 @@ typedef enum {
 
 	/* because -Y can also modify libraries, we include library places */
 	P_startup,
+#if defined(TARG_SL)
+	P_sl5_startup,
+#endif
 	P_include,
 	P_library,
 	P_alt_library,	/* alternate library path */
@@ -178,6 +185,7 @@ extern languages_t get_language (char key);
 extern phases_t get_phase (char key);
 
 typedef long long mask_t;
+extern mask_t OPEN64_PHASE_MASK; /* mask for all open64 phases */
 extern mask_t PHASE_MASK;	/* mask for all phases */
 extern mask_t LIB_MASK;		/* mask for all libraries */
 /* get mask associated with language and phase */
@@ -206,6 +214,8 @@ extern char *get_phase_name (phases_t index);
 extern char *get_full_phase_name (phases_t index);
 /* set phase name */
 extern void set_phase_name (phases_t index, char *s);
+/* Override a directory for a phase */
+extern void override_phase(int phase, char *phase_name, char *new_path, char *new_name);
 
 /* get language index associated with name */
 extern languages_t get_named_language (char *name);

@@ -53,7 +53,19 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
 TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
 endif
+ifeq ($(BUILD_TARGET), SL)
+TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
+endif
 ifeq ($(BUILD_TARGET), X8664)
+TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
 TARGDEFS +=-D__MIPS_AND_IA64_ELF_H
 endif
 
@@ -75,11 +87,14 @@ TARGETS = ir_b2a ir_size ir_sel ir_all
 COMMON_UTIL_DIR= $(BUILD_TOT)/common/util
 COMMON_COM_DIR= $(BUILD_TOT)/common/com
 COMMON_COM_TARG_DIR= $(BUILD_TOT)/common/com/$(BUILD_TARGET_DIR)
+BE_COM_DIR= $(BUILD_TOT)/be/com
+BE_OPT_DIR= $(BUILD_TOT)/be/opt
 
-LDIRT = ir_a2b ir_sel
+LDIRT = $(TARGETS)
 
 LCINCS = -I$(BUILD_BASE) -I$(COMMON_COM_DIR) -I$(COMMON_COM_TARG_DIR) \
-	-I$(COMMON_UTIL_DIR) $(XINC) -I$(BUILD_TOT)/include
+	-I$(COMMON_UTIL_DIR) -I$(BE_COM_DIR) -I$(BE_OPT_DIR) $(XINC)  \
+        -I$(BUILD_TOT)/include
 ifeq ($(BUILD_OS), LINUX)
 LCINCS += -I$(BUILD_AREA)/include/libelf
 endif
@@ -123,7 +138,16 @@ COMMON_COM_CXX_SRC =	\
 	wn_util.cxx	\
 	wutil.cxx	\
 	xstats.cxx	\
+	intrn_info.cxx
 
+BE_COM_SRCS =           \
+        wssa_defs.cxx   \
+        wssa_sym.cxx    \
+        wssa_mgr.cxx    \
+        wssa_wn.cxx     \
+        wssa_io.cxx     \
+        wssa_utils.cxx 
+ 
 
 COMMON_COM_TARG_CXX_SRCS =	\
 	config_targ.cxx	\
@@ -132,15 +156,20 @@ COMMON_COM_TARG_CXX_SRCS =	\
 
 CXXFILES =		\
 	$(COMMON_COM_CXX_SRC) \
-	$(COMMON_COM_TARG_CXX_SRCS)
+	$(COMMON_COM_TARG_CXX_SRCS) \
+        $(BE_COM_SRCS)
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 first:
-ifeq ($(BUILD_OS), LINUX)
-	$(call submake,$(BUILD_AREA)/include)
-endif
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(BUILD_AREA)/libcomutil)
+endif
 
 last: make_deps
 
@@ -153,7 +182,7 @@ install: default
 
 include $(COMMONRULES)
 
-VPATH = $(BUILD_BASE) $(COMMON_COM_DIR) $(COMMON_COM_TARG_DIR)
+VPATH = $(BUILD_BASE) $(COMMON_COM_DIR) $(COMMON_COM_TARG_DIR) $(BE_COM_DIR)
 
 ir_b2a: $(OBJECTS) ir_a2b.o
 	$(link.c++f) -o ir_b2a ir_a2b.o $(OBJECTS) $(LDFLAGS)

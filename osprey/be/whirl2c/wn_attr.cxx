@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: wn_attr.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/wn_attr.cxx,v $
+ * $Revision: 1.12 $
+ * $Date: 05/12/05 08:59:32-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.wn_attr.cxx $
  *
  * Revision history:
  *  07-Mar-95 - Original Version
@@ -59,7 +63,7 @@
  */
 
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/wn_attr.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.wn_attr.cxx $ $Revision: 1.12 $";
 #endif /* _KEEP_RCS_ID */
 
 
@@ -68,12 +72,12 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/wn_
 #include "intrn_info.h"
 #include "wutil.h"
 
-/* INTRN_c_name() is only implemented when defined(BUILD_WHIRL2C), while
- * we must use INTRN_specific_name() when defined(BUILD_WHIRL2F).  To 
+/* INTRN_c_name() is only implemented when !defined(BUILD_SKIP_WHIRL2C), while
+ * we must use INTRN_specific_name() when !defined(BUILD_SKIP_WHIRL2F).  To 
  * abstract away from this, we define the macro INTRN_high_level_name.
  * NOT TRUE anymore, but keep this cause I'm not sure which they really want.
  */
-#ifdef BUILD_WHIRL2C
+#if !defined(BUILD_SKIP_WHIRL2C)
 #define INTRN_high_level_name INTRN_c_name
 #else /*BUILD_WHIRL2F*/
 #define INTRN_high_level_name INTRN_specific_name
@@ -120,15 +124,16 @@ WN_Cvtl_Ty(const WN *wn)
    return Stab_Mtype_To_Ty(cvtl_mtype);
 } /* WN_Cvtl_Ty */
 
-TY_IDX Get_Field_Type (TY_IDX struct_type, UINT field_id)
+TY_IDX Get_Field_Type(TY_IDX base, int field_id) 
 {
-  FmtAssert(TY_kind (struct_type) == KIND_STRUCT, ("expecting KIND_STRUCT in Get_Field_Type"));
-  UINT cur_field_id = 0;
-  FLD_HANDLE fld = FLD_get_to_field (struct_type, field_id, cur_field_id);
-  FmtAssert(! fld.Is_Null(), ("Invalid field id %d for type 0x%x",
-			      field_id, struct_type));
-  return FLD_type (fld);
+
+  Is_True(TY_Is_Structured(base), ("CALLING GET_FIELD_TYPE with a non struct type"));
+
+  UINT cur_fld_id = 0;
+  FLD_HANDLE fh = FLD_get_to_field(base, field_id, cur_fld_id);
+  return FLD_type(fh);
 }
+
 
 /*------------------------ Exported functions -------------------------
  *---------------------------------------------------------------------*/
@@ -176,16 +181,16 @@ WN_intrinsic_name(INTRINSIC intr_opc)
 	   ("Intrinsic Opcode (%d) out of range", intr_opc)); 
    if (INTRN_high_level_name(intr_opc) != NULL)
       name = INTRN_high_level_name(intr_opc);
-#ifdef BUILD_WHIRL2F
+#if !defined(BUILD_SKIP_WHIRL2F)
    else
    {
       ASSERT_WARN(FALSE, 
 		  (DIAG_A_STRING,
 		   Concat2_Strings("Missing intrinsic name ", 
-				   get_intrinsic_name(intr_opc))));
-      name = get_intrinsic_name(intr_opc);
+				   INTRINSIC_name(intr_opc))));
+      name = INTRINSIC_name(intr_opc);
    }
-#else /*BUILD_WHIRL2C*/
+#else /* BUILD_SKIP_WHIRL2C*/
    else if (INTRN_rt_name(intr_opc) != NULL)
       name = INTRN_rt_name(intr_opc);
    else
@@ -247,6 +252,9 @@ WN_intrinsic_return_ty(OPCODE wn_opc, INTRINSIC intr_opc, const WN *call)
    case IRETURN_F8:
       ret_ty = Stab_Mtype_To_Ty(MTYPE_F8);
       break;
+   case IRETURN_F10:
+      ret_ty = Stab_Mtype_To_Ty(MTYPE_F10);
+      break;
    case IRETURN_FQ:
       ret_ty = Stab_Mtype_To_Ty(MTYPE_FQ);
       break;
@@ -255,6 +263,9 @@ WN_intrinsic_return_ty(OPCODE wn_opc, INTRINSIC intr_opc, const WN *call)
       break;
    case IRETURN_C8:
       ret_ty = Stab_Mtype_To_Ty(MTYPE_C8);
+      break;
+   case IRETURN_C10:
+      ret_ty = Stab_Mtype_To_Ty(MTYPE_C10);
       break;
    case IRETURN_CQ:
       ret_ty = Stab_Mtype_To_Ty(MTYPE_CQ);
@@ -282,22 +293,68 @@ WN_intrinsic_return_ty(OPCODE wn_opc, INTRINSIC intr_opc, const WN *call)
       ret_ty = Stab_Mtype_To_Ty(MTYPE_I4);
       break;
 #ifdef TARG_X8664
+   case IRETURN_V16C8:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V16C8);
+     break;
+   case IRETURN_V16I1:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V16I1);
+     break;
+   case IRETURN_V16I2:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V16I2);
+     break;     
+   case IRETURN_V16I4:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V16I4);
+     break;     
+   case IRETURN_V16I8:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V16I8);
+     break;
    case IRETURN_V16F8:
      ret_ty = Stab_Mtype_To_Ty(MTYPE_V16F8);
      break;
    case IRETURN_V16F4:
      ret_ty = Stab_Mtype_To_Ty(MTYPE_V16F4);
      break;     
+   case IRETURN_M8I1:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_M8I1);
+     break;
+   case IRETURN_M8I2:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_M8I2);
+     break;     
+   case IRETURN_M8I4:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_M8I4);
+     break;     
+   case IRETURN_V32C4:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32C4);
+     break;
+   case IRETURN_V32C8:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32C8);
+     break;
+   case IRETURN_V32I1:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32I1);
+     break;
+   case IRETURN_V32I2:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32I2);
+     break;
+   case IRETURN_V32I4:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32I4);
+     break;
+   case IRETURN_V32I8:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32I8);
+     break;
+   case IRETURN_V32F4:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32F4);
+     break;
+   case IRETURN_V32F8:
+     ret_ty = Stab_Mtype_To_Ty(MTYPE_V32F8);
+     break;
 #endif
 #endif
    case IRETURN_PPU2:
      ret_ty = Stab_Pointer_To(Stab_Pointer_To(Stab_Mtype_To_Ty(MTYPE_U2)));
      break;
-
    case IRETURN_PPI4:
      ret_ty = Stab_Pointer_To(Stab_Pointer_To(Stab_Mtype_To_Ty(MTYPE_I4)));
      break;
-
    default:
       Is_True(FALSE, 
 	      ("Unexpected INTRN_RETKIND in WN_intrinsic_return_ty()"));
@@ -368,7 +425,7 @@ WN_Get_PtrAdd_Intconst(WN    *wn0,
     * pointed to.
     */
    if (TY_size(pointed_ty) == 0 ||    /* incomplete type */
-       TY_kind(pointed_ty) == KIND_ARRAY || /* for arrays, we always need a cast to the pointer type  bug 212 Liao*/
+       TY_kind(pointed_ty) == KIND_ARRAY || /* for arrays, we always need a cast to the pointer type */
        (intconst != NULL && 
 	WN_opc_operator(intconst) == OPR_INTCONST &&
 	WN_const_val(intconst)%TY_size(pointed_ty) != 0LL))
@@ -395,8 +452,10 @@ WN_Tree_Type(const WN *wn)
    {
       switch (WN_opc_operator(wn))
       {
-      case OPR_ILOAD:
       case OPR_ILOADX:
+	ty = WN_ty(wn);
+	break;
+      case OPR_ILOAD:
 	ty = WN_ty(wn);
 	break;
       case OPR_LDID:
@@ -407,7 +466,7 @@ WN_Tree_Type(const WN *wn)
 	 break;
 
       case OPR_LDA:
-	 ty = WN_ty(wn);
+     ty = WN_ty(wn);
 	 //bug 606: LDAs may also have field ids (e.g., arrays in a struct, with array lowering disabled)
 	 if (WN_field_id(wn) > 0) {
 	   TY_IDX pointed = TY_pointed(ty);
@@ -419,8 +478,7 @@ WN_Tree_Type(const WN *wn)
 	       ty = Make_Pointer_Type(pointed);
 	   }
 	 }
-#ifdef COMPILE_UPC
- else if (TY_kind(TY_pointed(ty)) == KIND_ARRAY && WN_load_offset(wn) == 0) {
+     else if (TY_kind(TY_pointed(ty)) == KIND_ARRAY && WN_load_offset(wn) == 0) {
 	   //fix bug445.
 	   //When taking the address of an array, 
 	   //the LDAs generated by the front-end / backend does not distinguish between
@@ -430,9 +488,11 @@ WN_Tree_Type(const WN *wn)
 	   // Should we go for the inner array type here or for the element type?
 	   ty = Make_Pointer_Type(/*TY_etype*/ Get_Inner_Array_Type(TY_pointed(ty)));
 	 }
-#endif
-
 	 break;
+
+      case OPR_LDA_LABEL: 
+         ty = TY_pointed(WN_ty(wn));
+         break;
 
       case OPR_MLOAD:
 	 /* There is not much we can do about this case */
@@ -447,7 +507,6 @@ WN_Tree_Type(const WN *wn)
 				   WN_load_offset(wn), 
 				   WN_const_val(WN_kid1(wn)));
 	   }
-
 	 }
 	 else
 	 {
@@ -547,8 +606,7 @@ WN_Tree_Type(const WN *wn)
 		}
 	      }
 	    }
-
-#ifdef _BUILD_WHIRL2C
+#if !defined(BUILD_SKIP_WHIRL2C)
 	    /* Also check that the constant expression can be reduced */
 	    if (TY_Is_Pointer(ty) && 
 		WN_Get_PtrAdd_Intconst(WN_kid0(wn), 
@@ -557,7 +615,7 @@ WN_Tree_Type(const WN *wn)
 	    {
 	       ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
 	    }
-#endif /* _BUILD_WHIRL2C */
+#endif /* BUILD_WHIRL2C */
 	 }
 	 else
 	    ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
@@ -666,6 +724,7 @@ WN_Tree_Type(const WN *wn)
       case OPR_REDUCE_MAX:
       case OPR_REDUCE_MIN:
       case OPR_SHUFFLE:
+      case OPR_ATOMIC_RSQRT:
 	ty = Stab_Mtype_To_Ty(WN_opc_rtype(wn));
 	break;
 
@@ -681,7 +740,7 @@ WN_Tree_Type(const WN *wn)
 
       default:
 	 /* Only the above forms of expression nodes are handled here */
-	 ErrMsg ( EC_Invalid_Case, "WN_Tree_Type", __LINE__ );
+	 FmtAssert(FALSE, ("unexpected operator %s", OPERATOR_name(WN_operator(wn))));
       } /* switch */
    } /* else */
    
@@ -808,3 +867,14 @@ Restore_Skips(const W2CF_SKIP_ITEM *skip_info,
          WN_prev(next) = skipped->last;
    }
 } /* Restore_Skips */
+
+TY_IDX Get_Inner_Array_Type( TY_IDX idx)
+{
+  Is_True(TY_kind(idx) == KIND_ARRAY,("Get_Inner_Array_Type not an array?"));
+  TY_IDX eidx = TY_etype(idx);
+  while (TY_kind(eidx) == KIND_ARRAY)
+    eidx = TY_etype(eidx);
+
+  return eidx;
+}
+

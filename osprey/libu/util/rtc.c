@@ -82,7 +82,8 @@
 
 #include <stdio.h>
 #include <sys/time.h>
-#ifdef KEY /* from <sys/time.h> but ifdef'ed out; needed in order to compile */
+/* In Linux <sys/time.h> this is ifdef'ed out */
+#if defined(KEY) && ! defined(BUILD_OS_DARWIN)
 struct timezone
   {
     int tz_minuteswest;		/* Minutes west of GMT.  */

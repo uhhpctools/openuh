@@ -625,7 +625,10 @@ get_immediate_dominator (dom, bb)
 
 /* Set the immediate dominator of the block possibly removing
    existing edge.  NULL can be used to remove any edge.  */
-inline void
+#ifndef KEY
+inline /* GNU 4.2 does not support this type of C99 inline functions. */
+#endif
+void
 set_immediate_dominator (dom, bb, dominated_by)
      dominance_info dom;
      basic_block bb, dominated_by;

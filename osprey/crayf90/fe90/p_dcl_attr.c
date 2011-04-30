@@ -62,7 +62,11 @@ static char USMID[] = "\n@(#)5.0_pl/sources/p_dcl_attr.c	5.2	06/17/99 09:28:10\n
 /*****************************************************************\
 |* function prototypes of static functions declared in this file *|
 \*****************************************************************/
+#ifdef KEY /* Bug 14150 */
+static int parse_attrs(boolean (*func) (boolean, int, int, int));
+#else /* defined(BUILD_OS_DARWIN) */
 static void parse_attrs(boolean (*func) (boolean, int, int, int));
+#endif /* KEY Bug 14150 */
 
 
 /******************************************************************************\
@@ -83,7 +87,12 @@ static void parse_attrs(boolean (*func) (boolean, int, int, int));
 |*									      *|
 \******************************************************************************/
 
-static void parse_attrs(boolean (*merge_function) ())
+#ifdef KEY /* Bug 14150 */
+static int
+#else /* KEY Bug 14150 */
+static void
+#endif /* KEY Bug 14150 */
+parse_attrs(boolean (*merge_function) ())
 
 {
    int		array_idx;
@@ -96,6 +105,9 @@ static void parse_attrs(boolean (*merge_function) ())
    int		name_idx;
    int		new_sb_idx;
    int		sb_idx;
+#ifdef KEY /* Bug 14150 */
+   int		count = 0;
+#endif /* KEY Bug 14150 */
 
 
    TRACE (Func_Entry, "parse_attrs", NULL);
@@ -127,6 +139,30 @@ static void parse_attrs(boolean (*merge_function) ())
 
          if (attr_idx == NULL_IDX) {
             found_attr			= FALSE;
+#ifdef KEY /* Bug 14110 */
+	    /* Handle the case of "volatile x" when we haven't seen any other
+	     * declaration for "x" in the current scope, but there's an "x" in
+	     * the host scope. If we see no further declaration in the current
+	     * scope, then this will refer to the host-associated "x" instead
+	     * of creating a local one. */
+	    int junk_idx;
+            if (merge_function == merge_volatile &&
+	      srch_host_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token), &junk_idx,
+	        FALSE) &&
+	      (LA_CH_VALUE == COMMA || LA_CH_VALUE == EOS)) {
+	      surprise_volatile(memcpy(malloc(TOKEN_LEN(token) + sizeof '\0'),
+	        TOKEN_STR(token), TOKEN_LEN(token)));
+	      int save_la_ch_value = LA_CH_VALUE;
+	      NEXT_LA_CH;
+
+	      if (save_la_ch_value == COMMA) {
+		continue;
+	      }
+	      else if (save_la_ch_value == EOS) {
+	        break;
+	      }
+	    }
+#endif /* KEY Bug 14110 */
             attr_idx			= ntr_sym_tbl(&token, name_idx);
             LN_DEF_LOC(name_idx)	= TRUE;      /* Can't be host assoc */
 
@@ -199,6 +235,9 @@ static void parse_attrs(boolean (*merge_function) ())
 
          if (stmt_type != Dimension_Stmt) {
             (*merge_function) (found_attr, line, column, attr_idx);
+#ifdef KEY /* Bug 14150 */
+            count += 1;
+#endif /* KEY Bug 14150 */
          }
 
          AT_DCL_ERR(attr_idx) = AT_DCL_ERR(attr_idx) | blk_err;
@@ -213,6 +252,9 @@ static void parse_attrs(boolean (*merge_function) ())
       }
       else if (LA_CH_VALUE == SLASH &&
                (stmt_type == Save_Stmt ||
+#ifdef KEY /* Bug 14150 */
+                stmt_type == Bind_Stmt ||
+#endif /* KEY Bug 14150 */
                 stmt_type == Volatile_Stmt)) {
 
          NEXT_LA_CH;		/* Pick up slash */
@@ -262,6 +304,26 @@ static void parse_attrs(boolean (*merge_function) ())
 
                SB_SAVED(sb_idx)		= TRUE;
             }
+#ifdef KEY /* Bug 14150 */
+            else if (stmt_type == Bind_Stmt) {
+	       set_binding_label(SB_Tbl_Idx, sb_idx, &new_binding_label);
+	       count += 1;
+	       /* Make sure no common object in this block has been
+	        * equivalenced */
+	       for (int cobj_idx = SB_FIRST_ATTR_IDX(sb_idx);
+		 cobj_idx != NULL_IDX;
+		 cobj_idx = ATD_NEXT_MEMBER_IDX(cobj_idx)) {
+		 if (ATD_EQUIV(cobj_idx)) {
+		   /* Seems most useful to refer to line containing "common"
+		    * even if a declaration for the common object appeared
+		    * earlier than that */
+		   PRINTMSG(TOKEN_LINE(token), 550, Error, TOKEN_COLUMN(token),
+		     AT_OBJ_NAME_PTR(cobj_idx), "BIND", "EQUIVALENCE",
+		     SB_DEF_LINE(sb_idx));
+		 }
+	       }
+	    }
+#endif /* KEY Bug 14150 */
             else {  /* Volatile_Stmt */
                SB_VOLATILE(sb_idx)	= TRUE;
             }
@@ -306,7 +368,11 @@ static void parse_attrs(boolean (*merge_function) ())
 
    TRACE (Func_Exit, "parse_attrs", NULL);
 
+#ifdef KEY /* Bug 14150 */
+   return count;
+#else /* KEY Bug 14150 */
    return;
+#endif /* KEY Bug 14150 */
 
 
 }  /* parse_attrs */
@@ -1101,7 +1167,11 @@ void parse_volatile_stmt (void)
 {
    TRACE (Func_Entry, "parse_volatile_stmt", NULL);
 
+#ifdef KEY /* Bug 14110 */
+   PRINTMSG(stmt_start_line, 1685, Ansi, stmt_start_col, "VOLATILE");
+#else /* KEY Bug 14110 */
    PRINTMSG(stmt_start_line, 1253, Ansi, stmt_start_col, "VOLATILE");
+#endif /* KEY Bug 14110 */
    
    parse_attrs(merge_volatile);
 
@@ -1110,4 +1180,41 @@ void parse_volatile_stmt (void)
    return;
 
 }  /* parse_volatile_stmt */
+#ifdef KEY /* Bug 14150 */
+/*
+ *	BNF is
+ *		language-binding-spec [ :: ] bind-entity-list
+ *	where bind-entity-list contains
+ *		entity-name
+ *      or
+ *		/ common-block-name /
+ */
+void parse_bind_stmt (void) {
+   TRACE (Func_Entry, "parse_bind_stmt", NULL);
+   parse_language_binding_spec(&new_binding_label);
 
+   if (1 < parse_attrs(merge_bind) && BIND_SPECIFIES_NAME(new_binding_label)) {
+     PRINTMSG(stmt_start_line, 1689, Error, stmt_start_col);
+   }
+
+   TRACE (Func_Exit, "parse_bind_stmt", NULL);
+
+   return;
+
+}  /* parse_bind_stmt */
+
+void parse_value_stmt (void)
+
+{
+   TRACE (Func_Entry, "parse_value_stmt", NULL);
+
+   PRINTMSG(stmt_start_line, 1685, Ansi, stmt_start_col, "VALUE");
+   
+   parse_attrs(merge_value);
+
+   TRACE (Func_Exit, "parse_value_stmt", NULL);
+
+   return;
+
+}  /* parse_value_stmt */
+#endif /* KEY Bug 14150 */

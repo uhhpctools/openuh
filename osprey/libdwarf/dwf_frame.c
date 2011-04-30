@@ -33,7 +33,7 @@ Dwarf_Bool generate_m64_dwarf;
 
 Dwarf_Unsigned
 dwf_add_frame_cie(Dwarf_P_Debug dbg,
-		  char *augmenter,
+		  const char *augmenter,
 		  Dwarf_Small code_align,
 		  Dwarf_Small data_align,
 		  Dwarf_Small return_reg,
@@ -62,7 +62,7 @@ dwf_add_frame_cie(Dwarf_P_Debug dbg,
 
 Dwarf_Unsigned
 dwf_add_ehframe_cie(Dwarf_P_Debug dbg,
-		    char *augmenter,
+		    const char *augmenter,
 		    Dwarf_Small code_align,
 		    Dwarf_Small data_align,
 		    Dwarf_Small return_reg,

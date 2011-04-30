@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+/*
  * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -41,7 +44,7 @@ extern void Mark_Scopes_And_Labels (gs_t);
 extern void Push_Temp_Cleanup (gs_t, bool);
 #endif
 extern void Do_Temp_Cleanups (gs_t);
-extern void Do_Handlers (void);
+extern void Do_Handlers (INT =0);
 extern void Call_Throw();
 #ifdef KEY
 extern void Push_Temp_Cleanup (gs_t, bool, bool=0);
@@ -59,6 +62,11 @@ extern bool in_cleanup;
 extern void WGEN_Expand_Pragma (gs_t);
 extern void Register_Cleanup (gs_t);
 extern void Unregister_Cleanup (void);
+extern ST_IDX Get_exception_pointer_symbol (void);
+extern ST_IDX Get_exception_filter_symbol (void);
+#ifdef FE_GNU_4_2_0
+extern void WGEN_maybe_do_eh_cleanups (void);
+#endif
 #endif // KEY
 extern INT Current_Handler_Count();
 extern void Add_Handler_Info (WN * call_wn, INT i, INT num_handlers);
@@ -68,6 +76,8 @@ extern
 "C"
 #endif
 void WGEN_Expand_Stmt (gs_t stmt, WN* target_wn = NULL);
+
+extern void WGEN_Expand_Label (gs_t label);
 
 #ifdef KEY
 extern LABEL_IDX WGEN_unusable_label_idx;

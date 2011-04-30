@@ -188,7 +188,10 @@ char		*blk_struct_str[]	= {
 	"Open_Mp_Parallel_Workshare_Blk", /* Open_Mp_Parallel_Workshare_Blk */
 	"Contains_Blk",	 		/* Contains_Blk	   		*/
 	"Interface_Blk",		/* Interface_Blk		*/
-	"Derived_Type_Blk"		/* Derived_Type_Blk		*/
+	"Derived_Type_Blk",		/* Derived_Type_Blk		*/
+#ifdef KEY /* Bug 10572 */
+	"Enum_Blk"			/* Enum_Blk			*/
+#endif /* KEY Bug 10572 */
 	};
 
 char		*boolean_str[]		= {
@@ -201,6 +204,9 @@ char		*context_str[]		= {
 		"Sub_Func_Stmt_Cat",
 		"Dir_Integer_Stmt_Cat",
 		"Use_Stmt_Cat",
+#ifdef KEY /* Bug 11741 */
+		"Import_Stmt_Cat",
+#endif /* KEY Bug 11741 */
 		"Implicit_None_Stmt_Cat",
 		"Implicit_Stmt_Cat",
 		"Declaration_Stmt_Cat",
@@ -366,6 +372,12 @@ char		*intrin_str[]		= {
 				"Cvmgp_Intrinsic",
 				"Cvmgt_Intrinsic",
 				"Cvmgz_Intrinsic",
+#ifdef KEY /* Bug 14150 */
+				"C_F_Pointer_Intrinsic",
+				"C_F_Procpointer_Intrinsic",
+				"C_Funloc_Intrinsic",
+				"C_Loc_Iso_Intrinsic",
+#endif /* KEY Bug 14150 */
 				"C_Loc_Intrinsic",
 				"Dabs_Intrinsic",
 				"Dacos_Intrinsic",
@@ -506,6 +518,9 @@ char		*intrin_str[]		= {
 				"Ifix_Intrinsic",
 				"Iiabs_Intrinsic",
 				"Iiand_Intrinsic",
+#ifdef KEY /* Enum value itself predates KEY, but this string was missing */
+				"Iibchng_Intrinsic",
+#endif
 				"Iibclr_Intrinsic",
 				"Iibits_Intrinsic",
 				"Iibset_Intrinsic",
@@ -549,6 +564,9 @@ char		*intrin_str[]		= {
 				"Jdate_Intrinsic",
 				"Jiabs_Intrinsic",
 				"Jiand_Intrinsic",
+#ifdef KEY /* Enum value itself predates KEY, but this string was missing */
+				"Jibchng_Intrinsic",
+#endif
 				"Jibclr_Intrinsic",
 				"Jibits_Intrinsic",
 				"Jibset_Intrinsic",
@@ -571,6 +589,9 @@ char		*intrin_str[]		= {
 				"Jnot_Intrinsic",
 				"Kiabs_Intrinsic",
 				"Kiand_Intrinsic",
+#ifdef KEY /* Enum value itself predates KEY, but this string was missing */
+				"Kibchng_Intrinsic",
+#endif
 				"Kibclr_Intrinsic",
 				"Kibits_Intrinsic",
 				"Kibset_Intrinsic",
@@ -600,7 +621,9 @@ char		*intrin_str[]		= {
 				"Len_Intrinsic",
 				"Length_Intrinsic",
 				"Len_Trim_Intrinsic",
+#ifndef KEY	/* Remove duplicate string entry */
 				"Length_Intrinsic",
+#endif
 				"Lge_Intrinsic",
 				"Lgt_Intrinsic",
 				"Lle_Intrinsic",
@@ -813,6 +836,7 @@ char		*intrin_str[]		= {
 #endif /* KEY Bug 1683 */
 #ifdef KEY /* Bug 5089 */
 				"True_Intrinsic",
+				"Support_Uflow_Intrinsic",
 #endif /* KEY Bug 5089 */
 #ifdef KEY /* F2003 */
 				"Newline_Intrinsic"
@@ -1448,6 +1472,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Assignment",	/* Tok_Kwd_Assignment	*/
 			"Tok_Kwd_Automatic",	/* Tok_Kwd_Automatic	*/
 			"Tok_Kwd_Backspace",	/* Tok_Kwd_Backspace	*/
+#ifdef KEY /* Bug 10572 */
+			"Tok_Kwd_Bind",		/* Tok_Kwd_Bind    	*/
+#endif /* KEY Bug 10572 */
 			"Tok_Kwd_Block",	/* Tok_Kwd_Block	*/
 			"Tok_Kwd_Buffer",	/* Tok_Kwd_Buffer	*/
 			"Tok_Kwd_Byte",		/* Tok_Kwd_Byte		*/
@@ -1473,6 +1500,10 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Encode",	/* Tok_Kwd_Encode	*/
 			"Tok_Kwd_End",		/* Tok_Kwd_End		*/
 			"Tok_Kwd_Entry",	/* Tok_Kwd_Entry	*/
+#ifdef KEY /* Bug 10572 */
+			"Tok_Kwd_Enum",		/* Tok_Kwd_Enum    	*/
+			"Tok_Kwd_Enumerator",	/* Tok_Kwd_Enumerator  	*/
+#endif /* KEY Bug 10572 */
 			"Tok_Kwd_Equivalence",	/* Tok_Kwd_Equivalence	*/
 			"Tok_Kwd_Exit",		/* Tok_Kwd_Exit		*/
 			"Tok_Kwd_External",	/* Tok_Kwd_External	*/
@@ -1483,6 +1514,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Go",		/* Tok_Kwd_Go		*/
 			"Tok_Kwd_If",		/* Tok_Kwd_If		*/
 			"Tok_Kwd_Implicit",	/* Tok_Kwd_Implicit	*/
+#ifdef KEY /* Bug 11741 */
+			"Tok_Kwd_Import",	/* Tok_Kwd_Import	*/
+#endif /* KEY Bug 11741 */
 			"Tok_Kwd_In",		/* Tok_Kwd_In		*/
 			"Tok_Kwd_Inquire",	/* Tok_Kwd_Inquire	*/
 			"Tok_Kwd_Integer",	/* Tok_Kwd_Integer	*/
@@ -1493,6 +1527,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Len",		/* Tok_Kwd_Len		*/
 			"Tok_Kwd_Logical",	/* Tok_Kwd_Logical	*/
 			"Tok_Kwd_Module",	/* Tok_Kwd_Module	*/
+#ifdef KEY /* Bug 10572 */
+			"Tok_Kwd_Name",		/* Tok_Kwd_Name    	*/
+#endif /* KEY Bug 10572 */
 			"Tok_Kwd_Namelist",	/* Tok_Kwd_Namelist	*/
 			"Tok_Kwd_None",		/* Tok_Kwd_None		*/
 #ifdef KEY /* Bug 5089 */
@@ -1535,6 +1572,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Type",		/* Tok_Kwd_Type		*/
 			"Tok_Kwd_Use",		/* Tok_Kwd_Use		*/
 			"Tok_Kwd_Undefined",	/* Tok_Kwd_Undefined	*/
+#ifdef KEY /* Bug 14150 */
+			"Tok_Kwd_Value",	/* Tok_Kwd_Value	*/
+#endif /* KEY Bug 14150 */
 			"Tok_Kwd_Volatile",	/* Tok_Kwd_Volatile	*/
 			"Tok_Kwd_Where",	/* Tok_Kwd_Where	*/
 			"Tok_Kwd_While",	/* Tok_Kwd_While	*/

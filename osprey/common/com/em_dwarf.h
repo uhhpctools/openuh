@@ -75,11 +75,11 @@ extern INT Em_Dwarf_Prepare_Output (void);
 
 extern void Em_Dwarf_Add_Line_Entry ( INT code_address, SRCPOS srcpos);
 
-extern void Em_Dwarf_Add_Include (UINT16 incl_idx, char *name);
+extern void Em_Dwarf_Add_Include (UINT16 incl_idx, const char *name);
 
 extern void Em_Dwarf_Add_File (
     UINT16 file_idx,
-    char *name,
+    const char *name,
     UINT16 incl_idx,
     Dwarf_Unsigned modification_time,
     Dwarf_Unsigned file_size);

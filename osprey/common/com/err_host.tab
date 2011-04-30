@@ -37,9 +37,9 @@
  *
  * Module: err_host.tab
  * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/com/err_host.tab,v $
+ * $Date: 2005/06/23 02:15:40 $
+ * $Author: sxyang $
+ * $Source: /u/cvs/Pathscale.MIPS/common/com/err_host.tab,v $
  *
  * Revision history:
  *  18-Feb-94 - Original Version, extracted from err_host.h.
@@ -54,7 +54,7 @@
  * ====================================================================
  */
 #ifdef _KEEP_RCS_ID
-static char *err_host_tab_rcs_id = "$Source$ $Revision$";
+static char *err_host_tab_rcs_id = "$Source: /u/cvs/Pathscale.MIPS/common/com/err_host.tab,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 /* Include the typedef for our various tables */

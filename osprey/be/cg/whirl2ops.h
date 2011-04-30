@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -77,6 +81,7 @@ extern TN *Get_Complement_TN(TN *tn);
  * been allocated for the PREG, this routine does that.
  */
 extern TN * PREG_To_TN (ST *preg_st, PREG_NUM preg_num);
+extern TN * PREG_To_TN (TY_IDX preg_ty, PREG_NUM preg_num);
 
 extern void PREG_To_TN_Clear (void);
 
@@ -106,7 +111,9 @@ inline WN *Get_WN_From_Memory_OP( const OP *op )
 }
 
 extern OP_MAP OP_Asm_Map;
+#if defined(TARG_IA64)
 extern OP_MAP OP_Ld_GOT_2_Sym_Map;
+#endif
 
 /* Information about the predicate under which conditional memory OPs
  * are executed.  Note that this is not currently maintained to adjust
@@ -140,7 +147,7 @@ extern void TN_CORRESPOND_Free(void);
 
 extern BB * Add_Label(LABEL_IDX);
 
-#ifdef CG_PATHSCALE_MERGE
+#if defined(KEY) || defined(TARG_PPC32)
 extern OPS New_OPs;
 extern OP *Last_Processed_OP;
 extern SRCPOS current_srcpos;
@@ -149,8 +156,21 @@ extern BB *Cur_BB;
 extern void Process_New_OPs(void);
 extern BB_MAP outer_label_map;
 #endif
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_SL)
 extern BOOL W2OPS_Pragma_Preamble_End_Seen (void);
 #endif
+#ifdef TARG_LOONGSON
+/* wrapper for calling the static functions */
+extern void Begin_New_Basic_Block(void);
+extern void Start_New_Label(LABEL_IDX lb_idx, LABEL *lb, const char *str);
+#endif
 
+/* For new call inserted during whirl to ops, 
+ * we need to finish current BB and start new bb
+ * The original ops will be append to original BB,
+ * then it will be re-initialized to contain new OPs for new BB.
+ * for example: __tls_get_addr 
+ */
+void Expand_New_Call_To_OPs(WN*, OPERATOR, OPS*);
+BB*  Start_New_Basic_Block();
 #endif /* whirl2ops_INCLUDED */

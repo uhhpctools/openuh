@@ -74,7 +74,7 @@
 
 /////////////////////////////////////
 static void 
-dump_control_dependencies(char * title, HB* hb, BB_MAP control_dependences,
+dump_control_dependencies(const char * title, HB* hb, BB_MAP control_dependences,
 			  BB_MAP true_edges)
 {
   BB * bb;
@@ -532,7 +532,7 @@ Merge_Blocks(HB*                  hb,
 
 // want to AND together controlling predicate to existing qualifying predicate
 // such that op is executed iff ptn1 and ptn2 are both true.
-void
+static void
 AND_Predicate_To_OP (OP *op, TN *ptn1, TN *ptn2, 
 	BB *bb_insert_point, OP *op_insert_point, BB_SET *hb_blocks)
 {
@@ -580,16 +580,6 @@ AND_Predicate_To_OP (OP *op, TN *ptn1, TN *ptn2,
 	// defines new ptn1, and then use ptn1 on op.
 	// Can get into use before def problems if ptn1 and ptn2 are
 	// defined in separate bb's, so check for that.
-#if 0
-	DEF_KIND kind;
-	compare_op = TN_Reaching_Value_At_Op(ptn1, op, &kind, TRUE);
-	if (compare_op == NULL 
-		|| kind != VAL_KNOWN 
-		|| OP_cond_def(compare_op)) 
-	{
-		compare_op = NULL;
-	}
-#else
 	// TN_Reaching_Value_At_Op doesn't work,
 	// because hbf has unlinked some of the previous bbs
 	// in the hb.  So instead do brute search in hb
@@ -618,7 +608,6 @@ AND_Predicate_To_OP (OP *op, TN *ptn1, TN *ptn2,
 		}
 	    }
 	}
-#endif
 	FmtAssert(def_ptn1_op != NULL, ("and_pred no def; try recompiling with -CG:hb_exclude_pgtns=on"));
 	FmtAssert(def_ptn2_op != NULL, ("and_pred2 no def; try recompiling with -CG:hb_exclude_pgtns=on"));
 	FmtAssert(OP_has_predicate(def_ptn1_op), ("and_pred no qp; try recompiling with -CG:hb_exclude_pgtns=on")); 
@@ -1665,7 +1654,6 @@ Remove_Branches(HB*                  hb,
        } else {
 	 Merge_Blocks(hb,prev_bb,bb,freq_map,last_block,candidate_regions);
 #ifndef TARG_IA64
-//#ifdef KEY
 	 if (merge_failed) {
 	   printf("MERGE FAILED\n\n\n");
 	   Unlink_Pred_Succ(prev_bb, bb);
@@ -1887,7 +1875,7 @@ Insert_Predicates(HB* hb, BB_MAP control_dependences, BB_MAP true_edges,
     if (!ec) {
       ec = TYPE_MEM_POOL_ALLOC(equiv_classes, &MEM_local_pool);
       ec->control_dependences = cds;
-#ifndef TARG_IA64 // #ifdef key
+#ifndef TARG_IA64 
       if (BB_SET_Size(cds) > 1) {
 	// we do not deal with multiple dependencies
 	multiple_dependencies = TRUE;
@@ -1968,7 +1956,6 @@ Insert_Predicates(HB* hb, BB_MAP control_dependences, BB_MAP true_edges,
       bb_cd = BB_SET_Choose(cds);
       bb_cdep_data = (control_dep_data*) BB_MAP_Get(control_dep_info, bb_cd);
 #ifndef TARG_IA64
-//#ifdef KEY
       // More than one equivalence class may have the same bb_cd
       // So, choose already existing pred_tn instead of creating new ones.
       if (!bb_cdep_data->true_tn && !bb_cdep_data->false_tn)
@@ -2188,17 +2175,16 @@ HB_If_Convert(HB* hb, std::list<HB_CAND_TREE*>& candidate_regions)
   Order_And_Classify_Blocks(hb,block_order,block_class);
   Calculate_Control_Dependences(hb, control_dependences, true_edges);
 #ifndef TARG_IA64
-    multiple_dependencies = FALSE;    
-#endif
+  multiple_dependencies = FALSE;    
   Insert_Predicates(hb, control_dependences, true_edges, predicate_tns);
-#ifndef TARG_IA64
   if (!multiple_dependencies)
-#endif
-  Remove_Branches(hb, predicate_tns, block_order, block_class, candidate_regions);
-#ifndef TARG_IA64
+    Remove_Branches(hb, predicate_tns, block_order, block_class, candidate_regions);
   else
     // If hb_formation did not succeed then,no need of hb_sched phase.
     IGLS_Enable_HB_Scheduling = 0;
+#else
+  Insert_Predicates(hb, control_dependences, true_edges, predicate_tns);
+  Remove_Branches(hb, predicate_tns, block_order, block_class, candidate_regions);
 #endif
 
   BB_MAP_Delete(true_edges);
@@ -2361,19 +2347,20 @@ Force_If_Convert(LOOP_DESCR *loop, BOOL allow_multi_bb)
     Calculate_Control_Dependences(hb, control_dependences, true_edges);
 #ifndef TARG_IA64
     multiple_dependencies = FALSE;
-#endif
     Insert_Predicates(hb, control_dependences, true_edges, predicate_tns);
-#ifndef TARG_IA64
     if (!multiple_dependencies)
-#endif
-    fall_thru_block = Remove_Branches(hb, predicate_tns, block_order, block_class, candidate_regions);
-#ifndef TARG_IA64 
+      fall_thru_block = Remove_Branches(
+	  hb, predicate_tns, block_order, block_class, candidate_regions);
     else {
       // If hb_formation did not succeed then,no need of hb_sched phase.
       IGLS_Enable_HB_Scheduling = 0;
       one_bb = FALSE;
     }
+#else
+    Insert_Predicates(hb, control_dependences, true_edges, predicate_tns);
+    fall_thru_block = Remove_Branches(hb, predicate_tns, block_order, block_class, candidate_regions);
 #endif
+
     BB_MAP_Delete(true_edges);
     BB_MAP_Delete(control_dependences);
     BB_MAP_Delete(predicate_tns);

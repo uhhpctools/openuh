@@ -71,11 +71,16 @@ CFILES	=	cifbinread.c \
 
 SRC_DIRS = $(BUILD_BASE)
 
-default: first $(TARGETS) last
+default:
+	$(MAKE)  first
+	$(MAKE)  $(TARGETS)
+	$(MAKE)  last
 
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
+ endif
 endif
 
 last: make_deps

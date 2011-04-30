@@ -1,26 +1,33 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
+
+/*
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_util.h
@@ -44,14 +51,14 @@
       fprintf(stderr, ParmList), \
       fprintf(stderr, "\n"), \
       fflush(stderr), \
-      abort(), 0))
+      abort(), (void) 0))
 
 #define DevWarning(Cond, ParmList)\
     ( Cond ? (void) 1 : \
     ( fprintf(stderr, "DevWaring: at %s: %d", __FILE__, __LINE__), \
       fprintf(stderr, ParmList), \
       fprintf(stderr, "\n"), \
-      fflush(stderr), 0)) 
+      fflush(stderr), (void) 0)) 
 
 #define DebugLog(ParmList) \
 	fprintf(stderr, "Debug Log at %s:%d", __FILE__, __LINE__); \
@@ -66,11 +73,11 @@
 	
 #define Is_Valid(Cond, ParmList)\
     ( Cond ? (void) 1 : \
-    ( fprintf(stderr, "Invalid setting :"), \
+    ( fprintf(stderr, "Invalid setting : "), \
       fprintf(stderr, ParmList), \
       fprintf(stderr, "\n"), \
       fflush(stderr), \
-      abort(), 0))
+      abort(), (void) 0))
 
 void
 Not_Valid (char * error_message) __attribute__ ((__noreturn__));
@@ -79,14 +86,14 @@ void
 Warning (char * warning_message);
 
 /* Waiting while condition is true */
-#define MAX_COUNT 50000
+//#define MAX_COUNT 50000
+#define MAX_COUNT 1000000000
 #define OMPC_WAIT_WHILE(condition) \
       { \
           if (condition) { \
               int count = 0; \
               while (condition) { \
                    if (count > MAX_COUNT) { \
-	                sleep(0); \
 	                count = 0; \
                    } \
 		   count++; \
@@ -109,6 +116,24 @@ Get_System_Stack_Limit(void);
 
 int
 Get_SMP_CPU_num(void);
+
+int
+Get_CPU_Cores(void);
+
+int 
+Get_Affinity_Map(int**, int);
+
+void
+Get_Ordered_Corelist(int *, int);
+
+void *
+aligned_malloc(size_t, size_t);
+
+void
+aligned_free(void*);
+
+void *
+aligned_realloc(void *, size_t, size_t, size_t);
 
 void __ompc_do_nothing(void);
 #endif

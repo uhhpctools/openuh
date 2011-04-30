@@ -288,7 +288,11 @@ extern void Lower_Distr_Pragmas (WN* func_nd) {
   // Walk the tree, finding exits, and actual redistributes
   // also collect altentries, if any
   while (wn) {
-    if (WN_operator(wn) == OPR_RETURN) {
+    if (WN_operator(wn) == OPR_RETURN
+#ifdef KEY
+  	|| WN_operator(wn) == OPR_GOTO_OUTER_BLOCK
+#endif
+       ) {
       exit_stack->Push(wn);
       wn = LWN_Get_Next_Stmt_Node (wn);
     } else if ((WN_operator(wn) == OPR_PRAGMA) &&
@@ -1045,7 +1049,11 @@ static void Insert_Exit_Code (STACK_OF_WN* exit_stack) {
     // Processing return nodes in the stack
     for (INT i=0; i < exit_stack->Elements(); i++) {
       pwn = exit_stack->Bottom_nth(i);
-      FmtAssert (WN_operator(pwn) == OPR_RETURN,
+      FmtAssert (WN_operator(pwn) == OPR_RETURN
+#ifdef KEY
+  		 || WN_operator(pwn) == OPR_GOTO_OUTER_BLOCK
+#endif
+      		 ,
                  ("Insert_Exit_Code found non-return node (got opcode=%d)\n",
                   WN_opcode(pwn)));
       
@@ -1387,19 +1395,6 @@ extern WN* Get_Array_Dimension_Size (TY_IDX array_ty, INT i) {
     ret_wn = LWN_Make_Icon (MTYPE_I8, (TY_AR_ubnd_val(array_ty,i) -
                                     TY_AR_lbnd_val(array_ty,i) + 1));
     
-#if 0
-    if (TY_AR_stride_val(array_ty, i) == elem_size) {
-      ret_wn = LWN_Make_Icon (MTYPE_I8,(TY_AR_ubnd_val(array_ty,i) -
-                                    TY_AR_lbnd_val(array_ty,i) + 1));
-    }
-    else {
-      ret_wn = LWN_Make_Icon(MTYPE_I8, ((TY_AR_ubnd_val(array_ty,i) -
-                                     TY_AR_lbnd_val(array_ty,i) + 1)/
-                                     (TY_AR_stride_val(array_ty,i)/
-                                         elem_size)));
-      DevWarn ("Stride on distributed array is not 1");
-    }
-#endif
   }
   else {
     // something is non-const, so generate an expression
@@ -2498,7 +2493,7 @@ static void Reshape_ST_Entry (DISTR_INFO* dinfo) {
 }
 
 
-static ST* Declare_Func_Zero_Arg (char* ty_name, char* st_name,
+static ST* Declare_Func_Zero_Arg (const char* ty_name, const char* st_name,
                                   TY_IDX ret_ty) {
   ST* func_st;
   TY_IDX func_ty;
@@ -2548,7 +2543,7 @@ static ST* Declare_Func_Zero_Arg (char* ty_name, char* st_name,
   return func_st;
 }
 
-static ST* Declare_Func_One_Arg (char* ty_name, char* st_name,
+static ST* Declare_Func_One_Arg (const char* ty_name, const char* st_name,
                                   TY_IDX ret_ty, TY_IDX arg1_ty) {
   ST* func_st;
   TY_IDX func_ty;
@@ -2606,7 +2601,7 @@ static ST* Declare_Func_One_Arg (char* ty_name, char* st_name,
   return func_st;
 }
 
-static ST* Declare_Func_Two_Arg (char* ty_name, char* st_name,
+static ST* Declare_Func_Two_Arg (const char* ty_name, const char* st_name,
                               TY_IDX ret_ty, TY_IDX arg1_ty, TY_IDX arg2_ty) {
                                  
   ST* func_st;
@@ -2668,7 +2663,7 @@ static ST* Declare_Func_Two_Arg (char* ty_name, char* st_name,
   return func_st;
 }
 
-static ST* Declare_Func_Three_Arg (char* ty_name, char* st_name,
+static ST* Declare_Func_Three_Arg (const char* ty_name, const char* st_name,
                                    TY_IDX ret_ty,
                                 TY_IDX arg1_ty, TY_IDX arg2_ty, TY_IDX arg3_ty) {
   ST* func_st;
@@ -2735,7 +2730,7 @@ static ST* Declare_Func_Three_Arg (char* ty_name, char* st_name,
   return func_st;
 }
 
-static ST* Declare_Func_N_Arg (char* ty_name, char* st_name, 
+static ST* Declare_Func_N_Arg (const char* ty_name, const char* st_name, 
                                TY_IDX ret_ty, INT nargs, TY_IDX ty_array[])
 
 {
@@ -3345,19 +3340,4 @@ void Generate_Runtime_Stuff () {
                           Be_Type_Tbl(MTYPE_V),
                           voidpty);
 
-#if 0
-  // These are now defined in be/be/dra_ec.cxx
-  //
-  distr_st_entries[ECHT_Check] = 
-    Declare_Func_One_Arg (".__dsm_echt_check", "__dsm_echt_check",
-                          voidpty,
-                          voidpty);
-
-  arg_ty[0] = arg_ty[1] = voidpty;
-  distr_st_entries[ECHT_Compare] = 
-    Declare_Func_N_Arg (".__dsm_echt_compare", "__dsm_echt_compare",
-                        Be_Type_Tbl(MTYPE_V),
-                        4,
-                        arg_ty);
-#endif
 }

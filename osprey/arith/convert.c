@@ -1288,61 +1288,6 @@ ar_i64to128 (AR_IEEE_128 *q, const AR_IEEE_64 *d) {
 }
 
 #ifdef __mips
-#if 0 
-/* Conversions to/from MIPS quad to IEEE quad */
- 
-int
-ar_m128toi128(AR_IEEE_128 *out, long double *in)
-{
-	int res;
-
-	AR_IEEE_128 lo, hi;
-
-	/* A MIPS quad is 2 doubles, so to convert to an IEEE
-	 * quad, just add them.
-	 */
-
-	res  = ar_i64to128(&hi, &((AR_IEEE_64 *) in)[0]);
-	res |= ar_i64to128(&lo, &((AR_IEEE_64 *) in)[1]);
-	res |= ar_ifadd128(out, &lo, &hi, AR_ROUND_NEAREST);
-
-	return (res);
-}
- 
-int
-ar_i128tom128(long double *out, AR_IEEE_128 *in)
-{
-	int res;
-
-	AR_IEEE_64  lo64,   hi64;
-	AR_IEEE_128 low128, hi128;
-	long double lo1,    hi1;
-
-	/* Convert by setting hi part of out to 
-	 * (double) in, low part of out to the rest.
-	 */
-	res = ar_i128to64(&hi64, in, AR_ROUND_NEAREST);
-	res |= ar_i64to128(&hi128, &hi64);
-	res |= ar_ifsub128(&low128, in, &hi128, AR_ROUND_NEAREST);
-	res |= ar_i128to64(&lo64, &low128, AR_ROUND_NEAREST);
-
-	lo1 = *((double *) &lo64);
-	hi1 = *((double *) &hi64);
-	*out = lo1 + hi1;
-	return (res);
-}
- 
-/* Fortran interfaces for above 2 routines */
-void ar_m128toi128_(AR_IEEE_128 *out, long double *in)
-{
-   (void) ar_m128toi128(out,in);
-}
-
-void ar_i128tom128_(AR_IEEE_128 *out, long double *in)
-{
-   (void) ar_i128tom128(out,in);
-}
-#endif
 
 #endif /* __mips */
 

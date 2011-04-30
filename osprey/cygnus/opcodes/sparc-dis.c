@@ -976,22 +976,4 @@ build_hash_table (opcode_table, hash_table, num_opcodes)
       ++hash_count[hash];
     }
 
-#if 0 /* for debugging */
-  {
-    int min_count = num_opcodes, max_count = 0;
-    int total;
-
-    for (i = 0; i < HASH_SIZE; ++i)
-      {
-        if (hash_count[i] < min_count)
-	  min_count = hash_count[i];
-	if (hash_count[i] > max_count)
-	  max_count = hash_count[i];
-	total += hash_count[i];
-      }
-
-    printf ("Opcode hash table stats: min %d, max %d, ave %f\n",
-	    min_count, max_count, (double) total / HASH_SIZE);
-  }
-#endif
 }

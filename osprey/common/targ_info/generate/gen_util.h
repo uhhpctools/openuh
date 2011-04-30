@@ -66,6 +66,12 @@
 
 #include "gen_util_gen.h"
 
+#ifdef __MINGW32__
+#define LL_FORMAT "I64"
+#else
+#define LL_FORMAT "ll"
+#endif /* __MINGW32__ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

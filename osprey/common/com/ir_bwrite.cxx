@@ -44,13 +44,23 @@
 #pragma hdrstop
 #include <unistd.h>		    /* for unlink() */
 #include <fcntl.h>		    /* for open() */
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#else
 #include <sys/mman.h>		    /* for mmap() */
+#endif /* __MINGW32__ */
 #include <alloca.h>		    /* for alloca() */
 #include <signal.h>		    /* for signal() */
 #include <errno.h>		    /* for system error code */
 #include "elf_stuff.h"		    /* for all Elf stuff */
 #include <sys/elf_whirl.h>	    /* for WHIRL sections' sh_info */
 #include <cmplrs/rcodes.h>
+
+#ifdef __MINGW32__
+#include <io.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif /* __MINGW32__ */
 
 #ifndef USE_STANDARD_TYPES
 #define USE_STANDARD_TYPES	    /* override unwanted defines in "defs.h" */
@@ -89,14 +99,17 @@
 #include "tracing.h"                /* TEMPORARY FOR ROBERT'S DEBUGGING */
 
 #ifdef BACK_END
+#include "wssa_io.h"
 #include "glob.h"
 #include "pf_cg.h"
 #include "instr_reader.h"
 #include "fb_whirl.h"			// for feedback stuff
+#include "ipa_be_write.h"
 
 BOOL Write_BE_Maps = FALSE;
 BOOL Write_AC_INTERNAL_Map = FALSE;
 BOOL Write_ALIAS_CLASS_Map = FALSE;
+BOOL Write_ALIAS_CGNODE_Map = FALSE;
 
 extern WN **prefetch_ldsts;
 extern INT num_prefetch_ldsts;
@@ -105,6 +118,10 @@ extern INT max_num_prefetch_ldsts;
 extern WN **alias_classes;
 extern INT num_alias_class_nodes;
 extern INT max_alias_class_nodes;
+
+extern WN **alias_cgnodes;
+extern INT num_alias_cgnode_nodes;
+extern INT max_alias_cgnode_nodes;
 
 extern WN **ac_internals;
 extern INT num_ac_internal_nodes;
@@ -120,7 +137,11 @@ extern void Depgraph_Write (void *depgraph, Output_File *fl, WN_MAP off_map);
     mmap((void *)(addr), (size_t)(len), (int)(prot), (int)(flags),	\
 	 (int)(fd), (off_t)(off))
 
-#ifndef linux
+#ifdef __MINGW32__
+#define OPEN(path, flag, mode)						\
+    open((const char *)(path), (int)(flag), (int)(mode))
+#else
+#if ! (defined(linux) || defined(BUILD_OS_DARWIN))
 #define MUNMAP(addr, len)						\
     munmap((void *)(addr), (size_t)(len))
 #else
@@ -130,13 +151,14 @@ extern void Depgraph_Write (void *depgraph, Output_File *fl, WN_MAP off_map);
 
 #define OPEN(path, flag, mode)						\
     open((const char *)(path), (int)(flag), (mode_t)(mode))
+#endif /* __MINGW32__ */
 
 static void (*old_sigsegv) (int);   /* the previous signal handler */
 static void (*old_sigbus) (int);   /* the previous signal handler */
 
 Output_File *Current_Output = 0;
 
-#ifdef linux
+#if (defined(linux) || defined(BUILD_OS_DARWIN))
 #define MAPPED_SIZE 0x400000
 #endif
 
@@ -149,7 +171,9 @@ cleanup (Output_File *fl)
     fl->num_of_section = 0;
     fl->section_list = NULL;
 
+#if !defined(TARG_NVISA)
     MUNMAP (fl->map_addr, fl->mapped_size);
+#endif
     fl->map_addr = NULL;
     fl->file_size = 0;
 } /* cleanup */
@@ -176,9 +200,11 @@ ir_bwrite_signal_handler (int sig, int err_num)
 		     Current_Output->file_name : "mmapped object",
 		     err_str);
     switch (sig) {
+#ifndef __MINGW32__
     case SIGBUS:
 	old_handler = old_sigbus;
 	break;
+#endif /* __MINGW32__ */
     case SIGSEGV:
 	old_handler = old_sigsegv;
 	break;
@@ -186,7 +212,11 @@ ir_bwrite_signal_handler (int sig, int err_num)
     
     if (old_handler == SIG_DFL) {
       /* resignal - will get default handler */
+#ifdef __MINGW32__
+      raise(sig);
+#else
       kill(getpid(), sig);
+#endif /* __MINGW32__ */
     } else if (old_handler != SIG_IGN) {
       /* call old handler */
       (*old_handler)(sig);
@@ -201,8 +231,8 @@ ir_bwrite_signal_handler (int sig, int err_num)
 /* Elf-related routines */
 #define DEFAULT_NUM_OF_SECTIONS 8	
 
-static Section *
-get_section (Elf64_Word sh_info, char *name, Output_File *fl)
+Section *
+get_section (Elf64_Word sh_info, const char *name, Output_File *fl)
 {
     register INT i;
 
@@ -294,11 +324,8 @@ write_output (UINT64 e_shoff, const typename ELF::Elf_Shdr& strtab_sec,
     typename ELF::Elf_Ehdr* ehdr = (typename ELF::Elf_Ehdr *) fl->map_addr;
     strcpy ((char *) ehdr->e_ident, ELFMAG);
     ehdr->e_ident[EI_CLASS] = tag.Elf_class ();
-#ifndef linux
-    ehdr->e_ident[EI_DATA] = ELFDATA2MSB; /* assume MSB for now */
-#else
-    ehdr->e_ident[EI_DATA] = ELFDATA2LSB; /* assume LSB for now */
-#endif
+    ehdr->e_ident[EI_DATA] = 
+	(Host_Byte_Sex == BIG_ENDIAN ? ELFDATA2MSB : ELFDATA2LSB);
     ehdr->e_ident[EI_VERSION] = EV_CURRENT;
     ehdr->e_type = ET_IR;
     ehdr->e_machine = Get_Elf_Target_Machine();
@@ -365,7 +392,7 @@ write_output (UINT64 e_shoff, const typename ELF::Elf_Shdr& strtab_sec,
 static int
 create_temp_file (Output_File *fl)
 {
-    register char *tmpdir;
+    register const char *tmpdir;
     register char *path;
     register int fd;
 
@@ -374,8 +401,19 @@ create_temp_file (Output_File *fl)
     path = (char *) malloc (strlen(tmpdir) + strlen(DEFAULT_TEMPLATE) + 1);
     if (path == 0)
 	return -1;
+#ifdef __MINGW32__
+    {
+    int mode = O_RDWR | O_CREAT | O_EXCL ;
+    do {
+      strcpy (path, tmpdir);
+      strcat (path, DEFAULT_TEMPLATE);
+      mktemp( path );
+    } while( (fd = open(path, mode)) < 0 );
+    }
+#else
     strcpy (path, tmpdir);
     strcat (path, DEFAULT_TEMPLATE);
+#endif /* __MINGW32__ */
     fd = mkstemp (path);
     if (fd != -1)
 	unlink (path);
@@ -404,10 +442,11 @@ WN_open_output (char *file_name)
 	old_sigsegv = signal (SIGSEGV, reinterpret_cast<void (*)(int)>
 			      (ir_bwrite_signal_handler));
 
+#ifndef __MINGW32__
     if (old_sigbus == 0)
 	old_sigbus = signal (SIGBUS, reinterpret_cast<void (*)(int)>
 			     (ir_bwrite_signal_handler)); 
-	
+#endif /* __MINGW32__ */	
 
     fl = (Output_File *)malloc(sizeof(Output_File));
     if (!fl) return NULL;
@@ -417,12 +456,18 @@ WN_open_output (char *file_name)
     } else {
 	fl->file_name = file_name;
 	// set mode to rw for all; users umask will AND with that.
+#ifdef __MINGW32__
+	fl->output_fd = OPEN (file_name, _O_RDWR| _O_CREAT| _O_TRUNC, _S_IREAD| _S_IWRITE);
+#else
 	fl->output_fd = OPEN (file_name, O_RDWR|O_CREAT|O_TRUNC, 0666);
     }
+#endif /* __MINGW32__ */
     if (fl->output_fd < 0)
 	return NULL;
 
-#ifdef linux
+#if defined(linux) || defined(__APPLE__)
+    ftruncate(fl->output_fd, MAPPED_SIZE);
+#elif defined(_WIN32)
     ftruncate(fl->output_fd, MAPPED_SIZE);
 #endif
 
@@ -507,7 +552,7 @@ WN_write_PU_Infos (PU_Info *pu_list, Output_File *fl)
 void
 WN_write_tree (PU_Info *pu, WN_MAP off_map, Output_File *fl)
 {
-    static char *scn_name = "tree";
+    static const char *scn_name = "tree";
     UINT padding;
     Elf64_Word this_tree;
     WN *tree;
@@ -536,6 +581,15 @@ WN_write_tree (PU_Info *pu, WN_MAP off_map, Output_File *fl)
       alias_classes = NULL;
       num_alias_class_nodes = 0;
       max_alias_class_nodes = 0;
+    }
+
+    if (Write_ALIAS_CGNODE_Map) {
+      /* globals used to record nodes with cgnode id information for
+       * nystrom alias analyzer
+       */
+      alias_cgnodes = NULL;
+      num_alias_cgnode_nodes = 0;
+      max_alias_cgnode_nodes = 0;
     }
 
     if (Write_AC_INTERNAL_Map) {
@@ -587,6 +641,16 @@ WN_write_tree (PU_Info *pu, WN_MAP off_map, Output_File *fl)
       alias_classes[num_alias_class_nodes] = NULL;
       Set_PU_Info_alias_class_ptr(pu, alias_classes);
       Set_PU_Info_state(pu, WT_ALIAS_CLASS, Subsect_InMem);
+    }
+
+    if (Write_ALIAS_CGNODE_Map) {
+      if (num_alias_cgnode_nodes > 0) {
+        alias_cgnodes[num_alias_cgnode_nodes] = NULL;
+        Set_PU_Info_alias_cgnode_ptr(pu, alias_cgnodes);
+        Set_PU_Info_state(pu, WT_ALIAS_CGNODE, Subsect_InMem);
+      } else {
+        Set_PU_Info_state(pu, WT_ALIAS_CGNODE, Subsect_Missing);
+      }
     }
 
     if (Write_AC_INTERNAL_Map && num_ac_internal_nodes > 0) {
@@ -750,6 +814,36 @@ WN_write_dst (DST_TYPE dst, Output_File *fl)
 } /* WN_write_dst */
 
 
+#if defined(TARG_SL)
+void 
+WN_write_isr_cg(vector<mINT32>& cg, Output_File *fl)
+{
+    Section *cur_section;
+
+    cur_section = get_section (WT_CALLGRAPH, MIPS_WHIRL_CALLGRAPH, fl);
+    
+    fl->file_size = ir_b_align (fl->file_size, sizeof(mINT32), 0);
+    cur_section->shdr.sh_offset = fl->file_size;
+
+    UINT32 sz = sizeof(mINT32) * cg.size();    
+
+    mINT32 *buf = (mINT32*) malloc (sz);
+    mINT32 *ptr = buf;
+
+    for (vector<mINT32>::iterator iter = cg.begin(); 
+           iter != cg.end(); iter++) 
+    {
+       *(ptr++) = *iter; 
+    }
+
+    (void) ir_b_save_buf (buf, sz, sizeof(mINT32), 0, fl);
+
+    cur_section->shdr.sh_size = fl->file_size - cur_section->shdr.sh_offset;
+    cur_section->shdr.sh_addralign = sizeof(mINT32);
+}
+#endif // TARG_SL
+
+
 #ifdef BACK_END
 
 namespace
@@ -908,7 +1002,7 @@ WN_write_feedback (PU_Info* pu, Output_File* fl)
 		   pu_hdr.pu_value_fp_bin_offset);   
 #endif
 
-    bcopy (&pu_hdr, fl->map_addr + feedback_base, sizeof(pu_hdr));
+    BCOPY (&pu_hdr, fl->map_addr + feedback_base, sizeof(pu_hdr));
     
 
     Set_PU_Info_state (pu, WT_FEEDBACK, Subsect_Written);
@@ -922,6 +1016,9 @@ WN_write_feedback (PU_Info* pu, Output_File* fl)
  *  Write out the IPA summary information.
  */
 
+
+// This routine is used to write the old mod_ref_info.  The output
+// file in this case is symtab.I
 void
 IPA_write_summary (void (*IPA_irb_write_summary) (Output_File*),
 		   Output_File *fl)
@@ -977,6 +1074,43 @@ WN_write_depgraph (PU_Info *pu, WN_MAP off_map, Output_File *fl)
 
 } /* WN_write_depgraph */
 
+/*
+ *  Note: write the SSA info into file
+ */
+void
+WN_write_SSA(PU_Info *pu, Output_File *fl)
+{
+    Section *cur_section = fl->cur_section;
+
+    if (PU_Info_state(pu, WT_SSA) == Subsect_Missing)
+	return;
+
+    if (strcmp(cur_section->name, MIPS_WHIRL_PU_SECTION) != 0 ||
+	PU_Info_state(pu, WT_SSA) != Subsect_InMem)
+	ErrMsg (EC_IR_Scn_Write, "WHIRL SSA info", fl->file_name);
+
+    WSSA::WHIRL_SSA_MANAGER *wssa_mgr = PU_Info_ssa_ptr(pu);
+    if (!wssa_mgr->Is_stat_OK()) {
+      Set_PU_Info_state(pu, WT_SSA, Subsect_Missing);
+      PU_Info_subsect_size(pu, WT_SSA) = 0;
+      PU_Info_subsect_offset(pu, WT_SSA) = fl->file_size - cur_section->shdr.sh_offset;
+      delete wssa_mgr;
+      return;
+    }
+    
+    fl->file_size = ir_b_align(fl->file_size, sizeof(mINT32), 0);
+    off_t wssa_base = fl->file_size;
+
+    WSSA::WHIRL_SSA_IO wssa_io(wssa_mgr);
+    wssa_io.Write_To_Output_File(fl);
+
+    Set_PU_Info_state(pu, WT_SSA, Subsect_Written);
+    PU_Info_subsect_size(pu, WT_SSA) = fl->file_size - wssa_base;
+    PU_Info_subsect_offset(pu, WT_SSA) = wssa_base - cur_section->shdr.sh_offset;
+
+    // wssa_mgr is no longer needed
+    delete wssa_mgr;
+} 
 
 /*
  * Write out the prefetch pointer mapping. The prefetch mappings are written
@@ -1311,11 +1445,20 @@ WN_close_output (Output_File *fl)
 	write_output (e_shoff, strtab_sec, fl, ELF64());
     }
 
+#ifdef _WIN32
+    UnmapViewOfFile(fl->map_addr);
+    CloseHandle(fl->mapHd);
+    if (_chsize(fl->output_fd, fl->file_size))
+       ErrMsg (EC_IR_Close, fl->file_name, GetLastError ());
+#else
+    // for cygwin need to unmap before truncate, okay on linux too.
+    MUNMAP(fl->map_addr, fl->mapped_size);
     if (ftruncate(fl->output_fd, fl->file_size) != 0)
 	ErrMsg (EC_IR_Close, fl->file_name, errno);
+#endif
 
     close (fl->output_fd);
-    cleanup (fl);		    /* unmaps output file */
+    cleanup (fl);
 
 } /* WN_close_output */
 
@@ -1326,11 +1469,19 @@ WN_close_file (void *this_fl)
     if (fl->output_fd < 0)
 	ErrMsg (EC_IR_Close, fl->file_name, EBADF);
     
+#ifdef _WIN32
+    UnmapViewOfFile(fl->map_addr);
+    CloseHandle(fl->mapHd);
+    if (_chsize(fl->output_fd, fl->file_size))
+        ErrMsg (EC_IR_Close, fl->file_name, GetLastError());
+#else
+    MUNMAP(fl->map_addr, fl->mapped_size);
     if (ftruncate(fl->output_fd, fl->file_size) != 0)
 	ErrMsg (EC_IR_Close, fl->file_name, errno);
+#endif
 
     close (fl->output_fd);
-    cleanup (fl);		    /* unmaps output file */
+    cleanup (fl);
 
 }
 
@@ -1358,7 +1509,7 @@ Write_PU_Info (PU_Info *pu)
     if (PU_Info_state (pu, WT_FEEDBACK) == Subsect_InMem)
 	WN_write_feedback (pu, ir_output);
 
-    if (Write_BE_Maps || Write_ALIAS_CLASS_Map) {
+    if (Write_BE_Maps || Write_ALIAS_CLASS_Map || Write_ALIAS_CGNODE_Map) {
 	Current_Map_Tab = PU_Info_maptab(pu);
 	MEM_POOL_Push(MEM_local_nz_pool_ptr);
 	off_map = WN_MAP32_Create(MEM_local_nz_pool_ptr);
@@ -1368,7 +1519,11 @@ Write_PU_Info (PU_Info *pu)
     WN_write_tree (pu, off_map, ir_output);
 
 #ifdef BACK_END
-    if (Write_BE_Maps || Write_ALIAS_CLASS_Map) {
+    /*write out the whirl ssa info*/
+    if (PU_Info_state(pu, WT_SSA) == Subsect_InMem)
+        WN_write_SSA(pu, ir_output);
+
+    if (Write_BE_Maps || Write_ALIAS_CLASS_Map || Write_ALIAS_CGNODE_Map) {
 	if (Write_BE_Maps) {
 	    WN_write_depgraph(pu, off_map, ir_output);
 	    
@@ -1379,6 +1534,11 @@ Write_PU_Info (PU_Info *pu)
 	if (Write_ALIAS_CLASS_Map) {
 	  WN_write_INT32_map(pu, off_map, ir_output, WT_ALIAS_CLASS,
 			     WN_MAP_ALIAS_CLASS, "alias class map");
+	}
+
+	if (Write_ALIAS_CGNODE_Map) {
+	  WN_write_INT32_map(pu, off_map, ir_output, WT_ALIAS_CGNODE,
+			     WN_MAP_ALIAS_CGNODE, "alias cgnode map");
 	}
 
 	WN_MAP_Delete(off_map);
@@ -1433,7 +1593,6 @@ Close_Output_Info (void)
 }
 
 
-#ifdef linux
 extern "C" void
 WN_write_elf_symtab (const void* symtab, UINT64 size, UINT64 entsize,
 		     UINT align, Output_File* fl)
@@ -1460,7 +1619,7 @@ WN_write_elf_symtab (const void* symtab, UINT64 size, UINT64 entsize,
     cur_section->shdr.sh_link = strtab_idx;
     cur_section->shdr.sh_entsize = entsize;
 } // WN_write_elf_symtab
-#endif // linux
+
 #endif // OWN_ERROR_PACKAGE
 
 

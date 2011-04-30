@@ -87,6 +87,7 @@ CFILES += \
     lu2s.c \
     lwrite.c \
     main.c \
+    f90_main.c \
     numblks.c \
     oconvtab.c \
     open.c \

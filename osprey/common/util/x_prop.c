@@ -35,7 +35,9 @@
 
 
 static const char source_file[] = __FILE__;
-static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/x_prop.c,v $ $Revision: 1.1.1.1 $";
+static const char rcs_id[] = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/x_prop.c,v $ $Revision: 1.1 $";
+
+#include <bstring.h>
 
 
 /* ====================================================================
@@ -59,7 +61,7 @@ _X_PROP_CREATE_(
   UINT32 words = (  (universe_size + _X_PROP_TYPE_SIZE_ - 1)
 		  >> _X_PROP_TYPE_SIZE_LOG2_) + 1;
   _X_PROP_TYPE_ *prop = TYPE_MEM_POOL_ALLOC_N(_X_PROP_TYPE_, pool, words);
-  if ( ! MEM_POOL_Zeroed(pool) ) bzero(prop, words * sizeof(_X_PROP_TYPE_));
+  if ( ! MEM_POOL_Zeroed(pool) ) BZERO(prop, words * sizeof(_X_PROP_TYPE_));
   prop[0] = universe_size;
   return prop;
 }

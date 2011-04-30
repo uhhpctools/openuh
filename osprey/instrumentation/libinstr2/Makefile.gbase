@@ -3,6 +3,9 @@
 #  Makefile.base for libinstr
 #
 
+#
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #---------------------------------------------------------------------
 #
 #  Copyright 2005 PathScale, Inc.  All Rights Reserved.
@@ -90,14 +93,22 @@ HOSTDEFS += -Dlonglong
 HOSTDEFS += -D_LONGLONG -D_SVR4_SOURCE
 HOSTDEFS += -D_USE_PROFILE_ERROR_ROUTINES
 
+ifeq ($(BUILD_COMPILER), GNU)
+NO_UNWIND=-fno-unwind-tables
+else
+NO_UNWIND=-CG:emit_unwind_info=off
+endif
+
 ifeq ($(BUILD_OPTIMIZE), DEBUG)
 HOSTDEFS += -DIs_True_On
 HOSTDEFS += -DInsist_On 
-else
-#CXXFLAGS += -O2 -fno-exceptions -nostdinc++ -CG:emit_unwind_info=off -D_INCLUDED_FROM_LIBINSTR_
-CXXFLAGS += -O2 -fno-exceptions -nostdinc++ -D_INCLUDED_FROM_LIBINSTR_
 endif
 
+CXXFLAGS += -fno-exceptions -nostdinc++ $(NO_UNWIND) -D_INCLUDED_FROM_LIBINSTR_
+
+ifeq ($(BUILD_TARGET), SL)
+CXXFLAGS += -msoft-float -gnu42 -keep -show 
+endif
 
 #----------------------------------------------------------------------
 #  List of directories, and source files of interest
@@ -114,6 +125,14 @@ LIBINSTR_HEADER_DIRS    = \
  $(BUILD_TOT)/instrumentation/libinstr2 \
  $(BUILD_TOT)/common/instrument   \
  $(BUILD_TOT)/common/com
+
+ifeq ($(BUILD_TARGET), SL)
+LIBINSTR_HEADER_DIRS += $(TOOLROOT)/usr/include
+endif
+
+ifeq ($(BUILD_TARGET), LOONGSON)
+LIBINSTR_HEADER_DIRS += $(BUILD_TOT)/common/com/loongson
+endif
 
 # These are the directories in which to look for source files.
 
@@ -151,6 +170,16 @@ LCDEFS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 LC++DEFS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 endif
 
+ifeq ($(BUILD_TARGET), LOONGSON)
+CC = mips64el-n32-linux-gcc
+CXX = mips64el-n32-linux-g++
+AR = mips64el-n32-linux-ar
+LD = mips64el-n32-linux-gcc
+RANLIB = mips64el-n32-linux-ranlib
+CFLAGS += -static -mabi=n32 -fno-exceptions -O3 -DTARG_LOONGSON
+CXXFLAGS += -static -mabi=n32 -fno-exceptions -O3 -DTARG_LOONGSON
+endif
+
 # setup stuff to build shared or non-shared
 GLDOPTS = $(STD_LOAD_OPTS)
 
@@ -183,13 +212,21 @@ ifndef TARGETS
 TARGETS = $(LIBRARY) $(PROF_LIB) $(DSO) 
 endif
 
+#--------------------------------------------------------------------
+#define ranlib
+#--------------------------------------------------------------------
+ifeq ($(BUILD_TARGET), SL)
+RANLIB = $(TOOLROOT)/usr/bin/ranlib
+endif
 
 #--------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
 #----------------------------------------------------------------------
 LLDLIBS += 
 
-default: $(TARGETS) last
+default:
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is

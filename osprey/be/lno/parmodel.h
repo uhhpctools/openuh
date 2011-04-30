@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -316,13 +320,14 @@ extern double SNL_Cache_Cost(WN* wn_outer, INT permutation[], INT nloops,
   INT parallel_depth, INT split_depth, SX_PLIST* plist,
   double *est_num_iters);
 
-
-#define NOMINAL_PROCS                  8
+#include "config_lno.h"
+#define NOMINAL_PROCS                 (LNO_Num_Processors == 0 ? 8 : LNO_Num_Processors) 
 #define UNBOUNDED_ITERS         12345678
 #define LOOP_CYCLES_PER_ITER           4
 #define HASH_SIZE                    100
 
 class PAR_STAT {
+  DECL_CXX_ALLOC_AS_FRIEND(PAR_STAT); 
 private:
   PAR_STAT* _next; 
   PAR_STAT* _prev; 

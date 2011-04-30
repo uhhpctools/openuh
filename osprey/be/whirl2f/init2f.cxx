@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -37,10 +41,10 @@
  * ====================================================================
  *
  * Module: init2f.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/init2f.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:43 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/init2f.cxx,v $
  *
  * Revision history:
  *  15-June-95 - Original Version
@@ -75,7 +79,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/init2f.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/init2f.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include "whirl2f_common.h"
@@ -122,12 +126,14 @@ Set_Tcon_Value(TCON *tcon, MTYPE mtype, INT typesize, char *bytes)
 	 UINT64    u8;
 	 float     f[2];
 	 double    d[2];
+         long double ld;
 	 QUAD_TYPE q;
       } val1;
       union
       {
 	 float     f;
 	 double    d;
+         long double ld;
 	 QUAD_TYPE q;
       } val2;
    } TCON_VALUE;
@@ -184,16 +190,20 @@ Set_Tcon_Value(TCON *tcon, MTYPE mtype, INT typesize, char *bytes)
       break;
 
    case MTYPE_F4:
-      *tcon = Host_To_Targ_Float_4(mtype, rep.val.val1.f[0]);
+      /* TODO: export Host_To_Targ_Float_4() from be.so 
+       */
+      *tcon = Host_To_Targ_Float(mtype, rep.val.val1.f[0]);
       break;
 
    case MTYPE_F8:
       *tcon = Host_To_Targ_Float(mtype, rep.val.val1.d[0]);
       break;
 
+#if defined(TARG_X8664) || defined(TARG_IA64)
    case MTYPE_F10:
-      *tcon = Host_To_Targ_Float_10(mtype, rep.val.val1.q);
+      *tcon = Host_To_Targ_Float_10(mtype, rep.val.val1.ld);
       break;
+#endif
 
    case MTYPE_FQ:
      *tcon = Host_To_Targ_Quad(rep.val.val1.q);
@@ -207,9 +217,11 @@ Set_Tcon_Value(TCON *tcon, MTYPE mtype, INT typesize, char *bytes)
      *tcon = Host_To_Targ_Complex (mtype,rep.val.val1.d[0],rep.val.val1.d[1]);
      break;
 
-   case MTYPE_C10:
-     *tcon = Host_To_Targ_Complex_10 (mtype, rep.val.val1.q, rep.val.val2.q);
+#if defined(TARG_X8664) || defined(TARG_IA64)
+   case MTYPE_C10:     
+     *tcon = Host_To_Targ_Complex_10 (mtype, rep.val.val1.ld,rep.val.val2.ld);
      break;
+#endif
 
    case MTYPE_CQ:     
      *tcon = Host_To_Targ_Complex_Quad (rep.val.val1.q,rep.val.val2.q);
@@ -1105,13 +1117,6 @@ INIT2F_array(TOKEN_BUFFER lhs_tokens,
 
       INITV&  initv = Initv_Table[initv_array[*initv_idx]];
 
-#if 0      
-      ASSERT_DBG_FATAL(!(TY_Is_Array_Of_Chars(object_ty)    &&
-			 INITV_kind(initv) == INITVKIND_VAL &&
-			 TCON_ty(INITV_tc_val(initv)) == MTYPE_STRING),
-		       (DIAG_W2F_UNEXPECTED_INITV, 
-			INITV_kind(initv), "INITV2F_array"));
-#endif
       /* Get the last consecutive initv and the array segment-size
        * implied by this consecutive sequence of initializers.
        */

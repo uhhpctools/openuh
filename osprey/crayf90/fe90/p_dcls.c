@@ -262,18 +262,6 @@ void parse_common_stmt (void)
                last_attr_idx	= ATD_NEXT_MEMBER_IDX(last_attr_idx);
             }
          }
-# if 0
-         /* we want to allow THREADPRIVATE before the common stmt. */
-         /* I'm leaving this in for now. BHJ                       */
-
-         else if (SB_BLK_TYPE(sb_idx) == Threadprivate && !SB_DCL_ERR(sb_idx)) {
-
-            /* Must be declared completely before THREADPRIVATE */
-
-            PRINTMSG(TOKEN_LINE(token), 1479, Error, TOKEN_COLUMN(token),
-                     SB_NAME_PTR(sb_idx));
-         }
-# endif
 
          if ((cif_flags & XREF_RECS) != 0) {
             cif_sb_usage_rec(sb_idx,
@@ -328,7 +316,23 @@ void parse_common_stmt (void)
             ATD_STOR_BLK_IDX(attr_idx)	= sb_idx;
             SET_IMPL_TYPE(attr_idx);
          }
-         else if (!fnd_semantic_err(Obj_Common_Obj,line,column,attr_idx,TRUE)) {
+#ifdef KEY /* Bug 14150 */
+         else {
+	  int save_stor_blk_idx = 0;
+	  /* We need to set this so fnd_semantic_err() can report the
+	   * special-case error of "equivalence" involving a common block
+	   * object when the common block (rather than the object) has the
+	   * "bind" attribute. Set it only if safe, and revert in case of
+	   * error. */
+	  if (AT_OBJ_CLASS(attr_idx) == Data_Obj) {
+	   save_stor_blk_idx = ATD_STOR_BLK_IDX(attr_idx);
+	   ATD_STOR_BLK_IDX(attr_idx) = sb_idx;
+	  }
+	  if (!fnd_semantic_err(Obj_Common_Obj,line,column,attr_idx,TRUE))
+#else /* KEY Bug 14150 */
+         else if (!fnd_semantic_err(Obj_Common_Obj,line,column,attr_idx,TRUE))
+#endif /* KEY Bug 14150 */
+	  {
 
             if (AT_REFERENCED(attr_idx) == Char_Rslt_Bound_Ref) {
                AT_ATTR_LINK(attr_idx)	= NULL_IDX;
@@ -351,6 +355,13 @@ void parse_common_stmt (void)
                SB_AUXILIARY(sb_idx)	= TRUE;
             }
          }
+#ifdef KEY /* Bug 14150 */
+	  /* fnd_semantic_err() found error, so revert */
+	  else if (save_stor_blk_idx) {
+	    ATD_STOR_BLK_IDX(attr_idx) = save_stor_blk_idx;
+	  }
+	 }
+#endif /* KEY Bug 14150 */
 
          if (AT_OBJ_CLASS(attr_idx) == Data_Obj) {
             ATD_SEEN_OUTSIDE_IMP_DO(attr_idx) = TRUE;
@@ -496,6 +507,10 @@ void parse_contains_stmt (void)
 
 
    TRACE (Func_Entry, "parse_contains_stmt", NULL);
+
+#ifdef KEY /* Bug 14110 */
+   revisit_volatile();
+#endif /* KEY Bug 14110 */
 
    do_cmic_blk_checks();
 
@@ -1149,7 +1164,13 @@ static void parse_cpnt_dcl_stmt()
       }
 
       if (!AT_DCL_ERR(attr_idx)) {
+#ifdef KEY /* Bug 14150 */
+         assign_bind_c_offset(attr_idx,
+	   AT_OBJ_CLASS(CURR_BLK_NAME) == Derived_Type &&
+	     AT_BIND_ATTR(CURR_BLK_NAME)); /* Assign offsets to components */
+#else /* KEY Bug 14150 */
          assign_offset(attr_idx);	/* Assign offsets to components */
+#endif /* KEY Bug 14150 */
       }
       else {
          ATD_CPNT_OFFSET_IDX(attr_idx)	= CN_INTEGER_ZERO_IDX;
@@ -1480,6 +1501,9 @@ static void parse_derived_type_stmt()
    boolean	 err;
    int		 name_idx;
    char		*str;
+#ifdef KEY /* Bug 14150 */
+   int		 found_bind = 0;
+#endif /* KEY Bug 14150 */
 
 
    TRACE (Func_Entry, "parse_derived_type_stmt", NULL);
@@ -1505,8 +1529,23 @@ static void parse_derived_type_stmt()
             parse_err_flush(Find_None, "::");
          }
       }
+#ifdef KEY /* Bug 14150 */
+      else if (matched_specific_token(Tok_Kwd_Bind, Tok_Class_Keyword)) {
+	 parse_language_binding_spec(0);
+	 found_bind = 1;
+         if (!matched_specific_token(Tok_Punct_Colon_Colon, Tok_Class_Punct)) {
+            parse_err_flush(Find_None, "::");
+         }
+      }
+#endif /* KEY Bug 14150 */
       else {
-         parse_err_flush(Find_None, "PUBLIC or PRIVATE");
+         parse_err_flush(Find_None, 
+#ifdef KEY /* Bug 14150 */
+            "BIND, PUBLIC, or PRIVATE"
+#else /* KEY Bug 14150 */
+	    "PUBLIC or PRIVATE"
+#endif /* KEY Bug 14150 */
+	    );
          /* Bypass ::, just in case it's there */
          matched_specific_token(Tok_Punct_Colon_Colon, Tok_Class_Punct);
       }
@@ -1619,6 +1658,12 @@ static void parse_derived_type_stmt()
          ATT_SCP_IDX(dt_idx)		= curr_scp_idx;
       }
 
+#ifdef KEY /* Bug 14150 */
+      if (found_bind) {
+        AT_BIND_ATTR(dt_idx) = 1;
+      }
+#endif /* KEY Bug 14150 */
+
       if (CURR_BLK != Interface_Body_Blk) {
 
          /* Interface_Body_Blk stuff is counted during interface collapse. */
@@ -1668,6 +1713,25 @@ static void parse_derived_type_stmt()
       PUSH_BLK_STK(Derived_Type_Blk);
       curr_stmt_category	= Declaration_Stmt_Cat;
    }
+#ifdef KEY /* Bug 14150 */
+   /* Even before the 14150 enhancement, a source error (like "type ::" with no
+    * id) could make us arrive here with dt_idx == NULL_IDX, which would cause
+    * subsequent references to ATT_* in parse_cpnt_dcl_stmt() to die in
+    * _DEBUG mode. */
+   if (dt_idx == NULL_IDX) {
+#define NO_ID "<NO NAME>"
+     TOKEN_LEN(token) = (sizeof NO_ID) - 1;
+     CREATE_ID(TOKEN_ID(token), NO_ID, TOKEN_LEN(token));
+     dt_idx = srch_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token), &name_idx);
+     if (dt_idx == NULL_IDX) {
+       dt_idx				= ntr_sym_tbl(&token, name_idx);
+       AT_OBJ_CLASS(dt_idx)		= Derived_Type;
+       ATT_STRUCT_BIT_LEN_FLD(dt_idx)	= CN_Tbl_Idx;
+       ATT_STRUCT_BIT_LEN_IDX(dt_idx)	= CN_INTEGER_ZERO_IDX;
+       ATT_SCP_IDX(dt_idx)		= curr_scp_idx;
+     }
+   }
+#endif /* KEY Bug 14150 */
 
    CURR_BLK_NO_EXEC		= TRUE;
    CURR_BLK_NAME		= dt_idx;
@@ -2575,6 +2639,161 @@ void parse_interface_stmt (void)
 }  /* parse_interface_stmt */
 
 
+#ifdef KEY /* Bug 10572 */
+
+/*
+ *	BNF is    ENUM, BIND(C)
+ */
+void
+parse_enum_stmt() {
+   TRACE (Func_Entry, "parse_enum_stmt", NULL);
+
+   if ((STMT_OUT_OF_ORDER(curr_stmt_category, Enum_Stmt) ||
+      STMT_CANT_BE_IN_BLK(Enum_Stmt, CURR_BLK)) &&
+      iss_blk_stk_err()) {
+      PUSH_BLK_STK(Enum_Blk);
+      CURR_BLK_ERR = TRUE;
+   }
+   else {
+      PUSH_BLK_STK(Enum_Blk);
+   }
+   curr_stmt_category = Declaration_Stmt_Cat;
+
+   CURR_BLK_NO_EXEC = TRUE;
+
+   BLK_ENUM_EMPTY(blk_stk_idx) = TRUE;
+   BLK_ENUM_COUNTER(blk_stk_idx) = 0;
+
+   if (LA_CH_VALUE != COMMA) {
+     parse_err_flush(Find_EOS, ",");
+     return;
+   }
+   NEXT_LA_CH; /* Consume comma */
+
+   if (!matched_specific_token(Tok_Kwd_Bind, Tok_Class_Keyword)) {
+     parse_err_flush(Find_EOS, "BIND");
+     return;
+   }
+   parse_language_binding_spec(0);
+
+   if (LA_CH_VALUE != EOS) {
+     parse_err_flush(Find_EOS, EOS_STR);
+   }
+   NEXT_LA_CH;				/* Pick up EOS */
+         
+   TRACE (Func_Exit, "parse_enum_stmt", NULL);
+
+}  /* parse_enum_stmt */
+
+/*
+ *	BNF is    	ENUMERATOR [ :: ] enumerator-list
+ *      enumerator is	id [ = scalar-int-initialization-expr ]
+ */
+void
+parse_enumerator_stmt() {
+   TRACE (Func_Entry, "parse_enumerator_stmt", NULL);
+
+   PRINTMSG(TOKEN_LINE(token), 1685, Ansi, TOKEN_COLUMN(token), "ENUM");
+
+   if ((STMT_OUT_OF_ORDER(curr_stmt_category, Enumerator_Stmt) ||
+      STMT_CANT_BE_IN_BLK(Enumerator_Stmt, CURR_BLK)) &&
+      iss_blk_stk_err()) {
+      PUSH_BLK_STK(Enum_Blk);
+      CURR_BLK_ERR = TRUE;
+      CURR_BLK_NO_EXEC = TRUE;
+   }
+
+   BLK_ENUM_EMPTY(blk_stk_idx) = FALSE;
+
+   /* Optional :: */
+   matched_specific_token(Tok_Punct_Colon_Colon, Tok_Class_Punct);
+
+   for (;;) {
+     if (!MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+	parse_err_flush(Find_Comma_Rparen, "named-constant");
+	if (LA_CH_VALUE == EOS) {
+	  break;
+	}
+	continue;
+     }
+     int line = TOKEN_LINE(token);
+     int column = TOKEN_COLUMN(token);
+     int name_idx;
+     int attr_idx = srch_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token), &name_idx);
+     if (attr_idx != NULL_IDX) {
+	char *ptr2 = get_basic_type_str(ATD_TYPE_IDX(attr_idx));
+	PRINTMSG(line, 550, Error, column, AT_OBJ_NAME_PTR(attr_idx), ptr2,
+	  "ENUMERATOR", AT_DEF_LINE(attr_idx));
+     }
+     attr_idx = ntr_sym_tbl(&token, name_idx);
+     LN_DEF_LOC(name_idx) = TRUE;
+     ATD_TYPE_IDX(attr_idx) = INTEGER_DEFAULT_TYPE;
+     AT_TYPED(attr_idx) = TRUE;
+     ATD_SEEN_OUTSIDE_IMP_DO(attr_idx) = TRUE;
+     boolean have_value = TRUE;
+
+     opnd_type opnd;
+     int const_line = line;
+     int const_column = column;
+
+     if (LA_CH_VALUE == EQUAL) {
+       have_value = FALSE;
+       NEXT_LA_CH;		/* Skip = */
+
+       const_line = LA_CH_LINE;
+       const_column = LA_CH_COLUMN;
+
+       long kind_idx;
+       fld_type field_type;
+       if (parse_int_spec_expr(&kind_idx, &field_type, TRUE, FALSE)) {
+	  OPND_FLD(opnd)		= field_type;
+	  OPND_IDX(opnd)		= kind_idx;
+
+	  BLK_ENUM_COUNTER(blk_stk_idx) =
+	    * (long *) &CN_CONST(OPND_IDX(opnd));
+       }
+       else {
+	  /* error from parse_expr */
+	  AT_DCL_ERR(attr_idx) = TRUE;
+       }
+     }
+     else {
+       /* Use the value in the enum counter */
+       long temp = BLK_ENUM_COUNTER(blk_stk_idx);
+       OPND_FLD(opnd) = CN_Tbl_Idx;
+       OPND_IDX(opnd) = ntr_const_tbl(ATD_TYPE_IDX(attr_idx), FALSE, &temp);
+     }
+     BLK_ENUM_COUNTER(blk_stk_idx) += 1;
+     OPND_LINE_NUM(opnd) = const_line;
+     OPND_COL_NUM(opnd)  = const_column;
+
+     expr_arg_type exp_desc;
+     exp_desc.rank = 0;
+     if ((!AT_DCL_ERR(attr_idx)) && expr_semantics(&opnd, &exp_desc)) {
+       merge_parameter(FALSE, attr_idx, line, column, &opnd, &exp_desc,
+	 const_line, const_column);
+       if ((cif_flags & XREF_RECS) != 0) {
+	  cif_usage_rec(attr_idx, AT_Tbl_Idx, line, column,
+	    CIF_Symbol_Declaration);
+       }
+     }
+
+     if (LA_CH_VALUE != COMMA) {
+       break;
+     }
+     NEXT_LA_CH; /* Consume comma */
+   }
+
+   if (LA_CH_VALUE != EOS) {
+     parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   NEXT_LA_CH;				/* Pick up EOS */
+         
+   TRACE (Func_Exit, "parse_enumerator_stmt", NULL);
+
+}  /* parse_enum_stmt */
+#endif /* KEY Bug 10572 */
 /******************************************************************************\
 |*									      *|
 |* Description:								      *|
@@ -3561,6 +3780,9 @@ void parse_type_dcl_stmt (void)
 
    AT_DCL_ERR(AT_WORK_IDX) = SH_ERR_FLG(curr_stmt_sh_idx);
 
+#ifdef KEY /* Bug 14150 */
+   int count_entities = 0;
+#endif /* KEY Bug 14150 */
    do {
       if (!MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
          found_end = !parse_err_flush(Find_Comma, "object-name");
@@ -3632,6 +3854,17 @@ void parse_type_dcl_stmt (void)
 
       if (attr_list & (1 << External_Attr)) {
          merge_external(!new_attr, id_line, id_column, attr_idx);
+      }
+
+      /* Merge in binding label for each entity, because in the general case
+       * it will omit "name=x" and depend on the name of the entity  */
+      if (attr_list & (1 << Bind_Attr)) {
+	merge_bind(TRUE, id_line, id_column, attr_idx);
+	count_entities += 1;
+	/* Nonempty name= precludes multiple entities in one statement */
+	if ((BIND_SPECIFIES_NAME(new_binding_label)) && count_entities == 2) {
+	  PRINTMSG(id_line, 1689, Error, id_column);
+	}
       }
 
 #ifdef KEY /* Bug 8260 */
@@ -3805,6 +4038,9 @@ void parse_type_dcl_stmt (void)
 
          if (attr_list & (1 << Automatic_Attr)) {
             merge_automatic(TRUE, id_line, id_column, attr_idx);
+         }
+         if (attr_list & (1 << Value_Attr)) {
+            merge_value(TRUE, id_line, id_column, attr_idx);
          }
 
          if (attr_list & (1 << Public_Attr)) {
@@ -4451,6 +4687,114 @@ EXIT:
    return;
 
 }  /* parse_use_stmt */
+#ifdef KEY /* Bug 11741 */
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	Parses the "import" statement                                         *|
+|*	BNF    IMPORT [ :: [ import-name-list ]                               *|
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NONE								      *|
+|*									      *|
+\******************************************************************************/
+void parse_import_stmt(void)
+
+{
+   boolean found_list = FALSE;
+
+   TRACE (Func_Entry, "parse_import_stmt", NULL);
+
+   PRINTMSG(TOKEN_LINE(token), 1685, Ansi, TOKEN_COLUMN(token), "IMPORT");
+
+   if ((STMT_OUT_OF_ORDER(curr_stmt_category, Import_Stmt) ||
+        STMT_CANT_BE_IN_BLK(Import_Stmt, CURR_BLK)) && iss_blk_stk_err()) {
+      /* Block error - intentionally left blank */
+   }
+   else {
+      curr_stmt_category = Import_Stmt_Cat;
+   }
+
+   /* Consume optional :: */
+   if (matched_specific_token(Tok_Punct_Colon_Colon, Tok_Class_Punct) &&
+     LA_CH_VALUE == EOS) {
+       parse_err_flush(Find_EOS, "identifier");
+   }
+
+   while (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+     found_list = TRUE;
+     int missing_in_host = FALSE;
+     int name_idx;
+     int attr_idx = srch_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token), &name_idx);
+
+     /* Name exists in symbol table already */
+     if (attr_idx != NULL_IDX) {
+       /* For "type(t) function()" we have already seen the type name, but we
+        * haven't defined it, so we want to import it */
+       if (AT_OBJ_CLASS(attr_idx) == Derived_Type && !AT_DEFINED(attr_idx)) {
+	 if (import_from_host(TOKEN_STR(token), TOKEN_LEN(token), 0, attr_idx)
+	   == NULL_IDX) {
+	   missing_in_host = TRUE;
+	 }
+       }
+       else {
+	 /* If a duplicate import, rather than a conflict between import and
+	  * local, then issue a mere warning */
+	 int severity = AT_ATTR_LINK(attr_idx) ? Warning : Error;
+	 PRINTMSG(TOKEN_LINE(token), 1683, severity, TOKEN_COLUMN(token),
+	   TOKEN_STR(token));
+       }
+     }
+
+     /* Make local name pointing to host's attribute */
+     else {
+       int host_name_idx;
+       int host_attr_idx = srch_host_sym_tbl_for_import(TOKEN_STR(token),
+         TOKEN_LEN(token), &host_name_idx);
+       if (NULL_IDX == host_attr_idx) {
+         missing_in_host = TRUE;
+       }
+       else {
+	 attr_idx = ntr_host_in_sym_tbl(&token, name_idx, host_attr_idx,
+	   host_name_idx, TRUE);
+	 AT_DEFINED(attr_idx) = AT_DEFINED(host_attr_idx);
+	 AT_LOCKED_IN(attr_idx) = TRUE;
+       }
+     }
+
+     if (missing_in_host) {
+       PRINTMSG(TOKEN_LINE(token), 1684, Error, TOKEN_COLUMN(token),
+	 TOKEN_STR(token));
+     }
+
+     if (LA_CH_VALUE == COMMA) {
+	NEXT_LA_CH;                            /* Pick up comma */
+     }
+     else {
+	break;
+     }
+   }
+
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, ", or " EOS_STR);
+   }
+
+   NEXT_LA_CH; /* Consume EOS */
+
+   if (!found_list) {
+     SCP_IMPORT(curr_scp_idx) = TRUE;
+   }
+
+   TRACE (Func_Exit, "parse_import_stmt", NULL);
+}  /* parse_import_stmt */
+#endif /* KEY Bug 11741 */
 
 /******************************************************************************\
 |*									      *|
@@ -4612,7 +4956,11 @@ static long parse_attr_spec(int		*array_idx,
       NEXT_LA_CH;
                
       if (!MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
-         parse_err_flush(Find_Comma, "ALLOCATABLE, DIMENSION, EXTERNAL, "
+         parse_err_flush(Find_Comma, "ALLOCATABLE, "
+#ifdef KEY /* Bug 14150 */
+	                 "BIND, "
+#endif /* KEY Bug 14150 */
+	                 "DIMENSION, EXTERNAL, "
                          "INTENT, INTRINSIC, OPTIONAL, PARAMETER, POINTER, "
                          "PRIVATE, PUBLIC, SAVE or TARGET");
          continue;
@@ -4849,8 +5197,13 @@ static long parse_attr_spec(int		*array_idx,
                issue_attr_blk_err("VOLATILE");
             }
             else {
-               PRINTMSG(TOKEN_LINE(token), 1254, Ansi, TOKEN_COLUMN(token),
-                        "VOLATILE");
+               PRINTMSG(TOKEN_LINE(token),
+#ifdef KEY /* Bug 14110 */
+	         1685,
+#else /* KEY Bug 14110 */
+	         1254,
+#endif /* KEY Bug 14110 */
+		 Ansi, TOKEN_COLUMN(token), "VOLATILE");
                err_in_list	= err_attrs[Volatile_Attr] & attr_list;
                attr_list	= attr_list | (1 << Volatile_Attr);
 
@@ -4884,6 +5237,47 @@ static long parse_attr_spec(int		*array_idx,
             ATD_INTENT(AT_WORK_IDX)	= new_intent;
             break;
 
+#ifdef KEY /* Bug 14150 */
+	 case Tok_Kwd_Bind:
+            if (STMT_CANT_BE_IN_BLK(Bind_Stmt, CURR_BLK)) {
+               issue_attr_blk_err("BIND");
+               parse_err_flush(Find_Comma, NULL);
+               continue;
+            }
+            err_in_list	= err_attrs[Bind_Attr] & attr_list;
+            attr_list	= attr_list | (1 << Bind_Attr);
+
+            if (err_in_list) {
+               issue_attr_err(Bind_Attr, err_in_list);
+            }
+
+	    if (parse_language_binding_spec(&new_binding_label)) {
+              /* parse_attrs() will merge in the binding label */
+	    }
+	    break;
+
+         case Tok_Kwd_Value:
+
+            if (STMT_CANT_BE_IN_BLK(Value_Stmt, CURR_BLK)) {
+               issue_attr_blk_err("VALUE");
+               parse_err_flush(Find_Comma, NULL);
+               continue;
+            }
+            err_in_list	= err_attrs[Value_Attr] & attr_list;
+            attr_list	= attr_list | (1 << Value_Attr);
+
+            if (err_in_list) {
+               issue_attr_err(Value_Attr, err_in_list);
+            }
+
+	    else {
+	       /* Set OBJ_CLASS just to avoid sytb_var_error() */
+	       AT_OBJ_CLASS(AT_WORK_IDX) = Data_Obj;
+	       ATD_CLASS(AT_WORK_IDX) = Dummy_Argument;
+	       ATD_VALUE_ATTR(AT_WORK_IDX)	= TRUE;
+	    }
+            break;
+#endif /* KEY Bug 14150 */
 
          case Tok_Kwd_Dimension:
             err_in_list	= err_attrs[Dimension_Attr] & attr_list;
@@ -5542,6 +5936,9 @@ static	void	issue_attr_blk_err(char		*attr_str)
       case Contains_Blk:
       case Derived_Type_Blk:
       case Interface_Blk:
+#ifdef KEY /* Bug 10572 */
+      case Enum_Blk:
+#endif /* KEY Bug 10572 */
 
          /* These things are caught earlier.  The type declaration statement */
          /* is not allowed in any of the executable blocks, so don't print   */
@@ -6705,3 +7102,49 @@ EXIT:
    return(ok);
 
 }  /* parse_initializer */
+
+#ifdef KEY /* Bug 14110 */
+static char **surprise_ids;
+static unsigned surprise_ids_cnt;
+static unsigned surprise_ids_limit;
+
+/*
+ * id		Identifier which appears in "volatile" statement without
+ *		having previously created an attribute in the current scope
+ */
+void surprise_volatile(char *id) {
+  if (surprise_ids_cnt >= surprise_ids_limit) {
+    surprise_ids = surprise_ids_limit ?
+      realloc(surprise_ids, surprise_ids_limit *= 2) :
+      malloc(10 * sizeof(char *));
+  }
+  surprise_ids[surprise_ids_cnt++] = strdup(id);
+}
+
+/*
+ * For each identifier which appeared in a "volatile" statement without
+ * having previously created an attribute in the current scope, if there's
+ * now a local or host-associated attribute, set the "volatile" bit on that
+ * attribute. Otherwise, create an attribute in the current scope.
+ */
+void
+revisit_volatile() {
+  for (int i = 0; i < surprise_ids_cnt; i += 1) {
+    int name_idx;
+    token_type tmp = initial_token;
+    memcpy(TOKEN_STR(tmp), surprise_ids[i], strlen(surprise_ids[i]));
+    int attr_idx = srch_sym_tbl(TOKEN_STR(tmp), TOKEN_LEN(tmp), &name_idx);
+    if (!attr_idx) {
+      attr_idx = srch_host_sym_tbl(TOKEN_STR(tmp), TOKEN_LEN(tmp), &name_idx,
+        0);
+    }
+    if (!attr_idx) {
+      attr_idx = ntr_sym_tbl(&tmp, name_idx);
+      SET_IMPL_TYPE(attr_idx);
+    }
+    merge_volatile(TRUE, 1, 1, attr_idx);
+    free(surprise_ids[i]);
+  }
+  surprise_ids_cnt = 0;
+}
+#endif /* KEY Bug 14110 */

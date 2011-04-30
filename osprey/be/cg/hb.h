@@ -451,7 +451,7 @@ inline HB_bb_list * HB_Blocks_List(HB *hb)
 extern HB* HB_Alloc(MEM_POOL* pool);
 
 extern void HB_Init(void);
-extern void HB_Form_Hyperblocks(RID* rid, const BB_REGION& bb_region);
+extern void HB_Form_Hyperblocks(RID* rid, const BB_REGION* bb_region);
 //
 // Some typedefs to make using STL lists easier
 //

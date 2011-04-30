@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007 QLogic Corporation.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -59,7 +67,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "elf_stuff.h"
 #include <ctype.h>
@@ -367,10 +374,33 @@ Targ_Emit_Const (FILE *fl,	    /* File to which to write */
 	break;
 	}
 
+      case MTYPE_F10: {
+        char *p = (char *) & TCON_R16(tc);
+        // Force the size of MTYPE_F10 to 16 for 64bit code and 12 for 32bit code
+	emit_bytes( fl, p, Is_Target_64bit() ? 16 : 12 /* sizeof(TCON_R16(tc)) */ );
+	fprintf(fl, "\t%s long double %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+	--rc;
+	break;
+	}
+
       case MTYPE_FQ: {
         char *p = (char *) & TCON_R16(tc);
-	emit_bytes( fl, p, Is_Target_64bit() ? 16 : sizeof(TCON_R16(tc)) );
+        // Force the size of MTYPE_FQ to 16 for 64bit code and 12 for 32bit code
+	emit_bytes( fl, p, Is_Target_64bit() ? 16 : 12 /* sizeof(TCON_R16(tc)) */ );
 	fprintf(fl, "\t%s quad %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+	--rc;
+	break;
+	}
+
+      case MTYPE_C10: {
+	INT i;
+        char *p = (char *) & TCON_R16(tc);
+	emit_bytes( fl, p, sizeof(TCON_R16(tc)) );
+	fprintf(fl, "\t%s complex long double real part %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+
+        p = (char *) & TCON_IR16(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR16(tc)) );
+	fprintf(fl, "\t%s complex long double imag part %#Lg\n", ASM_CMNT, TCON_IR16(tc) );
 	--rc;
 	break;
 	}
@@ -390,7 +420,7 @@ Targ_Emit_Const (FILE *fl,	    /* File to which to write */
 
       case MTYPE_STRING: {
 	INTSC count;
-#ifdef KEY	// Use .rept/.endr to reduce .s file size.  Bug 4620.
+#if defined(KEY) && ! defined(BUILD_OS_DARWIN)	// Use .rept/.endr to reduce .s file size.  Bug 4620.
 	if (rc > 1)
 	  fprintf(fl, ".rept %ld\n", rc);
 	char *p = Index_to_char_array (TCON_cp(tc));
@@ -406,6 +436,79 @@ Targ_Emit_Const (FILE *fl,	    /* File to which to write */
 	rc = 0;
 	break;
 	}
+
+      case MTYPE_V8I1:
+      case MTYPE_M8I1:
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v0(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v1(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>24) & 0xff, rc, 10 );
+	rc = 0;
+	break;
+
+      case MTYPE_V8I2:
+      case MTYPE_M8I2:
+	if (CG_emit_non_gas_syntax) {
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v0(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v0(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v1(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v1(tc)>>16) & 0xffff, rc, 8 );
+	}
+	else {	  
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v0(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v0(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v1(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v1(tc)>>16) & 0xffff, rc, 8 );
+	}
+	rc = 0;
+	break;
+
+      case MTYPE_V8I4:
+      case MTYPE_M8I4:
+	{
+	  if (CG_emit_non_gas_syntax) {
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v0(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v1(tc), rc, 4 );
+	  } else {
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v0(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v1(tc), rc, 4 );
+	  }
+	  rc = 0;
+	  break;
+	}
+
+      case MTYPE_V8I8:
+	if (CG_emit_non_gas_syntax)
+	  Emit_Repeated_Constant ( fl, ".dword", TCON_ll0(tc), rc, 2 );
+	else Emit_Repeated_Constant ( fl, 
+		((loc % 8) == 0 ? AS_DWORD : AS_DWORD_UNALIGNED), 
+		TCON_ll0(tc), rc, 2 );
+	rc = 0;
+	break;
 
       case MTYPE_V16F4: {
 	if (CG_emit_non_gas_syntax) {
@@ -606,6 +709,347 @@ Targ_Emit_Const (FILE *fl,	    /* File to which to write */
 	  break;
 	}
 
+      case MTYPE_V32F4: {
+	if (CG_emit_non_gas_syntax) {
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", TCON_word0(tc), rc, 4 );
+	} 
+	else {
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(tc), rc, 4 );
+	}
+	fprintf(fl, "\t%s float[8] %#g %#g %#g %#g %#g %#g %#g %#g\n", ASM_CMNT, 
+		TCON_R4(tc), TCON_R4(tc), TCON_R4(tc), TCON_R4(tc),
+		TCON_R4(tc), TCON_R4(tc), TCON_R4(tc), TCON_R4(tc));
+	rc = 0;
+	break;
+        }
+      case MTYPE_V32F8: {
+	/* Emit doubles as two words, to match how the constants are
+           handled in the code. */
+	if (CG_emit_non_gas_syntax) {
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, ".word", 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	}
+	else {
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Lo(tc)), 1, 4 );
+	  Emit_Repeated_Constant ( fl, 
+		((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+		TCON_word0(Extract_Double_Hi(tc)), 1, 4 );
+	}
+
+	fprintf(fl, "\t%s double[4] %#g %#g %#g %#g\n", ASM_CMNT, 
+		TCON_R8(tc), TCON_R8(tc), TCON_R8(tc), TCON_R8(tc) );
+	--rc;
+	break;
+        }
+
+      case MTYPE_V32C4: {
+	INT i;
+        char *p = (char *) & TCON_R4(tc);
+	emit_bytes( fl, p, sizeof(TCON_R4(tc)) );
+	fprintf(fl, "\t%s complex float real part %#g\n", ASM_CMNT, TCON_R4(tc) );
+
+        p = (char *) & TCON_IR4(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR4(tc)) );
+	fprintf(fl, "\t%s complex float imag part %#g\n", ASM_CMNT, TCON_IR4(tc) );
+
+        p = (char *) & TCON_R4(tc);
+	emit_bytes( fl, p, sizeof(TCON_R4(tc)) );
+	fprintf(fl, "\t%s complex float real part %#g\n", ASM_CMNT, TCON_R4(tc) );
+
+        p = (char *) & TCON_IR4(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR4(tc)) );
+	fprintf(fl, "\t%s complex float imag part %#g\n", ASM_CMNT, TCON_IR4(tc) );
+
+        p = (char *) & TCON_R4(tc);
+	emit_bytes( fl, p, sizeof(TCON_R4(tc)) );
+	fprintf(fl, "\t%s complex float real part %#g\n", ASM_CMNT, TCON_R4(tc) );
+
+        p = (char *) & TCON_IR4(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR4(tc)) );
+	fprintf(fl, "\t%s complex float imag part %#g\n", ASM_CMNT, TCON_IR4(tc) );
+
+        p = (char *) & TCON_R4(tc);
+	emit_bytes( fl, p, sizeof(TCON_R4(tc)) );
+	fprintf(fl, "\t%s complex float real part %#g\n", ASM_CMNT, TCON_R4(tc) );
+
+        p = (char *) & TCON_IR4(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR4(tc)) );
+	fprintf(fl, "\t%s complex float imag part %#g\n", ASM_CMNT, TCON_IR4(tc) );
+
+	--rc;
+	break;
+        }
+
+      case MTYPE_V32I1:
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v0(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v0(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v1(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v1(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v2(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v2(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v2(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v2(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v3(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v3(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v3(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v3(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v4(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v4(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v4(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v4(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v5(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v5(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v5(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v5(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v6(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v6(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v6(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v6(tc)>>24) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, TCON_v7(tc) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v7(tc)>>8) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v7(tc)>>16) & 0xff, rc, 10 );
+	Emit_Repeated_Constant ( fl, AS_BYTE, (TCON_v7(tc)>>24) & 0xff, rc, 10 );
+	rc = 0;
+	break;
+
+      case MTYPE_V32I2:
+	if (CG_emit_non_gas_syntax) {
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v0(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v0(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v1(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v1(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v2(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v2(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v3(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v3(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v4(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v4(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v5(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v5(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v6(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v6(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   TCON_v7(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl, ".half", 
+				   (TCON_v7(tc)>>16) & 0xffff, rc, 8 );
+	}
+	else {	  
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v0(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v0(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v1(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v1(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v2(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v2(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v3(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v3(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v4(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v4(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v5(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v5(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v6(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v6(tc)>>16) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   TCON_v7(tc) & 0xffff, rc, 8 );
+	  Emit_Repeated_Constant ( fl,
+				   ((loc % 2) == 0 ? AS_HALF : 
+				    AS_HALF_UNALIGNED), 
+				   (TCON_v7(tc)>>16) & 0xffff, rc, 8 );
+	}
+	rc = 0;
+	break;
+
+      case MTYPE_V32I4: 
+	{
+	  if (CG_emit_non_gas_syntax) {
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v0(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v1(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v2(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v3(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v4(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v5(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v6(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, ".word", TCON_v7(tc), rc, 4 );
+	  } else {
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v0(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v1(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v2(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v3(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v4(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v5(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v6(tc), rc, 4 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 4) == 0 ? AS_WORD : AS_WORD_UNALIGNED), 
+				     TCON_v7(tc), rc, 4 );
+	  }
+	  rc = 0;
+	  break;
+	}
+
+      case MTYPE_V32I8:
+	{
+	  if (CG_emit_non_gas_syntax) {
+	    Emit_Repeated_Constant ( fl, ".dword", TCON_ll0(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, ".dword", TCON_ll1(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, ".dword", TCON_ll2(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, ".dword", TCON_ll3(tc), rc, 2 );
+	  } else {
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 8) == 0 ? AS_DWORD : AS_DWORD_UNALIGNED), 
+				     TCON_ll0(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 8) == 0 ? AS_DWORD : AS_DWORD_UNALIGNED), 
+				     TCON_ll1(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 8) == 0 ? AS_DWORD : AS_DWORD_UNALIGNED), 
+				     TCON_ll2(tc), rc, 2 );
+	    Emit_Repeated_Constant ( fl, 
+				     ((loc % 8) == 0 ? AS_DWORD : AS_DWORD_UNALIGNED), 
+				     TCON_ll3(tc), rc, 2 );
+	  }
+	  rc = 0;
+	  break;
+	}
+
       default:
 	ErrMsg ( EC_Inv_Mtype, Mtype_Name(TCON_ty(tc)),
 		"Targ_Emit_Const" );
@@ -711,10 +1155,31 @@ Targ_Emit_EH_Const (FILE *fl,	    /* File to which to write */
 	break;
 	}
 
+      case MTYPE_F10: {
+        char *p = (char *) & TCON_R16(tc);
+	emit_bytes( fl, p, sizeof(TCON_R16(tc)) );
+	fprintf(fl, "\t%s long double %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+	--rc;
+	break;
+	}
+
       case MTYPE_FQ: {
         char *p = (char *) & TCON_R16(tc);
 	emit_bytes( fl, p, sizeof(TCON_R16(tc)) );
 	fprintf(fl, "\t%s quad %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+	--rc;
+	break;
+	}
+
+      case MTYPE_C10: {
+	INT i;
+        char *p = (char *) & TCON_R16(tc);
+	emit_bytes( fl, p, sizeof(TCON_R16(tc)) );
+	fprintf(fl, "\t%s complex long double real part %#Lg\n", ASM_CMNT, TCON_R16(tc) );
+
+        p = (char *) & TCON_IR16(tc);
+	emit_bytes( fl, p, sizeof(TCON_IR16(tc)) );
+	fprintf(fl, "\t%s complex long double imag part %#Lg\n", ASM_CMNT, TCON_IR16(tc) );
 	--rc;
 	break;
 	}
@@ -811,6 +1276,9 @@ Targ_Emit_EH_Const (FILE *fl,	    /* File to which to write */
 
 
 #if defined(BACK_END) || defined(QIKKI_BE)
+#if defined(BUILD_OS_DARWIN)
+void Em_Targ_Emit_Const (void *, TCON, BOOL, INTSC) {}
+#else /* defined(BUILD_OS_DARWIN) */
 /* ====================================================================
  *
  * Em_Targ_Emit_Const
@@ -899,11 +1367,28 @@ Em_Targ_Emit_Const (void *scn,	    /* Section to which to write */
 	}
 	break;
 
+    case MTYPE_F10:
+        for (count = 0; count < rc; count++) {
+            long double value = TCON_R16(tc);
+            Em_Add_Bytes_To_Scn (section, (char *) &value, sizeof(value), 1);
+        }
+        break;
+
     case MTYPE_FQ:
 	for (count = 0; count < rc; count++) {
 	    double *pvalue = &(TCON_R8(tc));
 	    Em_Add_Bytes_To_Scn (section, (char *) pvalue, sizeof(double), 1);
 	    Em_Add_Bytes_To_Scn (section, (char *) (pvalue+1), sizeof(double), 1);
+	}
+	break;
+
+    case MTYPE_C10:
+	for (count = 0; count < rc; count++) {
+	    long double value;
+	    value = TCON_R16(tc);
+	    Em_Add_Bytes_To_Scn (section, (char *) &value, sizeof(value), 1);
+	    value = TCON_IR16(tc);
+	    Em_Add_Bytes_To_Scn (section, (char *) &value, sizeof(value), 1);
 	}
 	break;
 
@@ -932,6 +1417,7 @@ Em_Targ_Emit_Const (void *scn,	    /* Section to which to write */
 			  Mtype_Name(TCON_ty(tc)) ) );
     }
 } /* Em_Targ_Emit_Const */
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif /* BACK_END */
 
 #if !defined(MONGOOSE_BE) && !defined(QIKKI_BE)

@@ -37,6 +37,8 @@
 #define import_INCLUDED
 
 /* Imported from prompf_anl.so */
+#if ! defined(BUILD_OS_DARWIN)
 #pragma weak Anl_File_Path
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 #endif

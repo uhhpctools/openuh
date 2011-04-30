@@ -67,7 +67,7 @@ static ST *reg_st_local;
 static ST *unreg_st_local;
 static ST *reg_st_common;
 
-static ST*  Declare_Function (char* ty_name, char* st_name, 
+static ST*  Declare_Function (const char* ty_name, const char* st_name, 
                               INT nparms, TY *ty_array[]);
 static void Set_Call_Side_Effects (WN* call_wn);
 static void MemCtr_Init ();
@@ -280,7 +280,7 @@ static void Collect_Goodies (WN* wn,
 }
 
 
-static ST* Declare_Function (char* ty_name, char* st_name, 
+static ST* Declare_Function (const char* ty_name, const char* st_name, 
                              INT nparms, TY_IDX ty_array[])
 {
   ST* func_st;

@@ -43,7 +43,6 @@
 
 //* -*-Mode: c++;-*- (Tell emacs to use c++ mode) */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <alloca.h>
 
@@ -333,28 +332,6 @@ Update_wn_types (WN* pu, const TY_TO_TY_MAP* old_to_new_ty_map)
   }
 }
 
-#if 0
-// -----------------------------------------------------------------
-// Replace an LDID node with the constant and update parent pointers
-// -----------------------------------------------------------------
-static void
-Replace_ldid_with_constant (WN* ldid_wn, WN* const_wn)
-{
-  WN* parent = LWN_Get_Parent(ldid_wn);
-  Is_True (parent, ("Replace_ldid_with_constant: no parent for LDID node"));
-
-  INT k = 0; 
-  while (k < WN_kid_count(parent) && WN_kid(parent,k) != ldid_wn) {
-    ++k;
-  }
-  Is_True(k < WN_kid_count(parent), 
-          ("Replace_ldid_with_constant: broken parent pointer"));
-
-  WN_Delete(ldid_wn);
-  WN_kid(parent,k) = WN_COPY_Tree(const_wn);
-  LWN_Set_Parent(WN_kid(parent, k), parent);
-}
-#endif  
 
 // -----------------------------------------------------------------------
 // After constant formals have been substituted in array bound expressions
@@ -391,7 +368,14 @@ Update_array_bounds (WN* pu)
             break;
           }
           // replace all LDIDs of the formal by the constant
-          else if (opr == OPR_LDID && WN_st(node) == st) {
+          else if (opr == OPR_LDID && WN_st(node) == st
+#ifdef KEY
+          // Bug 14197: Above, the STID was to the ST with offset 0, so
+          // we can only replace offset 0 LDIDs. Also note, there is really
+          // no check to limit this replacement to only formals.
+                   && WN_offset(node) == 0
+#endif
+		   ) {
             iter.Replace(WN_COPY_Tree(rhs));
           }
           ++iter;
@@ -494,19 +478,6 @@ IPA_constant_in_array_bounds (const SUMMARY_VALUE& value,
   return found_formal_ldid;
 }
 
-#if 0
-//-------------------------------------------------------------------
-// generate the assignment statement
-//-------------------------------------------------------------------
-static WN*
-Create_Stmt (ST* formal, WN* const_wn, TYPE_ID desc)
-{
-    WN* result = WN_Stid (desc, 0, formal, ST_type (formal), const_wn);
-    LWN_Set_Parent (const_wn, result);
-    return result;
-    
-} // Create_Stmt
-#endif
 
 #ifdef Is_True_On
 // create assert statement to verify if "formal" has value equals to
@@ -770,6 +741,9 @@ Replace_Icall (TREE_ITER& iter, const WN* icall, ST* actual)
     for (INT i = 0; i < WN_kid_count (icall) - 1; ++i) {
 	WN_kid (call, i) = WN_kid (icall, i);
     }
+#ifdef KEY // bug 1050
+    WN_call_flag(call) = WN_call_flag(icall);
+#endif
     iter.Replace (call);
 } // Replace_Icall
 
@@ -1052,8 +1026,32 @@ Propagate_Constants (IPA_NODE* node, WN* w, VALUE_DYN_ARRAY* cprop_annot)
 			     w      /* current_pu */ ))
 	  continue;				  
 #endif
-	    // parameter passed by reference
-	    if (annot_node.Is_addr_of ()) {
+    //here we will met the recursive case, where in the following case
+    //   caller(){
+    //       x       = 0, y =0;
+    //       callee(x,y)//x, y both are by reference
+    //           }
+    //   callee(int p, int q){
+    //             p = 0;
+    //             q = 1
+    //            }
+    // since p and q are killed in callee, so it will cprop p,q in callee, but
+    // will cprop x, y in caller, will changed into
+    //   callee(0,0);
+    // this will introduce the problem in callee, where 0 are in rodata section,
+    // it try to modify the readonly section
+    // the safe fix here is just disable such optimization if we find this
+    // annot_node is passed by reference since we can't now if the callee have
+    // been cproped
+
+    //better fix is when the callee is done, if we can pass some information to
+    //the caller, then we will get better result.
+        
+    // parameter passed by reference
+//     if(annot_node.Is_addr_of ()){
+//       continue;
+//     }
+    if (annot_node.Is_addr_of ()) {
 		// "normal" case: we can peel off the LDA from the actual
 		const IPAA_NODE_INFO* mod_ref_info = node->Mod_Ref_Info ();
 		if (mod_ref_info &&
@@ -1185,6 +1183,15 @@ IPA_Propagate_Constants (IPA_NODE* n, BOOL delete_const_param)
 	    state_formal_array = (STATE_ARRAY*) sec->Get_formals();
     }
     INT k=0;
+#ifdef KEY
+    TYLIST_IDX tylist_idx;
+    TYLIST_IDX from_idx = TY_tylist(PU_prototype(Pu_Table[ST_pu(WN_st(w))]));
+    // function return type
+    Set_TYLIST_type (New_TYLIST (tylist_idx), Tylist_Table[from_idx]);
+    Set_TY_tylist (PU_prototype(Pu_Table[ST_pu(WN_st(w))]), tylist_idx);
+    ++from_idx;
+#endif
+
     for (i = 0; i < WN_num_formals(w); i++) {
 	WN* id = WN_kid(w,i);
 	if ((*cprop_annot)[i].Is_remove_param ()) {
@@ -1200,30 +1207,20 @@ IPA_Propagate_Constants (IPA_NODE* n, BOOL delete_const_param)
 	} else {
 	    WN_kid(func_node,k) = id;
 	    ++k;
+#ifdef KEY
+	    Set_TYLIST_type (New_TYLIST (tylist_idx), Tylist_Table[from_idx]);
+#endif
+
 	}
-    }
+#ifdef KEY
+	++from_idx;
+#endif
 
-    if(k < i) {
-      // Need to Change function prototype
-      TY_IDX old_prototype = n->Get_PU().prototype;
-      TY_IDX new_prototype = Copy_TY( old_prototype );
-      TY& old_ty = Ty_Table[old_prototype];
-      TY& new_ty = Ty_Table[new_prototype];
-      TYLIST_IDX old_idx = old_ty.Tylist();
-      TYLIST_IDX new_idx;
-      New_TYLIST(new_idx) = Tylist_Table[old_idx++]; // For return type
-      new_ty.Set_tylist(new_idx);
-      for (i = 0; i < WN_num_formals(w); i++) {
-	WN* id = WN_kid(w,i);
-	if ((*cprop_annot)[i].Is_remove_param ())
-	  ++old_idx; // Skip this parameter
-        else
-	  New_TYLIST(new_idx) = Tylist_Table[old_idx++]; // For remained parameter
-      }
-      New_TYLIST(new_idx) = 0; // End of the list.
-
-      n->Get_PU().prototype = new_prototype;
     }
+#ifdef KEY
+    Set_TYLIST_type (New_TYLIST (tylist_idx), 0);
+#endif
+
     if (n->Has_Aliased_Formal ()) {
 	// there are STs that are based on the deleted formals, so we
 	// need to change their storage_class to SCLASS_AUTO
@@ -1408,9 +1405,6 @@ Create_Const_ST (const SUMMARY_VALUE& value)
   return 0;
 } 
 
-#if 0
-typedef HASH_TABLE<ST_IDX,ST_IDX> ST_IDX_HASH_TABLE;
-#endif
 
 //-------------------------------------------------------------------
 // propagate globals into this PU
@@ -1418,16 +1412,6 @@ typedef HASH_TABLE<ST_IDX,ST_IDX> ST_IDX_HASH_TABLE;
 extern void
 IPO_propagate_globals(IPA_NODE *n)
 {
-#if 0
-  static MEM_POOL Temp_pool;
-  static BOOL Temp_pool_initialized = FALSE;
-  
-  if (!Temp_pool_initialized) {
-    Temp_pool_initialized = TRUE;
-    MEM_POOL_Initialize(&Temp_pool, "temp pool", 0);
-  }
-  MEM_POOL_Push(&Temp_pool);
-#endif
 
   IPAA_NODE_INFO* modref_info = n->Mod_Ref_Info();
   GLOBAL_ANNOT* gannot = n->Global_Annot();
@@ -1437,6 +1421,9 @@ IPO_propagate_globals(IPA_NODE *n)
     BOOL need_to_update_array_bounds = FALSE;
     WN* new_block = WN_CreateBlock();
     WN* pu = n->Whirl_Tree();
+#ifdef KEY // bug 12371
+    LWN_Parentize(pu);
+#endif
     // ST_IDX_HASH_TABLE current_hash_table(8, &Temp_pool);
     
     for (UINT32 i = 0; i < GLOBAL_ANNOT::Size; ++i) {
@@ -1488,34 +1475,7 @@ IPO_propagate_globals(IPA_NODE *n)
     WN_verifier(pu);
   }
 
-#if 0
-  MEM_POOL_Pop(&Temp_pool);
-#endif
 }
 
 
-#if 0
-//-------------------------------------------------------------------------
-// update whirl, change the st's to be sts to the newly created constants
-//-------------------------------------------------------------------------
-static void 
-update_whirl(WN* w, ST_IDX_HASH_TABLE *table)
-{
-  // replace all instances of the current ST with the ST in the temp
-  OPCODE opc =  WN_opcode(w);
-  if (OPCODE_has_sym(opc) && WN_st(w) && table->Find(WN_st_idx(w))) {
-    WN_st_idx(w) = table->Find(WN_st_idx(w));
-  }
-  if (opc == OPC_BLOCK) {
-    for (WN* wn = WN_first(w); wn; wn = WN_next(wn)) {
-      update_whirl(wn, table);
-    }
-  }
-  else {
-    for (INT kid=0; kid<WN_kid_count(w); kid++) {
-      update_whirl(WN_kid(w,kid),table);
-    }
-  }
-}
-#endif
 

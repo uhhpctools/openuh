@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2008, 2009. PathScale, LLC. All Rights Reserved.
+ */
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -70,7 +73,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 /* sgi includes */
 
@@ -1524,7 +1527,7 @@ cwh_addr_stid(ST *st, OFFSET_64 off, TY_IDX ty , WN * rhs)
     tl = ty;
     bt = TY_mtype(ty) ;
 
-# if ! defined (linux)
+# if ! (defined (linux) || defined(BUILD_OS_DARWIN))
     if (IS_ALTENTRY_TEMP(st)) {
       if (MTYPE_is_integral(bt)) {
 	  tl = cwh_stab_altentry_TY(st,TRUE);
@@ -1701,7 +1704,7 @@ cwh_addr_store_ST(ST * st, OFFSET_64 off, TY_IDX dty,  WN * rhs)
    	/* if CQ function result & shared entry temp */
    	/* store via the result address too          */
    	
-# if ! defined (linux)
+# if ! (defined (linux) || defined(BUILD_OS_DARWIN))
    	if (IS_ALTENTRY_TEMP(st)) {
    	  if (TY_mtype(ts) == MTYPE_CQ){
    	    if(!ST_auxst_altentry_shareTY(ST_base(st))) {
@@ -1859,6 +1862,12 @@ cwh_addr_address_ST(ST * st, OFFSET_64 off, TY_IDX ty)
   case SCLASS_FORMAL:
 
     DevAssert((TY_kind(ty) == KIND_POINTER),("formal & non-pointer"));
+
+    if (ST_is_value_parm(st) && !ST_auxst_is_rslt_tmp(st) &&
+       !BY_VALUE(ty)) {
+       wn = cwh_addr_lda(st,off,ty);
+       return wn;
+    }
 
     wn = cwh_addr_ldid(st,0,ty);
     if (off != 0)
@@ -2645,12 +2654,6 @@ cwh_addr_f90_pointer_reference(WN * addr)
        return (FALSE);
        
     case OPR_LDA:
-#if 0
-       st = WN_st(addr);
-       if (ST_class(st) == CLASS_VAR) {
-	  return (ST_auxst_is_f90_pointer(st));
-       }
-#endif
        return (FALSE);
        
     case OPR_ILOAD:

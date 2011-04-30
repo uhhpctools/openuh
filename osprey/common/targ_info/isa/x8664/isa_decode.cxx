@@ -47,7 +47,7 @@
 #include "isa_decode_gen.h"
 #include "targ_isa_bundle.h"
  
-main()
+int main()
 {
   ISA_Decode_Begin("x8664");
 

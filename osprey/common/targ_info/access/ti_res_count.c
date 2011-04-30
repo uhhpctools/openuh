@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -37,6 +41,7 @@
 static const char source_file[] = __FILE__;
 static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/targ_info/access/ti_res_count.c,v $ $Revision: 1.1.1.1 $";
 
+#include <string.h>
 #include <stdio.h>
 #include <math.h>	/* for ceil */
 
@@ -45,8 +50,9 @@ static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/
 #include "mempool.h"
 #include "topcode.h"
 #include "ti_si.h"
-
+#include "bstring.h"
 #include "ti_res_count.h"
+
 
 /* Declare the TI_RES_COUNT opaque type (a context for resource counting):
  */
@@ -77,8 +83,8 @@ TI_RES_COUNT_Alloc(
   TI_RES_COUNT *counts = TYPE_MEM_POOL_ALLOC(TI_RES_COUNT, pool);
   counts->vec = TYPE_MEM_POOL_ALLOC_N(double, pool, SI_resource_count);
   if ( !MEM_POOL_Zeroed(pool) ) {
-    bzero(counts->vec, sizeof(double) * SI_resource_count);
-    bzero(counts->bad_ii, sizeof(counts->bad_ii));
+    memset(counts->vec, 0, sizeof(double) * SI_resource_count);
+    memset(counts->bad_ii, 0, sizeof(counts->bad_ii));
   }
   return counts;
 }
@@ -156,7 +162,7 @@ TI_RES_COUNT_Add_Op_Resources(
   INT                i;
   TOP                topcode = opcode;
   SI_BAD_II_SET      bad_iis = TSI_Bad_IIs(topcode);
-  SI_RESOURCE_TOTAL* rt_vec  = TSI_Resource_Total_Vector(topcode);
+  const SI_RESOURCE_TOTAL* rt_vec  = TSI_Resource_Total_Vector(topcode);
 
   for ( i = 0; i < TSI_Resource_Total_Vector_Size(topcode); ++i ) {
     SI_RESOURCE_ID id    = SI_RESOURCE_TOTAL_Resource_Id(rt_vec+i);
@@ -194,7 +200,7 @@ TI_RES_COUNT_Add_Op_Resources_Scaled(
   INT                i;
   TOP                topcode = opcode;
   SI_BAD_II_SET      bad_iis = TSI_Bad_IIs(topcode);
-  SI_RESOURCE_TOTAL *rt_vec  = TSI_Resource_Total_Vector(topcode);
+  const SI_RESOURCE_TOTAL *rt_vec  = TSI_Resource_Total_Vector(topcode);
 
   for ( i = 0; i < TSI_Resource_Total_Vector_Size(topcode); ++i ) {
     SI_RESOURCE_ID id    = SI_RESOURCE_TOTAL_Resource_Id(rt_vec+i);
@@ -231,7 +237,7 @@ TI_RES_COUNT_Subtract_Op_Resources(
   INT                i;
   TOP                topcode = opcode;
   SI_BAD_II_SET      bad_iis = TSI_Bad_IIs(topcode);
-  SI_RESOURCE_TOTAL *rt_vec = TSI_Resource_Total_Vector(topcode);
+  const SI_RESOURCE_TOTAL *rt_vec = TSI_Resource_Total_Vector(topcode);
 
   for ( i = 0; i < TSI_Resource_Total_Vector_Size(topcode); ++i ) {
     SI_RESOURCE_ID id    = SI_RESOURCE_TOTAL_Resource_Id(rt_vec+i);
@@ -269,7 +275,7 @@ TI_RES_COUNT_Subtract_Op_Resources_Scaled(
   INT                i;
   TOP                topcode = opcode;
   SI_BAD_II_SET      bad_iis = TSI_Bad_IIs(topcode);
-  SI_RESOURCE_TOTAL *rt_vec = TSI_Resource_Total_Vector(topcode);
+  const SI_RESOURCE_TOTAL *rt_vec = TSI_Resource_Total_Vector(topcode);
 
   for ( i = 0; i < TSI_Resource_Total_Vector_Size(topcode); ++i ) {
     SI_RESOURCE_ID id    = SI_RESOURCE_TOTAL_Resource_Id(rt_vec+i);

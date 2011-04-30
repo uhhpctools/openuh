@@ -5393,13 +5393,6 @@ PREFIX(re_search_2) (bufp, string1, size1, string2, size2, startpos, range,
 #endif /* WCHAR */
 
 /* Disabled due to a compiler bug -- see comment at case wordbound */
-#if 0
-/* Test if the character before D and the one at D differ with respect
-   to being word-constituent.  */
-#define AT_WORD_BOUNDARY(d)						\
-  (AT_STRINGS_BEG (d) || AT_STRINGS_END (d)				\
-   || WORDCHAR_P (d - 1) != WORDCHAR_P (d))
-#endif
 
 /* Free everything we malloc.  */
 #ifdef MATCH_MAY_ALLOCATE
@@ -7380,24 +7373,6 @@ byte_re_match_2_internal (bufp, string1, size1,string2, size2, pos,
             break;
           }
 
-#if 0
-	/* The DEC Alpha C compiler 3.x generates incorrect code for the
-	   test  WORDCHAR_P (d - 1) != WORDCHAR_P (d)  in the expansion of
-	   AT_WORD_BOUNDARY, so this code is disabled.  Expanding the
-	   macro and introducing temporary variables works around the bug.  */
-
-	case wordbound:
-	  DEBUG_PRINT1 ("EXECUTING wordbound.\n");
-	  if (AT_WORD_BOUNDARY (d))
-	    break;
-	  goto fail;
-
-	case notwordbound:
-	  DEBUG_PRINT1 ("EXECUTING notwordbound.\n");
-	  if (AT_WORD_BOUNDARY (d))
-	    goto fail;
-	  break;
-#else
 	case wordbound:
 	{
 	  boolean prevchar, thischar;
@@ -7427,7 +7402,6 @@ byte_re_match_2_internal (bufp, string1, size1,string2, size2, pos,
 	    goto fail;
 	  break;
 	}
-#endif
 
 	case wordbeg:
           DEBUG_PRINT1 ("EXECUTING wordbeg.\n");

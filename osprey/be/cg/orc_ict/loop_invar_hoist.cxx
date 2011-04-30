@@ -105,7 +105,7 @@ typedef OP_Vector::iterator    OP_Vector_Iter;
 
     /* STL BB list */
 typedef mempool_allocator<BB*> BB_ALLOC;
-typedef std::list<BB*,OP_ALLOC>     BB_Lst;
+typedef std::list<BB*,BB_ALLOC>     BB_Lst;
 typedef BB_Lst::iterator       BB_Lst_Iter;
 
      /* class LI_TN_INFO :

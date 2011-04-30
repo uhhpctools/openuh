@@ -38,7 +38,7 @@
 #define iface_scn_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *iface_scn_rcs_id = "$Source$ $Revision$";
+static char *iface_scn_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.iface_scn.h $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "symtab.h"

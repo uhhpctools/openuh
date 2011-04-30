@@ -182,9 +182,6 @@ static struct obstack df_ref_obstack;
 static struct df *ddf;
 
 static void df_reg_table_realloc PARAMS((struct df *, int));
-#if 0
-static void df_def_table_realloc PARAMS((struct df *, int));
-#endif
 static void df_insn_table_realloc PARAMS((struct df *, unsigned int));
 static void df_bitmaps_alloc PARAMS((struct df *, int));
 static void df_bitmaps_free PARAMS((struct df *, int));
@@ -200,10 +197,6 @@ static struct df_link *df_ref_unlink PARAMS((struct df_link **, struct ref *));
 static void df_def_unlink PARAMS((struct df *, struct ref *));
 static void df_use_unlink PARAMS((struct df *, struct ref *));
 static void df_insn_refs_unlink PARAMS ((struct df *, basic_block, rtx));
-#if 0
-static void df_bb_refs_unlink PARAMS ((struct df *, basic_block));
-static void df_refs_unlink PARAMS ((struct df *, bitmap));
-#endif
 
 static struct ref *df_ref_create PARAMS((struct df *,
 					 rtx, rtx *, rtx,
@@ -353,35 +346,6 @@ df_reg_table_realloc (df, size)
 }
 
 
-#if 0
-/* Not currently used.  */
-static void
-df_def_table_realloc (df, size)
-     struct df *df;
-     int size;
-{
-  int i;
-  struct ref *refs;
-
-  /* Make table 25 percent larger by default.  */
-  if (! size)
-    size = df->def_size / 4;
-
-  df->def_size += size;
-  df->defs = xrealloc (df->defs,
-		       df->def_size * sizeof (*df->defs));
-
-  /* Allocate a new block of memory and link into list of blocks
-     that will need to be freed later.  */
-
-  refs = xmalloc (size * sizeof (*refs));
-
-  /* Link all the new refs together, overloading the chain field.  */
-  for (i = 0; i < size - 1; i++)
-    refs[i].chain = (struct df_link *) (refs + i + 1);
-  refs[size - 1].chain = 0;
-}
-#endif
 
 
 
@@ -2006,9 +1970,6 @@ df_analyse_1 (df, blocks, flags, update)
       /* More fine grained incremental dataflow analysis would be
 	 nice.  For now recompute the whole shebang for the
 	 modified blocks.  */
-#if 0
-      df_refs_unlink (df, blocks);
-#endif
       /* All the def-use, use-def chains can be potentially
 	 modified by changes in one block.  The size of the
 	 bitmaps can also change.  */
@@ -2402,52 +2363,6 @@ df_insn_refs_unlink (df, bb, insn)
 }
 
 
-#if 0
-/* Unlink all the insns within BB from their reference information.  */
-static void
-df_bb_refs_unlink (df, bb)
-     struct df *df;
-     basic_block bb;
-{
-  rtx insn;
-
-  /* Scan the block an insn at a time from beginning to end.  */
-  for (insn = bb->head; ; insn = NEXT_INSN (insn))
-    {
-      if (INSN_P (insn))
-	{
-	  /* Unlink refs for INSN.  */
-	  df_insn_refs_unlink (df, bb, insn);
-	}
-      if (insn == bb->end)
-	break;
-    }
-}
-
-
-/* Unlink all the refs in the basic blocks specified by BLOCKS.
-   Not currently used.  */
-static void
-df_refs_unlink (df, blocks)
-     struct df *df;
-     bitmap blocks;
-{
-  basic_block bb;
-
-  if (blocks)
-    {
-      FOR_EACH_BB_IN_BITMAP (blocks, 0, bb,
-      {
-	df_bb_refs_unlink (df, bb);
-      });
-    }
-  else
-    {
-      FOR_EACH_BB (bb)
-	df_bb_refs_unlink (df, bb);
-    }
-}
-#endif
 
 /* Functions to modify insns.  */
 
@@ -2737,12 +2652,6 @@ df_bb_def_use_swap (df, bb, def_insn, use_insn, regno)
   link->next = df->insns[use_uid].defs;
   df->insns[use_uid].defs = link;
 
-#if 0
-  link = df_ref_unlink (&df->regs[regno].defs, def);
-  link->ref = def;
-  link->next = df->regs[regno].defs;
-  df->insns[regno].defs = link;
-#endif
 
   DF_REF_INSN (def) = use_insn;
   return def;

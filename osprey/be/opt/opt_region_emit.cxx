@@ -294,6 +294,8 @@ PRUNE_BOUND::Useset_expr(CODEREP *cr)
       Useset_expr(cr->Ilod_base());
       if (cr->Opr() == OPR_MLOAD)
 	Useset_expr(cr->Mload_size());
+      else if (cr->Opr() == OPR_ILOADX)
+	Useset_expr(cr->Index());
       break;
 
     case CK_OP:
@@ -355,37 +357,6 @@ PRUNE_BOUND::Collect_mod_use_sets(BB_NODE *bb)
 }
 
 
-#if 0
-// SAVE THIS CODE FOR LATER, IT MAY BE REQUIRED
-// create a POINTS_TO_REF from an aux_id and remove it from a boundary set
-// based on OPT_STAB::REGION_merge_aux_id_points_to()
-void REGION_remove_aux_id_points_to(POINTS_TO_SET *pset, AUX_ID aux_id,
-				    OPT_STAB *opt_stab)
-{
-  POINTS_TO_REF *tmp, *prev = NULL;
-
-  for (tmp=pset->Elements; tmp!=NULL; tmp=tmp->Next) {
-    if (Compare_points_to(opt_stab->Points_to(aux_id), tmp->Pt)) {
-      if (prev == NULL)
-	pset->Elements = tmp->Next;
-      else
-	prev->Next = tmp->Next;
-      return;
-    }
-    prev = tmp;
-  }
-}
-
-// compare two POINTS_TOs, return TRUE only if they are exactly the same
-BOOL
-PRUNE_BOUND::Compare_points_to(POINTS_TO *p1, POINTS_TO *p2)
-{
-  if (p1->Base() == p2->Base() && p1->Ofst() == p2->Ofst() &&
-      p1->Size() == p2->Size())
-    return TRUE;
-  return FALSE;
-}
-#endif
 
 // remove a POINTS_TO for the aux_id from the boundary set
 // based on OPT_STAB::REGION_add_to_bound()
@@ -408,17 +379,6 @@ PRUNE_BOUND::REGION_remove_from_bound(AUX_ID aux_id, BOOL outset)
   // we only look at Is_real_var so the ST is guaranteed to exist
   Is_True(st != NULL, ("PRUNE_BOUND::REGION_remove_from_bound, NULL st"));
 
-#if 0
-// see PV 555748, if there is a loop around a region, need the pregs to
-// be live-out
-  if (st && ST_class(st) == CLASS_PREG) {
-    BOOL ret = REGION_remove_preg(rid, pt->Ofst(), outset); 
-    Is_Trace(Trace() && ret,(TFile,"===== REGION_remove_from_bound (RGN %d), "
-	      "removing PREG %d, aux_id %d, %s\n", RID_id(rid),
-	      (PREG_NUM) pt->Ofst(), aux_id,
-	      outset ? "out-set" : "in-set"));
-  } 
-#endif
 //  else {
 //    REGION_remove_aux_id_points_to(&RID_def_in_live_out(rid),
 //				   aux_id, opt_stab);

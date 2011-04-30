@@ -54,6 +54,7 @@
 
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_pro_disk_next_block_xtnd = _xlate_pro_disk_next_block_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_pro_disk_next_block = _xlate_pro_disk_next_block
 #endif
@@ -98,7 +99,7 @@ do_64bit_merge_header(xlate_table_pro  table,
     }
 
     /*to ensure no random bits in the output. */
-    bzero(data_ret,bytes_used);
+    BZERO(data_ret,bytes_used);
 
     hdrp = (xlate_header64_v2 *)data_ret;
     base_oblkp = (xlate_blockheader64_v2*) (hdrp+1);
@@ -209,7 +210,7 @@ do_32bit_merge_header(xlate_table_pro  table,
     }
 
     /*to ensure no random bits in the output. */
-    bzero(data_ret,bytes_used);
+    BZERO(data_ret,bytes_used);
 
     hdrp = (xlate_header32_v2 *)data_ret;
     base_oblkp = (xlate_blockheader32_v2*) (hdrp+1);
@@ -378,7 +379,7 @@ _xlate_do_simple_32bit_header(xlate_table_pro  table,
     }
 
     /*to ensure no random bits in the output. */
-    bzero(data_ret,bytes_used);
+    BZERO(data_ret,bytes_used);
 
     hdrp = (xlate_header32_v2 *)data_ret;
     base_oblkp = (xlate_blockheader32_v2*) (hdrp+1);
@@ -477,7 +478,7 @@ _xlate_do_simple_64bit_header(xlate_table_pro  table,
     }
 
     /*to ensure no random bits in the output */
-    bzero(data_ret,bytes_used);
+    BZERO(data_ret,bytes_used);
 
     hdrp = (xlate_header64_v2 *)data_ret;
     base_oblkp = (xlate_blockheader64_v2*) (hdrp+1);
@@ -569,7 +570,7 @@ _xlate_do_current_block(xlate_table_pro  table,
     }
     memcpy(data_ret,curblock->bk_data, bytes_initialized);
     if(bytes_initialized <TB_BLOCK_SIZE) {
-        bzero(data_ret + bytes_initialized,TB_BLOCK_SIZE - bytes_initialized);
+        BZERO(data_ret + bytes_initialized,TB_BLOCK_SIZE - bytes_initialized);
     }
 
     /* set for next block */

@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -71,7 +75,6 @@
 static char *rcs_id = opt_fold_CXX"$Revision: 1.9 $";
 #endif /* _KEEP_RCS_ID */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"
 #include "errors.h"
@@ -145,6 +148,8 @@ static CODEMAP *fold_htable;
 // We need to turn tracing on/off in the simplifier without making it
 // a member of the FOLD class.
 static BOOL     fold_trace;
+
+static CODEREP * CR_CreateFPconst(TCON tc);
 
 void
 Initialize_CR_simp(CODEMAP *htable)
@@ -467,7 +472,7 @@ FOLD::CR_Simplify_Expr(CODEREP *cr)
 
       CODEREP *k0 = SIMPNODE_kid0(cr); // could be CK_OP or CK_IVAR
       found = check_convert(cr, &k0, 0);
-#ifdef TARG_X8664 
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
       // Bug 5935 - disable simplification because if it is a SQRT(RECIP)
       // when the type is F8 because there is no x86 instruction for translating
       // F8RSQRT.
@@ -511,6 +516,13 @@ FOLD::CR_Simplify_Expr(CODEREP *cr)
       found |= check_convert(cr, &k1, 1);
       r = SIMPNODE_SimplifyExp2(op, k0, k1);
       if (r) {
+	 if (SIMPNODE_rtype(r) == MTYPE_F8 && 
+   	   SIMPNODE_rtype(cr) == MTYPE_C8)
+	 {
+	   CODEREP *zero;
+	   zero = CR_CreateFPconst(Host_To_Targ_Float(MTYPE_F8, 0.0)); 
+	   r = CR_Create(OPC_C8PAIR, 2, r, zero, NULL);
+	 }
 	 SIMPNODE_DELETE(cr);
 	 result = r;			// no need for rehash, already done
       } else {
@@ -643,6 +655,8 @@ CODEREP *Combine_bits_any_nzero_test(CODEREP *cr)
   }
   if (lvar != rvar)
     return NOHASH;
+  if (lvar->Kind() != CK_VAR && lvar->Kind() != CK_IVAR)
+    return NOHASH;
   // succeeded in matching pattern
   CODEREP *newcr;
   INT nbits = MTYPE_bit_size(lvar->Dsctyp()); 
@@ -725,6 +739,8 @@ CODEREP *Combine_bits_all_zero_test(CODEREP *cr)
     rbitmask = -1;
   }
   if (lvar != rvar)
+    return NOHASH;
+  if (lvar->Kind() != CK_VAR && lvar->Kind() != CK_IVAR)
     return NOHASH;
   // succeeded in matching pattern
   CODEREP *newcr;
@@ -907,6 +923,12 @@ CR_opcode(CODEREP *cr)
       // cr->Dsctyp() is meaningless for FP constants
       return OPCODE_make_op(OPR_CONST, cr->Dtyp(), MTYPE_V);
     case CK_VAR:
+#ifdef TARG_SL
+      if ( cr->Dtyp() == MTYPE_I2 &&  cr->Dsctyp() == MTYPE_I2) {
+        return OPCODE_make_op(cr->Bit_field_valid() ? OPR_LDBITS : OPR_LDID,
+			      MTYPE_I4, cr->Dsctyp());
+      } else
+#endif
       return OPCODE_make_op(cr->Bit_field_valid() ? OPR_LDBITS : OPR_LDID,
 			    cr->Dtyp(), cr->Dsctyp());
     default:

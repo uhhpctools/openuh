@@ -1,5 +1,13 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. Pathscale, LLC. All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006. 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -95,6 +103,7 @@ static char *config_lno_rcs_id = "$Source: common/com/SCCS/s.config_lno.cxx $ $R
  */
 
 #define DEFAULT_UNROLL_PROD_MAX 16
+
 #ifdef KEY //bug 5375 changes unroll_max default to 5
 #define DEFAULT_UNROLL_MAX 5
 #else
@@ -169,8 +178,10 @@ static LNO_FLAGS Default_LNO = {
   FALSE,	/* Run_fiz_fuse */
 #ifdef TARG_X8664
   0,		/* Fission */
+  TRUE,		/* Serial_distribute */
 #else
   1,		/* Fission */
+  FALSE,	/* Serial_distribute */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -209,8 +220,15 @@ static LNO_FLAGS Default_LNO = {
 #else
   NO_PREFETCH, FALSE,	/* Run_prefetch */
   FALSE, FALSE, /* Prefetch for store accesses - Prefetch_stores */
-  TRUE,        /*Prefetch Invariant (non-constant) Stride */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
+  TRUE,         /*Prefetch Invariant (non-constant) Stride */
   8,            /*Prefetch_Strides_Ahead*/
+  TRUE,         /*Run_streaming_prefetch*/
+#else
+  TRUE,         /*Prefetch Invariant (non-constant) Stride */
+  8,            /*Prefetch_Strides_Ahead*/
+  FALSE,         /*Run_streaming_prefetch*/
 #endif
   2,		/* Prefetch_ahead */
 #ifdef TARG_IA64
@@ -220,6 +238,8 @@ static LNO_FLAGS Default_LNO = {
 #endif
   2,		/* Prefetch_cache_factor */
   FALSE,	/* Prefetch_indirect */
+  TRUE,		/* Prefetch_inductive */
+  TRUE,		/* Prefetch_induc_indir */
   FALSE, FALSE,	/* Run_prefetch_manual */
   TRUE,		/* Power_of_two_hack */
   TRUE,		/* Sclrze */
@@ -252,6 +272,9 @@ static LNO_FLAGS Default_LNO = {
   FALSE,	/* Unswitch_Verbose */
   FALSE,	/* Prefetch_Verbose */
   FALSE,        /* Build_Scalar_Reductions */
+  TRUE,         /* Invariant Factorization */
+  TRUE,         /* New_Invariant Factorization */
+  FALSE,        /* Invar_Factor_Verbose*/
 #endif /* KEY */
   TRUE,		/* Run_oinvar */
 #ifdef TARG_IA64
@@ -288,7 +311,8 @@ static LNO_FLAGS Default_LNO = {
   8,            /* Full_unrolling */
 #endif
 #ifdef KEY
-  2000,         /* Full_unrolling_loop_size_limit */
+  TRUE,         /* Peel_2D_triangle_loop */
+  2500,         /* Full_unrolling_loop_size_limit */
 #ifdef TARG_IA64
   TRUE,		/* Full_Unroll_Outer */
 #else
@@ -298,6 +322,11 @@ static LNO_FLAGS Default_LNO = {
   128,		/* Parallel_per_proc_overhead */ 
   FALSE,	/* Apo_use_feedback */
 #endif
+  TRUE,        /* IfMinMax_Fix_Cond */
+  UINT32_MAX,  /* IfMinMax_Limit */
+  UINT32_MAX,  /* IfMinMax_Fix_Cond_Limit */
+  0,           /* IfMinMax_Trace */
+  TRUE,        /* Struct_Array_Copy */
   { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 }	/* buffer[16] */
 };
 
@@ -364,8 +393,10 @@ LNO_FLAGS Initial_LNO = {
   FALSE,	/* Run_fiz_fuse */
 #ifdef TARG_X8664
   0,		/* Fission */
+  TRUE,		/* Serial_distribute */
 #else
   1,		/* Fission */
+  FALSE,	/* Serial_distribute */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -404,8 +435,15 @@ LNO_FLAGS Initial_LNO = {
 #else
   NO_PREFETCH, FALSE,   /* Run_prefetch */
   FALSE, FALSE, /* Prefetch for store accesses - Prefetch_stores */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
   TRUE,        /* Prefetch Invariant Stride */
   8,            /* Prefetch_Strides_Ahead */
+  TRUE,            /* Streaming Prefetch */
+#else
+  TRUE,        /* Prefetch Invariant Stride */
+  8,            /* Prefetch_Strides_Ahead */
+  FALSE,            /* Streaming Prefetch */
 #endif
   2,		/* Prefetch_ahead */
 #ifdef TARG_IA64
@@ -415,6 +453,8 @@ LNO_FLAGS Initial_LNO = {
 #endif
   2,		/* Prefetch_cache_factor */
   FALSE,	/* Prefetch_indirect */
+  TRUE,		/* Prefetch_inductive */
+  TRUE,		/* Prefetch_induc_indir */
   FALSE, FALSE,	/* Run_prefetch_manual */
   TRUE,		/* Power_of_two_hack */
   TRUE,		/* Sclrze */
@@ -447,6 +487,9 @@ LNO_FLAGS Initial_LNO = {
   FALSE,	/* Unswitch_Verbose */
   FALSE,	/* Prefetch_Verbose */
   FALSE,        /* Build_Scalar_Reductions */
+  TRUE,        /* Invariant Factorization */
+  TRUE,        /* New_Invariant Factorization */
+  FALSE,        /* Invar_Factor_Verbose */
 #endif /* KEY */
   TRUE,		/* Run_oinvar */
 #ifdef TARG_IA64
@@ -483,7 +526,8 @@ LNO_FLAGS Initial_LNO = {
   8,            /* Full_unrolling */
 #endif
 #ifdef KEY
-  2000,         /* Full_unrolling_loop_size_limit */
+  TRUE,         /* Peel_2D_triangle_loop */
+  2500,         /* Full_unrolling_loop_size_limit */
 #ifdef TARG_IA64
   TRUE,		/* Full_Unroll_Outer */
 #else
@@ -493,6 +537,11 @@ LNO_FLAGS Initial_LNO = {
   128,		/* Parallel_per_proc_overhead */ 
   FALSE,	/* Apo_use_feedback */
 #endif
+  TRUE,        /* IfMinMax_Fix_Cond */
+  1000000,     /* IfMinMax_Limit */
+  1000000,     /* IfMinMax_Fix_Cond_Limit */
+  0,           /* IfMinMax_Trace */
+  TRUE,        /* Struct_Array_Copy */
   { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 }	/* buffer[16] */
 };
 
@@ -663,8 +712,10 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "ff",			NULL,	Run_fiz_fuse ),
 #ifdef TARG_X8664
   LNOPT_U32  ( "fission",		"fis",	0,0,2,	Fission ),
+  LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
 #else
   LNOPT_U32  ( "fission",		"fis",	1,0,2,	Fission ),
+  LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
 #endif
   LNOPT_U32  ( "fission_inner_register_limit",	NULL,	32,0,99999,
 					Fission_inner_register_limit ),
@@ -735,17 +786,15 @@ static OPTION_DESC Options_LNO[] = {
 					Pct_Excess_Writes_Nonhidable ),
   LNOPT_BOOL (   "plower",	        NULL,	Pseudo_lower ),
   LNOPT_BOOL (   "plower_mp",           NULL,	Pseudo_lower ),
-#ifndef KEY
-  LNOPT_U32_SET  ( "prefetch",		"pref",	0,0,2,	Run_prefetch, 
-  					Run_prefetch_set ),
-#else
   LNOPT_U32_SET  ( "prefetch",		"pref",	NO_PREFETCH,NO_PREFETCH,
   					AGGRESSIVE_PREFETCH,	
 					Run_prefetch, Run_prefetch_set ),
   LNOPT_BOOL_SET ( "prefetch_stores",	NULL, 	Prefetch_stores,
   						Prefetch_stores_set ),
+#ifdef TARG_X8664
   LNOPT_BOOL( "pf_inv_stride",          NULL,   Prefetch_invariant_stride),
-  LNOPT_U32 ( "pf_stride_ahead",            NULL,   8,0,128, Prefetch_stride_ahead ),
+  LNOPT_U32 ( "pf_stride_ahead",        NULL,   8,0,128, Prefetch_stride_ahead ),
+  LNOPT_BOOL( "stream_prefetch",        NULL,   Run_stream_prefetch ),
 #endif
   LNOPT_U32  ( "prefetch_ahead",	NULL,	2,0,50,	Prefetch_ahead ),
   LNOPT_U32  (   "pf_ahead",		NULL,	2,0,50,	Prefetch_ahead ),
@@ -759,6 +808,8 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_U32  ( "prefetch_cache_factor",	NULL,	1,1,50,	Prefetch_cache_factor),
   LNOPT_U32  (   "pf_cf",		NULL,	1,1,50,	Prefetch_cache_factor),
   LNOPT_BOOL ( "prefetch_indirect",	"",	Prefetch_indirect ),
+  LNOPT_BOOL ( "prefetch_inductive",	"",	Prefetch_inductive ),
+  LNOPT_BOOL ( "prefetch_induc_indir",	"",	Prefetch_induc_indir ),
   MHOPT_BOOL_DUP ( "prefetch_level",	Prefetch_Level ),
   MHOPT_BOOL_DUP ( "pf",		Prefetch_Level ),
   LNOPT_BOOL_SET ( "prefetch_manual",	"",	Run_prefetch_manual,
@@ -798,7 +849,7 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "vintr",			NULL,	Run_vintr ),
 #else
   LNOPT_U32_SET ("vintr",                "vintr", 1, 0, 2, Run_vintr,
-		                        Run_vintr_set ),
+		 Run_vintr_set ),
   LNOPT_BOOL ( "vintr_verbose",		NULL,	Vintr_Verbose ),
   LNOPT_U32_SET ("simd",                "simd", 1, 0, 2, Run_simd,
 		                        Run_simd_set ),
@@ -813,6 +864,9 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "unswitch_verbose",	NULL,	Unswitch_Verbose ),
   LNOPT_BOOL ( "prefetch_verbose",	NULL,	Prefetch_Verbose ),
   LNOPT_BOOL ( "build_scalar_reductions",NULL,	Build_Scalar_Reductions ),
+  LNOPT_BOOL ( "invar_factorization","invar_factor",  Invariant_Factorization),
+  LNOPT_BOOL ( "new_invar_factorization","new_invar_factor",  New_Invariant_Factorization),
+  LNOPT_BOOL ( "invar_fact_verbose",   NULL,    Invar_Factor_Verbose),
 #endif /* KEY */  
   LNOPT_BOOL ( "oinvar",		NULL,	Run_oinvar ),
   LNOPT_U32  ( "doacross",		NULL,	1,0,4,Run_doacross),
@@ -847,8 +901,9 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_U32  ( "local_pad_size", 	NULL,   0,0,1000,Local_pad_size),
   LNOPT_U32  ( "full_unroll", 	        "fu",   0,0,100,Full_unrolling),
 #ifdef KEY
+  LNOPT_BOOL ( "peel_triangle_loop",   NULL,	Peel_2D_triangle_loop ),
   LNOPT_U32  ( "full_unroll_size", 	NULL,   
-	       2000,0,10000,Full_unrolling_loop_size_limit),
+	       2500,0,10000,Full_unrolling_loop_size_limit),
   LNOPT_BOOL ( "full_unroll_outer",	NULL,	Full_Unroll_Outer ),
   LNOPT_U32  ( "processors", 	NULL,   
 	       0,0,10000,Num_Processors),
@@ -856,7 +911,14 @@ static OPTION_DESC Options_LNO[] = {
 	       128,0,0x7fffffff, Parallel_per_proc_overhead),
   LNOPT_BOOL ( "apo_use_feedback",	NULL,	Apo_use_feedback ),
 #endif
-
+  LNOPT_BOOL ( "ifmm_fix_cond",	NULL,	IfMinMax_Fix_Cond),
+  LNOPT_U32  ( "ifmm_limit", 	NULL,   
+	       UINT32_MAX,0,UINT32_MAX, IfMinMax_Limit),
+  LNOPT_U32  ( "ifmm_fc_limit", NULL,   
+	       UINT32_MAX,0,UINT32_MAX, IfMinMax_Fix_Cond_Limit),
+  LNOPT_U32  ( "ifmm_trace", 	NULL,   
+	       0,0,3, IfMinMax_Trace),
+  LNOPT_BOOL ( "struct_array_copy", NULL, Struct_Array_Copy),
   { OVK_COUNT }		    /* List terminator -- must be last */
 };
 
@@ -885,6 +947,70 @@ LNO_Init_Config ( void )
   LNO_FLAGS_next(Current_LNO) = next;
   LNO_FLAGS_mhd (Current_LNO) = &Mhd_Options;
 }
+
+/* ==================================================================
+ * Query whether the given bit mask has a legal value 
+ * ==================================================================
+ */
+static BOOL
+LNO_Check_Bitmask(LNO_FLAGS_MASK bitmask)
+{
+  if ((bitmask < 0) || (bitmask >= LNO_FLAGS_BM_NEXT))
+    return FALSE;
+
+  int bitcount = 0;
+  int val = (INT) bitmask;
+
+  while (val > 0) {
+    if (val & 1) 
+      bitcount ++;
+    val >>=  1;
+  }
+  
+  return (bitcount == 1);
+}
+
+/* ==========================================================================
+ * Given a LNO flag configuration and the bit mask of a field, check whether 
+ * the value of the field has been saved in the next element on the LNO 
+ * configuration stack. If so, copy the value to the cur_lno and reset the
+ * bit mask.
+ * ==========================================================================
+ */
+static void
+LNO_Restore_Field(LNO_FLAGS * cur_lno, LNO_FLAGS_MASK field_mask)
+{
+  FmtAssert(LNO_Check_Bitmask(field_mask), ("Illegal bit mask for LNO flag configuration"));
+
+  if (LNO_FLAGS_bitmask(cur_lno) & field_mask) {
+    LNO_FLAGS * next_lno = LNO_FLAGS_next(cur_lno);
+    FmtAssert(next_lno, ("Null LNO configuration"));
+
+    switch (field_mask) {
+    case OLF_UPPER_BOUND:
+      cur_lno->OLF_Upper_Bound = next_lno->OLF_Upper_Bound;
+      break;
+    default:
+      FmtAssert(FALSE, ("Unknown bit mask for LNO configuration")); 
+      ;
+    }
+
+    LNO_FLAGS_bitmask(cur_lno) -= field_mask;
+  }
+}
+
+/* ===================================================================
+ *  Restore LNO configuration for all fields that have been saved.
+ * ====================================================================
+ */
+static void
+LNO_Restore_Fields( LNO_FLAGS * cur_lno )
+{
+  LNO_Restore_Field(cur_lno,OLF_UPPER_BOUND);
+  /* Add new calls to restore additional fields one by one here */
+}
+
+
 
 /* ====================================================================
  *
@@ -902,7 +1028,7 @@ LNO_Init_Config ( void )
  */
 
 void
-LNO_Push_Config ( BOOL use_default )
+LNO_Push_Config ( BOOL use_default, LNO_FLAGS_MASK bitmask )
 {
   LNO_FLAGS *new_flags =
 	(LNO_FLAGS *) malloc ( sizeof(LNO_FLAGS) );
@@ -914,10 +1040,12 @@ LNO_Push_Config ( BOOL use_default )
   *new_flags = use_default ? Default_LNO : *Current_LNO;
   LNO_FLAGS_next(new_flags) = Current_LNO;
   LNO_FLAGS_mhd (new_flags) = &Mhd_Options;
+
+  FmtAssert(LNO_Check_Bitmask(bitmask), ("Illegal bit mask for LNO flag configuration"));
+  LNO_FLAGS_bitmask(new_flags) =  bitmask;
+
   Current_LNO = new_flags;
 }
-
-
 
 /* ====================================================================
  *
@@ -935,7 +1063,7 @@ LNO_Push_Config ( BOOL use_default )
  */
 
 BOOL
-LNO_Pop_Config ( void )
+LNO_Pop_Config (BOOL do_restore )
 {
   if ( Current_LNO->next == NULL ) {
     /* This is the bottom of the stack: */
@@ -943,11 +1071,39 @@ LNO_Pop_Config ( void )
   } else {
     /* Deallocate the top element and pop it: */
     LNO_FLAGS *new_flags = LNO_FLAGS_next(Current_LNO);
+
+    /*  Copy flags from Current_LNO to new_flags excluding saved fields
+     *  and next field and mhd field
+     */
+    if (do_restore && LNO_FLAGS_bitmask(Current_LNO)) {
+      LNO_FLAGS * next = LNO_FLAGS_next(new_flags);
+      struct MHD * mhd = LNO_FLAGS_mhd(new_flags);
+      LNO_Restore_Fields(Current_LNO);
+      *new_flags = *Current_LNO;
+      LNO_FLAGS_next(new_flags) = next;
+      LNO_FLAGS_mhd(new_flags) = mhd;
+    }
+    
     free ( Current_LNO );
     Current_LNO = new_flags;
+
     return TRUE;
   }
 }
+
+/* ======================================================================================
+ * Pop all temporary elements from LNO configuration stack and restore all saved fields 
+ * ======================================================================================
+ */
+
+void
+LNO_Restore_Configs()
+{
+  while (LNO_Pop_Config(TRUE));
+  FmtAssert(Current_LNO, ("Null Current_LNO"));
+  FmtAssert((LNO_FLAGS_bitmask(Current_LNO) == 0), ("Invalid LNO flag bit mask"));
+}
+
 
 /* ====================================================================
  *

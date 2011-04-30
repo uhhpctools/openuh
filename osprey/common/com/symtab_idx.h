@@ -150,6 +150,21 @@ make_INITO_IDX (UINT index, SYMTAB_IDX level) {
     return (INITO_IDX) ((index << 8)|level);
 }
 
+// similar to ST_IDX, LABEL_IDX consists of a level and index
+inline SYMTAB_IDX
+LABEL_IDX_level (LABEL_IDX label_idx)
+{
+  return Extract_level8(label_idx, (SYMTAB_IDX *) 0);
+}
+
+inline UINT32
+LABEL_IDX_index (LABEL_IDX label_idx)	{ return Extract_index24(label_idx); }
+
+inline LABEL_IDX
+make_LABEL_IDX (UINT index, SYMTAB_IDX level) {
+    return (LABEL_IDX) ((index << 8)|level);
+}
+
 template<class ENTRY_TYPE,
          class INDEX_TYPE,
          class LEVEL_INDEX_TYPE,

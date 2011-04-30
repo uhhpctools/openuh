@@ -263,7 +263,13 @@ int	arg_assoc_tbl[MAX_NUM_ACT_TYPES][MAX_NUM_DUMMY_TYPES] = {
 	/* Scalar_Constant */				{
 			/* Unknown_Dummy        */	COPY_IN,
 			/* Scalar_Dummy         */	COPY_IN,
+#ifdef KEY /* Bug 14150 */
+			/* F2003 allows passing a character string (which
+			 * may be const) to a dummy array of character */
+			/* Sequence_Array_Dummy */	COPY_IN,
+#else /* KEY Bug 14150 */
 			/* Sequence_Array_Dummy */	ERROR_ASSOC,
+#endif /* KEY Bug 14150 */
 			/* Scalar_Ptr_Dummy     */	ERROR_ASSOC,
 			/* Array_Ptr_Dummy      */	ERROR_ASSOC,
 			/* Assumed_Shape_Dummy  */	ERROR_ASSOC,

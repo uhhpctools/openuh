@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -453,7 +457,7 @@ PROCESS_SIBLING:
 
    /* Subprogram header information */
    init_subprog_info (pgm_attr_idx);
-   name_ptr = &name_pool[ATP_EXT_NAME_IDX(pgm_attr_idx)].name_char;
+   name_ptr = ATP_EXT_NAME_PTR(pgm_attr_idx);
    msp.name = mnpool(&msp, name_ptr);
 
    /* Allocate scope table entries for this routine. */
@@ -3936,7 +3940,7 @@ static void	cvrt_ir_to_mif(int	scp_idx)
                               IR_FLD_L(ir_idx),
                               &baseattr, &fldattr, &typeix);
 
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             loc_offset_idx = IL_IDX(IL_NEXT_LIST_IDX(IR_IDX_R(ir_idx)));
 
 
@@ -4905,8 +4909,7 @@ static void  cvrt_proc(int		attr_idx,
    }
    if (ATP_EXT_NAME_IDX(attr_idx) != NULL_IDX &&
        ATP_EXT_NAME_IDX(attr_idx) != AT_NAME_IDX(attr_idx)) {
-      msp.func[funcix].extname =
-	 mnpool(&msp, &name_pool[ATP_EXT_NAME_IDX(attr_idx)].name_char);
+      msp.func[funcix].extname = mnpool(&msp, ATP_EXT_NAME_PTR(attr_idx));
    }
 
    if ((ATP_PROC(attr_idx) == Module_Proc) || 
@@ -5557,16 +5560,6 @@ static int cvrt_attr_ntry(int	attr_idx)
                            msp.immtype,
                          (unsigned long) CN_INT_TO_C(ATD_OFFSET_IDX(attr_idx)));
 
-# if 0
-         /* JBL .. I pulled this */
-
-         sym.offset.tag = mtag_con;
-         sym.offset.val = mcon_lookup(&msp, 
-                                      get_basic_type(CN_TYPE_IDX(
-                                                   ATD_OFFSET_IDX(attr_idx))), 
-                                   (char *)&CN_CONST(ATD_OFFSET_IDX(attr_idx)), 
-                                      NONE);
-# endif
       }
 
       /* Storage block (if necessary) */
@@ -6945,18 +6938,6 @@ static void create_option_tbl(void)
 
 /* Don't know what this is. */
 
-# if 0
-   /* default IEEE rounding mode */
-
-	unsigned int /* enum mroundmode */ roundmode : 3;
-
-        mroundmode_none,        /* default value */
-        mroundmode_tonearest,   /* round to nearest representable value */
-        mroundmode_tozero,      /* round towards zero */
-        mroundmode_upward,      /* round up to nearest representable value */
-        mroundmode_downward,    /* round down to nearest representable value */
-        mroundmode_runtime      /* IEEE rounding mode set at load or run time */
-# endif
 
    /* arithmetic control flags */
 

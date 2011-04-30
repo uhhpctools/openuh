@@ -290,12 +290,6 @@ ffewhere_line_filelinenum (ffewhereLine wl)
 void
 ffewhere_line_kill (ffewhereLine wl)
 {
-#if 0
-  if (!ffewhere_line_is_unknown (wl))
-    fprintf (dmpout, "; ffewhere_line_kill %" ffewhereLineNumber_f "u, uses=%"
-	     ffewhereUses_f_ "u\n",
-	     wl->line_num, wl->uses);
-#endif
   assert (ffewhere_line_is_unknown (wl) || (wl->uses != 0));
   if (!ffewhere_line_is_unknown (wl) && (--wl->uses == 0))
     {
@@ -327,11 +321,6 @@ ffewhere_line_new (ffewhereLineNumber ln)
        || (wl->line_num != ln))
       && (ffelex_line_number () == ln))
     {
-#if 0
-      fprintf (dmpout,
-	       "; ffewhere_line_new %" ffewhereLineNumber_f "u, lexer\n",
-	       ln);
-#endif
       wl = malloc_new_ks (ffe_pool_file (), "FFEWHERE line",
 			  offsetof (struct _ffewhere_line_, content)
 			  + (size_t) ffelex_line_length () + 1);
@@ -355,11 +344,6 @@ ffewhere_line_new (ffewhereLineNumber ln)
 
   if (wl->line_num == ln)
     {
-#if 0
-      fprintf (dmpout, "; ffewhere_line_new %" ffewhereLineNumber_f "u, uses=%"
-	       ffewhereUses_f_ "u\n", ln,
-	       wl->uses);
-#endif
       wl->uses++;
       return wl;
     }
@@ -390,10 +374,6 @@ ffewhere_line_new (ffewhereLineNumber ln)
 ffewhereLine
 ffewhere_line_use (ffewhereLine wl)
 {
-#if 0
-  fprintf (dmpout, "; ffewhere_line_use %" ffewhereLineNumber_f "u, uses=%" ffewhereUses_f_
-	   "u\n", wl->line_num, wl->uses);
-#endif
   assert (ffewhere_line_is_unknown (wl) || (wl->uses != 0));
   if (!ffewhere_line_is_unknown (wl))
     ++wl->uses;

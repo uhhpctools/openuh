@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -138,6 +142,8 @@ public:
   MAP_LIST   *Find_map_list(POINTER k);
   void        Add_map(POINTER k, POINTER v);
   POINTER     Get_val(POINTER k);
+  mUINT32     Size() { return size; };
+  MAP_LIST *  Get_bucket(UINT32 i) { return hash_vec[i]; };
 #ifdef Is_True_On
   void	      Dump_map(FILE *fp=stderr);
 #endif

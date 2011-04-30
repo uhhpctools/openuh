@@ -184,9 +184,13 @@ Get_ST (tree decl_tree)
 		  }
 		}
 #endif
-                return st;
         }
-	return Create_ST_For_Tree (decl_tree);
+	else st = Create_ST_For_Tree (decl_tree);
+#ifdef KEY
+	if (ST_is_thread_private(st) && CURRENT_SYMTAB != GLOBAL_SYMTAB)
+	  Set_PU_has_mp(Get_Current_PU());
+#endif
+	return st;
 }
 
 bool is_empty_base_class (tree type_tree);

@@ -40,10 +40,10 @@ extern "C" {
  * ====================================================================
  *
  * Module: w2c_driver.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/w2c_driver.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:42:00-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.w2c_driver.h $
  *
  * Description:
  *
@@ -273,8 +273,8 @@ extern FILE *W2C_File[W2C_NUM_FILES];
 
 extern BOOL W2C_Should_Emit_Nested_PUs(void);
 extern BOOL W2C_Should_Before_CG(void);
-extern void W2C_Process_Command_Line(INT phase_argc, char * const phase_argv[],
-				     INT argc, char * const argv[]);
+extern void W2C_Process_Command_Line(INT phase_argc, const char* const phase_argv[],
+				     INT argc, const char* const argv[]);
 extern void W2C_Init(void);
 extern void W2C_Fini(void);
 extern void W2C_Push_PU(const WN *pu, WN *body_part_of_interest);

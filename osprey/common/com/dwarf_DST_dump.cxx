@@ -410,9 +410,7 @@ DST_put_assoc(const char *at_name, DST_flag flag, DST_ASSOC_INFO assoc)
 {
    DST_put_string(at_name);
    DST_nput_char(1, '(');
-   if (DST_IS_assoc_fe(flag))
-      DST_put_hex64_attribute("FE", assoc.st_u.fe_uint);
-   else {
+   {
       DST_put_string("ST");
       DST_put_st_id (DST_ASSOC_INFO_st_level(assoc), DST_ASSOC_INFO_st_index(assoc));
    }
@@ -836,7 +834,7 @@ DST_put_array_type(DST_flag flag, DST_ARRAY_TYPE *attr)
 static void
 DST_put_subrange_type(DST_flag flag, DST_SUBRANGE_TYPE *attr)
 {
-   char * p;
+   const char * p;
    DST_put_string(":subrange_type:");
    if (DST_IS_lb_cval(flag)) 
    	DST_put_INT32_attribute(" lower", 

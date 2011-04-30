@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -41,16 +45,23 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "common_com_pch.h"
 #endif /* USE_PCH */
 #pragma hdrstop
 #include <unistd.h>		    /* for unlink() */
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#else
 #include <sys/mman.h>		    /* for mmap() */
+#endif /* __MINGW32__ */
 #include <errno.h>		    /* for errno */
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>		    /* for all Elf stuff */
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>	    /* for WHIRL sections' sh_info */
 
 #ifndef USE_STANDARD_TYPES
@@ -78,6 +89,7 @@
 #define INIT_TMP_MAPPED_SIZE    MAPPED_SIZE
 
 #ifdef BACK_END
+
 #define DEFAULT_NUM_OF_PREFETCHES 64
 WN **prefetch_ldsts;
 INT num_prefetch_ldsts;
@@ -88,11 +100,17 @@ WN **alias_classes;
 INT num_alias_class_nodes;
 INT max_alias_class_nodes;
 
+#define DEFAULT_NUM_ALIAS_CGNODES 128
+WN **alias_cgnodes;
+INT num_alias_cgnode_nodes;
+INT max_alias_cgnode_nodes;
+
 #define DEFAULT_NUM_AC_INTERNALS 128
 WN **ac_internals;
 INT num_ac_internal_nodes;
 INT max_ac_internal_nodes;
-#endif
+
+#endif // BACK_END
 
 #ifndef __GNUC__
 #define __ALIGNOF(x) __builtin_alignof(x)
@@ -100,7 +118,7 @@ INT max_ac_internal_nodes;
 #define __ALIGNOF(x) __alignof__(x)
 #endif // __GNUC__
 
-char *Whirl_Revision = WHIRL_REVISION;
+const char *Whirl_Revision = WHIRL_REVISION;
 
 /* This variable is used by IPAA to pass its local map information
  * to ir_bwrite.c, and by ir_bread.c to pass it to WOPT:
@@ -121,9 +139,9 @@ BOOL Doing_mmapped_io = FALSE;
  *
  * It returns the file offset corresponding to buf + padding.
  */
-extern Elf64_Word
-ir_b_save_buf (const void *buf, Elf64_Word size, unsigned int align,
-	       unsigned int padding, Output_File *fl)
+extern off_t
+ir_b_save_buf (const void *buf, Elf64_Word size, UINT32 align,
+	       UINT32 padding, Output_File *fl)
 {
     Current_Output = fl;
 
@@ -141,7 +159,7 @@ ir_b_save_buf (const void *buf, Elf64_Word size, unsigned int align,
 
 /* copy a file into the temporary file.
  */
-extern Elf64_Word
+extern off_t
 ir_b_copy_file (const void *buf, Elf64_Word size, void *tmpfl)
 {
     Output_File* fl = (Output_File*)tmpfl;
@@ -172,7 +190,7 @@ save_buf_at_offset (const void *buf, Elf64_Word size, off_t offset,
 
 // similar to ir_b_save_buf, except that no actual copying is done, but
 // file space is reserved.
-static Elf64_Word
+static off_t
 ir_b_reserve_space (Elf64_Word size, unsigned int align, Output_File *fl)
 {
     off_t file_size = ir_b_align (fl->file_size, align, 0);
@@ -184,7 +202,7 @@ ir_b_reserve_space (Elf64_Word size, unsigned int align, Output_File *fl)
     return file_size;
 } // ir_b_reserve_space
 
-
+#ifndef __MINGW32__
 /* increase the mmap size.  It is faster if we first unmap the region and
  * then map it again with a larger size.  The overhead for maintaining
  * multiple regions (by the kernel) outweighs that of extra system calls.
@@ -204,7 +222,7 @@ ir_b_grow_map (Elf64_Word min_size, Output_File *fl)
 	else
 	    fl->mapped_size += MAPPED_SIZE;
     }
-#ifndef linux
+#if !(defined(linux) || defined(BUILD_OS_DARWIN) || defined(__APPLE__))
     fl->map_addr = (char *) mmap (0, fl->mapped_size, PROT_READ|PROT_WRITE,
 				  MAP_SHARED|MAP_AUTOGROW, fl->output_fd, 0); 
 #else
@@ -221,19 +239,85 @@ ir_b_grow_map (Elf64_Word min_size, Output_File *fl)
     return fl->map_addr;
 } /* ir_b_grow_map */
 
+#else
+
+#include<windows.h>
+#include<io.h>
+/* Increase the mmap size.  It is faster if we first unmap the region and
+ * then map it again with a larger size.  The overhead for maintaining
+ * multiple regions (by the kernel) outweighs that of extra system calls.
+ * Also, we get a contiguous address space for the file this way.
+ */
+char *
+ir_b_grow_map (Elf64_Word min_size, Output_File *fl)
+{
+	char errBuf[100];
+    Is_True (fl->map_addr != 0, ("output file not yet mapped"));
+	if(!UnmapViewOfFile(fl->map_addr) || !CloseHandle(fl->mapHd))
+    	ErrMsg (EC_IR_Write, fl->file_name, strerror(errno));
+    min_size += fl->file_size;
+    while (fl->mapped_size < min_size) {
+	if (fl->mapped_size < MAPPED_SIZE)
+	    fl->mapped_size = MAPPED_SIZE;
+	else
+	    fl->mapped_size += MAPPED_SIZE;
+    }
+
+   if(_chsize(fl->output_fd, fl->mapped_size)){
+    	FormatMessage(0,NULL, GetLastError(),0, errBuf, 100, NULL);
+		ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+   }
+    if( (fl->mapHd = CreateFileMapping((HANDLE)_get_osfhandle(fl->output_fd), 
+	NULL, PAGE_READWRITE, 0, fl->mapped_size, fl->file_name))== NULL){
+		FormatMessage(0,NULL, GetLastError(),0, errBuf, 100, NULL);
+		ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+    	}
+
+	if ( (fl->map_addr = (char *)MapViewOfFileEx(fl->mapHd, 
+                          FILE_MAP_WRITE,0,0, fl->mapped_size, 0)) == NULL){
+		FormatMessage(0,NULL, GetLastError(),0, errBuf, 100, NULL);
+		ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+    	}
+    if (fl->map_addr == (char *) (-1))
+		ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+    return fl->map_addr;
+} /* ir_b_grow_map */
+
+
+#endif /* __MINGW32__ */
+
 
 extern char *
 ir_b_create_map (Output_File *fl)
 {
     int fd = fl->output_fd;
     fl->mapped_size = INIT_TMP_MAPPED_SIZE;
-#ifndef linux
+#ifdef __MINGW32__
+    {
+      char errBuf[100];
+
+      if( (fl->mapHd = CreateFileMapping((HANDLE)_get_osfhandle(fl->output_fd), NULL, PAGE_READWRITE, 0,
+    								  fl->mapped_size, NULL))
+    			   == NULL){
+	  INT err = GetLastError();
+	  FormatMessage(0,NULL, err,0, errBuf, 100, NULL);
+          ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+    	  }
+      if( (fl->map_addr = (char *)MapViewOfFileEx(fl->mapHd, FILE_MAP_WRITE,
+    		  0,0,fl->mapped_size, 0))  == NULL){
+		  FormatMessage(0,NULL, GetLastError(),0, errBuf, 100, NULL);
+		  ErrMsg (EC_IR_Write, fl->file_name, errBuf);
+    	  }
+    }
+#else
+#if !defined(linux) && !defined(__APPLE__)
     fl->map_addr = (char *) mmap (0, fl->mapped_size, PROT_READ|PROT_WRITE,
 				  MAP_SHARED|MAP_AUTOGROW, fd, 0); 
 #else
     fl->map_addr = (char *) mmap (0, fl->mapped_size, PROT_READ|PROT_WRITE,
 				  MAP_SHARED, fd, 0); 
 #endif
+#endif /* __MINGW32__ */
     return fl->map_addr;
 } /* ir_b_create_map */
 
@@ -253,15 +337,15 @@ IP_FILE_HDR_TABLE *IP_File_header_p;
 #include <ipo_tlog_utils.h>
 #include <ipa_cg.h>
 // ******************** IPA weak symbols$
-extern Elf64_Word
+extern off_t
 ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map, PU_Info *pu)
 #else
-extern Elf64_Word
+extern off_t
 ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
 #endif
 {
     register OPCODE opcode;
-    Elf64_Word node_offset;
+    off_t node_offset;
     char *real_addr;
     INT32 size = WN_Size_and_StartAddress (node, (void **) &real_addr);
 
@@ -276,6 +360,7 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
     if (off_map != WN_MAP_UNDEFINED &&
 	(Write_BE_Maps ||
 	 Write_ALIAS_CLASS_Map ||
+	 Write_ALIAS_CGNODE_Map ||
 	 Write_AC_INTERNAL_Map)) {
 	/* save node_offset for use when writing maps */
 	BOOL set_offset = FALSE;
@@ -293,7 +378,7 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
 		if (num_prefetch_ldsts == 0) {
 		    max_num_prefetch_ldsts = DEFAULT_NUM_OF_PREFETCHES;
 		    prefetch_ldsts =
-			(WN **)malloc(max_num_prefetch_ldsts * sizeof(WN*));
+			(WN **)MEM_POOL_Alloc (Malloc_Mem_Pool, max_num_prefetch_ldsts * sizeof(WN*));
 		    FmtAssert (prefetch_ldsts,
 			       ("No more memory for allocation."));
 		} else if (max_num_prefetch_ldsts == num_prefetch_ldsts + 1) {
@@ -331,6 +416,28 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
 		    FmtAssert(alias_classes != NULL, ("No more memory."));
 		}
 		alias_classes[num_alias_class_nodes++] = node;
+	    }
+	}
+
+        // To dump the WN to CGNodeId map for the Nystrom Alias Analyzer
+	if (Write_ALIAS_CGNODE_Map) {
+
+	    if (WN_MAP32_Get (WN_MAP_ALIAS_CGNODE, node) != 0) {
+                set_offset = TRUE;
+		if (alias_cgnodes == NULL) {
+		    max_alias_cgnode_nodes = DEFAULT_NUM_ALIAS_CGNODES;
+		    alias_cgnodes = (WN **) malloc (max_alias_cgnode_nodes *
+						    sizeof(WN *));
+		    FmtAssert (alias_cgnodes != NULL, ("No more memory."));
+		} else if (max_alias_cgnode_nodes == 
+                           num_alias_cgnode_nodes + 1) {
+		    max_alias_cgnode_nodes *= 2;
+		    alias_cgnodes = (WN **) realloc(alias_cgnodes,
+						    max_alias_cgnode_nodes *
+						    sizeof(WN **));
+		    FmtAssert(alias_cgnodes != NULL, ("No more memory."));
+		}
+		alias_cgnodes[num_alias_cgnode_nodes++] = node;
 	    }
 	}
 	
@@ -388,7 +495,7 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
     	INITV_IDX types = INITV_next (INITV_blk (INITO_val (WN_ereg_supp (node))));
 	for (; types; types = INITV_next (types))
 	{
-	    if (INITV_kind (types) == INITVKIND_ZERO)
+	    if (INITV_kind (types) != INITVKIND_VAL)
 	    	continue;
 	    int index = TCON_uval (INITV_tc_val (types));
 	    if (index <= 0) continue;
@@ -404,7 +511,7 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
 
 
     if (opcode == OPC_BLOCK) {
-	register Elf64_Word prev, this_node;
+	register off_t prev, this_node;
 
 	if (WN_first(node) == 0) {
 	    WN_first(WN_ADDR(node_offset)) = (WN *) -1;
@@ -436,7 +543,7 @@ ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map)
 	register int i;
 
 	for (i = 0; i < WN_kid_count(node); i++) {
-	    register Elf64_Word kid;
+	    register off_t kid;
 
 	    if (WN_kid(node, i) == 0) {
 		WN_kid(WN_ADDR(node_offset), i) = (WN *) -1;
@@ -480,7 +587,7 @@ struct WRITE_TABLE_OP
 
 
 template <class TABLE>
-static Elf64_Word
+static off_t
 write_table (TABLE& fld, off_t base_offset,
 	     Output_File *fl)
 {
@@ -500,7 +607,7 @@ write_table (TABLE& fld, off_t base_offset,
 } // write_table
 
 
-static Elf64_Word
+static off_t
 write_file_info (off_t base_offset, Output_File *fl)
 {
     off_t cur_offset = ir_b_align (fl->file_size, __ALIGNOF(FILE_INFO), 0);
@@ -511,17 +618,17 @@ write_file_info (off_t base_offset, Output_File *fl)
 
 
 // write a global symtab:  
-Elf64_Word
+off_t
 ir_b_write_global_symtab (off_t base_offset, Output_File *fl)
 {
     GLOBAL_SYMTAB_HEADER_TABLE gsymtab;
 
     // should use __builtin_alignof(gsymtab) instead of sizeof(mUINT64),
     // but our frontend has a bug and fails to compile it. 
-    const Elf64_Word symtab_offset =
+    const  off_t symtab_offset =
 	ir_b_reserve_space (sizeof(gsymtab), sizeof(mUINT64), fl);
 
-    Elf64_Word cur_offset;
+    off_t cur_offset;
     UINT i = 0;
     const UINT idx = GLOBAL_SYMTAB;
 
@@ -590,16 +697,16 @@ ir_b_write_global_symtab (off_t base_offset, Output_File *fl)
 
 } // ir_b_write_global_symtab
 
-Elf64_Word
+off_t
 ir_b_write_local_symtab (const SCOPE& pu, off_t base_offset, Output_File *fl)
 {
     LOCAL_SYMTAB_HEADER_TABLE symtab;
 
-    const Elf64_Word symtab_offset =
+    const off_t symtab_offset =
 	ir_b_reserve_space (sizeof(symtab), sizeof(mUINT64), fl);
 
     UINT i = 0;
-    Elf64_Word cur_offset;
+    off_t cur_offset;
 
     cur_offset = write_table (*pu.st_tab, symtab_offset, fl);
     symtab.header[i++].Init (cur_offset, pu.st_tab->Size () * sizeof(ST),
@@ -629,10 +736,10 @@ ir_b_write_local_symtab (const SCOPE& pu, off_t base_offset, Output_File *fl)
 
 
 /* write blocks of data, then block headers, then # blocks */
-extern Elf64_Word
+extern off_t
 ir_b_write_dst (DST_TYPE dst, off_t base_offset, Output_File *fl)
 {
-    Elf64_Word cur_offset;
+    off_t cur_offset;
     DST_BLOCK_IDX i;
     block_header *dst_blocks;
     Current_DST = dst;
@@ -642,7 +749,8 @@ ir_b_write_dst (DST_TYPE dst, off_t base_offset, Output_File *fl)
 	/* may have 64-bit data fields, so align at 8 bytes */
 	cur_offset = ir_b_save_buf (dst_blocks[i].offset, 
 		dst_blocks[i].size, __ALIGNOF(INT64), 0, fl);
-	dst_blocks[i].offset = (char*)(cur_offset - base_offset);
+	// off_t may be larger than pointer (cygwin), so first convert to INTPS
+	dst_blocks[i].offset = (char*)(INTPS)(cur_offset - base_offset);
     } 
     FOREACH_DST_BLOCK(i) {
 	cur_offset = ir_b_save_buf
@@ -712,6 +820,13 @@ IPA_irb_write_mod_ref_info(Output_File *fl)
                    0, // padding
                    fl);
 
+    // same_entry_exit_value_or_1
+    ir_b_save_buf (Mod_Ref_Info_Table[0].same_entry_exit_value_or_1,
+		   Mod_Ref_Info_Table[0].size,
+		   0, // alignment
+		   0, // padding
+		   fl);
+
     for (INT i=1; i<size; i++)
     {
       ir_b_save_buf (&Mod_Ref_Info_Table[i].pu_idx,
@@ -725,6 +840,10 @@ IPA_irb_write_mod_ref_info(Output_File *fl)
 
       ir_b_save_buf (Mod_Ref_Info_Table[i].ref,
                      Mod_Ref_Info_Table[i].size, 0, 0, fl);
+
+      ir_b_save_buf (Mod_Ref_Info_Table[i].same_entry_exit_value_or_1,
+                     Mod_Ref_Info_Table[i].size, 0, 0, fl);
+      
     }
 
     offset_mod_ref = offset_mod_ref - cur_sec_disp;
@@ -742,3 +861,4 @@ IPA_irb_write_mod_ref_info(Output_File *fl)
     header_addr->entsize = sizeof(pu_mod_ref_info);
 }
 #endif
+

@@ -68,10 +68,6 @@ static void expand_compare PARAMS ((enum tree_code, tree, tree, int));
 static void expand_test PARAMS ((enum tree_code, tree, int));
 static void expand_cond PARAMS ((enum tree_code, tree, int));
 static void expand_java_goto PARAMS ((int));
-#if 0
-static void expand_java_call PARAMS ((int, int));
-static void expand_java_ret PARAMS ((tree)); 
-#endif
 static tree pop_arguments PARAMS ((tree)); 
 static void expand_invoke PARAMS ((int, int, int)); 
 static void expand_java_field_op PARAMS ((int, int, int)); 
@@ -1706,30 +1702,6 @@ expand_java_goto (target_pc)
   expand_goto (target_label);
 }
 
-#if 0
-static void
-expand_java_call (target_pc, return_address)
-     int target_pc, return_address;
-{
-  tree target_label = lookup_label (target_pc);
-  tree value = build_int_2 (return_address, return_address < 0 ? -1 : 0);
-  push_value (value);
-  flush_quick_stack ();
-  expand_goto (target_label);
-}
-
-static void
-expand_java_ret (return_address)
-     tree return_address ATTRIBUTE_UNUSED;
-{
-  warning ("ret instruction not implemented");
-#if 0
-  tree target_label = lookup_label (target_pc);
-  flush_quick_stack ();
-  expand_goto (target_label);
-#endif
-}
-#endif
 
 static tree
 pop_arguments (arg_types)
@@ -3030,14 +3002,6 @@ process_jvm_instruction (PC, byte_ops, length)
 #define BRANCH_CALL(OPERAND_VALUE) \
   expand_java_call (oldpc + OPERAND_VALUE, oldpc)
 
-#if 0
-#define BRANCH_RETURN(OPERAND_VALUE) \
-  { \
-    tree type = OPERAND_TYPE##_type_node; \
-    tree value = find_local_variable (OPERAND_VALUE, type, oldpc); \
-    expand_java_ret (value); \
-  }
-#endif
 
 #define NOT_IMPL(OPERAND_TYPE, OPERAND_VALUE) \
 	  fprintf (stderr, "%3d: %s ", oldpc, opname); \

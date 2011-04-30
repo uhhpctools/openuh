@@ -137,16 +137,11 @@ extern NUM_VARIANTS Find_one_variant(BB_NODE *bb,
                                      NUMBER *,
                                      CODEMAP *htable = NULL);
 
-#if 1
 #define SET_OPT_PHASE(str)  (void) Set_opt_phase(NULL, str)
 #define SET_OPT_REPEAT_PHASE(phase_id, str) (void) Set_opt_phase(&phase_id, str)
-INT Set_opt_phase(INT32 *, char*);  // Set the current subphases of the optimizer
+INT Set_opt_phase(INT32 *, const char*);  // Set the current subphases of the optimizer
 #define REPORT_STATISTICS() Report_statistics()
 INT Report_statistics();   // Report statistics of subphases of the optimizer
-#else
-#define SET_OPT_PHASE(str)
-#define REPORT_STATISTICS()
-#endif
 
 // Bitvector definitions
 //
@@ -170,5 +165,8 @@ typedef vector<bool, BVECTOR_ALLOCATOR> BVECTOR; // TODO add range checks
 //
 class CFG;
 void Set_volatile_map(CFG *cfg, BVECTOR &vol);
+#if defined(TARG_SL)
+extern BOOL CR_Intrinsic_Op_Slave(CODEREP * cr);
+#endif
 
 #endif  // opt_util_INCLUDED

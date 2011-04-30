@@ -2023,7 +2023,6 @@ else
   fi
 fi
 
-CFLAGS="-g -DIs_True_On"	# KEY
 
   # We must set the default linker to the linker used by gcc for the correct
   # operation of libtool.  If LD is not defined and we are using gcc, try to

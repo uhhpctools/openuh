@@ -1640,12 +1640,8 @@ output_fpop (code, op0, op1, op2, insn)
 	      && GET_CODE (op2) == REG && FP_REGNO_P (REGNO (op2)))
 	    {
 	      if (REGNO (op0) == REGNO (op2))
-#if 1
 		/* This triggers a bug on the RT.  */
 		abort ();
-#else
-		size += fr0_avail ? 0 : 64;
-#endif
 	    }
 	  else
 	    {

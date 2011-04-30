@@ -38,10 +38,10 @@
 // =======================================================================
 //
 //  Module: cg_swp_allocator.h
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_swp_allocator.h,v $
+//  $Revision: 1.2 $
+//  $Date: 02/11/07 23:41:22-00:00 $
+//  $Author: fchow@keyresearch.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_swp_allocator.h $
 //
 //  Revision comments:
 //
@@ -497,7 +497,7 @@ public:
     }  
   }  
   //}
-#endif   
+#endif   // TARG_IA64  
 }; // class SWP_ALLOCATOR
 
 #endif // cg_swp_allocator_INCLUDED

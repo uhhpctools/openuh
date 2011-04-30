@@ -842,6 +842,10 @@ enum pragma_type
   OMP,
   OPTIONS,
   EXEC_FREQ
+#ifdef TARG_SL2  //fork_joint
+  , SL2 
+#endif 
+  
 };
 
 static enum pragma_type current_pragma = INVALID;
@@ -885,6 +889,14 @@ _cpp_omp_token (cpp_reader * pfile)
      result = _cpp_lex_direct (pfile);
      current_pragma = EXEC_FREQ;
   }
+
+#ifdef TARG_SL2 //fork_joint 
+  else if((rlimit -c)>=strlen("sl2") && !memcmp(c, "sl2", strlen("sl2")))
+  {
+     result = _cpp_lex_direct(pfile);
+     current_pragma = SL2;
+  }
+#endif 
 
   return result;
 }
@@ -962,6 +974,13 @@ _cpp_lex_token (pfile)
 	    last_token_omp_hash = TRUE;
 	    return omp_res;
 	  } // potentially more else statements here.
+#ifdef TARG_SL2 //fork_joint
+         else if (current_pragma == SL2) 
+         {
+            last_token_omp_hash = TRUE;
+	     return omp_res;
+         }
+#endif 
 	  else
 	  {
 	    skip_to_end_of_line (pfile);

@@ -222,28 +222,6 @@ extern  void  Cif_Summary_Rec(FILE *,		/* Compiler Information File. */
 /*  QUESTION:  Does Max field length need to be a long?  Should code size     */
 /*             and data sizes also be longs?				      */
 
-# if 0
-
-/* DOSHARED CDIR$ record [16].						      */
-
-extern  void  Cif_Doshared_Cdir_Rec(FILE *,	/* Compiler Information File. */
-				    int,	/* Doshared type.	      */
-                                    int,	/* Random.		      */
-                                    int,	/* File id.		      */
-                                    int,	/* File line number.	      */
-                                    int,	/* Column number.	      */
-                                    char *,	/* M value.  		      */
-                                    int,	/* M file id.		      */
-                                    int,	/* M file line number.	      */
-                                    int,	/* M column number.	      */
-                                    int,	/* Number of control vars.    */
-				    long *);    /* An array of control	      */
-						/* variable symbol ids.       */
-
-/*   Note:  This record is not yet output by CF90 and may have a different    */
-/*          form depending on what happens to CRAFT.			      */
-
-# endif
 
 
 /* Unit record [17].							      */
@@ -313,21 +291,6 @@ extern  void  Cif_Stmt_Type_Rec(FILE *,         /* Compiler Information File. */
                                 int,            /* Column number.             */
                                 int);  	        /* Statement number.          */
       			        
-# if 0
-
-/* MPP Geometry record [26].						      */
-
-/*   Note:  This record is not yet output by CF90 and may have a different    */
-/*          form depending on what happens to CRAFT.			      */
-
-extern  void  Cif_Mpp_Geometry_Rec(FILE *,      /* Compiler Information File. */
-				   char *,	/* Geometry name.	      */
-				   int,		/* Geometry symbol id.        */
-				   int,		/* Number of dimensions.      */
-				   Cif_geometry_dim *);
-						/* An array of geometry	      */
-						/* dimension structures.      */
-# endif
 					
 
 

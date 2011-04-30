@@ -54,7 +54,7 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
+const static char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source$ $Revision$";

@@ -320,16 +320,8 @@ OPERATOR_is_black_box (OPERATOR op)
 }
 
 /* Compatibility functions */
-#if 0
-extern OPCODE   OPCODE_is_valid_opcode_table[];
-#define OPCODE_MAKE_VALID(x) (OPCODE_is_valid_opcode_table[(x)])
-#endif
 
-#if 1
 #define Is_Valid_Opcode Is_Valid_Opcode_FUNC
-#else
-#define Is_Valid_Opcode(opcode) (OPCODE_is_valid_opcode_table[(opcode)]!=OPC_UNKNOWN)
-#endif
 
 #ifdef __cplusplus
 extern "C" BOOL Is_Valid_Opcode_FUNC (OPCODE op);

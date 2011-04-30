@@ -1,4 +1,13 @@
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/* 
+   Copyright (C) 2001-2004 Tensilica, Inc.  All Rights Reserved.
+   Revised to support Tensilica processors and to improve overall performance
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -68,10 +77,10 @@
  * ====================================================================
  *
  * Module: opt_goto.cxx  
- * $Revision$
- * $Date$
- * $Author$
- * $Source$
+ * $Revision: 1.21 $
+ * $Date: 2000/04/06 01:58:39 $
+ * $Author: mtibuild $
+ * $Source: /isms/cmplrs.src/osprey1.0/be/com/RCS/opt_goto.cxx,v $
  *
  * Revision history:
  *  1-31-95 - Original Version
@@ -99,8 +108,9 @@
 
 #ifdef _KEEP_RCS_ID
 #define opt_goto_CXX "opt_goto.cxx"
-static char *rcs_id = opt_goto_CXX" $Revision$";
+static char *rcs_id = opt_goto_CXX" $Revision: 1.21 $";
 #endif /* _KEEP_RCS_ID */
+
 
 // Build up a table of goto descriptors
 // Go through the code, push each goto onto the stack
@@ -248,11 +258,15 @@ void GOTO_TABLE::Remove_Gotos()
   INT goto_expanding_transformations = 0;
   // go backwards, seems to be cleaner
   INT i;
+  BOOL created_whiles=FALSE;
   for (i = _gd.Elements() - 1; i >= 0; i--) {
     GOTO_DESCRIPTOR *gd = &_gd.Bottom_nth(i);
     // don't touch breaks or compgotos
     if (gd->Label_Wn && ! WN_Label_Is_Break(gd->Label_Wn)
 	&& ! gd->Is_Compgoto) {
+      if (Is_Truebr(gd)) {
+	Create_Truebr(gd);
+      }
       if (Can_Move_Into_Else(gd)) {
         Move_Into_Else(gd);
       } 
@@ -260,10 +274,11 @@ void GOTO_TABLE::Remove_Gotos()
         WN_DELETE_FromBlock(Get_Parent(gd->Goto_Wn), gd->Goto_Wn);
 	gd->Is_Dismantled = TRUE;
       } else {
-        while (Ancestor_Through_If(gd) && 
-	     !_contains_altentry &&
-	     (goto_expanding_transformations <= 
-		   MAX_GOTO_EXPANDING_TRANSFORMATIONS)) {
+        //while (Ancestor_Through_If(gd) && 
+	//     !_contains_altentry &&
+	//    (goto_expanding_transformations < 
+	//	   MAX_GOTO_EXPANDING_TRANSFORMATIONS)) {
+        if (Parent_Through_If(gd) && !_contains_altentry) { 
           Move_Goto_Out(gd);
 	  goto_expanding_transformations++;
         }
@@ -272,12 +287,16 @@ void GOTO_TABLE::Remove_Gotos()
 	    Replace_Goto_With_If(gd);
           } else {
 	    Replace_Goto_With_While(gd);
+	    created_whiles = TRUE;
           }
         }
       }
     }
   }
 
+  if (created_whiles) {
+    Promote_Do_While(Func_Nd());
+  }
 
   // Dismantle bad control flow nodes
   for (i = _gd.Elements() - 1; i >= 0; i--) { 
@@ -409,11 +428,76 @@ BOOL GOTO_TABLE::Ancestor_Through_If(GOTO_DESCRIPTOR *gd)
 
   return (Get_Parent(tmp) == Get_Parent(gd->Label_Wn));
 }
+  
+// is the goto a descendant of its label, with only one BLOCK and one IF in between
+BOOL GOTO_TABLE::Parent_Through_If(GOTO_DESCRIPTOR *gd)
+{
+  INT goto_level = Find_Level(gd->Goto_Wn);
+  INT label_level = Find_Level(gd->Label_Wn);
+  if (goto_level != label_level+2) {
+    return(FALSE);
+  }
+
+  WN *tmp = Get_Parent(gd->Goto_Wn);
+  OPCODE opcode = WN_opcode(tmp);
+  if (opcode != OPC_BLOCK) return FALSE;
+  tmp = Get_Parent(tmp);
+  opcode = WN_opcode(tmp);
+  if (opcode != OPC_IF) return FALSE;
+  return (Get_Parent(tmp) == Get_Parent(gd->Label_Wn));
+}
 
 // is the goto a sibling of its label
 BOOL GOTO_TABLE::Sibling(GOTO_DESCRIPTOR *gd) 
 {
   return (Get_Parent(gd->Label_Wn) == Get_Parent(gd->Goto_Wn));
+}
+
+// This routine is not from the McGill paper
+// Replace if (cond) goto with a single TRUEBR
+BOOL GOTO_TABLE::Is_Truebr(GOTO_DESCRIPTOR *gd)
+{
+  WN *wn = gd->Goto_Wn;
+  if (WN_opcode(wn) != OPC_GOTO) {
+    return FALSE;
+  }
+  WN *parent = Get_Parent(wn);
+  if (WN_opcode(parent) != OPC_BLOCK) {
+    return FALSE;
+  }
+  WN *grand_parent = Get_Parent(parent);
+  if (WN_opcode(grand_parent) != OPC_IF) {
+    return FALSE;
+  }
+
+  WN *wn_else = WN_else(grand_parent);
+  if (WN_first(wn_else)) {
+     return FALSE;
+  }
+
+  if (wn != WN_last(parent) || wn != WN_first(parent)) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+void GOTO_TABLE::Create_Truebr(GOTO_DESCRIPTOR *gd)
+{
+  WN *block_wn = Get_Parent(gd->Goto_Wn);
+  WN *if_wn = Get_Parent(block_wn);
+  WN *if_parent = Get_Parent(if_wn);
+  WN *if_test = WN_if_test(if_wn);
+
+  WN *truebr = WN_CreateTruebr(WN_label_number(gd->Goto_Wn),if_test);
+  WN_Set_Linenum(truebr, WN_Get_Linenum(gd->Goto_Wn));
+  WN_INSERT_BlockBefore(if_parent,if_wn,truebr);
+  gd->Goto_Wn = truebr;
+  if (Cur_PU_Feedback) {
+    Cur_PU_Feedback->FB_lower_branch( if_wn, truebr );
+  }
+  Set_Parent(truebr, if_parent);
+  WN_if_test(if_wn) = NULL;
+  WN_DELETE_FromBlock(if_parent,if_wn);
 }
 
 // This routine is not from the McGill paper
@@ -720,6 +804,62 @@ void GOTO_TABLE::Replace_Goto_With_If(GOTO_DESCRIPTOR *gd)
   WN_Delete(goto_wn);
 }
 
+// Are two expressions equivalent, assumes that there are no intervening writes
+static BOOL Equivalent(WN *wn1, WN *wn2)
+{
+  if (!WN_Equiv(wn1, wn2)) return FALSE;
+  for (INT i=0; i<WN_kid_count(wn1); i++) {
+    if (!Equivalent(WN_kid(wn1,i), WN_kid(wn2,i))) return FALSE;
+  }
+  return TRUE;
+}
+
+
+// replace 
+// if (cond) {
+// do {
+//    ...
+// while(cond) 
+// with 
+// while (cond) do
+void GOTO_TABLE::Promote_Do_While(WN *wn)
+{
+  OPCODE opcode = WN_opcode(wn);
+  if (opcode == OPC_BLOCK) {
+    WN *kid = WN_first(wn);
+    while (kid) {
+      WN *next_kid = WN_next(kid);
+      Promote_Do_While(kid);
+      kid = next_kid;
+    }
+  } else {
+    if (OPCODE_is_scf(opcode)) {
+      if (opcode == OPC_IF) {
+        if (WN_first(WN_else(wn)) == NULL) {
+          if (WN_first(WN_then(wn)) && (WN_first(WN_then(wn)) == WN_last(WN_then(wn)))) {
+            if (WN_opcode(WN_first(WN_then(wn))) == OPC_DO_WHILE) {
+	      WN *while_wn = WN_first(WN_then(wn));
+              if (Equivalent(WN_if_test(wn), WN_while_test(while_wn))) {
+                WN_set_opcode(while_wn, OPC_WHILE_DO);
+  		WN *parent = Get_Parent(wn);
+  		WN_INSERT_BlockBefore(parent, wn, while_wn);
+		Set_Parent(while_wn, parent);
+                WN_first(WN_then(wn)) = NULL;
+                WN_DELETE_FromBlock(parent, wn);
+		Promote_Do_While(while_wn);
+		return;
+              }
+            }
+          }
+        }
+      }
+    } 
+    for (INT kidno=0; kidno<WN_kid_count(wn); kidno++) {
+       Promote_Do_While(WN_kid(wn,kidno));
+    }
+  }
+}
+
 // Given a backward, sibling, goto, replace it with a DO_WHILE.  For example:
 // LABEL <label>                            DO_WHILE
 // <statements>                               <cond>
@@ -759,6 +899,7 @@ void GOTO_TABLE::Replace_Goto_With_While(GOTO_DESCRIPTOR *gd)
     if (Get_Parent(wn)) Set_Parent(wn, block);
   }
 
+
   WN *while_wn = WN_CreateDoWhile(cond, block);
   Set_Parent(block, while_wn);
   Set_Parent(while_wn, parent);
@@ -794,8 +935,9 @@ void GOTO_TABLE::Dismantle(WN *bad, WN *parent)
   WN *prev = WN_prev(bad);
   WN *block = WN_CreateBlock(); 
   WN_EXTRACT_FromBlock(parent, bad);
-  WN_INSERT_BlockLast(block, lower_scf_non_recursive(block, bad, LOWER_SCF | 
-						     LOWER_FREQUENCY_MAPS));
+  WN *scf_wn = lower_scf_non_recursive(block, bad, 
+				       LOWER_SCF | LOWER_FREQUENCY_MAPS);
+  WN_INSERT_BlockLast(block, scf_wn);
 
   // move everything in block to be after prev
   while (WN_last(block)) {

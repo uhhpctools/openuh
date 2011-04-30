@@ -40,6 +40,6 @@ extern void WB_ANL_Initialize(WN* wn_global, WN_MAP prompf_id_map);
 
 extern void WB_ANL_Terminate();
 
-extern void s_anl_debug(char init_buffer[]);
+extern void s_anl_debug(const char init_buffer[]);
 
 #endif /* wb_anl_INCLUDED */

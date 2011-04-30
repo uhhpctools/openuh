@@ -1,9 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -63,7 +59,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -86,7 +81,6 @@
 #include "lnoptimizer.h"
 #include "opt_du.h"			/* Du_Built() */
 #include "wn_pragmas.h"
-
 #include "lwn_util.h"
 #include "lnoutils.h"
 #include "dep_graph.h"
@@ -142,12 +136,16 @@
 #include "ipa_section.h"
 #include "lnodriver.h"
 #include "ipa_lno_read.h"
+#include "wn_lower.h"
+#include "array_copy.h"
 
 // Laks 06.29.06: include UH stuffs here
 #include "uh_lno.h"
 
 #pragma weak Prompf_Emit_Whirl_to_Source__GP7pu_infoP2WN
+#if ! defined(BUILD_OS_DARWIN)
 #pragma weak Anl_File_Path  
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #pragma weak Print_file__16PROJECTED_REGIONGP8__file_s
 #pragma weak Print_file__14PROJECTED_NODEGP8__file_s
  
@@ -159,6 +157,7 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
 		      BOOL do_fiz_fuse, BOOL do_phase25,
                       BOOL do_inner_fission);
 
+typedef STACK<WN *> STACK_OF_WN;
   /* ====================================================================
    *
    * Loop Nest Optimizer - Return an optimized tree
@@ -168,6 +167,9 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
 
   // Each statement/hcf maps a pointer to its parent
   WN_MAP Parent_Map;
+
+  // A map to keep track of deleted loop (because of unroll, etc)
+  HASH_TABLE<WN*,BOOL> *Deleted_Loop_Map;
 
   // Each array maps an ACCESS_ARRAY
   // Each do loop maps a BOUNDS
@@ -214,6 +216,12 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
 				      // ipl
 
 static INT prompf_dumped = FALSE; 
+
+static BOOL
+Unroll_before_Factorize(WN *wn);
+
+static 
+void Outer_Unroll_For_Factorization(WN *func_nd, STACK_OF_WN *inner_do_stack);
 
 //-----------------------------------------------------------------------
 // NAME: Prompf_Init 
@@ -305,6 +313,7 @@ Num_Iters(WN* loop)
     return -1;
   }
 
+
   DO_LOOP_INFO* dli = Get_Do_Loop_Info(loop);
   if (dli->LB->Num_Vec() > 1 || dli->UB->Num_Vec() > 1) {
     return -1;
@@ -324,6 +333,49 @@ Num_Iters(WN* loop)
   MEM_POOL_Pop(&LNO_local_pool);
   return rval;
 }
+
+void Lower_To_Memlib_Walk(WN *block, WN *wn)
+{
+  OPCODE opc=WN_opcode(wn);
+  
+  if (!OPCODE_is_scf(opc))
+    return;
+  else if (opc==OPC_DO_LOOP) {
+    if (Do_Loop_Is_Good(wn) && Do_Loop_Is_Inner(wn) && !Do_Loop_Has_Calls(wn)
+        && !Do_Loop_Has_Gotos(wn)) {
+       WN* result = Lower_Memlib(NULL, wn, LOWER_TO_MEMLIB, Alias_Mgr);
+       if (WN_opcode(result) != OPC_DO_LOOP)
+       {
+         LWN_Insert_Block_Before(block,wn,result);
+         LWN_Parentize(block);
+         LWN_Delete_DU(wn);
+         LWN_Delete_Tree(wn);
+       }
+    } else
+      Lower_To_Memlib_Walk(block,WN_do_body(wn));
+  } else if (opc==OPC_BLOCK)
+    for (WN* stmt=WN_first(wn); stmt;) {
+      WN* next_stmt=WN_next(stmt);
+      Lower_To_Memlib_Walk(wn, stmt); 
+      stmt=next_stmt;
+    } 
+  else
+    for (UINT kidno=0; kidno<WN_kid_count(wn); kidno++) {
+      Lower_To_Memlib_Walk(block,WN_kid(wn,kidno));
+    }
+}
+
+// this is in common/com/config_opt.cxx
+extern UINT32 OPT_Lower_To_Memlib;
+
+void  LNO_Lower_Memlib(WN *wn)
+{
+  if (OPT_Lower_To_Memlib == 2)
+  {
+    Lower_To_Memlib_Walk(NULL, wn);
+  }
+}
+
 
 #define MAX_INNER_LOOPS 3
 
@@ -359,6 +411,7 @@ Num_Inner_Loops(WN* loop)
   }
   return max_inner_loops;
 }
+
 
 #ifdef KEY
 // Count the number of basic operations
@@ -424,34 +477,460 @@ INT64 Loop_Size(WN* wn)
   return count;
   
 }
+// Count the number of basic operations in triangle loop
+static
+INT64 Loop_Size_Triangle(WN* wn, double trip_count)
+{
+  OPCODE opcode = WN_opcode(wn);
+  if (OPCODE_is_leaf(opcode))
+    return 1;
+  else if (OPCODE_is_load(opcode))
+    return 1;
+  else if (opcode == OPC_BLOCK) {
+    WN *kid = WN_first(wn);
+    INT64 count = 0;
+    while (kid) {
+      count += Loop_Size_Triangle(kid, trip_count);
+      kid = WN_next(kid);
+    }
+    return count;
+  } else if (opcode == OPC_DO_LOOP) {
+    INT64 count = Loop_Size_Triangle(WN_start(wn), trip_count/2);
+    count += Loop_Size_Triangle(WN_end(wn), trip_count/2);
+    INT64 count1 = Loop_Size_Triangle(WN_do_body(wn), trip_count/2);
+    count1 += Loop_Size_Triangle(WN_step(wn), (trip_count+1)/2);
+    count1 *= MAX(1,trip_count);
+    return (count+count1);
+  }
+
+  OPERATOR oper = OPCODE_operator(opcode);
+  
+  INT64 count = 0;
+  INT kid_cnt = WN_kid_count(wn);
+
+  if ((oper == OPR_TRUNC) || (oper == OPR_RND) ||
+      (oper == OPR_CEIL) || (oper == OPR_FLOOR) || (oper == OPR_INTRINSIC_OP)) {
+    count++;
+  } else if ((oper == OPR_REALPART) || (oper == OPR_IMAGPART) ||
+	     (oper == OPR_PARM) || (oper == OPR_PAREN)) {
+    // no-ops
+  } else if (OPCODE_is_expression(opcode) && (oper != OPR_CONST)) {
+    if ((oper == OPR_MAX) || (oper == OPR_MIN) || 
+	(oper == OPR_ADD) || (oper == OPR_SUB) || (oper == OPR_MPY) ||
+	(oper == OPR_NEG))
+      count++;
+    else if ((oper == OPR_DIV || oper == OPR_SQRT))
+      count = count + 10;
+    
+  } else if (OPCODE_is_store(opcode)) {
+    count++;
+    kid_cnt = kid_cnt - 1;
+  } else if ((oper == OPR_CALL) || (oper == OPR_PURE_CALL_OP)) {
+    count = count + LNO_Full_Unrolling_Loop_Size_Limit;
+  }
+  
+  for (INT kidno=0; kidno<kid_cnt; kidno++) {
+    WN *kid = WN_kid(wn,kidno);
+    count += Loop_Size_Triangle(kid, trip_count);
+  }
+
+  return count;
+  
+}
+
+static BOOL Has_Negative_Offset_Preg(WN *tree)
+{
+ if(WN_operator(tree)==OPR_BLOCK){
+  for(WN *stmt = WN_first(tree); stmt; stmt=WN_next(stmt)){
+     if(Has_Negative_Offset_Preg(stmt))
+       return TRUE;
+  }
+  return FALSE;
+ }
+ if(WN_operator(tree)==OPR_LDID || WN_operator(tree)==OPR_STID){
+   if (ST_class(WN_st(tree)) == CLASS_PREG &&
+       WN_offset(tree) < 0) return TRUE;
+ }
+ for(INT kidno=0; kidno<WN_kid_count(tree); kidno++){
+   if(Has_Negative_Offset_Preg(WN_kid(tree,kidno)))
+    return TRUE;
+ }
+ return FALSE;
+} 
 #endif
-static void
+
+//-----------------------------------------------------------------------
+// peel the 2D triangle into 2 piece and fully unroll the 
+// first part
+// will do the following transformation
+// for i = 1, n
+//   for j = 1, i
+//     S;
+//---- will be changed to ----->
+// switch(n)
+// {
+// case 1:
+//   for i = 1, 1
+//     for j = 1, j
+//       S;
+//       break;
+// ....
+// case m-1:
+//   for i = 1, m-1
+//     for j = 1, j
+//       S;
+//       break;
+// default:
+//   if (n >=m)
+//   {
+//     for i = 1, m
+//       for j = 1, j
+//         S;
+//         break;
+//     for i = m+1, n
+//       for j = 1, j
+//         S;
+//         break;
+//   }
+// }
+//-----------------------------------------------------------------------
+BOOL Peel_2D_Triangle_Loops(WN* outer_loop)
+{
+  if ( !LNO_Peel_2D_Triangle_LOOP )
+    return FALSE;
+  Is_True((WN_opcode(outer_loop) == OPC_DO_LOOP) ,("outer_loop must be a do loop"));
+
+  // don't do the transformation in the outermost loop
+  if (!Do_Loop_Depth(outer_loop)) 
+    return FALSE;
+  ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph; 
+  WN* inner = Find_Next_Innermost_Do(outer_loop);
+  Is_True((inner), ("inner must exist"));
+  WN* inner_ubexp = UBexp(WN_end(inner));
+
+  // the init value should be a const.
+  WN* outer_start_v = WN_kid0(WN_start(outer_loop));
+  WN* inner_start_v = WN_kid0(WN_start(inner));
+  if( !outer_start_v || !inner_start_v)
+    return FALSE;
+  if ((WN_operator(outer_start_v) != OPR_CONST && 
+       WN_operator(outer_start_v) != OPR_INTCONST) ||       
+      (WN_operator(inner_start_v) != OPR_CONST &&
+       WN_operator(inner_start_v) != OPR_INTCONST))
+    return FALSE;
+  
+  // the compare operation should be OPR_LE
+  if (WN_operator(WN_end(outer_loop)) != OPR_LE ||
+      WN_operator(WN_end(inner)) != OPR_LE )
+    return FALSE;
+  // the loop step is a constant
+  WN* outer_step_v = WN_kid1(WN_kid0(WN_step(outer_loop)));
+  WN* inner_step_v = WN_kid1(WN_kid0(WN_step(inner)));
+  if ((WN_operator(outer_step_v) != OPR_CONST && 
+       WN_operator(outer_step_v) != OPR_INTCONST) ||       
+      (WN_operator(inner_step_v) != OPR_CONST &&
+       WN_operator(inner_step_v) != OPR_INTCONST))
+    return FALSE;
+  
+  //  check if the loop is a triangle loop
+  DEF_LIST *defs = Du_Mgr->Ud_Get_Def(inner_ubexp);
+  DEF_LIST_ITER iter(defs);
+  int num=0;
+  for (const DU_NODE *node=iter.First(); !iter.Is_Empty(); node = iter.Next()) {
+    WN *def = (WN *) node->Wn();
+    if (def != WN_start(outer_loop) && def != WN_step(outer_loop))
+      return FALSE;
+    num++;
+  }
+  if (num != 2)
+    return FALSE;
+
+  // now, it's a triangle loop, do the transformation
+  WN* outer_info=WN_do_loop_info(outer_loop);
+  WN* outer_trip=NULL;
+  INT outer_trip_est=100;
+  if (outer_info){
+    outer_trip = WN_loop_trip(outer_info);
+    outer_trip_est = WN_loop_trip_est(outer_info);
+  }
+
+  INT Triangle_Peel_Factor = 1;
+  //check the size
+  for (INT i = 2; i <= LNO_Full_Unrolling_Limit; i++){
+    INT loop_size = Loop_Size_Triangle(outer_loop, i);
+    if ( loop_size > LNO_Full_Unrolling_Loop_Size_Limit )
+      break;
+    Triangle_Peel_Factor = i;
+  }
+  if ( Triangle_Peel_Factor < 2 )
+    return FALSE;
+
+  if (LNO_Verbose) {
+    fprintf(stdout,"Peel_2D_Triangle_Loops\n");
+    fprintf(TFile, "Peel_2D_Triangle_Loops\n");
+  }
+  INT outer_init_v = WN_const_val(outer_start_v);
+  INT outer_loop_step = WN_const_val(outer_step_v);
+  INT const_value = (Triangle_Peel_Factor -1 + outer_init_v) * outer_loop_step;
+  // The trip count is known
+  if (outer_trip && outer_trip_est > Triangle_Peel_Factor) {
+    WN* nest_copy = LWN_Copy_Tree(outer_loop, TRUE, LNO_Info_Map); 
+    WN* wn_holder[2];
+    wn_holder[0] = outer_loop;
+    wn_holder[1] = nest_copy;
+    if (red_manager) 
+      red_manager->Unroll_Update(wn_holder, 2);
+    Unrolled_DU_Update((WN**)wn_holder, 2, Do_Loop_Depth(outer_loop)-1, TRUE, FALSE);
+    if (!dg->Add_Deps_To_Copy_Block(outer_loop, nest_copy, TRUE)) {
+      SNL_DEBUG0(0, "Peel_2D_Triangle_Loops() failed -- continueing");
+      LWN_Update_Dg_Delete_Tree(nest_copy, dg);
+      LNO_Erase_Dg_From_Here_In(nest_copy, dg);
+      LWN_Delete_Tree(nest_copy);
+      MEM_POOL_Pop_Unfreeze(&SNL_local_pool);
+      return FALSE;
+    }
+    WN* pblock = LWN_Get_Parent(outer_loop);
+    LWN_Insert_Block_Before(pblock, outer_loop, nest_copy);
+    LWN_Set_Parent(nest_copy, pblock);
+
+    //set the bounds of the two loop
+    WN* tmp;
+    TYPE_ID rtype = WN_rtype(tmp);
+
+    tmp = WN_kid1(WN_end(nest_copy));
+    WN_const_val(tmp) = const_value ;
+    WN* info0 = WN_do_loop_info(nest_copy);
+    WN_const_val(WN_loop_trip(info0)) = Triangle_Peel_Factor;
+    WN_loop_trip_est(info0) = Triangle_Peel_Factor;
+    inner = Find_Next_Innermost_Do(nest_copy);
+    WN_loop_trip_est(WN_do_loop_info(inner)) = (Triangle_Peel_Factor + 1) / 2;
+    DO_LOOP_INFO *dli = Get_Do_Loop_Info(nest_copy);
+    dli->Est_Num_Iterations = Triangle_Peel_Factor;
+    dli = Get_Do_Loop_Info(inner);
+    dli->Est_Num_Iterations = (Triangle_Peel_Factor + 1) / 2;
+
+    tmp = WN_kid0(WN_start(outer_loop));
+    WN_const_val(tmp) = const_value + 1;
+    WN* info1 = WN_do_loop_info(outer_loop);
+    WN_const_val(WN_loop_trip(info1)) = outer_trip_est - Triangle_Peel_Factor;
+    WN_loop_trip_est(info1) = outer_trip_est - Triangle_Peel_Factor;
+    inner = Find_Next_Innermost_Do(outer_loop);
+    WN_loop_trip_est(WN_do_loop_info(inner)) = (outer_trip_est - Triangle_Peel_Factor)/2;
+    dli = Get_Do_Loop_Info(outer_loop);
+    dli->Est_Num_Iterations = outer_trip_est - Triangle_Peel_Factor;
+    dli = Get_Do_Loop_Info(inner);
+    dli->Est_Num_Iterations = (outer_trip_est - Triangle_Peel_Factor + 1) / 2;
+    
+    return TRUE;
+  } else if (outer_trip) {
+    return TRUE; 
+  }
+  // deal with the situation when the trip count is unkown.
+  WN *nest_copy, *tmp, *loop_info;
+  WN** wn_holder;
+  WN* pblock = LWN_Get_Parent(outer_loop);
+  WN* position_wn = NULL;
+  WN *goto_exp, *lable_exp;
+  LABEL_IDX out_lbl;
+  New_LABEL(CURRENT_SYMTAB, out_lbl);
+  WN* out_lbl_exp = WN_CreateLabel(out_lbl, 0, NULL);
+  LWN_Insert_Block_After(pblock, outer_loop, out_lbl_exp);
+  LWN_Set_Parent(out_lbl_exp, pblock);
+  wn_holder = CXX_NEW_ARRAY(WN*, Triangle_Peel_Factor+1, &SNL_local_pool);
+  wn_holder[0] = outer_loop; 
+
+  //make Triangle_Peel_Factor copy of the original
+  for (INT i = 1; i <= Triangle_Peel_Factor; i++) {
+    nest_copy = LWN_Copy_Tree(outer_loop, TRUE, LNO_Info_Map);
+    if (!dg->Add_Deps_To_Copy_Block(outer_loop, nest_copy, TRUE)){
+      SNL_DEBUG0(0, "Peel_2D_Triangle_Loops() failed -- continueing");
+      LWN_Update_Dg_Delete_Tree(nest_copy, dg);
+      LNO_Erase_Dg_From_Here_In(nest_copy, dg);
+      LWN_Delete_Tree(nest_copy);
+      MEM_POOL_Pop_Unfreeze(&SNL_local_pool);
+      return FALSE;
+    }
+    wn_holder[i]=nest_copy;
+  }  
+  if (red_manager) 
+    red_manager->Unroll_Update(wn_holder, Triangle_Peel_Factor+1);
+  Unrolled_DU_Update(wn_holder, Triangle_Peel_Factor+1, Do_Loop_Depth(outer_loop)-1, TRUE, FALSE);
+
+  for (INT i = 1; i <= Triangle_Peel_Factor; i++) {
+    nest_copy = wn_holder[i];
+    tmp = WN_kid1(WN_end(nest_copy));
+    defs = Du_Mgr->Ud_Get_Def(tmp);
+    DEF_LIST_ITER d_iter0(defs);
+    for (DU_NODE* d_node = d_iter0.First(); !d_iter0.Is_Empty(); d_node=d_iter0.Next()) {
+      Du_Mgr->Delete_Def_Use(d_node->Wn(), tmp);
+    }
+    Du_Mgr->Remove_Use_From_System(tmp);
+    tmp = WN_CreateIntconst(OPCODE_make_op(OPR_INTCONST, WN_rtype(tmp), MTYPE_V), 
+			    (i - 1 + outer_init_v) * outer_loop_step); 
+    LWN_Delete_Tree(WN_kid1(WN_end(nest_copy)));
+    WN_kid1(WN_end(nest_copy)) = tmp;
+    LWN_Set_Parent(tmp, WN_end(nest_copy));
+    loop_info = WN_do_loop_info(nest_copy);
+    WN_kid1(loop_info) = WN_CreateIntconst(OPCODE_make_op(OPR_INTCONST, WN_rtype(tmp), MTYPE_V), i); 
+    WN_set_kid_count(loop_info, 2);
+    LWN_Set_Parent(WN_loop_trip(loop_info), loop_info);
+    WN_loop_trip_est(loop_info) = i;
+    inner = Find_Next_Innermost_Do(nest_copy);
+    WN_loop_trip_est(WN_do_loop_info(inner)) = (i + 1) / 2;
+    DO_LOOP_INFO *dli = Get_Do_Loop_Info(nest_copy);
+    dli->Est_Num_Iterations = i;
+    dli->Num_Iterations_Symbolic = 0;
+    dli = Get_Do_Loop_Info(inner);
+    dli->Est_Num_Iterations = (i + 1) / 2;
+    dli->Num_Iterations_Symbolic = 0;
+
+    if ( i == Triangle_Peel_Factor ) 
+      break;
+      
+    // build the switch case
+    OPCODE op_eq = OPCODE_make_op(OPR_EQ, Boolean_type, Do_Wtype(outer_loop));
+    WN* tmp1 = LWN_Copy_Tree(UBexp(WN_end(outer_loop)));
+    defs = Du_Mgr->Ud_Get_Def(UBexp(WN_end(outer_loop)));
+    DEF_LIST_ITER d_iter(defs);
+    for (DU_NODE* d_node = d_iter.First(); !d_iter.Is_Empty(); d_node=d_iter.Next()) {
+      Du_Mgr->Add_Def_Use(d_node->Wn(), tmp1);    
+    }
+    WN* tmp2 = WN_CreateIntconst(OPCODE_make_op(OPR_INTCONST, WN_rtype(tmp1), MTYPE_V), i); 
+    LABEL_IDX lbl;
+    New_LABEL(CURRENT_SYMTAB, lbl);
+    WN* truebr_exp = WN_CreateTruebr(lbl, LWN_CreateExp2(op_eq, tmp1, tmp2));
+    LWN_Set_Parent(WN_kid0(truebr_exp), truebr_exp);
+    LWN_Insert_Block_After(pblock, outer_loop, truebr_exp);
+    LWN_Set_Parent(truebr_exp, pblock);
+    if (!position_wn)
+      position_wn = truebr_exp;
+    lable_exp = WN_CreateLabel(lbl, 0, NULL);
+    LWN_Insert_Block_After(pblock, position_wn, lable_exp);
+    LWN_Set_Parent(lable_exp, pblock);
+    LWN_Insert_Block_After(pblock, lable_exp, nest_copy);
+    LWN_Set_Parent(nest_copy, pblock);
+    goto_exp = WN_CreateGoto(out_lbl);
+    LWN_Insert_Block_After(pblock, nest_copy, goto_exp);
+    LWN_Set_Parent(goto_exp, pblock);
+  }
+  LABEL_IDX lbl_default;
+  New_LABEL(CURRENT_SYMTAB, lbl_default);
+  WN* lable_default_exp = WN_CreateLabel(lbl_default, 0, NULL);
+  WN* goto_default = WN_CreateGoto(lbl_default);
+  LWN_Insert_Block_After(pblock, position_wn, goto_default);
+  LWN_Set_Parent(goto_default, pblock);
+  LWN_Insert_Block_Before(pblock, out_lbl_exp, lable_default_exp);
+  LWN_Set_Parent(lable_default_exp, pblock);
+
+  tmp = WN_kid0(WN_start(outer_loop));
+  WN_const_val(tmp) = const_value+1;
+  loop_info = WN_do_loop_info(outer_loop);
+
+  if (WN_loop_trip_est(loop_info))
+    WN_loop_trip_est(loop_info) = outer_trip_est - Triangle_Peel_Factor;
+  
+  //create the if-then-else, split the loop into two pieces.
+  OPCODE op_ge = OPCODE_make_op(OPR_GE, Boolean_type, Do_Wtype(outer_loop));
+
+  WN* tmp1 = LWN_Copy_Tree(UBexp(WN_end(outer_loop)));
+  defs = Du_Mgr->Ud_Get_Def(UBexp(WN_end(outer_loop)));
+  DEF_LIST_ITER d_iter(defs);
+  for (DU_NODE* d_node = d_iter.First(); !d_iter.Is_Empty(); d_node=d_iter.Next()) {
+    Du_Mgr->Add_Def_Use(d_node->Wn(), tmp1);    
+  }
+  WN* tmp2 = WN_CreateIntconst(OPCODE_make_op(OPR_INTCONST, WN_rtype(tmp1), MTYPE_V),
+			       Triangle_Peel_Factor); 
+  WN* if_exp = LWN_CreateIf(LWN_CreateExp2(op_ge, tmp1, tmp2), 
+			    WN_CreateBlock(), WN_CreateBlock());
+  LWN_Insert_Block_After(WN_then(if_exp), NULL, wn_holder[Triangle_Peel_Factor]);
+  LWN_Set_Parent(wn_holder[Triangle_Peel_Factor], WN_then(if_exp));
+  //get outer_loop out of the original parent
+  if (WN_first(pblock) == outer_loop) {
+    WN_first(pblock) = WN_next(outer_loop);
+    WN_prev(WN_first(pblock)) = NULL;
+  } else {
+    WN_next(WN_prev(outer_loop)) = WN_next(outer_loop);
+    WN_prev(WN_next(outer_loop)) = WN_prev(outer_loop);
+  }
+  LWN_Insert_Block_After(WN_then(if_exp), wn_holder[Triangle_Peel_Factor], outer_loop);
+  LWN_Set_Parent(outer_loop, WN_then(if_exp));
+  //insert after the switch default lable
+  LWN_Insert_Block_After(pblock, lable_default_exp, if_exp);
+  LWN_Set_Parent(if_exp, pblock);
+  // annotate the if
+  BOOL has_regions = (Find_SCF_Inside(if_exp, OPC_REGION) != NULL);
+  IF_INFO *ii = CXX_NEW(IF_INFO(&LNO_default_pool, TRUE, has_regions), &LNO_default_pool);
+  WN_MAP_Set(LNO_Info_Map, if_exp, (void *)ii);
+  DOLOOP_STACK* stack = CXX_NEW(DOLOOP_STACK(&LNO_local_pool), &LNO_local_pool);
+  Build_Doloop_Stack(if_exp, stack);
+  LNO_Build_If_Access(if_exp, stack);
+  //Build_Doloop_Stack(pblock, stack);
+  // LNO_Build_Access(pblock, stack, &LNO_local_pool);
+  CXX_DELETE(stack, &LNO_local_pool);
+  // set the parent_loop has goto
+  WN* parent_wn=pblock;
+  WN* parent_loop=NULL;
+  BOOL current_level=TRUE;
+  while (parent_wn){
+    if ( WN_opcode(parent_wn) == OPC_DO_LOOP ){
+      parent_loop=parent_wn;
+      Get_Do_Loop_Info(parent_wn)->Has_Gotos = TRUE;
+      if (current_level){
+	Get_Do_Loop_Info(parent_wn)->Has_Gotos_This_Level=TRUE;
+	current_level = FALSE;
+      }
+    }
+    parent_wn = LWN_Get_Parent(parent_wn);
+  }
+  Is_True(parent_loop, ("parent_loop is NULL!"));
+  SNL_Rebuild_Access_Arrays(parent_loop);
+  
+  return TRUE;
+}
+
+// returns true if any inner loop in wn is fully unrolled.
+
+BOOL
 Fully_Unroll_Short_Loops(WN* wn)
 {
   WN* first;
   WN* last;
   WN* next;
+  BOOL unrolled = FALSE;
   OPERATOR oper = WN_operator(wn);
   if (oper == OPR_BLOCK) {
     wn = WN_first(wn); 
     while (wn) {
       next = WN_next(wn);
-      Fully_Unroll_Short_Loops(wn);
+      unrolled  |=  Fully_Unroll_Short_Loops(wn);
       wn = next;
     }
-    return;
+    return unrolled;
   }
   else if (oper == OPR_DO_LOOP    &&
            !Do_Loop_Has_Calls(wn) &&
-           (!Do_Loop_Has_Exits(wn) || Do_Loop_Is_Regular(wn)) &&
+           !Do_Loop_Has_EH_Regions(wn) &&
 #ifndef KEY
+           (!Do_Loop_Has_Exits(wn) || Do_Loop_Is_Regular(wn)) &&
 	   !Do_Loop_Has_Conditional(wn) &&
+#else 
+           !Do_Loop_Has_Exits(wn) &&
+           !Do_Loop_Has_Gotos(wn) &&
 #endif
            !Do_Loop_Has_Gotos(wn) &&
            !Do_Loop_Is_Mp(wn)     &&
            !Is_Nested_Doacross(wn) &&
 #ifdef KEY
            Num_Inner_Loops(wn) <= MAX_INNER_LOOPS) {
+          //bug 10644
+          if(Num_Inner_Loops(wn) == MAX_INNER_LOOPS &&
+             Is_Invariant_Factorization_Beneficial(wn)) {
+             DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+            if(dli && dli->Delay_Full_Unroll==FALSE){
+               dli->Delay_Full_Unroll = TRUE;
+              return unrolled;              
+           }
+          }
 #else
            Num_Inner_Loops(wn) < MAX_INNER_LOOPS) {
 #endif
@@ -464,7 +943,7 @@ Fully_Unroll_Short_Loops(WN* wn)
 #endif
       ) {
       Remove_Zero_Trip_Loop(wn);
-      return;
+      return unrolled;
     }
     if (trip_count >= 1 && trip_count <= LNO_Full_Unrolling_Limit) {
       if (trip_count > 1) {
@@ -473,19 +952,21 @@ Fully_Unroll_Short_Loops(WN* wn)
         //bug 11954, 11958: Regression caused by not multiplying trip_count, because
         //we need new LNO_Full_Unrolling_Loop_Size_Limit default.
         //TODO: re-investigate here after work bug 10644
-        if (Loop_Size(wn)*trip_count > LNO_Full_Unrolling_Loop_Size_Limit) {
+	if (Loop_Size(wn)*trip_count > LNO_Full_Unrolling_Loop_Size_Limit ||
+            //bug 5159:  Loops having PREG with -ve offsets can not be unrolled since they are
+            //ASM output values and duplicating them will break CG assumption.
+            Has_Negative_Offset_Preg(WN_do_body(wn))){
 //       if (Loop_Size(wn) > LNO_Full_Unrolling_Loop_Size_Limit) {
-          Fully_Unroll_Short_Loops(WN_do_body(wn));
-          return;
-        }
-
+	  unrolled |= Fully_Unroll_Short_Loops(WN_do_body(wn));
+	  return unrolled;
+	}
 	static INT count = 0;
 	count ++;
 	if (LNO_Full_Unroll_Skip_Before > count - 1 ||
 	    LNO_Full_Unroll_Skip_After < count - 1 ||
 	    LNO_Full_Unroll_Skip_Equal == count - 1) {
-	  Fully_Unroll_Short_Loops(WN_do_body(wn));
-	  return;
+	  unrolled |= Fully_Unroll_Short_Loops(WN_do_body(wn));
+	  return unrolled;
 	}
 	if (LNO_Full_Unroll_Outer == FALSE) {
 	  DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
@@ -494,12 +975,13 @@ Fully_Unroll_Short_Loops(WN* wn)
 		WN_operator(parent) != OPR_FUNC_ENTRY)
 	    parent = LWN_Get_Parent(parent);
 	  if (!parent || WN_operator(parent) == OPR_FUNC_ENTRY) {
-	    Fully_Unroll_Short_Loops(WN_do_body(wn));
-	    return;	    
+	    unrolled |= Fully_Unroll_Short_Loops(WN_do_body(wn));
+	    return unrolled;	    
 	  }
 	}
 #endif
         Unroll_Loop_By_Trip_Count(wn, trip_count);
+        unrolled = TRUE;
         // Du_Sanity_Check(Current_Func_Node);
       }
       Remove_Unity_Trip_Loop(wn, TRUE, &first, &last, NULL, Du_Mgr);
@@ -507,22 +989,23 @@ Fully_Unroll_Short_Loops(WN* wn)
       wn = first; 
       while (wn) {
         next = WN_next(wn);
-        Fully_Unroll_Short_Loops(wn);
+        unrolled |= Fully_Unroll_Short_Loops(wn);
         if (wn == last) {
           break;
         }
         wn = next;
       }
-      return;
+      return unrolled;
     }
   }
   if (OPERATOR_is_scf(oper)) {
     for (INT kidno = 0; kidno < WN_kid_count(wn); kidno++) {
-      Fully_Unroll_Short_Loops(WN_kid(wn, kidno));
+      unrolled |= Fully_Unroll_Short_Loops(WN_kid(wn, kidno));
     }
   }
-}
 
+  return unrolled;
+}
 
 //-----------------------------------------------------------------------
 // NAME: Parallel_And_Padding_Phase 
@@ -567,6 +1050,7 @@ extern void Parallel_And_Padding_Phase(PU_Info* current_pu,
 }
 
 BOOL Run_autopar_save; 
+INT last_loop_num;
 
 #ifdef KEY
 static BOOL Skip_Simd;
@@ -580,10 +1064,11 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
 {
   extern BOOL Run_lno;
   STDOUT = stdout;
+  last_loop_num = 0;
 
   MEM_POOL_Initialize(&ARA_memory_pool, "ARA_memory_pool", FALSE);
   MEM_POOL_Push(&ARA_memory_pool);
-  
+
   // Laks 06.29.06: fix bug by identifying if Perform_ARA is executed or not
   //                    if not, let's browse the WHIRL
   BOOL UH_Perform_ARA_executed = FALSE;  // no by default
@@ -658,9 +1143,13 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
 
     MEM_POOL_Pop(&ARA_memory_pool);
     MEM_POOL_Delete(&ARA_memory_pool);
-        // Laks 06.29.06 why do we need to exit ?
-      UH_PrintUnitInfo(current_pu,func_nd);
-        // end of Laks dirty bug fix
+
+    // Laks 06.29.06 why do we need to exit ?
+    UH_PrintUnitInfo(current_pu,func_nd);
+    // end of Laks dirty bug fix
+
+    LNO_Restore_Configs();
+
     return func_nd;
   }
 
@@ -722,6 +1211,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   Array_Dependence_Graph = NULL;
 
   Parent_Map = WN_MAP_Create(&LNO_default_pool);
+  Deleted_Loop_Map =CXX_NEW(
+         (HASH_TABLE<WN*, BOOL>) (100,&LNO_default_pool),
+         &LNO_default_pool);
+
   WN_SimpParentMap = Parent_Map;   // Let the simplifier know about it
   FmtAssert(Parent_Map != -1,("Ran out of mappings in Lnoptimizer"));
   LNO_Info_Map = WN_MAP_Create(&LNO_default_pool);
@@ -734,6 +1227,7 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   Safe_Spec_Map = WN_MAP_Create(&LNO_default_pool);
   FmtAssert(Safe_Spec_Map != WN_MAP_UNDEFINED,
 	    ("Ran out of mappings in Lnoptimizer"));
+
 
 
   Start_Timer ( T_LNOParentize_CU );
@@ -816,7 +1310,9 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       void Lego_Fix_IO(WN *func_nd, BOOL *has_do_loops);
       Lego_Fix_IO(func_nd,&has_do_loops);
     }
-  
+
+    // Enumerate loops for debugging purpose.
+    Enum_loops(func_nd);  
   
     // Build and map all access arrays
     Start_Timer ( T_LNOAccess_CU );
@@ -832,7 +1328,7 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
     if (!has_do_loops) {
       goto return_point;  // no do loops, no point in continuing
     }
-  
+
     if (LNO_Full_Unrolling_Limit != 0) {
       Fully_Unroll_Short_Loops(func_nd);
     }
@@ -844,7 +1340,7 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
 #endif
       red_manager = CXX_NEW 
           (REDUCTION_MANAGER(&LNO_default_pool), &LNO_default_pool);
-      red_manager->Build(func_nd,TRUE,FALSE); // build scalar reductions
+      red_manager->Build(func_nd,TRUE,FALSE); // build scalar and array reductions
     }
   
   
@@ -862,14 +1358,11 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   
     // Build the array dependence graph
     Start_Timer ( T_LNOBuildDep_CU );
-  
-  
-  
+      
     if (Liberal_Ivdep && Cray_Ivdep) {
       DevWarn("Both Liberal_Ivdep and Cray_Ivdep set, Liberal_Ivdep ignored");
     }
     
-#ifdef PATHSCALE_MERGE
     BOOL LNO_skip=FALSE;
   
     // skip_it, skip_before, skip_after function count specified
@@ -880,13 +1373,8 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       }
       LNO_skip=TRUE;
     }
-#endif  
 
-#ifdef PATHSCALE_MERGE
-    if ((LNO_Opt == 0 || LNO_skip) && !(Run_autopar && LNO_Run_AP > 0)) {
-#else
-    if ((LNO_Opt == 0 || !LNO_enabled) && !(Run_autopar && LNO_Run_AP > 0)) {
-#endif
+    if ((LNO_Opt == 0 || LNO_skip || !LNO_enabled) && !(Run_autopar && LNO_Run_AP > 0)) {
       GRAPH16_CAPACITY = save_graph_capacity; 
       Build_CG_Dependence_Graph (func_nd);
       Stop_Timer ( T_LNOBuildDep_CU );
@@ -902,7 +1390,7 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       if (!graph_is_ok) 
         goto return_point;
     }
-  
+
     if (!LNO_enabled && (Run_autopar && LNO_Run_AP > 0)) {
       LWN_Process_FF_Pragmas(func_nd); 
       Parallel_And_Padding_Phase(current_pu, func_nd); 
@@ -912,20 +1400,28 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
     LNO_Tlog = Get_Trace ( TP_PTRACE1, TP_PTRACE1_LNO );
   
     Hoist_Varying_Lower_Bounds(func_nd); 
+#ifndef TARG_X8664
+    // Move If_MinMax() after Array_Substutution() so that
+    // new peeling heuiristic could kick-in. Only do this
+    // for X8664.
     If_MinMax(func_nd);
+#endif
     Dead_Store_Eliminate_Arrays(Array_Dependence_Graph);
     Array_Substitution(func_nd);
+#ifdef TARG_X8664
+    If_MinMax(func_nd);
+#endif
     Reverse_Loops(func_nd);
+
    
     if (Roundoff_Level >= ROUNDOFF_ASSOC) {
       // array reductions
       red_manager->Build(func_nd,FALSE,TRUE,Array_Dependence_Graph);
-  
       if (Eager_Level >= 4) {
         Eliminate_Zero_Mult(func_nd, Array_Dependence_Graph);
       }
     }
-  
+
     // Scalarize the invariants
     if (LNO_Sclrze) {
       Scalarize_Arrays(Array_Dependence_Graph,0,1,red_manager);
@@ -953,6 +1449,10 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       Mark_Auto_Vectorizable_Loops(func_nd);
 #endif
   
+    // This must be done before LWN_Process_FF_Pragmas because we rely
+    // on the inline markers
+    Perform_Structure_Array_Copy_Opt(func_nd);
+
     // Process pragmas
     if (!LNO_Ignore_Pragmas) {
       Fission_Init();
@@ -961,7 +1461,8 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
     }
   
     Canonicalize_Unsigned_Loops(func_nd); 
-    
+
+
     BOOL do_ara = ((Get_Trace(TP_LNOPT2,TT_LNO_RUN_ARA) 
       || Run_autopar && LNO_Run_AP > 0)
       && Get_Trace(TP_LNOPT2, TT_LNO_NO_AUTO_PARALLEL));
@@ -983,7 +1484,7 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       RR_Map_Setup(func_nd);
       Lego_Peel(func_nd);  
     }
-  
+
     BOOL early_exit = FALSE; 
     {
       BOOL do_fiz_fuse = !Get_Trace(TP_LNOPT,TT_LNO_SKIP_FIZ_FUSE);
@@ -1067,14 +1568,78 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
                       DBar, DBar);
       Array_Dependence_Graph->Print(TFile);
     }
-      
+
     // Use the array dependence graph to build cg's dependence graph
     Build_CG_Dependence_Graph (Array_Dependence_Graph);
   
     if (LNO_Cse && (Roundoff_Level >= ROUNDOFF_ASSOC)) { 
       Inter_Iteration_Cses(func_nd);
     }
-  
+
+     
+#ifdef KEY // bug 10644
+    //perform factorization only when the any loop is guarenteed to be executed
+    //at least once
+
+    if(!Get_Trace(TP_LNOPT, TT_LNO_GUARD) && LNO_Invariant_Factorization 
+      && Roundoff_Level >= ROUNDOFF_ASSOC){
+      BOOL unrolled = Unroll_before_Factorize(func_nd);
+      BOOL graph_is_ok = TRUE;
+      STACK_OF_WN *unroll_and_jammed_loops = CXX_NEW
+          (STACK_OF_WN(&LNO_default_pool),&LNO_default_pool);
+      // Rebuild the array depenedence graph
+      if (unrolled && Array_Dependence_Graph)
+      { 
+        Array_Dependence_Graph->Erase_Graph();
+        graph_is_ok =  Build_Array_Dependence_Graph (func_nd);
+        if (graph_is_ok)
+        { 
+	  // rebuild scalar reductions
+          if(red_manager){
+            red_manager->Erase(func_nd);
+             red_manager->Build(func_nd, TRUE, FALSE);//scalar
+	  }
+          Outer_Unroll_For_Factorization(func_nd, unroll_and_jammed_loops); 
+
+          // if we unrolled and jammed then rebuild the dependence graph.
+
+          if (unroll_and_jammed_loops->Elements() != 0)
+	  { 
+            Array_Dependence_Graph->Erase_Graph();
+            graph_is_ok =  Build_Array_Dependence_Graph (func_nd);
+	    // rebuild scalar reductions
+            if(red_manager){
+               red_manager->Erase(func_nd);
+               red_manager->Build(func_nd, TRUE, FALSE);//scalar
+	    }
+          } 
+	} 
+      }
+      if (graph_is_ok)
+      { 
+        BOOL rebuild_dg = Invariant_Factorization(func_nd);
+        if (rebuild_dg)
+        {
+          Array_Dependence_Graph->Erase_Graph();
+          graph_is_ok =  Build_Array_Dependence_Graph (func_nd);
+          if (graph_is_ok)
+	  { 
+             Minvariant_Removal(func_nd, Array_Dependence_Graph);
+          }
+	}
+        for(INT ii=0; ii<unroll_and_jammed_loops->Elements(); ii++){
+            WN *loop = unroll_and_jammed_loops->Bottom_nth(ii);
+            INT64 trip_count = Num_Iters(loop);
+            if (trip_count >= 1 && trip_count <= LNO_Full_Unrolling_Limit) 
+            { 
+	       WN *first, *last;
+               Unroll_Loop_By_Trip_Count(loop,trip_count);
+               Remove_Unity_Trip_Loop(loop, TRUE, &first, &last, NULL, Du_Mgr);
+            }
+	}
+      }
+    }
+#endif
     if (Get_Trace(TP_LNOPT,TT_LNO_DEP2) || 
         Get_Trace(TP_LNOPT,TT_LNO_DEP)) {
       fprintf(TFile, "%sLNO dep graph for CG, after LNO\n%s", DBar, DBar);
@@ -1153,6 +1718,7 @@ return_point:
   // fclose(LNO_Analysis); 
   MEM_POOL_Pop(&ARA_memory_pool);
   MEM_POOL_Delete(&ARA_memory_pool);
+  LNO_Restore_Configs();
   return func_nd;
 }
 
@@ -1276,6 +1842,9 @@ void DO_LOOP_INFO::Print(FILE *fp, INT indentation)
   buf[i] = '\0';
 
   if (Has_Calls) fprintf(fp,"%sIt has calls \n", buf);
+#ifdef KEY //bug 14284
+  if (Has_Nested_Calls) fprintf(fp,"%sIt has calls to nested functions \n", buf);
+#endif
   if (Has_Unsummarized_Calls) fprintf(fp,"%sIt has unsummarized calls \n", buf);
   if (Has_Unsummarized_Call_Cost) 
 	fprintf(fp,"%sIt has unsummarized call cost \n", buf);
@@ -1490,6 +2059,9 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
 
   if (do_fiz_fuse) {
     Fiz_Fuse_Phase(WN_func_body(func_nd), ffi);
+#ifdef TARG_X8664
+    SNL_Lite_Phase(func_nd);
+#endif
 
 #ifdef Is_True_On
     MP_Sanity_Check_Func(func_nd);
@@ -1614,14 +2186,33 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
     Inner_Fission(func_nd,Array_Dependence_Graph);
   }
 
+  LNO_Lower_Memlib(func_nd);
+
 #ifdef TARG_X8664
   void Simd_Phase(WN* func_nd);
   if (LNO_Run_Simd && LNO_Run_Simd_Set && !Skip_Simd && Is_Target_SSE2())
+  {
+    Array_Substitution(func_nd);
     Simd_Phase(func_nd);
+  }
   void HoistIf_Phase(WN* func_nd);
   if (LNO_Run_hoistif==TRUE && !Skip_HoistIf)
     HoistIf_Phase(func_nd);
 #endif /* KEY */
+//Sicortex bug 5073: Do an additional pass of array substutution. We need
+//to rebuild reduction manager because reduction arrays may be replaced.
+#ifdef KEY
+#ifdef TARG_MIPS
+Array_Substitution(func_nd);
+if(red_manager){
+  red_manager->Erase(func_nd);
+  red_manager->Build(func_nd, TRUE, FALSE);//scalar
+  if (Roundoff_Level >= ROUNDOFF_ASSOC) //array
+   red_manager->Build(func_nd,FALSE,TRUE,Array_Dependence_Graph);
+ }
+#endif
+#endif
+
   void Vintrinsic_Fission_Phase(WN* func_nd);
 #ifndef KEY
   if (LNO_Run_Vintr==TRUE)
@@ -1649,26 +2240,30 @@ extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd,
 }
 
 DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
-	ACCESS_VECTOR *step, BOOL has_calls, BOOL has_unsummarized_calls,
+	ACCESS_VECTOR *step, BOOL has_calls, BOOL has_nested_calls, BOOL has_unsummarized_calls,
 	BOOL has_unsummarized_call_cost, BOOL has_gotos, BOOL has_exits, 
 	BOOL has_gotos_this_level,BOOL is_inner) {
     _pool = pool;
+    _id = 0;
     LB = lb;
     UB = ub;
     Step = step;
     Has_Calls = has_calls;
+    Has_Nested_Calls = has_nested_calls;
     Has_Unsummarized_Calls = has_unsummarized_calls;
     Has_Unsummarized_Call_Cost = has_unsummarized_call_cost;
     Has_Threadprivate = FALSE; 
     Has_Gotos = has_gotos;
-#ifdef PATHSCALE_MERGE
+#ifndef KEY
     Has_Conditional = FALSE;
 #endif
     Has_Gotos_This_Level = has_gotos_this_level;
     Has_Exits = has_exits;
+    Has_EH_Regions = FALSE;
     Is_Inner = is_inner;
     Has_Bad_Mem = FALSE;
     Has_Barriers = FALSE;
+    Multiversion_Alias = FALSE;
     Is_Ivdep = FALSE;
     Is_Concurrent_Call = FALSE;
     Concurrent_Directive = FALSE;
@@ -1708,6 +2303,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     Parallelizable = FALSE; 
 #ifdef KEY
     Vectorizable = FALSE; 
+    Delay_Full_Unroll = FALSE;
 #endif
     Last_Value_Peeled = FALSE; 
     Not_Enough_Parallel_Work = FALSE; 
@@ -1747,18 +2343,24 @@ extern BOOL Last_Value_Peeling()
 
 DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
     _pool = pool;
+    _id = 0;
     if (dli->LB) LB = CXX_NEW(ACCESS_ARRAY(dli->LB,pool),pool);
     if (dli->UB) UB = CXX_NEW(ACCESS_ARRAY(dli->UB,pool),pool);
     if (dli->Step) Step = CXX_NEW(ACCESS_VECTOR(dli->Step,pool),pool);
     Has_Calls = dli->Has_Calls;
+#ifdef KEY //bug 14284
+    Has_Nested_Calls = dli->Has_Nested_Calls;
+#endif    
     Has_Unsummarized_Calls = dli->Has_Unsummarized_Calls;
     Has_Unsummarized_Call_Cost = dli->Has_Unsummarized_Call_Cost;
     Has_Threadprivate = dli->Has_Threadprivate; 
     Has_Gotos = dli->Has_Gotos;
     Has_Gotos_This_Level = dli->Has_Gotos_This_Level;
     Has_Exits = dli->Has_Exits;
+    Has_EH_Regions = dli->Has_EH_Regions;
     Has_Bad_Mem = dli->Has_Bad_Mem;
     Has_Barriers = dli->Has_Barriers;
+    Multiversion_Alias = dli->Multiversion_Alias;
     Is_Inner = dli->Is_Inner;
     Is_Ivdep = dli->Is_Ivdep;
     Is_Concurrent_Call = dli->Is_Concurrent_Call;
@@ -1807,6 +2409,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
     Parallelizable = dli->Parallelizable; 
 #ifdef KEY
     Vectorizable = dli->Vectorizable; 
+    Delay_Full_Unroll = dli->Delay_Full_Unroll; 
 #endif
     Last_Value_Peeled = dli->Last_Value_Peeled; 
     Not_Enough_Parallel_Work = dli->Not_Enough_Parallel_Work; 
@@ -1909,3 +2512,137 @@ extern INT cl()
   }
   return error_count;
 }  
+// the map to keep track of the deleted loops (because of unroll, etc)
+extern HASH_TABLE<WN*, BOOL> *Deleted_Loop_Map;
+
+static BOOL
+Unroll_before_Factorize(WN *func_nd)
+{ 
+  if (!LNO_New_Invariant_Factorization) return FALSE; 
+
+   //identify loops where full unrolling is delayed
+   STACK_OF_WN *inner_do_stack = CXX_NEW
+          (STACK_OF_WN(&LNO_default_pool),&LNO_default_pool);
+   for (LWN_ITER* itr = LWN_WALK_TreeIter(func_nd);
+        itr;
+        itr = LWN_WALK_TreeNext(itr)){
+         WN* wn = itr->wn;
+         if (WN_operator(wn) == OPR_DO_LOOP){
+            DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+            if (dli->Delay_Full_Unroll == TRUE)
+  	    {
+              Array_Substitution(wn); 
+              for (LWN_ITER* itr2 = LWN_WALK_TreeIter(WN_do_body(wn));
+                             itr2;
+                   itr2 = LWN_WALK_TreeNext(itr2)){
+                   WN* wn = itr2->wn;
+                   if (WN_operator(wn) == OPR_DO_LOOP){
+                       DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+                       if(dli && dli->Is_Inner)
+                          inner_do_stack->Push(wn);
+		   }
+	      }
+	    }
+	 }
+   }
+
+  BOOL unrolled = FALSE; 
+  for(INT ii=0; ii<inner_do_stack->Elements(); ii++){
+     WN *loop = inner_do_stack->Bottom_nth(ii);
+
+     // Unroll the inner loops.  Currently we will unroll 2 levels.
+     INT current_level=1;
+     while (current_level < MAX_INNER_LOOPS)
+     { 
+        if (Deleted_Loop_Map->Find(loop)) break;
+        WN *parent = LWN_Get_Parent(loop);
+        WN *outer_loop = Enclosing_Do_Loop(parent);
+        if (outer_loop == NULL) break;
+        WN *loopbody = WN_do_body(loop);
+        DO_LOOP_INFO* dli = Get_Do_Loop_Info(loop);
+        unrolled |= Fully_Unroll_Short_Loops(loop);
+        loop = outer_loop;
+        current_level++;
+     }
+  }
+
+  return unrolled; 
+}
+
+static WN *
+Unroll_and_Jam(WN *loop, INT ufactor)
+{ 
+
+  INT nloops = 1 + Num_Inner_Loops(loop);
+
+  if (!Fully_Permutable_Permutation(loop, nloops)) return NULL; 
+
+  DO_LOOP_INFO *dli = Get_Do_Loop_Info(loop);
+  SNL_NEST_INFO ni(loop, nloops, &LNO_default_pool, TRUE);
+
+  // before calling the function SNL_Regtile_Loop, the condition that
+  // all the scalars must be expanded should be satisfied. 
+  if ( !ni.All_Var_Expandable(nloops) )
+    return NULL;
+  INT outer = Do_Depth(loop);
+
+  EST_REGISTER_USAGE est_register_usage =
+      Get_Do_Loop_Info(loop)->Est_Register_Usage;
+  SNL_REGION ujm = SNL_Regtile_Loop(loop,ufactor,nloops, FALSE, est_register_usage, &ni.Privatizability_Info(), outer, TRUE, NULL, NULL);
+  ARRAY_DIRECTED_GRAPH16*       dg = Array_Dependence_Graph;
+  Renumber_Loops(ujm.First, ujm.Last, dg);
+  // remove the unity count outer loop. 
+
+  WN *first, *last;
+
+  Remove_Unity_Trip_Loop(loop, TRUE, &first, &last, NULL, Du_Mgr);
+
+  return first; 
+} 
+
+void
+Outer_Unroll_For_Factorization(WN *func_nd, STACK_OF_WN *loops)
+{ 
+   //identify loops where full unrolling is delayed
+   STACK_OF_WN *inner_do_stack = CXX_NEW
+          (STACK_OF_WN(&LNO_default_pool),&LNO_default_pool);
+   for (LWN_ITER* itr = LWN_WALK_TreeIter(func_nd);
+        itr;
+        itr = LWN_WALK_TreeNext(itr)){
+         WN* wn = itr->wn;
+         if (WN_operator(wn) != OPR_DO_LOOP) continue; 
+
+         DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+	 if (dli->Delay_Full_Unroll != TRUE) continue;
+
+         // Get the outermost loop. 
+         WN *outermost = NULL;
+         WN *outer = wn;
+         while (outer = LWN_Get_Parent(outer))
+         { 
+           OPCODE opc = WN_opcode(outer);
+           if (OPC_DO_LOOP == opc)
+           {
+             outermost = outer;
+             continue;
+	   }
+           if (OPC_BLOCK == opc)
+             continue;
+           break;
+	 }
+         if (outermost == NULL) continue;
+         INT64 trip_count = Num_Iters(outermost);
+         if (trip_count >= 1 && trip_count <= LNO_Full_Unrolling_Limit) 
+         { 
+           WN *unrolled_loop =  Unroll_and_Jam(outermost, trip_count);
+           if (unrolled_loop)
+             loops->Push(unrolled_loop);
+         }
+   }
+}
+
+
+
+
+
+

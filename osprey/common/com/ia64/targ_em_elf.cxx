@@ -91,18 +91,6 @@ void Em_Write_Reginfo (
     /* A:  no */
     return;
 
-#if 0
-    if (Sixtyfour_Bit) {
-	if (Get_Elf_Target_Machine() == EM_IA_64) {
-	  Elf_IA64_RegInfo reginfo_ia64;
-	  reginfo_ia64.ri_gp_value = gprvalue;
-	  Em_Add_New_Option (ODK_IA64_REGINFO, SHN_UNDEF,0, &reginfo_ia64, sizeof(reginfo_ia64));
-	}
-    }
-    else {
-    	ErrMsg(EC_Assertion, __FILE__, __LINE__, "NYI - n32 reginfo");
-    }
-#endif
 }
 
 /* Add new entry to the .options section. */
@@ -115,24 +103,7 @@ Em_Add_New_Option (
     Elf32_Byte length)
 {
     Elf_Options option;
-#if 0 // don't put out options period. Its not defined in ABI
-    if (Options_Scn == NULL) {
-	Options_Scn = Em_New_Section (IA64_OPTIONS, SHT_IRIX_OPTIONS, 
-			  SHF_ALLOC | SHF_IRIX_NOSTRIP, 0, 
-			  ELF64_FSZ_XWORD);
-    }
-    option.kind = option_kind;
-    option.size = sizeof (Elf_Options);
-    option.section = option_section;
-    option.info = option_info;
-    option.size += Roundup (length, 8);
-    Em_Add_Bytes_To_Scn (Options_Scn, &option, sizeof(option), ELF64_FSZ_WORD);
-    if (length != 0) {
-      Em_Add_Bytes_To_Scn (Options_Scn, buffer, length, ELF64_FSZ_WORD);
-    }
-#else
     return;
-#endif
 }
 
 

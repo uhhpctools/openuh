@@ -401,9 +401,6 @@ output_move_double (operands)
   if (REG_P (operands[1]))
     optype1 = REGOP;
   else if (CONSTANT_P (operands[1]))
-#if 0
-	   || GET_CODE (operands[1]) == CONST_DOUBLE)
-#endif
     optype1 = CNSTOP;
   else if (offsettable_memref_p (operands[1]))
     optype1 = OFFSOP;
@@ -1019,15 +1016,6 @@ output_jump(pos, neg, length)
     
     static char buf[1000];
 
-#if 0
-/* currently we don't need this, because the tstdf and cmpdf 
-   copy the condition code immediately, and other float operations are not 
-   yet recognized as changing the FCC - if so, then the length-cost of all
-   jump insns increases by one, because we have to potentially copy the 
-   FCC! */
-    if (cc_status.flags & CC_IN_FPU)
-	output_asm_insn("cfcc", NULL);
-#endif
 	
     switch (length)
     {
@@ -1136,11 +1124,6 @@ simple_memory_operand(op, mode)
     if (GET_CODE (op) != MEM)
 	return FALSE;
 
-#if 0
-    /* dword operations really put out 2 instructions, so eliminate them.  */
-    if (GET_MODE_SIZE (GET_MODE (op)) > (HAVE_64BIT_P () ? 8 : 4))
-	return FALSE;
-#endif
 
     /* Decode the address now.  */
 

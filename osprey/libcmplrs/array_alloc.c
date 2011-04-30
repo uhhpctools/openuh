@@ -45,7 +45,9 @@ Initializer and space-requester
 
 */
 #include <stdio.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <string.h>
 #include <stdlib.h>
 #include "array_alloc.h"

@@ -1,5 +1,5 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -66,7 +66,6 @@ typedef struct index_list_rec {
 typedef struct option_info_rec {
 	mask_t valid_langs;
 	mask_t valid_phases;
-	index_list_t *combo_list;
 	option_list_t *implies;
 	char *name;
 	char *help_msg;
@@ -156,6 +155,13 @@ void
 add_phase_for_option(int flag, phases_t p)
 {
                 options[flag].valid_phases |= get_phase_mask(p);
+}
+
+/* keep multi options for a phase */
+void
+keep_phase_for_option(int flag, char *opt)
+{
+                options[flag].implies->name = opt;
 }
 
 /* remove phase to list of valid phases for option */
@@ -279,38 +285,6 @@ no_more_options (void)
 	return (current_option == 0);
 }
 
-/*
- * iterate through options in option-combination-list
- * #define FOREACH_OPTION_IN_COMBO(i,c)	\
- *	for (i = first_combo_item(c); !no_more_combo_items(c); i = next_combo_item(c))
- */
-static index_list_t *current_combo;
-
-int 
-first_combo_item (int combo_flag)
-{
-	current_combo = options[combo_flag].combo_list;
-	if (current_combo == NULL)
-		return O_Unrecognized;
-	else
-		return current_combo->info_index;
-}
-
-int 
-next_combo_item (int combo_flag)
-{
-	current_combo = current_combo->next;
-	if (current_combo == NULL)
-		return O_Unrecognized;
-	else
-		return current_combo->info_index;
-}
-
-boolean 
-no_more_combo_items (int combo_flag)
-{
-	return (current_combo == NULL);
-}
 
 /*
  * iterate through implied options for a particular option.
@@ -357,7 +331,6 @@ void
 dump_option (int flag)
 {
 	option_list_t *pi = options[flag].implies;
-	index_list_t *pc = options[flag].combo_list;
 	printf("dump option %d", flag);
 	if (options[flag].name != NULL) {
 		printf(" (%s)", options[flag].name);
@@ -373,14 +346,6 @@ dump_option (int flag)
 		}
 	}
 	printf("\n");
-	if (pc != NULL) {
-		printf("\tcombos:");
-		while (pc != NULL) {
-			printf("  %d", pc->info_index);
-			pc = pc->next;
-		}
-		printf("\n");
-	}
 }
 
 #include "init_options.i"

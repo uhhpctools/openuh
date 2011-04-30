@@ -663,21 +663,8 @@ ffeste_begin_iterdo_ (ffestw block, tree *xtvar, tree *xtincr,
 		     expr,
 		     tincr_saved);
 
-#if 1	/* New, F90-approved approach: convert to default INTEGER. */
   if (TREE_TYPE (tvar) != error_mark_node)
     expr = convert (ffecom_integer_type_node, expr);
-#else	/* Old approach; convert to INTEGER unless that's a narrowing. */
-  if ((TREE_TYPE (tvar) != error_mark_node)
-      && ((TREE_CODE (TREE_TYPE (tvar)) != INTEGER_TYPE)
-	  || ((TYPE_SIZE (TREE_TYPE (tvar)) != NULL_TREE)
-	      && ((TREE_CODE (TYPE_SIZE (TREE_TYPE (tvar)))
-		   != INTEGER_CST)
-		  || (TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (tvar)))
-		      <= TREE_INT_CST_LOW (TYPE_SIZE (ffecom_integer_type_node)))))))
-    /* Convert unless promoting INTEGER type of any kind downward to
-       default INTEGER; else leave as, say, INTEGER*8 (long long int).  */
-    expr = convert (ffecom_integer_type_node, expr);
-#endif
 
   assert (TYPE_MAIN_VARIANT (TREE_TYPE (niters))
 	  == TYPE_MAIN_VARIANT (TREE_TYPE (expr)));
@@ -929,13 +916,6 @@ ffeste_io_dofio_ (ffebld expr)
 			 TYPE_SIZE_UNIT (ffecom_tree_type[bt][kt]),
 			 size_int (TYPE_PRECISION (char_type_node)
 				   / BITS_PER_UNIT));
-#if 0	/* Assume that while it is possible that char * is wider than
-	   ftnlen, no object in Fortran space can get big enough for its
-	   size to be wider than ftnlen.  I really hope nobody wastes
-	   time debugging a case where it can!  */
-      assert (TYPE_PRECISION (ffecom_f2c_ftnlen_type_node)
-	      >= TYPE_PRECISION (TREE_TYPE (size)));
-#endif
       size = convert (ffecom_f2c_ftnlen_type_node, size);
     }
 
@@ -1019,13 +999,6 @@ ffeste_io_dolio_ (ffebld expr)
 			 TYPE_SIZE_UNIT (ffecom_tree_type[bt][kt]),
 			 size_int (TYPE_PRECISION (char_type_node)
 				   / BITS_PER_UNIT));
-#if 0	/* Assume that while it is possible that char * is wider than
-	   ftnlen, no object in Fortran space can get big enough for its
-	   size to be wider than ftnlen.  I really hope nobody wastes
-	   time debugging a case where it can!  */
-      assert (TYPE_PRECISION (ffecom_f2c_ftnlen_type_node)
-	      >= TYPE_PRECISION (TREE_TYPE (size)));
-#endif
       size = convert (ffecom_f2c_ftnlen_type_node, size);
     }
 
@@ -1107,13 +1080,6 @@ ffeste_io_douio_ (ffebld expr)
 			 TYPE_SIZE_UNIT (ffecom_tree_type[bt][kt]),
 			 size_int (TYPE_PRECISION (char_type_node)
 				   / BITS_PER_UNIT));
-#if 0	/* Assume that while it is possible that char * is wider than
-	   ftnlen, no object in Fortran space can get big enough for its
-	   size to be wider than ftnlen.  I really hope nobody wastes
-	   time debugging a case where it can!  */
-      assert (TYPE_PRECISION (ffecom_f2c_ftnlen_type_node)
-	      >= TYPE_PRECISION (TREE_TYPE (size)));
-#endif
       size = convert (ffecom_f2c_ftnlen_type_node, size);
     }
 

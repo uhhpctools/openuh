@@ -54,6 +54,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "omp_types.h"
 #include "omp_directive.h"
 #endif // KEY
+#if defined(TARG_SL) || defined(TARG_MIPS)
+#include "wfe_stmt.h"
+#endif
 
 /* If non-NULL, the address of a language-specific function for
    expanding statements.  */
@@ -908,17 +911,35 @@ process_omp_stmt (tree t)
       break;
     case options_dir:
     case exec_freq_dir:
+    case unroll_dir:
       WFE_Expand_Pragma (t);
       break;
-  case task_cons_b:
-    expand_start_task((struct task_clause_list *)(tree)t->omp.omp_clause_list);
-    break;
-  case task_cons_e:
-    expand_end_task();
-    break;
-  case taskwait_dir:
-    expand_taskwait();
-    break;
+#ifdef TARG_SL  // fork_joint
+    case sl2_sections_cons_b:
+    case sl2_minor_sections_cons_b:		
+      expand_start_sl2_sections (t->omp.choice == sl2_minor_sections_cons_b);
+      break;
+    case sl2_sections_cons_e:
+      expand_end_sl2_sections ();
+      break;
+    case sl2_section_cons_b:
+    case sl2_minor_section_cons_b:		
+      expand_start_sl2_section (t->omp.choice == sl2_minor_section_cons_b);
+      break;
+    case sl2_section_cons_e:
+    case sl2_minor_section_cons_e:		
+      expand_end_sl2_section ();
+      break;
+#endif 
+    case task_cons_b:
+      expand_start_task((struct task_clause_list *)(tree)t->omp.omp_clause_list);
+      break;
+    case task_cons_e:
+      expand_end_task();
+      break;
+    case taskwait_dir:
+      expand_taskwait();
+      break;
 
     default:
       abort();
@@ -1037,6 +1058,12 @@ expand_stmt (t)
 	  process_omp_stmt (t);
 	  break;
 #endif // KEY
+
+#if defined(TARG_SL) || defined(TARG_MIPS)
+	case FREQ_HINT_STMT:
+	  WFE_Expand_Freq_Hint (t);
+	  break;
+#endif
 
 	default:
 	  if (lang_expand_stmt)

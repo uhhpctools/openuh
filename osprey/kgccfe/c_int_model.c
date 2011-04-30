@@ -80,7 +80,7 @@ struct {
   TYPE_ID mtype_ulong_long;
 #endif
   TYPE_ID mtype_pointer;
-} C_Int_Model[3] =
+} C_Int_Model[4] =
 { 
   /* ILP32 */
   {MTYPE_I2, /* short */
@@ -120,6 +120,19 @@ struct {
    MTYPE_U8, /* unsignedlong long */
 #endif
    MTYPE_U8 /* pointer */
+  },
+  /* P64 */
+  {MTYPE_I2, /* short */
+   MTYPE_I4, /* int */
+   MTYPE_I4, /* long */
+   MTYPE_U2, /* ushort */
+   MTYPE_U4, /* uint */
+   MTYPE_U4, /* ulong */
+#ifdef longlong
+   MTYPE_I8, /* long long */
+   MTYPE_U8, /* unsignedlong long */
+#endif
+   MTYPE_U8 /* pointer */
   }
 };
 
@@ -140,7 +153,7 @@ void Initialize_C_Int_Model( void ) {
 #ifdef KEY
   if (TARGET_64BIT)
     Target_Int_Model = TARGET_INT_LP64;  
-#if !defined(TARG_IA32) && !defined(TARG_X8664)
+#if !defined(TARG_IA32) && !defined(TARG_X8664) && !defined(TARG_NVISA) && !defined(TARG_LOONGSON)
   if (TARGET_BIG_ENDIAN)
     Target_Byte_Sex = BIG_ENDIAN;
   else Target_Byte_Sex = LITTLE_ENDIAN;

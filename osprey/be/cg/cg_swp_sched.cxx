@@ -1126,7 +1126,7 @@ Modulo_Schedule(SWP_OP_vector &swp_op_vector, INT min_ii, INT max_ii,
   swp_op_vector.ii = 0;
 
   bool trace_slack = Get_Trace(TP_SWPIPE, 16);
-  if (swp_op_vector.size() >= SWP_OPS_LIMIT) {
+  if (swp_op_vector.size() >= SWP_Options.OPS_Limit) {
     if (trace)
       fprintf(TFile, "MOD SCHED FAILED: loop too big!");
     return MOD_SCHED_FAILED;

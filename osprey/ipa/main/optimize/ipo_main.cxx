@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
@@ -65,17 +69,21 @@
 // the full (old symtab) version of the file.
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
 #include <signal.h>
 #include <alloca.h>
 #include <cmplrs/rcodes.h>		// for RC_SYSTEM_ERROR
 #include <float.h>
 #include <ext/hash_set>
+#include <queue>
 
 #include "defs.h"
 #include "erglob.h"
@@ -111,10 +119,13 @@
 #include "ipo_alias_class.h"
 #include "ir_bread.h"			// For second-pass WHIRL file
 #include "ir_bwrite.h"			// I/O for alias class
+#include "ipa_be_write.h"               // for nystrom alias summary
 #include "be_symtab.h" 
+#include "ipa_nystrom_alias_analyzer.h"
 
 #include "ipc_option.h"
 
+#include "ipa_devirtual.h"
 #ifdef KEY
 #include "ipa_builtins.h"
 #include "ipo_parent.h"
@@ -122,6 +133,10 @@
 
 #ifndef KEY
 #include "inline_script_parser.h"
+#else
+extern void IPO_WN_Update_For_Struct_Opt (IPA_NODE *);
+extern void IPO_WN_Update_For_Complete_Structure_Relayout_Legality(IPA_NODE *);
+extern void IPO_WN_Update_For_Array_Remapping_Legality(IPA_NODE *, int, int *);
 #endif  /* KEY */
 #include "ipa_reorder.h" //IPO_Modify_WN_for_field_reorder ()
 
@@ -133,6 +148,7 @@ extern WN_MAP Parent_Map;
 
 extern char * preopt_path;       // declared in ld/option.c
 extern int preopt_opened;        // declared in ld/option.c
+extern FILE *Y_inlining;         // declared in analyze/ipa_inline.cxx
 static BOOL have_open_input_file = FALSE;
 static FILE *fin;
 struct reg_feedback {
@@ -341,6 +357,52 @@ Trans_Order_Walk (IPA_NODE_VECTOR& vect, mBOOL* visited, IPA_GRAPH* cg,
     vect.push_back (node);
 } // Trans_Order_Walk 
 
+#if defined(TARG_SL)
+typedef queue<NODE_INDEX> NODE_INDEX_QUEUE;
+
+// A breadth-first search of the call graph.
+static void
+Build_BFS_Order (IPA_NODE_VECTOR& vect, IPA_GRAPH* cg,
+		  NODE_INDEX root) 
+{
+    mBOOL *visited = (mBOOL *) alloca (GRAPH_vmax (cg) * sizeof(mBOOL));
+    bzero (visited, GRAPH_vmax (cg) * sizeof(mBOOL));
+    vect.reserve (GRAPH_vcnt (cg));
+
+    NODE_INDEX_QUEUE myqueue;
+    myqueue.push(root);
+
+    while (!myqueue.empty()) {
+
+        NODE_INDEX cur = myqueue.front();
+        myqueue.pop();
+
+        if (!visited[cur]) {
+            visited[cur] = TRUE;
+            NODE_ITER vitr (cg, cur);
+            NODE_INDEX child;
+            for (child = vitr.First_Succ (); child != -1;
+            	 child = vitr.Next_Succ ())
+            {
+	            if (!visited[child])
+                    myqueue.push(child); 
+            }
+           
+            IPA_NODE* node = cg->Node_User (cur);
+            if (node == NULL)
+                continue;
+#ifdef KEY
+            if (node->Is_Builtin())
+                continue;
+#endif
+            //printf("BFS - Pushing node (%d): %s\n", node->Node_Index(), IPA_Node_Name(node));
+            vect.push_back(node);
+        }
+
+    } // while
+}
+#endif // TARG_SL
+
 static inline void
 Build_Transformation_Order (IPA_NODE_VECTOR& vect, IPA_GRAPH* cg,
 			    NODE_INDEX root)
@@ -389,7 +451,7 @@ static void Fixup_EHinfo_In_PU (IPA_NODE* node, WN * w = NULL)
       INITV_IDX types = INITV_next (INITV_blk (blk));
       for (; types; types = INITV_next (types))
       {
-        if (INITV_kind (types) == INITVKIND_ZERO)
+        if (INITV_kind (types) != INITVKIND_VAL)
           continue;
         int index = TCON_uval (INITV_tc_val (types));
         if (index <= 0) continue;
@@ -483,17 +545,12 @@ Inline_Call (IPA_NODE *caller, IPA_NODE *callee, IPA_EDGE *edge,
     }
 #endif
 
-/*pengzhao
-if(Get_Trace(TP_IPA, IPA_TRACE_TUNING_NEW))
-	{
-			
-		fprintf ( inlining_result,"%s inlined into ", DEMANGLE(callee->Name()));
-		fprintf ( inlining_result, "%s (edge# %d)\n", DEMANGLE (caller->Name()), edge->Edge_Index () );
-
-	} */
-
     if ( Trace_IPA || Trace_Perf ) {
-	fprintf ( TFile, "%s inlined into ", DEMANGLE (callee->Name()) );
+        if (edge->Has_Partial_Inline_Attrib()) {
+           fprintf ( TFile, "%s partially inlined into ", DEMANGLE (callee->Name()) );
+        } else {
+           fprintf ( TFile, "%s inlined into ", DEMANGLE (callee->Name()) );
+        }
 	fprintf ( TFile, "%s (edge# %d)", DEMANGLE (caller->Name()), edge->Edge_Index () );
 	if ( IPA_Skip_Report ) {
 	    fprintf ( TFile, " (%d)\n", caller->Node_Index() );
@@ -502,7 +559,11 @@ if(Get_Trace(TP_IPA, IPA_TRACE_TUNING_NEW))
 	}
     }
     if ( INLINE_List_Actions ) {
-	fprintf ( stderr, "%s inlined into ", DEMANGLE (callee->Name()) );
+        if (edge->Has_Partial_Inline_Attrib()) {
+           fprintf ( stderr, "%s partially inlined into ", DEMANGLE (callee->Name()) );
+        } else {
+           fprintf ( stderr, "%s inlined into ", DEMANGLE (callee->Name()) );
+        }
 	fprintf ( stderr, "%s (edge# %d)\n", DEMANGLE (caller->Name()), edge->Edge_Index () );
 	if ( IPA_Skip_Report ) {
 	    fprintf ( stderr, " (%d)\n", caller->Node_Index() );
@@ -552,7 +613,11 @@ if(Get_Trace(TP_IPA, IPA_TRACE_TUNING_NEW))
    	strcat(callee_key, callee_file);
 	strcat(callee_key, callee_func);	
 	
-	fprintf(inline_action, "[%s] inlined into [%s]\n", callee_key, caller_key);
+        if (edge->Has_Partial_Inline_Attrib()) {
+           fprintf(inline_action, "[%s] partially inlined into [%s]\n", callee_key, caller_key);
+        } else {
+           fprintf(inline_action, "[%s] inlined into [%s]\n", callee_key, caller_key);
+        }
 	fclose(inline_action);
 #endif
     }
@@ -562,6 +627,7 @@ if(Get_Trace(TP_IPA, IPA_TRACE_TUNING_NEW))
 } // Inline_Call
 
 #ifdef KEY
+extern void IPO_Process_Virtual_Functions (IPA_NODE *);
 extern void IPO_Process_Icalls (IPA_NODE *);
 extern void IPA_update_ehinfo_in_pu (IPA_NODE *);
 #endif
@@ -583,6 +649,13 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
 
   IPA_NODE_CONTEXT context (node);	// switch to this node's context
 
+  // Map WN to its new unique CGNodeId for the Nystrom alias analyzer
+  if (Alias_Nystrom_Analyzer) {
+    IPA_NystromAliasAnalyzer::aliasAnalyzer()->updateLocalSyms(node);
+    IPA_NystromAliasAnalyzer::aliasAnalyzer()->
+                              mapWNToUniqCallSiteCGNodeId(node);
+  }
+
 #ifdef KEY
   if (PU_src_lang (node->Get_PU()) & PU_CXX_LANG)
     IPA_update_ehinfo_in_pu (node);
@@ -591,6 +664,11 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
     IPO_Process_Icalls (node);
   }
 #endif
+  if (IPA_Enable_Fast_Static_Analysis_VF && 
+      node->Has_Pending_Virtual_Functions()) {
+    IPO_Process_Virtual_Functions (node);
+  }
+
 
   if (IPA_Enable_Padding) {
     IPO_Pad_Whirl (node);
@@ -600,12 +678,21 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
     IPO_propagate_globals(node);
   }
   
+#ifdef KEY
+  if (IPA_Enable_Struct_Opt)
+    IPO_WN_Update_For_Struct_Opt(node);
+#endif
+
   if(IPA_Enable_Reorder && reorder_candidate.size)
     IPO_Modify_WN_for_field_reorder(node) ;
-  else //just for debug  feld reorder
+  else // just for debug  field reorder
     Compare_whirl_tree(node);
 
-  if (IPA_Enable_Cloning && node->Is_Clone_Candidate()) {
+  if (
+#if defined(TARG_SL)
+      !ld_ipa_opt[LD_IPA_IPISR].flag && 
+#endif
+      IPA_Enable_Cloning && node->Is_Clone_Candidate()) {
 
     IPA_NODE *cloned_node = cg->Create_Clone(node);
     cloned_node->Set_Propagated_Const ();
@@ -630,27 +717,6 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
 				      !is_fortran &&
 				      !node->Has_No_Aggr_Cprop()));
 	
-#if 0	/* sample code sequence for calling preopt */
-	WN *pu_wn = node->Whirl_Tree();
-	REGION_Initialize(pu_wn, FALSE);
-
-	Current_PU = WN_st(pu_wn);
-
-	MEM_POOL_Push(&MEM_local_pool);
-
-	Set_Error_Phase ("Global Optimizer");
-	IPO_Load_Preopt();
-	DU_MANAGER* du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
-	ALIAS_MANAGER* alias_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr);
-
-	WN *opt_pu = Pre_Optimizer(PREOPT_IPA1_PHASE, pu_wn, du_mgr, alias_mgr);
-	node->Set_Whirl_Tree(opt_pu);
-
-	Delete_Du_Manager(du_mgr,MEM_pu_nz_pool_ptr);
-	Delete_Alias_Manager(alias_mgr,MEM_pu_nz_pool_ptr);
-
-	MEM_POOL_Pop(&MEM_local_pool);
-#endif
   }
 
   return node;
@@ -818,12 +884,17 @@ IPO_Process_edge (IPA_NODE* caller, IPA_NODE* callee, IPA_EDGE* edge,
     
 } // IPO_Process_edge
 
+extern void WN_free_input (void *handle, off_t mapped_size);
 
 static inline void
-Delete_Proc (const IPA_NODE *node)
+Delete_Proc (IPA_NODE *node)
 {
     Set_ST_is_not_used (node->Func_ST ());
     Delete_Function_In_File (node->File_Header(), node->Proc_Info_Index ());
+    node->Un_Read_PU();
+    /* Free the mmaped memory if all PUs in the file are released */
+    if (node->File_Header().num_written == IP_FILE_HDR_num_procs(node->File_Header()))
+      WN_free_input(IP_FILE_HDR_input_map_addr(node->File_Header()), node->File_Header().mapped_size);
 
 } // Delete_Proc
 
@@ -891,12 +962,6 @@ Perform_Transformation (IPA_NODE* caller, IPA_CALL_GRAPH* cg)
 	}
 #endif // TODO
 	    
-#if 0
-	if (cg->Graph()->Is_Recursive_Edge(edge->Edge_Index())) {
-	    caller->Set_Undeletable();
-	    callee->Set_Undeletable();
-	}
-#endif
 	    
 	if (!edge->Is_Processed ())
 	    IPO_Process_edge (caller, callee, edge, cg);
@@ -1015,7 +1080,6 @@ Perform_Transformation (IPA_NODE* caller, IPA_CALL_GRAPH* cg)
 	MEM_POOL_Pop(&Recycle_mem_pool);   
     }
 #endif
-
 } // Perform_Transformation
 
 static void
@@ -1035,11 +1099,6 @@ Preorder_annotate_PU_and_kids(const char *const input_file_name,
   // Read the analyzed PU from the input file
   Read_Local_Info(MEM_pu_nz_pool_ptr, current_pu);
 
-#if 0
-  if (PU_Info_state(current_pu, WT_AC_INTERNAL) != Subsect_InMem) {
-    ErrMsg(EC_IR_Scn_Read, "alias class internal map", input_file_name);
-  }
-#endif
 
   Ip_alias_class->Finalize_memops(PU_Info_tree_ptr(current_pu));
 
@@ -1110,6 +1169,17 @@ Perform_Alias_Class_Annotation(void)
     // Write the PU_Info's and DST to the output file.
     WN_write_PU_Infos(pu_info_tree, output_file);
     WN_write_dst(Current_DST, output_file);
+    
+    if (Alias_Nystrom_Analyzer)
+    {
+      IPA_write_alias_summary(pu_info_tree, output_file);
+    }
+    
+
+#if defined(TARG_SL)
+    if (ld_ipa_opt[LD_IPA_IPISR].flag)
+        WN_write_isr_cg(ipisr_cg, output_file);
+#endif
 
     // close the two files
     Close_Output_Info();
@@ -1160,6 +1230,37 @@ Perform_Alias_Class_Annotation(void)
     }
   }
 }
+
+
+static void 
+Evaluate_RSE_Cost(MEM_POOL *pool) {
+    if (! have_open_input_file) {
+        fin = fopen("struc_feedback","r");
+        have_open_input_file = TRUE;
+        while (!feof(fin)) {
+            REG_FB_POINTER reg_fb = CXX_NEW(struct reg_feedback,pool);
+            fread(reg_fb,1,sizeof(struct reg_feedback),fin);
+            REG_FB_INFO_TABLE[reg_fb->_func_name] = reg_fb;
+        }
+        fclose(fin);
+    }
+}
+
+static void
+Construct_Budget_Table(IPA_CALL_GRAPH *cg,MEM_POOL *pool) {
+    IPA_NODE_ITER cg_iter(cg,PREORDER);
+    for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+        IPA_NODE* node = cg_iter.Current();
+        if (node) { 
+            if (! node->Is_Deletable()) {
+                REG_BUDGET_POINTER reg_budget_ptr = CXX_NEW(struct reg_budget,pool);
+                reg_budget_ptr->_node = node; 
+                REG_BUDGET_TABLE[IPA_Node_Name(node)] = reg_budget_ptr;
+            }
+        }
+    }
+}
+
 
 static IPA_EDGE *
 Get_Most_Frequent_Succ(IPA_NODE *seed,IPA_CALL_GRAPH *cg) {
@@ -1716,6 +1817,11 @@ check_for_nested_PU (IPA_NODE * node)
 	    &child_node->File_Header()))
 	{
           check_for_nested_PU (child_node);
+#if defined(TARG_SL)
+	  if (ld_ipa_opt[LD_IPA_IPISR].flag) {
+	    ErrMsg(EC_Ipa_Outfile, "Encountered nested PU when -ipisr is turned on");
+	  }
+#endif
 	  IPA_Rename_Builtins (child_node);
 	  child_node->Write_PU();
 	}
@@ -1724,6 +1830,21 @@ check_for_nested_PU (IPA_NODE * node)
     }
 }
 #endif // KEY
+
+#if defined(TARG_SL)
+// ipisr_cg is the call graph used for interprocedural ISR register
+// allocation. It'll put into MIPS_WHISRL_IPISR section of *.I by ipa.
+// The struct of the call graph is as follows.
+//   <PU0's 1st caller id>, ..., <PU0's last caller id>, <-1>
+//   <PU1's 1st caller id>, ..., <PU1's last caller id>, <-1>
+//   ...
+//   <PUn's 1st caller id>, ..., <PUn's last caller id>, <-1>
+// The PU id is equal to the ID in be. -1 is used to mark the end of callers. 
+vector<mINT32> ipisr_cg;
+#endif
+
+static void mark_argument_array_remapping_candidate_malloc(WN *wn,
+  int argument_num, IPA_NODE *callee);
 
 static void
 IPO_main (IPA_CALL_GRAPH* cg)
@@ -1768,6 +1889,77 @@ IPO_main (IPA_CALL_GRAPH* cg)
     	IPA_Remove_Regions (walk_order, cg); // Remove EH regions that are not required
 #endif
 
+    // we will use the following loop to check whether it is legal to perform
+    // the complete structure relayout optimization; later (in the subsequent
+    // loop) we will perform the actual optimization (if it is legal)
+
+    // same with array remapping optimization
+
+    // comment out the following since this optimization benefits both mso as
+    // well as non-mso compilations; besides, the following will disable
+    // structure peeling also
+    // if (!IPA_Enable_Scale)
+    //   -mso (multi-core scaling optimization is not on
+    //   IPA_Enable_Struct_Opt = 0;
+    for (IPA_NODE_VECTOR::iterator first = walk_order.begin();
+         first != walk_order.end(); first++)
+    {
+      int argument_num;
+
+      if (IPA_Enable_Struct_Opt != 0 &&
+          PU_src_lang((*first)->Get_PU()) & PU_C_LANG)
+      {
+        IPA_NODE_CONTEXT context(*first);
+        IPO_WN_Update_For_Complete_Structure_Relayout_Legality(*first);
+
+        argument_num = -1;
+        IPO_WN_Update_For_Array_Remapping_Legality(*first, 1, &argument_num);
+        if (argument_num != -1)
+        {
+          // argument_num != -1 means that an array remapping candidate was
+          // found inside the function (*first), and that it was nicely
+          // malloced, but that this candidate is an argument into the function
+          // (*first).  When this happens, we need to propagate this finding
+          // upward to all the callers of (*first)
+          IPA_PRED_ITER pred_iter(*first);
+          for (pred_iter.First(); !pred_iter.Is_Empty(); pred_iter.Next())
+          {
+            IPA_EDGE *edge = pred_iter.Current_Edge();
+            if (edge != NULL)
+            {
+              IPA_NODE *caller = IPA_Call_Graph->Caller(edge);
+              IPA_NODE_CONTEXT context(caller);
+              WN *wn_tree = WN_func_body(caller->Whirl_Tree());
+              // look for all the calls to (*first) inside this wn_tree, and
+              // mark the corresponding argument of all these calls as an array
+              // remapping candidate that has been malloced
+              mark_argument_array_remapping_candidate_malloc(wn_tree,
+                argument_num, *first);
+            }
+          }
+        }
+      }
+      else
+        IPA_Enable_Struct_Opt = 0; // only do this for C programs
+    }
+
+    // normally we only need the above loop to check for legality, but in the
+    // case of array remapping optimization, there is a phase ordering problem:
+    // we need to mark all the array remapping candidates' malloc bit before we
+    // can decide if they are valid candidates to apply the stringent legality
+    // checks on, but unfortunately they cannot both occur in the same pass,
+    // since we cannot rely on the order the functions are compiled.  Let's run
+    // another loop
+    if (IPA_Enable_Struct_Opt != 0)
+    {
+      for (IPA_NODE_VECTOR::iterator first = walk_order.begin();
+           first != walk_order.end(); first++)
+      {
+        IPA_NODE_CONTEXT context(*first);
+        IPO_WN_Update_For_Array_Remapping_Legality(*first, 2, NULL);
+      }
+    }
+
     for (IPA_NODE_VECTOR::iterator first = walk_order.begin ();
 	 first != walk_order.end ();
 	 ++first) {
@@ -1781,6 +1973,73 @@ IPO_main (IPA_CALL_GRAPH* cg)
       Perform_Transformation (*first, cg);
 
     }
+
+#if defined(TARG_SL)
+    // Other non-postorder emitions
+
+    // If -ipisr, emit PUs in BFS order. 
+    // At this time, ld_ipa_opt[LD_IPA_IPISR].flag is true. 
+    if (IPA_Enable_PU_Reorder == REORDER_BY_BFS)
+    {	// reorder by breadth-first ordering 
+
+        IPA_NODE_VECTOR emit_order, emit_queue;
+        Build_BFS_Order (emit_order, cg->Graph(), cg->Root());
+
+        mINT32 cnt = 0;
+      
+        // Emit the PU in BFS order 
+        for (IPA_NODE_VECTOR::iterator first = emit_order.begin ();
+	        first != emit_order.end (); ++first) 
+        {
+            IPA_NODE* emit = *first;
+            if (!PU_Deleted (cg->Graph(), emit->Node_Index(), // deleted
+                                &emit->File_Header()) && 
+                !PU_Written (cg->Graph(), emit,    // written
+                                &emit->File_Header())
+            ) {
+	          // bug 4668
+	          check_for_nested_PU (emit);
+	          IPA_Rename_Builtins(emit);
+	          emit->Write_PU();
+              emit->Set_Emit_Id(cnt++); // It equals to the PU id in cg
+              emit_queue.push_back(emit);
+	        }
+        }
+
+        // Build ipisr_cg. 
+        for (IPA_NODE_VECTOR::iterator first = emit_queue.begin ();
+	        first != emit_queue.end (); ++first) 
+        {
+            IPA_NODE* callee = *first;
+            IPA_PRED_ITER pred_iter(callee);
+            vector<mINT32> visited;
+
+            //printf("Find %s's preds\n", IPA_Node_Name(callee));
+            for (pred_iter.First(); !pred_iter.Is_Empty(); pred_iter.Next()) { 
+
+                IPA_EDGE *edge = pred_iter.Current_Edge ();
+                if (edge == NULL) continue;
+
+                IPA_NODE *caller = cg->Caller (edge);
+                mINT32 id = caller->Emit_Id();
+
+                //printf("%s --> %s\n", IPA_Node_Name(callee), IPA_Node_Name(caller));
+
+                Is_True(emit_queue.end() 
+                            != find(emit_queue.begin(), emit_queue.end(), caller),
+                        ("In IPISR, the caller is not in the emit queue!\n"));
+
+                // If this caller is not added yet
+                if (visited.end() == find(visited.begin(), visited.end(), id)) {
+                    ipisr_cg.push_back(id);
+                    visited.push_back(id);
+                }
+            }
+
+            ipisr_cg.push_back(-1); // -1 marks the end of the call list
+        }
+    }
+#endif // TARG_SL
 
 #ifdef KEY
     { // PU reordering heuristics
@@ -1890,6 +2149,11 @@ IPO_main (IPA_CALL_GRAPH* cg)
     if ( INLINE_List_Actions ) {
         fprintf ( stderr, "Total number of edges = %d\n", IPA_Call_Graph->Edge_Size() );
     }
+
+  if( Get_Trace ( TP_IPA, IPA_TRACE_TUNING) ){
+    fclose(Y_inlining);
+  }
+
 } // IPO_main
 
 
@@ -2020,12 +2284,6 @@ Perform_Interprocedural_Optimization (void)
   }
 #endif
 
-  if (Get_Trace(TP_IPA, IPA_TRACE_TUNING)) {
-    #pragma mips_frequency_hint NEVER
-    extern void Print_inline_decision (void);
-    Print_inline_decision ();
-  }
-
   if (Get_Trace(TP_IPA, IPA_TRACE_TUNING_NEW)) {
     fprintf(TFile, "\t+++++++++++++++++++++++++++++++++++++++\n");
     IPA_Call_Graph->Print_vobose(TFile);
@@ -2068,6 +2326,8 @@ Perform_Interprocedural_Optimization (void)
 
   Ip_alias_class->Release_resources();
   Ip_alias_class = NULL;
+
+  IPA_NystromAliasAnalyzer::clean();
 
 #if Is_True_On
   {
@@ -2177,4 +2437,169 @@ Print_inline_decision (void) {
 
   fprintf(orc_script, "\n#END_INLINE\n\n");
   fclose (orc_script);
+}
+
+// Visit the input wn and look for a call to "callee".  Locate the argument in
+// this call statement corresponding to the input argument number, and mark that
+// argument as an array remapping candidate that has been malloced.
+static void mark_argument_array_remapping_candidate_malloc(WN *wn,
+  int argument_num, IPA_NODE *callee)
+{
+  if (wn == NULL || argument_num < 0 || callee == NULL)
+    return;
+  if (!OPCODE_is_leaf(WN_opcode(wn)))
+  {
+    if (WN_opcode(wn) == OPC_BLOCK)
+    {
+      WN *child_wn = WN_first(wn);
+      while (child_wn != NULL)
+      {
+        mark_argument_array_remapping_candidate_malloc(child_wn, argument_num,
+          callee);
+        child_wn = WN_next(child_wn);
+      }
+    }
+    else
+    {
+      INT child_num;
+      WN *child_wn;
+      for (child_num = 0; child_num < WN_kid_count(wn); child_num++)
+      {
+        child_wn = WN_kid(wn, child_num);
+        if (child_wn != NULL)
+          mark_argument_array_remapping_candidate_malloc(child_wn, argument_num,
+            callee);
+      }
+    }
+  }
+  switch (WN_operator(wn))
+  {
+    case OPR_CALL:
+      if (callee->Func_ST() == WN_st(wn) &&
+          WN_operator(WN_kid(wn, argument_num)) == OPR_PARM &&
+          WN_operator(WN_kid0(WN_kid(wn, argument_num))) == OPR_LDA)
+        // it's the right call, and &argument is passed (inside the callee we
+        // have *argument = malloc()
+        Set_ST_is_array_remapping_candidate_malloc(WN_st(WN_kid0(WN_kid(wn,
+          argument_num))));
+      break;
+
+    default:
+      break;
+  }
+  return;
+}
+
+// Visit the input wn and look for a call to "callee".  Locate the argument in
+// this call statement corresponding to the input argument number, and see if
+// that argument is an array remapping candidate that has been malloced.  This
+// function returns TRUE if the above is true for all such calls in the input
+// wn.
+BOOL argument_in_wn_is_array_remapping_candidate_malloc(WN *wn,
+  int argument_num, IPA_NODE *callee, BOOL *found_a_call)
+{
+  BOOL result;
+
+  // found_a_call is meant to be checked when the entire function wn tree has
+  // been processed, not after each recursive call (because it is not reasonable
+  // to expect each block of wn's to contain such a call)
+
+  if (wn == NULL || argument_num < 0 || callee == NULL)
+    return FALSE;
+  result = TRUE;
+  if (!OPCODE_is_leaf(WN_opcode(wn)))
+  {
+    if (WN_opcode(wn) == OPC_BLOCK)
+    {
+      WN *child_wn = WN_first(wn);
+      while (child_wn != NULL)
+      {
+        result = result && argument_in_wn_is_array_remapping_candidate_malloc
+          (child_wn, argument_num, callee, found_a_call);
+        if (result == FALSE)
+          return FALSE; // no need to continue
+        child_wn = WN_next(child_wn);
+      }
+    }
+    else
+    {
+      INT child_num;
+      WN *child_wn;
+      for (child_num = 0; child_num < WN_kid_count(wn); child_num++)
+      {
+        child_wn = WN_kid(wn, child_num);
+        if (child_wn != NULL)
+        {
+          result = result && argument_in_wn_is_array_remapping_candidate_malloc
+            (child_wn, argument_num, callee, found_a_call);
+          if (result == FALSE)
+            return FALSE; // no need to continue
+        }
+      }
+    }
+  }
+  switch (WN_operator(wn))
+  {
+    case OPR_CALL:
+      if (callee->Func_ST() == WN_st(wn))
+      {
+        // right call
+        *found_a_call = TRUE;
+        if (WN_operator(WN_kid(wn, argument_num)) == OPR_PARM &&
+            WN_operator(WN_kid0(WN_kid(wn, argument_num))) == OPR_LDID)
+          return ST_is_array_remapping_candidate_malloc(WN_st(WN_kid0(WN_kid(wn,
+            argument_num))));
+        else
+          return FALSE; // something's wrong
+      }
+      break;
+
+    default:
+      break;
+  }
+  return result;
+}
+
+// Given a node (e.g. "foo") in the call graph and an argument number, this
+// function returns TRUE if the corresponding argument of *all* the callers of
+// foo is an array remapping candidate that has been malloced.  (Usage note:  if
+// this function returns TRUE, then the caller of this function can mark the
+// array corresponding to the argument number as an array remapping candidate
+// that has been malloced also.)
+BOOL argument_in_callers_is_array_remapping_candidate_malloc(IPA_NODE *node,
+  int argument_num)
+{
+  BOOL result;
+  BOOL found_a_caller;
+  BOOL found_a_call;
+
+  if (node == NULL || argument_num < 0)
+    return FALSE;
+  result = TRUE;
+  found_a_caller = FALSE;
+  // visit all the callers of node
+  IPA_PRED_ITER pred_iter(node);
+  for (pred_iter.First(); !pred_iter.Is_Empty(); pred_iter.Next())
+  {
+    IPA_EDGE *edge = pred_iter.Current_Edge();
+    if (edge != NULL)
+    {
+      IPA_NODE *caller = IPA_Call_Graph->Caller(edge);
+      IPA_NODE_CONTEXT context(caller);
+      found_a_caller = TRUE;
+      WN *wn_tree = WN_func_body(caller->Whirl_Tree());
+      // look for all the calls to node inside this wn_tree, and see if the
+      // corresponding argument of all these calls is an array remapping
+      // candidate that has been malloced
+      result = result && argument_in_wn_is_array_remapping_candidate_malloc
+        (wn_tree, argument_num, node, &found_a_call);
+      if (result == FALSE)
+        return FALSE; // no need to continue
+      if (found_a_call == FALSE)
+        return FALSE; // something is wrong:  the call graph says there is a
+                      // call to node, but no such call was found
+    }
+  }
+  return (result && found_a_caller); // to prevent returning TRUE when there are
+                                     // no callers at all
 }

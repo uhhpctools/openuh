@@ -41,10 +41,10 @@
 extern WN* SNL_SPL_Loop_Is_Inner_Tile(WN* wn_loop, INT* tile_size); 
 
 extern BOOL SNL_SPL_Split_Inner_Tile_Loop(WN* wn_outer, WN* wn_inner,
-  INT tile_size, char prefix[], BOOL cache_annotate); 
+  INT tile_size, const char prefix[], BOOL cache_annotate); 
 
 extern void SNL_SPL_Split_Inner_Tile_Loops(WN* wn_first, WN* wn_last, 
-  INT split_flag, char prefix[], BOOL cache_annotate);
+  INT split_flag, const char prefix[], BOOL cache_annotate);
 
 #endif /* split_tiles_INCLUDED */
 

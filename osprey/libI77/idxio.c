@@ -329,59 +329,23 @@ dokey(int keyid, int mode)
    return 0; /* return value is ignored */
 }
 
-#if 00
-static int f_del_com (alist64 *a, int lock);
-static int f_unl_com (alist64 *a, int lock);
-#else
 static int f_del_com (alist *a, int lock);
 static int f_unl_com (alist *a, int lock);
-#endif
 
 int
 f_del (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-  return( f_del_com( &a64, 0 ) );
-#else
   return( f_del_com( a, 0 ) );
-#endif
 }
 
 int
 f_del_mp (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-  return( f_del_com( &a64, 1 ) );
-#else
-  return( f_del_com( a, 1 ) );
-#endif
-}
-
-#if 00
-int
-f_del64 (alist64 *a)
-{
-  return( f_del_com( a, 0 ) );
-}
-
-int
-f_del64_mp (alist64 *a)
-{
   return( f_del_com( a, 1 ) );
 }
 
-static int
-f_del_com (alist64 *a, int lock)
-#else
 static int
 f_del_com (alist *a, int lock)
-#endif
 {
    unit           *ftnunit = find_luno(a->aunit);
 
@@ -404,48 +368,17 @@ f_del_com (alist *a, int lock)
 int
 f_unl (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-   return( f_unl_com( &a64, 0 ) );
-#else
    return( f_unl_com( a, 0 ) );
-#endif
 }
 
 int
 f_unl_mp (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-   return( f_unl_com( &a64, 1 ) );
-#else
-   return( f_unl_com( a, 1 ) );
-#endif
-}
-
-#if 00
-int
-f_unl64 (alist64 *a)
-{
-   return( f_unl_com( a, 0 ) );
-}
-
-int
-f_unl64_mp (alist64 *a)
-{
    return( f_unl_com( a, 1 ) );
 }
 
-static int
-f_unl_com (alist64 *a, int lock)
-#else
 static int
 f_unl_com (alist *a, int lock)
-#endif
 {
    unit           *ftnunit = find_luno(a->aunit);
 
@@ -472,7 +405,6 @@ s_xsue (cilist *a)
 }
 
 
-#if 11
 int
 s_xsue64 (cilist64 *a)
 {
@@ -489,10 +421,6 @@ s_xsue_mp (cilist *a, unit **fu)
 
 int
 s_xsue64_mp (cilist64 *a, unit **fu)
-#else
-int
-s_xsue_mp (cilist *a, unit **fu)
-#endif
 {
    unit *ftnunit;
    (void) wsue(a, fu);
@@ -535,7 +463,6 @@ s_xsle (cilist *a)
    return( s_xsle_mp( a, &f77curunit ) );
 }
 
-#if 11
 int
 s_xsle64 (cilist64 *a)
 {
@@ -554,12 +481,6 @@ int
 s_xsle64_mp (cilist64 *a, unit **fu)
 {
    int             n = s_wsle64_mp(a, fu);
-#else
-int
-s_xsle_mp (cilist *a, unit **fu)
-{
-   int             n = s_wsle_mp(a, fu);
-#endif
    unit		*ftnunit = *fu;
 
    if (n) {
@@ -584,7 +505,6 @@ s_xsfe (cilist *a)
 }
 
 
-#if 11
 int
 s_xsfe64 (cilist64 *a)
 {
@@ -601,10 +521,6 @@ s_xsfe_mp (cilist *a, unit **fu)
 
 int
 s_xsfe64_mp (cilist64 *a, unit **fu)
-#else
-int
-s_xsfe_mp (cilist *a, unit **fu)
-#endif
 {
    int             n = wsfe(a, fu, 0);
    unit		  *ftnunit;
@@ -625,9 +541,7 @@ s_xsfe_mp (cilist *a, unit **fu)
    return (0);
 }
 
-#if 11
 #pragma weak f_del64 = f_del
 #pragma weak f_del64_mp = f_del_mp
 #pragma weak f_unl64 = f_unl
 #pragma weak f_unl64_mp = f_unl_mp
-#endif

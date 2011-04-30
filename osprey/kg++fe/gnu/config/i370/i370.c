@@ -449,18 +449,6 @@ i370_label_scan ()
 
            lp = mvs_get_label (labelno);
            lp -> label_addr = here;
-#if 0
-           /* Supposedly, labels are supposed to have circular
-              lists of label-refs that reference them, 
-              setup in flow.c, but this does not appear to be the case.  */
-           rtx labelref = LABEL_REFS (insn);
-           rtx ref = labelref;
-           do 
-             {
-               rtx linsn = CONTAINING_INSN(ref);
-               ref =  LABEL_NEXTREF(ref);
-             } while (ref && (ref != labelref));
-#endif
          }
        else
        if (JUMP_INSN == code)
@@ -716,20 +704,6 @@ mvs_check_label (id)
 /* Get the page on which the label sits.  This will be used to 
    determine is a register reload is really needed.  */
 
-#if 0
-int
-mvs_get_label_page(int id)
-{
-  label_node_t *lp;
-
-  for (lp = label_anchor; lp; lp = lp->label_next)
-    {
-      if (lp->label_id == id)
-	return lp->label_page;
-    }
-  return -1;
-}
-#endif
 
 /* The label list for the current page freed by linking the list onto the free
    label element chain.  */
@@ -923,12 +897,6 @@ mvs_need_alias (realname)
 
    if (mvs_function_check (realname))
      return 0;
-#if 0
-   if (!strcmp (realname, "gccmain"))
-     return 0;
-   if (!strcmp (realname, "main"))
-     return 0;
-#endif
    if (j > MAX_MVS_LABEL_SIZE)
      return 1;
    if (strchr (realname, '_') != 0)

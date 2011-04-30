@@ -78,6 +78,31 @@
  		(_fcdlen(array->base_addr.charptr))    :  \
 		((array->base_addr.a.el_len)>>3))    
 
+#ifdef KEY /* Bug 12134 */
+/*
+ * Used in functions which implement maxloc and minloc, to return 32-bit or
+ * 64-bit result, depending on dope vector for "result" argument.
+ */
+#define UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count) \
+  if ((dim) != NULL) { \
+    if ((result)->type_lens.int_len == 32) { \
+      * (int32_t *) (result_p) = (count); \
+    } else { \
+      * (int64_t *) (result_p) = (count); \
+    } \
+  }
+#endif /* KEY Bug 12134 */
+#ifdef KEY /* Bug 10410 */
+/* If the "mask" argument to an intrinsic like "maxloc" is not specified in
+ * the source, the runtime function sees a null pointer to the dope vector.
+ * If the argument is specified but not "present" (because the actual argument
+ * is itself an optional dummy in the calling procedure, and is not specified
+ * in the call to that procedure) then the runtime function sees a null address
+ * inside the dope vector.
+ */
+#define HAVE_MASK(mask) ((mask) != NULL && (mask)->base_addr.a.ptr != NULL)
+#endif /* KEY Bug 10410 */
+
 static size_t GET_STRIDE_FROM_DESC(DopeVectorType * array, int32_t dim)
 {
    size_t rval;

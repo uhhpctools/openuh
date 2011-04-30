@@ -48,11 +48,11 @@
 // the call graph is built. For those, we provide dual interfaces.
 // -------------------------------------------------------------------
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "ipa_cg.h"                     // IPA_NODE, IPA_Call_Graph_Built
 #include "ipa_summary.h"        
 #include "ipl_summarize.h"              // SUMMARY
+#include "ipa_be_summary.h"
 
 // --------------------------------------------------------------
 // Functions that take IP_FILE_HDR parameter also return the size
@@ -103,6 +103,90 @@ IPA_get_struct_access_file_array (const IP_FILE_HDR& hdr, INT32& size)
   if (size = summary_header->Get_struct_access_size()) {
     return (SUMMARY_STRUCT_ACCESS *)
       (IP_FILE_HDR_summary (hdr) + summary_header->Get_struct_access_offset ());
+  } 
+  return NULL;
+}
+
+#ifdef KEY
+SUMMARY_TY_INFO*
+IPA_get_ty_info_file_array (const IP_FILE_HDR& hdr, INT32& size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header (hdr);
+  if (size = summary_header->Get_ty_info_size()) {
+    return (SUMMARY_TY_INFO *)
+      (IP_FILE_HDR_summary (hdr) + summary_header->Get_ty_info_offset ());
+  } 
+  return NULL;
+}
+#endif
+
+SUMMARY_CONSTRAINT_GRAPH_NODE*
+IPA_get_constraint_graph_nodes_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_nodes_size()) {
+    return (SUMMARY_CONSTRAINT_GRAPH_NODE *)
+      (IP_FILE_HDR_summary (hdr) + 
+                   summary_header->Get_constraint_graph_nodes_offset());
+  } 
+  return NULL;
+}
+
+SUMMARY_CONSTRAINT_GRAPH_EDGE*
+IPA_get_constraint_graph_edges_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_edges_size()) {
+    return (SUMMARY_CONSTRAINT_GRAPH_EDGE *)
+      (IP_FILE_HDR_summary (hdr) + 
+                   summary_header->Get_constraint_graph_edges_offset());
+  } 
+  return NULL;
+}
+
+SUMMARY_CONSTRAINT_GRAPH_STINFO*
+IPA_get_constraint_graph_stinfos_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_stinfos_size()) {
+    return (SUMMARY_CONSTRAINT_GRAPH_STINFO *)
+      (IP_FILE_HDR_summary (hdr) + 
+                   summary_header->Get_constraint_graph_stinfos_offset());
+  } 
+  return NULL;
+}
+
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE*
+IPA_get_constraint_graph_callsites_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_callsites_size()) {
+    return (SUMMARY_CONSTRAINT_GRAPH_CALLSITE *)
+      (IP_FILE_HDR_summary (hdr) + 
+                   summary_header->Get_constraint_graph_callsites_offset());
+  } 
+  return NULL;
+}
+
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE*
+IPA_get_constraint_graph_modranges_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_modranges_size()) {
+    return (SUMMARY_CONSTRAINT_GRAPH_MODRANGE *)
+      (IP_FILE_HDR_summary (hdr) + 
+                   summary_header->Get_constraint_graph_modranges_offset());
+  } 
+  return NULL;
+}
+
+UINT32 *
+IPA_get_constraint_graph_node_ids_array(const IP_FILE_HDR &hdr, INT32 &size)
+{
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header(hdr);
+  if (size = summary_header->Get_constraint_graph_node_ids_size()) {
+    return (UINT32 *)(IP_FILE_HDR_summary (hdr) + 
+                      summary_header->Get_constraint_graph_node_ids_offset());
   } 
   return NULL;
 }
@@ -245,6 +329,19 @@ IPA_get_actual_file_array (const IP_FILE_HDR& hdr, INT32& size)
   } 
   return NULL;
 }
+
+SUMMARY_CALLSITE* 
+IPA_get_callsite_file_array (const IP_FILE_HDR& hdr, INT32& size) 
+{ 
+  Is_True(! IPA_Call_Graph_Built, 
+          ("IPA_get_actual_file_array must use IPA_NODE after call graph is built")); 
+  const SUMMARY_FILE_HEADER *summary_header = IP_FILE_HDR_file_header (hdr); 
+  if (size = summary_header->Get_callsite_size ()) { 
+    return (SUMMARY_CALLSITE *) 
+      (IP_FILE_HDR_summary (hdr) + summary_header->Get_callsite_offset()); 
+  } 
+  return NULL; 
+} 
 
 IVAR* 
 IPA_get_ivar_file_array (const IP_FILE_HDR& hdr, INT32& size)

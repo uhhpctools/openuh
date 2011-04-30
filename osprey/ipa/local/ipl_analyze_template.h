@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 /* -*- c++ -*-
  *
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -73,6 +77,8 @@
 #endif // opt_mu_chi_INCLUDED
 
 extern "C" {
+#ifdef SHARED_BUILD
+ // is replaced in ipa build but not for inliner
  void _ZN10DU_MANAGER14CD_is_br_takenEj(void) __attribute__ ((weak));
  void _ZN10DU_MANAGER15CD_is_fall_thruEj(void) __attribute__((weak));
  void _ZNK7CODEREP12Def_at_entryEv(void) __attribute__((weak));
@@ -80,6 +86,7 @@ extern "C" {
  void _ZN10DU_MANAGER8DominateEjj(void) __attribute__((weak));
  void _ZN10DU_MANAGER6Get_cdEj(void) __attribute__((weak));
  void _ZN10DU_MANAGER13Get_last_stmtEj(void) __attribute__((weak));
+#endif
 
  void _ZN10DU_MANAGER14CD_is_br_takenEj(void) {}
  void _ZN10DU_MANAGER15CD_is_fall_thruEj(void) {}
@@ -272,14 +279,6 @@ SUMMARIZE<program>::Process_phi_jump_function (WN *orig_wn, PHI_NODE *phi)
 
     CODEREP *cr0 = phi->OPND (0);
     CODEREP *cr1 = phi->OPND (1);
-#if 0
-    CODEREP *res = phi->RESULT ();
-    printf("sym%dv%d (cr%d) = PHI[sym%dv%d (cr%d), sym%dv%d (cr%d)]\n",
-           res->Aux_id(), res->Version(), res->Coderep_id(),
-           cr0->Aux_id(), cr0->Version(), cr0->Coderep_id(),
-           cr1->Aux_id(), cr1->Version(), cr1->Coderep_id());
-    fflush(stdout);
-#endif    
     if (cr0->Is_flag_set(CF_IS_ZERO_VERSION) ||
 	cr1->Is_flag_set(CF_IS_ZERO_VERSION))
 	return -1;
@@ -396,10 +395,6 @@ INT
 SUMMARIZE<program>::Process_chi_jump_function (WN *wn,
 					       const SUMMARY_DESC &desc)
 {
-#if 0
-    FmtAssert (! desc.Is_addr_of (),
-	       ("LDA of a symbol cannot have chi node"));
-#endif
 
     CODEREP *cr = desc.Get_chi_cr ()->Defchi ()->OPND ();
 
@@ -419,16 +414,6 @@ SUMMARIZE<program>::Process_chi_jump_function (WN *wn,
         return -1;
 #endif // KEY
 
-#if 0
-    printf("sym%dv%d (cr%d) = CHI[sym%dv%d (cr%d)]\n",
-           desc.Get_chi_cr()->Aux_id(),
-           desc.Get_chi_cr()->Version(),
-           desc.Get_chi_cr()->Coderep_id(),
-           cr->Aux_id(),
-           cr->Version(),
-           cr->Coderep_id());
-    fflush(stdout);
-#endif
     
     // Check the hash table based on CODEREP/PHI_NODE pointers
     {
@@ -647,7 +632,7 @@ struct LOAD_STORE_ENTRY
   CODEREP* cr;
   ST* st;
   INT offset;
-  TYPE_ID type;
+  TYPE_ID type : 8;
   BOOL is_ptr;
   BOOL ret_val;
 
@@ -1611,12 +1596,31 @@ SUMMARIZE<program>:: Record_ref_formal ( WN* w )
 	break;
 
     case OPR_LDA:
-	i = Get_symbol_index(WN_st(w));
+      // For ASM_INPUT, set dref to the symbol
+      i = Get_symbol_index(WN_st(w));
+      parent_w = LWN_Get_Parent(w);
+      OPERATOR opr = parent_w ?
+	WN_operator(parent_w) : (OPERATOR) 0;
+      if (opr == OPR_ASM_INPUT) {
+	// in the case of FORMAL_REF, and ldid really refers to an
+	// indirect reference
+	if (ST_sclass(WN_st(w)) == SCLASS_FORMAL_REF ||
+	    WN_operator (parent_w) == OPR_ICALL)
+	  Get_symbol (i)->Set_iref ();
+	else {
+	  Get_symbol (i)->Set_dref();
+	  if ( Trace_CopyProp )
+	    fprintf ( TFile, "\n  formal: %s : set dref\n",
+		      ST_name(WN_st(w)) );
+	}
+      }
+      else {
 	Get_symbol (i)->Set_aref();
-	if ( Trace_CopyProp ) 
-	    fprintf ( TFile, "\n  formal: %s : set aref\n",
-		     ST_name(WN_st(w)) );
-	break;
+	if ( Trace_CopyProp )
+	  fprintf ( TFile, "\n  formal: %s : set aref\n",
+		    ST_name(WN_st(w)) );
+      }
+      break;
     }
 
     if ( Trace_Modref ) {
@@ -1909,6 +1913,23 @@ SUMMARIZE<program>:: Record_ref (WN *w)
 
     case OPR_LDID:
 
+#ifdef KEY
+	{
+	  TY_IDX st_type = ST_type(s);
+	  TY_IDX wn_type = WN_ty(w);
+	  if (st_type != wn_type /* type-cast */ &&
+	      TY_kind(st_type) == KIND_POINTER) {
+
+	    TY_IDX pst_type = TY_pointed(st_type);
+	    if (TY_kind(pst_type) == KIND_STRUCT)
+	      Record_ty_info_for_type (pst_type, TY_NO_SPLIT);
+
+	    if (TY_kind(wn_type) == KIND_POINTER &&
+	        TY_kind(TY_pointed(wn_type)) == KIND_STRUCT)
+	      Record_ty_info_for_type (TY_pointed(wn_type), TY_NO_SPLIT);
+	  }
+	}
+#endif
 	parent_w = LWN_Get_Parent(w); 
 	// don't record this as a direct ref since it is actually an
 	// indirect ref that was captured by OPR_ILOAD
@@ -1948,6 +1969,13 @@ SUMMARIZE<program>:: Record_ref (WN *w)
 	break;
 
     case OPR_LDA:
+#ifdef KEY
+	{
+	  TY_IDX type = WN_type(w);
+	  if (TY_kind(type) == KIND_STRUCT)
+	    Record_ty_info_for_type (type, TY_NO_SPLIT);
+	}
+#endif
 	if (Inliner_copy_prop)
 	    break;
 	
@@ -1963,7 +1991,9 @@ SUMMARIZE<program>:: Record_ref (WN *w)
 
 	    
 	default:
-	    break;
+	  if ( opr == OPR_ASM_INPUT)
+	    Record_ref_formal (w);
+	  break;
 	}
 	break;
 
@@ -2117,6 +2147,7 @@ SUMMARIZE<program>:: Record_mod_formal ( WN* w )
     switch ( WN_operator(w) ) {
 
     case OPR_ISTORE:
+    case OPR_MSTORE: // OSP_418, Both kid1 of MSTORE and ISTORE are the address
 	switch ( WN_operator(WN_kid1(w)) ) {
 	case OPR_ARRAY:
 	    // check to see if the base of the array is an LDA or an
@@ -2227,6 +2258,24 @@ SUMMARIZE<program>:: Record_mod_common (WN *w, const ST *st)
 
 } // SUMMARIZE::Record_mod_common
           
+// It is the responsibility of the caller to ensure "w" has ty_idx
+// information.
+static TY_IDX
+get_access_type (WN * w)
+{
+  Is_True (OPERATOR_has_1ty(WN_operator(w)) ||
+           OPERATOR_has_2ty(WN_operator(w)),
+           ("get_access_type needs WN with ty_idx information"));
+  TY_IDX w_type = WN_ty(w);
+
+  if (WN_field_id(w) == 0)
+    return w_type;
+
+  UINT cur_field_id = 0;
+  FLD_HANDLE fld = FLD_get_to_field (w_type, WN_field_id(w), cur_field_id);
+
+  return FLD_type(fld);
+}
 
 //-----------------------------------------------------------
 // record variables that have been modified
@@ -2304,6 +2353,26 @@ SUMMARIZE<program>:: Record_mod (WN* w)
 	    st = WN_st (w);
 	    if (ST_st_idx (st) != ST_base_idx (st) && !ST_is_weak_symbol (st))
 		st = ST_base (st);
+#ifdef KEY
+	    // TODO: Find the actual base from the potentially complex
+	    // rhs expression.
+	    if (WN_operator(WN_kid0(w)) == OPR_LDID) {
+
+	      TY_IDX rhs_ty = get_access_type(WN_kid0(w));
+	      TY_IDX w_ty = get_access_type(w);
+
+	      if (rhs_ty != w_ty) {
+
+	        if (TY_kind(rhs_ty) == KIND_POINTER &&
+	            TY_kind(TY_pointed(rhs_ty)) == KIND_STRUCT)
+	          Record_ty_info_for_type (TY_pointed(rhs_ty), TY_NO_SPLIT);
+
+	        if (TY_kind(w_ty) == KIND_POINTER &&
+	            TY_kind(TY_pointed(w_ty)) == KIND_STRUCT)
+	          Record_ty_info_for_type (TY_pointed(w_ty), TY_NO_SPLIT);
+	      }
+	    }
+#endif
 	    
 	    switch ( ST_sclass(st) ) {
 	    case SCLASS_AUTO:

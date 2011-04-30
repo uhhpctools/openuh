@@ -343,24 +343,6 @@ const struct gcc_debug_hooks sdb_debug_hooks =
   sdbout_label
 };
 
-#if 0
-
-/* return the tag identifier for type
- */
-
-char *
-tag_of_ru_type (type,link)
-     tree type,link;
-{
-  if (TYPE_SYMTAB_ADDRESS (type))
-    return TYPE_SYMTAB_ADDRESS (type);
-  if (link && TREE_PURPOSE (link)
-      && IDENTIFIER_POINTER (TREE_PURPOSE (link)))
-    TYPE_SYMTAB_ADDRESS (type) = IDENTIFIER_POINTER (TREE_PURPOSE (link));
-  else
-    return (char *) TYPE_SYMTAB_ADDRESS (type);
-}
-#endif
 
 /* Return a unique string to name an anonymous type.  */
 
@@ -727,11 +709,6 @@ sdbout_symbol (decl, local)
 
   sdbout_one_type (type);
 
-#if 0 /* This loses when functions are marked to be ignored,
-	 which happens in the C++ front end.  */
-  if (DECL_IGNORED_P (decl))
-    return;
-#endif
 
   switch (TREE_CODE (decl))
     {
@@ -1100,7 +1077,6 @@ sdbout_one_type (type)
 	return;
 
       TREE_ASM_WRITTEN (type) = 1;
-#if 1
       /* This is reputed to cause trouble with the following case,
 	 but perhaps checking TYPE_SIZE above will fix it.  */
 
@@ -1118,9 +1094,6 @@ sdbout_one_type (type)
 	  int ccccc;
 	} badtype;   */
 
-#if 0
-      TREE_ASM_BEING_WRITTEN (type) = 1;
-#endif
       /* This change, which ought to make better output,
 	 used to make the COFF assembler unhappy.
 	 Changes involving KNOWN_TYPE_TAG may fix the problem.  */
@@ -1129,10 +1102,6 @@ sdbout_one_type (type)
 	 are not used if forward references are in use.  */
       if (TREE_CODE (type) != ENUMERAL_TYPE)
 	sdbout_field_types (type);
-#if 0
-      TREE_ASM_WRITTEN (type) = 1;
-#endif
-#endif
 
       /* Output a structure type.  */
       {
@@ -1452,18 +1421,6 @@ sdbout_reg_parms (parms)
 		 && PARM_PASSED_IN_MEMORY (parms)
 		 && ! rtx_equal_p (DECL_RTL (parms), DECL_INCOMING_RTL (parms)))
 	  {
-#if 0 /* ??? It is not clear yet what should replace this.  */
-	    int offset = DECL_OFFSET (parms) / BITS_PER_UNIT;
-	    /* A parm declared char is really passed as an int,
-	       so it occupies the least significant bytes.
-	       On a big-endian machine those are not the low-numbered ones.  */
-	    if (BYTES_BIG_ENDIAN
-		&& offset != -1
-		&& TREE_TYPE (parms) != DECL_ARG_TYPE (parms))
-	      offset += (GET_MODE_SIZE (TYPE_MODE (DECL_ARG_TYPE (parms)))
-			 - GET_MODE_SIZE (GET_MODE (DECL_RTL (parms))));
-	    if (INTVAL (XEXP (XEXP (DECL_RTL (parms), 0), 1)) != offset) {...}
-#endif
 	      {
 		if (name == 0 || *name == 0)
 		  name = gen_fake_label ();

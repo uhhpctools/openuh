@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+/*
  * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -53,6 +60,10 @@ extern "C" {
 #endif
 
 extern int  WGEN_Keep_Zero_Length_Structs;
+#ifdef TARG_X8664
+extern int Reg_Parm_Count;
+extern BOOL SSE_Reg_Parm;
+#endif
 
 extern void WGEN_Init (INT argc, char **arrgv, char **envp);
 extern void WGEN_Finish (void);
@@ -94,6 +105,7 @@ typedef enum {
   wgen_stmk_rcomma,
   wgen_stmk_temp_cleanup,
   wgen_stmk_dummy,	// does not generate code
+  wgen_stmk_guard_init,
   wgen_stmk_last
 } WGEN_STMT_KIND;
 
@@ -113,17 +125,37 @@ extern bool Did_Not_Terminate_Region;
 extern WN * WGEN_Find_Stmt_In_Stack (WGEN_STMT_KIND);
 extern void Warning (const char *);
 
+
+void
+WGEN_Guard_Block_Stack_Init();
+
+void
+WGEN_Guard_Init_Block_Push(); 
+
+WN *
+WGEN_Guard_Init_Block_Pop(); 
+
+WN *
+WGEN_Guard_Init_Block_Stack_Top(); 
+
 extern BOOL wgen_invoke_inliner;	/* from main.c */
 extern char *asm_file_name;		/* from main.c */
 extern BOOL TARGET_64BIT;		/* from main.c */
 extern int lineno;			/* from main.c */
-extern int key_exceptions;		/* from main.c */
+extern int emit_exceptions;		/* from main.c */
 extern BOOL opt_regions;		/* from main.c */
 extern gs_t program;			/* from main.c */
 extern BOOL lang_cplus;			/* from main.c */
-#if 0
-extern char *Spin_File_Name;
-extern FILE *Spin_File;
+extern BOOL keep_inline_functions;	/* from main.c */
+extern BOOL gen_pic_code;                  /* from main.c, -fpic or -fPIC */
+extern BOOL tls_stress_test;               /* from main.c, do tls stress test or not */ 
+#ifdef FE_GNU_4_2_0
+#include "wn_util.h"
+extern BOOL enable_cxx_openmp;		/* from main.c */
+extern void WGEN_add_pragma_to_enclosing_regions (WN_PRAGMA_ID, ST *,
+                                                  BOOL = FALSE);
+void Add_Pragma_To_MP_Regions (WN_VECTOR *, WN_PRAGMA_ID, ST *, WN_OFFSET,
+                               WN_MAP, BOOL, BOOL);
 #endif
 extern UINT current_file;		/* from wgen_dst.cxx */
 

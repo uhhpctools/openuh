@@ -52,7 +52,7 @@
 #include "defs.h"
 
 char path[PATH_MAX];
-static char *libpath[3] = 
+static const char *libpath[3] = 
 {"LD_LIBRARY_PATH",
  "LD_LIBRARYN32_PATH",
  "LD_LIBRARY64_PATH"
@@ -62,8 +62,8 @@ static const char * const errstring = "%s: can't allocate memory\n";
 
 
 static BOOL
-Has_Extension (char *name,	/* The filename to check */
-	       char *ext)	/* The extension to look for */
+Has_Extension (const char *name,/* The filename to check */
+	       const char *ext)	/* The extension to look for */
 {
   INT16 nlen = strlen(name);
   INT16 elen = strlen(ext);

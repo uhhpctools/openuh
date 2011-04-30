@@ -40,12 +40,14 @@
 #include <fortran.h>
 #include <fp.h>
 #include "inline.h"
-#ifdef KEY /* Bug 10771, 10259 */
+#ifdef KEY /* Bug 10771, 10259, 11941 */
 # include <math.h>
 # include <fenv.h>
 
-# if _MIPS_SZPTR == 32
-   /* Workaround for bug in libm nextafterf for -m32 */
+#if defined(TARG_IA32) || defined(TARG_X8664)
+/* Workaround for bug in libm nextafter and nextafterf which fails to set IEEE
+ * flags as required by the C standard. In FC3 and SuSE9 this was only broken
+ * for -m32, but in FC4 and SuSE10 it's broken for -m64 too. */
 #  define NEXTAFTER_SET_FLAGS(result) \
 	{ \
 	  int classification = fpclassify(result); \
@@ -56,10 +58,10 @@
 	    feraiseexcept(FE_UNDERFLOW | FE_INEXACT); \
 	  } \
 	}
-# else /* _MIPS_SZPTR == 32 */
-#  define NEXTAFTER_SET_FLAGS(result) /* No workaround needed for -m64 */
-# endif /* _MIPS_SZPTR == 32 */
-#endif /* KEY Bug 10771, 10259 */
+# else /* defined(TARG_IA32) || defined(TARG_X8664) */
+#  define NEXTAFTER_SET_FLAGS(result) /* No bug */
+# endif /* defined(TARG_IA32) || defined(TARG_X8664) */
+#endif /* KEY Bug 10771, 10259, 11941 */
 
 extern _f_real4 _IEEE_NEXT_AFTER_H(_f_real4 x, _f_real4 s);
 extern _f_real4 _IEEE_NEXT_AFTER_H_R(_f_real4 x, _f_real8 s);

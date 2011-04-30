@@ -1626,7 +1626,6 @@ compute_bucket_count (struct bfd_link_info *info)
 	     the chains.  */
 	  max = (2 + nsyms) * (ARCH_SIZE / 8);
 
-# if 1
 	  /* Variant 1: optimize for short chains.  We add the squares
 	     of all the chain lengths (which favors many small chain
 	     over a few long chains).  */
@@ -1636,18 +1635,6 @@ compute_bucket_count (struct bfd_link_info *info)
 	  /* This adds penalties for the overall size of the table.  */
 	  fact = i / (BFD_TARGET_PAGESIZE / (ARCH_SIZE / 8)) + 1;
 	  max *= fact * fact;
-# else
-	  /* Variant 2: Optimize a lot more for small table.  Here we
-	     also add squares of the size but we also add penalties for
-	     empty slots (the +1 term).  */
-	  for (j = 0; j < i; ++j)
-	    max += (1 + counts[j]) * (1 + counts[j]);
-
-	  /* The overall size of the table is considered, but not as
-	     strong as in variant 1, where it is squared.  */
-	  fact = i / (BFD_TARGET_PAGESIZE / (ARCH_SIZE / 8)) + 1;
-	  max *= fact;
-# endif
 
 	  /* Compare with current best results.  */
 	  if (max < best_chlen)
@@ -3215,21 +3202,6 @@ elf_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 	goto error_return;
     }
 
-#if 0
-  /* Some standard ELF linkers do this, but we don't because it causes
-     bootstrap comparison failures.  */
-  /* Output a file symbol for the output file as the second symbol.
-     We output this even if we are discarding local symbols, although
-     I'm not sure if this is correct.  */
-  elfsym.st_value = 0;
-  elfsym.st_size = 0;
-  elfsym.st_info = ELF_ST_INFO (STB_LOCAL, STT_FILE);
-  elfsym.st_other = 0;
-  elfsym.st_shndx = SHN_ABS;
-  if (! elf_link_output_sym (&finfo, bfd_get_filename (abfd),
-			     &elfsym, bfd_abs_section_ptr, NULL))
-    goto error_return;
-#endif
 
   /* Output a symbol for each section.  We output these even if we are
      discarding local symbols, since they are used for relocs.  These

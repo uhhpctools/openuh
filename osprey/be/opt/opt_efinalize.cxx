@@ -117,6 +117,11 @@ EXP_WORKLST::Insert_one_operand(      ETABLE  *const etable,
   // In the following assertion, checking
   // (was_integral_load_store && Is_the_same_as(insert_cr->Opnd(0)))
   // first is not OK because insert_cr can be a CK_VAR node.
+  Is_Trace(etable->Tracing(), (TFile, "EXP_WORKLST::Insert_one_operand\n"));
+  Is_Trace(etable->Tracing(), (TFile, "Inserted expression:\n"));
+  Is_Trace_cmd(etable->Tracing(), insert_cr->Print(3, TFile));
+  Is_Trace(etable->Tracing(), (TFile, "CFG \n"));
+  Is_Trace_cmd(etable->Tracing(), etable->Cfg()->Print(TFile));
   Is_True(Is_the_same_as(insert_cr) ||
 	  (was_integral_load_store && 
 	   Is_the_same_as(insert_cr->Opnd(0))),
@@ -559,7 +564,11 @@ EXP_WORKLST::Determine_inserts_saves_deletions(CODEMAP         *htable,
 		if (LR_shrink_cand())
 		  Check_restore_sunk_lvalue_def(e_ver_tab, opnd);
 		EXP_OCCURS *def = e_ver_tab->Avail_def(opnd->E_version());
-		if (def->Occurs_as_lvalue() && def->Sunk_lvalue()) {
+		if (def->Occurs_as_lvalue() && def->Sunk_lvalue()
+#if defined(TARG_SL) //PARA_EXTENSION
+                  && !occ_bb->SL2_para_region()
+#endif
+		    ) {             
 		  // this phi operand is first use before which the sunk def 
 		  // is to be inserted later
 		  occ->Set_sunk_lvalue();
@@ -567,6 +576,10 @@ EXP_WORKLST::Determine_inserts_saves_deletions(CODEMAP         *htable,
 		  phi->Set_opnd(opnd_num, occ); // Phi opnd pts to phi-pred nd
 		}
 		else {
+#if defined(TARG_SL) //PARA_EXTENSION
+                  if(occ_bb->SL2_para_region() && def->Sunk_lvalue())
+                    def->Reset_sunk_lvalue(); 
+#endif
 		  e_ver_tab->Note_version_use(opnd->E_version());
   
 		  phi->Set_opnd(opnd_num,

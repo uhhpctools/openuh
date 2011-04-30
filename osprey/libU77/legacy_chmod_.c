@@ -25,7 +25,11 @@ Temple Place - Suite 330, Boston MA 02111-1307, USA.
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "cmplrs/f_errno.h"
 #include <sys/param.h>
 #include "externals.h"

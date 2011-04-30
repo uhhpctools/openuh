@@ -269,9 +269,6 @@ Boston, MA 02111-1307, USA.  */
    libgcc2.c.  */
 /* We don't want to include this because sys/mman.h is not present on
    some non-Solaris configurations that use sol2.h.  */
-#if 0 /* def L_trampoline */
-#include <sys/mman.h>
-#endif
 
 #define TRANSFER_FROM_TRAMPOLINE					\
 static int need_enable_exec_stack;					\

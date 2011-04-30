@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2008 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -59,7 +63,6 @@ static ABI_PROPERTY
   func_val,
   stack_ptr,
   frame_ptr,
-  eight_bit_reg,
   static_link;
 
 
@@ -101,9 +104,6 @@ static void x86_32_abi(void)
   Reg_Property( static_link, ISA_REGISTER_CLASS_integer, 
   		ECX,
 	       -1 );
-  Reg_Property( eight_bit_reg, ISA_REGISTER_CLASS_integer, 
-		EAX, EBX, ECX, EDX,
-		-1 );
 
   // ISA_REGISTER_CLASS_float
 
@@ -199,10 +199,6 @@ static void x86_64_abi(void)
   Reg_Property( static_link, ISA_REGISTER_CLASS_integer, 
 		R10,
 	       -1 );
-  Reg_Property( eight_bit_reg, ISA_REGISTER_CLASS_integer,
-		RAX, RBX, RCX, RDX, RBP, RSI, RDI, RSP,
-		R8,  R9,  R10, R11, R12, R13, R14, R15,
-		-1 );
 
   // ISA_REGISTER_CLASS_float
 
@@ -256,7 +252,7 @@ static void x86_64_abi(void)
 }
 
 
-main()
+int main()
 {
   ABI_Properties_Begin( "x8664" );
 
@@ -268,7 +264,6 @@ main()
   stack_ptr = Create_Reg_Property( "stack_ptr" );
   frame_ptr = Create_Reg_Property( "frame_ptr" );
   static_link = Create_Reg_Property( "static_link" );
-  eight_bit_reg = Create_Reg_Property( "eight_bit_reg" );
 
   Begin_ABI( "n32" );
   x86_32_abi();
@@ -277,4 +272,6 @@ main()
   x86_64_abi();
 
   ABI_Properties_End();
+
+  return 0;
 }

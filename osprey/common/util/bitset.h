@@ -43,10 +43,10 @@ extern "C" {
  * ====================================================================
  *
  * Module: bitset.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/bitset.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:57 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/bitset.h,v $
  *
  * Revision history:
  *  05-01-93 - Original Version
@@ -61,7 +61,7 @@ extern "C" {
 
 
 #ifdef _KEEP_RCS_ID
-static char *xxx_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/bitset.h,v $ $Revision: 1.1.1.1 $";
+static char *xxx_rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/bitset.h,v $ $Revision: 1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 /* This package implements sets of nonnegative INTs.  These can be

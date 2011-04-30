@@ -41,7 +41,7 @@
 # architectures, update only ieg.mh. 
 #
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 CFILES += \
 
 else

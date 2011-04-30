@@ -666,11 +666,6 @@ typedef struct
      length fields above, but unsure at this time whether they are used
      anywhere.  */
   CGEN_MAYBE_MULTI_IFLD index_fields;
-#if 0 /* ??? Interesting idea but relocs tend to get too complicated,
-	 and ABI dependent, for simple table lookups to work.  */
-  /* Ideally this would be the internal (external?) reloc type.  */
-  int reloc_type;
-#endif
 
   /* Attributes.
      This should, but technically needn't, appear last.  It is a variable sized
@@ -997,16 +992,6 @@ typedef struct
   int bitsize;
 #define CGEN_INSN_BITSIZE(insn) ((insn)->base->bitsize)
 
-#if 0 /* ??? Disabled for now as there is a problem with embedded newlines
-	 and the table is already pretty big.  Should perhaps be moved
-	 to a file of its own.  */
-  /* Semantics, as RTL.  */
-  /* ??? Plain text or bytecodes?  */
-  /* ??? Note that the operand instance table could be computed at run-time
-     if we parse this and cache the results.  Something to eventually do.  */
-  const char *rtx;
-#define CGEN_INSN_RTX(insn) ((insn)->base->rtx)
-#endif
 
   /* Attributes.
      This must appear last.  It is a variable sized array in that one

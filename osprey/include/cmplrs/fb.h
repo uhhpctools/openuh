@@ -36,12 +36,23 @@
 #ifndef __FB_H__
 #define __FB_H__
 
+#ifdef __MINGW32__
+#include <stdint.h>
+#include "translatetypes.h"
+#else
 #include <sys/types.h>
+#endif /* __MINGW32__ */
 
 #if defined(__GNUC__)
+#ifdef __MINGW32__
+typedef uint64_t	FB_offset;
+typedef uint64_t	FB_xword;
+typedef uint32_t	FB_word;
+#else
 typedef u_int64_t	FB_offset;
 typedef u_int64_t	FB_xword;
 typedef u_int32_t	FB_word;
+#endif /* __MINGW32__ */
 #else
 typedef __uint64_t	FB_offset;
 typedef __uint64_t	FB_xword;

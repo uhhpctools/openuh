@@ -5554,22 +5554,6 @@ static void set_up_letter_idx_table(int		*idx_tbl,
       }
    }
 
-# if 0
-   printf("\t\t\t\t%3d,%4d,%4d,%4d,%4d,%4d,%4d,     /* A-G */\n",
-          idx_tbl[0],idx_tbl[1],idx_tbl[2],idx_tbl[3],
-          idx_tbl[4],idx_tbl[5],idx_tbl[6]);
-   printf("\t\t\t\t%3d,%4d,%4d,%4d,%4d,%4d,%4d,     /* H-N */\n",
-          idx_tbl[7],idx_tbl[8],idx_tbl[9],idx_tbl[10],
-          idx_tbl[11],idx_tbl[12],idx_tbl[13]);
-   printf("\t\t\t\t%3d,%4d,%4d,%4d,%4d,%4d,%4d,     /* O-U */\n",
-          idx_tbl[14],idx_tbl[15],idx_tbl[16],idx_tbl[17],
-          idx_tbl[18],idx_tbl[19],idx_tbl[20]);
-   printf("\t\t\t\t%3d,%4d,%4d,%4d,%4d,               /* V-Z */\n",
-          idx_tbl[21],idx_tbl[22],idx_tbl[23],idx_tbl[24],
-          idx_tbl[25]);
-   printf("\t\t\t\t%3d };                                 /* end */\n",
-           idx_tbl[26]);
-# endif
 
 
    TRACE (Func_Exit, "set_up_letter_idx_table", NULL);

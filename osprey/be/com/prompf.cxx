@@ -37,14 +37,17 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
 #endif /* USE_PCH */
 #pragma hdrstop
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdio.h> 
 
 #define USE_STANDARD_TYPES
@@ -57,8 +60,29 @@
 #include "ir_reader.h"
 #include "targ_sim.h"
 
+#ifndef BUILD_SKIP_PROMPF
+#ifdef SHARED_BUILD
 #pragma weak New_Construct_Id 
 #pragma weak Get_Next_Construct_Id
+#pragma weak Anl_File_Path
+#endif //SHARED_BUILD
+#else
+extern "C" INT64 Get_Next_Construct_Id() 
+{
+	FmtAssert(FALSE, ("NYI"));
+	return 0; 
+}
+extern "C" INT64 New_Construct_Id() 
+{ 
+	FmtAssert(FALSE, ("NYI"));
+	return 0; 
+}
+extern "C" const char* Anl_File_Path()
+{
+	FmtAssert(FALSE, ("NYI"));
+	return 0; 
+}
+#endif
 
 PROMPF_INFO* Prompf_Info = NULL; 
 MEM_POOL PROMPF_pool;

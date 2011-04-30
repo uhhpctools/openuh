@@ -60,5 +60,11 @@ double z_abs__(dcomplex *z)
   return(hypot(z->dreal, z->dimag));
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+double z_abs_(dcomplex *z) { return z_abs__(z); }
+double z_abs(dcomplex *z) { return z_abs__(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(z_abs__, z_abs_);
 defalias(z_abs__, z_abs);
+#endif /* defined(BUILD_OS_DARWIN) */

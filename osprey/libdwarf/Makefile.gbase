@@ -112,25 +112,46 @@ CFILES	= \
 	dwf_frame.c \
 	dwf_section.c
 
+ifeq ($(BUILD_OS),DARWIN)
+DUMP_CFILES := \
+	dwarfdump.c \
+	makename.c
+else
 DUMP_CFILES := \
 	dwarfdump.c \
 	makename.c \
 	print_die.c \
 	print_reloc.c \
 	print_sections.c
+endif
 
 DUMP_OBJECTS := \
 	$(DUMP_CFILES:.c=.o) \
 	dwarf_names.o
 
-default: first $(TARGETS) last
+#----------------------------------------------------------------------
+#  For parallel makes, makefile must satisfy:
+#  -> Submake for include/ finished before building any objects;
+#  -> All archive/library submakes finished before linking targets;
+#  -> All targets finished before make_deps or make_libdeps.
+#----------------------------------------------------------------------
+
+default:
+	$(MAKE) first
+	$(MAKE) make_libdeps
+
+make_libdeps: $(TARGETS)
+$(OBJECTS): $(BUILD_AREA)/include/pathscale_defs.h
+.PHONY: default install make_libdeps first 
 
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
+ endif
 endif
 
-last: make_libdeps
+#----------------------------------------------------------------------
 
 exports: default
 	$(INSTALL) $(STD_INSTALL_READ_MASK) -F $(STD_LIBRARY_LOC) $(TARGETS)
@@ -141,6 +162,8 @@ VPATH = $(BUILD_BASE) $(BUILD_BASE)/dwarfdump $(BUILD_BASE)/libdwarf
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^
+
+print_sections.o: dwarf_names.h
 
 dwarf_names.h dwarf_names.c: stamp-names
 
@@ -160,6 +183,13 @@ _tag_tree_table.c: tag_tree.list tag_tree_build dwarf.h
 	$(cc) -o $@ $(LCINCS) $<
 
 print_die.o: _tag_attr_table.c _tag_tree_table.c dwarf_names.h
+
+ifeq ($(BUILD_OS), DARWIN)
+LELF=
+else
+LELF=-lelf
+endif
+
 
 $(DUMP): $(DUMP_OBJECTS) $(LIBRARY)
 	$(cc) -o $@ $^ -L. -L$(BUILD_AREA)/libelf -ldwarf -lelf

@@ -25,10 +25,6 @@ Boston, MA 02111-1307, USA.  */
 /* GNU/Linux uses ctype from glibc.a. I am not sure how complete it is.
    For now, we play safe. It may change later.  */
 
-#if 0
-#undef MULTIBYTE_CHARS
-#define MULTIBYTE_CHARS 1
-#endif
 
 /* We need that too.  */
 #define HANDLE_SYSV_PRAGMA
@@ -73,17 +69,11 @@ Boston, MA 02111-1307, USA.  */
 
 #undef LIB_SPEC
 
-#if 1
 /* We no longer link with libc_p.a or libg.a by default. If you
    want to profile or debug the GNU/Linux C library, please add
    -lc_p or -ggdb to LDFLAGS at the link time, respectively.  */
 #define LIB_SPEC \
 "%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
-#else    
-#define LIB_SPEC \
-"%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
- %{!p:%{!pg:%{!g*:-lc} %{g*:-lg -static}}}" 
-#endif
 
 #undef LINK_SPEC
 #define LINK_SPEC	"-m sparclinux"

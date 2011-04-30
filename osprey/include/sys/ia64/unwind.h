@@ -71,7 +71,6 @@ struct sigcontext {
         uint64_t           sc_ip;          /* instruction pointer */
         uint64_t           sc_cfm;         /* current frame marker */
         uint64_t           sc_psr;         /* (some bits of the) processor status reg. */
-#if 1
         uint64_t           sc_ar_rsc;      /* register stack configuration register */
         uint64_t           sc_ar_bsp;      /* backing store pointer */
         uint64_t           sc_ar_rnat;     /* RSE NaT collection register */
@@ -81,9 +80,6 @@ struct sigcontext {
         uint64_t           sc_ar_pfs;      /* previous function state */
         uint64_t           sc_ar_ec;       /* epilog count register */
         uint64_t           sc_ar_lc;       /* loop count register */
-#else
-	uint64_t	   sc_ar[128];
-#endif
         uint64_t           sc_pr;          /* predicate registers */
         uint64_t           sc_br[8];       /* branch registers */
 	uint64_t	   sc_gr[128];
@@ -192,17 +188,10 @@ typedef enum {
  */
 
 typedef int _Unwind_Action;
-#if 1
 #define _UA_SEARCH_PHASE 1
 #define _UA_CLEANUP_PHASE 2
 #define _UA_HANDLER_FRAME 4
 #define _UA_FORCE_UNWIND 8
-#else
-const _Unwind_Action _UA_SEARCH_PHASE = 1;
-const _Unwind_Action _UA_CLEANUP_PHASE = 2;
-const _Unwind_Action _UA_HANDLER_FRAME = 4;
-const _Unwind_Action _UA_FORCE_UNWIND = 8;
-#endif
 
 struct _Unwind_Exception;
 

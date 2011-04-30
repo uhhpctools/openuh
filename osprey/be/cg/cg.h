@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -48,6 +52,9 @@
 #include "wn.h"
 #include "dwarf_DST_mem.h"
 #include "symtab.h"
+#if defined(TARG_SL) || defined(TARG_MIPS)
+#include "register.h"
+#endif
 
 /* type stubs - can't include appropriate files since
  * this file is included by be/com/driver.c ...
@@ -61,24 +68,41 @@ extern BOOL GRA_optimize_restore_pr;
 extern BOOL GRA_optimize_restore_b0_ar_pfs;
 extern BOOL GRA_optimize_restore_ar_lc;
 extern BOOL EBO_data_spec;
-#endif
-#ifndef TARG_IA64
-extern BOOL PU_Has_Exc_Handler;
-#endif
-
-
-#ifdef TARG_IA64
-extern BOOL CG_PU_Has_Feedback;
-#endif
-#ifdef TARG_X8664
-extern BOOL PU_References_GOT; // for -m32 -fpic
-#endif
-
-
-#ifdef TARG_IA64
 extern BOOL edge_done;
 #endif
+#ifdef KEY
+extern BOOL PU_Has_Exc_Handler;
+extern BOOL PU_Has_Nonlocal_Goto_Target;
+extern BOOL CG_file_scope_asm_seen;
+#endif
+
+#ifdef TARG_X8664
+struct tn;
+extern BOOL PU_has_local_dynamic_tls;         // for local-dynamic tls
+extern struct tn*  Local_Dynamic_TLS_Base;    // return value for __get_tls_addr
+extern BOOL PU_References_GOT; // for -m32 -fpic
+extern BOOL PU_has_avx128; // cause emit of vzeroupper
+extern BOOL PU_has_builtin_apply_args; // __builtin_apply_args
+extern BOOL PU_has_builtin_apply; // __builtin_apply
+#endif
+
 extern BOOL CG_PU_Has_Feedback;
+
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
+extern BOOL RGN_Formed;
+#endif
+
+#ifdef TARG_LOONGSON
+extern BOOL edge_done;
+
+typedef struct {
+  char *name;
+  struct bb *dominator;
+}Info_Global_Name;
+
+extern Info_Global_Name Global_Name_Executed[];
+extern int iter_executed;
+#endif
 
 /* WOPT alias manager */
 extern struct ALIAS_MANAGER *Alias_Manager;
@@ -115,10 +139,10 @@ extern void Trace_IR (
   INT phase,		/* Phase after which to print */
   const char *pname,	/* Print name of phase */
 #ifdef TARG_IA64
-  struct bb *bb,		/* BB to print, or NULL */
+  struct bb *bb,	/* BB to print, or NULL */
   BOOL after = TRUE
 #else
-  struct bb *bb         /* BB to print, or NULL */
+  struct bb *bb		/* BB to print, or NULL */
 #endif
 );
 
@@ -127,7 +151,6 @@ extern void Check_for_Dump (
   INT phase,	/* Phase after which to print */
   struct bb *bb	/* BB to print, or NULL */
 );
-
 
 /* Overloaded version of standard Get_Trace with additional bb
  * parameter. If bb parameter is non-NULL and BBs were explicitly 
@@ -141,8 +164,15 @@ extern MEM_POOL MEM_local_region_pool;
 extern MEM_POOL MEM_local_region_nz_pool;
 
 extern RID *Current_Rid;
-#ifdef TARG_IA64
+
+#if defined(TARG_SL) || defined(TARG_MIPS)
+extern void CG_Dump_Cur_Region();
+extern REGISTER_SET caller_saved_regs_used[ISA_REGISTER_CLASS_MAX+1];
+extern void IPISR_Insert_Spills();
+#endif
+#if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS)
 /* indicate whether region is already been formed. */
 extern BOOL RGN_Formed;
 #endif
+
 #endif /* cg_INCLUDED */

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -168,14 +172,14 @@ BBlist_Add_BB (BBLIST **lst, BB *bb)
  * If bb was already in the lst, just increment edge probability.
  * Edge probabilities not updated unless FREQ_Frequencies_Computed().
  */
+
 BBLIST *
 BBlist_Add_BB_with_Prob (BBLIST **lst, BB *bb, float prob,
 			 BOOL via_feedback, BOOL set_prob
 #ifdef KEY
-                         , BOOL via_hint
+                         ,BOOL via_hint
 #endif
-                         , BOOL incr_prob
-			 )
+			 ,BOOL incr_prob)
 {
   BBLIST *p, *last;
 
@@ -189,8 +193,8 @@ BBlist_Add_BB_with_Prob (BBLIST **lst, BB *bb, float prob,
       Set_BBLIST_prob_fb_based(p);
     } if (set_prob || FREQ_Frequencies_Computed()) {
       BBLIST_prob(p) = prob;
-#ifdef KEY
-      if (via_hint)
+#if defined(KEY)
+      if(via_hint)
         Set_BBLIST_prob_hint_based(p);
 #endif
       Reset_BBLIST_prob_fb_based(p);
@@ -203,7 +207,11 @@ BBlist_Add_BB_with_Prob (BBLIST **lst, BB *bb, float prob,
   last = NULL;
   for (;p != NULL; p = BBLIST_next(p)) {
     if (BBLIST_item(p) == bb) {
-      if (FREQ_Frequencies_Computed() && incr_prob) BBLIST_prob(p) += prob;
+      if (FREQ_Frequencies_Computed() && incr_prob) {
+        BBLIST_prob(p) += prob;
+        if (BBLIST_prob(p) >= 1.0f)
+          BBLIST_prob(p) = 1.0f;
+      }
       return p;
     }
     last = p;
@@ -217,18 +225,17 @@ BBlist_Add_BB_with_Prob (BBLIST **lst, BB *bb, float prob,
     BBLIST_prob(p) = prob;
     Set_BBLIST_prob_fb_based(p);
   } if (
-#ifdef KEY
-        set_prob ||
+#if defined(KEY) 
+      set_prob ||
 #endif
-        FREQ_Frequencies_Computed()) {
+      FREQ_Frequencies_Computed()) {
     BBLIST_prob(p) = prob;
-#ifdef KEY
-    if (via_hint)
-      Set_BBLIST_prob_hint_based(p);
+#if defined(KEY)
+      if(via_hint)
+        Set_BBLIST_prob_hint_based(p);
 #endif
     Reset_BBLIST_prob_fb_based(p);
   }
-  
   return p;
 }
 
@@ -249,7 +256,6 @@ Link_Pred_Succ (BB *pred, BB *succ)
    */
   BBLIST_prob(pedge) = NaN;
 }
-
 
 void
 Link_Pred_Succ_with_Prob (BB *pred, BB *succ, float prob,
@@ -350,10 +356,13 @@ BBlist_Fall_Thru_Succ (BB *bb)
 	DevAssert(TN_is_label(dest), ("expected label"));
 	if (Is_Label_For_BB(TN_label(dest), next)) {
 	  /* Remove useless explicit branch to <next> */
-#ifdef TARG_X8664
 	  BB_Remove_Op(bb, br_op);
-#endif
 	} else {
+#if defined(TARG_SL)
+#ifndef  fork_joint
+         if(!OP_fork(br_op))
+#endif 
+#endif 
 	  DevAssert(OP_cond(br_op), ("BB_succs(BB:%d) wrongly contains BB:%d",
 				     BB_id(bb), BB_id(next)));
 	}

@@ -58,9 +58,17 @@
 #define S_ISLNK(mode)  __S_ISTYPE((mode), __S_IFLNK)
 #endif
 #endif	/* LITTLE_ENDIAN */
+#if defined(BUILD_OS_DARWIN)
+#include <sys/mount.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <sys/statfs.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <fcntl.h>
 #include "sysio.h"
+// OSP does not have libfoobar
+#ifdef VENDOR_PSC /* Bug 11654 */
+#include "../../libfoobar/qk.h"
+#endif /* KEY Bug 11654 */
 
 int
 _make_scratch(const char *name, int realfd, int *retflags, struct ffsw *iostat);
@@ -248,7 +256,14 @@ again:
 			break;		
 		case FC_FSTATFS:
 #if	defined(_LITTLE_ENDIAN)
+#ifdef VENDOR_PSC /* Bug 11654 */
+			/* Introduce a wrapper so we can avoid calling
+			 * fstatfs in an environment where that causes a
+			 * link-time warning. */
+			ret = _Qk_fstatfs(fio->realfd, (struct statfs *)arg);
+#else /* KEY Bug 11654 */
 			ret = fstatfs(fio->realfd, (struct statfs *)arg);
+#endif /* KEY Bug 11654 */
 #else
 			ret = fstatfs(fio->realfd, (struct statfs *)arg,
 				sizeof(struct statfs), 0);

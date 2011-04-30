@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -39,10 +43,10 @@
 
 /* ====================================================================
  * Module: omp_lower.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/be/omp_lower.cxx,v $
+ * $Revision: 1.25 $
+ * $Date: 05/12/22 15:18:19-08:00 $
+ * $Author: gautam@jacinth.keyresearch $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/be/SCCS/s.omp_lower.cxx $
  *
  * Revision history:
  *  26-Jun-97 : First created by Dave Kohr
@@ -54,10 +58,11 @@
  * OMP_Prelower() : Transform Open MP pragmas to same form as MP ones
  * ==================================================================== */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>		    /* for wn.h */
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
 #include "wn.h"
@@ -93,8 +98,10 @@
 #include "dra_export.h"
 #include "be_symtab.h"
 
-#pragma weak New_Construct_Id
+#if !defined(BUILD_OS_DARWIN) && !defined(BUILD_SKIP_PROMPF)
 #pragma weak Anl_File_Path
+#pragma weak New_Construct_Id
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /***********************************************************************
  * Local constants, types, etc.
@@ -215,6 +222,11 @@ static void Add_Memory_Barriers (WN *wn);
 static void Convert_Simple_To_Interleaved (WN *wn);
 static void Convert_Just_Chunksize_To_Dynamic (WN *wn);
 
+#ifdef TARG_SL2 //fork_joint
+static WN *Is_SL2_Section_Begin(WN *wn);
+static void Convert_SL2_Section_To_Pdo(WN *sections, WN *pragma);
+#endif 
+
 //-----------------------------------------------------------------------
 // NAME: OMP_Prompf_Init
 // FUNCTION: Initialize PROMPF processing for current function.
@@ -222,11 +234,13 @@ static void Convert_Just_Chunksize_To_Dynamic (WN *wn);
 
 static void OMP_Prompf_Init(WN* func_nd)
 {
+#ifndef BUILD_SKIP_PROMPF
   if (Run_prompf) {
     Prompf_Info->Enable();
     Prompf_Info->Mark_Omp();
     WB_OMP_Set_Prompf_Info(Prompf_Info);
   }
+#endif
 }
 
 //-----------------------------------------------------------------------
@@ -236,6 +250,7 @@ static void OMP_Prompf_Init(WN* func_nd)
 
 static void OMP_Prompf_Finish()
 {
+#ifndef BUILD_SKIP_PROMPF
   if (Run_prompf) {
     const char *path = Anl_File_Path();
     FILE *fp_anl = fopen(path, "a");
@@ -243,6 +258,7 @@ static void OMP_Prompf_Finish()
     fclose(fp_anl);
     Prompf_Info->Disable();
   }
+#endif
 }
 
 
@@ -252,6 +268,11 @@ static void OMP_Prompf_Finish()
  *
  * Return the WN for the lowered PU.
  ***********************************************************************/
+
+#if defined(BUILD_OS_DARWIN)
+/* Bug in gcc 4.0.1? Previous extern "C" declaration in omp_lower.h ignored */
+extern "C" { WN *OMP_Prelower(PU_Info *current_pu, WN *pu); }
+#endif /* defined(BUILD_OS_DARWIN) */
 
 WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
 {
@@ -275,17 +296,31 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
   Is_True(rename_common_stack.Elements() == 1,
           ("OMP_Prelower(): rename_common_stack.Elements() != 1"));
 
-# ifdef KEY
   RENAMING_SCOPE rename_common(NULL, &omp_pool);
-  RENAMING_SCOPE rename_common_blk(NULL, &omp_pool);
+
+  // Note that rename_common_blk renaming scope needs to provide
+  // mappings that are valid through the entire compilation.
+  static RENAMING_SCOPE *rename_common_blk;
+  if (rename_common_blk == NULL) {
+    rename_common_blk = CXX_NEW(RENAMING_SCOPE(NULL, Malloc_Mem_Pool),
+				Malloc_Mem_Pool);
+  }
+  else {
+    std::list<ST*>::const_iterator cit = rename_common_blk->local_mappings.begin();
+
+    // Remove any mappings local symbols for previously processed PU.
+    for( ; cit != rename_common_blk->local_mappings.end(); cit++ )
+      rename_common_blk->map.Remove(*cit);
+    rename_common_blk->local_mappings.clear();
+  }
+
   RENAMING_STACK rename_scope_stack(&omp_pool);
   rename_scope_stack.Push(CXX_NEW(RENAMING_SCOPE(NULL, &omp_pool),
                                    &omp_pool));
   Rename_Threadprivate_COMMON(pu, pu, pu, 
                              &rename_scope_stack, 
                              &rename_common,
-                             &rename_common_blk);
-# endif
+                             rename_common_blk);
 
     // create parent map
   Omp_Parent_Map = WN_MAP_Create(&omp_pool);
@@ -297,6 +332,15 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
   critical_st.Set_Mem_Pool (&omp_pool);
 
   pu = Translate_OMP_to_MP(pu);
+#if defined(TARG_SL2)
+  if(Cur_PU_Feedback)
+	Cur_PU_Feedback->Verify("sl2 psection conversion");
+#endif
+
+#if defined(TARG_SL) && defined(TARG_SL2)
+  if(Cur_PU_Feedback)
+    Cur_PU_Feedback->Verify("sl2 psection conversion");
+#endif
 
   FmtAssert (critical_st.Elements() == 0,
              ("Mismatch in begin-critical and end-critical pragmas"));
@@ -1004,6 +1048,14 @@ static WN *Translate_OMP_to_MP(WN *wn)
 {
   OPCODE opcode = WN_opcode(wn);
   WN *section = Is_Section_Begin(wn);
+
+#ifdef TARG_SL2 //fork_joint
+   WN* sl2_section = Is_SL2_Section_Begin(wn);
+   if(sl2_section) {
+       Convert_SL2_Section_To_Pdo(wn, sl2_section);
+   } 
+#endif 
+  
   if (section) {
     Convert_Section_To_Pdo(wn,section);
   }
@@ -1493,6 +1545,204 @@ static WN *Is_Section_Begin(WN *wn)
   return NULL;
 }
 
+
+
+#ifdef TARG_SL2 //fork_joint
+static void Convert_SL2_Section_To_Pdo(WN *sections, WN *pragma)
+{
+  MEM_POOL_Popper popper(&Omp_Local_Pool);
+
+  WN_pragma_arg1(pragma) = 0;
+  WN_pragma_arg2(pragma) = 1;
+
+// add one exit for enclosing region 
+  Is_True(WN_opcode(sections) == OPC_REGION,  ("expected a region node")); 
+
+  // delete the end sections if it exists
+  WN *end_sec = WN_last(WN_region_body(sections));
+  if (end_sec && WN_opcode(end_sec) == OPC_PRAGMA &&
+      ((WN_PRAGMA_ID)WN_pragma(end_sec) == WN_PRAGMA_PSECTION_END)) {
+    WN_Delete(WN_EXTRACT_FromBlock(WN_region_body(sections),end_sec));
+  }
+ 
+  // Walk the code, replacing each section with a label
+  // recall that the first section might be implicit
+  // store the labels in a stack
+  STACK_OF_WN *sec_stack = CXX_NEW(STACK_OF_WN(&Omp_Local_Pool),
+					&Omp_Local_Pool);
+  WN *tmp = WN_first(WN_region_body(sections));
+  WN* parent = WN_region_body(sections);
+  // now find the other sections
+  BOOL first_region = TRUE;
+  while (tmp) {
+    WN *next = WN_next(tmp);
+    if(WN_opcode(tmp) == OPC_REGION && WN_first(WN_region_pragmas(tmp)) && 
+	  (WN_pragma(WN_first(WN_region_pragmas(tmp))) == WN_PRAGMA_BARRIER)) 
+    {
+
+       //added by xma, not to create c2_joint in fe, but in vho to enable annotation for parallel program
+       WN_INSERT_BlockAfter(WN_region_body(tmp), WN_last(WN_region_body(tmp)),
+                            WN_Create_Intrinsic (OPR_INTRINSIC_CALL, MTYPE_V, MTYPE_V,
+				      INTRN_C2_JOINT, 0, 0));
+
+      WN_DELETE_FromBlock(WN_region_pragmas(tmp),  WN_first(WN_region_pragmas(tmp)));
+
+      if( first_region )
+        first_region = FALSE;
+      else {
+        if(Cur_PU_Feedback) {
+          Cur_PU_Feedback->Annot(tmp, FB_EDGE_CALL_OUTGOING, FB_FREQ_ZERO);
+          Cur_PU_Feedback->FB_reset_in_out_same_node(tmp);
+        } 
+      }
+    }
+
+
+    if (WN_opcode(tmp) == OPC_PRAGMA &&
+        ((WN_PRAGMA_ID)WN_pragma(tmp) == WN_PRAGMA_SL2_SECTION)) {
+      WN *label = New_Label();
+      WN_INSERT_BlockBefore(WN_region_body(sections),tmp,label);
+      Set_Parent(label,WN_region_body(sections));
+      sec_stack->Push(label);
+      if (next) {
+        WN_Set_Linenum(label,WN_Get_Linenum(next));
+        WN* next_rgn=next;
+        while(next_rgn!=NULL && WN_operator(next_rgn)!=OPR_REGION) {
+          next_rgn=WN_next(next_rgn);
+        }
+        FmtAssert(next_rgn!=NULL, ("Convert_SL2_Section_To_Pdo: cannot find next region"));
+        if(Cur_PU_Feedback) {
+           FB_FREQ fb_into_region = Cur_PU_Feedback->Query(next_rgn, FB_EDGE_CALL_INCOMING);
+           FB_Info_Invoke fb_label(fb_into_region);
+           Cur_PU_Feedback->Annot_invoke(label, fb_label);
+        }
+      }
+      WN_DELETE_FromBlock(WN_region_body(sections),tmp);
+    }
+    tmp = next;
+  }
+
+
+ WN_OFFSET index_offset = Create_Preg(MTYPE_I4,"sl2_section");
+
+  WN *comp_goto_block = WN_CreateBlock();
+
+  WN *cgoto = WN_CreateCompgoto(sec_stack->Elements(),
+				WN_LdidPreg ( MTYPE_I4,index_offset),
+				comp_goto_block,NULL,0);
+
+/* need distinguish is major fork or minor fork */ 
+  if((WN_PRAGMA_ID) WN_pragma(pragma) == WN_PRAGMA_SL2_MINOR_PSECTION_BEGIN) 
+// minor thread
+  {
+     WN_Set_is_compgoto_for_minor(cgoto, TRUE);	
+  }
+  else if((WN_PRAGMA_ID) WN_pragma(pragma) == WN_PRAGMA_SL2_MAJOR_PSECTION_BEGIN ) //main thread
+  {
+     WN_Set_is_compgoto_para(cgoto, TRUE); 
+  }	  
+
+  WN_Set_Linenum(cgoto,WN_Get_Linenum(sections));
+
+
+
+  INT i;
+  for (i=0; i<sec_stack->Elements(); i++) {
+    WN *label_goto = 
+    WN_CreateGoto((ST*) NULL,WN_label_number(sec_stack->Bottom_nth(i)));
+    WN_Set_Linenum(label_goto,WN_Get_Linenum(sections));
+    WN* label=sec_stack->Bottom_nth(i);
+    WN_CopyMap(label_goto, WN_MAP_FEEDBACK, label);
+    WN_INSERT_BlockBefore(comp_goto_block,NULL,label_goto);
+  }
+
+  if(Cur_PU_Feedback) {
+    INT32 cgoto_size = sec_stack->Elements();
+    FB_Info_Switch fb_info_sw(cgoto_size + 1 );
+    fb_info_sw[ FB_EDGE_SWITCH_INDEX( FB_EDGE_SWITCH_DEFAULT ) ]= FB_FREQ_UNKNOWN;
+    for(i=0;i<cgoto_size;i++)  {
+      WN* label=sec_stack->Bottom_nth(i);
+      FB_Info_Invoke fb_info_iv = Cur_PU_Feedback->Query_invoke( label );
+      fb_info_sw[ FB_EDGE_SWITCH_INDEX( FB_EDGE_SWITCH( i ) ) ] =  fb_info_iv.freq_invoke;
+    }
+    Cur_PU_Feedback->Annot_switch(cgoto, fb_info_sw);
+  }
+
+  WN* tmp_block = WN_CreateBlock();
+  WN_Set_Linenum(tmp_block, WN_Get_Linenum(sections));
+  WN_INSERT_BlockAfter(tmp_block, NULL, cgoto);
+
+  // Move all the code after the compgoto
+  WN *region_body = WN_region_body(sections);
+  while (WN_last(region_body)) {
+    WN *wn = WN_EXTRACT_FromBlock(region_body,WN_last(region_body));
+    WN_INSERT_BlockAfter(tmp_block, cgoto, wn);
+    Set_Parent(wn, tmp_block);
+  }
+
+  // Create a new label at the end of the do loop
+  // Put a jump to this label at the end of every section
+  WN *exit_label = New_Label();
+  for (i=1; i<sec_stack->Elements(); i++) {
+    WN *exit_goto = WN_CreateGoto((ST*) NULL,WN_label_number(exit_label));
+    WN_Set_Linenum(exit_goto,WN_Get_Linenum(sec_stack->Bottom_nth(i-1)));
+    if(Cur_PU_Feedback) {
+      WN* prev_label=sec_stack->Bottom_nth(i-1);		
+      WN* exit_rgn=WN_next(prev_label);
+      while(exit_rgn!=NULL && WN_operator(exit_rgn)!=OPR_REGION) {
+         exit_rgn=WN_next(exit_rgn);
+      }	  
+      FmtAssert(exit_rgn!=NULL, ("Convert_SL2_Section_To_Pdo: cannot find next region"));
+      if(Cur_PU_Feedback) {
+           FB_FREQ fb_out_region = Cur_PU_Feedback->Query(exit_rgn, FB_EDGE_CALL_OUTGOING);
+           FB_Info_Invoke fb_goto(fb_out_region);
+           Cur_PU_Feedback->Annot_invoke(exit_goto, fb_goto);
+      }
+    }
+    WN_INSERT_BlockBefore(tmp_block,
+	sec_stack->Bottom_nth(i),exit_goto);
+    Set_Parent(exit_goto, tmp_block);
+  }
+
+  if(Cur_PU_Feedback) 
+    Cur_PU_Feedback->Annot(exit_label, FB_EDGE_INCOMING, 
+        Cur_PU_Feedback->Query(sections, FB_EDGE_CALL_OUTGOING));
+
+  WN_INSERT_BlockBefore(tmp_block, NULL,exit_label);
+//  Set_Parent(exit_label, tmp_block);
+//  WN_Set_Linenum(exit_label,WN_Get_Linenum(sections));
+  // Insert the do
+  WN_INSERT_BlockAfter(WN_region_body(sections), NULL, tmp_block);
+  Parentize(WN_region_body(sections));
+/* add barrier. */ 
+}
+
+
+static WN *Is_SL2_Section_Begin(WN *wn)
+{
+  if (WN_opcode(wn) != OPC_REGION) {
+    return FALSE;
+  }
+  WN *pragmas = WN_region_pragmas(wn);
+  if (pragmas) {
+    WN *pragma = WN_first(pragmas);
+    while (pragma) {
+      if (WN_opcode(pragma) == OPC_PRAGMA) {
+        if ((WN_PRAGMA_ID)WN_pragma(pragma)==WN_PRAGMA_SL2_MAJOR_PSECTION_BEGIN
+		|| (WN_PRAGMA_ID) WN_pragma(pragma) == WN_PRAGMA_SL2_MINOR_PSECTION_BEGIN) {
+	  return pragma;
+        } 
+      }
+      pragma = WN_next(pragma);
+    }
+  }
+  return NULL;
+}
+#endif //fork_joint
+
+
+
+
 // Create an st for a call to OMP_GET_THREAD_NUM
 static ST *Create_Omp_Get_Thread_Num()
 {
@@ -1535,7 +1785,7 @@ static void Atomic_Using_Critical(WN *atomic, WN *store)
   WN *parent = Get_Parent(atomic);
   INT64 line = WN_Get_Linenum(atomic);
 
-  char name[25];
+  char name[128];
   switch (WN_desc(store)) {
     case MTYPE_I1: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_I1");
@@ -1567,12 +1817,15 @@ static void Atomic_Using_Critical(WN *atomic, WN *store)
     case MTYPE_F8: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_F8");
       break;
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
     case MTYPE_F10: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_F10");
       break;
+    case MTYPE_C10:
+      sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_C10");
+      break;
 #endif
-    case MTYPE_FQ:
+    case MTYPE_FQ: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_FQ");
       break;
     case MTYPE_C4: 
@@ -1581,11 +1834,6 @@ static void Atomic_Using_Critical(WN *atomic, WN *store)
     case MTYPE_C8: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_C8");
       break;
-#ifdef TARG_IA64
-    case MTYPE_C10:
-      sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_C10");
-      break;
-#endif
     case MTYPE_CQ: 
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_CQ");
       break;
@@ -1593,7 +1841,6 @@ static void Atomic_Using_Critical(WN *atomic, WN *store)
       sprintf(name,"%s","__OMP_CRITICAL_ATOMIC_??");
       break;
   }
-  name[24] = 0;
   TCON tc = Host_To_Targ_String ( MTYPE_STRING, name,strlen(name));
   ST *string = Gen_String_Sym (&tc, MTYPE_To_TY(MTYPE_STRING), FALSE );
   WN *critical1 = WN_CreatePragma(WN_PRAGMA_CRITICAL_SECTION_BEGIN,string,0,0);
@@ -1768,7 +2015,7 @@ static BOOL format_rhs_atomic_stmt (WN * store)
  * Allocate and return a SYMBOL* for a local variable of type mtype.
  *
  **********************************************************************/
-static ST * Create_Local_Symbol (char* name, TYPE_ID mtype) 
+static ST * Create_Local_Symbol (const char* name, TYPE_ID mtype) 
 {
   ST* st         = New_ST(CURRENT_SYMTAB);
   ST_Init (st,
@@ -2036,10 +2283,10 @@ Atomic_Using_Swap(WN *atomic, WN *store, WN *operation, WN *parent,
   WN *c_s;
   if (swap_type == MTYPE_I4) {
     c_s=WN_Create_Intrinsic(OPC_U4INTRINSIC_CALL,
-		    INTRN_COMPARE_AND_SWAP_I4,3,kids);
+		    INTRN_BOOL_COMPARE_AND_SWAP_I4,3,kids);
   } else {
     c_s=WN_Create_Intrinsic(OPC_U8INTRINSIC_CALL,
-		    INTRN_COMPARE_AND_SWAP_I8,3,kids);
+		    INTRN_BOOL_COMPARE_AND_SWAP_I8,3,kids);
   }
   WN_Set_Call_Parm_Mod(c_s);
   WN_Set_Call_Parm_Ref(c_s);
@@ -2208,8 +2455,8 @@ Get_ATOMIC_Update_LDA(WN *wn)
   case INTRN_FETCH_AND_OR_I8:
   case INTRN_FETCH_AND_XOR_I8:
       // from Atomic_Using_Swap()
-  case INTRN_COMPARE_AND_SWAP_I4:
-  case INTRN_COMPARE_AND_SWAP_I8:
+  case INTRN_BOOL_COMPARE_AND_SWAP_I4:
+  case INTRN_BOOL_COMPARE_AND_SWAP_I8:
     break;
   default:
     return NULL;
@@ -2406,19 +2653,14 @@ ATOMIC_Lowering_Class WN_ATOMIC_STORE_Lowering_Class(WN *store)
 #endif
       break;
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
     case MTYPE_F10:
+    case MTYPE_C10:
 	alclass = ALCLASS_CRITICAL;	/* XXX - ALCLASS_SWAP? */
 	break;
-
-    case MTYPE_I1: case MTYPE_I2:
-    case MTYPE_U1: case MTYPE_U2:
-    case MTYPE_FQ:
-    case MTYPE_C4: case MTYPE_C8: case MTYPE_C10: case MTYPE_CQ:
-#else
-  case MTYPE_U1: case MTYPE_U2: case MTYPE_I1: case MTYPE_I2:
-  case MTYPE_C4: case MTYPE_C8: case MTYPE_CQ: case MTYPE_FQ:
 #endif
+    case MTYPE_U1: case MTYPE_U2: case MTYPE_I1: case MTYPE_I2:
+    case MTYPE_C4: case MTYPE_C8: case MTYPE_CQ: case MTYPE_FQ:
       alclass = ALCLASS_CRITICAL;
       break;
 
@@ -3011,12 +3253,22 @@ Apply_Par_Region_Default_Scopes(WN *wn, ST_TO_BOOL_HASH *processed,
  * Perform these checks on final scopes: (1) THREADPRIVATE common blocks
  * and variables in them can't appear in any scope clauses; (2) FIRSTPRIVATE,
  * LASTPRIVATE and REDUCTION variables in a worksharing construct lexically 
- * enclosed by a parallel region must have shared scope in the parallel
+ * enclosed by a parallel region must have shared scope in the parallel 
  * region.
  *
  * For a PRIVATE variable in a worksharing construct lexically enclosed by
  * a parall region, if it's not shared in that parallel region, just ignore
  * the inner PRIVATE clause. (Reprivatization is legal)
+ *
+ * As exceptions to the rule against reprivatization, we allow:
+ *   (a) An implicit PRIVATE(i) on a parallel region that contains a PDO
+ *       with a PRIVATE(i), if "i" is the PDO index variable (this can
+ *       result from implicit privatization of PDO index variables).
+ *   (b) If both the outer and inner pragmas are PRIVATE and compiler-
+ *       generated. In this case we delete the inner PRIVATE. This can
+ *       result from inlining.
+ *       KEY: I don't see why the inner pragma also needs to be compiler-
+ *            generated. bug 6428 shows why !compiler-generated is valid.
  *
  * Parameters:
  *  wn : in/out : Whirl tree in which to perform privatization
@@ -3053,7 +3305,7 @@ Privatize_Index_Vars_And_Check_Final_Scopes(
     // check final scopes within parallel construct when we first reach
     // the construct
   if (is_worksharing || is_par_region) {
-      // reprivatizing pragmas to be removed
+      // exception case (a) and (b) reprivatizing pragmas to be removed
     WN_LIST reprivatizing_pragmas(&omp_pool);
 
     for (WN *prag = WN_first(WN_region_pragmas(wn)); prag;
@@ -3104,22 +3356,36 @@ Privatize_Index_Vars_And_Check_Final_Scopes(
           // parallel region is OK: PV 626400)
         continue; // skip reprivatization checks
 
-      switch (prag_id) {
-	//Check reprivatization variables.
-      case WN_PRAGMA_LOCAL:
-        if (Var_Scope(st, pragma_block_list, &how, &scope_prag) ==
-            WN_PRAGMA_DEFAULT_PRIVATE) // reprivatization
-          reprivatizing_pragmas.AddElement(prag);
-	break;
-
-        // Check that REDUCTION, FIRSTPRIVATE, LASTPRIVATE variables in an enclosed
+        // Check that REDUCTION and PRIVATE variables in an enclosed
 	// worksharing construct are shared in enclosing parallel region.
+	// Allow exception cases (a) and (b), described above.
+      switch (prag_id) {
+      case WN_PRAGMA_LOCAL:
       case WN_PRAGMA_LASTLOCAL:
       case WN_PRAGMA_FIRSTPRIVATE:
       case WN_PRAGMA_REDUCTION:
         if (Var_Scope(st, pragma_block_list, &how, &scope_prag) !=
             WN_PRAGMA_DEFAULT_PRIVATE)
           break;  // no reprivatization
+
+        if (prag_id == WN_PRAGMA_LOCAL &&
+            Index_Priv_From_OMPL->Find(scope_prag)) {
+          reprivatizing_pragmas.AddElement(prag);
+	  break;  // exception case (a)
+        }
+
+	if (WN_pragma(scope_prag) == WN_PRAGMA_LOCAL &&
+	    prag_id == WN_PRAGMA_LOCAL &&
+	    WN_pragma_compiler_generated(scope_prag)
+#ifndef KEY
+	    // bug 6428
+	    && WN_pragma_compiler_generated(prag)
+#endif // !KEY
+	    )
+        {
+          reprivatizing_pragmas.AddElement(prag);
+	  break;  // exception case (b)
+        }
 
         ErrMsgLine(prag_id == WN_PRAGMA_REDUCTION ?
                    EC_MPLOWER_red_of_private : EC_MPLOWER_reprivatization,
@@ -3270,9 +3536,10 @@ This reprivatization is safe.
     if (first && WN_opcode(first) == OPC_PRAGMA &&
         WN_pragma(first) == WN_PRAGMA_PDO_BEGIN &&
 	WN_pragma_arg1(first) == 0) {
-      if (enclosing_pdo)
-        Fail_FmtAssertion("Privatize_Index_Vars_And_Check_Final_Scopes(): "
-	                  "nested orphaned PDOs!");
+// gcc frontend has issued a warning, and we ignore this issue.
+//      if (enclosing_pdo)
+//        Fail_FmtAssertion("Privatize_Index_Vars_And_Check_Final_Scopes(): "
+//	                  "nested orphaned PDOs!");
       enclosing_pdo = WN_region_pragmas(wn);
     }
   }
@@ -3558,6 +3825,7 @@ static void Lower_Fetch_And_Op(WN *intrinsic)
   ST *return_st = Create_Local_Symbol("return_val",type);
 
   WN *atomic_pragma = WN_CreatePragma(WN_PRAGMA_ATOMIC, (ST*) 0, 0, 0);
+#ifndef BUILD_SKIP_PROMPF
   if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
     INT new_id = New_Construct_Id();
     WN_MAP32_Set(Prompf_Id_Map, atomic_pragma, new_id);
@@ -3565,6 +3833,7 @@ static void Lower_Fetch_And_Op(WN *intrinsic)
     pl->Add_Lines(intrinsic);
     Prompf_Info->OMPL_Fetchop_Atomic(new_id, pl);
   }
+#endif
   WN_set_pragma_omp(atomic_pragma);
   WN_INSERT_BlockBefore(parent,intrinsic,atomic_pragma);
   Set_Parent(atomic_pragma,parent);

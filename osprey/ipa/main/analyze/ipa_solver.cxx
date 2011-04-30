@@ -69,9 +69,12 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/ipa/main/analyze/ipa_solver.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "assert.h"
 #include "defs.h"
@@ -663,7 +666,7 @@ DF_PRINT::Trans ( IN_T *in, OUT_T *out, void *vertex_user )
 // ====================================================================
 
 void
-Trace_Callgraph ( IPA_CALL_GRAPH &cg, DF_DIRECTION dir, char *msg )
+Trace_Callgraph ( IPA_CALL_GRAPH &cg, DF_DIRECTION dir, const char *msg )
 {
   // Push the local memory pool:
   MEM_POOL_Push ( MEM_local_pool_ptr );

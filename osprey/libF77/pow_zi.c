@@ -50,13 +50,25 @@ void pow_zi__(dcomplex *p, dcomplex *a, int32 *b)   /* p = a**b  */
   *p = __powzi(a->dreal, a->dimag,*b);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void pow_zi_(dcomplex *p, dcomplex *a, int32 *b) { pow_zi__(p, a, b); }
+void pow_zif_(dcomplex *p, dcomplex *a, int32 *b) { pow_zi__(p, a, b); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(pow_zi__, pow_zi_);
 defalias(pow_zi__, pow_zif_);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 void pow_zl__(dcomplex *p, dcomplex *a, int64 *b)   /* p = a**b  */
 {
   *p = __powzl(a->dreal, a->dimag,*b);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void pow_zl_(dcomplex *p, dcomplex *a, int64 *b) { pow_zl__(p, a, b); }
+void pow_zlf_(dcomplex *p, dcomplex *a, int64 *b) { pow_zl__(p, a, b); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(pow_zl__, pow_zl_);
 defalias(pow_zl__, pow_zlf_);
+#endif /* defined(BUILD_OS_DARWIN) */

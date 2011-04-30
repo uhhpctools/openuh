@@ -164,6 +164,8 @@ struct ctbl consttbl[] = {
 	{"ERANGE",ERANGE},
 	{"ENOMSG",ENOMSG},
 	{"EIDRM",EIDRM},
+#if defined(BUILD_OS_DARWIN)
+#else /* defined(BUILD_OS_DARWIN) */
 	{"ECHRNG",ECHRNG},
 	{"EL2NSYNC",EL2NSYNC},
 	{"EL3HLT",EL3HLT},
@@ -172,6 +174,7 @@ struct ctbl consttbl[] = {
 	{"EUNATCH",EUNATCH},
 	{"ENOCSI",ENOCSI},
 	{"EL2HLT",EL2HLT},
+#endif /* defined(BUILD_OS_DARWIN) */
 	{"EDEADLK",EDEADLK},
 	{"ENOLCK",ENOLCK},
 #ifdef	_UNICOS
@@ -333,9 +336,13 @@ struct ctbl consttbl[] = {
         {"SIGTERM",SIGTERM},
         {"SIGIO",SIGIO},
         {"SIGURG",SIGURG},
+#if ! defined(BUILD_OS_DARWIN)
         {"SIGCLD",SIGCLD},
+#endif /* defined(BUILD_OS_DARWIN) */
         {"SIGCHLD",SIGCHLD},
+#if ! defined(BUILD_OS_DARWIN)
         {"SIGPWR",SIGPWR},
+#endif /* defined(BUILD_OS_DARWIN) */
 #ifdef _UNICOS
         {"SIGMT",SIGMT},
         {"SIGMTKILL",SIGMTKILL},
@@ -363,7 +370,9 @@ struct ctbl consttbl[] = {
         {"SIGUSR1",SIGUSR1},
         {"SIGUSR2",SIGUSR2},
 #if	defined(__mips) || defined(_LITTLE_ENDIAN)
+#if ! defined(BUILD_OS_DARWIN)
         {"SIGPOLL",SIGPOLL},
+#endif /* defined(BUILD_OS_DARWIN) */
         {"SIGVTALRM",SIGVTALRM},
         {"SIGPROF",SIGPROF},
         {"SIGXCPU",SIGXCPU},
@@ -405,7 +414,9 @@ struct ctbl consttbl[] = {
         {"INLCR",INLCR},
         {"IGNCR",IGNCR},
         {"ICRNL",ICRNL},
+#if ! defined(BUILD_OS_DARWIN)
         {"IUCLC",IUCLC},
+#endif /* defined(BUILD_OS_DARWIN) */
         {"IXON",IXON},
         {"IXANY",IXANY},
         {"IXOFF",IXOFF},
@@ -417,7 +428,9 @@ struct ctbl consttbl[] = {
 #endif	/* __mips or _LITTLE_ENDIAN */
 /* c_oflag output mode values in sys/termios.h for pxfcf... */
         {"OPOST",OPOST},
+#if ! defined(BUILD_OS_DARWIN)
         {"OLCUC",OLCUC},
+#endif /* defined(BUILD_OS_DARWIN) */
         {"ONLCR",ONLCR},
         {"OCRNL",OCRNL},
         {"ONOCR",ONOCR},
@@ -455,10 +468,12 @@ struct ctbl consttbl[] = {
         {"VEOL2",VEOL2},
         {"VMIN",VMIN},
         {"VTIME",VTIME},
+#if ! defined(BUILD_OS_DARWIN)
 #ifdef	_LITTLE_ENDIAN
         {"VSWTC",VSWTC},
 #else
         {"VSWTCH",VSWTCH},
+#endif	/* _LITTLE_ENDIAN */
 #endif	/* _LITTLE_ENDIAN */
         {"VSUSP",VSUSP},
         {"VSTART",VSTART},

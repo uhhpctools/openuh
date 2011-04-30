@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -60,5 +64,7 @@
 #define ifminmax_INCLUDED "cache_model.h"
 
 extern void If_MinMax(WN* func_nd); 
+extern BOOL CleanUp_IntContant_Off_One(WN*, WN*);
+
 
 #endif // ifminmax_INCLUDED

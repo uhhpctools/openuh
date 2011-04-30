@@ -76,11 +76,6 @@ public:
   INT32 Intersect_Region(CACHE_REGION *c, ARA_LOOP_INFO *ara_info);
 
   ~CACHE_REGION() {
-#if 0
-    if (_dist != NULL) CXX_DELETE_ARRAY(_dist, &LNO_local_pool);
-    if (_offsets != NULL) CXX_DELETE_ARRAY(_offsets, &LNO_local_pool);
-    if (_ranges != NULL) CXX_DELETE_ARRAY(_ranges, &LNO_local_pool);
-#endif
   }
 
 };

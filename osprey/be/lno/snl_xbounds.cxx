@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -54,7 +58,6 @@
 *** $Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.snl_xbounds.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -62,7 +65,7 @@
 #pragma hdrstop
 
 #define snl_nest_CXX      "snl_nest.cxx"
-static char *rcs_id =   snl_nest_CXX "$Revision: 1.5 $";
+const static char *rcs_id =   snl_nest_CXX "$Revision: 1.5 $";
 
 #include <sys/types.h>
 #include "snl.h"
@@ -368,8 +371,6 @@ void SNL_BOUNDS_INFO::Reset_Bounds_To(INT rows_le, INT rows_eq, INT cols)
 
 void SNL_BOUNDS_INFO::Canonicize(INT nloops, DOLOOP_STACK* stack, INT stk_first)
 {
-  Is_True(stk_first == _outermost_depth, ("Problem in Canonicize"));
-
   SYSTEM_OF_EQUATIONS*		soeb = &Bounds();
   SYSTEM_OF_EQUATIONS*		soec = &Conditionals();
 

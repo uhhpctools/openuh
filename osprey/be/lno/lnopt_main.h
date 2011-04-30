@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -100,6 +104,10 @@
 //
 //		Any calls inside this do loop
 //
+//      mBOOL Has_Nested_Calls
+//              
+//              Any calls to nested functions inside this do loop
+//
 //	mBOOL Has_Unsummarized_Calls
 //
 //		Any calls without IPA summary info inside this do loop
@@ -127,6 +135,10 @@
 //	mBOOL Has_Exits
 //
 //		Any gotos/returns leaving the loop
+//
+//	mBOOL Has_EH_Regions
+//
+//		Has EH regions in the loop
 //
 //	mBOOL Has_Gotos_This_Level
 //
@@ -710,6 +722,8 @@
 
 #include "dep_graph.h"
 
+#include "cxx_hash.h"
+
 #ifdef KEY // bug 7422
 #define LNO_MAX_DO_LOOP_DEPTH 64
 #else
@@ -719,6 +733,8 @@ extern WN_MAP Parent_Map;  /* contains the mapping for the */
 			   /* parent pointers for all nodes */
 extern WN_MAP LNO_Info_Map;
 extern WN_MAP Array_Dependence_Map;
+// the map to keep track of deleted loop (because of unroll etc.)
+extern HASH_TABLE<WN*, BOOL> *Deleted_Loop_Map;
 extern MEM_POOL LNO_default_pool;
 extern MEM_POOL LNO_local_pool;
 extern INT snl_debug; 
@@ -807,6 +823,7 @@ extern void Last_Value_Peeling_Off();
 class DO_LOOP_INFO {
 private:
   MEM_POOL *_pool;
+  IDTYPE  _id;  //  a unique ID for debugging purpose.
   mUINT8 _wind_down_flags;
   enum DLI_FLAG {CWD = 1, RWD = 2, ICWD = 4, IRWD = 8, UNIMPORTANT = 16};
   void Set_Flag(DLI_FLAG flag, BOOL set) {
@@ -831,15 +848,17 @@ public:
   void Set_Est_Num_Iterations(DOLOOP_STACK *do_stack);
 
   mBOOL Has_Calls;
+#ifdef KEY //bug 14284
+  mBOOL Has_Nested_Calls;
+#endif
   mBOOL Has_Unsummarized_Calls;
   mBOOL Has_Unsummarized_Call_Cost; 
   mBOOL Has_Threadprivate; 
   mBOOL Has_Gotos;
-#ifdef PATHSCALE_MERGE
   mBOOL Has_Conditional;
-#endif
   mBOOL Has_Gotos_This_Level;
   mBOOL Has_Exits;
+  mBOOL Has_EH_Regions;
   mBOOL Is_Inner;
   mBOOL Has_Bad_Mem;
   mBOOL Is_Ivdep; 
@@ -865,11 +884,13 @@ public:
   mBOOL Parallelizable; 
 #ifdef KEY
   mBOOL Vectorizable;
+  mBOOL Delay_Full_Unroll;
 #endif
   mBOOL Last_Value_Peeled; 
   mBOOL Not_Enough_Parallel_Work; 
   mBOOL Inside_Critical_Section;
   mBOOL Has_Barriers; 
+  mBOOL Multiversion_Alias;
   mINT8 Required_Unroll;
   mINT32 Tile_Size; 
   double Work_Estimate; 
@@ -903,9 +924,11 @@ public:
   void Set_In_Register_Winddown(BOOL b = TRUE) {Set_Flag(IRWD, b);}
   BOOL Is_Generally_Unimportant() const {return Get_Flag(UNIMPORTANT);}
   void Set_Generally_Unimportant(BOOL b = TRUE) {Set_Flag(UNIMPORTANT, b);}
+  IDTYPE Get_Id() { return _id; }
+  IDTYPE Set_Id(IDTYPE i ) { _id = i; }
 
   DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
-	ACCESS_VECTOR *step, BOOL has_calls, BOOL has_unsummarized_calls,
+	ACCESS_VECTOR *step, BOOL has_calls, BOOL has_nested_calls, BOOL has_unsummarized_calls,
 	BOOL has_unsummarized_call_cost, BOOL has_gotos, 
 	BOOL has_gotos_this_level,BOOL has_exits, BOOL is_inner); 
   DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool);
@@ -973,13 +996,11 @@ inline BOOL Do_Loop_Has_Gotos (WN *wn)
   return(dli && dli->Has_Gotos);
 }
 
-#ifdef PATHSCALE_MERGE
 inline BOOL Do_Loop_Has_Conditional( WN *wn)
 {
   DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
   return(dli && dli->Has_Conditional);
 }
-#endif
 
 inline BOOL Do_Loop_Has_Gotos_This_Level (WN *wn)
 {
@@ -991,6 +1012,12 @@ inline BOOL Do_Loop_Has_Exits (WN *wn)
 {
   DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
   return(dli && dli->Has_Exits);
+}
+
+inline BOOL Do_Loop_Has_EH_Regions (WN *wn)
+{
+  DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
+  return(dli && dli->Has_EH_Regions);
 }
 
 inline BOOL Do_Loop_Is_Inner (WN *wn)
@@ -1138,6 +1165,7 @@ inline REGION_INFO* Get_Region_Info(const WN* wn)
 #define TT_CALL_INFO		    0x01000000
 #define TT_SHACKLE_DEBUG            0x02000000
 #define TT_CROSS_LOOP               0x04000000
+#define TT_STRUCT_ARRAY_COPY        0x08000000
 
 #ifdef TARG_X8664
 extern BOOL Minvariant_Removal_For_Simd;

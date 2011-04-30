@@ -68,7 +68,7 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/crayf90/sgi/SCCS/s.c
 typedef INT64 OFFSET_64 ; 
 typedef unsigned long ULONG ;
 typedef long SLONG ;
-#if (defined(TARG_IA64) && defined(_LP64))
+#if ((defined(TARG_IA64) || defined(TARG_X8664)) && defined(_LP64))
 #define cast_to_TY(x) ((TY_IDX)x) 
 #define cast_to_WN(x) ((WN *) (void *)x) 
 #define cast_to_ST(x) ((ST *) (void *)x) 
@@ -79,11 +79,11 @@ typedef long SLONG ;
 #define cast_to_void(x) ((void *)x)
 #define cast_to_STB(x) ((STB_pkt *) (void *)x)
 #else
-#define cast_to_TY(x) ((TY_IDX) (void *)x) 
+#define cast_to_TY(x) ((TY_IDX) (INTPTR)(void *)x) 
 #define cast_to_WN(x) ((WN *) (void *)x) 
 #define cast_to_ST(x) ((ST *) (void *)x) 
-#define cast_to_LB(x) ((LABEL_IDX) (void *)x) 
-#define cast_to_uint(x) ((unsigned long) (void *)x)
+#define cast_to_LB(x) ((LABEL_IDX) (INTPTR) (void *)x) 
+#define cast_to_uint(x) ((unsigned long) (INTPTR) (void *)x)
 #define cast_to_int(x) ((long ) (void *)x)
 #define cast_to_long(x) ((long)(void*)x)
 #define cast_to_void(x) ((void *)x)
@@ -215,12 +215,17 @@ extern MEM_POOL *FE_Mempool;
 #define RESULT_SIZE 16
 #endif
 #ifdef TARG_IA32
+#if defined(BUILD_OS_DARWIN)
+/* Darwin -m32 returns small structures via registers */
+#define RESULT_SIZE 8
+#else /* defined(BUILD_OS_DARWIN) */
 #define RESULT_SIZE 0
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif
 #ifdef TARG_IA64 
 #define RESULT_SIZE 64
 #endif
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
 #define RESULT_SIZE 16
 #endif
 

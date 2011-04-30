@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: gtn_universe.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gtn_universe.h,v $
+ *  $Revision: 1.2 $
+ *  $Date: 02/11/07 23:41:25-00:00 $
+ *  $Author: fchow@keyresearch.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.gtn_universe.h $
  *
  *  Revision comments:
  *
@@ -150,19 +150,10 @@ extern void GTN_UNIVERSE_Add_TN( TN *tn );
 inline INT32
 GTN_UNIVERSE_TN_int( TN *tn)
 {
-#if 0
-  /* the following assertion fails at several places in CG. Comment 
-     it out till those references are fixed. */
-  Is_True (TN_is_register(tn) && 
-	   TN_is_global_reg(tn) &&
-	   (TN_number(tn) < tn_int_map_allocated_size),
-		("Invalid TN%d in GTN_UNIVERSE_TN_int", TN_number(tn)));
-#else
   if (!(TN_is_register(tn) && 
 	TN_is_global_reg(tn) &&
 	(TN_number(tn) < tn_int_map_allocated_size)))
     return 0;
-#endif
 
   return GTN_UNIVERSE_tn_int_map[TN_number(tn)];
 }

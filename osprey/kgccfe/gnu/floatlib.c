@@ -78,27 +78,13 @@ union double_long {
     double d;
 #ifdef SWAP
     struct {
-#ifdef PATHSCALE_MERGE
-#ifdef KEY
-      int upper;
       unsigned int lower;
-#else
-      unsigned long lower;
-      long upper;
-#endif
-#endif
+      int upper;
     } l;
 #else
     struct {
-#ifdef PATHSCALE_MERGE
-#ifdef KEY
       int upper;
       unsigned int lower;
-#else
-      long upper;
-      unsigned long lower;
-#endif
-#endif
     } l;
 #endif
     long long ll;

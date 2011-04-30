@@ -530,30 +530,6 @@ poplevel (keep, reverse, functionbody)
 
   /* This warning is turned off because it causes warnings for
      declarations like `extern struct foo *x'.  */
-#if 0
-  /* Warn about incomplete structure types in this level.  */
-  for (link = tags; link; link = TREE_CHAIN (link))
-    if (!COMPLETE_TYPE_P (TREE_VALUE (link)))
-      {
-	tree type = TREE_VALUE (link);
-	tree type_name = TYPE_NAME (type);
-	char *id = IDENTIFIER_POINTER (TREE_CODE (type_name) == IDENTIFIER_NODE
-				       ? type_name
-				       : DECL_NAME (type_name));
-	switch (TREE_CODE (type))
-	  {
-	  case RECORD_TYPE:
-	    error ("`struct %s' incomplete in scope ending here", id);
-	    break;
-	  case UNION_TYPE:
-	    error ("`union %s' incomplete in scope ending here", id);
-	    break;
-	  case ENUMERAL_TYPE:
-	    error ("`enum %s' incomplete in scope ending here", id);
-	    break;
-	  }
-      }
-#endif /* 0 */
 
   /* Get the decls in the order they were written.
      Usually current_binding_level->names is in reverse order.
@@ -2011,17 +1987,6 @@ pushdecl (x)
 		}
 	    }
 
-#if 0
-	  /* This case is probably sometimes the right thing to do.  */
-	  /* If we have a local external declaration,
-	     then any file-scope declaration should not
-	     have been static.  */
-	  if (oldlocal == 0 && oldglobal != 0
-	      && !TREE_PUBLIC (oldglobal)
-	      && DECL_EXTERNAL (x) && TREE_PUBLIC (x))
-	    warning ("`%s' locally external but globally static",
-		     IDENTIFIER_POINTER (name));
-#endif
 
 	  /* If we have a local external declaration,
 	     and no file-scope declaration has yet been seen,
@@ -2109,11 +2074,6 @@ implicitly_declare (functionid)
   /* We used to reuse an old implicit decl here,
      but this loses with inline functions because it can clobber
      the saved decl chains.  */
-#if 0
-  if (IDENTIFIER_IMPLICIT_DECL (functionid) != 0)
-    decl = IDENTIFIER_IMPLICIT_DECL (functionid);
-  else
-#endif
     decl = build_decl (FUNCTION_DECL, functionid, default_function_type);
 
   /* Warn of implicit decl following explicit local extern decl.
@@ -2948,14 +2908,6 @@ start_decl (declarator, declspecs, initialized, attributes)
 
   if (initialized)
     {
-#if 0
-      /* Seems redundant with grokdeclarator.  */
-      if (current_binding_level != global_binding_level
-	  && DECL_EXTERNAL (decl)
-	  && TREE_CODE (decl) != FUNCTION_DECL)
-	warning ("declaration of `%s' has `extern' and is initialized",
-		 IDENTIFIER_POINTER (DECL_NAME (decl)));
-#endif
       DECL_EXTERNAL (decl) = 0;
       if (current_binding_level == global_binding_level)
 	TREE_STATIC (decl) = 1;
@@ -3010,6 +2962,7 @@ start_decl (declarator, declspecs, initialized, attributes)
   /* Opencc does not support nested function.
    * So put all function declarations at the top level */
   tem = (TREE_CODE(decl)==FUNCTION_DECL)?pushdecl_top_level(decl):pushdecl(decl);
+
 
   /* For a local variable, define the RTL now.  */
   if (current_binding_level != global_binding_level
@@ -3335,16 +3288,6 @@ push_parm_decl (parm)
 			 TREE_PURPOSE (TREE_PURPOSE (parm)), PARM, 0);
   decl_attributes (&decl, TREE_VALUE (parm), 0);
 
-#if 0
-  if (DECL_NAME (decl))
-    {
-      tree olddecl;
-      olddecl = lookup_name (DECL_NAME (decl));
-      if (pedantic && olddecl != 0 && TREE_CODE (olddecl) == TYPE_DECL)
-	pedwarn_with_decl (decl,
-			   "ISO C forbids parameter `%s' shadowing typedef");
-    }
-#endif
 
   decl = pushdecl (decl);
 
@@ -3581,6 +3524,15 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
   int explicit_int = 0;
   int explicit_char = 0;
   int defaulted_int = 0;
+#if defined(TARG_SL)
+  int sbufp = 0;
+  int sdramp = 0;
+  int v1bufp = 0;
+  int v2bufp = 0;
+  int v4bufp = 0;
+  int vbuf_type = 0;
+  int internal_mem = 0;
+#endif // TARG_SL
   tree typedef_decl = 0;
   const char *name;
   tree typedef_type = 0;
@@ -3684,6 +3636,26 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 	  enum rid i = C_RID_CODE (id);
 	  if ((int) i <= (int) RID_LAST_MODIFIER)
 	    {
+#if defined(TARG_SL)
+	      // if type char isn't declared explicitly we set default type 
+	      // as char instead of original int type.
+ 
+           {
+             switch(i) {
+	       case RID_V1BUF:
+	       case RID_V2BUF:
+	       case RID_V4BUF:  
+	         vbuf_type = 1;
+		      // fall through
+	       case RID_SBUF:
+	       case RID_SDRAM:
+	         internal_mem = i;
+	         break;
+	       default:
+	         break;
+	     }
+	  }
+#endif // TARG_SL
 	      if (i == RID_LONG && (specbits & (1 << (int) RID_LONG)))
 		{
 		  if (longlong)
@@ -3787,9 +3759,19 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 			 name);
 	}
 
+#if defined(TARG_SL)
+      /* vbuf type default set to char */
+      if( vbuf_type ) {
+	type = char_type_node;
+      }
+      else {
+#endif // TARG_SL
       defaulted_int = 1;
       type = integer_type_node;
     }
+#if defined(TARG_SL)
+     }
+#endif 
 
   /* Now process the modifiers that were specified
      and check for invalid combinations.  */
@@ -3875,7 +3857,15 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 	  && !(specbits & 1 << (int) RID_SIGNED)))
     {
       if (longlong)
+#if defined(TARG_SL)
+/* SL don't support type long long, for bringup os easily, 
+ * compiler just mapping signed long long to signed long and
+ * unsigned long long to unsigned long 
+ */
+    	type = long_unsigned_type_node;     
+#else
 	type = long_long_unsigned_type_node;
+#endif
       else if (specbits & 1 << (int) RID_LONG)
 	type = long_unsigned_type_node;
       else if (specbits & 1 << (int) RID_SHORT)
@@ -3891,7 +3881,15 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 	   && type == char_type_node)
     type = signed_char_type_node;
   else if (longlong)
+#if defined(TARG_SL)
+/* SL don't support type long long, for bringup os easily, 
+ * compiler just mapping signed long long to signed long and
+ * unsigned long long to unsigned long 
+ */
+    type = long_integer_type_node;
+#else
     type = long_long_integer_type_node;
+#endif
   else if (specbits & 1 << (int) RID_LONG)
     type = long_integer_type_node;
   else if (specbits & 1 << (int) RID_SHORT)
@@ -3944,6 +3942,13 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
   restrictp = !! (specbits & 1 << (int) RID_RESTRICT) + TYPE_RESTRICT (type);
   volatilep = !! (specbits & 1 << (int) RID_VOLATILE) + TYPE_VOLATILE (type);
   inlinep = !! (specbits & (1 << (int) RID_INLINE));
+#if defined(TARG_SL)
+  sbufp = !!  (specbits & (1 << (int) RID_SBUF));
+  sdramp =!!  (specbits & (1 << (int) RID_SDRAM));
+  v1bufp = !!  (specbits & (1 << (int) RID_V1BUF));
+  v2bufp = !!  (specbits & (1 << (int) RID_V2BUF));
+  v4bufp = !!  (specbits & (1 << (int) RID_V4BUF));
+#endif // TARG_SL
   if (constp > 1 && ! flag_isoc99)
     pedwarn ("duplicate `const'");
   if (restrictp > 1 && ! flag_isoc99)
@@ -3954,7 +3959,15 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
     type = TYPE_MAIN_VARIANT (type);
   type_quals = ((constp ? TYPE_QUAL_CONST : 0)
 		| (restrictp ? TYPE_QUAL_RESTRICT : 0)
-		| (volatilep ? TYPE_QUAL_VOLATILE : 0));
+		| (volatilep ? TYPE_QUAL_VOLATILE : 0)
+#if defined(TARG_SL)
+                | (sbufp ? TYPE_QUAL_SBUF : 0)
+		| (sdramp ? TYPE_QUAL_SDRAM : 0)
+		| (v1bufp ? TYPE_QUAL_V1BUF : 0)
+		| (v2bufp ? TYPE_QUAL_V2BUF : 0)
+		| (v4bufp ? TYPE_QUAL_V4BUF : 0)
+#endif // TARG_SL
+		);
 
   /* Warn if two storage classes are given. Default to `auto'.  */
 
@@ -4252,13 +4265,6 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 	  if (pedantic && !COMPLETE_TYPE_P (type))
 	    pedwarn ("array type has incomplete element type");
 
-#if 0
-	  /* We shouldn't have a function type here at all!
-	     Functions aren't allowed as array elements.  */
-	  if (pedantic && TREE_CODE (type) == FUNCTION_TYPE
-	      && (constp || volatilep))
-	    pedwarn ("ISO C forbids const or volatile function types");
-#endif
 
 	  /* Build the array type itself, then merge any constancy or
 	     volatility into the target type.  We must do it in this order
@@ -4625,11 +4631,29 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 	    type = build_array_type (c_build_qualified_type (TREE_TYPE (type),
 							     type_quals),
 				     TYPE_DOMAIN (type));
-#if 0
-	    /* Leave the field const or volatile as well.  */
-	    type_quals = TYPE_UNQUALIFIED;
-#endif
 	  }
+#if defined(TARG_SL)
+     else if(internal_mem && TREE_CODE(declarator) == IDENTIFIER_NODE )
+     {
+        
+      switch(internal_mem) {
+	       case RID_V1BUF:
+            type = c_build_qualified_type(type, TYPE_QUAL_V1BUF);
+            break;
+	       case RID_V2BUF:
+	        type = c_build_qualified_type(type, TYPE_QUAL_V2BUF);
+	        break;
+	       case RID_V4BUF:  
+	        type = c_build_qualified_type(type, TYPE_QUAL_V4BUF);
+	         break;
+	       case RID_SBUF:
+	        type = c_build_qualified_type(type, TYPE_QUAL_SBUF);
+	        break;
+	      case RID_SDRAM:
+	        type = c_build_qualified_type(type, TYPE_QUAL_SDRAM);      
+      }
+     } 
+#endif // TARG_SL
 	decl = build_decl (FIELD_DECL, declarator, type);
 	DECL_NONADDRESSABLE_P (decl) = bitfield;
 
@@ -4732,9 +4756,6 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 							     type_quals),
 				     TYPE_DOMAIN (type));
 	    TYPE_ALIGN (type) = saved_align;
-#if 0 /* Leave the variable const or volatile as well.  */
-	    type_quals = TYPE_UNQUALIFIED;
-#endif
 	  }
 	else if (type_quals)
 	  type = c_build_qualified_type (type, type_quals);
@@ -4781,6 +4802,29 @@ grokdeclarator (declarator, declspecs, decl_context, initialized)
 
     if (specbits & (1 << (int) RID_REGISTER))
       DECL_REGISTER (decl) = 1;
+
+#if defined(TARG_SL)
+    /* Internal Buffer Extension */
+    tree tmp_type_node;
+    if (specbits & (1 << (int) RID_SDRAM))
+      DECL_SDRAM (decl) = 1;
+    if (specbits & (1 << (int) RID_SBUF))
+      DECL_SBUF (decl) = 1;
+    
+    if (specbits & (1 << (int) RID_V1BUF))
+      { 
+      	DECL_V1BUF (decl) = 1;  
+      }
+    if (specbits & (1 << (int) RID_V2BUF))
+     {
+      DECL_V2BUF (decl) = 1;
+     }
+    if (specbits & (1 << (int) RID_V4BUF))
+    {
+      DECL_V4BUF (decl) = 1;
+    }
+
+#endif // TARG_SL
 
     /* Record constancy and volatility.  */
     c_apply_type_quals_to_decl (type_quals, decl);
@@ -4848,10 +4892,6 @@ grokparms (parms_info, funcdef_flag)
 	 These tags can never be defined in the scope of the declaration,
 	 so the types can never be completed,
 	 and no call can be compiled successfully.  */
-#if 0
-      /* In a fcn definition, arg types must be complete.  */
-      if (funcdef_flag)
-#endif
 	for (parm = last_function_parms, typelt = first_parm;
 	     parm;
 	     parm = TREE_CHAIN (parm))
@@ -4875,27 +4915,6 @@ grokparms (parms_info, funcdef_flag)
 		      TREE_TYPE (parm) = error_mark_node;
 		    }
 		}
-#if 0
-	      /* This has been replaced by parm_tags_warning, which
-		 uses a more accurate criterion for what to warn
-		 about.  */
-	      else
-		{
-		  /* Now warn if is a pointer to an incomplete type.  */
-		  while (TREE_CODE (type) == POINTER_TYPE
-			 || TREE_CODE (type) == REFERENCE_TYPE)
-		    type = TREE_TYPE (type);
-		  type = TYPE_MAIN_VARIANT (type);
-		  if (!COMPLETE_TYPE_P (type))
-		    {
-		      if (DECL_NAME (parm) != 0)
-			warning ("parameter `%s' points to incomplete type",
-				 IDENTIFIER_POINTER (DECL_NAME (parm)));
-		      else
-			warning ("parameter points to incomplete type");
-		    }
-		}
-#endif
 	      typelt = TREE_CHAIN (typelt);
 	    }
 
@@ -6219,21 +6238,6 @@ store_parm_decls ()
 	 and record in the function.  */
       DECL_ARGUMENTS (fndecl) = getdecls ();
 
-#if 0
-      /* If this function takes a variable number of arguments,
-	 add a phony parameter to the end of the parm list,
-	 to represent the position of the first unnamed argument.  */
-      if (TREE_VALUE (tree_last (TYPE_ARG_TYPES (TREE_TYPE (fndecl))))
-	  != void_type_node)
-	{
-	  tree dummy = build_decl (PARM_DECL, NULL_TREE, void_type_node);
-	  /* Let's hope the address of the unnamed parm
-	     won't depend on its type.  */
-	  TREE_TYPE (dummy) = integer_type_node;
-	  DECL_ARG_TYPE (dummy) = integer_type_node;
-	  DECL_ARGUMENTS (fndecl) = chainon (DECL_ARGUMENTS (fndecl), dummy);
-	}
-#endif
 
       /* Now pushdecl the enum constants.  */
       for (parm = others; parm; parm = next)
@@ -6503,9 +6507,6 @@ store_parm_decls ()
 
   /* ??? This might be an improvement,
      but needs to be thought about some more.  */
-#if 0
-  keep_next_level_flag = 1;
-#endif
 
   /* Write a record describing this function definition to the prototypes
      file (if requested).  */
@@ -6569,11 +6570,6 @@ finish_function (nested, can_defer_p)
 {
   tree fndecl = current_function_decl;
 
-#if 0
-  /* This caused &foo to be of type ptr-to-const-function which then
-     got a warning when stored in a ptr-to-function variable.  */
-  TREE_READONLY (fndecl) = 1;
-#endif
 
   poplevel (1, 0, 1);
   BLOCK_SUPERCONTEXT (DECL_INITIAL (fndecl)) = fndecl;

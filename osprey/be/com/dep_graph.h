@@ -340,17 +340,17 @@
 //
 //
 
-/** $Revision: 1.1.1.1 $
-*** $Date: 2005/10/21 19:00:00 $
-*** $Author: marcel $
-*** $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/dep_graph.h,v $
+/** $Revision: 1.2 $
+*** $Date: 02/11/07 23:41:35-00:00 $
+*** $Author: fchow@keyresearch.com $
+*** $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.dep_graph.h $
 **/
 
 #ifndef dep_graph_INCLUDED
 #define dep_graph_INCLUDED "dep_graph.h"
 
 #ifdef _KEEP_RCS_ID
-static char *dep_graph_rcs_id = dep_graph_INCLUDED "$Revision$";
+static char *dep_graph_rcs_id = dep_graph_INCLUDED "$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #ifndef cxx_graph_INCLUDED
@@ -456,7 +456,13 @@ class  ARRAY_DIRECTED_GRAPH16 :
   DEP_GRAPH_TYPE  _type;
   MEM_POOL *_pool;
 public:
+
+#ifndef LNO
   void Print(FILE *fp);
+#else
+  void Print(FILE *fp, INT dummy=0);
+#endif
+
   ARRAY_DIRECTED_GRAPH16(mUINT16 num_v, mUINT16 num_e, WN_MAP map, 
 	DEP_GRAPH_TYPE type) : 
 	DIRECTED_GRAPH16<ARRAY_EDGE16,ARRAY_VERTEX16>(num_v,num_e) {
@@ -501,7 +507,7 @@ public:
       DIRECTED_GRAPH16<ARRAY_EDGE16,ARRAY_VERTEX16>::Add_Vertex();
     if (result != 0) {
       _v[result].Wn = wn;
-      WN_MAP_Set(_map,wn, (void *)(INTPTR)(UINT) result);
+      WN_MAP_Set(_map,wn, (void *) (INTPTR)(UINT) result);
     }
     return result;
   }

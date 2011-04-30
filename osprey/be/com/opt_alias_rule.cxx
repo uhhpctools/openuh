@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -69,6 +73,7 @@
 static char *rcs_id = 	opt_alias_rule_CXX"$Revision: 1.8 $";
 #endif /* _KEEP_RCS_ID */
 
+#include "be_util.h"
 #include "defs.h"
 #include "stab.h"
 #include "tracing.h"
@@ -76,6 +81,7 @@ static char *rcs_id = 	opt_alias_rule_CXX"$Revision: 1.8 $";
 #include "opt_points_to.h"
 #include "opt_alias_class.h"
 #include "opt_alias_rule.h"
+#include "alias_analyzer.h"
 #ifdef KEY
 #include "config_opt.h"
 #endif
@@ -148,6 +154,35 @@ ALIAS_RULE::Aliased_Ip_Classification_Rule(const POINTS_TO *const mem1,
   return aliased;
 }
 
+BOOL
+ALIAS_RULE::Aliased_Alias_Analyzer_Rule(const POINTS_TO *const mem1,
+                                        const POINTS_TO *const mem2,
+                                        bool acResult) const
+{
+  FmtAssert(_alias_analyzer,("Invoking Alias Analyzer Rule with NULL AliasAnalyzer"));
+
+  BOOL aliased;
+  INT32 count = _alias_analyzer->aliasQueryCount();
+  if (count == 0 && Get_Trace(TP_ALIAS,NYSTROM_QUERY_TRACE_FLAG)) {
+    extern char *Current_PU_Name();
+    fprintf(TFile, "pu_name %s\n", Current_PU_Name());
+  }
+  if (count < Alias_Query_Limit ) {
+    aliased = _alias_analyzer->aliased(mem1->Alias_tag(),mem2->Alias_tag());
+    if (aliased)
+      _alias_analyzer->incrAliasedCount();
+    if(Get_Trace(TP_ALIAS,NYSTROM_QUERY_TRACE_FLAG))
+      fprintf(TFile,"Query %d,%d: aliased memop %d %d: %-3s Alias (ac %-3s)\n",
+              Current_PU_Count(),count,
+              mem1->Alias_tag(),mem2->Alias_tag(),
+              aliased?"May":"No",
+              acResult?"No":"May");
+  }
+  else
+    aliased = true;
+  return aliased;
+}
+
 // return TRUE iff
 //   o. ty1 == ty2, or 
 //   o. ty1 is of aggregate and there exist a filed <f> of ty1 
@@ -211,14 +246,6 @@ ALIAS_RULE::Aliased_F90_Target_Rule(const POINTS_TO *const mem1,
 				    TY_IDX object_ty2) const
 {
   if (mem1->Known_f90_pointer()) {
-#if 0
-    fprintf(TFile, "---------------\n");
-    mem1->Print(TFile);
-    fprintf(TFile, "      and\n");
-    mem2->Print(TFile);
-    fprintf(TFile, "      do %salias\n",
-	    (!mem2->Known_not_f90_pointer() || !mem2->Not_f90_target() ? "" : "not "));
-#endif
     if (mem2->Base() != NULL) {
       Is_True(!mem2->Not_f90_target() ||
 	      (ST_class(mem2->Base()) != CLASS_VAR) ||
@@ -228,14 +255,6 @@ ALIAS_RULE::Aliased_F90_Target_Rule(const POINTS_TO *const mem1,
     return (!mem2->Known_not_f90_pointer() || !mem2->Not_f90_target());
   }
   if (mem2->Known_f90_pointer()) {
-#if 0
-    fprintf(TFile, "---------------\n");
-    mem2->Print(TFile);
-    fprintf(TFile, "      and\n");
-    mem1->Print(TFile);
-    fprintf(TFile, "      do %salias\n",
-	    (!mem1->Known_not_f90_pointer() || !mem1->Not_f90_target() ? "" : "not "));
-#endif
     if (mem1->Base() != NULL) {
       Is_True(!mem1->Not_f90_target() ||
 	      (ST_class(mem1->Base()) != CLASS_VAR) ||
@@ -324,6 +343,17 @@ ALIAS_KIND ALIAS_RULE::Aliased_Indirect_Rule
   return ALIAS_KIND(AR_POSSIBLE_ALIAS);
 }
 
+static BOOL
+LMV_may_alias (LMV_ALIAS_GROUP a1, LMV_ALIAS_GROUP a2) {
+  UINT loop1 = a1 & 0xffff0000;
+  UINT loop2 = a2 & 0xffff0000;
+  if (loop1 != loop2 || !loop1) return TRUE;
+
+  UINT grp1 = a1 & 0xffff;
+  UINT grp2 = a2 & 0xffff;
+  return grp1 == grp2;
+}
+
 //  Implement A.6.3 and A.6.4. (See opt_alias_rule.h.)
 //    TRUE:  may be aliased
 //    FALSE: not aliased
@@ -331,7 +361,6 @@ ALIAS_KIND ALIAS_RULE::Aliased_Indirect_Rule
 BOOL ALIAS_RULE::Aliased_Qualifier_Rule(const POINTS_TO *mem1, const POINTS_TO *mem2, TY_IDX ty1, TY_IDX ty2) const
 {
   // If mem1 or mem2 is declared const, ...
-#if 1
   // If at least one of mem1 and mem2 is declared global const, and
   // they do not overlap, the two operations don't alias.
   if (((mem1->Const() &&
@@ -344,15 +373,6 @@ BOOL ALIAS_RULE::Aliased_Qualifier_Rule(const POINTS_TO *mem1, const POINTS_TO *
        !mem1->Overlap(mem2))) {
     return FALSE;
   }
-#else
-  if (Rule_enabled(C_RESTRICT_CONST_RULE) && ty1 != NULL && ty2 != NULL) {
-    // disabled analysis of const qualifier because of inlining of
-    // C constructors.
-    if ((TY_is_const(ty1) && mem2->Not_init_const()) ||
-	(TY_is_const(ty2) && mem1->Not_init_const()))
-      return FALSE;
-  }
-#endif
 
   // mem1 is a unique pointer
   if (mem1->Based_sym() != NULL &&
@@ -367,6 +387,16 @@ BOOL ALIAS_RULE::Aliased_Qualifier_Rule(const POINTS_TO *mem1, const POINTS_TO *
       mem2->Based_sym() != mem1->Based_sym() &&
       !mem1->Default_vsym())
        return FALSE;
+
+  // The alias-group, a term conined and set by loop-multiversioning,  
+  // can be employed to disambiguate alias.
+
+  LMV_ALIAS_GROUP ag1, ag2;
+  if ((ag1 = mem1->LMV_alias_group ()) &&  
+      (ag2 = mem2->LMV_alias_group()) &&
+      !LMV_may_alias (ag1, ag2)) {
+    return FALSE;
+  }
 
   return TRUE;
 }
@@ -432,20 +462,27 @@ static hash_map<const TY_IDX, INT, __gnu_cxx::hash<TY_IDX>, TY_IDX_EQ> Stripped_
 #endif
 
 #ifdef TARG_X8664
-#define I1_VECTOR_TYPES    case MTYPE_V16I1: \
+#define I1_VECTOR_TYPES    case MTYPE_V32I1: \
+                           case MTYPE_V16I1: \
                            case MTYPE_V8I1:  \
                            case MTYPE_M8I1:
-#define I2_VECTOR_TYPES    case MTYPE_V16I2: \
+#define I2_VECTOR_TYPES    case MTYPE_V32I2: \
+                           case MTYPE_V16I2: \
                            case MTYPE_V8I2:  \
                            case MTYPE_M8I2:
-#define I4_VECTOR_TYPES    case MTYPE_V16I4: \
+#define I4_VECTOR_TYPES    case MTYPE_V32I4: \
+                           case MTYPE_V16I4: \
                            case MTYPE_V8I4:  \
                            case MTYPE_M8I4:
-#define I8_VECTOR_TYPES    case MTYPE_V16I8:
-#define F4_VECTOR_TYPES    case MTYPE_V16F4: \
+#define I8_VECTOR_TYPES    case MTYPE_V32I8: \
+                           case MTYPE_V16I8: \
+                           case MTYPE_V8I8:
+#define F4_VECTOR_TYPES    case MTYPE_V32F4: \
+                           case MTYPE_V16F4: \
                            case MTYPE_V8F4:  \
                            case MTYPE_M8F4:
-#define F8_VECTOR_TYPES    case MTYPE_V16F8:
+#define F8_VECTOR_TYPES    case MTYPE_V32F8: \
+                           case MTYPE_V16F8:
 #else
 #define I1_VECTOR_TYPES
 #define I2_VECTOR_TYPES
@@ -611,6 +648,11 @@ BOOL ALIAS_RULE::Aliased_ANSI_Type_Rule(const POINTS_TO *mem1,
       return FALSE;
     
     if (ty1 == ty2) {
+      if (ty1 != mem1->Highlevel_Ty () || ty2 != mem2->Highlevel_Ty ()) {
+	// in this case Field_id() does not make sense.
+        return TRUE;
+      }
+
       INT32 fld1 = mem1->Field_id();
       INT32 fld2 = mem2->Field_id();
       if (!fld1 || !fld2 || fld1 == fld2) return TRUE;
@@ -677,13 +719,6 @@ BOOL ALIAS_RULE::Aliased_Strongly_Typed_Rule(TY_IDX ty1, TY_IDX ty2) const
 //
 BOOL ALIAS_RULE::Aliased_C_Qualifier_Rule(const POINTS_TO *mem1, const POINTS_TO *mem2) const
 {
-#if 0
-  // OLD Restricted rule
-  if (mem1->Based_sym() != NULL && mem1->Restricted() &&
-      mem2->Based_sym() != NULL && mem2->Restricted() &&
-      mem1->Based_sym() != mem2->Based_sym())
-    return FALSE;
-#else
   // Implement restrict pointer like a unique_pt.
   //
   if (mem1->Based_sym() != NULL &&
@@ -703,7 +738,6 @@ BOOL ALIAS_RULE::Aliased_C_Qualifier_Rule(const POINTS_TO *mem1, const POINTS_TO
       mem2->Based_sym() != mem1->Based_sym() &&
       !mem1->Default_vsym())
     return FALSE;
-#endif
 
   return TRUE;
 }
@@ -758,8 +792,19 @@ BOOL ALIAS_RULE::Aliased_Disjoint(const POINTS_TO *mem1, const POINTS_TO *mem2) 
 
 //  Same location
 //
-BOOL ALIAS_RULE::Same_location(const WN *wn1, const WN *wn2, const POINTS_TO *mem1, const POINTS_TO *mem2)
+BOOL ALIAS_RULE::Same_location(const WN *wn1, const WN *wn2, const POINTS_TO *mem1, const POINTS_TO *mem2) const
 {
+  // The analysis performed in Same_location is quite weak and assumes
+  // that no dependence analysis is done.  This wasn't recognized
+  // early since Same_location returns FALSE for references to arrays
+  // with more than one element.  The problem is exposed for single
+  // element arrays, which are sometimes used in Fortran 77 to
+  // implement dynamic array allocation (that is, in each reference to
+  // the allocated array, an index base appears as a term in the
+  // index expression, where the index base points to the first
+  // element of the allocated array).
+  if (mem1->Is_array())
+    return FALSE;
   if (mem1->Same_base(mem2) &&
       mem1->Ofst_kind() == OFST_IS_FIXED &&
       mem2->Ofst_kind() == OFST_IS_FIXED &&
@@ -769,12 +814,21 @@ BOOL ALIAS_RULE::Same_location(const WN *wn1, const WN *wn2, const POINTS_TO *me
        WN_object_size(wn1) == mem1->Byte_Size()) &&
       (WN_operator(wn2) == OPR_IDNAME ||
        WN_object_size(wn2) == mem2->Byte_Size())) {
-    
-    if (mem1->Bit_Size() == 0 || mem2->Bit_Size() == 0)
+    BOOL wn1_is_bit = (WN_operator(wn1) == OPR_LDBITS || WN_operator(wn1) == OPR_STBITS
+		 || WN_operator(wn1) == OPR_ILDBITS || WN_operator(wn1) == OPR_ISTBITS);
+    BOOL wn2_is_bit = (WN_operator(wn2) == OPR_LDBITS || WN_operator(wn2) == OPR_STBITS
+		 || WN_operator(wn2) == OPR_ILDBITS || WN_operator(wn2) == OPR_ISTBITS);
+    if (!wn1_is_bit && !wn2_is_bit) {
+      FmtAssert((mem1->Bit_Size() == 0 && mem2->Bit_Size() == 0), 
+	  	("ALIAS_RULE::Same_location: wrong bit size" ));
       return TRUE;
-    else
-      return (mem1->Bit_Ofst() == mem2->Bit_Ofst() &&
-	      mem1->Bit_Size() == mem2->Bit_Size());
+    } else if (wn1_is_bit && wn2_is_bit) {
+      if (WN_bit_size(wn1) == mem1->Bit_Size() && 
+          WN_bit_size(wn2) == mem2->Bit_Size() && 
+          mem1->Bit_Ofst() == mem2->Bit_Ofst() &&
+          mem1->Bit_Size() == mem2->Bit_Size())
+	return TRUE;
+    }
   }
   return FALSE;
 }
@@ -819,11 +873,22 @@ ALIAS_KIND ALIAS_RULE::Aliased_Memop_By_Analysis
   if (Rule_enabled(NEST_RULE) && !Aliased_Static_Nest_Rule(p1, p2))
     return ALIAS_KIND (AR_NOT_ALIAS);
 
-  if (Rule_enabled(CLAS_RULE) && !Aliased_Classification_Rule(p1, p2))
+  bool localACResult = !Aliased_Classification_Rule(p1, p2)
+      && (!p1->Default_vsym() || p2->No_alias())
+      && (!p2->Default_vsym() || p1->No_alias());
+  if (Rule_enabled(CLAS_RULE) && localACResult)
     return ALIAS_KIND (AR_NOT_ALIAS);
 
-  if (Rule_enabled(IP_CLAS_RULE) && !Aliased_Ip_Classification_Rule(p1, p2))
+  bool ipACResult = !Aliased_Ip_Classification_Rule(p1, p2)
+      && (!p1->Default_vsym() || p2->No_alias())
+      && (!p2->Default_vsym() || p1->No_alias());
+  if (Rule_enabled(IP_CLAS_RULE) && ipACResult)
     return ALIAS_KIND (AR_NOT_ALIAS);
+
+  if (Rule_enabled(ALIAS_ANALYZER_RULE) &&
+      !Aliased_Alias_Analyzer_Rule(p1,p2,(localACResult||ipACResult))) {
+    return ALIAS_KIND (AR_NOT_ALIAS);
+  }
 
   return ALIAS_KIND (AR_POSSIBLE_ALIAS);
 }
@@ -874,6 +939,26 @@ BOOL ALIAS_RULE::Aliased_Memop_By_Declaration(const POINTS_TO *p1,
 
   if (Rule_enabled(IBM_DISJOINT_RULE) && !Aliased_Disjoint(p1, p2))
     return FALSE;
+
+  // extend the disjoint rule to cover the case of the *same* pointer to a
+  // struct's different members
+  if (Rule_enabled(IBM_DISJOINT_RULE))
+    if (p1->Ty() == p2->Ty() &&
+        p1->Id() == p2->Id() &&
+        p1->Expr_kind() == p2->Expr_kind() &&
+        p1->Base_kind() == p2->Base_kind() &&
+        p1->Ofst_kind() == p2->Ofst_kind() &&
+        p1->Base() == p2->Base() &&
+        p1->Byte_Ofst() != p2->Byte_Ofst() &&
+        p1->Byte_Size() == p2->Byte_Size() &&
+        p1->Bit_Ofst() == p2->Bit_Ofst() &&
+        p1->Bit_Size() == p2->Bit_Size() &&
+        p1->Based_sym() == p2->Based_sym() &&
+        p1->Based_sym_depth() == p2->Based_sym_depth() &&
+        p1->Attr() == p2->Attr() &&
+        p1->Alias_class() == p2->Alias_class() &&
+        p1->Ip_alias_class() == p2->Ip_alias_class())
+      return FALSE;
   
   if (Rule_enabled(F90_TARGET_RULE) && !Aliased_F90_Target_Rule(p1, p2, ty1, ty2))
     return FALSE;
@@ -968,6 +1053,21 @@ READ_WRITE ALIAS_RULE::Aliased_with_Call(ST *st, INT32 flags, const POINTS_TO *m
       mod = FALSE;
     if ((flags & WN_CALL_NON_PARM_REF) == 0)
       ref = FALSE;
+  }
+
+  if (Rule_enabled(ALIAS_ANALYZER_RULE)) {
+    // this is to get more precious from _alias_analyzer's IPA analysis result.
+    // TODO: its consertive now, mod_tmp, ref_tmp, always true now.
+    if(mod || ref) {
+      BOOL mod_tmp;
+      BOOL ref_tmp;
+      _alias_analyzer->aliasedWithCall(st,mem->Alias_tag(),mod_tmp,ref_tmp);
+      // if mod is false, don't update mod
+      if(mod)
+        mod = mod_tmp;
+      if(ref)
+        ref = ref_tmp;
+    }
   }
 
   if (mod && ref)

@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: cg_dep_graph_update.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_dep_graph_util.h,v $
+ *  $Revision: 1.2 $
+ *  $Date: 02/11/07 23:41:20-00:00 $
+ *  $Author: fchow@keyresearch.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_dep_graph_util.h $
  *
  *  Revision comments:
  *
@@ -64,6 +64,11 @@ inline OP_LIST* CG_DEP_Get_Defs(TN *tn, TN_MAP usage_map){
 inline void CG_DEP_Add_Def(OP *op, UINT8 pos, TN_MAP usage_map, MEM_POOL *pool){
   OP_LIST *defs_list = CG_DEP_Get_Defs(OP_result(op, pos), usage_map); 
   TN_MAP_Set(usage_map, OP_result(op, pos), OP_LIST_Push(op, defs_list, pool));
+}
+
+inline void CG_DEP_Add_Def_By_TN(OP* op, TN* result_tn, TN_MAP usage_map, MEM_POOL *pool){
+  OP_LIST *defs_list = CG_DEP_Get_Defs(result_tn, usage_map); 
+  TN_MAP_Set(usage_map, result_tn, OP_LIST_Push(op, defs_list, pool));
 }
 
 #endif /* CG_DEP_GRAPH_UTIL */

@@ -46,7 +46,19 @@
 extern "C" {
 #endif
 
-#ifdef __linux
+#if defined(TARG_NVISA)
+/* NVISA:  ptx version */
+#include "pathscale_defs.h"
+#define	MS_STAMP 1
+#define	LS_STAMP 2
+#define INCLUDE_STAMP "1.2"
+
+#elif defined(TARG_SL)
+#include "pathscale_defs.h"
+#define	MS_STAMP 1
+#define	LS_STAMP 0
+#define INCLUDE_STAMP "1.0"
+#elif defined(__linux)
 #include "pathscale_defs.h"
 
 #ifdef PSC_TO_OPEN64
@@ -57,7 +69,8 @@ extern "C" {
 #define	MS_STAMP OPEN64_MAJOR_VERSION_NUM
 #define	LS_STAMP OPEN64_MINOR_VERSION_NUM
 #define INCLUDE_STAMP OPEN64_FULL_VERSION
-#endif
+#endif /* PSC_TO_OPEN64 */
+
 #else
 #define	MS_STAMP 7
 #define	LS_STAMP 40

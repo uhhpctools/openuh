@@ -88,6 +88,74 @@ static const char * const interface[] = {
   NULL
 };
 
+#if defined(TARG_SL) || defined(TARG_MIPS)
+typedef struct map_tag{
+		char *source;
+		char *dest;
+}Map;
+
+static char * Map_Op(Map *map, unsigned int size, char * str)
+{
+	unsigned int i;
+	for(i=0;i<size;++i)
+		if(!strcmp(map[i].source,str))
+			return map[i].dest;
+	if(i>=size)
+		return str;
+}
+
+Map instr_map[]={
+  //{"addu", "add"},
+			{"add.i", "addiu"},
+			{"and.i", "andi"},
+			{"br.eq", "beq"},
+			{"br.gez", "bgez"},
+			{"br.gtz", "bgtz"},
+			{"br.lez", "blez"},
+			{"br.ltz", "bltz"},
+			{"br.ne", "bne"},
+			{"extrb", "extrbs"},
+			{"extrbu", "extrbu"},
+			{"jp", "j"},
+			{"jp.lnk", "jal"},
+			{"jr.lnk", "jalr"},
+			{"ldb", "lb"},
+			{"ldub", "lbu"},
+			//{"ldc", "lcache"},
+                        //{"ld.c", "nop"},
+			{"ldh", "lh"},
+			{"lduh", "lhu"},
+			{"ld.lnk", "ll"},
+			{"ldw", "lw"},
+			{"movf.hi", "mfhi"},
+			{"movf.lo", "mflo"},
+			{"mvup.i", "lui"},
+			{"or.i", "ori"},
+			{"shll.i", "sll"},
+			{"shll", "sllv"},
+			{"setlt", "slt"},
+			{"setlt.i", "slti"},
+			{"setltu.i", "sltiu"},
+			{"setltu", "sltu"},
+			{"shra.i", "sra"},
+			{"shra", "srav"},
+			{"shrl.i", "srl"},
+			{"shrl", "srlv"},
+			{"stb", "sb"},
+			//{"st.c", "scache"},
+			{"sth", "sh"},
+			{"stw", "sw"},
+			//{"sub", "subu"},
+			{"xor.i", "xori"},
+	};
+
+char * NewInstr_To_OldInstr(char *str)
+{
+//	return Map_Op(instr_map,37,str);
+      return Map_Op(instr_map,sizeof(instr_map)/sizeof(Map),str);
+}
+
+#endif
 
 /////////////////////////////////////
 static char* Dot_To_Line(const char* str)
@@ -103,6 +171,16 @@ static char* Dot_To_Line(const char* str)
   for (s = str, r = result; *s != 0; ++s, ++r) {
     if (*s == '.')
       *r = '_';
+#if defined(TARG_NVISA)
+    else if (*s == '<')
+      *r = '_';
+    else if (*s == '>') {
+      if (*(s+1) == '<') 
+        --r; // two enums in row, only do one _
+      else
+        *r = '_';
+    }
+#endif
     else
       *r = *s;
   }
@@ -137,7 +215,11 @@ void ISA_Create (const char *isa_name, ...)
   va_start(ap,isa_name);
   while ((instruction_name = va_arg (ap, char *)) != NULL) {
     fprintf(hfile,"%s\n  TOP_%s",is_first ? "" : ",",
+#if defined(TARG_SL) || defined(TARG_MIPS)
+                                 Dot_To_Line(NewInstr_To_OldInstr(instruction_name)));
+#else
                                  Dot_To_Line(instruction_name));
+#endif
     fprintf(cfile,"%s\n  \"%s\"",is_first ? "" : ",",
                                  instruction_name);
     if ( is_first )
@@ -165,4 +247,8 @@ void ISA_Create (const char *isa_name, ...)
 		"}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

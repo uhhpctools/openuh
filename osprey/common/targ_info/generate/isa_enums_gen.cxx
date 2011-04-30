@@ -160,14 +160,14 @@ void ISA_Create_Enum_Class ( const char* name, ...)
 }
 
 
-static char*
+static const char*
 Print_ECV_EName (const char *name)
 {
   // will print direct to file, so can use temp buffers
   static char buf[80];
   char *p = (char*) name;
   int i = 0;
-  if (name == NULL)
+  if (name == NULL || name[0] == '\0')
     return "_none";
   else if (name[0] != '\0' && name[0] != '.' && name[0] != '_') {
     // insert leading _
@@ -189,6 +189,21 @@ Print_ECV_EName (const char *name)
   }
   buf[i] = '\0';
   return buf;
+}
+
+static const char*
+Print_ECV_Name (ECV_struct ecv)
+{
+    if (ecv.ecv_int == UNDEFINED) {
+	return "ECV_UNDEFINED";
+    } else {
+  	static char buf[80];
+	int i;
+	// have to use multiple calls since Print_ECV_EName uses a static bufr
+	i = sprintf(buf, "ECV%s", Print_ECV_EName (ecv.ecv_ecname));
+	sprintf(buf+i, "%s", Print_ECV_EName(ecv.ecv_name));
+	return buf;
+    }
 }
 
 /////////////////////////////////////
@@ -223,9 +238,8 @@ void ISA_Enums_End(void)
   fprintf(hfile, "} ISA_ENUM_CLASS;\n");
   fprintf(hfile, "\ntypedef enum {\n");
   for ( iecv = all_ecv.begin(); iecv != all_ecv.end(); ++iecv) {
-	// have to use multiple calls since Print_ECV_EName uses a static bufr
-  	fprintf(hfile, "\tECV%s", Print_ECV_EName (iecv->ecv_ecname));
-  	fprintf(hfile, "%s,\n", Print_ECV_EName (iecv->ecv_name));
+	tecv = *iecv;
+  	fprintf(hfile, "\t%s,\n", Print_ECV_Name(tecv));
   }
   fprintf(hfile, "\tECV_MAX\n");
   fprintf(hfile, "} ISA_ENUM_CLASS_VALUE;\n");
@@ -241,13 +255,9 @@ void ISA_Enums_End(void)
   for ( iec = all_ec.begin(); iec != all_ec.end(); ++iec) {
   	fprintf(cfile, "\t{ \"EC%s\",", Print_ECV_EName(iec->ec_name));
 	tecv = all_ecv[iec->first_ecv];
-	// have to use multiple calls since Print_ECV_EName uses a static bufr
-  	fprintf(cfile, "\tECV%s", Print_ECV_EName(tecv.ecv_ecname));
-  	fprintf(cfile, "%s,", Print_ECV_EName(tecv.ecv_name));
+  	fprintf(cfile, "\t%s,", Print_ECV_Name(tecv));
 	tecv = all_ecv[iec->last_ecv];
-	// have to use multiple calls since Print_ECV_EName uses a static bufr
-  	fprintf(cfile, "\tECV%s", Print_ECV_EName(tecv.ecv_ecname));
-  	fprintf(cfile, "%s },\n", Print_ECV_EName(tecv.ecv_name));
+  	fprintf(cfile, "\t%s },\n", Print_ECV_Name(tecv));
   }
   fprintf(cfile, "};\n\n");
 
@@ -289,4 +299,8 @@ void ISA_Enums_End(void)
 		 "}\n\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

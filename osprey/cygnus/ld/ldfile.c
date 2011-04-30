@@ -307,6 +307,95 @@ ldfile_try_open_bfd (const char *attempt,
   return TRUE;
 }
 
+#ifdef KEY 
+
+static FILE *
+read_gcc_output(const char *cmdline)
+{
+    FILE *fp = NULL;
+    int cmd_len = strlen (cmdline);
+    char *gcc_cmd = (char *)malloc((5+cmd_len)*sizeof(char));
+    if (!gcc_cmd)  {
+      printf ("Failed to malloc!\n");
+      exit (1);
+    }
+    strcpy (gcc_cmd, "gcc ");
+    strcat (gcc_cmd, cmdline);
+    if ((fp = popen(gcc_cmd, "r")) == NULL) {
+        fp = NULL;
+    }
+    
+    free (gcc_cmd);
+    return fp;
+}
+
+bfd_boolean
+ldfile_try_auto_open_bfd (const char *gcc_option, lang_input_statement_type *entry)
+{
+  FILE *fp = read_gcc_output (gcc_option);
+  if (!fp) return FALSE;
+  char buf[1000];
+  while (fread(buf, 1, 1000, fp) != 0) {
+    if (strstr (buf, entry->filename) != 0) {
+      char *arg = buf;
+      while (*arg == '/') arg++;
+      arg--;
+      char *iter = arg;
+      while (*iter != '\n') iter++;
+      *iter = '\0';
+      if (arg && ldfile_try_open_bfd (arg, entry)) {
+        entry->filename = arg;
+        pclose (fp);
+        return TRUE;
+      }
+    }
+  }
+  pclose (fp);
+  return FALSE;
+}
+
+bfd_boolean
+ldfile_open_file_auto_search (lang_input_statement_type *entry)
+{
+    int liblen = strlen (entry->filename);
+    // sizeof ("-print-file-name=") = 17, 
+    // plus considering the "/" and "lib" and ".so.*" or ".a"
+    char *gcc_option = (char *) malloc ((30 + liblen) * sizeof(char));
+    if (!gcc_option) {
+      printf ("Failed to malloc!\n");
+      exit (1);
+    }
+    strcpy (gcc_option, "-print-file-name=");
+    if (!strstr (entry->filename, "lib")) 
+      strcat (gcc_option, "lib");
+    if (strstr (entry->filename, ".so") ||
+        strstr (entry->filename, ".a")) {
+      strcat (gcc_option, entry->filename);
+      if (ldfile_try_auto_open_bfd (gcc_option, entry)) { 
+         free (gcc_option);
+         return TRUE;
+      }
+    }
+    strcat (gcc_option, entry->filename);
+    strcat (gcc_option, ".so");
+    if (ldfile_try_auto_open_bfd (gcc_option, entry)) {
+      free (gcc_option);
+      return TRUE;
+    }
+    else {
+      int option_len = strlen (gcc_option);
+      *(gcc_option + option_len - 1) = '\0'; 
+      *(gcc_option + option_len - 2) = 'a'; 
+      if (ldfile_try_auto_open_bfd (gcc_option, entry)) {
+        free (gcc_option);
+        return TRUE;
+      } 
+    }
+    return FALSE;
+}
+#endif
+
+
 /* Search for and open the file specified by ENTRY.  If it is an
    archive, use ARCH, LIB and SUFFIX to modify the file name.  */
 
@@ -340,8 +429,14 @@ ldfile_open_file_search (const char *arch,
 	  return TRUE;
 	}
 
+#ifndef TARG_LOONGSON
+      /* Bug 13174:  In LOONGSON compiler, IPA receives an absolute path as
+       * /libc/libc.so.6 -- Workaround this problem by pretending it is
+       * not an absolute path.
+       */
       if (IS_ABSOLUTE_PATH (entry->filename))
 	return FALSE;
+#endif
     }
 
   for (search = search_head; search != NULL; search = search->next)
@@ -377,11 +472,12 @@ ldfile_open_file_search (const char *arch,
 	  entry->sysrooted = search->sysrooted;
 	  return TRUE;
 	}
-
       free (string);
     }
 
-  return FALSE;
+#ifdef KEY 
+    return ldfile_open_file_auto_search (entry);
+#endif
 }
 
 /* Open the input file specified by ENTRY.  */

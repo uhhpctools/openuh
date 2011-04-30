@@ -42,7 +42,7 @@
 #include "ercg.h"
 #include "tracing.h"
 #include "config.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "config_debug.h"
 #include "xstats.h"
 #include "topcode.h"
@@ -58,6 +58,8 @@
 #include "cgexp.h"
 #include "cgexp_internals.h"
 #include "whirl2ops.h"
+#include "tls.h"
+#include "targ_sim_core.h"
 
 void
 Expand_Lda (TN *dest, TN *src, OPS *ops)
@@ -677,6 +679,106 @@ Exp_Ldst (
     	} 
     	else {
 		FmtAssert(FALSE, ("gp-relative offset doesn't fit in 22 bits"));
+	}
+  }
+  else if (ST_is_thread_local(sym))
+  {
+	// Thread-Local-Storage
+	TN *tmp1, *tmp2;
+	// Parameter and return value for __tls_get_addr
+	TN *out0, *out1, *ret0, *tgt_tn;
+	CALLINFO *call_info;
+	RETURN_INFO return_info;
+	WN* call_wn;
+	// For Get_Input_Parameter_Location/Get_Output_Parameter_Location
+	PLOC ploc;
+	// Initialize the TLS related variables if it's not initialized
+	TLS_init();
+	switch( ST_tls_model(sym) ) {
+	case TLS_GLOBAL_DYNAMIC:
+		// tmp1 = addl @ltoff(@dtpmod(ST#)), gp
+		// tmp2 = addl @ltoff(@dtprel(ST#)), gp
+		// out0 = ld8 tmp1
+		// out1 = ld8 tmp0
+		// br.call __tls_get_addr
+		// base_tn = r8
+		// ofst_tn = Gen_Literal_TN(ofst, 4)
+
+	case TLS_LOCAL_DYNAMIC:
+		// tmp1 = addl @ltoff(@dtpmod(ST#)), gp
+		// out0 = ld8 tmp1
+		// out1 = add1 @dtprel(ST#),r0
+		// br.call __tls_get_addr
+		// base_tn = r8
+		// ofst_tn = Gen_Literal_TN(ofst, 4)
+		Allocate_Object( TLS_get_addr_st );	
+		Is_True( (TLS_get_addr_ty_idx != 0 && TLS_get_addr_st != NULL), 
+			 ("TY or ST for __tls_get_addr is NULL."));
+		// Setup output TNs and Return TN.
+		ploc = Setup_Output_Parameter_Locations( ST_pu_type(TLS_get_addr_st) );
+		ploc = Get_Output_Parameter_Location( MTYPE_To_TY(Pointer_Mtype) );
+		out0 = PREG_To_TN (MTYPE_To_PREG(Pointer_Mtype), PLOC_reg(ploc));
+		ploc = Get_Output_Parameter_Location( MTYPE_To_TY(Pointer_Mtype) );
+		out1 = PREG_To_TN (MTYPE_To_PREG(Pointer_Mtype), PLOC_reg(ploc));
+                return_info = Get_Return_Info(Be_Type_Tbl(Pointer_Mtype), Use_Simulated);
+		ret0 = PREG_To_TN (MTYPE_To_PREG(Pointer_Mtype), RETURN_INFO_preg(return_info, 0));
+		//
+		tmp1 = Build_TN_Of_Mtype(Pointer_Mtype);
+		Expand_Add(tmp1,
+			   Gen_Symbol_TN(sym, 0, TN_RELOC_IA_LTOFF_DTPMOD22),
+			   GP_TN, Pointer_Mtype, &newops);
+		if ( ST_tls_model(sym) == TLS_GLOBAL_DYNAMIC ) {
+			tmp2 = Build_TN_Of_Mtype(Pointer_Mtype);
+			Expand_Add(tmp2,
+				   Gen_Symbol_TN(sym, 0, TN_RELOC_IA_LTOFF_DTPREL22),
+				   GP_TN, Pointer_Mtype, &newops);
+			Expand_Load(OPCODE_make_signed_op(OPR_LDID,
+					Pointer_Mtype, Pointer_Mtype, FALSE),
+				    out1, tmp2, Gen_Literal_TN(0, 4), variant, &newops);
+			Set_OP_no_alias(OPS_last(&newops));
+		}
+		else {
+			Expand_Add(out1, 
+				 Gen_Symbol_TN(sym, 0, TN_RELOC_IA_DTPREL22), 
+				 Zero_TN, Pointer_Mtype, &newops);
+		}
+		Expand_Load(OPCODE_make_signed_op(OPR_LDID,
+				Pointer_Mtype, Pointer_Mtype, FALSE),
+			    out0, tmp1, Gen_Literal_TN(0, 4), variant, &newops);
+		Set_OP_no_alias(OPS_last(&newops));
+		// Expand the call
+		call_wn = WN_Create(OPR_CALL, Pointer_Mtype, MTYPE_V, 0);
+		WN_st_idx(call_wn) = ST_st_idx(TLS_get_addr_st);
+		Expand_New_Call_To_OPs(call_wn, OPR_CALL, &newops);
+		// Get the return value
+		base_tn = Build_TN_Of_Mtype(Pointer_Mtype);
+		Exp_COPY(base_tn, ret0, &newops);
+		ofst_tn = Gen_Literal_TN(ofst, 4);
+		break;
+        case TLS_INITIAL_EXEC:
+		// tmp1 = addl @ltoff(@tprel(sym#)), gp
+		// tmp2 = ld8 [tmp1]
+		// base_tn = addl tmp2, TP_TN
+		tmp1 = Build_TN_Of_Mtype(Pointer_Mtype);
+		Expand_Add(tmp1,
+                	   Gen_Symbol_TN(sym, 0, TN_RELOC_IA_LTOFF_TPREL22),
+		   	   GP_TN, Pointer_Mtype, &newops);
+		tmp2 = Build_TN_Of_Mtype(Pointer_Mtype);
+		Expand_Load(OPCODE_make_signed_op(OPR_LDID,
+                	        Pointer_Mtype, Pointer_Mtype, FALSE),
+                    	    tmp2, tmp1, Gen_Literal_TN(0, 4), variant, &newops);
+		Set_OP_no_alias(OPS_last(&newops));
+		base_tn = Build_TN_Of_Mtype(Pointer_Mtype);
+        	Expand_Add(base_tn,
+                   	   tmp2, TP_TN, Pointer_Mtype, &newops);
+		ofst_tn = Gen_Literal_TN(ofst, 4);
+		break;
+	case TLS_LOCAL_EXEC:
+		base_tn = TP_TN;
+		ofst_tn = Gen_Symbol_TN(sym, ofst, TN_RELOC_IA_TPREL22);
+		break;
+	default:
+		FmtAssert(FALSE, ("Wrong TLS_MODEL"));
 	}
   }
   else if (Guaranteed_Small_GOT) {

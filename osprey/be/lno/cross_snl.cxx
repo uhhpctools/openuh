@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -37,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -59,7 +62,7 @@
 #include "cross_snl.h"
 #include "snl_utils.h"
 #include "cross_cache.h"
-#define NOMINAL_PROCS 8
+#include "parmodel.h" 
 
 static INT cross_loop_debug_level = 2;
 BOOL running_cross_loop_analysis = FALSE;
@@ -269,52 +272,6 @@ void SNL_Array_Analysis(WN* wn_outer, INT nloops)
   ARA_Cleanup(wn_outer);
 }
 
-#if 0
-/*
- * NAME : Cross_Loop_Analysis :
- *
- *        Analyzes a function unit across SNLs
- */
-extern void Cross_Loop_Cache_Analysis(PU_Info* current_pu, WN* func_nd)
-{
-#if CROSS_TODO_FIXED
-  cross_loop_debug_level = Get_Trace(TP_LNOPT2, TT_CROSS_LOOP_DEBUG)
-    ? 1 : 0;
-#else
-  cross_loop_debug_level = 1;
-#endif
-
-  MEM_POOL_Push(&LNO_local_pool);
-
-  if (cross_loop_debug_level >= 1) {
-    fprintf(stdout, "### Cross Loop Analysis (Begin)\n");
-    fprintf(TFile,  "### Cross Loop Analysis (Begin)\n");
-  }
-
-
-  FIZ_FUSE_INFO* ffi=
-    CXX_NEW(FIZ_FUSE_INFO(&LNO_local_pool), &LNO_local_pool);
-  ffi->Build(func_nd, TRUE);
-
-  for (INT i = 0; i < ffi->Num_Snl(); i++) {
-
-    if (ffi->Get_Type(i) == Invalid || ffi->Get_Type(i) == Non_SNL)
-      continue; 
-   
-    WN* wn_outer_loop = ffi->Get_Wn(i); 
-    INT nloops = ffi->Get_Depth(i); 
-    SNL_Array_Analysis(wn_outer_loop, nloops);
-  }
-
-  MEM_POOL_Pop(&LNO_local_pool);
-
-  if (cross_loop_debug_level >= 1) {
-    fprintf(stdout, "### Cross Loop Analysis (End)\n");
-    fprintf(TFile,  "### Cross Loop Analysis (End)\n");
-  } 
-}
-
-#endif 
 
 INT Intersect_References(CACHE_CONTENTS *cc, ARRAY_SNL_INFO *asi, INT32 parallel_loop,
 			  ARA_REF_INFO_ST *refs, double *denom, double *numer)

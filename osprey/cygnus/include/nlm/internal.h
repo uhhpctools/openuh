@@ -26,28 +26,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    the nlm/common.h file which contains the portions that are common to
    both the internal and external representations. */
    
-#if 0
-
-/* Types used by various structures, functions, etc. */
-
-typedef unsigned long	Nlm32_Addr;	/* Unsigned program address */
-typedef unsigned long	Nlm32_Off;	/* Unsigned file offset */
-typedef 	 long	Nlm32_Sword;	/* Signed large integer */
-typedef unsigned long	Nlm32_Word;	/* Unsigned large integer */
-typedef unsigned short	Nlm32_Half;	/* Unsigned medium integer */
-typedef unsigned char	Nlm32_Char;	/* Unsigned tiny integer */
-
-#ifdef BFD_HOST_64_BIT
-typedef unsigned BFD_HOST_64_BIT	Nlm64_Addr;
-typedef unsigned BFD_HOST_64_BIT	Nlm64_Off;
-typedef          BFD_HOST_64_BIT	Nlm64_Sxword;
-typedef unsigned BFD_HOST_64_BIT	Nlm64_Xword;
-#endif
-typedef          long		Nlm64_Sword;
-typedef unsigned long		Nlm64_Word;
-typedef unsigned short		Nlm64_Half;
-
-#endif /* 0 */
 
 /* This structure contains the internal form of the portion of the NLM
    header that is fixed length. */

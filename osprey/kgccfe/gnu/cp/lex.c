@@ -728,10 +728,6 @@ static int *reduce_count;
 
 int *token_count;
 
-#if 0
-#define REDUCE_LENGTH ARRAY_SIZE (yyr2)
-#define TOKEN_LENGTH (256 + ARRAY_SIZE (yytname))
-#endif
 
 #ifdef GATHER_STATISTICS
 #ifdef REDUCE_LENGTH

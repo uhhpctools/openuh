@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -37,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "elf_stuff.h"
 #include "sections.h"
@@ -61,10 +64,26 @@ SECTION Sections[_SEC_INDEX_MAX] = {
      0|SHF_WRITE|SHF_IA_64_SHORT|SHF_ALLOC,
 	SHT_PROGBITS, 0, 
      INT32_MAX, MIPS_SDATA, 0},
+#ifdef KEY
+  // Create a new section _SEC_LDATA_MIPS_LOCAL which is the same as the
+  // non-KEY _SEC_LDATA so that we can allocate OpenMP thread-private symbols
+  // to it, in order to preserve the old OpenMP thread-private behavior.  This
+  // frees up _SEC_LDATA to mean ELF_TDATA for thread-local storage (TLS).
+  // Bug 12619.
+  {_SEC_LDATA_MIPS_LOCAL,	NULL,
+     0|SHF_WRITE|SHF_ALLOC|SHF_MIPS_LOCAL,
+	SHT_PROGBITS, 0, 
+     INT64_MAX, ".MIPS.ldata", 0},
+  {_SEC_LDATA,	NULL,
+     0|SHF_WRITE|SHF_ALLOC|SHF_TLS,
+	SHT_PROGBITS, 0, 
+     INT64_MAX, ELF_TDATA, 0},
+#else
   {_SEC_LDATA,	NULL,
      0|SHF_WRITE|SHF_ALLOC|SHF_MIPS_LOCAL,
 	SHT_PROGBITS, 0, 
      INT64_MAX, ".MIPS.ldata", 0},
+#endif
   {_SEC_RDATA,	NULL,
      0|SHF_ALLOC,
 	SHT_PROGBITS, 0, 
@@ -93,17 +112,16 @@ SECTION Sections[_SEC_INDEX_MAX] = {
      0|SHF_WRITE|SHF_IA_64_SHORT|SHF_ALLOC,
 	SHT_NOBITS, 0, 
      INT64_MAX, MIPS_SBSS, 0},
-#ifndef linux
+#if ! (defined(linux) || defined(BUILD_OS_DARWIN))
   {_SEC_LBSS,	NULL,
      0|SHF_WRITE|SHF_ALLOC|SHF_MIPS_LOCAL,
 	SHT_NOBITS, 0, 
      INT64_MAX, MIPS_LBSS, 0},
 #else
-  // There is no MIPS_LBSS section on Linux, but we need a space holder
-  {_SEC_LBSS,   NULL,
-     0,
-        0, 0,
-     0, ".unknown", 0},
+  {_SEC_LBSS,   NULL,				// KEY
+     0|SHF_WRITE|SHF_ALLOC|SHF_TLS,
+	SHT_NOBITS, 0, 
+     INT64_MAX, ELF_TBSS, 0},
 #endif
   {_SEC_GOT,	NULL,
      0|SHF_IA_64_SHORT|SHF_ALLOC,
@@ -113,7 +131,7 @@ SECTION Sections[_SEC_INDEX_MAX] = {
      0|SHF_WRITE|SHF_ALLOC|SHF_MIPS_NAMES,
 	SHT_PROGBITS, 0, 
      INT64_MAX, "__cplinit", 0},
-#ifndef linux
+#if ! (defined(linux) || defined(BUILD_OS_DARWIN))
   {_SEC_EH_REGION,	NULL,
      0|SHF_WRITE|SHF_ALLOC|SHF_MIPS_NAMES,
 	SHT_PROGBITS, 0, 
@@ -188,4 +206,10 @@ extern BOOL
 SEC_is_nobits (SECTION_IDX sec)
 {
 	return (SEC_type(sec) & SHT_NOBITS);
+}
+
+extern BOOL
+SEC_is_tls (SECTION_IDX sec)
+{
+        return (SEC_flags(sec) & SHF_TLS);
 }

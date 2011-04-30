@@ -612,13 +612,7 @@ fcc_reg_operand (op, mode)
       && (GET_MODE (op) != CCFPmode && GET_MODE (op) != CCFPEmode))
     return 0;
 
-#if 0	/* ??? ==> 1 when %fcc0-3 are pseudos first.  See gen_compare_reg().  */
-  if (reg_renumber == 0)
-    return REGNO (op) >= FIRST_PSEUDO_REGISTER;
-  return REGNO_OK_FOR_CCFP_P (REGNO (op));
-#else
   return (unsigned) REGNO (op) - SPARC_FIRST_V9_FCC_REG < 4;
-#endif
 }
 
 /* Nonzero if OP is a floating point condition code fcc0 register.  */
@@ -2196,10 +2190,6 @@ sparc_emit_set_const64 (op0, op1)
     }
 
   /* The easiest way when all else fails, is full decomposition.  */
-#if 0
-  printf ("sparc_emit_set_const64: Hard constant [%08lx%08lx] neg[%08lx%08lx]\n",
-	  high_bits, low_bits, ~high_bits, ~low_bits);
-#endif
   sparc_emit_set_const64_longway (op0, temp, high_bits, low_bits);
 }
 
@@ -2286,7 +2276,6 @@ gen_compare_reg (code, x, y)
      deal, but if we win, great!  */
 
   if (TARGET_V9 && GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
-#if 1 /* experiment */
     {
       int reg;
       /* We cycle through the registers to ensure they're all exercised.  */
@@ -2307,9 +2296,6 @@ gen_compare_reg (code, x, y)
 	}
       cc_reg = gen_rtx_REG (mode, reg + SPARC_FIRST_V9_FCC_REG);
     }
-#else
-    cc_reg = gen_reg_rtx (mode);
-#endif /* ! experiment */
   else if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
     cc_reg = gen_rtx_REG (mode, SPARC_FCC_REG);
   else
@@ -4893,20 +4879,6 @@ function_arg (cum, mode, type, named, incoming_p)
 	{
 	  /* "* 2" because fp reg numbers are recorded in 4 byte
 	     quantities.  */
-#if 0
-	  /* ??? This will cause the value to be passed in the fp reg and
-	     in the stack.  When a prototype exists we want to pass the
-	     value in the reg but reserve space on the stack.  That's an
-	     optimization, and is deferred [for a bit].  */
-	  if ((regno - SPARC_FP_ARG_FIRST) >= SPARC_INT_ARG_MAX * 2)
-	    return gen_rtx_PARALLEL (mode,
-			    gen_rtvec (2,
-				       gen_rtx_EXPR_LIST (VOIDmode,
-						NULL_RTX, const0_rtx),
-				       gen_rtx_EXPR_LIST (VOIDmode,
-						reg, const0_rtx)));
-	  else
-#else
 	  /* ??? It seems that passing back a register even when past
 	     the area declared by REG_PARM_STACK_SPACE will allocate
 	     space appropriately, and will not copy the data onto the
@@ -4916,7 +4888,6 @@ function_arg (cum, mode, type, named, incoming_p)
 	     expand_call whenever reg_parm_stack_space > 0, which
 	     while benefical to our example here, would seem to be
 	     in error from what had been intended.  Ho hum...  -- r~ */
-#endif
 	    return reg;
 	}
       else

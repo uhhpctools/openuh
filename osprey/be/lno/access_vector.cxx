@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -65,7 +69,6 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
 #include <alloca.h>
@@ -102,6 +105,9 @@ template <> MEM_POOL* MAT<mINT32>::_default_pool = &LNO_local_pool;
 
 #ifdef LNO
 extern BOOL Is_Consistent_Condition(ACCESS_VECTOR*, WN*);
+extern BOOL Is_Const_Array_Addr(WN *);
+extern BOOL Is_Loop_Invariant_Use(WN *, WN *);
+extern BOOL Is_Loop_Invariant_Indir(WN*);
 #endif
 
 // The following functions are used in place of snprintf(), which belongs 
@@ -620,9 +626,8 @@ void ACCESS_VECTOR::Print_Analysis_Info(FILE *fp,
   for (INT32 i=0; i< Nest_Depth(); i++) {
     if (Loop_Coeff(i) != 0) {
 
-      if (i >=  do_stack.Elements()) {
-	FmtAssert(i < do_stack.Elements(), ("Print_Analysis_Info : loop mismatch"));
-      }
+      if (i >=  do_stack.Elements()) 
+        continue;
 
       SYMBOL sym(WN_index(do_stack.Bottom_nth(i)));
       if (!seen_something) {
@@ -1205,7 +1210,7 @@ char* SYMBOL::Name(char* buf, INT bufsz) const
       }
     }
     else
-      name = "$nobase";
+      name = const_cast<char*>("$nobase");
 
     goalname = 
       (char*) alloca(strlen(name) + strlen(true_name) + 30 + max_woff_len);
@@ -1314,7 +1319,12 @@ void ACCESS_ARRAY::Set_Array(WN *wn, DOLOOP_STACK *stack)
 	      WN_operator(WN_kid0(base)) == OPR_LDID)) {
     Update_Non_Const_Loops(WN_kid0(base),stack);
 #endif
-  } else if (WN_operator(base) != OPR_LDA) {
+  }
+#ifdef LNO
+  else if (Is_Loop_Invariant_Indir(base)) 
+    Update_Non_Const_Loops(WN_kid0(WN_kid0(base)), stack);
+#endif
+  else if (WN_operator(base) != OPR_LDA) {
     for (INT32 i=0; i<_num_vec; i++) {
       Dim(i)->Max_Non_Const_Loops(stack->Elements());
     }
@@ -1758,7 +1768,7 @@ INT ACCESS_ARRAY::Set_LB_r(WN *wn, DOLOOP_STACK *stack, INT i, INT64 step)
 	_dim[i].Too_Messy = TRUE;
       return (i+1);
     } else {
-      _dim[i+1].Too_Messy = TRUE;
+      _dim[i].Too_Messy = TRUE;
       return (i+1);
     }
   } else {
@@ -1983,6 +1993,20 @@ void ACCESS_VECTOR::Add(WN *wn, DOLOOP_STACK *stack,INT8 sign)
 #endif
 }
 
+#ifdef KEY
+//whether or not it is used for array addresses calculation.
+static BOOL WN_Under_Array(WN *wn)
+{
+    WN* parent = LWN_Get_Parent(wn);
+    while(parent && WN_operator(parent) != OPR_DO_LOOP) {
+      if (WN_operator(parent) == OPR_ARRAY)
+        return TRUE;
+      parent = LWN_Get_Parent(parent);
+    }
+  return FALSE;
+}
+#endif
+
 // Add coeff*(expression represented by wn) to this vector
 void ACCESS_VECTOR::Add_Sum(WN *wn, INT64 coeff, DOLOOP_STACK *stack,
 				BOOL allow_nonlin)
@@ -2081,23 +2105,37 @@ void ACCESS_VECTOR::Add_Sum(WN *wn, INT64 coeff, DOLOOP_STACK *stack,
   } else if (WN_operator(wn) == OPR_PAREN) {
     Add_Sum(WN_kid(wn,0),coeff,stack,allow_nonlin);
   } else if (WN_opcode(wn) == OPC_I8I4CVT
-#ifdef PATHSCALE_MERGE
-					|| WN_opcode(wn) == OPC_U8I4CVT
-#endif
-  	) {
+	     || WN_opcode(wn) == OPC_U8I4CVT ) {
+    // Bug 14132 -- OPC_U8I4CVT should also be ok
     Add_Sum(WN_kid(wn,0),coeff,stack,allow_nonlin);
+  }
 #ifdef KEY 
   // Bug 4525 - tolerate CVTs in the access vector for -m64 compilation
   // when the type of loop variable is I8 but the rest of the ARRAY kids 
   // are of type U4/I4. The CVT and the associated CVTL introduced by the 
   // front-end or inliner can be ignored. The return type can be assumed 
   // to be of type I4.
-  } else if (WN_opcode(wn) == OPC_I4U8CVT &&
+  else if (WN_opcode(wn) == OPC_I4U8CVT &&
 	     WN_opcode(WN_kid0(wn)) == OPC_U8CVTL &&
 	     WN_cvtl_bits(WN_kid0(wn)) == 32) {
-    Add_Sum(WN_kid0(WN_kid0(wn)),coeff,stack,allow_nonlin);    
+    Add_Sum(WN_kid0(WN_kid0(wn)),coeff,stack,allow_nonlin);  
+  } 
+//BUG 14400: don't abruptly consider access vector Too_Messy for shifts
+//BUG 14495: limit this only for building access vectors for arrays
+  else if (WN_operator(wn) == OPR_SHL && WN_Under_Array(wn)){
+    if (WN_operator(WN_kid(wn,1)) == OPR_INTCONST) {
+      Add_Sum(WN_kid(wn,0),coeff<<WN_const_val(WN_kid(wn,1)),stack,
+                                                        allow_nonlin);
+    }else Too_Messy = TRUE;
+  } 
+  else if (WN_operator(wn) == OPR_ASHR && WN_Under_Array(wn)){
+    if (WN_operator(WN_kid(wn,1)) == OPR_INTCONST) {
+      Add_Sum(WN_kid(wn,0),coeff>>WN_const_val(WN_kid(wn,1)),stack,
+                                                        allow_nonlin);
+    }else Too_Messy = TRUE;
+  }
 #endif
-  } else {
+  else {
     Too_Messy = TRUE;
   }
 }

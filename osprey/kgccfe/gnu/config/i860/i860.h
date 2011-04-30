@@ -975,12 +975,6 @@ struct cumulative_args { int ints, floats; };
 /* The .file command should always begin the output.  */
 
 #define ASM_FILE_START(FILE)
-#if 0
-#define ASM_FILE_START(FILE)					\
-  do { output_file_directive ((FILE), main_input_filename);	\
-       if (optimize) ASM_FILE_START_1 (FILE);			\
-     } while (0)
-#endif
 
 #define ASM_FILE_START_1(FILE)
 

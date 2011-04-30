@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -115,6 +119,7 @@
 #define opt_vn_expr_taxonomy_INCLUDED "opt_vn_expr_taxonomy.h"
 
 #include "opt_vn_expr.h"
+#include "intrn_info.h"
 #include "wutil.h"
 
 #ifdef __STL_USE_NAMESPACES
@@ -1088,7 +1093,7 @@ private:
    
    static FREE_STACK *_Free;
 
-   MTYPE      _dsctype;
+   MTYPE      _dsctype : 8;
    VN_VALNUM  _bytesize;
    VN_VALNUM  _offset;
    VN_VALNUM  _base_addr;   // Address = _base_addr + _offset

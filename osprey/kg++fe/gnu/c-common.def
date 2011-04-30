@@ -132,6 +132,12 @@ DEFTREECODE (CLEANUP_STMT, "cleanup_stmt", 'e', 2)
 DEFTREECODE (OMP_MARKER_STMT, "omp_marker_stmt", 'e', 0)
 #endif /* KEY */
 
+
+/* A FREQ_HINT_STMT is representation of "#pragma frequency_hint hint-name".
+   The operand is a string points to the <hint-name */
+DEFTREECODE (FREQ_HINT_STMT, "freq_hint_stmt", 'e', 1)
+
+
 /*
 Local variables:
 mode:c

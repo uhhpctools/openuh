@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -232,18 +236,9 @@ SUMMARIZE<INLINER>::Process_procedure (WN *w)
 
 	if ((PU_src_lang(pu) == PU_C_LANG) ||
 	    ((PU_src_lang(pu) == PU_CXX_LANG))) {
-	    if (PU_is_inline_function (pu)) {
-		// for 7.2 don't inline functions marked weak inline
-		if (ST_is_weak_symbol(st) && ST_export(st) != EXPORT_PROTECTED
-#ifdef KEY
-		    && ST_export(st) != EXPORT_INTERNAL // bug 7550
-#endif
-		   ) {
-		    DevWarn("Inliner encountered a function marked weak inline; NOT inlining it");
-		    proc->Set_no_inline();
-		} else
+	    if (PU_is_inline_function (pu))
 		    proc->Set_may_inline();
-	    } // if weak inline function
+
 	    // Heuristic based inlining for "static" functions(marked XLOCAL) 
 	    // whose address has not been taken passed or saved
 	    if (INLINE_Static &&

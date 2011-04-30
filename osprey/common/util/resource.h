@@ -42,7 +42,7 @@ extern "C" {
 
 
 #ifdef _KEEP_RCS_ID
-static char *resource_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/resource.h,v $ $Revision: 1.1.1.1 $";
+static char *resource_rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/resource.h,v $ $Revision: 1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 /* Request codes: */
@@ -81,7 +81,7 @@ typedef struct time_info {
 extern void Resource_Init ( void );
 
 /* Allocate a resource structure: */
-extern RSTATE *Resource_Alloc ( char *rname, RSTATE *parent );
+extern RSTATE *Resource_Alloc ( const char *rname, RSTATE *parent );
 
 /* Accumulate resource usage: */
 extern void Resource_Accum ( RSTATE *r, RES_REQUEST req );
@@ -91,10 +91,10 @@ extern void Resource_Accum ( RSTATE *r, RES_REQUEST req );
 extern TIME_INFO *Get_Time ( RSTATE *r, RES_REQUEST req );
 
 /* Return memory usage from r for caller use: */
-extern INT Get_Memory ( RSTATE *r, RES_REQUEST req );
+extern INTPTR Get_Memory ( RSTATE *r, RES_REQUEST req );
 
 /* Return the name of a timer for caller use: */
-extern char *Get_Timer_Name ( RSTATE *r );
+extern const char *Get_Timer_Name ( RSTATE *r );
 
 /* Report resource usage from r (if non-NULL) or current usage,
  * according to the request function req and preceded by title:

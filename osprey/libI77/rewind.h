@@ -47,13 +47,8 @@
 /* PROTOTYPES */
 extern int f_rew(alist *);
 
-#if 00
-extern int f_rew64 (alist64 *a);
-extern int f_rew64_mp (alist64 *a);
-#else
 extern int f_rew64 (alist *a);
 extern int f_rew64_mp (alist *a);
-#endif
 
 #endif /* C || C++ */
 

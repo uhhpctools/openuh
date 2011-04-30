@@ -1,5 +1,8 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
+ */
+/*
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +44,10 @@
  * ====================================================================
  *
  * Module: c_q_to_a
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_q_to_a.c,v $
+ * $Revision: 1.6 $
+ * $Date: 04/12/21 14:57:27-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/common/util/SCCS/s.c_q_to_a.c $
  *
  * Revision history:
  *  26-jul-93 - Original Version
@@ -68,7 +71,7 @@
 
 typedef  union {
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int  lo	:32;
 		unsigned int  hi	:20;
 		unsigned int  exp	:11;
@@ -81,7 +84,7 @@ typedef  union {
 #endif
 	} fparts;
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int  lo	:32;
 		unsigned int  hi	:19;
 		unsigned int  qnan_bit	:1;
@@ -96,7 +99,7 @@ typedef  union {
 #endif
 	} nparts;
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_LITTLE_ENDIAN)
 		unsigned int lo;
 		unsigned int hi;
 #else
@@ -136,8 +139,15 @@ extern void	c_qtenscale( _ldblval *, INT32, INT32 *);
 static INT32	c_qtoa(char *buffer, INT32 ndigit, QUAD x, INT32 fflag);
 extern INT	c_q_to_a(char *str, QUAD x, INT *p_err );
 
+#if defined(BUILD_OS_DARWIN)
+/* Can't use "pragma weak" to create aliases in Mach-O */
+INT c_q_to_a(char *str, QUAD x, INT *p_err );
+INT __c_q_to_a(char *str, QUAD x, INT *p_err )
+  { return c_q_to_a(str, x, p_err); }
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak c_q_to_a = __c_q_to_a
 #define	c_q_to_a __c_q_to_a
+#endif /* defined(BUILD_OS_DARWIN) */
 
 
 /* ====================================================================

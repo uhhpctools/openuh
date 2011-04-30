@@ -37,10 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <ctype.h>
 #include "wn.h"
 #include "wn_map.h"
@@ -71,7 +74,7 @@ extern void WB_IPA_Terminate()
   WB_Terminate(&wb_ipa); 
 } 
 
-extern void s_ipa_debug(char init_buffer[])
+extern void s_ipa_debug(const char init_buffer[])
 { 
   wb_ipa.Sdebug(init_buffer); 
 } 

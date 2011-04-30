@@ -122,6 +122,9 @@ private:
   void Print_nodes_with_dead_bits(FILE *);
   void Print_node_usecnts(FILE *);
   void Print_livebits(INT32);		// for use in dbx
+#if defined(TARG_SL)
+  void Repair_Injured_AuxIntrnOP (void);
+#endif
 
 public:
   BITWISE_DCE( CODEMAP *htable, OPT_STAB *opt_stab, CFG *cfg, MEM_POOL *lpool,

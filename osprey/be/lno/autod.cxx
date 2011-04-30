@@ -95,15 +95,14 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.autod.cxx $ $Revision: 1.5 $";
+static const char *source_file = __FILE__;
+static const char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.autod.cxx $ $Revision: 1.5 $";
 
 #include <sys/types.h>
 #include <ctype.h>

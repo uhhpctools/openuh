@@ -64,10 +64,8 @@ extern int rd_POS(unit *, char *);
 extern int rd_B (unit *ftnunit, unsigned char *n, long w, ftnlen len);
 
 
-#if 11
 extern int s_rsfi64 (icilist64 *a);
 extern int s_rsfi64_mp (icilist64 *a, unit **fu);
-#endif
 
 
 #endif /* C || C++ */

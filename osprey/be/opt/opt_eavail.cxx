@@ -143,7 +143,7 @@ public:
   EXP_OCCURS_CONTAINER &Nodes(void) const
     { return Worklst()->Phi_occurs(); }
 
-  char *Search_name(void) const
+  const char *Search_name(void) const
     { return "USER_AVAIL_SEARCH";}
 };
 
@@ -227,19 +227,19 @@ public:
       return &adj_list;
     }
 
-  char *Search_name(void) const;
+const   char *Search_name(void) const;
 };
 
 template <> BOOL DEFEAT_INSERT_SEARCH<FORWARD_PRE>::_tracing = FALSE;
 template <> BOOL DEFEAT_INSERT_SEARCH<BACKWARD_PRE>::_tracing = FALSE;
 
-template <> char *
+template <> const char *
 DEFEAT_INSERT_SEARCH<FORWARD_PRE>::Search_name(void) const
 {
   return "DEFEAT_INSERT_SEARCH<FORWARD_PRE>";
 }
 
-template <> char *
+template <> const char *
 DEFEAT_INSERT_SEARCH<BACKWARD_PRE>::Search_name(void) const
 {
   return "DEFEAT_INSERT_SEARCH<BACKWARD_PRE>";
@@ -379,14 +379,14 @@ public:
   EXP_OCCURS_CONTAINER &Nodes(void) const
     { return Worklst()->Phi_occurs(); }
 
-  char *Search_name(void) const;
+  const char *Search_name(void) const;
 };
 
 template <> BOOL CANT_BE_AVAIL_SEARCH<FORWARD_PRE>::_tracing = FALSE;
 template <> EXP_WORKLST *CANT_BE_AVAIL_SEARCH<FORWARD_PRE>::_worklst = NULL;
 
 // For EPRE/LPRE:
-template <> char *
+template <> const char *
 CANT_BE_AVAIL_SEARCH<FORWARD_PRE>::Search_name(void) const
 { return "CANT_BE_AVAIL_SEARCH<FORWARD_PRE>"; }
 
@@ -435,7 +435,7 @@ template <> BOOL CANT_BE_AVAIL_SEARCH<BACKWARD_PRE>::_tracing = FALSE;
 template <> EXP_WORKLST *CANT_BE_AVAIL_SEARCH<BACKWARD_PRE>::_worklst = NULL;
 
 // For SPRE:
-template <> char *
+template <> const char *
 CANT_BE_AVAIL_SEARCH<BACKWARD_PRE>::Search_name(void) const
 { return "CANT_BE_AVAIL_SEARCH<BACKWARD_PRE>"; }
 
@@ -528,14 +528,7 @@ public:
       // stops forward movement.
       //
       // Actually, the operand stops forward movement regardless.
-#if 0
-      if (def_phi->Will_b_avail() ||
-	  !use_phi->Will_b_avail()) {
-#endif
 	use_phi->Set_opnd_stops(opnd_idx);
-#if 0
-      }
-#endif
     }
 
   BOOL Start_from(const node_type *const phi) const
@@ -567,7 +560,7 @@ public:
   EXP_OCCURS_CONTAINER &Nodes(void) const
     { return Worklst()->Phi_occurs(); }
 
-  char *Search_name(void) const
+  const char *Search_name(void) const
     { return "STOPS_SEARCH"; }
 };
 
@@ -642,7 +635,7 @@ public:
   EXP_OCCURS_CONTAINER &Nodes(void) const
     { return Worklst()->Phi_occurs(); }
 
-  char *Search_name(void) const
+  const char *Search_name(void) const
     { return "PARTIAL_AVAIL_SEARCH";}
 };
 

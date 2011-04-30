@@ -41,7 +41,11 @@
 #include <errno.h>
 #include <liberrno.h>
 #include <fortran.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

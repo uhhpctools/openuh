@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -53,5 +57,9 @@ static char *snl_test_rcs_id = snl_test_INCLUDED "$Revision$";
 #endif /* _KEEP_RCS_ID */
 
 extern void SNL_Phase(WN* func_nd);
+
+#ifdef TARG_X8664
+extern void SNL_Lite_Phase(WN* func_nd);
+#endif
 
 #endif

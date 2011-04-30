@@ -403,10 +403,6 @@ m32r_encode_section_info (decl)
 	  char *name = (char *) TREE_STRING_POINTER (DECL_SECTION_NAME (decl));
 	  if (! strcmp (name, ".sdata") || ! strcmp (name, ".sbss"))
 	    {
-#if 0 /* ??? There's no reason to disallow this, is there?  */
-	      if (TREE_READONLY (decl))
-		error_with_decl (decl, "const objects cannot go in .sdata/.sbss");
-#endif
 	      prefix = SDATA_FLAG_CHAR;
 	    }
 	}
@@ -2163,10 +2159,6 @@ m32r_output_function_epilogue (file, size)
 	fprintf (file, "\tjmp %s\n", reg_names[RETURN_ADDR_REGNUM]);
     }
 
-#if 0 /* no longer needed */
-  /* Ensure the function cleanly ends on a 32 bit boundary.  */
-  fprintf (file, "\t.fillinsn\n");
-#endif
 
   /* Reset state info for each function.  */
   current_frame_info = zero_frame_info;
@@ -2402,11 +2394,6 @@ m32r_print_operand (file, x, code)
       fputs (IMMEDIATE_PREFIX, file);
       return;
 
-#if 0 /* ??? no longer used */
-    case '@' :
-      fputs (reg_names[SDA_REGNUM], file);
-      return;
-#endif
 
     case 0 :
       /* Do nothing special.  */
@@ -2604,10 +2591,6 @@ conditional_move_operand (operand, mode)
       return INT8_P (INTVAL (operand));
 
     default:
-#if 0
-      fprintf (stderr, "Test for cond move op of type: %s\n",
-	       GET_RTX_NAME (GET_CODE (operand)));
-#endif
       return 0;
     }
 }

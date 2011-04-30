@@ -62,14 +62,5 @@ __powrl( _f_real4 x,
 }
 
 /* if needed for compatibility with f77 for call by address */
-#if 0
-pow_rl( _f_real4 *x,
-	_f_int8 *y )
-{
-	_f_real8 _RTOI( _f_real8 r, _f_int8 i);
-	_f_real8 xtemp = *x;
-	return ((_f_real4) _RTOI( xtemp, *y));
-}
-#endif	/* end of if 0 */
 
 #endif	/* end of mips or little endian */

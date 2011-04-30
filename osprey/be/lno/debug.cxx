@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -41,7 +45,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -99,6 +102,7 @@
 #include "wb.h"
 #include "DaVinci.h"
 #include "wutil.h"
+#include "intrn_info.h"  // INTRINSIC_name
 
 #define 	BUFFER_MAX 		132 
 #define 	MAX_FORMULA_VARS 	100
@@ -130,7 +134,7 @@ const INT fancy_min = 2;
 const INT fancy_max = 3; 
 static VOID_FUNC_PTR last_fp;
 
-static char *operator_table[OPERATOR_LAST + 1] = 
+static const char *operator_table[OPERATOR_LAST + 1] = 
 {
   "UNKNOWN", 
   "ABS",
@@ -282,6 +286,10 @@ static char *operator_table[OPERATOR_LAST + 1] =
   "PURE_CALL_OP",
   "SHUFFLE",
   "ATOMIC_RSQRT",
+#elif defined(TARG_LOONGSON)
+  "MPYU2",
+  "MPYI2",
+  "PURE_CALL_OP",
 #elif defined(TARG_MIPS)
   "PURE_CALL_OP",
 #endif
@@ -428,7 +436,7 @@ extern const char* WB_Whirl_Symbol_Type(WN* wn)
 struct WB_CHAR_FUNCPTR { 
   char ch;
   BOOL context_independent; 
-  char* message;  
+  const char* message;  
   VOID_FUNC_PTR fp; 
 };  
 
@@ -541,7 +549,7 @@ static WB_CHAR_FUNCPTR Command_List[] =
 //-----------------------------------------------------------------------
 
 struct WB_STRING_VOIDFUNCPTR { 
-  char* type;
+  const char* type;
   VOID_FUNC_PTR fp; 
 };  
 
@@ -596,7 +604,7 @@ static WB_STRING_VOIDFUNCPTR Type_List[] =
 //-----------------------------------------------------------------------
 
 struct WB_STRING_BOOLFUNCPTR { 
-  char* type;
+  const char* type;
   BOOL_FUNC_PTR fp; 
 };  
 
@@ -650,7 +658,7 @@ static void this_node(WN* wn,
   fprintf(stdout, "%s ", ch); 
   if (fancy >= 3) 
     if (OPCODE_has_next_prev(WN_opcode(wn)))
-      fprintf(stdout, "(%d) ", (INT) WN_linenum(wn)); 
+      fprintf(stdout, "(%d) ", Srcpos_To_Line(WN_linenum(wn))); 
   if (fancy >= 3 && Prompf_Info != NULL) 
     fprintf(stdout, "<%d> ", WN_MAP32_Get(Prompf_Id_Map, wn));
   if (WN_operator(wn) == OPR_INTCONST) {
@@ -2812,20 +2820,20 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
 	const char *name = WB_Whirl_Symbol(wn);
 	if (Prompf_Id_Map != WN_MAP_UNDEFINED) { 
 	  fprintf(fp, "[%d] 0x%p DOLOOP (%d) <%d> %s\n", loop_count, wn,  
-	    (INT) WN_linenum(wn), WN_MAP32_Get(Prompf_Id_Map, wn), name);
+	    Srcpos_To_Line(WN_linenum(wn)), WN_MAP32_Get(Prompf_Id_Map, wn), name);
 	} else { 
 	  fprintf(fp, "[%d] 0x%p DOLOOP (%d) %s\n", loop_count, wn,  
-	    (INT) WN_linenum(wn), name);
+	    Srcpos_To_Line(WN_linenum(wn)), name);
 	} 
       } else {  
 	const char *name = WB_Whirl_Symbol(wn); 
 	if (Prompf_Info != NULL) {
 	  fprintf(fp, "[%d] 0x%p DOLOOP %d (%d) <%d> %s\n", loop_count, wn,  
-	    dli->Depth, (INT) WN_linenum(wn), WN_MAP32_Get(Prompf_Id_Map, wn), 
+	    dli->Depth, Srcpos_To_Line(WN_linenum(wn)), WN_MAP32_Get(Prompf_Id_Map, wn), 
 	    name);
 	} else { 
 	  fprintf(fp, "[%d] 0x%p DOLOOP %d (%d) %s\n", loop_count, 
-	    wn, dli->Depth, (INT) WN_linenum(wn), name);
+	    wn, dli->Depth, Srcpos_To_Line(WN_linenum(wn)), name);
 	} 
       } 
       if (loop_count < MAX_SAVED_NODES) 
@@ -2877,7 +2885,7 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
   case OPC_DO_WHILE: 
     dump_spaces(fp, spaces);
     fprintf(fp, "[%d] 0x%p DO_WHILE_LOOP (%d) \n", loop_count, wn,
-      (INT) WN_linenum(wn));
+      Srcpos_To_Line(WN_linenum(wn)));
     if (loop_count < MAX_SAVED_NODES)
       carray[loop_count++] = wn;
     dump_loops(WN_while_body(wn), fp, spaces + increment, increment);
@@ -2885,7 +2893,7 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
   case OPC_WHILE_DO:
     dump_spaces(fp, spaces);
     fprintf(fp, "[%d] 0x%p WHILE_DO_LOOP (%d) \n", loop_count, wn,
-      (INT) WN_linenum(wn));
+      Srcpos_To_Line(WN_linenum(wn)));
     if (loop_count < MAX_SAVED_NODES)
       carray[loop_count++] = wn;
     dump_loops(WN_while_body(wn), fp, spaces + increment, increment);
@@ -3956,8 +3964,8 @@ static BOOL WBTR_SNL_INV_Limited_SE_And_Dist()
 //-----------------------------------------------------------------------
 
 struct WB_STRING_REASON {
-  char *type; 
-  char *reason_string;
+  const char *type; 
+  const char *reason_string;
   SNL_INV_CACHE_BLOCK_REASON reason; 
 };
 
@@ -3981,7 +3989,7 @@ static BOOL WBTR_Loop_Tiling()
   BOOL legality_check = TRUE; 
   WN* wn_loop = NULL; 
   INT tile_size = 0;
-  char* prefix = NULL; 
+  const char* prefix = NULL; 
   INT transform_number = -1; 
   SYMBOL* sym_pid = NULL;
   SNL_INV_CACHE_BLOCK_REASON reason = SNL_INV_UNDEFINED; 
@@ -4165,7 +4173,7 @@ static void Initialize_Keymap() {
 //   in the compiler where you want to see the loops.   
 //-----------------------------------------------------------------------
 
-extern void s_lno_debug(char init_buffer[]) 
+extern void s_lno_debug(const char init_buffer[]) 
 {
   char ch;
   VOID_FUNC_PTR fp;

@@ -84,6 +84,10 @@ main (
 	WFE_Check_Errors (&error_count, &sorry_count, &need_inliner);
 	if (error_count)
     		Terminate (RC_INTERNAL_ERROR) ;
+
+	if (sorry_count && warnings_are_errors)
+    		Terminate (RC_USER_ERROR) ;
+
   	if (need_inliner)
 		exit ( RC_NEED_INLINER );
 

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -2637,7 +2641,7 @@ void  label_ref_semantics(int		attr_idx,
    int			lbl_blk_idx;
    stmt_type_type	lbl_stmt_type;
    int			line_num;
-   char                 stmt_str[10];
+   char                 stmt_str[12];
    boolean		valid_branch_target = TRUE;
 
 

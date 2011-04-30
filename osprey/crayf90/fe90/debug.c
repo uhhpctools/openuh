@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -943,9 +947,9 @@ void print_cmd_tbl (void)
                        "aggress", boolean_str[opt_flags.aggress],
                        "bottom_load", boolean_str[opt_flags.bottom_load]);
 
-   fprintf(debug_file, "  %-17s = %-2s   %-18s = %-2d  %-18s = %-2d\n",
+   fprintf(debug_file, "  %-17s = %-2s   %-18s = %-2s  %-18s = %-2d\n",
                        "fusion", boolean_str[opt_flags.fusion],
-                       "ieeeconform", (int) boolean_str[opt_flags.ieeeconform],
+                       "ieeeconform", boolean_str[opt_flags.ieeeconform],
                        "inline_lvl", opt_flags.inline_lvl);
 
    fprintf(debug_file, "  %-17s = %-2s   %-18s = %-2s  %-18s = %-2s\n",
@@ -2052,7 +2056,7 @@ void print_sn_list (int 	attr_idx)
    else {
       fprintf(stderr,
               "\n*FE90-ERROR* %s can not have Secondary Name table entries.\n",
-              &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+              AT_OBJ_NAME_PTR(attr_idx));
    }
    return;
 
@@ -2173,8 +2177,7 @@ static void loop_thru_sn_ntries (FILE		*out_file,
    }
 
    fprintf(out_file, "\n  %s %s:\n\n",
-                     "Dummy Arguments for",
-                     &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+                     "Dummy Arguments for", AT_OBJ_NAME_PTR(attr_idx));
 
    for (i = first_idx;
         i < (first_idx + count);
@@ -2261,8 +2264,7 @@ static void chain_thru_sn_ntries (FILE		*out_file,
          return;
       }
       fprintf(out_file, "\n  %s %s:\n\n",
-                        "Component entries for",
-                        &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+                        "Component entries for", AT_OBJ_NAME_PTR(attr_idx));
    }
    else if (AT_OBJ_CLASS(attr_idx) == Interface) {
       first_idx = ATI_FIRST_SPECIFIC_IDX(attr_idx);
@@ -2273,8 +2275,7 @@ static void chain_thru_sn_ntries (FILE		*out_file,
          return;
       }
       fprintf(out_file, "\n  %s %s:\n\n",
-                        "Interface bodies for",
-                        &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+                        "Interface bodies for", AT_OBJ_NAME_PTR(attr_idx));
    }
    else if (AT_OBJ_CLASS(attr_idx) == Namelist_Grp) {
       first_idx = ATN_FIRST_NAMELIST_IDX(attr_idx);
@@ -2285,13 +2286,11 @@ static void chain_thru_sn_ntries (FILE		*out_file,
          return;
       }
       fprintf(out_file, "\n  %s %s:\n\n",
-                        "Namelist objects for",
-                        &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+                        "Namelist objects for", AT_OBJ_NAME_PTR(attr_idx));
    }
    else {
       fprintf(out_file, "\n  %s %s:\n\n",
-                        "Invalid attribute entry ",
-                        &name_pool[AT_NAME_IDX(attr_idx)].name_char);
+                        "Invalid attribute entry ", AT_OBJ_NAME_PTR(attr_idx));
       return;
    }
 
@@ -2929,6 +2928,9 @@ void	print_defines(void)
    fprintf(debug_file, "\t\t\t_HOST_OS_LINUX\n");
 # endif
 
+# if defined(_HOST_OS_DARWIN)
+   fprintf(debug_file, "\t\t\t_HOST_OS_DARWIN\n");
+# endif
 # ifdef _HOST_OS_MAX
    fprintf(debug_file, "\t\t\t_HOST_OS_MAX\n");
 # endif
@@ -2948,6 +2950,10 @@ void	print_defines(void)
 
 # if defined(_TARGET_OS_LINUX)
    fprintf(debug_file, "\t\t\t_TARGET_OS_LINUX\n");
+# endif
+
+# if defined(_TARGET_OS_DARWIN)
+   fprintf(debug_file, "\t\t\t_TARGET_OS_DARWIN\n");
 # endif
 
 # ifdef _TARGET_OS_MAX
@@ -3139,9 +3145,6 @@ static void dump_dv(FILE                *out_file,
    int  num_chars;
    char *char_ptr;
 
-# if 0
-   char str[80];
-# endif
 
 
    if (dv == NULL) {
@@ -3167,9 +3170,6 @@ static void dump_dv(FILE                *out_file,
 # endif
    fprintf(out_file, "num_dims  = %d\n", dv->num_dims);
 
-# if 0
-   dump_io_type_code_ntry(out_file, (long_type *)&(dv->type_code), 0);
-# endif
 
 #if defined(_HOST32) && defined(_TARGET64)
    fprintf(out_file, "orig_base = 0x%x\n", dv->orig_base);
@@ -3198,49 +3198,6 @@ static void dump_dv(FILE                *out_file,
 #endif
 
 
-# if 0
-   lptr = (long *)(dv->base_addr);
-
-   if (lptr != NULL &&
-       dv->num_dims == 1 &&
-       dump_it) {
-
-      /* this assumes that the array is contiguous */
-
-      if (dv_type == DV_ASCII_CHAR) {
-
-         char_ptr = (char *)(dv->base_addr);
-
-         idx = 0;
-
-         for (k = 0; k < dv->dim[0].extent; k++) {
-            fprintf(out_file,"\"");
-            for (i = 0; i < num_chars; i++) {
-               fprintf(out_file, "%c", char_ptr[idx]);
-               idx++;
-            }
-            fprintf(out_file,"\"  ");
-         }
-         fprintf(out_file, "\n");
-      }
-      else {
-
-         for (k = 0; k < dv->dim[0].extent; k++) {
-#if 1
-            fprintf(out_file, "  %x  ", 
-                              lptr[num_host_wds[TYP_LINEAR(type_idx)] * k]);
-# else
-
-            fprintf(out_file, "  %s  ",
-             convert_to_string(&(lptr[num_host_wds[TYP_LINEAR(type_idx)] * k]),
-                               type_idx,
-                               str));
-# endif
-         }
-         fprintf(out_file, "\n");
-      }
-   }
-# endif
 
    return;
 
@@ -5101,6 +5058,12 @@ static void dump_at_ntry (FILE		*out_file,
                    print_at_name(ATD_AUTO_BASE_IDX(at_idx)));
          }
 
+#ifdef KEY /* Bug 14150 */
+	 if (ATD_CLASS(at_idx) != Dummy_Argument) {
+            fprintf(out_file, "  %-16s= %-7s\n",
+                    "AT_BIND_ATTR", boolean_str[AT_BIND_ATTR(at_idx)]);
+	 }
+#endif /* KEY Bug 14150 */
          if (ATD_CLASS(at_idx) == Variable) {
             fprintf(out_file, "  %-16s= %-7d %-16s= %-7s %-16s= %-8s\n",
                     "ATD_ASSIGN_TMP_I", ATD_ASSIGN_TMP_IDX(at_idx),
@@ -5201,9 +5164,17 @@ static void dump_at_ntry (FILE		*out_file,
                     "Function Name", print_at_name(ATD_FUNC_IDX(at_idx)));
          }
          else if (ATD_CLASS(at_idx) == Dummy_Argument) {
+#ifdef KEY /* Bug 14150 */
+            fprintf(out_file,"  %-16s= %-7s %-16s= %-7s %-16s= %-7s\n",
+                    "ATD_INTENT",intent_str[ATD_INTENT(at_idx)],
+                    "ATD_INTRIN_DARG", boolean_str[ATD_INTRIN_DARG(at_idx)],
+		    "ATD_VALUE_ATTR", boolean_str[ATD_VALUE_ATTR(at_idx)]
+		    );
+#else /* KEY Bug 14150 */
             fprintf(out_file,"  %-16s= %-7s %-16s= %-7s\n",
                     "ATD_INTENT",intent_str[ATD_INTENT(at_idx)],
                     "ATD_INTRIN_DARG", boolean_str[ATD_INTRIN_DARG(at_idx)]);
+#endif /* KEY Bug 14150 */
 
             if (ATD_INTRIN_DARG(at_idx)) {
                fprintf(out_file,"  %-20s= %-22o\n",
@@ -5436,6 +5407,14 @@ static void dump_at_ntry (FILE		*out_file,
                    "ATP_DCL_EXTERNAL", boolean_str[ATP_DCL_EXTERNAL(at_idx)],
                    "ATP_DUPLICATE_IN", ATP_DUPLICATE_INTERFACE_IDX(at_idx));
 
+#ifdef KEY /* Bug 14150 */
+	    if (ATP_PGM_UNIT(at_idx) == Function ||
+	      ATP_PGM_UNIT(at_idx) == Pgm_Unknown ||
+	      ATP_PGM_UNIT(at_idx) == Subroutine) {
+	      fprintf(out_file, "  %-16s= %-7s\n",
+                   "AT_BIND_ATTR", boolean_str[AT_BIND_ATTR(at_idx)]);
+	    }
+#endif /* KEY Bug 14150 */
             if (ATP_PROC(at_idx) == Dummy_Proc) {
                fprintf(out_file, "  %-16s= %-7s %-16s= %-7d\n",
                      "ATP_CIF_DARG_PRO", boolean_str[ATP_CIF_DARG_PROC(at_idx)],
@@ -5833,6 +5812,11 @@ static void dump_at_ntry (FILE		*out_file,
          break;
 
       case Derived_Type:
+
+#ifdef KEY /* Bug 14150 */
+         fprintf(out_file, "  %-16s= %-7s\n",
+                 "AT_BIND_ATTR", boolean_str[AT_BIND_ATTR(at_idx)]);
+#endif /* KEY Bug 14150 */
 
          fprintf(out_file, "  %-16s= %-7s %-16s= %-7s %-16s= %-8s\n",
                  "ATT_CHAR_CPNT", boolean_str[ATT_CHAR_CPNT(at_idx)],
@@ -6438,11 +6422,6 @@ static void dump_eq_ntry (FILE  *out_file,
                      "EQ_GRP_IDX", EQ_GRP_IDX(eq_idx),
                      "EQ_LINE_NUM", EQ_LINE_NUM(eq_idx));
 
-# if 0
-   if (EQ_LIST_IDX(eq_idx) != NULL_IDX) {
-      print_list(out_file, IL_IDX(EQ_LIST_IDX(eq_idx)), 4, 1, FALSE);
-   }
-# endif
 
    fprintf(out_file, "  %-16s= %-7d %-16s= %-7s %-16s= %-8d\n",
                      "EQ_LIST_IDX", EQ_LIST_IDX(eq_idx),
@@ -6628,6 +6607,12 @@ static void dump_ga_ntry (FILE		*out_file,
                     "GAC_SECTION_GP", boolean_str[GAC_SECTION_GP(ga_idx)],
                     "GAC_SECTION_NON_", boolean_str[GAC_SECTION_NON_GP(ga_idx)],
                     "GAC_TASK_COMMON", boolean_str[GAC_TASK_COMMON(ga_idx)]);
+#ifdef KEY /* Bug 14150 */
+      const char *bl = GA_BINDING_LABEL(ga_idx);
+      fprintf(out_file, "  %-16s= %-7s %-16s= %-s\n",
+		    "GA_BIND_ATTR",boolean_str[GA_BIND_ATTR(ga_idx)],
+		    "GA_BIND_LABEL", (bl ? bl : ""));
+#endif /* KEY Bug 14150 */
 
       ga_idx2	= GAC_FIRST_MEMBER_IDX(ga_idx);
 
@@ -6698,6 +6683,10 @@ static void dump_ga_ntry (FILE		*out_file,
               "GAD_RANK", GAD_RANK(ga_idx),
               "GAD_TARGET", boolean_str[GAD_TARGET(ga_idx)]);
 
+#ifdef KEY /* Bug 14110 */
+      fprintf(out_file, "  %-16s= %-7s\n",
+	      "GAD_VOLATILE", boolean_str[GAD_VOLATILE(ga_idx)]);
+#endif /* KEY /* Bug 14110 */
       fprintf(out_file, "  %-16s= %-7d %-s\n",
               "GAD_TYPE_IDX",  GAD_TYPE_IDX(ga_idx),
                print_global_type_f(GAD_TYPE_IDX(ga_idx)));
@@ -6731,9 +6720,19 @@ static void dump_ga_ntry (FILE		*out_file,
               "GAP_PGM_UNIT_DEF", boolean_str[GAP_PGM_UNIT_DEFINED(ga_idx)],
               "GAP_PURE", boolean_str[GAP_PURE(ga_idx)]);
 
+#ifdef KEY /* Bug 14150 */
+      fprintf(out_file, "  %-16s= %-7s %-16s= %-7s %-16s= %-8s\n",
+              "GAP_RECURSIVE", boolean_str[GAP_RECURSIVE(ga_idx)],
+              "GAP_VFUNCTION",boolean_str[GAP_VFUNCTION(ga_idx)],
+	      "GA_BIND_ATTR",boolean_str[GA_BIND_ATTR(ga_idx)]);
+      const char *bl = GA_BINDING_LABEL(ga_idx);
+      fprintf(out_file, "  %-16s= %-s\n",
+      	      "GA_BIND_LABEL", (bl ? bl : ""));
+#else /* KEY */
       fprintf(out_file, "  %-16s= %-7s %-16s= %-7s\n",
               "GAP_RECURSIVE", boolean_str[GAP_RECURSIVE(ga_idx)],
               "GAP_VFUNCTION",boolean_str[GAP_VFUNCTION(ga_idx)]);
+#endif /* KEY Bug 14150 */
 
       if (GAP_RSLT_IDX(ga_idx) != NULL_IDX) {
          dump_ga_ntry(out_file, GAP_RSLT_IDX(ga_idx));
@@ -7055,7 +7054,7 @@ static void dump_hn_ntry(FILE		*out_file,
    if (HN_ATTR_IDX(idx) != NULL_IDX) {
 
       if (HN_NAME_IDX(idx) != NULL_IDX) {
-         fprintf(out_file, "%-32.32s  ",&name_pool[HN_NAME_IDX(idx)].name_char);
+         fprintf(out_file, "%-32.32s  ", HN_NAME_PTR(idx));
       }
       else {
          fprintf(out_file, "%-32.32s  ", "**No name - HN_NAME_IDX is 0**");
@@ -7211,7 +7210,7 @@ static void dump_ir_ntry(FILE 	*out_file,
        IR_OPR(idx) <= Dv_Set_Stride_Mult) {
       fprintf(out_file, " dim = %d", IR_DV_DIM(idx));
    }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    else if (IR_OPR(idx) == Call_Opr) {
       if (IR_INLINE_STATE(idx) == Inline_Sgi) {
          fprintf(out_file, " INLINE ");
@@ -7474,7 +7473,7 @@ static void dump_ln_ntry(FILE		*out_file,
    if (LN_ATTR_IDX(idx) != NULL_IDX) {
 
       if (LN_NAME_IDX(idx) != NULL_IDX) {
-         fprintf(out_file, "%-32.32s  ",&name_pool[LN_NAME_IDX(idx)].name_char);
+         fprintf(out_file, "%-32.32s  ", LN_NAME_PTR(idx));
       }
       else {
          fprintf(out_file, "%-32.32s  ", "**No name - LN_NAME_IDX is 0**");
@@ -7711,8 +7710,14 @@ static void dump_sb_ntry(FILE	*out_file,
            "SB_CIF_SYMBOL_ID", SB_CIF_SYMBOL_ID(sb_idx),
            "SB_COMMON_NEEDS_", boolean_str[SB_COMMON_NEEDS_OFFSET(sb_idx)]);
 
-   fprintf(out_file, "  %-16s  %-7s %-16s= %-7s %-16s= %-8s\n",
+   fprintf(out_file,
+#ifdef KEY /* Bug 14150 */
+           "  %-16s= %-7s %-16s= %-7s %-16s= %-8s\n",
+	   "SB_BIND_ATTR", boolean_str[SB_BIND_ATTR(sb_idx)],
+#else /* KEY Bug 14150 */
+           "  %-16s  %-7s %-16s= %-7s %-16s= %-8s\n",
            " ", " ",
+#endif /* KEY Bug 14150 */
            "SB_DCL_COMMON_DI", boolean_str[SB_DCL_COMMON_DIR(sb_idx)],
            "SB_DCL_ERR", boolean_str[SB_DCL_ERR(sb_idx)]);
 
@@ -7760,7 +7765,19 @@ static void dump_sb_ntry(FILE	*out_file,
    fprintf(out_file, "  %-16s= %-7d %-16s= %-7d %-16s= %-8d\n",
            "SB_NAME_LEN", SB_NAME_LEN(sb_idx),
            "SB_ORIG_SCP_IDX", SB_ORIG_SCP_IDX(sb_idx),
-           "SB_PAD_AMOUNT", SB_PAD_AMOUNT(sb_idx));
+#ifdef KEY /* Bug 14150 */
+           "SB_EXT_NAME_IDX", SB_EXT_NAME_IDX(sb_idx)
+#else /* KEY Bug 14150 */
+           "SB_PAD_AMOUNT", SB_PAD_AMOUNT(sb_idx)
+#endif /* KEY Bug 14150 */
+	   );
+#ifdef KEY /* Bug 14150 */
+   if (SB_EXT_NAME_IDX(sb_idx)) {
+     fprintf(out_file, "  %-16s= %-7d %-16s= %-16s\n",
+       "SB_EXT_NAME_LEN", SB_EXT_NAME_LEN(sb_idx),
+       "SB_EXT_NAME", SB_EXT_NAME_PTR(sb_idx));
+   }
+#endif /* KEY Bug 14150 */
 
    fprintf(out_file, "  %-16s= %-7s %-16s= %-7s %-16s= %-8s\n",
            "SB_PAD_AMOUNT_SE", boolean_str[SB_PAD_AMOUNT_SET(sb_idx)],
@@ -7874,11 +7891,6 @@ PROCESS_SIBLING:
            "SCP_COPY_ASSUMED_LIS", SCP_COPY_ASSUMED_LIST(scp_idx),
            "SCP_DARG_LIST", SCP_DARG_LIST(scp_idx));
 
-# if 0
-   fprintf(out_file,"%18s%-20s= %-7s  %-20s= %-9s\n", " ",
-           "SCP_DBG_PRINT_STMT", boolean_str[SCP_DBG_PRINT_STMT(scp_idx)],
-           "SCP_DBG_PRINT_SYTB", boolean_str[SCP_DBG_PRINT_SYTB(scp_idx)]);
-# endif
 
    fprintf(out_file,"%18s%-20s= %-27s\n", " ",
            "SCP_DEFAULT_STORAGE", 
@@ -8034,7 +8046,7 @@ static void dump_sn_ntry (FILE 	*out_file,
       return;
    }
 
-   fprintf(out_file, "  %-51s", &name_pool[SN_NAME_IDX(sn_idx)].name_char); 
+   fprintf(out_file, "  %-51s", SN_NAME_PTR(sn_idx)); 
 
    fprintf(out_file, " %-16s= %-8d\n", "            IDX", sn_idx);
 
@@ -8357,5 +8369,11 @@ static void dump_io_type_code_ntry(FILE         *out_file,
    return;
 
 }  /* dump_io_type_code_ntry */
+
+#ifdef KEY
+void debug_to_stderr() {
+  debug_file = stderr;
+}
+#endif /* KEY */
 
 # endif

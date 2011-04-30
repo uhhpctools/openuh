@@ -100,6 +100,22 @@ char *_dwarf_rel_section_names[] = {
    Must match also _dwarf_rel_section_names above
 */
 char *_dwarf_sectnames[] = {
+#ifdef KEY /* Mac port */
+    DEBUG_INFO_SECTNAME,
+    DEBUG_LINE_SECTNAME,
+    DEBUG_ABBREV_SECTNAME,
+    DEBUG_FRAME_SECTNAME,
+    DEBUG_ARANGES_SECTNAME,
+    DEBUG_PUBNAMES_SECTNAME,
+    DEBUG_STR_SECTNAME,
+    DEBUG_FUNCNAMES_SECTNAME,	/* sgi extension */
+    DEBUG_TYPENAMES_SECTNAME,	/* sgi extension */
+    DEBUG_VARNAMES_SECTNAME,	/* sgi extension */
+    DEBUG_WEAKNAMES_SECTNAME,	/* sgi extension */
+    DEBUG_MACINFO_SECTNAME,
+    DEBUG_LOC_SECTNAME,
+    EH_FRAME_SECTNAME
+#else /* KEY Mac port */
     ".debug_info",
     ".debug_line",
     ".debug_abbrev",
@@ -114,6 +130,7 @@ char *_dwarf_sectnames[] = {
     ".debug_macinfo",
     ".debug_loc",
     ".eh_frame"
+#endif /* KEY Mac port */
 };
 
 
@@ -285,9 +302,10 @@ dwarf_transform_to_disk_form(Dwarf_P_Debug dbg, Dwarf_Error * error)
 	case EH_FRAME:
 	    if (dbg->de_eh_frame_cies == NULL)
 		continue;
+#ifdef KEY
+	    flags = SHF_MIPS_NOSTRIP | SHF_ALLOC;
+#else
 	    flags = SHF_MIPS_NOSTRIP;
-#ifdef TARG_X8664
-		flags |= SHF_ALLOC;
 #endif
 	    break;
 	default:
@@ -931,9 +949,11 @@ _dwarf_pro_generate_debugframe(Dwarf_P_Debug dbg, Dwarf_Error * error)
     Dwarf_Unsigned cur_off;	/* current offset of written data,
 				   held for relocation info */
 
+#ifdef TARG_X8664
     if (generate_fpic_dwarf) {
 	upointer_size = 4;
     }
+#endif
 
     elfsectno = dbg->de_elf_sects[DEBUG_FRAME];
 
@@ -956,7 +976,7 @@ _dwarf_pro_generate_debugframe(Dwarf_P_Debug dbg, Dwarf_Error * error)
 	char buff1[ENCODE_SPACE_NEEDED];
 	char buff2[ENCODE_SPACE_NEEDED];
 	char buff3[ENCODE_SPACE_NEEDED];
-	char *augmentation;
+	const char *augmentation;
 	char *augmented_al;
 	long augmented_fields_length;
 	int a_bytes;
@@ -1358,26 +1378,6 @@ _dwarf_pro_generate_debugframe(Dwarf_P_Debug dbg, Dwarf_Error * error)
 		    return 0;
 		}
 	    }
-#if 0
-	    if (curinst->dfp_sym_index) {
-		int res;
-
-		res = dbg->de_reloc_name(dbg,
-					 DEBUG_FRAME,
-					 (data - fde_start_point)
-					 + cur_off + uwordb_size,	/* r_offset 
-									 */
-					 curinst->dfp_sym_index,
-					 dwarf_drt_data_reloc,
-					 upointer_size);
-		if (res != DW_DLV_OK) {
-		    {
-			_dwarf_p_error(dbg, error, DW_DLE_ALLOC_FAIL);
-			return (0);
-		    }
-		}
-	    }
-#endif
 	    if (DW_CFA_advance_loc4 == db) {
 		data[0] = 0;
 		data[1] = 0;
@@ -1515,6 +1515,9 @@ _dwarf_pro_generate_debuginfo(Dwarf_P_Debug dbg, Dwarf_Error * error)
 
     die_off = cu_header_size;
 
+#if defined(BUILD_OS_DARWIN)
+    /* gcc sets this to zero, and Mach-O linker seems to want that too */
+#else /* defined(BUILD_OS_DARWIN) */
     /* 
        Relocation for abbrev offset in cu header store relocation
        record in linked list */
@@ -1525,6 +1528,7 @@ _dwarf_pro_generate_debuginfo(Dwarf_P_Debug dbg, Dwarf_Error * error)
     if (res != DW_DLV_OK) {
 	DWARF_P_DBG_ERROR(dbg, DW_DLE_REL_ALLOC, -1);
     }
+#endif /* defined(BUILD_OS_DARWIN) */
 
     /* pass 0: only top level dies, add at_sibling attribute to those
        dies with children */
@@ -1598,12 +1602,19 @@ _dwarf_pro_generate_debuginfo(Dwarf_P_Debug dbg, Dwarf_Error * error)
 	    if (curabbrev->abb_tag == DW_TAG_imported_declaration)
 	      module_name = curattr->ar_data;
 #endif /* KEY Bug 3507 */
+#if defined(BUILD_OS_DARWIN)
+        int skip_stmt_list = 0;
+#endif /* defined(BUILD_OS_DARWIN) */
 	while (curattr) {
 	    if (curattr->ar_rel_type != R_MIPS_NONE) {
 		switch (curattr->ar_attribute) {
 		case DW_AT_stmt_list:
+#if defined(BUILD_OS_DARWIN)
+		    skip_stmt_list = 1;
+#else /* defined(BUILD_OS_DARWIN) */
 		    curattr->ar_rel_symidx =
 			dbg->de_sect_name_idx[DEBUG_LINE];
+#endif /* defined(BUILD_OS_DARWIN) */
 		    break;
 		case DW_AT_MIPS_fde:
 		    curattr->ar_rel_symidx =
@@ -1616,6 +1627,9 @@ _dwarf_pro_generate_debuginfo(Dwarf_P_Debug dbg, Dwarf_Error * error)
 		default:
 		    break;
 		}
+#if defined(BUILD_OS_DARWIN)
+                if (!skip_stmt_list) {
+#endif /* defined(BUILD_OS_DARWIN) */
 		res = dbg->de_reloc_name(dbg, DEBUG_INFO,
 #ifdef KEY /* Bug 3507 */
 		  ADJUSTED_DIE_OFF + curattr->ar_rel_offset,	/* r_offset */
@@ -1629,6 +1643,9 @@ _dwarf_pro_generate_debuginfo(Dwarf_P_Debug dbg, Dwarf_Error * error)
 		if (res != DW_DLV_OK) {
 		    DWARF_P_DBG_ERROR(dbg, DW_DLE_REL_ALLOC, -1);
 		}
+#if defined(BUILD_OS_DARWIN)
+		}
+#endif /* defined(BUILD_OS_DARWIN) */
 
 	    }
 	    die_off += curattr->ar_nbytes;

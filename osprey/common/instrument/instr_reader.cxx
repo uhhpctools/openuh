@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -42,10 +42,10 @@
 // ====================================================================
 //
 // Module: instr_reader.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/common/instrument/instr_reader.cxx,v $
+// $Revision: 1.14 $
+// $Date: 05/12/05 08:59:43-08:00 $
+// $Author: bos@eng-24.pathscale.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/common/instrument/SCCS/s.instr_reader.cxx $
 //
 // Revision history:
 //  03-Aug-98 - Original Version
@@ -61,19 +61,22 @@
 #include "instr_reader.h"
 #include "instr_memory.h"
 
-template <class _Key> struct hash { };
-template <> struct hash<UINT64> {
+//rename the structure from hash to ihash to avoid conflict with system hash.  
+template <class _Key> struct ihash { };
+template <> struct ihash<UINT64> {
   size_t operator()(const UINT64 x)const{return (size_t)x;}
 };
 
-typedef hash_map<UINT64, char*, hash<UINT64> > ADDRESS_NAME_MAP;
-typedef hash_map<UINT64, INT32, hash<UINT64> > ADDRESS_PUSIZE_MAP;
+typedef hash_map<UINT64, char*, ihash<UINT64> > ADDRESS_NAME_MAP;
+typedef hash_map<UINT64, INT32, ihash<UINT64> > ADDRESS_PUSIZE_MAP;
 
 extern ADDRESS_NAME_MAP PU_Addr_Name_Map;
 extern ADDRESS_PUSIZE_MAP PU_Addr_Pusize_Map;
 
 static char* ERR_POS = "Error in positioning within %s";
 static char* ERR_READ = "Error in reading from %s";
+
+static char* ERR_WRITE = "Error in writing to %s";
 
 #ifndef _BUILD_INSTR
 
@@ -92,6 +95,7 @@ Process_Feedback_File(char *fb_name)
   if ((fp = fopen(fb_name, "r")) == NULL) {
        profile_error("Unable to open file: %s", fb_name);
   }
+
 
   Get_File_Header(fp, fb_name, &fb_hdr);
 
@@ -567,6 +571,15 @@ Get_Icall_Profile(PU_PROFILE_HANDLE pu_handle, INT32 id)
     FB_Value_Vector& Stride_Table = pu_handle->Get_Stride_Table();
     return Stride_Table[id];
   }
+
+#ifdef TARG_LOONGSON
+ FB_Info_Cache&
+ Get_Cache_Profile(PU_PROFILE_HANDLE pu_handle, INT32 id)
+ {
+    FB_Cache_Vector& Cache_Table = pu_handle->Get_Cache_Table();
+    return Cache_Table[id];
+ }
+#endif
 #endif // _BUILD_INSTR
 
 
@@ -609,6 +622,152 @@ Get_Str_Table(FILE *fp, char *fname, Fb_Hdr& fb_hdr, char *str_table)
 // Given a PU handle, allocate storage for the Invoke Table in 
 // PU handle and update it with data from feedback file.
 
+#if defined(TARG_SL)
+
+#define FREQ_FP_OFFSET 3.0
+#define RESET_FREQ_FP_OFFSET(x)  (x - FREQ_FP_OFFSET)
+
+typedef UINT32 FREQ_INSTR_VALUE_TYPE;
+typedef float FREQ_OPT_VALUE_TYPE;
+
+void
+cast_invoke_freq(FB_Info_Invoke*  fb_ink, ULONG num_inv_items)
+{
+  for(INT i=0;i<num_inv_items;i++) {
+    FREQ_OPT_VALUE_TYPE value=(FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_ink->Get_Freq_Invoke().Get_Value()))));
+    fb_ink->Get_Freq_Invoke().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+    fb_ink++;
+  }
+
+  return;
+}
+
+void
+cast_branch_freq(FB_Info_Branch* fb_bra, ULONG num_bra_items)
+{
+  for(INT i=0;i<num_bra_items;i++) {
+    FREQ_OPT_VALUE_TYPE value;
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_bra->Get_Freq_Taken().Get_Value()))));
+    fb_bra->Get_Freq_Taken().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_bra->Get_Freq_Not_Taken().Get_Value()))));    
+    fb_bra->Get_Freq_Not_Taken().Set_Value(RESET_FREQ_FP_OFFSET( value ) );  
+    fb_bra++;
+  }
+  
+  return;
+}
+
+void
+cast_freq (FB_FREQ*  fb, ULONG num_fb_items)
+{
+  for(INT i=0;i<num_fb_items;i++) {
+    FREQ_OPT_VALUE_TYPE value=(FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb->Get_Value()))));
+    fb->Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+    fb++;
+  }
+
+  return;
+}
+
+void
+cast_loop_freq(FB_Info_Loop*  fb_loop, ULONG num_loop_items)
+{
+
+  for(INT i=0;i<num_loop_items;i++) {
+    FREQ_OPT_VALUE_TYPE value;
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Zero().Get_Value()))));
+    fb_loop->Get_Freq_Zero().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Positive().Get_Value()))));
+    fb_loop->Get_Freq_Positive().Set_Value(RESET_FREQ_FP_OFFSET( value ) );   
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Out().Get_Value()))));
+    fb_loop->Get_Freq_Out().Set_Value(RESET_FREQ_FP_OFFSET( value ) );   	
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Back().Get_Value()))));
+    fb_loop->Get_Freq_Back().Set_Value(RESET_FREQ_FP_OFFSET( value ) );   	
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Exit().Get_Value()))));
+    fb_loop->Get_Freq_Exit().Set_Value(RESET_FREQ_FP_OFFSET( value ) );   	
+
+    value = (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_loop->Get_Freq_Iterate().Get_Value()))));
+    fb_loop->Get_Freq_Iterate().Set_Value(RESET_FREQ_FP_OFFSET( value ) );   	
+
+
+    fb_loop++;
+  }
+
+  return;
+  	
+}	
+
+void
+cast_scircuit_freq(FB_Info_Circuit* fb_cir, ULONG num_cir_items)
+{
+
+  for(INT i=0;i<num_cir_items;i++) {
+    FREQ_OPT_VALUE_TYPE value;
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&( fb_cir->Get_Freq_Left().Get_Value())))) ;
+    fb_cir->Get_Freq_Left().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&( fb_cir->Get_Freq_Right().Get_Value())))) ;
+    fb_cir->Get_Freq_Right().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&( fb_cir->Get_Freq_Neither().Get_Value())))) ;
+    fb_cir->Get_Freq_Neither().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    fb_cir++;
+  }
+  
+  return;
+}	
+
+void 
+cast_call_freq(FB_Info_Call* fb_call, ULONG num_call_items)
+{
+  for(INT i=0;i<num_call_items;i++) {
+    FREQ_OPT_VALUE_TYPE value;
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&( fb_call->Get_Freq_Entry().Get_Value()))))  ;
+    fb_call->Get_Freq_Entry().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+	
+    value= (FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&( fb_call->Get_Freq_Exit().Get_Value()))))  ;
+    fb_call->Get_Freq_Exit().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    fb_call++;
+  }
+  
+  return;
+
+}
+
+#ifdef KEY
+void
+cast_value_freq(FB_Info_Value* fb_val, ULONG num_val_Items)
+{
+  for(INT i=0;i <num_val_Items;i++) {
+    FREQ_OPT_VALUE_TYPE value;
+    value=(FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&(fb_val->Get_Exe_Counter().Get_Value()))));
+    fb_val->Get_Exe_Counter().Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+	
+    for(INT j=0;j<TNV;j++) {
+      value=(FREQ_OPT_VALUE_TYPE)(*((FREQ_INSTR_VALUE_TYPE*)(&((fb_val->Get_Freq())[j].Get_Value()))));
+      ((fb_val->Get_Freq())[j]).Set_Value(RESET_FREQ_FP_OFFSET( value ) );
+
+    }
+    fb_val++;
+  }
+  
+  return;
+
+}
+
+#endif
+
+#endif
+
+
+
 void
 read_invoke_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
                     long pu_ofst, FILE *fp, char *fname)
@@ -619,11 +778,15 @@ read_invoke_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
 
   Inv_Table.resize(pu_hdr_entry.pu_num_inv_entries);
 
-  
   FSEEK(fp, pu_ofst + pu_hdr_entry.pu_inv_offset, SEEK_SET, ERR_POS, fname);
- 
+
   FREAD (&(Inv_Table.front ()), sizeof(FB_Info_Invoke),
 	 pu_hdr_entry.pu_num_inv_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_invoke_freq(&(Inv_Table.front ()), pu_hdr_entry.pu_num_inv_entries);
+#endif  
+
 }
 
 // Given a PU handle, allocate storage for the Branch Table in 
@@ -638,12 +801,16 @@ read_branch_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
   Is_True (Br_Table.empty (), ("pu_handle not empty"));
 
   Br_Table.resize(pu_hdr_entry.pu_num_br_entries);
-
   
   FSEEK(fp, pu_ofst + pu_hdr_entry.pu_br_offset, SEEK_SET, ERR_POS, fname);
 
   FREAD (&(Br_Table.front ()), sizeof(FB_Info_Branch),
 	 pu_hdr_entry.pu_num_br_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_branch_freq(&(Br_Table.front ()), pu_hdr_entry.pu_num_br_entries);
+#endif
+
 }
 
 // Given a PU handle, allocate storage for the Switch Table in 
@@ -678,6 +845,9 @@ read_switch_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
       FREAD (&(first->freq_targets.front ()), sizeof(FB_FREQ), *target, fp,
 	     ERR_READ, fname);  
 
+#if defined(TARG_SL)
+      cast_freq(&(first->freq_targets.front ()),  *target);
+#endif
       ++target;
   }
 } 
@@ -713,6 +883,11 @@ read_cgoto_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
 
       FREAD (&(first->freq_targets.front ()), sizeof(FB_FREQ), *target, fp,
 	     ERR_READ, fname); 
+
+#if defined(TARG_SL)
+      cast_freq(&(first->freq_targets.front ()), *target);
+#endif
+
       ++target;
   }
 }  
@@ -734,6 +909,11 @@ read_loop_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
  
   FREAD (&(Loop_Table.front ()), sizeof (FB_Info_Loop),
 	 pu_hdr_entry.pu_num_loop_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_loop_freq(&(Loop_Table.front ()), pu_hdr_entry.pu_num_loop_entries);
+#endif
+
 }
 
 // Given a PU handle, allocate storage for the Short Circuit Table in 
@@ -754,6 +934,11 @@ read_scircuit_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
  
   FREAD (&(Scircuit_Table.front ()), sizeof(FB_Info_Circuit),
 	 pu_hdr_entry.pu_num_scircuit_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_scircuit_freq(&(Scircuit_Table.front ()), pu_hdr_entry.pu_num_scircuit_entries);
+#endif
+
 }
 
 // Given a PU handle, allocate storage for the Call Table in 
@@ -770,9 +955,14 @@ read_call_profile(PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
   Call_Table.resize(pu_hdr_entry.pu_num_call_entries);
 
   FSEEK(fp, pu_ofst + pu_hdr_entry.pu_call_offset, SEEK_SET, ERR_POS, fname);
- 
+  
   FREAD (&(Call_Table.front ()), sizeof(FB_Info_Call),
 	 pu_hdr_entry.pu_num_call_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_call_freq(&(Call_Table.front ()), pu_hdr_entry.pu_num_call_entries);
+#endif
+
 }
 
 
@@ -827,6 +1017,11 @@ void read_value_profile( PU_PROFILE_HANDLE pu_handle, Pu_Hdr& pu_hdr_entry,
  
   FREAD (&(Value_Table.front ()), sizeof(FB_Info_Value),
 	 pu_hdr_entry.pu_num_value_entries, fp, ERR_READ, fname);
+
+#if defined(TARG_SL)
+  cast_value_freq(&(Value_Table.front ()), pu_hdr_entry.pu_num_value_entries);
+#endif
+
 }
 #endif // KEY
 

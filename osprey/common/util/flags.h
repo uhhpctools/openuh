@@ -1,5 +1,7 @@
 /*
 
+  Copyright (C) 2010, Hewlett-Packard Development Company, L.P. All Rights Reserved.
+
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
@@ -37,10 +39,10 @@
  * ====================================================================
  *
  * Module: flags.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/flags.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:57 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/flags.h,v $
  *
  * Revision history:
  *  08-Sep-89 - Original Version
@@ -162,6 +164,11 @@
  *	     OVK_UNIMPLEMENTED	Option is unimplemented.
  *	     OVK_REPLACED	Option is obsolete, replaced by another,
  *				named by its ODESC_variable field.
+ *       OVK_ENUM       Options takes string value, which should be 
+ *              one of the names defined for a enum, defaulting to
+ *              the specified default value. It also has a default
+ *              set value, which is used when a "" string is passed
+ *              to the option.
  *	     OVK_COUNT		Dummy value used to mark end of option
  *				descriptor array.
  *	    TODO: 64-bit option values not yet implemented.
@@ -191,7 +198,7 @@
  *	    other means before that, calling this explicitly earlier
  *	    will properly identify those as modified on listings.
  *
- *	void Set_Option_Internal ( OPTION_GROUP *ogroup, char *name );
+ *	void Set_Option_Internal ( OPTION_GROUP *ogroup, const char *name );
  *	    Set the given option in the given group internal, meaning
  *	    that it won't appear on user listings.  If the option name
  *	    is NULL, the entire group is set internal.  This must be
@@ -207,7 +214,7 @@
  *	    incorrectly specified.  Returns TRUE whenever <flags> named
  *	    a valid group.
  *
- *	void Print_Option_Group ( FILE *tf, OPTION_GROUP *og, char *pfx,
+ *	void Print_Option_Group ( FILE *tf, OPTION_GROUP *og, const char *pfx,
  *				  BOOL internal, BOOL full, BOOL update)
  *	    Print the current settings of the 'og' flags to 'tf'.
  *	    Start lines with pfx (for comments in assembly source file
@@ -224,7 +231,7 @@
  *	Print_Option_Groups / Trace_Option_Groups
  *	    Same as the singular forms above, but print array of groups.
  *
- *	OPTION_GROUP *Get_Command_Line_Group ( OPTION_GROUP *og, char *name )
+ *	OPTION_GROUP *Get_Command_Line_Group ( OPTION_GROUP *og, const char *name )
  *	    Given an option group array and a group name, return a
  *	    pointer to the array element which has the name (or NULL).
  *
@@ -272,7 +279,7 @@
 #define flags_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *flags_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/flags.h,v $ $Revision: 1.1.1.1 $";
+static char *flags_rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/flags.h,v $ $Revision: 1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 #ifdef __cplusplus
@@ -317,7 +324,8 @@ typedef enum {
 		 */
   OVK_REPLACED,	/* Option is obsolete, replaced by another */
   OVK_UNIMPLEMENTED,	/* Option is unimplemented */
-
+  OVK_ENUM,
+  
   OVK_COUNT=63	/* end of list marker */
 } OPTION_KIND;
 
@@ -331,7 +339,7 @@ typedef enum {
 /* Define the list returned for OVK_LIST: */
 typedef struct option_list {
   struct option_list	*next;
-  char			*opt;
+  const char		*opt;
   char			*val;
 } OPTION_LIST;
 
@@ -344,14 +352,14 @@ typedef struct option_desc {
   mINT8		kind;
   mINT8		visibility;
   BOOL		can_change_by_pragma; /* options pragma */
-  char *	name;
-  char *	abbrev;
+  const char *	name;
+  const char *	abbrev;
   INT64		def_val;
   INT64		min_val;
   INT64		max_val;
   void *	variable;
   void *	aux;
-  char *	description;
+  const char *	description;
 } OPTION_DESC;
 
 #define ODESC_kind(o)		((o)->kind)
@@ -367,8 +375,8 @@ typedef struct option_desc {
 
 /* Define an option group descriptor: */
 typedef struct option_group {
-  char *	name;		/* Group name */
-  char		separator;	/* Separator between sub-options */
+  const char *	name;		/* Group name */
+  char	        separator;	/* Separator between sub-options */
   char		valmarker;	/* ... between option name and value */
   OPTION_DESC *	options;	/* Array of option descriptors */
   void *	aux;		/* Auxiliary info for internal use */
@@ -391,7 +399,7 @@ extern void Initialize_Option_Groups ( OPTION_GROUP *ogroups );
  * won't appear on user listings.  If the option name is NULL, the
  * entire group is set internal.
  */
-extern void Set_Option_Internal ( OPTION_GROUP *ogroup, char *name );
+extern void Set_Option_Internal ( OPTION_GROUP *ogroup, const char *name );
 
 /* Process the given option group: */
 extern BOOL Process_Command_Line_Group (
@@ -402,7 +410,7 @@ extern BOOL Process_Command_Line_Group (
 extern void Print_Option_Group (
   FILE *tf,			/* Listing/trace file */
   OPTION_GROUP *opt_group,	/* Which group? */
-  char *prefix,			/* Prefix for output lines (comment) */
+  const char *prefix,			/* Prefix for output lines (comment) */
   BOOL internal,		/* Internal trace or user listing? */
   BOOL full,			/* All options or only set options? */
   BOOL update );		/* Update set/mod flags after list? */
@@ -415,7 +423,7 @@ extern void Trace_Option_Group (
 extern void Print_Option_Groups (
   FILE *tf,			/* Listing/trace file */
   OPTION_GROUP *opt_group,	/* Group array */
-  char *prefix,			/* Prefix for output lines (comment) */
+  const char *prefix,			/* Prefix for output lines (comment) */
   BOOL internal,		/* Internal trace or user listing? */
   BOOL full,			/* All options or only set options? */
   BOOL update );		/* Update set/mod flags after list? */
@@ -427,11 +435,52 @@ extern void Trace_Option_Groups (
 /* Get a group from an array, given its name: */
 extern OPTION_GROUP *Get_Command_Line_Group (
   OPTION_GROUP *og,
-  char *name );
+  const char *name );
 
 extern void Trace_Command_Line_Group(FILE *, OPTION_GROUP *);
 
 extern void Save_or_restore_options(char *, INT32, BOOL);
+
+typedef enum 
+{       
+    OPT_invalid = -1,                                      
+    OPT_common_first = 0,
+    OPT_enable       = OPT_common_first,
+    OPT_disable,
+    OPT_dump_before,
+    OPT_dump_after,
+    OPT_trace,
+    OPT_stats,
+    OPT_common_last,
+    OPT_component_first = OPT_common_last
+
+} O64_COMMON_OPTION;
+
+typedef enum
+{
+    TRACE_none = 0,
+    TRACE_info,
+    TRACE_minimal,
+    TRACE_medium,
+    TRACE_maximal
+} TRACE_OPTION_KIND;
+
+typedef enum
+{
+    DUMP_none =0,
+    DUMP_ir,
+    DUMP_cfg,
+    DUMP_maximal
+} DUMP_KIND;
+
+typedef enum
+{
+    COMPONENT_invalid = -1,
+    COMPONENT_first   =  0,
+    COMPONENT_driver  = COMPONENT_first,
+    COMPONENT_last
+
+} O64_COMPONENT;
 
 #ifdef __cplusplus
 }

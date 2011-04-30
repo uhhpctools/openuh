@@ -92,11 +92,16 @@ HOSTDEFS += -DFRONT_END
 HOSTDEFS += -DFRONT_F90
 HOSTDEFS += -D_PDGCS 
 HOSTDEFS += -DUSE_STANDARD_TYPES
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 HOSTDEFS += -D __MIPS_AND_IA64_ELF_H
 endif
 ifeq ($(BUILD_OS), LINUX)
 HOSTDEFS += -Dlinux
+endif
+ifeq ($(BUILD_OS), DARWIN)
+HOSTDEFS += -Ddarwin
+endif
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 HOSTDEFS += -D__USE_BSD
 HOSTDEFS += -D_GNU_SOURCE
 endif
@@ -124,7 +129,7 @@ COMMON_COM_TARG_DIR 	= $(COMMON_COM_DIR)/$(BUILD_TARGET_DIR)
 COMMON_LIB_DIR 		= $(COMMON_DIR)/lib
 COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 FE90_INCLUDES           = $(BUILD_TOT)/linux/mfef90_includes
 LINUX_INC		= $(BUILD_TOT)/linux/include
 INCLUDE_DIR		= $(BUILD_AREA)/include
@@ -173,7 +178,7 @@ TRANS_SRCS = \
 	sgi_cmd_line.cxx \
 	path_intrinsic_list.cxx
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 TRANS_SRCS += \
 	make_depend.cxx 
 endif
@@ -230,15 +235,15 @@ CFILES = $(SGI_C_SRCS)
 CXXFILES = $(SGI_CXX_SRCS)
 
 # extra files to be removed with make clobber
-LDIRT = cf95.i cf95.cat cf95.exp cf95.cat.m cf95.exp.m ii_files compiler_build_date.c
+LDIRT = mfef95 cf95.i cf95.cat cf95.exp cf95.cat.m cf95.exp.m ii_files compiler_build_date.c
 
 HEADER_DIRS = $(FE90_DIR) $(SRC_DIRS) $(CURDIR) $(BUILD_TOT)/include
 
 VPATH    =  $(FE90_DIR) $(SRC_DIRS) 
 
 LCINCS = $(addprefix -I, $(HEADER_DIRS))
-ifeq ($(BUILD_OS), LINUX)
-LCINCS += -I$(FE90_INCLUDES) -I$(LINUX_INC) -I$(INCLUDE_DIR)/cmplrs -I/usr/include
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
+LCINCS += -I$(FE90_INCLUDES) -I$(LINUX_INC) -I$(BUILD_TOT)/include/cmplrs -I$(INCLUDE_DIR)/cmplrs
 endif
 LCXXINCS = $(LCINCS)
 
@@ -282,6 +287,10 @@ endif
 ifeq ($(BUILD_TARGET), X8664)
 LIBRARIES += $(F90SGI_TARG_DIR)/libf90sgi.a
 endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+LIBRARIES += $(F90SGI_TARG_DIR)/libf90sgi.a
+endif
+
 
 LLDLIBS += $(LIBRARIES)
 ifeq ($(BUILD_ARCH), IA64)
@@ -290,7 +299,7 @@ endif
 ifeq ($(BUILD_ARCH), IA32)
 LLDLIBS += -L/usr/ia32-sgi-linux/bin
 endif
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 LLDLIBS += -lm 
 ifeq ($(BUILD_HOST), IA64)
 LDFLAGS += -Wl,-relax
@@ -301,24 +310,36 @@ else
 LLDLIBS += -lcmplrs $(TARGDIR)/libm/libm.a
 endif
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
+	$(call submake,$(BUILD_AREA)/include)
+ endif
 ## verify that arith.a, fe90.a, libcif.a, and libf90sgi.a are up to date
 	$(call submake,$(TARG_COMUTIL_DIR))
 	$(call submake,$(LIBCIF_TARG_DIR))
 	$(call submake,$(ARITH_TARG_DIR))
 	$(call submake,$(FE90_TARG_DIR))
-ifeq ($(BUILD_TARGET),IA64)
+ ifeq ($(BUILD_TARGET),IA64)
 	$(call submake,$(F90SGI_TARG_DIR))
-endif
-ifeq ($(BUILD_TARGET),X8664)
+ endif
+ ifeq ($(BUILD_TARGET),X8664)
 	$(call submake,$(F90SGI_TARG_DIR))
-	$(call submake,$(LIBFORTRAN_DIR))
+ endif
+ ifeq ($(BUILD_TARGET),LOONGSON)
+       $(call submake,$(F90SGI_TARG_DIR))
+ endif
 endif
 
 #----------------------------------------------------------------------
@@ -341,7 +362,7 @@ exports: cf95.cat cf95.exp
 	$(INSTALL) -m 444 -F $(LANG_C_MSG_DIR) -src cf95.exp cf95.exp
 	$(INSTALL) -m 444 -F $(LANG_C_MSG_DIR) -src cf95.exp.m cf95.exp.m
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 install: default
 	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -D mfef95 $(STD_MONGOOSE_LINUX_LOC)/mfef95
 	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -D cf95.cat $(STD_MONGOOSE_LINUX_LOC)/cf95.cat
@@ -362,9 +383,13 @@ ifeq ($(BUILD_TARGET),IA64)
 	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -m32 -lm
 else
 ifeq ($(BUILD_TARGET),X8664)
-	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(LIBFORTRAN_DIR)/libfortran.a
+	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -lm
+else
+ifeq ($(BUILD_TARGET), LOONGSON)
+	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -lm 
 else
 	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $$($(F90) -m32 -print-file-name=libfortran.a)
+endif
 endif
 endif
 else
@@ -372,9 +397,9 @@ ifeq ($(BUILD_TARGET),IA64)
 	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -lm
 else
 ifeq ($(BUILD_TARGET),X8664)
-	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -lm
+	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(F90_RTLIBS) -m64 -lm 
 else
-	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(OPEN64_PREFIX)/lib/libm.a
+	$(link.c++f) -o $@ $(OBJECTS) compiler_build_date.o  -L./ $(TARG_COMUTIL_DIR)/libcomutil.a $(LDFLAGS) $(OPEN64_PREFIX)/lib/libm.a $$($(F90) -m32 -print-file-name=libfortran.a) 
 endif
 endif
 endif
@@ -398,9 +423,9 @@ $(LIBRARY): $(OBJECTS)
 cf95.i: $(FE90_DIR)/cf95.msgs
 	$(CCF) -E $(FE90_DIR)/cf95.msgs > cf95.i
 
-ifeq ($(BUILD_OS), LINUX)
-cf95.cat: ../../../crayf90/fe90/cf95.msgs
-	awk -f ../../../linux/tools/caterr.awk < ../../../crayf90/fe90/cf95.msgs | gencat -o cf95.cat
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
+cf95.cat: $(BUILD_TOT)/crayf90/fe90/cf95.msgs
+	awk -f $(BUILD_TOT)/linux/tools/caterr.awk < $(BUILD_TOT)/crayf90/fe90/cf95.msgs | gencat -o cf95.cat
 else
 cf95.cat: cf95.i
 	rm -f cf95.cat

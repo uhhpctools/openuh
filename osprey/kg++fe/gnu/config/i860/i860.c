@@ -535,20 +535,6 @@ singlemove_string (operands)
 	  return "st.l %r1,%0";
       else
 	abort ();
-#if 0
-	{
-	  rtx xoperands[2];
-
-	  cc_status.flags &= ~CC_F0_IS_0;
-	  xoperands[0] = gen_rtx_REG (SFmode, 32);
-	  xoperands[1] = operands[1];
-	  output_asm_insn (singlemove_string (xoperands), xoperands);
-	  xoperands[1] = xoperands[0];
-	  xoperands[0] = operands[0];
-	  output_asm_insn (singlemove_string (xoperands), xoperands);
-	  return "";
-	}
-#endif
     }
   if (GET_CODE (operands[1]) == MEM)
     {
@@ -1030,86 +1016,6 @@ output_load (operands)
   return load_opcode (mode, "%L1(%?r31),%0", operands[0]);
 }
 
-#if 0
-/* Load the address specified by OPERANDS[3] into the register
-   specified by OPERANDS[0].
-
-   OPERANDS[3] may be the result of a sum, hence it could either be:
-
-   (1) CONST
-   (2) REG
-   (2) REG + CONST_INT
-   (3) REG + REG + CONST_INT
-   (4) REG + REG  (special case of 3).
-
-   Note that (3) is not a legitimate address.
-   All cases are handled here.  */
-
-void
-output_load_address (operands)
-     rtx *operands;
-{
-  rtx base, offset;
-
-  if (CONSTANT_P (operands[3]))
-    {
-      output_asm_insn ("mov %3,%0", operands);
-      return;
-    }
-
-  if (REG_P (operands[3]))
-    {
-      if (REGNO (operands[0]) != REGNO (operands[3]))
-	output_asm_insn ("shl %?r0,%3,%0", operands);
-      return;
-    }
-
-  if (GET_CODE (operands[3]) != PLUS)
-    abort ();
-
-  base = XEXP (operands[3], 0);
-  offset = XEXP (operands[3], 1);
-
-  if (GET_CODE (base) == CONST_INT)
-    {
-      rtx tmp = base;
-      base = offset;
-      offset = tmp;
-    }
-
-  if (GET_CODE (offset) != CONST_INT)
-    {
-      /* Operand is (PLUS (REG) (REG)).  */
-      base = operands[3];
-      offset = const0_rtx;
-    }
-
-  if (REG_P (base))
-    {
-      operands[6] = base;
-      operands[7] = offset;
-      CC_STATUS_PARTIAL_INIT;
-      if (SMALL_INT (offset))
-	output_asm_insn ("adds %7,%6,%0", operands);
-      else
-	output_asm_insn ("mov %7,%0\n\tadds %0,%6,%0", operands);
-    }
-  else if (GET_CODE (base) == PLUS)
-    {
-      operands[6] = XEXP (base, 0);
-      operands[7] = XEXP (base, 1);
-      operands[8] = offset;
-
-      CC_STATUS_PARTIAL_INIT;
-      if (SMALL_INT (offset))
-	output_asm_insn ("adds %6,%7,%0\n\tadds %8,%0,%0", operands);
-      else
-	output_asm_insn ("mov %8,%0\n\tadds %0,%6,%0\n\tadds %0,%7,%0", operands);
-    }
-  else
-    abort ();
-}
-#endif
 
 /* Output code to place a size count SIZE in register REG.
    Because block moves are pipelined, we don't include the
@@ -1127,19 +1033,8 @@ output_size_for_block_move (size, reg, align)
   xoperands[1] = size;
   xoperands[2] = align;
 
-#if 1
   cc_status.flags &= ~ CC_KNOW_HI_R31;
   output_asm_insn (singlemove_string (xoperands), xoperands);
-#else
-  if (GET_CODE (size) == REG)
-    output_asm_insn ("sub %2,%1,%0", xoperands);
-  else
-    {
-      xoperands[1] = GEN_INT (INTVAL (size) - INTVAL (align));
-      cc_status.flags &= ~ CC_KNOW_HI_R31;
-      output_asm_insn ("mov %1,%0", xoperands);
-    }
-#endif
 }
 
 /* Emit code to perform a block move.
@@ -1157,9 +1052,6 @@ output_block_move (operands)
   /* A vector for our computed operands.  Note that load_output_address
      makes use of (and can clobber) up to the 8th element of this vector.  */
   rtx xoperands[10];
-#if 0
-  rtx zoperands[10];
-#endif
   static int movstrsi_label = 0;
   int i;
   rtx temp1 = operands[4];
@@ -1252,12 +1144,6 @@ output_block_move (operands)
      or use a free register (used by no operands).  */
   output_size_for_block_move (operands[2], operands[4], alignrtx);
 
-#if 0
-  /* Also emit code to decrement the size value by ALIGN.  */
-  zoperands[0] = operands[0];
-  zoperands[3] = plus_constant (operands[0], align);
-  output_load_address (zoperands);
-#endif
 
   /* Generate number for unique label.  */
 
@@ -1265,13 +1151,6 @@ output_block_move (operands)
 
   /* Calculate the size of the chunks we will be trying to move first.  */
 
-#if 0
-  if ((align & 3) == 0)
-    chunk_size = 4;
-  else if ((align & 1) == 0)
-    chunk_size = 2;
-  else
-#endif
     chunk_size = 1;
 
   /* Copy the increment (negative) to a register for bla insn.  */
@@ -1346,194 +1225,6 @@ output_block_move (operands)
   return "";
 }
 
-#if 0
-/* Output a delayed branch insn with the delay insn in its
-   branch slot.  The delayed branch insn template is in TEMPLATE,
-   with operands OPERANDS.  The insn in its delay slot is INSN.
-
-   As a special case, since we know that all memory transfers are via
-   ld/st insns, if we see a (MEM (SYMBOL_REF ...)) we divide the memory
-   reference around the branch as
-
-	orh ha%x,%?r0,%?r31
-	b ...
-	ld/st l%x(%?r31),...
-
-   As another special case, we handle loading (SYMBOL_REF ...) and
-   other large constants around branches as well:
-
-	orh h%x,%?r0,%0
-	b ...
-	or l%x,%0,%1
-
-   */
-/* ??? Disabled because this re-recognition is incomplete and causes
-   constrain_operands to segfault.  Anyone who cares should fix up
-   the code to use the DBR pass.  */
-
-const char *
-output_delayed_branch (template, operands, insn)
-     const char *template;
-     rtx *operands;
-     rtx insn;
-{
-  rtx src = XVECEXP (PATTERN (insn), 0, 1);
-  rtx dest = XVECEXP (PATTERN (insn), 0, 0);
-
-  /* See if we are doing some branch together with setting some register
-     to some 32-bit value which does (or may) have some of the high-order
-     16 bits set.  If so, we need to set the register in two stages.  One
-     stage must be done before the branch, and the other one can be done
-     in the delay slot.  */
-
-  if ( (GET_CODE (src) == CONST_INT
-	&& ((unsigned) INTVAL (src) & (unsigned) 0xffff0000) != (unsigned) 0)
-      || (GET_CODE (src) == SYMBOL_REF)
-      || (GET_CODE (src) == LABEL_REF)
-      || (GET_CODE (src) == CONST))
-    {
-      rtx xoperands[2];
-      xoperands[0] = dest;
-      xoperands[1] = src;
-
-      CC_STATUS_PARTIAL_INIT;
-      /* Output the `orh' insn.  */
-      output_asm_insn ("orh %H1,%?r0,%0", xoperands);
-
-      /* Output the branch instruction next.  */
-      output_asm_insn (template, operands);
-
-      /* Now output the `or' insn.  */
-      output_asm_insn ("or %L1,%0,%0", xoperands);
-    }
-  else if ((GET_CODE (src) == MEM
-	    && CONSTANT_ADDRESS_P (XEXP (src, 0)))
-	   || (GET_CODE (dest) == MEM
-	       && CONSTANT_ADDRESS_P (XEXP (dest, 0))))
-    {
-      rtx xoperands[2];
-      const char *split_template;
-      xoperands[0] = dest;
-      xoperands[1] = src;
-
-      /* Output the `orh' insn.  */
-      if (GET_CODE (src) == MEM)
-	{
-	  if (! ((cc_prev_status.flags & CC_KNOW_HI_R31)
-		 && (cc_prev_status.flags & CC_HI_R31_ADJ)
-		 && cc_prev_status.mdep == XEXP (operands[1], 0)))
-	    {
-	      CC_STATUS_INIT;
-	      output_asm_insn ("orh %h1,%?r0,%?r31", xoperands);
-	    }
-	  split_template = load_opcode (GET_MODE (dest),
-					"%L1(%?r31),%0", dest);
-	}
-      else
-	{
-	  if (! ((cc_prev_status.flags & CC_KNOW_HI_R31)
-		 && (cc_prev_status.flags & CC_HI_R31_ADJ)
-		 && cc_prev_status.mdep == XEXP (operands[0], 0)))
-	    {
-	      CC_STATUS_INIT;
-	      output_asm_insn ("orh %h0,%?r0,%?r31", xoperands);
-	    }
-	  split_template = store_opcode (GET_MODE (dest),
-					 "%r1,%L0(%?r31)", src);
-	}
-
-      /* Output the branch instruction next.  */
-      output_asm_insn (template, operands);
-
-      /* Now output the load or store.
-	 No need to do a CC_STATUS_INIT, because we are branching anyway.  */
-      output_asm_insn (split_template, xoperands);
-    }
-  else
-    {
-      int insn_code_number;
-      rtx pat = gen_rtx_SET (VOIDmode, dest, src);
-      rtx delay_insn = gen_rtx_INSN (VOIDmode, 0, 0, 0, pat, -1, 0, 0);
-      int i;
-
-      /* Output the branch instruction first.  */
-      output_asm_insn (template, operands);
-
-      /* Now recognize the insn which we put in its delay slot.
-	 We must do this after outputting the branch insn,
-	 since operands may just be a pointer to `recog_data.operand'.  */
-      INSN_CODE (delay_insn) = insn_code_number
-	= recog (pat, delay_insn, NULL);
-      if (insn_code_number == -1)
-	abort ();
-
-      for (i = 0; i < insn_data[insn_code_number].n_operands; i++)
-	{
-	  if (GET_CODE (recog_data.operand[i]) == SUBREG)
-	    alter_subreg (&recog_data.operand[i]);
-	}
-
-      insn_extract (delay_insn);
-      if (! constrain_operands (1))
-	fatal_insn_not_found (delay_insn);
-
-      template = get_insn_template (insn_code_number, delay_insn);
-      output_asm_insn (template, recog_data.operand);
-    }
-  CC_STATUS_INIT;
-  return "";
-}
-
-/* Output a newly constructed insn DELAY_INSN.  */
-const char *
-output_delay_insn (delay_insn)
-     rtx delay_insn;
-{
-  const char *template;
-  int insn_code_number;
-  int i;
-
-  /* Now recognize the insn which we put in its delay slot.
-     We must do this after outputting the branch insn,
-     since operands may just be a pointer to `recog_data.operand'.  */
-  insn_code_number = recog_memoized (delay_insn);
-  if (insn_code_number == -1)
-    abort ();
-
-  /* Extract the operands of this delay insn.  */
-  INSN_CODE (delay_insn) = insn_code_number;
-  insn_extract (delay_insn);
-
-  /* It is possible that this insn has not been properly scanned by final
-     yet.  If this insn's operands don't appear in the peephole's
-     actual operands, then they won't be fixed up by final, so we
-     make sure they get fixed up here.  -- This is a kludge.  */
-  for (i = 0; i < insn_data[insn_code_number].n_operands; i++)
-    {
-      if (GET_CODE (recog_data.operand[i]) == SUBREG)
-	alter_subreg (&recog_data.operand[i]);
-    }
-
-  if (! constrain_operands (1))
-    abort ();
-
-  cc_prev_status = cc_status;
-
-  /* Update `cc_status' for this instruction.
-     The instruction's output routine may change it further.
-     If the output routine for a jump insn needs to depend
-     on the cc status, it should look at cc_prev_status.  */
-
-  NOTICE_UPDATE_CC (PATTERN (delay_insn), delay_insn);
-
-  /* Now get the template for what this insn would
-     have been, without the branch.  */
-
-  template = get_insn_template (insn_code_number, delay_insn);
-  output_asm_insn (template, recog_data.operand);
-  return "";
-}
-#endif
 
 /* Special routine to convert an SFmode value represented as a
    CONST_DOUBLE into its equivalent unsigned long bit pattern.

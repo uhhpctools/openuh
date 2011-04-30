@@ -34,7 +34,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <alloca.h>
 #include "wn.h"	                        // WN
@@ -356,7 +355,8 @@ IPA_Create_Builtins ()
   // create the builtins (currently none)
 
   // Create our own arrays for used in ctype.h.
-  IPA_Create_Ctype_Arrays();
+  if(IPA_Enable_Ctype)
+    IPA_Create_Ctype_Arrays();
 
   // Restore pointers to standard memory pools
   MEM_pu_pool_ptr = save_pu_pool_ptr;
@@ -382,32 +382,6 @@ IPA_Rename_Builtins (IPA_NODE *node)
       WN *wn;
       WN *block = WN_ITER_wn(wni);
       for (wn = WN_first(block); wn != NULL; wn = WN_next(wn)) {
-#if 0	// Currently there are no IPA builtins.
-	if (WN_operator(wn) == OPR_INTRINSIC_CALL) {
-	  std::vector<IPA_BUILTIN*>::iterator it;
-	  for (it = IPA_builtins_list.begin(); 
-	       it != IPA_builtins_list.end();
-	       it++) {
-	    IPA_BUILTIN *ipa_builtin = *it;
-
-	    if (WN_intrinsic(wn) == ipa_builtin->Get_Intrinsic()) {
-	      WN *call_wn = WN_Create (OPR_CALL, MTYPE_V, MTYPE_V, 3);
-	      WN_st_idx(call_wn) = PU_Info_proc_sym(ipa_builtin->Get_PU_Info());
-
-	      WN_kid(call_wn, 0) = WN_kid0(wn);
-	      WN_kid(call_wn, 1) = WN_kid1(wn);
-	      WN_kid(call_wn, 2) = WN_kid2(wn);
-
-	      // Replace wn with call_wn.
-	      WN_INSERT_BlockAfter(block, wn, call_wn);
-	      WN_EXTRACT_FromBlock(block, wn);
-
-	      wn = call_wn;
-	      break;
-	    }
-	  }
-	} else
-#endif
 	// See if WN is a call to a C library function that returns the address
 	// of arrays used in ctype.h.  Change the call to a LDA of our own
 	// array.

@@ -204,17 +204,6 @@ function_cannot_inline_p (fndecl)
   if (get_max_uid () > 3 * max_insns)
     return N_("function too large to be inline");
 
-#if 0
-  /* Don't inline functions which do not specify a function prototype and
-     have BLKmode argument or take the address of a parameter.  */
-  for (parms = DECL_ARGUMENTS (fndecl); parms; parms = TREE_CHAIN (parms))
-    {
-      if (TYPE_MODE (TREE_TYPE (parms)) == BLKmode)
-	TREE_ADDRESSABLE (parms) = 1;
-      if (last == NULL_TREE && TREE_ADDRESSABLE (parms))
-	return N_("no prototype, and parameter address used; cannot be inline");
-    }
-#endif
 
   /* We can't inline functions that return structures
      the old-fashioned PCC way, copying into a static block.  */
@@ -2192,21 +2181,6 @@ copy_rtx_and_substitute (orig, map, for_lhs)
 					  copy_rtx_and_substitute (constant,
 								   map, 0));
 
-#if 0
-	      /* Legitimizing the address here is incorrect.
-
-		 Since we had a SYMBOL_REF before, we can assume it is valid
-		 to have one in this position in the insn.
-
-		 Also, change_address may create new registers.  These
-		 registers will not have valid reg_map entries.  This can
-		 cause try_constants() to fail because assumes that all
-		 registers in the rtx have valid reg_map entries, and it may
-		 end up replacing one of these new registers with junk.  */
-
-	      if (! memory_address_p (GET_MODE (temp), XEXP (temp, 0)))
-		temp = change_address (temp, GET_MODE (temp), XEXP (temp, 0));
-#endif
 
 	      temp = XEXP (temp, 0);
 
@@ -2292,11 +2266,6 @@ copy_rtx_and_substitute (orig, map, for_lhs)
 	}
       break;
 
-#if 0
-      /* Must be ifdefed out for loop unrolling to work.  */
-    case RETURN:
-      abort ();
-#endif
 
     case SET:
       /* If this is setting fp or ap, it means that we have a nonlocal goto.

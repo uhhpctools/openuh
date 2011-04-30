@@ -54,7 +54,11 @@ static char USMID[] = "@(#) libcif/cifdup.c	30.5	07/26/96 07:19:13";
 #endif
 
 #include <stdlib.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <stdio.h>
 #include <string.h>
 

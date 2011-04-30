@@ -1851,7 +1851,7 @@ PARTITION_GRAPH::Find_Node_In_OP(TN_OP_PAIR* tn_op)
 {
     Is_True(tn_op, ("Input is NULL tn_op and can't get its node"));
     TN* tn = tn_op->first;
-    OP* op = tn_op->second;
+    const OP* op = tn_op->second;
     PG_CONTAINER* node_set = (PG_CONTAINER*)OP_MAP_Get(_tn_node_map, op);
     if(!node_set){
         // There are too much this DevWarn to be nuisance
@@ -2058,7 +2058,7 @@ PARTITION_GRAPH::Is_Disjoint(TN_OP_PAIR tp1, TN_OP_PAIR tp2)
     Is_True(node, ("Can't get tp2's tn node!"));
     index2 = node->Index ();
     if(Get_Trace(TP_A_PRDB, TT_PRDB_APP)) {
-        OP* op1, *op2;
+        const OP* op1, *op2;
         op1 = tp1.second;
         op2 = tp2.second;
         fprintf(TFile, "number_of_query_PU_%d\n", Current_PU_Count());
@@ -2615,7 +2615,7 @@ void
 PARTITION_GRAPH::Sum(TN_OP_PAIR* tp,TP_CONTAINER* tp_set)
 {
     TN* tn = tp->first;
-    OP* op = tp->second;
+    const OP* op = tp->second;
     PARTITION_GRAPH_NODE* node = Find_Node_In_OP(tp);
     TP_CONTAINER::iterator iter;
     for ( iter = tp_set->begin(); iter != tp_set->end(); iter++)

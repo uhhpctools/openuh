@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -42,10 +46,10 @@
 // ====================================================================
 //
 // Module: fb_freq.h
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/common/com/fb_freq.h,v $
+// $Revision: 1.8 $
+// $Date: 05/12/05 08:59:36-08:00 $
+// $Author: bos@eng-24.pathscale.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/common/com/SCCS/s.fb_freq.h $
 //
 // Description:
 //
@@ -137,13 +141,22 @@ enum FB_FREQ_TYPE {
 // To account for round-off error, x == y  iff  x > y (1 - epsilon)
 //                                         and  y > x (1 - epsilon)
 
+#if defined(TARG_SL) && defined(__SL__) 
+#define  FREQ_OFFSET 3
+#define  FREQ_SET_OFFSET(value)    (value + FREQ_OFFSET)
+#define  FREQ_RESET_OFFSET(value)  (value - FREQ_OFFSET)
+typedef UINT32 FREQ_VALUE_TYPE;
+#else
 const float FB_FREQ_EPSILON = 0.0001;
+typedef float FREQ_VALUE_TYPE;
+#endif
 
 class FB_FREQ {
 public:
 
   FB_FREQ_TYPE  _type;
-  float         _value;
+  
+  FREQ_VALUE_TYPE    _value;
 
   // In order to simplify FB_FREQ operations, two internal restrictions
   // are imposed:
@@ -151,26 +164,63 @@ public:
   // (2) If _type <  0, then _value == (float) _type.
 
   // Private constructor, for binary operations
-  FB_FREQ( FB_FREQ_TYPE type, float value )
+  
+#if defined(TARG_SL) && defined(__SL__) 
+  FB_FREQ( FB_FREQ_TYPE type, FREQ_VALUE_TYPE value )
+    : _type( type ), _value( FREQ_SET_OFFSET(value) ) { }
+#else
+  FB_FREQ( FB_FREQ_TYPE type, FREQ_VALUE_TYPE value )
     : _type( type ), _value( value ) { }
+#endif  
+
 
 public:
 
   // Constructor methods
+#if defined(TARG_SL) && defined(__SL__) 
+  FB_FREQ()
+    : _type( FB_FREQ_TYPE_UNINIT ),
+      _value( FREQ_SET_OFFSET((FREQ_VALUE_TYPE) FB_FREQ_TYPE_UNINIT) ) {}
+
+  FB_FREQ( FREQ_VALUE_TYPE value, bool exact )
+    : _type( exact ? FB_FREQ_TYPE_EXACT : FB_FREQ_TYPE_GUESS ),
+      _value( FREQ_SET_OFFSET(value))
+    { Is_True( value >= 0, ( "FB_FREQ: negative value %ld", value ) ); }
+  FB_FREQ( INT32 value )
+    : _type( FB_FREQ_TYPE_EXACT ),
+      _value( FREQ_SET_OFFSET((FREQ_VALUE_TYPE) value))
+    { Is_True( value >= 0, ( "FB_FREQ: negative value %ld", value ) ); }
+  FB_FREQ( FREQ_VALUE_TYPE value )
+    : _type( FB_FREQ_TYPE_EXACT ),
+      _value(FREQ_SET_OFFSET(value))
+    { Is_True( value >= 0, ( "FB_FREQ: negative value %ld", value ) ); }
+
+  FB_FREQ( FB_FREQ_TYPE type )
+    : _type( type ),
+      _value( type >= 0 ? FREQ_SET_OFFSET(0) : FREQ_SET_OFFSET((FREQ_VALUE_TYPE) type) ) {
+    Is_True( FB_FREQ_TYPE_IS_VALID( type ),
+	     ( "FB_FREQ: invalid type %d", type ) );
+  }
+#else
 
   FB_FREQ()
     : _type( FB_FREQ_TYPE_UNINIT ),
-      _value( (float) FB_FREQ_TYPE_UNINIT ) {}
+      _value( (FREQ_VALUE_TYPE) FB_FREQ_TYPE_UNINIT ) {}
 
   FB_FREQ( float value, bool exact )
     : _type( exact ? FB_FREQ_TYPE_EXACT : FB_FREQ_TYPE_GUESS ),
       _value( value )
     { Is_True( value >= 0.0, ( "FB_FREQ: negative value %f", value ) ); }
 
+  FB_FREQ( INT32 value )
+    : _type( FB_FREQ_TYPE_EXACT ),
+      _value( (FREQ_VALUE_TYPE) value )
+    { Is_True( value >= 0, ( "FB_FREQ: negative value %lld", value ) ); }
+
 #ifdef KEY
   FB_FREQ( double value )
     : _type( FB_FREQ_TYPE_EXACT ),
-      _value( (float) value )
+      _value( (FREQ_VALUE_TYPE) value )
     { Is_True( value >= 0.0, ( "FB_FREQ: negative value %lld", value ) ); }
 
   FB_FREQ( float value )
@@ -181,19 +231,69 @@ public:
 
   FB_FREQ( INT64 value )
     : _type( FB_FREQ_TYPE_EXACT ),
-      _value( (float) value )
+      _value( (FREQ_VALUE_TYPE) value )
     { Is_True( value >= 0, ( "FB_FREQ: negative value %lld", value ) ); }
 
   FB_FREQ( FB_FREQ_TYPE type )
     : _type( type ),
-      _value( type >= 0 ? 0.0 : (float) type ) {
+      _value( type >= 0 ? 0.0 : (FREQ_VALUE_TYPE) type ) {
     Is_True( FB_FREQ_TYPE_IS_VALID( type ),
 	     ( "FB_FREQ: invalid type %d", type ) );
   }
+#endif
 
   // Member access methods
+  FREQ_VALUE_TYPE Value() const { return _value; }
+  FB_FREQ_TYPE Type() const { return _type; }
+  FREQ_VALUE_TYPE& Get_Value() { return _value; }
+  void   Set_Value(FREQ_VALUE_TYPE val) { _value=val; }
 
-  float Value() const { return _value; }
+#if defined(TARG_SL) && defined(__SL__) 
+
+  friend FB_FREQ operator+ ( const FB_FREQ freq1, const FB_FREQ freq2 ) {
+    FB_FREQ_TYPE type = FB_FREQ_TYPE_COMBINE( freq1._type, freq2._type );
+    if ( FB_FREQ_TYPE_NOT_KNOWN( type ) )
+      return FB_FREQ( type );
+    return FB_FREQ( type, FREQ_RESET_OFFSET(freq1._value) +FREQ_RESET_OFFSET( freq2._value));
+  }
+
+  FB_FREQ operator+= ( const FB_FREQ freq ) {
+    _type = FB_FREQ_TYPE_COMBINE( _type, freq._type );
+    if ( FB_FREQ_TYPE_NOT_KNOWN( _type ) )
+      _value = FREQ_SET_OFFSET((FREQ_VALUE_TYPE) _type);
+    else
+      _value += FREQ_RESET_OFFSET(freq._value) ;
+    return *this;
+  }
+
+  void Print( FILE *fp ) const {
+    switch ( _type ) {
+    case FB_FREQ_TYPE_EXACT:
+      fprintf( fp, "%d!", _value );
+      break;
+    case FB_FREQ_TYPE_GUESS:
+      fprintf( fp, "%d?", _value );
+      break;
+    case FB_FREQ_TYPE_UNKNOWN:
+      fprintf( fp, "unknown" );
+      break;
+    case FB_FREQ_TYPE_UNINIT:
+      fprintf( fp, "uninitialized" );
+      break;
+    case FB_FREQ_TYPE_ERROR:
+      fprintf( fp, "error" );
+      break;
+    default:
+      Is_True( FALSE, ("FB_FREQ: Unexpected type %d", _type ));
+      break;
+    }
+  }
+
+  void Print_simple (FILE * fp) const {
+    fprintf(fp, "_type = %d   |  _value = %f \n", _type, _value);
+  }
+
+#else
 
   // Boolean tests
 
@@ -215,7 +315,7 @@ public:
   FB_FREQ operator+= ( const FB_FREQ freq ) {
     _type = FB_FREQ_TYPE_COMBINE( _type, freq._type );
     if ( FB_FREQ_TYPE_NOT_KNOWN( _type ) )
-      _value = (float) _type;
+      _value = (FREQ_VALUE_TYPE) _type;
     else
       _value += freq._value;
     return *this;
@@ -224,7 +324,7 @@ public:
   FB_FREQ operator-= ( const FB_FREQ freq ) {
     _type = FB_FREQ_TYPE_COMBINE( _type, freq._type );
     if ( FB_FREQ_TYPE_NOT_KNOWN( _type ) )
-      _value = (float) _type;
+      _value = (FREQ_VALUE_TYPE) _type;
     else {
       _value -= freq._value;
       if ( _value < 0 )
@@ -234,7 +334,7 @@ public:
 	else {
 	  DevWarn( "FB_FREQ: subtraction of larger from smaller value" );
 	  _type  = FB_FREQ_TYPE_ERROR;
-	  _value = (float) _type;
+	  _value = (FREQ_VALUE_TYPE) _type;
 	}
     }
     return *this;
@@ -249,7 +349,7 @@ public:
     } else {
       _type = FB_FREQ_TYPE_COMBINE( _type, freq._type );
       if ( FB_FREQ_TYPE_NOT_KNOWN( _type ) )
-	_value = (float) _type;
+	_value = (FREQ_VALUE_TYPE) _type;
       else
 	_value *= freq._value;
     }
@@ -257,7 +357,7 @@ public:
   }
 
   // All scale factors are assumed to be guesses
-  FB_FREQ operator*= ( const float scale ) {
+  FB_FREQ operator*= ( const FREQ_VALUE_TYPE scale ) {
     Is_True ( scale >= 0.0, ( "FB_FREQ: negative scale %f", scale ) );
     return ( *this *= FB_FREQ( FB_FREQ_TYPE_GUESS, scale ) );
   }
@@ -270,11 +370,11 @@ public:
     else if ( freq.Zero() ) {
       DevWarn("FB_FREQ: division by zero");
       _type  = FB_FREQ_TYPE_ERROR;
-      _value = (float) _type;
+      _value = (FREQ_VALUE_TYPE) _type;
     } else {
       _type = FB_FREQ_TYPE_COMBINE( _type, freq._type );
       if ( FB_FREQ_TYPE_NOT_KNOWN( _type ) )
-	_value = (float) _type;
+	_value = (FREQ_VALUE_TYPE) _type;
       else {
 	if ( _value != freq._value )
 	  _type = FB_FREQ_TYPE_COMBINE( _type, FB_FREQ_TYPE_GUESS );
@@ -285,7 +385,7 @@ public:
   }
 
   // All scale factors are assumed to be guesses
-  FB_FREQ operator/= ( const float scale ) {
+  FB_FREQ operator/= ( const FREQ_VALUE_TYPE scale ) {
     Is_True ( scale >= 0.0, ( "FB_FREQ: negative scale %f", scale ) );
     return ( *this /= FB_FREQ( FB_FREQ_TYPE_GUESS, scale ) );
   }
@@ -303,7 +403,7 @@ public:
     FB_FREQ_TYPE type = FB_FREQ_TYPE_COMBINE( freq1._type, freq2._type );
     if ( FB_FREQ_TYPE_NOT_KNOWN( type ) )
       return FB_FREQ( type );
-    float value = freq1._value - freq2._value;
+    FREQ_VALUE_TYPE value = freq1._value - freq2._value;
     if ( value >= 0 )
       return FB_FREQ( type, value );
     if ( - value < FB_FREQ_EPSILON
@@ -324,7 +424,7 @@ public:
   }
 
   // All scale factors are assumed to be guesses
-  friend FB_FREQ operator* ( const FB_FREQ freq, const float scale ) {
+  friend FB_FREQ operator* ( const FB_FREQ freq, const FREQ_VALUE_TYPE scale ) {
     Is_True ( scale >= 0.0, ( "FB_FREQ: negative scale %f", scale ) );
     return ( freq * FB_FREQ( FB_FREQ_TYPE_GUESS, scale ) );
   }
@@ -343,12 +443,12 @@ public:
       return FB_FREQ( type );
     if ( freq1._value != freq2._value )
       type = FB_FREQ_TYPE_COMBINE( type, FB_FREQ_TYPE_GUESS );
-    float value = freq1._value / freq2._value;
+    FREQ_VALUE_TYPE value = freq1._value / freq2._value;
     return FB_FREQ( type, value );
   }
 
   // All scale factors are assumed to be guesses
-  friend FB_FREQ operator/ ( const FB_FREQ freq, float scale ) {
+  friend FB_FREQ operator/ ( const FB_FREQ freq, FREQ_VALUE_TYPE scale ) {
     Is_True ( scale >= 0.0, ( "FB_FREQ: negative scale %f", scale ) );
     return ( freq / FB_FREQ( FB_FREQ_TYPE_GUESS, scale ) );
   }
@@ -444,13 +544,13 @@ public:
     }
     return length;
   }
+#endif  
 };
 
 
 // Some FB_FREQ constants.  For unknown and uninitialized frequencies,
 // use these instead of invoking an FB_FREQ constructor.
-
-const FB_FREQ FB_FREQ_ZERO(    0.0, true /*EXACT*/  );
+const FB_FREQ FB_FREQ_ZERO(    0, true /*EXACT*/  );
 const FB_FREQ FB_FREQ_UNKNOWN( FB_FREQ_TYPE_UNKNOWN );
 const FB_FREQ FB_FREQ_UNINIT(  FB_FREQ_TYPE_UNINIT  );
 const FB_FREQ FB_FREQ_ERROR(   FB_FREQ_TYPE_ERROR   );

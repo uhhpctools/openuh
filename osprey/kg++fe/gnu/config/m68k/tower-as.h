@@ -279,39 +279,6 @@ do {					\
       fprintf ((FILE), "&0x%lx%08lx", l[0], l[1]);			\
     } while (0)
 
-#if 0
-#undef PRINT_OPERAND
-#define PRINT_OPERAND(FILE, X, CODE)  \
-{ if (CODE == '.') fprintf (FILE, ".");					\
-  else if (CODE == '#') fprintf (FILE, "&");				\
-  else if (CODE == '-') fprintf (FILE, "-(%%sp)");			\
-  else if (CODE == '+') fprintf (FILE, "(%%sp)+");			\
-  else if (CODE == '@') fprintf (FILE, "(%%sp)");			\
-  else if (CODE == '!') fprintf (FILE, "%%fpcr");			\
-  else if (CODE == '/')							\
-    fprintf (FILE, "%%");						\
-  else if (CODE == '$') { if (TARGET_68040_ONLY) fprintf (FILE, "s"); }	\
-  else if (CODE == '&') { if (TARGET_68040_ONLY) fprintf (FILE, "d"); }	\
-  else if (GET_CODE (X) == REG)						\
-    fprintf (FILE, "%s", reg_names[REGNO (X)]);				\
-  else if (GET_CODE (X) == MEM)						\
-    output_address (XEXP (X, 0));					\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == SFmode)	\
-    { REAL_VALUE_TYPE r; long l;					\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      REAL_VALUE_TO_TARGET_SINGLE (r, l);				\
-      fprintf (FILE, "&0x%lx", l); }					\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == DFmode)	\
-    { REAL_VALUE_TYPE r; int i[2];					\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      REAL_VALUE_TO_TARGET_DOUBLE (r, i);				\
-      fprintf (FILE, "&0x%x%08x", i[0], i[1]); }			\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == XFmode)	\
-    { REAL_VALUE_TYPE r;						\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      ASM_OUTPUT_LONG_DOUBLE_OPERAND (FILE, r); }			\
-  else { putc ('&', FILE); output_addr_const (FILE, X); }}
-#endif
 
 /* Note that this contains a kludge that knows that the only reason
    we have an address (plus (label_ref...) (reg...))

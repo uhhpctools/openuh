@@ -120,10 +120,6 @@ do {  \
    weak symbols in crtbegin.o (e.g., __register_frame_info).  Possibly
    Q relocations might avoid this problem but the GNU assembler doesn't
    support them.  */
-#if 0
-#define INIT_SECTION_ASM_OP	"\t.section\t.init"
-#define FINI_SECTION_ASM_OP	"\t.section\t.fini"
-#else
 #define EH_FRAME_IN_DATA_SECTION 1
 
 #undef ENDFILE_SPEC
@@ -133,7 +129,6 @@ do {  \
 #define STARTFILE_SPEC "%{!shared: \
 			 %{!symbolic: \
 			  %{pg:gcrt0.o%s}%{!pg:%{p:mcrt0.o%s}%{!p:crt0.o%s}}}}"
-#endif
 
 /* A default list of other sections which we might be "in" at any given
    time.  For targets that use additional sections (e.g. .tdesc) you

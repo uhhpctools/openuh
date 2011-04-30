@@ -34,14 +34,12 @@
 */
 
 
-#if 11
 
 extern void get_cilist64( cilist64 *a64, cilist *a );
 extern void get_inlist64(inlist64 *dst, inlist *src);
 extern void get_icilist64(icilist64 *dst, icilist *src);
 extern void get_olist64(olist64 *dst, olist *src);
 
-#endif	/* -n32 or -64 */
 
 #ifdef NO_XXX64_IN_LIBC
 extern long long lseek64(int a, long long b, int c);

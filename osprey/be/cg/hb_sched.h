@@ -41,10 +41,10 @@
 * ====================================================================
 *
 * Module: hb_sched.h
-* $Revision: 1.1.1.1 $
-* $Date: 2005/10/21 19:00:00 $
-* $Author: marcel $
-* $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/hb_sched.h,v $
+* $Revision: 1.14 $
+* $Date: 05/12/05 08:59:08-08:00 $
+* $Author: bos@eng-24.pathscale.com $
+* $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.hb_sched.h $
 *
 * Description:
 *
@@ -80,8 +80,17 @@
 #define HBS_FROM_GCM_FROM_BB		0x0800
 #define HBS_FROM_GCM_TO_BB		0x1000
 #define HBS_MINIMIZE_BUNDLES		0x2000
+#ifdef KEY
+#define HBS_BALANCE_READY_TYPES		0x4000
+#define HBS_BALANCE_UNSCHED_TYPES	0x8000
+#define HBS_DROP_UNSCHED_PREFETCHES	0x10000
+#endif
 
+#ifdef KEY
+typedef UINT32 HBS_TYPE;
+#else
 typedef UINT16 HBS_TYPE;
+#endif
 
 // Accessors:
 #define OP_VECTOR_element(v,i)	((OP *)VECTOR_element(v,i))
@@ -90,7 +99,7 @@ typedef UINT16 HBS_TYPE;
 // OPSCH: Data structure to keep track of scheduling information associated
 //        with each OP.
 // ======================================================================
-typedef struct {
+typedef struct OPSCH_struct {
   mUINT16 num_succs;
   mUINT16 num_preds;
   mUINT16 estart;
@@ -99,7 +108,44 @@ typedef struct {
   mUINT16 dfsnum;
   mINT16  regcost;
   mUINT16 flags;
+#ifdef KEY
+  mUINT16 depth;
+  mUINT16 id;
+  OP	  *op;
+
+  // These should have type OPSCH_SET* but OPSCH_SET is not available due to
+  // circular declaration.  Ugly hack to work around.
+  BS *ancestors;		// Bit vector identifying the node's ancestors
+  BS *descendants;		// and descendants.
+
+  // Identify the least blocked int/fp node among all the nodes blocked by the
+  // current node.  For forward/backward scheduling, this node has the fewest
+  // number of unscheduled ancestors/descendants.
+  struct OPSCH_struct	*least_constrained_int;
+  struct OPSCH_struct	*least_constrained_fp;
+
+  // The number of nodes blocking the current node.  It is the number of
+  // unscheduled ancestors/descendants in forward/backward scheduling.
+  mINT16 num_blockers;
+
+  // For one set operations.
+  INT32 one_set_mark;
+#endif
 } OPSCH;
+
+#ifdef KEY
+extern OPSCH **OPSCH_Vec;
+extern int OPSCH_Vec_Count;
+
+inline OPSCH *
+OPSCHvec(int idx) {
+  Is_True(idx <= OPSCH_Vec_Count, ("OPSCHvec: illegal OPSCH idx"));
+  return OPSCH_Vec[idx];
+}
+
+#include "opsch_set.h"
+
+#endif
 
 #define OPSCH_num_succs(opsch)	((opsch)->num_succs)
 #define OPSCH_num_preds(opsch)	((opsch)->num_preds)
@@ -109,6 +155,18 @@ typedef struct {
 #define OPSCH_dfsnum(opsch)	((opsch)->dfsnum)
 #define OPSCH_regcost(opsch)	((opsch)->regcost)
 #define OPSCH_flags(opsch)	((opsch)->flags)
+
+#ifdef KEY
+#define OPSCH_depth(opsch)			((opsch)->depth)
+#define OPSCH_id(opsch)				((opsch)->id)
+#define OPSCH_op(opsch)				((opsch)->op)
+#define OPSCH_ancestors(opsch)			((opsch)->ancestors)
+#define OPSCH_descendants(opsch)		((opsch)->descendants)
+#define OPSCH_least_constrained_int(opsch)	((opsch)->least_constrained_int)
+#define OPSCH_least_constrained_fp(opsch)	((opsch)->least_constrained_fp)
+#define OPSCH_num_blockers(opsch)		((opsch)->num_blockers)
+#define OPSCH_one_set_mark(opsch)		((opsch)->one_set_mark)
+#endif
 
 //
 // Define all the flags used to associate information with OPs in the 
@@ -426,6 +484,14 @@ private:
   TI_RES_RES*       _rr_tab;
   TI_BUNDLE         *_bundle;
   INT32		    _max_sched;
+#ifdef KEY
+  OPSCH_SET	    *_scheduled_opschs;
+  INT32		    _ready_count;
+  INT32		    _unsched_count;
+  INT32		    _ready_fp_percentage;
+  INT32		    _unsched_fp_percentage;
+  INT32		    _one_set_counter;
+#endif
 
   // private functions:
   BOOL Avoid_Processing_HB(std::list<BB*>);
@@ -446,7 +512,11 @@ private:
   void Compute_BBSCH (BB*, BBSCH*);
   BOOL Can_Schedule_Op (OP *cur_op, INT cur_time);
   void Initialize (); 
+#ifdef KEY
+  void Schedule_Block (BB*, BBSCH*, int scheduling_algorithm);
+#else
   void Schedule_Block (BB*, BBSCH*); 
+#endif
   void Schedule_Blocks (std::list<BB*>&); 
   void Put_Sched_Vector_Into_BB (BB*, BBSCH*, BOOL);
   void Put_Sched_Vector_Into_HB (std::list<BB*>&);
@@ -454,6 +524,18 @@ private:
   void Adjust_Ldst_Offsets (void);
 #ifdef KEY
   void Adjust_Ldst_Offsets (BOOL is_fwd);
+  void Update_Least_Constrained (OPSCH *, BOOL);
+  void DFS_Update_Least_Constrained (OPSCH *, BOOL);
+  void Drop_Remaining_Prefetches (BB *);
+
+  // One set operations.
+  void Clear_One_Set(void)		{ _one_set_counter++; }
+  BOOL One_Set_MemberP(OPSCH *opsch)
+    { return OPSCH_one_set_mark(opsch) == _one_set_counter; }
+  void One_Set_Union1(OPSCH *opsch)
+    { OPSCH_one_set_mark(opsch) = _one_set_counter; }
+  void One_Set_Difference1(OPSCH *opsch)
+    { OPSCH_one_set_mark(opsch) = _one_set_counter - 1; }
 #endif
   void Init_Register_Map (BB*);
   void Init_RFlag_Table (std::list<BB*>&, BOOL);
@@ -483,6 +565,11 @@ public:
   void Set_hbs_from_pre_gcm_sched(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_FROM_PRE_GCM_SCHED); }   
   void Set_hbs_from_post_gcm_sched(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_FROM_POST_GCM_SCHED); }   
   void Set_hbs_minimize_bundles(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_MINIMIZE_BUNDLES); }
+#ifdef KEY
+  void Set_hbs_balance_ready_types(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_BALANCE_READY_TYPES); }
+  void Set_hbs_balance_unsched_types(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_BALANCE_UNSCHED_TYPES); }
+  void Set_hbs_drop_unsched_prefetches(void) { _hbs_type = (HBS_TYPE) (_hbs_type | HBS_DROP_UNSCHED_PREFETCHES); }
+#endif
 
   // Member access functions:
   HBS_TYPE type(void)        const { return _hbs_type; }
@@ -492,6 +579,11 @@ public:
   BOOL HBS_Depth_First(void) const { return _hbs_type & HBS_DEPTH_FIRST; }
   BOOL HBS_Minimize_Regs(void) const { return _hbs_type & HBS_MINIMIZE_REGS; }
   BOOL HBS_Minimize_Bundles(void) const { return _hbs_type & HBS_MINIMIZE_BUNDLES; }
+#ifdef KEY
+  BOOL HBS_Balance_Ready_Types(void) const { return _hbs_type & HBS_BALANCE_READY_TYPES; }
+  BOOL HBS_Balance_Unsched_Types(void) const { return _hbs_type & HBS_BALANCE_UNSCHED_TYPES; }
+  BOOL HBS_Drop_Unsched_Prefetches(void) const { return _hbs_type & HBS_DROP_UNSCHED_PREFETCHES; }
+#endif
   BOOL HBS_From_GCM(void) const { return _hbs_type & HBS_FROM_GCM; }
   BOOL HBS_From_CGPREP(void) const { return _hbs_type & HBS_FROM_CGPREP; }
   BOOL HBS_From_Pre_GCM_Sched(void) const { return _hbs_type & HBS_FROM_PRE_GCM_SCHED; }
@@ -502,13 +594,26 @@ public:
   TI_BUNDLE* bundle(void)    { return _bundle; }
   hTN_MAP regs_map(void) { return _regs_map; }
   TI_RES_RES* rr_tab(void) { return _rr_tab; }
+#ifdef KEY
+  void Update_Schedule_Parameters(void);
+  INT32 Ready_Vector_Fp_Count(void);
+
+  INT32 Ready_Count(void)		    { return _ready_count; }
+  INT32 Ready_Fp_Percentage(void)	    { return _ready_fp_percentage; }
+  INT32 Unsched_Count(void)		    { return _unsched_count; }
+  INT32 Unsched_Fp_Percentage(void)	    { return _unsched_fp_percentage; }
+#endif
 
   // Exported functions:
   void Init (BB*, HBS_TYPE, INT32, BBSCH*, mINT8*);
   void Init (std::list<BB*>, HBS_TYPE, mINT8*);
   INT Find_Schedule_Cycle(OP*, BOOL);
   void Estimate_Reg_Cost_For_OP (OP*);
+#ifdef KEY
+  void Schedule_BB (BB*, BBSCH*, int scheduling_algorithm = -1);
+#else
   void Schedule_BB (BB*, BBSCH*);   
+#endif
   void Schedule_HB (std::list<BB*>);   
 };
 
@@ -521,8 +626,11 @@ extern BOOL Reschedule_BB(BB*);
 extern BOOL Can_Schedule_HB(std::list<BB*> hb_blocks);
 extern BOOL Is_Ldst_Addiu_Pair (OPSCH*, OPSCH*, OP*, OP*);
 extern void Fixup_Ldst_Offset(OP*, INT64, INT64, HBS_TYPE);
-extern void Compute_OPSCH(BB *bb, BB_MAP value_map, MEM_POOL *pool);
-extern void Compute_OPSCHs(std::list<BB*> bblist, BB_MAP value_map, MEM_POOL *pool);
+extern void Compute_OPSCH(BB *bb, BB_MAP value_map, MEM_POOL *pool,
+			  BOOL compute_bitsets = FALSE, BOOL is_fwd = FALSE);
+extern void Compute_OPSCHs(std::list<BB*> bblist, BB_MAP value_map,
+			   MEM_POOL *pool, BOOL compute_bitsets = FALSE,
+			   BOOL is_fwd = FALSE);
 
 // Trace Utility routines
 extern void Print_BB_For_HB (std::list<BB*> bblist);

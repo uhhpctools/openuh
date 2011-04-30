@@ -1870,27 +1870,6 @@ generate_bytecode_insns (exp, target, state)
     case LOOP_EXPR:
       {
 	tree body = TREE_OPERAND (exp, 0);
-#if 0
-	if (TREE_CODE (body) == COMPOUND_EXPR
-	    && TREE_CODE (TREE_OPERAND (body, 0)) == EXIT_EXPR)
-	  {
-	    /* Optimize:  H: if (TEST) GOTO L; BODY; GOTO H; L:
-	       to:  GOTO L;  BODY;  L:  if (!TEST) GOTO L; */
-	    struct jcf_block *head_label;
-	    struct jcf_block *body_label;
-	    struct jcf_block *end_label = gen_jcf_label (state);
-	    struct jcf_block *exit_label = state->labeled_blocks;
-	    head_label = gen_jcf_label (state);
-	    emit_goto (head_label, state);
-	    body_label = get_jcf_label_here (state);
-	    generate_bytecode_insns (TREE_OPERAND (body, 1), target, state);
-	    define_jcf_label (head_label, state);
-	    generate_bytecode_conditional (TREE_OPERAND (body, 0),
-					   end_label, body_label, 1, state);
-	    define_jcf_label (end_label, state);
-	  }
-	else
-#endif
 	  {
 	    struct jcf_block *head_label = get_jcf_label_here (state);
 	    generate_bytecode_insns (body, IGNORE_TARGET, state);

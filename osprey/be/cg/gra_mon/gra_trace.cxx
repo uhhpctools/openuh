@@ -1,8 +1,4 @@
 /*
- * Copyright 2006.  QLogic Corporation.  All Rights Reserved.
- */
-
-/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -51,10 +47,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_trace.cxx,v $
+//  $Revision: 1.6 $
+//  $Date: 05/12/05 08:59:10-08:00 $
+//  $Author: bos@eng-24.pathscale.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_trace.cxx $
 
 #ifdef USE_PCH
 #include "cg_pch.h"
@@ -219,7 +215,7 @@ GRA_Trace_Split_Sub_Priority(GRA_BB* gbb, BOOL is_store)
   }
 }
 
-#ifndef TARG_IA64
+#ifdef KEY
 /////////////////////////////////////
 void
 GRA_Trace_Split_Reclaim_Add_Priority(GRA_BB* gbb, BOOL is_store, float priority)
@@ -253,7 +249,7 @@ GRA_Trace_Split_Reclaim_Sub_Priority(GRA_BB* gbb, BOOL is_store, float priority)
 
 /////////////////////////////////////
 void
-GRA_Trace_Split_Priority_On(char *msg)
+GRA_Trace_Split_Priority_On(const char *msg)
 /////////////////////////////////////
 //  See interface description.
 /////////////////////////////////////
@@ -637,7 +633,7 @@ GRA_Init_Trace_Memory(void)
 
 /////////////////////////////////////
 void
-GRA_Trace_Memory(char *string)
+GRA_Trace_Memory(const char *string)
 /////////////////////////////////////
 {
   if (trace_memory) {
@@ -648,7 +644,7 @@ GRA_Trace_Memory(char *string)
 
 /////////////////////////////////////
 void
-GRA_Trace_Memory_Realloc(char *string)
+GRA_Trace_Memory_Realloc(const char *string)
 /////////////////////////////////////
 {
   if (trace_memory) {
@@ -663,13 +659,13 @@ GRA_Trace_Memory_Counts()
 {
   if (trace_memory) {
     fprintf(TFile,"<gra> Memory use for GRA_BBs: %ld\n",
-	    (long)gbb_mgr.Alloc_Count()*sizeof(GRA_BB));
+	    (long)(gbb_mgr.Alloc_Count()*sizeof(GRA_BB)));
     fprintf(TFile,"<gra> Memory count of GRA_BBs: %d\n",
 	    gbb_mgr.Alloc_Count());
     fprintf(TFile,"<gra> Memory use for GRA_REGIONs: %ld\n",
-	    (long)gra_region_mgr.Alloc_Count()*sizeof(GRA_REGION));
-    fprintf(TFile,"<gra> Memory count of GRA_REGIONs: %d\n",
-	    gra_region_mgr.Alloc_Count());
+	    (long)(gra_region_mgr.Alloc_Count()*sizeof(GRA_REGION)));
+    fprintf(TFile,"<gra> Memory count of GRA_REGIONs: %ld\n",
+	    (long)(gra_region_mgr.Alloc_Count()));
   }
 }
 
@@ -708,7 +704,7 @@ GRA_Trace_LRANGE_Allocate(LRANGE* lrange )
   }
 }
 
-#ifndef TARG_IA64
+#ifdef KEY
 /////////////////////////////////////
 void
 GRA_Trace_LRANGE_Choose(LRANGE* lrange, REGISTER_SET allowed)
@@ -719,7 +715,6 @@ GRA_Trace_LRANGE_Choose(LRANGE* lrange, REGISTER_SET allowed)
     fprintf(TFile, " for GTN%d\n", TN_number(lrange->Tn()));
   }
 }
-
 /////////////////////////////////////
 void
 GRA_Trace_LRANGE_Choose_Reclaimable(LRANGE* lrange, REGISTER_SET reclaimable)

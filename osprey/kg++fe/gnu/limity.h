@@ -7,4 +7,3 @@
 #include_next <limits.h>		/* recurse down to the real one */
 #endif
 
-#endif /* not _GCC_LIMITS_H_ */

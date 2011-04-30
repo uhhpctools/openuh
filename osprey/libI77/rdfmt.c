@@ -85,28 +85,19 @@ int __s_rsfi_com (icilist64 *a, unit **fu, int f90sw)
 
 int s_rsfi (icilist *a)
 {
-#if 11
   icilist64 dst;
   get_icilist64(&dst, a);
   return __s_rsfi_com(&dst, &f77curunit, 0);
-#else
-    return( __s_rsfi_com( a, &f77curunit, 0 ) );
-#endif
 }
 
 int s_rsfi_mp (icilist *a, unit **fu)
 {
-#if 11
   icilist64 dst;
   get_icilist64(&dst, a);
   return __s_rsfi_com(&dst, fu, 0);
-#else
-    return( __s_rsfi_com( a, fu, 0 ) );
-#endif
 }
 
 
-#if 11
 /* 64 bit versions */
 int s_rsfi64 (icilist64 *a)
 {
@@ -118,7 +109,6 @@ int s_rsfi64_mp (icilist64 *a, unit **fu)
     return( __s_rsfi_com( a, fu, 0 ) );
 }
 
-#endif	/* -n32 and -64 */
 
 int
 rd_ed (unit * ftnunit, struct f77syl *p, char *ptr, ftnlen len, ftnint type)

@@ -41,13 +41,6 @@
 #include "cxx_memory.h"
 #include "errors.h"
 
-MEM_POOL* _dummy_new_mempool = (MEM_POOL*) -1;
-MEM_POOL* _dummy_delete_mempool = (MEM_POOL*) -1;
-size_t _dummy_pad = 0;
-
-int         _alloc_callsite_line = 0;
-const char *_alloc_callsite_file = NULL;
-
 /* Description of new scheme:
  * ==========================
  *
@@ -138,61 +131,25 @@ const char *_alloc_callsite_file = NULL;
  * /hosts/snowy.mti/work/workarea/v7.00/common/util/cxx_memory.{h,cxx}.shank
  */
 
-void* operator new (size_t sz)
-#ifdef __GNUC__
-                               throw(std::bad_alloc) 
-#endif /* __GNUC__ */
+// the dummy parameter make the new operator different from "new(size_t, void*)"
+//
+
+void* operator
+new (size_t sz, MEM_POOL* mp, size_t pad, INT32 line, const char* file) 
+    #ifdef __GNUC__
+       throw(std::bad_alloc) 
+    #endif
 {
   void* ptr;
-  if (_dummy_new_mempool == (MEM_POOL*) -1) {
-#if (__GNUC__ < 3) // to many of this after building with gcc 3.2
-    DevWarn("new: _dummy_new_mempool is not yet set; Using Malloc_Mem_Pool");
-#endif
-    _dummy_new_mempool = Malloc_Mem_Pool;
+  if (mp == (MEM_POOL*) -1) {
+    mp = Malloc_Mem_Pool;
   }
 
-  ptr = (void *) MEM_POOL_Alloc_P(_dummy_new_mempool,
-				  sz+_dummy_pad,
 #ifdef Is_True_On
-				  _alloc_callsite_line,
-				  _alloc_callsite_file);
-  _alloc_callsite_file = NULL;
-  _alloc_callsite_line = 0;
+  ptr = (void *)MEM_POOL_Alloc_P(mp, pad+sz, line, file);
 #else
-				0, NULL);
+  ptr = (void *)MEM_POOL_Alloc_P(mp, pad+sz, 0, NULL);
 #endif
-  _dummy_new_mempool = (MEM_POOL*) -1;
-  _dummy_pad = 0;
+
   return ptr;
 }
-
-void operator delete (void* ptr)
-#ifdef __GNUC__
-                                 throw() 
-#endif /* __GNUC__ */
-{
-  if (_dummy_delete_mempool == (MEM_POOL*) -1) {
-#if (__GNUC__ < 3) // to many of this after building with gcc 3.2
-    DevWarn("new: _dummy_delete_mempool is not yet set; Using Malloc_Mem_Pool");
-#endif
-    _dummy_delete_mempool = Malloc_Mem_Pool;
-  }
-
-  MEM_POOL_FREE (_dummy_delete_mempool, ptr);
-  _dummy_delete_mempool = (MEM_POOL*) -1;
-}
-
-#ifdef __GNUC__
-void operator delete[] (void* ptr) throw() {
-  if (_dummy_delete_mempool == (MEM_POOL*) -1) {
-#if (__GNUC__ < 3) // to many of this after building with gcc 3.2
-    DevWarn("new: _dummy_delete_mempool is not yet set; Using Malloc_Mem_Pool");
-#endif
-    _dummy_delete_mempool = Malloc_Mem_Pool;
-  }
-
-  MEM_POOL_FREE (_dummy_delete_mempool, ptr);
-  _dummy_delete_mempool = (MEM_POOL*) -1;
-}
-#endif
-

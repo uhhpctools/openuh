@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -66,8 +70,8 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source$ $Revision$";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source$ $Revision$";
 
 #ifndef _NEW_SYMTAB
 
@@ -169,10 +173,11 @@ static INT Size(OPCODE opcode)
     case MTYPE_I2: case MTYPE_U2: return 2;
     case MTYPE_I4: case MTYPE_U4: case MTYPE_F4: return 4;
     case MTYPE_I8: case MTYPE_U8: case MTYPE_F8: case MTYPE_C4: return 8;
-#ifdef PATHSCALE_MERGE
+#if defined(TARG_IA64) || define(TARG_X8664)
     case MTYPE_F10:
 #endif								
     case MTYPE_C8: case MTYPE_FQ: return 16;
+    case MTYPE_C10:
     case MTYPE_CQ: return 32;
   }
   return 0;

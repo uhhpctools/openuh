@@ -1,12 +1,4 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
- */
-
-/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -858,7 +850,7 @@ extern void Pad_Degenerates()
       /* Bug 4902 - Avoid the Store and Load Forward [31:12] penalty. */
       if (!Is_Target_Anyx86() &&
 	  !Is_Target_EM64T() && 
-	  !Is_Target_Core() &&
+//	  !Is_Target_Core() &&  //good for core
 	  !Is_Target_Pentium4() &&
 	  size >= 4096) {
 	UINT tmp = size;

@@ -110,22 +110,8 @@ _mm_lddqu_si128 (__m128i const *__P)
   return (__m128i) __builtin_ia32_lddqu ((char const *)__P);
 }
 
-#if 0
-static __inline void
-_mm_monitor (void const * __P, unsigned int __E, unsigned int __H)
-{
-  __builtin_ia32_monitor (__P, __E, __H);
-}
-
-static __inline void
-_mm_mwait (unsigned int __E, unsigned int __H)
-{
-  __builtin_ia32_mwait (__E, __H);
-}
-#else
 #define _mm_monitor(P, E, H)	__builtin_ia32_monitor ((P), (E), (H))
 #define _mm_mwait(E, H)		__builtin_ia32_mwait ((E), (H))
-#endif
 
 #endif /* __PNI__ */
 

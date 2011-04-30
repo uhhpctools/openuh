@@ -76,7 +76,7 @@ elf_getarsym(Elf *elf, size_t *ptr) {
 		return NULL;
 	    }
 	    elf_assert(!*s);
-	    syms[i].as_hash = elf_hash(syms[i].as_name);
+	    syms[i].as_hash = elf_hash((unsigned char *) syms[i].as_name);
 	    syms[i].as_off = __load_u32M(elf->e_symtab + 4 * (i + 1));
 	}
 	syms[count].as_name = NULL;

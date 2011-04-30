@@ -109,6 +109,10 @@
 //	In multiple word instructions, advance to the next word. Subsequent
 //	Operand and Result calls operate on this word.
 //
+//  void ISA_Pack_Is_Unused(void)
+//      If won't be using pack info, then this will generate dummy file
+//      so builds easy and don't have to create any pack types.
+//
 //  void ISA_Pack_End(void)
 //      Complete processing of operands/results.
 //
@@ -150,6 +154,7 @@ extern void Adjust_Operand(int operand_index,
 			   OPND_ADJ_TYPE unpack_adj);
 extern void Result (int result_index, int bit_position, int width);
 extern void Next_Word (void);
+extern void ISA_Pack_Is_Unused(void);
 extern void ISA_Pack_End(void);
 
 #ifdef __cplusplus

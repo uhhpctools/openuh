@@ -200,11 +200,7 @@ xstormy16_emit_cbranch (code, loc)
   else
     {
       rtx sub;
-#if 0
-      sub = gen_rtx_SET (VOIDmode, op0, gen_rtx_MINUS (SImode, op0, op1));
-#else
       sub = gen_rtx_CLOBBER (SImode, op0);
-#endif
       vec = gen_rtvec (3, branch, sub, cy_clobber);
     }
 

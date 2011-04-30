@@ -211,7 +211,7 @@ void MHD_LEVEL::Reset_CS_String()
    if(Size < 0) return; /*nothing to do */
    if(CS_string != NULL)
       free(CS_string); /* safe to free, because it is malloced */
-   char *addition = "K"; /* appending character */
+   const char *addition = "K"; /* appending character */
    INT64 remains = Size/1024;
    if(remains >= 1024)
    {

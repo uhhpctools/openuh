@@ -155,10 +155,6 @@ Em_Dwarf_Symbolic_Relocs_To_Elf(next_buffer_retriever     get_buffer,
 	exit(-1);
       }
       else {
-#if 0
-	fprintf(TFile, "translating pair (0x%lx) aimed at offset %llu\n",
-		reloc_buf, reloc_buf->drd_offset);
-#endif
 
 	Dwarf_Unsigned offset1, offset2;
 	Dwarf_Unsigned scn_sym1, scn_sym2;
@@ -183,9 +179,6 @@ Em_Dwarf_Symbolic_Relocs_To_Elf(next_buffer_retriever     get_buffer,
 	  }
 	  buffer = get_buffer();
 	  bufsize = get_bufsize();
-#if 0
-	  fprintf(TFile, "buffer = 0x%lx, bufsize = %llu\n", buffer, bufsize);
-#endif
 	}
 	if (is_64bit) {
 	  ((UINT64_unaligned *) ((char *) buffer +
@@ -200,10 +193,6 @@ Em_Dwarf_Symbolic_Relocs_To_Elf(next_buffer_retriever     get_buffer,
       }
     }
     else {
-#if 0
-	fprintf(TFile, "translating simple (0x%lx) aimed at offset %llu\n",
-		reloc_buf, reloc_buf->drd_offset);
-#endif
 
 	while (reloc_buf->drd_offset >= bufsize + offset_offset) {
 	  offset_offset += bufsize;
@@ -212,9 +201,6 @@ Em_Dwarf_Symbolic_Relocs_To_Elf(next_buffer_retriever     get_buffer,
 	  }
 	  buffer = get_buffer();
 	  bufsize = get_bufsize();
-#if 0
-	  fprintf(TFile, "buffer = 0x%lx, bufsize = %llu\n", buffer, bufsize);
-#endif
 	}
       if (is_64bit) {
 	*((Elf64_AltRel *) cur_reloc) =

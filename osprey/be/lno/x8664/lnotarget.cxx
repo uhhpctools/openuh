@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -49,14 +53,20 @@ LNOTARGET_Whirl_To_Top (WN* wn)
     return TOP_addss;
   case OPC_F8ADD:
     return TOP_addsd;
+  case OPC_F10ADD:
+    return TOP_fadd;
   case OPC_F4SUB:
     return TOP_subss;
   case OPC_F8SUB:
     return TOP_subsd;
+  case OPC_F10SUB:
+    return TOP_fsub;
   case OPC_F4MPY:
     return TOP_mulss;
   case OPC_F8MPY:
     return TOP_mulsd;
+  case OPC_F10MPY:
+    return TOP_fmul;
   case OPC_F4MADD:	// (src2 * src3) + src1
   case OPC_F4NMADD:	// -((src2 * src3) + src1)
   case OPC_F4MSUB:	// (src2 * src3) - src1
@@ -71,7 +81,10 @@ LNOTARGET_Whirl_To_Top (WN* wn)
     return TOP_divss;
   case OPC_F8DIV:
     return TOP_divsd;
+  case OPC_F10DIV:
+    return TOP_fdiv;
   case OPC_F4RSQRT:
+  case OPC_F4ATOMIC_RSQRT:
     return TOP_sqrtss;
   case OPC_F8RSQRT:
     return TOP_sqrtsd;
@@ -79,34 +92,47 @@ LNOTARGET_Whirl_To_Top (WN* wn)
     return TOP_xorps;
   case OPC_F8NEG:
     return TOP_xorpd;    
+  case OPC_I4F10EQ:
   case OPC_I4F8EQ:
   case OPC_I4F4EQ:
+  case OPC_I4F10NE:
   case OPC_I4F8NE:
   case OPC_I4F4NE:
+  case OPC_I4F10LT:
   case OPC_I4F8LT:
   case OPC_I4F4LT:
+  case OPC_I4F10GT:
   case OPC_I4F8GT:
   case OPC_I4F4GT:
+  case OPC_I4F10LE:
   case OPC_I4F8LE:
   case OPC_I4F4LE:
+  case OPC_I4F10GE:
   case OPC_I4F8GE:
   case OPC_I4F4GE:
+  case OPC_U4F10EQ:
   case OPC_U4F8EQ:
   case OPC_U4F4EQ:
+  case OPC_U4F10NE:
   case OPC_U4F8NE:
   case OPC_U4F4NE:
+  case OPC_U4F10LT:
   case OPC_U4F8LT:
   case OPC_U4F4LT:
+  case OPC_U4F10GT:
   case OPC_U4F8GT:
   case OPC_U4F4GT:
+  case OPC_U4F10LE:
   case OPC_U4F8LE:
   case OPC_U4F4LE:
+  case OPC_U4F10GE:
   case OPC_U4F8GE:
   case OPC_U4F4GE:
     // needs a ucomisd/ucomiss and some form of set
     return TOP_UNDEFINED;    
   case OPC_F4RECIP:
   case OPC_F8RECIP:
+  case OPC_F10RECIP:
     // needs two ops - one to load constant 1; and one to divide
     return TOP_UNDEFINED;
   case OPC_F4ABS:
@@ -115,6 +141,8 @@ LNOTARGET_Whirl_To_Top (WN* wn)
   case OPC_F8ABS:
     // approximate because needs an op to load a special constant 
     return TOP_andpd;
+  case OPC_F10ABS:
+    return TOP_fabs;
   case OPC_F4SELECT:
   case OPC_F8SELECT:
     // selects have no direct particular ops; and get expanded to multiple ops.
@@ -124,7 +152,11 @@ LNOTARGET_Whirl_To_Top (WN* wn)
     // expand into several ops
     return TOP_UNDEFINED;
   default:
-    FmtAssert(FALSE, ("Handle this case"));
+    // bug 10320: handle TAS to avoid assertion failure
+    if(OPCODE_operator(opcode) == OPR_TAS)
+      break;
+    else
+      FmtAssert(FALSE, ("Handle this case"));
   }
   return WHIRL_To_TOP(wn);
 }
@@ -270,32 +302,32 @@ LNOTARGET_Cvt_Res (TI_RES_COUNT* resource_count, OPCODE opcode)
     TI_RES_COUNT_Add_Op_Resources(resource_count, TOP_cvttsd2siq);
     return 1.0;        
  
-  case OPC_FQF8CVT:
-  case OPC_FQF4CVT:
+  case OPC_F10F8CVT:
+  case OPC_F10F4CVT:
     TI_RES_COUNT_Add_Op_Resources(resource_count, 
-				  opcode == OPC_F8FQCVT ? TOP_stsd : TOP_stss);
+				  opcode == OPC_F8F10CVT ? TOP_stsd : TOP_stss);
     TI_RES_COUNT_Add_Op_Resources(resource_count, 
-				  opcode == OPC_F8FQCVT ? TOP_fldl : TOP_flds);
+				  opcode == OPC_F8F10CVT ? TOP_fldl : TOP_flds);
     return 2.0;        
-  case OPC_F8FQCVT:
-  case OPC_F4FQCVT:
+  case OPC_F8F10CVT:
+  case OPC_F4F10CVT:
     TI_RES_COUNT_Add_Op_Resources(resource_count, 
-				  opcode == OPC_F8FQCVT ? TOP_fstpl:TOP_fstps);
+				  opcode == OPC_F8F10CVT ? TOP_fstpl:TOP_fstps);
     TI_RES_COUNT_Add_Op_Resources(resource_count, 
-				  opcode == OPC_F8FQCVT ? TOP_ldsd : TOP_ldss);
+				  opcode == OPC_F8F10CVT ? TOP_ldsd : TOP_ldss);
     return 2.0;        
 
-  case OPC_FQI4CVT:
-  case OPC_FQI8CVT:
-  case OPC_FQU4CVT:
-  case OPC_FQU8CVT:
+  case OPC_F10I4CVT:
+  case OPC_F10I8CVT:
+  case OPC_F10U4CVT:
+  case OPC_F10U8CVT:
     // CG forms few basic blocks. Use a simple model here.
     return 4.0;
 
-  case OPC_I4FQCVT:
-  case OPC_I8FQCVT:
-  case OPC_U4FQCVT:
-  case OPC_U8FQCVT:
+  case OPC_I4F10CVT:
+  case OPC_I8F10CVT:
+  case OPC_U4F10CVT:
+  case OPC_U8F10CVT:
     {
       TI_RES_COUNT_Add_Op_Resources(resource_count, TOP_fnstcw);
       TI_RES_COUNT_Add_Op_Resources(resource_count, TOP_ld32);
@@ -304,17 +336,17 @@ LNOTARGET_Cvt_Res (TI_RES_COUNT* resource_count, OPCODE opcode)
       TI_RES_COUNT_Add_Op_Resources(resource_count, TOP_fldcw);
       TOP top;
       switch (opcode) {
-      case OPC_I4FQCVT:    top = TOP_fistpl;   break;
-      case OPC_U4FQCVT:
-      case OPC_U8FQCVT:
-      case OPC_I8FQCVT:    top = TOP_fistpll;  break;
+      case OPC_I4F10CVT:    top = TOP_fistpl;   break;
+      case OPC_U4F10CVT:
+      case OPC_U8F10CVT:
+      case OPC_I8F10CVT:    top = TOP_fistpll;  break;
       default:
 	// Follow CG
 	FmtAssert( false, ("NYI") );
       }
       TI_RES_COUNT_Add_Op_Resources(resource_count, top);
       TI_RES_COUNT_Add_Op_Resources(resource_count, TOP_fldcw);
-      if (opcode != OPC_U8FQCVT)
+      if (opcode != OPC_U8F10CVT)
 	return 7.0;
       else
 	// and then few new basic blocks. Use a simple model here.

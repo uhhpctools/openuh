@@ -38,8 +38,11 @@ LIBMV_1.0 {
     __vrda_pow;
     __vrda_sin;
     __vrda_sincos;
+    __vrs4_cosf;
     __vrs4_expf;
+    __vrs4_log10f;
     __vrs4_logf;
+    __vrs4_sinf;
     __vrs4_powf;
     __vrs8_expf;
     __vrs8_logf;

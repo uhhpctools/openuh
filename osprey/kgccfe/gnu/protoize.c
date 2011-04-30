@@ -704,111 +704,6 @@ in_system_include_dir (path)
   return 0;
 }
 
-#if 0
-/* Return true if the given filename designates a file that the user has
-   read access to and for which the user has write access to the containing
-   directory.  */
-
-static int
-file_could_be_converted (const char *path)
-{
-  char *const dir_name = (char *) alloca (strlen (path) + 1);
-
-  if (access (path, R_OK))
-    return 0;
-
-  {
-    char *dir_last_slash;
-
-    strcpy (dir_name, path);
-    dir_last_slash = strrchr (dir_name, DIR_SEPARATOR);
-#ifdef DIR_SEPARATOR_2
-    {
-      char *slash;
-
-      slash = strrchr (dir_last_slash ? dir_last_slash : dir_name,
-		       DIR_SEPARATOR_2);
-      if (slash)
-	dir_last_slash = slash;
-    }
-#endif
-    if (dir_last_slash)
-      *dir_last_slash = '\0';
-    else
-      abort ();  /* Should have been an absolutized filename.  */
-  }
-
-  if (access (path, W_OK))
-    return 0;
-
-  return 1;
-}
-
-/* Return true if the given filename designates a file that we are allowed
-   to modify.  Files which we should not attempt to modify are (a) "system"
-   include files, and (b) files which the user doesn't have write access to,
-   and (c) files which reside in directories which the user doesn't have
-   write access to.  Unless requested to be quiet, give warnings about
-   files that we will not try to convert for one reason or another.  An
-   exception is made for "system" include files, which we never try to
-   convert and for which we don't issue the usual warnings.  */
-
-static int
-file_normally_convertible (const char *path)
-{
-  char *const dir_name = alloca (strlen (path) + 1);
-
-  if (in_system_include_dir (path))
-    return 0;
-
-  {
-    char *dir_last_slash;
-
-    strcpy (dir_name, path);
-    dir_last_slash = strrchr (dir_name, DIR_SEPARATOR);
-#ifdef DIR_SEPARATOR_2
-    {
-      char *slash;
-
-      slash = strrchr (dir_last_slash ? dir_last_slash : dir_name,
-		       DIR_SEPARATOR_2);
-      if (slash)
-	dir_last_slash = slash;
-    }
-#endif
-    if (dir_last_slash)
-      *dir_last_slash = '\0';
-    else
-      abort ();  /* Should have been an absolutized filename.  */
-  }
-
-  if (access (path, R_OK))
-    {
-      if (!quiet_flag)
-	notice ("%s: warning: no read access for file `%s'\n",
-		pname, shortpath (NULL, path));
-      return 0;
-    }
-
-  if (access (path, W_OK))
-    {
-      if (!quiet_flag)
-	notice ("%s: warning: no write access for file `%s'\n",
-		pname, shortpath (NULL, path));
-      return 0;
-    }
-
-  if (access (dir_name, W_OK))
-    {
-      if (!quiet_flag)
-	notice ("%s: warning: no write access for dir containing `%s'\n",
-		pname, shortpath (NULL, path));
-      return 0;
-    }
-
-  return 1;
-}
-#endif /* 0 */
 
 #ifndef UNPROTOIZE
 
@@ -2090,16 +1985,6 @@ start_over: ;
 	  return;
 	}
     }
-#if 0 /* There is code farther down to take care of this.  */
-  else
-    {
-      struct stat s1, s2;
-      stat (aux_info_file_name, &s1);
-      stat (base_source_file_name, &s2);
-      if (s2.st_mtime > s1.st_mtime)
-	must_create = 1;
-    }
-#endif /* 0 */
 
   /* If we need a .X file, create it, and verify we can read it.  */
   if (must_create)
@@ -2600,12 +2485,6 @@ find_extern_def (head, user)
 			shortpath (NULL, file), user->line,
 			needed+7);	/* Don't print "extern " */
 	      }
-#if 0
-	    else
-	      notice ("%s: %d: warning: no extern definition for `%s'\n",
-		      shortpath (NULL, file), user->line,
-		      user->hash_entry->symbol);
-#endif
 	}
     }
   return extern_def_p;
@@ -3996,13 +3875,6 @@ scan_for_missed_items (file_p)
 		      if (!strcmp (func_name, *stmt_keyword))
 			goto not_missed;
 
-#if 0
-		    notice ("%s: found definition of `%s' at %s(%d)\n",
-			    pname,
-			    func_name,
-			    shortpath (NULL, file_p->hash_entry->symbol),
-			    identify_lineno (id_start));
-#endif				/* 0 */
 		    /* We really should check for a match of the function name
 		       here also, but why bother.  */
 
@@ -4174,32 +4046,6 @@ edit_file (hp)
 	  (size_t) (orig_text_limit - orig_text_base));
   do_cleaning (new_clean_text_base, new_clean_text_limit);
 
-#if 0
-  {
-    int clean_file;
-    size_t clean_size = orig_text_limit - orig_text_base;
-    char *const clean_filename = (char *) alloca (strlen (convert_filename) + 6 + 1);
-
-    /* Open (and create) the clean file.  */
-
-    strcpy (clean_filename, convert_filename);
-    strcat (clean_filename, ".clean");
-    if ((clean_file = creat (clean_filename, 0666)) == -1)
-      {
-	int errno_val = errno;
-	notice ("%s: can't create/open clean file `%s': %s\n",
-		pname, shortpath (NULL, clean_filename),
-		xstrerror (errno_val));
-	return;
-      }
-
-    /* Write the clean file.  */
-
-    safe_write (clean_file, new_clean_text_base, clean_size, clean_filename);
-
-    close (clean_file);
-  }
-#endif /* 0 */
 
   /* Do a simplified scan of the input looking for things that were not
      mentioned in the aux info files because of the fact that they were
@@ -4576,11 +4422,6 @@ main (argc, argv)
 	case 'q':
 	  quiet_flag = 1;
 	  break;
-#if 0
-	case 'f':
-	  force_flag = 1;
-	  break;
-#endif
 	case 'n':
 	  nochange_flag = 1;
 	  keep_flag = 1;

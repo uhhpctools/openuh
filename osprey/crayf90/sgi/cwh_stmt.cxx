@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -100,7 +104,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 
 /* sgi includes */
@@ -1529,7 +1533,7 @@ fei_label_addr(INTPTR lbl_idx)
   WN *wn;
   INT32 *assign_id;
 
-  assign_id = cwh_auxst_assign_id(CURRENT_SYMTAB, cast_to_LB(lbl_idx));
+  assign_id = cwh_auxst_assign_id(CURRENT_SYMTAB, LABEL_IDX_index((LABEL_IDX)lbl_idx));
 
   if (*assign_id == -1)
      *assign_id = cwh_assign_label_id++;
@@ -2097,6 +2101,9 @@ cwh_stmt_str_falsebr_util(OPERATOR opr,
 
 void
 fei_new_select(INT32 num_cases,
+#ifdef KEY /* Bug 12319 */
+               INTPTR last_label_idx,
+#endif /* KEY Bug 12319 */
                INTPTR default_label_idx )
 {
   WN *parent_block;
@@ -2146,6 +2153,10 @@ fei_new_select(INT32 num_cases,
        
        cwh_block_set_current(parent_block);
        cwh_block_append(wn);
+#ifdef KEY /* Bug 12319 */
+       LABEL_IDX last_lb = cast_to_LB(last_label_idx);
+       WN_last_label(wn) = last_lb;
+#endif /* KEY Bug 12319 */
 
      } else {  /* empty select */
 
@@ -2801,7 +2812,7 @@ cwh_stmt_return_scalar(ST *st, WN * rv, TY_IDX  rty, BOOL callee_return)
       }
       else {
 
-# ifdef linux
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
         wn2 = cwh_addr_load_ST(st,0,0);
         wn = WN_CreateReturn_Val (OPR_RETURN_VAL, TY_mtype (rty), MTYPE_V, wn2);
 # else
@@ -3251,6 +3262,50 @@ fei_dowhile(void)
    cwh_block_set_current(block);
 }
 
+/* to check if the step and end expression is of the correct form, 
+ * currently we only verify the end opr.
+*/
+static bool verify_do_loop_sei(WN *loop)
+{
+   WN *start, *end, *incr;
+   DevAssert((WN_opcode(loop) == OPC_DO_LOOP),("The WHIRL node is not DO_LOOP"));
+   start = WN_kid1(loop);
+   end = WN_kid2(loop);
+   incr = WN_kid3(loop);
+
+   if (WN_operator(end) != OPR_LT && WN_operator(end) != OPR_LE
+       && WN_operator(end) != OPR_GT && WN_operator(end) != OPR_GE)
+     return false;
+   
+
+   return true;   
+}
+
+WN* convert_doloop_to_while(WN* doloop)
+{
+// <start>
+// WHILE <end>
+//  <stmts>
+//  <step>
+    WN *body; 
+    WN *while_body; 
+    WN *temp; 
+    body = WN_CreateBlock();
+    while_body = WN_CreateBlock();
+
+    DevAssert((WN_opcode(doloop) == OPC_DO_LOOP),("The WHIRL node is not DO_LOOP"));
+    WN_INSERT_BlockLast(body, WN_COPY_Tree(WN_kid1(doloop)));
+
+    WN_Set_Linenum(while_body, WN_linenum(WN_kid3(doloop)));
+    WN_INSERT_BlockLast(while_body, WN_COPY_Tree(WN_kid4(doloop)));
+    WN_INSERT_BlockLast(while_body, WN_COPY_Tree(WN_kid3(doloop)));
+    temp = WN_CreateWhileDo(WN_COPY_Tree(WN_kid2(doloop)), while_body);
+    WN_Set_Linenum(temp, WN_linenum(doloop));
+    WN_INSERT_BlockLast(body, temp); 
+
+    return body;        
+}
+
 /*================================================================
  *
  * fei_doloop
@@ -3513,6 +3568,14 @@ fei_doloop(INT32	line)
    WN_Set_Linenum (stmts, USRCPOS_srcpos(current_srcpos) );
 
    doloop = WN_CreateDO(index_id, start, end, step, stmts, NULL);
+
+
+   if(!verify_do_loop_sei(doloop))
+   {
+     WN* whileloop;
+     whileloop = convert_doloop_to_while(doloop);
+     doloop = whileloop;
+   }
 
    cwh_directive_insert_do_loop_directives();
    cwh_block_append(doloop);
@@ -3949,7 +4012,7 @@ fei_allocate(INT32 count)
    /* Fill in the temp */
    DevAssert((WN_opcode(ver) == OPC_I8INTCONST),("Expected I8INTCONST for allocate version."));
    if (Pointer_Size == 4) {
-# ifdef linux
+# if defined(linux) || defined(BUILD_OS_DARWIN)
       vernum = WN_const_val(ver) & (0xffffffff);
       cwh_block_append(cwh_addr_stid(temp_st,0,pty,
                                       WN_Intconst(Pointer_Mtype,vernum)));
@@ -4040,7 +4103,7 @@ cwh_stmt_add_parallel_pragmas(void)
  * value	Initial value for symbol
  */
 static void
-export_i4_sym(char *symname, int value) {
+export_i4_sym(const char *symname, int value) {
   TY_IDX int_ty_idx = MTYPE_To_TY(MTYPE_I4);
   ST *st = New_ST(GLOBAL_SYMTAB);
   cwh_auxst_clear(st);

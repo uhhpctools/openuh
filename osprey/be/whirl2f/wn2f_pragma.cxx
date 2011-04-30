@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: wn2f_pragma.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_pragma.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:42 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f_pragma.cxx,v $
  *
  * Revision history:
  *  12-Aug-96 - Original Version
@@ -56,7 +56,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_pragma.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f_pragma.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include "alloca.h"
@@ -203,7 +203,7 @@ Append_Reduction_Operator(TOKEN_BUFFER tokens,OPERATOR op)
    * appends a symbol representing an OMP reduction operator.
    */
 
-  char * p;
+  const char * p;
 
   switch(op) 
     {

@@ -96,7 +96,7 @@ extern void HB_PATH_Trace(HB_PATH* path);
 extern void HB_Trace_Init(void);
 extern void HB_Trace_If_Convert_Blocks(HB* hb);
 extern void HB_Trace_HB_List();
-extern void HB_Trace_Candidates(char* tstring,
+extern void HB_Trace_Candidates(const char* tstring,
 				std::list<HB_CAND_TREE*>& cands);
 extern void HB_Trace_Print_Cand_Tree(HB_CAND_TREE* cand,INT indent=0);
 

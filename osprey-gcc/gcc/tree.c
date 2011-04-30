@@ -7101,9 +7101,6 @@ gcc_built_in2gsbi (enum built_in_function code)
     case BUILT_IN_ISWXDIGIT: return GSBI_BUILT_IN_ISWXDIGIT;
     case BUILT_IN_TOWLOWER: return GSBI_BUILT_IN_TOWLOWER;
     case BUILT_IN_TOWUPPER: return GSBI_BUILT_IN_TOWUPPER;
-    case BUILT_IN_CTYPE_B_LOC: return GSBI_BUILT_IN_CTYPE_B_LOC;
-    case BUILT_IN_CTYPE_TOUPPER_LOC: return GSBI_BUILT_IN_CTYPE_TOUPPER_LOC;
-    case BUILT_IN_CTYPE_TOLOWER_LOC: return GSBI_BUILT_IN_CTYPE_TOLOWER_LOC;
     case BUILT_IN_ABORT: return GSBI_BUILT_IN_ABORT;
     case BUILT_IN_ABS: return GSBI_BUILT_IN_ABS;
     case BUILT_IN_AGGREGATE_INCOMING_ADDRESS: return GSBI_BUILT_IN_AGGREGATE_INCOMING_ADDRESS;
@@ -7203,6 +7200,58 @@ gcc_built_in2gsbi (enum built_in_function code)
     case BUILT_IN_COMPLEX_MUL_MAX: return GSBI_BUILT_IN_COMPLEX_MUL_MAX;
     case BUILT_IN_COMPLEX_DIV_MIN: return GSBI_BUILT_IN_COMPLEX_DIV_MIN;
     case BUILT_IN_COMPLEX_DIV_MAX: return GSBI_BUILT_IN_COMPLEX_DIV_MAX;
+#ifdef TARG_SL
+    case BUILT_IN_C3AADDA:  return GSBI_BUILT_IN_C3AADDA;
+    case BUILT_IN_C3NEGA:   return GSBI_BUILT_IN_C3NEGA;
+    case BUILT_IN_C3BITR:   return GSBI_BUILT_IN_C3BITR;
+    case BUILT_IN_C3CS:     return GSBI_BUILT_IN_C3CS;
+    case BUILT_IN_C3DADD:   return GSBI_BUILT_IN_C3DADD;
+    case BUILT_IN_C3DMAC:   return GSBI_BUILT_IN_C3DMAC;
+    case BUILT_IN_C3DMACA:  return GSBI_BUILT_IN_C3DMACA;
+    case BUILT_IN_C3DMULA:  return GSBI_BUILT_IN_C3DMULA;
+    case BUILT_IN_C3DMULAA: return GSBI_BUILT_IN_C3DMULAA;
+    case BUILT_IN_C3DSHLLI: return GSBI_BUILT_IN_C3DSHLLI;
+    case BUILT_IN_C3FFE:    return GSBI_BUILT_IN_C3FFE;
+    case BUILT_IN_C3LD:     return GSBI_BUILT_IN_C3LD;
+    case BUILT_IN_C3ST:     return GSBI_BUILT_IN_C3ST;
+    case BUILT_IN_C3LEAD:   return GSBI_BUILT_IN_C3LEAD;
+    case BUILT_IN_C3MAC:    return GSBI_BUILT_IN_C3MAC;
+    case BUILT_IN_C3MACA:   return GSBI_BUILT_IN_C3MACA;
+    case BUILT_IN_C3MACAR:  return GSBI_BUILT_IN_C3MACAR;
+    case BUILT_IN_C3MACI:   return GSBI_BUILT_IN_C3MACI;
+    case BUILT_IN_C3MULA:   return GSBI_BUILT_IN_C3MULA;
+    case BUILT_IN_C3MULAA:  return GSBI_BUILT_IN_C3MULAA;
+    case BUILT_IN_C3MULAAR: return GSBI_BUILT_IN_C3MULAAR;
+    case BUILT_IN_C3MULAI:  return GSBI_BUILT_IN_C3MULAI;
+    case BUILT_IN_C3MULS:   return GSBI_BUILT_IN_C3MULS;
+    case BUILT_IN_C3MULUS:  return GSBI_BUILT_IN_C3MULUS;
+    case BUILT_IN_C3REVB:   return GSBI_BUILT_IN_C3REVB;
+    case BUILT_IN_C3ROUND:  return GSBI_BUILT_IN_C3ROUND;
+    case BUILT_IN_C3SAADDA: return GSBI_BUILT_IN_C3SAADDA;
+    case BUILT_IN_C3SAADDHA: return GSBI_BUILT_IN_C3SAADDHA;
+    case BUILT_IN_C3SAADDS:  return GSBI_BUILT_IN_C3SAADDS;
+    case BUILT_IN_C3SAADDSH: return GSBI_BUILT_IN_C3SAADDSH;
+    case BUILT_IN_C3SADDA:   return GSBI_BUILT_IN_C3SADDA;
+    case BUILT_IN_C3SADDAA:  return GSBI_BUILT_IN_C3SADDAA;
+    case BUILT_IN_C3SAMULHA: return GSBI_BUILT_IN_C3SAMULHA;
+    case BUILT_IN_C3SAMULSH: return GSBI_BUILT_IN_C3SAMULSH;
+    case BUILT_IN_C3SHAV:    return GSBI_BUILT_IN_C3SHAV;
+    case BUILT_IN_C3SHLAFAI: return GSBI_BUILT_IN_C3SHLAFAI;
+    case BUILT_IN_C3SHLATAI: return GSBI_BUILT_IN_C3SHLATAI;
+    case BUILT_IN_C3SHLAI:   return GSBI_BUILT_IN_C3SHLAI;
+    case BUILT_IN_C3SUBC:    return GSBI_BUILT_IN_C3SUBC;
+    case BUILT_IN_INIT_HI:   return GSBI_BUILT_IN_INIT_HI;
+    case BUILT_IN_COPY_HI:   return GSBI_BUILT_IN_COPY_HI;
+    case BUILT_IN_C3_INIT_ACC: return GSBI_BUILT_IN_C3_INIT_ACC;
+    case BUILT_IN_C3_SAVE_ACC: return GSBI_BUILT_IN_C3_SAVE_ACC;
+    case BUILT_IN_C3_INIT_DACC: return GSBI_BUILT_IN_C3_INIT_DACC;
+    case BUILT_IN_C3_SAVE_DACC: return GSBI_BUILT_IN_C3_SAVE_DACC;
+    case BUILT_IN_C3_INIT_ADDR: return GSBI_BUILT_IN_C3_INIT_ADDR;
+    case BUILT_IN_C3_SAVE_ADDR: return GSBI_BUILT_IN_C3_SAVE_ADDR;
+    case BUILT_IN_C3_MVFS:      return GSBI_BUILT_IN_C3_MVFS;
+    case BUILT_IN_SET_ADDR:     return GSBI_BUILT_IN_SET_ADDR;
+    case BUILT_IN_SET_CIRCBUF:  return GSBI_BUILT_IN_SET_CIRCBUF;
+#endif
     case END_BUILTINS: return GSBI_END_BUILTINS;
   }
   gcc_assert (0);
@@ -7931,6 +7980,12 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
         gs_operand((gs_t)GS_NODE(t), GS_TYPE_SIZE) == NULL)
       goto REVISIT;
 
+    /* bug 14420 */
+    if (tcode == RECORD_TYPE &&
+        TYPE_FIELDS(t) &&
+        gs_operand((gs_t)GS_NODE(t), GS_TYPE_FIELDS) == NULL)
+      goto REVISIT;
+
     if (tcode == RECORD_TYPE &&
         CLASS_TYPE_P(t) &&
         CLASSTYPE_TYPEINFO_VAR(t) &&
@@ -8125,12 +8180,6 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 
       _gs_bv (flags, GS_DECL_NONLOCAL, DECL_NONLOCAL (t));
 
-      if (TREE_CODE(t) != FUNCTION_DECL && DECL_REGISTER(t)) {
-	gs_t asmreg = __gs(IB_INT);
-	_gs_n(asmreg, DECL_ASMREG(t));
-	gs_set_operand((gs_t) GS_NODE(t), GS_DECL_ASMREG, asmreg);
-      }
-
       switch (TREE_CODE(t)) {
 	case TYPE_DECL:
 	  gs_set_operand((gs_t) GS_NODE(t), GS_DECL_ORIGINAL_TYPE,
@@ -8150,7 +8199,11 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 	    _gs_bv (flags, GS_DECL_DECLARED_INLINE_P, DECL_DECLARED_INLINE_P (t));
 	    _gs_bv (flags, GS_DECL_BUILT_IN, DECL_BUILT_IN (t));
 	    _gs_bv (flags, GS_DECL_NO_STATIC_CHAIN, DECL_NO_STATIC_CHAIN (t));
-	    _gs_bv (flags, GS_DECL_THUNK_P, DECL_THUNK_P (t));
+	    /* Set this flag only for C++, because for C it may not always
+	     * be initialized to 0. This flag may also be moved to
+	     * cp_decl_flags. */
+	    if (CPR())
+	      _gs_bv (flags, GS_DECL_THUNK_P, DECL_THUNK_P (t));
 
 	    /* KEY: By default for C++, each function is not "needed" and not
 	     * "reachable" in GNU call graph terminology. That means wgen
@@ -8188,6 +8241,14 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 		     gs_x_1(DECL_VALUE_EXPR(t), seq_num));
 	  _gs_bv (flags, GS_DECL_IN_TEXT_SECTION, DECL_IN_TEXT_SECTION (t));
 	  _gs_bv (flags, GS_DECL_THREAD_LOCAL, DECL_THREAD_LOCAL (t));
+
+	  if (DECL_REGISTER(t) && DECL_HARD_REGISTER(t)) {
+	    char *reg_name = IDENTIFIER_POINTER(DECL_ASSEMBLER_NAME(t));
+	    int reg_number = decode_reg_name(reg_name);
+	    gs_t asmreg = __gs(IB_INT);
+	    _gs_n(asmreg, reg_number);
+	    gs_set_operand((gs_t) GS_NODE(t), GS_DECL_ASMREG, asmreg);
+	  }
 	  break;
 
 	case PARM_DECL:
@@ -8280,13 +8341,13 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
           case BUILT_IN_NORMAL:
             _gs_hword(decl_function_code, gcc_built_in2gsbi ((int) DECL_FUNCTION_CODE (t)));
             break;
-          case BUILT_IN_MD:
 #if defined(TARG_IA32) || defined(TARG_X8664)
+          case BUILT_IN_MD:
             _gs_hword(decl_function_code, ix86_builtins2gsbi_ts ((int) DECL_FUNCTION_CODE (t)));
 #else
-            _gs_hword(decl_function_code, gcc_built_in2gsbi ((int) DECL_FUNCTION_CODE (t)));
+	    _gs_hword(decl_function_code, gcc_built_in2gsbi ((int) DECL_FUNCTION_CODE (t)));
 #endif
-            break;
+	    break;
           default: gcc_assert (0); break;
         }
         gs_set_operand ((gs_t) GS_NODE (t), GS_DECL_BUILT_IN_CLASS, decl_built_in_class);
@@ -8340,7 +8401,8 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
          || (TREE_CODE (t) == VAR_DECL
             && (TREE_STATIC (t)
                 || DECL_EXTERNAL (t)
-                || TREE_PUBLIC (t)))) {
+                || TREE_PUBLIC (t)
+		|| DECL_REGISTER(t) && DECL_HARD_REGISTER(t)))) {
         gs_set_operand((gs_t) GS_NODE(t), GS_DECL_ASSEMBLER_NAME,
 		   gs_x_1(DECL_ASSEMBLER_NAME(t), seq_num));
       }
@@ -8708,6 +8770,28 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 	  case TARGET_EXPR:
 	    _gs_bv(flags, GS_EMIT_TARGET_EXPR_CLEANUP,
 		   EMIT_TARGET_EXPR_CLEANUP(t));
+	    break;
+	  case CALL_EXPR:
+	    {
+	      /* bug 12598: Try to fold OBJ_TYPE_REF if it is present
+	         under the CALL_EXPR. Code adapted from fold_stmt() . */
+	      tree callee = get_callee_fndecl (t);
+	      if (!(callee && DECL_BUILT_IN(callee)))
+	      {
+		callee = TREE_OPERAND(t,0);
+		if (TREE_CODE(callee) == OBJ_TYPE_REF &&
+		    lang_hooks.fold_obj_type_ref
+		    && TREE_CODE (OBJ_TYPE_REF_OBJECT (callee)) == ADDR_EXPR
+		    && DECL_P (TREE_OPERAND (OBJ_TYPE_REF_OBJECT (callee), 0)))
+		    {
+		      tree t1 = TREE_TYPE (TREE_TYPE
+		                           (OBJ_TYPE_REF_OBJECT (callee)));
+		      t1 = lang_hooks.fold_obj_type_ref (callee, t1);
+		      if (t1)
+		        TREE_OPERAND (t, 0) = t1;
+		    }
+	      }
+	    }
 	    break;
 	  default:
 	    break;

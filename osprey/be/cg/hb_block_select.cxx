@@ -624,7 +624,7 @@ HB_Block_Select(HB* candidate, BOOL profitable_ifc)
 /////////////////////////////////////
 {
   BOOL retval;
-  std::vector<BB *> join_list;
+  vector<BB *> join_list;
   INT i;
   BB *bb_j;
   BB_SET *current_blocks;
@@ -784,7 +784,11 @@ HB_Block_Select(HB* candidate, BOOL profitable_ifc)
       break; // Stop looking
     }
     if (HB_Trace(HB_TRACE_SELECT)) {
-      fprintf(HB_TFile, "<HB> examining %d paths\n", (INT)hb_paths.size());
+#ifdef KEY /* Mac port */
+      fprintf(HB_TFile, "<HB> examining %ld paths\n", (long) hb_paths.size());
+#else /* KEY Mac port */
+      fprintf(HB_TFile, "<HB> examining %d paths\n", hb_paths.size());
+#endif /* KEY Mac port */
     }
     if (hb_paths.size() > HB_MAX_PATHS) {
       if (HB_Trace(HB_TRACE_SELECT)) {

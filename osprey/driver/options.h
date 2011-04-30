@@ -61,6 +61,8 @@ extern boolean option_matches_phase (int flag, phases_t p);
 extern boolean is_internal_option (int flag);
 extern void set_internal_option (int flag);
 
+/* keep multi options for a phase */ 
+extern void keep_phase_for_option(int flag, char *opt);
 /* add phase to list of valid phases for option */
 extern void add_phase_for_option(int flag, phases_t p);
 /* remove phase from list of valid phases for option */
@@ -92,12 +94,6 @@ extern int first_option (void);
 extern int next_option (void);
 extern boolean no_more_options (void);
 
-/* iterate through options in option-combination-list */
-#define FOREACH_OPTION_IN_COMBO(i,c)	\
-	for (i = first_combo_item(c); !no_more_combo_items(c); i = next_combo_item(c))
-extern int first_combo_item (int combo_flag);
-extern int next_combo_item (int combo_flag);
-extern boolean no_more_combo_items (int combo_flag);
 
 /* iterate through implied options for a particular option */
 #define FOREACH_IMPLIED_OPTION(i,o)	\

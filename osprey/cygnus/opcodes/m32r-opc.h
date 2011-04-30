@@ -34,18 +34,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #undef  CGEN_DIS_HASH_SIZE
 #define CGEN_DIS_HASH_SIZE 256
 #undef  CGEN_DIS_HASH
-#if 0
-#define X(b) (((unsigned char *) (b))[0] & 0xf0)
-#define CGEN_DIS_HASH(buffer, value) \
-(X (buffer) | \
- (X (buffer) == 0x40 || X (buffer) == 0xe0 || X (buffer) == 0x60 || X (buffer) == 0x50 ? 0 \
-  : X (buffer) == 0x70 || X (buffer) == 0xf0 ? (((unsigned char *) (buffer))[0] & 0xf) \
-  : X (buffer) == 0x30 ? ((((unsigned char *) (buffer))[1] & 0x70) >> 4) \
-  : ((((unsigned char *) (buffer))[1] & 0xf0) >> 4)))
-#else
 #define CGEN_DIS_HASH(buffer, value) m32r_cgen_dis_hash(buffer, value)
 extern unsigned int m32r_cgen_dis_hash(const char *, CGEN_INSN_INT);
-#endif
 
 /* -- */
 /* Enum declaration for m32r instruction types.  */

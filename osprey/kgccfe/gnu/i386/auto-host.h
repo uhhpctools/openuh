@@ -31,8 +31,10 @@
 /* Define if you have the ANSI # stringizing operator in cpp. */
 #define HAVE_STRINGIZE 1
 
+#ifndef __MINGW32__
 /* Define if you have <sys/wait.h> that is POSIX.1 compatible.  */
 #define HAVE_SYS_WAIT_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have <vfork.h>.  */
 /* #undef HAVE_VFORK_H */
@@ -116,6 +118,8 @@
 /* Define if you have the dup2 function.  */
 #define HAVE_DUP2 1
 
+#if ! defined(BUILD_OS_DARWIN)
+
 /* Define if you have the feof_unlocked function.  */
 #define HAVE_FEOF_UNLOCKED 1
 
@@ -125,6 +129,7 @@
 /* Define if you have the fprintf_unlocked function.  */
 /* #undef HAVE_FPRINTF_UNLOCKED */
 
+#if !defined(__MINGW32__) && !defined(__APPLE__)
 /* Define if you have the fputc_unlocked function.  */
 #define HAVE_FPUTC_UNLOCKED 1
 
@@ -133,6 +138,9 @@
 
 /* Define if you have the fwrite_unlocked function.  */
 #define HAVE_FWRITE_UNLOCKED 1
+
+#endif /* __MINGW32__ */
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /* Define if you have the getcwd function.  */
 #define HAVE_GETCWD 1
@@ -146,6 +154,7 @@
 /* Define if you have the getgid function.  */
 #define HAVE_GETGID 1
 
+#ifndef __MINGW32__
 /* Define if you have the getrlimit function.  */
 #define HAVE_GETRLIMIT 1
 
@@ -154,6 +163,7 @@
 
 /* Define if you have the gettimeofday function.  */
 #define HAVE_GETTIMEOFDAY 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the getuid function.  */
 #define HAVE_GETUID 1
@@ -161,23 +171,29 @@
 /* Define if you have the kill function.  */
 #define HAVE_KILL 1
 
+#ifndef __MINGW32__
 /* Define if you have the lstat function.  */
 #define HAVE_LSTAT 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the mempcpy function.  */
 #define HAVE_MEMPCPY 1
 
+#ifdef __MINGW32__
 /* Define if you have the mmap function.  */
 #define HAVE_MMAP 1
 
 /* Define if you have the munmap function.  */
 #define HAVE_MUNMAP 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the nl_langinfo function.  */
 #define HAVE_NL_LANGINFO 1
 
 /* Define if you have the putc_unlocked function.  */
+#ifndef __MINGW32__
 #define HAVE_PUTC_UNLOCKED 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the putenv function.  */
 #define HAVE_PUTENV 1
@@ -206,8 +222,10 @@
 /* Define if you have the strdup function.  */
 #define HAVE_STRDUP 1
 
+#ifndef __MINGW32__
 /* Define if you have the strsignal function.  */
 #define HAVE_STRSIGNAL 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the strtoul function.  */
 #define HAVE_STRTOUL 1
@@ -215,8 +233,10 @@
 /* Define if you have the sysconf function.  */
 #define HAVE_SYSCONF 1
 
+#ifndef __MINGW32__
 /* Define if you have the times function.  */
 #define HAVE_TIMES 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the tsearch function.  */
 #define HAVE_TSEARCH 1
@@ -266,8 +286,10 @@
 /* Define if you have the <sys/param.h> header file.  */
 #define HAVE_SYS_PARAM_H 1
 
+#ifndef __MINGW32__
 /* Define if you have the <sys/resource.h> header file.  */
 #define HAVE_SYS_RESOURCE_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the <sys/stat.h> header file.  */
 #define HAVE_SYS_STAT_H 1
@@ -275,8 +297,10 @@
 /* Define if you have the <sys/time.h> header file.  */
 #define HAVE_SYS_TIME_H 1
 
+#ifndef __MINGW32__
 /* Define if you have the <sys/times.h> header file.  */
 #define HAVE_SYS_TIMES_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the <time.h> header file.  */
 #define HAVE_TIME_H 1
@@ -406,6 +430,7 @@
 /* Define if printf supports %p. */
 #define HAVE_PRINTF_PTR 1
 
+#ifndef __MINGW32__
 /* Define if read-only mmap of a plain file works. */
 #define HAVE_MMAP_FILE 1
 
@@ -414,6 +439,7 @@
 
 /* Define if mmap with MAP_ANON(YMOUS) works. */
 #define HAVE_MMAP_ANON 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the iconv() function. */
 #define HAVE_ICONV 1
@@ -445,6 +471,7 @@
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_STRSIGNAL 1
 
+#ifndef __CYGWIN__
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_PUTC_UNLOCKED 1
 
@@ -456,6 +483,7 @@
 
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_FPRINTF_UNLOCKED 0
+#endif
 
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_STRSTR 1
@@ -463,8 +491,10 @@
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_ERRNO 1
 
+#ifndef __MINGW32__
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_VASPRINTF 1
+#endif /* __MINGW32__ */
 
 /* Define to 1 if we found this declaration otherwise define to 0. */
 #define HAVE_DECL_MALLOC 1
@@ -544,11 +574,15 @@
    is requested. */
 #define ENABLE_NLS 1
 
+#ifndef __CYGWIN__
 /* Define if you have the <libintl.h> header file. */
+#if !defined(__MINGW32__) && !defined(__APPLE__)
 #define HAVE_LIBINTL_H 1
+#endif /* __MINGW32__ */
 
 /* Define if the GNU gettext() function is already present or preinstalled. */
 #define HAVE_GETTEXT 1
+#endif
 
 /* Define to use the libintl included with this package instead of any
    version in the system libraries. */

@@ -80,7 +80,11 @@ extern rtx alter_subreg PARAMS ((rtx *));
 
 /* Report inconsistency between the assembler template and the operands.
    In an `asm', it's the user's fault; otherwise, the compiler's fault.  */
+#ifdef __MINGW32__
+extern void output_operand_lossage  PARAMS ((const char *));
+#else
 extern void output_operand_lossage  PARAMS ((const char *, ...)) ATTRIBUTE_PRINTF_1;
+#endif /* __MINGW32__ */
 
 /* Output a string of assembler code, substituting insn operands.
    Defined in final.c.  */

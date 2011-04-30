@@ -11,8 +11,10 @@
 /* Define if you have a working `mmap' system call.  */
 #define HAVE_MMAP 1
 
+#ifndef __MINGW32__
 /* Define if you have <sys/wait.h> that is POSIX.1 compatible.  */
 #define HAVE_SYS_WAIT_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have <vfork.h>.  */
 /* #undef HAVE_VFORK_H */
@@ -39,7 +41,9 @@
 /* #undef vfork */
 
 /* Define to `unsigned long' if <sys/types.h> doesn't define.  */
+#ifndef __APPLE__
 #define uintptr_t unsigned long
+#endif
 
 /* Define if you have the _doprnt function.  */
 /* #undef HAVE__DOPRNT */
@@ -53,17 +57,23 @@
 /* Define if you have the basename function.  */
 #define HAVE_BASENAME 1
 
+#ifndef __MINGW32__
 /* Define if you have the bcmp function.  */
 #define HAVE_BCMP 1
+#endif /* __MINGW32__ */
 
+#ifndef __MINGW32__
 /* Define if you have the bcopy function.  */
 #define HAVE_BCOPY 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the bsearch function.  */
 #define HAVE_BSEARCH 1
 
+#ifndef __MINGW32__
 /* Define if you have the bzero function.  */
 #define HAVE_BZERO 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the calloc function.  */
 #define HAVE_CALLOC 1
@@ -77,20 +87,28 @@
 /* Define if you have the getcwd function.  */
 #define HAVE_GETCWD 1
 
+#ifndef __MINGW32__
 /* Define if you have the getpagesize function.  */
 #define HAVE_GETPAGESIZE 1
+#endif /* __MINGW32__ */
 
+#ifndef __MINGW32__
 /* Define if you have the getrusage function.  */
 #define HAVE_GETRUSAGE 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the getsysinfo function.  */
 /* #undef HAVE_GETSYSINFO */
 
+#ifndef __MINGW32__
 /* Define if you have the gettimeofday function.  */
 #define HAVE_GETTIMEOFDAY 1
+#endif /* __MINGW32__ */
 
+#ifndef __MINGW32__
 /* Define if you have the index function.  */
 #define HAVE_INDEX 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the insque function.  */
 #define HAVE_INSQUE 1
@@ -116,8 +134,10 @@
 /* Define if you have the on_exit function.  */
 #define HAVE_ON_EXIT 1
 
+#ifndef __MINGW32__
 /* Define if you have the psignal function.  */
 #define HAVE_PSIGNAL 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the pstat_getdynamic function.  */
 /* #undef HAVE_PSTAT_GETDYNAMIC */
@@ -134,11 +154,15 @@
 /* Define if you have the rename function.  */
 #define HAVE_RENAME 1
 
+#ifndef __MINGW32__
 /* Define if you have the rindex function.  */
 #define HAVE_RINDEX 1
+#endif /* __MINGW32__ */
 
+#ifndef __MINGW32__
 /* Define if you have the sbrk function.  */
 #define HAVE_SBRK 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the setenv function.  */
 #define HAVE_SETENV 1
@@ -165,7 +189,9 @@
 #define HAVE_STRRCHR 1
 
 /* Define if you have the strsignal function.  */
+#ifndef __MINGW32__
 #define HAVE_STRSIGNAL 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the strstr function.  */
 #define HAVE_STRSTR 1
@@ -191,14 +217,18 @@
 /* Define if you have the table function.  */
 /* #undef HAVE_TABLE */
 
+#ifndef __MINGW32__
 /* Define if you have the times function.  */
 #define HAVE_TIMES 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the tmpnam function.  */
 #define HAVE_TMPNAM 1
 
+#ifndef __MINGW32__
 /* Define if you have the vasprintf function.  */
 #define HAVE_VASPRINTF 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the vfprintf function.  */
 #define HAVE_VFPRINTF 1
@@ -209,8 +239,10 @@
 /* Define if you have the vsprintf function.  */
 #define HAVE_VSPRINTF 1
 
+#ifndef __MINGW32__
 /* Define if you have the waitpid function.  */
 #define HAVE_WAITPID 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the <alloca.h> header file.  */
 #define HAVE_ALLOCA_H 1
@@ -230,8 +262,10 @@
 /* Define if you have the <string.h> header file.  */
 #define HAVE_STRING_H 1
 
+#ifndef __MINGW32__
 /* Define if you have the <strings.h> header file.  */
 #define HAVE_STRINGS_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the <sys/file.h> header file.  */
 #define HAVE_SYS_FILE_H 1
@@ -245,14 +279,18 @@
 /* Define if you have the <sys/pstat.h> header file.  */
 /* #undef HAVE_SYS_PSTAT_H */
 
+#ifndef __MINGW32__
 /* Define if you have the <sys/resource.h> header file.  */
 #define HAVE_SYS_RESOURCE_H 1
+#endif /* __MINGW32__ */
 
 /* Define if you have the <sys/stat.h> header file.  */
 #define HAVE_SYS_STAT_H 1
 
 /* Define if you have the <sys/sysctl.h> header file.  */
+#if !defined(__CYGWIN__) && !defined(__MINGW32__)
 #define HAVE_SYS_SYSCTL_H 1
+#endif /* __CYGWIN__ __MINGW32__ */
 
 /* Define if you have the <sys/sysinfo.h> header file.  */
 #define HAVE_SYS_SYSINFO_H 1
@@ -290,8 +328,10 @@
 /* Define if you have the sys_nerr variable. */
 #define HAVE_SYS_NERR 1
 
+#ifndef __MINGW32__
 /* Define if you have the sys_siglist variable. */
 #define HAVE_SYS_SIGLIST 1
+#endif /* __MINGW32__ */
 
 /* Define to one of _getb67, GETB67, getb67 for Cray-2 and Cray-YMP
    systems. This function is required for alloca.c support on those

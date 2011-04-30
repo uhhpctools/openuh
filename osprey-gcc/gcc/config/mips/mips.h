@@ -2554,7 +2554,14 @@ typedef struct mips_args {
 
    On RISC machines, it tends to generate better code to define
    this as 1, since it avoids making a QI or HI mode register.  */
+#ifdef KEY
+/* Bug 14214: On mips5kf, nothing is gained by using I8 instead
+ * of I1, I2, or I4, and using larger sizes can trigger backend
+ * bugs. */
+#define SLOW_BYTE_ACCESS 0
+#else
 #define SLOW_BYTE_ACCESS 1
+#endif
 
 /* Define this to be nonzero if shift instructions ignore all but the low-order
    few bits.  */

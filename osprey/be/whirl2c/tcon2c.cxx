@@ -61,6 +61,7 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/tcon2c.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
+#include <ctype.h>
 #include "whirl2c_common.h"
 #include "tcon2c.h"
 #include "alloca.h"
@@ -102,12 +103,15 @@ Remove_Trailing_Zero_Fraction(char *strbase)
    else
    {
       INT j, remove_to;
+      INT skip = 1;
 
       while (strbase[i] >= '0' && strbase[i] <= '9') i--; /* skip exp digits */
+      if(strbase[i] == '.')
+        skip = 0;
       while (strbase[i] < '0' || strbase[i] > '9') i--; /* skip exp letters */
       remove_to = i;
 
-      while (strbase[i] == '0') i--; /* skip zero digits in the fraction */
+      while (skip && strbase[i] == '0') i--; /* skip zero digits in the fraction */
       if (strbase[i] == '.')
 	 i += 1;
 
@@ -117,18 +121,18 @@ Remove_Trailing_Zero_Fraction(char *strbase)
 	 strbase[++i] = strbase[j];
       last = i+1;
    }
-   strbase[last] = '\0';
+   //do not delete 0.0
+   if(last)
+     strbase[last] = '\0';
 
    return strbase;
 } /* Remove_Trailing_Zero_Fraction */
 
-
-static char *
-TCON2C_append_string_char(char *str, char ch)
+char* append_char(char* str, char ch)
 {
   BOOL escape;
   char escaped_ch;
-  
+
   switch (ch)
   {
   case '\n':
@@ -136,9 +140,13 @@ TCON2C_append_string_char(char *str, char ch)
      escape = TRUE;
      break;
   case '\t':
-     escaped_ch = 't';
-     escape = TRUE;
-     break;
+    escaped_ch = 't';
+    escape = TRUE;
+    break;
+  case '\a':
+    escaped_ch = 'a';
+    escape = TRUE;
+    break;
   case '\b':
      escaped_ch = 'b';
      escape = TRUE;
@@ -167,9 +175,21 @@ TCON2C_append_string_char(char *str, char ch)
      escaped_ch = '\"';
      escape = TRUE;
      break;
-  default: 
-     escaped_ch = ch;
-     escape = FALSE;
+  default:
+    if (!isprint(ch)) {
+      /* special handling for binary output */
+      *str++ = '\\';
+      //const char * val = utoa(ch).c_str();
+      char val[4];
+      sprintf(val, "%u", ch);
+      for (int i = 0; i < strlen(val); i++) {
+        *str++ = val[i];
+      }
+      return str;
+    } else {
+      escaped_ch = ch;
+      escape = FALSE;
+    }
      break;
   }
   if (escape)
@@ -177,8 +197,7 @@ TCON2C_append_string_char(char *str, char ch)
   *str++ = escaped_ch;
 
   return str;
-} /* TCON2C_append_string_char */
-
+}
 
 void 
 TCON2C_Append_String_Const(TOKEN_BUFFER tokens, 
@@ -189,10 +208,14 @@ TCON2C_Append_String_Const(TOKEN_BUFFER tokens,
    char       *str;
    INT32       stridx;
 
-   str_base = str = (char *)alloca(2*strlen + 3); /* "'", orig_str, "'", and "\0" */
+   /* Why 4*strlen? if <orig_str> contains a non-printable char, 
+    * the output of that char would be something like "\123".
+    */
+   str_base = str = (char *)alloca(4*strlen + 3); /* "'", orig_str, "'", and "\0" */
    *(str++) = '\"';
+   strlen = strlen - 1; // subtract 1 for the extra \0
    for (stridx = 0; stridx < strlen; stridx++)
-      str = TCON2C_append_string_char(str, orig_str[stridx]);
+      str = append_char(str, orig_str[stridx]);
    while (str[-1] == '\0') str--;
    *(str++) = '\"';
    *(str++) = '\0';
@@ -253,6 +276,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
       Append_Token_String(tokens, Targ_Print("%1d", tvalue));
       break;
       
+    case MTYPE_B:
     case MTYPE_U1:
     case MTYPE_U2:
     case MTYPE_U4:
@@ -271,7 +295,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
       str = Targ_Print("%.10e", tvalue);
       strbase = Remove_Trailing_Zero_Fraction(str);
       /* Undo the 'e'->'d' conversion */
-      if ((str = strchr(strbase, 'd')) != NULL)
+      if ((str = (char*)strchr(strbase, 'd')) != NULL)
 	 *str = 'e';
 
       /* Add F suffix */
@@ -282,7 +306,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
       str = Targ_Print("%.20e", tvalue);
       strbase = Remove_Trailing_Zero_Fraction(str);
       /* Undo the 'e'->'d' conversion */
-      if ((str = strchr(strbase, 'd')) != NULL)
+      if ((str = (char*)strchr(strbase, 'd')) != NULL)
 	 *str = 'e';
       Append_Token_String(tokens, strbase);
       break;
@@ -291,7 +315,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
       str = Targ_Print(NULL, tvalue);
       strbase = Remove_Trailing_Zero_Fraction(str);
       /* Undo the 'e'->'d' conversion */
-      if ((str = strchr(strbase, 'd')) != NULL)
+      if ((str = (char*)strchr(strbase, 'd')) != NULL)
          *str = 'e';
       Append_Token_String(tokens, strbase);
       break;
@@ -300,7 +324,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
       str = Targ_Print(NULL, tvalue);
       strbase = Remove_Trailing_Zero_Fraction(str);
       /* Undo the 'e'->'d' conversion */
-      if ((str = strchr(strbase, 'd')) != NULL)
+      if ((str = (char*)strchr(strbase, 'd')) != NULL)
 	 *str = 'e'; 
 
       /* Add L suffix */
@@ -361,7 +385,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
      str = Targ_Print("%.10e", tvalue);
      strbase = Remove_Trailing_Zero_Fraction(str);
      /* Undo the 'e'->'d' conversion */
-     if ((str = strchr(strbase, 'd')) != NULL)
+     if ((str = (char*)strchr(strbase, 'd')) != NULL)
        *str = 'e';
      
      newstr = (char *)malloc(sizeof(char)*1000); //((strlen(strbase)+1)*4+15));
@@ -375,7 +399,7 @@ TCON2C_translate(TOKEN_BUFFER tokens, TCON tvalue)
      str = Targ_Print("%.20e", tvalue);
      strbase = Remove_Trailing_Zero_Fraction(str);
      /* Undo the 'e'->'d' conversion */
-     if ((str = strchr(strbase, 'd')) != NULL)
+     if ((str = (char*)strchr(strbase, 'd')) != NULL)
        *str = 'e';
      newstr = (char *)malloc(sizeof(char)*1000); //((strlen(strbase)+1)*2+15));
      sprintf(newstr, "[%s, %s]", strbase, strbase);

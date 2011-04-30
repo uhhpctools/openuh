@@ -1,12 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
- */
-
-/*
+  Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -41,7 +34,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -221,7 +213,6 @@ static BOOL FS_Is_Inside_If(WN* wn_use,
 //   in the original outermost do loop for which we are substituting 
 //   scalars. 
 //-----------------------------------------------------------------------
-
 static void FS_Substitute(WN* wn_orig, 
 			  LS_IN_LOOP* loop_ls) 
 {
@@ -238,6 +229,7 @@ static void FS_Substitute(WN* wn_orig,
       continue;
     if (FS_Is_Inside_If(use, LWN_Get_Parent(wn_orig)))
       continue; 
+
     sub_count++; 
     INT position = loop_ls->In(use); 
     INT32 count = 0;
@@ -259,7 +251,22 @@ static void FS_Substitute(WN* wn_orig,
     } 
     BOOL added_convert = FALSE; 
     WN* wn_copy = Replace_Wnexp_With_Exp_Copy(use, WN_kid0(wn_orig), du,
-      &added_convert); 
+      &added_convert);
+#ifdef KEY
+    //bug 12622: for the following case, an implicit CVTL is applied
+    //in STID. We need an explicit CVTL instead of CVT when replacing
+    //LDIDs with the the ILOAD.
+    //
+    //  I4I1ILOAD
+    // U1STID
+    if(added_convert && WN_operator(wn_copy) == OPR_CVT &&
+       WN_operator(WN_kid0(wn_orig)) == OPR_ILOAD &&
+       MTYPE_bit_size(WN_desc(wn_orig))<MTYPE_bit_size(WN_rtype(WN_kid0(wn_orig)))){
+           WN_set_operator(wn_copy, OPR_CVTL);
+           WN_set_desc(wn_copy, MTYPE_V);
+           WN_cvtl_bits(wn_copy) = MTYPE_bit_size(WN_desc(wn_orig));
+      }
+#endif
     LWN_Set_Frequency_Tree(wn_copy,count);
     WN* wn_true_copy = added_convert ? WN_kid0(wn_copy) : wn_copy; 
     Fix_Access_Arrays_In_Copy_Block(wn_true_copy); 
@@ -302,8 +309,8 @@ static void BS_Collect_Array(WN* wn_copy,
   if((opr == OPR_ILOAD || opr == OPR_ISTORE)
            && WN_operator(WN_kid(wn_copy, kid_number))==OPR_ARRAY)
 #endif
-       LNO_Build_Access_Array(WN_kid(wn_copy, kid_number), copy_stack,
-                              &LNO_default_pool);
+    LNO_Build_Access_Array(WN_kid(wn_copy, kid_number), copy_stack,
+           &LNO_default_pool);
   array_stack->Push(wn_copy);
   position_stack->Push(position);
 }
@@ -581,6 +588,11 @@ static BOOL FS_Worthwhile(WN* wn_orig,
     }
     if (!Wn_Is_Inside(use, wn_loop))
        return FALSE; 
+
+    // Avoid FS for nodes directly under ASM_INPUT in order to preserve type.
+    if (WN_operator(LWN_Get_Parent(use)) == OPR_ASM_INPUT)
+      return FALSE;
+
     WN* use_loop = Enclosing_Loop(use); 
     if (use_loop != def_loop) {
       all_uses_in_same_def_loop = FALSE;
@@ -607,6 +619,18 @@ static BOOL FS_Worthwhile(WN* wn_orig,
     }
     if (!substitution_candidate) 
       return FALSE;
+
+#ifdef KEY
+//bug 14352: Forward substitution requires the "use" is under the subtree
+//of LWN_Get_Parent(wn_orig)). Otherwise, it is not legal to substitute
+//"use" with the right-hand side of wn_orig.
+    WN *tmp=NULL;
+    for(tmp = use; tmp!=NULL; tmp=LWN_Get_Parent(tmp))
+     if(tmp == LWN_Get_Parent(wn_orig))
+        break;
+    if(!tmp) return FALSE;
+#endif
+
     if (FS_Is_Inside_If(use, LWN_Get_Parent(wn_orig)))
        return FALSE;
     WN *wn;
@@ -616,19 +640,18 @@ static BOOL FS_Worthwhile(WN* wn_orig,
 #ifdef KEY //bug 11786: count total number of uses
     total_use_count++;
 #endif
-
     if (wn != NULL) 
-      continue; 
+      continue;
     use_count++;  
   }
-  if (use_count == 0) //no use or all uses under array 
+  if (use_count == 0)//no use or all uses under array
     return FALSE; 
   if (count > FS_LOAD_AND_LEAF_LIMIT && found_inner_use) 
     return FALSE; 
 #ifdef KEY //bug 11786: let total uses to control code expansion
   if (count > FS_LOAD_AND_LEAF_LIMIT && total_use_count > 1)
 #else
-  if (count > FS_LOAD_AND_LEAF_LIMIT && use_count > 1)
+  if (count > FS_LOAD_AND_LEAF_LIMIT && use_count > 1) 
 #endif
     return FALSE;  
   if (all_uses_in_same_def_loop) {

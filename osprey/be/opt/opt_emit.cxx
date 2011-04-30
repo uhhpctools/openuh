@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -72,7 +76,6 @@ static char *rcs_id = 	opt_emit_CXX"$Revision: 1.13 $";
 // standard types.
 #define USE_STANDARD_TYPES
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"
 #include "tracing.h"
@@ -104,8 +107,16 @@ static char *rcs_id = 	opt_emit_CXX"$Revision: 1.13 $";
 #include "opt_main.h"
 
 #include "opt_emit_template.h"
+#include "wssa_emitter.h"  // WSSA emitter
+#include "pu_info.h"
 
 extern WN_MAP Prompf_Id_Map;
+#if defined(TARG_NVISA)
+// To get better loop depth comments in the ptx file
+// Require better implement because opt is not supposed
+// to use global statics
+static INT cur_loop_depth = 0;
+#endif
 
 
 inline WN *
@@ -133,9 +144,14 @@ CODEREP::Gen_wn(EMITTER *emitter)
 
 
 inline void
-BB_NODE::Gen_wn(EMITTER *emitter)
+BB_NODE::Gen_wn(EMITTER *emitter, BOOL copy_phi)
 {
   Gen_bb_wn(this, emitter);
+  if (OPT_Enable_WHIRL_SSA && copy_phi &&
+      Firststmt() != NULL &&
+      WN_operator_is(Firststmt(), OPR_LABEL)) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(this, Firststmt());
+  }
 }
 
 
@@ -386,6 +402,14 @@ Raise_if_stmt(EMITTER *emitter, BB_NODE **bb)
   }
   emitter->Connect_sr_wn( bb_cond->Branch_stmtrep(), rwn );
 
+  if (OPT_Enable_WHIRL_SSA && 
+      (bb_merge->First_stmtrep() == NULL ||
+       bb_merge->First_stmtrep()->Opr() != OPR_LABEL)) {
+    // only place phi on IF when merge bb is empty 
+    //   or first stmt in merge bb is not LABEL
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(bb_merge, rwn);
+  }
+
   // if bb_cond has more than one statement, create a BLOCK ...
   if (bb_cond->Firststmt() != bb_cond->Laststmt()) {
     WN *block = WN_CreateBlock();
@@ -520,7 +544,11 @@ Build_new_loop_info( WN *do_loop, WN *old_info )
   }
   else {
     est_trips = 0;
+#if defined(TARG_NVISA)
+    depth = cur_loop_depth;
+#else
     depth = 0;
+#endif
     lflags = 0;
   }
 
@@ -726,6 +754,10 @@ Raise_doloop_stmt(EMITTER *emitter, BB_NODE **bb)
   FmtAssert(bb_body == bb_start->Loopbody(), ("Wrong body"));
   FmtAssert(bb_step == bb_start->Loopstep(), ("Wrong step"));
   FmtAssert(bb_merge == bb_start->Loopmerge(), ("Wrong merge"));
+
+#if defined(TARG_NVISA)
+  ++cur_loop_depth;
+#endif
   
   // generate code for the initialization block
   bb_start->Gen_wn(emitter);
@@ -750,7 +782,7 @@ Raise_doloop_stmt(EMITTER *emitter, BB_NODE **bb)
   bb_step->Gen_wn(emitter);
 
   // generate code for the condition
-  bb_end->Gen_wn(emitter);
+  bb_end->Gen_wn(emitter, FALSE);
   FmtAssert(WN_opcode(bb_end->Laststmt()) == OPC_TRUEBR ||
 	    WN_opcode(bb_end->Laststmt()) == OPC_FALSEBR,
 	    ("DO condition is not TRUEBR/FALSEBR. (BB:%d)", bb_end->Id()));
@@ -821,6 +853,9 @@ Raise_doloop_stmt(EMITTER *emitter, BB_NODE **bb)
   }
   bb_end->Set_loopstmt(rwn);
   emitter->Connect_sr_wn( bb_end->Branch_stmtrep(), rwn );
+  if(OPT_Enable_WHIRL_SSA) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(bb_end, rwn);
+  }
   emitter->Set_has_do_loop();
 
   // update the loop_info because we just used an old one to act
@@ -852,6 +887,9 @@ Raise_doloop_stmt(EMITTER *emitter, BB_NODE **bb)
   // set *bb to merge_bb, so we advance to it
   *bb = bb_merge;
 
+#if defined(TARG_NVISA)
+  --cur_loop_depth;
+#endif
   return rwn;
 }
 
@@ -889,7 +927,7 @@ Raise_whiledo_stmt_to_whileloop(EMITTER *emitter, BB_NODE *bb, BB_NODE **next_bb
   }
 
   // generate the code for the ending condition
-  bb_end->Gen_wn(emitter);
+  bb_end->Gen_wn(emitter, FALSE);
 
   // create OPC_BLOCK statement for while body
   WN *block_body = Create_block(emitter, bb_body, loop_back);
@@ -910,6 +948,10 @@ Raise_whiledo_stmt_to_whileloop(EMITTER *emitter, BB_NODE *bb, BB_NODE **next_bb
   // bb_end->Loop()->Set_loopstmt(rwn);
 
   emitter->Connect_sr_wn( bb_end->Branch_stmtrep(), rwn );
+  if(OPT_Enable_WHIRL_SSA) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(bb_end, rwn);
+  }
+
 
   // If bb_end contains more than one statement, create a new block to
   // contain the extra statements in the whileend block and the whiledo
@@ -984,7 +1026,10 @@ Raise_whiledo_stmt_to_doloop(EMITTER *emitter, BB_NODE *bb, BB_NODE *prev_bb, BB
               ? header->Nth_succ(0) : header->Nth_succ(1);
   Is_True(loopmerge, ("Loop merge is NULL"));
 
-  header->Gen_wn(emitter);
+  // head BB must have phi nodes, if it has label, its must unused label
+  // other wise it will not promote to do loop.
+  // skip copy phi nodes to label, we need record phi nodes on do loop
+  header->Gen_wn(emitter, FALSE);
 
   // Remove the init WN* and STMTREP* from the preheader block
   WN *init_stmt = preheader->Laststmt();
@@ -1019,6 +1064,10 @@ Raise_whiledo_stmt_to_doloop(EMITTER *emitter, BB_NODE *bb, BB_NODE *prev_bb, BB
   STMTREP *goto_end = loopback->Branch_stmtrep();
   if ( goto_end != NULL)
     loopback->Remove_stmtrep( goto_end );
+
+#if defined(TARG_NVISA)
+  ++cur_loop_depth;
+#endif
 
   // generate code for the body of the loop
   WN *block_body = Create_block(emitter, loopbody, loopback);
@@ -1069,7 +1118,9 @@ Raise_whiledo_stmt_to_doloop(EMITTER *emitter, BB_NODE *bb, BB_NODE *prev_bb, BB
   header->Loop()->Set_loopstmt(rwn);
 
   emitter->Connect_sr_wn( header->Branch_stmtrep(), rwn );
-
+  if(OPT_Enable_WHIRL_SSA) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(header, rwn);
+  }
   // fix bb_merge:  if bb_merge has a label and exactly one pred,
   // the bb_merge is only reachable from the DO-loop, so it is safe to
   // delete the label stmt.  Fix 315023.
@@ -1087,8 +1138,15 @@ Raise_whiledo_stmt_to_doloop(EMITTER *emitter, BB_NODE *bb, BB_NODE *prev_bb, BB
   header->Set_loopstmt(rwn);
   emitter->Set_has_do_loop();
 
+  // A loop info may have been attached to the BB_LOOP by loop multiversion
+  WN *old_loop_info =loop ? loopbody->Label_loop_info() : NULL;
   if (WOPT_Enable_Add_Do_Loop_Info)
-    WN_set_do_loop_info(rwn, Build_new_loop_info(rwn, NULL));
+    WN_set_do_loop_info(rwn, Build_new_loop_info(rwn,old_loop_info));
+
+#if defined(TARG_NVISA)
+  --cur_loop_depth;
+#endif
+
   return rwn;
 }
 
@@ -1168,7 +1226,9 @@ Raise_dowhile_stmt(EMITTER *emitter, BB_NODE **bb)
     emitter->Cfg()->Feedback()->Emit_feedback( rwn, bb_end );
   }
   emitter->Connect_sr_wn( bb_end->Branch_stmtrep(), rwn );
-
+  if(OPT_Enable_WHIRL_SSA) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI(bb_body, rwn);
+  }
   // Move the extra statements in BB_END to the body.
   if (bb_end->Firststmt() != bb_end->Laststmt()) {
     STMT_CONTAINER stmtcon(WN_first(block_body), WN_last(block_body));
@@ -1222,6 +1282,9 @@ Raise_region_stmt(EMITTER *emitter, BB_NODE **bb)
   // PPP this is a kludge !!! need a node to mark region_entry/func_entry
   emitter->Connect_sr_wn( region_start->Succ()->Node()->First_stmtrep(),
 			 region_wn );
+  if(OPT_Enable_WHIRL_SSA) {
+    emitter->WSSA_Emitter()->WSSA_Copy_PHI( region_start, region_wn );
+  }
 
   // progress onto the next block
   *bb = region_end->Next();
@@ -1274,6 +1337,7 @@ static RAISE_FUNC raise_func[] = {
 //
 // ====================================================================
 
+#include <malloc.h>
 void
 EMITTER::Gen_wn(BB_NODE *first_bb, BB_NODE *last_bb)
 {
@@ -1338,7 +1402,11 @@ EMITTER::Gen_wn(BB_NODE *first_bb, BB_NODE *last_bb)
 	}
 	else if ( entry_opc == OPC_ALTENTRY ||
 		  (entry_opc == OPC_LABEL && 
-		   WN_Label_Is_Handler_Begin(bb->Entrywn())) )
+		   (WN_Label_Is_Handler_Begin(bb->Entrywn())
+#ifdef KEY
+		   || LABEL_target_of_goto_outer_block(WN_label_number(bb->Entrywn()))
+#endif
+		   )) )
 	{
 	  BOOL skip_curbb = Raise_altentry( bb );
 	  // Connect all WN nodes in the merged bb to the end of 'bb'
@@ -1374,7 +1442,10 @@ EMITTER::Gen_wn(BB_NODE *first_bb, BB_NODE *last_bb)
       // also emit any transparent region when Preopt is called from IPA or LNO
       if (RID_TYPE_mp(bb_region->Rid()) || RID_TYPE_eh(bb_region->Rid()) ||
 	  // kludge for 7.2, see pv 457243
-	  RID_TYPE_olimit(bb_region->Rid()) ||
+	  RID_TYPE_olimit(bb_region->Rid()) || 
+#if defined(TARG_SL) //region_type_for_major
+	  RID_TYPE_sl2_para(bb_region->Rid()) ||
+#endif 	  
 	  RID_TYPE_pragma(bb_region->Rid())) {
 
 	Is_True(bb_region->Region_start() == bb,
@@ -1508,6 +1579,24 @@ EMITTER::Emit(COMP_UNIT *cu, DU_MANAGER *du_mgr,
   _alias_mgr = alias_mgr;
   _du_mgr = du_mgr;
 
+  // initial wssa emitter
+  if (OPT_Enable_WHIRL_SSA) {
+    WSSA::WHIRL_SSA_MANAGER *wssa_mgr = PU_Info_ssa_ptr(Current_PU_Info);
+    _wssa_emitter = CXX_NEW(WHIRL_SSA_EMITTER(wssa_mgr, _opt_stab, _wn_to_cr_map),
+                            _mem_pool);
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT_INOUT)) {
+      _htable->Print(TFile);
+      _cfg->Print(TFile);
+    }
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT)) {
+      _wssa_emitter->Set_trace(TRUE);
+      fprintf(TFile, "Entering WSSA Emitter\n");
+    }
+    if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+      _wssa_emitter->Set_trace_time(TRUE);
+    }
+  }
+
   // do we have valid loop-body information, which is necessary for
   // some of the checks
   Cfg()->Analyze_loops();
@@ -1533,8 +1622,27 @@ EMITTER::Emit(COMP_UNIT *cu, DU_MANAGER *du_mgr,
   // prepare for the def-use construction
   du_mgr->Set_alias_mgr(alias_mgr);
 
+  // convert opt_stab's vsym into symtab
+  if(OPT_Enable_WHIRL_SSA) {
+    _wssa_emitter->WSSA_Convert_OPT_Symbol();
+  }
+  
   // generate all of the Whirl
   Raise_func_entry(Cfg()->Func_entry_bb(), Cfg()->Last_bb());
+
+  if (OPT_Enable_WHIRL_SSA) {
+    _wssa_emitter->WSSA_Build_MU_CHI_Version(_opt_func);
+    if (_wssa_emitter->Get_trace()) {
+      fprintf(TFile, "Exiting WSSA Emitter\n");
+    }
+    CXX_DELETE(_wssa_emitter, _mem_pool);
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT_INOUT)) {
+      fprintf(TFile, "WSSA sym table and WN tree after WSSA Emitter\n");
+      WSSA::WHIRL_SSA_MANAGER *wssa_mgr = PU_Info_ssa_ptr(Current_PU_Info);
+      wssa_mgr->Print_wst_table(TFile);
+      fdump_tree(TFile, _opt_func);
+    }
+  }
 
   // construct the def-use information after all Whirl generated
   Compute_use_def(du_mgr);
@@ -1563,6 +1671,21 @@ EMITTER::Emit(COMP_UNIT *cu, DU_MANAGER *du_mgr,
   Is_True(Get_Preg_Num(PREG_Table_Size(CURRENT_SYMTAB)) ==
 	  Opt_stab()->Last_preg(),
 	  ("EMITTER:Emit, incorrect last preg number"));
+
+#if !defined(TARG_NVISA)
+  {
+    BOOL tr = _trace || Get_Trace (TP_GLOBOPT, ALIAS_DUMP_FLAG);
+    if (Opt_stab()->Phase() == PREOPT_LNO_PHASE
+        || Opt_stab()->Phase() == PREOPT_LNO1_PHASE) {
+      Opt_stab()->Cr_sr_annot_mgr()->Export_annot 
+                     (_opt_func, alias_mgr, FALSE, tr);
+    } else {
+      Opt_stab()->Cr_sr_annot_mgr()->Discard_offline_annot 
+                     (_opt_func, alias_mgr, tr);
+    }
+    WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()->Set_active_mgr();  
+  }
+#endif
 
   Verify(_opt_func);
   
@@ -1626,9 +1749,19 @@ EMITTER::Can_raise_to_scf(BB_NODE *bb)
     bb_step = bb_start->Loopstep();
     bb_merge = bb_start->Loopmerge();
 #ifdef KEY // bug 8327: the incr stmt has been optimized to something else
+    // bugs 13605, 13624: A DOSTEP originally contains the step WN followed
+    // by a goto to the DOEND. DCE sometimes introduces a label at the start,
+    // and sometimes is not able to delete the goto. So the actual STEP wn
+    // may be neither the head nor the tail of the stmtlist. If DCE is later
+    // found to do more changes to the DOSTEP bb, then we should just scan
+    // the entire bb for the STEP wn.
     if (bb_step->Stmtlist()->Tail() == NULL ||
-        bb_step->Stmtlist()->Tail()->Opr() != OPR_STID ||
-        bb_step->Stmtlist()->Tail()->Rhs()->Kind() != CK_OP)
+	((bb_step->Stmtlist()->Tail()->Opr() != OPR_STID ||
+	  bb_step->Stmtlist()->Tail()->Rhs()->Kind() != CK_OP) &&
+	 // Now check the previous statement, if any.
+	 (bb_step->Stmtlist()->Tail()->Prev() == NULL ||
+	  bb_step->Stmtlist()->Tail()->Prev()->Opr() != OPR_STID ||
+	  bb_step->Stmtlist()->Tail()->Prev()->Rhs()->Kind() != CK_OP)))
       ;
     else
 #endif
@@ -1809,6 +1942,7 @@ EMITTER::EMITTER(MEM_POOL *lpool, MEM_POOL *gpool, OPT_PHASE opt_phase):
   _opt_stab = NULL;
   _opt_func = NULL;
   _rgn_entry_stmt = NULL;
+  _wssa_emitter = NULL;
   _has_do_loop = FALSE;
 
   // create a mapping from WN to CODEREP/STMTREP

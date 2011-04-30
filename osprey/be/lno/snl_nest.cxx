@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -57,7 +61,7 @@
 #pragma hdrstop
 
 #define snl_nest_CXX      "snl_nest.cxx"
-static char *rcs_id =   snl_nest_CXX "$Revision$";
+const static char *rcs_id =   snl_nest_CXX "$Revision$";
 
 #include <sys/types.h>
 #include "fiz_fuse.h"
@@ -69,6 +73,7 @@ static char *rcs_id =   snl_nest_CXX "$Revision$";
 #include "scalar_expand.h"
 #include "wn_simp.h"
 #include "lnoutils.h"
+#include "cond.h"
 
 //-----------------------------------------------------------------------
 // SNL_NEST_INFO member functions
@@ -223,6 +228,7 @@ SNL_NEST_INFO::SNL_NEST_INFO(WN* outer, INT nloops, MEM_POOL* pool,
   _below_is_distributable(TRUE),
   _nloops_general(0),
   _nloops_invariant(0),
+  _nloops_transformable(0),
   _depth_inner(0),
   _privatizability_info(pool),
   _problem(NULL)
@@ -272,6 +278,8 @@ SNL_NEST_INFO::SNL_NEST_INFO(WN* outer, INT nloops, MEM_POOL* pool,
       const SX_PNODE* pnode = NULL;
       INT outer_scalar_loop = 
         Privatizability_Info().First_Transformable_Depth( &pnode);
+      INT outer_transformable_loop=
+	Privatizability_Info().First_Transformable_Depth_Reduction(&pnode);
       INT i;
       for (i = 0; i < _nloops; i++) {
         INT d = _depth_inner - i;
@@ -291,6 +299,21 @@ SNL_NEST_INFO::SNL_NEST_INFO(WN* outer, INT nloops, MEM_POOL* pool,
       }
       _nloops_general = ii;
       _nloops_invariant = ii;
+
+      for (i = 0; i < _nloops; i++) {
+        INT d = _depth_inner - i;
+        if (d < outer_transformable_loop)
+          break;
+      }
+
+      for (ii = 0; ii < i; ii++) {
+        INT d = _depth_inner - ii;
+        if (!SNL_Is_Transformable(Dostack().Bottom_nth(d),
+                                  _depth_inner - _nloops + 1, dli[d]))
+          break;
+      }
+      _nloops_transformable = ii;
+
     
       // How far out are the loop bounds really invariant?
       for (i = 2; i <= _nloops_invariant; i++) {
@@ -622,6 +645,215 @@ SNL_NEST_INFO::SNL_NEST_INFO(WN* outer, INT nloops, MEM_POOL* pool,
   }
 }
 
+extern WN *dump_tree(WN*);
+
+SNL_NEST_INFO::SNL_NEST_INFO(WN* outer, WN *inner, INT nloops, MEM_POOL* pool)
+: _nloops(0),
+  _bi(0),
+  _pool(pool),
+  _dostack(pool),
+  _num_bad(0),
+  _above_is_distributable(FALSE),
+  _below_is_distributable(FALSE),
+  _nloops_general(0),
+  _nloops_invariant(0),
+  _nloops_transformable(0),
+  _depth_inner(0),
+  _privatizability_info(pool),
+  _problem(NULL)
+{
+  FmtAssert(nloops <= SNL_MAX_LOOPS,
+            ("SNL_NEST_INFO constructor: nloops %d > %d",
+            nloops, SNL_MAX_LOOPS));
+  FmtAssert(pool != &SNL_local_pool, ("Bad pool for SNL_NEST_INFO()"));
+
+  MEM_POOL_Push(&SNL_local_pool);
+
+  if (nloops < 1)
+    goto return_point2;
+
+  if ((OPT_unroll_level != 2) &&
+     (!Get_Do_Loop_Info(inner)->Multiversion_Alias))
+       goto return_point2;
+
+  {
+    Build_Doloop_Stack(inner, &_dostack);
+    _innermost = Get_Do_Loop_Info(inner)->Is_Inner;
+  
+    _depth_inner = Dostack().Elements() - 1;
+    _num_bad = _depth_inner - Good_Do_Depth(inner);
+    _nloops = nloops;
+    
+    if (!_innermost)
+      goto return_point2;
+
+    if (Do_Loop_Depth(inner) != (Do_Loop_Depth(outer) + 1)) 
+      goto return_point2;
+    
+    {
+      DO_LOOP_INFO* dli[LNO_MAX_DO_LOOP_DEPTH];
+      for (INT d = Dostack().Elements() - 1; d >= 0; d--)
+        dli[d] = Get_Do_Loop_Info(Dostack().Bottom_nth(d));
+    
+      // Ok, so now we start screening.  First, we can only optimize those
+      // loops that do not have problems with privatizability.  They must
+      // otherwise be transformable, meaning bounds well behaved, etc.
+      // Also we are only considering innermost loop peeling here. No
+      // Other transformations are applied in this analysis.
+    
+      _privatizability_info.Make_Sx_Info(outer, nloops); 
+      _problem = CXX_NEW_ARRAY(SNL_LOOP_PROBLEM_INFO, _depth_inner+1, pool);
+      INT ii;
+      for (ii = 0; ii <= _depth_inner; ii++)
+        _problem[ii] = SNL_LOOP_PROBLEM_INFO(SNL_LOOP_PROBLEM_NONE);
+    
+      // The privatizability info tells us the outermost loop as far as
+      // scalars are concerned.
+    
+      const SX_PNODE* pnode = NULL;
+      INT outer_scalar_loop = 
+        Privatizability_Info().First_Transformable_Depth( &pnode);
+      INT i;
+      for (i = 0; i < _nloops; i++) {
+        INT d = _depth_inner - i;
+        if (d < outer_scalar_loop)
+          break;
+      }
+      for (ii = i; ii < _nloops; ii++) {
+        INT d = _depth_inner - ii;
+        _problem[d] = SNL_LOOP_PROBLEM_INFO(SNL_LOOP_PROBLEM_SCALAR);
+      }
+
+      // Is the loop a transformable candidate
+      if (!SNL_Is_Transformable(inner, _depth_inner, dli[_depth_inner]))
+          goto return_point2;
+
+      _nloops_general == ii;
+      while (1) {
+       try_while_again:
+        INT inner_depth = _depth_inner;
+        INT outer_depth = _depth_inner - 1;
+    
+	_bi = CXX_NEW(SNL_BOUNDS_INFO(Pool()), Pool());
+	_bi->Outermost_Depth() = outer_depth;
+	for (INT d = outer_depth; d <= _depth_inner; d++)
+	  _bi->Collect_Do_Info(Dostack().Bottom_nth(d));
+
+	_bi->Conditionals().Add_Vars(_bi->Bounds().Num_Vars() -
+				     _bi->Conditionals().Num_Vars());
+	_bi->Canonicize(_nloops, &Dostack(), inner_depth);
+    
+        SNL_BOUNDS_INFO ebounds(&SNL_local_pool);
+        ebounds.Outermost_Depth() = outer_depth;
+        ebounds.Collect_Outer_Info(inner);
+    
+        //for (INT d = outer_depth; d <= inner_depth; d++) {
+        {
+          INT d = inner_depth;
+   
+	  // Add in an equation that says the loop never executes.  If that
+	  // is consistent, then there's a problem.  If the bounds are 
+	  // invariant, then add the appropriate conditional outside the 
+	  // outer_depth. Otherwise, give up: the new outer depth is one 
+	  // in from here.
+    
+	  WN* wn = Dostack().Bottom_nth(d);
+    
+          for (INT dimlb = 0; dimlb < dli[d]->LB->Num_Vec(); dimlb++) {
+	    ACCESS_VECTOR* avlb = dli[d]->LB->Dim(dimlb);
+	    for(INT dimub = 0; dimub < dli[d]->UB->Num_Vec(); dimub++) {
+	      ACCESS_VECTOR* avub = dli[d]->UB->Dim(dimub);
+    
+	      BOOL is_consistent = ebounds.Bounds().Is_Consistent();
+	      ebounds.Bounds().Remove_Last_Le(1);
+	      if (!is_consistent)
+	        continue;
+    
+	      // First test is that the ub and lb are invariant in the outer
+              // loop.  TODO: add code to support SNL's with no parent loop.
+              if (SNL_Is_Invariant(&Dostack(), outer_depth, inner_depth) ) {
+                WN *stmt;
+    
+	        // Now mine the comp expression the loop and the
+                // conditionals in the loop to see if there are
+                // then regions which would not be executed if either
+                // the first or the last iteration were missing.
+	        BOOL peeled=0; // 0 = no peel; 1 = peel first; 2 = peel last
+                BOOL exclusion = 1; // the then part of the loop is not peeled.
+
+                // TODO: add support for the other case, inclusion which
+                // would do the opposite, peeling the then and omitting
+                // it from the loop body. cases are 
+                //   if (lb expr match) then ...
+                //   if (ub expr match) then ...
+    
+	        // Test for peeling the last iteration.
+	        if (d == outer_depth + 1 &&
+		    dli[d]->LB->Num_Vec() == 1 &&
+		    dli[d]->UB->Num_Vec() == 1 &&
+		    dli[d]->UB->Dim(0)->Loop_Coeff(d) ==1){
+
+                  // Walk the loop lookinf for stmt level if regions
+                  for (stmt = WN_first(WN_do_body(inner));
+                    stmt; stmt = WN_next(stmt)) {
+                    if (WN_operator(stmt) == OPR_IF) {
+                      WN *UB_wn = SNL_UBexp(WN_end(inner));
+                      WN *UB_var = SNL_UBvar(WN_end(inner));
+
+                      // First try the upper bounds match
+                      is_consistent =  SNL_Compare_Logic(UB_wn, UB_var,
+                                                         inner, stmt, TRUE);
+                      if (!is_consistent) {
+		        peeled = 2;
+                        break;
+                      }
+
+                      // Now try the lower bounds match
+                      is_consistent =  SNL_Compare_Logic(NULL, NULL,
+                                                         inner, stmt, FALSE);
+                      if (!is_consistent) {
+		        peeled = 1;
+                        break;
+                      }
+                    }
+		  }
+	        }
+    
+	        if (peeled) {
+		  WN* peel_wn = Dostack().Bottom_nth(inner_depth);
+		  SNL_DEBUG1(1, "Peeling first or last iteration of %s",
+		             SYMBOL(WN_index(peel_wn)).Name());
+		  SNL_Peel_Iteration_Inner(peel_wn, stmt, exclusion, peeled==1);
+	        } else {
+	          _problem[_depth_inner] =
+	            SNL_LOOP_PROBLEM_INFO(SNL_LOOP_PROBLEM_INNER_MIGHT_NOT_GO);
+	          SNL_DEBUG1(1, "Not enough iterations to use loop %s",
+			     SYMBOL(WN_index(wn)).Name());
+                }
+	      }
+	    }
+	  }
+  
+	  ebounds.Collect_Do_Info(wn);
+	  ebounds.Conditionals().Add_Vars(ebounds.Bounds().Num_Vars() -
+	    ebounds.Conditionals().Num_Vars());
+        }
+
+        // All's well.
+        break;
+      }
+    }
+  }
+
+  return_point2:
+  MEM_POOL_Pop(&SNL_local_pool);
+
+  if (snl_debug >= 3) {
+    fprintf(TFile, "Nest info creation:\n");
+    Print(TFile);
+  }
+}
+
 void SNL_NEST_INFO::Exclude_Outer_Loops(INT how_many)
 {
   FmtAssert(how_many > 0, ("Bad call to Exclude_Outer_Loops(INT)"));
@@ -641,3 +873,9 @@ void SNL_NEST_INFO::Exclude_Outer_Loops(INT how_many)
   }
 }
 
+BOOL SNL_NEST_INFO::All_Var_Expandable(int nloops)
+{
+  if ( nloops > _nloops_general && nloops > _nloops_invariant )
+    return FALSE;
+  return TRUE;
+}

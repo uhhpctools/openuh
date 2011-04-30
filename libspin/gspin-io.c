@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
   Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
@@ -109,10 +113,12 @@ gs_void_t gs_write (const gs_string_t filename)
     memcpy(p_in_memseg, t, size);
 #ifdef Is_True_On
     _gs_em(p_in_memseg, false);
+#ifdef CHECK_SPIN_LEAKS
     if (gs_em(t) == false) {
       printf("leaked node: ");
       gs_dump(t);
     }
+#endif
 #endif
 
     if (gs_code_arity(gs_code(t)) > 0) { // convert kid pointers to indices
@@ -159,20 +165,20 @@ gs_unsigned_char_t *gs_read (const gs_string_t filename)
 
   // Convert indexes within the mem_seg to physical addresses.
   p = mem_seg;
-  string_section = (char *)(~0L); 
+  string_section = (char *) (~0L);
   while (p - mem_seg < statbuf.st_size && p < string_section) {
     gs_t q = (gs_t) p;
     if (gs_code_arity(gs_code(q)) > 0) { // convert kid indicese to pointers
       int j;
       for (j = 0; j < gs_code_arity(gs_code(q)); j++)
         if (gs_operand(q, j) != NULL) {
-	  GS_ASSERT((int)gs_operand(q, j) < statbuf.st_size, 
+	  GS_ASSERT((long)gs_operand(q, j) < statbuf.st_size, 
 	  	    "right offset out of bounds!.\n");
-	  gs_set_operand(q, j, (gs_t) (mem_seg + (long) gs_operand(q,j)));
+	  gs_set_operand(q, j, (gs_t) (mem_seg + (int) gs_operand(q,j)));
 	}
     }
     else if (gs_code(q) == IB_STRING) { // convert string index to pointer
-      if (string_section == (char *)(~0L) )
+      if (string_section == (char *) (~0L))
 	string_section = mem_seg + gs_u(q);
       GS_ASSERT(gs_u(q) < statbuf.st_size, "left offset out of bounds!.\n");
       _gs_s_no_alloc (q, (gs_unsigned_char_t *) (mem_seg + gs_u(q)));

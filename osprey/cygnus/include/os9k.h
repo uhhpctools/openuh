@@ -94,11 +94,6 @@ Boston, MA 02111-1307, USA.  */
 
 /* Macro definitions for accessing module header fields.  */
 #define MODNAME(mod) ((u_char*)((u_char*)mod + ((Mh_com)mod)->m_name))
-#if 0
-/* Appears not to be used, and the u_int32 typedef is gone (because it
-   conflicted with a Mach header.  */
-#define MODSIZE(mod) ((u_int32)((Mh_com)mod)->m_size)
-#endif /* 0 */
 #define MHCOM_BYTES_SIZE 80
 #define N_BADMAG(a) (((a).a_info) != MODSYNC)
 
@@ -151,31 +146,5 @@ typedef	mh_com *Mh_dev,mh_dev;
 /* Configuration module.  */
 typedef mh_com *Mh_config, mh_config;
 
-#if 0 
-
-#if !defined(_MODDIR_H)
-/* Go get _os_fmod (and others).  */
-#include <moddir.h>
-#endif
-
-error_code _os_crc (void *, u_int32, int *);
-error_code _os_datmod (char *, u_int32, u_int16 *, u_int16 *, u_int32, void **, mh_data **);
-error_code _os_get_moddir (void *, u_int32 *);
-error_code _os_initdata (mh_com *, void *);
-error_code _os_link (char **, mh_com **, void **, u_int16 *, u_int16 *);
-error_code _os_linkm (mh_com *, void **, u_int16 *, u_int16 *);
-error_code _os_load (char *, mh_com **, void **, u_int32, u_int16 *, u_int16 *, u_int32);
-error_code _os_mkmodule (char *, u_int32, u_int16 *, u_int16 *, u_int32, void **, mh_com **, u_int32);
-error_code _os_modaddr (void *, mh_com **);
-error_code _os_setcrc (mh_com *);
-error_code _os_slink (u_int32, char *, void **, void **, mh_com **);
-error_code _os_slinkm (u_int32, mh_com *, void **, void **);
-error_code _os_unlink (mh_com *);
-error_code _os_unload (char *, u_int32);
-error_code _os_tlink (u_int32, char *, void **, mh_trap **, void *, u_int32);
-error_code _os_tlinkm (u_int32, mh_com *, void **, void *, u_int32);
-error_code _os_iodel (mh_com *);
-error_code _os_vmodul (mh_com *, mh_com *, u_int32);
-#endif /* 0 */
 
 #endif

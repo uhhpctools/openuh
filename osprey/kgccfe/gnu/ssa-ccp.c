@@ -1050,19 +1050,6 @@ ssa_const_prop ()
      as appropriate.  */
   ssa_ccp_df_delete_unreachable_insns ();
 
-#if 0
-  /* The DF analyzer expects the number of blocks to remain constant,
-     so we can't remove unreachable blocks.
-
-     Code the DF analyzer calls expects there to be no unreachable
-     blocks in the CFG.  So we can't leave unreachable blocks in the
-     CFG.
-
-     So, there is no way to do an incremental update of the DF data
-     at this point.  */
-  df_analyse (df_analyzer, 0,
-	      DF_RD_CHAIN | DF_RU_CHAIN | DF_REG_INFO | DF_HARD_REGS);
-#endif
 
   /* Clean up any dead code exposed by SSA-CCP, do this after updating
      the dataflow information!  */

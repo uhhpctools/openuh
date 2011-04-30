@@ -37,7 +37,13 @@
 #ifdef	_UNICOS
 #pragma _CRI duplicate _memwcpy as memwcpy
 #else
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void _memwcpy(long *s, long *s0, int n );
+void memwcpy(long *s, long *s0, int n ) { _memwcpy(s, s0, n); }
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak memwcpy = _memwcpy
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif
 
 #ifndef	_CRAY

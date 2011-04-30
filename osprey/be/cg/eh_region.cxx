@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -52,7 +56,9 @@
 
 #include <algorithm>
 #include <vector>
+#if ! defined(BUILD_OS_DARWIN)
 #include "libelf/libelf.h"
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "dwarf_stuff.h"
 #include "defs.h"
 #include "errors.h"
@@ -511,9 +517,6 @@ struct IS_SIB_RANGE {
   }
 };
 
-#if defined(KEY) && defined(TARG_MIPS)
-static BOOL Is_Target_64bit (void) { return TRUE; }
-#endif
 
 static LABEL_IDX Duplicate_LABEL (LABEL_IDX oldi)
 {
@@ -549,7 +552,7 @@ void
 EH_Set_Start_Label(EH_RANGE* p)
 {
   LABEL_IDX label;
-#ifdef OSP_OPT
+#ifdef TARG_IA64
   // too much Eh label will affect the cfg and region formation,
   // further affects the register allocation and instruction schedule
   // for optimization of EH implementation
@@ -598,7 +601,7 @@ void
 EH_Set_End_Label(EH_RANGE* p)
 {
   LABEL_IDX label;
-#ifdef OSP_OPT
+#ifdef TARG_IA64
   // too much Eh label will affect the cfg and region formation,
   // further affects the register allocation and instruction schedule
   // for optimization of EH implementation
@@ -722,6 +725,12 @@ struct ADJUST_PARENT {
   void operator()(EH_RANGE&r) {r.parent -= r.adjustment;}
 };
 
+
+struct SET_NUM_EH_RANGE {
+  void operator()(EH_RANGE & r) {
+    RID_num_eh_ranges(r.rid) = 1;  // every eh region contains 1 eh_range before flatten
+  }
+};
 
 void
 EH_Prune_Range_List(void)
@@ -911,7 +920,14 @@ ST_For_Range_Table(WN * wn)
   TY& ty = New_TY(tyi);
   TY_Init(ty, size, KIND_STRUCT, MTYPE_M,
 	  Save_Str2(".range_table.",ST_name(pu)));
+#ifdef KEY
+  if (Is_Target_64bit())
+    Set_TY_align(tyi, 8);
+  else
+    Set_TY_align(tyi, 4);
+#else
   Set_TY_align(tyi, 4);
+#endif
   st = New_ST(CURRENT_SYMTAB);
   ST_Init(st, TY_name_idx(ty),
 	  CLASS_VAR, SCLASS_EH_REGION, EXPORT_LOCAL, tyi);
@@ -1012,7 +1028,7 @@ Convert_TF_Map_To_FT_Map(TF_MAP& src, FT_MAP& dst)
 static INITV_IDX
 Get_TF_Map_and_EH_Spec_List(PU& pu, TF_MAP& tfmap)
 {
-  INITO_IDX ino_idx = pu.unused;
+  INITO_IDX ino_idx = pu.misc;
   tfmap.clear();
 
   if (ino_idx == INITO_IDX_ZERO) {
@@ -1050,6 +1066,104 @@ Get_TF_Map_and_EH_Spec_List(PU& pu, TF_MAP& tfmap)
   return (id != 0) ? INITV_blk(INITO_val(id)) : INITV_IDX_ZERO;
 }
 
+
+// bug 3416: The exception ranges in exception table must be sorted in
+// increasing order of call-site address. The problem shows up when we
+// generate nested regions due to code like "if (foo()) bar();".
+// So flatten the regions here to remove overlap between parent and child
+// regions. As a side-effect, add new ranges resulting from the splits.
+// Assumption: a parent region is always listed after its children (even if
+// not immediately after). The caller of this function must, therefore, sort
+// the list before calling.
+// Transformation:
+// R1_begin:
+//    R2_begin:
+//    R2_end:
+// R1_end:
+//
+// R2_end - R2_begin  ===>    R2_begin - R1_begin
+// R1_end - R1_begin          R2_end - R2_begin
+//                            R1_end - R2_end (bug 3736)
+//
+// TODO: Check if the new regions created have any call, if not, don't
+// create, or delete the region.
+
+// FIX: remove two improper assumptions in previous implementation:
+//   1. there is no gaps between children of a same parent. It has been violated
+//      by some test case;
+//   2. there is no level 2 or higher vertexes.
+//      it is not violated yet, but we remove it for safety.
+// We now assume that the EH_RANGES forms an arbitrary forrest now.
+// We still assume that parents are always listed after their children, and regions
+// are listed in order of starting BB. Also, we discard some empty new ranges.
+static void flatten_regions (void)
+{
+  vector<EH_RANGE> new_ranges;
+  int i, j;
+  const int no_child = -1;
+
+  // set the num_eh_ranges for all eh region to 1
+  for_each  (range_list.begin(), range_list.end(), SET_NUM_EH_RANGE());
+
+  for ( j = range_list.size() - 1; j > 0; j--)
+  {
+    int first_child, last_child;
+    bool more_parents;
+
+    first_child = last_child = no_child;
+    more_parents = false;
+    for (i=0; i < j; i++)
+    {
+      if(range_list[i].parent)
+        more_parents = true;
+      if (range_list[i].parent == &range_list[j])
+      {
+        if (first_child == no_child)
+          last_child = first_child = i;
+        if ( first_child != no_child && i != last_child )
+        {
+          EH_RANGE new_range (range_list[i].rid);
+          new_range.start_label = range_list[last_child].end_label;
+          new_range.end_label = range_list[i].start_label;
+          new_range.end_bb = Get_Label_BB(range_list[i].start_label);
+          new_range.has_call = range_list[j].has_call; // not accurate
+          if (Get_Label_BB(new_range.start_label) != Get_Label_BB(new_range.end_label))
+             new_ranges.push_back (new_range);
+
+        }
+        range_list[i].parent = NULL;
+        last_child = i;
+      }
+    }
+
+    if (first_child != no_child)
+    {
+      EH_RANGE new_range (range_list[j].rid);
+      new_range.start_label = range_list[last_child].end_label;
+      new_range.end_label = range_list[j].end_label;
+      new_range.end_bb = range_list[j].end_bb;
+      new_range.has_call = range_list[j].has_call; // not accurate
+      if (Get_Label_BB(new_range.start_label) != Get_Label_BB(new_range.end_label))
+        new_ranges.push_back (new_range);
+
+      // Update the parent now to end before the 1st child
+      range_list[j].end_label = range_list[first_child].start_label;
+      range_list[j].end_bb = Get_Label_BB (range_list[first_child].start_label);
+    }
+    if (!more_parents)
+     break;
+  }
+
+  for (vector<EH_RANGE>::iterator iter = new_ranges.begin();
+       iter != new_ranges.end(); ++iter) {
+    range_list.add_range (*iter);
+    RID_num_eh_ranges(iter->rid) ++;
+  }
+}
+
+#include <map>
+using namespace std;
+
 struct cmpst
 {
   bool operator() (const ST_IDX i1, const ST_IDX i2) const
@@ -1081,7 +1195,7 @@ struct sort_on_filter : public binary_function<type_filter_entry,
 static INITO*
 Create_Type_Filter_Map (void)
 {
-  INITV_IDX i = INITV_next (INITV_next (INITO_val (Get_Current_PU().unused)));
+  INITV_IDX i = INITV_next (INITV_next (INITO_val (PU_misc_info (Get_Current_PU()))));
   INITO* ino;
   INITO_IDX idx = TCON_uval (INITV_tc_val(i));
   if (idx)	// idx for typeinfo_table
@@ -1120,6 +1234,20 @@ Create_Type_Filter_Map (void)
   }
   return ino;
 }
+
+// This function returns the size of an LEB128 encoding of value. We do
+// not use the encoding however. We emit the unencoded value with the LEB128
+// directive.
+static int
+sizeof_signed_leb128 (int value)
+{
+  char buff[ENCODE_SPACE_NEEDED];
+  int size;
+  int res = _dwarf_pro_encode_signed_leb128_nm (value, &size, buff, sizeof(buff));
+  FmtAssert (res == DW_DLV_OK, ("Encoding for exception table failed"));
+  return size;
+}
+
 
 static const char*
 Get_INITV_kind (INITVKIND kind)
@@ -1278,9 +1406,9 @@ EH_Print_Range_List (void)
 void
 Print_PU_EH_Entry(PU& pu, ST* pu_st, FILE* fp)
 {
-  INITO_IDX ino_idx = pu.unused;
+  INITO_IDX ino_idx = pu.misc;
   /*
-   *    .unused (INITO) = <etable (ST), exc_ptr_iv (INITV)>
+   *    .eh_info (INITO) = <etable (ST), exc_ptr_iv (INITV)>
    *			--> exc_ptr_iv(__Exc_Ptr__)			(ST_IDX)
    *			--> filter_iv (___Exc_Filter__)			(ST_IDX)
    *			--> tinfo (type filter entry, 0 if none)	(INITO_IDX)
@@ -1363,18 +1491,6 @@ Print_PU_EH_Entry(PU& pu, ST* pu_st, FILE* fp)
   fprintf(fp, "\n");
 }
 
-// This function returns the size of an LEB128 encoding of value. We do
-// not use the encoding however. We emit the unencoded value with the LEB128
-// directive.
-static int
-sizeof_signed_leb128 (int value)
-{
-  char buff[ENCODE_SPACE_NEEDED];
-  int size;
-  int res = _dwarf_pro_encode_signed_leb128_nm (value, &size, buff, sizeof(buff));
-  FmtAssert (res == DW_DLV_OK, ("Encoding for exception table failed"));
-  return size;
-}
 
 static void
 INITV_Init_Integer_2(INITV_IDX inv, TYPE_ID mtype, INT64 val, UINT16 repeat)
@@ -1411,69 +1527,6 @@ EH_Get_PU_Range_INITO(bool bSetNull)
 }
 
 
-#ifdef KEY
-// bug 3416: The exception ranges in exception table must be sorted in
-// increasing order of call-site address. The problem shows up when we
-// generate nested regions due to code like "if (foo()) bar();".
-// So flatten the regions here to remove overlap between parent and child
-// regions. As a side-effect, add new ranges resulting from the splits.
-// Assumption: a parent region is always listed after its children (even if
-// not immediately after). The caller of this function must, therefore, sort
-// the list before calling.
-// Transformation:
-// R1_begin:
-//    R2_begin:
-//    R2_end:
-// R1_end:
-//
-// R2_end - R2_begin  ===>    R2_begin - R1_begin
-// R1_end - R1_begin          R2_end - R2_begin
-//                            R1_end - R2_end (bug 3736)
-//
-// TODO: Check if the new regions created have any call, if not, don't
-// create, or delete the region.
-static void flatten_regions (void)
-{
-  vector<EH_RANGE> new_ranges;
-  int i=0;
-  while (i < range_list.size() - 1)
-  {
-    if (range_list[i].parent) 
-    {
-      int first_child, last_child;
-      first_child = last_child = i++;
-      // search for the parent
-      while (range_list[first_child].parent != &range_list[i])
-      {
-        if (range_list[i].parent == range_list[first_child].parent)
-	{
-          range_list[i].parent = NULL;
-	  last_child = i;
-	}
-	i++;
-      }
-      // 'i' has the parent
-      EH_RANGE new_range (range_list[i].rid);
-      new_range.start_label = range_list[last_child].end_label;
-      new_range.end_label = range_list[i].end_label;
-      new_range.end_bb = range_list[i].end_bb;
-      new_range.has_call = range_list[i].has_call; // not accurate
-      new_ranges.push_back (new_range);
-
-      // Update the parent now to end before the 1st child
-      range_list[i].end_label = range_list[first_child].start_label;
-      range_list[i].end_bb = Get_Label_BB (range_list[i].end_label);
-      range_list[first_child].parent = NULL;
-      i = first_child + 1; // start over
-    }
-    else i++;
-  }
-
-  for (vector<EH_RANGE>::iterator iter = new_ranges.begin();
-       iter != new_ranges.end(); ++iter)
-    range_list.add_range (*iter);
-}
-#endif
 
 
 #ifdef TARG_IA64 
@@ -1484,7 +1537,7 @@ bool pu_need_LSDA;
  */
 
 // check whether need not to create INITO for LSDA
-// Another way: check if exception type info stored in INITO pu.unused is NULL/ZERO
+// Another way: check if exception type info stored in INITO pu.misc is NULL/ZERO
 bool
 PU_Need_Not_Create_LSDA ()
 {
@@ -1561,7 +1614,10 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
     ST* st = INITO_st(range.ereg_supp);
     if (ST_is_not_used(st)) 	continue;
 
-    Set_ST_is_not_used(st);
+    RID_num_eh_ranges(range.rid) --;
+    if ( RID_num_eh_ranges(range.rid) == 0 ) // all flatten eh_ranges has been processed
+      Set_ST_is_not_used(st);
+
     INITV_IDX blk = INITO_val(range.ereg_supp);
     if (INITV_kind(blk) != INITVKIND_BLOCK) {
 	    Set_ST_is_not_used(st);
@@ -1584,7 +1640,8 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
      *    char*	cs_start; //	offset to Start IP of current proc
      *    char*	cs_len;	  //	length to the next call-site?
      *    char*	cs_lp;	  //	ladding pad offset to lpStart
-     *    char*	cs_action;//    the first action table offset (biased by 1, 0 indicates there are no     *                          actions)
+     *    char*	cs_action;//    the first action table offset (biased by 1, 0 indicates there are no
+     *                          actions)
      * };
      */ 
     // call-site record
@@ -1632,7 +1689,7 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
     for (INITV_IDX next = INITV_next(first); next; next = INITV_next(next)) {
       // begin write action record (cinv, next)
       int filter = 0;
-      if (INITVKIND_ZERO != INITV_kind(next))
+      if (INITVKIND_VAL == INITV_kind(next))
 	filter = TCON_ival(INITV_tc_val(next));
 
       if (filter > 0) { // handler
@@ -1740,6 +1797,7 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
 }
 
 #else // TARG_IA64
+
 /* implementation on X8664. 
  */
 #ifdef KEY
@@ -1751,8 +1809,9 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
 // 4th field in a call-site record.
   int running_ofst=1;
   int bytes_for_filter;
+  INITO_IDX tmp = PU_misc_info (Get_Current_PU());
 
-  INITO* eh_spec = Create_Type_Filter_Map ();
+  INITO* eh_spec = (tmp) ? Create_Type_Filter_Map () : NULL ;
 
   vector<INITV_IDX> action_chains;
 
@@ -1779,12 +1838,6 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
     INITO_IDX ereg = range_list[i].ereg_supp;
     INITV_IDX first_initv = INITV_blk (INITO_val (ereg));
     Set_ST_is_not_used (*(INITO_st (ereg)));
-#if 0
-    if ((INITV_kind(first_initv) != INITVKIND_LABEL) &&
-                PU_is_mainpu (Get_Current_PU ())) {
-      continue;
-    }
-#endif
 
     LABEL_IDX pad_label=0;
     if (INITV_kind(first_initv) != INITVKIND_ZERO)
@@ -1806,34 +1859,18 @@ Create_INITO_For_Range_Table(ST * st, ST * pu)
     		next_initv; next_initv=INITV_next (next_initv))
     {
     	INITV_IDX action = New_INITV();
-	int sym=0;
-	if (INITV_kind(next_initv) != INITVKIND_ZERO)
+	// The special value INITVKIND_ONE represents a catch-all handler.
+	// A zero in the list means no handler, although there may still
+	// be a landing pad (cleanup).
+	int sym = 0;
+	bool catch_all = false;
+	if (INITV_kind(next_initv) == INITVKIND_ONE) {
+	    FmtAssert (pad_label, ("Catch-all with no landing pad"));
+	    catch_all = true;
+	}
+	else if (INITV_kind(next_initv) != INITVKIND_ZERO)
 	    sym = TCON_uval(INITV_tc_val (next_initv));
 
-	bool catch_all = false;	// catch-all clause
-	if (!sym)
-	    catch_all = (type_filter_map.find(sym) != type_filter_map.end());
-	// if a region has eh specifications, we at least need:
-	// 0 /* zero means zero */
-	// 1 /* offset */
-	// -filter /* eh spec typeinfo offset */
-	// 0
-	// But catch-all typeinfo is also zero. How to distinguish between
-	// the first zero and a catch-all zero? The following hack is used:
-	// if the next typeinfo is negative, then "zero means zero".
-	if (catch_all && INITV_next (next_initv))
-	{
-	    int next_sym = 0;
-	    INITV_IDX tmp_idx = INITV_next (next_initv);
-	    if (INITV_kind (tmp_idx) != INITVKIND_ZERO)
-	    	next_sym = TCON_ival (INITV_tc_val (tmp_idx));
-	    if (next_sym < 0)
-	    	catch_all = false;
-	}
-
-	// If there is no landing pad for this region, there should not be
-	// a catch-all clause for it.
-	if (catch_all && !pad_label) catch_all = false;
 	// action field
 	// Check if we have any action for this eh-region, if not, emit 0
 	// for action start marker.
@@ -2197,7 +2234,7 @@ EH_Write_Range_Table(WN * wn)
 
 #ifdef KEY
   // C++ exceptions not yet supported within MP regions.
-  if (PU_mp_lower_generated (Get_Current_PU ()))
+  if (!LANG_Enable_CXX_Openmp && PU_mp_lower_generated (Get_Current_PU ()))
   {
     EH_RANGE_LIST::iterator first(range_list.begin());
     EH_RANGE_LIST::iterator last(range_list.end());

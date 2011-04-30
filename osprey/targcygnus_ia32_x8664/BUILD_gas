@@ -1,8 +1,0 @@
-#!/bin/csh
-# if haven't already, first clobber and configure:
-#./CLOBBER
-#./CONFIGURE
-cd bfd; make
-cd ../opcodes; make
-cd ../libiberty; make
-cd ../gas; make

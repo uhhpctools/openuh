@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -135,7 +137,7 @@ COMMON_COM_DIR 		= $(COMMON_DIR)/com
 COMMON_COM_TARG_DIR 	= $(COMMON_COM_DIR)/$(BUILD_TARGET_DIR)
 COMMON_LIB_DIR 		= $(COMMON_DIR)/lib
 COMMON_TARG_INFO_DIR	= $(COMMON_DIR)/targ_info
-COMMON_TARG_INFO_ACCESS_DIR = $(COMMON_TARG_INFO_DIR)/access
+COMMON_TARG_INFO_ACCESS_DIR = $(TARG_INFO_SRC)/access
 COMMON_TARG_INFO_GENERATE_DIR = $(COMMON_TARG_INFO_DIR)/generate
 COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 COMMON_UTIL_TARG_DIR 	= $(COMMON_UTIL_DIR)/$(BUILD_TARGET_DIR)
@@ -168,7 +170,8 @@ HEADER_DIRS = \
   $(BE_BE_DIR)		\
   $(IPA_IPL_DIR)	\
   $(BE_PROMPF_DIR)	\
-  $(BUILD_TOT)/include
+  $(BUILD_TOT)/include  \
+  $(TARGDIR)/be
 
 #----------------------------------------------------------------------
 #  List of source files.  Please keep them in alphabetical order.
@@ -286,11 +289,12 @@ BE_LNOPT_NLX_CXX_SRCS = \
   cross_snl.cxx			\
   cross_cache.cxx		\
   lnotarget.cxx			\
-  init.cxx	                \
-  uh_ara.cxx                    \
-  uh_apo.cxx                    \
-  uh_lno.cxx                    \
-  uh_util.cxx
+  init.cxx				\
+  uh_ara.cxx			\
+  uh_apo.cxx			\
+  uh_lno.cxx			\
+  uh_util.cxx			\
+  array_copy.cxx
 
 
 ifeq ($(BUILD_TARGET), X8664)
@@ -378,11 +382,15 @@ else
 TARGETS = lno.so
 endif
 
+.PHONY: default	first last install
 #----------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
 #----------------------------------------------------------------------
 
-default: first $(TARGETS) last
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
@@ -391,14 +399,16 @@ default: first $(TARGETS) last
 #  requested target.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
 ## verify that wopt.so is up to date
 	$(call submake,$(TARG_OPT_DIR))
 ## verify that ipl.so if up to date
 	$(call submake,$(TARG_IPL_DIR))
-ifeq ($(BUILD_PCH), USE_PCH)
+ ifeq ($(BUILD_PCH), USE_PCH)
 ## build pch files first so that we can use precompiled headers
 	( $(MAKE) $(.MAKEFLAGS) BUILD_PCH=USE_PCH PCH_OPTS="-LANG:create_pch=lno_pch.pch" lno_pch.pch lno_pch.o )
 	( $(MAKE) $(.MAKEFLAGS) BUILD_PCH=USE_PCH PCH_OPTS="-LANG:use_pch=lno_pch.pch" lno_pch_files )
+ endif
 endif
 
 #----------------------------------------------------------------------
@@ -437,7 +447,7 @@ lno.so:  $(LNOPT_OBJS) $(LNOPT_CXX_OBJS) $(LNOPT_PCH_OBJS) \
 	$(link.c++f) -o lno.so $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
          $(LNOPT_OBJS) $(LNOPT_CXX_OBJS) $(LNOPT_PCH_OBJS) \
          $(LNOPT_DSOS) $(LLDLIBS) -show
-	if [ ! -l be.so ]; then ln -sf $(TARG_BE)/be.so .; fi
+	if [ ! -l be.so ]; then ln -sf $(TARG_BE_DIR)/be.so .; fi
 	if [ ! -l wopt.so ]; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
 	if [ ! -l ipl.so ]; then ln -sf $(TARG_IPL_DIR)/ipl.so .; fi
 	if [ ! -l be ]; then ln -sf $(TARG_BE)/be .; fi
@@ -451,13 +461,13 @@ lno.so:	$(LNOPT_OBJS) $(LNOPT_CXX_OBJS) $(BE_LNOPT_DIR)/Exported \
 	$(LNOPT_OBJS) $(LNOPT_CXX_OBJS) $(LNOPT_DSOS) $(LLDLIBS)
 
 wopt.so:	
-	if ! test -a wopt.so; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
+	if ! test -e wopt.so; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
 
 be.so:	
-	if ! test -a be.so; then ln -sf $(TARG_BE)/be.so .; fi
+	if ! test -e be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
 
 ipl.so:	
-	if ! test -a ipl.so; then ln -sf $(TARG_IPL_DIR)/ipl.so .; fi
+	if ! test -e ipl.so; then ln -sf $(TARG_IPL_DIR)/ipl.so .; fi
 
 
 endif

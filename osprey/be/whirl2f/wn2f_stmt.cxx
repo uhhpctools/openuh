@@ -41,10 +41,10 @@
  * ====================================================================
  *
  * Module: wn2f_stmt.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_stmt.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:43 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f_stmt.cxx,v $
  *
  * Revision history:
  *  12-Apr-95 - Original Version
@@ -68,7 +68,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_stmt.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f_stmt.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include "whirl2f_common.h"
@@ -909,7 +909,7 @@ WN2F_Translate_DoLoop_Bound(TOKEN_BUFFER   tokens,
    TOKEN_BUFFER opnd1_expr;
    UINT         op_idx;
    BOOL         is_intrinsic;
-   char        *intrname;
+   const char  *intrname;
    char         opname;
    
    WN2F_translate(bound_expr, bound->opnd0, context);
@@ -1187,31 +1187,6 @@ WN2F_Append_Symtab_Consts(TOKEN_BUFFER tokens,
    /* When "tokens" is NULL, we write the consts directly to the
     * Whirl2f_file; otherwise, append them to the given token-list.
     */
-#if 0   
-   /* Declare static variables for symbolic constants */
-   FOR_ALL_CONSTANTS(st, const_idx)
-   {
-      /* TODO: Full support for sym_consts */
-
-	 if (tokens != NULL)
-	 {
-	    Append_F77_Indented_Newline(tokens, 
-				       lines_between_decls, NULL/*label*/);
-	    ST2F_decl_translate(tokens, st);
-	 }
-	 else
-	 {
-	    tmp_tokens = New_Token_Buffer();
-	    Append_F77_Indented_Newline(tmp_tokens, 
-				       lines_between_decls, NULL/*label*/);
-	    ST2F_decl_translate(tmp_tokens, st);
-	    Write_And_Reclaim_Tokens(W2F_File[W2F_FTN_FILE],
-				     W2F_File[W2F_LOC_FILE],
-				     &tmp_tokens);
-	 }
-      }
-   }
-#endif
 
 } /* WN2F_Append_Symtab_Consts */
 

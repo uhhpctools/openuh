@@ -42,10 +42,10 @@ extern "C" {
  * ====================================================================
  *
  * Module: w2f_driver.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/w2f_driver.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:42 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/w2f_driver.h,v $
  *
  * Description:
  *
@@ -247,8 +247,8 @@ extern FILE *W2F_File[W2F_NUM_FILES];
 
   /* Note that we also export some utilities from W2CF_symtab.h */
 extern BOOL W2F_Should_Emit_Nested_PUs(void);
-extern void W2F_Process_Command_Line(INT phase_argc, char *phase_argv[],
-				     INT argc, char *argv[]);
+  extern void W2F_Process_Command_Line(INT phase_argc,const char *phase_argv[],
+				     INT argc, const char *argv[]);
 extern void W2F_Init(void);
 extern void W2F_Fini(void);
 extern void W2F_Push_PU(WN *pu, WN *body_part_of_interest);

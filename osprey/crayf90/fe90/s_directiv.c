@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -1318,17 +1322,6 @@ void directive_stmt_semantics(void)
             exp_desc.rank = 0;
             ok &= expr_semantics(&opnd, &exp_desc);
 
-# if 0
-            if (OPND_FLD(opnd) == CN_Tbl_Idx &&
-                exp_desc.rank  == 0          &&
-                exp_desc.type  == Integer)   {
-
-               if (compare_cn_and_value(OPND_IDX(opnd), 0, Lt_Opr) {
-                  find_opnd_line_and_column(&opnd, &line, &column);
-                  PRINTMSG(line, 796, Error, column);
-               }
-            }
-# endif
 
             COPY_OPND(IR_OPND_L(ir_idx), opnd);
 
@@ -2172,6 +2165,14 @@ void directive_stmt_semantics(void)
 #endif /* KEY Bug 10441 */
          open_mp_directive_semantics(Single_Omp);
          break;
+         
+      case  Parallelworkshare_Open_Mp_Opr:
+        open_mp_directive_semantics(Parallel_Workshare_Omp);
+        break;
+        
+      case Endparallelworkshare_Open_Mp_Opr:
+        end_blk_mp_semantics(TRUE);
+        break;
 
    }
 
@@ -2217,7 +2218,7 @@ static void doall_cmic_semantics(void)
    int			shared_list_idx;
    long64		value;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int			max_idx;
    opnd_type		opnd2;
    char			string[13];
@@ -2381,7 +2382,7 @@ static void doall_cmic_semantics(void)
 
         IL_IDX(list2_idx) = attr_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
             (ATD_ALLOCATABLE(attr_idx) ||
              ATD_CLASS(attr_idx) == CRI__Pointee ||
@@ -2774,7 +2775,7 @@ CONTINUE2:
             PRINTMSG(line, 1499, Error, column, "NUMCHUNKS");
          }
       }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       else if (OPND_FLD(opnd) != CN_Tbl_Idx && OPND_FLD(opnd) != NO_Tbl_Idx &&
                (value == CMIC_WORK_DIST_CHUNKSIZE ||
                 value == CMIC_WORK_DIST_NUMCHUNKS)) {
@@ -2863,7 +2864,7 @@ static void doparallel_cmic_semantics(void)
    int			save_curr_stmt_sh_idx;
    long64		value;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int			list2_idx;
    int			max_idx;
    opnd_type		opnd2;
@@ -2919,7 +2920,7 @@ static void doparallel_cmic_semantics(void)
             PRINTMSG(line, 1499, Error, column, "NUMCHUNKS");
          }
       }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       else if (OPND_FLD(opnd) != CN_Tbl_Idx && OPND_FLD(opnd) != NO_Tbl_Idx &&
                (value == CMIC_WORK_DIST_CHUNKSIZE ||
                 value == CMIC_WORK_DIST_NUMCHUNKS)) {
@@ -3101,7 +3102,7 @@ static void parallel_cmic_semantics(void)
    int                  private_list_idx;
    int                  shared_list_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    char			string[13];
 # endif
 
@@ -3251,7 +3252,7 @@ static void parallel_cmic_semantics(void)
 
          IL_IDX(list2_idx) = attr_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
             (ATD_ALLOCATABLE(attr_idx) ||
              ATD_CLASS(attr_idx) == CRI__Pointee ||
@@ -4964,12 +4965,24 @@ static boolean assert_semantics(void)
          break;
 
       case ASSERT_PERMUTATION:
+#ifdef KEY /* Bug 12497 */
+         if (IR_FLD_R(ir_idx) == IL_Tbl_Idx) {
+	    attr_idx = IL_IDX(IR_IDX_R(ir_idx));
+	 }
+	 else
+#endif /* KEY Bug 12497 */
          attr_idx = IR_IDX_R(ir_idx);
          while (AT_ATTR_LINK(attr_idx)) {
             attr_idx = AT_ATTR_LINK(attr_idx);
             AT_LOCKED_IN(attr_idx) = TRUE;
          }
 
+#ifdef KEY /* Bug 12497 */
+         if (IR_FLD_R(ir_idx) == IL_Tbl_Idx) {
+	    IL_IDX(IR_IDX_R(ir_idx)) = attr_idx;
+	 }
+	 else
+#endif /* KEY Bug 12497 */
          IR_IDX_R(ir_idx) = attr_idx;
          break;
 
@@ -5889,14 +5902,6 @@ static void open_mp_directive_semantics(open_mp_directive_type directive)
                            "REDUCTION", open_mp_dir_str[directive]);
                }
                /* the following is deleted by jhs, 02.9.10 */
-#if 0
-		else if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX) {
-                  PRINTMSG(IL_LINE_NUM(list2_idx), 1483, Error,
-                           IL_COL_NUM(list2_idx),
-                           AT_OBJ_NAME_PTR(attr_idx),
-                           open_mp_dir_str[directive]);
-               }
-#endif
 	       /* the above is deleted by jhs, 02.9.10 */
                else if (ATD_CLASS(attr_idx) == CRI__Pointee) {
                   PRINTMSG(IL_LINE_NUM(list2_idx), 1477, Error,
@@ -5956,6 +5961,26 @@ static void open_mp_directive_semantics(open_mp_directive_type directive)
                }
                else {
 	          ATD_TASK_REDUCTION(attr_idx) = TRUE;
+
+                if (ATD_CLASS(attr_idx) == Variable &&
+                    ATD_AUTOMATIC(attr_idx) &&
+                    ATD_AUTO_BASE_IDX(attr_idx) != NULL_IDX &&
+                    ! ATD_TASK_REDUCTION(ATD_AUTO_BASE_IDX(attr_idx))) {
+
+                     ATD_TASK_REDUCTION(ATD_AUTO_BASE_IDX(attr_idx)) = TRUE;
+
+                     NTR_IR_LIST_TBL(list3_idx);
+                     IL_PREV_LIST_IDX(IL_IDX(list_idx)) = list3_idx;
+                     IL_NEXT_LIST_IDX(list3_idx) = IL_IDX(list_idx);
+                     IL_IDX(list_idx) = list3_idx;
+                     IL_LIST_CNT(list_idx)++;
+
+                     IL_FLD(list3_idx) = AT_Tbl_Idx;
+                     IL_IDX(list3_idx) = ATD_AUTO_BASE_IDX(attr_idx);
+                     IL_LINE_NUM(list3_idx) = IL_LINE_NUM(list2_idx);
+                     IL_COL_NUM(list3_idx) = IL_COL_NUM(list2_idx);
+              }
+
 	       }
        
 	       list2_idx = IL_NEXT_LIST_IDX(list2_idx);
@@ -5988,28 +6013,6 @@ static void open_mp_directive_semantics(open_mp_directive_type directive)
                AT_LOCKED_IN(attr_idx) = TRUE;
             }
 
-# if 0
-  /* do not do this for open mp. pv 658750 */
-
-            if (! ATD_TASK_PRIVATE(attr_idx) &&
-                ! ATD_TASK_FIRSTPRIVATE(attr_idx) &&
-                ! ATD_TASK_LASTPRIVATE(attr_idx)) {
-
-               NTR_IR_LIST_TBL(list3_idx);
-               IL_NEXT_LIST_IDX(list3_idx) =
-                         IL_IDX(cdir_switches.lastprivate_list_idx);
-               if (IL_IDX(cdir_switches.lastprivate_list_idx) != NULL_IDX) {
-                  IL_PREV_LIST_IDX(IL_IDX(cdir_switches.lastprivate_list_idx))=
-                                          list3_idx;
-               }
-               IL_IDX(cdir_switches.lastprivate_list_idx) = list3_idx;
-               IL_FLD(cdir_switches.lastprivate_list_idx) = IL_Tbl_Idx;
-               IL_LIST_CNT(cdir_switches.lastprivate_list_idx)++;
-               IL_FLD(list3_idx) = AT_Tbl_Idx;
-               IL_IDX(list3_idx) = attr_idx;
-               ATD_TASK_LASTPRIVATE(attr_idx) = TRUE;
-            }
-# endif
 
             IL_IDX(list2_idx) = attr_idx;
             list2_idx = IL_NEXT_LIST_IDX(list2_idx);
@@ -6500,11 +6503,6 @@ static void end_blk_mp_semantics(boolean	open_mp)
       set_mp_task_flags(ir_idx, FALSE);
    }
 
-# if 0
-      {extern char *operator_str[];
-      printf(" ending block for %s\n", operator_str[IR_OPR(ir_idx)]);
-      }
-# endif
 
    pop_task_blk();
 

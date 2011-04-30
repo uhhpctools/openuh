@@ -64,11 +64,7 @@
 extern void     _cleanup(void);
 
 static int
-#if 11
 f_inqu0_com (inlist64 *a, int *mask, int lock)
-#else
-f_inqu0_com (inlist *a, int *mask, int lock)
-#endif
 {
    flag            byfile;
    flag            sysfile = 0;	/* set this flag if the file name is
@@ -294,28 +290,19 @@ setvar:
 int
 f_inqu0 (inlist *a, int *mask)
 {
-#if 11
   inlist64 dst;
   get_inlist64(&dst, a);
   return( f_inqu0_com(&dst, mask, 0));
-#else
-    return( f_inqu0_com( a, mask, 0 ) );
-#endif
 }
 
 int
 f_inqu0_mp (inlist *a, int *mask)
 {
-#if 11
   inlist64 dst;
   get_inlist64(&dst, a);
   return( f_inqu0_com(&dst, mask, 1));
-#else
-    return( f_inqu0_com( a, mask, 1 ) );
-#endif
 }
 
-#if 11
 
 int
 f_inqu064(inlist64 *a, int *mask)
@@ -329,12 +316,6 @@ f_inqu064_mp (inlist64 *a, int *mask)
     return( f_inqu0_com( a, mask, 1 ) );
 }
 
-#else
-
-#pragma weak f_inqu064 = f_inqu0
-#pragma weak f_inqu064_mp = f_inqu0_mp
-
-#endif
 
 /*  ========================================================================  */
 /*									      */

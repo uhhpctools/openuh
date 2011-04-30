@@ -94,7 +94,14 @@ abort_msg__(char *msg, _f_int len)
 	abort();
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void abort_msg_(char *msg, _f_int len) {
+  abort_msg__(msg, len);
+}
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(abort_msg__, abort_msg_);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 void
 abort_(void)

@@ -51,6 +51,7 @@ $Date: 2005/10/21 19:00:00 $
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_named_init_elf_xtnd  = _xlate_named_init_elf_xtnd
 #pragma weak xlate_finish_xtnd  = _xlate_finish_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_named_init_elf  = _xlate_named_init_elf
 #pragma weak xlate_finish  = _xlate_finish
@@ -428,7 +429,7 @@ xlate_named_init_elf(Elf * elf, const char *section_name,
    if(newtab == NULL) {
 	return XLATE_TB_STATUS_ALLOC_FAIL;
    }
-   bzero(newtab,sizeof(struct xlate_table_con_s));
+   BZERO(newtab,sizeof(struct xlate_table_con_s));
 
 
    newtab->xc_elf = elf;
@@ -485,7 +486,7 @@ xlate_finish(xlate_table_con tab)
    if(tab->xc_did_elf_begin ) {
 	elf_end(tab->xc_elf);
    }
-   bzero(tab,sizeof(*tab));
+   BZERO(tab,sizeof(*tab));
    free(tab);
    return retstatus;
 }

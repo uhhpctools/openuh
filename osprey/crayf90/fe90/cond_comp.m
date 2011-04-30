@@ -1,5 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
 
+/*
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
@@ -72,7 +75,8 @@
 # define CC_LN_ATTR_IDX(IDX)               cc_ln_tbl[IDX].attr_idx
 # define CC_LN_NAME_IDX(IDX)               cc_ln_tbl[IDX].name_idx
 # define CC_LN_NAME_LEN(IDX)               cc_ln_tbl[IDX].name_len
-# define CC_LN_NAME_LONG(IDX)       &(str_pool[CC_LN_NAME_IDX(IDX)].name_long)
+# define CC_LN_NAME_LONG(IDX)           ((long *)&str_pool[CC_LN_NAME_IDX(IDX)])
+# define CC_LN_NAME_PTR(IDX)            ((char *)&str_pool[CC_LN_NAME_IDX(IDX)])
 
 
 # define CC_AT_NAME_LEN(IDX)		cc_attr_tbl[IDX].name_len
@@ -84,8 +88,8 @@
 # define CC_AT_NUM_ARGS(IDX)		cc_attr_tbl[IDX].num_args
 # define CC_AT_START_LINE(IDX)		cc_attr_tbl[IDX].start_line
 # define CC_AT_START_COL(IDX)		cc_attr_tbl[IDX].start_col
-# define CC_AT_NAME_PTR(IDX)	&(str_pool[CC_AT_NAME_IDX(IDX)].name_char)
-# define CC_AT_STR_PTR(IDX)	&(str_pool[CC_AT_STR_IDX(IDX)].name_char)
+# define CC_AT_NAME_PTR(IDX)		((char *)&str_pool[CC_AT_NAME_IDX(IDX)])
+# define CC_AT_STR_PTR(IDX)		((char *)&str_pool[CC_AT_STR_IDX(IDX)])
 
 # define CC_CURR_BLK_TYPE	cc_blk_stk_tbl[cc_blk_stk_tbl_idx].blk_type
 # define CC_CURR_BLK_IS_ACTIVE	cc_blk_stk_tbl[cc_blk_stk_tbl_idx].is_active

@@ -101,6 +101,12 @@ LNOTARGET_Int_Select_Res (TI_RES_COUNT* resource_count, TYPE_ID rtype);
 
 extern double
 LNOTARGET_Int_Cvtl_Res (TI_RES_COUNT* resource_count, TYPE_ID rtype, INT length);
+#elif defined(TARG_LOONGSON)
+extern double
+LNOTARGET_Int_Select_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
+
+extern double
+LNOTARGET_Int_Cvtl_Res (TI_RES_COUNT* resource_count, TYPE_ID from, TYPE_ID to);
 #else
 extern double
 LNOTARGET_Int_Select_Res (TI_RES_COUNT* resource_count);
@@ -112,8 +118,13 @@ LNOTARGET_Int_Cvtl_Res (TI_RES_COUNT* resource_count);
 extern double
 LNOTARGET_Int_Neg_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
 
+#ifdef TARG_LOONGSON
+extern double
+LNOTARGET_Int_Abs_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes, TYPE_ID mtype);
+#else
 extern double
 LNOTARGET_Int_Abs_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
+#endif
 
 #ifdef TARG_X8664
 extern double
@@ -220,7 +231,7 @@ LNOTARGET_Int_Lior_Res (TI_RES_COUNT* resource_count, TYPE_ID rtype);
 extern double
 LNOTARGET_Int_Cior_Res (TI_RES_COUNT* resource_count, TYPE_ID rtype);
 #else
-#ifndef TARG_MIPS
+#if !(defined(TARG_MIPS) || defined(TARG_PPC32))
 extern double
 LNOTARGET_Int_Div_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
 #else
@@ -239,8 +250,13 @@ LNOTARGET_Int_Rem_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
 extern double
 LNOTARGET_Int_DivRem_Res (TI_RES_COUNT* resource_count, BOOL eight_bytes);
 
+#ifdef TARG_LOONGSON
 extern double
+LNOTARGET_Int_Min_Max_Res (TI_RES_COUNT* resource_count, BOOL minmax, BOOL eight_byte);
+#else
+extern double 
 LNOTARGET_Int_Min_Max_Res (TI_RES_COUNT* resource_count, BOOL minmax);
+#endif //TARG_LOONGSON
 
 extern double
 LNOTARGET_Int_Band_Res (TI_RES_COUNT* resource_count);

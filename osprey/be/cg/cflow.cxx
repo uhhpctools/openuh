@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -184,6 +188,8 @@ BOOL CFLOW_Trace_Dom;
 BOOL CFLOW_Trace_Empty_BB_Elim;
 #endif
 
+extern UINT32 CG_LOOP_unroll_level;
+
 /* We need to keep some auxilary information for each BB for the various
  * optimizations we perform. The following BB_MAP provides the mechanism
  * to access the info.
@@ -291,7 +297,7 @@ static LISTVAR_COUNT *listvar_counts;
 
 void Print_BB_Info(BB *bb);
 #pragma mips_frequency_hint NEVER Print_BB_Info
-void Print_Cflow_Graph(char *banner);
+void Print_Cflow_Graph(const char *banner);
 #pragma mips_frequency_hint NEVER Print_Cflow_Graph
 
 #ifdef TARG_X8664
@@ -303,16 +309,103 @@ void Print_Cflow_Graph(char *banner);
  *
  * ====================================================================
  */
-static inline OP* BB_savexmms_op( BB *bb )
+static inline OP* 
+BB_savexmms_op( BB *bb )
 {
   OP* op = BB_last_op(bb);
   return ( (op != NULL) && (OP_code(op) == TOP_savexmms) ) ? op : NULL;
 }
 
-static inline bool BB_computes_got( BB* bb )
+static inline bool
+BB_first_OP_computes_got (BB* bb)
 {
-  OP* op = BB_first_op(bb);
-  return ( (op != NULL) && OP_computes_got(op) );
+  OP *first_op = BB_first_op(bb);
+  return ((first_op != NULL) && OP_computes_got(first_op));
+}
+
+static inline bool
+BB_last_OP_computes_got (BB* bb)
+{
+  OP *last_op = BB_last_op(bb);
+  return ((last_op != NULL) && OP_computes_got(last_op));
+}
+
+static void
+Extend_Truncate_Short_Cmp_Src(OP* compare_op, VARIANT br_variant, INT64 *v)
+{
+  BOOL is_sign;
+  switch (br_variant) {
+    case V_BR_I4EQ:
+    case V_BR_I4NE:
+    case V_BR_I4GE: 
+    case V_BR_I4GT: 
+    case V_BR_I4LE: 
+    case V_BR_I4LT: 
+    case V_BR_I8EQ:
+    case V_BR_I8NE:
+    case V_BR_I8GE: 
+    case V_BR_I8GT: 
+    case V_BR_I8LE: 
+    case V_BR_I8LT:
+      is_sign = TRUE;
+      break;
+    case V_BR_U4EQ:
+    case V_BR_U4NE:
+    case V_BR_U4GT:
+    case V_BR_U4GE:
+    case V_BR_U4LT:
+    case V_BR_U4LE:
+    case V_BR_U8EQ:
+    case V_BR_U8NE:
+    case V_BR_U8GT:
+    case V_BR_U8GE:
+    case V_BR_U8LT:
+    case V_BR_U8LE:
+      is_sign = FALSE;
+      break;
+    default:
+      return;
+  }
+
+  // sign extend the constant value
+  const TOP top = OP_code( compare_op );
+  switch ( top ) {
+    case TOP_test8:
+    case TOP_testx8:
+    case TOP_testxx8:
+    case TOP_testxxx8:
+    case TOP_testi8:
+    case TOP_cmp8:
+    case TOP_cmpx8:
+    case TOP_cmpxx8:
+    case TOP_cmpxxx8:
+    case TOP_cmpi8:
+    case TOP_cmpxi8:
+    case TOP_cmpxxi8:
+    case TOP_cmpxxxi8:
+      if(is_sign)
+        *v = ( (*v) << ( sizeof(INT64) * 8 - 8 ) ) >> ( sizeof(INT64) * 8 - 8 );
+      else
+        *v = *v & 0xff;
+      return;
+    case TOP_test16:
+    case TOP_testx16:
+    case TOP_testxx16:
+    case TOP_testxxx16:
+    case TOP_testi16:
+    case TOP_cmp16:
+    case TOP_cmpx16:
+    case TOP_cmpxx16:
+    case TOP_cmpxxx16:
+    case TOP_cmpi16:
+    case TOP_cmpxi16:
+    case TOP_cmpxxi16:
+    case TOP_cmpxxxi16:
+      if(is_sign)
+        *v = ( (*v) << ( sizeof(INT64) * 8 - 16 ) ) >> ( sizeof(INT64) * 8 - 16 );
+      else
+        *v = *v & 0xffff;
+  }
 }
 #endif
 
@@ -405,6 +498,16 @@ Print_BB_Info(BB *bb)
   case BBKIND_CALL:
     fprintf(TFile, "\nSuccessor:\t%s\n", Format_Succ(bb, 0));
     break;
+#if defined(TARG_SL)
+  case BBKIND_ZDL_BODY:
+    fprintf( TFile, "\nSuccessor 0:\t%s\n", Format_Succ(bb, 0));
+    fprintf( TFile, "Successor 1:\t%s\n", Format_Succ(bb, 1));
+    break;
+  case BBKIND_FORK:
+    fprintf( TFile, "\nSuccessor 0:\t%s\n", Format_Succ(bb, 0));
+    fprintf( TFile, "Successor 1:\t%s\n", Format_Succ(bb, 1));
+    break;
+#endif
   default:
     fprintf(TFile, "\n");
     break;
@@ -421,7 +524,7 @@ Print_BB_Info(BB *bb)
  * ====================================================================
  */
 void
-Print_Cflow_Graph(char *banner)
+Print_Cflow_Graph(const char *banner)
 {
   BB *bb;
 
@@ -489,6 +592,7 @@ static void Move_LoopHead(BB *head)
        */
       BB_Copy_Annotations(new_head, head, ANNOT_LOOPINFO);
       BB_Copy_Annotations(new_head, head, ANNOT_PRAGMA);
+      BB_Copy_Annotations(new_head, head, ANNOT_INLINE);
       break;
     }
 
@@ -553,14 +657,14 @@ static INT *ListVar_RefCount(ST *listvar)
  *
  * ====================================================================
  */
-#ifdef TARG_IA64
+#if defined (TARG_IA64) 
 static BOOL
 #else
 static void
 #endif
 Cflow_Change_Succ(BB *bb, INT isucc, BB *old_succ, BB *new_succ)
 {
-#ifdef TARG_IA64
+#if defined (TARG_IA64)
   if(IPFEC_Enable_Region_Formation && RGN_Formed) {
       if(Home_Region(bb)->Is_No_Further_Opt() ||
          Home_Region(old_succ)->Is_No_Further_Opt() ||
@@ -614,7 +718,7 @@ Cflow_Change_Succ(BB *bb, INT isucc, BB *old_succ, BB *new_succ)
 	      float old_prob = BBLIST_prob(old_edge);
 	      BBLIST_prob(old_edge) = prob > old_prob ? 0.0 : old_prob - prob;
       }
-#ifdef TARG_IA64
+#if defined (TARG_IA64)
       if(IPFEC_Enable_Region_Formation && RGN_Formed) {
         RGN_Link_Pred_Succ_With_Prob(bb,new_succ,prob);
 	      return TRUE;
@@ -628,13 +732,13 @@ Cflow_Change_Succ(BB *bb, INT isucc, BB *old_succ, BB *new_succ)
 #endif
     }
   }
-#ifdef TARG_IA64
+#if defined (TARG_IA64)
   if (IPFEC_Enable_Region_Formation && RGN_Formed) {
       RGN_Unlink_Pred_Succ(bb,old_succ);
-	    RGN_Link_Pred_Succ_With_Prob(bb,new_succ,prob);
+      RGN_Link_Pred_Succ_With_Prob(bb,new_succ,prob);
   } else {
       Unlink_Pred_Succ(bb, old_succ);
-#ifdef KEY
+#if defined(KEY)
   Link_Pred_Succ_with_Prob(bb, new_succ, prob, FALSE, TRUE,
                            BBLIST_prob_hint_based(old_edge) != 0, !prob_acced);
 #else
@@ -645,7 +749,7 @@ Cflow_Change_Succ(BB *bb, INT isucc, BB *old_succ, BB *new_succ)
   return TRUE;
 #else
   Unlink_Pred_Succ(bb, old_succ);
-#ifdef KEY
+#if defined(KEY)
   Link_Pred_Succ_with_Prob(bb, new_succ, prob, FALSE, TRUE,
                            BBLIST_prob_hint_based(old_edge) != 0);
 #else
@@ -738,7 +842,7 @@ Alloc_BB_Like(BB *model)
   }
   deleted_bbs = BB_next(new_bb);
   id = BB_id(new_bb);
-  bzero(new_bb, sizeof(*new_bb));
+  BZERO(new_bb, sizeof(*new_bb));
   new_bb->id = id;
   if (model) BB_rid(new_bb) = BB_rid(model);
   return new_bb;
@@ -836,7 +940,15 @@ Delete_BB_Contents(BB *bp)
   /* Delete all OPs from BB.
    */
   BB_Remove_All(bp);
-
+#ifdef TARG_IA64
+  if (IPFEC_Enable_Region_Formation && RGN_Formed ) {
+    /* If the region has been formed,must also delete the node from
+     * region.
+     */
+    RGN_Unlink_BB_Edges(bp, Home_Region(bp)->Regional_Cfg());
+  
+  }else{ 
+#endif
   /* Remove successor edges.
    */
   FOR_ALL_BB_SUCCS(bp, edge) {
@@ -852,7 +964,9 @@ Delete_BB_Contents(BB *bp)
     BBlist_Delete_BB(&BB_succs(pred), bp);
   }
   BBlist_Free(&BB_preds(bp));
-
+#ifdef TARG_IA64
+  }
+#endif
   Set_BBINFO_kind(bp, BBKIND_GOTO);
   Set_BBINFO_nsuccs(bp, 0);
 }
@@ -1120,6 +1234,14 @@ static void Insert_Goto_BB(
   lab = Gen_Label_For_BB(targ_bb);
   lab_tn = Gen_Label_TN(lab, targ_offset);
   Exp_OP1(OPC_GOTO, NULL, lab_tn, &ops);
+
+#ifdef TARG_SL
+  // make up line info of GOTO instruction
+  if (BB_last_op(bb) && (OP_srcpos(BB_last_op(bb)) != 0)) {
+    OP_srcpos(OPS_last(&ops)) = OP_srcpos(BB_last_op(bb));
+  }
+#endif
+
   if (   PROC_has_branch_delay_slot()
       && (fill_delay_slots || region_is_scheduled))
   {
@@ -1193,7 +1315,7 @@ Finalize_BB(BB *bp)
       if ((br == NULL) || OP_noop(br))// bug fix for OSP_104, OSP_105, OSP_192
       {
          br = BB_Last_chk_op(bp);
-	}
+      }
 #endif
       /* Get the fall through and the target BBs.
        */
@@ -1203,7 +1325,30 @@ Finalize_BB(BB *bp)
       target = BBINFO_succ_bb(bp, 0);
       target_offset = BBINFO_succ_offset(bp, 0);
       target_prob = BBINFO_succ_prob(bp, 0);
-
+#if defined(TARG_SL)
+      if ((Is_Target_Sl1_pcore() || Is_Target_Sl1_dsp()) && CG_branch_taken) {
+         /* Since sl1 use a branch always taken policy, we may need to change layout here. 
+            We negate branch for the three cases where  fall_through_prob > target_prob:
+            1. fall_through is the start of the next BB
+            2. target is the start of the next BB
+            3. neither succ is the next BB
+               Maybe we are too aggressive here.
+          */
+        if (fall_through_prob > target_prob) {
+	        if (BBINFO_b_likely(bp)) {
+      	    // ??
+      	  } else if (Negate_Branch(br)) {
+      	    target = fall_through;
+      	    target_offset = fall_through_offset;
+      	    target_prob = fall_through_prob;
+      	    fall_through = BBINFO_succ_bb(bp, 0);
+      	    fall_through_offset = BBINFO_succ_offset(bp, 0);
+      	    fall_through_prob = BBINFO_succ_prob(bp, 0);
+      	  }
+      	}
+      }
+      else
+#endif
       /* If the target is the start of the next BB or neither succ is
        * the next BB and the target probability is lower, negate the
        * branch condition so that we fall through to the next BB in
@@ -1263,6 +1408,21 @@ Finalize_BB(BB *bp)
     }
     break;
 
+#if defined(TARG_SL)
+  case BBKIND_ZDL_BODY:
+  case BBKIND_FORK:
+    {
+      INT64 fall_through_offset;
+      BB* fall_through;
+      fall_through = BBINFO_succ_bb(bp, 1);
+      fall_through_offset = BBINFO_succ_offset(bp, 1);
+      if (fall_through_offset != 0 || fall_through != BB_next(bp)) {
+	  Insert_Goto_BB(bp, fall_through, fall_through_offset, fill_delay_slots);
+      }
+    }
+    break;
+#endif
+
   case BBKIND_GOTO:
     if (BBINFO_nsuccs(bp)) {
       BB *succ_bb = BBINFO_succ_bb(bp, 0);
@@ -1273,12 +1433,16 @@ Finalize_BB(BB *bp)
       Is_True(BB_Find_Succ(bp, succ_bb),
 	      ("BB:%d preds/succs don't match BBINFO", BB_id(bp)));
       Is_True(   !freqs_computed
+#if defined(TARG_SL)
+		 || BB_freq_unbalanced(bp)
+#endif
 		 || (BBLIST_prob(BB_Find_Succ(bp, succ_bb)) == 1.0),
 		 ("BB:%d preds/succs don't match BBINFO", BB_id(bp)));
 
       if (   offset == 0
 	  && succ_bb == BB_next(bp) 
-	  && BBINFO_cold(bp) == BBINFO_cold(succ_bb))
+	  && BBINFO_cold(bp) == BBINFO_cold(succ_bb)
+	 )
       {
 
 	/* Fall through; remove terminating branch if there is one.
@@ -1328,6 +1492,14 @@ Finalize_BB(BB *bp)
 	   * to the new target.
 	   */
 	  Exp_OP1(OPC_GOTO, NULL, lab_tn, &ops);
+#ifdef TARG_SL
+	  // make up line info of GOTO instruction
+	  if (BB_last_op(bp) && (OP_srcpos(BB_last_op(bp)) != 0)) {
+	    OP_srcpos(OPS_last(&ops)) = OP_srcpos(BB_last_op(bp));
+	  } else if (succ_bb && BB_last_op(succ_bb) && (OP_srcpos(BB_last_op(succ_bb)) != 0)) {
+	    OP_srcpos(OPS_last(&ops)) = OP_srcpos(BB_last_op(succ_bb));
+	  }
+#endif
 	  if (   PROC_has_branch_delay_slot()
 	      && (fill_delay_slots || region_is_scheduled)) {
 	    Exp_Noop(&ops);
@@ -1343,35 +1515,6 @@ Finalize_BB(BB *bp)
 
   case BBKIND_VARGOTO:
   case BBKIND_INDGOTO:
-#if 0
-    {
-      INT i;
-      INT nsuccs = BBINFO_nsuccs(bp);
-      struct succedge *edges = (struct succedge *)alloca(nsuccs * sizeof(struct succedge));
-      INT n = 0;
-      for (i = 0; i < nsuccs; ++i) {
-	INT j;
-	for (j = 0; j < n; ++j) {
-	  if (edges[j].bb == BBINFO_succ_bb(bp, i)) break;
-	}
-	if (j == n) {
-	  edges[j].bb = BBINFO_succ_bb(bp, i);
-	  edges[j].prob = BBINFO_succ_prob(bp, i);
-	  ++n;
-	} else {
-	  edges[j].prob += BBINFO_succ_prob(bp, i);
-	}
-      }
-      for (i = 0; i < n; ++i) {
-	BB *succ = edges[i].bb;
-	float prob = edges[i].prob;
-	BBLIST *edge = BB_Find_Succ(bp, succ);
-	Is_True(edge, ("BB:%d preds/succs don't match BBINFO", BB_id(bp)));
-	Is_True(!freqs_computed || (BBLIST_prob(edge) == prob),
-		("BB:%d preds/succs don't match BBINFO", BB_id(bp)));
-      }
-    }
-#endif
 #if Is_True_On
     if (BBINFO_kind(bp) == BBKIND_VARGOTO) {
       ANNOTATION *ant = ANNOT_Get(BB_annotations(bp), ANNOT_SWITCH);
@@ -1430,6 +1573,69 @@ Finalize_BB(BB *bp)
 }
 
 
+#ifdef TARG_X8664
+
+/* ====================================================================
+ *
+ * Br_Fuse_BB
+ *
+ * Do branch fuse processing for a BB -- mostly manipulating cmp instructions.
+ *
+ * ====================================================================
+ */
+static void
+Br_Fuse_BB(BB *bp)
+{
+  if (BBINFO_kind(bp) == BBKIND_LOGIF) {
+    OP *br = BB_branch_op(bp);
+    OP *cmp = BBINFO_compare_op(bp);
+    // now see if we pass the entrance criteria
+    if ((cmp != NULL) && 
+        (OP_load_exe(cmp) == false) &&
+        (br != cmp) &&
+        (OP_bb(cmp) == bp)) {
+      ARC_LIST *arcs;
+      OP *cmp_next = OP_next(cmp);
+
+      // If we are already optimal, do nothing.
+      if (cmp_next == br)
+        return;
+
+      // Now check for a modifier to the use regs of the cmp.
+      CG_DEP_Compute_Graph ( bp,
+                             INCLUDE_ASSIGNED_REG_DEPS,
+                             NON_CYCLIC,
+                             NO_MEMREAD_ARCS,
+                             INCLUDE_MEMIN_ARCS,
+                             NO_CONTROL_ARCS,
+                             NULL);
+
+      // Check for anti-deps on the cmp's src operands
+      for (arcs = OP_succs(cmp);
+           arcs != NULL; arcs = ARC_LIST_rest(arcs)) {
+        ARC *arc = ARC_LIST_first(arcs);
+        OP *succ_op = ARC_succ(arc);
+        if (succ_op == br) continue;
+
+        // any other reader/writer represents a scheduling barrier
+        if (OP_Precedes(succ_op, br)) {
+          CG_DEP_Delete_Graph (bp);
+          return;
+        }
+      }
+
+      // Even if the cmp still winds up in the last
+      // slot of the last dispatch group, and the fusion
+      // does not happen, this is not a destructive activity.
+      OP_scycle(cmp) = OP_scycle(br);
+      OP_dgroup(cmp) = OP_dgroup(br);
+      BB_Move_Op_Before(bp, br, bp, cmp);
+      CG_DEP_Delete_Graph (bp);
+    }
+  }
+}
+#endif
+
 /* ====================================================================
  *
  * Finalize_All_BBs
@@ -1460,6 +1666,29 @@ Finalize_All_BBs(void)
     EH_Prune_Range_List();
   }
 }
+
+
+#ifdef TARG_X8664
+/* ====================================================================
+ *
+ * Br_Fuse_All_BBs
+ *
+ * Do branch fuse processing for all BBs in the region.
+ *
+ * ====================================================================
+ */
+static void
+Br_Fuse_All_BBs(void)
+{
+  BB *bp;
+  BB *next;
+
+  for (bp = REGION_First_BB; bp; bp = next) {
+    next = BB_next(bp);
+    Br_Fuse_BB(bp);
+  }
+}
+#endif
 
 
 /* ====================================================================
@@ -1723,6 +1952,10 @@ Initialize_BB_Info(void)
 #ifdef TARG_IA64
     case BBKIND_CHK: // bug fix for OSP_104, OSP_105, OSP_192
 #endif
+#if defined(TARG_SL)
+    case BBKIND_ZDL_BODY:
+    case BBKIND_FORK:
+#endif
       {
 	INT tfirst;
 	INT tcount;
@@ -1761,6 +1994,9 @@ Initialize_BB_Info(void)
 	bbinfo->succs[1].offset = 0;
 	bbinfo->succs[1].prob = BBLIST_prob(fall_through_edge);
 
+#if defined(TARG_SL)
+	if(br == NULL)  continue;
+#endif
 	CGTARG_Branch_Info(br, &tfirst, &tcount);
 	FmtAssert(tcount == 1, ("unexpected number of branch targets"));
 	lab_tn = OP_opnd(br, tfirst);
@@ -2143,6 +2379,19 @@ Redundant_Logif(BB *pred, BB *succ, BOOL *pnegated)
       && (pred_cmp != BB_branch_op(pred) || succ_cmp != BB_branch_op(succ))
   ) return FALSE;
 
+#ifdef TARG_NVISA
+  // can have differing cmp, same variant (P_TRUE),
+  // and both are branch_op cause couldn't find real source of compare.
+  // Check for one being negate of the other.
+  if (pred_cmp != succ_cmp) {
+    DevWarn("differing cmp ops");
+    if (OP_code(pred_cmp) == TOP_bra_p && OP_code(succ_cmp) == TOP_bra_np)
+      negated = TRUE;
+    else if (OP_code(pred_cmp) == TOP_bra_np && OP_code(succ_cmp) == TOP_bra_p)
+      negated = TRUE;
+  }
+#endif
+
 #ifdef KEY
   /* A BBINFO_condval could be re-defined by an op which is scheduled
      at the delay slot. */
@@ -2153,7 +2402,7 @@ Redundant_Logif(BB *pred, BB *succ, BOOL *pnegated)
 	TN* result = OP_result( last_op, i );
 	if( result == BBINFO_condval1(succ) ||
 	    result == BBINFO_condval2(succ) ){
-	  // Is_True( false, ("TN is re-defined more than once.\n") );
+	  // Is_True( false, ("TN is re-defined more than once.\n") );// 11657
 	  return FALSE;
 	}
       }
@@ -2437,12 +2686,33 @@ Convert_If_To_Goto ( BB *bp )
   tn1 = BBINFO_condval1(bp); 
   tn2 = BBINFO_condval2(bp); 
   compare_op = BBINFO_compare_op(bp);
+#ifdef TARG_LOONGSON
+  /* for loongson, there are some branch instructions with only one operand, such as:
+       "mipsbgez",
+       "mipsbgezal",
+       "mipsbgtz",
+       "mipsblez",
+       "mipsbltz",
+       "mipsbltzal",
+       for the instructions, there is only one operand and the second implicit operand is 
+       Zero_TN.
+    */
+  if (tn2 == NULL)  {     
+  	tn2 = Zero_TN;
+  }
+#endif
   
   Is_True(tn1 != NULL, ("compare with no operands in BB:%d", BB_id(bp)));
 
   if (!TN_Value_At_Op(tn1, compare_op, &v1)) goto try_identities;
+#ifdef TARG_X8664
+  Extend_Truncate_Short_Cmp_Src(compare_op, br_variant, &v1);
+#endif
 
   if (tn2 && !TN_Value_At_Op(tn2, compare_op, &v2)) goto try_identities;
+#ifdef TARG_X8664
+  Extend_Truncate_Short_Cmp_Src(compare_op, br_variant, &v2);
+#endif
 
   /* Evaluate the condition.
    */
@@ -2801,14 +3071,6 @@ Convert_Goto_To_If ( BB *bp, mBOOL *used_branch_around )
      * consideration given to which branch is best replaced.
      */
     used_branch_around[BB_id(targ)] = TRUE;
-#if 0
-  } else if ( ) {
-
-    /* It might be useful to detect other targets which we believe
-     * could be reordered later. This wouldn't be all that different
-     * than the branches-around case above.
-     */
-#endif
   } else {
 
     /* We weren't convinced this was profitiable.
@@ -3145,7 +3407,7 @@ Optimize_Branches(void)
 #endif
  
   used_branch_around = (mBOOL *)alloca((PU_BB_Count + 2) * sizeof(*used_branch_around));
-  bzero(used_branch_around, (PU_BB_Count + 2) * sizeof(*used_branch_around));
+  BZERO(used_branch_around, (PU_BB_Count + 2) * sizeof(*used_branch_around));
   pass = 0;
   do {
     BB *bp;
@@ -3181,9 +3443,7 @@ Optimize_Branches(void)
 #ifdef TARG_IA64
             chan_succ = Cflow_Change_Succ(bp, 0, old_tgt, new_tgt);
 	  }
-          if (chan_succ) {
-            changed = TRUE;
-          }
+          changed = TRUE;          
         } else {
           if (freqs_computed) {
             edge_freq = BBINFO_succ_prob(bp, 0) * BB_freq(bp);
@@ -3457,6 +3717,11 @@ Delete_Unreachable_Blocks(void)
       ANNOTATION *next_ant;
 
       ant = ANNOT_First(BB_annotations(bp), ANNOT_LABEL);
+
+#ifdef KEY
+      Is_True(ant != NULL, ("Delete_Unreachable_Blocks: BB has no label"));
+#endif
+
       do {
 	LABEL_IDX lab = ANNOT_label(ant);
 
@@ -3482,6 +3747,8 @@ Delete_Unreachable_Blocks(void)
 			       LABEL_name(lab), BB_id(bp));
 	      }
 	      BB_annotations(bp) = ANNOT_Unlink(BB_annotations(bp), ant);
+	      if (ANNOT_First(BB_annotations(bp), ANNOT_LABEL) == NULL) //bug fix for OSP_358
+	        Reset_BB_has_label(bp);//no label annotate, reset has_lable flag
 	      Set_Label_BB(lab, NULL);
 	      eh_label_removed = TRUE;
 	    } else {
@@ -3502,6 +3769,8 @@ Delete_Unreachable_Blocks(void)
 			       LABEL_name(lab), BB_id(bp));
 	      }
 	      BB_annotations(bp) = ANNOT_Unlink(BB_annotations(bp), ant);
+	      if (ANNOT_First(BB_annotations(bp), ANNOT_LABEL) == NULL) //bug fix for OSP_358
+	        Reset_BB_has_label(bp);//no label annotate, reset has_lable flag
 	      Set_Label_BB(lab, NULL);
 	      eh_label_removed = TRUE;
 	    } else {
@@ -3593,6 +3862,10 @@ Merge_With_Pred ( BB *b, BB *pred )
   case BBKIND_INDGOTO:
 #ifdef TARG_IA64
   case BBKIND_CHK:// bug fix for OSP_104, OSP_105, OSP_192
+#endif
+#if defined(TARG_SL) 
+  case BBKIND_ZDL_BODY:
+  case BBKIND_FORK:
 #endif
     if (CFLOW_Trace_Merge) {
       #pragma mips_frequency_hint NEVER
@@ -3737,6 +4010,7 @@ Merge_With_Pred ( BB *b, BB *pred )
   /* Copy pragmas to the pred.
    */
   BB_Copy_Annotations(pred, b, ANNOT_PRAGMA);
+  BB_Copy_Annotations(pred, b, ANNOT_INLINE);
 
   /* Update BB successor info if necessary.
    */
@@ -3751,6 +4025,11 @@ Merge_With_Pred ( BB *b, BB *pred )
 #endif
   for (i = 0; i < BBINFO_nsuccs(pred); ++i) {
     if (BBINFO_succ_bb(pred, i) == b) {
+
+#if defined(TARG_SL)
+  if(BB_zdl_prolog(b))
+    Set_BB_zdl_prolog(pred);
+#endif
 
 #ifdef TARG_IA64
 	  if (IPFEC_Enable_Region_Formation && RGN_Formed) {
@@ -3836,6 +4115,28 @@ Can_Append_Succ(
     /* We handle these.
      */
     break;
+#if defined(TARG_SL) 
+  case BBKIND_ZDL_BODY:
+    {
+      if (trace) {
+        #pragma mips_frequency_hint NEVER
+        fprintf(TFile, "rejecting %s of BB:%d into BB:%d"
+		       " (BBKIND_ZDL must not be appended)\n",
+		       oper_name, BB_id(suc), BB_id(b));
+      }
+      return FALSE;
+    }
+  case BBKIND_FORK:
+    {
+      if (trace) {
+ 	  #pragma mips_frequency_hint NEVER
+	  fprintf(TFile, "rejecting %s of BB:%d into BB:%d"
+		       " (BBKIND_FORL can not be appended currently)\n",
+		       oper_name, BB_id(suc), BB_id(b));
+      }
+      return FALSE;
+    }
+#endif
   default:
     if (trace) {
       #pragma mips_frequency_hint NEVER
@@ -3844,6 +4145,28 @@ Can_Append_Succ(
     }
     return FALSE;
   }
+
+#if defined(TARG_SL)
+  if(BBINFO_kind(b) == BBKIND_ZDL_BODY) {
+    if (trace) {
+      #pragma mips_frequency_hint NEVER
+      fprintf(TFile, "rejecting %s of BB:%d into BB:%d"
+		       " (BBKIND_ZDL must not append other bb)\n",
+		       oper_name, BB_id(suc), BB_id(b));
+      }
+    return FALSE;
+  }
+
+  if(BBINFO_kind(b) == BBKIND_FORK) {
+    if(trace) {
+      #pragma mips_frequency_hint NEVER
+	fprintf(TFile, "rejecting %s of BB:%d into BB:%d"
+		       " (BBKIND_FORL can not append other bb currently)\n",
+		       oper_name, BB_id(suc), BB_id(b));
+    }
+    return FALSE;
+  }
+#endif
 
   /* Reject if BB has an asm.
    */
@@ -3860,6 +4183,11 @@ Can_Append_Succ(
 #ifdef TARG_X8664
   // merging would delete the label needed by this instr
   if( BB_savexmms_op(b) != NULL ){
+    return FALSE;
+  }
+
+  if (BB_last_OP_computes_got(b) ||		// bug 14452
+      BB_first_OP_computes_got(suc)) {
     return FALSE;
   }
 #endif
@@ -4050,67 +4378,6 @@ Can_Append_Succ(
 }
 
 
-#if 0
-/* I was going to use this for cloning VARGOTO blocks, but it is not
- * good enough just to copy the jump table and set the annotation and
- * WN_st, the code needs to be modified as well! I'm not sure to how
- * guarantee that I can find the code. Perhaps it could just be
- * regenerated and the old code dead-code eliminated. But it seems
- * that we can just share the jump tables, so we'll just keep this
- * fine piece of code in case we ever need it. Ken, 4-feb-98
- */
-
-/* ====================================================================
- *
- * Copy_Jump_Table
- *
- * Copy the [switch] jump table specified by the symbol <old_listvar>
- * and return the new symbol by function value.
- *
- * ====================================================================
- */
-static ST *
-Copy_Jump_Table(ST *old_listvar)
-{
-  TY_IDX table;
-  ST *listvar;
-  INITO_IDX old_ino;
-  INITV_IDX old_inv;
-  INITO_IDX ino;
-  INITV_IDX inv;
-  INITV_IDX prev_inv;
-  INT num_entries;
-
-  /* Get INITO for old table
-   */
-  old_ino = Find_INITO_For_Symbol(old_listvar);
-
-  /* Find how many entries in the table (can't use number of succs
-   * of VARGOTO BB since it doesn't count duplicates).
-   */
-  num_entries = 0;
-  FOREACH_INITV(INITO_val(old_ino), old_inv) ++num_entries;
-
-  /* Create the symbol for the new table.
-   */
-  table = Make_Array_Type(Pointer_type, 1, num_entries);
-  listvar = Gen_Read_Only_Symbol(table, "jump_table");
-  Set_ST_is_initialized(listvar);    /* so goes in rdata section */
-
-  /* Finally create and copy the jump target labels (INITVs).
-   */
-  ino = New_INITO(listvar);
-  prev_inv = INITV_IDX_ZERO;
-  FOREACH_INITV(INITO_val(old_ino), old_inv) {
-    LABEL_IDX lab = INITV_lab(old_inv);
-    inv = New_INITV();
-    INITV_Init_Label (inv, lab);
-    prev_inv = Append_INITV (inv, ino, prev_inv);
-  }
-
-  return listvar;
-}
-#endif
 
 
 /* ====================================================================
@@ -4341,6 +4608,7 @@ Append_Succ(
 
   BB_Copy_Annotations(b, suc, ANNOT_NOTE);
   BB_Copy_Annotations(b, suc, ANNOT_PRAGMA);
+  BB_Copy_Annotations(b, suc, ANNOT_INLINE);
 
   if ((num = BB_REGION_Exit(suc, b_rid)) != NO_REGION_EXIT) {
 
@@ -4383,6 +4651,11 @@ Merge_With_Succ(BB *b, BB *suc, BB *merged_pred, BOOL in_cgprep)
   if (!Can_Append_Succ(b, suc, merged_pred, TRUE, CFLOW_Trace_Merge)) {
     return FALSE;
   }
+
+#if defined(TARG_SL)
+  if(BB_zdl_prolog(suc))
+    Set_BB_zdl_prolog(b);
+#endif
 
   Append_Succ(b, suc, in_cgprep, TRUE);
   if (CFLOW_Trace_Merge) {
@@ -4459,7 +4732,8 @@ Merge_Blocks ( BOOL in_cgprep )
 	  break;
 	}
 
-	if( BB_computes_got(b) ){
+	if (BB_first_OP_computes_got(b) ||
+	    BB_last_OP_computes_got(b)) {	// bug 14452
 	  break;
 	}
 #endif
@@ -4893,7 +5167,7 @@ Init_Edges(EDGE *edges)
    * for given BB.
    */
   bb_preds = (EDGE **)alloca((PU_BB_Count + 2) * sizeof(EDGE *));
-  bzero(bb_preds, (PU_BB_Count + 2) * sizeof(EDGE *));
+  BZERO(bb_preds, (PU_BB_Count + 2) * sizeof(EDGE *));
 
   /* Visit all the BBs and create and initialize the edges.
    * On this pass the weighting only accounts for things we can
@@ -4905,6 +5179,10 @@ Init_Edges(EDGE *edges)
 
     switch (BBINFO_kind(bb)) {
     case BBKIND_LOGIF:
+#if defined(TARG_SL)
+    case BBKIND_ZDL_BODY:
+    case BBKIND_FORK:
+#endif
       {
         double prob0 = BBINFO_succ_prob(bb, 0);
 	double prob1 = BBINFO_succ_prob(bb, 1);
@@ -5064,6 +5342,19 @@ typedef struct bbchain {
   BOOL never;		/* blocks in chain have NEVER freq hint */
 } BBCHAIN;
 
+#ifdef TARG_SL
+static BB*
+Get_Zdl_Loop_Tail(BB * prolog)
+{
+  FmtAssert(OP_code(BB_last_op(prolog))==TOP_loop, ("Get_Zdl_Loop_Tail::wrong zdl prolog"));
+  FmtAssert(BB_in_succs(prolog, BB_next(prolog)), ("Get_Zdl_Loop_Tail::wrong zdl header"));
+  BB *body = BB_next(prolog);
+  BB *tail = BB_Other_Predecessor(body, prolog);
+  FmtAssert(tail!=NULL, ("Get_Zdl_Loop_Tail::cannot find zdl tail"));
+  return tail;
+}
+#endif
+
 
 /* ====================================================================
  *
@@ -5094,6 +5385,23 @@ Init_Chains(BBCHAIN *chains)
   for (bb = REGION_First_BB; bb; bb = next_bb) {
     BB *tail = bb;
     BB_MAP_Set(chain_map, bb, chains);
+
+#ifdef TARG_SL
+    /* We do not intend to reorder bb inside a zero delay loop
+     */
+    if (CG_enable_zero_delay_loop) {
+      OP *op = BB_last_op(bb);
+      if (op!=NULL && OP_code(op) == TOP_loop) {
+        BB *zdl_tail=Get_Zdl_Loop_Tail(bb);
+        BB *loop_bb = bb;
+        while (loop_bb!=zdl_tail) {
+          loop_bb = BB_next(loop_bb);
+          BB_MAP_Set(chain_map, loop_bb, chains);
+        }
+        tail = zdl_tail;
+      }
+    }
+#endif
 
     /* We have to be careful about reordering in the face of regions
      * (REGION and exception regions). The two kind of regions have
@@ -5218,6 +5526,11 @@ Weight_Succ_Chains(BB_MAP chain_map, BBCHAIN *chain)
       BB *succ = BBINFO_succ_bb(bb, i);
       BBCHAIN *succ_chain = BB_Chain(chain_map, succ);
       succ_chain->weight += bb_freq * BBINFO_succ_prob(bb, i);
+      // keep loops with flow that are unrolled together
+      if (CG_LOOP_unroll_level == 2) {
+        if (BB_unrolled_fully(bb))
+          succ_chain->weight = 1.0;
+      }
     }
   } while (bb = BB_next(bb));
 }
@@ -5290,13 +5603,6 @@ Create_Cold_Region(BBCHAIN *cold)
   RID_parent(r) = parent;
   RID_cginfo(r) = NULL; /* ?? this should have a value */
 
-#if 0
-  INT i;
-  for ( i = SWP_replication_factor - 1; i >= 0; --i ) {
-    INT32 rep_num = Rep_Index_To_Number(i);
-    if ( Is_Exit_Replication(rep_num) ) ++RID_num_exits(r);
-  }
-#endif
 
   if ( parent ) RID_Add_kid(r, parent);
 
@@ -5572,6 +5878,28 @@ Validate_Cold_Region(BBCHAIN *chains, BBCHAIN *cold_region)
     BB *bb;
     BB_NUM cold_ord = BB_ORD(cold_region->head);
 
+#ifdef TARG_SL
+    BB *ch_head = ch->head;
+    if (ch_head != NULL) {
+      BBLIST *edge;
+      FOR_ALL_BB_PREDS(ch_head, edge) {
+        BB *pred = BBLIST_item(edge);
+        if (OP_fork(BB_last_op(pred))) {
+          BBCHAIN *new_cold = ch->next;
+          if (CFLOW_Trace_Freq_Order) {
+            #pragma mips_frequency_hint NEVER
+            fprintf(TFile, "  fork target caused cold region start"
+                           " to move from BB:%d to BB:%d\n",
+                           BB_id(cold_region->head),
+                           new_cold ? BB_id(new_cold->head) : -1);
+          }
+          cold_region = new_cold;
+          goto next_chain;
+        }
+      }
+    }
+#endif
+
     for (bb = ch->head; bb; bb = BB_next(bb)) {
       BBLIST *edge;
 
@@ -5591,6 +5919,22 @@ Validate_Cold_Region(BBCHAIN *chains, BBCHAIN *cold_region)
 	cold_region = new_cold;
 	goto next_chain;
       }
+
+#ifdef TARG_SL
+      if (OP_fork(BB_last_op(bb))) {
+        BBCHAIN *new_cold = ch->next;
+        if (CFLOW_Trace_Freq_Order) {
+          #pragma mips_frequency_hint NEVER
+          fprintf(TFile, "  fork instruction caused cold region start"
+                         " to move from BB:%d to BB:%d\n",
+                         BB_id(cold_region->head),
+                         new_cold ? BB_id(new_cold->head) : -1);
+        }
+        cold_region = new_cold;
+        goto next_chain;
+      }
+
+#endif
 
       /* Check to make sure that an edge between the hot and cold
        * region is also not a transition between regions. If we
@@ -5748,7 +6092,11 @@ Order_Chains(BBCHAIN *unordered, BB_MAP chain_map)
    * has been defined, locate the appropriate chain and create
    * the cold region.
    */
+#if defined(TARG_SL)
+  if (CFLOW_cold_threshold &&  (current_flags & CFLOW_COLD_REGION)) {
+#else
   if (CFLOW_cold_threshold) {
+#endif
     BBCHAIN *ch = last_ordered;
 
     /* The cold region boundary is placed between chains to avoid
@@ -5985,10 +6333,17 @@ Grow_Chains(BBCHAIN *chains, EDGE *edges, INT n_edges, BB_MAP chain_map)
     }
 #endif
 
+    // keep loops with flow that are unrolled together
+    BOOL can_combine = TRUE;
+    if (CG_LOOP_unroll_level == 2) {
+      can_combine = (BB_unrolled_fully(succ) == FALSE);
+    }
+
     /* If this edge connects the tail of one chain to the head of
      * another, then combine the chains.
      */
-    if (pchain != schain && pchain->tail == pred && schain->head == succ) {
+    if ((can_combine) &&
+        (pchain != schain && pchain->tail == pred && schain->head == succ)) {
       INT j;
       INT nsuccs;
       BB *bb;
@@ -6179,6 +6534,10 @@ Dynamic_Branch_Cost(
     case BBKIND_RETURN:
     case BBKIND_TAIL_CALL:
     case BBKIND_REGION_EXIT:
+#if defined(TARG_SL)
+    case BBKIND_ZDL_BODY:
+    case BBKIND_FORK:
+#endif
       break;
     default:
       #pragma mips_frequency_hint NEVER
@@ -6211,12 +6570,6 @@ Freq_Order_Blocks(void)
   BBCHAIN *chains;
   BB_MAP chain_map;
 
-#if 0
-// 11-sep-97 re-enable for 7.3 -- it seems to work now
-  /* Temporary workaround -- see pv468701
-   */
-  if (have_eh_regions) return FALSE;
-#endif
 
   /* Find the BBs that hint pragmas indicate are never executed.
    */
@@ -6235,6 +6588,15 @@ Freq_Order_Blocks(void)
     cost0 = Dynamic_Branch_Cost(REGION_First_BB, &stat_fall0);
   }
 
+#if defined(TARG_SL)
+  //delete the region info in the last pass cg
+  if ( !Compiling_Proper_REGION ) {
+    for (BB* bb = REGION_First_BB; bb; bb=BB_next(bb)) {
+      if(BBINFO_eh_rgn(bb) || BB_handler(bb)) continue;
+      BB_rid(bb) = BB_rid(REGION_First_BB);
+    }
+  }
+#endif
   /* Get the max number of succ edges and allocate that many edge structs.
    */
   n_succs = Count_Succ_Edges();
@@ -6380,7 +6742,7 @@ Estimate_Callee_Saves(void)
 
   MEM_POOL_Push(&MEM_local_pool);
 
-  bzero(callee_saves, sizeof(callee_saves));
+  BZERO(callee_saves, sizeof(callee_saves));
   for (bb = REGION_First_BB; bb; bb = BB_next(bb)) {
     INT tn_count[ISA_REGISTER_CLASS_MAX + 1];
     TN *tn;
@@ -6402,7 +6764,7 @@ Estimate_Callee_Saves(void)
     /* Count up the number of GTNs that need a register for each
      * register class.
      */
-    bzero(tn_count, sizeof(tn_count));
+    BZERO(tn_count, sizeof(tn_count));
     for (tn = GTN_SET_Choose(need_reg);
 	 tn && tn != GTN_SET_CHOOSE_FAILURE; // gra_live::live_init has brought in some virtual tn that may not there
 	 tn = GTN_SET_Choose_Next(need_reg, tn))
@@ -6474,7 +6836,7 @@ Estimate_BB_Length(BB *bb)
   if (!CG_localize_tns && (BB_exit(bb) || BB_entry(bb))) {
     INT callees_needed[ISA_REGISTER_CLASS_MAX + 1];
     OP *op;
-    bcopy(callee_saves, callees_needed, sizeof(callee_saves));
+    BCOPY(callee_saves, callees_needed, sizeof(callee_saves));
     FOR_ALL_BB_OPs(bb, op) {
       ISA_REGISTER_CLASS rc;
       TN *tn;
@@ -6515,7 +6877,7 @@ Create_Sched_Est(BB *bb, MEM_POOL *pool)
   if (!CG_localize_tns && (BB_entry(bb) || BB_exit(bb))) {
     INT callees_needed[ISA_REGISTER_CLASS_MAX + 1];
     OP *op;
-    bcopy(callee_saves, callees_needed, sizeof(callee_saves));
+    BCOPY(callee_saves, callees_needed, sizeof(callee_saves));
     FOR_ALL_BB_OPs(bb, op) {
       ISA_REGISTER_CLASS rc;
       TN *tn;
@@ -7005,6 +7367,10 @@ CFLOW_Optimize(INT32 flags, const char *phase_name)
   /* Get flag settings for this invocation.
    */
   current_flags = flags & ~disabled_flags;
+#if defined(TARG_SL)
+  if(((current_flags & CFLOW_COLD_REGION) && CFLOW_cold_threshold))
+    current_flags |= CFLOW_FREQ_ORDER;
+#endif
 
   if (CFLOW_Trace) {
     #pragma mips_frequency_hint NEVER
@@ -7031,6 +7397,10 @@ CFLOW_Optimize(INT32 flags, const char *phase_name)
 	    (current_flags & CFLOW_OPT_ALL_BR_TO_BCOND) ? "enabled" : "disabled");
     fprintf(TFile, "  fill delay slots:\t\t%s\n",
 	    (current_flags & CFLOW_FILL_DELAY_SLOTS) ? "enabled" : "disabled");
+#if defined (TARG_SL)
+    fprintf(TFile, "  cold region:\t\t%s\n",
+	    (current_flags & CFLOW_COLD_REGION) ? "enabled" : "disabled");
+#endif
 
     fprintf(TFile, "\n");
     Print_All_BBs();
@@ -7061,15 +7431,6 @@ CFLOW_Optimize(INT32 flags, const char *phase_name)
   // Reset the mapping between BBs and hyperblocks.
   Setup_HB_bb_map();
 
-#if 0
-// this is not ready for prime-time. It is general solution to fix
-// the problem uncovered by pv661478.
-  if (   PROC_has_branch_delay_slot()
-      && current_flags & CFLOW_FILL_DELAY_SLOTS)
-  {
-    flow_change |= Normalize_Delay_Slots();
-  }
-#endif
 
   if (CFLOW_Trace_Detail) {
     #pragma mips_frequency_hint NEVER
@@ -7189,6 +7550,12 @@ CFLOW_Optimize(INT32 flags, const char *phase_name)
     }
     flow_change |= change;
   }
+
+#ifdef TARG_X8664
+  if (current_flags & CFLOW_BR_FUSE) {
+    Br_Fuse_All_BBs();
+  }
+#endif
 
   /* If we made any flow changes, re-create the preds and succs lists.
    */
@@ -7550,8 +7917,11 @@ CFLOW_Delete_Empty_BB(void)
 	 // BB with EH Range labels can not be removed, even
 	 // though its length is 0 and it has no succ,
 	 // coz these labels are required by LSDA construction.
-         if (BB_Has_Exc_Label(bp))
-	   continue;
+	 // bug fix for OSP_350
+         if (BB_Has_Exc_Label(bp)
+		|| BB_Has_Addr_Taken_Label(bp)
+		|| BB_Has_Outer_Block_Label(bp))
+	   		continue;
 
 	 // Be caution to the empty GOTO BB bp, if BB_next(bp) == NULL;
 	 // In this situation, we can remove it only when none of it's
@@ -7650,3 +8020,229 @@ CFLOW_Delete_Empty_BB(void)
   MEM_POOL_Pop(&MEM_local_nz_pool);
 }
 #endif
+
+#if defined(KEY) && (defined(TARG_MIPS) && !defined(TARG_SL))
+
+
+// Fix for bugs 8748 and 11720:  Build a long jump using the jr instruction.
+// Save and restore own temp register.
+static void
+Build_Long_Goto(BB *targ_bb, OPS *ops)
+{
+  // Build this sequence:
+  //   sp = sp - 8      ; grow stack segment before storing r2
+  //   store r2,0(sp)   ; arbitrarily pick r2 to be tmp_reg
+  //   r2 = target_label
+  //   sp = sp + 8
+  //   jr r2
+  //   r2 = load -8(sp) ; restore r2
+
+  TN *tmp_reg = Build_Dedicated_TN(ISA_REGISTER_CLASS_integer, 3, 8);
+  LABEL_IDX label_idx = Gen_Label_For_BB(targ_bb);
+
+  // 11720: Create st that matches the label name that we can then use with
+  // relocations. (Code modified from LDA_LABEL in be/cg/whirl2ops.cxx)
+  ST *st = New_ST(CURRENT_SYMTAB);
+  ST_Init(st, Save_Str(LABEL_name(label_idx)), CLASS_NAME,
+          SCLASS_UNKNOWN, EXPORT_LOCAL, MTYPE_To_TY(Pointer_Mtype));
+
+  Build_OP(TOP_daddiu, SP_TN, SP_TN, Gen_Literal_TN(-8, 0), ops);
+  Build_OP(TOP_sd, tmp_reg, SP_TN, Gen_Literal_TN(0, 0), ops);
+
+  if (MTYPE_byte_size(Pointer_Mtype) == 8) {    // 64-bit address
+    // Cannot use TN_RELOC_HIGH16/TN_RELOC_LOW16 because that will produce a
+    // 32-bit address only.  Bug 12662.
+    TN *target_tn = Gen_Symbol_TN(st, 0, TN_RELOC_GOT_DISP);
+    Build_OP(TOP_ld, tmp_reg, GP_TN, target_tn, ops);
+  } else {                                      // 32-bit address
+    TN *target_hi_tn = Gen_Symbol_TN(st, 0, TN_RELOC_HIGH16);
+    TN *target_lo_tn = Gen_Symbol_TN(st, 0, TN_RELOC_LOW16);
+    Build_OP(TOP_lui, tmp_reg, target_hi_tn, ops);
+    Build_OP(TOP_addiu, tmp_reg, tmp_reg, target_lo_tn, ops);
+  }
+
+  Build_OP(TOP_daddiu, SP_TN, SP_TN, Gen_Literal_TN(8, 0), ops);
+  Build_OP(TOP_jr, tmp_reg, ops);
+  Build_OP(TOP_ld, tmp_reg, SP_TN, Gen_Literal_TN(-8, 0), ops);
+}
+
+// Estimate the branch distance for each branch OP.  If the distance is too
+// large to fit in the branch instruction's displacement field, replace the
+// branch with a jump.
+void
+CFLOW_Fixup_Long_Branches()
+{
+  BB *bb;
+  UINT32 *bb_position, ops_count;
+  BB_NUM old_PU_BB_Count = PU_BB_Count;
+
+  // Estimate the beginning position of each BB relative to the beginning of
+  // the PU.
+  int size = (PU_BB_Count + 1) * sizeof(UINT32);
+  bb_position = (UINT32 *) alloca(size);
+  memset(bb_position, 0, size);
+  ops_count = 0;
+  for (bb = REGION_First_BB; bb; bb = BB_next(bb)) {
+    Is_True(BB_id(bb) <= PU_BB_Count, ("CFLOW_Fixup_Long_Branches: bad BB id"));
+    bb_position[BB_id(bb)] = ops_count;
+    ops_count += BB_length(bb);
+  }
+
+  // Replace long branches with jumps.
+  for (bb = REGION_First_BB; bb; bb = BB_next(bb)) {
+    // Skip BBs that we just added.
+    if (BB_id(bb) > old_PU_BB_Count)
+      continue;
+
+    // GOTO bbs related to C++ exception handling often do not have
+    // successors.
+    if (!BB_succs(bb))
+      continue;
+
+    // Check for jumps too because the GNU assembler changes the j instruction
+    // to a branch.
+    BBKIND bb_kind = BB_kind(bb);
+    if (bb_kind == BBKIND_GOTO ||
+        bb_kind == BBKIND_LOGIF) {
+      // Get the (approx) position of the branch OP.
+      UINT32 branch_position =
+        bb_position[BB_id(BB_next(bb) ? BB_next(bb) : bb)];
+
+      // Get the target BB's position.
+      BB *succ0 = BBLIST_item(BB_succs(bb));
+      BB *succ1 = NULL;
+      BB *targ_bb = NULL;
+      BB *old_fall_thru_bb = NULL;
+
+      // Skip if the branch target BB is the same as the fall thru BB.
+      if (bb_kind == BBKIND_GOTO) {
+        targ_bb = succ0;
+      } else {  // BBKIND_LOGIF
+        if (BBLIST_next(BB_succs(bb)) == NULL)
+          continue;
+        succ1 = BBLIST_item(BBLIST_next(BB_succs(bb)));
+        if (BB_next(bb) == succ0) {
+          targ_bb = succ1;
+          old_fall_thru_bb = succ0;
+        } else {
+          targ_bb = succ0;
+          old_fall_thru_bb = succ1;
+        }
+        // Cflow should have already made the fall thru BB be the next BB.
+        Is_True(old_fall_thru_bb == BB_next(bb),
+                ("CFLOW_Fixup_Long_Branches: fall thru BB is not the next BB"));
+      }
+
+      UINT32 targ_position = bb_position[BB_id(targ_bb)];
+
+      // Estimate displacement in bytes.  Inflate estimate for safety.
+      INT64 disp = (INT64) targ_position - (INT64) branch_position;
+      disp *= 4;
+      // 14212: Hardware workaround will inflate code.
+#if defined(TARG_SL) || !defined(TARG_MIPS)
+      if (CG_hw_round > 0 || CG_hw_stall > 0) {
+	disp = (INT64) (disp * 1.2);
+      } else {
+	disp = (INT64) (disp * 1.1);
+      }
+#endif
+
+      if (!CGTARG_Can_Fit_Displacement_In_Branch_Instruction(disp)) {
+        if (bb_kind == BBKIND_GOTO) {
+          OPS ops = OPS_EMPTY;
+          OP *branch_op = BB_branch_op(bb);
+          OP *next_op = OP_next(branch_op);
+
+          if (next_op &&
+              OP_code(next_op) == TOP_nop) {
+            BB_Remove_Op(bb, next_op);  // Delete NOP in branch delay slot.
+          }
+          BB_Remove_Op(bb, branch_op);  // Delete old jump OP.
+          Build_Long_Goto(targ_bb, &ops);
+          BB_Append_Ops(bb, &ops);
+
+          if (!CG_localize_tns) {
+            GRA_LIVE_Compute_Liveness_For_BB(bb);
+          }
+        } else {        // BBKIND_LOGIF
+          // Create <goto_bb> to hold the jump to <targ_bb>.  Insert <goto_bb>
+          // after <bb>.  (Based on Insert_Goto_BB.)
+          OPS ops = OPS_EMPTY;
+          BBLIST *sedge = BB_Find_Succ(bb, targ_bb);
+          float goto_prob = BBLIST_prob(sedge);
+          BOOL goto_prob_fb = BBLIST_prob_fb_based(sedge);
+          RID *rid = BB_rid(bb);
+          BOOL region_is_scheduled = rid && RID_level(rid) >= RL_CGSCHED;
+          BOOL fill_delay_slots = (current_flags & CFLOW_FILL_DELAY_SLOTS) != 0;
+
+          BB *goto_bb = Alloc_BB_Like(bb);
+          BB_freq(goto_bb) = BB_freq(bb) * goto_prob;
+          Insert_BB(goto_bb, bb);
+          Build_Long_Goto(targ_bb, &ops);
+
+          if (BB_freq_fb_based(bb) && goto_prob_fb) {
+            BBLIST *edge = BB_Find_Succ(goto_bb, targ_bb);
+            Set_BB_freq_fb_based(goto_bb);
+            Set_BBLIST_prob_fb_based(edge);
+          }
+
+          if (PROC_has_branch_delay_slot()
+              && (fill_delay_slots || region_is_scheduled)) {
+            Set_BB_scheduled(goto_bb);
+          }
+          BB_Append_Ops(goto_bb, &ops);
+
+          Unlink_Pred_Succ(bb, targ_bb);
+          Link_Pred_Succ_with_Prob(bb, goto_bb, goto_prob);
+          if (goto_prob_fb) {
+            BBLIST *edge = BB_Find_Succ(bb, goto_bb);
+            Set_BBLIST_prob_fb_based(edge);
+          }
+
+          INT tfirst;
+          INT tcount;
+          LABEL_IDX lab;
+          TN *lab_tn;
+          OP *branch_op = BB_branch_op(bb);
+          CGTARG_Branch_Info(branch_op, &tfirst, &tcount);
+          lab = Gen_Label_For_BB(old_fall_thru_bb);
+          lab_tn = Gen_Label_TN(lab, 0);
+          Set_OP_opnd(branch_op, tfirst, lab_tn);       // Change branch target.
+          Negate_Logif_BB(bb);                  // Negate sense of branch.
+
+          if (PROC_has_branch_delay_slot()) {
+
+            // If <bb> ends in branch likely, move the delay slot OP
+            // to <goto_bb>
+            OP *delay_op = OP_next(branch_op);
+            if (delay_op != NULL && !OP_noop(delay_op) && OP_likely(branch_op)) {
+              BB_Move_Op_To_Start(goto_bb, bb, delay_op);
+              delay_op = NULL;
+            }
+
+            // If <bb> branch delay slot is empty (because we just moved out
+            // the delay slot OP, or because GCM deliberately deleted the NOP
+            // -- see Fill_From_Successor in gcm.cxx), then insert NOP.
+            // (Fixes bug 11776)
+            if (delay_op == NULL && (fill_delay_slots || region_is_scheduled)) {
+              OPS ops = OPS_EMPTY;
+              Exp_Noop(&ops);
+              Set_BB_scheduled(bb);
+              BB_Append_Ops(bb, &ops);
+            }
+
+          }
+
+          if (!CG_localize_tns) {
+            GRA_LIVE_Compute_Liveness_For_BB(goto_bb);
+            GRA_LIVE_Compute_Liveness_For_BB(bb);
+          }
+        }
+      }
+    }
+  }
+}
+
+
+#endif  // KEY and TARG_MIPS
+

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -46,7 +50,6 @@
 *** AND whose imperfect parts are always distributable. 
 ***/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -54,7 +57,7 @@
 #pragma hdrstop
 
 #define snl_CXX      "snl.cxx"
-static char *rcs_id =   snl_CXX "$Revision: 1.5 $";
+const static char *rcs_id =   snl_CXX "$Revision: 1.5 $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -86,6 +89,7 @@ static char *rcs_id =   snl_CXX "$Revision: 1.5 $";
 #include "wind_down.h"
 #include "ff_utils.h"
 #include "fb_whirl.h"
+#include "tlog.h"
 
 #pragma weak New_Construct_Id
 
@@ -574,6 +578,10 @@ extern WN* SNL_INV_Permute_Loops(WN* outer_loop,
     Print_Interchange(stdout, outer_loop, permutation, nloops); 
     Print_Interchange(TFile, outer_loop, permutation, nloops); 
   } 
+
+  if (LNO_Tlog)
+    Print_Interchange(Get_Tlog_File(), outer_loop, permutation, nloops);
+  
   ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph; 
   DU_MANAGER* du = Du_Mgr; 
   REDUCTION_MANAGER* rm = red_manager; 
@@ -657,6 +665,9 @@ extern WN* SNL_INV_Cache_Block(SNL_NEST_INFO* ni,
     INT newstripsz = t->Stripsz(s);
     INT lvl = t->Striplevel(s);
 
+    if (LNO_Tlog) 
+      fprintf(Get_Tlog_File(), "##Blocking: %d \n", Srcpos_To_Line(WN_Get_Linenum(olddo)));
+    
     // Decide whether the cache tiling should include wind-down.  It's
     // not necessary when the iteration count divides the trip
     // size.  Also, if we are not register tiling that loop, or if the
@@ -808,7 +819,7 @@ extern WN* SNL_INV_Cache_Block(SNL_NEST_INFO* ni,
     // annotate the new loop
 
     DO_LOOP_INFO* dli = CXX_NEW(DO_LOOP_INFO(&LNO_default_pool,
-      NULL, NULL, NULL, FALSE,FALSE,FALSE, FALSE, FALSE, FALSE, FALSE),
+      NULL, NULL, NULL, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
       &LNO_default_pool);
     DO_LOOP_INFO* olddli = Get_Do_Loop_Info(olddo);
     Set_Do_Loop_Info(stripdo, dli);

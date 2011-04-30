@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -37,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"
 #include "symtab.h"
@@ -263,9 +266,21 @@ namespace
 	if (TY_size (merged_ty) != TY_size (new_ty) ||
 	    TY_kind (merged_ty) != TY_kind (new_ty) ||
 	    TY_mtype (merged_ty) != TY_mtype (new_ty) ||
-	    TY_flags (merged_ty) != TY_flags (new_ty) ||
 	    TY_name_idx (merged_ty) != str_map[TY_name_idx (new_ty)])
 	    return VALIDATE_FAIL;
+
+        // for struct types, the TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE
+        // flag may be set.  This should not block type merging.
+        mUINT32 merged_ty_flags_copy = TY_flags(merged_ty);
+        mUINT32 new_ty_flags_copy = TY_flags(new_ty);
+        if (TY_kind(merged_ty) == KIND_STRUCT)
+        {
+          // we already know the kinds are the same
+          merged_ty_flags_copy &= ~TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE;
+          new_ty_flags_copy &= ~TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE;
+        }
+        if (merged_ty_flags_copy != new_ty_flags_copy)
+          return VALIDATE_FAIL;
 
 	UINT kid_count = ty_node.kid_count ();
 	UINT i;
@@ -343,9 +358,21 @@ namespace
            if (TY_name_idx (merged_ty) != str_map[TY_name_idx (new_ty)]) 
                return VALIDATE_FAIL;
         if (TY_size (merged_ty) != TY_size (new_ty) ||
-            TY_mtype (merged_ty) != TY_mtype (new_ty) ||
-            TY_flags (merged_ty) != TY_flags (new_ty))
+            TY_mtype (merged_ty) != TY_mtype (new_ty))
             return VALIDATE_FAIL;
+
+        // for struct types, the TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE
+        // flag may be set.  This should not block type merging.
+        mUINT32 merged_ty_flags_copy = TY_flags(merged_ty);
+        mUINT32 new_ty_flags_copy = TY_flags(new_ty);
+        if (TY_kind(merged_ty) == KIND_STRUCT)
+        {
+          // we already know the kinds are the same
+          merged_ty_flags_copy &= ~TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE;
+          new_ty_flags_copy &= ~TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE;
+        }
+        if (merged_ty_flags_copy != new_ty_flags_copy)
+          return VALIDATE_FAIL;
 
         UINT kid_count = ty_node.kid_count ();
         UINT i;
@@ -644,6 +671,11 @@ Commit_Recursive_Type (TY_INDEX index, TY_IDX_MAP& ty_map,
 	break;
 
     case KIND_STRUCT:
+        // flags should technically already be identical if we are
+        // merging, but when we compared, we stripped out the
+        // TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE flag
+        Set_TY_flags(merged_ty_idx, 
+                     TY_flags(merged_ty_idx) | TY_flags(new_ty));
 	Commit_Ty_Specific (new_ty, ty_map, merged_ty_idx,
 			    struct_access (new_ty, Ty_Table[merged_ty_idx])); 
 	break;

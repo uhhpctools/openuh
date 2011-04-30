@@ -40,10 +40,10 @@
 //-*-c++-*-
 /**
 *** Module: cxx_graph.h
-*** $Revision: 1.1.1.1 $
-*** $Date: 2005/10/21 19:00:00 $
-*** $Author: marcel $
-*** $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/cxx_graph.h,v $
+*** $Revision: 1.6 $
+*** $Date: 05/12/05 08:59:12-08:00 $
+*** $Author: bos@eng-24.pathscale.com $
+*** $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.cxx_graph.h $
 *** 
 *** Revision history:
 ***
@@ -117,7 +117,7 @@
 #define cxx_graph_INCLUDED "cxx_graph.h"
 
 #ifdef _KEEP_RCS_ID
-static char *cxx_graph_rcs_id = cxx_graph_INCLUDED "$Revision: 1.5 $";
+static char *cxx_graph_rcs_id = cxx_graph_INCLUDED "$Revision: 1.6 $";
 #endif /* _KEEP_RCS_ID */
 
 #ifndef defs_INCLUDED
@@ -125,7 +125,7 @@ static char *cxx_graph_rcs_id = cxx_graph_INCLUDED "$Revision: 1.5 $";
 #endif
 
 typedef mUINT16 VINDEX16;
-typedef mUINT16 EINDEX16;
+typedef mUINT16 EINDEX16; // increase graph capacity. see bug 13018
 
 extern const VINDEX16 INVALID_VINDEX16;
 extern VINDEX16 GRAPH16_CAPACITY;

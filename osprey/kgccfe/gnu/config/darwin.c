@@ -648,10 +648,6 @@ machopic_legitimize_pic_address (orig, mode, reg)
 		  emit_move_insn (reg, pic);
 		  pic = reg;
 		}
-#if 0
-	      emit_insn (gen_rtx (USE, VOIDmode,
-				  gen_rtx (REG, Pmode, PIC_OFFSET_TABLE_REGNUM)));
-#endif
 
 	      pic_ref = gen_rtx (PLUS, Pmode,
 				 pic, 
@@ -723,10 +719,6 @@ machopic_legitimize_pic_address (orig, mode, reg)
 		      emit_move_insn (reg, pic);
 		      pic = reg;
 		    }
-#if 0
-		  emit_insn (gen_rtx (USE, VOIDmode,
-				      pic_offset_table_rtx));
-#endif
 		  pic_ref = gen_rtx (PLUS, Pmode,
 				     pic,
 				     gen_rtx (CONST, Pmode, 

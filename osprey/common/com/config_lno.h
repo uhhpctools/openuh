@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -239,6 +243,7 @@ typedef struct lno_flags {
   BOOL	Fancy_tile;
   BOOL	Run_fiz_fuse;
   UINT32 Fission;
+  BOOL  Serial_distribute;
   UINT32 Fission_inner_register_limit;
   BOOL	Forward_substitution;
   UINT32 Fusion;
@@ -277,13 +282,16 @@ typedef struct lno_flags {
 #ifdef KEY
   BOOL   Prefetch_stores;
   BOOL   Prefetch_stores_set;
+#endif
   BOOL   Prefetch_invariant_stride;
   UINT32 Prefetch_stride_ahead;
-#endif
+  BOOL   Run_stream_prefetch;   
   UINT32 Prefetch_ahead;
   UINT32 Prefetch_iters_ahead;
   UINT32 Prefetch_cache_factor;
   BOOL	Prefetch_indirect;
+  BOOL	Prefetch_inductive;
+  BOOL	Prefetch_induc_indir;
   BOOL	Run_prefetch_manual;
   BOOL	Run_prefetch_manual_set;
   BOOL	Power_of_two_hack;
@@ -317,6 +325,9 @@ typedef struct lno_flags {
   BOOL 	  Unswitch_Verbose;
   BOOL    Prefetch_Verbose;
   BOOL    Build_Scalar_Reductions;
+  BOOL    Invariant_Factorization;
+  BOOL    New_Invariant_Factorization;
+  BOOL    Invar_Factor_Verbose;
 #endif /* KEY */
   BOOL	Run_oinvar;
   UINT32 Run_doacross;
@@ -337,6 +348,7 @@ typedef struct lno_flags {
   UINT32 Local_pad_size;
   UINT32 Full_unrolling;  
 #ifdef KEY
+  BOOL   Peel_2D_triangle_loop;
   UINT32 Full_unrolling_loop_size_limit;
   BOOL   Full_Unroll_Outer;
   UINT32 Num_Processors;	// 0 means unknown
@@ -344,6 +356,12 @@ typedef struct lno_flags {
   BOOL Apo_use_feedback;	// APO use loop freq from feedback data to
   				// decide whether to parallelize a loop
 #endif
+  BOOL   IfMinMax_Fix_Cond;
+  UINT32 IfMinMax_Limit;
+  UINT32 IfMinMax_Fix_Cond_Limit;
+  UINT32 IfMinMax_Trace; // 0: disable; 1: minimal; 2: normal; 3: maximum
+  BOOL   Struct_Array_Copy;
+  
   /* This buffer area allows references to new fields to be added in
    * later revisions, from other DSOs, without requiring a new be.so
    * or running the risk of referencing illegal data.  Assuming that
@@ -355,6 +373,41 @@ typedef struct lno_flags {
 
 #define LNO_FLAGS_next(f)	(f->next)
 #define LNO_FLAGS_mhd(f)	(f->_mhd)
+/* Bit masks for saved fields */
+#define LNO_FLAGS_bitmask(f) ((f)->buffer[0])
+
+/* One bit per saved field, indicating whether the field's orginal value is 
+ * saved in the next element on the LNO configuration stack.
+ */
+typedef enum LNO_FLAGS_MASK {
+    LNO_FLAGS_UNDEF = 0,
+    OLF_UPPER_BOUND = 1,
+    LNO_FLAGS_BM_NEXT = 2 /* next unused bit mask */
+};
+
+/* He we gives an interface to dynamically change and restore LNO configuration flags:
+ * LNO_Save_Config(bitmask) saves a snap shot of Current_LNO on the LNO configuration stack
+ * and flag the bit mask for the field to be saved.
+ * LNO_Restore_Configs restores values for all saved fields and pop all temporary elements 
+ * from LNO configuration stack.
+ * Values saved earlier take precedence of values saved later.
+ *
+ *  LNO_Save_Config(bitmask)
+ * 
+ *  LNO_Restore_Configs()
+ *
+ * To add a new field that can be dynamically changed and restored:
+ * 1. Assign a bitmask for the field in LNO_FLAGS_MASK and increment LNO_FLAGS_BM_NEXT 
+ *    accordingly.
+ * 2. Add a case statement in LNO_Restore_Field for the field.
+ * 3. Add a call to LNO_Restore_Field in LNO_Restore_Fields for the field.
+ * 4. Use the LNO_Save_Config(bitmask) interface to save the field before the change.
+ *
+ * The default restoration points are at the end of LNO.
+ */
+
+#define LNO_Save_Config(x)  LNO_Push_Config(FALSE, (x))
+
 
 /* ====================================================================
  *
@@ -432,6 +485,7 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Fancy_Tile			Current_LNO->Fancy_tile
 #define LNO_Run_Fiz_Fuse		Current_LNO->Run_fiz_fuse
 #define LNO_Fission			Current_LNO->Fission
+#define LNO_Serial_Distribute		Current_LNO->Serial_distribute
 #define LNO_Fission_Inner_Register_Limit	\
 	Current_LNO->Fission_inner_register_limit
 #define LNO_Forward_Substitution	Current_LNO->Forward_substitution
@@ -475,12 +529,15 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Prefetch_Stores_Set		Current_LNO->Prefetch_stores_set
 #define LNO_Prefetch_Invariant_Stride   Current_LNO->Prefetch_invariant_stride
 #define LNO_Prefetch_Stride_Ahead       Current_LNO->Prefetch_stride_ahead
+#define LNO_Run_Stream_Prefetch         Current_LNO->Run_stream_prefetch
 #endif
 
 #define LNO_Prefetch_Ahead		Current_LNO->Prefetch_ahead
 #define LNO_Prefetch_Iters_Ahead	Current_LNO->Prefetch_iters_ahead
 #define LNO_Prefetch_Cache_Factor	Current_LNO->Prefetch_cache_factor
 #define LNO_Prefetch_Indirect		Current_LNO->Prefetch_indirect
+#define LNO_Prefetch_Inductive		Current_LNO->Prefetch_inductive
+#define LNO_Prefetch_Induc_Indir	Current_LNO->Prefetch_induc_indir
 #define LNO_Run_Prefetch_Manual		Current_LNO->Run_prefetch_manual
 #define LNO_Run_Prefetch_Manual_Set	Current_LNO->Run_prefetch_manual_set
 #define LNO_Power_Of_Two_Hack		Current_LNO->Power_of_two_hack
@@ -514,6 +571,9 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Unswitch_Verbose		Current_LNO->Unswitch_Verbose
 #define LNO_Prefetch_Verbose            Current_LNO->Prefetch_Verbose
 #define LNO_Build_Scalar_Reductions     Current_LNO->Build_Scalar_Reductions
+#define LNO_Invariant_Factorization     Current_LNO->Invariant_Factorization
+#define LNO_New_Invariant_Factorization Current_LNO->New_Invariant_Factorization
+#define LNO_Invar_Factor_Verbose        Current_LNO->Invar_Factor_Verbose
 #endif /* KEY */
 #define LNO_Run_Oinvar			Current_LNO->Run_oinvar
 #define LNO_Run_Doacross		Current_LNO->Run_doacross
@@ -522,6 +582,10 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Parallel_Overhead		Current_LNO->Parallel_overhead
 #define LNO_Prompl			Current_LNO->Prompl
 #define LNO_IfMinMax			Current_LNO->IfMinMax
+#define LNO_IfMinMax_Fix_Cond		Current_LNO->IfMinMax_Fix_Cond
+#define LNO_IfMinMax_Limit		Current_LNO->IfMinMax_Limit
+#define LNO_IfMinMax_Fix_Cond_Limit	Current_LNO->IfMinMax_Fix_Cond_Limit
+#define LNO_IfMinMax_Trace		Current_LNO->IfMinMax_Trace
 #define LNO_Run_call_info		Current_LNO->Run_call_info
 #define LNO_Shackle 			Current_LNO->Shackle 
 #define LNO_Cross_Loop 			Current_LNO->Cross_loop
@@ -554,6 +618,7 @@ extern LNO_FLAGS Initial_LNO;
 // Unroll loops with trip count <= LNO_Full_Unrolling_Limit
 #define LNO_Full_Unrolling_Limit	Current_LNO->Full_unrolling
 #ifdef KEY
+#define LNO_Peel_2D_Triangle_LOOP Current_LNO->Peel_2D_triangle_loop
 #define LNO_Full_Unrolling_Loop_Size_Limit \
 Current_LNO->Full_unrolling_loop_size_limit
 #define LNO_Full_Unroll_Outer           Current_LNO->Full_Unroll_Outer
@@ -561,6 +626,7 @@ Current_LNO->Full_unrolling_loop_size_limit
 #define LNO_Parallel_per_proc_overhead  Current_LNO->Parallel_per_proc_overhead
 #define LNO_Apo_use_feedback  		Current_LNO->Apo_use_feedback
 #endif
+#define LNO_Struct_Array_Copy           Current_LNO->Struct_Array_Copy
 
 /* Initialize the current top of stack to defaults: */
 extern void LNO_Init_Config ( void );
@@ -568,12 +634,16 @@ extern void LNO_Init_Config ( void );
 /* Push a new struct on top of stack, either a copy of the current
  * TOS, or the defaults:
  */
-extern void LNO_Push_Config ( BOOL use_default );
+extern void LNO_Push_Config ( BOOL use_default, LNO_FLAGS_MASK );
 
 /* Pop a struct from top of stack and return TRUE if the old TOS was
  * not the original TOS, or do nothing and return FALSE:
  */
-extern BOOL LNO_Pop_Config ( void );
+extern BOOL LNO_Pop_Config ( BOOL );
+
+/* Restore LNO configuration.
+ */
+extern void LNO_Restore_Configs( void );
 
 /* Configure the current top of stack struct: */
 extern void LNO_Configure ( void );

@@ -1945,11 +1945,7 @@ block_move_sequence (dest, dst_mem, src, src_mem, size, align, offset)
 	  
 	  size -= amount[next];
 	  srcp = gen_rtx (MEM,
-#if 0
-			  MEM_IN_STRUCT_P (src_mem) ? mode[next] : BLKmode,
-#else
 			  mode[next],
-#endif
 			  gen_rtx (PLUS, Pmode, src,
 				   gen_rtx (CONST_INT, SImode, offset_ld)));
 	  
@@ -1966,11 +1962,7 @@ block_move_sequence (dest, dst_mem, src, src_mem, size, align, offset)
 	  active[phase] = FALSE;
 	  
 	  dstp = gen_rtx (MEM,
-#if 0
-			  MEM_IN_STRUCT_P (dst_mem) ? mode[phase] : BLKmode,
-#else
 			  mode[phase],
-#endif
 			  gen_rtx (PLUS, Pmode, dest,
 				   gen_rtx (CONST_INT, SImode, offset_st)));
 	  

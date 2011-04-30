@@ -213,6 +213,9 @@ OPTCOUNT::Bottom_up_cr(IDTYPE bb, CODEREP *cr, BOOL is_store)
     if ( cr->Opr() == OPR_MLOAD ) {
       Bottom_up_cr(bb, cr->Mload_size() ? cr->Mload_size() : cr->Mstore_size());
     }
+    else if ( cr->Opr() == OPR_ILOADX ) {
+      Bottom_up_cr(bb, cr->Index());
+    }
     break;
 
   case CK_OP:		// non-terminal

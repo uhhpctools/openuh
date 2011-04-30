@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: x_list.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/x_list.c,v $
+ *  $Revision: 1.1 $
+ *  $Date: 2005/07/27 02:17:56 $
+ *  $Author: kevinlo $
+ *  $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/x_list.c,v $
  *
  *  Revision comments:
  *
@@ -56,8 +56,8 @@
  * =======================================================================
  */
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/x_list.c,v $ $Revision: 1.1.1.1 $";
+static const char *source_file = __FILE__;
+static const char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/x_list.c,v $ $Revision: 1.1 $";
 
 #define _X_first_(x)    ((x)->first)
 #define _X_rest_(x)     ((x)->rest)

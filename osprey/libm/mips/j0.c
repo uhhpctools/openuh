@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: j0.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/j0.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.j0.c $
  *
  * Revision history:
  *  20-Mar-98 - Original Version
@@ -69,7 +69,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/j0.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.j0.c $ $Revision: 1.5 $";
 
 /****************************  IMPORTANT NOTE  ****************************
  *
@@ -110,7 +110,18 @@ extern double y0(double);
 #pragma weak y0 = __y0
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __j0(double);
+extern double __y0(double);
+#pragma weak j0
+#pragma weak y0
+double j0( double arg ) {
+  return __j0( arg );
+}
+double y0( double x ) {
+  return __y0( x );
+}
+#elif defined(__GNUC__)
 extern  double  __j0(double);
 
 double    j0() __attribute__ ((weak, alias ("__j0")));
@@ -643,7 +654,17 @@ double	num, denom, result;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern  long double  __j0l(long double);
+extern  long double  __y0l(long double);
+long double j0l( long double x ) {	
+  return ( (long double)__j0((double)x) );
+}
+
+long double y0l( long double x ) {	
+  return ( (long double)__y0((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __j0l(long double);
 
 long double    j0l() __attribute__ ((weak, alias ("__j0l")));

@@ -3,10 +3,10 @@
 // ====================================================================
 //
 // Module: opt_rvi.h
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/opt/opt_rvi.h,v $
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:55-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/opt/SCCS/s.opt_rvi.h $
 //
 // ====================================================================
 //
@@ -56,7 +56,7 @@
 #ifndef opt_rvi_INCLUDED
 #define opt_rvi_INCLUDED "opt_rvi.h"
 #ifdef _KEEP_RCS_ID
-static char *opt_rvircs_id = opt_rvi_INCLUDED"$ $Revision$";
+static char *opt_rvircs_id = opt_rvi_INCLUDED"$ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #ifndef wn_INCLUDED
@@ -325,7 +325,9 @@ private:
   void Perform_constant_rvi( void );
   // perform RVI for variables and constants (common code for above)
   void Perform_variable_constant_rvi( RVI_NODE * );
-
+#if defined(TARG_SL)
+  BOOL Is_Intrncall_Nth_Parm_Need_RVI(INTRINSIC, INT);
+#endif
   // The two main phases of RVI
   WN *Perform_phase1( WN *wn );
   WN *Perform_phase2( WN *wn );
@@ -375,6 +377,11 @@ public:
   // Does RVI consider the op a black box that it won't look in?
   BOOL Black_box( const OPCODE opc ) const
 		{ return OPCODE_is_black_box(opc) ||
+			 // don't want pregs for what may be local
+			 // const table that asm refers to
+			 // because then symbol will be moved outside
+			 // of asm scope.
+			 opc == OPC_ASM_STMT ||
 			 opc == OPC_EXC_SCOPE_BEGIN;
 		}
 

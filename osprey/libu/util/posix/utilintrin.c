@@ -95,6 +95,37 @@ int32 __popcnt8(uint64 x)
 }
 
 
+int32 __poppar1(uint8 x)
+{
+   x ^= x >> 4;
+   return (0x6996 >> (x & 15)) & 1;
+}
+
+int32 __poppar2(uint16 x)
+{
+   x ^= x >> 8;
+   x ^= x >> 4;
+   return (0x6996 >> (x & 15)) & 1;
+}
+
+int32 __poppar4(uint32 x)
+{
+   x ^= x >> 16;
+   x ^= x >> 8;
+   x ^= x >> 4;
+   return (0x6996 >> (x & 15)) & 1;
+}
+
+int32 __poppar8(uint64 x)
+{
+   x ^= x >> 32;
+   x ^= x >> 16;
+   x ^= x >> 8;
+   x ^= x >> 4;
+   return (0x6996 >> (x & 15)) & 1;
+}
+
+
 int32 __leadz1(uint8 x)
 {
    int32 r,t;

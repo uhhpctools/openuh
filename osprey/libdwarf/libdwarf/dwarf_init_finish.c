@@ -41,8 +41,12 @@
 
 #include "config.h"
 #include "dwarf_incl.h"
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #ifdef HAVE_ELF_H
 #include <elf.h>
+#endif
 #endif
 #ifdef __SGI_FAST_LIBELF
 #include <libelf_sgi.h>
@@ -61,7 +65,9 @@
 #include <sys/types.h>
 #include <string.h>
 #include <stdlib.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <malloc.h>
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 #include "dwarf_incl.h"
 

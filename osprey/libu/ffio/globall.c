@@ -1467,9 +1467,6 @@ _glob_io_init()
 
 	_glob_io_init_called = 1;
 
-#if	0
-	_par_vars.maxfiles = PAR_MAX_FILES; 	/* at least 1 per PE */
-#endif
 	_par_vars.pepages = GLOB_DEF_NBUF;
 	_par_vars.pgsize = GLOB_DEF_BUFSIZ;
 	_par_vars.pgsize_bytes = _par_vars.pgsize * YMPBLOCK;
@@ -1493,21 +1490,6 @@ _glob_io_init()
 
 	}
 
-#if _CRAY && 0	/* deactivate this for now */
-	if (_par_vars.do_tracing) {
-		_par_trace_buf = (struct _par_trace_entry *)
-		 _shmallocg(arp, sizeof (struct _par_trace_entry)
-			* PAR_TRACE_ENTRIES);
-		CHK_MALLOC_RET(_par_trace_buf);	
-		_par_local_tracebuf = (struct _par_trace_entry * )
-		   _mallocg(sizeof (struct _par_trace_entry)
-			* PAR_TRACE_ENTRIES);
-		CHK_MALLOC_RET(_par_local_tracebuf);	
-		_par_write_timestamp_trace(fio, glob_info->myrank);
-	}
-	_glio_barrier(arp);
-
-#endif /* _CRAY */
 	return(0);
 }
 

@@ -1,3 +1,7 @@
+/*
+ * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ */
+
 /* 
   Copyright (C) 2000,2004 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -31,7 +35,7 @@
 
 
 
-$Header: /proj/osprey/CVS/open64/osprey1.0/libdwarf/dwarfdump/globals.h,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
+$Header: /var/tmp/pathscale-compiler-sources-2.4-2006.03.27/kpro64/libdwarf/dwarfdump/globals.h 1.4 05/12/05 09:01:16-08:00 bos@eng-24.pathscale.com $ */
 #ifndef globals_INCLUDED
 #define globals_INCLUDED
 
@@ -83,10 +87,10 @@ typedef unsigned long long  __uint64_t;
 #include <elf.h>
 #endif
 #ifdef HAVE_LIBELF_H
-#include <libelf.h>
+#include "libelf/libelf.h"
 #else
 #ifdef HAVE_LIBELF_LIBELF_H
-#include <libelf/libelf.h>
+#include "libelf/libelf.h"
 #endif
 #endif
 #include <dwarf.h>

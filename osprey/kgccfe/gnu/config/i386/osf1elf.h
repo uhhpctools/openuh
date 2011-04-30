@@ -123,17 +123,7 @@
    We override it here to allow for the new profiling code to go before
    the prologue and the old mcount code to go after the prologue (and
    after %ebx has been set up for ELF shared library support).  */
-#if 0
-#define OSF_PROFILE_BEFORE_PROLOGUE					\
-  (!TARGET_MCOUNT							\
-   && !current_function_needs_context					\
-   && (!flag_pic							\
-       || !frame_pointer_needed						\
-       || (!current_function_uses_pic_offset_table			\
-	   && !current_function_uses_const_pool)))
-#else
 #define OSF_PROFILE_BEFORE_PROLOGUE 0
-#endif
 
 /* A C statement or compound statement to output to FILE some assembler code to
    call the profiling subroutine `mcount'.  Before calling, the assembler code

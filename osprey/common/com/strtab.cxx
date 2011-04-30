@@ -68,7 +68,7 @@
 
 typedef STR_IDX STR_INDEX;
 
-#ifdef linux
+#if defined(linux) || defined(BUILD_OS_DARWIN)
 
 #define STR_INDEX_size(xxx) (xxx & 0xff)
 #define STR_INDEX_index(xxx) (xxx >> 8)
@@ -358,7 +358,7 @@ initialize_strtab (STRTAB& strtab, const char *buf, UINT32 size)
                                 strtab.hash_table.end());
     strtab.buffer_size = size;
     strtab.buffer = (char *) MEM_POOL_Alloc (Malloc_Mem_Pool, size);
-    bcopy (buf, strtab.buffer, size);
+    BCOPY (buf, strtab.buffer, size);
     strtab.last_idx = size;
     strtab.init_hash ();
     

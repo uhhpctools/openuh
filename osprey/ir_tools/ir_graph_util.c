@@ -843,13 +843,6 @@ void Print_DFN (DFN* d, GRAPH *g, void (*prn)(), void (*prn_c)() )
     for (j = 0; j < get_vertex_level(g,DFN_v_list_i(d,i)); j++) 
       printf("+ ");
     (*prn)(DFN_v_list_i(d,i));
-#if 0
-    k = DFN_user_i(d,i);
-    if (k)
-      printf(" %d",*k);
-    else 
-      printf(" ?");
-#endif
     Print_Pred(g, DFN_v_list_i(d,i), prn);
     printf("\n");
   }

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -129,6 +133,16 @@ private:
   Elf64_Word _global_offset;
   Elf64_Word _common_offset, _common_shape_offset;
   Elf64_Word _struct_access_offset;
+#ifdef KEY
+  Elf64_Word _ty_info_offset;
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  Elf64_Word _constraint_graph_nodes_offset;
+  Elf64_Word _constraint_graph_edges_offset;
+  Elf64_Word _constraint_graph_stinfos_offset;
+  Elf64_Word _constraint_graph_callsites_offset;
+  Elf64_Word _constraint_graph_node_ids_offset;
+  Elf64_Word _constraint_graph_modranges_offset;
 
   // array section flow sensitive analysis information
   Elf64_Word _scalar_node_offset, _cfg_node_offset, _regions_array_offset;
@@ -144,6 +158,16 @@ private:
   mINT32 _value_size, _expr_size, _phi_size, _chi_size, _global_size;
   mINT32 _common_size, _common_shape_size, _global_stid_size;
   mINT32 _struct_access_size;
+#ifdef KEY
+  mINT32 _ty_info_size;
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  mINT32 _constraint_graph_nodes_size;
+  mINT32 _constraint_graph_edges_size;
+  mINT32 _constraint_graph_stinfos_size;
+  mINT32 _constraint_graph_callsites_size;
+  mINT32 _constraint_graph_node_ids_size;
+  mINT32 _constraint_graph_modranges_size;
 
   // array section flow sensitive analysis information
   mINT32 _scalar_node_size, _cfg_node_size, _regions_array_size; 
@@ -159,6 +183,17 @@ private:
   mINT32 _chi_entry_size, _global_entry_size;
   mINT32 _common_entry_size, _common_shape_entry_size, _global_stid_entry_size;
   mUINT32 _struct_access_entry_size;
+#ifdef KEY
+  mUINT32 _ty_info_entry_size;
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  mUINT32 _constraint_graph_nodes_entry_size;
+  mUINT32 _constraint_graph_edges_entry_size;
+  mUINT32 _constraint_graph_stinfos_entry_size;
+  mUINT32 _constraint_graph_callsites_entry_size;
+  mUINT32 _constraint_graph_node_ids_entry_size;
+  mUINT32 _constraint_graph_modranges_entry_size;
+
    // array section flow sensitive analysis information
   mINT32 _scalar_node_entry_size, _cfg_node_entry_size;
   mINT32 _regions_array_entry_size; 
@@ -172,7 +207,7 @@ private:
 public:
 
   SUMMARY_FILE_HEADER() {
-    bzero(this, sizeof(SUMMARY_FILE_HEADER));
+    BZERO(this, sizeof(SUMMARY_FILE_HEADER));
   };
 
   void Set_version_number(mINT32 i) { _version_number = i;};
@@ -191,13 +226,37 @@ public:
   void Set_chi_offset(Elf64_Word s) { _chi_offset = s;};
   void Set_global_offset(Elf64_Word s) { _global_offset = s;};
   void Set_common_offset(Elf64_Word s) { _common_offset = s;};
-  void Set_common_shape_offset(Elf64_Word s) { _common_shape_offset =
-						 s;};
-  void Set_global_stid_offset(Elf64_Word s) { _global_stid_offset =
-						 s;};
-  void Set_struct_access_offset(Elf64_Word s) { _struct_access_offset =
-						 s;};
-
+  void Set_common_shape_offset(Elf64_Word s) { _common_shape_offset = s;};
+  void Set_global_stid_offset(Elf64_Word s) { _global_stid_offset = s;};
+  void Set_struct_access_offset(Elf64_Word s) { _struct_access_offset =	 s;};
+#ifdef KEY
+  void Set_ty_info_offset(Elf64_Word s) { _ty_info_offset = s;};
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  void Set_constraint_graph_nodes_offset(Elf64_Word s) 
+  {
+    _constraint_graph_nodes_offset = s;
+  }
+  void Set_constraint_graph_edges_offset(Elf64_Word s) 
+  {
+    _constraint_graph_edges_offset = s;
+  }
+  void Set_constraint_graph_stinfos_offset(Elf64_Word s) 
+  {
+    _constraint_graph_stinfos_offset = s;
+  }
+  void Set_constraint_graph_callsites_offset(Elf64_Word s) 
+  {
+    _constraint_graph_callsites_offset = s;
+  }
+  void Set_constraint_graph_node_ids_offset(Elf64_Word s) 
+  {
+    _constraint_graph_node_ids_offset = s;
+  }
+  void Set_constraint_graph_modranges_offset(Elf64_Word s) 
+  {
+    _constraint_graph_modranges_offset = s;
+  }
 
   void Set_opt_level(mUINT8 opt_level) { _opt_level = opt_level;};
 
@@ -233,11 +292,38 @@ public:
   void Set_global_size(mINT32 s) { _global_size = s;};
   void Set_common_size(mINT32 s) { _common_size = s;};
   void Set_common_shape_size(mINT32 s) { _common_shape_size =
-						 s;};
+s;};
   void Set_global_stid_size(mINT32 s) { _global_stid_size =
-						 s;};
-  void Set_struct_access_size(mINT32 s) { _struct_access_size =
-						 s;};
+s;};
+  void Set_struct_access_size(mINT32 s) { _struct_access_size = s;};
+#ifdef KEY
+  void Set_ty_info_size(mINT32 s) { _ty_info_size = s;};
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  void Set_constraint_graph_nodes_size(mINT32 s) 
+  { 
+    _constraint_graph_nodes_size = s; 
+  }
+  void Set_constraint_graph_edges_size(mINT32 s) 
+  { 
+    _constraint_graph_edges_size = s; 
+  }
+  void Set_constraint_graph_stinfos_size(mINT32 s) 
+  { 
+    _constraint_graph_stinfos_size = s; 
+  }
+  void Set_constraint_graph_callsites_size(mINT32 s) 
+  { 
+    _constraint_graph_callsites_size = s; 
+  }
+  void Set_constraint_graph_node_ids_size(mINT32 s) 
+  { 
+    _constraint_graph_node_ids_size = s; 
+  }
+  void Set_constraint_graph_modranges_size(mINT32 s) 
+  { 
+    _constraint_graph_modranges_size = s; 
+  }
 
   // array section flow sensitive analysis information
   void Set_scalar_node_size(mINT32 s) { _scalar_node_size = s;};
@@ -272,7 +358,16 @@ public:
     _global_stid_entry_size = s;};
   void Set_struct_access_entry_size(mINT32 s) {
     _struct_access_entry_size = s;};
-    
+#ifdef KEY
+  void Set_ty_info_entry_size(mINT32 s) { _ty_info_entry_size = s;};
+#endif   
+  // Constraint graph summary for Nystrom Alias Analyzer
+  void Set_constraint_graph_nodes_entry_size(mINT32 s) { _constraint_graph_nodes_entry_size = s;};
+  void Set_constraint_graph_edges_entry_size(mINT32 s) { _constraint_graph_edges_entry_size = s;};
+  void Set_constraint_graph_stinfos_entry_size(mINT32 s) { _constraint_graph_stinfos_entry_size = s;};
+  void Set_constraint_graph_callsites_entry_size(mINT32 s) { _constraint_graph_callsites_entry_size = s;};
+  void Set_constraint_graph_node_ids_entry_size(mINT32 s) { _constraint_graph_node_ids_entry_size = s;};
+  void Set_constraint_graph_modranges_entry_size(mINT32 s) { _constraint_graph_modranges_entry_size = s;};
 
   void Set_scalar_node_entry_size(mINT32 s) { _scalar_node_entry_size = s;};
   void Set_cfg_node_entry_size(mINT32 s) {_cfg_node_entry_size = s;};
@@ -308,6 +403,34 @@ public:
   Elf64_Word Get_common_shape_offset() const { return _common_shape_offset;};
   Elf64_Word Get_global_stid_offset() const { return _global_stid_offset;};
   Elf64_Word Get_struct_access_offset() const { return _struct_access_offset;};
+#ifdef KEY
+  Elf64_Word Get_ty_info_offset() const    { return _ty_info_offset;};
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  Elf64_Word Get_constraint_graph_nodes_offset() const  
+  { 
+    return _constraint_graph_nodes_offset;
+  };
+  Elf64_Word Get_constraint_graph_edges_offset() const  
+  { 
+    return _constraint_graph_edges_offset;
+  };
+  Elf64_Word Get_constraint_graph_stinfos_offset() const  
+  { 
+    return _constraint_graph_stinfos_offset;
+  };
+  Elf64_Word Get_constraint_graph_callsites_offset() const  
+  { 
+    return _constraint_graph_callsites_offset;
+  };
+  Elf64_Word Get_constraint_graph_node_ids_offset() const  
+  { 
+    return _constraint_graph_node_ids_offset;
+  };
+  Elf64_Word Get_constraint_graph_modranges_offset() const  
+  { 
+    return _constraint_graph_modranges_offset;
+  };
 
   mUINT8  Get_opt_level() const { return _opt_level;};
 
@@ -349,6 +472,34 @@ public:
   mINT32 Get_common_shape_size() const	{ return _common_shape_size;};
   mINT32 Get_global_stid_size() const	{ return _global_stid_size;};
   mINT32 Get_struct_access_size() const	{ return _struct_access_size;};
+#ifdef KEY
+  mINT32 Get_ty_info_size() const          { return _ty_info_size;};
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  mINT32 Get_constraint_graph_nodes_size() const
+  {
+    return _constraint_graph_nodes_size;
+  }
+  mINT32 Get_constraint_graph_edges_size() const
+  {
+    return _constraint_graph_edges_size;
+  }
+  mINT32 Get_constraint_graph_stinfos_size() const
+  {
+    return _constraint_graph_stinfos_size;
+  }
+  mINT32 Get_constraint_graph_callsites_size() const
+  {
+    return _constraint_graph_callsites_size;
+  }
+  mINT32 Get_constraint_graph_node_ids_size() const
+  {
+    return _constraint_graph_node_ids_size;
+  }
+  mINT32 Get_constraint_graph_modranges_size() const
+  {
+    return _constraint_graph_modranges_size;
+  }
   
   // array section flow sensitive analysis information
   mINT32 Get_scalar_node_size()  const { return _scalar_node_size; };
@@ -378,7 +529,35 @@ public:
   mINT32 Get_common_entry_size() { return _common_entry_size;};
   mINT32 Get_common_shape_entry_size() { return _common_shape_entry_size;};
   mINT32 Get_struct_access_entry_size() { return _struct_access_entry_size;};
-  
+#ifdef KEY
+  mINT32 Get_ty_info_entry_size() { return _ty_info_entry_size;};
+#endif
+  // Constraint graph summary for Nystrom Alias Analyzer
+  mINT32 Get_constraint_graph_nodes_entry_size() 
+  { 
+    return _constraint_graph_nodes_entry_size;
+  };
+  mINT32 Get_constraint_graph_edges_entry_size() 
+  { 
+    return _constraint_graph_edges_entry_size;
+  };
+  mINT32 Get_constraint_graph_stinfos_entry_size() 
+  { 
+    return _constraint_graph_stinfos_entry_size;
+  };
+  mINT32 Get_constraint_graph_callsites_entry_size() 
+  { 
+    return _constraint_graph_callsites_entry_size;
+  };
+  mINT32 Get_constraint_graph_node_ids_entry_size() 
+  { 
+    return _constraint_graph_node_ids_entry_size;
+  };
+  mINT32 Get_constraint_graph_modranges_entry_size() 
+  { 
+    return _constraint_graph_modranges_entry_size;
+  };
+    
   mINT32 Get_scalar_node_entry_size() const  { 
     return _scalar_node_entry_size ;};
   mINT32 Get_cfg_node_entry_size() const  { return _cfg_node_entry_size ;};
@@ -502,6 +681,22 @@ private:
 						   // LOCAL pragma's st 
 #define PROC_NEVER_INVOKED 		0x40000000 // INLINING_TUNING
     LANGUAGE _l;
+
+    // For Nystrom alias analyzer
+    mUINT32 _constraint_graph_nodes_idx;
+    mUINT32 _constraint_graph_nodes_count;
+    mUINT32 _constraint_graph_edges_idx;
+    mUINT32 _constraint_graph_edges_count;
+    mUINT32 _constraint_graph_stinfos_idx;
+    mUINT32 _constraint_graph_stinfos_count;
+    mUINT32 _constraint_graph_callsites_idx;
+    mUINT32 _constraint_graph_callsites_count;
+    mUINT32 _constraint_graph_node_ids_idx;
+    mUINT32 _constraint_graph_node_ids_count;
+    mUINT32 _constraint_graph_formal_parm_idx;
+    mUINT32 _constraint_graph_formal_parm_count;
+    mUINT32 _constraint_graph_formal_ret_idx;
+    mUINT32 _constraint_graph_formal_ret_count;
 
 public:
 
@@ -703,11 +898,130 @@ public:
     void Set_lang (LANGUAGE lang)	{ _l = lang; }
     LANGUAGE Get_lang() const		{ return _l; }
 
+    // For the Nystrom alias analyzer
+    mUINT32 Get_constraint_graph_nodes_idx() const
+    {
+      return _constraint_graph_nodes_idx;
+    }
+    void Set_constraint_graph_nodes_idx(mUINT32 i)
+    {
+      _constraint_graph_nodes_idx = i;
+    }
+    mUINT32 Get_constraint_graph_nodes_count() const
+    {
+      return _constraint_graph_nodes_count;
+    }
+    void Set_constraint_graph_nodes_count(mUINT32 c)
+    {
+      _constraint_graph_nodes_count = c;
+    }
 
+    mUINT32 Get_constraint_graph_edges_idx() const
+    {
+      return _constraint_graph_edges_idx;
+    }
+    void Set_constraint_graph_edges_idx(mUINT32 i)
+    {
+      _constraint_graph_edges_idx = i;
+    }
+    mUINT32 Get_constraint_graph_edges_count() const
+    {
+      return _constraint_graph_edges_count;
+    }
+    void Set_constraint_graph_edges_count(mUINT32 c)
+    {
+      _constraint_graph_edges_count = c;
+    }
+
+    mUINT32 Get_constraint_graph_stinfos_idx() const
+    {
+      return _constraint_graph_stinfos_idx;
+    }
+    void Set_constraint_graph_stinfos_idx(mUINT32 i)
+    {
+      _constraint_graph_stinfos_idx = i;
+    }
+    mUINT32 Get_constraint_graph_stinfos_count() const
+    {
+      return _constraint_graph_stinfos_count;
+    }
+    void Set_constraint_graph_stinfos_count(mUINT32 c)
+    {
+      _constraint_graph_stinfos_count = c;
+    }
+
+    mUINT32 Get_constraint_graph_callsites_idx() const
+    {
+      return _constraint_graph_callsites_idx;
+    }
+    void Set_constraint_graph_callsites_idx(mUINT32 i)
+    {
+      _constraint_graph_callsites_idx = i;
+    }
+    mUINT32 Get_constraint_graph_callsites_count() const
+    {
+      return _constraint_graph_callsites_count;
+    }
+    void Set_constraint_graph_callsites_count(mUINT32 c)
+    {
+      _constraint_graph_callsites_count = c;
+    }
+
+    mUINT32 Get_constraint_graph_node_ids_idx() const
+    {
+      return _constraint_graph_node_ids_idx;
+    }
+    void Set_constraint_graph_node_ids_idx(mUINT32 i)
+    {
+      _constraint_graph_node_ids_idx = i;
+    }
+    mUINT32 Get_constraint_graph_node_ids_count() const
+    {
+      return _constraint_graph_node_ids_count;
+    }
+    void Set_constraint_graph_node_ids_count(mUINT32 c)
+    {
+      _constraint_graph_node_ids_count = c;
+    }
+
+    mUINT32 Get_constraint_graph_formal_parm_idx() const
+    {
+      return _constraint_graph_formal_parm_idx;
+    }
+    void Set_constraint_graph_formal_parm_idx(mUINT32 i)
+    {
+      _constraint_graph_formal_parm_idx = i;
+    }
+    mUINT32 Get_constraint_graph_formal_parm_count() const
+    {
+      return _constraint_graph_formal_parm_count;
+    }
+    void Set_constraint_graph_formal_parm_count(mUINT32 c)
+    {
+      _constraint_graph_formal_parm_count = c;
+    }
+
+    mUINT32 Get_constraint_graph_formal_ret_idx() const
+    {
+      return _constraint_graph_formal_ret_idx;
+    }
+    void Set_constraint_graph_formal_ret_idx(mUINT32 i)
+    {
+      _constraint_graph_formal_ret_idx = i;
+    }
+    mUINT32 Get_constraint_graph_formal_ret_count() const
+    {
+      return _constraint_graph_formal_ret_count;
+    }
+    void Set_constraint_graph_formal_ret_count(mUINT32 c)
+    {
+      _constraint_graph_formal_ret_count = c;
+    }
+   
     /* operations */
 
     void Init (void) {
-	bzero (this, sizeof(SUMMARY_PROCEDURE));
+	BZERO (this, sizeof(SUMMARY_PROCEDURE));
 	_bb_count = MIN (PU_WN_BB_Cnt, UINT16_MAX);
 	_stmt_count = MIN (PU_WN_Stmt_Cnt, UINT16_MAX);
 
@@ -729,7 +1043,7 @@ public:
     void Trace ( INT32 i ) const;
     void Print_array ( FILE *fp, INT32 size ) const;
     void Trace_array ( INT32 size ) const;
-    void WB_Print(FILE* fp, INT procedure_index, char* name, 
+    void WB_Print(FILE* fp, INT procedure_index, const char* name, 
       INT fancy_level);
 
 }; // class SUMMARY_PROCEDURE
@@ -797,7 +1111,7 @@ public:
 
     /* operations */
 
-    void Init () { bzero (this, sizeof(SUMMARY_FEEDBACK)); }
+    void Init () { BZERO (this, sizeof(SUMMARY_FEEDBACK)); }
 
     // Tracing
     void Print (FILE *f) const;
@@ -820,18 +1134,27 @@ class SUMMARY_CALLSITE
 #define IPL_CALL_MUST_INLINE	0x08
 #define IPL_CALL_NO_INLINE	0x10
 
-#ifndef PATHSCALE_MERGE_ZHC
 #ifdef KEY
-#define IPL_ICALL_SLOT        0x20  
-#endif
+#define IPL_ICALL_TARGET        0x20  
 #endif
 
 #define IPL_IN_CASE_CLAUSE      0x40
+#define IPL_IS_VIRTUAL_CALL     0x80
 
-#ifdef KEY
-#define IPL_ICALL_TARGET        0x80
-#endif
+/*
+File 3: osprey/ipa/local/ipl_summary.h
+    I added a new state flag IPL_VIRTUAL_FUNCTION_TARGET in SUMMARY_CALLSITE 
+    and functions to set, reset and test this flag. This flag is set on the dummy callsite
+    inserted by Process_virtual_function. This flag is reset after the 
+    devirtualization pass has replaced a dummy call site with a real call, to the 
+    inferred direct call.
+    function that sets this flag: Set_virtual_function_target
+    function that resets this flag: Reset_virtual_function_target
+    function that checks this flag: Is_virtual_function_target
 
+*/
+
+#define IPL_VIRTUAL_FUNCTION_TARGET     0x100
     
 private:
 
@@ -860,7 +1183,13 @@ private:
 #ifdef KEY
     float _probability;			// if inside a branch, probability of it being taken
 #endif
-    TYPE_ID _return_type;		// Return type of this CALL
+    TYPE_ID _return_type:8;		// Return type of this CALL
+
+    TY_IDX _virtual_class;              // the class of the virtual function 
+    mUINT32 _vtable_offset;             // virtual function position, the offset of the vtable 
+    mUINT64 _vptr_offset;               // vtable field offset of this call 
+
+    mUINT32 _constraint_graph_callsite_id; // For the Nystrom alias analyzer
 
 public:
 
@@ -899,6 +1228,8 @@ public:
 	return u2._value_index;
     }
 
+    mUINT16 Get_state() const { return _state;}
+
     void Set_actual_index (mINT32 a)	{ _actual_index = a; }
     INT Get_actual_index () const	{ return _actual_index; }
 
@@ -910,25 +1241,20 @@ public:
     void Reset_func_ptr ()              { _state &= ~IPL_FUNC_PTR; }
 
 #ifdef KEY
-    void Set_icall_target () { _state |= IPL_ICALL_TARGET; }
-    void Reset_icall_target () { _state &= ~IPL_ICALL_TARGET; }
-    BOOL Is_icall_target () const { return (_state & IPL_ICALL_TARGET); }
-#endif
-
-#ifdef KEY
-    void Set_icall_slot ()		{ _state |= IPL_ICALL_SLOT; }
-    void Reset_icall_slot ()		{ _state &= ~IPL_ICALL_SLOT; }
-    BOOL Is_icall_slot () const		{ return (_state & IPL_ICALL_SLOT); }
-#endif
+    void Set_icall_target ()		{ _state |= IPL_ICALL_TARGET; }
+    void Reset_icall_target ()		{ _state &= ~IPL_ICALL_TARGET; }
+    BOOL Is_icall_target () const	{ return (_state & IPL_ICALL_TARGET); }
 
     void Set_probability (float p)	{ _probability = p; }
     float Get_probability () const	{ return _probability; }
+#endif
 
     BOOL Is_in_case_clause (void) const	{ return (_state & IPL_IN_CASE_CLAUSE); }
     void Set_in_case_clause (void)	{ _state |= IPL_IN_CASE_CLAUSE; }
 
     void Set_intrinsic()		{ _state |= IPL_INTRINSIC_FUNC; }
     BOOL Is_intrinsic() const		{ return _state & IPL_INTRINSIC_FUNC; };
+
     void Set_callsite_freq ()		{ _state |= IPL_HAS_CALLSITE_FREQ;}
     BOOL Has_callsite_freq () const	{ return _state & IPL_HAS_CALLSITE_FREQ; }
 
@@ -952,11 +1278,38 @@ public:
     void Set_return_type (TYPE_ID return_type)	{ _return_type = return_type;}
     TYPE_ID Get_return_type () const		{ return _return_type;}
 
+    void Set_virtual_function_target() { _state |= IPL_VIRTUAL_FUNCTION_TARGET; }
+    void Reset_virtual_function_target() { _state &= ~IPL_VIRTUAL_FUNCTION_TARGET; }
+    BOOL Is_virtual_function_target() { return (_state & IPL_VIRTUAL_FUNCTION_TARGET); }
+
+    void Set_virtual_class(TY_IDX func) { _virtual_class = func; } 
+    TY_IDX Get_virtual_class() { return _virtual_class; } 
+  
+    void Set_vtable_offset(UINT32 offset) { _vtable_offset = offset; } 
+    UINT32 Get_vtable_offset() { return _vtable_offset; } 
+  
+    void Set_vptr_offset(UINT64 ofst) { _vptr_offset = ofst; } 
+    UINT64 Get_vptr_offset() { return _vptr_offset; } 
+  
+    void Set_is_virtual_call() { _state |= IPL_IS_VIRTUAL_CALL; } 
+    void Reset_is_virtual_call() { _state &= ~IPL_IS_VIRTUAL_CALL; }
+    BOOL Is_virtual_call() { return _state & IPL_IS_VIRTUAL_CALL; } 
+
+    // For the Nystrom alias analyzer
+    UINT32 Get_constraint_graph_callsite_id() const
+    { 
+      return _constraint_graph_callsite_id; 
+    }
+    void Set_constraint_graph_callsite_id(UINT32 callSiteId)
+    {
+      _constraint_graph_callsite_id = callSiteId;
+    }
+
     /* operations */
 
 
     void Init () {
-	bzero (this, sizeof(SUMMARY_CALLSITE));
+	BZERO (this, sizeof(SUMMARY_CALLSITE));
     }
 	
     // Tracing:
@@ -964,7 +1317,7 @@ public:
     void Trace ( void ) const;
     void Print_array ( FILE *fp, INT32 size ) const;
     void Trace_array ( INT32 size ) const;
-    void WB_Print(FILE* fp, INT callsite_index, char* name, char* func_name);
+    void WB_Print(FILE* fp, INT callsite_index, const char* name, const char* func_name);
     
 }; // class SUMMARY_CALLSITE
 
@@ -1035,7 +1388,7 @@ public:
     void Trace ( void ) const;
     void Print_array ( FILE *fp, INT32 size ) const;
     void Trace_array ( INT32 size ) const;
-    void WB_Print(FILE* fp, INT formal_index, char* name, char* func_name);
+    void WB_Print(FILE* fp, INT formal_index, const char* name, const char* func_name);
 
 }; // class SUMMARY_FORMAL
 
@@ -1089,7 +1442,7 @@ public:
   void Trace ( INT32 id ) const;
   void Print_array ( FILE* fp, INT32 size ) const;
   void Trace_array ( INT32 size ) const;
-  void WB_Print(FILE* fp, INT stid_index, char* name, char* func_name);
+  void WB_Print(FILE* fp, INT stid_index, const char* name, const char* func_name);
 
 }; // class SUMMARY_STID
 
@@ -1160,14 +1513,14 @@ public:
     }
 
     // return the name of a IPA_PASS_TYPE
-    char *Pass_type_name (void) const;
+    const char *Pass_type_name (void) const;
 
     void Print (FILE *f, INT32 position) const;
 
     void Print_array (FILE *f, INT32 size) const;
 
     void Trace (INT32 id) const		{ Print (TFile, id); }
-    void WB_Print(FILE* fp, INT actual_index, char* name, char* func_name);
+    void WB_Print(FILE* fp, INT actual_index, const char* name, const char* func_name);
 
 }; // SUMMARY_ACTUAL 
 
@@ -1248,8 +1601,8 @@ private:
 
     /* 64-bit aligned at this point */
 
-    mTYPE_ID _mtype;			// result type
-    mTYPE_ID _target_mtype;		// used only when _addr_of is true: 
+    mTYPE_ID _mtype : 8;		// result type
+    mTYPE_ID _target_mtype : 8;		// used only when _addr_of is true: 
 					// specify the mtype of what this
 					// value points to
     
@@ -1286,7 +1639,7 @@ private:
     /* private member functions */
 
     // return the name of a IPA_CONST_TYPE
-    char *Const_type_name (void) const;
+    const char *Const_type_name (void) const;
 
 public:
 
@@ -1439,7 +1792,7 @@ public:
 
     /* operations */
     
-    void Init ()		{ bzero (this, sizeof(SUMMARY_VALUE)); }
+    void Init ()		{ BZERO (this, sizeof(SUMMARY_VALUE)); }
 
     // print the constant value in ascii form
     void Print_const_value (FILE *f, const SUMMARY_SYMBOL* symbol = NULL) const;
@@ -1503,7 +1856,7 @@ public:
     
     /* operations */
 
-    void Init ()		{ bzero (this, sizeof(SUMMARY_PHI)); }
+    void Init ()		{ BZERO (this, sizeof(SUMMARY_PHI)); }
 
     /* print functions */
 
@@ -1569,7 +1922,7 @@ public:
     void Print (FILE *f) const;
 
     void Print_array (FILE *f, INT32 size) const;
-    void WB_Print(FILE* fp, INT chi_index, char* name, char* func_name);
+    void WB_Print(FILE* fp, INT chi_index, const char* name, const char* func_name);
 
 }; // SUMMARY_CHI
 
@@ -1731,7 +2084,7 @@ public:
 
     /* operations */
 
-    void Init ()		{ bzero (this, sizeof(SUMMARY_EXPR)); }
+    void Init ()		{ BZERO (this, sizeof(SUMMARY_EXPR)); }
 
     void Print_node (FILE *f, INT kid = 0) const;
 
@@ -1859,13 +2212,13 @@ public:
 
     /* operations */
 
-    void Init ()	{ bzero (this, sizeof(SUMMARY_STMT)); }
+    void Init ()	{ BZERO (this, sizeof(SUMMARY_STMT)); }
 
     /* print functions */
 
     void Print (FILE *f) const;
     void Print_array (FILE *f, INT32 size) const;
-    void WB_Print(FILE* fp, INT stmt_index, char* name, char* func_name);
+    void WB_Print(FILE* fp, INT stmt_index, const char* name, const char* func_name);
     
 }; // SUMMARY_STMT
 
@@ -1936,7 +2289,7 @@ public:
 
     /* operations */
 
-    void Init ()	{ bzero (this, sizeof(SUMMARY_CONTROL_DEPENDENCE)); }
+    void Init ()	{ BZERO (this, sizeof(SUMMARY_CONTROL_DEPENDENCE)); }
 
     /* print functions */
     
@@ -1982,7 +2335,7 @@ private:
     mUINT32 _type   :  8;               // type information about the symbol
     mUINT32 _state  :  8;               // state of the symbol
     mUINT32 _modref : 16;               // mod ref state of the symbol
-    mTYPE_ID _btype;                    // backend type
+    mTYPE_ID _btype :  8;               // backend type
     
 public:
     /* access functions */
@@ -2156,15 +2509,15 @@ public:
 
     /* operations */
        
-    void Init ()		{ bzero (this, sizeof(SUMMARY_SYMBOL)); }
+    void Init ()		{ BZERO (this, sizeof(SUMMARY_SYMBOL)); }
 
     
     // Tracing:
-    char * Get_Name ( void ) const;
+    const char * Get_Name ( void ) const;
     void Print ( FILE *fp , INT id = -1, char* symbol_name = NULL, 
       char* function_name = NULL) const;
-    void WB_Print(FILE* fp, INT symbol_index, BOOL is_list, char* name,
-      char* func_name, INT fancy_level);
+    void WB_Print(FILE* fp, INT symbol_index, BOOL is_list, const char* name,
+      const char* func_name, INT fancy_level);
     void Trace ( void ) const;
     void Print_array ( FILE *fp, INT32 size, 
       DYN_ARRAY<char*>* symbol_names = NULL, 
@@ -2232,7 +2585,7 @@ public:
 
     /* operations */
 
-    void Init (void)		{ bzero (this, sizeof(SUMMARY_GLOBAL));}
+    void Init (void)		{ BZERO (this, sizeof(SUMMARY_GLOBAL));}
 
     // Tracing:
     void Print ( FILE *fp ) const;
@@ -2326,7 +2679,7 @@ public:
   INT16 Has_equivalences() const { return  _state & IPL_HAS_EQUIVALENCES;};
 
   /* operations */
-  void Init ()		{ bzero (this, sizeof(SUMMARY_COMMON)); }
+  void Init ()		{ BZERO (this, sizeof(SUMMARY_COMMON)); }
 
   void Print_array(FILE *fp, INT32 size) const;
   void Trace_array(INT32 size) const ;
@@ -2422,7 +2775,7 @@ public:
 
   /* operations */
   void Init ()	{ 
-    bzero(this, sizeof(SUMMARY_COMMON_SHAPE)); 
+    BZERO(this, sizeof(SUMMARY_COMMON_SHAPE)); 
     Set_symbol_index(-1); 
   }
 
@@ -2497,12 +2850,15 @@ public:
     mUINT32 Get_hot_fld_id(mUINT32 hot_num)const	{return _u.hot_fld[hot_num].field_id;}
 
     void Set_flatten_flds(mUINT32 flatten_flds) {_flatten_flds=flatten_flds;}
-    mUINT32 Get_flatten_flds()const {return _flatten_flds;};
+    mUINT32 Get_flatten_flds() const { return _flatten_flds;};
     void  Inc_fld_count(mUINT32 fld_id, mUINT64 add_count)
+#ifdef KEY // bug 5372
+    	{_u.flds[fld_id-1].count+=add_count;};
+#else
     	{_u.flds[fld_id].count+=add_count;};
-
-	char* Get_ty_name (void) const  	{TY& ty=Ty_tab[_ty];
-		return Index_To_Str(ty.name_idx);}
+#endif
+    char* Get_ty_name (void) const { TY& ty=Ty_tab[_ty];
+		 return Index_To_Str(ty.name_idx); }
 
 
     void Set_hot_fld (void) // get hottness sorting, put  to hot_fld[], dealloc flds[]
@@ -2535,16 +2891,12 @@ public:
     /* operations */
 
     void Init (mUINT32 ty_index,mUINT32 flatten_flds,MEM_POOL * mem){ 
-	    bzero(this, sizeof(SUMMARY_STRUCT_ACCESS)); 
+	    BZERO(this, sizeof(SUMMARY_STRUCT_ACCESS)); 
 	    _mem=mem;
 	    Set_ty(ty_index); 
 	    Set_flatten_flds(flatten_flds);
 	    _u.flds= (STRUCT_ACCESS*)MEM_POOL_Alloc_P(_mem,
-#ifdef KEY		// Field IDs are 1, ..., flatten_flds.  Bug 5372.
-			sizeof(STRUCT_ACCESS)*(flatten_flds + 1),
-#else
 			sizeof(STRUCT_ACCESS)*flatten_flds,
-#endif
 			TRUE,NULL);
 #ifndef KEY
 	    fprintf(stderr,"new summary: type%d, \n",ty_index);
@@ -2563,9 +2915,35 @@ public:
 
 }; // class SUMMARY_STRUCT_ACCESS
 
+#ifdef KEY
+class SUMMARY_TY_INFO
+{
+  private:
+    TY_IDX _ty;
+    mUINT32 _flags;
+
+#define IPL_TY_NO_SPLIT 0x00000001
+
+  public:
+
+    void Set_ty (TY_IDX type)        { _ty = type; }
+    TY_IDX Get_ty (void) const       { return _ty; }
+
+    void Set_ty_no_split (void)      { _flags |= IPL_TY_NO_SPLIT; }
+    BOOL Is_ty_no_split (void) const { return _flags & IPL_TY_NO_SPLIT; }
+
+    void Init (void)                 { BZERO (this, sizeof(SUMMARY_TY_INFO)); }
+    void Print_array(FILE *fp, INT32 size) const;
+    void Trace_array(INT32 size) const ;
+    void Print(FILE *f) const;
+    void Trace(void) const;
+};
+#endif
+
 extern SUMMARY_SYMBOL *Ipl_Summary_Symbol;
 extern BOOL IPA_Trace_Mod_Ref;          /* Trace log for Mod_Ref */
 extern char Modref_Buf[];                                                      
+
 
 #endif /* ipl_summary_INCLUDED */
 

@@ -453,10 +453,6 @@ static const char *
 java_init (filename)
      const char *filename;
 {
-#if 0
-  extern int flag_minimal_debug;
-  flag_minimal_debug = 0;
-#endif
 
   /* Force minimum function alignment if g++ uses the least significant
      bit of function pointers to store the virtual bit. This is required

@@ -37,10 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <ctype.h>
 #include "wn.h"
 #include "wn_map.h"
@@ -84,7 +87,7 @@ extern void WB_OMP_Terminate()
   WB_Terminate(&wb_omp); 
 } 
 
-extern void s_omp_debug(char init_buffer[])
+extern void s_omp_debug(const char init_buffer[])
 { 
   wb_omp.Sdebug(init_buffer); 
 } 

@@ -284,11 +284,6 @@ extern int target_flags;
 
 #define PROMOTE_FUNCTION_ARGS
 
-#if 0
-/* Apparently not doing TRT if int < register-size.  FIXME: Perhaps
-   FUNCTION_VALUE and LIBCALL_VALUE needs tweaking as some ports say.  */
-#define PROMOTE_FUNCTION_RETURN
-#endif
 
 /* I'm a little bit undecided about this one.  It might be beneficial to
    promote all operations.  */
@@ -1201,10 +1196,6 @@ const_section ()						\
 #define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
 
 /* We have a choice here too.  */
-#if 0
-/* FIXME:  Revisit, we don't have scc expanders yet.  */
-#define STORE_FLAG_VALUE 1
-#endif
 
 #define Pmode DImode
 

@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: c_q_neg.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_q_neg.c,v $
+ *  $Revision$
+ *  $Date$
+ *  $Author$
+ *  $Source$
  *
  * =======================================================================
  * =======================================================================
@@ -52,9 +52,15 @@
 
 /* quad unary minus */
 
+#if defined(BUILD_OS_DARWIN)
+/* Can't use "pragma weak" to create aliases in Mach-O */
+QUAD c_q_neg(QUAD x, INT *p_err );
+QUAD __c_q_neg(QUAD x, INT *p_err ) { return c_q_neg(x, p_err); }
+#else /* defined(BUILD_OS_DARWIN) */
 extern QUAD c_q_neg(QUAD, INT *);
 #pragma weak c_q_neg = __c_q_neg
 #define	c_q_neg __c_q_neg
+#endif /* defined(BUILD_OS_DARWIN) */
 
 QUAD
 c_q_neg(QUAD x, INT *p_err )

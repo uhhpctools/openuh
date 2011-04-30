@@ -37,7 +37,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -202,7 +201,7 @@ static ST* Lookup_Variable(char *nm, SYMTAB *stab);
 #endif
 static ST* Create_Global_Variable (char* nm, TYPE_ID type, ST* array_st,
                                    INT32 i);
-static ST* Create_Local_Variable (char* nm, TYPE_ID type, ST* array_st,
+static ST* Create_Local_Variable (const char* nm, TYPE_ID type, ST* array_st,
                                    INT32 i);
 static ST* New_DART (ST* array_st);
 static ST* Create_Common_Block (ST* array_st, INT numdim);
@@ -618,7 +617,7 @@ static ST* Lookup_Variable(char *nm, SYMTAB *stab)
  * Create a global ST for Jennifer's variables.
  *
  ***********************************************************************/
-static ST* Create_Global_Variable (char* nm, TYPE_ID type, ST* array_st,
+static ST* Create_Global_Variable (const char* nm, TYPE_ID type, ST* array_st,
                                    INT32 i) {
   char *name;
   if (ST_base(array_st) != array_st && ST_isCommon(array_st)) {
@@ -660,7 +659,7 @@ static ST* Create_Global_Variable (char* nm, TYPE_ID type, ST* array_st,
  * Create a local ST for Jennifer's variables.
  *
  ***********************************************************************/
-static ST* Create_Local_Variable (char* nm, TYPE_ID type, ST* array_st,
+static ST* Create_Local_Variable (const char* nm, TYPE_ID type, ST* array_st,
                                   INT32 i) {
   char *name;
   if (ST_base(array_st) != array_st) {
@@ -2134,13 +2133,6 @@ WN* DISTR_INFO::Load_Distr_Array () {
         Set_Array_Alias_WN(copy_wn);
       }
       break;
-#if 0
-      Is_True (Get_Array_Alias_WN() && Get_Array_Def_WN(),
-               ("ST (%s) is local: where is the alias and def info?\n",
-                ST_name(array_st)));
-      Copy_alias_info (Alias_Mgr, Get_Array_Alias_WN(), array_load_wn);
-      break;
-#endif
     case var_global:
     case var_common:
       if (Get_Array_Alias_WN())
@@ -2729,7 +2721,7 @@ static void Read_Pragma_Data_Affinity (WN* do_wn, WN* rwn) {
                  "affinity must be for an array reference (ignoring).");
     return;
   }
-#ifdef __linux
+#if defined(__linux) || defined(BUILD_OS_DARWIN)
   // Nothing we can do about this for now.
   return;
 #endif
@@ -2863,37 +2855,6 @@ static void Read_Pragma_Data_Affinity (WN* do_wn, WN* rwn) {
     CXX_DELETE (dli->Lego_Info, LEGO_pool);
     dli->Lego_Info = NULL;
   }
-#if 0
-    /* Is the array redistributed? */
-    {
-      ST* array_st = WN_st(base);
-      DISTR_INFO* dinfo = da_hash->Find(array_st);
-      if (!dinfo || dinfo->IsDynamic ()) {
-        /* Generate the information as follows:
-         *    - pragma(data-affinity) containing array-st
-         *    - pragma(affinity) containing (index#, dimnum/const/coeff, value)
-         */
-        WN* gen_wn = WN_CreatePragma (WN_PRAGMA_DATA_AFFINITY, array_st, 1, 0);
-        LWN_Insert_Block_Before (NULL, pwn, gen_wn);
-        gen_wn = WN_CreatePragma (WN_PRAGMA_AFFINITY, NULL, 0, 0);
-        WN_pragma_index(gen_wn) = 0;
-        WN_pragma_distr_type(gen_wn) = 0;
-        WN_pragma_preg(gen_wn) = dimnum;
-        LWN_Insert_Block_Before (NULL, pwn, gen_wn);
-        gen_wn = WN_CreatePragma (WN_PRAGMA_AFFINITY, NULL, 0, 0);
-        WN_pragma_index(gen_wn) = 0;
-        WN_pragma_distr_type(gen_wn) = 1;
-        WN_pragma_preg(gen_wn) = constant;
-        LWN_Insert_Block_Before (NULL, pwn, gen_wn);
-        gen_wn = WN_CreatePragma (WN_PRAGMA_AFFINITY, NULL, 0, 0);
-        WN_pragma_index(gen_wn) = 0;
-        WN_pragma_distr_type(gen_wn) = 2;
-        WN_pragma_preg(gen_wn) = coeff;
-        LWN_Insert_Block_Before (NULL, pwn, gen_wn);
-        continue;
-      }
-    }
-#endif
 } /* Read_Pragma_Affinity */
 
 /***********************************************************************
@@ -3036,7 +2997,7 @@ static BOOL Check_Expr (WN* expr_wn, SYMBOL* index_sym,
  ***********************************************************************/
 static void Read_Pragma_Thread_Affinity (WN* pwn, WN* do_wn, WN* rwn) {
 
-#ifdef __linux
+#if defined(__linux) || defined(BUILD_OS_DARWIN)
   // Nothing we can do about this for now.
   return; 
 #endif 
@@ -3173,59 +3134,6 @@ static void Read_Pragma_Thread_Affinity (WN* pwn, WN* do_wn, WN* rwn) {
 
   return;
 
-#if 0
-  // generate call to mp_my_threadnum, store into preg
-  OPCODE callop = OPCODE_make_op(OPR_CALL, MTYPE_I4, MTYPE_V);
-  WN* call_wn = WN_Create(callop, 0);
-  WN_st(call_wn) = distr_st_entries[mp_my_threadnum];
-  Set_Runtime_Call_Side_Effects (call_wn);
-  LWN_Insert_Block_Before (NULL, do_wn, call_wn);
-  // return values
-  PREG_NUM rreg1, rreg2;
-  ST* rst = Find_Return_Registers (MTYPE_I4, &rreg1, &rreg2);
-  FmtAssert(rreg1 != 0 && rreg2 == 0, ("Bad MTYPE_I4 return regs"));
-
-  SYMBOL preg = Create_Preg_Symbol ("$myid", MTYPE_I4);
-  WN* ldid_wn = WN_CreateLdid (OPCODE_make_op(OPR_LDID, MTYPE_I4, MTYPE_I4),
-                               rreg1, rst, Be_Type_Tbl(MTYPE_I4));
-  Create_alias (Alias_Mgr, ldid_wn);
-  Du_Mgr->Add_Def_Use (call_wn, ldid_wn);
-  WN* stid_wn = LWN_CreateStid (OPCODE_make_op(OPR_STID, MTYPE_V, MTYPE_I4),
-                                preg.WN_Offset(), preg.St(),
-                                Be_Type_Tbl(MTYPE_I4), ldid_wn);
-  Create_local_alias (Alias_Mgr, stid_wn);
-  LWN_Insert_Block_After (NULL, call_wn, stid_wn);
-  WN* myid_wn = WN_CreateLdid (OPCODE_make_op(OPR_LDID, MTYPE_I4, MTYPE_I4),
-                               preg.WN_Offset(), preg.St(),
-                               Be_Type_Tbl(MTYPE_I4));
-  Copy_alias_info (Alias_Mgr, stid_wn, myid_wn);
-  Du_Mgr->Add_Def_Use (stid_wn, myid_wn);
-
-  WN* cond_wn = LWN_CreateExp2 (OPCODE_make_op(OPR_EQ,
-                                               Boolean_type,
-                                               Promote_Type(MTYPE_I4)),
-                                thread_wn, myid_wn);
-  WN* block_wn = WN_CreateBlock();
-  WN* if_wn = LWN_CreateIf (cond_wn, WN_do_body(do_wn), block_wn);
-  block_wn = WN_CreateBlock ();
-  LWN_Insert_Block_Before (block_wn, NULL, if_wn);
-  WN_do_body(do_wn) = block_wn;
-  LWN_Set_Parent(block_wn, do_wn);
-
-
-  // Update access vectors for expr in the ifnode
-  IF_INFO *ii=CXX_NEW (IF_INFO(&LNO_default_pool,TRUE,
-                               Find_SCF_Inside(if_wn,OPC_REGION)!=NULL),
-                       &LNO_default_pool);
-  WN_MAP_Set(LNO_Info_Map,if_wn,(void *)ii);
-  DOLOOP_STACK* stack = CXX_NEW(DOLOOP_STACK(&LNO_local_pool),
-                                &LNO_local_pool);
-  Build_Doloop_Stack(if_wn, stack);
-  LNO_Build_If_Access(if_wn, stack);
-  CXX_DELETE(stack, &LNO_local_pool);
-
-  return;
-#endif
 } /* Read_Pragma_Thread_Affinity */
 
 /***********************************************************************
@@ -3499,10 +3407,6 @@ WN* Read_Pragma_Distribute (WN* pwn) {
 
   INT i;
 
-#if 0
-  printf ("Printing ST\n");  Print_ST (stdout, array_st,  TRUE);
-  printf ("Printing TY\n");  Print_TY (stdout, array_ty,  TRUE);
-#endif
 
 #ifdef Is_True_On
   FmtAssert (ST_class(array_st) == CLASS_VAR,
@@ -3510,24 +3414,6 @@ WN* Read_Pragma_Distribute (WN* pwn) {
   FmtAssert (TY_AR_ndims(array_ty) > 0, ("Array with zero dimensions?\n"));
 #endif
 
-#if 0
-  ARI* ari = TY_arinfo(array_ty);
-  printf ("printing element type\n");
-  Print_TY (stdout, TY_AR_etype(array_ty), TRUE);
-  printf ("%d dims\n", ndims);
-  for (i=0; i<ndims; i++) {
-    printf ("Dimension %d: lbnd = ", i);
-    if (TY_AR_const_lbnd(array_ty, i))
-      printf ("const, %d. ", TY_AR_lbnd_val(array_ty, i));
-    else printf ("non-constant. ");
-    printf (" ubnd = ");
-    if (TY_AR_const_ubnd(array_ty, i))
-      printf ("const, %d. \n", TY_AR_ubnd_val(array_ty, i));
-    else printf ("non-constant. \n");
-  }
-  printf ("Now for the args: flag = %d, index = %d, preg = %d\n",
-          WN_pragma_flag(pwn), WN_pragma_index(pwn), WN_pragma_preg(pwn));
-#endif
 
   /* Compile-Time data structures:
    * allocate, initialize, store in hash-table.
@@ -3922,75 +3808,6 @@ static DISTR_ARRAY* New_DACT (WN** pwn_addr, ST* array_st, INT ndims) {
     dact = CXX_NEW (DISTR_ARRAY(dd, first_pwn, last_pwn, bounds_wns, onto),
                     LEGO_pool);
 
-#if 0
-// if FE was generating sample reference
-    /* Now find the sample array reference */
-    WN* xpwn = LWN_Get_Next_Stmt_Node(last_pwn);
-    if (xpwn != pwn)
-      DevWarn ("Array %s with no dimensions???", ST_name(array_st));
-    Is_True (WN_operator(xpwn) == OPR_XPRAGMA,
-             ("Array %s: Missing xpragma node with sample array reference",
-              ST_name(array_st)));
-    Is_True (WN_pragma(xpwn) == pragma_id,
-             ("Array %s: Bad pragma type in sample array reference xpragma",
-              ST_name(array_st)));
-    Is_True (WN_operator(WN_kid0(xpwn)) == OPR_ARRAY,
-             ("Array %s: Expected opc_array as kid of sample ref xpragma",
-              ST_name(array_st)));
-    WN* base = WN_array_base(WN_kid0(xpwn));
-    Is_True ((WN_operator(base) == OPR_LDA) ||
-             (WN_operator(base) == OPR_LDID),
-             ("Array %s: sample reference has bad base", ST_name(array_st)));
-    Is_True (WN_st(base) == array_st,
-             ("Array %s: unexpected ST in base of sample reference",
-              ST_name(array_st), ST_name(WN_st(base))));
-    dact->Set_Array_XPragma_WN(xpwn);
-#endif
-#if 0
-// if we were creating our own sample reference
-    {
-      /* just create one for now */
-      TY_IDX array_ty = Get_Array_Type(array_st);
-      INT ndims = TY_AR_ndims(array_ty);
-      INT i;
-      OPCODE array_op = OPCODE_make_op(OPR_ARRAY, (Pointer_Size == 8 ?
-                                                   MTYPE_U8 : MTYPE_U4),
-                                       MTYPE_V);
-      WN* array_wn = WN_Create (array_op, 2*ndims+1);
-      WN* base_wn;
-      if (TY_kind(array_ty) == KIND_POINTER) {
-        OPCODE ldid_op = OPCODE_make_op (OPR_LDID, Pointer_type, Pointer_type);
-        base_wn = WN_CreateLdid (ldid_op, 0, array_st, ST_type(array_st));
-      }
-      else {
-        OPCODE lda_op = OPCODE_make_op (OPR_LDA, Pointer_type, MTYPE_V);
-        base_wn = WN_CreateLda(lda_op, 0,
-                               Make_Pointer_Type(ST_type(array_st)),
-                               array_st);
-      }
-      WN_array_base(array_wn) = base_wn;
-      for (i=0; i<ndims; i++) {
-        WN_array_index(array_wn, i) = LWN_Make_Icon (MTYPE_I4, 0);
-        if (TY_AR_const_ubnd(array_ty, ndims-i-1))
-          WN_array_dim(array_wn, i)  =
-            LWN_Make_Icon (MTYPE_I4, TY_AR_ubnd_val(array_ty, ndims-i-1));
-        else 
-          WN_array_dim(array_wn, i)  =
-            LWN_Copy_Tree (TY_AR_ubnd_tree(array_ty, ndims-i-1));
-      }
-      /* now make an XPRAGMA node */
-      // WN* xpwn = WN_CreateXpragma (pragma_id, array_st, 1);
-      WN* xpwn = WN_Create(OPC_XPRAGMA, 1);
-      WN_pragma(xpwn) = pragma_id;
-      WN_st(xpwn) = array_st;
-      WN_kid0(xpwn) = array_wn;
-      LWN_Parentize(xpwn);
-      dact->Set_Array_XPragma_WN(xpwn);
-      dact->Set_Last_Pragma_WN(xpwn);
-      LWN_Insert_Block_After (NULL, last_pwn, xpwn);
-      last_pwn = xpwn;
-    }
-#endif
   }
   else {
     CXX_DELETE_ARRAY (dd, LEGO_pool);

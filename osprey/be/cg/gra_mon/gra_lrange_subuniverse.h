@@ -57,10 +57,10 @@
 
 
 /*
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_lrange_subuniverse.h,v $
+ *  $Revision: 1.2 $
+ *  $Date: 02/11/07 23:41:29-00:00 $
+ *  $Author: fchow@keyresearch.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_lrange_subuniverse.h $
  */
 
 
@@ -70,7 +70,7 @@
 #ifndef LRANGE_SUBUNIVERSE_RCS_ID
 #define LRANGE_SUBUNIVERSE_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *lrange_subuniverse_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_lrange_subuniverse.h,v $ $Revision: 1.1.1.1 $";
+static char *lrange_subuniverse_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_lrange_subuniverse.h $ $Revision: 1.2 $";
 #endif
 #endif
 

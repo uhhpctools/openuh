@@ -222,7 +222,7 @@ private:
   BOOL Can_only_increase(CODEREP *, AUX_ID);
 
   // print an occurrence and a string
-  void Print_occ(FILE *fp, char *str, EXP_OCCURS *occ)
+  void Print_occ(FILE *fp, const char *str, EXP_OCCURS *occ)
     { fprintf(fp,"%s\n",str);
       occ->Print(fp);
       occ->Occurrence()->Print(0,fp);

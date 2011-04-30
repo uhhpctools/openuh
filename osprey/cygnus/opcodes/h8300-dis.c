@@ -158,10 +158,6 @@ extract_immediate (stream, looking_for, thisnib, data, cst, len, q)
     case L_16U:
       *len = 16;
       *cst = (data[0] << 8) + data [1];
-#if 0
-      if ((looking_for & SIZE) == L_16)
-	*cst = (short) *cst;	/* sign extend */
-#endif
       break;
     case L_32:
       *len = 32;

@@ -66,9 +66,6 @@ gen_peephole (peep)
   n_operands = 0;
 
   printf ("  insn = ins1;\n");
-#if 0
-  printf ("  want_jump = 0;\n");
-#endif
 
   for (i = 0; i < ninsns; i++)
     {
@@ -87,10 +84,6 @@ gen_peephole (peep)
   		  insn_code_number);
 	}
 
-#if 0
-      printf ("  if (GET_CODE (insn) == JUMP_INSN)\n");
-      printf ("    want_jump = JUMP_LABEL (insn);\n");
-#endif
 
       printf ("  pat = PATTERN (insn);\n");
 
@@ -115,14 +108,6 @@ gen_peephole (peep)
 
   printf ("  PATTERN (ins1) = gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (%d, operands));\n", n_operands);
 
-#if 0
-  printf ("  if (want_jump && GET_CODE (ins1) != JUMP_INSN)\n");
-  printf ("    {\n");
-  printf ("      rtx insn2 = emit_jump_insn_before (PATTERN (ins1), ins1);\n");
-  printf ("      delete_related_insns (ins1);\n");
-  printf ("      ins1 = ins2;\n");
-  printf ("    }\n");
-#endif
 
   /* Record this define_peephole's insn code in the insn,
      as if it had been recognized to match this.  */

@@ -47,6 +47,7 @@
 
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_get_all_reg_rules_xtnd = _xlate_get_all_reg_rules_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_get_all_reg_rules = _xlate_get_all_reg_rules
 #endif

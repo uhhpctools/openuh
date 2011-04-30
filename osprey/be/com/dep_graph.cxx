@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -62,7 +66,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
@@ -73,7 +76,11 @@ static char *rcs_id = "$Source: be/com/SCCS/s.dep_graph.cxx $ $Revision: 1.7 $";
 #endif /* _KEEP_RCS_ID */
 
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #define USE_STANDARD_TYPES	    /* override unwanted defines in "defs.h" */
 
@@ -86,6 +93,9 @@ static char *rcs_id = "$Source: be/com/SCCS/s.dep_graph.cxx $ $Revision: 1.7 $";
 #include "irbdata.h"		    /* for inito */
 #include "dwarf_DST_mem.h"	    /* for DST */
 #include "pu_info.h"
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include "ir_bwrite.h"
 #include "ir_bcom.h"
 
@@ -331,7 +341,11 @@ void ARRAY_DIRECTED_GRAPH16::PruneMapsUsingParity(void)
   }
 }
 
+#ifndef LNO
 void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp)
+#else
+void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp, INT)
+#endif
 {
   VINDEX16 i;
   EINDEX16 e;
@@ -715,6 +729,7 @@ DOLOOP_STACK *stack, BOOL rebuild, BOOL skip_bad)
 	return(0);
   }
   Is_True(!calls->Elements() || Has_Call_Info(calls->Bottom_nth(0)->_call) ||
+    WN_operator(calls->Bottom_nth(0)->_call) == OPR_INTRINSIC_CALL ||
 	Do_Loop_Is_Concurrent_Call(Enclosing_Do_Loop(start)),
 	("Unexpected call in Build_Region"));
 
@@ -1790,7 +1805,8 @@ INT ARRAY_DIRECTED_GRAPH16::Gather_References(WN *wn, REF_LIST_STACK *writes,
 	  reads->Bottom_nth(i)->Append(CXX_NEW(REFERENCE_NODE(wn,s,
 			statement_number), &LNO_local_pool));
 	} else {
-	  if (WN_operator(wn) != OPR_LDID)
+	  if ((WN_operator(wn) != OPR_LDID)
+	      && !Is_Loop_Invariant_Indir(wn))
 	    Set_Bad_Mem(wn);
 	  VINDEX16 vindex = Get_Vertex(wn);
 	  if (vindex)

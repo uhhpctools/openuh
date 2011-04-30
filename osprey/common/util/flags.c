@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: flags.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/flags.c,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:57 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/flags.c,v $
  *
  * Revision history:
  *  17-Jun-91 - Original Version
@@ -55,7 +55,7 @@
 
 #ifdef _KEEP_RCS_ID
 static const char source_file[] = __FILE__;
-static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/flags.c,v $ $Revision: 1.1.1.1 $";
+static const char rcs_id[] = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/flags.c,v $ $Revision: 1.1 $";
 #endif
 
 #include <string.h>
@@ -233,6 +233,15 @@ typedef union optval {
   void  *p;
 } OPTVAL;
 
+typedef union optvaltypes {
+  BOOL   b;
+  UINT32 ui32;
+  INT32  i32;
+  UINT64 ui64;
+  INT64  i64;
+  void  *p;
+} OPTVALTYPES;
+
 typedef struct odesc_aux {
   INT16 flags;		/* Various status flags */
   BOOL	*specified;	/* The option has been specified (user's) */
@@ -306,7 +315,102 @@ typedef struct ogroup_aux {
 #define OGA_internal(o)		(OGA_flags(o) & OGF_INTERNAL)
 #define Set_OGA_internal(o)	(OGA_flags(o) |= OGF_INTERNAL)
 #define Reset_OGA_internal(o)	(OGA_flags(o) &= ~OGF_INTERNAL)
+
+/* ====================================================================
+ * OVK_Scalar_Kind
+ * return TRUE if OPTION_KIND is a scalar.
+ * ====================================================================*/
+static BOOL
+OVK_Scalar_Kind(OPTION_KIND o)
+{
+  return (o == OVK_NONE || o == OVK_BOOL || o == OVK_INT32
+          || o == OVK_UINT32 || o == OVK_INT64 || o == OVK_UINT64);
+}
+
+/* ====================================================================
+ * OVK_Pointer_Kind
+ * return TRUE if OPTION_KIND is a pointer.
+ * ====================================================================*/
+static BOOL
+OVK_Pointer_Kind(OPTION_KIND o)
+{
+  return (o == OVK_SELF || o == OVK_NAME || o == OVK_LIST);
+}
+
+/* ====================================================================
+ * Get_OVK_Size
+ * return size of the different OPTION_KIND's.
+ * ====================================================================*/
+static INT
+Get_OVK_Size(OPTION_KIND o)
+{
+  switch (o) {
+    case OVK_NONE:
+    case OVK_BOOL:
+      return sizeof(BOOL);
+    case OVK_INT32:
+      return sizeof(INT32);
+    case OVK_UINT32:
+      return sizeof(UINT32);
+    case OVK_INT64:
+      return sizeof(INT64);
+    case OVK_UINT64:
+      return sizeof(UINT64);
+    case OVK_NAME:
+    case OVK_SELF:
+      return sizeof(char *);
+    case OVK_LIST:
+      return sizeof(OPTION_LIST *);
+    default: /* INVALID, OBSOLETE, REPLACED, UNIMPLEMENTED */
+      return 0;
+  }
+}
+
+/* ====================================================================
+ * Get_OVK_UINT64_Val
+ * return UINT64 value for pointer to OVK variable of type o.
+ * ====================================================================*/
+static UINT64
+Get_OVK_UINT64_Val(void *p, OPTION_KIND o)
+{
+  char b[1024];
+  OPTVALTYPES v;
 
+  if (Get_OVK_Size(o) > 0)
+    memmove(&v, p, Get_OVK_Size(o));
+
+  switch (o) {
+    case OVK_NONE:
+    case OVK_BOOL:
+      return (UINT64) v.b;
+    case OVK_INT32:
+      return (UINT64) v.i32;
+    case OVK_UINT32:
+      return (UINT64) v.ui32;
+    case OVK_INT64:
+      return (UINT64) v.i64;
+    case OVK_UINT64:
+      return v.ui64;
+    default: /* INVALID, OBSOLETE, REPLACED, UNIMPLEMENTED */
+      return 0;
+  }
+}
+
+/* ====================================================================
+ * Get_OVK_Pointer_Val
+ * return pointer value for pointer to OVK variable of type o.
+ * ====================================================================*/
+static void *
+Get_OVK_Pointer_Val(void *p, OPTION_KIND o)
+{
+  OPTVALTYPES v;
+  if (OVK_Pointer_Kind(o)) {
+    memmove(&v, p, Get_OVK_Size(o));
+    return (void *) v.p;
+  }
+  else
+    return NULL;
+}
 
 /* ====================================================================
  * Copy_option
@@ -317,36 +421,19 @@ static INT
 Copy_option(OPTION_DESC *odesc, char *container, BOOL save)
 {
   void *var = ODESC_variable(odesc);
-  size_t sz = 0;
+  INT size = Get_OVK_Size(ODESC_kind(odesc));
 
   Is_True(ODESC_can_change_by_pragma(odesc),
 	  ("Copy_option, trying to copy option that cannot change"));
 
-  switch (ODESC_kind(odesc)) {
-    case OVK_NONE:
-    case OVK_BOOL:
-      sz = sizeof(BOOL);
-      break;
-    case OVK_INT32:
-    case OVK_UINT32:
-      sz = sizeof(INT32);
-      break;
-    case OVK_INT64:
-    case OVK_UINT64:
-      sz = sizeof(INT64);
-    case OVK_NAME:
-    case OVK_SELF:
-    case OVK_LIST:
-      sz = sizeof(void *);
+  if (size > 0) {
+    if (save)
+      memmove(container, var, size);
+    else /* restore */
+      memmove(var, container, size);
   }
 
-  if (sz > 0) {
-    if (save)
-      memcpy(container, var, sz);
-    else
-      memcpy(var, container, sz);
-  }
-  return (sz);
+  return size;
 }
 
 
@@ -369,33 +456,10 @@ Duplicate_Value ( OPTION_DESC *odesc, OPTVAL *container )
 {
   void *var = ODESC_variable(odesc);
 
-  switch ( ODESC_kind(odesc) ) {
-    case OVK_NONE:
-    case OVK_BOOL:
-      container->i = *((BOOL *)var);
-      break;
-    case OVK_INT32:
-      container->i = *((INT32 *)var);
-      break;
-    case OVK_UINT32:
-      container->i = *((UINT32 *)var);
-      break;
-    case OVK_INT64:
-      container->i = *((INT64 *)var);
-      break;
-    case OVK_UINT64:
-      container->i = *((UINT64 *)var);
-      break;
-    case OVK_NAME:
-    case OVK_SELF:
-      container->p = *((char **)var);
-      break;
-    case OVK_LIST:
-      container->p = *((OPTION_LIST **)var);
-      break;
-    default:
-      break;
-  }
+  if (OVK_Scalar_Kind(ODESC_kind(odesc)))
+    container->i = Get_OVK_UINT64_Val(var, ODESC_kind(odesc));
+  else if (OVK_Pointer_Kind(ODESC_kind(odesc)))
+    container->p = Get_OVK_Pointer_Val(var, ODESC_kind(odesc));
 }
 
 
@@ -512,7 +576,7 @@ Initialize_Option_Group ( OPTION_GROUP *ogroup )
  */
 
 void
-Set_Option_Internal ( OPTION_GROUP *ogroup, char *name )
+Set_Option_Internal ( OPTION_GROUP *ogroup, const char *name )
 {
   if ( name == NULL ) {
     Set_OGA_internal ( OGROUP_aux (ogroup) );
@@ -583,6 +647,7 @@ Update_Scalar_Value ( OPTION_DESC *odesc, UINT64 val )
 {
   void *var = ODESC_variable(odesc);
   ODESC_AUX *aux = ODESC_aux(odesc);
+  OPTVALTYPES v;
 
   if ( val != ODA_last_i(aux) ) {
     Set_ODA_mod(aux);
@@ -593,23 +658,25 @@ Update_Scalar_Value ( OPTION_DESC *odesc, UINT64 val )
   switch ( ODESC_kind(odesc) ) {
     case OVK_NONE:
     case OVK_BOOL:
-      *((BOOL *)var) = (BOOL)val;
+      v.b = (BOOL)val;
       break;
     case OVK_INT32:
-      *((INT32 *)var) = (INT32)val;
+      v.i32 = (INT32)val;
       break;
     case OVK_UINT32:
-      *((UINT32 *)var) = (UINT32)val;
+      v.ui32 = (UINT32)val;
       break;
     case OVK_INT64:
-      *((INT64 *)var) = (UINT64)val;
+      v.i64 = (UINT64)val;
       break;
     case OVK_UINT64:
-      *((UINT64 *)var) = (UINT64)val;
+      v.ui64 = (UINT64)val;
       break;
     default:
       break;
   }
+  if (Get_OVK_Size(ODESC_kind(odesc)) > 0) 
+    memmove(var, &v, Get_OVK_Size(ODESC_kind(odesc)));
 }
 
 /* ====================================================================
@@ -709,8 +776,8 @@ Process_Command_Line_Group (char *flag, OPTION_GROUP *opt_groups)
        && ODESC_kind(odesc) != OVK_OLD_COUNT;
 	  odesc++)
     {
-      char *abbrev = ODESC_abbrev(odesc);
-      char *name = ODESC_name(odesc);
+      const char *abbrev = ODESC_abbrev(odesc);
+      const char *name = ODESC_name(odesc);
       Is_True ( abbrev == NULL
 	     || strncmp(abbrev, name, strlen(abbrev)) == 0,
 		( "Option group (%s) configuration error: "
@@ -862,31 +929,6 @@ Process_Command_Line_Group (char *flag, OPTION_GROUP *opt_groups)
 		Update_Scalar_Value ( found, (UINT64)ival );
 		break;
 
-#if 0
-	    case OVK_INT64:
-	    case OVK_UINT64:
-		if ( ODESC_min_val(found) < INT32_MIN	||
-		    ODESC_max_val(found) > INT32_MAX )
-		    {
-			ErrMsg ( EC_Unimplemented,
-				"Process_Command_Line_Group: "
-				"> 32-bit flag values" );
-		    }
-		if ( ! hasval ) {
-		    ival = ODESC_def_val(found);
-		} else {
-		    char *tval = val;
-		    if ((*val < '0' || *val > '9') && *val != '-')
-		      ErrMsg(EC_Flag_Int_Expected, this_flag);
-		    ival = Get_Numeric_Flag ( &tval,
-					     ODESC_min_val(found),
-					     ODESC_max_val(found),
-					     ODESC_def_val(found),
-					     this_flag );
-		}
-		Update_Scalar_Value ( found, (UINT64)ival );
-		break;
-#endif
 
 	    case OVK_NAME:
 		if ( ! hasval ) {
@@ -959,33 +1001,12 @@ Modified_Option ( OPTION_DESC *odesc )
   ODESC_AUX *aux = ODESC_aux(odesc);
   UINT64 cur;
 
-  switch ( ODESC_kind(odesc) ) {
-    case OVK_NONE:
-    case OVK_BOOL:
-      cur = (UINT64)*((BOOL*)var);
-      break;
-    case OVK_INT32:
-      cur = (UINT64)*((INT32*)var);
-      break;
-    case OVK_UINT32:
-      cur = (UINT64)*((UINT32*)var);
-      break;
-    case OVK_INT64:
-      cur = (UINT64)*((INT64*)var);
-      break;
-    case OVK_UINT64:
-      cur = (UINT64)*((UINT64*)var);
-      break;
-    case OVK_NAME:
-    case OVK_SELF:
-    case OVK_LIST:
-      return ( *((void**)var) != ODA_last_p(aux) );
-    default:
-      break;
-  }
-
-  /* For the scalar cases, still need to check: */
-  return ( cur != ODA_last_i(aux) );
+  if (OVK_Scalar_Kind(ODESC_kind(odesc)))
+    return (Get_OVK_UINT64_Val(var, ODESC_kind(odesc)) != ODA_last_i(aux));
+  else if (OVK_Pointer_Kind(ODESC_kind(odesc)))
+    return (Get_OVK_Pointer_Val(var, ODESC_kind(odesc)) != ODA_last_p(aux));
+  else
+    return FALSE;
 }
 
 /* ====================================================================
@@ -1016,7 +1037,7 @@ Modified_Option ( OPTION_DESC *odesc )
  */
 
 void
-Print_Option_Group ( FILE *tf, OPTION_GROUP *og, char *prefix,
+Print_Option_Group ( FILE *tf, OPTION_GROUP *og, const char *prefix,
 		     BOOL internal, BOOL full, BOOL update )
 {
   OPTION_DESC *desc = OGROUP_options(og);
@@ -1120,12 +1141,12 @@ Print_Option_Group ( FILE *tf, OPTION_GROUP *og, char *prefix,
 	  || ODESC_primary(desc) == NULL  )
 	{
 #ifdef KEY /* bug 12020: The compiler may change the fprintf to fputs,
-              which cannot handle null. */
-          char ** var = (char **) ODESC_variable(desc);
-          if ( *var != NULL )
-            fprintf ( tf, "%s", *var);
+	      which cannot handle null. */
+	  char ** var = (char **) ODESC_variable(desc);
+	  if ( *var != NULL )
+	    fprintf ( tf, "%s", *var);
 #else
-          fprintf ( tf, "%s", *((char **) ODESC_variable(desc)));
+	  fprintf ( tf, "%s", *((char **) ODESC_variable(desc)));
 #endif
 	} else {
 	  fprintf ( tf, " (See '%s' above)",
@@ -1222,7 +1243,7 @@ Trace_Command_Line_Group ( FILE *tf, OPTION_GROUP *og )
  */
 
 void
-Print_Option_Groups ( FILE *tf, OPTION_GROUP *og, char *prefix,
+Print_Option_Groups ( FILE *tf, OPTION_GROUP *og, const char *prefix,
 		      BOOL internal, BOOL full, BOOL update )
 {
   while ( OGROUP_name(og) != NULL ) {
@@ -1251,7 +1272,7 @@ Trace_Option_Groups ( FILE *tf, OPTION_GROUP *og, BOOL full )
  */
 
 OPTION_GROUP *
-Get_Command_Line_Group ( OPTION_GROUP *og, char *name )
+Get_Command_Line_Group ( OPTION_GROUP *og, const char *name )
 {
   INT32 i;
 

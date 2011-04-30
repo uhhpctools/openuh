@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *
  * Copyright (C) 2006, 2007, Tsinghua University.  All Rights Reserved.
  *
@@ -22,9 +26,6 @@
  *
  */
 
-#ifdef OSP_OPT
-
-#define __STDC_LIMIT_MACROS
 
 #include "ipa_chg.h"
 
@@ -113,10 +114,30 @@ IPA_CLASS_HIERARCHY::Is_Ancestor(TY_INDEX ancestor, TY_INDEX descendant) {
         return TRUE;
     for (UINT i=0; i<Get_Num_Sub_Classes(ancestor); i++) {
         TY_INDEX sub = Get_Sub_Class(ancestor, i);
-        if (Is_Sub_Class(sub, descendant))
+        if (Is_Ancestor(sub, descendant))
             return TRUE;
     }
     return FALSE;
+}
+
+void IPA_CLASS_HIERARCHY::Get_Sub_Class_Hierarchy (TY_INDEX declared_class,
+    hash_set<TY_INDEX>& targets) {
+    targets.insert(declared_class);
+    if (IPA_Class_Hierarchy->
+        Get_Num_Sub_Classes(declared_class) == 0)
+        return;
+    for (UINT scls = 0; 
+         scls < IPA_Class_Hierarchy->Get_Num_Sub_Classes(declared_class);
+         ++scls) {
+        TY_INDEX sub = IPA_Class_Hierarchy->Get_Sub_Class(declared_class, scls);
+        Get_Sub_Class_Hierarchy (sub, targets);
+    }
+}
+
+int IPA_CLASS_HIERARCHY::Num_Sub_Class_In_Hierarchy(TY_INDEX declared_class) {
+    hash_set<TY_INDEX> subclses;
+    Get_Sub_Class_Hierarchy (declared_class, subclses);
+    return subclses.size();
 }
 
 IPA_CLASS_HIERARCHY*
@@ -147,5 +168,34 @@ Build_Class_Hierarchy() {
     return chg;
 }
 
-#endif
+/*
+ * Get the offset of the ancestor class in the class sub 
+ */
+size_t
+IPA_CLASS_HIERARCHY::Get_Ancestor_Offset(TY_INDEX sub, TY_INDEX anc) {
+    if (sub == anc)
+        return 0;
+    TY &ty = Ty_tab[sub];
+    if (Is_Structure_Type(ty) && !TY_is_union(ty) && ty.Fld() > 0) {
+        // search for each base class
+        FLD_IDX fld_idx = ty.Fld();
+        do {
+            FLD_HANDLE fld(fld_idx);
+            if (FLD_is_base_class(fld)) {
+                TY_INDEX current_base = TY_IDX_index(FLD_type(fld));
+                // if anc(current_base) is direct base class of sub
+                if (current_base == anc) 
+                    return FLD_ofst(fld);
+                // otherwise, search current_base recursively
+                size_t ofst = Get_Ancestor_Offset(current_base, anc);
+                if (ofst != BASE_CLASS_NOT_FOUND) 
+                    return FLD_ofst(fld) + ofst;
+            }
+            if (FLD_last_field(fld))
+                break;
+            fld_idx++;
+        } while (1); 
+    }
+    return BASE_CLASS_NOT_FOUND;
+}
 

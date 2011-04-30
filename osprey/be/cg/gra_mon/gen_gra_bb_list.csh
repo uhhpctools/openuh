@@ -38,10 +38,10 @@
 ### ======================================================================
 ###
 ### Module: gen_tn_list.csh
-### $Revision: 1.1.1.1 $
-### $Date: 2005/10/21 19:00:00 $
-### $Author: marcel $
-### $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gen_gra_bb_list.csh,v $
+### $Revision: 1.2 $
+### $Date: 02/11/07 23:41:28-00:00 $
+### $Author: fchow@keyresearch.com $
+### $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gen_gra_bb_list.csh $
 ### Revision history:
 ###   27-Feb-92 - Original version
 ###

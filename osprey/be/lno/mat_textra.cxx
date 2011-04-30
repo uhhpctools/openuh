@@ -51,10 +51,9 @@
 **/
 
 #define mat_textra_CXX      "mat_textra.cxx"
-static char *rcs_id =   mat_textra_CXX "$Revision: 1.6 $";
+const static char *rcs_id =   mat_textra_CXX "$Revision: 1.6 $";
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "lnopt_main.h"
 #include "mat.h"
@@ -75,20 +74,6 @@ template <> MEM_POOL* MAT<double>::_default_pool = NULL;
 // The #if below chooses between the two.  #if 0 selects double rather than
 // fractional inverse.
 
-#if 0
-
-IMAT MAT<mINT32>::Inv() const
-{
-  FmtAssert(_r == _c, ("Matrix not square"));
-
-  MEM_POOL* hold = FMAT::Set_Default_Pool(IMAT::Default_Pool());
-  FMAT fmat = IMAT_to_FMAT(*this);
-  fmat.D_Inv();
-  FMAT::Set_Default_Pool(hold);
-  return FMAT_to_IMAT(fmat, IMAT::Default_Pool());
-}
-
-#else
 
 template<>
 IMAT MAT<mINT32>::Inv() const
@@ -102,7 +87,6 @@ IMAT MAT<mINT32>::Inv() const
   return DMAT_to_IMAT(dmat, IMAT::Default_Pool());
 }
 
-#endif
 
 // Factor and use the factoring inversion routines
 

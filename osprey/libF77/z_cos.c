@@ -60,4 +60,9 @@ dcomplex z_cos_(dcomplex *z)
   return __zcos(z->dreal, z->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+dcomplex z_cos(dcomplex *z) { return z_cos_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(z_cos_, z_cos);
+#endif /* defined(BUILD_OS_DARWIN) */

@@ -83,9 +83,6 @@ struct insn_info
   /* ???? The following luid field should be considerd private so that
      we can change it on the fly to accommodate new insns?  */
   int luid;			/* Logical UID.  */
-#if 0
-  rtx insn;			/* Backpointer to the insn.  */
-#endif
 };
 
 

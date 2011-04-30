@@ -39,10 +39,10 @@
  * ====================================================================
  *
  * Module: wn_attr.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/wn_attr.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:42:00-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.wn_attr.h $
  *
  * Revision history:
  *  07-Mar-95 - Original Version
@@ -223,6 +223,7 @@ extern UINT WN_num_var_refs(WN *wn, const ST *st, STAB_OFFSET st_ofst);
    ((arg)!=NULL && WN_opc_operator(arg) == OPR_PARM? WN_kid0(arg) : arg)
 
 extern TY_IDX Get_Field_Type(TY_IDX base, UINT field_id);
+
 extern const char * WN_intrinsic_name(INTRINSIC intr_opc);
 extern TY_IDX WN_intrinsic_return_ty(OPCODE    wn_opc,
                                      INTRINSIC intr_opc,
@@ -251,5 +252,7 @@ extern void Remove_Skips(WN             *ablock,
 extern void Restore_Skips(const W2CF_SKIP_ITEM *skip_info,
                           INT                   number_of_items,
                           BOOL                  clist);
+
+extern TY_IDX Get_Inner_Array_Type( TY_IDX idx);
 
 #endif /* wn_attr_INCLUDED */

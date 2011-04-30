@@ -79,19 +79,6 @@ label: \"basic block %d",
       break;
     }
 
-#if 0
-  /* FIXME Should this be printed?  It makes the graph significantly larger.  */
-
-  /* Print the live-at-start register list.  */
-  fputc ('\n', fp);
-  EXECUTE_IF_SET_IN_REG_SET (basic_block_live_at_start[bb], 0, i,
-			     {
-			       fprintf (fp, " %d", i);
-			       if (i < FIRST_PSEUDO_REGISTER)
-				 fprintf (fp, " [%s]",
-					  reg_names[i]);
-			     });
-#endif
 
   switch (graph_dump_format)
     {

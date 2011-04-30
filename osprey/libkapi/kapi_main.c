@@ -195,9 +195,6 @@ int main( int argc, char *argv[] )
       printf( "fuLD has %d ports\n", 
              KAPI_cportCount4fu( pvoid1, 0, fuLD ) );
 
-#if 0
-	  tmp = KAPI_intra;
-#endif
 
 	  dump_instruction_fus(outp,pvoid1);
       KAPI_Finalize( pvoid1 );
@@ -205,11 +202,6 @@ int main( int argc, char *argv[] )
       fprintf( stderr, "KAPI_Initialize failed\n" );
    }
 
-#if 0
-   Test_bv128Rtns();
-   Test_bv64Rtns();
-   Test_bv32Rtns();
-#endif
 
    return 0;
 }

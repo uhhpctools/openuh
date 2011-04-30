@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -50,14 +58,17 @@ extern "C" {
 #define Float_Preg_Max_Offset           32
 #define X87_Preg_Min_Offset             33
 #define X87_Preg_Max_Offset             40
-#define Last_Dedicated_Preg_Offset      X87_Preg_Max_Offset
+#define MMX_Preg_Min_Offset             41
+#define MMX_Preg_Max_Offset             48
+#define Last_Dedicated_Preg_Offset      MMX_Preg_Max_Offset
 
   /* The order is assigned to favor the parameter passing. */
   enum { RAX=1, RBX, RBP, RSP, RDI, RSI, RDX, RCX,
 	 R8, R9, R10, R11, R12, R13, R14, R15,
   	 XMM0, XMM1, XMM2,  XMM3,  XMM4,  XMM5,  XMM6,  XMM7,
 	 XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15,
-	 ST0,  ST1,  ST2,   ST3,   ST4,   ST5,   ST6,   ST7   };
+	 ST0,  ST1,  ST2,   ST3,   ST4,   ST5,   ST6,   ST7,
+  	 MM0, MM1, MM2,  MM3,  MM4,  MM5,  MM6,  MM7   };
 
 /* The offsets for return registers are fixed: */
 #define First_Int_Preg_Return_Offset	RAX
@@ -72,6 +83,8 @@ extern "C" {
 #define Last_Float_Preg_Param_Offset	XMM7
 #define First_X87_Preg_Return_Offset	ST0
 #define Last_X87_Preg_Return_Offset	ST1
+#define First_MMX_Preg_Return_Offset	MM0
+#define Last_MMX_Preg_Return_Offset	MM1
 #define Static_Link_Preg_Offset		( Is_Target_64bit() ? R10 : RCX )
 
 #define MAX_NUMBER_OF_REGISTERS_FOR_RETURN 2
@@ -99,9 +112,9 @@ enum X86_64_PARM_CLASS {
     X86_64_SSEUP_CLASS,
 };
 
-#define MAX_CLASSES 2
+#define MAX_CLASSES 4
 extern INT Classify_Aggregate(const TY_IDX ty, 
-			      enum X86_64_PARM_CLASS classes[MAX_CLASSES]);
+			      enum X86_64_PARM_CLASS classes[MAX_CLASSES], INT byte_offset = 0);
 
 #ifdef __cplusplus
 }

@@ -405,11 +405,17 @@ INITV2C_struct_fill(TOKEN_BUFFER tokens,
    INT      pad_byte;
    INT      tcon_size;
    TCON     tcon;
+   BOOL do_paren = TRUE;
    
    Is_True(*current_inv != 0 && *current_offset < desired_offset,
 	   ("Incorrect call to INITV2C_struct_fill()"));
 
-   Append_Token_Special(tokens, '{');
+   if(*current_offset < desired_offset && *current_inv != 0 &&
+       INITV_kind(Initv_Table[*current_inv]) == INITVKIND_PAD)
+     do_paren = FALSE;
+
+   if(do_paren)
+     Append_Token_Special(tokens, '{');
    while (*current_offset < desired_offset && *current_inv != 0)
    {
       /* Expect only padding and integral val INITVs */
@@ -432,6 +438,7 @@ INITV2C_struct_fill(TOKEN_BUFFER tokens,
       case INITVKIND_ZERO:
       case INITVKIND_ONE:
       case INITVKIND_VAL:
+         do_paren = TRUE;
          tcon = TCON_For_Initv(*current_inv);
 	 tcon_size = TY_size(Stab_Mtype_To_Ty(TCON_ty(tcon)));
 	 if (tcon_size < sizeof(tcon.vals.uval.u0))
@@ -459,10 +466,6 @@ INITV2C_struct_fill(TOKEN_BUFFER tokens,
 	 /* The tcon bytes of relevance are now in tcon_bytes */
 	 for (pad_byte = 0; pad_byte < tcon_size; pad_byte++)
 	 {
-	    if (pad_byte > 0)
-	       Append_Token_Special(tokens, ',');
-	    Append_Token_String(tokens, 
-	       Number_as_String(tcon_bytes.byte[pad_byte], "%llu"));
 	 }
 	 *current_offset += tcon_size;
 	 break;
@@ -499,7 +502,8 @@ INITV2C_struct_fill(TOKEN_BUFFER tokens,
 	 Append_Token_Special(tokens, ',');
 
    } /*while*/
-   Append_Token_Special(tokens, '}');
+   if(do_paren)
+     Append_Token_Special(tokens, '}');
 } /* INITV2C_struct_fill */
 
 
@@ -517,6 +521,7 @@ INITV2C_block_struct(TOKEN_BUFFER tokens,
    FLD_HANDLE    fld;
    TY2C_FLD_INFO fld_info;
    BOOL          a_field_is_initialized = FALSE;
+   BOOL          do_comma = TRUE;
 
    /* Walk through the list of (comma separated) initializers 
     * for the aggregate initializer, ignoring padding.
@@ -565,6 +570,8 @@ INITV2C_block_struct(TOKEN_BUFFER tokens,
 		     Append_Token_Special(tokens, ',');
 		  else
 		     a_field_is_initialized = TRUE;
+		  if (INITV_kind(Initv_Table[inv]) == INITVKIND_PAD)
+		    do_comma = FALSE;
 		  INITV2C_struct_fill(tokens,
 				      &inv, &inv_repeat,
 				      &local_offset, FLD_ofst(fld));
@@ -574,14 +581,17 @@ INITV2C_block_struct(TOKEN_BUFFER tokens,
 		  /* An initializer exists for this field.
 		   */
 		  if (a_field_is_initialized)
+		   if(do_comma)
 		     Append_Token_Special(tokens, ',');
+		   else
+		    do_comma = TRUE;
 		  else
 		     a_field_is_initialized = TRUE;
 
 		  /* Work around a Fortran bug! TODO: Rewrite this to
 		   * be more similar to whirl2f and to work for all cases.
 		   */
-		  if (PU_src_lang(CURRENT_SYMTAB) == PU_F77_LANG &&
+		  if (PU_src_lang(Get_Current_PU()) == PU_F77_LANG &&
 		      (INITV_kind(Initv_Table[inv]) == INITVKIND_ZERO ||
 		       INITV_kind(Initv_Table[inv]) == INITVKIND_ONE  ||
 		       INITV_kind(Initv_Table[inv]) == INITVKIND_VAL))

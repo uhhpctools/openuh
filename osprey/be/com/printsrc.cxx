@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: printsrc.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/printsrc.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:38-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.printsrc.cxx $
  *
  * Revision history:
  *  10-june-93 - Original Version
@@ -53,7 +53,7 @@
 
 #ifdef _KEEP_RCS_ID
 static const char source_file[] = __FILE__;
-static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/com/printsrc.cxx,v $ $Revision: 1.1.1.1 $";
+static const char rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.printsrc.cxx $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include <stdio.h>
@@ -123,7 +123,7 @@ static void Gen_File_Table(void)
   {
     file = DST_FILE_IDX_TO_PTR (idx);
     if (DST_IS_NULL(DST_FILE_NAME_name(file))) {
-      name = "NULLNAME";
+      name = const_cast<char*>("NULLNAME");
     }
     else {
       name = DST_STR_IDX_TO_PTR (DST_FILE_NAME_name(file));
@@ -192,6 +192,9 @@ void Print_Src_Line(SRCPOS srcpos, FILE *f)
     cur_file_index = filenum;
     cur_file = &file_table[cur_file_index];
     /* open the new file. */
+    if (cur_file->incl_index == 0)
+    sprintf (buf, "%s", cur_file->filename);
+    else
     sprintf (buf, "%s/%s", incl_table[cur_file->incl_index], 
 			   cur_file->filename);
     cur_file->fileptr = fopen (buf, "r");

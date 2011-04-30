@@ -49,124 +49,6 @@ void *pKmapiInfo;
 //int trying123;
 
 
-#if 0
-void dump_instruction_fus(FILE *fp, void *pknobs)
-
-{
-
-	int num_of_insts,iid,dummy;
-	kapi_fu_t fu;
-	knobs_t *pIknobs;
-
-	typedef struct {
-		int x;
-		int *ix;
-		char *gogo;
-		int nx[2];
-	} xtest;
-	typedef struct {
-		int nxs;
-		xtest *pxtest;
-		xtest *ppx[2];
-		char *dx;
-	} ytest;
-
-	static int yy[]={5,5};
-
-
-	static xtest xx[]= {{2,yy,"gogo",{0,0}},
-						{2,yy,"gogo",{0,0}}};
-	static xtest zz[2]= {{2,yy,"gogo",{0,0}},
-						{2,yy,"gogo",{0,0}}};
-
-	static ytest ylast={2,
-						&(zz[1]),
-						{xx,zz},
-						"gugunza",
-	};
-
-	char *str;
-	char *cIdx;
-	char buffer[100];
-	int idx;
-	int iVal;
-	FILE *fpTab=fopen("tryTab.c","w");
-	int expressions=KAPI_EnumCardinality(pknobs,"expressions");
-	int i0,i1,m0,m1;
-	i0=KAPI_EnumIndex(pknobs,"port_t","portI0");
-	i1=KAPI_EnumIndex(pknobs,"port_t","portI1");
-	m0=KAPI_EnumIndex(pknobs,"port_t","portM0");
-	m1=KAPI_EnumIndex(pknobs,"port_t","portM1");
-	dummy=KAPI_cportMask4ut(pknobs,0,kapi_utI);
-	iVal=(1 << i0) | (1 << i1);
-/*	dummy=KAPI_portMask4ut(pknobs,0,kapi_utI); */
-	dummy=KAPI_cportMask4ut(pknobs,0,kapi_utM);
-	iVal=(1 << m0) | (1 << m1);
-	dummy=KAPI_cportMask4ut(pknobs,0,kapi_utF);
-	dummy=KAPI_cportMask4ut(pknobs,0,kapi_utB);
-	
-	
-	dummy=KAPI_fuCount(pknobs);
-	num_of_insts=KAPI_iidCount(pknobs);
-	_strset(buffer,0);
-	str="#include \"tryhead.h\"\n\ninst_info_tab_t infoTab[] = {\n";
-	fwrite(str,sizeof(char),strlen(str),fp);
-	for (iid=0;iid<num_of_insts;iid++)
-	{
-		_strset(buffer,0);
-		str=KAPI_iid2uniqueName(pknobs,iid,dummy);
-		fwrite(str,sizeof(char),strlen(str),fp);
-		fwrite(",",sizeof(char),1,fp);
-		fu=KAPI_iid2fu(pknobs,iid,dummy);
-		strcat(buffer,"/* ");
-		strcat(buffer,KAPI_fu2fuName(pknobs,fu,dummy));
-		strcat(buffer," */");
-		fwrite(buffer,sizeof(char),strlen(buffer),fp);
-		*buffer='\0';
-		_itoa(fu,buffer,10);
-		fwrite(buffer,sizeof(char),strlen(buffer),fp);
-		fwrite(",",sizeof(char),1,fp);
-		fwrite("\n",sizeof(char),1,fp);
-	}
-	_strset(buffer,0);
-	str="0,0\n};\n/*";
-	fwrite(str,sizeof(char),strlen(str),fp);
-	
-	for (idx=0;idx<expressions;idx++)
-	{
-		*buffer='\0';
-		cIdx=KAPI_EnumName(pknobs,idx,"expressions");
-		iVal=KAPI_GetIntegerVariable(pknobs,"expr",idx);
-		sprintf(buffer,"[%s] = %d\n",cIdx,iVal);
-		fwrite(buffer,sizeof(char),strlen(buffer),fp);
-	}
-	_strset(buffer,0);
-	str="*/\n\n";
-	fwrite(str,sizeof(char),strlen(str),fp);
-	printf("finished Try\n");
-	fclose(fp);
-	fp=fopen("T1.c","w");
-	KAPI_save_as_header_all_IA64_info( fp, pknobs , "trying123");
-	printf("finished T1\n");
-	fclose(fp);
-	fclose(fpTab);
-	//KAPI_fEnableIA64call_from_header(&pknobs,&trying123,0);
-	fp=fopen("T2.c","w");
-	KAPI_save_as_header_all_IA64_info( fp, pknobs , "trying123");
-	fclose(fp);
-	printf("finished T2\n");
-
-//	pKmapiInfo=KMAPI_initialize(pknobs);
-	if (pKmapiInfo!=NULL)
-		printf("Kmapi initialized!\n");
-	else 
-	{
-		printf("Kmapi Initialization Failed!\n");
-	}
-	//_getch();
-}
-
-#endif
 
 int main( int argc, char *argv[] )
 {
@@ -236,11 +118,6 @@ int main( int argc, char *argv[] )
       fprintf( stderr, "KAPI_Initialize failed\n" );
    }
 
-#if 0
-   Test_bv128Rtns();
-   Test_bv64Rtns();
-   Test_bv32Rtns();
-#endif
 
    return 0;
 }

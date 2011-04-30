@@ -162,6 +162,8 @@ extern BB *RGN_Gen_And_Insert_BB_Before(BB *point,
  
 extern void RGN_Remove_BB_And_Edges(BB *bb, 
                   REGIONAL_CFG *regional_cfg = NULL);
+extern void RGN_Unlink_BB_Edges(BB *bb,
+                  REGIONAL_CFG *regional_cfg = NULL);
 
 extern void Add_Regional_Cfg_Edge(REGIONAL_CFG_NODE *pred, 
                                   REGIONAL_CFG_NODE *succ, 
@@ -188,6 +190,6 @@ extern void RGN_Unlink_Pred_Succ(BB *pred, BB *succ,
 
 
 extern GTN_SET *Region_Def_Reach_In(REGION *rgn, MEM_POOL *pool);
-extern BB *RGN_Divide_BB(BB *bb, OP *point);
+extern BB *RGN_Divide_BB(BB *bb, OP *point, BOOL force = FALSE);
 
 #endif

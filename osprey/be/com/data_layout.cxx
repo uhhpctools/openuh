@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -40,10 +44,10 @@
 /* ====================================================================
  * ====================================================================
  *
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/data_layout.cxx,v $
+ * $Revision: 1.68 $
+ * $Date: 05/12/05 08:59:12-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.data_layout.cxx $
  *
  * Revision history:
  *  11-Nov-94 - Original Version
@@ -60,8 +64,14 @@
 #endif /* USE_PCH */
 #pragma hdrstop
 #include <cmplrs/rcodes.h>
+#ifndef __MINGW32__
 #include <sys/resource.h>
+#endif /* __MINGW32__ */
+#if (__GNUC__==2)
+#include <slist>
+#else
 #include <ext/slist>
+#endif
 #include "defs.h"
 #include "erglob.h"
 #include "erbe.h"
@@ -87,9 +97,20 @@
 #include "config_opt.h"    // for CIS_Allowed
 
 extern void (*CG_Set_Is_Stack_Used_p)();
+extern INT (*Push_Pop_Int_Saved_Regs_p)(void);
 #endif
-
+#if defined(TARG_SL)
+#include <map>
+#include <vector>
+#include "fb_whirl.h"
+#include "config_debug.h"
+#endif
 extern void Early_Terminate (INT status);
+
+#if defined(TARG_MIPS) && !defined(TARG_SL)
+//static BOOL inline Is_Target_64bit (void) { return TRUE; }
+static BOOL inline Is_Target_32bit (void) { return FALSE; }
+#endif // TARG_MIPS
 
 #define ST_force_gprel(s)	ST_gprel(s)
 
@@ -99,10 +120,17 @@ ST *Local_Spill_Sym;
 extern INT32 mp_io;
 INT32 Current_PU_Actual_Size;
 STACK_MODEL Current_PU_Stack_Model = SMODEL_UNDEF;
-
+#ifdef TARG_PPC32
+INT64 PU_Frame_Size = 0;
+static INT32 Int_Formal_Size   = 0;
+static INT32 Float_Formal_Size = 0;
+#endif
 #define ST_NAME(st)	(ST_class(st) == CLASS_CONST ? \
 	Targ_Print(NULL,STC_val(st)) : ST_name(st) )
 
+#define ST_NO_LINKAGE(st) \
+    (ST_export(st) == EXPORT_LOCAL ||   \
+     ST_export(st) == EXPORT_LOCAL_INTERNAL)
 static BOOL Frame_Has_Calls;	// whether stack frame has calls
 
 /* ====================================================================
@@ -133,7 +161,7 @@ typedef struct {
   SF_SEGMENT	seg;	/* Which segment */
   ST           *block;  /* Which ST block */
   mINT64	maxsize;/* Maximum allocated size */
-  char	       *name;	/* For tracing */
+  const char   *name;	/* For tracing */
 } SF_SEG_DESC;
 
 #define	SFSEG_seg(s)	((s)->seg)
@@ -227,6 +255,15 @@ static void Allocate_Label (ST *lab);
 // bug fix for OSP_138
 BOOL ST_has_Predefined_Named_Section (ST *, SECTION_IDX &);
 static void Allocate_Object_To_Predefined_Named_Section (ST *, SECTION_IDX);
+
+enum _sec_kind Get_Const_Var_Section()
+{
+#if defined(TARG_SL)                
+    return _SEC_DATA;
+#else              
+    return _SEC_RDATA;
+#endif
+}
 
 extern BOOL
 Is_Allocated (ST *st)
@@ -560,7 +597,7 @@ Create_Local_Block( STACK_DIR dir, STR_IDX name )
 }
 
 static ST *
-Create_Base_Reg (char *name, STACK_DIR dir)
+Create_Base_Reg (const char *name, STACK_DIR dir)
 {
   ST *new_blk = Create_Local_Block(dir, Save_Str(name));
   Set_STB_root_base(new_blk);
@@ -612,7 +649,21 @@ Allocate_Space(ST *base, ST *blk, INT32 lpad, INT32 rpad, INT64 maxsize)
 {
   UINT align = Adjusted_Alignment(blk);
   INT64 old_offset;
-  INT64 size = ST_size(blk);
+  INT64 size;
+  INITO_IDX ino_idx;
+  // if blk is variable length struct, its size should be inito size.
+  if (TY_kind(ST_type(blk)) == KIND_STRUCT && (ino_idx = Find_INITO_For_Symbol(blk)) != 0 && INITV_kind(INITO_val(ino_idx)) == INITVKIND_BLOCK)
+  {
+    size = Get_INITO_Size(ino_idx);
+    Is_True(size >= ST_size(blk),("%s's inito size smaller than ST_size",ST_name(blk)));
+  }
+  else
+    size = ST_size(blk);
+#if defined(TARG_PPC32)
+  if ( ST_sclass(blk) == SCLASS_FORMAL && MTYPE_is_m(TY_mtype(ST_type(blk))) ) {
+    size = MTYPE_RegisterSize(Spill_Int_Mtype);;
+  }
+#endif 
 
 #ifdef KEY
   // C++ requires distinct addresses for empty classes
@@ -635,7 +686,11 @@ Allocate_Space(ST *base, ST *blk, INT32 lpad, INT32 rpad, INT64 maxsize)
 	-(INT64) ROUNDUP(ST_ofst(blk) + size + rpad, align)); /* start */
     Set_STB_size(base, -ST_ofst(blk));
   }
+#ifdef TARG_PPC32
+  if ((base == SP_Sym && Frame_Has_Calls)) {
+#else
   if ((base == SP_Sym && Frame_Has_Calls) || base == FP_Sym) {
+#endif
 	// on stack
 	// All stack offsets are adjusted a certain amount,
 	// such that we can use part of the space from the callers frame.
@@ -656,7 +711,7 @@ Allocate_Space(ST *base, ST *blk, INT32 lpad, INT32 rpad, INT64 maxsize)
 #ifdef KEY
 		  align
 #else
-		  TY_align(ST_type(blk) 
+		  TY_align(ST_type(blk))
 #endif // KEY
 		  );
   }
@@ -783,7 +838,12 @@ Add_Object_To_Frame_Segment ( ST *sym, SF_SEGMENT seg, BOOL allocate )
       // struct params are left-justified.
       if (TY_kind(ST_type(sym)) == KIND_STRUCT)
       {
-	rpad = ROUNDUP(size, MTYPE_RegisterSize(Spill_Int_Mtype)) - size;
+#if defined(TARG_PPC32)
+        size = MTYPE_RegisterSize(Spill_Int_Mtype);
+        lpad = rpad = 0;
+#else
+	 rpad = ROUNDUP(size, MTYPE_RegisterSize(Spill_Int_Mtype)) - size;
+#endif
       }
       else
       {
@@ -804,11 +864,50 @@ Add_Object_To_Frame_Segment ( ST *sym, SF_SEGMENT seg, BOOL allocate )
       }
       break;
     }
+#if defined(TARG_PPC32)    
+    if (seg != SFSEG_FORMAL)
+#endif
     ST_Block_Merge (SF_Block(seg), sym, lpad, rpad, SF_Maxsize(seg));
 
 #ifndef TARG_X8664
     if (seg == SFSEG_FORMAL)
     {
+#if defined(TARG_PPC32)    
+      extern INT Float_Formal_Save_Area_Size;
+
+      ST * formal           = SF_Block(seg);
+      int type_formal_size  = 0;
+      int type_formal_bound = 0;
+      TY_IDX tyidx          = ST_type(sym);
+      TYPE_ID mtype         = TY_mtype(tyidx);
+      
+      if ( (mtype != MTYPE_F8) && (mtype != MTYPE_F4) ) {
+        if (MTYPE_is_m(mtype)) {
+          Int_Formal_Size += ST_size(Int_Preg);
+        } else {
+          Int_Formal_Size  += (ST_size(sym) + rpad + lpad);
+        }
+        type_formal_size  = Int_Formal_Size;
+        type_formal_bound = Formal_Save_Area_Size;
+      }
+      else {
+        Float_Formal_Size += (ST_size(sym) + rpad + lpad);
+        type_formal_size   = Float_Formal_Size;
+        type_formal_bound  = Float_Formal_Save_Area_Size;
+      }      
+      
+      if (type_formal_size > type_formal_bound) {
+        ST *upformal = SF_Block(SFSEG_UPFORMAL);
+        if (Trace_Frame) 
+          fprintf(TFile, "<lay> split formal between segs\n");
+
+        Initialize_Frame_Segment(SFSEG_UPFORMAL, ST_sclass(sym), INCREMENT);
+        ST_Block_Merge(SF_Block(SFSEG_UPFORMAL), sym, lpad, rpad, SF_Maxsize(SFSEG_UPFORMAL));
+      } 
+      else {
+        ST_Block_Merge(SF_Block(seg), sym, lpad, rpad, SF_Maxsize(seg));
+      }
+#else   // TARG_PPC32
       ST *formal = SF_Block(seg);
 
      /* formal overlaps both formal and upformal area,
@@ -826,6 +925,7 @@ Add_Object_To_Frame_Segment ( ST *sym, SF_SEGMENT seg, BOOL allocate )
 	    STB_size(upformal) + STB_size(formal) - Formal_Save_Area_Size);
 	Set_STB_size(formal, Formal_Save_Area_Size);
       }
+#endif    // TARG_PPC32   
     }
 #endif
   }
@@ -912,7 +1012,6 @@ Find_Special_Return_Address_Symbol (void)
 	return ST_ptr(st_idx);
 
 } // Find_Special_Return_Address_Symbol
-
 
 /* ====================================================================
  *
@@ -927,6 +1026,14 @@ static ST*
 Get_Section_ST(SECTION_IDX sec, UINT align, ST_SCLASS sclass)
 {
   if (SEC_block(sec) == NULL) {
+#if defined(TARG_X8664) || defined(TARG_SL)  // bug 9795
+    if (sec == _SEC_DATA && align != 0)
+      align = MAX(align, 16);
+#if defined(TARG_SL)
+    if (((sec == _SEC_SDATA) || (sec == _SEC_DATA)) && (align < 4))
+      align = 4;
+#endif
+#endif
     ST *new_blk = New_ST_Block (Save_Str(SEC_name(sec)), 
 	TRUE/*is_global*/, sclass, align, 0);
     Set_STB_section_idx(new_blk, sec);
@@ -968,18 +1075,35 @@ Get_Section_ST_With_Given_Name (SECTION_IDX sec, ST_SCLASS sclass, STR_IDX name)
 			break;
 		}
 	}
+
 	if (newblk == NULL) {
-		// bug fix for OSP_129
-		// bug fix for OSP_254
-		// The gnu4 FE will put static variables in STL into .gnu.linkonce.d. or .gnu.linkonce.b
-		// If the section name does not start with .gnu.linkonce.b.
-		//    It's a user-defineded section, we 
-		//       Create Data section for user-defineded section
-	      if ( sec == _SEC_BSS && strncmp(Index_To_Str(name), ".gnu.linkonce.b.", 16) )
-		sec = _SEC_DATA; 
+              // bug fix for OSP_129
+              // bug fix for OSP_254
+              // The gnu4 FE will put static variables in STL into .gnu.linkonce.d. or .gnu.linkonce.b. or .bss.
+              // If the section name doesn't start with 
+              //     .gnu.linkonce.b. -or-
+              //     .bss.     
+              //    It's a user-defineded section, we 
+              //       Create Data section for user-defineded section
+              // The goal of these code is to be compatible with GCC
+              if ( strncmp(Index_To_Str(name), ".gnu.linkonce.b.", 16) == 0 || 
+                   strncmp(Index_To_Str(name), ".bss.", 5) == 0 ) {
+                // For .gnu.linkonce.b., .bss., force to _SEC_BSS
+		sec = _SEC_BSS;
+              }
+              else if ( sec == _SEC_BSS ) {
+                // Otherwise, user defined section, force to _SEC_DATA
+                sec = _SEC_DATA;
+              }
 	      ST *blk = Get_Section_ST(sec, 0, sclass);
-	      newblk = Copy_ST_Block(blk);
-	      Set_ST_name_idx(newblk, name);
+	      if (strcmp(SEC_name(sec), Index_To_Str(name)) == 0) {
+		// seen this before, no need to create a new blk
+		newblk = blk;
+	      }
+	      else {
+		  newblk = Copy_ST_Block(blk);
+		  Set_ST_name_idx(newblk, name);
+	      }
 	}
 	return newblk;
 }
@@ -991,13 +1115,14 @@ void
 Assign_ST_To_Named_Section (ST *st, STR_IDX name)
 {
 	ST *newblk;
+	if (ST_is_not_used(st))
+		return;
+
 	// bug fix for OSP_138
 	SECTION_IDX sec_idx;    
 	/* If st has section name attribute and it's same as one of the predefined section name,
 	 * it is hanled in the same way as normal st. So it isn't assigned to section here. */
 	if (ST_has_Predefined_Named_Section(st, sec_idx))
-		return;
-	if (ST_is_not_used(st))
 		return;
 	if (ST_class(st) == CLASS_FUNC) {
 		if (ST_sclass(st) == SCLASS_EXTERN) {
@@ -1020,21 +1145,34 @@ Assign_ST_To_Named_Section (ST *st, STR_IDX name)
 		case SCLASS_FSTATIC:
 		case SCLASS_PSTATIC:
 			// must be initialized
-     			if (ST_is_constant(st)) sec = _SEC_RDATA;
+  		if (ST_is_constant(st)) sec = Get_Const_Var_Section();
 		        // bug fix for OSP_129
 			else if ( ST_is_initialized(st) )
 				sec = _SEC_DATA;
 			else
 			        sec = _SEC_BSS;	// if data is not initialized, it's still in BSS
-		        break;
+			break;
 		case SCLASS_UGLOBAL:
 #ifdef KEY
     			if (ST_is_constant(st) &&	// bug 4743
 			    !ST_is_weak_symbol(st)) {	// bug 4823
-			  sec = _SEC_RDATA;
+			  sec = Get_Const_Var_Section();
 			} else
 #endif
-			sec = _SEC_BSS;
+#if defined(TARG_SL)
+			if (name != _SEC_BSS) {
+			  DevWarn("change user specified section symbol to be initialized");
+			  Set_ST_is_initialized(st);
+			  Set_ST_sclass(st, SCLASS_DGLOBAL);
+			  INITO_IDX ino = New_INITO(st);
+			  INITV_IDX inv = New_INITV();
+			  INITV_Init_Pad (inv, ST_size(st));
+			  Set_INITO_val(ino, inv);
+			  sec = _SEC_DATA;
+			}
+			else
+#endif
+			  sec = _SEC_BSS;
 			break;
 #ifdef KEY
 		case SCLASS_COMMON:
@@ -1081,29 +1219,6 @@ struct Assign_Section_Names
     }
 };
 
-// return section name for corresponding ST via st_attr table
-struct find_st_attr_secname {
-        ST_IDX st;
-        find_st_attr_secname (const ST *s) : st (ST_st_idx (s)) {}
-
-        BOOL operator () (UINT, const ST_ATTR *st_attr) const {
-            return (ST_ATTR_kind (*st_attr) == ST_ATTR_SECTION_NAME &&
-                    ST_ATTR_st_idx (*st_attr) == st);
-        }
-};
-
-STR_IDX
-Find_Section_Name_For_ST (const ST *st)
-{
-    ST_IDX idx = ST_st_idx (st);
-    ST_ATTR_IDX d;
-
-    d = For_all_until (St_Attr_Table, ST_IDX_level (idx),
-                          find_st_attr_secname(st));
-    FmtAssert(d != 0, ("didn't find section name for ST %s", ST_name(st)));
-    return ST_ATTR_section_name(St_Attr_Table(ST_IDX_level (idx), d));
-}
-
 
 /*
  * In -64 there are two areas for the parameters:
@@ -1134,6 +1249,10 @@ Calc_Actual_Area ( TY_IDX pu_type, WN *pu_tree )
 	INT regsize = MTYPE_RegisterSize(Spill_Int_Mtype);
 	INTRINSIC	id;
 
+#if defined(TARG_PPC32)
+  INT int_type     = 0;
+  INT double_type  = 0;
+#endif
 	switch (WN_operator(pu_tree)) {
 	case OPR_PICCALL:
 	case OPR_ICALL:
@@ -1144,13 +1263,27 @@ Calc_Actual_Area ( TY_IDX pu_type, WN *pu_tree )
 		num_parms = WN_num_actuals(pu_tree);
        		ploc = Setup_Output_Parameter_Locations(pu_type);
        		for (i = 0; i < num_parms; i++) {
-		  ploc = Get_Output_Parameter_Location (TY_Of_Parameter(WN_actual(pu_tree,i)));
+			TY_IDX ty = TY_Of_Parameter(WN_actual(pu_tree,i));
+		  ploc = Get_Output_Parameter_Location (ty);
 #ifdef TARG_X8664
 		  if (ploc.reg == 0)  // not passed in register
 		    size = PLOC_total_size(ploc);
 #endif
-		}
-#ifndef TARG_X8664
+#if defined(TARG_PPC32)
+    if (ploc.reg == 0) {
+      if (MTYPE_is_float(TY_mtype(ty))) {
+        double_type += PLOC_size(ploc);
+      }
+      else {
+        int_type    += PLOC_size(ploc);
+      } 
+    }
+#endif
+    }
+#if defined(TARG_PPC32)   
+    size = int_type + double_type;
+#endif
+#if !defined(TARG_X8664) && !defined(TARG_PPC32)
 		size = PLOC_total_size(ploc);
 #endif
 		break;
@@ -1211,7 +1344,9 @@ Calc_Actual_Area ( TY_IDX pu_type, WN *pu_tree )
 		Set_PU_arg_area_size(pu_type, size);
 	}
   }
+#if !defined(TARG_PPC32)  
   size -= Formal_Save_Area_Size;
+#endif
   if (size < 0) 
     size = 0;
   else if (Trace_Frame)
@@ -1385,11 +1520,21 @@ Allocate_Entry_Formal(ST *formal, BOOL on_stack, BOOL in_formal_reg)
 	sec = Shorten_Section(formal, _SEC_BSS);
     	Allocate_Object_To_Section(formal, sec, Adjusted_Alignment(formal));
     }
+#ifdef TARG_NVISA
+    // if use shared memory, then treat like static (don't put on stack)
+    // will end up putting it in param memory.
+    else if (ST_in_shared_mem(formal)) {
+	Clear_ST_is_value_parm(formal);
+    	Allocate_Object_To_Section(formal, _SEC_BSS, Adjusted_Alignment(formal));
+    }
+#endif
+#ifndef TARG_MIPS // bug 12772
     else if (in_formal_reg)
     {
       /* parameter is in register, so put in FORMAL area */
       Add_Object_To_Frame_Segment ( formal, SFSEG_FORMAL, TRUE );
     }
+#endif
     else if (on_stack)
     {
       /* parameter is on stack, so put in either UPFORMAL or FTEMP area */
@@ -1400,6 +1545,13 @@ Allocate_Entry_Formal(ST *formal, BOOL on_stack, BOOL in_formal_reg)
       	Add_Object_To_Frame_Segment ( formal, SFSEG_UPFORMAL, TRUE );
       }
     }
+#ifdef TARG_MIPS // bug 12772
+    else if (in_formal_reg)
+    {
+      /* parameter is in register, so put in FORMAL area */
+      Add_Object_To_Frame_Segment ( formal, SFSEG_FORMAL, TRUE );
+    }
+#endif
     else 
     {
 	// formal not in usual parameter reg and not on stack
@@ -1433,12 +1585,12 @@ static TY_IDX Formal_ST_type(ST *sym)
 }
 
 /* indexed list of vararg symbols */
-# if MAX_NUMBER_OF_REGISTER_PARAMETERS > 0
-    ST *vararg_symbols[MAX_NUMBER_OF_REGISTER_PARAMETERS];	
-# else
+#if MAX_NUMBER_OF_REGISTER_PARAMETERS > 0
+static ST *vararg_symbols[MAX_NUMBER_OF_REGISTER_PARAMETERS];	
+#else
     // zero length arrays not allowed.
-#   define vararg_symbols ((ST * *)0)  // Not accessed
-# endif
+#define vararg_symbols ((ST * *)0)  // Not accessed
+#endif
 
 /* this is just so we don't have symbols dangling around in next PU */
 static void
@@ -1454,7 +1606,7 @@ Clear_Vararg_Symbols (void)
 extern ST*
 Get_Vararg_Symbol (PLOC ploc)
 {
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) && !defined(TARG_PPC32)
 	Is_True(PLOC_reg(ploc) < 
 		First_Int_Preg_Param_Offset+MAX_NUMBER_OF_REGISTER_PARAMETERS,
 		("Get_Vararg_Symbol:  ploc %d out of range", PLOC_reg(ploc)));
@@ -1465,6 +1617,12 @@ Get_Vararg_Symbol (PLOC ploc)
 	else
 	  return vararg_symbols[PLOC_reg(ploc)-First_Float_Preg_Param_Offset+MAX_NUMBER_OF_INT_REGISTER_PARAMETERS];
 #endif
+}
+
+extern ST*
+Get_Upformal_Segment(void)
+{
+  return SF_Block(SFSEG_UPFORMAL);
 }
 
 #ifdef TARG_X8664
@@ -1506,7 +1664,7 @@ Allocate_All_Formals (WN *pu)
 {
   INT i;
   PLOC ploc;
-  ST *sym;
+  ST *sym = NULL;
   BOOL varargs;
   TY_IDX pu_type = ST_pu_type (WN_st (pu));
 
@@ -1514,6 +1672,9 @@ Allocate_All_Formals (WN *pu)
   varargs = TY_is_varargs (pu_type);
   ploc = Setup_Input_Parameter_Locations(pu_type);
 
+#if defined(TARG_PPC32)// PPC32 variable argument function allocate the 8 int, 8 float register on statck continuely
+  if (!varargs) {                   
+#endif    
  /*
   *  for varargs functions do not put the scalar formal base in a preg
   */
@@ -1527,6 +1688,9 @@ Allocate_All_Formals (WN *pu)
 
     Allocate_Entry_Formal (sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc)));
   }
+#if defined(TARG_PPC32)  
+  }
+#endif
 
   if ( PU_has_altentry(Get_Current_PU()))
   {
@@ -1552,6 +1716,87 @@ Allocate_All_Formals (WN *pu)
     }
   }
 
+#if defined(TARG_PPC32)
+  if (varargs) {
+    Clear_Vararg_Symbols();
+    
+    ST * last_fixed_symbol = NULL;
+    PLOC last_fixed_ploc;
+    
+    TY_IDX vararg_int   = Copy_TY(ST_type(Int_Preg)); 
+    Set_TY_no_ansi_alias(vararg_int);
+    TY_IDX vararg_float = Copy_TY(ST_type(Float_Preg));
+    Set_TY_no_ansi_alias(vararg_float);
+    TY_IDX vararg_dummy = MTYPE_TO_TY_array[MTYPE_F4];
+    Set_TY_no_ansi_alias(vararg_dummy);
+
+    // allocate int parameters
+    int num = 0;
+    ploc = Setup_Input_Parameter_Locations(pu_type);
+    for (i = 0; i < WN_num_formals(pu); i++)
+    {
+      sym = WN_st(WN_formal(pu, i)); 
+      TY_IDX ty   = ST_type(sym);
+      TYPE_ID tid = TY_mtype (ty);
+      if (!MTYPE_float(tid)) {
+        ploc = Get_Input_Parameter_Location(Formal_ST_type(sym));       
+        num++;
+        sym =  Formal_Sym(sym, PLOC_on_stack(ploc));
+        Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc))); 
+      }
+    }
+
+    while (num < MAX_NUMBER_OF_INT_REGISTER_PARAMETERS) {
+      ploc = Get_Vararg_Input_Parameter_Location (ploc);
+      sym = Gen_Temp_Symbol (vararg_int, "va_param_int");
+      Set_ST_sclass (sym, SCLASS_FORMAL);
+      Set_ST_is_value_parm( sym);
+      Set_ST_addr_saved(sym);
+
+      vararg_symbols[num] = sym;
+      num++;
+      Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc))); 
+    }
+  
+    // allocate float parameters
+    num = 0;
+    for (i = 0; i < WN_num_formals(pu); i++)
+    {
+      sym = WN_st(WN_formal(pu, i)); 
+      
+      TY_IDX ty   = ST_type(sym);
+      TYPE_ID tid = TY_mtype (ty);
+      if (MTYPE_float(tid)) {
+        num++;
+        ploc = Get_Input_Parameter_Location(Formal_ST_type(sym));      
+        sym  =  Formal_Sym(sym, PLOC_on_stack(ploc));
+        Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc)));
+
+        // Gen f4 dummy parameter for allocate fix space for va_param_float
+        if (tid == MTYPE_F4) {
+          sym = Gen_Temp_Symbol (vararg_dummy, "va_param_f4_dummy");
+          Set_ST_sclass (sym, SCLASS_FORMAL);
+          Set_ST_is_value_parm( sym);
+          Set_ST_addr_saved(sym);
+          
+          Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc)));
+        }
+      }
+    }
+
+    while (num < MAX_NUMBER_OF_FLOAT_REGISTER_PARAMETERS) {
+      ploc = Get_Vararg_Input_Parameter_Location (ploc);
+      sym = Gen_Temp_Symbol (vararg_float, "va_param_float");
+      Set_ST_sclass (sym, SCLASS_FORMAL);
+      Set_ST_is_value_parm( sym);
+      Set_ST_addr_saved(sym);
+
+      vararg_symbols[MAX_NUMBER_OF_INT_REGISTER_PARAMETERS + num] = sym;
+      num++;
+      Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc)));
+    }
+  }
+#else 
   if (varargs) {
 	/*
 	 *  For varargs, the func-entry just has the list of fixed
@@ -1617,15 +1862,15 @@ Allocate_All_Formals (WN *pu)
 		Set_ST_sclass (sym, SCLASS_FORMAL);
 		Set_ST_is_value_parm( sym);
 		Set_ST_addr_saved(sym);
-#ifdef TARG_X8664
+#if defined(TARG_X8664) 
 		if (Preg_Offset_Is_Int(PLOC_reg(ploc)))
-#endif
 		vararg_symbols[PLOC_reg(ploc)-First_Int_Preg_Param_Offset] = sym;
-#ifdef TARG_X8664
 		else if( Preg_Offset_Is_Float(PLOC_reg(ploc)) )
 		  vararg_symbols[PLOC_reg(ploc)-First_Float_Preg_Param_Offset+MAX_NUMBER_OF_INT_REGISTER_PARAMETERS] = sym;
 		else
 		  FmtAssert( false, ("Unknown vararg symbol type.") );
+#else 
+      vararg_symbols[PLOC_reg(ploc)-First_Int_Preg_Param_Offset] = sym;
 #endif
 #ifndef TARG_X8664
 		Allocate_Entry_Formal(sym, PLOC_on_stack(ploc), Is_Formal_Preg(PLOC_reg(ploc)));
@@ -1644,6 +1889,7 @@ Allocate_All_Formals (WN *pu)
 		ploc = Get_Vararg_Input_Parameter_Location (ploc);
 	}
   }
+#endif // TARG_PPC32  
 }
 
 /* For stack parameters in altentry functions, 
@@ -1667,7 +1913,7 @@ Get_Altentry_UpFormal_Symbol (ST *formal, PLOC ploc)
   if (PUSH_FRAME_POINTER_ON_STACK && PU_has_alloca(Get_Current_PU())) {
     offset += MTYPE_byte_size(Pointer_Mtype);
   }
-#ifdef TARG_X8664  // always reserve FP save location to maintain quad align
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)  // always reserve FP save location to maintain quad align
   else offset += MTYPE_byte_size(Pointer_Mtype);
 #endif
   if (PUSH_RETURN_ADDRESS_ON_STACK) {
@@ -1689,7 +1935,12 @@ Calc_Formal_Area (WN *pu_tree, INT32 *formal_size, INT32 *upformal_size)
   FmtAssert(WN_opcode(pu_tree) == OPC_FUNC_ENTRY, ("not a func-entry"));
 
   if (TY_is_varargs (pu_ty)) {
+#ifdef TARG_PPC32
+       extern INT Float_Formal_Save_Area_Size;
+       *formal_size = Formal_Save_Area_Size + Float_Formal_Save_Area_Size;
+#else
 	*formal_size = Formal_Save_Area_Size;
+#endif
 	*upformal_size = 0;
 	/* don't set PU_arg_area_size, cause changes with each call */
 	return;
@@ -1821,9 +2072,13 @@ Init_Segment_Descriptors(void)
 static void
 Init_Formal_Segments (INT32 formal_size, INT32 upformal_size)
 {
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) && !defined(TARG_LOONGSON)
   SF_Maxsize ( SFSEG_UPFORMAL ) = ROUNDUP(upformal_size, stack_align);
   SF_Maxsize ( SFSEG_FORMAL ) = ROUNDUP(formal_size, stack_align);
+#endif
+#if defined(TARG_PPC32)
+  Int_Formal_Size   = 0;
+  Float_Formal_Size = 0;
 #endif
 }
 
@@ -1907,7 +2162,6 @@ Merge_Fixed_Stack_Frame(ST *SP_baseST, ST *FP_baseST)
   INT32 orig_formal_size;
   FmtAssert(SP_baseST != NULL && FP_baseST != NULL,
 	    ("Initialize_Stack_Frame: Invalid parameters"));
-
   Set_STB_size(SP_baseST,0);
   Set_STB_size(FP_baseST,0);
 
@@ -1918,23 +2172,25 @@ Merge_Fixed_Stack_Frame(ST *SP_baseST, ST *FP_baseST)
   BOOL pu_is_varargs = TY_is_varargs (ST_pu_type (Get_Current_PU_ST()));
   if (pu_is_varargs) {
 	orig_formal_size = STB_size(SF_Block(SFSEG_FORMAL));
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) && !defined(TARG_PPC32) && !defined(TARG_LOONGSON)
   	Set_STB_size(SF_Block(SFSEG_FORMAL), SF_Maxsize(SFSEG_FORMAL));
 #endif
   }
-
   switch ( Current_PU_Stack_Model) {
   case SMODEL_SMALL:
     MERGE_SEGMENT(SP_baseST, SFSEG_ACTUAL, Max_Small_Frame_Offset);
     /* only altentries may use the temp area, so merge it now */
     MERGE_SEGMENT(SP_baseST, SFSEG_FTEMP, Max_Small_Frame_Offset);
-
 #ifndef KEY
     // don't know offset of formals and upformals,
     // so leave alone until finalized.
 #else
     /* attach formals and upformal to SP, but don't assign offsets till finalize */
+#ifdef TARG_PPC32
+     MERGE_SEGMENT(SP_Sym, SFSEG_FORMAL, Max_Small_Frame_Offset);
+#else
     Set_ST_base(SF_Block(SFSEG_FORMAL), SP_baseST);
+#endif
     Set_ST_base(SF_Block(SFSEG_UPFORMAL), SP_baseST);
 #endif
     break;
@@ -1944,15 +2200,22 @@ Merge_Fixed_Stack_Frame(ST *SP_baseST, ST *FP_baseST)
     MERGE_SEGMENT(SP_baseST, SFSEG_FTEMP, MAX_LARGE_FRAME_OFFSET);
     Set_ST_base(SF_Block(SFSEG_UPFORMAL), FP_baseST);
     Set_ST_ofst (SF_Block(SFSEG_UPFORMAL), Stack_Offset_Adjustment);
+#ifdef TARG_PPC32
+    MERGE_SEGMENT(SP_baseST, SFSEG_FORMAL, MAX_LARGE_FRAME_OFFSET);
+#else
     MERGE_SEGMENT(FP_baseST, SFSEG_FORMAL, MAX_LARGE_FRAME_OFFSET);
+#endif
     break;
 
   case SMODEL_DYNAMIC:
     MERGE_SEGMENT(SP_baseST, SFSEG_ACTUAL, MAX_LARGE_FRAME_OFFSET);
     Set_ST_base(SF_Block(SFSEG_UPFORMAL), FP_baseST);
     Set_ST_ofst (SF_Block(SFSEG_UPFORMAL), Stack_Offset_Adjustment);
-
+#ifdef TARG_PPC32
+    Set_ST_base(SF_Block(SFSEG_FORMAL), FP_baseST);
+#else
     MERGE_SEGMENT(FP_baseST, SFSEG_FORMAL, MAX_LARGE_FRAME_OFFSET);
+#endif
     MERGE_SEGMENT(FP_baseST, SFSEG_FTEMP, MAX_LARGE_FRAME_OFFSET);
     break;
 
@@ -2011,6 +2274,19 @@ Allocate_Local_Spill_Sym (void)
   }
 }
 
+#if defined(TARG_PPC32)
+void
+Generate_Return_Address(void) {
+  ST* ra_sym = Find_Special_Return_Address_Symbol();
+    if (ra_sym == NULL) {
+        ra_sym = New_ST();
+        ST_Init (ra_sym, Save_Str ("__return_address"), CLASS_VAR, SCLASS_AUTO,
+	     EXPORT_LOCAL, Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE));
+    }
+    Add_Object_To_Frame_Segment (ra_sym, SFSEG_UPFORMAL, FALSE);
+}
+#endif
+
 extern void
 Initialize_Stack_Frame (WN *PU_tree)
 {
@@ -2034,6 +2310,7 @@ Initialize_Stack_Frame (WN *PU_tree)
 	fprintf(TFile, "<lay> Determine_Stack_Model for %s\n", 
 		ST_name(WN_st(PU_tree)));
 
+#ifndef TARG_X8664
   if (PU_has_return_address(Get_Current_PU()) 
 	&& MTYPE_byte_size(Pointer_Mtype) < MTYPE_byte_size(Spill_Int_Mtype) )
   {
@@ -2053,6 +2330,7 @@ Initialize_Stack_Frame (WN *PU_tree)
 	    MTYPE_byte_size(Spill_Int_Mtype) - MTYPE_byte_size(Pointer_Mtype) :
 	    0);
   }
+#endif
 
   Init_Segment_Descriptors();
   Init_PU_arg_area_size_array();
@@ -2069,9 +2347,7 @@ Initialize_Stack_Frame (WN *PU_tree)
     Frame_Has_Calls = TRUE;
   }
   Current_PU_Actual_Size = actual_size;
-
   frame_size = Calc_Local_Area ();
-
   if (PUSH_FRAME_POINTER_ON_STACK) {
     // Reserve the space on stack for the old frame pointer (ia32);
     // this is needed even if FP is not used, to maintain quad align
@@ -2088,13 +2364,20 @@ Initialize_Stack_Frame (WN *PU_tree)
 
   if (PUSH_RETURN_ADDRESS_ON_STACK) {
     // Reserve the space on stack for the return address (ia32)
-    ST* ra_st = New_ST ();
-    ST_Init (ra_st, 
-             Save_Str("return_address"),
-             CLASS_VAR,
-             SCLASS_FORMAL,
-             EXPORT_LOCAL,
-             MTYPE_To_TY(Pointer_Mtype));
+    ST* ra_st;
+#ifdef KEY // bug 12261: check before creating another return address symbol
+    if ((ra_st = Find_Special_Return_Address_Symbol()) == NULL) {
+#endif
+      ra_st = New_ST ();
+      ST_Init (ra_st, 
+	       Save_Str("return_address"),
+	       CLASS_VAR,
+	       SCLASS_FORMAL,
+	       EXPORT_LOCAL,
+	       MTYPE_To_TY(Pointer_Mtype));
+#ifdef KEY 
+    }
+#endif
     Add_Object_To_Frame_Segment (ra_st, SFSEG_UPFORMAL, TRUE);
     upformal_size += MTYPE_byte_size(Pointer_Mtype);
   }
@@ -2128,6 +2411,12 @@ Initialize_Stack_Frame (WN *PU_tree)
   /* make sure all formals are allocated before we split into regions */
   Allocate_All_Formals (PU_tree);
   Init_Formal_Segments (formal_size, upformal_size);
+
+#ifdef TARG_NVISA
+  // initially, we are limited to 256 bytes of formal space
+  if ((formal_size + upformal_size) > 256) 
+	ErrMsg (EC_Too_Many_Args, ST_name(WN_st(PU_tree)));
+#endif
 }
 
 // this is called after lowering, when have more accurate view of code.
@@ -2183,12 +2472,18 @@ Process_Stack_Variable ( ST *st )
 
    if (! is_root_block && ST_class(st) == CLASS_BLOCK) return;
 
+   if((PU_src_lang(Get_Current_PU()) & (PU_CXX_LANG|PU_C_LANG)) &&
+      ST_is_return_var(st)) {
+     Set_ST_base(st, FP_Sym);
+     Set_ST_ofst(st, Is_Target_32bit()? 4 : 8);
+     return;
+   }
+
    sc = ST_sclass(st);
    Is_True ( (sc == SCLASS_AUTO),
            ("Process_Stack_Variable: Invalid SCLASS %d\n",ST_sclass(st)) );
 
    size = (is_root_block) ? STB_size(st) : TY_size(ST_type(st));
-
    /* attach large objects to FP (if exists), else attach to SP */
    if (Current_PU_Stack_Model == SMODEL_SMALL || 
 	(Current_PU_Stack_Model == SMODEL_LARGE && size < Large_Object_Bytes))
@@ -2199,7 +2494,7 @@ Process_Stack_Variable ( ST *st )
 }
 
 static void
-Trace_Stack_Segments( char *msg, ST *SP_baseST, ST *FP_baseST )
+Trace_Stack_Segments(const char *msg, ST *SP_baseST, ST *FP_baseST )
 {
   SF_SEGMENT s;
 
@@ -2304,12 +2599,28 @@ INT64 Finalize_Stack_Frame (void)
 	if (Trace_Frame) fprintf(TFile, "<lay> formals not used\n");
     }
     else {
+#if !defined(TARG_PPC32)
 	MERGE_SEGMENT(SP_Sym, SFSEG_FORMAL, Max_Small_Frame_Offset);
+#endif
     }
     Frame_Size = STB_size(SP_Sym);
     Set_ST_base(SF_Block(SFSEG_UPFORMAL), SP_Sym);
+#if defined(TARG_PPC32)   
+    Set_ST_ofst(SF_Block(SFSEG_UPFORMAL), 
+    	ROUNDUP(STB_size(SP_Sym) +  (Frame_Has_Calls ? Stack_Offset_Adjustment : 0), stack_align) + Stack_Offset_Adjustment);
+#else
     Assign_Offset(SF_Block(SFSEG_UPFORMAL), SP_Sym, 
 	(Frame_Has_Calls ? Stack_Offset_Adjustment : 0), 0);
+#ifdef TARG_X8664
+    {
+      int push_pop_int_saved_regs = (*Push_Pop_Int_Saved_Regs_p)();
+      if (push_pop_int_saved_regs & 1)
+	push_pop_int_saved_regs++;
+      Set_ST_ofst(SF_Block(SFSEG_UPFORMAL), ST_ofst(SF_Block(SFSEG_UPFORMAL)) +
+		    push_pop_int_saved_regs * MTYPE_byte_size(Pointer_Mtype));
+    }
+#endif
+#endif // TARG_PPC32
     break;
 
   case SMODEL_LARGE:
@@ -2317,7 +2628,10 @@ INT64 Finalize_Stack_Frame (void)
     break;
 
   case SMODEL_DYNAMIC:
-    Frame_Size = STB_size(SP_Sym) + STB_size(FP_Sym);
+#ifdef TARG_PPC32
+    MERGE_SEGMENT(FP_Sym, SFSEG_FORMAL,MAX_LARGE_FRAME_OFFSET);
+#endif
+     Frame_Size = STB_size(SP_Sym) + STB_size(FP_Sym);
     break;
 
   default:
@@ -2325,20 +2639,65 @@ INT64 Finalize_Stack_Frame (void)
 	       ("UNDEFINED Stack Model in Finalize_Stack_Frame" ));
   }
 
+#if defined(TARG_PPC32)
+  if (Frame_Has_Calls)
+    Frame_Size += Stack_Offset_Adjustment; // PowerPC external space for SP($1), LR(Link Register) and CR(Condition Register)
+#endif
   Frame_Size = ROUNDUP(Frame_Size, stack_align);
 #ifdef TARG_X8664 // this is needed to maintain 16 bytes gap that contains
     		  // the save area for return-addr and frame-ptr
-  if (Current_PU_Stack_Model == SMODEL_SMALL && PUSH_FRAME_POINTER_ON_STACK)
+  if (Current_PU_Stack_Model == SMODEL_SMALL && PUSH_FRAME_POINTER_ON_STACK) {
     Frame_Size += MTYPE_byte_size(Pointer_Mtype);
+    if ((*Push_Pop_Int_Saved_Regs_p)() & 1)
+      Frame_Size += MTYPE_byte_size(Pointer_Mtype);
+  }
+#endif
+#ifdef TARG_PPC32
+  // for return address
+  ST *ra_sv_sym = Find_Special_Return_Address_Symbol();
+  if (ra_sv_sym) {
+    Set_ST_ofst(ra_sv_sym, -4);
+/*    if (Current_PU_Stack_Model == SMODEL_SMALL) {
+      Set_ST_ofst(ra_sv_sym, Frame_Size + 4);
+    } else {
+      Set_ST_ofst(ra_sv_sym, 4);
+    }*/
+  }
 #endif
 
   // the stack-frame-adjustment represents N bytes of free space
   // that is in the callers frame, and thus does not need to be
   // included in the new callee frame size if this is a leaf
   // (so don't need to reserve space for subsequent frames).
+#ifndef TARG_PPC32
   if (!Frame_Has_Calls) {
 	Frame_Size = MAX(0, Frame_Size - Stack_Offset_Adjustment);
   }
+#endif
+#if defined(BUILD_OS_DARWIN)
+// Darwin requires 16 byte alignment of the stack pointer even in -m32
+// (otherwise, for example, dynamic linking code faults on a movdqa
+// instruction). Because the "call" pushes a 4-byte return address onto the
+// stack which isn't included in Frame_Size, it's not sufficient just to
+// round up the Frame_Size. If the frame will use the stack pointer instead
+// of the base pointer, then the offset to the arguments needs to take into
+// account any padding we add.
+if(! Is_Target_64bit() ) {
+  int excess = MTYPE_byte_size(Pointer_Mtype) *
+    ((Current_PU_Stack_Model == SMODEL_DYNAMIC) ?
+    2 :
+    1);
+  int mod = (Frame_Size + excess) % 16;
+  if (mod) {
+    excess = 16 - mod;
+    Frame_Size += excess;
+    ST *upformal = SF_Block(SFSEG_UPFORMAL);
+    if (Current_PU_Stack_Model == SMODEL_SMALL) {
+      Set_ST_ofst(upformal, ST_ofst(upformal) + excess);
+    }
+  }
+}
+#endif /* defined(BUILD_OS_DARWIN) */
 
   if ( Trace_Frame ) {
     Trace_Stack_Segments ( "Finalize_Stack_Frame", SP_Sym, FP_Sym);
@@ -2355,18 +2714,25 @@ INT64 Finalize_Stack_Frame (void)
 	if (Trace_Frame) fprintf(TFile, "<lay> stack-model underflowed\n");
 
   {	/* check that stacksize does not exceed system max */
-#if defined(linux)
+
+#ifndef __MINGW32__
+#if defined(linux) || defined(__CYGWIN__) || defined(__APPLE__) || defined(BUILD_OS_DARWIN)
         struct rlimit rlp;
         getrlimit(RLIMIT_STACK, &rlp);
 #else
 	struct rlimit64 rlp;
 	getrlimit64 (RLIMIT_STACK, &rlp);
 #endif
+#endif /* __MINGW32__ */
+
 #ifndef KEY // Redhat 8.0 will have unlimited stack size
 	if (Frame_Size > rlp.rlim_cur)
 		ErrMsg (EC_LAY_stack_limit, Frame_Size, (INT64) rlp.rlim_cur);
 #endif
   }
+#if defined(TARG_PPC32)   
+  PU_Frame_Size = Frame_Size;
+#endif
   return Frame_Size;
 }
 
@@ -2404,14 +2770,16 @@ Is_String_Literal (ST *st)
 	if (ST_class(st) == CLASS_CONST && TCON_ty(STC_val(st)) == MTYPE_STR) {
 		return TRUE;
 	}
+#ifndef TARG_SL
 	/* sometimes strings are in const array vars */
 	else if (ST_class(st) == CLASS_VAR && ST_is_const_var(st)
-		&& ST_is_initialized(st) 
+		&& ST_is_initialized(st)
 		&& TY_kind(ST_type(st)) == KIND_ARRAY
 		&& TY_mtype(TY_AR_etype(ST_type(st))) == MTYPE_U1 )
 	{
 		return TRUE;
 	}
+#endif
 	return FALSE;
 }
 
@@ -2447,7 +2815,7 @@ Shorten_Section ( ST *st, SECTION_IDX sec )
    newsec = Corresponding_Short_Section (sec);
    if (newsec == sec) return sec;	// won't be shortened
 
-#ifdef TARG_X8664
+#if defined (TARG_X8664) || defined (TARG_SL) 
    /* bug#539
       Do not generate gprel load/store to <newsec> if <newsec> is not gprel.
     */
@@ -2487,20 +2855,12 @@ Shorten_Section ( ST *st, SECTION_IDX sec )
 	size = MAX(size, Adjusted_Alignment(st));
 	if (size <= Gspace_Available) {
 		Gspace_Available -= size;
-#if 0
-		if (Trace_Frame) fprintf(TFile, "<lay> use Gspace for %s (size %d, align %d)\n", ST_NAME(st), TY_size(ST_type(st)), Adjusted_Alignment(st));
-#endif
 	}
 	else {
 		if (Trace_Frame) fprintf(TFile, "<lay> not enough Gspace, so didn't assign %s to gprel section\n", ST_NAME(st));
 		return sec;
 	}
    }
-#if 0
-else {
-if (Trace_Frame) fprintf(TFile, "<lay> didn't check Gspace for %s\n", ST_NAME(st));
-}
-#endif
 
    if (sec == _SEC_RDATA && ST_class(st) == CLASS_CONST) {
      /* by default put all short .rodata items into .srdata, unless 
@@ -2518,7 +2878,10 @@ if (Trace_Frame) fprintf(TFile, "<lay> didn't check Gspace for %s\n", ST_NAME(st
        case MTYPE_U8:
 	 newsec = _SEC_LIT8;
 	 break;
+#if defined(TARG_IA64) || defined(TARG_X8664)
        case MTYPE_F10:
+       case MTYPE_C10:
+#endif
        case MTYPE_FQ:
 	 newsec = _SEC_LIT16;
 	 break;
@@ -2556,7 +2919,8 @@ Allocate_Object_To_Section (ST *st, SECTION_IDX sec, UINT align)
   block = Get_Section_ST (sec, align, SCLASS_UNKNOWN /* cause varies */);
   max_size = SEC_max_sec_size(sec);
   if ( Trace_Frame ) {
-    fprintf(TFile, "Allocating %s to %s", ST_name(st), ST_name(block));
+    const char * name = (ST_sym_class(st) == CLASS_CONST) ? "<constant>" : ST_name(st);
+    fprintf(TFile, "Allocating %s to %s\n", name, ST_name(block));
   }
   ST_Block_Merge (block, st, 0, 0, max_size);
 }
@@ -2597,7 +2961,293 @@ Allocate_Label (ST *lab)
   /* this is a reference only, no storage need be allocated */
   Assign_Object_To_Section ( lab, _SEC_TEXT, 0 );
 }
- 
+
+
+#ifdef TARG_SL
+inline SECTION_IDX
+Get_Vbuf_Section(const ST *st)
+{
+	if( ST_in_v1buf(st))
+	{
+		return _SEC_VS1DATA;
+	}
+	else if(ST_in_v2buf(st)){
+		return _SEC_VS2DATA;
+	}
+	else {
+	    return _SEC_VS4DATA;
+	}
+}
+
+typedef std::map<ST*, float> ST_FREQ_MAP;
+typedef ST_FREQ_MAP::iterator ST_FREQ_ITER;
+//iterate the inputed whirl tree, depth first, postorder 
+//for all the load and store operation, collect the st references and calculate frequences based on profile
+static void
+Walk_And_Collect_Heur_Based_Refs(WN *wn, ST_FREQ_MAP *st2f_map)
+{
+  OPERATOR opr=WN_operator(wn);
+  ST *st=NULL;
+  switch (opr) {
+  case OPR_LDID:
+  case OPR_LDA:
+ 	st=WN_st(wn);
+	break; 	
+  case OPR_STID:
+      Walk_And_Collect_Heur_Based_Refs(WN_kid0(wn), st2f_map);
+	st=WN_st(wn);
+	break;
+  case OPR_BLOCK:
+      for(WN *kid=WN_first(wn); kid; kid=WN_next(kid))
+	  	Walk_And_Collect_Heur_Based_Refs(kid, st2f_map);
+      break;
+  case OPR_FUNC_ENTRY:
+  	Walk_And_Collect_Heur_Based_Refs(WN_func_body(wn), st2f_map);
+	break;
+  default:
+  	for(INT i=0;i<WN_kid_count(wn); i++)
+        Walk_And_Collect_Heur_Based_Refs(WN_kid(wn, i), st2f_map);  	
+  	break;
+  }
+  
+  if(st!=NULL && ST_sclass(st)==SCLASS_AUTO) {
+	if((*st2f_map).find(st)==st2f_map->end())
+		(*st2f_map)[st]=1;
+	else 
+		(*st2f_map)[st]=(*st2f_map)[st]+1;
+  }
+  return;
+}
+
+//iterate the inputed whirl tree, depth first, preorder 
+//for all the load and store operation, collect the st references and calculate frequences based on heuristic
+static void
+Walk_And_Collect_Fb_Based_Refs(WN *wn, float& cur_freq, ST_FREQ_MAP *st2f_map)
+{
+  ST *st=NULL;
+  OPERATOR opr=WN_operator(wn);
+  switch (opr) {
+  case OPR_FUNC_ENTRY:
+	{
+	FB_FREQ freq_default = Cur_PU_Feedback->Query( wn, FB_EDGE_ENTRY_OUTGOING );
+	cur_freq=freq_default.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_func_body(wn), cur_freq, st2f_map);
+	}
+	break;
+  case OPR_BLOCK:
+	{
+	for(WN* kid=WN_first(wn);kid;kid=WN_next(kid))
+		Walk_And_Collect_Fb_Based_Refs(kid, cur_freq, st2f_map);
+	}
+  	break;
+  case OPR_DO_LOOP:
+	{
+	FB_FREQ freq_exit, freq_iterate;
+	freq_exit = Cur_PU_Feedback->Query(wn, FB_EDGE_LOOP_EXIT);
+	freq_iterate = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_ITERATE );
+	cur_freq=freq_iterate.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_start(wn), cur_freq, st2f_map);
+	cur_freq=freq_iterate.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_do_body(wn), cur_freq, st2f_map);
+	cur_freq=freq_iterate.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_step(wn), cur_freq, st2f_map);
+	cur_freq=freq_iterate.Value()+1;
+	Walk_And_Collect_Fb_Based_Refs(WN_end(wn), cur_freq, st2f_map);
+	cur_freq=freq_exit.Value();
+	}
+  	break;
+  case OPR_DO_WHILE:
+	{
+      	FB_FREQ freq_positive, freq_out, freq_back;
+      	freq_positive = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_POSITIVE );
+      	freq_out = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_OUT );
+      	freq_back = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_BACK );
+      	float iterate = freq_positive.Value()+freq_back.Value();
+	cur_freq=freq_positive.Value()+freq_back.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_while_body(wn), cur_freq, st2f_map);
+	cur_freq=freq_positive.Value()+freq_back.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_while_test(wn), cur_freq, st2f_map);
+	cur_freq=freq_out.Value();
+	}
+  	break;
+  case OPR_WHILE_DO:
+  	{
+	FB_FREQ freq_exit, freq_iterate;
+	freq_exit    = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_EXIT );
+	freq_iterate = Cur_PU_Feedback->Query( wn, FB_EDGE_LOOP_ITERATE );
+	cur_freq=freq_iterate.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_while_body(wn), cur_freq, st2f_map);
+	cur_freq=freq_iterate.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_while_test(wn), cur_freq, st2f_map);
+	cur_freq=freq_exit.Value();
+  	}
+  	break;
+  case OPR_IF:
+	{
+      FB_FREQ freq_then, freq_else;
+      freq_then = Cur_PU_Feedback->Query( wn, FB_EDGE_BRANCH_TAKEN     );
+      freq_else = Cur_PU_Feedback->Query( wn, FB_EDGE_BRANCH_NOT_TAKEN );
+      cur_freq=freq_then.Value()+freq_else.Value();
+      Walk_And_Collect_Fb_Based_Refs(WN_if_test(wn), cur_freq, st2f_map);
+	float out_freq_then=freq_then.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_then(wn), out_freq_then, st2f_map); 
+	float out_freq_else=freq_else.Value();
+	Walk_And_Collect_Fb_Based_Refs(WN_else(wn), out_freq_else, st2f_map); 
+	cur_freq=out_freq_then + out_freq_else;
+  	}
+  	break;
+  case OPR_GOTO:
+  	{
+	cur_freq=0;	
+  	}
+  	break;
+  case OPR_SWITCH:
+  case OPR_COMPGOTO:
+  case OPR_XGOTO:
+  	{
+	Walk_And_Collect_Fb_Based_Refs(WN_kid0(wn), cur_freq, st2f_map);
+	cur_freq=0;	
+  	}
+  	break;
+  case OPR_TRUEBR:
+  case OPR_FALSEBR:
+  	{
+      FB_FREQ freq_branch, freq_default;
+      freq_branch  = Cur_PU_Feedback->Query( wn, FB_EDGE_BRANCH_TAKEN     );
+      freq_default = Cur_PU_Feedback->Query( wn, FB_EDGE_BRANCH_NOT_TAKEN );
+      cur_freq=freq_branch.Value()+freq_default.Value();
+      Walk_And_Collect_Fb_Based_Refs(WN_kid0(wn), cur_freq, st2f_map);
+      cur_freq=freq_default.Value();
+  	}
+	break;
+  case OPR_RETURN:
+  	{
+	cur_freq=0;	
+  	}
+  	break;
+  case OPR_RETURN_VAL:
+  	{
+	Walk_And_Collect_Fb_Based_Refs(WN_kid0(wn), cur_freq, st2f_map);
+	cur_freq=0;
+  	}
+  	break;
+  case OPR_LABEL:
+  	{
+	FB_FREQ freq_l = Cur_PU_Feedback->Query( wn, FB_EDGE_INCOMING );
+	cur_freq=freq_l.Value();
+  	}
+	break;
+  case OPR_CALL:
+  case OPR_ICALL:
+  case OPR_VFCALL:
+  case OPR_PICCALL:
+  case OPR_INTRINSIC_CALL:
+  case OPR_IO: //here may exist issues
+  	{
+	if(Cur_PU_Feedback->Same_in_out(wn)) {
+	      FB_FREQ freq_in = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_INOUTSAME );
+	      cur_freq=freq_in.Value();              
+		for ( INT t = 0; t < WN_kid_count(wn); ++t ) {
+			Walk_And_Collect_Fb_Based_Refs(WN_kid(wn, t), cur_freq, st2f_map);
+		}
+		cur_freq=freq_in.Value();
+	} else {
+		FB_FREQ freq_entry = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_INCOMING );
+		FB_FREQ freq_exit  = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_OUTGOING );
+	      cur_freq=freq_entry.Value();
+		for ( INT t = 0; t < WN_kid_count(wn); ++t ) 
+			Walk_And_Collect_Fb_Based_Refs(WN_kid(wn, t), cur_freq, st2f_map);
+		cur_freq=freq_exit.Value();
+	}
+  	}
+  	break;
+  case OPR_REGION:
+  	{
+      FB_FREQ freq_entry = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_INCOMING );
+      FB_FREQ freq_exit  = Cur_PU_Feedback->Query( wn, FB_EDGE_CALL_OUTGOING );
+      cur_freq=freq_entry.Value();
+      Walk_And_Collect_Fb_Based_Refs(WN_region_body(wn), cur_freq, st2f_map);
+      cur_freq=freq_exit.Value();
+  	}
+  	break;
+  case OPR_LDA:
+  case OPR_LDID:
+  	st=WN_st(wn);
+	break;
+  case OPR_STID: 
+  	{
+  	Walk_And_Collect_Fb_Based_Refs(WN_kid0(wn), cur_freq, st2f_map);
+  	st=WN_st(wn);
+  	}
+	break;
+  default:
+  	for(int i=0;i<WN_kid_count(wn);i++)
+	  Walk_And_Collect_Fb_Based_Refs(WN_kid(wn, i), cur_freq, st2f_map);
+	break;
+  }
+
+  if(st!=NULL && ST_sclass(st)==SCLASS_AUTO) {
+	if((*st2f_map).find(st)==st2f_map->end())
+		(*st2f_map)[st]=cur_freq;
+	else 
+		(*st2f_map)[st]=(*st2f_map)[st]+cur_freq;
+  }
+  
+  return;
+}
+
+
+
+class Sort_Vst_By_Freq_Size{
+private:
+  ST_FREQ_MAP& st2f;
+public:
+  Sort_Vst_By_Freq_Size(ST_FREQ_MAP& st2f_map) : 
+  	st2f(st2f_map) 
+  {}
+  bool operator()(ST *st1, ST *st2) {
+    return st2f[st1]/float(ST_size(st1))>st2f[st2]/float(ST_size(st2));
+  }
+};
+
+extern void
+Pre_Allocate_Objects(WN* wn)
+{
+  ST_FREQ_MAP st2f_map;
+  //step1: walk whirl tree and collect stack variables and their reference freqs
+  if(Cur_PU_Feedback) {
+    float freq=0;
+    Walk_And_Collect_Fb_Based_Refs(wn, freq, &st2f_map);
+  }
+  else
+    Walk_And_Collect_Heur_Based_Refs(wn, &st2f_map);
+
+  //step2: sort the variables in some order 
+  vector<ST *> sorted_vst;
+  for(ST_FREQ_ITER itr=st2f_map.begin(); itr!=st2f_map.end();itr++)
+  	sorted_vst.push_back(itr->first);
+
+  sort(sorted_vst.begin(), sorted_vst.end(), Sort_Vst_By_Freq_Size(st2f_map));
+
+  if(Trace_Frame) {
+    fprintf(TFile, "Ordered objects:\n");
+    for(vector<ST*>::iterator itr=sorted_vst.begin(); itr!=sorted_vst.end();itr++) {
+      ST *st=*itr;
+      fprintf(TFile, "%s: size=%lld, freq=%f\n", ST_name(st), ST_size(st), st2f_map[st]);
+    }
+  }
+
+  //step3: allocate the variables in order
+  for(vector<ST*>::iterator itr=sorted_vst.begin(); itr!=sorted_vst.end();itr++) {
+    ST *st=*itr;
+    Allocate_Object(st);
+  }
+  return;
+}
+
+#endif 
+
+
 // bug fix for OSP_138
 /* =====================================================================
  * 
@@ -2614,8 +3264,9 @@ BOOL
 ST_has_Predefined_Named_Section(ST *st, SECTION_IDX &sec_idx) {
 
   for (sec_idx = _SEC_UNKNOWN; sec_idx <= _SEC_DISTR_ARRAY; sec_idx ++) {
-  	if (!strcmp(Index_To_Str(Find_Section_Name_For_ST(st)), SEC_name(sec_idx)))
-  		return TRUE;
+  	if (SEC_name(sec_idx) && 
+	    !strcmp(Index_To_Str(Find_Section_Name_For_ST(st)), SEC_name(sec_idx)))
+  	  return TRUE;
   }
 
   return FALSE;
@@ -2634,6 +3285,18 @@ ST_has_Predefined_Named_Section(ST *st, SECTION_IDX &sec_idx) {
  */
 static void
 Allocate_Object_To_Predefined_Named_Section(ST *st, SECTION_IDX sec_idx) {
+  // bug fix 572: for extern st, we should not allocate them.
+  if (ST_class(st) == CLASS_FUNC) {
+     if (ST_sclass(st) == SCLASS_EXTERN) {
+         return;
+     }
+  } else if (ST_class(st) == CLASS_VAR) {
+     if (ST_sclass(st) == SCLASS_EXTERN) {
+         return;
+     }
+  } else
+     FmtAssert(FALSE, ("unexpected section attribute"));
+
   Clear_ST_has_named_section(st);	// Clear st's flag for ST_HAS_NAMED_SECTION
   Set_ST_base_idx(st,ST_st_idx(st));	// Set st's base index equel to st index
   Set_ST_ofst(st,0);			// Set st's offset to 0
@@ -2686,27 +3349,28 @@ Allocate_Object ( ST *st )
     Clear_ST_is_not_used(SF_Block(SFSEG_FORMAL));
   }
 
-  if (Is_Allocated(st))
-  	// bug fix for OSP_138
-	/* If st has section name attribute and the section name is same as
-	 * one of the predefined section, it will be processed later */
-	if (!ST_has_named_section(st))
-  		return;
-  	else if (!ST_has_Predefined_Named_Section(st, sec))
-		return;
-  
+  if (Is_Allocated(st)) {
+    // bug fix for OSP_138
+    /* If st has section name attribute and the section name is same as
+     * one of the predefined section, it will be processed later */
+    if (!ST_has_named_section(st))
+      return;
+    else if (!ST_has_Predefined_Named_Section(st, sec))
+      return;
+  }
+
   if (ST_is_not_used(st)) return;
 
   if (ST_has_named_section(st)) {
-	// bug fix for OSP_138
-	if (ST_has_Predefined_Named_Section(st, sec))
-		// Assign st to appropriate section
-		Allocate_Object_To_Predefined_Named_Section(st, sec);
-	else {
-		STR_IDX name = Find_Section_Name_For_ST (st);
-		Assign_ST_To_Named_Section (st, name);
-	}
-	return;
+    // bug fix for OSP_138
+    if (ST_has_Predefined_Named_Section(st, sec))
+      // Assign st to appropriate section
+      Allocate_Object_To_Predefined_Named_Section(st, sec);
+    else {
+      STR_IDX name = Find_Section_Name_For_ST (st);
+      Assign_ST_To_Named_Section (st, name);
+    }
+    return;
   }
   if (Has_Base_Block(st)) {
 	base_st = Base_Symbol(st);	/* allocate the base, not the leaf */
@@ -2732,7 +3396,20 @@ Allocate_Object ( ST *st )
   case SCLASS_FSTATIC :
     if (ST_is_thread_private(st)) {
       if (ST_is_initialized(st) && !ST_init_value_zero (st))
+#if defined(KEY) && !defined(TARG_SL) && !defined(TARG_PPC32)
+        sec = _SEC_LDATA_MIPS_LOCAL;	// bug 12619
+#else
         sec = _SEC_LDATA;
+#endif
+#ifdef TARG_SL 
+      else if(ST_in_v1buf(st)) 
+        sec = _SEC_VS1DATA;
+      else if(ST_in_v2buf(st)) 
+        sec = _SEC_VS2DATA;
+      else if(ST_in_v4buf(st)) 
+        sec = _SEC_VS4DATA;
+#endif      	  
+
       else
 #ifdef KEY
         sec = _SEC_BSS;
@@ -2740,9 +3417,45 @@ Allocate_Object ( ST *st )
         sec = _SEC_LBSS;
 #endif // KEY
     }
+#ifdef KEY
+    else if (ST_is_thread_local(st)) {
+      if (ST_is_initialized(st) && !ST_init_value_zero(st))
+        sec = _SEC_LDATA;
+      else
+        sec = _SEC_LBSS;
+    }
+#endif
     else if (ST_is_initialized(st) && !ST_init_value_zero (st))
-        sec = (ST_is_constant(st) ? _SEC_RDATA : _SEC_DATA);
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+    {
+      if (ST_is_constant(st))
+        // GNU puts CLASS_CONST data in .rodata.
+        if (Gen_PIC_Shared && ST_sym_class(st) != CLASS_CONST)
+          sec = _SEC_DATA_REL_RO; // bug 10097
+        else
+          sec = _SEC_RDATA;
+      else
+        sec = _SEC_DATA;
+    }
+#elif defined(TARG_SL)
+      sec = _SEC_DATA;
+#else
+      sec = (ST_is_constant(st) ? _SEC_RDATA : _SEC_DATA);
+#endif
+
     else
+#ifdef TARG_SL
+    if (ST_in_vbuf(st)) {
+/*  currently assembler don't support vbuf section for each v1buf v2buf v4buf,
+ *  all these three type variables has only one section _SEC_VSDATA
+ */
+      sec = Get_Vbuf_Section(st);
+    }
+    else if(ST_in_sbuf(st)){
+      sec = _SEC_SSDATA;
+    }
+    else 
+#endif  
 	sec = _SEC_BSS;
     sec = Shorten_Section ( st, sec );
     Allocate_Object_To_Section ( base_st, sec, Adjusted_Alignment (base_st) );
@@ -2801,20 +3514,42 @@ Allocate_Object ( ST *st )
       sec = _SEC_LBSS;
 #endif // KEY
     } 
+#ifdef KEY
+    else if (ST_is_thread_local(st)) {
+      sec = _SEC_LBSS;
+    }
+#endif
     else sec = _SEC_BSS;
     sec = Shorten_Section ( st, sec );
     Allocate_Object_To_Section ( base_st, sec, Adjusted_Alignment(base_st));
     break;
   case SCLASS_DGLOBAL :
-    if (ST_is_thread_private(st)) sec = _SEC_LDATA;
+    if (ST_is_thread_private(st))
+#if defined(KEY) && !defined(TARG_SL) && !defined(TARG_PPC32)
+      sec = _SEC_LDATA_MIPS_LOCAL;	// bug 12619
+#else
+      sec = _SEC_LDATA;
+#endif
+#ifdef KEY
+    else if (ST_is_thread_local(st)) sec = _SEC_LDATA;
+#endif
     else if (ST_is_constant(st)) {
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
       if (Gen_PIC_Shared)
-	sec = _SEC_DATA_REL_RO;
+	sec = _SEC_DATA_REL_RO; // bug 6925
       else
 #endif
-      sec = _SEC_RDATA;
+	sec = Get_Const_Var_Section();
     }
+
+#ifdef TARG_SL
+    else if (ST_in_vbuf(st)) {
+      sec = Get_Vbuf_Section(st);
+    }
+    else if(ST_in_sbuf(st)){
+      sec = _SEC_SSDATA;
+    }
+#endif
     else sec = _SEC_DATA;
     sec = Shorten_Section ( st, sec );
     Allocate_Object_To_Section ( base_st, sec, Adjusted_Alignment(base_st));
@@ -3026,10 +3761,37 @@ Stack_Offset_Adjustment_For_PU (void)
 	return 0;
 }
 
+extern void
+Set_Frame_Has_Calls(BOOL b)
+{
+    Frame_Has_Calls = b;
+}
+
 #ifdef TARG_X8664
 BOOL
 Stack_Frame_Has_Calls (void)
 {
   return Frame_Has_Calls;
+}
+#endif
+
+#ifdef TARG_PPC32
+INT32
+Get_Vararg_Start_Offset(void)
+{
+	if (Current_PU_Stack_Model == SMODEL_DYNAMIC) {
+		return -STB_size(FP_Sym);
+	} else {
+		INT32 chain_lr_size;
+		if (Frame_Has_Calls) {
+			chain_lr_size = 8;
+		} else {
+			chain_lr_size = 0;
+		}
+		INT32 align = Stack_Alignment();
+		INT32 actual_max_size = ROUNDUP(Current_PU_Actual_Size, align);
+		return chain_lr_size + actual_max_size;
+	}
+	
 }
 #endif

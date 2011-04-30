@@ -533,32 +533,6 @@ is_member_template (t)
 	      template_class_depth (DECL_CONTEXT (t))));
 }
 
-#if 0 /* UNUSED */
-/* Returns nonzero iff T is a member template class.  See
-   is_member_template for a description of what precisely constitutes
-   a member template.  */
-
-int
-is_member_template_class (t)
-     tree t;
-{
-  if (!DECL_CLASS_TEMPLATE_P (t))
-    /* Anything that isn't a class template, is certainly not a member
-       template.  */
-    return 0;
-
-  if (!DECL_CLASS_SCOPE_P (t))
-    /* Anything whose context isn't a class type is surely not a
-       member template.  */
-    return 0;
-
-  /* If there are more levels of template parameters than there are
-     template classes surrounding the declaration, then we have a
-     member template.  */
-  return  (TMPL_PARMS_DEPTH (DECL_TEMPLATE_PARMS (t)) > 
-	   template_class_depth (DECL_CONTEXT (t)));
-}
-#endif
 
 /* Return a new template argument vector which contains all of ARGS,
    but has as its innermost set of arguments the EXTRA_ARGS.  */

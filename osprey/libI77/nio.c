@@ -62,12 +62,8 @@
 #define BSIZ    (unsigned) 50
 static char     nlrs[] = "namelist read";
 static char    *getword(unit *, char *, unsigned int, int, int);
-#if 11
 static int c_nle (cilist64 *pcl, unit **fu);
 static int s_wsne64_mp (cilist64 *pnlarg, unit **fu);
-#else
-static int c_nle (cilist *pcl, unit **fu);
-#endif
 
 
 #define XINT_TYPE	int
@@ -82,7 +78,6 @@ static int c_nle (cilist *pcl, unit **fu);
 #undef NAMENlentry
 #undef NAMENamelist
 
-#if 11
 #define XINT_TYPE	XINT
 #define NAMEDims	Dims64
 #define NAMENlentry	Nlentry64
@@ -93,7 +88,6 @@ static int c_nle (cilist *pcl, unit **fu);
 #undef NAMEDims
 #undef NAMENlentry
 #undef NAMENamelist
-#endif	/* -64 */
 
 
 /*
@@ -106,11 +100,7 @@ static int c_nle (cilist *pcl, unit **fu);
 
 #define NAMEs_rsNe_work	s_rsNe_work
 #define NAMEs_wsNe_work	s_wsNe_work
-#if 11
 #define TYPEcilist	cilist64	/* we convert all cilists to cilist64 */
-#else
-#define TYPEcilist	cilist	/* pure 32 bit */
-#endif
 #define TYPENamelist	Namelist
 #define TYPENlentry	Nlentry
 #define NAMEfindit	findit
@@ -126,7 +116,6 @@ static int c_nle (cilist *pcl, unit **fu);
 #undef NAMEgetvar
 
 /* define the full 64 set */
-#if 11
 #define NAMEs_rsNe_work	s_rsNe64_work
 #define NAMEs_wsNe_work	s_wsNe64_work
 #define TYPEcilist	cilist64
@@ -144,15 +133,6 @@ static int c_nle (cilist *pcl, unit **fu);
 #undef NAMEfindit
 #undef NAMEgetvar
 
-#else /* for -r32, -n32 */
-
-/* for -n32 and -r32, we dont define new routines, we simply need to
-   equivalence s_rsNe64_work and s_wsNe64_work */
-
-#pragma weak s_rsNe64_work = s_rsNe_work
-#pragma weak s_wsNe64_work = s_wsNe_work
-
-#endif
 
 
 /*
@@ -191,15 +171,11 @@ s_rsne (cilist *pnlarg)
    Namelist       *pnl;
    Nlentry        *pnlent;
 
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG        &dst
-#else
-#define WORK_ARG        pnlarg
-#endif
 
 #ifdef I90OLD
 				/* Fortran 90 wants to call wsne from rsne */
@@ -225,15 +201,11 @@ s_rsne (cilist *pnlarg)
 int
 s_rsNe (cilist *pnlarg)
 {
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG	&dst
-#else
-#define WORK_ARG	pnlarg
-#endif
 #ifdef I90OLD
 	return s_rsNe_work(WORK_ARG, &f77curunit, 0, 0);  /* but Fortran 90 wants to call wsNe
 					 from rsNe, also dont use match_type */
@@ -249,15 +221,11 @@ s_rsNe (cilist *pnlarg)
 int
 s_rsNe_mp (cilist *pnlarg, unit **fu)
 {
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG	&dst
-#else
-#define WORK_ARG	pnlarg
-#endif
 #ifdef I90OLD
 	return s_rsNe_work(WORK_ARG, fu, 0, 0);  /* but Fortran 90 wants to call wsNe
 					 from rsNe, also dont use match_type */
@@ -390,7 +358,6 @@ static char    *getword(unit *ftnunit, char *s, unsigned int n, int skip_newline
 int
 s_wsne (cilist *pnlarg)
 {
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
@@ -401,14 +368,6 @@ s_wsne (cilist *pnlarg)
  return s_wsNe_work(&dst, &f77curunit, 0);
 #endif
 
-#else
-#ifdef I90OLD
- return s_wsNe_work(pnlarg, &f77curunit, 1);
-#else
- return s_wsNe_work(pnlarg, &f77curunit, 0);
-#endif
-
-#endif
 }
 
 int
@@ -416,15 +375,11 @@ s_wsne_mp (cilist *pnlarg, unit **fu)
 {
    Namelist       *pnl;
    Nlentry        *pnlent;
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG        &dst
-#else
-#define WORK_ARG        pnlarg
-#endif
 
 #ifdef I90OLD
 	/* Fortran 90: set use_match_type to use match_type, but doesn't
@@ -448,7 +403,6 @@ s_wsne_mp (cilist *pnlarg, unit **fu)
 #undef WORK_ARG
 }
 
-#if 11
 static int
 s_wsne64_mp (cilist64 *pnlarg, unit **fu)
 {
@@ -475,21 +429,16 @@ s_wsne64_mp (cilist64 *pnlarg, unit **fu)
 #endif
 
 }
-#endif
 
 
 int
 s_wsNe (cilist *pnlarg)
 {
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG	&dst
-#else
-#define WORK_ARG	pnlarg
-#endif
     return( s_wsNe_work( WORK_ARG, &f77curunit, 0 ) );
 #undef WORK_ARG
 }
@@ -498,15 +447,11 @@ s_wsNe (cilist *pnlarg)
 int
 s_wsNe_mp (cilist *pnlarg, unit **fu)
 {
-#if 11
 /* to maintain backwards compatibility and reasonable performance, we only
    convert the cilist structure to cilist64 */
  cilist64 dst;
  get_cilist64(&dst, pnlarg);
 #define WORK_ARG	&dst
-#else
-#define WORK_ARG	pnlarg
-#endif
    return s_wsNe_work(WORK_ARG, fu, 0);
 	/* dont set use_match_type */
 #undef WORK_ARG
@@ -529,11 +474,7 @@ s_wsNe_mp (cilist *pnlarg, unit **fu)
 
 static
 int
-#if 11
 c_nle (cilist64 *pcl, unit **fu)
-#else
-c_nle (cilist *pcl, unit **fu)
-#endif
 {
    unit		*ftnunit;
 
@@ -560,7 +501,6 @@ c_nle (cilist *pcl, unit **fu)
 #pragma weak __kai_s_wsne_mp = s_wsNe_mp
 
 /* now declare all the 64 bit versions */
-#if 11
 
 int
 s_rsNe64(cilist64 *pnlarg)
@@ -591,4 +531,3 @@ s_wsNe64_mp(cilist64 *pnlarg, unit **fu)
 #pragma weak __kai_s_rsne64_mp = s_rsNe64_mp
 #pragma weak __kai_s_wsne64_mp = s_wsNe64_mp
 
-#endif

@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -35,6 +38,10 @@
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
+
+/* fe90/i_cvrt.c needs variables crayf90_def_main and def_main_u, but can't
+ * handle the rest of this file. */
+#if !defined(FOR_I_CVRT)
 
 static OPCODE Intconst_Opcode [4] = {
   OPC_I4INTCONST, OPC_U4INTCONST, OPC_I8INTCONST, OPC_U8INTCONST
@@ -297,17 +304,20 @@ static ST *st_for_distribute_temp;
 
 BOOL cwh_stab_pu_has_globals; /* Were any global symbols seen in the PU */
 
+#endif /* !defined(FOR_I_CVRT) */
 
 /* strings for default MAIN, used by BE/Cray FE */
 
-static  char * const crayf90_def_main = "main___" ;
-static  char * const def_main_u = "MAIN__" ;
+static  const char * const crayf90_def_main = "main___" ;
+static  const char * const def_main_u = "MAIN__" ;
 #ifndef KEY
 static  char * const def_main   = "MAIN_" ;
 #else
 /* Bug 2672- use the mangled name in Dwarf output to match the assembly name */
-static  char * const def_main   = "MAIN__" ;
+static  const char * const def_main   = "MAIN__" ;
 #endif
+
+#if !defined(FOR_I_CVRT)
 
 /* forward references */
 
@@ -364,7 +374,7 @@ static INTPTR fei_proc_def     ( char          *name_string,
                                  INT64	       flags );
 
 static INTPTR fei_proc_imp     ( INT32         lineno,
-                                 char          *name_string,
+                                 const char    *name_string,
                                  INT32         unused1,
                                  INT32         unused2,
                                  INT32         sclass,
@@ -375,6 +385,7 @@ static INTPTR fei_proc_imp     ( INT32         lineno,
 
 static void cwh_stab_adjust_base_name(ST * st);
 
+#endif /* !defined(FOR_I_CVRT) */
 
 
 			     

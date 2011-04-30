@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -102,6 +106,7 @@ class SNL_NEST_INFO {
  public:
 
   SNL_NEST_INFO(WN* outer, INT nloops, MEM_POOL* pool, BOOL inner_only);
+  SNL_NEST_INFO(WN* outer, WN* inner, INT nloops, MEM_POOL* pool);
   ~SNL_NEST_INFO();
 
   DOLOOP_STACK&		Dostack() {return _dostack;}
@@ -110,6 +115,7 @@ class SNL_NEST_INFO {
   INT			Nloops_General() const {return _nloops_general;}
   INT			Nloops_Invariant() const {return _nloops_invariant;}
   INT&			Nloops_Invariant() {return _nloops_invariant;}
+  INT			Nloops_Transformable() const {return _nloops_transformable;}
   INT		       	Depth_Inner() const {return _depth_inner;}
   INT			Num_Bad() const {return _num_bad;}
   SNL_BOUNDS_INFO*	Bi() {return _bi;}
@@ -122,6 +128,7 @@ class SNL_NEST_INFO {
   BOOL			Innermost() const {return _innermost;}
   void			Print(FILE*) const;
   void			Exclude_Outer_Loops(INT how_many);
+  BOOL                  All_Var_Expandable(int nloops);
 
   SX_INFO& Privatizability_Info()
     {return _privatizability_info;}
@@ -165,6 +172,9 @@ class SNL_NEST_INFO {
   BOOL			    _above_is_distributable;
   BOOL			    _below_is_distributable;
   SNL_LOOP_PROBLEM_INFO*    _problem;
+  
+  // event aggretive transformations
+  INT			     _nloops_transformable;
 };
 
 //---------------------------------------------------------------------------

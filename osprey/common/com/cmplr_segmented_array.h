@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 /* -*- c++ -*-
  *
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -469,7 +473,7 @@ RELATED_SEGMENTED_ARRAY<T,block_size>::Update_Map(T    *marker,
     map.push_back(pair<T*, BOOL>(marker, own_memory));
     new_size -= block_size;
     marker += block_size;
-    own_memory += false;	//Only the first entry can be freed for a block that
+    own_memory = FALSE;         //Only the first entry can be freed for a block that
 				//is larger than block_size. By: Jon Hsu, 11 May 2001.
   } while (new_size);
 } // RELATED_SEGMENTED_ARRAY<T,block_size>::Update_Map
@@ -655,26 +659,6 @@ For_all_entries (RELATED_SEGMENTED_ARRAY<T, block_size>& array,
 // The following function is ifdefed out because, until we have
 // partial ordering of function templates, the compiler will flag it
 // as ambiguous.
-#if 0
-
-template <class T, UINT block_size, class OP>
-inline void
-For_all_entries (const RELATED_SEGMENTED_ARRAY<T, block_size>& array,
-                 const OP &op,
-		 UINT32 first = 0)
-{
-    UINT last = array.Size ();
-
-    while (first < last) {
-	const T *block = &array[first];
-	UINT size = array.Get_block_size (first);
-	for (UINT j = 0; j < size; ++j, ++block)
-	    op (first + j, block);
-	first += size;
-    }
-}
-
-#endif
 
 template <class T, UINT block_size, class OP>
 inline void
@@ -750,7 +734,7 @@ Copy_array_range (const RELATED_SEGMENTED_ARRAY<T, block_size>& from_array,
  */                                                                                                        
 
 template <class T, UINT block_size>
-UINT32
+void
 Delete_array_item (const RELATED_SEGMENTED_ARRAY<T, block_size>& from_array,
 		  RELATED_SEGMENTED_ARRAY<T, block_size>& to_array,
 		  UINT32 first_idx = 0, UINT32 last_idx = (UINT32) -1)

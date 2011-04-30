@@ -1037,10 +1037,18 @@ multiple_definition (struct bfd_link_info *info ATTRIBUTE_UNUSED,
      discarded, and this is not really a multiple definition at all.
      FIXME: It would be cleaner to somehow ignore symbols defined in
      sections which are being discarded.  */
-  if ((osec->output_section != NULL
+  if ((
+#ifdef KEY
+       osec  != NULL && 
+#endif
+       osec->output_section != NULL
        && ! bfd_is_abs_section (osec)
        && bfd_is_abs_section (osec->output_section))
-      || (nsec->output_section != NULL
+      || (
+#ifdef KEY
+          nsec != NULL && 
+#endif
+          nsec->output_section != NULL
 	  && ! bfd_is_abs_section (nsec)
 	  && bfd_is_abs_section (nsec->output_section)))
     return TRUE;

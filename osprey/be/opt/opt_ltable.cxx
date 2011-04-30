@@ -1,6 +1,10 @@
 //-*-c++-*-
 
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -144,13 +148,19 @@ ETABLE::LPRE_bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
       Append_real_occurrence(cr, stmt, stmt_kid_num, depth, FALSE);
     break;
   case CK_RCONST: 
-#ifdef TARG_X8664 // bug 11268: need to keep the real and imag halves together 
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) // bug 11268: need to keep the real and imag halves together 
     if (cr->Dtyp() == MTYPE_C4 && parent && parent->Kind() == CK_IVAR && 
 	parent->Opr() == OPR_PARM)
       break;
 #endif
-    if ( LPRE_do_consts() )
+    if ( LPRE_do_consts() ) {
+#ifdef TARG_NVISA
+      // on this targ, even floats can be immediates so we need that check
+      if (!cr->Is_rvi_const_candidate(parent, whichkid, Opt_stab()))
+        break;
+#endif
       Append_real_occurrence(cr, stmt, stmt_kid_num, depth, FALSE);
+    }
     break;
   case CK_LDA:    
     if ( LPRE_do_consts() && ! cr->Is_flag_set(CF_LDA_LABEL) &&
@@ -160,7 +170,7 @@ ETABLE::LPRE_bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
 
   case CK_VAR:	    // variable terminal rvi candidates
 
-#ifdef TARG_X8664 // bug 11268: need to keep the real and imag halves together 
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) // bug 11268: need to keep the real and imag halves together 
     if (cr->Dtyp() == MTYPE_C4 && parent && parent->Kind() == CK_IVAR && 
 	parent->Opr() == OPR_PARM)
       break;
@@ -170,7 +180,18 @@ ETABLE::LPRE_bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
          // screen out MLDID
          !Opt_stab()->Aux_stab_entry(cr->Aux_id())->No_register() &&
 	 ST_class( Opt_stab()->St(cr->Aux_id()) ) != CLASS_PREG )
+    {
+#ifdef TARG_NVISA
+      if (Tracing())
+              Opt_stab()->St(cr->Aux_id())->Print(TFile);
+      if (!WOPT_Enable_Const_Var_PRE 
+	&& ST_is_const_var( Opt_stab()->St(cr->Aux_id())))
+      {
+  	    Is_Trace(Tracing(),(TFile, "don't do lpre on const_var symbol\n"));
+      } else
+#endif
       Insert_real_occurrence(cr, stmt, stmt_kid_num, depth, is_store, TRUE);
+    }
     break;
 
   case CK_IVAR:	// non-terminal
@@ -194,6 +215,10 @@ ETABLE::LPRE_bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
       LPRE_bottom_up_cr(stmt, stmt_kid_num, 
 			cr->Mload_size() ? 
 			cr->Mload_size() : cr->Mstore_size(),
+			FALSE, ( depth + 1 ), cr, 1);
+    }
+    else if (cr->Opr() == OPR_ILOADX) {
+      LPRE_bottom_up_cr(stmt, stmt_kid_num, cr->Index(),
 			FALSE, ( depth + 1 ), cr, 1);
     }
     break;
@@ -231,6 +256,11 @@ ETABLE::LPRE_bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
 	cr->Set_max_depth( ( depth <= 255 ) ? depth : 255 );
 	
       for (INT32 i=0; i<cr->Kid_count(); i++)	{ 
+#ifdef KEY // bug 12471: __builtin_expect's first kid must be constant
+	if (cr->Opr() == OPR_INTRINSIC_OP && cr->Intrinsic() == INTRN_EXPECT &&
+	    i == 1)
+	  continue;
+#endif
 	LPRE_bottom_up_cr(stmt, stmt_kid_num, cr->Opnd(i), FALSE, (depth+1), cr, i);
       }
       break;
@@ -355,6 +385,14 @@ ETABLE::Perform_LPRE_optimization(void)
 
     // exclude all expressions from being handled by Strength
     cur_worklst->Set_exclude_sr_cand();
+
+#if defined(TARG_NVISA)
+    if (cur_worklst->Has_unequal_sizes()) {
+      Is_Trace(Tracing(), (TFile, "Skipping, different sizes of loads"));
+      cur_worklst->Remove_occurs(this);
+      continue;
+    }
+#endif
 
     // remove small constant occ if their lhs has been promoted to PREG
     if (cur_worklst->Exp()->Kind() == CK_CONST) {
@@ -568,6 +606,18 @@ CODEREP::Is_rvi_const_candidate(const CODEREP *parent, INT whichkid, const OPT_S
 {
   if ( parent == NULL ) return FALSE;
 
+#ifdef TARG_NVISA
+  // On this TARG, float constants(CK_RCONST) can be immediates
+  // Using separate function to avoid any confusion since
+  // Can_Be_Immediate has implicit assumption of being integer const
+  if (Kind() == CK_RCONST) {
+    if (MTYPE_is_float(Dtyp())) {
+      return !Can_Be_Float_Immediate(Dtyp());
+    }
+    return false;
+  }
+#endif
+
   Is_True( (Kind() == CK_CONST) && MTYPE_is_integral(Dtyp()),
 	  ("CODEREP::Is_rvi_const_candidate: not an integer const") );
 
@@ -576,7 +626,7 @@ CODEREP::Is_rvi_const_candidate(const CODEREP *parent, INT whichkid, const OPT_S
   const CODEKIND par_ck   = parent->Kind();
   const OPERATOR par_opr  = (par_ck == CK_VAR) ? OPR_STID : parent->Opr();
 
-#ifdef TARG_MIPS
+#if defined(TARG_MIPS) || defined(TARG_LOONGSON)
   if (con_val == 0)
     return FALSE;
 #endif
@@ -613,8 +663,7 @@ BOOL
 CODEREP::Is_rvi_lda_candidate( const CODEREP *parent, INT whichkid, const OPT_STAB *opt_stab ) const
 {
 #if defined(TARG_X8664) || defined(TARG_IA32)
-  if (! WOPT_Enable_RVI)
-    return FALSE;
+  return FALSE;
 #else
   if (parent == NULL) return FALSE;
 
@@ -631,6 +680,7 @@ CODEREP::Is_rvi_lda_candidate( const CODEREP *parent, INT whichkid, const OPT_ST
 
   switch ( par_opr ) {
   case OPR_ILOAD:
+  case OPR_ILOADX:
   case OPR_MLOAD:
   case OPR_ILDBITS:
     // include OPR_ISTORE, OPR_MSTORE

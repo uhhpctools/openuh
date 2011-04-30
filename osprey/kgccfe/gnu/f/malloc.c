@@ -191,9 +191,6 @@ malloc_pool_kill (mallocPool p)
   if (--p->uses != 0)
     return;
 
-#if 0
-  malloc_pool_display (p);
-#endif
 
   assert (p->next->previous == p);
   assert (p->previous->next == p);
@@ -362,11 +359,6 @@ malloc_new_ (mallocSize s)
   void *ptr;
   unsigned ss = s;
 
-#if MALLOC_DEBUG && 0
-  assert (s == (mallocSize) ss);/* Else alloc is too big for this
-				   library/sys. */
-#endif
-
   ptr = xmalloc (ss);
 #if MALLOC_DEBUG
   memset (ptr, 126, ss);	/* Catch some kinds of errors more
@@ -515,10 +507,6 @@ void *
 malloc_resize_ (void *ptr, mallocSize s)
 {
   int ss = s;
-
-#if MALLOC_DEBUG && 0
-  assert (s == (mallocSize) ss);/* Too big if failure here. */
-#endif
 
   ptr = xrealloc (ptr, ss);
   return ptr;

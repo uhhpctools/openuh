@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -49,8 +53,6 @@
 //  $Date: 2005/10/21 19:00:00 $
 //  $Author: marcel $
 //  $Source: /proj/osprey/CVS/open64/osprey1.0/common/targ_info/generate/isa_operands_gen.cxx,v $
-
-typedef struct operand_value_type *OPERAND_VALUE_TYPE;
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -578,7 +580,7 @@ void ISA_Operands_End(void)
 		 "  mUINT8 rsubclass;\n"
 		 "  mUINT8 lclass;\n"
 		 "  mUINT8 eclass;\n"
-		 "  mUINT8 size;\n"
+		 "  mUINT16 size;\n"
 		 "  mUINT8 flags;\n"
 		 "} ISA_OPERAND_VALTYP;\n");
 
@@ -942,4 +944,8 @@ void ISA_Operands_End(void)
 		 "}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

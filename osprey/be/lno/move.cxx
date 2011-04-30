@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2008. PathScale, LLC. All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -41,7 +45,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -172,7 +175,11 @@ static BOOL Possibly_Used_Outside_Program_Unit(WN* wn_stid)
   const DU_NODE* node1 = NULL;
   for (node1 = iter.First(); !iter.Is_Empty(); node1 = iter.Next()) {
     WN* wn_use = node1->Wn();
-    if (WN_opcode(wn_use) == OPC_RETURN)
+    if (WN_opcode(wn_use) == OPC_RETURN
+#ifdef KEY
+  	|| WN_opcode(wn_use) == OPC_GOTO_OUTER_BLOCK
+#endif
+       )
       return TRUE; 
   }
   return FALSE; 
@@ -1063,8 +1070,12 @@ static BOOL Sinkable_Out_Of_Loop(WN* wn_stat,
   case OPR_PARM:
     if (WN_Parm_By_Value(wn_test)) 
       return Sinkable_Out_Of_Loop(wn_stat, WN_kid0(wn_test), wn_sink_loop, du);
-    if (WN_Parm_By_Reference(wn_test)) 
-      return !Maybe_Assigned(WN_kid0(wn_test), WN_next(wn_stat), wn_sink_loop); 
+    if (WN_Parm_By_Reference(wn_test))
+#ifdef KEY //bug 14207
+      return !Maybe_Assigned(WN_kid0(wn_test), wn_sink_loop, wn_sink_loop);
+#else
+      return !Maybe_Assigned(WN_kid0(wn_test), WN_next(wn_stat), wn_sink_loop);
+#endif 
     FmtAssert(FALSE, ("Parameter must be by value or by reference."));
   case OPR_CALL: 
 #ifdef KEY

@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: ori.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/region/ori.cxx,v $
+ * $Revision: 1.6 $
+ * $Date: 05/12/05 08:59:31-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/region/SCCS/s.ori.cxx $
  *
  * Description:
  * Olimit Region Insertion (ORI):
@@ -195,7 +195,7 @@ Initialize_ORI (void)
 }
 
 static void
-Check_Dump (WN *tree, char *msg)
+Check_Dump (WN *tree, const char *msg)
 {
 	if (Get_Trace(TKIND_IR, TP_ORI)) {
 		fputs(DBar, TFile);
@@ -988,18 +988,6 @@ Split_Block (ORI_BLOCK *b)
 	if (in_stmt_group && stmt != OB_end_tree(b)) {
 		if (Trace_ORI) fprintf(TFile, "ori: don't split block %d in middle of stmt group\n", OB_id(b));
 	}
-#if 0
-// need to wait until redo to handle control flow inside clump 
-	while (in_stmt_group && stmt != OB_end_tree(b)) {
-		Count_WN_Node (stmt, &num_bbs, &num_stmts);
-		if (WN_opcode(stmt) == OPC_PRAGMA 
-		    && WN_pragma(stmt) == WN_PRAGMA_END_STMT_CLUMP) 
-			in_stmt_group = FALSE;
-		stmt = WN_next(stmt);
-	}
-	FmtAssert(stmt != NULL, ("Split_Block: couldn't split io block %d", OB_id(b)));
-	FmtAssert(!in_stmt_group, ("ORI Split_Block: couldn't reach end of stmt group"));
-#endif
 	// don't split between call and store of return preg
 	// (could be two stores of return pregs after call).
 	// also need to check for case of splitting between 

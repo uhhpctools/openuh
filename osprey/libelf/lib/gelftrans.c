@@ -380,32 +380,5 @@ gelf_update_rel(Elf_Data *dst, int ndx, GElf_Rel *src) {
     return 1;
 }
 
-#if 0
-
-GElf_Syminfo*
-gelf_getsyminfo(Elf_Data *src, int ndx, GElf_Syminfo *dst) {
-    seterr(ERROR_UNIMPLEMENTED);
-    return NULL;
-}
-
-int
-gelf_update_syminfo(Elf_Data *dst, int ndx, GElf_Syminfo *src) {
-    seterr(ERROR_UNIMPLEMENTED);
-    return 0;
-}
-
-GElf_Move*
-gelf_getmove(Elf_Data *src, int ndx, GElf_Move *src) {
-    seterr(ERROR_UNIMPLEMENTED);
-    return NULL;
-}
-
-int
-gelf_update_move(Elf_Data *dst, int ndx, GElf_Move *src) {
-    seterr(ERROR_UNIMPLEMENTED);
-    return 0;
-}
-
-#endif
 
 #endif /* __LIBELF64 */

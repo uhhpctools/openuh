@@ -59,7 +59,11 @@
 #pragma hdrstop
 
 #include <sys/types.h>	    /* for off_t */
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
 #include "mempool.h"
@@ -71,6 +75,9 @@
 #include "wn.h"
 #include "wn_map.h"
 
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include "ir_bwrite.h"
 #include "ir_bcom.h"
 #include "opt_ipaa_io.h"
@@ -86,7 +93,7 @@
 
 // Read table from .B file
 extern "C" void *
-IPAA_CALLSITES_Read ( char *base, Elf64_Word size )
+IPAA_CALLSITES_Read ( char *base, UINT32 size )
 {
   IPAA_CALLSITES *cs = (IPAA_CALLSITES *)base;
   cs->_mpool = NULL;
@@ -127,7 +134,7 @@ IPAA_CALLSITES_Write ( void *callsites, Output_File *fl )
 }
 
 extern "C" void *
-IPAA_LOCAL_MAP_Read ( char *base, Elf64_Word size )
+IPAA_LOCAL_MAP_Read ( char *base, UINT32 size )
 {
   IPAA_LOCAL_MAP *lm = (IPAA_LOCAL_MAP *)base;
   lm->_mpool = NULL;

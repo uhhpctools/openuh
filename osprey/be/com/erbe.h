@@ -1,4 +1,8 @@
 /*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -164,7 +168,8 @@ static char *erbe_rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/com/SCCS/s.e
 #define EC_LAY_section_name	EC_BASE_BE+127
 
 /* Miscellaneous */
-#define EC_Skip_PU	EC_BASE_BE+130	/* str, int, str */
+#define EC_Skip_PU		EC_BASE_BE+130	/* str, int, str */
+#define EC_Uninitialized	EC_BASE_BE+131  /* str, str */
 
 /* DRA cloning error messages */
 #define EC_DRA_rii_file_io       EC_BASE_BE+140  /* str, err */
@@ -177,6 +182,18 @@ static char *erbe_rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/com/SCCS/s.e
 #ifdef KEY
 #define EC_MPLOWER_copyin_st     EC_BASE_BE+147
 #endif
+#ifdef TARG_NVISA
+#define EC_No_Calls		 EC_BASE_BE+148
+#define EC_Too_Many_Args	 EC_BASE_BE+149
+#define EC_Const_Space_Overflow	 EC_BASE_BE+150
+#define EC_Unaligned_Memory	 EC_BASE_BE+151
+#define EC_Ptr_Assumed_Global	 EC_BASE_BE+152
+#define EC_Load_Past_Struct	 EC_BASE_BE+153
+#define EC_Shared_Atomic64_Opnd  EC_BASE_BE+154
+#define EC_Memset_Too_Large      EC_BASE_BE+155 /* int */
+#endif /* TARG_NVISA */
+
+#define EC_Invalid_Asm_Constrain EC_BASE_BE+156 /* str */
 
 #ifdef __cplusplus
 }

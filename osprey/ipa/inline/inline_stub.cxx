@@ -53,3 +53,17 @@ void IP_WRITE_pu ( struct ip_file_hdr *s, INT pindex ) {}
 #ifdef __cplusplus
 }
 #endif
+
+#if !defined(SHARED_BUILD)
+/* no weak version, so need stub to compile (real version is in libwopt) */
+#include "opt_defs.h"
+AUX_ID WN_aux (const WN*) {}
+
+/* from whirl2c */
+extern "C" {
+void W2C_Cleanup(void) {}
+void W2C_Push_PU(const WN* a, WN* b) {}
+void W2C_Pop_PU(void) {}
+void W2C_Translate_Wn(FILE* a, const WN* b) {}
+}
+#endif

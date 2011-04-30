@@ -969,15 +969,6 @@ void parse_module_stmt (void)
                         AT_OBJ_NAME_PTR(attr_idx));
             }
 
-# if 0
-            if ((cif_flags & XREF_RECS) != 0) {
-               cif_usage_rec(attr_idx,
-                             AT_Tbl_Idx,
-                             TOKEN_LINE(token),
-                             TOKEN_COLUMN(token),
-                             CIF_Symbol_Declaration);
-            }
-# endif
 
             /* If the context is okay, interface_idx will be non NULL.  If */
             /* so enter into interface list and set ATI_INTERFACE_CLASS.   */
@@ -1607,6 +1598,19 @@ void parse_subroutine_stmt (void)
       parse_dummy_args(attr_idx);
    }
 
+#ifdef KEY /* Bug 14150 */
+   if (matched_specific_token(Tok_Kwd_Bind, Tok_Class_Keyword)) {
+      if (AT_IS_DARG(attr_idx)) {
+	parse_language_binding_spec(0);
+	AT_BIND_ATTR(attr_idx) = TRUE;
+      }
+      else {
+	parse_language_binding_spec(&new_binding_label);
+	set_binding_label(AT_Tbl_Idx, attr_idx, &new_binding_label);
+      }
+   }
+   else
+#endif /* KEY Bug 14150 */
    if (LA_CH_VALUE != EOS) {
       parse_err_flush(Find_EOS, EOS_STR);
    }
@@ -1618,6 +1622,93 @@ void parse_subroutine_stmt (void)
    return;
 
 }  /* parse_subroutine_stmt */
+#ifdef KEY /* Bug 14150 */
+/*
+ * Parse RESULT clause for FUNCTION suffix.
+ * attr_idx		AT_Tbl_Idx for function
+ * out_rslt_idx		AT_Tbl_Idx for function result
+ * return		TRUE if error found
+ */
+static int
+help_set_function_rslt(int attr_idx, int *out_result_idx) {
+   token_type save_token;
+   int rslt_idx;
+   int name_idx;
+   int err_found = FALSE;
+
+   if (LA_CH_VALUE != LPAREN) {
+      parse_err_flush(Find_EOS, "(");
+      err_found = TRUE;
+   }
+   else {
+      NEXT_LA_CH;
+
+      if (!MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+	 parse_err_flush(Find_EOS, "result-name");
+	 err_found = TRUE;
+      }
+      else {
+
+	 if (LA_CH_VALUE == RPAREN) {
+	    NEXT_LA_CH;
+	 }
+	 else {
+	    save_token	= token;
+	    parse_err_flush(Find_EOS, ")");
+	    err_found	= TRUE;
+	    token		= save_token;
+	 }
+
+	 rslt_idx = srch_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token),
+				 &name_idx);
+
+	 if (rslt_idx == NULL_IDX) {
+	    rslt_idx			= ntr_sym_tbl(&token, name_idx);
+	    LN_DEF_LOC(name_idx)	= TRUE;
+	    AT_OBJ_CLASS(rslt_idx)	= Data_Obj;
+	 }
+	 else if (!ATP_ALT_ENTRY(attr_idx)) {
+
+	    /* The function result should not exist in the symbol table */
+
+	    PRINTMSG(TOKEN_LINE(token), 1471, Error, TOKEN_COLUMN(token),
+		     AT_OBJ_NAME_PTR(rslt_idx));
+	    CREATE_ERR_ATTR(rslt_idx,
+			    TOKEN_LINE(token),
+			    TOKEN_COLUMN(token),
+			    Data_Obj);
+	 }
+	 else if (fnd_semantic_err(Obj_Ntry_Func_Result,
+				   TOKEN_LINE(token),
+				   TOKEN_COLUMN(token),
+				   rslt_idx,
+				   TRUE)) {
+	    CREATE_ERR_ATTR(rslt_idx,
+			    TOKEN_LINE(token),
+			    TOKEN_COLUMN(token),
+			    Data_Obj);
+	 }
+	 else if (AT_REFERENCED(rslt_idx) == Char_Rslt_Bound_Ref) {
+	    AT_ATTR_LINK(rslt_idx)	= NULL_IDX;
+	    LN_DEF_LOC(name_idx)	= TRUE;
+	 }
+
+	 if ((cif_flags & XREF_RECS) != 0) {
+	    cif_usage_rec(rslt_idx,
+			  AT_Tbl_Idx,
+			  TOKEN_LINE(token),
+			  TOKEN_COLUMN(token),
+			  CIF_Symbol_Declaration);
+	 }
+
+	 ATD_CLASS(rslt_idx)		= Function_Result;
+	 ATP_RSLT_NAME(attr_idx)	= TRUE;
+      }
+   } 
+   *out_result_idx = rslt_idx;
+   return err_found;
+}
+#endif /* KEY Bug 14150 */
 
 /******************************************************************************\
 |*									      *|
@@ -1641,89 +1732,38 @@ static void set_function_rslt(int	attr_idx,
 {
    boolean		err_found	= FALSE;
    int			func_rslt_idx;
-   int			name_idx;
    int			rslt_idx	= NULL_IDX;
-   token_type		save_token;
 
 
    TRACE (Func_Entry, "set_function_rslt", NULL);
 
-   if (LA_CH_VALUE != EOS) {		/* Check for RESULT */
-
-      if (!matched_specific_token(Tok_Kwd_Result, Tok_Class_Keyword)) {
-         parse_err_flush(Find_EOS, "RESULT or " EOS_STR);
-         err_found = TRUE;
-      }
-      else if (LA_CH_VALUE != LPAREN) {
-         parse_err_flush(Find_EOS, "(");
-         err_found = TRUE;
-      }
-      else {
-         NEXT_LA_CH;
-
-         if (!MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
-            parse_err_flush(Find_EOS, "result-name");
-            err_found = TRUE;
-         }
-         else {
-
-            if (LA_CH_VALUE == RPAREN) {
-               NEXT_LA_CH;
-            }
-            else {
-               save_token	= token;
-               parse_err_flush(Find_EOS, ")");
-               err_found	= TRUE;
-               token		= save_token;
-            }
-
-            rslt_idx = srch_sym_tbl(TOKEN_STR(token), TOKEN_LEN(token),
-                                    &name_idx);
-
-            if (rslt_idx == NULL_IDX) {
-               rslt_idx			= ntr_sym_tbl(&token, name_idx);
-               LN_DEF_LOC(name_idx)	= TRUE;
-               AT_OBJ_CLASS(rslt_idx)	= Data_Obj;
-            }
-            else if (!ATP_ALT_ENTRY(attr_idx)) {
-
-               /* The function result should not exist in the symbol table */
-
-               PRINTMSG(TOKEN_LINE(token), 1471, Error, TOKEN_COLUMN(token),
-                        AT_OBJ_NAME_PTR(rslt_idx));
-               CREATE_ERR_ATTR(rslt_idx,
-                               TOKEN_LINE(token),
-                               TOKEN_COLUMN(token),
-                               Data_Obj);
-            }
-            else if (fnd_semantic_err(Obj_Ntry_Func_Result,
-                                      TOKEN_LINE(token),
-                                      TOKEN_COLUMN(token),
-                                      rslt_idx,
-                                      TRUE)) {
-               CREATE_ERR_ATTR(rslt_idx,
-                               TOKEN_LINE(token),
-                               TOKEN_COLUMN(token),
-                               Data_Obj);
-            }
-            else if (AT_REFERENCED(rslt_idx) == Char_Rslt_Bound_Ref) {
-               AT_ATTR_LINK(rslt_idx)	= NULL_IDX;
-               LN_DEF_LOC(name_idx)	= TRUE;
-            }
-
-            if ((cif_flags & XREF_RECS) != 0) {
-               cif_usage_rec(rslt_idx,
-                             AT_Tbl_Idx,
-                             TOKEN_LINE(token),
-                             TOKEN_COLUMN(token),
-                             CIF_Symbol_Declaration);
-            }
-
-            ATD_CLASS(rslt_idx)		= Function_Result;
-            ATP_RSLT_NAME(attr_idx)	= TRUE;
-	 }
-      } 
+#ifdef KEY /* Bug 14150 */
+   int bind_ok = 1;
+   int result_ok = 1;
+   while (LA_CH_VALUE != EOS) {
+     if (bind_ok && matched_specific_token(Tok_Kwd_Bind, Tok_Class_Keyword)) {
+       bind_ok = 0;
+       int line, column;
+       if (AT_IS_DARG(attr_idx)) {
+	 parse_language_binding_spec(0);
+	 AT_BIND_ATTR(attr_idx) = TRUE;
+       }
+       else {
+	 parse_language_binding_spec(&new_binding_label);
+	 set_binding_label(AT_Tbl_Idx, attr_idx, &new_binding_label);
+       }
+     }
+     else if (result_ok && matched_specific_token(Tok_Kwd_Result,
+       Tok_Class_Keyword)) {
+       result_ok = 0;
+       err_found = help_set_function_rslt(attr_idx, &rslt_idx);
+     } else {
+       parse_err_flush(Find_EOS, "BIND, RESULT or " EOS_STR);
+       err_found = TRUE;
+       break;
+     }
    }
+#endif /* KEY Bug 14150 */
 
    func_rslt_idx	= ATP_RSLT_IDX(attr_idx);
 
@@ -3525,7 +3565,7 @@ static void start_new_scp(void)
 
       SCP_SB_STACK_IDX(curr_scp_idx)	= SCP_SB_STACK_IDX(parent_idx);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
       /* Set the scope for the darg block to the parent scope. */
 

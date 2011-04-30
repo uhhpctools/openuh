@@ -218,6 +218,9 @@ typedef unsigned long          INTPTR;
 #define FEI_OBJECT_IN_COMMON     			33
 #define FEI_OBJECT_NOT_PT_TO_UNIQUE_MEM			34
 #define FEI_OBJECT_READ_ONLY				35
+#ifdef KEY /* Bug 14150 */
+#define FEI_OBJECT_PASS_BY_VALUE			36
+#endif /* KEY Bug 14150 */
 
 #define FEI_ARRAY_DIMEN_VARY_LB      	 	 	 0
 #define FEI_ARRAY_DIMEN_VARY_EXT     	 	 	 1
@@ -686,7 +689,7 @@ typedef enum {
 
 typedef struct  type_descriptor  {
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_MONGOOSE)
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) || defined(_TARGET_MONGOOSE)
     unsigned     const_flag      :  1;
     unsigned     volatile_flag   :  1;
     unsigned     signed_flag     :  1;
@@ -932,6 +935,9 @@ extern TYPE  fei_descriptor               ( INT32 flag_matrix,
                                             INT32 basic_type,
                                             INT32 aux_info,
                                             INT32 alignment);
+#ifdef KEY /* Bug 14110 */
+extern unsigned fei_set_volatile(unsigned);
+#endif /* KEY Bug 14110 */
 extern INTPTR fei_name                    ( char  *name_string,
                                             INT32 st_grp,
                                             INTPTR st_idx,
@@ -1487,6 +1493,9 @@ extern void  fei_new_select_case 	  ( INT64 low_value_pres,
                                  	    INT64 high_value_pres,
                                  	    INT32 case_follows );
 extern void  fei_new_select      	  ( INT32 num_cases,
+#ifdef KEY /* Bug 12319 */
+                                 	    INTPTR last_label_idx,
+#endif /* KEY Bug 12319 */
                                  	    INTPTR default_label_idx );
 extern TYPE  fei_dope_vector              ( INT32 num_dims, 
                                     	    TYPE  base_type,
@@ -1652,7 +1661,7 @@ extern void PDGCS_mpp_init                ( char        *src_fname,
 
 typedef struct		type_descriptor	pdg_type_tbl_type;
 #ifdef KEY
-extern int Check_FF2C_Script           ( char *callee_key,
+extern int Check_FF2C_Script           (const char *callee_key,
                                          int  mangled ); 
 #endif
 # ifdef __cplusplus

@@ -29,22 +29,22 @@
 #define ROUNDUP(val,align)       ( (-(INT64)align) & (INT64)(val+align-1) )
 static ST* Get_Section_ST(SECTION_IDX sec, UINT align, ST_SCLASS sclass);
 
-extern WN * Gen_Call( char *name, TYPE_ID rtype = MTYPE_V );
-extern WN * Gen_Call( char *name, WN *arg1, TYPE_ID rtype = MTYPE_V);
-extern WN * Gen_Call( char *name, WN *arg1, WN *arg2, TYPE_ID rtype = MTYPE_V  );
-extern WN * Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, TYPE_ID rtype= MTYPE_V);
-extern WN * Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, TYPE_ID rtype = MTYPE_V);
-extern WN * Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, WN *arg5, TYPE_ID rtype = MTYPE_V );
-extern WN * Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, WN *arg5, WN *arg6, TYPE_ID rtype = MTYPE_V );
+extern WN * Gen_Call( const char *name, TYPE_ID rtype = MTYPE_V );
+extern WN * Gen_Call( const char *name, WN *arg1, TYPE_ID rtype = MTYPE_V);
+extern WN * Gen_Call( const char *name, WN *arg1, WN *arg2, TYPE_ID rtype = MTYPE_V  );
+extern WN * Gen_Call( const char *name, WN *arg1, WN *arg2, WN *arg3, TYPE_ID rtype= MTYPE_V);
+extern WN * Gen_Call( const char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, TYPE_ID rtype = MTYPE_V);
+extern WN * Gen_Call( const char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, WN *arg5, TYPE_ID rtype = MTYPE_V );
+extern WN * Gen_Call( const char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4, WN *arg5, WN *arg6, TYPE_ID rtype = MTYPE_V );
 
 
-char* OUTPUT_FUNC_START_PROFILER::_prefix = "_GLOBAL__GCOV_";
+const char* OUTPUT_FUNC_START_PROFILER::_prefix = "_GLOBAL__GCOV_";
 #ifdef GCC_303
-char* OUTPUT_FUNC_START_PROFILER::_init_proc = "__gcov_init";
+const char* OUTPUT_FUNC_START_PROFILER::_init_proc = "__gcov_init";
 #else
-char* OUTPUT_FUNC_START_PROFILER::_init_proc = "__bb_init_func";
+const char* OUTPUT_FUNC_START_PROFILER::_init_proc = "__bb_init_func";
 #endif
-char* OUTPUT_FUNC_START_PROFILER::_lpbx_0 = "LPBX0";
+const char* OUTPUT_FUNC_START_PROFILER::_lpbx_0 = "LPBX0";
 
 OUTPUT_FUNC_START_PROFILER Output_Func_Start_Profiler;
 
@@ -59,7 +59,7 @@ OUTPUT_FUNC_START_PROFILER::OUTPUT_FUNC_START_PROFILER(const char* src_file_name
       _func_name(NULL) {}
 
 char*
-OUTPUT_FUNC_START_PROFILER::Construct_Func_Name(char *name)
+OUTPUT_FUNC_START_PROFILER::Construct_Func_Name(const char *name)
 {
     char* func_name = TYPE_MEM_POOL_ALLOC_N(char, &_mem_pool, strlen(name) + strlen(_file_name) + 1);
     sprintf(func_name, "%s%s", name, _file_name);
@@ -254,7 +254,7 @@ OUTPUT_FUNC_START_PROFILER::Fill_In_Func_Body(void)
     UINT32 size = zero_word_size + filename_size + counts_size + ncounts_size + next_size + sizeofbb_size + bb_function_info_size;
 #else
     UINT32 size;
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
     if (Is_Target_32bit())
       size = 7*4;
     else
@@ -266,7 +266,7 @@ OUTPUT_FUNC_START_PROFILER::Fill_In_Func_Body(void)
     TY& ty = New_TY(tyi);
     TY_Init(ty, size, KIND_STRUCT, MTYPE_M,
           STR_IDX_ZERO);
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
     Set_TY_align(tyi, Is_Target_32bit()? 4 : 32);
 #else
     Set_TY_align(tyi, 32);
@@ -276,7 +276,7 @@ OUTPUT_FUNC_START_PROFILER::Fill_In_Func_Body(void)
             CLASS_VAR, SCLASS_PSTATIC, EXPORT_PREEMPTIBLE, tyi);
     Set_ST_is_initialized(_lpbx_st);
     Set_ST_is_not_used(_lpbx_st);
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
     WN* parm_var_addr =
       WN_CreateLda (OPCODE_make_op(OPR_LDA, Pointer_type, MTYPE_V),
                     0,

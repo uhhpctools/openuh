@@ -61,7 +61,6 @@ s_rdfe (cilist *a)
 }
 
 
-#if 11
 int
 s_rdfe_mp (cilist *a, unit **fu) {
     cilist64 a64;
@@ -78,11 +77,6 @@ s_rdfe64 (cilist64 *a)
 
 int s_rdfe64_mp(cilist64 *a, unit **fu) {
 
-#else
-int
-s_rdfe_mp (cilist *a, unit **fu) {
-
-#endif
    int             n;
    unit            *ftnunit;
 
@@ -117,7 +111,6 @@ s_wdfe (cilist *a) {
     return( s_wdfe_mp( a, &f77curunit ) );
 }
 
-#if 11
 
 int
 s_wdfe_mp (cilist *a, unit **fu) {
@@ -135,11 +128,6 @@ s_wdfe64 (cilist64 *a)
 
 int s_wdfe64_mp (cilist64 *a, unit **fu) {
 
-#else
-
-int
-s_wdfe_mp (cilist *a, unit **fu) {
-#endif
    int             n;
    unit		*ftnunit;
 
@@ -400,10 +388,8 @@ y_wSL (unit *ftnunit)
    return (0);
 }
 
-#if 11
 #pragma weak e_rdfe64 = e_rdfe
 #pragma weak e_rdfe64_mp = e_rdfe_mp
 #pragma weak e_wdfe64 = e_wdfe
 #pragma weak e_wdfe64_mp = e_wdfe_mp
-#endif
 

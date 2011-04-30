@@ -56,13 +56,14 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <strings.h>
+#include <string.h>
 #include <assert.h>
 #include <list>
 #include "topcode.h"
 #include "gen_util.h"
 #include "targ_isa_subset.h"
 #include "isa_hazards_gen.h"
+#include "bstring.h"
 
 
 struct isa_hazard {
@@ -156,7 +157,7 @@ ISA_HAZARD Hazard_Create( const char *name )
 /////////////////////////////////////
 {
   ISA_HAZARD result = new isa_hazard;
-  bzero(result, sizeof(isa_hazard));
+  memset(result, 0, sizeof(isa_hazard));
   hazards.push_back(result);
   result->name = name;
   return result;
@@ -173,7 +174,7 @@ void Hazard_Group( TOP topcode, ... )
   int count = 0;
 
   current_haz_desc = new haz_desc;
-  bzero(current_haz_desc, sizeof(haz_desc));
+  memset(current_haz_desc, 0, sizeof(haz_desc));
 
   va_start(ap,topcode);
   for (opcode = topcode;
@@ -416,4 +417,8 @@ void ISA_Hazards_End(void)
 		 "}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(efile);
+  fclose(cfile);
 }

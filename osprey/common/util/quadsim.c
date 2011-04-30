@@ -1,5 +1,5 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +41,10 @@
  * =======================================================================
  *
  *  Module: quadsim.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/quadsim.c,v $
+ *  $Revision: 1.5 $
+ *  $Date: 04/12/21 14:57:27-08:00 $
+ *  $Author: bos@eng-25.internal.keyresearch.com $
+ *  $Source: /home/bos/bk/kpro64-pending/common/util/SCCS/s.quadsim.c $
  *
  * =======================================================================
  * =======================================================================
@@ -116,7 +116,30 @@ static const	du	infinity =
 {0x7ff00000,	0x00000000};
 
 #define STRINGIFY(str) #str
-
+#ifndef TARG_LOONGSON
+#if defined(BUILD_OS_DARWIN)
+/* Can't use "pragma weak" to create aliases in Mach-O */
+#define DECLARE(ret_type, fn_name, arg_types...) \
+  ret_type __ ## fn_name(arg_types); \
+  ret_type fn_name(arg_types) { return __ ## fn_name(x, p_err); }
+extern	INT	c_q_le(QUAD x, QUAD y, INT *p_err);
+extern	INT	c_q_ge(QUAD x, QUAD y, INT *p_err);
+DECLARE(INT32,	c_ji_qint, QUAD x, INT *p_err );
+INT32 __c_fp_class_q(QUAD);
+INT32 c_fp_class_q(QUAD x) { return __c_fp_class_q(x); }
+DECLARE(UINT32,	c_ji_quint, QUAD x, INT *p_err );
+DECLARE(INT64,	c_ki_qint, QUAD x, INT *p_err );
+DECLARE(UINT64,	c_ki_quint, QUAD x, INT *p_err );
+DECLARE(float,	c_sngl_q, QUAD x, INT *p_err );
+DECLARE(double,	c_dble_q, QUAD x, INT *p_err );
+DECLARE(QUAD,	c_q_flotj, INT32 x, INT *p_err );
+DECLARE(QUAD,	c_q_flotju, UINT32 x, INT *p_err );
+DECLARE(QUAD,	c_q_flotk, INT64 x, INT *p_err );
+DECLARE(QUAD,	c_q_flotku, UINT64 x, INT *p_err );
+DECLARE(QUAD,	c_q_ext,  float x, INT *p_err );
+DECLARE(QUAD,	c_q_extd, double x, INT *p_err );
+DECLARE(QUAD,	c_q_trunc, QUAD x, INT *p_err );
+#else /* defined(BUILD_OS_DARWIN) */
 #define DECLARE(ret_type, fn_name, arg_types...) \
   ret_type __ ## fn_name(arg_types); \
   ret_type fn_name(arg_types) __attribute__((weak, alias("__" #fn_name)))
@@ -137,6 +160,7 @@ DECLARE(QUAD,	c_q_flotku, UINT64 n, INT *p_err );
 DECLARE(QUAD,	c_q_ext,  float x, INT *p_err );
 DECLARE(QUAD,	c_q_extd, double x, INT *p_err );
 DECLARE(QUAD,	c_q_trunc, QUAD x, INT *p_err );
+#endif /* defined(BUILD_OS_DARWIN) */
 extern	double	trunc(double x);
 
 /* quad to INT32 */
@@ -611,7 +635,7 @@ QUAD	result;
 		return ( result );
 	}
 }
-
+#endif
 /* ====================================================================
  *
  * FunctionName: c_fp_class_q
@@ -655,6 +679,46 @@ fp_class_d( double x )
     return ( (sign == 0) ? FP_POS_NORM : FP_NEG_NORM );
 }
 
+#ifdef TARG_LOONGSON
+/*for loongson's long double*/
+#define LDMANTWIDTH 112
+#define LDEXPWIDTH 15
+#define LDSIGNMASK 0x7fffffffffffffffll
+#define LDEXPMASK        0x8000ffffffffffffll
+#define LDQNANBITMASK    0xffff7fffffffffffll
+
+INT32
+c_fp_class_q( QUAD x )
+{
+  UINT64 hi, lo, exp, mantissa;
+  INT32 sign;
+
+  lo = *(UINT64*)&x;
+  hi = *((UINT64*)&x + 1);
+  exp = (hi >> (LDMANTWIDTH - 64));
+  sign = (exp >> LDEXPWIDTH);
+  exp &= 0x7fff;
+  mantissa = (hi & (LDSIGNMASK & LDEXPMASK));
+  if ( exp == 0x7fff ) {
+    /* result is an infinity, or a NaN */
+    if ( mantissa == 0 && lo == 0)
+      return ( (sign == 0) ? FP_POS_INF : FP_NEG_INF );
+    else if ( mantissa & ~LDQNANBITMASK )
+      return ( FP_QNAN );
+    else
+      return ( FP_SNAN );
+  }
+
+  if ( exp == 0 ) {
+    if ( mantissa == 0 && lo == 0)
+      return ( (sign == 0) ? FP_POS_ZERO : FP_NEG_ZERO );
+    else
+      return ( (sign == 0) ? FP_POS_DENORM : FP_NEG_DENORM );
+  }
+  else
+    return ( (sign == 0) ? FP_POS_NORM : FP_NEG_NORM );
+}
+#else
 INT32
 __c_fp_class_q(QUAD x)
 {	
@@ -693,4 +757,5 @@ INT32	class;
 
 	return ( FP_NEG_DENORM );
 }
+#endif
 

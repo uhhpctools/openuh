@@ -44,6 +44,6 @@ extern void WB_F90_Lower_Set_Prompf_Info(PROMPF_INFO* prompf_info);
 
 extern void WB_F90_Lower_Terminate();
 
-extern void s_f90_lower_debug(char init_buffer[]);
+extern void s_f90_lower_debug(const char init_buffer[]);
 
 #endif /* wb_f90_lower_INCLUDED */

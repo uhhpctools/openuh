@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -169,6 +173,8 @@ extern WN *WN_SimplifyIstore(OPCODE opc, WN_OFFSET offset,
 			    TY_IDX ty, UINT field_id, WN *value, WN *addr);
 
 extern INT32 WN_Simp_Compare_Trees(WN *t1, WN *t2);
+
+extern OPCODE get_inverse_relop(OPCODE opc);
 
 struct ALIAS_MANAGER;  /* Needed as a forward reference */
 

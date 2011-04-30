@@ -42,9 +42,9 @@ static BOOL script_init = FALSE;
 extern MEM_POOL *FE_Mempool;
 using namespace std;
 
-static void Make_Mangled_Name(char *dst, char *src)
+static void Make_Mangled_Name(char *dst, const char *src)
 {
-  char *ptr;
+  const char *ptr;
   int underscores;
 
   bzero (dst, sizeof(char)*strlen(dst));
@@ -112,10 +112,10 @@ static void Parse_script(const char *script_name)
 // FUNCTION: The interface function for inquiry into the inlining record
 //--------------------------------------------------------
 extern char *F2C_ABI_filename;
-extern "C" int Check_FF2C_Script(char *callee_key, int mangled)
+extern "C" int Check_FF2C_Script(const char *callee_key, int mangled)
 {
   char name_string[1024];
-  char *name_ptr;
+  const char *name_ptr;
 
   if (!F2C_ABI_filename) 
     return FALSE;

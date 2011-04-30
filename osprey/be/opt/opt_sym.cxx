@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -84,7 +88,6 @@
 #pragma hdrstop
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "limits.h"
 
@@ -122,6 +125,7 @@
 #endif
 #include "opt_points_to.h"
 #include "opt_cvtl_rule.h"
+#include "opt_alias_mgr.h"
 
 #include <algorithm>
 
@@ -131,7 +135,7 @@
 extern "C" {
 #include "targ_const.h"
 #include "stdlib.h"
-char *Targ_Print( char *fmt, TCON cvalue );
+char *Targ_Print( const char *fmt, TCON cvalue );
 }
 
 #ifdef Is_True_On
@@ -193,9 +197,16 @@ OPT_STAB::OPT_STAB(MEM_POOL *pool) : aux_stab(pool),
 
   // The following are initialized in Create:
   _has_exc_handler = FALSE;
+#ifdef KEY
+  _has_nonlocal_goto_target = FALSE;
+#endif
 
   _ac_2_vsym_map.Init ();
   _pt_sum.Set_opt_stab (this);  
+
+  BOOL t = Get_Trace (TP_GLOBOPT, CR_DUMP_FLAG);
+  _cr_sr_annot_mgr = CXX_NEW (MEMOP_ANNOT_CR_SR_MGR (mem_pool, t), mem_pool);
+  _cr_sr_annot_mgr->Set_active_mgr ();
 }
 
 
@@ -204,6 +215,8 @@ OPT_STAB::~OPT_STAB(void)
   WN_MAP_Delete(WN_sym_map());
   WN_MAP_Delete(WN_box_refs());
   WN_MAP_Delete(WN_box_defs());
+
+  CXX_DELETE (_cr_sr_annot_mgr, _cr_sr_annot_mgr->Mem_pool());
 
   // Is_True(_ver_pool == NULL, ("ver pool is not deleted."));
 
@@ -356,8 +369,9 @@ static void Collect_addr_passed_for_PU(WN *wn)
 
   // Fix 625656:
   //  Catch the cases not covered by addr_saved in be/com/opt_addr_flags.cxx.
-  if (WN_operator(wn) == OPR_PARM && 
-      (WN_Parm_By_Reference(wn) || WN_Parm_Passed_Not_Saved(wn))) 
+  if (WN_operator(wn) == OPR_PARM && (
+      WN_Parm_Dereference(wn) ||
+      WN_Parm_By_Reference(wn) || WN_Parm_Passed_Not_Saved(wn))) 
     Collect_addr_passed(WN_kid0(wn));
   //
   // Fix 642145:
@@ -466,6 +480,10 @@ OPT_STAB::Count_syms(WN *wn)
 
   if (WN_operator(wn) == OPR_REGION && REGION_is_EH(wn))
     _has_exc_handler = TRUE;
+#ifdef KEY
+  if (PU_has_nonlocal_goto_label(Get_Current_PU()))
+    _has_nonlocal_goto_target = TRUE;
+#endif
 
   // any regions in the whirl are black boxes, ignore
   if (WN_operator(wn) == OPR_REGION) {
@@ -532,7 +550,7 @@ OPT_STAB::Count_syms(WN *wn)
 // ====================================================================
 
 
-char *
+const char *
 AUX_STAB_ENTRY::St_name(void)
 {
   if (st) { 
@@ -700,6 +718,7 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
 #ifdef KEY
   BOOL is_bit_field = FALSE;
 #endif
+  TY_IDX hl_ty = (TY_IDX)0;
 
   switch (opr) {
   case OPR_LDA:
@@ -750,6 +769,10 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
     if (opr == OPR_LDID)
       field_id = WN_field_id(wn);
 #endif
+    if (WN_field_id(wn) != (TY_IDX)0) {
+      UINT32 dummy;
+      WN_hl_object_ty(wn, hl_ty, dummy);
+    }
     break;
   case OPR_STBITS:
     bit_size = WN_bit_size(wn);
@@ -792,6 +815,10 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
     if (opr == OPR_STID)
       field_id = WN_field_id(wn);
 #endif
+    if (WN_field_id(wn) != (TY_IDX)0) {
+      UINT32 dummy;
+      WN_hl_object_ty(wn, hl_ty, dummy);
+    }
     break;
   default:
     stype = VT_OTHER;
@@ -813,10 +840,6 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
   
   // Lookup the opt_stab first
   while (idx && aux_stab[idx].St() != NULL) {
-#if 0 // necessitated by the fix to bug 6293
-    Is_True(aux_stab[idx].St() == st,
-	    ("Enter_aux_stab::lookup wrong ST chain."));
-#endif
     BOOL kind_match = FALSE;
     switch (aux_stab[idx].Stype()) {
     case VT_NO_LDA_SCALAR:
@@ -839,6 +862,9 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
 
     if (kind_match &&
 	aux_stab[idx].Byte_size() == byte_size &&
+#ifdef KEY // bug 12321
+	aux_stab[idx].St() == st &&
+#endif
 	aux_stab[idx].St_ofst() == ofst &&
 	aux_stab[idx].Bit_size() == bit_size &&
 	aux_stab[idx].Bit_ofst() == bit_ofst &&
@@ -913,7 +939,13 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
   sym->Set_field_id(field_id);
   sym->Set_mclass(0);
   sym->Set_mtype(MTYPE_UNKNOWN);
-#ifdef KEY // bug 3091: to help create correct identity assignment for BS var
+  sym->Set_def_bbs(NULL);  
+
+#ifdef KEY 
+  // bug 13670: don't leave the field uninitialized
+  sym->Set_value_size(0);
+  sym->Set_spre_node(NULL);
+  // bug 3091: to help create correct identity assignment for BS var
   if (opr == OPR_LDID || opr == OPR_STID)
     sym->Set_wn(wn);
 #endif
@@ -950,6 +982,7 @@ OPT_STAB::Enter_symbol(OPERATOR opr, ST* st, INT64 ofst,
   sym->Set_byte_size(byte_size);
   sym->Set_bit_ofst_size(bit_ofst, bit_size);
   sym->Set_ty(wn_object_ty);
+  sym->Points_to()->Set_hl_ty(hl_ty);
 
   INT64 tmpofst;
   ST    *tmpbase;
@@ -1045,6 +1078,11 @@ OPT_STAB::Enter_ded_preg(ST *st, INT64 ofst, TY_IDX ty, INT32 mclass)
   sym->Set_stype(VT_NO_LDA_SCALAR);
   sym->Set_mclass(mclass);
   sym->Set_mtype(MTYPE_UNKNOWN);
+#ifdef KEY
+  // bug 13670
+  sym->Set_value_size(0);
+  sym->Set_spre_node(NULL);
+#endif
   sym->Clear_flags();
   sym->Set_st(st);
   sym->Set_st_ofst(ofst);
@@ -1082,6 +1120,11 @@ OPT_STAB::Create_vsym(EXPR_KIND k)
   vsym->Clear_flags();
   vsym->Set_mclass(0);
   vsym->Set_mtype(MTYPE_UNKNOWN);
+#ifdef KEY
+  // bug 13670
+  vsym->Set_value_size(0);
+  vsym->Set_spre_node(NULL);
+#endif
   vsym->Set_st(NULL);
   vsym->Set_st_ofst(0);
   vsym->Set_nonzerophis(NULL);
@@ -1098,11 +1141,12 @@ OPT_STAB::Create_vsym(EXPR_KIND k)
 
 
 AUX_ID
-OPT_STAB::Create_preg(MTYPE preg_ty, char *name, WN *home_wn)
+OPT_STAB::Create_preg(MTYPE preg_ty, const char *name, WN *home_wn)
 {
   ST *st;
 #ifdef KEY // bug 1523: preopt in ipl cannot use pregs due to exception handling
-  if (Has_exc_handler() && Phase() == PREOPT_IPA0_PHASE)
+  if ((Has_exc_handler()  || Has_nonlocal_goto_target())
+      && Phase() == PREOPT_IPA0_PHASE)
     st = Gen_Temp_Symbol(MTYPE_To_TY(preg_ty), name);
   else
 #endif
@@ -1138,6 +1182,14 @@ OPT_STAB::Create_preg(MTYPE preg_ty, char *name, WN *home_wn)
   sym->Set_synonym((AUX_ID) 0);
   sym->Set_home_sym((AUX_ID) 0);
   sym->Set_zero_cr(NULL);
+#ifdef KEY
+  // bug 13670
+  sym->Set_value_size(0);
+  sym->Set_spre_node(NULL);
+#endif
+
+  sym->Set_def_bbs(NULL);
+  
   sym->Points_to()->Analyze_ST(st, sym->St_ofst(),
 			       TY_size(MTYPE_To_TY(preg_ty)), 0, 0, 0,
 			       FALSE /* no equiv */);
@@ -1165,10 +1217,20 @@ AUX_STAB_ENTRY::Change_to_new_preg(OPT_STAB *opt_stab, CODEMAP *htable)
   if (preg_ty == 0) return;
 
   // Turn the variable into a PREG
-  char * name = St_name();
+  const char * name = St_name();
   Set_st(MTYPE_To_PREG(preg_ty));
   Set_stype(VT_NO_LDA_SCALAR);
+#ifdef TARG_NVISA
+  // want to find def for filling in home_wn of preg,
+  // which is needed for correct memory state info in Find_Lda.
+  WN *home_wn = NULL;
+  if (cr->Defstmt() && cr->Defstmt()->Rhs()) {
+    home_wn = cr->Defstmt()->Rhs()->Rvi_home_wn(opt_stab);
+  }
+  mINT64 offset = opt_stab->Alloc_preg(preg_ty, name, home_wn);
+#else
   mINT64 offset = opt_stab->Alloc_preg(preg_ty,name);
+#endif
   Set_st_ofst(offset);
   Set_st_group(0);	// clears "overlap" union
   Set_synonym((AUX_ID) 0);
@@ -1661,15 +1723,25 @@ OPT_STAB::Convert_ST_to_AUX(WN *wn, WN *block_wn)
 				 WN_kid0(wn)); 
       if (twn) {
 	opr = WN_operator(twn);
+        FmtAssert(opr == OPR_LDID || opr == OPR_LDBITS || opr == OPR_INTCONST,
+                  ("Unknown operator: opr:%s when simpilfying iload", 
+                  OPERATOR_name(opr)));
 	rtype = WN_rtype(twn);
 	desc = WN_desc(twn);
-        WN_set_operator(wn, opr);
+	// reset map_id since OPR_INTCONST is in different mapcat group than OPR_LDID/OPR_LDBITS.
+	if (opr == OPR_INTCONST) 
+	  WN_set_map_id(wn, -1);
+	WN_change_operator(wn, opr);
 	WN_set_rtype(wn, rtype);
 	WN_set_desc(wn, desc);
-        WN_load_offset(wn) = WN_load_offset(twn);
-        WN_st_idx(wn) = WN_st_idx(twn);
-        WN_set_ty(wn, WN_ty(twn));
-	WN_kid0(wn) = NULL;
+        if (opr == OPR_INTCONST)
+          WN_const_val(wn) = WN_const_val(twn);
+        else {
+          WN_load_offset(wn) = WN_load_offset(twn);
+          WN_st_idx(wn) = WN_st_idx(twn);
+          WN_set_ty(wn, WN_ty(twn));
+	  WN_kid0(wn) = NULL;
+        }
 	WN_Delete(twn);
       }
     }
@@ -1692,7 +1764,7 @@ OPT_STAB::Convert_ST_to_AUX(WN *wn, WN *block_wn)
 	opr = WN_operator(twn);
 	rtype = WN_rtype(twn);
 	desc = WN_desc(twn);
-        WN_set_operator(wn, opr);
+        WN_change_operator(wn, opr);
 	WN_set_rtype(wn, rtype);
 	WN_set_desc(wn, desc);
         WN_load_offset(wn) = WN_load_offset(twn);
@@ -1723,7 +1795,7 @@ OPT_STAB::Convert_ST_to_AUX(WN *wn, WN *block_wn)
     if (opr == OPR_TRUEBR && WN_const_val(test) != 0 ||
 	opr == OPR_FALSEBR && WN_const_val(test) == 0) {
       WN_Delete(test);
-      WN_set_operator(wn, OPR_GOTO);
+      WN_change_operator(wn, OPR_GOTO);
       WN_set_rtype(wn, MTYPE_V);
       WN_set_desc(wn, MTYPE_V);
       WN_set_kid_count(wn, 0);
@@ -1768,9 +1840,7 @@ OPT_STAB::Convert_ST_to_AUX(WN *wn, WN *block_wn)
     BOOL in_parallel_region_save = FALSE;
     if (Phase() != MAINOPT_PHASE && PU_has_mp(Get_Current_PU()) && 
 	! PU_mp_lower_generated(Get_Current_PU())) {
-      // see if there is a WN_PRAGMA_PARALLEL
-      has_parallel_pragma = Is_region_with_pragma(wn, WN_PRAGMA_PARALLEL_BEGIN)
-      			 || Is_region_with_pragma(wn, WN_PRAGMA_MASTER_BEGIN);
+      has_parallel_pragma = Is_region_with_pragma(wn, WN_PRAGMA_MASTER_BEGIN);
     }
     for (i = 0; i < WN_kid_count(wn); i++) {
       if (has_parallel_pragma && i == 2) {
@@ -2068,8 +2138,7 @@ OPT_STAB::Make_st_group(void)
 	UINT64 size = sorted[i]->Bit_size() == 0 ?
 	  sorted[i]->Byte_size() * 8 : sorted[i]->Bit_size();
         if (ofst < hi) {
-           // Merge
-#ifdef linux
+#if defined(linux) || defined(BUILD_OS_DARWIN)
 //         hi = (( hi > ofst + size ) ?  hi : ofst + size ) ;
            if (hi < ofst + size)
              hi = ofst + size;
@@ -2456,7 +2525,7 @@ OPT_STAB::Collect_ST_attr(void)
     ST *st = psym->St();
     const INT32 stype = psym->Stype();
 
-    if (stype == VT_OTHER) continue;
+    if (stype == VT_OTHER || stype == VT_UNKNOWN) continue;
       
     // Update POINTS_TO 
     POINTS_TO *pt = psym->Points_to();
@@ -2468,6 +2537,13 @@ OPT_STAB::Collect_ST_attr(void)
       TY_IDX ty = (psym->Field_id() != 0 && psym->Ty() != 0) ? psym->Ty() :
                    (ST_class(st) == CLASS_VAR ? ST_type(st) : (TY_IDX)0);
 #endif 
+      // Do not discard the high-level type which may be different from
+      // object-type. This is an example: "LDID agg.field". The agg.field
+      // is treated as a separate symbol (i.e. it has unique aux_id) by 
+      // Enter_symbol(). The pt->Ty() record the type-of(agg.field), and
+      // pt->Highlevel_ty() records type-of(agg).
+      //
+      TY_IDX hl_ty = pt->Highlevel_Ty();
       pt->Analyze_ST(st, psym->St_ofst(), psym->Byte_size(),
 		     psym->Bit_ofst(), psym->Bit_size(),
 #ifdef KEY
@@ -2480,6 +2556,10 @@ OPT_STAB::Collect_ST_attr(void)
       //  if a symbol has size 0, its offset is considered unknown.
       if (pt->Byte_Size() == 0)
 	pt->Set_ofst_kind(OFST_IS_UNKNOWN);
+
+      if (hl_ty != (TY_IDX)0 && pt->Highlevel_Ty() == (TY_IDX)0) {
+	pt->Set_hl_ty(hl_ty);
+      }
     }
 
     // Precompute the alias attributes and put them in bitsets.
@@ -2587,8 +2667,6 @@ OPT_STAB::Incorporate_alias_class_info(void)
 // Create creates the optimizer symbol table.
 //
 // ====================================================================
-
-
 void 
 OPT_STAB::Create(COMP_UNIT *cu, REGION_LEVEL rgn_level)
 {
@@ -2646,8 +2724,21 @@ OPT_STAB::Create(COMP_UNIT *cu, REGION_LEVEL rgn_level)
 
   // Fix 648051: move loop normalization after BE address flag is valid
   if (WOPT_Enable_IVR) {
+
     SET_OPT_PHASE("Loop normalization");
+    BOOL trace_loop = Get_Trace (TP_WOPT2, LOOP_NORM_FLAG);
+    if (trace_loop) {
+      fprintf (TFile, "%sDump before Loop Normalization \n%s", DBar, DBar);
+      fdump_tree (TFile, cu->Input_tree ());
+    }
+
     cu->Normalize_loop(cu->Input_tree());
+    
+    if (trace_loop) {
+      fprintf (TFile, "%sDump after Loop Normalization \n%s", DBar, DBar);
+      fdump_tree (TFile, cu->Input_tree ());
+    }
+
     SET_OPT_PHASE("Create AUX Symbol table");
   } 
 
@@ -2673,11 +2764,6 @@ OPT_STAB::Create(COMP_UNIT *cu, REGION_LEVEL rgn_level)
   
   // Setup ST alias groups
   Make_st_group();
-#if 0 // OPT_REVISE_SSA will use Enter_symbol later
-  // st_chain_map is no longer needed now that we have ST alias groups 
-  CXX_DELETE(st_chain_map, &_st_chain_pool);
-  st_chain_map = NULL;
-#endif
   // Identify synonyms within aux_stab, and convert STs into their
   // lowest numbered synonyms
   Canonicalize();
@@ -2692,9 +2778,10 @@ OPT_STAB::Create(COMP_UNIT *cu, REGION_LEVEL rgn_level)
   pt->Set_ofst_kind(OFST_IS_UNKNOWN);
   pt->Set_base(NULL);
   pt->Set_global();
-  
+ 
   // Collect ST attributes (used by FFA and FSA)
   Collect_ST_attr();
+  
 
   // Setup empty du chain
   _ver_stab = CXX_NEW(VER_STAB_ARRAY_TYPE(&_ver_pool), &_ver_pool);
@@ -3503,6 +3590,18 @@ CHI_NODE::Print(FILE *fp) const
 #endif
 }
 
+void     
+CHI_NODE::Print_Deref(FILE *fp) const
+{
+  if (Live())
+    fprintf(fp, "sym%dv%d <- chi( sym%dv%d )\n",
+                Aux_id(), RESULT()->Version(), 
+                Aux_id(), OPND()->Version());
+  else
+    fprintf(fp, "(not live) sym%dv%d <- chi( sym%dv%d )\n",
+                Aux_id(), Result(), 
+                Aux_id(), Opnd());
+}
 
 void
 CHI_LIST::Print(FILE *fp)
@@ -3522,12 +3621,17 @@ void
 MU_NODE::Print(FILE *fp) const
 {
 #ifdef KEY
-  fprintf(fp, " sym%dv%d ", Aux_id(), Opnd());
+  fprintf(fp, " mu[ sym%dv%d ]\n", Aux_id(), Opnd());
 #else
   fprintf(fp, " sym%d ", Aux_id());
 #endif
 }
 
+void
+MU_NODE::Print_Deref(FILE *fp) const
+{
+  fprintf(fp, " sym%dv%d ", Aux_id(), OPND()->Version());
+}
 
 void
 MU_LIST::Print(FILE *fp)
@@ -3537,7 +3641,7 @@ MU_LIST::Print(FILE *fp)
 
   fprintf(fp, "       mu[");
   FOR_ALL_NODE(mnode, mu_iter, Init(this)) {
-    mnode->Print(fp);
+    fprintf(fp, " sym%dv%d ", mnode->Aux_id(), mnode->Opnd());
   }
   fprintf(fp, "]\n");
 }
@@ -3609,7 +3713,7 @@ void OPT_STAB::Print_aux_entry(AUX_ID i, FILE *fp)
     break;
   }
   if (psym->Is_real_var() || psym->Is_virtual()) {
-    if (bbl->Len() > 0) {
+    if (bbl && bbl->Len() > 0) {
       fprintf(fp, "       defined in BBs ");
       bbl->Print(fp);
       fprintf(fp, "\n");
@@ -3694,7 +3798,6 @@ AUX_STAB_ENTRY::Has_multiple_signs(void) const
 void OPT_STAB::Print_occ_tab(FILE *fp, WN *wn)
 #endif
 {
-#if 1
   /* WN_MAP_ITER has been removed because it does not work reliably for
      this sort of thing.  (The mapping may contain dangling pointers for
      WNs that have been deleted.)  If anyone needs this to work, it
@@ -3714,20 +3817,6 @@ void OPT_STAB::Print_occ_tab(FILE *fp, WN *wn)
       occ->Print(fp);
       for ( INT32 i = 0; i < WN_kid_count( wn ); i++ )
         Print_occ_tab( fp, WN_kid( wn, i ));
-  }
-#endif
-#else
-
-  WN_MAP_ITER map_iter;
-  INT32 category;
-  OCC_TAB_ENTRY **addr;
-  for (category = 0; category <  WN_MAP_CATEGORIES; category++) {
-    WN_MAP_ITER_Init(&map_iter, Current_Map_Tab, WN_sym_map(),
-		     (OPCODE_MAPCAT) category);
-    while (addr = (OCC_TAB_ENTRY **) WN_MAP_ITER_Step(&map_iter, NULL)) {
-      if (*addr != NULL)
-	(*addr)->Print(fp);
-    }
   }
 #endif
 }
@@ -3925,6 +4014,9 @@ OPT_STAB::Collect_nested_ref_info(void)
   FOR_ALL_NODE(var, aux_stab_iter, Init()) {
     ST *var_base;
 
+    if (Aux_stab_entry(var)->Stype() == VT_UNKNOWN)
+      continue;
+
     if (!Aux_stab_entry(var)->Has_nested_ref() &&
 	(ST_class(var_base = Aux_stab_entry(var)->Base()) == CLASS_VAR) &&
 	ST_has_nested_ref(var_base)) {
@@ -3984,6 +4076,7 @@ OPT_STAB::Collect_nested_ref_info(void)
 		    1);
   }
 }
+
 
 void
 VER_STAB_ENTRY::Print_use(WN *wn, FILE *fp) const

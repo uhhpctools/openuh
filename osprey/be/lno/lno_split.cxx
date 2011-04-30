@@ -63,15 +63,14 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lno_split.cxx $ $Revision: 1.6 $";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lno_split.cxx $ $Revision: 1.6 $";
 
 #include <sys/types.h>
 #include "lnopt_main.h"
@@ -79,7 +78,7 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lno_sp
 #include "model.h"
 #include "lnoutils.h"
 #include "lwn_util.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "config_targ.h"
 #include "config_opt.h"
 #include "opt_du.h"
@@ -497,12 +496,6 @@ extern INT Split_Array(WN *store, WN *split_point,
     Split_Statement(new_store,dep_graph);
   }
 
-#if 0
-  // this is basically gratuitous recursion
-  if (Need_To_Split(store)) {
-    Split_Statement(store,dep_graph);
-  }
-#endif
 
   return 1;
 
@@ -522,7 +515,7 @@ extern WN *Split_Using_Preg(WN *statement, WN *split_point,
   OPCODE split_opcode = WN_opcode(split_point);
   TYPE_ID type = OPCODE_rtype(split_opcode);
   ST *preg_st = MTYPE_To_PREG(type);
-  char *orig_name;
+  const char *orig_name;
   if (OPCODE_operator(store_opcode) == OPR_STID) {
     orig_name = ST_name(WN_st(statement));
   } else if ((WN_operator(WN_kid1(statement)) == OPR_ARRAY) &&

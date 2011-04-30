@@ -276,7 +276,17 @@ BOOL WN_Can_Be_Speculative (WN *wn, struct ALIAS_MANAGER *alias)
       return ! WN_Is_Volatile_Mem(wn);
 #endif
     
-    // fall thru
+#ifdef TARG_NVISA
+    // we want to be aggressive about speculating short-circuit operators,
+    // at which point we don't have alias info, so instead check that it is
+    // a non-dynamic reference (so may be garbage but won't segfault).
+    // pointer derefs will generate ILOAD; LDID should always be safe?
+
+    if (WN_Is_Volatile_Mem(wn))
+      return FALSE;
+
+    return TRUE;
+#endif
 
   case OPR_ILOAD:
   case OPR_ILOADX:

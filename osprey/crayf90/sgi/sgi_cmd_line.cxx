@@ -42,10 +42,9 @@
 
 
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/crayf90/sgi/sgi_cmd_line.cxx,v $ $Revision: 1.1.1.1 $";
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 /* SGI includes */
 #include "stamp.h"
@@ -236,7 +235,7 @@ identify_schedtype(char *text)
 } 
 
 
-void add_cray_args(char *arg)
+void add_cray_args(const char *arg)
 {
    /* Add a string to the Cray args */
 
@@ -880,6 +879,12 @@ void Process_Command_Line (INT argc, char ** argv)
 	 add_deferred_cray_args(argv[i]);
       }
    }
+
+#ifdef KEY /* Bug 5061 */
+   /* Fortran front end relies on wn_simp to fold certain expressions, so
+    * don't allow Process_Command_Line_Group() above to turn it off */
+   Enable_WN_Simp = TRUE;
+#endif /* KEY Bug 5061 */
 
    /* Add the align switch */
    if (FE_align==8) {

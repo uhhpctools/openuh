@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007, 2008.  Pathscale, LLC. All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -44,12 +52,16 @@
 #include <stddef.h>
 #include "proc_gen.h"
 
-main ()
+int main ()
 {
   PROC_Create( "x8664",
 	       "opteron",
+               "barcelona",
+               "orochi",
 	       "em64t",
 	       "core",
+	       "wolfdale",
 	       NULL );
+  return 0;
 }
 

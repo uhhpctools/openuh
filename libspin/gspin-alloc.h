@@ -27,12 +27,12 @@
 #ifndef __GSPIN_ALLOC_H__
 #define __GSPIN_ALLOC_H__
                                                                                                                                                            
-////////////////////////////////////////////////////////////////////////////////
-//
-// Wrappers around calloc (3) and free (3):
-//
-////////////////////////////////////////////////////////////////////////////////
+/* */
+/* */
+/* Wrappers around calloc (3) and free (3): */
+/* */
+/* */
 
 extern void *gs_alloc (size_t nmemb, size_t size);
 
-#endif // __GSPIN_ALLOC_H__
+#endif /* __GSPIN_ALLOC_H__ */

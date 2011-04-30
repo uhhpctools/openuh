@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -153,6 +157,7 @@ public:
   void         Do_local_rvi(void);          // Fast rvi of local variables
   void         Find_lr_shrink_cand(void);   // if Do_local_rvi is not called
   void	       Introduce_mtype_bool(void);  // introduce MTYPE_B 
+  void         Do_reasso(void);             // Redundancy elimination with reassociation
   void         Do_new_pre(void);            // PRE based on SSA
   void         Do_store_pre(void);          // STORE PRE based on SSA
   void         Do_update_dead_sources(void);// IV elimination (part 2)
@@ -170,6 +175,7 @@ public:
   void	       Find_uninitialized_locals(void); // find uninitialized local vars
   void	       Find_uninit_locals_for_entry(BB_NODE*); // find uninitialized local vars for an entry to the PU
 #endif
+  void         Pro_loop_trans();         // The driver for proactive loop transformations.
 
   // member access functions
   WN          *Input_tree(void)         { return _input_tree; }

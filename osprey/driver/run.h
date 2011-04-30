@@ -47,6 +47,7 @@ extern int show_version;	/* show the compiler version */
 extern boolean show_copyright;	/* show the compiler copyright */
 extern boolean dump_version;	/* dump the compiler version */
 extern boolean show_flag;	/* show what driver does */
+extern boolean v_flag;		/* show what driver does, except link call */
 extern boolean execute_flag;	/* execute phases */
 extern boolean time_flag;	/* give time info */
 extern boolean run_m4;		/* run m4 on each ratfor file */

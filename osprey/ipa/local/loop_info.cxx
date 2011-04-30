@@ -54,9 +54,12 @@
 //     that occur in WHIRL
 //
 //--------------------------------------------------------------------------
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>                        // Elf64_Word
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>                        // Elf64_Word
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "tracing.h"
 #include "loop_info.h"
@@ -71,7 +74,10 @@
 #include "ipl_summary.h"
 #include "ipl_summarize.h"
 
-#pragma weak Aliased 
+#ifdef SHARED_BUILD
+#pragma weak Aliased
+#endif
+ 
 mINT32
 SYSTEM_OF_EQUATIONS::_work[SOE_MAX_WORK_ROWS][SOE_MAX_WORK_COLS];
 mINT64 
@@ -900,12 +906,6 @@ IPL_Print_One_Access(FILE *fp, WN* wn)
 	WN_MAP_Get(IPL_info_map,wn);
       fprintf(fp,"The do loop info is \n"); dli->Print(fp);
     } 
-#if 0
-  else if (WN_opcode(wn) == OPC_IF) 
-    {
-      IF_INFO *info = (IF_INFO *) WN_MAP_Get(IPL_info_map,wn);
-    }
-#endif 
   else if (WN_operator(wn) == OPR_ARRAY) 
     {
       ACCESS_ARRAY *array = (ACCESS_ARRAY *) WN_MAP_Get(IPL_info_map,wn);
@@ -973,6 +973,10 @@ DO_LOOP_INFO_BASE::Print(FILE *fp, INT indentation)
 // 3) Intersect sections in if then else parts
 //------------------------------------------------------------
 
+extern "C" void Print_DO_LOOP_INFO_BASE (FILE *fp, DO_LOOP_INFO_BASE *b)
+{
+  b->Print(fp);
+}
 
 
 

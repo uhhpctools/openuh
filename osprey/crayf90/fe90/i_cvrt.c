@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -68,6 +72,10 @@
 #define FOR_I_CVRT
 #include "../sgi/cwh_types.h"
 #endif /* KEY Bug 6845 */
+#ifdef KEY /* Bug 14150 */
+#include "../sgi/decorate_utils.h"
+#include "../sgi/cwh_stab.i"
+#endif /* KEY Bug 14150 */
 
 /*****************************************************************\
 |* Function prototypes of static functions declared in this file *|
@@ -598,7 +606,7 @@ void cvrt_to_pdg (char	*compiler_gen_date)
       PDG_DBG_PRINT_D("(2) one", 1);
       PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       cwh_add_to_used_files_table(GL_FILE_NAME_PTR(i), 1);
 # endif
    }
@@ -675,6 +683,59 @@ void cvrt_to_pdg (char	*compiler_gen_date)
 
 }  /*  cvrt_to_pdg  */
 
+#ifdef KEY /* Bug 14150 */
+/* Remember info about the source construct which led us to create the previous
+ * definition of an external label */
+typedef struct {
+  const char *id;	/* source identifier */
+  int line;		/* global source line */
+  int bind_attr;	/* source declaration has BIND attribute */
+  } external_name_t;
+
+/*
+ * Issue an error if we're about to use the same external label for two
+ * definitiions which have different identifiers in the source code. (The
+ * reason is that the BIND attribute allows the user to create duplicates
+ * involving program units and common, even involving "hidden" names
+ * like MAIN__ and _BLNK_, and sometimes this causes the back end to crash.
+ * Since it's hard to be sure that duplicates are never legitimate at the
+ * point in the front end where we call this--remarkably, there's not a
+ * simple bit distinguishing "definition" from "reference" in the attr--we
+ * issue the error only if at least one of the source constructs had the
+ * BIND attribute; any spurious errors will then be limited to code using
+ * that new F2003 construct. As yet we don't call this function in every
+ * place where an external label might be generated (e.g.
+ * "__pathscale_compiler") but hopefully we've got the cases which are apt
+ * to cause trouble.
+ *
+ * fld		AT_Tbl_Idx or SB_Tbl_Idx
+ * idx		Index into attr_tbl or stor_blk_tbl
+ * ext_name	External label
+ */
+static void
+check_duplicate_external_name(fld_type fld, int idx, const char *ext_name) {
+  const char *id = (AT_Tbl_Idx == fld) ? AT_OBJ_NAME_PTR(idx) :
+    SB_NAME_PTR(idx);
+  int line = (AT_Tbl_Idx == fld) ? AT_DEF_LINE(idx) : SB_DEF_LINE(idx);
+  int bind_attr = (AT_Tbl_Idx == fld) ? AT_BIND_ATTR(idx) : SB_BIND_ATTR(idx);
+  external_name_t *prev = get_external_label(ext_name);
+  if (!prev) {
+    prev = malloc(sizeof prev);
+    prev->id = strdup(id);
+    prev->line = line;
+    prev->bind_attr = bind_attr;
+    put_external_label(ext_name, prev);
+  }
+
+  if ((bind_attr || prev->bind_attr) && !!strcmp(prev->id, id)) {
+      int column = (AT_Tbl_Idx == fld) ? AT_DEF_COLUMN(idx) :
+	SB_DEF_COLUMN(idx);
+      char *fal = file_and_line(prev->line);
+      PRINTMSG(line, 1701, Error, column, id, prev->id, ext_name, fal);
+      free(fal);
+   }
+}
+#endif /* KEY Bug 14150 */
 
 
 /******************************************************************************\
@@ -752,7 +813,15 @@ PROCESS_SIBLING:
 
    cvrt_sytb_to_pdg();
 
-   name_ptr = &name_pool[ATP_EXT_NAME_IDX(pgm_attr_idx)].name_char;
+   name_ptr = ATP_EXT_NAME_PTR(pgm_attr_idx);
+#ifdef KEY /* Bug 14150 */
+   /* Imitate kludgy transformation performed by sgi/cwh_stab.cxx */
+   const char *ext_name = ATP_EXT_NAME_PTR(pgm_attr_idx);
+   if (Program == ATP_PGM_UNIT(pgm_attr_idx)) {
+     ext_name = def_main_u;
+   }
+   check_duplicate_external_name(AT_Tbl_Idx, pgm_attr_idx, ext_name);
+#endif /* KEY Bug 14150 */
 
    PDG_DBG_PRINT_START
    PDG_DBG_PRINT_C("PDGCS_comp_unit");
@@ -1471,7 +1540,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
       PDG_DBG_PRINT_LD("(1) PDG_SB_IDX", PDG_SB_IDX(ir_idx));
       PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
       fei_seg_ref(PDG_SB_IDX(ir_idx));
 # endif
@@ -2058,6 +2127,9 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
 
 # ifdef _ENABLE_FEI
          fei_new_select(big_int,
+#ifdef KEY /* Bug 12319 */
+                        PDG_AT_IDX(IL_IDX(list_idx2)),
+#endif /* KEY Bug 12319 */
                         PDG_AT_IDX(IL_IDX(list_idx3)));
 # endif
          break;
@@ -2197,7 +2269,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_lock_release");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_lock_release();
 # endif
@@ -2267,7 +2339,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_synchronize");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_synchronize();
 # endif
@@ -2288,7 +2360,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_compare_and_swap");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_compare_and_swap(basic);
 # endif
@@ -2309,7 +2381,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_lock_test_and_set");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_lock_test_and_set(basic);
 # endif
@@ -2331,7 +2403,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_and_add");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_add(basic);
 # endif
@@ -2352,7 +2424,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_add_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_add_and_fetch(basic);
 # endif
@@ -2374,7 +2446,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_and_and");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_and(basic);
 # endif
@@ -2396,7 +2468,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_and_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_and_and_fetch(basic);
 # endif
@@ -2418,7 +2490,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_and_nand");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_nand(basic);
 # endif
@@ -2440,7 +2512,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_nand_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_nand_and_fetch(basic);
 # endif
@@ -2463,7 +2535,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_and_or");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_or(basic);
 # endif
@@ -2484,7 +2556,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_or_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_or_and_fetch(basic);
 # endif
@@ -2505,7 +2577,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_sub_add");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_sub(basic);
 # endif
@@ -2526,7 +2598,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_sub_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_sub_and_fetch(basic);
 # endif
@@ -2549,7 +2621,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_fetch_and_xor");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fetch_and_xor(basic);
 # endif
@@ -2570,7 +2642,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_C("fei_xor_and_fetch");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_xor_and_fetch(basic);
 # endif
@@ -3206,7 +3278,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
 
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    case Mvbits_Opr :
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx), 
                         IR_FLD_L(ir_idx));
@@ -3510,7 +3582,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         case Leadz_Opr :
              arg_type	= null_type;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
              if (IR_FLD_L(ir_idx) == IL_Tbl_Idx) {
                 arg_idx = IR_IDX_L(ir_idx);
 
@@ -3545,7 +3617,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         case Poppar_Opr :
              arg_type	= null_type;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
              if (IR_FLD_L(ir_idx) == IL_Tbl_Idx) {
                 arg_idx = IR_IDX_L(ir_idx);
 
@@ -3580,7 +3652,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         case Popcnt_Opr :
              arg_type	= null_type;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
              if (IR_FLD_L(ir_idx) == IL_Tbl_Idx) {
                 arg_idx = IR_IDX_L(ir_idx);
 
@@ -4248,7 +4320,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    case Read_Namelist_Opr :
         io_type = READ_NML_STMT;
 
-# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         /* remove the namelist group attr from the format item */
         list_idx1 = IR_IDX_L(ir_idx);
         for (i = 0; i < 7; i++) {
@@ -4310,7 +4382,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    case Write_Namelist_Opr :
         io_type = WRITE_NML_STMT;
 
-# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         /* remove the namelist group attr from the format item */
         list_idx1 = IR_IDX_L(ir_idx);
         for (i = 0; i < 7; i++) {
@@ -4620,7 +4692,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              break;
 
         case Ieee_Copy_Sign_Opr :
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_ieee_sign_xfer");
              PDG_DBG_PRINT_END
@@ -5244,7 +5316,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_dot_product_logical)");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_dot_product_logical(basic);
 # endif
@@ -5603,7 +5675,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_END
 
 # ifdef _ENABLE_FEI
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         fei_malloc();
 # endif
 # endif
@@ -5671,7 +5743,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         PDG_DBG_PRINT_END    
 
 # ifdef _ENABLE_FEI
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         fei_mfree();
 # endif
 # endif
@@ -5714,7 +5786,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
 
 
    case Copyin_Bound_Opr :
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         send_attr_ntry(IR_IDX_L(ir_idx));
 
         PDG_DBG_PRINT_START
@@ -7108,7 +7180,7 @@ CONTINUE:
    case Where_Opr :
         if (IR_LIST_CNT_L(ir_idx) == 4) {
            /* defined assignment */
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
            proc_idx = IR_IDX_L(ir_idx);
            lhs_idx = IL_NEXT_LIST_IDX(proc_idx);
            mask_idx = IL_NEXT_LIST_IDX(lhs_idx);
@@ -7138,7 +7210,7 @@ CONTINUE:
 # endif
         }
         else {
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
            lhs_idx = IR_IDX_L(ir_idx);
            mask_idx = IL_NEXT_LIST_IDX(lhs_idx);
            rhs_idx = IL_NEXT_LIST_IDX(mask_idx);
@@ -7377,7 +7449,7 @@ CONTINUE:
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_regionbegin");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_regionbegin();
 # endif
@@ -7388,7 +7460,7 @@ CONTINUE:
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_regionend");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_regionend();
 # endif
@@ -7399,7 +7471,7 @@ CONTINUE:
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_endcriticalsection");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_endcriticalsection();
 # endif
@@ -7410,7 +7482,7 @@ CONTINUE:
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_endparallel");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_endparallel();
 # endif
@@ -7421,7 +7493,7 @@ CONTINUE:
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_section");
              PDG_DBG_PRINT_END
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
              fei_section();
 # endif
@@ -7433,7 +7505,7 @@ CONTINUE:
              PDG_DBG_PRINT_C("fei_barrier");
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
              fei_barrier();
 # endif
 # endif
@@ -7461,7 +7533,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_endpdo(nowait);
 # endif
@@ -7482,7 +7554,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_endpsection(nowait);
 # endif
@@ -7502,7 +7574,7 @@ CONTINUE:
        PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
        fei_endsingleprocess(nowait);
 # endif
@@ -7525,7 +7597,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_criticalsection(varcount);
 # endif
@@ -7538,7 +7610,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_user_code_start");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_user_code_start();
 # endif
@@ -7827,7 +7899,7 @@ CONTINUE:
            PDG_DBG_PRINT_LD("(7) chunkcount", chunkcount);
            PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_doacross(task_if_idx,
                         schedtype,
@@ -7855,7 +7927,7 @@ CONTINUE:
            PDG_DBG_PRINT_LD("(7) chunkcount", chunkcount);
            PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_pdo(schedtype,
                    ordered, 
@@ -7883,7 +7955,7 @@ CONTINUE:
            PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_paralleldo(task_if_idx,
                           schedtype,
@@ -7906,7 +7978,7 @@ CONTINUE:
            PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_parallel(task_if_idx);
 # endif
@@ -7921,7 +7993,7 @@ CONTINUE:
            PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_singleprocess();
 # endif
@@ -7937,7 +8009,7 @@ CONTINUE:
            PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_psection();
 # endif
@@ -7957,7 +8029,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) state", TRUE);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_concurrentize(TRUE);
 # endif
@@ -7975,7 +8047,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) state", FALSE);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_concurrentize(FALSE);
 # endif
@@ -7992,7 +8064,7 @@ CONTINUE:
 
    case Interchange_Dir_Opr:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
 
@@ -8017,7 +8089,7 @@ CONTINUE:
 
    case Blockable_Dir_Opr:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
@@ -8046,7 +8118,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_fission");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fission();
 # endif
@@ -8060,7 +8132,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_forall");
         PDG_DBG_PRINT_END
                                                                                                                                                              
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_forall();
 # endif
@@ -8084,7 +8156,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_flush(list_cnt);
 # endif
@@ -8104,7 +8176,7 @@ CONTINUE:
         PDG_DBG_PRINT_LD("(1) level", level);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fuse(level);
 # endif
@@ -8142,7 +8214,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(2) count    ", count);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_assert(assertion, count);
 # endif
@@ -8165,7 +8237,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_unroll");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_unroll();
 # endif
@@ -8185,7 +8257,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) list count", IR_LIST_CNT_L(ir_idx));
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_section_nongp(IR_LIST_CNT_L(ir_idx));
 # endif
@@ -8206,7 +8278,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) list count", IR_LIST_CNT_L(ir_idx));
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_section_gp(IR_LIST_CNT_L(ir_idx));
 # endif
@@ -8226,7 +8298,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) list count", IR_LIST_CNT_L(ir_idx));
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_copy_in(IR_LIST_CNT_L(ir_idx));
 # endif
@@ -8262,7 +8334,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_align_symbol(list_cnt, C_value);
 # endif
@@ -8295,7 +8367,7 @@ CONTINUE:
         PDG_DBG_PRINT_END
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_fill_symbol(list_cnt, C_value);
 # endif
@@ -8337,7 +8409,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_purple_conditional");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_purple_conditional();
 # endif
@@ -8357,7 +8429,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_opaque");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_opaque();
 # endif
@@ -8375,7 +8447,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_purple_unconditional");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_purple_unconditional();
 # endif
@@ -8396,7 +8468,7 @@ CONTINUE:
         PDG_DBG_PRINT_D("(1) list count", list_cnt);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_dynamic(list_cnt);
 # endif
@@ -8415,7 +8487,7 @@ CONTINUE:
         PDG_DBG_PRINT_C("fei_page_place");
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_page_place();
 # endif
@@ -8435,7 +8507,7 @@ CONTINUE:
         PDG_DBG_PRINT_LD("(1) prefetch_manual", prefetch_manual);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_prefetch_manual(prefetch_manual);
 # endif
@@ -8462,7 +8534,7 @@ CONTINUE:
         PDG_DBG_PRINT_LD("(2) n2", n2);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_prefetch(n1, n2);
 # endif
@@ -8479,7 +8551,7 @@ CONTINUE:
         PDG_DBG_PRINT_S("(1) c1", c1);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
 	fei_options(c1);
 # endif
@@ -8508,7 +8580,7 @@ CONTINUE:
         PDG_DBG_PRINT_LD("(2) prefetch_size", prefetch_size);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_prefetch_ref_disable(prefetch_array, prefetch_size);
 # endif
@@ -8563,7 +8635,7 @@ CONTINUE:
         PDG_DBG_PRINT_LD("(4) prefetch_size", prefetch_size);
         PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
         fei_prefetch_ref(stride_list,
                          level_list,
@@ -8623,7 +8695,7 @@ CONTINUE:
            PDG_DBG_PRINT_LD("(5) onto_exists", onto_exists);
            PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifdef _ENABLE_FEI
            fei_redistribute(redistribute_array,
                             j, 
@@ -8690,7 +8762,7 @@ CONTINUE:
            list_idx2 = IL_IDX(list_array[2]);
 
            idx = Context_Private; 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
            if (IL_FLD(list_array[6]) == CN_Tbl_Idx) { /* SAVELAST */
               idx = Context_Lastlocal; 
            }
@@ -9155,8 +9227,8 @@ CONTINUE:
 
            PDG_DBG_PRINT_START    
            PDG_DBG_PRINT_C("fei_name");
-           PDG_DBG_PRINT_S("(1) name_ptr", 
-                    &name_pool[ATP_MOD_PATH_IDX(IR_IDX_L(ir_idx))].name_char);
+           PDG_DBG_PRINT_S("(1) name_ptr",
+                    ATP_MOD_PATH_NAME_PTR(IR_IDX_L(ir_idx)));
            PDG_DBG_PRINT_D("(2) unused", 0);
            PDG_DBG_PRINT_D("(3) unused", 0);
            PDG_DBG_PRINT_D("(4) unused", 0);
@@ -9164,7 +9236,7 @@ CONTINUE:
            PDG_DBG_PRINT_END
 
 # ifdef _ENABLE_FEI
-           fei_name(&name_pool[ATP_MOD_PATH_IDX(IR_IDX_L(ir_idx))].name_char,
+           fei_name(ATP_MOD_PATH_NAME_PTR(IR_IDX_L(ir_idx)),
                     0,
                     0,
                     0,
@@ -11227,7 +11299,7 @@ static TYPE get_type_desc(int	input_idx)
                                          ubound);
 # endif
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (i == BD_RANK(bd_idx)) {  
 # endif
             PDG_DBG_PRINT_START
@@ -11251,7 +11323,7 @@ static TYPE get_type_desc(int	input_idx)
             PDG_DBG_PRINT_T("(r) type", type_idx);
             PDG_DBG_PRINT_END
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          }
 # endif
       } 
@@ -11387,6 +11459,19 @@ static TYPE get_type_desc(int	input_idx)
 # endif
 
 EXIT:
+#ifdef KEY /* Bug 14110 */
+   /* The "volatile" member inside the TYPE variable "type_idx" seems not
+    * to affect the WHIRL symbol table, but the "volatile" bit of the
+    * "table_index" member does. The original SGI code in this file and
+    * cwh_types.cxx attempts to set the "volatile" member (although
+    * it doesn't consistently do so); we have left that alone, neither
+    * removing the existing code nor attempting to make it consistent.
+    * The following suffices to make the variable volatile in every case
+    * I've found. */
+   if (AT_OBJ_CLASS(input_idx) == Data_Obj && ATD_VOLATILE(input_idx)) {
+      type_idx.table_index = fei_set_volatile(type_idx.table_index);
+   }
+#endif /* KEY Bug 14110 */
 
    TRACE (Func_Exit, "get_type_desc", NULL);
 
@@ -11421,7 +11506,7 @@ static void send_stor_blk(int	 sb_idx,
    int           parent_idx;
    sb_type_type	 sb_type;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		 i;
    char		 new_name[256];
 # endif
@@ -11539,7 +11624,13 @@ static void send_stor_blk(int	 sb_idx,
 
    if (sb_type == Common || sb_type == Task_Common) {
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
+#ifdef KEY /* Bug 14150 */
+      if (SB_EXT_NAME_IDX(sb_idx)) {
+	name_ptr = SB_EXT_NAME_PTR(sb_idx);
+      }
+      else
+#endif /* KEY Bug 14150 */
       if (! SB_BLANK_COMMON(sb_idx) &&
           ! SB_NAME_IN_STONE(sb_idx)) {
 
@@ -11578,6 +11669,9 @@ static void send_stor_blk(int	 sb_idx,
    else {
       parent_idx = PDG_AT_IDX(SCP_ATTR_IDX(SB_SCP_IDX(sb_idx)));
    }
+#ifdef KEY /* Bug 14150 */
+   check_duplicate_external_name(SB_Tbl_Idx, sb_idx, name_ptr);
+#endif /* KEY Bug 14150 */
 
    PDG_DBG_PRINT_START    
    PDG_DBG_PRINT_C("fei_seg"); 
@@ -11652,7 +11746,7 @@ static void  send_dummy_procedure(int	attr_idx)
 
    class = Dummy_Procedure;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (curr_scp_idx != ATP_SCP_IDX(attr_idx)) {
       class = Hosted_Dummy_Procedure;
    }
@@ -11808,7 +11902,7 @@ static void  send_procedure(int			attr_idx,
           ATP_IN_INTERFACE_BLK(attr_idx) &&
           ATP_EXPL_ITRFC(attr_idx) &&
           ATP_PROC(attr_idx) == Extern_Proc) {
-         name_ptr = &name_pool[ATP_EXT_NAME_IDX(attr_idx)].name_char;
+         name_ptr = ATP_EXT_NAME_PTR(attr_idx);
          if (strcmp(AT_OBJ_NAME_PTR(SCP_ATTR_IDX(curr_scp_idx)), 
                     name_ptr) == 0) {
             /*
@@ -11822,7 +11916,7 @@ static void  send_procedure(int			attr_idx,
    }
 
    pgm_unit = ATP_PGM_UNIT(attr_idx);
-   name_ptr = &name_pool[ATP_EXT_NAME_IDX(attr_idx)].name_char;
+   name_ptr = ATP_EXT_NAME_PTR(attr_idx);
    parent_idx = NULL_IDX;
 
 
@@ -12101,6 +12195,10 @@ static void  send_procedure(int			attr_idx,
 
       while (alt_entry_idx != NULL_IDX) {
          attr_idx = AL_ATTR_IDX(alt_entry_idx);
+#ifdef KEY /* Bug 14150 */
+	 check_duplicate_external_name(AT_Tbl_Idx, attr_idx,
+	   ATP_EXT_NAME_PTR(attr_idx));
+#endif /* KEY Bug 14150 */
 
          /* Send entry name, result name, and dummy args.  Need to */
          /* set ATP_SCP_ALIVE, so if there are any bounds tmps,    */
@@ -12115,7 +12213,7 @@ static void  send_procedure(int			attr_idx,
 
          ATP_SCP_ALIVE(attr_idx) = FALSE;
 
-         name_ptr = &name_pool[ATP_EXT_NAME_IDX(attr_idx)].name_char;
+         name_ptr = ATP_EXT_NAME_PTR(attr_idx);
 
          /* prev_idx is a pdgcs index to the name being entered */
          /* in the pdgcs secondary name table.                  */
@@ -12203,6 +12301,13 @@ static TYPE	send_derived_type(int	type_idx)
       pdg_type_tbl[type_idx] = pdg_type_idx;
       goto EXIT;
    }
+#ifdef KEY /* Bug 14150 */
+  if (c_ptr_abi_trouble(dt_attr_idx)) {
+    pdg_type_idx = fei_descriptor(0, Basic, bit_size_tbl[Integer_4], Integral,
+      0 /* unused */, pdg_align[Word_Align]);
+    return pdg_type_idx;
+  }
+#endif /* KEY Bug 14150 */
 
    flag = ((long) (ATT_SCP_IDX(dt_attr_idx) != curr_scp_idx) 
                                            << FEI_NEXT_TYPE_IDX_HOSTED_TYPE);
@@ -12228,7 +12333,7 @@ static TYPE	send_derived_type(int	type_idx)
 
    sequence = (ATT_CHAR_SEQ(dt_attr_idx)) ? Seq_Char : Seq_Mixed;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (ATT_CHAR_SEQ(dt_attr_idx)) {
       sequence = Seq_Char;
    }
@@ -12302,6 +12407,12 @@ static TYPE	send_derived_type(int	type_idx)
    sn_idx = ATT_FIRST_CPNT_IDX(dt_attr_idx);
 
    do {
+#ifdef KEY /* Bug 14150 */
+      /* F2003 allows types with no components */
+      if (sn_idx == NULL_IDX) {
+        break;
+      }
+#endif /* KEY Bug 14150 */
       attr_idx = SN_ATTR_IDX(sn_idx);
       send_attr_ntry(attr_idx);
 
@@ -12731,7 +12842,7 @@ static void  send_namelist_group(int	ng_attr_idx)
    PDG_DBG_PRINT_END
 
 # ifdef _ENABLE_FEI
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    PDG_AT_IDX(ng_attr_idx) = fei_namelist(AT_OBJ_NAME_PTR(ng_attr_idx),
                                           count,
                                           prev_idx);
@@ -13008,7 +13119,7 @@ static void send_attr_ntry(int		attr_idx)
             offset = (long64) PDG_AT_IDX(ATD_AUTO_BASE_IDX(attr_idx));
          }
 
-# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) && ! defined(_TARGET_OS_MAX)
+# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) && ! defined(_TARGET_OS_MAX)
          if (ATD_DEFINING_ATTR_IDX(attr_idx) != NULL_IDX) {
             send_attr_ntry(ATD_DEFINING_ATTR_IDX(attr_idx));
             defining_attr = PDG_AT_IDX(ATD_DEFINING_ATTR_IDX(attr_idx));
@@ -13199,7 +13310,7 @@ static void send_attr_ntry(int		attr_idx)
 
       send_stor_blk(sb_idx, &class);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (ATD_CLASS(attr_idx) == Compiler_Tmp) {
             if (sb_idx != NULL_IDX &&
                 SB_SCP_IDX(sb_idx) != NULL_IDX &&
@@ -13364,12 +13475,20 @@ static void send_attr_ntry(int		attr_idx)
       ((long64) ATD_READ_ONLY_VAR(attr_idx) 	<< FEI_OBJECT_READ_ONLY) |
       ((long64) ATD_NOT_PT_UNIQUE_MEM(attr_idx) 	
                                       << FEI_OBJECT_NOT_PT_TO_UNIQUE_MEM) |
+#ifdef KEY /* Bug 14150 */
+      ((long64) (ATD_CLASS(attr_idx) == Dummy_Argument &&
+        ATD_VALUE_ATTR(attr_idx)) 		<< FEI_OBJECT_PASS_BY_VALUE) |
+#endif /* KEY Bug 14150 */
       ((long64) AT_NAMELIST_OBJ(attr_idx) 	<< FEI_OBJECT_NAMELIST_ITEM));
 
 
       if (ATD_CLASS(attr_idx) == Compiler_Tmp ||
           ATD_CLASS(attr_idx) == Variable) {
          flag = flag | ((long64) 1 << FEI_OBJECT_ADDRTAKEN);
+      }
+
+      if (ATD_TASK_PRIVATE(attr_idx) && SB_BLK_TYPE(sb_idx) != Stack) {
+         flag |= 1 << FEI_SEG_THREADPRIVATE;
       }
 
       if (class == Component) {
@@ -13408,7 +13527,7 @@ static void send_attr_ntry(int		attr_idx)
          }
 # endif
 
-# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) && ! defined(_TARGET_OS_MAX)
+# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) && ! defined(_TARGET_OS_MAX)
          if (dv_alias == NULL_IDX) {
             dv_alias = defining_attr;  /* These two are overlayed */
          }

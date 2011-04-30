@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: whirl2c.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/whirl2c.c,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:42:00-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.whirl2c.c $
  *
  * Revision history:
  *  07-Nov-94 - Original Version
@@ -78,7 +78,7 @@
  * ====================================================================
  */
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/whirl2c.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.whirl2c.c $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
   #include <errno.h>                  /* for sys_errlist */

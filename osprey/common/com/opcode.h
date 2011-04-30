@@ -214,19 +214,6 @@ void Init_Operator_To_Opcode_Table(void);
 
 
 
-#if 1
-#if 0
-inline OPCODE OPCODE_make_op_no_assert(OPERATOR opr, TYPE_ID rtype,
-				       TYPE_ID desc)
-{
-  OPCODE ret;
-      
-  ret = OPCODE_make_op_MACRO(opr,rtype,desc);
-  ret = Is_Valid_Opcode (ret) ? ret : OPCODE_UNKNOWN;
-  
-  return ret;
-}
-#endif
 
 inline OPCODE OPCODE_make_op(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
 {
@@ -238,9 +225,6 @@ inline OPCODE OPCODE_make_op(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
 
   return ret;
 }
-#else /* Is_True_On */
-#define OPCODE_make_op(opr,rtype,desc) OPCODE_MAKE_VALID( OPCODE_make_op_MACRO(opr,rtype,desc))
-#endif
 
 #ifdef __cplusplus
 }

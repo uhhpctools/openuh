@@ -57,9 +57,12 @@
 // ====================================================================
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <assert.h>		// for assert()
 #include <cmplrs/host.h>        // for ipc_ld.h
 #define USE_STANDARD_TYPES      /* override unwanted defines in defs.h */
@@ -147,23 +150,6 @@ Create_ST_TO_FLD_MAP(COMMON_SNODE_TBL* common_snode_tbl)
 FLD_HANDLE
 Get_FLD(ST* s, ST* common_st, ST_TO_FLD_MAP_ARRAY& st_to_fld_map)
 {
-#if 0
-    FLD_ITER fld_iter = 
-	Make_fld_iter(TY_fld(Ty_Table[ST_type(common_st)]));
-    do {
-	FLD_HANDLE current_fld (fld_iter);
-	TY& fld_type = Ty_Table[FLD_type(current_fld)];
-	if (FLD_ofst(current_fld) == ST_ofst(s) && 
-	    (FLD_type(current_fld) == ST_type(s)))
-	    {
-		return current_fld;
-	    }
-    } while (!FLD_last_field(fld_iter++));
-    
-    Is_True(0, ("FLD not found in Get_FLD \n"));
-    return;
-}
-#endif       
 
   ST* st = NULL;
   FLD_HANDLE fld;
@@ -185,10 +171,6 @@ ST *
 Get_ST(FLD_HANDLE fld, ST_TO_FLD_MAP_ARRAY& st_to_fld_map)
 {
   ST  * st = NULL;
-#if 0
-  ST_IDX idx = FLD_st(fld);
-  return &St_Table[idx];
-#endif
   for (mUINT32 idx = 0; idx < st_to_fld_map.Elements(); idx++)
     {
       ST_TO_FLD_MAP *entry = &(st_to_fld_map)[idx];

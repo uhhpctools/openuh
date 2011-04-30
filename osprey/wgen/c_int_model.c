@@ -58,7 +58,8 @@ c_int_model.c -- c data type models
 #include "c_int_model.h"
 #include "config_targ.h"
 #ifdef TARG_MIPS 
-#include "gnu_config.h"
+// #include "gnu_config.h"
+extern BOOL TARGET_64BIT;           /* from main.c */
 #include "config.h"	/* for Target_Byte_Sex */
 #endif
 
@@ -138,10 +139,11 @@ struct {
 void Initialize_C_Int_Model( void ) {
 #ifdef TARG_MIPS 
   if (TARGET_64BIT)
-    Target_Int_Model = TARGET_INT_LP64;  
-  if (TARGET_BIG_ENDIAN)
-    Target_Byte_Sex = BIG_ENDIAN;
-  else Target_Byte_Sex = LITTLE_ENDIAN;
+    Target_Int_Model = TARGET_INT_LP64;
+  //  if (TARGET_BIG_ENDIAN)
+  //    Target_Byte_Sex = BIG_ENDIAN;
+  //  else Target_Byte_Sex = LITTLE_ENDIAN;
+  Target_Byte_Sex = LITTLE_ENDIAN;
 #endif
 }
    

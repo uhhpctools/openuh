@@ -37,9 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#include <sys/elf_whirl.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>
 #include <sys/types.h>
 #include "defs.h"
@@ -146,7 +150,7 @@ static INT IPL_EX_Copy_Value(DYN_ARRAY<SUMMARY_VALUE>* sv,
   INT sv_new_index = sv->Newidx();
   SUMMARY_VALUE* svv_old = &(*sv)[sv_old_index];
   SUMMARY_VALUE* svv_new = &(*sv)[sv_new_index];
-  bcopy(svv_old, svv_new, sizeof(SUMMARY_VALUE));
+  BCOPY(svv_old, svv_new, sizeof(SUMMARY_VALUE));
   return sv_new_index;
 }
 
@@ -163,7 +167,7 @@ static INT IPL_EX_Copy_Expr(DYN_ARRAY<SUMMARY_EXPR>* sx,
   INT sx_new_index = sx->Newidx();
   SUMMARY_EXPR* sxx_old = &(*sx)[sx_old_index];
   SUMMARY_EXPR* sxx_new = &(*sx)[sx_new_index];
-  bcopy(sxx_old, sxx_new, sizeof(SUMMARY_EXPR));
+  BCOPY(sxx_old, sxx_new, sizeof(SUMMARY_EXPR));
   return sx_new_index;
 }
 
@@ -402,7 +406,7 @@ static void Eliminate_Expr(DYN_ARRAY<SUMMARY_EXPR>* sx,
   for (i = expr_index + 1; i <= sx->Lastidx(); i++) { 
     SUMMARY_EXPR* sxx_old = &(*sx)[i]; 
     SUMMARY_EXPR* sxx_new = &(*sx)[i-1]; 
-    bcopy(sxx_old, sxx_new, sizeof(SUMMARY_EXPR));
+    BCOPY(sxx_old, sxx_new, sizeof(SUMMARY_EXPR));
   } 
 
   sx->Decidx();
@@ -483,7 +487,7 @@ extern void IPL_EX_Eliminate_Value(DYN_ARRAY<SUMMARY_VALUE>* sv,
   for (i = value_index + 1; i <= sv->Lastidx(); i++) {
     SUMMARY_VALUE* svv_old = &(*sv)[i];
     SUMMARY_VALUE* svv_new = &(*sv)[i-1];
-    bcopy(svv_old, svv_new, sizeof(SUMMARY_VALUE));
+    BCOPY(svv_old, svv_new, sizeof(SUMMARY_VALUE));
   }
 
   sv->Decidx();
@@ -580,7 +584,7 @@ static void IPL_EXS_Sort_Exprs(DYN_ARRAY<SUMMARY_VALUE>* sv,
 
   for (i = 0; i <= sx->Lastidx(); i++) {
     SUMMARY_EXPR* sxx = &(*sx)[i];
-    bcopy(sxx, &new_exprs[new_index[i]], sizeof(SUMMARY_EXPR));
+    BCOPY(sxx, &new_exprs[new_index[i]], sizeof(SUMMARY_EXPR));
   }
 
   sx->Resetidx();

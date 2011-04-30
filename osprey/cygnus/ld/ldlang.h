@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -592,5 +596,9 @@ extern void lang_update_definedness
   (const char *, struct bfd_link_hash_entry *);
 
 extern void add_excluded_libs (const char *);
+
+#ifdef IPA_LINK
+extern int allow_mixed_libraries;
+#endif
 
 #endif

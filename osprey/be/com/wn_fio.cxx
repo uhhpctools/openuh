@@ -1,5 +1,9 @@
 /*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 /*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -41,13 +45,16 @@
 
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
 #endif /* USE_PCH */
 #pragma hdrstop
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <isam.h>
 #include "defs.h"
 #include "strtab.h"
@@ -726,9 +733,9 @@ typedef struct {
     FIOSTRUCT  last;
     INT16      size32;
     INT16      size64;
-    char       *name;
-    char       *name_ptr;
-    char       *name_local;
+    const char       *name;
+    const char       *name_ptr;
+    const char       *name_local;
 } FIOSTRUCTID_INFO;
 
 typedef struct {
@@ -737,7 +744,7 @@ typedef struct {
     INT16        offset64;
     INT16        type64;
     FIOSTRUCTID  iostruct;
-    char         *name;
+    const char  *name;
 } FIOSTRUCT_INFO;
 
 static ST * Make_IoRuntime_ST ( FIOOPER );
@@ -774,7 +781,7 @@ INT32 mp_io;
 
 /*  This table contains the external names of all I/O runtime routines.  */
 
-static char * fio_names [FIOOPER_LAST + 1] = {
+static const char * fio_names [FIOOPER_LAST + 1] = {
     "",			/* FIOOPER_NONE */
     "s_rsfe64",		/* FIO_EXT_READ_FORMAT_start */
     "s_rsue64",		/* FIO_EXT_READ_UNFORMAT_start */
@@ -1963,7 +1970,7 @@ Get_ARB_WN(const ARB_HANDLE arb, arb_enum whattoget)
 
 
 static TY_IDX
-Make_Simple_Array_Type (char *name, INT32 n_elems, TY_IDX elem_ty)
+Make_Simple_Array_Type (const char *name, INT32 n_elems, TY_IDX elem_ty)
 {
     TY_IDX ty_idx;
     TY& ty = New_TY (ty_idx);
@@ -2850,7 +2857,7 @@ static void Gen_Impld_Io_Calls ( WN * block, FIOFORMATTYPE form,
   char impld_name[48];
   ST *tmp_st;
   static ST * impld_fio_sts [FIOFORMATTYPE_LAST + 1];
-  static char *impld_fio_names [ FIOFORMATTYPE_LAST + 1] =
+  static const char *impld_fio_names [ FIOFORMATTYPE_LAST + 1] =
 	{ "", "do_fio64", "do_uio64", "do_Lio64" };
   INT32	nkids;
   TY_IDX aty;
@@ -3179,11 +3186,13 @@ static void Gen_Iolist_PutFieldWN ( WN * block, ST * st, INT32 foffset,
 	      WN_CreateExp1 ( OPC_I4F8CVT,
 	      WN_CreateLdid ( OPC_F8F8LDID, WN_offset(wn), WN_st(wn),
 			      Be_Type_Tbl(MTYPE_F8) )));
+#if defined(TARG_IA64) || defined(TARG_X8664)
       else if (vtype == MTYPE_F10)
         wnx = WN_CreateStid ( OPC_I4STID, foffset, st, Be_Type_Tbl(MTYPE_I4),
               WN_CreateExp1 ( OPC_I4F10CVT,
               WN_CreateLdid ( OPC_F10F10LDID, WN_offset(wn), WN_st(wn),
                               Be_Type_Tbl(MTYPE_F10) )));
+#endif
       else if (vtype == MTYPE_FQ)
 	wnx = WN_CreateStid ( OPC_I4STID, foffset, st, Be_Type_Tbl(MTYPE_I4),
 	      WN_CreateExp1 ( OPC_I4FQCVT,
@@ -3211,11 +3220,13 @@ static void Gen_Iolist_PutFieldWN ( WN * block, ST * st, INT32 foffset,
 	      WN_CreateExp1 ( OPC_I8F8CVT,
 	      WN_CreateLdid ( OPC_F8F8LDID, WN_offset(wn), WN_st(wn),
 			      Be_Type_Tbl(MTYPE_F8) )));
+#if defined(TARG_IA64) || defined(TARG_X8664)
       else if (vtype == MTYPE_F10)
         wnx = WN_CreateStid ( OPC_I8STID, foffset, st, Be_Type_Tbl(MTYPE_I8),
               WN_CreateExp1 ( OPC_I8F10CVT,
               WN_CreateLdid ( OPC_F10F10LDID, WN_offset(wn), WN_st(wn),
                               Be_Type_Tbl(MTYPE_F10) )));
+#endif
       else if (vtype == MTYPE_FQ)
 	wnx = WN_CreateStid ( OPC_I8STID, foffset, st, Be_Type_Tbl(MTYPE_I8),
 	      WN_CreateExp1 ( OPC_I8FQCVT,
@@ -6010,15 +6021,15 @@ Create_Dope_From_IoItem( WN *block, WN *item )
     a_contig = 1;
 
     info_word = 0;
-    dh_ptr = (dope_header_type *)&info_word;
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      dh_ptr = (dope_header_type *)&info_word;
 
-    dh_ptr->assoc = assoc;
-    dh_ptr->a_contig = a_contig;
-    dh_ptr->n_dim = 1;
-
-/*   ^ this used to be ...
-*    info_word = assoc << 63 | a_contig << 59 | 1;
-*/
+      dh_ptr->assoc = assoc;
+      dh_ptr->a_contig = a_contig;
+      dh_ptr->n_dim = 1;
+    } else {
+      info_word = assoc << 63 | a_contig << 59 | 1;
+    }
     Gen_Iolist_PutFieldConst( block, st, 
 			FIO_OFFSET(FCR_DV_FLAG_INFO),
 			FIO_TYPE(FCR_DV_FLAG_INFO), info_word);
@@ -6035,17 +6046,18 @@ Create_Dope_From_IoItem( WN *block, WN *item )
     f90_type_t *f90_type_ptr;
  
     f90type_t_word = 0;
-    f90_type_ptr = (f90_type_t *)&f90type_t_word;
 
       type = 6;
       int_len = 8; /* length in bits */
 
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      f90_type_ptr = (f90_type_t *)&f90type_t_word;
       f90_type_ptr->type = type;
       f90_type_ptr->int_len = int_len;
-/*  used to be ...
-*      f90type_t_word = (type << 24)
-*			    | (int_len << 8);
-*/
+    } else {
+      f90type_t_word = (type << 24)
+			    | (int_len << 8);
+    }
       Gen_Iolist_PutFieldConst( block, st,
 			FIO_OFFSET(FCR_DV_TYPE_LEN),
 			FIO_TYPE(FCR_DV_TYPE_LEN), f90type_t_word);
@@ -6156,30 +6168,28 @@ Create_DopeVector_WN( WN *block, WN *arr_item, TY_IDX ity, TY_IDX  ety, BOOL imp
   ** unused:
   ** n_dim:3		= number of dimensions
   */
-     UINT64 assoc = 1; // indicates contains valid data
-     UINT64 a_contig;
+    UINT64 assoc = 1; // indicates contains valid data
+    UINT64 a_contig;
 
-     dope_header_type *dh_ptr;
+    dope_header_type *dh_ptr;
 
-     info_word = 0;
-     dh_ptr = (dope_header_type *)&info_word;
+    info_word = 0;
     
     a_contig = (impl_do) ? 0 :  1;
 
-    dh_ptr->assoc = assoc;
-    dh_ptr->a_contig = a_contig;
-    dh_ptr->n_dim = ndims;
-    if (TY_pointer( ity ))
-	dh_ptr->ptr_alloc = 1;
-
-// used to be ....
-//   info_word = assoc << 63 | a_contig << 59 | ndims;
-//
-//   /* ptr_alloc :  set if allocated by pointer  (can always be 0) */
-//   /*
-//   if (TY_pointer( ity ))
-//     info_word |= (UINT64) 1 << 62;
-//   */
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      dh_ptr = (dope_header_type *)&info_word;
+      dh_ptr->assoc = assoc;
+      dh_ptr->a_contig = a_contig;
+      dh_ptr->n_dim = ndims;
+      if (TY_pointer( ity ))
+	  dh_ptr->ptr_alloc = 1;
+    } else {
+     info_word = assoc << 63 | a_contig << 59 | ndims;
+   /* ptr_alloc :  set if allocated by pointer  (can always be 0) */
+     if (TY_pointer( ity ))
+       info_word |= (UINT64) 1 << 62;
+    }
 //   /* p_or_a : pointer or allocatable array not important here */
 //
     Gen_Iolist_PutFieldConst( block, st, 
@@ -6199,7 +6209,6 @@ Create_DopeVector_WN( WN *block, WN *arr_item, TY_IDX ity, TY_IDX  ety, BOOL imp
 
     f90_type_t *f90_type_ptr;
     f90type_t_word = 0;
-    f90_type_ptr = (f90_type_t *)&f90type_t_word;
 
       if (TY_is_character( ity )) {
 	kind_of_star = 0;
@@ -6207,19 +6216,20 @@ Create_DopeVector_WN( WN *block, WN *arr_item, TY_IDX ity, TY_IDX  ety, BOOL imp
       }
       type = (TY_is_character( ity )) ? 6 : Dv_Type_From_TY(ety);
       int_len = TY_size( ety )*8; /* length in bits */
-      f90_type_ptr->type = type;
-      f90_type_ptr->dpflag = dpflag;
-      f90_type_ptr->kind_or_star = kind_of_star;
-      f90_type_ptr->int_len = int_len;
-      f90_type_ptr->dec_len = dec_len;
-
-// used to be ...
-//     f90type_t_word = (type << 24)
-//		    | (dpflag << 23)
-//		    | (kind_of_star << 20)
-//		    | (int_len << 8)
-//		    | dec_len;
-//
+      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+        f90_type_ptr = (f90_type_t *)&f90type_t_word;
+        f90_type_ptr->type = type;
+        f90_type_ptr->dpflag = dpflag;
+        f90_type_ptr->kind_or_star = kind_of_star;
+        f90_type_ptr->int_len = int_len;
+        f90_type_ptr->dec_len = dec_len;
+      } else {
+     f90type_t_word = (type << 24)
+		    | (dpflag << 23)
+		    | (kind_of_star << 20)
+		    | (int_len << 8)
+		    | dec_len;
+      }
       Gen_Iolist_PutFieldConst( block, st,
 			FIO_OFFSET(FCR_DV_TYPE_LEN),
 			FIO_TYPE(FCR_DV_TYPE_LEN), f90type_t_word);
@@ -6411,17 +6421,19 @@ Create_Null_Call( WN *block, FIOOPER form, WN *cilist_wn,
   }
 
   word = 0;
-  io_header_ptr = (iolist_header_type *)&word;
-  io_header_ptr->version = 1;
-  io_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
-  io_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
-  io_header_ptr->ioetsize = 8 / Pointer_Size;
+  if (Target_Byte_Sex == LITTLE_ENDIAN) {
+    io_header_ptr = (iolist_header_type *)&word;
+    io_header_ptr->version = 1;
+    io_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
+    io_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
+    io_header_ptr->ioetsize = 8 / Pointer_Size;
+  } else {
   
-// ^ used to be ...
-// word = ( (UINT64) 1 << 61) | /* version */
-//              ( (UINT64) first_last << 32) | /* first_last flag*/
-//       ( (UINT64) 8 / Pointer_Size );
-//
+ word = ( (UINT64) 1 << 61) | /* version */
+              ( (UINT64) first_last << 32) | /* first_last flag*/
+       ( (UINT64) 8 / Pointer_Size );
+
+  }
   Make_Cray_Io_Call( block, form, iostat1, iostat2, cilist_wn, stack_wn, 
 		   null_iolist_st, word);
 }
@@ -6823,14 +6835,15 @@ scalar:
     Add_To_Iolist( FID_IOSCALAR_ENTRY, last_field, offset, 0 );
 
     word1 = 0;
-    ioentry_header_ptr = (ioentry_header_type *)&word1;
-    ioentry_header_ptr->valtype = val_type;
-    ioentry_header_ptr->ioentsize = ioentsize;
-
-// ^ used to be ....
-//    /* io_entry header */
-//    word1 = ((UINT64) val_type << 56) |	/* val type */
-//          ((UINT64) ioentsize);
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      ioentry_header_ptr = (ioentry_header_type *)&word1;
+      ioentry_header_ptr->valtype = val_type;
+      ioentry_header_ptr->ioentsize = ioentsize;
+    } else {
+    /* io_entry header */
+    word1 = ((UINT64) val_type << 56) |	/* val type */
+          ((UINT64) ioentsize);
+    }
     Gen_Iolist_PutFieldConst (block, *iolist_st, header_offset, MTYPE_U8, word1);
 
     /* F90_type_t entry */
@@ -6916,12 +6929,14 @@ scalar:
       }
     }
     word1 = 0;
-    ioentry_header_ptr = (ioentry_header_type *)&word1;
-    ioentry_header_ptr->valtype = val_type;
-    ioentry_header_ptr->ioentsize = ioentsize;   
-// ^ used to be ...
-//    word1 = ((UINT64) val_type << 56) |	/* val type */
-//          ((UINT64) ioentsize);
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      ioentry_header_ptr = (ioentry_header_type *)&word1;
+      ioentry_header_ptr->valtype = val_type;
+      ioentry_header_ptr->ioentsize = ioentsize;   
+    } else {
+      word1 = ((UINT64) val_type << 56) |	/* val type */
+            ((UINT64) ioentsize);
+    }
     Gen_Iolist_PutFieldConst (block, *iolist_st, header_offset, 
 		FIO_TYPE(FCR_IOARRAY_ENTRY), word1);
   } else if (val_type == 3) {
@@ -7035,12 +7050,13 @@ scalar:
 	  if (i > 0) {
 	    /* implied_do entry word */
             word = 0;
-            ioentry_header_ptr = (ioentry_header_type *)&word;
-            ioentry_header_ptr->valtype = 3;
-            ioentry_header_ptr->ioentsize = ioentsize;
-
-// ^ used to be ...
-//	    word = ((UINT64) 3 << 56) | ((UINT64) ioentsize);
+	    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+              ioentry_header_ptr = (ioentry_header_type *)&word;
+              ioentry_header_ptr->valtype = 3;
+              ioentry_header_ptr->ioentsize = ioentsize;
+	    } else {
+	      word = ((UINT64) 3 << 56) | ((UINT64) ioentsize);
+	    }
 	    Gen_Iolist_PutFieldConst( block, *iolist_st, ioffset+8,
 				MTYPE_U8, word);
 	  }
@@ -7057,11 +7073,13 @@ scalar:
 	}
 	/* implied_do entry word */
         word = 0;
-        ioentry_header_ptr = (ioentry_header_type *)&word;
-        ioentry_header_ptr->valtype = 3;
-        ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//	word = ((UINT64) 3 << 56) | ((UINT64) ioentsize);
+	if (Target_Byte_Sex == LITTLE_ENDIAN) {
+          ioentry_header_ptr = (ioentry_header_type *)&word;
+          ioentry_header_ptr->valtype = 3;
+          ioentry_header_ptr->ioentsize = ioentsize;
+	} else {
+	  word = ((UINT64) 3 << 56) | ((UINT64) ioentsize);
+	}
 	Gen_Iolist_PutFieldConst( block, *iolist_st, ioffset+8,
 			MTYPE_U8, word);
 	return( ioentsize-impldosize-8/Pointer_Size );
@@ -7107,12 +7125,14 @@ scalar:
       /* replace the ioentry header which had the wrong ioentsize value now
          that we know the real ioentsize for the implied-do */
       word1 = 0;
-      ioentry_header_ptr = (ioentry_header_type *)&word1;
-      ioentry_header_ptr->valtype = 3;
-      ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//      word1 = ((UINT64) val_type << 56) |	/* val type */
-//            ((UINT64) ioentsize);
+      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+        ioentry_header_ptr = (ioentry_header_type *)&word1;
+        ioentry_header_ptr->valtype = 3;
+        ioentry_header_ptr->ioentsize = ioentsize;
+      } else {
+        word1 = ((UINT64) val_type << 56) |	/* val type */
+              ((UINT64) ioentsize);
+      }
       Gen_Iolist_PutFieldConst (block, *iolist_st, header_offset, 
 		FIO_TYPE(FCR_IOIMPLIEDDO_ENTRY), word1);
       num_impl--;
@@ -7142,17 +7162,19 @@ scalar:
 	  ** handled here.
 	  */
           word = 0;
-          io_header_ptr = (iolist_header_type *)&word;
-          io_header_ptr->version = 1;
-          io_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
-          io_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
-          io_header_ptr->icount = *icount;
-          io_header_ptr->ioetsize = *iolist_size;
-// ^ used to be ...
-//          word = ( (UINT64) 1 << 61) | /* version */
-//	       ( (UINT64) first_last << 32) | /* first_last flag*/
-//	       ( (UINT64) *icount << 16) | /* icount */ 
-//	       ( (UINT64) *iolist_size );
+          if (Target_Byte_Sex == LITTLE_ENDIAN) {
+            io_header_ptr = (iolist_header_type *)&word;
+            io_header_ptr->version = 1;
+            io_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
+            io_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
+            io_header_ptr->icount = *icount;
+            io_header_ptr->ioetsize = *iolist_size;
+	  } else {
+          word = ( (UINT64) 1 << 61) | /* version */
+	       ( (UINT64) first_last << 32) | /* first_last flag*/
+      ( (UINT64) *icount << 16) | /* icount */ 
+	       ( (UINT64) *iolist_size );
+	  }
           Set_TY_size(Ty_Table[*iolist_ty], *offset);
 	  Set_FLD_last_field (last_field);
           Make_Cray_Io_Call( block, form, iostat1, iostat2, cilist_wn,
@@ -7575,17 +7597,19 @@ lower_f77_record_items ( WN * block, WN *rec, WN *cilist_wn, WN *stack_wn,
 	  */
 	  if (*icount) {
             word = 0;
-            iolist_header_ptr = (iolist_header_type *)&word;
-            iolist_header_ptr->version = 1;
-            iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
-            iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
-            iolist_header_ptr->icount = *icount;
-            iolist_header_ptr->ioetsize = *iolist_size;
-// ^ used to be ...
-//            word = ( (UINT64) 1 << 61) | /* version */
-//	       ( (UINT64) first_last << 32) | /* first_last flag*/
-//	       ( (UINT64) *icount << 16) | /* icount */ 
-//	       ( (UINT64) *iolist_size );
+	    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+              iolist_header_ptr = (iolist_header_type *)&word;
+              iolist_header_ptr->version = 1;
+              iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
+              iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
+              iolist_header_ptr->icount = *icount;
+              iolist_header_ptr->ioetsize = *iolist_size;
+	    } else {
+            word = ( (UINT64) 1 << 61) | /* version */
+	       ( (UINT64) first_last << 32) | /* first_last flag*/
+	       ( (UINT64) *icount << 16) | /* icount */ 
+	       ( (UINT64) *iolist_size );
+	    }
             Set_TY_size(*iolist_ty, *offset);
 	    Set_FLD_last_field (last_field);
             Make_Cray_Io_Call( block, form, iostat1, iostat2, cilist_wn,
@@ -7640,17 +7664,19 @@ lower_f77_record_items ( WN * block, WN *rec, WN *cilist_wn, WN *stack_wn,
   
   if (*icount) {
     word = 0;
-    iolist_header_ptr = (iolist_header_type *)&word;
-    iolist_header_ptr->version = 1;
-    iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
-    iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
-    iolist_header_ptr->icount = *icount;
-    iolist_header_ptr->ioetsize = *iolist_size;
-// ^ used to be ...
-//    word = ( (UINT64) 1 << 61) | /* version */
-//	       ( (UINT64) first_last << 32) | /* first_last flag*/
-//	       ( (UINT64) *icount << 16) | /* icount */ 
-//	       ( (UINT64) *iolist_size );
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      iolist_header_ptr = (iolist_header_type *)&word;
+      iolist_header_ptr->version = 1;
+      iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
+      iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
+      iolist_header_ptr->icount = *icount;
+      iolist_header_ptr->ioetsize = *iolist_size;
+    } else {
+    word = ( (UINT64) 1 << 61) | /* version */
+	       ( (UINT64) first_last << 32) | /* first_last flag*/
+	       ( (UINT64) *icount << 16) | /* icount */ 
+	       ( (UINT64) *iolist_size );
+    }
     Set_TY_size(*iolist_ty, *offset);
     Set_FLD_last_field (last_field);
     Make_Cray_Io_Call( block, form, iostat1, iostat2, cilist_wn,
@@ -7845,17 +7871,19 @@ dump_tree(tree);
         if (iend >= kid_last || itm >= kid_last)
           first_last |= 1;
         word = 0;
-        iolist_header_ptr = (iolist_header_type *)&word;
-        iolist_header_ptr->version = 1;
-        iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
-        iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
-        iolist_header_ptr->icount = icount;
-        iolist_header_ptr->ioetsize = iolistsize;
-// ^ used to be ...
-//        word = ( (UINT64) 1 << 61) | /* version */
-//               ( (UINT64) first_last << 32) | /* first_last flag*/
-//	       ( (UINT64) icount << 16) | /* icount */ 
-//	       ( (UINT64) iolistsize );
+	if (Target_Byte_Sex == LITTLE_ENDIAN) {
+          iolist_header_ptr = (iolist_header_type *)&word;
+          iolist_header_ptr->version = 1;
+          iolist_header_ptr->iolfirst = (first_last == 2 || first_last == 3) ? 1 : 0;
+          iolist_header_ptr->iollast = (first_last == 1 || first_last == 3) ? 1 : 0;
+          iolist_header_ptr->icount = icount;
+          iolist_header_ptr->ioetsize = iolistsize;
+	} else {
+        word = ( (UINT64) 1 << 61) | /* version */
+               ( (UINT64) first_last << 32) | /* first_last flag*/
+	       ( (UINT64) icount << 16) | /* icount */ 
+	       ( (UINT64) iolistsize );
+	}
         Set_TY_size (Ty_Table [iolist_ty], *offset);
 	Set_FLD_last_field (last_field);
         Make_Cray_Io_Call( block, form, iostat1, iostat2, cilist_wn, 
@@ -7868,14 +7896,16 @@ dump_tree(tree);
       ** implied-do list which has to be implemented as a DO loop.
       */
       word = 0;
-      iolist_header_ptr = (iolist_header_type *)&word;
-      iolist_header_ptr->version = 1;
-      iolist_header_ptr->icount = icount;
-      iolist_header_ptr->ioetsize = iolistsize;
-// ^ used to be ...
-//      word = ( (UINT64) 1 << 61) | /* version */
-//	       ( (UINT64) icount << 16) | /* icount */ 
-//	       ( (UINT64) iolistsize );
+      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+        iolist_header_ptr = (iolist_header_type *)&word;
+        iolist_header_ptr->version = 1;
+        iolist_header_ptr->icount = icount;
+        iolist_header_ptr->ioetsize = iolistsize;
+      } else {
+      word = ( (UINT64) 1 << 61) | /* version */
+	       ( (UINT64) icount << 16) | /* icount */ 
+	       ( (UINT64) iolistsize );
+      }
 
       Set_TY_size (Ty_Table [iolist_ty], *offset);
       Set_FLD_last_field (last_field);
@@ -7884,14 +7914,16 @@ dump_tree(tree);
 			stack_wn, iolist_st, word);
     } else if (nested == NESTED_DOPE) {
       word = 0;
-      iolist_header_ptr = (iolist_header_type *)&word;
-      iolist_header_ptr->version = 1;
-      iolist_header_ptr->icount = icount;
-      iolist_header_ptr->ioetsize = iolistsize;
-// ^ used to be ...
-//      word = ( (UINT64) 1 << 61) | /* version */
-//	       ( (UINT64) icount << 16) | /* icount */ 
-//	       ( (UINT64) iolistsize );
+      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+        iolist_header_ptr = (iolist_header_type *)&word;
+        iolist_header_ptr->version = 1;
+        iolist_header_ptr->icount = icount;
+        iolist_header_ptr->ioetsize = iolistsize;
+      } else {
+      word = ( (UINT64) 1 << 61) | /* version */
+	       ( (UINT64) icount << 16) | /* icount */ 
+	       ( (UINT64) iolistsize );
+      }
       Gen_Iolist_PutFieldConst( block, iolist_st, header_offset, 
 				MTYPE_U8, word);
     }
@@ -8021,12 +8053,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 		       Be_Type_Tbl(MTYPE_U8), offset);
 
              word = 0;
-             ioentry_header_ptr = (ioentry_header_type *)&word;
-             ioentry_header_ptr->valtype = valtype;
-             ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//             word = ( (UINT64) valtype << 56) | 
-//	            ( (UINT64) ioentsize );
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioentry_header_ptr = (ioentry_header_type *)&word;
+               ioentry_header_ptr->valtype = valtype;
+               ioentry_header_ptr->ioentsize = ioentsize;
+	     } else {
+               word = ( (UINT64) valtype << 56) | 
+	              ( (UINT64) ioentsize );
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st, offset, MTYPE_U8,
 				       word );
              offset += 8;
@@ -8079,12 +8113,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 		      Be_Type_Tbl (MTYPE_U8), offset);
 
              word = 0;
-             ioentry_header_ptr = (ioentry_header_type *)&word;
-             ioentry_header_ptr->valtype = valtype;
-             ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//             word = ( (UINT64) valtype << 56) | 
-//	            ( (UINT64) ioentsize );
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioentry_header_ptr = (ioentry_header_type *)&word;
+               ioentry_header_ptr->valtype = valtype;
+               ioentry_header_ptr->ioentsize = ioentsize;
+	     } else {
+               word = ( (UINT64) valtype << 56) | 
+	              ( (UINT64) ioentsize );
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st, offset, MTYPE_U8,
 				       word );
              offset += 8;
@@ -8128,12 +8164,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 		      Be_Type_Tbl (MTYPE_U8), offset);
 
              word = 0;
-             ioentry_header_ptr = (ioentry_header_type *)&word;
-             ioentry_header_ptr->valtype = valtype;
-             ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//             word = ( (UINT64) valtype << 56) |
-//                    ( (UINT64) ioentsize );
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioentry_header_ptr = (ioentry_header_type *)&word;
+               ioentry_header_ptr->valtype = valtype;
+               ioentry_header_ptr->ioentsize = ioentsize;
+	     } else {
+               word = ( (UINT64) valtype << 56) |
+                      ( (UINT64) ioentsize );
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st, offset, MTYPE_U8,
 				       word);
              offset += 8;
@@ -8200,12 +8238,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 		      Be_Type_Tbl (MTYPE_U8), offset);
 	      
              word = 0;
-             ioentry_header_ptr = (ioentry_header_type *)&word;
-             ioentry_header_ptr->valtype = valtype;
-             ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//             word = ( (UINT64) valtype << 56) |
-//                    ( (UINT64) ioentsize );
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioentry_header_ptr = (ioentry_header_type *)&word;
+               ioentry_header_ptr->valtype = valtype;
+               ioentry_header_ptr->ioentsize = ioentsize;
+	     } else {
+               word = ( (UINT64) valtype << 56) |
+                      ( (UINT64) ioentsize );
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st, offset, MTYPE_U8,
 				       word );
              offset += 8;
@@ -8223,12 +8263,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 		      Be_Type_Tbl (MTYPE_U8), offset);
 
              word = 0;
-             ioarray_entry_ptr = (ioarray_entry_type *)&word;
-             ioarray_entry_ptr->indflag = indflag;
-             ioarray_entry_ptr->boundchk = bound_check;
-// ^ used to be ...
-//             word = ( (UINT64) indflag << 63) |
-//                    ( (UINT64) bound_check << 62);
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioarray_entry_ptr = (ioarray_entry_type *)&word;
+               ioarray_entry_ptr->indflag = indflag;
+               ioarray_entry_ptr->boundchk = bound_check;
+	     } else {
+               word = ( (UINT64) indflag << 63) |
+                      ( (UINT64) bound_check << 62);
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st, offset, MTYPE_U8,
 				       word );
              offset += 8;
@@ -8334,12 +8376,14 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
              *word_count += ioentsize;
 
              word = 0;
-             ioentry_header_ptr = (ioentry_header_type *)&word;
-             ioentry_header_ptr->valtype = valtype;
-             ioentry_header_ptr->ioentsize = ioentsize;
-// ^ used to be ...
-//             word = ( (UINT64) valtype << 56) |
-//                    ( (UINT64) ioentsize );
+	     if (Target_Byte_Sex == LITTLE_ENDIAN) {
+               ioentry_header_ptr = (ioentry_header_type *)&word;
+               ioentry_header_ptr->valtype = valtype;
+               ioentry_header_ptr->ioentsize = ioentsize;
+	     } else {
+               word = ( (UINT64) valtype << 56) |
+                      ( (UINT64) ioentsize );
+	     }
              Gen_Iolist_PutFieldConst( block, iolist_st,
 				       save_impdo_word1_offset, MTYPE_U8, word);
              break;
@@ -8353,17 +8397,19 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 
   if (needs_new_iolist_table) {
     word = 0;
-    iolist_header_ptr = (iolist_header_type *)&word;
-    iolist_header_ptr->version = 1;
-    iolist_header_ptr->iolfirst = (flflag == 2 || flflag == 3) ? 1 : 0;
-    iolist_header_ptr->iollast = (flflag == 1 || flflag == 3) ? 1 : 0;
-    iolist_header_ptr->icount = icount;
-    iolist_header_ptr->ioetsize = iolistsize;
-// ^ used to be ...
-//    word = ( (UINT64) 1 << 61) | /* version */
-//           ( (UINT64) flflag << 32) | /* first_last flag*/
-//	   ( (UINT64) icount << 16) | /* icount */ 
-//	   ( (UINT64) iolistsize );
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      iolist_header_ptr = (iolist_header_type *)&word;
+      iolist_header_ptr->version = 1;
+      iolist_header_ptr->iolfirst = (flflag == 2 || flflag == 3) ? 1 : 0;
+      iolist_header_ptr->iollast = (flflag == 1 || flflag == 3) ? 1 : 0;
+      iolist_header_ptr->icount = icount;
+      iolist_header_ptr->ioetsize = iolistsize;
+    } else {
+    word = ( (UINT64) 1 << 61) | /* version */
+           ( (UINT64) flflag << 32) | /* first_last flag*/
+	   ( (UINT64) icount << 16) | /* icount */ 
+	   ( (UINT64) iolistsize );
+    }
     Set_TY_size (Ty_Table[iolist_ty], offset);
     Gen_Iolist_PutFieldConst (block, iolist_st, save_iotable_word1_offset,
 			      MTYPE_U8, word);
@@ -8407,18 +8453,20 @@ static void lower_cray_io_items ( WN * block, WN * tree, INT32 kid_first,
 
   } else {
     word = 0;
-    iolist_header_ptr = (iolist_header_type *)&word;
-    iolist_header_ptr->version = 1;
-    iolist_header_ptr->iolfirst = 0;
-    iolist_header_ptr->iollast = 0;
-    iolist_header_ptr->icount = icount;
-    iolist_header_ptr->ioetsize = *word_count;
-// ^ used to be ...
-//      word = ( (UINT64) 1 << 61) | /* version */
-//             ( (UINT64) 0 << 33) | /* first */
-//             ( (UINT64) 0 << 32) | /* last */
-//             ( (UINT64) icount << 16) | /* icount */
-//             ( (UINT64) *word_count );
+    if (Target_Byte_Sex == LITTLE_ENDIAN) {
+      iolist_header_ptr = (iolist_header_type *)&word;
+      iolist_header_ptr->version = 1;
+      iolist_header_ptr->iolfirst = 0;
+      iolist_header_ptr->iollast = 0;
+      iolist_header_ptr->icount = icount;
+      iolist_header_ptr->ioetsize = *word_count;
+    } else {
+      word = ( (UINT64) 1 << 61) | /* version */
+             ( (UINT64) 0 << 33) | /* first */
+             ( (UINT64) 0 << 32) | /* last */
+             ( (UINT64) icount << 16) | /* icount */
+             ( (UINT64) *word_count );
+      }
       Gen_Iolist_PutFieldConst (block, iolist_st, save_iotable_word1_offset,
 				MTYPE_U8, word);
   }
@@ -8600,6 +8648,7 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 	break;
     case IOU_DEFAULT:
 	if (current_io_library == IOLIB_CRAY) {
+#ifndef KEY // bug 8586
 	  WN* unit = WN_kid0(kid0);
 	  if (WN_operator_is(unit,OPR_INTCONST) ||
 	               WN_operator_is(unit,OPR_LDID)) {
@@ -8608,6 +8657,7 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 	          Fail_FmtAssertion("unexpected unit type (%d) in I/O processing", ret_type);
              }
           }
+#endif
 
           if (WN_operator_is(WN_kid0(kid0), OPR_INTCONST) && 
 		WN_const_val(WN_kid0(kid0)) == 0) {
@@ -8639,6 +8689,7 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
          */
 
 	  pure_unit_wn = WN_kid0(kid0);
+#ifndef KEY // bug 8586
 	  if (WN_operator_is(pure_unit_wn,OPR_INTCONST) ||
 	               WN_operator_is(pure_unit_wn,OPR_LDID)) {
 	     INT32 ret_type = WN_rtype(pure_unit_wn);
@@ -8646,6 +8697,7 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 	          Fail_FmtAssertion("unexpected unit type (%d) in I/O processing", ret_type);
              }
           }
+#endif
 
 	  unit_wn = create_pointer_to_node(block, WN_kid0(kid0),
 					   (TY_IDX) 0, TRUE);
@@ -8807,8 +8859,8 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
   /*  Clear all potential control items and then extract the ones specified.
       Do some partial pre-processing on specific items for efficiency.  */
 
-  bzero ( items,  sizeof(items)  );
-  bzero ( itemsx, sizeof(itemsx) );
+  BZERO ( items,  sizeof(items)  );
+  BZERO ( itemsx, sizeof(itemsx) );
 
   for (iolist=2; iolist<WN_kid_count(tree); iolist++) {
 
@@ -9705,14 +9757,16 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            cilist_st = Gen_Temp_Symbol(MTYPE_To_TY(MTYPE_U8), "inquire_arg1");
            ty = ST_type(cilist_st);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 1;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                   ( (UINT64) stk_size << 16 ) |
-//                  ( (UINT64) 1 ); /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 1;
+	   } else {
+             word1 = ((UINT64) 1 << 56) |  /* Version */
+                     ((UINT64) stk_size << 16 ) |
+                     ((UINT64) 1 ); // Number of words in control list struct
+	   }
            WN_INSERT_BlockLast(block, 
                                WN_Stid (MTYPE_U8, 0, cilist_st, ty, 
                                WN_CreateIntconst (OPC_U8INTCONST,word1)));
@@ -9743,31 +9797,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
 	   cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+              cilist_header_ptr = (cilist_header_type *)&word1;
+              cilist_header_ptr->version = 1;
+              cilist_header_ptr->uflag = unit_flag;
+              cilist_header_ptr->iostatflg = iostat_flag;
+              cilist_header_ptr->eorflag = eor_flag;
+              cilist_header_ptr->endflag = end_flag;
+              cilist_header_ptr->errflag = err_flag;
+              cilist_header_ptr->advcode = advance_flag;
+              cilist_header_ptr->edcode = edflag;
+              cilist_header_ptr->internal = is_internal_io;
+              cilist_header_ptr->dflag = is_direct;
+              cilist_header_ptr->fmt = fmt_flag;
+              cilist_header_ptr->stksize = stk_size;
+              cilist_header_ptr->icount = 7;
+	   } else {
+              word1 = ( (UINT64) 1 << 56 ) |  // Version
+                      ( (UINT64) unit_flag << 48 ) |
+                      ( (UINT64) eeeflag << 40 ) |
+                      ( (UINT64) advance_flag << 35 ) |
+                      ( (UINT64) edflag << 34 ) | // Encode decode flag
+                      ( (UINT64) is_internal_io << 33 ) |
+                      ( (UINT64) is_direct << 32 ) |
+                      ( (UINT64) fmt_flag << 24 ) |
+                      ( (UINT64) stk_size << 16 ) |
+                      ( (UINT64) 7 ) ; // Number of words in control list struct
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
 	   if (unit_wn != NULL)
   	     Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -9806,31 +9862,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
            cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->uflag = unit_flag;
+             cilist_header_ptr->iostatflg = iostat_flag;
+             cilist_header_ptr->eorflag = eor_flag;
+             cilist_header_ptr->endflag = end_flag;
+             cilist_header_ptr->errflag = err_flag;
+             cilist_header_ptr->advcode = advance_flag;
+             cilist_header_ptr->edcode = edflag;
+             cilist_header_ptr->internal = is_internal_io;
+             cilist_header_ptr->dflag = is_direct;
+             cilist_header_ptr->fmt = fmt_flag;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 7;
+	   } else {
+             word1 = ( (UINT64) 1 << 56 ) |  // Version
+                     ( (UINT64) unit_flag << 48 ) |
+                     ( (UINT64) eeeflag << 40 ) |
+                     ( (UINT64) advance_flag << 35 ) |
+                     ( (UINT64) edflag << 34 ) | // Encode decode flag
+                     ( (UINT64) is_internal_io << 33 ) |
+                     ( (UINT64) is_direct << 32 ) |
+                     ( (UINT64) fmt_flag << 24 ) |
+                     ( (UINT64) stk_size << 16 ) |
+                     ( (UINT64) 7 ) ; // Number of words in control list struct
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
            if (unit_wn != NULL)
              Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -9870,31 +9928,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
            cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->uflag = unit_flag;
+             cilist_header_ptr->iostatflg = iostat_flag;
+             cilist_header_ptr->eorflag = eor_flag;
+             cilist_header_ptr->endflag = end_flag;
+             cilist_header_ptr->errflag = err_flag;
+             cilist_header_ptr->advcode = advance_flag;
+             cilist_header_ptr->edcode = edflag;
+             cilist_header_ptr->internal = is_internal_io;
+             cilist_header_ptr->dflag = is_direct;
+             cilist_header_ptr->fmt = fmt_flag;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 7;
+	   } else {
+             word1 = ( (UINT64) 1 << 56 ) |  // Version
+                     ( (UINT64) unit_flag << 48 ) |
+                     ( (UINT64) eeeflag << 40 ) |
+                     ( (UINT64) advance_flag << 35 ) |
+                     ( (UINT64) edflag << 34 ) | // Encode decode flag
+                     ( (UINT64) is_internal_io << 33 ) |
+                     ( (UINT64) is_direct << 32 ) |
+                     ( (UINT64) fmt_flag << 24 ) |
+                     ( (UINT64) stk_size << 16 ) |
+                     ( (UINT64) 7 ) ; // Number of words in control list struct
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
            if (unit_wn != NULL)
              Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -9933,31 +9993,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
            cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->uflag = unit_flag;
+             cilist_header_ptr->iostatflg = iostat_flag;
+             cilist_header_ptr->eorflag = eor_flag;
+             cilist_header_ptr->endflag = end_flag;
+             cilist_header_ptr->errflag = err_flag;
+             cilist_header_ptr->advcode = advance_flag;
+             cilist_header_ptr->edcode = edflag;
+             cilist_header_ptr->internal = is_internal_io;
+             cilist_header_ptr->dflag = is_direct;
+             cilist_header_ptr->fmt = fmt_flag;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 7;
+	   } else {
+             word1 = ( (UINT64) 1 << 56 ) |  // Version
+                     ( (UINT64) unit_flag << 48 ) |
+                     ( (UINT64) eeeflag << 40 ) |
+                     ( (UINT64) advance_flag << 35 ) |
+                     ( (UINT64) edflag << 34 ) | // Encode decode flag
+                     ( (UINT64) is_internal_io << 33 ) |
+                     ( (UINT64) is_direct << 32 ) |
+                     ( (UINT64) fmt_flag << 24 ) |
+                     ( (UINT64) stk_size << 16 ) |
+                     ( (UINT64) 7 ) ; // Number of words in control list struct
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
            if (unit_wn != NULL)
              Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -9998,31 +10060,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
            cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->uflag = unit_flag;
+             cilist_header_ptr->iostatflg = iostat_flag;
+             cilist_header_ptr->eorflag = eor_flag;
+             cilist_header_ptr->endflag = end_flag;
+             cilist_header_ptr->errflag = err_flag;
+             cilist_header_ptr->advcode = advance_flag;
+             cilist_header_ptr->edcode = edflag;
+             cilist_header_ptr->internal = is_internal_io;
+             cilist_header_ptr->dflag = is_direct;
+             cilist_header_ptr->fmt = fmt_flag;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 7;
+	   } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) advance_flag << 35 ) |
+                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
            if (unit_wn != NULL)
              Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -10093,31 +10157,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
            }
            cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
            word1 = 0;
-           cilist_header_ptr = (cilist_header_type *)&word1;
-           cilist_header_ptr->version = 1;
-           cilist_header_ptr->uflag = unit_flag;
-           cilist_header_ptr->iostatflg = iostat_flag;
-           cilist_header_ptr->eorflag = eor_flag;
-           cilist_header_ptr->endflag = end_flag;
-           cilist_header_ptr->errflag = err_flag;
-           cilist_header_ptr->advcode = advance_flag;
-           cilist_header_ptr->edcode = edflag;
-           cilist_header_ptr->internal = is_internal_io;
-           cilist_header_ptr->dflag = is_direct;
-           cilist_header_ptr->fmt = fmt_flag;
-           cilist_header_ptr->stksize = stk_size;
-           cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   if (Target_Byte_Sex == LITTLE_ENDIAN) {
+             cilist_header_ptr = (cilist_header_type *)&word1;
+             cilist_header_ptr->version = 1;
+             cilist_header_ptr->uflag = unit_flag;
+             cilist_header_ptr->iostatflg = iostat_flag;
+             cilist_header_ptr->eorflag = eor_flag;
+             cilist_header_ptr->endflag = end_flag;
+             cilist_header_ptr->errflag = err_flag;
+             cilist_header_ptr->advcode = advance_flag;
+             cilist_header_ptr->edcode = edflag;
+             cilist_header_ptr->internal = is_internal_io;
+             cilist_header_ptr->dflag = is_direct;
+             cilist_header_ptr->fmt = fmt_flag;
+             cilist_header_ptr->stksize = stk_size;
+             cilist_header_ptr->icount = 7;
+	   } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) advance_flag << 35 ) |
+                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	   }
            Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
            if (unit_wn != NULL)
              Gen_Io_PutAddrWN ( block, cilist_st, FCR_CI_UNIT, unit_wn );
@@ -10263,26 +10329,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //			| ((end != (LABEL_IDX) 0) << 1)
 //			| ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10373,26 +10441,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10439,26 +10509,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10493,31 +10565,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 			       err, end, (LABEL_IDX) 0, zero_escape_freq );
               cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = iostat_flag;
-              cilist_header_ptr->eorflag = eor_flag;
-              cilist_header_ptr->endflag = end_flag;
-              cilist_header_ptr->errflag = err_flag;
-              cilist_header_ptr->advcode = advance_flag;
-              cilist_header_ptr->edcode = edflag;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = iostat_flag;
+                cilist_header_ptr->eorflag = eor_flag;
+                cilist_header_ptr->endflag = end_flag;
+                cilist_header_ptr->errflag = err_flag;
+                cilist_header_ptr->advcode = advance_flag;
+                cilist_header_ptr->edcode = edflag;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) advance_flag << 35 ) |
+                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
               Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, cilist_st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10598,28 +10672,30 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //			| ((end != (LABEL_IDX) 0) << 1)
 //			| ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->edcode = edflag;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->edcode = edflag;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Gen_Io_PutAddrWN ( block, st, FCR_CI_FMTSRC, format_wn );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
@@ -10681,26 +10757,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10752,26 +10830,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10818,26 +10898,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10903,26 +10985,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -10968,26 +11052,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11033,26 +11119,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11088,31 +11176,33 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 			       err, end, (LABEL_IDX) 0, zero_escape_freq );
               cilist_st = Get_IoStruct_ST ( block, FID_CRAY_CLIST, TRUE);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = iostat_flag;
-              cilist_header_ptr->eorflag = eor_flag;
-              cilist_header_ptr->endflag = end_flag;
-              cilist_header_ptr->errflag = err_flag;
-              cilist_header_ptr->advcode = advance_flag;
-              cilist_header_ptr->edcode = edflag;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) advance_flag << 35 ) |
-//                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = iostat_flag;
+                cilist_header_ptr->eorflag = eor_flag;
+                cilist_header_ptr->endflag = end_flag;
+                cilist_header_ptr->errflag = err_flag;
+                cilist_header_ptr->advcode = advance_flag;
+                cilist_header_ptr->edcode = edflag;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) advance_flag << 35 ) |
+                ( (UINT64) edflag << 34 ) | /* Encode decode flag */
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
               Gen_Io_PutFieldConst ( block, cilist_st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, cilist_st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11192,26 +11282,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11273,26 +11365,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11344,26 +11438,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 
@@ -11410,26 +11506,28 @@ fprintf(stderr, "Processing I/O at line number %d\n", lineno);
 //                      | ((end != (LABEL_IDX) 0) << 1)
 //                      | ((iostat != NULL) << 3);
               word1 = 0;
-              cilist_header_ptr = (cilist_header_type *)&word1;
-              cilist_header_ptr->version = 1;
-              cilist_header_ptr->uflag = unit_flag;
-              cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
-              cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
-              cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
-              cilist_header_ptr->internal = is_internal_io;
-              cilist_header_ptr->dflag = is_direct;
-              cilist_header_ptr->fmt = fmt_flag;
-              cilist_header_ptr->stksize = stk_size;
-              cilist_header_ptr->icount = 7;
-// ^ used to be ...
-//           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
-//                ( (UINT64) unit_flag << 48 ) |
-//                ( (UINT64) eeeflag << 40 ) |
-//                ( (UINT64) is_internal_io << 33 ) |
-//                ( (UINT64) is_direct << 32 ) |
-//                ( (UINT64) fmt_flag << 24 ) |
-//                ( (UINT64) stk_size << 16 ) |
-//                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      if (Target_Byte_Sex == LITTLE_ENDIAN) {
+                cilist_header_ptr = (cilist_header_type *)&word1;
+                cilist_header_ptr->version = 1;
+                cilist_header_ptr->uflag = unit_flag;
+                cilist_header_ptr->iostatflg = (iostat != NULL) ? 1 : 0;
+                cilist_header_ptr->endflag = (end != (LABEL_IDX) 0) ? 1 : 0;
+                cilist_header_ptr->errflag = (errstat != FALSE) ? 1 : 0;
+                cilist_header_ptr->internal = is_internal_io;
+                cilist_header_ptr->dflag = is_direct;
+                cilist_header_ptr->fmt = fmt_flag;
+                cilist_header_ptr->stksize = stk_size;
+                cilist_header_ptr->icount = 7;
+	      } else {
+           word1 = ( (UINT64) 1 << 56 ) |  /* Version */
+                ( (UINT64) unit_flag << 48 ) |
+                ( (UINT64) eeeflag << 40 ) |
+                ( (UINT64) is_internal_io << 33 ) |
+                ( (UINT64) is_direct << 32 ) |
+                ( (UINT64) fmt_flag << 24 ) |
+                ( (UINT64) stk_size << 16 ) |
+                ( (UINT64) 7 ) ; /* Number of words in control list struct */
+	      }
 	      Gen_Io_PutFieldConst( block, st, FCR_CI_WORD1, word1 );
 	      Set_Cilist_Fields( block, st, unit_wn, items, rec_wn, 
 				parsfmt_wn, fmtsrc_wn, advance_wn, 

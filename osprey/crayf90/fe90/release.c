@@ -41,7 +41,7 @@ static char USMID[] = "@(#)5.0_pl/sources/release.c	5.16	10/22/99 08:51:40";
 # include "globals.m"
 #include "stamp.h"
 
-# if defined(_TARGET_OS_LINUX)
+# if defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)
 
 char	release_level[RELEASE_LEVEL_LEN] = INCLUDE_STAMP; 
 

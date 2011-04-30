@@ -49,10 +49,13 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <alloca.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>		  
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
 #include "wn.h"	                        // WN
@@ -138,10 +141,6 @@ IPO_Clone (IPA_NODE* orig_node, IPA_NODE* clone_node)
                    clone_node->Mem_Pool(), 
                    clone_node->Mem_Pool());
 
-#if 0
-  // set lobal tables 
-  IP_READ_file_info (orig_node->File_Header());
-#endif
   
   // save current pointers to standard memory pools
   MEM_POOL* save_pu_pool_ptr = MEM_pu_pool_ptr;

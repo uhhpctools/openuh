@@ -1,5 +1,7 @@
 $
-$  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+$  Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+$
+$  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
 $
 $  Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
 $
@@ -2378,13 +2380,12 @@ is a nonzero, unsigned integer constant.
 .ME
 $
 $ Ansi : 0169
-$msg  0169 A comma between these format fields is required by the Fortran standard.
+$msg  0169 A comma between these format fields is required by some versions of the Fortran standard.
 $nexp 0169
-Ansi : A comma between these format fields is required by the Fortran standard.
+Ansi : A comma between these format fields is required by some versions of the Fortran standard.
 .PP
 This format specification has two consecutive format descriptors with no comma
-separating them.  The Fortran standard requires commas between
-items in a format specification.  The Fortran standard allows the comma to
+separating them.  The Fortran 90 standard allows the comma to
 be omitted in the following places:
 .BL
 Between a P descriptor and an immediately following F, E, D, or G descriptor
@@ -2392,6 +2393,9 @@ Between a P descriptor and an immediately following F, E, D, or G descriptor
 Before or after a slash
 .BL
 Before or after a colon
+.PP
+In addition, the Fortran 2003 standard allows the comma to be omitted between
+a P descriptor and a repeat specifier.
 .ME
 $
 $ Ansi : 0170
@@ -2837,12 +2841,13 @@ either pointer or allocatable arrays.
 .ME
 $
 $ Error : 0202
-$msg  0202 The status variable for this ALLOCATE/DEALLOCATE statement must be a scalar integer variable.
+$msg  0202 The status variable for this ALLOCATE/DEALLOCATE statement must be scalar and integer, not constant or protected.
 $nexp 0202
-Error : The status variable for this ALLOCATE/DEALLOCATE statement must be a scalar integer variable.
+Error : The status variable for this ALLOCATE/DEALLOCATE statement must be scalar and integer, not constant or protected.
 .PP
 The variable used as the status variable, \*CSTAT = \fIstat_variable\fR, in an \*CALLOCATE\fR or \*CDEALLOCATE\fR
-statement cannot be an array and must be of integer type.
+statement cannot be an array, must be of integer type, must not be a constant,
+and must not be use-associated if it is protected.
 .ME
 $
 $ Error : 0203
@@ -4560,12 +4565,13 @@ able to change your code so that this error is not encountered.
 .ME
 $
 $ Error : 0326
-$msg  0326 The left hand side of this assignment statement is a constant.
+$msg  0326 The left hand side of this assignment statement is constant or protected.
 $nexp 0326
-Error : The left hand side of this assignment statement is a constant.
+Error : The left hand side of this assignment statement is constant or protected.
 .PP
-The left side of an assignment statement is either a named constant or a
-subobject of a named constant.
+The left side of an assignment statement is either a named constant, a
+a use-associated variable that is protected, or a subobject that is constant
+or protected.
 .ME
 $
 $ Ansi : 0327
@@ -5669,12 +5675,14 @@ attribute.
 .ME
 $
 $ Error : 0418
-$msg  0418 The variable in a pointer assignment statement must have the TARGET attribute or the POINTER attribute.
+$msg  0418 The right side of a pointer assignment must either have the POINTER attribute, or have the TARGET attribute and not be protected.
 $nexp 0418
-Error : The variable in a pointer assignment statement must have the TARGET attribute or the POINTER attribute.
+Error : The right side of a pointer assignment must either have the POINTER attribute, or have the TARGET attribute and not be protected.
 .PP
-The variable that is the right side of a pointer assignment statement, 
-must be a target, the subobject of a target, or a pointer.
+The variable that is the right side of a pointer assignment statement may be a
+pointer, or it may be a non-pointer variable. If the latter, it must have the
+TARGET attribute, and it must not be a use-associated variable with the
+PROTECTED attribute.
 .ME
 $
 $ Error : 0419
@@ -6146,12 +6154,13 @@ The type of the variable used as an I/O control list specifier is not valid.
 .ME
 $
 $ Error : 0460
-$msg  0460 The %s control list specifier must have a scalar %s variable as an argument for this %s statement.
+$msg  0460 The %s control list specifier must have a scalar %s variable, not constant or protected, as an argument for this %s statement.
 $nexp 0460
-Error : The %s control list specifier must have a scalar %s variable as an argument for this %s statement.
+Error : The %s control list specifier must have a scalar %s variable, not constant or protected, as an argument for this %s statement.
 .PP
 Some I/O control list specifiers require a variable name as an argument.  It
-must be of the required type and must have default kind type.
+must be of the required type and must have default kind type. It must not be a
+constant or a use-associated protected variable.
 .ME
 $
 $ Error : 0461
@@ -6318,11 +6327,11 @@ An I/O input item is an expression.  Input items must be variables.
 .ME
 $
 $ Error : 0479
-$msg  0479 A constant cannot be used as an input item in a %s statement.
+$msg  0479 A constant or protected variable cannot be used as an input item in a %s statement.
 $nexp 0479
-Error : A constant cannot be used as an input item in a %s statement.
+Error : A constant or protected variable cannot be used as an input item in a %s statement.
 .PP
-An I/O input item is a constant.  Input items must be variables.
+An I/O input item must be a variable which is not use-associated and protected.
 .ME
 $
 $ Warning : 0480
@@ -6339,7 +6348,7 @@ $msg  0481 This implied-DO control variable is not valid.
 $nexp 0481
 Error : This implied-DO control variable is not valid.
 .PP
-An expression or constant appears where an implied-\*CDO\fR variable is expected.
+An expression, constant, or use-associated protected variable appears where an implied-\*CDO\fR variable is expected.
 .ME
 $
 $ Error : 0482
@@ -6351,9 +6360,9 @@ An implied-\*CDO\fR variable has a rank greater than zero.
 .ME
 $
 $ Error : 0483
-$msg  0483 The IOLENGTH= specifier in an INQUIRE statement must be a scalar default integer variable.
+$msg  0483 The IOLENGTH= specifier in an INQUIRE statement must be a scalar default integer variable, not constant or protected.
 $nexp 0483
-Error : The IOLENGTH= specifier in an INQUIRE statement must be a scalar default integer variable.
+Error : The IOLENGTH= specifier in an INQUIRE statement must be a scalar default integer variable, not constant or protected.
 .PP
 In an \*CINQUIRE\fR statement, the \*CIOLENGTH=\fR specifier  requires that a
 scalar integer variable of default kind type be specified.
@@ -10318,13 +10327,20 @@ an initialization expression.
 .ME
 $
 $ Ansi : 0771
-$msg  0771 Use of a BOZ literal constant outside of a DATA statement is an extension to the Fortran standard.
+$msg  0771 In Fortran 95, a BOZ constant may appear only in a DATA statement (in Fortran 2003, it may also appear in intrinsic INT, REAL, DBLE, or CMPLX)
 $nexp 0771
-Ansi : Use of a BOZ literal constant outside of a DATA statement is an extension to the Fortran standard.
+Ansi : In Fortran 95, a BOZ constant may appear only in a DATA statement (in Fortran 2003, it may also appear in intrinsic INT, REAL, DBLE, or CMPLX)
 .PP
-The Fortran standard only allows BOZ literal constants in a \*CDATA\fR statement
-value list.  The compiler treats them as type Boolean and allows them wherever
-type Boolean is allowed.
+The Fortran 95 standard allows BOZ literal constants only in a \*CDATA\fR
+statement value list. The Fortran 2003 standard also allows them as arguments
+to intrinsics INT, REAL, or DBLE. As an extension, the compiler allows them
+elsewhere.
+.PP
+By default, intrinsics REAL, DBLE, and CMPLX treat a BOZ constant as an
+integer and return the real value having the same magnitude. When the option
+-ansi or -ffortran2003 is in effect, the compiler behaves as Fortran 2003
+prescribes, returning the real value having the same bit pattern as the BOZ
+constant.
 .ME
 $
 $ Error : 0772
@@ -15513,7 +15529,7 @@ Error : The array subscript for dimension %d does not fall within the defined ra
 .PP
 An array reference was encountered where a subscript was out of bounds 
 for the array. The compiler will check array bounds at compile time if
--Rb is specified and the subscript and bounds values are constant. The
+-C is specified and the subscript and bounds values are constant. The
 following code shows three cases where this message would be issued.
 
       integer i(10)
@@ -16536,7 +16552,7 @@ Error : Procedure "%s" is %s at line %s.  It must have an explicit interface spe
 
    A procedure other than a statement function shall have an explicit interface
    if the procedure is elemental or the procedure has
-       (a) An optional dummy argument
+       (a) An optional or volatile dummy argument
        (b) A dummy argument that is an assumed-shape array, a pointer or a
            target
        (c) An array-valued result (functions only.)
@@ -20589,9 +20605,9 @@ supported when the procedure has co-array dummy arguments.
 .ME
 $
 $ Warning : 1602
-$msg  1602 Common block "%s" is used in multiple program units.  It must be specified with the %s directive in all uses.
+$msg  1602 Common block "%s" is used in multiple program units.  It must be specified with the %s directive in all uses: see line %s.
 $nexp 1602
-Warning : Common block "%s" is used in multiple program units.  It must be specified with the %s directive in all uses.
+Warning : Common block "%s" is used in multiple program units.  It must be specified with %s in all uses: see line %s.
 .PP
 In this compilation, a common block is used in multiple program units.  If 
 the common block is specified with a directive describing storage or how
@@ -20983,10 +20999,14 @@ Warning : The array subscript for dimension %d does not fall within the defined 
 .PP
 An array reference was encountered where a subscript was out of bounds for
 the array. The subscript could be either a single value, or a triplet
-section.  The compiler will check array bounds at compile time if -Rb is
+section.  The compiler will check array bounds at compile time if -C is
 specified and the subscript and bounds values are constant. The BOUNDS
 and NOBOUNDS compiler directives will control the issuing of this
-message for specific ranges of code or for specific variables.
+message for specific ranges of code or for specific variables. You can
+turn the compile-time warning into an error by setting the environment
+variable F90_BOUNDS_CHECK_ABORT to "YES" (which also changes run-time
+bounds check warnings into fatal errors.)
+.PP
 The following code shows three cases where this message would be issued.
 
       integer i(10)
@@ -21196,11 +21216,12 @@ compile time, then an Error level message is issued.
 .ME
 $
 $ Error : 1650
-$msg  1650 This argument cannot be a constant.
+$msg  1650 This argument cannot be a constant or protected variable.
 $nexp 1650
-Error : This argument cannot be a constant.
+Error : This argument cannot be a constant or protected variable.
 .PP
-This actual argument may not be a constant.
+This actual argument may not be a constant, and it may not be a use-associated
+variable with the PROTECTED attribute.
 .ME
 $
 $ Error : 1651
@@ -21584,4 +21605,233 @@ Ansi :  Statement functions are an obsolescent feature
 This feature was declared obsolescent in the Fortran 95 standard. An
 alternative is to create an internal procedure using the "contains" keyword.
 .ME
-$ LAST NUMBER USED : 1682
+$
+$ Error : 1683
+$msg  1683 Duplicate or conflicting IMPORT of %s
+$nexp 1683
+Error :  Duplicate or conflicting IMPORT of %s
+.PP
+The name has already appeared in an "import" statement in this interface body,
+or there is already a declaration of the name which is local to the interface
+body
+.ME
+$
+$ Error : 1684
+$msg  1684 %s cannot be imported from the host scoping unit
+$nexp 1684
+Error :  %s cannot be imported from the host scoping unit
+.PP
+The name is not accessible in the host scoping unit. Note that the declaration
+of a name in the host must precede its use in an IMPORT statement.
+.ME
+$
+$ Ansi : 1685
+$msg  1685 Not standard prior to Fortran 2003 (%s)
+$nexp 1685
+Ansi :  Not standard prior to Fortran 2003 (%s)
+.PP
+Prior to the Fortran 2003 standard, this construct was not available, though
+compilers may have allowed it as an extension.
+.ME
+$
+$ Error : 1686
+$msg  1686 Only the ENUMERATOR statement is allowed between ENUM and END ENUM statements
+$nexp 1686
+Error :  Only the ENUMERATOR statement is allowed between ENUM and END ENUM statements
+.PP
+Only the ENUMERATOR statement is allowed between ENUM and END ENUM statements
+.ME
+$
+$ Warning : 1687
+$msg  1687 %s appears in OpenMP THREADPRIVATE but is neither a module variable nor SAVEd.
+$nexp 1687
+Warning :   %s appears in OpenMP THREADPRIVATE but is neither a module variable nor SAVEd.
+.PP
+The OpenMP THREADPRIVATE directive requires either an entire common block, or
+an individual variable which is either a module variable or a variable having
+the SAVE attribute which is not in a common block.
+.ME
+$
+$ Error : 1688
+$msg  1688 Because dummy argument %s is volatile, this actual argument is not allowed
+$nexp 1688
+Error :   Because dummy argument %s is volatile, this actual argument is not allowed
+.PP
+If a dummy argument is volatile, then:
+  1. The actual argument may not be an array section using a vector subscript
+  2. If the actual argument is a pointer, the dummy argument must be a pointer
+    or an assumed-shape array (Fortran 2003 constraint C1233)
+  3. If the actual argument is an assumed-shape array or an array section
+    not using a vector subscript, the dummy argument must be an assumed-shape
+    array (Fortran 2003 constraint C1232)
+.ME
+$
+$ Error : 1689
+$msg  1689 BIND with NAME= cannot apply to more than one entity in statement
+$nexp 1689
+Error :   BIND with NAME= cannot apply to more than one entity in statement
+.PP
+Fortran 2003 constraints C533 and C551 forbid multiple entities in a single
+statement if BIND specifies an explicit language binding label
+.ME
+$
+$ Error : 1690
+$msg  1690 NAME= specifier in BIND clause requires scalar character constant
+$nexp 1690
+Error :   NAME= specifier in BIND clause requires scalar character constant
+.PP
+Fortran 2003 constraint C540 requires that the NAME= specifier in a
+language-binding-spec must provide a scalar character constant expression
+.ME
+$
+$ Error : 1691
+$msg  1691 For "%s", %s not allowed with BIND(C)
+$nexp 1691
+Error :   For "%s", "%s" not allowed with BIND(C)
+.PP
+Various Fortran 2003 constraints limit the use of the language binding spec
+"BIND(C)":
+.PP
+  C530: Dummy argument must not have ALLOCATABLE, POINTER, or OPTIONAL
+    attribute
+  C532: Entity must be an interoperable variable or procedure
+  C550: Variable must be interoperable and appear in module specification
+    part
+  C1237: Procedure must not be internal
+  C1238: Procedure dummy argument must be nonoptional interoperable variable
+    or procedure; function result must be interoperable variable
+  C1242: Function must not be ELEMENTAL
+  C1501: Derived type must not have SEQUENCE
+  C1502: Derived type must not have type parameters
+  C1503: Derived type must not have EXTENDS attribute
+  C1504: Derived type must not have a type-bound procedure
+  C1505: Each component of derived type must be interoperable, and must not
+    have POINTER or ALLOCATABLE attribute
+.PP
+"Interoperable" means that an equivalent entity can be defined by means of C:
+generally, its type must be one of the types provided by the intrinsic module
+"ISO_C_BINDING", or a derived type which itself uses "BIND" and whose
+components are interoperable. ALLOCATABLE and POINTER variables are never
+interoperable. Only explicit-shape and assumed-size arrays can be
+interoperable. CHARACTER types can be arrays, but must have LEN=1.
+.ME
+$
+$ Error : 1692
+$msg  1692 Argument of intrinsic C_LOC or C_FUNLOC doesn't satisfy Fortran 2003
+$nexp 1692
+Error :   Argument of intrinsic C_LOC or C_FUNLOC doesn't satisfy Fortran 2003
+.PP
+Fortran 2003 requires that the argument of ISO_C_BINDING module procedure C_LOC
+either have interoperable type and type parameters, or be a nonpolymorphic
+scalar with no length type parameters.
+.PP
+If it has an interoperable type, it must satisfy one of these requirements:
+  1. It must be a variable with the TARGET attribute but without ALLOCATABLE
+    and POINTER, or
+  2. It must be a variable with ALLOCATABLE and TARGET attributes which
+    is allocated and is not a zero-size array, or
+  3. It must be a scalar with the POINTER attribute which is associated
+.PP
+Otherwise, it must either have the TARGET attribute or it must be a POINTER;
+if it is ALLOCATABLE, it must be allocated.
+.PP
+Fortran 2003 requires that the argument of C_FUNLOC be a procedure with the
+BIND attribute, or a procedure pointer associated with an interoperable target.
+.ME
+$
+$ Error : 1693
+$msg  1693 For "%s", type "%s" lacks the BIND attribute
+$nexp 1693
+Error :   For "%s", type "%s" lacks the BIND attribute
+.PP
+To be interoperable with C, a structure must use a type which has the BIND
+attribute.
+.ME
+$
+$ Error : 1694
+$msg  1694 Cannot use BIND on "%s": not in specification part of module
+$nexp 1694
+Error :   Cannot use BIND on "%s": not in specification part of module
+.PP
+Fortran 2003 constraint C550 prohibits the BIND attribute on a variable
+declaration outside the specification part of a module.
+.ME
+$
+$ Error : 1695
+$msg  1695 For "%s", BIND requires CHARACTER type to have LEN=1
+$nexp 1695
+Error :   For "%s", BIND requires CHARACTER type to have LEN=1
+.PP
+The Fortran standard requires that
+a CHARACTER type used with BIND must have LEN=1, "*1", or default
+LEN in order to be interoperable with C. An array of CHARACTER(LEN=1) is
+allowed.
+.ME
+$
+$ Error : 1696
+$msg  1696 Applied BIND more than once to "%s" (identifier first appeared at line %d)
+$nexp 1696
+Error :   Applied BIND more than once to "%s" (identifier first appeared at line %d)
+.PP
+The BIND attribute has been applied to the variable or common block more than
+once
+.ME
+$
+$ Ansi : 1697
+$msg  1697 Fortran 2003 feature: "%s" is both %s and %s (identifier first appeared at line %d)
+$nexp 1697
+Ansi :   Fortran 2003 feature: "%s" is both %s and %s (identifier first appeared at line %d)
+.PP
+A dummy argument could not have both POINTER and "INTENT" attributes prior to Fortran 2003.
+.ME
+$
+$ Error : 1698
+$msg  1698 Error in argument SHAPE of intrinsic C_F_POINTER
+$nexp 1698
+Error :   Error in argument SHAPE of intrinsic C_F_POINTER
+.PP
+For intrinsic C_F_POINTER, if argument FPTR is not a pointer, then the optional
+argument SHAPE must not appear. Otherwise, SHAPE must be an array of rank 1
+whose size is equal to the rank of FPTR.
+.ME
+$
+$ Error : 1699
+$msg  1699 Dummy procedure %s needs BIND attribute to make %s interoperable
+$nexp 1699
+Error :   Dummy procedure %s needs BIND attribute to make %s interoperable
+.PP
+If a procedure has the BIND attribute, and one of its dummy arguments is a
+dummy procedure, then the dummy procedure must also have the BIND attribute.
+.ME
+$
+$ Error : 1700
+$msg  1700 For "%s", binding label does not match the one ("%s") defined at line %s
+$nexp 1700
+Error :   For "%s", binding label does not match the one ("%s") defined at line %s
+.PP
+The binding label specified (explicitly or implicitly) by the "BIND" attribute
+should be consistent.
+.ME
+$
+$ Warning : 1701
+$msg  1701 "%s" and "%s" have same external linker symbol "%s": see line %s
+$nexp 1701
+Warning :   "%s" and "%s" have same external linker symbol "%s": see line %s
+.PP
+The same external linker symbol is being used for two different procedures or common blocks, probably due to an error in a BIND clause.
+.ME
+$
+$ Error : 1702
+$msg  1702 Cannot change constant or PROTECTED entity "%s"
+$nexp 1702
+Error :   Cannot change constant or PROTECTED entity "%s"
+.PP
+The value of a constant entity cannot be redefined.
+.PP
+The value of an entity with the PROTECTED attribute can be used but not defined
+outside the module which declares the entity. If the entity has the POINTER or
+ALLOCATABLE attribute, it cannot be allocated, deallocated, or nullified outside
+the module either.
+.ME
+$ LAST NUMBER USED : 1702
+	

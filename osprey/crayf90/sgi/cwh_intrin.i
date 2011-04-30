@@ -137,7 +137,7 @@ typedef struct {
 /* Intrinsic table */
 
 typedef struct {
-	char *iname;
+	const char *iname;
 	intopc ops[t_LAST];
 } itab_entry;
 

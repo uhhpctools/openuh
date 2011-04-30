@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -82,6 +86,7 @@ static char *rcs_id = 	opt_combine_CXX"$Revision: 1.8 $";
 #include "opt_defs.h"
 
 #include "opt_combine.h"
+#include "betarget.h" // for Can_Do_Fast_Divide
 
 
 // ====================================================================
@@ -111,15 +116,20 @@ Combine_div_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
     //             1 b  =>      b
     // That case is valid on Recip_Allowed, which is less harmful.
     if ( Div_Split_Allowed ) {
-      const OPCODE recip_opc = OPCODE_make_op(OPR_RECIP,rtype,desc);
+      MTYPE rtyped = OPCODE_rtype(WN_opcode(WN_kid1(old_wn)));
+      const OPCODE recip_opc = OPCODE_make_op(OPR_RECIP,rtyped,MTYPE_V);
       WN *recip = WN_CreateExp1(recip_opc, WN_kid(old_wn,1));
-      const OPCODE mpy_opc = OPCODE_make_op(OPR_MPY,rtype,desc);
+      const OPCODE mpy_opc = OPCODE_make_op(OPR_MPY,rtype,MTYPE_V);
       WN *mpy = WN_CreateExp2(mpy_opc, WN_kid0(old_wn), recip);
       *new_wn = mpy;
       return TRUE;
     }
   }
-  else if ( WOPT_Enable_DIVREM && MTYPE_is_integral(rtype) ) {
+
+  else if ( WOPT_Enable_DIVREM && MTYPE_is_integral(rtype)  && 
+	    ! (WN_operator_is(WN_kid1(old_wn), OPR_INTCONST) && 
+	       Can_Do_Fast_Divide(MTYPE_I4, WN_const_val(WN_kid1(old_wn))))) {
+    
     // Transform:  DIV        DIVPART
     //             a b  =>    DIVREM
     //                        a    b
@@ -165,6 +175,12 @@ Combine_intrinsic_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
       new_intr_opc = OPC_C8INTRINSIC_OP;
       new_intr = INTRN_F8CIS; new_complex = OPC_F8IMAGPART;
       goto handle_sin;
+#if  0 // TODO defined(TARG_X8664)
+    case INTRN_F10SIN:
+      new_intr_opc = OPC_C8INTRINSIC_OP;
+      new_intr = INTRN_F10CIS; new_complex = OPC_F10IMAGPART;
+      goto handle_sin;
+#endif
     case INTRN_FQSIN:
       new_intr_opc = OPC_CQINTRINSIC_OP;
       new_intr = INTRN_FQCIS; new_complex = OPC_FQIMAGPART;
@@ -191,6 +207,12 @@ Combine_intrinsic_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
       new_intr_opc = OPC_C8INTRINSIC_OP;
       new_intr = INTRN_F8CIS; new_complex = OPC_F8REALPART;
       goto handle_cos;
+#if  0 // TODO defined(TARG_X8664)
+    case INTRN_F10COS:
+      new_intr_opc = OPC_CQINTRINSIC_OP;
+      new_intr = INTRN_F10CIS; new_complex = OPC_F10REALPART;
+      goto handle_cos;
+#endif
     case INTRN_FQCOS:
       new_intr_opc = OPC_CQINTRINSIC_OP;
       new_intr = INTRN_FQCIS; new_complex = OPC_FQREALPART;
@@ -267,7 +289,13 @@ Combine_rem_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
   const MTYPE rtype = OPCODE_rtype(old_wn_opc);
   const MTYPE desc  = OPCODE_desc(old_wn_opc);
 
+#if defined (TARG_SL)
+  if ( WOPT_Enable_DIVREM && MTYPE_is_integral(rtype) &&
+       ! (WN_operator_is(WN_kid1(old_wn), OPR_INTCONST) && 
+       Can_Do_Fast_Remainder(MTYPE_I4, WN_const_val(WN_kid1(old_wn))))) {
+#else
   if ( WOPT_Enable_DIVREM && MTYPE_is_integral(rtype) ) {
+#endif
     // Transform:  REM        REMPART
     //             a b  =>    DIVREM
     //                        a    b
@@ -316,6 +344,15 @@ Combine_Operations( WN *old_wn, WN **new_wn )
   return FALSE;
 }
 
+#ifdef TARG_X8664
+static TYPE_ID unify_recip_mpy_div_rtype(TYPE_ID dividend, TYPE_ID divisor)
+{
+  if (dividend == MTYPE_V16C8 || divisor == MTYPE_V16C8)
+     return MTYPE_V16C8;
+  else
+     return dividend;
+}
+#endif
 // ====================================================================
 // handle the MPY operator
 // ====================================================================
@@ -329,6 +366,9 @@ Uncombine_mpy_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
   WN *kid1 = WN_kid1(old_wn);
   const OPCODE   kid1_opc = WN_opcode(kid1);
   const OPERATOR kid1_opr = OPCODE_operator(kid1_opc);
+  WN *kid0 = WN_kid0(old_wn);
+  const OPCODE   kid0_opc = WN_opcode(kid0);
+  const OPERATOR kid0_opr = OPCODE_operator(kid0_opc);
 
 #ifdef KEY
   if (Recip_Allowed)
@@ -339,23 +379,34 @@ Uncombine_mpy_operator( WN *old_wn, WN **new_wn, OPCODE old_wn_opc )
     // Transform:  MPY       into  DIV
     //            a  RECIP         a b
     //                 b
+#ifdef TARG_X8664
+    TYPE_ID rtype = unify_recip_mpy_div_rtype(OPCODE_rtype(kid0_opc), 
+		                      OPCODE_rtype(kid1_opc));
+    const OPCODE div_opc = OPCODE_make_op(OPR_DIV,
+			rtype, OPCODE_desc(kid1_opc) );
+#else
     const OPCODE div_opc = OPCODE_make_op(OPR_DIV,
 			OPCODE_rtype(kid1_opc),OPCODE_desc(kid1_opc) );
+#endif
     WN *div = WN_CreateExp2(div_opc, WN_kid0(old_wn), WN_kid0(kid1));
     *new_wn = div;
     return TRUE;
   }
 
-  WN *kid0 = WN_kid0(old_wn);
-  const OPCODE   kid0_opc = WN_opcode(kid0);
-  const OPERATOR kid0_opr = OPCODE_operator(kid0_opc);
-
   if ( kid0_opr == OPR_RECIP ) {
     // Transform:  MPY       into  DIV
     //            RECIP b          b a
     //              a   
+#ifdef TARG_X8664
+    TYPE_ID rtype = unify_recip_mpy_div_rtype(OPCODE_rtype(kid0_opc), 
+		                      OPCODE_rtype(kid1_opc));
+    const OPCODE div_opc = OPCODE_make_op(OPR_DIV,
+			rtype,OPCODE_desc(kid0_opc) );
+#else
     const OPCODE div_opc = OPCODE_make_op(OPR_DIV,
 			OPCODE_rtype(kid0_opc),OPCODE_desc(kid0_opc) );
+    
+#endif
     WN *div = WN_CreateExp2(div_opc, WN_kid1(old_wn), WN_kid0(kid0));
     *new_wn = div;
     return TRUE;
@@ -429,6 +480,12 @@ Uncombine_imagrealpart_operator(WN *old_wn,WN **new_wn,OPCODE old_wn_opc)
 	new_intr_opc = OPC_F8INTRINSIC_OP;
 	goto handle_sincos;
 
+#if  0 // TODO defined(TARG_X8664)
+      case INTRN_F10CIS:
+	new_intr = old_wn_opr == OPR_IMAGPART ? INTRN_F10SIN : INTRN_F10COS;
+	new_intr_opc = OPC_F10INTRINSIC_OP;
+	goto handle_sincos;
+#endif
       case INTRN_FQCIS:
 	new_intr = old_wn_opr == OPR_IMAGPART ? INTRN_FQSIN : INTRN_FQCOS;
 	new_intr_opc = OPC_FQINTRINSIC_OP;

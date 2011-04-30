@@ -690,6 +690,32 @@ void expand_end_section ( )
 
 ///////// single directive ////////
 
+#ifdef TARG_SL2 //fork_joint
+/* following code is used to handle sl2 fork_joint and we put our implementation in openmp framework */ 
+void
+expand_start_sl2_sections (bool is_minor_thread)
+ {
+     WFE_expand_start_sl2_sections (is_minor_thread);
+ }
+
+void
+expand_end_sl2_sections ( )
+{
+     WFE_expand_end_sl2_sections ();
+}
+
+void expand_start_sl2_section (bool is_minor_thread)
+{
+     WFE_expand_start_sl2_section (is_minor_thread);
+}
+
+void expand_end_sl2_section ( )
+{
+     WFE_expand_end_sl2_section ();
+}
+#endif 
+
+
 void
 check_single_directive( struct single_clause_list * clause_list )
 {
@@ -1419,7 +1445,11 @@ void expand_start_do_loop (tree init_expr, tree logical_expr, tree incr_expr)
               
         //temp= build_modify_expr (DECL_NAME(init_expr), NOP_EXPR, DECL_INITIAL(init_expr));
         wn1 = WFE_Expand_Expr (DECL_INITIAL(init_expr)); // r.h.s.
+#ifdef TARG_SL
+        wn_tmp = WFE_Lhs_Of_Modify_Expr(MODIFY_EXPR, init_expr, NULL, FALSE, 
+#else
         wn_tmp = WFE_Lhs_Of_Modify_Expr(MODIFY_EXPR, init_expr, FALSE, 
+#endif
 				     0, 0, 0, FALSE, wn1, 0, FALSE, FALSE);
         //wn_tmp = WFE_Expand_Expr (temp); 
         wn_tmp = WFE_Stmt_Pop (wfe_stmk_comma);

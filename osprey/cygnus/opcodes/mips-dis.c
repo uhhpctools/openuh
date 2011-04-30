@@ -1185,12 +1185,10 @@ _print_insn_mips (memaddr, info, endianness)
   set_default_mips_dis_options (info);
   parse_mips_dis_options (info->disassembler_options);
 
-#if 1
   /* FIXME: If odd address, this is CLEARLY a mips 16 instruction.  */
   /* Only a few tools will work this way.  */
   if (memaddr & 0x01)
     return print_insn_mips16 (memaddr, info);
-#endif
 
 #if SYMTAB_AVAILABLE
   if (info->mach == bfd_mach_mips16

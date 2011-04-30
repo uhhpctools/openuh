@@ -134,6 +134,10 @@ void ISA_Lits_Begin (void)
   sprintf (buf, "%s", FNAME);
   Emit_Header (hfile, buf, interface);
 
+#ifdef __MINGW32__
+  fprintf(hfile, "\n#undef LC_MAX\n");
+#endif /* __MINGW32__ */
+
   fprintf(hfile, "\ntypedef enum {\n");
   // start with undefined value
   fprintf(hfile, "\tLC_UNDEFINED,\n");
@@ -202,8 +206,8 @@ void ISA_Create_Lit_Class(const char* name, LIT_CLASS_TYPE type, ...)
   va_list ap;
   LIT_RANGE range;
   bool is_signed = type == SIGNED;
-  long long min = is_signed ? LONG_LONG_MAX : ULONG_LONG_MAX;
-  long long max = is_signed ? LONG_LONG_MIN : 0;
+  long long min = is_signed ? LLONG_MAX : ULLONG_MAX;
+  long long max = is_signed ? LLONG_MIN : 0;
   int num_ranges = 0;
 
   // Find the smallest min and largest max for all ranges, and
@@ -229,11 +233,11 @@ void ISA_Create_Lit_Class(const char* name, LIT_CLASS_TYPE type, ...)
   // Initialize ISA_LIT_CLASS_info for this class. Note that .range[0]
   // holds the smallest min/largest max; .range[1] is the first sub-range.
   fprintf(hfile, "\tLC_%s,\n", name);
-  fprintf(cfile, "  { { { 0x%016llxLL, 0x%016llxLL }", min, max);
+  fprintf(cfile, "  { { { 0x%016" LL_FORMAT "xLL, 0x%016" LL_FORMAT "xLL }", min, max);
   va_start(ap,type);
   while ((range = va_arg(ap,LIT_RANGE)) != LIT_RANGE_END) {
-    fprintf(cfile, ",\n      { 0x%016llxLL, 0x%016llxLL }", 
-		   range->min, range->max);
+    fprintf(cfile, ",\n      { 0x%016" LL_FORMAT "xLL, 0x%016" LL_FORMAT "xLL }",
+			range->min, range->max);
   }
   va_end(ap);
   fprintf(cfile, " }, %d, %d, \"LC_%s\" },\n",

@@ -85,7 +85,6 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stack>
 
@@ -214,9 +213,6 @@ pair<INT32,CODEREP*> Count_occurs(CODEREP          *cr,
       break;
       
    case CK_IVAR:
-      if (cr->Opr() == OPR_ILOADX)
-	 Warn_todo("Count_occurs: Indexed load.");
-      
       if (matches(cr) && cr->Opr() != OPR_PARM)
       {
 	 counter = 1;
@@ -226,10 +222,12 @@ pair<INT32,CODEREP*> Count_occurs(CODEREP          *cr,
       {
 	 CODEREP *size_cr = 
 	    (is_store_lhs? cr->Mstore_size() : cr->Mload_size());
+	 if (cr->Opr() == OPR_ILOADX)
+	   size_cr = cr->Index();
 	 CODEREP *base_cr =
 	    (is_store_lhs? cr->Istr_base() : cr->Ilod_base());
 	    
-	 if (cr->Opr() == OPR_MLOAD)
+	 if (cr->Opr() == OPR_MLOAD || cr->Opr() == OPR_ILOADX)
 	 {
 	    counted_occurs = Count_occurs(size_cr, matches, FALSE);
 	    counter = counted_occurs.first;
@@ -1080,7 +1078,8 @@ VALNUM_FRE::delete_all_occurs(const EXP_OCCURS *occur,
    const VN_VALNUM valnum = get_valnum(occur->Occurrence()->Coderep_id());
 
    if ((OPCODE_operator(stmt->Op()) == OPR_MSTORE ||
-	OPCODE_operator(stmt->Op()) == OPR_ISTORE) &&
+	OPCODE_operator(stmt->Op()) == OPR_ISTORE ||
+	OPCODE_operator(stmt->Op()) == OPR_ISTOREX) &&
        cr->Coderep_id() == stmt->Lhs()->Coderep_id())
       _remove_nested_occurs(cr, valnum, 
 			    TRUE/*istr_lhs*/, FALSE/*in_occurrence*/);
@@ -1185,13 +1184,15 @@ VALNUM_FRE::_remove_nested_occurs(const CODEREP  *enclosing_cr,
 	 break;
 	 
       case CK_IVAR:
-	 if (enclosing_cr->Opr() == OPR_ILOADX)
-	    Warn_todo("VALNUM_FRE::_remove_nested_occurs: Indexed load.");
-	 
 	 if (enclosing_cr->Opr() == OPR_MLOAD)
 	    _remove_nested_occurs((is_istr_lhs? 
 				   enclosing_cr->Mstore_size():
 				   enclosing_cr->Mload_size()),
+				  remove_valnum,
+				  FALSE, // is_istr_lhs
+				  within_valnum);
+	 else if (enclosing_cr->Opr() == OPR_ILOADX)
+	    _remove_nested_occurs(enclosing_cr->Index(),
 				  remove_valnum,
 				  FALSE, // is_istr_lhs
 				  within_valnum);
@@ -1548,8 +1549,8 @@ VALNUM_FRE::_save_to_temp(BB_NODE *in_bb,
    const MTYPE dtype = rhs->Dtyp();
    CODEREP    *lhs = 
       _etable->New_temp_cr(dtype, 
-			   rhs->Check_if_result_is_address(_etable->
-							   Htable()->Sym()));
+		   rhs->Check_if_result_is_address(_etable->Htable()->Sym()),
+		   rhs);
 
    VNFRE::add_valnum(lhs, get_valnum(rhs->Coderep_id()).ordinal());
 
@@ -2115,6 +2116,8 @@ VALNUM_FRE::_contains_undef_val(CODEREP *cr, STMTREP *stmt) const
 	    {
 	       if (cr->Opr() == OPR_MLOAD)
 		  undef = _contains_undef_val(cr->Mstore_size(), stmt);
+	       else if (cr->Opr() == OPR_ILOADX)
+		  undef = _contains_undef_val(cr->Index(), stmt);
 	       if (!undef)
 		  undef = _contains_undef_val(cr->Istr_base(), stmt);
 	    }
@@ -2122,6 +2125,8 @@ VALNUM_FRE::_contains_undef_val(CODEREP *cr, STMTREP *stmt) const
 	    {
 	       if (cr->Opr() == OPR_MLOAD)
 		  undef = _contains_undef_val(cr->Mload_size(), stmt);
+	       else if (cr->Opr() == OPR_ILOADX)
+		  undef = _contains_undef_val(cr->Index(), stmt);
 	       if (!undef)
 		  undef = _contains_undef_val(cr->Ilod_base(), stmt);
 	    }
@@ -2349,6 +2354,9 @@ VALNUM_FRE::insert_cr_occurrences(CODEREP *cr,
 	 if (cr->Opr() == OPR_MLOAD)
 	    insert_cr_occurrences(cr->Mload_size(), stmt, stmt_kid_num,
 				   FALSE, depth+1);
+	 else if (cr->Opr() == OPR_ILOADX)
+	    insert_cr_occurrences(cr->Index(), stmt, stmt_kid_num,
+				   FALSE, depth+1);
 	 insert_cr_occurrences(cr->Ilod_base(), stmt, stmt_kid_num,
 				FALSE, depth+1);
 
@@ -2359,6 +2367,9 @@ VALNUM_FRE::insert_cr_occurrences(CODEREP *cr,
       {
 	 if (cr->Opr() == OPR_MLOAD)
 	    insert_cr_occurrences(cr->Mstore_size(), stmt, stmt_kid_num,
+				   FALSE, depth+1);
+	 else if (cr->Opr() == OPR_ILOADX)
+	    insert_cr_occurrences(cr->Index(), stmt, stmt_kid_num,
 				   FALSE, depth+1);
 	 insert_cr_occurrences(cr->Istr_base(), stmt, stmt_kid_num,
 				FALSE, depth+1);
@@ -2469,6 +2480,9 @@ VALNUM_FRE::collect_cr_occurrences(CODEREP *cr,
 	 if (cr->Opr() == OPR_MLOAD)
 	    collect_cr_occurrences(cr->Mload_size(), stmt, stmt_kid_num,
 				    FALSE, depth+1);
+	 else if (cr->Opr() == OPR_ILOADX)
+	    collect_cr_occurrences(cr->Index(), stmt, stmt_kid_num,
+				    FALSE, depth+1);
 	 collect_cr_occurrences(cr->Ilod_base(), stmt, stmt_kid_num,
 				 FALSE, depth+1);
 	 if (cr->Opr() != OPR_PARM)
@@ -2478,6 +2492,9 @@ VALNUM_FRE::collect_cr_occurrences(CODEREP *cr,
       {
 	 if (cr->Opr() == OPR_MLOAD)
 	    collect_cr_occurrences(cr->Mstore_size(), stmt, stmt_kid_num,
+				    FALSE, depth+1);
+	 else if (cr->Opr() == OPR_ILOADX)
+	    collect_cr_occurrences(cr->Index(), stmt, stmt_kid_num,
 				    FALSE, depth+1);
 	 collect_cr_occurrences(cr->Istr_base(), stmt, stmt_kid_num,
 				 FALSE, depth+1);
@@ -2656,6 +2673,9 @@ VALNUM_FRE::_all_same_occurs(CODEREP       *cr,
 	    if (cr->Opr() == OPR_MLOAD)
 	       same = 
 		  _all_same_occurs(cr->Mload_size(), FALSE, valnum, occ_cr);
+	    else if (cr->Opr() == OPR_ILOADX)
+	       same = 
+		  _all_same_occurs(cr->Index(), FALSE, valnum, occ_cr);
 	    if (same)
 	       same = 
 		  _all_same_occurs(cr->Ilod_base(), FALSE, valnum, occ_cr);
@@ -2665,6 +2685,9 @@ VALNUM_FRE::_all_same_occurs(CODEREP       *cr,
 	    if (cr->Opr() == OPR_MLOAD)
 	       same = 
 		  _all_same_occurs(cr->Mstore_size(), FALSE, valnum, occ_cr);
+	    else if (cr->Opr() == OPR_ILOADX)
+	       same = 
+		  _all_same_occurs(cr->Index(), FALSE, valnum, occ_cr);
 	    if (same)
 	       same =
 		  _all_same_occurs(cr->Istr_base(), FALSE, valnum, occ_cr);

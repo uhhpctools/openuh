@@ -49,12 +49,6 @@ MFMC_Min_cut_lhs(MFMC_HANDLE handle, INT32 i)
  */
 /* --- NOT IMPLEMENTED YET --- */
 
-#if 0
-INT64
-MFMC_Max_flow_arc_flow(MFMC_HANDLE handle, MFMC_ARC_HANDLE arc_handle)
-{
-}
-#endif
 
 INT64
 MFMC_Objective_value(MFMC_HANDLE handle)

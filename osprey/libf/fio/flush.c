@@ -195,9 +195,16 @@ flush_(
 
 		case FS_TEXT:
 #ifdef KEY
-			if (!(cup->ufp.std->_flags & _IO_NO_WRITES))
+			{
+# if defined(BUILD_OS_DARWIN)
+			int writeable = cup->ufp.std->_flags & (__SWR | __SRW);
+# else /* defined(BUILD_OS_DARWIN) */
+			int writeable = !(cup->ufp.std->_flags & _IO_NO_WRITES);
+# endif /* defined(BUILD_OS_DARWIN) */
+			if (writeable)
 				if (fflush(cup->ufp.std) == EOF)
 					FLUSH_ERROR(errno);
+			}
 			break;
 #endif
 		case STD:

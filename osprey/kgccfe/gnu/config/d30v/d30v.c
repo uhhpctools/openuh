@@ -178,13 +178,6 @@ override_options ()
 	  if (mode1 == mode2)
 	    ok_p = TRUE;
 
-#if 0
-	  else if (GET_MODE_CLASS (mode1) == MODE_INT
-		   && GET_MODE_SIZE (mode1) <= UNITS_PER_WORD
-		   && GET_MODE_CLASS (mode2) == MODE_INT
-		   && GET_MODE_SIZE (mode2) <= UNITS_PER_WORD)
-	    ok_p = TRUE;
-#endif
 
 	  else
 	    ok_p = FALSE;
@@ -193,25 +186,6 @@ override_options ()
 	}
     }
 
-#if 0
-  for (mode1 = VOIDmode;
-       (int)mode1 < NUM_MACHINE_MODES;
-       mode1 = (enum machine_mode)((int)mode1 + 1))
-    {
-      for (mode2 = VOIDmode;
-	   (int)mode2 <= NUM_MACHINE_MODES;
-	   mode2 = (enum machine_mode)((int)mode2 + 1))
-	{
-	  for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
-	    if (ok_p
-		&& (hard_regno_mode_ok[(int)mode1][regno]
-		    != hard_regno_mode_ok[(int)mode2][regno]))
-	      error ("bad modes_tieable_p for register %s, mode1 %s, mode2 %s",
-		     reg_names[regno], GET_MODE_NAME (mode1),
-		     GET_MODE_NAME (mode2));
-	}
-    }
-#endif
 
   /* A C expression whose value is a register class containing hard
      register REGNO.  In general there is more than one such class;
@@ -251,20 +225,6 @@ override_options ()
 
       regno_reg_class[regno] = class;
 
-#if 0
-      {
-	static const char *const names[] = REG_CLASS_NAMES;
-	fprintf (stderr, "Register %s class is %s, can hold modes", reg_names[regno], names[class]);
-	for (mode1 = VOIDmode;
-	     (int)mode1 < NUM_MACHINE_MODES;
-	     mode1 = (enum machine_mode)((int)mode1 + 1))
-	  {
-	    if (hard_regno_mode_ok[ (int)mode1 ][ regno ])
-	      fprintf (stderr, " %s", GET_MODE_NAME (mode1));
-	  }
-	fprintf (stderr, "\n");
-      }
-#endif
     }
 
   /* A C expression which defines the machine-dependent operand
@@ -1884,13 +1844,6 @@ direct_return ()
       if (info->total_size == 0)
 	return 1;
 
-#if 0
-      /* If just a small amount of local stack was allocated and no registers
-         saved, skip forward branch */
-      if (info->total_size == info->vars_size
-	  && IN_RANGE_P (info->total_size, 1, 31))
-	return 1;
-#endif
     }
 
   return 0;

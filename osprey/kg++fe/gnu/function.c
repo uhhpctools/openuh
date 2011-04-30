@@ -1272,42 +1272,6 @@ push_temp_slots ()
 /* Likewise, but save the new level as the place to allocate variables
    for blocks.  */
 
-#if 0
-void
-push_temp_slots_for_block ()
-{
-  push_temp_slots ();
-
-  var_temp_slot_level = temp_slot_level;
-}
-
-/* Likewise, but save the new level as the place to allocate temporaries
-   for TARGET_EXPRs.  */
-
-void
-push_temp_slots_for_target ()
-{
-  push_temp_slots ();
-
-  target_temp_slot_level = temp_slot_level;
-}
-
-/* Set and get the value of target_temp_slot_level.  The only
-   permitted use of these functions is to save and restore this value.  */
-
-int
-get_target_temp_slot_level ()
-{
-  return target_temp_slot_level;
-}
-
-void
-set_target_temp_slot_level (level)
-     int level;
-{
-  target_temp_slot_level = level;
-}
-#endif
 
 /* Pop a temporary nesting level.  All slots in use in the current level
    are freed.  */

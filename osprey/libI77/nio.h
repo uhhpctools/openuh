@@ -71,7 +71,6 @@ extern int __kai_s_wsne(cilist *);
 extern int __kai_s_rsne_mp(cilist *, unit **);
 extern int __kai_s_wsne_mp(cilist *, unit **);
 
-#if 11
 extern int s_rsNe64(cilist64 *pnlarg);
 extern int s_rsNe64_mp(cilist64 *pnlarg, unit **fu);
 extern int s_wsNe64(cilist64 *pnlarg);
@@ -80,7 +79,6 @@ extern int __kai_s_rsne64(cilist64 *pnlarg);
 extern int __kai_s_rsne64_mp(cilist64 *pnlarg, unit **fu);
 extern int __kai_s_wsne64(cilist64 *pnlarg);
 extern int __kai_s_wsne64_mp(cilist64 *pnlarg, unit **fu);
-#endif
 
 #endif /* C || C++ */
 

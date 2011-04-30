@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -83,6 +87,13 @@
 
 BOOL Trace_Exp = FALSE;	/* General code expansion trace */
 
+#ifdef TARG_NVISA
+// fp ops are same as int ops
+static BOOL Separate_FP_Expansion = FALSE;
+#else
+// fp ops go thru different path from int ops
+static BOOL Separate_FP_Expansion = TRUE;
+#endif
 
 /* ====================================================================
  *
@@ -109,6 +120,7 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	Expand_Branch (op1, op2, op3, variant, ops);
 	break;
   case OPR_GOTO:
+  case OPR_GOTO_OUTER_BLOCK:
 	Expand_Branch (op1, op2, op3, V_BR_ALWAYS, ops);
 	break;
   case OPR_LDA:
@@ -118,19 +130,28 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	Expand_Lda_Label (result, op1, ops);
 	break;
   case OPR_INTCONST:
+#if defined(TARG_NVISA)
+	Expand_Mtype_Immediate (result, op1, rtype, ops);
+#elif defined(TARG_SL)
+	Expand_Immediate (result, op1, rtype, ops);
+#elif defined(TARG_PPC32) 
+	void Expand_Immediate (TN *, TN *, BOOL, OPS *, TYPE_ID);
+	Expand_Immediate (result, op1, TRUE /* is_signed */, ops, rtype);
+#else
 	Expand_Immediate (result, op1, TRUE /* is_signed */, ops);
+#endif
 	break;
   case OPR_CONST:
 	Expand_Const (result, op1, rtype, ops);
 	break;
   case OPR_ADD:
-	if (MTYPE_is_float(rtype))
+	if (MTYPE_is_float(rtype) && Separate_FP_Expansion)
 		Expand_Flop (opcode, result, op1, op2, op3, ops);
 	else
 		Expand_Add (result, op1, op2, rtype, ops);
 	break;
   case OPR_SUB:
-	if (MTYPE_is_float(rtype))
+	if (MTYPE_is_float(rtype) && Separate_FP_Expansion)
 		Expand_Flop (opcode, result, op1, op2, op3, ops);
 	else
 		Expand_Sub (result, op1, op2, rtype, ops);
@@ -152,26 +173,33 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	Expand_Rrotate (result, op1, op2, rtype, desc, ops);
 	break;
 #endif
+  case OPR_ILOADX:
   case OPR_ILOAD:
   case OPR_LDID:
 	if ( V_align_all(variant) != 0 ) {
 		Expand_Misaligned_Load ( opcode, result, op1, op2, variant, ops);
 	}
 	else {
-#if defined(TARG_MIPS) || defined(TARG_X8664)
+#if defined(TARG_MIPS) || defined(TARG_X8664) || defined(TARG_PPC32)
 		Expand_Load (opcode, result, op1, op2, ops);
 #else
 		Expand_Load (opcode, result, op1, op2, variant, ops);
 #endif
 	}
 	break;
+  case OPR_ISTOREX:
   case OPR_ISTORE:
   case OPR_STID:
+	if ( variant & V_HIGH64);
 	if ( V_align_all(variant) != 0 ) {
+#if defined(TARG_SL)
+          if (CG_check_packed)
+  	    Is_True(0, ("SL does not handle unaligned store"));
+#endif
 		Expand_Misaligned_Store (desc, op1, op2, op3, variant, ops);
 	}
 	else {
-#if defined(TARG_MIPS) || defined(TARG_X8664)
+#if defined(TARG_MIPS) || defined(TARG_PPC32)
 		Expand_Store (desc, op1, op2, op3, ops);
 #else
 		Expand_Store (desc, op1, op2, op3, variant, ops);
@@ -179,17 +207,22 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	}
 	break;
   case OPR_ABS:
+#ifdef TARG_LOONGSON
+	if (MTYPE_is_float(rtype))
+		Expand_Flop (opcode, result, op1, op2, op3, ops);
+	else
+#endif
 	Expand_Abs (result, op1, rtype, ops);
 	break;
   case OPR_MPY:
 #ifdef TARG_X8664
 	if (MTYPE_is_float(rtype) || MTYPE_is_mmx_vector(rtype))
 #else
-	if (MTYPE_is_float(rtype))
+	if (MTYPE_is_float(rtype) && Separate_FP_Expansion)
 #endif
 		Expand_Flop (opcode, result, op1, op2, op3, ops);
 	else
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
 		Expand_Multiply (result, op1, op2, rtype, ops, opcode);
 #else
 	Expand_Multiply (result, op1, op2, rtype, ops);
@@ -199,7 +232,7 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	Expand_High_Multiply (result, op1, op2, rtype, ops);
 	break;
   case OPR_REM:
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
 	Expand_Rem (result, op1, op2, rtype, ops, opcode);
 #else
 	Expand_Rem (result, op1, op2, rtype, ops);
@@ -207,14 +240,14 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	break;
   case OPR_MOD:
 	if (MTYPE_is_signed(rtype))
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
 		Expand_Mod (result, op1, op2, rtype, ops, opcode);
 #else
 	Expand_Mod (result, op1, op2, rtype, ops );
 #endif
 	else
 		// unsigned MOD acts like REM
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
 		Expand_Rem (result, op1, op2, rtype, ops, opcode);
 #else
 	Expand_Rem (result, op1, op2, rtype, ops);
@@ -227,7 +260,7 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 		Expand_Divide (result, op1, op2, rtype, ops);
 	break;
   case OPR_DIVREM:
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
 	Expand_DivRem(result, op1, op2, op3, rtype, ops, opcode);
 #else
         Expand_DivRem(result, op1, op2, op3, rtype, ops);
@@ -302,12 +335,16 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	break;
 
   case OPR_CVTL:
+#if defined(TARG_PPC32)
+	Expand_Convert_Length ( result, op1, op2, rtype, rtype, ops);
+#else
 	Expand_Convert_Length ( result, op1, op2, rtype, MTYPE_is_signed(rtype), ops);
+#endif
 	break;
   case OPR_CVT:
 	Is_True(rtype != MTYPE_B, ("conversion to bool unsupported"));
 	if (MTYPE_is_float(rtype) && MTYPE_is_float(desc)) {
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_SL) || defined(TARG_MIPS) || defined(TARG_PPC32) || defined(TARG_LOONGSON)
 		Expand_Float_To_Float (result, op1, rtype, desc, ops);
 #else
 		Expand_Float_To_Float (result, op1, rtype, ops);
@@ -330,14 +367,27 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 		// vector conversions not covered above
 		Expand_Conv_To_Vector (result, op1, desc, rtype, ops);
 	}
+	else if (MTYPE_is_vector (desc)) {
+		Expand_Conv_From_Vector (result, op1, desc, rtype, ops);
+	}
 #endif
 	else {
 		// both are int
   		// zero-extend when enlarging an unsigned value, or 
   		//   converting to smaller unsigned vlaue (e.g U4I8CVT)
 		// else sign-extend.
+#if defined(TARG_NVISA)
+		// have to change register size, so not an in-place truncation
+		Expand_Convert (result, rtype, op1, desc, ops);
+#elif defined(TARG_PPC32)
+		Expand_Convert_Length (result, op1, op2, rtype, desc, ops);
+#else
 		Expand_Convert_Length ( result, op1, op2, 
-			rtype, 
+#ifdef TARG_LOONGSON
+			desc,
+#else
+			rtype,
+#endif
 			(MTYPE_is_signed(desc)
 #ifdef TARG_IA64
 			 && (MTYPE_bit_size(desc) < MTYPE_bit_size(rtype) ) ),
@@ -346,6 +396,7 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 		|| (MTYPE_bit_size(desc) > MTYPE_bit_size(rtype) ) ),
 		     ops);
 #endif
+#endif // TARG_NVISA TARG_PPC32
 	}
 	break;
 #ifdef TARG_X8664
@@ -369,7 +420,7 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
   case OPR_FLOOR:
 #ifdef TARG_X8664
     if( MTYPE_is_float( rtype ) ){
-      if( MTYPE_is_quad( rtype ) )
+      if( MTYPE_is_F10( rtype ) )
 	Expand_Float_To_Float_Floorl( result, op1, rtype, desc, ops );
       else if( rtype == MTYPE_F8 )
 	Expand_Float_To_Float_Floor( result, op1, rtype, desc, ops );
@@ -377,6 +428,11 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	Expand_Float_To_Float_Floorf( result, op1, rtype, desc, ops );
       break;
     }	
+#elif defined (TARG_MIPS) && !defined(TARG_SL)
+        if (MTYPE_is_float (rtype)) {
+	  Expand_Float_To_Float_Floor (result, op1, rtype, desc, ops);
+	  break;
+	}
 #endif
 	Expand_Float_To_Int_Floor (result, op1, rtype, desc, ops);
 	break;
@@ -429,6 +485,26 @@ Expand_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant
 	break;
 
 #endif /* TARG_X8664 */
+#ifdef TARG_X8664
+  case OPR_COMPLEX:
+	FmtAssert(opcode == OPC_V16C8PAIR,
+		("Expand_OP:  unexpected PAIR opcode %s", OPCODE_name(opcode)));
+	extern void Expand_Complex(OPCODE, TN*, TN*, TN*,OPS*);
+	extern void Expand_Firstpart(OPCODE, TN*, TN*, OPS*);
+	extern void Expand_Secondpart(OPCODE, TN*, TN*, OPS*);
+	Expand_Complex(opcode, result, op1, op2, ops);
+	break;
+  case OPR_REALPART:
+	FmtAssert(opcode == OPC_F8FIRSTPART,
+		("Expand_OP:  unexpected FIRSTPART opcode %s", OPCODE_name(opcode)));
+	Expand_Firstpart(opcode, result, op1, ops);
+	break;
+  case OPR_IMAGPART:
+	FmtAssert(opcode == OPC_F8SECONDPART,
+		("Expand_OP:  unexpected SECONDPART opcode %s", OPCODE_name(opcode)));
+	Expand_Secondpart(opcode, result, op1, ops);
+	break;
+#endif
   default:
 	FmtAssert(FALSE, 
 		("Expand_OP:  unexpected opcode %s", OPCODE_name(opcode)));
@@ -499,6 +575,21 @@ Exp_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant, O
 	So instead of create a new OPS structure, the old one is added.
 	*/
 	if (OPS_length(ops)==0) {
+#ifdef TARG_LOONGSON
+  	/* For TARG_LOONGSON, when expanding op, the 'ops' should be New_OPs
+        because 'Start_New_Basic_Block' will check New_OPs to decide if 
+        a new  BB should be created. So, we cannot create a new OPs here.
+        */
+	Expand_OP (opcode, result, op1, op2, op3, variant, ops);
+  	if (Trace_Exp) {
+  		#pragma mips_frequency_hint NEVER
+  		OP *op;
+  		FOR_ALL_OPS_OPs (ops, op) {
+  			fprintf(TFile, " into "); Print_OP (op);
+  		}
+  	}
+
+#else
 		OPS new_ops;
   		OPS_Init(&new_ops);
   		Expand_OP (opcode, result, op1, op2, op3, variant, &new_ops);
@@ -514,6 +605,7 @@ Exp_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant, O
 			/* Add the new OPs to the end of the list passed in */
 			OPS_Append_Ops(ops, &new_ops);
   		}
+#endif
   	}
   	else {
 		OP *last_OP = OPS_last(ops);
@@ -522,7 +614,8 @@ Exp_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant, O
   			if (OP_next(last_OP)!=NULL) {
   				#pragma mips_frequency_hint NEVER
 	  			OP *op;
-		  		for (op = OP_next(last_OP); op && op != OP_next(OPS_last(ops)); op = OP_next(op)){
+		  		for (op = OP_next(last_OP); op && (OPS_last(ops) == NULL || 
+                                                                   op != OP_next(OPS_last(ops))); op = OP_next(op)){
 			  		fprintf(TFile, " into "); Print_OP (op);
 			  	}
 		  	}

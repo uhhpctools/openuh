@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -79,8 +83,8 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source$ $Revision$";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source$ $Revision$";
 
 #include <sys/types.h>
 #include "lnopt_main.h"
@@ -183,10 +187,10 @@ void Hoist_Outer_Invar(WN *wn_inner, INT num_loops, INT outer_reg_tile, BOOL can
   if (LNO_Verbose) { 
     fprintf(stdout, 
       "# Hoisting outer invariants from loop on line %d (begin)\n", 
-      (INT) WN_linenum(wn_inner)); 
+      Srcpos_To_Line(WN_linenum(wn_inner))); 
     fprintf(TFile, 
       "# Hoisting outer invariants from loop on line %d (begin)\n", 
-      (INT) WN_linenum(wn_inner)); 
+      Srcpos_To_Line(WN_linenum(wn_inner))); 
   } 
   DOLOOP_STACK *do_stack = CXX_NEW(DOLOOP_STACK(&LNO_local_pool),
 					&LNO_local_pool);
@@ -219,10 +223,10 @@ void Hoist_Outer_Invar(WN *wn_inner, INT num_loops, INT outer_reg_tile, BOOL can
   if (LNO_Verbose) { 
     fprintf(stdout, 
       "# Hoisting outer invariants from loop on line %d (end)\n", 
-      (INT) WN_linenum(wn_inner)); 
+      Srcpos_To_Line(WN_linenum(wn_inner))); 
     fprintf(TFile, 
       "# Hoisting outer invariants from loop on line %d (end)\n", 
-      (INT) WN_linenum(wn_inner)); 
+      Srcpos_To_Line(WN_linenum(wn_inner))); 
   } 
   MEM_POOL_Pop(&LNO_local_pool);
 }
@@ -266,6 +270,19 @@ Is_Very_Expensive_Expression(const WN* wn)
 	  );
 }
 
+#ifdef KEY
+static BOOL Operands_All_Invariant(WN *wn)
+{
+ WN *do_loop = Enclosing_Do_Loop(wn);
+ for (INT i = 0; i < WN_kid_count(wn); i++){
+  WN *kid = WN_kid(wn,i);
+  if(!WN_operator(kid)==OPR_LDID || 
+    !Is_Loop_Invariant_Exp(kid, do_loop)) 
+   return FALSE;
+ }
+ return TRUE;
+}
+#endif
 
 // Count the number of ILOADs and bytes actually moved
 // Special handling is needed for complex types:
@@ -315,7 +332,15 @@ Expr_Should_Always_Be_Hoisted(WN* wn,
     (*num_bytes) += bytes;
   }
 
+//bug 14132 : Even though an expression is very expensive, if all
+//its operands are invariant to the loop, the optimizer will hoist
+//the expression outside the loop. And thus beyond the consideration.
+#ifdef KEY
+  else if (Is_Very_Expensive_Expression(wn) && 
+                !Operands_All_Invariant(wn)){ 
+#else
   else if (Is_Very_Expensive_Expression(wn)) {
+#endif
     return TRUE;
   }
 

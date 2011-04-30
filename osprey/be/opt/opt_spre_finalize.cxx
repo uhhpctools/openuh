@@ -315,6 +315,7 @@ ETABLE::SPRE_rename_expr(CODEREP *cr, BB_NODE *bb)
       CODEREP *m_cr = NULL;
       CODEREP *ilod_base = NULL;
       CODEREP *mload_size = NULL;
+      CODEREP *iloadx_index = NULL;
 
       if (mnode) {
 	if (cr->Ivar_defstmt() && 
@@ -336,8 +337,10 @@ ETABLE::SPRE_rename_expr(CODEREP *cr, BB_NODE *bb)
 
       if (cr->Opr() == OPR_MLOAD)
 	mload_size = SPRE_rename_expr(cr->Mload_size(), bb);
+      else if (cr->Opr() == OPR_ILOADX)
+	iloadx_index = SPRE_rename_expr(cr->Index(), bb);
 
-      if (m_cr || ilod_base || mload_size) { // need rehash
+      if (m_cr || ilod_base || mload_size || iloadx_index) { // need rehash
 	newcr->Copy(*cr);   // not creating new cr, just copy
 	if (m_cr) {
 	  // Fix 622235, 621101:
@@ -354,6 +357,8 @@ ETABLE::SPRE_rename_expr(CODEREP *cr, BB_NODE *bb)
 	newcr->Set_usecnt(0);
 	if (mload_size)
 	  newcr->Set_mload_size(mload_size);
+	if (iloadx_index)
+	  newcr->Set_index(iloadx_index);
 	newcr->Set_ivar_occ(cr->Ivar_occ());
 	cr->DecUsecnt();
 	return Htable()->Rehash(newcr);

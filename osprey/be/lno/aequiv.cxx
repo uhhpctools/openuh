@@ -484,7 +484,11 @@ INT AEQUIV::Build_CFG_Rec(WN *wn, VINDEX16 *current_v,
     *current_v = Add_CFG_Vertex(CXX_NEW(BIT_VECTOR(Num_Arrays(),_pool),_pool)); 
     if (!*current_v) return -1;
     if (!Add_CFG_Edge(old_current,*current_v)) return -1;
-  } else if (opcode == OPC_RETURN) {
+  } else if (opcode == OPC_RETURN
+#ifdef KEY
+  	     || opcode == OPC_GOTO_OUTER_BLOCK
+#endif
+             ) {
     if (!Add_CFG_Edge(*current_v,_tail_vertex)) return -1;
   } else if (opcode == OPC_LABEL) {
     VINDEX16 old_current = *current_v;
@@ -775,7 +779,11 @@ INT AEQUIV::Build_CFG_Loop(WN *wn,VINDEX16 loopv,
     }
   } else if (opcode == OPC_ALTENTRY) {
     if (!Add_CFG_Edge(_head_vertex,loopv)) return -1;
-  } else if (opcode == OPC_RETURN) {
+  } else if (opcode == OPC_RETURN
+#ifdef KEY
+  	     || opcode == OPC_GOTO_OUTER_BLOCK
+#endif
+             ) {
    if (!Add_CFG_Edge(loopv,_tail_vertex)) return -1;
   } else if (opcode == OPC_LABEL) {
     label_hash->Enter(WN_label_number(wn),loopv);

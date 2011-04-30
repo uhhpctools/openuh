@@ -171,17 +171,6 @@ Boston, MA 02111-1307, USA.  */
 
 /* This is not a good idea.  It prevents interoperation between
    files compiled with -m68881 and those compiled with -msoft-float.  */
-#if 0
-#define FUNCTION_VALUEX(MODE)					\
-  gen_rtx_REG ((MODE),						\
-	       ((TARGET_68881					\
-		 && ((MODE) == SFmode || (MODE) == DFmode	\
-		     || (MODE) == XFmode))			\
-		? 16 : 0))
-
-#undef FUNCTION_VALUE
-#define FUNCTION_VALUE(VALTYPE,FUNC) FUNCTION_VALUEX (TYPE_MODE (VALTYPE))
-#endif /* 0 */
 
 /* This is how to output an assembler lines defining floating operands.
    There's no way to output a NaN's fraction, so we lose it.  */

@@ -22,21 +22,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-//#include "pcl_config.h"
 #include "pcl.h"
-
-
-#if 0
-#if defined(CO_USE_UCONEXT)
-#include <ucontext.h>
-
-typedef ucontext_t co_core_ctx_t;
-#else
-#include <setjmp.h>
-
-typedef jmp_buf co_core_ctx_t;
-#endif
-#endif
 
 #if defined(CO_USE_SIGCONTEXT)
 #include <signal.h>
@@ -50,23 +36,7 @@ typedef jmp_buf co_core_ctx_t;
 #define CO_STK_COROSIZE ((sizeof(coroutine) + CO_STK_ALIGN - 1) & ~(CO_STK_ALIGN - 1))
 #define CO_MIN_SIZE (4 * 1024)
 
-#if 0
-typedef struct s_co_ctx {
-	co_core_ctx_t cc;
-} co_ctx_t;
 
-typedef struct s_coroutine {
-	co_ctx_t ctx;
-	int alloc;
-	struct s_coroutine *caller;
-	struct s_coroutine *restarget;
-	void (*func)(void *);
-	void *data;
-} coroutine;
-#endif
-
-
-//coroutine co_main;
 __thread coroutine co_thread;
 __thread coroutine *co_curr;
 __thread coroutine *co_dhelper;

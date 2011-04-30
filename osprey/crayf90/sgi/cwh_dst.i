@@ -38,7 +38,7 @@
 
 typedef struct type_trans {
 	DST_size_t size;
-	char *name;
+	const char *name;
 	DST_ATE_encoding encoding;
 } type_trans;	
 

@@ -65,7 +65,10 @@
 #include "flags.h"		// Common_Option_Group
 #include "options_stack.h"	// options stack
 
+#ifdef SHARED_BUILD
+// defined in be, outside of be.so
 #pragma weak Process_Command_Line
+#endif
 
 //============================================================================
 // Push_Current_Options
@@ -125,8 +128,8 @@ OPTIONS_STACK::str2argv(char *str, char ***argv, MEM_POOL *pool)
 
   // allocate array and fill in command and filename
   *argv = CXX_NEW_ARRAY(char *, argc, pool);
-  (*argv)[0] = ""; // command
-  (*argv)[argc-1] = ""; // filename
+  (*argv)[0] =  const_cast<char*>(""); // command
+  (*argv)[argc-1] = const_cast<char*>(""); // filename
 
   // fill in options
   INT32 pos = 0;

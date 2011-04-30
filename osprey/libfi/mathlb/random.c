@@ -322,6 +322,11 @@ double _RANF_8(void)
 
 float _RANF_4(void) 
 {
+#ifdef KEY /* Bug 11627 */
+  /* Depending on how you read it, the standard may require all precisions to
+   * use same sequence */
+  return (float) _RANF_8();
+#else /* KEY Bug 11627 */
 	int	i;
 	float	f;
 
@@ -339,6 +344,7 @@ float _RANF_4(void)
 	MEM_UNLOCK(&mut);
 #endif /* KEY Bug 5019 */
 	return (f);
+#endif /* KEY Bug 11627 */
 }
 
 #endif	/* NOT USE_RANDOM */

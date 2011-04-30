@@ -793,13 +793,6 @@ void gen_default_init_code(int	 attr_idx)
    else if (ATD_IN_COMMON(attr_idx)) {
       operator = Init_Opr;
 
-# if 0
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
-      func = gen_common_dv_init;
-# else
-      func = gen_static_dv_whole_def;
-# endif
-# endif
    }
    else {
       operator = Init_Opr;

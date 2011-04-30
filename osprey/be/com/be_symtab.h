@@ -69,6 +69,7 @@ const UINT32 BE_ST_PU_HAS_VALID_ADDR_FLAGS = 0x00000010;
 // ST_ADDR_* bits are no longer valid and need to be recomputed
 const UINT32 BE_ST_PU_NEEDS_ADDR_FLAG_ADJUST = 0x00000020;
 
+const UINT32 BE_ST_REFERENCED = 0x00000040; // mark as being referenced
 
 // Back-end-specific information about each symtab entry
 
@@ -448,7 +449,21 @@ Clear_BE_ST_pu_needs_addr_flag_adjust(const ST_IDX idx)
   Be_symbol_table[idx].Clear_flag(BE_ST_PU_NEEDS_ADDR_FLAG_ADJUST);
 }
 
-
+inline BOOL
+BE_ST_referenced (const ST *const st)
+{
+  return Be_symbol_table[ST_st_idx(st)].Is_set(BE_ST_REFERENCED);
+}
+inline void
+Set_BE_ST_referenced(const ST *const st)
+{
+  Be_symbol_table[ST_st_idx(st)].Set_flag(BE_ST_REFERENCED);
+}
+inline void
+Clear_BE_ST_referenced (const ST *const st)
+{
+  Be_symbol_table[ST_st_idx(st)].Clear_flag(BE_ST_REFERENCED);
+}
 
 
 //
@@ -464,7 +479,7 @@ ST_is_const_initialized(const ST *);
 // to a value we can determine at compile time and return in the
 // argument tcon_copy.
 extern BOOL
-ST_is_const_initialized_scalar(const ST *, TCON &tcon_copy);
+ST_is_const_initialized_scalar(const ST *, INT64 offset, TCON &tcon_copy);
 
 // Return the INITV_IDX of the value of the ST if the ST is a const
 // initialized scalar and we can find the INITV.
@@ -489,10 +504,21 @@ public:
 class BE_PREG {
 private:
   WN *home_location;
+#ifdef TARG_NVISA
+  WN *lda;
+#endif
 public:
+#ifdef TARG_NVISA
+  BE_PREG(void) : home_location(NULL), lda(NULL)  { }
+#else
   BE_PREG(void) : home_location(NULL)   { }
+#endif
   void  Set_home_location(WN *wn)       { home_location = wn; }
   WN   *Home_location(void) const       { return home_location; }
+#ifdef TARG_NVISA
+  void  Set_lda(WN *wn)    { lda = wn; }
+  WN   *Lda(void) const    { return lda; }
+#endif
 };
 
 typedef RELATED_SEGMENTED_ARRAY<BE_PREG> BE_PREG_TAB;
@@ -503,7 +529,7 @@ extern BE_PREG_TAB Be_preg_tab;
 // home location with each register.
 
 static inline PREG_NUM
-Create_Preg(TYPE_ID mtype, char *name, WN *home)
+Create_Preg(TYPE_ID mtype,const char *name, WN *home)
 {
   PREG_NUM retval = Create_Preg(mtype, name);
   Be_preg_tab[retval - Last_Dedicated_Preg_Offset].Set_home_location(home);
@@ -516,6 +542,26 @@ Preg_Home(PREG_NUM preg)
   const UINT idx = preg - Last_Dedicated_Preg_Offset;
   return (idx < Be_preg_tab.Size()) ? Be_preg_tab[idx].Home_location() : NULL;
 }
+
+#ifdef TARG_NVISA
+static inline WN*
+Preg_Lda(PREG_NUM preg)
+{
+  const UINT idx = preg - Last_Dedicated_Preg_Offset;
+  return (idx < Be_preg_tab.Size()) ? Be_preg_tab[idx].Lda() : NULL;
+}
+
+static inline void
+Set_Preg_Lda(PREG_NUM preg, WN *wn)
+{
+  Be_preg_tab[preg - Last_Dedicated_Preg_Offset].Set_lda(wn);
+}
+
+// Search tree for a LDA, returning NULL if not found.
+// Will search through preg homes to find LDA.
+// Can also return LDID if is LDID of parameter pointer.
+extern WN* Find_Lda (WN *tree);
+#endif
 
 extern void BE_symtab_initialize_be_scopes(void);
 extern void BE_symtab_free_be_scopes(void);

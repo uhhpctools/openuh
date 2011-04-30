@@ -41,6 +41,9 @@
 #include "be_util.h"
 
 OP_MAP OP_Tag_Map;
+#ifdef TARG_SL
+BB_MAP BB_Tag_Map;
+#endif
 
 LABEL_IDX Gen_Tag (void)
 {
@@ -66,4 +69,11 @@ extern void TAG_Finish (void)
 	OP_MAP_Delete (OP_Tag_Map);
 	OP_Tag_Map = NULL;
   }
+
+#ifdef TARG_SL
+  if (BB_Tag_Map) {
+        BB_MAP_Delete (BB_Tag_Map);
+        BB_Tag_Map = NULL;
+  }
+#endif
 }

@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -44,10 +48,10 @@
  * ====================================================================
  *
  * Module: erglob.desc
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/com/erglob.desc,v $
+ * $Revision: 1.18 $
+ * $Date: 05/03/10 16:47:52-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/common/com/SCCS/s.erglob.desc $
  *
  * Revision history:
  *  07-Sep-89 - Original Version
@@ -142,8 +146,15 @@ ERROR_DESC EDESC_Globals[] = {
     2, ET_STRING, ET_STRING, 0,0,0,0 },
 
 #ifdef KEY
+#if defined(TARG_SL)
+  { EC_Unimplemented_Feature,   EM_Compiler | ES_ERRABORT,	RAG_EN_NONE,
+    "%s not implemented in file %s in line %d", 3, ET_STRING, ET_STRING, ET_INT, 0,0,0 },
+#else
   { EC_Unimplemented_Feature,   EM_Compiler | ES_ERRABORT,	RAG_EN_NONE,
     "%s not implemented", 1, ET_STRING, 0,0,0,0,0 },
+#endif
+  { EC_Misc_User_Abort,		EM_User | ES_ERRABORT,		RAG_EN_NONE,
+    "%s", 1, ET_STRING, 0,0,0,0,0 },
 #endif // KEY
 
   { EC_Trace_Func,	EM_Compiler | ES_WARNING,	RAG_EN_NONE,
@@ -409,6 +420,8 @@ ERROR_DESC EDESC_Globals[] = {
   { EC_Ill_Alias,	EM_User | ES_ERRABORT,		RAG_EN_NONE,
     "Declaration of alias \"%s\" does not match its target \"%s\".",
     2, ET_STRING, ET_STRING, 0, 0, 0, 0 },
+  { EC_Misc_Asm,	EM_User | ES_ERRABORT,		RAG_EN_NONE,
+    "%s", 1, ET_STRING, 0, 0, 0, 0, 0 },
 #endif /* KEY */
 
   { EC_Ill_Align,	EM_User | ES_WARNING ,	RAG_EN_NONE,

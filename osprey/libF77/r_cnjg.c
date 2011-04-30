@@ -57,4 +57,9 @@ complex r_cnjg_(complex *z)
   return __rconjg(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex r_cnjg(complex *z) { return r_cnjg_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(r_cnjg_, r_cnjg);
+#endif /* defined(BUILD_OS_DARWIN) */

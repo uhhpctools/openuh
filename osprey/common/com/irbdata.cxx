@@ -150,9 +150,9 @@ INITV_Init_Symiplt (INITV_IDX inv, ST *st, INT64 ofst, UINT16 repeat)
 #endif
 
 void
-INITV_Init_Label (INITV_IDX inv, LABEL_IDX lab, UINT16 repeat)
+INITV_Init_Label (INITV_IDX inv, LABEL_IDX lab, UINT16 repeat, INT16 flags, mTYPE_ID mtype)
 {
-    INITV_Set_LABEL (Initv_Table[inv], repeat, lab);
+    INITV_Set_LABEL (Initv_Table[inv], repeat, lab, flags, mtype);
 }
 
 void
@@ -493,8 +493,8 @@ Print_INITV (const INITV& initv)
 #endif
     case INITVKIND_LABEL:
 	repeat = INITV_repeat1 (initv);
-	fprintf (TFile," LABEL: %s (%d)", LABEL_name (INITV_lab (initv)),
-		 INITV_lab (initv));
+	fprintf (TFile," LABEL: %s (%d) flags=%d mtype=%d", LABEL_name (INITV_lab (initv)),
+		 INITV_lab (initv), INITV_lab_flags(initv), INITV_lab_mtype(initv));
 	break;
 	
     case INITVKIND_SYMDIFF:

@@ -91,50 +91,6 @@ s_cat_tmp(char **lp, char *rpp[], int32 rnp[],
     for (i=0, len=0; i<n; i++)
 	len += rnp[i];
 
-#if 0
-       Don't do this until we can resolve problem such as :
-       
-       call inievs("hello")
-       end
-       
-       subroutine inievs(fichier)
-       character*(*) fichier
-       
-       character*4 suffixe
-       character*20 temp
-       suffixe = '.uni'
-       
-       ifin = len(fichier)
-       call abc(fichier(1:ifin)//suffixe,fichier//suffixe,
-       1	foo(fichier(2:ifin)//suffixe,fichier),
-       2	fichier(1:len(fichier)-1)//suffixe)
-       return
-       end
-       
-       subroutine abc(str1, str2, a, str3)
-       character*(*) str1, str2, str3
-       print *, "ABC:", "'", str1, "'"
-       print *, "ABC:", "'", str2, "'"
-       print *, "ABC:", "'", str3, "'"
-       return
-       end
-       
-       
-       function foo(str1, str2)
-       character*(*) str1, str2
-       call bar("BAR:"//str1)
-       print *, "FOO:", "'", str1, "'"
-       print *, "FOO:", "'", str2, "'"
-       foo = 0
-       return
-       end
-       
-       subroutine bar(str)
-       character*(*) str
-       print *, str
-       return
-       end
-#endif
 
     if (*ntemp == 0) {
 	/* first temporary string in a statement.  Reset all values and

@@ -199,18 +199,6 @@ _PXFINTGET(
 	      break;
 	   case PXF_SIGACTION:
 	      SETIFMATCH(component,sigaction,sa_flags)
-#if 0
-	      else if (strcmp(component,"sa_handler\0") == 0) {
-		*value	=
-		  (_f_int)(((struct sigaction*)(pxfhand.pxfstructptr))->sa_handler);
-	      } else if (strcmp(component,"sa_mask\0") == 0) {
-#ifndef	__mips
-	        *value	= ((struct sigaction*)(pxfhand.pxfstructptr))->sa_mask;
-#else
-		*value	= ((struct sigaction*)(pxfhand.pxfstructptr))->sa_mask.__sigbits[0];
-#endif
-	      }
-#endif	/* if 0, do not compile yet */
 	      else {
 		 *ierror = ENONAME;
 	      }
@@ -310,18 +298,6 @@ _PXFINTSET(
 	      break;
 	   case PXF_SIGACTION:
 	      GETIFMATCH(component,sigaction,sa_flags)
-#if	0
-	      else if (strcmp(component,"sa_handler\0") == 0) {
-		((struct sigaction*)(pxfhand.pxfstructptr))->sa_handler =
-		  (void (*)()) *value;
-	      } else if (strcmp(component,"sa_mask\0") == 0) {
-#ifndef	__mips
-	        ((struct sigaction*)(pxfhand.pxfstructptr))->sa_mask = *value;
-#else
-	        ((struct sigaction*)(pxfhand.pxfstructptr))->sa_mask.__sigbits[0] = *value;
-#endif
-	      }
-#endif	/* if 0, do not compile yet */
 	      else {
 		 *ierror = ENONAME;
 	      }

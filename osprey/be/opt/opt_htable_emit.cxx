@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -87,6 +91,8 @@ static char *rcs_id = 	opt_htable_emit_CXX"$Revision: 1.5 $";
 #include "opt_sym.h"
 
 #include "opt_emit_template.h" // this comes the last
+#include "wssa_emitter.h"      // WHIRL SSA emitter
+#include "pu_info.h"
 
 class RVI;
 
@@ -102,7 +108,9 @@ private:
   ALIAS_MANAGER   *_alias_mgr;
   BOOL	           _do_rvi;       // do the bit vector RVI afterward
   RVI             *_rvi;
+  WHIRL_SSA_EMITTER *_wssa_emitter ;    // WSSA emitter
   BOOL             _trace;
+  WN_MAP           _wn_to_cr_map;	// map from wn -> cr/sr for WSSA emitter
 
   STACK<E_REGION*> _region_stack; // for MP regions
 
@@ -142,6 +150,7 @@ public:
   ALIAS_MANAGER   *Alias_Mgr(void) const      { return _alias_mgr; }
   BOOL             Trace(void) const          { return _trace; }
   BOOL             For_preopt(void) const     { return FALSE; }
+  WHIRL_SSA_EMITTER *WSSA_Emitter(void) const { return _wssa_emitter;}
 
   void             Gen_wn(BB_NODE *f,
                           BB_NODE *l);
@@ -159,12 +168,13 @@ public:
 			{ return WOPT_Enable_RVI1 && _do_rvi; }
   RVI             *Rvi(void) const            { return _rvi; };
 
-  void             Connect_sr_wn(STMTREP*,
-                                 WN *)        {}
+  void             Connect_sr_wn(STMTREP* sr, WN *wn)
+    { if (OPT_Enable_WHIRL_SSA) { WN_MAP_Set(_wn_to_cr_map, wn, sr); } }
   void             Set_region_entry_stmt(STMTREP*) {}
   STMTREP         *Region_entry_stmt(void)    { return NULL; }
 
-  WN_MAP          *Wn_to_cr_map(void)         { return NULL; }
+  WN_MAP          *Wn_to_cr_map(void)        
+    { return OPT_Enable_WHIRL_SSA ? &_wn_to_cr_map : NULL; }
 };
 
 
@@ -342,6 +352,15 @@ ML_WHIRL_EMITTER::Build_loop_info( BB_NODE *label_bb )
 				Opt_stab()->St(iv->Aux_id()),
 				iv->Lod_ty(),
 				iv->Field_id());
+      // WHIRL SSA
+      if (OPT_Enable_WHIRL_SSA) {
+        Connect_cr_wn(&_wn_to_cr_map, iv, induction);
+      }
+#ifdef TARG_LOONGSON
+      // Need to change operator of induction to OPT_LDBITS when induction is BITs variable
+      if (iv->Points_to(Opt_stab())->Bit_Size() != 0)
+        WN_change_operator(induction, OPR_LDBITS);
+#endif
       if (Do_rvi() && ST_class(WN_st(induction)) != CLASS_PREG) {
 	Warn_todo("ML_WHIRL_EMITTER::Build_loop_info: do not adjust bitpos by 1" );
 	Rvi()->Map_bitpos(induction, iv->Bitpos() + 1);
@@ -394,9 +413,42 @@ ML_WHIRL_EMITTER::Emit(void)
   // Fix 592011:  simplify CG's job.
   Cfg()->Delete_empty_BB();
 
+  // WHIRL SSA
+  if (OPT_Enable_WHIRL_SSA) {
+    WSSA::WHIRL_SSA_MANAGER *wssa_mgr = NULL;
+    if (PU_Info_state(Current_PU_Info, WT_SSA) == Subsect_InMem) {
+      wssa_mgr = PU_Info_ssa_ptr(Current_PU_Info);
+    }
+    else {
+      wssa_mgr = new WSSA::WHIRL_SSA_MANAGER(MEM_pu_nz_pool_ptr);
+      Set_PU_Info_ssa_ptr(Current_PU_Info, wssa_mgr);
+      Set_PU_Info_state(Current_PU_Info, WT_SSA, Subsect_InMem);
+    }
+
+    _wssa_emitter = CXX_NEW(WHIRL_SSA_EMITTER(wssa_mgr, _opt_stab, 
+                                              _wn_to_cr_map), _mem_pool);
+    // dump code rep and SSA tree before emitter.
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT_INOUT)) {
+      fprintf( TFile, "Coderep before WSSA Emitter\n");
+      _htable->Print(TFile);
+      _cfg->Print(TFile);
+    }
+    // internal emitter trace
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT)) {
+      _wssa_emitter->Set_trace(TRUE);
+      fprintf( TFile, "Entering WSSA Emitter\n");
+    }
+    // time trace
+    if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
+      _wssa_emitter->Set_trace_time(TRUE);
+    }
+    _wssa_emitter->WSSA_Convert_OPT_Symbol();
+  }
+
   // Visit BBs in program order and preprocess then emit to WN
   BB_NODE *bb;
   CFG_ITER cfg_iter;
+  WN* last_stmt = NULL; // last genreated wn in wn_list
   FOR_ALL_ELEM(bb, cfg_iter, Init(Cfg())) {
     if (bb->Reached()) { // skip fake entry and exit BBs
 
@@ -413,11 +465,24 @@ ML_WHIRL_EMITTER::Emit(void)
 		  RID_id(bb->Regioninfo()->Rid()),prev_wn));
       }
 
+    // Add an assertion to make sure that the BB layout is right with respect
+    // to eh_region. That is, if BB is inside a valid eh region (dce may 
+    // remove some eh region and make rid invalid), its BB rid should 
+    // match with the top eh_region's rid
+    if (bb->Kind() != BB_REGIONEXIT && bb->EH_region() && bb->Rid() && 
+        RID_is_valid(Cfg()->Rid(), bb->Rid()))
+        Is_True(bb->Rid() == _region_stack.Top()->Region_start()->Rid(),
+        ("ML_WHIRL_EMITTER::Emit: BB region id not match"));
+
       // generate alternate entry statement if necessary
       if ( bb->Kind() == BB_ENTRY && bb->Entrywn() &&
 	   (WN_opcode(bb->Entrywn()) == OPC_ALTENTRY ||
 	    (WN_opcode(bb->Entrywn()) == OPC_LABEL &&
-	     WN_Label_Is_Handler_Begin(bb->Entrywn()))) )
+	     (WN_Label_Is_Handler_Begin(bb->Entrywn())
+#ifdef KEY
+	      || LABEL_target_of_goto_outer_block(WN_label_number(bb->Entrywn()))
+#endif
+	     ))) )
       {
         Insert_wn( bb->Entrywn() );
 	// Update Feedback?
@@ -442,17 +507,65 @@ ML_WHIRL_EMITTER::Emit(void)
 
       STMTREP_ITER stmt_iter(bb->Stmtlist());
       STMTREP *tmp;
+      BOOL bb_fisrt_stmt = TRUE;
+      BOOL copy_phi = FALSE;
+      WN *bb_prev_stmt = _wn_list.Tail();
       FOR_ALL_NODE(tmp, stmt_iter, Init()) {
-	if ( tmp->Live_stmt() )
+
+        OPERATOR stmt_opr = OPCODE_operator(tmp->Op());
+
+        // first check if we need add a label wn to record phi node.
+        // 1. first stmt is a label
+        // 2. not a label, has fall through phi node 
+        //    the phi has only opnd, and the effect is change version.
+        // 3. not a label, has valid phi(not fall through), error case.
+        if (OPT_Enable_WHIRL_SSA && bb_fisrt_stmt) {
+          copy_phi = FALSE;
+          if (stmt_opr == OPR_LABEL) {
+            copy_phi = TRUE;
+          }
+          else if (stmt_opr != OPR_OPT_CHI &&
+                   bb->Has_valid_phi() &&
+                   bb->Only_fall_through_phi()) {
+            _wssa_emitter->WSSA_Copy_Fallthrough_PHI(bb, &_wn_list);
+            copy_phi = FALSE;
+          }
+          else if (stmt_opr != OPR_OPT_CHI) {
+            // assert no valid phi node on this bb, because this bb has no label.
+            Is_True(!bb->Has_valid_phi(), ("unexpected case \n"));
+          }
+        }
+        
+        if ( tmp->Live_stmt() )
           Gen_stmt(tmp);
 
-	OPERATOR stmt_opr = OPCODE_operator(tmp->Op());
+        // map WSSA phi info to stmt next to bb_prev_stmt.
+        if (OPT_Enable_WHIRL_SSA && bb_fisrt_stmt && copy_phi) {
+          WN* copy_wn;
+          if (bb_prev_stmt == NULL) {
+            copy_wn = _wn_list.Head();
+          }
+          else {
+            copy_wn = WN_next(bb_prev_stmt);
+          }
+          _wssa_emitter->WSSA_Copy_PHI(bb, copy_wn);
+          copy_phi = FALSE;
+        }
+        bb_fisrt_stmt = FALSE;
 
 	// insert the comment if necessary after the label
 	if ( stmt_opr == OPR_LABEL && comment_wn != NULL ) {
 	  Insert_wn( comment_wn );
 	  comment_wn = NULL;
 	}
+      }
+
+      // emit phi for bb with single pred without stmt
+      if (OPT_Enable_WHIRL_SSA &&
+          bb->Stmtlist()->Is_Empty() &&
+          bb->Has_valid_phi() &&
+          bb->Only_fall_through_phi()) {
+        _wssa_emitter->WSSA_Copy_Fallthrough_PHI(bb, &_wn_list);
       }
 
       bb->Set_wngend();
@@ -486,6 +599,21 @@ ML_WHIRL_EMITTER::Emit(void)
 	    ("ML_WHIRL_EMITTER::Emit, inconsistent region"));
   }
 
+  // copy wssa mu/chi/version info
+  if (OPT_Enable_WHIRL_SSA) {
+    _wssa_emitter->WSSA_Build_MU_CHI_Version(_opt_func);
+    if (_wssa_emitter->Get_trace()) {
+      fprintf( TFile, "Exiting WSSA Emitter\n");
+    }
+    CXX_DELETE(_wssa_emitter, _mem_pool);
+    if (Get_Trace(TP_WSSA, TT_WSSA_EMT_INOUT)) {
+      fprintf(TFile, "WSSA sym table and WN tree after WSSA Emitter\n");
+      WSSA::WHIRL_SSA_MANAGER *wssa_mgr = PU_Info_ssa_ptr(Current_PU_Info);
+      wssa_mgr->Print_wst_table(TFile);
+      fdump_tree(TFile, _opt_func);
+    }
+  }
+
   // update SYMTAB with number of labels
   Is_True(Get_Preg_Num(PREG_Table_Size(CURRENT_SYMTAB)) ==
 	  Opt_stab()->Last_preg(),
@@ -503,6 +631,14 @@ ML_WHIRL_EMITTER::Emit(void)
   /*PPP this shouldn't be necessary - the main emitter is destroying alias
     info for previously processed regions */
   REGION_update_alias_info(_opt_func,_alias_mgr);
+
+  if (Opt_stab()->Phase() == MAINOPT_PHASE) {
+    BOOL tr = Trace() || Get_Trace (TP_GLOBOPT, ALIAS_DUMP_FLAG);
+    Opt_stab()->Cr_sr_annot_mgr()->
+      Export_annot (_opt_func, _alias_mgr, TRUE, tr);
+    WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()->Set_active_mgr();  
+  }
+
   Verify(_opt_func);
 
   Is_True(REGION_consistency_check(_opt_func),(""));
@@ -521,10 +657,15 @@ ML_WHIRL_EMITTER::ML_WHIRL_EMITTER(CFG           *cfg,
                                    MEM_POOL      *gpool)
      :_cfg(cfg), _opt_stab(opt_stab), _htable(htable), _alias_mgr(alias_mgr),
      _rvi(rvi), _do_rvi(rvi->Do_rvi()), _mem_pool(gpool), _loc_pool(lpool),
-     _region_stack(lpool), _preg_renumbering_map(128, 0, lpool, FALSE)
+     _region_stack(lpool), _preg_renumbering_map(128, 0, lpool, FALSE),
+     _wssa_emitter(NULL)
 {
   _trace = Get_Trace(TP_GLOBOPT, MAIN_EMIT_DUMP_FLAG);
+  if (OPT_Enable_WHIRL_SSA)
+    _wn_to_cr_map = WN_MAP_Create(Mem_pool());
   Emit();
+  if (OPT_Enable_WHIRL_SSA)
+    WN_MAP_Delete(_wn_to_cr_map);
 }
 
 WN*

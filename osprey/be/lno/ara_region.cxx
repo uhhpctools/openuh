@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -39,7 +43,6 @@
 
 // This may look like C code, but it is really -*- C++ -*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -723,9 +726,6 @@ Add_Access(ACCESS_VECTOR *av, const INT32 coeff[],
     // Loop indices
     for (INT i = 0; i < depth; ++i) {
 
-#if 0
-      fprintf(stdout,"%d \n", av->Loop_Coeff(i));
-#endif
 
       // Note that num_dim+i might have been set by v[axle]
       v[num_dim+i] = av->Loop_Coeff(i);
@@ -803,9 +803,6 @@ Add_Bound(ACCESS_VECTOR *av,
     // Loop indices
     for (INT i = 0; i < depth; ++i) {
 
-#if 0
-      fprintf(stdout,"%d \n", av->Loop_Coeff(i));
-#endif
 
       // Note that num_dim+i might have been set by v[axle]
       v[num_dim+i] = av->Loop_Coeff(i);
@@ -1602,11 +1599,6 @@ Region_Compare(const REGION &a, const REGION &b, const ARA_LOOP_INFO &ara_info)
   if (a._dim != b._dim)
     return 0;
 
-#if 0
-  // Check if the coefficients on unprojected loop indices
-  // are the same.  If not, the intersection is empty.
-  if (a._kernel!=b._kernel) return 0;
-#endif
 
   INT result = 0;
   // Now the offset on the equations should be the same
@@ -1954,10 +1946,6 @@ AXLE_NODE::Set_To_Kernel_Image(const AXLE_NODE &a, const INT dim, const INT kern
 	  up->_ac_v->Set_Loop_Coeff(i,0);
 	up->_ac_v->Const_Offset -= kernel_offset;
 	ACCESS_VECTOR *old_av = up->_ac_v;
-#if 0
-	FmtAssert(old_av->Nest_Depth() == a.up->_ac_v->Nest_Depth(),
-		  ("Access depths do not match"));
-#endif
 	old_av->Set_Nest_Depth(a.up->_ac_v->Nest_Depth());
 	up->_ac_v = Merge(a.up->_ac_v, old_av, &ARA_memory_pool);
 	CXX_DELETE(old_av, &ARA_memory_pool);
@@ -1996,10 +1984,6 @@ AXLE_NODE::Set_To_Kernel_Image(const AXLE_NODE &a, const INT dim, const INT kern
 	  lo->_ac_v->Set_Loop_Coeff(i,0);
 	lo->_ac_v->Const_Offset -= kernel_offset;
 	ACCESS_VECTOR *old_av = lo->_ac_v;
-#if 0
-	FmtAssert(a.lo->_ac_v->Nest_Depth() == old_av->Nest_Depth(),
-		  ("Nest depths of accesses do not match"));
-#endif
 
 	old_av->Set_Nest_Depth(a.lo->_ac_v->Nest_Depth());
 	lo->_ac_v = Merge(a.lo->_ac_v, old_av, &ARA_memory_pool);
@@ -2184,8 +2168,8 @@ REGION_UN::Is_Included(const REGION_UN &a, const ARA_LOOP_INFO &ara_info)
 	break;
       }
 
-      if (!covered) return FALSE;
     }
+    if (!covered) return FALSE;
   }
 
   return TRUE;

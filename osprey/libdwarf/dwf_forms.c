@@ -85,7 +85,12 @@ dwf_add_AT_unsigned_const_ext(Dwarf_P_Debug dbg,
 
     new_attr->ar_attribute = attr;
     new_attr->ar_attribute_form = attr_form;
+#if defined(BUILD_OS_DARWIN) /* Should be related to target */
+#define NO_RELOCATION (~0)
+    new_attr->ar_rel_type = NO_RELOCATION;
+#else
     new_attr->ar_rel_type = R_MIPS_NONE;
+#endif /* ! defined(BUILD_OS_DARWIN) */
     new_attr->ar_reloc_len = 0 ; /* irrelevant: unused with R_MIPS_NONE */
     new_attr->ar_nbytes = size;
     new_attr->ar_next  = 0;
@@ -166,7 +171,11 @@ dwf_add_AT_complex_const(Dwarf_P_Debug	dbg,
 
     new_attr->ar_attribute = attr;
     new_attr->ar_attribute_form = DW_FORM_block;
+#if defined(BUILD_OS_DARWIN) /* Should be related to target */
+    new_attr->ar_rel_type = NO_RELOCATION;
+#else /* defined(BUILD_OS_DARWIN) */
     new_attr->ar_rel_type = R_MIPS_NONE;
+#endif /* defined(BUILD_OS_DARWIN) */
     new_attr->ar_reloc_len = 0 ; /* irrelevant: unused with R_MIPS_NONE */
     new_attr->ar_nbytes = size+1;
     new_attr->ar_next  = 0;

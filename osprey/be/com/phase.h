@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: phase.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/phase.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:38-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.phase.h $
  *
  * Revision history:
  *  17-Feb-95 - Original Version
@@ -70,7 +70,7 @@ typedef enum {
 } BE_PHASES;
 
 typedef struct {
-    char *group_name;		    /* option group name */
+    const char *group_name;	    /* option group name */
     INT group_name_length;	    /* string length of group_name */
     BE_PHASES phase;		    /* the phase where this group belongs */
 } PHASE_SPECIFIC_OPTION_GROUP;

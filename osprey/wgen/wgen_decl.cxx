@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
@@ -53,9 +61,17 @@ extern "C" {
 #include "gspin-wgen-interface.h"
 }
 
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "errors.h"
 
@@ -74,15 +90,17 @@ extern "C" {
 #include "wgen_spin_symbol.h"
 #include "wgen_expr.h"
 #include "wgen_stmt.h"
+#include "wgen_tracing.h"
 //#include "tree_cmp.h"
 #include "wgen_dst.h" // DST_enter_member_function
 #include "dwarf_DST_dump.h"
+#include "targ_sim.h" // PUSH_RETURN_ADDRESS_ON_STACK
+#include "wgen_omp_directives.h"
 
 #ifdef KEY
 #include <ext/hash_map>
 #endif
 
-extern void WGEN_add_pragma_to_enclosing_regions (WN_PRAGMA_ID, ST *);
 extern BOOL c_omit_external; // for C programs, omit generating functions with
 			     // gs_decl_external = TRUE, which is the default
 
@@ -93,17 +111,22 @@ static gs_t WGEN_get_thunk_target (gs_t decl);
 static gs_t WGEN_get_final_thunk_target (gs_t decl);
 static void WGEN_Handle_Named_Return_Value(gs_t fn);
 static WN *WGEN_Start_Function(gs_t fndecl);
+static void WGEN_Finish_Function(gs_t fndecl);
 
 // The initializer for the named return value object.  Expand this in place of
 // the DECL_INITIAL in the object's VAR_DECL.
 // IMPORTANT:  Doesn't work for nested functions.
 gs_t named_ret_obj_initializer;
 
+/* ST to represent EXC_PTR_EXPR if C++ exceptions are disabled */
+ST * Dummy_Exc_Ptr_Expr = NULL;
+
 static gs_t *deferred_function_stack;
 static INT32 deferred_function_i;
 static INT32 deferred_function_max;
 static BOOL flag_keep_inline_functions = FALSE;
 static UINT32 WGEN_PU_count = 0;
+static BOOL finish_alias = FALSE;
 
 void 
 Init_Deferred_Function_Stack()
@@ -187,26 +210,47 @@ static MEM_POOL Map_Mem_Pool;
 
 
 // to manage the current function
-static gs_t curr_func_decl = NULL;
 static gs_t curr_namespace_decl = NULL;
 
 static int __ctors = 0;
 static int __dtors = 0;
 
-static void Set_Current_Function_Decl(gs_t decl){
-  curr_func_decl = decl;
+static gs_t *func_decl_stack = NULL;
+static INT func_decl_stack_size = 0;
+static INT func_decl_stack_top = -1;
+
+static void Push_Current_Function_Decl(gs_t decl){
+  if (func_decl_stack_size == 0) {
+    func_decl_stack = (gs_t *)malloc(sizeof(gs_t));
+    func_decl_stack_size = 1;
+  }
+  func_decl_stack_top++;
+  if (func_decl_stack_top == func_decl_stack_size) {
+    func_decl_stack_size++;
+    func_decl_stack = (gs_t *)realloc(func_decl_stack, func_decl_stack_size);
+  }
+  func_decl_stack[func_decl_stack_top] = decl;
 }
 
 gs_t Current_Function_Decl(void) {
-return curr_func_decl;
+  return func_decl_stack[func_decl_stack_top];
 }
 
+static void Pop_Current_Function_Decl(void){
+  func_decl_stack_top--;
+}
 
 //to manage the entry_wn, current function's entry_wn always on top
 static std::vector<WN*> curr_entry_wn;
 static void Push_Current_Entry_WN(WN *wn) { curr_entry_wn.push_back(wn); }
 static void Pop_Current_Entry_WN() { curr_entry_wn.pop_back(); }
-WN *Current_Entry_WN(void) { return curr_entry_wn.back(); }
+WN *Current_Entry_WN(void) {
+    if (curr_entry_wn.size()==0) {
+        return NULL;
+    } else {
+        return curr_entry_wn.back(); 
+    }
+}
 
 // Any typeinfo symbols that we have determined we should emit
 std::vector<gs_t> emit_typeinfos;
@@ -214,6 +258,10 @@ std::vector<gs_t> emit_typeinfos;
 std::vector<gs_t> emit_decls;
 // Struct fields whose type we want to set last.
 std::vector<std::pair<gs_t, FLD_HANDLE> > defer_fields;
+
+#ifdef KEY
+std::vector <std::pair<gs_t, gs_t> > alias_vector;
+#endif
 
 #include <stack>
 // Potentially OpenMP private variables. See comment in parse_end_decl(),
@@ -371,8 +419,9 @@ WGEN_Expand_Function_Body (gs_t decl)
 
   expanded_decl(decl) = TRUE;
 
+  TRACE_EXPAND_GS(decl);
   (void) WGEN_Start_Function(decl);
-  Set_Current_Function_Decl(decl);
+  Push_Current_Function_Decl(decl);
 
   WGEN_Handle_Named_Return_Value(decl);
 
@@ -391,7 +440,8 @@ WGEN_Expand_Function_Body (gs_t decl)
   add_deferred_DST_types();
 #endif
 
-  WGEN_Finish_Function();
+  WGEN_Finish_Function(decl);
+  Pop_Current_Function_Decl();
   WGEN_PU_count++;
   return 1;
 }
@@ -602,7 +652,7 @@ WGEN_Generate_Thunk (gs_t decl)
 
     WN *block_wn = WN_CreateBlock ();
     WN_INSERT_BlockLast (block_wn, call_wn);
-    wn = WN_Ldid (ret_mtype, -1, Return_Val_Preg, Be_Type_Tbl (ret_mtype));
+    wn = WN_Ldid (ret_mtype, -1, Return_Val_Preg, TY_ret_type(ST_pu_type(func_st)));
     wn = WN_CreateComma (OPR_COMMA, Mtype_comparison (ret_mtype), MTYPE_V,
 			 block_wn, wn);
     if (!adjust_this) {
@@ -644,19 +694,11 @@ WGEN_Generate_Thunk (gs_t decl)
   }
 
   Set_PU_is_thunk (Get_Current_PU ());
-  WGEN_Finish_Function ();
+  WGEN_Finish_Function (decl);
 }
 
 static void process_local_classes()
 {
-#if 0 // wgen TODO
-  for (int i = 0; i < local_classes->elements_used; ++i) {
-    gs_t t = VARRAY_TREE(local_classes, i);
-      if (gs_tree_code(t) == GS_RECORD_TYPE ||
-	  gs_tree_code(t) == GS_UNION_TYPE)
-	Get_TY(t);
-  }
-#endif
 }
 
 void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
@@ -675,11 +717,15 @@ void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
   switch (gs_tree_code(decl)) { 
 
     case GS_CONST_DECL:
-      DevWarn("WGEN_Expand_Decl:  don't know what to do with CONST_DECL");
+      // DevWarn("WGEN_Expand_Decl:  don't know what to do with CONST_DECL");
       break;
 
     case GS_LABEL_DECL:
+#ifdef KEY
+      WGEN_Get_LABEL(decl, FALSE);
+#else
       DevWarn("WGEN_Expand_Decl:  don't know what to do with LABEL_DECL");
+#endif
       break;
 
     case GS_FUNCTION_DECL:
@@ -688,6 +734,13 @@ void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
       if (gs_operand(decl, GS_FLAGS) == NULL)
         return;
 
+#ifdef KEY
+      // if it is a nested function, needs to process parent first
+      if (gs_decl_context(decl) != NULL &&
+	  gs_tree_code(gs_decl_context(decl)) == GS_FUNCTION_DECL) {
+	WGEN_Expand_Decl(gs_decl_context(decl), FALSE);
+      }
+#endif
       if (gs_decl_thunk_p(decl) &&
           gs_tree_code(gs_cp_decl_context(decl)) != GS_NAMESPACE_DECL) {
         WGEN_Generate_Thunk(decl);
@@ -703,7 +756,10 @@ void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
         gs_t body = gs_decl_saved_tree(decl);
         if (body != NULL && 
 	     (lang_cplus && !gs_decl_external(decl) ||
-	      !lang_cplus && (!c_omit_external || !gs_decl_external(decl) || gs_decl_declared_inline_p(decl))) &&
+	      !lang_cplus && (!c_omit_external || 
+			      !gs_decl_external(decl) || 
+			      gs_decl_declared_inline_p(decl) || 
+			      gs_decl_built_in(decl)/* bug 14254 */ )) &&
 	     !gs_decl_maybe_in_charge_constructor_p(decl) &&
 	     !gs_decl_maybe_in_charge_destructor_p(decl)) {
 
@@ -748,10 +804,6 @@ void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
 	   subdecl != NULL;
 	   subdecl = gs_tree_chain(subdecl))
 	WGEN_Expand_Decl(subdecl, TRUE);
-#if 0 // wgen TODO
-      if (decl == global_namespace)
-	process_local_classes(); 
-#endif
 #ifndef KEY
       while (deferred_function_i != -1) {
 //      fprintf(stderr, "NAMESPACE_DECL: Pop_Deferred_Function\n");
@@ -821,6 +873,16 @@ void WGEN_Expand_Decl(gs_t decl, BOOL can_skip)
 	  expanded_decl(decl) = TRUE;
 	  return;
 	}
+
+#ifdef FE_GNU_4_2_0
+      // Bug 14091: For a TREE_STATIC variable, check if it is needed.
+      // If a symbol is weak, then we can expand it.
+      if (lang_cplus && gs_tree_static(decl) &&
+          !gs_decl_weak(decl) && !gs_decl_needed(decl)) {
+        expanded_decl(decl) = TRUE;
+        return;
+      }
+#endif
 
       // Handle decls that are aliases for other decls.  Bug 3841.
       if (gs_decl_alias_target(decl)) {
@@ -955,9 +1017,11 @@ Setup_Entry_For_EH (void)
     INITV_Set_VAL (Initv_Table[eh_spec], Enter_tcon (Host_To_Targ (MTYPE_U4,
                                 0)), 1);
     Set_INITV_next (tinfo, eh_spec);
-    Get_Current_PU().unused = New_INITO (ST_st_idx (etable), exc_ptr_iv);
+    Set_PU_misc_info (Get_Current_PU(),
+                      New_INITO (ST_st_idx (etable), exc_ptr_iv));
 }
 
+extern TY_IDX Type_For_Function_Returning_Void (void);
 
 
 // Generate WHIRL representing an asm at file scope (between functions).
@@ -966,13 +1030,14 @@ static void
 WGEN_Assemble_Asm(char *asm_string)
 {
   ST *asm_st = New_ST(GLOBAL_SYMTAB);
+  TY_IDX ty_idx = Type_For_Function_Returning_Void();
   ST_Init(asm_st,
           Str_To_Index (Save_Str (asm_string),
                         Global_Strtab),
           CLASS_NAME,
           SCLASS_UNKNOWN,
           EXPORT_LOCAL,
-          (TY_IDX) 0);
+	  ty_idx);
                                                                                 
   Set_ST_asm_function_st(*asm_st);
                                                                                 
@@ -1061,11 +1126,15 @@ WGEN_Assemble_Asm(char *asm_string)
                                                                                 
     PU_IDX pu_idx;
     PU &pu = New_PU(pu_idx);
-    PU_Init(pu, (TY_IDX) 0, CURRENT_SYMTAB);
+    PU_Init(pu, ty_idx, CURRENT_SYMTAB);
     Set_PU_no_inline(pu);
     Set_PU_no_delete(pu);
     Set_ST_pu(*asm_st, pu_idx);
                                                                                 
+    if (lang_cplus) 
+      Set_PU_cxx_lang (Pu_Table [ST_pu (asm_st)]);
+    else Set_PU_c_lang (Pu_Table [ST_pu (asm_st)]);
+
     Write_PU_Info (pu_info);
                                                                                 
     // What does the following line do?
@@ -1078,6 +1147,34 @@ WGEN_Assemble_Asm(char *asm_string)
 #ifdef KEY
 BOOL expanding_function_definition = FALSE;
 #endif
+
+// str is supposed to be in the form ATTR, while attribute can be
+// either of ATTR or __ATTR__ . Return TRUE if they match, else FALSE.
+BOOL
+is_attribute (const char * str, gs_t attribute)
+{
+  Is_True (gs_tree_code(attribute) == GS_IDENTIFIER_NODE,
+           ("is_attribute: unexpected attribute TREE code"));
+  const char * attr = gs_identifier_pointer(attribute);
+  INT s_len = strlen(str);
+  INT a_len = strlen(attr);
+
+  // in ATTR form ?
+  if (s_len == a_len &&
+      !strcmp (str, attr))
+    return TRUE;
+
+  // in __ATTR__ form ?
+  if (s_len + 4 == a_len &&
+      attr[0] == '_' &&
+      attr[1] == '_' &&
+      attr[a_len - 2] == '_' &&
+      attr[a_len - 1] == '_' &&
+      !strncmp (str, attr + 2, s_len))
+    return TRUE;
+
+  return FALSE;
+}
 
 //******************************************************
 // for a function
@@ -1123,9 +1220,7 @@ WGEN_Start_Function(gs_t fndecl)
 
     try_block_seen = false;
 
-#if 1 // wgen
     decl_arguments = NULL;
-#endif
    
     /* deallocate the old map table */
     if (Current_Map_Tab) {
@@ -1146,10 +1241,6 @@ WGEN_Start_Function(gs_t fndecl)
     /* create the map table for the next PU */
     (void)WN_MAP_TAB_Create(&Map_Mem_Pool);
 
-#ifdef KEY
-    if (CURRENT_SYMTAB > 1)
-      ErrMsg (EC_Unimplemented_Feature, "Nested functions");
-#endif
     New_Scope (CURRENT_SYMTAB + 1, Malloc_Mem_Pool, TRUE);
 
     if (gs_decl_source_file (fndecl)) {
@@ -1191,20 +1282,51 @@ WGEN_Start_Function(gs_t fndecl)
     // don't have a way of knowing that, so we assume it for the entire
     // translation unit.
     //
+    // bug 13385: There are some cases where C++ template functions marked
+    // inline can still be externally accessible. Rely on GNU's "needed"
+    // flag.
     if (lang_cplus) {
       if (interface_only &&
+	  !gs_decl_needed (fndecl) && // bug 13385
 	  gs_decl_weak (fndecl) &&
 	  (gs_decl_declared_inline_p (fndecl) ||
 	   (gs_decl_lang_specific (fndecl) &&
 	    gs_decl_implicit_instantiation (fndecl) &&
 	    gs_decl_namespace_scope_p (fndecl))))
-	eclass = EXPORT_INTERNAL; // bug 7550
+	    eclass = EXPORT_INTERNAL; // bug 7550
       else if (gs_tree_public(fndecl) || gs_decl_weak(fndecl)) {
-	if (gs_decl_inline(fndecl) || !gs_decl_weak(fndecl))
-	  eclass = EXPORT_PROTECTED;
-	else eclass = EXPORT_PREEMPTIBLE;
+        if (!gs_decl_declared_inline_p(fndecl)) {
+          // global non-inline function has to be preemptible
+          // unless it is changed by visibility option/attribute
+          eclass = EXPORT_PREEMPTIBLE;
+        }
+        else {
+          // inline function definition should be appeared in every 
+          // Translation Unit, it can be hidden (allow address be taken)
+          // one example of implicit address taken is dtor address be 
+          // used in __cxa_throw() arguments when the type is thrown
+          //
+          // gnu linker complains about protected symbol illegal relocation
+          // for taking its address, the hidden symbol' addres is ok to export 
+          // to other DSO or within the same module 
+          if (!interface_only || keep_inline_functions || 
+              !gs_decl_weak (fndecl)) {
+            // there are inline functions not weak function, such as
+            // global function's local class member, they have the same
+            // export class as hosting function
+            //
+            // if the inline function is under pragma implementation,
+            // or -fkeep-inline-function, it should be PREEMPTIBLE,
+            // so it will not be DFEed
+            eclass = EXPORT_PREEMPTIBLE;
+          }
+          else {
+            eclass = EXPORT_HIDDEN;
+          }
+	} 
       }
-      else eclass = EXPORT_LOCAL;
+      else
+	 eclass = EXPORT_LOCAL;
       func_st = Get_ST (fndecl);
       // KEY: bugs 8873, 11247, 11287
       // The following does not differentiate between a function marked
@@ -1217,9 +1339,27 @@ WGEN_Start_Function(gs_t fndecl)
     }
     else {
       eclass = gs_tree_public(fndecl) ? EXPORT_PREEMPTIBLE : EXPORT_LOCAL;
-      if (gs_decl_inline (fndecl) && gs_tree_public (fndecl)) {
+      if (gs_decl_declared_inline_p(fndecl) && gs_tree_public (fndecl)) {
 	if (gs_decl_external(fndecl) && DECL_ST2 (fndecl) == 0) {
 	  // encountered first extern inline definition
+#ifdef KEY
+	  // SiCortex 4800: The above comment does not look correct. The
+	  // definition of a function can either reach this branch of the
+	  // IF, or the other branch. It cannot reach both, because
+	  // WGEN_Start_Function should only be called once for a fndecl.
+	  //
+	  // Use the ST if it was previously expanded.
+	  func_st = Get_ST (fndecl);
+	  // DECL_ST should be already set
+	  DECL_ST (fndecl) = DECL_ST2 (fndecl) = func_st;
+	  extern_inline = TRUE;
+	  // Bug 14217: If this is a C extern inline function, it must be
+	  // a global function, not XLOCAL (XLOCAL also causes IPA to
+	  // modify the function name to make it unique, causing it to be
+	  // undefined).
+	  eclass = EXPORT_PREEMPTIBLE;
+#else
+
 	  ST *oldst = DECL_ST (fndecl);
 	  DECL_ST (fndecl) = 0;
 	  func_st =  Get_ST (fndecl);
@@ -1227,6 +1367,7 @@ WGEN_Start_Function(gs_t fndecl)
 	  DECL_ST2 (fndecl) = func_st;
 	  extern_inline = TRUE;
 	  eclass = EXPORT_LOCAL;
+#endif
 	}
 	else {
 	  // encountered second definition, the earlier one was extern inline
@@ -1252,6 +1393,32 @@ WGEN_Start_Function(gs_t fndecl)
     }
     Set_ST_export (func_st, eclass);
 
+    gs_symbol_visibility_kind_t vk = 
+      (gs_symbol_visibility_kind_t) gs_decl_visibility(fndecl);
+    if (gs_tree_public(fndecl) && 
+        (gs_decl_visibility_specified(fndecl) ||
+         GS_VISIBILITY_DEFAULT != vk)) {
+      ST_EXPORT export_class = EXPORT_PREEMPTIBLE;
+      switch (vk) {
+        case GS_VISIBILITY_DEFAULT:
+          export_class = EXPORT_PREEMPTIBLE;
+          break;
+        case GS_VISIBILITY_PROTECTED:
+          export_class = EXPORT_PROTECTED;
+          break;
+        case GS_VISIBILITY_HIDDEN:
+          export_class = EXPORT_HIDDEN;
+          break;
+        case GS_VISIBILITY_INTERNAL:
+          export_class = EXPORT_INTERNAL;
+          break;
+        default:
+          GS_ASSERT(0, "unknown decl visibility");
+          break;
+      }
+      Set_ST_export (func_st, export_class);
+    }
+
     // For extern inline in C++, we ensure the function is inlined at > -O0,
     // when inlining is not disabled. IF the inliner thinks it appropriate,
     // it may also delete the function.
@@ -1266,12 +1433,21 @@ WGEN_Start_Function(gs_t fndecl)
     if (gs_decl_attributes(fndecl) && 
         gs_tree_code(gs_decl_attributes(fndecl)) == GS_TREE_LIST) {
       gs_t nd;
+
+      // bug 14180: For C++, the user-written function A with constructor
+      // or destructor attribute, as well as the corresponding compiler-
+      // generated function B will have the attribute. But the runtime
+      // must call only B (which will in turn call A). So for C++, we should
+      // handle these attributes only for compiler-generated functions.
+      BOOL ctor_dtor_ok = !lang_cplus || gs_decl_artificial(fndecl);
+
       for (nd = gs_decl_attributes(fndecl);
            nd; nd = gs_tree_chain(nd)) {
 	gs_t attr = gs_tree_purpose(nd);
 	if (gs_tree_code(attr) == GS_IDENTIFIER_NODE) {
 	  // bug 2395
-	  if (strcmp("noinline", (char *)gs_identifier_pointer(attr)) == 0)
+	  BOOL is_ctors = FALSE;
+	  if (is_attribute("noinline", attr))
 	    Set_PU_no_inline (Pu_Table [ST_pu (func_st)]);
 
 	  // bug 2646
@@ -1280,30 +1456,43 @@ WGEN_Start_Function(gs_t fndecl)
 	  // any call, we need to handle it here.
 	  // bug 11730: The above is no longer true in the new GNU4 front-end.
 	  // Such functions are now not handled in GNU fe for both C/C++.
-	  else if (strcmp("always_inline", (char *)gs_identifier_pointer(attr)) == 0)
+	  else if (is_attribute("always_inline", attr))
 	      Set_PU_must_inline (Pu_Table [ST_pu (func_st)]);
 
 	  // bug 11754
-	  else if (strcmp("constructor", (char *)gs_identifier_pointer(attr)) == 0 ||
-	           strcmp("destructor", (char *)gs_identifier_pointer(attr)) == 0) {
-	    BOOL is_ctors = *(char *)gs_identifier_pointer(attr) == 'c';
-	    INITV_IDX initv = New_INITV ();
-	    INITV_Init_Symoff (initv, func_st, 0, 1);
-	    ST *init_st = New_ST (GLOBAL_SYMTAB);
-	    ST_Init (init_st, Save_Str2i (is_ctors ? "__ctors" : "__dtors",
-	    	     			  "_", ++__ctors),
-		     CLASS_VAR, SCLASS_FSTATIC,
-		     EXPORT_LOCAL, Make_Pointer_Type (ST_pu_type (func_st), FALSE));
-	    Set_ST_is_initialized (init_st);
-	    INITO_IDX inito = New_INITO (init_st, initv);
-	    ST_ATTR_IDX st_attr_idx;
-	    ST_ATTR&	st_attr = New_ST_ATTR (GLOBAL_SYMTAB, st_attr_idx);
-      	    ST_ATTR_Init (st_attr, ST_st_idx (init_st), ST_ATTR_SECTION_NAME,
-                    	  Save_Str (is_ctors ? ".ctors" : ".dtors"));
+	  else if ((is_ctors = is_attribute("constructor", attr)) ||
+	           is_attribute("destructor", attr)) {
+	    if (ctor_dtor_ok) {
+	      INITV_IDX initv = New_INITV ();
+	      INITV_Init_Symoff (initv, func_st, 0, 1);
+	      ST *init_st = New_ST (GLOBAL_SYMTAB);
+	      ST_Init (init_st, Save_Str2i (is_ctors ? "__ctors" : "__dtors",
+	    	     			    "_", ++__ctors),
+		       CLASS_VAR, SCLASS_FSTATIC,
+		       EXPORT_LOCAL,
+		       Make_Pointer_Type (ST_pu_type (func_st), FALSE));
+	      Set_ST_is_initialized (init_st);
+	      INITO_IDX inito = New_INITO (init_st, initv);
+	      ST_ATTR_IDX st_attr_idx;
+	      ST_ATTR&	st_attr = New_ST_ATTR (GLOBAL_SYMTAB, st_attr_idx);
+      	      ST_ATTR_Init (st_attr, ST_st_idx (init_st), ST_ATTR_SECTION_NAME,
+                    	    Save_Str (is_ctors ? ".ctors" : ".dtors"));
+	    }
+	    // There's no use inlining A into B (ref bug 14180 comment above)
 	    Set_PU_no_inline (Pu_Table [ST_pu (func_st)]);
 	    Set_PU_no_delete (Pu_Table [ST_pu (func_st)]);
 	    Set_ST_addr_saved (func_st);
 	  }
+#ifdef KEY
+	  else if (is_attribute("no_instrument_function", attr)) {
+	    Set_PU_no_instrument (Pu_Table [ST_pu (func_st)]);  // Bug 750
+	  }
+	  else if (is_attribute("used", attr))
+	    Set_PU_no_delete (Pu_Table [ST_pu (func_st)]);  // bug 3697
+#endif
+          else if (is_attribute("malloc", attr)) {
+            Set_PU_has_attr_malloc (Pu_Table [ST_pu (func_st)]);
+          }
 	}
       } 
     }
@@ -1328,8 +1517,10 @@ WGEN_Start_Function(gs_t fndecl)
 // Insert special variables into the local symtab, store their id's
 // in the PU_TAB, to be accessed later in the front-end, WN Lowerer,
 // inliner/ipa, and back-end.
-    if (key_exceptions)
+    if (emit_exceptions)
        Setup_Entry_For_EH ();
+    else
+       Dummy_Exc_Ptr_Expr = NULL;
 
     if (func_PU_uplevel(fndecl))
       Set_PU_uplevel (Get_Current_PU ());
@@ -1513,6 +1704,12 @@ WGEN_Start_Function(gs_t fndecl)
       Set_TY_is_varargs (ty_idx);
       Set_TY_has_prototype (ty_idx);
       Set_PU_prototype (pu, ty_idx);
+	  
+      gs_t fntype = gs_tree_type(fndecl);
+      if (gs_tree_code(fntype) == GS_METHOD_TYPE) {
+          TY_IDX base = Get_TY(gs_type_method_basetype(fntype));
+          Set_PU_base_class(pu, base);
+      }
     }
 
     if (!thunk && gs_decl_global_ctor_p(fndecl)) {
@@ -1597,8 +1794,8 @@ WGEN_Start_Function(gs_t fndecl)
     return entry_wn;
 }
 
-extern void
-WGEN_Finish_Function (void)
+static void
+WGEN_Finish_Function (gs_t fndecl)
 {
     // This is not defined yet
     //WGEN_Check_Undefined_Labels ();
@@ -1608,6 +1805,27 @@ WGEN_Finish_Function (void)
 
       DevWarn ("Encountered nested function");
       Set_PU_is_nested_func (Get_Current_PU ());
+#ifdef KEY
+      PU &parent_pu = Get_Scope_PU(PU_lexical_level(Get_Current_PU()) - 1);
+      Set_PU_uplevel(parent_pu);
+      // insert in the nested linked list of nested functions in the parent's PU
+      INITV_IDX nested_fn_iv = New_INITV();
+      INITV_Set_SYMOFF(Initv_Table[nested_fn_iv], 1, ST_st_idx(DECL_ST(fndecl)),
+		       0);
+      INITO_IDX parent_inito;
+      if (PU_misc_info(parent_pu) == INITO_IDX_ZERO) {
+	ST *st = New_ST(PU_lexical_level(parent_pu));
+	ST_Init (st, Save_Str (".nested_functions"),
+		 CLASS_PREG, SCLASS_REG, EXPORT_LOCAL, MTYPE_To_TY(MTYPE_I4));
+	parent_inito = New_INITO(ST_st_idx(st), nested_fn_iv);
+	Set_PU_misc_info(parent_pu, parent_inito);
+      }
+      else {
+	parent_inito = PU_misc_info(parent_pu);
+	Set_INITV_next(nested_fn_iv, INITO_val(parent_inito));
+	Set_INITO_val(parent_inito, nested_fn_iv);
+      }
+#endif
     }
     if (opt_regions)
     {
@@ -1632,8 +1850,7 @@ WGEN_Finish_Function (void)
     if (lang_cplus) {
       // Add any handler code
       Do_Handlers ();
-      // if (flag_exceptions)// check if exceptions are enabled
-      if (key_exceptions)
+      if (emit_exceptions)
 	Do_EH_Tables ();
     }
 
@@ -1656,6 +1873,13 @@ WGEN_Finish_Function (void)
       Set_PU_no_inline (Get_Current_PU ());
       Return_Address_ST [CURRENT_SYMTAB] = NULL;
     }
+
+#ifdef KEY
+    // Bug 14417: Wgen may have set the PU no_inline, so we must reset
+    // must_inline.
+    if (PU_no_inline (Get_Current_PU()))
+      Clear_PU_must_inline (Get_Current_PU());
+#endif
 
     try_block_seen = false;
 
@@ -1684,24 +1908,40 @@ private:
 #ifdef TARG_IA64
   void Add_Aggregate_Init_Symiplt (ST *st, WN_OFFSET offset = 0);
 #endif
-  void WGEN_Add_Aggregate_Init_Label (LABEL_IDX lab);
+  void WGEN_Add_Aggregate_Init_Label (LABEL_IDX lab, INT32 flag = INITVLABELFLAGS_UNUSED, mTYPE_ID mtype = MTYPE_UNKNOWN);
   void WGEN_Add_Aggregate_Init_Address (gs_t init);
   void WGEN_Add_Aggregate_Init_Vector (gs_t init_list);
+  // For label values, '.L1 - .L2' 
+  void Add_Init_For_Label_Values(WN *init_wn, UINT size, BOOL first_child = TRUE, BOOL last_child = TRUE); 
+  BOOL WN_Tree_Is_Label_Values(WN* init_wn);   // Is the wn tree label values
   void Add_Init_For_WHIRL(WN *init_wn, UINT size, INT64 ofst);
   void Add_Initv_For_Tree (gs_t val, UINT size);
   void Add_Bitfield_Initv_For_Tree (gs_t val, FLD_HANDLE fld, INT &bytes);
-  void Traverse_Aggregate_Pad ( ST     *st,
+  void Traverse_Aggregate_Pad ( 
+#ifdef NEW_INITIALIZER
+        WN     *target,
+#else
+        ST     *st,
+#endif
 	BOOL   gen_initv,
 	UINT   pad,
 	UINT   current_offset);
 void Traverse_Aggregate_Array (
+#ifdef NEW_INITIALIZER
+        WN   *target,
+#else
 	ST   *st,            // symbol being initialized
+#endif
 	gs_t init_list,      // list of initializers for each array element
 	gs_t type,           // type of array
 	BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
 	UINT current_offset); // offset from start of symbol for current array
   UINT Traverse_Aggregate_Struct (
+#ifdef NEW_INITIALIZER
+        WN   *target,
+#else
 	ST   *st,               // symbol being initialized
+#endif
 	gs_t init_list,         // list of initializers for elements in STRUCT
 #ifdef KEY
 	gs_t struct_type,       // type of top level structure
@@ -1728,14 +1968,22 @@ public:
 
   void WGEN_Add_Aggregate_Init_Padding (INT size);
   void Traverse_Aggregate_Vector (
+#ifdef NEW_INITIALIZER
+        WN * target,
+#else
 	ST * st,              // symbol being initialized
+#endif
 	gs_t init_list,       // list of initializers for units in vector
 	TYPE_ID mtyp,         // type of vector
 	BOOL gen_initv,       // TRUE if initializing with INITV, FALSE for statements
 	UINT current_offset,  // offset from start of symbol for current vector
 	BOOL vec_cst = FALSE);// init_list is a constant or not
   UINT Traverse_Aggregate_Constructor (
+#ifdef NEW_INITIALIZER
+        WN   *target,
+#else
 	ST   *st,               // symbol being initialized
+#endif
 	gs_t init_list,         // list of initilaizers for this aggregate
 #ifdef KEY
 	gs_t struct_type,	  // type of top level struct
@@ -1749,23 +1997,6 @@ public:
   void Add_Inito_For_Tree (gs_t init, ST *st);
 };
 
-#if 0 // wgen
-void
-WGEN_Start_Aggregate_Init (gs_t decl)
-{
-  if (gs_tree_static(decl)) {
-	ST *st = Get_ST(decl);
-	Set_ST_is_initialized(st);
-	if (ST_sclass(st) == SCLASS_UGLOBAL ||
-	    ST_sclass(st) == SCLASS_EXTERN  ||
-	    ST_sclass(st) == SCLASS_COMMON)
-		Set_ST_sclass(st, SCLASS_DGLOBAL);
-	aggregate_inito = New_INITO (st);
-	not_at_root = FALSE;
-	last_aggregate_initv = 0;
-  }
-}
-#endif
 
 void
 AGGINIT::WGEN_Add_Aggregate_Init_Padding (INT size)
@@ -1838,8 +2069,10 @@ AGGINIT::WGEN_Add_Aggregate_Init_Real (gs_t real, INT size)
       WGEN_Convert_To_Host_Order((long *)&buffer);
       tc = Host_To_Targ_Float (MTYPE_F8, buffer);
       break;
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    case 12:
     case 16:
+      // TODO handle MTYPE_F16
       tc = Host_To_Targ_Float_10(MTYPE_F10, gs_tree_real_cst_ld(real));
       break;
 #else
@@ -1893,8 +2126,10 @@ AGGINIT::WGEN_Add_Aggregate_Init_Complex (gs_t rval, gs_t ival, INT size)
       WGEN_Convert_To_Host_Order((long *)&buffer);
       itc = Host_To_Targ_Float (MTYPE_F8, buffer);
       break;
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    case 24:
     case 32:
+      // TODO handle MTYPE_F16
       rtc = Host_To_Targ_Float_10(MTYPE_F10, gs_tree_real_cst_ld(rval));
       itc = Host_To_Targ_Float_10(MTYPE_F10, gs_tree_real_cst_ld(ival));
       break;
@@ -1973,13 +2208,13 @@ AGGINIT::Add_Aggregate_Init_Symiplt (ST *st, WN_OFFSET offset)
 
 
 void
-AGGINIT::WGEN_Add_Aggregate_Init_Label (LABEL_IDX lab)
+AGGINIT::WGEN_Add_Aggregate_Init_Label (LABEL_IDX lab, INT16 flag, mTYPE_ID mtype)
 {
   DevWarn ("taking address of a label at line %d", lineno);
   Set_PU_no_inline (Get_Current_PU ());
   if (_inito == 0) return;
   INITV_IDX inv = New_INITV();
-  INITV_Init_Label (inv, lab, 1);
+  INITV_Init_Label (inv, lab, 1, flag, mtype);
   if (_last_initv != 0)
     Set_INITV_next(_last_initv, inv);
   else if (! _not_root)
@@ -2076,27 +2311,38 @@ AGGINIT::WGEN_Add_Aggregate_Init_Address (gs_t init)
 		  iload_ofst = WN_offset(wn);
 		  wn = WN_kid0(wn);
 		}
-		if (WN_operator(wn) != OPR_ARRAY)
+		// bug fix for OSP_128
+		//
+		if (WN_operator(wn) == OPR_INTCONST) 
+		  WGEN_Add_Aggregate_Init_Integer(WN_const_val(wn) + iload_ofst, Pointer_Size);
+		else if (WN_operator(wn) != OPR_ARRAY)
 		  WGEN_Add_Aggregate_Init_Symbol (WN_st(wn), WN_offset(wn)+iload_ofst);
 		else {
-		  FmtAssert(WN_operator(WN_array_base(wn)) == OPR_LDA,
-			    ("cannot find address of array"));
-		  INT displace = 0;
-		  INT multiplier = 1;
 		  BOOL const_indices = TRUE;
-		  for (INT i = 0; i < WN_num_dim(wn); i++) {
-		    if (WN_operator(WN_array_index(wn, i)) != OPR_INTCONST ||
-			WN_operator(WN_array_dim(wn, i)) != OPR_INTCONST) {
-		      const_indices = FALSE;
-		      break;
+		  INT total_displace = 0;
+		  // bug 13346 handle nested ARRAY nodes
+		  do {
+		    INT displace = 0;
+		    INT multiplier = 1;
+		    for (INT i = 0; i < WN_num_dim(wn); i++) {
+		      if (WN_operator(WN_array_index(wn, i)) != OPR_INTCONST ||
+			  WN_operator(WN_array_dim(wn, i)) != OPR_INTCONST) {
+			const_indices = FALSE;
+			break;
+		      }
+		      displace += WN_const_val(WN_array_index(wn, i)) * multiplier;
+		      multiplier *= WN_const_val(WN_array_dim(wn, i));
 		    }
-		    displace += WN_const_val(WN_array_index(wn, i)) * multiplier;
-		    multiplier *= WN_const_val(WN_array_dim(wn, i));
-		  }
-		  if (const_indices) {
 		    displace *= WN_element_size(wn);
-		    WGEN_Add_Aggregate_Init_Symbol (WN_st(WN_array_base(wn)),
-			      WN_offset(WN_array_base(wn)) + displace + iload_ofst);
+		    total_displace += displace;
+		    wn = WN_array_base(wn);
+		  } while (WN_operator(wn) == OPR_ARRAY);
+
+		  FmtAssert(WN_operator(wn) == OPR_LDA,
+		  	    ("unhandled array references in initialization"));
+		  if (const_indices) {
+		    WGEN_Add_Aggregate_Init_Symbol (WN_st(wn),
+			  WN_offset(wn) + total_displace + iload_ofst);
 		  }
 		  else FmtAssert(FALSE, ("cannot resolve to constant address in array"));
 		}
@@ -2121,13 +2367,14 @@ AGGINIT::WGEN_Add_Aggregate_Init_Vector (gs_t init_list)
 
   init = gs_tree_vector_cst_elts (init_list);
 
-  gs_t size = gs_type_size (gs_tree_type (gs_tree_value (init)));
-  Is_True (gs_tree_code (size) == GS_INTEGER_CST,
-           ("WGEN_Add_Aggregate_Init_Vector: Vector of variable-sized units?"));
-
-  UINT esize = gs_get_integer_value(size) / BITSPERBYTE;
+  // find the element size from vector mtype
+  TY_IDX vector_type = Get_TY(gs_tree_type(init_list));
+  Is_True (MTYPE_is_vector(TY_mtype(vector_type)), 
+            ("WGEN_Add_Aggregate_Init_Vector: invalid vector type"));
+  TYPE_ID elem_mtype = Mtype_vector_elemtype(TY_mtype(vector_type));
+  UINT esize = MTYPE_byte_size(elem_mtype);
   UINT nunits = vec_size / esize;
-  gs_code_t code = gs_tree_code (gs_tree_value (init));
+  gs_code_t code = MTYPE_is_integral(elem_mtype) ? GS_INTEGER_CST : GS_REAL_CST;
 
   for (i = 0;
        init;
@@ -2200,33 +2447,6 @@ AGGINIT::WGEN_Add_Aggregate_Init_Vector (gs_t init_list)
 } /* WGEN_Add_Aggregate_Init_Vector */
 #endif
 
-#if 0 // wgen
-void
-AGGINIT::WGEN_Finish_Aggregate_Init (void)
-{
-  if (aggregate_inito == 0) return;
-  ST *st = INITO_st(aggregate_inito);
-  TY_IDX ty = ST_type(st);
-  if (TY_size(ty) == 0 ||
-      (TY_kind(ty) == KIND_ARRAY &&
-       !ARB_const_ubnd (TY_arb(ty)) &&
-       TY_size(ty) <= Get_INITO_Size(aggregate_inito))) {
-	// e.g. array whose size is determined by init;
-	// fill in with initv size
-	Set_TY_size(ty, Get_INITO_Size(aggregate_inito));
-	if (TY_kind(ty) == KIND_ARRAY) {
-		Set_ARB_const_ubnd (TY_arb(ty));
-		Set_ARB_ubnd_val (TY_arb(ty), 
-			(TY_size(ty) / TY_size(TY_etype(ty))) - 1 );
-	}
-  }
-  if (last_aggregate_initv == 0) {
-    WGEN_Add_Aggregate_Init_Padding (0);
-  }
-  aggregate_inito = 0;
-  not_at_root = FALSE;
-}
-#endif
 
 static BOOL
 Has_Non_Constant_Init_Value (gs_t init)
@@ -2236,9 +2456,21 @@ Has_Non_Constant_Init_Value (gs_t init)
   }
   switch (gs_tree_code(init)) {
   case GS_CONSTRUCTOR:
+#ifdef FE_GNU_4_2_0
+      {
+	INT count = gs_constructor_length(init);
+	if (!count)
+	    return TRUE;
+        for (INT i = 0; i < count; i++)
+	  if (Has_Non_Constant_Init_Value (gs_constructor_elts_value(init, i)))
+	    return TRUE;
+        return FALSE;
+      }
+#else
 	if (!gs_constructor_elts(init))
 	    return TRUE;
 	return Has_Non_Constant_Init_Value (gs_constructor_elts(init));
+#endif
   case GS_TREE_LIST:
 	{
 	gs_t p;
@@ -2317,8 +2549,23 @@ AGGINIT::Add_Initv_For_Tree (gs_t val, UINT size)
 		WGEN_Add_Aggregate_Init_Real (val, size);
 		break;
 	case GS_STRING_CST:
+#ifdef KEY
+		// bug 14492: SIZE may be larger than the string length,
+		// in which case the remaining should be filled with
+		// null/pad bytes, so that they don't get undefined
+		// values.
+		WGEN_Add_Aggregate_Init_String (
+		         const_cast<char*>(gs_tree_string_pointer(val)),
+		         size < gs_tree_string_length(val) ?
+		              size :
+		              gs_tree_string_length(val));
+		if (size > gs_tree_string_length(val))
+		  WGEN_Add_Aggregate_Init_Padding (size -
+						 gs_tree_string_length(val));
+#else
 		WGEN_Add_Aggregate_Init_String (
 			const_cast<char*>(gs_tree_string_pointer(val)), size);
+#endif
 		break;
 #ifdef KEY // bug 11576
 	case GS_VECTOR_CST:
@@ -2328,23 +2575,6 @@ AGGINIT::Add_Initv_For_Tree (gs_t val, UINT size)
 	case GS_ADDR_EXPR:
 		WGEN_Add_Aggregate_Init_Address (gs_tree_operand(val, 0));
 		break;
-#if 0
-	case GS_PLUS_EXPR:
-		if ( gs_tree_code(gs_tree_operand(val,0)) == GS_ADDR_EXPR
-		     && gs_tree_code(gs_tree_operand(val,1)) == GS_INTEGER_CST)
-		{
-			gs_t addr_kid = gs_tree_operand(gs_tree_operand(val,0),0);
-			FmtAssert(gs_tree_code(addr_kid) == GS_VAR_DECL
-				  || gs_tree_code(addr_kid) == GS_FUNCTION_DECL,
-				("expected decl under plus_expr"));
-			WGEN_Add_Aggregate_Init_Symbol ( Get_ST (addr_kid),
-			gs_get_integer_value(gs_tree_operand(val,1)) );
-		}
-		else
-			FmtAssert(FALSE, ("unexpected tree code %s", 
-				tree_code_name[gs_tree_code(val)]));
-		break;
-#endif
 	case GS_NOP_EXPR:
 		gs_t kid;
 		kid = gs_tree_operand(val,0);
@@ -2376,19 +2606,19 @@ AGGINIT::Add_Initv_For_Tree (gs_t val, UINT size)
 		}
 #endif
 		if (WN_operator (init_wn) == OPR_LDA_LABEL) {
-          gs_t label_decl =
-            (gs_tree_code(gs_tree_operand(val, 0)) == GS_ADDR_EXPR)?
-            gs_tree_operand (gs_tree_operand (val, 0), 0):
-            gs_tree_operand (val, 0);
-          LABEL_IDX label_idx =
-            WGEN_Get_LABEL (label_decl, FALSE);
-          WGEN_Add_Aggregate_Init_Label (label_idx);
-        }
-        else Add_Init_For_WHIRL(init_wn, size, 0);
-        WN_DELETE_Tree (init_wn);
-        break;
+		  gs_t label_decl = 
+		    (gs_tree_code(gs_tree_operand(val, 0)) == GS_ADDR_EXPR)?
+		    gs_tree_operand (gs_tree_operand (val, 0), 0):
+		    gs_tree_operand (val, 0);
+		  LABEL_IDX label_idx = 
+		    WGEN_Get_LABEL (label_decl, FALSE);
+		  WGEN_Add_Aggregate_Init_Label (label_idx);
 		}
-	}
+		else Add_Init_For_WHIRL(init_wn, size, 0);
+		WN_DELETE_Tree (init_wn);
+		break;
+		}
+        }
 }
 
 // buffer for simulating the initialized memory unit; it is managed independent
@@ -2467,7 +2697,13 @@ AGGINIT::Add_Bitfield_Initv_For_Tree (gs_t val, FLD_HANDLE fld, INT &bytes)
 // "bytes" will be updated with the additional bytes that this invocation
 // generates stores into
 static void
-Gen_Assign_Of_Init_Val (ST *st, gs_t init, UINT offset, UINT array_elem_offset,
+Gen_Assign_Of_Init_Val (
+#ifdef NEW_INITIALIZER
+WN *target,
+#else
+ST *st, 
+#endif
+gs_t init, UINT offset, UINT array_elem_offset,
 	TY_IDX ty, BOOL is_bit_field, UINT field_id, FLD_HANDLE fld, INT &bytes)
 {
 #ifdef KEY
@@ -2475,8 +2711,41 @@ Gen_Assign_Of_Init_Val (ST *st, gs_t init, UINT offset, UINT array_elem_offset,
     // memory, then tell the call expr to put the result directly into ST.
     if (TY_return_in_mem(ty) &&
 	gs_tree_code(init) == GS_CALL_EXPR) {
+#ifndef NEW_INITIALIZER
       WN *target = WN_Lda (Pointer_Mtype, 0, st, 0);
+      bytes += TY_size(ty);
+#endif
       WGEN_Expand_Expr (init, TRUE, 0, 0, 0, 0, FALSE, FALSE, target);
+      return;
+    }
+#endif
+
+#ifdef NEW_INITIALIZER
+    if (TY_return_in_mem(ty) &&
+        gs_tree_code(init) == GS_TARGET_EXPR) {
+      // We can not pass the offset to WGEN_Expand_Expr,
+      //  because it's not handled in that function, so we make an add here
+      Is_True ((WN_operator(target) == OPR_LDID ||
+                WN_operator(target) == OPR_LDA),
+               ("Bad operator for target") );
+      TY_IDX targ_ty = WN_ty(target);
+      ST* addr_st = Gen_Temp_Symbol (TY_mtype(targ_ty), "target");
+      WN* wn = NULL;
+      if (WN_offset(target) != 0 || offset != 0) {
+          DevWarn("Pointer Arithmetic here may introduce bugs!");
+          wn = WN_Stid (TY_mtype(targ_ty), 0, addr_st, targ_ty,
+                        WN_Binary (OPR_ADD, Pointer_Mtype, 
+			           WN_CopyNode(target),
+                                   WN_Intconst(MTYPE_I4, offset + WN_offset(target) ) ) );
+      }
+      else {
+          wn = WN_Stid (TY_mtype(targ_ty), 0, addr_st, targ_ty,
+                        WN_CopyNode(target) );
+      }
+      WGEN_Stmt_Append (wn, Get_Srcpos());
+      target = WN_Ldid (TY_mtype(targ_ty), 0, addr_st, targ_ty);
+      WGEN_Expand_Expr (init, TRUE, 0, 0, 0, 0, FALSE, FALSE, target);
+      bytes += TY_size(ty);
       return;
     }
 #endif
@@ -2489,33 +2758,46 @@ Gen_Assign_Of_Init_Val (ST *st, gs_t init, UINT offset, UINT array_elem_offset,
 	// rather than directy copy assignment,
 	// so need special code.
 	UINT size = TY_size(ty);
+	// OSP, string size > ty_size, only init ty_size
+	// Replace gs_tree_string_length with load_size
+	UINT load_size = ( size > gs_tree_string_length(init) ) ?
+					gs_tree_string_length(init) : size;
 	TY_IDX ptr_ty = Make_Pointer_Type(ty);
 	WN *load_wn = WN_CreateMload (0, ptr_ty, init_wn,
 #ifdef KEY // bug 3188
-			      WN_Intconst(MTYPE_I4, gs_tree_string_length(init)));
+			      WN_Intconst(MTYPE_I4, load_size));
 #else
 				      WN_Intconst(MTYPE_I4, size));
 #endif
+
+#ifdef NEW_INITIALIZER
+        WN *addr_wn = target;
+#else
 	WN *addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
 	WGEN_Stmt_Append(
 		WN_CreateMstore (offset, ptr_ty,
 				 load_wn,
 				 addr_wn,
 #ifdef KEY // bug 3188
-                              WN_Intconst(MTYPE_I4, gs_tree_string_length(init))),
+                              WN_Intconst(MTYPE_I4, load_size)),
 #else
 				 WN_Intconst(MTYPE_I4,size)),
 #endif
 		Get_Srcpos());
 #ifdef KEY // bug 3247
-	if (size - gs_tree_string_length(init)) {
+	if (size - load_size > 0) {
 	  load_wn = WN_Intconst(MTYPE_U4, 0);
+#ifdef NEW_INITIALIZER
+          addr_wn = target;
+#else
 	  addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
 	  WGEN_Stmt_Append(
-		  WN_CreateMstore (offset+gs_tree_string_length(init), ptr_ty,
+		  WN_CreateMstore (offset+load_size, ptr_ty,
 				   load_wn,
 				   addr_wn,
-			   WN_Intconst(MTYPE_I4,size-gs_tree_string_length(init))),
+			   WN_Intconst(MTYPE_I4,size-load_size)),
 		  Get_Srcpos());
 	}
 #endif
@@ -2528,8 +2810,26 @@ Gen_Assign_Of_Init_Val (ST *st, gs_t init, UINT offset, UINT array_elem_offset,
 	} else
 	    field_id = 0;	// uses offset instead
 	WGEN_Set_ST_Addr_Saved (init_wn);
+#ifdef NEW_INITIALIZER
+        //TY_IDX ptr_ty = Make_Pointer_Type(ty);
+        //WN *wn = WN_CreateMstore(offset, ty, init_wn, target, WN_Intconst(MTYPE_I4, TY_size(ty)) );
+        WN* wn = NULL;
+        Is_True( (WN_operator(target) == OPR_LDID ||
+                  WN_operator(target) == OPR_LDA),
+                 ("Invalid operator for target"));
+        if( WN_operator(target) == OPR_LDID ) {
+            TY_IDX ptr_ty = Make_Pointer_Type(ty);
+            wn = WN_Istore(mtype, offset, ptr_ty, target, init_wn, field_id);
+        }
+        else { // OPR_LDA
+            ST *st = WN_st(target);
+            wn = WN_Stid (mtype, WN_lda_offset(target) + offset, st,
+                          ty, init_wn, field_id); 
+        }
+#else
 	WN *wn = WN_Stid (mtype, ST_ofst(st) + offset, st,
 		ty, init_wn, field_id);
+#endif
 	WGEN_Stmt_Append(wn, Get_Srcpos());
 	if (! is_bit_field) 
 	  bytes += TY_size(ty);
@@ -2565,9 +2865,14 @@ WGEN_Process_Initialization ( gs_t exp )
            ("WGEN_Process_Initialization: Unhandled tree code in init"));
 
   ST * st = Get_ST(lhs);
-
+#ifdef NEW_INITIALIZER
+  WN* target = WN_Lda(Pointer_Mtype, 0, st);
+  Gen_Assign_Of_Init_Val (target, init, 0, 0, ST_type(st), FALSE, 0,
+                          FLD_HANDLE(), emitted_bytes);
+#else
   Gen_Assign_Of_Init_Val (st, init, 0, 0, ST_type(st), FALSE, 0,
                           FLD_HANDLE(), emitted_bytes);
+#endif
 }
 
 // For the specified symbol, generate padding at the offset specified.
@@ -2576,7 +2881,11 @@ WGEN_Process_Initialization ( gs_t exp )
 
 void
 AGGINIT::Traverse_Aggregate_Pad (
+#ifdef NEW_INITIALIZER
+  WN     *target,
+#else
   ST     *st,
+#endif
   BOOL   gen_initv,
   UINT   pad,
   UINT   current_offset)
@@ -2587,7 +2896,11 @@ AGGINIT::Traverse_Aggregate_Pad (
   else {
     WN *zero_wn = WN_Intconst(MTYPE_U4, 0);
     WN *pad_wn = WN_Intconst(MTYPE_U4, pad);
+#ifdef NEW_INITIALIZER
+    WN *addr_wn = target;
+#else
     WN *addr_wn = WN_Lda(Pointer_Mtype, 0, st);
+#endif
     TY_IDX mstore_ty = Make_Pointer_Type(MTYPE_To_TY(MTYPE_U1)); // char *
     WGEN_Stmt_Append (WN_CreateMstore (current_offset, mstore_ty,
                                       zero_wn, addr_wn, pad_wn),
@@ -2602,7 +2915,11 @@ AGGINIT::Traverse_Aggregate_Pad (
 
 void
 AGGINIT::Traverse_Aggregate_Array (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,            // symbol being initialized
+#endif
   gs_t init_list,      // list of initializers for each array element
   gs_t type,           // type of array
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
@@ -2621,6 +2938,117 @@ AGGINIT::Traverse_Aggregate_Array (
     return;
 #endif
 
+#ifdef FE_GNU_4_2_0
+  INT length = gs_constructor_length(init_list);
+  gs_t curr_index_elem = length > 0? gs_operand (init_list, GS_CONSTRUCTOR_ELTS_INDEX) : NULL;
+  gs_t curr_value_elem = length > 0? gs_operand (init_list, GS_CONSTRUCTOR_ELTS_VALUE) : NULL;
+  for (INT idx = 0;
+       idx < length;
+       idx++) {
+
+    gs_t element_index = gs_operand(curr_index_elem, 0);
+    curr_index_elem = gs_operand(curr_index_elem, 1);
+
+    // Bug 591
+    // In gcc-3.2 (updated Gnu front-end), the TREE_PURPOSE(init) 
+    // would give us the current_offset where TREE_VALUE(init) goes in. 
+    // We need to pad any gaps here. This is unlike the gcc-2.96 front-end
+    // whereby output_pending_init_elements calls assemble_zeros which
+    // calls WFE_Add_Aggregate_Init_Padding appropriately.
+    // We do not want to modify the Gnu front-end (c-typeck.c) and instead
+    // hack it inside our front-end.
+    INT lindex, hindex;
+    // wgen bug 10919: need to handle the new RANGE_EXPR for TREE_PURPOSE
+    //  while preserving the fix for bug 2373
+    if (gs_tree_code(element_index) == GS_RANGE_EXPR) {
+      lindex = gs_get_integer_value(gs_tree_operand(element_index,0));
+      hindex = gs_get_integer_value(gs_tree_operand(element_index,1));
+    }
+    else lindex = hindex = gs_get_integer_value(element_index);
+    if ( emitted_bytes/esize < lindex ) {
+      // pad (lindex - current_offset/esize)*esize bytes
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Pad (target, gen_initv,
+#else
+      Traverse_Aggregate_Pad (st, gen_initv, 
+#endif
+			      (lindex - emitted_bytes/esize)*esize,
+			      current_offset);
+      current_offset += (lindex - emitted_bytes/esize)*esize;
+      emitted_bytes += (lindex - emitted_bytes/esize)*esize;
+    }	
+
+    gs_t tree_value = gs_operand(curr_value_elem, 0);
+    curr_value_elem = gs_operand(curr_value_elem, 1);
+    if (gs_tree_code(tree_value) == GS_PTRMEM_CST)  {
+      gs_t t = gs_expanded_ptrmem_cst(tree_value);
+      Is_True(t != NULL,
+	      ("Traverse_Aggregate_Array: expanded PTRMEM_CST is NULL"));
+      gs_constructor_elts_set_value(init_list, idx, t);
+      tree_value = gs_constructor_elts_value(init_list, idx);
+      Is_True (tree_value == t, ("gspin list assignment error"));
+    }
+
+    if (gs_tree_code(tree_value) == GS_CONSTRUCTOR) {
+      // recursively process nested ARRAYs and STRUCTs
+      // update array_elem_offset to current_offset to
+      // keep track of where each array element starts
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Constructor (target, tree_value,
+#else
+      Traverse_Aggregate_Constructor (st, tree_value,
+#endif
+#ifdef KEY
+				      gs_tree_type(type),
+#endif
+				      gs_tree_type(type),
+                                      gen_initv, current_offset, current_offset,
+                                      0);
+      emitted_bytes += esize;
+      current_offset += esize;
+    }
+
+    else {
+#ifdef TARG_IA64
+      // There are two FDESC_EXPR in the GS Tree and they are the same. (why?)
+      // We need to skip the later if they are equivalent
+      if (gen_initv && 
+          gs_tree_code(tree_value) == GS_FDESC_EXPR && 
+	  idx < length - 1) {
+        gs_t next = gs_operand(curr_value_elem, 0); 
+        if ((next != NULL) && 
+	    (gs_tree_code(next) == GS_FDESC_EXPR) &&
+	    (gs_tree_operand(tree_value, 0) == gs_tree_operand(next, 0)) ) {
+  	  idx++; // Skip the next one
+          curr_index_elem = gs_operand(curr_index_elem, 1);
+          curr_value_elem = gs_operand(curr_value_elem, 1);
+	  Add_Initv_For_Tree (tree_value, esize);
+  	  emitted_bytes += (esize << 1);  // *2, fptr + gp
+  	  current_offset += (esize << 1);
+  	  continue;
+  	}
+      }
+#endif
+
+      // initialize SCALARs and POINTERs
+      // note that we should not be encountering bit fields
+      for (INT index = lindex; index <= hindex; index++) {
+	if (gen_initv) {
+	  Add_Initv_For_Tree (tree_value, esize);
+	  emitted_bytes += esize;
+	}
+	else
+#ifdef NEW_INITIALIZER
+          Gen_Assign_Of_Init_Val (target, tree_value, current_offset, 0,
+#else
+	  Gen_Assign_Of_Init_Val (st, tree_value, current_offset, 0,
+#endif
+				  ety, FALSE, 0, FLD_HANDLE (), emitted_bytes);
+	current_offset += esize;
+      }
+    }
+  }
+#else
   for (init = gs_constructor_elts(init_list);
        init;
        init = next) {
@@ -2646,7 +3074,11 @@ AGGINIT::Traverse_Aggregate_Array (
     else lindex = hindex = gs_get_integer_value(gs_tree_purpose(init));
     if ( emitted_bytes/esize < lindex ) {
       // pad (lindex - current_offset/esize)*esize bytes
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Pad (target, gen_initv,
+#else
       Traverse_Aggregate_Pad (st, gen_initv, 
+#endif
 			      (lindex - emitted_bytes/esize)*esize,
 			      current_offset);
       current_offset += (lindex - emitted_bytes/esize)*esize;
@@ -2665,7 +3097,11 @@ AGGINIT::Traverse_Aggregate_Array (
       // recursively process nested ARRAYs and STRUCTs
       // update array_elem_offset to current_offset to
       // keep track of where each array element starts
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Constructor (target, gs_tree_value(init), 
+#else
       Traverse_Aggregate_Constructor (st, gs_tree_value(init), 
+#endif
 #ifdef KEY
 				      gs_tree_type(type),
 #endif
@@ -2699,12 +3135,17 @@ AGGINIT::Traverse_Aggregate_Array (
 	  emitted_bytes += esize;
 	}
 	else
+#ifdef NEW_INITIALIZER
+          Gen_Assign_Of_Init_Val (target, gs_tree_value(init), current_offset, 0,
+#else
 	  Gen_Assign_Of_Init_Val (st, gs_tree_value(init), current_offset, 0,
+#endif
 				  ety, FALSE, 0, FLD_HANDLE (), emitted_bytes);
 	current_offset += esize;
       }
     }
   }
+#endif
 
 #ifdef KEY
   // GCC extension allows arrays to be declared without sizes, and later
@@ -2720,19 +3161,19 @@ AGGINIT::Traverse_Aggregate_Array (
      }
      values [];
      };
-
+     
      const struct locale_data _nl_C_LC_CTYPE =
      {
      0,
      {
-
+     
      { .string = ((void *)0) },
-
+     
      { .string = "upper\0" "lower\0" "alpha\0" "digit\0" "xdigit\0" "space\0"
      "print\0" "graph\0" "blank\0" "cntrl\0" "punct\0" "alnum\0"
      },
      }
-     }
+     } 
   */
   // Here size of values is determined when _nl_C_LC_CTYPE is initialized.
   if (TY_size(ty) == 0)
@@ -2743,8 +3184,11 @@ AGGINIT::Traverse_Aggregate_Array (
   pad = TY_size (ty) - emitted_bytes;
 
   if (pad > 0)
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
     Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
-
+#endif
 } /* Traverse_Aggregate_Array */
 
 #ifdef KEY
@@ -2780,7 +3224,11 @@ UINT Advance_Field_Id (FLD_HANDLE field, UINT field_id) {
 
 UINT
 AGGINIT::Traverse_Aggregate_Struct (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,               // symbol being initialized
+#endif
   gs_t init_list,         // list of initializers for elements in STRUCT
 #ifdef KEY
   gs_t struct_type,       // type of top level structure
@@ -2834,12 +3282,190 @@ AGGINIT::Traverse_Aggregate_Struct (
   while (field && gs_tree_code(field) != GS_FIELD_DECL)
     field = next_real_field(type, field);
 
+#ifdef FE_GNU_4_2_0
+  INT length = gs_constructor_length(init_list);
+  for (INT idx = 0;
+       idx < length;
+       idx++) {
+
+    ++field_id; // compute field_id for current field
+    gs_t element_index = gs_constructor_elts_index(init_list, idx);
+
+    // if the initialization is not for the current field,
+    // advance the fields till we find it
+    if (field && element_index && gs_tree_code(element_index) == GS_FIELD_DECL) {
+      // DevWarn ("Encountered FIELD_DECL during initialization");
+      for (;;) {
+        if (field == element_index) {
+          break;
+        }
+#ifdef KEY
+	// The same field can be created more than once.  Bug 2708.
+        if (gs_decl_name(field) &&
+	    gs_decl_name(field) == gs_decl_name(element_index)) {
+          break;
+        }
+#endif
+#ifndef KEY
+        ++field_id;
+#else
+	field_id = Advance_Field_Id(fld, field_id);
+#endif
+        fld = FLD_next (fld);
+        field = next_real_field(type, field);
+        while (field && gs_tree_code(field) != GS_FIELD_DECL)
+          field = next_real_field(type, field);
+      }
+    }
+
+    // check if we need to pad upto the offset of the field
+    pad = FLD_ofst (fld) - emitted_bytes;
+
+    if (pad > 0) {
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
+      Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
+      current_offset += pad;
+      emitted_bytes  += pad;
+    }
+
+    gs_t element_value = gs_constructor_elts_value(init_list, idx);
+    if (gs_tree_code(element_value) == GS_NOP_EXPR &&
+        gs_tree_code(gs_tree_operand(element_value, 0)) == GS_CONSTRUCTOR)
+        element_value = gs_tree_operand(element_value, 0);
+
+    fld_ty = FLD_type(fld);
+    if (gs_tree_code(element_value) == GS_CONSTRUCTOR) {
+      // recursively process nested ARRAYs and STRUCTs
+      gs_t element_type;
+      element_type = gs_tree_type(field);
+#ifdef KEY
+      // The size of the struct have to be adjusted for zero-length arrays 
+      // that later get initialized and hence adjusted in size.
+      // For an example see Traverse_Aggregate_Array
+      INT array_size = TY_size(fld_ty);
+#endif
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, element_value,
+#else
+      field_id = Traverse_Aggregate_Constructor (st, element_value,
+#endif
+#ifdef KEY
+  						 struct_type,
+#endif
+                                                 element_type, gen_initv,
+                                                 current_offset,
+                                                 array_elem_offset, field_id);
+#ifdef KEY
+      // see comment above 
+      if (TY_size(fld_ty) != array_size) {
+	FmtAssert ((array_size == 0), 
+		   ("Unexpected change in size of array"));
+	TY_IDX struct_ty = Get_TY ( struct_type );
+	Ty_Table[struct_ty].size +=  TY_size(fld_ty);
+      }	
+#endif
+      emitted_bytes += TY_size(fld_ty);
+    }
+#ifdef KEY
+    // Fields corresponding to pointer-to-member-functions are represented as
+    // records with fields __pfn and __delta.  The initializer is a TREE_LIST
+    // of __pfn and __delta.  Bug 3143.
+    else if (gs_type_ptrmemfunc_p(gs_tree_type(field))) {
+      gs_t element_type;
+      element_type = gs_tree_type(field);
+      gs_t init_value = element_value;
+      if (gs_tree_code(init_value) == GS_NOP_EXPR)
+	init_value = gs_tree_operand(init_value, 0); // bug 10853
+      GS_ASSERT(gs_tree_code(init_value) == GS_PTRMEM_CST,
+		("Traverse_Aggregate_Struct: GS_PTRMEM_CST not found"));
+      // PTRMEM_CST was expanded by GCC's cplus_expand_constant.  Get the
+      // result.
+      gs_t expanded_ptrmem_cst = gs_expanded_ptrmem_cst(init_value);
+      FmtAssert(expanded_ptrmem_cst != NULL,
+               ("Traverse_Aggregate_Struct: expanded PTRMEM_CST is NULL"));
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, expanded_ptrmem_cst,
+#else
+      field_id = Traverse_Aggregate_Constructor (st, expanded_ptrmem_cst,
+#endif
+  						 struct_type,
+                                                 element_type, gen_initv,
+                                                 current_offset,
+                                                 array_elem_offset, field_id);
+      emitted_bytes += TY_size(fld_ty);
+    }
+#endif
+    else {
+      // initialize SCALARs and POINTERs
+      is_bit_field = FLD_is_bit_field(fld);
+      if (gen_initv) {
+        if (! is_bit_field) {
+#ifdef KEY
+	  // Bug 1021
+	  // For fields that are arrays of characters with unspecified 
+	  // lengths, update the field size and the structure size here.
+	  if (TY_size(fld_ty) == 0 && 
+	      gs_tree_code(element_value) == GS_STRING_CST &&
+	      gs_tree_string_pointer(element_value)) {
+	    Ty_Table[fld_ty].size = 
+	    	strlen(gs_tree_string_pointer(element_value));
+	    TY_IDX struct_ty = Get_TY ( struct_type );
+	    Ty_Table[struct_ty].size += TY_size(fld_ty);
+	  }
+#endif	  
+          Add_Initv_For_Tree (element_value, TY_size(fld_ty));
+          emitted_bytes += TY_size(fld_ty);
+        }
+        else { // do 1 byte a time
+          Add_Bitfield_Initv_For_Tree (element_value, fld, emitted_bytes);
+          // emitted_bytes updated by the call as reference parameter
+        }
+      }
+      else {
+#ifdef NEW_INITIALIZER
+        Gen_Assign_Of_Init_Val (target, element_value,
+#else
+        Gen_Assign_Of_Init_Val (st, element_value,
+#endif
+                                current_offset, array_elem_offset,
+#ifndef KEY
+                                is_bit_field ? ty : fld_ty,
+#else
+				is_bit_field ? Get_TY(struct_type) : fld_ty,
+#endif
+                                is_bit_field, field_id, fld, emitted_bytes);
+        // emitted_bytes updated by the call as reference parameter
+      }
+    }
+
+    current_offset = current_offset_base + emitted_bytes;
+    fld = FLD_next(fld);
+    field = next_real_field(type, field);
+    while (field && gs_tree_code(field) != GS_FIELD_DECL)
+      field = next_real_field(type, field);
+  }
+#else // end FE_GNU_4_2_0
+#ifdef KEY
+  if (gs_constructor_elts(init_list))
+    ++field_id; // compute field_id for current field
+#endif
   for (init = gs_constructor_elts(init_list);
        init;
        init = gs_tree_chain(init)) {
     // loop through each initializer specified
 
+#ifdef KEY
+    // Bug 14422: Do the first increment outside the loop. Then advance
+    // the field_id at the tail end of the loop before moving on to next
+    // field, taking into account any fields inside current struct field.
+    // The update at the tail end is done only if there is an iteration
+    // left.
+#else
     ++field_id; // compute field_id for current field
+#endif
 
     // if the initialization is not for the current field,
     // advance the fields till we find it
@@ -2872,7 +3498,11 @@ AGGINIT::Traverse_Aggregate_Struct (
     pad = FLD_ofst (fld) - emitted_bytes;
 
     if (pad > 0) {
+#ifdef NEW_INITIALIZER
+      Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
       Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
       current_offset += pad;
       emitted_bytes  += pad;
     }
@@ -2893,7 +3523,12 @@ AGGINIT::Traverse_Aggregate_Struct (
       // For an example see Traverse_Aggregate_Array
       INT array_size = TY_size(fld_ty);
 #endif
+
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, init_value,
+#else
       field_id = Traverse_Aggregate_Constructor (st, init_value,
+#endif
 #ifdef KEY
   						 struct_type,
 #endif
@@ -2915,7 +3550,7 @@ AGGINIT::Traverse_Aggregate_Struct (
     // Fields corresponding to pointer-to-member-functions are represented as
     // records with fields __pfn and __delta.  The initializer is a TREE_LIST
     // of __pfn and __delta.  Bug 3143.
-    else if (gs_type_ptrmemfunc_p(gs_tree_type(field))) {
+    else if (field && gs_type_ptrmemfunc_p(gs_tree_type(field))) {
       gs_t element_type;
       element_type = gs_tree_type(field);
 
@@ -2924,7 +3559,13 @@ AGGINIT::Traverse_Aggregate_Struct (
       // PTRMEM_CST was expanded by GCC's cplus_expand_constant.  Get the
       // result.
       gs_t expanded_ptrmem_cst = gs_expanded_ptrmem_cst(init_value);
+      FmtAssert(expanded_ptrmem_cst != NULL,
+               ("Traverse_Aggregate_Struct: expanded PTRMEM_CST is NULL"));
+#ifdef NEW_INITIALIZER
+      field_id = Traverse_Aggregate_Constructor (target, expanded_ptrmem_cst,
+#else
       field_id = Traverse_Aggregate_Constructor (st, expanded_ptrmem_cst,
+#endif
   						 struct_type,
                                                  element_type, gen_initv,
                                                  current_offset,
@@ -2959,7 +3600,11 @@ AGGINIT::Traverse_Aggregate_Struct (
         }
       }
       else {
+#ifdef NEW_INITIALIZER
+        Gen_Assign_Of_Init_Val (target,  gs_tree_value(init),
+#else
         Gen_Assign_Of_Init_Val (st, gs_tree_value(init),
+#endif
                                 current_offset, array_elem_offset,
 #ifndef KEY
                                 is_bit_field ? ty : fld_ty,
@@ -2971,13 +3616,23 @@ AGGINIT::Traverse_Aggregate_Struct (
       }
     }
 
-    // advance ot next field
+#ifdef KEY
+    // Bug 14422:
+    // Count current field before moving to next field. The current field
+    // may be of struct type, in which case its fields need to be counted.
+    // We increment the field-id here instead of at the start of the loop.
+    if (gs_tree_chain(init)) // only if there is an iteration left
+      field_id = Advance_Field_Id(fld, field_id);
+#endif
+    // advance to next field
     current_offset = current_offset_base + emitted_bytes;
     fld = FLD_next(fld);
-    field = next_real_field(type, field);
+    if (field) // bug 13102
+      field = next_real_field(type, field);
     while (field && gs_tree_code(field) != GS_FIELD_DECL)
       field = next_real_field(type, field);
   }
+#endif
 
   // if not all fields have been initialized, then loop through
   // the remaining fields to update field_id
@@ -2995,6 +3650,25 @@ AGGINIT::Traverse_Aggregate_Struct (
 	TYPE_ID mtyp = TY_mtype(fld_ty);
 	mtyp = (mtyp == MTYPE_V) ? MTYPE_I4 : Widen_Mtype(mtyp);
 	WN *init_wn = WN_Intconst (mtyp, 0);
+#ifdef NEW_INITIALIZER
+        TY_IDX struct_ty = Get_TY ( struct_type );
+        //TY_IDX ptr_ty = Make_Pointer_Type(struct_ty);
+        //WN *wn = WN_CreateMstore(array_elem_offset, ptr_ty, init_wn, target, WN_Intconst(MTYPE_I4, TY_size(struct_ty)) );
+        WN* wn = NULL;
+        Is_True( (WN_operator(target) == OPR_LDID ||
+                  WN_operator(target) == OPR_LDA),
+                 ("Invalid operator for target"));
+        if( WN_operator(target) == OPR_LDID ) {
+            TY_IDX ptr_ty = Make_Pointer_Type(struct_ty);
+            wn = WN_Istore(MTYPE_BS, array_elem_offset, struct_ty, 
+                           target, init_wn, field_id);
+        }
+        else { // OPR_LDA
+            ST *st = WN_st(target);
+            wn = WN_Stid (MTYPE_BS, WN_lda_offset(target) + array_elem_offset,
+                          st, struct_ty, init_wn, field_id);
+        }
+#else
 	WN *wn = WN_Stid (MTYPE_BS, ST_ofst(st) + array_elem_offset, st,
 #ifndef KEY
 			  ty, 
@@ -3002,12 +3676,14 @@ AGGINIT::Traverse_Aggregate_Struct (
 			  Get_TY(struct_type),
 #endif
 			  init_wn, field_id);
+#endif
 	WGEN_Stmt_Append(wn, Get_Srcpos());
       }
     }
 #ifdef KEY
     field_id = Advance_Field_Id(fld,field_id)-1;
 #endif
+
     fld = FLD_next(fld);
     field = next_real_field(type, field);
     while (field && gs_tree_code(field) != GS_FIELD_DECL)
@@ -3019,7 +3695,11 @@ AGGINIT::Traverse_Aggregate_Struct (
   pad = TY_size (ty) - emitted_bytes;
 
   if (pad > 0)
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
     Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
 
   return field_id;
 } /* Traverse_Aggregate_Struct */
@@ -3030,7 +3710,11 @@ AGGINIT::Traverse_Aggregate_Struct (
 // If gen_initv is FALSE generate a sequence of stores.
 void
 AGGINIT::Traverse_Aggregate_Vector (
+#ifdef NEW_INITIALIZER
+  WN * target,
+#else
   ST * st,             // symbol being initialized
+#endif
   gs_t init_list,      // list of initializers for units in vector
   TYPE_ID mtyp,	       // type of vector
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
@@ -3042,8 +3726,43 @@ AGGINIT::Traverse_Aggregate_Vector (
 
   if (vec_cst)
     init = gs_tree_vector_cst_elts (init_list);
+#ifndef FE_GNU_4_2_0
   else
     init = gs_constructor_elts (init_list);
+#else
+  if (!vec_cst)
+  {
+    INT length = gs_constructor_length(init_list);
+    for (INT idx = 0;
+         idx < length;
+         idx++) {
+
+      gs_t element_value = gs_constructor_elts_value(init_list, idx);
+
+      gs_t unit_type = gs_tree_type(element_value);
+      gs_t size = gs_type_size (unit_type);
+      Is_True (gs_tree_code (size) == GS_INTEGER_CST,
+               ("Traverse_Aggregate_Vector: Vector of variable-sized units?"));
+      UINT esize = gs_get_integer_value(size) / BITSPERBYTE;
+      if (gen_initv)
+      {
+        Add_Initv_For_Tree (element_value, esize);
+        emitted_bytes += esize;
+      }
+      else
+#ifdef NEW_INITIALIZER
+        Gen_Assign_Of_Init_Val (target, element_value,
+#else
+        Gen_Assign_Of_Init_Val (st, element_value,
+#endif
+                                current_offset, 0,
+                                Get_TY(unit_type),
+                                0, 0, FLD_HANDLE(), emitted_bytes);
+      current_offset += esize;
+    }
+  }
+  else
+#endif
 
   for (;
        init;
@@ -3060,7 +3779,11 @@ AGGINIT::Traverse_Aggregate_Vector (
       emitted_bytes += esize;
     }
     else
+#ifdef NEW_INITIALIZER
+      Gen_Assign_Of_Init_Val (target, gs_tree_value(init),
+#else
       Gen_Assign_Of_Init_Val (st, gs_tree_value(init),
+#endif
                               current_offset, 0,
                               Get_TY(unit_type),
                               0, 0, FLD_HANDLE(), emitted_bytes);
@@ -3070,19 +3793,43 @@ AGGINIT::Traverse_Aggregate_Vector (
   // bug 11615: If the entire vector has not been initialized, pad till the end
   INT pad = MTYPE_byte_size(mtyp) - emitted_bytes;
 
+#ifdef NEW_INITIALIZER
+    // When object size can't be obtained from mtyp, get it from
+    // the pointed-to object.
+    if ((MTYPE_byte_size(mtyp) == 0) && target 
+	&& (WN_operator(target) == OPR_LDA)) {
+      TY_IDX pointer_type = WN_ty(target);
+      TY_IDX object_type = TY_pointed(pointer_type);
+      UINT64 object_size = TY_size(object_type);
+      pad = object_size - emitted_bytes;
+    }
+#endif
+
   if (pad > 0)
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Pad (target, gen_initv, pad, current_offset);
+#else
     Traverse_Aggregate_Pad (st, gen_initv, pad, current_offset);
+#endif
 } /* Traverse_Aggregate_Vector */
 
 void
 Traverse_Aggregate_Vector_Const (
+#ifdef NEW_INITIALIZER
+  WN * target,
+#else
   ST * st,             // symbol being initialized
+#endif
   gs_t init_list,      // list of initializers for units in vector
   BOOL gen_initv,      // TRUE if initializing with INITV, FALSE for statements
   UINT current_offset) // offset from start of symbol for current vector
 {
   AGGINIT agginit;
+#ifdef NEW_INITIALIZER
+  agginit.Traverse_Aggregate_Vector(target, init_list, WN_desc(target),
+#else
   agginit.Traverse_Aggregate_Vector(st, init_list, TY_mtype(ST_type(st)), 
+#endif
 				    gen_initv, current_offset, TRUE);
 }
 #endif
@@ -3099,7 +3846,11 @@ Traverse_Aggregate_Vector_Const (
 
 UINT
 AGGINIT::Traverse_Aggregate_Constructor (
+#ifdef NEW_INITIALIZER
+  WN   *target,
+#else
   ST   *st,               // symbol being initialized
+#endif
   gs_t init_list,         // list of initilaizers for this aggregate
 #ifdef KEY
   gs_t struct_type,	  // type of top level struct
@@ -3125,8 +3876,12 @@ AGGINIT::Traverse_Aggregate_Constructor (
   }
 
   if (TY_kind (ty) == KIND_STRUCT) {
-
+#ifdef NEW_INITIALIZER
+    field_id = Traverse_Aggregate_Struct (target, init_list,
+#else
     field_id = Traverse_Aggregate_Struct (st, init_list, 
+#endif
+
 #ifdef KEY
 					  struct_type,
 #endif
@@ -3137,15 +3892,21 @@ AGGINIT::Traverse_Aggregate_Constructor (
 
   else
   if (TY_kind (ty) == KIND_ARRAY) {
-
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Array (target, init_list, type, gen_initv, current_offset);
+#else
     Traverse_Aggregate_Array (st, init_list, type, gen_initv, current_offset);
+#endif
   }
 
 #ifdef KEY // bug 9550
   else
   if (TY_kind (ty) == KIND_SCALAR && MTYPE_is_vector (TY_mtype (ty))) {
-
+#ifdef NEW_INITIALIZER
+    Traverse_Aggregate_Vector(target, init_list, TY_mtype(ty), gen_initv, current_offset);
+#else
     Traverse_Aggregate_Vector(st, init_list, TY_mtype(ty), gen_initv, current_offset);
+#endif
   }
 #endif
 
@@ -3170,6 +3931,7 @@ AGGINIT::Add_Init_For_WHIRL(WN *init_wn, UINT size, INT64 ofst)
   case OPR_INTCONST:
     WGEN_Add_Aggregate_Init_Integer(WN_const_val(init_wn) + ofst, size);
     return;
+  case OPR_LDID:
   case OPR_LDA:
     WGEN_Add_Aggregate_Init_Symbol(WN_st(init_wn), WN_offset(init_wn)+ofst);
 // bugs 555, 11308
@@ -3179,42 +3941,50 @@ AGGINIT::Add_Init_For_WHIRL(WN *init_wn, UINT size, INT64 ofst)
     return;
   case OPR_ADD:
     if (WN_operator(WN_kid0(init_wn)) == OPR_INTCONST) {
-      Add_Init_For_WHIRL(WN_kid1(init_wn), size,
-                 ofst + WN_const_val(WN_kid0(init_wn)));
+      Add_Init_For_WHIRL(WN_kid1(init_wn), size, 
+      			 ofst + WN_const_val(WN_kid0(init_wn)));
+      return;
+    } 
+    if (WN_operator(WN_kid1(init_wn)) == OPR_INTCONST) {
+      Add_Init_For_WHIRL(WN_kid0(init_wn), size, 
+      			 ofst + WN_const_val(WN_kid1(init_wn)));
       return;
     }
-    if (WN_operator(WN_kid1(init_wn)) == OPR_INTCONST) {
-      Add_Init_For_WHIRL(WN_kid0(init_wn), size,
-                 ofst + WN_const_val(WN_kid1(init_wn)));
+    if (WN_Tree_Is_Label_Values(init_wn) == TRUE) {
+      Add_Init_For_Label_Values(init_wn, size);
       return;
     }
     break;
   case OPR_SUB:
     if (WN_operator(WN_kid1(init_wn)) == OPR_INTCONST) {
-      Add_Init_For_WHIRL(WN_kid0(init_wn), size,
-                 ofst - WN_const_val(WN_kid1(init_wn)));
+      Add_Init_For_WHIRL(WN_kid0(init_wn), size, 
+      			 ofst - WN_const_val(WN_kid1(init_wn)));
+      return;
+    } 
+    if (WN_Tree_Is_Label_Values(init_wn) == TRUE) {
+      Add_Init_For_Label_Values(init_wn, size);
       return;
     }
     break;
 #ifdef KEY // bug 10924
-  case OPR_ARRAY:
+  case OPR_ARRAY: 
     {
       INT displace = 0;
       INT multiplier = 1;
       BOOL const_indices = TRUE;
       for (INT i = 0; i < WN_num_dim(init_wn); i++) {
-    if (WN_operator(WN_array_index(init_wn, i)) != OPR_INTCONST ||
-        WN_operator(WN_array_dim(init_wn, i)) != OPR_INTCONST) {
-      const_indices = FALSE;
-      break;
-    }
-    displace += WN_const_val(WN_array_index(init_wn, i)) * multiplier;
-    multiplier *= WN_const_val(WN_array_dim(init_wn, i));
+	if (WN_operator(WN_array_index(init_wn, i)) != OPR_INTCONST ||
+	    WN_operator(WN_array_dim(init_wn, i)) != OPR_INTCONST) {
+	  const_indices = FALSE;
+	  break;
+	}
+	displace += WN_const_val(WN_array_index(init_wn, i)) * multiplier;
+	multiplier *= WN_const_val(WN_array_dim(init_wn, i));
       }
       if (const_indices) {
-    displace *= WN_element_size(init_wn);
-    Add_Init_For_WHIRL(WN_array_base(init_wn), size, ofst + displace);
-    return;
+	displace *= WN_element_size(init_wn);
+	Add_Init_For_WHIRL(WN_array_base(init_wn), size, ofst + displace);
+	return;
       }
       break;
     }
@@ -3234,6 +4004,295 @@ AGGINIT::Add_Init_For_WHIRL(WN *init_wn, UINT size, INT64 ofst)
   Fail_FmtAssertion("Add_Init_For_WHIRL: unexpected static init tree");
 }
 
+
+static inline
+BOOL WN_is_lda_label(WN* wn) {
+  if ( WN_operator_is(wn, OPR_LDA_LABEL) )
+    return TRUE;
+  else if ( WN_operator_is(wn, OPR_CVT) )
+    return WN_is_lda_label(WN_kid0(wn));
+  else
+    return FALSE;
+} /* WN_is_lda_label */
+
+static inline
+INT32 WN_lda_label_number(WN* wn) {
+  if ( WN_operator_is(wn, OPR_LDA_LABEL) )
+    return WN_label_number(wn);
+  else if ( WN_operator_is(wn, OPR_CVT) )
+    return WN_lda_label_number(WN_kid0(wn));
+  else {
+    FmtAssert( FALSE, ("WN is not a LDA_LABEL or CVT"));
+    return 0;
+  }
+} /* WN_lda_label_number */
+
+static inline
+mTYPE_ID Size_To_MTYPE(UINT size) {
+  switch ( size ) {
+    case 1:  return MTYPE_I1;
+    case 2:  return MTYPE_I2;
+    case 4:  return MTYPE_I4;
+    case 8:  return MTYPE_I8;
+    default:
+      FmtAssert( FALSE, ("Fix me, unexpected size=%d", size) );
+      return MTYPE_UNKNOWN;
+  }
+} /* Size_To_MTYPE */
+
+BOOL
+AGGINIT::WN_Tree_Is_Label_Values(WN* init_wn)
+{
+  // check if the tree is for initializing label values ( .L1 - .L2 )
+  if ( WN_operator(init_wn) == OPR_SUB ) {
+    // only allow the substractions on labels
+    if ( ! WN_is_lda_label(WN_kid0(init_wn)) ||
+         ! WN_is_lda_label(WN_kid1(init_wn)) ) {
+      return FALSE;
+    }
+  }
+  else if ( WN_operator(init_wn) == OPR_ADD ) {
+    // check children of the add node, which can be OPR_ADD or OPR_SUB
+    if ( WN_Tree_Is_Label_Values(WN_kid0(init_wn)) == FALSE ) {
+      return FALSE;
+    }
+    if ( WN_Tree_Is_Label_Values(WN_kid1(init_wn)) == FALSE ) {
+      return FALSE;
+    }
+  }
+  else {
+    // Other operator is not allowed in label values
+    return FALSE;
+  }
+  return TRUE;
+}
+
+void
+AGGINIT::Add_Init_For_Label_Values(WN* init_wn, UINT size, BOOL first_child, BOOL last_child)
+{
+  OPERATOR opr = WN_operator(init_wn);
+  Is_True(opr == OPR_ADD || opr == OPR_SUB,
+          ("Only OPR_ADD and OPR_SUB is allowed in Label Values"));
+
+  WN* kid0 = WN_kid0(init_wn);
+  if ( WN_is_lda_label(kid0) ) {
+    Is_True(opr == OPR_SUB,
+            ("Only Label Substraction is allowed for LDA_LABEL"));
+    WGEN_Add_Aggregate_Init_Label ( WN_lda_label_number(kid0),
+             (first_child == TRUE) ? INITVLABELFLAGS_VALUES_FIRST : INITVLABELFLAGS_VALUES_PLUS,
+             Size_To_MTYPE(size) );
+  }
+  else {
+    Add_Init_For_Label_Values(kid0, size, first_child, FALSE);
+  }
+
+  WN* kid1 = WN_kid1(init_wn);
+  if ( WN_is_lda_label(kid1) ) {
+    Is_True(opr == OPR_SUB,
+            ("Only Label Substraction is allowed for LDA_LABEL"));
+    WGEN_Add_Aggregate_Init_Label (  WN_lda_label_number(kid1),
+             (last_child == TRUE) ? INITVLABELFLAGS_VALUES_LAST : INITVLABELFLAGS_VALUES_MINUS,
+             Size_To_MTYPE(size) );
+  }
+  else {
+    Add_Init_For_Label_Values(kid1, size, FALSE, last_child);
+  }
+}
+
+
+static BOOL Is_Aggregate_Init_Zero (gs_t init_list, gs_t type);
+static BOOL Is_Aggregate_Init_Zero_Array (gs_t init_list, gs_t type);
+static BOOL Is_Aggregate_Init_Zero_Struct (gs_t init_list, gs_t type);
+static BOOL Is_Real_Init_Zero (gs_t init, UINT size);
+
+/*
+Is_Aggregate_Init_Zero:
+Return TRUE if all initializers found in init_list are zeros
+*/
+static BOOL 
+Is_Aggregate_Init_Zero (gs_t init_list, gs_t type)
+{
+  TY_IDX ty = Get_TY (type);
+  TY_KIND kind = TY_kind (ty);
+
+  switch (kind) {
+    case KIND_ARRAY:
+      return Is_Aggregate_Init_Zero_Array (init_list, type);
+    case KIND_STRUCT:
+      return Is_Aggregate_Init_Zero_Struct (init_list, type);
+    default:
+      return FALSE;
+  }
+}
+
+/*
+Is_Aggregate_Init_Zero_Array:
+Return TRUE if the array is initialized to all zeros
+*/
+static BOOL 
+Is_Aggregate_Init_Zero_Array (gs_t init_list, gs_t type)
+{
+#ifdef FE_GNU_4_2_0
+  UINT esize = TY_size(TY_etype(Get_TY(type)));
+  INT length = gs_constructor_length(init_list);
+
+  gs_t curr_value_elem = length > 0 ? gs_operand (init_list, GS_CONSTRUCTOR_ELTS_VALUE) : NULL;
+
+  for (INT idx = 0; idx < length; idx++) {
+
+    gs_t tree_value = gs_operand(curr_value_elem, 0);
+
+    curr_value_elem = gs_operand(curr_value_elem, 1);
+
+    switch (gs_tree_code (tree_value)) {
+      case GS_CONSTRUCTOR:
+        if (!Is_Aggregate_Init_Zero (tree_value, gs_tree_type (type)))
+          return FALSE;
+        break;
+      case GS_INTEGER_CST:
+        if (gs_get_integer_value(tree_value) != 0)
+          return FALSE;
+        break;
+      case GS_REAL_CST:
+        if (!Is_Real_Init_Zero(tree_value, esize))
+          return FALSE;
+        break;
+      default:
+        // Unknown / unimplemented types. Return FALSE
+        return FALSE;
+    }
+  }
+  return TRUE;
+#else
+  // Not implemented for old front-end
+  return FALSE;
+#endif
+}
+
+/*
+Is_Aggregate_Init_Zero_Struct:
+Return TRUE if the struct is initialized to all zeros
+*/
+static BOOL 
+Is_Aggregate_Init_Zero_Struct (gs_t init_list, gs_t type)
+{
+#ifdef FE_GNU_4_2_0
+  TY_IDX     ty    = Get_TY(type);
+  gs_t       field = get_first_real_or_virtual_field(type);
+  FLD_HANDLE fld   = TY_fld (ty);
+
+  gs_t       init;
+
+  gs_t type_binfo, basetypes;
+
+  if ((type_binfo = gs_type_binfo(type)) != NULL &&
+      (basetypes = gs_binfo_base_binfos(type_binfo)) != NULL) {
+
+    gs_t list;
+    for (list = basetypes; gs_code(list) != EMPTY; list = gs_operand(list, 1)) {
+      gs_t binfo = gs_operand(list, 0);
+      gs_t basetype = gs_binfo_type(binfo);
+      if (!is_empty_base_class(basetype) || !gs_binfo_virtual_p(binfo)) {
+        fld = FLD_next (fld);
+      }
+    }
+  }
+
+  while (field && gs_tree_code(field) != GS_FIELD_DECL)
+    field = next_real_field(type, field);
+
+  INT length = gs_constructor_length(init_list);
+  for (INT idx = 0; idx < length; idx++) {
+
+    gs_t element_index = gs_constructor_elts_index(init_list, idx);
+
+    // if the initialization is not for the current field,
+    // advance the fields till we find it
+    if (field && element_index && gs_tree_code(element_index) == GS_FIELD_DECL) {
+      for (;;) {
+        if (field == element_index) {
+          break;
+        }
+        if (gs_decl_name(field) && gs_decl_name(field) == gs_decl_name(element_index)) {
+          break;
+        }
+        fld = FLD_next (fld);
+        field = next_real_field(type, field);
+        while (field && gs_tree_code(field) != GS_FIELD_DECL)
+          field = next_real_field(type, field);
+      }
+    }
+
+    gs_t element_value = gs_constructor_elts_value(init_list, idx);
+    if (gs_tree_code(element_value) == GS_CONSTRUCTOR) {
+      // recursively process nested ARRAYs and STRUCTs
+      gs_t element_type;
+      element_type = gs_tree_type(field);
+      if (!Is_Aggregate_Init_Zero (element_value, element_type))
+        return FALSE;
+    }
+    else if (gs_type_ptrmemfunc_p(gs_tree_type(field))) {
+      return FALSE;
+    }
+    else if (gs_tree_code(element_value) == GS_REAL_CST) {
+      if (!Is_Real_Init_Zero (element_value, TY_size(FLD_type(fld))))
+        return FALSE;
+    }
+    else if (gs_tree_code(element_value) == GS_INTEGER_CST) {
+      // SCALARs and POINTERs
+      if (gs_get_integer_value (element_value) != 0)
+        return FALSE;
+    }
+    else {
+      return FALSE;
+    }
+
+    // advance to next field
+    fld = FLD_next(fld);
+    field = next_real_field(type, field);
+    while (field && gs_tree_code(field) != GS_FIELD_DECL)
+      field = next_real_field(type, field);
+  }
+
+  return TRUE;
+#else
+  // Not implemented for old front-end
+  return FALSE;
+#endif
+}
+
+/*
+Is_Real_Init_Zero:
+Return TRUE if the binary representation of the floating-point
+value is zero on target
+*/
+static BOOL
+Is_Real_Init_Zero (gs_t real, UINT size)
+{
+  TCON tc;
+  switch (size) {
+    case 4:
+      tc = Host_To_Targ_Float_4 (MTYPE_F4, gs_tree_real_cst_f(real));
+      break;
+    case 8:
+      tc = Host_To_Targ_Float (MTYPE_F8, gs_tree_real_cst_d(real));
+      break;
+    case 12:
+    case 16:
+#if defined(TARG_IA64) || defined(TARG_X8664)
+      tc = Host_To_Targ_Float_10(MTYPE_F10, gs_tree_real_cst_ld(real));
+#else
+      tc = Host_To_Targ_Quad (gs_tree_real_cst_ld(real));
+#endif
+      break;
+    default:
+      FmtAssert(FALSE, ("Is_Real_Init_Zero unexpected size"));
+      break;
+  }
+  return (tc.vals.uval.u0 == 0 && tc.vals.uval.u1 == 0 &&
+          tc.vals.uval.u2 == 0 && tc.vals.uval.u3 == 0);
+}
+
 void
 AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
 {
@@ -3245,7 +4304,10 @@ AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
   case GS_INTEGER_CST:
 	UINT64 val;
 	val = gs_get_integer_value (init);
-	if (val == 0) {
+	// For C, don't set INIT_VALUE_ZERO for symbols with assigned
+	// sections to ensure they remain DGLOBAL, and get assigned to
+	// data section.
+	if (val == 0 && (lang_cplus || !ST_has_named_section(st))) {
 		Set_ST_init_value_zero(st);
 		if (ST_sclass(st) == SCLASS_DGLOBAL)
 			Set_ST_sclass(st, SCLASS_UGLOBAL);
@@ -3256,6 +4318,12 @@ AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
 	WGEN_Add_Aggregate_Init_Integer (val, TY_size(ST_type(st)));
 	return;
   case GS_REAL_CST:
+	if ((lang_cplus || !ST_has_named_section(st)) && Is_Real_Init_Zero(init, TY_size(ST_type(st)))) {
+		Set_ST_init_value_zero(st);
+		if (ST_sclass(st) == SCLASS_DGLOBAL)
+			Set_ST_sclass(st, SCLASS_UGLOBAL);
+		return;
+	}
 	_inito = New_INITO (st);
 	_not_root = FALSE;
 	WGEN_Add_Aggregate_Init_Real (init, TY_size(ST_type(st)));
@@ -3285,6 +4353,8 @@ AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
 	_not_root = FALSE;
 	WGEN_Add_Aggregate_Init_Vector (init);
 	return;
+
+  case GS_CONVERT_EXPR: // bug 14186
 #endif
   case GS_NOP_EXPR: {
 	  Add_Inito_For_Tree (gs_tree_operand(init,0), st);
@@ -3335,8 +4405,21 @@ AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
 	}
 	break;
   case GS_CONSTRUCTOR: {
+	if ((lang_cplus || !ST_has_named_section(st)) && Is_Aggregate_Init_Zero(init, gs_tree_type(init))) {
+		// If the aggregate is initialized but all its initializers are equal to zero,
+		// it can go to BSS
+		Set_ST_init_value_zero(st);
+		if (ST_sclass(st) == SCLASS_DGLOBAL)
+			Set_ST_sclass(st, SCLASS_UGLOBAL);
+		return;
+	}
 	AGGINIT agginit(New_INITO(st));
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, st, 0);
+        agginit.Traverse_Aggregate_Constructor (target, init,
+#else
 	agginit.Traverse_Aggregate_Constructor (st, init, 
+#endif
 #ifdef KEY
 					gs_tree_type(init),
 #endif
@@ -3351,11 +4434,11 @@ AGGINIT::Add_Inito_For_Tree (gs_t init, ST *st)
   _inito = New_INITO (st);
   _not_root = FALSE;
   if (WN_operator(init_wn) == OPR_LDA_LABEL) {
-    gs_t label_decl =
+    gs_t label_decl = 
       (gs_tree_code(gs_tree_operand(init, 0)) == GS_ADDR_EXPR)?
       gs_tree_operand (gs_tree_operand (init, 0), 0):
       gs_tree_operand (init, 0);
-    LABEL_IDX label_idx =
+    LABEL_IDX label_idx = 
       WGEN_Get_LABEL (label_decl, FALSE);
     WGEN_Add_Aggregate_Init_Label (label_idx);
   }
@@ -3380,7 +4463,12 @@ WGEN_Generate_Temp_For_Initialized_Aggregate (gs_t init, char * name)
   {
 	// do sequence of stores to temp
 	Set_ST_sclass(temp, SCLASS_AUTO);	// put on stack
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+        agginit.Traverse_Aggregate_Constructor (target, init,
+#else
 	agginit.Traverse_Aggregate_Constructor (temp, init, 
+#endif
 #ifdef KEY
 					gs_tree_type(init),
 #endif
@@ -3391,7 +4479,12 @@ WGEN_Generate_Temp_For_Initialized_Aggregate (gs_t init, char * name)
 	// setup inito for temp
 	Set_ST_is_initialized(temp);
 	agginit.Set_inito(New_INITO(temp));
+#ifdef NEW_INITIALIZER
+        WN* target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+        agginit.Traverse_Aggregate_Constructor (target, init,
+#else
 	agginit.Traverse_Aggregate_Constructor (temp, init, 
+#endif
 #ifdef KEY
 					gs_tree_type(init),
 #endif
@@ -3423,6 +4516,73 @@ WGEN_Generate_Temp_For_Initialized_Aggregate (gs_t init, char * name)
   }
   return temp;
 }
+
+#ifdef NEW_INITIALIZER
+ST* WGEN_Generate_Initialized_Aggregate(WN* target, gs_t init)
+{
+  Is_True(gs_tree_code(init) == GS_CONSTRUCTOR, 
+          ("wrong tree code for target"));
+  Is_True((WN_operator(target) == OPR_LDID ||
+           WN_operator(target) == OPR_LDA),
+          ("Invalid target operator"));
+  ST* target_st = WN_st(target);
+
+  AGGINIT agginit;
+  gs_code_t code = gs_tree_code(init);
+  if (! Use_Static_Init_For_Aggregate (target_st, init))
+  {
+	agginit.Traverse_Aggregate_Constructor (target, init, 
+					gs_tree_type(init),
+					gs_tree_type(init),
+                                        FALSE /*gen_initv*/, 
+                                        0 /*currect_ofst*/, 
+                                        0, 0);
+	return target_st;
+  }
+  else {
+        // TODO: We do not need to create a temp ST in all cases.
+        //  if ST_class(target_st) is FORMAL, we need it indeed.
+        DevWarn ("Static initialize %s(%s)\n", 
+                 ST_name(target_st), Sclass_Name(ST_sclass(target_st)));
+        TY_IDX ty_idx = Get_TY(gs_tree_type(init));
+	ST *temp = New_ST (CURRENT_SYMTAB);
+	ST_Init (temp,
+        	 Save_Str2 (ST_name(target_st), ".init"),
+        	 CLASS_VAR, SCLASS_PSTATIC, EXPORT_LOCAL,
+        	 ty_idx );
+	// setup inito for target_st
+	Set_ST_is_initialized(temp);
+	agginit.Set_inito(New_INITO(temp));
+	WN* temp_target = WN_Lda (Pointer_Mtype, 0, temp, 0);
+
+	agginit.Traverse_Aggregate_Constructor (temp_target, init, 
+					gs_tree_type(init),
+					gs_tree_type(init),
+                                        TRUE /*gen_initv*/, 
+                                        0, 
+                                        0, 0);
+	// following inlined from WGEN_Finish_Aggregate_Init()
+	TY_IDX ty = ST_type(temp);
+	if (TY_size(ty) == 0 ||
+	    (TY_kind(ty) == KIND_ARRAY &&
+	     !ARB_const_ubnd (TY_arb(ty)) &&
+	     TY_size(ty) <= Get_INITO_Size(agginit.Inito()))) {
+	      // e.g. array whose size is determined by init;
+	      // fill in with initv size
+	      Set_TY_size(ty, Get_INITO_Size(agginit.Inito()));
+	      if (TY_kind(ty) == KIND_ARRAY) {
+		      Set_ARB_const_ubnd (TY_arb(ty));
+		      Set_ARB_ubnd_val (TY_arb(ty), 
+			      (TY_size(ty) / TY_size(TY_etype(ty))) - 1 );
+	      }
+	}
+	if (agginit.Last_initv() == 0) {
+	  agginit.WGEN_Add_Aggregate_Init_Padding (0);
+	}
+	return temp;
+  }
+}
+#endif
 
 static gs_t init_decl = NULL;
 
@@ -3466,36 +4626,6 @@ WGEN_Initialize_Decl (gs_t decl)
 			agginit.Add_Inito_For_Tree (gs_decl_initial(init_decl),
 					    Get_ST(init_decl));
 		}
-                // Set the virtual table entry of a TY when creating vtable INITO
-                if (gs_decl_virtual_p(decl)) {
-                    ST_IDX st_idx = ST_st_idx(st);
-                    SYMTAB_IDX st_idx_level = ST_IDX_level(st_idx);
-                    // search the INITO that has the same ST_IDX to st
-                    INITO_IDX match_inito = INITO_Table_Size(st_idx_level) - 1;
-                    while (match_inito > 0 && st_idx != INITO_st_idx(Inito_Table[make_INITO_IDX(match_inito, st_idx_level)])) 
-                        match_inito--;
-                    // check if the inito entry is found
-                    Is_True(match_inito > 0, ("Cannot find any matched st in INITO table."));
-                    INITV_IDX vfunc = Inito_Table[make_INITO_IDX(match_inito, st_idx_level)].val;
-                    while (vfunc > 0) {
-#ifndef TARG_IA64
-                        if (INITV_kind(vfunc) == INITVKIND_SYMOFF) 
-#else
-                        if (INITV_kind(vfunc) == INITVKIND_SYMIPLT)
-#endif
-                        {
-                            ST &initv_st = St_Table[INITV_st(vfunc)];
-                            if (ST_sym_class(initv_st) == CLASS_FUNC)
-                                break;
-                        }
-                        vfunc = (INITV_kind(vfunc) == INITVKIND_BLOCK) ?
-                                 INITV_blk(vfunc) : INITV_next(vfunc);
-                    }                    
-                    if (vfunc > 0) {
-                        TY_IDX base_tyi = Get_TY(gs_decl_context(decl));
-                        Set_TY_vtable(base_tyi, vfunc);
-                    }
-                }
 		init_decl = NULL;
 	}
 	if (gs_tree_readonly(decl) && !gs_tree_this_volatile(decl))
@@ -3524,7 +4654,12 @@ WGEN_Initialize_Decl (gs_t decl)
 		else {
 			// do sequence of stores for each element
 			AGGINIT agginit;
+#ifdef NEW_INITIALIZER
+                        WN *target = WN_Lda (Pointer_Mtype, 0, st, 0);
+                        agginit.Traverse_Aggregate_Constructor (target, init, 
+#else
 			agginit.Traverse_Aggregate_Constructor (st, init, 
+#endif
 #ifdef KEY
 				gs_tree_type(init),
 #endif
@@ -3534,7 +4669,12 @@ WGEN_Initialize_Decl (gs_t decl)
 	}
 	else {
 		INT emitted_bytes;
+#ifdef NEW_INITIALIZER
+                WN *target = WN_Lda (Pointer_Mtype, 0, st, 0);
+                Gen_Assign_Of_Init_Val (target, init, 
+#else
 		Gen_Assign_Of_Init_Val (st, init, 
+#endif
 			0 /*offset*/, 0 /*array_elem_offset*/,
 			ST_type(st), FALSE, 0 /*field_id*/,
 			FLD_HANDLE(), emitted_bytes);
@@ -3542,83 +4682,6 @@ WGEN_Initialize_Decl (gs_t decl)
   }
 }
 
-#if 0 // wgen
-#ifdef KEY
-  // For initialization of any variables  except globals.
-extern void
-WGEN_Initialize_Nested_Decl (gs_t decl)
-{
-  gs_t init = gs_decl_initial(decl);
-
-  if (init == NULL)
-    return;
-
-  if (gs_decl_ignored_p(decl)) {
-  	// ignore initialization unless really used
-	// e.g. FUNCTION and PRETTY_FUNCTION
-	return;
-  }
-
-  if (gs_tree_code(decl) == GS_LABEL_DECL)
-	return;
-
-  if (gs_tree_code(decl) == GS_CONST_DECL) // bug 10201
-	return;
-
-  ST *st = Get_ST(decl);
-
-  if (gs_tree_static(decl) || gs_decl_context(decl) == NULL) 
-  {
-	// static or global context, so needs INITO
-	if ((ST_sclass(st) == SCLASS_UGLOBAL &&
-             !ST_init_value_zero(st)) ||
-	    ST_sclass(st) == SCLASS_EXTERN  ||
-	    ST_sclass(st) == SCLASS_COMMON)
-		Set_ST_sclass(st, SCLASS_DGLOBAL);
-	if (!ST_is_initialized(st)) {
-		Set_ST_is_initialized(st);
-		Add_Inito_For_Tree (init, st);
-		WGEN_Finish_Aggregate_Init ();
-	}
-	if (gs_tree_readonly(decl))
-		Set_ST_is_const_var (st);
-  }
-  else {
-	// mimic an assign
-	if (gs_tree_code(init) == GS_CONSTRUCTOR) {
-		// is aggregate
-		if (Use_Static_Init_For_Aggregate (st, init)) {
-			// create inito for initial copy
-			// and store that into decl
-			ST *copy = WGEN_Generate_Temp_For_Initialized_Aggregate(
-					init, ST_name(st));
-			WN *init_wn = WN_CreateLdid (OPR_LDID, MTYPE_M, MTYPE_M,
-				0, copy, ST_type(copy));
-			WGEN_Stmt_Append(
-				WN_CreateStid (OPR_STID, MTYPE_V, MTYPE_M,
-					0, st, ST_type(st), init_wn),
-				Get_Srcpos());
-		}
-		else {
-			// do sequence of stores for each element
-			Traverse_Aggregate_Constructor (st, init, 
-							gs_tree_type(init),
-							FALSE /*gen_initv*/, 
-							0, 0, 0);
-		}
-		return;
-	}
-	else {
-		INT emitted_bytes;
-		Gen_Assign_Of_Init_Val (st, init, 
-			0 /*offset*/, 0 /*array_elem_offset*/,
-			ST_type(st), FALSE, 0 /*field_id*/,
-			FLD_HANDLE(), emitted_bytes);
-	}
-  }
-}
-#endif /* KEY */
-#endif /* wgen */
 
 void
 WGEN_Decl (gs_t decl)
@@ -3653,7 +4716,10 @@ WGEN_Assemble_Alias (gs_t decl, gs_t target)
   // Don't expand alias until the target is expanded, so that we can set st's
   // sclass to base_st's sclass.  This may take more than one iteration since
   // the target can be an alias to another target.  Bug 4393.
-  if (!expanded_decl(base_decl)) {
+  if (!expanded_decl(base_decl) && (lang_cplus || !finish_alias))
+  {
+    if (!lang_cplus) // KEY bug 12778
+      alias_vector.push_back (std::make_pair (decl, target));
     return FALSE; // bugs 12602, 12704
   }
   expanded_decl(decl) = TRUE;
@@ -3706,8 +4772,8 @@ WGEN_Get_Return_Address_ST (int level)
   if (return_address_st == NULL) {
     return_address_st = New_ST (CURRENT_SYMTAB - level);
     ST_Init (return_address_st, Save_Str ("__return_address"), CLASS_VAR,
-             SCLASS_AUTO, EXPORT_LOCAL, 
-             Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE));
+	     (PUSH_RETURN_ADDRESS_ON_STACK ? SCLASS_FORMAL : SCLASS_AUTO),
+             EXPORT_LOCAL, Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE));
     Set_ST_is_return_var (return_address_st);
     Return_Address_ST [CURRENT_SYMTAB - level] = return_address_st;
   }
@@ -3721,7 +4787,7 @@ WGEN_Alloca_0 (void)
   WN *wn;
   TY_IDX ty_idx = Make_Pointer_Type (Be_Type_Tbl (MTYPE_V), FALSE);
   ST* alloca_st = Gen_Temp_Symbol (ty_idx, "__alloca");
-#if 0 // wgen TODO
+#ifdef FE_GNU_4_2_0
   WGEN_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, alloca_st);
 #endif
   wn = WN_CreateAlloca (WN_CreateIntconst (OPC_I4INTCONST, 0));
@@ -3742,7 +4808,7 @@ WGEN_Alloca_ST (gs_t decl)
   Set_ST_is_temp_var (alloca_st);
   Set_ST_pt_to_unique_mem (alloca_st);
   Set_ST_base_idx (st, ST_st_idx (alloca_st));
-  WN *swn = WGEN_Expand_Expr (gs_type_size(gs_tree_type(decl)));
+  WN *swn = WGEN_Expand_Expr (gs_type_size_unit(gs_tree_type(decl)));
   WN *wn  = WN_CreateAlloca (swn);
   wn = WN_Stid (Pointer_Mtype, 0, alloca_st, ST_type (alloca_st), wn);
   WGEN_Stmt_Append (wn, Get_Srcpos());
@@ -3837,10 +4903,6 @@ void
 WGEN_Process_Class_Decl (gs_t decl)
 {
 //fprintf(stderr, "CLASS_DECL: %s\n", IDENTIFIER_POINTER(gs_decl_name(decl)));
-#if 0 // wgen TODO
-  if (cp_type_quals(decl) != TYPE_UNQUALIFIED)
-    return;
-#endif
 
   if (TYPE_TY_IDX(decl))
     return;
@@ -3892,13 +4954,6 @@ WGEN_Process_Class_Decl (gs_t decl)
 void
 WGEN_Process_Type_Decl (gs_t decl)
 {
-#if 0 // wgen TODO
-//fprintf(stderr, "TYPE_DECL: %s\n", IDENTIFIER_POINTER(gs_decl_name(decl)));
-  if (gs_tree_code(gs_tree_type(decl)) == GS_RECORD_TYPE &&
-      cp_type_quals(decl) == TYPE_UNQUALIFIED) {
-    WGEN_Process_Class_Decl (gs_tree_type(decl));
-  }
-#endif
 } /* WGEN_Process_Type_Decl */
 
 void
@@ -3945,14 +5000,26 @@ decl_is_needed_vtable (gs_t decl)
 #endif
      ) {
             
+#ifdef FE_GNU_4_2_0
+    INT count = gs_constructor_length (gs_decl_initial (decl));
+    for (INT idx = 0;
+         idx < count;
+         idx++)
+#else
     gs_t entries = gs_constructor_elts (gs_decl_initial (decl));
 
-    for (; entries; entries = gs_tree_chain (entries)) {
+    for (; entries; entries = gs_tree_chain (entries))
+#endif
+    {
 
       gs_t fnaddr;
       gs_t fn;
 
+#ifdef FE_GNU_4_2_0
+      fnaddr = gs_constructor_elts_value (gs_decl_initial (decl), idx);
+#else
       fnaddr = gs_tree_value (entries);
+#endif
 
 #ifdef KEY
       if (gs_tree_code (fnaddr) == GS_NOP_EXPR &&
@@ -4006,9 +5073,6 @@ WGEN_Process_Var_Decl (gs_t decl)
   if (gs_tree_public(decl)    &&
 //    !gs_decl_weak(decl)     &&
       !gs_decl_external(decl)
-#if 0 // bug 11266
-      && !DECL_ST(decl)
-#endif
       ) {
     if (!gs_decl_weak(decl)
 	|| decl_is_needed_vtable (decl)
@@ -4086,17 +5150,6 @@ WGEN_Process_Decl (gs_t decl)
 void
 WGEN_Process_Namespace_Decl (gs_t namespace_decl)
 {
-#if 0 // wgen TODO
-//fprintf(stderr, "NAMESPACE_DECL: %s\n", IDENTIFIER_POINTER(gs_decl_name(namespace_decl)));
-  gs_t decl;
-  if (!gs_decl_name(namespace_decl) && (namespace_decl != std_node)) {
-    for (decl = cp_namespace_decls(namespace_decl);
-         decl != NULL;
-         decl = gs_tree_chain(decl)) {
-      WGEN_Process_Decl(decl);
-    }
-  }
-#endif
 } /* WGEN_Process_Namespace_Decl */
 
 extern "C"
@@ -4109,29 +5162,38 @@ WGEN_Expand_Top_Level_Decl (gs_t top_level_decl)
   curr_namespace_decl = top_level_decl;
 #endif
 
-#if 0 // wgen TODO
-  if (top_level_decl == global_namespace) {
-   check_gnu_errors (&error_count, &sorry_count);
-   if (error_count || sorry_count)
-     return;
-  }
-#endif
 
   if (!Enable_WFE_DFE) {
     // Emit asm statements at global scope, before expanding the functions,
     // to prevent them from getting into wrong sections (e.g. .except_table)
-    gs_t gxx_emitted_asms_list = gs_gxx_emitted_asms(program);
+    static BOOL gxx_emitted_asms_expanded = FALSE;
 
     gs_t list;
-    for (list = gxx_emitted_asms_list; gs_code(list) != EMPTY; 
-    	 list = gs_operand(list, 1)) {
-      char *asm_string = gs_s(gs_operand(list, 0));
-      WGEN_Assemble_Asm (asm_string);
+    // This check is needed for C, because for C this function can be
+    // called multiple times.
+    if (!gxx_emitted_asms_expanded) {
+      gs_t gxx_emitted_asms_list = gs_gxx_emitted_asms(program);
+
+      for (list = gxx_emitted_asms_list; gs_code(list) != EMPTY; 
+    	   list = gs_operand(list, 1)) {
+        char *asm_string = gs_s(gs_operand(list, 0));
+        WGEN_Assemble_Asm (asm_string);
+      }
+      gxx_emitted_asms_expanded = TRUE;
     }
+
+    // No decls or all decls have been expanded
+    if ( gs_code(top_level_decl) == EMPTY )
+      return;
 
     WGEN_Expand_Decl (top_level_decl, TRUE);
 
 #ifdef KEY
+    if (!lang_cplus) {
+      curr_namespace_decl = old_namespace_decl;
+      return;
+    }
+
     // Catch all the functions that are emitted by g++ that we haven't
     // translated into WHIRL.
     int changed;
@@ -4410,11 +5472,13 @@ WGEN_Handle_Named_Return_Value (gs_t fn)
   // table in order to generate DWARF for it.  Bug 4900.
   Get_ST(named_ret_obj);
 
-  // The return type should be returned in memory.
   TY_IDX ret_ty_idx = Get_TY(gs_tree_type(gs_tree_type(fn)));
-  FmtAssert(TY_return_in_mem(ret_ty_idx),
-	    ("WGEN_Handle_Named_Return_Value: nrv type not in mem"));
 
+  // It is possible that g++ does nvr for complex type.
+  // We won't do anything in such case, since lowering phase will handle it
+  // according to ABI.
+  if (!TY_return_in_mem(ret_ty_idx)) return;
+  
   // Get the ST for the fake first parm.
   WN *first_formal = WN_formal(Current_Entry_WN(), 0);
 
@@ -4449,5 +5513,14 @@ WGEN_Handle_Named_Return_Value (gs_t fn)
       (void *)(INTPTR)ST_st_idx(WN_st(first_formal));
     DST_SET_deref(DST_INFO_flag( DST_INFO_IDX_TO_PTR(info_idx)));
   }
+}
+
+extern "C" void
+WGEN_Alias_Finish (void)
+{
+  finish_alias = TRUE;
+  for (INT i=0; i<alias_vector.size(); i++)
+    WGEN_Assemble_Alias (alias_vector[i].first, alias_vector[i].second);
+  alias_vector.clear ();
 }
 #endif

@@ -89,32 +89,6 @@ generic_print_address (addr, info)
   (*info->fprintf_func) (info->stream, "0x%s", buf);
 }
 
-#if 0
-/* Just concatenate the address as hex.  This is included for
-   completeness even though both GDB and objdump provide their own (to
-   print symbolic addresses).  */
-
-void generic_strcat_address PARAMS ((bfd_vma, char *, int));
-
-void
-generic_strcat_address (addr, buf, len)
-     bfd_vma addr;
-     char *buf;
-     int len;
-{
-  if (buf != (char *)NULL && len > 0)
-    {
-      char tmpBuf[30];
-
-      sprintf_vma (tmpBuf, addr);
-      if ((strlen (buf) + strlen (tmpBuf)) <= (unsigned int) len)
-	strcat (buf, tmpBuf);
-      else
-	strncat (buf, tmpBuf, (len - strlen(buf)));
-    }
-  return;
-}
-#endif
 
 /* Just return true.  */
 

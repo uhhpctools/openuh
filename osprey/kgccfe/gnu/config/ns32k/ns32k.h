@@ -840,10 +840,6 @@ __transfer_from_trampoline ()		\
     SECONDARY_MEMORY_NEEDED in practice, though the stack slots used
     are not available for optimization.  */
 
-#if 0
-#define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, M)			\
-     secondary_memory_needed(CLASS1, CLASS2, M)
-#endif
 
 /* SMALL_REGISTER_CLASSES is a run time option. This should no longer
    be necessay and should go when we have confidence that we won't run

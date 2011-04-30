@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -63,7 +63,7 @@
  * ====================================================================
  */
 /*REFERENCED*/
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
@@ -80,7 +80,11 @@ static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_pdgcs.cxx $ $Revision: 1.
 #include "stab.h"
 #include "strtab.h"
 #include "wn.h" 
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #include "elf.h"
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "pu_info.h"
 #include <sys/types.h>
 #include "ir_reader.h"
@@ -185,7 +189,11 @@ PDGCS_initialize(LANG   language_code,
 					  IRB_FILE_EXTENSION);
 	 }
 	 Irb_File1 = Open_Output_Info ( Irb_File_Name ); 
+#ifdef KEY /* Bug 12559 */
+	 cwh_dst_init_file(src_fname) ;
+#else /* KEY Bug 12559 */
 	 cwh_dst_init_file(src_path_name) ;
+#endif /* KEY Bug 12559 */
          cwh_stmt_init_file(test_flag(flags,PDGCS_INITIALIZE_MP));
 	 fe_preg_init() ;
 
@@ -498,10 +506,6 @@ PDGCS_do_proc(void)
   Verify_SYMTAB (CURRENT_SYMTAB);
   Write_PU_Info (pu);
 
-#if 0
-  if (Get_Trace (TP_IRB,TINFO_STATS)) /* -ttIRB:16 */
-    cwh_stats_print(PU_Info_proc_sym(pu));
-#endif
 
   WN_MAP_Delete(array_name_map);
   WN_Mem_Pop();
@@ -598,49 +602,8 @@ cwh_pdgcs_pu_mem(void)
  *
  *===============================================
  */ 
-#if 0
-static char *
-basename ( char * const s )
-{
-  char * p;
-  char * last;
-  char * name;
-  int    size;
 
-  if ( s == NULL || *s == '\0' )
-    return ".";
-
-  else {
-
-    p = s + strlen ( s );
-
-    /* skip trailing '/' */
-
-    while ( p != s && *p == '/' )
-      --p;
-
-    last = p;
-
-    while ( p != s ) {
-
-      if ( *--p == '/' ) {
-
-        ++p;
-        break;
-      }
-    }
-
-    size = last - p;
-    name = (char *) malloc ( size + 1);
-    strncpy ( name, p, size );
-    name [size] = '\0';
-
-    return name;
-  }
-} /* basename */
-#endif
-
-static char *
+static const char *
 dirname ( char * const s )
 {
   char * p;
@@ -737,7 +700,7 @@ update_rii_file ( void )
   FILE * f_rii_file;
   FILE * f_old_rii_file;
   FILE * f_cmd_file;
-  char * rii_dir_name;
+  const char * rii_dir_name;
   char * new_rii_file_name;
   int    ch;
 

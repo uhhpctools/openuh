@@ -97,13 +97,5 @@ __powri( _f_real4 x,
 }
 
 /* if needed for compatibility with f77 for pass by address */
-#if 0
-_f_real4
-pow_ri( _f_real4 *x,
-	_f_int4 *y )
-{
-	return ((_f_real4) _HTON(*x, *y));
-}
-#endif	/* end of if 0 */
 
 #endif	/* end of mips or little endian */

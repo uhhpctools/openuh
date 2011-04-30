@@ -317,22 +317,6 @@ while (0)
 #undef  TARGET_STRIP_NAME_ENCODING
 #define TARGET_STRIP_NAME_ENCODING  i386_pe_strip_name_encoding_full
 
-#if 0	
-/* Turn this back on when the linker is updated to handle grouped
-   .data$ sections correctly. See corresponding note in i386/interix.c. 
-   MK.  */
-
-/* Define this macro if in some cases global symbols from one translation
-   unit may not be bound to undefined symbols in another translation unit
-   without user intervention.  For instance, under Microsoft Windows
-   symbols must be explicitly imported from shared libraries (DLLs).  */
-#define MULTIPLE_SYMBOL_SPACES
-
-extern void i386_pe_unique_section PARAMS ((tree, int));
-#define TARGET_ASM_UNIQUE_SECTION i386_pe_unique_section
-
-#define SUPPORTS_ONE_ONLY 1
-#endif /* 0 */
 
 /* Switch into a generic section.  */
 #define TARGET_ASM_NAMED_SECTION  default_pe_asm_named_section

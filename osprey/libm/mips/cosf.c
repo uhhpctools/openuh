@@ -70,7 +70,13 @@ extern	float	cosf(float);
 #pragma weak cosf = __cosf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __cosf(float);
+#pragma weak cosf
+float cosf( float x ) {
+  return __cosf( x );
+}
+#elif defined(__GNUC__)
 extern  float  __cosf(float);
 float    cosf(float) __attribute__ ((weak, alias ("__cosf")));
 #endif

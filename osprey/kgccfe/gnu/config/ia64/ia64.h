@@ -993,15 +993,6 @@ enum reg_class
    storing a register of CLASS1 into memory and loading that memory location
    into a register of CLASS2.  */
 
-#if 0
-/* ??? May need this, but since we've disallowed TFmode in GR_REGS,
-   I'm not quite sure how it could be invoked.  The normal problems
-   with unions should be solved with the addressof fiddling done by
-   movtf and friends.  */
-#define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE)			\
-  ((MODE) == TFmode && (((CLASS1) == GR_REGS && (CLASS2) == FR_REGS)	\
-			|| ((CLASS1) == FR_REGS && (CLASS2) == GR_REGS)))
-#endif
 
 /* A C expression for the maximum number of consecutive registers of
    class CLASS needed to hold a value of mode MODE.

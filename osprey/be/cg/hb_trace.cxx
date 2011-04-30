@@ -211,7 +211,7 @@ HB_Trace_Print_Cand_Tree(HB_CAND_TREE* c, INT indent)
 
 /////////////////////////////////////
 void
-HB_Trace_Candidates(char* tstring, std::list<HB_CAND_TREE*>& cands)
+HB_Trace_Candidates(const char* tstring, std::list<HB_CAND_TREE*>& cands)
 /////////////////////////////////////
 //
 //  See interface description.

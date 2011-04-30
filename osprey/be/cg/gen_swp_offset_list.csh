@@ -1,7 +1,7 @@
 #!/bin/csh -f
 #
 #
-#  Copyright (C) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -37,9 +37,9 @@
 ### ====================================================================
 ### Module: gen_swp_offset_list.csh
 ### $Revision: 1.1.1.1 $
-### $Date: 2005/10/21 19:00:00 $
-### $Author: marcel $
-### $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gen_swp_offset_list.csh,v $
+### $Date: 2005/06/23 02:15:36 $
+### $Author: sxyang $
+### $Source: /u/cvs/Pathscale.MIPS/be/cg/gen_swp_offset_list.csh,v $
 ### Revision history:
 ###   dd-mm-yy
 ###

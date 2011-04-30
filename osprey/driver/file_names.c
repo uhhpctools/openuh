@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -46,7 +50,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if defined(_WIN32)
+#include <io.h>
+#else
 #include <sys/utsname.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
@@ -66,36 +74,120 @@ extern int errno;
 
 boolean keep_flag = FALSE;
 
+/* linked list of files */
+typedef struct file_item_rec {
+       char *name;
+       int file_descriptor;
+       struct file_item_rec *next;
+} file_item_t;
+
 string_list_t *count_files = NULL;
-static string_list_t *temp_files = NULL;
+static file_item_t *temp_files = NULL;
 #ifdef KEY /* Bug 11265 */
 string_list_t *isystem_dirs = NULL;
 #endif /* KEY Bug 11265 */
 static char *tmpdir;
 static char *saved_object = NULL;
 
-#define DEFAULT_TMPDIR	"/tmp"
+#if !defined(_WIN32)
+#define DEFAULT_TMPDIR  "/tmp"
+
+#else
+
+#include <windows.h>
+#define DEFAULT_TMPDIR default_tmpdir()
+
+static char * 
+conv_dir_seperator_to_posix (char *bad_path)
+{
+        int i;
+        int bad_path_len = strlen(bad_path);
+        for (i = bad_path_len; i-1 >= 0; i--)
+          if(bad_path[i] == '\\')
+            /* found the location of error, fix it by replacing \\ with / */
+            bad_path[i] = '/';
+        return bad_path; /* no longer bad, actually */
+}
+
+static char * 
+conv_dir_seperator_to_win32 (char *bad_path)
+{
+        int i;
+        int bad_path_len = strlen(bad_path);
+        for (i = bad_path_len; i-1 >= 0; i--)
+          if(bad_path[i] == '/')
+            /* found the location of error, fix it by replacing / with \\ */
+            bad_path[i] = '\\';
+        return bad_path; /* no longer bad, actually */
+}
+
+static char * default_tmpdir(void)
+{
+  static char dir[MAX_PATH];
+  if (GetTempPath(MAX_PATH, (LPSTR)dir) == 0)
+    return "";
+  conv_dir_seperator_to_posix(dir);
+  return (char*) dir;
+}
+#endif /* _WIN32 */
 
 static string_pair_list_t *temp_obj_files = NULL;
 
+/* add file that has already been opened */
+static void
+add_temp_file_info (char *s, int fd)
+{
+       file_item_t *p;
+       p = (file_item_t *) malloc(sizeof(file_item_t)); 
+       p->next = NULL;
+       if (temp_files == NULL) {
+               temp_files = p;
+       } else {
+               p->next = temp_files; 
+               temp_files = p;
+       }
+       p->name = s;
+       p->file_descriptor = fd;
+
+}
+
+/* add file to list if not already in list */
+static void
+add_file_if_new (char *s, int fd)
+{
+       file_item_t *p;
+       char *str; 
+       for (p = temp_files; p != NULL; p = p->next) {
+               if (strcmp(p->name, s) == 0)
+                       return;         /* already in list */
+       }
+       str = string_copy(s);
+       /* string not in list */
+       add_temp_file_info(str, fd);
+}
 
 /* get object file corresponding to src file */
 char *
 get_object_file (char *src)
 {
+#if defined(_WIN32) || defined(TARG_NVISA)
+	/* user is responsible for specifying writable dir,
+	 * don't write it behind their back. */
+#else
 	// bug 2025
 	// Create .o files in /tmp in case the src dir is not writable.
 	if (!(keep_flag || (ipa == TRUE) || remember_last_phase == P_any_as)) {
 	  char *obj_name = change_suffix(src, "o");
 	  string_pair_item_t *p;
+	  buffer_t buf;
+	  char *mapped_name;
 	  FOREACH_STRING_PAIR (p, temp_obj_files) {
 	    if (strcmp (STRING_PAIR_KEY(p), obj_name) == 0)
 	      return STRING_PAIR_VAL(p);
 	  }
 	  // Create temp file name as in create_temp_file_name.
-	  buffer_t buf;
 	  sprintf(buf, "cco.");
-	  char *mapped_name = tempnam (tmpdir, buf);
+	  mapped_name = tempnam (tmpdir, buf);
 	  add_string_pair (temp_obj_files, obj_name, mapped_name);
 	  return mapped_name;
 	}
@@ -107,13 +199,13 @@ get_object_file (char *src)
 	    !option_was_seen(O_c) &&
 	    keep_flag != TRUE) {
 	  char *p;
-	  src = strdupa(src);
+	  src = strcpy(alloca(strlen(src)+1), src);
 	  for (p = src; *p != '\0'; p++) {
 	    if (*p == '/')
 	      *p = '%';
 	  }
 	}
-
+#endif
 	return change_suffix(drop_path(src), "o");
 }
 
@@ -131,51 +223,42 @@ create_temp_file_name (char *suffix)
 {
 	buffer_t buf;
 	buffer_t pathbuf;
-	size_t pathbuf_len;
+	size_t prefix_len;
 	char *s;
-	string_item_t *p;
-	/* use same prefix as gcc compilers;
-	 * tempnam limits us to 5 chars, and may have 2-letter suffix. */
-#ifdef KEY
-	int len = strlen(suffix);
-	if (len > 4) {
-	  internal_error("create_temp_file_name: suffix too long: %s", suffix);
-	  suffix = "xx";	// Let driver continue until error exit.
-	} else if (len > 2) {
-	  sprintf(buf, "%s.", suffix);
-	} else
-#endif
-	sprintf(buf, "cc%s.", suffix);
+	file_item_t *p;
+	int fd = -1;
+	/* use same prefix as gcc compilers */
+	/* use mkstemp instead of tempnam to be more portable */
+	sprintf(buf, "cc%s#.XXXXXX", suffix);
 	sprintf(pathbuf, "%s/%s", tmpdir, buf); /* full path of tmp files */
-	pathbuf_len = strlen(pathbuf);
+#ifdef _WIN32
+        /* Canonicalize paths to use forward slashes so that comparisons
+           with existing temp_files will work.  */
+	conv_dir_seperator_to_posix(pathbuf);
+#endif
+	/* subtracting the XXXXXX */
+	prefix_len = strlen(pathbuf) - strlen(strchr(pathbuf, '#'));
 
-	for (p = temp_files->head; p != NULL; p = p->next) {
-		/* Can't use get_suffix here because we don't actually
-		 * want the suffix. tempnam may return a value with a period
-		 * in it. This will confuse our duplicates check below.
-		 * We can't change get_suffix, because in other cases we
-		 * actually want the right-most period. foo.bar.c
-		 * We are guaranteed here that the first period after the last
-		 * directory divider is the position we want because we chose
-		 * its contents above.
-		 */
-		char *file_name = strrchr(p->name, '/');
-		if (file_name == NULL)
-			file_name = p->name;
-		s = strchr(file_name, '.');
-		/* we know that s won't be null because we created a string
-		 * with a period in it. */
-		s++;
-		/* assume that s points inside p->name,
-		 * e.g. /tmp/ccB.abc, s points to a */
-		if (strncmp(s-pathbuf_len, pathbuf, pathbuf_len) == 0) {
-			/* matches the prefix and suffix character */
-			return p->name;
-		}
+	for (p = temp_files; p != NULL; p = p->next) {
+	  if (strncmp(p->name, pathbuf, prefix_len) == 0) {
+	    /* matches the prefix and suffix character */
+	    return p->name;
+	  }
 	}
 	/* need new file name */
-	s = tempnam (tmpdir, buf);
-	add_string (temp_files, s);
+#ifdef _WIN32
+	/* mingw doesn't have mkstemp */
+	s = mktemp (pathbuf);
+	if (!s)
+	  internal_error("Couldn't create temporary file %s\n", pathbuf);
+	/* Some phases cannot handle backslashes in file names yet.  */
+	s = conv_dir_seperator_to_posix(s);
+	s = string_copy(s);
+#else
+	fd = mkstemp(pathbuf);
+	s = string_copy(pathbuf);
+#endif
+	add_temp_file_info(s, fd);
 	return s;
 }
 
@@ -209,7 +292,7 @@ construct_given_name (char *src, char *suffix, boolean keep)
 		return s;
 	} else {
 		s = string_copy(s);
-		add_string_if_new (temp_files, s);
+		add_file_if_new(s, -1);
 		return s;
 	}
 }
@@ -218,7 +301,7 @@ void
 mark_saved_object_for_cleanup ( void )
 {
 	if (saved_object != NULL)
-	add_string_if_new (temp_files, saved_object);
+	add_file_if_new(saved_object, -1);
 }
 
 /* Create filename with the given extension; eg. foo.anl from foo.f */
@@ -231,21 +314,36 @@ construct_file_with_extension (char *src, char *ext)
 void
 init_temp_files (void)
 {
+#if defined(_WIN32)
+        tmpdir = getenv("TMP");
+        if (tmpdir == NULL) {
+          tmpdir = getenv("TMPDIR");
+        }
+#else
         tmpdir = string_copy(getenv("TMPDIR"));
+#endif
         if (tmpdir == NULL) {
                 tmpdir = DEFAULT_TMPDIR;
 	} 
-	else if (!is_directory(tmpdir)) {
+#if defined(_WIN32)
+        /* avoid space in temp path issues on windows */
+	{
+	  static char buf[1024];
+	  GetShortPathName(tmpdir, buf, 1024);
+	  tmpdir = buf;
+	}
+#endif
+	if (!is_directory(tmpdir)) {
 		error("$TMPDIR does not exist: %s", tmpdir);
 	} 
 	else if (!directory_is_writable(tmpdir)) {
 		error("$TMPDIR not writable: %s", tmpdir);
 	} 
-	else if (tmpdir[strlen(tmpdir)-1] == '/') {
+	else if (is_dir_separator(tmpdir[strlen(tmpdir)-1])) {
 		/* drop / at end so strcmp matches */
 		tmpdir[strlen(tmpdir)-1] = '\0';
 	}
-	temp_files = init_string_list();
+	temp_files = NULL;
 
 	temp_obj_files = init_string_pair_list();
 }
@@ -261,6 +359,8 @@ static char *report_file;
 void
 init_crash_reporting (void)
 {
+#if !defined(_WIN32) /* don't generate crash reports on windows */
+
 	#ifdef PSC_TO_OPEN64
 	if ((report_file = getenv("OPEN64_CRASH_REPORT")) != NULL)
 	#endif
@@ -272,7 +372,7 @@ init_crash_reporting (void)
 		report_file = NULL;
 		goto bail;
 	}
-	
+
 	if (mkstemp(report_file) == -1) {
 		report_file = NULL;
 		goto bail;
@@ -282,6 +382,7 @@ init_crash_reporting (void)
 	setenv("OPEN64_CRASH_REPORT", report_file, 1);
 	#endif
 bail:
+#endif /* !_WIN32 */
 	return;
 }
 
@@ -293,9 +394,14 @@ save_cpp_output (char *path)
 	char *save_dir, *save_path, *final_path;
 	FILE *ifp = NULL, *ofp = NULL;
 	char *name = drop_path(path);
+	int saved = 0;
+#if !defined(_WIN32)
+	/* don't generate crash reports on windows;
+	 * (for nvisa, how would it be used since not operating on user's 
+	 * source?, and is os-specific). */
+
 	struct utsname uts;
 	char buf[4096];
-	int saved = 0;
 	size_t nread;
 	char *suffix;
 	char *home;
@@ -442,6 +548,8 @@ no_report:
 	saved = 1;
 	
 	goto bail;
+#endif /* _WIN32 */
+
 b0rked:
 	fprintf(stderr, "Could not save problem report to %s: %s\n",
 		save_path, strerror(errno));
@@ -458,22 +566,40 @@ void
 cleanup (void)
 {
 	/* cleanup temp-files */
-	string_item_t *p;
+	file_item_t *p;
 	int status;
 	if (temp_files == NULL) return;
-	for (p = temp_files->head; p != NULL; p = p->next) {
+	for (p = temp_files; p != NULL; p = p->next) {
 		if (debug) printf("unlink %s\n", p->name);
-		if (execute_flag) {
+                 if (p->file_descriptor > 0){
+                       close(p->file_descriptor);
+                 }
+		/* when using mkstemp, files are always created */
+		/* if (execute_flag) { */
 			if (internal_error_occurred)
 				save_cpp_output(p->name);
+#if !defined(_WIN32)
 			status = unlink(p->name);
+#else
+			/* WIN32 unlink does not accept '/' 
+			 * as a directory seperator.
+			 * So gotta convert that before calling unlink. */
+			conv_dir_seperator_to_win32(p->name);
+			status = unlink(p->name);
+			conv_dir_seperator_to_posix(p->name);
+#endif
 			if (status != 0 && errno != ENOENT) {
 				internal_error("cannot unlink temp file %s", p->name);
 				perror(program_name);			
 			}
-		}
 	}
-	temp_files->head = temp_files->tail = NULL;
+        p = temp_files;
+        while (p != NULL) {
+                file_item_t *p_next = p->next;
+                free(p);
+                p = p_next;
+        } 
+	temp_files = NULL;
 
 	if (save_count) {
 		fprintf(stderr, "Please review the above file%s and, "
@@ -486,7 +612,7 @@ cleanup (void)
 void
 mark_for_cleanup (char *s)
 {
-	add_string_if_new (temp_files, s);
+	add_file_if_new(s, -1);
 }
 
 void

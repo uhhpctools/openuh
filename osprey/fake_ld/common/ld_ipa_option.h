@@ -59,6 +59,9 @@ typedef enum{
     LD_IPA_KEEP_TEMPS, 
     LD_IPA_ISA,
     LD_IPA_XXXX, 
+#ifdef TARG_SL
+    LD_IPA_IPISR,
+#endif
     MAX_LD_IPA
 }ld_ipa_option_enum;
 
@@ -102,13 +105,17 @@ typedef struct {    /* all symbols specified in command line */
 typedef enum {
 	TOS_MIPS_O32,
 
-#if 1
 	TOS_MIPS_R32,
-#endif
 	TOS_MIPS_N32,
 	TOS_MIPS_64,
 	TOS_IA64_64,
 	TOS_IA64_32, 
+#ifdef TARG_LOONGSON
+	/* Add support for loongson2e , loongson2f and loongson3*/
+	TOS_LOONGSON_2e,
+	TOS_LOONGSON_2f,
+	TOS_LOONGSON_3,
+#endif
 	TOS_MAX
 }targos_enum;
 

@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: stab_attr.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/stab_attr.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:59-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.stab_attr.cxx $
  *
  * Revision history:
  *  07-Mar-95 - Original Version
@@ -55,7 +55,7 @@
  */
 
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/stab_attr.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.stab_attr.cxx $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 
@@ -145,7 +145,8 @@ static const char *const Ftn_Reserved_Ty_Name[] =
 
 static const char *const Ftn_Reserved_St_Name[] =
 {
-   "TO DO"
+   "TO DO",
+   "TO DO MORE"  // Workaround for bug 13289 during bootstrap.
 }; /* Ftn_Reserved_St_Names */
 
 #endif /**** BUILD_WHIRL2F *****/
@@ -325,7 +326,7 @@ public:
   {
     _size  = sz ;
     _flags = CXX_NEW_ARRAY(char,sz,Malloc_Mem_Pool);
-    memset(_flags, 0, sz);
+    BZERO(_flags, sz);
   }
 
   ~W2FC_FLAG_ARRAY()
@@ -360,7 +361,7 @@ public:
   void Clear_w2fc_flags(void) 
   {
     if (_flags != NULL) {
-      bzero(_flags,_size*sizeof(mUINT8)) ;
+      BZERO(_flags,_size*sizeof(mUINT8)) ;
     }
   }
 };
@@ -659,6 +660,10 @@ Stab_Is_Equivalenced_Struct(TY_IDX ty)
 
    do {
        FLD_HANDLE fld (fld_iter);
+       // bug1323 -- special case for empty structs
+       if (fld.Is_Null()) {
+	 return FALSE;
+       }
        is_equivalent_fld = FLD_equivalence (fld);
    } while (!FLD_last_field (fld_iter++) && !is_equivalent_fld);
        
@@ -721,7 +726,7 @@ Stab_Get_Mload_Ty(TY_IDX base, STAB_OFFSET offset, STAB_OFFSET size)
       
       Is_True(! this_fld.Is_Null () &&
 	      FLD_ofst(this_fld) <= offset           &&
-	      (next_fld.Is_Null () || FLD_ofst(next_fld) >= offset)           &&
+	      (next_fld.Is_Null () || FLD_ofst(next_fld) >= offset) &&
 	      (TY_Is_Structured(FLD_type(this_fld))) &&
 	      TY_size(FLD_type(this_fld)) >= size, 
 	      ("Could not find a field as expected in TY2C_Get_Mload_Ty()"));

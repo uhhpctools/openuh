@@ -49,7 +49,7 @@ static char USMID[] = "\n@(#)5.0_pl/sources/messages.c	5.9	10/14/99 14:08:59\n";
 
 # define  __NLS_INTERNALS  1
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 /*  typedef __int32_t;  */
 # include <nl_types.h>
 # include <nlcatmsg.h>
@@ -78,6 +78,12 @@ static char USMID[] = "\n@(#)5.0_pl/sources/messages.c	5.9	10/14/99 14:08:59\n";
 # include "messages.h"
 #ifdef KEY /* Bug 3632 */
 # include "src_input.m"
+#endif /* KEY Bug 3632 */
+#ifdef KEY /* Bug 6673 */
+#include "../liberrno.h"
+/* Can remove this pragma and the two "if (verbose_message)" tests later on,
+ * once we have a new toolroot libpathfortran.a containing verbose_message. */
+#pragma weak verbose_message
 #endif /* KEY Bug 3632 */
 
 #  define	 CIF_VERSION	       3    /* Must be defined before         */
@@ -130,7 +136,7 @@ void init_msg_processing (char *argv[])
 
    /* Unconditionally open the message system */
 
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(TARGET_OS_DARWIN))
 #ifdef KEY /* Bug 5089 */
   if (result == NULL)
 #else /* KEY Bug 5089 */
@@ -162,7 +168,7 @@ void init_msg_processing (char *argv[])
 
    if (msg_sys == (nl_catd) -1) {  /* (nl_catd) is msg_sys's type. */
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 #ifdef PSC_TO_OPEN64
       fprintf (stderr, OPEN64_NAME_PREFIX "f95 INTERNAL: Unable to open message system.\n");
 #endif
@@ -1095,7 +1101,7 @@ void output_msg (int				glb_line_num,
                                  orig_text,
                                  ORIG_MSG_SIZE);
 	     
-   if (*text_ptr == (char) NULL) {	/* Unable to retrieve message. */
+   if (!*text_ptr) {	/* Unable to retrieve message. */
 
       if (msg_num == 3) {
 
@@ -1112,7 +1118,7 @@ void output_msg (int				glb_line_num,
          /* more of a clue as to what could possibly have happened and then   */
          /* added the specific check later for the "out of memory" case.      */
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 #ifdef PSC_TO_OPEN64
          fprintf(stderr, OPEN64_NAME_PREFIX "f95 INTERNAL: "
 #endif
@@ -1149,7 +1155,7 @@ void output_msg (int				glb_line_num,
       /* the "if" should be changed to a "switch" on the codes returned from  */
       /* __catgetmsg_error_code().					      */
 
-# if !defined(_HOST_OS_LINUX)
+# if !(defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 
       if (__catgetmsg_error_code() == NL_ERR_MALLOC) {
          fprintf(stderr, "cft90 INTERNAL: "
@@ -1204,6 +1210,11 @@ void output_msg (int				glb_line_num,
                     position_buff,
                     (char *) NULL);
          fputs (final_text, stderr);
+#ifdef KEY /* Bug 6673 */
+	 if (verbose_message) {
+	   verbose_message(group_code, msg_num);
+	 }
+#endif /* KEY Bug 6673 */
       }
    }
    else {
@@ -1289,7 +1300,7 @@ void exit_compiler (int		code)
 
 # ifdef _DEBUG
 
-# if defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 
    /* Abort if this is a Limit or an Internal error.			      */
 
@@ -1777,7 +1788,7 @@ void print_buffered_messages(void)
       goto EMERGENCY_EXIT;
    }
 
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
   if (getenv("NLSPATH") == NULL) {
     /* NLSPATH is not set. */
     const char * const toolroot = getenv("TOOLROOT");
@@ -2178,6 +2189,11 @@ JUST_PRINT_MESSAGE:
                    (char *) NULL);
 
          fputs(final_text, stderr);
+#ifdef KEY /* Bug 6673 */
+	 if (verbose_message) {
+	   verbose_message(group_code, message_rec->msgno);
+	 }
+#endif /* KEY Bug 6673 */
 
 # ifdef _DEBUG
          if (dump_flags.stmt_dmp) {

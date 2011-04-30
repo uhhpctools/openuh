@@ -51,7 +51,6 @@
 //  $Author: marcel $
 //  $Source: /proj/osprey/CVS/open64/osprey1.0/common/targ_info/generate/abi_properties_gen.cxx,v $
 
-#include <strings.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -61,38 +60,61 @@
 #include "gen_util.h"
 #include "targ_isa_registers.h"
 #include "abi_properties_gen.h"
+#include "bstring.h"
 
 //
 // Information about a property
 //
 struct abi_property {
   const char* name;		// Name given for documentation and debugging
-  bool is_reg;			// Register or non-register
-  bool is_flag;			// Boolean flag or value
-  unsigned long long v;		// Flag mask (is_flag) or value (!is_flag)
+  bool single_class;		// whether only has one regclass
+  bool single_reg;		// whether only has one reg (per class)
+  ISA_REGISTER_CLASS rc;	// first register class
+  INT reg[ISA_REGISTER_CLASS_MAX+1]; // first register in class
+  unsigned long long val;	// unique bit value of property
 };
+
+// If more than NUM_REGISTERS_LIMIT, then don't want to create static arrays
+// of register data, as cygwin compiler complains; instead create sparse list
+// of modified values.
+#define NUM_REGISTERS_LIMIT 1000
+
+typedef struct {
+  ISA_REGISTER_CLASS rc;
+  INT reg;
+  const char *name;
+} REG_NAME;
+
+typedef struct {
+  ISA_REGISTER_CLASS rc;
+  // because properties often cover a large range (e.g. allocatable),
+  // just use one info record for entire range.
+  INT minreg;	
+  INT maxreg;
+  ABI_PROPERTY aprop;
+} ABI_PROPERTY_INFO;
 
 //
 // Information about an ABI
 //
 typedef struct abi {
   const char *name;		// Name
-  std::list<ABI_PROPERTY> flags;	// Non-register flag properties
-  std::list<ABI_PROPERTY> values;	// Non-register value properties
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
   std::list<ABI_PROPERTY> reg_flags[ISA_REGISTER_CLASS_MAX+1][ISA_REGISTER_MAX+1];
 				// Register flag properties
-  std::list<ABI_PROPERTY> reg_values[ISA_REGISTER_CLASS_MAX+1][ISA_REGISTER_MAX+1];
-				// Register value properties
   const char *reg_names[ISA_REGISTER_CLASS_MAX+1][ISA_REGISTER_MAX+1];
 				// Register names
+#else
+  std::list<ABI_PROPERTY_INFO> reg_flags; // Register value properties
+  std::list<REG_NAME> reg_names; // Register names
+#endif
 } *ABI;
 
 
 static std::list<ABI_PROPERTY> props; // All the properties
 static std::list<ABI> abis;		// All the ABIs
 static ABI current_abi;		// The current ABI being described
-static int prop_count[2 /* is_flag */][2 /* is_reg */] = {0};
-				// Counts of the various kinds of props
+static int prop_count = 0;	// number of properties
 
 static const char * const interface[] = {
   "/* ====================================================================",
@@ -161,12 +183,15 @@ ABI_PROPERTY Create_Reg_Property(const char *name)
   ABI_PROPERTY result = new abi_property;
 
   result->name = name;
-  result->is_reg = true;
-  result->is_flag = true;
-  result->v = 0;
+  result->val = 0;
+  result->rc = ISA_REGISTER_CLASS_UNDEFINED;
+  int rc;
+  for (rc = 0; rc <= ISA_REGISTER_CLASS_MAX; ++rc)
+    result->reg[rc] = -1;
+  result->single_class = false;
+  result->single_reg = false;
 
   props.push_back(result);
-
   return result;
 }
 
@@ -180,7 +205,9 @@ void Begin_ABI(const char *name)
   ABI result = new abi;
 
   result->name = name;
-  bzero(result->reg_names, sizeof(result->reg_names));
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
+  memset(result->reg_names, 0, sizeof(result->reg_names));
+#endif
 
   current_abi = result;
 
@@ -197,20 +224,85 @@ void Reg_Property(ABI_PROPERTY prop, ISA_REGISTER_CLASS rc, ...)
   va_list ap;
   int reg_num;
   bool used = false;
+  int count = 0;
+  int firstreg = -1;
 
   va_start(ap,rc);
   while ( (reg_num = va_arg(ap,int)) != -1 ) {
+    if (firstreg == -1) 
+      firstreg = reg_num;
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
     current_abi->reg_flags[rc][reg_num].push_back(prop);
+#else
+    {
+    ABI_PROPERTY_INFO api = {rc, reg_num, reg_num, prop};
+    current_abi->reg_flags.push_back(api);
+    }
+#endif
     used = true;
+    ++count;
   }
   va_end(ap);
 
-  if (used && prop->v == 0) {
-    prop->v = 1ULL << prop_count[true][true];
-    ++prop_count[true][true];
+  if (used && prop->val == 0) {
+    prop->val = 1ULL << prop_count;
+    ++prop_count;
+    prop->single_class = true;
+    if (count == 1)
+      prop->single_reg = true;
+    else
+      prop->single_reg = false;
+    prop->rc = rc;
   }
+  else {
+    // in case multiple calls to this property, e.g. if in multiple regclass
+    prop->single_class = false;
+  }
+  prop->reg[rc] = firstreg;
 }
 
+/////////////////////////////////////
+void Reg_Property_Range(ABI_PROPERTY prop, ISA_REGISTER_CLASS rc, INT minreg, INT maxreg)
+/////////////////////////////////////
+//  See interface description.
+/////////////////////////////////////
+{
+  bool used = false;
+
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
+  int reg_num;
+  for (reg_num = minreg; reg_num <= maxreg; ++reg_num) {
+    current_abi->reg_flags[rc][reg_num].push_back(prop);
+    used = true;
+  }
+#else
+  ABI_PROPERTY_INFO api = {rc, minreg, maxreg, prop};
+  current_abi->reg_flags.push_back(api);
+  used = true;
+#endif
+
+  if (used && prop->val == 0) {
+    prop->val = 1ULL << prop_count;
+    ++prop_count;
+    prop->rc = rc;
+    prop->single_class = true;
+  }
+  else {
+    prop->single_class = false;
+  }
+  prop->reg[rc] = minreg;
+}
+
+
+void Set_Reg_Name(ISA_REGISTER_CLASS rc, INT reg, const char *name)
+{
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
+    current_abi->reg_names[rc][reg] = name;
+#else
+    REG_NAME rn = {rc, reg, name};
+    current_abi->reg_names.push_back(rn);
+#endif
+}
 
 /////////////////////////////////////
 void Reg_Names(ISA_REGISTER_CLASS rc, INT minreg, INT maxreg, const char **names)
@@ -220,10 +312,9 @@ void Reg_Names(ISA_REGISTER_CLASS rc, INT minreg, INT maxreg, const char **names
 {
   int reg_num;
   for (reg_num = minreg; reg_num <= maxreg; ++reg_num) {
-    current_abi->reg_names[rc][reg_num] = names[reg_num - minreg];
+    Set_Reg_Name (rc, reg_num, names[reg_num - minreg]);
   }
 }
-
 
 /////////////////////////////////////
 static const char *Type_Name(int bits)
@@ -313,12 +404,10 @@ void ABI_Properties_End(void)
   // Generate the ABI_PROPERTIES decl
   //
   fprintf(hfile, "\ntypedef struct {\n");
-  if (prop_count[true][false] != 0) {
-    fprintf(hfile, "  %s flags;\n", Type_Name(prop_count[true][false]));
-  }
-  if (prop_count[true][true] != 0) {
+
+  if (prop_count != 0) {
     fprintf(hfile, "  %s reg_flags[%d][%d];\n", 
-		   Type_Name(prop_count[true][true]),
+		   Type_Name(prop_count),
 		   ISA_REGISTER_CLASS_MAX+1,
 		   ISA_REGISTER_MAX+1);
   }
@@ -333,12 +422,11 @@ void ABI_Properties_End(void)
   fprintf(hfile, "\n");
   for (prop_iter = props.begin(); prop_iter != props.end(); ++prop_iter) {
     ABI_PROPERTY prop = *prop_iter;
-    assert(prop->is_flag);
-    fprintf(hfile, "#define ABI_PROPERTY_%-20s 0x%0*llx%s\n",
+    fprintf(hfile, "#define ABI_PROPERTY_%-20s 0x%0*" LL_FORMAT "x%s\n",
 		   prop->name,
-		   Type_Size(prop_count[true][prop->is_reg]) / 4,
-		   prop->v,
-		   Type_Suffix(prop_count[true][prop->is_reg]));
+		   Type_Size(prop_count) / 4,
+		   prop->val,
+		   Type_Suffix(prop_count));
   }
 
   //
@@ -358,20 +446,7 @@ void ABI_Properties_End(void)
 		   "    /* %s */\n",
 		   abi->name);
 
-    int count = prop_count[true][false];
-    if (count != 0) {
-      unsigned long long mask = 0;
-      for (prop_iter = abi->flags.begin(); prop_iter != abi->flags.end(); ++prop_iter) {
-	ABI_PROPERTY prop = *prop_iter;
-	mask |= prop->v;
-      }
-      fprintf(cfile, "    0x%0*llx%s,\n",
-		     Type_Size(count) / 4,
-		     mask,
-		     Type_Suffix(count));
-    }
-
-    count = prop_count[true][true];
+    int count = prop_count;
     if (count != 0) {
       fprintf(cfile, "    {\n");
       for (rc = 0; rc <= ISA_REGISTER_CLASS_MAX; ++rc) {
@@ -384,16 +459,30 @@ void ABI_Properties_End(void)
 	int cursor = fprintf(cfile, "      {");
 	for (reg = 0; reg <= ISA_REGISTER_MAX; ++reg) {
 	  unsigned long long mask = 0;
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
 	  std::list<ABI_PROPERTY> props = abi->reg_flags[rc][reg];
 	  for (prop_iter = props.begin(); prop_iter != props.end(); ++prop_iter) {
 	    ABI_PROPERTY prop = *prop_iter;
-	    mask |= prop->v;
+	    mask |= prop->val;
 	  }
+#else
+          std::list<ABI_PROPERTY_INFO>::iterator api_iter;
+	  for (api_iter = abi->reg_flags.begin(); 
+             api_iter != abi->reg_flags.end(); 
+             ++api_iter) 
+          {
+	    ABI_PROPERTY_INFO api = *api_iter;
+            if (api.rc == rc && reg >= api.minreg && reg <= api.maxreg) {
+	      ABI_PROPERTY prop = api.aprop;
+	      mask |= prop->val;
+            }
+          }
+#endif
 	  if (cursor >= 80 - (4 + Type_Size(count) / 4) - 3 - 1) {
 	    fprintf(cfile, "\n");
 	    cursor = fprintf(cfile, "       ");
 	  }
-	  cursor += fprintf(cfile, " 0x%0*llx%s,",
+	  cursor += fprintf(cfile, " 0x%0*" LL_FORMAT "x%s,",
 				   Type_Size(count) / 4,
 				   mask,
 				   Type_Suffix(count));
@@ -413,7 +502,23 @@ void ABI_Properties_End(void)
 		     ISA_REGISTER_CLASS_INFO_Name(cinfo));
       int cursor = fprintf(cfile, "      {");
       for (reg = 0; reg <= ISA_REGISTER_MAX; ++reg) {
-	const char *name = abi->reg_names[rc][reg];
+        const char *name;
+#if ISA_REGISTER_MAX < NUM_REGISTERS_LIMIT
+	name = abi->reg_names[rc][reg];
+#else
+        name = NULL;
+        std::list<REG_NAME>::iterator rn_iter;
+	for (rn_iter = abi->reg_names.begin(); 
+             rn_iter != abi->reg_names.end(); 
+             ++rn_iter) 
+        {
+	    REG_NAME rn = *rn_iter;
+            if (rn.rc == rc && rn.reg == reg) {
+              name = rn.name;
+              break;
+            }
+        }
+#endif
 	if (name == NULL) name = ISA_REGISTER_CLASS_INFO_Reg_Name(cinfo, reg);
 	if (name == NULL) name = "";
 	if (cursor >= 80 - (4 + strlen(name))) {
@@ -483,15 +588,13 @@ void ABI_Properties_End(void)
 
   for (prop_iter = props.begin(); prop_iter != props.end(); ++prop_iter) {
     ABI_PROPERTY prop = *prop_iter;
-    assert(prop->is_flag);
-    fputs(prop->v ? "\n" : "\n/*ARGSUSED*/\n", hfile);
-    if (prop->is_reg) {
+    fputs(prop->val ? "\n" : "\n/*ARGSUSED*/\n", hfile);
       fprintf(hfile, "inline BOOL ABI_PROPERTY_Is_%s(\n"
 		     "  ISA_REGISTER_CLASS rc,\n"
 		     "  INT reg)\n"
 		     "{\n",
 		     prop->name);
-      if (prop->v == 0) {
+      if (prop->val == 0) {
 	fprintf(hfile, "  return FALSE;\n"
 		       "}\n");
       } else {
@@ -501,22 +604,57 @@ void ABI_Properties_End(void)
 		       "}\n",
 		       prop->name);
       }
-    } else {
-      fprintf(hfile, "inline BOOL ABI_PROPERTY_Is_%s(void)\n"
-		     "{\n",
-		     prop->name);
-      if (prop->v == 0) {
-	fprintf(hfile, "  return FALSE;\n"
-		       "}\n");
-      } else {
-	fprintf(hfile, "  extern const ABI_PROPERTIES *ABI_PROPERTIES_target_props;\n"
-		       "  return (  ABI_PROPERTIES_target_props->flags\n"
-		       "          & ABI_PROPERTY_%s) != 0;\n"
-		       "}\n",
-		       prop->name);
+  }
+
+  // Generate accessors for abi properties so we don't have to add separate
+  // accessors in cg.  When property maps to several registers, just give
+  // the first register, which is useful if in a sequential range
+  // (not useful in some cases, but doesn't hurt).
+  fprintf(hfile, "\n");
+  fprintf(hfile, "/* For properties that map to only one register,\n");
+  fprintf(hfile, " * create accessor routines for those registers.\n");
+  fprintf(hfile, " * If they map to multiple registers,\n");
+  fprintf(hfile, " * create accessor routines for first register.\n");
+  fprintf(hfile, " */\n");
+  for (prop_iter = props.begin(); prop_iter != props.end(); ++prop_iter) {
+    ABI_PROPERTY prop = *prop_iter;
+    if (prop->rc == ISA_REGISTER_CLASS_UNDEFINED) {
+      continue;
+    }
+    const ISA_REGISTER_CLASS_INFO *cinfo = ISA_REGISTER_CLASS_Info(prop->rc);
+    if (prop->single_class) {
+      fprintf(hfile, "#define ABI_PROPERTY_%s_Register_Class ISA_REGISTER_CLASS_%s\n", 
+	prop->name, ISA_REGISTER_CLASS_INFO_Name(cinfo));
+      if (prop->single_reg) 
+        fprintf(hfile, "#define ABI_PROPERTY_%s_Register %d\n", 
+	  prop->name, prop->reg[prop->rc]);
+      else
+        fprintf(hfile, "#define ABI_PROPERTY_%s_First_Register %d\n", 
+	  prop->name, prop->reg[prop->rc]);
+    }
+    else { // !single_class
+      int rc;
+      for (rc = 1; rc <= ISA_REGISTER_CLASS_MAX; ++rc) {
+        if (prop->reg[rc] != -1) {
+          if (prop->single_reg) 
+            fprintf(hfile, "#define ABI_PROPERTY_%s_%s_Register %d\n", 
+	      ISA_REGISTER_CLASS_INFO_Name(
+	        ISA_REGISTER_CLASS_Info((ISA_REGISTER_CLASS)rc)),
+	      prop->name, prop->reg[rc]);
+          else
+            fprintf(hfile, "#define ABI_PROPERTY_%s_%s_First_Register %d\n", 
+	      ISA_REGISTER_CLASS_INFO_Name(
+	        ISA_REGISTER_CLASS_Info((ISA_REGISTER_CLASS)rc)),
+	      prop->name, prop->reg[rc]);
+        }
       }
     }
+    fprintf(hfile, "\n");
   }
-  
+
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

@@ -1633,7 +1633,15 @@ static void CGGRP_Bundle_BB(BB *bb)
 	       op = OP_next(op);
                CGGRP_Cycle_Advance();
             } else {
+               OP *prev_op = op;
                op = OP_next(op);
+
+               // OSP
+               // Force to start a new cycle for the code in new line
+               //   to get better debugability at -g
+               if ( Debug_Level > 0 && op != NULL &&
+                    OP_srcpos(op) != OP_srcpos(prev_op) )
+                   CGGRP_Cycle_Advance(); 
 	    }
         }
         else{

@@ -52,9 +52,6 @@ Boston, MA 02111-1307, USA.  */
 /* special flags for the aix assembler to generate the short form for all
    qualifying forward reference */
 /* The buggy /bin/as of aix ps/2 1.2.x cannot always handle it.	*/
-#if 0
-#define ASM_SPEC "-s2"
-#endif /* 0 */
 
 #undef ASM_FILE_START
 #define ASM_FILE_START(FILE) 					\

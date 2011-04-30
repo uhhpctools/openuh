@@ -85,11 +85,15 @@ enum AUX_ST_FLAG
 extern "C" void
 Sync_symbol_attributes (ST_IDX st_idx, UINT32 sym_attr, BOOL is_weak,
 			UINT32 export_class);
+#ifdef SHARED_BUILD
 #pragma weak Sync_symbol_attributes
+#endif
 
 extern "C" void
 Linker_mark_not_gp_rel (ST_IDX st_idx);
+#ifdef SHARED_BUILD
 #pragma weak Linker_mark_not_gp_rel
+#endif
 
 #endif 
 
@@ -321,7 +325,7 @@ struct block_element_compare
 };
 
 typedef std::map<const BLOCK_ELEMENT_DESC, ST_IDX, block_element_compare,
-    mempool_allocator<ST_IDX> > BLOCK_ELEMENTS;
+    mempool_allocator< std::pair<const BLOCK_ELEMENT_DESC, ST_IDX> > > BLOCK_ELEMENTS;
 typedef hash_map<ST_IDX, BLOCK_ELEMENTS*, __gnu_cxx::hash<ST_IDX>, std::equal_to<ST_IDX>,
     mempool_allocator<BLOCK_ELEMENTS*> > COMMON_BLOCK_ELEMENTS_MAP;
 

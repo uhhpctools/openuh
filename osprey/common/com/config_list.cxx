@@ -69,6 +69,10 @@ BOOL List_Notes = TRUE;		/* -LIST:notes - in .s file */
 static BOOL List_Notes_Set = FALSE;	/* 	... option set */
 BOOL List_Software_Names = FALSE; /* -LIST:software_names - in .s file */
 BOOL List_Source = TRUE;	/* -LIST:source - in .s file */
+char* List_Build_Date = NULL;	/* if NULL then not set */
+#if defined(TARG_SL)
+BOOL List_Profile=FALSE;
+#endif
 
 /* Listing options: */
 static OPTION_DESC Options_LIST[] = {
@@ -105,9 +109,19 @@ static OPTION_DESC Options_LIST[] = {
       0, 0, 0,	&List_Symbols,	NULL,
       "List symbols in listing file" },
 
+#if defined (TARG_SL)
+    { OVK_BOOL, OV_VISIBLE,     FALSE, "profile",       "prof",
+      0, 0, 0,  &List_Profile,          NULL,
+      "List profile in listing file" },
+#endif
+
     { OVK_BOOL, OV_VISIBLE,	FALSE, "software_names", "soft",
       0, 0, 0,	&List_Software_Names,	NULL,
       "Use software (ABI) register names in .s file" },
+
+    { OVK_NAME, OV_VISIBLE,	FALSE, "build_date", "",
+      0, 0, 0,	&List_Build_Date,	NULL,
+      "Put build date in assembly file" },
 
     { OVK_COUNT }		    /* List terminator -- must be last */
 };
@@ -128,7 +142,11 @@ LIST_Configure ( void )
   if ( List_All_Options ) List_Options = TRUE;
 
   /* Turn on the listing file if specific listing options specified: */
+#if defined(TARG_SL)
+  if ( List_Symbols || List_Cite || List_Options || List_Profile ) {
+#else
   if ( List_Symbols || List_Cite || List_Options ) {
+#endif
     List_Enabled = TRUE;
   }
 }

@@ -35,13 +35,19 @@
 
 #ifdef _KEEP_RCS_ID
 static const char source_file[] = __FILE__;
-static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/resource.c,v $ $Revision: 1.1.1.1 $";
+static const char rcs_id[] = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/resource.c,v $ $Revision: 1.1 $";
 #endif
 
 #if (1)
 # include <sys/time.h>
+#ifdef __MINGW32__
+#include<time.h>
+#include<sys/types.h>
+#include<sys/timeb.h>
+#else /* __MINGW32__ */
 # include <sys/resource.h>
   typedef struct rusage time_buf_t;
+#endif /* __MINGW32__ */
 #else
 # include <sys/param.h>
 # include <sys/types.h>
@@ -79,11 +85,11 @@ struct resources {
     TIME_INFO	utime;	/* User cpu time */
     TIME_INFO	stime;	/* System cpu time */
     TIME_INFO	etime;	/* Elapsed time */
-    /* 32 bits are enought to hold the value of memory usage. However, 
-     * in the process of keeping track of memory usage, <memory> is 
-     * used sometimes to hold the value of pointer. e.g the value 
-     * return from sbrk(), therefore, memory should be 64bits long 
-     * on 64bit environment. 
+    /* 32 bits are enought to hold the value of memory usage. However,
+     * in the process of keeping track of memory usage, <memory> is
+     * used sometimes to hold the value of pointer. e.g the value
+     * return from sbrk(), therefore, memory should be 64bits long
+     * on 64bit environment.
      */
     INTPTR memory;	/* Memory used (bytes) */
     INTPTR freemem;	/* Free memory allocated */
@@ -97,7 +103,7 @@ struct rstate {
     RESOURCES cur;	/* The latest absolute information */
     RESOURCES del;	/* The accumulated delta information */
     struct rstate *dad;	/* The parent structure in hierarchy */
-    char *name;		/* The resource record name */
+    const char *name;	/* The resource record name */
 };
 
 static void Clear_Resource ( RESOURCES *r );
@@ -113,11 +119,17 @@ static void Accum_Delta_Resource ( RESOURCES *delta,
                               RESOURCES *summary );
 
 /* We need a few buffers for internal use: */
+#ifndef __MINGW32__
 static time_buf_t tbuf;
+#endif /* __MINGW32__ */
 static RESOURCES curtime, deltime;
 static RSTATE runtime;
 #if (1)
+#ifdef __MINGW32__
+static struct _timeb start_time;
+#else /* __MINGW32__ */
 static struct timeval start_time;
+#endif /* __MINGW32__ */
 #else
 static INT start_time;	/* Initial date/time */
 #endif
@@ -162,7 +174,11 @@ Get_Resources (
 )
 {
 #if (1)
+#ifdef __MINGW32__
+    struct _timeb now;
+#else /* __MINGW32__ */
     struct timeval now;
+#endif /* __MINGW32__ */
 #else
     INT secs, frac;
 #endif
@@ -171,8 +187,18 @@ Get_Resources (
     if ( ! initialized ) Resource_Init ();
 
     /* Get the elapsed time: */
+#ifdef __MINGW32__
+    _ftime(&now);
+    r->etime.secs  = now.time  - start_time.time;
+    r->etime.usecs = (now.millitm - start_time.millitm) * 1000;
+
+    r->utime.secs = clock() / 2;
+    r->stime.secs = clock() / 2;
+    r->utime.usecs = 0;
+    r->stime.usecs = 0;
+#else /* __MINGW32__ */
 #if (1)
-#ifndef linux
+#if !(defined(linux) || defined(BUILD_OS_DARWIN))
     gettimeofday(&now);
 #else
     gettimeofday(&now, NULL);
@@ -209,7 +235,8 @@ Get_Resources (
 #endif
 
     /* Get the memory information */
-    r->memory = (INTPTR)sbrk(0);
+    r->memory = (INTPTR) sbrk(0);
+#endif /* __MINGW32__ */
     r->freemem = 0;
 }
 
@@ -323,8 +350,11 @@ void
 Resource_Init ( void )
 {
     /* Initialize elapsed time base: */
+#ifdef __MINGW32__
+  _ftime(&start_time);
+#else /* __MINGW32__ */
 #if (1)
-#ifndef linux
+#if !(defined(linux) || defined(BUILD_OS_DARWIN))
     gettimeofday(&start_time);
 #else
     gettimeofday(&start_time, NULL);
@@ -332,6 +362,7 @@ Resource_Init ( void )
 #else
     start_time = time (0);
 #endif
+#endif /* __MINGW32__ */
     initialized = 1;
 
     /* Initialize the process initialization structure: */
@@ -351,7 +382,7 @@ Resource_Init ( void )
 
 RSTATE *
 Resource_Alloc (
-    char *rname,
+    const char *rname,
     RSTATE *parent
 )
 {
@@ -446,7 +477,7 @@ Get_Time (
  * ====================================================================
  */
 
-char *
+const char *
 Get_Timer_Name (
     RSTATE *r
 )
@@ -463,7 +494,7 @@ Get_Timer_Name (
  * ====================================================================
  */
 
-INT
+INTPTR
 Get_Memory (
     RSTATE *r,
     RES_REQUEST req
@@ -527,7 +558,6 @@ Resource_Report (
 	      res->stime.secs, res->stime.usecs/1000,
 	      res->etime.secs, res->etime.usecs/10000 );
 #endif
-    fprintf ( file, "\tmemory:\t%8x\n\tfree:\t%8x\n",
-	      (INT)res->memory, (INT)res->freemem);
+    fprintf ( file, "\tmemory:\t%8lx\n\tfree:\t%8lx\n",
+	      res->memory, res->freemem );
 }
-

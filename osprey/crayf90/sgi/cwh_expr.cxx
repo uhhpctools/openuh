@@ -71,7 +71,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/crayf90/sgi/SCCS/s.cwh_expr.cxx $ $Revision: 1.5 $";
@@ -755,7 +755,7 @@ fei_lneg(TYPE result)
   wn  = WN_CreateExp1(OPC_I4LNOT, lhs) ;
 
   wn = cwh_expr_restore_arrayexp(wn,ae);
-  cwh_stk_push_typed(wn,WN_item,cast_to_TY(t_TY(result)));
+  cwh_stk_push_typed(wn,WN_item,(INTPTR)cast_to_TY(t_TY(result)));
 }
 
 /*===============================================

@@ -81,7 +81,11 @@ _ADJUSTL_(
  */
 
 	(void) memset (rptr, (int) ' ', lenr);
+#ifdef KEY /* Bug 9723 */
+	(void) memmove(rptr, tptr, i);
+#else /* KEY Bug 9723 */
 	(void) strncpy (rptr, tptr, i);
+#endif /* KEY Bug 9723 */
 
 /*	convert result to fcd					*/
 

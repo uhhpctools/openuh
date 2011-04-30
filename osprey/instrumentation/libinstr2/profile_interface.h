@@ -90,7 +90,7 @@ extern void __profile_branch(void *pu_handle, INT32 id, bool taken);
 
 extern void __profile_switch_init(void *pu_handle,
 				  INT32 num_switch,      INT32 *num_targets,
-				  INT32 num_case_values, INT64 *case_values);
+				  INT32 num_case_values, FB_NUM_TYPE *case_values);
 extern void __profile_switch(void *pu_handle, INT32 switch_id,
 			     INT32 target, INT32 num_targets);
 
@@ -132,7 +132,7 @@ extern void __profile_icall(void * pu_handle, int icall_id, void * called_fun_ad
 #ifdef KEY
   // Profile routines for value
   extern void __profile_value_init(void *pu_handle, int num_values);
-  extern void __profile_value(void * pu_handle, int inst_id, INT64 value );
+  extern void __profile_value(void * pu_handle, int inst_id, FB_NUM_TYPE value );
 
   // Profile routines for value_fp_bin
   extern void __profile_value_fp_bin_init(void *pu_handle, int num_values);

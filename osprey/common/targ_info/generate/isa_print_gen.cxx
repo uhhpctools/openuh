@@ -1,5 +1,9 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ *  Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -56,22 +60,37 @@
 #include <assert.h>
 #include <list>
 #include <vector>
+#include <string.h>
 #include "topcode.h"
 #include "targ_isa_properties.h"
 #include "gen_util.h"
 #include "isa_print_gen.h"
+#include "targ_isa_operands.h"
 
 /* The maximum number of operands and results used by ANY target.
  * (It would be better to get the max operands and results from the
  * generated targ_isa_operands.h file -- Ken)
  */
+#if defined(TARG_SL)
+#define MAX_OPNDS 9
+#define MAX_RESULTS 4
+#elif defined(TARG_PPC32)
 #define MAX_OPNDS 6
 #define MAX_RESULTS 2
+#else
+#define MAX_OPNDS ISA_OPERAND_max_operands
+#define MAX_RESULTS ISA_OPERAND_max_results
+#endif
 
 typedef enum {
 	END	= 0,			// end of list marker
 	NAME	= 1,			// instruction name/mnemonic
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+   	SEGMENT = 2,			// address segment prefix
+	OPND    = 3,			// OPND+n => operand n
+#else
 	OPND    = 2,			// OPND+n => operand n
+#endif
    	RESULT  = OPND+MAX_OPNDS,	// RESULT+n => result n
 } COMP_TYPE;
 
@@ -161,7 +180,7 @@ static const char * const interface[] = {
 const char* Print_Name(int print_index)
 /////////////////////////////////////
 {
-  static char *comp_name[MAX_LISTING_OPERANDS];
+  static const char *comp_name[MAX_LISTING_OPERANDS];
   static bool initialized;
 
   if (!initialized) {
@@ -169,16 +188,20 @@ const char* Print_Name(int print_index)
     for (i = 0; i < MAX_LISTING_OPERANDS; ++i) {
       char buf[80];
       if (i == END) {
-	comp_name[i] = "ISA_PRINT_COMP_end";
+	comp_name[i] = strdup("ISA_PRINT_COMP_end");
       } else if (i == NAME) {
-	comp_name[i] = "ISA_PRINT_COMP_name";
+	comp_name[i] = strdup("ISA_PRINT_COMP_name");
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+      } else if (i == SEGMENT) {
+	comp_name[i] = strdup("ISA_PRINT_COMP_segment");
+#endif
       } else if (i == OPND) {
-	comp_name[i] = "ISA_PRINT_COMP_opnd";
+	comp_name[i] = strdup("ISA_PRINT_COMP_opnd");
       } else if (i > OPND && i < (OPND + MAX_OPNDS)) {
 	sprintf(buf, "ISA_PRINT_COMP_opnd+%d", i - OPND);
 	comp_name[i] = strdup(buf);
       } else if (i == RESULT) {
-	comp_name[i] = "ISA_PRINT_COMP_result";
+	comp_name[i] = strdup("ISA_PRINT_COMP_result");
       } else {
 	assert(i > RESULT && i < (RESULT + MAX_RESULTS));
 	sprintf(buf, "ISA_PRINT_COMP_result+%d", i - RESULT);
@@ -335,11 +358,12 @@ void ISA_Print_End(void)
   const char comma = ',';
   const char space = ' ';
   const char * const isa_print_type_format = "\t/* %s[%d] */";
-  const char * const isa_print_format_format = "  { %-14s ";
+  const char * const isa_print_format_format = "  { %s {\n";
   const char * const isa_print_args_format = " %s%c";
   int top;
   bool err;
 
+#ifndef TARG_LOONGSON
   for (err = false, top = 0; top < TOP_count; ++top) {
     bool is_dummy = TOP_is_dummy((TOP)top);
     bool is_simulated = TOP_is_simulated((TOP)top);
@@ -360,6 +384,7 @@ void ISA_Print_End(void)
     }
   }
   if (err) exit(EXIT_FAILURE);
+#endif
 
   fprintf(cfile,"#include <string.h>\n");
   fprintf(cfile,"#include \"topcode.h\"\n");
@@ -374,12 +399,18 @@ void ISA_Print_End(void)
   fprintf(hfile, "\ntypedef enum {\n"
 	"  %-21s = %d,  /* %s */\n"
 	"  %-21s = %d,  /* %s */\n"
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+	"  %-21s = %d,  /* %s */\n"
+#endif
 	"  %-21s = %d,  /* %s */\n"
    	"  %-21s = %d,  /* %s */\n"
    	"  %-21s = %d   /* %s */\n"
 	"} ISA_PRINT_COMP;\n",
 	Print_Name(END), END, "End of list marker",
 	Print_Name(NAME), NAME, "Instruction name",
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+	Print_Name(SEGMENT), SEGMENT, "Address segment prefix",
+#endif
 	Print_Name(OPND), OPND, "OPND+n => operand n",
 	Print_Name(RESULT), RESULT, "RESULT+n => result n",
         "ISA_PRINT_COMP_MAX", MAX_LISTING_OPERANDS-1, "Last component");
@@ -399,7 +430,7 @@ void ISA_Print_End(void)
 
   fprintf (cfile, isa_print_format_format, "\"\",");
   fprintf (cfile, isa_print_args_format, Print_Name(END), space);
-  fprintf (cfile, "},");
+  fprintf (cfile, "} },");
   fprintf (cfile, isa_print_type_format, "print_NULL", 0);
   fprintf (cfile, "\n");
   for ( isi = all_prints.begin(); isi != all_prints.end(); ++isi ) {
@@ -414,7 +445,7 @@ void ISA_Print_End(void)
 	    fprintf (cfile, "\n%19s", "");
 	}
 	fprintf (cfile, isa_print_args_format, Print_Name(END), space);
-	fprintf (cfile, "},");
+	fprintf (cfile, "} },");
 	fprintf (cfile, isa_print_type_format, 
 			curr_type->type->name,
 			curr_type->args);
@@ -516,3 +547,20 @@ void ISA_Print_End(void)
 
   Emit_Footer (hfile);
 }
+
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+/////////////////////////////////////
+void Segment (void)
+/////////////////////////////////////
+//  See interface description.
+/////////////////////////////////////
+{
+  if (current_print_desc->args == MAX_LISTING_OPERANDS) {
+    fprintf(stderr, "### Error: too many listing operands for %s\n",
+		    current_print_desc->type->name);
+    exit(EXIT_FAILURE);
+  }
+  current_print_desc->arg[current_print_desc->args] = SEGMENT;
+  current_print_desc->args++;
+}
+#endif

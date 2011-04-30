@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -71,8 +73,10 @@ include $(COMMONDEFS)
 #  Set environment variables
 #----------------------------------------------------------------------
 ifdef LOCAL_BE_DIR
+CVERSION  =  -xansi
 TARG_BE_DIR = $(TARGDIR)/$(LOCAL_BE_DIR)
 else
+CVERSION =
 TARG_BE_DIR = $(TARGDIR)/be
 endif
 
@@ -140,7 +144,8 @@ HEADER_DIRS = \
   $(BE_BE_DIR)		\
   $(BE_CG_DIR)		\
   $(BE_OPT_DIR)		\
-  $(BE_LNO_DIR)
+  $(BE_LNO_DIR)		\
+  $(TARGDIR)/be
 
 
 #----------------------------------------------------------------------
@@ -221,7 +226,11 @@ GLDOPTS = $(STD_LOAD_OPTS) $(LD_QUICKSTART_INFO)
 
 #DSOSTARTOPT = -update_registry $(TARGDIR)/be/so_locations -no_unresolved
 #DSOSTARTOPT = -no_unresolved
+ifeq ($(BUILD_OS), IRIX)
+DSOSTARTOPT = -check_registry $(TARGDIR)/be/so_locations -no_unresolved
+else
 DSOSTARTOPT = 
+endif
 DSOSTARTOPT_32 = -32 $(DSOSTARTOPT)
 DSOSTARTOPT_N32 = -n32 $(DSOSTARTOPT)
 
@@ -231,7 +240,11 @@ DSOSTARTOPT_N32 = -n32 $(DSOSTARTOPT)
 #----------------------------------------------------------------------
 # File containing the list of symbols exported outside of whirl2f.so
 #----------------------------------------------------------------------
+ifeq ($(BUILD_COMPILER), EDG)
+EXPORT_LIST = -exports_file $(BE_WHIRL2F_DIR)/Exported
+else
 EXPORT_LIST =
+endif
 
 #----------------------------------------------------------------------
 #  Define target
@@ -239,44 +252,31 @@ EXPORT_LIST =
 
 TARGETS = whirl2f.so whirl2f_be whirl2f
 
-ifdef LOCAL_TARG_INFO_DIR
-TARG_TARG_INFO_DIR = $(TARGDIR)/$(LOCAL_TARG_INFO_DIR)
-else
-TARG_TARG_INFO_DIR = $(TARGDIR)/targ_info
-endif
-
-ifeq ($(BUILD_TARGET), MIPS)
-TARGET_SO = r10000.so
-endif
-ifeq ($(BUILD_TARGET), IA64)
-TARGET_SO = itanium.so
-endif
-ifeq ($(BUILD_TARGET), IA32)
-TARGET_SO = pentium.so
-endif
-ifeq ($(BUILD_TARGET), X8664)
-TARGET_SO = opteron.so
-endif
-
 # extra files to be removed with make clobber
-LDIRT += be be.so $(TARGET_SO) whirl2c_be
+LDIRT += be be.so $(TARGETS)
 
 
 #----------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
 #----------------------------------------------------------------------
+ifeq ($(BUILD_COMPILER), EDG)
+LLDLIBS	= -none -lc
+endif
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(TARGDIR)/be)
-ifeq ($(BUILD_OS), LINUX)
-	$(call submake,$(BUILD_AREA)/include)
-	if ! test -a $(TARGET_SO); then ln -sf $(TARG_TARG_INFO_DIR)/$(TARGET_SO) .; fi
 endif
 
 #----------------------------------------------------------------------
@@ -314,16 +314,16 @@ whirl2f_be: whirl2f.so
                    LINK_DSO='$(LINK_DSO)' \
                    LINK_DSO_OPTS='$(LINK_DSO_OPTS) -L.' \
                    be)
-	if ! test -a whirl2f_be; then ln -sf $(TARGDIR)/be/be whirl2f_be ; fi
+	if ! test -e whirl2f_be; then ln -sf $(TARGDIR)/be/be whirl2f_be ; fi
 
 whirl2f: whirl2f.so whirl2f_be $(WHIRL2F_MAIN_OBJS)
 	$(link.c++f) -o whirl2f $(WHIRL2F_MAIN_OBJS) $(LDFLAGS)
 
 be.so:
-	if ! test -a be.so; then ln -sf $(TARGDIR)/be/be.so .; fi
+	if ! test -e be.so; then ln -sf $(TARGDIR)/be/be.so .; fi
 
 be:
-	if ! test -a be; then ln -sf $(TARGDIR)/be/be .; fi
+	if ! test -e be; then ln -sf $(TARGDIR)/be/be .; fi
 
 #For debugging, set LD_LIBRARY_PATH manually and invoke whirl2f_dbg
 # directly.

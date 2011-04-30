@@ -1,13 +1,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "omp_rtl.h"
-//#include "uth.h"
 #include "pcl.h"
 #include "omp_task.h"
-//#include "omp_task.h"
 #include "omp_sys.h"
-
-//#define TASK_DEBUG
 
 #define SCHED6
 
@@ -52,7 +48,7 @@ int __ompc_task_false_cond()
 
 int __ompc_task_numtasks_cond()
 {
-    return (__omp_level_1_team_manager.num_tasks < __omp_task_limit);
+  return (__omp_level_1_team_manager.num_tasks < __omp_task_limit);
 }
 
 
@@ -66,11 +62,10 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int is_tied)
     fprintf(stdout,"%d: %lX created %lX\n", __omp_myid, __omp_current_task, newtask);
 #endif
 
-    if(newtask == NULL)
-      {
-	fprintf(stderr, "%d: not able to create new tasks\n", __omp_myid);
-	exit(1);
-      }
+    if(newtask == NULL) {
+      fprintf(stderr, "%d: not able to create new tasks\n", __omp_myid);
+      exit(1);
+    }
     newtask->num_children = 0;
     newtask->is_parallel_task = 0;
     newtask->is_tied = is_tied;
@@ -81,7 +76,7 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int is_tied)
     newtask->pdepth = newtask->depth;
     __ompc_init_lock(&__omp_current_task->lock);
 
-	/*update number of children - use atomic operation if possible */
+    /*update number of children - use atomic operation if possible */
     int x;
     x = __ompc_atomic_inc(&__omp_current_task->num_children);
     __ompc_atomic_inc(&__omp_level_1_team_manager.num_tasks);
@@ -94,7 +89,6 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int is_tied)
 	__ompc_task_q_put_tail(&__omp_local_task_q[__omp_myid], newtask);
 #endif
 
-
     return 0;
 }
 
@@ -102,82 +96,70 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int is_tied)
 void __ompc_task_exit()
 {
 
-    omp_task_t *next;
-    next = NULL;
-/*decrement num_children of parent*/
-   if(__omp_current_task->creator != NULL)
-     {
+  omp_task_t *next;
+  next = NULL;
+  /*decrement num_children of parent*/
+  if(__omp_current_task->creator != NULL) {
 
 #ifdef TASK_DEBUG
-       printf("%X: %X->num_children = %d\n", __omp_current_task, __omp_current_task->creator,__omp_current_task->creator->num_children);
+    printf("%X: %X->num_children = %d\n", __omp_current_task, __omp_current_task->creator,__omp_current_task->creator->num_children);
 #endif 
-       __ompc_lock(&__omp_current_task->creator->lock);
+    __ompc_lock(&__omp_current_task->creator->lock);
 
-       int x;
-
-       x = __ompc_atomic_dec(&__omp_current_task->creator->num_children);
-
-#ifdef TASK_DEBUG
-       printf("parent = %X: task = %X: num_children_left = %d; state = %d\n", __omp_current_task->creator, __omp_current_task,x, __omp_current_task->creator->state);
-#endif
-
-       assert(x >= 0);
-       if((x) == 0 && 
-	  !__omp_current_task->creator->is_parallel_task )
-	 {
-	   if(__omp_current_task->creator->state == OMP_TASK_SUSPENDED)
-	     {
-	       __omp_current_task->creator->state = OMP_TASK_DEFAULT;
-	       while(!__omp_current_task->creator->safe_to_enqueue){};
+    int x;
+    x = __ompc_atomic_dec(&__omp_current_task->creator->num_children);
 
 #ifdef TASK_DEBUG
-	       printf("%d: task_exit: %X placing %X on queue ", __omp_myid, __omp_current_task, __omp_current_task->creator);
+    printf("parent = %X: task = %X: num_children_left = %d; state = %d\n", __omp_current_task->creator, __omp_current_task,x, __omp_current_task->creator->state);
 #endif
-	       int threadid;
-	       omp_task_q_t *q;
+
+    assert(x >= 0);
+    if((x) == 0 && !__omp_current_task->creator->is_parallel_task ) {
+      if(__omp_current_task->creator->state == OMP_TASK_SUSPENDED) {
+        __omp_current_task->creator->state = OMP_TASK_DEFAULT;
+        while(!__omp_current_task->creator->safe_to_enqueue) { };
+
+#ifdef TASK_DEBUG
+        printf("%d: task_exit: %X placing %X on queue ", __omp_myid, __omp_current_task, __omp_current_task->creator);
+#endif
+        int threadid;
+        omp_task_q_t *q;
 #ifdef SCHED1
-	       threadid = __omp_current_task->creator->threadid;
-	       __sync_bool_compare_and_swap(&__omp_empty_flags[threadid], 1, 0);
+        threadid = __omp_current_task->creator->threadid;
+        __sync_bool_compare_and_swap(&__omp_empty_flags[threadid], 1, 0);
 
 #else
-	       if(__omp_current_task->creator->is_tied &&
-		  __omp_current_task->creator->started)
-		 {
-		   threadid = __omp_current_task->creator->threadid;
-		   q = __omp_private_task_q;
-		 }
-	       else
-		 {
-		   threadid = __omp_myid;
-		   q = __omp_local_task_q;
-		 }
+        if(__omp_current_task->creator->is_tied &&
+            __omp_current_task->creator->started) {
+          threadid = __omp_current_task->creator->threadid;
+          q = __omp_private_task_q;
+        } else {
+          threadid = __omp_myid;
+          q = __omp_local_task_q;
+        }
 #endif
-	       __ompc_task_q_put_tail(
-				      &q[threadid],
-				      __omp_current_task->creator);
+        __ompc_task_q_put_tail(
+            &q[threadid],
+            __omp_current_task->creator);
 
-	     }
-	   else if(__omp_current_task->creator->state == OMP_TASK_EXIT)
-	     {
-	       //	       __ompc_task_delete(__omp_current_task->creator);
-	     }
+      }
+      else if(__omp_current_task->creator->state == OMP_TASK_EXIT) {
+        //	       __ompc_task_delete(__omp_current_task->creator);
+      }
 #ifdef TASK_DEBUG
-	   else
-	     printf("%d: taskexit: %X state = %d\n", __omp_myid, __omp_current_task->creator, __omp_current_task->creator->state);
+      else
+        printf("%d: taskexit: %X state = %d\n", __omp_myid, __omp_current_task->creator, __omp_current_task->creator->state);
 #endif
 
-	 }
-       __ompc_unlock(&__omp_current_task->creator->lock);
-     }
+    }
+    __ompc_unlock(&__omp_current_task->creator->lock);
+  }
 
-   __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
-   __omp_current_task->state = OMP_TASK_EXIT;
+  __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
+  __omp_current_task->state = OMP_TASK_EXIT;
 
-
-/*before we delete anything we need to wait for all children to complete */
-
-   __ompc_task_wait2(OMP_TASK_EXIT);
-
+  /*before we delete anything we need to wait for all children to complete */
+  __ompc_task_wait2(OMP_TASK_EXIT);
 }
 
 void __ompc_task_wait()

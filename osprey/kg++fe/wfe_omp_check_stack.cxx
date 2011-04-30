@@ -30,7 +30,10 @@
 
 extern BOOL Trace_Omp;
 
-char dirname[80];
+namespace {  // Bug 13884: Keep "dirname" out of global namespace
+  char dirname[80];
+}
+
 static char* WFE_omp_name(WFE_CHECK_KIND kind)
 {
    switch(kind)

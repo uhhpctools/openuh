@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
   under the terms of version 2 of the GNU General Public License as
@@ -34,5 +34,8 @@ static inline gs_t gs_cons (gs_t e, gs_t es)
 
 gs_count_t gs_length (gs_t list);
 gs_t gs_index (gs_t list, gs_count_t index);
+#ifdef FE_GNU_4_2_0
+void gs_set_index (gs_t list, gs_count_t index, gs_t value);
+#endif
 
-#endif // __GSPIN_LIST_H__
+#endif /* __GSPIN_LIST_H__ */

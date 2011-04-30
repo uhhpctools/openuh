@@ -44,15 +44,23 @@
 
 */
 
-
+#ifdef __MINGW32__
+#include "WINDOWS.h"
+#endif /* __MINGW32__ */
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "config.h"
 #include "config_debug.h"
 #include "config_list.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "controls.h"
 #include "erglob.h"
 #include "erlib.h"
@@ -233,51 +241,17 @@ Terminate ( INT status )
   exit (status);
 }
 
-/* ====================================================================
- *
- * Prepare_Source
- *
- * Process the next source argument and	associated file	control	flags
- * from	the command line.  Pre-process the source file unless
- * suppressed, and initialize output files as required.	 Return	TRUE
- * iff we have a successfully pre-processed source file	left to
- * compile.
- *
- * ====================================================================
- */
-
-static BOOL
-Prepare_Source ( void )
+static void
+Process_Command_Line (void)
 {
   INT16	i;
   char *cp;
-  char *fname;
   INT16 len;
   BOOL  dashdash_flag = FALSE;
 
-  /* Initialize error handler: */
-  Init_Error_Handler ( 100 );
-  Set_Error_Line ( ERROR_LINE_UNKNOWN );
-  Set_Error_File ( NULL );
-  Set_Error_Phase ( "Front End Driver" );
-
-  /* Clear file names: */
-  Src_File_Name = NULL;	/* Source file */
-  IR_File_Name = NULL;	/* SGIR file */
-  Irb_File_Name = NULL;	/* ACIR file */
-  Err_File_Name = Dash;	/* Error file */
-  Lst_File_Name = NULL;	/* Listing file */
-  Trc_File_Name = NULL;	/* Trace file */
-  DSTdump_File_Name = NULL; /* DST dump */
-
-  Delete_IR_File = FALSE;
-  
   /* Check the command line flags for -f? and source file names: */
-  while ( ++Source_Arg <= Argc ) {
+  while ( ++Source_Arg < Argc ) {
     i = Source_Arg;
-
-    /* Null argument => end of list: */
-    if ( Argv[i] == NULL ) return FALSE;
 
     if ( !dashdash_flag && (*(Argv[i]) == '-' )) {
       cp = Argv[i]+1;	/* Pointer to next flag character */
@@ -297,6 +271,11 @@ Prepare_Source ( void )
 	Process_Command_Line_Group (cp, Common_Option_Groups);
     	continue;
       }
+
+      if (*cp == 't') {
+	Process_Trace_Option ( Argv[i] );
+	continue;
+      }
     } 
     else {
       Src_Count++;
@@ -306,43 +285,76 @@ Prepare_Source ( void )
       len = strlen ( Argv[i] );
       Src_File_Name = (char *) malloc (len+5);
       strcpy ( Src_File_Name, Argv[i] );
+    }
+  }
+}
 
-      /* We've got a source file name -- open other files.
-       * We want them to be created in the current directory, so we
-       * strip off the filename only from Src_File_Name for use:
-       */
-      fname = Last_Pathname_Component ( Src_File_Name );
+/* ====================================================================
+ *
+ * Prepare_Source
+ *
+ * Process the next source argument and	associated file	control	flags
+ * from	the command line.  Pre-process the source file unless
+ * suppressed, and initialize output files as required.	 Return	TRUE
+ * iff we have a successfully pre-processed source file	left to
+ * compile.
+ * Change:  move command-line processing earlier, same as what other
+ * phases do, so that flags are read before configuring.
+ *
+ * ====================================================================
+ */
 
-      /* Error file first to get error reports: */
-      if ( Err_File_Name == NULL ) {
+static BOOL
+Prepare_Source ( void )
+{
+  INT16	i;
+  char *cp;
+  char *fname;
+  INT16 len;
+  BOOL  dashdash_flag = FALSE;
+  BOOL  okay;
+
+  /* If the user forgot to specify sources, complain: */
+  if ( Src_Count == 0 || Src_File_Name == NULL) {
+    ErrMsg ( EC_No_Sources );
+  }
+
+  /* We've got a source file name -- open other files.
+   * We want them to be created in the current directory, so we
+   * strip off the filename only from Src_File_Name for use:
+   */
+  fname = Last_Pathname_Component ( Src_File_Name );
+
+  /* Error file first to get error reports: */
+  if ( Err_File_Name == NULL ) {
 	/* Replace source file extension to get error file: */
 	Err_File_Name = New_Extension
 			    ( fname, ERR_FILE_EXTENSION	);
-      } else if ( *Err_File_Name == '-' ) {
+  } else if ( *Err_File_Name == '-' ) {
 	/* Disable separate error file: */
 	Err_File_Name = NULL;
-      }
-      Set_Error_File ( Err_File_Name );
+  }
+  Set_Error_File ( Err_File_Name );
 
-      /* Trace file next: */
-      if ( Trc_File_Name == NULL ) {
+  /* Trace file next: */
+  if ( Trc_File_Name == NULL ) {
 	if ( Tracing_Enabled ) {
 	  /* Replace source file extension to get trace file: */
 	  Trc_File_Name = New_Extension
 			    ( fname, TRC_FILE_EXTENSION	);
 	}
-      } else if ( *Trc_File_Name == '-' ) {
+  } else if ( *Trc_File_Name == '-' ) {
 	/* Leave trace file on stdout: */
 	Trc_File_Name = NULL;
-      }
-      Set_Trace_File ( Trc_File_Name );
-      if ( Get_Trace (TKIND_INFO, TINFO_TIME) ) Tim_File = TFile;
+  }
+  Set_Trace_File ( Trc_File_Name );
+  if ( Get_Trace (TKIND_INFO, TINFO_TIME) ) Tim_File = TFile;
 
-      /* We're ready to pre-process: */
-      IR_File_Name = Src_File_Name;
+  /* We're ready to pre-process: */
+  IR_File_Name = Src_File_Name;
 
-      /* Open the IR file for compilation: */
-      if ( Irb_File_Name == NULL ) {
+  /* Open the IR file for compilation: */
+  if ( Irb_File_Name == NULL ) {
 	if (asm_file_name == NULL) {
 		/* Replace source file extension to get listing file: */
 		Irb_File_Name = New_Extension (	fname, IRB_FILE_EXTENSION );
@@ -350,28 +362,24 @@ Prepare_Source ( void )
 	else {
 		Irb_File_Name = asm_file_name;
 	}
-      }
+  }
 
-	if ( (Irb_File = fopen ( Irb_File_Name, "w" )) == NULL ) {
+  if ( (Irb_File = fopen ( Irb_File_Name, "w" )) == NULL ) {
 	  ErrMsg ( EC_IR_Open, IR_File_Name, errno );
 	  Cleanup_Files ( TRUE, FALSE );	/* close opened files */
-	  return Prepare_Source ();
-	} else {
+	  return FALSE;
+  } else {
 	  if ( Get_Trace ( TP_MISC, 1) ) {
 	    fprintf ( TFile, 
 	      "\n%sControl Values: Open_Dot_B_File\n%s\n", DBar, DBar );
 	    Print_Controls ( TFile, "", TRUE );
 	  }
-	}
-
-      /* Configure internal options for this source file */
-      Configure_Source ( Src_File_Name );
-
-      return TRUE;
-    }
   }
 
-  return FALSE;
+  /* Configure internal options for this source file */
+  Configure_Source ( Src_File_Name );
+
+  return TRUE;
 }
 
 #ifdef KEY
@@ -399,14 +407,40 @@ WFE_Init (INT argc, char **argv, char **envp )
 #ifdef TARG_IA64
   ABI_Name = "i64";
 #endif
-#if defined(TARG_IA32) || defined(TARG_X8664)
+#if defined(TARG_IA32) || defined(TARG_X8664) || defined(TARG_NVISA)
   if (TARGET_64BIT)
+    ABI_Name = "n64";
+  else ABI_Name = "n32";
+#endif
+#ifdef TARG_LOONGSON
+   // ABI_Name is valued here for Configure() to choose right Target_ABI
+   // mips_abi is valued in set_target_switch() as a middle value
+  if (mips_abi == ABI_n64)
     ABI_Name = "n64";
   else ABI_Name = "n32";
 #endif
   Init_Controls_Tbl();
   Argc = argc;
   Argv = argv;
+
+  /* Initialize error handler: */
+  Init_Error_Handler ( 100 );
+  Set_Error_Line ( ERROR_LINE_UNKNOWN );
+  Set_Error_File ( NULL );
+  Set_Error_Phase ( "Front End Driver" );
+
+  /* Clear file names: */
+  Src_File_Name = NULL;	/* Source file */
+  IR_File_Name = NULL;	/* SGIR file */
+  Irb_File_Name = NULL;	/* ACIR file */
+  Err_File_Name = Dash;	/* Error file */
+  Lst_File_Name = NULL;	/* Listing file */
+  Trc_File_Name = NULL;	/* Trace file */
+  DSTdump_File_Name = NULL; /* DST dump */
+  Delete_IR_File = FALSE;
+  
+  Process_Command_Line();
+
   Configure ();
 //Initialize_C_Int_Model();
   IR_reader_init();
@@ -436,11 +470,6 @@ WFE_File_Init (INT argc, char **argv)
   MEM_POOL_Push (&MEM_src_pool);
 
   Restore_Cmd_Line_Ctrls();
-
-  /* If the user forgot to specify sources, complain: */
-  if ( Src_Count == 0 ) {
-    ErrMsg ( EC_No_Sources );
-  }
 
   Open_Output_Info ( Irb_File_Name );
   DST_build(argc, argv);	// do initial setup of dst
@@ -715,3 +744,4 @@ WFE_Find_Stmt_In_Stack (WFE_STMT_KIND kind)
   return sp->wn;
 }
 #endif
+

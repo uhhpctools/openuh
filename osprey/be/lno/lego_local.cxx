@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -72,8 +76,8 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lego_local.cxx $";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lego_local.cxx $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -221,7 +225,7 @@ static void Lego_Fix_Local_Rec(WN *wn, BOOL in_a_parallel_region)
 	      if (in_a_parallel_region) {
 		FmtAssert(WN_next(mp_region) != NULL, 
 		  ("Lego_Fix_Local_Rec: Expecting non-NULL pointer"));
-		Create_Single_Region(WN_next(mp_region), 
+		Create_Single_Region(LWN_Get_Parent(mp_region), WN_next(mp_region), 
 		  WN_next(WN_next(mp_region))); 
 	      }
 
@@ -237,7 +241,7 @@ static void Lego_Fix_Local_Rec(WN *wn, BOOL in_a_parallel_region)
               WN* copy_in_store=Copy_Array(di, st_new, mp_region, NULL, FALSE);
 
 	      if (in_a_parallel_region) 
-	        Create_Single_Region(WN_prev(mp_region), mp_region);
+	        Create_Single_Region(LWN_Get_Parent(mp_region), WN_prev(mp_region), mp_region);
 
               WN* copy_in_load=WN_kid0(copy_in_store);
 
@@ -596,14 +600,6 @@ Copy_Array(DISTR_INFO* di, ST *local_st, WN *mp_region, WN *tmp_array_def,
       stride=LWN_Make_Icon(index_type,1);
     }
 
-#if 0
-    //the following code handles variable stride but did not consider
-    // element size
-    if (ARB_const_stride(arb))
-      stride=LWN_Make_Icon(index_type,ARB_stride_val(arb));
-    else
-      stride=LWN_Copy_Tree((WN*)ARB_stride_tree(arb));
-#endif
 
     WN *add = LWN_CreateExp2(OPCODE_make_op(OPR_ADD,index_type,MTYPE_V),
                              step_use, stride);

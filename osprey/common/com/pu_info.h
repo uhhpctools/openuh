@@ -40,7 +40,11 @@
 #ifndef pu_info_INCLUDED
 #define pu_info_INCLUDED
 
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"		/* for Elf64_Word */
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>		/* for Elf64_Word */
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "dwarf_DST_mem.h"
 
@@ -85,8 +89,10 @@
 #define WT_FREQ		0x6		/* obsolete */
 #define WT_AC_INTERNAL	0x7		/* alias classification temporary */
 #define WT_ALIAS_CLASS	0x8		/* alias classification */
+#define WT_SSA          0x9        /*WHIRL SSA info*/
+#define WT_ALIAS_CGNODE	0xa		/* constraint graph node */
 
-#define WT_SUBSECTIONS	0x9		/* number of subsection types */
+#define WT_SUBSECTIONS	0xb		/* number of subsection types */
 #define WT_PROC_SYM	-1		/* special value for proc sym state */
 
 /*
@@ -219,8 +225,13 @@ typedef enum subsect_state {
      (INT32 *) PU_Info_subsect_ptr((pu), WT_FREQ)
 #define PU_Info_alias_class_ptr(pu) \
      (INT32 *) PU_Info_subsect_ptr((pu), WT_ALIAS_CLASS)
+#define PU_Info_alias_cgnode_ptr(pu) \
+     (INT32 *) PU_Info_subsect_ptr((pu), WT_ALIAS_CGNODE)
 #define PU_Info_ac_internal_ptr(pu) \
      (void *) PU_Info_subsect_ptr((pu), WT_AC_INTERNAL)
+//get WHIRL ssa info to pu_info
+#define PU_Info_ssa_ptr(pu) \
+     (WSSA::WHIRL_SSA_MANAGER *) PU_Info_subsect_ptr((pu), WT_SSA)
 
 #define Set_PU_Info_tree_ptr(pu,x) \
     PU_Info_subsect_ptr((pu), WT_TREE) = (void *)(x)
@@ -236,8 +247,13 @@ typedef enum subsect_state {
     PU_Info_subsect_ptr((pu), WT_FREQ) = (void *) (x)
 #define Set_PU_Info_alias_class_ptr(pu,x) \
     PU_Info_subsect_ptr((pu), WT_ALIAS_CLASS) = (void *) (x)
+#define Set_PU_Info_alias_cgnode_ptr(pu,x) \
+    PU_Info_subsect_ptr((pu), WT_ALIAS_CGNODE) = (void *) (x)
 #define Set_PU_Info_ac_internal_ptr(pu,x) \
      PU_Info_subsect_ptr((pu), WT_AC_INTERNAL) = (void *) (x)
+//set WHIRL ssa info to pu_info
+#define Set_PU_Info_ssa_ptr(pu,x) \
+    PU_Info_subsect_ptr((pu), WT_SSA) = (WSSA::WHIRL_SSA_MANAGER *) (x)
 
 #define Set_PU_Info_pu_dst(pu, x) \
 	PU_Info_pu_dst(pu) = x;

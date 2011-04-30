@@ -39,7 +39,6 @@
 
 /* -*-Mode: c++;-*- (Tell emacs to use c++ mode) */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <dwarf.h>
 #include <vector>
@@ -142,7 +141,7 @@ void initialize_dst_map(dst_hash_map& M, pu_info* pu)
     if (M.find(dst) == M.end())
       M.insert(std::make_pair(dst, idx_pair_vector(M.get_allocator())));
     
-    if (PU_Info_pu_dst(pu) != DST_INVALID_IDX)
+    if( !DST_IS_NULL(PU_Info_pu_dst(pu) ))
       M[dst].push_back(idx_pair(PU_Info_pu_dst(pu), DST_INVALID_IDX));
 
     if (PU_Info_child(pu))
@@ -174,14 +173,14 @@ void construct_transitive_closure(dst_hash_map& M)
       for (idx_pair_vector::const_iterator i = V.begin();
            i != V.end();
            ++i) {
-        Is_True(i->first != DST_INVALID_IDX,
+        Is_True( !DST_IS_NULL(i->first) ,
                 ("DST index vector contains an invalid index"));
         DST_INFO* info = DST_get_info(dst, i->first);
         DST_SUBPROGRAM* subpr = DST_get_subprogram_attr(dst, info);
 
         if (DST_SUBPROGRAM_has_spec(info)) {
           DST_IDX spec = DST_SUBPROGRAM_spec(info, subpr);
-          if (spec != DST_INVALID_IDX) {
+          if( !DST_IS_NULL(spec) ) {
             idx_pair spec_pair(spec, DST_INVALID_IDX);
             if (!std::binary_search(V.begin(), V.end(), spec_pair,
                                     idx_pair_less()))
@@ -190,7 +189,7 @@ void construct_transitive_closure(dst_hash_map& M)
         }
         if (DST_SUBPROGRAM_has_origin(info)) {
           DST_IDX origin = DST_SUBPROGRAM_origin(info, subpr);
-          if (origin != DST_INVALID_IDX) {
+          if( !DST_IS_NULL(origin) ) {
             idx_pair origin_pair(origin, DST_INVALID_IDX);
             if (!std::binary_search(V.begin(), V.end(), origin_pair,
                                     idx_pair_less()))
@@ -216,9 +215,9 @@ void construct_transitive_closure(dst_hash_map& M)
 void merge_directories_and_files(dst_hash_map& M, MEM_POOL* p,
                                  DST_TYPE output)
 {
-  Is_True(DST_get_include_dirs(output) == DST_INVALID_IDX,
+  Is_True( DST_IS_NULL(DST_get_include_dirs(output)),
           ("Output DST already has include dirs"));
-  Is_True(DST_get_file_names(output) == DST_INVALID_IDX,
+  Is_True( DST_IS_NULL(DST_get_file_names(output)),
           ("Output DST already has file names"));
   
   UINT16 prev_include_dirs = 0;
@@ -231,7 +230,7 @@ void merge_directories_and_files(dst_hash_map& M, MEM_POOL* p,
 
     // Merge in this DST's include dirs.
     DST_IDX old_dir = DST_get_include_dirs(src);
-    while (old_dir != DST_INVALID_IDX) {
+    while( !DST_IS_NULL(old_dir) ) {
       ++include_dirs_this_dst;
       cur_include_dir =
         DST_copy_include_dir(src, output, p, cur_include_dir, old_dir);
@@ -240,7 +239,7 @@ void merge_directories_and_files(dst_hash_map& M, MEM_POOL* p,
 
     // Merge in this DST's filenames.
     DST_IDX old_file = DST_get_file_names(src);
-    while (old_file != DST_INVALID_IDX) {
+    while( !DST_IS_NULL(old_file) ) {
       cur_filename = DST_copy_filename(src, output, p, cur_filename, old_file,
                                        prev_include_dirs);
       old_file = DST_INCLUDE_DIR_next(DST_get_file_name(src, old_file));
@@ -266,7 +265,7 @@ void merge_subprograms(dst_hash_map& M, MEM_POOL* p, DST_TYPE output)
     idx_pair_vector& V = dst_iter->second;
 
     DST_IDX src_cu_idx = DST_get_compile_unit(src);
-    Is_True(DST_INFO_sibling(DST_get_info(src, src_cu_idx)) == DST_INVALID_IDX,
+    Is_True( DST_IS_NULL( DST_INFO_sibling(DST_get_info(src, src_cu_idx)) ),
             ("Input dst should have only one compile unit"));
 
     // Copy the compile unit.
@@ -279,7 +278,7 @@ void merge_subprograms(dst_hash_map& M, MEM_POOL* p, DST_TYPE output)
     for (i = V.begin(); i < V.end(); ++i) {
       i->second = subpr_idx =
         DST_copy_subprogram(src, output, p, cu_idx, subpr_idx, i->first);
-      Is_True(subpr_idx != DST_INVALID_IDX,
+      Is_True( !DST_IS_NULL(subpr_idx),
               ("Index of new subprogram unit is invalid"));
     }
 
@@ -292,15 +291,17 @@ void merge_subprograms(dst_hash_map& M, MEM_POOL* p, DST_TYPE output)
 
       if (DST_SUBPROGRAM_has_spec(src_sub_info)) {
         DST_IDX src_spec = DST_SUBPROGRAM_spec(src_sub_info, src_sub);
-        if (src_spec != DST_INVALID_IDX) {
+        if( !DST_IS_NULL(src_spec) ) {
           idx_pair p(src_spec, DST_INVALID_IDX);
           Is_True(binary_search(V.begin(), V.end(), p, idx_pair_less()),
                   ("Input spec index not found in index vector"));
-          Is_True(lower_bound(V.begin(), V.end(), p,
-                              idx_pair_less())->first == src_spec,
+          Is_True( DST_ARE_EQUAL( lower_bound(V.begin(), V.end(), p,
+                                              idx_pair_less())->first,
+                                  src_spec),
                   ("Inconsistent index vector"));
-          Is_True(lower_bound(V.begin(), V.end(), p,
-                              idx_pair_less())->second != DST_INVALID_IDX,
+          Is_True( !DST_ARE_EQUAL( lower_bound(V.begin(), V.end(), p,
+                                               idx_pair_less())->second, 
+                                   DST_INVALID_IDX),
                   ("Input spec index maps to invalid index"));
           DST_SUBPROGRAM_spec(sub_info, sub) = 
             lower_bound(V.begin(), V.end(), p, idx_pair_less())->second;
@@ -309,15 +310,17 @@ void merge_subprograms(dst_hash_map& M, MEM_POOL* p, DST_TYPE output)
 
       if (DST_SUBPROGRAM_has_origin(src_sub_info)) {
         DST_IDX src_origin = DST_SUBPROGRAM_origin(src_sub_info, src_sub);
-        if (src_origin != DST_INVALID_IDX) {
+        if( !DST_IS_NULL(src_origin) ) {
           idx_pair p(src_origin, DST_INVALID_IDX);
           Is_True(binary_search(V.begin(), V.end(), p, idx_pair_less()),
                   ("Input origin index not found in index vector"));
-          Is_True(lower_bound(V.begin(), V.end(), p,
-                              idx_pair_less())->first == src_origin,
+          Is_True( DST_ARE_EQUAL( lower_bound(V.begin(), V.end(), p,
+                                              idx_pair_less())->first,
+                                  src_origin),
                   ("Inconsistent index vector"));
-          Is_True(lower_bound(V.begin(), V.end(), p,
-                              idx_pair_less())->second != DST_INVALID_IDX,
+          Is_True( !DST_ARE_EQUAL( lower_bound(V.begin(), V.end(), p,
+                                               idx_pair_less())->second,
+                                   DST_INVALID_IDX),
                   ("Input origin index maps to invalid index"));
           DST_SUBPROGRAM_origin(sub_info, sub) = 
             lower_bound(V.begin(), V.end(), p, idx_pair_less())->second;
@@ -332,7 +335,7 @@ void update_pu_dst_indices(dst_hash_map& M, pu_info* pu)
   Is_True(pu != 0, ("No pu"));
 
   while (pu) {
-    if (PU_Info_pu_dst(pu) != DST_INVALID_IDX) {
+    if( !DST_IS_NULL(PU_Info_pu_dst(pu)) ) {
       IPA_NODE* cg_node = Get_Node_From_PU(pu);
       DST_TYPE dst = IP_FILE_HDR_dst(cg_node->File_Header());
       Is_True(dst != 0, ("No dst"));
@@ -344,11 +347,13 @@ void update_pu_dst_indices(dst_hash_map& M, pu_info* pu)
       idx_pair p(PU_Info_pu_dst(pu), DST_INVALID_IDX);
       Is_True(std::binary_search(V.begin(), V.end(), p, idx_pair_less()),
               ("DST index not present in map"));
-      Is_True(std::lower_bound(V.begin(), V.end(), p,
-                               idx_pair_less())->first == PU_Info_pu_dst(pu),
+      Is_True( DST_ARE_EQUAL( std::lower_bound(V.begin(), V.end(), p,
+                                               idx_pair_less())->first,
+                               PU_Info_pu_dst(pu) ),
               ("DST index not present in map"));
-      Is_True(std::lower_bound(V.begin(), V.end(), p,
-                               idx_pair_less())->second != DST_INVALID_IDX,
+      Is_True( !DST_ARE_EQUAL( std::lower_bound(V.begin(), V.end(), p,
+                                                idx_pair_less())->second,
+                               DST_INVALID_IDX ),
               ("DST index maps to incorrect value"));
       PU_Info_pu_dst(pu) = std::lower_bound(V.begin(), V.end(), p,
                                          idx_pair_less())->second;

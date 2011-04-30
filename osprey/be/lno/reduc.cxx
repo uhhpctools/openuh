@@ -76,8 +76,8 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.reduc.cxx $ $Revision: 1.5 $";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.reduc.cxx $ $Revision: 1.5 $";
 
 #include <sys/types.h>
 #include "reduc.h"

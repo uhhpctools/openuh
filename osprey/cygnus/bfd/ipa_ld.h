@@ -148,6 +148,9 @@ typedef enum{
     LD_IPA_KEEP_TEMPS, 
     LD_IPA_ISA,
     LD_IPA_XXXX, 
+#ifdef TARG_SL
+    LD_IPA_IPISR,
+#endif
     MAX_LD_IPA
 }ld_ipa_option_enum;
 
@@ -208,9 +211,15 @@ extern char * __Release_ID;
 extern void *(*p_ipa_open_input)(char *, off_t *);
 extern void (*p_ipa_init_link_line)(int, char **);
 extern void (*p_ipa_add_link_flag)(const char*);
+extern void (*p_ipa_modify_link_flag)(char*, char*);
 extern void (*p_ipa_driver)(int, char **);
-extern void (*p_process_whirl64)(void *, off_t, void *, int, const char *);
-extern void (*p_process_whirl32)(void *, off_t, void *, int, const char *);
+#ifdef OSP_OPT
+extern void (*p_process_whirl64)(void *, off_t, void *, int, const char *, off_t, bfd_boolean);
+extern void (*p_process_whirl32)(void *, off_t, void *, int, const char *, off_t, bfd_boolean);
+#else
+extern void (*p_process_whirl64)(void *, off_t, void *, int, const char *, off_t);
+extern void (*p_process_whirl32)(void *, off_t, void *, int, const char *, off_t);
+#endif
 extern void (*p_ipa_insert_whirl_marker)(void);
 #ifdef KEY
 extern void (*p_ipa_erase_link_flag)(const char*);
@@ -308,11 +317,19 @@ ipa_is_whirl(bfd *);
 extern void
 ipa_process_whirl ( bfd *);
 
+extern void
+ipa_process_whirl_in_archive ( bfd *, bfd *);
+
 extern int 
 Count_elf_external_gots (void);
 
 extern void 
 ipa_set_syms (void);
+
+#ifdef OSP_OPT
+extern char *
+ipa_mmap_file_in_archive ( bfd *, int, off_t);
+#endif
 
 /* The following constant values are shared by both ld and ipa.  Each
    symtab entry in ld's merged symbol table has an ST_IDX field pointing

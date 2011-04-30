@@ -72,6 +72,7 @@
 #include "opt_transform.h"
 #include "opt_dce.h"
 #include "opt_main.h"
+#include "opt_util.h"
 
 using std::set;
 
@@ -149,12 +150,17 @@ static void trace_paths(BB_NODE *bb, BB_NODE *def_bb, Paths &paths)
 //
 static bool find_conditional_const(BB_NODE *bb, CODEREP *cr, 
 				   Set_of_paths &set_of_paths,
-				   vector<bool>& visited, 
 				   BB_LOOP *loop,
-				   bool trace)
+				   bool trace,
+				   BVECTOR & visited,
+				   BVECTOR & cr_visited)
 {
-  if (visited[bb->Id()]) return false;
+
+  // avoid processing same bb or same cr 
+  if (visited[bb->Id()] || cr_visited[cr->Coderep_id()]) return false;
+
   visited[bb->Id()] = true;
+  cr_visited[cr->Coderep_id()] = true;
 
   if (!cr->Is_flag_set(CF_DEF_BY_PHI)) return false;
 
@@ -171,6 +177,7 @@ static bool find_conditional_const(BB_NODE *bb, CODEREP *cr,
 
   for (INT i = 0; i < phi->Size(); ++i) {
     CODEREP *opnd = phi->OPND(i);
+    
     if (!opnd->Is_flag_set(CF_IS_ZERO_VERSION) &&
 	!opnd->Is_flag_set(CF_DEF_BY_PHI) &&
 	!opnd->Is_flag_set(CF_DEF_BY_CHI)) {
@@ -181,7 +188,7 @@ static bool find_conditional_const(BB_NODE *bb, CODEREP *cr,
 	found_conditional_const = true;
       }
     } else if (opnd->Is_flag_set(CF_DEF_BY_PHI)) {
-      if (find_conditional_const(phi->Bb()->Nth_pred(i), opnd, set_of_paths, visited, loop, trace))
+      if (find_conditional_const(phi->Bb()->Nth_pred(i), opnd, set_of_paths, loop, trace, visited, cr_visited))
 	found_conditional_const = true;
     }
   }
@@ -221,6 +228,7 @@ static bool is_redundant_cmp(CODEREP *cmp, BB_NODE *bb, BB_NODE *pred,
       break;
     }
   }
+
   if (!found_succ) return false;
 
   COND_EVAL ce;
@@ -314,8 +322,9 @@ struct CONDITIONAL_CONST : public NULL_TRANSFORM {
 
     if (cr->Kind() == CK_VAR && !is_mu) {
       Set_of_paths set_of_paths;
-      vector<bool> visited(cu->Cfg()->Total_bb_count(), false);  //  TODO: use shared cache
-      bool found = find_conditional_const(bb, cr, set_of_paths, visited, bb->Innermost(), trace);
+      BVECTOR visited(cu->Cfg()->Total_bb_count(), false, BVECTOR_ALLOCATOR(cu->Cfg()->Loc_pool()));  
+      BVECTOR cr_visited(htable->Coderep_id_cnt()+1, false, BVECTOR_ALLOCATOR(cu->Cfg()->Loc_pool()));
+      bool found = find_conditional_const(bb, cr, set_of_paths, bb->Innermost(), trace, visited, cr_visited);
       if (found && trace) {
 	fprintf(TFile, "CONDITIONAL CONST found for cr%d in BB%d\n", cr->Coderep_id(), bb->Id());
 	print_set_of_paths(TFile, set_of_paths);
@@ -352,8 +361,12 @@ struct CONDITIONAL_CONST : public NULL_TRANSFORM {
 
 void generate_conditional_const_zones(COMP_UNIT *cu, successor_graph &g, vector<zone>& zones, bool trace)
 {
+  OPT_POOL_Push(cu->Cfg()->Loc_pool(), -1);
+  {
   CONDITIONAL_CONST conditional_const(cu, &zones, trace);
   UPDATE<CONDITIONAL_CONST, PER_BB_CACHE>
     SCAN_conditional_const(cu, &conditional_const, trace);
   SCAN_conditional_const.Process_PU();
+  }
+  OPT_POOL_Pop(cu->Cfg()->Loc_pool(), -1);
 }

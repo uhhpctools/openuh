@@ -175,8 +175,15 @@ struct tree_common GTY(())
 #ifdef KEY
   unsigned lang_flag_7 : 1;
 #else
-  unsigned unused_1 : 1;
-#endif
+  unsigned unused_1 : 1;	
+#endif 
+#if defined(TARG_SL) 
+  unsigned sbuf   : 1;
+  unsigned sdram  : 1;
+  unsigned v1buf : 1;
+  unsigned v2buf : 1;
+  unsigned v4buf : 1;
+#endif // TARG_SL
 };
 
 /* The following table lists the uses of each of the above flags and
@@ -797,10 +804,16 @@ struct tree_real_cst GTY(())
 
 /* In a STRING_CST */
 #define TREE_STRING_LENGTH(NODE) (STRING_CST_CHECK (NODE)->string.length)
+#ifndef SGI_MONGOOSE
 #define TREE_STRING_POINTER(NODE) (STRING_CST_CHECK (NODE)->string.pointer)
-#ifdef KEY
+#else
+// Have to pass back a char * and not a const char *
+#define TREE_STRING_POINTER(NODE) \
+	(STRING_CST_CHECK (NODE)->string.pointer)
+#endif /* SGI_MONGOOSE */
+#ifdef SGI_MONGOOSE
 #define TREE_STRING_ST(NODE) (STRING_CST_CHECK (NODE)->string.st)
-#endif /* KEY */
+#endif /*SGI_MONGOOSE */
 
 struct tree_string GTY(())
 {
@@ -1181,11 +1194,29 @@ struct tree_block GTY(())
    combined by bitwise-or to form the complete set of qualifiers for a
    type.  */
 
+#if defined(TARG_SL)
+ 
+#define TYPE_SBUF(NODE) (TYPE_CHECK (NODE)->common.sbuf)
+#define TYPE_SDRAM(NODE) (TYPE_CHECK (NODE)->common.sdram)
+
+#define TYPE_V1BUF(NODE) (TYPE_CHECK (NODE)->common.v1buf)
+#define TYPE_V2BUF(NODE) (TYPE_CHECK (NODE)->common.v2buf)
+#define TYPE_V4BUF(NODE) (TYPE_CHECK (NODE)->common.v4buf)
+#define TYPE_VBUF_P(NODE)  (TYPE_V1BUF(NODE)||TYPE_V2BUF(NODE)||TYPE_V4BUF(NODE))
+#endif // TARG_SL
+
 #define TYPE_UNQUALIFIED   0x0
 #define TYPE_QUAL_CONST    0x1
 #define TYPE_QUAL_VOLATILE 0x2
 #define TYPE_QUAL_RESTRICT 0x4
 #define TYPE_QUAL_BOUNDED  0x8
+#if defined(TARG_SL)
+#define TYPE_QUAL_SBUF     0x10
+#define TYPE_QUAL_SDRAM    0x20
+#define TYPE_QUAL_V1BUF    0x40
+#define TYPE_QUAL_V2BUF    0x80
+#define TYPE_QUAL_V4BUF    0x100
+#endif // TARG_SL
 
 /* The set of type qualifiers for this type.  */
 #define TYPE_QUALS(NODE)					\
@@ -1193,6 +1224,15 @@ struct tree_block GTY(())
    | (TYPE_VOLATILE (NODE) * TYPE_QUAL_VOLATILE)		\
    | (TYPE_RESTRICT (NODE) * TYPE_QUAL_RESTRICT)		\
    | (BOUNDED_INDIRECT_TYPE_P (NODE) * TYPE_QUAL_BOUNDED))
+
+#if defined(TARG_SL)
+#define TYPE_VBUF_QUALS(NODE)                 \
+  ((TYPE_V1BUF(NODE) * TYPE_QUAL_V1BUF)          \
+   | (TYPE_V2BUF(NODE) * TYPE_QUAL_V2BUF)          \
+   | (TYPE_V4BUF(NODE) * TYPE_QUAL_V4BUF)         \
+   | (TYPE_SBUF(NODE) * TYPE_QUAL_SBUF)          \
+   | (TYPE_SDRAM(NODE) * TYPE_QUAL_SDRAM))
+#endif // TARG_SL
 
 /* The set of qualifiers pertinent to an expression node.  */
 #define TREE_EXPR_QUALS(NODE)				\
@@ -1708,12 +1748,15 @@ struct tree_type GTY(())
 #define DECL_DST_IDX(NODE) (TYPE_CHECK(NODE)->decl.decl_dst_id)
 #endif /* SGI_MONGOOSE */
 
+#if defined(TARG_SL)
+#define DECL_SL_MODEL_NAME(NODE) (DECL_CHECK(NODE) -> decl.sl_model_name)
+#endif
+
 #ifdef KEY
 /* In a VAR_DECL, if DECL_ASMREG is non-zero, then DECL_ASMREG is the register
    number assigned through an "asm". */
 #define DECL_ASMREG(NODE) (DECL_CHECK (NODE)->decl.thunk_delta)
 #endif
-
 /* In a VAR_DECL or FUNCTION_DECL,
    nonzero means external reference:
    do not allocate storage, and refer to a definition elsewhere.  */
@@ -1917,7 +1960,7 @@ struct tree_type GTY(())
 #define DECL_WIDEN_RETVAL(NODE) (DECL_CHECK (NODE)->decl.widen_retval_flag)
 #endif /* SGI_MONGOOSE */
 
-#ifdef KEY
+ #ifdef KEY
 /* Used to indicate that this decl is emitted by g++, regardless of the decl's
    other attributes such as weak or external. */
 #define DECL_EMITTED_BY_GXX(NODE) (DECL_CHECK (NODE)->decl.emitted_by_gxx)
@@ -1927,6 +1970,18 @@ struct tree_type GTY(())
 #define DECL_THREADPRIVATE(NODE) (DECL_CHECK (NODE)->decl.threadprivate_flag)
 #endif
 #endif
+
+
+#if defined(TARG_SL)
+/* Internal Buffer Extension */
+#define DECL_SBUF(NODE) (DECL_CHECK(NODE)->decl.sbuf_flag)
+#define DECL_SDRAM(NODE) (DECL_CHECK(NODE)->decl.sdram_flag)
+#define DECL_V1BUF(NODE) (DECL_CHECK(NODE)->decl.v1buf_flag)
+#define DECL_V2BUF(NODE) (DECL_CHECK(NODE)->decl.v2buf_flag)
+#define DECL_V4BUF(NODE) (DECL_CHECK(NODE)->decl.v4buf_flag)
+#define DECL_VBUF(NODE) (DECL_V1BUF(NODE)||DECL_V2BUF(NODE)||DECL_V4BUF(NODE))
+
+#endif // TARG_SL
 
 struct function;
 
@@ -1946,6 +2001,16 @@ struct tree_decl GTY(())
   unsigned virtual_flag : 1;
   unsigned ignored_flag : 1;
   unsigned abstract_flag : 1;
+
+#if defined(TARG_SL)
+  /* Internal Buffer Extension */
+  unsigned sbuf_flag : 1;
+  unsigned sdram_flag : 1;
+  unsigned v1buf_flag : 1;
+  unsigned v2buf_flag : 1;
+  unsigned v4buf_flag : 1;
+  
+#endif // TARG_SL
 
   unsigned in_system_header_flag : 1;
   unsigned common_flag : 1;
@@ -1972,7 +2037,7 @@ struct tree_decl GTY(())
   unsigned inlined_function_flag : 1;
 #ifdef KEY
   unsigned threadprivate_flag : 1;
-  unsigned this_ptr : 1; 
+  unsigned this_ptr : 1;
 #endif /* KEY */
 
   unsigned lang_flag_0 : 1;
@@ -2071,6 +2136,11 @@ struct tree_decl GTY(())
 #endif
   struct mongoose_gcc_DST_IDX decl_dst_id; /* whirl DST */
 #endif /* SGI_MONGOOSE */
+
+#if defined(TARG_SL)
+tree sl_model_name; 
+#endif
+
 };
 
 #ifdef KEY
@@ -2155,7 +2225,9 @@ enum tree_index
   TI_DOUBLE_PTR_TYPE,
   TI_LONG_DOUBLE_PTR_TYPE,
   TI_INTEGER_PTR_TYPE,
-
+#if defined(TARG_SL) || defined (TARG_SL2)
+  TI_SHORT_PTR_TYPE, 
+#endif
   TI_SIZE_ZERO,
   TI_SIZE_ONE,
 
@@ -2243,6 +2315,10 @@ extern GTY(()) tree global_trees[TI_MAX];
 #define double_ptr_type_node            global_trees[TI_DOUBLE_PTR_TYPE]
 #define long_double_ptr_type_node       global_trees[TI_LONG_DOUBLE_PTR_TYPE]
 #define integer_ptr_type_node           global_trees[TI_INTEGER_PTR_TYPE]
+
+#if defined(TARG_SL) || defined(TARG_SL2)
+#define short_ptr_type_node           global_trees[TI_SHORT_PTR_TYPE]
+#endif
 
 #define float_type_node			global_trees[TI_FLOAT_TYPE]
 #define double_type_node		global_trees[TI_DOUBLE_TYPE]

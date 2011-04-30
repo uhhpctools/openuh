@@ -99,8 +99,8 @@ private:
 
   PROPAGATABILITY Propagatable(CODEREP *x, BOOL chk_inverse,
 			       AUX_ID propagating_var, BOOL icopy_phase,
-			       BOOL inside_cse, INT32 *height,
-			       BOOL in_array );
+			       BOOL inside_cse, INT32 *height,INT32*weight,
+			       BOOL in_array, BB_NODE *curbb );
   CODEREP *Copy_propagate_cr(CODEREP *x, BB_NODE *curbb, 
 			     BOOL inside_cse, BOOL in_array, BOOL no_complex_preg = FALSE);
   void     Copy_propagate_stmt(STMTREP *stmt, BB_NODE *bb); 

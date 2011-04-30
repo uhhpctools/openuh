@@ -54,6 +54,8 @@
 #define SUBNAME SDGEMMX@
 #elif defined(UNIX_NAMING_CONVENTION)
 #define SUBNAME _SDGEMMX
+#elif defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME underscore_sdgemmx__
 #else
 #define SUBNAME _sdgemmx__
 #endif

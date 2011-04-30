@@ -2587,16 +2587,6 @@ arm_rtx_costs (x, code, outer)
 	  
 	default:
 	  return 99;
-#if 0	  
-	case FFS:
-	case FLOAT:
-	case FIX:
-	case UNSIGNED_FIX:
-	  /* XXX guess */
-	  fprintf (stderr, "unexpected code for thumb in rtx_costs: %s\n",
-		   rtx_name[code]);
-	  abort ();
-#endif
 	}
     }
   
@@ -3097,10 +3087,6 @@ bad_signed_byte_operand (op, mode)
      rtx op;
      enum machine_mode mode ATTRIBUTE_UNUSED;
 {
-#if 0
-  if ((mode == QImode && !memory_operand (op, mode)) || GET_CODE (op) != MEM)
-    return 0;
-#endif
   if (GET_CODE (op) != MEM)
     return 0;
 
@@ -6049,17 +6035,6 @@ note_invalid_constants (insn, address)
 	  if (CONSTANT_P (op))
 	    push_minipool_fix (insn, address, recog_data.operand_loc[opno],
 			       recog_data.operand_mode[opno], op);
-#if 0
-	  /* RWE: Now we look correctly at the operands for the insn,
-	     this shouldn't be needed any more.  */
-#ifndef AOF_ASSEMBLER
-	  /* XXX Is this still needed?  */
-	  else if (GET_CODE (op) == UNSPEC && XINT (op, 1) == UNSPEC_PIC_SYM)
-	    push_minipool_fix (insn, address, recog_data.operand_loc[opno],
-			       recog_data.operand_mode[opno],
-			       XVECEXP (op, 0, 0));
-#endif
-#endif
 	  else if (GET_CODE (op) == MEM
 		   && GET_CODE (XEXP (op, 0)) == SYMBOL_REF
 		   && CONSTANT_POOL_ADDRESS_P (XEXP (op, 0)))
@@ -7697,12 +7672,6 @@ arm_output_epilogue (really_return)
 	}
     }
 
-#if 0
-  if (ARM_FUNC_TYPE (func_type) == ARM_FT_EXCEPTION_HANDLER)
-    /* Adjust the stack to remove the exception handler stuff.  */
-    asm_fprintf (f, "\tadd\t%r, %r, %r\n", SP_REGNUM, SP_REGNUM,
-		 REGNO (eh_ofs));
-#endif
 
   if (! really_return
     || (ARM_FUNC_TYPE (func_type) == ARM_FT_NORMAL
@@ -8903,14 +8872,6 @@ arm_final_prescan_insn (insn)
   if (GET_CODE (body) == PARALLEL && XVECLEN (body, 0) > 0)
     body = XVECEXP (body, 0, 0);
 
-#if 0  
-  /* If this is a conditional return then we don't want to know */
-  if (GET_CODE (body) == SET && GET_CODE (SET_DEST (body)) == PC
-      && GET_CODE (SET_SRC (body)) == IF_THEN_ELSE
-      && (GET_CODE (XEXP (SET_SRC (body), 1)) == RETURN
-          || GET_CODE (XEXP (SET_SRC (body), 2)) == RETURN))
-    return;
-#endif
 
   if (reverse
       || (GET_CODE (body) == SET && GET_CODE (SET_DEST (body)) == PC

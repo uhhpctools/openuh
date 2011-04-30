@@ -724,7 +724,7 @@ static BOOL RV_Tree_Has_All_Backward_Indices(WN* wn_tree,
   return TRUE; 
 } 
 
-#ifdef PATHSCALE_MERGE
+
 //-----------------------------------------------------------------------
 // NAME: RV_Find_Written_Indices
 // FUNCTION: Returns TRUE if all of the indices of 'wn_loop' in 'wn_tree'
@@ -749,7 +749,7 @@ static BOOL RV_Tree_Has_All_Written_Indices(WN* wn_tree,
   }
   return FALSE;
 }
-#endif
+
 
 //-----------------------------------------------------------------------
 // NAME: Do_Loop_Is_Backward
@@ -767,7 +767,7 @@ extern BOOL Do_Loop_Is_Backward(WN* wn_loop)
     &found_backward) && found_backward; 
 }
 
-#ifdef PATHSCALE_MERGE
+
 //-----------------------------------------------------------------------
 // NAME: Do_Loop_Is_Regular
 // FUNCTION: Returns TRUE if all of the do loop indices in the body of
@@ -780,4 +780,4 @@ extern BOOL Do_Loop_Is_Regular(WN* wn_loop)
 {
   return !RV_Tree_Has_All_Written_Indices(WN_do_body(wn_loop), wn_loop);				
 }
-#endif
+

@@ -58,4 +58,9 @@ complex c_sin_(complex *z)
   return __csin(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_sin(complex *z) { return c_sin_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_sin_, c_sin);
+#endif /* defined(BUILD_OS_DARWIN) */

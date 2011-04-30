@@ -1,3 +1,11 @@
+/*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -61,7 +69,6 @@
 static char *rcs_id = 	opt_util_CXX"$Revision: 1.8 $";
 #endif /* _KEEP_RCS_ID */
 
-#define __STDC_LIMIT_MACROS
 #include <stdarg.h>
 #include <stdio.h>
 #include <strings.h>
@@ -69,6 +76,9 @@ static char *rcs_id = 	opt_util_CXX"$Revision: 1.8 $";
 #include <unistd.h>
 #include <string.h>
 #include <stdint.h>
+#if defined(TARG_SL)
+#include "intrn_info.h"
+#endif
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //
@@ -177,7 +187,7 @@ Opt_tlog_trace( void )
   return Get_Trace ( TP_PTRACE1, TP_PTRACE1_OPT );
 }
 
-static char *tlog_phase = NULL;
+static const char *tlog_phase = NULL;
 
 static void Opt_tlog2( char *keyword, INT64 srcpos, char *msg )
 {
@@ -191,6 +201,7 @@ Set_tlog_phase(const INT32 phase)
   switch (phase) {
   case PREOPT_PHASE:
   case PREOPT_LNO_PHASE:
+  case PREOPT_LNO1_PHASE:
   case PREOPT_DUONLY_PHASE:
   case PREOPT_IPA0_PHASE:
   case PREOPT_IPA1_PHASE:
@@ -205,11 +216,10 @@ Set_tlog_phase(const INT32 phase)
 
 
 // ====================================================================
-#if 1
 const INT32    PHASE_STRLEN = 72;
 const INT32    MAX_SUBPHASES = 200;
 static char    phase_name[PHASE_STRLEN];
-static char   *phases[MAX_SUBPHASES];
+static const   char   *phases[MAX_SUBPHASES];
 static INT32   times[MAX_SUBPHASES];
 static INT32   reps[MAX_SUBPHASES];
 static INT32   cum_times[MAX_SUBPHASES];
@@ -225,14 +235,18 @@ static void   *prev_mem   = NULL;
 //    It collected the time spent in each optimizer phase.
 //    It changes the global phase name for better error reporting.
 //
-INT Set_opt_phase(INT32 *phase_id, char *subphase)
+INT Set_opt_phase(INT32 *phase_id, const char *subphase)
 {
   INT32  curr_time;
   void  *curr_mem;
 
   if (Get_Trace(TKIND_INFO, TINFO_TIME)) {
     curr_time = CLOCK_IN_MS();
+#ifdef __MINGW32__
+    DevWarn("sbrk not supported on Win NT");
+#else
     curr_mem  = sbrk(0);
+#endif /* __MINGW32__ */
     times[curr_phase] += (curr_time - prev_time);
     mem[curr_phase] += (char *) curr_mem - (char *) prev_mem;
     if (phase_id == NULL || *phase_id == 0) {
@@ -296,7 +310,6 @@ INT Report_statistics()
   return 1;
 }
 
-#endif
 
 
 static inline INT32 Sign(INT64 v)
@@ -447,7 +460,7 @@ Find_one_variant(BB_NODE *bb, CODEREP *vr, CODEREP *cr, NUMBER *factor,
 	r0 = Find_one_variant(bb, vr, cr->Opnd(0), factor, htable);
 	return r0;
       } else
-#elif defined(TARG_X8664)
+#elif defined(TARG_X8664) || defined(TARG_NVISA)
       if (opc == OPC_U8I4CVT || opc == OPC_I8I4CVT || opc == OPC_U8U4CVT) {
 	r0 = Find_one_variant(bb, vr, cr->Opnd(0), factor, htable);
 	return r0;
@@ -646,3 +659,15 @@ Set_volatile_map(CFG *cfg, BVECTOR &vol)
    }
    OPT_POOL_Pop(cfg->Loc_pool(), -1);
 } // set_volatile_map
+
+#if defined(TARG_SL)
+BOOL CR_Intrinsic_Op_Slave( CODEREP *cr) {
+  if (cr->Kind() == CK_OP && cr->Opr() == OPR_INTRINSIC_OP) {
+    INTRINSIC ins = cr->Intrinsic();
+    if (INTRN_is_slave(ins))
+      return TRUE;
+  }
+  return FALSE;
+}
+#endif
+

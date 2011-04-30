@@ -38,7 +38,13 @@
 #define __SYS_UNWINDP_H
 
 #if defined(__ia64) || defined(__MIPS_AND_IA64_ELF_H)
+#if defined(TARG_SL)
+#include  <sys/sl/unwindP.h>
+#elif defined(TARG_MIPS)
+#include  <sys/mips/unwindP.h>
+#else
 #include <sys/ia64/unwindP.h>
+#endif
 #endif
 
 #endif

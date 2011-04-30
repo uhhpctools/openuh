@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -88,6 +92,12 @@ static char *rcs_id = 	opt_alias_mgr_CXX"$Revision: 1.7 $";
 #include "opt_points_to.h"
 #include "region_util.h"
 #include "targ_sim.h"
+#include "glob.h"
+#include "pu_info.h"
+#include "nystrom_alias_analyzer.h"
+
+static BOOL in_ipa_pu_list(char *function_name);
+static BOOL in_pure_call_list(char *function_name);
 
 #define ALIAS_TRACE_FLAG  0x1000000 /* trace alias analysis for CG          */
 #define ALIAS_DUMP_FLAG      0x0800 /* trace alias analysis		    */
@@ -122,7 +132,7 @@ public:
 #endif
     _pu_pool(pu_pool),
     _map(WN_MAP_Create(pu_pool))
-      { }
+      { WN_MAP_Set_dont_copy(_map, TRUE);}
 
   ~RESTRICTED_MAP(void) { 
     WN_MAP_Delete(_map);
@@ -290,12 +300,6 @@ RESTRICTED_MAP::Verify_info(const WN        *const wn,
       // correctly, LNO removes entries from the restricted map (via
       // Note_Invalid_Based_Symbol) under some conditions (like when
       // it distributes/rehapes an array).
-#if 0
-      Is_True(!pt->Unique_pt(),
-	      ("RESTRICTED_MAP: Spurious Unique_pt()"));
-      Is_True(!pt->Restricted(),
-	      ("RESTRICTED_MAP: Spurious Restricted()"));
-#endif
     }
   }
 #endif
@@ -365,16 +369,11 @@ void Note_Invalid_Based_Symbol(const ST *st)
 // ALIAS MANAGER constructor.
 // It set up its own memory pool.
 //
-ALIAS_MANAGER::ALIAS_MANAGER(void)
+ALIAS_MANAGER::ALIAS_MANAGER(WN *entryWN)
 {
   MEM_POOL_Initialize(&_mem_pool, "ALIAS_pool", FALSE);
   MEM_POOL_Push(&_mem_pool);
 
-#if 0
-  _invalid_ip_alias_classes =
-    CXX_NEW(vector<IDTYPE, mempool_allocator<IDTYPE> > (&_mem_pool),
-	    &mem_pool);
-#else
   // Note: C++ is broken in that it uses the same preprocessor as C,
   // and the C preprocessor sees '<' as "less than" instead of "begin
   // template argument". Therefore it seems we can't use CXX_NEW
@@ -384,7 +383,6 @@ ALIAS_MANAGER::ALIAS_MANAGER(void)
   typedef vector<IDTYPE, mempool_allocator<IDTYPE> > STUPID_COMPILER;
   _invalid_ip_alias_classes =
     CXX_NEW(STUPID_COMPILER(&_mem_pool), &_mem_pool);
-#endif
 
   // initialized default context
   ALIAS_CONTEXT ac = (DEFAULT_COMMON_RULES | DEFAULT_ANALYSIS_RULES | DEFAULT_COMPATIABILITY_RULES);
@@ -437,8 +435,12 @@ ALIAS_MANAGER::ALIAS_MANAGER(void)
     Is_True(FALSE, ("Language is unknown; mixed-language inlining illegal."));
   }
 
+  // Here we create the AliasAnalyzer object, which serves as the
+  // interface to the selected alias analysis algorithm.
+  AliasAnalyzer::Create_Alias_Analyzer(ac,entryWN);
+
   Set_pu_context(ac);
-  _rule = CXX_NEW(ALIAS_RULE(ac), &_mem_pool);
+  _rule = CXX_NEW(ALIAS_RULE(ac,AliasAnalyzer::aliasAnalyzer()), &_mem_pool);
 
   // Setup the trace flags.
   _trace = Get_Trace(TP_GLOBOPT, ALIAS_DUMP_FLAG);
@@ -564,6 +566,37 @@ ALIAS_MANAGER::Gen_alias_id(WN *wn, POINTS_TO *pt)
 {
   if (pt != NULL) {
     WN_MAP32_Set(WN_MAP_ALIAS_CLASS, wn, pt->Ip_alias_class());
+ 
+    // Restore the WN to CGNodeId map
+    NystromAliasAnalyzer *naa = static_cast<NystromAliasAnalyzer *>
+                                (AliasAnalyzer::aliasAnalyzer());
+    if (naa) 
+    {
+      AliasTag tag = pt->Alias_tag();
+      // If the WN is not mapped to a CGNodeId, use the AliasTag from
+      // the POINTS_TO to get the CGNodeId using the NystromAliasAnalyzers's
+      // AliasTag to CGNodeId map that was constructed during createAliasTags
+      if (WN_MAP32_Get(WN_MAP_ALIAS_CGNODE, wn) == 0) {
+        OPERATOR opr = WN_operator(wn);
+        if (OPERATOR_is_scalar_istore(opr) ||
+            OPERATOR_is_scalar_iload(opr) ||
+            OPERATOR_is_scalar_load(opr) ||
+            OPERATOR_is_scalar_store(opr) ||
+            opr == OPR_MSTORE ||
+            opr == OPR_MLOAD) {
+          CGNodeId id = naa->cgNodeId(tag);
+          if (id != 0) {
+            if (opr == OPR_ILDBITS || opr == OPR_MLOAD || opr == OPR_ILOAD)
+              WN_MAP32_Set(WN_MAP_ALIAS_CGNODE, WN_kid0(wn), id);
+            else
+              WN_MAP32_Set(WN_MAP_ALIAS_CGNODE, wn, id);
+          }
+        }
+      }
+      // Set the WNs alias tag from the POINTS_TO
+      if (tag >= InitialAliasTag)
+        naa->setAliasTag(wn,pt->Alias_tag());
+    }
   }
 
   if (!WOPT_Enable_CG_Alias) {
@@ -655,6 +688,10 @@ ALIAS_MANAGER::Dup_tree_alias_id( const WN *old_wn, WN *new_wn )
     WN_MAP32_Set(WN_MAP_ALIAS_CLASS, new_wn, ip_alias_class);
   }
 
+  AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+  if (aa)
+    aa->transferAliasTag(new_wn,old_wn);
+
   // now travel down the tree
   if ( opc == OPC_BLOCK ) {
     WN *old_bwn, *new_bwn;
@@ -728,9 +765,9 @@ ALIAS_MANAGER::Cross_dso_set_id(WN *wn, IDTYPE id) const
 // ************************************************************************
 
 //  Create an alias manager
-ALIAS_MANAGER *Create_Alias_Manager(MEM_POOL *pu_pool)
+ALIAS_MANAGER *Create_Alias_Manager(MEM_POOL *pu_pool, WN *entryWN)
 {
-  return CXX_NEW(ALIAS_MANAGER(), pu_pool);
+  return CXX_NEW(ALIAS_MANAGER(entryWN), pu_pool);
 }
 
 //  Delete the alias manager
@@ -913,6 +950,18 @@ BOOL Valid_alias(const ALIAS_MANAGER *am, WN *wn)
   return FALSE;
 }
 
+static
+BOOL equivalent_struct(TY_IDX ty1, TY_IDX ty2)
+{
+    if (ty1 == ty2 ||
+        (!TY_anonymous(ty1) && TY_name_idx(ty1) == TY_name_idx(ty2) &&
+         TY_kind(ty1) == TY_kind(ty2) && TY_kind(ty1) == KIND_STRUCT)) { 
+        return TRUE;
+    }    
+
+    return FALSE;
+}
+
 
 //  Alias analysis for two WN *
 //
@@ -929,10 +978,32 @@ ALIAS_RESULT Aliased(const ALIAS_MANAGER *am, WN *wn1, WN *wn2,
   if (id2 == 0 && Is_PREG_ldst(wn2)) 
     am->Set_id(wn2, id2 = am->Preg_id());
   
+  if (FILE_INFO_ipa(File_info))
+  {
+    // if -ipa is in effect, and if wn1 or wn2 is a call wn, further check that
+    // the function called by wn1 or wn2 is not a user-defined function (seen by
+    // ipa), in which case it may be a nice library function and does not alias
+    char *called_pu_name;
+    if (WN_operator(wn1) == OPR_CALL)
+    {
+      called_pu_name = ST_name(WN_st_idx(wn1));
+      if (!in_ipa_pu_list(called_pu_name) &&
+          in_pure_call_list(called_pu_name))
+        return NOT_ALIASED;
+    }
+    if (WN_operator(wn2) == OPR_CALL)
+    {
+      called_pu_name = ST_name(WN_st_idx(wn2));
+      if (!in_ipa_pu_list(called_pu_name) &&
+          in_pure_call_list(called_pu_name))
+        return NOT_ALIASED;
+    }
+  }
+
   // Complain if the WNs have no alias information.
   if (id1 == 0 || id2 == 0) 
     return POSSIBLY_ALIASED;
-  
+
   //  If both are PREGs, they are not alias if
   //  their base ST is different or their offset is different.
   if (id1 == am->Preg_id() && id2 == am->Preg_id()) 
@@ -972,18 +1043,22 @@ ALIAS_RESULT Aliased(const ALIAS_MANAGER *am, WN *wn1, WN *wn2,
 
   if (OPERATOR_is_store(WN_operator(wn1)) && OPERATOR_is_load(WN_operator(wn2)) ||
       OPERATOR_is_store(WN_operator(wn2)) && OPERATOR_is_load(WN_operator(wn1))) {
-#ifdef TARG_IA64
-    if (am->Rule()->Aliased_Memop(pt1, pt2, ignore_loop_carried)) // OSP-172
-#else
-    if (am->Rule()->Aliased_Memop(pt1, pt2, WN_object_ty(wn1), WN_object_ty(wn2)))
-#endif
-      return POSSIBLY_ALIASED;
+  
+    // when the high level type show that pt1 and pt2 are two structs with same name, these
+    // two structs could be equivelant type, thus could not rely on their high level type
+    if (equivalent_struct(pt1->Highlevel_Ty(),pt2->Highlevel_Ty())) {
+        if (am->Rule()->Aliased_Memop(pt1, pt2, pt1->Ty(), pt2->Ty(), ignore_loop_carried)) // OSP-172
+          return POSSIBLY_ALIASED;
+    }else {
+        if (am->Rule()->Aliased_Memop(pt1, pt2, ignore_loop_carried))
+          return POSSIBLY_ALIASED;
+    }      
+        
   } else {
     // cannot apply ANSI type rule to STORE <--> STORE.
     if (am->Rule()->Aliased_Memop(pt1, pt2, (TY_IDX)NULL, (TY_IDX)NULL, 
-                                  ignore_loop_carried)) { 
+                                  ignore_loop_carried)) 
       return POSSIBLY_ALIASED;
-    }
   }
   return NOT_ALIASED;
 }
@@ -994,9 +1069,8 @@ ALIAS_MANAGER::Aliased(const POINTS_TO *pt1, const POINTS_TO *pt2,
                        BOOL ignore_loop_carried)
 {
   if (Rule()->Aliased_Memop(pt1, pt2, (TY_IDX) NULL, (TY_IDX) NULL, 
-                            ignore_loop_carried)) {
+                            ignore_loop_carried)) 
     return POSSIBLY_ALIASED;
-  }
   return NOT_ALIASED;
 }
 
@@ -1097,7 +1171,7 @@ ALIAS_RESULT Aliased_with_region(const ALIAS_MANAGER *am, const WN *wn, const WN
     for (INT32 i = 0; i < WN_kid_count(region_or_call); i++) {
       WN *wn = WN_kid(region_or_call,i);  
       if (WN_operator(wn) == OPR_PARM && 
-	  WN_Parm_By_Reference(wn)) {
+	  (WN_Parm_By_Reference(wn)||WN_Parm_Dereference(wn))) {
 	// check aliasing
 	IDTYPE id2 = am->Id(wn);
 	if (id2 == 0) return POSSIBLY_ALIASED;  // assume aliased 
@@ -1154,7 +1228,7 @@ ALIAS_RESULT Aliased_with_intr_op(const ALIAS_MANAGER *am, const WN *intr_op, co
   // go through call-by-ref all parameters
   for (INT32 i = 0; i < WN_kid_count(intr_op); i++) {
     WN *wn = WN_kid(intr_op,i);  
-    if (WN_Parm_By_Reference(wn)) {
+    if (WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn)) {
       // check aliasing
       IDTYPE id2 = am->Id(wn);
       if (id2 == 0) return POSSIBLY_ALIASED;  // assume aliased 
@@ -1253,11 +1327,8 @@ ALIAS_RESULT Overlapped_base(const ALIAS_MANAGER *am, const WN *wn1, const WN *w
   //
   // if (!pt1.Base_is_fixed())
   pt1.Set_ofst_kind(OFST_IS_UNKNOWN);
-  pt1.Set_iofst_kind(OFST_IS_UNKNOWN);
-
   // if (!pt2.Base_is_fixed())
   pt2.Set_ofst_kind(OFST_IS_UNKNOWN);
-  pt2.Set_iofst_kind(OFST_IS_UNKNOWN);
 
   if (am->Rule()->Aliased_Memop(&pt1, &pt2, WN_object_ty(wn1), WN_object_ty(wn2))) {
     if (pt1.Same_base(&pt2)) {
@@ -1295,6 +1366,10 @@ void Copy_alias_info(const ALIAS_MANAGER *am, WN *wn1, WN *wn2)
   WN_MAP32_Set(WN_MAP_ALIAS_CLASS, wn2,
 	       WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn1));
 
+  AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+  if (aa)
+    aa->transferAliasTag(wn2,wn1);
+
   IDTYPE id = am->Id(wn1);
   if (id == 0) {
     OPERATOR opr = OPCODE_operator(opc1);
@@ -1303,7 +1378,7 @@ void Copy_alias_info(const ALIAS_MANAGER *am, WN *wn1, WN *wn2)
 	ST_sclass(WN_st(wn1)) == SCLASS_REG) {
       id = am->Preg_id();
       am->Set_id(wn1, id);
-    } else if (opr == OPR_PARM && !WN_Parm_By_Reference(wn1)) {
+    } else if (opr == OPR_PARM && !WN_Parm_By_Reference(wn1) && !WN_Parm_Dereference(wn1)) {
       // It has no alias info.
       am->Set_id(wn2, 0);    // cancel the original alias info in wn2
       return;
@@ -1334,6 +1409,10 @@ void Duplicate_alias_info(ALIAS_MANAGER *am, WN *wn1, WN *wn2)
   WN_MAP32_Set(WN_MAP_ALIAS_CLASS, wn2,
 	       WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn1));
 
+  AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+  if (aa)
+    aa->transferAliasTag(wn2,wn1);
+
   // copy homing information
   if ( OPCODE_is_load(opc1) && OPCODE_is_load(opc2) ) {
     am->Set_homing_load( wn2, am->Homing_load(wn1) );
@@ -1350,7 +1429,7 @@ void Duplicate_alias_info(ALIAS_MANAGER *am, WN *wn1, WN *wn2)
 	ST_sclass(WN_st(wn1)) == SCLASS_REG) {
       id = am->Preg_id();
       am->Set_id(wn1, id);
-    } else if (opr == OPR_PARM && !WN_Parm_By_Reference(wn1)) {
+    } else if (opr == OPR_PARM && !WN_Parm_By_Reference(wn1) && !WN_Parm_Dereference(wn1)) {
       // It has no alias info.
       am->Set_id(wn2, 0);    // cancel the original alias info in wn2
       return;
@@ -1437,7 +1516,7 @@ ALIAS_MANAGER::Print( const WN *wn, FILE *fp ) const
   for ( i = Preg_id()+1; i <= Vec()->Lastidx(); i++) {
     fprintf( fp, "aliased_with<%d,{", i);
     for (INT32 oldid = Preg_id() + 1; oldid <= i; oldid++) {
-      if (Rule()->Aliased_Memop(Pt(oldid), Pt(i), Pt(oldid)->Ty(), Pt(i)->Ty()))
+      if (Rule()->Aliased_Memop(Pt(oldid), Pt(i), Pt(oldid)->Ty(), Pt(i)->Ty(), TRUE))
         fprintf( fp,"%d ", oldid);
     }
     fprintf( fp, "}>\n");
@@ -1477,13 +1556,15 @@ void Print_alias_info(char *buf, const ALIAS_MANAGER *am, const WN *wn)
   POINTS_TO *pt = am->Pt(alias_id);
 
   if (pt->Expr_kind() == EXPR_IS_ADDR && pt->Base_kind() == BASE_IS_FIXED) {
+    const char* st_name = ST_class(pt->Base()) == CLASS_CONST ? "<constant>" : ST_name(pt->Base());
+    
     if (pt->Ofst_kind() == OFST_IS_FIXED) 
       sprintf(buf, "id:%d %s+0x%llx",
 	      alias_id, 
-	      ST_class(pt->Base())==CLASS_VAR ? ST_name(pt->Base()) : "not_variable",
+	      ST_class(pt->Base())==CLASS_VAR ? st_name : "not_variable",
 	      pt->Byte_Ofst());
     else
-      sprintf(buf, "id:%d %s", alias_id, ST_name(pt->Base()));
+      sprintf(buf, "id:%d %s", alias_id, st_name);
   } else if (pt->F_param() && pt->Based_sym() != NULL) {
     sprintf(buf, "id:%d parm:%s", alias_id, ST_name(pt->Based_sym()));
   } else if (pt->Unique_pt() && pt->Based_sym() != NULL) {
@@ -1610,4 +1691,42 @@ POINTS_TO *Points_to_copy(POINTS_TO *pt, MEM_POOL *rpool)
   POINTS_TO *tmp = CXX_NEW(POINTS_TO, rpool);
   tmp->Copy_fully(pt);
   return tmp;
+}
+
+// Is the function whose name is function_name in the list of functions seen by
+// ipa?
+static BOOL in_ipa_pu_list(char *function_name)
+{
+  PU_Info *pu;
+
+  for (pu = (PU_Info *)Global_PU_Tree; pu != NULL; pu = PU_Info_next(pu))
+  {
+    char *pu_name = ST_name(PU_Info_proc_sym(pu));
+    if (strcmp(pu_name, function_name) == 0)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+// Is the function whose name is function_name in the list of nice library
+// functions?
+static BOOL in_pure_call_list(char *function_name)
+{
+  if (strcmp(function_name, "malloc") == 0)
+    return TRUE;
+  if (strcmp(function_name, "calloc") == 0)
+    return TRUE;
+  if (strcmp(function_name, "realloc") == 0)
+    return TRUE;
+  if (strcmp(function_name, "printf") == 0)
+    return TRUE;
+  if (strcmp(function_name, "fprintf") == 0)
+    return TRUE;
+  if (strcmp(function_name, "exit") == 0)
+    return TRUE;
+  if (strcmp(function_name, "free") == 0)
+    return TRUE;
+  
+  // add more
+  return FALSE;
 }

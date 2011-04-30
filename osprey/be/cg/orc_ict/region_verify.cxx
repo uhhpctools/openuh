@@ -299,7 +299,7 @@ void Verify_Entry_Exit_BB(BB *bb){
     if(BB_preds_len(bb)==0)
         Is_True(node->Is_Entry(), ("verify_entry_exit_bb"));
     if(BB_succs_len(bb)==0)
-        Is_True(node->Is_Exit(), ("verify_entry_exit_bb"));
+      Is_True(node->Is_Exit(), ("verify_entry_exit_bb"));
 
     BBLIST *pred_list;
     FOR_ALL_BB_PREDS(bb, pred_list){
@@ -471,6 +471,14 @@ void Verify_Region_Tree(REGION_TREE *tree, BB *first_bb){
 
     // verify the relation of global cfg and regional cfg
     for(BB *bb = first_bb; bb!=0; bb = BB_next(bb)){
+      // OSP_355, this is very aweful hack, 
+      // since CFlow can not delete BBs with eh_label, addr_taken_label and outer_block_label
+      // It only deletes the content and pred/succ of the BBs
+        if ( BB_unreachable(bb) ) {
+          Is_True( BB_Has_Exc_Label(bb)|| BB_Has_Addr_Taken_Label(bb)|| BB_Has_Outer_Block_Label(bb),
+                  ("BB is unreachable, but not of exec/addr_taken/outer_block_label type. Refer to Delete_BB_Contents function in CFlow"));
+          continue;
+        }
         Verify_Entry_Exit_BB(bb);
 
         REGIONAL_CFG_NODE *node = Regional_Cfg_Node(bb);

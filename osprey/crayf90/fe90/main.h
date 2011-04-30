@@ -516,7 +516,19 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 						   "ELSE WHERE MASK",
                                                    "VOLATILE",
                                                    "OPEN MP END PARALLEL WORKSHARE",
-                                                   "OPEN MP END WORKSHARE"
+                                                   "OPEN MP END WORKSHARE",
+#ifdef KEY /* Bug 11741 */
+						   "IMPORT",
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+						   "ENUM",
+						   "END ENUMERATOR",
+						   "ENUMERATOR",
+#endif /* KEY Bug 10572 */
+#ifdef KEY /* Bug 14150 */
+						   "BIND",
+						   "VALUE"
+#endif /* KEY Bug 10572 */
 						  };
 
 	target_machine_type	target_machine;

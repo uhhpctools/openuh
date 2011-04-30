@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -211,7 +215,7 @@ set_option_unseen (int optflag)
 	int_list *p;
 	p = option_is_seen[optflag];
 	option_is_seen[optflag] = NOT_SEEN;
-	if (p) delete_order_option(p);
+	if (p && p != IMPLICITLY_SEEN) delete_order_option(p);
 }
 
 /* iterator routines, e.g.:

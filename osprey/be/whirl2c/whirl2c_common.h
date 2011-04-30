@@ -39,10 +39,10 @@
  * ====================================================================
  *
  * Module: whirl2c_common.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/whirl2c_common.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:42:00-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2c/SCCS/s.whirl2c_common.h $
  *
  * Revision history:
  *  07-Nov-94 - Original Version
@@ -151,6 +151,7 @@ typedef struct Context
 #define CONTEXT_LVALUE_TYPE 0x000000040      /* Context suggests lvalue type */
 #define CONTEXT_OMP_PRAGMA 0x000000080       /* Processing an Open MP pragma */
 #define CONTEXT_CONST_TY2C 0x000000100       /* Whether const is output for this TY */
+#define CONTEXT_PTR_ARITH 0x000000200       /* pointer arithmetic expressions */
 
 /* Accessor macros */
 #define CONTEXT_reset_flags(c)  ((c).flags = 0U)
@@ -208,6 +209,18 @@ typedef struct Context
 #define CONTEXT_reset_const(c) \
    ((c).flags = (c).flags  & ~CONTEXT_CONST_TY2C)
 
+#define CONTEXT_const(c) ((c).flags & CONTEXT_CONST_TY2C)
+#define CONTEXT_set_const(c) \
+   ((c).flags = (c).flags | CONTEXT_CONST_TY2C)
+#define CONTEXT_reset_const(c) \
+   ((c).flags = (c).flags  & ~CONTEXT_CONST_TY2C)
+
+#define CONTEXT_ptr_arith(c) ((c).flags & CONTEXT_PTR_ARITH)
+#define CONTEXT_set_ptr_arith(c) \
+   ((c).flags = (c).flags | CONTEXT_PTR_ARITH)
+#define CONTEXT_reset_ptr_arith(c) \
+   ((c).flags = (c).flags  & ~CONTEXT_PTR_ARITH)
+
 
                      /* Identifier naming */
                      /*-------------------*/
@@ -226,6 +239,14 @@ extern const char * WHIRL2C_make_valid_c_name(const char *name);
  */
 extern void WHIRL2C_parenthesize(TOKEN_BUFFER tokens);
 
+extern int compiling_upc_flag;
+
+struct eqstr {
+  bool operator()(const char* s1, const char* s2) const
+  {
+    return strncmp(s1, s2, 256) == 0;
+  }
+};
 
 #endif /* whirl2c_common_INCLUDED */
 

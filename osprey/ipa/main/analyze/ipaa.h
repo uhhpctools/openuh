@@ -96,7 +96,7 @@ public:
 	if ( fcount > 32 ) {
 	    INT32 dw = (fcount+63)/64;
 	    _fbv._fdata = (INT64 *) MEM_POOL_Alloc ( pool, dw*sizeof(INT64) );
-	    bzero ( _fbv._fdata, dw*sizeof(INT64) );
+	    BZERO ( _fbv._fdata, dw*sizeof(INT64) );
 	} else
 	    _fbv._fbits = 0;
     }
@@ -105,7 +105,7 @@ public:
 	if (fcount > 32) {
 	    INT32 dw = (fcount+63)/64;
 	    _fbv._fdata = (INT64 *) MEM_POOL_Alloc ( pool, dw*sizeof(INT64) );
-	    bcopy (fbv._fbv._fdata, _fbv._fdata, dw*sizeof(INT64));
+	    BCOPY (fbv._fbv._fdata, _fbv._fdata, dw*sizeof(INT64));
 	} else
 	    _fbv._fbits = fbv._fbv._fbits;
     }
@@ -139,7 +139,7 @@ public:
     // Add an element to a set:
     void Add_element ( INT32 fcount, INT32 elmt ) {
 	if ( fcount > 32 ) {
-	    *(_fbv._fdata+elmt/64) |= 1 << (elmt&63);
+	    *(_fbv._fdata+elmt/64) |= (mINT64)1 << (elmt&63);
 	} else {
 	    _fbv._fbits |= 1 << elmt;
 	}
@@ -148,7 +148,7 @@ public:
     // Check for an element in a set:
     BOOL Is_element ( INT32 fcount, INT32 elmt ) {
 	if ( fcount > 32 ) {
-	    return ( *(_fbv._fdata+elmt/64) & ( 1 << (elmt&63) ) ) != 0;
+	    return ( *(_fbv._fdata+elmt/64) & ( (mINT64)1 << (elmt&63) ) ) != 0;
 	} else {
 	    return ( _fbv._fbits & ( 1 << elmt ) ) != 0;
 	}
@@ -283,7 +283,7 @@ private:
 public:
     // Construct an empty set of IPAA node information:
     IPAA_NODE_INFO ( INT32 formal_count ) {
-	bzero ( this, sizeof(IPAA_NODE_INFO) );
+	BZERO ( this, sizeof(IPAA_NODE_INFO) );
 	_fcount = formal_count;
     }
 

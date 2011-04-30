@@ -1,4 +1,8 @@
 /*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -42,7 +46,7 @@ extern "C" {
 
 
 #ifdef _KEEP_RCS_ID
-static char *dwarf_DST_mem_rcs_id = "$Source$ $Revision$";
+static char *dwarf_DST_mem_rcs_id = "$Source: /scratch/mee/Patch0002-taketwo/kpro64-pending/common/com/SCCS/s.dwarf_DST_mem.h $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "defs.h"
@@ -88,15 +92,13 @@ extern const DST_IDX DST_INVALID_IDX;
 
 #ifdef __cplusplus
 
-inline bool operator==(const DST_IDX& x, const DST_IDX& y) {
+// == != operators can conflict with windows.h,
+// so just define an explicit equality routine.
+inline BOOL DST_ARE_EQUAL (const DST_IDX x, const DST_IDX y) {
   return x.byte_idx == y.byte_idx && x.block_idx == y.block_idx;
 }
 
-inline bool operator!=(const DST_IDX& x, const DST_IDX& y) {
-  return x.byte_idx != y.byte_idx || x.block_idx != y.block_idx;
-}
-
-inline bool operator<(const DST_IDX& x, const DST_IDX& y) {
+inline bool operator < (const DST_IDX& x, const DST_IDX& y) {
   return (x.block_idx < y.block_idx) ||
          (x.block_idx == y.block_idx && x.byte_idx < y.byte_idx);
 }

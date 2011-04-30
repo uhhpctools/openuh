@@ -136,15 +136,15 @@ CFILES += \
     $(IRFILES)
 
 ifeq ($(BUILD_TARGET), IA64)
-CFILES += main.c
+CFILES += main.c f90_main.c
 endif
 
 ifeq ($(BUILD_TARGET), X8664)
-CFILES += main.c
+CFILES += main.c f90_main.c
 endif
 
 ifeq ($(BUILD_TARGET), IA32)
-CFILES += main.c
+CFILES += main.c f90_main.c
 endif
 
 SRC_DIRS += \

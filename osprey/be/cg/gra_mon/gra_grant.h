@@ -77,10 +77,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_grant.h,v $
+//  $Revision: 1.2 $
+//  $Date: 02/11/07 23:41:29-00:00 $
+//  $Author: fchow@keyresearch.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_grant.h $
 
 
 #ifndef GRA_GRANT_INCLUDED
@@ -89,7 +89,7 @@
 #ifndef GRA_GRANT_RCS_ID
 #define GRA_GRANT_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *gra_grant_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_grant.h,v $ $Revision: 1.1.1.1 $";
+static char *gra_grant_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_grant.h $ $Revision: 1.2 $";
 #endif
 #endif
 
@@ -110,4 +110,9 @@ GRA_GRANT_Transfer( BB* from_bb, BB* to_bb );
 
 extern void
 GRA_GRANT_Unused_Caller_Saved(void);
+
+#ifdef TARG_SL2 //minor_reg_alloc
+extern void 
+GRA_GRANT_REGISTER_SET_Set_For_BB(BB * bb, ISA_REGISTER_CLASS rc, REGISTER_SET reg_set);
+#endif 
 #endif

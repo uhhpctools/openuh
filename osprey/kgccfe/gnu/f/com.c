@@ -2414,20 +2414,6 @@ ffecom_concat_list_gather_ (ffecomConcatList_ catlist, ffebld expr,
       expr = ffebld_right (expr);
       goto recurse;		/* :::::::::::::::::::: */
 
-#if 0				/* Breaks passing small actual arg to larger
-				   dummy arg of sfunc */
-    case FFEBLD_opCONVERT:
-      expr = ffebld_left (expr);
-      {
-	ffetargetCharacterSize cmax;
-
-	cmax = catlist.len + ffebld_size_known (expr);
-
-	if ((max == FFETARGET_charactersizeNONE) || (max > cmax))
-	  max = cmax;
-      }
-      goto recurse;		/* :::::::::::::::::::: */
-#endif
 
     case FFEBLD_opANY:
       return catlist;
@@ -2480,32 +2466,6 @@ ffecom_debug_kludge_ (tree aggr, const char *aggr_type, ffesymbol member,
   int len;
   char *buff;
   char space[120];
-#if 0
-  tree type_id;
-
-  for (type_id = member_type;
-       TREE_CODE (type_id) != IDENTIFIER_NODE;
-       )
-    {
-      switch (TREE_CODE (type_id))
-	{
-	case INTEGER_TYPE:
-	case REAL_TYPE:
-	  type_id = TYPE_NAME (type_id);
-	  break;
-
-	case ARRAY_TYPE:
-	case COMPLEX_TYPE:
-	  type_id = TREE_TYPE (type_id);
-	  break;
-
-	default:
-	  assert ("no IDENTIFIER_NODE for type!" == NULL);
-	  type_id = error_mark_node;
-	  break;
-	}
-    }
-#endif
 
   if (ffecom_transform_only_dummies_
       || !ffe_is_debug_kludge ())
@@ -2514,9 +2474,6 @@ ffecom_debug_kludge_ (tree aggr, const char *aggr_type, ffesymbol member,
   len = 60
     + strlen (aggr_type)
     + IDENTIFIER_LENGTH (DECL_NAME (aggr));
-#if 0
-    + IDENTIFIER_LENGTH (type_id);
-#endif
 
   if (((size_t) len) >= ARRAY_SIZE (space))
     buff = malloc_new_ks (malloc_pool_image (), "debug_kludge", len + 1);
@@ -3755,31 +3712,7 @@ ffecom_expr_ (ffebld expr, tree dest_tree, ffebld dest,
       return error_mark_node;
     }
 
-#if 1
   assert ("didn't think anything got here anymore!!" == NULL);
-#else
-  switch (ffebld_arity (expr))
-    {
-    case 2:
-      TREE_OPERAND (item, 0) = ffecom_expr (ffebld_left (expr));
-      TREE_OPERAND (item, 1) = ffecom_expr (ffebld_right (expr));
-      if (TREE_OPERAND (item, 0) == error_mark_node
-	  || TREE_OPERAND (item, 1) == error_mark_node)
-	return error_mark_node;
-      break;
-
-    case 1:
-      TREE_OPERAND (item, 0) = ffecom_expr (ffebld_left (expr));
-      if (TREE_OPERAND (item, 0) == error_mark_node)
-	return error_mark_node;
-      break;
-
-    default:
-      break;
-    }
-
-  return fold (item);
-#endif
 }
 
 /* Returns the tree that does the intrinsic invocation.
@@ -3924,10 +3857,6 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 
     case FFEINTRIN_impAINT:
     case FFEINTRIN_impDINT:
-#if 0
-      /* ~~Someday implement FIX_TRUNC_EXPR yielding same type as arg.  */
-      return ffecom_1 (FIX_TRUNC_EXPR, tree_type, ffecom_expr (arg1));
-#else /* in the meantime, must use floor to avoid range problems with ints */
       /* r__1 = r1 >= 0 ? floor(r1) : -floor(-r1); */
       saved_expr1 = ffecom_save_tree (ffecom_expr (arg1));
       return
@@ -3953,31 +3882,9 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 						       NULL_TREE)
 				     ))
 		 );
-#endif
 
     case FFEINTRIN_impANINT:
     case FFEINTRIN_impDNINT:
-#if 0				/* This way of doing it won't handle real
-				   numbers of large magnitudes. */
-      saved_expr1 = ffecom_save_tree (ffecom_expr (arg1));
-      expr_tree = convert (tree_type,
-			   convert (integer_type_node,
-				    ffecom_3 (COND_EXPR, tree_type,
-					      ffecom_truth_value
-					      (ffecom_2 (GE_EXPR,
-							 integer_type_node,
-							 saved_expr1,
-						       ffecom_float_zero_)),
-					      ffecom_2 (PLUS_EXPR,
-							tree_type,
-							saved_expr1,
-							ffecom_float_half_),
-					      ffecom_2 (MINUS_EXPR,
-							tree_type,
-							saved_expr1,
-						     ffecom_float_half_))));
-      return expr_tree;
-#else /* So we instead call floor. */
       /* r__1 = r1 >= 0 ? floor(r1 + .5) : -floor(.5 - r1) */
       saved_expr1 = ffecom_save_tree (ffecom_expr (arg1));
       return
@@ -4009,7 +3916,6 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 						       NULL_TREE))
 			   )
 		 );
-#endif
 
     case FFEINTRIN_impASIN:
     case FFEINTRIN_impDASIN:
@@ -4147,36 +4053,18 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 
     case FFEINTRIN_impICHAR:
     case FFEINTRIN_impIACHAR:
-#if 0				/* The simple approach. */
-      ffecom_char_args_ (&expr_tree, &saved_expr1 /* Ignored */ , arg1);
-      expr_tree
-	= ffecom_1 (INDIRECT_REF,
-		    TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (expr_tree))),
-		    expr_tree);
-      expr_tree
-	= ffecom_2 (ARRAY_REF,
-		    TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (expr_tree))),
-		    expr_tree,
-		    integer_one_node);
-      return convert (tree_type, expr_tree);
-#else /* The more interesting (and more optimal) approach. */
       expr_tree = ffecom_intrinsic_ichar_ (tree_type, arg1, &saved_expr1);
       expr_tree = ffecom_3 (COND_EXPR, tree_type,
 			    saved_expr1,
 			    expr_tree,
 			    convert (tree_type, integer_zero_node));
       return expr_tree;
-#endif
 
     case FFEINTRIN_impINDEX:
       break;
 
     case FFEINTRIN_impLEN:
-#if 0
-      break;					/* The simple approach. */
-#else
       return ffecom_intrinsic_len_ (arg1);	/* The more optimal approach. */
-#endif
 
     case FFEINTRIN_impLGE:
     case FFEINTRIN_impLGT:
@@ -4280,10 +4168,6 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 
     case FFEINTRIN_impNINT:
     case FFEINTRIN_impIDNINT:
-#if 0
-      /* ~~Ideally FIX_ROUND_EXPR would be implemented, but it ain't yet.  */
-      return ffecom_1 (FIX_ROUND_EXPR, tree_type, ffecom_expr (arg1));
-#else
       /* i__1 = r1 >= 0 ? floor(r1 + .5) : -floor(.5 - r1); */
       saved_expr1 = ffecom_save_tree (ffecom_expr (arg1));
       return
@@ -4302,7 +4186,6 @@ ffecom_expr_intrinsic_ (ffebld expr, tree dest_tree,
 				     saved_expr1,
 				     convert (arg1_type,
 					      ffecom_float_half_))));
-#endif
 
     case FFEINTRIN_impSIGN:
     case FFEINTRIN_impDSIGN:
@@ -7812,19 +7695,6 @@ ffecom_sym_transform_ (ffesymbol s)
 			|| (high && TREE_CODE (high) != INTEGER_CST)))
 		  adjustable = TRUE;
 
-#if 0				/* Old approach -- see below. */
-		if (TREE_CODE (low) != INTEGER_CST)
-		  low = ffecom_3 (COND_EXPR, integer_type_node,
-				  ffecom_adjarray_passed_ (s),
-				  low,
-				  ffecom_integer_zero_node);
-
-		if (high && TREE_CODE (high) != INTEGER_CST)
-		  high = ffecom_3 (COND_EXPR, integer_type_node,
-				   ffecom_adjarray_passed_ (s),
-				   high,
-				   ffecom_integer_zero_node);
-#endif
 
 		/* ~~~gcc/stor-layout.c (layout_type) should do this,
 		   probably.  Fixes 950302-1.f.  */
@@ -7869,7 +7739,6 @@ ffecom_sym_transform_ (ffesymbol s)
 		== (ffecom_num_entrypoints_ + 1))
 	      break;
 
-#if 1
 
 	    /* If variable_size in stor-layout has been called during
 	       the above, then get_pending_sizes should have the
@@ -7919,30 +7788,6 @@ ffecom_sym_transform_ (ffesymbol s)
 		put_pending_sizes (sizes);
 	    }
 
-#else
-#if 0
-	    if (adjustable
-		&& (ffesymbol_numentries (s)
-		    != ffecom_num_entrypoints_ + 1))
-	      DECL_SOMETHING (t)
-		= ffecom_2 (NE_EXPR, integer_type_node,
-			    t,
-			    null_pointer_node);
-#else
-#if 0
-	    if (adjustable
-		&& (ffesymbol_numentries (s)
-		    != ffecom_num_entrypoints_ + 1))
-	      {
-		ffebad_start (FFEBAD_MISSING_ADJARRAY_UNSUPPORTED);
-		ffebad_here (0, ffesymbol_where_line (s),
-			     ffesymbol_where_column (s));
-		ffebad_string (ffesymbol_text (s));
-		ffebad_finish ();
-	      }
-#endif
-#endif
-#endif
 	  }
 	  break;
 
@@ -11409,17 +11254,6 @@ ffecom_init_0 ()
   pushdecl (build_decl (TYPE_DECL, get_identifier ("unsigned4"),
 			t));
 
-#if 0
-  if (ffe_is_do_internal_checks ()
-      && LONG_TYPE_SIZE != FLOAT_TYPE_SIZE
-      && LONG_TYPE_SIZE != CHAR_TYPE_SIZE
-      && LONG_TYPE_SIZE != SHORT_TYPE_SIZE
-      && LONG_TYPE_SIZE != LONG_LONG_TYPE_SIZE)
-    {
-      fprintf (stderr, "Sorry, no g77 support for LONG_TYPE_SIZE (%d bits) yet.\n",
-	       LONG_TYPE_SIZE);
-    }
-#endif
 
   ffecom_tree_type[FFEINFO_basictypeLOGICAL][FFEINFO_kindtypeLOGICAL1]
     = t = make_signed_type (FLOAT_TYPE_SIZE);
@@ -11824,37 +11658,8 @@ ffecom_init_0 ()
   ffecom_tree_xargc_ = start_decl (ffecom_tree_xargc_, FALSE);
   finish_decl (ffecom_tree_xargc_, NULL_TREE, FALSE);
 
-#if 0	/* This is being fixed, and seems to be working now. */
-  if ((FLOAT_TYPE_SIZE != 32)
-      || (TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (null_pointer_node))) != 32))
-    {
-      warning ("configuration: REAL, INTEGER, and LOGICAL are %d bits wide,",
-	       (int) FLOAT_TYPE_SIZE);
-      warning ("and pointers are %d bits wide, but g77 doesn't yet work",
-	  (int) TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (null_pointer_node))));
-      warning ("properly unless they all are 32 bits wide");
-      warning ("Please keep this in mind before you report bugs.");
-    }
-#endif
 
-#if 0	/* Code in ste.c that would crash has been commented out. */
-  if (TYPE_PRECISION (ffecom_f2c_ftnlen_type_node)
-      < TYPE_PRECISION (string_type_node))
-    /* I/O will probably crash.  */
-    warning ("configuration: char * holds %d bits, but ftnlen only %d",
-	     TYPE_PRECISION (string_type_node),
-	     TYPE_PRECISION (ffecom_f2c_ftnlen_type_node));
-#endif
 
-#if 0	/* ASSIGN-related stuff has been changed to accommodate this. */
-  if (TYPE_PRECISION (ffecom_integer_type_node)
-      < TYPE_PRECISION (string_type_node))
-    /* ASSIGN 10 TO I will crash.  */
-    warning ("configuration: char * holds %d bits, but INTEGER only %d --\n\
- ASSIGN statement might fail",
-	     TYPE_PRECISION (string_type_node),
-	     TYPE_PRECISION (ffecom_integer_type_node));
-#endif
 }
 
 /* ffecom_init_2 -- Initialize
@@ -12746,29 +12551,6 @@ ffecom_return_expr (ffebld expr)
 	  break;
 	}
       rtn = ffecom_func_result_;
-#if 0
-      /* Spurious error if RETURN happens before first reference!  So elide
-	 this code.  In particular, for debugging registry, rtn should always
-	 be non-null after all, but TREE_USED won't be set until we encounter
-	 a reference in the code.  Perfectly okay (but weird) code that,
-	 e.g., has "GOTO 20;10 RETURN;20 RTN=0;GOTO 10", would result in
-	 this diagnostic for no reason.  Have people use -O -Wuninitialized
-	 and leave it to the back end to find obviously weird cases.  */
-
-      /* Used to "assert(rtn != NULL_TREE);" here, but it's kind of a valid
-	 situation; if the return value has never been referenced, it won't
-	 have a tree under 2pass mode. */
-      if ((rtn == NULL_TREE)
-	  || !TREE_USED (rtn))
-	{
-	  ffebad_start (FFEBAD_RETURN_VALUE_UNSET);
-	  ffebad_here (0, ffesymbol_where_line (ffecom_primary_entry_),
-		       ffesymbol_where_column (ffecom_primary_entry_));
-	  ffebad_string (ffesymbol_text (ffesymbol_funcresult
-					 (ffecom_primary_entry_)));
-	  ffebad_finish ();
-	}
-#endif
       break;
 
     default:
@@ -12957,30 +12739,6 @@ ffecom_sym_retract (ffesymbol s UNUSED)
 {
   assert (!ffesymbol_retractable ());
 
-#if 0				/* GCC doesn't commit any backtrackable sins,
-				   so nothing needed here. */
-  switch (ffesymbol_hook (s).state)
-    {
-    case 0:			/* nothing happened yet. */
-      break;
-
-    case 1:			/* exec transition happened. */
-      break;
-
-    case 2:			/* learned happened. */
-      break;
-
-    case 3:			/* learned then exec. */
-      break;
-
-    case 4:			/* exec then learned. */
-      break;
-
-    default:
-      assert ("bad hook state" == NULL);
-      break;
-    }
-#endif
 }
 
 /* Create temporary gcc label.  */
@@ -14350,10 +14108,6 @@ mark_addressable (exp)
 	/* drops in */
       case FUNCTION_DECL:
 	TREE_ADDRESSABLE (x) = 1;
-#if 0				/* poplevel deals with this now.  */
-	if (DECL_CONTEXT (x) == 0)
-	  TREE_ADDRESSABLE (DECL_ASSEMBLER_NAME (x)) = 1;
-#endif
 
       default:
 	return 1;
@@ -14770,16 +14524,6 @@ signed_type (type)
     return long_integer_type_node;
   if (type1 == long_long_unsigned_type_node)
     return long_long_integer_type_node;
-#if 0	/* gcc/c-* files only */
-  if (type1 == unsigned_intDI_type_node)
-    return intDI_type_node;
-  if (type1 == unsigned_intSI_type_node)
-    return intSI_type_node;
-  if (type1 == unsigned_intHI_type_node)
-    return intHI_type_node;
-  if (type1 == unsigned_intQI_type_node)
-    return intQI_type_node;
-#endif
 
   type2 = type_for_size (TYPE_PRECISION (type1), 0);
   if (type2 != NULL_TREE)
@@ -14814,48 +14558,15 @@ truthvalue_conversion (expr)
   if (TREE_CODE (expr) == ERROR_MARK)
     return expr;
 
-#if 0 /* This appears to be wrong for C++.  */
-  /* These really should return error_mark_node after 2.4 is stable.
-     But not all callers handle ERROR_MARK properly.  */
-  switch (TREE_CODE (TREE_TYPE (expr)))
-    {
-    case RECORD_TYPE:
-      error ("struct type value used where scalar is required");
-      return integer_zero_node;
-
-    case UNION_TYPE:
-      error ("union type value used where scalar is required");
-      return integer_zero_node;
-
-    case ARRAY_TYPE:
-      error ("array type value used where scalar is required");
-      return integer_zero_node;
-
-    default:
-      break;
-    }
-#endif /* 0 */
 
   switch (TREE_CODE (expr))
     {
       /* It is simpler and generates better code to have only TRUTH_*_EXPR
 	 or comparison expressions as truth values at this level.  */
-#if 0
-    case COMPONENT_REF:
-      /* A one-bit unsigned bit-field is already acceptable.  */
-      if (1 == TREE_INT_CST_LOW (DECL_SIZE (TREE_OPERAND (expr, 1)))
-	  && TREE_UNSIGNED (TREE_OPERAND (expr, 1)))
-	return expr;
-      break;
-#endif
 
     case EQ_EXPR:
       /* It is simpler and generates better code to have only TRUTH_*_EXPR
 	 or comparison expressions as truth values at this level.  */
-#if 0
-      if (integer_zerop (TREE_OPERAND (expr, 1)))
-	return build_unary_op (TRUTH_NOT_EXPR, TREE_OPERAND (expr, 0), 0);
-#endif
     case NE_EXPR: case LE_EXPR: case GE_EXPR: case LT_EXPR: case GT_EXPR:
     case TRUTH_ANDIF_EXPR:
     case TRUTH_ORIF_EXPR:
@@ -14952,10 +14663,6 @@ truthvalue_conversion (expr)
       break;
 
     case MODIFY_EXPR:
-#if 0				/* No such thing in Fortran. */
-      if (warn_parentheses && C_EXP_ORIGINAL_CODE (expr) == MODIFY_EXPR)
-	warning ("suggest parentheses around assignment used as truth value");
-#endif
       break;
 
     default:
@@ -15093,16 +14800,6 @@ unsigned_type (type)
     return long_unsigned_type_node;
   if (type1 == long_long_integer_type_node)
     return long_long_unsigned_type_node;
-#if 0	/* gcc/c-* files only */
-  if (type1 == intDI_type_node)
-    return unsigned_intDI_type_node;
-  if (type1 == intSI_type_node)
-    return unsigned_intSI_type_node;
-  if (type1 == intHI_type_node)
-    return unsigned_intHI_type_node;
-  if (type1 == intQI_type_node)
-    return unsigned_intQI_type_node;
-#endif
 
   type2 = type_for_size (TYPE_PRECISION (type1), 1);
   if (type2 != NULL_TREE)
@@ -15693,11 +15390,6 @@ ffecom_open_include_ (char *name, ffewhereLine l, ffewhereColumn c)
 	      /* This is a normal VMS filespec, so use it unchanged.  */
 	      strncpy (fname, (char *) fbeg, flen);
 	      fname[flen] = 0;
-#if 0	/* Not for g77.  */
-	      /* if it's '#include filename', add the missing .h */
-	      if (strchr (fname, '.') == NULL)
-		strcat (fname, ".h");
-#endif
 	    }
 #endif /* VMS */
 	  f = open_include_file (fname, searchptr);

@@ -75,9 +75,9 @@ extern "C" PHASE_NAME Get_ipa_tlog_phase(void);
 extern "C" void Set_ipa_tlog_phase(const INT32 phase);
 
 // TLOG interface for reporting optimizations
-extern "C" void Ipa_tlog( char *keyword, SRCPOS srcpos, const char *fmt, ... );
+extern "C" void Ipa_tlog( const char *keyword, SRCPOS srcpos, const char *fmt, ... );
 
-extern "C" void Inline_tlog( char *keyword, SRCPOS srcpos, const char *fmt, ... );
+extern "C" void Inline_tlog( const char *keyword, SRCPOS srcpos, const char *fmt, ... );
 
 #endif // ipo_tlog_util_INCLUDED
 

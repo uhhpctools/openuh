@@ -42,6 +42,7 @@
 #include <alloca.h>
 #include "defs.h"
 #include "mempool.h"
+#include "config_asm.h"
 #include "label_util.h"
 #include "be_util.h"
 #include "bb.h"
@@ -142,12 +143,12 @@ LABEL_IDX Gen_Temp_Label(void)
   LABEL_IDX labx;
   LABEL &label = New_LABEL(CURRENT_SYMTAB, labx);
 
-  name = (char *)alloca(  strlen(".L__")
+  name = (char *)alloca(  strlen(LABEL_PREFIX "__")
                         + maxint_digits
                         + maxint_digits
                         + 1);
   // use underscores cause intel's asm doesn't like dots in name
-  sprintf(name, ".L_%d_%d", Current_PU_Count(), labx);
+  sprintf(name, LABEL_PREFIX "_%d_%d", Current_PU_Count(), labx);
   LABEL_Init (label, Save_Str(name), LKIND_DEFAULT);
 
   return labx;

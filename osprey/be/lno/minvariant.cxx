@@ -1,12 +1,4 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
- */
-
-/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -570,7 +562,10 @@ static void MIR_Maybe_Add_To_List(WN*                      wn,
     WN*      parent = LWN_Get_Parent(wn);
     OPERATOR parent_oper = WN_operator(parent);
     if (((parent_oper == OPR_ISTORE) && (wn == WN_kid1(parent))) ||
-        (parent_oper == OPR_ILOAD)) {
+        (parent_oper == OPR_ILOAD)){
+#ifdef KEY //12404: don't "minvar" for istore/iload of volatiles
+      if (!WN_Is_Volatile_Mem(parent))
+#endif
       MIR_Build_Loop_List_Array(wn, lists, pool, duplicates_okay);
     }
   }
@@ -1532,10 +1527,6 @@ MIR_Partition_Lists(WN* loop,
   if (Minv_Debug) {
     fprintf(TFile, "MIR_Partition_Lists for loop %s, depth %d:\n",
             SYMBOL(WN_index(loop)).Name(), Do_Depth(loop));
-#if 0
-    fprintf(TFile, "old lists:\n");
-    Print_Lists(TFile, old_lists);
-#endif
   }
 
   DYN_ARRAY<MIR_REFLIST*>* rval = MIR_Build_Loop_List(loop, pool);

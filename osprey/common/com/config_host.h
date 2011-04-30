@@ -77,12 +77,27 @@ static char *config_host_rcs_id = "$Source$ $Revision$";
 /* What is the byte sex of the host?  Note that the variable
  * Host_Byte_Sex is set based on this definition in config_host.c.
  */
-#ifndef linux
+#ifdef __MINGW32__
+/* windows doesn't have endian.h, assume is running little-endian on x86 */
+#define HOST_IS_BIG_ENDIAN	0
+#define HOST_IS_LITTLE_ENDIAN	1
+
+#else 
+/* unix systems should have endian.h */
+#ifdef __APPLE__
+#include <machine/endian.h>
+#else
+#include <endian.h>
+#endif
+
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER == __BIG_ENDIAN)
 #define HOST_IS_BIG_ENDIAN	1
 #define HOST_IS_LITTLE_ENDIAN	0
 #else
+/* default to little-endian */
 #define HOST_IS_BIG_ENDIAN	0
 #define HOST_IS_LITTLE_ENDIAN	1
+#endif
 #endif
 
 /* Does the host (compiler) support quad-precision floating point? */

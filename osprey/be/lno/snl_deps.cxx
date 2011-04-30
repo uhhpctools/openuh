@@ -39,7 +39,6 @@
 
 // -*-C++-*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -47,7 +46,7 @@
 #pragma hdrstop
 
 #define snl_utils_CXX      "snl_utils.cxx"
-static char *rcs_id =   snl_utils_CXX "$Revision: 1.5 $";
+const static char *rcs_id =   snl_utils_CXX "$Revision: 1.5 $";
 
 #include <sys/types.h>
 #include "snl.h"

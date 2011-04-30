@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -58,6 +66,7 @@
 #include "const.h"                      // for MAX_SYMBOLIC_CONST_NAME_LEN
 #include "ttype.h"
 #include "targ_sim.h"
+#include "config_asm.h"
 
 // global tables
 FILE_INFO	File_info;
@@ -151,7 +160,11 @@ Copy_ST_No_Base (ST *st, SYMTAB_IDX scope)
     static INT Temp_Index = 0;
     STR_IDX new_name;
     if (scope == GLOBAL_SYMTAB) 
+#ifdef TARG_NVISA
+        new_name = Save_Str2i(ST_name(st),"__", Temp_Index++);
+#else
         new_name = Save_Str2i(ST_name(st),"..", Temp_Index++);
+#endif
     else
 	new_name = ST_name_idx(st);
 
@@ -572,7 +585,7 @@ static void INTRINSIC_LIST_add(ST *st)
 
 ST *
 INTRINSIC_LIST_lookup(TY_IDX  ty,
-		      char   *function_name)
+		      const char   *function_name)
 {
   vector<ST *>::iterator result =
                 std::find_if(intrinsic_list.begin(),
@@ -587,8 +600,7 @@ INTRINSIC_LIST_lookup(TY_IDX  ty,
 }
 
 ST *
-Gen_Intrinsic_Function(TY_IDX  ty,
-		       char   *function_name)
+Gen_Intrinsic_Function(TY_IDX  ty, const char   *function_name)
 {
   ST *st = INTRINSIC_LIST_lookup(ty, function_name);
 
@@ -602,6 +614,15 @@ Gen_Intrinsic_Function(TY_IDX  ty,
 
     ST_Init (st, Save_Str(function_name), CLASS_FUNC, SCLASS_EXTERN,
              EXPORT_PREEMPTIBLE, (TY_IDX) pu_idx);
+
+#ifdef TARG_X8664
+    if (Is_Target_32bit()) {
+      if (Use_Sse_Reg_Parm)
+        Set_TY_has_sseregister_parm (ty);
+      if (Use_Reg_Parm)
+        Set_TY_register_parm (ty, Use_Reg_Parm);
+    }
+#endif
 
     INTRINSIC_LIST_add(st);
   }
@@ -1188,6 +1209,74 @@ TY_is_unique (const TY_IDX ty_idx)
   };
 } // TY_is_unique
 
+/* ty either is union or has union in one of its fields (called recursively) */
+BOOL
+TY_has_union (TY_IDX ty)
+{
+  if (TY_kind(ty) != KIND_STRUCT) 
+    return FALSE;
+  if (TY_is_union(ty))
+    return TRUE;
+
+  FLD_HANDLE fld = TY_fld (ty);
+  TY_IDX fty;
+  do {
+    fty = FLD_type(fld);
+    if (TY_has_union(fty))
+      return TRUE;
+    fld = FLD_next (fld);
+  } while (!fld.Is_Null ());
+  return FALSE;
+}
+
+#ifdef TARG_NVISA
+/* number of elements in the vector */
+UINT
+TY_vector_count (TY_IDX ty)
+{
+  FmtAssert(TY_can_be_vector(ty), ("not a vector type"));
+  FmtAssert(TY_kind(ty) == KIND_STRUCT, ("vector not a struct type"));
+  INT count = 0;
+  FLD_HANDLE fld = TY_fld (ty);
+  do {
+	++count;
+    	fld = FLD_next (fld);
+  } while (!fld.Is_Null ());
+  return count;
+}
+#endif
+
+// return mtype associated with type and offset
+TYPE_ID
+Mtype_For_Type_Offset (TY_IDX ty, INT64 offset)
+{
+  switch (TY_kind(ty)) {
+  case KIND_STRUCT:
+    {
+      // return mtype of field
+      FLD_ITER fld_iter = Make_fld_iter(TY_fld(ty));
+      do {
+        FLD_HANDLE fld(fld_iter);
+        if (Is_Composite_Type(FLD_type(fld))
+          && offset >= FLD_ofst(fld)
+          && offset < FLD_ofst(fld) + TY_size(FLD_type(fld)))
+        {
+          return Mtype_For_Type_Offset (FLD_type(fld), offset - FLD_ofst(fld));
+        }
+        if (FLD_ofst(fld) == offset)
+          return TY_mtype(FLD_type(fld));
+      } while (!FLD_last_field(fld_iter++));
+      FmtAssert(FALSE, ("couldn't find matching field"));
+    }
+  case KIND_ARRAY:
+    // return mtype of elements, recursing in case array of structs
+    return Mtype_For_Type_Offset (TY_etype(ty),
+        offset % TY_size(TY_etype(ty)));
+  default:
+    return TY_mtype(ty);
+  }
+}
+
 //----------------------------------------------------------------------
 // PREG-related utilities
 //----------------------------------------------------------------------
@@ -1222,15 +1311,15 @@ Create_Preg_explicit(TYPE_ID mtype, const char *name,
 	switch (mtype) {
 	case MTYPE_C4:
 	case MTYPE_C8:
-#ifdef TARG_IA64
 	case MTYPE_C10:
-#endif
 	case MTYPE_FQ:
+	case MTYPE_F16:
 		// reserve space for another preg
 		(void) New_PREG_explicit (scope_tab, level, preg_idx2);
                 Set_PREG_name_idx ((*scope_tab[level].preg_tab)[preg_idx2], 0);
 		break;
 	case MTYPE_CQ:
+	case MTYPE_C16:
 		// reserve space for 3 more pregs
 		(void) New_PREG_explicit (scope_tab, level, preg_idx2);
                 Set_PREG_name_idx ((*scope_tab[level].preg_tab)[preg_idx2], 0);
@@ -1252,7 +1341,8 @@ Create_Preg_explicit(TYPE_ID mtype, const char *name,
 PREG_NUM
 Create_Preg (TYPE_ID mtype, const char *name)
 {
-  return Create_Preg_explicit(mtype, name, Scope_tab, CURRENT_SYMTAB);
+  PREG_NUM preg_num = Create_Preg_explicit(mtype, name, Scope_tab, CURRENT_SYMTAB);
+  return preg_num;
 }
 
 // uses the real preg size because simulated pregs might take more than one
@@ -1264,21 +1354,29 @@ Preg_Increment (TYPE_ID mtype)
 
     case MTYPE_C4:
     case MTYPE_C8:
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
     case MTYPE_C10:
-#endif
-#ifndef TARG_X8664
+#elif !defined(TARG_LOONGSON)
     case MTYPE_FQ:
 #endif
+    case MTYPE_F16:
 	return 2;
 
-    case MTYPE_CQ:
+    case MTYPE_C16:
 	return 4;
+
+    case MTYPE_CQ:
+#if !defined(TARG_X8664) && !defined(TARG_LOONGSON)
+	return 4;
+#else
+        return 2;
+#endif
 
     case MTYPE_I8:
     case MTYPE_U8:
 	if (MTYPE_size_reg(MTYPE_I8) > MTYPE_size_reg(Spill_Int_Mtype))
 	    return 2;
+        break;
     case MTYPE_B:
 	// bool mtype not usually used, but if used, saves space for
 	// complement preg.
@@ -1488,6 +1586,16 @@ Print_type_attributes (FILE *f, TY_IDX ty)
 	fputs ("restrict ", f);
 } // Print_type_attributes
 
+static void
+Print_type_attributes (std::ostream& os, TY_IDX ty)
+{
+    if (TY_is_const (ty))
+	os << "const ";
+    if (TY_is_volatile (ty))
+	os << "volatile ";
+    if (TY_is_restrict (ty))
+	os << "restrict ";
+} // Print_type_attributes
 
 static void
 Print_TY_IDX_verbose (FILE *f, TY_IDX idx)
@@ -1664,13 +1772,24 @@ ST::Print (FILE *f, BOOL verbose) const
 	    if (flags & PU_NEEDS_MANUAL_UNWINDING) fprintf (f, " needs_manual_unwinding");
 	    if (flags & PU_IS_EXTERN_INLINE) fprintf (f, " extern_inline");
 	    if (flags & PU_IS_MARKED_INLINE) fprintf (f, " inline_keyword");
+	    if (flags & PU_NO_INSTRUMENT) fprintf (f, " no_instrument");
+	    if (flags & PU_HAS_ATTR_MALLOC) fprintf (f, " attr_malloc");
+	    if (flags & PU_NEED_TRAMPOLINE) fprintf (f, " need_trampoline");
 #endif
 #ifdef TARG_X8664
 	    if (flags & PU_FF2C_ABI) fprintf (f, " ff2c_abi");
 #endif
+	    if (flags & PU_IS_CDECL) fprintf (f, " cdecl");
 	    if (TY_return_to_param(ty_idx))	fprintf (f, " return_to_param");
 	    if (TY_is_varargs(ty_idx))		fprintf (f, " varargs");
 	    if (TY_has_prototype(ty_idx))	fprintf (f, " prototype");
+#ifdef TARG_X8664
+	    if (TY_has_sseregister_parm(ty_idx)) fprintf (f, " sseregisterparm");
+	    INT register_parms = TY_register_parm(ty_idx);
+	    if (register_parms) fprintf (f, " %d-registerparm", register_parms);
+            if (TY_has_stdcall(ty_idx))    fprintf (f, " stdcall");
+            if (TY_has_fastcall(ty_idx))   fprintf (f, " fastcall");
+#endif
 	    fprintf (f, "\n");
 	}
     }
@@ -1737,8 +1856,48 @@ ST::Print (FILE *f, BOOL verbose) const
 		fprintf (f, " copy_constructor_st");
             if (flags_ext & ST_INITV_IN_OTHER_ST)
                 fprintf (f, " st_used_as_initialization");
+            if (flags_ext & ST_IS_THREAD_LOCAL)
+                fprintf (f, " thread_local");
 	}
 #endif
+#ifdef TARG_NVISA
+	    if (memory_space == MEMORY_GLOBAL)
+		fprintf (f, " __global__");
+	    if (memory_space == MEMORY_SHARED)
+		fprintf (f, " __shared__");
+	    if (memory_space == MEMORY_CONSTANT)
+                fprintf (f, " __constant__");
+	    if (memory_space == MEMORY_LOCAL)
+                fprintf (f, " __local__");
+	    if (memory_space == MEMORY_TEXTURE)
+                fprintf (f, " __texture__");
+	    if (memory_space == MEMORY_PARAM)
+                fprintf (f, " __param__");
+#else
+        // tls-model
+	if (flags_ext & ST_IS_THREAD_LOCAL) {
+            switch (tls_model) {
+            case TLS_NONE:
+                fputs (", TLS:none", f);
+                break;
+            case TLS_EMULATED:
+                fputs (", TLS:emulated", f);
+                break;
+            case TLS_GLOBAL_DYNAMIC:
+                fputs (", TLS:global-dynamic", f);
+                break;
+            case TLS_LOCAL_DYNAMIC:
+                fputs (", TLS:local-dynamic", f);
+                break;
+            case TLS_INITIAL_EXEC:
+                fputs (", TLS:initial-exec", f);
+                break;
+            case TLS_LOCAL_EXEC:
+                fputs (", TLS:local-exec", f);
+                break;
+            }
+        }
+#endif /* TARG_NVISA */
 
 	switch (export_class) {
 
@@ -1779,6 +1938,332 @@ ST::Print (FILE *f, BOOL verbose) const
     }
 } // ST::Print
 
+std::ostream& operator<<(std::ostream &os, const ST &st )
+{
+    BOOL verbose = TRUE;
+
+    const char *name_str = (st.sym_class == CLASS_CONST) ?
+	"<constant>" : &Str_Table[st.u1.name_idx];
+
+    int level = ST_IDX_level(st.st_idx);
+    os << name_str << " \t<" << level << "," 
+       << ST_IDX_index (st.st_idx) << "> ";
+
+    if (strlen (name_str) > 20)
+        os << "\t\t" << std::endl;
+
+    TY_IDX ty_idx = 0;
+
+    switch (st.sym_class) {
+
+    case CLASS_UNK:
+        os << "Class unknown";
+	break;
+
+    case CLASS_VAR:
+        os << "Variable";
+	ty_idx = st.u2.type;
+	break;
+
+    case CLASS_FUNC:
+        os << "Subprogram";
+	ty_idx = PU_prototype (Pu_Table[st.u2.pu]);
+	break;
+
+    case CLASS_CONST:
+        os << "Constant";
+	ty_idx = st.u2.type;
+	break;
+
+    case CLASS_PREG:
+        os << "Pseudo-Register";
+	ty_idx = st.u2.type;
+	break;
+
+    case CLASS_BLOCK:
+        os << "Block" << " (#" << st.u2.blk << ")";
+	break;
+
+    case CLASS_NAME:
+        os << "Name-only";
+	break;
+	
+    default:
+        os << "INVALID CLASS (" << st.sym_class << ")";
+	break;
+    }
+
+    const TY& ty = Ty_Table [ty_idx];
+
+    if (ty_idx != 0) {
+
+	name_str = TY_name_idx (ty) == 0 ? NULL : TY_name (ty);
+
+	if (!(st.sym_class == CLASS_FUNC) || name_str != NULL) {
+            os << " of type ";
+
+	    Print_type_attributes (os, ty_idx);
+
+            os << (name_str ? name_str : "(anon)");
+	    
+	    const TY *pty = &ty;
+	    INT pcount = 0;
+	    while (TY_kind (*pty) == KIND_POINTER) {
+		pty = &Ty_Table[TY_pointed (*pty)];
+		++pcount;
+	    }
+	    
+	    if (verbose) {
+		name_str = TY_kind_name (*pty);
+                os << " (#" << TY_IDX_index (ty_idx) << ", " << name_str;
+		while (pcount-- > 0)
+                    os << '*';
+                os << ')';
+	    } else
+                os << " (#" << TY_IDX_index (ty_idx) << ")";
+	}
+    }
+
+    if (!verbose) {
+	/* quick address */
+        os << " @ 0x" << std::hex << st.offset << std::dec;
+	if (st.base_idx != 0)
+            os << "(" << ST_name (st.base_idx) << ")";
+    }
+    os << std::endl;
+    
+
+    if (st.sym_class == CLASS_FUNC && verbose) {
+	/* Give info about the type being returned, which is different
+	 * than the type of the function.
+	 */
+	if (ty_idx != 0 && TY_tylist (ty) != 0) {
+	    TY_IDX rettype_idx = Tylist_Table[TY_tylist (ty)];
+	    const TY& rettype = Ty_Table[rettype_idx];
+            os << "\t\tReturning ";
+	    Print_type_attributes (os, rettype_idx);
+            os << TY_name(rettype);
+	    name_str = TY_kind_name (rettype);
+            os << " (#" << TY_IDX_index (rettype_idx) << ", " << name_str;
+
+            os << "PU[" << st.u2.pu << "] ";
+
+	    if (Pu_Table[st.u2.pu].src_lang & PU_C_LANG)	os <<  "C  ";
+	    if (Pu_Table[st.u2.pu].src_lang & PU_CXX_LANG)	os << "C++  ";
+	    if (Pu_Table[st.u2.pu].src_lang & PU_F77_LANG)	os << "F77  ";
+	    if (Pu_Table[st.u2.pu].src_lang & PU_F90_LANG)	os << "F90  ";
+
+	    mUINT64 flags = Pu_Table[st.u2.pu].flags;
+            os << "flags:";
+	    if (flags & PU_IS_PURE)		os << " pure";
+	    if (flags & PU_NO_SIDE_EFFECTS)	os << " no_side_effects";
+	    if (flags & PU_IS_INLINE_FUNCTION)	os << " inline";
+	    if (flags & PU_NO_INLINE)		os << " no_inline";
+	    if (flags & PU_MUST_INLINE)		os << " must_inline";
+	    if (flags & PU_NO_DELETE)		os << " no_delete";
+	    if (flags & PU_HAS_EXC_SCOPES)	os << " exc_scopes";
+	    if (flags & PU_IS_NESTED_FUNC)	os << " nested_func";
+	    if (flags & PU_HAS_NON_MANGLED_CALL)os << " non_mangled_call";
+	    if (flags & PU_ARGS_ALIASED)	os << " args_aliased";
+	    if (flags & PU_NEEDS_FILL_ALIGN_LOWERING)os << " fill_align";
+	    if (flags & PU_NEEDS_T9)		os << " t9";
+	    if (flags & PU_HAS_VERY_HIGH_WHIRL)	os << " very_high_whirl";
+	    if (flags & PU_HAS_ALTENTRY)	os << " altentry";
+	    if (flags & PU_RECURSIVE)		os << " recursive";
+	    if (flags & PU_IS_MAINPU)		os << " main";
+	    if (flags & PU_UPLEVEL)		os << " uplevel";
+	    if (flags & PU_MP_NEEDS_LNO)	os << " mp_needs_lno";
+	    if (flags & PU_HAS_ALLOCA)		os << " alloca";
+	    if (flags & PU_IN_ELF_SECTION)	os << " in_elf_section";
+	    if (flags & PU_HAS_MP)		os << " has_mp";
+	    if (flags & PU_MP)			os << " mp";
+	    if (flags & PU_HAS_NAMELIST)	os << " namelist";
+	    if (flags & PU_HAS_RETURN_ADDRESS)	os << " return_address";
+	    if (flags & PU_HAS_REGION)		os << " has_region";
+	    if (flags & PU_HAS_INLINES)		os << " has_inlines";
+	    if (flags & PU_CALLS_SETJMP)	os << " calls_setjmp";
+	    if (flags & PU_CALLS_LONGJMP)	os << " calls_longjmp";
+	    if (flags & PU_IPA_ADDR_ANALYSIS)	os << " ipa_addr";
+	    if (flags & PU_SMART_ADDR_ANALYSIS)	os << " smart_addr";
+	    if (flags & PU_HAS_GLOBAL_PRAGMAS)	os << " global_pragmas";
+	    if (flags & PU_HAS_USER_ALLOCA)	os << " user_alloca";
+	    if (flags & PU_HAS_UNKNOWN_CONTROL_FLOW)	os << " unknown_control_flow";
+	    if (flags & PU_IS_THUNK)		os << " thunk";
+#ifdef KEY
+	    if (flags & PU_NEEDS_MANUAL_UNWINDING) os << " needs_manual_unwinding";
+	    if (flags & PU_IS_EXTERN_INLINE) os << " extern_inline";
+	    if (flags & PU_IS_MARKED_INLINE) os << " inline_keyword";
+	    if (flags & PU_NO_INSTRUMENT) os << " no_instrument";
+	    if (flags & PU_NEED_TRAMPOLINE) os << " need_trampoline";
+#endif
+#ifdef TARG_X8664
+	    if (flags & PU_FF2C_ABI) os << " ff2c_abi";
+#endif
+	    if (flags & PU_IS_CDECL) os << " cdecl";
+	    if (TY_return_to_param(ty_idx))	os << " return_to_param";
+	    if (TY_is_varargs(ty_idx))		os << " varargs";
+	    if (TY_has_prototype(ty_idx))	os << " prototype";
+#ifdef TARG_X8664
+	    if (TY_has_sseregister_parm(ty_idx)) os << " sseregisterparm";
+	    INT register_parms = TY_register_parm(ty_idx);
+	    if (register_parms) os << " " << register_parms << "-registerparm";
+            if (TY_has_stdcall(ty_idx))    os << " stdcall";
+            if (TY_has_fastcall(ty_idx))   os << " fastcall";
+#endif
+	    os << std::endl;
+	}
+    }
+	
+    if (st.sym_class == CLASS_CONST)
+        os << "\t\tvalue: " 
+           << Targ_Print (NULL, Tcon_Table[st.u1.tcon]) << std::endl;
+
+    if (verbose) {
+	// Print address
+	if (st.base_idx != 0) {
+	    const ST& base_st = St_Table[st.base_idx];
+            int level = ST_IDX_level(st.base_idx);
+            os << "\t\tAddress: " << st.offset << "("
+               << (ST_class (base_st) == CLASS_CONST ? ""
+                                                     : ST_name(st.base_idx))
+               << "<" << level << "," 
+               << ST_IDX_index (st.base_idx) << ">) ";
+	}
+
+	if (ty_idx != 0) {
+	    if (st.base_idx == 0 && st.offset == 0)
+                os << "\t\t";
+            os << "Alignment: " <<  TY_align (ty_idx) << "bytes";
+
+	}
+        os << std::endl;
+
+	mUINT64 flags = st.flags;
+        os << "\t\tFlags:\t0x" << std::hex << flags << std::dec;
+	if (flags) {
+	    if (flags & ST_IS_WEAK_SYMBOL)	os << " weak";
+	    if (flags & ST_IS_SPLIT_COMMON)	os << " split_common";
+	    if (flags & ST_IS_NOT_USED)		os << " not_used";
+	    if (flags & ST_IS_INITIALIZED)	os << " initialized";
+	    if (flags & ST_IS_RETURN_VAR)	os << " return_var";
+	    if (flags & ST_IS_VALUE_PARM)	os << " value_parm";
+	    if (flags & ST_PROMOTE_PARM)	os << " promote_parm";
+	    if (flags & ST_KEEP_NAME_W2F)	os << " keep_name_w2f";
+	    if (flags & ST_IS_DATAPOOL)		os << " datapool";
+	    if (flags & ST_IS_RESHAPED)		os << " reshaped";
+	    if (flags & ST_EMIT_SYMBOL)		os << " emit_symbol";
+	    if (flags & ST_HAS_NESTED_REF)	os << " has_nested_ref";
+	    if (flags & ST_INIT_VALUE_ZERO)	os << " init_value_zero";
+	    if (flags & ST_GPREL)		os << " gprel";
+	    if (flags & ST_NOT_GPREL)		os << " not_gprel";
+	    if (flags & ST_IS_NAMELIST)		os << " namelist";
+	    if (flags & ST_IS_F90_TARGET)	os << " f90_target";
+	    if (flags & ST_DECLARED_STATIC)	os << " static";
+	    if (flags & ST_IS_EQUIVALENCED)	os << " equivalenced";
+	    if (flags & ST_IS_FILL_ALIGN)	os << " fill_align";
+	    if (flags & ST_IS_OPTIONAL_ARGUMENT)os << " optional";
+	    if (flags & ST_PT_TO_UNIQUE_MEM)	os << " pt_to_unique_mem";
+	    if (flags & ST_IS_TEMP_VAR)		os << " temp";
+	    if (flags & ST_IS_CONST_VAR)	os << " const";
+	    if (flags & ST_ADDR_SAVED)		os << " addr_saved";
+	    if (flags & ST_ADDR_PASSED)		os << " addr_passed";
+	    if (flags & ST_IS_THREAD_PRIVATE)	os << " thread_private";
+	    if (flags & ST_ASSIGNED_TO_DEDICATED_PREG)
+		os << " assigned_to_dedicated_preg";
+	}
+
+#ifdef KEY
+	mUINT64 flags_ext = st.flags_ext;
+	if (flags_ext) {
+            os << "\t\tFlags_ext:\t0x" << std::hex << flags_ext << std::dec;
+	    if (flags_ext & ST_ONE_PER_PU)
+		os << " one_per_pu";
+	    if (flags_ext & ST_COPY_CONSTRUCTOR_ST)
+		os << " copy_constructor_st";
+            if (flags_ext & ST_INITV_IN_OTHER_ST)
+                os << " st_used_as_initialization";
+            if (flags_ext & ST_IS_THREAD_LOCAL)
+                os << " thread_local";
+	}
+#endif
+#ifdef TARG_NVISA
+	    if (memory_space == MEMORY_GLOBAL)
+		os << " __global__";
+	    if (memory_space == MEMORY_SHARED)
+		os << " __shared__";
+	    if (memory_space == MEMORY_CONSTANT)
+                os << " __constant__";
+	    if (memory_space == MEMORY_LOCAL)
+                os << " __local__";
+	    if (memory_space == MEMORY_TEXTURE)
+                os << " __texture__";
+	    if (memory_space == MEMORY_PARAM)
+                os << " __param__";
+#else
+        // tls-model
+	if (flags_ext & ST_IS_THREAD_LOCAL) {
+            switch (st.tls_model) {
+            case TLS_NONE:
+                os << ", TLS:none";
+                break;
+            case TLS_EMULATED:
+                os << ", TLS:emulated";
+                break;
+            case TLS_GLOBAL_DYNAMIC:
+                os << ", TLS:global-dynamic";
+                break;
+            case TLS_LOCAL_DYNAMIC:
+                os << ", TLS:local-dynamic";
+                break;
+            case TLS_INITIAL_EXEC:
+                os << ", TLS:initial-exec";
+                break;
+            case TLS_LOCAL_EXEC:
+                os << ", TLS:local-exec";
+                break;
+            }
+        }
+#endif /* TARG_NVISA */
+
+	switch (st.export_class) {
+
+	case EXPORT_LOCAL:
+	    os << ", XLOCAL";
+	    break;
+
+	case EXPORT_LOCAL_INTERNAL:
+	    os << ", XLOCAL(INTERNAL)";
+	    break;
+
+	case EXPORT_INTERNAL:
+	    os << ", XINTERNAL";
+	    break;
+
+	case EXPORT_HIDDEN:
+	    os << ", XHIDDEN";
+	    break;
+
+	case EXPORT_PROTECTED:
+	    os << ", XPROTECTED";
+	    break;
+
+	case EXPORT_PREEMPTIBLE:
+	    os << ", XPREEMPTIBLE";
+	    break;
+
+	case EXPORT_OPTIONAL:
+	    os << ", XOPTIONAL";
+	    break;
+
+	default:
+	    os << ", Export class unknown";
+	    break;
+	}
+
+        os << std::endl << "\t\tSclass: "
+           << Sclass_Name(st.storage_class) << std::endl;
+    }
+} // ST::Print
 
 void
 FLD::Print (FILE *f) const
@@ -1847,6 +2332,10 @@ TY::Print (FILE *f) const
 	if (flags & TY_RETURN_IN_MEM)	fprintf (f, " return_in_mem");
 	if (flags & TY_CONTENT_SEEN)	fprintf (f, " content_seen");
         if (flags & TY_IS_INCOMPLETE)   fprintf (f, " incomplete");
+	if (flags & TY_NO_SPLIT)        fprintf (f, " no_split");
+#endif
+#ifdef TARG_NVISA
+	if (flags & TY_CAN_BE_VECTOR) 	fprintf (f, "  vector");
 #endif
     }
     fprintf (f, ")");
@@ -1938,8 +2427,8 @@ PU::Print (FILE *f) const
 #ifdef KEY
     fprintf (f, ", flags 0x%016llx,\n"
 	     "\tlexical level %d, LANG 0x%02x, TARGET_INFO %d,\n"
-	     "\tEH Info (unused) %d\n",
-	     flags, lexical_level, src_lang, target_idx, (INT32)unused); 
+	     "\tMisc. Info (misc) %d\n",
+	     flags, lexical_level, src_lang, target_idx, (INT32)misc); 
 #else
     fprintf (f, ", flags 0x%016llx,\n"
 	     "\tlexical level %d, LANG 0x%02x, TARGET_INFO %d\n",
@@ -2015,7 +2504,6 @@ FILE_INFO::Print (FILE *f) const
     
 
 
-#if 1 // Fix 10-26-2002: Enhancement to reset addr_saved flag before Mainopt
 struct clear_addr_flag_op
 {
     clear_addr_flag_op() {};
@@ -2031,7 +2519,6 @@ Clear_local_symtab_addr_flags(const SCOPE& scope)
 {
   For_all_entries (*scope.st_tab, clear_addr_flag_op(), 1);
 }
-#endif
 
 // function object used in "For_all"
 template <class T>
@@ -2205,7 +2692,10 @@ Gen_Temp_Named_Symbol (TY_IDX ty, const char *rootname,
 {
   static INT Temp_Index = 0;
   ST *st = New_ST(CURRENT_SYMTAB);
-  STR_IDX str_idx = Save_Str2i(rootname, "_temp_", Temp_Index++);
+  STR_IDX str_idx = Save_Str2i(
+    // put _temp first so don't need knowledge of legal prefix in Gen_Temp call
+    (Temp_Symbol_Prefix), 
+    rootname, Temp_Index++);
   ST_Init(st, str_idx, sym_class, storage_class, EXPORT_LOCAL, ty);
   return st;
 }
@@ -2373,7 +2863,7 @@ Setup_Preg_Pointers ()
     Branch_Preg = MTYPE_To_PREG(MTYPE_A8);
     
 #ifdef TARG_X8664
-    X87_Preg = MTYPE_To_PREG( MTYPE_FQ );
+    X87_Preg = MTYPE_To_PREG( MTYPE_F10 );
 #endif
 } // Setup_Preg_Pointers
 
@@ -2505,8 +2995,6 @@ Create_Special_Global_Symbols ()
 	} else if ( i == Spill_Float_Mtype ) {
 	    Spill_Float_Type = ty_idx;
 	}
-	if ( i == MTYPE_FQ )
-	    Quad_Type = ty_idx;
 
 #if defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)
 #ifndef FRONT_END_MFEF77
@@ -2615,7 +3103,7 @@ Initialize_Special_Global_Symbols ()
 #endif // KEY
     Void_Type = MTYPE_To_TY (MTYPE_V);
 
-#ifdef TARG_X8664 
+#if defined(TARG_X8664) || defined(TARG_MIPS)
     Spill_Int32_Type   = MTYPE_To_TY (Spill_Int32_Mtype);
     Spill_Float32_Type = MTYPE_To_TY (Spill_Float32_Mtype);
 #endif
@@ -2636,10 +3124,10 @@ Initialize_Symbol_Tables (BOOL reserve_index_zero)
     
     Scope_tab = (SCOPE *) MEM_POOL_Alloc (Malloc_Mem_Pool,
 					  Max_scope * sizeof(SCOPE));
-    bzero(Scope_tab, Max_scope * sizeof(SCOPE));
+    BZERO(Scope_tab, Max_scope * sizeof(SCOPE));
 
-    bzero (MTYPE_TO_PREG_array, sizeof(ST*) * (MTYPE_LAST + 1));
-    bzero (MTYPE_TO_TY_array, sizeof(TY_IDX) * (MTYPE_LAST + 1));
+    BZERO (MTYPE_TO_PREG_array, sizeof(ST*) * (MTYPE_LAST + 1));
+    BZERO (MTYPE_TO_TY_array, sizeof(TY_IDX) * (MTYPE_LAST + 1));
 
     if (reserve_index_zero) {
 	// For producer, we reserve first entry for all global tables
@@ -2647,13 +3135,13 @@ Initialize_Symbol_Tables (BOOL reserve_index_zero)
 	Initialize_Strtab (0x1000);	// start with 4Kbytes for strtab.
 
 	UINT dummy_idx;
-	bzero (&New_PU ((PU_IDX&) dummy_idx), sizeof(PU));
-	bzero (&New_TY ((TY_IDX&) dummy_idx), sizeof(TY));
-	bzero (New_FLD ().Entry(), sizeof(FLD));
-	bzero (&New_TYLIST ((TYLIST_IDX&) dummy_idx), sizeof(TYLIST));
-	bzero (New_ARB ().Entry(), sizeof(ARB));
-	bzero (&New_BLK ((BLK_IDX&) dummy_idx), sizeof(BLK));
-	bzero (&Initv_Table.New_entry ((INITV_IDX&) dummy_idx), sizeof(INITV));
+	BZERO (&New_PU ((PU_IDX&) dummy_idx), sizeof(PU));
+	BZERO (&New_TY ((TY_IDX&) dummy_idx), sizeof(TY));
+	BZERO (New_FLD ().Entry(), sizeof(FLD));
+	BZERO (&New_TYLIST ((TYLIST_IDX&) dummy_idx), sizeof(TYLIST));
+	BZERO (New_ARB ().Entry(), sizeof(ARB));
+	BZERO (&New_BLK ((BLK_IDX&) dummy_idx), sizeof(BLK));
+	BZERO (&Initv_Table.New_entry ((INITV_IDX&) dummy_idx), sizeof(INITV));
 	Init_Constab ();
 	New_Scope (GLOBAL_SYMTAB, Malloc_Mem_Pool, TRUE);
 	Create_Special_Global_Symbols ();
@@ -2663,7 +3151,7 @@ Initialize_Symbol_Tables (BOOL reserve_index_zero)
     if (!Read_Global_Data) {
        // reserve zero index in BLK table
        UINT blk_idx;
-       bzero (&New_BLK ((BLK_IDX&) blk_idx), sizeof(BLK));
+       BZERO (&New_BLK ((BLK_IDX&) blk_idx), sizeof(BLK));
     }
 #endif
 }
@@ -2693,7 +3181,7 @@ Init_Constab ()
     if (Tcon_Table.Size () == 0) {
 	TCON Zero;
 	UINT32 idx;
-        bzero (&Zero, sizeof(TCON));
+        BZERO (&Zero, sizeof(TCON));
         idx = Tcon_Table.Insert (Zero);	// index 0: dummy
 	Set_TCON_ty (Zero, MTYPE_F4); 
         idx = Tcon_Table.Insert (Zero);	// index 1: float (0.0)

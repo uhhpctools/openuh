@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: tanh.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/tanh.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:23-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.tanh.c $
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/tanh.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.tanh.c $ $Revision: 1.5 $";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -72,7 +72,13 @@ extern	double	tanh(double);
 #pragma weak tanh = __tanh
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __tanh(double);
+#pragma weak tanh
+double tanh( double x ) {
+  return __tanh( x );
+}
+#elif defined(__GNUC__)
 extern  double  __tanh(double);
 
 double    tanh() __attribute__ ((weak, alias ("__tanh")));
@@ -291,7 +297,12 @@ L:
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __tanhl(long double);
+long double tanhl( long double x ) {	
+  return ( (long double)__tanh((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __tanhl(long double);
 
 long double    tanhl() __attribute__ ((weak, alias ("__tanhl")));

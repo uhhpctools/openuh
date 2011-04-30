@@ -209,9 +209,13 @@ typedef enum {
   WN_PRAGMA_NUMTHREADS,
   WN_PRAGMA_NOWAIT,
   WN_PRAGMA_PAGE_PLACE,
-#if 0
-#define WN_PRAGMA_PAGE_ALLOCATE WN_PRAGMA_PAGE_PLACE	/* to be removed */
-#endif
+#if defined(TARG_SL)
+ WN_PRAGMA_SL2_MAJOR_PSECTION_BEGIN,  // begin of major section 
+ WN_PRAGMA_SL2_MINOR_PSECTION_BEGIN,  // begin of minor section 
+ WN_PRAGMA_SL2_SEPERATE_COMPILATION,
+ WN_PRAGMA_SL2_SECTION,  
+#endif 
+
   WN_PRAGMA_ONTO,
   WN_PRAGMA_LASTTHREAD, 
 
@@ -496,7 +500,7 @@ enum {
 typedef struct wn_pragma_desc {
   WN_PRAGMA_USERS users;	/* The components that use this pragma */
   WN_PRAGMA_SCOPE scope;	/* Pragma scope */
-  char	*name;			/* Pragma name */
+  const char	 *name;		/* Pragma name */
 } WN_PRAGMA_DESC;
 
 extern WN_PRAGMA_DESC WN_pragmas[];

@@ -97,12 +97,6 @@
 #define FILEIO_ULONG_MAX   18446744073709551615ULL
 
 /* Integral types as used in protocol. */
-#if 0
-typedef __int32_t fio_int_t;
-typedef __uint32_t fio_uint_t, fio_mode_t, fio_time_t;
-typedef __int64_t fio_long_t;
-typedef __uint64_t fio_ulong_t;
-#endif
 
 #define FIO_INT_LEN   4
 #define FIO_UINT_LEN  4

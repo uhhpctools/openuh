@@ -33,7 +33,6 @@
 */
 
 
-#if 1
 /* #ifdef _TARG_MIPS */
 
 #ifndef __IPA_INTERFACE_H__
@@ -104,4 +103,3 @@ Count_elf_external_gots (void);
 
 #endif /*  __IPA_INTERFACE_H__ */
 
-#endif /* _TARG_MIPS */

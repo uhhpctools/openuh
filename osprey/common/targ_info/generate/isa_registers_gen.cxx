@@ -364,6 +364,7 @@ void ISA_Registers_End(void)
 
   int max_reg = 0;
   int first_reg = max_reg;
+  bool many_regs = false;
   for (rc_iter = rclasses.begin(); rc_iter != rclasses.end(); ++rc_iter) {
     ISA_REGISTER_CLASS rclass = *rc_iter;
     int class_max = 0;
@@ -385,6 +386,10 @@ void ISA_Registers_End(void)
     if (class_max > max_reg) max_reg = class_max;
   }
 
+  // if many_regs, don't waste space by creating large static array of reg info,
+  // as that may not be compilable by some compilers (e.g. cygwin).
+  if (max_reg > 1000) many_regs = true;
+
 #define FNAME "targ_isa_registers"
   char filename[1000];
   sprintf(filename,"%s.h",FNAME);
@@ -394,6 +399,10 @@ void ISA_Registers_End(void)
   sprintf(filename,"%s.Exported",FNAME);
   FILE* efile = fopen(filename,"w");
 
+  if (many_regs) {
+    fprintf(hfile,"#include <stddef.h>\n");
+    fprintf(cfile,"#include <stdio.h>\n");
+  }
   fprintf(cfile,"#include \"targ_isa_subset.h\"\n");
   fprintf(cfile,"#include \"%s.h\"\n",FNAME);
 
@@ -401,7 +410,7 @@ void ISA_Registers_End(void)
   Emit_Header (hfile, filename, interface);
   fprintf(hfile,"#include \"targ_isa_subset.h\"\n");
 
-  fprintf(hfile, "\n#define ISA_REGISTER_FIRST (%d)\n", first_reg);  
+  fprintf(hfile, "\n#define ISA_REGISTER_FIRST (%d)\n", first_reg);
   fprintf(hfile, "\n#define ISA_REGISTER_MAX (%d)\n", max_reg);
 
   /**************************************************
@@ -437,21 +446,39 @@ void ISA_Registers_End(void)
 
   fprintf(hfile, "\ntypedef struct {\n"
 		 "  mUINT8 isa_mask;\n"
-		 "  mUINT8 min_regnum;\n"
-		 "  mUINT8 max_regnum;\n"
 		 "  mUINT8 bit_size;\n"
+		 "  mUINT16 min_regnum;\n"
+		 "  mUINT16 max_regnum;\n"
 		 "  mBOOL can_store;\n"
 		 "  mBOOL multiple_save;\n"
-		 "  const char *name;\n"
-		 "  const char *reg_name[ISA_REGISTER_MAX+1];\n"
-  		 "} ISA_REGISTER_CLASS_INFO;\n");
+		 "  const char *name;\n");
+
+  if ( many_regs) {
+    fprintf(hfile, "  const char *reg_name_format;\n");
+  } else {
+    fprintf(hfile, "  const char *reg_name[ISA_REGISTER_MAX+1];\n");
+  }
+  fprintf(hfile, "} ISA_REGISTER_CLASS_INFO;\n");
 
   fprintf(efile, "ISA_REGISTER_CLASS_info\n");
 
+  if (many_regs) {
+    // the disadvantage of not having a static array is that the
+    // name now has to be computed each time;
+    // rather than alloc space at each call, just reuse a buffer,
+    // and then callers have to be sure to copy or emit the value
+    // before calling again.
+    fprintf(cfile, "\nstatic char namebuf[16];\n");
+  }
   fprintf(cfile, "\nconst ISA_REGISTER_CLASS_INFO"
 		   " ISA_REGISTER_CLASS_info[] = {\n");
-  fprintf(cfile, "  { 0x%02x, %3d, %3d, %2d, %1d, %1d, \"%s\", { 0 } },\n",
+  fprintf(cfile, "  { 0x%02x, %2d, %3d, %3d, %1d, %1d, \"%s\",",
 		 0, 0, -1, 0, 0, 0, "UNDEFINED");
+  if (many_regs) {
+    fprintf(cfile, " \"\" },\n");
+  } else {
+    fprintf(cfile, " { 0 } },\n");
+  }
   for (rc_iter = rclasses.begin(); rc_iter != rclasses.end(); ++rc_iter) {
     ISA_REGISTER_CLASS rclass = *rc_iter;
     std::list<ISA_REGISTER_SET>::iterator reg_iter;
@@ -460,17 +487,20 @@ void ISA_Registers_End(void)
 	 ++reg_iter
     ) {
       ISA_REGISTER_SET regset = *reg_iter;
-      fprintf(cfile, "  { 0x%02x, %3d, %3d, %2d, %1d, %1d, \"%s\",",
+      fprintf(cfile, "  { 0x%02x, %2d, %3d, %3d, %1d, %1d, \"%s\",",
 	      regset->isa_mask,
+	      rclass->bit_size,
 	      regset->min_regnum,
 	      regset->max_regnum,
-	      rclass->bit_size,
 	      rclass->can_store,
 	      rclass->multiple_save,
 	      rclass->name);
 
-      int len = fprintf(cfile, "\n    { ");
-      for (i = regset->min_regnum; i <= regset->max_regnum; ++i) {
+      if (many_regs) {
+	  fprintf(cfile, " \"%s\" ", regset->def_name_format);
+      } else {
+       int len = fprintf(cfile, "\n    { ");
+       for (i = regset->min_regnum; i <= regset->max_regnum; ++i) {
 	if (len > 70) len = fprintf(cfile, "\n      ");
         len += fprintf(cfile, "\"");
 	if (regset->names && regset->names[i - regset->min_regnum]) {
@@ -479,8 +509,10 @@ void ISA_Registers_End(void)
 	  len += fprintf(cfile, regset->def_name_format, i);
 	}
 	len += fprintf(cfile, "\"%s", i != regset->max_regnum ? ", " : "");
+       }
+       fprintf(cfile, " }");
       }
-      fprintf(cfile, " } },\n");
+      fprintf(cfile, " },\n");
     }
   }
   fprintf(cfile, "};\n");
@@ -535,17 +567,25 @@ void ISA_Registers_End(void)
   fprintf(hfile, "\ntypedef struct {\n"
 		 "  const char *name;\n"
 		 "  mISA_REGISTER_CLASS rclass;\n"
-		 "  mUINT8 count;\n"
-		 "  mUINT8 members[ISA_REGISTER_MAX+1];\n"
-		 "  const char *reg_name[ISA_REGISTER_MAX+1];\n"
-  		 "} ISA_REGISTER_SUBCLASS_INFO;\n");
+		 "  mUINT16 count;\n");
+  if (many_regs && subclasses.empty()) {
+    // don't emit large empty arrays
+  } else {
+    fprintf(hfile, "  mUINT16 members[ISA_REGISTER_MAX+1];\n"
+		 "  const char *reg_name[ISA_REGISTER_MAX+1];\n");
+  }
+  fprintf(hfile, "} ISA_REGISTER_SUBCLASS_INFO;\n");
 
   fprintf(efile, "ISA_REGISTER_SUBCLASS_info\n");
 
   fprintf(cfile, "\nconst ISA_REGISTER_SUBCLASS_INFO"
 		   " ISA_REGISTER_SUBCLASS_info[] = {\n");
-  fprintf(cfile, "  { \"%s\", ISA_REGISTER_CLASS_%s, 0, { 0 }, { 0 } },\n", 
+  fprintf(cfile, "  { \"%s\", ISA_REGISTER_CLASS_%s, 0", 
 		 "UNDEFINED", "UNDEFINED");
+  if ( !many_regs || !subclasses.empty()) {
+    fprintf(cfile, ", { 0 }, { 0 } ");
+  }
+  fprintf(cfile, " },\n");
   for (rsc_iter = subclasses.begin(); rsc_iter != subclasses.end(); ++rsc_iter) {
     ISA_REGISTER_SUBCLASS subclass = *rsc_iter;
     fprintf(cfile, "  { \"%s\", ISA_REGISTER_CLASS_%s, %d,", 
@@ -633,13 +673,31 @@ void ISA_Registers_End(void)
 		 "  return info->name;\n"
 		 "}\n");
 
-  fprintf(hfile, "\ninline const char *ISA_REGISTER_CLASS_INFO_Reg_Name(\n"
+  if (many_regs) {
+    fprintf(hfile, "\n/* Note that Reg_Name returns a temporary name buffer\n"
+		 " * that gets reused, so must emit or copy the name\n"
+		 " * before calling Reg_Name again */\n");
+    fprintf(hfile, "extern const char *ISA_REGISTER_CLASS_INFO_Reg_Name(\n"
+		 "  const ISA_REGISTER_CLASS_INFO *info,\n"
+		 "  INT reg_index\n"
+		 ");\n");
+    fprintf(cfile, "\nconst char *ISA_REGISTER_CLASS_INFO_Reg_Name(\n"
+		 "  const ISA_REGISTER_CLASS_INFO *info,\n"
+		 "  INT reg_index\n"
+		 ")\n"
+		 "{\n"
+		 "  sprintf(namebuf, info->reg_name_format, reg_index);\n"
+		 "  return namebuf;\n"
+		 "}\n");
+  } else {
+    fprintf(hfile, "\ninline const char *ISA_REGISTER_CLASS_INFO_Reg_Name(\n"
 		 "  const ISA_REGISTER_CLASS_INFO *info,\n"
 		 "  INT reg_index\n"
 		 ")\n"
 		 "{\n"
 		 "  return info->reg_name[reg_index];\n"
 		 "}\n");
+  }
 
   fprintf(hfile, "\ninline const ISA_REGISTER_SUBCLASS_INFO *ISA_REGISTER_SUBCLASS_Info(\n"
 		 "  ISA_REGISTER_SUBCLASS sc\n"
@@ -674,17 +732,25 @@ void ISA_Registers_End(void)
 		 "  const ISA_REGISTER_SUBCLASS_INFO *info,\n"
 		 "  INT n\n"
 		 ")\n"
-		 "{\n"
-		 "  return info->members[n];\n"
-		 "}\n");
+		 "{\n");
+  if (many_regs && subclasses.empty()) {
+    fprintf(hfile, "  return 0;\n");
+  } else {
+    fprintf(hfile, "  return info->members[n];\n");
+  }
+  fprintf(hfile, "}\n");
 
   fprintf(hfile, "\ninline const char *ISA_REGISTER_SUBCLASS_INFO_Reg_Name(\n"
 		 "  const ISA_REGISTER_SUBCLASS_INFO *info,\n"
 		 "  INT n\n"
 		 ")\n"
-		 "{\n"
-		 "  return info->reg_name[n];\n"
-		 "}\n");
+		 "{\n");
+  if (many_regs && subclasses.empty()) {
+    fprintf(hfile, "  return NULL;\n");
+  } else {
+    fprintf(hfile, "  return info->reg_name[n];\n");
+  }
+  fprintf(hfile, "}\n");
 
   fprintf(hfile, "\nextern void ISA_REGISTER_Initialize(void);\n");
 
@@ -705,4 +771,8 @@ void ISA_Registers_End(void)
 		 "}\n");
 
   Emit_Footer(hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

@@ -134,10 +134,6 @@
 /* Following opcode was defined in the Hennessy's book as
    "normal" opcode but was implemented in the RTL as special
    functions.  */
-#if 0
-#define  MVTSOP	     0x50000000
-#define  MVFSOP      0x54000000
-#endif
 
 struct dlx_opcode
 {
@@ -225,11 +221,6 @@ static const struct dlx_opcode dlx_opcodes[] =
     { "mov",      ADDIOP,         "b,P"   },  /* a move macro                 */
     { "movu",     ADDUIOP,        "b,P"   },  /* a move macro, unsigned       */
 
-#if 0
-    /* Move special.  */
-    { "mvts",     MVTSOP,         "b,a"   },  /* Move From Integer to Special */
-    { "mvfs",     MVFSOP,         "b,a"   },  /* Move From Special to Integer */
-#endif
 
     /* Load high Immediate I-TYPE instruction.  */
     { "lhi",      LHIOP,          "b,i"   },  /* Load High Immediate          */

@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -72,7 +76,6 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/com/config.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef FRONT_END	/* For setting fullwarn, woff in front end */
 #ifndef FRONT_F90
@@ -84,11 +87,12 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/com/con
 #endif /* ~FRONT_F90 */
 #endif /*  FRONT_END */
 #include <ctype.h>	/* For isdigit */
-#include "elf_stuff.h"
-
 #define USE_STANDARD_TYPES 1
 #include "defs.h"
+#if ! defined(BUILD_OS_DARWIN)
+#include "elf_stuff.h"
 #include "em_elf.h"
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "config.h"
 #include "config_platform.h"
 #include "config_targ.h"
@@ -106,7 +110,7 @@ static INT32 Ignore_Int;
 /* The following contains the phase-specific option groups and their
  * associated variable definitions:
  */
-#include "config_TARG.cxx"
+#include "config_targ_opt.cxx"
 #include "config_debug.cxx"
 #include "config_ipa.cxx"
 #include "config_list.cxx"
@@ -142,6 +146,7 @@ BOOL CSE_Elim_Enabled = FALSE;		/* Is CSE-elim on? -- this does
 					 * not control it, it just
 					 * shadows the opt. level
 					 */
+BOOL Disable_Simplification_For_FE = FALSE;  /* Disable Simplification for Front End*/
 
 #ifdef BACK_END
 # define DEF_DEBUG_LEVEL        0
@@ -151,9 +156,17 @@ INT8 Debug_Level = DEF_DEBUG_LEVEL;     /* -gn: debug level */
 
 /***** Alignment (misaligned memory reference) control *****/
 BOOL	UseAlignedCopyForStructs = FALSE;	/* control aggregrate copy */
+#ifdef TARG_MIPS
+BOOL	UnweaveCopyForStructs = TRUE; 	/* clump loads then stores for copy */
+INT32	Aggregate_UnrollFactor = 8;	/* Unroll aggregate copy loop */
+#else
+BOOL	UnweaveCopyForStructs = FALSE;	/* clump loads then stores for copy */
+INT32	Aggregate_UnrollFactor = 1;	/* Unroll aggregate copy loop */
+#endif
 INT32	MinStructCopyLoopSize =    16;		/* 0 = always expand */
 INT32	MinStructCopyMemIntrSize=  0;		/* generate bcopy */
 INT32	Aggregate_Alignment = -1;		/* This alignment for aggregate layout */
+BOOL	Aggregate_Alignment_Set = FALSE;
 
 INT32 iolist_reuse_limit = 100;
 
@@ -164,7 +177,7 @@ BOOL Ptr_Opt_Allowed = FALSE;
 BOOL Zeroinit_in_bss = TRUE;
 
 /* don't make strings gp-relative (to save gp space) */
-#if defined(TARG_X8664) || defined(TARG_IA32)
+#if defined(TARG_X8664) || defined(TARG_IA32) || defined(TARG_MIPS)
 BOOL Strings_Not_Gprelative = TRUE;
 #else
 BOOL Strings_Not_Gprelative = FALSE;
@@ -208,7 +221,11 @@ static char *Language_Name = NULL;	/* Source language name */
 LANGUAGE Language = LANG_UNKNOWN;	/* See language.h */
 BOOL CXX_Bool_On = TRUE;
 BOOL CXX_Bool_Set = FALSE;
+#if defined(TARG_SL)
+BOOL CXX_Exceptions_On = FALSE;
+#else
 BOOL CXX_Exceptions_On = TRUE;
+#endif
 BOOL CXX_Exceptions_Set = FALSE;
 BOOL CXX_Alias_Const=FALSE;
 BOOL CXX_Alias_Const_Set=FALSE;
@@ -267,10 +284,15 @@ BOOL LANG_Ignore_Target_Attribute_Set = FALSE;
 // -LANG:math_errno=off => do not set errno
 BOOL LANG_Math_Errno = TRUE; // set errno after calling math functions
 BOOL LANG_Math_Errno_Set = FALSE;
-# endif
-# ifdef KEY /* Bug 3405 */
+/* KEY Bug 3405 */
 BOOL LANG_IEEE_Minus_Zero_On = FALSE;
 BOOL LANG_IEEE_Minus_Zero_Set = FALSE;
+
+BOOL LANG_Enable_CXX_Openmp = FALSE;
+BOOL LANG_Enable_CXX_Openmp_Set = FALSE;
+
+BOOL LANG_Enable_Global_Asm = FALSE;
+BOOL LANG_Enable_Global_Asm_Set = FALSE;
 # endif /* KEY Bug 3405 */
 
 BOOL LANG_Pch;
@@ -293,7 +315,7 @@ BOOL WHIRL_Merge_Types_Set = FALSE;
 BOOL WHIRL_Comma_Rcomma_On = TRUE;
 BOOL WHIRL_Comma_Rcomma_Set = FALSE;
 BOOL WHIRL_Mtype_A_On = FALSE;
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_NVISA)
 BOOL WHIRL_Mtype_B_On = TRUE;
 #else
 BOOL WHIRL_Mtype_B_On = FALSE;
@@ -375,8 +397,15 @@ BOOL SIMD_ZMask = TRUE;
 BOOL SIMD_OMask = TRUE;
 BOOL SIMD_UMask = TRUE;
 BOOL SIMD_PMask = TRUE;
+BOOL SIMD_AMask = FALSE;
+BOOL SIMD_FMask = FALSE;
+/* -msseregparm */
+BOOL Use_Sse_Reg_Parm = FALSE;
+/* -mregparm= */
+INT32 Use_Reg_Parm = 0;
 #endif
 BOOL Force_GP_Prolog;	/* force usage of gp prolog */
+char *IPA_Object_Name = NULL;   /* distinguish symbols in different .so files */
 
 OPTION_LIST *Registers_Not_Allocatable = NULL;
 
@@ -387,6 +416,9 @@ INT32 Ipa_Ident_Number = 0;
 // Tell ipa_link to set LD_LIBRARY_PATH to this before running the shell cmds.
 char *IPA_old_ld_library_path = NULL;
 
+// Tell ipa_link which compiler to invoke.
+char *IPA_cc_name = NULL;
+
 // Tell ipa_link about the source language.
 char *IPA_lang = NULL;
 #endif
@@ -396,10 +428,14 @@ BOOL Indexed_Loads_Allowed = FALSE;
 /* Target environment options: */
 static OPTION_DESC Options_TENV[] = {
   { OVK_INT32,	OV_VISIBLE,	FALSE, "align_aggregates",	"align_ag",
-    -1, 0, 16,	&Aggregate_Alignment, NULL,
+    -1, 0, 16,	&Aggregate_Alignment, &Aggregate_Alignment_Set,
     "Minimum alignment to use for aggregates (structs/arrays)" },
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "aligned_copy",		NULL,
     0, 0, 0,	&UseAlignedCopyForStructs, NULL },
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "unweave_copy",		NULL,
+    0, 0, 0,	&UnweaveCopyForStructs, NULL },
+  { OVK_INT32,	OV_INTERNAL,	FALSE, "aggregate_unroll_factor", "aggregate_unroll",
+    4, 0, 1024,	&Aggregate_UnrollFactor, NULL },
   { OVK_BOOL,   OV_SHY,		FALSE, "call_mcount",		NULL,
     0, 0, 0,    &Call_Mcount, NULL },
   { OVK_BOOL,   OV_SHY,		FALSE, "constant_gp",		NULL,
@@ -457,6 +493,18 @@ static OPTION_DESC Options_TENV[] = {
   { OVK_BOOL,	OV_INTERNAL,	FALSE, "simd_pmask",		NULL,
     0, 0, 0,	&SIMD_PMask, NULL,
     "Unmask SIMD precision exception" },
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "simd_amask",		NULL,
+    0, 0, 0,	&SIMD_AMask, NULL,
+    "Enable SIMD Denormalized as zero behavour" },
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "simd_fmask",		NULL,
+    0, 0, 0,	&SIMD_FMask, NULL,
+    "Enable SIMD flush to zero behavour" },
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "msseregparm",		NULL,
+    0, 0, 0,	&Use_Sse_Reg_Parm, NULL,
+    "Use sse register parameters at -m32" },
+  { OVK_INT32,	OV_INTERNAL,	FALSE, "mregparm",		NULL,
+    0, 0, 3,	&Use_Reg_Parm, NULL,
+    "Use (up to 3) register parameters at -m32" },
 #endif
   { OVK_BOOL,	OV_VISIBLE,	FALSE, "local_names",		"",
     0, 0, 0,	&PIC_Local_Names, NULL },
@@ -551,6 +599,15 @@ static OPTION_DESC Options_TENV[] = {
   { OVK_INT32,	OV_INTERNAL,	FALSE, "iolist_reuse",	"iolist_reuse",
     100, 1, INT32_MAX,	&iolist_reuse_limit, 			NULL,
     "Maximum number of iolists which will share stack space" },
+  { /* IPA object name used for -shared compile */
+    OVK_NAME,   OV_SHY,         FALSE, "object_name",          "",
+    0, 0, 0, &IPA_Object_Name, NULL },
+#if defined(TARG_SL)
+  { OVK_BOOL,   OV_VISIBLE,	FALSE, "sl2_initbuf",	NULL,
+    0, 0, 0,    &Sl2_Inibuf, NULL, "Need to Init buf for sl2" },
+  { OVK_BOOL,   OV_VISIBLE,	FALSE, "sl2_ibuf_name",	NULL,
+    0, 0, 0,    &Sl2_Ibuf_Name, NULL, "function name to Init buf for sl2" },
+#endif
 
   { OVK_COUNT }		/* List terminator -- must be last */
 };
@@ -620,10 +677,6 @@ static OPTION_DESC Options_LANG[] = {
       0, 0, 0,	&CXX_Exceptions_On,	&CXX_Exceptions_Set,
       "C++: enable exceptions" },
 #endif // !KEY
-#if 0 // remove it till we have a robust design 
-    { OVK_BOOL, OV_SHY,		FALSE, "alias_const",		"",
-      0, 0, 0,  &CXX_Alias_Const,       &CXX_Alias_Const_Set },
-#endif
     { OVK_BOOL, OV_VISIBLE,	FALSE, "recursive",		"",
       0, 0, 0,	&LANG_Recursive,	&LANG_Recursive_Set,
       "FORTRAN: program contains recursion" },
@@ -713,8 +766,6 @@ static OPTION_DESC Options_LANG[] = {
     { OVK_BOOL, OV_VISIBLE,	TRUE, "IEEE_save",		"",
       0, 0, 0,	&LANG_IEEE_Save,	&LANG_IEEE_Save_Set,
       "FORTRAN: Save/restore FPU state in procedure prolog/epilog as F2003 requires" },
-# endif
-# ifdef KEY
     /* Bug 3405 */
     { OVK_BOOL, OV_VISIBLE,	TRUE, "IEEE_minus_zero",		"",
       0, 0, 0,	&LANG_IEEE_Minus_Zero_On,	&LANG_IEEE_Minus_Zero_Set,
@@ -723,7 +774,13 @@ static OPTION_DESC Options_LANG[] = {
     { OVK_BOOL, OV_INTERNAL,	TRUE, "math_errno",		"",
       0, 0, 0,	&LANG_Math_Errno,	&LANG_Math_Errno_Set,
       "C/C++: Set errno after calling math functions" },
-# endif /* KEY */
+    { OVK_BOOL, OV_INTERNAL,    TRUE, "cxx_openmp",             "",
+      0, 0, 0,  &LANG_Enable_CXX_Openmp,        &LANG_Enable_CXX_Openmp_Set,
+      "C++: Enable OpenMP processing." },
+    { OVK_BOOL, OV_INTERNAL,	TRUE, "global_asm",		"",
+      0, 0, 0,	&LANG_Enable_Global_Asm,	&LANG_Enable_Global_Asm_Set,
+      "Handle global scope ASMs fully." },
+#endif /* KEY */
 
     { OVK_COUNT }		    /* List terminator -- must be last */
 };
@@ -773,6 +830,8 @@ static OPTION_DESC Options_INTERNAL[] = {
 #ifdef KEY
     { OVK_NAME, OV_INTERNAL,	FALSE, "old_ld_lib_path",	"",
       0, 0, 0,	&IPA_old_ld_library_path,	NULL },
+    { OVK_NAME, OV_INTERNAL,	FALSE, "cc_name",		"",
+      0, 0, 0,	&IPA_cc_name,	NULL },
     { OVK_NAME, OV_INTERNAL,	FALSE, "lang",			"",
       0, 0, 0,	&IPA_lang,	NULL },
 #endif
@@ -799,10 +858,10 @@ OPTION_GROUP Common_Option_Groups[] = {
   { "LNO",	':', '=', Options_LNO, NULL,
     "Options to control loop nest optimization" },
 #endif /* BACK_END */
-#if defined(BACK_END) || defined(QIKKI_BE)
+#if defined(BACK_END) 
   { "PHASE",	':', '=', Options_PHASE, NULL,
     "Options to control phase invocation and locations" },
-#endif /* defined(BACK_END) || defined(QIKKI_BE) */
+#endif // BACK_END
   { "TARG",	':', '=', Options_TARG, NULL,
     "Options to specify the target machine characteristics" },
   { "TENV",	':', '=', Options_TENV, NULL,
@@ -819,7 +878,7 @@ OPTION_GROUP Common_Option_Groups[] = {
        "Options to control program region extraction process" },
   { "PROMP", ':', '=', Options_PROMP, NULL,
        "Options to control listing mp transformations" },
-  { NULL }		/* List terminator -- must be last */
+  { NULL },		/* List terminator -- must be last */
 };
 
 /* ====================================================================
@@ -844,8 +903,13 @@ BOOL Idict_Commutable_Match = FALSE;
 BOOL Scalar_Formal_Ref = TRUE;		/* for fortran scalar formal refs */
 BOOL Non_Scalar_Formal_Ref = FALSE;	/* for fortran non_scalar formal refs */
 
+BOOL Emulate_memset = TRUE;             /* for intrinsic expansion of memset */
 BOOL CG_mem_intrinsics = TRUE;		/* for memory intrinsic expansion */
+#ifdef TARG_NVISA
+INT32 CG_memmove_inst_count = 128;	/* for intrinsic expansion of bzero etc */
+#else
 INT32 CG_memmove_inst_count = 16;	/* for intrinsic expansion of bzero etc */
+#endif
 BOOL CG_memmove_inst_count_overridden = FALSE;
 BOOL CG_bcopy_cannot_overlap = FALSE;	/* for intrinsic expansion of bcopy */
 #ifdef KEY
@@ -860,6 +924,8 @@ BOOL CG_memmove_nonconst = FALSE;	/* expand mem intrinsics unknown size */
 /***** Miscellaneous GOPT options *****/
 INT32 Opt_Level = DEF_OPT_LEVEL;
 INT32 OPT_unroll_times = 4;		/* but see Configure_Target() */
+INT32 OPT_unroll_level = 1;
+BOOL OPT_keep_extsyms = FALSE;
 BOOL OPT_unroll_times_overridden = FALSE;
 INT32 OPT_unroll_size = 40;		/* but see Configure_CG_Options() */
 BOOL OPT_unroll_size_overridden = FALSE;
@@ -870,8 +936,13 @@ BOOL Enable_SWP = FALSE;		/* but see cgdriver.c */
 BOOL Enable_SWP_overridden = FALSE;
 
 /***** What is the byte	sex of the host	and target? *****/
+#if defined(TARG_SL) || defined(TARG_MIPS)
+UINT8 Host_Byte_Sex = LITTLE_ENDIAN;	/* Set in config_host.c	*/
+UINT8 Target_Byte_Sex =	LITTLE_ENDIAN;	/* Set in config_targ.c	*/
+#else
 UINT8 Host_Byte_Sex = BIG_ENDIAN;	/* Set in config_host.c	*/
 UINT8 Target_Byte_Sex =	BIG_ENDIAN;	/* Set in config_targ.c	*/
+#endif
 BOOL  Same_Byte_Sex = TRUE;		/* Set in config_targ.c	*/
 
 /***** Miscellaneous code generation options *****/
@@ -889,7 +960,7 @@ BOOL Force_Mem_Formals = FALSE;	/* Always force formals to memory? */
 BOOL Kernel_Code = FALSE;	/* Compiling OS kernel? */
 BOOL Varargs_Prototypes = TRUE;	/* Varargs have prototypes for FP? */
 BOOL Gen_Profile = FALSE;	/* Generate a profile call for each user call */
-char *Gen_Profile_Name = "__profile_call"; 
+const char *Gen_Profile_Name = "__profile_call"; 
 BOOL Call_Mcount = FALSE;	/* generate a call to mcount in pu entry */
 BOOL GP_Is_Preserved = FALSE;	/* GP is neither caller or callee-save */
 
@@ -904,6 +975,10 @@ char *Library_Name = NULL;      /* -TENV:io_library=xxx */
 BOOL Omit_UE_DESTROY_FRAME = FALSE;  /* tmp close Epilogue overflow error */
 
 INT  target_io_library;
+#if defined (TARG_SL)
+BOOL Sl2_Inibuf=FALSE;
+char* Sl2_Ibuf_Name=NULL;
+#endif
 
 #ifdef TARG_X8664
 char* Mcmodel_Name = NULL;      /* -TENV:mcmodel=xxx */
@@ -945,12 +1020,15 @@ char *Purple_Path = 0;		    /* path to purple.so */
 char *Prompf_Anl_Path = 0;	    /* path to prompf_anl.so */
 WN_MAP Prompf_Id_Map = WN_MAP_UNDEFINED; 
 			/* Maps WN constructs to unique identifiers */
+#if defined(TARG_SL)
+BOOL Run_ipisr = FALSE;         /* run ipisr register allocation */
+#endif
 #endif /* BACK_END */
 char *Inline_Path = 0;                    /* path to inline.so */
 #if defined(BACK_END) || defined(QIKKI_BE)
 char *Targ_Path = 0;		    /* path to targ_info .so */
 #endif /* defined(BACK_END) || defined(QIKKI_BE) */
-
+
 /* ====================================================================
  *
  * Preconfigure
@@ -1035,6 +1113,7 @@ Configure_Platform ( char *platform_name )
     Processor_Name = POPTS_pname(popts);
   }
 }
+
 
 /* ====================================================================
  *
@@ -1091,6 +1170,13 @@ Configure_Ofast ( void )
     Div_Split_Allowed = TRUE;
     Div_Split_Set = TRUE;
   }
+
+#ifdef TARG_X8664
+  if( !OPT_Malloc_Alg_Set) {
+      OPT_Malloc_Alg = 1;      
+  }
+#endif
+
 /* #645549: There exists an OS bug which gets triggered by NULL ptr
    speculation. Disable NULL ptr speculation for Ofast (base flags).
    They will however continue to be turned ON for SPEC peak flags.
@@ -1113,46 +1199,15 @@ Configure_Ofast ( void )
     WOPT_Enable_Estr_FB_Injury_Set = TRUE;
   }
 
+  if ( ! WOPT_Enable_Loop_Multiver_Set ) {
+    WOPT_Enable_Loop_Multiver = TRUE;
+    WOPT_Enable_Loop_Multiver_Set = TRUE;
+  }
+
   /* Get platform and its associated options: */
   Configure_Platform ( Ofast );
 }
-
-#ifdef TARG_IA64
-/*==============================================================
-* Configure_Olegacy
-*
-* Set default call-shared and alias=typed if legacy is NULL
-* Set default non-shared and alias=notyped otherwise
-* in_FE indicates that whether this is invoked in FE
-*===============================================================
-*/
-extern BOOL Olegacy;
-
-void
-Configure_Olegacy (BOOL in_FE)
-{
-  if(!in_FE) {
-    /* We assume that the driver has defaulted CALL-SHARED and alias=typed. */
-    /* First set the options that are common to all targets: */
-    if ( ! Olegacy ) {
-      Use_Call_Shared_Link = TRUE;
-      if(Alias_Pointer_Types_Set) {
-        Alias_Pointer_Types = TRUE;
-        Alias_Pointer_Types_Set = TRUE;
-      }
-    }
-    else {
-      Use_Call_Shared_Link = FALSE;
-      if(Alias_Pointer_Types_Set) {
-        Alias_Pointer_Types = FALSE;
-        Alias_Pointer_Types_Set = TRUE;
-      }
-    }
-  } else {
-    if(Olegacy) Use_Call_Shared_Link = FALSE;
-  }
-}
-#endif
+
 
 /* ====================================================================
  *
@@ -1190,21 +1245,23 @@ Configure (void)
     }
   }
 
+  if ( Get_Trace( TP_MISC, 0x200 ) ) {
+     IR_dump_wn_addr = TRUE;
+  }
+  if ( Get_Trace( TP_MISC, 0x400 ) ) {
+     IR_dump_wn_id = TRUE;
+  }
+  
+
 #ifdef KEEP_WHIRLSTATS
   atexit(whirlstats);
 #endif
 
-#ifdef TARG_IA64
-  /* Resume original settings or PRO64 if Olegacy flag is set;
-   * and set default settings otherwise
-   */
-  Configure_Olegacy(FALSE);
-#endif
 
   /* Configure the alias options first so the list is processed and
    * we can tell for -OPT:Ofast below what overrides have occurred:
    */
-  Configure_Alias_Options ( Alias_Option );
+  Configure_Alias_Options ();
 
   /* Check the -TARG:platform option (subordinate to Ofast): */
   if ( Platform_Name != NULL && *Platform_Name != 0 ) {
@@ -1215,7 +1272,6 @@ Configure (void)
   if ( Ofast != NULL ) {
     Configure_Ofast ();
   }
-
 
   /* Perform host-specific and target-specific configuration: */
   Configure_Host ();
@@ -1260,12 +1316,40 @@ Configure (void)
   if (Force_GP_Prolog) Force_Jalr = TRUE;
 #ifdef TARG_X8664
   // Bug 1039 - align aggregates to 16-byte for all optimization levels
-  if ( Is_Target_SSE2() )
+  // OSP: Some cases may failed on i386(-march=anyx86) due to the alignment
+  // bug 13998 - do this even under -mno-sse2
+  if ( ! Aggregate_Alignment_Set &&
+       ! LANG_Enable_Global_Asm )
     Aggregate_Alignment = 16;
   if ( !Vcast_Complex_Set && Opt_Level > 1 )
     Vcast_Complex = TRUE;
 #endif
 }
+
+/* ====================================================================
+ *
+ * Configure_IPA
+ *
+ * Configure IPA options based on flag values.
+ *
+ * ====================================================================
+ */
+
+void
+Configure_IPA (void)
+{
+  if ( Get_Trace( TP_MISC, 0x40 ) && ! DevWarn_Enabled()) {
+    DevWarn_Toggle();
+  }
+
+  if ( Get_Trace( TP_MISC, 0x200 ) ) {
+     IR_dump_wn_addr = TRUE;
+  }
+  if ( Get_Trace( TP_MISC, 0x400 ) ) {
+     IR_dump_wn_id = TRUE;
+  }
+}
+
 
 /* ====================================================================
  *
@@ -1387,6 +1471,11 @@ Configure_Source ( char	*filename )
   Goto_Skip_List = Build_Skiplist ( Goto_Skip );
 #endif
 
+#if defined(TARG_SL)
+  /* Are we skipping any branches for DDB? */
+  DDB_Skip_List = Build_Skiplist ( DDB_Skip );
+#endif
+
   /* F90 is a recursive language, so this needs to be set */
   if (!LANG_Recursive_Set && Language == LANG_F90)
      LANG_Recursive = TRUE;
@@ -1397,8 +1486,13 @@ Configure_Source ( char	*filename )
     LANG_Copy_Inout = TRUE;
   }
 
+#ifdef TARG_NVISA
+  /* Turn on -VHO:struct_opt by default at all levels: */
+  if ( ! VHO_Struct_Opt_Set) {
+#else
   /* Turn on -VHO:struct_opt by default at -O1: */
   if ( ! VHO_Struct_Opt_Set && Opt_Level >= 1 ) {
+#endif
     VHO_Struct_Opt = TRUE;
   }
   /* Turn on -VHO:cselect_opt by default at -O1: */
@@ -1412,9 +1506,15 @@ Configure_Source ( char	*filename )
    */
   if ( ! Cfold_Aggr_Set )
     Enable_Cfold_Aggressive = TRUE;
-
+  
+#if defined(TARG_PPC32)
+  Enable_CVT_Opt = FALSE;
+#else
+#ifndef TARG_NVISA // nvisa wants to preserve 32<->64 conversions
   if (!Enable_CVT_Opt_Set)
     Enable_CVT_Opt = ( Opt_Level > 0);
+#endif
+#endif  
 
   CSE_Elim_Enabled = Opt_Level > 0;
 
@@ -1435,10 +1535,6 @@ Configure_Source ( char	*filename )
       OPT_unroll_size = 20;
     /* reduce caller+callee "size" limit for inlining */
     INLINE_Max_Pu_Size=1000;
-#if 0 /* not ready for this yet. */
-    /* don't inline divide expansions */
-    if (!OPT_Inline_Divide_Set) OPT_Inline_Divide = FALSE;
-#endif
 
 #ifdef BACK_END
     /* LNO options to be turned off for SPACE */
@@ -1461,7 +1557,7 @@ Configure_Source ( char	*filename )
   Enable_BB_Splitting = ! Get_Trace ( TP_FLOWOPT, 0x080 );
 
   if (Opt_Level > 2 && ! Olimit_Set)
-	Olimit = DEFAULT_O3_OLIMIT;
+	Olimit = MAX(Olimit,DEFAULT_O3_OLIMIT);
   if (Olimit == 0) {
 	/* 0 Olimit means no limit or infinite limit */
 	Olimit = MAX_OLIMIT;
@@ -1512,9 +1608,15 @@ Configure_Source ( char	*filename )
   /* IEEE arithmetic options: */
   if ( IEEE_Arithmetic > IEEE_ACCURATE ) {
     /* Minor roundoff differences for inexact results: */
-#ifndef TARG_X8664 // facerec fails at -O3 if Recip_Allowed is true
+#if !defined(TARG_IA64) && !defined(TARG_X8664) && !defined(TARG_LOONGSON)
+    // facerec fails at -O3 if Recip_Allowed is true
     if ( ! Recip_Set )
       Recip_Allowed = IEEE_Arithmetic >= IEEE_INEXACT;
+#endif
+#if !defined(TARG_IA64) && !defined(TARG_X8664) && !defined(TARG_LOONGSON)
+    // apsi fails at -O3 because Rsqrt_Allowed is true
+    if ( ! Rsqrt_Set )
+      Rsqrt_Allowed = IEEE_Arithmetic >= IEEE_INEXACT;
 #endif
     /* Potential non-IEEE results for exact operations: */
     if ( ! Div_Split_Set )
@@ -1526,7 +1628,7 @@ Configure_Source ( char	*filename )
 #ifndef KEY
     Roundoff_Level = ROUNDOFF_ASSOC;
 #else
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_LOONGSON)
     Roundoff_Level = ROUNDOFF_ASSOC;
 #else
     Roundoff_Level = ROUNDOFF_SIMPLE;
@@ -1568,23 +1670,17 @@ Configure_Source ( char	*filename )
     if (!Fast_trunc_Set)
       Fast_trunc_Allowed = Roundoff_Level >= ROUNDOFF_SIMPLE;
 
+#if defined(TARG_X8664)
     if ( ! CIS_Set )
       CIS_Allowed |= Roundoff_Level >= ROUNDOFF_SIMPLE;
+#endif
   }
 
-#if 0
-  /* Set the relational operator folding in simplifier based on the optimizer
-     setting of Allow_wrap_around_opt */
-  if (!Simp_Unsafe_Relops_Set && Allow_wrap_around_opt_Set) {
-     Simp_Unsafe_Relops = Allow_wrap_around_opt;
-  }
-  if (!Allow_wrap_around_opt_Set && Simp_Unsafe_Relops_Set ) {
-     Allow_wrap_around_opt = Simp_Unsafe_Relops;
-  }
-#endif
+#if !defined(TARG_NVISA) // NVISA needs to avoid overflow arithmetic
   if (!Simp_Unsafe_Relops_Set && Opt_Level > 2) {
      Simp_Unsafe_Relops = TRUE;
   }
+#endif
   
   Enable_GDSE	 = ((Opt_Level > 1) &&
 		    (!Get_Trace(TP_GLOBOPT, 4096))
@@ -1645,6 +1741,18 @@ Configure_Source ( char	*filename )
   } else if ( Get_Trace ( TP_MISC, 32 ) ) {
     Trace_Option_Groups ( TFile, Common_Option_Groups, FALSE );
   }
+
+  // If -fc,<name> but no -CLIST:dotc_filename=<name>,
+  // then copy -fc name to clist option for use in whirl2c.
+  // This allows c: in paths for windows.
+  if (Whirl2C_File_Name && CLIST_dotc_filename == NULL) {
+    CLIST_dotc_filename = Whirl2C_File_Name;
+  }
+
+#ifdef KEY // bug 12939
+  if (Language == LANG_CPLUS && ! WOPT_Enable_Tail_Recur_Set)
+    WOPT_Enable_Tail_Recur = FALSE;
+#endif
 }
 
 /* ====================================================================
@@ -1657,20 +1765,18 @@ Configure_Source ( char	*filename )
  */
 
 void
-Configure_Alias_Options( OPTION_LIST *olist )
+Configure_Alias_Options()
 {
+  if (!Alias_Option) return;
+
   OPTION_LIST *ol;
-  for (ol = olist; ol != NULL; ol = OLIST_next(ol)) {
+  for (ol = Alias_Option; ol != NULL; ol = OLIST_next(ol)) {
     char *val = OLIST_val(ol);
     INT len = strlen (val);
     if (strncasecmp( val, "any", len) == 0) {
       Alias_Pointer_Parms = TRUE;	/* observed by Fortran programs */
       Alias_Pointer_Cray = FALSE;	/* observed by Fortran programs */
-#ifdef TARG_IA64
       Alias_Pointer_Types = TRUE;	/* observed by C and C++ programs */
-#else
-      Alias_Pointer_Types = FALSE;	/* observed by C and C++ programs */
-#endif
       Alias_Not_In_Union  = TRUE;	/* observed by C++ programs only */
       Alias_Pointer_Strongly_Typed = FALSE;	/* observed by C and C++ programs */
       Alias_Pointer_Types_Set = TRUE;
@@ -1726,6 +1832,8 @@ Configure_Alias_Options( OPTION_LIST *olist )
       Alias_F90_Pointer_Unaliased = TRUE;
     } else if (strncasecmp( val, "f90_pointer_alias", len) == 0) {
       Alias_F90_Pointer_Unaliased = FALSE;
+    } else if (strncasecmp( val, "nystrom", len) == 0) {
+      Alias_Nystrom_Analyzer = TRUE;
     } else {
       ErrMsg ( EC_Inv_OPT, "alias", val );
     }
@@ -1786,7 +1894,7 @@ struct skiplist {
  */
 
 static void
-Print_Skiplist ( FILE *tf, SKIPLIST *skip, char *lab )
+Print_Skiplist ( FILE *tf, SKIPLIST *skip, const char *lab )
 {
   INT32 i;
 
@@ -1868,13 +1976,11 @@ Build_Skiplist ( OPTION_LIST *olist )
 	ol != NULL;
 	++count, ol = OLIST_next(ol) )
   {
-    if ( !strncmp ( "skip_a", OLIST_opt(ol), 6 ) ||
-	 !strncmp ( "region_skip_a", OLIST_opt(ol), 13 ) ||
-	 !strncmp ( "goto_skip_a", OLIST_opt(ol), 11 ) ) {
+    // ignore goto/region/ddb prefix of skip name
+    const char *opt_name = strstr(OLIST_opt(ol), "skip");
+    if ( !strncmp ( "skip_a", opt_name, 6 )) {
       Set_SKIPLIST_kind ( sl, count, SK_AFTER );
-    } else if ( !strncmp ( "skip_b", OLIST_opt(ol), 6 ) ||
-	        !strncmp ( "region_skip_b", OLIST_opt(ol), 13 ) ||
-	        !strncmp ( "goto_skip_b", OLIST_opt(ol), 11 ) ) {
+    } else if ( !strncmp ( "skip_b", opt_name, 6 )) {
       Set_SKIPLIST_kind ( sl, count, SK_BEFORE );
     } else {
       Set_SKIPLIST_kind ( sl, count, SK_EQUAL );
@@ -2054,8 +2160,14 @@ Process_Trace_Option ( char *option )
 	break;
     
     case 'r':
-	Set_Trace (TKIND_IR,
-		   Get_Trace_Phase_Number ( &cp, option ) );
+	if (strcmp(cp, "a") == 0) {
+	  Set_All_Trace( TKIND_IR );
+	  cp++;
+	}
+	else {
+	  Set_Trace (TKIND_IR,
+		     Get_Trace_Phase_Number ( &cp, option ) );
+	}
 	break;
 
     case 's':
@@ -2123,7 +2235,7 @@ Process_Trace_Option ( char *option )
 void
 List_Compile_Options (
   FILE *f,
-  char *pfx,
+  const char *pfx,
   BOOL internal,
   BOOL full,
   BOOL update )

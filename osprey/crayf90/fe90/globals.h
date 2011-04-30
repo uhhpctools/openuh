@@ -292,6 +292,12 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Cvmgp_Intrinsic,
 				Cvmgt_Intrinsic,
 				Cvmgz_Intrinsic,
+#ifdef KEY /* Bug 14150 */
+				C_F_Pointer_Intrinsic,
+				C_F_Procpointer_Intrinsic,
+				C_Funloc_Intrinsic,
+				C_Loc_Iso_Intrinsic,
+#endif /* KEY Bug 14150 */
 				C_Loc_Intrinsic,
 				Dabs_Intrinsic,
 				Dacos_Intrinsic,
@@ -830,7 +836,11 @@ enum	msg_severities	       {Comment,	Note,		Caution,
 enum	obj_values	       {Obj_Assum_Type_Ch,	Obj_Expl_Shp_Arr,
 				Obj_Assum_Size_Arr,	Obj_Defrd_Shp_Arr,
                                 Obj_Assum_Shp_Arr,	Obj_Co_Array,
-				Obj_Allocatable,	Obj_Constant,
+				Obj_Allocatable,
+#ifdef KEY /* Bug 14150 */
+				Obj_Bind,		Obj_Value,
+#endif /* KEY Bug 14150 */
+				Obj_Constant,
 				Obj_Intent,		Obj_Optional,
 				Obj_Private,		Obj_Public,
 				Obj_Target,		Obj_Equiv,
@@ -1709,7 +1719,19 @@ enum stmt_type_values           {Null_Stmt,
                                  Volatile_Stmt,
 
 				 Open_MP_End_Parallel_Workshare_Stmt,
-				 Open_MP_End_Workshare_Stmt
+				 Open_MP_End_Workshare_Stmt,
+#ifdef KEY /* Bug 11741 */
+				 Import_Stmt,
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+				 Enum_Stmt,
+				 End_Enum_Stmt,
+				 Enumerator_Stmt,
+#endif /* KEY Bug 10572 */
+#ifdef KEY /* Bug 14150 */
+				 Bind_Stmt,
+				 Value_Stmt
+#endif /* KEY Bug 10572 */
 
                                  /* When you add a stmt, make sure you change */
                                  /* stmt_type_str in main.h.                  */
@@ -2103,6 +2125,9 @@ struct	on_off_flags_entry {
 	 * collide with that of any user-created module. */
 	boolean		intrinsic_module_gen	: 1;		/* -intrinsic_module_gen */
 #endif/* KEY Bug 5089 */
+#ifdef KEY /* Bug 12482 */
+	boolean		fortran2003		: 1;		/* -ffortran2003 */
+#endif /* KEY Bug 12482 */
 	};
 
 /*************\
@@ -2367,7 +2392,7 @@ union	target_machine_entry   {
  
 # if defined(_GETPMC_AVAILABLE)
 			 long		mcpmt;
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
                          char		mcpmt[12];
 # endif
 			 long		mcbank;
@@ -2417,7 +2442,7 @@ union	target_machine_entry   {
 
 # if defined(_GETPMC_AVAILABLE)
 		long	mc_tbl[128];
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
                 long    mc_tbl[130];                 
 # endif
 	};
@@ -2672,6 +2697,9 @@ extern  void  fcd_intrinsic     (opnd_type *, expr_arg_type *, int *);
 extern  void  loc_intrinsic     (opnd_type *, expr_arg_type *, int *);
 extern  void  clock_intrinsic   (opnd_type *, expr_arg_type *, int *);
 #ifdef KEY
+extern  void  c_f_pointer_intrinsic(opnd_type *, expr_arg_type *, int *);
+#endif /* KEY Bug 14150 */
+#ifdef KEY
 extern  void  time_intrinsic    (opnd_type *, expr_arg_type *, int *);
 extern  void  dtime_intrinsic    (opnd_type *, expr_arg_type *, int *);
 #endif
@@ -2879,6 +2907,10 @@ extern  boolean		fold_aggragate_expression(opnd_type *, expr_arg_type *,
 extern  boolean		fold_relationals(int, int, operator_type);
 extern  boolean         folder_driver(char *, int, char *, int, long_type *,
                                       int *, int, int, int, int, ...);
+#ifdef KEY /* Bug 12482 */
+extern void		copy_and_pad_boz(long_type *dst, Uint dst_words,
+			  long_type *src, Uint src_words);
+#endif /* KEY Bug 12482 */
 extern	void		free_tables(void);
 extern	void		free_get_char(void);
 extern	void		free_get_char_literal(void);
@@ -3321,7 +3353,8 @@ typedef struct f90_type {
 |* our dope vector in C so we can create dope vectors for the folders. *|
 \***********************************************************************/
 
-# if defined(_DOPE_VECTOR_32_OR_64)
+/* OSP_467, #4, dynamic selection of ptr32 or ptr64 for TARG_X8664 */
+# if defined(_DOPE_VECTOR_32_OR_64) || defined(TARG_X8664)
 union ext_dope_entry {
 		struct {
                         int       	base_addr;
@@ -3510,11 +3543,19 @@ struct  int_dope_entry  {
 
 typedef struct int_dope_entry           int_dope_type;
 
-
+/*  linear_type_type is enum type, in ia64 system, this type is 32 bit length.
+# ifdef _HOST64  
+struct exp_tbl_entry            {
+                                boolean			ext  :  1;
+                                linear_type_type	type : 63;
+                                };
+# elif _HOST32
+*/
 struct exp_tbl_entry            {
                                 boolean			ext  :  1;
                                 linear_type_type	type : 31;
                                 };
+//# endif
 
 typedef struct exp_tbl_entry    exp_tbl_type;
 
@@ -3541,7 +3582,7 @@ typedef struct nmlist_goli {
 
 typedef struct {
     unsigned int        version :3;     /* contains NAMELIST_VERSION */
-#if (defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))) && \
+#if (defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)) && \
     ! defined(_BITFIELD_RIGHT_TO_LEFT)
     unsigned int                :29;    /* unused */
     unsigned int                :16;    /* unused */
@@ -3561,7 +3602,7 @@ typedef struct {
 
 typedef struct nmlist_struclist {
 
-#if (defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))) && \
+#if (defined(_TARGET64) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)) && \
     ! defined(_BITFIELD_RIGHT_TO_LEFT)
     unsigned int                  :32;  /* unused */
     unsigned int                  :16;  /* unused */
@@ -3600,6 +3641,10 @@ extern  boolean		special_case_fcn_to_sub(int spec_idx);
 extern char *init_msg_processing (char *[]);
 extern void process_cmd_line (int, char *[], char *);
 #endif /* KEY Bug 5089 */
+#ifdef KEY /* Bug 14150 */
+extern boolean c_ptr_abi_trouble(int);
+extern boolean is_x8664_n32();
+#endif /* KEY Bug 14150 */
 
 #ifdef KEY /* Bug 3018 */
 /* Suffix used in intrin_tbl to indicate G77 subroutine versions of intrinsics

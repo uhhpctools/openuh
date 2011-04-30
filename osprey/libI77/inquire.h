@@ -48,17 +48,10 @@
 extern int f_inqu0(inlist *, int *);
 extern int f_inqu0_mp(inlist *, int *);
 
-#if 11
 extern int f_inqu064(inlist64 *, int *);
 extern int f_inqu064_mp(inlist64 *, int *);
 extern int f_inqu064x (inlist64 *a, XINT xmask);
 extern int f_inqu064x_mp (inlist64 *a, XINT xmask);
-#else
-extern int f_inqu064(inlist *, int *);
-extern int f_inqu064_mp(inlist *, int *);
-extern int f_inqu064x (inlist *a, XINT xmask);
-extern int f_inqu064x_mp (inlist *a, XINT xmask);
-#endif
 
 #endif /* C || C++ */
 

@@ -148,6 +148,9 @@ static BOOL Is_Non_Dependent_Load(WN* wn,
   case OPR_ILOAD:
   case OPR_IO:
   case OPR_RETURN:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
   case OPR_CALL:
   case OPR_ICALL:
   case OPR_INTRINSIC_CALL:
@@ -202,6 +205,9 @@ static BOOL Is_Non_Dependent_Expression(WN* wn,
   case OPR_ILOAD:
   case OPR_IO:
   case OPR_RETURN:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
   case OPR_CALL:
   case OPR_ICALL:
   case OPR_INTRINSIC_CALL:

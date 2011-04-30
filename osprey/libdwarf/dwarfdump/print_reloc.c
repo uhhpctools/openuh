@@ -403,7 +403,7 @@ static void print_reloc_information_32(int section_no, Dwarf_Small *buf,
     for (off = 0; off < size; off += sizeof (Elf32_Rel)) {
 	Elf32_Rel *p = (Elf32_Rel *) (buf + off);
 	printf("%5lu\t<%3d> %-34s%s\n", (unsigned long int) (p->r_offset), 
-	       ELF32_R_SYM(p->r_info), 
+	       (int)ELF32_R_SYM(p->r_info), 
 	       sym_data[ELF32_R_SYM(p->r_info) - 1].name, 
 	       get_reloc_type_names(ELF32_R_TYPE(p->r_info)));
     }

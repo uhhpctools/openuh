@@ -322,9 +322,9 @@ class POINTS_TO;
 class ALIAS_KIND; 
 class WN;
 typedef struct bs BS;
+class AliasAnalyzer;
 
 #include "optimizer.h"
-
 
 //  Assign a bitpos to each rule.
 //  _context in ALIAS_RULE control which rules can be applied
@@ -370,8 +370,9 @@ enum {
   // Analysis Rules 
   FFA_RULE = 0x1000000,
   FSA_RULE = 0x2000000,
+  ALIAS_ANALYZER_RULE = 0x4000000,
   ALL_ANALYSIS_RULES =  0x7000000,
-  DEFAULT_ANALYSIS_RULES = 0x7000000,
+  DEFAULT_ANALYSIS_RULES = 0x3000000,
 
   // Compatiability Rules
   IBM_DISJOINT_RULE =   0x08000000,
@@ -386,10 +387,10 @@ enum {
 class ALIAS_RULE {
 
   ALIAS_CONTEXT _context;  // control which rules can be applied
+  AliasAnalyzer *_alias_analyzer;
   
 private:
-  
-  //  Obtain the basic type from TY
+    //  Obtain the basic type from TY
   INT32 Get_stripped_mtype(TY_IDX ty) const;
 
   // return TRUE iff
@@ -421,10 +422,14 @@ private:
                              BOOL ignore_loop_carried) const;
   BOOL Aliased_F90_Target_Rule(const POINTS_TO *, const POINTS_TO *,
 			       TY_IDX , TY_IDX ) const;
+  BOOL Aliased_Alias_Analyzer_Rule(const POINTS_TO *, const POINTS_TO *,bool) const;
   
 public:
 
-  ALIAS_RULE(ALIAS_CONTEXT ac):_context(ac) {}
+  ALIAS_RULE(ALIAS_CONTEXT ac, AliasAnalyzer *aa)
+    : _context(ac),
+      _alias_analyzer(aa)
+  {}
 
   BOOL Aliased_Strongly_Typed_Rule(TY_IDX , TY_IDX ) const;
 
@@ -439,7 +444,7 @@ public:
   ALIAS_CONTEXT Get_context(void)      { return _context; }
 
   //  Two memory operations are referencing the same location.
-  BOOL Same_location(const WN *, const WN *, const POINTS_TO *, const POINTS_TO *);
+  BOOL Same_location(const WN *, const WN *, const POINTS_TO *, const POINTS_TO *) const;
 
   //  Offset,size of two memop overlapped.
   ALIAS_KIND Aliased_Ofst_Rule(const POINTS_TO *, const POINTS_TO *) const;
@@ -480,5 +485,9 @@ public:
   const BS *Alias_Set_Return(const OPT_STAB *) const;
   const BS *Alias_Set_Asm(const OPT_STAB *) const;
 };
+
+typedef UINT32 LMV_ALIAS_GROUP;
+inline LMV_ALIAS_GROUP Gen_LMV_alias_group(INT loop, INT grp) 
+  { return (UINT(loop & 0xffff) << 16) | UINT(grp & 0xffff) ; }
 
 #endif

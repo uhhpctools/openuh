@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 // ====================================================================
@@ -44,6 +48,81 @@
 #ifndef opt_misc_INCLUDED
 #define opt_misc_INCLUDED
 
+#include "be_util.h"
+#include "opt_alias_rule.h"
+#include "opt_main.h"  // for COMP_UNIT
+#include "opt_mu_chi.h"
+#include "opt_htable.h"
+#include "opt_sym.h"
+#include "opt_cfg.h"
+
 void Analyze_pu_attr (OPT_STAB* opt_stab, ST* pu_st);
+
+class UselessStoreElimination
+{
+friend class CFG;
+
+private:
+
+    COMP_UNIT* _comp_unit;
+    CFG* _cfg;
+    OPT_STAB* _opt_stab;
+    const ALIAS_RULE* _alias_rule;
+    CODEMAP* _htable;
+
+    typedef struct {
+        CODEREP * def;
+        BB_NODE * def_defbb;
+        STMTREP * def_stmt;
+        CODEREP * def_copy;
+        BOOL def_inc;
+        BOOL def_const;
+        INT def_const_val;
+        BB_NODE * clear_bb;
+    } Candidate;
+
+    enum Store_Type {
+        Inc_Store = 1,
+        Const_Store = 2,
+        Other_Store =3
+    };
+    
+    Candidate _candidate;
+    INT _opt_count;
+    BOOL _tracing;
+
+    void Candidate_Clear()
+    {
+        _candidate.def = NULL;
+        _candidate.def_stmt = NULL;
+        _candidate.def_defbb = NULL;
+        _candidate.def_copy = NULL;
+        _candidate.def_inc = FALSE;
+        _candidate.def_const = FALSE;
+        _candidate.def_const_val = 0;
+        _candidate.clear_bb = NULL;
+    };
+
+    void Traverse_Loops(BB_LOOP*);
+    STMTREP* Is_Applicable_Innerloop(BB_LOOP*);
+    BOOL Is_Freed_in_BB(BB_NODE*, CODEREP*);
+    BOOL Aliased_with_CR(CODEREP*, POINTS_TO*);
+    BOOL Aliased_with_base(CODEREP*, POINTS_TO*);
+    BOOL Check_Uses_Defs_in_Loop(BB_LOOP* , STMTREP*, BB_NODE*, POINTS_TO*, BOOL);
+    BOOL Check_Uses_Defs_Coderep(STMTREP*, CODEREP*, POINTS_TO*, BOOL);
+    BOOL Check_First_Def_Coderep(STMTREP*, BB_NODE *, CODEREP*, POINTS_TO*, BOOL);
+    BOOL Call_Can_be_Ignore(STMTREP*, POINTS_TO*);
+    BOOL Is_Def_Candidate(CODEREP*);
+    BOOL Same_as_first_def(CODEREP*);
+    BOOL Have_Increment_Def(BB_LOOP*, BB_NODE*, POINTS_TO*);
+    Store_Type Istore_Inc_Const_Other(STMTREP *, INT *);
+    BOOL Perform_transform(BB_LOOP*);
+
+public:
+    UselessStoreElimination(COMP_UNIT*);
+    ~UselessStoreElimination(void) {};
+    void Perform_Useless_Store_Elimination();
+};
+
 
 #endif //opt_misc_INCLUDED

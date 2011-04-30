@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: dcis.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/dcis.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:21-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.dcis.c $
  *
  * Revision history:
  *  05-Sep-96 - Original Version
@@ -71,7 +71,13 @@ extern	dcomplex	__dcis(double);
 #pragma weak __dcis = __libm_dcis
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern dcomplex __libm_dcis(double);
+#pragma weak __dcis
+dcomplex __dcis(double x) {
+  return __libm_dcis(x);
+}
+#elif defined(__GNUC__)
 extern  dcomplex  __libm_dcis(double);
 dcomplex    __dcis() __attribute__ ((weak, alias ("__libm_dcis")));
 #endif

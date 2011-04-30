@@ -1,12 +1,16 @@
+/*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
 //
 // Module: opt_daVinci.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/opt/opt_daVinci.cxx,v $
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:53-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/Patch0002-taketwo/kpro64-pending/be/opt/SCCS/s.opt_daVinci.cxx $
 //
 // ====================================================================
 //
@@ -56,7 +60,15 @@
 #include <sys/types.h>              // for pid_t
 #include <unistd.h>                 // for fork(), pipe(), etc.
 #include <signal.h>                 // for SIGINT
+#ifndef __MINGW32__
+#if defined(__CYGWIN__) || defined(__APPLE__)
+#include <sys/wait.h>
+#elif defined(BUILD_OS_DARWIN)
+#include <sys/wait.h>                   // for waitpid()
+#else /* defined(BUILD_OS_DARWIN) */
 #include <wait.h>                   // for waitpid()
+#endif
+#endif /* __MINGW32__ */
 
 #define USE_STANDARD_TYPES
 #include "defs.h"
@@ -95,6 +107,7 @@ public:
 
 DAVINCI::DAVINCI(void)
 {
+#ifndef __MINGW32__
   to_display = from_display = NULL;
   
   if (isatty (1) == 0 && isatty (2) == 0)
@@ -146,6 +159,7 @@ DAVINCI::DAVINCI(void)
       fprintf(to_display, "menu(view_menu(fit_scale_to_window))\n");
     }
   }
+#endif /* __MINGW32__ */
 } 
 
 
@@ -186,6 +200,7 @@ DAVINCI::wait_for (const char *str)
 void
 DAVINCI::cleanup (void)
 {
+#ifndef __MINGW32__
   int stat;
   
   display_ok = FALSE;
@@ -194,6 +209,7 @@ DAVINCI::cleanup (void)
   // confuse ipacom.
   fclose (to_display);
   fclose (from_display);
+#endif /* __MINGW32__ */
 } // DAVINCI::cleanup
 
 

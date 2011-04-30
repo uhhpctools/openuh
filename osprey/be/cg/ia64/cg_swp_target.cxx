@@ -1185,6 +1185,7 @@ Identify_and_delete_incr(BB *bb, OP *memop, INT base_opnd_num, BASE_UPDATE up)
 
   bool allow_imm = (up & IMM_BASE_UPDATE) != 0;
   bool allow_reg = (up & REG_BASE_UPDATE) != 0;
+  bool incr_kill = false;
 
   TN *pred_tn = OP_opnd(memop, OP_PREDICATE_OPND);
 
@@ -1211,14 +1212,37 @@ Identify_and_delete_incr(BB *bb, OP *memop, INT base_opnd_num, BASE_UPDATE up)
 	if ((OP_opnd(incr_op, 1) == base) &&
 	    (OP_omega(incr_op, 1) == OP_omega(memop, base_opnd_num)) &&
 	    TN_is_global_reg(OP_opnd(incr_op, 2))) {
-	  BB_Remove_Op(bb, incr_op);
-	  return OP_opnd(incr_op, 2);
+	  //OSP_383&377
+	  //for the following op:
+	  //op1,  GTN100 = ld  GTN1001
+	  //op2,  GTN1002 = ld GTN1003
+	  //op3   GTN1001 = add GTN1001 + GTN1002
+          //GTN1002 is killed between op1 and op3, so the transform is invalid.
+	  //we should find such kill and prevent such transformation.
+	  for(OP *def_op = OP_next(memop);!incr_kill && def_op!=incr_op;def_op=OP_next(def_op))
+	    {
+	      if (OP_Defs_TN(def_op, OP_opnd(incr_op, 2))) incr_kill = true;
+	    }
+	  if(!incr_kill){
+	    BB_Remove_Op(bb, incr_op);
+	    return OP_opnd(incr_op, 2);
+	  }
+	  else 
+	    return NULL;
 	}
 	else if ((OP_opnd(incr_op, 2) == base) &&
 		 (OP_omega(incr_op, 2) == OP_omega(memop, base_opnd_num)) &&
 		 TN_is_global_reg(OP_opnd(incr_op, 1))) {
-	  BB_Remove_Op(bb, incr_op);
-	  return OP_opnd(incr_op, 1);
+	  for(OP *def_op = OP_next(memop);!incr_kill && def_op!=incr_op;def_op=OP_next(def_op))
+	    {
+	      if (OP_Defs_TN(def_op, OP_opnd(incr_op, 1))) incr_kill = true;
+	    }
+	  if(!incr_kill){
+	    BB_Remove_Op(bb, incr_op);
+	    return OP_opnd(incr_op, 1);
+	  }
+	  else
+	    return NULL;
 	}
       }
     }

@@ -41,6 +41,11 @@ typedef union tree_node *tree;
 # include "i386/biarch64.h"
 # include "i386/i386.h"
 # include "i386/unix.h"
+#if defined(BUILD_OS_DARWIN)
+# include "svr4.h"
+# include "darwin.h"
+# include "i386/x86-64.h"
+#else /* defined(BUILD_OS_DARWIN) */
 # include "i386/att.h"
 # include "dbxelf.h"
 # include "elfos.h"
@@ -48,6 +53,7 @@ typedef union tree_node *tree;
 # include "linux.h"
 # include "i386/x86-64.h"
 # include "i386/linux64.h"
+#endif /* defined(BUILD_OS_DARWIN) */
 # include "defaults.h"
 #endif
 #ifndef POSIX

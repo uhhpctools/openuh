@@ -62,4 +62,9 @@ dcomplex z_exp_(dcomplex *z)
   return __zexp(z->dreal, z->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+dcomplex z_exp(dcomplex *z) { return z_exp_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(z_exp_, z_exp);
+#endif /* defined(BUILD_OS_DARWIN) */

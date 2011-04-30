@@ -128,6 +128,14 @@ static int print_single_switch (FILE *, int, int, const char *,
 static void print_switch_values (FILE *, int, int, const char *,
 				 const char *, const char *);
 
+#ifdef TARG_SL
+/* Supporting long long type. -mlong-long */
+bool Long_Long_Support = FALSE;
+
+/* Supporting float point emulation. -msoft-float */
+bool Float_Point_Support = FALSE;
+#endif
+
 /* Nonzero to dump debug info whilst parsing (-dy option).  */
 static int set_yydebug;
 

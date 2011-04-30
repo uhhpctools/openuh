@@ -97,7 +97,7 @@ Dwarf_P_Attribute dwf_add_AT_complex_const(Dwarf_P_Debug /*dbg*/,
     Dwarf_Unsigned 	/*size*/);
 
 Dwarf_Unsigned dwf_add_frame_cie(Dwarf_P_Debug /*dbg*/,
-    char*               /*augmenter*/,
+    const char*         /*augmenter*/,
     Dwarf_Small         /*code_alignent_factor*/,
     Dwarf_Small         /*data_alignment_factor*/,
     Dwarf_Small         /*return_address_reg*/,
@@ -111,7 +111,7 @@ Dwarf_Unsigned dwf_add_frame_cie(Dwarf_P_Debug /*dbg*/,
     Dwarf_Error*        /*error*/);
 
 Dwarf_Unsigned dwf_add_ehframe_cie(Dwarf_P_Debug /*dbg*/, 
-    char* 		/*augmenter*/, 
+    const char* 	/*augmenter*/, 
     Dwarf_Small 	/*code_alignent_factor*/, 
     Dwarf_Small 	/*data_alignment_factor*/, 
     Dwarf_Small 	/*return_address_reg*/, 
@@ -169,6 +169,39 @@ Dwarf_Unsigned dwf_add_ehframe_info(
     Dwarf_Signed   	/*offset_into_exception_tables*/,
     Dwarf_Unsigned 	/*exception_table_symbol*/,
     Dwarf_Error*	/*error*/);
+
+#if defined(BUILD_OS_DARWIN)
+    /* Mach-O x86 linker requires local "L" labels in Dwarf sections */
+#  define DEBUG_INFO_SECTNAME "L.debug_info"
+#  define DEBUG_LINE_SECTNAME "L.debug_line"
+#  define DEBUG_ABBREV_SECTNAME "L.debug_abbrev"
+#  define DEBUG_FRAME_SECTNAME "L.debug_frame"
+#  define DEBUG_ARANGES_SECTNAME "L.debug_aranges"
+#  define DEBUG_PUBNAMES_SECTNAME "L.debug_pubnames"
+#  define DEBUG_STR_SECTNAME "L.debug_str"
+#  define DEBUG_FUNCNAMES_SECTNAME "L.debug_funcnames"
+#  define DEBUG_TYPENAMES_SECTNAME "L.debug_typenames"
+#  define DEBUG_VARNAMES_SECTNAME "L.debug_varnames"
+#  define DEBUG_WEAKNAMES_SECTNAME "L.debug_weaknames"
+#  define DEBUG_MACINFO_SECTNAME "L.debug_macinfo"
+#  define DEBUG_LOC_SECTNAME "L.debug_loc"
+#  define EH_FRAME_SECTNAME "L.eh_frame"
+#else /* defined(BUILD_OS_DARWIN) */
+#  define DEBUG_INFO_SECTNAME ".debug_info"
+#  define DEBUG_LINE_SECTNAME ".debug_line"
+#  define DEBUG_ABBREV_SECTNAME ".debug_abbrev"
+#  define DEBUG_FRAME_SECTNAME ".debug_frame"
+#  define DEBUG_ARANGES_SECTNAME ".debug_aranges"
+#  define DEBUG_PUBNAMES_SECTNAME ".debug_pubnames"
+#  define DEBUG_STR_SECTNAME ".debug_str"
+#  define DEBUG_FUNCNAMES_SECTNAME ".debug_funcnames"
+#  define DEBUG_TYPENAMES_SECTNAME ".debug_typenames"
+#  define DEBUG_VARNAMES_SECTNAME ".debug_varnames"
+#  define DEBUG_WEAKNAMES_SECTNAME ".debug_weaknames"
+#  define DEBUG_MACINFO_SECTNAME ".debug_macinfo"
+#  define DEBUG_LOC_SECTNAME ".debug_loc"
+#  define EH_FRAME_SECTNAME ".eh_frame"
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #ifdef __cplusplus
 }

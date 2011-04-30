@@ -803,10 +803,6 @@ preferred_reload_class (x, class)
 
 	  /* If the accumulators are not part of the class
 	     being reloaded into, return NO_REGS.  */
-#if 0
-	  if (!reg_class_subset_p (ACCUM_REGS, class))
-	    return (!reload_in_progress ? NO_REGS : class);
-#endif
 	  if (reg_class_subset_p (ACCUM_HIGH_REGS, class))
 	    return ACCUM_HIGH_REGS;
 
@@ -1083,10 +1079,6 @@ secondary_reload_class (class, mode, in)
 	return ACCUM_LOW_REGS;
     }
 
-#if 0
-  if (REG_P(in))
-    return ACCUM_REGS;
-#endif
 
   /* Otherwise, we need a high accumulator(s).  */
   return ACCUM_HIGH_REGS;
@@ -1373,10 +1365,6 @@ int
 dsp16xx_call_saved_register (regno)
      int regno;
 {
-#if 0
-  if (regno == REG_PR && current_frame_info.function_makes_calls)
-    return 1;
-#endif
   return (regs_ever_live[regno] && !call_used_regs[regno] &&
 	  !IS_YBASE_REGISTER_WINDOW(regno));
 }
@@ -2010,22 +1998,6 @@ reg_save_size ()
   return (reg_save_size);
 }
 
-#if 0
-int
-dsp16xx_starting_frame_offset()
-{
-  int reg_save_size = 0;
- int regno;
- 
-  for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
-    if (dsp16xx_call_saved_register (regno))
-      {
-	reg_save_size += UNITS_PER_WORD;
-      }
-
-  return (reg_save_size);
-}
-#endif
 
 int
 initial_frame_pointer_offset()
@@ -2044,71 +2016,6 @@ initial_frame_pointer_offset()
 /* Generate the minimum number of 1600 core shift instructions
    to shift by 'shift_amount'.  */
 
-#if 0
-void
-emit_1600_core_shift (shift_op, operands, shift_amount, mode)
-     enum rtx_code shift_op;
-     rtx *operands;
-     int shift_amount;
-     enum machine_mode mode;
-{
-  int quotient;
-  int i;
-  int first_shift_emitted = 0;
-  
-  while (shift_amount != 0)
-    {
-      if (shift_amount/16)
-	{
-	  quotient = shift_amount/16;
-	  shift_amount = shift_amount - (quotient * 16);
-	  for (i = 0; i < quotient; i++)
-	    emit_insn (gen_rtx_SET (VOIDmode, operands[0],
-				    gen_rtx (shift_op, mode, 
-					     first_shift_emitted
-					     ? operands[0] : operands[1],
-					     GEN_INT (16))));
-	  first_shift_emitted = 1;
-	}
-      else if (shift_amount/8)
-	{
-	  quotient = shift_amount/8;
-	  shift_amount = shift_amount - (quotient * 8);
-	  for (i = 0; i < quotient; i++)
-	    emit_insn (gen_rtx_SET (VOIDmode, operands[0],
-				    gen_rtx (shift_op, mode, 
-					     first_shift_emitted
-					     ? operands[0] : operands[1],
-					     GEN_INT (8))));
-	  first_shift_emitted = 1;
-	}
-      else if (shift_amount/4)
-	{
-	  quotient = shift_amount/4;
-	  shift_amount = shift_amount - (quotient * 4);
-	  for (i = 0; i < quotient; i++)
-	    emit_insn (gen_rtx_SET (VOIDmode, operands[0],
-				    gen_rtx (shift_op, mode, 
-					     first_shift_emitted
-					     ? operands[0] : operands[1],
-					     GEN_INT (4))));
-	  first_shift_emitted = 1;
-	}
-      else if (shift_amount/1)
-	{
-	  quotient = shift_amount/1;
-	  shift_amount = shift_amount - (quotient * 1);
-	  for (i = 0; i < quotient; i++)
-	    emit_insn (gen_rtx_SET (VOIDmode, operands[0],
-				    gen_rtx (shift_op, mode, 
-					     first_shift_emitted
-					     ? operands[0] : operands[1],
-					     GEN_INT (1))));
-	  first_shift_emitted = 1;
-	}
-    }
-}
-#else
 void
 emit_1600_core_shift (shift_op, operands, shift_amount)
      enum rtx_code shift_op;
@@ -2179,7 +2086,6 @@ emit_1600_core_shift (shift_op, operands, shift_amount)
 	}
     }
 }
-#endif
 
 int
 num_1600_core_shifts (shift_amount)

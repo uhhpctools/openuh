@@ -28,8 +28,6 @@
 extern "C" {
 #endif
 
-
-  //typedef void *coroutine_t;
 #define CO_USE_UCONEXT
 
 #if defined(CO_USE_UCONEXT)
@@ -45,12 +43,11 @@ typedef jmp_buf co_core_ctx_t;
 #endif
 
 
-typedef enum
-{
+typedef enum {
   OMP_TASK_DEFAULT,
   OMP_TASK_SUSPENDED,
   OMP_TASK_EXIT
-}omp_task_state_t;
+} omp_task_state_t;
 
 
 typedef struct s_co_ctx {
@@ -91,7 +88,7 @@ void co_resume(void);
 void co_exit_to(coroutine_t coro);
 void co_exit(void);
 coroutine_t co_current(void);
-  void co_vp_init();
+void co_vp_init();
 
 
 #ifdef __cplusplus

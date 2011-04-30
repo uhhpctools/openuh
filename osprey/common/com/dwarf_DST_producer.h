@@ -1,4 +1,8 @@
 /*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -44,10 +48,10 @@
  * ====================================================================
  *
  * Module: dwarf_DST_producer.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/com/dwarf_DST_producer.h,v $
+ * $Revision: 1.9 $
+ * $Date: 04/12/21 15:18:03-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /scratch/mee/Patch0002-taketwo/kpro64-pending/common/com/SCCS/s.dwarf_DST_producer.h $
  *
  * Revision history:
  *  25-Apr-93 - Original Version
@@ -68,7 +72,7 @@
 
 
 #ifdef _KEEP_RCS_ID
-static char *dwarf_DST_producer_rcs_id = "$Source: common/com/SCCS/s.dwarf_DST_producer.h $ $Revision: 1.12 $";
+static char *dwarf_DST_producer_rcs_id = "$Source: /scratch/mee/Patch0002-taketwo/kpro64-pending/common/com/SCCS/s.dwarf_DST_producer.h $ $Revision: 1.9 $";
 #endif /* _KEEP_RCS_ID */
 
 
@@ -224,8 +228,8 @@ extern void DST_end_PU(void);
 /* Creates a DW_TAG_inlined_subroutine entry and returns its idx.
 */
 extern DST_INFO_IDX 
-DST_mk_inlined_subroutine(void * low_pc,
-			  void * high_pc,
+DST_mk_inlined_subroutine(ST_IDX low_pc,
+			  ST_IDX high_pc,
 			  DST_INFO_IDX abstract_origin);
 
 
@@ -233,7 +237,7 @@ DST_mk_inlined_subroutine(void * low_pc,
 */
 extern DST_INFO_IDX 
 DST_mk_subprogram_memdef(USRCPOS      decl,  /* Source location */
-			 void        *subpr, /* front-end routine */
+			 ST_IDX	subpr, 
 			 BOOL         is_prototyped,
 			 DST_INFO_IDX spec); /* decl in class */
 
@@ -246,7 +250,7 @@ DST_mk_subprogram(USRCPOS      decl,
 		  char        *name,
 		  DST_INFO_IDX type,
 		  DST_INFO_IDX origin,
-		  void        *subpr,    /* front-end routine */
+		  ST_IDX	subpr,
 		  DST_inline   inlin,
 		  DST_virtuality virtuality,
 		  DST_vtable_elem_location vtable_elem_location,
@@ -302,7 +306,7 @@ extern DST_INFO_IDX
 DST_mk_entry_point(USRCPOS      decl,
 		  char        *name,
 		  DST_INFO_IDX type,
-		  void        *subpr);   /* front-end routine */
+		  ST_IDX	subpr);
 
 
 /* create a DW_TAG_common_block entry and return its index 
@@ -310,7 +314,7 @@ DST_mk_entry_point(USRCPOS      decl,
 */
 DST_INFO_IDX 
 DST_mk_common_block(char	*name,
-		    void 	*subpr);
+		    ST_IDX	subpr);
 
 /* create a DW_TAG_common_inclusion and return its idx 
  *
@@ -320,22 +324,22 @@ DST_mk_common_incl( USRCPOS      decl,
 		    DST_INFO_IDX comblk);
 
 #ifdef KEY /* Bug 3507 */
-/* create a DW_TAG_imported_declaration and return its idx 
+/* create a DW_TAG_imported_declaration and return its idx
 */
-DST_INFO_IDX 
+DST_INFO_IDX
 DST_mk_imported_decl( char *mangled_name,
-		    char *name);
-DST_INFO_IDX 
+                    char *name);
+DST_INFO_IDX
 DST_mk_module( USRCPOS decl,
-	       char    *name);
+               char    *name);
 #endif /* KEY Bug 3507 */
 
 /* Creates a DW_TAG_lexical_block entry and returns its idx.
 */
 extern DST_INFO_IDX 
 DST_mk_lexical_block(char        *name,         /* NULL if unnamed */
-		     void        *low_pc,       /* ptr to front-end label */
-                     void        *high_pc,      /* ptr to front-end label */
+		     ST_IDX 	low_pc,
+                     ST_IDX 	high_pc,
 		     DST_INFO_IDX abstract_origin); /* NULL if none */
 
 
@@ -344,7 +348,7 @@ DST_mk_lexical_block(char        *name,         /* NULL if unnamed */
 */
 extern DST_INFO_IDX 
 DST_mk_label(char         *name,             /* NULL if unnamed */
-	     void         *low_pc,           /* front-end label */
+	     ST_IDX	low_pc,
 	     DST_INFO_IDX  abstract_origin); /* NULL if none */
 
 
@@ -370,7 +374,7 @@ extern DST_INFO_IDX
 DST_mk_variable_comm( USRCPOS         decl, /* Source location */
 		      char           *name,    /* Name of const variable */
 		      DST_INFO_IDX    type,    /* Type of const variable */
-		      void 	     *feptr,    /* front end pointer */
+		      ST_IDX	var,
 		      UINT64 	      offset);    /* offset from common block */
 
 
@@ -379,7 +383,7 @@ DST_mk_variable_comm( USRCPOS         decl, /* Source location */
 */
 extern DST_INFO_IDX 
 DST_mk_variable_memdef(USRCPOS      decl,  /* Source location */
-		       void        *var,   /* front-end variable */
+		       ST_IDX	var,
 		       DST_INFO_IDX spec); /* Class member decl */
 
 
@@ -392,7 +396,7 @@ DST_mk_variable(USRCPOS      decl,     /* Source location */
 		char        *name,     /* Name of variable */
 		DST_INFO_IDX type,     /* Type of variable */
 		UINT64	     offs,     /* offset from front end variable */
-		void        *var,      /* front-end variable */
+		ST_IDX	     var,      /* symbol */
 		DST_INFO_IDX abstract_origin, /* For inlined proc */
 		BOOL         is_declaration,
 		BOOL         is_automatic,
@@ -407,7 +411,7 @@ extern DST_INFO_IDX
 DST_mk_formal_parameter(USRCPOS     decl,          /* Source location */
 			char        *name,          /* Name of parm */
 			DST_INFO_IDX type,          /* Type of parm */
-			void        *parm,          /* front-end parameter */
+			ST_IDX	    parm,          /* symbol */
                         DST_INFO_IDX abstract_origin, /* For inlined proc */
 			DST_INFO_IDX default_val,   /* (C++) param value */
 			BOOL         is_optional,   /* Optional param (C++) */
@@ -453,7 +457,7 @@ DST_mk_constant_decl(USRCPOS      decl,  /* Source location */
 /* Creates a DW_TAG_basetype entry.
 */
 extern DST_INFO_IDX 
-DST_mk_basetype(char            *name,      /* Name of type */
+DST_mk_basetype(const char      *name,      /* Name of type */
 		DST_ATE_encoding encoding,  /* How to encode/interpret data */
 		DST_size_t       byte_size);/* Size of object */
 
@@ -708,8 +712,8 @@ DST_get_cross_inlined_file_id(char 	*,
 
 extern DST_INFO_IDX 
 DST_mk_cross_inlined_subroutine(
-                 void          *,            
-                 void          *,   
+                 ST_IDX,            
+                 ST_IDX,   
                  char          *,     
                  mUINT16       *,        
                  UINT64        ,         
@@ -725,7 +729,7 @@ DST_mk_cloned_subprogram(USRCPOS,
                   char        *,
                   DST_INFO_IDX ,
                   DST_INFO_IDX ,
-                  void        *,   /* front-end st */
+                  ST_IDX       ,   /* front-end st */
                   DST_inline   ,
                   DST_virtuality );
 

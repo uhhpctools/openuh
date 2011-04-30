@@ -40,7 +40,22 @@
 #ifndef _ELF_STUFF_H
 
 #define	_ELF_STUFF_H 1
+
+#ifdef __MINGW32__
+#ifndef	_SYS_CDEFS_H
+#define _SYS_CDEFS_H
+#ifdef	__cplusplus
+#define	__BEGIN_DECLS	extern "C" {
+#define	__END_DECLS	}
+#else
+#define	__BEGIN_DECLS
+#define	__END_DECLS
+#endif
+#define __P(protos)     protos		/* full-blown ANSI C */
+#endif
+#else
 #include <sys/cdefs.h>
+#endif /* __MINGW32__ */
 
 __BEGIN_DECLS
 
@@ -180,6 +195,10 @@ typedef unsigned char Elf64_Byte;
 #define ELF_STRTAB	".strtab"
 #define ELF_SYMTAB	".symtab"
 #define ELF_TEXT	".text"
+#ifdef KEY
+#define ELF_TBSS        ".tbss"
+#define ELF_TDATA       ".tdata"
+#endif
 
 /*
  * special section names
@@ -219,6 +238,17 @@ typedef unsigned char Elf64_Byte;
 #define MIPS_XLATE_DEBUG	".MIPS.Xlate_debug"
 #define MIPS_CONTENT		".MIPS.content"
 #define MIPS_WHIRL              ".WHIRL"	/* Mips uses this name       */
+
+#if defined(TARG_SL)
+/* this name is what assembler need and will be replaced with above one */
+#define MIPS_SSDATA              ".sbuf"
+
+
+#define MIPS_VSDATA              ".vbuf"
+#define MIPS_VS1DATA             ".vs1data"
+#define MIPS_VS2DATA             ".vs2data"
+#define MIPS_VS4DATA             ".vs4data"   
+#endif 
 
 /*
  * special section names
@@ -428,6 +458,9 @@ typedef enum {
 #define SHF_WRITE	(1 << 0)	/* Writable */
 #define SHF_ALLOC	(1 << 1)	/* Occupies memory during execution */
 #define SHF_EXECINSTR	(1 << 2)	/* Executable */
+#ifndef SHF_TLS
+#define SHF_TLS         (1 << 10)       /* Section hold thread-local data. */
+#endif
 #define SHF_MASKPROC	0xf0000000	/* Processor-specific */
 
 /* Symbol table entry.  */

@@ -63,7 +63,7 @@
 #include <math.h>
 #include "defs.h"
 #include "config.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "config_asm.h"
 #include "mempool.h"
 #include "bb.h"
@@ -866,6 +866,7 @@ Check_For_Delay_Slot_Hazards (BB *bb)
     BB_Move_Delay_Slot_Op (bb);
   }
 
+#ifndef KEY
   // R10k chip workaround: Avoid placing integer mult/div ops in delay
   // slots of unconditional branches. (see pv516598) for more details.
   if (Is_Delay_Slot_Op (last_op, bb) && 
@@ -876,7 +877,79 @@ Check_For_Delay_Slot_Hazards (BB *bb)
       BB_Insert_Noops(xfer_op, 1, FALSE); 
     }
   }
+#endif
 }
+
+#if defined(TARG_SL)
+void Repl_Tmp_TN(BB *bb)
+{
+  OP *op;
+  OP *prev_op;
+  TN *tmp_tn;
+
+  prev_op = BB_first_op(bb);
+  op = OP_next(prev_op);
+  tmp_tn = TMP1_TN;
+  while (op) {
+    Is_True(prev_op, ("prev_op is null in BB %d",BB_id(bb)));
+    for (INT j = 0; j < OP_results(prev_op); ++j) {
+      TN *result_tn = OP_result(prev_op, j);
+      ISA_REGISTER_CLASS cl = TN_register_class(result_tn);
+
+     if (!OP_cond_def(prev_op) && !OP_same_res(op) && !OP_same_res(prev_op)) {
+	// need to screen out depb since the dest is also implicit use, 
+	// replacing the implicit use won't help
+	if (cl == ISA_REGISTER_CLASS_integer) {
+	  REGISTER reg = TN_register(result_tn);
+	  BOOL read_dep = CGTARG_OP_Refs_TN(op, result_tn);
+	  BOOL write_dep = CGTARG_OP_Defs_TN(op, result_tn);
+	  BOOL read_dep2 = OP_Refs_Reg(op, cl, reg); 
+	  BOOL write_dep2 = OP_Defs_Reg(op, cl, reg);
+
+	  if (CGTARG_OP_Refs_TN(prev_op, tmp_tn) || OP_Refs_Reg(prev_op, cl, TN_register(tmp_tn)))
+	    continue;    // if previous opr has been replaced, doing so will not help
+
+	  if ((read_dep && write_dep) || (read_dep2 && write_dep2)) {
+	    // result of prev inst is being used and defined by this op
+	    // change result tn to tmp_tn, and the op tn to tmp_tn
+	    // this eliminates such psuedo WaW dep
+	    Is_True(OP_has_result(prev_op), ("result to be repl conflict"));
+	    Set_OP_result(prev_op, j, tmp_tn);
+
+	    BOOL mod = FALSE;
+	    for ( INT num = 0; num < OP_opnds(op); num++ ) {
+	      TN *opnd_tn = OP_opnd(op, num);
+	      if (opnd_tn == result_tn) {
+		Set_OP_opnd(op, num, tmp_tn);
+		mod = TRUE;
+	      }
+	      else if (TN_is_register(opnd_tn) && (TN_register_class(opnd_tn)==cl) &&
+		       TN_register(opnd_tn) == reg) {
+		Set_OP_opnd(op, num, tmp_tn);
+		mod = TRUE;
+	      }
+	      
+	    }
+	    Is_True(mod, ("cannot find result tn to fix up"));
+	    if (tmp_tn == TMP1_TN) {
+            tmp_tn = TMP2_TN;
+	    } else {
+			tmp_tn = TMP1_TN;
+	    }
+
+	    // only one tmp available, so change one result only
+	    continue;
+	  }
+	}
+      }
+    }
+    prev_op = op;
+    op = OP_next(op);
+  }
+}
+
+#endif
+
 
 // ======================================================================
 // Eliminate hazards for 'bb' by adding noops.
@@ -922,4 +995,8 @@ Handle_All_Hazards (BB *bb)
   }
   // Check for any extra hazards.
   Insert_Stop_Bits(bb);
+#if defined(TARG_SL)
+  // remove pseudo WaW dependence
+  Repl_Tmp_TN(bb);
+#endif
 }

@@ -293,6 +293,11 @@ boolean parse_expr (opnd_type	*result)
 
             attr_idx = host_attr_idx;
          }
+#ifdef KEY /* Bug 12636 */
+         while (AT_ATTR_LINK(host_attr_idx)) {
+            host_attr_idx = AT_ATTR_LINK(attr_idx);
+         }
+#endif /* KEY Bug 12636 */
       }
       else if (AT_ATTR_LINK(attr_idx)) {
          host_attr_idx = AT_ATTR_LINK(attr_idx);

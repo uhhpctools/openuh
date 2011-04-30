@@ -126,7 +126,7 @@ private:
 
 public:
 
-    RETURN_PREG () : use_return_val (TRUE) {
+    RETURN_PREG () : use_return_val (FALSE) {
 	_u.old_style.num_pregs = 0;
     }
 

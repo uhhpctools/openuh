@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -175,8 +179,12 @@ BOOL
 STR_RED::Is_cvt_linear( const CODEREP *cr ) const
 {
   // screen out non-register size types
-  if (MTYPE_size_min(cr->Dsctyp()) < MTYPE_size_min(MTYPE_I4))
+  if (MTYPE_size_min(cr->Dsctyp()) < MTYPE_size_min(MTYPE_I4)) {
+    if (WOPT_Enable_STR_Short && (MTYPE_size_min(cr->Dsctyp()) == MTYPE_size_min(MTYPE_I2))) {
+      return TRUE;
+    }
     return FALSE;
+  }
 
   // e.g., disable str-red of I8I4CVT ... if do not allow wrap around opt
   if (! Allow_wrap_around_opt && 
@@ -205,9 +213,19 @@ STR_RED::Is_cvt_linear( const CODEREP *cr ) const
   // allow U8U4CVT strength reduction if the CVT is a 1st order expr
   if ((cr->Dtyp() == MTYPE_U8 || cr->Dtyp() == MTYPE_I8)
       && cr->Dsctyp() == MTYPE_U4) {
+
     Is_True(cr->Opnd(0)->Kind() == CK_VAR, 
 	    ("STR_RED::Is_cvt_linear:  invalid str red expr."));
+#ifdef TARG_NVISA
+    // MIPS had this check, but no one remembers why it would be a problem now;
+    // U8U4CVT is not a nop for nvisa, but we want to optimize these,
+    // so ifdef this out, but leave in for safety for other targets.
+    // output devwarn just in case later find problem with this.
+    if (Htable()->Opt_stab()->Aux_stab_entry(cr->Opnd(0)->Aux_id())->EPRE_temp())
+	DevWarn("previously would not allow strength reduction on this cvt");
+#else
     if (!Htable()->Opt_stab()->Aux_stab_entry(cr->Opnd(0)->Aux_id())->EPRE_temp())
+#endif
       return TRUE;
   }
       
@@ -216,8 +234,10 @@ STR_RED::Is_cvt_linear( const CODEREP *cr ) const
 
 
 BOOL 
-STR_RED::Is_implicit_cvt_linear(MTYPE opc_type, MTYPE opnd_type) const
+STR_RED::Is_implicit_cvt_linear(MTYPE opc_type, const CODEREP *cr) const
 {
+  MTYPE opnd_type = cr->Dtyp();
+   
   // The check below is commented because 
   //     U4U4LDID
   //    U8MPY  
@@ -227,6 +247,14 @@ STR_RED::Is_implicit_cvt_linear(MTYPE opc_type, MTYPE opnd_type) const
 
   // Is_True( Need_type_conversion(opc_type, opnd_type, NULL) == NOT_AT_ALL,
   //  ("STR_RED::Is_implicit_cvt_linear:  cvt is not implicit."));
+
+#ifdef TARG_X8664
+  // Restrict strength reduction of implicit U8U4CVT as we do in Is_cvt_linear
+  if ((opc_type == MTYPE_U8 || opc_type == MTYPE_I8) &&
+      opnd_type == MTYPE_U4)
+     if (Htable()->Opt_stab()->Aux_stab_entry(cr->Aux_id())->EPRE_temp())
+        return FALSE;
+#endif
 
   // e.g., disable str-red of I8I4CVT ... if do not allow wrap around opt
   if (! Allow_wrap_around_opt && 
@@ -1000,10 +1028,71 @@ STR_RED::Candidate( const CODEREP *cr,
 		    CODEREP *use_opnd0, CODEREP *use_opnd1,
 		    BB_NODE *use_bb ) const
 {
+#ifdef TARG_NVISA
+  BB_LOOP *bb_loop = NULL;
+  Is_Trace(Tracing(), (TFile, "estr candidate Operation: "));
+  Is_Trace_cmd(Tracing(), cr->Print_node(0,TFile));
+  Is_Trace(Tracing(), (TFile, "\n"));
+  if ( def_bb != NULL ) {
+      bb_loop = def_bb->Innermost();
+      Is_Trace(Tracing(), (TFile, 
+	"Non-Null BB Node information and Loop Depth=%d\n", 
+	def_bb->Loopdepth()));
+  }
+  else {
+      Is_Trace(Tracing(), (TFile, "Null BB information\n"));
+  }
+
+  if ( bb_loop != NULL ) {
+      Is_Trace(Tracing(), (TFile, 
+	"Non-Null Loop information, Loop Depth=%d and Max Depth=%d\n", 
+	bb_loop->Depth(), bb_loop->Max_depth() ));
+      if ( ! WOPT_Enable_Estr_Early_Exit
+	&& bb_loop->Exit_early() && ! WOPT_Enable_Aggressive_Code_Motion) 
+      {
+	// If we don't do aggressive code motion, but do strength reduce
+	// a loop with an early exit, then we end up with worse code
+	// because it goes to the expense of extra regs for the address,
+	// but doesn't hoist the address computation out of the loop.
+	// For some (unknown) reason, the code for self-contained ifs 
+	// inside loops is good, it is only a problem with early exit loops.
+        DevWarn("early exit loop and not aggcm, so don't strength reduce?");
+	return FALSE;
+      }
+  } else {
+      Is_Trace(Tracing(), (TFile, "Null Loop information\n"));
+  }
+
+  if ( ! WOPT_Enable_Estr_Outer_Loop
+    && bb_loop != NULL && bb_loop->Depth() <= 1 && bb_loop->Max_depth() >=2 ) 
+  {
+      // Dont strength reduce the outermost loop in deeply nested loops
+      return FALSE; 
+  }
+#endif
+
   const OPERATOR opr = cr->Opr();
   switch ( opr ) {
     case OPR_ADD:
     case OPR_SUB:
+#ifdef TARG_NVISA
+	Is_Trace(Tracing(), (TFile, 
+	  "Number of uses of this add/sub operation=%d\n", cr->Usecnt()));
+	if ( ! WOPT_Enable_Estr_Const_Opnds
+	  && ( cr->Get_opnd(0)->Kind() == CK_CONST 
+	    || cr->Get_opnd(1)->Kind() == CK_CONST ) )
+	{
+	    // Don't Consider for strength reduction, if one operand is constant
+	    Is_Trace(Tracing(), (TFile, "At least one constant operand\n"));
+	    break; 
+	}
+	if ( ! WOPT_Enable_Estr_Used_Once && !(cr->Usecnt() > 1) ) {
+	    // Don't consider for strength reduction, 
+	    // if SR variable is not used in more than one place
+       	    break;
+	}
+	// else fallthru
+#endif
     case OPR_MPY:
       // i*k
       // i+k
@@ -1013,7 +1102,7 @@ STR_RED::Candidate( const CODEREP *cr,
 				opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
 	  return TRUE;
         }
       }
@@ -1026,13 +1115,23 @@ STR_RED::Candidate( const CODEREP *cr,
 				opr == OPR_ADD || opr == OPR_SUB))
       {
         if (Is_cvt_linear(use_opnd1) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1)) {
 	  return TRUE;
         }
       }
       break;
 
     case OPR_NEG:
+	Is_Trace(Tracing(), (TFile, 
+          "Number of uses of this neg operation=%d\n", cr->Usecnt()));
+#ifdef TARG_NVISA
+	if ( ! WOPT_Enable_Estr_Used_Once && !(cr->Usecnt() > 1) ) {
+	    // Don't consider for strength reduction, 
+	    // if SR variable is not used in more than one place
+	    break;
+	}
+	// else fallthru
+#endif
 #ifdef TARG_X8664 // avoid U4 due to zero-extension to high-order 32 bits
       if (cr->Dtyp() == MTYPE_U4)
 	return FALSE;
@@ -1040,7 +1139,7 @@ STR_RED::Candidate( const CODEREP *cr,
       // i*-1
       if (Defined_by_iv_update( use_opnd0, def_opnd0, NULL, use_bb, cr)) {
 	if (Is_cvt_linear(use_opnd0) && 
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
 	  return TRUE;
 	}
       }
@@ -1051,7 +1150,7 @@ STR_RED::Candidate( const CODEREP *cr,
       if (Defined_by_iv_update( use_opnd0, def_opnd0, NULL, use_bb, cr)) {
 	if (Is_cvt_linear(cr) && 
 	    Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dsctyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dsctyp(), use_opnd0)) {
 	  return TRUE;
 	}
       }
@@ -1088,7 +1187,7 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
 				       opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
 	  return TRUE;
 	}
       }
@@ -1101,7 +1200,7 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
 				       opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd1) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1)) {
 	  return TRUE;
 	}
       }
@@ -1117,7 +1216,7 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
 				       NULL/*invar*/, use_bb, cr))
       {
 	if (Is_cvt_linear(use_opnd0) && 
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
 	  return TRUE;
 	}
       }
@@ -1129,7 +1228,7 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
       {
 	if (Is_cvt_linear(cr) && 
 	    Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dsctyp(), use_opnd0->Dtyp())) {
+	    Is_implicit_cvt_linear(cr->Dsctyp(), use_opnd0)) {
 	  return TRUE;
 	}
       }
@@ -1358,54 +1457,6 @@ STR_RED::Find_iv_and_mult_phi_res( const EXP_OCCURS *def, CODEREP **iv_def,
 // candidate
 //======================================================================
 // Unused?
-#if 0
-void
-EXP_WORKLST::Exclude_strength_reduction_cands(ETABLE *etable)
-{
-  EXP_OCCURS        *exp_occ;
-  EXP_OCCURS_ITER    exp_occ_iter;
-
-  // if we're not enabled, this everything is excluded
-  if ( ! WOPT_Enable_New_SR ) {
-    Set_exclude_sr_cand();
-    return;
-  }
-
-#ifdef EXCLUDE_IV_RHS_FROM_SR
-  // is it even something we would accept as an iv update?
-  //
-
-  // if it's not an op, we don't consider it as an rhs of iv-update
-  if ( Exp()->Kind() != CK_OP ) {
-    return;
-  }
-
-  // if it's not an add/sub, we don't consider it as an rhs of iv-update
-  const OPERATOR exp_opr = Exp()->Opr();
-  if ( exp_opr != OPR_ADD && exp_opr != OPR_SUB ) {
-    return;
-  }
-
-  // we now have an expression that *may* show up on the rhs of an
-  // iv update, so see if it ever does
-  FOR_ALL_NODE (exp_occ, exp_occ_iter, Init(Real_occurs().Head())) {
-    STMTREP *occ_stmt = exp_occ->Enclosed_in_stmt();
-    if ( occ_stmt->Rhs() == exp_occ->Occurrence() &&
-         etable->Str_red()->Determine_iv_update(occ_stmt,NULL) )
-    {
-      // we'll have to exclude this expression from strength-reduction
-      Set_exclude_sr_cand();
-
-      Is_Trace(etable->Tracing(),
-	(TFile,"Exclude_strength_reduction_cands: excluded iv rhs\n"));
-
-      break;
-    }
-  }
-#endif // EXCLUDE_IV_RHS_FROM_SR
-
-}
-#endif
 
 void
 STR_RED::Perform_per_expr_cleanup(void)

@@ -120,10 +120,10 @@
 ***
 **/
 
-/** $Revision: 1.1.1.1 $
-*** $Date: 2005/10/21 19:00:00 $
-*** $Author: marcel $
-*** $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/cxx_memory.h,v $
+/** $Revision: 1.1 $
+*** $Date: 2005/07/27 02:17:56 $
+*** $Author: kevinlo $
+*** $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/cxx_memory.h,v $
 **/
 
 #ifndef CXX_MEMORY_INCLUDED
@@ -149,67 +149,128 @@
 
 #else
 
+//////////////////////////////////////////////////////////////
+//  
+//              Allocators using MEM_POOL 
+//
+//////////////////////////////////////////////////////////////
+//
 #include <new>
   extern MEM_POOL* Delete_Mem_Pool;
 
-extern MEM_POOL* _dummy_new_mempool;
-extern MEM_POOL* _dummy_delete_mempool;
-
-#ifdef Is_True_On
-extern int         _alloc_callsite_line;
-extern const char *_alloc_callsite_file;
+// part 1: prototype of overided placement new operator
+//
+void* operator new (size_t, MEM_POOL*, size_t pad, INT32 ln, const char* file)
+#ifdef __GNUC__
+    throw(std::bad_alloc) 
 #endif
+    ;
 
-extern size_t _dummy_pad;
-
+// part 2: implementation of CXX_NEW and CXX_NEW_VARIANT
+//
 #ifdef Is_True_On
-#define CXX_NEW(constructor, mempool)			\
-  (_dummy_new_mempool = mempool,			\
-   _alloc_callsite_line = __LINE__,			\
-   _alloc_callsite_file = __FILE__,			\
-   new constructor)
 
-#define CXX_NEW_ARRAY(constructor, elements, mempool)	\
-  (_dummy_new_mempool = mempool,			\
-   _alloc_callsite_line = __LINE__,			\
-   _alloc_callsite_file = __FILE__,			\
-   new constructor [elements])
+#define CXX_NEW(constructor, mempool)			\
+  (new(mempool, 0, __LINE__, (const char*)__FILE__) constructor)
 
 #define CXX_NEW_VARIANT(constructor, pad, mempool)	\
-  (_dummy_new_mempool = mempool,			\
-   _alloc_callsite_line = __LINE__,			\
-   _alloc_callsite_file = __FILE__,			\
-   _dummy_pad = pad, new constructor)
+  (new(mempool, pad, __LINE__, (const char*)__FILE__) constructor)
+
 #else	// Is_True_On
-#define CXX_NEW(constructor, mempool)			\
-  (_dummy_new_mempool = mempool,			\
-   new constructor)
 
-#define CXX_NEW_ARRAY(constructor, elements, mempool)	\
-  (_dummy_new_mempool = mempool,			\
-   new constructor [elements])
-
-#define CXX_NEW_VARIANT(constructor, pad, mempool)	\
-  (_dummy_new_mempool = mempool,			\
-   _dummy_pad = pad, new constructor)
-#endif
-
-#define CXX_DELETE(pointer, mempool)			\
-do {   \
-  MEM_POOL* save_mpool = _dummy_delete_mempool;     \
-  _dummy_delete_mempool = mempool;  \
-  delete pointer;    \
-  _dummy_delete_mempool = save_mpool;   \
-  } while (0)
-
-#define CXX_DELETE_ARRAY(pointer, mempool)		\
-do {   \
-  MEM_POOL* save_mpool = _dummy_delete_mempool;     \
-  _dummy_delete_mempool = mempool;  \
-  delete [] pointer;    \
-  _dummy_delete_mempool = save_mpool;   \
-} while (0)
+#define CXX_NEW(constructor, mempool)	(new(mempool, 0, 0, NULL) constructor)
+#define CXX_NEW_VARIANT(constructor, pad, mp) (new(mp, pad, 0, NULL) constructor)
 
 #endif
+
+// part 3: implementation of CXX_DELETE
+//
+template<class T> void
+cxx_del_opr (T* ptr, MEM_POOL* mp) {
+    if (ptr != NULL) {
+        ptr->~T();
+        MEM_POOL_FREE (mp, (void*)ptr);
+    }
+}
+
+#define CXX_DELETE(pointer, mp) cxx_del_opr(pointer, mp)
+
+// part 4: implementation of CXX_NEW_ARRAY
+//
+template <class T>
+UINT32 _calc_array_alloc_pad_sz (void) {
+    UINT32 sz1 = sizeof(UINT32);
+    UINT32 sz2 = __alignof__ (T);
+
+    return sz1 > sz2 ? sz1 : sz2;
+}
+
+template <class T> T*
+cxx_array_alloc_opr (UINT32 elem_cnt, MEM_POOL* mp, INT32 line, const char* file) {
+    
+    if (mp == Malloc_Mem_Pool) {
+        return new T[elem_cnt];
+    }
+
+    UINT32 pad = _calc_array_alloc_pad_sz<T>(); 
+    UINT32 sz = sizeof(T) * elem_cnt;
+    
+    char* ptr;
+    #ifdef Is_True_On
+        ptr = (char*)MEM_POOL_Alloc_P(mp, sz+pad, line, file);
+    #else
+        ptr = (char*)MEM_POOL_Alloc_P(mp, sz+pad, 0, NULL);
+    #endif
+    
+    *(UINT32*)ptr = elem_cnt;
+    T* elem_ptr = (T*)(void*)(ptr + pad);
+
+    for (INT32 i = 0; i < elem_cnt; i++) {
+        new (elem_ptr+i) T();
+    }
+
+    return elem_ptr;
+}
+
+#ifdef Is_True_On
+    #define CXX_NEW_ARRAY(T, elements, mempool)	\
+	            cxx_array_alloc_opr<T>((UINT32)(elements), (MEM_POOL*)mempool, \
+                 (INT32)__LINE__, (const char*)__FILE__)
+#else
+    #define CXX_NEW_ARRAY(T, elements, mempool)	\
+	            cxx_array_alloc_opr<T>((UINT32)(elements), mempool, 0, NULL)
+#endif
+
+// part 5: implementation of CXX_DELETE_ARRAY
+//
+template <class T> void
+cxx_delete_array_opr (T* elem_ptr, MEM_POOL* mp) {
+
+    if (mp == Malloc_Mem_Pool) {
+        delete [] elem_ptr;
+        return;
+    }
+
+    if (elem_ptr != NULL) {
+        UINT32 pad = _calc_array_alloc_pad_sz<T>(); 
+
+        char* ptr = (char*)(void*)elem_ptr;
+        UINT32 elem_cnt = *(UINT32*)(void*)(ptr - pad);
+
+        for (UINT32 i = 0; i < elem_cnt; i++) {
+            (elem_ptr+i)->~T();
+        }
+        MEM_POOL_FREE (mp, (void*)(ptr-pad));
+    }
+}
+
+#define CXX_DELETE_ARRAY(pointer, mempool) cxx_delete_array_opr (pointer, mempool)
+
+#define DECL_CXX_ALLOC_AS_FRIEND(T)  \
+    friend void cxx_delete_array_opr<T>(T*, MEM_POOL*); \
+    friend T* cxx_array_alloc_opr<T> (UINT32, MEM_POOL*, INT32, const char*); \
+    friend void cxx_del_opr<T>(T*, MEM_POOL*)
+
+#endif // CXX_USE_STANDARD_NEW_AND_DELETE
 
 #endif

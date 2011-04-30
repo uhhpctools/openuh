@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ *  Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -172,11 +176,12 @@ add_string_option_or_dash (int flag, char *arg)
 	/* check that there is an argument after the option,
 	 * which should not begin with a dash unless the argument is just '-',
 	 * and unless option ends in a comma (e.g. -pfa,%s ) */
+	/* Bug fix for OSP_428, gcc can specify --* argument for -o option
+	 * opencc should be compatiable with gcc */
 	char *s = get_option_name(flag);
 	if (arg == NULL ||
-	    (*arg == '-' &&
-	     arg[1] != '\0' &&
-	     s[strlen(s)-1] != ',')) {
+	    (*arg == '-' && arg[1] != '\0' && 
+	     (s[strlen(s)-1] != ',') && (s[1] != 'o'))) {
 		parse_error(get_option_name(flag), "no argument given for option");
 		return flag;
 	}
@@ -362,8 +367,10 @@ parse_Xlinker_option (char **argv, int *argi)
 		/* -Xlinker */
 		int flag;
 		get_next_arg(argi);
+#ifndef KEY	// Support -Xlinker for bug 13641.
 		warning("%s is no longer supported, use %s instead",
 			option_name, "-Wl,");
+#endif
 		if (argv[*argi] == NULL) {
 		  parse_error(option_name, "no argument given for option");
 		  return add_new_option(option_name);
@@ -457,6 +464,12 @@ parse_W_option (char **argv, int *argi)
 		phase = get_phase(*start);
 		if (phase == P_NONE) {
 			parse_error(option_name, "bad phase for -W option");
+		}
+		/* keep -Wa,-myopt for multi option. 
+		   We use "gcc -c" instead of as directly, 
+		   so we still need -Wa, to pass AS options. by dongyuan */
+		if (phase == P_any_as) {
+ 		        keep_phase_for_option(flag, argv[*argi -1]);
 		}
 		add_phase_for_option(flag, phase);
 	}

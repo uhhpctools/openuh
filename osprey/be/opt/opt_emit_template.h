@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 //-*-c++-*-
@@ -78,6 +82,9 @@
 #include "opt_cvtl_rule.h"
 #include "wn_util.h"            // for WN_COPY_Tree_With_Map
 
+#include "nystrom_alias_analyzer.h"
+
+extern BOOL OPT_Enable_WHIRL_SSA;
 
 template < class EMITTER >WN*
 Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
@@ -99,9 +106,16 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
 	if (WOPT_Enable_Cvt_Folding && !emitter->For_preopt()) {
 	  INT    cvt_kind;
 	  OPCODE opc;
-	  cvt_kind =
-	    Need_type_conversion(exp->Dsctyp(), exp->Dtyp(), &opc);//326120
-
+          if (MTYPE_is_vector(exp->Dtyp()) && MTYPE_is_vector(exp->Dsctyp())
+              && exp->Dtyp() != exp->Dsctyp()) {
+            opc = OPCODE_make_op(OPR_CVT, exp->Dtyp(), exp->Dsctyp());
+            cvt_kind = NEED_CVT;
+          }
+          else
+          {
+	    cvt_kind =
+	      Need_type_conversion(exp->Dsctyp(), exp->Dtyp(), &opc);//326120
+          }
 	  CODEREP *kid = exp->Get_opnd(0);
 	  if (cvt_kind == NEED_CVT) {
 	    
@@ -185,7 +199,11 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
       }
     case OPR_CVTL:
       {
-	if (WOPT_Enable_Cvt_Folding && ! emitter->For_preopt()) {
+	if (WOPT_Enable_Cvt_Folding && ! emitter->For_preopt()
+	    /* when exp->Offset() are 8, 16 , 32, 64 , load and then cvtl can be fold into
+	     I8I1load  U8U2load ... etc*/
+	    && (exp->Offset() == 8 || exp->Offset() == 16 
+		|| exp->Offset() == 32 || exp->Offset() == 64 )) {
 	  CODEREP *kid = exp->Get_opnd(0);
 	  WN      *opnd;
 	  actual_type = Actual_cvtl_type(exp->Op(), exp->Offset());
@@ -249,21 +267,6 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
 	    if (new_type) actual_type = new_type;
 	  }
 
-#if 0 // the analysis in No_truncation_by_value_size  assumes state 
-      // before BDCE, so this code has to be disabled now
-	  if (actual_type == actual_opnd_type ||
-	      (WOPT_Enable_Min_Type &&
-	       kid->Kind() == CK_VAR &&
-	       MTYPE_is_integral( actual_opnd_type ) &&
-	       No_truncation_by_value_size(actual_type, 
-					   MTYPE_is_signed(actual_type), 
-					   kid, emitter->Opt_stab() )
-	       )
-	      ) {
-	    wn = opnd;
-	    connect_cr_to_wn = FALSE;
-	  } else 
-#endif
 	  {
 	    BOOL enabled = WN_Simplifier_Enable(TRUE);
 	    wn = WN_CreateCvtl(exp->Op(), (INT16)exp->Offset(), opnd);
@@ -278,6 +281,22 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
 
 	} else {
 	  WN *opnd = Gen_exp_wn(exp->Get_opnd(0), emitter);
+#if defined(TARG_X8664)
+          // cannot remove CVTL when loading value from return register,
+          // the return value needs to be zero/sign extended in order to
+          // mask off the possible trash value in upper part of the
+          // register
+          
+          if (WN_operator(opnd) == OPR_LDID && 
+                WN_st_idx(opnd) != (ST_IDX) 0 && (ST_class(WN_st(opnd)) == CLASS_PREG)) {
+            if (WN_st(opnd) == Return_Val_Preg ||
+                 ( Preg_Is_Dedicated(WN_offset(opnd)) && Preg_Offset_Is_Int(WN_offset(opnd)) &&
+                   Is_Return_Preg(WN_offset(opnd)) )) {
+               wn = WN_CreateCvtl(exp->Op(), (INT16)exp->Offset(), opnd);
+               break;
+            }
+          }
+#endif // TARG_X8664
 	  actual_type = Actual_cvtl_type(exp->Op(), exp->Offset());
 	  actual_opnd_type = Actual_result_type(opnd);
 
@@ -371,7 +390,9 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
 // Fix bug 1766
               if (ty == MTYPE_I1 || ty == MTYPE_I2 || ty == MTYPE_U1 || ty == MTYPE_U2)
                 WN_kid(wn, i) = WN_Int_Type_Conversion( WN_kid(WN_kid(wn, i),0), ty );
-              else if (exp->Asm_input_rtype() != exp->Asm_input_dsctype()){
+              else if (
+		       ! MTYPE_is_float(exp->Asm_input_rtype()) &&
+		       exp->Asm_input_rtype() != exp->Asm_input_dsctype()) {
                 WN_set_rtype(WN_kid(wn, i), exp->Asm_input_rtype());
                 WN_set_desc(WN_kid(wn, i), exp->Asm_input_dsctype());
               }
@@ -384,9 +405,24 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
             }
           } 
           else{
+#ifdef TARG_NVISA
+            // Preserve initial types lest we lose alignment info
+            // (e.g. if U4U2LDID becomes I4I4LDID)
+            // This can happen if copyprop U4U2 into original I4I4).
+            // But make sure rtypes are compatible.
+            if (Mtype_TransferSign(WN_rtype(WN_kid(wn,i)), 
+                                   exp->Asm_input_rtype()) 
+               == WN_rtype(WN_kid(wn,i)))
+            {
+              continue; // skip following code
+            }
+#endif //TARG_NVISA
             WN_set_rtype(WN_kid(wn, i), exp->Asm_input_rtype());
-            if (opnd->Kind() == CK_VAR || opnd->Kind() == CK_IVAR)
-              WN_set_desc(WN_kid(wn, i), exp->Asm_input_dsctype());
+	    // bug 13104
+            if (! MTYPE_is_float(exp->Asm_input_rtype()) &&
+				(opnd->Kind() == CK_VAR || opnd->Kind() == CK_IVAR))
+			  // OSP_388 and OSP_390
+              WN_set_desc(WN_kid(wn, i), Mtype_TransferSign(exp->Asm_input_rtype(), exp->Asm_input_dsctype()));
           }
 #endif
 	}
@@ -397,7 +433,7 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
       wn = WN_Tas(exp->Dtyp(), 
 		  exp->Ty_index(), 
 		  Gen_exp_wn(exp->Get_opnd(0), emitter));
-#ifdef TARG_X8664 // bug 11752: make sure operand type has same size
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) // bug 11752: make sure operand type has same size
       if (MTYPE_byte_size(WN_rtype(wn)) > MTYPE_byte_size(WN_rtype(WN_kid0(wn))) &&
           WN_operator(WN_kid0(wn)) == OPR_INTCONST)
         WN_set_rtype(WN_kid0(wn), Mtype_TransferSize(MTYPE_I8, WN_rtype(WN_kid0(wn))));
@@ -449,28 +485,29 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
 	     && OPERATOR_is_compare(exp->Opr()))
 	    exp->Set_dsctyp(WN_rtype(opnd0));
 #endif
+#ifdef KEY // bug 13230: fix INTCONSTs kids of compare unnecessarily made 64-bit
+	  else if (OPERATOR_is_compare(exp->Opr()) &&
+	      	   MTYPE_byte_size(exp->Dsctyp()) == 4) {
+	    if (WN_operator(opnd0) == OPR_INTCONST && 
+		MTYPE_byte_size(WN_rtype(opnd0)) == 8)
+	      WN_set_rtype(opnd0, Mtype_TransferSize(exp->Dsctyp(), WN_rtype(opnd0)));
+	    if (WN_operator(opnd1) == OPR_INTCONST && 
+		MTYPE_byte_size(WN_rtype(opnd1)) == 8)
+	      WN_set_rtype(opnd1, Mtype_TransferSize(exp->Dsctyp(), WN_rtype(opnd1)));
+	  }
+#endif
 #ifdef KEY // bug 3347: fix INTCONSTs unnecessarily made 64-bit
 	  else if (! OPERATOR_is_compare(exp->Opr()) &&
 	      	   MTYPE_byte_size(exp->Dtyp()) == 4) {
 	    if (WN_operator(opnd0) == OPR_INTCONST && 
 		MTYPE_byte_size(WN_rtype(opnd0)) == 8) {
-#if 0
-	      Is_True(( WN_const_val(opnd0) << 32 >> 32) == WN_const_val(opnd0),
-	      	      ("Inconsistent INTCONST type"));
-#else
 	      if ((WN_const_val(opnd0) << 32 >> 32) == WN_const_val(opnd0))
 	        WN_set_rtype(opnd0, Mtype_TransferSize(exp->Dtyp(), WN_rtype(opnd0)));
-#endif
 	    }
 	    if (WN_operator(opnd1) == OPR_INTCONST && 
 		MTYPE_byte_size(WN_rtype(opnd1)) == 8) {
-#if 0 // umlau6.f of sixtrack hits this assertion
-	      Is_True((WN_const_val(opnd1) << 32 >> 32) == WN_const_val(opnd1),
-	      	      ("Inconsistent INTCONST type"));
-#else
 	      if ((WN_const_val(opnd1) << 32 >> 32) == WN_const_val(opnd1))
 	        WN_set_rtype(opnd1, Mtype_TransferSize(exp->Dtyp(), WN_rtype(opnd1)));
-#endif
 	    }
 	    if (OPCODE_is_load(WN_opcode(opnd0)) && 
 		MTYPE_byte_size(WN_rtype(opnd0)) == 8 &&
@@ -543,14 +580,23 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
     }
     else if ( exp->Opr() == OPR_PARM ) {
       wn = Gen_exp_wn(exp->Ilod_base(), emitter);
+#ifdef KEY // bug 12161: fix INTCONSTs unnecessarily made 64-bit
+      if (WN_operator(wn) == OPR_INTCONST && MTYPE_byte_size(WN_rtype(wn)) == 8
+	  && MTYPE_byte_size(exp->Dtyp()) == 4) {
+	if ((WN_const_val(wn) << 32 >> 32) == WN_const_val(wn))
+	  WN_set_rtype(wn, Mtype_TransferSize(exp->Dtyp(), WN_rtype(wn)));
+      }
+#endif
       wn = WN_CreateParm(exp->Dtyp(), wn, exp->Ilod_ty(), exp->Offset());
-      if (WN_Parm_By_Reference(wn)) {
+      // avoid cse of implicit aliases stuff
+      if (WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn)) {
 	POINTS_TO *pt = exp->Points_to(emitter->Opt_stab());
 	Is_True(pt != NULL, ("Reference parameter has NULL POINTS_TO."));
 	emitter->Alias_Mgr()->Gen_alias_id(wn, pt);
       }
 #ifdef KEY // bug 7766
       else if (IS_FORTRAN && exp->Ilod_base()->Kind() == CK_LDA &&
+	       ! exp->Ilod_base()->Is_flag_set(CF_LDA_LABEL) &&
 	       ! WN_Parm_By_Reference(wn)) {
 	WN_Set_Parm_By_Reference(wn);
 	Set_ST_addr_passed(exp->Ilod_base()->Lda_base_st());
@@ -608,6 +654,13 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
     {
       AUX_STAB_ENTRY *aux_entry = 
 	emitter->Opt_stab()->Aux_stab_entry(exp->Aux_id());
+#ifdef TARG_SL
+      if (exp->Dtyp() == MTYPE_I2 && exp->Dsctyp() == MTYPE_I2) {
+        wn = WN_Create((aux_entry->Bit_size() > 0 && aux_entry->Field_id() == 0)
+			? OPR_LDBITS : OPR_LDID,
+	   	        MTYPE_I4, exp->Dsctyp(), 0); 
+      } else
+#endif
       wn = WN_Create((aux_entry->Bit_size() > 0 && aux_entry->Field_id() == 0)
 			? OPR_LDBITS : OPR_LDID,
 		     exp->Dtyp(), exp->Dsctyp(), 0); 
@@ -620,11 +673,23 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
       if (ST_class (st) == CLASS_PREG &&
           exp->Dsctyp() != MTYPE_M &&  // added to fix bug #567932
 	  TY_size (ty_idx) != MTYPE_byte_size (exp->Dsctyp())) {
-	DevWarn("PREG (%s) has mismatching MTYPE-size and TY-size; refer to bug #567932", 
-		ST_name(st));
-	Set_TY_IDX_index (ty_idx,
-			  TY_IDX_index(MTYPE_To_TY (exp->Dsctyp())));
-	field_id = 0;
+	BOOL reset_type = TRUE;
+	if (field_id != 0 && TY_kind(ty_idx) == KIND_STRUCT) {
+	  // check if is referring to struct field which does match size
+	  UINT cur_field_id = 0;
+	  FLD_HANDLE fld = FLD_get_to_field (ty_idx, field_id, cur_field_id);
+	  Is_True (! fld.Is_Null(), ("Invalid field id %d for type 0x%x",
+                          field_id, ty_idx));
+	  if (TY_size(FLD_type(fld)) == MTYPE_byte_size(exp->Dsctyp()))
+		reset_type = FALSE;
+	}
+	if (reset_type) {
+	  DevWarn("PREG (%s) has mismatching MTYPE-size and TY-size; refer to bug #567932", 
+		  ST_name(st));
+	  Set_TY_IDX_index (ty_idx,
+			    TY_IDX_index(MTYPE_To_TY (exp->Dsctyp())));
+	  field_id = 0;
+	}
       }
       WN_set_ty(wn, ty_idx);
       WN_st_idx(wn) = ST_st_idx(st);
@@ -688,6 +753,23 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
     Warn_todo("Gen_exp_wn: CODEKIND is not implemented yet");
     break;
   }
+
+#if defined(TARG_SL)
+  // set flag for vbuf offset wn node. 
+  if (exp->Is_flag_set(CF_INTERNAL_MEM_OFFSET)) {
+    WN_Set_is_internal_mem_ofst(wn, TRUE);
+  }
+
+  extern INT Need_type_conversion(TYPE_ID from_ty, TYPE_ID to_ty, OPCODE *opc);
+  
+  OPERATOR opr_t = WN_operator(wn);
+  TYPE_ID from_ty = WN_desc(wn);
+  TYPE_ID to_ty = WN_rtype(wn);
+  OPCODE opc = WN_opcode(wn);
+  
+  if ((opr_t == OPR_CVT) && (Need_type_conversion(from_ty, to_ty, &opc) == NOT_AT_ALL) && WN_kid0(wn))
+     wn = WN_kid0(wn);
+#endif 
 
   // connect up this cr and the resulting wn for def-use
   if ( emitter->Wn_to_cr_map() && connect_cr_to_wn )
@@ -781,6 +863,10 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
       rhs_wn = Gen_exp_wn( srep->Rhs(), emitter );
       rwn = WN_CreateCompgoto(num_entries, rhs_wn, block_wn, default_wn, 0);
     }
+#ifdef TARG_SL //fork_joint
+     WN_Set_is_compgoto_para(rwn, srep->Fork_stmt_flags());
+     WN_Set_is_compgoto_for_minor(rwn, srep->Minor_fork_stmt_flags());
+#endif 
     break;
 
   case OPR_ASM_STMT:
@@ -807,8 +893,8 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 				 0);
 	}
 	else {
-	  // bug fix for OSP_87 & OSP_90
-          prag = WN_CreateXpragma(WN_PRAGMA_ASM_CLOBBER,
+          // bug fix for OSP_87 and OSP_90
+	  prag = WN_CreateXpragma(WN_PRAGMA_ASM_CLOBBER,
 				  (ST_IDX) p->clobber_string_idx,
 				  1);
 	  WN_kid0(prag) = WN_CreateIdname(p->preg_number,
@@ -854,20 +940,37 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
       OPCODE opc = srep->Op();
       OPERATOR opr = OPCODE_operator(opc);
       rwn = Gen_exp_wn( srep->Rhs(), emitter );
+
+      // Restore the callsite id for the Nystrom alias analyzer
+      if (srep->Get_constraint_graph_callsite_id() != 0)
+        WN_MAP32_Set(WN_MAP_ALIAS_CGNODE, rwn, 
+                     srep->Get_constraint_graph_callsite_id());
 #ifdef KEY
       // bug 8941: If possible replace ICALL with a CALL.
       if (WN_operator (rwn) == OPR_ICALL)
       {
 	mINT16 kidcount = WN_kid_count (rwn);
 	WN * kid = WN_kid (rwn, kidcount - 1 );
+        // cannot replace ICALL with a CALL if the types
+        // are not match:
+        //   extern void foo(void);  
+        //   int i = ((int (*))foo)();
 	if (WN_operator (kid) == OPR_LDA &&
-	    ST_class (WN_st (kid)) == CLASS_FUNC)
+	    ST_class (WN_st (kid)) == CLASS_FUNC &&
+            srep->Ty() == ST_type(WN_st (kid)) )
 	{
 	  WN_set_operator (rwn, OPR_CALL);
 	  WN_st_idx (rwn) = ST_st_idx (WN_st (kid));
 	  WN_call_flag (rwn) = srep->Call_flags();
 	  WN_set_kid_count (rwn, kidcount - 1);
 	  WN_Delete (kid);
+          // Since we are promoting the ICALL to a CALL, fix the CallSite
+          // information in the Nystrom alias analyzer accordingly
+          NystromAliasAnalyzer *naa = static_cast<NystromAliasAnalyzer *>
+                                      (AliasAnalyzer::aliasAnalyzer());
+          if (naa && !naa->isPostIPA() && naa->constraintGraph())
+            naa->constraintGraph()->promoteCallSiteToDirect(
+                           WN_MAP_CallSiteId_Get(rwn), WN_st_idx(rwn));
 	  break;
 	}
       }
@@ -882,6 +985,7 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 	  opr == OPR_BACKWARD_BARRIER ||
 	  opr == OPR_DEALLOCA) 
 	emitter->Alias_Mgr()->Gen_alias_id_list(rwn, srep->Pt_list());
+
     }
     break;
 
@@ -908,6 +1012,9 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 	      || rhs_cr->Opr() == OPR_CVTL ) &&
 	     MTYPE_is_integral( rhs_cr->Dtyp() ) && 
              MTYPE_is_integral( lhs->Dsctyp() )
+#ifdef TARG_X8664
+	     && ! MTYPE_is_vector(lhs->Dsctyp())
+#endif
 	    ) {
 	  
 	  MTYPE actual_type;
@@ -968,13 +1075,15 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 			    TY_IDX_index(MTYPE_To_TY (lhs->Dsctyp())));
 	  field_id = 0;
 	}
+
 	if (lhs->Dsctyp() == MTYPE_B && WN_rtype(rhs_wn) != MTYPE_B) {
 	  Is_True(WN_operator(rhs_wn) == OPR_INTCONST,
 	        ("Gen_stmt_wn: non-boolean value stored to boolean variable"));
 	  WN_set_rtype(rhs_wn, MTYPE_B);
 	}
 #ifdef KEY
-	if (OPERATOR_is_load(WN_operator(rhs_wn))) {
+	if (OPERATOR_is_load(WN_operator(rhs_wn)) && 
+	    lhs->Dsctyp() != MTYPE_BS /* bug 14453 */) {
 	  if (MTYPE_byte_size(WN_rtype(rhs_wn)) < 
 	    			MTYPE_byte_size(lhs->Dsctyp())) { // bug 5224
 	    Is_True(MTYPE_is_integral(WN_rtype(rhs_wn)),
@@ -1020,8 +1129,18 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 	  srep->Rhs()->Offset() == srep->Lhs()->Offset() &&
 	  MTYPE_size_min(srep->Rhs()->Dsctyp()) == MTYPE_size_min(srep->Lhs()->Dsctyp()) &&
 	  !srep->Rhs()->Is_ivar_volatile() &&
-	  !srep->Lhs()->Is_ivar_volatile()) 
-	return FALSE;	// omit generating this istore
+	  !srep->Lhs()->Is_ivar_volatile()) {
+        WN* rwn = NULL;
+        if (OPT_Enable_WHIRL_SSA) {
+          // WHIRL SSA: process chi list
+          rwn = emitter->WSSA_Emitter()->WSSA_Copy_Equivalent_CHI(srep);
+          if (rwn != NULL) {
+            WN_Set_Linenum(rwn, srep->Linenum());
+            stmt_container->Append(rwn);
+          }
+        }
+        return rwn;
+      }
 
       CODEREP *rhs_cr = srep->Rhs();
       CODEREP *lhs = srep->Lhs();
@@ -1040,7 +1159,8 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
 #endif
 	   || rhs_cr->Opr() == OPR_CVTL ) &&
 	  MTYPE_is_integral( rhs_cr->Dtyp() ) && 
-	  MTYPE_is_integral( lhs->Dsctyp() )
+	  MTYPE_is_integral( lhs->Dsctyp() ) &&
+	  lhs->Dsctyp() != MTYPE_BS /* bug 14453 */
 	  ) {
 	MTYPE actual_type;
 	if (rhs_cr->Opr() == OPR_CVTL)
@@ -1072,16 +1192,22 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
       WN_store_offset(rwn) = lhs->Offset();
       WN_set_ty(rwn, lhs->Ilod_base_ty());
       WN_set_field_id(rwn, lhs->I_field_id());
-#ifdef TARG_X8664 // bug 6910
+#if defined(TARG_SL)
+      // support vbuf istore automatic expansion 
+      WN_Set_is_internal_mem_ofst(rwn, srep->SL2_internal_mem_ofst());  
+#endif 
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) // bug 6910
       if (emitter->Htable()->Phase() != MAINOPT_PHASE &&
 	  WN_operator(rhs_wn) == OPR_INTCONST &&
-	  MTYPE_byte_size(WN_rtype(rhs_wn)) < MTYPE_byte_size(lhs->Dsctyp()))
+	  MTYPE_byte_size(WN_rtype(rhs_wn)) < MTYPE_byte_size(lhs->Dsctyp()) &&
+	  lhs->Dsctyp() != MTYPE_BS /* bug 14453 */)
 	WN_set_rtype(rhs_wn, Mtype_TransferSize(lhs->Dsctyp(), WN_rtype(rhs_wn)));
 #endif
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) 
       if (Is_Target_32bit() && MTYPE_byte_size(WN_rtype(rhs_wn)) == 8 &&
 	  WN_operator(rhs_wn) == OPR_INTCONST && 
-	  MTYPE_byte_size(lhs->Dsctyp()) < 8)
+	  MTYPE_byte_size(lhs->Dsctyp()) < 8 &&
+	  lhs->Dsctyp() != MTYPE_BS /* bug 14453 */)
 	WN_set_rtype(rhs_wn, Mtype_TransferSize(MTYPE_I4, WN_rtype(rhs_wn)));
 #endif
       emitter->Alias_Mgr()->
@@ -1191,6 +1317,9 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
   
   case OPR_RETURN:
   case OPR_PRAGMA:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     rwn = WN_COPY_Tree_With_Map(srep->Orig_wn());
     if (OPCODE_has_aux(srep->Op()))
       WN_st_idx(rwn) = ST_st_idx(emitter->Opt_stab()->St(WN_aux(rwn)));
@@ -1217,10 +1346,16 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
       OPCODE opcode = OPCODE_make_op(OPR_STID, MTYPE_V, srep->Rhs()->Dtyp());
       rwn = WN_CreateStid(opcode,preg,preg_st,ST_type(preg_st),rhs_wn);
       emitter->Alias_Mgr()->Gen_alias_id(rwn, NULL);
+      // WHIRL SSA
+      if(OPT_Enable_WHIRL_SSA)
+        emitter->WSSA_Emitter()->WSSA_Set_Ver(rwn, WSSA::VER_IDX_ZERO);
       opcode = OPCODE_make_op(OPR_LDID, srep->Rhs()->Dtyp(), srep->Rhs()->Dtyp());
       WN *lwn = WN_CreateLdid(opcode,preg,preg_st,ST_type(preg_st));
       emitter->Alias_Mgr()->Gen_alias_id(lwn, NULL);
       srep->Bb()->Loop()->Set_wn_trip_count(lwn);
+      // WHIRL SSA
+      if(OPT_Enable_WHIRL_SSA)
+        emitter->WSSA_Emitter()->WSSA_Set_Ver(lwn,  WSSA::VER_IDX_ZERO);
     } else
       rwn = WN_CreateEval(rhs_wn);
     break;

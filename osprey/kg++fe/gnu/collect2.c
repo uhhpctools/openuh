@@ -282,9 +282,6 @@ static void write_list		PARAMS ((FILE *, const char *, struct id *));
 #ifdef COLLECT_EXPORT_LIST
 static void dump_list		PARAMS ((FILE *, const char *, struct id *));
 #endif
-#if 0
-static void dump_prefix_list	PARAMS ((FILE *, const char *, struct prefix_list *));
-#endif
 static void write_list_with_asm PARAMS ((FILE *, const char *, struct id *));
 static void write_c_file	PARAMS ((FILE *, const char *));
 static void write_c_file_stat	PARAMS ((FILE *, const char *));
@@ -299,9 +296,6 @@ static void scan_libraries	PARAMS ((const char *));
 static int is_in_args		PARAMS ((const char *, const char **, const char **));
 #endif
 #ifdef COLLECT_EXPORT_LIST
-#if 0
-static int is_in_list		PARAMS ((const char *, struct id *));
-#endif
 static void write_aix_file	PARAMS ((FILE *, struct id *));
 static char *resolve_lib_name	PARAMS ((const char *));
 static int ignore_library	PARAMS ((const char *));
@@ -1811,20 +1805,6 @@ is_in_args (string, args_begin, args_end)
 
 #ifdef COLLECT_EXPORT_LIST
 /* This function is really used only on AIX, but may be useful.  */
-#if 0
-static int
-is_in_list (prefix, list)
-     const char *prefix;
-     struct id *list;
-{
-  while (list)
-    {
-      if (!strcmp (prefix, list->name)) return 1;
-      list = list->next;
-    }
-    return 0;
-}
-#endif
 #endif /* COLLECT_EXPORT_LIST */
 
 /* Added for debugging purpose.  */
@@ -1843,20 +1823,6 @@ dump_list (stream, prefix, list)
 }
 #endif
 
-#if 0
-static void
-dump_prefix_list (stream, prefix, list)
-     FILE *stream;
-     const char *prefix;
-     struct prefix_list *list;
-{
-  while (list)
-    {
-      fprintf (stream, "%s%s,\n", prefix, list->prefix);
-      list = list->next;
-    }
-}
-#endif
 
 static void
 write_list_with_asm (stream, prefix, list)

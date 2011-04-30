@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
@@ -48,7 +52,7 @@
 #define opt_verify_INCLUDED
 
 #if Is_True_On
-extern BOOL Def_before_use(const CODEREP *, const BB_NODE *);
+extern BOOL Def_before_use(CODEREP *, const BB_NODE *);
 #endif
 
 #endif

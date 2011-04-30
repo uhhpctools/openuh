@@ -75,7 +75,7 @@ pathf90_getcwd(char *path, pathf90_i4 *status, int len)
  * unexpected, the code should fail instead of silently compiling with
  * neither getwd nor getcwd .
  */
-#  ifdef __linux
+#  if defined(__linux) || defined(BUILD_OS_DARWIN)
 	p = getcwd(pathname,MAXPATHLEN);
 #  else
 #    error "Check function getwd/getcwd signature"

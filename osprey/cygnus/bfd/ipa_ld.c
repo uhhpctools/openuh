@@ -76,9 +76,15 @@ extern void *ipa_open_input(char *, off_t *) __attribute__((weak));
 void *(*p_ipa_open_input)(char *, off_t *) = NULL;
 void (*p_ipa_init_link_line)(int, char **) = NULL;
 void (*p_ipa_add_link_flag)(const char*) = NULL;
+void (*p_ipa_modify_link_flag)(char*, char*) = NULL;
 void (*p_ipa_driver)(int, char **) = NULL;
-void (*p_process_whirl64)(void *, off_t, void *, int, const char *) = NULL;
-void (*p_process_whirl32)(void *, off_t, void *, int, const char *) = NULL;
+#ifdef OSP_OPT
+void (*p_process_whirl64)(void *, off_t, void *, int, const char *, off_t, bfd_boolean) = NULL;
+void (*p_process_whirl32)(void *, off_t, void *, int, const char *, off_t, bfd_boolean) = NULL;
+#else
+void (*p_process_whirl64)(void *, off_t, void *, int, const char *, off_t) = NULL;
+void (*p_process_whirl32)(void *, off_t, void *, int, const char *, off_t) = NULL;
+#endif
 int  (*p_Count_elf_external_gots)(void) = NULL;
 void (*p_ipa_insert_whirl_marker)(void) = NULL;
 void (*p_Sync_symbol_attributes)(unsigned int, unsigned int, bfd_boolean, unsigned int) = NULL;
@@ -643,10 +649,6 @@ make_link (const string dest, const string src)
     static string working_dir = 0;
     int link_result;
 
-#if 0
-    LD_ASSERT (dest && src, thisfile,
-	       "NULL path name passed to symbolic_link()");
-#endif
 
     /* try hard link first */
 
@@ -1094,7 +1096,11 @@ ipa_process_whirl ( bfd *abfd)
 			    elf_elfheader (abfd)->e_shnum, 
 			    abfd->usrdata+elf_elfheader(abfd)->e_shoff,
 			    0, /* check_whirl_revision */
-			    abfd->filename);
+#ifdef OSP_OPT
+			    abfd->filename, mapped_size, FALSE);
+#else
+                            abfd->filename, mapped_size);
+#endif
     else
 #endif    
       (*p_process_whirl64) ( 
@@ -1102,10 +1108,101 @@ ipa_process_whirl ( bfd *abfd)
 			    elf_elfheader (abfd)->e_shnum, 
 			    abfd->usrdata+elf_elfheader(abfd)->e_shoff,
 			    0, /* check_whirl_revision */
-			    abfd->filename);
+#ifdef OSP_OPT
+			    abfd->filename, mapped_size, FALSE);
+#else
+                            abfd->filename, mapped_size);
+#endif
 }
 
+#ifdef OSP_OPT
+    /*******************************************************
+        Function: ipa_mmap_file_in_archive
 
+        If the whirl is in an archive, this function
+        tries to mmap the file to memory, and return
+        the mmaped address.
+
+     *******************************************************/
+
+char *ipa_mmap_file_in_archive ( bfd *bfd, int fd, off_t mapped_size) {
+  off_t offset = bfd->origin % getpagesize();
+  char *buf = (char *)mmap(0, mapped_size + offset, PROT_READ|PROT_WRITE,
+                     MAP_PRIVATE, fd, bfd->origin - offset);
+
+  if (buf == (char *)(-1)) {
+    return NULL;
+  }
+
+  return buf + offset;
+}
+
+#endif
+
+    /*******************************************************
+        Function: ipa_process_whirl_in_archive
+
+        If the whirl is in a mixed archive, this
+        archive should already be opened. So this
+        function just map the mmap pointer to the
+        correct position in the archive.
+
+     *******************************************************/
+
+void ipa_process_whirl_in_archive ( bfd *abfd, bfd *element)
+{
+  char *buf;
+  struct ar_hdr *p_hdr;
+  off_t mapped_size;
+  ld_set_cur_obj(element);
+  p_hdr = arch_hdr(element);
+  mapped_size = strtol (p_hdr->ar_size, NULL, 10);
+
+#ifdef OSP_OPT
+  int fd = open(abfd->filename, O_RDONLY);
+  if ((buf = ipa_mmap_file_in_archive(element, fd, mapped_size)) == NULL) {
+    einfo(("%F%B: ipa_mmap_file_in_archive failed for member %B\n"), abfd, element);
+  }
+#else
+  if ((buf = bfd_alloc(element, mapped_size)) == NULL) {
+    einfo(("%F%B: bfd_alloc failed for member %B\n"), abfd, element);
+  }
+  if (bfd_seek(element, 0, SEEK_SET) != 0) {
+    einfo(("%F%B: bfd_seek failed for member %B\n"), abfd, element);
+  }
+  if (bfd_bread(buf, mapped_size, element) != mapped_size) {
+    einfo(("%F%B: bfd_read failed for member %B\n"), abfd, element);
+  }
+#endif
+  element->usrdata = buf;
+
+#if !defined(__ALWAYS_USE_64BIT_ELF__)
+  /* Should be sync. with Config_Target_From_ELF() defined in be.so
+   */
+  if( ( elf_elfheader (element)->e_flags & EF_IRIX_ABI64 ) == 0 )
+    (*p_process_whirl32) (
+			  (void *)element,
+			  elf_elfheader (element)->e_shnum,
+			  element->usrdata+elf_elfheader(element)->e_shoff,
+			  0, /* check_whirl_revision */
+#ifdef OSP_OPT
+			  abfd->filename, mapped_size, TRUE);
+#else
+                          abfd->filename, mapped_size);
+#endif
+  else
+#endif
+    (*p_process_whirl64) (
+			  (void *)element,
+			  elf_elfheader (element)->e_shnum,
+			  element->usrdata+elf_elfheader(element)->e_shoff,
+			  0, /* check_whirl_revision */
+#ifdef OSP_OPT
+			  element->filename, mapped_size, TRUE);
+#else
+                          element->filename, mapped_size);
+#endif
+}
 
 	/*******************************************************
 		Function: ipa_set_syms
@@ -1145,6 +1242,11 @@ ipa_set_syms(void)
     	exit(1);
     }
 
+    p_ipa_modify_link_flag = dlsym(p_handle,"ipa_modify_link_flag");
+    if ((p_error = dlerror()) != NULL) {
+      fputs(p_error, stderr);
+      exit(1);
+    }
     p_ipa_driver = dlsym(p_handle,"ipa_driver");
     if ((p_error = dlerror()) != NULL)  {
     	fputs(p_error, stderr);
@@ -1264,13 +1366,6 @@ ipa_symbol_sync(struct bfd_link_hash_entry *p_bfd_link_hash, PTR info)
     if (p_elf_link_hash->hidden) {
     }
 
-#if 0	// binutils 2.16.1's elf_link_hash_entry has no bitfield corresponding
-	// to 2.15's ELF_LINK_HASH_ADDRESS_TAKEN.  Comment out this 2.15 code
-	// until proven incorrect.
-    if (p_elf_link_hash->elf_link_hash_flags & ELF_LINK_HASH_ADDRESS_TAKEN) {
-	result |= ADDR_TAKEN_IN_OBJ;
-    }
-#endif
 
     if (p_elf_link_hash->ipa_indx != WHIRL_ST_IDX_UNINITIALIZED &&
     	p_elf_link_hash->ipa_indx != WHIRL_ST_IDX_NOT_AVAILABLE) {
@@ -1310,14 +1405,6 @@ cleanup_symtab_for_ipa (void)
 
     bfd_link_hash_traverse (link_info.hash, ipa_symbol_sync, (PTR) NULL);
 
-#if 0
-    /* TODO */
-    /* collect autognum and other info and pass them to ipa */
-    if (threadlocalsyms)
-	mark_all_xlocal_not_gp_rel ();
-
-    /* finally release all unnecessary storage allocated in ld. */
-#endif
     
 }  /* cleanup_symtab_for_ipa */
 

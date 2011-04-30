@@ -891,28 +891,6 @@ print_insn_sh (memaddr, info)
 	    }
 	}
 
-#if 0
-      /* This code prints instructions in delay slots on the same line
-         as the instruction which needs the delay slots.  This can be
-         confusing, since other disassembler don't work this way, and
-         it means that the instructions are not all in a line.  So I
-         disabled it.  Ian.  */
-      if (!(info->flags & 1)
-	  && (op->name[0] == 'j'
-	      || (op->name[0] == 'b'
-		  && (op->name[1] == 'r'
-		      || op->name[1] == 's'))
-	      || (op->name[0] == 'r' && op->name[1] == 't')
-	      || (op->name[0] == 'b' && op->name[2] == '.')))
-	{
-	  info->flags |= 1;
-	  fprintf_fn (stream, "\t(slot ");
-	  print_insn_sh (memaddr + 2, info);
-	  info->flags &= ~1;
-	  fprintf_fn (stream, ")");
-	  return 4;
-	}
-#endif
 
       if (disp_pc && strcmp (op->name, "mova") != 0)
 	{

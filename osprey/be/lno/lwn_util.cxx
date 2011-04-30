@@ -1,4 +1,17 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. Pathscale, LLC. All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -974,6 +987,11 @@ void LWN_Delete_Tree(WN* wn)
       WN_MAP32_Set(Prompf_Id_Map, wn, 0); 
     }
   } 
+
+  // keep track of deleted loop
+  if (WN_opcode(wn) == OPC_DO_LOOP) {
+    Deleted_Loop_Map->Enter(wn, TRUE);
+  }    
 #endif
 
   if (WN_opcode(wn) == OPC_BLOCK) {
@@ -1272,8 +1290,15 @@ WN *LWN_CreateStid(OPCODE opc, WN *orig_op, WN *value)
   Is_True((WN_operator(orig_op) == OPR_LDID) ||
           (WN_operator(orig_op) == OPR_STID),
 	  ("Illegal orig_op in LWN_Create_Stid"));
+//bug 13013: we need field_id if it is not 0 (default) 
+#ifdef KEY
   WN* wn = WN_CreateStid(opc, WN_offset(orig_op),
-		WN_st(orig_op), WN_ty(orig_op),value);
+		WN_st(orig_op), WN_ty(orig_op),value, WN_field_id(orig_op));
+#else
+  WN* wn = WN_CreateStid(opc, WN_offset(orig_op),
+                WN_st(orig_op), WN_ty(orig_op),value);
+#endif
+
 #ifdef LNO
   Copy_alias_info(Alias_Mgr,orig_op,wn);
 #endif
@@ -1288,7 +1313,11 @@ WN *LWN_CreateLdid(OPCODE opc, WN *orig_op)
           (WN_operator(orig_op) == OPR_STID),
 	  ("Illegal orig_op in LWN_Create_Ldid"));
   WN* wn = WN_CreateLdid(opc, WN_offset(orig_op),
+#ifndef KEY //bug 13586
 		WN_st(orig_op), WN_ty(orig_op));
+#else
+		WN_st(orig_op), WN_ty(orig_op),WN_field_id(orig_op));
+#endif
 #ifdef LNO
   Copy_alias_info(Alias_Mgr,orig_op,wn);
 #endif

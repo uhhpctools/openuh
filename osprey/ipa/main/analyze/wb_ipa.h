@@ -44,6 +44,6 @@ extern void WB_IPA_Initialize(WN* wn_global, PU* pu);
 
 extern void WB_IPA_Terminate();
 
-extern void s_ipa_debug(char init_buffer[]);
+extern void s_ipa_debug(const char init_buffer[]);
 
 #endif /* wb_ipl_INCLUDED */

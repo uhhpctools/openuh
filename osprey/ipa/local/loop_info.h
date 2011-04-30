@@ -161,7 +161,7 @@ public:
   void Set_step(ACCESS_VECTOR *step) { _step = step;};
   ACCESS_VECTOR* Get_step() const { return _step;};
 
-#ifdef KEY
+#if defined(KEY) && defined(SHARED_BUILD)
   void Print(FILE *fp, INT = 0) __attribute__((weak));
 #else
   void Print(FILE *fp, INT = 0);
@@ -180,5 +180,6 @@ extern
 BOOL Record_scalar_flow(WN* stid);
 
 extern void Mark_formal_summary_symbol(ST* s);
+extern "C" void Print_DO_LOOP_INFO_BASE (FILE *fp, DO_LOOP_INFO_BASE *b);
 
 #endif

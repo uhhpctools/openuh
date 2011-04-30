@@ -77,11 +77,7 @@
 unsigned long	io_lock;
 
 static int
-#if 11
 f_open_com (olist64 *a, ftnint *mask, char **mode_, char **buf_, unit **fu)
-#else
-f_open_com (olist *a, ftnint *mask, char **mode_, char **buf_, unit **fu)
-#endif
 {
    unit           *b;
    ino_t           inod;
@@ -91,11 +87,7 @@ f_open_com (olist *a, ftnint *mask, char **mode_, char **buf_, unit **fu)
    char    	  buf[PATH_MAX];		/* temp buffer */
    char    	  ubuf[PATH_MAX];		/* temp buffer */
    unsigned int   need;
-#if 00
-   cllist64          x;
-#else
    cllist          x;
-#endif
    struct stat     sbuf;
    static char     seed[] = "aa";
    char		   *q = seed;
@@ -212,11 +204,7 @@ same:if (a->oblnk != 0)
             b->uconn = 0;
             b->ufd = NULL;
 	 }
-#if 00
-#define NAMEf_clos	f_clos64
-#else
 #define NAMEf_clos	f_clos
-#endif
       } else if ((n = NAMEf_clos (&x)) != 0)
          return (n);
       b->luno = a->ounit;
@@ -691,13 +679,9 @@ f_open0 (olist *a, int *mask)
    char           *buf;
    int             i;
    unit		  *ftnunit;
-#if 11
    olist64 dst;
    get_olist64(&dst, a);
 #define WORK_ARG (&dst)
-#else
-#define WORK_ARG a
-#endif
 
    i = f_open_com(WORK_ARG, mask, &mode, &buf, &ftnunit);
    io_lock = 0;
@@ -722,20 +706,15 @@ f_open1 (olist *a, int *mask)
    char           *mode;
    int 		   n;
 
-#if 11
    olist64 dst;
    get_olist64(&dst, a);
 #define WORK_ARG (&dst)
-#else
-#define WORK_ARG a
-#endif
    n = f_open_com (WORK_ARG, mask, &mode, &buf, &f77curunit);
    io_lock = 0;
    return (n);
 #undef WORK_ARG
 }
 
-#if 11
 /* declare pure 64 bit versions */
 
 int
@@ -764,7 +743,6 @@ f_open064 (olist64 *a, int *mask)
 
 #pragma weak f_open064_mp = f_open064
 
-#endif /* -n32 and -64 */
 
 
 
@@ -984,11 +962,7 @@ f_dconn (luno)
 }
 
 int
-#if 11
 f_duped (olist64 *a, unit *ftnunit, unit **dupunit)
-#else
-f_duped (olist *a, unit *ftnunit, unit **dupunit)
-#endif
 {
    register int    i;
    register unit  *u;

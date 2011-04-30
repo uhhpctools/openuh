@@ -34,6 +34,20 @@
 
 #ifndef prp_driver_INCLUDED
 #define prp_driver_INCLUDED
+
+#if defined(BUILD_OS_DARWIN)
+/* Linux assumes weak declaration followed by definition and reference will
+ * create a weak symbol which won't cause an error at link time; Mach-O
+ * creates an undefined symbol which causes link to fail. */
+#define Prp_Process_Command_Line(a, b, c, d) \
+  assert(!"Prp_Process_Command_Line")
+#define Prp_Needs_Whirl2c() 0
+#define Prp_Needs_Whirl2f() 0
+#define Prp_Init() assert(!"Prp_Init")
+#define Prp_Instrument_And_EmitSrc(a) assert(!"Prp_Instrument_And_EmitSrc")
+#define Prp_Fini() assert(!"Prp_Fini")
+#else /* defined(BUILD_OS_DARWIN) */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -41,10 +55,10 @@ extern "C" {
  * ==============================================================
  *
  * Module: prp_driver.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/purple2/prp_driver.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:47 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/purple2/prp_driver.h,v $
  *
  * Description:
  *
@@ -65,4 +79,6 @@ void Prp_Fini(void);
 #ifdef __cplusplus
 }
 #endif
+#endif /* defined(BUILD_OS_DARWIN) */
+
 #endif /* prp_driver_INCLUDED */

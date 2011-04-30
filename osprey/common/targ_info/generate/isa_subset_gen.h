@@ -48,11 +48,16 @@
 //      Architecture.  No client visible fields.
 //
 //  ISA_SUBSET ISA_Subset_Create( ISA_SUBSET isa_subset, const char* name )
-//      Used to create a new ISA_SUBTYPE.  <isa_subset> may be either another
+//      Used to create a new ISA_SUBSET.  <isa_subset> may be either another
 //      ISA_SUBSET in which case the newly created set will be a subset of the
 //      given <isa_subset>, or it may be NULL, in which case the created set
 //      is a root subset.  <name> should be the name for the created
 //      ISA_SUBSET and is provided for debugging and documentation purposes.
+//
+//  void ISA_Subset_Create_Only_One( const char* name )
+//      Used to create a new ISA_SUBSET when there is only one subset,
+//      so all the TOPs belong to this one (and then don't need to list
+//      them in a separate Instruction_Group).
 //
 //  void Instruction_Group( ISA_SUBSET subset, ... )
 //      Lists the instructions the given <subset>.  Subsequent arguments are
@@ -87,6 +92,7 @@ static char *isa_subset_gen_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0
 void ISA_Subset_Begin( const char* archname );
 typedef struct isa_subset *ISA_SUBSET;
 ISA_SUBSET ISA_Subset_Create( ISA_SUBSET subset, const char* name );
+void ISA_Subset_Create_Only_One( const char* name );
 void Instruction_Group( ISA_SUBSET isa_subset, ... );
 void ISA_Subset_End(void);
 

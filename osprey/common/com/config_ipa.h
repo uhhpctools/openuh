@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -103,6 +111,7 @@ extern UINT32 IPA_Common_Pad_Size;      /* Amount by which to pad commons */
 extern BOOL IPA_Enable_Split_Common;    /* Enable split common inside IPA */
 extern BOOL IPA_Enable_Cloning;         /* Enable Cloning in conjunction
 					 * with constant propagation */
+extern BOOL IPA_Enable_Partial_Inline;  /* Enable partial inlining */ 
 					   
 extern BOOL IPA_Echo_Commands;		/* Echo back end command lines */
 extern BOOL IPA_Enable_Lang;            /* support inlining across language
@@ -135,7 +144,9 @@ extern BOOL IPA_Enable_Pure_Call_Opt;	// optimizes callsites w/o side-effects
 extern INT32 IPA_Pure_Call_skip_before;
 extern BOOL IPA_Consult_Inliner_For_Icall_Opt; // Consult inliner for icallopt?
 extern UINT32 IPA_Icall_Min_Freq;	// Min icall freq for icall opt
-extern BOOL IPA_Enable_Source_PU_Order; 
+extern BOOL IPA_Enable_Source_PU_Order;
+extern UINT32 IPA_Enable_Struct_Opt;
+extern UINT32 IPA_Update_Struct;
 #endif
 
 /* ===== Inlining heuristics: ===== */
@@ -253,7 +264,8 @@ typedef enum
 {
   REORDER_DISABLE = 0,
   REORDER_BY_NODE_FREQ = 1,
-  REORDER_BY_EDGE_FREQ = 2
+  REORDER_BY_EDGE_FREQ = 2,
+  REORDER_BY_BFS = 3
 } PU_REORDER_SCHEME;
 
 extern PU_REORDER_SCHEME IPA_Enable_PU_Reorder; /* Procedure reordering */
@@ -307,6 +319,9 @@ extern BOOL	INLINE_Static;		/* Inline static fns? */
 extern BOOL	INLINE_Static_Set;	/* explicitly set */
 extern BOOL	INLINE_Aggressive;	/* inline even non-leaf, out-of-loop
 					   calls */ 
+extern BOOL     INLINE_First_Inline_Calls_In_Loops;  /* chooses to inline calls in loops
+                                                      * first, a little more aggressively
+                                                      */
 extern BOOL     INLINE_Enable_DFE;     /* dead function elimination */
 extern BOOL     INLINE_Enable_Auto_Inlining;    /* automatic inline analysis */
 extern BOOL	INLINE_Enable_Restrict_Pointers; /* allow restrict pointers */
@@ -335,10 +350,17 @@ extern BOOL   INLINE_Enable_Script;
 
 extern UINT32  IPA_Max_Density;
 
-/* This flag is to use the old type merge phase. It should be removed when the old type merge is removed. */
-extern BOOL IPA_Enable_Old_Type_Merge;	
+extern BOOL IPA_Enable_Old_Type_Merge;
 
 extern BOOL IPA_Enable_Devirtualization;
+extern BOOL IPA_Enable_Fast_Static_Analysis_VF;
+
+/* assert whole program mode to enable more aggressive ipo */
+extern BOOL IPA_Enable_Whole_Program_Mode;
+extern BOOL IPA_Enable_Whole_Program_Mode_Set;
+
+// Enable multi-core scalability optimization.
+extern BOOL IPA_Enable_Scale;
 
 #ifdef __cplusplus
 }

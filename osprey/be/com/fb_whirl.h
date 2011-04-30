@@ -43,7 +43,7 @@
 // ====================================================================
 //
 // Module: fb_whirl.h
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/fb_whirl.h,v $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.fb_whirl.h $
 //
 // Description:
 //
@@ -103,13 +103,13 @@
 // Map to record <pu_runtime_address, pu_name> pair.
 // 
 
-template <class _Key> struct hash { };
-template <> struct hash<UINT64> {
+template <class _Key> struct fbhash { };
+template <> struct fbhash<UINT64> {
   size_t operator()(const UINT64 x)const{return (size_t)x;}
 };
 
-typedef hash_map<UINT64, char*, hash<UINT64> > ADDRESS_NAME_MAP;
-typedef hash_map<UINT64, INT32, hash<UINT64> > ADDRESS_PUSIZE_MAP;
+typedef hash_map<UINT64, char*, fbhash<UINT64> > ADDRESS_NAME_MAP;
+typedef hash_map<UINT64, INT32, fbhash<UINT64> > ADDRESS_PUSIZE_MAP;
 
 
 // ====================================================================
@@ -209,6 +209,10 @@ public:
   bool  Same_in_out( const WN *wn );
   void  FB_set_in_out_same_node( WN *wn );
   void  FB_set_in_out_same( WN *wn );
+
+#if defined(TARG_SL) && defined(TARG_SL2)
+  void FB_reset_in_out_same_node( WN *wn );
+#endif
 
   void  Print         ( FILE *fp, const WN *wn ) const;
   void  Print_with_wn ( FILE *fp, WN *wn ) const;

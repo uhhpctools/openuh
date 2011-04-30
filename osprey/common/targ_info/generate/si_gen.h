@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -52,11 +56,13 @@
 //
 //      This is done by including this header file and by calling:
 //
-//          void Machine( char* name, ISA_SUBSET isa, int argc, char** argv )
+//          void Targ_SI( );
+//              Perform one-time initializtion.
+//
+//          void Machine( const char* name, ISA_SUBSET isa )
 //              <name> is a name you wish to give to the processor being
-//              described. <isa> is the ISA for the machine. <argc> and 
-//		<argv> are the command line arguments passed to main.  
-//		After this call, machine description can begin.
+//              described. <isa> is the ISA for the machine. <slot> is 
+//              is the index in the global si_machines array.
 //
 //  2. Describe the fundamental resources
 //  =====================================
@@ -64,7 +70,7 @@
 //      Resources are represented by the abstract type RES, which has no
 //      client visible fields.  These are created by the function:
 //
-//          RESOURCE RESOURCE_Create( char* name, int count )
+//          RESOURCE RESOURCE_Create( const char* name, int count )
 //              Creates a resource with <count> instances available per
 //              machine cycle.  <name> is given to the resource for debugging
 //              and documentation purposes.
@@ -88,7 +94,8 @@
 //      An abstract type, ISSUE_SLOT, is used to force instructions to be
 //      grouped together:
 //
-//          ISSUE_SLOT ISSUE_SLOT_Create( char* name, int skew, int count )
+//          ISSUE_SLOT ISSUE_SLOT_Create( const char* name,
+//                                        int skew, int count )
 //              Creates an ISSUE_SLOT giving it the given <name> for
 //              documentation and debugging purposes.  ISSUE_SLOTs must be
 //              created in the order in which the operations assigned to them
@@ -105,7 +112,7 @@
 //      properties.  The description of each instruction group begins with a
 //      call to:
 //
-//          void Instruction_Group( char* name,
+//          void Instruction_Group( const char* name,
 //                                  TOP top,...,TOP_UNDEFINED)
 //              Start a description of a new instruction group that includes
 //              all the given <topi>, each of which should be the symbolic
@@ -202,10 +209,15 @@
 //
 //      After all the instruction groups have been described, call:
 //
-//          void Machine_Done( char* filename )
-//              Writes out the machine description to the given <filename>,
-//              appending an approprite extension depending on the particular
-//              format requested in the command line.
+//          void Machine_Done( )
+//              Finalizes the current machine description.  This call may be
+//              followed by any number of Machine/Machine_Done pairs to specify
+//              descriptions for more than one machine.
+//
+//          void Targ_SI_Done( const char* basename )
+//              Write out all machine descriptions to a C source file and
+//              header file derived from <basename>.  The source filename is
+//              constructed by appending ".c", and the header, ".h".
 //
 /////////////////////////////////////
 
@@ -224,10 +236,11 @@
 typedef class RES* RESOURCE;
 typedef class ISLOT* ISSUE_SLOT;
 
-extern void Machine( char* name, ISA_SUBSET isa, int argc, char** argv );
-extern RESOURCE RESOURCE_Create( char* name, int count );
-extern ISSUE_SLOT ISSUE_SLOT_Create( char* name, int skew, int count );
-extern void Instruction_Group( char* name, ... );
+extern void Targ_SI( void );
+extern void Machine( const char* name, ISA_SUBSET isa );
+extern RESOURCE RESOURCE_Create( const char* name, int count );
+extern ISSUE_SLOT ISSUE_SLOT_Create( const char* name, int skew, int count );
+extern void Instruction_Group( const char* name, ... );
 extern void Any_Operand_Access_Time( int time );
 extern void Operand_Access_Time( int operand_index, int time );
 extern void Any_Result_Available_Time( int time );
@@ -235,9 +248,11 @@ extern void Result_Available_Time( int result_index, int time );
 extern void Store_Available_Time( int time );
 extern void Load_Access_Time( int time );
 extern void Last_Issue_Cycle( int time );
+extern void Alternative_Resource_Requirement( RESOURCE resource, int time );
 extern void Resource_Requirement( RESOURCE resource, int time );
 extern void Valid_Issue_Slot( ISSUE_SLOT slot );
-extern void Write_Write_Interlock();
-extern void Machine_Done( char* filename );
+extern void Write_Write_Interlock( void );
+extern void Machine_Done( void );
+extern void Targ_SI_Done( const char* basename );
 
 #endif

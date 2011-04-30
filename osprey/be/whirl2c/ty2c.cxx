@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +41,10 @@
  * ====================================================================
  *
  * Module: ty2c.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/ty2c.cxx,v $
+ * $Revision: 1.37 $
+ * $Date: 2006/02/28 23:02:28 $
+ * $Author: wychen $
+ * $Source: /var/local/cvs/compilers/open64/osprey1.0/be/whirl2c/ty2c.cxx,v $
  *
  * Revision history:
  *  07-Oct-94 - Original Version
@@ -58,7 +58,7 @@
  * ====================================================================
  */
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2c/ty2c.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /var/local/cvs/compilers/open64/osprey1.0/be/whirl2c/ty2c.cxx,v $ $Revision: 1.37 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "whirl2c_common.h"
@@ -76,6 +76,15 @@ using namespace __gnu_cxx;
 #include <set>
 #endif
 */
+
+#if defined(__GNUC__) && (__GNUC__ >= 3)
+//# define USING_HASH_SET 1
+# include <ext/hash_set>
+using __gnu_cxx::hash_set;
+//using namespace __gnu_cxx;
+#else
+# include <set>
+#endif
 
 /*------------------ macros, types, and local state -------------------*/
 /*---------------------------------------------------------------------*/
@@ -100,10 +109,10 @@ typedef struct SCALAR_C_NAME
  */
 const char TY2C_Aligned_Block_Name[] = "__block";
 
-#ifndef TARG_X8664
-#define MTYPE_PREDEF MTYPE_F16
+#if defined(TARG_X8664)
+#define MTYPE_PREDEF MTYPE_V32F8
 #else
-#define MTYPE_PREDEF MTYPE_V16F8
+#define MTYPE_PREDEF MTYPE_F16
 #endif /* TARG_X8664 */
 
 static char Name_Unknown_Type[] = "__UNKNOWN_TYPE";
@@ -124,34 +133,84 @@ static const SCALAR_C_NAME Scalar_C_Names[MTYPE_LAST + 1] =
     {"unsigned long long", "_UINT64"},          /* MTYPE_U8 = 9 */
     {"float",              "_IEEE32"},          /* MTYPE_F4 = 10 */
     {"double",             "_IEEE64"},          /* MTYPE_F8 = 11 */
-#ifndef TARG_X8664
-    {Name_Unknown_Type,    "_IEEE80"},          /* MTYPE_F10 = 12 */
-    {Name_Unknown_Type,    "_IEEE128"}  /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"long double",        "_IEEE80"},          /* MTYPE_F10 = 12 */
 #else
-    {Name_Unknown_Type,        ""},             /* MTYPE_V16C4 = 12 */
-    {Name_Unknown_Type,        "_IEEE128"},     /* MTYPE_F16 = 13 */
+    {Name_Unknown_Type,    "_IEEE80"},          /* MTYPE_F10 = 12 */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"__float128",         "_IEEE128"},         /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#else
+    {Name_Unknown_Type,    "_IEEE128"},         /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#endif
     {Name_Unknown_Type,        ""},             /* MTYPE_STRING = 14 */
     {Name_Unknown_Type,        ""},             /* MTYPE_FQ = 15 */
     {Name_Unknown_Type,        ""},             /* MTYPE_M = 16 */
-    {"_Complex float",	   "_COMPLEX32"},	/* MTYPE_C4 = 17 */
-    {"_Complex double",	   "_COMPLEX64"},		/* MTYPE_C8 = 18 */
+    {"_Complex float",     "_COMPLEX32"},       /* MTYPE_C4 = 17 */
+    {"_Complex double",    "_COMPLEX64"},       /* MTYPE_C8 = 18 */
     {Name_Unknown_Type,        ""},             /* MTYPE_CQ = 19 */
     {Name_Unknown_Type,        ""},             /* MTYPE_V = 20 */
     {Name_Unknown_Type,        ""},             /* MTYPE_BS = 21 */
     {Name_Unknown_Type,        ""},             /* MTYPE_A4 = 22 */
     {Name_Unknown_Type,        ""},             /* MTYPE_A8 = 23 */
-    {"_Complex long double", "_COMPLEX80"},	/* MTYPE_C10 = 24 */
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"_Complex long double", "_COMPLEX80"},       /* MTYPE_C10 = 24 */
+#else
+    {Name_Unknown_Type, "_COMPLEX80"},          /* MTYPE_C10 = 24 */
+#endif
+#if defined(TARG_IA64) || defined(TARG_X8664)
+    {"_Complex __float128",  "_IEEE128"},       /* MTYPE_F16 = 13 = MTYPE_PREDEF */
+#else
     {Name_Unknown_Type,        ""},             /* MTYPE_C16 = 25 */
+#endif
     {Name_Unknown_Type,        ""},             /* MTYPE_I16 = 26 */
-    {Name_Unknown_Type,        ""},		/* MTYPE_U16 = 27 */
-    {Name_Unknown_Type,        "_CMPLX8[2]"},   /* MTYPE_V16C4 = 24 */
-    {Name_Unknown_Type,        "_CMPLX16[1]"},  /* MTYPE_V16C8 = 25 */
-    {"signed char[16]",        "_INT8[16]"},    /* MTYPE_V16I1 = 26 */
-    {"signed short[8]",        "_INT16[8]"},    /* MTYPE_V16I2 = 27 */
-    {"signed int[4]",          "_INT32[4]"},    /* MTYPE_V16I4 = 28 */
-    {"signed long long int[2]","_INT64[2]"},    /* MTYPE_V16I8 = 29 */
-    {"float[4]",               "_IEEE32[4]"},   /* MTYPE_V16F4 = 30 */
-    {"double[2]",              "_IEEE64[2]"}    /* MTYPE_V16F8 = 31 */
+    {Name_Unknown_Type,        ""},              /* MTYPE_U16 = 27 */
+#ifdef TARG_X8664
+    {Name_Unknown_Type,        "_CMPLX8[2]"},   /* MTYPE_V16C4 = 28 */
+    {Name_Unknown_Type,        "_CMPLX16[1]"},  /* MTYPE_V16C8 = 29 */
+    {Name_Unknown_Type,        "V16I1"},        /* MTYPE_V16I1 = 30 */
+    {Name_Unknown_Type,        "V16I2"},        /* MTYPE_V16I2 = 31 */
+    {Name_Unknown_Type,        "V16I4"},        /* MTYPE_V16I4 = 32 */
+    {Name_Unknown_Type,        "V16I8"},        /* MTYPE_V16I8 = 33 */
+    {Name_Unknown_Type,        "V16F4"},        /* MTYPE_V16F4 = 34 */
+    {Name_Unknown_Type,        "V16F8"},        /* MTYPE_V16F8 = 35 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I1 = 36 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I2 = 37 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I4 = 38 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8I8 = 39 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V8F4 = 40 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I1 = 41 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I2 = 42 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8I4 = 43 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_M8F4 = 44 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32C4 = 45 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32C8 = 46 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I1 = 47 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I2 = 48 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I4 = 49 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32I8 = 50 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32F4 = 51 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_V32F8 = 52 */
+#elif defined(TARG_SL)
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB1 = 28 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB2 = 29 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB4 = 30 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SB8 = 31 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU1 = 32 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU2 = 33 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU4 = 34 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SBU8 = 35 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD1 = 36 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD2 = 37 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD4 = 38 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SD8 = 39 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU1 = 40 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU2 = 41 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU4 = 42 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_SDU8 = 43 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF1 = 44 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF2 = 45 */
+    {Name_Unknown_Type,        ""},             /* MTYPE_VBUF4 = 46 */
 #endif /* TARG_X8664 */
    }; /* Scalar_C_Names */
 
@@ -170,20 +229,35 @@ const char Special_Complex32_TypeName[] = "_COMPLEX32";
 const char Special_Complex64_TypeName[] = "_COMPLEX64";
 const char Special_ComplexQD_TypeName[] = "_COMPLEXQD";
 
-#define GET_SPECIAL_TYPENAME(mtype)\
-   ((mtype) == MTYPE_V? Special_Void_TypeName : \
-    ((mtype) == MTYPE_STR? Special_String_TypeName : \
-     ((mtype) == MTYPE_FQ? Special_Quad_TypeName : \
-      ((mtype) == MTYPE_C4? Special_Complex32_TypeName : \
-       ((mtype) == MTYPE_C8? Special_Complex64_TypeName : \
-	((mtype) == MTYPE_CQ? Special_ComplexQD_TypeName : \
-	 (const char *)NULL))))))
+const char *GET_SPECIAL_TYPENAME(TY_IDX mtype)
+{
+#if defined(TARG_SL)
+  const char *Special_SL_Mem_TypeName[] = { 
+    "_sbuf1", "_sbuf2", "_sbuf4", "_sbuf8", "unsigned _sbuf1", "unsigned _sbuf2",
+    "unsigned _sbuf4", "unsigned _sbuf8", "_sdram1", "_sdram2", "_sdram4", "_sdram8",
+    "unsigned _sdram1", "unsigned _sdram2", "unsigned _sdram4", "unsigned _sdram8",
+    "_vbuf1", "_vbuf2", "_vbuf4" };
 
+  if ((mtype >= MTYPE_SB1) || (mtype <= MTYPE_LAST)) {
+    return Special_SL_Mem_TypeName[mtype - MTYPE_SB1];
+  }
+#endif
+  return
+   ((mtype) == MTYPE_V? Special_Void_TypeName : 
+    ((mtype) == MTYPE_STR? Special_String_TypeName : 
+     ((mtype) == MTYPE_FQ? Special_Quad_TypeName : 
+      ((mtype) == MTYPE_C4? Special_Complex32_TypeName : 
+       ((mtype) == MTYPE_C8? Special_Complex64_TypeName : 
+	((mtype) == MTYPE_CQ? Special_ComplexQD_TypeName : 
+	 (const char *)NULL))))));
+}
+
+/*
 #define PTR_OR_ALIGNED_WITH_STRUCT(fld_ty, struct_align) \
    (TY_Is_Pointer(fld_ty) || TY_align(fld_ty) <= struct_align)
+*/
 
-
-//TODO, Liao#define PTR_OR_ALIGNED_WITH_STRUCT(fld_ty, struct_align) true
+#define PTR_OR_ALIGNED_WITH_STRUCT(fld_ty, struct_align) true
 
 
 /* Some forward declarations */
@@ -224,6 +298,7 @@ static const TY2C_HANDLER_FUNC
  */
 const char *TY2C_Complex_Realpart_Name = "realpart";
 const char *TY2C_Complex_Imagpart_Name = "imagpart";
+extern int compiling_upc_flag ;
 
 /*--------------------- hidden utility routines -----------------------*/
 /*---------------------------------------------------------------------*/
@@ -269,17 +344,17 @@ Write_Typedef(FILE       *ofile,
 static void 
 TY2C_prepend_qualifiers(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
-
   if (!CONTEXT_unqualified_ty2c(context))
     {
       if (TY_is_const(ty) && CONTEXT_const(context)) {
 	Prepend_Token_String(decl_tokens, "const");
       }
       if (TY_is_volatile(ty))
-	 Prepend_Token_String(decl_tokens, "volatile");
-      if (TY_is_restrict(ty))
-	 Prepend_Token_String(decl_tokens, "restrict");
-   }
+	Prepend_Token_String(decl_tokens, "volatile");
+      if (TY_is_restrict(ty)) {
+	Prepend_Token_String(decl_tokens, "restrict");
+      }
+    }
   /*
 	Prepend_Token_String(decl_tokens, "volatile");
       if (TY_is_restrict(ty)) {
@@ -349,8 +424,9 @@ skip_till_next_field(FLD_HANDLE  this_fld,
       while (!next_fld.Is_Null () &&
 	     (FLD_ofst(this_fld) >= FLD_ofst(next_fld) ||
 	      !PTR_OR_ALIGNED_WITH_STRUCT(FLD_type(next_fld), struct_align) ||
-	      (!TY_Is_Pointer(FLD_type(next_fld)) &&
-	       FLD_ofst(next_fld) % TY_align(FLD_type(next_fld)) != 0) ||
+	      //bug1452 -- on PPC we have situations where a type's natural alignemnt 
+	      //is different from when it's the inside a struct, so we'd have a "misaligned"
+	      //field here that still needs to be output
 	      (!is_union &&
 	       FLD_Is_Bitfield(next_fld, 
 			       FLD_next(next_fld),
@@ -366,10 +442,7 @@ skip_till_next_field(FLD_HANDLE  this_fld,
 static void
 TY2C_prepend_filler_field(TOKEN_BUFFER decl_tokens, INT64 byte_size)
 {
-  //TOOD, Liao
-  //if (Portable_compile) {
-  //  return;  //Do not output filler field to aid debugging 
-  //}
+   return;  //Do not output filler field to aid debugging
 
    /* Declare a filler field, uniquely named "fill".
     */
@@ -388,6 +461,7 @@ TY2C_prepend_filler_field(TOKEN_BUFFER decl_tokens, INT64 byte_size)
 } /* TY2C_prepend_filler_field */
 
 
+extern int debug_requested;
 static void
 TY2C_prepend_FLD_list(TOKEN_BUFFER decl_tokens,
 		      FLD_HANDLE   fld,
@@ -443,6 +517,7 @@ TY2C_prepend_FLD_list(TOKEN_BUFFER decl_tokens,
     * manner.  Note that we cannot redeclare bitfields accurately,
     * since the TY information is too incomplete to allow this.
     */
+
    if (!PTR_OR_ALIGNED_WITH_STRUCT(FLD_type(fld), struct_align) ||
        (!is_union &&
 	FLD_Is_Bitfield(fld, FLD_next(fld), remaining_bytes)))
@@ -511,9 +586,9 @@ TY2C_prototype_params(TOKEN_BUFFER decl_tokens,
 		      CONTEXT      context)
 {
    TOKEN_BUFFER param_tokens;
+
    /* We want the const qualifer for function prototypes */
    CONTEXT_set_const(context);
-
    if (Tylist_Table[params] == 0)
    {
       Append_Token_String(decl_tokens, "void");
@@ -542,7 +617,7 @@ static void
 TY2C_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
    Is_True(TY_Is_String(ty) ||
-	   TY_mtype(ty) <= MTYPE_LAST, ("Illegal type in TY2C_scalar()"));
+	   TY_mtype(ty) <= MTYPE_PREDEF, ("Illegal type in TY2C_scalar()"));
    Is_True(TY_mtype(ty) != MTYPE_UNKNOWN, ("Unknown type in TY2C_scalar()"));
 
    if (TY_Is_String(ty))
@@ -552,11 +627,14 @@ TY2C_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
       Append_Token_Special(decl_tokens, '[');
       Append_Token_Special(decl_tokens, ']');
    }
+   else if (TY_is_logical(ty)) {
+       Prepend_Token_String(decl_tokens, TY_name(ty));
+   }
    else
    {
 #ifndef COMPILE_UPC
-      Prepend_Token_String(decl_tokens, 
-			   Scalar_C_Names[TY_mtype(ty)].pseudo_name);
+	 Prepend_Token_String(decl_tokens, 
+			      Scalar_C_Names[TY_mtype(ty)].pseudo_name);
 #else
      //WEI:
      //For shared_ptr_idx, we want to print the name directly
@@ -660,7 +738,6 @@ TY2C_array(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    if (TY_kind(TY_AR_etype(ty)) == KIND_STRUCT) {
      CONTEXT_set_incomplete_ty2c(context);
    }
-
    
    /* Add the element type tokens and combine the array and element
     * qualifiers.
@@ -671,7 +748,8 @@ TY2C_array(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 
 static void TY2C_complete_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context) {
 
-   /* We need to get the alignment right for structs containing
+   /* 
+    *  We need to get the alignment right for structs containing
     * equivalence fields; i.e. overlapping fields, only one of which
     * will be declared by whirl2f.  One way to accomplish this is
     * to wrap the whole struct within a union and give the union the
@@ -694,44 +772,34 @@ static void TY2C_complete_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT co
     * Access expressions to this struct must accordingly denote
     * the "__block" portion of the union.
     */
-   CONTEXT fld_context;
-   BOOL    declare_incomplete = (CONTEXT_incomplete_ty2c(context) ||
-				 TY_is_translated_to_c(ty));
-   BOOL    is_equivalenced = Stab_Is_Equivalenced_Struct(ty);
-   
-   if (!declare_incomplete) /* flag it as having been translated to C */
-      Set_TY_is_translated_to_c(ty);
 
+    CONTEXT fld_context;
+    BOOL    is_equivalenced = Stab_Is_Equivalenced_Struct(ty);
     BOOL    is_anonymous = (strncmp (TY_name(ty), "T ", 2) == 0); //whether struct is anonymous
     BOOL    do_write = FALSE;
     if (!TY_flist(Ty_Table[ty]).Is_Null ()) {
       do_write = TRUE;
-      /* Declare all the struct fields, unless the incomplete type is all
-       * that is needed.
-       */
-      // if (!declare_incomplete && !TY_flist(Ty_Table[ty]).Is_Null ())
-      //{
       fld_context = context;
       CONTEXT_reset_unqualified_ty2c(fld_context);
-      CONTEXT_set_incomplete_ty2c(fld_context);
-      //CONTEXT_reset_incomplete_ty2c(fld_context);
+      //CONTEXT_set_incomplete_ty2c(fld_context);
+      CONTEXT_reset_incomplete_ty2c(fld_context);
       
       if (is_equivalenced)
-      {
-	 /* Prepend the end-of-union character, on a new line following
-	  * the list of its two fields, and force the alignment
-	  * with a new field.
-	  */
-	 Prepend_Token_Special(decl_tokens, '}');
-	 Prepend_Indented_Newline(decl_tokens, 1);
-	 Increment_Indentation();
-	 Prepend_Token_Special(decl_tokens, ';');
-	 Prepend_Token_String(decl_tokens, "__align");
-	 TY2C_Prepend_Alignment_Type(decl_tokens, TY_align(ty));
-	 Prepend_Indented_Newline(decl_tokens, 1);
-	 Prepend_Token_Special(decl_tokens, ';');
-	 Prepend_Token_String(decl_tokens, TY2C_Aligned_Block_Name);
-      }
+	{
+	  /* Prepend the end-of-union character, on a new line following
+	   * the list of its two fields, and force the alignment
+	   * with a new field.
+	   */
+	  Prepend_Token_Special(decl_tokens, '}');
+	  Prepend_Indented_Newline(decl_tokens, 1);
+	  Increment_Indentation();
+	  Prepend_Token_Special(decl_tokens, ';');
+	  Prepend_Token_String(decl_tokens, "__align");
+	  TY2C_Prepend_Alignment_Type(decl_tokens, TY_align(ty));
+	  Prepend_Indented_Newline(decl_tokens, 1);
+	  Prepend_Token_Special(decl_tokens, ';');
+	  Prepend_Token_String(decl_tokens, TY2C_Aligned_Block_Name);
+	}
       
       /* Prepend the end-of-struct character, on a new line following
        * the list of fields.
@@ -778,17 +846,17 @@ static void TY2C_complete_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT co
       if (!is_anonymous) {
 	Prepend_Token_String(decl_tokens, W2CF_Symtab_Nameof_Ty(ty));
       }
-    } else if (TY_size(ty) == 0) {// 0 size structure,not 1. Liao,
-      //   else if (!declare_incomplete && TY_size(ty) == 1)
-
+    } else if (TY_size(ty) == 1) { /* FIXME: Liao suggested 0 here? */
       /* A special struct with no fields, which may sometimes
        * occur for C++ lowered into C.
        */
       Prepend_Token_Special(decl_tokens, '}');
       Prepend_Indented_Newline(decl_tokens, 1);
+      
       Prepend_Token_Special(decl_tokens, ';');
       Prepend_Token_String(decl_tokens, W2CF_Symtab_Unique_Name("dummy"));
       TY2C_translate(decl_tokens, Stab_Mtype_To_Ty(MTYPE_U1), context);
+      
       Increment_Indentation();
       Prepend_Indented_Newline(decl_tokens, 1);
       Prepend_Token_Special(decl_tokens, '{');
@@ -813,7 +881,10 @@ static void TY2C_complete_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT co
 /* code to avoid duplication of struct output.  This could happen e.g. if the struct type is used both for 
    shaerd and non-shared variables */
 
-//  static hash_set<STR_IDX> struct_names;
+// STL hash_set does not support 64bit int, so can't do this:
+// static hash_set<STR_IDX> struct_names;
+// Instead do it on TY_IDX:
+static hash_set<TY_IDX> struct_ty;
 
 
 //If the given type is a user-defined struct, 
@@ -822,13 +893,11 @@ static void TY2C_Output_Struct_Type(TY_IDX ty,
 			     INT lines_between_decls,
 			     CONTEXT context) {
 
-
-//TODO, Liao  if (struct_names.find(Save_Str(TY_name(ty))) != struct_names.end()
-//      || !TY_is_written(ty)) {
+  // this was commented out before in OpenUH */
+  if (struct_ty.find(ty) != struct_ty.end()) {
     //don't output duplicate struct definitions
-//TODO    return;
-//  }
-
+    return;
+  }
 
   //it seems that the intention here is to avoid writing duplicate declarations
   //for structs that appear as both local and shared types.
@@ -836,7 +905,8 @@ static void TY2C_Output_Struct_Type(TY_IDX ty,
   //need them for debug. The above test should be strong enough ...
   //if (!TY_is_shared(ty)) {
     Set_TY_is_translated_to_c(ty);  //need to force all later struct type decl to be incomplete
- //   struct_names.insert(Save_Str(TY_name(ty)));
+    struct_ty.insert(ty);
+ 
 
     TOKEN_BUFFER tmp_tokens = New_Token_Buffer(); 
     CONTEXT_reset_incomplete_ty2c(context); 
@@ -846,7 +916,7 @@ static void TY2C_Output_Struct_Type(TY_IDX ty,
     Write_And_Reclaim_Tokens(W2C_File[W2C_DOTH_FILE], 
 			     NULL,
 			     &tmp_tokens);
-   CONTEXT_set_incomplete_ty2c(context);//Liao
+   // CONTEXT_set_incomplete_ty2c(context); //Liao
     //}
 }
 
@@ -881,7 +951,7 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
   //}
 
 #endif
-  if (declare_incomplete){
+
   BOOL is_anonymous = (strncmp(TY_name(ty), "T ", 2) == 0);
   if (!is_anonymous) {
     /* the normal case */
@@ -897,7 +967,6 @@ TY2C_struct(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
   }
     
   TY2C_prepend_qualifiers(decl_tokens, ty, context);
-  }//end if
 } /* TY2C_struct */
 
 
@@ -911,6 +980,7 @@ TY2C_function(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 
    /* WEI: struct types in a function had better be incomplete */
    CONTEXT_set_incomplete_ty2c(context);
+
    /* Append the parameter type list to the right of the decl_tokens */
    Append_Token_Special(decl_tokens, '(');
    if (TY_has_prototype(ty))
@@ -934,10 +1004,12 @@ TY2C_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
 {
 
   TY_IDX sptr_idx = 0;
+
    /* Add qualifiers to the rhs of the '*' and to the left of the
     * decl_tokens.
     */
    TY2C_prepend_qualifiers(decl_tokens, ty, context);
+
    Prepend_Token_Special(decl_tokens, '*');
 
    if (TY_Is_Array_Or_Function(TY_pointed(ty)))
@@ -962,25 +1034,13 @@ TY2C_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty, CONTEXT context)
    
    CONTEXT_reset_unqualified_ty2c(context); /* Always qualify pointee type */
    CONTEXT_set_incomplete_ty2c(context); /* Pointee can be incomplete */
-   TY2C_translate(decl_tokens, TY_pointed(ty), context);
-   /* TODO, Liao
    bool old_const = CONTEXT_const(context);
    CONTEXT_set_const(context);
-   if(!sptr_idx)
-     TY2C_translate(decl_tokens, TY_pointed(ty), context);
-   else {
-     if(Compile_Upc && debug_requested) {
-       static char mangled_name[256];
-       strcpy(mangled_name,"__BMN_");
-       strcat(mangled_name, Mangle_Type(ty).data());
-       Prepend_Token_String(decl_tokens, mangled_name);
-     }
-     else 
-       TY2C_translate(decl_tokens, sptr_idx, context);
-   }
+   TY2C_translate(decl_tokens, TY_pointed(ty), context);
+
    if (!old_const) {
      CONTEXT_reset_const(context);
-     } */
+   }
 } /* TY2C_pointer */
 
 
@@ -1056,7 +1116,7 @@ TY2C_translate_unqualified(TOKEN_BUFFER decl_tokens, TY_IDX ty)
    CONTEXT_reset(context);
    CONTEXT_set_unqualified_ty2c(context);
    //WEI: in this cast the struct type should definitely be incomplete
-   if ( TY_kind(ty) == KIND_STRUCT) {
+   if (TY_kind(ty) == KIND_STRUCT) {
      CONTEXT_set_incomplete_ty2c(context);
    }
 
@@ -1225,7 +1285,7 @@ TY2C_builtin(TY_IDX ty)
    const char *name = GET_SPECIAL_TYPENAME(TY_mtype(ty));
 
    return (name != NULL ||
-	   (TY_mtype(ty) <= MTYPE_LAST && 
+	   (TY_mtype(ty) <= MTYPE_PREDEF && 
 	    (TY_mtype(ty) != MTYPE_UNKNOWN || TY_kind(ty) == KIND_INVALID) &&
 	    Scalar_C_Names[TY_mtype(ty)].pseudo_name != NULL));
 } /* TY2C_builtin */

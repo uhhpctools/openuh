@@ -257,7 +257,10 @@ bitmap_element_link (head, element)
 
 /* Clear a bitmap by freeing the linked list.  */
 
-INLINE void
+#ifndef KEY
+INLINE /* GNU 4.2 does not allow non-static C99 inline functions. */
+#endif
+void
 bitmap_clear (head)
      bitmap head;
 {

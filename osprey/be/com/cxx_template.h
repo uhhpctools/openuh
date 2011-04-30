@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -38,10 +42,10 @@
 *** ====================================================================
 ***
 *** Module: cxx_template.h
-*** $Revision: 1.1.1.1 $
-*** $Date: 2005/10/21 19:00:00 $
-*** $Author: marcel $
-*** $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/cxx_template.h,v $
+*** $Revision: 1.2 $
+*** $Date: 02/11/07 23:41:35-00:00 $
+*** $Author: fchow@keyresearch.com $
+*** $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.cxx_template.h $
 ***
 *** Revision history:
 ***  8-SEP-94 shin - Original Version
@@ -169,13 +173,12 @@
 #ifndef cxx_template_INCLUDED
 #define cxx_template_INCLUDED	  "cxx_template.h"
 #ifdef _KEEP_RCS_ID
-static char *cxx_templatercs_id = cxx_template_INCLUDED"$Revision$";
+static char *cxx_templatercs_id = cxx_template_INCLUDED"$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "mempool.h"
 #include "erglob.h"
 #include "errors.h"
-
 
 template <class T>
 class DYN_ARRAY {
@@ -220,7 +223,20 @@ public:
     _array[Newidx()] = val;
 #endif
   }
-
+  void DeleteElement(mUINT32 idx)
+  {
+    if (idx < _lastidx) {
+       for (int iter = idx; iter < _lastidx; iter++) {
+          _array[idx] = _array[idx+1];
+       }
+       _array[_lastidx] = NULL;
+       Decidx();
+    }
+    else if (idx == _lastidx) {
+        _array[idx] = NULL;
+        Decidx();
+    }
+  }
   mUINT32 Elements () const  { return (_lastidx+1); }
 
   mUINT32 Newidx(void);                  // allocate a valid index
@@ -327,6 +343,8 @@ public:
   void    Free()                                { _stack.Free_array(); }
   void    Alloc(const INT32 n)                  { _stack.Alloc_array(n); }
   mINT32  Elements() const			{ return(_stack.Lastidx() +1);}
+  // Delete Top_nth(n) element.
+  void    DeleteTop(mUINT32 n)         { _stack.DeleteElement(_stack.Lastidx() - n); }
 };
 
 
@@ -425,7 +443,7 @@ template <class T>
 void
 DYN_ARRAY<T>::Bzero_array()
 {
-  if (_array != NULL) bzero(_array,sizeof(T) * _size);
+  if (_array != NULL) BZERO(_array,sizeof(T) * _size);
 }
 
 template <class T>
@@ -493,7 +511,6 @@ void STACK<T>::Settop(const T& val)
   Is_True(idx >= 0, ("STACK::Settop(): Stack Empty"));
   _stack[idx] = val;
 }
-
 
 template <class T>
 T& STACK<T>::Top_nth(const INT32 n) const

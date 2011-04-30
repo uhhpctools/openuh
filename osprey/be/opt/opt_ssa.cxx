@@ -603,6 +603,7 @@ void SSA::Construct(CODEMAP *htable, CFG *cfg, OPT_STAB *opt_stab)
 
   OPT_POOL_Pop(&defs_bb_pool, SSA_DUMP_FLAG);
   OPT_POOL_Delete(&defs_bb_pool, SSA_DUMP_FLAG);
+  _opt_stab->Reset_def_bbs();
 
   MEM_POOL rename_pool;
   OPT_POOL_Initialize(&rename_pool, "SSA rename pool", FALSE, SSA_DUMP_FLAG);
@@ -807,10 +808,17 @@ SSA::Find_zero_versions(void)
     v->Set_cr_list(NULL);    // initialize this field unioned with nonzerophis
     }
 #ifdef KEY
-  if ( Get_Trace(TP_GLOBOPT, SSA_DUMP_FLAG)) {
+  if ( Get_Trace(TP_GLOBOPT, SSA_DUMP_FLAG) ) {
+    fprintf(TFile, "ZERO VERSIONING: \n");
+    Print();
+  }
+#endif
+  OPT_POOL_Pop(loc_pool, SSA_DUMP_FLAG);
+}
+
+void SSA::Print() {
     CFG_ITER cfg_iter;
     BB_NODE *bb;
-    fprintf(TFile, "ZERO VERSIONING: \n");
     FOR_ALL_ELEM (bb, cfg_iter, Init(_cfg)){
       if (bb->Phi_list()->Len() > 0) {
         fprintf(TFile, "BB%d: \n", bb->Id());
@@ -819,8 +827,7 @@ SSA::Find_zero_versions(void)
       WN *wn;
       STMT_ITER stmt_iter;
       FOR_ALL_ELEM (wn, stmt_iter, Init(bb->Firststmt(), bb->Laststmt())) {
-        fdump_tree_no_st(TFile, wn);
-        Print_ssa_ver_for_wn(wn);
+        Print_ssa_ver_for_wn(wn, 0);
         if (WN_has_mu(wn, _cfg->Rgn_level())) {
           MU_LIST *mu_list = Opt_stab()->Get_stmt_mu_list(wn);
           if (mu_list)
@@ -833,25 +840,25 @@ SSA::Find_zero_versions(void)
         }
       }
     }
-  }
-#endif
-  OPT_POOL_Pop(loc_pool, SSA_DUMP_FLAG);
 }
+
 #ifdef KEY
-void SSA::Print_ssa_ver_for_wn(WN* wn)
+void SSA::Print_ssa_ver_for_wn(WN* wn, INT indent)
 {
+  for (INT32 i = 0; i < WN_kid_count(wn); i++)
+    Print_ssa_ver_for_wn(WN_kid(wn,i), indent + 1);
   OPCODE opc = WN_opcode(wn);
   OPERATOR opr = OPCODE_operator(opc);
+  for (INT j = 0; j < indent; j++)
+    fprintf(TFile, " ");
+  fdump_wn_no_st(TFile,wn);
   if (WN_has_mu(wn, Cfg()->Rgn_level())) {
     OCC_TAB_ENTRY *occ = Opt_stab()->Get_occ(wn);
     if (occ && !occ->Is_stmt()) {
-      fdump_tree_no_st(TFile,wn);
       MU_NODE *mnode = occ -> Mem_mu_node();
       mnode->Print(TFile);
     }
   }
-  for (INT32 i = 0; i < WN_kid_count(wn); i++)
-    Print_ssa_ver_for_wn(WN_kid(wn,i));
 }
 #endif
 void
@@ -864,6 +871,14 @@ SSA::Create_CODEMAP(void)
     extern BOOL Simp_Canonicalize;
     BOOL save_simp_canon = Simp_Canonicalize;
     COPYPROP copyprop(_htable, _opt_stab, _cfg, loc_pool);
+#ifdef TARG_NVISA
+    // in first pass, only want to handle loops, not do optimization
+    // (which may cause performance issues because propagates into loop,
+    // emits whirl, then does mainopt which may not hoist if originates
+    // in loop, unless aggcm which we have turned off).
+    if (Htable()->Phase() == PREOPT_PHASE)
+      copyprop.Set_disabled();
+#endif
 
     //Simp_Canonicalize = FALSE;
     Value_number(_htable, _opt_stab, _cfg->Entry_bb(), &copyprop, _cfg->Exc());
@@ -876,12 +891,18 @@ SSA::Create_CODEMAP(void)
 	      DBar, DBar );
       _htable->Print(TFile);
       _cfg->Print(TFile);
+      if (_opt_stab->Cr_sr_annot_mgr ())
+        _opt_stab->Cr_sr_annot_mgr()->Print (TFile);
     }
   
     Opt_tlog( "CODEMAP", 0, "%d iloadfolds, %d istorefolds",
 	      _htable->Num_iloadfolds(), _htable->Num_istorefolds() );
     Opt_tlog( "INPUTPROP", 0, "%d copy propagations",
 	      Htable()->Num_inputprops() );
+#ifdef TARG_NVISA
+    if (Htable()->Phase() == PREOPT_PHASE)
+      copyprop.Reset_disabled();
+#endif
     Simp_Canonicalize = save_simp_canon;
   }
   
@@ -889,6 +910,10 @@ SSA::Create_CODEMAP(void)
   OPT_POOL_Pop(loc_pool, SSA_DUMP_FLAG);
 
   _htable->Init_var_phi_hash();
+  
+  // Clear WN annotation map lest we accidently use it in preopt/wopt.
+  if (WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()) 
+    WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()->Invalidate ();
 }
 
 // ====================================================================
@@ -1075,6 +1100,7 @@ SSA::Du2cr( CODEMAP *htable, OPT_STAB *opt_stab, VER_ID du,
       OPCODE opc = WN_opcode(ref_wn);
       rtype = OPCODE_rtype(opc);
       dtype = OPCODE_desc(opc);
+      Is_True(!(dtype==MTYPE_I2 && rtype== MTYPE_I2), ("Create illegal coderep i2i2"));
 
 #ifndef TARG_X8664
       // Fix 770676
@@ -1255,6 +1281,16 @@ void SSA::Value_number(CODEMAP *htable, OPT_STAB *opt_stab, BB_NODE *bb,
     // add new stmtrep with Wn set
     stmt = bb->Add_stmtnode(wn, mem_pool);
 
+#ifdef TARG_SL //fork_joint
+    stmt->Set_fork_stmt_flags(WN_is_compgoto_para(wn));
+    stmt->Set_minor_fork_stmt_flags(WN_is_compgoto_for_minor(wn));
+    // mark istore for vbuf automatic expansion 
+    if (WN_operator(wn) == OPR_ISTORE && WN_is_internal_mem_ofst(wn))
+      stmt->Set_SL2_internal_mem_ofst(TRUE);
+    else
+      stmt->Set_SL2_internal_mem_ofst(FALSE); 
+#endif 
+
     stmt->Enter_rhs(htable, opt_stab, copyprop, exc);
     stmt->Enter_lhs(htable, opt_stab, copyprop);
 
@@ -1281,31 +1317,6 @@ void SSA::Value_number(CODEMAP *htable, OPT_STAB *opt_stab, BB_NODE *bb,
     }
 #endif
 
-#if 0
-    // Simplification of CVT/CVTL
-    OPERATOR stmt_opr = stmt->Opr();
-    if (stmt_opr == OPR_STID &&
-	ST_class(opt_stab->St(stmt->Lhs()->Aux_id())) != CLASS_PREG ||
-	stmt_opr == OPR_ISTORE ||
-	stmt_opr == OPR_ISTOREX) {
-      CODEREP *rhs_cr = stmt->Rhs();
-      CODEREP *lhs = stmt->Lhs();
-      if (WOPT_Enable_Cvt_Folding &&
-	  rhs_cr->Kind() == CK_OP && 
-	  (rhs_cr->Opr() == OPR_CVT && MTYPE_is_integral(rhs_cr->Dsctyp()) 
-	   || rhs_cr->Opr() == OPR_CVTL) &&
-	  MTYPE_is_integral(rhs_cr->Dtyp()) && 
-	  MTYPE_is_integral(lhs->Dsctyp())
-	  ) {
-	MTYPE actual_type = (rhs_cr->Opr() == OPR_CVT) ? 
-	  rhs_cr->Dsctyp() : Actual_cvtl_type(rhs_cr->Op(),rhs_cr->Offset());
-	if (MTYPE_size_min(lhs->Dsctyp()) <= MTYPE_size_min(actual_type)) {
-	  stmt->Set_rhs(rhs_cr->Get_opnd(0));
-	}
-      }
-    }
-#endif
-    
     INT32 linenum = Srcpos_To_Line(stmt->Linenum());	// for debugging
 
     // should no longer need the Wn
@@ -1317,13 +1328,25 @@ void SSA::Value_number(CODEMAP *htable, OPT_STAB *opt_stab, BB_NODE *bb,
       WOPT_Enable_Itself_Prop = FALSE; // can cause incorrectness in itself-prop
     }
 
+    // For a call, set the call site id for the Nystrom alias analyzer
+    // so as to restore it during CODEMAP -> WHIRL translation
+    if (OPERATOR_is_call(WN_operator(wn))) {
+      UINT32 callsite_id = WN_MAP32_Get(WN_MAP_ALIAS_CGNODE, wn);
+      if (callsite_id != 0)
+        stmt->Set_constraint_graph_callsite_id(callsite_id);
+    }
+
     // statement has mu only in returns and calls
     if (WN_has_mu(wn, Cfg()->Rgn_level())) {
       MU_LIST_ITER mu_iter;
       MU_NODE *mnode;
 
       stmt->Set_mu_list( opt_stab->Get_stmt_mu_list(wn) );
-      if (stmt->Opr() == OPR_RETURN || stmt->Opr() == OPR_RETURN_VAL)
+      if (stmt->Opr() == OPR_RETURN || stmt->Opr() == OPR_RETURN_VAL
+#ifdef KEY
+	  || stmt->Opr() == OPR_GOTO_OUTER_BLOCK
+#endif
+	 )
 	stmt->Mu_list()->Delete_def_at_entry_mus(opt_stab);
       FOR_ALL_NODE( mnode, mu_iter, Init(stmt->Mu_list()) ) {
 	if (mnode->Opnd() != 0) {
@@ -1410,6 +1433,9 @@ void SSA::Value_number(CODEMAP *htable, OPT_STAB *opt_stab, BB_NODE *bb,
       copyprop->Set_past_ret_reg_def();
     else if (stmt->Opr() == OPR_RETURN || 
 	     stmt->Opr() == OPR_RETURN_VAL ||
+#ifdef KEY
+  	     stmt->Opr() ==  OPR_GOTO_OUTER_BLOCK ||
+#endif
 	     stmt->Opr() == OPR_REGION)
       copyprop->Reset_past_ret_reg_def();
 

@@ -1741,7 +1741,11 @@ assemble_variable (tree decl, int top_level ATTRIBUTE_UNUSED,
 #ifdef KEY
       // Must call asm_emit_uninitialised before returning.  Needed to create
       // DECL_SECTION_NAME.  Bug 10876.
-      if (flag_spin_file)
+      if (flag_spin_file
+#ifdef TARG_MIPS
+          && DECL_SECTION_NAME(decl)
+#endif
+         )
         return;
 #endif
     }
@@ -1790,6 +1794,14 @@ assemble_variable (tree decl, int top_level ATTRIBUTE_UNUSED,
       // bug 11177: Update external_flag so that wgen expands any
       // initialization it may have.
       gs_set_flag_value (decl, GS_DECL_EXTERNAL, DECL_EXTERNAL(decl));
+#ifdef TARG_MIPS
+      if (DECL_INITIAL (decl) == 0 ||
+          DECL_INITIAL (decl) == error_mark_node) {
+        // bugs 12645, 13054
+        gs_set_operand(GS_NODE(decl), GS_DECL_SECTION_NAME,
+                       gs_x(DECL_SECTION_NAME(decl)));
+      }
+#endif
     }
 
     if (DECL_ASSEMBLER_NAME_SET_P (decl) &&

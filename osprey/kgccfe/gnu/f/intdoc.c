@@ -45,11 +45,6 @@ static const char *argument_info_ptr (ffeintrinImp imp, int argno);
 static const char *argument_info_string (ffeintrinImp imp, int argno);
 static const char *argument_name_ptr (ffeintrinImp imp, int argno);
 static const char *argument_name_string (ffeintrinImp imp, int argno);
-#if 0
-static const char *elaborate_if_complex (ffeintrinImp imp, int argno);
-static const char *elaborate_if_maybe_complex (ffeintrinImp imp, int argno);
-static const char *elaborate_if_real (ffeintrinImp imp, int argno);
-#endif
 static void print_type_string (const char *c);
 
 int
@@ -538,12 +533,6 @@ this intrinsic is valid only when used as the argument to\n\
 		    arg_string,
 		    arg_string);
 	}
-#if 0
-      else if ((c[0] == 'I')
-	       && (c[1] == '7'))
-	printf (", the exact type being wide enough to hold a pointer\n\
-on the target system (typically @code{INTEGER(KIND=1)} or @code{INTEGER(KIND=4)}).\n\n");
-#endif
       else if (c[1] == '=' && ISDIGIT (c[colon + 1]))
 	{
 	  assert (other_arg >= 0);

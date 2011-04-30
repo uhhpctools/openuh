@@ -228,38 +228,6 @@ Find_Def_Of_TN (TN *tn, OP *last_op)
 	if (op == NULL && Trace_Unwind)
 		fprintf(TFile, "couldn't find def of tn %d\n", TN_number(tn));
 	return op;
-#if 0
-	// search backwards to find def of tn
-	DEF_KIND kind;
-	OP *op = TN_Reaching_Value_At_Op(tn, last_op, &kind, TRUE);
-	if (op && OP_has_result(op) && OP_result(op,0) == tn) {
-		return op;
-	}
-
-	// if following a call, may be store of return val
-	BB *bb;
-	bb = OP_bb(last_op);
-	bb = BB_Unique_Predecessor(bb);
-	if (bb != NULL && BB_call(bb)
-	    && ! REGISTER_SET_MemberP(
-		 REGISTER_CLASS_callee_saves(TN_register_class(tn)),
-            	 TN_register(tn) ) )
-	{
-		return NULL;
-	}
-
-DevWarn("unwind:  couldn't initially find def of tn %d, so search all bbs", TN_number(tn));
-	for (BB *bb = REGION_First_BB; bb; bb = BB_next(bb)) {
-	    if (BB_unreachable(bb)) continue;
-	    FOR_ALL_BB_OPs_FWD(bb, op) {
-		if (op && OP_has_result(op) && OP_result(op,0) == tn) {
-			return op;
-		}
-	    }
-	}
-DevWarn("unwind:  still couldn't find def of tn %d", TN_number(tn));
-	return NULL;
-#endif
 }
 
 static TN*
@@ -1720,6 +1688,10 @@ extern BOOL Is_Dwarf_Section_To_Emit(const char *name)
 	  if(strcmp(name,drop_these[i]) == 0) {
 	    return FALSE;
 	  }
+	}
+	if(Debug_Level < 1 && strncmp(name, ".debug_", 7) == 0) {
+	  //do not emit .debug_ sections if no '-g'
+	  return FALSE;
 	}
         return TRUE;
 }

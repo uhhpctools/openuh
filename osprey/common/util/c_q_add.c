@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: c_q_add.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/c_q_add.c,v $
+ *  $Revision$
+ *  $Date$
+ *  $Author$
+ *  $Source$
  *
  * =======================================================================
  * =======================================================================
@@ -73,8 +73,14 @@ static const du		inf =
 
 extern	QUAD	c_q_add(QUAD, QUAD, INT *);
 
+#if defined(BUILD_OS_DARWIN)
+/* Can't use "pragma weak" to create aliases in Mach-O */
+QUAD c_q_add(QUAD x, QUAD y, INT *p_err );
+QUAD __c_q_add(QUAD x, QUAD y, INT *p_err ) { return c_q_add(x, y, p_err); }
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak c_q_add = __c_q_add
 #define	c_q_add __c_q_add
+#endif /* defined(BUILD_OS_DARWIN) */
 
 double	fabs(double);
 #pragma intrinsic (fabs)

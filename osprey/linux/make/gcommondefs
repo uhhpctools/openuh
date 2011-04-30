@@ -1,6 +1,8 @@
 # -*- Makefile -*-
 #
 #
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -70,23 +72,31 @@ COMMONTARGS= clobber clean rmtargets fluff tags
 # development systems to build the software.
 #
 
-AR	= ar
-AWK	= awk
-
 SIZEDEFS = -D_LONGLONG -D_MIPS_SZINT=32
+
+PTRSIZE = 32
 ifeq ($(BUILD_ABI), 64BIT)
-  _MIPS_SZLONG := 64
-  SIZEDEFS += -D_MIPS_SZPTR=64 -D_MIPS_SZLONG=$(_MIPS_SZLONG) -D_LP64
+ PTRSIZE = 64
+endif
+ifeq ($(BUILD_ABI), I64BIT)
+ PTRSIZE = 64
+endif
+ifeq ($(BUILD_ABI), W64BIT)
+ PTRSIZE = 64
+endif
+ifeq ($(PTRSIZE), 32)
+ SIZEDEFS += -D_MIPS_SZPTR=32 -D_MIPS_SZLONG=32
 else
-  ifeq ($(BUILD_ABI), I64BIT)
-    _MIPS_SZLONG := 64
-    SIZEDEFS += -D_MIPS_SZPTR=64 -D_MIPS_SZLONG=$(_MIPS_SZLONG) -D_LP64
-  else
-    SIZEDEFS += -D_MIPS_SZPTR=32 -D_MIPS_SZLONG=32
-  endif
+ SIZEDEFS += -D_MIPS_SZPTR=64
+ ifeq ($(BUILD_ABI), W64BIT)
+  # W64BIT is win64, which has 64bit ptr but 32bit long
+  SIZEDEFS += -D_MIPS_SZLONG=32 -DWIN64
+ else
+  SIZEDEFS += -D_MIPS_SZLONG=64 -D_LP64
+ endif
 endif
 
-ifeq ($(BUILD_OS), LINUX)
+ifneq ($(BUILD_ARCH), MIPS)
 ENDIAN = -D_MIPSEL
 else
 ENDIAN = -D_MIPSEB
@@ -94,84 +104,160 @@ endif
 
 
 ifeq ($(BUILD_COMPILER), GNU)
-ASNAME = gcc  
-CCNAME = gcc 
-C++NAME = g++ 
-#F90 = gfortran
-#F90_RTLIBS = -lgfortran
-#F90 = ifort -assume 2underscores
-#F90_RTLIBS = $(INTEL_COMPILER_FC_HOME)/lib/libifcore.a $(INTEL_COMPILER_FC_HOME)/lib/libimf.a
-F90 = openf90
-ifeq ($(BUILD_ARCH), X8664)
-# only 64bit libraries set the BUILD_ARCH to X8664 
-CCNAME  = opencc 
-C++NAME = openCC  
-F90 = openf90 
-endif
-ifeq ($(BUILD_TARGET), IA32)
-# only 32bit libraries set the BUILD_TARGET to IA32
-CCNAME  = opencc -m32 -mno-sse2
-C++NAME = openCC -m32 -mno-sse2
-F90 = openf90 -m32 -mno-sse2
-endif
-ifeq ($(BUILD_TARGET), X8664)
-# both the 64bit libraries and executables set the BUILD_TARGET to X8664
-# we should distinguish them
-ifeq ($(BUILD_ARCH), IA32)
-ASNAME = gcc -m32
-CCNAME = gcc -m32
-C++NAME = g++ -m32
-# or using ifort to build the FORTRAN FE
-F90 = openf90 -m32
-endif
-endif
-AR      = ar
-F77 = $(F90)
+  ASNAME = gcc 
+  ifeq ($(BUILD_HOST), PPC32)
+    CCNAME = gcc -DHOST_PPC32 
+    C++NAME = g++ -DHOST_PPC32 
+  else
+    CCNAME = gcc 
+    C++NAME = g++ 
+  endif
+  F90 = gfortran -fsecond-underscore
+  F90_RTLIBS = -Wl,-Bstatic -lgfortran -Wl,-Bdynamic
+  #F90 = ifort -assume 2underscores
+  #F90_RTLIBS = $(INTEL_COMPILER_FC_HOME)/lib/libifcore.a $(INTEL_COMPILER_FC_HOME)/lib/libimf.a
+
+  ifeq ($(BUILD_TARGET), X8664)
+    # only 64bit libraries set the BUILD_ARCH to X8664 
+    #
+    CCNAME  += 
+    C++NAME +=  
+    F90 +=
+  endif
+  ifeq ($(BUILD_TARGET), IA32)
+    # only 64bit libraries set the BUILD_ARCH to X8664 
+    CCNAME  +=
+    C++NAME +=
+    ASNAME +=
+    F90 +=
+  endif
+  ifeq ($(BUILD_TARGET), IA64)
+    # only 64bit libraries set the BUILD_ARCH to X8664 
+    CCNAME  += 
+    C++NAME +=  
+    F90 += 
+  endif
+  ifeq ($(BUILD_TARGET), NVISA)
+    ROOT_DIR := $(dir $(word $(words $(MAKEFILE_LIST)),$(MAKEFILE_LIST)))/../../../..
+    ifneq ($(BUILD_OS), LINUX)
+      ifneq ($(BUILD_OS), DARWIN)
+        ifndef USE_NATIVE
+          USE_CYGWIN := 1
+        endif
+      endif
+    endif
+    include $(ROOT_DIR)/build/Platform.mk
+ 
+    CCNAME  = $(GCC_BIN)gcc
+    C++NAME = $(GCC_BIN)g++
+  endif
+
+  AR      = ar
+  F77 = $(F90)
+endif # GNU
+
+ifeq ($(BUILD_COMPILER), SLC)
+  CCNAME = $(TOOLROOT)/usr/bin/slcc
+  C++NAME = $(TOOLROOT)/usr/bin/slCC
 endif
 
 ifeq ($(BUILD_COMPILER), PSC)
-ASNAME = pathcc -m32 -mno-sse2
-CCNAME = pathcc -m32 -mno-sse2
-C++NAME = pathCC -m32 -mno-sse2
-ifeq ($(BUILD_ARCH), X8664)
-CCNAME  = pathcc 
-C++NAME = pathCC 
-AR      = ar
-endif
-F90 = pathf90 -m32 
-ifeq ($(BUILD_TARGET), IA32)
-F90 += -m32 -mno-sse2
-endif
-F77 = $(F90)
+  ASNAME = pathcc 
+  CCNAME = pathcc
+  C++NAME = pathCC
+  F90 = pathf90  
+  ifeq ($(BUILD_TARGET), X8664)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  ifeq ($(BUILD_TARGET), IA32)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  F77 = $(F90)
+  AR      = ar
 endif
 
 ifeq ($(BUILD_COMPILER), OSP)
-ASNAME = opencc
-CCNAME = opencc
-C++NAME = openCC
-F90 = openf90
-F90_RTLIBS = -lfortran
+  ASNAME = opencc
+  CCNAME = opencc
+  C++NAME = openCC
+  F90 = openf90
+  F90_RTLIBS = -Wl,-Bstatic -lfortran -Wl,-Bdynamic
 
-ifeq ($(BUILD_TARGET), IA32)
-# only 32bit libraries set the BUILD_TARGET to IA32
-ASNAME += -m32 -mno-sse2
-CCNAME += -m32 -mno-sse2
-C++NAME += -m32 -mno-sse2
-F90 += -m32 -mno-sse2
+  ifeq ($(BUILD_TARGET), X8664)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  ifeq ($(BUILD_TARGET), IA32)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  ifeq ($(BUILD_TARGET), IA64)
+    # only 64bit libraries set the BUILD_ARCH to X8664 
+    CCNAME  += 
+    C++NAME +=  
+    F90 += 
+  endif
+  F77 = $(F90)
+  AR      = ar
 endif
 
-ifeq ($(BUILD_TARGET), X8664)
-# both the 64bit libraries and executables set the BUILD_TARGET to X8664
-# we should distinguish them
+ifeq ($(BUILD_COMPILER), SELF)
+  ASNAME = $(COMPILER_TARG_DIR)/driver/opencc
+  CCNAME = $(COMPILER_TARG_DIR)/driver/opencc
+  C++NAME = $(COMPILER_TARG_DIR)/driver/openCC
+  F90 = $(COMPILER_TARG_DIR)/driver/openf90
+  F90_RTLIBS = -Wl,-Bstatic -lfortran -Wl,-Bdynamic
+
+  ASNAME += -run-build=$(TOP_BUILDDIR)
+  CCNAME += -run-build=$(TOP_BUILDDIR) -L$(BUILD_AREA)/libopen64rt -L$(BUILD_AREA)/libacml_mv
+  C++NAME += -run-build=$(TOP_BUILDDIR)
+  F90 += -run-build=$(TOP_BUILDDIR)
+
+  ifeq ($(BUILD_TARGET), X8664)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  ifeq ($(BUILD_TARGET), IA32)
+    CCNAME  += -march=anyx86
+    C++NAME += -march=anyx86
+    F90 += -march=anyx86
+  endif
+  ifeq ($(BUILD_TARGET), IA64)
+    # only 64bit libraries set the BUILD_ARCH to X8664 
+    CCNAME  += 
+    C++NAME +=  
+    F90 += 
+  endif
+  F77 = $(F90)
+  AR      = ar
+endif
+
 ifeq ($(BUILD_ARCH), IA32)
-ASNAME += -m32 -mno-sse2
-CCNAME += -m32 -mno-sse2
-C++NAME += -m32 -mno-sse2
-F90 += -m32 -mno-sse2
-endif
+# only 32bit libraries set the BUILD_TARGET to IA32
+  CCNAME  += -m32 -mno-sse2 
+  C++NAME += -m32 -mno-sse2
+  F90 += -m32 -mno-sse2
 endif
 
-F77 = $(F90)
+ifeq ($(BUILD_ARCH), X8664)
+  # both the 64bit libraries and executables set the BUILD_TARGET to X8664
+  # we should distinguish them
+  CCNAME  += -m64 
+  C++NAME += -m64 
+  F90 += -m64
+endif
+
+ifeq ($(BUILD_ARCH), IA64)
+  CCNAME  += 
+  C++NAME += 
+  F90 += 
 endif
 
 AS	= $(ASNAME) -D_SGI_SOURCE
@@ -180,10 +266,25 @@ C++	= $(C++NAME) -D_SGI_SOURCE -D_LANGUAGE_C_PLUS_PLUS
 
 CC	= $(CCNAME) -D_SGI_SOURCE -D_LANGUAGE_C
 
-ifeq ($(BUILD_OS), LINUX)
 AS	+= -funsigned-char -D__GNU_BUG_WORKAROUND
 CC	+= -Wformat -funsigned-char -D__GNU_BUG_WORKAROUND
 C++	+= -Wformat -funsigned-char -D__GNU_BUG_WORKAROUND -D_NOTHREADS
+
+ifeq ($(BUILD_OS), MINGW)
+  CC	+= -mno-cygwin
+  C++	+= -mno-cygwin
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+# FUTURE_SUPPORT is items that will not be enabled in current release
+  CC	+= $(GCC_OPTS) -DFUTURE_SUPPORT
+  C++	+= $(GXX_OPTS) -DFUTURE_SUPPORT
+ endif
+ ifeq ($(BUILD_ARCH), IA32)
+  ifeq ($(BUILD_ABI), I64BIT)
+   AS += -m64
+   CC += -m64
+   C++ += -m64
+  endif
 endif
 
 C++C	= $(C++)
@@ -193,17 +294,35 @@ FC	= $(F77)
 LEX	= flex
 LD	= $(CCNAME)
 
-RANLIB	= ranlib
-LINT	= glint
-NM	= nm
-SHELL	= sh
-SIZE	= size
-STRIP	= strip
-# TLINK	= lndir
-YACC	= yacc
+ifeq ($(BUILD_TARGET), NVISA)
+CSH	= $(TOOL_PREFIX)tcsh -f
+LINT	= $(TOOL_PREFIX)glint
+LN	= $(TOOL_PREFIX)ln
+MKDIR	= $(TOOL_PREFIX)mkdir
+NM	= $(TOOL_PREFIX)nm
+RANLIB	= $(TOOL_PREFIX)ranlib
+SIZE	= $(TOOL_PREFIX)size
+STRIP	= $(TOOL_PREFIX)strip
+YACC    = $(TOOL_PREFIX)yacc
+BISON   = $(TOOL_PREFIX)bison
+#BISON   = $(YACC)
 
+else
+CSH	= tcsh -f
+RANLIB  = ranlib
+LINT    = glint
+LN	= ln
+MKDIR	= mkdir
+NM      = nm
+SHELL   = sh
+SIZE    = size
+STRIP   = strip
+YACC    = yacc
+BISON   = bison
+endif # TARG_NVISA
+
+AR     = ar
 AWK	= awk
-ECHO	= echo
 M4	= m4
 
 #
@@ -232,7 +351,7 @@ CSTYLE=
 
 GCOPTS	= $(CSTYLE) $(OPTIMIZER) $(ENDIAN) $(SIZEDEFS) $(MKDEPOPT)
 GCDEFS	=
-GCINCS  = -I$(INCLDIR)
+GCINCS  = $(INCLDIRS)
 
 #
 # Cc flags, composed of:
@@ -288,7 +407,7 @@ C++DEFS   = $(VC++DEFS) $(LC++DEFS) $(GC++DEFS)
 C++INCS   = $(VC++INCS) $(LC++INCS) $(GC++INCS)
 
 GC++OPTS  = $(CSTYLE) $(OPTIMIZER) $(ENDIAN) $(SIZEDEFS) $(MKDEPOPT)
-GC++INCS  = -I$(INCLDIR)
+GC++INCS  = $(INCLDIRS)
 GC++DEFS  = 
 
 #
@@ -325,7 +444,14 @@ GLDOPTS_64_M4 = -mips4 -64 $(LD_QUICKSTART_INFO) -nostdlib $(LSRCH_64_M4)
 #
 # LDFLAG layout
 #
-LDFLAGS	= $(LDOPTS) $(LDLIBS) $(ENDIAN)
+LDFLAGS=
+# must put library paths before LDLIBS
+ifeq ($(BUILD_COMPILER), GNU)
+ifeq ($(BUILD_TARGET), NVISA)
+ LDFLAGS += $(GCC_LINKOPTS)
+endif
+endif
+LDFLAGS	+= $(LDOPTS) $(LDLIBS) $(ENDIAN)
 LDOPTS	= $(VLDOPTS) $(LLDOPTS) $(GLDOPTS)
 LDLIBS	= $(VLDLIBS) $(LLDLIBS) $(GLDLIBS)
 
@@ -395,7 +521,7 @@ F77OPTS	= $(VF77OPTS) $(LF77OPTS) $(GF77OPTS)
 F77DEFS	= $(VF77DEFS) $(LF77DEFS) $(GF77DEFS)
 F77INCS	= $(VF77INCS) $(LF77INCS) $(GF77INCS)
 
-GF77OPTS= $(CSTYLE) $(OPTIMIZER) $(ENDIAN) $(SIZEDEFS) $(MKDEPOPT)
+GF77OPTS= $(CSTYLE) $(OPTIMIZER) $(ENDIAN) $(SIZEDEFS)
 GF77DEFS= $(GCDEFS)
 GF77INCS= $(GCINCS)
 
@@ -442,10 +568,10 @@ LEXMKDEPFLAGS=
 #
 # Include directory shorthands, used in CFLAGS and LDFLAGS components.
 #
-ifeq ($(BUILD_OS), LINUX)
-INCLDIR	= $(BUILD_AREA)/include
+ifneq ($(BUILD_OS), IRIX)
+INCLDIRS = -I$(BUILD_AREA)/include -I$(BUILD_OBJ_DIR) -I$(TARGDIR)/include -I$(BUILD_TOT)/include
 else
-INCLDIR = $(ROOT)/usr/include
+INCLDIRS = -I$(ROOT)/usr/include
 endif
 
 #
@@ -572,6 +698,9 @@ OBJECTS=$(ASOALL) $(CXXOALL) $(CFILES:.c=.o) $(EFILES:.e=.o) \
 #
 DIRT=$(GDIRT) $(VDIRT) $(LDIRT) $(XDIRT)
 GDIRT=Makedepend *.[douea] *.so *.so.[0-9] a.out core lex.yy.[co] y.tab.[cho] $(_FORCE) ar.tmp.*
+ifeq ($(BUILD_OS), MINGW)
+GDIRT += *.exe
+endif
 
 #
 #  This exitop should be used by those who are building the FTR database.

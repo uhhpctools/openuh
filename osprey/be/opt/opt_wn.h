@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
@@ -65,6 +69,7 @@ static char *opt_wnrcs_id = 	opt_wn_INCLUDED"$Revision: 1.5 $";
 #include "wn.h"
 #include "opt_alias_interface.h"   // for READ_WRITE
 #include "region_util.h" // for REGION_LEVEL
+#include "opt_base.h"
 
 // Forward declaration
 class ALIAS_MANAGER;
@@ -344,27 +349,8 @@ extern BOOL OPERATOR_is_fake(OPERATOR oper);
 extern BOOL OPCODE_is_fake(OPCODE opc);
 extern BOOL OPERATOR_is_volatile(OPERATOR oper);
 extern BOOL OPCODE_is_volatile(OPCODE opc);
-
-static inline BOOL
-OPERATOR_is_scalar_load (OPERATOR opr)
-{
-    return (opr == OPR_LDID || opr == OPR_LDBITS);
-}
-static inline BOOL
-OPERATOR_is_scalar_store (OPERATOR opr)
-{
-    return (opr == OPR_STID || opr == OPR_STBITS);
-}
-static inline BOOL
-OPERATOR_is_scalar_iload (OPERATOR opr)
-{
-    return (opr == OPR_ILOAD || opr == OPR_ILDBITS);
-}
-static inline BOOL
-OPERATOR_is_scalar_istore (OPERATOR opr)
-{
-    return (opr == OPR_ISTORE || opr == OPR_ISTBITS);
-}
+extern BOOL WN_get_val(WN *, int *, const WN_MAP&);
+extern BOOL WN_has_disjoint_val_range(WN *, WN *, const WN_MAP&, const WN_MAP&);
 
   WN * WN_copy(WN *wn);  // copy a WN node
   WN * WN_copy_with_map (WN *wn);

@@ -712,7 +712,10 @@ static void *first_edge_aux_obj = 0;
 /* Allocate a memory block of SIZE as BB->aux.  The obstack must
    be first initialized by alloc_aux_for_blocks.  */
 
-inline void
+#ifndef KEY
+inline /* GNU4.2 does not support C99 inline functions. */
+#endif
+void
 alloc_aux_for_block (bb, size)
      basic_block bb;
      int size;
@@ -780,7 +783,10 @@ free_aux_for_blocks ()
 /* Allocate a memory edge of SIZE as BB->aux.  The obstack must
    be first initialized by alloc_aux_for_edges.  */
 
-inline void
+#ifndef KEY
+inline
+#endif
+void
 alloc_aux_for_edge (e, size)
      edge e;
      int size;

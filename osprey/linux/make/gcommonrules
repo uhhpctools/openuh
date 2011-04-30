@@ -99,8 +99,27 @@ MAKELIB: .USE .PRECIOUS
 _empty :=
 _space :=	$(_empty) $(_empty)
 
-BISON =		bison
+ifeq ($(BUILD_TARGET), NVISA)
+ar =		$(AR)
+as =		$(CC)
+bison =		$(BISON)
+c++f =		$(C++F)
+cc =		$(CC)
+ccf =		$(CCF)
+cxx =		$(CXX)
+f77 =		$(F77)
+f90 =		$(F90)
+fc =		$(FC)
+ld =		$(LD)
+ln =		$(LN)
+link.c++f =	$(C++F)
+link.ccf =	$(CCF)
+link.cxxf =	$(CXXF)
+ranlib =	$(RANLIB)
+run =	
+submake =	$(MAKE) -C $(1) $(2)
 
+else
 ar =		$(if $V,,@echo 'AR     $(CWD)/$@';) $(AR)
 as =		$(if $V,,@echo 'AS     $(CWD)/$<';) $(CC)
 bison =		$(if $V,,@echo 'BISON  $(CWD)/$<';) $(BISON)
@@ -112,7 +131,7 @@ f77 =		$(if $V,,@echo 'F77    $(CWD)/$<';) $(F77)
 f90 =		$(if $V,,@echo 'F90    $(CWD)/$<';) $(F90)
 fc =		$(if $V,,@echo 'F90    $(CWD)/$<';) $(FC)
 ld =		$(if $V,,@echo 'LD     $(CWD)/$@';) $(LD)
-ln =		$(if $V,,@echo 'LN     $(CWD)/$@';) ln
+ln =		$(if $V,,@echo 'LN     $(CWD)/$@';) $(LN)
 link.c++f =	$(if $V,,@echo 'LD     $(CWD)/$@';) $(C++F)
 link.ccf =	$(if $V,,@echo 'LD     $(CWD)/$@';) $(CCF)
 link.cxxf =	$(if $V,,@echo 'LD     $(CWD)/$@';) $(CXXF)
@@ -120,6 +139,7 @@ link.f90f =	$(if $V,,@echo 'LD     $(CWD)/$@';) $(F90F)
 ranlib =	$(if $V,,@echo 'RANLIB $(CWD)/$@';) $(RANLIB)
 run =		$(if $V,,@echo 'RUN    $(CWD)/$<';)
 submake =	+$(if $V,,@echo 'MAKE   $(if $(2),$(2) in )$(CWD)/$(1)';) $(MAKE) -C $(1) $(if $V,,--no-print-directory) $(2)
+endif # TARG_NVISA
 
 %.o : %.cxx
 	$(cxx) -c $(CPPFLAGS) $(CXXFLAGS) $< -o $@
@@ -214,12 +234,15 @@ ipa_flag := -ipa
 make_deps:
 	-@cat *.d > $(MKDEPFILE)
 
+ifeq ($(BUILD_TARGET), NVISA)
+make_libdeps :
+	-@cat *.d > $(MKDEPFILE)
+else
 # make dependencies be for library(foo.o) not for foo.o,
 # thus we don't need to preserve intermediate .o files.
 make_libdeps :
-	-@cat *.d > $(MKDEPFILE).tmp
-	-@sed -e "s/^.*\.o/$(LIBRARY)(&)/" $(MKDEPFILE).tmp > $(MKDEPFILE)
-	-@rm $(MKDEPFILE).tmp
+	-@cat *.d | sed -e "s/^.*\.o/$(LIBRARY)(&)/" > $(MKDEPFILE)
+endif
 
 #
 # Include the make dependency file if it exists.

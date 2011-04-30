@@ -41,10 +41,10 @@
  * =======================================================================
  *
  * Module: gra_live.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_live.h,v $
+ * $Revision: 1.6 $
+ * $Date: 05/12/05 08:59:07-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.gra_live.h $
  *
  * Revision history:
  *
@@ -384,7 +384,7 @@ extern void GRA_LIVE_Finish_REGION(void);
 
 extern void GRA_LIVE_Print_Liveness( BB* bb );
 
-#ifndef TARG_IA64
+#ifdef KEY
 extern void Rename_TNs_For_BB (BB *bb, TN_SET *multiple_defined_set,
 			       OP *rename_local_TN_op = NULL);
 #else

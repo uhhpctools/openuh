@@ -40,10 +40,18 @@
 #include "f90_intrinsic.h"
 
 #ifdef _DEBUG
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+extern void _Copyin(void *, DopeVectorType *);
+extern void _Copyout(DopeVectorType *, void *);
+void copyin_(void *result, DopeVectorType *array) { _Copyin(result, array); }
+void copyout_(DopeVectorType *dest, void *src) { _Copyout(dest, src); }
+#else /* defined(BUILD_OS_DARWIN) */
 extern void copyin_(void *, DopeVectorType *);
 extern void copyout_(DopeVectorType *, void *);
 #pragma weak copyin_ = _Copyin
 #pragma weak copyout_ = _Copyout
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif /* _DEBUG */
 
 /*

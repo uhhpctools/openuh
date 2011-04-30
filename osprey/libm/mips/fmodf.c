@@ -86,7 +86,13 @@ extern	float	fmodf(float, float);
 #pragma weak fmodf = __fmodf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __fmodf(float, float);
+#pragma weak fmodf
+float fmodf( float x, float y ) {
+  return __fmodf( x, y );
+}
+#elif defined(__GNUC__)
 extern  float  __fmodf(float, float);
 float   fmodf(float, float) __attribute__ ((weak, alias ("__fmodf")));
 #endif

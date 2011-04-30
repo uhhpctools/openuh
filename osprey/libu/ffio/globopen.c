@@ -46,6 +46,10 @@
 #include <cray/assign.h>
 #include "globio.h"
 #include "fxlist.h"
+#if defined(BUILD_OS_DARWIN)
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 DECLARE(GLOBAL_XLIST);
 

@@ -49,7 +49,6 @@
 #define mat_CXX      "mat.cxx"
 #endif
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifndef mat_INCLUDED
 #include "lnopt_main.h"

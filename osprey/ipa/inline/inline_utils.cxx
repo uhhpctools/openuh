@@ -50,7 +50,9 @@
 //  Copied from ld/process.c
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include <stdint.h>
 #include <map>				// STL map
 #include <cxx_memory.h>
@@ -62,7 +64,7 @@ Setup_Inliner_File_Header (char *input_name, void *mmap_addr)
     UINT index;
 
     IP_FILE_HDR& file_header = IP_File_header.New_entry (index);
-    new (&file_header) IP_FILE_HDR (input_name, mmap_addr);
+    new (&file_header) IP_FILE_HDR (input_name, mmap_addr, 0);
 
     return file_header;
 } // Setup_Inliner_File_Header
@@ -243,8 +245,14 @@ Fix_Aliased_Commons ()
 
 #include <unistd.h>                 /* for unlink() */
 #include <fcntl.h>                  /* for open() */
+#ifndef __MINGW32__
 #include <sys/mman.h>               /* for mmap() */
+#endif /* __MINGW32__ */
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>                    /* for all Elf stuff */
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>          /* for WHIRL sections' sh_info */
 #include "defs.h"                   /* for wn_core.h */
 
@@ -299,7 +307,12 @@ Copy_Input_Info_To_Output(char *input_name, char *output_name)
 {
 
     off_t mapped_size;
+#ifdef __MINGW32__
+    HANDLE handle;
+    void *i_handle = WN_open_input (input_name, &mapped_size, 0, &handle);
+#else
     void *i_handle = WN_open_input (input_name, &mapped_size);
+#endif // __MINGW32__
     void *o_handle = WN_open_output(output_name);
     (void) ir_b_copy_file (i_handle, mapped_size, o_handle);
     WN_close_file(o_handle);

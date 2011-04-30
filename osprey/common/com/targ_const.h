@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -106,8 +110,45 @@ extern "C" {
 struct ty;
 
 /* Define a quad-precision floating point type appropriate to host: */
-#if HOST_SUPPORTS_QUAD_FLOAT
+#ifdef HOST_SUPPORTS_QUAD_FLOAT
+#ifdef TARG_LOONGSON
+struct QUAD_TYPE
+{
+    INT32 qval[4];
+    /* As loongson's long double type is of 128 bit, hence longer than x86 and x86_64's 
+     * long double type which are only 80-bit long, we have to overload operators for 
+     * 128-bit operations.
+     */
+    QUAD_TYPE operator=(const double);
+    QUAD_TYPE operator+=(QUAD_TYPE);	
+    QUAD_TYPE operator-=(QUAD_TYPE);		
+    QUAD_TYPE operator*=(QUAD_TYPE);	
+    QUAD_TYPE operator/=(QUAD_TYPE);		
+    QUAD_TYPE operator+(QUAD_TYPE);		
+    QUAD_TYPE operator+(double);		
+    QUAD_TYPE operator-(QUAD_TYPE);		
+    QUAD_TYPE operator-(double);		
+    QUAD_TYPE operator-();		
+    QUAD_TYPE operator*(QUAD_TYPE);	
+    QUAD_TYPE operator*(double);			
+    QUAD_TYPE operator/(QUAD_TYPE);	
+    QUAD_TYPE operator/(double);		
+    INT operator>(QUAD_TYPE);		
+    INT operator>(double);			
+    INT operator<(QUAD_TYPE);			
+    INT operator<(double);			
+    INT operator==(QUAD_TYPE);	
+    INT operator==(double);			
+    INT operator!=(QUAD_TYPE);		
+    INT operator!=(double);			
+    INT operator>=(QUAD_TYPE);			
+    INT operator>=(double);			
+    INT operator<=(QUAD_TYPE);			
+    INT operator<=(double);			
+};
+#else
 typedef QUADFP QUAD_TYPE;
+#endif
 #else
 typedef struct { INT32 qval[4]; } QUAD_TYPE;
 #endif
@@ -150,22 +191,24 @@ struct TCON {
     union {
 	struct {
 #if HOST_IS_LITTLE_ENDIAN
-	    mINT32 v0, v1, v2, v3;	/* Individual signed words */
+	    mINT32 v0, v1, v2, v3, v4, v5, v6, v7;	/* Individual signed words */
 #else
-	    mINT32 v1, v0, v3, v2;	/* Individual signed words */
+	    mINT32 v1, v0, v3, v2, v5, v4, v7, v6;	/* Individual signed words */
 #endif
 	} ival;
 	struct {
 #if HOST_IS_LITTLE_ENDIAN
-	    mUINT32 u0, u1, u2, u3;	/* Individual unsigned words */
+	    mUINT32 u0, u1, u2, u3, u4, u5, u6, u7;	/* Individual unsigned words */
 #else
-	    mUINT32 u1, u0, u3, u2;	/* Individual unsigned words */
+	    mUINT32 u1, u0, u3, u2, u5, u4, u7, u6;	/* Individual unsigned words */
 #endif
 	} uval;
 #ifdef KEY 
 	struct {
 	    mINT64 ll0;
 	    mINT64 ll1;
+            mINT64 ll2;
+            mINT64 ll3;
 	} llval;
 #endif
 	mINT32 word0;			/* for getting the first integer word */
@@ -173,6 +216,7 @@ struct TCON {
 	mUINT64 k0;			/* Unsigned integer */
 	float fval;			/* 32-bit floating point */
 	double dval;			/* 64-bit floating point */
+	long double ldval;		/* 80-bit floating point */
 	QUAD_TYPE qval;			/* 128-bit floating point */
 	struct {			/* string literal */
 	    mUINT32 cp;			/* STR_IDX to string table */
@@ -182,9 +226,9 @@ struct TCON {
     union {
 	struct {
 #if HOST_IS_LITTLE_ENDIAN
-	    mINT32 v0, v1, v2, v3;	/* Individual signed words */
+	    mINT32 v0, v1, v2, v3, v4, v5, v6, v7;	/* Individual signed words */
 #else
-	    mINT32 v1, v0, v3, v2;	/* Individual signed words */
+	    mINT32 v1, v0, v3, v2, v5, v4, v7, v6;	/* Individual signed words */
 #endif
 	} ival;
 #ifdef KEY
@@ -193,6 +237,7 @@ struct TCON {
 #endif // key
 	float fival;
 	double dival;
+	long double ldival;		/* 80-bit floating point */
 	QUAD_TYPE qival;
     } cmplxval;
 };
@@ -211,7 +256,13 @@ inline INT64
 TCON_ci0 (const TCON& tcon)		{ return tcon.cmplxval.i0; }
 #endif // KEY
 inline UINT32
-TCON_uval (const TCON& tcon)		{ return (UINT32) tcon.vals.word0; }    
+TCON_uval (const TCON& tcon)		{ 
+#if HOST_IS_LITTLE_ENDIAN
+  return (UINT32) tcon.vals.word0; 
+#else
+  return (UINT32) tcon.vals.i0; 
+#endif
+}    
 inline INT64
 TCON_i0 (const TCON& tcon)		{ return tcon.vals.i0; }    
 inline UINT64
@@ -220,6 +271,8 @@ inline float
 TCON_fval (const TCON& tcon)		{ return tcon.vals.fval; }
 inline double
 TCON_dval (const TCON& tcon)		{ return tcon.vals.dval; }    
+inline long double
+TCON_ldval (const TCON& tcon)		{ return tcon.vals.ldval; }    
 inline QUAD_TYPE
 TCON_qval (const TCON& tcon)		{ return tcon.vals.qval; }
 inline mUINT32
@@ -248,7 +301,7 @@ typedef struct TCON TCON;
 #ifdef really_call_bzero
 #define TCON_clear(c)	really_call_bzero (&c, sizeof(TCON))
 #else
-#define TCON_clear(c)	bzero (&c, sizeof(TCON))
+#define TCON_clear(c)	BZERO (&c, sizeof(TCON))
 #endif
 
 
@@ -304,8 +357,10 @@ extern TCON Host_To_Targ_Float ( TYPE_ID ctype, double fvalue );
 extern TCON Host_To_Targ_Float_10 ( TYPE_ID ctype, long double fvalue );
 extern TCON Host_To_Targ_Float_4 ( TYPE_ID ctype, float fvalue );
 extern TCON Host_To_Targ_Quad  ( QUAD_TYPE fvalue );
-#ifdef TARG_X8664
+#ifdef KEY
 extern TCON Create_Simd_Const ( TYPE_ID ctype, TCON t );
+#endif
+#ifdef TARG_X8664
 extern TCON Create_Simd_Prog_Const ( TYPE_ID ctype, INT64 val );
 #endif 
 
@@ -351,7 +406,7 @@ extern TCON Extract_LongLong_Lo( TCON q);
  * passed includes the NULL.
  * Targ_String_Length always returns the "len" that was initially passed in.
  */
-extern TCON Host_To_Targ_String ( TYPE_ID ctype, char *cp, UINT32 len );
+extern TCON Host_To_Targ_String ( TYPE_ID ctype, const char *cp, UINT32 len );
 extern char *Targ_String_Address ( TCON cvalue );
 extern mUINT32 Targ_String_Length ( TCON cvalue );
 
@@ -359,7 +414,7 @@ extern mUINT32 Targ_String_Length ( TCON cvalue );
  * is a static string which gets recycled after 8 calls, so it must
  * be used immediately or copied:
  */
-extern char *Targ_Print ( char *fmt, TCON cvalue );
+extern char *Targ_Print (const char *fmt, TCON cvalue );
 
 /* Format the given string as a printable string, by replacing special
  * characters by the C source codes, e.g. "\n" for newline, "\003" for

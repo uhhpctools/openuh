@@ -39,9 +39,12 @@
 
 /* -*-Mode: c++;-*- (Tell emacs to use c++ mode) */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>                        // Elf64_Word
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>                        // Elf64_Word
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>                  // ir_bwrite.h needs it
 
 #include "defs.h"
@@ -645,7 +648,7 @@ ARRAY_SUMMARY_OUTPUT::Map_loop_info(LOOPINFO *l)
 
   INT idx = _loopinfo_nodes->Newidx();
   LOOPINFO* l_out = &(*_loopinfo_nodes)[idx];
-  bzero(l_out, sizeof(LOOPINFO));
+  BZERO(l_out, sizeof(LOOPINFO));
   l_out->Set_nest_level(l->Get_nest_level());
   l_out->Set_flags(l->Get_flags());
   
@@ -774,7 +777,7 @@ ARRAY_SUMMARY_OUTPUT::Map_proj_array(PROJECTED_ARRAY* proj_array)
   for (INT i = 0; i <= proj_array->Lastidx(); ++i) {
 
     PROJECTED_NODE* p = &(*_project_nodes)[_project_nodes->Newidx()];
-    bzero (p, sizeof(PROJECTED_NODE));
+    BZERO (p, sizeof(PROJECTED_NODE));
 
     PROJECTED_NODE* p_in = &(*proj_array)[i];
     p->Set_flags(p_in->Get_flags());

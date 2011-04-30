@@ -83,10 +83,12 @@
 
 #include "wodriver.h"		// So we pick up 'extern "C"'
 
-//#ifdef SHARED_BUILD
-#if 0
-char * Ipa_File_Name = NULL;
+#ifdef SHARED_BUILD
+#if defined(BUILD_OS_DARWIN)
+extern char * Ipa_File_Name;
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif
+
 
 /* ====================================================================
  *
@@ -103,7 +105,7 @@ char * Ipa_File_Name = NULL;
 void
 wopt_main (INT wopt_argc, char **wopt_argv, INT be_argc, char **be_argv)
 {
-  extern char *Whirl_Revision;
+  extern const char *Whirl_Revision;
 
   if (strcmp (Whirl_Revision, WHIRL_REVISION) != 0)
     FmtAssert (!DEBUG_Ir_Version_Check,
@@ -115,10 +117,9 @@ wopt_main (INT wopt_argc, char **wopt_argv, INT be_argc, char **be_argv)
     FmtAssert (FALSE,
 	       ("BE version (in be/com/be_version.h) mismatch between be.so (%s) and wopt.so (%s)", 
 		&Get_BE_Version != NULL ? Get_BE_Version() : "undef", BE_VERSION));
-
   /* Construct a skip list from the -WOPT:skip_* options: */
   WOPT_Skip_List = Build_Skiplist ( WOPT_Skip );
-
+  WOPT_Unroll_Skip_List = Build_Skiplist ( WOPT_Unroll_Skip );
 } /* wopt_main */
 
 
@@ -179,7 +180,7 @@ Perform_Preopt_Optimization(WN *pu_wn, WN *region_wn)
 
     du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
 
-    alias_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr);
+    alias_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr,pu_wn);
     opt_pu = Pre_Optimizer(PREOPT_PHASE, region_wn, du_mgr, alias_mgr);
 
     Delete_Du_Manager(du_mgr,MEM_pu_nz_pool_ptr);

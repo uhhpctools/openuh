@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 #
+#  Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -34,9 +36,9 @@
 #
 
 VER_MAJOR="4"
-VER_MINOR="0"
+VER_MINOR="2"
 #PATCH_LEVEL=""
-VERSION="${VER_MAJOR}.${VER_MINOR}"
+VERSION="${OPEN64_FULL_VERSION:-${VER_MAJOR}.${VER_MINOR}}"
 
 PREBUILT_LIB="./lib"
 PREBUILT_BIN="./bin"
@@ -46,6 +48,12 @@ if [ -z "$1" ]; then
     ARCH=`uname -m | sed -e s/i.86/i386/`
 else
     ARCH=$1
+fi
+
+if [ -z "$2" ]; then
+    INSTALL_FORTRAN="YES"
+else
+    INSTALL_FORTRAN=$2
 fi
 
 # set the build host
@@ -58,13 +66,29 @@ ia64 )
     PREBUILD_INTERPOS="ia64-linux"
     INSTALL_TYPE="ia64-native"
     ;;
-i386 | x86_64 )
+i386 )
     BUILD_HOST="ia32"
     TARG_HOST="x8664"
     PHASE_DIR_PREFIX="x86_64"
     PREBUILD_INTERPOS="x8664-linux"
     AREA="osprey/targia32_x8664"
     INSTALL_TYPE="x8664-native"
+    ;;
+x86_64 )
+    BUILD_HOST="x8664"
+    TARG_HOST="x8664"
+    PHASE_DIR_PREFIX="x86_64"
+    PREBUILD_INTERPOS="x8664-linux"
+    AREA="osprey/targx8664_x8664"
+    INSTALL_TYPE="x8664-native"
+    ;;
+ppc )
+    BUILD_HOST="ppc32"
+    TARG_HOST="ppc32"
+    AREA="osprey/targppc32_ppc32"
+    PHASE_DIR_PREFIX="ppc32"
+    PREBUILD_INTERPOS="ppc32-linux"
+    INSTALL_TYPE="ppc32-native"
     ;;
 cross )
     BUILD_HOST="ia32"
@@ -79,6 +103,8 @@ cross )
     exit 1
     ;;
 esac
+
+AREA="osprey/targdir"
 
 # get the TOOLROOT
 if [ -z ${TOOLROOT} ] ; then
@@ -102,8 +128,9 @@ TARG_OS="linux"
 BUILD_OS="linux"
 
 # prepare the source dir
-GNUFE_AREA="osprey-gcc/targ${BUILD_HOST}_${TARG_HOST}"
-LD_NEW_DIR="osprey/targcygnus_${BUILD_HOST}_${TARG_HOST}/ld"
+GNUFE_AREA="osprey-gcc"
+GNUFE42_AREA="osprey-gcc-4.2.0"
+LD_NEW_DIR="osprey/cygnus/ld"
 
 # prepare the distination dir
 INTERPOSE=
@@ -146,7 +173,12 @@ INSTALL_DATA_SUB () {
 # install the driver
 INSTALL_DRIVER () {
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${PHASEPATH}/driver
-    INSTALL_EXEC_SUB ${AREA}/driver/kdriver  ${PHASEPATH}/kdriver
+    if [ "$TARG_HOST" = "ia64" ] || [ "$TARG_HOST" = "x8664" ]; then
+      INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/targdir/driver/kdriver  ${PHASEPATH}/kdriver
+    fi
+    if [ "$TARG_HOST" = "ppc32" ]; then
+      INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/targdir/driver/kdriver  ${PHASEPATH}/kdriver
+    fi
 
     [ ! -d ${BIN_DIR}       ] && mkdir -p ${BIN_DIR}
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhcc
@@ -163,9 +195,63 @@ INSTALL_DRIVER () {
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/orf95
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/opencc
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openCC
-    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90
-    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95
-    INSTALL_EXEC_SUB ${AREA}/driver/kdriver ${BIN_DIR}/kopencc
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/opencc-${VERSION}
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openCC-${VERSION}
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf90-${VERSION}
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/openf95-${VERSION}
+
+    if [ "$TARG_HOST" = "ia64" ] || [ "$TARG_HOST" = "x8664" ]; then
+      INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/targdir/driver/kdriver ${BIN_DIR}/kopencc
+    fi
+    if [ "$TARG_HOST" = "ppc32" ]; then
+      INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/targdir/driver/kdriver ${BIN_DIR}/kopencc
+    fi
+
+    return 0
+}
+
+# Install internal gcc distribution
+INSTALL_GCC () {
+    pushd ${GNUFE42_AREA}
+
+    for j in '*/*' '*/*/*' '*/*/*/*' '*/*/*/*/*' '*/*/*/*/*/*' '*/*/*/*/*/*/*' '*/*/*/*/*/*/*/*'; do
+        for i in open64-gcc-4.2.0/$j; do
+            if [ -e $i ] && [ ! -d $i ]; then
+                INSTALL_EXEC_SUB $i ${ROOT}/$i
+            fi
+        done
+    done
+
+    # Make links to gcc runtime libraries
+    cd ${ROOT}
+    test -d $PHASEPATH/64 || mkdir $PHASEPATH/64
+    if [ "$TARG_HOST" = "x8664" ]
+    then
+	for i in open64-gcc-4.2.0/lib64/lib*.so*; do
+	    if [ -e "$i" ]
+	    then
+		(cd $PHASEPATH/64; ln -sf ../../../../../$i `basename $i`)
+	    fi
+	done
+	for i in open64-gcc-4.2.0/lib/lib*.so*; do
+	    if [ -e "$i" ]
+	    then
+		(cd $PHASEPATH/32; ln -sf ../../../../../$i `basename $i`)
+	    fi
+	done
+    elif [ "$TARG_HOST" = "ia64" ]
+    then
+	for i in open64-gcc-4.2.0/lib/lib*.so*; do
+	    if [ -e "$i" ]
+	    then
+		(cd $PHASEPATH/64; ln -sf ../../../../../$i `basename $i`)
+	    fi
+	done
+    fi
+
+    popd
 
     return 0
 }
@@ -173,11 +259,17 @@ INSTALL_DRIVER () {
 # Install front-end components
 INSTALL_FE () {
 
-    INSTALL_EXEC_SUB ${AREA}/gccfe/gfec  ${PHASEPATH}/gfec
-    INSTALL_EXEC_SUB ${AREA}/g++fe/gfecc ${PHASEPATH}/gfecc
-    INSTALL_EXEC_SUB ${AREA}/wgen/wgen ${PHASEPATH}/wgen
-    INSTALL_EXEC_SUB ${GNUFE_AREA}/gcc/cc1 ${PHASEPATH}/cc1
-    INSTALL_EXEC_SUB ${GNUFE_AREA}/gcc/cc1plus ${PHASEPATH}/cc1plus
+    # optional GNU 3.3 based FE
+    if [ -f ${AREA}/gccfe/gfec ] ; then 
+      INSTALL_EXEC_SUB ${AREA}/gccfe/gfec  ${PHASEPATH}/gfec
+      INSTALL_EXEC_SUB ${AREA}/g++fe/gfecc ${PHASEPATH}/gfecc
+    fi
+
+    # GNU 4.2.0 based FE
+    INSTALL_EXEC_SUB ${AREA}/wgen/wgen42 ${PHASEPATH}/wgen42
+    LIBEXEC=libexec/gcc/${PHASE_DIR_PREFIX}-redhat-linux/4.2.0
+    (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1 cc142)
+    (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1plus cc1plus42)
 
     if [ -f ${AREA}/crayf90/sgi/mfef95 ] ; then 
       INSTALL_EXEC_SUB ${AREA}/crayf90/sgi/mfef95   ${PHASEPATH}/mfef95
@@ -202,7 +294,7 @@ INSTALL_IPA () {
 
     INSTALL_EXEC_SUB ${LD_NEW_DIR}/ld-new  ${PHASEPATH}/ipa_link
 
-    ln -sf ${PHASEPATH}/be ${PHASEPATH}/ipl 
+    (cd ${PHASEPATH}; ln -sf be ipl)
 
     return 0
 }
@@ -221,15 +313,16 @@ INSTALL_CG () {
 INSTALL_WHIRL_STUFF () {
 
     INSTALL_EXEC_SUB  ${AREA}/whirl2c/whirl2c    ${PHASEPATH}/whirl2c
-    INSTALL_EXEC_SUB  ${AREA}/whirl2f/whirl2f    ${PHASEPATH}/whirl2f
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB  ${AREA}/whirl2f/whirl2f    ${PHASEPATH}/whirl2f
     INSTALL_EXEC_SUB  ${AREA}/whirl2c/whirl2c.so ${PHASEPATH}/whirl2c.so
-    INSTALL_EXEC_SUB  ${AREA}/whirl2f/whirl2f.so ${PHASEPATH}/whirl2f.so
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_EXEC_SUB  ${AREA}/whirl2f/whirl2f.so ${PHASEPATH}/whirl2f.so
 
-    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be ${PHASEPATH}/whirl2c_be) 
-    (cd ${PHASEPATH}; ln -sf ${PHASEPATH}/be ${PHASEPATH}/whirl2f_be) 
+    (cd ${PHASEPATH}; ln -sf be whirl2c_be) 
+    [ "$INSTALL_FORTRAN" = "YES" ] && (cd ${PHASEPATH}; ln -sf be whirl2f_be) 
 
     INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_b2a    ${BIN_DIR}/ir_b2a
-    INSTALL_EXEC_SUB  ${AREA}/libspin/gspin      ${BIN_DIR}/gspin
+    INSTALL_EXEC_SUB  ${AREA}/libspin_4_2_0/gspin42 ${BIN_DIR}/gspin42
+    (cd ${BIN_DIR}; ln -sf gspin42 gspin)
 
     return 0
 }
@@ -242,57 +335,142 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
 
     if [ "$TARG_HOST" = "ia64" ] ; then
         # These stuffs are only valid on ia64
+	LIBAREA="osprey/targdir_lib"
+
         # f90 related archieves 
-        INSTALL_DATA_SUB ${AREA}/temp_f90libs/lib.cat  ${PHASEPATH}/lib.cat
-        INSTALL_DATA_SUB ${AREA}/temp_f90libs/lib.exp  ${PHASEPATH}/lib.exp
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${AREA}/temp_f90libs/lib.cat  ${PHASEPATH}/lib.cat
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${AREA}/temp_f90libs/lib.exp  ${PHASEPATH}/lib.exp
 
         # instrument archieves.
-        d="osprey/targ${TARG_HOST}/"
-        INSTALL_DATA_SUB $d/libcginstr/libcginstr.a  ${PHASEPATH}/libcginstr.a  
-        INSTALL_DATA_SUB $d/libinstr/libinstr.a      ${PHASEPATH}/libinstr.a 
+        INSTALL_DATA_SUB ${LIBAREA}/libcginstr/libcginstr.a  ${PHASEPATH}/libcginstr.a  
+        INSTALL_DATA_SUB ${LIBAREA}/libinstr/libinstr.a      ${PHASEPATH}/libinstr.a 
         INSTALL_DATA_SUB $d/libepilog/libepilog.a    ${PHASEPATH}/libepilog.a
 
 
         #  SGI implementation for turning on FLUSH to ZERO
-        INSTALL_DATA_SUB $d/init/ftz.o     ${PHASEPATH}/ftz.o
+        INSTALL_DATA_SUB ${LIBAREA}/init/ftz.o     ${PHASEPATH}/ftz.o
+    elif [ "$TARG_HOST" = "ppc32" ] ;  then
+	LIBAREA="osprey/targdir_lib"
+	LIB32AREA="osprey/targdir_lib2"
+        # 64bit libraries
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.a ${PHASEPATH}/libfortran.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
+        INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
+        INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
+	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+        # 32bit libraries
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.a          ${PHASEPATH}/32/libffio.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
+    else
+        # IA32 and x86_64
+	LIBAREA="osprey/targdir_lib2"
+	LIB32AREA="osprey/targdir_lib"
+        HUGETLB=${TOP_SRCDIR}/osprey/libhugetlbfs
+
+        INSTALL_DATA_SUB ${LIBAREA}/libinstr2/libinstr.a      ${PHASEPATH}/libinstr.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libinstr2/libinstr.a      ${PHASEPATH}/32/libinstr.a
+
+        INSTALL_DATA_SUB ${LIBAREA}/libopen64rt/libopen64rt.a      ${PHASEPATH}/libopen64rt.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libopen64rt/libopen64rt.a      ${PHASEPATH}/32/libopen64rt.a
+
+        INSTALL_DATA_SUB ${LIBAREA}/libopen64rt/libopen64rt_shared.a      ${PHASEPATH}/libopen64rt_shared.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libopen64rt/libopen64rt_shared.a      ${PHASEPATH}/32/libopen64rt_shared.a
+
+        INSTALL_DATA_SUB ${LIBAREA}/libhugetlbfs/obj64/libhugetlbfs_open64.a     ${PHASEPATH}/libhugetlbfs_open64.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libhugetlbfs/obj32/libhugetlbfs_open64.a   ${PHASEPATH}/32/libhugetlbfs_open64.a
+
+        INSTALL_DATA_SUB ${LIBAREA}/libhugetlbfs/obj64/libhugetlbfs_open64.so    ${PHASEPATH}/libhugetlbfs_open64.so.1
+        INSTALL_DATA_SUB ${LIB32AREA}/libhugetlbfs/obj32/libhugetlbfs_open64.so  ${PHASEPATH}/32/libhugetlbfs_open64.so.1
+
+        (cd ${PHASEPATH}; ln -sf libhugetlbfs_open64.so.1 libhugetlbfs_open64.so)
+        (cd ${PHASEPATH}/32; ln -sf libhugetlbfs_open64.so.1 libhugetlbfs_open64.so)
+
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_x86_64.xB      ${PHASEPATH}/64/elf.xB
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_i386.xB        ${PHASEPATH}/32/elf.xB
+
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_x86_64.xBDT    ${PHASEPATH}/64/elf.xBDT
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_i386.xBDT      ${PHASEPATH}/32/elf.xBDT
+
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_x86_64_1G.xBDT    ${PHASEPATH}/64/elf_1G.xBDT
+        INSTALL_DATA_SUB ${HUGETLB}/ldscripts/elf_i386_1G.xBDT      ${PHASEPATH}/32/elf_1G.xBDT
+
+        INSTALL_DATA_SUB ${LIBAREA}/libhugetlbfs/elf.xBD    ${PHASEPATH}/64/elf.xBD
+        INSTALL_DATA_SUB ${LIB32AREA}/libhugetlbfs/elf.xBD      ${PHASEPATH}/32/elf.xBD
+
+        INSTALL_DATA_SUB ${LIBAREA}/libhugetlbfs/elf_1G.xBD    ${PHASEPATH}/64/elf_1G.xBD
+        INSTALL_DATA_SUB ${LIB32AREA}/libhugetlbfs/elf_1G.xBD      ${PHASEPATH}/32/elf_1G.xBD
+
     fi
 
-    # libgcc.a, libstdc++.a and libstdc++.so are deemed as "GNU link" specific archieves
-    # is it necessary?
-    for i in libgcc.a libstdc++.a libstdc++.so; do 
-        F=`gcc --print-file-name $i`
-        [ ! -z "$F" ] && [ -e $F ] && INSTALL_DATA_SUB $F ${PHASEPATH}/$i
-    done
-
+    # libgcc.a, libstdc++.a and libstdc++.so are deemed as "GNU link" specific archives
+    if [ "$ARCH" = "ia64" ] ; then
+        for i in libgcc.a libgcc_s.so libstdc++.a libstdc++.so; do 
+            F=`gcc --print-file-name $i`
+            if [ ! -z "$F" ] && [ -e "$F" ]; then
+              INSTALL_DATA_SUB $F ${PHASEPATH}/$i
+            fi
+        done
+    fi
     return 0
 }
 
-# Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a and libm.a   
+# Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a, libm.a, libopenmp.a
 INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
 
     if [ "$TARG_HOST" = "ia64" ] ; then
-        LIBAREA="osprey/targ${TARG_HOST}/"
-        INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.a ${PHASEPATH}/libfortran.a 
-        INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
-        INSTALL_DATA_SUB ${LIBAREA}/libmsgi/libmsgi.a       ${PHASEPATH}/libmsgi.a
+	LIBAREA="osprey/targdir_lib"
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.a ${PHASEPATH}/libfortran.a 
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
+        # libmsgi.a is no longer needed
+        #INSTALL_DATA_SUB ${LIBAREA}/libmsgi/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
-	INSTALL_DATA_SUB ${AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+    elif [ "$TARG_HOST" = "ppc32" ] ; then
+	LIBAREA="osprey/targdir_lib"
+	LIB32AREA="osprey/targdir_lib2"
     else
-        LIBAREA=osprey/targx8664_builtonia32
-        LIB32AREA=osprey/targia32_builtonia32
+	LIBAREA="osprey/targdir_lib2"
+        LIB32AREA="osprey/targdir_lib"
         # 64bit libraries
-        INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.a ${PHASEPATH}/libfortran.a
-        INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
-        INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.a ${PHASEPATH}/libfortran.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libfortran/libfortran.so ${PHASEPATH}/libfortran.so
+        # FMODS="IEEE_ARITHMETIC.mod IEEE_EXCEPTIONS.mod IEEE_FEATURES.mod ISO_C_BINDING.mod ISO_FORTRAN_ENV.mod"
+	FMODS="ISO_C_BINDING.mod"
+        for i in $FMODS ; do
+            [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libfortran/$i ${PHASEPATH}/$i
+        done
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.a          ${PHASEPATH}/libffio.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIBAREA}/libu/libffio.so          ${PHASEPATH}/libffio.so
+        #INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
-	INSTALL_DATA_SUB ${AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+        INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
+        INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+        INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
+        INSTALL_DATA_SUB ${LIBAREA}/libacml_mv/libacml_mv.a ${PHASEPATH}/libacml_mv.a
+        INSTALL_DATA_SUB ${LIBAREA}/libacml_mv/libacml_mv.so.1 ${PHASEPATH}/libacml_mv.so.1
         # 32bit libraries
-        INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
-        INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.a          ${PHASEPATH}/32/libffio.a
-        INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.so ${PHASEPATH}/32/libfortran.so
+        for i in $FMODS ; do
+            [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/$i ${PHASEPATH}/32/$i
+        done
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.a          ${PHASEPATH}/32/libffio.a
+        [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.so          ${PHASEPATH}/32/libffio.so
+        #INSTALL_DATA_SUB ${LIB32AREA}/libm/libmsgi.a       ${PHASEPATH}/32/libmsgi.a
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.a           ${PHASEPATH}/32/libmv.a
-        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a           ${PHASEPATH}/32/libopenmp.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
+        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
+        INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.a ${PHASEPATH}/32/libacml_mv.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.so.1 ${PHASEPATH}/32/libacml_mv.so.1
+
+        (cd ${PHASEPATH}; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}; ln -sf libacml_mv.so.1 libacml_mv.so)
+        (cd ${PHASEPATH}/32; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}/32; ln -sf libacml_mv.so.1 libacml_mv.so)
     fi 
     #install .h files
     INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
@@ -307,11 +485,14 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
 
 INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP () {
 
-    for i in crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o crtendT.o; do 
-      f=`gcc --print-file-name=$i`
-      [ "x$f" != "x" ] && [ -e $f ] && 
-        INSTALL_DATA_SUB $f ${PHASEPATH}/$i
-    done
+    if [ "$ARCH" = "ia64" ] ; then
+        for i in crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o crtendT.o; do 
+            F=`gcc --print-file-name=$i`
+            if [ ! -z "F" ] && [ -e "$F" ]; then
+              INSTALL_DATA_SUB $F ${PHASEPATH}/$i
+            fi
+        done
+    fi
     return 0
 }
 
@@ -399,8 +580,8 @@ INSTALL_NATIVE_HEADER () {
     #INSTALL_DATA_SUB osprey/include/nue/stdarg.h  ${PHASEPATH}/include/stdarg.h
     #INSTALL_DATA_SUB osprey/include/nue/va-ia64.h  ${PHASEPATH}/include/va-ia64.h 
     #cp -f -a osprey/include ${PHASEPATH}/ 
-    INSTALL_DATA_SUB ${ROOT}/include/whirl2c.h  ${ROOT}/include/${VERSION}/whirl2c.h
-    INSTALL_DATA_SUB ${ROOT}/include/whirl2f.h  ${ROOT}/include/${VERSION}/whirl2f.h
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/whirl2c.h  ${ROOT}/include/${VERSION}/whirl2c.h
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/whirl2f.h  ${ROOT}/include/${VERSION}/whirl2f.h
 
     INSTALL_DATA_SUB ${AREA}/include/dwarf.h  ${ROOT}/include/${VERSION}/dwarf.h
     INSTALL_DATA_SUB ${AREA}/include/libdwarf.h  ${ROOT}/include/${VERSION}/libdwarf.h
@@ -408,7 +589,9 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${AREA}/include/libelf/libelf.h  ${ROOT}/include/${VERSION}/libelf/libelf.h
     INSTALL_DATA_SUB ${AREA}/include/libelf/sys_elf.h  ${ROOT}/include/${VERSION}/libelf/sys_elf.h
 
-    INSTALL_DATA_SUB ${AREA}/include/omp/omp.h  ${ROOT}/include/${VERSION}/omp.h
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp.h  ${ROOT}/include/${VERSION}/omp.h
+    INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.f  ${ROOT}/include/${VERSION}/omp_lib.f
 
     return 0
 }
@@ -419,9 +602,9 @@ INSTALL_MAN_PAGE () {
     d2=$ROOT/usr/man/man1
 
     INSTALL_DATA_SUB $d1/sgicc.1 $d2 
-    INSTALL_DATA_SUB $d1/sgif90.1 $d2
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB $d1/sgif90.1 $d2
 
-    ln -sf $d2/sgicc.1  $d2/sgiCC.1
+    (cd $d2; ln -sf sgicc.1 sgiCC.1)
 
     return 0
 }
@@ -436,17 +619,6 @@ INSTALL_MISC () {
         INSTALL_EXEC_SUB ${AREA}/targ_info/itanium2.so ${PHASEPATH}/itanium2.so
     fi
 
-    if [ "$TARG_HOST" = "x8664" ]; then
-        INSTALL_EXEC_SUB ${AREA}/targ_info/opteron.so ${PHASEPATH}/opteron.so
-        INSTALL_EXEC_SUB ${AREA}/targ_info/em64t.so ${PHASEPATH}/em64t.so
-    fi
-#    if [ ! -z "$ROOT" ] ; then
-#        for i in gcc f77 as ld g++ gas as ; do
-#            x=`which $i 2>/dev/null`
-#            [ ! -z "$x" ] && ln -s $x $BIN_DIR/`basename $x` 2>/dev/null
-#        done
-#    fi
-
     # install some scripts
     [ ! -d ${PREBUILT_BIN}/misc ] && return 0
     for i in ${PREBUILT_BIN}/misc/* ; do 
@@ -456,7 +628,16 @@ INSTALL_MISC () {
     return 0
 }
 
-cd `dirname $0`
+# Create the Fortran module files for the OpenMP interface
+INSTALL_MODULES () {
+    if [ ! -e ${ROOT}/include/${VERSION}/OMP_LIB.mod ] ; then
+        (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/openf90 -c omp_lib.f)
+    fi
+
+    return 0
+}
+
+# cd `dirname $0`
 
 [ ! -d ${BIN_DIR} ] && mkdir -p ${BIN_DIR}
 [ ! -d ${NATIVE_LIB_DIR} ] && mkdir -p ${NATIVE_LIB_DIR}
@@ -465,12 +646,16 @@ if [ "$TARG_HOST" = "x8664" -a ! -d "${NATIVE_LIB_DIR}/32" ]; then
 fi
 
 INSTALL_DRIVER 
+if [ "$TARG_HOST" != "ppc32"  ]; then
+INSTALL_GCC
+fi
 INSTALL_FE 
 INSTALL_BE 
 INSTALL_IPA 
 INSTALL_CG 
 INSTALL_WHIRL_STUFF 
 INSTALL_MISC
+INSTALL_NATIVE_HEADER
 
 #cat << _EOF_
 # ------------------------------------------------------------------------
@@ -494,6 +679,7 @@ INSTALL_PREBUILD_OPEN64_NATIVE_LIB
 INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP 
 [ "$INSTALL_TYPE" = "ia64-cross" ] && INSTALL_CROSS_UTIL
 INSTALL_PREBUILD_PHASE 
+[ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
 
 exit 0
 

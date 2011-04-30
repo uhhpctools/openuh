@@ -155,15 +155,9 @@ extern const __uint32_t _unw_ar_map[__UNW_MAX_AR_PRESERVED];
 #define __UNW_CONTEXT_ACCESS_FR(x,i) (((x)->context.sc_fr)[i])
 #define __UNW_CONTEXT_ACCESS_BR(x,i) (((x)->context.sc_br)[i])
 
-#if 0 /* !defined(_LP64 ) || defined( FOR_GDB ) -- removed GMB */ /* Amaury */
-#define __UNW_CONTEXT_ACCESS_AR(x,i) (((x)->context.sc_ar)[i])
-#define __UNW_AR_MAP(i)              (_unw_ar_map[(i)])
-#define __UNW_CONTEXT_ACCESS_AR_EC(x) (((x)->context.sc_ar)[66])
-#else
 #define __UNW_AR_MAP(i)              (_unw_ar_map[(i)])
 #define __UNW_CONTEXT_ACCESS_AR(x,i) *(((uint64_t*) &((x)->context.sc_ar_bsp) + i))
 #define __UNW_CONTEXT_ACCESS_AR_EC(x) ((x)->sc_ar_ec)
-#endif
 
 #define __UNW_CONTEXT_ACCESS_IP(x) ((x)->context.sc_ip)
 #define __UNW_CONTEXT_ACCESS_GP(x) (((x)->context.sc_gr)[1])

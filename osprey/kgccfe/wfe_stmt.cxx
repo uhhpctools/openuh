@@ -38,7 +38,7 @@
 
 */
 
-
+#include <stdint.h>
 #include "defs.h"
 #include "glob.h"
 #include "config.h"
@@ -146,10 +146,9 @@ WFE_Stmt_Init (void)
 } /* WFE_Stmt_Init */
 
 void
-WFE_Expand_Start_Cond (tree cond, int exitflag)
+WFE_Expand_Start_Cond_WN(WN* test,  int exitflag)
 {
   WN* if_stmt;
-  WN* test;
   WN* then_block;
   WN* else_block;
 
@@ -161,13 +160,20 @@ WFE_Expand_Start_Cond (tree cond, int exitflag)
   }
 
   if_else_info_stack [if_else_info_i] = FALSE;
-  test       = WFE_Expand_Expr_With_Sequence_Point (cond, Boolean_type);
   then_block = WN_CreateBlock ();
   else_block = WN_CreateBlock ();
   if_stmt    = WN_CreateIf (test, then_block, else_block);
   WFE_Stmt_Append (if_stmt, Get_Srcpos());
   WFE_Stmt_Push (else_block, wfe_stmk_if_else, Get_Srcpos());
   WFE_Stmt_Push (then_block, wfe_stmk_if_then, Get_Srcpos());
+}
+
+void
+WFE_Expand_Start_Cond (tree cond, int exitflag)
+{
+  WN* test;
+  test       = WFE_Expand_Expr_With_Sequence_Point (cond, Boolean_type);
+  WFE_Expand_Start_Cond_WN(test, exitflag);
 } /* WFE_Expand_Start_Cond */
 
 void
@@ -227,9 +233,11 @@ WFE_Expand_Start_Loop_Continue_Elsewhere (int exitflag, struct nesting *whichloo
     loop_info_stack [loop_info_i].continue_info = CONTINUE_HERE_ELSEWHERE;
   else
     Fail_FmtAssertion ("WFE_Expand_Start_Loop_Continue_Elsewhere: unexpected state"); 
+#ifndef TARG_NVISA // only create label if needed
   LABEL_IDX continue_label_idx;
   New_LABEL (CURRENT_SYMTAB, continue_label_idx);
   loop_info_stack [loop_info_i].continue_label_idx = continue_label_idx;
+#endif
 } /* WFE_Expand_Start_Loop_Continue_Elsewhere */
 
 void
@@ -244,6 +252,12 @@ WFE_Expand_Loop_Continue_Here (void)
     loop_info_stack [loop_info_i].continue_info = CONTINUE_ELSEWHERE_HERE;
   else
     Fail_FmtAssertion ("WFE_Expand_Loop_Continue_Here: unexpected state"); 
+
+#ifdef TARG_NVISA
+  // only emit label if continue stmt
+  // Otherwise we have unnecessary label that stops unrolling of for loops.
+  if (loop_info_stack [loop_info_i].continue_label_idx)
+#endif
   WFE_Stmt_Append (
     WN_CreateLabel ((ST_IDX) 0,
                     loop_info_stack [loop_info_i].continue_label_idx,
@@ -361,6 +375,17 @@ WFE_Expand_Start_Case (int exit_flag, tree expr, tree type, char *printname)
   TYPE_ID index_mtype = Mtype_comparison (TY_mtype (Get_TY (TREE_TYPE (expr))));
   WN *switch_block    = WN_CreateBlock ();
   WN *index           = WFE_Expand_Expr_With_Sequence_Point (expr, index_mtype);
+
+#ifdef KEY
+  // The switch index may be needed more than once if it contains case
+  // range. As it may have side-effects like a function call, save the
+  // index into a temporary, and used the saved value.
+  ST *save_expr_st = Gen_Temp_Symbol (MTYPE_TO_TY_array[index_mtype], "_switch_index");
+  WN *stid = WN_Stid (index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype], index);
+  WFE_Stmt_Append(stid, Get_Srcpos());
+  index = WN_Ldid(index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype]);
+#endif
+
   WFE_Stmt_Push (switch_block, wfe_stmk_switch, Get_Srcpos());
   if (++switch_info_i == switch_info_max) {
 
@@ -450,6 +475,7 @@ static WN* WN_CreateIfForCaseGotoRange(
   return WN_CreateIf(cond, then_blk, else_blk);
 } /* WN_CreateIfForCaseGotoRange */
 #endif
+
 void
 WFE_Expand_End_Case (tree orig_index)
 {
@@ -797,6 +823,7 @@ WFE_Expand_Return (tree retval)
         wn = WN_CreateReturn_Val(OPR_RETURN_VAL, TY_mtype(ret_ty_idx), MTYPE_V, rhs_wn);
     }
   }
+
   WFE_Stmt_Append(wn, Get_Srcpos());
 } /* WFE_Expand_Return */
 
@@ -914,7 +941,7 @@ static char *operand_constraint_array[MAX_RECOG_OPERANDS];
 static BOOL
 constraint_by_address (const char *s)
 {
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) || !defined(TARG_LOONGSON)
   if (strchr (s, 'm')) {
 #else
   if (strchr (s, 'm') || strchr (s, 'g')) {
@@ -992,7 +1019,7 @@ address_of (const WN *wn)
  * operands that are passed by address.
  */
 
-static PREG_NUM asm_neg_preg = -2;
+PREG_NUM asm_neg_preg = -2;
 
 void
 Wfe_Expand_Asm_Operands (tree  string,
@@ -1262,6 +1289,7 @@ Wfe_Expand_Asm_Operands (tree  string,
 	}
       }
 
+#ifndef TARG_NVISA // ptx f is for 32bit float
 #ifdef PATHSCALE_MERGE
       // bug fix for OSP_141
       // When considering the related ASM statement as following:
@@ -1276,6 +1304,7 @@ Wfe_Expand_Asm_Operands (tree  string,
 	  input_rvalue = WN_CreateExp1(OPR_CVT, MTYPE_F8, WN_rtype(input_rvalue), input_rvalue);
 	}
       }
+#endif
 #endif
 #ifdef KEY
       // Get the new operand numbers from map.
@@ -1340,7 +1369,14 @@ Wfe_Expand_Asm_Operands (tree  string,
 	  TY_IDX hi_ty_idx = Get_TY(TREE_TYPE(output)); 
 	  // TYPE_ID rtype = Widen_Mtype(TY_mtype(hi_ty_idx));
 	  TYPE_ID rtype = TY_mtype(hi_ty_idx);
+#ifdef TARG_NVISA
+          // we allow 32bit floats
+	  if (rtype == MTYPE_U4 || rtype == MTYPE_I4) {
+	    Set_TY_mtype(hi_ty_idx, MTYPE_F4); 
+	  }
+#else
 	  Is_True(MTYPE_bit_size(rtype) >= 64, ("bit size must equal or greater than 64"));
+#endif
 	  if (rtype == MTYPE_U8 || rtype == MTYPE_I8) {
 	    Set_TY_mtype(hi_ty_idx, MTYPE_F8); 
 	  }
@@ -1366,6 +1402,9 @@ Wfe_Expand_Asm_Operands (tree  string,
 
 	WN *output_rvalue_wn = WFE_Lhs_Of_Modify_Expr (MODIFY_EXPR,
 						       output,
+#ifdef TARG_SL
+                                                       NULL,
+#endif
 						       plus_modifier,
 						       (TY_IDX) 0, // component type
 						       (INT64) 0,  // component offset
@@ -1393,7 +1432,15 @@ Wfe_Expand_Asm_Operands (tree  string,
 	// bug fix for OSP_141
 	// 
 	if (strchr (constraint_string, 'f') != NULL) {
+#ifdef TARG_NVISA
+          // can have 32bit floats
+          if (MTYPE_bit_size(desc) == 32)
+            desc = MTYPE_F4;
+          else
+            desc = MTYPE_F8;
+#else
 	  Is_True(MTYPE_bit_size(desc) >= 64, ("bit size must equal or greater than 64"));
+#endif
 	  desc = MTYPE_F8;
 	}
 #endif
@@ -1479,6 +1526,9 @@ WFE_Null_ST_References (tree* node)
     if(DECL_ST (*node)==NULL)
          return 0;
 #endif
+#if defined(TARG_SL)
+    if (DECL_ST (*node)) {
+#endif
     ST_SCLASS sc = ST_sclass (DECL_ST (*node));
 
     // Don't null out global symbols
@@ -1489,6 +1539,9 @@ WFE_Null_ST_References (tree* node)
          sc != SCLASS_COMMON )
       DECL_ST(*node) = NULL;
   }
+#if defined(TARG_SL)
+   }
+#endif
 
   return 0;
 }
@@ -1590,6 +1643,47 @@ WFE_Expand_Pragma (tree exp)
       WFE_Stmt_Append (wn, Get_Srcpos());
       break;
     }
+    case unroll_dir:
+    { // pragma unroll N
+      UINT32 num;
+      exp = (tree) exp->omp.omp_clause_list;
+      if (exp) {
+        FmtAssert(TREE_CODE(exp) == INTEGER_CST, ("unroll arg not an integer constant?"));
+        num = Get_Integer_Value(exp);
+      }
+      else {
+        // no N given, so use max N
+        num = UINT32_MAX;
+      }
+      WN * wn = WN_CreatePragma (WN_PRAGMA_UNROLL, (ST*)NULL, num, 0);
+      WFE_Stmt_Append (wn, Get_Srcpos());
+      break;
+    }
   }
 }
 #endif
+
+void
+WFE_Expand_Freq_Hint (tree exp) {
+
+   tree hint_opnd = TREE_OPERAND(exp, 0);
+   Is_True (TREE_CODE (hint_opnd) == STRING_CST, 
+            ("the first operand of FREQ_HINT_STMT should be STRING_CST"));
+
+   MIPS_FREQUENCY_HINT hint_id;
+   const char* hint_name = TREE_STRING_POINTER (hint_opnd);
+
+   if (!strcmp (hint_name, "never")) {
+     hint_id = FREQUENCY_HINT_NEVER;
+   } else if (!strcmp (hint_name, "init")) {
+     hint_id = FREQUENCY_HINT_INIT;
+   } else if (!strcmp (hint_name, "frequent")) {
+     hint_id = FREQUENCY_HINT_FREQUENT;
+   } else {
+     Is_True (FALSE, ("unrecognized frequency hint '%s'", hint_name));
+   }
+
+   WN* wn = WN_CreatePragma (WN_PRAGMA_MIPS_FREQUENCY_HINT, (ST*)NULL, hint_id, 0);
+   WFE_Stmt_Append (wn, Get_Srcpos());
+}
+

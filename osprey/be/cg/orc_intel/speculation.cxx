@@ -303,9 +303,10 @@ Build_Outgoing_Edges(OP *spec_ld, OP *chk)
     typedef mempool_allocator<OP*> OP_ALLOC;
     typedef std::set<OP*, compare_op, OP_ALLOC> OPs;
 
-    typedef mempool_allocator< std::pair<REGIONAL_CFG_NODE*, TNs> > NODE_TNs_ALLOC;
+    typedef mempool_allocator< std::pair<REGIONAL_CFG_NODE* const, TNs> > NODE_TNs_ALLOC;
     typedef std::map<REGIONAL_CFG_NODE*, TNs, compare_node, NODE_TNs_ALLOC>  NODE_TNs_MAP;
-    typedef std::map<REGIONAL_CFG_NODE*, OPs, compare_node, NODE_TNs_ALLOC>  NODE_OPs_MAP;
+    typedef mempool_allocator< std::pair<REGIONAL_CFG_NODE* const, OPs> > NODE_OPs_ALLOC;
+    typedef std::map<REGIONAL_CFG_NODE*, OPs, compare_node, NODE_OPs_ALLOC>  NODE_OPs_MAP;
 
     NODE_TNs_MAP spec_chain_live;  // Record all live in TNs of the speculative chain.
     NODE_TNs_MAP spec_chain_def;   // Record all TNs that are defined on the speculative chain.

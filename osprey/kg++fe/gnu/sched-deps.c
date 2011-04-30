@@ -252,15 +252,6 @@ add_dependence (insn, elem, dep_type)
 #ifdef INSN_SCHEDULING
   /* ??? No good way to tell from here whether we're doing interblock
      scheduling.  Possibly add another callback.  */
-#if 0
-  /* (This code is guarded by INSN_SCHEDULING, otherwise INSN_BB is undefined.)
-     No need for interblock dependences with calls, since
-     calls are not moved between blocks.   Note: the edge where
-     elem is a CALL is still required.  */
-  if (GET_CODE (insn) == CALL_INSN
-      && (INSN_BB (elem) != INSN_BB (insn)))
-    return 0;
-#endif
 
   /* If we already have a dependency for ELEM, then we do not need to
      do anything.  Avoiding the list walk below can cut compile times

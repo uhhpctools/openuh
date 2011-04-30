@@ -59,9 +59,12 @@
 static char *opt_sysrcs_id = opt_sys_INCLUDED"$ $Revision$";
 #endif /* _KEEP_RCS_ID */
 
-#define BZERO bzero
-
 //  Return the CPU time in millisecond.
+#if defined(BUILD_OS_DARWIN)
+/* Darwin/BSD has only 100 ticks per second, so we need to use FP */
+#define CLOCK_IN_MS() ((clock_t) (clock() / (CLOCKS_PER_SEC / 1000.0)))
+#else /* defined(BUILD_OS_DARWIN) */
 #define CLOCK_IN_MS() (clock() / (CLOCKS_PER_SEC / 1000))
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #endif

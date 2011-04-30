@@ -5816,14 +5816,6 @@ lookup_tag (form, name, binding_level, thislevel_only)
   POP_TIMEVAR_AND_RETURN (TV_NAME_LOOKUP, NULL_TREE);
 }
 
-#if 0
-void
-set_current_level_tags_transparency (tags_transparent)
-     int tags_transparent;
-{
-  current_binding_level->tag_transparent = tags_transparent;
-}
-#endif
 
 /* Given a type, find the tag that was defined for it and return the tag name.
    Otherwise return 0.  However, the value can never be 0
@@ -7064,9 +7056,6 @@ cxx_init_decl_processing ()
 
   empty_except_spec = build_tree_list (NULL_TREE, NULL_TREE);
 
-#if 0
-  record_builtin_type (RID_MAX, NULL, string_type_node);
-#endif
 
   delta_type_node = ptrdiff_type_node;
   vtable_index_type = ptrdiff_type_node;
@@ -7734,10 +7723,6 @@ start_decl (declarator, declspecs, initialized, attributes, prefix_attributes)
   register tree type, tem;
   tree context;
 
-#if 0
-  /* See code below that used this.  */
-  int init_written = initialized;
-#endif
 
   /* This should only be done once on the top most decl.  */
   if (have_extern_spec)
@@ -8104,9 +8089,6 @@ layout_var_decl (decl)
      tree decl;
 {
   tree type = TREE_TYPE (decl);
-#if 0
-  tree ttype = target_type (type);
-#endif
 
   /* If we haven't already layed out this declaration, do so now.
      Note that we must not call complete type for an external object
@@ -8131,17 +8113,6 @@ layout_var_decl (decl)
       error ("storage size of `%D' isn't known", decl);
       TREE_TYPE (decl) = error_mark_node;
     }
-#if 0
-  /* Keep this code around in case we later want to control debug info
-     based on whether a type is "used".  (jason 1999-11-11) */
-
-  else if (!DECL_EXTERNAL (decl) && IS_AGGR_TYPE (ttype))
-    /* Let debugger know it should output info for this type.  */
-    note_debug_info_needed (ttype);
-
-  if (TREE_STATIC (decl) && DECL_CLASS_SCOPE_P (decl))
-    note_debug_info_needed (DECL_CONTEXT (decl));
-#endif
 
   if ((DECL_EXTERNAL (decl) || TREE_STATIC (decl))
       && DECL_SIZE (decl) != NULL_TREE
@@ -10492,10 +10463,6 @@ grokdeclarator (declarator, declspecs, decl_context, initialized, attrlist)
   int funcdef_flag = 0;
   enum tree_code innermost_code = ERROR_MARK;
   int bitfield = 0;
-#if 0
-  /* See the code below that used this.  */
-  tree decl_attr = NULL_TREE;
-#endif
   /* Set this to error_mark_node for FIELD_DECLs we could not handle properly.
      All FIELD_DECLs we build here have `init' put into their DECL_INITIAL.  */
   tree init = NULL_TREE;
@@ -11018,11 +10985,6 @@ grokdeclarator (declarator, declspecs, decl_context, initialized, attrlist)
     found: ;
     }
 
-#if 0
-  /* See the code below that used this.  */
-  if (typedef_decl)
-    decl_attr = DECL_ATTRIBUTES (typedef_decl);
-#endif
   typedef_type = type;
 
   /* No type at all: default to `int', and set DEFAULTED_INT
@@ -12380,11 +12342,6 @@ grokdeclarator (declarator, declspecs, decl_context, initialized, attrlist)
 			       funcdef_flag, template_count, in_namespace);
 	    if (decl == NULL_TREE)
 	      return decl;
-#if 0
-	    /* This clobbers the attrs stored in `decl' from `attrlist'.  */
-	    /* The decl and setting of decl_attr is also turned off.  */
-	    decl = build_decl_attribute_variant (decl, decl_attr);
-#endif
 
 	    /* [class.conv.ctor]
 

@@ -188,23 +188,6 @@ typedef struct pdr {
  * If 0'd out because exception_info chokes Visual C++ and because there
  * don't seem to be any references to this structure elsewhere in gdb.
  */
-#if 0
-typedef struct runtime_pdr {
-	bfd_vma	adr;		/* memory address of start of procedure */
-	long	regmask;	/* save register mask */
-	long	regoffset;	/* save register offset */
-	long	fregmask;	/* save floating point register mask */
-	long	fregoffset;	/* save floating point register offset */
-	long	frameoffset;	/* frame size */
-	short	framereg;	/* frame pointer register */
-	short	pcreg;		/* offset or reg of return pc */
-	long	irpss;		/* index into the runtime string table */
-	long	reserved;
-	struct exception_info *exception_info;/* pointer to exception array */
-} RPDR, *pRPDR;
-#define cbRPDR sizeof(RPDR)
-#define rpdNil ((pRPDR) 0)
-#endif
 
 /*
  * Line Numbers

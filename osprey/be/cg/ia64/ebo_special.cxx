@@ -66,7 +66,7 @@ static const char source_file[] = __FILE__;
 
 #include <stdarg.h>
 #include "defs.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "errors.h"
 #include "mempool.h"
 #include "tracing.h"
@@ -93,6 +93,7 @@ static const char source_file[] = __FILE__;
 #include "cg_spill.h"
 #include "cgexp_internals.h"
 #include "data_layout.h"
+#include "cxx_hash.h"
 
 #include "ebo.h"
 #include "ebo_info.h"
@@ -106,8 +107,27 @@ static const char source_file[] = __FILE__;
 /* Define a macro to sign-extend the least signficant 32 bits */
 #define SEXT_32(val) (((INT64)(val) << 32) >> 32)
 
+typedef HASH_TABLE<ST_IDX, INITV_IDX> ST_TO_INITV_MAP;
+static ST_TO_INITV_MAP *st_initv_map = NULL;
+static BOOL st_initv_map_inited = FALSE;
+static GTN_SET *work_gtn_set = NULL;
+static BS *work_defined_set = NULL;
+static MEM_POOL *work_pool = NULL;
+
 /* ===================================================================== */
 
+/* Initialize and finalize ebo special routines. */
+
+
+void
+EBO_Special_Finish (void)
+{
+  st_initv_map = NULL;
+  st_initv_map_inited = FALSE;
+  work_gtn_set = NULL;
+  work_defined_set = NULL;
+  work_pool = NULL;
+}
 
 /*
  * Identify OP's that contain a constant and operate in a way that

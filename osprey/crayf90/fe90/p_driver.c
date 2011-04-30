@@ -203,7 +203,7 @@ void complete_intrinsic_definition(int		generic_attr)
       /* static intrinsic table now to reflect the  */
       /* correct result type of this intrinsic.     */
 
-# if defined(_TARGET_OS_LINUX)
+# if defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)
          if (intrin_tbl[intrin_tbl_idx].n_specifics == 1) {
             if (intrin_tbl[intrin_tbl_idx].id_str.string[0] == 'Q' ||
                 (intrin_tbl[intrin_tbl_idx].id_str.string[0] == 'C' &&
@@ -545,7 +545,8 @@ void complete_intrinsic_definition(int		generic_attr)
 
 typedef enum {
   imt_inline,	/* Call xxx_intrinsic procedure to emit code inline */
-  imt_extern	/* Generate call to external procedure */
+  imt_extern,	/* Generate call to external procedure */
+  imt_type	/* Mark type for special handling */
   } imt_kind;
 
 typedef struct {
@@ -556,6 +557,18 @@ typedef struct {
 
 /* Must be alphabetical by "name" member */
 static imt_entry intrinsic_module_table[] = {
+  { "C_ASSOCIATED_FUNPTR",		imt_extern, Unknown_Intrinsic},
+  { "C_ASSOCIATED_PTR",			imt_extern, Unknown_Intrinsic},
+  /* For now, call external procedure for C_FUNLOC and C_LOC because front
+   * end blows up if loc_intrinsic() in s_intrin.c creates a Loc_Opr whose
+   * result is a derived type. */
+  { "C_FUNLOC",				imt_extern, C_Funloc_Intrinsic},
+  { "C_FUNPTR",				imt_type,   Unknown_Intrinsic},
+  { "C_F_POINTERA",			imt_extern, C_F_Pointer_Intrinsic},
+  { "C_F_POINTERS",			imt_extern, C_F_Pointer_Intrinsic},
+  { "C_F_PROCPOINTER",			imt_inline, C_F_Procpointer_Intrinsic},
+  { "C_LOC",				imt_extern, C_Loc_Iso_Intrinsic},
+  { "C_PTR",				imt_type,   Unknown_Intrinsic},
   { "IEEE_CLASS_4",			imt_extern, Unknown_Intrinsic},
   { "IEEE_CLASS_8",			imt_extern, Unknown_Intrinsic},
   { "IEEE_COPY_SIGN_4",			imt_inline, Ieee_Copy_Sign_Intrinsic},
@@ -801,6 +814,21 @@ static int intrinsic_module_cmp(const void *va, const void *vb)
 }
 
 /*
+ * name		name of attribute in module
+ * returns	pointer to intrinsic_module_table entry for that name, or null
+ */
+static imt_entry *
+find_imt(char *name) {
+  imt_entry key;
+  key.name = name;
+  return bsearch(&key,
+    intrinsic_module_table,
+    ((sizeof intrinsic_module_table) / (sizeof *intrinsic_module_table)),
+    sizeof *intrinsic_module_table,
+    intrinsic_module_cmp);
+  }
+
+/*
  * Given a symbol from an intrinsic module, if it is a generic interface,
  * mark it as "intrinsic" and also mark its specific procedures as "intrinsic".
  *
@@ -811,7 +839,21 @@ int intrinsic_module_lookup(int attr_idx)
 {
   /* Only interface or program unit can be intrinsic */
   obj_class_type obj_class = AT_OBJ_CLASS(attr_idx);
-  if (Interface != obj_class) {
+  if (Derived_Type == obj_class) {
+    imt_entry *keyp = find_imt(AT_ORIG_NAME_PTR(attr_idx));
+    if (keyp) {
+      if (is_x8664_n32() && keyp->kind == imt_type) {
+        AT_IS_INTRIN(attr_idx) = TRUE;
+	if (AT_OBJ_CLASS(attr_idx) == Derived_Type) {
+	  ATT_NUM_CPNTS(attr_idx) = 0;
+	  ATT_FIRST_CPNT_IDX(attr_idx) = 0;
+	}
+	return 1;
+      }
+      return 0;
+    }
+  }
+  else if (Interface != obj_class && Derived_Type != obj_class) {
     return 0;
   }
 
@@ -822,24 +864,18 @@ int intrinsic_module_lookup(int attr_idx)
   int elemental = 0;
   for (int s = ATI_NUM_SPECIFICS(attr_idx); s > 0; s -= 1) {
     int spec_idx = SN_ATTR_IDX(spec_sn_idx);
-    imt_entry key;
-    key.name = AT_ORIG_NAME_PTR(spec_idx);
-    imt_entry *keyp = bsearch(&key,
-      intrinsic_module_table,
-      ((sizeof intrinsic_module_table) / (sizeof *intrinsic_module_table)),
-      sizeof *intrinsic_module_table,
-      intrinsic_module_cmp);
+    imt_entry *keyp = find_imt(AT_ORIG_NAME_PTR(spec_idx));
     if (keyp) {
       found = keyp->index;
-      if (imt_inline == keyp->kind) {
+      if (imt_inline == keyp->kind || Unknown_Intrinsic != keyp->index) {
 	elemental = AT_ELEMENTAL_INTRIN(spec_idx) = ATP_ELEMENTAL(spec_idx);
 	ATP_PROC(spec_idx) = Intrin_Proc;
 	AT_IS_INTRIN(spec_idx) = TRUE;
-	ATP_EXTERNAL_INTRIN(spec_idx) = FALSE;
+	ATP_EXTERNAL_INTRIN(spec_idx) = (imt_extern == keyp->kind);
 	ATP_NON_ANSI_INTRIN(spec_idx) = FALSE;
 	ATP_INTRIN_ENUM(spec_idx) = keyp->index;
       }
-      else if (imt_extern == keyp->kind) {
+      if (imt_extern == keyp->kind) {
         /* Change name from FUNCTION.in.MODULE to _Function or from
 	 * function_ to _Function. We're doing this in place because if
 	 * we use NTR_NAME_POOL to allocate space for a new name, the
@@ -858,6 +894,19 @@ int intrinsic_module_lookup(int attr_idx)
 	}
 	*(dot + 1) = toupper(*dot);
 	*user_name = '_';
+      }
+      /* For x8664 -m32, types C_PTR and C_FUNPTR must be treated as scalars
+       * compatible with C "void *", not as structures. In user code, they
+       * are marked with AT_IS_INTRIN: the c_ptr_abi_trouble() function
+       * then ensures that functions which return them treat them as scalars.
+       * But when compiling iso_c_binding.F90, they are not marked specially,
+       * so here we must treat specially the two functions C_LOC and C_FUNLOC
+       * which return them. */
+      if (is_x8664_n32() && (keyp->index == C_Loc_Iso_Intrinsic ||
+	keyp->index == C_Funloc_Intrinsic)) {
+	ATP_EXTRA_DARG(spec_idx) = FALSE;
+	ATP_NUM_DARGS(spec_idx) = 1;
+	ATP_FIRST_IDX(spec_idx) += 1;
       }
     }
     spec_sn_idx = SN_SIBLING_LINK(spec_sn_idx);
@@ -1094,7 +1143,7 @@ void parse_prog_unit (void)
    int		save_blk_stk_idx;
    int		sh_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		ir_idx;
 # endif
 
@@ -1441,7 +1490,7 @@ void parse_prog_unit (void)
 
       }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (stmt_type != Directive_Stmt) {
          directives_are_global = FALSE;
       }
@@ -2677,7 +2726,7 @@ extern	void init_type(void)
    }
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    if (cmd_line_flags.s_pointer8) {
       storage_bit_size_tbl[CRI_Ptr_8] = 64;
@@ -2843,7 +2892,9 @@ static void init_const_tbl(void)
    }
 # endif
 
-   idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, TARGET_BITS_PER_WORD);
+   /* OSP_467, #3, set the right size of CG_INTEGER_DEFAULT_TYPE */
+   idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, 
+                     storage_bit_size_tbl[CG_INTEGER_DEFAULT_TYPE]);
 
 # ifdef _DEBUG
    if (idx != CN_INTEGER_BITS_PER_WORD_IDX) {
@@ -3328,6 +3379,9 @@ static void stmt_level_semantics(void)
          case Null_Stmt:
          case Allocatable_Stmt:
          case Automatic_Stmt:
+#ifdef KEY /* Bug 14150 */
+	 case Bind_Stmt:
+#endif /* KEY Bug 14150 */
          case Common_Stmt:
          case Contains_Stmt:
          case Cpnt_Decl_Stmt:
@@ -3340,6 +3394,13 @@ static void stmt_level_semantics(void)
          case Format_Stmt:
          case Implicit_Stmt:
          case Implicit_None_Stmt:
+#ifdef KEY /* Bug 11741 */
+	 case Import_Stmt:
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+	 case Enum_Stmt:
+	 case Enumerator_Stmt:
+#endif /* KEY Bug 10572 */
          case Intent_Stmt:
          case Interface_Stmt:
          case Intrinsic_Stmt:
@@ -3358,6 +3419,9 @@ static void stmt_level_semantics(void)
          case Type_Decl_Stmt:
          case Use_Stmt:
          case Volatile_Stmt:
+#ifdef KEY /* Bug 14150 */
+         case Value_Stmt:
+#endif /* KEY Bug 14150 */
 
             /* The label is defined on a spec stmt.  Normally, the stmt  */
             /* doesn't need to be processed by the Semantics Pass (DATA  */
@@ -3396,6 +3460,9 @@ static void stmt_level_semantics(void)
          case End_Function_Stmt:
          case End_If_Stmt:
          case End_Interface_Stmt:
+#ifdef KEY /* Bug 10572 */
+         case End_Enum_Stmt:
+#endif /* KEY Bug 10572 */
          case End_Module_Stmt:
          case End_Program_Stmt:
          case End_Select_Stmt:
@@ -3505,6 +3572,9 @@ static void stmt_level_semantics(void)
                check_for_dup_derived_type_lbl();
                break;
 
+#ifdef KEY /* Bug 10572 */
+	    case End_Enum_Stmt:
+#endif /* KEY Bug 10572 */
             case End_Interface_Stmt: /* Labeled declaration statements */
                SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
                break;
@@ -3533,6 +3603,9 @@ static void stmt_level_semantics(void)
       switch (stmt_type) {
          case Allocatable_Stmt:
          case Automatic_Stmt:
+#ifdef KEY /* Bug 14150 */
+	 case Bind_Stmt:
+#endif /* KEY Bug 14150 */
          case Common_Stmt:
          case Contains_Stmt:
          case Cpnt_Decl_Stmt:
@@ -3543,6 +3616,13 @@ static void stmt_level_semantics(void)
          case Format_Stmt:
          case Implicit_Stmt:
          case Implicit_None_Stmt:
+#ifdef KEY /* Bug 11741 */
+	 case Import_Stmt:
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+	 case Enum_Stmt:
+	 case Enumerator_Stmt:
+#endif /* KEY Bug 10572 */
          case Intent_Stmt:
          case Interface_Stmt:
          case Intrinsic_Stmt:
@@ -3560,8 +3640,14 @@ static void stmt_level_semantics(void)
          case Task_Common_Stmt:
          case Type_Decl_Stmt:
          case End_Interface_Stmt:
+#ifdef KEY /* Bug 10572 */
+         case End_Enum_Stmt:
+#endif /* KEY Bug 10572 */
          case End_Type_Stmt:
          case Volatile_Stmt:
+#ifdef KEY /* Bug 14150 */
+         case Value_Stmt:
+#endif /* KEY Bug 14150 */
             need_new_sh = FALSE;
             break;
 
@@ -3623,20 +3709,6 @@ static void parse_expr_for_evaluator(void)
 
    if (parse_expr(&opnd)) {
 
-# if 0  /* Do not want to generate a compiler temp here.  Need to insert */
-        /* a new statement type and operator.  Use it.                   */
-
-      GEN_COMPILER_TMP_ASG(ir_idx,
-                           attr_idx,
-                           TRUE,             /* Semantics done */
-                           OPND_LINE_NUM(opnd),
-                           OPND_COL_NUM(opnd),
-                           INTEGER_DEFAULT_TYPE,
-                           Priv);
-
-      SH_IR_IDX(curr_stmt_sh_idx)	= ir_idx;
-      COPY_OPND(IR_OPND_R(ir_idx),opnd); 
-# endif
       stmt_level_semantics();
    }
    else { /* Problems with expression - exit */

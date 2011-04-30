@@ -72,7 +72,7 @@
 #ifndef wnmp_INCLUDED
 #define wnmp_INCLUDED "wn_mp.h"
 
-#ifndef __ELF_H__
+#if (! defined(__ELF_H__)) && (! defined(BUILD_OS_DARWIN))
 #include <elf.h>            /* pu_info.h can't compile without this */
 #endif
 
@@ -99,6 +99,8 @@ extern WN * Gen_MP_Getlock ( ST * lock );
 extern WN * Gen_MP_Unlock ( ST * lock ) ;
 extern WN * Gen_MP_Setlock ( void );
 extern WN * Gen_MP_Unsetlock ( void );
+
+extern void Verify_No_MP(WN *tree);
 
   // list of the STORE nodes for the REDUCTION pragmas of an MP construct
 typedef DYN_ARRAY<WN *> REDUCTION_LIST;

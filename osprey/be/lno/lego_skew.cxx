@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -431,9 +435,9 @@ static void Lego_Skew_Loop(WN* wn_loop,
 {
   if (LNO_Verbose) { 
     fprintf(stdout, "Lego skewing loop %s on line %d\n", 
-      WB_Whirl_Symbol(wn_loop), (INT) WN_linenum(wn_loop)); 
+      WB_Whirl_Symbol(wn_loop), Srcpos_To_Line(WN_linenum(wn_loop))); 
     fprintf(TFile, "Lego skewing loop %s on line %d\n", 
-      WB_Whirl_Symbol(wn_loop), (INT) WN_linenum(wn_loop)); 
+      WB_Whirl_Symbol(wn_loop), Srcpos_To_Line(WN_linenum(wn_loop))); 
     if (LNO_Tlog)
       Generate_Tlog("LNO", "lego_skewing", Srcpos_To_Line(WN_linenum(wn_loop)),
         (char *) WB_Whirl_Symbol(wn_loop), "", "", "");

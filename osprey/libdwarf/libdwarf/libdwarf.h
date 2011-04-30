@@ -1,8 +1,4 @@
 /*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -49,7 +45,7 @@ extern "C" {
 #endif
 /*
 	libdwarf.h  
-	$Revision: 1.8 $ $Date: 05/08/26 23:50:11-07:00 $
+	$Revision: 1.9 $ $Date: 05/12/05 09:00:44-08:00 $
 
 	For libdwarf producers and consumers
 
@@ -75,6 +71,11 @@ struct Elf;
 typedef struct Elf* dwarf_elf_handle;
 #endif
 
+/* Defining different types for 32 vs 64bit builds means that
+ * we cannot use same formatting or casts across builds.
+ * Long long is just as efficient as long on 64bit machine,
+ * so just use long long everywhere.
+ */
 #if (_MIPS_SZLONG == 64)
 /* Special case for MIPS, so -64 (LP64) build gets simple -long-.
    Non-MIPS LP64 or ILP64 environments should probably ensure
@@ -173,7 +174,7 @@ enum Dwarf_Rel_Type {
 		dwarf_drt_module,               /* module name */
 		dwarf_drt_imported_declaration, /* imported declaration */
 	   /* Bug 9534 */
-		dwarf_drt_cie_begin,            /* EH cie begin marker */
+		dwarf_drt_cie_begin, /* simple string */
 		dwarf_drt_fde_begin,            /* EH fde begin marker */
 #endif
 		dwarf_drt_cie_label, /* simple string */
@@ -1341,7 +1342,7 @@ Dwarf_P_Attribute dwarf_add_AT_location_expr(Dwarf_P_Debug /*dbg*/,
 Dwarf_P_Attribute dwarf_add_AT_string(Dwarf_P_Debug /*dbg*/, 
     Dwarf_P_Die 	/*ownerdie*/, 
     Dwarf_Half 		/*attr*/, 
-    char* 		/*string*/, 
+    const char* 	/*string*/, 
     Dwarf_Error* 	/*error*/);
 
 Dwarf_P_Attribute dwarf_add_AT_flag(Dwarf_P_Debug /*dbg*/, 
@@ -1373,11 +1374,11 @@ Dwarf_P_Attribute dwarf_add_AT_name(Dwarf_P_Die	/*die*/,
 
 /* Producer line creation functions (.debug_line) */
 Dwarf_Unsigned dwarf_add_directory_decl(Dwarf_P_Debug /*dbg*/, 
-    char* 		/*name*/, 
+    const char* 	/*name*/, 
     Dwarf_Error*	/*error*/);
 
 Dwarf_Unsigned dwarf_add_file_decl(Dwarf_P_Debug /*dbg*/, 
-    char* 		/*name*/,
+    const char* 	/*name*/,
     Dwarf_Unsigned 	/*dir_index*/, 
     Dwarf_Unsigned 	/*time_last_modified*/, 
     Dwarf_Unsigned 	/*length*/, 
@@ -1403,7 +1404,7 @@ Dwarf_Unsigned dwarf_lne_end_sequence(Dwarf_P_Debug /*dbg*/,
 
 /* Producer .debug_frame functions */
 Dwarf_Unsigned dwarf_add_frame_cie(Dwarf_P_Debug /*dbg*/, 
-    char* 		/*augmenter*/, 
+    const char* 	/*augmenter*/, 
     Dwarf_Small 	/*code_alignent_factor*/, 
     Dwarf_Small 	/*data_alignment_factor*/, 
     Dwarf_Small 	/*return_address_reg*/, 
@@ -1464,6 +1465,13 @@ Dwarf_P_Fde dwarf_add_fde_inst(
     Dwarf_Small 	/*op*/, 
     Dwarf_Unsigned 	/*val1*/, 
     Dwarf_Unsigned 	/*val2*/, 
+    Dwarf_Error* 	/*error*/);
+
+Dwarf_P_Fde dwarf_add_fde_inst_with_signed_offset(
+    Dwarf_P_Fde         /*fde*/,
+    Dwarf_Small 	/*op*/, 
+    Dwarf_Unsigned 	/*val1*/, 
+    Dwarf_Signed 	/*val2*/, 
     Dwarf_Error* 	/*error*/);
 
 Dwarf_P_Fde dwarf_new_fde(Dwarf_P_Debug	/*dbg*/, Dwarf_Error* /*error*/);

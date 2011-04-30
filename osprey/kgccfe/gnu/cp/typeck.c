@@ -4166,13 +4166,7 @@ build_unary_op (code, xarg, noconvert)
 		error ("invalid use of `--' on bool variable `%D'", arg);
 		return error_mark_node;
 	      }
-#if 0
-	    /* This will only work if someone can convince Kenner to accept
-	       my patch to expand_increment. (jason)  */
-	    val = build (code, TREE_TYPE (arg), arg, inc);
-#else
 	    val = boolean_increment (code, arg);
-#endif
 	  }
 	else
 	  val = build (code, TREE_TYPE (arg), arg, inc);
@@ -4619,10 +4613,6 @@ build_x_compound_expr (list)
                 && VOID_TYPE_P (TREE_TYPE (TREE_VALUE(list)))))
         warning("left-hand operand of comma expression has no effect");
     }
-#if 0 /* this requires a gcc backend patch to export warn_if_unused_value */
-  else if (warn_unused_value)
-    warn_if_unused_value (TREE_VALUE(list));
-#endif
 
   return build_compound_expr
     (tree_cons (NULL_TREE, TREE_VALUE (list),

@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -39,6 +42,8 @@ extern "C" {
 
 typedef __gnu_cxx::hash_map<const char*, const char *, __gnu_cxx::hash<const char*>,  eqstr> KEY_TARGET_HTABLE;
 static KEY_TARGET_HTABLE spec_table;
+typedef __gnu_cxx::hash_map<const char*, void*, __gnu_cxx::hash<const char*>,  eqstr> char_to_void_htable;
+static char_to_void_htable binding_labels;
 extern MEM_POOL *FE_Mempool;
 using namespace std;
 
@@ -119,10 +124,29 @@ void parse_decorate_script(const char *script_name)
 // If the "-fdecorate path" option has told us to map Fortran symbol "key"
 // onto a particular string, return that string; otherwise, return null.
 //--------------------------------------------------------
-extern "C" const char *get_symbol_decoration(char *key)
+extern "C" const char *get_symbol_decoration(const char *key)
 {
-  // Check if the hash map contains the element being inquired
-  if (spec_table.find(key) == spec_table.end()) 
-    return 0;
-  return spec_table[key];
+  return (spec_table.find(key) == spec_table.end()) ?
+    0 :
+    spec_table[key];
+}
+
+//--------------------------------------------------------
+// Map language binding label "key" onto global_attr_idx
+//--------------------------------------------------------
+extern "C" void put_external_label(const char *key, void *info)
+{
+  char *key_temp = new char[::strlen(key) + 1];
+  ::strcpy(key_temp, key);
+  binding_labels[key_temp] = info;
+}
+
+//--------------------------------------------------------
+// Return global_attr_idx associated with "key", or 0 if there is no mapping
+//--------------------------------------------------------
+extern "C" void *get_external_label(const char *key)
+{
+  return (binding_labels.find(key) == binding_labels.end()) ?
+    0 :
+    binding_labels[key];
 }

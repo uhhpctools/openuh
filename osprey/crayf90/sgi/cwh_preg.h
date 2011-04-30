@@ -69,10 +69,10 @@ typedef struct {
 
 extern void fe_preg_init (void) ;
 extern PREG_det cwh_preg_next_preg (TYPE_ID    btype,
-				    char     * name,
+				    const char     * name,
 				    WN       * home_wn ) ;
 
-extern WN * cwh_preg_temp_save(char * name, WN  * expr ) ;
+extern WN * cwh_preg_temp_save(const char * name, WN  * expr ) ;
 
 #endif /* CIR_WH_PREG_INCLUDED */
 

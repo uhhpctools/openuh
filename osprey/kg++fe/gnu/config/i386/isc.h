@@ -28,24 +28,6 @@
 #undef WCHAR_TYPE_SIZE
 #define WCHAR_TYPE_SIZE BITS_PER_UNIT
 
-#if 0
-/* This is apparently not true: ISC versions up to 3.0, at least, use
-   the standard calling sequence in which the called function pops the
-   extra arg.  */
-/* caller has to pop the extra argument passed to functions that return
-   structures.  */
-
-#undef RETURN_POPS_ARGS
-#define RETURN_POPS_ARGS(FUNDECL,FUNTYPE,SIZE)   \
-  ((FUNDECL) && TREE_CODE (FUNDECL) == IDENTIFIER_NODE ? 0	\
-   : (TARGET_RTD						\
-      && (TYPE_ARG_TYPES (FUNTYPE) == 0				\
-	  || (TREE_VALUE (tree_last (TYPE_ARG_TYPES (FUNTYPE)))	\
-	      == void_type_node))) ? (SIZE)			\
-   : 0)
-/* On other 386 systems, the last line looks like this:
-   : (aggregate_value_p (TREE_TYPE (FUNTYPE))) ? GET_MODE_SIZE (Pmode) : 0)  */
-#endif
 
 /* Handle #pragma pack and #pragma weak.  */
 #define HANDLE_SYSV_PRAGMA

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -291,10 +295,11 @@ typedef INT32 		WN_MAP;
 #define WN_MAP_FEEDBACK 2
 #define WN_MAP_AC_INTERNAL 3
 #define WN_MAP_ALIAS_CLASS 4
+#define WN_MAP_ALIAS_CGNODE 5
 
 /* number of reserved mappings and total number */
-#define WN_MAP_RESERVED 5
-#define WN_MAP_MAX 28
+#define WN_MAP_RESERVED 6
+#define WN_MAP_MAX 128
 
 typedef enum {
   WN_MAP_KIND_VOIDP = 1,
@@ -308,6 +313,7 @@ typedef struct wn_map_tab {
   WN_MAP_KIND _kind[WN_MAP_MAX];
   void **_mapping[WN_MAP_CATEGORIES][WN_MAP_MAX];
   BOOL _is_used[WN_MAP_MAX];  /* is this WN_MAP being used */
+  BOOL _dont_copy[WN_MAP_MAX]; /* does this WN_MAP need to be copied to the nested function ? */
   INT32 _last_map_id[WN_MAP_CATEGORIES]; /* last map_id for each category */
   INT32 _map_size[WN_MAP_CATEGORIES][WN_MAP_MAX]; /* size of each mapping */
 
@@ -437,6 +443,11 @@ extern void WN_MAP_Set_ID(
 );
 
 #define WN_MAP_Get_Kind(wn_map) (Current_Map_Tab->_kind[(wn_map)])
+
+#define WN_MAP_Get_dont_copy(wn_map) (Current_Map_Tab->_dont_copy[(wn_map)])
+
+#define WN_MAP_Set_dont_copy(wn_map, dont_copy) \
+    (Current_Map_Tab->_dont_copy[(wn_map)] = (dont_copy))
 
 #ifdef __cplusplus
 }

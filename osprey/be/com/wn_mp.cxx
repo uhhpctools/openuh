@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -36,7 +44,6 @@
 
 */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
@@ -47,7 +54,11 @@
 *  csc.
 */
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #define USE_STANDARD_TYPES          /* override unwanted defines in "defs.h" */
 
@@ -61,6 +72,9 @@
 #include "irbdata.h"                /* for inito */
 #include "dwarf_DST_mem.h"          /* for DST */
 #include "pu_info.h"
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include "ir_bwrite.h"
 #include "ir_reader.h"
 #include "ir_bcom.h"
@@ -75,7 +89,9 @@
 
 #include <string.h>
 
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "alloca.h"
 #include "cxx_template.h"
 #include "defs.h"
@@ -186,7 +202,7 @@ inline void WN_set_offsetx ( WN *wn, WN_OFFSET ofst )
   }
 }
 
-inline TYPE_ID Promote_Type(TYPE_ID mtype)
+static inline TYPE_ID Promote_Type(TYPE_ID mtype)
 {
   switch (mtype) {
     case MTYPE_I1 : case MTYPE_I2: return(MTYPE_I4);
@@ -648,7 +664,7 @@ static BOOL critical_lock_not_init = TRUE; /* for uninitialized critical lock */
 
 /*  This table contains the external names of all MP runtime routines.  */
 
-static char *mpr_names [MPRUNTIME_LAST + 1] = {
+static const char *mpr_names [MPRUNTIME_LAST + 1] = {
   "",				/* MPRUNTIME_NONE */
   "__mp_setup",			/* MPR_SETUP */
   "__mp_cleanup",		/* MPR_CLEANUP */
@@ -823,80 +839,8 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
 #define IS_MASTER_PREG_NAME  "mp_is_master"
 
 
-/*
-After returning from lower_mp(), all MP constructs should have been lowered
-in both the Whirl tree passed to lower_mp() and the nested PU (if one was
-created).  If all MP constructs have been lowered in a Whirl tree, the tree
-will contain no MP pragmas, MP IF's, or non-POD finalization IF's.  This
-class verifies this post- condition just before returning from lower_mp().
-
-This class could easily be extended to perform additional verification on
-the lowered Whirl.
-*/
-
-class Verify_MP_Lowered {
-  BOOL replace_block_set;
-  WN *replace_block_start;
-    // i.e. WN_next() of last node in replace_block
-  WN *replace_block_sibling;
-  BOOL nested_pu_set;
-  WN *nested_pu;
-
-  static void Verify_No_MP(WN *tree);
-
-public:
-  Verify_MP_Lowered() : replace_block_set(FALSE), nested_pu_set(FALSE) { }
-
-  void Set_replace_block(WN *replace, WN *sibling) {
-    Is_True(!replace_block_set, ("Set_replace_block() called already"));
-    replace_block_set = TRUE;
-    replace_block_start = replace;
-    replace_block_sibling = sibling;
-  }
-
-  void Set_nested_pu_tree(WN *pu) {
-    Is_True(!nested_pu_set, ("Set_nested_pu_tree() called already"));
-    nested_pu_set = TRUE;
-    nested_pu = pu;
-  }
-
-  void Set_replace_block_and_nested_pu(WN *replace, WN *sibling, WN *pu) {
-    Is_True(!replace_block_set && !nested_pu_set,
-            ("replace_block_start and/or nested_pu set already"));
-    replace_block_set = TRUE;
-    replace_block_start = replace;
-    replace_block_sibling = sibling;
-    nested_pu_set = TRUE;
-    nested_pu = pu;
-  }
-
-  ~Verify_MP_Lowered();
-};
-
-/*
-Destructor verifies that both the replace_block and nested PU have been set
-(either may be NULL), then verifies that neither contains any MP pragmas,
-MP IF's, or non-POD finalization IF's.  If compiled without debugging
-support, it does nothing.
-*/
-
-Verify_MP_Lowered::~Verify_MP_Lowered()
-{
-  Is_True(replace_block_set, ("replace_block_start not set"));
-  Is_True(nested_pu_set, ("nested_pu not set"));
-
-#ifdef Is_True_On
-  for (WN *wn = replace_block_start; wn && wn != replace_block_sibling;
-       wn = WN_next(wn))
-    Verify_No_MP(wn);
-
-  if (nested_pu)
-    Verify_No_MP(nested_pu);
-#endif
-}
-
-  // Verify that tree contains no MP pragmas or IF's
-void Verify_MP_Lowered::Verify_No_MP(WN *tree)
+// Verify that tree contains no MP pragmas or IF's
+void Verify_No_MP(WN *tree)
 {
   WN_ITER *wni = WN_WALK_TreeIter(tree);
 
@@ -921,8 +865,6 @@ void Verify_MP_Lowered::Verify_No_MP(WN *tree)
 			(unsigned long) wn, (unsigned long) tree);
   }
 }
-
-Verify_MP_Lowered *verify_mp_lowered_ptr; // set upon entry to lower_mp()
 
 
 /* Forward function declarations. */
@@ -1006,6 +948,12 @@ Get_Gtid(ST * gtid)
 The lock type of Intel RTL is an I4 array of size 8. But where to put it?
 Does every named lock need a different lock? Remained to be tested.
 */
+#if defined(TARG_MIPS) && !defined(TARG_SL)
+BOOL Is_Target_32bit () 
+{ 
+  return (Target_ABI == ABI_N32); 
+}
+#endif
 
 static void 
 Create_Lock_Type()
@@ -1061,6 +1009,73 @@ Gen_In_Parallel(void)
   WN_linenum(wn) = line_number;
   
   return wn;
+}
+
+static UINT64
+Get_Offset_From_Const_Array(WN* array)
+{
+  // should be one-dimension array with constant index.
+  WN* index = WN_array_index(array,0);
+  FmtAssert(WN_operator(index) == OPR_INTCONST,("expect a const index"));
+  UINT64 offset = WN_element_size(array) * WN_const_val(index);
+  return offset;
+}
+
+// Return a non-structure field from offset, if there's multiple field
+// with the same offset, return the first.
+// This routine can return empty fld handler.
+static FLD_HANDLE 
+Get_FLD_From_Offset_r(const TY_IDX ty_idx, const UINT64 offset, UINT* field_id)
+{
+  Is_True(Is_Structure_Type(ty_idx), ("need to be a structure type"));
+
+  UINT64 cur_offset = 0;
+
+  FLD_ITER fld_iter = Make_fld_iter(TY_fld(ty_idx));
+  do {
+    if ( field_id != NULL )
+      (*field_id) ++;
+    FLD_HANDLE fld(fld_iter);       
+
+    // we assume that we will not see bit-fields here.
+    cur_offset = FLD_ofst(fld);
+
+    if (cur_offset == offset)
+    {
+      // check type
+      TY_IDX cur_fld_idx = FLD_type(fld);
+      if (!Is_Structure_Type(cur_fld_idx))
+        return fld;
+    }
+
+    TY_IDX cur_fld_idx = FLD_type(fld);
+    if (TY_kind(cur_fld_idx) == KIND_STRUCT &&
+        TY_fld(cur_fld_idx) != FLD_HANDLE())
+    {
+      // it's possible that the new_offset becomes negative
+      // because of unions. 
+      INT64 new_offset = offset - cur_offset;
+      if (new_offset < 0) return FLD_HANDLE();
+      FLD_HANDLE fld1 = Get_FLD_From_Offset_r(cur_fld_idx, new_offset, field_id);
+      if (!fld1.Is_Null()) return fld1;
+    }
+
+  } while (!FLD_last_field(fld_iter++));
+
+  return FLD_HANDLE();
+}
+
+// Return a non-structure field from offset, if there's multiple field
+// with the same offset, return the first.
+// This routine will assert if it cannot find a valid field.
+static FLD_HANDLE 
+Get_FLD_From_Offset(const TY_IDX ty_idx, const UINT64 offset, UINT *field_id= NULL)
+{
+  if (field_id != NULL)
+	  *field_id= 0;
+  FLD_HANDLE fld = Get_FLD_From_Offset_r(ty_idx, offset, field_id);
+  FmtAssert(!fld.Is_Null(),("cannot find field from offset"));
+  return fld;
 }
 
 /*
@@ -1785,11 +1800,7 @@ Gen_Threadpriv_Func(WN* prags, WN* block, BOOL prepend)
   ST *gtid_st = NULL;
   BOOL need_thread_num = FALSE;
 
-#ifdef TARG_X8664
   BOOL target_32bit = Is_Target_32bit();
-#else
-  BOOL target_32bit = FALSE;
-#endif
 
   const OPCODE uint_opc = (Pointer_Size == 4) ? OPC_U4INTCONST :
                          (Pointer_Size == 8) ? OPC_U8INTCONST : OPCODE_UNKNOWN;
@@ -2024,7 +2035,7 @@ Add_DST_variable ( ST *st, DST_INFO_IDX parent_dst,
       typesize = TY_size(ST_type(st));
     }
 
-    char *int_name1, *int_name2, *int_name3;
+    const char *int_name1, *int_name2, *int_name3;
     DST_INFO_IDX *int_idx_p;
 
     switch (typesize) {
@@ -2086,7 +2097,7 @@ Add_DST_variable ( ST *st, DST_INFO_IDX parent_dst,
     dst = DST_mk_formal_parameter( srcpos,
 			ST_name( st ),
 			int_idx,	/* type DST_IDX */
-			NULL,
+			ST_st_idx(st),	/* symbol */
 			DST_INVALID_IDX,
 			DST_INVALID_IDX,
 			FALSE,
@@ -2099,7 +2110,7 @@ Add_DST_variable ( ST *st, DST_INFO_IDX parent_dst,
 			ST_name( st ),
 			int_idx, 	/* type DST_IDX */
 			0 /* offset */,
-			(void *) NULL,	/* a_variable_ptr */
+			ST_st_idx(st),	/* symbol */
 			DST_INVALID_IDX,
 			FALSE,		/* memory allocated */
 			TRUE, 		/* parameter has sc_auto */
@@ -2107,12 +2118,6 @@ Add_DST_variable ( ST *st, DST_INFO_IDX parent_dst,
 			FALSE);		/* is_artificial */
 
   (void)DST_append_child( parent_dst, dst );
-  info = DST_INFO_IDX_TO_PTR( dst );
-  assoc = &DST_VARIABLE_def_st(
-		DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(info), DST_VARIABLE));
-  pDST_ASSOC_INFO_st_idx(assoc) = ST_st_idx(st);
-  DST_SET_assoc_idx(DST_INFO_flag(info));
-  DST_RESET_assoc_fe(DST_INFO_flag(info));
 }
 
 
@@ -2233,7 +2238,7 @@ Create_New_DST ( DST_INFO_IDX dst, ST *st , BOOL append_to_nested )
 			name,
 			type_idx, 	/* type DST_IDX */
 			0 /* offset */,
-			(void *) NULL,	/* a_variable_ptr */
+			ST_st_idx(st),	/* symbol */
 			DST_INVALID_IDX,
 			FALSE,		/* memory allocated */
 			TRUE, 		/* parameter has sc_auto */
@@ -2243,12 +2248,6 @@ Create_New_DST ( DST_INFO_IDX dst, ST *st , BOOL append_to_nested )
   if (append_to_nested)
     (void)DST_append_child( nested_dst, new_dst );
   info = DST_INFO_IDX_TO_PTR( new_dst );
-  iattr = DST_INFO_attributes(info);
-  assoc = &DST_VARIABLE_def_st(
-		DST_ATTR_IDX_TO_PTR(iattr, DST_VARIABLE));
-  pDST_ASSOC_INFO_st_idx(assoc) = ST_st_idx(st);
-  DST_SET_assoc_idx(DST_INFO_flag(info));
-  DST_RESET_assoc_fe(DST_INFO_flag(info));
 }
 
 
@@ -2265,7 +2264,7 @@ Create_Func_DST ( char * st_name )
 			st_name,
 			DST_INVALID_IDX,	/* return type */
 			DST_INVALID_IDX,	/* for weak symbols */
-			(void *) NULL,
+			ST_st_idx(parallel_proc),
 			DW_INL_not_inlined,
 			DW_VIRTUALITY_none,
 			0,
@@ -2277,12 +2276,6 @@ Create_Func_DST ( char * st_name )
 			FALSE			/* external */
 			);
   (void)DST_append_child( dst, nested_dst );
-  info = DST_INFO_IDX_TO_PTR( nested_dst );
-  assoc = &DST_SUBPROGRAM_def_st(
-		DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(info), DST_SUBPROGRAM));
-  pDST_ASSOC_INFO_st_idx(assoc) = ST_st_idx(parallel_proc);
-  DST_SET_assoc_idx(DST_INFO_flag(info));
-  DST_RESET_assoc_fe(DST_INFO_flag(info));
 }
 
 
@@ -2298,7 +2291,8 @@ Identical_Pragmas ( WN * wn1, WN * wn2 )
       (WN_st(wn1) != WN_st(wn2)) ||
       (WN_pragma_flags(wn1) != WN_pragma_flags(wn2)) ||
       ((WN_operator(wn1) == OPR_PRAGMA) &&
-       (WN_pragma_arg64(wn1) != WN_pragma_arg64(wn2))) ||
+       (WN_pragma_arg1(wn1) != WN_pragma_arg1(wn2))) || 
+       (WN_pragma_arg2(wn1) != WN_pragma_arg2(wn2)) ||
       (WN_kid_count(wn1) != WN_kid_count(wn2)))
     return (FALSE);
 
@@ -2315,7 +2309,7 @@ to accept a value as the function's formal parameter.
 So, this function just allocate a temp var in current scope.
 */
 static void 
-Create_Temp( TYPE_ID mtype, char *name, ST **st )
+Create_Temp( TYPE_ID mtype, const char *name, ST **st )
 {
   ST *new_st;
   new_st = New_ST (CURRENT_SYMTAB);
@@ -2328,6 +2322,211 @@ Create_Temp( TYPE_ID mtype, char *name, ST **st )
   Set_ST_is_temp_var ( new_st );
   *st = new_st;
 }
+
+#ifdef KEY
+// If old_st_idx has already been localized, return the new
+// st_idx. Else, create a new local symbol and return its st_idx.
+static ST_IDX Localize_Symbol (ST_IDX old_st_idx, VAR_TABLE * v)
+{
+  for ( ; v->orig_st; v++) {
+    if (ST_st_idx(*v->orig_st) == old_st_idx &&
+        v->vtype == VAR_LOCAL) {
+      return ST_st_idx(*v->new_st);
+    }
+  }
+
+  ST_IDX new_st_idx = 0;
+
+  ST * new_st = New_ST (CURRENT_SYMTAB);
+  ST * old_st = &St_Table[old_st_idx];
+  ST_Init (new_st,
+           Save_Str (ST_name(old_st_idx)),
+           ST_class(old_st),
+           ST_sclass(old_st),
+           ST_export(old_st),
+           ST_type(old_st));
+  new_st->flags = old_st->flags;
+  new_st->flags_ext = old_st->flags_ext;
+
+  return ST_st_idx(new_st);
+}
+
+// For C++ exception handling, the PU holds different exception
+// handling-related information, generated by the front-end.
+// old_inito is expected to hold the start of the info for the
+// serial function.
+// Clone the information (INITOs, INITVs, and local STs), and
+// localize where necessary.
+//
+// TODO: The parallel function being created may not need all
+// the typeinfos from the serial function, but currently we will
+// have all of them in the typeinfo table for the parallel function.
+static INITO_IDX
+Process_PU_Exc_Info ( INITO_IDX old_inito, VAR_TABLE * vtab )
+{
+  INITO_IDX new_inito;
+  ST *old_initst, *new_initst;
+  INITV_IDX old_initv, new_initv, pinito, parent, prev;
+  STACK<INITV_IDX> old_stack(Malloc_Mem_Pool), new_stack(Malloc_Mem_Pool);
+
+  old_initst = INITO_st(old_inito);
+  old_initv  = INITO_val(old_inito);
+
+  // Table name (__EH_INFO_PER_PU__)
+  new_initst = New_ST (CURRENT_SYMTAB);
+  ST_Init (new_initst,
+           Save_Str ( ST_name(old_initst) ),
+           ST_class(old_initst),
+           ST_sclass(old_initst),
+           ST_export(old_initst),
+           ST_type(old_initst));
+
+  new_initst->flags = old_initst->flags;
+  new_initst->flags_ext = old_initst->flags_ext;
+
+  Set_ST_is_not_used(*old_initst);
+
+  new_inito = New_INITO ( new_initst );
+
+  pinito = new_inito;
+  parent = 0;
+  prev = 0;
+
+  // __Exc_Ptr__, __Exc_Filter__
+  for (INT i = 0; i < 2; i++)
+  {
+    (void) Initv_Table.New_entry(new_initv);
+    INITV& new_initv_ref = Initv_Table[new_initv];
+    INITV& old_initv_ref = Initv_Table[old_initv];
+    if (pinito) {
+      Set_INITO_val(pinito, new_initv);
+      pinito = 0;
+    } else if (prev) {
+      Set_INITV_next(prev, new_initv);
+    }
+    INITVKIND k = INITV_kind(old_initv);
+    Is_True (k == INITVKIND_VAL,
+             ("Unexpected initv kind during PU exception processing"));
+    INITO_IDX inito = 0;
+    ST_IDX st = TCON_uval(INITV_tc_val(old_initv_ref));
+    if (st)
+      st = Localize_Symbol (st, vtab);
+    INITV_Set_VAL(new_initv_ref, Enter_tcon (Host_To_Targ (MTYPE_U4, st)),
+                  INITV_repeat2(old_initv_ref));
+    old_initv = INITV_next(old_initv);
+    prev = new_initv;
+  }
+
+  INITO_IDX old_inito_array[2] = {0, 0};
+  INITO_IDX new_inito_array[2] = {0, 0};
+
+  // __TYPEINFO_TABLE__, __EH_SPEC_TABLE__
+  for (INT i = 0; i < 2; i++)
+  {
+    (void) Initv_Table.New_entry(new_initv);
+    INITV& new_initv_ref = Initv_Table[new_initv];
+    INITV& old_initv_ref = Initv_Table[old_initv];
+    if (prev)
+      Set_INITV_next(prev, new_initv);
+    INITVKIND k = INITV_kind(old_initv);
+    Is_True (k == INITVKIND_VAL,
+             ("Unexpected initv kind during typeinfo/EH-spec processing"));
+
+    INITO_IDX inito = 0;
+    ST_IDX st = TCON_uval(INITV_tc_val(old_initv_ref));
+    if (st)
+    {
+      inito = (INITO_IDX) st;
+      st = Localize_Symbol (INITO_st_idx(Inito_Table[inito]), vtab);
+      INITO_IDX new_inito = New_INITO (st, INITO_val(inito));
+
+      INITV_Set_VAL(new_initv_ref, Enter_tcon (Host_To_Targ (MTYPE_U4,
+                                                             new_inito)),
+                    INITV_repeat2(old_initv_ref));
+      old_inito_array[i] = inito;
+      new_inito_array[i] = new_inito;
+    }
+    else
+      INITV_Set_VAL(new_initv_ref, Enter_tcon (Host_To_Targ (MTYPE_U4, st)),
+                    INITV_repeat2(old_initv_ref));
+    old_initv = INITV_next(old_initv);
+    prev = new_initv;
+  }
+
+  for (INT i = 0; i < 2; i++) {
+
+    // i == 0 : info in typeinfo table
+    // i == 1 : info in exception-specification table
+    old_initv = old_inito_array[i] ? INITO_val(old_inito_array[i]) : 0;
+    pinito = new_inito_array[i];
+    parent = prev = 0;
+
+    while ( old_initv ) {
+
+      (void) Initv_Table.New_entry(new_initv);
+      INITV& new_initv_ref = Initv_Table[new_initv];
+      INITV& old_initv_ref = Initv_Table[old_initv];
+
+      if (pinito) {
+        Set_INITO_val(pinito, new_initv);
+        pinito = 0;
+      } else if (parent) {
+        Set_INITV_blk(parent, new_initv);
+        parent = 0;
+      } else if (prev) {
+        Set_INITV_next(prev, new_initv);
+      }
+
+      INITVKIND k = INITV_kind(old_initv);
+      switch ( k ) {
+
+      case INITVKIND_ZERO:
+        INITV_Set_ZERO(new_initv_ref, INITV_mtype(old_initv_ref),
+                       INITV_repeat2(old_initv_ref));
+        old_initv = INITV_next(old_initv);
+        prev = new_initv;
+        break;
+
+      case INITVKIND_ONE:
+        INITV_Set_ONE(new_initv_ref, INITV_mtype(old_initv_ref),
+                      INITV_repeat2(old_initv_ref));
+        old_initv = INITV_next(old_initv);
+        prev = new_initv;
+        break;
+
+      case INITVKIND_VAL:
+      {
+        ST_IDX st = TCON_uval(INITV_tc_val(old_initv_ref));
+        INITV_Set_VAL(new_initv_ref, Enter_tcon (Host_To_Targ (MTYPE_U4, st)),
+                      INITV_repeat2(old_initv_ref));
+        old_initv = INITV_next(old_initv);
+        prev = new_initv;
+      }
+      break;
+
+      case INITVKIND_BLOCK:
+        INITV_Set_BLOCK(new_initv_ref, INITV_repeat1(old_initv_ref), 0);
+        old_stack.Push(old_initv);
+        new_stack.Push(new_initv);
+        old_initv = INITV_blk(old_initv);
+        parent = new_initv;
+        prev = 0;
+        break;
+
+      default:
+        Fail_FmtAssertion ( "unexpected INITV kind %d", (INT) k );
+      }
+
+      while (!old_initv && old_stack.Elements() > 0) {
+        old_initv = INITV_next(old_stack.Pop());
+        prev = new_stack.Pop();
+      }
+    }
+  }
+
+  return new_inito;
+}
+#endif
 
 static WN * Gen_MP_Store ( ST * st, WN_OFFSET offset, WN * value, 
 			   BOOL scalar_only = FALSE );
@@ -2575,7 +2774,6 @@ is inheriting pu_recursive OK?
   PU_Info *parallel_pu = TYPE_MEM_POOL_ALLOC ( PU_Info, Malloc_Mem_Pool );
   PU_Info_init ( parallel_pu );
   Set_PU_Info_tree_ptr (parallel_pu, func_entry );
-  verify_mp_lowered_ptr->Set_nested_pu_tree(func_entry);
 
   PU_Info_proc_sym(parallel_pu) = ST_st_idx(parallel_proc);
   PU_Info_maptab(parallel_pu) = cmaptab = WN_MAP_TAB_Create(MEM_pu_pool_ptr);
@@ -2660,7 +2858,7 @@ is inheriting pu_recursive OK?
     handling.  */
 
 static void 
-Create_Preg_or_Temp ( TYPE_ID mtype, char *name, ST **st,
+Create_Preg_or_Temp ( TYPE_ID mtype, const char *name, ST **st,
 				  WN_OFFSET *ofst )
 {
   ST *new_st;
@@ -3065,6 +3263,9 @@ Walk_and_Info_Pregs ( WN * tree )
 	Walk_and_Info_Pregs ( WN_kid(tree, i) );
 
     if (OPCODE_has_sym(op) && OPCODE_has_offset(op) && WN_st(tree) &&
+#ifdef KEY // bug 11914: if OPC_PRAGMA, WN_offsetx will not return correct pnum
+        op != OPC_PRAGMA &&
+#endif
         (ST_class(WN_st(tree)) == CLASS_PREG) &&
         !Preg_Is_Dedicated(WN_offsetx(tree))) {
       PREG_IDX pnum = Get_Preg_Idx(WN_offsetx(tree));
@@ -3132,7 +3333,7 @@ Translate_Label ( LABEL_IDX plabel_idx )
   if (mpt == MPP_ORPHANED_SINGLE || mpt == MPP_ORPHANED_PDO)
     return plabel_idx;
 
-  LABEL_IDX clabel_idx = label_info_table[plabel_idx];
+  LABEL_IDX clabel_idx = label_info_table[LABEL_IDX_index(plabel_idx)];
 
   if (clabel_idx == LABEL_IDX_ZERO) {
       // remove when symtab-setting stuff gets cleaned up--DRK
@@ -3150,8 +3351,8 @@ Translate_Label ( LABEL_IDX plabel_idx )
 
     LABEL &clabel = New_LABEL(csymtab, clabel_idx);
     LABEL_Init(clabel, Save_Str(labelname),
-               LABEL_kind((*Scope_tab[psymtab].label_tab)[plabel_idx]));
-    label_info_table[plabel_idx] = clabel_idx;
+               LABEL_kind((*Scope_tab[psymtab].label_tab)[LABEL_IDX_index(plabel_idx)]));
+    label_info_table[LABEL_IDX_index(plabel_idx)] = clabel_idx;
   }
   
   return clabel_idx;
@@ -3409,6 +3610,7 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
 			 (TY_kind(TY_pointed(ST_type(old_st))) == KIND_ARRAY) &&
 			 (TY_size(TY_pointed(ST_type(old_st))) != 0));
   v->is_dynamic_array = (((vtype == VAR_LOCAL) || (vtype == VAR_LASTLOCAL) ||
+                          (vtype == VAR_REDUCTION_ARRAY_OMP) ||
 			  (vtype == VAR_FIRSTPRIVATE)) &&
 			 (TY_kind(ST_type(old_st)) == KIND_POINTER) &&
                          (ST_keep_name_w2f(old_st) || 
@@ -3458,36 +3660,53 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
   } else if (ST_class(old_st) != CLASS_PREG) {
 
     ty = ST_type(old_st);
-#ifdef KEY // bug 7259 and 8076
-    if ((TY_kind(ty) == KIND_STRUCT) && 
-        (vtype == VAR_REDUCTION_SCALAR || vtype == VAR_REDUCTION_ARRAY))
-      ty = FLD_type(TY_fld(ty));
-#endif
-    if ((TY_kind(ty) == KIND_POINTER) &&
-        ((v->is_static_array) || (vtype == VAR_REDUCTION_ARRAY)))
-#ifdef KEY //bug 11661
-     {
-#endif
-      ty = TY_pointed(ty);
-#ifdef KEY //bug 11661: for structure, we need the field type
-      if (TY_kind(ty) == KIND_STRUCT && vtype == VAR_REDUCTION_ARRAY)
-        ty = FLD_type(TY_fld(ty));
-     }
-#endif
 
-    if ((TY_kind(ty) == KIND_ARRAY) && (vtype == VAR_REDUCTION_ARRAY))
-      ty = TY_etype(ty);
-    if ((vtype == VAR_REDUCTION_ARRAY_OMP) && (TY_kind(ty) == KIND_POINTER)
-					&& (TY_kind(TY_pointed(ty)) == KIND_ARRAY))
-		{
-			ty = TY_pointed(ty);
-			// we need to create an array in local stack.
-			// This may not always work.
-			// csc.
-      /*ty = TY_etype(ty);*/
-		}
+    TY_KIND kind = TY_kind(ty);
+    while ( kind == KIND_POINTER || kind == KIND_STRUCT || kind == KIND_ARRAY)
+    {
+      if (kind == KIND_POINTER)
+      {
+        if (v->is_static_array || vtype == VAR_REDUCTION_ARRAY)
+          ty = TY_pointed(ty);
+        else
+          break;
+      }else if (kind == KIND_STRUCT)
+      {
+        if (vtype == VAR_REDUCTION_SCALAR)
+           ty = FLD_type(Get_FLD_From_Offset(ty, v->orig_offset));
+        else if (vtype == VAR_REDUCTION_ARRAY)
+        {
+          WN* array = v->vtree;
+          if (WN_element_size(array)<0)
+          {
+            // fortran dope vector: we will iteratively find the element type.
+            // Maybe we should check the dimsion.
+            ty = FLD_type(TY_fld(ty));
+          }
+          else
+          {
+            // must be from pointer promption
+            // we might have some problems for the union as multiple fields
+            // share the same offset. But this info is lost and there's no way
+            // to recover. (we need to change the reduction pragma)
+            UINT64 offset = Get_Offset_From_Const_Array(array);
+            FLD_HANDLE fld = Get_FLD_From_Offset(ty, offset);
+
+            ty = FLD_type(fld);
+          }
+        } else
+         break;
+      }else if (kind == KIND_ARRAY)
+      {
+        if (vtype == VAR_REDUCTION_ARRAY)
+           ty = TY_etype(ty);
+        else
+          break;
+      }
+      kind = TY_kind(ty);
+    }
   
-	localname = (char *) alloca(strlen(ST_name(old_st)) + 32);
+    localname = (char *) alloca(strlen(ST_name(old_st)) + 32);
       // if already localized, append "x" to localization prefix
     if (strncmp(ST_name(old_st), "__mplocal_", 10) == 0)
       sprintf ( localname, "__mplocalx_%s", &ST_name(old_st)[10] );
@@ -3953,7 +4172,6 @@ Create_Copyfunc(ST *struct_st)
   PU_Info *copy_pu = TYPE_MEM_POOL_ALLOC ( PU_Info, Malloc_Mem_Pool );
   PU_Info_init ( copy_pu );
   Set_PU_Info_tree_ptr (copy_pu, func_entry );
-  //verify_mp_lowered_ptr->Set_nested_pu_tree(func_entry);
 
   PU_Info_proc_sym(copy_pu) = ST_st_idx(parallel_proc);
   PU_Info_maptab(copy_pu) = cp_cmaptab = WN_MAP_TAB_Create(MEM_pu_pool_ptr);
@@ -4039,7 +4257,7 @@ Gen_MP_Copyprivate(WN *copyprivates, WN **copyprivate_blockp,
   FLD *next;
   ST *st, *fld_st;
 
-#ifdef TARG_X8664
+#ifndef TARG_NVISA
   BOOL target_32bit = Is_Target_32bit();
 #else
   BOOL target_32bit = FALSE;
@@ -4728,9 +4946,7 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
     old_offset = WN_offsetx(tree);
     for (w=vtab; w->orig_st; w++) {
       if ((w->orig_st == old_sym) &&
-#ifndef KEY
 	  (w->has_offset ? (w->orig_offset == old_offset) : TRUE ) &&
-#endif
           (w->vtype != VAR_REDUCTION_ARRAY) &&
 	  ! (w->is_non_pod && is_orphaned_worksharing)) {
 	if (w->is_static_array) {
@@ -4749,12 +4965,15 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
 	  opr = OPCODE_operator(op);
 	} else {
           WN_st_idx(tree) = ST_st_idx(w->new_st);
+	  // for reduction of a field of STRUCT, the TY_kind would be different
+	  // And, we need to fix the TY for the wn, the field_id, and offsetx
+	  // As the local_xxx symbol is always .predef..., so field_id should be 0
+	  if (TY_kind(ST_type(w->new_st)) != TY_kind(WN_ty(tree))){
+            WN_set_ty(tree, ST_type(w->new_st));
+	    WN_set_field_id(tree, 0);
+	  }
 	  if (w->has_offset)
-#ifdef KEY
-	    WN_set_offsetx(tree, old_offset);
-#else
 	    WN_set_offsetx(tree, w->new_offset);
-#endif
 	}
 	if (w->is_dynamic_array) {  // fix PV 553472 by updating aliases
             // child of ldst that's on the path to tree
@@ -4793,17 +5012,15 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
     for (w=vtab; w->orig_st; w++) {
       if ((w->vtree == NULL) &&
 	  (w->orig_st == old_sym) &&
-#ifndef KEY
 	  (w->has_offset ? (w->orig_offset == old_offset) : TRUE ) &&
-#endif
 	  ! (w->is_non_pod && is_orphaned_worksharing)) {
 	WN_st_idx(tree) = ST_st_idx(w->new_st);
+	if (TY_kind(ST_type(w->new_st)) != TY_kind(WN_ty(tree))){
+	  WN_set_ty(tree, ST_type(w->new_st));
+	  WN_set_field_id(tree, 0);
+	}
 	if (w->has_offset)
-#ifdef KEY
-	  WN_set_offsetx(tree, old_offset);
-#else
 	  WN_set_offsetx(tree, w->new_offset);
-#endif
 	break;
       }
     }
@@ -4870,6 +5087,7 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
              !is_orphaned_worksharing) {
     LABEL_IDX new_lab =  Translate_Label (WN_label_number(tree));
     WN_label_number(tree) = new_lab;
+    if (opr == OPR_LDA_LABEL) Set_LABEL_addr_saved(new_lab); // Bug 13821
   } else if (OPCODE_has_sym(op) && WN_st(tree)) {
     old_sym = WN_st(tree);
     old_offset = OPCODE_has_offset(op) ? WN_offsetx(tree) : 0;
@@ -5528,51 +5746,58 @@ ST_IDX Make_MPRuntime_ST ( MPRUNTIME rop )
 }
 
 
-/*  Generate an appropriate load WN based on an ST.  */
-
-static WN * 
-Gen_MP_Load ( ST * st, WN_OFFSET offset, BOOL scalar_only )
+static void
+Gen_MP_LS_get_fld_id_and_ty(ST *st, WN_OFFSET offset, BOOL scalar_only, UINT &field_id, TY_IDX &ty, TY_IDX &result_ty)
 {
-  WN *wn;
-  TY_IDX ty = ST_type(st);
+  ty = ST_type(st);
+  result_ty = ty;
 #ifdef KEY // bug 7259
-  if (scalar_only && TY_kind(ty) == KIND_STRUCT)
-    ty = FLD_type(TY_fld(ty));
+  if (scalar_only && TY_kind(ty) == KIND_STRUCT )
+  {
+    FLD_HANDLE fld = Get_FLD_From_Offset(ty, offset, &field_id);
+    result_ty = FLD_type(fld);
+  }
 #endif
 #ifdef KEY // bug 10681
   if (scalar_only && TY_kind(ty) == KIND_ARRAY)
     ty = TY_etype(ty);
 #endif
+  return; 
+}
+/*  Generate an appropriate load WN based on an ST.  */
 
-  wn = WN_RLdid ( Promote_Type(TY_mtype(ty)),
-                  TY_mtype(ty), offset, st, ty );
+static WN *
+Gen_MP_Load( ST * st, WN_OFFSET offset, BOOL scalar_only )
+{
+  UINT field_id = 0;
+  WN *wn;
+  TY_IDX ty;
+  TY_IDX result_ty;
+  
+  Gen_MP_LS_get_fld_id_and_ty(st, offset, scalar_only, field_id, ty, result_ty);
+
+  wn = WN_Ldid ( TY_mtype(result_ty), offset, st, ty ,field_id);
 
   return (wn);
 }
 
-
 /*  Generate an appropriate store WN based on an ST.  */
 
-static WN * 
-Gen_MP_Store ( ST * st, WN_OFFSET offset, WN * value, BOOL scalar_only)
+static WN *
+Gen_MP_Store( ST * st, WN_OFFSET offset, WN * value, BOOL scalar_only)
 {
+  UINT  field_id = 0;
   WN *wn;
-  TY_IDX ty = ST_type(st);
-#ifdef KEY // bug 7259
-  if (scalar_only && TY_kind(ty) == KIND_STRUCT)
-    ty = FLD_type(TY_fld(ty));
-#endif
-#ifdef KEY // bug 10681
-  if (scalar_only && TY_kind(ty) == KIND_ARRAY)
-    ty = TY_etype(ty);
-#endif
+  TY_IDX ty;
+  TY_IDX result_ty;
 
-  wn = WN_Stid ( TY_mtype(ty), offset, st, ty, value );
+  Gen_MP_LS_get_fld_id_and_ty(st, offset, scalar_only, field_id, ty, result_ty);
+  
+  wn = WN_Stid ( TY_mtype(result_ty), offset, st, ty, value, field_id );
   WN_linenum(wn) = line_number;
 
   return (wn);
 }
-
 
 /*  Generate appropriate load/store WN's based on two ST's.  */
 
@@ -5727,6 +5952,7 @@ static ST*
 Get_Threadprv_St(WN *prags, ST *copyin_st, ST **copyin_local_st)
 {
   ST *split_block;
+  ST *copyin_global_st = NULL;
   ST *common_block = ST_Source_Block(copyin_st, &split_block);
   if (!ST_is_thread_private(copyin_st) &&
      !(split_block && ST_is_thread_private(split_block)) &&
@@ -5735,18 +5961,24 @@ Get_Threadprv_St(WN *prags, ST *copyin_st, ST **copyin_local_st)
   BOOL match = FALSE;
   prags = WN_first(prags);
 
-  while (prags) { 
+  while (prags) {
     if (WN_opcode(prags) == OPC_PRAGMA &&
         WN_pragma(prags) == WN_PRAGMA_THREADPRIVATE &&
         WN_st(prags) == common_block) {
       *copyin_local_st = ST_ptr(WN_pragma_arg1(prags));
+      copyin_global_st = ST_ptr(WN_pragma_arg2(prags));
       match = TRUE;
     }
     prags = WN_next(prags);
   }
   if (!match)
     Fail_FmtAssertion ( "bad copyin st (%s) in MP processing",
-                            ST_st_idx(copyin_st) );
+                            ST_name(copyin_st) );
+  if (copyin_global_st)
+    common_block = copyin_global_st;
+  else
+    Is_True (FALSE, ("Copyin source ST not found in MP processing"));
+
   return common_block;
 }
 
@@ -5811,7 +6043,7 @@ Post_MP_Processing (WN * pu)
   // Localize the variables
   INT32 vsize = (local_count + 1) * sizeof(VAR_TABLE);
   var_table = (VAR_TABLE *) alloca (vsize);
-  bzero (var_table, vsize);
+  BZERO (var_table, vsize);
 
   mpt = MPP_ORPHAN;
 
@@ -5908,18 +6140,13 @@ Gen_MP_Copyin ( BOOL is_omp )
       if (WN_opcode(wnx) == OPC_PRAGMA) {
         ST *ppthd, *global;
         global = Get_Threadprv_St(reference_block, WN_st(wnx), &ppthd);
-	// Use ST_ofst only if we are generating a pointer to the
-	// threadprivate base of the st, instead of to the st itself.
-	//
-	// If ofst == 0, WN_Add will take care of it.
-	INT64 ofst = (global == WN_st (wnx)) ? 0 : ST_ofst (WN_st (wnx));
-        wny = WN_Add(Pointer_type,
-                     WN_CreateLdid(OPCODE_make_op(OPR_LDID, Pointer_type, Pointer_type),
-                                   0, ppthd,ST_type(ppthd)), 
-                     WN_Intconst (MTYPE_I4, ofst));
-        wnz = WN_Add(Pointer_type,
-                     WN_Lda(Pointer_type, 0, global),
-                     WN_Intconst (MTYPE_I4, ofst));
+        wny = WN_CreateLdid(OPCODE_make_op(OPR_LDID,
+                                           Pointer_type, Pointer_type),
+                            0, ppthd,ST_type(ppthd)); 
+        // See bugs 12688, 12696 for OpenMP library change in
+        // __ompc_get_thdprv() that necessitates the following.
+        wnz = WN_IloadLdid(TY_mtype(ST_type(global)), 0,
+                           ST_type(global), global, 0);
         ty = ST_type(WN_st(wnx));
         size = TY_size(ty);
       } else
@@ -6339,7 +6566,12 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	    //The code are partly ported from be/vho/f90_lower.cxx
 
 	    // Create loop nest.
-	    ARB_HANDLE arb_base = TY_arb( ST_type( v->new_st ));
+        TY_IDX array_ty= (TY_kind(v->ty) == KIND_POINTER ? 
+                TY_pointed(v->ty) : v->ty);
+        TY_IDX pointer_ty = (TY_kind(v->ty) == KIND_POINTER ?
+            v->ty: Make_Pointer_Type(v->ty, false));
+
+        ARB_HANDLE arb_base = TY_arb(array_ty);
 	    ndim_array = ARB_dimension( arb_base );
 	    Is_True(( ndim_array <= MAX_NDIM ) && ( ndim_array >= 0 ),
 	          ("dimension of array is not 0-7"));
@@ -6347,21 +6579,46 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	    INT64 temp_size = 0;
 	    for(int j=0; j<ndim_array; j++)
 	    {
-		     ARB_HANDLE arb = arb_base[ ndim_array-1-j ];
-		     Is_True( ARB_const_lbnd( arb ) && ARB_const_ubnd( arb ),
-		            ("Lower and/or Upper bound of array is not const"));
-		     temp_size = ARB_ubnd_val( arb ) - ARB_lbnd_val( arb ) + 1;
-		     temp_size = ( temp_size > 0 ) ? temp_size : 0;
-		     sizes[ndim_array-j-1] = WN_CreateIntconst( OPC_I8INTCONST, 
-				                        temp_size );
-		     sizes_bak[j] = WN_CreateIntconst( OPC_I8INTCONST, temp_size );
-	    }
-
-	    for( int j=ndim_array; j<MAX_NDIM; j++ )
-	    {
-		     sizes[j] = NULL;
-		     sizes_bak[j] = NULL;
-	    }
+                ARB_HANDLE arb = arb_base[ ndim_array-1-j ];
+                WN* lb = NULL;
+                WN* ub = NULL;
+                WN* size = NULL;
+                TYPE_ID mtype = MTYPE_I8;
+                TY_IDX ty_idx = 0;
+                
+                if (ARB_const_lbnd(arb))
+                   lb = WN_Intconst(mtype, ARB_lbnd_val(arb));
+                else
+                {
+                   ST_IDX st_idx = ARB_lbnd_var(arb);
+                   ty_idx = ST_type(st_idx);
+                   lb = WN_Ldid(TY_mtype(ty_idx), 0, st_idx, ty_idx);
+                   lb = WN_Type_Conversion(lb, mtype);
+                }
+                
+                if (ARB_const_ubnd(arb))
+                   ub = WN_Intconst(mtype, ARB_ubnd_val(arb));
+                else
+                {
+                   ST_IDX st_idx = ARB_ubnd_var(arb);
+                   ty_idx = ST_type(st_idx);
+                   ub = WN_Ldid(TY_mtype(ty_idx), 0, st_idx, ty_idx);
+                   ub = WN_Type_Conversion(ub, mtype);
+                }
+                
+                size = WN_Add(mtype, 
+                WN_Sub(mtype, ub, lb),
+                WN_Intconst(mtype, 1));
+                
+                sizes[ndim_array-j-1] = size;
+                sizes_bak[j] = WN_COPY_Tree(size);
+            }
+                
+            for( int j=ndim_array; j<MAX_NDIM; j++ )
+            {
+                sizes[j] = NULL;
+                sizes_bak[j] = NULL;
+            }
 							
 	    stlist = create_doloop_nest( new_indices,&loopnest,
 	                           sizes,ndim_array );
@@ -6374,11 +6631,12 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	    // store the value.
         OPCODE op_array = OPCODE_make_op( OPR_ARRAY, Pointer_type, MTYPE_V );
 	    WN *local_array = WN_Create( op_array, 1+2*ndim_array );
-	    WN_element_size( local_array ) = TY_size( TY_AR_etype( v->ty ));
 
-	    WN_array_base( local_array ) = WN_CreateLda( 
-	    OPCODE_make_op( OPR_LDA, Pointer_type, MTYPE_V ),
-	              0, Make_Pointer_Type( v->ty ), v->new_st);
+	    WN_element_size( local_array ) = TY_size( TY_AR_etype(array_ty));
+        if (TY_kind(v->ty) == KIND_POINTER)
+	        WN_array_base( local_array ) = WN_Ldid(Pointer_type, 0, v->new_st, v->ty);
+        else
+            WN_array_base( local_array ) = WN_Lda(Pointer_type, 0, v->new_st);
 
 	    for( int j=0; j<ndim_array; j++ )
 	    {
@@ -6391,8 +6649,7 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	    // Maybe need to set parent point of the array kids.
 
 	    WN *wn_store_val = WN_Istore( v->mtype, 0, 
-			    Make_Pointer_Type( v->ty ),
-	                    local_array, wn_init_val ); 
+			    pointer_ty, local_array, wn_init_val ); 
 
 	    WN_INSERT_BlockLast( stlist, wn_store_val );
 	    WN_INSERT_BlockLast( *init_block, loopnest );
@@ -6492,7 +6749,11 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
       lower_using_critical = TRUE;
       // stuff code for later use, will be clean up later. csc.
       // TODO:Insert combine code here.
-      ARB_HANDLE arb_base = TY_arb( ST_type( v->new_st ));
+      TY_IDX array_ty= (TY_kind(v->ty) == KIND_POINTER ?
+                      TY_pointed(v->ty) : v->ty);
+      TY_IDX pointer_ty = (TY_kind(v->ty) == KIND_POINTER ?
+                  v->ty: Make_Pointer_Type(v->ty, false));
+      ARB_HANDLE arb_base = TY_arb( array_ty);
       ndim_array = ARB_dimension( arb_base );
       Is_True(( ndim_array <= MAX_NDIM ) && ( ndim_array >= 0 ),
               ("dimension of array is not 0-7"));
@@ -6501,13 +6762,39 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
       for(int j=0; j<ndim_array; j++)
       {
           ARB_HANDLE arb = arb_base[ ndim_array-1-j ];
-          Is_True( ARB_const_lbnd( arb ) && ARB_const_ubnd( arb ),
-                  ("Lower and/or Upper bound of array is not const"));
-	        temp_size = ARB_ubnd_val( arb ) - ARB_lbnd_val( arb ) + 1;
-	        temp_size = ( temp_size > 0 ) ? temp_size : 0;
-	        sizes[ndim_array-j-1] = WN_CreateIntconst( OPC_I8INTCONST,
-					                   temp_size );
-	        sizes_bak[j] = WN_CreateIntconst( OPC_I8INTCONST, temp_size );
+          WN* lb = NULL;
+          WN* ub = NULL;
+          WN* size = NULL;
+          TYPE_ID mtype = MTYPE_I8;
+          TY_IDX ty_idx = 0;
+
+          if (ARB_const_lbnd(arb))
+             lb = WN_Intconst(mtype, ARB_lbnd_val(arb));
+          else
+          {
+             ST_IDX st_idx = ARB_lbnd_var(arb);
+             ty_idx = ST_type(st_idx);
+             lb = WN_Ldid(TY_mtype(ty_idx), 0, st_idx, ty_idx);
+             lb = WN_Type_Conversion(lb, mtype);
+          }
+
+          if (ARB_const_ubnd(arb))
+             ub = WN_Intconst(mtype, ARB_ubnd_val(arb));
+          else
+          {
+             ST_IDX st_idx = ARB_ubnd_var(arb);
+             ty_idx = ST_type(st_idx);
+             ub = WN_Ldid(mtype, 0, st_idx, ST_type(st_idx));
+             ub = WN_Ldid(TY_mtype(ty_idx), 0, st_idx, ty_idx);
+             ub = WN_Type_Conversion(ub, mtype);
+          }
+
+          size = WN_Add(mtype, 
+                       WN_Sub(mtype, ub, lb),
+                       WN_Intconst(mtype, 1));
+
+          sizes[ndim_array-j-1] = size;
+          sizes_bak[j] = WN_COPY_Tree(size);
       }
 
       for( int j=ndim_array; j<MAX_NDIM; j++ )
@@ -6523,12 +6810,18 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
       WN *wn_init_val = Make_Reduction_Identity( v->reduction_opr, v->mtype );
       OPCODE op_array = OPCODE_make_op( OPR_ARRAY, Pointer_type, MTYPE_V );
       WN *new_array = WN_Create( op_array, 1+2*ndim_array );
-      WN_element_size( new_array ) = TY_size( TY_AR_etype( v->ty ));
-      WN_array_base( new_array ) = WN_Lda( Pointer_type, 0, v->new_st );
+      WN_element_size( new_array ) = TY_size( TY_AR_etype(array_ty));
+      if (TY_kind(v->ty) == KIND_POINTER)
+        WN_array_base( new_array ) = WN_Ldid(Pointer_type, 0, v->new_st, v->ty);
+      else
+        WN_array_base( new_array ) = WN_Lda(Pointer_type, 0, v->new_st);
 
       WN *old_array = WN_Create( op_array, 1+2*ndim_array );
-      WN_element_size( old_array ) = TY_size( TY_AR_etype( v->ty ));
-      WN_array_base( old_array ) = WN_Lda( Pointer_type, 0, v->orig_st );
+      WN_element_size( old_array ) = TY_size( TY_AR_etype(array_ty));
+      if (TY_kind(v->ty) == KIND_POINTER)
+        WN_array_base( old_array ) = WN_Ldid(Pointer_type, 0, v->orig_st, v->ty);
+      else
+        WN_array_base(old_array ) = WN_Lda(Pointer_type, 0, v->orig_st);
 					          
       for( int j=0; j<ndim_array; j++ )
       {
@@ -6540,9 +6833,9 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	     WN_array_dim( old_array, j ) =  sizes_bak[ndim_array-j-1];
       }
 			   // Maybe need to set parent point of the array kids.
-      WN *wn_old_val = WN_Iload( v->mtype, 0, Make_Pointer_Type( v->ty ),
+      WN *wn_old_val = WN_Iload( v->mtype, 0, pointer_ty,
 	                         WN_COPY_Tree( old_array ));
-      WN *wn_new_val = WN_Iload( v->mtype, 0, Make_Pointer_Type( v->ty ),
+      WN *wn_new_val = WN_Iload( v->mtype, 0, pointer_ty,
 	                         new_array );
 
       if(( v->reduction_opr == OPR_CAND || v->reduction_opr == OPR_CIOR) &&
@@ -6592,7 +6885,7 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
 	              v->mtype != restype )
 	      result = WN_Cvt( restype, v->mtype, result );
 
-      WN *wn_store_val = WN_Istore( v->mtype, 0, Make_Pointer_Type( v->ty ),
+      WN *wn_store_val = WN_Istore( v->mtype, 0, pointer_ty,
                                     old_array, result );
       WN_INSERT_BlockLast( stlist, wn_store_val );
       WN_INSERT_BlockLast( *store_block, loopnest );
@@ -6712,7 +7005,7 @@ ST_Has_Dope_Vector(ST *st)
    Gen_Restore_Stack_Pointer(). */
 
 static WN *
-Gen_Save_Stack_Pointer(char *st_basename, WN **sp_save_stid)
+Gen_Save_Stack_Pointer(const char *st_basename, WN **sp_save_stid)
 {
   char *newstname;
   static INT count = 0;
@@ -7009,7 +7302,7 @@ static WN *Gen_MP_Workshare_Region(WN *workshare_region)
     WN *nested_alloca_block = NULL;
 
     vt = (VAR_TABLE *) alloca((vt_size + 1) * sizeof(VAR_TABLE));
-    bzero(vt, (vt_size + 1) * sizeof(VAR_TABLE));
+    BZERO(vt, (vt_size + 1) * sizeof(VAR_TABLE));
     Create_Local_Variables(vt, NULL, NULL, nested_local_nodes,
                            NULL, NULL,
                            NULL, &nested_alloca_block);
@@ -7158,7 +7451,7 @@ static WN *Gen_MP_SingleProcess_Region(WN *single_region)
     WN *nested_alloca_block = NULL, *firstprivate_block = NULL;
 
     vt = (VAR_TABLE *) alloca((vt_size + 1) * sizeof(VAR_TABLE));
-    bzero(vt, (vt_size + 1) * sizeof(VAR_TABLE));
+    BZERO(vt, (vt_size + 1) * sizeof(VAR_TABLE));
     Create_Local_Variables(vt, NULL, NULL, nested_local_nodes,
                            nested_firstprivate_nodes, &firstprivate_block,
                            NULL, &nested_alloca_block);
@@ -10252,7 +10545,11 @@ Process_PDO ( WN * tree )
   is_omp = WN_pragma_omp(cur_node);
 
   next_node = WN_next(cur_node);
+#ifdef KEY
+  WN_DELETE_FromBlock (WN_region_pragmas(tree), cur_node);
+#else
   WN_Delete ( cur_node );
+#endif
 
   while (cur_node = next_node) {
 
@@ -10426,6 +10723,37 @@ Process_PDO ( WN * tree )
 
   body_block = WN_region_body(tree);
   first_node = pdo_node = WN_first(body_block);
+#ifdef KEY
+  // bug 13534: Sometimes the DO_LOOP may be inside a C++ exception
+  // region. Extract it out of the region, after some validation checks.
+  if (pdo_node && WN_operator(pdo_node) == OPR_REGION &&
+      WN_region_kind(pdo_node) == REGION_KIND_EH /* &&
+      pdo_node == WN_last(body_block) */) {
+
+    // The region is the only statement in the parallel DO.
+    // Bug 14036: The above line is not true any more. The
+    // restriction in the above line has been
+    // removed, because there is often a label after the EH
+    // region containing the DO loop, to account for the label
+    // a "break" may jump to.
+    WN * region_body = WN_region_body(pdo_node);
+    WN * stmt = WN_first(region_body);
+    for (; stmt; stmt = WN_next(stmt)) {
+      if (stmt == WN_last(region_body) &&
+          WN_opcode(stmt) == OPC_DO_LOOP)
+        break;
+    }
+    Is_True (!stmt || WN_operator(stmt) == OPR_DO_LOOP,
+             ("Expected statement to be DO_LOOP."));
+    if (stmt) {
+      // extract out of region
+      stmt = WN_EXTRACT_FromBlock (region_body, stmt);
+      // insert after region
+      WN_INSERT_BlockAfter (body_block, pdo_node, stmt);
+      first_node = pdo_node = WN_first(body_block);
+    }
+  }
+#endif
   while (pdo_node && (WN_opcode(pdo_node) != OPC_DO_LOOP)) {
     if ((WN_opcode(pdo_node) == OPC_DO_WHILE) ||
 	(WN_opcode(pdo_node) == OPC_WHILE_DO))
@@ -10458,7 +10786,7 @@ Process_PDO ( WN * tree )
         // privatize within DO_LOOP but not code before or after it
       vsize = (nested_local_count + 1) * sizeof(VAR_TABLE);
       nested_var_table = (VAR_TABLE *) alloca ( vsize );
-      bzero ( nested_var_table, vsize );
+      BZERO ( nested_var_table, vsize );
       Create_Local_Variables ( nested_var_table, nested_reduction_nodes,
 			       nested_lastlocal_nodes, nested_local_nodes,
 			       nested_firstprivate_nodes,
@@ -10474,45 +10802,6 @@ Process_PDO ( WN * tree )
 
     }
 
-#if 0 //def KEY
-// The following is in order to make "i" private in the serialized version
-// of the region:
-//    #pragma omp parallel
-//    #pragma omp for private (i)
-//
-    if (nested_local_count && !orphaned)
-    {
-      // We have to recreate new ST entries because we need these symbols
-      // for a different scope than above, typically 2. So change the current
-      // scope ONLY locally.
-      SYMTAB_IDX psymtab_l = CURRENT_SYMTAB;
-      PU_Info * ppuinfo_l = Current_PU_Info;
-      WN_MAP_TAB * pmaptab_l = Current_Map_Tab;
-
-      CURRENT_SYMTAB = psymtab;
-      Current_PU_Info = ppuinfo;
-      Current_Map_Tab = pmaptab;
-
-      // Use local versions of the global tables.
-      INT32 vsize_l = (nested_local_count + 1) * sizeof (VAR_TABLE);
-      VAR_TABLE * nested_var_table_l = (VAR_TABLE *) alloca (vsize_l);
-      bzero ( nested_var_table_l, vsize_l );
-      Create_Local_Variables ( nested_var_table_l, nested_reduction_nodes,
-			       nested_lastlocal_nodes, nested_local_nodes,
-			       nested_firstprivate_nodes,
-			       &nested_firstprivate_block,
-			       nested_lastthread_node,
-			       &alloca_block );
-      Localize_Parent_Stack lps_l(orphaned, body_block);
-      (void) Walk_and_Localize ( serial_stmt_block,
-                                 nested_var_table_l, &lps_l, FALSE,
-                                 &nested_non_pod_finalization_nodes );
-
-      CURRENT_SYMTAB = psymtab_l;
-      Current_PU_Info = ppuinfo_l;
-      Current_Map_Tab = pmaptab_l;
-    }
-#endif // KEY
 
     prev_node = WN_prev(pdo_node);
     if (prev_node) {
@@ -10839,10 +11128,16 @@ Process_PDO ( WN * tree )
           if (!found_non_pod)
             Fail_FmtAssertion("missing non-POD lastprivate clauses");
         } else {
+#ifndef KEY
+            // KEY: GNU42 front-end does not want to ensure this, unless
+            // this is necessary. Unless required, the lastlocal nodes
+            // attached to the proper region seem more accurate.
+            //
             // non-orphaned PDO case: lastprivate nodes are on PARALLEL
           if (found_non_pod)
               // fecc should move lastprivate clauses to enclosing PARALLEL
             Fail_FmtAssertion("extraneous non-POD lastprivate clauses");
+#endif
         }
       } else {
         if (found_non_pod)
@@ -11223,6 +11518,16 @@ Process_Parallel_Do ( void )
                                    &non_pod_finalization_nodes );
 
 #ifdef KEY
+  if (LANG_Enable_CXX_Openmp && PU_misc_info(PU_Info_pu(ppuinfo)) &&
+      PU_src_lang(PU_Info_pu(ppuinfo)) == PU_CXX_LANG)
+  { // C++: This code has not yet been tested.
+    Is_True (parallel_proc, ("Parallel block unavailable"));
+    PU_IDX pu_idx = ST_pu(parallel_proc);
+    PU &pu = Pu_Table[pu_idx];
+    Set_PU_misc_info (pu,
+        Process_PU_Exc_Info(PU_misc_info (PU_Info_pu(ppuinfo)), var_table));
+  }
+
   // If chunk uses a private variable (e.g. threadprivate variable), fix it
   chunk_wn = Walk_and_Localize ( chunk_wn, var_table, &lps, FALSE,
                                  &non_pod_finalization_nodes );
@@ -11470,6 +11775,17 @@ Process_Parallel_Region ( void )
   Localize_Parent_Stack lps(FALSE, NULL);
   stmt_block = Walk_and_Localize ( stmt_block, var_table, &lps, TRUE , 
                                    &non_pod_finalization_nodes );
+#ifdef KEY
+  if (LANG_Enable_CXX_Openmp && PU_Info_pu(ppuinfo).misc &&
+    PU_src_lang(PU_Info_pu(ppuinfo)) == PU_CXX_LANG)
+  { // C++
+    Is_True (parallel_proc, ("Parallel block unavailable"));
+    PU_IDX pu_idx = ST_pu(parallel_proc);
+    PU &pu = Pu_Table[pu_idx];
+    // Update typeinfo data present in PU.
+    pu.misc = Process_PU_Exc_Info(PU_Info_pu(ppuinfo).misc, var_table);
+  }
+#endif
   /* Transform contents of parallel region */
 
   if (copyin_nodes) {
@@ -11477,6 +11793,7 @@ Process_Parallel_Region ( void )
   }
 
   Transform_Parallel_Block ( stmt_block );
+  Verify_No_MP(stmt_block);
 #ifdef KEY
   Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
 #endif
@@ -11548,7 +11865,7 @@ static void Localize_in_serialized_parallel (void)
 {
   INT32 vsize_l = (local_count + 1) * sizeof(VAR_TABLE);
   VAR_TABLE * var_table_l = (VAR_TABLE *) alloca ( vsize_l );
-  bzero ( var_table_l, vsize_l );
+  BZERO ( var_table_l, vsize_l );
   Create_Local_Variables ( var_table_l, reduction_nodes, lastlocal_nodes,
                            local_nodes, firstprivate_nodes,
 			   &firstprivate_block, NULL, &alloca_block );
@@ -11606,9 +11923,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   Is_True(PU_Info_proc_sym(Current_PU_Info) == last_pu_proc_sym,
           ("LowerMP_PU_Init() not called for this PU"));
 
-  Verify_MP_Lowered verify_mp_lowered;
-  verify_mp_lowered_ptr = &verify_mp_lowered;
-
   /* Special case handling of PU-scope pragmas. */
 
   if (block == NULL) {
@@ -11624,7 +11938,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     }
 
-    verify_mp_lowered.Set_replace_block_and_nested_pu(NULL, NULL, NULL);
     return (NULL);
 
   }
@@ -11700,17 +12013,17 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
   lsize = sizeof(LABEL_INFO_TABLE) * LABEL_Table_Size(CURRENT_SYMTAB);
   label_info_table = (LABEL_INFO_TABLE *) alloca ( lsize );
-  bzero ( label_info_table, lsize );
+  BZERO ( label_info_table, lsize );
 
   ssize = 4096 * sizeof(SHARED_TABLE);
   shared_table = (SHARED_TABLE *) alloca ( ssize );
-  bzero ( shared_table, ssize );
+  BZERO ( shared_table, ssize );
 
   if (mpid_size == 0) {
     mpid_size = 1028;
     msize = mpid_size * sizeof(MPID_TABLE);
     mpid_table = (MPID_TABLE *) malloc ( msize );
-    bzero ( mpid_table, msize );
+    BZERO ( mpid_table, msize );
   }
 
   pu_has_eh = PU_has_exc_scopes(Get_Current_PU());
@@ -11744,8 +12057,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN *return_wn = WN_first( store_gtid );
       WN_DELETE_Tree(node);
       WN_Delete( store_gtid );
-      verify_mp_lowered.Set_replace_block_and_nested_pu( return_wn,
-        WN_next(call), NULL);
       return return_wn;
 
     } 
@@ -11763,18 +12074,14 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN *return_wn = WN_first(block);
       WN_DELETE_Tree(node);
       WN_Delete(block);
-      verify_mp_lowered.Set_replace_block_and_nested_pu(return_wn, WN_next(call\
-									   ), NULL);
       return return_wn;
     }
     else if (WN_pragma(node) == WN_PRAGMA_CHUNKSIZE) {
       pu_chunk_node = node;
-      verify_mp_lowered.Set_replace_block_and_nested_pu(NULL, NULL, NULL);
       return (WN_next(node));
 
     } else if (WN_pragma(node) == WN_PRAGMA_MPSCHEDTYPE) {
       pu_mpsched_node = node;
-      verify_mp_lowered.Set_replace_block_and_nested_pu(NULL, NULL, NULL);
       return (WN_next(node));
 
     } else if (WN_pragma(node) == WN_PRAGMA_COPYIN) {
@@ -11786,7 +12093,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
       wn = WN_next(node);
       WN_DELETE_Tree ( node );
-      verify_mp_lowered.Set_replace_block_and_nested_pu(NULL, NULL, NULL);
       return (wn);
 
     } else if (WN_pragma(node) == WN_PRAGMA_CRITICAL_SECTION_BEGIN) {
@@ -11810,8 +12116,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN *return_wn = WN_first( store_gtid );
       WN_DELETE_Tree(node);
       WN_Delete( store_gtid );
-      verify_mp_lowered.Set_replace_block_and_nested_pu( return_wn,
-        WN_next(call), NULL);
       return return_wn;
 
     } else if (WN_pragma(node) == WN_PRAGMA_ORDERED_END) {
@@ -11824,8 +12128,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_next(call) = wn;
       if (wn) WN_prev(wn) = call;
       WN_DELETE_Tree(node);
-      verify_mp_lowered.Set_replace_block_and_nested_pu(call,
-        WN_next(call), NULL);
       return call;
 
     } else
@@ -11858,8 +12160,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_DELETE_Tree(WN_region_exits(node));
       RID_Delete(Current_Map_Tab, node);
       WN_Delete(node);
-      verify_mp_lowered.Set_replace_block_and_nested_pu(wn, WN_next(wn),
-        NULL);
       return wn;
 
     case WN_PRAGMA_MASTER_BEGIN:
@@ -11871,8 +12171,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_DELETE_Tree(WN_region_exits(node));
       RID_Delete(Current_Map_Tab, node);
       WN_Delete(node);
-      verify_mp_lowered.Set_replace_block_and_nested_pu(wn, WN_next(wn),
-        NULL);
       return wn;
 
     case WN_PRAGMA_DOACROSS:
@@ -11882,7 +12180,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     case WN_PRAGMA_PDO_BEGIN:
       mpt = MPP_ORPHANED_PDO;
-      verify_mp_lowered.Set_nested_pu_tree(NULL);
       break;
 
     case WN_PRAGMA_PARALLEL_BEGIN:
@@ -12155,7 +12452,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 	    copyin_nodes_end = WN_next(copyin_nodes_end) = cur_node;
 	  ++copyin_count;
           break;
-
+        
+	case WN_PRAGMA_DEFAULT:
+	  break;
+	  
 	  default:
 	    Fail_FmtAssertion (
 	       "out of context pragma (%s) in MP {top-level pragma} processing",
@@ -12210,8 +12510,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     WN_INSERT_BlockLast ( replace_block, Gen_MP_Copyin ( FALSE ) );
 
-    verify_mp_lowered.Set_nested_pu_tree(NULL);
-
   } else if (mpt == MPP_CRITICAL_SECTION) {
 
     line_number = WN_linenum(node);
@@ -12253,8 +12551,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     WN_DELETE_Tree ( node );
     WN_Delete ( cur_node );
 
-    verify_mp_lowered.Set_nested_pu_tree(NULL);
-
   } else if (mpt == MPP_PARALLEL_DO) {
 
     BOOL is_omp = WN_pragma_omp(WN_first(WN_region_pragmas(node)));
@@ -12294,7 +12590,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
         WN_Delete ( node );
         local_count = 0;
         WN_INSERT_BlockLast ( replace_block, do_preamble_block );
-        verify_mp_lowered_ptr->Set_nested_pu_tree(NULL);
         goto finish_processing;
       } else
         Fail_FmtAssertion
@@ -12347,7 +12642,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     vsize = (local_count + 1) * sizeof(VAR_TABLE);
     var_table = (VAR_TABLE *) alloca ( vsize );
-    bzero ( var_table, vsize );
+    BZERO ( var_table, vsize );
 
     fp = WN_LdidPreg ( Pointer_type, Frame_Pointer_Preg_Offset );
 
@@ -12365,10 +12660,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
                             WN_COPY_Tree( do_preamble_block ));
     }
 
-#if 0 //def KEY
-    // localize variables in serialized version of PDO
-    Localize_in_serialized_parallel ();
-#endif
 
 //    do_preamble_block = NULL;
 
@@ -12449,7 +12740,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 	WN_Delete ( node );
 	local_count = 0;
 	WN_INSERT_BlockLast ( replace_block, do_preamble_block );
-	verify_mp_lowered_ptr->Set_nested_pu_tree(NULL);
 	goto finish_processing;
       } else
         Fail_FmtAssertion
@@ -12485,7 +12775,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     vsize = (local_count + 1) * sizeof(VAR_TABLE);
     var_table = (VAR_TABLE *) alloca ( vsize );
-    bzero ( var_table, vsize );
+    BZERO ( var_table, vsize );
 
     fp = WN_LdidPreg ( Pointer_type, Frame_Pointer_Preg_Offset );
 
@@ -12497,10 +12787,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     } else
       serial_stmt_block = Copy_Non_MP_Tree ( stmt_block );
 
-#if 0 //def KEY
-    // localize variables in serialized version of parallel region
-    Localize_in_serialized_parallel ();
-#endif
 
     Process_Parallel_Region ( );
 
@@ -12805,8 +13091,6 @@ finish_processing:
     /* For mp if's return the entire replacement block and the caller will
        handle it from there. */
 
-    verify_mp_lowered.Set_replace_block(replace_block,
-      WN_next(WN_last(replace_block)));
     return_nodes = replace_block;
 
   } else {
@@ -12823,7 +13107,6 @@ finish_processing:
       return_nodes = cont_nodes;
 
     WN_Delete ( replace_block );
-    verify_mp_lowered.Set_replace_block(return_nodes, cont_nodes);
   }
 
   return (return_nodes);
@@ -12846,7 +13129,7 @@ LowerMP_PU_Init()
     region_id = 0;
     lock_id = 0;
     if (mpid_size > 0)
-      bzero ( mpid_table, mpid_size * sizeof(MPID_TABLE) );
+      BZERO ( mpid_table, mpid_size * sizeof(MPID_TABLE) );
       // ignore pu_chunk_node and pu_mpsched_node from prior PU; no need to
       // deallocate it since Whirl mempool gets popped at end of compiling
       // the PU

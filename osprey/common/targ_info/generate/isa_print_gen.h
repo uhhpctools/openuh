@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -76,6 +80,10 @@
 //  void ISA_Print_End(void)
 //      Complete processing of operands/results.
 //
+#ifdef TARG_X8664
+//  void Segment (void)
+//      Print the memory address segment prefix.
+#endif
 //
 /////////////////////////////////////
 
@@ -109,6 +117,9 @@ extern void Result (int result_index);
 extern void Instruction_Print_Group ( ISA_PRINT_TYPE print_type, TOP top, ... );
 extern void ISA_Print_End(void);
 extern void Set_AsmName_Func(const char *(*asmname_func)(TOP topcode));
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
+extern void Segment (void);
+#endif
 
 #ifdef __cplusplus
 }

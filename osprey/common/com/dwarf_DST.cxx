@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -38,8 +42,8 @@
 
 
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: common/com/SCCS/s.dwarf_DST.cxx $ $Revision: 1.5 $";
+const static char *source_file = __FILE__;
+const static char *rcs_id = "$Source: common/com/SCCS/s.dwarf_DST.cxx $ $Revision: 1.5 $";
 
 #include "dwarf_DST.h"
 #include "errors.h"         /* in ../common/util */
@@ -301,6 +305,7 @@ DST_append_child(DST_INFO_IDX parent, DST_INFO_IDX child)
    DST_INFO     *child_info;
    DST_INFO	*parent_info = DST_INFO_IDX_TO_PTR(parent);
 
+   FmtAssert(parent_info != NULL, ("Illegal attempt to append DST child"));
    last_child_field = DST_get_ptr_to_lastChildField(parent_info);
    DST_ASSERT(last_child_field != NULL, "Illegal attempt to append DST child");
    

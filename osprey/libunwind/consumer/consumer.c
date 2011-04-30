@@ -88,13 +88,8 @@ const __uint32_t _unw_fr_map[__UNW_MAX_FR_PRESERVED] =
 	  22, 23, 24, 25, 26, 27, 28, 29, 30, 31 };
 const __uint32_t _unw_br_map[__UNW_MAX_BR_PRESERVED] =
 	{ 0, 1, 2, 3, 4, 5 };
-#if 0 /* def FOR_GDB -- removed GMB */
-const __uint32_t _unw_ar_map[__UNW_MAX_AR_PRESERVED] =
-	{ 17, 18, 19, 36, 40, 64, 65 };
-#else
 const __uint32_t _unw_ar_map[__UNW_MAX_AR_PRESERVED] =
         { 0, 0, 1, 3, 4, 5, 7 };
-#endif
 
 /* initialization and finalization flags */
 static __uint32_t _unwind_initialized = 0;
@@ -1027,10 +1022,6 @@ unwind_output("unwind_table_entry_compare: Coucou");
 
 	/* entry found in the unwind table but the unwind info has zero size, */
 	/* so assume defaults */
-#if 0
-	fprintf(stderr, "unwind_info_addr=0x%llx  +  0x%llx  header=0x%llx\n",
-	       unwind_info_addr, (__uint64_t)ptr->_info, unwind_info->_header);
-#endif
 	if (0 == __UNW_LENGTH(unwind_info->_header)) {
 		__UNW_CONTEXT_ACCESS_IP(scp) =
 			__UNW_CONTEXT_ACCESS_BR(scp, 0);
@@ -1774,13 +1765,7 @@ unwind_output("unwind_table_entry_compare: Coucou");
 		} else {
 			preds = __UNW_CONTEXT_ACCESS_GR(scp, state._preds._reg);
 		}
-#if 0
-		for (i = 0; i < 64; i++) {
-			__UNW_CONTEXT_ACCESS_PREDS(scp, i) = (preds & (0x1 << i)) >> i;
-		}
-#else
 		__UNW_CONTEXT_ACCESS_PREDS(scp) = preds;
-#endif
 		if (_unwind_verbose >= __UNW_VERBOSE_MSGS) {
 			unwind_output("%s restored preds=0x%016llx (off gr %d)",
 				"unwind_frame() MSG:",
@@ -1812,13 +1797,7 @@ unwind_output("unwind_table_entry_compare: Coucou");
 			state._preds._offset);
 		preds = *stack_loc;
 #endif
-#if 0
-		for (i = 0; i < 64; i++) {
-			__UNW_CONTEXT_ACCESS_PREDS(scp, i) = (preds & (0x1 << i)) >> i;
-		}
-#else
 		__UNW_CONTEXT_ACCESS_PREDS(scp) = preds;
-#endif
 		if (_unwind_verbose >= __UNW_VERBOSE_MSGS) {
 			unwind_output("%s restored preds=0x%llx (sp offset %llu)",
 				"unwind_frame() MSG:",
@@ -1844,13 +1823,7 @@ unwind_output("unwind_table_entry_compare: Coucou");
 			state._preds._offset);
 		preds = *stack_loc;
 #endif
-#if 0
-		for (i = 0; i < 64; i++) {
-			__UNW_CONTEXT_ACCESS_PREDS(scp, i) = (preds & (0x1 << i)) >> i;
-		}
-#else
 		__UNW_CONTEXT_ACCESS_PREDS(scp) = preds;
-#endif
 		if (_unwind_verbose >= __UNW_VERBOSE_MSGS) {
 			unwind_output("%s restored preds=0x%llx (psp offset %llu)",
 				"unwind_frame() MSG:",

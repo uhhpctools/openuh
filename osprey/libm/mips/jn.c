@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: jn.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/jn.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.jn.c $
  *
  * Revision history:
  *  28-May-93 - Original Version
@@ -57,7 +57,7 @@
  * ====================================================================
  */
 
-/* $Header: /proj/osprey/CVS/open64/osprey1.0/libm/mips/jn.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
+/* $Header: /home/bos/bk/kpro64-pending/libm/mips/jn.c 1.5 04/12/21 14:58:22-08:00 bos@eng-25.internal.keyresearch.com $ */
 
 /****************************  IMPORTANT NOTE  ****************************
  *
@@ -129,7 +129,18 @@ extern	double	yn(int, double);
 #pragma weak yn = __yn
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __jn(int, double);
+extern double __yn(int, double);
+#pragma jn
+#pragma yn
+double jn( int n, double x ) {
+  return __jn( n, x );
+}
+double yn( int n, double x ) {
+  return __yn( n, x );
+}
+#elif defined(__GNUC__)
 extern  double  __jn(int, double);
 
 double    jn() __attribute__ ((weak, alias ("__jn")));
@@ -439,7 +450,18 @@ error in yn\n");
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __jnl(int, long double);
+extern long double __ynl(int, long double);
+#pragma weak jnl
+#pragma weak ynl
+long double jnl( int n, long double x ) {
+  return __jnl( n, x );
+}
+long double ynl( int n, long double x ) {
+  return __ynl( n, x );
+}
+#elif defined(__GNUC__)
 extern  long double  __jnl(int, long double);
 
 long double    jnl() __attribute__ ((weak, alias ("__jnl")));

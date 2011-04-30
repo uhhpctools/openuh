@@ -126,6 +126,7 @@ public:
   void     Init(AUX_ID var)           { Set_aux_id(var); Set_opnd(var); }
   void     Clone(MU_NODE *mu)         { Set_aux_id(mu->Aux_id()); Set_OPND(mu->OPND()); }
   void     Print(FILE *fp=stderr) const;
+  void     Print_Deref(FILE *fp=stderr) const;
 };
 
 //  MU_LIST is a internal linked list
@@ -248,6 +249,7 @@ public:
     return p;
   }
   void     Print(FILE *fp=stderr) const;
+  void     Print_Deref(FILE *fp=stderr) const;
 };
 
 

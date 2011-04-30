@@ -1,5 +1,9 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -54,7 +58,6 @@
  * ====================================================================
  * ====================================================================
  */
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "common_com_pch.h"
@@ -81,6 +84,12 @@
 #if (defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)) && !defined(FRONT_END_MFEF77)
 #include "wn_util.h"
 #endif /* (defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)) && !defined(FRONT_END_MFEF77) */
+#if !defined(FRONT_END_C) && !defined(IR_TOOLS) && defined(TARG_SL)
+#include "intrn_info.h"
+#endif
+
+#include <set>
+using std::set;
 
 #ifdef KEEP_WHIRLSTATS
 INT32 whirl_num_allocated=0;
@@ -94,6 +103,10 @@ void whirlstats()
    fprintf(stderr,"Num deallocated = %d\nbytes deallocated = %d\n",whirl_num_deallocated,whirl_bytes_deallocated);
 }
 #endif
+
+UINT32 WN::the_unique_id = 0;
+BOOL IR_dump_wn_addr = FALSE;
+BOOL IR_dump_wn_id = FALSE;
 
 MEM_POOL WN_mem_pool;
 MEM_POOL *WN_mem_pool_ptr = &WN_mem_pool;
@@ -120,12 +133,13 @@ static struct winfo {
   UINT_TYPE,     INT_TYPE,      8,  /* MTYPE_U8 */
   FLOAT_TYPE,    FLOAT_TYPE,    4,  /* MTYPE_F4 */
   FLOAT_TYPE,    FLOAT_TYPE,    8,  /* MTYPE_F8 */
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   FLOAT_TYPE,    FLOAT_TYPE,   16,  /* MTYPE_F10*/
+  FLOAT_TYPE,    FLOAT_TYPE,   16,  /* MTYPE_F16*/
 #else
   UNKNOWN_TYPE,  UNKNOWN_TYPE,  0,  /* MTYPE_F10*/
-#endif
   UNKNOWN_TYPE,  UNKNOWN_TYPE,  0,  /* MTYPE_F16*/
+#endif
   UNKNOWN_TYPE,  UNKNOWN_TYPE,  0,  /* MTYPE_STR*/
   FLOAT_TYPE,    FLOAT_TYPE,   16,  /* MTYPE_FQ  */
   UNKNOWN_TYPE,  UNKNOWN_TYPE,  0,  /* MTYPE_M  */
@@ -137,6 +151,11 @@ static struct winfo {
   UINT_TYPE,     INT_TYPE,      4,  /* MTYPE_A4 */
   UINT_TYPE,     INT_TYPE,      8,  /* MTYPE_A8 */
   COMPLEX_TYPE,  COMPLEX_TYPE, 32,  /* MTYPE_C10 */
+#if defined(TARG_IA64) || defined(TARG_X8664)
+  COMPLEX_TYPE,  COMPLEX_TYPE, 32,  /* MTYPE_C16 */
+#else
+  UNKNOWN_TYPE,  UNKNOWN_TYPE,  0,  /* MTYPE_C16*/
+#endif
 };
 
 #define WTYPE_base_type(w) WINFO[w].base_type
@@ -212,18 +231,6 @@ IPO_Types_Are_Compatible ( TYPE_ID ltype, TYPE_ID rtype )
 {
     BOOL   compatible;
 
-#if 0
-    /* Apparently the following is an overkill.  Possibly there was a
-       frontend bug that has been fixed.  Until we can come up with a test
-       case, we allow unsigned/signed to be compatible.
-     */
-
-    /* if the formal is of UINT and actual is INT, stid could introduce */
-    /* problems hence return not compatible */
-    if ((WTYPE_base_type(ltype) == UINT_TYPE) && 
-	(WTYPE_base_type(rtype) == INT_TYPE))
-	return FALSE;
-#endif
 
     /* if the base types are the same or the base type of the stid  */
     /* is of comparable type and size of lhs is  */
@@ -524,6 +531,44 @@ void WN_Reset_Num_Delete_Cleanup_Fns(void)
  */
 #define New_Map_Id() ((WN_MAP_ID) (-1))
 
+static WN* trace_wn_node=NULL;
+static mINT64 trace_wn_mapid = -1;
+static UINT32 trace_wn_id = 0;
+void Set_Trace_Wn_Node(WN* n) { trace_wn_node = n; }
+void Set_Trace_Wn_mapid(mINT64 mapid) { trace_wn_mapid = mapid; }
+void gdb_stop_here()
+{
+   return ;
+}
+
+void Check_Traced_Wn_Node(WN *n)
+{
+   if (n && (n == trace_wn_node 
+             || trace_wn_mapid != -1 && WN_map_id(n) == trace_wn_mapid
+             || trace_wn_id != 0 && trace_wn_id == WN_id(n)
+             ) ) {
+      gdb_stop_here();
+   }
+}
+
+static set<UINT32> copied_ids;
+
+void Set_Trace_Wn_id(UINT32 wn_id) 
+{ 
+   trace_wn_id = wn_id; 
+   copied_ids.insert(wn_id);
+}
+
+void Trace_Wn_Copy(const WN *wn, const WN *src_wn)
+{
+   set<UINT32>::iterator itr = copied_ids.find(WN_id(src_wn));
+   if (itr != copied_ids.end()) {
+      // found src_wn's wn_id in copied list
+      copied_ids.insert(WN_id(wn));
+      gdb_stop_here();
+   }
+}
+
 /* ---------------------------------------------------------------------
  * WN *WN_Create(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, mINT16 kid_count)
  *
@@ -561,7 +606,7 @@ WN_Create (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, mINT16 kid_count)
      */
     if (free_list && !WN_FREE_LIST_Empty(free_list)) {
 	wn = WN_FREE_LIST_Pop(free_list);
-	bzero(wn, size);
+	BZERO(wn, size);
     } else {
 	if (WN_mem_pool_ptr == &WN_mem_pool && !WN_mem_pool_initialized) {
 	    MEM_POOL_Initialize(WN_mem_pool_ptr, "WHIRL Nodes", TRUE);
@@ -569,7 +614,7 @@ WN_Create (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, mINT16 kid_count)
 	    WN_mem_pool_initialized = TRUE;
 	}
 	wn = (WN *)MEM_POOL_Alloc(WN_mem_pool_ptr, size);
- 	bzero(wn, size);
+ 	BZERO(wn, size);
     }
 
     /* Some nodes have next and previous pointers grow off the bottom.
@@ -587,7 +632,16 @@ WN_Create (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, mINT16 kid_count)
     WN_set_desc(wn, desc);
     WN_set_kid_count(wn, kid_count);
     WN_set_map_id(wn, New_Map_Id());
+    wn->set_unique_id();
 
+#ifdef TARG_SL
+    /* SL initialization
+     */
+    WN_Set_vbuf_ofst_adjusted(wn, FALSE);
+    WN_Set_is_internal_mem_ofst(wn, FALSE);
+    WN_Set_is_compgoto_para(wn, FALSE);
+    WN_Set_is_compgoto_for_minor(wn, FALSE);
+#endif
     return wn;
 }
 
@@ -632,11 +686,6 @@ WN_Create_Generic (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
     WN_cvtl_bits(wn) = cvtl_bits;
   }
   /* Num_dim is now just a read-only quantity */
-#if 0
-  if (OPCODE_has_ndim(opcode)) {
-    WN_num_dim(wn) = num_dim;
-  }
-#endif
   if (OPCODE_has_esize(opcode)) {
     WN_element_size(wn) = element_size;
   }
@@ -915,6 +964,16 @@ WN_CreateEntry (INT16 nkids, ST_IDX name, WN *body, WN *pragmas, WN *varrefs)
  *
  */
 
+#if defined(TARG_SL) //fork_joint
+WN *WN_CreateFork(INT32 label_number,  BOOL major)
+{
+  WN *wn;
+  wn = WN_Create(major ? OPC_SL2_FORK_MAJOR : OPC_SL2_FORK_MINOR , 0);
+  WN_label_number(wn) = label_number;
+  return(wn);
+}
+#endif 
+
 // no st anymore in goto
 WN *WN_CreateGoto(INT32 label_number)
 {
@@ -940,7 +999,7 @@ WN *WN_CreateAgoto(WN *addr)
 {
   WN *wn;
 
-  Is_True(WN_rtype(addr)==Pointer_type,
+  Is_True(MTYPE_byte_size(WN_rtype(addr)) == MTYPE_byte_size(Pointer_type),
           ("Bad addr in WN_CreateAgoto"));
   wn = WN_Create(OPC_AGOTO,1);
   WN_kid0(wn) = addr;
@@ -1358,6 +1417,18 @@ WN_CreateStid (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
     }
 
 #endif /* (defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)) && !defined(FRONT_END_MFEF77) */
+#ifdef TARG_NVISA
+    if ((MTYPE_byte_size(desc) == 8 && MTYPE_byte_size(WN_rtype(value)) == 4)
+     || (MTYPE_byte_size(desc) == 4 && MTYPE_byte_size(WN_rtype(value)) == 8))
+    {
+        // Rather than create I8STID(I4*),
+        // create I8STID(I8I4CVT(I4*).
+        // We need explicit conversion
+        // because we use different registers for the two sizes,
+        DevWarn("insert cvt of stid, %d %d", desc, WN_rtype(value));
+        value = WN_Cvt(WN_rtype(value), desc, value);
+    }
+#endif
 
     wn = WN_Create(opc,1);
     WN_kid0(wn) = value;
@@ -1512,7 +1583,8 @@ WN *WN_CreateXpragma(WN_PRAGMA_ID pragma_name, ST_IDX st, INT16 kid_count)
   WN_pragma(wn) = pragma_name;
   WN_st_idx(wn) = st;
   WN_pragma_flags(wn) = 0;
-  WN_pragma_arg64(wn) = 0;
+  WN_pragma_arg2(wn) = 0;
+  WN_kid(wn, 0) = NULL;
 
   return(wn);
 }
@@ -1566,18 +1638,12 @@ WN *WN_CreateExp2(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, WN *kid0, WN *kid1)
   Is_True(OPCODE_is_expression(WN_opcode(kid1)),
 	  ("Bad kid1 in WN_CreateExp2"));
 
-#if 0 // with 32-bit MPY, need U8U4CVT to zero-out high-order 32 bits (bug 4637)
-  Is_True(opr != OPR_MPY || 
-  	  WN_operator(kid0) == OPR_INTCONST ||
-  	  WN_operator(kid1) == OPR_INTCONST ||
-          MTYPE_byte_size(WN_rtype(kid0)) == MTYPE_byte_size(WN_rtype(kid1)),
-  	  ("inconsistent sizes in operands of MPY"));
-#endif
 
   /* bug#2731 */
 #ifdef KEY
   if( !WN_has_side_effects(kid0) &&
-      !WN_has_side_effects(kid1) )
+      !WN_has_side_effects(kid1) &&
+      !Disable_Simplification_For_FE) /* Disable Simplification if it is called in WGEN. */
 #endif
     wn = WN_SimplifyExp2(opc, kid0, kid1);
 
@@ -1680,6 +1746,26 @@ WN_CreateIload (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
   
   wn = WN_SimplifyIload(opc,offset,ty,field_id,load_addr_ty,addr);
   if (!wn) {
+#ifdef TARG_NVISA
+     if ((MTYPE_byte_size(rtype) == 8 && MTYPE_byte_size(desc) == 4)
+      || (MTYPE_byte_size(rtype) == 4 && MTYPE_byte_size(desc) == 8))
+     {
+        // Rather than create I8I4ILOAD,
+        // create I8I4CVT(I4I4ILOAD).
+        // I8I4ILOAD can cause later problems with pregs,
+        // which have same rtype and desc, so wopt sometimes loses info
+        // about the implicit conversion, and we need explicit conversion
+        // because we use different registers for the two sizes,
+        DevWarn("insert cvt of iload, %d %d", rtype, desc);
+        wn = WN_CreateExp1(opr,desc,desc,addr);
+        WN_load_offset(wn) = offset;
+        WN_set_ty(wn,ty);
+        WN_set_load_addr_ty(wn,load_addr_ty);
+        WN_set_field_id(wn, field_id);
+        wn = WN_Cvt(desc, rtype, wn);
+        return wn;
+     }
+#endif
      wn = WN_CreateExp1(opr,rtype,desc,addr);
      WN_load_offset(wn) = offset;
      WN_set_ty(wn,ty);
@@ -1759,6 +1845,26 @@ WN_CreateLdid (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
 				 &St_Table [st] == Float64_Preg)),
 	     ("Preg offset 0 in WN_CreateLdid"));
 #endif /* FRONT_END */
+#ifdef TARG_NVISA
+    if ((MTYPE_byte_size(rtype) == 8 && MTYPE_byte_size(desc) == 4)
+     || (MTYPE_byte_size(rtype) == 4 && MTYPE_byte_size(desc) == 8))
+    {
+        // Rather than create I8I4LDID,
+        // create I8I4CVT(I4I4LDID).
+        // I8I4LDID can cause later problems with pregs,
+        // which have same rtype and desc, so wopt sometimes loses info
+        // about the implicit conversion, and we need explicit conversion
+        // because we use different registers for the two sizes,
+        DevWarn("insert cvt of ldid, %d %d", rtype, desc);
+        wn = WN_Create(opr,desc,desc,0);
+        WN_load_offset(wn) = offset;
+        WN_st_idx(wn) = st;
+        WN_set_ty(wn,ty);
+        WN_set_field_id(wn, field_id);
+        wn = WN_Cvt(desc, rtype, wn);
+        return wn;
+    }
+#endif
     wn = WN_Create(opr,rtype,desc,0);
     WN_load_offset(wn) = offset;
     WN_st_idx(wn) = st;
@@ -1840,18 +1946,19 @@ WN *WN_CreateIntconst(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, INT64 const_val
   Is_True(OPCODE_operator(opc) == OPR_INTCONST, 
 	 ("Bad opcode in WN_CreateIntconst")); 
   wn = WN_Create(opr,rtype,desc,0); 
-#ifndef TARG_X8664
   if (opc == OPC_U4INTCONST) {
+#ifndef TARG_X8664
 	/* make sure that 32-bit value is sign-extended */
 	UINT32 uval = const_val;
 	INT32 sval = uval;
   	WN_const_val(wn) = (INT64) sval;
+#else
+	/* bug 12869 make sure that high order 32 bits is zero */
+  	WN_const_val(wn) = const_val & 0x0ffffffffLL;
+#endif
   } else {
-#endif
   	WN_const_val(wn) = const_val;
-#ifndef TARG_X8664
   }
-#endif
 
   return(wn);
 }
@@ -1934,7 +2041,7 @@ WN *WN_CreateAsm_Input (char   *constraint_string,
   return wn;
 }
 
-WN *WN_CreateComment (char *s)
+WN *WN_CreateComment (const char *s)
 {
   WN *wn;
   wn = WN_Create(OPC_COMMENT,0);
@@ -1967,6 +2074,14 @@ WN *WN_CopyNode (const WN* src_wn)
 
     WN_Copy_u1u2 (wn, src_wn);
     WN_Copy_u3 (wn, src_wn);
+#if defined(TARG_SL)
+    //vbuf_offset
+    WN_Set_is_internal_mem_ofst(wn, WN_is_internal_mem_ofst(src_wn)); 
+    //fork_joint
+    WN_Set_is_compgoto_para(wn, WN_is_compgoto_para(src_wn));
+    WN_Set_is_compgoto_for_minor(wn, WN_is_compgoto_for_minor(src_wn));
+#endif 
+
     WN_set_field_id(wn, WN_field_id(src_wn));
 
     if (opcode == OPC_REGION && WN_ereg_supp(src_wn) != (INITO_IDX) 0) {
@@ -1982,49 +2097,12 @@ WN *WN_CopyNode (const WN* src_wn)
     if (WN_kid_count(src_wn) == 3)
       WN_kid(wn, 2) = WN_kid(src_wn, 2);
 #endif
+
+    // trace copy wn node here
+    Trace_Wn_Copy(wn, src_wn);
     return(wn);
 }
 
-#if 0
-/* no one uses this currently */
-void IPA_WN_Move_Maps (WN_MAP_TAB *maptab, WN *dst, WN *src)
-{
-  INT32 i;
-
-  /* if the opcodes are in the same category, just move the map_id */
-  if (OPCODE_mapcat(WN_opcode(dst)) == OPCODE_mapcat(WN_opcode(src))) {
-    if (WN_map_id(dst) != WN_MAP_UNDEFINED) WN_MAP_Add_Free_List(maptab, dst);
-    WN_map_id(dst) = WN_map_id(src);
-    WN_map_id(src) = WN_MAP_UNDEFINED;
-    return;
-  }
-
-  /* otherwise iterate through the mappings */
-  for (i = 0; i < WN_MAP_MAX; i++) { 
-    if (maptab->_is_used[i]) {
-      switch (maptab->_kind[i]) {
-      case WN_MAP_KIND_VOIDP: {
-	IPA_WN_MAP_Set(maptab, i, dst, IPA_WN_MAP_Get(maptab, i, src));
-	break;
-      }
-      case WN_MAP_KIND_INT32: {
-	IPA_WN_MAP32_Set(maptab, i, dst, IPA_WN_MAP32_Get(maptab, i, src));
-	break;
-      }
-      case WN_MAP_KIND_INT64: {
-	IPA_WN_MAP64_Set(maptab, i, dst, IPA_WN_MAP64_Get(maptab, i, src));
-	break;
-      }
-      default:
-	Is_True(FALSE, ("WN_Move_Maps: unknown map kind"));
-      }
-    }
-  }
-
-  WN_MAP_Add_Free_List(maptab, src);
-  WN_map_id(src) = WN_MAP_UNDEFINED;
-}
-#endif
 
 void IPA_WN_Move_Maps_PU (WN_MAP_TAB *src, WN_MAP_TAB *dst, WN *wn)
 {
@@ -2046,7 +2124,7 @@ void IPA_WN_Move_Maps_PU (WN_MAP_TAB *src, WN_MAP_TAB *dst, WN *wn)
      we start processing the child PU (Preopt and LNO are not run
      on the child again to recreate the maps so we save them here.) */
   for (i = 0; i < WN_MAP_MAX; i++) {
-    if (src->_is_used[i]) {
+    if (src->_is_used[i] && !WN_MAP_Get_dont_copy(i)) {
 
       if (!dst->_is_used[i]) { /* Create the destination */
         dst->_is_used[i] = TRUE;
@@ -2307,21 +2385,13 @@ WN *WN_Iload(TYPE_ID desc, WN_OFFSET offset, TY_IDX align, WN *addr,
 
 WN *
 WN_RIload (TYPE_ID rtype, TYPE_ID desc, WN_OFFSET offset, TY_IDX align,
-#ifndef KEY
-	   WN *addr)
-#else
            WN *addr, UINT field_id)
-#endif
 {
   TY_IDX palign;
   palign = Make_Pointer_Type(align);
 
-#ifndef KEY
-  return WN_CreateIload (OPR_ILOAD, rtype, desc, offset, align, palign, addr);
-#else
   return WN_CreateIload (OPR_ILOAD, rtype, desc, offset, align, palign, addr,
-                         field_id);
-#endif
+  			 field_id);
 }
 
 WN *
@@ -2479,6 +2549,15 @@ WN *WN_UVConst( TYPE_ID type)
   case MTYPE_C8:
   case MTYPE_C10:
   case MTYPE_CQ:
+#ifdef TARG_X8664
+  case MTYPE_V8I1:
+  case MTYPE_V8I2:
+  case MTYPE_M8I1:
+  case MTYPE_M8I2:
+  case MTYPE_V8I4:
+  case MTYPE_V8I8:
+  case MTYPE_M8I4:
+#endif
     return Make_Const (Host_To_Targ_UV(type));
   case MTYPE_STR:
   case MTYPE_M:
@@ -2826,6 +2905,12 @@ WN_Type_Conversion( WN *wn, TYPE_ID to_type )
   TYPE_ID from_type = WN_rtype(wn);
   BOOL from_flt,to_flt;		/* is type a floating type? */
 
+  //OSP_434
+  //special handling for vector intrinsic, CG expansion need to generated special
+  //instruction queue for this CVT, can't optimization this
+  if(MTYPE_is_vector(from_type))
+    return wn;
+
   /* quickie check of no-op */
   if ( from_type == to_type )
     return wn;
@@ -2916,7 +3001,7 @@ WN *WN_Istorex(TYPE_ID desc, TY_IDX ty, WN *value, WN *base, WN *index)
   return WN_CreateIstorex(OPR_ISTOREX, MTYPE_V, desc, ty, value, base, index);
 }
 
-WN *WN_LdaString(char *str, WN_OFFSET ldaOffset, INT32 len)
+WN *WN_LdaString(const char *str, WN_OFFSET ldaOffset, INT32 len)
 {
   TCON	tc;
   ST	*st;
@@ -3341,6 +3426,20 @@ WN_has_side_effects (const WN* wn)
   }
 } /* WN_has_side_effects */
 
+// Check whether given WHIRL is an executable statement.
+BOOL
+WN_is_executable(WN * wn)
+{
+  switch (WN_operator(wn)) {
+  case OPR_PRAGMA:
+  case OPR_LABEL:
+    break;
+  default:
+    return TRUE;
+  }
+
+  return FALSE;
+}
 
 WN *
 WN_Rrotate (TYPE_ID desc, WN *src, WN *cnt)
@@ -3348,3 +3447,144 @@ WN_Rrotate (TYPE_ID desc, WN *src, WN *cnt)
   Set_PU_has_very_high_whirl (Get_Current_PU ());
   return WN_CreateExp2 (OPR_RROTATE, Mtype_comparison (desc), desc, src, cnt);
 } /* WN_Rotate */
+
+#if !defined(FRONT_END_C)  &&  !defined(IR_TOOLS) && defined(TARG_SL)
+BOOL WN_Intrinsic_OP_Slave (WN *wn) {
+    if (WN_operator(wn) == OPR_INTRINSIC_OP) {
+	INTRINSIC ins = WN_intrinsic(wn);
+	 if (INTRN_is_slave(ins)) 
+	 	return TRUE;
+    }
+    return FALSE;	
+}
+#endif
+
+// Query whether wn represents a bit operation.
+BOOL
+WN_is_bit_op(WN * wn)
+{
+  switch (WN_operator(wn)) {
+  case OPR_BAND:
+  case OPR_BXOR:
+  case OPR_BNOT:
+  case OPR_BIOR:
+  case OPR_BNOR:
+    return TRUE;
+  default:
+    ;
+  }
+  return FALSE;
+}
+
+// Get bit position of the TRUE bit for an integer constant WHIRL if its value is a power of 2.
+// Return -1 if the value is not a power of 2.
+int
+WN_get_bit_from_const(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+  FmtAssert((opr == OPR_INTCONST), ("Expect an integer constant"));
+
+  INT64 val = WN_const_val(wn);
+  int count = 0;
+  int bit_pos = 0;
+  int bit_true;
+
+  while (val > 0) {
+    if ((val & 0x1) == 1) {
+      count++;
+      bit_true = bit_pos;
+    }
+      
+    val >>= 1;
+    bit_pos++;
+  }
+
+  if (count == 1)
+    return bit_true;
+
+  return -1;
+}
+
+// Get bit position of the TRUE bit for an integral expression if its value is a power of 2.
+// Return NULL if the value is not a power of 2 or if we can't tell.
+// This routine does not process constants. Use WN_get_bit_from_const for constants.
+WN *
+WN_get_bit_from_expr(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+  FmtAssert((opr != OPR_INTCONST), ("Do not expect an integer constant"));
+
+  if (opr == OPR_CVT) {
+    WN * wn_kid = WN_kid(wn, 0);
+    if (WN_operator(wn_kid) != OPR_INTCONST)
+      return WN_get_bit_from_expr(wn_kid);
+  }
+  else if (opr == OPR_SHL) {
+    WN * wn_tmp = WN_kid(wn, 0);
+
+    if ((WN_operator(wn_tmp) == OPR_INTCONST)
+	&& (WN_const_val(wn_tmp) == 1)) 
+      return WN_kid(wn, 1);
+  }
+
+  return NULL;
+}
+
+// Query whether wn has a value that is a power of 2.
+// Return FALSE if the value is not a power of 2 or if we can't tell.
+BOOL
+WN_is_power_of_2(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+
+  if (opr == OPR_INTCONST) {
+    if (WN_get_bit_from_const(wn) >= 0)
+      return TRUE;
+  }
+  else if (WN_get_bit_from_expr(wn)) 
+    return TRUE;
+
+  return FALSE;
+}
+
+// Match pattern:
+//  a = a  bit-op  ( 1 << b)
+// where bit-op is a bit operation.
+//
+// If matched, Return the RHS WHIRL tree "a bit-op ( 1 << b)",
+WN *
+WN_get_bit_reduction(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+
+  if (OPERATOR_is_store(opr)) {
+    WN * wn_data = WN_kid(wn, 0);
+    WN * wn_addr = NULL;
+
+    if (!OPERATOR_is_scalar_store(opr))
+      wn_addr = WN_kid(wn, 1);
+
+    if (WN_is_bit_op(wn_data)) {
+      WN * wn_tmp = WN_kid(wn_data, 0);
+      opr = WN_operator(wn_tmp);
+      
+      if (OPERATOR_is_load(opr)) {
+	if (!OPERATOR_is_scalar_load(opr)) {
+	  if (wn_addr && (WN_Simp_Compare_Trees(WN_kid(wn_tmp, 0), wn_addr) == 0)) {
+	    wn_tmp = WN_kid(wn_data, 1);
+	    if (wn_tmp && WN_is_power_of_2(wn_tmp))
+	      return wn_data;
+	  }
+	}
+	else if ((wn_addr == NULL) && (WN_st_idx(wn_tmp) == WN_st_idx(wn))
+		 && WN_offset(wn_tmp) == WN_offset(wn)) {
+	  wn_tmp = WN_kid(wn_data, 1);
+	  if (wn_tmp && WN_is_power_of_2(wn_tmp))
+	    return wn_data;
+	}
+      }
+    }
+  }
+  
+  return NULL;
+}

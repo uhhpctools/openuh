@@ -41,7 +41,9 @@
 #ifndef cgdwarf_INCLUDED
 #define cgdwarf_INCLUDED
 
-#include <libelf/libelf.h>
+#if ! defined(BUILD_OS_DARWIN)
+#include "libelf/libelf.h"
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include <libdwarf.h>
 #include "dwarf_DST_mem.h"
 
@@ -88,9 +90,9 @@ extern void Cg_Dwarf_Process_PU (Elf64_Word  scn_index,
 				 // ranges symbolically.
 				 INT        low_pc,
 				 INT        high_pc);
+#endif // TARG_X8664
 // To force a line number entry after the end of preamble in entry BB.
 extern BOOL Cg_Dwarf_First_Op_After_Preamble_End;
-#endif // TARG_X8664
 #ifdef KEY
 // To force a line number entry at the start op of every BB.
 extern BOOL Cg_Dwarf_BB_First_Op;

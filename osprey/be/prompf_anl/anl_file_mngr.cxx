@@ -39,7 +39,6 @@
 
 /* -*-Mode: c++;-*- (Tell emacs to use c++ mode) */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <errno.h>    // for sys_errlist
 #include <stdio.h>    // for put/get and print/read

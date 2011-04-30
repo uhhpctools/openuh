@@ -64,18 +64,21 @@ ARGV *current_ld_flags;
 ARGV *comma_list;
 UINT32 comma_list_byte_count = 0;
 
-#if defined(TARG_IA64) || defined(TARG_X8664)
+#if defined(TARG_IA64) || defined(TARG_X8664) || defined(TARG_MIPS) || defined(TARG_SL) || defined(TARG_LOONGSON)
 
-#ifdef TARG_X8664
+#ifdef TARG_LOONGSON
+#define LINKER_NAME "mips64el-n32-linux-gcc"
+#define LINKER_NAME_WITH_SLASH "/mips64el-n32-linux-gcc"
+#else
 #define LINKER_NAME "gcc"
 #define LINKER_NAME_WITH_SLASH "/gcc"
-#else  /* TARG_IA64 */
-#define LINKER_NAME "ld"
-#define LINKER_NAME_WITH_SLASH "/ld"
+#endif //TARG_LOONGSON
+
+#if defined(TARG_IA64)
 #define DYNAMIC_LINKER "-dynamic-linker /lib/ld-linux-ia64.so.2"
 #endif /* KEY */
 
-static char* concat_names(char* a , char* b)
+static char* concat_names(const char* a , const char* b)
 {
     char * buf;
     buf = (char *)malloc(strlen(a)+strlen(b)+1);
@@ -96,9 +99,20 @@ static bool file_exists(const char* path)
 }
 
 
-static char* get_linker_name(int argc, char** argv)
+static bool external_gcc_flag_exists(int argc, char** argv)
 {
-    char * toolroot = getenv("TOOLROOT");
+    int i;
+    for (i = 0; i < argc; i++)
+        if (strcmp(argv[i], "-external-gcc") == 0)
+            return true;
+
+    return false;
+}
+
+
+static const char* get_linker_name(int argc, char** argv)
+{
+    const char * toolroot = getenv("TOOLROOT");
     if (!toolroot) { toolroot = "" ; }
 
     char* linker_name;
@@ -106,10 +120,27 @@ static char* get_linker_name(int argc, char** argv)
 
     if (where_am_i) {
 	char *slash = strrchr (where_am_i, '/');
-	#ifdef PSC_TO_OPEN64
+
+        if (! external_gcc_flag_exists (argc, argv)) {
+
+            // Drop the last path component from COMPILER_BIN
+            int i = (int)(slash - where_am_i);
+            while (where_am_i[--i] != '/' && i > 0) ;
+
+            asprintf (&linker_name, "%.*s%s/%s", i, where_am_i, INTERNAL_GCC_BIN, LINKER_NAME);
+            if (file_exists (linker_name)) {
+                return linker_name;
+            }
+            free (linker_name);
+        }
+
+#if defined(VENDOR_PSC)
+	asprintf (&linker_name, "%.*s/../" PSC_TARGET "/bin/" LINKER_NAME,
+		  slash - where_am_i, where_am_i);
+#else
 	asprintf (&linker_name, "%.*s/../" OPEN64_TARGET "/bin/" LINKER_NAME,
-	#endif
 		  (int)(slash - where_am_i), where_am_i);
+#endif
 	if (file_exists (linker_name)) {
 	    return linker_name;
 	}
@@ -153,29 +184,8 @@ ipa_init_link_line (int argc, char** argv)
     comma_list = CXX_NEW (ARGV, Malloc_Mem_Pool);
 
     // Push the path and name of the final link tool
-#if defined(TARG_IA64) || defined(TARG_X8664)
+#if defined(TARG_IA64) || defined(TARG_X8664) || defined(TARG_MIPS) || defined(TARG_LOONGSON)
 
-#if 0
-    char *t_path = arg_vector[0];
-    char *t_name;
-    char *buf;
-    int len = strlen(t_path);
-    int i,new_len;
-    
-    t_name = t_path + (len-1);
-    for (i=0; i<len; i++,t_name--) {
-    	if (*t_name == '/')
-	    break;
-    }
-    new_len = len-i;
-    buf = (char *)malloc(strlen(LINKER_NAME)+new_len+1);
-    
-    strncpy(buf,t_path,new_len);
-    strcat(buf,LINKER_NAME);
-    ld_flags_part1->push_back (buf);
-    
-    free(buf);
-#endif
     ld_flags_part1->push_back (get_linker_name(arg_count, arg_vector));
 #if defined(TARG_IA64) && defined(CROSS_COMPILATION) 
     ld_flags_part1->push_back (DYNAMIC_LINKER);
@@ -199,6 +209,23 @@ ipa_add_link_flag (const char* str)
     current_ld_flags->push_back (str);
 } // ipa_add_link_flag
 
+void
+ipa_modify_link_flag (char* lname, char* fname)
+{
+  ARGV::iterator i;
+  for(i = ld_flags_part1->begin(); i != ld_flags_part1->end(); i++) {
+    if(!strcmp(lname, *i)) {
+      ld_flags_part1->erase(i);
+      ld_flags_part1->insert(i, fname);
+    }
+  }
+  for(i = ld_flags_part2->begin(); i != ld_flags_part2->end();i++) {
+    if(!strcmp(lname, *i)) {
+      ld_flags_part2->erase(i);
+      ld_flags_part2->insert(i, fname);
+    }
+  }
+} // ipa_modify_link_flag
 
 #ifdef KEY
 // Prepend "../" to name if it is a relative pathname.

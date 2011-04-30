@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -56,7 +60,11 @@ extern char *fb_type;          /* type for -fb_type */
 #ifdef KEY
 extern char *coco_setfile;  /* setfile for -fcoco */
 #endif
-
+#ifdef TARG_SL
+extern boolean ldscript_file;
+extern boolean Long_Long_Support;
+extern boolean Float_Point_Support;
+#endif
 extern char *global_toolroot;   /* TOOLROOT, get from $TOOLROOT or guess from arg[0] */
 extern char *ldpath_for_pixie;  /* Tell pixie where to find ld */
 extern int saved_argc;		/* original argc */
@@ -125,6 +133,7 @@ extern void init_phase_names (void);
 #ifdef KEY
 // Get the system GCC's major version number.
 extern int get_gcc_major_version(void);
+extern void init_frontend_phase_names(int, int);
 #endif
 
 #define PASS1 0

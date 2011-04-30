@@ -65,7 +65,7 @@ extern WN * cwh_intrin_op(INTRINSIC intr, INT16 numargs, WN ** k, WN **sz, BOOL 
 extern WN * cwh_intrin_wrap_ref_parm(WN *wa, TY_IDX  ty) ;
 extern WN * cwh_intrin_wrap_char_parm(WN *wa, WN *sz ) ;
 extern WN * cwh_intrin_wrap_value_parm(WN *wn) ;
-extern ST * cwh_intrin_make_intrinsic_symbol(char *name, TYPE_ID ty);
+extern ST * cwh_intrin_make_intrinsic_symbol(const char *name, TYPE_ID ty);
 
 #endif /* CWH_INTRIN_INCLUDED */
 

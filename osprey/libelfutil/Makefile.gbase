@@ -93,11 +93,18 @@ XLATEOBJECTS = $(XLATECFILES:.c=.o)
 LIBOBJECTS = \
 	$(XLATEOBJECTS)
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
+ endif
 endif
 
 last: make_libdeps

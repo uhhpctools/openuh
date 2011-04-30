@@ -615,7 +615,7 @@ static void Prompf_Tile_Split(WN* outer_tile_loop,
 static BOOL SNL_SPL_Split_Tile_Sets(WN* outer_tile_loop, 
 				    DOLOOP_STACK* inner_tile_stack,
 				    INT tile_size, 
-				    char prefix[], 
+				    const char prefix[], 
 				    BOOL cache_annotate) 
 { 
    ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph;
@@ -743,7 +743,7 @@ static BOOL SNL_SPL_Split_Tile_Sets(WN* outer_tile_loop,
 extern BOOL SNL_SPL_Split_Inner_Tile_Loop(WN* wn_outer, 
 					  WN* wn_inner,
 					  INT tile_size, 
-					  char prefix[],
+					  const char prefix[],
 					  BOOL cache_annotate) 
 {
   DOLOOP_STACK inner_do_stack(&LNO_local_pool); 
@@ -771,7 +771,7 @@ extern BOOL SNL_SPL_Split_Inner_Tile_Loop(WN* wn_outer,
 extern void SNL_SPL_Split_Inner_Tile_Loops(WN* wn_first, 
 					   WN* wn_last, 
 				           INT split_flag,
-					   char prefix[],
+					   const char prefix[],
 					   BOOL cache_annotate) 
 {
   WN* outer_tile_loop; 

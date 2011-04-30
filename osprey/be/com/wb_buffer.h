@@ -54,7 +54,7 @@ public:
   WB_BUFFER() { _buffer_start = 0; _buffer[0] = '\0'; } 
   void Reset_Buffer() { _buffer_start = 0; } 
   void Load_Buffer(); 
-  void Load_Buffer(char s[]); 
+  void Load_Buffer(const char s[]); 
   void Scan_Blanks_And_Tabs(); 
   void Skip_To_Separator(WB_SKIP_CLASS skip_type); 
   void Load_Loop(WN** wn_loop);

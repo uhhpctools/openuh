@@ -46,10 +46,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_grant.cxx,v $
+//  $Revision: 1.7 $
+//  $Date: 05/12/05 08:59:10-08:00 $
+//  $Author: bos@eng-24.pathscale.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_grant.cxx $
 
 #ifdef USE_PCH
 #include "cg_pch.h"
@@ -57,7 +57,7 @@
 #pragma hdrstop
 
 #ifdef _KEEP_RCS_ID
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_grant.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_grant.cxx $ $Revision: 1.7 $";
 #endif
 
 #include "tracing.h"
@@ -69,7 +69,9 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/
 #include "register.h"
 #include "gra_bb.h"
 #include "gra_trace.h"
-
+#ifdef TARG_SL2 //minor_reg_alloc
+#include "gra_para_region.h"
+#endif 
 
 MEM_POOL grant_pool;    // Just for grants
 BB_MAP grant_map;
@@ -215,24 +217,39 @@ GRA_GRANT_Local_Register( GRA_BB* gbb, ISA_REGISTER_CLASS rc, REGISTER reg )
      In the long run, it may not even be safe if changes are made to
      how Build_Dedicated_TN works. But it works for now!
   */
-#ifdef TARG_IA64
-  if (!GTN_SET_MemberP(BB_live_out(gbb->Bb()),Build_Dedicated_TN(rc, reg, 8))) {
-    GRA_Trace_Grant(gbb,rc,reg);
-    GRANT_Union1D(gr,rc,reg);
-  }
-#else
-#ifndef TARG_X8664
+#if !defined (TARG_X8664)
   if (!REGISTER_SET_MemberP(REGISTER_CLASS_function_value(rc), reg) ||
       !BB_call(gbb->Bb()) &&
       !GTN_SET_MemberP(BB_live_in (gbb->Bb()),Build_Dedicated_TN(rc, reg, 8)) ||
       !GTN_SET_MemberP(BB_live_out(gbb->Bb()),Build_Dedicated_TN(rc, reg, 8)))
+#else
+#if defined (TARG_SL)
+    if ((REGISTER_SET_MemberP(REGISTER_CLASS_function_value(rc), reg))) {
+      if (BB_call(gbb->Bb()))
+        if (GTN_SET_MemberP(BB_live_out(gbb->Bb()),Build_Dedicated_TN(rc, reg, 8)))
+          return;
+        else if (GTN_SET_MemberP(BB_live_in (gbb->Bb()),Build_Dedicated_TN(rc, reg, 8)))
+          return;
+    }
+    else
+#endif
 #endif
     {
-      GRA_Trace_Grant(gbb,rc,reg);
-      GRANT_Union1D(gr,rc,reg);
+	 GRA_Trace_Grant(gbb,rc,reg);
+         GRANT_Union1D(gr,rc,reg);
     }
-#endif // TARG_IA64
 }
+
+
+#ifdef TARG_SL2 //minor_reg_alloc
+/////////////////////////////////////
+void
+GRA_GRANT_REGISTER_SET_Set_For_BB( BB* bb, ISA_REGISTER_CLASS rc, REGISTER_SET reg_set )
+{
+  GRANT* gr = (GRANT*)BB_MAP_Get(grant_map, bb);
+  GRANT_REGISTER_SET_Set(gr,  rc,  reg_set);
+}
+#endif 
 
 /////////////////////////////////////
 REGISTER_SET
@@ -275,7 +292,16 @@ GRA_GRANT_Unused_Caller_Saved(void)
       free_regs = REGISTER_SET_Difference(REGISTER_CLASS_caller_saves(rc),
 					  gbb->Registers_Used(rc));
       FOR_ALL_REGISTER_SET_members(free_regs, reg) {
-	GRA_GRANT_Local_Register(gbb, rc, reg);
+#ifdef TARG_SL2 //minor_reg_alloc
+        if(BB_rid(gbb->Bb()) && RID_TYPE_minor(BB_rid(gbb->Bb()))) 
+        {
+          GRA_PARA_REGION* region  = gra_para_region_mgr.Get(BB_rid(gbb->Bb()));
+          if( !REGISTER_SET_Intersection1(region->Registers_Exclude(rc), reg)) 
+            GRA_GRANT_Local_Register(gbb, rc, reg);
+        }
+        else 
+#endif 
+          GRA_GRANT_Local_Register(gbb, rc, reg);
       }
     }
   }

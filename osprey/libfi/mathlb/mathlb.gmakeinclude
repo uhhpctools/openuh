@@ -36,7 +36,7 @@
 #
 
 IEMIPS =
-ifneq ($(BUILD_OS), LINUX)
+ifneq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 ifeq ($(BUILD_ARCH), MIPS3)
 IEMIPS =\
     ieee_mips.c
@@ -81,11 +81,12 @@ CFILES += \
     ieee_exponent_i2.c \
     ieee_exponent_n.c \
     ieee_exponent_r.c \
-    ieee_int.c 
-ifeq ($(BUILD_TARGET), X8664)
+    ieee_int.c \
+    ieee_next_after.c \
+    iso_c_binding_support.c
+ifneq ($(BUILD_TARGET), IA64)
 CFILES += \
-    ieee_module_support.c \
-    ieee_next_after.c 
+    ieee_module_support.c 
 endif
 CFILES += \
     ilen.c \
@@ -105,18 +106,16 @@ CFILES += \
     spacing.c \
     $(IEMIPS)
 
-ifeq ($(BUILD_TARGET), X8664)
 F90FILES += \
     ieee_features.F90 \
     ieee_arithmetic.F90 \
     ieee_exceptions.F90 \
+    iso_c_binding.F90 \
     iso_fortran_env.F90
-endif
 
 SRC_DIRS += \
    $(BUILD_TOT)/libfi/mathlb
 
-ifeq ($(BUILD_TARGET), X8664)
 # We're assuming that any .F90 module in this directory is supposed to be
 # an "intrinsic module" (in the F2003 sense of the term.) If not, this option
 # should be used only for such modules (e.g. ieee_arithmetic, ieee_exceptions,
@@ -132,11 +131,12 @@ gen_ieee_cpp_macros.o: gen_ieee_cpp_macros.c
 
 ieee_cpp_macros.h: gen_ieee_cpp_macros
 	./gen_ieee_cpp_macros > ieee_cpp_macros.h
-	rm -f ./gen_ieee_cpp_macros
 
 ieee_exceptions.o ieee_arithmetic.o iso_fortran_env.o: ieee_cpp_macros.h
+ieee_exceptions.pg.o ieee_arithmetic.pg.o iso_fortran_env.pg.o: ieee_cpp_macros.h
+ieee_exceptions.pic.o ieee_arithmetic.pic.o iso_fortran_env.pic.o: ieee_cpp_macros.h
 
 LF77INCS += -I$(BUILD_AREA)/libfortran
 
-LDIRT = ieee_cpp_macros.h $(XMATHLBDIRT)
-endif
+LDIRT = ieee_cpp_macros.h gen_ieee_cpp_macros *.mod $(XMATHLBDIRT)
+

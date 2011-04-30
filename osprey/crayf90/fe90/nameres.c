@@ -218,6 +218,14 @@ boolean	fnd_semantic_err(obj_type	new_obj,
             msg_str = dir_str[Dir_Auxiliary];
             goto ISSUE_ERR;
          }
+#ifdef KEY /* Bug 14150 */
+         if (AT_BIND_ATTR(attr_idx) && 
+                  (attr_obj_ntry & (1 << Attr_Bind))) {
+            msg_num = attr_msg_num[new_obj][Attr_Bind];
+            msg_str = attr_str[Attr_Bind];
+            goto ISSUE_ERR;
+         }
+#endif /* KEY Bug 14150 */
          break;
 
       case Variable:
@@ -225,11 +233,23 @@ boolean	fnd_semantic_err(obj_type	new_obj,
          /* Only a variable can be data initialized, equivalenced, */
          /*      in a common block,  in auxiliary or saved.        */
 
-# if 0
-
-         if (name_obj_ntry & (1 << Name_Variable))) {
-            msg_num = name_msg_num[new_obj][Name_Variable];
-            msg_str = name_str[Name_Variable];
+#ifdef KEY /* Bug 14150 */
+         if (AT_BIND_ATTR(attr_idx) && 
+                  (attr_obj_ntry & (1 << Attr_Bind))) {
+            msg_num = attr_msg_num[new_obj][Attr_Bind];
+            msg_str = attr_str[Attr_Bind];
+            goto ISSUE_ERR;
+         }
+	 /* Special case: we need to check bind attr on common block itself
+	  * versus equivalence att on common block object; we need to force
+	  * the message to cite "equivalence vs bind" even if the
+	  * characteristic now being added is "common" */
+	 if ((ATD_EQUIV(attr_idx) || new_obj == Obj_Equiv) &&
+	   (ATD_IN_COMMON(attr_idx) || new_obj == Obj_Common_Obj) &&
+	   (SB_BIND_ATTR(ATD_STOR_BLK_IDX(attr_idx)))) {
+	   msg_num = 550;
+	   new_obj = Obj_Equiv;
+	   msg_str = attr_str[Attr_Bind];
             goto ISSUE_ERR;
          }
 # endif
@@ -336,6 +356,22 @@ boolean	fnd_semantic_err(obj_type	new_obj,
             msg_num = other_msg_num[new_obj][Other_Use_Dummy_Arg];
             goto ISSUE_ERR;
          }
+#ifdef KEY /* Bug 14150 */
+	 /* No evident way to issue Ansi instead of Error via tables */
+	 else if (on_off_flags.issue_ansi_messages &&
+	   ((ATD_INTENT(attr_idx) != Intent_Unseen && new_obj == Obj_Pointer) ||
+	   (ATD_POINTER(attr_idx) && new_obj == Obj_Intent))) {
+	   
+	   PRINTMSG(line, 1697, Ansi, column, AT_OBJ_NAME_PTR(attr_idx),
+	     obj_str[Obj_Pointer], obj_str[Obj_Intent], AT_DEF_LINE(attr_idx));
+	 }
+	 else if (ATD_VALUE_ATTR(attr_idx) &&
+	    (attr_obj_ntry & (1 << Attr_Value))) {
+	    msg_num = attr_msg_num[new_obj][Attr_Value];
+	    msg_str = attr_str[Attr_Value];
+	    goto ISSUE_ERR;
+	 }
+#endif /* KEY Bug 14150 */
          break;	/* End Dummy_Arg case */
 
       case Function_Result:
@@ -627,6 +663,15 @@ boolean	fnd_semantic_err(obj_type	new_obj,
 
 
    case Pgm_Unit:
+
+#ifdef KEY /* Bug 14150 */
+     if (AT_BIND_ATTR(attr_idx) && 
+	      (attr_obj_ntry & (1 << Attr_Bind))) {
+	msg_num = attr_msg_num[new_obj][Attr_Bind];
+	msg_str = attr_str[Attr_Bind];
+	goto ISSUE_ERR;
+      }
+#endif /* KEY Bug 14150 */
 
       switch (ATP_PGM_UNIT(attr_idx)) {
       case Program:
@@ -1083,10 +1128,6 @@ boolean	fnd_semantic_err(obj_type	new_obj,
             break;
 # ifdef _DEBUG
          default:
-# if 0
-            PRINTMSG(line, 257, Internal, column,
-                     ATP_PROC(attr_idx), "ATP_PROC");
-# endif
             break;
 # endif
          }        /* End switch */
@@ -1145,6 +1186,14 @@ boolean	fnd_semantic_err(obj_type	new_obj,
          msg_str = name_str[Name_Derived_Type];
          goto ISSUE_ERR;
       }
+#ifdef KEY /* Bug 14150 */
+      if (AT_BIND_ATTR(attr_idx) && 
+	       (attr_obj_ntry & (1 << Attr_Bind))) {
+	 msg_num = attr_msg_num[new_obj][Attr_Bind];
+	 msg_str = attr_str[Attr_Bind];
+	 goto ISSUE_ERR;
+      }
+#endif /* KEY Bug 14150 */
       break;
 
    case Interface:

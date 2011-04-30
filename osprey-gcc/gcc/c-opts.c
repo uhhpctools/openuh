@@ -261,7 +261,17 @@ c_common_handle_option (size_t scode, const char *arg, int value)
       result = 0;
       break;
 
-    case OPT__output_pch_:
+#ifdef TARG_SL
+    case OPT_msoft_float:
+      Float_Point_Support = true;
+      break;
+		
+    case OPT_mlong_long:
+      Long_Long_Support = true;
+      break;
+#endif
+    
+		case OPT__output_pch_:
       pch_file = arg;
       break;
 

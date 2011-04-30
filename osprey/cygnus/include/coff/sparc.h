@@ -63,14 +63,6 @@ struct external_syment
       char e_zeroes[4];
       char e_offset[4];
     } e;
-#if 0 /* of doubtful value */
-    char e_nptr[2][4];
-    struct {
-      char e_leading_zero[1];
-      char e_dbx_type[1];
-      char e_dbx_desc[2];
-    } e_dbx;
-#endif
   } e;
 
   char e_value[4];

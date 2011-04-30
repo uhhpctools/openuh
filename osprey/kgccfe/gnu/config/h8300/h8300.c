@@ -1185,11 +1185,7 @@ print_operand (file, x, code)
 	  switch (GET_MODE (x))
 	    {
 	    case QImode:
-#if 0 /* Is it asm ("mov.b %0,r2l", ...) */
-	      fprintf (file, "%s", byte_reg (x, 0));
-#else /* ... or is it asm ("mov.b %0l,r2l", ...) */
 	      fprintf (file, "%s", names_big[REGNO (x)]);
-#endif
 	      break;
 	    case HImode:
 	      fprintf (file, "%s", names_big[REGNO (x)]);

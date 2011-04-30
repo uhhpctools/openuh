@@ -1,9 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,7 +37,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -176,7 +171,7 @@ static WN* Parallel_Loop(PARALLEL_INFO* parallel_info,
 static void ap_tlog_info(
   PARALLEL_INFO* parallel_info,
   DOLOOP_STACK* loop_stack,
-  char*         message)
+  const char* message)
 {
   char out_string[80];
   WN* wn_parallel = Parallel_Loop(parallel_info, loop_stack); 
@@ -188,7 +183,7 @@ static void ap_tlog_info(
   INT required_length = strlen(WB_Whirl_Symbol(wn_parallel)) + 13; 
   char* in_string = CXX_NEW_ARRAY(char, required_length, &LNO_local_pool);
   sprintf(in_string, "%s %d ", 
-    WB_Whirl_Symbol(wn_parallel), (INT) WN_linenum(wn_parallel)); 
+    WB_Whirl_Symbol(wn_parallel), Srcpos_To_Line(WN_linenum(wn_parallel))); 
   for (INT i = 0; i < parallel_info->Nloops(); i++) {
     sprintf(&out_string[5*i], "%2d%2s", parallel_info->Permutation(i), 
       parallel_info->Parallel_Depth() == i + outer_depth ?
@@ -233,9 +228,9 @@ static void Mark_Parallelizable_Loop(WN* wn_outer,
   DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn_parallel); 
   if (!dli->Parallelizable && parallel_debug_level >= 1) {
     fprintf(stdout, "Loop %s at %d is parallelizable\n", 
-      WB_Whirl_Symbol(wn_parallel), (INT) WN_linenum(wn_parallel)); 
+      WB_Whirl_Symbol(wn_parallel), Srcpos_To_Line(WN_linenum(wn_parallel))); 
     fprintf(TFile, "Loop %s at %d is parallelizable\n", 
-      WB_Whirl_Symbol(wn_parallel), (INT) WN_linenum(wn_parallel)); 
+      WB_Whirl_Symbol(wn_parallel), Srcpos_To_Line(WN_linenum(wn_parallel))); 
   } 
   dli->Parallelizable = TRUE; 
 } 
@@ -1633,8 +1628,12 @@ static BOOL* Scl_Dep_Info(WN* wn_outer,
       continue; 
     for (WN* wn = wn_scalar; wn != NULL; wn = LWN_Get_Parent(wn)) {
       if (WN_opcode(wn) == OPC_DO_LOOP) {
-	DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn);	  
-	if (dli->ARA_Info->Is_Problem_Scalar(wn_scalar)) 
+	DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn);
+#ifdef KEY //bug 12049: we are only interested in the chunk of 'nloops' 
+           //loops with wn_outer as the outermost
+        if(dli->Depth  < outer_depth + nloops)
+#endif	  
+	if (dli->ARA_Info->Is_Problem_Scalar(wn_scalar))
 	  scl_list[dli->Depth - outer_depth] = TRUE; 
       }
       if (wn == wn_outer)
@@ -1683,7 +1682,7 @@ static void Print_Parallel_Loop(FILE* fp,
   INT inner_depth = loop_stack->Elements() - 1; 
   INT outer_depth = inner_depth - nloops + 1; 
   fprintf(fp, "Auto Parallelizing Loop %s at %d ", 
-    WB_Whirl_Symbol(wn_parallel), (INT) WN_linenum(wn_parallel)); 
+    WB_Whirl_Symbol(wn_parallel), Srcpos_To_Line(WN_linenum(wn_parallel))); 
   fprintf(fp, "using (");
   for (INT i = 0; i < parallel_info->Nloops(); i++) {
     fprintf(fp, "%d%s", parallel_info->Permutation(i), 
@@ -1979,7 +1978,7 @@ static void SNL_Auto_Parallelization(WN* wn_outer,
 	&work_estimate, TRUE); 
       if (work_estimate == 0.0) 
         DevWarn("Work Estimate for loop %s at %d is 0", 
-          WB_Whirl_Symbol(wn_new_outer), (INT) WN_linenum(wn_new_outer));
+          WB_Whirl_Symbol(wn_new_outer), Srcpos_To_Line(WN_linenum(wn_new_outer)));
       min_parallel_cycles = SNL_Min_Parallel_Overhead_Cost(wn_new_outer, 
 	new_nloops, i);
       if (!par_pref && machine_cycles + min_parallel_cycles >= pi_best->Cost())
@@ -2083,7 +2082,7 @@ static void Check_Suggested_Parallel(WN* wn_tree)
     DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn_tree); 
     if (dli->Suggested_Parallel && !Do_Loop_Is_Mp(wn_tree))
       DevWarn("Did NOT auto-parallelize suggested loop %s at %d", 
-        WB_Whirl_Symbol(wn_tree), (INT) WN_linenum(wn_tree));
+        WB_Whirl_Symbol(wn_tree), Srcpos_To_Line(WN_linenum(wn_tree)));
   }
 
   if (WN_opcode(wn_tree) == OPC_BLOCK) {

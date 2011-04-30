@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: log.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/log.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.log.c $
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/log.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.log.c $ $Revision: 1.5 $";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -79,7 +79,13 @@ extern	double	log(double);
 #pragma weak log = __log
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __log(double);
+#pragma weak log
+double log( double x ) {
+  return __log( x );
+}
+#elif defined(__GNUC__)
 extern  double  __log(double);
 
 double    log() __attribute__ ((weak, alias ("__log")));
@@ -434,7 +440,12 @@ zeroarg:
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern  long double  __logl(long double);
+long double logl( long double x ) {	
+  return ( (long double)__log((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __logl(long double);
 
 long double    logl() __attribute__ ((weak, alias ("__logl")));

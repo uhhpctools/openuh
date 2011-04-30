@@ -59,7 +59,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
@@ -199,7 +199,7 @@ fei_add_use_path(INTPTR st_idx,INT32 path_idx,INT32 module_idx)
 }
 
 
-static void makedepend_error(char *fmt, ...)
+static void makedepend_error(const char *fmt, ...)
 {
     static char makedepend_errbuf[400];
     va_list ap;

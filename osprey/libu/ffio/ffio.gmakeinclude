@@ -40,7 +40,7 @@
 # architectures, update only ffio.mh. 
 #
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 FFIONLE = \
     evntlistio.c
 

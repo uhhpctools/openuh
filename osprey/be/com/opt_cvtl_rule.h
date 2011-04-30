@@ -38,10 +38,10 @@
  * ====================================================================
  *
  * Module: opt_wn.h
- * $Revision$
- * $Date$
- * $Author$
- * $Source$
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:38-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_cvtl_rule.h $
  *
  * Description:  interface for CVTL rules
  *

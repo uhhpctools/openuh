@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -90,6 +94,42 @@ static char *rcs_id = 	opt_bb_CXX"$Revision: 1.1.1.1 $";
 #include "opt_base.h"
 #include "bb_node_set.h"
 #include "idx_32_set.h"
+#include "wn_simp.h"
+
+BB_LOOP::BB_LOOP (WN *index, BB_NODE *start, BB_NODE *end,
+	              BB_NODE *body, BB_NODE *step, BB_NODE *merge) { 
+  _child = NULL;
+  _parent = NULL;
+  _loopstmt = NULL;
+  _index = index;
+  _u1._start = start;
+  _end = end;
+  _body = body;
+  _step = step;
+  _u2._merge = merge;
+  _body_set = NULL;
+  _true_body_set = NULL;
+  _trip_count_stmt = NULL;
+  _trip_count_expr = NULL;
+  _entry_test = NULL;
+  _wn_trip_count = NULL;
+  _iv = NULL;
+  _iv_replacement = NULL;
+  _lftr_non_candidates = NULL;
+  _flags = LOOP_EMPTY;
+  _orig_wn = NULL;
+  _promoted_do = FALSE;
+  has_entry_guard = FALSE;
+  well_formed = FALSE;
+  _valid_doloop = TRUE;
+  header = NULL;
+  _size_estimate = 0;  
+
+  header = tail = preheader = loopback = NULL;
+  header_pred_count = -1;
+  preheader_pred_num = -1;
+  max_depth = depth = -1;
+}
 
 BB_LOOP*
 BB_LOOP::Append (BB_LOOP *loop)
@@ -285,7 +325,7 @@ BB_NODE::Falls_thru_to(void) const
     }
   }
   else {
-    if (!Can_fallthru(WN_opcode(Laststmt()))) {
+    if (Laststmt() && !Can_fallthru(WN_opcode(Laststmt()))) {
       return NULL;
     }
   }
@@ -336,6 +376,16 @@ BB_NODE::Nth_pred( INT32 n ) const
   return NULL;
 }
 
+// Return the last successor.
+BB_NODE *
+BB_NODE::Last_succ()
+{
+  BB_NODE * last_succ = NULL;
+  for ( BB_LIST *succs = Succ(); succs != NULL; succs = succs->Next()) {
+    last_succ = succs->Node();
+  }
+  return last_succ;
+}
 
 BB_NODE *
 BB_NODE::Nth_succ( INT32 n ) const
@@ -365,6 +415,50 @@ BB_NODE::Remove_phi_reference( INT32 whichpred )
 {
   if (Phi_list() != NULL)
     Phi_list()->Remove_opnd( whichpred );
+}
+
+// ====================================================================
+// Has_valid_phi - if bb has valid phi node
+// ====================================================================
+BOOL
+BB_NODE::Has_valid_phi()
+{
+  PHI_LIST_ITER phi_iter;
+  PHI_NODE *pnode;
+
+  if (_phi_list == NULL) {
+    return FALSE;
+  }
+
+  FOR_ALL_NODE(pnode, phi_iter, Init(_phi_list)){
+    if (pnode->Live()) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+// ====================================================================
+// Only_fall_through_phi - all BB's valid phi node has only one opnd
+// ====================================================================
+BOOL         
+BB_NODE::Only_fall_through_phi()
+{
+  PHI_LIST_ITER phi_iter;
+  PHI_NODE *pnode;
+  BOOL all_one_opnd = TRUE;
+
+  if (_phi_list == NULL) {
+    return FALSE;
+  }
+
+  FOR_ALL_NODE(pnode, phi_iter, Init(_phi_list)){
+    if (pnode->Live() && pnode->Size() > 1) {
+      all_one_opnd = FALSE;
+      break;
+    }
+  }
+  return all_one_opnd;
 }
 
 // ====================================================================
@@ -403,6 +497,8 @@ BB_NODE::Clear()
   _loop = NULL;
   _hi._ifinfo = NULL;
   Set_exp_phi(NULL);
+  _layout_id= 0;
+  _rid = NULL;
 }
 
 // ====================================================================
@@ -456,6 +552,8 @@ BB_NODE::BB_NODE(const BB_NODE& old)
   _u12 = old._u12;
   _u13 = old._u13;
   Set_exp_phi(NULL);
+  _layout_id = old._layout_id;
+  _rid = old._rid;
 }
 
 
@@ -570,7 +668,8 @@ BB_NODE::Append_stmtrep(STMTREP *stmt)
 void
 BB_NODE::Prepend_stmtrep(STMTREP *stmt)
 {
-  Is_True(Kind() != BB_REGIONSTART && Kind() != BB_ENTRY,
+  Is_True((Kind() != BB_REGIONSTART && Kind() != BB_ENTRY) ||
+    (Kind() == BB_REGIONSTART && stmt->Op() == OPC_LABEL), 
 	  ("BB_NODE::Prepend_stmtrep(), inserting into a %s (bb:%d)",
 	   Kind_name(), Id()));
 
@@ -593,7 +692,8 @@ BB_NODE::Prepend_stmtrep(STMTREP *stmt)
 void
 BB_NODE::Insert_stmtrep_before(STMTREP *stmt, STMTREP *before_stmt)
 {
-  Is_True(Kind() != BB_REGIONSTART && Kind() != BB_ENTRY,
+  Is_True((Kind() != BB_REGIONSTART && Kind() != BB_ENTRY) ||
+    (Kind() == BB_REGIONSTART && stmt->Op() == OPC_LABEL),
 	  ("BB_NODE::Insert_stmtrep(), inserting into a %s",Kind_name()));
 
   STMTREP_ITER stmtrep_iter(&_stmtlist);
@@ -633,6 +733,7 @@ BB_NODE::Remove_stmtrep( STMTREP *stmt )
   }
 
   _stmtlist.Remove(stmt);
+  stmt->Reset_live_stmt();  // WHIRL SSA: mark stmt dead
 }
 
 //====================================================================
@@ -781,6 +882,19 @@ BB_NODE::Branch_wn(void) const
   return ( NULL );
 }
 
+// Query whether this BB_NODE ends with a branch WN targetting at the given bb.
+
+BOOL
+BB_NODE::Is_branch_to(BB_NODE * bb)
+{
+  WN * branch_wn = Branch_wn();
+  
+  if (branch_wn && WN_label_number(branch_wn) 
+      && (WN_label_number(branch_wn) == bb->Labnam()))
+    return TRUE;
+
+  return FALSE;
+}
 
 // ====================================================================
 // Label_wn - determine if this block has a LABEL statement
@@ -1007,7 +1121,8 @@ BB_NODE::Is_empty()
 }
 
 BOOL
-BB_NODE::Clonable(BOOL allow_loop_cloning, const BVECTOR *cr_vol_map)
+BB_NODE::Clonable(BOOL allow_loop_cloning, const BVECTOR *cr_vol_map, 
+                  BOOL allow_clone_calls)
 {
   // Note that we ignore the volatile attributes of codereps if 
   // cr_vol_map==NULL.
@@ -1030,6 +1145,9 @@ BB_NODE::Clonable(BOOL allow_loop_cloning, const BVECTOR *cr_vol_map)
   case BB_REPEATEND:
     if (!allow_loop_cloning) return FALSE;
   }
+
+  if (Regionend()) return FALSE;
+
   if (Loop() && Loop()->Header()==this)
     if (!allow_loop_cloning) return FALSE;
 
@@ -1057,7 +1175,11 @@ BB_NODE::Clonable(BOOL allow_loop_cloning, const BVECTOR *cr_vol_map)
     OPERATOR opr = OPCODE_operator(stmt->Op());
     if (opr == OPR_PREFETCH) return FALSE;  // prefetch map contains back pointer
     if (opr == OPR_REGION) return FALSE;    // black box region -- very difficult to clone
-    if (OPERATOR_is_volatile(opr)) return FALSE;
+    if (OPERATOR_is_volatile(opr)) {
+      if (!OPERATOR_is_call (opr) || !allow_clone_calls) {
+        return FALSE;
+      }
+    }
     if (cr_vol_map != NULL &&
 	stmt->Contains_volatile_ref(*cr_vol_map)) return FALSE;
     // The followings are represented by volatile operator
@@ -1071,6 +1193,33 @@ BB_NODE::Clonable(BOOL allow_loop_cloning, const BVECTOR *cr_vol_map)
 
   return TRUE;
 }
+
+#if defined(TARG_SL)
+BOOL
+BB_NODE::Preds_or_succs_from_different_region(BOOL pred)
+{
+  BB_LIST_ITER bb_iter;
+  BB_LIST* bb_list;
+  BB_NODE *bb;
+  vector <mUINT16 >rid_stack;
+
+  rid_stack.clear();
+
+  bb_list = (pred) ? this->Pred() : this->Succ();
+
+  FOR_ALL_ELEM(bb, bb_iter, Init(bb_list)) {
+    if(find(rid_stack.begin(), rid_stack.end(), bb->Rid_id()) == rid_stack.end())
+      rid_stack.push_back(bb->Rid_id());
+  }
+
+  if(rid_stack.size() > 1)
+    return TRUE;
+  else
+     return FALSE;
+
+}
+#endif
+
 
 
 // ====================================================================
@@ -1097,7 +1246,10 @@ BB_LOOP::Print(FILE *fp) const
     fprintf(fp, "not a well-formed loop\n");
   if (End() != NULL) {
     fprintf(fp, "SCF: START %d, END %d, BODY %d, MERGE %d\n",
-	    Start()->Id(), End()->Id(), Body()->Id(), Merge()->Id());
+	    Start() ? Start()->Id() : 0,
+        End() ? End()->Id() : 0, 
+        Body() ? Body()->Id() : 0 , 
+        Merge() ? Merge()->Id() : 0);
   }
 
   BOOL in_mainopt = Start() && Start()->Kind() == BB_DOHEAD;
@@ -1190,6 +1342,12 @@ BB_NODE::Print_head (FILE *fp) const
     fprintf(fp, "Fallthrough: %d\n", Falls_thru_to()->Id());
   }
 
+  if (Next())
+    fprintf(fp, "Next  :  BB%d\n", Next()->Id());
+
+  if (Prev())
+    fprintf(fp, "Prev  :  BB%d\n", Prev()->Id());
+
   if (Idom())
     fprintf(fp, "Idom  : BB%d\n", Idom()->Id() );
   if (Ipdom())
@@ -1253,6 +1411,32 @@ BB_NODE::Print (FILE *fp) const
 }
 
 void
+BB_NODE::PrintVis (void) const
+{
+  BB_LIST_ITER bb_succ_iter(Succ());
+  BB_NODE *succ;
+  WN * wn;
+
+#ifdef TARG_NVISA
+  // mark the blocks with __synchthreads as red
+  STMT_ITER stmt_iter;
+  FOR_ALL_ELEM(wn, stmt_iter, Init(Firststmt(), Laststmt())) {
+    INTRINSIC id;
+    if (WN_operator(wn) == OPR_INTRINSIC_CALL) {
+      id = WN_intrinsic(wn);
+      if (id == INTRN_SYNCHRONIZE) {
+	fprintf(stdout, "BB%d[color=red]\n", Id());
+	break;
+      }
+    }
+  }
+#endif
+  FOR_ALL_ELEM(succ, bb_succ_iter, Init()) {
+    fprintf(stdout, "  BB%d -> BB%d\n", Id(), succ->Id());
+  }
+}
+
+void
 BB_NODE::Print_ssa (FILE *fp) const
 {
   // only print the ssa representation of the code
@@ -1268,15 +1452,204 @@ INT32 BB_NODE::Code_size_est(void) const
   STMTREP_CONST_ITER stmt_iter(&_stmtlist);
   const STMTREP *stmt;
   INT32 size = 0;
+
+  INT32 mm_count = 0;
+  INT32 sl_count = 0;
+
   FOR_ALL_NODE(stmt, stmt_iter, Init()) {
     size++;
     if (OPERATOR_is_call(stmt->Opr()))
       size += 10;
-    else if (stmt->Opr() == OPR_ISTORE) {
-      if (stmt->Rhs()->Kind() == CK_OP && stmt->Rhs()->Opr() == OPR_SELECT)
-        size += 19;
+    else if (stmt->Opr() == OPR_ISTORE)
+    {
+      CODEREP *rhs = stmt->Rhs();
+      INT32 cf = 0;
+      INT32 c_minmax = 0;
+      switch (rhs->Kind())
+      {
+        case CK_OP:
+          if (stmt->Rhs()->Opr() == OPR_SELECT)
+          {
+             cf = 1;
+             sl_count += 1;
+          } 
+          c_minmax = stmt->Rhs()->Count_MinMax();
+          break;
+
+        case CK_IVAR:
+          c_minmax = stmt->Rhs()->Count_MinMax();
+          break;
+
+        default:
+          continue;
+      }
+      if (c_minmax > 0)
+      {
+        cf += c_minmax;
+        mm_count += c_minmax;
+      }
+      size += cf*19 + c_minmax;
+    }     
+  }         
+  return size;
+}
+
+// query whether this BB_NODE dominates every node in the SC tree rooted at sc.
+BOOL 
+BB_NODE::Is_dom(SC_NODE * sc)
+{
+  BB_NODE * tmp = sc->Get_bb_rep();
+
+  if ((tmp != NULL) && !this->Dominates(tmp))
+    return FALSE;
+  
+  BB_LIST * bb_list = sc->Get_bbs();
+
+  if (bb_list != NULL) {
+    BB_LIST_ITER bb_list_iter(bb_list);
+    BB_NODE * tmp;
+    
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init()) {
+      if (!this->Dominates(tmp))
+	return FALSE;
     }
   }
-  return size;
+
+  SC_LIST * kids = sc->Kids();
+
+  if (kids != NULL) {
+    SC_LIST_ITER sc_list_iter(kids);
+    SC_NODE *tmp;
+    FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
+      if (!this->Is_dom(tmp))
+	return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+// query whether this BB_NODE post-dominates every node in the SC tree rooted at sc.
+
+BOOL
+BB_NODE::Is_postdom(SC_NODE * sc)
+{
+  BB_NODE * tmp = sc->Get_bb_rep();
+
+  if ((tmp != NULL) && !this->Postdominates(tmp))
+    return FALSE;
+  
+  BB_LIST * bb_list = sc->Get_bbs();
+
+  if (bb_list != NULL) {
+    BB_LIST_ITER bb_list_iter(bb_list);
+    BB_NODE * tmp;
+    
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init()) {
+      if (!this->Postdominates(tmp))
+	return FALSE;
+    }
+  }
+
+  SC_LIST * kids = sc->Kids();
+
+  if (kids != NULL) {
+    SC_LIST_ITER sc_list_iter(kids);
+    SC_NODE *tmp;
+    FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
+      if (!this->Is_postdom(tmp))
+	return FALSE;
+    }
+  }
+  return TRUE;
+
+}
+
+// Query whether every WN statement in this BB_NODE and given BB_NODE
+// are identical.
+
+BOOL
+BB_NODE::Compare_Trees(BB_NODE * bb)
+{
+  WN * stmt1 = Firststmt();
+  WN * stmt2 = bb->Firststmt();
+
+  while (stmt1 && stmt2) {
+    OPERATOR opr = WN_operator(stmt1);
+
+    if (opr != WN_operator(stmt2))
+      return FALSE;
+
+    if ((opr == OPR_FALSEBR) || (opr == OPR_TRUEBR)) {
+      if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+	return FALSE;
+    }
+    else if ((opr != OPR_LABEL) && (opr != OPR_PRAGMA)
+	     && WN_Simp_Compare_Trees(stmt1, stmt2) != 0)
+      return FALSE;      
+
+    stmt1 = WN_next(stmt1);
+    stmt2 = WN_next(stmt2);
+  }
+
+  if ((stmt1 != NULL) || (stmt2 != NULL))
+    return FALSE;
+
+  return TRUE;
+}
+
+// Count number of executable statements in this BB_NODE.
+int
+BB_NODE::Executable_stmt_count()
+{
+  WN * tmp;
+  int count = 0;
+
+  for (tmp = Firststmt(); tmp != NULL; tmp = WN_next(tmp)) {
+    if (WN_is_executable(tmp))
+      count++;
+
+    if (tmp == Laststmt())
+      break;
+  }
+
+  return count;
+}
+
+// Remove predecessors.
+void
+BB_NODE::Remove_preds(MEM_POOL * pool)
+{
+  BB_LIST * bb_list = _pred;
+  while (bb_list) {
+    BB_NODE * bb = bb_list->Node();
+    bb_list = bb_list->Remove(bb, pool);
+  }
+  _pred = NULL;
+}
+
+// Remove succcessors.
+void
+BB_NODE::Remove_succs(MEM_POOL * pool)
+{
+  BB_LIST * bb_list = _succ;
+  while (bb_list) {
+    BB_NODE * bb = bb_list->Node();
+    bb_list = bb_list->Remove(bb, pool);
+  }
+  _succ = NULL;
+}
+
+// Return the first executable statement in this BB_NODE.
+WN *
+BB_NODE::First_executable_stmt(void)
+{
+  WN * wn;
+  STMT_ITER stmt_iter;
+  FOR_ALL_ELEM (wn, stmt_iter, Init(this->Firststmt(), this->Laststmt())) {
+    if (WN_is_executable(wn))
+      return wn;
+  }
+
+  return NULL;
 }
 

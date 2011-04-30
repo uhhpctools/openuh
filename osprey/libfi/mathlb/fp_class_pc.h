@@ -102,7 +102,15 @@
 #define IEEE_64_MANT_BTS2 32
 
 #define IEEE_32_EXPO_BITS 8
+#ifdef KEY /* Bug 11640 */
+/* The IEEE 32-bit exponent occupies 8 bits, so the largest value is 0xff; the
+ * value 0x7f8 causes an impossible-comparison warning in GNU-based C front
+ * ends in functions _FP_CLASS_I4_H() and _FP_CLASS_I8_H() in fp_class_h.c
+ */
+#define IEEE_32_EXPO_MAX 0XFF
+#else /* KEY Bug 11640 */
 #define IEEE_32_EXPO_MAX 0X7F8
+#endif /* KEY Bug 11640 */
 #define IEEE_32_MANT_BTS 23
 
 #if defined(_LITTLE_ENDIAN) && !defined(__sv2)

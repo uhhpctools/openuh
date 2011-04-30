@@ -41,7 +41,7 @@
 # architectures, update only ibm.mh. 
 #
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 IBMNLE =\
 
 else

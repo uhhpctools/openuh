@@ -60,7 +60,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -75,7 +74,7 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.inner_
 #include <sys/types.h>
 #include <stdlib.h>
 #include "defs.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "wn.h"
 #include "wn_map.h"
 #include "model.h"
@@ -138,7 +137,7 @@ static ACCESS_VECTOR Dummy_Access_Vector;
 
 static void inner_fission_verbose_info(
   SRCPOS        srcpos,
-  char*         message)
+  const char*   message)
 {
   printf("#### Inner Fission(%d): %s\n", Srcpos_To_Line(srcpos), message);
 }

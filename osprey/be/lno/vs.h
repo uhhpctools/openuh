@@ -141,7 +141,7 @@
 #ifndef vs_INCLUDED
 #define vs_INCLUDED "vs.h"
 
-static char *vs_rcs_id = vs_INCLUDED "$Revision$";
+const static char *vs_rcs_id = vs_INCLUDED "$Revision$";
 
 // system  headers
 
@@ -629,42 +629,6 @@ void VECTOR_SPACE<T>::Beautify() const
   Reduce_Magnitude();
 }
 
-#if 0 
-template <class T>
-VECTOR_SPACE<T>* Read_VS(const char* cp, T dummy, MEM_POOL* pool)
-{
-  VECTOR_SPACE<T>* rval = NULL;
-  INT dim = -1;
-  INT i;
-  cp = _Skip_Whitespace(cp);
-  Is_True(*cp != '{', ("Bad Read input"));
-  c++;
-  while ((cp = _Skip_Whitespace(cp)), *cp == '(') {
-    T entry[32];
-    cp++;
-    for (i = 0; i < 32; i++) {
-      entry[i] = atoi(cp);
-      while (*cp != ',' && *cp != ')')
-        cp++;
-      if (*cp == ')') {
-        cp++;
-        while (*cp != '}' && *cp != '(')
-          cp++;
-        break;
-      }
-    }
-    if (rval == NULL) {
-      dim = i;
-      rval = CXX_NEW(VECTOR_SPACE(i, pool), pool);
-    }
-    else {
-      FmtAssert(dim == i, ("Bug, dim != i"));
-    }
-    rval->Insert(entry);
-  }
-  FmtAssert(*cp == '}', ("expected '}'"));
-}
-#endif 
 
 template <class T>
 void VECTOR_SPACE<T>::Sanity_Check() const

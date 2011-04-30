@@ -36,11 +36,13 @@
 
 #ident  "$Header: /proj/osprey/CVS/open64/osprey1.0/libcsup/msgnew/catmsgfmt.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $"
 
+#if ! defined(BUILD_OS_DARWIN)
 #ifdef	_LITTLE_ENDIAN
 	#pragma weak _catmsgfmt = catmsgfmt
 #else					/* Else _LITTLE_ENDIAN */
 #if defined(__STDC__) && !defined(_LIBU)
         #pragma weak catmsgfmt = _catmsgfmt
+#endif
 #endif
 #endif					/* End _LITTLE_ENDIAN */
 

@@ -21,6 +21,8 @@ export OPEN64_EXTRA_VERSION := -custom
 export OPEN64_FULL_VERSION := $(OPEN64_MAJOR_VERSION).$(OPEN64_MINOR_VERSION).$(OPEN64_PATCH_LEVEL)$(OPEN64_EXTRA_VERSION)
 export OPEN64_FULL_VERSION := 3.0
 export OPEN64_GCC_VERSION := 3.3.1
+export OPEN64_GCC40_VERSION := 4.0.2
+export OPEN64_GCC42_VERSION := 4.2.0
 export OPEN64_ARCH_64 := x86_64
 export OPEN64_ARCH_32 := i386
 export OPEN64_ARCH := $(OPEN64_ARCH_64)
@@ -48,7 +50,7 @@ compiler:
 
 messages: compiler
 	$(MAKE) -C $(compiler_dir)/crayf90/sgi cf95.cat
-	$(MAKE) -C $(compiler_dir)/arith arith.cat
+#	$(MAKE) -C $(compiler_dir)/arith arith.cat
 	$(MAKE) -C $(compiler_dir)/libu lib.cat
 
 cygnus:

@@ -130,6 +130,11 @@ C         External (FORN) storage length, in bits.
       INTENT (OUT) NATIVECH
       OPTIONAL NATIVECH
 
+#if defined(BUILD_OS_DARWIN) && defined(__GNUC__)
+      /* GNU Fortran rejects $ in ids. We just want it to compile, not work */
+      MIPS2IA = 0
+      END
+#else /* defined(BUILD_OS_DARWIN) && defined(__GNUC__) */
 C         Optional parameter specifying NATIVE character variable if
 C         it is of type CHARACTER (TYPE = 6).  This parameter is
 C         ignored if TYPE is not 6 (CHARACTER).
@@ -153,14 +158,15 @@ C
       PARAMETER        (WORDSZB = 6)   !  Log (base 2) of WORDSZ
 
       INTEGER           IINC, MINC
-#ifdef	__mips
+/* KEY bug 13352: __mips does not imply little-endian */
+#if ! defined(_MIPSEL)
       PARAMETER        (IINC = 1)
 #else
       PARAMETER        (MINC = 1)
 #endif
 
       INTEGER (KIND=8)  IOFF, MOFF, ZERO
-#ifdef	__mips
+#if ! defined(_MIPSEL)
       PARAMETER        (MOFF = 0)
 #else
       PARAMETER        (IOFF = 0)
@@ -296,7 +302,7 @@ C      IF (.NOT. POWER_OF_TWO(NATLEN)) GOTO 9005 /* fix this later */
 
       IF (NMBR .EQ. 0) GOTO 9000
 
-#ifdef	__mips
+#if ! defined(_MIPSEL)
       MPTR   = LOC(NATIVE(0))
       IPTR   = LOC(FORN(0))
 #else
@@ -340,7 +346,7 @@ C      IF (.NOT. POWER_OF_TWO(NATLEN)) GOTO 9005 /* fix this later */
 
 C     Set lengths, stride and bit offsets
 
-#ifdef	__mips
+#if ! defined(_MIPSEL)
       ILEN   = FORLEN
       IOFF   = BITOFF
       MINC   = STRIDE
@@ -1322,3 +1328,4 @@ C
      5          O'        213',   ! Logical:  64-, 32-, 16- and 8-bit
      6          O'        001'/   ! Character:  8-bit
       END BLOCK DATA MIPS2IA_INIT
+#endif /* defined(BUILD_OS_DARWIN) && defined(__GNUC__) */

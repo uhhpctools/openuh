@@ -112,6 +112,12 @@ extern WN*  WFE_Stmt_Top (void);
 extern void WFE_Stmt_Append (WN* wn, SRCPOS srcpos);
 extern WN*  WFE_Stmt_Last (void);
 extern WN*  WFE_Stmt_Pop (WFE_STMT_KIND kind);
+
+#ifdef KEY
+extern void WFE_Stmt_Prepend_Last (WN* wn, SRCPOS srcpos);
+#endif
+
+
 #ifdef KEY
 extern void WFE_Guard_Var_Push (void);
 extern tree WFE_Guard_Var_Pop (void);

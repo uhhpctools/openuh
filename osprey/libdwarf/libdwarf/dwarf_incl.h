@@ -45,8 +45,12 @@
 #include "libdwarfdefs.h"
 #include <string.h>
 
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #ifdef HAVE_ELF_H
 #include <elf.h>
+#endif
 #endif
 
 #include <limits.h>

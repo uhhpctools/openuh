@@ -296,7 +296,7 @@
 ***
 ***     extern void SE_Symbols_For_SE(
 ***         SYMBOL*                      ptr_array, 
-***         char*                        pref, 
+***         const char*                  pref, 
 ***         INT                          unique_id, 
 ***         TYPE_ID                      mtype)
 ***
@@ -306,7 +306,7 @@
 ***     extern WN* Get_Expansion_Space(
 ***         SYMBOL                       se_ptrsym, 
 ***         WN*                          bsz,
-***         char*                        pref,        
+***         const char*                  pref,        
 ***	    INT                          unique_id,     
 ***         TYPE_ID                      wtype,     
 ***         WN*                          allocregion,   
@@ -469,11 +469,11 @@ struct WN_REFERENCE_INFO {
 };
 
 extern void SE_Symbols_For_SE(SYMBOL* ptr_array, 
-			      char* pref, INT unique_id, TYPE_ID mtype);
+			      const char* pref, INT unique_id, TYPE_ID mtype);
 
 extern WN* Get_Expansion_Space(SYMBOL se_ptrsym, 
 			       WN* bsz,          
-			       char* pref,       
+			       const char* pref,       
 			       INT unique_id,     
 			       TYPE_ID wtype,     
 			       WN* allocregion,   

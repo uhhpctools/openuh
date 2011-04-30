@@ -80,7 +80,7 @@ static char USMID[] = "\n@(#)5.0_pl/sources/utils.c	5.9	10/14/99 12:53:57\n";
 
 # define STR_FMT "\"%s\""
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 #    define DBL_FMT "%Le"
 # elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
 #    define DBL_FMT "%e"
@@ -296,20 +296,16 @@ char *	 convert_to_string (long_type	*the_constant,
 # ifdef _TARGET64
       case Real_4 :
       case Real_8 :
-#ifdef TARG_IA64
-         sprintf(result, FLT_FMT, *(float_type *)the_constant);
-#else
          if (sizeof(float_type) > sizeof(float)) {
 #if defined(_HOST32)
             sprintf(result, FLT_FMT, *(float_type *)the_constant);
 #else
-            sprintf(result, DBL_FMT, *(float_type *)the_constant);
+            sprintf(result, DBL_FMT, *(ldouble *)the_constant);
 #endif
          }
          else {
             sprintf(result, FLT_FMT, *(float_type *)the_constant);
          }
-#endif
          break;
 
       case Real_16 :
@@ -320,11 +316,6 @@ char *	 convert_to_string (long_type	*the_constant,
       case Complex_8 :
          inc = (TYP_LINEAR(type_idx) > COMPLEX_DEFAULT_TYPE) ? 2 : 1;
 
-#ifdef TARG_IA64
-         sprintf(result, "(" FLT_FMT ", " FLT_FMT ")",
-                                        *(float_type *)the_constant,
-                                        *(float_type *)(the_constant + inc));
-#else
          if (sizeof(float_type) > sizeof(float)) {
 #if defined(_HOST32)
             sprintf(result, "(" FLT_FMT ", " FLT_FMT ")",
@@ -332,8 +323,8 @@ char *	 convert_to_string (long_type	*the_constant,
                                            *(float_type *)(the_constant + inc));
 #else
             sprintf(result, "(" DBL_FMT ", " DBL_FMT ")",
-                                           *(float_type *)the_constant,
-                                           *(float_type *)(the_constant + inc));
+                                           *(ldouble *)the_constant,
+                                           *(ldouble *)(the_constant + inc));
 #endif
          }
          else {
@@ -341,7 +332,6 @@ char *	 convert_to_string (long_type	*the_constant,
                                            *(float_type *)the_constant,
                                            *(float_type *)(the_constant + inc));
          }
-#endif
          break;
 
       case Complex_16 :
@@ -358,7 +348,7 @@ char *	 convert_to_string (long_type	*the_constant,
          break;
 
       case Real_8 :
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
          sprintf(result, FLT_FMT, *(double *)the_constant);
          break;
 # endif

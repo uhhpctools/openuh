@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -76,7 +80,7 @@ TY_IDX DRA_EC_struct_ptr_ty = (TY_IDX) NULL;
 
 static OPCODE Ldid_Opcode [MTYPE_LAST + 1] = {
   OPC_UNKNOWN,    /* MTYPE_UNKNOWN */
-  OPC_UNKNOWN,    /* MTYPE_B */
+  OPC_UNKNOWN,    /* MTYPE_UNKNOWN */
   OPC_I4I1LDID,   /* MTYPE_I1 */
   OPC_I4I2LDID,   /* MTYPE_I2 */
   OPC_I4I4LDID,   /* MTYPE_I4 */
@@ -87,10 +91,9 @@ static OPCODE Ldid_Opcode [MTYPE_LAST + 1] = {
   OPC_U8U8LDID,   /* MTYPE_U8 */
   OPC_F4F4LDID,   /* MTYPE_F4 */
   OPC_F8F8LDID,   /* MTYPE_F8 */
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   OPC_F10F10LDID, /* MTYPE_F10 */
-#endif
-#ifdef TARG_X8664
+#else
   OPC_UNKNOWN,    /* MTYPE_F10 */
 #endif
   OPC_UNKNOWN,    /* MTYPE_F16 */
@@ -100,11 +103,11 @@ static OPCODE Ldid_Opcode [MTYPE_LAST + 1] = {
   OPC_C4C4LDID,   /* MTYPE_C4 */
   OPC_C8C8LDID,   /* MTYPE_C8 */
   OPC_CQCQLDID,   /* MTYPE_CQ */
-  OPC_UNKNOWN,    /* MTYPE_V */
+  OPC_UNKNOWN,     /* MTYPE_V */
   OPC_UNKNOWN,    /* MTYPE_BS */
   OPC_UNKNOWN,    /* MTYPE_A4 */
   OPC_UNKNOWN,    /* MTYPE_A8 */
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_X8664)
   OPC_C10C10LDID, /* MTYPE_C10 */
 #endif
 };
@@ -138,8 +141,8 @@ static WN*  Get_Array_Dim_Size (TY& array_ty,
 
 static ST* Create_Local_ST (char *name, TY_IDX ty);
 
-static ST* Declare_Func_N_Arg (char* ty_name, 
-                               char* st_name, 
+static ST* Declare_Func_N_Arg (const char* ty_name, 
+                               const char* st_name, 
                                TY_IDX ret_ty, 
                                INT nargs, 
                                TY_IDX ty_array[]);
@@ -665,8 +668,8 @@ Create_Local_ST(char *name, TY_IDX ty)
 // ===================================================================
 
 static ST* 
-Declare_Func_N_Arg (char* ty_name, 
-                    char* st_name, 
+Declare_Func_N_Arg (const char* ty_name, 
+                    const char* st_name, 
                     TY_IDX ret_ty, 
                     INT nargs, 
                     TY_IDX ty_array[])

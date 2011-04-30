@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * =======================================================================
  *
  *  Module: ebo_info.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/ebo_info.h,v $
+ *  $Revision: 1.11 $
+ *  $Date: 05/12/05 08:59:06-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.ebo_info.h $
  *
  *  Revision comments:
  *
@@ -251,6 +255,7 @@ extern EBO_OP_INFO *EBO_opinfo_table[EBO_MAX_OP_HASH];
 extern BOOL EBO_in_pre;
 extern BOOL EBO_in_loop;
 extern BOOL EBO_in_peep;
+extern BOOL EBO_flow_safe;
 
 extern TN_MAP EBO_tninfo_table;
 extern MEM_POOL EBO_pool;
@@ -260,7 +265,7 @@ extern INT EBO_tninfo_entries_reused;
 extern INT EBO_num_opinfo_entries;
 extern INT EBO_opinfo_entries_reused;
 
-extern char *EBO_trace_pfx;
+extern const char *EBO_trace_pfx;
 extern BOOL EBO_Trace_Execution;
 extern BOOL EBO_Trace_Optimization;
 extern BOOL EBO_Trace_Block_Flow;
@@ -304,9 +309,6 @@ extern BOOL EBO_Trace_Hash_Search;
 void tn_info_entry_dump (EBO_TN_INFO *tninfo);
 void tn_info_table_dump ();
 #ifdef KEY
-#if 0
-void delete_useless_store_op (EBO_OP_INFO *opinfo);
-#endif
 #endif
 
 inline EBO_TN_INFO *
@@ -409,7 +411,7 @@ EBO_predicate_complements (TN *pred1, EBO_TN_INFO *info1,
    /* If defined by the same instruction but not equal, they must be complements. */
     return TRUE;
   }
-#endif
+#endif  
  /* Until we can resolve subsets, assume a problem. */
   return FALSE;
 }
@@ -432,16 +434,33 @@ tn_info_def (BB *current_bb, OP *current_op, TN *local_tn,
   if ((tninfo_prev != NULL)  &&
       (tninfo_prev->in_bb == current_bb) &&
       ((predicate_tn == NULL) ||
-#ifdef TARG_IA64
-       (!OP_cond_def(current_op) && EBO_predicate_dominates(predicate_tn,
-#else
        (EBO_predicate_dominates(predicate_tn,
-#endif
                                 predicate_info,
                                 (tninfo_prev->predicate_tninfo != NULL)?
                                         tninfo_prev->predicate_tninfo->local_tn:True_TN,
                                 tninfo_prev->predicate_tninfo)))) {
    /* The new definition completely redefines the previous. */
+#ifdef TARG_X8664
+    // In rare situations, if tninfo and tninfo_prev correspond to the same
+    // TN and are defined in the same OP, then don't consider the TN as
+    // being redefined in order to prevent EBO from deleting the OP.  For
+    // example:
+    //   rdx TN100 = idiv ...	; TN100 not used
+    // idiv requires "rax rdx" results in that order, but the WHIRL wants to
+    // return the first result via rdx (the second return value register).
+    // add_to_hash_table calls tn_info_def to add the TNs and their subclass in
+    // this order:
+    //   rax	; result 0's subclass
+    //   rdx	; result 0
+    //   rdx	; result 1's subclass
+    //   TN100	; result 1
+    // The second add of rdx would have set the first rdx's
+    // tninfo->redefined_before_block_end to TRUE.  Since result 1 is never
+    // used, EBO would think both results are not used, and the OP can be
+    // deleted.  To avoid this, don't set redefined_before_block_end.
+    // Bug 12744.
+    if (tninfo_prev->in_op != current_op)
+#endif
     tninfo_prev->redefined_before_block_end = TRUE;
   }
 
@@ -468,12 +487,20 @@ tn_info_use (BB *current_bb, OP *current_op, TN *local_tn,
       if (predicate_tn != NULL) {
        /* Then, if the predicates have the right relationship, we have
           found the matching input to this use. */
-       if ( EBO_in_peep ) { /*post ebo set and get tninfo for physical registers, 
-       					 * so we should compare them for relationship.*/
-	   	if (tninfo->predicate_tninfo == NULL ||
-			use_tn_or_reg(tninfo->predicate_tninfo->local_tn) == use_tn_or_reg(predicate_tn))
-			break;
+#if defined(TARG_IA64)
+       if ( EBO_in_peep ) { 
+	 /* post ebo set and get tninfo for physical registers, 
+       	    so we should compare them for relationship.*/
+	 if (tninfo->predicate_tninfo == NULL ||
+	     (TN_is_global_reg(tninfo->predicate_tninfo->local_tn) && 
+	      TN_is_global_reg(predicate_tn)) &&
+	     (use_tn_or_reg(tninfo->predicate_tninfo->local_tn) == use_tn_or_reg(predicate_tn))) //bug OSP_320
+	   /* The previous fix's assumption is that dominate TN is spilled by previous BB.
+	      So, the two TNs at least are global TNs, I'm not sure if the condition is enough.
+	      Maybe we should strengthen this conditon later.*/
+	   break;
        }
+#endif
        if (EBO_predicate_dominates((tninfo->predicate_tninfo != NULL)?
                                              tninfo->predicate_tninfo->local_tn:True_TN,
                                     tninfo->predicate_tninfo,
@@ -610,11 +637,6 @@ inline void backup_opinfo_list (EBO_OP_INFO *previous_last)
    /* Update the hash table entry with any previous ptr. */
     while (opinfo != previous_last) {
 #ifdef KEY      
-#if 0
-      if (opinfo->in_op &&
-         OP_store(opinfo->in_op))    
-        delete_useless_store_op(opinfo);
-#endif
 #endif
       EBO_opinfo_table[opinfo->hash_index] = opinfo->same;
       opinfo = opinfo->prior;

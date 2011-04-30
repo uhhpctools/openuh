@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -47,6 +51,8 @@
 #define snl_gen_INCLUDED "snl_gen.h"
 
 extern void SNL_Peel_Iteration(WN* wn, BOOL first_iter); 
+extern void SNL_Peel_Iteration_Inner(WN* wn, WN* stmt, 
+                                     BOOL exclusion, BOOL first_iter); 
 
 extern SNL_REGION SNL_GEN_Protect_Nest_With_Conditionals(const SNL_NEST_INFO* 
   ni, BOOL* failed);

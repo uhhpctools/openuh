@@ -36,6 +36,8 @@ end ifc
 #include "config.h"
 #include "system.h"
 #include "tree.h"
+#include "omp_types.h"
+#include "omp_directive.h"
 #include "input.h"
 #include "cpplib.h"
 #include "intl.h"
@@ -105,7 +107,16 @@ do {									\
 %start program
 
 %union {long itype; tree ttype; enum tree_code code;
-	const char *filename; int lineno; }
+	const char *filename; int lineno;
+	enum reduction_op_type red_op_type;
+	enum schedule_kind_type sch_k_type;
+	struct parallel_clause_list * pclause_type;
+	struct for_clause_list * for_clause_type;
+	struct sections_clause_list * sections_clause_type;
+	struct single_clause_list * single_clause_type;
+	struct parallel_for_clause_list * parallel_for_clause_type;
+	struct parallel_sections_clause_list * parallel_sections_clause_type;
+	}
 
 /* All identifiers that are not reserved words
    and are not declared typedefs in the current block */
@@ -139,6 +150,14 @@ do {									\
 
 /* "...", used for functions with variable arglists.  */
 %token ELLIPSIS
+
+%token PRAGMA_OPTIONS PRAGMA_EXEC_FREQ FREQ_NEVER FREQ_INIT FREQ_FREQUENT
+
+%token PRIVATE COPYPRIVATE FIRSTPRIVATE LASTPRIVATE SHARED DEFAULT NONE
+%token REDUCTION COPYIN DYNAMIC GUIDED RUNTIME ORDERED SCHEDULE
+%token NOWAIT PRAGMA_OMP PARALLEL NUM_THREADS SECTIONS SECTION
+%token SINGLE MASTER CRITICAL BARRIER
+%token ATOMIC FLUSH THREADPRIVATE
 
 /* the reserved words */
 /* SCO include files test "ASM", so use something else. */
@@ -236,6 +255,33 @@ do {									\
 
 %type <filename> save_filename
 %type <lineno> save_lineno
+
+%type <ttype> options_directive pragma_directives exec_freq_directive
+%type <ttype> exec_freq_directive_ignore
+
+%type <ttype> freq_hint
+
+%type <ttype> variable_list critical_directive region_phrase
+%type <red_op_type> reduction_operator
+%type <sch_k_type> schedule_kind
+%type <pclause_type> parallel_clause_list parallel_clause parallel_directive
+%type <ttype> openmp_construct parallel_construct for_construct sections_construct
+%type <ttype> single_construct parallel_for_construct parallel_sections_construct
+%type <ttype> master_construct critical_construct atomic_construct
+%type <ttype> ordered_construct
+%type <ttype> barrier_directive flush_directive
+%type <for_clause_type> for_clause_list for_clause for_directive
+%type <sections_clause_type> sections_clause_list sections_clause sections_directive
+%type <single_clause_type> single_clause single_clause_list single_directive
+%type <parallel_for_clause_type> parallel_for_clause parallel_for_clause_list parallel_for_directive
+%type <parallel_sections_clause_type> parallel_sections_clause parallel_sections_clause_list parallel_sections_directive
+
+/* sl2 fork_joint */ 
+%token SL2_SECTIONS SL2_MINOR_SECTIONS SL2_SECTION PRAGMA_SL2 SL2_MINOR_SECTION 
+%type <ttype> sl2_sections_construct sl2_section_scope sl2_maybe_section_sequence
+%type <ttype> sl2_section_sequence sl2_maybe_structured_block sl2_section_construct 
+
+
 
 ifobjc
 /* the Objective-C nonterminals */
@@ -330,6 +376,13 @@ end ifc
 
 static bool parsing_iso_function_signature;
 
+static bool In_MP_Region = false;
+static bool In_MP_Section = false;
+#define MAX_MP_NESTING 10
+static GTY(()) tree mp_locals[MAX_MP_NESTING];
+static int mp_nesting = -1;
+extern bool Is_shared_mp_var (tree);
+
 /* Tell yyparse how to print a token's value, if yydebug is set.  */
 
 #define YYPRINT(FILE,YYCHAR,YYLVAL) yyprint(FILE,YYCHAR,YYLVAL)
@@ -401,6 +454,9 @@ end ifobjc
 		    error ("argument of `asm' is not a constant string"); }
 	| extension extdef
 		{ RESTORE_EXT_FLAGS ($1); }
+	| threadprivate_directive
+	| exec_freq_directive_ignore
+	{}
 	;
 
 datadef:
@@ -1428,11 +1484,16 @@ initdcl:
 	  init
 /* Note how the declaration of the variable is in effect while its init is parsed! */
 		{ finish_init ();
-		  finish_decl ($<ttype>5, $6, $2); }
+		  finish_decl ($<ttype>5, $6, $2);
+		  if (In_MP_Region && Is_shared_mp_var ($<ttype>5))
+		    mp_locals[mp_nesting] = chainon (mp_locals[mp_nesting], build_tree_list (NULL, $<ttype>5));
+		}
 	| declarator maybeasm maybe_attribute
 		{ tree d = start_decl ($1, current_declspecs, 0,
 				       chainon ($3, all_prefix_attributes));
 		  finish_decl (d, NULL_TREE, $2);
+		  if (In_MP_Region && Is_shared_mp_var (d))
+		    mp_locals[mp_nesting] = chainon (mp_locals[mp_nesting], build_tree_list (NULL, d));
                 }
 	;
 
@@ -1444,11 +1505,17 @@ notype_initdcl:
 	  init
 /* Note how the declaration of the variable is in effect while its init is parsed! */
 		{ finish_init ();
-		  finish_decl ($<ttype>5, $6, $2); }
+		  finish_decl ($<ttype>5, $6, $2);
+		  if (In_MP_Region && Is_shared_mp_var ($<ttype>5))
+		    mp_locals[mp_nesting] = chainon (mp_locals[mp_nesting], build_tree_list (NULL, $<ttype>5));
+		}
 	| notype_declarator maybeasm maybe_attribute
 		{ tree d = start_decl ($1, current_declspecs, 0,
 				       chainon ($3, all_prefix_attributes));
-		  finish_decl (d, NULL_TREE, $2); }
+		  finish_decl (d, NULL_TREE, $2);
+		  if (In_MP_Region && Is_shared_mp_var (d))
+		    mp_locals[mp_nesting] = chainon (mp_locals[mp_nesting], build_tree_list (NULL, d));
+		}
 	;
 /* the * rules are dummies to accept the Apollo extended syntax
    so that the header files compile. */
@@ -2363,9 +2430,649 @@ for_init_stmt:
 		{ check_for_loop_decls (); }
 	;
 
+
+
+openmp_construct:
+          parallel_construct
+        |  for_construct
+        |  sections_construct
+        |  single_construct
+        |  parallel_for_construct
+        |  parallel_sections_construct
+        |  master_construct
+        |  critical_construct
+        |  atomic_construct
+        |  ordered_construct
+        | sl2_sections_construct
+        ;
+
+sl2_sections_construct:
+        PRAGMA_SL2 SL2_SECTIONS '\n'
+	 {
+           add_stmt(build_omp_stmt(sl2_sections_cons_b, NULL));
+	 }
+	 sl2_section_scope
+	 { add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;}
+	 | PRAGMA_SL2 SL2_MINOR_SECTIONS '\n'
+	 {
+           add_stmt(build_omp_stmt(sl2_minor_sections_cons_b, NULL));
+	 }
+	 sl2_section_scope
+	 { add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;}
+	 	
+	 ;
+
+sl2_section_scope:
+        '{'
+        sl2_maybe_section_sequence 
+        '}'
+        ;
+
+sl2_maybe_section_sequence:
+	sl2_section_sequence
+      | sl2_maybe_structured_block
+      | sl2_maybe_structured_block sl2_section_sequence
+      ;
+
+sl2_maybe_structured_block:
+      structured_block
+	;
+
+sl2_section_sequence:
+	sl2_section_construct
+	| sl2_section_sequence sl2_section_construct
+	;
+
+sl2_section_construct:
+        PRAGMA_SL2 SL2_SECTION '\n'
+        {
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+        }
+        structured_block
+        {
+	  add_stmt (build_omp_stmt (sl2_section_cons_e, NULL));
+        }
+      | PRAGMA_SL2 SL2_MINOR_SECTION '\n'
+        {
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_minor_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+        }
+        structured_block
+        {
+	  add_stmt (build_omp_stmt (sl2_minor_section_cons_e, NULL));
+        }
+
+      	   
+        ;
+                                                                                
+pragma_directives:
+        barrier_directive
+        | flush_directive
+        | threadprivate_directive
+        {}
+        | options_directive
+	| exec_freq_directive
+        ;
+                                                                                
+options_directive:
+        PRAGMA_OPTIONS STRING '\n'
+	{ add_stmt (build_omp_stmt (options_dir, $2)); $$ = NULL; }
+        ;
+
+/* Ignore directive in global scope */
+exec_freq_directive_ignore:
+	PRAGMA_EXEC_FREQ freq_hint_ignore IDENTIFIER '\n'
+	{ $$ = NULL; }
+	;
+
+freq_hint_ignore:
+	FREQ_NEVER | FREQ_INIT | FREQ_FREQUENT
+	;
+
+exec_freq_directive:
+        PRAGMA_EXEC_FREQ freq_hint '\n'
+	{ add_stmt (build_omp_stmt (exec_freq_dir, $2)); $$ = NULL; }
+	;
+
+freq_hint:
+        FREQ_NEVER { $$ = build_string (6, "never"); }
+	| FREQ_INIT { $$ = build_string (5, "init"); }
+	| FREQ_FREQUENT { $$ = build_string (9, "frequent"); }
+	;
+
+structured_block:
+        stmt
+        ;
+                                                                                
+parallel_construct:
+        parallel_directive
+        {
+	    $$ = add_stmt (build_omp_stmt (parallel_dir_b, $1));
+	    In_MP_Region = true;
+	    mp_nesting++;
+	    if (mp_nesting == MAX_MP_NESTING)
+	    {
+	      // will see
+	      printf ("MP nesting > %d not supported\n", MAX_MP_NESTING-1);
+	      abort();
+	    }
+	    mp_locals[mp_nesting] = NULL;
+        }
+        structured_block
+        {
+	    add_stmt (build_omp_stmt (parallel_dir_e, NULL));
+	    $$=NULL;
+	    In_MP_Region = false;
+	    if (mp_locals[mp_nesting])
+	    {
+	      $<ttype>2->omp.omp_clause_list =
+	        chain_parallel_list_on ($<ttype>2->omp.omp_clause_list,
+		          build_parallel_clause_list (mp_locals[mp_nesting],
+			                              p_private, 0, 0));
+	    }
+	    mp_locals[mp_nesting] = NULL;
+	    mp_nesting--;
+	}
+        ;
+                                                                                
+parallel_directive:
+        PRAGMA_OMP PARALLEL '\n'
+        { $$ = NULL; }
+        | PRAGMA_OMP PARALLEL  parallel_clause_list '\n'
+        { $$ = $3; }
+        ;
+                                                                                
+parallel_clause_list:
+        parallel_clause
+        { $$ = $1; }
+        | parallel_clause_list parallel_clause
+        { $$ = chain_parallel_list_on ($1, $2); }
+        ;
+
+parallel_clause:
+      IF '(' expr_no_commas ')'
+            { $$ = build_parallel_clause_list($3, p_if, 0, 0); }
+        | NUM_THREADS '(' expr_no_commas ')'
+        { $$ = build_parallel_clause_list($3, p_num_threads, 0, 0); }
+        | PRIVATE '(' variable_list ')'
+        { $$ = build_parallel_clause_list($3, p_private, 0, 0); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_clause_list($3, p_firstprivate, 0, 0); }
+        |  SHARED '(' variable_list ')'
+        { $$ = build_parallel_clause_list($3, p_shared, 0, 0); }
+        |  DEFAULT '(' SHARED ')'
+        { $$ = build_parallel_clause_list(NULL, p_default, default_shared, 0); }
+        |  DEFAULT '(' NONE ')'
+        { $$ = build_parallel_clause_list(NULL, p_default, default_none, 0); }
+        |  REDUCTION '(' reduction_operator ':' variable_list ')'
+        { $$ = build_parallel_clause_list($5, p_reduction, 0, $3); }
+        |  COPYIN '(' variable_list ')'
+        { $$ = build_parallel_clause_list($3, p_copyin, 0, 0); }
+        ;
+                                                                                
+for_construct:
+        for_directive
+        {
+	    add_stmt (build_omp_stmt (for_dir_b, $1));
+	    $$ = NULL;
+        }
+                                                                                
+        iteration_statement
+        { add_stmt (build_omp_stmt (for_dir_e, NULL)); $$ = NULL; }
+        ;
+
+/* taken from 'stmt' */
+iteration_statement:
+           FOR
+		{ $<ttype>$ = build_stmt (FOR_STMT, NULL_TREE, NULL_TREE,
+					  NULL_TREE, NULL_TREE);
+		  TREE_ADDRESSABLE ($<ttype>$) = 1; // generate do-loop
+		  add_stmt ($<ttype>$); }
+	  '(' for_init_stmt
+		{ stmt_count++;
+		  RECHAIN_STMTS ($<ttype>2, FOR_INIT_STMT ($<ttype>2)); }
+	  xexpr ';'
+                { if ($6)
+		    FOR_COND ($<ttype>2)
+		      = c_common_truthvalue_conversion ($6); }
+	  xexpr ')'
+		{ FOR_EXPR ($<ttype>2) = $9; }
+	  c99_block_lineno_labeled_stmt
+                { RECHAIN_STMTS ($<ttype>2, FOR_BODY ($<ttype>2)); }
+	;
+
+for_directive:
+        PRAGMA_OMP FOR '\n'
+        { $$ = NULL; }
+        | PRAGMA_OMP FOR for_clause_list '\n'
+        { $$ = $3; }
+        ;
+                                                                                
+for_clause_list:
+        for_clause
+        { $$ = $1; }
+        | for_clause_list for_clause
+        { $$ = chain_for_list_on ($1, $2); }
+        ;
+                                                                                
+for_clause:
+           PRIVATE '(' variable_list ')'
+        { $$ = build_for_clause_list($3, f_private, 0, 0); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_for_clause_list($3, f_firstprivate, 0, 0); }
+        |  LASTPRIVATE '(' variable_list ')'
+        { $$ = build_for_clause_list($3, f_lastprivate, 0, 0); }
+        |  REDUCTION '(' reduction_operator ':' variable_list ')'
+        { $$ = build_for_clause_list($5, f_reduction, 0, $3); }
+        |  SCHEDULE '(' schedule_kind ')'
+        { $$ = build_for_clause_list(NULL, f_schedule_1, $3, 0); }
+        |  SCHEDULE '(' schedule_kind ',' expr_no_commas ')'
+        { $$ = build_for_clause_list($5, f_schedule_2, $3, 0); }
+        |  ORDERED
+        { $$ = build_for_clause_list(NULL, f_ordered, 0, 0); }
+        |  NOWAIT
+        { $$ = build_for_clause_list(NULL, f_nowait, 0, 0); }
+        ;
+                                                                                
+schedule_kind:
+           STATIC
+         {
+       if (strcmp (IDENTIFIER_POINTER ($1), "static"))
+              error ("'%s' is not a valid schedule kind\n",  IDENTIFIER_POINTER ($1));
+       else
+              $$=SK_STATIC; }
+        |  DYNAMIC
+         { $$=SK_DYNAMIC; }
+        |  GUIDED
+         { $$=SK_GUIDED; }
+        |  RUNTIME
+         { $$=SK_RUNTIME; }
+        ;
+                                                                                
+                                                                                
+sections_construct:
+        sections_directive
+        {
+	    add_stmt (build_omp_stmt (sections_cons_b, $1));
+	    $$ = NULL;
+        }
+        section_scope
+        { add_stmt (build_omp_stmt (sections_cons_e, NULL)); $$ = NULL; }
+        ;
+                                                                                
+sections_directive:
+        PRAGMA_OMP SECTIONS '\n'
+        { $$ = NULL; }
+        | PRAGMA_OMP SECTIONS sections_clause_list '\n'
+        { $$ = $3; }
+        ;
+                                                                                
+sections_clause_list:
+        sections_clause
+        { $$ = $1; }
+        | sections_clause_list sections_clause
+        { $$ = chain_sections_list_on ($1, $2); }
+        ;
+                                                                                
+sections_clause:
+       PRIVATE '(' variable_list ')'
+        { $$ = build_sections_clause_list($3, sections_private, 0); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_sections_clause_list($3, sections_firstprivate, 0); }
+        |  LASTPRIVATE '(' variable_list ')'
+        { $$ = build_sections_clause_list($3, sections_lastprivate, 0); }
+        |  REDUCTION '(' reduction_operator ':' variable_list ')'
+        { $$ = build_sections_clause_list($5, sections_reduction, $3); }
+        |  NOWAIT
+        { $$ = build_sections_clause_list(NULL, sections_nowait, 0); }
+        ;
+                                                                                
+/* The first section directive is optional */
+section_scope:
+        '{'
+        {
+           In_MP_Section = true;
+           add_stmt (build_omp_stmt (section_cons_b, NULL));
+        }
+        maybe_section_sequence '}'
+        ;
+
+maybe_section_sequence:
+	section_sequence
+	| maybe_structured_block
+	| maybe_structured_block section_sequence
+	;
+
+maybe_structured_block:
+	structured_block
+	{
+	  In_MP_Section = false;
+	  add_stmt (build_omp_stmt (section_cons_e, NULL));
+	}
+	;
+
+section_sequence:
+        section_construct
+        |section_sequence section_construct
+        ;
+                                                                                
+section_construct:
+        section_directive
+        {
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+        }
+        structured_block
+        {
+	  add_stmt (build_omp_stmt (section_cons_e, NULL));
+        }
+    ;
+                                                                                
+section_directive:
+        PRAGMA_OMP  SECTION '\n'
+        ;
+                                                                                
+single_construct:
+        single_directive
+        {
+	    add_stmt (build_omp_stmt (single_cons_b, $1));
+	    $$ = NULL;
+        }
+        structured_block
+        { add_stmt (build_omp_stmt (single_cons_e, NULL)); $$ = NULL; }
+        ;
+                                                                                
+single_directive:
+        PRAGMA_OMP SINGLE '\n'
+        {$$ = NULL;}
+        | PRAGMA_OMP SINGLE single_clause_list '\n'
+        {$$ = $3;}
+        ;
+                                                                                
+single_clause_list:
+        single_clause
+        { $$ = $1; }
+        |  single_clause_list single_clause
+        { $$ = chain_single_list_on ($1, $2); }
+        ;
+                                                                                
+single_clause:
+       PRIVATE '(' variable_list ')'
+        { $$ = build_single_clause_list($3, single_private); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_single_clause_list($3, single_firstprivate); }
+        |  COPYPRIVATE '(' variable_list ')'
+        { $$ = build_single_clause_list($3, single_copyprivate); }
+        |  NOWAIT
+        { $$ = build_single_clause_list(NULL, single_nowait); }
+        ;
+                                                                                
+parallel_for_construct:
+        parallel_for_directive
+        {
+	    $$ = add_stmt (build_omp_stmt (par_for_cons_b, $1));
+	    In_MP_Region = true;
+	    mp_nesting++;
+	    if (mp_nesting == MAX_MP_NESTING)
+	    {
+	      // will see
+	      printf ("MP nesting > %d not supported\n", MAX_MP_NESTING-1);
+	      abort();
+	    }
+	    mp_locals[mp_nesting] = NULL;
+        }
+        iteration_statement
+        {
+	    add_stmt (build_omp_stmt (par_for_cons_e, NULL));
+	    $$ = NULL;
+	    In_MP_Region = false;
+	    if (mp_locals[mp_nesting])
+	    {
+	      $<ttype>2->omp.omp_clause_list =
+	        chain_parallel_for_list_on ($<ttype>2->omp.omp_clause_list,
+		          build_parallel_for_clause_list (mp_locals[mp_nesting],
+			                              p_for_private, 0, 0, 0));
+	    }
+	    mp_locals[mp_nesting] = NULL;
+	    mp_nesting--;
+	}
+        ;
+                                                                                
+parallel_for_directive:
+        PRAGMA_OMP PARALLEL FOR '\n'
+        {$$ = NULL;}
+        | PRAGMA_OMP PARALLEL FOR parallel_for_clause_list '\n'
+        {$$ = $4;}
+        ;
+                                                                                
+parallel_for_clause_list:
+        parallel_for_clause
+        { $$ = $1; }
+        | parallel_for_clause_list parallel_for_clause
+        { $$ = chain_parallel_for_list_on ($1, $2); }
+        ;
+                                                                                
+parallel_for_clause:
+        IF '(' expr_no_commas ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_if, 0, 0, 0); }
+        | NUM_THREADS '(' expr_no_commas ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_num_threads, 0, 0, 0); }
+        | PRIVATE '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_private, 0, 0, 0); }
+        |  COPYPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_copyprivate, 0, 0, 0); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_firstprivate, 0, 0, 0); }
+        |  LASTPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_lastprivate, 0, 0, 0); }
+        |  SHARED '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_shared, 0, 0, 0); }
+        |  DEFAULT '(' SHARED ')'
+        { $$ = build_parallel_for_clause_list(NULL, p_for_default, default_shared, 0, 0); }
+        |  DEFAULT '(' NONE ')'
+        { $$ = build_parallel_for_clause_list(NULL, p_for_default, default_none, 0, 0); }
+        |  REDUCTION '(' reduction_operator ':' variable_list ')'
+        { $$ = build_parallel_for_clause_list($5, p_for_reduction, 0, 0, $3); }
+        |  COPYIN '(' variable_list ')'
+        { $$ = build_parallel_for_clause_list($3, p_for_copyin, 0, 0, 0); }
+        |  SCHEDULE '(' schedule_kind ')'
+        { $$ = build_parallel_for_clause_list(NULL, p_for_schedule_1, 0, $3, 0); }
+        |  SCHEDULE '(' schedule_kind ',' expr_no_commas ')'
+        { $$ = build_parallel_for_clause_list($5, p_for_schedule_2, 0, $3, 0); }
+        |  ORDERED
+        { $$ = build_parallel_for_clause_list(NULL, p_for_ordered, 0, 0, 0); }
+        ;
+                                                                                
+parallel_sections_construct:
+        parallel_sections_directive
+        {
+	    $$ = add_stmt (build_omp_stmt (par_sctn_cons_b, $1));
+	    In_MP_Region = true;
+	    mp_nesting++;
+	    if (mp_nesting == MAX_MP_NESTING)
+	    {
+	      // will see
+	      printf ("MP nesting > %d not supported\n", MAX_MP_NESTING-1);
+	      abort();
+	    }
+	    mp_locals[mp_nesting] = NULL;
+        }
+        section_scope
+        {
+	    add_stmt (build_omp_stmt (par_sctn_cons_e, NULL));
+	    $$ = NULL;
+	    In_MP_Region = false;
+	    if (mp_locals[mp_nesting])
+	    {
+	      $<ttype>2->omp.omp_clause_list =
+	        chain_parallel_sections_list_on ($<ttype>2->omp.omp_clause_list,
+		   build_parallel_sections_clause_list (mp_locals[mp_nesting],
+		   p_sections_private, 0, 0));
+	    }
+	    mp_locals[mp_nesting] = NULL;
+	    mp_nesting--;
+	}
+    ;
+                                                                                
+parallel_sections_directive:
+        PRAGMA_OMP PARALLEL SECTIONS '\n'
+        {$$ = NULL;}
+        | PRAGMA_OMP PARALLEL SECTIONS parallel_sections_clause_list '\n'
+        {$$ = $4;}
+        ;
+                                                                                
+parallel_sections_clause_list:
+        parallel_sections_clause
+        { $$=$1; }
+        | parallel_sections_clause_list parallel_sections_clause
+        { $$ = chain_parallel_sections_list_on ($1, $2); }
+        ;
+                                                                                
+parallel_sections_clause:
+        IF '(' expr_no_commas ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_if, 0, 0); }
+        | NUM_THREADS '(' expr_no_commas ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_num_threads, 0, 0); }
+        | PRIVATE '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_private, 0, 0); }
+        |  COPYPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_copyprivate, 0, 0); }
+        |  FIRSTPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_firstprivate, 0, 0); }
+        |  LASTPRIVATE '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_lastprivate, 0, 0); }
+        |  SHARED '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_shared, 0, 0); }
+        |  DEFAULT '(' SHARED ')'
+        { $$ = build_parallel_sections_clause_list(NULL, p_sections_default, default_shared, 0); }
+        |  DEFAULT '(' NONE ')'
+        { $$ = build_parallel_sections_clause_list(NULL, p_sections_default, default_none, 0); }
+        |  REDUCTION '(' reduction_operator ':' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($5, p_sections_reduction, 0, $3); }
+        |  COPYIN '(' variable_list ')'
+        { $$ = build_parallel_sections_clause_list($3, p_sections_copyin, 0, 0); }
+        ;
+                                                                                
+master_construct:
+        master_directive
+        { add_stmt (build_omp_stmt (master_cons_b, NULL)); $$ = NULL; }
+        structured_block
+        { add_stmt (build_omp_stmt (master_cons_e, NULL)); $$ = NULL; }
+        ;
+                                                                                
+master_directive:
+        PRAGMA_OMP MASTER '\n'
+        ;
+                                                                                
+critical_construct:
+        critical_directive
+        { add_stmt (build_omp_stmt (critical_cons_b, $1)); $$ = NULL; }
+        structured_block
+        { add_stmt (build_omp_stmt (critical_cons_e, NULL)); $$ = NULL; }
+        ;
+
+critical_directive:
+        PRAGMA_OMP CRITICAL '\n'
+        { $$ = NULL; }
+        | PRAGMA_OMP CRITICAL '(' region_phrase ')'  '\n'
+        { $$ = $4; }
+        ;
+
+region_phrase:
+    IDENTIFIER
+    { $$ = $1; }
+    ;
+
+barrier_directive:
+        PRAGMA_OMP BARRIER '\n'
+        { add_stmt (build_omp_stmt (barrier_dir, NULL)); $$ = NULL; }
+        ;
+
+atomic_construct:
+        atomic_directive expr_no_commas ';'
+        {
+	    add_stmt (build_omp_stmt (atomic_cons, $2));
+	    $$ = NULL;
+        }
+        ;
+
+atomic_directive:
+        PRAGMA_OMP ATOMIC '\n'
+        ;
+
+flush_directive:
+        PRAGMA_OMP FLUSH '\n'
+        { add_stmt (build_omp_stmt (flush_dir, NULL)); $$ = NULL; }
+                                                                                
+        | PRAGMA_OMP FLUSH '(' variable_list ')' '\n'
+        { add_stmt (build_omp_stmt (flush_dir, $4)); $$ = NULL; }
+        ;
+
+ordered_construct:
+        ordered_directive
+        { add_stmt (build_omp_stmt (ordered_cons_b, NULL)); $$ = NULL; }
+        structured_block
+        { add_stmt (build_omp_stmt (ordered_cons_e, NULL)); $$ = NULL; }
+        ;
+
+ordered_directive:
+        PRAGMA_OMP ORDERED '\n'
+        ;
+
+threadprivate_directive:
+        PRAGMA_OMP THREADPRIVATE '(' variable_list ')' '\n'
+        { expand_threadprivate($4); }
+        ;
+
+reduction_operator:
+        '+'
+        {$$ = REDUCTION_OPR_ADD;}
+        | '*'
+        {$$ = REDUCTION_OPR_MPY;}
+        | '-'
+        {$$ = REDUCTION_OPR_SUB;}
+        | '&'
+        {$$ = REDUCTION_OPR_BAND;}
+        | '^'
+        {$$ = REDUCTION_OPR_BXOR;}
+        | '|'
+        {$$ = REDUCTION_OPR_BIOR;}
+        | ANDAND
+        {$$ = REDUCTION_OPR_CAND;}
+        | OROR
+        {$$ = REDUCTION_OPR_CIOR;}
+        ;
+
+variable_list:
+        IDENTIFIER
+        {
+           if(lookup_name($1)==0)
+                        error("Undefined variable %s", IDENTIFIER_POINTER($1));
+          $$ = build_tree_list (NULL_TREE, lookup_name ($1));
+        }
+        |variable_list ',' IDENTIFIER
+    {
+      if (lookup_name ($3) == 0)
+        error ("Undefined variable %s", IDENTIFIER_POINTER($3));
+      $$ = chainon ($1, build_tree_list (NULL_TREE, lookup_name ($3)));
+    }
+    ;
+                                                                                
+
+
+
 /* Parse a single real statement, not including any labels.  */
 stmt:
-	  compstmt
+        pragma_directives
+        |openmp_construct
+	| compstmt
 		{ stmt_count++; $$ = $1; }
 	| expr ';'
 		{ stmt_count++;
@@ -3369,6 +4076,11 @@ static const struct resword reswords[] =
   { "long",		RID_LONG,	0 },
   { "register",		RID_REGISTER,	0 },
   { "restrict",		RID_RESTRICT,	D_C89 },
+  { "__sbuf",           RID_SBUF,       0 },
+  { "__sdram",          RID_SDRAM,      0 },
+  { "__v1buf",          RID_V1BUF,      0 },
+  { "__v2buf",          RID_V2BUF,      0 },
+  { "__v4buf",          RID_V4BUF,      0 },
   { "return",		RID_RETURN,	0 },
   { "short",		RID_SHORT,	0 },
   { "signed",		RID_SIGNED,	0 },
@@ -3431,7 +4143,11 @@ static const short rid_to_yy[RID_MAX] =
   /* RID_SIGNED */	TYPESPEC,
   /* RID_AUTO */	SCSPEC,
   /* RID_RESTRICT */	TYPE_QUAL,
-
+  /* RID_SBUF */     TYPE_QUAL,
+  /* RID_SDRAM */    TYPE_QUAL,
+  /* RID_V1BUF */ TYPE_QUAL, 
+  /* RID_V2BUF */ TYPE_QUAL, 
+  /* RID_V4BUF */ TYPE_QUAL, 
   /* C extensions */
   /* RID_BOUNDED */	TYPE_QUAL,
   /* RID_UNBOUNDED */	TYPE_QUAL,
@@ -3725,6 +4441,105 @@ end ifc
   return STRING;
 }
 
+extern bool in_omp_pragma;
+extern bool seen_omp_paren;
+static int
+check_omp_string (char * s, bool * status)
+{
+  *status = true;
+
+  if (!strcmp (s, "\n"))
+  {
+    in_omp_pragma = seen_omp_paren = FALSE;
+    return '\n';
+  }
+  if ((!strcmp (s, "mips_frequency_hint") ||
+       !strcmp (s, "frequency_hint")) && !seen_omp_paren)
+    return PRAGMA_EXEC_FREQ;
+  if (!strcasecmp (s, "never") && !seen_omp_paren)
+    return FREQ_NEVER;
+  if (!strcasecmp (s, "init") && !seen_omp_paren)
+    return FREQ_INIT;
+  if (!strcasecmp (s, "frequent") && !seen_omp_paren)
+    return FREQ_FREQUENT;
+  if (!strcmp (s, "options") && !seen_omp_paren)
+    return PRAGMA_OPTIONS;
+  if (!strcmp (s, "private") && !seen_omp_paren)
+    return PRIVATE;
+  if (!strcmp (s, "parallel") && !seen_omp_paren)
+    return PARALLEL;
+  if (!strcmp (s, "omp") && !seen_omp_paren)
+    return PRAGMA_OMP;
+  if (!strcmp (s, "copyprivate") && !seen_omp_paren)
+    return COPYPRIVATE;
+  if (!strcmp (s, "firstprivate") && !seen_omp_paren)
+    return FIRSTPRIVATE;
+  if (!strcmp (s, "lastprivate") && !seen_omp_paren)
+    return LASTPRIVATE;
+  if (!strcmp (s, "shared"))
+    return SHARED;
+  if (!strcmp (s, "none"))
+    return NONE;
+  if (!strcmp (s, "reduction") && !seen_omp_paren)
+    return REDUCTION;
+  if (!strcmp (s, "copyin") && !seen_omp_paren)
+    return COPYIN;
+  if (!strcmp (s, "static"))
+  {
+    fprintf (stderr,"NYI\n");
+    abort();
+  }
+  if (!strcmp (s, "dynamic"))
+    return DYNAMIC;
+  if (!strcmp (s, "guided"))
+    return GUIDED;
+  if (!strcmp (s, "runtime"))
+    return RUNTIME;
+  if (!strcmp (s, "ordered"))
+    return ORDERED;
+  if (!strcmp (s, "schedule"))
+    return SCHEDULE;
+  if (!strcmp (s, "nowait"))
+    return NOWAIT;
+  if (!strcmp (s, "num_threads") && !seen_omp_paren)
+    return NUM_THREADS;
+  if (!strcmp (s, "sections") && !seen_omp_paren)
+    return SECTIONS;
+  if (!strcmp (s, "section"))
+    return SECTION;
+  if (!strcmp (s, "single"))
+    return SINGLE;
+  if (!strcmp (s, "master") && !seen_omp_paren)
+    return MASTER;
+  if (!strcmp (s, "critical") && !seen_omp_paren)
+    return CRITICAL;
+  if (!strcmp (s, "barrier") && !seen_omp_paren)
+    return BARRIER;
+  if (!strcmp (s, "atomic") && !seen_omp_paren)
+    return ATOMIC;
+  if (!strcmp (s, "flush") && !seen_omp_paren)
+    return FLUSH;
+  if (!strcmp (s, "threadprivate") && !seen_omp_paren)
+    return THREADPRIVATE;
+
+#ifdef TARG_SL2 //fork_joint
+  if(!strcmp(s, "sl2") && !seen_omp_paren) 
+  return PRAGMA_SL2;
+  if(!strcmp(s, "sl2_major_sections") && !seen_omp_paren)
+  return SL2_SECTIONS;
+  if(!strcmp(s, "sl2_minor_sections") && !seen_omp_paren)
+  return SL2_MINOR_SECTIONS;
+  if(!strcmp(s, "sl2_major_section") && !seen_omp_paren)
+  return SL2_SECTION;
+  if(!strcmp(s, "sl2_minor_section") && !seen_omp_paren)
+  return SL2_MINOR_SECTION;
+#endif 
+
+  // this must be last, return anything
+  *status = false;
+  return 0;
+}
+
 static inline int
 _yylex ()
 {
@@ -3794,7 +4609,14 @@ _yylex ()
 	int ret = yylexname ();
 	if (ret == STRING)
 	  return yylexstring ();
-	else
+	else if (ret == IDENTIFIER && in_omp_pragma)
+	{
+          if (TREE_CODE (yylval.ttype) != IDENTIFIER_NODE) abort();
+	  char * omp_name = IDENTIFIER_POINTER (yylval.ttype);
+	  bool valid = false;
+	  int code = check_omp_string (omp_name, &valid);
+	  if (valid) return code;
+	}
 	  return ret;
       }
 

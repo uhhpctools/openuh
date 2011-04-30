@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -37,15 +41,19 @@
  * ====================================================================
  *
  * Module: dominate.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/dominate.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:23-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.dominate.h $
  *
  * Description:
  *
  * Definitions for basic block (BB) dominator/post-dominator information
  * generation and maintenence.
+ *
+ * Definitions:
+ *   BB A dominates B iff all paths from the entry to B intersects A. 
+ *   BB A post-dominates B iff all paths from B to the exit intersects A.
  *
  * Constants:
  *
@@ -119,6 +127,7 @@ extern void Set_BB_pdom_set(BB *bb, BS *bs);
 
 #define BB_Has_Dominator_Info(bb) (BB_id(bb) < bb_dom_map.size)
 
+extern BOOL Are_Dominators_Calculated(void);
 extern void Calculate_Dominators(void);
 extern void BB_REGION_Calculate_Dominators(const BB_REGION& region);
 extern void BB_SET_Calculate_Dominators(BB_SET *bbset, BOOL compute_dom, BOOL compute_pdom);

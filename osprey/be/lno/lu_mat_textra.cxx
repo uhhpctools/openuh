@@ -45,7 +45,6 @@
 *** $Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.lu_mat_textra.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -53,7 +52,7 @@
 #pragma hdrstop
 
 #define lu_mat_textra_CXX      "lu_mat_textra.cxx"
-static char *rcs_id =   lu_mat_textra_CXX "$Revision: 1.6 $";
+const static char *rcs_id =   lu_mat_textra_CXX "$Revision: 1.6 $";
 
 
 #include "lnopt_main.h"

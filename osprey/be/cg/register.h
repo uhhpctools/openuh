@@ -44,10 +44,10 @@
  * ====================================================================
  *
  *  Module: register.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/register.h,v $
+ *  $Revision: 1.7 $
+ *  $Date: 06/03/20 17:31:48-08:00 $
+ *  $Author: gautam@jacinth.keyresearch $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.register.h $
  *
  *  Revision history:
  *   07-May-93 - Original Version
@@ -590,7 +590,7 @@
 
 
 #ifdef _KEEP_RCS_ID
-static const char register_rcs_id[] = "$Source: /home/bos/bk/kpro64-pending/be/cg/SCCS/s.register.h $ $Revision: 1.5 $";
+static const char register_rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.register.h $ $Revision: 1.7 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "mtypes.h"
@@ -604,16 +604,19 @@ struct tn;
  */
 
 typedef UINT   REGISTER;
-typedef mUINT8 mREGISTER;
+//typedef mUINT8 mREGISTER;
+// Use mUINT16 now because some architecture, e.g. NVISA, can have a large amount 
+// of registers.
+typedef mUINT16 mREGISTER;
 
-/* define 16-bit structure to hold both the class and register number,
-   and a union with an mUINT16 so that we can efficiently compare
+/* define 32-bit structure to hold both the class and register number,
+   and a union with an mUINT32 so that we can efficiently compare
    register class-number pairs */
 typedef union class_reg_pair {
-  mUINT16	class_n_reg;
+  mUINT32	class_n_reg;
   struct class_reg_struct {
     mREGISTER 	        reg;
-    mISA_REGISTER_CLASS rclass;
+    mISA_REGISTER_CLASS rclass; 
     } class_reg;
 } CLASS_REG_PAIR;
 
@@ -723,10 +726,12 @@ extern const REGISTER_SET REGISTER_SET_EMPTY_SET;
  * not really exported.  See below for exported access macros.
  */
 typedef struct {
-  mUINT8            reg_machine_id[REGISTER_MAX + 1];
+  mUINT16           reg_machine_id[REGISTER_MAX + 1];
   mUINT8            reg_bit_size[REGISTER_MAX + 1];
   mBOOL             reg_allocatable[REGISTER_MAX + 1];
+#if !defined(TARG_NVISA)
   const char       *reg_name[REGISTER_MAX + 1];
+#endif
 
   mBOOL             can_store;
   mBOOL		    multiple_save;
@@ -741,10 +746,13 @@ typedef struct {
   REGISTER_SET      shrink_wrap;
   REGISTER_SET	    stacked;
   REGISTER_SET      rotating;
-#ifdef TARG_X8664
-  /* Set of registers that are eight-bit addressable. */
-  REGISTER_SET      eight_bit_regs;
+#ifdef TARG_LOONGSON
+  REGISTER_SET      assembler_temporary;
 #endif
+//#ifdef TARG_X8664
+//  /* Set of registers that are eight-bit addressable. */
+//  REGISTER_SET      eight_bit_regs;
+//#endif
 } REGISTER_CLASS_INFO;
 
 
@@ -791,10 +799,14 @@ REGISTER_CLASS_info[ISA_REGISTER_CLASS_MAX + 1];
                                 (REGISTER_CLASS_info[x].can_store)
 #define REGISTER_CLASS_multiple_save(x)				\
                                 (REGISTER_CLASS_info[x].multiple_save)
-#ifdef TARG_X8664
-#define REGISTER_CLASS_eight_bit_regs(x)			\
-                                (REGISTER_CLASS_info[x].eight_bit_regs)
+#ifdef TARG_LOONGSON
+#define REGISTER_CLASS_assembler_temporary(x)               \
+                                (REGISTER_CLASS_info[x].assembler_temporary)
 #endif
+//#ifdef TARG_X8664
+//#define REGISTER_CLASS_eight_bit_regs(x)			\
+//                                (REGISTER_CLASS_info[x].eight_bit_regs)
+//#endif
 #define REGISTER_CLASS_last_register(x)				\
 			(REGISTER_CLASS_register_count(x) + REGISTER_MIN - 1)
 
@@ -802,8 +814,19 @@ REGISTER_CLASS_info[ISA_REGISTER_CLASS_MAX + 1];
                                 (REGISTER_CLASS_reg_machine_id(rclass)[reg])
 #define REGISTER_allocatable(rclass,reg)			\
 				(REGISTER_CLASS_reg_allocatable(rclass)[reg])
+#if defined(TARG_NVISA)
+/* Because the isa reg_name may not be permanent (when many regs),
+ * we have to copy or use it immediately.
+ * Rather than alloc space to copy it to the local info struct, 
+ * change this to just invoke the isa routine directly
+ * (why bother with two copies of the same data?). */
+#define REGISTER_name(rclass,reg)				\
+	(ISA_REGISTER_CLASS_INFO_Reg_Name(ISA_REGISTER_CLASS_Info(rclass), \
+	 reg - REGISTER_MIN))
+#else
 #define REGISTER_name(rclass,reg)				\
 				(REGISTER_CLASS_reg_name(rclass)[reg])
+#endif
 #define REGISTER_bit_size(rclass,reg)				\
 				(REGISTER_CLASS_reg_bit_size(rclass)[reg])
 
@@ -863,6 +886,13 @@ extern CLASS_REG_PAIR		CLASS_REG_PAIR_sp;
 #define REGISTER_CLASS_sp	CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_sp)
 #define CLASS_AND_REG_sp	CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_sp)
 
+#ifdef TARG_IA64
+extern CLASS_REG_PAIR           CLASS_REG_PAIR_tp;
+#define REGISTER_tp             CLASS_REG_PAIR_reg(CLASS_REG_PAIR_tp)
+#define REGISTER_CLASS_tp       CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_tp)
+#define CLASS_AND_REG_tp        CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_tp)
+#endif
+
 extern CLASS_REG_PAIR		CLASS_REG_PAIR_fp;
 #define REGISTER_fp		CLASS_REG_PAIR_reg(CLASS_REG_PAIR_fp)
 #define REGISTER_CLASS_fp	CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_fp)
@@ -920,6 +950,199 @@ extern CLASS_REG_PAIR		CLASS_REG_PAIR_fone;
 #define REGISTER_fone		CLASS_REG_PAIR_reg(CLASS_REG_PAIR_fone)
 #define REGISTER_CLASS_fone	CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_fone)
 #define CLASS_AND_REG_fone	CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_fone)
+
+#if defined(TARG_SL)
+extern CLASS_REG_PAIR		CLASS_REG_PAIR_k0;
+#define REGISTER_k0		CLASS_REG_PAIR_reg(CLASS_REG_PAIR_k0)
+#define REGISTER_CLASS_k0	CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_k0)
+#define CLASS_AND_REG_k0	CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_k0)
+extern CLASS_REG_PAIR           CLASS_REG_PAIR_k1;
+#define REGISTER_k1             CLASS_REG_PAIR_reg(CLASS_REG_PAIR_k1)
+#define REGISTER_CLASS_k1       CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_k1)
+#define CLASS_AND_REG_k1        CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_k1)
+
+//control register ja
+extern CLASS_REG_PAIR           CLASS_REG_PAIR_ja;
+#define REGISTER_ja             CLASS_REG_PAIR_reg(CLASS_REG_PAIR_ja)
+#define REGISTER_CLASS_ja       CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_ja)
+#define CLASS_AND_REG_ja        CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_ja)
+
+extern CLASS_REG_PAIR            CLASS_REG_PAIR_lc0;
+#define REGISTER_lc0            CLASS_REG_PAIR_reg(CLASS_REG_PAIR_lc0)
+#define REGISTER_CLASS_lc0  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_lc0)
+#define CLASS_AND_REG_lc0  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_lc0)
+
+extern CLASS_REG_PAIR            CLASS_REG_PAIR_lc1;
+#define REGISTER_lc1            CLASS_REG_PAIR_reg(CLASS_REG_PAIR_lc1)
+#define REGISTER_CLASS_lc1  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_lc1)
+#define CLASS_AND_REG_lc1  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_lc1)
+
+extern CLASS_REG_PAIR            CLASS_REG_PAIR_lc2;
+#define REGISTER_lc2            CLASS_REG_PAIR_reg(CLASS_REG_PAIR_lc2)
+#define REGISTER_CLASS_lc2  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_lc2)
+#define CLASS_AND_REG_lc2  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_lc2)
+
+extern CLASS_REG_PAIR            CLASS_REG_PAIR_lc3;
+#define REGISTER_lc3            CLASS_REG_PAIR_reg(CLASS_REG_PAIR_lc3)
+#define REGISTER_CLASS_lc3  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_lc3)
+#define CLASS_AND_REG_lc3  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_lc3)
+
+extern CLASS_REG_PAIR      CLASS_REG_PAIR_hi;
+#define REGISTER_hi          CLASS_REG_PAIR_reg(CLASS_REG_PAIR_hi)
+#define REGISTER_CLASS_hi CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_hi)
+#define CLASS_AND_REG_hi  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_hi)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_acc0;
+#define REGISTER_acc0     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_acc0)
+#define REGISTER_CLASS_acc0  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_acc0)
+#define CLASS_AND_REG_acc0 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_acc0)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_acc1;
+#define REGISTER_acc1     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_acc1)
+#define REGISTER_CLASS_acc1  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_acc1)
+#define CLASS_AND_REG_acc1 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_acc1)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_acc2;
+#define REGISTER_acc2     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_acc2)
+#define REGISTER_CLASS_acc2  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_acc2)
+#define CLASS_AND_REG_acc2 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_acc2)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_acc3;
+#define REGISTER_acc3     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_acc3)
+#define REGISTER_CLASS_acc3  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_acc3)
+#define CLASS_AND_REG_acc3 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_acc3)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add0;
+#define REGISTER_add0     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add0)
+#define REGISTER_CLASS_add0  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add0)
+#define CLASS_AND_REG_add0 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add0)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add1;
+#define REGISTER_add1     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add1)
+#define REGISTER_CLASS_add1  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add1)
+#define CLASS_AND_REG_add1 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add1)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add2;
+#define REGISTER_add2     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add2)
+#define REGISTER_CLASS_add2  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add2)
+#define CLASS_AND_REG_add2 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add2)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add3;
+#define REGISTER_add3     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add3)
+#define REGISTER_CLASS_add3  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add3)
+#define CLASS_AND_REG_add3 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add3)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add4;
+#define REGISTER_add4     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add4)
+#define REGISTER_CLASS_add4  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add4)
+#define CLASS_AND_REG_add4 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add4)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add5;
+#define REGISTER_add5     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add5)
+#define REGISTER_CLASS_add5  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add5)
+#define CLASS_AND_REG_add5 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add5)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add6;
+#define REGISTER_add6     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add6)
+#define REGISTER_CLASS_add6  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add6)
+#define CLASS_AND_REG_add6 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add6)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_add7;
+#define REGISTER_add7     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_add7)
+#define REGISTER_CLASS_add7  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_add7)
+#define CLASS_AND_REG_add7 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_add7)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize0;
+#define REGISTER_addsize0     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize0)
+#define REGISTER_CLASS_addsize0  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize0)
+#define CLASS_AND_REG_addsize0 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize0)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize1;
+#define REGISTER_addsize1     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize1)
+#define REGISTER_CLASS_addsize1  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize1)
+#define CLASS_AND_REG_addsize1 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize1)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize2;
+#define REGISTER_addsize2     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize2)
+#define REGISTER_CLASS_addsize2  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize2)
+#define CLASS_AND_REG_addsize2 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize2)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize3;
+#define REGISTER_addsize3     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize3)
+#define REGISTER_CLASS_addsize3  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize3)
+#define CLASS_AND_REG_addsize3 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize3)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize4;
+#define REGISTER_addsize4     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize4)
+#define REGISTER_CLASS_addsize4  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize4)
+#define CLASS_AND_REG_addsize4 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize4)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize5;
+#define REGISTER_addsize5     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize5)
+#define REGISTER_CLASS_addsize5  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize5)
+#define CLASS_AND_REG_addsize5 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize5)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize6;
+#define REGISTER_addsize6     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize6)
+#define REGISTER_CLASS_addsize6  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize6)
+#define CLASS_AND_REG_addsize6 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize6)
+
+extern CLASS_REG_PAIR   CLASS_REG_PAIR_addsize7;
+#define REGISTER_addsize7     CLASS_REG_PAIR_reg(CLASS_REG_PAIR_addsize7)
+#define REGISTER_CLASS_addsize7  CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_addsize7)
+#define CLASS_AND_REG_addsize7 CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_addsize7)
+#endif // TARG_SL
+
+#ifdef TARG_SL2
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_c2acc;
+#define REGISTER_c2acc       CLASS_REG_PAIR_reg(CLASS_REG_PAIR_c2acc)
+#define REGISTER_CLASS_c2acc CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_c2acc)
+#define CLASS_AND_REG_c2acc  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_c2acc)
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_c2cond;
+#define REGISTER_c2cond       CLASS_REG_PAIR_reg(CLASS_REG_PAIR_c2cond)
+#define REGISTER_CLASS_c2cond CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_c2cond)
+#define CLASS_AND_REG_c2cond  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_c2cond)
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_c2mvsel;
+#define REGISTER_c2mvsel       CLASS_REG_PAIR_reg(CLASS_REG_PAIR_c2mvsel)
+#define REGISTER_CLASS_c2mvsel CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_c2mvsel)
+#define CLASS_AND_REG_c2mvsel  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_c2mvsel)
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_c2vlcs;
+#define REGISTER_c2vlcs       CLASS_REG_PAIR_reg(CLASS_REG_PAIR_c2vlcs)
+#define REGISTER_CLASS_c2vlcs CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_c2vlcs)
+#define CLASS_AND_REG_c2vlcs  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_c2vlcs)
+
+#endif
+
+#ifdef TARG_LOONGSON
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_at;
+#define REGISTER_at           CLASS_REG_PAIR_reg(CLASS_REG_PAIR_at)
+#define REGISTER_CLASS_at     CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_at)
+#define CLASS_AND_REG_at      CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_at)
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_hi;
+#define REGISTER_hi           CLASS_REG_PAIR_reg(CLASS_REG_PAIR_hi)
+#define REGISTER_CLASS_hi     CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_hi)
+#define CLASS_AND_REG_hi      CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_hi)
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_lo;
+#define REGISTER_lo           CLASS_REG_PAIR_reg(CLASS_REG_PAIR_lo)
+#define REGISTER_CLASS_lo     CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_lo)
+#define CLASS_AND_REG_lo      CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_lo)
+
+extern CLASS_REG_PAIR          CLASS_REG_PAIR_fsr;
+#define REGISTER_fsr           CLASS_REG_PAIR_reg(CLASS_REG_PAIR_fsr)
+#define REGISTER_CLASS_fsr     CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_fsr)
+#define CLASS_AND_REG_fsr      CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_fsr)
+
+#endif
+
+extern CLASS_REG_PAIR         CLASS_REG_PAIR_c2movpat;
+#define REGISTER_c2movpat       CLASS_REG_PAIR_reg(CLASS_REG_PAIR_c2movpat)
+#define REGISTER_CLASS_c2movpat CLASS_REG_PAIR_rclass(CLASS_REG_PAIR_c2movpat)
+#define CLASS_AND_REG_c2movpat  CLASS_REG_PAIR_class_n_reg(CLASS_REG_PAIR_c2movpat)
 
 extern const CLASS_REG_PAIR		CLASS_REG_PAIR_undef;
 

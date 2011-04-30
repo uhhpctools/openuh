@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -48,11 +48,18 @@
 #include "wb_carray.h"
 #endif 
 
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #ifndef __SYS_ELF_H__
 #include <elf.h>
 #endif
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #ifndef ipl_summary_INCLUDED
+#ifndef UINT16_MAX
+#define  UINT16_MAX       (65535u)
+#endif
 #include "ipl_summary.h"
 #endif 
 
@@ -60,6 +67,8 @@
 #include "ipl_summarize.h"
 #endif
 
+#include "dep_graph.h"
+#include "prompf.h"
 
 class ARRAY_SUMMARY; 
 const INT WB_MAX_STRING_LENGTH = 1000;
@@ -87,7 +96,7 @@ struct WB_COMMAND {
   char _command; 
   WB_REQUIRED_PIECES _required_fields; 
   WB_COMMAND* _subcommand; 
-  char* _text; 
+  const char* _text; 
 }; 
 
 class WB_BROWSER {
@@ -129,7 +138,7 @@ protected:
   char Command(INT i) { return (_command_list)[i]._command; }
   WB_REQUIRED_PIECES Required_Fields(INT i) 
     { return (_command_list)[i]._required_fields; }
-  char* Command_Text(INT i) { return (_command_list)[i]._text; }
+  const char* Command_Text(INT i) { return (_command_list)[i]._text; }
   WB_COMMAND* Subcommand(INT i) {return (_command_list)[i]._subcommand;};
   void Set_Subcommand(char ch);
   void Reset_Subcommand();
@@ -232,7 +241,6 @@ protected:
   BOOL Summary_Array_Command(char ch);
   INT Summary_Size(char ch);
   void Summary_Single(FILE* fp, char ch, INT index, BOOL is_list);
-  void Summary(FILE* fp) __attribute__((weak));
   void Summary_Locate(FILE* fp);  
   void Help(); 
   void Invoke_Command(char ch); 
@@ -241,6 +249,7 @@ public:
   WB_BROWSER(WN* global_fd, DU_MANAGER* du, ALIAS_MANAGER* alias_mgr,
     WN_MAP prompf_id_map, WN_MAP access_arrray_map, WN_MAP reduction_map, 
     PU* pu, WB_COMMAND* command_list); 
+  void Summary(FILE* fp) __attribute__((weak));
   PU* Pu() { return _pu; }
   void Set_Pu(PU* pu) { _pu = pu; }
   WN* Global_Fd() { return _global_fd; }
@@ -268,8 +277,12 @@ public:
     { _array_summary = array_summary; }
   void Set_Sanity_Check_Level(INT sanity_check_level) 
     { _sanity_check_level = sanity_check_level; }
-  void Sdebug(char init_buffer[]);
+  void Sdebug(const char init_buffer[]);
   void Debug(); 
 }; 
+
+// Summary is actually only defined in ipa,
+// so create external name that we can do weak naming trick on.
+extern "C" void WB_BROWSER_Summary (FILE *fp, WB_BROWSER *wb);
 
 #endif /* wb_browser_INCLUDED */

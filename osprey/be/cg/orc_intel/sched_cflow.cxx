@@ -2169,6 +2169,8 @@ Copy_Entry_BB_Annotation (BB* entry_bb, BB* splitted_bb) {
         case ANNOT_LOOPINFO :
         case ANNOT_SWITCH : 
         case ANNOT_ROTATING_KERNEL :
+	case ANNOT_ASMINFO :
+	case ANNOT_INLINE :
             BB_Add_Annotation (splitted_bb,ANNOT_kind (annot),ANNOT_info(annot));
             break ;
 
@@ -2444,6 +2446,9 @@ Copy_Exit_BB_Annot (BB * exit_bb, BB * splitted_exit) {
                 ("Exit block BB:%d cannot be a rotating kernel", 
                   BB_id(exit_bb)));
             add_annot = FALSE; break ;
+
+        case ANNOT_INLINE:
+            break;
 
         default:
             FmtAssert(FALSE, 

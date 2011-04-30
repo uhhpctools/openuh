@@ -45,8 +45,14 @@ G77_gerror_0 (char *str, ftnlen Lstr)
 {
 #ifdef KEY /* Bug 1683, 5019 */
   char *buf = alloca(Lstr + 1);
+#if defined(BUILD_OS_DARWIN)
+  /* Standard version uses "buf" */
+  strerror_r(errno, buf, Lstr + 1);
+  char *s = buf;
+#else /* KEY Mac port */
   /* GNU version returns "char *", may ignore "buf" */
   char *s = strerror_r(errno, buf, Lstr + 1);
+#endif /* KEY Mac port */
 #else
   char *s;
 

@@ -230,15 +230,20 @@ LDIRT = be.so ii_files
 
 LLDLIBS = -lmangle -lgen
 
-default: first $(TARGETS) last
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
 first :
+ifndef SKIP_DEP_BUILD
 ## verify that be.so is up to date
 	$(call submake,$(TARG_BE_DIR))
+endif
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is
@@ -255,6 +260,15 @@ ifndef NOSYSGEN
 endif
 endif
 endif
+
+ifeq ($(BUILD_TARGET), SL)
+ifeq ($(BUILD_TYPE), SHARED)
+ifndef NOSYSGEN
+        $(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -F /usr/cpu/sysgen/root$(STD_MONGOOSE_LOC) inline
+endif
+endif
+endif
+
 
 inline: $(IPA_OBJS) $(IPA_CXX_OBJS)
 	$(C++F) -show -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/be.so $(LDFLAGS)

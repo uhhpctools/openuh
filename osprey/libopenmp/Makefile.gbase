@@ -1,34 +1,29 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
+#  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
 #
-#  This program is free software; you can redistribute it and/or modify it
-#  under the terms of version 2 of the GNU General Public License as
-#  published by the Free Software Foundation.
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
-#  This program is distributed in the hope that it would be useful, but
-#  WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+#  Copyright (C) 2003 - 2009 Tsinghua University.
 #
-#  Further, this software is distributed without any warranty that it is
-#  free of the rightful claim of any third person regarding infringement 
-#  or the like.  Any license provided herein, whether implied or 
-#  otherwise, applies only to this software file.  Patent licenses, if 
-#  any, provided herein do not apply to combinations of this program with 
-#  other software, or any other product whatsoever.  
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
 #
-#  You should have received a copy of the GNU General Public License along
-#  with this program; if not, write the Free Software Foundation, Inc., 59
-#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#  This library is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  Lesser General Public License for more details.
 #
-#  Contact information:  Silicon Graphics, Inc., 1600 Amphitheatre Pky,
-#  Mountain View, CA 94043, or:
+#  You should have received a copy of the GNU Lesser General Public
+#  License along with this library; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+#  
+#  Contact information: HPC Institute, Department of Computer Science and Technology,
+#  Tsinghua University, Beijing 100084, CHINA, or:
 #
-#  http://www.sgi.com
-#
-#  For further information regarding this notice, see:
-#
-#  http://oss.sgi.com/projects/GenInfo/NoticeExplan
+#  http://hpc.cs.tsinghua.edu.cn
 #
 #
 
@@ -36,7 +31,16 @@
 
 # What we're building, and where to find it.
 LIBRARY = libopenmp.a
+PROF_LIB = libopenmp_p.a
+dso_version := 1
+DSO = libopenmp.so.$(dso_version)
+
+ifeq ($(BUILD_TYPE), NONSHARED)
 TARGETS = $(LIBRARY)
+else
+TARGETS = $(LIBRARY) $(PROF_LIB) $(DSO)
+endif
+
 SRC_DIRS    = $(BUILD_BASE)
 
 # Makefile setup
@@ -52,6 +56,13 @@ LCINCS = -I$(SRC_DIRS) -I$(BUILD_BASE)
 # HOSTDEFS += -DTAU_USE_C_API
 HOSTDEFS += -I$(TAU_ROOT)/include -I$(PAPI_ROOT)/include -DPROFILING_ON -DTAU_PAPI -DTAU_STDCXXLIB -DTAU_DOT_H_LESS_HEADERS -DTAU_OPEN64ORC  -DTAU_OPENMP -DTAU_MULTIPLE_COUNTERS   -DTAU_LINUX_TIMERS -DTAU_PAPI_WALLCLOCKTIME -DTAU_PAPI_VIRTUAL -DTAU_CALLPATH -DTAU_COMPENSATE -DTAU_LARGEFILE -D_LARGEFILE64_SOURCE -DSTD_COMPLEX  -DTAU_MPI -DTAU_MPI_THREADED -DTAU_MPIATTRFUNCTION
 
+#
+# don't support i386 since it lacks atomic instructions.
+#
+ifeq ($(BUILD_ARCH), IA32)
+CFLAGS += -march=i486
+endif
+
 CFLAGS += -DTARG_$(BUILD_TARGET)
 CXXFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
@@ -65,25 +76,50 @@ CFILES = \
 	omp_util.c \
 	omp_queue.c \
 	omp_task.c \
-	pcl.c 
+	pcl.c  \
+	omp_collector_util.c
 
-CXXFILES = omp_collector_util.cxx
+CXXFILES = \
+	omp_init.cxx
 
+ifeq ($(BUILD_COMPILER), GNU)
+NO_UNWIND=-fno-unwind-tables
+else
+NO_UNWIND=-CG:emit_unwind_info=off
+endif
 
+# Adding -fno-exceptions to avoid EH related stuffs, 
+#  which may cause undefined symbols in C program
+CXXFLAGS += -fno-exceptions -nostdinc++ $(NO_UNWIND)
 
-default: first $(TARGETS) last
+default:
+	$(MAKE)  first
+	$(MAKE)  $(TARGETS)
+	$(MAKE)  last
 
 first : 
-	@echo ${COMMONRULES}
-	@echo ${BUILD_COMPILER}
-	@echo ${OBJECTS}
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(BUILD_AREA)/include)
-	@echo ${BUILD_COMPILER}
+endif
 
 last : make_libdeps
+
+include $(COMMONRULES)
 
 $(LIBRARY): $(OBJECTS)
 	@echo ${BUILD_COMPILER}
 	$(ar) cru $@ $^
+	$(ranlib) $@
 
-include $(COMMONRULES)
+$(PROF_LIB): $(OBJECTS:%.o=%.pg.o)
+	$(ar) cru $@ $^
+	$(ranlib) $@
+
+$(DSO): $(OBJECTS:%.o=%.pic.o)
+ifeq ($(BUILD_OS), DARWIN)
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -o $@ $^ -L. -lpthread
+else
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -Wl,-soname=$(DSO) -Wl,--version-script=$(BUILD_BASE)/$(DSO:%.so.$(dso_version)=%.vs) -o $@ $^ -L. -lpthread
+endif
+	$(ln) -sf $(DSO) $(basename $(DSO))
+

@@ -650,11 +650,6 @@ ffeglobal_proc_def_arg (ffesymbol s, int argno, const char *name, ffeglobalArgSu
 	      defwhy = "an alternate-return label";
 	      break;
 
-#if 0
-	    case FFEGLOBAL_argsummaryPTR:
-	      defwhy = "a pointer";
-	      break;
-#endif
 
 	    default:
 	      defwhy = "???";
@@ -904,16 +899,6 @@ ffeglobal_proc_ref_arg (ffesymbol s, int argno, ffeglobalArgSummary as,
 	    }
 	  break;
 
-#if 0
-	case FFEGLOBAL_argsummaryPTR:
-	  if ((ai->as != FFEGLOBAL_argsummaryPTR)
-	      && (ai->as != FFEGLOBAL_argsummaryNONE))
-	    {
-	      fail = TRUE;
-	      refwhy = "a pointer";
-	    }
-	  break;
-#endif
 
 	default:
 	  break;
@@ -957,11 +942,6 @@ ffeglobal_proc_ref_arg (ffesymbol s, int argno, ffeglobalArgSummary as,
 	      defwhy = "an alternate-return label";
 	      break;
 
-#if 0
-	    case FFEGLOBAL_argsummaryPTR:
-	      defwhy = "a pointer";
-	      break;
-#endif
 
 	    default:
 	      defwhy = "???";
@@ -1284,21 +1264,6 @@ ffeglobal_ref_progunit_ (ffesymbol s, ffelexToken t, ffeglobalType type)
 	       && (type != FFEGLOBAL_typeCOMMON)
 	       && ! g->u.proc.defined)))
 	{
-#if 0	/* This is likely to just annoy people. */
-	  if (ffe_is_warn_globals ())
-	    {
-	      /* Warn about EXTERNAL of a COMMON name, though it works.  */
-	      ffebad_start (FFEBAD_FILEWIDE_TIFF);
-	      ffebad_string (ffelex_token_text (t));
-	      ffebad_string (ffeglobal_type_string_[type]);
-	      ffebad_string (ffeglobal_type_string_[g->type]);
-	      ffebad_here (0, ffelex_token_where_line (t),
-			   ffelex_token_where_column (t));
-	      ffebad_here (1, ffelex_token_where_line (g->t),
-			   ffelex_token_where_column (g->t));
-	      ffebad_finish ();
-	    }
-#endif
 	}
       else if (ffe_is_globals () || ffe_is_warn_globals ())
 	{

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -93,7 +97,7 @@ inline BOOL
 ST_visible_outside_dso(const ST *s)	{ return ST_visible_outside_dso(*s); }
 
 ST *
-Gen_Intrinsic_Function(TY_IDX, char *function_name); // implementation
+Gen_Intrinsic_Function(TY_IDX, const char *function_name); // implementation
 						     // still
 						     // incomplete.
 
@@ -104,10 +108,8 @@ Make_Function_Type(TY_IDX return_ty_idx);  // implementation still
 TY_IDX
 Make_Array_Type(TYPE_ID element_type, INT32 ndim, INT64 len);
 
-#if 1 // Fix 10-26-2002: Enhancement to reset addr_saved flag before Mainopt
 void
 Clear_local_symtab_addr_flags (const SCOPE& scope);
-#endif
 
 //----------------------------------------------------------------------
 // TY-related utilities
@@ -119,9 +121,7 @@ extern TY_IDX MTYPE_TO_TY_array[MTYPE_LAST+1];
 // Well known predefined types
 extern TY_IDX Void_Type, FE_int_Type, FE_double_Type;
 extern TY_IDX Spill_Int_Type, Spill_Float_Type;
-#ifdef TARG_X8664
 extern TY_IDX Quad_Type;
-#endif /* TARG_X8664 */
 
 #ifdef KEY
 extern TY_IDX Spill_Int32_Type;
@@ -197,6 +197,25 @@ TY_are_equivalent (TY_IDX ty_id1,
 */
 TY_IDX
 TY_is_unique (TY_IDX);
+
+/* ty either is union or has union in one of its fields (called recursively) */
+BOOL TY_has_union (TY_IDX ty);
+
+#ifdef TARG_NVISA
+/* base ty (field ty) of vector */
+inline TY_IDX
+TY_vector_elem_ty (TY_IDX ty)
+{
+	return FLD_type(TY_fld(ty));
+}
+/* number of elements in the vector */
+UINT
+TY_vector_count (TY_IDX ty);
+#endif
+
+// return mtype associated with type and offset
+// (e.g. might be mtype of structure field)
+TYPE_ID Mtype_For_Type_Offset (TY_IDX ty, INT64 offset);
 
 //----------------------------------------------------------------------
 // PREG-related utilities
@@ -374,7 +393,8 @@ Make_arb_iter (ARB_HANDLE arb)
 inline LABEL_ITER
 Make_label_iter (LABEL_IDX label_idx)
 {
-    return LABEL_ITER (Scope_tab[CURRENT_SYMTAB].label_tab, label_idx);
+    return LABEL_ITER (Scope_tab[LABEL_IDX_level (label_idx)].label_tab, 
+		       LABEL_IDX_index (label_idx));
 }
 
 inline PREG_ITER
@@ -556,6 +576,34 @@ For_all_until (const TYPE_TABLE&, const PREDICATE& pred)
 
 #define FOREACH_INITV(init,v) \
 	for (v = init; v != 0; v = Initv_Table[v].next)
+
+//
+// The following utility function Find_Section_Name_For_ST() is moved
+// from data_layout.cxx for reuse in ipc_symtab_merge.cxx
+//
+
+// return section name for corresponding ST via st_attr table
+struct find_st_attr_secname {
+        ST_IDX st;
+        find_st_attr_secname (const ST *s) : st (ST_st_idx (*s)) {}
+ 
+        BOOL operator () (UINT, const ST_ATTR *st_attr) const {
+            return (ST_ATTR_kind (*st_attr) == ST_ATTR_SECTION_NAME &&
+                    ST_ATTR_st_idx (*st_attr) == st);
+        }
+};
+ 
+inline STR_IDX
+Find_Section_Name_For_ST (const ST *st)
+{
+    ST_IDX idx = ST_st_idx (*st);
+    ST_ATTR_IDX d;
+
+    d = For_all_until (St_Attr_Table, ST_IDX_level (idx),
+                          find_st_attr_secname(st));
+    FmtAssert(d != 0, ("didn't find section name for ST %s", ST_name(*st)));
+    return ST_ATTR_section_name(St_Attr_Table(ST_IDX_level (idx), d));
+}
 
 #endif /* symtab_utils_INCLUDED */
 

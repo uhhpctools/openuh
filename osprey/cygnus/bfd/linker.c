@@ -1840,15 +1840,30 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	    {
 	      asection *msec = NULL;
 	      bfd_vma mval = 0;
+              bfd *mbfd = NULL;
 
 	      switch (h->type)
 		{
 		case bfd_link_hash_defined:
+#ifdef KEY
+                  if ( !h->u.def.section_is_invalid ) {
+#endif
 		  msec = h->u.def.section;
+                  mbfd = msec->owner;
+#ifdef KEY
+                  }
+#endif
 		  mval = h->u.def.value;
 		  break;
 	        case bfd_link_hash_indirect:
+#ifdef KEY
+                  if ( !h->u.def.section_is_invalid ) {
+#endif
 		  msec = bfd_ind_section_ptr;
+                  mbfd = msec->owner;
+#ifdef KEY
+                  }
+#endif
 		  mval = 0;
 		  break;
 		default:
@@ -1864,7 +1879,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 		break;
 
 	      if (! ((*info->callbacks->multiple_definition)
-		     (info, h->root.string, msec->owner, msec, mval,
+		     (info, h->root.string, mbfd, msec, mval,
 		      abfd, section, value)))
 		return FALSE;
 	    }

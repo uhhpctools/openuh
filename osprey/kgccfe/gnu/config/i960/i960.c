@@ -130,17 +130,6 @@ fpmove_src_operand (op, mode)
   return (GET_CODE (op) == CONST_DOUBLE || general_operand (op, mode));
 }
 
-#if 0
-/* Return true if OP is a register or zero.  */
-
-int
-reg_or_zero_operand (op, mode)
-     rtx op;
-     enum machine_mode mode;
-{
-  return register_operand (op, mode) || op == const0_rtx;
-}
-#endif
 
 /* Return truth value of whether OP can be used as an operands in a three
    address arithmetic insn (such as add %o1,7,%l2) of mode MODE.  */
@@ -458,11 +447,6 @@ int
 i960_address_cost (x)
      rtx x;
 {
-#if 0
-  /* Handled before calling here.  */
-  if (GET_CODE (x) == REG)
-    return 1;
-#endif
   /* This is a MEMA operand -- it's free.  */
   if (GET_CODE (x) == CONST_INT
       && INTVAL (x) >= 0
@@ -1365,17 +1349,6 @@ i960_output_function_prologue (file, size)
     }
 
   actual_fsize = compute_frame_size (size) + 4 * n_remaining_saved_regs;
-#if 0
-  /* ??? The 1.2.1 compiler does this also.  This is meant to round the frame
-     size up to the nearest multiple of 16.  I don't know whether this is
-     necessary, or even desirable.
-
-     The frame pointer must be aligned, but the call instruction takes care of
-     that.  If we leave the stack pointer unaligned, we may save a little on
-     dynamic stack allocation.  And we don't lose, at least according to the
-     i960CA manual.  */
-  actual_fsize = (actual_fsize + 15) & ~0xF;
-#endif
 
   /* Check stack limit if necessary.  */
   if (current_function_limit_stack)
@@ -2133,28 +2106,6 @@ legitimize_address (x, oldx, mode)
   return x;
 }
 
-#if 0
-/* Return the most stringent alignment that we are willing to consider
-   objects of size SIZE and known alignment ALIGN as having.  */
-   
-int
-i960_alignment (size, align)
-     int size;
-     int align;
-{
-  int i;
-
-  if (! TARGET_STRICT_ALIGN)
-    if (TARGET_IC_COMPAT2_0 || align >= 4)
-      {
-	i = i960_object_bytes_bitalign (size) / BITS_PER_UNIT;
-	if (i > align)
-	  align = i;
-      }
-
-  return align;
-}
-#endif
 
 
 int

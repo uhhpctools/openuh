@@ -51,6 +51,7 @@ extern "C" {
 #include "ir_reader.h"
 #include "wfe_expr.h"
 #include "wfe_stmt.h"
+#include "wfe_pragma.h"
 #include "wfe_decl.h"
 #include "tree_symtab.h"
 #include "targ_sim.h"
@@ -606,7 +607,7 @@ Do_EH_Tables (void)
 			// Store the inito_idx in the PU
 			// 1. exc_ptr 2. filter : Set 3rd entry with inito_idx
 			INITV_IDX index = INITV_next (INITV_next (INITO_val (
-			               (INITO_IDX) Get_Current_PU().unused)));
+			               PU_misc_info (Get_Current_PU()))));
 			// INITV_Set_VAL resets the next field, so back it up
 			// and set it again.
 			INITV_IDX bkup = INITV_next (index);
@@ -642,7 +643,7 @@ Do_EH_Tables (void)
 		ST * eh_spec = Get_eh_spec_ST ();
 		id = New_INITO (ST_st_idx(eh_spec), start);
 		INITV_IDX index = INITV_next (INITV_next (INITV_next (
-			INITO_val ((INITO_IDX) Get_Current_PU().unused))));
+			INITO_val (PU_misc_info (Get_Current_PU())))));
 		// INITV_Set_VAL resets the next field, so back it up
 		// and set it again.
 		INITV_IDX bkup = INITV_next (index);
@@ -1100,7 +1101,7 @@ static char *operand_constraint_array[MAX_RECOG_OPERANDS];
 static BOOL
 constraint_by_address (const char *s)
 {
-#ifndef TARG_X8664
+#if !defined(TARG_X8664) && !defined(TARG_LOONGSON)
   if (strchr (s, 'm')) {
 #else
   if (strchr (s, 'm') || strchr (s, 'g')) {
@@ -1521,6 +1522,9 @@ Wfe_Expand_Asm_Operands (tree  string,
 
 	WN *output_rvalue_wn = WFE_Lhs_Of_Modify_Expr (MODIFY_EXPR,
 						       TREE_VALUE (tail),
+#ifdef TARG_SL
+                                                       NULL,
+#endif
 						       plus_modifier,
 						       (TY_IDX) 0, // component type
 						       (INT64) 0,  // component offset
@@ -2274,6 +2278,10 @@ WFE_Expand_Return (tree stmt, tree retval)
 
 #ifdef KEY
     bool copied_return_value = FALSE;
+#ifdef PATHSCALE_MERGE
+    bool need_iload_via_fake_parm = FALSE;
+    WN *target_wn = NULL;
+#endif
 
     // If the return object must be passed through memory and the return
     // object is created by a TARGET_EXPR, have the TARGET_EXPR write directly
@@ -2289,13 +2297,43 @@ WFE_Expand_Return (tree stmt, tree retval)
       if (TREE_CODE(t) == TARGET_EXPR) {
 	WFE_fixup_target_expr(t);
 	copied_return_value = TRUE;
+#ifdef PATHSCALE_MERGE
+      } else if (TREE_CODE(t) == CALL_EXPR) {
+	// Pass the first fake parm to the called function, so that the called
+	// function can write the result directly to the return area.
+	// Bug 12837.
+	WN *first_formal = WN_formal(Current_Entry_WN(), 0);
+	ST *st = WN_st(first_formal);
+	target_wn = WN_Ldid(Pointer_Mtype, 0, st, ST_type(st));
+	copied_return_value = TRUE;
+	need_iload_via_fake_parm = TRUE;
+#endif
       }
     }
 #endif
 
     rhs_wn = WFE_Expand_Expr_With_Sequence_Point (
 		retval,
-		TY_mtype (ret_ty_idx));
+		TY_mtype (ret_ty_idx)
+#ifdef PATHSCALE_MERGE
+                , target_wn
+#endif
+                );
+#ifdef PATHSCALE_MERGE
+    // rhs_wn is NULL if retval is a call_expr which writes the result directly
+    // into the return area.  Manufacture a rhs_wn which is an iload of the
+    // fake first parm.  Bug 12837.
+    if (rhs_wn == NULL) {
+      Is_True(need_iload_via_fake_parm == TRUE,
+	      ("WFE_Expand_Return: unexpected rhs_wn NULL"));
+      WN *first_formal = WN_formal(Current_Entry_WN(), 0);
+      ST *st = WN_st(first_formal);
+      TY_IDX ty_idx = Get_TY(TREE_TYPE(retval));
+      WN *ldid_wn = WN_Ldid(Pointer_Mtype, 0, st, ST_type(st));
+      rhs_wn = WN_Iload(TY_mtype(ty_idx), 0, ty_idx, ldid_wn);
+    }
+#endif
+
     WN * cleanup_block = WN_CreateBlock ();
     WFE_Stmt_Push (cleanup_block, wfe_stmk_temp_cleanup, Get_Srcpos ());
     Do_Temp_Cleanups (stmt);
@@ -2414,6 +2452,7 @@ WFE_Expand_Return (tree stmt, tree retval)
       wn = WN_CreateReturn_Val(OPR_RETURN_VAL, WN_rtype(rhs_wn), MTYPE_V, rhs_wn);
     }
   }
+
   WFE_Stmt_Append(wn, Get_Srcpos());
 } /* WFE_Expand_Return */
 
@@ -2682,10 +2721,6 @@ Tid_For_Handler (tree handler)
   while (TREE_CODE(t) != COMPOUND_STMT)
     t = TREE_CHAIN(t);
   t = COMPOUND_BODY(t);
-#if 0   /* START_CATCH_STMT no longer exists */
-  while (TREE_CODE(t) != START_CATCH_STMT)
-    t = TREE_CHAIN(t);
-#endif
   t = TREE_TYPE(t);
   return t ? ST_st_idx(Get_ST (TREE_OPERAND(t, 0))) : 0;
 }
@@ -3249,11 +3284,7 @@ WFE_Expand_Try (tree stmt)
 
 #ifdef KEY
 // FIXME: handle temp cleanups for return from handler.
-#if 0 
-  vector<TEMP_CLEANUP_INFO> *temp_cleanup = Get_Temp_Cleanup_Info ();
-#else
   vector<TEMP_CLEANUP_INFO> *temp_cleanup = 0;
-#endif
   int handler_count=0;
   WN * region_body;
   if (key_exceptions)
@@ -3474,25 +3505,11 @@ Call_Named_Function (ST * st)
 void
 Call_Throw (void)
 {
-#if 0
-  static ST * st = NULL;
-  if (st == NULL) {
-    st = Function_ST_For_String("__throw");
-  }
-  Call_Named_Function (st);
-#endif
 }
 
 void
 Call_Rethrow (void)
 {
-#if 0
-  static ST * st = NULL;
-  if (st == NULL) {
-    st = Function_ST_For_String ("__rethrow");
-  }
-  Call_Named_Function (st);
-#endif
 }
 
 void Call_Terminate (void)
@@ -3504,13 +3521,6 @@ void Call_Terminate (void)
   }
   Call_Named_Function (st);
 #else
-#if 0
-  static ST * st = NULL;
-  if (st == NULL) {
-    st = Function_ST_For_String ("terminate__Fv");
-  }
-  Call_Named_Function (st);
-#endif
 #endif // KEY
 }
 
@@ -3519,7 +3529,7 @@ static void Generate_filter_cmp (int filter, LABEL_IDX goto_idx);
 static WN *
 Generate_cxa_call_unexpected (void)
 {
-  ST_IDX exc_ptr_param = TCON_uval (INITV_tc_val (INITO_val (Get_Current_PU().unused)));
+  ST_IDX exc_ptr_param = TCON_uval (INITV_tc_val (INITO_val (PU_misc_info (Get_Current_PU()))));
   ST exc_st = St_Table[exc_ptr_param];
   WN* parm_node = WN_Ldid (Pointer_Mtype, 0, &exc_st, ST_type (exc_st));
 
@@ -3542,7 +3552,7 @@ Generate_cxa_call_unexpected (void)
 static void
 Generate_unwind_resume (void)
 {
-  ST_IDX exc_ptr_param = TCON_uval (INITV_tc_val (INITO_val (Get_Current_PU().unused)));
+  ST_IDX exc_ptr_param = TCON_uval (INITV_tc_val (INITO_val (PU_misc_info (Get_Current_PU()))));
   ST exc_st = St_Table[exc_ptr_param];
   WN* parm_node = WN_Ldid (Pointer_Mtype, 0, &exc_st, ST_type (exc_st));
 
@@ -3596,7 +3606,7 @@ Generate_unwind_resume (void)
 static void
 Generate_filter_cmp (int filter, LABEL_IDX goto_idx)
 {
-  ST_IDX filter_param = TCON_uval (INITV_tc_val (INITV_next (INITO_val (Get_Current_PU().unused))));
+  ST_IDX filter_param = TCON_uval (INITV_tc_val (INITV_next (INITO_val (PU_misc_info (Get_Current_PU())))));
   const TYPE_ID mtype = TARGET_64BIT ? MTYPE_U8 : MTYPE_U4;
   
   WN * wn_ldid = WN_Ldid (mtype, 0, &St_Table[filter_param],
@@ -3661,12 +3671,6 @@ WFE_Expand_Handlers_Or_Cleanup (const HANDLER_INFO &handler_info)
 	  else // catch-all, so do not compare filter
       		WFE_Stmt_Append (WN_CreateGoto ((ST_IDX) NULL, 
 				HANDLER_LABEL(t_copy)), Get_Srcpos());
-#if 0
-// we shouldn't need the following sort call
-// TODO: verify and remove it.
-	  sort (type_filter_vector.begin(), type_filter_vector.end(), 
-		cmp_types());
-#endif
         }
         else 
 	{
@@ -3717,12 +3721,6 @@ WFE_Expand_Handlers_Or_Cleanup (const HANDLER_INFO &handler_info)
 // We will see if control reaches here.
 // Let me comment this out, may need to do something else later.
       //Fail_FmtAssertion ("Handle it");
-#if 0
-      // Don't do anything for TREE_CODE(t) == BIND_EXPR.
-      // Clean up this code once it stabilizes.
-      WFE_One_Stmt (t);
-      Call_Rethrow();
-#endif
   }    
 }
 
@@ -3811,6 +3809,25 @@ WFE_Expand_Omp (tree stmt)
     case exec_freq_dir:
       WFE_Expand_Pragma (stmt);
       break;
+
+#ifdef TARG_SL  // fork_joint
+    case sl2_sections_cons_b:
+    case sl2_minor_sections_cons_b:		
+      expand_start_sl2_sections (stmt->omp.choice == sl2_minor_sections_cons_b);
+      break;
+    case sl2_sections_cons_e:
+      expand_end_sl2_sections ();
+      break;
+    case sl2_section_cons_b:
+    case sl2_minor_section_cons_b:		
+      expand_start_sl2_section (stmt->omp.choice == sl2_minor_section_cons_b);
+      break;
+    case sl2_section_cons_e:
+    case sl2_minor_section_cons_e:		
+      expand_end_sl2_section ();
+      break;
+#endif 
+
                                                                                 
     default:
       Fail_FmtAssertion ("Unexpected stmt node");
@@ -3828,10 +3845,6 @@ WFE_Expand_DO (tree stmt)
   incr = FOR_EXPR(stmt);
   cond = FOR_COND(stmt);
   body = FOR_BODY(stmt);
-#if 0
-  for (init = FOR_INIT_STMT(stmt); init; init = TREE_CHAIN(init))
-	WFE_Expand_Stmt(init);
-#endif
   expand_start_do_loop (init, cond, incr);
   while (body)
   {
@@ -3876,12 +3889,6 @@ WFE_Expand_Stmt(tree stmt, WN* target_wn)
 #endif /* WFE_DEBUG */
 
 #ifdef KEY
-#if 0
- // Close a region before any stmt, we may be able to relax this restriction.
- // We at least want to close it on seeing a cleanup_stmt.
- if (opt_regions && Check_For_Call_Region ())
-   Did_Not_Terminate_Region = FALSE;
-#endif
 #endif
 
  if (TREE_CODE(stmt) == LABEL_DECL)

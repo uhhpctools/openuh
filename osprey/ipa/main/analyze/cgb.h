@@ -55,9 +55,9 @@ extern void CGB_Initialize(CG_BROWSER* cgb, IPA_CALL_GRAPH* ipa_cg);
 
 extern void CGB_Terminate(CG_BROWSER* cgb);
 
-extern void cg_sdebug(char init_buffer[]);
+extern "C" void cg_sdebug(const char init_buffer[]);
 
-extern void scgb(char init_buffer[]);
+extern void scgb(const char init_buffer[]);
 
 extern void cg_debug();
 

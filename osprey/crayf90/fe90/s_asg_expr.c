@@ -1,5 +1,12 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2007, 2008. PathScale, LLC.  All Rights Reserved.
+ */
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -132,7 +139,7 @@ static boolean expr_semantics_d (opnd_type *result_opnd,
 #endif /* KEY Bug 934 */
 
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 # pragma inline uplus_opr_handler
 # pragma inline power_opr_handler
 # pragma inline mult_opr_handler
@@ -337,6 +344,7 @@ help_assign_cpnts(int line, int col, Uint type_idx,
   for (int sn_idx = ATT_FIRST_CPNT_IDX(TYP_IDX(type_idx));
     sn_idx != NULL_IDX;
     sn_idx = SN_SIBLING_LINK(sn_idx)) {
+    boolean need_semantics = FALSE;
     int cpnt_attr_idx = SN_ATTR_IDX(sn_idx);
     int l_idx = do_make_struct_opr(line, col, lvalue_idx, lvalue_fld,
       cpnt_attr_idx);
@@ -356,8 +364,7 @@ help_assign_cpnts(int line, int col, Uint type_idx,
 	line, col);
     }
 
-    else if (Structure == TYP_TYPE(ATD_TYPE_IDX(cpnt_attr_idx)) &&
-      ATT_ALLOCATABLE_CPNT(TYP_IDX(ATD_TYPE_IDX(cpnt_attr_idx)))) {
+    else if (allocatable_structure_component(cpnt_attr_idx)) {
 
       /* Non-allocatable array whose element type is a structure having
        * allocatable components or subcomponents: no dope vector, so we can't
@@ -379,12 +386,20 @@ help_assign_cpnts(int line, int col, Uint type_idx,
     else {
       new_ir_idx = gen_ir(IR_Tbl_Idx, l_idx, Asg_Opr,
         ATD_TYPE_IDX(cpnt_attr_idx), line, col, IR_Tbl_Idx, r_idx);
+      /* Array, character assignments need expansion by semantics processing */
+      need_semantics = (ATD_ARRAY_IDX(cpnt_attr_idx) != NULL_IDX ||
+        TYP_TYPE(ATD_TYPE_IDX(cpnt_attr_idx)) == Character);
     }
 
     if (new_ir_idx != NULL_IDX) {
       gen_sh(After, Assignment_Stmt, line, col, FALSE, FALSE, TRUE);
       SH_IR_IDX(curr_stmt_sh_idx) = new_ir_idx;
-      SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+      if (need_semantics) {
+	assignment_stmt_semantics();
+      }
+      else {
+	SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+      }
     }
   }
 }
@@ -904,7 +919,12 @@ CK_WHERE:
       }
 #endif /* KEY Bug 572 */
 
+#ifdef KEY /* Bug 14150 */
+      ok &= check_for_legal_assignment_define(&l_opnd,
+        IR_OPR(ir_idx) == Ptr_Asg_Opr);
+#else /* KEY Bug 14150 */
       ok &= check_for_legal_define(&l_opnd);
+#endif /* KEY Bug 14150 */
 
       attr_idx = find_base_attr(&l_opnd, &line, &col);
 
@@ -1740,17 +1760,7 @@ static boolean expr_sem_d(opnd_type      *result_opnd,
                attr_idx = ATD_SF_ARG_IDX(attr_idx);
                OPND_IDX((*result_opnd)) = attr_idx;
             }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
-# if 0
-            else if (ATD_CLASS(attr_idx) == Dummy_Argument &&
-                     ATD_ARRAY_IDX(attr_idx) &&
-                     BD_ARRAY_CLASS(ATD_ARRAY_IDX(attr_idx))==Assumed_Shape &&
-                     ATD_SF_ARG_IDX(attr_idx) != NULL_IDX) {
-
-               attr_idx = ATD_SF_ARG_IDX(attr_idx);
-               OPND_IDX((*result_opnd)) = attr_idx;
-            }
-# endif
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # endif
 
 
@@ -1875,16 +1885,6 @@ static boolean expr_sem_d(opnd_type      *result_opnd,
                }
                else if (dump_flags.mp) {
 
-# if 0
-                  if (processing_do_var) {
-                     /* do vars are scope private, by default */
-
-                     ADD_VAR_TO_PRIVATE_LIST(attr_idx);
-                  }
-                  else {
-                     ADD_VAR_TO_SHARED_LIST(attr_idx);
-                  }
-# endif
                }
                else {
 
@@ -4153,7 +4153,29 @@ void	add_substring_length(int	sub_idx)
    IR_COL_NUM(max_idx)		= col;
 
    IL_FLD(list_idx) = IR_Tbl_Idx;
-   IL_IDX(list_idx) = max_idx;
+#ifdef KEY /* Bug 11922 */
+   /*
+    * When the -i8 option is on, what should be the type of the integer
+    * lengths of character data? Throughout the front end, the assumption is
+    * that the lengths are Integer_4 (e.g. in the extra integer arguments
+    * passed to a procedure with character*(*) dummy arguments.) And the
+    * code below this comment consistently uses CG_INTEGER_DEFAULT_TYPE, which
+    * remains Integer_4 even under -i8.
+    *
+    * However, under -i8 the subscripts of this expression are likely to be
+    * Integer_8, and they will force all the Integer_4 stuff to be converted
+    * upward. If we do not generate an explicit conversion back to Integer_4,
+    * then procedure calls, string comparison intrinsics, etc will fail under
+    * -i8 -m32 because they expect Integer_4.
+    */
+   if (cmd_line_flags.s_integer8) {
+     int convert_idx = gen_ir(IR_Tbl_Idx, max_idx, Cvrt_Opr,
+       CG_INTEGER_DEFAULT_TYPE, line, col, NO_Tbl_Idx, NULL_IDX);
+     IL_IDX(list_idx) = convert_idx;
+   }
+   else
+#endif /* KEY Bug 11922 */
+     IL_IDX(list_idx) = max_idx;
 
    NTR_IR_LIST_TBL(list2_idx);
    IR_FLD_L(max_idx) = IL_Tbl_Idx;
@@ -8788,7 +8810,7 @@ static boolean struct_opr_handler(opnd_type		*result_opnd,
           if (AT_OBJ_CLASS(SN_ATTR_IDX(i)) == Data_Obj &&
               ATD_CLASS(SN_ATTR_IDX(i)) == Struct_Component &&
               SN_ATTR_IDX(i) != IR_OPND_R(ir_idx).idx &&
-              strcmp(AT_OBJ_NAME_PTR(IR_OPND_R(ir_idx).idx),&name_pool[SN_NAME_IDX(i)].name_char)==0)
+              strcmp(AT_OBJ_NAME_PTR(IR_OPND_R(ir_idx).idx), SN_NAME_PTR(i))==0)
               IR_OPND_R(ir_idx).idx = SN_ATTR_IDX(i);
         }
       }
@@ -9813,21 +9835,6 @@ static boolean array_construct_opr_handler(opnd_type		*result_opnd,
          ok &= expr_semantics(&size_opnd, &loc_exp_desc);
       }
 
-# if 0
-# ifdef _DEBUG
-      switch (OPND_FLD(size_opnd)) {
-      case CN_Tbl_Idx:
-         print_cn(OPND_IDX(size_opnd));
-         break;
-      case IR_Tbl_Idx:
-         print_ir(OPND_IDX(size_opnd));
-         break;
-      case AT_Tbl_Idx:
-         print_at_all(OPND_IDX(size_opnd));
-         break;
-      }
-# endif
-# endif
 
       COPY_OPND((exp_desc->shape[0]), size_opnd);
       exp_desc->constructor_size_level = constructor_size_level;
@@ -10792,32 +10799,6 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          if (bd_idx &&
              pe_dim_list_idx != NULL_IDX) {
 
-# if 0
-/* don't add pe dimensions for local reference. */
-
-            if (pe_dim_list_idx == NULL_IDX) {
-               /* no pe dimensions specified. */
-
-               list_idx = IR_IDX_R(ir_idx);
-               while (IL_NEXT_LIST_IDX(list_idx) != NULL_IDX) {
-                  list_idx = IL_NEXT_LIST_IDX(list_idx);
-               }
-
-               NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
-               IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
-               list_idx = IL_NEXT_LIST_IDX(list_idx);
-               IR_LIST_CNT_R(ir_idx) += 1;
-
-               IL_FLD(list_idx) = IR_Tbl_Idx;
-               
-               NTR_IR_TBL(plus_idx);
-               IR_OPR(plus_idx) = Local_Pe_Dim_Opr;
-               IR_TYPE_IDX(plus_idx)     = CG_INTEGER_DEFAULT_TYPE;
-               IR_LINE_NUM(plus_idx)     = line;
-               IR_COL_NUM(plus_idx)      = col;
-               IL_IDX(list_idx)          = plus_idx;
-            }
-# endif
 
             num_dims = 0;
             list_idx = pe_dim_list_idx;
@@ -10897,7 +10878,6 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
 
                      (exp_desc->rank)++;
 
-# if 1
                      find_opnd_line_and_column((opnd_type *)
                                                 &IL_OPND(list_idx),
                                                &opnd_line,
@@ -10906,156 +10886,6 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
                               "array syntax", "co-array variables");
                      ok = FALSE;
 
-# else
-
-                     if (IL_FLD(list_idx) == IR_Tbl_Idx  &&
-                         IR_OPR(IL_IDX(list_idx)) == Triplet_Opr) {
-
-                        exp_desc->section = TRUE;
-
-                        list2_idx = IR_IDX_L(IL_IDX(list_idx));
-
-                        if (IL_FLD(list2_idx) == NO_Tbl_Idx) {
-                           /* fill in lower bound */
-
-                           IL_FLD(list2_idx) = BD_LB_FLD(bd_idx, i);
-                           IL_IDX(list2_idx) = BD_LB_IDX(bd_idx, i);
-                           IL_LINE_NUM(list2_idx) = 
-                                           IR_LINE_NUM(IL_IDX(list_idx));
-                           IL_COL_NUM(list2_idx) = 
-                                           IR_COL_NUM(IL_IDX(list_idx));
-
-                           if (IL_FLD(list2_idx) == AT_Tbl_Idx) {
-                              ADD_TMP_TO_SHARED_LIST(IL_IDX(list2_idx));
-                           }
-
-                           if (IL_FLD(list2_idx) != CN_Tbl_Idx) {
-                              exp_desc->foldable = FALSE;
-                              exp_desc->will_fold_later = FALSE;
-   
-                              /* assumes that this is an AT_Tbl_Idx */
-                              exp_desc_r.type_idx =
-                                        ATD_TYPE_IDX(IL_IDX(list2_idx));
-                              exp_desc_r.type=TYP_TYPE(exp_desc_r.type_idx);
-                              exp_desc_r.linear_type =
-                                          TYP_LINEAR(exp_desc_r.type_idx);
-                              SHAPE_FOLDABLE(IL_OPND(list2_idx))
-                                                      = FALSE;
-                              SHAPE_WILL_FOLD_LATER(
-                               IL_OPND(list2_idx)) = FALSE;
-                           }
-                           else {
-                              SHAPE_FOLDABLE(IL_OPND(list2_idx))
-                                                      = TRUE;
-                              SHAPE_WILL_FOLD_LATER(
-                                         IL_OPND(list2_idx)) = TRUE;
-                              exp_desc_r.type_idx = 
-                                            CN_TYPE_IDX(IL_IDX(list2_idx));
-                              exp_desc_r.type=TYP_TYPE(exp_desc_r.type_idx);
-                              exp_desc_r.linear_type =
-                                             TYP_LINEAR(exp_desc_r.type_idx);
-                           }
-
-                           /* assume that lower bound is constant */
-                           /* should be in temp.                  */
-                           IL_CONSTANT_SUBSCRIPT(list2_idx) = TRUE;
-                        }
-
-                        list2_idx = IL_NEXT_LIST_IDX(list2_idx);
-      
-                        if (IL_FLD(list2_idx) == NO_Tbl_Idx) {
-      
-                           if (i == BD_RANK(bd_idx)               &&
-                               BD_ARRAY_CLASS(bd_idx) == Assumed_Size) {
-
-                              PRINTMSG(IR_LINE_NUM(IL_IDX(list_idx)),
-                                       321,Error,
-                                       IR_COL_NUM(IL_IDX(list_idx)));
-                              ok = FALSE;
-                           }
-      
-                           /* fill in upper bound */
-                           IL_FLD(list2_idx) = BD_UB_FLD(bd_idx, i);
-                           IL_IDX(list2_idx) = BD_UB_IDX(bd_idx, i);
-                           IL_LINE_NUM(list2_idx) = 
-                                     IR_LINE_NUM(IL_IDX(list_idx));
-                           IL_COL_NUM(list2_idx) = 
-                                     IR_COL_NUM(IL_IDX(list_idx));
-
-                           if (IL_FLD(list2_idx) == AT_Tbl_Idx) {
-                              ADD_TMP_TO_SHARED_LIST(IL_IDX(list2_idx));
-                           }
-
-                           if (IL_FLD(list2_idx) != CN_Tbl_Idx) {
-                              exp_desc->foldable = FALSE;
-                              exp_desc->will_fold_later = FALSE;
-                              /* assumes that this is an AT_Tbl_Idx */
-                              exp_desc_r.type_idx =
-                                           ATD_TYPE_IDX(IL_IDX(list2_idx));
-                              exp_desc_r.type=TYP_TYPE(exp_desc_r.type_idx);
-                              exp_desc_r.linear_type =
-                                             TYP_LINEAR(exp_desc_r.type_idx);
-                              SHAPE_FOLDABLE(IL_OPND(list2_idx)) = FALSE;
-                              SHAPE_WILL_FOLD_LATER(IL_OPND(list2_idx)) 
-                                     = FALSE;
-                           }
-                           else {
-                              SHAPE_FOLDABLE(IL_OPND(list2_idx)) = TRUE;
-                              SHAPE_WILL_FOLD_LATER(IL_OPND(list2_idx)) 
-                                     = TRUE;
-                              exp_desc_r.type_idx = 
-                                     CN_TYPE_IDX(IL_IDX(list2_idx));
-                              exp_desc_r.type=TYP_TYPE(exp_desc_r.type_idx);
-                              exp_desc_r.linear_type =
-                                             TYP_LINEAR(exp_desc_r.type_idx);
-                           }
-
-                           /* assume that upper bound is constant */
-                           /* should be in temp.                  */
-                           IL_CONSTANT_SUBSCRIPT(list2_idx) = TRUE;
-                        }
-
-                        list2_idx = IL_NEXT_LIST_IDX(list2_idx);
-
-                        if (IL_FLD(list2_idx) == NO_Tbl_Idx) {
-
-                           /* fill in stride = 1 */
-                           IL_FLD(list2_idx) = CN_Tbl_Idx;
-                           IL_IDX(list2_idx) = CN_INTEGER_ONE_IDX;
-                           IL_LINE_NUM(list2_idx) = 
-                                    IR_LINE_NUM(IL_IDX(list_idx));
-                           IL_COL_NUM(list2_idx) = 
-                                    IR_COL_NUM(IL_IDX(list_idx));
-
-                           IL_CONSTANT_SUBSCRIPT(list2_idx) = TRUE;
-                           SHAPE_FOLDABLE(IL_OPND(list2_idx)) = TRUE;
-                           SHAPE_WILL_FOLD_LATER(IL_OPND(list2_idx)) = TRUE;
-                        }
-                        else if (IL_FLD(list2_idx) == CN_Tbl_Idx &&
-                                 compare_cn_and_value(IL_IDX(list2_idx), 
-                                                      0, Eq_Opr)) {
-      
-                           /* zero stride is illegal */
-                           PRINTMSG(IL_LINE_NUM(list2_idx), 1001, Error,
-                                    IL_COL_NUM(list2_idx));
-                           ok = FALSE;
-                        }
-
-                        if (ok) {
-                           make_triplet_extent_tree(&opnd,
-                                               IR_IDX_L(IL_IDX(list_idx)));
-                           COPY_OPND(exp_desc->shape[exp_desc->rank - 1], 
-                                     opnd);
-                        }
-                     }
-                     else {
-                        /* have vector subscript */
-                        IL_VECTOR_SUBSCRIPT(list_idx) = TRUE;
-                        exp_desc->vector_subscript    = TRUE;
-                        COPY_OPND(exp_desc->shape[exp_desc->rank - 1],
-                                  exp_desc_r.shape[0]);
-                     }
-# endif
                   }
                   else if (exp_desc_r.rank > 1 ||
                            (exp_desc_r.type != Integer &&
@@ -13169,12 +12999,8 @@ boolean	check_substring_bounds(int	ir_idx)
                                    &IL_OPND(IR_IDX_R(ir_idx)),
                                    &line,
                                    &col);
-# if 0
-         PRINTMSG(line, 1634, Warning, col);
-# else
          PRINTMSG(line, 781, Error, col);
          ok = FALSE;
-# endif
       }
       else if (fold_relationals(IL_IDX(IL_NEXT_LIST_IDX(IR_IDX_R(ir_idx))),
                                 TYP_IDX(type_idx),
@@ -13186,12 +13012,8 @@ boolean	check_substring_bounds(int	ir_idx)
                                                         IR_IDX_R(ir_idx))),
                                    &line,
                                    &col);
-# if 0
-         PRINTMSG(line, 1634, Warning, col);
-# else
          PRINTMSG(line, 781, Error, col);
          ok = FALSE;
-# endif
       }
    }
 
@@ -13280,12 +13102,8 @@ boolean check_array_bounds(int		ir_idx)
             find_opnd_line_and_column((opnd_type *)&IL_OPND(list_idx),
                                       &line,
                                       &col);
-# if 0
-            PRINTMSG(line, 1633, Warning, col, i);
-# else
             PRINTMSG(line, 1197, Error, col, i);
             ok = FALSE;
-# endif
          }
          else if (BD_UB_FLD(bd_idx, i) == CN_Tbl_Idx &&
                   check_ub &&
@@ -13294,12 +13112,8 @@ boolean check_array_bounds(int		ir_idx)
             find_opnd_line_and_column((opnd_type *)&IL_OPND(list_idx),
                                       &line,
                                       &col);
-# if 0
-            PRINTMSG(line, 1633, Warning, col, i);
-# else
             PRINTMSG(line, 1197, Error, col, i);
             ok = FALSE;
-# endif
          }
       }
       else if (IL_FLD(list_idx) == IR_Tbl_Idx &&
@@ -13356,12 +13170,8 @@ boolean check_array_bounds(int		ir_idx)
                           CN_TYPE_IDX(OPND_IDX(cond_opnd)))) {
 
             find_opnd_line_and_column(&start_opnd, &line, &col);
-# if 0
-            PRINTMSG(line, 1633, Warning, col, i);
-# else
             PRINTMSG(line, 1197, Error, col, i);
             ok = FALSE;
-# endif
          }
       }
 

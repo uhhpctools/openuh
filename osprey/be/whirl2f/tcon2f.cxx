@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: tcon2f.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/tcon2f.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:43 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/tcon2f.cxx,v $
  *
  * Revision history:
  *  27-Apr-95 - Original Version
@@ -56,7 +56,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/tcon2f.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/tcon2f.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include "whirl2f_common.h"
@@ -297,7 +297,7 @@ TCON2F_translate(TOKEN_BUFFER tokens, TCON tvalue, BOOL is_logical)
       case MTYPE_F4:
 	 str = Targ_Print("%.10e", tvalue);
 	 strbase = Remove_Trailing_Zero_Fraction(str);
-	 if (str = strchr(strbase, 'd'))
+	 if (str = (char*)strchr(strbase, 'd'))
 	    *str = 'E';
 	 Append_Token_String(tokens, strbase);
 	 break;
@@ -305,33 +305,21 @@ TCON2F_translate(TOKEN_BUFFER tokens, TCON tvalue, BOOL is_logical)
       case MTYPE_F8:
 	 str = Targ_Print("%.20e", tvalue);
 	 strbase = Remove_Trailing_Zero_Fraction(str);
-	 if (str = strchr(strbase, 'E')) /* due to bug in targ_const.h */
+	 if (str = (char*)strchr(strbase, 'E')) /* due to bug in targ_const.h */
 	    *str = 'D';
-	 else if (str = strchr(strbase, 'd'))
+	 else if (str = (char*)strchr(strbase, 'd'))
 	    *str = 'D';
 	 else
 	    strbase = Concat2_Strings(strbase, "D00");
 	 Append_Token_String(tokens, strbase);
 	 break;
 
-      case MTYPE_F10:
-	 str = Targ_Print(NULL, tvalue);
-	 strbase = Remove_Trailing_Zero_Fraction(str);
-	 if (str = strchr(strbase, 'E')) /* due to bug in targ_const.h */
-	    *str = 'Q';
-	 else if (str = strchr(strbase, 'd'))
-	    *str = 'Q';
-	 else
-	    strbase = Concat2_Strings(strbase, "Q00");
-	 Append_Token_String(tokens, strbase);
-	 break;
-
       case MTYPE_FQ:
 	 str = Targ_Print(NULL, tvalue);
 	 strbase = Remove_Trailing_Zero_Fraction(str);
-	 if (str = strchr(strbase, 'E')) /* due to bug in targ_const.h */
+	 if (str = (char*)strchr(strbase, 'E')) /* due to bug in targ_const.h */
 	    *str = 'Q';
-	 else if (str = strchr(strbase, 'd'))
+	 else if (str = (char*)strchr(strbase, 'd'))
 	    *str = 'Q';
 	 else
 	    strbase = Concat2_Strings(strbase, "Q00");
@@ -340,7 +328,6 @@ TCON2F_translate(TOKEN_BUFFER tokens, TCON tvalue, BOOL is_logical)
 	 
       case MTYPE_C4:
       case MTYPE_C8:
-      case MTYPE_C10:
       case MTYPE_CQ:
 	 Append_Token_Special(tokens, '(');
 	 TCON2F_translate(tokens, Extract_Complex_Real(tvalue), FALSE);

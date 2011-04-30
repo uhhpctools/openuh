@@ -89,9 +89,22 @@ HOSTDEFS += -DPREFIX=\"$(OPEN64_INSTALL_PREFIX)\"
 HOSTDEFS += -DGCC_INCLUDE_DIR=\"$(OPEN64_INCLUDE_DIR)\"
 HOSTDEFS += -DGPLUSPLUS_INCLUDE_DIR=\"$(OPEN64_INCLUDE_DIR)\"
 endif
+ifeq ($(BUILD_TARGET), PPC32)
+HOSTDEFS += -DTARGET_NAME=\"ppc32-linux\"
+endif
 ifeq ($(BUILD_TARGET), MIPS)
 HOSTDEFS += -DTARGET_NAME=\"key-linux\"
 endif
+ifeq ($(BUILD_TARGET), SL)
+HOSTDEFS += -DTARGET_NAME=\"sl-linux\"
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+HOSTDEFS += -DTARGET_NAME=\"$(OPEN64_TARGET)\"
+HOSTDEFS += -DPREFIX=\"$(OPEN64_INSTALL_PREFIX)\"
+HOSTDEFS += -DGCC_INCLUDE_DIR=\"$(OPEN64_INCLUDE_DIR)\"
+HOSTDEFS += -DGPLUSPLUS_INCLUDE_DIR=\"$(OPEN64_INCLUDE_DIR)\"
+endif
+
 
 HOSTDEFS += -DLONGLONG
 HOSTDEFS += -DFRONT_END
@@ -126,6 +139,14 @@ HOSTDEFS += -DGPLUSPLUS_FE
 ifeq ($(BUILD_TARGET), IA64)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
+ifeq ($(BUILD_TARGET), SL)
+TARGDEFS += -DTARG_SL
+endif
+
+ifeq ($(BUILD_OS), LINUX)
+TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+endif
+
 
 #----------------------------------------------------------------------
 #  List of directories, and source files of interest
@@ -156,6 +177,16 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
 GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/mips
 endif
+ifeq ($(BUILD_TARGET), SL)
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/sl
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/ppc32
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+GNU_TARG_DIR = $(GNU_DIR)/loongson
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/loongson
+endif
 
 GNU_CP_DIR		= $(BUILD_BASE)/cp
 
@@ -181,7 +212,8 @@ INC_DIRS =		\
   $(GNU_TARG_DIR)	\
   $(GNU_CONFIG_DIR)	\
   $(GNU_CONFIG_TARG_DIR)\
-  $(BUILD_TOT)/include/gnu
+  $(BUILD_TOT)/include/gnu\
+  $(TARGDIR)/g++fe/gnu
 
 SRC_DIRS +=		\
   $(GNU_CP_DIR)
@@ -343,6 +375,16 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
   GNU_SRCS += mips.c
 endif
+ifeq ($(BUILD_TARGET), SL)
+  GNU_SRCS += mips.c
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+  GNU_SRCS += rs6000-c.c \
+              rs6000.c
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+  GNU_SRCS += $(GNU_CONFIG_DIR)/loongson/mips.c
+endif
 
 # Move lex.c down to after parse.c since it needs the generated parse.h
 GNU_CP_UNIQ_SRCS =	\
@@ -446,17 +488,24 @@ LIBIBERTY_OBJS = $(TARG_LIBIBERTY_DIR)/libiberty.a
 LLDLIBS = $(COMUTIL_OBJS) $(LIBIBERTY_OBJS)
 LLDLIBS += -lm $(CMPLRS_OBJS) $(CSUP_OBJS)
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is 
 #  built.
 #----------------------------------------------------------------------
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
-endif
+ endif
 	$(call submake,$(TARG_LIBIBERTY_DIR))
+endif
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is 
@@ -499,6 +548,12 @@ TM_FILE = MIPS/mips.h MIPS/mips.c MIPS/mips.md MIPS/linux.h
 MD_FILE = MIPS/mips.md
 X8664_OR_MIPS = 1
 endif
+ifeq ($(BUILD_TARGET), SL)
+TM_FILE = SL/sl.h SL/mips.c SL/mips.md SL/linux.h
+MD_FILE = SL/mips.md
+X8664_OR_MIPS = 1
+endif
+
 
 include $(BUILD_TOT)/kgccfe/gnu/frobnicate-version.mk
 
@@ -507,6 +562,9 @@ parse.c: parse.y
 	@echo 'BISON: Expect 33 shift/reduce, 58 reduce/reduce conflicts'
 	$(bison) -d -o $@ $<
 	@grep '#define YYEMPTY' $@ >> $(@:.c=.h)
+parse.h: parse.c
+
+lex.o pt.o spew.o: parse.h
 
 #ifdef X8664_OR_MIPS -- disable for x86-64
 ifdef MIPS

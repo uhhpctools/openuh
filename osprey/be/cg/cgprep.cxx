@@ -37,10 +37,10 @@
  * =======================================================================
  *
  *  Module: cgprep.cxx
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cgprep.cxx,v $
+ *  $Revision: 1.2 $
+ *  $Date: 02/11/07 23:41:23-00:00 $
+ *  $Author: fchow@keyresearch.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cgprep.cxx $
  *
  *  Revision comments:
  *
@@ -70,7 +70,7 @@
 #include "op_list.h"
 #include "cg_loop.h"
 #include "config.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "cg.h"
 #include "tracing.h"
 #include "timing.h"
@@ -248,5 +248,4 @@ void CGPREP_Copy_TN_Into_BB(TN *dest, TN *src, BB *bb, OP *point, UINT8 omega,
 
   BB_Insert_Ops(bb, point, &ops, before);
 }
-
 

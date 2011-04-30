@@ -32,10 +32,10 @@
 
 */
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_lunit.h,v $
+//  $Revision: 1.2 $
+//  $Date: 02/11/07 23:41:30-00:00 $
+//  $Author: fchow@keyresearch.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_lunit.h $
 //  Description: GRA Live Units
 //
 //      This data structure started its life (in the Chow GRA) as an
@@ -75,7 +75,7 @@
 #ifndef GRA_LUNIT_RCS_ID
 #define GRA_LUNIT_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *gra_lunit_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_lunit.h,v $ $Revision: 1.1.1.1 $";
+static char *gra_lunit_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_lunit.h $ $Revision: 1.2 $";
 #endif
 #endif
 
@@ -126,13 +126,14 @@ enum LU_FLAG {
 //		by this block?
 };
 
+class LUNIT;
 class LRANGE;
 class LUNIT_BB_LIST_ITER;
 class LUNIT_LRANGE_LIST_ITER;
 class LUNIT_SPILL_LIST_ITER;
 class LRANGE_LUNIT_ITER;
-class LUNIT;
-LUNIT *LUNIT_Create (LRANGE*, GRA_BB*);
+
+extern LUNIT* LUNIT_Create( LRANGE* lrange, GRA_BB* gbb );
 
 class LUNIT {
 friend class LRANGE;
@@ -289,7 +290,6 @@ public:
   LUNIT *Current(void)		{ return current; }
   void Step(void)		{ current = current->spill_list_next; }
 };
-
 
 #ifndef TARG_IA64
 extern LUNIT* LUNIT_Create( LRANGE* lrange, GRA_BB* gbb );

@@ -430,14 +430,6 @@ copy_body_r (tp, walk_subtrees, data)
   id = (inline_data *) data;
   fn = VARRAY_TOP_TREE (id->fns);
 
-#if 0
-  /* All automatic variables should have a DECL_CONTEXT indicating
-     what function they come from.  */
-  if ((TREE_CODE (*tp) == VAR_DECL || TREE_CODE (*tp) == LABEL_DECL)
-      && DECL_NAMESPACE_SCOPE_P (*tp))
-    if (! DECL_EXTERNAL (*tp) && ! TREE_STATIC (*tp))
-      abort ();
-#endif
 
 #ifdef INLINER_FOR_JAVA
   if (TREE_CODE (*tp) == BLOCK)
@@ -506,11 +498,6 @@ copy_body_r (tp, walk_subtrees, data)
       STRIP_TYPE_NOPS (new_decl);
       *tp = new_decl;
     }
-#if 0
-  else if (nonstatic_local_decl_p (*tp)
-	   && DECL_CONTEXT (*tp) != VARRAY_TREE (id->fns, 0))
-    abort ();
-#endif
   else if (TREE_CODE (*tp) == SAVE_EXPR)
     remap_save_expr (tp, id->decl_map, VARRAY_TREE (id->fns, 0),
 		     walk_subtrees);

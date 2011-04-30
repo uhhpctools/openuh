@@ -49,22 +49,6 @@ get_compatible (a,b)
   if (b->mach == bfd_mach_cris_v10_v32)
     return a;
 
-#if 0
-  /* The code below is disabled but kept as a warning.
-     See ldlang.c:lang_check.  Quite illogically, incompatible arches
-     (as signalled by this function) are only *warned* about, while with
-     this function signalling compatible ones, we can have the
-     cris_elf_merge_private_bfd_data function return an error.  This is
-     undoubtedly a FIXME: in general.  Also, the
-     command_line.warn_mismatch flag and the --no-warn-mismatch option
-     are misnamed for the multitude of ports that signal compatibility:
-     it is there an error, not a warning.  We work around it by
-     pretending matching machs here.  */
-
-  /* Except for the compatible mach, machs must match.  */
-  if (a->mach != b->mach)
-    return NULL;
-#endif
 
   return a;
 }

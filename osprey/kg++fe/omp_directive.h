@@ -136,6 +136,14 @@ extern int check_do_loop_for(tree init_expr, tree logical_expr, tree incr_expr);
 extern void expand_start_do_loop (tree, tree, tree);
 extern void expand_end_do_loop(void);
 
+
+#ifdef TARG_SL2 //fork_joint
+extern void expand_start_sl2_sections (bool is_minor_thread);
+extern void expand_end_sl2_sections ();
+extern void expand_start_sl2_section (bool is_minor_thread);
+extern void expand_end_sl2_section ();
+#endif 
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _LANGUAGE_C_PLUS_PLUS

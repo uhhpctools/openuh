@@ -96,11 +96,6 @@ pp_c_simple_type_specifier (ppi, t)
       pp_c_identifier (ppi, "<type-error>");
       break;
 
-#if 0
-    case UNKNOWN_TYPE:
-      pp_c_identifier (ppi, "<unkown-type>");
-      break;
-#endif
 
     case IDENTIFIER_NODE:
       pp_c_tree_identifier (ppi, t);
@@ -716,29 +711,6 @@ pp_c_postfix_expression (ppi, e)
       pp_initializer (ppi, e);
       break;
       
-#if 0
-    case SRCLOC:
-      pp_left_paren (ppi);
-      pp_identifier (ppi, "__location__");
-      pp_right_paren (ppi);
-      pp_whitespace (ppi);
-      pp_left_brace (ppi);
-      pp_dot (ppi);
-      pp_identifier (ppi, "file");
-      pp_whitespace (ppi);
-      pp_equal (ppi);
-      pp_c_whitespace (ppi);
-      pp_c_expression (ppi, SRCLOC_FILE (e));
-      pp_separate_with (ppi, ',');
-      pp_dot (ppi);
-      pp_identifier (ppi, "line");
-      pp_whitespace (ppi);
-      pp_equal (ppi);
-      pp_c_whitespace (ppi);
-      pp_c_expression (ppi, SRCLOC_LINE (e));
-      pp_right_brace (ppi);
-      break;
-#endif
 
     case VA_ARG_EXPR:
       pp_c_identifier (ppi, "__builtin_va_arg");

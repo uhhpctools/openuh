@@ -105,11 +105,7 @@ extern int target_flags;
 /* The ability to have 4 byte alignment is being suppressed for now.
    If this ability is reenabled, you must enable the definition below
    *and* edit t-mcore to enable multilibs for 4 byte alignment code.  */
-#if 0 
-#define TARGET_8ALIGN		(target_flags & ALIGN8_BIT)
-#else
 #define TARGET_8ALIGN		1
-#endif
 #define TARGET_DIV		(target_flags & DIV_BIT)
 #define TARGET_RELAX_IMM        (target_flags & RELAX_IMM_BIT)
 #define TARGET_W_FIELD          (target_flags & W_FIELD_BIT)

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -38,10 +42,10 @@
  * ====================================================================
  *
  * Module: tlog.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/tlog.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:56 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/tlog.h,v $
  *
  * Revision history:
  *  14-Sep-95 - Original Version
@@ -60,7 +64,7 @@ extern "C" {
 #endif
 
 #ifdef _KEEP_RCS_ID
-static char *tlog_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/tlog.h,v $ $Revision: 1.1.1.1 $";
+static char *tlog_rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/tlog.h,v $ $Revision: 1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 #include <sys/types.h>
@@ -73,16 +77,20 @@ static char *tlog_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/ut
 */
 
 extern void Generate_Tlog(
-  char*		phase_name,	/* e.g. "IPA", "LNO" */
-  char* 	trans_name,	/* e.g. "scalar_renaming" */
+  const char*	phase_name,	/* e.g. "IPA", "LNO" */
+  const char* 	trans_name,	/* e.g. "scalar_renaming" */
   SRCPOS	srcpos, 	/* source position where this */
 				/* transformation occurs */
-  char*		keyword,	/* one word to distinguish this */
+  const char*   keyword,	/* one word to distinguish this */
 				/* transformation. can be null pointer */
-  char*		input_string,
-  char*		output_string,
-  char*		aux_info_string
+  const char*	input_string,
+  const char*	output_string,
+  const char*	aux_info_string
 );
+
+extern FILE * Get_Tlog_File();
+
+
 #ifdef __cplusplus
 }
 #endif

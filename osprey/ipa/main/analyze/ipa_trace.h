@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -62,5 +66,6 @@
 #define IPA_TRACE_SIMPLIFY          131072
 #define IPA_TRACE_TUNING           0x40000
 #define IPA_TRACE_TUNING_NEW       0x80000
+#define IPA_TRACE_ICALL_DEVIRTURAL 0x100000
 
 #endif /* ipa_trace_INCLUDED */

@@ -65,7 +65,7 @@ static const char rcs_id[] = "$Source$ $Revision$";
 static char buf[BUF_SIZE];
 static INT idx = 0;
 
-char *
+const char *
 Host_Format_Parm (
   INT kind,	/* One of the parameter types in errors.h or above */
   MEM_PTR parm)	/* A message parameter passed by the reporter */

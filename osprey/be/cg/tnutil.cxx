@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: tnutil.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/tnutil.cxx,v $
+ * $Revision: 1.20 $
+ * $Date: 05/12/05 08:59:09-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.tnutil.cxx $
  *
  * Description:
  *
@@ -63,6 +67,7 @@
 
 #include "defs.h"
 #include "config.h"
+#include "config_list.h"
 #include "erglob.h"
 #include "xstats.h"
 #include "tracing.h"
@@ -86,7 +91,11 @@
 #include "targ_isa_enums.h"
 #include "stblock.h"
 #include "data_layout.h"	// for FP/SP
-
+#include "findloops.h"
+#if defined(TARG_SL)
+#include <map>
+using std::map;
+#endif
 
 #define DEFAULT_RCLASS_SIZE(rc)	\
 	(REGISTER_bit_size(rc, REGISTER_CLASS_last_register(rc))/8)
@@ -104,13 +113,58 @@ TN *SP_TN = NULL;
 TN *FP_TN = NULL;
 TN *Ep_TN = NULL;
 TN *GP_TN = NULL;
+#if defined(TARG_IA64)
+TN *TP_TN = NULL;
+#endif
 TN *Zero_TN = NULL;
 TN *Pfs_TN = NULL;
 TN *True_TN = NULL;
 TN *FZero_TN = NULL;
 TN *FOne_TN = NULL;
 TN *LC_TN = NULL;
+#if defined(TARG_SL)
+TN *TMP1_TN = NULL;
+TN *TMP2_TN = NULL;
+TN *JA_TN = NULL;
+TN *LC0_TN = NULL;
+TN *LC1_TN = NULL;
+TN *LC2_TN = NULL;
+TN *LC3_TN = NULL;
+TN *HI_TN = NULL;
+TN *Acc0_TN = NULL;
+TN *Acc1_TN = NULL;
+TN *Acc2_TN = NULL;
+TN *Acc3_TN = NULL;
+TN *Addr0_TN = NULL;
+TN *Addr1_TN = NULL;
+TN *Addr2_TN = NULL;
+TN *Addr3_TN = NULL;
+TN *Addr4_TN = NULL;
+TN *Addr5_TN = NULL;
+TN *Addr6_TN = NULL;
+TN *Addr7_TN = NULL;
+TN *Addrsize0_TN = NULL;
+TN *Addrsize1_TN = NULL;
+TN *Addrsize2_TN = NULL;
+TN *Addrsize3_TN = NULL;
+TN *Addrsize4_TN = NULL;
+TN *Addrsize5_TN = NULL;
+TN *Addrsize6_TN = NULL;
+TN *Addrsize7_TN = NULL;
 
+INT32 AccPregN = -1;
+INT32 AddPregN = -1;
+std::map<INT32, TN*> var2acc;
+std::map<INT32, TN*> var2addr;
+int ACCreg[4]= {0,0,0,0};
+int Addreg[8]= {0,0,0,0,0,0,0,0};
+#endif
+#ifdef TARG_LOONGSON
+TN *HI_TN;
+TN *LO_TN;
+TN *SL_TN;
+TN *FPSR_TN;
+#endif
 /* The register TNs are in a table named TNvec, indexed by their TN
  * numbers in the range 1..Last_TN.  The first part of the table, the
  * range 1..Last_Dedicated_TN, consists of TNs for various dedicated
@@ -149,6 +203,15 @@ TN **TN_Vec = NULL;		/* TN_number (TN_Vec[i]) == i */
 
 
 static TN_LIST *Hash_Table[HASH_TABLE_SIZE];
+
+#ifdef Is_True_On
+int trace_tn_number_ = -1;
+
+void set_trace_tn(int n) { trace_tn_number_ = n; }
+
+void reset_trace_tn() { trace_tn_number_ = -1; }
+
+#endif
 
 
 /* ====================================================================
@@ -195,6 +258,23 @@ Search_For_Previous_Constant (INT64 ivalue, INT size)
   return NULL;
 }
 
+static TN *
+Search_For_Previous_Enum (ISA_ENUM_CLASS_VALUE ecv)
+{
+  TN_LIST *p;
+  INT hash_value;
+  TN *tn;
+
+  hash_value = HASH_VALUE(ecv);
+  for(p = Hash_Table[hash_value]; p != NULL; p = TN_LIST_rest(p)) {
+    tn = TN_LIST_first(p);
+    if (TN_is_enum(tn) && TN_enum(tn) == ecv)
+    {
+      return tn;
+    }
+  }
+  return NULL;
+}
 
  /* search for a previously built symbol TN */
 static TN *
@@ -239,7 +319,7 @@ Check_TN_Vec_Size ( void )
     else {
       TN_Count += TN_VEC_INCR;
       TN_Vec = (TN **) realloc ( TN_Vec, (TN_Count+1)*sizeof(TN *) );
-      bzero ( &TN_Vec[TN_Count-TN_VEC_INCR+1], (TN_VEC_INCR)*sizeof(TN *) );
+      BZERO ( &TN_Vec[TN_Count-TN_VEC_INCR+1], (TN_VEC_INCR)*sizeof(TN *) );
     }
   }
 }
@@ -341,11 +421,28 @@ static TN *f4_ded_tns[REGISTER_MAX + 1];
 static TN *f10_ded_tns[REGISTER_MAX + 1];
 #endif
 #ifdef KEY
+#ifndef TARG_NVISA
 static TN *v16_ded_tns[REGISTER_MAX + 1];
+static TN *v32_ded_tns[REGISTER_MAX + 1];
 static TN *i1_ded_tns[REGISTER_MAX + 1];
 static TN *i2_ded_tns[REGISTER_MAX + 1];
 static TN *i4_ded_tns[REGISTER_MAX + 1];
+#endif
 #endif // KEY
+#if defined(TARG_SL)
+static TN *a4_ded_tns[REGISTER_MAX +1];
+#endif
+#if defined(TARG_SL)
+TN* C2_ACC_TN = NULL;
+TN* C2_COND_TN = NULL;
+TN* C2_MVSEL_TN = NULL;
+TN* C2_VLCS_TN = NULL;
+TN* C2_MOVPAT_TN = NULL;
+#endif
+
+#ifdef TARG_PPC32
+static TN* special_ded_tns[Last_Dedicated_Preg_Offset - Float_Preg_Max_Offset];
+#endif
 
 /* ====================================================================
  *
@@ -359,7 +456,11 @@ static TN *
 Create_Dedicated_TN (ISA_REGISTER_CLASS rclass, REGISTER reg)
 {
   INT size = REGISTER_bit_size(rclass, reg) / 8;
+#ifndef TARG_SL
   BOOL is_float = rclass == ISA_REGISTER_CLASS_float;
+#else
+  BOOL is_float = FALSE;
+#endif
 
 #ifdef TARG_X8664
   is_float |= ( rclass == ISA_REGISTER_CLASS_x87 );
@@ -402,6 +503,11 @@ Init_Dedicated_TNs (void)
 	 reg <= REGISTER_CLASS_last_register(rclass);
 	 reg++
     ) {
+#ifdef TARG_NVISA
+      // don't waste space by creating dedicated tns for allocatable regs
+      if (REGISTER_allocatable (rclass, reg))
+        continue;
+#endif
       ++tnum;
       ded_tns[rclass][reg] = Create_Dedicated_TN(rclass, reg);
     }
@@ -417,65 +523,134 @@ Init_Dedicated_TNs (void)
   True_TN = ded_tns[REGISTER_CLASS_true][REGISTER_true];
   FZero_TN = ded_tns[REGISTER_CLASS_fzero][REGISTER_fzero];
   FOne_TN = ded_tns[REGISTER_CLASS_fone][REGISTER_fone];
+#ifdef ABI_PROPERTY_loop_count
   LC_TN = ded_tns[REGISTER_CLASS_lc][REGISTER_lc];
-  
-#if defined(KEY) && !defined(TARG_X8664)
+#endif
+#if defined(TARG_SL)
+  TMP1_TN = ded_tns[REGISTER_CLASS_k0][REGISTER_k0];
+  TMP2_TN = ded_tns[REGISTER_CLASS_k1][REGISTER_k1];  
+  JA_TN = ded_tns[REGISTER_CLASS_ja][REGISTER_ja];
+  LC0_TN = ded_tns[REGISTER_CLASS_lc0][REGISTER_lc0];
+  LC1_TN = ded_tns[REGISTER_CLASS_lc1][REGISTER_lc1];
+  LC2_TN = ded_tns[REGISTER_CLASS_lc2][REGISTER_lc2];
+  LC3_TN = ded_tns[REGISTER_CLASS_lc3][REGISTER_lc3];
+  HI_TN = ded_tns[REGISTER_CLASS_hi][REGISTER_hi];
+  Acc0_TN = ded_tns[REGISTER_CLASS_acc0][REGISTER_acc0];
+  Acc1_TN = ded_tns[REGISTER_CLASS_acc1][REGISTER_acc1];
+  Acc2_TN = ded_tns[REGISTER_CLASS_acc2][REGISTER_acc2];
+  Acc3_TN = ded_tns[REGISTER_CLASS_acc3][REGISTER_acc3];
+  Addr0_TN = ded_tns[REGISTER_CLASS_add0][REGISTER_add0];
+  Addr1_TN = ded_tns[REGISTER_CLASS_add1][REGISTER_add1];
+  Addr2_TN = ded_tns[REGISTER_CLASS_add2][REGISTER_add2];
+  Addr3_TN = ded_tns[REGISTER_CLASS_add3][REGISTER_add3];
+  Addr4_TN = ded_tns[REGISTER_CLASS_add4][REGISTER_add4];
+  Addr5_TN = ded_tns[REGISTER_CLASS_add5][REGISTER_add5];
+  Addr6_TN = ded_tns[REGISTER_CLASS_add6][REGISTER_add6];
+  Addr7_TN = ded_tns[REGISTER_CLASS_add7][REGISTER_add7];
+  Addrsize0_TN = ded_tns[REGISTER_CLASS_addsize0][REGISTER_addsize0];
+  Addrsize1_TN = ded_tns[REGISTER_CLASS_addsize1][REGISTER_addsize1];
+  Addrsize2_TN = ded_tns[REGISTER_CLASS_addsize2][REGISTER_addsize2];
+  Addrsize3_TN = ded_tns[REGISTER_CLASS_addsize3][REGISTER_addsize3];
+  Addrsize4_TN = ded_tns[REGISTER_CLASS_addsize4][REGISTER_addsize4];
+  Addrsize5_TN = ded_tns[REGISTER_CLASS_addsize5][REGISTER_addsize5];
+  Addrsize6_TN = ded_tns[REGISTER_CLASS_addsize6][REGISTER_addsize6];
+  Addrsize7_TN = ded_tns[REGISTER_CLASS_addsize7][REGISTER_addsize7];
+#endif
+#if defined(TARG_SL)
+  C2_ACC_TN = ded_tns[REGISTER_CLASS_c2acc][REGISTER_c2acc];
+  C2_COND_TN = ded_tns[REGISTER_CLASS_c2cond][REGISTER_c2cond];
+  C2_MVSEL_TN = ded_tns[REGISTER_CLASS_c2mvsel][REGISTER_c2mvsel]; 
+  C2_VLCS_TN = ded_tns[REGISTER_CLASS_c2vlcs][REGISTER_c2vlcs]; 
+  C2_MOVPAT_TN = ded_tns[REGISTER_CLASS_c2movpat][REGISTER_c2movpat]; 
+#endif
+
+#if defined(TARG_PR)
+    LC_TN = ded_tns[REGISTER_CLASS_lc][REGISTER_lc];
+    RA_TN = ded_tns[REGISTER_CLASS_ra][REGISTER_ra];
+#endif
+
+#ifdef TARG_LOONGSON
+
+  HI_TN = ded_tns[REGISTER_CLASS_hi][REGISTER_hi];
+  LO_TN = ded_tns[REGISTER_CLASS_lo][REGISTER_lo];
+  FPSR_TN = ded_tns[REGISTER_CLASS_fsr][REGISTER_fsr];
+
+  // Static link register tn, only for F90
+  SL_TN = ded_tns[REGISTER_CLASS_static_link][REGISTER_static_link];
+#endif
+
   /* allocate gp tn.  this may use a caller saved register, so
    * we don't use the one allocated for $gp above.
    */
+#ifdef ABI_PROPERTY_global_ptr
   GP_TN = Create_Dedicated_TN (REGISTER_CLASS_gp, REGISTER_gp);
   tnum++;
 #endif
+#ifdef TARG_IA64  
+  TP_TN = Create_Dedicated_TN (REGISTER_CLASS_tp, REGISTER_tp);
+  tnum++;
+#endif
 
-#ifdef TARG_IA64
+
+#ifndef TARG_NVISA
     for (reg = REGISTER_MIN; 
 	 reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_float);
 	 reg++
     ) {
 	++tnum;
-	f4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
-	Set_TN_size(f4_ded_tns[reg], 4);
-  }
-  for (reg = REGISTER_MIN; 
-       reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_float);
-       reg++) {
+        f4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
+  	Set_TN_size(f4_ded_tns[reg], 4);
+#if defined(TARG_IA64)
 	++tnum;
 	f10_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
 	Set_TN_size(f10_ded_tns[reg], 16);
-  }
-#else // TARG_IA64
-  for (reg = REGISTER_MIN; 
-       reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_float);
-        reg++
-       ) {
-    ++tnum;
-    f4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
-    Set_TN_size(f4_ded_tns[reg], 4);
-#ifdef KEY
-    ++tnum;
-    v16_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
-    Set_TN_size(v16_ded_tns[reg], 16);
-#endif
-  }
-#ifdef KEY
-  for (reg = REGISTER_MIN; 
-       reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_integer);
-        reg++
-       ) {
-    ++tnum;
-    i1_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
-    Set_TN_size(i1_ded_tns[reg], 1);
-    ++tnum;
-    i2_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
-    Set_TN_size(i2_ded_tns[reg], 2);
-    ++tnum;
-    i4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
-    Set_TN_size(i4_ded_tns[reg], 4);
-  }
-#endif // KEY
 
-#endif // TARG_IA64
-  Last_Dedicated_TN = tnum;
+#endif
+#if defined(TARG_X8664)
+        ++tnum;
+        v16_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
+  	Set_TN_size(v16_ded_tns[reg], 16);
+        ++tnum;
+        v32_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_float, reg);
+        Set_TN_size(v32_ded_tns[reg], 32);
+#endif
+    }
+
+#ifdef KEY
+    for (reg = REGISTER_MIN; 
+	 reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_integer);
+	 reg++
+    ) {
+	++tnum;
+        i1_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
+  	Set_TN_size(i1_ded_tns[reg], 1);
+	++tnum;
+        i2_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
+  	Set_TN_size(i2_ded_tns[reg], 2);
+	++tnum;
+        i4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg);
+  	Set_TN_size(i4_ded_tns[reg], 4);
+    }
+#endif // KEY
+#endif // ! NVISA
+#ifdef TARG_PPC32
+    for (reg= 0; reg < Last_Dedicated_Preg_Offset - Float_Preg_Max_Offset; reg++) {
+		special_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_integer, reg + Float_Preg_Max_Offset + 1);
+		tnum++;
+    }
+#endif
+
+#if defined(TARG_SL)	 
+    for (reg = REGISTER_MIN; 
+	 reg <= REGISTER_CLASS_last_register(ISA_REGISTER_CLASS_accum);
+	 reg++
+    ) {
+	++tnum;
+        a4_ded_tns[reg] = Create_Dedicated_TN(ISA_REGISTER_CLASS_accum, reg);
+  	Set_TN_size(a4_ded_tns[reg], 4);
+    }
+#endif
+    Last_Dedicated_TN = tnum;
 }
 
 
@@ -490,47 +665,55 @@ Init_Dedicated_TNs (void)
 TN *
 Build_Dedicated_TN (ISA_REGISTER_CLASS rclass, REGISTER reg, INT size)
 {
-#ifdef TARG_IA64
+#ifdef TARG_PPC32
+  if (reg >Float_Preg_Max_Offset && reg <= Last_Dedicated_Preg_Offset) {
+  	return special_ded_tns[reg - Float_Preg_Max_Offset - 1];
+  }
+#endif
+
+#if defined(TARG_IA64)
   if (rclass == ISA_REGISTER_CLASS_float) {
     if (size == 4)
       return f4_ded_tns[reg];
     if (size == 16)
       return f10_ded_tns[reg];
   }
-#else
-#ifdef KEY
+#elif defined(TARG_X8664) || defined(TARG_MIPS) || defined(TARG_PPC32)
   // check for F4 tns and 16-byte vector tns
   if (rclass == ISA_REGISTER_CLASS_float
-	&& size != DEFAULT_RCLASS_SIZE(rclass) )
+      && size != DEFAULT_RCLASS_SIZE(rclass) )
   {
-        switch(size) {
-	  case 4:  return f4_ded_tns[reg];
-	  case 16: return v16_ded_tns[reg];
-	}
-  }
-#else
-  // check for F4 tns; someday may have to check for F10 tns too
-  if (rclass == ISA_REGISTER_CLASS_float && size == 4
-	&& size != DEFAULT_RCLASS_SIZE(rclass) )
-  {
-	return f4_ded_tns[reg];
+    switch(size) {
+      case 4:  return f4_ded_tns[reg];
+#if defined(TARG_X8664) 
+      case 16: return v16_ded_tns[reg];
+      case 32: return v32_ded_tns[reg];
+#endif // TARG_X8664
+    }
   }
 #endif
 
-#ifdef KEY
+#if defined(TARG_X8664) || defined(TARG_MIPS) || defined(TARG_SL) || defined(TARG_PPC32) || defined(TARG_LOONGSON)
   // check for I4 tns
   if (rclass == ISA_REGISTER_CLASS_integer
-	&& size != DEFAULT_RCLASS_SIZE(rclass) )
+      && size != DEFAULT_RCLASS_SIZE(rclass) )
   {
-        switch(size) {
-	  case 1: return i1_ded_tns[reg];
-	  case 2: return i2_ded_tns[reg];
-	  case 4: return i4_ded_tns[reg];
-	}
+    switch(size) {
+      case 1: return i1_ded_tns[reg];
+      case 2: return i2_ded_tns[reg];
+      case 4: return i4_ded_tns[reg];
+    }
   }
-#endif // KEY
+#endif
 
-#endif // TARG_IA64
+#if defined(TARG_SL)
+  if (rclass == ISA_REGISTER_CLASS_accum && (size ==4)
+      && size != DEFAULT_RCLASS_SIZE(rclass))
+  {
+    return  a4_ded_tns[reg];
+  }
+#endif // TARG_SL
+
   return ded_tns[rclass][reg];
 }
  
@@ -552,9 +735,11 @@ Gen_Register_TN (ISA_REGISTER_CLASS rclass, INT size)
   	Check_TN_Vec_Size ();
   	Set_TN_number(tn,++Last_TN);
   	TNvec(Last_TN) = tn;
-  	if ( size > 16 ) ErrMsg ( EC_TN_Size, size );
+  	if ( size > 32 ) ErrMsg ( EC_TN_Size, size );
   	Set_TN_size(tn, size);
+#if !defined(TARG_SL)
   	if ( rclass == ISA_REGISTER_CLASS_float)  Set_TN_is_float(tn);
+#endif
 #ifdef TARG_X8664
   	if ( rclass == ISA_REGISTER_CLASS_x87)  Set_TN_is_float(tn);
 #endif
@@ -589,12 +774,14 @@ Gen_Typed_Register_TN (TYPE_ID mtype, INT size)
   	//if ( size > 16 ) ErrMsg ( EC_TN_Size, size );
   	Set_TN_size(tn, size);
 
+#if !defined(TARG_SL)
   	if ( rclass == ISA_REGISTER_CLASS_float
 #ifdef TARG_X8664
 	     || rclass == ISA_REGISTER_CLASS_x87
 #endif
            )
 	  Set_TN_is_float(tn);
+#endif // TARG_SL
     	Set_TN_register_class(tn, rclass);
   }
 
@@ -650,7 +837,29 @@ Gen_Literal_TN ( INT64 ivalue, INT size )
   }
   return tn;
 }
- 
+
+#if defined(TARG_NVISA) 
+TN *
+Gen_Enum_TN (ISA_ENUM_CLASS_VALUE ecv)
+{
+  /* Check if there is already an enum TN with this value. Otherwise
+   * create a new one and add it to the hash table. 
+   */
+  TN *tn = Search_For_Previous_Enum (ecv);
+  if (tn == NULL) {
+    INT hash_value;
+    tn = Gen_TN ();
+    Set_TN_size(tn, 2);
+    Set_TN_is_constant(tn);
+    Set_TN_is_enum(tn);
+    Set_TN_enum(tn, ecv);
+    hash_value = HASH_VALUE(ecv);
+    Hash_Table[hash_value] = 
+      TN_LIST_Push (tn, Hash_Table[hash_value], &MEM_pu_pool);
+  }
+  return tn;
+}
+#else
 TN *
 Gen_Enum_TN (ISA_ENUM_CLASS_VALUE ecv)
 {
@@ -661,6 +870,7 @@ Gen_Enum_TN (ISA_ENUM_CLASS_VALUE ecv)
 	Set_TN_enum(tn, ecv);
 	return tn;
 }
+#endif
 
 /* ====================================================================
  *
@@ -738,6 +948,13 @@ Gen_Tag_TN ( LABEL_IDX tag)
   return tn;
 }
 
+#if defined(TARG_PPC32)
+TN *
+Gen_CR_TN (UINT cr)
+{
+  return Build_Dedicated_TN(ISA_REGISTER_CLASS_condition, (REGISTER)(cr+1), 1);
+}
+#endif
 /* ====================================================================
  *
  * Gen_Adjusted_TN
@@ -785,11 +1002,10 @@ Gen_Adjusted_TN ( TN *tn, INT64 adjust )
  * ====================================================================
  */
 
-#ifdef TARG_IA64
-char *
-#else 
-static char *
+#if !defined(TARG_IA64) && !defined(TARG_SL) && !defined(TARG_MIPS)
+static
 #endif
+char *
 sPrint_TN ( TN *tn, BOOL verbose, char *buf )
 {
   char *result = buf;
@@ -875,7 +1091,10 @@ sPrint_TN ( TN *tn, BOOL verbose, char *buf )
     if (TN_register(tn) != REGISTER_UNDEFINED) {
       if (TN_register(tn) <= REGISTER_CLASS_last_register(TN_register_class(tn))) {
 	buf += sprintf (buf, "(%s)", 
-		REGISTER_name(TN_register_class(tn), TN_register(tn)));
+          (List_Software_Names ? 
+	    ABI_PROPERTY_Reg_Name(TN_register_class(tn), 
+	        REGISTER_machine_id(TN_register_class(tn), TN_register(tn)) )
+	      : REGISTER_name(TN_register_class(tn), TN_register(tn))));
       } else {
 	buf += sprintf (buf, "(%d,%d)", TN_register_class(tn), TN_register(tn));
       }
@@ -884,6 +1103,11 @@ sPrint_TN ( TN *tn, BOOL verbose, char *buf )
 	buf += sprintf (buf, "(sv:%s)", 
 		REGISTER_name(TN_save_rclass(tn), TN_save_reg(tn)));
     }
+#ifdef TARG_NVISA
+    if (TN_has_memory_space(tn)) {
+	buf += sprintf (buf, "(space:%d)", TN_memory_space(tn)); 
+    }
+#endif
   }
   if (tn && Get_Trace(TP_CG, 8))
     buf += sprintf(buf, ":%d", TN_size(tn));
@@ -905,7 +1129,7 @@ sPrint_TN ( TN *tn, BOOL verbose, char *buf )
  */
 
 void
-fPrint_TN ( FILE *f, char *fmt, TN *tn)
+fPrint_TN ( FILE *f, const char *fmt, TN *tn)
 {
   char buf[1024];
   char *s = sPrint_TN (tn, FALSE, buf);
@@ -1017,7 +1241,7 @@ Init_TNs_For_PU (void)
   }
 
   /* clear out the hash table */
-  bzero(Hash_Table, sizeof(Hash_Table));
+  BZERO(Hash_Table, sizeof(Hash_Table));
 
   /* reset Last_TN*/
   Last_TN = Last_Dedicated_TN;
@@ -1356,6 +1580,144 @@ TN_Reaching_Value_At_Op(
   *kind = VAL_UNKNOWN;
   return NULL;
 }
+
+
+#if defined(TARG_NVISA)
+// this is a variant of the tnutil Reaching_Value routine,
+// but also uses loop_descr to handle multi-bb loops,
+// and prunes away unnecessary stuff
+// (seemed simpler than adding all this to that routine
+// since that routine is shared).
+static OP *
+Find_Reaching_Def_In_Pred (TN *tn, OP *use_op)
+{
+  OP *op;
+  BB *bb = OP_bb(use_op);
+  REGISTER reg = TN_register(tn);
+  ISA_REGISTER_CLASS rc = TN_register_class(tn);
+  INT cnt = 0;
+
+#define MAX_BB_THRESHOLD    30     // Don't look beyond 30 predecessor blocks.
+                                   // Results of finding very unlikely.
+
+  FmtAssert(TN_register(tn) != REGISTER_UNDEFINED, ("tn not a register"));
+  // if (tracing) fprintf(TFile, "find_reaching_def of reg %d\n", reg);
+  op = OP_prev(use_op);
+  do {
+	// search for def in previous ops
+	while (op) {
+	    if (OP_Defs_Reg(op, rc, reg)) {
+	    	return op;
+	    }
+	    op = OP_prev(op);
+	}
+
+	// look for previous bbs
+	BBLIST *edge;
+	BB *pred_bb = NULL;
+	INT num_preds = 0;
+	
+	FOR_ALL_BB_PREDS(bb, edge) {
+	    	pred_bb = BBLIST_item(edge);
+		num_preds++;
+	}
+	if (num_preds == 1) {
+	    if (REG_LIVE_Outof_BB(rc, reg, pred_bb))
+		bb = pred_bb;
+	    else {
+		// Trace("not live in predicate");
+		return NULL;	// not live in pred so give up
+	    }
+	}
+	else { // num_preds > 1
+		BB_SET *bbset = NULL;
+		if (LOOP_DESCR_Find_Loop(bb) != NULL)
+			bbset = LOOP_DESCR_bbset(LOOP_DESCR_Find_Loop(bb));
+		if (bbset) {
+			// if loop, check all bbs in loop
+			// then check bb that is not in loop (pre-loop-header)
+			BB *bbl;
+			FOR_ALL_BB_SET_members(bbset, bbl) {
+	      		    FOR_ALL_BB_OPs(bbl, op) {
+	        	        if (OP_Defs_Reg(op, rc, reg)) {
+			    		// is def in loop,
+			    		// but not before use or would have
+			    		// found it earlier, so no single def.
+					// Trace("multiple defs in loop");
+			    		return NULL;
+			    	}
+			    }
+			}
+			pred_bb = NULL;
+			FOR_ALL_BB_PREDS(bb, edge) {
+			    if ( ! BB_SET_MemberP(bbset, BBLIST_item(edge)))
+				pred_bb = BBLIST_item(edge);
+			}
+			// pred_bb is header block before loop
+			// or (TBD) need to search for this bb if didn't start
+			// at top of loop.
+			if (pred_bb == NULL) {
+				// Trace("couldn't find preloop bb");
+				return NULL;	// couldn't find preloop bb
+			}
+	    		if ( ! REG_LIVE_Outof_BB(rc, reg, pred_bb)) {
+				// Trace("no def to loop");
+				return NULL;	// no def from this path?
+			}
+			bb = pred_bb;
+		}
+		else {
+			// not a loop but multiple preds,
+			// e.g. merge point of if/else.
+			// could try to go back to prev merge point
+			// if no def in branches, but ignore this case
+			// for now (difficult and unlikely to be important). 
+			// Trace("multiple preds");
+			return NULL;
+		}
+	}
+	op = BB_last_op(bb);
+  } while (++cnt < MAX_BB_THRESHOLD); // circuit-breaker
+
+  // Trace("def not found");
+  return NULL;
+}
+
+OP *
+Find_Reaching_Def (TN *tn, OP *use_op)
+{
+  OP *op = Find_Reaching_Def_In_Pred (tn, use_op);
+  if (op) return op;
+
+#ifdef TARG_NVISA
+  // if tn was in use_op then def must reach use_op,
+  // but we also call this routine speculatively, 
+  // wanting to know if a tn def "could" reach use_op,
+  // in which case the one_def may not reach the use.
+  // Ideally would figure out if really reaches, 
+  // but just be conservative here and give up
+  // (to do right have to track conditional paths).
+  if ( ! OP_Refs_TN(use_op, tn)) {
+	return NULL;
+  }
+  // could be one_def but didn't find def in unique predecessor;
+  // in that case do a brute-force search.
+  if (TN_has_one_def(tn)) {
+    BB *bb;
+    // search for def in previous ops
+    for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+      FOR_ALL_BB_OPs_FWD (bb, op) {
+	if (OP_Defs_TN(op, tn)) {
+	  return op;
+        }
+      }
+    }
+  }
+#endif
+  return NULL;
+}
+
+#endif // TARG_NVISA
 
 
 /* ====================================================================

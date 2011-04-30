@@ -1,5 +1,17 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 Pathscale, LLC.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -125,6 +137,31 @@ find_full_path_of_gcc_file (char* const gcc_name, char* const comp_name,
         }
 }
 
+/* search library_dirs for the object file provided by the compiler */
+char *
+find_obj_path (char *objname)
+{
+        buffer_t buf;
+        sprintf (buf, "%s/%s", get_phase_dir(P_be), objname);
+        if (file_exists(buf)) { 
+                return string_copy(buf); 
+        }
+
+        sprintf (buf, "%s/%s", get_phase_dir(P_library), objname);
+        if (file_exists(buf)) { 
+                return string_copy(buf); 
+        }
+
+        sprintf (buf, "%s/%s", get_phase_dir(P_alt_library), objname);
+        if (file_exists(buf)) { 
+                return string_copy(buf); 
+        }
+
+	/* use default */
+        sprintf(buf, "%s/%s", get_phase_dir(P_startup), objname);
+        return string_copy(buf);
+}
+
 /* search library_dirs for the crt file */
 char*
 find_crt_path (char *crtname)
@@ -132,7 +169,7 @@ find_crt_path (char *crtname)
         string_item_t *p;
         buffer_t buf;
         phases_t ld_phase;
- 
+#ifndef TARG_SL 
         /* See which phase is used to link the "TRUE" objects (i.e, 
          * not the fake objects built by ipl.  
          */
@@ -145,7 +182,7 @@ find_crt_path (char *crtname)
                                          crtname, buf, sizeof(buf)); 
                 return string_copy (buf);
         }
-
+#endif
         for (p = library_dirs->head; p != NULL; p = p->next) {
 		sprintf(buf, "%s/%s", p->name, crtname);
 		if (file_exists(buf)) {
@@ -160,7 +197,7 @@ find_crt_path (char *crtname)
 		}
 		return crtname;
  	}
-
+#ifndef TARG_SL
         sprintf (buf, "%s/%s", get_phase_dir(P_be), crtname);
         if (file_exists(buf)) { return string_copy(buf); }
 
@@ -169,7 +206,7 @@ find_crt_path (char *crtname)
 
         sprintf (buf, "%s/%s", get_phase_dir(P_alt_library), crtname);
         if (file_exists(buf)) { return string_copy(buf); }
-
+#endif
         if (option_was_seen(O_L)) {
 		error("crt files not found in any -L directories:");
         	for (p = library_dirs->head; p != NULL; p = p->next) {
@@ -180,7 +217,13 @@ find_crt_path (char *crtname)
  	}
 
 	/* use default */
-	sprintf(buf, "%s/%s", get_phase_dir(P_startup), crtname);
+#if defined(TARG_SL)
+  if (use_sl5 == TRUE)
+    sprintf(buf, "%s/%s", get_phase_dir(P_sl5_startup), crtname);  
+  else
+#endif
+    sprintf(buf, "%s/%s", get_phase_dir(P_startup), crtname);
+    
 	return string_copy(buf);
 }
 
@@ -201,28 +244,27 @@ init_given_crt_path (char *crtname, char *prog_name, char *tmp_name)
         add_library_dir (&buf[0]);
 }
 
-/* Find out where libstdc++.so file is stored.
+/* Find out where libstdc++.so/libstdc++.a file is stored.
    Invoke gcc -print-file-name=libstdc++.so to find the path.
 */
-void init_stdc_plus_plus_path (void)
+void init_stdc_plus_plus_path (boolean is_shared)
 {
-
+#ifndef TARG_SL
         phases_t ld_phase = determine_ld_phase (FALSE);
-        if (ld_phase != P_ldplus || ld_phase != P_ld) {
-                /* use prebuilt libstdc++.so which reside at the same directory
-                 * as other phases.e.g BE, since the /path/to/be has already 
-                 * in the lib-path, we need not duplicate at this place. 
-                 */
-        } else {
-                char buf[1024];
-                char* p;
-                find_full_path_of_gcc_file (get_full_phase_name (ld_phase), 
-                                "libstdc++.so",  &buf[0], sizeof(buf));
-                p = drop_path (&buf[0]);
-                *p = '\0';
-                if (debug) fprintf(stderr, "libstdc++.so found in %s\n", &buf[0]);
-                add_library_dir (&buf[0]);
-        }
+        char buf[1024];
+        char* p;
+        char* lib_name = is_shared ? "libstdc++.so" : "libstdc++.a";
+        find_full_path_of_gcc_file (get_full_phase_name (ld_phase), 
+                                    lib_name,  &buf[0], sizeof(buf));
+        p = drop_path (&buf[0]);
+        *p = '\0';
+        if (debug) fprintf(stderr, "%s found in %s\n", lib_name, &buf[0]);
+        add_library_dir (&buf[0]);
+#else
+	char *tmp_name = create_temp_file_name("sl");
+	char *slcc_name = concat_strings(get_phase_dir(P_ld), "/slcc");
+	init_given_crt_path ("libstdc++.a", slcc_name, tmp_name);
+#endif
 }
 
 
@@ -235,10 +277,31 @@ init_crt_paths (void)
 	 * Invoke gcc -print-file-name=crt* to find the path.
 	 * Assume are two paths, one for crt{1,i,n} and one for crt{begin,end}.
 	 */
+#ifndef TARG_SL
 	char *tmp_name = create_temp_file_name("gc");
 	char *gcc_name = get_full_phase_name(P_ld);
 	init_given_crt_path ("crtbegin.o", gcc_name, tmp_name);
 	init_given_crt_path ("crt1.o", gcc_name, tmp_name);
+#else
+	// When "-ipa -h264lib" is used in command line, this function is called
+	// and the ./libsl2/ dir should be the right place to find crt*.o. However,
+	// a simple "slcc -print-file-name=crt*.o" can't know this and will give the
+	// wrong lib dir.  So, we use find_crt_path() instead. --jczhang
+	char *crt_names[2] = {"crtbegin.o", "crt1.o"};
+
+	for (int i = 0; i < 2; i++) {
+	  char *crt = crt_names[i];
+	  char* path = find_crt_path(crt);
+	  if (path[0] != '/') {
+	    internal_error("%s path not found", crt);
+          }
+          else {
+	    char *p = drop_path (path);
+	    *p = '\0';
+	    add_library_dir (path);
+          }
+        }
+#endif
 }
 
 /* whether option is an object or not */
@@ -283,7 +346,7 @@ static struct prof_lib prof_libs[] = {
     { "msgi", 1 },
     { "mv", 1 },
     { "fortran", 1 },
-    /* { "pscrt", 1 }, */
+    /* { "open64rt", 1 }, */
     { NULL, 0 },
 };
 
@@ -300,8 +363,9 @@ int prof_lib_exists(const char *lib)
 
 void add_library(string_list_t *list, const char *lib)
 {
+    struct prof_lib *l;
     if (option_was_seen(O_profile)) {
-	for (struct prof_lib *l = prof_libs; l->name; l++) {
+	for (l = prof_libs; l->name; l++) {
 	    if (strcmp(l->name, lib) != 0)
 		continue;
 	    if (!l->always && !prof_lib_exists(lib))
@@ -324,19 +388,40 @@ add_object (int flag, char *arg)
 	switch (flag) {
 	case O_l:
 		/* when -lm, implicitly add extra math libraries */
-		if (strcmp(arg, "m") == 0 ||
-		    strcmp(arg, "mpath") == 0) {	// bug 5184
-			/* add -lmv -lmblah */
-			add_library(lib_objects, "mv");
+		if (strcmp(arg, "m") == 0
+#ifndef VENDOR_OSP
+                    || strcmp(arg, "mpath") == 0
+#endif
+                 ) {	// bug 5184
+
+			/* add -lmv -lmblah */		
 			if (xpg_flag && invoked_lang == L_f77) {
-				add_library(lib_objects, "m" );
+#ifdef TARG_X8664
+				if (abi != ABI_N32)
+					add_library(objects, "acml_mv");
+#endif
+				add_library(lib_objects, "mv");
+				add_library(lib_objects, "m");
 			} else {
+#ifdef TARG_X8664
+				if (abi != ABI_N32)
+					add_library(objects, "acml_mv");
+#endif
+#if !defined(TARG_SL) && !defined(TARG_PPC32)   
+				add_library(objects, "mv");
+#endif
 				add_library(objects, "m");
 			}
+#if !defined(TARG_SL) && !defined(TARG_PPC32)
 			if (invoked_lang == L_CC) {
+#ifdef TARG_X8664
+			    if (abi != ABI_N32)
+				add_library(objects, "acml_mv");
+#endif
 			    add_library(cxx_prelinker_objects, "mv");
 			    add_library(cxx_prelinker_objects, "m");
 			}
+#endif
 #ifdef TARG_X8664
 			extern boolean link_with_mathlib;
 			// Bug 4680 - It is too early to check target_cpu so we
@@ -371,8 +456,13 @@ add_object (int flag, char *arg)
 
 	       break;
 	case O_WlC:
-	       if (ld_phase == P_ld || ld_phase == P_ldplus) {
+	       if (ld_phase == P_ld || ld_phase == P_ldplus || ld_phase == P_ipa_link) {
+#ifdef TARG_SL
+                 // ld didn't support -Wl in SL
+                 add_string(objects, arg);
+#else
 	         add_string(objects, concat_strings("-Wl,", arg));
+#endif
 	       } else {
 	         /* the arg would look like "-F,arg1,arg2,argn", 
 	          * each token delimited by comma should be passed 
@@ -431,7 +521,9 @@ append_objects_to_list (string_list_t *list)
 	    do_exit(1);
 	}
 	append_string_lists (list, objects);
-	append_string_lists (list, lib_objects);
+	if (xpg_flag && invoked_lang == L_f77) {
+		append_string_lists (list, lib_objects);
+	}
 }
 
 /* append cxx_prelinker_objects to end of list */
@@ -493,6 +585,7 @@ add_library_options (void)
 	 */
 	switch (abi) {
 #ifdef TARG_MIPS
+#ifndef TARG_SL
 	case ABI_N32:
 	case ABI_I32:
 		append_phase_dir(P_library, "32");
@@ -504,18 +597,28 @@ add_library_options (void)
 		break;
 #else
         case ABI_N32:
+        case ABI_64:
+                break;
+#endif //!SL
+#else
+        case ABI_N32:
 	case ABI_64:
 		break;
 #endif
 	case ABI_I64:
+	case ABI_W64:
 		break;
 	case ABI_IA32:
+	case ABI_P32:
+#if defined(TARG_PPC32) && defined(HOST_PPC32)    
+    add_library_dir("/usr/lib");
+    add_library_dir("/usr/lib/gcc-lib/powerpc-linux/3.3.5");
+#endif    
  		break;
 	default:
 		internal_error("no abi set? (%d)", abi);
 	}
 }
-
 
 // Check whether the option should be turned into a linker option when pathcc
 // is called as a linker.
@@ -603,6 +706,12 @@ finalize_maybe_linker_options (boolean is_linker)
   }
 }
 
+
+#if defined(TARG_NVISA)
+// ignore ipa elf issues
+static int check_for_whirl (char *name) { return FALSE; }
+#else
+
 // Check for ELF files containing WHIRL objects.  Code taken from
 // ../cygnus/bfd/ipa_cmdline.c.
 
@@ -675,3 +784,4 @@ check_for_whirl(char *name)
     return FALSE;
     
 }
+#endif //TARG_NVISA

@@ -38,10 +38,10 @@
 /* ======================================================================
  *
  * Module: mfmc.h
- * $Revision$
- * $Date$
- * $Author$
- * $Source$
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:37-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.mfmc.h $
  *
  * Revision history:
  * 17-Jul-96 - Original version
@@ -286,16 +286,11 @@ MFMC_EC		MFMC_Solve_problem(MFMC_HANDLE);
 /* Query interface functions */
 
 extern BOOL		MFMC_Min_cut_lhs(MFMC_HANDLE, INT32);
-#if 0
-/* --- NOT IMPLEMENTED YET --- */
-extern INT64		MFMC_Max_flow_arc_flow(MFMC_HANDLE, MFMC_ARC_HANDLE);
-#else
 inline INT64	MFMC_Max_flow_arc_flow(MFMC_HANDLE h, MFMC_ARC_HANDLE ah)
 {
   FmtAssert(FALSE, ("MFMC_Max_flow_arc_flow: arc handles not implemented"));
   /*NOTREACHED*/
 }
-#endif
 
 INT64
 MFMC_Objective_value(MFMC_HANDLE);

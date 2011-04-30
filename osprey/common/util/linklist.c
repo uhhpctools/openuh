@@ -267,11 +267,6 @@ Free_All_List_Items ( void )
  * something about it and not until!    -- Rutt
  */ 
  
-#if 0
-# ifdef Is_True_On
-  check_linked_list_free();
-# endif
-# endif
 
   for (blk=block_item_hdr; blk!=NULL; blk=nblk) {
     nblk = BLK_next(blk);

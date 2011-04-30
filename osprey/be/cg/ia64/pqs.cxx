@@ -612,12 +612,6 @@ PQS_MANAGER::never_true_together(PQS_TN t1, PQS_TN t2, PQS_NODE_IDX tni)
 	    t1 == PQS_NODE_get_out_pred2(tni)))) {
      printf("bad tni %d\n",tni);
    }
-#if 0
-   Is_True((t1 == PQS_NODE_get_out_pred1(tni) &&
-	    t2 == PQS_NODE_get_out_pred2(tni)) ||
-	   (t2 == PQS_NODE_get_out_pred1(tni) &&
-	    t1 == PQS_NODE_get_out_pred2(tni)),("Bad args to never_true_together"));
-#endif
 
    /* Check for getting set under an unconditional FALSE */
    if ((PQS_NODE_get_qual_pred(tni) == PQS_IDX_TRUE) &&

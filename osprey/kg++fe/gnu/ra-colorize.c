@@ -173,7 +173,10 @@ free_dlist (list)
    appropriate list.
    Inline, because it's called with constant TYPE every time.  */
 
-inline void
+#ifndef KEY
+inline /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+void
 put_web (web, type)
      struct web *web;
      enum node_type type;

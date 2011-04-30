@@ -37,9 +37,12 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <cmplrs/host.h>
 #include "assert.h"
 #define USE_STANDARD_TYPES
@@ -524,9 +527,6 @@ Mismatched_Types(IPA_NODE* ipan_caller,
     } 
   }
   else if (ST_IDX_level(ss_caller->St_idx()) == GLOBAL_SYMTAB) {
-#if 0
-    // return FALSE, if the common block has equivalences
-#endif
     if (TY_size(TY_etype(ST_type(ss_caller->St_idx())))
         != ra_callee->Get_element_size()) { 
       if (Get_Trace(TP_IPA, IPA_TRACE_SECTION_CORRECTNESS))
@@ -666,9 +666,6 @@ extern BOOL Try_Reshape_Callee_Formal(IPA_NODE* ipan_caller,
     }
   } 
   else if (ST_IDX_level(ss_caller->St_idx()) == GLOBAL_SYMTAB) {
-#if 0
-    // return FALSE, if the common block has equivalences
-#endif
     if (TY_size(TY_etype(ST_type(ss_caller->St_idx())))
 	!= ra_callee->Get_element_size()) { 
       if (Get_Trace(TP_IPA, IPA_TRACE_SECTION_CORRECTNESS))

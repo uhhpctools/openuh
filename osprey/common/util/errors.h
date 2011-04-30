@@ -51,10 +51,10 @@ extern "C" {
  * ====================================================================
  *
  * Module: errors.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/common/util/errors.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:17:57 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/errors.h,v $
  *
  * Revision history:
  *  21-Aug-89 - Original Version
@@ -184,6 +184,11 @@ extern "C" {
  *      If the current behavior of DevWarn is to print the warnings, calling
  *      this supresses the warnings.  If the current behavior is to supress
  *      the warnings, calling this will enable printing them.
+ *
+ *  BOOL DevWarn_Enable ( void )
+ *
+ *      If the current behavior of DevWarn is to print the warnings, this function
+ *      will return true, and fals else.
  *
  *  Lmt_DevWarn(const UINT limit, args)
  *
@@ -396,7 +401,7 @@ extern "C" {
 #endif
 
 extern void Abort_Compiler_Location (
-  char* file_name,
+  const char* file_name,
   INT line_number
 );
 #pragma mips_frequency_hint NEVER Abort_Compiler_Location
@@ -476,6 +481,8 @@ extern void DevWarn( const char* FormatString,... )
 #endif
 	;
 #pragma mips_frequency_hint NEVER DevWarn
+
+extern BOOL DevWarn_Enabled( void );
 
 extern void DevWarn_Toggle( void );
 #pragma mips_frequency_hint NEVER DevWarn_Toggle

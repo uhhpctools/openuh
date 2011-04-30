@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -63,7 +67,6 @@
 // ====================================================================
 //
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "linker.h"
 
@@ -93,9 +96,6 @@ AUX_PU_TAB Aux_Pu_Table;
 static IP_FILE_HDR* current_file_hdr;
 
 #include "ipc_ty_hash.h"
-#include <ext/hash_set>
-using __gnu_cxx::hash_set;
-hash_set <TY_INDEX> ty_updated_vtable;
 
 // --------------------------------------------------------------
 // Define accessors for index maps we need internally, but which
@@ -1043,6 +1043,12 @@ Merge_Global_Pu(UINT pu_idx, const IPC_GLOBAL_TABS& original_tabs)
     TY_IDX prototype_idx = (*New_Ty_Idx)[PU_prototype(this_pu)];
     Set_PU_prototype(Pu_Table[new_idx], prototype_idx);
 
+    // merge base class in PU 
+    if (PU_base_class(this_pu) != TY_IDX_ZERO) { 
+        TY_IDX base_class_idx = (*New_Ty_Idx)[PU_base_class(this_pu)]; 
+        Set_PU_base_class(Pu_Table[new_idx], base_class_idx); 
+    } 
+
     // sync. up with the Aux_Pu_Table
     UINT32 aux_idx;
     AUX_PU& aux_pu = Aux_Pu_Table.New_entry (aux_idx);
@@ -1145,7 +1151,8 @@ Synch_Pu_With_Pu (PU& merged_pu, const PU& original_pu)
 	PU_IS_MAINPU | PU_UPLEVEL | PU_MP_NEEDS_LNO | PU_HAS_ALLOCA |
 	PU_IN_ELF_SECTION | PU_HAS_MP | PU_MP | PU_HAS_NAMELIST |
 	PU_HAS_RETURN_ADDRESS | PU_HAS_REGION | PU_HAS_INLINES |
-	PU_CALLS_SETJMP | PU_CALLS_LONGJMP | PU_HAS_USER_ALLOCA;
+	PU_CALLS_SETJMP | PU_CALLS_LONGJMP | PU_HAS_USER_ALLOCA |
+	PU_HAS_ATTR_MALLOC | PU_HAS_ATTR_NORETURN | PU_NOTHROW;
 
     const UINT64 original_flags = original_pu.flags;
     UINT64 merged_flags = merged_pu.flags;
@@ -1159,8 +1166,10 @@ Synch_Pu_With_Pu (PU& merged_pu, const PU& original_pu)
 
     merged_pu.src_lang |= original_pu.src_lang;
 #ifdef KEY
-    if (!merged_pu.unused)
-    	merged_pu.unused = original_pu.unused; // EH information
+    if (!merged_pu.misc)
+    	merged_pu.misc = original_pu.misc; // EH/C nested function information
+
+    merged_pu.unused = original_pu.unused;
 #endif
 } // Synch_Pu_With_Pu
 
@@ -1202,7 +1211,8 @@ Synch_ST_flags (ST& merged_st, const ST& original_st)
 	ST_KEEP_NAME_W2F | ST_IS_RESHAPED | ST_EMIT_SYMBOL | ST_GPREL |
 	ST_NOT_GPREL | ST_IS_NAMELIST | ST_IS_F90_TARGET |
 	ST_DECLARED_STATIC | ST_IS_THREAD_PRIVATE | ST_ADDR_SAVED |
-	ST_ADDR_PASSED | ST_INIT_VALUE_ZERO | ST_IS_INITIALIZED; 
+	ST_ADDR_PASSED | ST_INIT_VALUE_ZERO | ST_IS_INITIALIZED |
+        ST_HAS_NAMED_SECTION; 
 
     UINT32 original_flags = original_st.flags;
     UINT32 merged_flags = merged_st.flags;
@@ -1219,8 +1229,32 @@ Synch_ST_flags (ST& merged_st, const ST& original_st)
 	(ST_GPREL | ST_NOT_GPREL)) {
 	Clear_ST_gprel (merged_st); 
     }
+
+    // if the named_section starts with .rodata., we
+    // need to set the ST as const_var, as gas will
+    // treat it as a rodata.
+    if (ST_is_const_var(merged_st))
+        return;
+
+    BOOL set_const_var = FALSE;
+    if (ST_has_named_section(&merged_st))
+    {
+        STR_IDX name = Find_Section_Name_For_ST(&merged_st);
+        if (strncmp(Index_To_Str(name), ".rodata.", 8) == 0)
+            set_const_var = TRUE;
+    }
+    if (!set_const_var && ST_has_named_section(&original_st))
+    {
+        STR_IDX name = Find_Section_Name_For_ST(&original_st);
+        if (strncmp(Index_To_Str(name), ".rodata.", 8) == 0)
+            set_const_var = TRUE;
+    }
+    if (set_const_var)
+        Set_ST_is_const_var(&merged_st);
+
 } // Synch_ST_flags
  
+
 
 static void
 Synch_St_With_St(const IPC_GLOBAL_TABS& original_tabs,
@@ -1303,7 +1337,14 @@ Enter_Original_St(const IPC_GLOBAL_TABS& original_tabs,
     } else {
 	Set_ST_name_idx(new_st, (*New_Symstr_Idx)[ST_name_idx(original_st)]);
 
-	if (ST_sym_class(original_st) == CLASS_FUNC) {
+	if (ST_sym_class(original_st) == CLASS_FUNC
+#ifdef KEY
+	    // Bug 14465: Merge the PU for a dummy function representing
+	    // a global-scope ASM, so that merged symbol table entries
+	    // get the updated PU idx.
+	    || ST_sym_class(original_st) == CLASS_NAME
+#endif
+	   ) {
 	    PU_IDX new_pu_idx = 
 		Merge_Global_Pu (ST_pu(original_st), original_tabs);
 
@@ -1329,7 +1370,8 @@ Enter_Original_St(const IPC_GLOBAL_TABS& original_tabs,
 	Merge_Global_St (ST_IDX_index (ST_raw_base_idx(original_st)),
 			 original_tabs);
     Set_ST_raw_base_idx(new_st, base_idx);
-#ifdef TARG_X8664
+
+#if defined(TARG_X8664) || defined(TARG_SL)
     if ( ST_sclass(new_st) != SCLASS_COMMON &&
 	 // Avoid Fortran Equivalenced arrays (to complete fix for bug 1988)
 	 !ST_is_equivalenced(new_st) &&
@@ -1519,7 +1561,7 @@ Merge_St_With_St(const IPC_GLOBAL_TABS &original_tabs,
     Synch_St_With_St (original_tabs, merged_st, original_st);
 
     (*New_St_Idx).set_map (ST_st_idx(original_st), ST_st_idx(merged_st));
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_SL)
     if ( ST_sclass(merged_st) != SCLASS_COMMON &&
 	 // Avoid Fortran Equivalenced arrays (to complete fix for bug 1988)
 	 !ST_is_equivalenced(merged_st) &&
@@ -1714,7 +1756,7 @@ Merge_Global_St(UINT                   idx,
     //
     char *st_name = &original_tabs.symstr_tab[ST_name_idx (original_st)];
 
-#if defined(TARG_IA64) || defined(TARG_X8664)
+#if defined(TARG_IA64) || defined(TARG_X8664) || defined(TARG_MIPS) || defined(TARG_SL) || defined(TARG_LOONGSON)
     void *pext = ld_slookup_mext(st_name,
     	    	    	    	(ST_storage_class (original_st) == SCLASS_EXTERN));
 #else
@@ -1891,6 +1933,16 @@ Merge_Global_Inito(const INITO* inito_tab, UINT32 inito_tab_size,
     }
 } // Merge_Global_Inito
 
+static BOOL St_Attr_Entry_Existed(ST_IDX new_st_idx, ST_ATTR_KIND kind) {
+	UINT32 i;
+	ST_ATTR* st_attr_entry;
+	for (i = 0; i < ST_ATTR_Table_Size(GLOBAL_SYMTAB) && (st_attr_entry = &St_Attr_Table(GLOBAL_SYMTAB,i)); ++i) {
+	    if (st_attr_entry->kind == kind && st_attr_entry->st_idx == new_st_idx) {
+	      return TRUE;
+	    }
+	}
+	return FALSE;
+} // St_Attr_Entry_Existed
 
 static void
 Merge_Global_St_Attr(const ST_ATTR* st_attr_tab, UINT32 size)
@@ -1913,6 +1965,9 @@ Merge_Global_St_Attr(const ST_ATTR* st_attr_tab, UINT32 size)
 	ST_IDX st_idx = (*New_St_Idx) [ST_ATTR_st_idx (old_st_attr)];
 	Update_reference_count (&St_Table [st_idx], /*refcount*/ 1,
 				/*modcount*/ 0, /*is_cmod*/ FALSE);
+
+	if (St_Attr_Entry_Existed(st_idx, old_st_attr.kind)) continue;
+
 	ST_ATTR_KIND akind = old_st_attr.kind;
 	ST_ATTR_IDX new_st_attr_idx;
 	ST_ATTR&    new_st_attr = New_ST_ATTR (GLOBAL_SYMTAB, new_st_attr_idx);
@@ -2096,17 +2151,6 @@ IPC_merge_global_tab (const IPC_GLOBAL_TABS &original_tabs,
 
     Merge_Global_Inito (original_tabs.inito_tab,
 			original_tabs.inito_tab_size, idx_map->initv);
-
-    // update vtable of TY
-    for (idx = 1; idx < original_tabs.ty_tab_size; idx++) {
-         TY_IDX tyi = idx_map->ty.map_[idx];
-         TY &new_ty = original_tabs.ty_tab[idx];
-         if (TY_kind(new_ty) == KIND_STRUCT && TY_vtable(new_ty) > 0
-             && NOT_IN_SET(ty_updated_vtable, tyi)) {
-             Set_TY_vtable(tyi, idx_map->initv[TY_vtable(new_ty)]);
-             ty_updated_vtable.insert(tyi);
-         }
-    }
 
     //  Set 6 : Walk the ST_ATTR table and append the records to the end
     //  end of the merged table.

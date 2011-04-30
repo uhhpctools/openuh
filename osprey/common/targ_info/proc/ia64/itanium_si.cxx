@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -69,10 +73,9 @@ static RESOURCE res_issue,
 		res_B0_or_B2,	// B0 or B2 unit
 		res_B2;		// B2 unit
 
-int
-main (int argc, char *argv[])
+void Generate_Itanium (void)
 {
-  Machine("itanium", ISA_SUBSET_intel1, argc, argv);
+  Machine("itanium", ISA_SUBSET_intel1);
 
   res_issue = RESOURCE_Create("issue", 6);
   res_sem = RESOURCE_Create("sem", 1);
@@ -1820,6 +1823,6 @@ main (int argc, char *argv[])
   Any_Result_Available_Time(1);
   Resource_Requirement(res_issue, 0);
 
-  Machine_Done("itanium.c");
+  Machine_Done();
 }
 

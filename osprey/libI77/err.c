@@ -385,27 +385,6 @@ f77canseek (FILE *f)
    return (0);
 }
 
-#if 0
-	/* this is already defined in libF77 */
-void
-s_abort (int errnum)
-{
-   char           *dumpflag;
-   int             coredump = 0;
-
-   if (dumpflag = getenv ("f77_dump_flag")) {
-      coredump = up_low (*dumpflag) == 'y' ? 1 : 0;
-   }
-   if (coredump) {
-      _cleanup ();
-      abort ();			/* cause a core dump */
-   } else {
-      _cleanup ();
-      fprintf (stderr, "*** Execution Terminated (%d) ***\n", errnum);
-      exit (errnum);
-   }
-}
-#endif
 
 void
 perror_ (char *s, int len)

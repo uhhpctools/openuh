@@ -380,13 +380,6 @@ public:
     {
       Is_True(cpt->Representative() != NULL,
 	      ("object class has no representative"));
-#if 0
-      if (Pending() != NULL) {
-	fprintf(TFile, "\n");
-	Print(TFile);
-	fprintf(TFile, " is becoming a pointer. Should see pending:\n");
-      }
-#endif
       _member_of_class_pointed_to = cpt->Representative();
     }
 

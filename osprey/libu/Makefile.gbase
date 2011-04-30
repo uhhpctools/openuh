@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
@@ -77,7 +79,6 @@ endif
 endif
 
 LF77OPTS = $(STD_COMPILE_OPTS)
-PREPFFOPTS =
 
 ifeq ($(BUILD_TARGET), IA32)
 LCDEFS += -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
@@ -86,7 +87,13 @@ endif
 ifeq ($(BUILD_OPTIMIZE), NODEBUG)
 OPTIMIZER = -O3
 endif
-#CFLAGS += -fno-fast-stdlib
+
+ifeq ($(BUILD_COMPILER), OSP)
+OPTIMIZER += -fno-fast-stdlib
+endif
+ifeq ($(BUILD_COMPILER), PSC)
+OPTIMIZER += -fno-fast-stdlib
+endif
 
 ifeq ($(BUILD_OPTIMIZE), DEBUG)
 LCDEFS += -DLIBDEBUG -D_ASSERT_ON -DDEBUG_MTIO
@@ -94,19 +101,15 @@ endif
 
 ifeq ($(BUILD_ABI), N32BIT)
 O_abi=N32
-PREPFFOPTS = -n32
 endif
 ifeq ($(BUILD_ABI), 64BIT)
 O_abi=64
-PREPFFOPTS = -64
 endif
 ifeq ($(BUILD_ARCH), MIPS3)
 O_mipsisa=3
-PREPFFOPTS += -mips3
 endif
 ifeq ($(BUILD_ARCH), MIPS4)
 O_mipsisa=4
-PREPFFOPTS += -mips4
 endif
 ifdef O_abi
 LCDEFS += -DT_MIPS$(O_mipsisa)_$(O_abi)
@@ -144,7 +147,7 @@ LDIRT += $(LIBRARY)
 endif
 
 TARGETS = $(LIB_TARGETS)
-LDIRT += lib.i numbers.h massage massage.c lib.cat lib.exp lib.cat.m lib.exp.m
+LDIRT += lib.i numbers.h massage massage.c lib.cat lib.exp lib.cat.m lib.exp.m defgets.c
 
 include $(BUILD_BASE)/aqio/aqio.makeinclude
 #include $(BUILD_BASE)/cdc/cdc.makeinclude
@@ -174,6 +177,9 @@ endif
 ifeq ($(BUILD_ABI), N32BIT)
 FC += -Wa,-mips4 
 endif
+ifeq ($(BUILD_ABI), I32BIT)
+  FC += -m32
+endif
 ifeq ($(BUILD_ARCH), IA32)
 ## Do not build the f90 routines yet.
 #SKIP_F90_ROUTINES = TRUE
@@ -195,11 +201,11 @@ endif
 ## C front end needs all the routines
 include $(BUILD_TOT)/libcsup/gen/gen.makeinclude
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 CFILES += \
 	catgetmsg.c \
-	catmsgfmt.c 
-#	catpathnm.c
+	catmsgfmt.c \
+	defgets.c
 else
 CFILES += \
 	catclose.c \
@@ -214,13 +220,29 @@ SRC_DIRS += \
         $(BUILD_TOT)/libcsup/msgnew
 LCINCS += -I$(BUILD_TOT)/libcsup/include
 
+.PHONY: default first last install
+
 # for now don't build msg catalog
 # default: $(TARGETS) $(MSGFILE) $(EXPFILE)
-default: first $(TARGETS) last
+
+ifeq ($(BUILD_COMPILER), GNU)
+default:
+	@echo "--------------------------------------------"
+	@echo "Warning: libu is not build!"
+	@echo "build libfortran with GNU compiler is not supported" 
+	@echo "--------------------------------------------"
+else
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
+endif
 
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
+ endif
 endif
 
 last : make_libdeps
@@ -240,7 +262,7 @@ exports: default
 ##endif
 
 install: default
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) $(LIB_TARGETS)
 	$(INSTALL) $(STD_INSTALL_READ_MASK) -src $(MSGFILE) $(MSGFILE)
 	$(INSTALL) $(STD_INSTALL_READ_MASK) -src $(MSGFILE).m $(MSGFILE).m
@@ -262,13 +284,15 @@ else
  endif
 endif
 
+LF77OPTS = $(STD_COMPILE_OPTS)
+FFLAGS_NOLANG = $(FFLAGS:N-LANG\:exceptions=O*) -shared
+
 include $(COMMONRULES)
+
 
 VPATH = $(SRC_DIRS)
 LF77INCS = $(LCINCS)
 
-.F.o:
-	$(FC) $(PREPFFOPTS) $(FFLAGS) -c $<
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^
@@ -284,15 +308,22 @@ endif
 
 ### Until hpc is built for linux or until library uses its own ###
 $(DSO): $(OBJECTS:%.o=%.pic.o)
+ifeq ($(BUILD_OS), DARWIN)
+	@echo "Skipping unneeded " $(DSO)
+else
 	$(ld) $(STD_DSO_LOADOPTS) -o $@ $^
+endif
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 lib.i: $(BUILD_BASE)/errmsg/lib.msg numbers.h
 	/usr/bin/cpp -traditional -E -I. $(BUILD_BASE)/errmsg/lib.msg > lib.i
 else
 lib.i: $(BUILD_BASE)/errmsg/lib.msg numbers.h
 	$(CCF) -E -I. $(BUILD_BASE)/errmsg/lib.msg > lib.i
 endif
+
+defgets.c: lib.i
+	$(AWK) -f $(BUILD_BASE)/errmsg/extract.awk lib.i > defgets.c
 
 ifeq ($(BUILD_OS), LINUX)
 lib.cat: lib.i
@@ -327,3 +358,10 @@ numbers.h :  $(BUILD_BASE)/errmsg/massage.awk  $(ROOT)/usr/include/liberrno.h
 	./massage > numbers.h
 endif
 
+ifeq ($(BUILD_COMPILER), OSP)
+defgu2s.o defgu2s.pic.o defgu2s.pg.o : CFLAGS += -OPT:ro=1 
+endif
+
+ifeq ($(BUILD_COMPILER), SELF)
+defgu2s.o defgu2s.pic.o defgu2s.pg.o : CFLAGS += -OPT:ro=1 
+endif

@@ -426,14 +426,6 @@ void verify_function(tree fn)
   assert(IDENTIFIER_POINTER(id) != 0);
   assert(IDENTIFIER_LENGTH(id) == strlen(IDENTIFIER_POINTER(id)));
 
-#if 0 /* Not yet implemented */
-  // Linkage is external or internal, not both.  Only functions with
-  // external linkage can be linkonce.
-  assert((DECL_EXTERNAL_LINKAGE_P(fn) && !DECL_INTERNAL_LINKAGE_P(fn)) ||
-         (DECL_INTERNAL_LINKAGE_P(fn) && !DECL_EXTERNAL_LINKAGE_P(fn)));
-  if (DECL_LINKONCE_P(fn))
-    assert(DECL_EXTERNAL_LINKAGE_P(fn));
-#endif /* 0, not yet implemented */
 
   // Constructors, destructors, and conversion operators are member functions.
   if (DECL_CONSTRUCTOR_P(fn) || DECL_DESTRUCTOR_P(fn) || DECL_CONV_FN_P(fn))

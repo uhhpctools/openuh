@@ -1180,12 +1180,6 @@ unroll_loop (loop, insn_count, strength_reduce_p)
     {
       if (REGNO (bl->biv->src_reg) != bl->regno)
 	map->reg_map[bl->regno] = bl->biv->src_reg;
-#if 0
-      /* Currently, non-reduced/final-value givs are never split.  */
-      for (v = bl->giv; v; v = v->next_iv)
-	if (REGNO (v->src_reg) != bl->regno)
-	  map->reg_map[REGNO (v->dest_reg)] = v->src_reg;
-#endif
     }
 
   /* Use our current register alignment and pointer flags.  */
@@ -1989,11 +1983,6 @@ copy_loop_body (loop, copy_start, copy_end, map, exit_label, last_iteration,
 		      giv_dest_reg = giv_src_reg;
 		    }
 
-#if 0
-		  /* If non-reduced/final-value givs were split, then
-		     this would have to remap those givs also.  See
-		     find_splittable_regs.  */
-#endif
 
 		  splittable_regs[regno]
 		    = simplify_gen_binary (PLUS, GET_MODE (giv_src_reg),
@@ -2748,30 +2737,6 @@ find_splittable_givs (loop, bl, unroll_type, increment, unroll_number)
 	  && ! (final_value = v->final_value))
 	continue;
 
-#if 0
-      /* Currently, non-reduced/final-value givs are never split.  */
-      /* Should emit insns after the loop if possible, as the biv final value
-	 code below does.  */
-
-      /* If the final value is nonzero, and the giv has not been reduced,
-	 then must emit an instruction to set the final value.  */
-      if (final_value && !v->new_reg)
-	{
-	  /* Create a new register to hold the value of the giv, and then set
-	     the giv to its final value before the loop start.  The giv is set
-	     to its final value before loop start to ensure that this insn
-	     will always be executed, no matter how we exit.  */
-	  tem = gen_reg_rtx (v->mode);
-	  loop_insn_hoist (loop, gen_move_insn (tem, v->dest_reg));
-	  loop_insn_hoist (loop, gen_move_insn (v->dest_reg, final_value));
-
-	  if (loop_dump_stream)
-	    fprintf (loop_dump_stream, "Giv %d mapped to %d for split.\n",
-		     REGNO (v->dest_reg), REGNO (tem));
-
-	  v->src_reg = tem;
-	}
-#endif
 
       /* This giv is splittable.  If completely unrolling the loop, save the
 	 giv's initial value.  Otherwise, save the constant zero for it.  */
@@ -2850,20 +2815,7 @@ find_splittable_givs (loop, bl, unroll_type, increment, unroll_number)
 	}
       else
 	{
-#if 0
-	  /* Currently, unreduced giv's can't be split.  This is not too much
-	     of a problem since unreduced giv's are not live across loop
-	     iterations anyways.  When unrolling a loop completely though,
-	     it makes sense to reduce&split givs when possible, as this will
-	     result in simpler instructions, and will not require that a reg
-	     be live across loop iterations.  */
-
-	  splittable_regs[REGNO (v->dest_reg)] = value;
-	  fprintf (stderr, "Giv %d at insn %d not reduced\n",
-		   REGNO (v->dest_reg), INSN_UID (v->insn));
-#else
 	  continue;
-#endif
 	}
 
       /* Unreduced givs are only updated once by definition.  Reduced givs
@@ -3956,10 +3908,6 @@ remap_split_bivs (loop, x)
       return x;
 
     case REG:
-#if 0
-      /* If non-reduced/final-value givs were split, then this would also
-	 have to remap those givs also.  */
-#endif
       if (REGNO (x) < ivs->n_regs
 	  && REG_IV_TYPE (ivs, REGNO (x)) == BASIC_INDUCT)
 	return REG_IV_CLASS (ivs, REGNO (x))->biv->src_reg;

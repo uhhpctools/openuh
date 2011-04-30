@@ -10,7 +10,6 @@
 
 
 #if defined( VXWORKS_GCC_PROBLEM_CHECK )
-#if 1
 #ifndef _GCC_SIZE_T
 #define _GCC_SIZE_T
 typedef unsigned int size_t;
@@ -25,6 +24,5 @@ typedef long ptrdiff_t;
 typedef unsigned short wchar_t;
 #endif
 #endif
-#endif /* __GNUC_TYPEOF_FEATURE_BROKEN_USE_DEFAULT_UNTIL_FIXED__ */
 
 #endif  /* VXWORKS_GCC_PROBLEM_CHECK */

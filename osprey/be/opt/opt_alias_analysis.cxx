@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -90,7 +94,6 @@
 #pragma hdrstop
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"			// INT32, INT64
 
@@ -114,6 +117,7 @@
 #include "opt_util.h"
 #include "opt_sym.h"			// aux_id
 #include "opt_ssa.h"
+#include "opt_htable.h"
 #include "opt_cfg.h"			// Cfg()
 #include "opt_mu_chi.h"			// OCC_TAB_ENTRY, New_mu_node
 #include "opt_points_to.h"		// Is_nested_call, etc
@@ -124,6 +128,7 @@
 #include "opt_dbg.h"                    // for g_comp_unit
 #include "opt_main.h"                   // for COMP_UNIT
 #include "opt_alias_analysis.h"
+#include "intrn_info.h"
 
 extern "C" {
 #include "bitset.h"
@@ -169,6 +174,9 @@ void OPT_STAB::Analyze_Range(WN *wn_arr, POINTS_TO *pt)
     // Negative element size signifies non-contiguous array. There are
     // no address bounds implicit in a non-contiguous array access, so
     // we can't do anything. (bug 708002)
+    pt->Set_byte_ofst(0);
+    pt->Set_byte_size(0);
+    pt->Set_ofst_kind( OFST_IS_UNKNOWN );
     return;
   }
 
@@ -231,7 +239,19 @@ void OPT_STAB::Simplify_Pointer_Arith(WN *wn_expr, POINTS_TO *ai)
 {
   OPERATOR opr = WN_operator(wn_expr);
   switch (opr) {
-    
+#if defined(TARG_SL)
+  case OPR_INTRINSIC_OP:
+    if( INTRN_copy_addr(WN_intrinsic(wn_expr)) )
+      Simplify_Pointer( WN_kid0(WN_kid0(wn_expr)), ai ); 
+    else {
+      ai->Set_expr_kind(EXPR_IS_UNKNOWN);
+      ai->Set_base_kind(BASE_IS_UNKNOWN);
+      ai->Set_ofst_kind(OFST_IS_UNKNOWN);
+      ai->Invalidate_ptr_info ();
+    }
+    CHECK_POINTS_TO(ai);
+    break;
+#endif  	    
   case OPR_INTCONST:
     ai->Set_expr_kind(EXPR_IS_INT);
     ai->Set_const_val(WN_const_val(wn_expr));
@@ -244,7 +264,7 @@ void OPT_STAB::Simplify_Pointer_Arith(WN *wn_expr, POINTS_TO *ai)
   case OPR_LDID:
   case OPR_ILOAD:
     {
-      TY_IDX ty = WN_ty(wn_expr);
+      TY_IDX ty = WN_object_ty(wn_expr);
       if (TY_kind(ty) == KIND_POINTER) {
 	Simplify_Pointer(wn_expr, ai);
       } else {
@@ -497,6 +517,8 @@ BOOL OPT_STAB::Its_ret_val_of_malloc (VER_ID ver_id) {
 //
 void OPT_STAB::Simplify_Pointer_Ver(VER_ID ver, POINTS_TO *ai)
 {
+  PT_MEMOP_ANNOT_STIKER mem_annot_stiker(ai);
+
   INT32 vtype = Ver_stab_entry(ver)->Type();
   POINTS_TO  *pt = Ver_stab_entry(ver)->Points_to();
   AUX_ID  aux_id = Ver_stab_entry(ver)->Aux_id();
@@ -646,7 +668,7 @@ void OPT_STAB::Simplify_Pointer_Ver(VER_ID ver, POINTS_TO *ai)
           summary_pt.Print(TFile);
           fprintf(TFile, "this result is not very useful, and is changed into: ");
         }
-        mINT64 malloc_id = summary_pt.Malloc_id();
+	PT_MEM_ANNOT mem_annot_saved = summary_pt.Mem_annot();
          // The result is virtuall useless. Following setting may provide more info.
         summary_pt.Init ();
         summary_pt.Set_expr_kind(EXPR_IS_ADDR);
@@ -665,8 +687,10 @@ void OPT_STAB::Simplify_Pointer_Ver(VER_ID ver, POINTS_TO *ai)
         }
         summary_pt.Set_pointer_ver (ver);
         summary_pt.Set_iofst_kind (OFST_IS_FIXED);
-        summary_pt.Set_malloc_id(malloc_id);
-
+	if (mem_annot_saved.Has_annotation ()) {
+	  PT_MEM_ANNOT& t = summary_pt.Mem_annot();
+	  t = mem_annot_saved ;
+	}
         if (Get_Trace(TP_GLOBOPT, ALIAS_DUMP_FLAG)) {
           summary_pt.Print (TFile);
         }
@@ -763,6 +787,9 @@ void OPT_STAB::Simplify_Pointer_Ver(VER_ID ver, POINTS_TO *ai)
 void OPT_STAB::Simplify_Pointer(WN *wn_addr, POINTS_TO *ai)
 {
   OPERATOR opr = WN_operator(wn_addr);
+
+  PT_MEMOP_ANNOT_STIKER t(ai);
+
   switch (opr) {
     
   case OPR_ARRAY:
@@ -812,12 +839,25 @@ void OPT_STAB::Simplify_Pointer(WN *wn_addr, POINTS_TO *ai)
     ai->Set_bit_ofst_size(0, 0);
     ai->Set_base( (ST *) wn_addr );
     break;
+#if defined(TARG_SL)
+  case OPR_INTRINSIC_OP:
+    if( INTRN_copy_addr(WN_intrinsic(wn_addr)) ) {
+      Simplify_Pointer( WN_kid0(WN_kid0(wn_addr)), ai );
+    } else {
+      ai->Set_expr_kind(EXPR_IS_UNKNOWN);
+      ai->Set_base_kind(BASE_IS_UNKNOWN);
+      ai->Set_ofst_kind(OFST_IS_UNKNOWN);
+    }
+    break;
+#endif
   default:     // no useful information
     ai->Set_expr_kind(EXPR_IS_UNKNOWN);
     ai->Set_base_kind(BASE_IS_UNKNOWN);
     ai->Set_ofst_kind(OFST_IS_UNKNOWN);
     break;
   }     
+  
+
   CHECK_POINTS_TO(ai);
 }
 
@@ -881,16 +921,15 @@ void OPT_STAB::Analyze_Base_Flow_Free(POINTS_TO *pt, WN *wn)
   case OPR_ILDBITS:
   case OPR_ILOAD:
   case OPR_MLOAD:
+  case OPR_ILOADX:
     Simplify_Pointer(WN_kid0(wn), pt);
     break;
   case OPR_ISTORE:
   case OPR_ISTBITS:
   case OPR_MSTORE:
+  case OPR_ISTOREX:
     Simplify_Pointer(WN_kid1(wn), pt);
     break;
-  case OPR_ILOADX:
-  case OPR_ISTOREX:
-    FmtAssert ( FALSE, ("ILOADX/ISTOREX not handled.") );
   }
   pt->Shift_ofst(WN_offset(wn));
   pt->Lower_to_base(wn);
@@ -945,6 +984,35 @@ void OPT_STAB::Analyze_Base_Flow_Sensitive(POINTS_TO *pt, WN *wn)
       }
     }
     break;
+
+  case OPR_PARM:
+    if( WN_Parm_Dereference(wn) ) {
+      Simplify_Pointer( WN_kid0(wn), &ai );
+      if ( ai.Expr_kind() == EXPR_IS_ADDR ) {
+        if ( ai.Base_kind() != BASE_IS_UNKNOWN ) {
+   	  pt->Set_expr_kind(EXPR_IS_ADDR);
+ 	  pt->Set_base_kind(ai.Base_kind());
+  	  pt->Set_ofst_kind(ai.Ofst_kind());
+  	  pt->Set_base(ai.Base());
+  	  pt->Set_byte_ofst(ai.Byte_Ofst());
+  	  pt->Set_byte_size(ai.Byte_Size());
+  	  pt->Set_bit_ofst_size(ai.Bit_Ofst(), ai.Bit_Size());
+  	  pt->Set_attr(ai.Attr());
+  	  pt->Shift_ofst(0);
+  	  pt->Lower_to_base(NULL);
+          pt->Copy_pointer_info (&ai);
+        } else if ( ai.Restricted() ) {
+  	  pt->Set_expr_kind(EXPR_IS_ADDR);
+  	  pt->Set_restricted();
+  	  pt->Set_based_sym(ai.Based_sym());
+        } 
+        if ( ai.Malloc_id() ) {
+          pt->Set_malloc_id(ai.Malloc_id());
+        }
+      }
+      break;
+    }
+
   case OPR_ISTORE:
   case OPR_ISTBITS:
   case OPR_MSTORE:
@@ -974,7 +1042,7 @@ void OPT_STAB::Analyze_Base_Flow_Sensitive(POINTS_TO *pt, WN *wn)
     break;
   case OPR_ILOADX:
   case OPR_ISTOREX:
-    FmtAssert ( FALSE, ("ILOADX/ISTOREX not handled.") );
+    break;
   }
   CHECK_POINTS_TO(pt);
 }
@@ -1443,6 +1511,8 @@ OPT_STAB::Create_entry_chi(void)
       AUX_ID auxid;
       FOR_ALL_NODE(auxid, aux_stab_iter, Init()) {
         AUX_STAB_ENTRY *sym = Aux_stab_entry(auxid);
+        if (sym->Stype() == VT_UNKNOWN)
+          continue; 
 	if ( !sym->Is_volatile() ) {
 	  CHI_NODE *cnode = chi->New_chi_node(auxid, Occ_pool());
 	  cnode->Set_opnd(auxid);
@@ -1674,26 +1744,8 @@ OPT_STAB::REGION_verify_bound(RID *rid, AUX_ID aux_id)
   Is_True(st != NULL, ("OPT_STAB::REGION_verify_bound, NULL st"));
 
   if (st && ST_class(st) == CLASS_PREG) { // pregs
-#if 1
     // ignore all pregs, they can be created by IVR or goto conversion
     return TRUE;
-#else
-    PREG_NUM pr = psym->St_ofst();
-
-    // ignore all dedicated pregs, they come from black regions
-    if (pr < 72)
-      return TRUE;
-
-    Is_True(REGION_search_preg_set(RID_pregs_in(rid), pr),
-	 ("OPT_STAB::REGION_verify_bound, PREG %d not in preg-in set, RGN %d",
-	  pr,RID_id(rid)));
-    if (RID_pregs_out(rid)) {
-      for (INT i=0; i<RID_num_exits(rid); i++)
-	Is_True(REGION_search_preg_set(RID_pregs_out_i(rid, i), pr),
-	  ("OPT_STAB::REGION_verify_bound, PREG %d not in preg-in set, RGN %d",
-		 pr,RID_id(rid)));
-    }
-#endif
   } else { // variables
 
     // if const LDA, ignore
@@ -1971,20 +2023,10 @@ OPT_STAB::Allocate_vsym(WN * memop_wn, POINTS_TO *memop_pt)
       return vp_idx;
     }
     else {
-#if 0
-      vp_idx = Find_vsym_with_base(occ->Based_sym());
-      if (vp_idx == NULL) {
-	vp_idx = Create_vsym(EXPR_IS_ANY);
-	AUX_STAB_ENTRY *vsym = Aux_stab_entry(vp_idx);
-	vsym->Points_to()->Set_based_sym(occ->Based_sym());
-	// What about vsym->Set_stype(something) here?
-      }
-#else
       // Replace the Based_sym() in the AUX_STAB_ENTRY with the
       // Based_sym() of the OCC_TAB_ENTRY. This should happen only
       // once, and we should never switch it back!
       pt->Set_based_sym(memop_pt->Based_sym());
-#endif
       return vp_idx;
     }
   }
@@ -2078,20 +2120,10 @@ OPT_STAB::Adjust_vsym(AUX_ID vp_idx, OCC_TAB_ENTRY *occ)
       return vp_idx;
     }
     else {
-#if 0
-      vp_idx = Find_vsym_with_base(occ->Based_sym());
-      if (vp_idx == NULL) {
-	vp_idx = Create_vsym(EXPR_IS_ANY);
-	AUX_STAB_ENTRY *vsym = Aux_stab_entry(vp_idx);
-	vsym->Points_to()->Set_based_sym(occ->Based_sym());
-	// What about vsym->Set_stype(something) here?
-      }
-#else
       // Replace the Based_sym() in the AUX_STAB_ENTRY with the
       // Based_sym() of the OCC_TAB_ENTRY. This should happen only
       // once, and we should never switch it back!
       pt->Set_based_sym(occ->Points_to()->Based_sym());
-#endif
       return vp_idx;
     }
   }
@@ -2195,6 +2227,7 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
   case OPR_ILOAD:
   case OPR_ILDBITS:
   case OPR_MLOAD:
+  case OPR_ILOADX:
 #ifdef KEY
     if (WOPT_Enable_New_Vsym_Allocation) {
       POINTS_TO pt;
@@ -2232,6 +2265,7 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
   case OPR_ISTORE:
   case OPR_ISTBITS:
   case OPR_MSTORE:
+  case OPR_ISTOREX:
 #ifdef KEY
     if (WOPT_Enable_New_Vsym_Allocation) {
       POINTS_TO pt;
@@ -2280,7 +2314,7 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
     break;
 
   case OPR_PARM:
-    if ( WN_Parm_By_Reference(wn) ) {
+    if ( WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn) ) {
 #ifdef KEY
       if (WOPT_Enable_New_Vsym_Allocation) {
         POINTS_TO pt;
@@ -2288,11 +2322,6 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
         pt.Set_base_kind(BASE_IS_UNKNOWN);
         pt.Set_ofst_kind(OFST_IS_INVALID);
 
-#if 0   // This is "HACK" from Enter_occ_tab, so we disable it until
-	// we know why it is required.
-        if (WN_operator(wn) == OPR_PARM && aux_id == _default_vsym)
-	        occ->Points_to()->Set_expr_kind(EXPR_IS_ANY);
-#endif
         pt.Analyze_Parameter_Base(WN_kid0(wn), *this);
         Update_From_Restricted_Map(wn, &pt);
         Is_True(pt.Alias_class() == OPTIMISTIC_AC_ID ||
@@ -2340,6 +2369,9 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
   case OPR_PREFETCH:
   case OPR_RETURN:
   case OPR_RETURN_VAL:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     Enter_occ_tab(wn, 0);
     break;
 
@@ -2573,8 +2605,8 @@ OPT_STAB::Has_read_only_parm(AUX_ID idx, WN *wn, INT32 num_parms)
 #include "be_ipa_util.h"
 // Brute force method for now
 // TODO: Keep a map internal to wopt so that we need to search once for a pu
-static void
-check_ipa_mod_ref_info (const ST * call_st, const ST * st, INT * mod, INT * ref)
+void
+OPT_STAB::check_ipa_mod_ref_info (const ST * call_st, const ST * st, INT * mod, INT * ref)
 {
   PU_IDX idx = ST_pu (call_st);
 
@@ -2599,6 +2631,37 @@ check_ipa_mod_ref_info (const ST * call_st, const ST * st, INT * mod, INT * ref)
       return;
     }
   }
+}
+
+// Similar to the above, this function checks if the input global variable's
+// exit value is the same as its entry value in the input function, or that the
+// exit value is 1.
+void
+OPT_STAB::check_ipa_same_entry_exit_value_or_1_info(const ST *call_st,
+  const ST *global_var_st, INT *same_entry_exit_value_or_1)
+{
+  PU_IDX pu_idx;
+  INT global_var_st_index;
+
+  *same_entry_exit_value_or_1 = 0; // default is to be conservative
+  pu_idx = ST_pu(call_st);
+  global_var_st_index = ST_IDX_index(ST_st_idx(global_var_st));
+  for (INT i = 0; i < Mod_Ref_Info_Table_Size(); i++)
+  {
+    if (Mod_Ref_Info_Table[i].pu_idx != pu_idx)
+      continue;
+    else
+    {
+      mUINT8 *same_entry_exit_value_or_1_info = Mod_Ref_Info_Table[i].
+        same_entry_exit_value_or_1;
+      if (global_var_st_index >= Mod_Ref_Info_Table[i].size * 8)
+        return;
+      *same_entry_exit_value_or_1 = (*(same_entry_exit_value_or_1_info +
+        global_var_st_index/8) >> (8 - 1 - (global_var_st_index % 8))) & 0x1;
+      return;
+    }
+  }
+  return;
 }
 #endif
 
@@ -2639,6 +2702,15 @@ OPT_STAB::Generate_call_mu_chi_by_value(WN *wn, ST *call_st,
       }
     }
 
+    if( WN_operator(wn)==OPR_INTRINSIC_CALL && 
+        INTRN_has_no_side_effects(WN_intrinsic(wn)) &&
+        (!pt->Dedicated())) {
+      if(how == WRITE)
+        how = NO_READ_NO_WRITE;
+      else if(how==READ_AND_WRITE)
+        how = READ;
+    }
+    
 #ifdef KEY
     // TODO: Check if the code above can add redundant READ, when
     //       how == WRITE.
@@ -2774,10 +2846,6 @@ OPT_STAB::Generate_asm_mu_chi(WN *wn, MU_LIST *mu, CHI_LIST *chi)
     }
 
     if (Asm_Memory || asm_clobbers_mem)
-#if 0 // bug 10016
-      if (Addr_saved(idx) || Addr_passed(idx) || Addr_used_locally(idx) ||
-	  idx == Default_vsym()) 
-#endif
       {
 	how = READ_AND_WRITE;
 	goto label_how;
@@ -2801,12 +2869,19 @@ OPT_STAB::Generate_asm_mu_chi(WN *wn, MU_LIST *mu, CHI_LIST *chi)
 	}
       }
     }
+
+#if defined(TARG_NVISA)
+    // we control what is in asm statements that we create,
+    // so mark them as okay if no clobbers and non-volatile
+    if (!asm_clobbers_mem && !WN_Asm_Volatile(wn))
+      continue;
+#endif
 #else
     if (!asm_clobbers_mem)   // non-volatile asm cannot modify memory
       continue;
     
     how |= Rule()->Aliased_with_Asm(wn, aux_stab[idx].Points_to());
-#endif
+#endif //KEY
 
 label_how:
     if (how & READ) {
@@ -2852,6 +2927,9 @@ OPT_STAB::Generate_exit_mu(WN *wn)
     // examining all variables (including volatile virtuals)
     // but excluding the default vsym.
 
+    if (psym->Stype() == VT_UNKNOWN) 
+      continue;
+
     if (psym->Is_volatile()) continue;
     if (idx == Default_vsym()) continue;
 
@@ -2882,6 +2960,54 @@ OPT_STAB::Generate_exit_mu(WN *wn)
     }
   }
 }
+
+#if defined(TARG_SL)
+void
+OPT_STAB::Generate_call_mu_chi_by_intrninfo(WN *intrn_wn, MU_LIST *mu, CHI_LIST *chi)
+{
+  INTRINSIC intrinsic = WN_intrinsic(intrn_wn);
+  FmtAssert( INTRN_is_sl(intrinsic),  ("OPT_STAB::Generate_call_mu_chi_by_intrninfo:input intrinsic is not sl intrinsic") );
+
+  OCC_TAB_ENTRY *occ[SL_MAX_MEMOP_COUNT]={NULL}; //we assumed that there are maximal 2 memop for each intrinsic
+
+  INT memop_count = INTRN_get_memop_count(intrinsic);  //for intrinsics which do not carry memop, memop_count <= 0
+  FmtAssert(memop_count <= SL_MAX_MEMOP_COUNT && (memop_count <= 0 || (memop_count >0 && INTRN_carry_memop(intrinsic))), 
+            ("OPT_STAB::Generate_call_mu_chi_by_intrninfo: too many memop"));
+
+  for(INT m_id = 0; m_id < memop_count; m_id++)  {
+    WN *addr_parm = WN_kid( intrn_wn, INTRN_get_addr_parm(intrinsic, m_id) );
+    occ[m_id] = Get_occ(addr_parm);
+  }
+
+  const BS *alias_set = Rule()->Alias_Set_Call_By_Value(this);  //we assume call by value rule for intrinsic calls
+  for (AUX_ID idx = BS_Choose( alias_set );
+       idx != (AUX_ID) BS_CHOOSE_FAILURE;
+       idx = BS_Choose_Next ( alias_set, idx )) {
+    // Volatile do not appear in any mu and chi
+    if (!Aux_stab_entry(idx)->Is_volatile() ||
+         Aux_stab_entry(idx)->Is_virtual() ) {
+      if (aux_stab[idx].Points_to()->Dedicated())
+        chi->New_chi_node(idx, Occ_pool());
+      else {
+        for(INT o_id = 0; o_id < memop_count; o_id++ ) {
+          if(Rule()->Aliased_Memop(occ[o_id]->Points_to(), aux_stab[idx].Points_to())) {
+            if(INTRN_like_store(intrinsic)) {
+              chi->New_chi_node(idx, Occ_pool());
+              break;
+            }
+            else {
+              mu->New_mu_node(idx, Occ_pool());
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  return;
+}
+
+#endif
 
 
 //  Flow Free Alias Analysis for the STMT and its sub-tree.
@@ -2967,6 +3093,7 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
   case OPR_ILDBITS:
   case OPR_ILOAD:
   case OPR_MLOAD:
+  case OPR_ILOADX:
     occ = Get_occ(wn);
     Is_True(!WOPT_Enable_Alias_Classification ||
 	    REGION_has_black_regions(g_comp_unit->Rid()) ||
@@ -2989,6 +3116,7 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
   case OPR_ISTORE:    // ST that are addr_taken are affected
   case OPR_ISTBITS:
   case OPR_MSTORE:
+  case OPR_ISTOREX:
     occ = Get_occ(wn);
     Is_True(!WOPT_Enable_Alias_Classification ||
 	    REGION_has_black_regions(g_comp_unit->Rid()) ||
@@ -3060,7 +3188,15 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
 
       occ = Get_occ(wn);
       mu = Get_stmt_mu_list(wn);
-      chi = Get_stmt_chi_list(wn);
+     chi = Get_stmt_chi_list(wn);
+
+#if defined(TARG_SL)
+      if(opr==OPR_INTRINSIC_CALL && INTRN_is_sl(WN_intrinsic(wn)) && 
+        INTRN_has_no_side_effects(WN_intrinsic(wn)) ) { //for these sl intrinsics, their memop are known
+        Generate_call_mu_chi_by_intrninfo(wn, mu, chi);
+        break;
+      }
+#endif 
 
       if (Rule()->Call_by_reference()) 
 	Generate_call_mu_chi_by_ref(wn, call_st, mu, chi, num_parms, bb);
@@ -3074,7 +3210,7 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
 
   case OPR_PARM:
     // generating the mu-list for parameters.
-    if ( WN_Parm_By_Reference(wn) ) {
+    if ( WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn) ) {
       occ = Get_occ(wn);
       AUX_ID vp_idx = occ->Aux_id();
       // With virtual var, PARM only cares about its own vp.
@@ -3130,6 +3266,9 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
     
   case OPR_RETURN: 
   case OPR_RETURN_VAL: 
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     Generate_exit_mu(wn);
     break;
   
@@ -3222,7 +3361,7 @@ OPT_STAB::Transfer_alias_class_to_occ_and_aux(RID *const rid,
     if (OPCODE_is_load(opc) ||
 	OPCODE_is_store(opc) ||
 	opr == OPR_LDA ||
-	(opr == OPR_PARM && WN_Parm_By_Reference(wn))) {
+	(opr == OPR_PARM && (WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn)))) {
       if (OPERATOR_is_scalar_load (opr) || OPERATOR_is_scalar_store (opr) ||
 	  opr == OPR_LDA) {
 	POINTS_TO *sym_pt = Aux_stab_entry(WN_aux(wn))->Points_to();
@@ -3234,6 +3373,7 @@ OPT_STAB::Transfer_alias_class_to_occ_and_aux(RID *const rid,
 	    !REGION_has_black_regions(rid)) {
 	  if (sym_pt->Alias_class() == OPTIMISTIC_AC_ID) {
 	    Is_True(WOPT_Enable_Tail_Recur ||	// Tail recursion elim introduces PREGs.
+                    WOPT_Enable_Reassociation_CSE || 
 		    (opr == OPR_LDA &&
 		     ST_class(Aux_stab_entry(WN_aux(wn))->st) == CLASS_FUNC) ||
 		    Aux_stab_entry(WN_aux(wn))->Is_dedicated_preg(),
@@ -3435,12 +3575,6 @@ OPT_STAB::Transfer_alias_class_to_occ_and_aux(RID *const rid,
 	  // and the copy overlap. The discarding of the alias class
 	  // information (and the IP alias class information) happens
 	  // inside POINTS_TO::Meet_info_from_alias_class(). -- RK
-#if 0
-	  Is_True((vsym_pt->Alias_class() == OPTIMISTIC_AC_ID) ||
-		  (vsym_pt->Alias_class() == alias_class),
-		  ("Transfer_alias_class_to_occ_and_aux: Inconsistent alias "
-		   "class for vsym"));
-#endif
 	  // Note: Since the above assertion doesn't hold in general,
 	  if (alias_class != OPTIMISTIC_AC_ID &&
 	      alias_class != PESSIMISTIC_AC_ID &&
@@ -3472,14 +3606,6 @@ OPT_STAB::Transfer_alias_class_to_occ_and_aux(RID *const rid,
 	  }
 	  // The following assertion removed 981116; see comments
 	  // above for the per-PU case that explain why. -- RK
-#if 0
-	  Is_True((vsym_pt->Ip_alias_class() == OPTIMISTIC_AC_ID) ||
-		  (vsym_pt->Ip_alias_class() ==
-		   WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn)) ||
-		  (WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn) == OPTIMISTIC_AC_ID),
-		  ("Transfer_alias_class_to_occ_and_aux: Inconsistent IP alias "
-		   "class for vsym"));
-#endif
 #if Is_True_On
 	  if ((WOPT_Ip_Alias_Class_Limit == UINT32_MAX) &&
 	      (WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn) ==
@@ -3509,6 +3635,268 @@ OPT_STAB::Transfer_alias_class_to_occ_and_aux(RID *const rid,
   return found_ip_alias_class_info;
 }
 
+void
+OPT_STAB::Transfer_alias_tag_to_occ_and_aux(RID *const rid,
+          WN  *const wn)
+{
+  BOOL   found_ip_alias_class_info = FALSE;
+  OPCODE opc = WN_opcode(wn);
+  AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+  if (!aa) return;
+
+  // BLOCK is allowed; it shows up as a kid of COMPGOTO, for example.
+  // Is_True(opc != OPC_BLOCK,
+  //         ("Transfer_alias_class_to_occ_and_aux: BLOCK not allowed"));
+  if (!OPCODE_is_black_box(opc)) {
+    OPERATOR opr = OPCODE_operator(opc);
+    if (OPCODE_is_load(opc) ||
+        OPCODE_is_store(opc) ||
+        opr == OPR_LDA ||
+        (opr == OPR_PARM && (WN_Parm_By_Reference(wn) || WN_Parm_Dereference(wn)))) {
+      if (OPERATOR_is_scalar_load (opr) || OPERATOR_is_scalar_store (opr) ||
+          opr == OPR_LDA) {
+        AUX_ID idx = WN_aux(wn);
+        AUX_STAB_ENTRY *psym = Aux_stab_entry(idx);
+        POINTS_TO *pt = psym->Points_to();
+
+        if (Get_Trace(TP_ALIAS,NYSTROM_SOLVER_FLAG))
+          fprintf(stderr,"xfer alias tag: IDX %d -> ST_IDX %d\n",
+                  idx,pt->Base()->st_idx);
+
+        // Extract the alias tag from the current WN and associate
+        // with the points-to of that symbol.  In the case of an LDA
+        // we appear to be producing an alias tag that covers the
+        // entire object, rather than the exact field being accessed.
+        // TODO: Revisit how this should be done in the context of
+        // field sensitive points-to information.
+        AliasTag aliasTag = aa->genAliasTag(pt->Base(),
+                                            pt->Byte_Ofst(),
+                                            pt->Byte_Size(),
+                                            true/*direct reference*/);
+
+        // Since I have just created an alias tag for a scalar wn, set the
+        // aliasTag on the wn
+        aa->setAliasTag(wn, aliasTag);
+        
+        pt->Set_alias_tag(aliasTag);
+      }
+      else {
+        Is_True(Get_occ(wn) != NULL,
+            ("Transfer_alias_tag_to_occ_and_aux: Indirect memop should have "
+                "OCC_TAB_ENTRY"));
+      }
+      // Direct memops can have OCC_TAB_ENTRY's corresponding to their
+      // vsyms. Set the alias class information in those POINTS_TO's,
+      // too, as well as for indirect memops.
+      OCC_TAB_ENTRY *occ = Get_occ(wn);
+      if (occ != NULL) {
+          POINTS_TO *occ_pt = occ->Points_to();
+          AliasTag tag = aa->getAliasTag(wn);
+          occ_pt->Set_alias_tag(tag);
+
+          POINTS_TO *vsym_pt = Aux_stab_entry(occ->Aux_id())->Points_to();
+          // Perform the part of POINTS_TO::Meet that is related to
+          // alias tag information, since Meet operations will already
+          // have been done before we finalize the full set of
+          // POINTS_TO's for the program.
+          vsym_pt->Meet_alias_tag(occ_pt,aa);
+        }
+      }
+      for (UINT i = 0; i < WN_kid_count(wn); ++i)
+        Transfer_alias_tag_to_occ_and_aux(rid, WN_kid(wn, i));
+    }
+    return;
+}
+
+#if defined(TARG_SL)
+void OPT_STAB::Refine_intrn_alias_info(	WN* intrn_wn )
+{  
+  FmtAssert( intrn_wn != NULL, ("OPT_STAB::Refine_intrn_alias_info:  input NULL") );
+
+  OPERATOR opr = WN_operator( intrn_wn );
+  FmtAssert( (opr == OPR_INTRINSIC_OP || opr == OPR_INTRINSIC_CALL),
+      ("OPT_STAB::Refine_intrn_alias_info:  input not intrinsic wn") );
+
+  INTRINSIC intrinsic = WN_intrinsic(intrn_wn);
+  FmtAssert( INTRN_specify_memop(intrinsic), 
+      ("OPT_STAB::Refine_intrn_alias_info:  input intrinsic has no memop") );
+
+  for(INT ma_count=0;ma_count++;ma_count<INTRN_get_memop_count(intrinsic))  {
+    WN *addr_parm = WN_kid( intrn_wn, INTRN_get_addr_parm(intrinsic, ma_count) );  
+    OCC_TAB_ENTRY *occ = Get_occ(addr_parm);
+    POINTS_TO *pt = occ->Points_to();
+    if ( pt->Base_kind() == BASE_IS_FIXED && pt->Ofst_kind() == OFST_IS_FIXED )  {
+      //decide if the memory operation is in search window mode
+      BOOL is_sw_mode = FALSE;
+      INT32 sw_id = INTRN_get_sw_parm( intrinsic );
+      if( sw_id != INVALID_PID ) {
+        WN *sw = WN_kid0( WN_kid(intrn_wn, sw_id) );
+        FmtAssert(WN_operator(sw) == OPR_INTCONST, 
+      	    ("OPT_STAB::Refine_intrn_alias_info: cannot get sw mode"));
+        if( WN_const_val(sw) > 0 ) 
+          is_sw_mode = TRUE;
+      }
+
+      //get offset offset by evaluate the address expression
+      POINTS_TO ai;   
+      WN *addr_wn = WN_kid0( addr_parm );
+      Simplify_Pointer( addr_wn, &ai );  
+      FmtAssert(ai.Base_kind() == BASE_IS_FIXED && ai.Base() == pt->Base(), 
+          ("OPT_STAB::Refine_intrn_alias_info: conflict base kind"));
+
+      if(ai.Ofst_kind() == OFST_IS_FIXED) {
+        mINT64 byte_ofst = ai.Byte_Ofst();
+        INT32 byte_size;
+        FmtAssert( byte_ofst >= pt->Byte_Ofst(), 
+            ("OPT_STAB::Refine_intrn_alias_info: wrong offset"));
+        if(!is_sw_mode)   //if in search window mode, the memory access may happen before the address
+          pt->Set_byte_ofst( byte_ofst );
+
+        //for macro mode, don't refine the byte size
+        INT32 macro_id=INTRN_get_macro_parm( intrinsic );
+        if( macro_id  != INVALID_PID  )  {
+          WN *macro = WN_kid0(WN_kid(intrn_wn, macro_id));
+          if( WN_operator( macro ) == OPR_INTCONST && WN_const_val(macro) > 0 )
+          return;
+        }
+
+        //for sw mode, refine ofst and size for simple some cases, i.e. without vertical offset
+        if( is_sw_mode ) {
+          ST *base_st = pt->Base();
+          if( base_st != NULL && ST_in_vbuf( base_st )) {
+            if( pt->Ofst_kind() == OFST_IS_FIXED) {
+              INT32 sw_acc_hint = byte_ofst & ( 1 << INTRN_vbuf_sw_crossline_hintbofs()-1 );
+              if(sw_acc_hint <= INTRN_vbuf_sw_crossline_hinthrd()) {
+                pt->Set_byte_ofst( byte_ofst );
+                if(sw_acc_hint == 0)
+                  byte_size = INTRN_vbuf_linesize();  //access data only from current line
+                else  
+                  byte_size = INTRN_vbuf_sw_crossline_size();  //access data from current and the next line
+                                                               //according to the semantics of intrinsic, the max size is 28 byte
+                FmtAssert( byte_size <= pt->Byte_Size(), 
+                    ("OPT_STAB::Refine_intrn_alias_info:wrong size"));
+                pt->Set_byte_size( byte_size );
+                return;
+              }
+            }
+          }
+          return;
+        }
+ 
+        //deal with other cases
+        INT32 size_id = INTRN_get_size_parm( intrinsic );    
+        if(size_id  != INVALID_PID ) {
+          WN *size = WN_kid0 ( WN_kid( intrn_wn, size_id ) );
+          FmtAssert( WN_operator(size) == OPR_INTCONST, 
+              ("OPT_STAB::Refine_intrn_alias_info:data size unknown ")); 
+   
+          INT32 size_base = INTRN_get_size( WN_const_val( size ) );
+          if( INTRN_maybe_stride( intrinsic ) && size_base > 1) { 
+            //we simplify the strided access to access into a continuous region
+            INT32 size_stride = INTRN_get_size_stride( intrinsic );
+            byte_size = (size_base-1) * size_stride + 1;
+          } else {
+	    INT32  size_coeff = INTRN_get_size_coeff( intrinsic );
+	    byte_size = size_base * size_coeff;
+          }
+	
+          FmtAssert( byte_size <= pt->Byte_Size(), 
+              ("OPT_STAB::Refine_intrn_alias_info:wrong size"));
+	  pt->Set_byte_size( byte_size );
+        }else {
+          pt->Set_byte_size( INTRN_get_max_scalar_size() );
+        }
+      }
+    }
+  }
+  return;  
+}
+
+void OPT_STAB::Refine_intrn_mu_chi_list(WN *intrn_wn)
+{
+  FmtAssert( intrn_wn != NULL, ("OPT_STAB::Refine_intrn_mu_chi_list:  input NULL") );
+
+  OPERATOR opr = WN_operator( intrn_wn );
+  FmtAssert( (opr == OPR_INTRINSIC_CALL), ("OPT_STAB::Refine_intrn_mu_chi_list:  input not intrinsic wn") );
+
+  INTRINSIC intrinsic = WN_intrinsic(intrn_wn);
+  FmtAssert( INTRN_carry_memop(intrinsic),  ("OPT_STAB::Refine_intrn_mu_chi_list:  input intrinsic has no memop") );
+
+  OCC_TAB_ENTRY *occ[SL_MAX_MEMOP_COUNT]={NULL}; //we assumed that there are maximal 2 memop for each intrinsic
+
+  INT memop_count = INTRN_get_memop_count(intrinsic);
+  FmtAssert( memop_count > 0 && memop_count <= SL_MAX_MEMOP_COUNT, ("OPT_STAB::Refine_intrn_mu_chi_list: too many memop"));
+
+  for(INT m_id = 0; m_id < memop_count; m_id++)  {
+    WN *addr_parm = WN_kid( intrn_wn, INTRN_get_addr_parm(intrinsic, m_id) );  
+    occ[m_id] = Get_occ(addr_parm);
+  }
+
+  if(INTRN_like_store(intrinsic)) { //update chi list
+    CHI_LIST *chi_list = Get_stmt_chi_list(intrn_wn);
+    FmtAssert(chi_list !=NULL, ("OPT_STAB::Refine_intrn_mu_chi_list: chi_list=NULL"));
+    CHI_NODE *prev_cnode = NULL;
+    CHI_NODE *cnode = chi_list->Head();
+    while (cnode != NULL) {
+      AUX_ID v = cnode->Aux_id();
+
+      BOOL can_remove=TRUE;
+      if (aux_stab[v].Points_to()->Dedicated())
+        can_remove=FALSE;
+      if(can_remove) {
+        for(INT p_id = 0; p_id < memop_count; p_id++)  {
+          if(Rule()->Aliased_Memop(occ[p_id]->Points_to(), aux_stab[v].Points_to()))
+            can_remove=FALSE;
+        }
+      }
+
+      if(can_remove) {
+        Ver_stab_entry(cnode->Result())->Set_synonym( cnode->Opnd());
+        if (Get_Trace(TP_GLOBOPT, ALIAS_DUMP_FLAG))
+          fprintf(TFile, "<alias> Remove the chi node that defines %d.\n", cnode->Result());
+        chi_list->Remove(prev_cnode, cnode);
+        if (prev_cnode != NULL)
+          cnode = prev_cnode->Next();
+        else
+          cnode = chi_list->Head();
+      } else {
+        prev_cnode = cnode;
+        cnode = prev_cnode->Next();
+      }
+    }
+  } else { //update mu list
+    MU_LIST *mu_list = Get_stmt_mu_list(intrn_wn);
+    FmtAssert(mu_list !=NULL, ("OPT_STAB::Refine_intrn_mu_chi_list: mu_list=NULL"));
+    MU_NODE *prev_cnode = NULL;
+    MU_NODE *mnode = mu_list->Head();
+    while (mnode != NULL) {
+      AUX_ID v = mnode->Aux_id();
+
+      BOOL can_remove=TRUE;
+      for(INT p_id = 0; p_id < memop_count; p_id++)  {
+        if(Rule()->Aliased_Memop(occ[p_id]->Points_to(), aux_stab[v].Points_to()))
+          can_remove=FALSE;
+      }
+
+      if(can_remove) {
+        if (Get_Trace(TP_GLOBOPT, ALIAS_DUMP_FLAG))
+          fprintf(TFile, "<alias> Remove the mu node that use %d.\n", mnode->Opnd());
+        mu_list->Remove(prev_cnode, mnode);
+        if (prev_cnode != NULL)
+          mnode = prev_cnode->Next();
+        else
+          mnode = mu_list->Head();
+      } else {
+        prev_cnode = mnode;
+        mnode = prev_cnode->Next();
+      }
+    }
+  }
+
+  return;
+}
+
+#endif
 
 //  Flow Free Alias Analysis for the PU
 //    This function examines the PU twice.  The first time it creates
@@ -3533,9 +3921,16 @@ void OPT_STAB::Compute_FFA(RID *const rid)
     FOR_ALL_ELEM (wn, stmt_iter, Init(bb->Firststmt(), bb->Laststmt())) {
       Allocate_mu_chi_and_virtual_var(wn, bb);
       found_ip_alias_class_info |= Transfer_alias_class_to_occ_and_aux(rid, wn);
+      Transfer_alias_tag_to_occ_and_aux(rid,wn);
     }
   }
 
+  if (Get_Trace(TP_ALIAS, NYSTROM_ALIAS_TAG_FLAG)) {
+    AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+    if (aa) {
+      aa->print_All_AliasTag(stderr);
+    }
+  }
 
   // The following code is last-minute for v7.3 beta, and should be
   // deleted and replaced with something smarter after that
@@ -3678,6 +4073,7 @@ void OPT_STAB::Compute_FFA(RID *const rid)
       }
     }
 #endif
+    Cr_sr_annot_mgr()->Print (TFile); 
   }
 }
 
@@ -3735,7 +4131,10 @@ OPT_STAB::Compute_FSA_stmt_or_expr(WN *wn)
 	   OPCODE_name(opc)));
   
   OCC_TAB_ENTRY *occ;
-  if (OPERATOR_is_scalar_iload (opr) || opr == OPR_MLOAD) {
+
+  if (OPERATOR_is_scalar_iload (opr) || opr == OPR_MLOAD ||
+      (opr == OPR_PARM && WN_Parm_Dereference(wn))) {
+
     // to be consistent with OPR_ISTORE
     occ = Get_occ(wn);
 
@@ -3877,6 +4276,20 @@ OPT_STAB::Compute_FSA_stmt_or_expr(WN *wn)
     for (; i < WN_kid_count(wn); i++)
       Compute_FSA_stmt_or_expr(WN_kid(wn, i));
   }
+#if defined(TARG_SL)
+  if( WOPT_Enable_Alias_Intrn ) {
+    if( opr == OPR_INTRINSIC_OP || opr == OPR_INTRINSIC_CALL ) {
+      INTRINSIC intrn = WN_intrinsic(wn);
+      //refine memop in intrnsic according to the sl intrn mem access info
+      if( INTRN_specify_memop(intrn) )  
+        Refine_intrn_alias_info(wn);
+      //refine the mu and chi list of intrinsic calls
+      if(opr == OPR_INTRINSIC_CALL && INTRN_carry_memop(intrn)){
+        Refine_intrn_mu_chi_list(wn);
+      }
+    }
+  }
+#endif
 }
 
 

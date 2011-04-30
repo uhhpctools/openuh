@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -39,7 +43,6 @@
 
 // This may look like C code, but it is really -*- C++ -*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -64,12 +67,15 @@
 #include "lego_util.h"
 #include "parids.h"
 #include "cond.h"
+#include "access_main.h"
 
 // Laks 07.03.07 add UH additional feature
 #include "uh_ara.h"
 #include "uh_lno.h"
 
+#if ! defined(BUILD_OS_DARWIN)
 #pragma weak Anl_File_Path
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 MEM_POOL ARA_memory_pool;
 static BOOL ara_mem_pool_initialized=FALSE;
@@ -95,9 +101,19 @@ Set_Invariant_Symbols(ARA_LOOP_INFO *loop_info, WN* wn)
 
   if (WN_operator(wn)==OPR_LDID) {
     DEF_LIST *defs = Du_Mgr->Ud_Get_Def(wn);
-    if (!defs || defs->Incomplete()) 
+    if (!defs) 
       return;
 
+    if (defs->Incomplete()){
+    // the "incomplete" means that there are some aliased def,
+    // but the aliased defs possibly is outside of the loop. 
+    // So we need to examine if it is aliased with some def inside of the loop
+      if( WN_opcode(loop_info->Loop()) != OPC_DO_LOOP)
+      // possibly be FUNC_ENTRY
+        return;
+      else if (Exp_Node_Varies_In_Loop(wn, (WN *) loop_info->Loop()))
+        return;
+    }
     if (!loop_info->Processed(wn)) {
       loop_info->Add_Processed(wn);
 
@@ -137,10 +153,6 @@ extern void ARA_Initialize_Loops(WN* wn,
 		                 ARA_LOOP_INFO *parent_info)
 {
 
-#if 0
-  fprintf(stdout, "Visiting %s ", OPERATOR_name(WN_operator(wn)));
-  Dump_WN(wn, stdout, 3, 0, 3, NULL, NULL, LWN_Get_Parent(wn));
-#endif
 
   if (WN_operator(wn) == OPR_ILOAD) {
     if (WN_operator(WN_kid0(wn)) == OPR_ARRAY) {
@@ -164,14 +176,18 @@ extern void ARA_Initialize_Loops(WN* wn,
 
   if (WN_opcode(wn) == OPC_DO_LOOP){
     DO_LOOP_INFO *dli = Get_Do_Loop_Info(wn);
-    ARA_LOOP_INFO *cur_loop_info =
-      CXX_NEW(ARA_LOOP_INFO(wn,
+    ARA_LOOP_INFO *cur_loop_info;
+    if (parent_info->Loop() != wn){
+      cur_loop_info = CXX_NEW(ARA_LOOP_INFO(wn,
 			    parent_info,
 			    parent_info->Invariant_Bounds()), 
 	      &ARA_memory_pool);
+      parent_info->Add_Child(cur_loop_info);
+    }else{
+      cur_loop_info = parent_info;
+    }
     dli->ARA_Info = cur_loop_info;
-    parent_info->Add_Child(cur_loop_info);
-    
+
     // Take care of the loop control statement first
     for (INT kidno=1; kidno<=3; ++kidno){
       Set_Invariant_Symbols(cur_loop_info, WN_kid(wn,kidno));
@@ -208,11 +224,11 @@ static void ARA_Print_Loops(ARA_LOOP_INFO *root_info)
 
   if (Get_Trace(TP_LNOPT2,TT_LNO_ARA_VERBOSE) || 
       Get_Trace(TP_LNOPT2,TT_LNO_ARA_DEBUG))
+  {  
     for (INT i = 0; i < inner_loops.Elements(); ++i) {
       inner_loops.Bottom_nth(i)->Print_Loop_Property();
     }
   
-  if (LNO_Analysis) {
     for (INT i = 0; i < inner_loops.Elements(); ++i) {
       inner_loops.Bottom_nth(i)->Print_Analysis_Info();
     }
@@ -283,14 +299,6 @@ void Perform_ARA_and_Parallelization(PU_Info* current_pu,
 void ARA_Walk_Loops(ARA_LOOP_INFO *root_info)
 {
 
-#if 0
-  ARA_LOOP_INFO_ST & inner_loops = root_info->Children();
-
-  // Process the loops if any
-  for (INT i = 0; i < inner_loops.Elements(); ++i) {
-    inner_loops.Bottom_nth(i)->Walk_Loop();
-  }
-#endif
 
   root_info->Default_For_Bad_Loop();
 

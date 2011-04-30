@@ -1,5 +1,12 @@
 /*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+/*
+ * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /* 
@@ -49,16 +56,24 @@ extern "C" {
 #include "gspin-wgen-interface.h"
 }
 
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
 #include <errno.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "config.h"
 #include "config_opt.h"	// for Div_Split_Allowed
 #include "config_debug.h"
 #include "config_list.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "controls.h"
 #include "erglob.h"
 #include "erlib.h"
@@ -88,8 +103,16 @@ extern "C" {
 
 int  WGEN_Keep_Zero_Length_Structs = TRUE;
 PU_Info *PU_Tree_Root = NULL;
+#ifdef TARG_X8664
+int Reg_Parm_Count = 0;
+BOOL SSE_Reg_Parm = FALSE;
+#endif
 
 extern void Initialize_IRB (void);	/* In lieu of irbutil.h */
+
+#ifdef FE_GNU_4_2_0
+extern void WGEN_Omp_Init (void);
+#endif
 
 static void WGEN_Stmt_Stack_Init (void);
 static void WGEN_Stmt_Stack_Free (void);
@@ -115,12 +138,10 @@ enum debug_info_level
 };
 
 /* Specify how much debugging info to generate.  */
-#if 0 // wgen TODO
-extern 
-#endif
 enum debug_info_level debug_info_level;
 // End gnu/flags.h data decl
 
+BOOL gv_cond_expr = FALSE;
 
 
 /* ====================================================================
@@ -381,7 +402,7 @@ WGEN_Init (INT argc, char **argv, char **envp )
   Initialize_Symbol_Tables (TRUE);
   WGEN_Stmt_Stack_Init (); 
   WGEN_Stmt_Init (); 
-#if 0 // wgen TODO
+#ifdef FE_GNU_4_2_0
   WGEN_Omp_Init ();
 #endif
   WGEN_Expr_Init (); 
@@ -392,6 +413,7 @@ WGEN_Init (INT argc, char **argv, char **envp )
 
 #ifdef KEY
   WGEN_Guard_Var_Init ();
+  WGEN_Guard_Block_Stack_Init(); 
 #endif
 
   Init_Deferred_Function_Stack();
@@ -551,7 +573,7 @@ WGEN_Stmt_Top (void)
 bool
 Check_For_Call_Region (void)
 {
-  if (key_exceptions) {
+  if (emit_exceptions) {
 	if (wn_stmt_sp->kind == wgen_stmk_call_region_body) {
 		Setup_EH_Region();
 		return TRUE;
@@ -641,7 +663,7 @@ WGEN_Stmt_Pop (WGEN_STMT_KIND kind)
 #ifdef KEY
 // another hack.
   WN * to_be_pushed = 0;
-  if (key_exceptions && wn_stmt_sp->kind != kind)
+  if (emit_exceptions && wn_stmt_sp->kind != kind)
   {
     if (!opt_regions || !Did_Not_Terminate_Region)
     {
@@ -718,11 +740,61 @@ WGEN_Stmt_Prepend_Last (WN* wn, SRCPOS srcpos)
 // guard variable is needed but not yet allocated.
 std::vector<gs_t > guard_vars;
 
+std::vector<WN *> guard_init_block_stack;
+
+void
+WGEN_Guard_Block_Stack_Init()
+{ 
+  // Clear the stack.
+  if (lang_cplus)
+    guard_init_block_stack.clear();
+}
+
+// Indicate a new guard variable is needed.
+void
+WGEN_Guard_Init_Block_Push()
+{
+  // treat the current top of stack
+  // for guard init. 
+
+  if (lang_cplus)
+  { 
+    WN * top = WGEN_Stmt_Top(); 
+    if (top == NULL)
+    { 
+       WN *init = WN_CreateBlock(); 
+       WGEN_Stmt_Push (init, wgen_stmk_guard_init, Get_Srcpos());
+    } 
+    guard_init_block_stack.push_back(WGEN_Stmt_Top());
+  } 
+}
+
+WN *
+WGEN_Guard_Init_Block_Pop()
+{
+  if (!lang_cplus) return NULL;
+
+  FmtAssert (!guard_init_block_stack.empty(), ("WGEN_Guard_Init_Block_Var_Pop: no init blocks to pop "));
+  WN *t = guard_init_block_stack.back();
+  guard_init_block_stack.pop_back();
+  return t;
+}
+
+WN *
+WGEN_Guard_Init_Block_Stack_Top()
+{ 
+  // Clear the stack.
+  if (lang_cplus)
+    return guard_init_block_stack.back(); 
+  return NULL; 
+}
+ 
 static void
 WGEN_Guard_Var_Init()
 {
   // Clear the stack.
-  guard_vars.clear();
+  if (lang_cplus)
+    guard_vars.clear();
 }
 
 
@@ -730,7 +802,8 @@ WGEN_Guard_Var_Init()
 void
 WGEN_Guard_Var_Push()
 {
-  guard_vars.push_back(NULL);
+  if (lang_cplus)
+    guard_vars.push_back(NULL);
 }
 
 
@@ -739,6 +812,8 @@ WGEN_Guard_Var_Push()
 gs_t 
 WGEN_Guard_Var_Pop()
 {
+  if (!lang_cplus) return NULL;
+
   FmtAssert (!guard_vars.empty(), ("WGEN_Guard_Var_Pop: no guard vars to pop"));
   gs_t t = guard_vars.back();
   guard_vars.pop_back();
@@ -750,6 +825,10 @@ gs_t
 WGEN_Get_Guard_Var()
 {
   gs_t t;
+
+  // Do nothing for C.
+  if (!lang_cplus)
+    return NULL;
 
   // Empty stack means no guard variable is needed.
   if (guard_vars.empty())
@@ -763,8 +842,14 @@ WGEN_Get_Guard_Var()
   // Top of stack is NULL_TREE.  Replace top of stack with a real guard
   // variable.
   guard_vars.pop_back();	// Pop off the NULL_TREE.
+  //Set flag gv_cond_expr to indicate a new guard variable for a 
+  //conditional expression is being created.
+  //See comments for WGEN_add_guard_var in wgen_expr.cxx 
+  //for information on conditional expressions.
+  gv_cond_expr = TRUE;
   t = gs_build_decl(GS_VAR_DECL, gs_integer_type_node());
   Get_ST(t);
+  gv_cond_expr = FALSE;
   guard_vars.push_back(t);	// Push new guard variable onto stack.
   return t;
 }
@@ -788,4 +873,99 @@ WGEN_Find_Stmt_In_Stack (WGEN_STMT_KIND kind)
   Is_True (sp->wn, ("Null WN stmt in apparently valid stack location"));
   return sp->wn;
 }
-#endif
+
+#ifdef FE_GNU_4_2_0
+// same as in wn_util.cxx
+static inline BOOL Pragma_is_Parallel_Region (WN_PRAGMA_ID pragma) {
+
+  switch (pragma) {
+  case WN_PRAGMA_PARALLEL_BEGIN:
+  case WN_PRAGMA_PARALLEL_SECTIONS:
+  case WN_PRAGMA_PARALLEL_DO:
+  case WN_PRAGMA_PARALLEL_WORKSHARE:
+  case WN_PRAGMA_DOACROSS:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
+// Similar to the function with same name in wn_util.cxx, except for the
+// last argument "parallel_only". This argument may be set to TRUE for
+// certain exception handling objects, that are LOCAL, and need to
+// be marked "private" only in the innermost enclosing parallel region.
+void Add_Pragma_To_MP_Regions (WN_VECTOR *wnv,
+                               WN_PRAGMA_ID pragma_id,
+                               ST *st, WN_OFFSET ofst,
+                               WN_MAP parent_map,
+                               BOOL make_compiler_generated,
+                               BOOL parallel_only)
+{
+  if (!parallel_only) {
+    // regular function call
+    Add_Pragma_To_MP_Regions (wnv, pragma_id, st, ofst, parent_map,
+                              make_compiler_generated);
+    return;
+  }
+
+  Is_True (pragma_id == WN_PRAGMA_LOCAL,
+           ("Add_Pragma_To_MP_Regions: Unexpected pragma"));
+
+  for (WN_VECTOR::iterator wni = wnv->begin();
+       wni != wnv->end();
+       wni++) {
+    //
+    // iterate over all the elements, first to last
+    // (i.e. from inner-most enclosing WHIRL-MP-REGION to outermost
+    //
+
+    WN *region_wn = *wni;
+
+    WN *pragma_wn = WN_first(WN_region_pragmas(region_wn));
+
+    Is_True (WN_opcode(pragma_wn) == OPC_PRAGMA,
+             ("Add_Pragma: Expected a pragma node"));
+    WN_PRAGMA_ID pragma = (WN_PRAGMA_ID) WN_pragma(pragma_wn);
+
+    if (Pragma_is_Parallel_Region(pragma)) {
+
+      // Don't insert the pragma if it is already there.
+      // This is, however, not required for correctness/performance
+      {
+        WN * pwn = pragma_wn;
+        BOOL match = FALSE;
+        while (pwn)
+        {
+          if (WN_st_idx (pwn) == ST_st_idx (st) &&
+              (WN_PRAGMA_ID) WN_pragma (pwn) == pragma_id)
+          {
+            match = TRUE;
+            break;
+          }
+          pwn = WN_next (pwn);
+        }
+        if (match)
+          break; // do nothing
+      }
+
+      WN *local_pwn = WN_CreatePragma (pragma_id, st, ofst, 0);
+      if (make_compiler_generated) {
+        WN_set_pragma_compiler_generated(local_pwn);
+      }
+      WN *last = WN_last(WN_region_pragmas(region_wn));
+      if (last &&
+          WN_opcode(last) == OPC_PRAGMA &&
+          WN_pragma(last) == WN_PRAGMA_END_MARKER)
+        WN_INSERT_BlockBefore (WN_region_pragmas(region_wn), last, local_pwn);        else
+        WN_INSERT_BlockBefore (WN_region_pragmas(region_wn), NULL, local_pwn);
+      if (parent_map != WN_MAP_UNDEFINED)
+      {
+        WN_MAP_Set(parent_map,local_pwn,(void*)WN_region_pragmas(region_wn));
+      }
+      // No need to insert in outer enclosing parallel regions.
+      break;
+    }
+  }
+}
+#endif // FE_GNU_4_2_0
+#endif // KEY

@@ -48,6 +48,7 @@ $Date: 2005/10/21 19:00:00 $
 
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_init_elf_xtnd  = _xlate_init_elf_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_init_elf  = _xlate_init_elf
 #endif

@@ -47,10 +47,10 @@
 /////////////////////////////////////
 
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_cflow.cxx,v $
+//  $Revision: 1.8 $
+//  $Date: 05/12/05 08:59:10-08:00 $
+//  $Author: bos@eng-24.pathscale.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_cflow.cxx $
 
 #ifdef USE_PCH
 #include "cg_pch.h"
@@ -71,6 +71,8 @@
 #include "cg.h"
 #endif
 
+#include "freq.h"
+
 BOOL GRA_split_entry_exit_blocks = TRUE;
     // Split entry and exit blocks before GRA and join them after so that
     // the copies to/from the callee-saves registers don't interfere with
@@ -78,6 +80,54 @@ BOOL GRA_split_entry_exit_blocks = TRUE;
 
 static BB_LIST* entry_bbs;  // New entry BBs created to hold prologs
 static BB_LIST* exit_bbs;   // New exit BBs create to hold epilogs
+
+/////////////////////////////////////
+inline BOOL
+OP_Is_Copy_To_Save_TN(const OP* op)
+/////////////////////////////////////
+//
+//  Is <op> a copy from a callee-saves register into its save-TN?
+//  
+/////////////////////////////////////
+{
+  INT i;
+
+  for ( i = OP_results(op) - 1; i >= 0; --i ) {
+    TN* tn = OP_result(op,i);
+    if ( TN_is_save_reg(tn)) return TRUE;
+  }
+
+  return FALSE;
+}
+
+/////////////////////////////////////
+inline BOOL
+OP_Is_Copy_From_Save_TN( const OP* op )
+/////////////////////////////////////
+//
+//  Is <op> a copy to a callee-saves register from its save-TN?
+//
+/////////////////////////////////////
+{
+  INT i;
+
+  // You'd think there'd be a better way than groveling through the operands,
+  // but short of marking these when we make them, this seems to be the most
+  // bullet-proof
+
+  for ( i = OP_results(op) - 1; i >= 0; --i ) {
+    if ( TN_is_dedicated(OP_result(op,i)) ) break;
+  }
+  if ( i < 0 ) return FALSE;
+
+  for ( i = OP_opnds(op) - 1; i >= 0; --i ) {
+    TN* tn = OP_opnd(op,i);
+    if ( TN_Is_Allocatable(tn) && TN_is_save_reg(tn))
+      return TRUE;
+  }
+
+  return FALSE;
+}
 
 /////////////////////////////////////
 static void
@@ -105,11 +155,11 @@ Split_Entry( BB* bb )
     do {
       prev_op = OP_prev(op); 
       if (OP_Is_Copy_To_Save_TN(op)) 
-        BB_Move_Op_To_Start(new_entry, bb, op);
+	BB_Move_Op_To_Start(new_entry, bb, op);
       op = prev_op;
     } while (op != NULL && op != BB_entry_sp_adj_op(new_entry));
   }
-  
+
   for (op = BB_entry_sp_adj_op (new_entry); op != NULL; op = prev_op) {
     prev_op = OP_prev(op);
     BB_Move_Op_To_Start (new_entry, bb, op);
@@ -227,7 +277,7 @@ GRA_Split_Entry_And_Exit_BBs(BOOL is_region)
   BB* next_bb = NULL;   // avoid stupid used before set warning
   BB_LIST *elist;
 
-#ifndef TARG_IA64
+#ifdef KEY
   GRA_pu_has_handler = FALSE;
   Is_True(GRA_split_entry_exit_blocks, 
       ("GRA will not work correctly under -GRA:split_entry_exit_blocks=off"));
@@ -240,7 +290,7 @@ GRA_Split_Entry_And_Exit_BBs(BOOL is_region)
 
   for ( bb = REGION_First_BB; bb != NULL; bb = next_bb ) {
     next_bb = BB_next(bb);
-#ifndef TARG_IA64
+#ifdef KEY
     if (BB_handler(bb))
       GRA_pu_has_handler = TRUE;
 #endif
@@ -317,11 +367,20 @@ GRA_Add_Call_Spill_Block(BB* bb, BB* succ)
   } 
 #else
   BB *new_succ = Gen_And_Insert_BB_After(bb);
+
+#if !defined(TARG_SL)
   BB_freq(new_succ) = BB_freq(bb);
+#endif
+
   Change_Succ(bb, succ, new_succ);
   Link_Pred_Succ_with_Prob(new_succ, succ, 1.0);
+#endif // TARG_IA64
+
+#if defined (TARG_SL)
+  if(FREQ_Frequencies_Computed() || BB_freq_fb_based(bb)) 
+    BB_freq(succ) += BB_freq(new_succ);
 #endif
-  
+
   GRA_LIVE_Compute_Local_Info(bb);
   GRA_LIVE_Compute_Local_Info(new_succ);
   GRA_LIVE_Region_Start();

@@ -197,6 +197,10 @@ common_init(Dwarf_P_Debug dbg, Dwarf_Unsigned flags)
 #if HAVE_ELF64_GETEHDR
 	dbg->de_relocation_record_size =
 	    IS_64BIT(dbg) ? sizeof(Elf64_Rel) : sizeof(Elf32_Rel);
+#elif defined(BUILD_OS_DARWIN) /* Actually should be related to target */
+	/* Apparently the file offset into the section is limited to 32 bits,
+	 * even in X8664, so the structure doesn't change. */
+	dbg->de_relocation_record_size = sizeof(struct relocation_info);
 #else
 	dbg->de_relocation_record_size = sizeof(Elf32_Rel);
 #endif

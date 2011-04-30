@@ -311,17 +311,6 @@ static struct binding_level clear_binding_level
   = {NULL_TREE, NULL_TREE, NULL_TREE, NULL_TREE,
        NULL_BINDING_LEVEL, LARGEST_PC, 0};
 
-#if 0
-/* A list (chain of TREE_LIST nodes) of all LABEL_DECLs in the function
-   that have names.  Here so we can clear out their names' definitions
-   at the end of the function.  */
-
-static tree named_labels;
-
-/* A list of LABEL_DECLs from outer contexts that are currently shadowed.  */
-
-static tree shadowed_labels;
-#endif
 
 int flag_traditional;
 
@@ -336,13 +325,8 @@ push_promoted_type (name, actual_type)
      tree actual_type;
 {
   tree type = make_node (TREE_CODE (actual_type));
-#if 1
   tree in_min = TYPE_MIN_VALUE (int_type_node);
   tree in_max = TYPE_MAX_VALUE (int_type_node);
-#else
-  tree in_min = TYPE_MIN_VALUE (actual_type);
-  tree in_max = TYPE_MAX_VALUE (actual_type);
-#endif
   TYPE_MIN_VALUE (type) = copy_node (in_min);
   TREE_TYPE (TYPE_MIN_VALUE (type)) = type;
   TYPE_MAX_VALUE (type) = copy_node (in_max);
@@ -474,14 +458,6 @@ java_init_decl_processing ()
   empty_stmt_node = build1 (NOP_EXPR, void_type_node, size_zero_node);
   CAN_COMPLETE_NORMALLY (empty_stmt_node) = 1;
 
-#if 0
-  /* Make a type to be the domain of a few array types
-     whose domains don't really matter.
-     200 is small enough that it always fits in size_t
-     and large enough that it can hold most function names for the
-     initializations of __FUNCTION__ and __PRETTY_FUNCTION__.  */
-  short_array_type_node = build_prim_array_type (short_type_node, 200);
-#endif
   char_type_node = make_node (CHAR_TYPE);
   TYPE_PRECISION (char_type_node) = 16;
   fixup_unsigned_type (char_type_node);
@@ -689,9 +665,6 @@ java_init_decl_processing ()
   field_info_union_node = make_node (UNION_TYPE);
   PUSH_FIELD (field_info_union_node, field, "boffset", int_type_node);
   PUSH_FIELD (field_info_union_node, field, "addr", ptr_type_node);
-#if 0
-  PUSH_FIELD (field_info_union_node, field, "idx", unsigned_short_type_node);
-#endif
   layout_type (field_info_union_node);
 
   PUSH_FIELD (field_type_node, field, "name", utf8const_ptr_type);
@@ -871,14 +844,6 @@ java_init_decl_processing ()
 			build_function_type (double_type_node, t),
 			BUILT_IN_FMOD, BUILT_IN_NORMAL, "fmod");
 
-#if 0
-  t = tree_cons (NULL_TREE, float_type_node,
-		 tree_cons (NULL_TREE, float_type_node, endlink));
-  soft_fmodf_node
-    = builtin_function ("__builtin_fmodf",
-			build_function_type (float_type_node, t),
-			BUILT_IN_FMOD, BUILT_IN_NORMAL, "fmodf");
-#endif
     
   soft_idiv_node
     = builtin_function ("_Jv_divI",
@@ -1057,54 +1022,6 @@ pushdecl (x)
 	  tree oldlocal = IDENTIFIER_LOCAL_VALUE (name);
 	  IDENTIFIER_LOCAL_VALUE (name) = x;
 
-#if 0
-	  /* Warn if shadowing an argument at the top level of the body.  */
-	  if (oldlocal != 0 && !DECL_EXTERNAL (x)
-	      /* This warning doesn't apply to the parms of a nested fcn.  */
-	      && ! current_binding_level->parm_flag
-	      /* Check that this is one level down from the parms.  */
-	      && current_binding_level->level_chain->parm_flag
-	      /* Check that the decl being shadowed
-		 comes from the parm level, one level up.  */
-	      && chain_member (oldlocal, current_binding_level->level_chain->names))
-	    {
-	      if (TREE_CODE (oldlocal) == PARM_DECL)
-		pedwarn ("declaration of `%s' shadows a parameter",
-			 IDENTIFIER_POINTER (name));
-	      else
-		pedwarn ("declaration of `%s' shadows a symbol from the parameter list",
-			 IDENTIFIER_POINTER (name));
-	    }
-
-	  /* Maybe warn if shadowing something else.  */
-	  else if (warn_shadow && !DECL_EXTERNAL (x)
-		   /* No shadow warnings for internally generated vars.  */
-		   && DECL_SOURCE_LINE (x) != 0
-		   /* No shadow warnings for vars made for inlining.  */
-		   && ! DECL_FROM_INLINE (x))
-	    {
-	      const char *warnstring = 0;
-
-	      if (TREE_CODE (x) == PARM_DECL
-		  && current_binding_level->level_chain->parm_flag)
-		/* Don't warn about the parm names in function declarator
-		   within a function declarator.
-		   It would be nice to avoid warning in any function
-		   declarator in a declaration, as opposed to a definition,
-		   but there is no way to tell it's not a definition.  */
-		;
-	      else if (oldlocal != 0 && TREE_CODE (oldlocal) == PARM_DECL)
-		warnstring = "declaration of `%s' shadows a parameter";
-	      else if (oldlocal != 0)
-		warnstring = "declaration of `%s' shadows previous local";
-	      else if (IDENTIFIER_GLOBAL_VALUE (name) != 0
-		       && IDENTIFIER_GLOBAL_VALUE (name) != error_mark_node)
-		warnstring = "declaration of `%s' shadows global declaration";
-
-	      if (warnstring)
-		warning (warnstring, IDENTIFIER_POINTER (name));
-	    }
-#endif
 
 	  /* If storing a local value, there may already be one (inherited).
 	     If so, record it for restoration when this binding level ends.  */
@@ -1177,13 +1094,6 @@ pushlevel (unused)
 {
   register struct binding_level *newlevel = NULL_BINDING_LEVEL;
 
-#if 0
-  /* If this is the top level of a function,
-     just make sure that NAMED_LABELS is 0.  */
-
-  if (current_binding_level == global_binding_level)
-    named_labels = 0;
-#endif
 
   /* Reuse or create a struct for this binding level.  */
 
@@ -1253,14 +1163,6 @@ poplevel (keep, reverse, functionbody)
   else
     fprintf (stderr, "pop  %s level 0x%08x pc %d\n",
 	     (is_class_level) ? "class" : "block", current_binding_level, current_pc);
-#if 0
-  if (is_class_level != (current_binding_level == class_binding_level))
-    {
-      indent ();
-      fprintf (stderr, "XXX is_class_level != (current_binding_level == class_binding_level)\n");
-    }
-  is_class_level = 0;
-#endif
 #endif /* defined(DEBUG_JAVA_BINDING_LEVELS) */
 
   /* Get the decls in the order they were written.
@@ -1363,28 +1265,6 @@ poplevel (keep, reverse, functionbody)
 	 since their scopes end here,
 	 and add them to BLOCK_VARS.  */
 
-#if 0
-      for (link = named_labels; link; link = TREE_CHAIN (link))
-	{
-	  register tree label = TREE_VALUE (link);
-
-	  if (DECL_INITIAL (label) == 0)
-	    {
-	      error_with_decl (label, "label `%s' used but not defined");
-	      /* Avoid crashing later.  */
-	      define_label (input_filename, lineno,
-			    DECL_NAME (label));
-	    }
-	  else if (warn_unused[UNUSED_LABEL] && !TREE_USED (label))
-	    warning_with_decl (label, "label `%s' defined but not used");
-	  IDENTIFIER_LABEL_VALUE (DECL_NAME (label)) = 0;
-
-	  /* Put the labels into the "variables" of the
-	     top-level block, so debugger can see them.  */
-	  TREE_CHAIN (label) = BLOCK_VARS (block);
-	  BLOCK_VARS (block) = label;
-	}
-#endif
     }
 
   /* Pop the current level, and free the structure for reuse.  */
@@ -1619,14 +1499,6 @@ give_name_to_locals (jcf)
 	  MAYBE_CREATE_VAR_LANG_DECL_SPECIFIC (decl);
 	  DECL_LOCAL_SLOT_NUMBER (decl) = slot;
 	  DECL_LOCAL_START_PC (decl) = start_pc;
-#if 0
-	  /* FIXME: The range used internally for exceptions and local
-	     variable ranges, is a half-open interval: 
-	     start_pc <= pc < end_pc.  However, the range used in the
-	     Java VM spec is inclusive at both ends: 
-	     start_pc <= pc <= end_pc. */
-	  end_pc++;
-#endif
 	  DECL_LOCAL_END_PC (decl) = end_pc;
 
 	  /* Now insert the new decl in the proper place in
@@ -1691,13 +1563,6 @@ complete_start_java_method (fndecl)
       expand_function_start (fndecl, 0);
     }
 
-#if 0
-      /* If this fcn was already referenced via a block-scope `extern' decl (or
-         an implicit decl), propagate certain information about the usage. */
-      if (TREE_ADDRESSABLE (DECL_ASSEMBLER_NAME (current_function_decl)))
-        TREE_ADDRESSABLE (current_function_decl) = 1;
-
-#endif
 
   if (METHOD_STATIC (fndecl) && ! METHOD_PRIVATE (fndecl)
       && ! flag_emit_class_files

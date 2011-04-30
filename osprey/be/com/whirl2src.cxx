@@ -27,7 +27,6 @@
   http://www.sgi.com
 
   For further information regarding this notice, see:
-
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
@@ -40,7 +39,11 @@
 
 #include "whirl2src.h"
 
+#ifndef SHARED_BUILD
+#define load_so(a,b,c)
+#else
 #include "dso.h"	// load_so
+#endif
 
 #include "w2c_weak.h"	// W2C_
 #include "w2f_weak.h"	// W2F_
@@ -65,15 +68,16 @@ Whirl2C_Init (WN* func_nd)
 {
   w2src_func_nd = func_nd;
   if (!init_whirl2c) {
+#ifndef BUILD_SKIP_WHIRL2C
     if (W2C_Process_Command_Line == NULL) {
       /* load and initialize whirl2c */
       extern char *W2C_Path;
-      char* str;
+      const char* const str = "";
       load_so("whirl2c.so", W2C_Path, Show_Progress);
-      str = "";
       W2C_Process_Command_Line(0, &str, 0, &str);
       W2C_Init ();
     }
+#endif
     init_whirl2c = TRUE;
   }
 }
@@ -92,15 +96,17 @@ Whirl2F_Init (WN* func_nd)
 {
   w2src_func_nd = func_nd;
   if (!init_whirl2f) {
+#ifndef BUILD_SKIP_WHIRL2F
     if (W2F_Process_Command_Line == NULL) {
       /* load and initialize whirl2f */
       extern char *W2F_Path;
-      char* str;
+      const char* str;
       str = "";
       load_so("whirl2f.so", W2F_Path, Show_Progress);
       W2F_Process_Command_Line(0, &str, 0, &str);
       W2F_Init ();
     }
+#endif
     init_whirl2f = TRUE;
   }
 }
@@ -188,7 +194,8 @@ Whirl2Src_Emit (FILE* fp, WN* wn)
   }
 }
 
-#ifndef __linux__
+#ifndef BUILD_SKIP_PROMPF
+#if ! (defined(__linux__) || defined(BUILD_OS_DARWIN))
 
 // These functions are needed only for prompf_anl.so
 
@@ -266,3 +273,4 @@ Whirl2Src_Translate_Istore_Str(char *str_buf,
 }
 
 #endif // __linux__
+#endif // BUILD_PROMPF

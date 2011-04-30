@@ -350,10 +350,6 @@ static const short yycheck[] = {     1,
 /* This used to test MSDOS, but that is a bad idea
    since that symbol is in the user namespace.  */
 #if (defined (_MSDOS) || defined (_MSDOS_)) && !defined (__TURBOC__)
-#if 0 /* No need for malloc.h, which pollutes the namespace;
-	 instead, just don't use alloca.  */
-#include <malloc.h>
-#endif
 #else /* not MSDOS, or __TURBOC__ */
 #if defined(_AIX)
 /* I don't know what this was needed for, but it pollutes the namespace.
@@ -362,13 +358,6 @@ static const short yycheck[] = {     1,
  #pragma alloca
 #define YYSTACK_USE_ALLOCA
 #else /* not MSDOS, or __TURBOC__, or _AIX */
-#if 0
-#ifdef __hpux /* haible@ilog.fr says this works for HPUX 9.05 and up,
-		 and on HPUX 10.  Eventually we can turn this on.  */
-#define YYSTACK_USE_ALLOCA
-#define alloca __builtin_alloca
-#endif /* __hpux */
-#endif
 #endif /* not _AIX */
 #endif /* not MSDOS, or __TURBOC__ */
 #endif /* not sparc */
@@ -1054,12 +1043,6 @@ yyerrlab1:   /* here on error raised explicitly by an action */
 
 yyerrdefault:  /* current state does not do anything special for the error token. */
 
-#if 0
-  /* This is wrong; only states that explicitly want error tokens
-     should shift them.  */
-  yyn = yydefact[yystate];  /* If its default is to accept any token, ok.  Otherwise pop it.*/
-  if (yyn) goto yydefault;
-#endif
 
 yyerrpop:   /* pop the current state because it cannot handle the error token */
 

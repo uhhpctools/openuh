@@ -205,7 +205,7 @@ init_spew ()
 }
 
 #ifdef KEY
-extern int in_omp_pragma;
+extern bool in_omp_pragma;
 #endif /* KEY */
 
 /* Subroutine of read_token.  */
@@ -358,6 +358,18 @@ check_omp_string (char * s, bool * status)
     return OMP_FLUSH;
   if (!strcmp (s, "threadprivate") && !seen_omp_paren)
     return OMP_THREADPRIVATE;
+#ifdef TARG_SL2 //fork_joint
+  if(!strcmp(s, "sl2") && !seen_omp_paren) 
+  return PRAGMA_SL2;
+  if(!strcmp(s, "sl2_major_sections") && !seen_omp_paren)
+  return SL2_SECTIONS;
+  if(!strcmp(s, "sl2_minor_sections") && !seen_omp_paren)
+  return SL2_MINOR_SECTIONS;
+  if(!strcmp(s, "sl2_major_section") && !seen_omp_paren)
+  return SL2_SECTION;
+  if(!strcmp(s, "sl2_minor_section") && !seen_omp_paren)
+  return SL2_MINOR_SECTION;
+#endif 
 
   /* this must be last, return anything */
   *status = false;
@@ -487,10 +499,6 @@ feed_input (input)
      struct unparsed_text *input;
 {
   struct feed *f;
-#if 0
-  if (feed)
-    abort ();
-#endif
 
   f = ggc_alloc (sizeof (struct feed));
 
@@ -1396,7 +1404,7 @@ snarf_defarg ()
 #endif
 
   arg = make_node (DEFAULT_ARG);
-  DEFARG_POINTER (arg) = (char *)buf;
+  DEFARG_POINTER (arg) = (unsigned char *)buf;
 
   return arg;
 }

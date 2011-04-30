@@ -48,11 +48,11 @@
  * Configuration specific to the target machine/system.
  *
  * NOTE:  There is an approximate distinction between -TARG option
- * group flags and their configuration (in config_TARG.c), and more
+ * group flags and their configuration (in config_targ_opt.c), and more
  * generic target configuration (in this file).  Note that the related
  * header file config_targ.h is included in config.h, and hence in most
- * source files, whereas config_TARG.h is only included directly, so
- * putting new -TARG option-related variables in config_TARG.c is to
+ * source files, whereas config_targ_opt.h is only included directly, so
+ * putting new -TARG option-related variables in config_targ_opt.c is to
  * be preferred to putting them here.
  *
  * ====================================================================
@@ -63,7 +63,7 @@
 #include "config.h"
 #include "config_asm.h"
 #include "config_debug.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "config_opt.h"
 #include "erglob.h"
 #include "tracing.h"
@@ -332,6 +332,13 @@ Targ_Name ( TARGET_PROCESSOR b)
 void
 Preconfigure_Target ( void )
 {
+#if defined(linux)
+  Target_Byte_Sex = LITTLE_ENDIAN;
+#else
+  Target_Byte_Sex = BIG_ENDIAN;
+#endif
+  Same_Byte_Sex = ( Target_Byte_Sex == Host_Byte_Sex );
+
   return;
 }
 

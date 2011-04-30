@@ -3822,14 +3822,6 @@ machine_dependent_reorg (first)
 	  emit_insn_before (gen_use_sfunc_addr (reg), insn);
 	}
     }
-#if 0
-  /* fpscr is not actually a user variable, but we pretend it is for the
-     sake of the previous optimization passes, since we want it handled like
-     one.  However, we don't have any debugging information for it, so turn
-     it into a non-user variable now.  */
-  if (TARGET_SH4)
-    REG_USERVAR_P (get_fpscr_rtx ()) = 0;
-#endif
   mdep_reorg_phase = SH_AFTER_MDEP_REORG;
 }
 
@@ -6101,15 +6093,6 @@ reg_unused_after (reg, insn)
     {
       code = GET_CODE (insn);
 
-#if 0
-      /* If this is a label that existed before reload, then the register
-	 if dead here.  However, if this is a label added by reorg, then
-	 the register may still be live here.  We can't tell the difference,
-	 so we just ignore labels completely.  */
-      if (code == CODE_LABEL)
-	return 1;
-      /* else */
-#endif
 
       if (code == JUMP_INSN)
 	return 0;

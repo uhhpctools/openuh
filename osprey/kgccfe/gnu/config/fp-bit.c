@@ -502,13 +502,11 @@ unpack_d (FLO_union_type * src, fp_number_type * dst)
 	  fraction <<= NGARDS;
 
 	  dst->class = CLASS_NUMBER;
-#if 1
 	  while (fraction < IMPLICIT_1)
 	    {
 	      fraction <<= 1;
 	      dst->normal_exp--;
 	    }
-#endif
 	  dst->fraction.ll = fraction;
 	}
     }
@@ -864,20 +862,6 @@ _fpmul_parts ( fp_number_type *  a,
       low <<= 1;
     }
   /* rounding is tricky. if we only round if it won't make us round later.  */
-#if 0
-  if (low & FRACHIGH2)
-    {
-      if (((high & GARDMASK) != GARDMSB)
-	  && (((high + 1) & GARDMASK) == GARDMSB))
-	{
-	  /* don't round, it gets done again later.  */
-	}
-      else
-	{
-	  high++;
-	}
-    }
-#endif
   if (!ROUND_TOWARDS_ZERO && (high & GARDMASK) == GARDMSB)
     {
       if (high & (1 << NGARDS))
@@ -1038,13 +1022,6 @@ divide (FLO_type arg_a, FLO_type arg_b)
 int
 __fpcmp_parts (fp_number_type * a, fp_number_type * b)
 {
-#if 0
-  /* either nan -> unordered. Must be checked outside of this routine.  */
-  if (isnan (a) && isnan (b))
-    {
-      return 1;			/* still unordered! */
-    }
-#endif
 
   if (isnan (a) || isnan (b))
     {

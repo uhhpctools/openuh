@@ -1274,7 +1274,12 @@ override_options ()
   if (TARGET_64BIT)
     {
       if (TARGET_ALIGN_DOUBLE)
+#ifdef TARG_NVISA
+	// we default to align-double, so undo it by a hack.
+	target_flags &= ~MASK_ALIGN_DOUBLE;
+#else
 	error ("-malign-double makes no sense in the 64bit mode");
+#endif
       if (TARGET_RTD)
 	error ("-mrtd calling convention not supported in the 64bit mode");
       /* Enable by default the SSE and MMX builtins.  */
@@ -4663,20 +4668,6 @@ ix86_compute_frame_layout (frame)
     frame->red_zone_size = 0;
   frame->to_allocate -= frame->red_zone_size;
   frame->stack_pointer_offset -= frame->red_zone_size;
-#if 0
-  fprintf (stderr, "nregs: %i\n", frame->nregs);
-  fprintf (stderr, "size: %i\n", size);
-  fprintf (stderr, "alignment1: %i\n", stack_alignment_needed);
-  fprintf (stderr, "padding1: %i\n", frame->padding1);
-  fprintf (stderr, "va_arg: %i\n", frame->va_arg_size);
-  fprintf (stderr, "padding2: %i\n", frame->padding2);
-  fprintf (stderr, "to_allocate: %i\n", frame->to_allocate);
-  fprintf (stderr, "red_zone_size: %i\n", frame->red_zone_size);
-  fprintf (stderr, "frame_pointer_offset: %i\n", frame->frame_pointer_offset);
-  fprintf (stderr, "hard_frame_pointer_offset: %i\n",
-	   frame->hard_frame_pointer_offset);
-  fprintf (stderr, "stack_pointer_offset: %i\n", frame->stack_pointer_offset);
-#endif
 }
 
 /* Emit code to save registers in the prologue.  */
@@ -6050,19 +6041,6 @@ get_thread_pointer (to_reg)
   insn = gen_rtx_SET (VOIDmode, reg, tp);
   insn = emit_insn (insn);
 
-#if 0
-  /* ??? Attempt to convice reload to not spill and restore REG 
-     from the stack.  This does sometimes create really weird rtl,
-     so we rely on peep2 to clean up.  */
-  if (flag_peephole2)
-    {
-      tp = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, const0_rtx), UNSPEC_TP_MEM);
-      tp = gen_rtx_MEM (Pmode, tp);
-      RTX_UNCHANGING_P (tp) = 1;
-      set_mem_alias_set (tp, ix86_GOT_alias_set ());
-      set_unique_reg_note (insn, REG_EQUAL, tp);
-    }
-#endif
 
   return reg;
 }
@@ -7154,7 +7132,15 @@ print_operand (file, x, code)
 	    return;
 	  }
 	default:
+#ifdef __MINGW32__
+	    {
+	      char str[50];
+	      sprintf (str, "invalid operand code `%c'", code);
+	      output_operand_lossage (str);
+	    }
+#else
 	    output_operand_lossage ("invalid operand code `%c'", code);
+#endif /* __MINGW32__ */
 	}
     }
 

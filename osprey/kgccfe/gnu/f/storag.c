@@ -182,19 +182,6 @@ ffestorag_end_layout (ffesymbol s)
     return;			/* Already laid out. */
 
   ffestorag_exec_layout (s);	/* Do what we have in common. */
-#if 0
-  assert (ffesymbol_storage (s) == NULL);	/* I'd like to know what
-						   cases miss going through
-						   ffecom_sym_learned, and
-						   why; I don't think we
-						   should have to do the
-						   exec_layout thing at all
-						   here. */
-  /* Now I think I know: we have to do exec_layout here, because equivalence
-     handling could encounter an error that takes a variable off of its
-     equivalence object (and vice versa), and we should then layout the var
-     as a local entity. */
-#endif
 }
 
 /* ffestorag_exec_layout -- Do initial layout for symbol

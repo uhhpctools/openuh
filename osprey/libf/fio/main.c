@@ -46,7 +46,7 @@
  * Fortran 90 compiler on mips and on some little endian systems.
  * In the future, do not use the libF77 routine with Fortran 90.
  */
-#if     defined(__linux)
+#if     defined(__linux) || defined(BUILD_OS_DARWIN)
 extern void MAIN__(void);
 
 extern void __f90_set_args(int argc, char **argv);
@@ -60,15 +60,8 @@ int __f90_main(int argc, char **argv, char **arge)
         return (0);
 }
 
-void __f90_MAIN(void)
-{
-        /* This function will not be called! */
-        abort();
-}
-
 #ifdef PATHSCALE_MERGE
 typeof(__f90_main) main __attribute__((weak, alias("__f90_main")));
-typeof(__f90_MAIN) MAIN__ __attribute__((weak, alias("__f90_MAIN")));
 #endif
 
 #endif

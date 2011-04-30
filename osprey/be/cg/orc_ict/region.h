@@ -304,7 +304,7 @@ class REGIONAL_CFG_NODE {
    
 friend class REGIONAL_CFG;
 friend class SCHEDULER;
-friend BB *RGN_Divide_BB(BB *bb, OP *point);
+friend BB *RGN_Divide_BB(BB *bb, OP *point, BOOL force);
 private:    
     union source_node {
         REGION *r;
@@ -546,6 +546,7 @@ friend void RGN_Gen_And_Insert_Node(BB *new_bb,BB *pred_bb, BB *succ_bb,
 friend BB   *RGN_Gen_And_Insert_BB_After(BB *point,REGIONAL_CFG *regional_cfg);
 friend BB   *RGN_Gen_And_Insert_BB_Before(BB *point, REGIONAL_CFG *regional_cfg);
 friend void RGN_Remove_BB_And_Edges(BB *bb, REGIONAL_CFG *regional_cfg);
+friend void RGN_Unlink_BB_Edges(BB *bb, REGIONAL_CFG *regional_cfg);
 friend void Add_Regional_Cfg_Edge(REGIONAL_CFG_NODE *pred, REGIONAL_CFG_NODE *succ, REGION *rgn);
 friend void Del_Regional_Cfg_Edge(REGIONAL_CFG_NODE *pred, REGIONAL_CFG_NODE *succ, REGION *rgn);
 friend void RGN_Link_Pred_Succ_With_Prob(BB *pred, BB *succ, float prob,
@@ -555,7 +556,7 @@ friend void RGN_Add_Regional_Cfg_Edge(BB *pred,BB *succ,REGIONAL_CFG *cfg);
 friend void RGN_Del_Regional_Cfg_Edge(BB *pred,BB *succ,REGIONAL_CFG *cfg);
 friend void Collect_Entry_BBs(REGION *rgn, BB_VECTOR *entries);
 friend void Collect_Exit_BBs(REGION *rgn, BB_VECTOR *exits);
-friend BB *RGN_Divide_BB(BB *bb, OP *point);
+friend BB *RGN_Divide_BB(BB *bb, OP *point, BOOL force);
 //------------------------------------
 // region verify functions as friends
 //------------------------------------
@@ -1685,6 +1686,7 @@ friend class REGION_LOOP_UPDATE;
 friend class REGIONAL_CFG;
 
 friend void Verify_Region_Tree(REGION_TREE *tree,BB *first_bb);
+friend void RGN_Unlink_BB_Edges(BB *bb, REGIONAL_CFG *regional_cfg);
 friend void RGN_Remove_BB_And_Edges(BB *bb, REGIONAL_CFG *regional_cfg);
 typedef mempool_allocator<REGION*>       REGION_ALLOC;
 

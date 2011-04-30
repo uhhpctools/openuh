@@ -37,10 +37,10 @@
 //============================================================================
 //
 // Module: region_alias_templates.h
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/region/region_alias_templates.h,v $
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:58-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/region/SCCS/s.region_alias_templates.h $
 //
 // Revision history:
 //  22-SEP-97 dahl - Original Version

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -54,7 +58,9 @@
 // ====================================================================
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include <stdint.h>
 #include "defs.h"
 #include "tracing.h"			// trace flags
@@ -66,9 +72,7 @@
 #include "ipa_nested_pu.h"
 #include "ipa_summary.h"
 #include "ipc_symtab_merge.h"		// IPC_GLOBAL_IDX_MAP
-#if 0
-#include "ipo_defs.h"			// IPA_NODE_CONTEXT
-#endif
+#include "ir_reader.h"                  // fdump_tree
 
 #include "symtab_access.h"
 
@@ -79,6 +83,9 @@
 #define MINI_HOTNESS_THRESHOLD		1
 #define MEDIAN_HOTNESS_THRESHOLD	10
 #define LARGE_HOTNESS_THRESHOLD		120
+
+#define ESTIMATED_PART_INL_BB_CNT       2
+#define ESTIMATED_PART_INL_STMT_CNT     5
 //INLINING_TUNIN$
 #define TINY_SIZE 10
 
@@ -90,10 +97,10 @@ static INT Real_Orig_Prog_Weight; // Orig_Prog_Weight - dead code
 static UINT32 non_aggr_callee_limit;
 static UINT32 Real_Orig_WN_Count; // Orig_Prog_Weight - dead code
 
-FILE *N_inlining;
-FILE *Y_inlining;
-FILE *e_weight;
-FILE *Verbose_inlining;
+FILE *N_inlining = NULL;
+FILE *Y_inlining = NULL;
+FILE *e_weight = NULL;
+FILE *Verbose_inlining = NULL;
 
 #define BASETYPE TY_mtype
 
@@ -113,13 +120,8 @@ OPCODE Stid_Opcode [MTYPE_LAST + 1] = {
   OPC_U8STID,     /* MTYPE_U8 */
   OPC_F4STID,     /* MTYPE_F4 */
   OPC_F8STID,     /* MTYPE_F8 */
-#ifdef TARG_IA64
   OPC_F10STID,    /* MTYPE_F10 */
   OPC_F16STID,    /* MTYPE_F16 */
-#elif TARG_X8664
-  OPC_UNKNOWN,    /* MTYPE_F10 */ 
-  OPC_UNKNOWN,    /* MTYPE_F16 */ 
-#endif
   OPC_UNKNOWN,    /* MTYPE_STR */
   OPC_FQSTID,     /* MTYPE_FQ */
   OPC_UNKNOWN,    /* MTYPE_M */
@@ -131,7 +133,7 @@ OPCODE Stid_Opcode [MTYPE_LAST + 1] = {
   ,OPC_BSSTID,    /* MTYPE_BS */
   OPC_A4STID,     /* MTYPE_A4 */
   OPC_A8STID,     /* MTYPE_A8 */
-  OPC_UNKNOWN,    /* MTYPE_C10 */
+  OPC_C10STID,    /* MTYPE_C10 */
   OPC_UNKNOWN,    /* MTYPE_C16 */
   OPC_UNKNOWN,    /* MTYPE_I16 */
   OPC_UNKNOWN     /* MTYPE_U16 */
@@ -147,11 +149,20 @@ OPCODE Stid_Opcode [MTYPE_LAST + 1] = {
   OPC_V8I1STID,   /* MTYPE_V8I1 */
   OPC_V8I2STID,   /* MTYPE_V8I2 */
   OPC_V8I4STID,   /* MTYPE_V8I4 */
+  OPC_V8I8STID,   /* MTYPE_V8I8 */
   OPC_V8F4STID,   /* MTYPE_V8F4 */
   OPC_M8I1STID,   /* MTYPE_M8I1 */
   OPC_M8I2STID,   /* MTYPE_M8I2 */
   OPC_M8I4STID,   /* MTYPE_M8I4 */
-  OPC_M8F4STID    /* MTYPE_M8F4 */
+  OPC_M8F4STID,   /* MTYPE_M8F4 */
+  OPC_V32C4STID,  /* MTYPE_V32C4 */
+  OPC_V32C8STID,  /* MTYPE_V32C8 */
+  OPC_V32I1STID,  /* MTYPE_V32I1 */
+  OPC_V32I2STID,  /* MTYPE_V32I2 */
+  OPC_V32I4STID,  /* MTYPE_V32I4 */
+  OPC_V32I8STID,  /* MTYPE_V32I8 */
+  OPC_V32F4STID,  /* MTYPE_V32F4 */
+  OPC_V32F8STID,  /* MTYPE_V32F8 */
 #endif // TARG_X8664
 #endif // KEY
 };
@@ -302,6 +313,23 @@ if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING))
 UINT32
 Get_combined_weight (PU_SIZE s1, PU_SIZE s2, IPA_NODE *callee)
 {
+    if (callee->Has_Varargs()) {
+       /* If callee is a varargs, we will only do partial inlining
+          and hence we estimate a much smaller size increase.
+          TODO:
+          We want to adjust the size estimate for all partially
+          inlined functions. But since the partial inlining candidates
+          and paths are not determined until the IPO phase, this
+          adjustment is not easy here. Once we move the partial
+          inlining candidate selection to the IPL phase and the decision
+          to the ipa_inline phase, we can solve this size adjustment
+          problem.
+        */
+       s1.Inc_PU_Size (ESTIMATED_PART_INL_BB_CNT,
+                       ESTIMATED_PART_INL_STMT_CNT, 0);
+       return s1.Weight ();
+    }
+
     s1 += s2;
     /* 1 less bb and 1 less callfrom removing the call, add copy stmt for
        formals */ 
@@ -316,6 +344,23 @@ Get_combined_weight (PU_SIZE s1, PU_SIZE s2, IPA_NODE *callee)
 UINT32
 Get_combined_olimit (PU_SIZE s1, PU_SIZE s2, IPA_NODE *callee)
 {
+    if (callee->Has_Varargs()) {
+       /* If callee is a varargs, we will only do partial inlining
+          and hence we estimate a much smaller size increase.
+          TODO:
+          We want to adjust the size estimate for all partially
+          inlined functions. But since the partial inlining candidates
+          and paths are not determined until the IPO phase, this
+          adjustment is not easy here. Once we move the partial
+          inlining candidate selection to the IPL phase and the decision
+          to the ipa_inline phase, we can solve this size adjustment
+          problem.
+        */
+       s1.Inc_PU_Size (ESTIMATED_PART_INL_BB_CNT,
+                       ESTIMATED_PART_INL_STMT_CNT, 0);
+       return s1.Weight ();
+    }
+
     s1 += s2;
     /* 1 less bb and 1 less callfrom removing the call, add copy stmt for
        formals */ 
@@ -432,12 +477,19 @@ Update_Total_Prog_Size (const IPA_NODE *caller, IPA_NODE *callee,
 {
     ++((*inline_count)[callee]);
 
-    if (IPA_Enable_Cloning && caller->Is_Clone_Candidate()) {
+    if ((IPA_Enable_Cloning && caller->Is_Clone_Candidate()) ||
+        callee->Has_Varargs()) {
+        /* If callee has var args, this is indempotent partial
+           inlining and the callee will be kept.
+         */
 	callee->Set_Undeletable ();
 	return;
     }
-	
-    if (! callee->Is_Undeletable () &&
+    if (
+#ifdef KEY
+	OPT_Cyg_Instrument == 0 &&  // Bug 750; TODO: Relax restriction
+#endif
+	! callee->Is_Undeletable () &&
 	! callee->Should_Be_Skipped() &&
 	All_Calls_Inlined (callee, cg) &&
 	! callee->Is_Externally_Callable ()) {
@@ -468,6 +520,20 @@ Effective_weight (const IPA_NODE* node)  {
 	return PU_Weight (fb->Get_effective_bb_count (),
 			  fb->Get_effective_stmt_count (),
 			  node->PU_Size().Call_Count ());
+    } else if (node->Has_Varargs()) { 
+        /* If callee is a varargs, we will only do partial inlining
+           and hence we estimate a much smaller size increase.
+           TODO:
+           We want to adjust the size estimate for all partially
+           inlined functions. But since the partial inlining candidates
+           and paths are not determined until the IPO phase, this
+           adjustment is not easy here. Once we move the partial 
+           inlining candidate selection to the IPL phase and the decision
+           to the ipa_inline phase, we can solve this size adjustment
+           problem.
+         */
+        return PU_Weight(ESTIMATED_PART_INL_BB_CNT, 
+                         ESTIMATED_PART_INL_STMT_CNT, 0);
     } else
 #endif // _STANDALONE_INLINER
 	return node->Weight ();
@@ -483,7 +549,7 @@ void inline_do_it (IPA_EDGE * ed, IPA_NODE * caller, IPA_NODE * callee,
 						  callee);
     if (Trace_IPA || Trace_Perf) {
         UINT32 callee_weight = Effective_weight (callee);
-	fprintf (stderr, "%s inlined into %s", callee->Name(),caller->Name());
+	fprintf (stderr, "%s inlined into %s\n", callee->Name(),caller->Name());
 	fprintf (TFile, "%s inlined into ", DEMANGLE (callee->Name()));
 	fprintf (TFile, "%s (size: %d + %d = %d)   (edge# %d) \n", DEMANGLE (caller->Name()), callee_weight, caller_weight, combined_weight, ed->Edge_Index());
     }
@@ -526,14 +592,17 @@ trivially_ok_to_inline (const IPA_NODE * node, const IPA_CALL_GRAPH * cg)
 }
 #endif // KEY
 
+#include<string>
+#include<sstream>
+
 static BOOL
 check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
 		     IPA_NODE *callee, const IPA_CALL_GRAPH *cg)
 {
     BOOL inline_it = FALSE;
-    char reason[300] = "{reason: ";
-    char tmp_decision[300] = "";
-    char tmp_reason[100]="";
+    using namespace std;
+    std::string reason_st, tmp_decision_st, tmp_reason_st;
+    reason_st = "{reason: ";
     INT32 IPA_idx = 0;
     UINT32 caller_weight = caller->Weight ();
     UINT32 callee_weight = Effective_weight (callee);
@@ -597,14 +666,20 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
 	    //pengzhao
 	    if (Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
 		inline_it = TRUE;
-		sprintf ( tmp_decision, "*[%s] will be Inlined into [%s] (edge=%d)", DEMANGLE (callee->Name()),DEMANGLE (caller->Name()),ed->Edge_Index() );
-		sprintf(tmp_reason, " because of force depth = (%d)}",IPA_Force_Depth); 
-		strcat (reason, tmp_reason);
+                ostringstream ed_ind;
+                ed_ind << ed->Edge_Index();
+                tmp_decision_st = string ("*[") + string(DEMANGLE(callee->Name())) + string("]") +
+                                  string("will be Inlined into [") + string (DEMANGLE(caller->Name())) + string("] (edge=") +
+                ed_ind.str() + string(")");
+                ostringstream fd_;
+                fd_ << IPA_Force_Depth;
+                tmp_reason_st = string(" because of force depth = (") + fd_.str() + string (")");
+                reason_st = reason_st + tmp_reason_st;
 	    }
 	    
 	    if ( INLINE_List_Actions ) {
-		fprintf ( stderr, "%s inlined into ", DEMANGLE (callee->Name()) );
-		fprintf ( stderr, "%s: because of force depth =  (%d)\n", DEMANGLE (caller->Name()), IPA_Force_Depth );
+                fprintf ( stderr, "%s (size %d) inlined into ", DEMANGLE (callee->Name()), callee_weight );
+                fprintf ( stderr, "%s (combined size %d): because of force depth =  (%d)\n", DEMANGLE (caller->Name()), combined_weight, IPA_Force_Depth );
 		Total_Prog_Size += (combined_weight - caller_weight);
 		caller->UpdateSize (callee, ed);
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
@@ -643,6 +718,9 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
 #ifdef KEY
                 Report_Reason (callee, caller, 
 		               "Total program size limit exceeded", ed);
+                if ( INLINE_List_Actions ) {
+                    fprintf ( stderr, "Total program size (%d) exceeds the limit (%d)\n", Total_Prog_Size, Max_Total_Prog_Size);
+                }
 #else
 		if ( INLINE_List_Actions ) {
 		    fprintf ( stderr, "Inlining stopped because total " "program size limit exceeded\n" );
@@ -745,11 +823,7 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
 		return FALSE;
 #endif // _STANDALONE_INLINER
 	    }else{ // 1.
-#ifndef PATHSCALE_MERGE_ZHC
-                if (callee_weight > IPA_Small_Callee_Limit && cg->Num_In_Edges(callee) > 2) {
-#else
 		if (callee_weight > IPA_Small_Callee_Limit && cg->Num_In_Edges(callee) > 1) {
-#endif
                     /* We try to screen out callees that are too large, but
                      * accept those that have only one caller:
                      */
@@ -761,12 +835,9 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
                     }
                 }
 
-#ifndef PATHSCALE_MERGE_ZHC
-                if (!INLINE_Aggressive && loopnest == 0 && callee->PU_Size().Call_Count() > 1 && 
+		if (!INLINE_Aggressive && loopnest == 0 && 
+                    callee->PU_Size().Call_Count() > 0   && 
                     callee_weight > non_aggr_callee_limit) {
-#else
-		if (!INLINE_Aggressive && loopnest == 0 && callee->PU_Size().Call_Count() > 0 && callee_weight > non_aggr_callee_limit) {
-#endif
                     /* Less aggressive inlining: don't inline unless it is
                      * either small, leaf, or called from a loop. 
                      */
@@ -800,14 +871,21 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
 		//pengzhao
 		if (Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
 		    inline_it = TRUE;
-		    sprintf ( tmp_decision, "*[%s] will be Inlined into [%s] (edge=%d): ", DEMANGLE (callee->Name()) ,DEMANGLE (caller->Name()),ed->Edge_Index() );
-		    sprintf(tmp_reason, " forced because of small size (%d) ",callee_weight);
-		    strcat (reason, tmp_reason);
+                    ostringstream ed_ind;
+                    ed_ind << ed->Edge_Index();
+                    tmp_decision_st = string ("*[") + string(DEMANGLE(callee->Name())) + string("]") +
+                                      string("will be Inlined into [") + string (DEMANGLE(caller->Name())) + string("] (edge=") +
+                    ed_ind.str() + string(")");
+                    ostringstream cw;
+                    cw << callee_weight;
+                    tmp_reason_st = string(" forced because of small size (") + cw.str() + string (")");
+                    reason_st = reason_st + tmp_reason_st;
 		}
 		
 		if ( INLINE_List_Actions ) {
-		    fprintf ( stderr, "%s inlined into ", DEMANGLE (callee->Name()) );
-		    fprintf ( stderr, "%s: forced because of small size (%d)  (edge# %d)\n", DEMANGLE (caller->Name()), callee_weight, ed->Edge_Index() );
+                    fprintf ( stderr, "%s (size %d) inlined into ", DEMANGLE (callee->Name()), callee_weight );
+                    fprintf ( stderr, "%s (combined size %d): forced because of small size (%d)  (edge# %d)\n", 
+                              DEMANGLE (caller->Name()), combined_weight, callee_weight, ed->Edge_Index() );
 		}
 	    }
 	}
@@ -848,20 +926,27 @@ check_size_and_freq (IPA_EDGE *ed, IPA_NODE *caller,
     inline_do_it (ed, caller, callee, cg);
 #else
     inline_do_it: if (Trace_IPA || Trace_Perf) {
-	fprintf (stderr, "%s inlined into %s", callee->Name(),caller->Name());
+	fprintf (stderr, "%s inlined into %s\n", callee->Name(),caller->Name());
 	fprintf (TFile, "%s inlined into ", DEMANGLE (callee->Name()));
-	fprintf (TFile, "%s (size: %d + %d = %d)   (edge# %d) \n", DEMANGLE (caller->Name()), callee_weight, caller_weight, combined_weight, ed->Edge_Index());
+	fprintf (TFile, "%s (size: %d + %d = %d)   (edge# %d) \n",
+                 DEMANGLE (caller->Name()), callee_weight, caller_weight, combined_weight, ed->Edge_Index());
     }
     
     //pengzhao
     if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
-	if (inline_it==FALSE)
-	    sprintf (tmp_decision, "*[%s] will be Inlined into [%s] (edge=%d)", DEMANGLE (callee->Name()), DEMANGLE (caller->Name()),ed->Edge_Index() );
-	sprintf(tmp_reason, " and the limits donot filter it out},(size: %d + %d = %d) ",callee_weight, caller_weight, combined_weight );
-	strcat (reason, tmp_reason);
-	strcat (reason, "\n");
-	fprintf(Y_inlining, tmp_decision);
-	fprintf(Y_inlining, reason);
+	if (inline_it==FALSE) {
+            ostringstream ed_ind;
+            ed_ind << ed->Edge_Index();
+            tmp_decision_st = string ("*[") + string(DEMANGLE(callee->Name())) + string("]") +
+                              string("will be Inlined into [") + string (DEMANGLE(caller->Name())) + string("] (edge=") +
+                              ed_ind.str() + string(")");
+        }
+        ostringstream alis;
+        alis << callee_weight << "+" << caller_weight << "=" << combined_weight << ")\n";
+        tmp_reason_st = string("  and the limits donot filter it out},(size") + alis.str();
+        reason_st = reason_st + tmp_reason_st;
+	fprintf(Y_inlining, tmp_decision_st.c_str());
+	fprintf(Y_inlining, reason_st.c_str());
     }
     
 #ifdef TODO
@@ -991,14 +1076,20 @@ types_are_compatible (TY_IDX ty_actual, TY_IDX ty_formal, BOOL lang)
 	    TY_IDX formal = base_type_of_array (ty_formal);
 	    TYPE_ID actual_type = BASETYPE (ty_actual);
 	    TYPE_ID formal_type = BASETYPE (formal);
-	    if ((actual_type == MTYPE_C10 && formal_type == MTYPE_F10) ||
+	    if (
+#if defined(TARG_IA64)
+		(actual_type == MTYPE_C10 && formal_type == MTYPE_F10) ||
+#endif
 		(actual_type == MTYPE_C8 && formal_type == MTYPE_F8) ||
 		(actual_type == MTYPE_C4 && formal_type == MTYPE_F4))
 	      return TRUE;
 
 	    // Actual can be complex, and formal can be array of 1 formal or
 	    // of variable size where size should be 1.
-	    if ((actual_type == MTYPE_C10 && formal_type == MTYPE_C10) ||
+	    if (
+#if defined(TARG_IA64)
+		(actual_type == MTYPE_C10 && formal_type == MTYPE_C10) ||
+#endif
 		(actual_type == MTYPE_C8 && formal_type == MTYPE_C8) ||
 		(actual_type == MTYPE_C4 && formal_type == MTYPE_C4))
 	      return TRUE;
@@ -1033,8 +1124,11 @@ types_are_compatible (TY_IDX ty_actual, TY_IDX ty_formal, BOOL lang)
 	if (INLINE_Check_Compatibility == RELAXED_CHECK)
 	{
 	  if (actual_is_array && formal_is_array &&
-	      ((actual_element_size==MTYPE_C10 &&
+	      (
+#if defined(TARG_IA64)
+	       (actual_element_size==MTYPE_C10 &&
 		formal_element_size==MTYPE_F10) ||
+#endif
 	       (actual_element_size==MTYPE_C8 &&
 		formal_element_size==MTYPE_F8) ||
 	       (actual_element_size==MTYPE_C4 && 
@@ -1046,8 +1140,11 @@ types_are_compatible (TY_IDX ty_actual, TY_IDX ty_formal, BOOL lang)
 	  }
 	  // the other way
 	  if (actual_is_array && formal_is_array &&
-	      ((actual_element_size==MTYPE_F10 && 
+	      (
+#if defined(TARG_IA64)
+	       (actual_element_size==MTYPE_F10 && 
 	        formal_element_size==MTYPE_C10) ||
+#endif
 	       (actual_element_size==MTYPE_F8 && 
 	        formal_element_size==MTYPE_C8) ||
 	       (actual_element_size==MTYPE_F4 && 
@@ -1060,14 +1157,7 @@ types_are_compatible (TY_IDX ty_actual, TY_IDX ty_formal, BOOL lang)
 	}
 #endif // KEY
 
-#if 0
-        else
-    	    return FALSE;
-#endif
     }
-#if 0
-    else { 	
-#endif
 	
         TYPE_ID desc = BASETYPE(ty_formal);
 	if ((desc == 0) && (TY_kind (ty_formal) == KIND_FUNCTION)) {
@@ -1099,9 +1189,6 @@ types_are_compatible (TY_IDX ty_actual, TY_IDX ty_formal, BOOL lang)
         if (IPO_Types_Are_Compatible(ltype, rtype))
 #endif
 	    return TRUE;
-#if 0
-    }
-#endif
 
     return FALSE;
 }
@@ -1141,9 +1228,6 @@ param_types_are_compatible (IPA_NODE* caller_node, IPA_NODE* callee_node, IPA_ED
     BOOL lang = ((callee_node->Summary_Proc()->Get_lang() == LANG_F77) || 
     		(callee_node->Summary_Proc()->Get_lang() == LANG_F90));
 
-#if 0
-    IPA_NODE_CONTEXT context(callee_node);
-#endif
 
     for (INT i=0; i<num_formals; ++i) {
 	TY_IDX ty_formal = formals[i].Get_ty();
@@ -1204,6 +1288,25 @@ param_types_are_compatible (IPA_NODE* caller_node, IPA_NODE* callee_node, IPA_ED
 void
 IPA_NODE::UpdateSize (IPA_NODE *callee, IPA_EDGE *ed)
 {
+    if (callee->Has_Varargs()) {
+       /* If callee is a varargs, we will only do partial inlining
+          and hence we estimate a much smaller size increase.
+          TODO:     
+          We want to adjust the size estimate for all partially
+          inlined functions. But since the partial inlining candidates
+          and paths are not determined until the IPO phase, this
+          adjustment is not easy here. Once we move the partial
+          inlining candidate selection to the IPL phase and the decision
+          to the ipa_inline phase, we can solve this size adjustment
+          problem.
+          TODO:
+          To adjust the size in the feedback case.
+        */
+       _pu_size.Inc_PU_Size (ESTIMATED_PART_INL_BB_CNT,
+                             ESTIMATED_PART_INL_STMT_CNT, 0);
+       return;
+    } 
+
     _pu_size += callee->PU_Size();
 #ifdef KEY
     _pu_size.Inc_PU_Size (-1, 0, -1);
@@ -1232,9 +1335,8 @@ IPA_NODE::UpdateSize (IPA_NODE *callee, IPA_EDGE *ed)
 // size
 //--------------------------------------------------------------
 void
-Update_Call_Graph (IPA_NODE *n)
+Update_Call_Graph (IPA_NODE *n, IPA_EDGE *edge)
 {
-
     /* by removing a call, we decrease the number of basic block by 1 */
     PU_SIZE size = n->PU_Size ();
     size.Inc_PU_Size (-1, 0, -1);
@@ -1246,6 +1348,10 @@ Update_Call_Graph (IPA_NODE *n)
     n->Summary_Proc()->Decr_call_count ();
     n->Summary_Proc()->Decr_callsite_count ();
     // Don't update Total_Succ as the edge is still present.
+
+    // mark the edge to indicate that caller has been updated.
+    edge->Set_Updated_Caller();
+
 
 } // Update_Call_Graph 
 
@@ -1406,7 +1512,7 @@ do_inline (IPA_EDGE *ed, IPA_NODE *caller,
 	   IPA_NODE *callee, const IPA_CALL_GRAPH *cg)
 {
     BOOL result = TRUE;
-    char *reason = 0;
+    const char *reason = 0;
 
 #ifdef KEY
     if (cg->Graph()->Is_Recursive_Edge (ed->Edge_Index ())) {
@@ -1430,19 +1536,6 @@ do_inline (IPA_EDGE *ed, IPA_NODE *caller,
 	    callee->Set_Recursive_In_Edge();
     }
 #endif
-#if 0
-    // caller and callee are not from the same partition AND the
-    // callee is not from the COMMON partition (partiton with value 0)
-    // or the caller is from the COMMON partition but not the callee
-    if ((IPA_Enable_GP_Partition ||
-	 (IPA_Enable_SP_Partition && (IPA_Space_Access_Mode == SAVE_SPACE_MODE))) &&
-	    ((caller->Get_partition_group() == COMMON_PARTITION) || 
-	    (callee->Get_partition_group() != COMMON_PARTITION)) && 
-	    (caller->Get_partition_group() != callee->Get_partition_group())) 
-	return FALSE;
-#endif
-//;;printf("######## (0x%x)%s->(0x%x)%s (%.1f)\n", caller,caller->Name(), callee,callee->Name(),callee->Get_cycle_count()._value );
-//;;fflush(stdout);
 
     if (callee->Should_Be_Skipped()) {
 	reason = "callee is skipped";
@@ -1504,10 +1597,23 @@ do_inline (IPA_EDGE *ed, IPA_NODE *caller,
 	result = FALSE;
 	reason = "callee is recursive";
 	ed->Set_reason_id (6);
-    } else if (callee->Has_Varargs()) {
+    } else if (callee->Has_Varargs() && 
+               !IPA_Enable_Partial_Inline) {
+        /*
+             Because WNs have not been read to memory at this
+             stage, we cannot scan the body of the callee
+             to determine a partial inlining candidate here.
+               The plan is to move the scanning for partial
+             inlining candidates to the IPL stage to address
+             this phase ordering issue.
+         */
 	result = FALSE;
 	reason = "callee is varargs";
 	ed->Set_reason_id (7);
+
+        if( Get_Trace ( TP_IPA, IPA_TRACE_TUNING) ){
+	   fprintf (Y_inlining, "In do_inline(): finding a var args\n");
+        }
     } else if (callee->Summary_Proc()->Is_alt_entry() ||
 	       callee->Summary_Proc()->Has_alt_entry() || 
 	       caller->Summary_Proc()->Is_alt_entry()) {
@@ -1667,6 +1773,27 @@ do_inline (IPA_EDGE *ed, IPA_NODE *caller,
             ed->Set_reason_id (37);
     }
 #endif // KEY && !_STANDALONE_INLINER && !_LIGHTWEIGHT_INLINER
+#ifdef KEY
+    else if (PU_is_nested_func(callee->Get_PU()) ||
+             PU_uplevel(callee->Get_PU())) {
+            result = FALSE;
+            reason = "not inlining nested functions";
+            ed->Set_reason_id (38);
+    } 
+#endif
+    else if (PU_has_attr_noreturn(callee->Get_PU()) &&
+             callee->PU_Size().Stmt_count() > TINY_SIZE ) {
+            result = FALSE;
+            reason = "not inlining non-tiny noreturn functions";
+            ed->Set_reason_id (39);
+    }
+#ifdef KEY
+    else if (PU_has_apply_args(callee->Get_PU())) {
+            result = FALSE;
+            reason = "not inlining __builtin_apply_args functions";
+            ed->Set_reason_id(40);
+    }
+#endif
     // The following else-if must be last
     else if (!IPA_Enable_Lang) {
 	if ((callee->Summary_Proc()->Get_lang() == LANG_F77) || 
@@ -1694,11 +1821,7 @@ do_inline (IPA_EDGE *ed, IPA_NODE *caller,
 	return FALSE;
     } 
 
-#if 0 // def _STANDALONE_INLINER
-    return result;
-#else
     return check_size_and_freq (ed, caller, callee, cg);
-#endif // _STANDALONE_INLINER
 } // do_inline
 
 
@@ -1799,6 +1922,12 @@ Get_Sorted_Callsite_List (IPA_NODE *n, IPA_CALL_GRAPH *cg,
 
 
 // decide if the given call could be deleted or inlined
+// This function has effects when IPA_Enable_DCE is true.
+// A deletable edge is marked so and the call graph and 
+// call counts are updated.  So the client should make
+// sure that this method is called only once on any edge.
+// In future, we can separate this functionality from
+// Analyze_call().  
 static void
 Analyze_call (IPA_NODE* caller, IPA_EDGE* edge, const IPA_CALL_GRAPH* cg)
 {
@@ -1808,6 +1937,14 @@ Analyze_call (IPA_NODE* caller, IPA_EDGE* edge, const IPA_CALL_GRAPH* cg)
 	    
     if (IPA_Enable_DCE) {
 	// Do dead call elimination analysis
+
+        if (edge->Has_Updated_Caller())
+	{
+	  // this edge is deleted and caller is updated, so return.
+          // this will allow invoking Analyze_call() on an edge multiple
+          // times.
+          return;
+	}
 		
 	if (!callee->Summary_Proc()->Has_pragma_side_effect() && // KEY
 	    ((edge->Is_Deletable () || // set by const. propagation
@@ -1837,7 +1974,7 @@ Analyze_call (IPA_NODE* caller, IPA_EDGE* edge, const IPA_CALL_GRAPH* cg)
 			DEMANGLE (caller->Name())); 
 	    }
 
-	    Update_Call_Graph (caller);
+	    Update_Call_Graph (caller,edge);
 			
 	    if (IPA_Enable_DFE)
 		Update_Total_Prog_Size (caller, callee, cg);
@@ -1866,10 +2003,6 @@ Analyze_call (IPA_NODE* caller, IPA_EDGE* edge, const IPA_CALL_GRAPH* cg)
         if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
             fprintf(Verbose_inlining,"NNN\t(%p)%-20s -------<%p>--------> (%p)%-20s\n",caller,caller->Name(),edge,callee,callee->Name());
 	}
-#if 0
-	if (callee->Has_Must_Inline_Attrib())
-	    callee->Clear_Must_Inline_Attrib ();
-#endif
 	if (callee->Has_Inline_Attrib())
 	    callee->Clear_Inline_Attrib ();
 	Total_Not_Inlined++;
@@ -1906,7 +2039,7 @@ void Perform_Inline_Analysis2( IPA_CALL_GRAPH* cg, MEM_POOL* pool )
   if( Get_Trace ( TP_IPA, IPA_TRACE_TUNING) ){
     Verbose_inlining = fopen ("Verbose_inlining.log", "w");
     N_inlining = fopen ("N_inlining.log", "w");
-    Y_inlining = fopen ("Y_inlining.log", "w");
+    Y_inlining = fopen ("Y_inlining.log", "a+");
     e_weight = fopen ("callee_wght.log","w");
   }
 
@@ -1972,7 +2105,6 @@ void Perform_Inline_Analysis2( IPA_CALL_GRAPH* cg, MEM_POOL* pool )
 
   if( Get_Trace ( TP_IPA, IPA_TRACE_TUNING) ){
     fclose(e_weight);
-    fclose(Y_inlining);
     fclose(N_inlining);
     fclose(Verbose_inlining);
   }
@@ -1981,18 +2113,32 @@ void Perform_Inline_Analysis2( IPA_CALL_GRAPH* cg, MEM_POOL* pool )
 }
 #endif // KEY
 
+
+static
+void analyze_calls_in_caller(IPA_NODE *caller, IPA_CALL_GRAPH *cg, INVOCATION_COST& cost_vector)
+{ 
+   if (caller == NULL)
+     return;
+
+   if (caller->Should_Be_Skipped()) { 
+	    Total_Inlined++;
+            return; 
+   }
+   EDGE_INDEX_VECTOR callsite_list;  	 
+   callsite_list.clear ();
+   Get_Sorted_Callsite_List (caller, cg, cost_vector, callsite_list);
+   EDGE_INDEX_VECTOR::const_iterator last = callsite_list.end ();
+   for (EDGE_INDEX_VECTOR::iterator first = callsite_list.begin ();
+	   first != last; ++first) {
+      IPA_EDGE *edge = cg->Edge(*first); 
+      if (edge->Has_Inline_Attrib()) continue; 
+      Analyze_call (caller, cg->Edge (*first), cg);
+   }
+}
+
 void
 Perform_Inline_Analysis (IPA_CALL_GRAPH* cg, MEM_POOL* pool)
 {
-    INVOCATION_COST cost_vector (cg, pool);
-    
-    if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
-        Verbose_inlining = fopen ("Verbose_inlining.log", "w");
-	N_inlining = fopen ("N_inlining.log", "w");
-	Y_inlining = fopen ("Y_inlining.log", "w");
-	e_weight = fopen ("callee_wght.log","w");
-    }
-    Init_inline_parameters ();
 
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
 
@@ -2000,33 +2146,19 @@ Perform_Inline_Analysis (IPA_CALL_GRAPH* cg, MEM_POOL* pool)
 	inline_count = CXX_NEW (INLINE_COUNTER_ARRAY (cg, pool), pool);
 
 #endif // _STANDALONE_INLINER
-
-    EDGE_INDEX_VECTOR callsite_list;
-    IPA_NODE_ITER cg_iter (cg, LEVELORDER, pool);
-
-
-    /* traverse all nodes at levelorder */
-    for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
-	IPA_NODE* caller = cg_iter.Current();
-
-	if (caller == NULL)
-	    continue;
-
-	if (caller->Should_Be_Skipped()) { 
-	    Total_Inlined++;
-	    continue;
-	}
-
-	callsite_list.clear ();
-	Get_Sorted_Callsite_List (caller, cg, cost_vector, callsite_list);
-
-	EDGE_INDEX_VECTOR::const_iterator last = callsite_list.end ();
-	for (EDGE_INDEX_VECTOR::iterator first = callsite_list.begin ();
-	     first != last; ++first) {
-
-	    Analyze_call (caller, cg->Edge (*first), cg);
-
-	}
+ 
+   INVOCATION_COST cost_vector (cg, pool);
+   if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
+        Verbose_inlining = fopen ("Verbose_inlining.log", "w");
+	N_inlining = fopen ("N_inlining.log", "w");
+	Y_inlining = fopen ("Y_inlining.log", "a+");
+	e_weight = fopen ("callee_wght.log","w");
+    }
+    Init_inline_parameters ();
+    Inline_Analyzer analyzer(cg, pool, cost_vector);
+    analyzer.analyze();
+    if ( INLINE_List_Actions ) {
+      analyzer.report();
     }
 
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
@@ -2067,8 +2199,436 @@ Perform_Inline_Analysis (IPA_CALL_GRAPH* cg, MEM_POOL* pool)
 
     if(Get_Trace ( TP_IPA, IPA_TRACE_TUNING)) {
         fclose(e_weight);
-        fclose(Y_inlining);
         fclose(N_inlining);
         fclose(Verbose_inlining);
     }
 } // Perform_Inline_Analysis
+
+BOOL
+Inline_Analyzer::all_calls_inlined(IPA_NODE *node)
+{ 
+  if (the_cg->Num_In_Edges(node)==0) return FALSE; 
+  IPA_PRED_ITER edge_iter( the_cg, node );
+  for( edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next() ){
+    IPA_EDGE *edge = edge_iter.Current_Edge ();
+    if (( edge != NULL) && edge->Has_Inline_Attrib()) continue;
+    return FALSE; 
+  }
+  return TRUE; 
+} 
+
+void 
+Inline_Analyzer::update_budget(IPA_EDGE *edge)
+{ 
+  NODE_INDEX_VECTOR modified;
+  IPA_NODE *callee = the_cg->Callee(edge);
+
+  nodes_affected_by_inlining(edge,modified);
+
+  NODE_INDEX_VECTOR::const_iterator last = modified.end();
+  INT32 count = 0;
+  for (NODE_INDEX_VECTOR::iterator first = modified.begin();
+      first != last ; ++first) {
+     IPA_NODE *node = the_cg->Node(*first);
+     if (all_calls_inlined(node)) continue;
+     count++;
+  }
+
+  if (all_calls_inlined(callee)) count--;
+  budget(budget()-count*Effective_weight(callee));
+}
+
+Inline_Analyzer::Inline_Analyzer(IPA_CALL_GRAPH *cg, MEM_POOL *pool, INVOCATION_COST &cost)
+{ 
+  the_cg = cg;
+  the_pool = pool;
+  cost_vector = &cost;
+  call_in_loop = (BOOL *) MEM_POOL_Alloc(pool, cg->Node_Size()*sizeof(BOOL));
+  int i;
+  for (i = 0; i < cg->Node_Size(); i++)
+    call_in_loop[i]=FALSE;
+}
+
+BOOL
+Inline_Analyzer::visited(std::map<IPA_NODE_INDEX,BOOL>&vec,IPA_NODE *node)
+{
+  if (vec.find(node->Array_Index()) == vec.end())
+    return FALSE;
+  return TRUE; 
+} 
+
+void
+Inline_Analyzer::nodes_affected_by_inlining(IPA_EDGE *edge, NODE_INDEX_VECTOR &modified)
+{ 
+  std::map<IPA_NODE_INDEX, BOOL> visited;
+  help_find_nodes_affected_by_inlining(edge,modified, visited);
+} 
+
+void
+Inline_Analyzer::help_find_nodes_affected_by_inlining(IPA_EDGE *edge, 
+                                                      NODE_INDEX_VECTOR &modified,
+                                                      std::map<IPA_NODE_INDEX,BOOL> &visited_vector)
+{ 
+  // caller is definitely affected. 
+  visited_vector[the_cg->Caller(edge)->Array_Index()] = TRUE;
+  modified.push_back(the_cg->Caller(edge)->Array_Index());
+  IPA_PRED_ITER edge_iter (the_cg, the_cg->Caller(edge));
+  for (edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next ()) {
+    IPA_EDGE *edge2 = edge_iter.Current_Edge ();
+    if (edge2) {
+      if (the_cg->Graph()->Is_Recursive_Edge (edge2->Edge_Index ())) continue; 
+      if (edge2->Has_Inline_Attrib())
+      { 
+        if (!visited(visited_vector, the_cg->Caller(edge2)))
+	{ 
+          help_find_nodes_affected_by_inlining(edge2,modified,visited_vector);
+	}
+      }
+    }
+  }
+}
+
+void 
+Inline_Analyzer::compute_statistics
+(
+  INT32&avg_wt, 
+  INT32&call_count,
+  INT32&avg_leaf_wt,
+  INT32 &max_wt, 
+  INT32&avg_fanout
+)
+{ 
+
+  INT32 total_wt = 0;
+  INT32 leaf_count = 0;
+  INT32 total_fanout = 0;
+  INT32 total_leaf_wt = 0;
+  max_wt = 0;
+  int i;
+  int size = 0;
+  for (i = 0; i < the_cg->Node_Size(); i++)
+  {
+    if (!call_in_loop[i]) continue;
+    size++;
+    IPA_NODE *node= the_cg->Node(i);
+
+    // ignore leaves.
+    INT32 fan_out = the_cg->Num_Out_Edges(node);
+    if (fan_out == 0)
+    { 
+      leaf_count++;
+      INT32 node_wt = Effective_weight(node);
+      total_leaf_wt += node_wt;
+      continue;
+    }
+    total_fanout += fan_out;
+    INT32 node_wt = Effective_weight(node);
+    total_wt += node_wt;
+    if (max_wt < node_wt)
+     max_wt = node_wt;
+  }
+
+  INT32 non_leaf_count = (size-leaf_count); 
+  call_count = size;
+  if (non_leaf_count == 0)
+  { 
+    avg_wt = 0;
+    avg_fanout = 0;
+    avg_leaf_wt = 0;
+    return; 
+  }
+  else
+  { 
+    avg_wt = total_wt/non_leaf_count;
+    avg_fanout = total_fanout/non_leaf_count;
+    if (leaf_count > 0)
+      avg_leaf_wt = total_leaf_wt/leaf_count; 
+    else
+      avg_leaf_wt = 0;
+  }
+} 
+
+void
+Inline_Analyzer::analyze()
+{ 
+  if (!INLINE_First_Inline_Calls_In_Loops
+      || INLINE_Aggressive)
+  {
+     IPA_NODE_ITER cg_iter (the_cg, LEVELORDER, the_pool);
+     /* traverse all nodes at levelorder */
+     for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+	 IPA_NODE* caller = cg_iter.Current();
+         if (caller==NULL)  continue;
+         analyze_calls_in_caller(caller, the_cg, *cost_vector);
+     }
+     return;
+  }
+
+  mark_calls_in_loop();
+
+  INT32 avg_wt = 0;
+  INT32 max_wt = 0; 
+  INT32 avg_leaf_wt = 0;
+  INT32 avg_fanout = 0;
+  INT32 call_count = 0;
+
+  // compute the following statistics on the calls in loops. 
+  //  o average size 
+  //  o the max function size of function called in a loop.
+  //  o average fanout of a call. 
+  // use that as a guideline for inlining decisions. 
+  //   plimit = avg_size + avg_fanout*avg_size;
+
+  compute_statistics(avg_wt, call_count, avg_leaf_wt, max_wt, avg_fanout);
+
+  IPA_NODE_ITER cg_iter (the_cg, LEVELORDER, the_pool);
+
+  if (avg_wt != 0)
+  {
+    // readjust the non aggressive callee limit
+    // based on the avgerage size of a function 
+    // called from a loop
+
+    INT32 orig2 = non_aggr_callee_limit;
+
+    if (avg_wt < orig2)
+       non_aggr_callee_limit = 2*orig2; 
+    else
+       non_aggr_callee_limit = 2*orig2 + 100;
+
+    // use a 50% inline budget for calls in loops
+    budget(avg_wt*call_count/2);
+
+    if ( INLINE_List_Actions ) {
+      fprintf(stderr, "call stats: avg_wt=%d, avg_fanout=%d, small_pu=%d, IPA_PU_Limit=%d\n",avg_wt,avg_fanout,non_aggr_callee_limit,IPA_PU_Limit);
+    }
+
+
+    /* traverse all nodes at levelorder */
+    for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+       IPA_NODE* caller = cg_iter.Current();
+       if ( (caller==NULL) ||
+            !call_in_loop[caller->Array_Index()])
+         continue;
+       inline_calls_in_caller(caller);
+       if (budget() < 0) break;
+    }
+
+    // reset the parameters to original values.
+    non_aggr_callee_limit = orig2;
+  }
+
+  /* traverse all nodes at levelorder */
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+	IPA_NODE* caller = cg_iter.Current();
+        if (caller==NULL) continue;
+        analyze_calls_in_caller(caller, the_cg, *cost_vector);
+  }
+
+}
+
+void
+Inline_Analyzer::inline_calls_in_caller
+(
+  IPA_NODE *call 
+)
+{
+  if ( INLINE_List_Actions ) {
+  fprintf(stderr, "Current budget is %d\n", budget());
+  fprintf(stderr, "Picking node %s with weight %d for inlining \n",call->Name(),Effective_weight(call));
+  }
+  analyze_calls_in_caller(call, the_cg, *cost_vector);
+
+  IPA_SUCC_ITER edge_iter(the_cg, call);
+  for( edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next() ){
+  IPA_EDGE *edge = edge_iter.Current_Edge ();
+  if (( edge != NULL)
+      && (edge->Has_Inline_Attrib()))
+  { 
+    update_budget(edge); 
+  }
+  }
+}
+
+static
+char *reason(IPA_EDGE *edge)
+{ 
+  INT32 reason_id = edge->reason_id();
+  switch (reason_id)
+  { 
+    case 0:
+	return "callee is skipped";
+    case 1:
+        return "edge is skipped";
+    case 2:
+        return "call deleted by DCE";
+    case 3:
+	return "caller is a nested procedure";
+    case 4:
+        return "callee has nested procedure(s) so ignore user MUST inline request";
+    case 5:
+        return "callee has nested procedure(s)";
+    case 6:
+        return "callee is recursive";
+    case 7:
+	return "callee is varargs";
+    case 8:
+	return "function with alternate entry point";
+    case 9:
+        return "number of parameters mismatched";
+    case 10:
+	return "callee has pragmas which are associated with formals";
+    case 11:
+	return "callee has flag that suggested that it should be MP'ed";
+    case 12:
+	return "callee has parallel pragmas that suggest turning off inlining";
+    case 13:
+	return "callee has VLAs and caller has parallel_pragma"; 
+    case 14:
+	return "callee has PDO pramgas and caller has parallel_pragma"; 
+    case 15:
+	    return "callsite pragma requested not to inline";
+    case 16:
+	return "exception handling function";
+    case 17:
+	return "exception handling code with pstatics";
+
+    case 18:
+	return "depth in call graph exceeds specified maximum";
+    case 19:
+	return "user requested not to inline";
+    case 20:
+        return "function has local fstatics and is set preemptible";
+    case 21:
+        return "function is preemptible and has not been set to mustinline";
+    case 22:
+	return "incompatible return types";
+    case 24:
+    case 25:
+	return "not inlining across language boundaries";
+    case 26:
+      return "combined size exceeds -IPA:plimit";
+    case 27:
+        return "hotness  < -IPA:min_hotness ";
+    case 28:
+      return "callee size > -IPA:callee_limit";
+    case 29:
+      return "callee_size > -INLINE:aggressive=off callee limit";
+    case 30:
+      return "small, but size but exceeds hard function size limit";
+    case 31:
+      return "Olimit exceeds -OPT:Olimit";
+    case 32:
+      return       "Edge is never invoked";
+    case 33:
+      return "Density  > Max_density ";
+    case 34:
+      return "optimization options are different for caller and callee";
+  case 35:
+	    return "Trying to do pure-call-optimization for this callsite";
+  case 36:
+            return "not inlining C++ with exceptions into non-C++";
+  case 37:
+            return "formal parameter is a loop index";
+  case 38:
+            return "not inlining nested functions";
+  case 39:
+            return "not inlining non-tiny noreturn functions";
+  case 40:
+            return "not inlining __builtin_apply_args functions";
+  default:
+    return "unknown reason";
+  } 
+} 
+
+
+
+void 
+Inline_Analyzer::mark_calls_in_loop()
+{
+  INT32 i;
+  NODE_INDEX_VECTOR worklist;
+
+  IPA_NODE_ITER cg_iter (the_cg, LEVELORDER, the_pool);
+
+  /* traverse all nodes at levelorder */
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+    IPA_NODE* caller = cg_iter.Current();
+    if (caller == NULL) continue; 
+    IPA_SUCC_ITER edge_iter(the_cg, caller);
+    for( edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next() ){
+      IPA_EDGE *edge = edge_iter.Current_Edge ();
+      if( edge != NULL)
+      { 
+	INT loopnest = edge->Summary_Callsite ()->Get_loopnest ();
+        IPA_NODE *callee = the_cg->Callee(edge);
+        if (loopnest > 0) 
+        {
+          if (!call_in_loop[callee->Array_Index()])
+          {
+            call_in_loop[callee->Array_Index()]=TRUE;
+            worklist.push_back(callee->Array_Index());
+	  }
+	}
+      }   
+    }
+  }
+
+  while (!worklist.empty())
+  { 
+
+    IPA_NODE_INDEX caller = worklist.back();
+    // remove it from the work list. 
+    worklist.pop_back();
+    IPA_SUCC_ITER edge_iter (the_cg, the_cg->Node(caller));
+    for (edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next ()) {
+    IPA_EDGE *edge = edge_iter.Current_Edge ();
+    if (edge != NULL)
+    {
+      IPA_NODE_INDEX callee = the_cg->Callee(edge)->Array_Index();
+      if (!call_in_loop[callee])
+      {
+        call_in_loop[callee]=TRUE;
+        worklist.push_back(callee);
+      }
+    }
+    }
+  }
+}
+
+
+void
+Inline_Analyzer::report()
+{
+
+   // For each of the calls in loops, find the number of edges
+   // not inlined and report. 
+   /* traverse all nodes at levelorder */
+
+   IPA_NODE_ITER cg_iter( the_cg, PREORDER, the_pool );
+   for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+       IPA_NODE* caller = cg_iter.Current();
+       if (caller==NULL) continue; 
+       INT32 inlined_edges=0;
+       IPA_SUCC_ITER edge_iter (the_cg, caller);
+       INT32 total = the_cg->Num_Out_Edges(caller);
+       BOOL in_loop = call_in_loop[caller->Array_Index()];
+       if (the_cg->Num_Out_Edges(caller) == 0) continue; 
+       fprintf(stderr, "caller=%s %s weight=%d fully inlined = %s\n",caller->Name(), in_loop ? "*" : "", Effective_weight(caller), all_calls_inlined(caller) ? "yes" : "no");
+       for (edge_iter.First (); !edge_iter.Is_Empty (); edge_iter.Next ()) {
+          IPA_EDGE *edge = edge_iter.Current_Edge ();
+          if (edge != NULL)
+          {
+	     if (edge->Has_Inline_Attrib())
+             { 
+             fprintf(stderr, "   edge %d : inlined %s weight(%d)\n",edge->Edge_Index(), the_cg->Callee(edge)->Name(), Effective_weight(the_cg->Callee(edge)));
+	     } 
+             else
+             { 
+             fprintf(stderr, "   edge %d : didnot %s weight(%d): reason=%s\n",edge->Edge_Index(), the_cg->Callee(edge)->Name(), Effective_weight(the_cg->Callee(edge)), reason(edge));
+	     } 
+          }
+       }
+    }
+
+}

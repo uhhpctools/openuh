@@ -158,7 +158,7 @@ typedef std::vector<BOOL, BIT_ALLOC> BV_VECTOR;
 typedef mempool_allocator<BV_VECTOR> BV_ALLOC;
 typedef std::vector<BV_VECTOR, BV_ALLOC>  BV_CONTAINER;
 
-typedef std::pair<TN*, OP*> TN_OP_PAIR;
+typedef std::pair<TN*, const OP*> TN_OP_PAIR;
 typedef mempool_allocator<TN_OP_PAIR*> TP_ALLOCATOR;
 typedef std::vector<TN_OP_PAIR*, TP_ALLOCATOR>  TP_CONTAINER;
 

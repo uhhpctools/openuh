@@ -109,14 +109,14 @@
 #ifndef opt_goto_INCLUDED
 #define opt_goto_INCLUDED "opt_goto.h"
 
-/** $Revision$
-*** $Date$
-*** $Author$
-*** $Source$
+/** $Revision: 1.2 $
+*** $Date: 02/11/07 23:41:38-00:00 $
+*** $Author: fchow@keyresearch.com $
+*** $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_goto.h $
 **/
 
 #ifdef _KEEP_RCS_ID
-static char *opt_goto_rcs_id = opt_goto_INCLUDED" $Revision$";
+static char *opt_goto_rcs_id = opt_goto_INCLUDED" $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "wn.h"
@@ -189,12 +189,17 @@ private:
   void Fixup_Parents(WN *wn, WN *parent);
   void Backpatch();
   BOOL Ancestor_Through_If(GOTO_DESCRIPTOR *gd);
+  BOOL Parent_Through_If(GOTO_DESCRIPTOR *gd);
   BOOL Sibling(GOTO_DESCRIPTOR *gd);
   void Move_Goto_Out(GOTO_DESCRIPTOR *gd);
   void Replace_Goto_With_If(GOTO_DESCRIPTOR *gd);
   void Replace_Goto_With_While(GOTO_DESCRIPTOR *gd);
   void Move_Into_Else(GOTO_DESCRIPTOR *gd);
+  void Create_Truebr(GOTO_DESCRIPTOR *gd);
+  void Promote_Do_While(WN *wn);
+  WN *Func_Nd() { return _func_nd;};
   BOOL Can_Move_Into_Else(GOTO_DESCRIPTOR *gd);
+  BOOL Is_Truebr(GOTO_DESCRIPTOR *gd);
   BOOL Goto_Is_Noop(GOTO_DESCRIPTOR *gd) const;
   INT Find_Level(WN *wn);
   WN *Find_Common_Ancestor(WN *wn1, WN *wn2);

@@ -37,9 +37,12 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <alloca.h>
 
 #include "defs.h"
@@ -949,18 +952,6 @@ Evaluate_chi (const SUMMARY_CHI *chi, SUMMARY_VALUE &return_value)
 	    return;
 	}
 
-#if 0
-        // nenad, 03/01/00, 783636:
-        // This seems completely bogus --
-        // it doesn't matter at all if sym is DMOD-ified in this procedure,
-        // but whether the call described in the CHI node may modify it.
-
-	if (!sym.Is_dmod ()) {
-	    // is not modified at all
-	    Get_chi_operand (chi, return_value);
-	    return;
-	}
-#endif
 
 	// last hope:  if this symbol is passed by reference in this
 	// particular callsite, and is not indirectly modified, we can
@@ -2304,7 +2295,7 @@ Update_annot_with_callee_mod (IPA_NODE* callee, GLOBAL_ANNOT* gannot)
 {
   IPAA_NODE_INFO* modref_info = callee->Mod_Ref_Info();
   for (UINT32 i = 0; i < GLOBAL_ANNOT::Size; ++i) {
-    char* is_mod = "is NOT";
+    const char* is_mod = "is NOT";
     ST_IDX common_st = GLOBAL_ANNOT::Common_ST[i];
     if (modref_info->Is_def_elmt(ST_IDX_index(common_st))) {
       gannot->Set_Bottom(i);

@@ -98,6 +98,11 @@ extern void WFE_Terminate_Do_Loop (struct nesting *);
 extern void WFE_Expand_Pragma (tree);
 #endif
 
+#if defined(TARG_SL) || defined(TARG_MIPS)
+extern void WFE_Expand_Freq_Hint (tree exp);
+#endif
+
+
 #ifdef __cplusplus
 }
 #endif

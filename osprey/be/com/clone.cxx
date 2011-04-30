@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -54,7 +58,11 @@
  * ====================================================================
  */
 
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>		  
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>		  
+#endif /* defined(BUILD_OS_DARWIN) */
 
 // ======================================================================
 #include "defs.h"                       // pre-defined types
@@ -69,6 +77,9 @@
 
 #include "clone.h"                      // IPO_CLONE, IPO_SYMTAB, 
 #include "targ_sim.h"
+#include "constraint_graph.h"
+
+extern BOOL Alias_Nystrom_Analyzer;
 
 // ======================================================================
 // For easy switching of Scope_tab
@@ -135,43 +146,6 @@ IPO_CLONE::Set_Entry_Point(WN *wn, WN *cloned_wn, ST *cloned_st)
 } // IPO_CLONE::Set_Entry_Point
 
 
-#if 0 // obsolete function
-// ======================================================================
-// Create a new global ST for this entry point, with new symbol name
-// ======================================================================
-
-void
-IPO_CLONE::Set_Entry_Point (WN* wn, WN* cloned_wn)
-{
-  Is_True(wn && cloned_wn && _sym,
-          ("IPO_CLONE::Set_Entry_Point parameter is null"));
-  Is_True(WN_opcode(wn) == OPC_FUNC_ENTRY || 
-          WN_opcode(wn) == OPC_ALTENTRY,
-          ("Set_Entry_Point can only be invoked on FUNCTIONs\n"));
-
-  ST* st = WN_st(wn);
-  ST* cloned_st = _sym->IPO_Copy_ST(st, GLOBAL_SYMTAB);
-
-  if (WN_opcode(wn) == OPC_FUNC_ENTRY) {
-    // Create a PU (don't do it for alternate entry points)
-    PU_IDX pu_idx;
-    PU& pu = New_PU (pu_idx);
-    PU_Init (pu, ST_pu_type(st), PU_lexical_level(st));
-    Set_ST_pu (cloned_st, pu_idx);
-  }
-
-  // reset this bit since all the unknown edges which may be
-  // due to addr taken and saved will point to the original procedure
-  Set_ST_addr_not_saved(cloned_st);
-
-  Set_ST_export (cloned_st, EXPORT_INTERNAL);
-
-  WN_st_idx(cloned_wn) = ST_st_idx(cloned_st);
-
-  _sym->Hide_Cloned_ST (st);  // so that recursive calls go to the orig.
-
-} // IPO_CLONE::Set_Entry_Point
-#endif // obsolete function
 
 
 // ======================================================================
@@ -192,11 +166,18 @@ IPO_CLONE::Fix_ST (WN* cloned_wn, WN* wn)
 
   if (st == NULL) {
     // label opcodes don't always have a valid st
+    INT lab_level, lab_index;
     if (OPCODE_has_label(op)) {
-      WN_label_number(cloned_wn) += _sym->Get_cloned_label_last_idx();
+      lab_level = _sym->Get_cloned_level();
+      lab_index = LABEL_IDX_index(WN_label_number(cloned_wn));
+      lab_index += _sym->Get_cloned_label_last_idx();
+      WN_label_number(cloned_wn) = make_LABEL_IDX(lab_index, lab_level);
     }
     if (OPCODE_has_last_label(op)) {
-      WN_last_label(cloned_wn) += _sym->Get_cloned_label_last_idx();
+      lab_level = _sym->Get_cloned_level();
+      lab_index = LABEL_IDX_index(WN_last_label(cloned_wn));
+      lab_index += _sym->Get_cloned_label_last_idx();
+      WN_last_label(cloned_wn) = make_LABEL_IDX(lab_index, lab_level);
     }
     return;
   }
@@ -235,9 +216,13 @@ IPO_CLONE::Fix_ST (WN* cloned_wn, WN* wn)
 
   cloned_st = _sym->Get_Cloned_ST (st);
 
-  if ((cloned_st != NULL) && (ST_level(cloned_st) == GLOBAL_SYMTAB))
+  if ((cloned_st != NULL) && (ST_level(cloned_st) == GLOBAL_SYMTAB)) {
 						// Promoted as global
+      if (Alias_Nystrom_Analyzer) {
+        ConstraintGraph::updatePromoteStIdxMap(WN_st_idx(wn) , ST_st_idx(cloned_st));
+      }
       WN_st_idx(wn) = ST_st_idx(cloned_st);	// So fix up the orig tree also
+  }
   else 
       cloned_st = _sym->Get_ST(st);
 
@@ -318,7 +303,7 @@ IPO_CLONE::Copy_Node (const WN *src_wn)
 	while (new_size < size)
 	    new_size *= 2;
 	_raw_buffer = (WN *)MEM_POOL_Alloc(WN_mem_pool_ptr, new_size);
- 	bzero (_raw_buffer, new_size);
+ 	BZERO (_raw_buffer, new_size);
 	_raw_buf_size = new_size;
     }
 
@@ -340,6 +325,14 @@ IPO_CLONE::Copy_Node (const WN *src_wn)
 
     WN_Copy_u1u2 (wn, src_wn);
     WN_Copy_u3 (wn, src_wn);
+	
+#if defined(TARG_SL) || defined(TARG_SL2)
+//  need copy these sl2 special flag also see bug 154 
+    WN_Copy_sl_ext(wn, src_wn); 
+#endif 
+
+    // trace copy wn node here
+    Trace_Wn_Copy(wn, src_wn);
 
     return(wn);
 } // Copy_Node
@@ -366,6 +359,10 @@ IPO_CLONE::Clone_Tree (WN *wn, ST *clone_st)
 
   ret_wn = Copy_Node (wn);
 
+  // Clone the WN to CGNodeId mapping for the cloned node into the caller
+  if (Alias_Nystrom_Analyzer)
+    ConstraintGraph::cloneWNtoCallSiteCGNodeIdMap(wn, ret_wn, this);
+
   op = WN_opcode(wn);
 
   if (_sym) {
@@ -375,23 +372,6 @@ IPO_CLONE::Clone_Tree (WN *wn, ST *clone_st)
       // which occur in the exception handling opcode
       // Exceptions now come as REGIONS (not as EXC_SCOPE_BEGINS)
       if ((WN_operator(wn) == OPR_REGION) && (WN_region_is_EH(wn))) {
-#if 0
-    // ensure that sym is not null (which is true when promoting pstatics
-      if (_sym && (!_sym->Get_Cloned_Scope_Tab())) {
-          INITO_IDX init_idx = WN_ereg_supp(wn);
-          if (init_idx) {
-              // check if this is a result of moving initos to
-              // the global symtab due to promoting static
-              // variables
-              INITO_IDX init_cp_idx;
-              if (init_cp_idx = _sym->Get_Cloned_INITO_IDX(Get_INITO(init_idx))) {
-                  WN_ereg_supp(wn) = init_cp_idx;
-                  WN_ereg_supp(ret_wn) = init_cp_idx;
-              }
-          }
-      }
-      else
-#endif
         // else we need to fix up the inito's occuring in whirl
             Fix_INITO(ret_wn, wn);
   }
@@ -406,19 +386,14 @@ IPO_CLONE::Clone_Tree (WN *wn, ST *clone_st)
 	else if (OPCODE_has_sym(op) || OPCODE_has_label(op))
             Fix_ST (ret_wn, wn);
 
-#if 0
-        // fix the ST_base, this occurs in fortran for local
-        // data statements and equivalences. see test case
-        // mf77tests/rag_misc/test028.f, test029.f
-        if (OPCODE_has_sym(op) && WN_st(wn)) {
-            ST * st = _sym->Get_Cloned_ST(ST_base(WN_st(wn)));
-            if (st) {
-              Set_ST_sclass(ST_base(WN_st(wn)),SCLASS_AUTO);
-              Set_ST_base_idx(WN_st(ret_wn), ST_st_idx(st));
-              Set_ST_base_idx(WN_st(wn), ST_st_idx(st));
-            }
-        }
-#endif
+       // Nystrom alias analyzer:
+       if (Alias_Nystrom_Analyzer) {
+         // Map the original st_idx to its clone for non globals
+         if (OPCODE_has_sym(op) && !OPCODE_is_call(WN_opcode(wn)) && 
+             WN_st(wn) && (ST_IDX_level(WN_st_idx(wn)) != GLOBAL_SYMTAB))
+           ConstraintGraph::updateOrigToCloneStIdxMap(WN_st_idx(wn),
+                                                      WN_st_idx(ret_wn));
+       }
   }
 
           
@@ -494,14 +469,6 @@ IPO_CLONE::New_Clone (ST *clone_st)
 
   FmtAssert(_orig_pu,("IPO_CLONE::orig_pu is null"));
   ST * s = WN_st(_orig_pu);
-#if 0
-  SYMTAB_IDX o_symtab = _sym->Get_Orig_Level();
-  // copy the initos for the local symtab
-  if (o_symtab && PU_has_exc_scopes(Get_Current_PU()))
-    {
-      _sym->Copy_INITO();
-    }
-#endif
 
   _cloned_map_tab = WN_MAP_TAB_Create (_mem);
 
@@ -522,11 +489,13 @@ IPO_CLONE::New_Clone (ST *clone_st)
 // IPO_SYMTAB Related Functions
 // ======================================================================
 
+
 // ======================================================================
 // Fix up ST entries
 // ======================================================================
 
-template<> inline void 
+template <>
+inline void 
 IPO_SYMTAB::fix_table_entry<ST>::operator () (UINT idx, ST* st) const
 {
     Set_ST_st_idx(st, make_ST_IDX(idx, _sym->Get_cloned_level()));
@@ -558,7 +527,8 @@ IPO_SYMTAB::fix_table_entry<ST>::operator () (UINT idx, ST* st) const
 // ======================================================================
 // Fix up INITO entries
 // ======================================================================
-template<> inline void 
+template <>
+inline void 
 IPO_SYMTAB::fix_table_entry<INITO>::operator () (UINT idx, INITO* inito) const
 {
     Set_INITO_st_idx(*inito, make_ST_IDX(ST_IDX_index(INITO_st_idx(*inito))+_sym->Get_cloned_st_last_idx(), _sym->Get_cloned_level()));
@@ -567,7 +537,8 @@ IPO_SYMTAB::fix_table_entry<INITO>::operator () (UINT idx, INITO* inito) const
 // ======================================================================
 // Fix up ST_ATTR entries
 // ======================================================================
-template<> inline void 
+template <>
+inline void 
 IPO_SYMTAB::fix_table_entry<ST_ATTR>::operator () (UINT idx, ST_ATTR* st_attr) const
 {
     // bug fix for OSP_125
@@ -628,18 +599,6 @@ IPO_SYMTAB::Copy_Local_Tables(BOOL label_only)
 #ifdef KEY
 	if (PU_src_lang (Get_Current_PU()) & PU_CXX_LANG)
 	{
-#if 0
-	// For lang other than C++, the copy below won't be done anyway 
-	// since it depends on sclass. But then prevent the unnecessary loop
-	// for other languages.
-	  for (int i=start_idx; 
-	     i<(_orig_scope_tab[_orig_level].inito_tab)->Size(); ++i)
-	  {
-	    INITO copy = (*_orig_scope_tab[_orig_level].inito_tab)[i];
-	    if (ST_sclass(INITO_st(copy)) == SCLASS_EH_REGION_SUPP)
-	    	(*_cloned_scope_tab[_cloned_level].inito_tab).Insert (copy);
-	  }
-#else
 	    // bug 4091: for C++ copy all INITOs
 	    // We really need to clone only the EH initos here, but if
 	    // we only clone them, we will need to do lots of fixups.
@@ -647,7 +606,6 @@ IPO_SYMTAB::Copy_Local_Tables(BOOL label_only)
 			           *_cloned_scope_tab[_cloned_level].inito_tab, 
 			           start_idx, 
 			           (_orig_scope_tab[_orig_level].inito_tab)->Size());
-#endif
 	}
 #endif
   }
@@ -770,8 +728,8 @@ traverse_initvs (INITV_IDX start, ST_IDX old, ST_IDX copy)
 // Walk the ST list and for those that are PU-level static, move them and
 // their correcponding INITO to the Global Symtab
 // ======================================================================
-
-template<> inline void
+template<>
+inline void
 IPO_SYMTAB::promote_entry<ST>::operator () (UINT idx, ST* old_st) const
 {
     ST *copy_st;
@@ -839,7 +797,8 @@ IPO_SYMTAB::promote_entry<ST>::operator () (UINT idx, ST* old_st) const
 }
 
 // bug fix for OSP_125
-template<> inline void
+template <>
+inline void
 IPO_SYMTAB::promote_entry<ST_ATTR>::operator () (UINT idx, ST_ATTR* old_attr) const
 {
     // If the ST entry of the ST_ATTR has been promoted, then need to
@@ -860,7 +819,8 @@ IPO_SYMTAB::promote_entry<ST_ATTR>::operator () (UINT idx, ST_ATTR* old_attr) co
 // a different base, need to fix it
 // ======================================================================
 
-template<> inline void
+template <>
+inline void
 IPO_SYMTAB::fix_base<ST>::operator () (UINT idx, ST* old_st) const
 {
     ST *copy_st = NULL;
@@ -882,7 +842,8 @@ IPO_SYMTAB::fix_base<ST>::operator () (UINT idx, ST* old_st) const
     }
 }
 
-template<> inline void
+template <>
+inline void
 IPO_SYMTAB::promote_entry<INITO>::operator () (UINT idx, INITO* old_inito) const
 {
     // If the ST entry of the INITO has been promoted, then need to
@@ -1030,15 +991,23 @@ IPO_SYMTAB::Clone_INITVs_For_EH (INITV_IDX inov, INITO_IDX ino)
 		  break;
 	      }
 	  }
-	  Set_INITV_lab1 (cloned_iv, 
-		INITV_lab1(iv)+Get_cloned_label_last_idx());
+	  INT lab_level = LABEL_IDX_level(INITV_lab1(iv));
+	  INT lab_index = LABEL_IDX_index(INITV_lab1(iv)) + 
+	  		  Get_cloned_label_last_idx();
+	  Set_INITV_lab1 (cloned_iv, make_LABEL_IDX(lab_index, lab_level));
+
 	  Set_INITV_st2 (cloned_iv, ST_st_idx(cloned_st));
 	} 
 	break;
 
     case INITVKIND_LABEL:
-	Set_INITV_lab (cloned_iv, INITV_lab(iv)+Get_cloned_label_last_idx());
+       {
+	INT lab_level = LABEL_IDX_level(INITV_lab(iv));
+	INT lab_index = LABEL_IDX_index(INITV_lab(iv)) + 
+			Get_cloned_label_last_idx();
+	Set_INITV_lab (cloned_iv, make_LABEL_IDX(lab_index, lab_level));
 	break;
+       }
     
     case INITVKIND_BLOCK:
         Set_INITV_blk(cloned_iv, Clone_INITVs_For_EH (INITV_blk(iv), ino));

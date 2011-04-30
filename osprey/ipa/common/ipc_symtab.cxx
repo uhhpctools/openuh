@@ -37,9 +37,12 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>		// for WHIRL_REVISION
 
 #include "linker.h"			// interface exported by ld
@@ -262,7 +265,7 @@ static void
 check_revision (const char *base, UINT64 sh_size, const char* file_name)
 {
     const char* eob;
-    static char *revision = WHIRL_REVISION;
+    static const char *revision = WHIRL_REVISION;
     int len = strlen (revision);
     
     const char* p = base;
@@ -288,7 +291,7 @@ template <class Shdr, class Sym>
 void
 process_whirl (an_object_file_ptr p_obj, int nsec, const Shdr* section_table,
 	       BOOL check_whirl_revision, const char* file_name,
-	       const Sym* elf_symtab) 
+	       const Sym* elf_symtab, off_t mmap_size) 
 {
     // Given a WHIRL file, this routine will merge the global symbol-table
     // in with the current merged global symbol table which should already
@@ -368,7 +371,7 @@ process_whirl (an_object_file_ptr p_obj, int nsec, const Shdr* section_table,
     }
 
     IP_FILE_HDR &file_header =
-	Setup_File_Header (file_name, ld_get_mmap_addr (p_obj));
+	Setup_File_Header (file_name, ld_get_mmap_addr (p_obj), mmap_size);
  
     // Get all tables that make up the global symbol table, as well as
     // the FILE_INFO record for this WHIRL file.  
@@ -385,17 +388,13 @@ process_whirl (an_object_file_ptr p_obj, int nsec, const Shdr* section_table,
     gtabs.symstr_tab = (char*) ld_get_section_base (p_obj, strtab_idx);
     get_global_symtab (gtabs, IP_FILE_HDR_file_info (file_header), p_obj,
 		       gsymtab); 
-#if !defined(TARG_IA64) && !defined(TARG_X8664)    // Merge the new ELF symbol table entries with the existing ones.
-    //
+#if !defined(TARG_IA64) && !defined(TARG_X8664) && !defined(TARG_MIPS) && !defined(TARG_SL)&& !defined(TARG_LOONGSON)
+    // Merge the new ELF symbol table entries with the existing ones.
     pair<Sym *, UINT> ext_symtab = walk_st_list (gtabs, elf_symtab);
 
     if (ext_symtab.second  > 0) {
-#if 1
     	an_elf_sym_record *p_sym = (an_elf_sym_record *)ext_symtab.first;
 	merge_ext (p_sym,
-#else
-	merge_ext (reinterpret_cast<an_elf_sym_record *> (ext_symtab.first),
-#endif
 		   ld_get_section_base (p_obj, strtab_idx),
 		   ext_symtab.second, p_obj);
     }
@@ -432,7 +431,7 @@ static BOOL ipa_dot_so_initialized = FALSE;
 extern "C" void
 process_whirl32 (an_object_file_ptr p_obj, INT nsec,
 		 const Elf32_Shdr* section_table,
-		 BOOL check_whirl_revision, const char* file_name) 
+		 BOOL check_whirl_revision, const char* file_name, off_t mmap_size) 
 {
     if (!ipa_dot_so_initialized) {
 #ifdef KEY
@@ -444,13 +443,13 @@ process_whirl32 (an_object_file_ptr p_obj, INT nsec,
     
     Elf32_Sym *tag = 0;
     process_whirl (p_obj, nsec, section_table, check_whirl_revision,
-		   file_name, tag); 
+		   file_name, tag, mmap_size); 
 }
 
 extern "C" void
 process_whirl64 (an_object_file_ptr p_obj, INT nsec,
 		 const Elf64_Shdr* section_table,
-		 BOOL check_whirl_revision, const char* file_name)
+		 BOOL check_whirl_revision, const char* file_name, off_t mmap_size)
 { 
     if (!ipa_dot_so_initialized) {
 #ifdef KEY
@@ -462,18 +461,14 @@ process_whirl64 (an_object_file_ptr p_obj, INT nsec,
 
     Elf64_Sym *tag = 0;
     process_whirl (p_obj, nsec, section_table, check_whirl_revision,
-		   file_name, tag); 
+		   file_name, tag, mmap_size); 
 }
-#if defined(TARG_IA64) || defined(TARG_X8664)
 
-    /* This is just a door to the be.so open routines. */
 extern "C" void *
 ipa_open_input(char *name, off_t *p_size)
 {
     return WN_open_input(name,p_size);
 }
-
-#endif // TARG_IA64 */
 
 #else // _STANDALONE_INLINER
 

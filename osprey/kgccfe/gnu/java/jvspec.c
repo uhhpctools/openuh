@@ -193,22 +193,6 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
      already gave a language for the file.  */
   int saw_speclang = 0;
 
-#if 0
-  /* "-lm" or "-lmath" if it appears on the command line.  */
-  const char *saw_math ATTRIBUTE_UNUSED = 0;
-
-  /* "-lc" if it appears on the command line.  */
-  const char *saw_libc ATTRIBUTE_UNUSED = 0;
-
-  /* "-lgcjgc" if it appears on the command line.  */
-  const char *saw_gc ATTRIBUTE_UNUSED = 0;
-
-  /* Saw `-l' option for the thread library.  */
-  const char *saw_threadlib ATTRIBUTE_UNUSED = 0;
-
-  /* Saw `-lgcj' on command line.  */
-  int saw_libgcj ATTRIBUTE_UNUSED = 0;
-#endif
 
   /* Saw --resource, -C or -o options, respectively. */
   int saw_resource = 0;
@@ -467,13 +451,6 @@ lang_specific_driver (in_argc, in_argv, in_added_libraries)
       num_args += 2;  /* for the combined arg and "-xjava" */
     }
   /* If we know we don't have to do anything, bail now.  */
-#if 0
-  if (! added && ! library && main_class_name == NULL && ! saw_C)
-    {
-      free (args);
-      return;
-    }
-#endif
 
   if (main_class_name)
     {

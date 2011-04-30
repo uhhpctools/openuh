@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -128,7 +130,7 @@ LIBCOMUTIL_DIR 		= $(BUILD_TOT)/libcomutil
 WOPT_DIRS = \
   $(BE_COM_DIR)		\
   $(BE_OPT_DIR)		\
-  $(COMMON_UTIL_DIR)	\
+  $(COMMON_UTIL_DIR)
 
 WOPT_HEADER_DIRS = \
   $(WOPT_DIRS)		\
@@ -143,16 +145,15 @@ WOPT_HEADER_DIRS = \
   $(TARGDIR)/targ_info	\
   $(TARGDIR)/include	\
   $(TARG_BE_DIR)
-  
+
+
 
 #----------------------------------------------------------------------
 #  List of source files.  Please keep them in alphabetical order.
 #----------------------------------------------------------------------
 
 BE_COM_CXX_SRCS = \
-  cxx_template.cxx	\
-
-BE_OPT_SRCS = \
+  cxx_template.cxx
 
 BE_OPT_CXX_SRCS = \
   opt_alias_class.cxx	\
@@ -162,7 +163,9 @@ BE_OPT_CXX_SRCS = \
   opt_bool.cxx		\
   opt_canon.cxx		\
   opt_cfg.cxx		\
+  opt_reasso.cxx     \
   opt_cfg_trans.cxx	\
+  opt_proactive.cxx     \
   opt_combine.cxx	\
   opt_cond_const.cxx	\
   opt_count.cxx	        \
@@ -190,6 +193,7 @@ BE_OPT_CXX_SRCS = \
   opt_htable.cxx	\
   opt_htable_emit.cxx	\
   opt_ivr.cxx		\
+  opt_lab.cxx		\
   opt_leaf_iter.cxx     \
   opt_lftr2.cxx         \
   opt_loop.cxx		\
@@ -228,7 +232,12 @@ BE_OPT_CXX_SRCS = \
   opt_revise_ssa.cxx	\
   wodriver.cxx          \
   init.cxx              \
-  opt_misc.cxx
+  opt_lclsc.cxx         \
+  opt_misc.cxx          \
+  opt_lmv.cxx           \
+  opt_lmv_helper.cxx   \
+  wssa_emitter.cxx     \
+  opt_peel_unroll.cxx
 
 ifeq ($(BUILD_PCH), USE_PCH)
 BACK_END_PCH_OBJS = $(BE_OPT_CXX_SRCS:.cxx=.o)
@@ -238,11 +247,10 @@ BACK_END_CXX_SRCS = $(BE_COM_CXX_SRCS) $(BE_OPT_CXX_SRCS)
 endif
 
 COMMON_UTIL_SRCS = \
-  bitset.c		\
+  bitset.c
 
 BACK_END_SRCS = \
-  $(BE_OPT_SRCS)		\
-  $(COMMON_UTIL_SRCS)		\
+  $(COMMON_UTIL_SRCS)
 
 BACK_END_OBJS = $(BACK_END_SRCS:.c=.o)
 BACK_END_CXX_OBJS   = $(BACK_END_CXX_SRCS:.cxx=.o)
@@ -292,29 +300,40 @@ EXPORT_LIST =
 ifdef LINK_DSO
 TARGETS = debug-wopt
 else
+ ifeq ($(BUILD_TYPE), NONSHARED)
+TARGETS = libwopt.a
+ else
 TARGETS = wopt.so
+ endif
 endif
 
 #----------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
 #----------------------------------------------------------------------
 
-default: first $(TARGETS) last
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
 ## verify that be.so is up to date
 	$(call submake,$(TARG_BE_DIR))
-ifeq ($(BUILD_OS), LINUX)
-	if ! test -a be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
 endif
-ifeq ($(BUILD_PCH), USE_PCH)
+ifeq ($(BUILD_OS), LINUX)
+	if ! test -e be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
+endif
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_PCH), USE_PCH)
 ## build pch files first so that we can use precompiled headers
 	( $(MAKE) $(.MAKEFLAGS) BUILD_PCH=USE_PCH PCH_OPTS="-LANG:create_pch=opt_pch.pch" opt_pch.pch opt_pch.o )
 	( $(MAKE) $(.MAKEFLAGS) BUILD_PCH=USE_PCH BUILD_OPTIMIZE="$(BUILD_OPTIMIZE)" PCH_OPTS="-LANG:use_pch=opt_pch.pch" opt_pch_files )
+ endif
 endif
 
 #----------------------------------------------------------------------
@@ -342,6 +361,8 @@ else
  endif
  endif
 endif
+
+.PHONY: default first last install make_deps
 
 ifeq ($(BUILD_PCH), USE_PCH)
 
@@ -372,6 +393,8 @@ wopt.so: $(BACK_END_OBJS) $(BACK_END_CXX_OBJS) $(BE_OPT_DIR)/Exported \
 	 $(LINK_DSOS) $(LLDLIBS)
 endif
 
+libwopt.a: $(BACK_END_CXX_OBJS) $(BACK_END_OBJS)
+	$(ar) cru $@ $^
 
 #gcc -O2 has some problem when compile this file, we we use -O1 temporally
 ifeq ($(BUILD_COMPILER), GNU)
@@ -382,7 +405,7 @@ opt_wovp.o: opt_wovp.cxx
 endif
 endif
 
-LDIRT += be.so bedriver be wopt
+LDIRT += be.so bedriver be wopt $(TARGETS)
 
 ifdef LINK_DSO
 debug-wopt: wopt.so

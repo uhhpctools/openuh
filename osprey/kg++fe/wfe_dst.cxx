@@ -87,7 +87,9 @@ static char *rcs_id = "$Source: kg++fe/SCCS/s.wfe_dst.cxx $ $Revision: 1.71 $";
 #include "file_util.h"  /* From common/util */
 #include "srcpos.h"
 #include "symtab.h"
+extern "C" {
 #include "gnu_config.h"
+}
 #ifdef KEY	// get HW_WIDE_INT for flags.h
 #include "gnu/hwint.h"
 #endif	/* KEY */
@@ -189,44 +191,43 @@ DST_get_context(tree intree)
 {
     tree ltree = intree;
     DST_INFO_IDX l_dst_idx = DST_INVALID_INIT;
-    bool continue_looping = true;
+    //bool continue_looping = true;
 
-    while(ltree && continue_looping) {
-	continue_looping = false;
+    while(ltree /* && continue_looping */) {
+	//continue_looping = false;
 	switch(TREE_CODE(ltree)) {
 	case BLOCK:
 	    // unclear when this will happen, as yet
 	    // FIX
-	    ltree = TYPE_CONTEXT(ltree);
+	    //ltree = TYPE_CONTEXT(ltree);
             DevWarn("Unhandled BLOCK scope of decl/var");
+            return comp_unit_idx;
 
-	    break;
-	case FUNCTION_DECL: {
-		// This is a normal case!
-		l_dst_idx = DECL_DST_IDX(ltree);
-		if(DST_IS_NULL(l_dst_idx)) {
-			DevWarn("forward reference to subprogram! assuming global context\n");
-			return comp_unit_idx;
-		}
-		return l_dst_idx;
+	    //break;
+	case FUNCTION_DECL:
+	    l_dst_idx = DECL_DST_IDX(ltree);
+	    if(DST_IS_NULL(l_dst_idx)) {
+		DevWarn("forward reference to subprogram! assuming global context\n");
+		return comp_unit_idx;
+	    }
+	    return l_dst_idx;
 
-        }
-	    break;
 	case RECORD_TYPE:
-	    ltree = TYPE_CONTEXT(ltree);
-	    break;
 	case UNION_TYPE:
-	    ltree = TYPE_CONTEXT(ltree);
-	    break;
 	case QUAL_UNION_TYPE:
 	    ltree = TYPE_CONTEXT(ltree);
-	    break;
+            continue;
+	    //break;
 	case FUNCTION_TYPE:
             DevWarn("Unhandled FUNCTION_TYPE scope of decl/var/type");
 	    return comp_unit_idx;
         case REFERENCE_TYPE:
 	    // cannot find our context from here
 	    return comp_unit_idx;
+	case NAMESPACE_DECL:
+	    // I see these a lot: catching here to avoid default DevWarn
+	    ltree = DECL_CONTEXT(ltree);
+	    continue;
 	default:
 	    DevWarn("Unhandled scope of tree code %d",
 			TREE_CODE(ltree));
@@ -234,16 +235,16 @@ DST_get_context(tree intree)
 	   // *is any of this right?
            if(TREE_CODE_CLASS(TREE_CODE(ltree)) == 'd') {
 		ltree =  DECL_CONTEXT(ltree);
-		continue_looping = true;
+		//continue_looping = true;
 		continue;
 	   } else if (TREE_CODE_CLASS(TREE_CODE(ltree)) == 't') {
 		ltree =  TYPE_CONTEXT(ltree);
-		continue_looping = true;
+		//continue_looping = true;
 		continue;
-           } else {
+           }  // else {
 	      // cannot find our context from here
 		// ??
-           }
+           //}
 	   return comp_unit_idx;
 	}
 
@@ -258,6 +259,10 @@ DST_get_context(tree intree)
 static UINT
 Get_Dir_Dst_Info (char *name)
 {
+#ifdef TARG_SL
+	// NOTE! Wenbo/2007-04-26: Refer to kgccfe/wfe_dst.cxx.
+        if (name == NULL) return 0;
+#endif
         std::vector< std::pair < char*, UINT > >::iterator found;
 	// assume linear search is okay cause list will be small?
         for (found = dir_dst_list.begin(); 
@@ -510,7 +515,7 @@ DST_enter_static_data_mem(tree  parent_tree,
         mem_name,  // user typed name, not mangled
         fidx,        // user typed type name here (typedef type perhaps).
         0,           // offset (fortran uses non zero )
-        (void*) base, // underlying type here, not typedef.
+        base, // underlying type here, not typedef.
         DST_INVALID_IDX,  // abstract origin
         TRUE,          // is_declaration=  decl only
         FALSE,         // is_automatic ?
@@ -657,7 +662,7 @@ DST_enter_member_function( tree parent_tree,
         basename,
         ret_dst,        	// return type
         DST_INVALID_IDX,        // Index to alias for weak is set later
-        (void*) 0,              // index to fe routine for st_idx
+        0,              // index to fe routine for st_idx
         inlin,                  // dwarf inline code.
         virtuality,     	// applies to C++, dwarf virt code
         vtable_elem_location,   // vtable_elem_location (vtable slot #
@@ -949,8 +954,13 @@ DST_enter_struct_union_members(tree parent_tree,
     // name of it as the context, but not get the decl context(bug also in pathescale2.3)
     FmtAssert (TREE_CODE(parent_tree) == RECORD_TYPE || TREE_CODE(parent_tree) == UNION_TYPE,
 	      ("Unexpected code for parent_tree %x\n.", TREE_CODE(parent_tree)));
+#ifdef PATHSCALE_MERGE
+    tree context = TYPE_CONTEXT(parent_tree);
+#else
     tree context = TYPE_NAME(parent_tree);
-    if (TREE_CODE(context) != TYPE_DECL ||
+#endif
+    if (context == NULL ||
+        TREE_CODE(context) != TYPE_DECL ||
 	!DECL_CONTEXT(context) ||
 	TREE_CODE(DECL_CONTEXT(context)) != NAMESPACE_DECL ||
 	!DECL_NAMESPACE_STD_P(DECL_CONTEXT(context)))
@@ -1131,7 +1141,14 @@ DST_enter_struct_union(tree type_tree, TY_IDX ttidx  , TY_IDX idx,
 #endif
 
 		    DST_append_child(dst_idx,inhx);
+//---------------------------------------------------------------
+//bug 12948: advance "offset" only when non-empty and non-virtual
+//---------------------------------------------------------------
+#ifdef KEY
+                    if (!is_empty_base_class(basetype) &&
+#else
                     if (!is_empty_base_class(basetype) ||
+#endif
                         !TREE_VIA_VIRTUAL(binfo)) {
                       //FLD_Init (fld, Save_Str(Get_Name(0)),
                        //         Get_TY(basetype) , offset);
@@ -1354,7 +1371,7 @@ DST_enter_subrange_type (ARB_HANDLE ar)
 			     ST_name(var_st),
 			     type,    
 			     0,  
-			     (void*) ST_st_idx(var_st), 
+			     ST_st_idx(var_st), 
 			     DST_INVALID_IDX,        
 			     FALSE,                  // is_declaration
 			     ST_sclass(var_st) == SCLASS_AUTO,
@@ -1377,7 +1394,7 @@ DST_enter_subrange_type (ARB_HANDLE ar)
 			     ST_name(var_st),
 			     type,    
 			     0,  
-			     (void*) ST_st_idx(var_st), 
+			     ST_st_idx(var_st), 
 			     DST_INVALID_IDX,        
 			     FALSE,                  // is_declaration
 			     ST_sclass(var_st) == SCLASS_AUTO,
@@ -1888,66 +1905,6 @@ Create_DST_type_For_Tree (tree type_tree, TY_IDX ttidx  , TY_IDX idx, bool ignor
 
     case FUNCTION_TYPE:
 		{	// new scope for local vars
-#if 0
-		tree arg;
-		INT32 num_args;
-		TY &ty = New_TY (idx);
-		TY_Init (ty, 0, KIND_FUNCTION, MTYPE_UNKNOWN, NULL); 
-		Set_TY_align (idx, 1);
-		TY_IDX ret_ty_idx;
-		TY_IDX arg_ty_idx;
-		TYLIST tylist_idx;
-
-		// allocate TYs for return as well as parameters
-		// this is needed to avoid mixing TYLISTs if one
-		// of the parameters is a pointer to a function
-
-		ret_ty_idx = Get_TY(TREE_TYPE(type_tree));
-		for (arg = TYPE_ARG_TYPES(type_tree);
-		     arg;
-		     arg = TREE_CHAIN(arg))
-			arg_ty_idx = Get_TY(TREE_VALUE(arg));
-
-		// if return type is pointer to a zero length struct
-		// convert it to void
-		if (!WFE_Keep_Zero_Length_Structs    &&
-		    TY_mtype (ret_ty_idx) == MTYPE_M &&
-		    TY_size (ret_ty_idx) == 0) {
-			// zero length struct being returned
-		  	DevWarn ("function returning zero length struct at line %d", lineno);
-			ret_ty_idx = Be_Type_Tbl (MTYPE_V);
-		}
-
-		Set_TYLIST_type (New_TYLIST (tylist_idx), ret_ty_idx);
-		Set_TY_tylist (ty, tylist_idx);
-		for (num_args = 0, arg = TYPE_ARG_TYPES(type_tree);
-		     arg;
-		     num_args++, arg = TREE_CHAIN(arg))
-		{
-			arg_ty_idx = Get_TY(TREE_VALUE(arg));
-			if (!WFE_Keep_Zero_Length_Structs    &&
-			    TY_mtype (arg_ty_idx) == MTYPE_M &&
-			    TY_size (arg_ty_idx) == 0) {
-				// zero length struct passed as parameter
-				DevWarn ("zero length struct encountered in function prototype at line %d", lineno);
-			}
-			else
-				Set_TYLIST_type (New_TYLIST (tylist_idx), arg_ty_idx);
-		}
-		if (num_args)
-		{
-			Set_TY_has_prototype(idx);
-			if (arg_ty_idx != Be_Type_Tbl(MTYPE_V))
-			{
-				Set_TYLIST_type (New_TYLIST (tylist_idx), 0);
-				Set_TY_is_varargs(idx);
-			}
-			else
-				Set_TYLIST_type (Tylist_Table [tylist_idx], 0);
-		}
-		else
-			Set_TYLIST_type (New_TYLIST (tylist_idx), 0);
-#endif
 		} // end FUNCTION_TYPE scope
 		break;
 #ifdef TARG_X8664
@@ -2344,7 +2301,7 @@ DST_Create_var(ST *var_st, tree decl)
 				field_name,
 				TYPE_DST_IDX(TREE_TYPE(field)),
 				0,  // offset (fortran uses non zero )
-				(void*) ST_st_idx(var_st), // underlying type here, not typedef.
+				ST_st_idx(var_st), // underlying type here, not typedef.
 				DST_INVALID_IDX,        // abstract origin
 				external_decl,          // is_declaration
 				FALSE,                  // is_automatic
@@ -2364,7 +2321,7 @@ DST_Create_var(ST *var_st, tree decl)
         field_name,
         type,    // user typed type name here (typedef type perhaps).
 	0,  // offset (fortran uses non zero )
-        (void*) ST_st_idx(var_st), // underlying type here, not typedef.
+        ST_st_idx(var_st), // underlying type here, not typedef.
         DST_INVALID_IDX,        // abstract origin
         external_decl,          // is_declaration
         FALSE,                  // is_automatic
@@ -2486,7 +2443,7 @@ DST_enter_param_vars(tree fndecl,
 		src,
 		name,
 		type_idx,
-		(void* )loc, // So backend can get location.
+		loc, // So backend can get location.
 			// For a formal in abstract root
 			// or a plain declaration (no def)
 			// there is no location.
@@ -2578,7 +2535,7 @@ DST_enter_param_vars(tree fndecl,
 		src,
 		name,
 		type_idx,
-		(void* )loc, // So backend can get location.
+		loc, // So backend can get location.
 			// For a formal in abstract root
 			// or a plain declaration (no def)
 			// there is no location.
@@ -2754,7 +2711,7 @@ DST_Create_Subprogram (ST *func_st,tree fndecl)
         funcname,
         ret_dst,        	// return type
         DST_INVALID_IDX,        // Index to alias for weak is set later
-        (void*) fstidx,         // index to fe routine for st_idx
+        fstidx,         // index to fe routine for st_idx
         DW_INL_not_inlined,     // applies to C++
         DW_VIRTUALITY_none,     // applies to C++
         0,                      // vtable_elem_location
@@ -2933,12 +2890,18 @@ WFE_Set_Line_And_File (UINT line, const char* f)
 	char buf[256];
 	if (file_name == file) {
 		// no path
+#ifdef TARG_SL
+		// NOTE! Wenbo/2007-04-26: Refer to kgccfe/wfe_dst.cxx. 
+		dir = NULL;
+	}
+#else
 		dir = current_working_dir;
 	}
 	else if (strncmp(file, "./", 2) == 0) {
 		// current dir
 		dir = current_working_dir;
 	}
+#endif
 	else {
 		// copy specified path
 		strcpy (buf, file);

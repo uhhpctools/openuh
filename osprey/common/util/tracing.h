@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -171,6 +175,7 @@ extern char *Sharps;	/* Sharps w/NL, full page width */
 
 /* Front end phases: */
 #define TP_SEMANTICS	8	/* Semantic analyzer */
+#define TP_WGEN	        9	/* WGEN GIMPLE to WHIRL bridge */
 #define TP_IRB		10	/* IR (WHIRL) builder */
 
 /* Intermediate utility phases: */
@@ -226,8 +231,9 @@ extern char *Sharps;	/* Sharps w/NL, full page width */
 #define TP_HBF		57	/* Hyperblock formation */
 #define TP_PQS		58	/* Predicate query system */
 #define TP_THR		59	/* Tree-Height reduction */
+#define TP_GRU          60      /* Fuse Spills */
 
-#define TP_TEMP		60	/* Temporary use */
+#define TP_TEMP		61	/* Temporary use */
 
 #define TP_IPFEC	61	/* Actualy several phases, but all IPFEC related */
 #define TP_A_GSCHED 	62  	/* "AGS", Ipfec global scheduler" */
@@ -245,12 +251,15 @@ extern char *Sharps;	/* Sharps w/NL, full page width */
 #define TP_A_CANA	73	/* ACA "Ipfec cache analysis and opt" */
 
 #define TP_EH		74	/* EH "Enable trace infos of EH range and EH entry" */
+#define TP_IPISR        75      /* Interprocedural interrupt service routine RA*/
 	
+#define TP_WSSA         76      /* "WSA", "Enable tracing WHIRL SSA" */
+
 /* WARNING: TP_LAST must be at least as large as the largest phase
  * number above, and TP_COUNT must be at least one larger.
  */
-#define TP_LAST		75	/* Largest valid phase number */
-#define TP_COUNT	76	/* Number of valid phase numbers */
+#define TP_LAST		76	/* Largest valid phase number */
+#define TP_COUNT	77	/* Number of valid phase numbers */
 	
 /* Extract the phase number from a trace option: */
 extern INT32 Get_Trace_Phase_Number ( char **cp, char *arg );
@@ -297,6 +306,9 @@ extern void List_Phase_Numbers ( void );
  *  phase number	flag mask	Enable masked per-phase traces
  */
 extern void Set_Trace ( INT func, INT arg );
+
+/* Set a trace flag in all phases. */
+void Set_All_Trace ( INT func );
 
 /* Note a PU to be traced: */
 extern void Set_Trace_Pu ( char *name );

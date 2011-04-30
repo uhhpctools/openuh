@@ -123,6 +123,16 @@ OPT_STAB::Enter_occ_tab(WN *wn, AUX_ID aux_id)
       Set_virtual_var(aux_id);  // put aux_id in the list of virtual var
     PF_POINTER *pf_pointer = WN_get_pf_pointer(wn);
     occ->Set_pf_pointer(pf_pointer);
+
+    // transfer the mem-op annotation 
+    if ((occ->Is_load() || occ->Is_store()) && 
+      WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()) {
+      MEMOP_ANNOT* annot = WN_MEMOP_ANNOT_MGR::WN_mem_annot_mgr()->Get_annot(wn);
+      if (annot) {
+        MEMOP_ANNOT* t = Cr_sr_annot_mgr()->Import_annot (annot);
+        occ->Points_to()->Mem_annot().Set_annots (t);
+      }
+    }
   }
 
   WN_MAP_Set(WN_sym_map(), wn, occ);

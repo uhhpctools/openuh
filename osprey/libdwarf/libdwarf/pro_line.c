@@ -179,7 +179,7 @@ _dwarf_pro_add_line_entry(Dwarf_P_Debug dbg,
 ------------------------------------------------------------------------*/
 Dwarf_Unsigned
 dwarf_add_directory_decl(Dwarf_P_Debug dbg,
-			 char *name, Dwarf_Error * error)
+			 const char *name, Dwarf_Error * error)
 {
     if (dbg->de_inc_dirs == NULL) {
 	dbg->de_inc_dirs = (Dwarf_P_Inc_Dir)
@@ -216,7 +216,7 @@ dwarf_add_directory_decl(Dwarf_P_Debug dbg,
 ------------------------------------------------------------------------*/
 Dwarf_Unsigned
 dwarf_add_file_decl(Dwarf_P_Debug dbg,
-		    char *name,
+		    const char *name,
 		    Dwarf_Unsigned dir_idx,
 		    Dwarf_Unsigned time_mod,
 		    Dwarf_Unsigned length, Dwarf_Error * error)

@@ -1332,9 +1332,6 @@ extern const enum reg_class reg_class_from_letter[];
 /* Don't define PUSH_ROUNDING, since the hardware doesn't do this.
    When PUSH_ROUNDING is not defined, PARM_BOUNDARY will cause gcc to
    do correct alignment.  */
-#if 0
-#define PUSH_ROUNDING(NPUSHED)  (((NPUSHED) + 3) & ~3)
-#endif
 
 /* Offset of first parameter from the argument pointer register value.  */
 #define FIRST_PARM_OFFSET(FNDECL)  0

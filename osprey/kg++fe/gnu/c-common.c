@@ -791,6 +791,11 @@ static tree handle_syscall_linkage_attribute PARAMS ((tree *, tree, tree, int,
 static tree handle_widenretval_attribute     PARAMS ((tree *, tree, tree, int,
                                                      bool *));
 #endif
+
+#if defined(TARG_SL)
+static tree handle_sl_model_attribute PARAMS ((tree *, tree, tree, int,
+						     bool *));
+#endif 
 static tree vector_size_helper PARAMS ((tree, tree));
 
 static void check_function_nonnull	PARAMS ((tree, tree));
@@ -888,6 +893,10 @@ const struct attribute_spec c_common_attribute_table[] =
                               handle_syscall_linkage_attribute },
   { "widenretval",            0, 0, true, false, false,
                               handle_widenretval_attribute },
+#endif
+#if defined(TARG_SL) 
+  {"sl_model",               1, 1, true, false, false, 
+                             handle_sl_model_attribute }, 
 #endif
   { NULL,                     0, 0, false, false, false, NULL }
 };
@@ -2765,27 +2774,6 @@ c_common_truthvalue_conversion (expr)
   if (TREE_CODE (expr) == ERROR_MARK)
     return expr;
 
-#if 0 /* This appears to be wrong for C++.  */
-  /* These really should return error_mark_node after 2.4 is stable.
-     But not all callers handle ERROR_MARK properly.  */
-  switch (TREE_CODE (TREE_TYPE (expr)))
-    {
-    case RECORD_TYPE:
-      error ("struct type value used where scalar is required");
-      return boolean_false_node;
-
-    case UNION_TYPE:
-      error ("union type value used where scalar is required");
-      return boolean_false_node;
-
-    case ARRAY_TYPE:
-      error ("array type value used where scalar is required");
-      return boolean_false_node;
-
-    default:
-      break;
-    }
-#endif /* 0 */
 
   switch (TREE_CODE (expr))
     {
@@ -3228,6 +3216,13 @@ c_common_nodes_and_builtins ()
 #define DEF_FUNCTION_TYPE_VAR_2(NAME, RETURN, ARG1, ARG2) NAME,
 #define DEF_FUNCTION_TYPE_VAR_3(NAME, RETURN, ARG1, ARG2, ARG3) NAME,
 #define DEF_POINTER_TYPE(NAME, TYPE) NAME,
+#if defined(TARG_SL)
+#define DEF_FUNCTION_TYPE_5(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) NAME,
+#define DEF_FUNCTION_TYPE_6(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6) NAME,
+#define DEF_FUNCTION_TYPE_7(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7) NAME,
+#define DEF_FUNCTION_TYPE_8(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8) NAME,
+#define DEF_FUNCTION_TYPE_9(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8, ARG9) NAME,
+#endif // TARG_SL
 #include "builtin-types.def"
 #undef DEF_PRIMITIVE_TYPE
 #undef DEF_FUNCTION_TYPE_0
@@ -3240,6 +3235,13 @@ c_common_nodes_and_builtins ()
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
 #undef DEF_POINTER_TYPE
+#ifdef TARG_SL
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
+#undef DEF_FUNCTION_TYPE_7
+#undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#endif
     BT_LAST
   };
 
@@ -3572,6 +3574,107 @@ c_common_nodes_and_builtins ()
 #define DEF_POINTER_TYPE(ENUM, TYPE)			\
   builtin_types[(int) ENUM]				\
     = build_pointer_type (builtin_types[(int) TYPE]);
+
+#ifdef TARG_SL
+#define DEF_FUNCTION_TYPE_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5)\
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+         builtin_types[(int) ARG1],                                     \
+         tree_cons (NULL_TREE,                                          \
+           builtin_types[(int) ARG2],                                   \
+           tree_cons(NULL_TREE,                                         \
+             builtin_types[(int) ARG3],                                 \
+             tree_cons (NULL_TREE,                                      \
+               builtin_types[(int) ARG4],                               \
+               tree_cons (NULL_TREE,                            \
+                   builtin_types[(int) ARG5],                           \
+                                         void_list_node))))));
+#define DEF_FUNCTION_TYPE_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6)\
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+         builtin_types[(int) ARG1],                                     \
+         tree_cons (NULL_TREE,                                          \
+           builtin_types[(int) ARG2],                                   \
+           tree_cons(NULL_TREE,                                         \
+             builtin_types[(int) ARG3],                                 \
+             tree_cons (NULL_TREE,                                      \
+               builtin_types[(int) ARG4],                               \
+               tree_cons (NULL_TREE,                                    \
+                 builtin_types[(int) ARG5],                             \
+                   tree_cons (NULL_TREE,                                \
+                   builtin_types[(int) ARG6],                           \
+                                         void_list_node)))))));
+#define DEF_FUNCTION_TYPE_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7)\
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+         builtin_types[(int) ARG1],                                     \
+         tree_cons (NULL_TREE,                                          \
+           builtin_types[(int) ARG2],                                   \
+           tree_cons(NULL_TREE,                                         \
+             builtin_types[(int) ARG3],                                 \
+             tree_cons (NULL_TREE,                                      \
+               builtin_types[(int) ARG4],                               \
+               tree_cons (NULL_TREE,                                    \
+                 builtin_types[(int) ARG5],                             \
+                 tree_cons (NULL_TREE,                                  \
+                   builtin_types[(int) ARG6],                           \
+                   tree_cons (NULL_TREE,                                \
+                     builtin_types[(int) ARG7],                         \
+                                         void_list_node))))))));
+
+#define DEF_FUNCTION_TYPE_8(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8)\
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+         builtin_types[(int) ARG1],                                     \
+         tree_cons (NULL_TREE,                                          \
+           builtin_types[(int) ARG2],                                   \
+           tree_cons(NULL_TREE,                                         \
+             builtin_types[(int) ARG3],                                 \
+             tree_cons (NULL_TREE,                                      \
+               builtin_types[(int) ARG4],                               \
+               tree_cons (NULL_TREE,                                    \
+                 builtin_types[(int) ARG5],                             \
+                 tree_cons (NULL_TREE,                                  \
+                   builtin_types[(int) ARG6],                           \
+                   tree_cons (NULL_TREE,                                        \
+                   builtin_types[(int) ARG7],                           \
+                   tree_cons (NULL_TREE,                                \
+                     builtin_types[(int) ARG8],                         \
+                                         void_list_node)))))))));
+
+#define DEF_FUNCTION_TYPE_9(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8, ARG9)\
+  builtin_types[(int) ENUM]                                             \
+    = build_function_type                                               \
+      (builtin_types[(int) RETURN],                                     \
+       tree_cons (NULL_TREE,                                            \
+         builtin_types[(int) ARG1],                                     \
+         tree_cons (NULL_TREE,                                          \
+           builtin_types[(int) ARG2],                                   \
+           tree_cons(NULL_TREE,                                         \
+             builtin_types[(int) ARG3],                                 \
+             tree_cons (NULL_TREE,                                      \
+               builtin_types[(int) ARG4],                               \
+               tree_cons (NULL_TREE,                                    \
+                 builtin_types[(int) ARG5],                             \
+                 tree_cons (NULL_TREE,                                  \
+                   builtin_types[(int) ARG6],                           \
+                   tree_cons (NULL_TREE,                                        \
+                   builtin_types[(int) ARG7],                           \
+                   tree_cons (NULL_TREE,                                        \
+                   builtin_types[(int) ARG8],                           \
+                   tree_cons (NULL_TREE,                                \
+                     builtin_types[(int) ARG9],                         \
+                                         void_list_node))))))))));
+#endif
+
 #include "builtin-types.def"
 #undef DEF_PRIMITIVE_TYPE
 #undef DEF_FUNCTION_TYPE_1
@@ -3583,6 +3686,13 @@ c_common_nodes_and_builtins ()
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
 #undef DEF_POINTER_TYPE
+#if defined(TARG_SL)
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
+#undef DEF_FUNCTION_TYPE_7
+#undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#endif // TARG_SL
 
   if (!c_attrs_initialized)
     c_init_attributes ();
@@ -4473,6 +4583,7 @@ c_expand_builtin (exp, target, tmode, modifier)
 
   switch (fcode)
     {
+#ifndef SGI_MONGOOSE
     case BUILT_IN_PRINTF:
       target = c_expand_builtin_printf (arglist, target, tmode,
 					modifier, ignore, /*unlocked=*/ 0);
@@ -4500,6 +4611,7 @@ c_expand_builtin (exp, target, tmode, modifier)
       if (target)
 	return target;
       break;
+#endif /* SGI_MONGOOSE */
 
     default:			/* just do library call, if unknown builtin */
       error ("built-in function `%s' not currently supported",
@@ -4546,6 +4658,7 @@ is_valid_printf_arglist (arglist)
   return ! diagnostic_occurred;
 }
 
+#ifndef SGI_MONGOOSE
 /* If the arguments passed to printf are suitable for optimizations,
    we attempt to transform the call.  */
 static rtx
@@ -4732,6 +4845,7 @@ c_expand_builtin_fprintf (arglist, target, tmode, modifier, ignore, unlocked)
 		      (ignore ? const0_rtx : target),
 		      tmode, modifier);
 }
+#endif /* SGI_MONGOOSE */
 
 
 /* Given a boolean expression ARG, return a tree representing an increment
@@ -6472,6 +6586,36 @@ handle_widenretval_attribute (node, name, args, flags, no_add_attrs)
   DECL_WIDEN_RETVAL (decl) = 1;
 }
 #endif /* SGI_MONGOOSE */
+
+
+#if defined(TARG_SL)
+static tree
+handle_sl_model_attribute (node, name, args, flags, no_add_attrs)
+     tree *node;
+     tree name;
+     tree args;
+     int flags ATTRIBUTE_UNUSED;
+     bool *no_add_attrs;
+{
+
+  tree decl = *node;
+
+  if ((TREE_CODE (decl) == VAR_DECL)
+     && TREE_CODE (TREE_VALUE (args)) == STRING_CST)
+  {
+    DECL_SL_MODEL_NAME (decl) = TREE_VALUE (args);
+  }
+  else
+  {
+    error_with_decl (*node,
+      "sl model attribute not allowed for `%s'");
+    *no_add_attrs = true;
+  }
+  
+  return NULL_TREE;
+}
+#endif 
+
 
 /* HACK.  GROSS.  This is absolutely disgusting.  I wish there was a
    better way.

@@ -81,7 +81,6 @@ setalist (alist *x, int xunit, int aerr)
    return 0;
 }
 
-#if 11
 int
 setcilist64 (cilist64 *x, ftnint u, char *fmt, XINT64 rec, int xerr, int end)
 {
@@ -107,29 +106,7 @@ setolist64 (olist64 *x, ftnint xunit, char *fname, char *sta, char *fm, int rl, 
    return 0;
 }
 
-#if 00
-int
-stcllist64 (cllist64 *x, ftnint xunit, char *stat, int cerr)
-{
-   x->cerr = cerr;
-   x->cunit = xunit;
-   x->csta = stat;
-   return 0;
-}
-#else
 /* #pragma weak stcllist64 = stcllist */
-#endif
 
-#if 00
-int
-setalist64 (alist64 *x, ftnint xunit, int aerr)
-{
-   x->aunit = xunit;
-   x->aerr = aerr;
-   return 0;
-}
-#else
 /* #pragma weak setalist64 = setalist */
-#endif
 
-#endif	/* -n32 and -64 */

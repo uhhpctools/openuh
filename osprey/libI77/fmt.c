@@ -501,7 +501,6 @@ en_fio (unit **ftnunit)
    return (do_fio_SIZE_mp (&type, &one, (char *) NULL, ftnunit, 0L));
 }
 
-#if 11
 int
 do_fio_1dim( 	ftnint *type, char *ptr,
 	     	flex *do_idx, ftnint *lb, 
@@ -527,23 +526,6 @@ do_fio64_mp_1dim(  ftnint *type, char *ptr,
                 XINT *ub, XINT *step,
 		unit **fu,
                 ftnlen len, ftnlen idxlen)
-#else
-int
-do_fio_1dim( 	ftnint *type, char *ptr,
-	     	flex *do_idx, ftnint *lb, 
-		ftnint *ub, ftnint *step, 
-		ftnlen len, ftnlen idxlen)	
-{
-   return( do_fio_mp_1dim( type, ptr, do_idx, lb, ub, step, &f77curunit, len, idxlen) );
-}
-
-int
-do_fio_mp_1dim(	ftnint *type, char *ptr,
-	     	flex *do_idx, ftnint *lb, 
-		ftnint *ub, ftnint *step, 
-		unit **fu,
-		ftnlen len, ftnlen idxlen)	
-#endif
 /* 
 ** This function carries out the I/O operation on a single-dimension
 ** implied-DO loop in the form (ARR(I),I=N,M,L).  It takes these 

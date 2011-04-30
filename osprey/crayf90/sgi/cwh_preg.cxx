@@ -57,7 +57,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/crayf90/sgi/SCCS/s.cwh_preg.cxx $ $Revision: 1.5 $";
@@ -93,7 +93,7 @@ static TYPE_ID preg_bt_typeid[MTYPE_MAX];
  */
 extern PREG_det
 cwh_preg_next_preg (TYPE_ID    btype,
-		    char     * name,
+		    const char     * name,
 		    WN       * home_wn )
 {
 
@@ -120,7 +120,7 @@ cwh_preg_next_preg (TYPE_ID    btype,
  *=============================================
  */
 extern WN *
-cwh_preg_temp_save(char * name, WN  * expr )
+cwh_preg_temp_save(const char * name, WN  * expr )
 {
   TYPE_ID  bt;
   PREG_NUM pr;

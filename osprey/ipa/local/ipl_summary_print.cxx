@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -50,13 +54,17 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>                // ipl_summary.h needs it
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>                // ipl_summary.h needs it
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
 #include "strtab.h"             // Current_Strtab
 #include "ipl_summary.h"        // SUMMARY_* classes
+#include "ipa_be_summary.h"     // SUMMARY_CONSTRAINT_* classes
 #include "ipc_symtab_merge.h"   // IPC_GLOBAL_IDX_MAP
 #include "ipl_tlog.h"
 
@@ -162,6 +170,29 @@ SUMMARY_PROCEDURE::Print (FILE *fp, INT32 id) const
     if ( Ipl_Summary_Symbol ) {
 	Ipl_Summary_Symbol[Get_symbol_index()].Print (fp);
     }
+
+    // For the Nystrom alias analyzer
+    fprintf(fp, "constraint graph nodes count: %d idx: %d\n",
+            Get_constraint_graph_nodes_count(),
+            Get_constraint_graph_nodes_idx());
+    fprintf(fp, "constraint graph edges count: %d idx: %d\n",
+            Get_constraint_graph_edges_count(),
+            Get_constraint_graph_edges_idx());
+    fprintf(fp, "constraint graph stinfos count: %d idx: %d\n",
+            Get_constraint_graph_stinfos_count(),
+            Get_constraint_graph_stinfos_idx());
+    fprintf(fp, "constraint graph callsites count: %d idx: %d\n",
+            Get_constraint_graph_callsites_count(),
+            Get_constraint_graph_callsites_idx());
+    fprintf(fp, "constraint graph node ids count: %d idx: %d\n",
+            Get_constraint_graph_node_ids_count(),
+            Get_constraint_graph_node_ids_idx());
+    fprintf(fp, "constraint graph formal parm count: %d idx: %d\n",
+            Get_constraint_graph_formal_parm_count(),
+            Get_constraint_graph_formal_parm_idx());
+    fprintf(fp, "constraint graph formal ret count: %d idx: %d\n",
+            Get_constraint_graph_formal_ret_count(),
+            Get_constraint_graph_formal_ret_idx());
 } // SUMMARY_PROCEDURE::Print
 
 
@@ -238,10 +269,12 @@ SUMMARY_CALLSITE::Print (FILE* f) const
 	fputs (", intrinsic\n", f);
     } else if (Is_func_ptr ())
 	fprintf (f, ": VALUE[%d]\n", Get_value_index ());
-    else {
+    else if (Ipl_Summary_Symbol) {
 	fputs (": ", f);
 	Ipl_Summary_Symbol[Get_symbol_index()].Print (f);
     }
+    if (_constraint_graph_callsite_id != 0)
+      fprintf (f, " cg callsite_id: %d\n", _constraint_graph_callsite_id);
 }
 
 // ====================================================================
@@ -299,7 +332,8 @@ SUMMARY_FORMAL::Print ( FILE* fp ) const
 	fputs ("by_reference ", fp);
     if (Is_var_dim_array ())
 	fputs ("var_dim_array ", fp);
-    Ipl_Summary_Symbol[Get_symbol_index()].Print (fp);
+    if (Ipl_Summary_Symbol)
+        Ipl_Summary_Symbol[Get_symbol_index()].Print (fp);
 }
 
 //-----------------------------------------------------------
@@ -334,7 +368,7 @@ SUMMARY_FORMAL::Trace_array ( INT32 size ) const
 }
 
 
-char *
+const char *
 SUMMARY_ACTUAL::Pass_type_name (void) const
 {
     switch (Get_pass_type()) {
@@ -359,7 +393,7 @@ void
 SUMMARY_ACTUAL::Print (FILE *f, INT32 id) const
 {
     fprintf (f, "ACTUAL[%d]: ", id);
-    if (Get_symbol_index () != -1)
+    if (Ipl_Summary_Symbol && Get_symbol_index () != -1)
 	Ipl_Summary_Symbol[Get_symbol_index()].Print (f);
 
     if (Is_value_parm())
@@ -367,7 +401,7 @@ SUMMARY_ACTUAL::Print (FILE *f, INT32 id) const
 
     fprintf (f, " ty_idx = 0x%x, ", Get_ty());
 
-    char *p = Pass_type_name ();
+    const char *p = Pass_type_name ();
     if (p)
 	fprintf (f, " %s, ", p);
     else
@@ -392,7 +426,7 @@ SUMMARY_ACTUAL::Print_array (FILE *f, INT32 size) const
 
 
 
-char *
+const char *
 SUMMARY_VALUE::Const_type_name (void) const
 {
     switch (Get_const_type()) {
@@ -511,7 +545,7 @@ SUMMARY_VALUE::Print_const_value (FILE *f, const SUMMARY_SYMBOL* symbol) const
 void
 SUMMARY_VALUE::Print (FILE *f, INT32 id) const
 {
-    char *p;
+    const char *p;
     
     fprintf (f, "VALUE[%d] : ", id);
     p = Const_type_name ();
@@ -566,7 +600,7 @@ SUMMARY_CHI::Print (FILE *f) const
 	break;
     }
 
-    if (_symbol_index != -1)
+    if (Ipl_Summary_Symbol && _symbol_index != -1)
 	Ipl_Summary_Symbol[_symbol_index].Print (f);
     else
 	fputc ('\n', f);
@@ -701,7 +735,8 @@ SUMMARY_STMT::Print (FILE *f) const
 	break;
     case STMT_VAR:
 	fprintf(f, "STMT_VAR \n");
-	Ipl_Summary_Symbol[Get_var_index()].Print (f);
+        if (Ipl_Summary_Symbol)
+	  Ipl_Summary_Symbol[Get_var_index()].Print (f);
 	break;
     case STMT_CALL:
 	fprintf (f, "CALLSITE[%d]\n", Get_call_index ());
@@ -804,7 +839,7 @@ SUMMARY_CONTROL_DEPENDENCE::Print_array (FILE *f, INT32 size) const
 // ====================================================================
 // ====================================================================
 
-char *
+const char *
 SUMMARY_SYMBOL::Get_Name ( void ) const
 {
     // Sort out impossible situations:
@@ -917,7 +952,7 @@ SUMMARY_SYMBOL::Print(FILE *fp,
       cc += sprintf(Modref_Buf+cc, " CDREF-PREG-ONLY");
   }
   if (Is_addr_saved() || Is_addr_f90_target() || Is_addr_passed()) {
-      char *sep = "";
+      const char *sep = "";
       fputs (" ADDR_TAKEN_AND_", fp );
       cc += sprintf( Modref_Buf+cc, " ADDR_TAKEN_AND_ ");
       if (Is_addr_saved()) {
@@ -998,6 +1033,7 @@ SUMMARY_SYMBOL::Trace_array ( INT32 size ) const
 void
 SUMMARY_GLOBAL::Print ( FILE *fp ) const
 {
+  if (Ipl_Summary_Symbol) {
     SUMMARY_SYMBOL *sym = &(Ipl_Summary_Symbol[Get_symbol_index()]);
     
     fprintf ( fp, "GLOBAL %s (refs=%d,  mods=%d)",
@@ -1012,8 +1048,9 @@ SUMMARY_GLOBAL::Print ( FILE *fp ) const
     if ( Is_dkill() )	fprintf ( fp, " DKILL");
     if ( sym->Is_cref() )	fprintf ( fp, " CREF");
     if ( sym->Is_cmod() )	fprintf ( fp, " CMOD");
+  }
 
-    fprintf ( fp, "\n" );
+  fprintf ( fp, "\n" );
 }
 
 //-----------------------------------------------------------
@@ -1251,5 +1288,189 @@ SUMMARY_STRUCT_ACCESS::Trace ( INT32 id ) const
     Print ( TFile, id );
 }
 
+#ifdef KEY
+void
+SUMMARY_TY_INFO::Print ( FILE *fp ) const
+{
+  fprintf ( fp, "TYPE [%d]: ", Get_ty() ); 
+  if (Is_ty_no_split()) fprintf ( fp, "no_split " );
 
+  fprintf ( fp, "\n");
+} // SUMMARY_TY_INFO::Print
+
+void
+SUMMARY_TY_INFO::Print_array (FILE* fp, INT32 size ) const
+{
+  fprintf ( fp, "%sStart type array\n%s", SBar, SBar );
+  for ( INT i=0; i<size; ++i ) {
+    this[i].Print ( fp );
+  }
+  fprintf ( fp, "%sEnd type array \n%s", SBar, SBar );
+}
+
+void
+SUMMARY_TY_INFO::Trace_array ( INT32 size ) const
+{
+  Print_array ( TFile, size );
+}
+
+void
+SUMMARY_TY_INFO::Trace ( void ) const
+{
+  Print ( TFile );
+}
+#endif
+
+// Constraint graph summary for Nystrom Alias Analyzer
+void
+SUMMARY_CONSTRAINT_GRAPH_NODE::Print( FILE *fp) const
+{
+  fprintf(fp, "CGNODE %d st: %lld offset: %d flags: 0x%x\n",
+          _cgNodeId, _cg_st_idx, _offset, _flags);
+  fprintf(fp, "_numBitsPtsGBL: %d idx: %d\n", _numBitsPtsGBL, _pointsToGBLIdx);
+  fprintf(fp, "_numBitsPtsHZ: %d idx: %d\n", _numBitsPtsHZ, _pointsToHZIdx);
+  fprintf(fp, "_numBitsPtsDN: %d idx: %d\n", _numBitsPtsDN, _pointsToDNIdx);
+} 
+
+void
+SUMMARY_CONSTRAINT_GRAPH_NODE::Print_array(FILE* fp, INT32 size) const
+{
+  fprintf(fp, "%sStart cg node array\n%s", SBar, SBar);
+  for (INT i = 0; i < size; ++i) {
+    this[i].Print(fp);
+    fprintf(fp, "\n");
+  }
+  fprintf( fp, "%sEnd cg node array \n%s", SBar, SBar);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_NODE::Trace_array(INT32 size) const
+{
+  Print_array(TFile, size);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_NODE::Trace(void) const
+{
+  Print (TFile);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_EDGE::Print( FILE *fp) const
+{
+  fprintf(fp, "src %d dest: %d etype: %d qual: %d sizeOrSkew: %d", 
+          _srcId, _destId, _etype, _qual, _sizeOrSkew);
+} 
+
+void
+SUMMARY_CONSTRAINT_GRAPH_EDGE::Print_array(FILE* fp, INT32 size) const
+{
+  fprintf(fp, "%sStart cg edge array\n%s", SBar, SBar);
+  for (INT i = 0; i < size; ++i) {
+    this[i].Print(fp);
+    fprintf(fp, "\n");
+  }
+  fprintf( fp, "%sEnd cg edge array \n%s", SBar, SBar);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_EDGE::Trace_array(INT32 size) const
+{
+  Print_array(TFile, size);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_EDGE::Trace(void) const
+{
+  Print (TFile);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_STINFO::Print( FILE *fp) const
+{
+  fprintf(fp, "st_idx %lld varsize: %lld modulus: %d firstoffset: %d", 
+          _cg_st_idx, _varSize, _modulus, _firstOffset);
+} 
+
+void
+SUMMARY_CONSTRAINT_GRAPH_STINFO::Print_array(FILE* fp, INT32 size) const
+{
+  fprintf(fp, "%sStart cg stinfo array\n%s", SBar, SBar);
+  for (INT i = 0; i < size; ++i) {
+    this[i].Print(fp);
+    fprintf(fp, "\n");
+  }
+  fprintf( fp, "%sEnd cg stinfo array \n%s", SBar, SBar);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_STINFO::Trace_array(INT32 size) const
+{
+  Print_array(TFile, size);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_STINFO::Trace(void) const
+{
+  Print (TFile);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE::Print( FILE *fp) const
+{
+  fprintf(fp, "id %d numParms: %d paramNodesIdx: %d return: %d ", 
+          _id, _numParms, _paramNodesIdx, _return);
+} 
+
+void
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE::Print_array(FILE* fp, INT32 size) const
+{
+  fprintf(fp, "%sStart cg callsite array\n%s", SBar, SBar);
+  for (INT i = 0; i < size; ++i) {
+    this[i].Print(fp);
+  }
+  fprintf( fp, "%sEnd cg callsite array \n%s", SBar, SBar);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE::Trace_array(INT32 size) const
+{
+  Print_array(TFile, size);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE::Trace(void) const
+{
+  Print (TFile);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE::Print( FILE *fp) const
+{
+  fprintf(fp, "start %d end: %d mod: %d child: %d next: %d", 
+          _startOffset, _endOffset, _modulus, _childIdx, _nextIdx);
+} 
+
+void
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE::Print_array(FILE* fp, INT32 size) const
+{
+  fprintf(fp, "%sStart cg modrange array\n%s", SBar, SBar);
+  for (INT i = 0; i < size; ++i) {
+    this[i].Print(fp);
+    fprintf(fp, "\n");
+  }
+  fprintf( fp, "%sEnd cg modrange array \n%s", SBar, SBar);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE::Trace_array(INT32 size) const
+{
+  Print_array(TFile, size);
+}
+
+void
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE::Trace(void) const
+{
+  Print (TFile);
+}
 

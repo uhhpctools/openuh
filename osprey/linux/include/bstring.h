@@ -33,6 +33,13 @@
 
 */
 
+#ifndef BZERO
+#define BZERO(p,n) memset(p,0,n)
+#endif
+#ifndef BCOPY
+#define BCOPY(s,d,n) memcpy(d,s,n)
+#endif
+
 #ifdef __linux__
 
 /* 

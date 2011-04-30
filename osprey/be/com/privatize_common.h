@@ -1,5 +1,8 @@
 /*
- * Copyright 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+/*
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -40,10 +43,10 @@
 //-*-c++-*-
 /* ====================================================================
  * Module: privatize_common.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/privatize_common.h,v $
+ * $Revision: 1.7 $
+ * $Date: 05/12/05 08:59:14-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.privatize_common.h $
  *
  * Revision history:
  *  11-12-97 : First created by Dave Kohr
@@ -80,6 +83,7 @@
 #include "cxx_hash.h"
 #endif
 
+#include <list>
 
 typedef HASH_TABLE<ST *, ST *> RENAMING_MAP;
 
@@ -96,6 +100,8 @@ public:
   ST_SET ignore;  // ST's that don't need to be renamed
   HASH_TABLE<WN *, BOOL> old_prags; // original PRIVATE pragmas in priv_list
                                     // for STs that must be renamed
+  std::list<ST*> local_mappings;    // Local symtab table mappings, which need
+                                    // to be removed when processing a new PU.
   RENAMING_SCOPE(WN *_priv_list, MEM_POOL *_pool)
     : priv_list(_priv_list), pool(_pool), map(NUM_HASH_ELEMENTS, _pool),
       ignore(NUM_HASH_ELEMENTS, _pool), old_prags(NUM_HASH_ELEMENTS, _pool)
@@ -120,6 +126,11 @@ ST_Source_COMMON_Block(ST *st, ST **split, BOOL want_st = FALSE);
 
 extern ST *
 ST_Source_COMMON_Block(ST *st, ST **split);
+#endif
+
+#ifdef TARG_LOONGSON
+extern BOOL
+ST_Is_Common_Block (ST *st);
 #endif
 
 #endif  // #ifndef privatize_common_INCLUDED

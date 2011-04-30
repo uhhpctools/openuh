@@ -272,13 +272,6 @@ has skipped through a "value separator" which may have a comma in it
 /* This doesn't work, since no one has ever bothered to set 
  * f77recpos to anything other than 0.  This should be looked at later.
  */
-#if 0 /* f77recpos isn't set */
-	    if ( isnamelist && !isnamelist90 && ftnunit->f77recpos == 0 ) {
-	       for (; ftnunit->nextch != '\n' && ftnunit->nextch != EOF; GETC (ftnunit->nextch));
-	       if (ftnunit->nextch == EOF) goto loopend;
-	       continue;
-	    }
-#endif /* f77recpos isn't set */
 	 default:
 	    goto rddata;
 	 }
@@ -1184,11 +1177,7 @@ static int l_CHAR(unit *ftnunit, ftnlen len, int isnamelist)
 }
 
 static
-#if 11
 int s_rsle_com (cilist64 *a, unit **fu)
-#else
-int s_rsle_com (cilist *a, unit **fu)
-#endif
 {
    int             n;
    unit		  *ftnunit;
@@ -1230,27 +1219,18 @@ int s_rsle_com (cilist *a, unit **fu)
 
 int s_rsle (cilist *a)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsle_com(&dst, &f77curunit);
-#else
-    return( s_rsle_com( a, &f77curunit ) );
-#endif
 }
 
 int s_rsle_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsle_com(&dst, fu);
-#else
-    return( s_rsle_com( a, fu ) );
-#endif
 }
 
-#if 11
 int s_rsle64 (cilist64 *a)
 {
     return( s_rsle_com( a, &f77curunit ) );
@@ -1260,14 +1240,9 @@ int s_rsle64_mp (cilist64 *a, unit **fu)
 {
     return( s_rsle_com( a, fu ) );
 }
-#endif
 
 static
-#if 11
 int s_rsli_com (icilist64 *a, unit **fu)
-#else
-int s_rsli_com (icilist *a, unit **fu)
-#endif
 {
    int             n;
    unit           *ftnunit;
@@ -1294,27 +1269,18 @@ int s_rsli_com (icilist *a, unit **fu)
 
 int s_rsli (icilist *a)
 {
-#if 11
   icilist64 dst;
   get_icilist64(&dst, a);
   return s_rsli_com(&dst, &f77curunit);
-#else
-    return( s_rsli_com( a, &f77curunit ) );
-#endif
 }
 
 int s_rsli_mp (icilist *a, unit **fu)
 {
-#if 11
   icilist64 dst;
   get_icilist64(&dst, a);
   return s_rsli_com(&dst, fu);
-#else
-    return( s_rsli_com( a, fu ) );
-#endif
 }
 
-#if 11
 int s_rsli64 (icilist64 *a)
 {
     return( s_rsli_com( a, &f77curunit ) );
@@ -1324,13 +1290,10 @@ int s_rsli64_mp (icilist64 *a, unit **fu)
 {
     return( s_rsli_com( a, fu ) );
 }
-#endif
 
 
-#if 11
 #pragma weak e_rsle64 = e_rsle
 #pragma weak e_rsle64_mp = e_rsle_mp
 #pragma weak e_rsli64 = e_rsli
 #pragma weak e_rsli64_mp = e_rsli_mp
 
-#endif

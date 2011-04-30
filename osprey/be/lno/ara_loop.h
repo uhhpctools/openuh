@@ -188,17 +188,6 @@ public:
   ARA_REF(WN *array_wn, INT32 offset, ARA_LOOP_INFO *ali);
   ARA_REF(SYMBOL *array_sym, REGION* new_region,
 		ARA_LOOP_INFO  *ali, BOOL is_invariant);
-#if 0
-  void Add_Ref_Region(WN* ref, REGION* reg, ARA_LOOP_INFO & ali) { 
-    Is_True((_array==NULL) || _array->St()==WN_st(WN_array_base(ref)),
-	    ("ARA_REF_INFO::Add_Ref(), base arrays are different"));
-    if (_array==NULL) {
-      _array = CXX_NEW(SYMBOL(WN_array_base(ref)),
-		       &ARA_memory_pool);
-    }
-    _image.Add_Region(reg,ali);
-  }
-#endif
 
   ~ARA_REF()
     {

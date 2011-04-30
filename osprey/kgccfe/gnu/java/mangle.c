@@ -647,8 +647,5 @@ finish_mangling ()
   obstack_1grow (mangle_obstack, '\0');
   result = get_identifier (obstack_base (mangle_obstack));
   obstack_free (mangle_obstack, obstack_base (mangle_obstack));
-#if 0
-  printf ("// %s\n", IDENTIFIER_POINTER (result));
-#endif
   return result;
 }

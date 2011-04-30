@@ -74,7 +74,9 @@ hash (str, len)
 }
 
 #ifdef __GNUC__
+#ifndef KEY /* GNU 4.2 does not support non-static C99 inline functions. */
 __inline
+#endif
 #endif
 const char *
 libc_name_p (str, len)

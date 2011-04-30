@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -48,6 +52,12 @@
 #include "string_utils.h"
 #include "errors.h"
 
+#ifdef _WIN32
+#define LL_FORMAT "I64"
+#else
+#define LL_FORMAT "ll"
+#endif
+
 #define EMPTY(x)	(x[0] == NIL)
 #define SPACE		" 	"
 #define DQUOTE		"\""
@@ -56,7 +66,9 @@
 #define RPAREN		")"
 #define FIELD_DIVIDER	'|'
 #define OPTIONS 1
-#define COMBINATIONS 2
+
+/* dummy for option referenced in lang_defs.c */
+int external_gcc = 0;
 
 typedef enum {
 	normal, 
@@ -71,8 +83,7 @@ typedef enum {
 	needs_directory_or_null, /* option takes directory arg; if no dir arg
 				    is seen, ignore the option altogether */
 #endif
-	needs_decimal,		/* option needs decimal arg */
-	combo 			/* is combination of options */
+	needs_decimal		/* option needs decimal arg */
 } syntax_t; 
 
 #define MAX_OPTION_LENGTH 48
@@ -98,7 +109,6 @@ typedef struct opt_info_rec {
 	boolean internal;	/* not available to user */
 	mask_t languages;
 	mask_t phases;
-	index_list_t *combo_list;
 	option_list_t *implies;
 	char name[MAX_OPTION_LENGTH];
 	char flag[MAX_OPTION_LENGTH];
@@ -113,7 +123,7 @@ static char implicit_vars[MAX_OPTIONS][MAX_NAME_LENGTH];
 static int n_ivars = 0;
 
 /*
- * table_for_phase means we don't need lang and phase masks, nor combos,
+ * table_for_phase means we don't need lang and phase masks,
  * because only have options for one phase, and can assume they are correct.
  */
 static boolean table_for_phase = FALSE;
@@ -246,6 +256,7 @@ set_flag_name(option_info_t *opt)
 	while (*pn != NIL) {
 		if (*pn == ' ') pn++;
 		if (*pn == '!') pn++;
+		if (*pn == '.') pn++;
 		if (*pn == '-') *pf = '_';
 		else if (*pn == '=') *pf = 'Q';
 		else if (*pn == '#') *pf = 'P';
@@ -472,6 +483,7 @@ static void check_dups(void)
 static void read_table(void) 
 {
 	char line[512];
+	char line2[512];
         char *option_lines[MAX_OPTIONS];
         int option_line_count = 0;
 	char *p;
@@ -485,50 +497,29 @@ static void read_table(void)
 	options[i].implies = NULL;
 	i++;
 
-        /* Find beginning of OPTIONS section. */
-        while (get_line(line) != EOF) {
-          if (EMPTY(line))
-            continue;
-          else if (line[0] == '%' && line[1] != '%') 
-            continue;
-          else if (strcmp(line, "%%% OPTIONS") == 0) {
-            section = OPTIONS;
-            break;
-          }
-          else {
-            internal_error("Unexpected line: %s", line);
-          }
-        }
-
-        /* Read and sort the OPTIONS section. */
-        if (section != OPTIONS) {
-          internal_error("OPTIONS section not found");
-        }
-
         option_line_count = 0;
         while (get_line(line) != EOF) {
             char* s;
 
 	    if (EMPTY(line)) 
               continue;
-	    else if (line[0] == '%' && line[1] != '%')
+	    else if (line[0] == '%')
               continue;
-	    else if (strncmp(line, "%%% ", 4) == 0) {
-              if (strcmp(line, "%%% OPTIONS") == 0) 
-                internal_error("OPTIONS section seen twice");
-              else if (strcmp(line, "%%% COMBINATIONS") == 0) {
-                section = COMBINATIONS;
-                break;
-              }
-              else {
-                internal_error("UNKNOWN SECTION: %s", line);
-              }
-            }
+	    else if (line[0] == ' ' && line[1] == NIL)
+              continue;
+	    else if (line[0] == '\t')
+                internal_error("unexpected line (help msg?): %s", line);
+	    else if (line[0] != '-' && line[0] != 'I')
+                internal_error("unexpected line: [%s]", line);
 
-            s = malloc(strlen(line) + 1);
+	    if (get_line(line2) == EOF)
+                internal_error("unexpected EOF for line2");
+
+            s = malloc(strlen(line) + strlen(line2) + 4);
             if (s == NULL)
               internal_error("memory allocation failed");
-            strcpy(s, line);
+	    sprintf(s, "%s %c %s", line, FIELD_DIVIDER, line2);
+
             option_lines[option_line_count] = s;
             INCREMENT_INDEX(option_line_count, MAX_OPTIONS);
         }
@@ -576,36 +567,6 @@ static void read_table(void)
 
 	check_dups();
 	
-        /* Read and process the COMBINATIONS section */
-        if (section != COMBINATIONS) {
-          internal_error("COMBINATIONS section not found");
-        }
-
-        while (get_line(line) != EOF) {
-	    if (EMPTY(line)) 
-              continue;
-	    else if (line[0] == '%' && line[1] != '%')
-              continue;
-	    else if (strncmp(line, "%%% ", 4) == 0) {
-              internal_error("Unexpected sections line: %s", line);
-            }
-            else {
-                /* <name> <action> <implies> */
-		if (line[0] != '\"')
-                        internal_error("MISSING \" : %s", line);
-                p = strtok(line+1, DQUOTE);
-                set_option_name(options[i].name, p, &options[i].num_letters);
-                options[i].syntax = combo;
-                set_flag_name(&options[i]);
-                p = strtok(NULL, SPACE); 
-                store_string(options[i].action, p, "OKAY");
-                options[i].implies = create_option_list(&p,i);
-                options[i].languages = ALL_LANGS;
-                options[i].phases = ALL_PHASES;
-                options[i].help = NULL;
-                INCREMENT_INDEX(i, MAX_OPTIONS);
-            }
-        }
 
         num_options = i;
 }
@@ -625,24 +586,6 @@ fill_option_info (void)
 		    	p->info_index = find_name(p->name);
 		    }
 		    p = p->next;
-		}
-		if (options[i].syntax == combo) {
-			options[i].combo_list = NULL;
-			strcpy(buffer, options[i].name);
-			s = strtok(buffer, SPACE);
-			while (s != NULL) {
-				pc = (index_list_t*) malloc(sizeof(index_list_t));
-				if (*s == '!') {
-					pc->negated = TRUE;
-					s++;
-				} else {
-					pc->negated = FALSE;
-				}
-				pc->info_index = find_name(s);
-				pc->next = options[i].combo_list;
-				options[i].combo_list = pc;
-				s = strtok(NULL, SPACE);
-			}
 		}
 	}
 }
@@ -694,9 +637,21 @@ write_option_names (void)
 			fprintf(f, "#define %s %d\n", options[i].flag, i);
 		if (options[i].toggle) {
 			/* get var after "toggle(&" */
+#ifdef KEY
+			// Handle multiple toggles such as:
+			//   toggle(&var1,10);toggle(&var2,11)
+			char *p = options[i].action;
+			while ((p = strstr(p, "toggle(&")) != NULL) {
+			  p = p + 8;
+			  strcpy(buffer, p);
+			  ivar = strtok(buffer,COMMA);
+			  add_implicit_var(ivar);
+			}
+#else
 			strcpy(buffer, ((char*)options[i].action)+8);
 			ivar = strtok(buffer,COMMA);
 			add_implicit_var(ivar);
+#endif
 		}
 	}
 	fprintf(f, "#define LAST_PREDEFINED_OPTION %d\n", num_options);
@@ -729,7 +684,6 @@ write_init_options (void)
 		fprintf(f, "{\n");
 		fprintf(f, "\toptions[flag].valid_langs = lang_mask;\n");
 		fprintf(f, "\toptions[flag].valid_phases = phase_mask;\n");
-		fprintf(f, "\toptions[flag].combo_list = NULL;\n");
 	}
 	fprintf(f, "\toptions[flag].implies = NULL;\n");
 	fprintf(f, "\toptions[flag].name = string_copy(name);\n");
@@ -745,17 +699,6 @@ write_init_options (void)
 	fprintf(f, "\tp->next = options[key].implies;\n");
 	fprintf(f, "\toptions[key].implies = p;\n");
 	fprintf(f, "}\n\n");
-	if (!table_for_phase) {
-		fprintf(f, "static void\n");
-		fprintf(f, "create_combo_item (int key, int index)\n");
-		fprintf(f, "{\n");
-		fprintf(f, "\tindex_list_t *p;\n");
-		fprintf(f, "\tp = (index_list_t *) malloc(sizeof(index_list_t));\n");
-		fprintf(f, "\tp->info_index = index;\n");
-		fprintf(f, "\tp->next = options[key].combo_list;\n");
-		fprintf(f, "\toptions[key].combo_list = p;\n");
-		fprintf(f, "}\n\n");
-	}
 	fprintf(f, "\nextern void\n");
 	fprintf(f, "init_options (void)\n");
 	fprintf(f, "{\n");
@@ -770,12 +713,14 @@ write_init_options (void)
 		} else {
 		    if (sizeof(mask_t)>4)
 		     {
-		     fprintf(f, "\tcreate_option_info(%d,%#llxLL,%#llxLL,\"%s\",",
+		     fprintf(f, "\tcreate_option_info("
+			    "%d,%#" LL_FORMAT "xLL,%#" LL_FORMAT "xLL,\"%s\",",
 			    i, options[i].languages, options[i].phases, options[i].name);
 		     }
 		    else
 		     {
-		     fprintf(f, "\tcreate_option_info(%d,%#llx,%#llx,\"%s\",",
+		     fprintf(f, "\tcreate_option_info("
+			    "%d,%#" LL_FORMAT "x,%#" LL_FORMAT "x,\"%s\",",
 			    i, options[i].languages, options[i].phases, options[i].name);
 		     }
 		}
@@ -790,16 +735,6 @@ write_init_options (void)
 			fprintf(f, "\tcreate_implies_item(%s, %d, \"%s\");\n",
 				options[i].flag, q->info_index, q->name);
 			q = q->next;
-		}
-		if (!table_for_phase) {
-		    if (options[i].syntax == combo) {
-			index_list_t *index_lst = options[i].combo_list;
-			while (index_lst != NULL) {
-				fprintf(f, "\tcreate_combo_item(%s, %d);\n",
-					options[i].flag, index_lst->info_index);
-				index_lst = index_lst->next;
-			}
-		    }
 		}
 	}
 	fprintf(f, "}\n\n");
@@ -821,7 +756,7 @@ write_get_option (void)
 	fprintf(f, "switch (argv[*argi][optindex]) {\n");
 	i = 0;
 	while (i < num_options) {
-		if (options[i].internal || options[i].syntax == combo) {
+		if (options[i].internal) {
 			/* skip */
 			i++;
 			continue;
@@ -880,10 +815,10 @@ write_get_option (void)
 			/* for cases where base is > 1 letter,
 			 * check that whole string matches */
 			if (strlen(options[i].name) > 2) {
-				fprintf(f, "\tif (strncmp(argv[*argi],\"%s\",%d) == 0) {\n",
-				    options[i].name, (int)strlen(options[i].name));
-				fprintf(f, "\t\tend_option(argv, argi, %d);\n",
-					(int)strlen(options[i].name));
+				fprintf(f, "\tif (strncmp(argv[*argi],\"%s\",%ld) == 0) {\n",
+				    options[i].name, (long)strlen(options[i].name));
+				fprintf(f, "\t\tend_option(argv, argi, %ld);\n",
+					(long)strlen(options[i].name));
 			} /* else -<single-letter> */
 			if (options[i].syntax == needs_decimal) {
 				fprintf(f, "\tif (is_decimal(next_string(argv,argi))) {\n");
@@ -892,7 +827,10 @@ write_get_option (void)
 				   || options[i].syntax == needs_directory_or_null
 #endif
 				   ) {
-				fprintf(f, "\tif (want_directory(next_string(argv,argi))) {\n");
+			  fprintf(f, "\tif (!is_directory(next_string(argv,argi)) && fullwarn)\n");
+			  fprintf(f, "\t\twarning(\"%%s is not a directory\", next_string(argv,argi));\n");
+			  fprintf(f, "\tif (strcmp(next_string(argv,argi),\"-default_options\")) {\n" );
+
 			}
 			fprintf(f, "\t\toptargs = get_optarg(argv, argi);\n");
 			if (options[i].syntax == needs_decimal) {
@@ -911,36 +849,6 @@ write_get_option (void)
 			  fprintf(f, "\t\treturn add_string_option(%s,optargs);\n", 
 				  options[i].flag);
 			fprintf(f, "\t\t/* NOTREACHED */\n");
-			if (options[i].syntax == needs_directory
-#ifdef KEY
-			    || options[i].syntax == needs_directory_or_null
-#endif
-			    ) {
-				fprintf(f, "\t} else if (!is_last_char(argv,argi)) {\n");
-				fprintf(f, "\t\tif (fullwarn) {\n");
-				fprintf(f, "\t\t\twarning(\"%%s does not refer to a valid directory\", option_name);\n");
-				fprintf(f, "\t\t}\n");
-				fprintf(f, "\t\toptargs = get_optarg(argv,argi);\n");
-				fprintf(f, "\t\tget_next_arg(argi);\n");
-#ifdef KEY
-				fprintf(f, "\t\treturn add_any_string_option(%s,optargs);\n", 
-					options[i].flag);
-#else
-				fprintf(f, "\t\treturn add_string_option(%s,optargs);\n", 
-					options[i].flag);
-#endif
-				fprintf(f, "\t\t/* NOTREACHED */\n");
-			}
-#ifdef KEY
-			// Ignore %D? option if no dir arg is found by changing
-			// them into -dummy.
-			if (options[i].syntax == needs_directory_or_null) {
-				fprintf(f, "\t} else {\n");
-				fprintf(f, "\t  optargs = current_string(argv,argi);\n");
-				fprintf(f, "\t  get_next_arg(argi);\n");
-				fprintf(f, "\t  return O_dummy;\n");
-			}
-#endif
 			if (options[i].syntax != needs_string
 			    && options[i].syntax != needs_string_or_dash
 					) {
@@ -954,8 +862,8 @@ write_get_option (void)
 			/* for cases where base is > 1 letter,
 			 * check that whole string matches */
 			if (strlen(options[i].name) > 2) {
-				fprintf(f, "\tif (strncmp(argv[*argi],\"%s\",%d) == 0) {\n",
-				    options[i].name, (int)strlen(options[i].name));
+				fprintf(f, "\tif (strncmp(argv[*argi],\"%s\",%ld) == 0) {\n",
+				    options[i].name, (long)strlen(options[i].name));
 			}
 			fprintf(f, "\t\treturn parse_%s_option(argv, argi);\n",
 				options[i].name+1);
@@ -1046,14 +954,16 @@ write_opt_action (void)
 	f = begin_file("opt_action.i");
 	fprintf(f, "#include \"string_utils.h\"\n\n");
 	fprintf(f, "#include \"get_options.h\"\n\n");
+	fprintf(f, "#include \"lib_phase_dir.h\"\n\n");
 	fprintf(f, "/* do action associated with option */\n");
 	fprintf(f, "extern void\n");
 	fprintf(f, "opt_action (int optflag)\n");
 	fprintf(f, "{\n");
 	fprintf(f, "switch (optflag) {\n");
+
 	for (i = 0; i < num_options; i++) {
 		if (!options[i].internal &&
-		    options[i].syntax != combo &&
+		    //options[i].syntax != combo &&
 		    !EMPTY(options[i].action) &&
 		    find_by_flag(options[i].flag, i) == NULL) {
 			fprintf(f, "case %s:\n", options[i].flag);
@@ -1089,115 +999,6 @@ write_opt_action (void)
 	fclose(f);
 }
 
-static void
-write_check_combos (void)
-{
-	int i, n;
-	index_list_t *q;
-	FILE *f;
-	f = fopen("check_combos.c", "w");
-	fprintf(f, "/* THIS FILE IS AUTOMATICALLY GENERATED BY table */\n\n");
-	fprintf(f, "#include <stddef.h>\n");
-	fprintf(f, "#include \"options.h\"\n");
-	fprintf(f, "#include \"option_seen.h\"\n");
-	fprintf(f, "#include \"option_names.h\"\n");
-	fprintf(f, "#include \"opt_actions.h\"\n");
-	fprintf(f, "#include \"errors.h\"\n");
-	fprintf(f, "\n");
-	fprintf(f, "/* replace individual options with combo */\n");
-	fprintf(f, "static void\n");
-	fprintf(f, "replace_with_combo (int combo_index)\n");
-	fprintf(f, "{\n");
-	fprintf(f, "\tint flag;\n");
-	fprintf(f, "\tint count = 1;\n");
-	fprintf(f, "\tFOREACH_OPTION_IN_COMBO(flag,combo_index) {\n");
-	fprintf(f, "\t\tif (count == 1) {\n");
-	fprintf(f, "\t\t\treplace_option_seen(flag, combo_index);\n");
-	fprintf(f, "\t\t} else {\n");
-	fprintf(f, "\t\t\tset_option_unseen(flag);\n");
-	fprintf(f, "\t\t}\n");
-	fprintf(f, "\t\tcount++;\n");
-	fprintf(f, "\t}\n");
-	fprintf(f, "}\n\n");
-	fprintf(f, "static void\n");
-	fprintf(f, "report_combo_errors (void)\n");
-	fprintf(f, "{\n");
-	for (i = 0; i < num_options; i++) {
-		if (options[i].syntax == combo && !EMPTY(options[i].action)) {
-			if (find_by_flag(options[i].flag, i))
-				continue;
-			fprintf(f, "\tif (option_was_seen(%s)) {\n",
-				options[i].flag);
-			if (strcmp(options[i].action, "WARNING") == 0) {
-				fprintf(f, "\t\twarning(\"%s combination not allowed, replaced with %s\");\n",
-					options[i].name, list_to_string(options[i].implies));
-			} else {
-				fprintf(f, "\t\tparse_error(\"%s\", \"illegal combination\");\n",
-					options[i].name);
-			}
-			fprintf(f, "\t}\n");
-		}
-	}
-	fprintf(f, "}\n\n");
-	fprintf(f, "extern boolean\n");
-	fprintf(f, "is_replacement_combo (int combo_index)\n");
-	fprintf(f, "{\n");
-	fprintf(f, "\tswitch (combo_index) {\n");
-	for (i = n = 0; i < num_options; i++) {
-		if (options[i].syntax == combo && !EMPTY(options[i].action)
-			&& strcmp(options[i].action, "WARNING") == 0 )
-		{
-			if (find_by_flag(options[i].flag, i))
-				continue;
-			fprintf(f, "\tcase %s:\n", options[i].flag);
-			n++;
-		}
-	}
-	if (n)
-		fprintf(f, "\t\treturn TRUE;\n");
-	fprintf(f, "\tdefault:\n");
-	fprintf(f, "\t\treturn FALSE;\n");
-	fprintf(f, "\t}\n");
-	fprintf(f, "}\n\n");
-	fprintf(f, "extern void\n");
-	fprintf(f, "check_for_combos (void)\n");
-	fprintf(f, "{\n");
-	for (i = 0; i < num_options; i++) {
-		if (options[i].syntax == combo) {
-			if (find_by_flag(options[i].flag, i))
-				continue;
-			q = options[i].combo_list;
-			if (q == NULL) internal_error("empty combo_list?");
-			fprintf(f, "\tif (");
-			if (q->negated) fprintf(f, "!");
-			fprintf(f, "option_was_seen(%s)", 
-				options[q->info_index].flag);
-			q = q->next;
-			while (q != NULL) {
-				fprintf(f, " && ");
-				if (q->negated) fprintf(f, "!");
-				fprintf(f, "option_was_seen(%s)", 
-					options[q->info_index].flag);
-				q = q->next;
-			}
-			fprintf(f, ") {\n");
-			/* replace in seen array */
-			fprintf(f, "\t\treplace_with_combo(%s);\n",
-				options[i].flag);
-			/* untoggle individual options */
-			for (q = options[i].combo_list; q != NULL; q = q->next) {
-				if (options[q->info_index].toggle) {
-					fprintf(f, "\t\tun%s\n", 
-						options[q->info_index].action);
-				}
-			}
-			fprintf(f, "\t}\n");
-		}
-	}
-	fprintf(f, "\treport_combo_errors();\n");
-	fprintf(f, "}\n\n");
-	fclose(f);
-}
 
 static void
 write_implicits (void)
@@ -1251,9 +1052,6 @@ main (int argc, char *argv[])
 	write_init_options();
 	write_get_option();
 	write_opt_action();
-	if (!table_for_phase) {
-		write_check_combos();
-	}
 	write_implicits();
 	return(error_status);
 }

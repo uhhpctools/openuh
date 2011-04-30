@@ -89,6 +89,7 @@ static char *defs_rcs_id = "$Source: /home/bos/bk/kpro64-pending/common/com/SCCS
 #define __STDC_CONSTANT_MACROS
 #endif
 #include <stdint.h>
+#include <limits.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -124,14 +125,14 @@ extern "C" {
 #if HOST_WORD_SIZE == 8
 # define EIGHT_BYTE_WORDS
 #endif
+#if defined(BUILD_OS_DARWIN)
+# define BITSPERBYTE	CHAR_BIT
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Map low indices to low-order bits in the bit vector package: */
 #define BV_LITTLE_ENDIAN_BIT_NUMBERING	1
 
 /* Should bit vector packages use table lookup instead of shifts? */
-#if 0
-#define BV_MEMORY_BIT_MASKS	/* when shifting is slow */
-#endif
 
 /* ====================================================================
  *
@@ -207,6 +208,13 @@ extern "C" {
 #endif
 #endif
 #endif
+
+#ifdef __GNUC__
+/* gcc allows us to put attribute weak after a prototype */
+#define WEAK __attribute__((weak))
+#else
+#define WEAK
+#endif
 
 
 /* ====================================================================
@@ -277,11 +285,15 @@ typedef unsigned long	UINTPS;	/* Pointer-sized integer */
 #define HOST_SUPPORTS_QUAD_FLOAT 0
 #endif
 
+#ifndef TARG_LOONGSON
 #if HOST_SUPPORTS_QUAD_FLOAT
 /* Temporarily remove this to get rid of warnings: */
 typedef long double	QUADFP;		/* 128-bit floating point */
 #else 
 typedef double	QUADFP;		/* 128-bit floating point */
+#endif
+#else
+typedef struct { INT32 qval[4]; } QUADFP;
 #endif
 
 #endif /* HOST_SGI || __GNUC__ */
@@ -331,11 +343,6 @@ typedef mUINT64 mTARG_UINT;
  * files which need them, e.g. to use /usr/include expansions which
  * require them.
  */
-#if 0 /* !defined(USE_STANDARD_TYPES) && !defined(_NEW_SYMTAB) */
-# define short	SYNTAX_ERROR_short
-# define int	SYNTAX_ERROR_int
-# define long	SYNTAX_ERROR_long
-#endif /* USE_STANDARD_TYPES */
 
 
 
@@ -371,11 +378,30 @@ typedef mUINT32 IDTYPE;
 #define MAX(a,b)	((a>=b)?a:b)
 #define MIN(a,b)	((a<=b)?a:b)
 
-inline INT Max(INT i, INT j)
+#ifdef KEY
+#ifdef Is_True_On
+static
+#else
+static __inline__ /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+#else
+inline
+#endif
+INT Max(INT i, INT j)
 {
   return MAX(i,j);
 }
-inline INT Min(INT i, INT j)
+
+#ifdef KEY
+#ifdef Is_True_On
+static
+#else
+static __inline__ /* GNU 4.2 does not support non-static C99 inline functions. */
+#endif
+#else
+inline
+#endif
+INT Min(INT i, INT j)
 {
   return MIN(i,j);
 }
@@ -392,6 +418,14 @@ inline INT Min(INT i, INT j)
  * --------------------------------------------------------------------
  */
 #define VERY_BAD_PTR (0xfffffff)
+
+/* mingw uses %I64 to print a long long rather than %ll */
+#ifdef __MINGW32__
+#define LL_FORMAT "I64"
+#else
+#define LL_FORMAT "ll"
+#endif
+
 
 #ifdef __cplusplus
 }

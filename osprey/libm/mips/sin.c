@@ -38,10 +38,10 @@
  * ====================================================================
  *
  * Module: sin.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/sin.c,v $
+ * $Revision$
+ * $Date$
+ * $Author$
+ * $Source$
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/sin.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source$ $Revision$";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -68,7 +68,13 @@ extern	double	sin(double);
 #pragma weak sin = __sin
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __sin(double);
+#pragma weak sin
+double sin( double x) {
+  return __sin( x );
+}
+#elif defined(__GNUC__)
 extern  double  __sin(double);
 
 double    sin() __attribute__ ((weak, alias ("__sin")));
@@ -580,7 +586,12 @@ of significance)\n");
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __sinl(long double);
+long double sinl( long double x ) {	
+  return ( (long double)__sin((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __sinl(long double);
 
 long double    sinl() __attribute__ ((weak, alias ("__sinl")));

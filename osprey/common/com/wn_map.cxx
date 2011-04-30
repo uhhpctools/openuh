@@ -139,6 +139,7 @@ WN_MAP_TAB_Create(MEM_POOL *pool)
   /*  initialize the predefined mappings */
   for (i = 0; i < WN_MAP_RESERVED; i++) {
     maptab->_is_used[i] = TRUE;
+    maptab->_dont_copy[i] = FALSE;
     /* zero the _map_size counter */
     for (category = 0; category < WN_MAP_CATEGORIES; category++) { 
       maptab->_map_size[category][i] = 0;
@@ -153,10 +154,12 @@ WN_MAP_TAB_Create(MEM_POOL *pool)
   maptab->_kind[WN_MAP_FEEDBACK] = WN_MAP_KIND_INT32;
   maptab->_kind[WN_MAP_AC_INTERNAL] = WN_MAP_KIND_VOIDP;
   maptab->_kind[WN_MAP_ALIAS_CLASS] = WN_MAP_KIND_INT32;
+  maptab->_kind[WN_MAP_ALIAS_CGNODE] = WN_MAP_KIND_INT32;
 
   /*  clear the slots that are not reserved */
   for (i = WN_MAP_RESERVED; i < WN_MAP_MAX; i++) { 
     maptab->_is_used[i] = FALSE;
+    maptab->_dont_copy[i] = FALSE;
   }
   /* clear all category info, even for reserved ones */
   /* Because we don't init mem to 0, have to set values here. */
@@ -218,6 +221,7 @@ WN_MAP_Do_Create(WN_MAP_TAB *maptab, MEM_POOL *pool, WN_MAP_KIND kind)
   FmtAssert(wn_map != WN_MAP_MAX,("WN_MAP_Do_Create, ran out of maps"));
 
   maptab->_is_used[wn_map] = TRUE;
+  maptab->_dont_copy[wn_map] = FALSE;
 
   /* zero the _map_size counter */
   for (category = 0; category < WN_MAP_CATEGORIES; category++) { 
@@ -348,7 +352,7 @@ WN_MAP_realloc_array (WN_MAP_TAB *maptab, OPERATOR_MAPCAT category,
   /* make sure the new storage is zeroed */
   if (!(maptab->_pool[wn_map]->bz)) {
       INTPS address = ((INTPS) maptab->_mapping[category][wn_map]) + (old_size * elemsz);
-      bzero((void *) address, (new_size - old_size) * elemsz);
+      BZERO((void *) address, (new_size - old_size) * elemsz);
   }
 }
 

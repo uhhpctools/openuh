@@ -668,36 +668,14 @@ static __uint64_t unwind_process_prologue_desc(__unw_state_info_t **state,
 		/* gr = (unsigned char)(*(ptr+2) & 0x7f); */
 	} else if (__UNW_IS_X1(*ptr)) {
 		count = 2;
-#if 0
-		fprintf(fp, "\tX1: 0x%02x", (unsigned char)*ptr);
-#endif
 		ret = __leb128_decode(ptr+count, size, &val);
 		count += ret;
-#if 0
-		fprintf(fp, "time=%llu\n", (unsigned long long) val);
-		fprintf(fp, "\t\treg = 0x%0x, ",
-			(unsigned char)*(ptr+1));
-#endif
 		ret = __leb128_decode(ptr+count, size, &val);
 		count += ret;
-#if 0
-		fprintf(fp, "offset = %lld\n", (long long)val);
-#endif
 	} else if (__UNW_IS_X2(*ptr)) {
 		count = 3;
-#if 0
-		fprintf(fp, "\tX1: 0x%02x", (unsigned char)*ptr);
-#endif
 		ret = __leb128_decode(ptr+count, size, &val);
 		count += ret;
-#if 0
-		fprintf(fp, "time=%llu\n",
-			(unsigned long long) val);
-		fprintf(fp, "\t\treg = 0x%0x, ",
-			(unsigned char)*(ptr+1));
-		fprintf(fp, "treg = 0x%0x\n",
-			(unsigned char)*(ptr+2));
-#endif
 	} else {
 		if (_unwind_verbose >= __UNW_VERBOSE_ERRORS) {
 			unwind_output("unwind_process_prologue_desc() ERROR: %s 0x%x",

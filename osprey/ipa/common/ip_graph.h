@@ -273,11 +273,13 @@ struct GRAPH_TEMPLATE : public GRAPH
 
   NODE_USER Node_User (NODE_INDEX node_index) const 
   {
+    FmtAssert(node_index != INVALID_NODE_INDEX, ("invalid node_index"));
     return NODE_user(&(Nodes()[node_index]));
   }
 
   EDGE_USER Edge_User (EDGE_INDEX edge_index) const
   {
+    FmtAssert(edge_index != INVALID_EDGE_INDEX, ("invalid edge_index"));
     return EDGE_user(&(Edges()[edge_index]));
   }
 };

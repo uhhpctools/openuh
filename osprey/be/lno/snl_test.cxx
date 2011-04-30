@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -45,7 +49,6 @@
 *** $Source: be/lno/SCCS/s.snl_test.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -53,7 +56,7 @@
 #pragma hdrstop
 
 #define snl_test_CXX      "snl_test.cxx"
-static char *rcs_id =   snl_test_CXX "$Revision: 1.9 $";
+const static char *rcs_id =   snl_test_CXX "$Revision: 1.9 $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -68,7 +71,7 @@ static char *rcs_id =   snl_test_CXX "$Revision: 1.9 $";
 #include "opt_du.h"
 #include "config_lno.h"
 #include "config_targ.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "errors.h"
 #include "erbe.h"
 #include "erglob.h"
@@ -1357,6 +1360,87 @@ static BOOL Fix_Blockable_Dependences(WN* wn_outer,
   return TRUE; 
 } 
 
+static void SNL_Transform_Min(WN* wn,
+		              INT nloops)
+{
+  ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph; 
+  WN* wn_original = wn; 
+  INT nloops_original = nloops; 
+  if (wn == NULL) 
+    return; 
+
+  // Remove non-permutable dependences, if BLOCKABLE directive was present
+  if (!Fix_Blockable_Dependences(wn, nloops))
+    return; 
+  // Attempt to fix index variables which have array dependences
+  if (!SNL_Fix_Array_Deps_On_Index_Variable(wn, nloops))
+    return; 
+  WN* wn_inner = SNL_Get_Inner_Snl_Loop(wn, nloops); 
+  WN* wn_ok = NULL; 
+  WN *wnn;
+  for (wnn = wn_inner; wnn != NULL; wnn = LWN_Get_Parent(wnn)) { 
+    if (WN_opcode(wnn) == OPC_DO_LOOP) {  
+      if (Need_Fix_Array_Deps_On_Index_Variable(wnn))
+        break;  
+      wn_ok = wnn;
+      if (wn_ok == wn) 
+	break; 
+    }
+  } 
+  if (wn_ok == NULL)
+    return; 
+  nloops -= Do_Loop_Depth(wn_ok) - Do_Loop_Depth(wn); 
+  wn = wn_ok; 
+
+  // This should never happen in real code, but do the right thing
+  // (look only at inner loops) if it does happen.
+
+  while (nloops > SNL_MAX_LOOPS) {
+    nloops--;
+    wn = Good_Do_Next_Innermost(wn);
+    FmtAssert(wn, ("Can't find loop in deep loop nest"));
+  }
+
+  while (nloops >= 2 && wn != NULL 
+    && (!Do_Loop_Is_Good(wn) || Do_Loop_Has_Calls(wn) ||
+	 Do_Loop_Has_Gotos(wn))) {
+    nloops--;
+    wn = Good_Do_Next_Innermost(wn);
+    // FmtAssert(wn, ("Can't find loop in deep loop nest"));
+  }
+
+  WN* wn_innermost_legotile = NULL;  
+  for (WN* wn_lego = wn; wn_lego != NULL; 
+    wn_lego = Good_Do_Next_Innermost(wn_lego)) {
+    DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn_lego); 
+    if (dli->Is_Outer_Lego_Tile) 
+      wn_innermost_legotile = wn_lego; 
+  } 
+  if (wn_innermost_legotile != NULL) {
+    WN* wn_new = Good_Do_Next_Innermost(wn_innermost_legotile);
+    if (wn_new == NULL) 
+      return;  
+    nloops = nloops - (Do_Depth(wn_new) - Do_Depth(wn)); 
+    wn = wn_new; 
+  }
+  if (wn == NULL) 
+    return; 
+ 
+  WN* parent_wn=LWN_Get_Parent(LWN_Get_Parent(wn));
+  if (parent_wn && (WN_opcode(parent_wn) == OPC_DO_LOOP)) {
+    SNL_NEST_INFO ni(parent_wn, wn, nloops, &LNO_default_pool);
+  }
+  else if (parent_wn && WN_opcode(parent_wn) == OPC_IF &&
+      Get_Do_Loop_Info(wn)->Multiversion_Alias) {
+    WN *parent_wn2 = LWN_Get_Parent(LWN_Get_Parent(parent_wn));
+    if (parent_wn2 && (WN_opcode(parent_wn2) == OPC_DO_LOOP)) {
+      SNL_NEST_INFO ni(parent_wn2, wn, nloops, &LNO_default_pool);
+    }
+  } 
+}
+
+extern void Fully_Unroll_Short_Loops(WN *);
+extern BOOL Peel_2D_Triangle_Loops(WN* outer_loop);
 static void SNL_Transform(WN* wn,
 		          INT nloops)
 {
@@ -1488,14 +1572,16 @@ static void SNL_Transform(WN* wn,
 
   INT nloops_g = ni.Nloops_General();
   INT nloops_i = ni.Nloops_Invariant();
+  INT nloops_t = ni.Nloops_Transformable();
 
-  while (nloops >= 2 && nloops > nloops_g && nloops > nloops_i) {
+  while (nloops >= 2 && nloops > nloops_g && nloops > nloops_i ) {
     nloops--;
     ni.Exclude_Outer_Loops(1);
     nloops_g = ni.Nloops_General();
     nloops_i = ni.Nloops_Invariant();
     if (LNO_Analysis || LNO_Tlog) {
-      char* message;
+      const char* message;
+      char* scalar_message = NULL;
       char  buf[32];           // enough space for its use
       switch (ni.Problem(ni.Depth_Inner() - nloops).Problem) {
        case SNL_LOOP_PROBLEM_NONE:
@@ -1507,9 +1593,9 @@ static void SNL_Transform(WN* wn,
 	break;
        case SNL_LOOP_PROBLEM_SCALAR: {
          SYMBOL var = ni.Problem(ni.Depth_Inner() - nloops).Var;
-         char* name = var.Name();
-         message = (char*) alloca(strlen(name) + 25);
-         sprintf(message, "%s unexpandable scalar", name);
+         const char* name = var.Name();
+         scalar_message = (char*) alloca(strlen(name) + 25);
+         sprintf(scalar_message, "%s unexpandable scalar", name);
         }
 	break;
        case SNL_LOOP_PROBLEM_LOOP: {
@@ -1530,6 +1616,7 @@ static void SNL_Transform(WN* wn,
         message = NULL;
 	Is_True(0, ("Missing excuse"));
       }
+      if (scalar_message) message = scalar_message;
       if (message) {
         if (LNO_Analysis)
           fprintf(LNO_Analysis,
@@ -1555,6 +1642,26 @@ static void SNL_Transform(WN* wn,
     if (LNO_Verbose) {
      printf("SNL not transforming nest,");
      printf(" transformable depth is less than two.\n");
+    }
+    if (nloops_original == 2 && nloops_t == 2)
+    {
+      if (Peel_2D_Triangle_Loops(wn_original))
+      {
+          // let the later phase Unroll_before_Factorize to
+          // unroll these loops
+          WN* parent_original=LWN_Get_Parent(wn_original);
+          while (parent_original && 
+            WN_operator(parent_original) != OPR_FUNC_ENTRY &&
+            WN_operator(parent_original) != OPR_DO_LOOP)
+            parent_original = LWN_Get_Parent(parent_original);
+
+          if (WN_operator(parent_original) == OPR_DO_LOOP)
+          {
+            DO_LOOP_INFO *dli = Get_Do_Loop_Info(parent_original);
+            if (dli) dli->Delay_Full_Unroll = TRUE;
+          }      
+      }    
+      return;
     }
     SNL_Optimize_Bounds(SNL_REGION(wn, wn));
     SNL_Transform(Find_Next_Innermost_Do(wn_original), nloops_original - 1); 
@@ -1684,6 +1791,53 @@ extern void SNL_Phase(WN* func_nd)
       fprintf(LNO_Analysis,")\n");
   }
 }
+
+#ifdef TARG_X8664
+extern void SNL_Lite_Phase(WN* func_nd)
+{
+  if (Get_Trace(TP_LNOPT, TT_LNO_SKIP_PH2))
+    return; 
+  if (Get_Trace(TP_LNOPT2, TT_SHACKLE_ONLY))
+    return;
+  if (PU_has_mp (Get_Current_PU ()) || Early_MP_Processing ||
+      PU_mp(Get_Current_PU ()))
+    return;
+  if (Get_Trace(TP_LNOPT2, TT_TILE_ONLY)) {
+    LNO_Run_Oinvar = FALSE; 
+    LNO_Outer_Unroll = 1; 
+  }
+
+  FIZ_FUSE_INFO* ffi=
+    CXX_NEW(FIZ_FUSE_INFO(&LNO_local_pool), &LNO_local_pool);
+  ffi->Build(func_nd);
+
+// Bug 6010: if the number of nests in a procedure exceeds
+// the limits, unrolling may require a large compilation time
+// memory. Setting to 1 will not directly affect any major LNO
+// optimizations 
+#ifdef KEY
+  if(ffi->Num_Snl() > MAX_NESTS_IN_FU)
+    LNO_Outer_Unroll = 1;
+#endif
+
+  if (LNO_Test_Dump)
+    for (INT i = 0; i < ffi->Num_Snl(); i++)
+      ffi->Print(i, TFile);
+
+  for (INT i = 0; i < ffi->Num_Snl(); i++) {
+    WN* wn = ffi->Get_Wn(i);
+    INT nloops = ffi->Get_Depth(i);
+    if (nloops < 1 || ffi->Get_Type(i) != Inner)
+      continue;
+    if (LNO_Analysis)
+      fprintf(LNO_Analysis, "(LNO_SNL\n");
+    SNL_Upper_Bound_Standardize(wn, nloops); 
+    SNL_Transform_Min(wn, nloops);
+    if (LNO_Analysis)
+      fprintf(LNO_Analysis,")\n");
+  }
+}
+#endif
 
 //-----------------------------------------------------------------------
 // NAME: RED_CLASS 

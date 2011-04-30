@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -45,7 +49,6 @@
 *** $Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.snl_dist.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -53,7 +56,7 @@
 #pragma hdrstop
 
 #define snl_dist_CXX      "snl_dist.cxx"
-static char *rcs_id =   snl_dist_CXX "$Revision: 1.5 $";
+const static char *rcs_id =   snl_dist_CXX "$Revision: 1.5 $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -512,7 +515,7 @@ static void Print_Distribution(FILE* file,
   } 
   fprintf(file, ") at ("); 
   for (i = outer; i <= inner; i++) { 
-    fprintf(file, "%d", (INT) WN_linenum(stack->Bottom_nth(i))); 
+    fprintf(file, "%d", Srcpos_To_Line(WN_linenum(stack->Bottom_nth(i)))); 
     if (i < inner) 
       fprintf(file, ","); 
   } 
@@ -658,7 +661,7 @@ WN* SNL_Distribute(DOLOOP_STACK* stack, INT inner, INT loopd, BOOL above)
 				  &LNO_default_pool);
 
     DO_LOOP_INFO* dli = CXX_NEW(DO_LOOP_INFO(&LNO_default_pool,
-      newlb, newub, newstep, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
+      newlb, newub, newstep, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
       (i == imperfect)), &LNO_default_pool);
     if (olddli->Lego_Info != NULL) 
       dli->Lego_Info = CXX_NEW(LEGO_INFO(olddli->Lego_Info, LEGO_pool),

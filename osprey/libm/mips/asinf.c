@@ -74,7 +74,13 @@ extern	float	asinf(float);
 #pragma weak asinf = __asinf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __asinf(float);
+#pragma weak asinf
+float asinf( float x ) {
+  return __asinf( x );
+}
+#elif defined(__GNUC__)
 extern  float  __asinf(float);
 float   asinf(float) __attribute__ ((weak, alias ("__asinf")));
 #endif

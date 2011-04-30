@@ -146,11 +146,7 @@ Boston, MA 02111-1307, USA.  */
 #endif
 
 #ifndef RELAX_SPEC
-#if 0 /* not supported yet */
-#define RELAX_SPEC "%{mrelax:-relax}"
-#else
 #define RELAX_SPEC ""
-#endif
 #endif
 
 #define EXTRA_SPECS							\
@@ -626,7 +622,6 @@ extern enum m32r_sdata m32r_sdata;
 #define SUBTARGET_REG_ALLOC_ORDER
 #endif
 
-#if 1 /* better for int code */
 #define REG_ALLOC_ORDER				\
 {						\
   4,  5,  6,  7,  2,  3,  8,  9, 10,		\
@@ -634,14 +629,6 @@ extern enum m32r_sdata m32r_sdata;
   SUBTARGET_REG_ALLOC_ORDER			\
 }
 
-#else /* better for fp code at expense of int code */
-#define REG_ALLOC_ORDER				\
-{						\
-   0,  1,  2,  3,  4,  5,  6,  7,  8,		\
-   9, 10, 11, 12, 13, 14, 15, 16, 17, 18	\
-  SUBTARGET_REG_ALLOC_ORDER			\
-}
-#endif
 
 /* Return number of consecutive hard regs needed starting at reg REGNO
    to hold something of mode MODE.
@@ -899,15 +886,6 @@ M32R_STACK_ALIGN (current_function_outgoing_args_size)
    pointer of the COUNT - 1 frame if `RETURN_ADDR_IN_PREVIOUS_FRAME'
    is defined.  */
 /* The current return address is in r14.  */
-#if 0 /* The default value should work.  */
-#define RETURN_ADDR_RTX(COUNT, FRAME) \
-(((COUNT) == -1)							\
- ? gen_rtx_REG (Pmode, 14)						\
- : copy_to_reg (gen_rtx_MEM (Pmode,					\
-			     memory_address (Pmode,			\
-					     plus_constant ((FRAME),	\
-							    UNITS_PER_WORD)))))
-#endif
 
 /* Register to use for pushing function arguments.  */
 #define STACK_POINTER_REGNUM 15
@@ -966,14 +944,6 @@ M32R_STACK_ALIGN (current_function_outgoing_args_size)
    If its value is nonzero the function will have a frame pointer.  */
 #define FRAME_POINTER_REQUIRED current_function_calls_alloca
 
-#if 0
-/* C statement to store the difference between the frame pointer
-   and the stack pointer values immediately after the function prologue.
-   If `ELIMINABLE_REGS' is defined, this macro will be not be used and
-   need not be defined.  */
-#define INITIAL_FRAME_POINTER_OFFSET(VAR) \
-((VAR) = m32r_compute_frame_size (get_frame_size ()))
-#endif
 
 /* If defined, this macro specifies a table of register pairs used to
    eliminate unneeded registers that point into the stack frame.  If
@@ -1043,10 +1013,6 @@ M32R_STACK_ALIGN (current_function_outgoing_args_size)
    This space can be allocated by the caller, or be a part of the
    machine-dependent stack frame: `OUTGOING_REG_PARM_STACK_SPACE' says
    which.  */
-#if 0
-#define REG_PARM_STACK_SPACE(FNDECL) \
-  (M32R_MAX_PARM_REGS * UNITS_PER_WORD)
-#endif
 
 /* Value is the number of bytes of arguments automatically
    popped when returning from a subroutine call.
@@ -1165,13 +1131,6 @@ M32R_STACK_ALIGN (current_function_outgoing_args_size)
 /* If defined, a C expression that gives the alignment boundary, in bits,
    of an argument with the specified mode and type.  If it is not defined, 
    PARM_BOUNDARY is used for all arguments.  */
-#if 0
-/* We assume PARM_BOUNDARY == UNITS_PER_WORD here.  */
-#define FUNCTION_ARG_BOUNDARY(MODE, TYPE) \
-(((TYPE) ? TYPE_ALIGN (TYPE) : GET_MODE_BITSIZE (MODE)) <= PARM_BOUNDARY \
- ? PARM_BOUNDARY \
- : 2 * PARM_BOUNDARY)
-#endif
 
 /* This macro offers an alternative
    to using `__builtin_saveregs' and defining the macro

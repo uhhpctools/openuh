@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -783,6 +787,12 @@ CODEREP::Propagatable_into_loop(const BB_LOOP *loop) const
 #ifdef KEY
 	|| Opr() == OPR_PURE_CALL_OP
 #endif
+#if defined(TARG_IA32) || defined(TARG_X8664)
+	|| Opr() == OPR_SELECT
+	|| Opr() == OPR_MIN
+	|| Opr() == OPR_MAX
+	|| Opr() == OPR_MINMAX
+#endif
        )
       return FALSE;
     return TRUE;
@@ -968,17 +978,6 @@ IVR::Generate_step(CODEREP *nv, CODEREP *iv) const
     }
   }
   
-#if 0
-  Disable this temp because iv has no type!  Bugs in htable?
-  
-  // call the simplifier to deal with more complicated expressions
-  if (delta == NULL && MTYPE_is_integral(nv->Dtyp())) {
-    OPCODE subop = OPCODE_make_op(OPR_SUB, dtype, MTYPE_V);
-    delta =  Htable()->Add_bin_node_and_fold(subop, 
-					     nv->Insert_CVTL(dtype,Htable()), 
-					     iv);
-  }
-#endif
   
   // The step expression contains the induction variable, either the
   // simplifier is not good enough, or it is not a valid candidate.
@@ -1207,10 +1206,6 @@ Primary_IV_preference(IV_CAND *iv, OPT_STAB *opt_stab)
   AUX_STAB_ENTRY *psym = opt_stab->Aux_stab_entry(aux_id);
   INT32 score = 1;
 
-#if 0	// IRM no longer supported
-  if (psym->Irm_generated())    // IRM generated, has no i=i insertion
-    score += 1000;
-#endif
 
   if (!psym->Points_to()->No_alias())  // has alias, unlikely to be dead
     score += 100;
@@ -1323,6 +1318,7 @@ IVR::Choose_primary_IV(const BB_LOOP *loop)
       STMTREP *init_stmt = init_value->Create_cpstmt(init_cr, Htable()->Mem_pool());
       Loop()->Preheader()->Append_stmtrep(init_stmt);
       init_stmt->Set_bb(Loop()->Preheader());
+      init_stmt->Set_linenum(Loop()->Preheader()->Linenum());
 
       OPCODE addop = OPCODE_make_op(OPR_ADD, mtype, MTYPE_V);
       CODEREP *step = Htable()->Add_const(mtype, 1);
@@ -1815,6 +1811,13 @@ IVR::Compute_trip_count(const OPCODE cmp_opc,
   //  The trip count is (bound - init + step + adjustmen) / step.
   //     
   CODEREP *trip_count = NO_TRIP_COUNT;
+#if defined(TARG_SL) || defined(TARG_PPC32)
+  if (!diff_divisable_by_step) {
+    if (step->Kind() == CK_CONST && step->Const_val() < 0) {
+      return NO_TRIP_COUNT;
+    }
+  }
+#endif
 
   // Always compute trip expr in signed integer.  This prevents a
   // problem if the step is unsigned (-1).  In the subsequent code,
@@ -1899,6 +1902,10 @@ IVR::Compute_trip_count(const OPCODE cmp_opc,
 	else if (adjustment == -1)
 	  tmp_cr = Htable()->Add_bin_node_and_fold(subop, tmp_cr, one);
 		   
+#ifdef TARG_SL
+        //step > 0, if tmp_cr is unsigned, set tripcount_type unsigned
+        tripcount_type = (tmp_cr->Dtyp() == MTYPE_U4) ? MTYPE_U4 : tripcount_type;
+#endif		   
 	OPCODE divop = OPCODE_make_op(OPR_DIV, tripcount_type, MTYPE_V);
 	trip_count =
           Htable()->Add_bin_node_and_fold(divop,
@@ -2348,6 +2355,30 @@ IVR::Determine_trip_IV_and_exit_count(BB_LOOP *loopinfo,
   if (trip_init == NULL || trip_step == NULL || trip_bound == NULL)
     return;
 
+#ifdef KEY // bug 13728: if there is wraparound, do not continue
+  if (trip_init->Kind() == CK_CONST && trip_step->Kind() == CK_CONST &&
+      trip_bound->Kind() == CK_CONST) {
+    if (MTYPE_signed(trip_cand->Var()->Dtyp()))
+      if (trip_step->Const_val() > 0) {
+	if (trip_init->Const_val() > trip_bound->Const_val())
+	  return;
+      }
+      else {
+	if (trip_init->Const_val() < trip_bound->Const_val())
+	  return;
+      }
+    else
+      if (trip_step->Const_val() > 0) {
+	if ((UINT64)trip_init->Const_val() > (UINT64)trip_bound->Const_val())
+	  return;
+      }
+      else {
+	if ((UINT64)trip_init->Const_val() < (UINT64)trip_bound->Const_val())
+	  return;
+      }
+  }
+#endif
+
   if (loopinfo->Test_at_entry()) {
     // the following trip equations only applies to DO_LOOP in preopt
     // the opr represents the exit condition, so it the init-value satisfy
@@ -2728,6 +2759,115 @@ IVR::Update_exit_stmt(const IV_CAND *secondary,
   Inc_exit_value_counter();
 }
 
+// This function is to canonicalize loop-exit brach. The necessity can 
+// be explained by the following example:
+//
+//   for (int i = n ; i < m; i++) { ... }
+// 
+// IVR introduces a var, say <prim_iv>, serveing as primary IV, making <i> 
+// secondary IV. Replace_secondary_IV() will replace all secondary IVs with 
+// <prim_iv>'s linear expr. In this case, the result would be:
+//
+//   for (int prim_iv = 0 ; (prim_iv + n) < m; prim_iv++) { ... }
+//
+//  The loop-exit branch is awkward. It is desirable to be in the form of:
+//      "prim_iv < m-n"
+//  This function is to serve for that purpose.
+//
+void
+IVR::Canon_loop_end_br (BB_LOOP* loop, IV_CAND* prim_iv_cand)
+{
+  if (!prim_iv_cand->Init_value () ||
+      prim_iv_cand->Init_value()->Kind () != CK_CONST ||
+      prim_iv_cand->Init_value()->Const_val () != 0) {
+    // TODO: handle these cases. These cases are possible if IVR is invoked 
+    //   in WOPT phase.
+    return;
+  }
+
+  STMTREP *stmt = loop->End()->Last_stmtrep();
+  if (stmt->Opr() != OPR_TRUEBR && stmt->Opr() != OPR_FALSEBR)
+    return; 
+
+  IV_CAND* second_iv_cand = NULL; 
+  CODEREP* up_bound = NULL;
+
+  CODEREP* cmp = stmt->Rhs ();
+  if (cmp->Kind() != CK_OP || !OPERATOR_is_compare (cmp->Opr ())) {
+    return;
+  }
+  CODEREP* kid_0 = cmp->Opnd (0);
+  CODEREP* kid_1 = cmp->Opnd (1);
+
+  // step 1: Figure out which secondary IV is involed in the branch,
+  //    in the mean time, figure out which operand is up-bound.
+  //
+  for (vector<IV_CAND*>::iterator iter = iv_cand_container.begin(); 
+       iter != iv_cand_container.end(); iter++) {
+    
+    IV_CAND *iv = *iter;
+    if (iv->Var ()) {
+      IDTYPE aux_id = iv->Var()->Aux_id();   
+      if (kid_0->Kind () == CK_VAR && aux_id == kid_0->Aux_id ()) {
+        up_bound = kid_1;
+        second_iv_cand = iv; 
+        break;
+      } else if (kid_1->Kind () == CK_VAR && aux_id == kid_1->Aux_id ()) {
+        up_bound = kid_0;
+        second_iv_cand = iv; 
+        break;
+      }
+    }
+  }
+
+  if (!second_iv_cand)
+    return;
+
+  CODEREP* second_iv = second_iv_cand->Var ();
+  CODEREP* prim_iv = prim_iv_cand->Var ();
+  if (second_iv->Aux_id () == prim_iv->Aux_id ()) {
+    // don't bother. It is already canonilocalized
+    //
+    return;
+  }
+
+  if (second_iv_cand->Step_value () == NULL ||
+      second_iv_cand->Step_value ()->Kind () != CK_CONST ||
+      second_iv_cand->Step_value ()->Const_val () != 1) {
+    // TODO: handle non-unit stride
+    return;
+  }
+  
+  MTYPE second_iv_ty = second_iv->Dtyp ();
+  MTYPE prim_iv_ty = prim_iv->Dtyp ();
+
+  if (MTYPE_is_signed (second_iv_ty) != MTYPE_is_signed (prim_iv_ty) ||
+      MTYPE_byte_size (second_iv_ty) != MTYPE_byte_size (prim_iv_ty)) {
+    // TODO: handle these cases.
+    return;
+  }
+
+  // step 2: generate normalized comparision: "<prim_iv> <cmp_op> expr"
+  //   or "<expr> <cmp_op> <prim_iv> depending on the order of orignial 
+  //   comparision.
+  //
+  OPCODE subop = OPCODE_make_op (OPR_SUB, prim_iv->Dtyp (), MTYPE_V);
+  CODEREP* norm_iv = Htable()->Add_bin_node_and_fold (subop, 
+                                up_bound, second_iv_cand->Init_value());
+                                     
+  OPCODE cmp_op = OPCODE_make_op (cmp->Opr (), prim_iv->Dtyp(), prim_iv->Dtyp());
+
+  CODEREP* new_cmp;
+  if (up_bound == kid_1) {
+    new_cmp = Htable()->Add_bin_node_and_fold (cmp_op, prim_iv, norm_iv);
+  } else {
+    new_cmp = Htable()->Add_bin_node_and_fold (cmp_op, norm_iv, prim_iv);
+  }
+
+  // step 3: update the branch statement
+  //
+  stmt->Set_rhs (new_cmp);
+}
 
 // ====================================================================
 //
@@ -2861,6 +3001,8 @@ IVR::Convert_all_ivs(BB_LOOP *loop)
 
   loop->Set_iv(primary->Var());
   if (_trace) { fprintf(TFile, "PRIMARY "); primary->Print(TFile); }
+
+  Canon_loop_end_br (loop, primary);
 
   for (iv_cand_iter = iv_cand_container.begin(); 
        iv_cand_iter != iv_cand_container.end();

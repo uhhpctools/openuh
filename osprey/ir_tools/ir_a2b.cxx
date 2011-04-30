@@ -39,9 +39,15 @@
 
 #include <errno.h>		    /* for sys_errlist */
 #include <stdio.h>		    /* for stderr */
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#else
 #include <libgen.h>		    /* for basename() */
+#endif /* __MINGW32__ */
 #include <sys/stat.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>
+#endif /* ! defined(BUILD_OS_DARWIN) */
 #include "defs.h"
 #include "mempool.h"
 #include "wn.h"			    /* for ir_reader.h */
@@ -150,6 +156,7 @@ ir_b2a_process_PUs (PU_Info *pu_tree, BOOL stflag, BOOL fbflag)
 	wn = PU_Info_tree_ptr(pu);
 	if (simplify_tree) wn = WN_Simplify_Tree(wn);
 
+	Current_PU_Info = pu;
 	IR_put_func (wn, NULL);
 
 	if (PU_Info_child(pu)) {
@@ -316,17 +323,18 @@ ir_all (char *input_file, char *output_file)
     Close_Output_Info ();
     Free_Input_Info ();
 
-} /* ir_sel */
+} /* ir_all */
 
 static void
 usage (char *progname)
 {
   INT a2b, b2a, sel, all;
 
-  a2b = (strcmp (progname, "ir_a2b") == 0);
-  b2a = (strcmp (progname, "ir_b2a") == 0);
-  sel = (strcmp (progname, "ir_sel") == 0);
-  all = (strcmp (progname, "ir_all") == 0);
+  // programes on windows are suffixed with .exe, so ignore that part
+  a2b = (strncmp (progname, "ir_a2b",6) == 0);
+  b2a = (strncmp (progname, "ir_b2a",6) == 0);
+  sel = (strncmp (progname, "ir_sel",6) == 0);
+  all = (strncmp (progname, "ir_all",6) == 0);
   
   if (a2b) {
       fprintf (stderr, "New symbol table format not supported by ir_a2b (yet)\n");
@@ -341,10 +349,11 @@ usage (char *progname)
     fprintf (stderr, "\t-sym <.G file> is the same as -global_local\n");
   } else if (sel) {
     fprintf (stderr, "Usage: %s <function> <Binary IR input> [<Binary IR output>]\n", progname);
+
   } else if (all) {
     fprintf (stderr, "Usage: %s <Binary IR input> [<Binary IR output>]\n", progname);
-
   }
+
   exit (1);
 }
 
@@ -365,14 +374,26 @@ main (INT argc, char *argv[])
     Set_Error_File(NULL);
     Set_Error_Line(ERROR_LINE_UNKNOWN);
     WHIRL_Mldid_Mstid_On = TRUE;
-
+#ifdef __MINGW32__
+    progname = argv[0] + strlen (argv[0]);
+    while (progname >= argv[0]) {
+	if (*progname == '/' || *progname == '\\') {
+	    progname++;
+	    break;
+	}
+	progname--;
+    }
+#else
     progname = basename (argv[0]);
+#endif /* __MINGW32__ */
+
     // weird linux bug with basename where it doesn't strip the leading /
     if (*progname == '/') ++progname;
-    a2b = (strcmp (progname, "ir_a2b") == 0);
-    b2a = (strcmp (progname, "ir_b2a") == 0);
-    sel = (strcmp (progname, "ir_sel") == 0);
-    all = (strcmp (progname, "ir_all") == 0);
+    // programes on windows are suffixed with .exe, so ignore that part
+    a2b = (strncmp (progname, "ir_a2b",6) == 0);
+    b2a = (strncmp (progname, "ir_b2a",6) == 0);
+    sel = (strncmp (progname, "ir_sel",6) == 0);
+    all = (strncmp (progname, "ir_all",6) == 0);
 
     if (a2b) {
 	usage (progname);
@@ -472,7 +493,7 @@ main (INT argc, char *argv[])
 void
 Signal_Cleanup (INT sig) { }
 
-char *
+const char *
 Host_Format_Parm (INT kind, MEM_PTR parm)
 {
     fprintf (stderr, "Internal: Host_Format_Parm () not implemented\n");

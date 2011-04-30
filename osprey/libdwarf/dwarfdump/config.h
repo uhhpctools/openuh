@@ -8,7 +8,11 @@
 #define HAVE_ELF64_R_INFO 1
 
 /* Define to 1 if you have the <elf.h> header file. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_ELF_H
+#else /* defined(BUILD_OS_DARWIN) */
 #define HAVE_ELF_H 1
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define to 1 if you have the <getopt.h> header file. */
 #define HAVE_GETOPT_H 1
@@ -17,10 +21,18 @@
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the <libelf.h> header file. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_LIBELF_H
+#else /* defined(BUILD_OS_DARWIN) */
 #define HAVE_LIBELF_H 1
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define to 1 if you have the <libelf/libelf.h> header file. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_LIBELF_LIBELF_H
+#else /* defined(BUILD_OS_DARWIN) */
 /* #undef HAVE_LIBELF_LIBELF_H */
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1

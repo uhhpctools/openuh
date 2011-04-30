@@ -58,4 +58,9 @@ complex c_cos_(complex *z)
   return __ccos(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_cos(complex *z) { return c_cos_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_cos_, c_cos);
+#endif /* defined(BUILD_OS_DARWIN) */

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * =======================================================================
  *
  *  Module: ebo_util.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/ebo_util.h,v $
+ *  $Revision: 1.17 $
+ *  $Date: 05/12/05 08:59:06-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.ebo_util.h $
  *
  *  Revision comments:
  *
@@ -121,6 +125,20 @@ EBO_tn_available(BB *bb,
   if (!EBO_in_peep &&
       ((bb != tn_bb) &&
        has_assigned_reg(tn))) return FALSE;
+
+#ifdef KEY
+  // Don't extend the live-range of homeable GTNs.  If the live-range is
+  // extended and GRA spills in the extended region, the spill could overwrite
+  // a store in the extended region that stores to the home location.
+  // Bug 14294.
+  if (Opt_Level >= 2 &&		// Global TN's aren't supported at low levels
+      TN_is_global_reg(tn) &&	// of optimization.
+      TN_is_gra_homeable(tn) &&
+      !GRA_LIVE_TN_Live_Into_BB(tn, bb)) {
+    return FALSE;
+  }
+#endif
+
   return TRUE;
 }
 
@@ -173,6 +191,27 @@ EBO_hash_op (OP *op,
 	if (TN_is_constant(ctn) && TN_is_symbol(ctn) && 
 	    TN_var(ctn) == TN_spill(spill_tn))
 	  hash_value = EBO_SPILL_MEM_HASH;
+      }
+    }
+    // The above test doesn't catch all cases of EBO_SPILL_MEM_HASH:
+    // 1)  TN_has_spill may be false even for spill OP.  This occurs for a
+    //     spill store when EBO has substituted the storeval with another TN
+    //     whose TN_has_spill is false.  Bug 12965.
+    // 2)  It is possible TN_var(ctn) != TN_spill(spill_tn).  For example:
+    //       TN100($11) = ld .. (sym:gra_spill_temp_200)
+    //       sd TN100($11) .. (sym:gra_spill_temp_201)
+    //     For the "sd":
+    //	     spill_tn is TN100($11); TN_spill(spill_tn) is gra_spill_temp_200
+    //	     ctn is (sym:gra_spill_temp_201); TN_var(ctn) is gra_spill_temp_201
+    //	   TN_spill is different from TN_var.  Bug 13223.
+    if (hash_value != EBO_SPILL_MEM_HASH) {
+      const INT n = TOP_Find_Operand_Use(OP_code(op), OU_offset);
+      if (n >= 0) {
+        TN *tn = OP_opnd(op, n);
+        if (TN_is_symbol(tn) &&
+  	    CGSPILL_Is_Spill_Location(TN_var(tn))) {
+	  hash_value = EBO_SPILL_MEM_HASH;
+        }
       }
     }
 #else
@@ -243,7 +282,7 @@ add_to_hash_table ( BOOL in_delay_slot,
     }
 #endif
     if ((tnr != NULL) && (tnr != True_TN) && (tnr != Zero_TN)) {
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
       TN* tmp_tn = CGTARG_Gen_Dedicated_Subclass_TN( op, idx, TRUE );
       if( tmp_tn == NULL )
 	tmp_tn = tnr;
@@ -275,9 +314,7 @@ add_to_hash_table ( BOOL in_delay_slot,
   }
 }
 
-
-
-
+#if !defined(TARG_SL)
 inline
 BOOL
 tn_registers_identical (TN *tn1, TN *tn2)
@@ -288,9 +325,7 @@ tn_registers_identical (TN *tn1, TN *tn2)
            (TN_is_dedicated(tn2) || (TN_register(tn2) != REGISTER_UNDEFINED)) &&
 	   (TN_register_and_class(tn1) == TN_register_and_class(tn2)))));
 }
-
-
-
+#endif
 
 inline
 EBO_OP_INFO *
@@ -340,7 +375,7 @@ EBO_OPS_predicate(TN *predicate_tn, OPS *ops)
 }
 
 
-
+extern void Expand_Copy (TN *result, TN *src, TYPE_ID mtype, OPS *ops);
 
 inline
 void

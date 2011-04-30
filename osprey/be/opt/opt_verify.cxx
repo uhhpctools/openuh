@@ -1,4 +1,12 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
+
+/*
+ * Copyright 2007 (C) PathScale, LLC.  All Rights Reserved.
+ */
 
 /*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -546,6 +554,8 @@ CODEREP::Verify_CODEMAP(CODEMAP *htable, OPT_STAB *opt_stab, BOOL allow_zero_ver
       Ilod_base()->Verify_CODEMAP(htable, opt_stab, FALSE);
       if (Opr() == OPR_MLOAD)
 	Mload_size()->Verify_CODEMAP(htable, opt_stab, FALSE);
+      if (Opr() == OPR_ILOADX)
+	Index()->Verify_CODEMAP(htable, opt_stab, FALSE);
       MU_NODE *mnode = Ivar_mu_node();
       if (mnode)
 	FmtAssert(mnode->Aux_id() != opt_stab->Return_vsym(),
@@ -750,7 +760,7 @@ COMP_UNIT::Verify_CODEMAP(void)
 // Check that the given coderep's Defbb() dominates the bb where the
 // coderep is used.
 BOOL
-Def_before_use(const CODEREP *cr, const BB_NODE *use_bb)
+Def_before_use(CODEREP *cr, const BB_NODE *use_bb)
 {
   // Defbb() is not set for zero versions since their points of
   // definition are unknown.
@@ -783,6 +793,27 @@ Def_before_use(const CODEREP *cr, const BB_NODE *use_bb)
     return TRUE;
   case CK_OP:
     {
+        /* If this node has been visited and has the same BB
+         * return true. If there was a use before the def it would
+         * have been flaged on the first traversal.
+         * This limits but not eliminates redundant calls.
+         */
+        if (cr->Is_isop_flag_set(ISOP_DEF_BEFORE_VISITED)
+        &&  use_bb == cr->Get_ISOP_def_before_use_cache())
+        {
+            // Would have already warned
+            return TRUE;
+        }
+        else
+        {
+            /* Set the visited flag and cache the BB.
+             * We cache the BB as this functions makes decisions based
+             * in it. Therefore, only paths with the same BB  as the last
+             * can be eliminated.
+             */
+            cr->Set_isop_flag(ISOP_DEF_BEFORE_VISITED);
+            cr->Set_ISOP_def_before_use_cache(use_bb);
+        }
       for (INT j = 0; j < cr->Kid_count(); j++)
 	if (!Def_before_use(cr->Opnd(j), use_bb)) {
 	  DevWarn("Def_before_use: inserted use before def (Opnd(%d))", j);
@@ -948,6 +979,8 @@ Verify_version_expr(CODEREP *expr, OPT_STAB *opt_stab, BB_NODE *bb, INT32 linenu
       Verify_version_expr(expr->Istr_base(), opt_stab, bb, linenum);
     if (expr->Opr() == OPR_MLOAD)
       Verify_version_expr(expr->Mload_size(), opt_stab, bb, linenum); 
+    if (expr->Opr() == OPR_ILOADX)
+      Verify_version_expr(expr->Index(), opt_stab, bb, linenum); 
     if (! WOPT_Enable_VN_Full) {
       MU_NODE *mnode = expr->Ivar_mu_node();
       if (mnode)
@@ -964,6 +997,17 @@ Verify_version_expr(CODEREP *expr, OPT_STAB *opt_stab, BB_NODE *bb, INT32 linenu
     
   case CK_OP:
     {
+        /* Here if the node has been visited we simply return
+         *  as any corrective action should have been taken previously.
+         *  otherwise we set visited and continue.
+         *  Note: If ever this function OR a called function conditionally
+         *  depends on anything other then the CR (expr) we can not simply
+         *  return and must cache the information per path see Def_before_use
+         */
+        if (expr->Is_isop_flag_set(ISOP_VERIFY_EXPR_VISITED))
+            return;
+        else
+            expr->Set_isop_flag (ISOP_VERIFY_EXPR_VISITED);
       for (INT32 i = 0; i < expr->Kid_count(); i++) {
 	Verify_version_expr(expr->Opnd(i), opt_stab, bb, linenum); 
       }
@@ -1144,6 +1188,8 @@ COMP_UNIT::Verify_version(void)
 void
 CODEMAP::Verify_hashing(void)
 {
+#ifndef KEY // bug 13042: this is found to cause the WHIRL output by wopt to
+  	    // have some operands of ADD arbitrarily swapped
 #ifdef Is_True_On
   CODEREP_ITER cr_iter;
   CODEREP *cr,*bucket;
@@ -1165,14 +1211,10 @@ CODEMAP::Verify_hashing(void)
       case CK_RCONST:
 	// Make this into assertion after bug fixes
 	if (hash_idx != Hash(cr)) {
-#if 0	  
-	  DevWarn("CODEMAP::Verify_hashing:  cr%d does not belong to hash bucket %d, "
-		  "should be in bucket %d.",
-		  cr->Coderep_id(), hash_idx, Hash(cr));
-#endif
 	}
       }
     }
   }
+#endif
 #endif
 }

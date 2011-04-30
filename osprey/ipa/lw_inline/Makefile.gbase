@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -126,7 +128,7 @@ HEADER_DIRS = \
   $(SRC_DIRS)		\
   $(COMMON_COM_TARG_DIR) \
   $(COMMON_UTIL_DIR)	\
-  $(TARGDIR)/be		\
+  $(TARG_BE_DIR)	\
   $(BE_VHO_DIR)		\
   $(BUILD_TOT)/include
 
@@ -178,10 +180,14 @@ BE_COM_CXX_SRCS = \
 BE_LNO_CXX_SRCS = \
 	lwn_util.cxx \
 
+ifneq ($(BUILD_VARIANT), STATIC)
 COMMON_COM_CXX_SRCS = \
         dwarf_DST.cxx      \
         dwarf_DST_mem.cxx       \
-        dwarf_DST_producer.cxx  \
+        dwarf_DST_producer.cxx
+else
+COMMON_COM_CXX_SRCS =
+endif
 
 IPA_SRCS = \
    $(IPA_LOCAL_SRCS) \
@@ -220,19 +226,28 @@ GLDOPTS = $(STD_LOAD_OPTS) $(LD_QUICKSTART_INFO)
 
 TARGETS = lw_inline
 
-LDIRT = be.so ii_files
+LDIRT = be.so ii_files ${TARGETS}
 
+ifneq ($(BUILD_VARIANT), STATIC)
 LLDOPTS = -Wl,--export-dynamic
+endif
 LLDLIBS = 
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(TARG_BE_DIR))
+endif
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is
@@ -252,9 +267,14 @@ else
  endif
 endif
 
+ifneq ($(BUILD_VARIANT), STATIC)
 lw_inline: $(IPA_OBJS) $(IPA_CXX_OBJS)
-	if ! test -a be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
+	if ! test -e be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
 	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) be.so  $(LDFLAGS)
+else
+lw_inline: $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/libbe.a
+	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/libbe.a $(LDFLAGS)
+endif
 
 #----------------------------------------------------------------------
 #  Include the usual commonrules

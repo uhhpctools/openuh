@@ -1,31 +1,35 @@
 /*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
-////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright 2006 PathScale, Inc. All Rights Reserved.
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of version 2 of the GNU General Public License as
-// published by the Free Software Foundation.
-//
-// This program is distributed in the hope that it would be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-//
-// Further, this software is distributed without any warranty that it is
-// free of the rightful claim of any third person regarding infringement
-// or the like.  Any license provided herein, whether implied or
-// otherwise, applies only to this software file.  Patent licenses, if
-// any, provided herein do not apply to combinations of this program with
-// other software, or any other product whatsoever.
-//
-// You should have received a copy of the GNU General Public License along
-// with this program; if not, write the Free Software Foundation, Inc., 59
-// Temple Place - Suite 330, Boston MA 02111-1307, USA.
-//
-////////////////////////////////////////////////////////////////////////////////
+/*
+ * Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/* */
+/* */
+/* Copyright 2006 PathScale, Inc. All Rights Reserved. */
+/* */
+/* This program is free software; you can redistribute it and/or modify it */
+/* under the terms of version 2 of the GNU General Public License as */
+/* published by the Free Software Foundation. */
+/* */
+/* This program is distributed in the hope that it would be useful, but */
+/* WITHOUT ANY WARRANTY; without even the implied warranty of */
+/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. */
+/* */
+/* Further, this software is distributed without any warranty that it is */
+/* free of the rightful claim of any third person regarding infringement */
+/* or the like.  Any license provided herein, whether implied or */
+/* otherwise, applies only to this software file.  Patent licenses, if */
+/* any, provided herein do not apply to combinations of this program with */
+/* other software, or any other product whatsoever. */
+/* */
+/* You should have received a copy of the GNU General Public License along */
+/* with this program; if not, write the Free Software Foundation, Inc., 59 */
+/* Temple Place - Suite 330, Boston MA 02111-1307, USA. */
+/* */
+/* */
 
 #ifndef __GSPIN_TREE_H__
 #define __GSPIN_TREE_H__
@@ -38,15 +42,15 @@
 
 typedef enum gs_code {
 
- // Generic core stuff:
+ /* Generic core stuff: */
 
  DOT,
 
- // list
+ /* list */
  EMPTY,
  CONS,
 
- // Inbuilt Constructors:
+ /* Inbuilt Constructors: */
 
  IB_INT,
  IB_UNSIGNED,
@@ -66,7 +70,7 @@ typedef enum gs_code {
  GSBI,
  GSBI_CLASS,
 
- // GCC Specific tree codes:
+ /* GCC Specific tree codes: */
 
  GS_ABS_EXPR,
  GS_ADDR_EXPR,
@@ -93,7 +97,7 @@ typedef enum gs_code {
  GS_CEIL_DIV_EXPR,
  GS_CEIL_MOD_EXPR,
  GS_CHAR_TYPE,
- GS_CLEANUP, // TODO: Same as GS_CLEANUP_POINT_EXPR?
+ GS_CLEANUP, /* TODO: Same as GS_CLEANUP_POINT_EXPR? */
  GS_CLEANUP_POINT_EXPR,
  GS_COMPLEX_CST,
  GS_COMPLEX_EXPR,
@@ -163,6 +167,18 @@ typedef enum gs_code {
  GS_NOP_EXPR,
  GS_OBJ_TYPE_REF,
  GS_OFFSET_TYPE,
+#ifdef FE_GNU_4_2_0
+ GS_OMP_ATOMIC,
+ GS_OMP_CLAUSE,
+ GS_OMP_CRITICAL,
+ GS_OMP_FOR,
+ GS_OMP_MASTER,
+ GS_OMP_ORDERED,
+ GS_OMP_PARALLEL,
+ GS_OMP_SECTION,
+ GS_OMP_SECTIONS,
+ GS_OMP_SINGLE,
+#endif
  GS_ORDERED_EXPR,
  GS_PARM_DECL,
  GS_PHI_NODE,
@@ -174,7 +190,7 @@ typedef enum gs_code {
  GS_POSTINCREMENT_EXPR,
  GS_PREDECREMENT_EXPR,
  GS_PREINCREMENT_EXPR,
- GS_PROGRAM, // Not in GCC.
+ GS_PROGRAM, /* Not in GCC. */
  GS_QUAL_UNION_TYPE,
  GS_RANGE_EXPR,
  GS_RDIV_EXPR,
@@ -195,7 +211,7 @@ typedef enum gs_code {
  GS_SCEV_KNOWN,
  GS_SCEV_NOT_KNOWN,
  GS_SCOPE,
- GS_SCOPE_STMT,		// Can delete because GCC 4 does not have SCOPE_STMT.  
+ GS_SCOPE_STMT,		/* Can delete because GCC 4 does not have SCOPE_STMT.   */
  GS_SIZEOF_EXPR,
  GS_SSA_NAME,
  GS_STATEMENT_LIST,
@@ -283,7 +299,8 @@ typedef enum gs_code {
  GS_UNBOUND_CLASS_TEMPLATE,
  GS_VEC_DELETE_EXPR,
  GS_VEC_NEW_EXPR,
- GS_TEMPLATE_TEMPLATE_PARM, // this is 233; should not be higher than 255
+ GS_TEMPLATE_TEMPLATE_PARM, /* this is 233; should not be higher than 255 */
+ GS_FREQ_HINT_STMT
 
 } gs_code_t;
 
@@ -298,7 +315,7 @@ typedef enum gs_tree_code_class {
  GS_TCC_UNARY,
  GS_TCC_BINARY,
  GS_TCC_STATEMENT,
- GS_TCC_EXPRESSION,
+ GS_TCC_EXPRESSION
 
 } gs_tree_code_class_t;
 
@@ -313,37 +330,47 @@ extern int gspin_node_size(gs_code_t code);
 typedef struct gspin *gs_t;
 typedef gs_t *gs_vec_t;
 
-typedef struct gspin 
+
+/* Bug 13134: gspin_t should have alignment 4 to conserve memory. */
+/* Data types with alignment 8 and higher are stored in u1.data[] and */
+/* realigned in the inline procedures below using gs_realign_t. */
+typedef struct gspin
 {
-  union { // byte 0
+  union { /* byte 0 */
     struct {
-      gs_code_t	code:8;
+      unsigned int	code:8;         /*gs_code_t*/
       unsigned int	emitted:1;
-      unsigned int	slen:23;	// length part of IB_STRING
+      unsigned int	slen:23;	/* length part of IB_STRING */
     } u0s0;
-    struct { // byte 0
-      char		unused1;	// space for code
-      char		unused2;	// space for emitted flag
-      union { // byte 2
-	unsigned char	byte;	// IB_BOOL, IB_CHAR, GS_TCC, GSBI_CLASS
-	unsigned short	hword;	// GSBI
+    struct { /* byte 0 */
+      char		unused1;	/* space for code */
+      char		unused2;	/* space for emitted flag */
+      union { /* byte 2 */
+	unsigned char	byte;	/* IB_BOOL, IB_CHAR, GS_TCC, GSBI_CLASS */
+	unsigned short	hword;	/* GSBI */
       } u0s1u;
     } u0s1;
   } u0;
-  union { // byte 4
-    unsigned int	u;	// IB_UNSIGNED, IB_UNSIGNED_LONG
-    int			n;	// IB_INT, IB_LONG
-    float		f;	// IB_FLOAT
-    gs_t		arg[1];	// for pointing to kids of non-leaf nodes
-    char *		s;	// pointer part of IB_STRING
-  } u1;
-  union { // byte 8
-    long long		ll;	// IB_LONG_LONG
-    unsigned long long	ull;	// IB_UNSIGNED_LONG_LONG, IB_BIT_VECTOR
-    double		d;	// IB_DOUBLE
-    long double		ld;	// IB_LONG_DOUBLE
-  } u2;
-} gspin_t __attribute__((aligned(4)));
+  union { /* byte 4 */
+    unsigned int	u;	/* IB_UNSIGNED, IB_UNSIGNED_LONG */
+    int			n;	/* IB_INT, IB_LONG */
+    float		f;	/* IB_FLOAT */
+    gs_t		arg[1];	/* for pointing to kids of non-leaf nodes */
+    char *		s;	/* pointer part of IB_STRING */
+    int			data[4]; /* All types larger than 4 bytes (see */
+  } u1;				 /*   gs_realign_t below) */
+} gspin_t;
+
+
+typedef union gs_realign
+{
+  int data[4];
+  long long		ll;	/* IB_LONG_LONG */
+  unsigned long long	ull;	/* IB_UNSIGNED_LONG_LONG, IB_BIT_VECTOR */
+  double		d;	/* IB_DOUBLE */
+  long double		ld;	/* IB_LONG_DOUBLE */
+} gs_realign_t;
+
 
 static inline gs_void_t _gs_code (gs_t node, gs_code_t c)
 {
@@ -399,33 +426,77 @@ static inline unsigned int gs_hword(gs_t node)
 
 static inline gs_void_t _gs_bv (gs_t node, gs_count_t position, bool bit)
 {
-  unsigned long long k;
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
   GS_ASSERT (bit == true || bit == false, "Bad bit value");
-  // Per Bug 10335, return right away if the value of parameter bit is 0.
+  /* Per Bug 10335, return right away if the value of parameter bit is 0. */
   if (bit == false)
     return;
-  k = 1LL << position;
-  node->u2.ull |= k;
+  realign.ull = 1LL << position;
+  node->u1.data[0] |= realign.data[0];
+  node->u1.data[1] |= realign.data[1];
   return;
 }
 
 static inline bool gs_bv (gs_t node, unsigned int position)
 {
+  gs_realign_t realign;
+  unsigned long long k = 1LL << position;
   if (node == NULL)
     return false;
-  unsigned long long k = 1LL << position;
-  return (k & node->u2.ull) != 0;
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  return (k & realign.ull) != 0;
 }
 
 static inline gs_void_t _gs_bv_reset (gs_t node, unsigned int position)
 {
-  unsigned long long k;
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  k = 1LL << position;
-  node->u2.ull &= ~k;
+  realign.ull = ~(1LL << position);
+  node->u1.data[0] &= realign.data[0];
+  node->u1.data[1] &= realign.data[1];
   return;
 }
+
+static inline gs_void_t _gs_bitsv (gs_t node, gs_count_t position, 
+                                   unsigned int bits, unsigned long val )
+{
+  gs_realign_t realign;
+  unsigned long long mask;
+  GS_ASSERT (node != (gs_t) NULL, "Got null node");
+  GS_ASSERT (bits < 32, "bits exceeds limits");
+  mask = (1LL << bits) - 1;
+  val &= mask;  /* truncate the value to bits length */
+
+  /* get old value */
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+
+  realign.ull &= ~(mask << position);
+  realign.ull |= val << position;
+
+  node->u1.data[0] |= realign.data[0];
+  node->u1.data[1] |= realign.data[1];
+  return;
+}
+
+static inline unsigned long gs_bitsv (gs_t node, unsigned int position, 
+                                      unsigned int bits)
+{
+  gs_realign_t realign;
+  unsigned long long mask;
+  unsigned long k;
+  if (node == NULL)
+    return false;
+  GS_ASSERT (bits < 64, "bits exceeds limits");
+  mask = (1LL << bits) - 1;
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  k = (realign.ull >> position) & mask;
+  return k;
+}
+
 static inline gs_void_t _gs_n (gs_t node, int n)
 {
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
@@ -454,55 +525,67 @@ static inline gs_unsigned_t gs_u (gs_t node)
 
 static inline gs_void_t _gs_ull (gs_t node, gs_unsigned_long_long_t ull)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  node->u2.ull = ull;
+  realign.ull = ull;
+  node->u1.data[0] = realign.data[0];
+  node->u1.data[1] = realign.data[1];
   return;
 }
 
 static inline gs_unsigned_long_long_t gs_ull (gs_t node)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  return node->u2.ull;
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  return realign.ull;
 }
 
 static inline gs_void_t _gs_ll (gs_t node, gs_long_long_t ll)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  node->u2.ll = ll;
+  realign.ll = ll;
+  node->u1.data[0] = realign.data[0];
+  node->u1.data[1] = realign.data[1];
   return;
 }
 
 static inline gs_long_long_t gs_ll (gs_t node)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  return node->u2.ll;
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  return realign.ll;
 }
 
 static inline gs_void_t _gs_ld (gs_t node, gs_long_double_t ld)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-#ifdef TARG_IA64  
-  if ( (gs_unsigned_long_t)(&(node->u2.ld)) % 16 != 0 )
-    /* using memcpy to avoid unaligned access on IA64 for long double */
-    memcpy( &(node->u2.ld), &(ld), sizeof(gs_long_double_t) );
-  else
+  realign.ld = ld;
+  node->u1.data[0] = realign.data[0];
+  node->u1.data[1] = realign.data[1];
+  node->u1.data[2] = realign.data[2];
+#if defined(ARCH_MIPS) || defined(TARG_IA64)
+  node->u1.data[3] = realign.data[3];
 #endif
-    node->u2.ld = ld;
   return;
 }
 
 static inline gs_long_double_t gs_ld (gs_t node)
 {
-  gs_long_double_t ret;
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-#ifdef TARG_IA64
-  if ( (gs_unsigned_long_t)(&(node->u2.ld)) % 16 != 0 )
-    /* using memcpy to avoid unaigned access on IA64 for long double */
-    memcpy( &(ret), &(node->u2.ld), sizeof(gs_long_double_t) );
-  else
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  realign.data[2] = node->u1.data[2];
+#ifdef ARCH_MIPS
+  realign.data[3] = node->u1.data[3];
 #endif
-    ret = node->u2.ld;
-  return ret;
+  return realign.ld;
 }
 
 static inline gs_void_t _gs_c (gs_t node, gs_char_t c)
@@ -533,15 +616,21 @@ static inline gs_float_t gs_f (gs_t node)
 
 static inline gs_void_t _gs_d (gs_t node, gs_double_t d)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  node->u2.d = d;
+  realign.d = d;
+  node->u1.data[0] = realign.data[0];
+  node->u1.data[1] = realign.data[1];
   return;
 }
 
 static inline gs_double_t gs_d (gs_t node)
 {
+  gs_realign_t realign;
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  return node->u2.d;
+  realign.data[0] = node->u1.data[0];
+  realign.data[1] = node->u1.data[1];
+  return realign.d;
 }
 
 extern gs_void_t _gs_s (gs_t node, const gs_string_t s,
@@ -576,7 +665,7 @@ static inline unsigned int gs_slen(gs_t op)
 static inline gs_code_t gs_code (gs_t node)
 {
   GS_ASSERT (node != (gs_t) NULL, "Got null node");
-  return node->u0.u0s0.code;
+  return (gs_code_t) node->u0.u0s0.code;
 }
 
 static inline gs_code_t gs_tree_code(gs_t node) { return gs_code(node); }
@@ -586,15 +675,15 @@ static inline gs_t gs_operand(gs_t node, int i)
   return node->u1.arg[i];
 }
 
-// gs_t field accessors/modifiers-
+/* gs_t field accessors/modifiers- */
 
 extern gs_t __gs (gs_code_t code);
 
 
-// Auxiliary
+/* Auxiliary */
 extern gs_void_t gs_dump (gs_t t);
 
-// This is GCC specific and ideally ought to be abstracted out into gspin-tel.h maybe.
+/* This is GCC specific and ideally ought to be abstracted out into gspin-tel.h maybe. */
 typedef enum gsbi {
 
   GSBI_BUILT_IN_ACOS,
@@ -693,6 +782,11 @@ typedef enum gsbi {
   GSBI_BUILT_IN_INF,
   GSBI_BUILT_IN_INFF,
   GSBI_BUILT_IN_INFL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_INFD32,
+  GSBI_BUILT_IN_INFD64,
+  GSBI_BUILT_IN_INFD128,
+#endif
   GSBI_BUILT_IN_J0,
   GSBI_BUILT_IN_J0F,
   GSBI_BUILT_IN_J0L,
@@ -702,12 +796,30 @@ typedef enum gsbi {
   GSBI_BUILT_IN_JN,
   GSBI_BUILT_IN_JNF,
   GSBI_BUILT_IN_JNL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_LCEIL,
+  GSBI_BUILT_IN_LCEILF,
+  GSBI_BUILT_IN_LCEILL,
+#endif
   GSBI_BUILT_IN_LDEXP,
   GSBI_BUILT_IN_LDEXPF,
   GSBI_BUILT_IN_LDEXPL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_LFLOOR,
+  GSBI_BUILT_IN_LFLOORF,
+  GSBI_BUILT_IN_LFLOORL,
+#endif
   GSBI_BUILT_IN_LGAMMA,
   GSBI_BUILT_IN_LGAMMAF,
   GSBI_BUILT_IN_LGAMMAL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_LLCEIL,
+  GSBI_BUILT_IN_LLCEILF,
+  GSBI_BUILT_IN_LLCEILL,
+  GSBI_BUILT_IN_LLFLOOR,
+  GSBI_BUILT_IN_LLFLOORF,
+  GSBI_BUILT_IN_LLFLOORL,
+#endif
   GSBI_BUILT_IN_LLRINT,
   GSBI_BUILT_IN_LLRINTF,
   GSBI_BUILT_IN_LLRINTL,
@@ -741,6 +853,11 @@ typedef enum gsbi {
   GSBI_BUILT_IN_NAN,
   GSBI_BUILT_IN_NANF,
   GSBI_BUILT_IN_NANL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_NAND32,
+  GSBI_BUILT_IN_NAND64,
+  GSBI_BUILT_IN_NAND128,
+#endif
   GSBI_BUILT_IN_NANS,
   GSBI_BUILT_IN_NANSF,
   GSBI_BUILT_IN_NANSL,
@@ -861,6 +978,11 @@ typedef enum gsbi {
   GSBI_BUILT_IN_CLOG,
   GSBI_BUILT_IN_CLOGF,
   GSBI_BUILT_IN_CLOGL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_CLOG10,
+  GSBI_BUILT_IN_CLOG10F,
+  GSBI_BUILT_IN_CLOG10L,
+#endif
   GSBI_BUILT_IN_CONJ,
   GSBI_BUILT_IN_CONJF,
   GSBI_BUILT_IN_CONJL,
@@ -899,13 +1021,23 @@ typedef enum gsbi {
   GSBI_BUILT_IN_MEMSET,
   GSBI_BUILT_IN_RINDEX,
   GSBI_BUILT_IN_STPCPY,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_STPNCPY,
+  GSBI_BUILT_IN_STRCASECMP,
+#endif
   GSBI_BUILT_IN_STRCAT,
   GSBI_BUILT_IN_STRCHR,
   GSBI_BUILT_IN_STRCMP,
   GSBI_BUILT_IN_STRCPY,
   GSBI_BUILT_IN_STRCSPN,
   GSBI_BUILT_IN_STRDUP,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_STRNDUP,
+#endif
   GSBI_BUILT_IN_STRLEN,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_STRNCASECMP,
+#endif
   GSBI_BUILT_IN_STRNCAT,
   GSBI_BUILT_IN_STRNCMP,
   GSBI_BUILT_IN_STRNCPY,
@@ -915,6 +1047,10 @@ typedef enum gsbi {
   GSBI_BUILT_IN_STRSTR,
   GSBI_BUILT_IN_FPRINTF,
   GSBI_BUILT_IN_FPRINTF_UNLOCKED,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_PUTC,
+  GSBI_BUILT_IN_PUTC_UNLOCKED,
+#endif
   GSBI_BUILT_IN_FPUTC,
   GSBI_BUILT_IN_FPUTC_UNLOCKED,
   GSBI_BUILT_IN_FPUTS,
@@ -1019,12 +1155,27 @@ typedef enum gsbi {
   GSBI_BUILT_IN_FINITE,
   GSBI_BUILT_IN_FINITEF,
   GSBI_BUILT_IN_FINITEL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_FINITED32,
+  GSBI_BUILT_IN_FINITED64,
+  GSBI_BUILT_IN_FINITED128,
+#endif
   GSBI_BUILT_IN_ISINF,
   GSBI_BUILT_IN_ISINFF,
   GSBI_BUILT_IN_ISINFL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_ISINFD32,
+  GSBI_BUILT_IN_ISINFD64,
+  GSBI_BUILT_IN_ISINFD128,
+#endif
   GSBI_BUILT_IN_ISNAN,
   GSBI_BUILT_IN_ISNANF,
   GSBI_BUILT_IN_ISNANL,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_ISNAND32,
+  GSBI_BUILT_IN_ISNAND64,
+  GSBI_BUILT_IN_ISNAND128,
+#endif
   GSBI_BUILT_IN_ISGREATER,
   GSBI_BUILT_IN_ISGREATEREQUAL,
   GSBI_BUILT_IN_ISLESS,
@@ -1063,15 +1214,244 @@ typedef enum gsbi {
   GSBI_BUILT_IN_INIT_TRAMPOLINE,
   GSBI_BUILT_IN_ADJUST_TRAMPOLINE,
   GSBI_BUILT_IN_NONLOCAL_GOTO,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_SETJMP_SETUP,
+  GSBI_BUILT_IN_SETJMP_DISPATCHER,
+  GSBI_BUILT_IN_SETJMP_RECEIVER,
+#endif
   GSBI_BUILT_IN_STACK_SAVE,
   GSBI_BUILT_IN_STACK_RESTORE,
+#ifdef FE_GNU_4_2_0
+  GSBI_BUILT_IN_OBJECT_SIZE,
+  GSBI_BUILT_IN_MEMCPY_CHK,
+  GSBI_BUILT_IN_MEMMOVE_CHK,
+  GSBI_BUILT_IN_MEMPCPY_CHK,
+  GSBI_BUILT_IN_MEMSET_CHK,
+  GSBI_BUILT_IN_STPCPY_CHK,
+  GSBI_BUILT_IN_STRCAT_CHK,
+  GSBI_BUILT_IN_STRCPY_CHK,
+  GSBI_BUILT_IN_STRNCAT_CHK,
+  GSBI_BUILT_IN_STRNCPY_CHK,
+  GSBI_BUILT_IN_SNPRINTF_CHK,
+  GSBI_BUILT_IN_SPRINTF_CHK,
+  GSBI_BUILT_IN_VSNPRINTF_CHK,
+  GSBI_BUILT_IN_VSPRINTF_CHK,
+  GSBI_BUILT_IN_FPRINTF_CHK,
+  GSBI_BUILT_IN_PRINTF_CHK,
+  GSBI_BUILT_IN_VFPRINTF_CHK,
+  GSBI_BUILT_IN_VPRINTF_CHK,
+#endif
   GSBI_BUILT_IN_PROFILE_FUNC_ENTER,
   GSBI_BUILT_IN_PROFILE_FUNC_EXIT,
+#ifdef FE_GNU_4_2_0
+  /* sync-builtins.def builtins begin */
+  GSBI_BUILT_IN_FETCH_AND_ADD_N,
+  GSBI_BUILT_IN_FETCH_AND_ADD_1,
+  GSBI_BUILT_IN_FETCH_AND_ADD_2,
+  GSBI_BUILT_IN_FETCH_AND_ADD_4,
+  GSBI_BUILT_IN_FETCH_AND_ADD_8,
+  GSBI_BUILT_IN_FETCH_AND_ADD_16,
+  GSBI_BUILT_IN_FETCH_AND_SUB_N,
+  GSBI_BUILT_IN_FETCH_AND_SUB_1,
+  GSBI_BUILT_IN_FETCH_AND_SUB_2,
+  GSBI_BUILT_IN_FETCH_AND_SUB_4,
+  GSBI_BUILT_IN_FETCH_AND_SUB_8,
+  GSBI_BUILT_IN_FETCH_AND_SUB_16,
+  GSBI_BUILT_IN_FETCH_AND_OR_N,
+  GSBI_BUILT_IN_FETCH_AND_OR_1,
+  GSBI_BUILT_IN_FETCH_AND_OR_2,
+  GSBI_BUILT_IN_FETCH_AND_OR_4,
+  GSBI_BUILT_IN_FETCH_AND_OR_8,
+  GSBI_BUILT_IN_FETCH_AND_OR_16,
+  GSBI_BUILT_IN_FETCH_AND_AND_N,
+  GSBI_BUILT_IN_FETCH_AND_AND_1,
+  GSBI_BUILT_IN_FETCH_AND_AND_2,
+  GSBI_BUILT_IN_FETCH_AND_AND_4,
+  GSBI_BUILT_IN_FETCH_AND_AND_8,
+  GSBI_BUILT_IN_FETCH_AND_AND_16,
+  GSBI_BUILT_IN_FETCH_AND_XOR_N,
+  GSBI_BUILT_IN_FETCH_AND_XOR_1,
+  GSBI_BUILT_IN_FETCH_AND_XOR_2,
+  GSBI_BUILT_IN_FETCH_AND_XOR_4,
+  GSBI_BUILT_IN_FETCH_AND_XOR_8,
+  GSBI_BUILT_IN_FETCH_AND_XOR_16,
+  GSBI_BUILT_IN_FETCH_AND_NAND_N,
+  GSBI_BUILT_IN_FETCH_AND_NAND_1,
+  GSBI_BUILT_IN_FETCH_AND_NAND_2,
+  GSBI_BUILT_IN_FETCH_AND_NAND_4,
+  GSBI_BUILT_IN_FETCH_AND_NAND_8,
+  GSBI_BUILT_IN_FETCH_AND_NAND_16,
+  GSBI_BUILT_IN_ADD_AND_FETCH_N,
+  GSBI_BUILT_IN_ADD_AND_FETCH_1,
+  GSBI_BUILT_IN_ADD_AND_FETCH_2,
+  GSBI_BUILT_IN_ADD_AND_FETCH_4,
+  GSBI_BUILT_IN_ADD_AND_FETCH_8,
+  GSBI_BUILT_IN_ADD_AND_FETCH_16,
+  GSBI_BUILT_IN_SUB_AND_FETCH_N,
+  GSBI_BUILT_IN_SUB_AND_FETCH_1,
+  GSBI_BUILT_IN_SUB_AND_FETCH_2,
+  GSBI_BUILT_IN_SUB_AND_FETCH_4,
+  GSBI_BUILT_IN_SUB_AND_FETCH_8,
+  GSBI_BUILT_IN_SUB_AND_FETCH_16,
+  GSBI_BUILT_IN_OR_AND_FETCH_N,
+  GSBI_BUILT_IN_OR_AND_FETCH_1,
+  GSBI_BUILT_IN_OR_AND_FETCH_2,
+  GSBI_BUILT_IN_OR_AND_FETCH_4,
+  GSBI_BUILT_IN_OR_AND_FETCH_8,
+  GSBI_BUILT_IN_OR_AND_FETCH_16,
+  GSBI_BUILT_IN_AND_AND_FETCH_N,
+  GSBI_BUILT_IN_AND_AND_FETCH_1,
+  GSBI_BUILT_IN_AND_AND_FETCH_2,
+  GSBI_BUILT_IN_AND_AND_FETCH_4,
+  GSBI_BUILT_IN_AND_AND_FETCH_8,
+  GSBI_BUILT_IN_AND_AND_FETCH_16,
+  GSBI_BUILT_IN_XOR_AND_FETCH_N,
+  GSBI_BUILT_IN_XOR_AND_FETCH_1,
+  GSBI_BUILT_IN_XOR_AND_FETCH_2,
+  GSBI_BUILT_IN_XOR_AND_FETCH_4,
+  GSBI_BUILT_IN_XOR_AND_FETCH_8,
+  GSBI_BUILT_IN_XOR_AND_FETCH_16,
+  GSBI_BUILT_IN_NAND_AND_FETCH_N,
+  GSBI_BUILT_IN_NAND_AND_FETCH_1,
+  GSBI_BUILT_IN_NAND_AND_FETCH_2,
+  GSBI_BUILT_IN_NAND_AND_FETCH_4,
+  GSBI_BUILT_IN_NAND_AND_FETCH_8,
+  GSBI_BUILT_IN_NAND_AND_FETCH_16,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_N,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_1,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_2,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_4,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_8,
+  GSBI_BUILT_IN_BOOL_COMPARE_AND_SWAP_16,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_N,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_1,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_2,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_4,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_8,
+  GSBI_BUILT_IN_VAL_COMPARE_AND_SWAP_16,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_N,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_1,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_2,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_4,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_8,
+  GSBI_BUILT_IN_LOCK_TEST_AND_SET_16,
+  GSBI_BUILT_IN_LOCK_RELEASE_N,
+  GSBI_BUILT_IN_LOCK_RELEASE_1,
+  GSBI_BUILT_IN_LOCK_RELEASE_2,
+  GSBI_BUILT_IN_LOCK_RELEASE_4,
+  GSBI_BUILT_IN_LOCK_RELEASE_8,
+  GSBI_BUILT_IN_LOCK_RELEASE_16,
+  GSBI_BUILT_IN_SYNCHRONIZE,
+  /* sync-builtins.def builtins end */
+
+  /* omp-builtins.def builtins begin */
+  GSBI_BUILT_IN_OMP_GET_THREAD_NUM,
+  GSBI_BUILT_IN_OMP_GET_NUM_THREADS,
+  GSBI_BUILT_IN_GOMP_ATOMIC_START,
+  GSBI_BUILT_IN_GOMP_ATOMIC_END,
+  GSBI_BUILT_IN_GOMP_BARRIER,
+  GSBI_BUILT_IN_GOMP_CRITICAL_START,
+  GSBI_BUILT_IN_GOMP_CRITICAL_END,
+  GSBI_BUILT_IN_GOMP_CRITICAL_NAME_START,
+  GSBI_BUILT_IN_GOMP_CRITICAL_NAME_END,
+  GSBI_BUILT_IN_GOMP_LOOP_STATIC_START,
+  GSBI_BUILT_IN_GOMP_LOOP_DYNAMIC_START,
+  GSBI_BUILT_IN_GOMP_LOOP_GUIDED_START,
+  GSBI_BUILT_IN_GOMP_LOOP_RUNTIME_START,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_STATIC_START,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_DYNAMIC_START,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_GUIDED_START,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_RUNTIME_START,
+  GSBI_BUILT_IN_GOMP_LOOP_STATIC_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_DYNAMIC_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_GUIDED_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_RUNTIME_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_STATIC_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_DYNAMIC_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_GUIDED_NEXT,
+  GSBI_BUILT_IN_GOMP_LOOP_ORDERED_RUNTIME_NEXT,
+  GSBI_BUILT_IN_GOMP_PARALLEL_LOOP_STATIC_START,
+  GSBI_BUILT_IN_GOMP_PARALLEL_LOOP_DYNAMIC_START,
+  GSBI_BUILT_IN_GOMP_PARALLEL_LOOP_GUIDED_START,
+  GSBI_BUILT_IN_GOMP_PARALLEL_LOOP_RUNTIME_START,
+  GSBI_BUILT_IN_GOMP_LOOP_END,
+  GSBI_BUILT_IN_GOMP_LOOP_END_NOWAIT,
+  GSBI_BUILT_IN_GOMP_ORDERED_START,
+  GSBI_BUILT_IN_GOMP_ORDERED_END,
+  GSBI_BUILT_IN_GOMP_PARALLEL_START,
+  GSBI_BUILT_IN_GOMP_PARALLEL_END,
+  GSBI_BUILT_IN_GOMP_SECTIONS_START,
+  GSBI_BUILT_IN_GOMP_SECTIONS_NEXT,
+  GSBI_BUILT_IN_GOMP_PARALLEL_SECTIONS_START,
+  GSBI_BUILT_IN_GOMP_SECTIONS_END,
+  GSBI_BUILT_IN_GOMP_SECTIONS_END_NOWAIT,
+  GSBI_BUILT_IN_GOMP_SINGLE_START,
+  GSBI_BUILT_IN_GOMP_SINGLE_COPY_START,
+  GSBI_BUILT_IN_GOMP_SINGLE_COPY_END,
+  /* omp-builtins.def builtins end */
+#endif
   GSBI_BUILT_IN_COMPLEX_MUL_MIN,
   GSBI_BUILT_IN_COMPLEX_MUL_MAX,
   GSBI_BUILT_IN_COMPLEX_DIV_MIN,
   GSBI_BUILT_IN_COMPLEX_DIV_MAX,
-  GSBI_END_BUILTINS,
+#ifdef TARG_SL
+  GSBI_BUILT_IN_CVT64_HIGH,
+  GSBI_BUILT_IN_CVT64_LOW,
+  GSBI_BUILT_IN_CVT32,
+  GSBI_BUILT_IN_LONGLONG_CVT64_HIGH,
+  GSBI_BUILT_IN_LONGLONG_CVT64_LOW,
+  GSBI_BUILT_IN_C3AADDA,
+  GSBI_BUILT_IN_C3NEGA,
+  GSBI_BUILT_IN_C3BITR,
+  GSBI_BUILT_IN_C3CS,
+  GSBI_BUILT_IN_C3DADD,
+  GSBI_BUILT_IN_C3DMAC,
+  GSBI_BUILT_IN_C3DMACA,
+  GSBI_BUILT_IN_C3DMULA,
+  GSBI_BUILT_IN_C3DMULAA,
+  GSBI_BUILT_IN_C3DSHLLI,
+  GSBI_BUILT_IN_C3FFE,
+  GSBI_BUILT_IN_C3LD,
+  GSBI_BUILT_IN_C3ST,
+  GSBI_BUILT_IN_C3LEAD,
+  GSBI_BUILT_IN_C3MAC,
+  GSBI_BUILT_IN_C3MACA,
+  GSBI_BUILT_IN_C3MACAR,
+  GSBI_BUILT_IN_C3MACI,
+  GSBI_BUILT_IN_C3MULA,
+  GSBI_BUILT_IN_C3MULAA,
+  GSBI_BUILT_IN_C3MULAAR,
+  GSBI_BUILT_IN_C3MULAI,
+  GSBI_BUILT_IN_C3MULS,
+  GSBI_BUILT_IN_C3MULUS,
+  GSBI_BUILT_IN_C3REVB,
+  GSBI_BUILT_IN_C3ROUND,
+  GSBI_BUILT_IN_C3SAADDA,
+  GSBI_BUILT_IN_C3SAADDHA,
+  GSBI_BUILT_IN_C3SAADDS,
+  GSBI_BUILT_IN_C3SAADDSH,
+  GSBI_BUILT_IN_C3SADDA,
+  GSBI_BUILT_IN_C3SADDAA,
+  GSBI_BUILT_IN_C3SAMULHA,
+  GSBI_BUILT_IN_C3SAMULSH,
+  GSBI_BUILT_IN_C3SHAV,
+  GSBI_BUILT_IN_C3SHLAFAI,
+  GSBI_BUILT_IN_C3SHLATAI,
+  GSBI_BUILT_IN_C3SHLAI,
+  GSBI_BUILT_IN_C3SUBC,
+  GSBI_BUILT_IN_INIT_HI,
+  GSBI_BUILT_IN_COPY_HI,
+  GSBI_BUILT_IN_C3_INIT_ACC,
+  GSBI_BUILT_IN_C3_SAVE_ACC,
+  GSBI_BUILT_IN_C3_INIT_DACC,
+  GSBI_BUILT_IN_C3_SAVE_DACC,
+  GSBI_BUILT_IN_C3_INIT_ADDR,
+  GSBI_BUILT_IN_C3_SAVE_ADDR,
+  GSBI_BUILT_IN_C3_MVFS,
+  GSBI_BUILT_IN_SET_ADDR,
+  GSBI_BUILT_IN_SET_CIRCBUF,
+#endif
+  GSBI_END_BUILTINS
 
 } gsbi_t;
 
@@ -1082,7 +1462,7 @@ typedef enum gsbi_class {
  GSBI_CLASS_NOT_BUILT_IN,
  GSBI_CLASS_BUILT_IN_FRONTEND,
  GSBI_CLASS_BUILT_IN_MD,
- GSBI_CLASS_BUILT_IN_NORMAL,
+ GSBI_CLASS_BUILT_IN_NORMAL
 
 } gsbi_class_t;
 
@@ -1450,14 +1830,425 @@ typedef enum gsbi_ts {
   GSBI_IX86_BUILTIN_VEC_EXT_V4HI,
   GSBI_IX86_BUILTIN_VEC_SET_V8HI,
   GSBI_IX86_BUILTIN_VEC_SET_V4HI,
+  GSBI_IX86_BUILTIN_MOVNTSS,
+  GSBI_IX86_BUILTIN_MOVNTSD,
+  GSBI_IX86_BUILTIN_EXTRQI,
+  GSBI_IX86_BUILTIN_EXTRQ,
+  GSBI_IX86_BUILTIN_INSERTQI,
+  GSBI_IX86_BUILTIN_INSERTQ,
+
+#ifdef FE_GNU_4_2_0
+  /* SSSE3 intrinsics */
+  GSBI_IX86_BUILTIN_PABSB,
+  GSBI_IX86_BUILTIN_PABSB128,
+  GSBI_IX86_BUILTIN_PABSD,
+  GSBI_IX86_BUILTIN_PABSD128,
+  GSBI_IX86_BUILTIN_PABSW,
+  GSBI_IX86_BUILTIN_PABSW128,
+  GSBI_IX86_BUILTIN_PALIGNR,
+  GSBI_IX86_BUILTIN_PALIGNR128,
+  GSBI_IX86_BUILTIN_PHADDD,
+  GSBI_IX86_BUILTIN_PHADDD128,
+  GSBI_IX86_BUILTIN_PHADDSW,
+  GSBI_IX86_BUILTIN_PHADDSW128,
+  GSBI_IX86_BUILTIN_PHADDW,
+  GSBI_IX86_BUILTIN_PHADDW128,
+  GSBI_IX86_BUILTIN_PHSUBD,
+  GSBI_IX86_BUILTIN_PHSUBD128,
+  GSBI_IX86_BUILTIN_PHSUBSW,
+  GSBI_IX86_BUILTIN_PHSUBSW128,
+  GSBI_IX86_BUILTIN_PHSUBW,
+  GSBI_IX86_BUILTIN_PHSUBW128,
+  GSBI_IX86_BUILTIN_PMADDUBSW,
+  GSBI_IX86_BUILTIN_PMADDUBSW128,
+  GSBI_IX86_BUILTIN_PMULHRSW,
+  GSBI_IX86_BUILTIN_PMULHRSW128,
+  GSBI_IX86_BUILTIN_PSHUFB,
+  GSBI_IX86_BUILTIN_PSHUFB128,
+  GSBI_IX86_BUILTIN_PSIGNB,
+  GSBI_IX86_BUILTIN_PSIGNB128,
+  GSBI_IX86_BUILTIN_PSIGND,
+  GSBI_IX86_BUILTIN_PSIGND128,
+  GSBI_IX86_BUILTIN_PSIGNW,
+  GSBI_IX86_BUILTIN_PSIGNW128,
+
+  /* SSE4.1 intrinsics */
+  GSBI_IX86_BUILTIN_BLENDPD,
+  GSBI_IX86_BUILTIN_BLENDPS,
+  GSBI_IX86_BUILTIN_BLENDVPD,
+  GSBI_IX86_BUILTIN_BLENDVPS,
+  GSBI_IX86_BUILTIN_DPPD,
+  GSBI_IX86_BUILTIN_DPPS,
+  GSBI_IX86_BUILTIN_INSERTPS128,
+  GSBI_IX86_BUILTIN_MOVNTDQA,
+  GSBI_IX86_BUILTIN_MPSADBW128,
+  GSBI_IX86_BUILTIN_PACKUSDW128,
+  GSBI_IX86_BUILTIN_PBLENDVB128,
+  GSBI_IX86_BUILTIN_PBLENDW128,
+  GSBI_IX86_BUILTIN_PCMPEQQ,
+  GSBI_IX86_BUILTIN_PHMINPOSUW128,
+  GSBI_IX86_BUILTIN_PMAXSB128,
+  GSBI_IX86_BUILTIN_PMAXSD128,
+  GSBI_IX86_BUILTIN_PMAXUD128,
+  GSBI_IX86_BUILTIN_PMAXUW128,
+  GSBI_IX86_BUILTIN_PMINSB128,
+  GSBI_IX86_BUILTIN_PMINSD128,
+  GSBI_IX86_BUILTIN_PMINUD128,
+  GSBI_IX86_BUILTIN_PMINUW128,
+  GSBI_IX86_BUILTIN_PMOVSXBD128,
+  GSBI_IX86_BUILTIN_PMOVSXBQ128,
+  GSBI_IX86_BUILTIN_PMOVSXBW128,
+  GSBI_IX86_BUILTIN_PMOVSXDQ128,
+  GSBI_IX86_BUILTIN_PMOVSXWD128,
+  GSBI_IX86_BUILTIN_PMOVSXWQ128,
+  GSBI_IX86_BUILTIN_PMOVZXBD128,
+  GSBI_IX86_BUILTIN_PMOVZXBQ128,
+  GSBI_IX86_BUILTIN_PMOVZXBW128,
+  GSBI_IX86_BUILTIN_PMOVZXDQ128,
+  GSBI_IX86_BUILTIN_PMOVZXWD128,
+  GSBI_IX86_BUILTIN_PMOVZXWQ128,
+  GSBI_IX86_BUILTIN_PMULDQ128,
+  GSBI_IX86_BUILTIN_PMULLD128,
+  GSBI_IX86_BUILTIN_VEC_SET_V16QI,
+  GSBI_IX86_BUILTIN_VEC_SET_V2DI,
+  GSBI_IX86_BUILTIN_VEC_SET_V4SF,
+  GSBI_IX86_BUILTIN_VEC_SET_V4SI,
+
+  /* SSE4.2 intrinsics */
+  GSBI_IX86_BUILTIN_CRC32DI,
+  GSBI_IX86_BUILTIN_CRC32HI,
+  GSBI_IX86_BUILTIN_CRC32QI,
+  GSBI_IX86_BUILTIN_CRC32SI,
+  GSBI_IX86_BUILTIN_PCMPESTRI128,
+  GSBI_IX86_BUILTIN_PCMPESTRA128,
+  GSBI_IX86_BUILTIN_PCMPESTRC128,
+  GSBI_IX86_BUILTIN_PCMPESTRO128,
+  GSBI_IX86_BUILTIN_PCMPESTRS128,
+  GSBI_IX86_BUILTIN_PCMPESTRZ128,
+  GSBI_IX86_BUILTIN_PCMPESTRM128,
+  GSBI_IX86_BUILTIN_PCMPGTQ,
+  GSBI_IX86_BUILTIN_PCMPISTRI128,
+  GSBI_IX86_BUILTIN_PCMPISTRA128,
+  GSBI_IX86_BUILTIN_PCMPISTRC128,
+  GSBI_IX86_BUILTIN_PCMPISTRO128,
+  GSBI_IX86_BUILTIN_PCMPISTRS128,
+  GSBI_IX86_BUILTIN_PCMPISTRZ128,
+  GSBI_IX86_BUILTIN_PCMPISTRM128,
+
+  /* AES intrinsics */
+  GSBI_IX86_BUILTIN_AESDEC128,
+  GSBI_IX86_BUILTIN_AESDECLAST128,
+  GSBI_IX86_BUILTIN_AESENC128,
+  GSBI_IX86_BUILTIN_AESENCLAST128,
+  GSBI_IX86_BUILTIN_AESIMC128,
+  GSBI_IX86_BUILTIN_AESKEYGENASSIST128,
+
+  /* PCLMUL intrinsics */
+  GSBI_IX86_BUILTIN_PCLMULQDQ128,
+
+  /* AVX intrinsics */
+  GSBI_IX86_BUILTIN_ADDPD256,
+  GSBI_IX86_BUILTIN_ADDPS256,
+  GSBI_IX86_BUILTIN_ADDSUBPD256,
+  GSBI_IX86_BUILTIN_ADDSUBPS256,
+  GSBI_IX86_BUILTIN_ANDNPD256,
+  GSBI_IX86_BUILTIN_ANDNPS256,
+  GSBI_IX86_BUILTIN_ANDPD256,
+  GSBI_IX86_BUILTIN_ANDPS256,
+  GSBI_IX86_BUILTIN_BLENDPD256,
+  GSBI_IX86_BUILTIN_BLENDPS256,
+  GSBI_IX86_BUILTIN_BLENDVPD256,
+  GSBI_IX86_BUILTIN_BLENDVPS256,
+  GSBI_IX86_BUILTIN_CMPPD,
+  GSBI_IX86_BUILTIN_CMPPD256,
+  GSBI_IX86_BUILTIN_CMPPS,
+  GSBI_IX86_BUILTIN_CMPPS256,
+  GSBI_IX86_BUILTIN_CMPSD,
+  GSBI_IX86_BUILTIN_CMPSS,
+  GSBI_IX86_BUILTIN_CVTDQ2PD256,
+  GSBI_IX86_BUILTIN_CVTDQ2PS256,
+  GSBI_IX86_BUILTIN_CVTPD2DQ256,
+  GSBI_IX86_BUILTIN_CVTPD2PS256,
+  GSBI_IX86_BUILTIN_CVTPS2DQ256,
+  GSBI_IX86_BUILTIN_CVTPS2PD256,
+  GSBI_IX86_BUILTIN_CVTTPD2DQ256,
+  GSBI_IX86_BUILTIN_CVTTPS2DQ256,
+  GSBI_IX86_BUILTIN_DIVPD256,
+  GSBI_IX86_BUILTIN_DIVPS256,
+  GSBI_IX86_BUILTIN_DPPS256,
+  GSBI_IX86_BUILTIN_HADDPD256,
+  GSBI_IX86_BUILTIN_HADDPS256,
+  GSBI_IX86_BUILTIN_HSUBPD256,
+  GSBI_IX86_BUILTIN_HSUBPS256,
+  GSBI_IX86_BUILTIN_LDDQU256,
+  GSBI_IX86_BUILTIN_LOADDQU256,
+  GSBI_IX86_BUILTIN_LOADUPD256,
+  GSBI_IX86_BUILTIN_LOADUPS256,
+  GSBI_IX86_BUILTIN_MASKLOADPD,
+  GSBI_IX86_BUILTIN_MASKLOADPD256,
+  GSBI_IX86_BUILTIN_MASKLOADPS,
+  GSBI_IX86_BUILTIN_MASKLOADPS256,
+  GSBI_IX86_BUILTIN_MASKSTOREPD,
+  GSBI_IX86_BUILTIN_MASKSTOREPD256,
+  GSBI_IX86_BUILTIN_MASKSTOREPS,
+  GSBI_IX86_BUILTIN_MASKSTOREPS256,
+  GSBI_IX86_BUILTIN_MAXPD256,
+  GSBI_IX86_BUILTIN_MAXPS256,
+  GSBI_IX86_BUILTIN_MINPD256,
+  GSBI_IX86_BUILTIN_MINPS256,
+  GSBI_IX86_BUILTIN_MOVDDUP256,
+  GSBI_IX86_BUILTIN_MOVMSKPD256,
+  GSBI_IX86_BUILTIN_MOVMSKPS256,
+  GSBI_IX86_BUILTIN_MOVNTDQ256,
+  GSBI_IX86_BUILTIN_MOVNTPD256,
+  GSBI_IX86_BUILTIN_MOVNTPS256,
+  GSBI_IX86_BUILTIN_MOVSHDUP256,
+  GSBI_IX86_BUILTIN_MOVSLDUP256,
+  GSBI_IX86_BUILTIN_MULPD256,
+  GSBI_IX86_BUILTIN_MULPS256,
+  GSBI_IX86_BUILTIN_ORPD256,
+  GSBI_IX86_BUILTIN_ORPS256,
+  GSBI_IX86_BUILTIN_PD256_PD,
+  GSBI_IX86_BUILTIN_PD_PD256,
+  GSBI_IX86_BUILTIN_PS256_PS,
+  GSBI_IX86_BUILTIN_PS_PS256,
+  GSBI_IX86_BUILTIN_PTESTC256,
+  GSBI_IX86_BUILTIN_PTESTNZC256,
+  GSBI_IX86_BUILTIN_PTESTZ256,
+  GSBI_IX86_BUILTIN_RCPPS256,
+  GSBI_IX86_BUILTIN_ROUNDPD256,
+  GSBI_IX86_BUILTIN_ROUNDPS256,
+  GSBI_IX86_BUILTIN_RSQRTPS256,
+  GSBI_IX86_BUILTIN_RSQRTPS_NR256,
+  GSBI_IX86_BUILTIN_SHUFPD256,
+  GSBI_IX86_BUILTIN_SHUFPS256,
+  GSBI_IX86_BUILTIN_SI256_SI,
+  GSBI_IX86_BUILTIN_SI_SI256,
+  GSBI_IX86_BUILTIN_SQRTPD256,
+  GSBI_IX86_BUILTIN_SQRTPS256,
+  GSBI_IX86_BUILTIN_SQRTPS_NR256,
+  GSBI_IX86_BUILTIN_STOREDQU256,
+  GSBI_IX86_BUILTIN_STOREUPD256,
+  GSBI_IX86_BUILTIN_STOREUPS256,
+  GSBI_IX86_BUILTIN_SUBPD256,
+  GSBI_IX86_BUILTIN_SUBPS256,
+  GSBI_IX86_BUILTIN_UNPCKHPD256,
+  GSBI_IX86_BUILTIN_UNPCKHPS256,
+  GSBI_IX86_BUILTIN_UNPCKLPD256,
+  GSBI_IX86_BUILTIN_UNPCKLPS256,
+  GSBI_IX86_BUILTIN_VBROADCASTPD256,
+  GSBI_IX86_BUILTIN_VBROADCASTPS256,
+  GSBI_IX86_BUILTIN_VBROADCASTSD256,
+  GSBI_IX86_BUILTIN_VBROADCASTSS,
+  GSBI_IX86_BUILTIN_VBROADCASTSS256,
+  GSBI_IX86_BUILTIN_EXTRACTF128PD256,
+  GSBI_IX86_BUILTIN_EXTRACTF128PS256,
+  GSBI_IX86_BUILTIN_EXTRACTF128SI256,
+  GSBI_IX86_BUILTIN_VINSERTF128PD256,
+  GSBI_IX86_BUILTIN_VINSERTF128PS256,
+  GSBI_IX86_BUILTIN_VINSERTF128SI256,
+  GSBI_IX86_BUILTIN_VPERM2F128PD256,
+  GSBI_IX86_BUILTIN_VPERM2F128PS256,
+  GSBI_IX86_BUILTIN_VPERM2F128SI256,
+  GSBI_IX86_BUILTIN_VPERMILPD,
+  GSBI_IX86_BUILTIN_VPERMILPD256,
+  GSBI_IX86_BUILTIN_VPERMILPS,
+  GSBI_IX86_BUILTIN_VPERMILPS256,
+  GSBI_IX86_BUILTIN_VPERMILVARPD,
+  GSBI_IX86_BUILTIN_VPERMILVARPD256,
+  GSBI_IX86_BUILTIN_VPERMILVARPS,
+  GSBI_IX86_BUILTIN_VPERMILVARPS256,
+  GSBI_IX86_BUILTIN_VTESTCPD,
+  GSBI_IX86_BUILTIN_VTESTCPD256,
+  GSBI_IX86_BUILTIN_VTESTCPS,
+  GSBI_IX86_BUILTIN_VTESTCPS256,
+  GSBI_IX86_BUILTIN_VTESTNZCPD,
+  GSBI_IX86_BUILTIN_VTESTNZCPD256,
+  GSBI_IX86_BUILTIN_VTESTNZCPS,
+  GSBI_IX86_BUILTIN_VTESTNZCPS256,
+  GSBI_IX86_BUILTIN_VTESTZPD,
+  GSBI_IX86_BUILTIN_VTESTZPD256,
+  GSBI_IX86_BUILTIN_VTESTZPS,
+  GSBI_IX86_BUILTIN_VTESTZPS256,
+  GSBI_IX86_BUILTIN_VZEROALL,
+  GSBI_IX86_BUILTIN_VZEROUPPER,
+  GSBI_IX86_BUILTIN_XORPD256,
+  GSBI_IX86_BUILTIN_XORPS256,
+
+  /* FMA4 intrinsics */
+  GSBI_IX86_BUILTIN_VFMADDPD,
+  GSBI_IX86_BUILTIN_VFMADDPD256,
+  GSBI_IX86_BUILTIN_VFMADDPS,
+  GSBI_IX86_BUILTIN_VFMADDPS256,
+  GSBI_IX86_BUILTIN_VFMADDSD,
+  GSBI_IX86_BUILTIN_VFMADDSS,
+  GSBI_IX86_BUILTIN_VFMADDSUBPD,
+  GSBI_IX86_BUILTIN_VFMADDSUBPD256,
+  GSBI_IX86_BUILTIN_VFMADDSUBPS,
+  GSBI_IX86_BUILTIN_VFMADDSUBPS256,
+  GSBI_IX86_BUILTIN_VFMSUBADDPD,
+  GSBI_IX86_BUILTIN_VFMSUBADDPD256,
+  GSBI_IX86_BUILTIN_VFMSUBADDPS,
+  GSBI_IX86_BUILTIN_VFMSUBADDPS256,
+  GSBI_IX86_BUILTIN_VFMSUBPD,
+  GSBI_IX86_BUILTIN_VFMSUBPD256,
+  GSBI_IX86_BUILTIN_VFMSUBPS,
+  GSBI_IX86_BUILTIN_VFMSUBPS256,
+  GSBI_IX86_BUILTIN_VFMSUBSD,
+  GSBI_IX86_BUILTIN_VFMSUBSS,
+  GSBI_IX86_BUILTIN_VFNMADDPD,
+  GSBI_IX86_BUILTIN_VFNMADDPD256,
+  GSBI_IX86_BUILTIN_VFNMADDPS,
+  GSBI_IX86_BUILTIN_VFNMADDPS256,
+  GSBI_IX86_BUILTIN_VFNMADDSD,
+  GSBI_IX86_BUILTIN_VFNMADDSS,
+  GSBI_IX86_BUILTIN_VFNMSUBPD,
+  GSBI_IX86_BUILTIN_VFNMSUBPD256,
+  GSBI_IX86_BUILTIN_VFNMSUBPS,
+  GSBI_IX86_BUILTIN_VFNMSUBPS256,
+  GSBI_IX86_BUILTIN_VFNMSUBSD,
+  GSBI_IX86_BUILTIN_VFNMSUBSS,
+
+  /* XOP intrinsics */
+  GSBI_IX86_BUILTIN_VFRCZPD,
+  GSBI_IX86_BUILTIN_VFRCZPD256,
+  GSBI_IX86_BUILTIN_VFRCZPS,
+  GSBI_IX86_BUILTIN_VFRCZPS256,
+  GSBI_IX86_BUILTIN_VFRCZSD,
+  GSBI_IX86_BUILTIN_VFRCZSS,
+  GSBI_IX86_BUILTIN_VPCMOV,
+  GSBI_IX86_BUILTIN_VPCMOV256,
+  GSBI_IX86_BUILTIN_VPCMOV_V16HI256,
+  GSBI_IX86_BUILTIN_VPCMOV_V16QI,
+  GSBI_IX86_BUILTIN_VPCMOV_V2DF,
+  GSBI_IX86_BUILTIN_VPCMOV_V2DI,
+  GSBI_IX86_BUILTIN_VPCMOV_V32QI256,
+  GSBI_IX86_BUILTIN_VPCMOV_V4DF256,
+  GSBI_IX86_BUILTIN_VPCMOV_V4DI256,
+  GSBI_IX86_BUILTIN_VPCMOV_V4SF,
+  GSBI_IX86_BUILTIN_VPCMOV_V4SI,
+  GSBI_IX86_BUILTIN_VPCMOV_V8HI,
+  GSBI_IX86_BUILTIN_VPCMOV_V8SF256,
+  GSBI_IX86_BUILTIN_VPCMOV_V8SI256,
+  GSBI_IX86_BUILTIN_VPCOMEQB,
+  GSBI_IX86_BUILTIN_VPCOMEQD,
+  GSBI_IX86_BUILTIN_VPCOMEQQ,
+  GSBI_IX86_BUILTIN_VPCOMEQUB,
+  GSBI_IX86_BUILTIN_VPCOMEQUD,
+  GSBI_IX86_BUILTIN_VPCOMEQUQ,
+  GSBI_IX86_BUILTIN_VPCOMEQUW,
+  GSBI_IX86_BUILTIN_VPCOMEQW,
+  GSBI_IX86_BUILTIN_VPCOMFALSEB,
+  GSBI_IX86_BUILTIN_VPCOMFALSED,
+  GSBI_IX86_BUILTIN_VPCOMFALSEQ,
+  GSBI_IX86_BUILTIN_VPCOMFALSEUB,
+  GSBI_IX86_BUILTIN_VPCOMFALSEUD,
+  GSBI_IX86_BUILTIN_VPCOMFALSEUQ,
+  GSBI_IX86_BUILTIN_VPCOMFALSEUW,
+  GSBI_IX86_BUILTIN_VPCOMFALSEW,
+  GSBI_IX86_BUILTIN_VPCOMGEB,
+  GSBI_IX86_BUILTIN_VPCOMGED,
+  GSBI_IX86_BUILTIN_VPCOMGEQ,
+  GSBI_IX86_BUILTIN_VPCOMGEUB,
+  GSBI_IX86_BUILTIN_VPCOMGEUD,
+  GSBI_IX86_BUILTIN_VPCOMGEUQ,
+  GSBI_IX86_BUILTIN_VPCOMGEUW,
+  GSBI_IX86_BUILTIN_VPCOMGEW,
+  GSBI_IX86_BUILTIN_VPCOMGTB,
+  GSBI_IX86_BUILTIN_VPCOMGTD,
+  GSBI_IX86_BUILTIN_VPCOMGTQ,
+  GSBI_IX86_BUILTIN_VPCOMGTUB,
+  GSBI_IX86_BUILTIN_VPCOMGTUD,
+  GSBI_IX86_BUILTIN_VPCOMGTUQ,
+  GSBI_IX86_BUILTIN_VPCOMGTUW,
+  GSBI_IX86_BUILTIN_VPCOMGTW,
+  GSBI_IX86_BUILTIN_VPCOMLEB,
+  GSBI_IX86_BUILTIN_VPCOMLED,
+  GSBI_IX86_BUILTIN_VPCOMLEQ,
+  GSBI_IX86_BUILTIN_VPCOMLEUB,
+  GSBI_IX86_BUILTIN_VPCOMLEUD,
+  GSBI_IX86_BUILTIN_VPCOMLEUQ,
+  GSBI_IX86_BUILTIN_VPCOMLEUW,
+  GSBI_IX86_BUILTIN_VPCOMLEW,
+  GSBI_IX86_BUILTIN_VPCOMLTB,
+  GSBI_IX86_BUILTIN_VPCOMLTD,
+  GSBI_IX86_BUILTIN_VPCOMLTQ,
+  GSBI_IX86_BUILTIN_VPCOMLTUB,
+  GSBI_IX86_BUILTIN_VPCOMLTUD,
+  GSBI_IX86_BUILTIN_VPCOMLTUQ,
+  GSBI_IX86_BUILTIN_VPCOMLTUW,
+  GSBI_IX86_BUILTIN_VPCOMLTW,
+  GSBI_IX86_BUILTIN_VPCOMNEB,
+  GSBI_IX86_BUILTIN_VPCOMNED,
+  GSBI_IX86_BUILTIN_VPCOMNEQ,
+  GSBI_IX86_BUILTIN_VPCOMNEUB,
+  GSBI_IX86_BUILTIN_VPCOMNEUD,
+  GSBI_IX86_BUILTIN_VPCOMNEUQ,
+  GSBI_IX86_BUILTIN_VPCOMNEUW,
+  GSBI_IX86_BUILTIN_VPCOMNEW,
+  GSBI_IX86_BUILTIN_VPCOMTRUEB,
+  GSBI_IX86_BUILTIN_VPCOMTRUED,
+  GSBI_IX86_BUILTIN_VPCOMTRUEQ,
+  GSBI_IX86_BUILTIN_VPCOMTRUEUB,
+  GSBI_IX86_BUILTIN_VPCOMTRUEUD,
+  GSBI_IX86_BUILTIN_VPCOMTRUEUQ,
+  GSBI_IX86_BUILTIN_VPCOMTRUEUW,
+  GSBI_IX86_BUILTIN_VPCOMTRUEW,
+  GSBI_IX86_BUILTIN_VPHADDBD,
+  GSBI_IX86_BUILTIN_VPHADDBQ,
+  GSBI_IX86_BUILTIN_VPHADDBW,
+  GSBI_IX86_BUILTIN_VPHADDDQ,
+  GSBI_IX86_BUILTIN_VPHADDUBD,
+  GSBI_IX86_BUILTIN_VPHADDUBQ,
+  GSBI_IX86_BUILTIN_VPHADDUBW,
+  GSBI_IX86_BUILTIN_VPHADDUDQ,
+  GSBI_IX86_BUILTIN_VPHADDUWD,
+  GSBI_IX86_BUILTIN_VPHADDUWQ,
+  GSBI_IX86_BUILTIN_VPHADDWD,
+  GSBI_IX86_BUILTIN_VPHADDWQ,
+  GSBI_IX86_BUILTIN_VPHSUBBW,
+  GSBI_IX86_BUILTIN_VPHSUBDQ,
+  GSBI_IX86_BUILTIN_VPHSUBWD,
+  GSBI_IX86_BUILTIN_VPMACSDD,
+  GSBI_IX86_BUILTIN_VPMACSDQH,
+  GSBI_IX86_BUILTIN_VPMACSDQL,
+  GSBI_IX86_BUILTIN_VPMACSSDD,
+  GSBI_IX86_BUILTIN_VPMACSSDQH,
+  GSBI_IX86_BUILTIN_VPMACSSDQL,
+  GSBI_IX86_BUILTIN_VPMACSSWD,
+  GSBI_IX86_BUILTIN_VPMACSSWW,
+  GSBI_IX86_BUILTIN_VPMACSWD,
+  GSBI_IX86_BUILTIN_VPMACSWW,
+  GSBI_IX86_BUILTIN_VPMADCSSWD,
+  GSBI_IX86_BUILTIN_VPMADCSWD,
+  GSBI_IX86_BUILTIN_VPPERM,
+  GSBI_IX86_BUILTIN_VPROTB,
+  GSBI_IX86_BUILTIN_VPROTB_IMM,
+  GSBI_IX86_BUILTIN_VPROTD,
+  GSBI_IX86_BUILTIN_VPROTD_IMM,
+  GSBI_IX86_BUILTIN_VPROTQ,
+  GSBI_IX86_BUILTIN_VPROTQ_IMM,
+  GSBI_IX86_BUILTIN_VPROTW,
+  GSBI_IX86_BUILTIN_VPROTW_IMM,
+  GSBI_IX86_BUILTIN_VPSHAB,
+  GSBI_IX86_BUILTIN_VPSHAD,
+  GSBI_IX86_BUILTIN_VPSHAQ,
+  GSBI_IX86_BUILTIN_VPSHAW,
+  GSBI_IX86_BUILTIN_VPSHLB,
+  GSBI_IX86_BUILTIN_VPSHLD,
+  GSBI_IX86_BUILTIN_VPSHLQ,
+  GSBI_IX86_BUILTIN_VPSHLW,
+
+#endif
+
   GSBI_IX86_BUILTIN_MAX
 
 } gsbi_ts_t;
 
 extern gs_string_t gsbi_ts_name (gsbi_ts_t code);
 
-// These are indexes into GS_GLOBAL_TREES_LIST.
-// They have to be in 1-1 correspondence with the corresponding enumeration in GCC.
+/* These are indexes into GS_GLOBAL_TREES_LIST. */
+/* They have to be in 1-1 correspondence with the corresponding enumeration in GCC. */
 typedef enum gs_tree_index
 {
   GS_TI_ERROR_MARK,
@@ -1513,8 +2304,21 @@ typedef enum gs_tree_index
   GS_TI_PID_TYPE,
   GS_TI_PTRDIFF_TYPE,
   GS_TI_VA_LIST_TYPE,
+#ifdef FE_GNU_4_2_0
+  GS_TI_VA_LIST_GPR_COUNTER_FIELD,
+  GS_TI_VA_LIST_FPR_COUNTER_FIELD,
+#endif
   GS_TI_BOOLEAN_TYPE,
   GS_TI_FILEPTR_TYPE,
+
+#ifdef FE_GNU_4_2_0
+  GS_TI_DFLOAT32_TYPE,
+  GS_TI_DFLOAT64_TYPE,
+  GS_TI_DFLOAT128_TYPE,
+  GS_TI_DFLOAT32_PTR_TYPE,
+  GS_TI_DFLOAT64_PTR_TYPE,
+  GS_TI_DFLOAT128_PTR_TYPE,
+#endif
 
   GS_TI_VOID_LIST_NODE,
 
@@ -1523,7 +2327,7 @@ typedef enum gs_tree_index
   GS_TI_MAX
 } gs_tree_index_t;
 
-// The values below have to be in 1-1 correspondence with the corresponding enumeration in GCC.
+/* The values below have to be in 1-1 correspondence with the corresponding enumeration in GCC. */
 typedef enum gs_integer_type_kind {
   GS_ITK_CHAR,
   GS_ITK_SIGNED_CHAR,
@@ -1539,4 +2343,53 @@ typedef enum gs_integer_type_kind {
   GS_ITK_NONE
 } gs_integer_type_kind_t;
 
-#endif // __GSPIN_TREE_H__
+#ifdef FE_GNU_4_2_0
+typedef enum gs_omp_clause_code {
+  GS_OMP_CLAUSE_ERROR,
+  GS_OMP_CLAUSE_PRIVATE,
+  GS_OMP_CLAUSE_SHARED,
+  GS_OMP_CLAUSE_FIRSTPRIVATE,
+  GS_OMP_CLAUSE_LASTPRIVATE,
+  GS_OMP_CLAUSE_REDUCTION,
+  GS_OMP_CLAUSE_COPYIN,
+  GS_OMP_CLAUSE_COPYPRIVATE,
+  GS_OMP_CLAUSE_IF,
+  GS_OMP_CLAUSE_NUM_THREADS,
+  GS_OMP_CLAUSE_SCHEDULE,
+  GS_OMP_CLAUSE_NOWAIT,
+  GS_OMP_CLAUSE_ORDERED,
+  GS_OMP_CLAUSE_DEFAULT
+} gs_omp_clause_code_t;
+
+typedef enum gs_omp_clause_schedule_kind {
+  GS_OMP_CLAUSE_SCHEDULE_STATIC,
+  GS_OMP_CLAUSE_SCHEDULE_DYNAMIC,
+  GS_OMP_CLAUSE_SCHEDULE_GUIDED,
+  GS_OMP_CLAUSE_SCHEDULE_RUNTIME
+} gs_omp_clause_schedule_kind_t;
+
+typedef enum gs_omp_clause_default_kind {
+  GS_OMP_CLAUSE_DEFAULT_UNSPECIFIED,
+  GS_OMP_CLAUSE_DEFAULT_SHARED,
+  GS_OMP_CLAUSE_DEFAULT_NONE,
+  GS_OMP_CLAUSE_DEFAULT_PRIVATE
+} gs_omp_clause_default_kind_t;
+#endif
+
+typedef enum gs_tls_model_kind {
+  GS_TLS_MODEL_NONE,
+  GS_TLS_MODEL_GLOBAL_DYNAMIC,
+  GS_TLS_MODEL_LOCAL_DYNAMIC,
+  GS_TLS_MODEL_INITIAL_EXEC,
+  GS_TLS_MODEL_LOCAL_EXEC
+} gs_tls_model_kind_t;
+
+typedef enum gs_symbol_visibility_kind
+{
+  GS_VISIBILITY_DEFAULT,
+  GS_VISIBILITY_PROTECTED,
+  GS_VISIBILITY_HIDDEN,
+  GS_VISIBILITY_INTERNAL
+} gs_symbol_visibility_kind_t;
+
+#endif /* __GSPIN_TREE_H__ */

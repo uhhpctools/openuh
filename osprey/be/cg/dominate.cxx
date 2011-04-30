@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -285,6 +289,12 @@ Init_BB_Dom_Info(BB *bb, BS *dom_init)
     BS_Union1D(BB_pdom_set(bb), BB_ID_POST_EXIT, NULL);
   }
 }
+
+BOOL
+Are_Dominators_Calculated(void)
+{
+  return pool_inited;
+}
 
 /* ====================================================================
  *
@@ -312,6 +322,7 @@ Calculate_Dominators(void)
   BB *last_bb = NULL;
 
   Start_Timer(T_CalcDom_CU);
+  CFLOW_Trace_Dom = Get_Trace(TP_FLOWOPT, 0x200);
 
   /* Prepare to allow allocations from our private mem pool.
    */
@@ -557,6 +568,7 @@ Calculate_Dominators(void)
 void
 BB_REGION_Calculate_Dominators(const BB_REGION& region)
 {
+  CFLOW_Trace_Dom = Get_Trace(TP_FLOWOPT, 0x200);
   MEM_POOL_Push(&MEM_local_pool);
   BB_SET* bs_tmp = BB_SET_Universe(PU_BB_Count+2, &MEM_local_pool);
   std::vector<BB*> region_bbs;
@@ -679,6 +691,7 @@ BB_REGION_Calculate_Dominators(const BB_REGION& region)
 void
 BB_SET_Calculate_Dominators(BB_SET *bbset, BOOL compute_dom, BOOL compute_pdom)
 {
+  CFLOW_Trace_Dom = Get_Trace(TP_FLOWOPT, 0x200);
   MEM_POOL_Push(&MEM_local_pool);
   BB_SET* bs_tmp = BB_SET_Universe(PU_BB_Count+2, &MEM_local_pool);
   std::vector<BB*> set_bbs;

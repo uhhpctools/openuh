@@ -228,6 +228,20 @@ extern BOOL TI_RES_RES_Resources_Available(
   INT          cycle
 );
 
+#if defined(TARG_SL)
+extern BOOL TI_RES_RES_Alternative_Resources_Available(
+  TI_RES_RES  *res,
+  TOP          opcode,
+  INT          cycle
+);
+
+extern void TI_RES_RES_Reserve_Alternative_Resources(
+  TI_RES_RES  *res,
+  TOP          opcode,
+  INT          cycle
+);
+#endif
+
 extern void TI_RES_RES_Reserve_Resources(
   TI_RES_RES  *res,
   TOP          opcode,

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -587,7 +591,7 @@
 ***	)
 ***		Return  lda of type rtype of sym
 ***
-***	WN *WN_LdaString(char *str,
+***	WN *WN_LdaString(const char *str,
 ***		WN_OFFSET ldaOffset,
 ***		INT32 len
 ***	)
@@ -1022,7 +1026,7 @@ WN_CreateRcomma (OPCODE opc, WN *value, WN *block) {
 			  OPCODE_desc(opc), value, block);
 }
 
-extern WN *WN_CreateComment (char *s);	/* create comment node */
+extern WN *WN_CreateComment (const char *s);	/* create comment node */
 extern STR_IDX WN_GetComment (const WN *wn);  /* get string idx from comment node */
 
 extern WN *WN_CreateAsm_Stmt (INT16 kid_count, char *asm_string);
@@ -1032,11 +1036,6 @@ extern WN *WN_CreateAsm_Input (char *constraint, UINT32 opnd_num, WN *opnd_expr)
 extern WN *WN_CopyNode(const WN* src_wn);
 
 
-#if 0
-#define WN_Move_Maps(dst,src) \
-  IPA_WN_Move_Maps(Current_Map_Tab, (dst), (src))
-extern void IPA_WN_Move_Maps(WN_MAP_TAB *maptab, WN *dst, WN *src);
-#endif
 
 extern void IPA_WN_Move_Maps_PU(WN_MAP_TAB *src, WN_MAP_TAB *dst, WN *wn);
 
@@ -1174,7 +1173,7 @@ extern WN *WN_Lda(TYPE_ID rtype,
 		  UINT field_id = 0);
 
 
-extern WN *WN_LdaString(char *str,
+extern WN *WN_LdaString(const char *str,
 			WN_OFFSET ldaOffset,
 			INT32 len);
 
@@ -1503,6 +1502,28 @@ WN_generic_call (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc, INT32 n, ST *sym)
     return WN_generic_call (opr, rtype, desc, n, ST_st_idx (sym));
 }
 
+inline BOOL
+OPERATOR_is_scalar_load (OPERATOR opr)
+{
+    return (opr == OPR_LDID || opr == OPR_LDBITS);
+}
+
+inline BOOL
+OPERATOR_is_scalar_store (OPERATOR opr)
+{
+    return (opr == OPR_STID || opr == OPR_STBITS);
+}
+
+inline BOOL 
+OPERATOR_is_scalar_iload (OPERATOR opr)
+{
+    return (opr == OPR_ILOAD || opr == OPR_ILDBITS || opr == OPR_ILOADX);
+}
+inline BOOL
+OPERATOR_is_scalar_istore (OPERATOR opr)
+{
+    return (opr == OPR_ISTORE || opr == OPR_ISTBITS || opr == OPR_ISTOREX);
+}
 
 extern WN* WN_CreateAffirm (WN* condition);
 extern WN* WN_CreateAlloca (WN* size);
@@ -1514,7 +1535,17 @@ extern void WN_set_st_addr_saved (WN *);
 extern BOOL WN_has_side_effects (const WN*);
 
 extern WN *WN_Rrotate (TYPE_ID desc, WN *src, WN *cnt);
+extern BOOL WN_is_executable(WN *);
+extern BOOL WN_is_bit_op(WN *);
+extern int  WN_get_bit_from_const(WN *);
+extern WN * WN_get_bit_from_expr(WN *);
+extern BOOL WN_is_power_of_2(WN *);
+extern WN * WN_get_bit_reduction(WN *);
 
+#if defined(TARG_SL)
+extern WN* WN_CreateFork(INT32 label_number, BOOL major);
+extern BOOL WN_Intrinsic_OP_Slave(WN * wn);
+#endif // TARG_SL
 #endif /* wn_INCLUDED */
 
 

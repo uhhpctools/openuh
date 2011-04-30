@@ -555,7 +555,7 @@
 #define HAVE_GAS_WEAK 1
 
 /* Define if your assembler supports .hidden. */
-/* #undef HAVE_GAS_HIDDEN */
+#define HAVE_GAS_HIDDEN 1
 
 /* Define if your assembler supports .uleb128. */
 #define HAVE_AS_LEB128 1
@@ -567,7 +567,7 @@
 #define HAVE_GAS_SHF_MERGE 1
 
 /* Define if your assembler supports thread-local storage. */
-/* #undef HAVE_AS_TLS */
+#define HAVE_AS_TLS 1
 
 /* Define if your assembler supports explicit relocations. */
 /* #undef HAVE_AS_EXPLICIT_RELOCS */

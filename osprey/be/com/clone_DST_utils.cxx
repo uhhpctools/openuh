@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -69,14 +73,14 @@ create_ipa_internal_name(void)
     // GNU C/C++ uses a real preprocessor, so we can't put #if inside
     // macro arguments.
 #if defined(_LEGO_CLONER)
-    name = (char *) CXX_NEW(char[strlen("***ipa_intnl***")+20],
+    name = (char *) CXX_NEW_ARRAY(char, strlen("***ipa_intnl***")+20,
 			    MEM_src_pool_ptr);
 #else
-    name = (char *) CXX_NEW(char[strlen("***ipa_intnl***")+20],
+    name = (char *) CXX_NEW_ARRAY(char, strlen("***ipa_intnl***")+20,
 			    &Ipo_mem_pool);
 #endif // _LEGO_CLONER
 #else
-    name = (char *)CXX_NEW(char[strlen("***ipa_intnl***")+20], 
+    name = (char *)CXX_NEW_ARRAY(char, strlen("***ipa_intnl***")+20, 
 #ifndef _LEGO_CLONER
                            &Ipo_mem_pool);
 #else
@@ -91,7 +95,7 @@ create_ipa_internal_name(void)
 #endif //  !defined(_STANDALONE_INLINER)
 
 
-static DST_IDX
+DST_IDX
 get_abstract_origin(DST_IDX concrete_instance)
 {
     DST_INFO *dst = DST_INFO_IDX_TO_PTR(concrete_instance);
@@ -288,7 +292,7 @@ DST_enter_cloned_childs(DST_IDX parent,
                 idx = DST_mk_formal_parameter(decl,
 					  name,
                                           DST_INVALID_IDX,
-                                          (void *)&parm, /* for location */
+                                          ST_st_idx(param_st),
                                           GET_ABSTRACT_ORIGIN(child_idx),     /* abstract_origin */
                                           DST_INVALID_IDX,
                                           FALSE,
@@ -334,7 +338,7 @@ DST_enter_cloned_childs(DST_IDX parent,
 				name,
                                 DST_INVALID_IDX,
                                 0,
-                                (void*)&var,     /* for location    */
+				ST_st_idx(local_st),
                                 GET_ABSTRACT_ORIGIN(child_idx),  	/* abstract_origin */
                                 FALSE,
                                 FALSE,
@@ -347,7 +351,7 @@ DST_enter_cloned_childs(DST_IDX parent,
 	    }
         case DW_TAG_label:
 	    {
-            DST_ASSOC_INFO lbl;
+            ST_IDX lbl;
 	    char *label_name = NULL;
 
 #if (!defined(_LEGO_CLONER))
@@ -356,7 +360,7 @@ DST_enter_cloned_childs(DST_IDX parent,
 
             DST_LABEL *attr =  DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(DST_INFO_IDX_TO_PTR(child_idx)), DST_LABEL);
 
-	    DST_ASSOC_INFO_st_idx(lbl) = make_ST_IDX(
+	    lbl = make_ST_IDX(
 		DST_ASSOC_INFO_st_index(DST_LABEL_low_pc (attr)) 
 			+ symtab->Get_cloned_label_last_idx(),
 		symtab->Get_cloned_level() );
@@ -380,7 +384,7 @@ DST_enter_cloned_childs(DST_IDX parent,
     	    Current_DST = caller_file_dst;
 #endif
 
-            idx = DST_mk_label(label_name, (void *)&lbl, 
+            idx = DST_mk_label(label_name, lbl, 
 					GET_ABSTRACT_ORIGIN(child_idx));
 
             DST_append_child(parent, idx);
@@ -413,8 +417,8 @@ DST_enter_cloned_childs(DST_IDX parent,
 	    }
 	case DW_TAG_lexical_block:
 	    {
-	    DST_ASSOC_INFO low_pc;
-	    DST_ASSOC_INFO high_pc;
+	    ST_IDX low_pc;
+	    ST_IDX high_pc;
 
 #if (!defined(_LEGO_CLONER))
             Current_DST = callee_file_dst;
@@ -422,12 +426,12 @@ DST_enter_cloned_childs(DST_IDX parent,
 
 	    DST_LEXICAL_BLOCK *attr = DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(DST_INFO_IDX_TO_PTR(child_idx)), DST_LEXICAL_BLOCK);
 
-	    DST_ASSOC_INFO_st_idx(low_pc)  = make_ST_IDX(
+	    low_pc = make_ST_IDX(
 		DST_ASSOC_INFO_st_index(DST_LEXICAL_BLOCK_low_pc (attr)) 
 			+ symtab->Get_cloned_label_last_idx(),
 		symtab->Get_cloned_level() );
 
-	    DST_ASSOC_INFO_st_idx(high_pc)  = make_ST_IDX(
+	    high_pc = make_ST_IDX(
 		DST_ASSOC_INFO_st_index(DST_LEXICAL_BLOCK_high_pc (attr)) 
 			+ symtab->Get_cloned_label_last_idx(),
 		symtab->Get_cloned_level() );
@@ -454,8 +458,8 @@ DST_enter_cloned_childs(DST_IDX parent,
 #endif
 
 	    idx = DST_mk_lexical_block(block_name,
-                             (void *) &low_pc,
-                             (void *) &high_pc,
+				       low_pc,
+				       high_pc,
                              GET_ABSTRACT_ORIGIN(child_idx));
 
 	    DST_append_child(parent, idx);
@@ -744,7 +748,7 @@ DST_enter_inlined_subroutine(DST_IDX parent,
     DST_INFO_IDX idx;
     SCOPE *old_scope = symtab->Get_orig_scope_tab();
     SYMTAB_IDX old_callee_level = symtab->Get_orig_level();
-    DST_ASSOC_INFO low_pc, high_pc;
+    ST_IDX low_pc, high_pc;
 
     Scope_tab = symtab->Get_orig_scope_tab();
     CURRENT_SYMTAB = symtab->Get_orig_level();
@@ -761,16 +765,16 @@ DST_enter_inlined_subroutine(DST_IDX parent,
 #endif
 
 
-    DST_ASSOC_INFO_st_idx(low_pc) = make_ST_IDX(
+    low_pc = make_ST_IDX(
 	begin_label,
 	symtab->Get_cloned_level() );
 
-    DST_ASSOC_INFO_st_idx(high_pc) = make_ST_IDX(
+    high_pc = make_ST_IDX(
 	end_label,
 	symtab->Get_cloned_level() );
 
     if (caller_file_dst == callee_file_dst) {
-        idx = DST_mk_inlined_subroutine ((void *)&low_pc, (void *)&high_pc,
+        idx = DST_mk_inlined_subroutine (low_pc, high_pc,
 					     abstract_origin); 
 
         DST_append_child(parent, idx);
@@ -805,8 +809,8 @@ DST_enter_inlined_subroutine(DST_IDX parent,
 	
 	if (filename != NULL) {
 
-	    idx = DST_mk_cross_inlined_subroutine((void *)&low_pc, 
-						      (void *)&high_pc, 
+	    idx = DST_mk_cross_inlined_subroutine(low_pc, 
+						      high_pc, 
 						      routine_name,
 						      &file_index,
 						      file_size,
@@ -860,7 +864,7 @@ DST_enter_cloned_subroutine(DST_IDX parent,
                                    ST_name(cloned_st),
                                    DST_SUBPROGRAM_def_type(attr),
                                    orig_node,
-                                   (void *)&subst,
+                                   DST_ASSOC_INFO_st_idx(subst),
                                    DST_SUBPROGRAM_def_inline(attr),
                                    DST_SUBPROGRAM_def_virtuality(attr));
 

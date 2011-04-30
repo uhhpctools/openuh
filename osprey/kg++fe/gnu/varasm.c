@@ -1834,10 +1834,6 @@ assemble_static_space (size)
   const char *namestring;
   rtx x;
 
-#if 0
-  if (flag_shared_data)
-    data_section ();
-#endif
 
   ASM_GENERATE_INTERNAL_LABEL (name, "LF", const_labelno);
   ++const_labelno;

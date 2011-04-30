@@ -237,21 +237,13 @@ namespace {
 	     first != src.end (); ++first) {
 
 	  // Did the very last pass through the loop have zero trip count?
-	  INT64 zero_trips = first->num_zero_trips;
+	  FB_NUM_TYPE zero_trips = first->num_zero_trips;
 	  if ( first->invocation_count > 0 && first->last_trip_count == 0 ) {
 	    zero_trips++;
 	  }
 
-	  const INT64 positive = first->invocation_count - zero_trips;
-	  const INT64 back = first->total_trip_count - first->invocation_count + zero_trips;
-#if 0
-	  FB_Info_Loop loop (FB_FREQ (zero_trips),
-			     FB_FREQ ( tmp),
-			     FB_FREQ (FB_FREQ_TYPE_UNKNOWN),
-			     FB_FREQ (tmp1));
-
-	   dest.push_back(loop);
-#endif
+	  const FB_NUM_TYPE positive = first->invocation_count - zero_trips;
+	  const FB_NUM_TYPE back = first->total_trip_count - first->invocation_count + zero_trips;
 	dest.push_back(FB_Info_Loop(FB_FREQ (zero_trips),
 				    FB_FREQ (positive),
 				    FB_FREQ (FB_FREQ_TYPE_UNKNOWN),

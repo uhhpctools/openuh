@@ -60,4 +60,9 @@ complex c_exp_(complex *z)
   return __cexp(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_exp(complex *z) { return c_exp_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_exp_, c_exp);
+#endif /* defined(BUILD_OS_DARWIN) */

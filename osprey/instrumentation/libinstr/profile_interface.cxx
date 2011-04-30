@@ -365,17 +365,6 @@ void __profile_finish(void)
 
   Dump_all(fp, output_filename);
   
-#if 0  // so the fini routine won't core dump if it access instrumented code
-  // This fix is a patch so that the mongoose compiler can instrument itself
-  // The problem is that C++ code appears to result in other __profile
-  // procedures being called after __profile_finish.  For 7.4, we should
-  // find out why this is happening, and then restore this code.
-  for(i = PU_Profile_Handle_Table.begin();
-      i != PU_Profile_Handle_Table.end(); i++) {
-    PU_PROFILE_HANDLE pu_handle = (*i).second;
-    delete pu_handle;
-  }
-#endif
 
   fclose(fp);
 

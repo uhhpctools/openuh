@@ -253,18 +253,6 @@ void KDumpBin_DumpSyllableInfo(FILE *fp,sylinfo_t *psyl)
 
 void KDumpBin_DumpSymbolTableNodeInfo(FILE *fp,stn_t *pstn)
 {
-#if 0
-   union {
-      tfi_t  tfi;
-      vfi_t  vfi;
-      efi_t  efi;
-      afih_t afih;
-   } u;
-   limp_t  *plimpListParse;
-   struct _SYM_TABLE_NODE *pstnNext; 
-   struct _SYM_TABLE_NODE *pstnTempNext; 
-   struct _SYM_TABLE_NODE *pstnHashNext; 
-#endif
 
     fwrite(&(pstn->fExpected),sizeof(int),1,fp);
     KDumpBin_DumpString(fp,pstn->pchName);

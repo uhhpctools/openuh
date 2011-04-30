@@ -117,6 +117,9 @@ secondr_(void)
 #include <unistd.h>
 #include <sys/times.h>
 
+#if defined(BUILD_OS_DARWIN)
+extern
+#endif /* defined(BUILD_OS_DARWIN) */
 double _sec_per_clock;
 /*
  *	On Sparc systems, SECONDR uses times() to get wall-clock time.

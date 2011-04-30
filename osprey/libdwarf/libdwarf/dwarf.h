@@ -276,11 +276,6 @@ extern "C" {
 #define DW_AT_MIPS_assumed_size			0x2011 /* MIPS/SGI */
 
 /* HP extensions. */
-#if 0
-#define DW_AT_HP_unmodifiable                   0x2001 /* conflict: MIPS */
-#define DW_AT_HP_actuals_stmt_list              0x2010 /* conflict: MIPS */
-#define DW_AT_HP_proc_per_section               0x2011 /* conflict: MIPS */
-#endif
 #define DW_AT_HP_raw_data_ptr                   0x2012 /* HP */
 #define DW_AT_HP_pass_by_reference              0x2013 /* HP */
 #define DW_AT_HP_opt_level                      0x2014 /* HP */
@@ -472,9 +467,6 @@ extern "C" {
 #define DW_OP_lo_user			0xe0
 
     /* HP extensions. */
-#if 0
-#define DW_OP_HP_unknown                0xe0 /* HP conflict: GNU */
-#endif
 #define DW_OP_HP_is_value               0xe1 /* HP */
 #define DW_OP_HP_fltconst4              0xe2 /* HP */
 #define DW_OP_HP_fltconst8              0xe3 /* HP */
@@ -625,7 +617,11 @@ extern "C" {
 #define DW_CFA_def_cfa_offset   0x0e
 #define DW_CFA_def_cfa_expression 0x0f     /* DWARF3 */
 #define DW_CFA_expression       0x10       /* DWARF3 */
+#ifdef KEY
+#define DW_CFA_offset_extended_sf 0x11 /* DWARF3 */
+#else
 #define DW_CFA_cfa_offset_extended_sf 0x11 /* DWARF3 */
+#endif
 #define DW_CFA_def_cfa_sf       0x12       /* DWARF3 */
 #define DW_CFA_def_cfa_offset_sf 0x13      /* DWARF3 */
 
@@ -638,6 +634,12 @@ extern "C" {
 #define DW_CFA_GNU_window_save   0x2d  /* GNU */
 #define DW_CFA_GNU_args_size     0x2e /* GNU */
 #define DW_CFA_GNU_negative_offset_extended  0x2f /* GNU */
+
+#if defined(TARG_SL)
+#define DW_CFA_SL_gpr_reginfo    0x3c   /* SL */
+#define DW_CFA_SL_cr_reginfo     0x3d   /* SL */
+#define DW_CFA_SL_sr_reginfo     0x3e   /* SL */
+#endif
 
 #define DW_CFA_high_user         0x3f
 
@@ -685,6 +687,10 @@ extern "C" {
 #define DW_FRAME_REG29	29 /* integer reg 29 */
 #define DW_FRAME_REG30	30 /* integer reg 30 */
 #define DW_FRAME_REG31	31 /* integer reg 31, aka ra */
+#if defined(TARG_SL)
+#define DW_FRAME_REG34  34 /* link address reg, aka ja */
+#define DW_FRAME_REG35  35 /* return address reg, aka ra */
+#endif
 	
 	/* MIPS1, 2 have only some of these 64-bit registers.
 	** MIPS1  save/restore takes 2 instructions per 64-bit reg, and
@@ -748,6 +754,20 @@ extern "C" {
 #define DW_CHILDREN_yes		     0x01
 
 #define DW_ADDR_none		0
+
+#if defined(TARG_NVISA)
+/* PTX memory spaces: */
+#define DW_ADDR_reg_space	1
+#define DW_ADDR_sreg_space	2
+#define DW_ADDR_const_space	3
+#define DW_ADDR_global_space	4
+#define DW_ADDR_local_space	5
+#define DW_ADDR_param_space	6
+#define DW_ADDR_shared_space	7
+#define DW_ADDR_surf_space	8
+#define DW_ADDR_tex_space	9
+#define DW_ADDR_code_space	10
+#endif
 
 #ifdef __cplusplus
 }

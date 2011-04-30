@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -77,7 +81,7 @@ Add_Float_Stores ()
     for (op = BB_first_op(bb); op != NULL; op = next) {
       next = OP_next(op);
       // Skip non-x87 OPs and x87 loads and stores.
-      if (!TOP_is_uses_stack(OP_code(op)) ||
+      if (!TOP_is_x87(OP_code(op)) ||
 	  OP_load(op) ||
 	  OP_store(op)) {
 	continue;

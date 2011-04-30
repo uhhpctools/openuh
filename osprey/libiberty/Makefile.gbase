@@ -93,10 +93,24 @@ OBJS =	alloca.o	\
 	xstrdup.o	\
 	xstrerror.o	\
 
+ifeq ($(BUILD_OS), MINGW)
+OBJS += \
+	asprintf.o	\
+	vasprintf.o     \
+	getpagesize.o
+endif
 
-default: all
+default: first all last
+
 
 all: $(TARGET)
+
+first:
+ifndef SKIP_DEP_BUILD
+	$(call submake,$(BUILD_AREA)/include)
+endif
+
+last: make_libdeps
 
 $(TARGET): $(OBJS)
 	rm -f $(TARGET)

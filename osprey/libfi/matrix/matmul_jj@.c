@@ -54,6 +54,8 @@
 #define SUBNAME JGEMMX@
 #elif defined(UNIX_NAMING_CONVENTION)
 #define SUBNAME _JGEMMX
+#elif defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME underscore_jgemmx__
 #else
 #define SUBNAME _jgemmx__
 #endif

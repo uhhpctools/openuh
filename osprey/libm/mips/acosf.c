@@ -74,7 +74,13 @@ extern	float	acosf(float);
 #pragma weak acosf = __acosf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __acosf(float);
+#pragma weak acosf
+float acosf( float x ) {
+  return __acosf(x);
+}
+#elif defined(__GNUC__)
 extern  float  __acosf(float);
 float    acosf(float) __attribute__ ((weak, alias ("__acosf")));
 #endif

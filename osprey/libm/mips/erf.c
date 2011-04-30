@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: erf.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/erf.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:21-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.erf.c $
  *
  * Revision history:
  *  28-May-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-/* $Header: /proj/osprey/CVS/open64/osprey1.0/libm/mips/erf.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
+/* $Header: /home/bos/bk/kpro64-pending/libm/mips/erf.c 1.5 04/12/21 14:58:21-08:00 bos@eng-25.internal.keyresearch.com $ */
 
 /*
 	C program for floating point error function
@@ -100,7 +100,18 @@ extern	double	erfc(double);
 #pragma weak erfc = __erfc
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __erf(double);
+extern double __erfc(double);
+#pragma weak erf
+#pragma weak erfc
+double erf( double arg ) {
+  return __erf( arg );
+}
+double erfc( double arg ) {
+  return __erfc( arg );
+}
+#elif defined(__GNUC__)
 extern  double  __erf(double);
 
 double    erf() __attribute__ ((weak, alias ("__erf")));
@@ -545,7 +556,17 @@ double	result;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __erfl(long double);
+extern long double __erfcl(long double);
+long double erfl( long double x ) {	
+  return ( (long double)__erf((double)x) );
+}
+
+long double erfcl( long double x ) {	
+  return ( (long double)__erfc((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __erfl(long double);
 
 long double    erfl() __attribute__ ((weak, alias ("__erfl")));

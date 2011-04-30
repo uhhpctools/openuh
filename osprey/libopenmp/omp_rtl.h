@@ -1,26 +1,33 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
+
+/*
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_rtl.h
@@ -47,9 +54,13 @@
 
 
 /* machine dependent values*/
-/* parameters for Itanium2 */
-#define CACHE_LINE_SIZE		64	/* L1D size */
-#define CACHE_LINE_SIZE_L2L3	128	/* L2,L3 size */
+#define CACHE_LINE_SIZE		64	// L1D cache line size 
+
+#ifdef TARG_IA64
+#define CACHE_LINE_SIZE_L2L3    128     // L2L3 cache line size
+#else
+#define CACHE_LINE_SIZE_L2L3     64      // L2L3 cache line size
+#endif
 
 /* default setting values*/
 #define OMP_NESTED_DEFAULT	0	
@@ -77,7 +88,8 @@
 /*
   #define OMP_ALLOC_UNIT		CACHE_LINE_SIZE_L2L3 / 8 
 */
-
+// The following def should not be changed
+// It should be consistent with def in wn_mp.cxx
 
 struct collector_message
 {
@@ -91,26 +103,26 @@ struct collector_message
 
 
 typedef enum {
-  OMP_SCHED_UNKNOWN 	= 0,
-  OMP_SCHED_STATIC 	= 1,
-  OMP_SCHED_STATIC_EVEN 	= 2,
-  OMP_SCHED_DYNAMIC 	= 3,
-  OMP_SCHED_GUIDED 	= 4,
-  OMP_SCHED_RUNTIME 	= 5,
+  OMP_SCHED_UNKNOWN     = 0,
+  OMP_SCHED_STATIC      = 1,
+  OMP_SCHED_STATIC_EVEN = 2,
+  OMP_SCHED_DYNAMIC     = 3,
+  OMP_SCHED_GUIDED      = 4,
+  OMP_SCHED_RUNTIME     = 5,
 
-  OMP_SCHED_ORDERED_UNKNOWN	= 32,
-  OMP_SCHED_ORDERED_STATIC 	= 33,
-  OMP_SCHED_ORDERED_STATIC_EVEN 	= 34,
-  OMP_SCHED_ORDERED_DYNAMIC 	= 35,
-  OMP_SCHED_ORDERED_GUIDED 	= 36,
-  OMP_SCHED_ORDERED_RUNTIME 	= 37,
+  OMP_SCHED_ORDERED_UNKNOWN     = 32,
+  OMP_SCHED_ORDERED_STATIC      = 33,
+  OMP_SCHED_ORDERED_STATIC_EVEN = 34,
+  OMP_SCHED_ORDERED_DYNAMIC     = 35,
+  OMP_SCHED_ORDERED_GUIDED      = 36,
+  OMP_SCHED_ORDERED_RUNTIME     = 37,
 
   OMP_SCHED_DEFAULT = OMP_SCHED_STATIC_EVEN
 } omp_sched_t;
 
 #define OMP_SCHEDULE_DEFAULT	2
 #define OMP_CHUNK_SIZE_DEFAULT	1
-#define OMP_SCHED_ORDERED_GAP	30
+#define OMP_SCHED_ORDERED_GAP	32
 
 
 /*  micro_task prototype.
@@ -121,7 +133,7 @@ typedef enum {
 /*Cody - changed frame_pointer from char * to void *, seems to be OK
   Did it because the Portable Coroutine Library takes a void * as an argument
 */
-#define frame_pointer_t void*
+typedef void * frame_pointer_t;
 
 /* The entry function prototype is nolonger 
  * the seem as GUIDE*/
@@ -136,8 +148,15 @@ extern volatile int __omp_dynamic;	  /* dynamic enable/disable */
 extern volatile int __omp_max_num_threads;
 /* stores the number of threads requested for future parallel regions. */
 extern volatile int __omp_nthreads_var;
+/* num of hardware processors */
+extern int __omp_num_hardware_processors;
 /* num of processors available*/
 extern int 	    __omp_num_processors; 
+/* size of core list in affinty setting*/
+extern int 	    __omp_core_list_size; 
+/* list of processors available*/
+extern int *        __omp_list_processors;
+
 /* default schedule type and chunk size of runtime schedule*/
 extern omp_sched_t  __omp_rt_sched_type;
 extern int  	    __omp_rt_sched_size;
@@ -149,7 +168,7 @@ extern volatile unsigned long int __omp_stack_size;
 
 
 /* a system level lock, used for malloc in __ompc_get_thdprv ,by Liao*/
-extern omp_lock_t _ompc_thread_lock;
+extern ompc_spinlock_t _ompc_thread_lock;
 
 /* The OMP_EXE_MODE_NESTED_SEQUENTIAL is of no use any longer*/
 typedef enum {
@@ -173,29 +192,24 @@ typedef struct omp_team	    omp_team_t;
 
 
 /* kernel thread*/
-/* Should be 64 Bytes, currently 24B*/
 struct omp_u_thread{
   pthread_t uthread_id;		/* pthread id*/
   omp_u_thread_t *hash_next;	/* hash link*/
   omp_v_thread_t *task;		/* task(vthread)*/
-  /* Maybe a few more bytes should be here for alignment.*/
-  /* TODO: stuff bytes*/
-  int stuff_byte[10];
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+  char *stack_pointer;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE))) ;
 
 /* team*/
-/* Should be 256 Bytes, currently 208B*/
 struct omp_team{
+  volatile int barrier_flag; // To indicate all arrived
   //	int	team_id;
   int	team_size;
   int	team_level;	/* team_level is not currently used yet*/
   int	is_nested;	
-  /* not used yet */
-  //	omp_v_thread_t **team_list;
 
   /* for loop schedule*/
 
-  omp_lock_t	schedule_lock;
+  ompc_spinlock_t schedule_lock;
   volatile long loop_lower_bound;
   long	loop_upper_bound;
   long	loop_increament;
@@ -214,10 +228,16 @@ struct omp_team{
   /* for ordered schedule*/
   /* Using schedule_lock as the ordered lock*/
   volatile long	ordered_count;
+  // using a dummy field to make the following layout better
+  int dummy11;
+  // offset = 128, when -m64 
+  pthread_mutex_t barrier_lock;
+  pthread_cond_t barrier_cond;
   pthread_cond_t ordered_cond;
 
   /* for single*/
-  omp_lock_t	single_lock;
+  // offset = 264
+  ompc_lock_t	single_lock;
   volatile int	single_count; 
   //	volatile int	single_open; /* Single section protector*/
   /* for copyprivate*/
@@ -226,11 +246,8 @@ struct omp_team{
 
   /* for team barrier*/
   /* TODO: optimize the barrier implementation, test the performance */
-  pthread_mutex_t barrier_lock;
-  pthread_cond_t barrier_cond;
+  // offset = 320
   volatile int barrier_count;
-  volatile int barrier_count2;
-  volatile int barrier_flag; /* To indicate all arrived */
 
 
 
@@ -238,10 +255,9 @@ struct omp_team{
    * To avoid pthread allowed spurious wake up, and for nested teams,
    * use this as a semphore to synchronize all thread before they really start*/
   volatile int new_task;
+  pthread_mutex_t ordered_mutex;
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
-  /*Cody - added field to struct, the stuff_byte is probably off */
-
 
   /*Cody - used in task implementation to make sure all tasks have completed
     execution in a barrier, would like to do something better if possible
@@ -249,11 +265,10 @@ struct omp_team{
   volatile int  num_tasks;
 
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)))
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
 
 
 /* user thread*/
-/* Should be 64 Byte, currently 64 Byte*/
 struct omp_v_thread {
   int	vthread_id;
   int   state;
@@ -287,7 +302,7 @@ struct omp_v_thread {
 
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 
 
 
@@ -298,7 +313,7 @@ struct omp_v_thread {
 extern omp_v_thread_t *  __omp_level_1_team; 
 extern omp_u_thread_t *  __omp_level_1_pthread;
 extern int		 __omp_level_1_team_size;
-extern omp_team_t	 __omp_level_1_team_manager;
+extern volatile omp_team_t	 __omp_level_1_team_manager;
 extern int		 __omp_level_1_team_alloc_size;
 extern omp_u_thread_t *  __omp_uthread_hash_table[UTHREAD_HASH_SIZE]; 
 /* Where do they should be initialized? */
@@ -311,7 +326,13 @@ extern void __ompc_set_state(OMP_COLLECTOR_API_THR_STATE state);
 extern void __ompc_event_callback(OMP_COLLECTORAPI_EVENT event);
 
 
-/* prototypes, implementations are defined in omp_thread.h */
+/* prototypes, implementations are defined in omp_thread.h
+ *
+ * Note with newer versions of GCC, no function will be generated
+ * unless there is a normal function prototype when the actual
+ * function definition is marked inline.
+ */
+extern int __ompc_can_fork(void);
 extern void __ompc_set_nested(const int __nested);
 extern void __ompc_set_dynamic(const int __dynamic);
 extern int __ompc_get_dynamic(void);
@@ -338,22 +359,22 @@ extern void __ompc_end(void);
 extern void __ompc_fork(const int num_threads, omp_micro micro_task,
 			frame_pointer_t frame_pointer);
 /* copied from omp_lock.h*/
-extern void __ompc_init_lock (volatile omp_lock_t *);
-extern void __ompc_lock (volatile omp_lock_t *);
-extern void __ompc_unlock (volatile omp_lock_t *);
-extern void __ompc_destroy_lock (volatile omp_lock_t *);
-extern int __ompc_test_lock (volatile omp_lock_t *);
+extern void __ompc_init_lock (volatile ompc_lock_t *);
+extern void __ompc_lock (volatile ompc_lock_t *);
+extern void __ompc_unlock (volatile ompc_lock_t *);
+extern void __ompc_destroy_lock (volatile ompc_lock_t *);
+extern int __ompc_test_lock (volatile ompc_lock_t *);
 
-extern void __ompc_init_nest_lock (volatile omp_nest_lock_t *);
-extern void __ompc_nest_lock (volatile omp_nest_lock_t *);
-extern void __ompc_nest_unlock (volatile omp_nest_lock_t *);
-extern void __ompc_destroy_nest_lock (volatile omp_nest_lock_t *);
-extern int __ompc_test_nest_lock (volatile omp_nest_lock_t *);
+extern void __ompc_init_nest_lock (volatile ompc_nest_lock_t *);
+extern void __ompc_nest_lock (volatile ompc_nest_lock_t *);
+extern void __ompc_nest_unlock (volatile ompc_nest_lock_t *);
+extern void __ompc_destroy_nest_lock (volatile ompc_nest_lock_t *);
+extern int __ompc_test_nest_lock (volatile ompc_nest_lock_t *);
 
-extern void __ompc_critical(int gtid, volatile omp_lock_t **lck);
-extern void __ompc_end_critical(int gtid, volatile omp_lock_t **lck);
-extern void __ompc_reduction(int gtid, volatile omp_lock_t **lck);
-extern void __ompc_end_reduction(int gtid, volatile omp_lock_t **lck);
+extern void __ompc_critical(int gtid, volatile ompc_lock_t **lck);
+extern void __ompc_end_critical(int gtid, volatile ompc_lock_t **lck);
+extern void __ompc_reduction(int gtid, volatile ompc_lock_t **lck);
+extern void __ompc_end_reduction(int gtid, volatile ompc_lock_t **lck);
 
 
 
@@ -366,12 +387,11 @@ extern void __ompc_end_reduction(int gtid, volatile omp_lock_t **lck);
 
 /* Support Pathscale OpenMP lowering, CWG */
 extern int __ompc_sug_numthreads;
+extern int __ompc_cur_numthreads;
 
 /* TODO:Not implemented yet*/
 extern void __ompc_serialized_parallel(int vthread_id);
 extern void __ompc_end_serialized_parallel(int vthread_id);
-
-
 
 
 /* Cody - Tasking Declarations */
@@ -383,26 +403,29 @@ typedef coroutine omp_task_t;
 typedef struct omp_task_q   omp_task_q_t;
 
 
-/* default is to use linked list for task queue, can use circular buffer
-   by changing 1 to 0
-*/
-#if 1
+/* 
+ * task queue represented as linked list
+ */
 struct omp_task_q {
   omp_task_t *head;
   omp_task_t *tail;
-  omp_lock_t lock; /*global lock for the whole queue, very bad */
+  ompc_lock_t lock; /*global lock for the whole queue, very bad */
   uint32_t size;
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
 
-#else
+/* 
+ * task queue represented as circular queue
+ */
+/*
 struct omp_task_q {
   omp_task_t **queue; //an array of pointers
-  omp_lock_t lock;
+  ompc_lock_t lock;
   uint32_t head;
   uint32_t tail;
   uint32_t size;
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
-#endif
+*/
+
 
 
 extern omp_task_q_t * __omp_private_task_q;
@@ -480,8 +503,7 @@ extern int __ompc_task_numtasks_cond();
 
 typedef struct omp_task_stats omp_task_stats_t;
 
-struct omp_task_stats
-{
+struct omp_task_stats {
   unsigned int tasks_started;
   unsigned int tasks_skipped;
   unsigned int tasks_created;
@@ -496,8 +518,6 @@ extern __thread unsigned int __omp_tasks_started;
 extern __thread unsigned int __omp_tasks_skipped;
 extern __thread unsigned int __omp_tasks_created;
 extern __thread unsigned int __omp_tasks_stolen;
-
-//omp_task_stats_t __omp_task_stats[OMP_MAX_NUM_THREADS];
 
 extern char *__omp_task_stats_filename;
 

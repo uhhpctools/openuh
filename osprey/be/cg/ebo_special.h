@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -45,10 +45,10 @@
  * =======================================================================
  *
  *  Module: ebo_special.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/ebo_special.h,v $
+ *  $Revision: 1.25 $
+ *  $Date: 05/12/05 08:59:06-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.ebo_special.h $
  *
  *  Revision comments:
  *
@@ -147,7 +147,7 @@ INT EBO_Copy_Operand (OP *op);
 BOOL delete_duplicate_op (OP *op,
                           EBO_TN_INFO **opnd_tninfo,
                           EBO_OP_INFO *opinfo
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
                           , EBO_TN_INFO **actual_tninfo = NULL
 #endif
 			  );
@@ -191,16 +191,21 @@ BOOL Special_Sequence (OP *op,
 void Redundancy_Elimination ();
 #endif
 #ifdef TARG_X8664
+
+class LOOP_DESCR;
+
 void Update_op_must_not_be_moved( OP*, EBO_TN_INFO** );
 BOOL EBO_Merge_Memory_Addr( OP*, TN**, EBO_TN_INFO**, EBO_TN_INFO** );
-BOOL EBO_Load_Execution( OP*, TN**, EBO_TN_INFO** );
+BOOL EBO_Not_Load_Exec_Opnd( OP* );
+BOOL EBO_Fold_Lea_Const_Component( OP* );
+BOOL EBO_Opt_Const_Array( OP*, LOOP_DESCR*, INT );
+BOOL EBO_Load_Execution( OP*, TN**, EBO_TN_INFO**, int );
 BOOL EBO_Lea_Insertion( OP*, TN**, EBO_TN_INFO** );
 BOOL EBO_Fold_Load_Duplicate( OP*, TN**, EBO_TN_INFO** );
-BOOL Combine_L1_L2_Prefetches( OP*, TN**, EBO_TN_INFO** );
 void Lea_Insertion ();
 void Init_Load_Exec_Map( BB*, MEM_POOL* );
 BOOL Delete_Unwanted_Prefetches( OP* );
-
+BOOL EBO_Can_Eliminate_Zero_Opnd_OP(OP *);
 #endif /* TARG_X8664 */
 
 BOOL EBO_Can_Merge_Into_Offset (OP *op);
@@ -208,4 +213,7 @@ BOOL EBO_Can_Merge_Into_Offset (OP *op);
 #ifdef KEY
 void EBO_Special_Start( MEM_POOL* );
 void EBO_Special_Finish();
+#if !defined(TARG_IA64) && !defined(TARG_SL)
+BOOL Combine_L1_L2_Prefetches( OP*, TN**, EBO_TN_INFO** );
+#endif
 #endif // KEY

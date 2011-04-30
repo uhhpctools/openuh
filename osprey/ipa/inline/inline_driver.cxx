@@ -49,11 +49,19 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <unistd.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */ 
 #include <cmplrs/rcodes.h>	    /* for exit return status */
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+void CG_force_link(void);
+
+#endif /* __MINGW32__ */
 
 #include "defs.h"
 #include "config.h"		    /* for Configure() */
@@ -61,6 +69,7 @@
 #include "flags.h"		    /* for Common_Option_Groups */
 #include "file_util.h"		    /* New_Extension() */
 #include "glob.h"		    /* for [Tlog|Irb]_File_Name and Tim_File */
+#include "err_host.tab"
 #include "erglob.h"		    /* Include the error tables */
 #include "mempool.h"
 #include "wn.h"			    /* for ir_bwrite.h */
@@ -149,7 +158,7 @@ Process_Command_Line (INT argc, char **argv)
 		    if (argv[i][3] != 0)
 			break;
 		    /* else, fall through */
-#ifndef linux
+#if ! (defined(linux) || defined(BUILD_OS_DARWIN))
 		case 0:
 		    if (!IPA_Enable_DFE_Set)
 			IPA_Enable_DFE = FALSE;
@@ -240,14 +249,8 @@ Process_Command_Line (INT argc, char **argv)
     
     IPA_Enable_BarrierFarg = FALSE;
 
-#if 0
-    /* Start timers if we're tracing: */
-    if ( Tracing_Enabled ) {
-      Initialize_Timing (TRUE); /* Compile when timers actually in use */
-    }
-#endif
 
-    if ( Get_Trace ( TKIND_ALLOC, 32767 ) ) {
+    if ( Get_Trace ( TKIND_ALLOC, TP_INLINE ) ) {
       MEM_Tracing_Enable ();
     }
 
@@ -295,10 +298,6 @@ Process_Command_Line (INT argc, char **argv)
       List_Phase_Numbers ();
     }
 
-#if 0 /* Compile when timers actually in use */
-    if (Get_Trace (TKIND_INFO, TINFO_TIME))
-      Tim_File = TFile;
-#endif
 
 }
 
@@ -326,6 +325,9 @@ main (INT argc, char **argv)
     /* Perform preliminary command line processing: */
     Cur_PU_Name = NULL;
     Init_Error_Handler (100);
+#if !defined(SHARED_BUILD)
+    Set_Error_Tables ( Phases, host_errlist );
+#endif
     Set_Error_Line ( ERROR_LINE_UNKNOWN );
     Set_Error_File (NULL);
 
@@ -344,8 +346,13 @@ main (INT argc, char **argv)
       /* first need to delete existing file, if doesn't exist this
 	 gives a message but we ignore it. */
       unlink(Irb_Output_Name);
+#ifndef __MINGW32__
       rc = symlink(Irb_File_Name, Irb_Output_Name);
       if (rc != 0)
+#else
+      rc = CopyFile(Irb_File_Name, Irb_Output_Name, TRUE);
+      if (rc == 0)
+#endif /* __MINGW32__ */
 	ErrMsg ( EC_IR_Create, Irb_Output_Name, errno);
     }
     else {
@@ -354,9 +361,6 @@ main (INT argc, char **argv)
       Init_Operator_To_Opcode_Table();
       BOOL close_output = Inliner(Irb_File_Name, Irb_Output_Name);
  
-#if 0
-      Finish_Compilation_Timing ( Tim_File, Src_File_Name );  /* Compile when timers actually in use */
-#endif
 
       if ( Get_Trace ( TKIND_ALLOC, TP_IPA ) ) {
 	fprintf ( TFile,

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -232,9 +236,8 @@ Mtype_to_Ukind(MTYPE mtype)
    
    switch (mtype)
    {
-   /*MTYPE_B is added to support PREG_AS_BOOL, by Liao, bug189*/
    case MTYPE_B:
-      ukind = PREG_AS_BOOL;
+      ukind = PREG_AS_INT8;
       break;
    case MTYPE_I1: 
       ukind = PREG_AS_INT8;
@@ -285,12 +288,34 @@ Mtype_to_Ukind(MTYPE mtype)
       ukind = PREG_AS_CQ;
       break;
 #ifdef TARG_X8664
+   case MTYPE_V16C4:
+   case MTYPE_V16C8:
    case MTYPE_V16I1:
    case MTYPE_V16I2:
    case MTYPE_V16I4:
    case MTYPE_V16I8:
    case MTYPE_V16F4:
    case MTYPE_V16F8:
+
+   case MTYPE_V8I1:
+   case MTYPE_V8I2:
+   case MTYPE_V8I4:
+   case MTYPE_V8I8:
+   case MTYPE_V8F4:
+
+   case MTYPE_M8I1:
+   case MTYPE_M8I2:
+   case MTYPE_M8I4:
+   case MTYPE_M8F4:
+
+   case MTYPE_V32C4:
+   case MTYPE_V32C8:
+   case MTYPE_V32I1:
+   case MTYPE_V32I2:
+   case MTYPE_V32I4:
+   case MTYPE_V32I8:
+   case MTYPE_V32F4:
+   case MTYPE_V32F8:
      ukind = PREG_AS_IEEE64;
      break;
 #endif
@@ -306,6 +331,9 @@ static PREG_INFO *
 Get_Preg_Info(INT16 preg_num)
 {
    PREG_INFO *preg_info = NULL;
+
+   if (preg_num < 0)
+     return NULL;
 
    /* Linear search for a matching entry in the hash table list */
    for (preg_info = Preg_Info_Hash_Tbl[PREG_INFO_HASH_IDX(preg_num)];
@@ -324,7 +352,7 @@ Accumulate_Preg_Info(TY_IDX preg_ty, INT16 preg_num)
    PREG_INFO      *preg_info;
    INT             usage_kind;
 
-   if (preg_num == -1)
+   if (preg_num <= -1)
      return;
 
    Is_True(TY_Is_Scalar(preg_ty), 
@@ -1067,7 +1095,8 @@ Accumulate_Expr_PUinfo(WN *root)
 	 case OPR_LDID:
 	    if (ST_sym_class(WN_st(wn)) == CLASS_PREG)
 	    {
-	       Accumulate_Preg_Info(ST_type(WN_st(wn)), WN_load_offset(wn));
+              if (!IS_RETURN_PREG(wn))
+                Accumulate_Preg_Info(ST_type(WN_st(wn)), WN_load_offset(wn));
 
 	       /* If we encounter an unexpected load of a return
 		* register, then update the CALLSITE to indicate that
@@ -1399,21 +1428,13 @@ PUinfo_Get_ReturnPreg(TY_IDX return_ty)
       RETURN_INFO return_info = Get_Return_Info (return_ty,
 						 Use_Simulated);
 
-      //merged from UPC 2.2, Liao
-      if ( TY_mtype(return_ty) == MTYPE_M) {
-	//fake the return pregs for functions returning structs
-	//fprintf(stderr, "returning struct type:\n");
-	//Print_TY(stderr, return_ty);
-	RETURN_PREG_mtype(return_preg_ptr, 0) = MTYPE_M;
-	RETURN_PREG_mtype(return_preg_ptr, 1) = MTYPE_V;
-	preg_num1 = -1;
-      } else if (RETURN_INFO_count(return_info) <= 2) {
-	
-	RETURN_PREG_mtype(return_preg_ptr, 0) = RETURN_INFO_mtype (return_info, 0);
-	RETURN_PREG_mtype(return_preg_ptr, 1) = RETURN_INFO_mtype (return_info, 1);
-	preg_num1 = RETURN_INFO_preg (return_info, 0);
-	preg_num2 = RETURN_INFO_preg (return_info, 1);
-
+      if (TY_mtype(return_ty) == MTYPE_M) {
+        //fake the return pregs for functions returning structs
+        RETURN_PREG_mtype(return_preg_ptr, 0) = MTYPE_M;
+        RETURN_PREG_mtype(return_preg_ptr, 1) = MTYPE_V;
+        preg_num1 = -1;
+      } 
+      else if (RETURN_INFO_count(return_info) <= 2) {
 
 	 RETURN_PREG_mtype(return_preg_ptr, 0) = RETURN_INFO_mtype (return_info, 0);
 	 RETURN_PREG_mtype(return_preg_ptr, 1) = RETURN_INFO_mtype (return_info, 1);

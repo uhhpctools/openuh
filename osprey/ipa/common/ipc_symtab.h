@@ -61,12 +61,12 @@ extern "C" {
 extern void
 process_whirl32 (an_object_file_ptr p_obj, int nsec,
                  const Elf32_Shdr* section_table,
-                 boolean check_whirl_revision, const char* file_name);
+                 boolean check_whirl_revision, const char* file_name, off_t);
 
 extern void
 process_whirl64 (an_object_file_ptr p_obj, int nsec,
                  const Elf64_Shdr* section_table,
-                 boolean check_whirl_revision, const char* file_name);
+                 boolean check_whirl_revision, const char* file_name, off_t);
 
 
 #ifdef _64BIT_OBJECTS

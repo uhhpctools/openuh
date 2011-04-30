@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -35,7 +39,6 @@
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
-
 
 #define INCLUDING_IN_REGISTER // we modify register classes and we're
 			      // really part of the register implementation
@@ -340,7 +343,7 @@ void Init_Mtype_RegClass_Map(void)
 
   map[MTYPE_F4] = Is_Target_SSE2() ? ISA_REGISTER_CLASS_float : ISA_REGISTER_CLASS_x87;
   map[MTYPE_F8] = Is_Target_SSE2() ? ISA_REGISTER_CLASS_float : ISA_REGISTER_CLASS_x87;
-  map[MTYPE_F10] = Is_Target_SSE2() ? ISA_REGISTER_CLASS_float : ISA_REGISTER_CLASS_x87;
+  map[MTYPE_F10] = ISA_REGISTER_CLASS_x87;
   map[MTYPE_FQ] = ISA_REGISTER_CLASS_x87;
   map[MTYPE_F16] = ISA_REGISTER_CLASS_UNDEFINED;
 
@@ -356,9 +359,19 @@ void Init_Mtype_RegClass_Map(void)
   map[MTYPE_V8I1] = ISA_REGISTER_CLASS_float;
   map[MTYPE_V8I2] = ISA_REGISTER_CLASS_float;
   map[MTYPE_V8I4] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V8I8] = ISA_REGISTER_CLASS_float;
   map[MTYPE_V8F4] = ISA_REGISTER_CLASS_float;
   map[MTYPE_M8I1] = ISA_REGISTER_CLASS_mmx;
   map[MTYPE_M8I2] = ISA_REGISTER_CLASS_mmx;
   map[MTYPE_M8I4] = ISA_REGISTER_CLASS_mmx;
   map[MTYPE_M8F4] = ISA_REGISTER_CLASS_mmx;
+  /* 256-bit floating point */
+  map[MTYPE_V32C4] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32C8] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32I1] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32I2] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32I4] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32I8] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32F4] = ISA_REGISTER_CLASS_float;
+  map[MTYPE_V32F8] = ISA_REGISTER_CLASS_float;
 }

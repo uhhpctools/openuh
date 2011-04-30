@@ -81,11 +81,6 @@ init_ready_list (ready)
   target_n_insns = 0;
   sched_n_insns = 0;
 
-#if 0
-  /* Print debugging information.  */
-  if (sched_verbose >= 5)
-    debug_dependencies ();
-#endif
 
   /* Initialize ready list with all 'ready' insns in target block.
      Count number of insns in the target block being scheduled.  */

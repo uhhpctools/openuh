@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -68,7 +72,7 @@ simp_cior, 	/* OPR_CIOR */
 NULL, 	/* OPR_COMMA */
 NULL, 	/* OPR_COMMENT */
 NULL, 	/* OPR_COMPGOTO */
-NULL, 	/* OPR_COMPLEX */
+simp_pair, 	/* OPR_COMPLEX */
 NULL, 	/* OPR_CONST */
 NULL, 	/* OPR_CSELECT */
 simp_cvt,	 /* OPR_CVT */
@@ -181,7 +185,7 @@ NULL,   /* OPR_ASM_INPUT */
 NULL,   /* OPR_RROTATE */
 NULL,   /* OPR_LDA_LABEL */
 NULL,   /* OPR_GOTO_OUTER_BLOCK */
-NULL,   /* OPR_EXTRACT_BITS */
+simp_extract_bits,   /* OPR_EXTRACT_BITS */
 NULL,   /* OPR_COMPOSE_BITS */
 #endif
 #ifdef TARG_X8664

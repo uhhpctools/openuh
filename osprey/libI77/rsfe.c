@@ -57,11 +57,7 @@
 extern int lnblnk_ (char *s, int len);	/* in libF77 */
 
 static
-#if 11
 int s_rsfe_com (cilist64 *a, unit **fu)
-#else
-int s_rsfe_com (cilist *a, unit **fu)
-#endif
 {
    int             n;
    unit           *ftnunit;
@@ -155,29 +151,20 @@ int s_rsfe_com (cilist *a, unit **fu)
 int
 s_rsfe (cilist *a)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsfe_com(&dst, &f77curunit);
-#else
-    return( s_rsfe_com( a, &f77curunit) );
-#endif
 }
 
 
 int
 s_rsfe_mp (cilist *a, unit **fu)
 {
-#if 11
   cilist64 dst;
   get_cilist64(&dst, a);
   return s_rsfe_com(&dst, fu);
-#else
-    return( s_rsfe_com( a, fu) );
-#endif
 }
 
-#if 11
 
 int
 s_rsfe64 (cilist64 *a)
@@ -191,7 +178,6 @@ s_rsfe64_mp (cilist64 *a, unit **fu)
     return( s_rsfe_com( a, fu) );
 }
 
-#endif /* -64 and -n32 */
 
 
 int

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -366,6 +370,11 @@
  *
  *      Build the base locality groups for a depth of (loopdepth+1), i.e. the 
  *      innermost level.
+ *
+ *  void Build_Induc_Base_LG ()
+ *
+ *      Build the locality group for the UGS with the base address of the
+ *      associated ARRAY being inductive in the innermost level.
  *
  *  PF_VOLUME Volume (mINT16 depth)
  *
@@ -736,6 +745,10 @@ class PF_LG {
   void      Split_LG ();     // split if large spread
   void      Gen_Pref_Node (PF_SORTED_REFS* srefs, mINT16 start, mINT16 stop,
                          PF_LEVEL, PF_DESC*, PF_SPLIT_VECTOR*);
+            /* Similar to the purpose of Gen_Pref_Node, but this deals with
+               the cases where the base address of an ARRAY being inductive.
+             */
+  void      Gen_Induc_Base_Pref_Node (PF_SORTED_REFS* srefs, mINT16 srefnum);
   INT Get_Bit_Vec (PF_DESC* pfdesc,
                    PF_LEVEL level,
                    PF_SPLIT_VECTOR* split_vec);
@@ -743,6 +756,10 @@ class PF_LG {
   INT64 Distance_LR (WN* ref, FRAC* dvec);    /* Compute distance of ref
                                                * from leading ref.
                                                */
+  INT64     Offset_to_Base_Addr(WN* ref); /* Compute the constant offset of
+                                             ref from the base address for an
+                                             inductive base addr cases.
+                                          */
   INT       LR_Compare (mINT16 refvecnum1, mINT16 refvecnum2);
   void      LR_Ordering (PF_SORTED_REFS* srefs, INT start, INT stop);
 
@@ -761,6 +778,10 @@ public:
   
   FRAC*     Ref_In_LG (WN* ref);      // check if reference is in this LG
   BOOL      Add_Ref (WN* ref, mINT16 bitpos);  // add a reference to PF_REFLIST
+            /* This is similar to Add_Ref except that it adds a reference 
+               to PF_REFLIST for an inductive base addr case.
+             */
+  BOOL      Add_Induc_Base_Ref (WN* ref, mINT16 bitpos);  
   BOOL      Add_Group (PF_LG* lg, WN* lref);   // add a locality group
   BOOL Check ();    // just check that there are no duplicates. For debugging.
   BOOL Check_Ref (mINT16 refnum);   /* just check that there are no duplicates.
@@ -796,13 +817,17 @@ public:
   mINT16        Get_Stride_One_Loop ();
   mINT16        Get_Stride_One_Size ();
   mINT32        Get_Stride_In_Enclosing_Loop ();
-#if defined(OSP_OPT) && defined(TARG_IA64)
+#if defined(TARG_IA64)
   BOOL           Get_Stride_Accurate();
 #endif
   mINT16        Stride_Forward ();
   void          Gen_Prefetch (PF_DESC* pfdesc,
                              PF_SPLIT_VECTOR* split_vec,
                              PF_LEVEL level);
+                /* This is similar to Gen_Prefetch() but it deals with the
+                   inductive base addr cases.
+                 */
+  void		Gen_Induc_Base_Prefetch();
   void Print (FILE*);
 };
 
@@ -834,9 +859,9 @@ class PF_UGS {
   // size in bytes travelled per iteration of immediately enclosing loop
   mINT32            _stride_in_enclosing_loop;
 
-#if defined(OSP_OPT) && defined(TARG_IA64)
-  // this variable is used to indicate whether the computation of _stride_in_enclosing_loop
-  // is accurate or is just a kind of estimation. 
+#if defined(TARG_IA64)
+  // this variable is used to indicate whether the computation of 
+  // _stride_in_enclosing_loop is accurate or is just a kind of estimation. 
   BOOL               _stride_accurate;
 #endif
   
@@ -856,6 +881,11 @@ public:
   ~PF_UGS ();
   BOOL                  Add_Ref (WN* ref);
   void                  Build_Base_LGs ();
+                        /* Similar to Build_Base_LGs(), but this builds the 
+                           locality group for the UGS with an inductive base 
+                           address case.
+                         */
+  void                  Build_Induc_Base_LG ();
   PF_VOLUME             Volume (mINT16 depth);
 
   void                  Find_Loc_Space (PF_LOCLOOP locloop);
@@ -871,7 +901,7 @@ public:
   mINT16                Get_Stride_One_Loop () const { return _stride_one_loop; }
   mINT16                Get_Stride_One_Size () const { return _stride_one_size; }
   mINT32                Get_Stride_In_Enclosing_Loop () const { return _stride_in_enclosing_loop; }
-#if defined(OSP_OPT) && defined(TARG_IA64)
+#if defined(TARG_IA64)
   BOOL                   Get_Stride_Accurate ()    const { return _stride_accurate; }
 #endif
   mINT16                Stride_Forward ()    const { return _stride_forward; }
@@ -893,21 +923,35 @@ class PF_BASE_ARRAY {
   PF_UGS_DA     _ugs;
   mINT16        _dim;       // dimension of this array
   PF_LOOPNODE   *_myloopnode;
+  
+  BOOL          _inductive_base;  // Is this a case where the index
+                                  // expression in each dim is a 
+                                  // constant but the base address
+                                  // is inductive?
+  BOOL          _indirect_base;   // Is this a case where the index
+                                  // expression in each dim is a 
+                                  // constant but the base address
+                                  // contains an indirect but otherwise 
+                                  // is inductive?
 
   PF_BASE_ARRAY (void);
   PF_BASE_ARRAY (const PF_BASE_ARRAY&);
   PF_BASE_ARRAY* operator= (const PF_BASE_ARRAY&);
 public:
-  PF_BASE_ARRAY (SYMBOL* symb, WN* wn_array, mINT16 dim, PF_LOOPNODE* loopnode)
+  PF_BASE_ARRAY (SYMBOL* symb, WN* wn_array, mINT16 dim, PF_LOOPNODE* loopnode,
+                 BOOL inductive_base = FALSE, BOOL indirect_base = FALSE)
     : _ugs (PF_mpool) {
     _array_base = symb;
     _sample_wn_array = wn_array;
     _dim        = dim;
     _myloopnode = loopnode;
+    _inductive_base = inductive_base;
+    _indirect_base = indirect_base;
   }
   ~PF_BASE_ARRAY ();
   SYMBOL    *Get_Symbol () { return _array_base; }
-  BOOL      Add_Ref (WN* wn_array, BOOL do_check = TRUE);
+  BOOL      Add_Ref (WN* wn_array, BOOL do_check = TRUE, 
+                     BOOL induc_base = FALSE);
   PF_VOLUME Volume (mINT16 depth);
   void      Build_Base_LGs ();
   void      Find_Loc_Space (PF_LOCLOOP locloop);
@@ -915,6 +959,8 @@ public:
   void      Gen_Prefetch (PF_SPLIT_VECTOR*);
 
   mINT16    Get_Dim() const { return _dim; }
+  BOOL      Get_Inductive_Base() const { return _inductive_base; }
+  BOOL      Get_Indirect_Base() const  { return _indirect_base; }
   mINT16    Get_Depth ();
   PF_LOOPNODE* Get_Loop () const { return _myloopnode; }
   void      Print (FILE*);

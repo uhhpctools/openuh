@@ -271,11 +271,6 @@ struct mips_elf_link_hash_entry
 struct mips_elf_link_hash_table
 {
   struct elf_link_hash_table root;
-#if 0
-  /* We no longer use this.  */
-  /* String section indices for the dynamic section symbols.  */
-  bfd_size_type dynsym_sec_strindex[SIZEOF_MIPS_DYNSYM_SECNAMES];
-#endif
   /* The number of .rtproc entries.  */
   bfd_size_type procedure_count;
   /* The size of the .compact_rel section (if SGI_COMPAT).  */
@@ -5311,10 +5306,6 @@ _bfd_mips_elf_fake_sections (bfd *abfd, Elf_Internal_Shdr *hdr, asection *sec)
     {
       if (SGI_COMPAT (abfd))
 	hdr->sh_entsize = 0;
-#if 0
-      /* This isn't how the IRIX6 linker behaves.  */
-      hdr->sh_info = SIZEOF_MIPS_DYNSYM_SECNAMES;
-#endif
     }
   else if (strcmp (name, ".got") == 0
 	   || strcmp (name, ".srdata") == 0
@@ -8338,40 +8329,6 @@ _bfd_mips_elf_gc_sweep_hook (bfd *abfd ATTRIBUTE_UNUSED,
 			     asection *sec ATTRIBUTE_UNUSED,
 			     const Elf_Internal_Rela *relocs ATTRIBUTE_UNUSED)
 {
-#if 0
-  Elf_Internal_Shdr *symtab_hdr;
-  struct elf_link_hash_entry **sym_hashes;
-  bfd_signed_vma *local_got_refcounts;
-  const Elf_Internal_Rela *rel, *relend;
-  unsigned long r_symndx;
-  struct elf_link_hash_entry *h;
-
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  sym_hashes = elf_sym_hashes (abfd);
-  local_got_refcounts = elf_local_got_refcounts (abfd);
-
-  relend = relocs + sec->reloc_count;
-  for (rel = relocs; rel < relend; rel++)
-    switch (ELF_R_TYPE (abfd, rel->r_info))
-      {
-      case R_MIPS_GOT16:
-      case R_MIPS_CALL16:
-      case R_MIPS_CALL_HI16:
-      case R_MIPS_CALL_LO16:
-      case R_MIPS_GOT_HI16:
-      case R_MIPS_GOT_LO16:
-      case R_MIPS_GOT_DISP:
-      case R_MIPS_GOT_PAGE:
-      case R_MIPS_GOT_OFST:
-	/* ??? It would seem that the existing MIPS code does no sort
-	   of reference counting or whatnot on its GOT and PLT entries,
-	   so it is not possible to garbage collect them at this time.  */
-	break;
-
-      default:
-	break;
-      }
-#endif
 
   return TRUE;
 }
@@ -8919,11 +8876,6 @@ _bfd_mips_elf_link_hash_table_create (bfd *abfd)
       return NULL;
     }
 
-#if 0
-  /* We no longer use this.  */
-  for (i = 0; i < SIZEOF_MIPS_DYNSYM_SECNAMES; i++)
-    ret->dynsym_sec_strindex[i] = (bfd_size_type) -1;
-#endif
   ret->procedure_count = 0;
   ret->compact_rel_size = 0;
   ret->use_rld_obj_head = FALSE;

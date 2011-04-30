@@ -44,7 +44,15 @@
 #include "defalias.h"
 #include "moremath.h"
 
+#if defined(BUILD_OS_DARWIN)
+static void
+sincos(double d, double *s, double *c) {
+  *s = sin(d);
+  *c = cos(d);
+  }
+#else /* defined(BUILD_OS_DARWIN) */
 extern	void	sincos(double, double *, double *);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #ifdef KEY
 dcomplex __powzz(double adreal, double adimag, double bdreal, double bdimag)
@@ -76,5 +84,11 @@ void pow_zz_(dcomplex *r, dcomplex *a, dcomplex *b)
   *r = __powzz(a->dreal, a->dimag, b->dreal, b->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void pow_zz(dcomplex *r, dcomplex *a, dcomplex *b) { pow_zz_(r, a, b); }
+void pow_zz__(dcomplex *r, dcomplex *a, dcomplex *b) { pow_zz_(r, a, b); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(pow_zz_, pow_zz);
 defalias(pow_zz_, pow_zz__);
+#endif /* defined(BUILD_OS_DARWIN) */

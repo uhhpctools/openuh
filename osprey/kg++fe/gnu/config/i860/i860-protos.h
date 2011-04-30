@@ -31,9 +31,6 @@ extern const char *output_move_double PARAMS ((rtx *));
 extern const char *output_fp_move_double PARAMS ((rtx *));
 extern const char *output_block_move PARAMS ((rtx *));
 extern const char *output_delay_insn PARAMS ((rtx));
-#if 0
-extern const char *output_delayed_branch PARAMS ((const char *, rtx *, rtx));
-#endif
 extern void output_load_address PARAMS ((rtx *));
 extern int safe_insn_src_p PARAMS ((rtx, enum machine_mode));
 extern int operand_clobbered_before_used_after PARAMS ((rtx, rtx));

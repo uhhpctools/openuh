@@ -1292,10 +1292,6 @@ insert_limmfinish (insn, operand, mods, reg, value, errmsg)
      long value ATTRIBUTE_UNUSED;
      const char **errmsg ATTRIBUTE_UNUSED;
 {
-#if 0
-  if (limm_p)
-    ; /* nothing to do, gas does it.  */
-#endif
   return insn;
 }
 

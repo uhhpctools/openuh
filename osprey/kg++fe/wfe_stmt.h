@@ -56,7 +56,6 @@ extern ST_IDX exc_ptr;
 extern int make_symbols_weak;
 extern bool try_block_seen;
 extern bool in_cleanup;
-extern void WFE_Expand_Pragma (tree);
 extern void Push_Top_Level_Scope (tree);
 extern void Pop_Top_Level_Scope (void);
 #endif // KEY

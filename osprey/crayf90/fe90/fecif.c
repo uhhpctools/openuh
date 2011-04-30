@@ -49,7 +49,7 @@ static char USMID[] = "\n@(#)5.0_pl/sources/fecif.c	5.9	10/14/99 12:53:57\n";
 # include <nl_types.h>      /* Contains typedef for nl_catd and prototype for */
 			    /* __cat_path_name.				      */
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
 # include <nlcatmsg.h>
 # endif
 
@@ -88,8 +88,10 @@ static char USMID[] = "\n@(#)5.0_pl/sources/fecif.c	5.9	10/14/99 12:53:57\n";
 
 # if defined(_HOST_OS_LINUX)
 #   include <sys/sysinfo.h>
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_SOLARIS) || defined(_HOST_OS_IRIX)
 #   include <sys/systeminfo.h>
+# elif defined(_HOST_OS_DARWIN)
+#   include <sys/param.h>
 # endif
 
 
@@ -152,7 +154,7 @@ void init_cif(char *comp_date_time, char *release_level)
 
    host_machine_type	host_machine_info;
 
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
    char		host_cpu_type[9];              /* Max of 8 chars (plus NULL). */
 # endif
 
@@ -297,7 +299,7 @@ void init_cif(char *comp_date_time, char *release_level)
    memcpy(cif_time, comp_date_time+18, 8);
    cif_time[8] = NULL_CHAR;
 
-# if defined(_HOST_OS_LINUX)
+# if defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
    msg_cat_name = "shouldnotgethere";
 # else
    msg_cat_name = (char *) __cat_path_name(msg_sys);
@@ -306,7 +308,9 @@ void init_cif(char *comp_date_time, char *release_level)
    strcpy(cpu_name, "LINUX");
 
 
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_DARWIN)
+   strcpy(cpu_name, "DARWIN");
+# elif defined(_HOST_OS_SOLARIS) || defined(_HOST_OS_IRIX)
 
    if (sysinfo(SI_HOSTNAME, cpu_name, ((long int) MAXHOSTNAMELEN)) < 0L) {
       Cif_Error();
@@ -329,6 +333,8 @@ void init_cif(char *comp_date_time, char *release_level)
    strcpy(host_cpu_type, "SPARC");
 # elif (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
    strcpy(host_cpu_type, "SGI");
+# elif defined(_HOST_OS_DARWIN)
+   strcpy(host_cpu_type, "MAC");
 # endif
 
    Cif_Cifhdr_Rec(c_i_f,
@@ -342,7 +348,7 @@ void init_cif(char *comp_date_time, char *release_level)
 
 # if defined(_GETPMC_AVAILABLE)
                   host_cpu_type.char_form);
-# elif defined(_HOST_OS_SOLARIS) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# elif defined(_HOST_OS_SOLARIS) || defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN)
                   host_cpu_type);
 # endif
 
@@ -716,9 +722,6 @@ void	cif_send_attr(int	attr_idx,
    int			rslt_id;
    int			rslt_idx;
    boolean		save_cif_done;
-# if 0
-   int			save_symbol_id;
-# endif
 #ifdef KEY /* Bug 10177 */
    int			scope_id = 0;
 #else /* KEY Bug 10177 */
@@ -1603,15 +1606,8 @@ void	cif_send_attr(int	attr_idx,
 
             AT_CIF_DONE(rslt_idx)      = FALSE;
 
-# if 0
-            save_symbol_id             = AT_CIF_SYMBOL_ID(rslt_idx);
-            AT_CIF_SYMBOL_ID(rslt_idx) = 0;
-# endif
             cif_send_attr(rslt_idx, NULL_IDX);
             rslt_id                    = AT_CIF_SYMBOL_ID(rslt_idx);
-# if 0
-            AT_CIF_SYMBOL_ID(rslt_idx) = save_symbol_id;
-# endif
             AT_CIF_DONE(rslt_idx)      = FALSE;
          }
       }
@@ -1753,29 +1749,6 @@ void	cif_send_attr(int	attr_idx,
 
    case Derived_Type:
 
-# if 0
-      /* If the Attr entry is marked in error, produce a Derived Type Def     */
-      /* record anyway so that its symbol id will be defined.  See the        */
-      /* comments at the head of the Data_Obj case for details.		      */
-
-      if (AT_DCL_ERR(attr_idx)) {
-
-         if (AT_CIF_SYMBOL_ID(attr_idx) == 0) {
-            AT_CIF_SYMBOL_ID(attr_idx) = NEXT_SYMBOL_ID;
-         }
-
-         Cif_F90_Derived_Type_Rec(c_i_f,
-                                  AT_OBJ_NAME_PTR(attr_idx),
-                                  AT_CIF_SYMBOL_ID(attr_idx),
-                                  SCP_CIF_ID(curr_scp_idx), 
-                                  ATT_CIF_DT_ID(attr_idx), 
-                                  0,
-                                  0,
-                                  NULL,
-                                  0);
-         goto EXIT;
-      }
-# endif
 
       if (AT_CIF_SYMBOL_ID(attr_idx) == 0) {
          AT_CIF_SYMBOL_ID(attr_idx) = NEXT_SYMBOL_ID;
@@ -2260,11 +2233,6 @@ void	cif_send_attr(int	attr_idx,
 
    case Stmt_Func:
 
-# if 0
-      if (AT_DCL_ERR(attr_idx)) {
-         goto EXIT;
-      }
-# endif
  
       if (AT_CIF_SYMBOL_ID(attr_idx) == 0) {
          AT_CIF_SYMBOL_ID(attr_idx) = NEXT_SYMBOL_ID;
@@ -2733,7 +2701,7 @@ void cif_summary_rec(char	*release_level,
       hms = elapsed_time;
 
 
-# if defined(_HOST_OS_UNICOS)  ||  (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX)) 
+# if defined(_HOST_OS_UNICOS)  ||  (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))  || defined(_HOST_OS_DARWIN)
 
       elapsed_time = elapsed_time - hms;
       milliseconds = (elapsed_time + .0005) * 1000;
@@ -3551,7 +3519,7 @@ void cif_machine_characteristics_rec(void)
 # endif
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
 
 
    /* Produce a dummy Machine Characteristics record for a IRIX.             */

@@ -1,6 +1,8 @@
+# -*- Makefile -*-
 #
+#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
-#  Copyright (C) 2000 Silicon Graphics, Inc.  All Rights Reserved.
+#  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -80,12 +82,6 @@ endif
 #----------------------------------------------------------------------
 HOSTDEFS += -Dsgi
 HOSTDEFS += -DBACK_END -DMONGOOSE_BE
-HOSTDEFS += -D__STDC_LIMIT_MACROS
-
-ifeq ($(BUILD_TARGET), X8664)
-HOSTDEFS += -DCG_PATHSCALE_MERGE
-endif
-
 ifeq ($(BUILD_OS), IRIX)
 HOSTDEFS += -D_LIBELF_XTND_64
 endif
@@ -106,10 +102,6 @@ ifeq ($(BUILD_PCH), USE_PCH)
 HOSTDEFS += -DUSE_PCH
 endif
 
-ifeq ($(BUILD_VARIANT), MEM_STATS)
-HOSTDEFS += -DMEM_STATS
-endif
-
 ifeq ($(BUILD_TARGET), IA64)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
@@ -119,7 +111,19 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
+ifeq ($(BUILD_TARGET), SL)
+TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+endif
 ifeq ($(BUILD_TARGET), X8664)
+TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
 
@@ -155,8 +159,27 @@ BE_CG_DIR 		= $(BE_DIR)/cg
 BE_CG_GRA_DIR		= $(BE_CG_DIR)/gra_mon
 BE_CG_TARG_DIR		= $(BE_CG_DIR)/$(BUILD_TARGET_DIR)
 BE_COM_DIR 		= $(BE_DIR)/com
-BE_ORC_ICT_DIR	= $(BE_CG_DIR)/orc_ict
+
+ifneq ($(BUILD_TARGET), LOONGSON)
+ifneq ($(BUILD_TARGET), SL)
+ifneq ($(BUILD_TARGET), MIPS)
+BE_ORC_ICT_DIR		= $(BE_CG_DIR)/orc_ict
 BE_ORC_INTEL_DIR	= $(BE_CG_DIR)/orc_intel
+BE_CG_REGION_DIR        =
+BE_CG_GSCHED_DIR	=
+else
+BE_ORC_ICT_DIR          =
+BE_ORC_INTEL_DIR        =
+BE_CG_REGION_DIR        = $(BE_DIR)/cg/region
+BE_CG_GSCHED_DIR        = $(BE_DIR)/cg/sched
+endif
+else
+BE_ORC_ICT_DIR          =
+BE_ORC_INTEL_DIR        =
+BE_CG_REGION_DIR	= $(BE_DIR)/cg/region
+BE_CG_GSCHED_DIR	= $(BE_DIR)/cg/sched
+endif
+endif
 BE_REGION_DIR 		= $(BE_DIR)/region
 BE_PROMPF_DIR		= $(BE_DIR)/prompf_anl
 BE_OPT_DIR              = $(BE_DIR)/opt
@@ -164,7 +187,7 @@ COMMON_DIR 		= $(BUILD_TOT)/common
 COMMON_COM_DIR 		= $(COMMON_DIR)/com
 COMMON_STL_DIR 		= $(COMMON_DIR)/stl
 COMMON_COM_TARG_DIR 	= $(COMMON_COM_DIR)/$(BUILD_TARGET_DIR)
-COMMON_TARG_INFO_ACCESS_DIR = $(COMMON_DIR)/targ_info/access
+COMMON_TARG_INFO_ACCESS_DIR = $(TARG_INFO_SRC)/access
 COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 LIBDWARF_DIR		= $(BUILD_TOT)/libdwarf
 
@@ -176,9 +199,10 @@ SRC_DIRS = \
   $(BE_CG_GRA_DIR)	\
   $(BE_CG_TARG_DIR)	\
   $(COMMON_COM_DIR)	\
-  $(COMMON_COM_TARG_DIR) \
-  $(COMMON_UTIL_DIR)    \
-  $(COMMON_TARG_INFO_ACCESS_DIR) 
+  $(COMMON_COM_TARG_DIR)\
+  $(COMMON_UTIL_DIR)	\
+  $(BE_CG_REGION_DIR)	\
+  $(BE_CG_GSCHED_DIR)
 
 ifndef TARG_BE
 TARG_BE = $(TARGDIR)/be
@@ -198,6 +222,7 @@ HEADER_DIRS = \
   $(TARG_BE)		\
   $(LIBDWARF_DIR)	\
   $(BUILD_TOT)/include	\
+  $(BUILD_TOT)/linux/include \
   $(BUILD_TOT)/libdwarf/libdwarf
 
 ifeq ($(BUILD_OS), LINUX)
@@ -219,17 +244,21 @@ SETGEN  = $(COMMON_UTIL_DIR)/gen_x_set		\
 	  $(COMMON_UTIL_DIR)/x_set_func.td	\
           $(COMMON_UTIL_DIR)/x_set_interface
 
-
 DERIVED_SRCS = \
 	bb_list.cxx \
-	gra_bb_list.cxx \
-	lrange_list.cxx \
 	op_list.cxx \
 	st_list.cxx \
 	tn_list.cxx \
 	void_list.cxx \
 	cg_loop_scc_prop.cxx \
-	tn_prop.cxx \
+	tn_prop.cxx
+
+ifneq ($(BUILD_TARGET), NVISA)
+DERIVED_SRCS += \
+	gra_bb_list.cxx \
+	lrange_list.cxx \
+	lrange_set.cxx
+endif
 
 # remove all derived files with make clobber.
 LDIRT = $(DERIVED_INCS) $(DERIVED_INCS:.h=.c) $(DERIVED_INCS:.h=.cxx) *.pch
@@ -250,9 +279,6 @@ COMMON_COM_TARG_CXX_SRCS =	\
 
 COMMON_UTIL_SRCS =	\
   bitset.c	\
-  ti_res.c              \
-  ti_res_count.c        \
-  ti_res_res.c
 
 CG_C_SRCS = \
   $(COMMON_UTIL_SRCS)
@@ -273,12 +299,13 @@ BE_CG_GRA_CXX_SRCS =		\
   gra_pref.cxx			\
   gra_region.cxx		\
   gra_spill.cxx			\
-  lrange_set.cxx		\
   gra_split.cxx			\
-  gra_trace.cxx
+  gra_trace.cxx			
 
+ifeq ($(BUILD_TARGET), SL)
+  BE_CG_GRA_CXX_SRCS += gra_para_region.cxx
+endif
 
-  
 CG_GRA_PCH_CXX_SRCS= $(BE_CG_GRA_CXX_SRCS)
 
 BE_CG_TARG_CXX_SRCS =	\
@@ -296,7 +323,12 @@ BE_CG_TARG_CXX_SRCS =	\
   expand.cxx		\
   pqs_cg.cxx            \
   pqs.cxx		\
-  register_targ.cxx     
+  register_targ.cxx
+ifeq ($(OLIVE_AUTO_CG), TRUE)
+  BE_CG_TARG_CXX_SRCS += olive_gen_expr.cxx
+  BE_CG_TARG_CXX_SRCS += olive_convert_longlong.cxx
+  CXXFLAGS += -D_OLIVE_AUTO_CG_
+endif
 
 ifeq ($(BUILD_TARGET), IA64)
   BE_CG_TARG_CXX_SRCS += float_rf.cxx
@@ -307,6 +339,34 @@ ifeq ($(BUILD_TARGET), IA32)
   BE_CG_TARG_CXX_SRCS += exp_longlong.cxx
 endif
 
+ifeq ($(BUILD_TARGET), MIPS)
+  BE_CG_TARG_CXX_SRCS += cg_sas.cxx
+#  BE_CG_TARG_CXX_SRCS += disp_instr.cxx
+#  BE_CG_TARG_CXX_SRCS += exp_slintrn.cxx
+endif
+ifeq ($(BUILD_TARGET), SL)
+  BE_CG_TARG_CXX_SRCS += cg_sas.cxx
+  BE_CG_TARG_CXX_SRCS += disp_instr.cxx
+  BE_CG_TARG_CXX_SRCS += exp_slintrn.cxx
+  BE_CG_TARG_CXX_SRCS += cg_isr.cxx
+  BE_CG_TARG_CXX_SRCS += loop_dce.cxx
+  BE_CG_TARG_CXX_SRCS += loop_rce.cxx
+  BE_CG_TARG_CXX_SRCS += gcm_licm.cxx
+  BE_CG_TARG_CXX_SRCS += cgtarget_special.cxx
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+  BE_CG_TARG_CXX_SRCS += db_dump.cxx
+  BE_CG_TARG_CXX_SRCS += ipfec_options.cxx
+  BE_CG_TARG_CXX_SRCS += edge_profile.cxx
+  BE_CG_TARG_CXX_SRCS += dump_feedback.cxx
+  BE_CG_TARG_CXX_SRCS += lgra_opt_spill.cxx
+  BE_CG_TARG_CXX_SRCS += profile_util.cxx  
+endif
+
+ifeq ($(BUILD_TARGET), PPC32)
+  BE_CG_TARG_CXX_SRCS += cg_sas.cxx    
+  BE_CG_TARG_CXX_SRCS += olive_convert_wn.cxx
+endif
 ifeq ($(BUILD_TARGET), X8664)
   BE_CG_TARG_CXX_SRCS += cg_sched.cxx
   BE_CG_TARG_CXX_SRCS += cg_convert_x87.cxx
@@ -323,8 +383,36 @@ CG_CXX_PCH_SRCS = 	\
   lra.cxx		\
   op_map.cxx		\
   oputil.cxx		\
-  tn_map.cxx            \
+  tn_map.cxx		\
   tnutil.cxx
+
+CG_REGION_SRCS = \
+    global_cycles_finder.cxx \
+    interval_processor.cxx \
+    region_bb_util.cxx      \
+    region.cxx              \
+    region_map.cxx          \
+    region_update.cxx       \
+    region_verify.cxx       \
+    scc_finder.cxx          \
+    vt_region.cxx	\
+    profile_util.cxx    \
+    ipfec_options.cxx   \
+    db_dump.cxx
+    
+CG_GLOBAL_SCHED_SRCS =  \
+    dag.cxx				\
+	sched_cand.cxx		\
+	sched_cflow.cxx 	\
+	sched_dflow.cxx		\
+	sched_dump.cxx		\
+	sched_heur.cxx		\
+	sched_rgn_info.cxx	\
+	sched_seq.cxx		\
+	sched_spec_itf.cxx	\
+	scheduler.cxx		\
+	sched_util.cxx		\
+    cggrp_microsched.cxx
 
 CG_CXX_SRCS = 		\
   $(COMMON_COM_CXX_SRCS)\
@@ -355,8 +443,8 @@ CG_CXX_SRCS = 		\
   cgdriver.cxx		\
   cgdwarf.cxx		\
   cgemit.cxx		\
-  ebo.cxx		\
   cgexp.cxx		\
+  ebo.cxx		\
   cgprep.cxx		\
   cio_rwtran.cxx        \
   comment.cxx		\
@@ -385,7 +473,14 @@ CG_CXX_SRCS = 		\
   hb_tail_duplication.cxx\
   hb_block_select.cxx	\
   hb_cflow.cxx          \
+  cxx_memory.cxx	\
+  cg_gcov.cxx		\
   $(DERIVED_SRCS)
+
+ifeq ($(BUILD_TARGET), SL)
+  CG_CXX_SRCS += $(CG_REGION_SRCS)  
+  CG_CXX_SRCS += $(CG_GLOBAL_SCHED_SRCS) 
+endif
 
 ifeq ($(BUILD_PCH), USE_PCH)
 CG_PCH_OBJS = $(CG_CXX_PCH_SRCS:.cxx=.o)
@@ -395,11 +490,61 @@ CG_CXX_SRCS += $(CG_CXX_PCH_SRCS)
 CG_CXX_SRCS += $(CG_GRA_PCH_CXX_SRCS)
 endif
 
-# add New target macro define by llx 2002-7-18
-ifeq ($(ORC_TARG), KAPI)
-HOSTDEFS +=-DIPFEC_Enable_New_Targ
+ifeq ($(BUILD_TARGET), NVISA)
+CG_CXX_SRCS = 		\
+  $(COMMON_COM_CXX_SRCS)\
+  $(COMMON_COM_TARG_CXX_SRCS)\
+  cg_flags_arch.cxx	\
+  cgdwarf_targ.cxx	\
+  cgemit_targ.cxx	\
+  cgtarget.cxx		\
+  entry_exit_targ.cxx	\
+  exp_branch.cxx	\
+  exp_divrem.cxx	\
+  exp_loadstore.cxx	\
+  exp_predicate.cxx	\
+  expand.cxx		\
+  register_targ.cxx	\
+  annotations.cxx	\
+  bb_map.cxx		\
+  bblist.cxx		\
+  bbutil.cxx 		\
+  calls.cxx		\
+  cflow.cxx		\
+  cg.cxx		\
+  cg_flags.cxx		\
+  cgdriver.cxx		\
+  cgdwarf.cxx		\
+  cgemit.cxx		\
+  cgexp.cxx		\
+  comment.cxx		\
+  dominate.cxx		\
+  findloops.cxx		\
+  gtn_universe.cxx	\
+  init.cxx		\
+  label_util.cxx	\
+  note.cxx		\
+  optimize_copies.cxx	\
+  register.cxx		\
+  reg_live.cxx		\
+  rematerialize_grf.cxx \
+  tag.cxx		\
+  unique_def.cxx	\
+  use_16bit_ops.cxx	\
+  variants.cxx		\
+  vector_loadstore.cxx  \
+  whirl2ops.cxx		\
+  op_map.cxx		\
+  oputil.cxx		\
+  tn_map.cxx		\
+  tnutil.cxx		\
+  bb_list.cxx 		\
+  op_list.cxx 		\
+  st_list.cxx 		\
+  tn_list.cxx 		\
+  void_list.cxx 	\
+  tn_prop.cxx
 endif
-# We will change this later to build different DSOs.
 
 CG_C_OBJS = $(CG_C_SRCS:.c=.o)
 
@@ -407,11 +552,17 @@ CG_CXX_OBJS = $(CG_CXX_SRCS:.cxx=.o)
 
 VPATH    =  $(SRC_DIRS)
 
-LCOPTS += $(STD_COMPILE_OPTS)
+LCOPTS += $(STD_COMPILE_OPTS) $(STD_C_OPTS)
+#ifneq ($(BUILD_COMPILER), EDG)
+#LCOPTS += -fwritable-strings
+#endif
 LCDEFS = $(HOSTDEFS) $(TARGDEFS)
 LCINCS = $(addprefix -I, $(HEADER_DIRS))
 
 LC++OPTS += $(STD_COMPILE_OPTS) $(PCH_OPTS)
+#ifneq ($(BUILD_COMPILER), EDG)
+#LC++OPTS += -fwritable-strings
+#endif
 LC++DEFS = $(HOSTDEFS) $(TARGDEFS)
 LC++INCS = $(addprefix -I, $(HEADER_DIRS))
 LASOPTS = $(STD_COMPILE_OPTS)
@@ -422,6 +573,10 @@ LASINCS = $(addprefix -I, $(HEADER_DIRS))
 ifeq ($(BUILD_TARGET), MIPS)
 GLDOPTS = $(STD_LOAD_OPTS)
 endif
+ifeq ($(BUILD_TARGET), SL)
+GLDOPTS = $(STD_LOAD_OPTS)
+endif
+
 
 ifeq ($(BUILD_COMPILER), EDG)
 #DSOSTARTOPT = -update_registry $(TARG_BE)/so_locations
@@ -449,7 +604,11 @@ endif
 ifdef LINK_DSO
 TARGETS = debug-cg
 else
+ ifeq ($(BUILD_TYPE), NONSHARED)
+TARGETS = libcg.a
+ else
 TARGETS = cg.so
+ endif
 endif
 
 #----------------------------------------------------------------------
@@ -461,56 +620,72 @@ else
 LLDLIBS =
 endif
 
-# We need to have one of the target .so's on the link line 
-# while building cg.so . This is needed by the linker on linux.
-# So, arbitrarily pick one of the target .so's to define TARGET_SO.
-ifeq ($(BUILD_TARGET), MIPS)
-TARGET_SO = r10000.so
-endif
-ifeq ($(BUILD_TARGET), IA64)
-TARGET_SO = 
-endif
-ifeq ($(BUILD_TARGET), IA32)
-TARGET_SO = pentium.so
-endif
-
 ifeq ($(BUILD_OS), IRIX)
 LLDLIBS += -lelf_xtnd -ldwarf_xtnd -lelfutil_xtnd -lm -lc
 else
  ifeq ($(BUILD_TARGET), IA64)
 LLDLIBS += $(TARG_LIBUNWIND)/libunwindP.a
  endif
+ ifeq ($(BUILD_TARGET), X8664)
+LLDLIBS += $(TARG_LIBUNWIND)/libunwindP.a
+ endif
+ ifeq ($(BUILD_TARGET), MIPS)
+LLDLIBS += $(TARG_LIBUNWIND)/libunwindP.a
+ endif
+ ifeq ($(BUILD_TARGET), SL)
+LLDLIBS += $(TARG_LIBUNWIND)/libunwindP.a
+ endif
+ ifeq ($(BUILD_TARGET), PPC32)
+LLDLIBS += $(TARG_LIBUNWIND)/libunwindP.a
+ endif
 LLDLIBS += $(TARG_LIBDWARF)/libdwarf.a \
 	$(TARG_LIBELFUTIL)/libelfutil.a \
 	$(TARG_LIBELF)/libelf.a \
-	$(TARG_TARG_INFO)/libtarginfo.a \
+	$(TARG_TARG_INFO)/libtarginfo.a $(TARG_LIBUNWIND)/libunwindP.a \
 	-lm -lc
 endif
 
-default: first derived_files $(TARGETS) last
+.PHONY: default first last install
+
+default: 
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is
 #  built.
 #----------------------------------------------------------------------
-first:
-ifeq ($(BUILD_OS), LINUX)
-	cd $(TARG_LIBELF) && $(MAKE)
-	cd $(TARG_LIBELFUTIL) && $(MAKE)
-	cd $(TARG_LIBDWARF) && $(MAKE)
- ifeq ($(BUILD_TARGET), IA64)
-	cd $(TARG_LIBUNWIND) && $(MAKE)
+first: derived_files
+ifndef SKIP_DEP_BUILD
+ ifeq ($(BUILD_OS), LINUX)
+	$(call submake,$(TARG_LIBELF))
+	$(call submake,$(TARG_LIBELFUTIL))
+	$(call submake,$(TARG_LIBDWARF))
+  ifeq ($(BUILD_TARGET), IA64)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
+  ifeq ($(BUILD_TARGET), MIPS)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
+  ifeq ($(BUILD_TARGET), X8664)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
+  ifeq ($(BUILD_TARGET), SL)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
+  ifeq ($(BUILD_TARGET), PPC32)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
+  ifeq ($(BUILD_TARGET), LOONGSON)
+	$(call submake,$(TARG_LIBUNWIND))
+  endif
  endif
-endif
-## verify that be.so is up to date
-	cd $(TARG_BE) && $(MAKE)
-ifeq ($(BUILD_OS), LINUX)
-	if ! test -e be.so; then ln -sf $(TARG_BE)/be.so .; fi
-	if ! test -e $(TARGET_SO); then ln -sf $(TARG_TARG_INFO)/$(TARGET_SO) .; fi
-endif
-ifeq ($(BUILD_PCH), USE_PCH)
-## build pch files first so that we can use precompiled headers
-# TODO: how to build pch on irix
+ ## verify that be.so is up to date
+	$(call submake,$(TARG_BE))
+ ifeq ($(BUILD_PCH), USE_PCH)
+ ## build pch files first so that we can use precompiled headers
+ # TODO: how to build pch on irix
 	( $(MAKE) \
 	PCH_OPTS="-LANG:create_pch=cg_pch.pch" cg_pch.pch cg_pch.o )
 	( $(MAKE) \
@@ -519,6 +694,11 @@ ifeq ($(BUILD_PCH), USE_PCH)
 	PCH_OPTS="-LANG:create_pch=cg_gra_pch.pch" cg_gra_pch.pch cg_gra_pch.o )
 	( $(MAKE) \
 	PCH_OPTS="-LANG:use_pch=cg_gra_pch.pch" cg_gra_pch_files )
+ endif
+endif
+ifeq ($(BUILD_OS), LINUX)
+	if ! test -e be.so; then ln -sf $(TARG_BE)/be.so .; fi
+	if ! test -e be; then ln -sf $(TARG_BE)/be .; fi
 endif
 
 #----------------------------------------------------------------------
@@ -562,14 +742,14 @@ cg_gra_pch_files: $(CG_GRA_PCH_OBJS) cg_gra_pch.pch
 cg.so:  $(CG_CXX_OBJS) $(CG_C_OBJS) $(CG_PCH_OBJS) $(CG_GRA_PCH_OBJS)\
 	$(BE_CG_DIR)/Exported $(TARG_BE)/be.so \
 	$(BE_BE_DIR)/so_locations
-	$(C++F) $(UNRESOLVED_FLAGS) $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
+	$(link.c++f) $(UNRESOLVED_FLAGS) $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
 	$(CG_C_OBJS) $(CG_CXX_OBJS) $(CG_PCH_OBJS) $(CG_GRA_PCH_OBJS)\
 	-o $@ $(TARG_BE)/be.so $(LLDLIBS)
 
 else
  ifeq ($(BUILD_OS), LINUX)
 # dso's must be in same directory
-LINK_DSOS = be.so 
+LINK_DSOS = be.so
 ifeq ($(BUILD_HOST), IA64)
 ifeq ($(BUILD_COMPILER), SGI)
 STD_DSO_LOADOPTS += -Wl,-relax
@@ -580,18 +760,21 @@ LINK_DSOS = $(TARG_BE)/be.so
  endif
 cg.so:  $(CG_CXX_OBJS) $(CG_C_OBJS) $(BE_CG_DIR)/Exported $(TARG_BE)/be.so \
 		$(BE_BE_DIR)/so_locations
-	$(C++F) $(UNRESOLVED_FLAGS) $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
-		$(CG_C_OBJS) $(CG_CXX_OBJS) \
+	$(link.c++f) $(UNRESOLVED_FLAGS) $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
+		$(CG_C_OBJS) $(CG_CXX_OBJS) -v \
 		-o $@ $(LINK_DSOS) $(LLDLIBS)
 
 endif
 #else
 #cg.so:  $(CG_CXX_OBJS) $(CG_C_OBJS) $(BE_CG_DIR)/Exported
 #	$(C++F) $(UNRESOLVED_FLAGS) $(STD_DSO_LOADOPTS) $(EXPORT_LIST) \
-#		$(CG_C_OBJS) $(CG_CXX_OBJS) -o $@ be.so $(TARGET_SO) $(LLDLIBS)
+#		$(CG_C_OBJS) $(CG_CXX_OBJS) -o $@ be.so $(LLDLIBS)
 #endif
 
-LDIRT += cg.so be.so $(TARGET_SO) be ii_files
+libcg.a: $(CG_CXX_OBJS) $(CG_C_OBJS)
+	$(ar) cru $@ $^
+
+LDIRT += $(TARGETS) be.so be ii_files
 
 ifdef LINK_DSO
 debug-cg: cg.so
@@ -601,96 +784,131 @@ endif
 
 DERIVED_INCS += bb_list.h
 bb_list.cxx : bb_list.h
-bb_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh                   \
-$(BE_CG_DIR)/gen_bb_list.csh
-	csh -f	$(BE_CG_DIR)/gen_bb_list.csh $(COMMON_UTIL_DIR)
+bb_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh                   \
+$(BE_CG_DIR)/gen_bb_list.sh
+	sh 	$(BE_CG_DIR)/gen_bb_list.sh $(COMMON_UTIL_DIR)
 
+ifneq ($(BUILD_TARGET), NVISA)
 DERIVED_INCS += gra_bb_list.h
 gra_bb_list.cxx : gra_bb_list.h
-gra_bb_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh                   \
-$(BE_CG_GRA_DIR)/gen_gra_bb_list.csh
-	csh -f	$(BE_CG_GRA_DIR)/gen_gra_bb_list.csh $(COMMON_UTIL_DIR)
+gra_bb_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh                   \
+$(BE_CG_GRA_DIR)/gen_gra_bb_list.sh
+	sh 	$(BE_CG_GRA_DIR)/gen_gra_bb_list.sh $(COMMON_UTIL_DIR)
 
 DERIVED_INCS += lrange_list.h
 lrange_list.cxx : lrange_list.h
-lrange_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh 	\
-	        $(BE_CG_GRA_DIR)/gen_lrange_list.csh
-	csh -f  $(BE_CG_GRA_DIR)/gen_lrange_list.csh $(COMMON_UTIL_DIR)
+lrange_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh 	\
+	        $(BE_CG_GRA_DIR)/gen_lrange_list.sh
+	sh   $(BE_CG_GRA_DIR)/gen_lrange_list.sh $(COMMON_UTIL_DIR)
+endif
 
 DERIVED_INCS += op_list.h
 op_list.cxx : op_list.h
-op_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh                   \
-$(BE_CG_DIR)/gen_op_list.csh
-	csh -f	$(BE_CG_DIR)/gen_op_list.csh $(COMMON_UTIL_DIR)
+op_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh                   \
+$(BE_CG_DIR)/gen_op_list.sh
+	sh 	$(BE_CG_DIR)/gen_op_list.sh $(COMMON_UTIL_DIR)
 
 DERIVED_INCS += st_list.h
 st_list.cxx : st_list.h
-st_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh   \
-	    $(BE_CG_DIR)/gen_st_list.csh
-	csh -f  $(BE_CG_DIR)/gen_st_list.csh $(COMMON_UTIL_DIR)
+st_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh   \
+	    $(BE_CG_DIR)/gen_st_list.sh
+	sh   $(BE_CG_DIR)/gen_st_list.sh $(COMMON_UTIL_DIR)
 
 DERIVED_INCS += tn_list.h
 tn_list.cxx : tn_list.h
-tn_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh 	\
-	    $(BE_CG_DIR)/gen_tn_list.csh
-	csh -f  $(BE_CG_DIR)/gen_tn_list.csh $(COMMON_UTIL_DIR)
+tn_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh 	\
+	    $(BE_CG_DIR)/gen_tn_list.sh
+	sh   $(BE_CG_DIR)/gen_tn_list.sh $(COMMON_UTIL_DIR)
 
 DERIVED_INCS += void_list.h
 void_list.cxx : void_list.h
-void_list.h : $(COMMON_UTIL_DIR)/gen_x_list.csh 	\
-	    $(BE_CG_DIR)/gen_void_list.csh
-	csh -f  $(BE_CG_DIR)/gen_void_list.csh $(COMMON_UTIL_DIR)
+void_list.h : $(COMMON_UTIL_DIR)/gen_x_list.sh 	\
+	    $(BE_CG_DIR)/gen_void_list.sh
+	sh   $(BE_CG_DIR)/gen_void_list.sh $(COMMON_UTIL_DIR)
 
 #SKIP DERIVED_SRCS += bb_set.cxx
 DERIVED_INCS += bb_set.h bb_set.td
 #SKIP bb_set.cxx : bb_set.h
 bb_set.h : bb_set.td
 bb_set.td : $(SETGEN) $(BE_CG_DIR)/gen_bb_set
-	csh -f $(BE_CG_DIR)/gen_bb_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
+	sh  $(BE_CG_DIR)/gen_bb_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
 
+DERIVED_INCS += opsch_set.h opsch_set.td
+opsch_set.h : opsch_set.td
+opsch_set.td : $(SETGEN) $(BE_CG_DIR)/gen_opsch_set
+	sh  $(BE_CG_DIR)/gen_opsch_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
+
+ifneq ($(BUILD_TARGET), NVISA)
 DERIVED_INCS += lrange_set.h lrange_set.td
 lrange_set.h : lrange_set.td
 lrange_set.cxx : lrange_set.td
 lrange_set.td : $(SETGEN) $(BE_CG_GRA_DIR)/gen_lrange_set
-	csh -f $(BE_CG_GRA_DIR)/gen_lrange_set $(COMMON_UTIL_DIR)
+	sh  $(BE_CG_GRA_DIR)/gen_lrange_set $(COMMON_UTIL_DIR)
+endif
 
 DERIVED_INCS += cg_loop_scc_prop.h
 cg_loop_scc_prop.cxx : cg_loop_scc_prop.h
-cg_loop_scc_prop.h :	$(COMMON_UTIL_DIR)/gen_x_prop.csh               \
-$(BE_CG_DIR)/gen_cg_loop_scc_prop.csh
-	csh -f	$(BE_CG_DIR)/gen_cg_loop_scc_prop.csh $(COMMON_UTIL_DIR)
+cg_loop_scc_prop.h :	$(COMMON_UTIL_DIR)/gen_x_prop.sh               \
+$(BE_CG_DIR)/gen_cg_loop_scc_prop.sh
+	sh 	$(BE_CG_DIR)/gen_cg_loop_scc_prop.sh $(COMMON_UTIL_DIR)
 
 DERIVED_INCS += tn_prop.h
 tn_prop.cxx : tn_prop.h
-tn_prop.h : $(COMMON_UTIL_DIR)/gen_x_prop.csh $(BE_CG_DIR)/gen_tn_prop.csh
-	csh -f	$(BE_CG_DIR)/gen_tn_prop.csh $(COMMON_UTIL_DIR)
+tn_prop.h : $(COMMON_UTIL_DIR)/gen_x_prop.sh $(BE_CG_DIR)/gen_tn_prop.sh
+	sh 	$(BE_CG_DIR)/gen_tn_prop.sh $(COMMON_UTIL_DIR)
 
 #SKIP DERIVED_SRCS += tn_set.cxx
 DERIVED_INCS += tn_set.h tn_set.td
 #SKIP tn_set.cxx : tn_set.h
 tn_set.h : tn_set.td
 tn_set.td : $(SETGEN) $(BE_CG_DIR)/gen_tn_set
-	csh -f $(BE_CG_DIR)/gen_tn_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
+	sh  $(BE_CG_DIR)/gen_tn_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
 
 #SKIP DERIVED_SRCS += gtn_set.cxx
 DERIVED_INCS += gtn_set.h gtn_set.td
 #SKIP gtn_set.cxx : gtn_set.h
 gtn_set.h : gtn_set.td
 gtn_set.td : $(SETGEN) $(BE_CG_DIR)/gen_gtn_set
-	csh -f $(BE_CG_DIR)/gen_gtn_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
+	sh  $(BE_CG_DIR)/gen_gtn_set $(COMMON_UTIL_DIR) $(GEN_X_SET_OPTS)
 
-#--------------------------------------------------------------------------
-cggrp_ptn_table.cxx : ptn_table_gen
-	 $(RUN) ./ptn_table_gen
-
-
-#----------------------------------------------------------------------
-# Begin to set new target file generator;
-
-
+ifeq ($(OLIVE_AUTO_CG), TRUE)
+  BE_CG_OLIVE_DIR	= $(BE_CG_DIR)/olive
   
-#--------------------------------------------------------------------------
+  OLIVE_GRAMMY		= $(BE_CG_OLIVE_DIR)/gram.y
+  OLIVE_GRAMMY_C	= $(BE_CG_OLIVE_DIR)/gram.c
+  OLIVE_GRAM_OBJ	= gram.o
+  OLIVE_OBJS		= x_arrayc.o x_arrayp.o	code.o iburg.o
+  OLIVE_SRCS		= $(BE_CG_OLIVE_DIR)/x_arrayc.c	$(BE_CG_OLIVE_DIR)/x_arrayp.c \
+			 $(BE_CG_OLIVE_DIR)/code.c	$(BE_CG_OLIVE_DIR)/iburg.c 
+  
+  OLIVE_TOOL		= olive
+  OLIVE_CG_GRAMMY	= $(BE_CG_TARG_DIR)/olive_gen_expr.brg
+  OLIVE_CG_OUTPUT	= olive_gen_expr.cxx
 
+
+  GRAMMY_TOOL		= gramgen
+  GRAMMY_CXX		= $(BE_CG_TARG_DIR)/gramgen.cxx
+  GRAMMY_RULES		= $(BE_CG_TARG_DIR)/rule_int.brg  $(BE_CG_TARG_DIR)/rule_bit.brg  $(BE_CG_TARG_DIR)/rule_float.brg \
+			  $(BE_CG_TARG_DIR)/rule_double.brg $(BE_CG_TARG_DIR)/rule_longlong.brg $(BE_CG_TARG_DIR)/rule_llbit.brg
+
+  OLIVE_CG_GRAMMY:	$(GRAMMY_CXX) $(GRAMMY_RULE)
+			$(CXX) -o $(GRAMMY_TOOL) $(GRAMMY_CXX)
+			./$(GRAMMY_TOOL) $(OLIVE_CG_GRAMMY) $(GRAMMY_RULES)
+
+
+  $(OLIVE_CG_OUTPUT):	$(OLIVE_TOOL) OLIVE_CG_GRAMMY
+			./$(OLIVE_TOOL) -I -L $(OLIVE_CG_GRAMMY)
+  $(OLIVE_TOOL):	$(OLIVE_OBJS) $(OLIVE_GRAM_OBJ)
+			$(CC) -o $(OLIVE_TOOL) $(LDFLAGS) $(OLIVE_OBJS) $(OLIVE_GRAM_OBJ)
+					
+  $(OLIVE_GRAM_OBJ):	$(OLIVE_GRAMMY_C)
+			$(CC) -c $(OLIVE_GRAMMY_C)		
+  $(OLIVE_GRAMMY_C):	$(OLIVE_GRAMMY)	
+			$(YACC)	-o $@ $?
+  $(OLIVE_OBJS):	$(OLIVE_SRCS)
+			$(CC) -c $?
+			
+endif
 # here's the target that gets made recursively
 derived_files : $(DERIVED_SRCS) $(DERIVED_INCS)
 
@@ -704,4 +922,15 @@ include $(COMMONRULES)
 #----------------------------------------------------------------------
 
 .cxx.pch:
-	$(C++F) -c $(.IMPSRC)
+	$(c++f) -c $(.IMPSRC)
+
+ifneq ($(BUILD_TARGET), SL)
+ifeq (gcc,$(firstword $(CCNAME)))
+# work around gcc bug optimizing this file on ia32
+ifeq ($(BUILD_OPTIMIZE), DEBUG)
+cg_loop.o: OPTIMIZER = -O0 -g
+else
+cg_loop.o: OPTIMIZER = -O0
+endif
+endif
+endif

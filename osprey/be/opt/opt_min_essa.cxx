@@ -176,7 +176,7 @@ public:
   EXP_OCCURS_CONTAINER &Nodes(void) const
     { return Worklst()->Phi_occurs(); }
 
-  char *Search_name(void) const
+  const char *Search_name(void) const
     { return "REPLACING_OCCUR_SEARCH"; }
 };
 

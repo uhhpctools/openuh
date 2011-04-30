@@ -57,6 +57,7 @@
 #include <assert.h>
 #include <list>
 #include <vector>
+#include <string.h>
 #include "topcode.h"
 #include "targ_isa_properties.h"
 #include "gen_util.h"
@@ -242,14 +243,14 @@ const char* Print_Name(int print_index)
     for (i = 0; i < MAX_LISTING_OPERANDS; ++i) {
       char buf[80];
       if (i == END) {
-	comp_name[i] = "ISA_PACK_COMP_end";
+	comp_name[i] = strdup("ISA_PACK_COMP_end");
       } else if (i == OPND) {
-	comp_name[i] = "ISA_PACK_COMP_opnd";
+	comp_name[i] = strdup("ISA_PACK_COMP_opnd");
       } else if (i > OPND && i < (OPND + MAX_OPNDS)) {
 	sprintf(buf, "ISA_PACK_COMP_opnd+%d", i - OPND);
 	comp_name[i] = strdup(buf);
       } else if (i == RESULT) {
-	comp_name[i] = "ISA_PACK_COMP_result";
+	comp_name[i] = strdup("ISA_PACK_COMP_result");
       } else {
 	assert(i > RESULT && i < (RESULT + MAX_RESULTS));
 	sprintf(buf, "ISA_PACK_COMP_result+%d", i - RESULT);
@@ -418,6 +419,34 @@ void Next_Word (void)
   }
 }
 
+/////////////////////////////////////
+void ISA_Pack_Is_Unused (void)
+/////////////////////////////////////
+//  See interface description.
+/////////////////////////////////////
+{
+  int i;
+  int top;
+  current_pack_desc = new isa_pack_type;
+  current_pack_desc->name = "dummy";
+  current_pack_desc->max_word = 0;
+  inst_words = 1;
+  all_packs.push_back (current_pack_desc);
+  for (top = 0; top < TOP_count; ++top) {
+    bool is_dummy = TOP_is_dummy((TOP)top);
+    bool is_simulated = TOP_is_simulated((TOP)top);
+    if (!is_dummy && !is_simulated) {
+      top_specified[top] = true;
+      op_assembly *op_pack = new op_assembly;
+      for (i = 0; i < MAX_WORDS; ++i) {
+        op_pack->opcode_mask[i] = 0;
+      }
+      op_packs_list.push_back(op_pack);
+      op_pack->desc = current_pack_desc;
+      op_packs[top] = op_pack;
+    }
+  }
+}
 
 /////////////////////////////////////
 static unsigned long long Mask(int width)
@@ -475,6 +504,7 @@ void ISA_Pack_End(void)
   bool only_zero_opndpos;
   const char *info_index_type;
 
+#ifndef TARG_LOONGSON
   for (err = false, top = 0; top < TOP_count; ++top) {
     bool is_dummy = TOP_is_dummy((TOP)top);
     bool is_simulated = TOP_is_simulated((TOP)top);
@@ -495,6 +525,7 @@ void ISA_Pack_End(void)
     }
   }
   if (err) exit(EXIT_FAILURE);
+#endif
 
   // setup types and formats depending on instruction size.
   if (inst_bits > 32) {
@@ -654,7 +685,7 @@ void ISA_Pack_End(void)
     op_assembly *op_pack = op_packs[top];
     fprintf(cfile, "  {");
     for (w = 0; w < inst_words; ++w) {
-      fprintf(cfile, " 0x%0*llxLL,",
+      fprintf(cfile, " 0x%0*" LL_FORMAT "xLL,",
 		     init_digits, op_pack ? op_pack->opcode_mask[w] : 0LL);
     }
     fprintf(cfile, " }, /* %s */\n", TOP_Name((TOP)top));
@@ -689,7 +720,11 @@ void ISA_Pack_End(void)
   fprintf(hfile, "\ninline INT ISA_PACK_Inst_Words(TOP topcode)\n"
 		 "{\n");
   if (inst_words == 1) {
+#if defined(TARG_SL)
+    fprintf(hfile, "  return TOP_is_dummy(topcode) ? 0 : (TOP_is_instr16(topcode) ? 1 : 2);\n"); // SL inst are by hword count
+#else
     fprintf(hfile, "  return TOP_is_dummy(topcode) ? 0 : 1;\n");
+#endif
   } else {
     fprintf(hfile, "  extern const mUINT8 ISA_PACK_inst_words[%d];\n"
 		   "  return ISA_PACK_inst_words[(INT)topcode];\n",
@@ -745,7 +780,6 @@ void ISA_Pack_End(void)
   index = 1;
   for ( isi = all_packs.begin(); isi != all_packs.end(); ++isi ) {
     ISA_PACK_TYPE curr_ptype = *isi;
-    i = 0;
     if (curr_ptype->oadj.begin() != curr_ptype->oadj.end()) {
       curr_ptype->adj_index = index;
       for ( ioi = curr_ptype->oadj.begin(); 
@@ -831,4 +865,8 @@ void ISA_Pack_End(void)
 		 "}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

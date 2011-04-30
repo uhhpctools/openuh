@@ -60,6 +60,6 @@ extern void WB_IPL_Terminate();
 
 extern void WB_IPL_Restore();
 
-extern void s_ipl_debug(char init_buffer[]);
+extern void s_ipl_debug(const char init_buffer[]);
 
 #endif /* wb_ipl_INCLUDED */

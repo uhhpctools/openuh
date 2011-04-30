@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -407,7 +415,15 @@ typedef enum REGION_KIND {
   REGION_KIND_EXC_SPEC   = 0xa,
   REGION_KIND_MASK       = 0xb,
   REGION_KIND_GUARD      = 0xc,
-  REGION_KIND_NULL_CLEANUP = 0xd  /* cleanup with empty destructor */
+  REGION_KIND_NULL_CLEANUP = 0xd, /* cleanup with empty destructor */
+
+#if defined(TARG_SL) //fork_joint
+  /* add following region kind for main thread and minor thread */ 
+  REGION_KIND_MINOR = 0x11,  /* minor thread */ 
+  REGION_KIND_MAJOR = 0x12,  /* major thread */ 
+  REGION_KIND_SL2_ENCLOSING_REGION = 0x13,
+  REGION_KIND_HOT   = 0x14,
+#endif
 } REGION_KIND;
 
 class WN {
@@ -438,8 +454,13 @@ public:
             } pragma;
 	    TY_IDX	    io_item_ty;  /* for IO_ITEM */
             struct {
+#if defined(TARG_SL)
+                REGION_KIND region_kind: 7;
+                mUINT32     region_id  :25;
+#else 
                 REGION_KIND region_kind: 4;
                 mUINT32     region_id  :28;
+#endif 
             } region;
 	 } ua;
 	 union {
@@ -469,6 +490,7 @@ public:
       mUINT32           kid_count   :14; /* gives kid_count for free */
       mINT64            map_id      :30;
       TYPE_ID           desc        : 6;  /* descriptor type */
+      UINT32            wn_id;            /* unique id for the whirl node */
    } common;
 
    union {
@@ -494,8 +516,11 @@ public:
       union {
         INT64       pragma_arg64;
         struct {
-           INT32    pragma_arg1;
-	   union {
+	  union{
+           WN* dummy3;
+	   INT32    pragma_arg1;
+	  };
+	  union {
 	     INT32    pragma_arg2;
 	     struct {
 	       mUINT32  pragma_asm_opnd_num : 8;
@@ -512,6 +537,35 @@ public:
       } pragma;
    } u3;
 
+#if defined(TARG_SL)
+// following struct include some target specific extension 
+   struct
+  {
+     BOOL vbuf_ofst_adjusted;
+     BOOL is_internal_mem_ofst;
+     BOOL compgoto_para;
+     BOOL compgoto_for_minor;
+  }sl_ext; 
+
+// need a flag to record if there are div/rem in actual 
+   UINT32 div_in_actual;
+#define WN_div_in_actual(x)  ((x)->div_in_actual)
+#define WN_Set_div_in_actual(x, y) (((x)->div_in_actual) = (y)) 
+
+#define WN_vbuf_ofst_adjusted(x) ((x)->sl_ext.vbuf_ofst_adjusted)
+#define WN_Set_vbuf_ofst_adjusted(x, y) ((x)->sl_ext.vbuf_ofst_adjusted = y)
+
+
+#define WN_is_internal_mem_ofst(x) ((x)->sl_ext.is_internal_mem_ofst)
+#define WN_Set_is_internal_mem_ofst(x, y) ((x)->sl_ext.is_internal_mem_ofst = y)
+
+#define WN_is_compgoto_para(x) ((x) ->sl_ext.compgoto_para)
+#define WN_Set_is_compgoto_para(x, y) ((x) ->sl_ext.compgoto_para = y)
+
+#define WN_is_compgoto_for_minor(x) ((x) ->sl_ext.compgoto_for_minor)
+#define WN_Set_is_compgoto_for_minor(x, y)  ((x) ->sl_ext.compgoto_for_minor = y)
+#endif // TARG_SL
+
 #ifndef WN_NO_ACCESSOR_FUNCTIONS
 
   WN () {}
@@ -524,8 +578,14 @@ public:
 #pragma reset woff 3201
   ~WN () {}
 
+  static UINT32 the_unique_id;
+
 public:
 
+  void set_unique_id() {
+     the_unique_id++;
+     common.wn_id = the_unique_id;
+  }
   friend inline WN_OFFSET   WN_load_offset (const WN *);
   friend inline WN_OFFSET&  WN_load_offset (WN *);
   friend inline WN_OFFSET   WN_lda_offset (const WN *);
@@ -608,6 +668,7 @@ public:
 
   friend inline OPERATOR    WN_operator (const WN *);
   friend inline void        WN_set_operator (WN *, OPERATOR);
+  friend inline void        WN_change_operator (WN *, OPERATOR);
   friend inline TYPE_ID     WN_rtype (const WN *);
   friend inline void        WN_set_rtype (WN *, TYPE_ID);
   friend inline INT         WN_kid_count (const WN *);
@@ -621,6 +682,7 @@ public:
   friend inline TYPE_ID     WN_desc (const WN *);
   friend inline void        WN_set_desc (WN *, TYPE_ID);
   friend inline INT32       WN_map_id (const WN *);
+  friend inline UINT32      WN_id (const WN *);
 
   friend inline TY_IDX      WN_ty (const WN *, const int);
   friend inline TY_IDX&     WN_ty (WN *, const int);
@@ -644,8 +706,6 @@ public:
   friend inline WN*         WN_last (const WN *);
   friend inline WN*&        WN_last (WN *);
 
-  friend inline INT64       WN_pragma_arg64 (const WN *);
-  friend inline INT64&      WN_pragma_arg64 (WN *);
   friend inline INT32       WN_pragma_arg1 (const WN *);
   friend inline INT32&      WN_pragma_arg1 (WN *);
   friend inline INT32       WN_pragma_arg2 (const WN *);
@@ -671,8 +731,15 @@ public:
   friend inline void        WN_Copy_u1u2 (WN*, const WN*);
   friend inline void        WN_Copy_u3 (WN*, const WN*);
 
+#if defined(TARG_SL)
+// following accessor used to access sl specific extension stuff
+  friend inline void        WN_Copy_sl_ext(WN* , const WN*); 
+#endif 
 #endif /* WN_NO_ACCESSOR_FUNCTIONS */
 };
+
+extern void Check_Traced_Wn_Node(WN *);
+extern void gdb_stop_here();
 
 #ifndef WN_NO_ACCESSOR_FUNCTIONS
 
@@ -743,6 +810,12 @@ inline WN_ESIZE& WN_element_size (WN* wn) { return wn->u1u2.element_size; }
 
 inline OPERATOR   WN_operator (const WN* wn) { return wn->common.wn_operator; }
 inline void       WN_set_operator (WN* wn, OPERATOR opr) { wn->common.wn_operator = opr; }
+inline void       WN_change_operator (WN* wn, OPERATOR opr) {
+  Is_True((WN_map_id(wn) == -1 ||
+        OPERATOR_mapcat(WN_operator(wn)) == OPERATOR_mapcat(opr)),
+      ("WN's new operator belongs to a different mapcat in WN_change_operator"));
+  WN_set_operator(wn, opr);
+}
 inline TYPE_ID    WN_rtype (const WN* wn) { return wn->common.rtype; }
 inline void       WN_set_rtype (WN* wn, TYPE_ID ty) { wn->common.rtype = ty; }
 inline INT        WN_kid_count (const WN* wn) { return OPERATOR_nkids(WN_operator(wn)) == -1 ? wn->common.kid_count : OPERATOR_nkids(WN_operator(wn)); }
@@ -755,7 +828,14 @@ inline void	  WN_set_bit_offset_size (WN* wn, UINT ofst, UINT siz) { wn->common.
 inline TYPE_ID    WN_desc (const WN* wn) { return wn->common.desc; }
 inline void       WN_set_desc (WN* wn, TYPE_ID ty) { wn->common.desc = ty; }
 inline INT32      WN_map_id (const WN* wn) { return wn->common.map_id; }
-inline void       WN_set_map_id (WN* wn, INT32 m) { wn->common.map_id = m; }
+inline void       WN_set_map_id (WN* wn, INT32 m) 
+{
+   wn->common.map_id = m; 
+#ifdef Is_True_On
+   Check_Traced_Wn_Node(wn);
+#endif
+}
+inline UINT32      WN_id (const WN *wn) { return wn->common.wn_id; }
 
 inline WN* WN_kid (const WN* wn, int i) { return wn->u3.kids [i]; }
 inline WN*& WN_kid (WN* wn, int i) { return wn->u3.kids [i]; }
@@ -768,6 +848,8 @@ inline WN* WN_kid2 (const WN* wn) { return wn->u3.kids [2]; }
 inline WN*& WN_kid2 (WN* wn) { return wn->u3.kids [2]; }
 inline WN* WN_kid3 (const WN* wn) { return wn->u3.kids [3]; }
 inline WN*& WN_kid3 (WN* wn) { return wn->u3.kids [3]; }
+inline WN* WN_kid4 (const WN* wn) { return wn->u3.kids [4]; }
+inline WN*& WN_kid4 (WN* wn) { return wn->u3.kids [4]; }
 #pragma reset woff 1172
 inline INT64 WN_const_val (const WN* wn) { return wn->u3.const_val; }
 inline INT64& WN_const_val (WN* wn) { return wn->u3.const_val; }
@@ -783,8 +865,6 @@ inline UINT32 WN_asm_opnd_num (const WN *wn) { return wn->u1u2.uu.ua.asm_operand
 inline UINT32& WN_asm_opnd_num (WN *wn) { return wn->u1u2.uu.ua.asm_operand_num; }
 inline UINT32 WN_asm_num_clobbers (const WN *wn) { return wn->u3.asm_fields.num_clobbers; }
 inline UINT32& WN_asm_num_clobbers (WN *wn) { return wn->u3.asm_fields.num_clobbers; }
-inline INT64 WN_pragma_arg64 (const WN* wn) { return wn->u3.pragma.pragma_arg64; }
-inline INT64& WN_pragma_arg64 (WN* wn) { return wn->u3.pragma.pragma_arg64; }
 inline INT32 WN_pragma_arg1 (const WN* wn) { return wn->u3.pragma.up1.pragma_arg1; }
 inline INT32& WN_pragma_arg1 (WN* wn) { return wn->u3.pragma.up1.pragma_arg1; }
 inline INT32 WN_pragma_arg2 (const WN* wn) { return wn->u3.pragma.up1.pragma_arg2; }
@@ -800,6 +880,10 @@ inline INT32& WN_pragma_preg (WN* wn) { return wn->u3.pragma.up2.pragma_preg; }
 
 inline void WN_Copy_u1u2 (WN* dst, const WN* src) { dst->u1u2 = src->u1u2; }
 inline void WN_Copy_u3 (WN* dst, const WN* src) { dst->u3 = src->u3; }
+
+#if defined(TARG_SL) || defined(TARG_SL2)
+inline void WN_Copy_sl_ext(WN* dst,  const WN* src)  { dst->sl_ext = src->sl_ext; }
+#endif
 
 #else
 
@@ -863,11 +947,11 @@ inline void WN_Copy_u3 (WN* dst, const WN* src) { dst->u3 = src->u3; }
 #define WN_kid1(x)              WN_kid((x),1)
 #define WN_kid2(x)              WN_kid((x),2)
 #define WN_kid3(x)              WN_kid((x),3)
+#define WN_kid4(x)              WN_kid((x),4)
 #define WN_const_val(x)         ((x)->u3.const_val)
 #define WN_label_flag(x)        ((x)->u3.label_flag_fields.label_flag)
 #define WN_first(x)             ((x)->u3.block.first)
 #define WN_last(x)              ((x)->u3.block.last)
-#define WN_pragma_arg64(x)      ((x)->u3.pragma.pragma_arg64)
 #define WN_pragma_arg1(x)       ((x)->u3.pragma.up1.pragma_arg1)
 #define WN_pragma_arg2(x)       ((x)->u3.pragma.up1.pragma_arg2)
 #define WN_pragma_distr_type(x) ((x)->u3.pragma.up2.pragma_distr_type)
@@ -1284,7 +1368,11 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
       return TY_is_volatile(pointed);
     } else {
       return TY_is_volatile(WN_ty(wn)) ||
+#ifdef KEY	// bug 12404
+	OPCODE_has_2ty(opc) && TY_is_volatile(TY_pointed(WN_load_addr_ty(wn)));
+#else
 	OPCODE_has_2ty(opc) && TY_is_volatile(WN_load_addr_ty(wn));
+#endif
     }
   }
   return FALSE;
@@ -1316,6 +1404,12 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
 
 /* Is the trip count estimate based on guessing the size of symbols */
 #define WN_LOOP_SYMB_TRIP 0x20
+
+/* Is the loop a upward countable loop */
+#define WN_LOOP_UP_TRIP   0x40
+
+/* Is the memory alias improved via loop multi-versioning */
+#define WN_LOOP_MULTIVERSION_ALIAS 0x80
 
 /* Is the loop an innermost loop */
 #define WN_Loop_Innermost(x)		(WN_loop_flag(x) & WN_LOOP_INNERMOST)
@@ -1363,6 +1457,23 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
 #define WN_Set_Loop_Symb_Trip(x)     (WN_loop_flag(x) |= WN_LOOP_SYMB_TRIP)
 #define WN_Reset_Loop_Symb_Trip(x)   (WN_loop_flag(x) &= ~WN_LOOP_SYMB_TRIP)
 
+#define WN_Loop_Up_Trip(x)         (WN_loop_flag(x) & WN_LOOP_UP_TRIP)
+#define WN_Set_Loop_Up_Trip(x)     (WN_loop_flag(x) |= WN_LOOP_UP_TRIP)
+#define WN_Reset_Loop_Up_Trip(x)   (WN_loop_flag(x) &= ~WN_LOOP_UP_TRIP)
+
+/* Through the use of multi-versioning we can provide improved aliasing
+ * results for the memory refrences within a loop.  This flag is applied
+ * to the loop in the multi-version pair for which the memory references
+ * have been divided into mult-version alias groups to provide runtime
+ * verified disambiguation.
+ */
+#define WN_Loop_Multiversion_Alias(x) \
+  (WN_loop_flag(x) & WN_LOOP_MULTIVERSION_ALIAS)
+#define WN_Set_Multiversion_Alias(x) \
+  (WN_loop_flag(x) |= WN_LOOP_MULTIVERSION_ALIAS)
+#define WN_Reset_Multiversion_Alias(x) \
+  (WN_loop_flag(x) &= ~WN_LOOP_MULTIVERSION_ALIAS)
+
 #define WN_LABEL_HANDLER_BEGIN 0x2
 #define WN_Label_Is_Handler_Begin(x)	   (WN_label_flag(x) & \
 					    WN_LABEL_HANDLER_BEGIN)
@@ -1398,6 +1509,9 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
 #define WN_PARM_NOT_EXPOSED_USE   0x40  /* there is no exposed use */
 #define WN_PARM_IS_KILLED   0x80        /* the parameter is killed, for
 					   pass by reference */
+#define WN_PARM_DEREFERENCE         0x100 /* parm is deferenced in callee */
+#define WN_Parm_Dereference(x)          (WN_parm_flag(x) & WN_PARM_DEREFERENCE)
+#define WN_Set_Parm_Dereference(x)      (WN_parm_flag(x) |= WN_PARM_DEREFERENCE)
 
 #define WN_Parm_By_Reference(x)		(WN_parm_flag(x) & WN_PARM_BY_REFERENCE)
 #define WN_Set_Parm_By_Reference(x)	(WN_parm_flag(x) |= WN_PARM_BY_REFERENCE)
@@ -1558,7 +1672,8 @@ inline mINT16 WN_num_actuals(const WN *wn)
  *              ^^^^^^^^^                     unused           (8 bits, 16..23)
  *            ^                               read(0)/write(1) (1 bit,  24)
  *           ^                                1 if manual prefetch  (1 bit, 25)
- *         ^^                                 unused           (2 bits, 26..27)
+ *          ^                                 keep                  (1 bit, 26)
+ *         ^                                  non-temporal          (1 bit, 27)                       
  *    ^^^^                                    confidence #     (4 bits, 28..31)
  *
  ***********************************************************************/
@@ -1569,7 +1684,6 @@ inline mINT16 WN_num_actuals(const WN *wn)
 #define PF_GET_STRIDE_2L(flag)  (((flag) >> 8)   & 0xff)
 #define PF_GET_CONFIDENCE(flag) (((flag) >> 28)  & 0xf)
 #define PF_GET_MANUAL(flag)     (((flag) >> 25) & 0x1)
-
 #ifdef KEY //bug 10953
 #define PF_GET_KEEP_ANYWAY(flag) (((flag) >> 26) & 0x1)
 #define PF_GET_NON_TEMPORAL(flag) (((flag) >> 27) & 0x1)
@@ -1582,14 +1696,12 @@ inline mINT16 WN_num_actuals(const WN *wn)
 #define PF_SET_CONFIDENCE(flag, x) flag = (((flag)&0x0fffffff) | ((x)&0xf)<<28)
 #define PF_SET_MANUAL(flag)        flag |= 0x02000000
 #define PF_UNSET_MANUAL(flag)      flag &= 0xfdffffff
-
 #ifdef KEY //bug 10953
 #define PF_SET_KEEP_ANYWAY(flag)   flag |= 0x04000000
 #define PF_UNSET_KEEP_ANYWAY(flag) flag &= 0xfbffffff
 #define PF_SET_NON_TEMPORAL(flag)  flag |= 0x08000000
 #define PF_UNSET_NON_TEMPORAL(flag) flag &= 0xf7ffffff
 #endif
-
 
 #define WN_pf_read(wn)       (((~(WN_prefetch_flag(wn))) >> 24) & 0x1)
 #define WN_pf_write(wn)      (((WN_prefetch_flag(wn))  >> 24) & 0x1)
@@ -1608,5 +1720,12 @@ inline mINT16 WN_num_actuals(const WN *wn)
 
 /* end prefetch macros */
 
+/* whether to dump the wn address; default to FALSE */
+extern BOOL IR_dump_wn_addr;
+/* whether to dump the unique wn id; default to FALSE */
+extern BOOL IR_dump_wn_id;
+
+extern void Trace_Wn_Copy(const WN *wn, const WN *src_wn);
+void Set_Trace_Wn_id(UINT32 wn_id);
 
 #endif /* wn_core_INCLUDED */

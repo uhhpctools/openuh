@@ -1,9 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -138,7 +134,6 @@
  * Prefetches are generated for each level of the cache.
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -160,6 +155,7 @@
 #include "opt_du.h"
 #include "lnoutils.h"
 #include "prompf.h"
+#include "wn_tree_util.h"               // for tree iterators
 
 extern WN* Find_SCF_Inside(WN* parent_wn, OPCODE opc); // in ff_utils.cxx
 #define minof(x, y) (((x)<(y)) ? (x) : (y))
@@ -211,7 +207,8 @@ static BOOL Has_Indirect_Ref (WN* wn)
       return TRUE;
   return FALSE;
 }
-
+#endif 
+#if defined(TARG_X8664) || defined(TARG_IA64)
 // i = i + inv -- stride is just inv (inv - non const)
 static WN *Obtain_Stride_From_Loop_Step(WN *loop)
 {
@@ -295,6 +292,212 @@ static WN *Obtain_Stride_From_Array_Index(WN *array_index, WN *loop)
   return NULL;
 }
 
+/*
+   This function analyzes an OPR_ARRAY whether it has an inductive base
+   address. An "inductive base aadress ARRAY" is defined as the following. 
+   (1) the all dimensions have constant strides, 
+   (2) the the base address of the ARRAY is inductive (a linear expression 
+       of the innermost loop index var), and
+   (3) the stride of the inductive expression is a compile-time constant.
+
+   Following is an example.
+
+   {int loopend; loopend=sites_on_node; 
+    site *lattice, *s;
+
+     for( i=0, s=lattice ; i<loopend; i++,s++ ){
+       register double  ar,br;
+
+       ar = s->tempmat1->e[0][0]; 
+       ...
+       br = s->link[dir[j]]->e[2][2]; 
+     }
+   }
+
+   Both s->tempmat1->e[0][0] and s->link[dir[j]]->e[2][2] meet the above
+   definition and are treated as ARRAYs with inductive base addresses.
+
+   If an ARRAY has an (linear) inductive base address expression, this 
+   function returns the WN contains the (constant) stride.
+
+   We currently exclude the cases with small strides even if they meet the
+   inductive base address definition. This is for a profitability
+   consideration. 
+
+   A variant is called indirect inductive base address, which follows
+   the above definition except of replacing (2) with the following.
+   - the base address of the ARRAY contains one indirect load whose address 
+     is inductive and the rest of the base address is loop invariant.
+
+   The *inductive_base and *indirect_base are marked accordingly.
+
+   **base returns a load which has a symbol for PF_BASE_ARRAY to track.
+   Since PF_BASE_ARRAY typically tracks the symbol of the load at the kid0
+   of OPR_ARRAY, but an inductive base address case does not necessarily
+   have a load, we try to deterministically get a load for this purpose.
+   But don't count what exactly this load is within the entire base address
+   expression.
+ 
+ */
+WN *Inductive_Base_Addr_Const_Stride(WN *array, WN *loop, WN **base, 
+                          BOOL *inductive_base, BOOL *indirect_base, mINT32 *stride_val)
+{
+  int kid;
+  *inductive_base = FALSE;
+  *indirect_base = FALSE;
+  *stride_val = 0;
+
+  // Prefetching the memory accesses of inductive base addresses is enabled
+  // only at AGGRESSIVE_PREFETCH.
+  if (!LNO_Prefetch_Inductive ||
+      LNO_Run_Prefetch < AGGRESSIVE_PREFETCH) {
+    return NULL;
+  }
+
+  // Check if the subscript address expression in each dimension is a
+  // constant.
+  for(kid = WN_num_dim(array)+1; kid < WN_kid_count(array); kid++) {
+    if(WN_operator(WN_kid(array, kid)) != OPR_INTCONST) {
+      return NULL;
+    }
+  }
+
+  WN *array_base_addr = WN_kid0(array);
+ 
+  if (WN_operator(array_base_addr) == OPR_LDID) {
+    // Get its def
+    DEF_LIST* def_list=Du_Mgr->Ud_Get_Def(array_base_addr);
+    WN* def = NULL;
+    DEF_LIST_ITER d_iter(def_list);
+    /* Not considering the incomplete cases here. Be aggressive.
+       If in rare cases an aliasing does appear, we may prefetch
+       undesirable cache lines but won't produce wrong code.
+     */
+    for (DU_NODE* dnode=d_iter.First(); !d_iter.Is_Empty();
+                  dnode=d_iter.Next()) { 
+      if (def != NULL) {
+        return NULL;  // Encounter multiple defs
+      }
+      def=dnode->Wn();
+    }
+
+    // Make sure the def is in the same loop.
+    WN *wn_loop = LWN_Get_Parent(def);
+    while (wn_loop && (WN_opcode(wn_loop)!=OPC_DO_LOOP)) {
+      wn_loop = LWN_Get_Parent(wn_loop);
+    }
+
+    if (WN_operator(def) == OPR_STID &&
+        wn_loop == loop) {
+      array_base_addr = WN_kid0(def);
+      PF_PRINT( fprintf(TFile, "Base address defined by a previous WN. \n");
+                fdump_tree(TFile, def); );
+    } else {
+      return NULL;  
+    }
+  }
+
+  // Search for an loop index load in the tree.
+  WN *loop_index_ld = NULL;
+  for (WN_TREE_ITER<PRE_ORDER, WN*> iter (array_base_addr);
+       iter.Wn () != NULL; ++iter) {
+    WN *wn = iter.Wn ();
+
+    if (WN_operator(wn) == OPR_LDID &&
+        SYMBOL(wn) == SYMBOL(WN_index(loop))) {
+      // The candidate tree should have no more than one loop index load.
+      if (loop_index_ld == NULL) {
+        loop_index_ld = wn;
+      } else {
+        loop_index_ld = NULL;
+        break;
+      }
+    }
+  }
+
+  if (loop_index_ld == NULL) {
+    return NULL;
+  }
+
+  /* Check if the ancestor chain of the loo_index_ld forms a linear inductive
+     expression (a * i + b).
+   */
+  WN *ancestor = LWN_Get_Parent(loop_index_ld);
+  WN *cur_wn = loop_index_ld;
+  WN *const_stride_wn = NULL;
+  WN *first_add = NULL;
+  *stride_val = 1;
+
+  // Traverse all ADDs.
+  while (ancestor != NULL && 
+         (WN_operator(ancestor) == OPR_ADD ||
+          WN_operator(ancestor) == OPR_CVT ||
+          WN_operator(ancestor) == OPR_MPY) ) {
+    if (WN_operator(ancestor) == OPR_ADD &&
+        first_add == NULL) {
+      first_add = ancestor;
+    } else if (WN_operator(ancestor) == OPR_MPY) {
+      WN *sibling = NULL;
+      if (WN_kid0(ancestor) == cur_wn) {
+        sibling = WN_kid1(ancestor);
+      } else {
+        sibling = WN_kid0(ancestor);
+      }
+      if (WN_operator(sibling) == OPR_INTCONST) {
+        const_stride_wn = sibling;
+        *stride_val *= WN_const_val(sibling);
+      } else {
+        return NULL;
+      }
+    }
+
+    cur_wn = ancestor;
+    ancestor = LWN_Get_Parent(ancestor);
+  }
+
+  if (cur_wn == array_base_addr) {
+    // Found a linear inductive expression.
+    if (*stride_val < (Cache.LineSize(1)/2)) {
+      // If the stride is too small (for now less than half of a cache line),
+      // don't consider it for this prefetching. This exclusion is for a
+      // profitability consideration.
+      return NULL;
+    } 
+    PF_PRINT( fprintf(TFile, "Found an inductive base addr \n"); );
+    *inductive_base = TRUE;
+  } else if (WN_operator(ancestor) == OPR_ILOAD &&
+             ancestor == array_base_addr &&
+             LNO_Prefetch_Induc_Indir) {
+    // Found an indirect load through a linear inductive expression.
+    PF_PRINT( fprintf(TFile, "Found an indirect inductive base addr \n"); );
+    *inductive_base = TRUE;
+    *indirect_base = TRUE;
+  } else {
+    PF_PRINT( fprintf(TFile, "Possibly missing a prefetching candidate with inductive base address \n"); );
+  }
+
+  if (*inductive_base) {
+    FmtAssert(first_add, ("Unable to locate ADD in an linear inductive expr."));
+    for (WN_TREE_ITER<PRE_ORDER, WN*> iter (first_add);
+       iter.Wn () != NULL; ++iter) {
+      WN *wn = iter.Wn ();
+      if ((WN_operator(wn) == OPR_LDID ||
+           WN_operator(wn) == OPR_ILOAD ||
+           WN_operator(wn) == OPR_LDA) &&
+          wn != loop_index_ld) {
+        *base = wn;
+        break;
+      }
+    }
+    FmtAssert(*base, ("Unable to locate a base load."));
+
+    /* Return a constant stride. */
+    return const_stride_wn;
+  }
+
+  return NULL;
+}
+
 //-------------------------------------------------------------------
 //Return a stride for the array if we can find a "loop" invariant one
 //
@@ -308,7 +511,8 @@ static WN *Obtain_Stride_From_Array_Index(WN *array_index, WN *loop)
 //
 //TODO: find more cases and release the singly-nested loop constraint
 //-------------------------------------------------------------------
-WN *Simple_Invariant_Stride_Access(WN *array, WN *loop)
+WN *Simple_Invariant_Stride_Access(WN *array, WN *loop, BOOL ck_induc_base,
+                                   BOOL *inductive_base, BOOL *indirect_base)
 {
 
   INT kid;
@@ -316,33 +520,69 @@ WN *Simple_Invariant_Stride_Access(WN *array, WN *loop)
     return NULL;
 
   ACCESS_ARRAY *aa = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map,array);
+
   if (!aa || aa->Too_Messy || WN_element_size(array)<0)
    return NULL;
 
-  //we only handle one dimensional array now
-  if(WN_num_dim(array) != 1) return NULL;
+  if (!LNO_Prefetch_Inductive ||
+      LNO_Run_Prefetch < AGGRESSIVE_PREFETCH) {
+    // Don't deal with inductive base address cases.
+    //we only handle one dimensional array now
+    if(WN_num_dim(array) != 1) return NULL;
+  } else {
+    /* The dim could be 0, but the base could be inductive. */
+    if(WN_num_dim(array) > 1) {
+      // We also want to deal with the case where a multi-dimenional
+      // array with constant indexing but the base is inductive.
+      for(kid = WN_num_dim(array)+1; kid < WN_kid_count(array); kid++) {
+        if(WN_operator(WN_kid(array, kid)) != OPR_INTCONST) {
+          return NULL;
+        }
+      }
+    }
+  }
 
   //we only process singly-nested loop now
   DO_LOOP_INFO *dli = (DO_LOOP_INFO *)WN_MAP_Get(LNO_Info_Map,loop);
   if(!dli || !dli->Is_Inner)
      return NULL;
+
+  WN *base;
+  mINT32 stride_val = 0;
+  if (ck_induc_base) {
+    WN *stride = Inductive_Base_Addr_Const_Stride(array, loop, &base, 
+                        inductive_base, indirect_base, &stride_val);
+    if (stride != NULL) {
+      return stride;
+    }
+  } else {
+    *inductive_base = FALSE;
+    *indirect_base = FALSE;
+  }
+
+  // For an inductive base addr, we will deal with it even there are outer
+  // loops, though the prefetches will be generated w.r.t. the innermost
+  // loops.
+
   WN *up_nest = LWN_Get_Parent(loop);
   while(up_nest != NULL){ //we only consider singly-nested
-      if(WN_opcode(up_nest) == OPC_DO_LOOP)
-        return NULL;
-      up_nest = LWN_Get_Parent(up_nest);
+    if(WN_opcode(up_nest) == OPC_DO_LOOP)
+      return NULL;
+    up_nest = LWN_Get_Parent(up_nest);
   }
 
   if(!Is_Loop_Invariant_Exp(WN_kid0(array), loop)){//base is not loop invariant
 
-   for(kid = WN_kid_count(array)-1; kid>0; kid--){
-    if(!Is_Loop_Invariant_Exp(WN_kid(array, kid),loop))
+  for(kid = WN_kid_count(array)-1; kid>0; kid--){
+    if(!Is_Loop_Invariant_Exp(WN_kid(array, kid),loop)) {
       return NULL; //could not tolerate other invariants
-   }
+    }
+  }
 
    if(WN_operator(WN_kid0(array)) != OPR_LDID || //base must be the loop index
-      SYMBOL(WN_kid0(array)) != SYMBOL(WN_index(loop)))
+      SYMBOL(WN_kid0(array)) != SYMBOL(WN_index(loop))) {
      return NULL;
+   }
 
    return Obtain_Stride_From_Loop_Step(loop);
   }//end if
@@ -374,6 +614,9 @@ WN *Simple_Invariant_Stride_Access(WN *array, WN *loop)
  ***********************************************************************/
 void PF_LOOPNODE::Add_Ref (WN* wn_array) {
   BOOL messy = FALSE;
+  BOOL inductive_base = FALSE;
+  BOOL indirect_base = FALSE;
+
   ACCESS_ARRAY *array = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map,wn_array);
 
   if (!array || array->Too_Messy) {
@@ -394,13 +637,14 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
   }
 
   if (array) {
+
 #ifdef KEY 
     // Bug 1656, 2945 - filter out indirect references from the messy vectors
     // to enable aggressive prefetching under AGGRESSIVE_PREFETCH.
     // TODO: If this is always safe, then we could make it default.
     for (INT i=0; i<array->Num_Vec(); i++) {
       ACCESS_VECTOR *av = array->Dim(i);
-#if defined(OSP_OPT) && defined(TARG_IA64)
+#if defined(TARG_IA64)
       // For IA64, prefetch can be more aggressive.
       if (av->Contains_Non_Lin_Symb() || av->Too_Messy) {
 	  if (Has_Indirect_Ref(wn_array))
@@ -429,9 +673,28 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
   }
 
   if (WN_element_size(wn_array) < 0) {
-    // Funny F90 strided array; pass for now
-    messy = TRUE;
+#ifdef TARG_X8664
+      //bug 5945: if the loop was vectorized
+      //the array is guaranteed to be contiguous, and we can prefetch
+      WN *parent = LWN_Get_Parent(wn_array);
+     if((WN_desc(parent) != MTYPE_V && MTYPE_is_vector(WN_desc(parent)))||
+       (WN_rtype(parent) != MTYPE_V && MTYPE_is_vector(WN_rtype(parent))));
+     else
+#endif
+       // Funny F90 strided array; pass for now (Guarding Loop for prefetch is expensive?)
+        messy = TRUE;
   }
+
+//bug 14291: It is aggressive to prefetch for a field of a Large structure, where the structure
+//is the array element. The case is similar to prefetch for non-continuous array, we can not
+//make sure whether the prefetched cache line will ever be used.
+#ifdef KEY
+ if(LNO_Run_Prefetch < AGGRESSIVE_PREFETCH &&
+    WN_element_size(wn_array) > 16 && 
+    WN_element_size(wn_array)%64 != 0){ //64 should be the cache line size in byte.
+     messy = TRUE;
+  }
+#endif
 
   if (LNO_Prefetch_Indirect && messy) {
     BOOL is_indirect = FALSE;
@@ -440,6 +703,7 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
         is_indirect = TRUE;
       }
     }
+
     if (is_indirect) {
       UINT32 flag=0;
       WN *parent = LWN_Get_Parent(wn_array);
@@ -493,23 +757,40 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
     }
     return;
   } else if (messy) {
-#ifdef KEY //bug 10953: for cases may not be "messy"
-     if(!Simple_Invariant_Stride_Access(wn_array, _code)){
+#if defined(TARG_X8664) || defined(TARG_IA64) //bug 10953: for cases may not be "messy"
+     if(!Simple_Invariant_Stride_Access(wn_array, _code, TRUE,
+                                        &inductive_base, &indirect_base)){
+       PF_PRINT( fprintf(TFile, "failing Simple_Invariant_Stride_Access(), _num_bad= %d\n", _num_bad); );
 #endif
     _num_bad++;
     return;
-#ifdef KEY //bug 10953
+#if defined(TARG_X8664) || defined(TARG_IA64) //bug 10953
    }
 #endif
   }
 
   // Find which element in the stack contains our base array
   WN *base = WN_array_base(wn_array);
+
   if ((WN_operator(base) != OPR_LDA) &&
       (WN_operator(base) != OPR_LDID)) {
-    _num_bad++;
-    return;
+
+     WN *stride = NULL;
+
+#if defined(TARG_X8664) || defined(TARG_IA64) //bug 10953
+     mINT32 stride_val = 0;
+     stride = Inductive_Base_Addr_Const_Stride(wn_array, _code, &base, 
+                                &inductive_base, &indirect_base, &stride_val);
+#endif
+
+     if (stride != NULL) {
+       inductive_base = TRUE;
+     } else {
+       _num_bad++;
+       return;
+     }
   }
+
   SYMBOL symb (base);
   if (mpf_syms->In_Manual (&symb)) {
     VB_PRINT (printf ("symbol prefetched manually: ");
@@ -517,13 +798,14 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
               printf ("\n"));
     return;
   }
+
   WN* parent_ref = LWN_Get_Parent (wn_array);
   if (WN_MAP_Get(WN_MAP_PREFETCH, parent_ref)) {
     VB_PRINT (printf ("reference prefetched manually, ignoring\n"));
     return;
   }
 
-  if (!Steady_Base(wn_array)) {
+  if (!Steady_Base(wn_array) && !inductive_base) {
     // base of array seems to vary in loop.
     _num_bad++;
     return;
@@ -535,15 +817,16 @@ void PF_LOOPNODE::Add_Ref (WN* wn_array) {
   }
 
   for (INT i=0; i<_bases.Elements(); i++) {
-    if (_bases.Bottom_nth(i)->Add_Ref (wn_array)) return;
+    if (_bases.Bottom_nth(i)->Add_Ref (wn_array, TRUE, inductive_base)) return;
   }
 
   SYMBOL* tmp_symb = CXX_NEW (SYMBOL(&symb), PF_mpool);
-  _bases.Push (CXX_NEW (PF_BASE_ARRAY (tmp_symb, wn_array,
-                                       array->Num_Vec(), this),
+  _bases.Push (CXX_NEW (PF_BASE_ARRAY (tmp_symb, wn_array, array->Num_Vec(), 
+                                       this, inductive_base, indirect_base),
                         PF_mpool));
   
-  BOOL tmp = _bases.Bottom_nth(_bases.Elements()-1)->Add_Ref (wn_array, FALSE);
+  BOOL tmp = _bases.Bottom_nth(_bases.Elements()-1)->Add_Ref (wn_array, FALSE,
+                                                              inductive_base);
   Is_True (tmp, ("Strange -- ref doesn't match sample ref"));
 }
 
@@ -600,7 +883,7 @@ static BOOL Is_Multi_BB (const WN* loop)
  * the references within those are processed later.
  *
  ***********************************************************************/
-void PF_LOOPNODE::Process_Refs (const WN* wn) {
+void PF_LOOPNODE::Process_Refs (WN* wn) {
   if (!wn) return;
 
   OPCODE opcode = WN_opcode(wn);
@@ -646,6 +929,8 @@ void PF_LOOPNODE::Process_Refs (const WN* wn) {
 
   if (OPCODE_operator(opcode) == OPR_ILOAD) {
     if (WN_operator(WN_kid0(wn)) == OPR_ARRAY) {
+      PF_PRINT( fprintf(TFile, "\nProcess_Refs() triggers a new pref candidate.\n");
+                fdump_tree(TFile, wn););
       Add_Ref (WN_kid0(wn));
     } else {
       _num_bad++;
@@ -657,6 +942,8 @@ void PF_LOOPNODE::Process_Refs (const WN* wn) {
 #endif
     if (WN_operator(WN_kid1(wn)) == OPR_ARRAY &&
         !Store_Is_Useless(wn)) {
+      PF_PRINT( fprintf(TFile, "\nProcess_Refs() triggers a new pref candidate.\n");
+                fdump_tree(TFile, wn); );
       Add_Ref (WN_kid1(wn));
     } else {
       _num_bad++;
@@ -694,7 +981,7 @@ void PF_LOOPNODE::Process_Loop () {
   // which will only walk the references immediately 
   // within this loop, and will (as a by-product) put all the
   // immediately nested loops in _child
-  const WN * w = WN_do_body(_code);
+  WN * w = WN_do_body(_code);
 #ifdef KEY
   DO_LOOP_INFO *dli = (DO_LOOP_INFO *) WN_MAP_Get(LNO_Info_Map, _code);
   BOOL single_small_trip_loop = FALSE; 
@@ -712,36 +999,6 @@ void PF_LOOPNODE::Process_Loop () {
 	 (dli->Num_Iterations_Symbolic &&
 	  LNO_Num_Iters < 100)))
       single_small_trip_loop = TRUE;
-#if 0 // bug 8560 : performance loss due to avoiding prefetch single - copy -loop
-#ifdef TARG_X8664
-    // For simple copy loop, the data may not be prefetched early enough for 
-    // next iteration - bug 4522.
-    {
-      WN* stmt = WN_first(w /* do loop body */);
-      if ( stmt && !WN_next(stmt) /* only statement in the loop */ && 
-           OPCODE_is_store(WN_opcode(stmt)) &&
-	   ( OPCODE_is_load(WN_opcode(WN_kid0(stmt))) ||
-	     ( WN_operator(WN_kid0(stmt)) == OPR_PAREN &&
-	       OPCODE_is_load(WN_opcode(WN_kid0(WN_kid0(stmt)))) ) ) )
-	simple_copy_loop = TRUE;
-      if ( simple_copy_loop ) {
-	// For streaming copy loops (that use non-temporal stores), eliminating
-	// prefetches slow down code by ~1.3%
-	if ( !dli->Num_Iterations_Symbolic ) {
-	  /* Refer to CGTARG_LOOP_Optimize for working set size calculation.
-	     The calculation here is simplified to handle a ISTORE(ILOAD).
-	  */
-	  INT trip_count = dli->Est_Num_Iterations;
-	  INT bytes = 2 * MTYPE_byte_size(WN_desc(stmt)) /* load + store */;
-	  INT size = trip_count * bytes;
-	  if ( size > 1000*1024 /* default for -CG:movnti */ )
-	    /* candidate for non-temporal store conversion */
-	    simple_copy_loop = FALSE;  
-	}
-      }
-    }
-#endif
-#endif
   }
   if ((LNO_Run_Prefetch > SOME_PREFETCH || 
        (LNO_Run_Prefetch == SOME_PREFETCH && !Is_Multi_BB (w))) &&
@@ -1072,12 +1329,6 @@ BOOL Check_Version_Map (WN* body_orig, WN* body_new) {
       (WN_operator(WN_kid1(body_orig)) == OPR_ARRAY)) 
     Is_True (WN_MAP_Get(version_map, WN_kid1(body_orig)) == WN_kid1(body_new),
              ("Check version map: error in array store\n"));
-#if 0
-  // no longer doing all loads/stores
-  if (OPCODE_is_load(opcode) || OPCODE_is_store(opcode)) 
-    Is_True (WN_MAP_Get(version_map, body_orig) == body_new,
-             ("Check version map: error in load/store\n"));
-#endif
   extern ARRAY_DIRECTED_GRAPH16 *pf_array_dep_graph;
   if (pf_array_dep_graph->Get_Vertex(body_orig))
     Is_True (WN_MAP_Get(version_map, body_orig) == body_new,
@@ -1565,7 +1816,7 @@ void PF_LOOPNODE::Print (FILE *fp) {
     fprintf (fp, "  Printing the references in each base array (of %d)\n",
              _bases.Elements());
     for (i=0; i<_bases.Elements(); i++) {
-      fprintf (fp, "  Base array %d -> ", i);
+      fprintf (fp, "\n  Base array %d -> ", i);
       _bases.Bottom_nth(i)->Print (fp);
     }
   }

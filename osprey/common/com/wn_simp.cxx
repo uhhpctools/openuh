@@ -46,7 +46,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "common_com_pch.h"
@@ -74,9 +73,9 @@
 
 #include "wn_simp.h"
 
-# if defined(KEY) && defined(Is_True_On)
-# include "config_opt.h"
-# endif
+#if defined(KEY) && defined(Is_True_On)
+#include "config_opt.h"
+#endif
 
 #ifdef BACK_END
 BOOL WN_Simp_Fold_ILOAD = TRUE;
@@ -120,6 +119,7 @@ typedef WN * simpnode;
 #define SIMPNODE_element_size WN_element_size
 #define SIMPNODE_idname_offset WN_idname_offset
 #define SIMPNODE_lda_offset WN_lda_offset
+#define SIMPNODE_label_number WN_label_number
 #define SIMPNODE_num_dim WN_num_dim
 #define SIMPNODE_array_base WN_array_base
 #define SIMPNODE_array_index WN_array_index
@@ -362,6 +362,7 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 	    Copy_alias_info(alias_manager,t,r);
 	 }
 # endif
+        WN_CopyMap(r, WN_MAP_ALIAS_CGNODE, t);
 	 WN_Delete(t);
 	 result = r;
 # if defined (KEY) && defined (Is_True_On)
@@ -376,6 +377,7 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 # endif
       r = WN_SimplifyIntrinsic(op, WN_intrinsic(t), numkids, &WN_kid0(t));
       if (r) {
+        WN_CopyMap(r, WN_MAP_ALIAS_CGNODE, t);
 	 WN_Delete(t);
 	 result = r;
 # if defined (KEY) && defined (Is_True_On)
@@ -388,10 +390,14 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
       k0 = WN_kid0(t);
 
       if (WN_operator(t) != OPR_CVTL) {
+          if (WN_operator(t) == OPR_EXTRACT_BITS) {
+              r = WN_SimplifyExp1(op,t);
+          } else {
 # if defined (KEY) && defined (Is_True_On)
-        if (Enable_WN_Simp_Expr_Limit == -1 || (Enable_WN_Simp_Expr_Limit != -1 && cur_idx < Enable_WN_Simp_Expr_Limit))
+            if (Enable_WN_Simp_Expr_Limit == -1 || (Enable_WN_Simp_Expr_Limit != -1 && cur_idx < Enable_WN_Simp_Expr_Limit))
 # endif
-	 r = WN_SimplifyExp1(op, k0);
+        	 r = WN_SimplifyExp1(op, k0);
+          }
       } else {
 # if defined (KEY) && defined (Is_True_On)
         if (Enable_WN_Simp_Expr_Limit == -1 || (Enable_WN_Simp_Expr_Limit != -1 && cur_idx < Enable_WN_Simp_Expr_Limit))
@@ -399,6 +405,7 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 	 r = WN_SimplifyCvtl(op, WN_cvtl_bits(t),k0);
       }
       if (r) {
+        WN_CopyMap(r, WN_MAP_ALIAS_CGNODE, t);
 	 WN_Delete(t);
 	 result = r;
 # if defined (KEY) && defined (Is_True_On)
@@ -414,8 +421,12 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 # if defined (KEY) && defined (Is_True_On)
       if (Enable_WN_Simp_Expr_Limit == -1 || (Enable_WN_Simp_Expr_Limit != -1 && cur_idx < Enable_WN_Simp_Expr_Limit))
 # endif
+#ifdef KEY // bug 13507
+      if (opr != OPR_PAIR)
+#endif
       r = WN_SimplifyExp2(op, k0, k1);
       if (r) {
+        WN_CopyMap(r, WN_MAP_ALIAS_CGNODE, t);
 	 WN_Delete(t);
 	 result = r;
 # if defined (KEY) && defined (Is_True_On)
@@ -433,6 +444,7 @@ WN *WN_Simplify_Rebuild_Expr_Tree(WN *t,ALIAS_MANAGER *alias_manager)
 # endif
       r = WN_SimplifyExp3(op, k0, k1, k2);
       if (r) {
+        WN_CopyMap(r, WN_MAP_ALIAS_CGNODE, t);
 	 WN_Delete(t);
 	 result = r;
 # if defined (KEY) && defined (Is_True_On)

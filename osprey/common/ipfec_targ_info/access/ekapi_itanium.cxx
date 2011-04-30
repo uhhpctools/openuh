@@ -394,6 +394,8 @@ void SCHE_INFO::Output_SI(void *pknobs, FILE *fd)
                store_avail_time);
     fprintf(fd,"  %-15s, /* resource requirement */\n",
                res_req_name.Vname());
+    fprintf(fd,"  %-15s, /* alternative resource requirement */\n",
+               "0");
     if (res_req_num != 0) {           
         fprintf(fd,"  %-15s, /* res id used set vec */\n",
                    id_set_name.Vname());

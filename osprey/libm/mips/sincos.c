@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: sincos.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/sincos.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.sincos.c $
  *
  * Revision history:
  *  10-Mar-00 - Original Version
@@ -71,7 +71,13 @@ extern	void	sincos(double, double *, double *);
 #pragma weak sincos = __sincos
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern void __sincos(double, double *, double *);
+#pragma weak sincos
+void sincos(double x, double *sinx, double *cosx) {
+  return __sincos(x, sinx, cosx);
+}
+#elif defined(__GNUC__)
 extern  void  __sincos(double, double *, double *);
 
 void    sincos() __attribute__ ((weak, alias ("__sincos")));
@@ -520,7 +526,17 @@ L:
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern void __sincosl(long double, long double *, long double *);
+void sincosl(long double x, long double *sinxl, long double *cosxl) {
+  double sinx, cosx;
+
+   __sincos((double)x, &sinx, &cosx);
+
+   *sinxl = sinx;
+   *cosxl = cosx;
+}
+#elif defined(__GNUC__)
 extern  void  __sincosl(long double, long double *, long double *);
 
 void    sincosl() __attribute__ ((weak, alias ("__sincosl")));

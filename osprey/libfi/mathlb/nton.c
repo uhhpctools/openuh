@@ -99,13 +99,5 @@ __powii( _f_int4 x,
 /* do not turn these on unless needed for compatibility with
  * f77 and pass by address.
  */
-#if 0
-_f_int4
-pow_ii( _f_int4 *x,
-	   _f_int4 *y )
-{
-	return(_NTON(*x, *y));
-}
-#endif	/* end of if 0 */
 
 #endif	/* end of mips or little endian */

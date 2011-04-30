@@ -45,6 +45,10 @@
    type defined (a required type). */
 #include <libelf.h>
 #endif
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#include <mach-o/reloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* The target address is given: the place in the source integer
    is to be determined.

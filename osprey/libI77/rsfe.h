@@ -54,10 +54,8 @@ extern int x_getc(unit *);
 extern int x_endp(unit *);
 extern int x_rev(unit *);
 
-#if 11
 extern int s_rsfe64 (cilist64 *a);
 extern int s_rsfe64_mp (cilist64 *a, unit **fu);
-#endif	/* -n32 and -64 */
 
 #endif /* C || C++ */
 

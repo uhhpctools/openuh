@@ -862,7 +862,6 @@ get_displacement (buffer, aoffsetp)
 }
 
 
-#if 1 /* a version that should work on ns32k f's&d's on any machine */
 static int
 invalid_float (p, len)
      register bfd_byte *p;
@@ -883,29 +882,3 @@ invalid_float (p, len)
     val = 1;
   return (val);
 }
-#else
-
-/* assumes the bytes have been swapped to local order */
-typedef union { double d;
-		float f;
-		struct { unsigned m:23, e:8, :1;} sf;
-		struct { unsigned lm; unsigned m:20, e:11, :1;} sd;
-	      } float_type_u;
-
-static int
-invalid_float (p, len)
-     register float_type_u *p;
-     register int len;
-{
-  register int val;
-  if ( len == sizeof (float) )
-    val = (p->sf.e == 0xff
-	   || (p->sf.e == 0 && p->sf.m != 0));
-  else if ( len == sizeof (double) )
-    val = (p->sd.e == 0x7ff
-	   || (p->sd.e == 0 && (p->sd.m != 0 || p->sd.lm != 0)));
-  else
-    val = 1;
-  return (val);
-}
-#endif

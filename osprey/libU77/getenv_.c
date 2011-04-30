@@ -60,17 +60,14 @@ getenv_ (char *fname, char *value, int flen, int vlen)
 #endif /* KEY Bug 1683 */
 {
 /* fixed bug 9931 */
-#ifdef _SYSTYPE_SVR4
-extern char **_environ;
+#if defined(BUILD_OS_DARWIN)
+extern char **environ;
+register char **env = environ;
 #else
 extern char **_environ;
+register char **env = _environ;
 #endif
 register char *ep, *fp, *flast;
-#ifdef _SYSTYPE_SVR4
-register char **env = _environ;
-#else
-register char **env = _environ;
-#endif
 
 flast = fname + flen;
 for(fp = fname ; fp < flast ; ++fp)

@@ -813,10 +813,6 @@ static const char *dwarf_fund_type_name	PARAMS ((unsigned));
 static tree decl_ultimate_origin	PARAMS ((tree));
 static tree block_ultimate_origin	PARAMS ((tree));
 static tree decl_class_context 		PARAMS ((tree));
-#if 0
-static void output_unsigned_leb128	PARAMS ((unsigned long));
-static void output_signed_leb128	PARAMS ((long));
-#endif
 static int fundamental_type_code	PARAMS ((tree));
 static tree root_type_1			PARAMS ((tree, int));
 static tree root_type			PARAMS ((tree));
@@ -860,9 +856,6 @@ static inline void body_begin_attribute	PARAMS ((const char *));
 static inline void body_end_attribute	PARAMS ((const char *));
 static inline void language_attribute	PARAMS ((unsigned));
 static inline void member_attribute	PARAMS ((tree));
-#if 0
-static inline void string_length_attribute PARAMS ((tree));
-#endif
 static inline void comp_dir_attribute	PARAMS ((const char *));
 static inline void sf_names_attribute	PARAMS ((const char *));
 static inline void src_info_attribute	PARAMS ((const char *));
@@ -885,9 +878,6 @@ static inline tree member_declared_type PARAMS ((tree));
 static const char *function_start_label	PARAMS ((tree));
 static void output_array_type_die	PARAMS ((void *));
 static void output_set_type_die		PARAMS ((void *));
-#if 0
-static void output_entry_point_die	PARAMS ((void *));
-#endif
 static void output_inlined_enumeration_type_die PARAMS ((void *));
 static void output_inlined_structure_type_die PARAMS ((void *));
 static void output_inlined_union_type_die PARAMS ((void *));
@@ -900,10 +890,6 @@ static void output_lexical_block_die	PARAMS ((void *));
 static void output_inlined_subroutine_die PARAMS ((void *));
 static void output_local_variable_die	PARAMS ((void *));
 static void output_member_die		PARAMS ((void *));
-#if 0
-static void output_pointer_type_die	PARAMS ((void *));
-static void output_reference_type_die	PARAMS ((void *));
-#endif
 static void output_ptr_to_mbr_type_die	PARAMS ((void *));
 static void output_compile_unit_die	PARAMS ((void *));
 static void output_string_type_die	PARAMS ((void *));
@@ -1661,55 +1647,6 @@ decl_class_context (decl)
   return context;
 }
 
-#if 0
-static void
-output_unsigned_leb128 (value)
-     unsigned long value;
-{
-  unsigned long orig_value = value;
-
-  do
-    {
-      unsigned byte = (value & 0x7f);
-
-      value >>= 7;
-      if (value != 0)	/* more bytes to follow */
-	byte |= 0x80;
-      dw2_asm_output_data (1, byte, "\t%s ULEB128 number - value = %lu",
-			   orig_value);
-    }
-  while (value != 0);
-}
-
-static void
-output_signed_leb128 (value)
-     long value;
-{
-  long orig_value = value;
-  int negative = (value < 0);
-  int more;
-
-  do
-    {
-      unsigned byte = (value & 0x7f);
-
-      value >>= 7;
-      if (negative)
-	value |= 0xfe000000;  /* manually sign extend */
-      if (((value == 0) && ((byte & 0x40) == 0))
-	  || ((value == -1) && ((byte & 0x40) == 1)))
-	more = 0;
-      else
-	{
-	  byte |= 0x80;
-	  more = 1;
-	}
-      dw2_asm_output_data (1, byte, "\t%s SLEB128 number - value = %ld",
-			   orig_value);
-    }
-  while (more);
-}
-#endif
 
 /**************** utility functions for attribute functions ******************/
 
@@ -3319,30 +3256,6 @@ member_attribute (context)
     }
 }
 
-#if 0
-#ifndef SL_BEGIN_LABEL_FMT
-#define SL_BEGIN_LABEL_FMT	"*.L_sl%u"
-#endif
-#ifndef SL_END_LABEL_FMT
-#define SL_END_LABEL_FMT	"*.L_sl%u_e"
-#endif
-
-static inline void
-string_length_attribute (upper_bound)
-     tree upper_bound;
-{
-  char begin_label[MAX_ARTIFICIAL_LABEL_BYTES];
-  char end_label[MAX_ARTIFICIAL_LABEL_BYTES];
-
-  ASM_OUTPUT_DWARF_ATTRIBUTE (asm_out_file, AT_string_length);
-  sprintf (begin_label, SL_BEGIN_LABEL_FMT, current_dienum);
-  sprintf (end_label, SL_END_LABEL_FMT, current_dienum);
-  ASM_OUTPUT_DWARF_DELTA2 (asm_out_file, end_label, begin_label);
-  ASM_OUTPUT_LABEL (asm_out_file, begin_label);
-  output_bound_representation (upper_bound, 0, 'u');
-  ASM_OUTPUT_LABEL (asm_out_file, end_label);
-}
-#endif
 
 static inline void
 comp_dir_attribute (dirname)
@@ -3463,11 +3376,6 @@ pure_or_virtual_attribute (func_decl)
 {
   if (DECL_VIRTUAL_P (func_decl))
     {
-#if 0 /* DECL_ABSTRACT_VIRTUAL_P is C++-specific.  */
-      if (DECL_ABSTRACT_VIRTUAL_P (func_decl))
-	ASM_OUTPUT_DWARF_ATTRIBUTE (asm_out_file, AT_pure_virtual);
-      else
-#endif
 	ASM_OUTPUT_DWARF_ATTRIBUTE (asm_out_file, AT_virtual);
       ASM_OUTPUT_DWARF_STRING_NEWLINE (asm_out_file, "");
     }
@@ -3707,33 +3615,6 @@ output_set_type_die (arg)
   type_attribute (TREE_TYPE (type), 0, 0);
 }
 
-#if 0
-/* Implement this when there is a GNU FORTRAN or GNU Ada front end.  */
-
-static void
-output_entry_point_die (arg)
-     void *arg;
-{
-  tree decl = arg;
-  tree origin = decl_ultimate_origin (decl);
-
-  ASM_OUTPUT_DWARF_TAG (asm_out_file, TAG_entry_point);
-  sibling_attribute ();
-  dienum_push ();
-  if (origin != NULL)
-    abstract_origin_attribute (origin);
-  else
-    {
-      name_and_src_coords_attributes (decl);
-      member_attribute (DECL_CONTEXT (decl));
-      type_attribute (TREE_TYPE (TREE_TYPE (decl)), 0, 0);
-    }
-  if (DECL_ABSTRACT (decl))
-    equate_decl_number_to_die_number (decl);
-  else
-    low_pc_attribute (function_start_label (decl));
-}
-#endif
 
 /* Output a DIE to represent an inlined instance of an enumeration type.  */
 
@@ -4074,40 +3955,6 @@ output_member_die (arg)
   data_member_location_attribute (decl);
 }
 
-#if 0
-/* Don't generate either pointer_type DIEs or reference_type DIEs.  Use
-   modified types instead.
-
-   We keep this code here just in case these types of DIEs may be
-   needed to represent certain things in other languages (e.g. Pascal)
-   someday.  */
-
-static void
-output_pointer_type_die (arg)
-     void *arg;
-{
-  tree type = arg;
-
-  ASM_OUTPUT_DWARF_TAG (asm_out_file, TAG_pointer_type);
-  sibling_attribute ();
-  equate_type_number_to_die_number (type);
-  member_attribute (TYPE_CONTEXT (type));
-  type_attribute (TREE_TYPE (type), 0, 0);
-}
-
-static void
-output_reference_type_die (arg)
-     void *arg;
-{
-  tree type = arg;
-
-  ASM_OUTPUT_DWARF_TAG (asm_out_file, TAG_reference_type);
-  sibling_attribute ();
-  equate_type_number_to_die_number (type);
-  member_attribute (TYPE_CONTEXT (type));
-  type_attribute (TREE_TYPE (type), 0, 0);
-}
-#endif
 
 static void
 output_ptr_to_mbr_type_die (arg)
@@ -6241,14 +6088,6 @@ dwarfout_init (main_input_filename)
   ASM_OUTPUT_LABEL (asm_out_file, DATA_BEGIN_LABEL);
   ASM_OUTPUT_POP_SECTION (asm_out_file);
 
-#if 0 /* GNU C doesn't currently use .data1.  */
-  /* Output a starting label for the .data1 section.  */
-
-  fputc ('\n', asm_out_file);
-  ASM_OUTPUT_PUSH_SECTION (asm_out_file, DATA1_SECTION_NAME);
-  ASM_OUTPUT_LABEL (asm_out_file, DATA1_BEGIN_LABEL);
-  ASM_OUTPUT_POP_SECTION (asm_out_file);
-#endif
 
   /* Output a starting label for the .rodata section.  */
 
@@ -6257,14 +6096,6 @@ dwarfout_init (main_input_filename)
   ASM_OUTPUT_LABEL (asm_out_file, RODATA_BEGIN_LABEL);
   ASM_OUTPUT_POP_SECTION (asm_out_file);
 
-#if 0 /* GNU C doesn't currently use .rodata1.  */
-  /* Output a starting label for the .rodata1 section.  */
-
-  fputc ('\n', asm_out_file);
-  ASM_OUTPUT_PUSH_SECTION (asm_out_file, RODATA1_SECTION_NAME);
-  ASM_OUTPUT_LABEL (asm_out_file, RODATA1_BEGIN_LABEL);
-  ASM_OUTPUT_POP_SECTION (asm_out_file);
-#endif
 
   /* Output a starting label for the .bss section.  */
 
@@ -6438,14 +6269,6 @@ dwarfout_finish (main_input_filename)
   ASM_OUTPUT_LABEL (asm_out_file, DATA_END_LABEL);
   ASM_OUTPUT_POP_SECTION (asm_out_file);
 
-#if 0 /* GNU C doesn't currently use .data1.  */
-  /* Output a terminator label for the .data1 section.  */
-
-  fputc ('\n', asm_out_file);
-  ASM_OUTPUT_PUSH_SECTION (asm_out_file, DATA1_SECTION_NAME);
-  ASM_OUTPUT_LABEL (asm_out_file, DATA1_END_LABEL);
-  ASM_OUTPUT_POP_SECTION (asm_out_file);
-#endif
 
   /* Output a terminator label for the .rodata section.  */
 
@@ -6454,14 +6277,6 @@ dwarfout_finish (main_input_filename)
   ASM_OUTPUT_LABEL (asm_out_file, RODATA_END_LABEL);
   ASM_OUTPUT_POP_SECTION (asm_out_file);
 
-#if 0 /* GNU C doesn't currently use .rodata1.  */
-  /* Output a terminator label for the .rodata1 section.  */
-
-  fputc ('\n', asm_out_file);
-  ASM_OUTPUT_PUSH_SECTION (asm_out_file, RODATA1_SECTION_NAME);
-  ASM_OUTPUT_LABEL (asm_out_file, RODATA1_END_LABEL);
-  ASM_OUTPUT_POP_SECTION (asm_out_file);
-#endif
 
   /* Output a terminator label for the .bss section.  */
 
@@ -6539,21 +6354,11 @@ dwarfout_finish (main_input_filename)
       ASM_OUTPUT_DWARF_ADDR (asm_out_file, DATA_BEGIN_LABEL);
       ASM_OUTPUT_DWARF_DELTA4 (asm_out_file, DATA_END_LABEL, DATA_BEGIN_LABEL);
 
-#if 0 /* GNU C doesn't currently use .data1.  */
-      ASM_OUTPUT_DWARF_ADDR (asm_out_file, DATA1_BEGIN_LABEL);
-      ASM_OUTPUT_DWARF_DELTA4 (asm_out_file, DATA1_END_LABEL,
-					     DATA1_BEGIN_LABEL);
-#endif
 
       ASM_OUTPUT_DWARF_ADDR (asm_out_file, RODATA_BEGIN_LABEL);
       ASM_OUTPUT_DWARF_DELTA4 (asm_out_file, RODATA_END_LABEL,
 					     RODATA_BEGIN_LABEL);
 
-#if 0 /* GNU C doesn't currently use .rodata1.  */
-      ASM_OUTPUT_DWARF_ADDR (asm_out_file, RODATA1_BEGIN_LABEL);
-      ASM_OUTPUT_DWARF_DELTA4 (asm_out_file, RODATA1_END_LABEL,
-					     RODATA1_BEGIN_LABEL);
-#endif
 
       ASM_OUTPUT_DWARF_ADDR (asm_out_file, BSS_BEGIN_LABEL);
       ASM_OUTPUT_DWARF_DELTA4 (asm_out_file, BSS_END_LABEL, BSS_BEGIN_LABEL);

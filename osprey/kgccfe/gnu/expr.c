@@ -414,11 +414,6 @@ protect_from_queue (x, modify)
 {
   RTX_CODE code = GET_CODE (x);
 
-#if 0  /* A QUEUED can hang around after the queue is forced out.  */
-  /* Shortcut for most common case.  */
-  if (pending_chain == 0)
-    return x;
-#endif
 
   if (code != QUEUED)
     {
@@ -9812,9 +9807,6 @@ expand_increment (exp, post, ignore)
 	 that often results if we must increment now and first save
 	 the old value for subsequent use.  */
 
-#if 0  /* Turned off to avoid making extra insn for indexed memref.  */
-      op0 = stabilize (op0);
-#endif
 
       icode = (int) this_optab->handlers[(int) mode].insn_code;
       if (icode != (int) CODE_FOR_nothing
@@ -9982,14 +9974,6 @@ do_jump (exp, if_false_label, if_true_label)
 	emit_jump (temp);
       break;
 
-#if 0
-      /* This is not true with #pragma weak  */
-    case ADDR_EXPR:
-      /* The address of something can never be zero.  */
-      if (if_true_label)
-	emit_jump (if_true_label);
-      break;
-#endif
 
     case UNSAVE_EXPR:
       do_jump (TREE_OPERAND (exp, 0), if_false_label, if_true_label);
@@ -10028,17 +10012,6 @@ do_jump (exp, if_false_label, if_true_label)
       placeholder_list = TREE_CHAIN (placeholder_list);
       break;
 
-#if 0
-      /* This is never less insns than evaluating the PLUS_EXPR followed by
-	 a test and can be longer if the test is eliminated.  */
-    case PLUS_EXPR:
-      /* Reduce to minus.  */
-      exp = build (MINUS_EXPR, TREE_TYPE (exp),
-		   TREE_OPERAND (exp, 0),
-		   fold (build1 (NEGATE_EXPR, TREE_TYPE (TREE_OPERAND (exp, 1)),
-				 TREE_OPERAND (exp, 1))));
-      /* Process as MINUS.  */
-#endif
 
     case MINUS_EXPR:
       /* Nonzero iff operands of minus differ.  */
@@ -10393,15 +10366,6 @@ do_jump (exp, if_false_label, if_true_label)
     default:
     normal:
       temp = expand_expr (exp, NULL_RTX, VOIDmode, 0);
-#if 0
-      /* This is not needed any more and causes poor code since it causes
-	 comparisons and tests from non-SI objects to have different code
-	 sequences.  */
-      /* Copy to register to avoid generating bad insns by cse
-	 from (set (mem ...) (arithop))  (set (cc0) (mem ...)).  */
-      if (!cse_not_expected && GET_CODE (temp) == MEM)
-	temp = copy_to_reg (temp);
-#endif
       do_pending_stack_adjust ();
       /* Do any postincrements in the expression that was tested.  */
       emit_queue ();
@@ -10635,27 +10599,6 @@ compare_from_rtx (op0, op1, code, unsignedp, mode, size)
   if ((tem = simplify_relational_operation (ucode, mode, op0, op1)) != 0)
     return tem;
 
-#if 0
-  /* There's no need to do this now that combine.c can eliminate lots of
-     sign extensions.  This can be less efficient in certain cases on other
-     machines.  */
-
-  /* If this is a signed equality comparison, we can do it as an
-     unsigned comparison since zero-extension is cheaper than sign
-     extension and comparisons with zero are done as unsigned.  This is
-     the case even on machines that can do fast sign extension, since
-     zero-extension is easier to combine with other operations than
-     sign-extension is.  If we are comparing against a constant, we must
-     convert it to what it would look like unsigned.  */
-  if ((code == EQ || code == NE) && ! unsignedp
-      && GET_MODE_BITSIZE (GET_MODE (op0)) <= HOST_BITS_PER_WIDE_INT)
-    {
-      if (GET_CODE (op1) == CONST_INT
-	  && (INTVAL (op1) & GET_MODE_MASK (GET_MODE (op0))) != INTVAL (op1))
-	op1 = GEN_INT (INTVAL (op1) & GET_MODE_MASK (GET_MODE (op0)));
-      unsignedp = 1;
-    }
-#endif
 
   emit_cmp_insn (op0, op1, code, size, mode, unsignedp);
 
@@ -10730,27 +10673,6 @@ do_compare_rtx_and_jump (op0, op1, code, unsignedp, mode, size,
       return;
     }
 
-#if 0
-  /* There's no need to do this now that combine.c can eliminate lots of
-     sign extensions.  This can be less efficient in certain cases on other
-     machines.  */
-
-  /* If this is a signed equality comparison, we can do it as an
-     unsigned comparison since zero-extension is cheaper than sign
-     extension and comparisons with zero are done as unsigned.  This is
-     the case even on machines that can do fast sign extension, since
-     zero-extension is easier to combine with other operations than
-     sign-extension is.  If we are comparing against a constant, we must
-     convert it to what it would look like unsigned.  */
-  if ((code == EQ || code == NE) && ! unsignedp
-      && GET_MODE_BITSIZE (GET_MODE (op0)) <= HOST_BITS_PER_WIDE_INT)
-    {
-      if (GET_CODE (op1) == CONST_INT
-	  && (INTVAL (op1) & GET_MODE_MASK (GET_MODE (op0))) != INTVAL (op1))
-	op1 = GEN_INT (INTVAL (op1) & GET_MODE_MASK (GET_MODE (op0)));
-      unsignedp = 1;
-    }
-#endif
 
   if (! if_true_label)
     {

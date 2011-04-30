@@ -548,6 +548,13 @@ check_class_key (key, aggr)
 %type <parallel_for_clause_type> parallel_for_clause parallel_for_clause_list parallel_for_directive
 %type <parallel_sections_clause_type> parallel_sections_clause parallel_sections_clause_list parallel_sections_directive
 
+
+/* SL2 FORK JOINT PRAGMA */ 
+%token SL2_SECTIONS SL2_MINOR_SECTIONS SL2_SECTION PRAGMA_SL2 SL2_MINOR_SECTION 
+%type <ttype> sl2_sections_construct sl2_section_scope sl2_maybe_section_sequence
+%type <ttype> sl2_section_sequence sl2_maybe_structured_block sl2_section_construct 
+
+
 /* Used in lex.c for parsing pragmas.  */
 %token END_OF_LINE
 
@@ -4610,6 +4617,91 @@ openmp_construct:
         |  critical_construct
         |  atomic_construct
         |  ordered_construct
+        | sl2_sections_construct
+        ;
+
+sl2_sections_construct:
+        PRAGMA_SL2 SL2_SECTIONS '\n'
+	 {
+#ifdef TARG_SL
+           add_stmt(build_omp_stmt(sl2_sections_cons_b, NULL));
+#endif
+	 }
+	 sl2_section_scope
+	 { 
+#ifdef TARG_SL
+	  add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;
+#endif
+	 }
+	 | PRAGMA_SL2 SL2_MINOR_SECTIONS '\n'
+	 {
+#ifdef TARG_SL
+           add_stmt(build_omp_stmt(sl2_minor_sections_cons_b, NULL));
+#endif
+	 }
+	 sl2_section_scope
+	 { 
+#ifdef TARG_SL
+	   add_stmt(build_omp_stmt(sl2_sections_cons_e, NULL)); $$=NULL;
+#endif
+	 }
+	 	
+	 ;
+
+sl2_section_scope:
+        '{'
+        sl2_maybe_section_sequence 
+        '}'
+        ;
+
+sl2_maybe_section_sequence:
+	sl2_section_sequence
+      | sl2_maybe_structured_block
+      | sl2_maybe_structured_block sl2_section_sequence
+      ;
+
+sl2_maybe_structured_block:
+      structured_block
+	;
+
+sl2_section_sequence:
+	sl2_section_construct
+	| sl2_section_sequence sl2_section_construct
+	;
+
+sl2_section_construct:
+        PRAGMA_SL2 SL2_SECTION '\n'
+        {
+#ifdef TARG_SL
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+#endif
+        }
+        structured_block
+        {
+#ifdef TARG_SL
+	  add_stmt (build_omp_stmt (sl2_section_cons_e, NULL));
+#endif
+        }
+      | PRAGMA_SL2 SL2_MINOR_SECTION '\n'
+        {
+#ifdef TARG_SL
+	  if (!In_MP_Section)
+	    add_stmt (build_omp_stmt (sl2_minor_section_cons_b, NULL));
+	  else
+	    In_MP_Section = false;
+#endif
+        }
+        structured_block
+        {
+#ifdef TARG_SL
+	  add_stmt (build_omp_stmt (sl2_minor_section_cons_e, NULL));
+#endif
+        }
+
+      	   
         ;
                                                                                 
 pragma_directives:

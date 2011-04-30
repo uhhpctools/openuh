@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
 
   This program is free software; you can redistribute it and/or modify it
   under the terms of version 2 of the GNU General Public License as
@@ -40,3 +40,14 @@ gs_t gs_index (gs_t list, gs_count_t index)
   for (; index != 0; index--, list = gs_operand(list, 1));
   return gs_operand(list, 0);
 }
+
+#ifdef FE_GNU_4_2_0
+void gs_set_index (gs_t list, gs_count_t index, gs_t value)
+{
+  GS_ASSERT (list != (gs_t) NULL, "got null list.");
+  GS_ASSERT (gs_length(list) > index, "index >= length of list too large.");
+
+  for (; index != 0; index--, list = gs_operand(list, 1));
+  gs_set_operand(list, 0, value);
+}
+#endif

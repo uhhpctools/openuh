@@ -102,8 +102,12 @@ extern "C" {
 #ifndef NL_EXPSET
 #define NL_EXPSET       NL_SETD       /* set number for explanations */
 #endif
+#if defined(BUILD_OS_DARWIN)
+#define NL_MSGSET       1
+#else
 #ifndef NL_MSGSET
 #define NL_MSGSET       NL_SETD       /* set number for messages */
+#endif
 #endif
 
 /* catmsgfmt formating information */

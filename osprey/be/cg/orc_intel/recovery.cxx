@@ -388,6 +388,11 @@ Do_Build_Recovery_Block(std::list<OP*>& Exec_Path)
             }
         }
         if(on_cascaded_chain){
+            // OSP, if op is speculative load, invalidate it
+            if( CGTARG_Is_OP_Speculative_Load(op) ) {
+                cascaded_loads.push_back(op);
+            }
+
             cascaded_ops.push_back(op);
             Collect_Results(cascaded_chain_def,op);
             continue;
@@ -511,6 +516,22 @@ Do_Build_Recovery_Block(std::list<OP*>& Exec_Path)
                 BB_Append_Op(recovery_bb, recovery_op);
             }
         }
+
+        // OSP, make the cascade_loads Global TN: They are invalidated in this BB and reloaded in another recovery BB.
+        for(std::vector<OP*, OP_ALLOC>::iterator casc_iter = cascaded_ops.begin(); casc_iter != cascaded_ops.end(); casc_iter++){
+            if(op == *casc_iter){
+                 for(INT i=0; i < OP_results(op); i++){
+                     TN *result_tn = OP_result(op,i);
+                     if(TN_Is_Allocatable(result_tn))
+                         GTN_UNIVERSE_Add_TN(result_tn);
+                 }
+                 for(INT i=0; i < OP_opnds(op); i++){
+                     TN *opnd_tn = OP_opnd(op,i);
+                     if(TN_Is_Allocatable(opnd_tn))
+                         GTN_UNIVERSE_Add_TN(opnd_tn);
+                 }
+             }
+        }
     }
 
     if(!IPFEC_Enable_Cascade)
@@ -530,6 +551,7 @@ Do_Build_Recovery_Block(std::list<OP*>& Exec_Path)
             continue;
         }
         if( CGTARG_Is_OP_Speculative(op) && !CGTARG_Is_OP_Advanced_Load(op) ){  // ld.s
+            // TODO: Only the first load is needed. We can rese the result TN with NAT.
             TN *reg_tn = OP_result(op, 0);
             TOP op_code = TN_is_float(reg_tn) ? TOP_ldf8 : TOP_ld8;
             TN *ldtype_tn = TN_is_float(reg_tn) ? Gen_Enum_TN(ECV_fldtype_s) : Gen_Enum_TN(ECV_ldtype_s);
@@ -611,13 +633,9 @@ Update_CFG()
 
         BOOL cut = TRUE;
         BB* bottom_bb = NULL; 
-        bottom_bb = RGN_Divide_BB(home_bb, chk_op);
-        if( bottom_bb == NULL ){
-            cut = FALSE;
-            bottom_bb = BB_next(home_bb);
-            Is_True(bottom_bb == BB_Unique_Successor(home_bb),("bottom_bb must be home_bb's unique succ!"));
-            Is_True(bottom_bb == BB_Fall_Thru_Successor(home_bb), ("bottom_bb must be home_bb's fall through!"));
-        } 
+        bottom_bb = RGN_Divide_BB(home_bb, chk_op, TRUE);
+        FmtAssert(bottom_bb != NULL,
+			("RGN_Divide_BB() returned NULL bottom_bb"));
 
         // Build corresponding edges.
 

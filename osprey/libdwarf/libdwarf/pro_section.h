@@ -112,5 +112,9 @@ int
 /* Intel's SoftSdv accepts only this */
 #define SECTION_TYPE            SHT_PROGBITS
 #else
+#ifdef KEY
+#define SECTION_TYPE            SHT_PROGBITS
+#else
 #define SECTION_TYPE            SHT_MIPS_DWARF
+#endif
 #endif

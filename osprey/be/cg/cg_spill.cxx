@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * =======================================================================
  *
  *  Module: cg_spill.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_spill.cxx,v $
+ *  $Revision: 1.20 $
+ *  $Date: 05/12/05 08:59:04-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_spill.cxx $
  *
  *  Description:
  *  ============
@@ -84,6 +88,7 @@
 #include "opt_alias_interface.h"
 #include "cgtarget.h"
 #include "targ_proc_properties.h"
+#include "tag.h"
 
 #ifdef TARG_IA64
 #define TRACE_REMAT 0x2
@@ -91,7 +96,7 @@
 #ifdef KEY
 static SPILL_SYM_INFO_MAP spill_sym_info_map;
 static void CGSPILL_Record_Spill (ST *spill_loc, OP *spill_op);
-static void CGSPILL_Inc_Restore_Count (ST *spill_loc);
+void CGSPILL_Inc_Restore_Count (ST *spill_loc);
 #endif
 
 static BOOL Trace_Remat; /* Trace rematerialization */
@@ -331,7 +336,7 @@ Gen_Spill_Symbol (TY_IDX ty, const char *root)
  * =======================================================================
  */
 static ST *
-LOCAL_SPILLS_Get_Spill_Location (LOCAL_SPILLS *slc, char *root)
+LOCAL_SPILLS_Get_Spill_Location (LOCAL_SPILLS *slc, const char *root)
 {
   ST *result;
 
@@ -437,7 +442,7 @@ CGSPILL_Initialize_For_PU(void)
   LOCAL_SPILLS_used(slc) = NULL;
 
   slc = &lra_x87_spills;
-  LOCAL_SPILLS_mem_type(slc) = MTYPE_To_TY( MTYPE_FQ );
+  LOCAL_SPILLS_mem_type(slc) = MTYPE_To_TY( MTYPE_F10 );
   LOCAL_SPILLS_free(slc) = NULL;
   LOCAL_SPILLS_used(slc) = NULL;
 
@@ -569,9 +574,8 @@ CGSPILL_Get_TN_Spill_Location (TN *tn, CGSPILL_CLIENT client)
        */
       if( TN_size(tn) == 16 || TN_size(tn) == 12 ){
 	mem_type = TN_register_class(tn) == ISA_REGISTER_CLASS_x87
-	  ? MTYPE_To_TY( MTYPE_FQ ) : Quad_Type;
+	  ? MTYPE_To_TY( MTYPE_F10 ) : Quad_Type;
       }
-
       // MMX
       if (TN_register_class(tn) == ISA_REGISTER_CLASS_mmx) {
 	mem_type = MTYPE_To_TY(MTYPE_M8I1);
@@ -582,6 +586,10 @@ CGSPILL_Get_TN_Spill_Location (TN *tn, CGSPILL_CLIENT client)
       if( CG_min_spill_loc_size && TN_size(tn) <= 4 ){
 	mem_type = TN_is_float(tn) ? Spill_Float32_Type : Spill_Int32_Type;
       }
+#if defined(TARG_SL)
+      if (TN_size(tn) <= MTYPE_byte_size(TY_mtype(mem_type)))
+        DevWarn("TN size is larger than the size of spill type.") ;
+#endif
 #endif
 
       if (client == CGSPILL_GRA) {
@@ -603,7 +611,7 @@ CGSPILL_Get_TN_Spill_Location (TN *tn, CGSPILL_CLIENT client)
 #ifdef TARG_X8664
       if (TN_register_class(tn) == ISA_REGISTER_CLASS_mmx) {	// MMX
 	slc = &lra_mmx_spills;
-      } else if (TN_size(tn) == 16 || TN_size(tn) == 12) {
+      } else if( TN_size(tn) == 16 || TN_size(tn) == 12 ){
 	slc = TN_register_class(tn) == ISA_REGISTER_CLASS_x87
 	  ? &lra_x87_spills : &lra_sse2_spills;
       }
@@ -665,17 +673,17 @@ CGSPILL_OP_Spill_Location (OP *op)
   if (spill_ids) {
     TN *spill_tn = NULL;
 
+    if (OP_load(op) && (OP_results(op) == 1)
 #ifdef TARG_IA64
-    if (OP_load(op) && (OP_results(op) == 1) && OP_spill_restore(op)) {
-#else
-      if (OP_load(op) && (OP_results(op) == 1)) {
+	&& OP_spill_restore(op)
 #endif
+	) {
       spill_tn = OP_result(op,0);
+    } else if (OP_store(op)
 #ifdef TARG_IA64
-    } else if (OP_store(op) && OP_spill_restore(op)) {
-#else
-    } else if (OP_store(op)) {
+	       && OP_spill_restore(op)
 #endif
+	       ) {
       spill_tn = OP_opnd(op,TOP_Find_Operand_Use(OP_code(op), OU_storeval));
     }
 #ifdef KEY
@@ -735,11 +743,10 @@ CGSPILL_Cost_Estimate (TN *tn, ST *mem_loc,
       {
 	OPCODE opcode = WN_opcode(home);
 	Exp_Load (OPCODE_rtype(opcode), OPCODE_desc(opcode), tn, WN_st(home),
-		   WN_offset(home), &OPs, V_NONE);
+		  WN_offset(home), &OPs, V_NONE);
 #ifdef TARG_IA64
         ld_2_ld_fill (&OPs) ;
 #endif
-
 	*restore_cost = OPS_length(&OPs);
 	*store_cost = *restore_cost;
       }
@@ -750,7 +757,11 @@ CGSPILL_Cost_Estimate (TN *tn, ST *mem_loc,
 		WN_st(home),
 		WN_lda_offset(home),
 		OPERATOR_UNKNOWN,
-		&OPs);
+		&OPs
+#ifdef TARG_SL
+                , WN_is_internal_mem_ofst(home)
+#endif
+		);
       *restore_cost = OPS_length(&OPs);
       break; 
     case OPR_INTCONST:
@@ -826,8 +837,7 @@ CGSPILL_Load_From_Memory (TN *tn, ST *mem_loc, OPS *ops, CGSPILL_CLIENT client,
     case OPR_LDID:
       /* homing load */
       Exp_Load (OPCODE_rtype(opcode), OPCODE_desc(opcode), tn,
-		 WN_st(home), WN_offset(home), ops, V_NONE);
-
+		WN_st(home), WN_offset(home), ops, V_NONE);
       if (Trace_Remat && !TN_is_gra_homeable(tn)) {
 #pragma mips_frequency_hint NEVER
 	fprintf(TFile, "<Rematerialize> LDID for rematerializeable TN%d\n",
@@ -836,9 +846,12 @@ CGSPILL_Load_From_Memory (TN *tn, ST *mem_loc, OPS *ops, CGSPILL_CLIENT client,
       break;
     case OPR_LDA:
       Exp_Lda (OPCODE_rtype(opcode), tn, WN_st(home), WN_lda_offset(home),
-	       OPERATOR_UNKNOWN, ops);
+	       OPERATOR_UNKNOWN, ops
+#ifdef TARG_SL
+	       , WN_is_internal_mem_ofst(home)
+#endif
+	       );
       break;
-
     case OPR_CONST:
 #ifdef TARG_X8664
     if (OPCODE_rtype(opcode) == MTYPE_V16F4 ||
@@ -861,7 +874,7 @@ CGSPILL_Load_From_Memory (TN *tn, ST *mem_loc, OPS *ops, CGSPILL_CLIENT client,
       switch (opcode) {
       case OPC_I8INTCONST:
       case OPC_U8INTCONST:
-#ifdef EMULATE_LONGLONG
+#if defined(EMULATE_LONGLONG) && !defined(TARG_SL) && !defined(TARG_PPC32)
         {
           extern TN *Gen_Literal_TN_Pair(UINT64);
           const_tn = Gen_Literal_TN_Pair((UINT64) WN_const_val(home));
@@ -926,7 +939,6 @@ CGSPILL_Load_From_Memory (TN *tn, ST *mem_loc, OPS *ops, CGSPILL_CLIENT client,
  * See interface description
  *
  * ======================================================================*/
-
 void 
 CGSPILL_Store_To_Memory (TN *src_tn, ST *mem_loc, OPS *ops,
 			 CGSPILL_CLIENT client, BB *bb)
@@ -949,7 +961,7 @@ CGSPILL_Store_To_Memory (TN *src_tn, ST *mem_loc, OPS *ops,
     WN *home = TN_home(src_tn);
     if (WN_operator(home) == OPR_LDID) {
       Exp_Store (OPCODE_desc(WN_opcode(home)), src_tn, WN_st(home),
-		 WN_offset(home), ops,V_NONE);
+		 WN_offset(home), ops, V_NONE);
 #ifdef TARG_IA64
       st_2_st_spill (ops) ;
 #endif
@@ -964,12 +976,11 @@ CGSPILL_Store_To_Memory (TN *src_tn, ST *mem_loc, OPS *ops,
 	   Set_OP_spill_restore(ops->last);
 #endif
 #ifdef KEY
-    // Looks like a bug in the Open64 compiler.
+    // Looks like a bug in the Open64 compiler. 
     // In the case of entry/exit BBs, the Max_Sdata_Elt_Size might get
     // reset and never set back if the next return is executed.
-    Max_Sdata_Elt_Size = max_sdata_save;
+    Max_Sdata_Elt_Size = max_sdata_save;  
 #endif
-
     return;
   }
 
@@ -977,7 +988,6 @@ CGSPILL_Store_To_Memory (TN *src_tn, ST *mem_loc, OPS *ops,
 #ifdef TARG_IA64
   st_2_st_spill (ops);
 #endif
-
   Max_Sdata_Elt_Size = max_sdata_save;
 #ifdef TARG_IA64
   if(ops->last)
@@ -1058,14 +1068,6 @@ CGSPILL_Prepend_Ops (BB *bb, OPS *ops)
 {
   if (OPS_first(ops) == NULL) return;
 
-#if 0
-  OP *op;
-  SRCPOS srcpos = 0;
-  /* want ops srcpos associated with beginning of bb */
-  srcpos = BB_first_op(bb) ? OP_srcpos(BB_first_op(bb)) 
-	: OP_srcpos(BB_last_op(BB_prev(bb)));
-  FOR_ALL_OPS_OPs(ops, op) OP_srcpos(op) = srcpos;
-#endif
 
   Reset_BB_scheduled (bb);
 
@@ -1344,6 +1346,11 @@ void
 CGSPILL_Append_Ops (BB *bb, OPS *ops)
 {
   OP *before_point = NULL;
+  BOOL after_tagged_op = FALSE;
+  LABEL_IDX tag_idx = 0;
+
+  OP *orig_last_op;
+  OP *new_last_op;
 
   if (BB_exit(bb)) {
     before_point = Find_First_Copy(bb);
@@ -1351,8 +1358,7 @@ CGSPILL_Append_Ops (BB *bb, OPS *ops)
     if (OP_prev(before_point) != NULL && OP_xfer(OP_prev(before_point))) {
 	before_point = OP_prev(before_point);
     }
-  }
-  else {
+  }  else {
     OP *last_op;
 
     if (PROC_has_branch_delay_slot())
@@ -1362,6 +1368,21 @@ CGSPILL_Append_Ops (BB *bb, OPS *ops)
       Fix_Xfer_Dependences (bb, ops);
       before_point = BB_last_op(bb);
     }
+
+#ifdef TARG_SL //adjust before_point if the bb has c2_joint instruction
+  if(last_op != NULL) {
+    OP* tmp;
+    FOR_ALL_BB_OPs_REV(bb, tmp)
+    {
+       if(OP_code(tmp) == TOP_c2_joint  || OP_code(tmp) == TOP_loop )
+       {
+          before_point = tmp;
+	   break;
+	 }
+    }
+  }
+#endif 
+
 #ifdef TARG_X8664
     else if (last_op != NULL && OP_code(last_op) == TOP_savexmms)
       before_point = BB_last_op(bb);
@@ -1447,6 +1468,12 @@ found_def:
 	      TN_number(tn), BB_id(bb));
     }
   } else if (op == BB_last_op(bb)) {
+    // line info of spilled op
+    OP *tmp;
+    FOR_ALL_OPS_OPs(ops, tmp) {
+      if (OP_srcpos(tmp) == 0) 
+        OP_srcpos(tmp) = OP_srcpos(op);
+    }
     //
     // we do some fancy footwork if we're spilling the delay slot
     // instruction.  let CGSPILL_Append_Ops handle it.

@@ -54,26 +54,6 @@ Boston, MA 02111-1307, USA.  */
    but they were incorrect since they tested the host rather than the target.
    The choice of model shouldn't actually matter.  */
 
-#if 0
-#ifdef news800
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dnews800 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#ifdef news900
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dnews900 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#ifdef news1500
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dmc68030 -Dnews1500 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#ifdef news1700
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dmc68030 -Dnews1700 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#ifdef news1800
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dmc68030 -Dnews1800 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#ifdef news1900
-#define CPP_PREDEFINES "-Dunix -Dbsd43 -Dsony -Dsony_news -Dmc68000 -Dmc68020 -Dmc68030 -Dnews1900 -Asystem=unix -Asystem=bsd -Acpu=m68k -Amachine=m68k"
-#endif
-#endif
 
 /* Link with libg.a when debugging, for dbx's sake.  */
 
@@ -83,12 +63,6 @@ Boston, MA 02111-1307, USA.  */
 
 #define DBX_DEBUGGING_INFO
 
-#if 0
-/* This is to be compatible with types.h.
-   It was found to be necessary with Newsos 3.  */
-
-#define SIZE_TYPE "long int"
-#endif
 
 /* Override parts of m68k.h to fit Sony's assembler syntax.  */
 
@@ -162,19 +136,6 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
   fprintf (FILE, "\t.space %u\n", (SIZE))
 
-#if 0
-/* The NEWS assembler in version 3.4 complains about fmove.d, but this
-   macro proved not to work right.  3.4 is old, so forget about it.  */
-#define ASM_OUTPUT_OPCODE(FILE, STRING) \
-{						\
-  if (!strncmp (STRING, "fmove.d", 7)		\
-      && CONSTANT_P (operands[1]))		\
-    {						\
-      fprintf (FILE, "fmove.x");		\
-      STRING += 7;				\
-    }						\
-}
-#endif
 
 /* Store in OUTPUT a string (made with alloca) containing
    an assembler-name for a local static variable named NAME.
@@ -242,64 +203,6 @@ Boston, MA 02111-1307, USA.  */
       asm_fprintf (FILE, "%I0r%s", dstr);				\
     } while (0)
 
-#if 0
-#undef PRINT_OPERAND
-#define PRINT_OPERAND(FILE, X, CODE)  \
-{ if (CODE == '.') fprintf (FILE, ".");					\
-  else if (CODE == '#') fprintf (FILE, "#");				\
-  else if (CODE == '-') fprintf (FILE, "-(sp)");			\
-  else if (CODE == '+') fprintf (FILE, "(sp)+");			\
-  else if (CODE == '@') fprintf (FILE, "(sp)");				\
-  else if (CODE == '!') fprintf (FILE, "fpcr");				\
-  else if (CODE == '$') {if (TARGET_68040_ONLY) fprintf (FILE, "s");}	\
-  else if (CODE == '&') {if (TARGET_68040_ONLY) fprintf (FILE, "d");}	\
-  else if (CODE == '/')							\
-    ;									\
-  else if (GET_CODE (X) == REG)						\
-    fprintf (FILE, "%s", reg_names[REGNO (X)]);				\
-  else if (GET_CODE (X) == MEM)						\
-    output_address (XEXP (X, 0));					\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == SFmode)	\
-    { REAL_VALUE_TYPE r;						\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      if (CODE == 'f')							\
-        { char dstr[30];						\
-          REAL_VALUE_TO_DECIMAL (r, "%.9e", dstr);			\
-          if (REAL_VALUE_ISINF (r) || REAL_VALUE_ISNAN (r)) {		\
-            if (REAL_VALUE_NEGATIVE (r))				\
-              fprintf (FILE, "#0f-99e999");				\
-            else							\
-              fprintf (FILE, "#0f99e999"); }				\
-          else if (REAL_VALUE_MINUS_ZERO (r))				\
-            fprintf (FILE, "#0f-0.0");					\
-          else								\
-            fprintf (FILE, "#0f%s", dstr); 				\
-        }								\
-      else								\
-        { long l;							\
-          REAL_VALUE_TO_TARGET_SINGLE (r, l);				\
-          fprintf (FILE, "#0x%lx", l);					\
-        }}								\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == XFmode)	\
-    { REAL_VALUE_TYPE r;						\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      ASM_OUTPUT_LONG_DOUBLE_OPERAND (FILE, r); }			\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == DFmode)	\
-    { REAL_VALUE_TYPE r; char dstr[30];					\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      REAL_VALUE_TO_DECIMAL (r, "%.20e", dstr );			\
-      if (REAL_VALUE_ISINF (r) || REAL_VALUE_ISNAN (r)) {		\
-        if (REAL_VALUE_NEGATIVE (r))					\
-          fprintf (FILE, "#0d-99e999");					\
-        else								\
-          fprintf (FILE, "#0d99e999"); }				\
-      else if (REAL_VALUE_MINUS_ZERO (r))				\
-          fprintf (FILE, "#0d-0.0");					\
-      else								\
-          fprintf (FILE, "#0d%s", dstr); }				\
-  else if (CODE == 'b') output_addr_const (FILE, X);			\
-  else { putc ('#', FILE); output_addr_const (FILE, X); }}
-#endif
 
 #undef PRINT_OPERAND_ADDRESS
 #define PRINT_OPERAND_ADDRESS(FILE, ADDR)  \

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -71,6 +75,7 @@
 #endif
 
 #endif
+
 
 class IPA_LNO_READ_FILE; 
 
@@ -152,7 +157,7 @@ private:
   } u;
   
   WN_OFFSET _offset;
-  mTYPE_ID  _mtype;
+  mTYPE_ID  _mtype:8;
   mBOOL     _is_formal;
   
 public:
@@ -462,7 +467,7 @@ private:
 
 public:
   // constructors
-  LOOPINFO(MEM_POOL* m) { bzero(this, sizeof(LOOPINFO)); _mem_pool = m; }
+  LOOPINFO(MEM_POOL* m) { BZERO(this, sizeof(LOOPINFO)); _mem_pool = m; }
 
   LOOPINFO(MEM_POOL* m, INT32 cd_idx);
 
@@ -1087,7 +1092,7 @@ public:
 
   void Print(FILE *fp = stderr);
   void Print_file(FILE* fp = stderr);
-  void WB_Print(FILE* fp, INT region_index, char* name, char* func_name);
+  void WB_Print(FILE* fp, INT region_index, const char* name, const char* func_name);
 };
 
 typedef DYN_ARRAY<REGION_ARRAYS> ARRAY_OF_REGION_ARRAYS;
@@ -1163,7 +1168,7 @@ public:
 
   void Print_file(FILE *fp = stderr);
   void Print(FILE *fp = stderr) { Print_file(fp); };
-  void WB_Print(FILE* fp, INT scalar_index, char* name, char* func_name);
+  void WB_Print(FILE* fp, INT scalar_index, const char* name, const char* func_name);
 };
 
 typedef DYN_ARRAY<SCALAR_INFO> INT_ARRAY;
@@ -1227,10 +1232,6 @@ private:
 
 public:
 
-#if 0
-  void Set_type(enum cfg_type t) { _type = t;};
-  enum cfg_type Get_type() { return _type;};
-#endif
   void Set_type_if()      { _type = CFG_IF; }
   void Set_type_do_loop() { _type = CFG_DO_LOOP; }
   void Set_type_entry()   { _type = CFG_ENTRY; }
@@ -1241,10 +1242,6 @@ public:
   BOOL Is_entry()   const { return _type == CFG_ENTRY; }
   BOOL Is_else()    const { return _type == CFG_ELSE; }
 
-#if 0
-  void Set_state(mUINT8 s) { _state = s;};
-  mUINT8 Get_state() const { return _state;};
-#endif
   void Set_has_calls()   { _state = (_cfg_state) (_state | CFG_HAS_CALLS); }
   void Set_is_executed() { _state = (_cfg_state) (_state | CFG_IS_EXECUTED); }
 
@@ -1279,7 +1276,7 @@ public:
   }
 
   void Init_Out () { 
-    bzero(this, sizeof(CFG_NODE_INFO));
+    BZERO(this, sizeof(CFG_NODE_INFO));
     _type = CFG_UNKNOWN;
   }
 
@@ -1427,7 +1424,7 @@ private:
   INT _sub_term_count;
 
 public:
-  TLOG_INFO() { bzero(this, sizeof(TLOG_INFO)); };
+  TLOG_INFO() { BZERO(this, sizeof(TLOG_INFO)); };
   INT& Get_cterm_count()  { return _cterm_count;};
   INT& Get_lterm_count()  { return _lterm_count;};
   INT& Get_iv_gterm_count()  { return _iv_g_term_count;};
@@ -1500,7 +1497,7 @@ public:
       _actual_count = actual_count;
       _callsite_start_idx = callsite_idx;
       _callsite_count = callsite_count;
-      bzero(_actual_scalar_info_map, sizeof(INT_IDS)*(actual_count+1));
+      BZERO(_actual_scalar_info_map, sizeof(INT_IDS)*(actual_count+1));
       if (cd_size)
 	_cd_map = (INT*)
 	  MEM_POOL_Alloc(&_write_pool, sizeof(INT)*cd_size);

@@ -70,7 +70,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_dst.cxx $ $Revision: 1.40 $";
 #endif /* _KEEP_RCS_ID */
@@ -140,14 +140,22 @@ extern void
 cwh_dst_init_file(char *src_path)
 {
   char         *comp_info = NULL;
+#ifndef KEY /* bug 12559 */
   char         *file ;
+#endif /* bug 12559 */
 
   DST_Init(NULL,0) ;
 
+#ifndef KEY
   file = strrchr(src_path,'/');
 
-#ifndef KEY
   comp_info = cwh_dst_get_command_line_options(); 
+
+  comp_unit_idx = DST_mk_compile_unit(++(file),
+				      current_host_dir,
+				      comp_info,
+				      DW_LANG_Fortran90,
+				      DW_ID_case_insensitive);
 #else
   // Bug 178 - AT_producer should be the name of the compiler and version info
   comp_info = (char *)malloc(sizeof(char)*100);
@@ -189,13 +197,15 @@ cwh_dst_init_file(char *src_path)
     perror("getcwd");
     exit(2);
   }
-#endif
 
-  comp_unit_idx = DST_mk_compile_unit(++(file),
+  /* bug 12559 : preserve the pathname to the source file. */
+  comp_unit_idx = DST_mk_compile_unit(src_path,
 				      current_host_dir,
 				      comp_info,
 				      DW_LANG_Fortran90,
 				      DW_ID_case_insensitive);
+#endif
+
   (void) cwh_dst_enter_path(src_path);
   free (comp_info);
 }
@@ -361,11 +371,6 @@ cwh_dst_mk_const(ST * st,DST_INFO_IDX  parent)
       exit = 1;
       break;
 
-# if 0
-      DST_CONST_VALUE_form(cval) = DST_FORM_STRING;
-      DST_CONST_VALUE_form_string(cval) =
-           DST_mk_string (Index_to_char_array (TCON_str_idx (ST_tcon_val(st))));
-# endif
 
    case MTYPE_UNKNOWN: 
 
@@ -541,7 +546,7 @@ cwh_dst_enter_pu(ST *en)
   current_scope_idx = cwh_dst_mk_func(en);
 
 #ifdef KEY /* Bug 3507 */
-  DST_INFO_IDX parent_idx = (DST_INVALID_IDX != current_module_idx) ?
+  DST_INFO_IDX parent_idx = ( !DST_ARE_EQUAL(DST_INVALID_IDX,current_module_idx)) ?
     current_module_idx :
     comp_unit_idx;
   module_set.clear();
@@ -691,14 +696,14 @@ cwh_dst_mk_func(ST * st)
   t  = cwh_dst_mk_subroutine_type(ty);
   
   if (IS_ALTENTRY(st)) 
-    i = DST_mk_entry_point(s,r,t,(void *)(INTPTR)ST_st_idx(st));
+    i = DST_mk_entry_point(s,r,t,ST_st_idx(st));
 
   else {
     i = DST_mk_subprogram(s,
 			  r,
 			  t,
 			  DST_INVALID_IDX,
-			  (void*)(INTPTR)ST_st_idx(st),
+			  ST_st_idx(st),
 			  DW_INL_not_inlined,
 			  DW_VIRTUALITY_none,
 			  0,	       
@@ -754,7 +759,7 @@ cwh_dst_mk_MAIN(ST *mn, DST_INFO_IDX en_idx)
 			   ST_name(mn),
 			   t,
 			   en_idx,
-			   (void*)(INTPTR) ST_st_idx(mn),
+			   ST_st_idx(mn),
 			   DW_INL_not_inlined,
 			   DW_VIRTUALITY_none,
 			   0,	       
@@ -1012,7 +1017,7 @@ cwh_dst_mk_var(ST * st,DST_INFO_IDX  parent)
     else if (module_common_name(st)) {
       char *module_name = extract_module_name(st);
       if (current_module_name) { // We are nested inside some module
-	if (parent == current_module_idx) {
+	if ( DST_ARE_EQUAL(parent,current_module_idx) ) {
 	  // Faked-up common directly inside the module represents the
 	  // global variables themselves: emit variables without the common
 	  (void) cwh_dst_mk_common(st, parent);
@@ -1137,7 +1142,7 @@ cwh_dst_mk_variable(ST * st)
 		      name,
 		      t,
 		      0,
-		      (void *) ST_st_idx(st),
+		      ST_st_idx(st),
 		      DST_INVALID_IDX,
 		      FALSE,
 		      ST_sclass(st) == SCLASS_AUTO,
@@ -1148,7 +1153,7 @@ cwh_dst_mk_variable(ST * st)
 		      ST_name(st),
 		      t,
 		      0,
-		      (void *) (INTPTR)ST_st_idx(st),
+		      ST_st_idx(st),
 		      DST_INVALID_IDX,
 		      FALSE,
 		      ST_sclass(st) == SCLASS_AUTO,
@@ -1263,7 +1268,7 @@ cwh_dst_mk_formal(ST * st)
   i = DST_mk_formal_parameter(s,
 			      name,
 			      t,
-			      (void *) ba,
+			      ba,
 			      DST_INVALID_IDX,
 			      DST_INVALID_IDX,
 			      FALSE, /* FIX optional */
@@ -1392,8 +1397,8 @@ cwh_dst_mk_common(ST * st)
 #endif /* KEY Bug 3507 */
   }
 # ifdef KEY /* Bug 3507 */
-  if (DST_INVALID_IDX == parent) {
-    i = DST_mk_common_block(name,(void*) ST_st_idx(st)); 
+  if ( DST_ARE_EQUAL(DST_INVALID_IDX,parent) ) {
+    i = DST_mk_common_block(name,ST_st_idx(st)); 
   }
   else {
     i = parent;
@@ -1440,7 +1445,7 @@ cwh_dst_mk_common(ST * st)
     m = DST_mk_variable_comm(s,
 			     name,
 			     t,
-			     (void *) ST_st_idx(st),
+			     ST_st_idx(st),
 			     ST_ofst(el)) ;
 #else
     m = DST_mk_variable_comm(s,
@@ -1603,21 +1608,6 @@ cwh_dst_mk_subroutine_type(TY_IDX  ty)
   t = cwh_dst_basetype(Be_Type_Tbl(MTYPE_V));
 /*   t = cwh_dst_mk_type(TY_ret_type(ty)); TODO fix with scope */
 
-#if 0
-  if (!DST_IS_NULL(t)) {
-
-    USRCPOS_clear(s);
-    
-    i = DST_mk_subroutine_type(s,
-			       NULL,
-			       t,
-			       DST_INVALID_IDX,
-			       FALSE);
-
-  }
-  DST_append_child(current_scope_idx,i);
-  return i;
-#endif
   return t ;
 }
 
@@ -2393,7 +2383,7 @@ cwh_dst_mk_dope_bound(ST *dp, mINT64 offset, DST_INFO_IDX t, DST_INFO_IDX p, BOO
       i = DST_mk_variable_comm(s,
 			       NULL,
 			       t,
-			       (void *) (INTPTR)ST_st_idx(ST_base(dp)),
+			       ST_st_idx(ST_base(dp)),
 			       offset);
 
     } else {
@@ -2402,7 +2392,7 @@ cwh_dst_mk_dope_bound(ST *dp, mINT64 offset, DST_INFO_IDX t, DST_INFO_IDX p, BOO
 			  n,
 			  t,
 			  offset,
-			  (void *) (INTPTR)ST_st_idx(dp),
+			  ST_st_idx(dp),
 			  DST_INVALID_IDX,
 			  FALSE,
 			  ST_sclass(dp) == SCLASS_AUTO,

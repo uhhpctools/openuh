@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -74,9 +78,12 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <string.h>
+#if (__GNUC__==2)
+extern "C" char *strsignal (int __sig);
+#endif
 #include <ctype.h>
 
-#ifndef linux
+#if defined(IRIX) 
 #define _LANGUAGE_C			/* work around system header bug */
 extern "C" {
 #include <sys/fpu.h>			/* we don't have a C++ sys/fpu.h */
@@ -85,7 +92,7 @@ extern "C" {
 #include <sys/syssgi.h>
 #endif
 
-#ifdef KEY
+#if defined(KEY) && defined(linux)
 #include <execinfo.h>
 #endif
 
@@ -124,7 +131,7 @@ INT Min_Error_Severity = ES_ADVISORY;	/* report advisory msgs or worse */
 INT Conformance_Level  = ES_IGNORE;	/* ignore conformance error */
 
 /* Compiler error location: */
-static char *Compiler_File = NULL;	/* errors.c internal use only */
+static const char *Compiler_File = NULL;/* errors.c internal use only */
 static INT   Compiler_Line = 0;		/* errors.c internal use only */
 
 /* Error file support: */
@@ -165,7 +172,7 @@ static BOOL Had_Compiler_Error = FALSE;
 typedef struct {
     INT  level;		/* Severity level */
     char symbol[5];	/* Symbol used to prefix messages */
-    char *name;		/* Name used in message headers */
+    const char *name;	/* Name used in message headers */
 } SEVERITY_DESCRIPTOR;
 
 static SEVERITY_DESCRIPTOR Severities[] = {
@@ -190,7 +197,7 @@ static SEVERITY_DESCRIPTOR Severities[] = {
  * ====================================================================
  */
 
-#ifdef MONGOOSE_BE
+#if defined(MONGOOSE_BE) && defined(SHARED_BUILD)
 #include "err_host.tab"		    /* for error tables */
 #else /* MONGOOSE_BE */
 /* these table pointers get pointed at the client's tables */
@@ -205,7 +212,7 @@ static bool do_traceback = false;
 #define Phase_List(n)	(Phases[n].descriptors)
 #define Phase_Name(n)	(Phases[n].name)
 
-#ifndef linux
+#if !defined(linux) && !defined(__APPLE__) && !defined(BUILD_OS_DARWIN)
 extern char *sys_siglist[];
 #endif
 
@@ -220,7 +227,7 @@ extern void Rag_Handle_Woff_Args(char	*wstring);
 
 static void dump_backtrace(FILE *fp = stderr, size_t start_frame = 1)
 {
-#ifdef KEY
+#if defined(KEY) && defined(linux) /* "backtrace" is unique to GNU/Linux libc */
     const int nframes = 32;
     void *buf[nframes];
     char **strings;
@@ -256,7 +263,9 @@ catch_signal (INT sig, INT error_num)
     signal ( sig, SIG_DFL );
 
     switch (sig) {
+#ifndef __MINGW32__
     case SIGBUS:
+#endif /* __MINGW32__ */
     case SIGSEGV:
 	if (error_num == ENXIO || error_num == ENOSPC)
 	    /* special case for I/O error on mmapped object: report as an
@@ -265,7 +274,11 @@ catch_signal (INT sig, INT error_num)
 			 strerror(error_num));
     }
     
+#ifdef __MINGW32__
+    fprintf (stderr,  "Signal: %s", "caught" );
+#else /* __MINGW32__ */
     fprintf (stderr,  "Signal: %s", strsignal(sig) );
+#endif /* __MINGW32__ */
     fflush ( stderr );
     fprintf ( stderr, " in %s phase.\n",
 	      Current_Phase ? Current_Phase : "startup" );
@@ -273,15 +286,28 @@ catch_signal (INT sig, INT error_num)
     do_traceback = true;
     
     Signal_Cleanup ( sig );	    /* Must be provided in err_host */
+#ifdef __MINGW32__
+    if ( sig == SIGINT || sig == SIGTERM ) {
+	raise ( sig);	/* pass signal on to driver */
+    	/*NOTREACHED*/
+	exit(RC_INTERNAL_ERROR);
+    }
+#else
     if ( sig == SIGHUP ||  sig == SIGINT || sig == SIGTERM ) {
 	kill ( getpid(), sig);	/* pass signal on to driver */
     	/*NOTREACHED*/
 	exit(RC_INTERNAL_ERROR);
     }
+#endif /* __MINGW32__ */
     signal ( SIGILL, SIG_DFL );
+#ifdef __MINGW32__
+    ErrMsgLine ( EC_Signal, ERROR_LINE_UNKNOWN,
+		"caught", Current_Phase );
+#else
     signal ( SIGBUS, SIG_DFL );
     ErrMsgLine ( EC_Signal, ERROR_LINE_UNKNOWN,
 		strsignal(sig), Current_Phase );
+#endif /* __MINGW32__ */
     /*NOTREACHED*/
     exit(RC_INTERNAL_ERROR);
 }
@@ -308,20 +334,23 @@ setup_signal_handler (int s)
 void
 Handle_Signals ( void )
 {
+#ifndef __MINGW32__
     setup_signal_handler (SIGHUP);
-    setup_signal_handler (SIGINT);
     setup_signal_handler (SIGQUIT);
-    setup_signal_handler (SIGILL);
     setup_signal_handler (SIGTRAP);
+    setup_signal_handler (SIGBUS);
+#endif /* __MINGW32__ */
+    setup_signal_handler (SIGINT);
+    setup_signal_handler (SIGILL);
     setup_signal_handler (SIGIOT);
-#ifndef linux
+    setup_signal_handler (SIGABRT);
+#if defined(IRIX)
     setup_signal_handler (SIGEMT);
 #endif
     setup_signal_handler (SIGFPE);
-    setup_signal_handler (SIGBUS);
     setup_signal_handler (SIGSEGV);
     setup_signal_handler (SIGTERM);
-#ifndef linux
+#if defined(IRIX)
     syssgi(SGI_SET_FP_PRECISE, 1);
     set_fpc_csr(get_fpc_csr() & ~FPCSR_FLUSH_ZERO);
     syssgi(SGI_SET_FP_PRESERVE, 1);
@@ -646,9 +675,13 @@ Init_Crash_Report (void)
 {
   if (Crash_File != NULL)
     return TRUE;
-  
-#ifdef PSC_TO_OPEN64
+
+#if defined(VENDOR_OSP)  
   char *name = getenv("OPEN64_CRASH_REPORT");
+#elif defined(VENDOR_SL)
+  char *name = getenv("SL_CRASH_REPORT");
+#else
+  char *name = getenv("PSC_CRASH_REPORT");
 #endif
 
   if (name == NULL)
@@ -695,7 +728,7 @@ Emit_Message (
   char *hmsg,		/* Header line of message */
   char *emsg )		/* Error line of message */
 {
-  char msg[512];
+  char msg[1024];
   BOOL report_location = FALSE;
 
   /* Report the assertion failure location: */
@@ -742,19 +775,29 @@ Emit_Message (
 
 static void
 ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
+#ifdef TARG_NVISA
+/* NVIDIA-specific: The format of error and warning messages below has been
+   changed so that they are parsable by the Visual Studio IDE (and, presumably,
+   Emacs).  We now print the full path of the offending file, immediately
+   followed by a line number in parentheses.
+*/
+                        const char *file, const char *dname, va_list vp )
+#else
                         const char *file, va_list vp )
+#endif
 {
   INT dlevel = ED_severity(edesc);	/* Declared severity */
   INT mlevel = dlevel;			/* Mapped severity */
-  char hmsg[512];
+# define BUFLEN 1024
+# define BUFLEN_NONUSER 1024
+  char hmsg[BUFLEN];
   vstring emsg;
   INTPS mparm[MAX_ERR_PARMS];
 
   /* Formatting buffer: */
-# define BUFLEN 512
-  INT loc;
-  static char buf[BUFLEN];
-  char *result;
+  INT loc = 0;
+  static char buf[BUFLEN_NONUSER];
+  const char *result;
   INT kind;
 
   INT pnum;
@@ -774,6 +817,16 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
 
   /* Prepare header line: */
   if ( ! ED_continuation(edesc) ) {
+#ifdef TARG_NVISA
+    if (dname && *dname) {
+      loc += sprintf (&hmsg[0], "%s/", dname);
+    }  
+    loc += sprintf ( &hmsg[loc], "%s(%d): ", file && *file? file: "<input>", line);
+    loc += sprintf ( &hmsg[loc], "%s%s%s", SEV_symbol(mlevel),
+		    ED_unknown(edesc) ? "Unknown Compiler " :
+			(ED_compiler(edesc) ? "Compiler " : ""),
+		    SEV_name(mlevel) );
+#else   
     loc = sprintf ( &hmsg[0], "%s%s%s", SEV_symbol(mlevel),
 		    ED_unknown(edesc) ? "Unknown Compiler " :
 			(ED_compiler(edesc) ? "Compiler " : ""),
@@ -784,9 +837,11 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
     if ( file != NULL && *file != 0 ) {
       loc += sprintf ( &hmsg[loc], " in file %s", file );
     }
+#endif  /* TARG_NVISA */
 #ifndef METAKAP
     if ( Cur_PU_Name != NULL ) {
-      loc += sprintf ( &hmsg[loc], " (user routine '%s')", Cur_PU_Name );
+      INT n = snprintf ( &hmsg[loc], 300, " (user routine '%s')", Cur_PU_Name );
+      loc += MIN(300, n);
     }
     if ( ED_compiler(edesc) && Current_Phase != NULL ) {
       loc += sprintf ( &hmsg[loc], " during %s phase", Current_Phase );
@@ -876,7 +931,7 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
       default:	result = Host_Format_Parm ( kind, va_arg(vp,char *) );
 		/* Copy the string from the result into buffer: */
 		++loc;
-		strncpy ( &buf[loc], result, BUFLEN-loc );
+		strncpy ( &buf[loc], result, BUFLEN_NONUSER-loc );
 		result = &buf[loc];
 		loc += strlen (result);
 		mparm[pnum] = (INTPS) result;
@@ -886,7 +941,7 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
   }
 
   /* Prepare main error message: */
-  emsg = vstr_begin(512);
+  emsg = vstr_begin(BUFLEN);
   emsg = vstr_concat (emsg, SEV_symbol(mlevel));
   loc = vstr_sprintf (&emsg, vstr_len(emsg), ED_format(edesc), mparm[0], 
 		mparm[1], mparm[2], mparm[3], mparm[4], mparm[5] );
@@ -901,7 +956,11 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
   /* Abort at highest severity level: */
   if ( mlevel >= ES_ERRABORT ) {
     Signal_Cleanup( 0 );
+#ifdef __MINGW32__
+    if ( ecode == EC_Signal )	raise ( SIGILL );
+#else /* __MINGW32__ */
     if ( ecode == EC_Signal )	kill ( getpid(), SIGILL );
+#endif /* __MINGW32__ */
     exit(RC_INTERNAL_ERROR);
   }
 
@@ -917,19 +976,23 @@ ErrMsg_Report_Nonuser ( ERROR_DESC *edesc, INT ecode, INT line,
 
 static void
 ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
+#ifdef TARG_NVISA
+                    const char *file, const char *dname, va_list vp )
+#else
                     const char *file, va_list vp )
+#endif
 {
   INT dlevel = ED_severity(edesc);	/* Declared severity */
   INT mlevel = dlevel;			/* Mapped severity */
-  char hmsg[512];
+  char hmsg[BUFLEN];
   vstring emsg;
   INTPS mparm[MAX_ERR_PARMS];
 
   /* Formatting buffer: */
-# define BUFLEN 512
-  INT loc;
-  static char buf[BUFLEN];
-  char *result;
+# define BUFLEN_USER 512
+  INT loc = 0;
+  static char buf[BUFLEN_USER];
+  const char *result;
   INT kind;
 
   INT pnum;
@@ -949,6 +1012,12 @@ ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
 
   /* Prepare header line: */
   if ( ! ED_continuation(edesc) ) {
+#ifdef TARG_NVISA
+    if (dname && *dname) {
+      loc += sprintf (&hmsg[0], "%s/", dname);
+    }  
+    loc += sprintf ( &hmsg[loc], "%s(%d): ", file && *file? file: "<input>", line);
+#else    
     if ( file != NULL && *file != 0 && line != ERROR_LINE_UNKNOWN ) {
       loc = sprintf ( &hmsg[0], "\"%s\", line %d: ", file, line );
     }
@@ -961,6 +1030,7 @@ ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
     else {
       loc = 0;
     }
+#endif  /* TARG_NVISA */    
     sprintf ( &hmsg[loc], "%s%s: ",
 	      ED_unknown(edesc) ? "unknown compiler "
 			        : (ED_compiler(edesc) ? "compiler " : ""),
@@ -1041,7 +1111,7 @@ ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
       default:	result = Host_Format_Parm ( kind, va_arg(vp,char *) );
 		/* Copy the string from the result into buffer: */
 		++loc;
-		strncpy ( &buf[loc], result, BUFLEN-loc );
+		strncpy ( &buf[loc], result, BUFLEN_USER-loc );
 		result = &buf[loc];
 		loc += strlen (result);
 		mparm[pnum] = (INTPS) result;
@@ -1076,7 +1146,11 @@ ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
   /* Abort at highest severity level: */
   if ( mlevel >= ES_ERRABORT ) {
     Signal_Cleanup( 0 );
+#ifdef __MINGW32__
+    if ( ecode == EC_Signal )	raise ( SIGILL );
+#else /* __MINGW32__ */
     if ( ecode == EC_Signal )	kill ( getpid(), SIGILL );
+#endif /* __MINGW32__ */
     exit(RC_NORECOVER_USER_ERROR);
   }
 
@@ -1090,15 +1164,36 @@ ErrMsg_Report_User (ERROR_DESC *edesc, INT ecode, INT line,
 }
 
 static void
+#ifdef TARG_NVISA
+ErrMsg_Report ( INT ecode, INT line, const char *file, const char *dname, va_list vp )
+#else
 ErrMsg_Report ( INT ecode, INT line, const char *file, va_list vp )
+#endif
 {
   ERROR_DESC *edesc = Find_Error_Desc (ecode);
 
   if ( ED_user(edesc) )
+#ifdef TARG_NVISA
+    ErrMsg_Report_User ( edesc, ecode, line, file, dname, vp );
+#else  
     ErrMsg_Report_User ( edesc, ecode, line, file, vp );
+#endif
   else
+#ifdef TARG_NVISA
+    ErrMsg_Report_Nonuser ( edesc, ecode, line, file, dname, vp );
+#else  
     ErrMsg_Report_Nonuser ( edesc, ecode, line, file, vp );
+#endif
 }
+
+#ifdef TARG_NVISA
+static void
+ErrMsg_Report ( INT ecode, INT line, const char *file, va_list vp )
+{
+  ErrMsg_Report (ecode, line, file, NULL, vp);
+}
+#endif  /* TARG_NVISA */
+
 
 /* ====================================================================
  *
@@ -1146,7 +1241,11 @@ ErrMsgSrcpos ( INT ecode, SRCPOS srcpos, ... )
   va_start ( vp, srcpos );
 
   IR_Srcpos_Filename(srcpos, &fname, &dname);
+#ifdef TARG_NVISA  
+  ErrMsg_Report ( ecode, line, fname, dname, vp );
+#else  
   ErrMsg_Report ( ecode, line, fname, vp );
+#endif
   va_end ( vp );
 }
 #endif
@@ -1172,7 +1271,7 @@ ErrMsgSrcpos ( INT ecode, SRCPOS srcpos, ... )
  */
 
 void Abort_Compiler_Location (
-  char * file_name,
+  const char * file_name,
   INT    line_number )
 {
   Compiler_File = file_name;
@@ -1361,7 +1460,8 @@ Get_Current_Phase_Number( void )
 }
 
 
-#ifndef MONGOOSE_BE
+#if !defined(MONGOOSE_BE) || !defined(SHARED_BUILD)
+/* be dynamically sets the tables, but static builds must call this */
 /* ====================================================================
  *
  * Set_Error_Tables
@@ -1406,46 +1506,53 @@ Set_Error_Descriptor (INT phase, ERROR_DESC *descriptor)
  * ====================================================================
  */
 
-#if Is_True_On
-static BOOL dev_warn_enabled = TRUE;
-#else
 static BOOL dev_warn_enabled = FALSE;
-#endif
+
+extern BOOL 
+DevWarn_Enabled()
+{
+  return dev_warn_enabled;
+}
 
 extern void
 DevWarn( const char *fmt, ... )
 {
   va_list args;
 
-  va_start ( args, fmt );
 
   const char *phase_name = (Current_Phase != NULL) ? Current_Phase : "unknown phase";
 
   if ( dev_warn_enabled ) {
     /* Write to standard error first: */
+    /* with newer gcc need to do start/end around each vprintf */
+    va_start ( args, fmt );
     fprintf ( stderr, "!!! DevWarn during %s: ", phase_name );
     vfprintf ( stderr, fmt, args );
     fprintf ( stderr, "\n" );
     fflush ( stderr );
+    va_end(args);
   }
  
   /* Then write to error file if enabled: */
   if ( Init_Error_File() ) {
+    va_start ( args, fmt );
     fprintf ( Error_File, "!!! DevWarn during %s: ", phase_name );
     vfprintf ( Error_File, fmt, args );
     fprintf ( Error_File, "\n" );
     fflush ( Error_File );
+    va_end(args);
   }
 
   /* Finally write to trace file: */
   if ( Trace_File != NULL ) {
+    va_start ( args, fmt );
     fprintf ( Trace_File, "!!! DevWarn during %s: ", phase_name );
     vfprintf ( Trace_File, fmt, args );
     fprintf ( Trace_File, "\n" );
     fflush ( Trace_File );
+    va_end(args);
   }
 
-  va_end(args);
 }
 
 /* ====================================================================

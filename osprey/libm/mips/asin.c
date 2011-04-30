@@ -72,7 +72,13 @@ extern	double	asin(double);
 #pragma weak asin = __asin
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __asin(double);
+#pragma weak asin
+double asin( double x ) {
+  return __asin( x );
+}
+#elif defined(__GNUC__)
 extern  double  __asin(double);
 
 double    asin() __attribute__ ((weak, alias ("__asin")));
@@ -322,7 +328,12 @@ struct exception	exstruct;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+#pragma weak asinl
+long double asinl( long double x ) {	
+	return ( (long double)__asin((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __asinl(long double);
 
 long double    asinl() __attribute__ ((weak, alias ("__asinl")));

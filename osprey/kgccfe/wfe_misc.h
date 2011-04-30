@@ -64,6 +64,7 @@ extern void WFE_Finish (void);
 extern void WFE_File_Init (INT argc, char **argv);
 extern void WFE_File_Finish (void);
 extern void WFE_Check_Errors (int *error_count, int *warning_count, BOOL *need_inliner);
+extern int warnings_are_errors;
 
 #ifdef __cplusplus
 }

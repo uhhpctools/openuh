@@ -71,13 +71,13 @@ ORDERED_NODE_ITER::BuildVector (TRAVERSAL_ORDER order)
     }
 
     visit = CXX_NEW_ARRAY (mUINT8, GRAPH_vmax(g), Malloc_Mem_Pool);
-    bzero (visit, sizeof(mUINT8)*GRAPH_vmax(g));
+    BZERO (visit, sizeof(mUINT8)*GRAPH_vmax(g));
 
     // level count, stores the count of vertices at each level
     // this is needed only during the postorder walk
     if (order == LEVELORDER) {
 	Level_Count = CXX_NEW_ARRAY (INT, GRAPH_vmax(g), Malloc_Mem_Pool);
-	bzero (Level_Count, sizeof(INT)*GRAPH_vmax(g)); 
+	BZERO (Level_Count, sizeof(INT)*GRAPH_vmax(g)); 
     }
 
     if (order == POSTORDER || order == PREORDER || order == LEVELORDER)

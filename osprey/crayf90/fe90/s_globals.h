@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -116,6 +119,9 @@ extern	void		cast_to_cg_default(opnd_type *, expr_arg_type *);
 extern	void		cast_opnd_to_type_idx(opnd_type *, int);
 extern	void		change_asg_to_where(int);
 extern	boolean		check_for_legal_define(opnd_type *);
+#ifdef KEY /* Bug 14150 */
+extern  boolean		check_for_legal_assignment_define(opnd_type *, boolean);
+#endif /* KEY Bug 14150 */
 extern	void		change_section_to_this_element(opnd_type *, 
                                                        opnd_type *, int);
 extern	boolean		check_where_conformance(expr_arg_type *);
@@ -211,6 +217,17 @@ extern	void		translate_dv_component(opnd_type *, expr_arg_type *);
 extern  void		transform_char_sequence_ref(opnd_type *, int);
 extern  boolean         tree_produces_dealloc(opnd_type *root);
 extern  boolean         validate_char_len(opnd_type *, expr_arg_type *);
+#ifdef KEY /* Bug 14293, 11986, 6845 */
+extern int help_dealloc(int, int, fld_type, int, boolean, boolean, boolean);
+extern int allocatable_structure_component(int);
+#endif /* KEY Bug 14293, 11986, 6845 */
+#ifdef KEY /* Bug 14150 */
+extern boolean check_interoperable_type(int, boolean, boolean);
+extern void check_interoperable_constraints(int);
+extern boolean interoperable_variable(int);
+extern boolean no_length_type_param(int);
+extern boolean length_type_param_is_one(int);
+#endif /* KEY Bug 14150 */
 
 
 /*********************************************\

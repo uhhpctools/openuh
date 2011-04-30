@@ -42,7 +42,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #endif
 
 #include "libgcc2.h"
-
 #ifdef DECLARE_LIBRARY_RENAMES
   DECLARE_LIBRARY_RENAMES
 #endif
@@ -1652,11 +1651,6 @@ __clear_cache (char *beg __attribute__((__unused__)),
 		+ offset);
 
   /* Compute the cache alignment of the place to stop clearing.  */
-#if 0  /* This is not needed for gcc's purposes.  */
-  /* If the block to clear is bigger than a cache plane,
-     we clear the entire cache, and OFFSET is already correct.  */
-  if (end < beg + INSN_CACHE_PLANE_SIZE)
-#endif
     offset = (((int) (end + INSN_CACHE_LINE_WIDTH - 1)
 	       & -INSN_CACHE_LINE_WIDTH)
 	      & (INSN_CACHE_PLANE_SIZE - 1));

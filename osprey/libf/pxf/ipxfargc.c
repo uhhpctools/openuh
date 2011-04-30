@@ -71,6 +71,16 @@ ipxfargc_()
 	return((_f_int) (f__xargc - 1) );
 }
 
+#elif defined(BUILD_OS_DARWIN)
+
+extern  int     NXArgc;         /* Number of argv fields */
+
+_f_int
+ipxfargc_()
+{
+        return (_f_int) (NXArgc - 1);
+}
+
 #else
 
 extern  int     __xargc;         /* Number of argv fields */

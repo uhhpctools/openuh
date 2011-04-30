@@ -44,7 +44,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-extern char *Whirl_Revision;
+extern const char *Whirl_Revision;
 
 /* This variable is used by IPAA to pass its local map information
  * to ir_bwrite.c, and by ir_bread.c to pass it to WOPT:
@@ -52,6 +52,11 @@ extern char *Whirl_Revision;
 extern void *IPAA_Local_Map;
 
 extern BOOL Doing_mmapped_io;
+
+/*
+ * Try to use off_t throughout to be consistent;
+ * on cygwin off_t is not long, but is 64-bit.
+ */
 
 inline off_t
 ir_b_align (off_t offset, UINT32 addralign, UINT32 padding)
@@ -62,11 +67,11 @@ ir_b_align (off_t offset, UINT32 addralign, UINT32 padding)
 	return offset;
 }
 
-extern Elf64_Word
+extern off_t
 ir_b_save_buf (const void *buf, Elf64_Word size, UINT32 align,
 	       UINT32 padding, Output_File *fl);
 
-extern Elf64_Word
+extern off_t
 ir_b_copy_file (const void *buf, Elf64_Word size, void *fl);
 
 extern char*
@@ -76,21 +81,20 @@ extern char *
 ir_b_create_map (Output_File *fl);
 
 #if defined(KEY) && !defined(FRONT_END) && !defined(IR_TOOLS)
-extern Elf64_Word
+extern off_t
 ir_b_write_tree (WN *, off_t, Output_File *, WN_MAP, PU_Info *);
 #else
-extern Elf64_Word
+extern off_t
 ir_b_write_tree (WN *node, off_t base_offset, Output_File *fl, WN_MAP off_map);
 #endif
 
-extern Elf64_Word
+extern off_t
 ir_b_write_dst (DST_TYPE dst, off_t base_offset, Output_File *fl);
 
-
-extern Elf64_Word
+extern off_t
 ir_b_write_global_symtab (off_t base_offset, Output_File *fl);
 
-extern Elf64_Word
+extern off_t
 ir_b_write_local_symtab (const SCOPE& pu, off_t base_offset, Output_File *fl);
 
 

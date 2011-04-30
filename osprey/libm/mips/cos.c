@@ -38,10 +38,10 @@
  * ====================================================================
  *
  * Module: cos.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/cos.c,v $
+ * $Revision$
+ * $Date$
+ * $Author$
+ * $Source$
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/cos.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source$ $Revision$";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -68,7 +68,13 @@ extern	double	cos(double);
 #pragma weak cos = __cos
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __cos(double);
+#pragma weak cos
+double cos(double x) {
+  return __cos(x);
+}
+#elif defined(__GNUC__)
 extern  double  __cos(double);
 
 double    cos() __attribute__ ((weak, alias ("__cos")));
@@ -588,7 +594,12 @@ of significance)\n");
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __cosl(long double);
+long double cosl( long double x ) {
+  return ( (long double)__cos((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __cosl(long double);
 
 long double    cosl() __attribute__ ((weak, alias ("__cosl")));

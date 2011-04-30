@@ -24,7 +24,16 @@
 
 VPATH =  $(BUILD_BASE)
 
-TARGETS = libgspin.a gspin
+ifeq ($(BUILD_VARIANT), GNU_4_2_0)
+NAME_SUFFIX = 42
+else
+NAME_SUFFIX =
+endif
+
+LIBSPIN = libgspin$(NAME_SUFFIX).a
+GSPIN = gspin$(NAME_SUFFIX)
+TARGETS = $(LIBSPIN) $(GSPIN)
+LDIRT += $(GSPIN)
 
 LIBSPIN_SOURCES = gspin-tree.c \
   gspin-assert.c \
@@ -48,28 +57,46 @@ LIBSPIN_OBJECTS = $(subst .c,.o,$(LIBSPIN_SOURCES))
 GSPIN_SOURCES = gspin-test-driver.c
 GSPIN_OBJECTS = $(subst .c,.o,$(GSPIN_SOURCES))
 
+ifeq ($(BUILD_ARCH), IA32)
+CFLAGS += -m32
+endif
+
+ifeq ($(BUILD_ARCH), X8664)
+CFLAGS += -m64
+endif
+
 ifeq ($(BUILD_TARGET), X8664)
-CFLAGS += -m32 -DTARG_X8664
+CFLAGS += -DTARG_X8664
 endif
 
 ifeq ($(BUILD_TARGET), IA64)
 CFLAGS += -DTARG_IA64
 endif
 
+ifeq ($(BUILD_OPTIMIZE), DEBUG)
+CFLAGS += -DIs_True_On
+endif
+
+ifeq ($(BUILD_VARIANT), GNU_4_2_0)
+CFLAGS += -DFE_GNU_4_2_0
+endif
+
+.PHONY: default
 default: $(TARGETS)
 
 devbuild: CFLAGS = -DIs_True_On -g -Wall
-devbuild: libgspin.a gspin
+devbuild: $(TARGETS)
 
 $(LIBSPIN_OBJECTS): $(LIBSPIN_HEADERS)
 $(GSPIN_OBJECTS):   $(LIBSPIN_HEADERS)
+$(GSPIN): $(LIBSPIN)
 
 
-libgspin.a: $(LIBSPIN_OBJECTS)
+$(LIBSPIN): $(LIBSPIN_OBJECTS)
 	$(AR) rc $@ $(LIBSPIN_OBJECTS)
 
-gspin: $(GSPIN_OBJECTS)
-	$(CC) $(GSPIN_OBJECTS) libgspin.a -o $@
+$(GSPIN): $(GSPIN_OBJECTS)
+	$(CC) $(GSPIN_OBJECTS) $(LIBSPIN) -o $@
 
 
 -include $(COMMONRULES)

@@ -164,11 +164,6 @@ CODEREP::Is_non_volatile_terminal(OPT_STAB *opt_stab) const
     if (Is_ivar_volatile()) return FALSE;
     if (Opr() == OPR_PARM && Ivar_mu_node() == NULL && WOPT_Enable_Move_Intrinsicop)
       return Ilod_base()->Is_non_volatile_terminal(opt_stab);
-#if 0
-    if ((Opr() == OPR_CVT && Cvt_is_nop()) || 
-	(Opr() == OPR_CVTL && Cvtl_is_nop()))
-      return Opnd(0)->Is_non_volatile_terminal(opt_stab);
-#endif
   default:
     return FALSE;
   }
@@ -200,8 +195,15 @@ EOCC::Collect_real_occurrences( void )
 	  CODEREP *rhs_cr = stmt->Rhs();
 	  CODEREP *lhs = stmt->Lhs();
 	  if (WOPT_Enable_Cvt_Folding && rhs_cr->Kind() == CK_OP && 
+#ifdef KEY // bug 11797
+	      ! MTYPE_is_vector(rhs_cr->Dsctyp()) &&
+	      ! MTYPE_is_vector(rhs_cr->Dtyp()) &&
+#endif
 	      (rhs_cr->Opr() == OPR_CVT && MTYPE_is_integral(rhs_cr->Dsctyp()) 
 	       || rhs_cr->Opr() == OPR_CVTL) &&
+#ifdef TARG_X8664
+	      !MTYPE_is_vector(lhs->Dsctyp()) &&
+#endif
 	      MTYPE_is_integral(rhs_cr->Dtyp()) && 
 	      MTYPE_is_integral(lhs->Dsctyp()) 
 	      ) {
@@ -615,6 +617,11 @@ EXP_WORKLST::Insert_exp_phi(ETABLE *etable)
       EXP_OCCURS *new_occ = etable->Append_phi_occurrence(Exp(), new_phi, this);
       etable->Set_exp_phi_bb(bb_phi, new_occ);
       bb_phi->Set_exp_phi(new_phi);
+#if defined(TARG_SL)
+    // set such phi not down-safe for that has predecessor from different parallel region 
+      if(bb_phi->SL2_para_region() && bb_phi->Preds_or_succs_from_different_region()) 
+        new_phi->Set_not_down_safe();
+#endif
     }
 
     // Build the phi-predecessor list

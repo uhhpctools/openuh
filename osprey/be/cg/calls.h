@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -44,10 +48,10 @@
  * ====================================================================
  *
  * Module: calls.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/calls.h,v $
+ * $Revision: 1.12 $
+ * $Date: 05/12/05 08:59:03-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.calls.h $
  *
  * Revision history:
  *  03-Oct-91 - Original Version
@@ -78,12 +82,9 @@
 #ifdef KEY
 #include "bb.h"
 #endif
+#include "tn.h"
 
 /* ================================================================= */
-
-/* Incomplete types to keep ANSI happy: */
-struct bb;
-struct op;
 
 /* frame length */
 extern INT64 Frame_Len;
@@ -98,8 +99,8 @@ extern void Set_Frame_Len (INT64 val);		// sets spadjust TN values
  * the return-address register the same way.
  */
 typedef struct save_reg {
-  struct tn 	*ded_tn; /* the dedicated TN for the callee-saved register */
-  struct tn	*sv_tn;	 /* the save-tn for the callee-saved register */
+  TN 	*ded_tn; /* the dedicated TN for the callee-saved register */
+  TN	*sv_tn;	 /* the save-tn for the callee-saved register */
 } SAVE_REG;
 
 /* Define the access macros, including indirect TN access: */
@@ -124,11 +125,18 @@ extern PREG_NUM GP_Preg;
 extern PREG_NUM Return_Int_Preg[2];
 extern PREG_NUM Return_Float_Preg[2];
 
+extern BOOL Gen_Frame_Pointer;
+
 /* assign a special preg to each CALLEE_tn.  also ra, and gp */
 extern void Init_Callee_Saved_Regs_for_REGION( ST *pu, BOOL is_region );
 
 /* Init subprogram entry/exit code: */
 extern void Init_Entry_Exit_Code ( WN *pu_wn);
+
+#ifdef TARG_X8664
+/* Generate Clear of Merge dependencies for YMM regs */
+extern void Generate_Entry_Merge_Clear( BOOL is_region );
+#endif
 
 /* Produce subprogram entry/exit code: */
 extern void Generate_Entry_Exit_Code ( ST* pu, BOOL is_region );
@@ -144,17 +152,19 @@ extern void Cycle_Count_Initialize ( ST *pu, BOOL is_region );
 /* Instrument code to call _mcount */
 extern void Instru_Call_Mcount(void );
 #endif
+
 /* Tail calls: */
 extern void Optimize_Tail_Calls( ST* pu );
 
 #ifdef TARG_X8664
 void Adjust_SP_After_Call( BB* );
+extern INT Push_Pop_Int_Saved_Regs (void);
 #endif
 
 #ifdef KEY
 // The following are interfaces into calls.cxx Callee saved registers stack
 typedef struct save_reg_loc {
-  struct tn 	*ded_tn; /* the dedicated TN for the callee-saved register */
+  TN	 	*ded_tn; /* the dedicated TN for the callee-saved register */
   ST 		*temp;   /* the save location */
   BOOL		user_allocated; /* true if allocated by user via asm */
 } SAVE_REG_LOC;
@@ -164,8 +174,11 @@ extern BOOL Is_Unique_Callee_Saved_Reg (TN *);
 // Number of callee saved registers
 extern INT Cgdwarf_Num_Callee_Saved_Regs (void);
 // Nth callee saved register dedicated TN
-extern struct tn* Cgdwarf_Nth_Callee_Saved_Reg (INT n);
+extern TN* Cgdwarf_Nth_Callee_Saved_Reg (INT n);
 // The location on the stack that corresponds to the nth TN on the stack.
 extern ST* Cgdwarf_Nth_Callee_Saved_Reg_Location (INT n);
+#endif
+#ifdef TARG_MIPS
+extern TN *Caller_GP_TN;
 #endif
 #endif /* calls_INCLUDED */

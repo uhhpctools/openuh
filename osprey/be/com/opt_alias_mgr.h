@@ -37,10 +37,10 @@
 * ====================================================================
 *
 * Module: opt_alias_mgr.h
-* $Revision$
-* $Date$
-* $Author$
-* $Source$
+* $Revision: 1.2 $
+* $Date: 02/11/07 23:41:38-00:00 $
+* $Author: fchow@keyresearch.com $
+* $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_alias_mgr.h $
 *
 * Revision history:
 *  07-APR-95 lo - spilt from opt_alias.h
@@ -54,7 +54,7 @@
 #ifndef opt_alias_mgr_INCLUDED
 #define opt_alias_mgr_INCLUDED	"opt_alias_mgr.h"
 #ifdef _KEEP_RCS_ID
-static char *opt_alias_mgrrcs_id = 	opt_alias_mgr_INCLUDED"$Revision$";
+static char *opt_alias_mgrrcs_id = 	opt_alias_mgr_INCLUDED"$Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 /***********************************************************************
@@ -87,6 +87,7 @@ static char *opt_alias_mgrrcs_id = 	opt_alias_mgr_INCLUDED"$Revision$";
 #include "tracing.h"			// for TFile
 
 class ALIAS_CLASSIFICATION;
+class AliasAnalyzer;
 
 class ALIAS_MANAGER {
 
@@ -109,7 +110,7 @@ private:
   vector<IDTYPE, mempool_allocator<IDTYPE> > *_invalid_ip_alias_classes;
 
 public:
-  ALIAS_MANAGER(void);
+  ALIAS_MANAGER(WN *entryWN);
   ~ALIAS_MANAGER(void);
 
   IDTYPE     Id(const WN *wn) const;
@@ -160,7 +161,7 @@ public:
   void Set_homing_store( WN *store_wn, BOOL b ) const
 		{ WN_MAP32_Set(Homing_map(),store_wn,b); }
 
-  ALIAS_RESULT Aliased(WN *wn, const POINTS_TO *pt, 
+  ALIAS_RESULT Aliased(WN *wn, const POINTS_TO *pt,
                         BOOL ignore_loop_carried = FALSE);
   ALIAS_RESULT Aliased(const POINTS_TO *pt, WN *wn,
                         BOOL ignore_loop_carried = FALSE);

@@ -1490,11 +1490,7 @@ finish_builtin_type (type, name, fields, len, align_type)
   TYPE_ALIGN (type) = TYPE_ALIGN (align_type);
   TYPE_USER_ALIGN (type) = TYPE_USER_ALIGN (align_type);
   layout_type (type);
-#if 0 /* not yet, should get fixed properly later */
-  TYPE_NAME (type) = make_type_decl (get_identifier (name), type);
-#else
   TYPE_NAME (type) = build_decl (TYPE_DECL, get_identifier (name), type);
-#endif
   TYPE_STUB_DECL (type) = TYPE_NAME (type);
   layout_decl (TYPE_NAME (type), 0);
 }

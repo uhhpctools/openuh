@@ -36,10 +36,10 @@
 /* ====================================================================
  *
  * Module: findloops.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/findloops.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:24-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.findloops.cxx $
  *
  * Description:
  *
@@ -48,7 +48,7 @@
  * ====================================================================
  */
 #ifdef _KEEP_RCS_ID
-static const char rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/findloops.cxx,v $ $Revision: 1.1.1.1 $";
+static const char rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.findloops.cxx $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "defs.h"
@@ -76,6 +76,139 @@ BB_MAP LOOP_DESCR_map;
 static BOOL loop_descr_map_initted;
 static LOOP_DESCR *the_loops;
 static BB_MAP dfo_map;
+
+#if defined(TARG_SL)
+/* the roots of the loop-trees, each loop-tree has the same
+ * oganization like region tree, with parent containing child
+ */
+VECTOR loop_tree_roots;
+#endif
+
+#if defined(TARG_SL)
+/* ====================================================================
+ *
+ * LOOP_DESCR_Create_Loop_Tree
+ * 
+ * Creat a loop tree for all the loops in the PU. The loop 
+ * tree has the same organization as Region Tree, and each
+ * parent node in the tree contains the child node.
+ *
+ * ====================================================================
+ */
+void
+LOOP_DESCR_Create_Loop_Tree( MEM_POOL * pool )
+{
+  LOOP_DESCR *cloop, *encl_loop;
+  INT loop_num = 0; 
+  BOOL not_root = FALSE;
+
+  /* I need loop_num to init the loop_tree_roots. 
+   * Although i can compute the loop_num in other places 
+   * where there is already an iteration of the_loops,
+   * i do here for simplicity, and not expensive.
+   */
+  for (cloop = the_loops; cloop != NULL; cloop = LOOP_DESCR_next(cloop) ){ 
+    loop_num++;
+  }
+
+  loop_tree_roots = VECTOR_Init( loop_num, pool );
+    
+  for (cloop = the_loops; cloop != NULL; cloop = LOOP_DESCR_next(cloop)) {
+
+    not_root = FALSE;
+    if( !cloop->children )
+      cloop->children = VECTOR_Init( loop_num-1, pool );
+
+    for (encl_loop = LOOP_DESCR_next(cloop); 
+	 encl_loop != NULL; 
+	 encl_loop = LOOP_DESCR_next(encl_loop)) {
+      if( !encl_loop->children )
+        encl_loop->children = VECTOR_Init( loop_num-1, pool );
+      if (BB_SET_ContainsP (LOOP_DESCR_bbset(encl_loop),
+			    LOOP_DESCR_bbset(cloop))) {
+        not_root = TRUE;
+	VECTOR_Add_Element( encl_loop->children, cloop );
+
+        /* Each loop can be child of only one father node, it
+         * is the immediate father.  So once we find the first
+         * father, stop it. This is made correct by the sort
+         * of all the loops
+         */ 
+        break;
+      }
+    }
+
+    if( !not_root ){
+      VECTOR_Add_Element( loop_tree_roots, cloop );
+    }
+  }
+}
+#endif
+
+#if defined(TARG_SL)
+void
+LOOP_DESCR_Dump_Loop_Brief( LOOP_DESCR* cloop )
+{
+  BB *loophead = LOOP_DESCR_loophead(cloop);
+  fprintf( TFile, 
+        "[loop head: %d, nest level: %d, # exits: %d]\n",
+	loophead ? BB_id(loophead) : 0, 
+	LOOP_DESCR_nestlevel(cloop), 
+	LOOP_DESCR_num_exits(cloop) );
+  return;
+}
+
+void
+LOOP_DESCR_Dump_Loop( INT indent, LOOP_DESCR* cloop )
+{
+  INT i;
+  LOOP_DESCR* child_loop;
+
+  for( i=0; i < indent; i++ ){
+    fprintf( TFile, " " );
+  }
+  
+  LOOP_DESCR_Dump_Loop_Brief( cloop );
+
+  for( i=0; i < VECTOR_count( cloop->children ); i++ ){
+    child_loop = (LOOP_DESCR*)VECTOR_element( cloop->children, i);
+    LOOP_DESCR_Dump_Loop( indent+2, child_loop ); 
+  }
+
+  return;
+} 
+#endif
+
+#if defined(TARG_SL)
+/* ====================================================================
+ *
+ * LOOP_DESCR_Dump_Loop_Tree
+ * 
+ * Dump the  loop tree 
+ *
+ * ====================================================================
+ */
+void
+LOOP_DESCR_Dump_Loop_Tree( void )
+{
+  LOOP_DESCR *root;
+  INT root_idx;
+ 
+  if( VECTOR_count(loop_tree_roots) == 0 ){
+    fprintf( TFile, "there is no loops at all !\n");
+    return;
+  }
+
+  fprintf( TFile, "%s", DBar );
+  fprintf( TFile, "  LOOP TREE   \n" );
+
+  for( root_idx = 0; root_idx < VECTOR_count(loop_tree_roots); root_idx++ ) {
+    root = (LOOP_DESCR*)VECTOR_element( loop_tree_roots, root_idx ); 
+    LOOP_DESCR_Dump_Loop( 2, root );
+  }
+  
+}
+#endif
 
 /* ====================================================================
  *
@@ -210,8 +343,10 @@ LOOP_DESCR_Detect_Loops (MEM_POOL *pool)
 	continue;
       }
 
+#ifndef TARG_NVISA
       if (CFLOW_Trace_Freq)
         fprintf (TFile, "BACK EDGE from %d to %d\n", BB_id(bb), BB_id(succ));
+#endif
 
       newloop = TYPE_L_ALLOC (LOOP_DESCR);
       loop_set = BB_SET_Create_Empty (PU_BB_Count + 2, pool);
@@ -325,6 +460,7 @@ LOOP_DESCR_Detect_Loops (MEM_POOL *pool)
 
   return the_loops;
 }
+
 
 static void
 LOOP_DESCR_Add_BB_Helper (LOOP_DESCR *loop, BB *bb) {
@@ -460,6 +596,7 @@ LOOP_DESCR_Can_Retarget_Loop_Entrances(LOOP_DESCR *loop)
   return TRUE;
 }
 
+#ifndef TARG_NVISA
 /* ====================================================================
  * See "findloops.h" for interface description.
  * ====================================================================
@@ -482,6 +619,7 @@ LOOP_DESCR_Estimate_Cycles(LOOP_DESCR *loop)
 
   return avg_cycles;
 }
+#endif
 
 /* ====================================================================
  * See "findloops.h" for interface description.

@@ -386,9 +386,6 @@ U64_lower_stmtrep(STMTREP *s, BOOL leave_CVTL_at_leaf)
     if (maxsize != 0 && maxsize != 64) { // generate comparison with 0
       if (hob_state == HOB_none)  // enlarge Kid 0
 	U64_LOWER_insert_cvtl_for_kid(s, HOB_zero_xtd, 0, maxsize, hob_state);
-#if 0
-      s->Set_rhs(U64_LOWER_create_ne_0(Boolean_type, MTYPE_U8, s->Rhs()));
-#endif
     }
     return;
 

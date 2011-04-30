@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -45,10 +45,10 @@
  * =======================================================================
  *
  *  Module: cg_flags.c
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_flags.cxx,v $
+ *  $Revision: 1.84 $
+ *  $Date: 06/01/19 16:18:29-08:00 $
+ *  $Author: fchow@fluorspar.internal.keyresearch.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_flags.cxx $
  *
  *  Description:
  *  ============
@@ -61,8 +61,8 @@
 
 
 #include <stdint.h>
-
 #include "defs.h"
+#include "config_targ.h"
 #include "cg_flags.h"
 #include "cgtarget.h"
 
@@ -73,10 +73,59 @@ INT32 CG_skip_equal = -1;
 INT32 CG_local_skip_after = INT32_MAX;
 INT32 CG_local_skip_before = 0;
 INT32 CG_local_skip_equal = -1;
+#ifdef TARG_SL
+INT32 CG_local_sched_pu_skip_before = -1;
+INT32 CG_local_sched_pu_skip_after  = -1 ;
+INT32 CG_local_sched_pu_skip_equal = -1;
+INT32 CG_local_sched_bb_skip_before = -1;
+INT32 CG_local_sched_bb_skip_after  = -1 ;
+INT32 CG_local_sched_bb_skip_equal = -1;
+INT32 CG_local_sched_op_skip_after  = -1 ;
+INT32 CG_bb_sched_op_num_max = -1;
+/* GCM flags */
+INT32 CG_GCM_skip_before = -1;
+INT32 CG_GCM_skip_after  = -1;
+INT32 CG_GCM_skip_equal  = -1;
+INT32 CG_GCM_loop_skip_before = -1;
+INT32 CG_GCM_loop_skip_after  = -1;
+INT32 CG_GCM_loop_skip_equal  = -1;
+INT32 CG_GCM_op_skip_before = -1;
+INT32 CG_GCM_op_skip_after  = -1;
+INT32 CG_GCM_op_skip_equal  = -1;
+INT32 CG_GCM_LICM_loop_skip_before = -1;
+INT32 CG_GCM_LICM_loop_skip_after = -1;
+INT32 CG_GCM_LICM_loop_skip_equal = -1;
+INT32 CG_GCM_LICM_op_skip_before = -1;
+INT32 CG_GCM_LICM_op_skip_after = -1;
+INT32 CG_GCM_LICM_op_skip_equal = -1;
+INT32 CG_LOOP_DCE_loop_skip_before = -1;
+INT32 CG_LOOP_DCE_loop_skip_after = -1;
+INT32 CG_LOOP_DCE_loop_skip_equal = -1;
+INT32 CG_LOOP_DCE_op_skip_before = -1;
+INT32 CG_LOOP_DCE_op_skip_after = -1;
+INT32 CG_LOOP_DCE_op_skip_equal = -1;
+
+BOOL CG_GCM_enable_critical_edge_motion = TRUE;
+BOOL CG_GCM_enable_mvtc_optimization = TRUE;
+BOOL CG_GCM_enable_reduce_loop_count = TRUE;
+BOOL CG_GCM_enable_licm = TRUE;
+BOOL CG_GCM_enable_dce = TRUE;
+BOOL CG_GCM_enable_rce = TRUE;
+BOOL CG_GCM_enable_break_dependence = FALSE;
+BOOL CG_GCM_enable_merge_small_bbs = TRUE;
+#endif 
 BOOL CG_skip_local_hbf = FALSE;
 BOOL CG_skip_local_loop = FALSE;
 BOOL CG_skip_local_sched = FALSE;
 BOOL CG_skip_local_swp = FALSE;
+#ifdef TARG_X8664
+BOOL CG_cmp_load_exec = FALSE;
+BOOL CG_fma4_load_exec = FALSE;
+BOOL CG_128bitstore = TRUE;
+BOOL CG_branch_fuse = TRUE;
+BOOL CG_dispatch_schedule = FALSE;
+BOOL CG_strcmp_expand = TRUE;
+#endif
 BOOL CG_opt_level;
 BOOL CG_localize_tns = FALSE;
 BOOL CG_localize_tns_Set = FALSE;
@@ -88,7 +137,6 @@ BOOL CG_x87_store = FALSE;
 #ifdef TARG_IA64
 BOOL CG_Enable_Ldxmov_Support = TRUE;
 #endif
-
 BOOL LOCALIZE_using_stacked_regs = TRUE;
 BOOL CG_unique_exit = TRUE;
 
@@ -131,6 +179,9 @@ BOOL FREQ_enable = TRUE;
 BOOL FREQ_view_cfg = FALSE;
 const char *FREQ_frequent_never_ratio = "1000.0";
 const char *FREQ_eh_freq = "0.1";
+#ifdef KEY
+const char *FREQ_non_local_targ_freq = "0.1";
+#endif
 
 BOOL CG_enable_rename = TRUE;
 BOOL CG_enable_prefetch = FALSE;
@@ -168,7 +219,13 @@ BOOL CG_tune_do_loop = TRUE;
 BOOL CG_enable_thr = FALSE;
 BOOL CG_cond_defs_allowed = FALSE;
 BOOL LOCS_Enable_Bundle_Formation = FALSE;
+#if defined(TARG_LOONGSON) || defined(TARG_MIPS) && !defined(TARG_SL)   
+BOOL CG_tail_call = FALSE;
+#elif defined(TARG_PPC32)
+BOOL CG_tail_call = FALSE;// we have some problem with struct value parameter tail call OPT
+#else
 BOOL CG_tail_call = TRUE;
+#endif
 BOOL GCM_Speculative_Loads = FALSE;
 BOOL GCM_Predicated_Loads = FALSE;
 #endif
@@ -179,6 +236,46 @@ BOOL IGLS_Enable_HB_Scheduling = TRUE;
 BOOL IGLS_Enable_PRE_HB_Scheduling = FALSE;
 BOOL IGLS_Enable_POST_HB_Scheduling = TRUE;
 BOOL IGLS_Enable_All_Scheduling = TRUE;
+#ifdef TARG_SL
+BOOL RGN_Enable_All_Scheduling = TRUE;
+const char* App_Name;
+const char* Cand_List_Pattern = "mi"; 
+BOOL CG_SL2_enable_combine_condmv = TRUE;
+BOOL CG_SL2_enable_peephole = TRUE;
+BOOL CG_SL2_enable_v1buf_expansion = TRUE;
+BOOL CG_Enable_Macro_Instr_Combine = TRUE;
+
+/* CG_zdl_enabled_level : The enabled levels counting from inside to
+ *                        outside.
+ * CG_zdl_skip_e        : the sequential number of loops that wont be
+ *                        zdl'ed. The sequential number is counted for
+ *                        each compilation unit. 
+ * CG_zdl_skip_a/b      : the loops whose sequential number bigger than
+ *                        (or smaller than) this will be ignored, not 
+ *                        including this number.
+ * The sequentional number of loops beginnes from 1, not 0.
+ */
+BOOL CG_enable_zero_delay_loop = TRUE;
+UINT32 CG_zdl_enabled_level = 2; // default value is 2
+UINT32 CG_zdl_skip_e = 0;  
+UINT32 CG_zdl_skip_a = INT32_MAX;
+UINT32 CG_zdl_skip_b = 0;
+BOOL CG_enable_opt_condmv = TRUE;
+BOOL CG_enable_CBUS_workaround = FALSE;
+BOOL CG_enable_LD_NOP_workaround = FALSE;
+BOOL CG_enbale_C3_AR_dependence_workaround = FALSE;
+#endif
+#ifdef TARG_LOONGSON
+BOOL CG_Enable_RVI_2_CG = FALSE;
+BOOL CG_enable_del_base_tn=FALSE;
+BOOL CG_enable_auto_add_op=FALSE;
+BOOL CG_enable_del_auto_add_op=FALSE;
+BOOL CG_enable_float_pointer_example=FALSE;
+BOOL CG_enable_too_many_spill=FALSE;
+BOOL CG_enable_improve_fp_efficiency=FALSE;
+BOOL CG_enable_all_ldst_is_lbsb=FALSE;
+BOOL CG_enable_improve_icache_efficiency=FALSE;
+#endif
 BOOL CG_enable_loop_optimizations = TRUE;
 BOOL GCM_Motion_Across_Calls = TRUE;
 BOOL GCM_Min_Reg_Usage = TRUE;
@@ -190,7 +287,7 @@ BOOL GCM_PRE_Enable_Scheduling = TRUE;
 BOOL GCM_POST_Enable_Scheduling = TRUE;
 BOOL GCM_Enable_Scheduling = TRUE;
 BOOL CGTARG_Enable_Brlikely = TRUE;
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
 BOOL Enable_Fill_Delay_Slots = FALSE;
 BOOL GCM_Enable_Fill_Delay_Slots = FALSE;
 BOOL CG_use_movlpd = TRUE;
@@ -207,11 +304,19 @@ BOOL CG_fold_shiftadd = FALSE;
 BOOL CG_use_prefetchnta = FALSE;
 BOOL CG_idivbyconst_opt = TRUE;
 BOOL CG_fold_constimul = TRUE;
-BOOL CG_cloop = TRUE;
+BOOL CG_LOOP_cloop = TRUE;
 BOOL CG_use_lddqu = FALSE;
+BOOL CG_push_pop_int_saved_regs = FALSE;
+BOOL CG_push_pop_int_saved_regs_Set = FALSE;
+UINT32 CG_ptr_load_use_latency = 4;
+#else
+#if defined(TARG_SL)
+BOOL Enable_Fill_Delay_Slots = FALSE;
+BOOL GCM_Enable_Fill_Delay_Slots = FALSE;
 #else
 BOOL Enable_Fill_Delay_Slots = TRUE;
 BOOL GCM_Enable_Fill_Delay_Slots = TRUE;
+#endif
 #endif
 const char *CGTARG_Branch_Taken_Prob = NULL;
 double CGTARG_Branch_Taken_Probability;
@@ -226,14 +331,37 @@ BOOL EMIT_explicit_bundles = TRUE;
 INT32 EMIT_Long_Branch_Limit = DEFAULT_LONG_BRANCH_LIMIT;
 
 INT32 CGEXP_expandconstant = DEFAULT_CGEXP_CONSTANT;
+BOOL CG_divrem_opt = FALSE;
 BOOL CGEXP_use_copyfcc = TRUE;
 BOOL CGEXP_normalize_logical = FALSE;
 BOOL CGEXP_gp_prolog_call_shared = TRUE;
 BOOL CGEXP_fast_imul = TRUE;
 BOOL CGEXP_float_consts_from_ints = TRUE;
+#if defined(TARG_SL)
+BOOL CGEXP_cvrt_int_div_to_mult = FALSE;
+BOOL CGEXP_cvrt_int_div_to_fdiv = FALSE;
+BOOL CG_Gen_16bit = TRUE;
+BOOL CG_Enable_br16 = TRUE;
+INT32 CG_localsch_pre_size = 1;
+BOOL CG_dsp_thread = FALSE; // dsp thread in sl1
+BOOL CG_check_quadword = TRUE;
+BOOL CG_rep_unpaired16 = TRUE;
+BOOL CG_ignore_mem_alias = FALSE;
+BOOL CG_stack_layout = TRUE;
+INT32 CG_ISR = 1;
+INT32 CG_Max_Accreg = 4;
+INT32 CG_Max_Addreg = 8;
+BOOL CG_round_spreg = TRUE;
+BOOL CG_check_packed = TRUE;
+BOOL CG_branch_taken = TRUE; //option for sl1
+#else
 BOOL CGEXP_cvrt_int_div_to_mult = TRUE;
 BOOL CGEXP_cvrt_int_div_to_fdiv = TRUE;
+#endif
 BOOL CGEXP_opt_float_div_by_const = TRUE;
+#ifdef KEY
+BOOL CGEXP_cvrt_int_mult_to_add_shift = TRUE;
+#endif
 
 const char *CGEXP_lfhint_L1;
 const char *CGEXP_lfhint_L2;
@@ -243,8 +371,18 @@ const char *CGEXP_sthint_L1;
 const char *CGEXP_sthint_L2;
 
 BOOL LRA_do_reorder = FALSE;
+#ifdef TARG_SL2 
+BOOL Enable_Checking_Register_Allocation = TRUE;
+BOOL CG_sl2 = FALSE;
+#endif 
 #ifdef TARG_X8664
 BOOL LRA_prefer_legacy_regs = FALSE;
+#endif
+#ifdef KEY
+BOOL LRA_prefer_lru_reg = TRUE;		// bug 14303
+BOOL LRA_prefer_lru_reg_Set = FALSE;
+INT32 LRA_inflate_reg_request = 0;
+INT32 LRA_inflate_reg_request_Set = FALSE;
 #endif
 
 BOOL GRA_use_old_conflict = FALSE;
@@ -272,6 +410,7 @@ const char* GRA_spill_count_factor_string = "0.5";
 #ifdef KEY
 BOOL GRA_exclude_callee_saved_regs = FALSE;
 BOOL GRA_eh_exclude_callee_saved_regs = FALSE;
+BOOL GRA_fp_exclude_callee_saved_regs = FALSE;
 #endif
 
 #ifdef KEY
@@ -281,6 +420,13 @@ INT32 HB_if_conversion_cut_off = 10;
 #else
 BOOL  HB_formation = TRUE;
 #endif
+#if defined(TARG_SL) || defined(TARG_IA64)
+BOOL CG_Enable_REGION_formation = FALSE;
+BOOL CG_Enable_Regional_Global_Sched = FALSE;
+BOOL CG_Enable_Regional_Local_Sched = TRUE;
+BOOL CG_Enable_Include_Memread_Arc = FALSE;
+#endif
+
 BOOL  HB_static_freq_heuristics = TRUE;
 INT   HB_max_blocks = 20;
 const char* HB_max_sched_growth = "4.1";
@@ -307,7 +453,7 @@ INT   HB_min_blocks = 2;
 BOOL  GRA_LIVE_Predicate_Aware = FALSE;
 
 /* Recurrence Breaking flags */
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_MIPS)
 BOOL CG_LOOP_fix_recurrences = TRUE;
 #else
 // Disable fix recurrence because CG_DEF_Op_Opnd_Changed
@@ -328,22 +474,58 @@ BOOL CG_LOOP_interleave_posti_specified = FALSE;
 BOOL CG_LOOP_reassociate = TRUE;
 BOOL CG_LOOP_reassociate_specified = FALSE;
 INT32 CG_LOOP_recurrence_min_omega = 0;
+#ifdef TARG_IA64
+INT32 CG_LOOP_recurrence_max_omega = 16;  // ia64
+#else
+INT32 CG_LOOP_recurrence_max_omega = 4;   // mips
+#endif
 #ifdef KEY
+BOOL LOCS_Best = FALSE;
+BOOL LOCS_Best_set = FALSE;
 BOOL LOCS_Fwd_Scheduling = FALSE;
 BOOL LOCS_Fwd_Scheduling_set = FALSE;
+UINT32 LOCS_Scheduling_Algorithm = 0;
+BOOL LOCS_Scheduling_Algorithm_set = FALSE;
+BOOL LOCS_Reduce_Prefetch = FALSE;
+BOOL LOCS_Reduce_Prefetch_set = FALSE;
+BOOL LOCS_Shallow_Depth = FALSE;
+BOOL LOCS_Shallow_Depth_set = FALSE;
+BOOL LOCS_Balance_Ready_Types = FALSE;
+BOOL LOCS_Balance_Ready_Types_set = FALSE;
+BOOL LOCS_Balance_Unsched_Types = FALSE;
+BOOL LOCS_Balance_Unsched_Types_set = FALSE;
+UINT32 LOCS_Balance_Ready_Int = 80;
+BOOL LOCS_Balance_Ready_Int_set = FALSE;
+UINT32 LOCS_Balance_Ready_Fp = 40;
+BOOL LOCS_Balance_Ready_Fp_set = FALSE;
+UINT32 LOCS_Balance_Unsched_Int = 40;
+BOOL LOCS_Balance_Unsched_Int_set = FALSE;
+UINT32 LOCS_Balance_Unsched_Fp = 60;
+BOOL LOCS_Balance_Unsched_Fp_set = FALSE;
 BOOL CG_min_spill_loc_size = FALSE;
+#if defined(TARG_SL) || defined(TARG_IA64)
+BOOL CG_min_stack_size = FALSE;
+#else
 BOOL CG_min_stack_size = TRUE;
+#endif
 BOOL flag_test_coverage = FALSE;
 OPTION_LIST *Arc_Profile_Region = NULL;
 INT32 CG_cse_regs = INT32_MAX - 1000;
 INT32 CG_sse_cse_regs = INT32_MAX - 1000;
 #endif
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_LOONGSON)
 INT32 CG_sse_load_execute = 0;
 INT32 CG_load_execute = 1;
 BOOL CG_loadbw_execute = FALSE;
 BOOL CG_p2align = FALSE;
+BOOL CG_loop32 = FALSE;
+BOOL CG_compute_to = FALSE;
 BOOL CG_valgrind_friendly = TRUE;
+BOOL CG_Movext_ICMP = TRUE;
+#endif
+#ifdef TARG_LOONGSON
+BOOL CGEXP_float_use_madd = FALSE;
+BOOL CGEXP_use_Loongson2e_MultDivMod = FALSE; 
 #endif
 
 // temporary flags for controlling algorithm selection for fdiv, sqrt, etc
@@ -355,3 +537,20 @@ BOOL CG_Enable_Cycle_Count = FALSE;
 BOOL Cycle_PU_Enable = FALSE;  
 BOOL Cycle_BB_Enable = FALSE;  
 const char *Cycle_String = "";
+
+#ifdef TARG_NVISA
+// treat auto stack variables as statics put in local space
+BOOL CGEXP_auto_as_static = TRUE;
+BOOL CGEXP_gen_ccodes = TRUE;
+
+BOOL CG_vector_loadstore = TRUE;	// emit vector loads and stores
+
+BOOL CG_rematerialize_grf = TRUE;
+
+BOOL CG_remove_typeconv = FALSE; // type conversion removal optimization
+
+BOOL CG_optimize_copies = FALSE; // leave off as OCG seems to handle this now
+
+BOOL CG_use_16bit_ops = TRUE;    // try to replace 32bit ops with 16bit ops
+BOOL CG_skip_local_16bit = FALSE;
+#endif

@@ -256,14 +256,6 @@ regrename_optimize ()
 
 	  all_chains = this->next_chain;
 
-#if 0 /* This just disables optimization opportunities.  */
-	  /* Only rename once we've seen the reg more than once.  */
-	  if (! TEST_HARD_REG_BIT (regs_seen, reg))
-	    {
-	      SET_HARD_REG_BIT (regs_seen, reg);
-	      continue;
-	    }
-#endif
 
 	  if (fixed_regs[reg] || global_regs[reg]
 #if FRAME_POINTER_REGNUM != HARD_FRAME_POINTER_REGNUM

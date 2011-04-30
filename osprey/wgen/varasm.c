@@ -1,7 +1,3 @@
-/*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
 /* Output variables, constants and external declarations, for GNU compiler.
    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
    1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
@@ -27,7 +23,11 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef TARG_MIPS
+#include "mips.h"
+#else
 #include "i386.h"
+#endif
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 

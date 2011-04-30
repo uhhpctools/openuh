@@ -238,11 +238,3 @@ ftell90_(_f_int *u)
 }
 #endif /* KEY Bug 1683 */
 
-#if 0
-extern int ftell_(_f_int *u);
-int 
-ftell_(_f_int *u)
-{
-	return( (int) ftellf90_8_4_(u));
-}
-#endif

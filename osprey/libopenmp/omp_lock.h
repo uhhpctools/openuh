@@ -1,26 +1,33 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
+
+/*
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_lock.h
@@ -32,47 +39,90 @@
 #ifndef __omp_lock_included
 #define __omp_lock_included
 
+#define ALIGN_SIZE 64
+
+#include <pthread.h>
+#include "omp_util.h"
+
+typedef struct {
+  pthread_spinlock_t data;
+}__attribute__ ((__aligned__(ALIGN_SIZE))) ompc_spinlock_t;
+
+typedef struct {
+  int __attribute__ ((__aligned__(ALIGN_SIZE))) flag;
+  union{
+    pthread_spinlock_t spin_data;
+    pthread_mutex_t mutex_data;
+  } lock;
+}__attribute__ ((__aligned__(ALIGN_SIZE))) ompc_lock_t;
+
 #ifndef __OPENMP_LOCK_TYPE_DEFINED_
 #define __OPENMP_LOCK_TYPE_DEFINED_
 
-#include <pthread.h>
-
-typedef pthread_mutex_t omp_lock_t;
-
 typedef struct {
-   omp_lock_t      lock, wait;
+   ompc_lock_t      lock, wait;
    pthread_t       thread_id;
    int             count;
-} omp_nest_lock_t;
+} ompc_nest_lock_t;
 
 #endif
 
-extern void __ompc_init_lock (volatile omp_lock_t *);
-extern void __ompc_lock (volatile omp_lock_t *);
-extern void __ompc_unlock (volatile omp_lock_t *);
-extern void __ompc_init_lock_s (volatile omp_lock_t *);
-extern void __ompc_lock_s (volatile omp_lock_t *);
-extern void __ompc_unlock_s (volatile omp_lock_t *);
+static inline void
+__ompc_init_spinlock(ompc_spinlock_t *lck_p)
+{
+  pthread_spin_init(&(lck_p->data),PTHREAD_PROCESS_PRIVATE);
+}
 
-extern void __ompc_destroy_lock (volatile omp_lock_t *);
-extern int __ompc_test_lock (volatile omp_lock_t *);
+static inline void
+__ompc_destroy_spinlock(ompc_spinlock_t *lck)
+{
+  pthread_spin_destroy(&(lck->data));
+}
 
-extern void __ompc_init_nest_lock (volatile omp_nest_lock_t *);
-extern void __ompc_nest_lock (volatile omp_nest_lock_t *);
-extern void __ompc_nest_unlock (volatile omp_nest_lock_t *);
-extern void __ompc_init_nest_lock_s (volatile omp_nest_lock_t *);
-extern void __ompc_nest_lock_s(volatile omp_nest_lock_t *);
-extern void __ompc_nest_unlock_s(volatile omp_nest_lock_t *);
+static inline void
+__ompc_lock_spinlock(ompc_spinlock_t *lck)
+{
+  pthread_spin_lock(&(lck->data));
+}
 
+static inline void
+__ompc_unlock_spinlock(ompc_spinlock_t *lck)
+{
+  pthread_spin_unlock(&(lck->data));
+}
 
-extern void __ompc_destroy_nest_lock (volatile omp_nest_lock_t *);
-extern int __ompc_test_nest_lock (volatile omp_nest_lock_t *);
+static inline int
+__ompc_try_spinlock(ompc_spinlock_t *lck)
+{
+  return pthread_spin_trylock(&(lck->data));
+}
 
-extern void __ompc_critical(int gtid, volatile omp_lock_t **lck);
-extern void __ompc_end_critical(int gtid, volatile omp_lock_t **lck);
+extern void __ompc_init_lock (volatile ompc_lock_t *);
+extern void __ompc_lock (volatile ompc_lock_t *);
+extern void __ompc_unlock (volatile ompc_lock_t *);
+extern void __ompc_destroy_lock (volatile ompc_lock_t *);
+extern int __ompc_test_lock (volatile ompc_lock_t *);
 
-extern void __ompc_reduction(int gtid, volatile omp_lock_t **lck);
-extern void __ompc_end_reduction(int gtid, volatile omp_lock_t **lck);
+extern void __ompc_init_nest_lock (volatile ompc_nest_lock_t *);
+extern void __ompc_nest_lock (volatile ompc_nest_lock_t *);
+extern void __ompc_nest_unlock (volatile ompc_nest_lock_t *);
+
+extern void __ompc_init_lock_s (volatile ompc_lock_t *);
+extern void __ompc_lock_s (volatile ompc_lock_t *);
+extern void __ompc_unlock_s (volatile ompc_lock_t *);
+
+extern void __ompc_init_nest_lock_s (volatile ompc_nest_lock_t *);
+extern void __ompc_nest_lock_s(volatile ompc_nest_lock_t *);
+extern void __ompc_nest_unlock_s(volatile ompc_nest_lock_t *);
+
+extern void __ompc_destroy_nest_lock (volatile ompc_nest_lock_t *);
+extern int __ompc_test_nest_lock (volatile ompc_nest_lock_t *);
+
+extern void __ompc_critical(int gtid, volatile ompc_lock_t **lck);
+extern void __ompc_end_critical(int gtid, volatile ompc_lock_t **lck);
+
+extern void __ompc_reduction(int gtid, volatile ompc_lock_t **lck);
+extern void __ompc_end_reduction(int gtid, volatile ompc_lock_t **lck);
 
 #endif
 

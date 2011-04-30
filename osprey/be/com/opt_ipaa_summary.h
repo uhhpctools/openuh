@@ -38,10 +38,10 @@
 // ====================================================================
 //
 // Module: opt_ipaa_summary.h
-// $Revision$
-// $Date$
-// $Author$
-// $Source$
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:38-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_ipaa_summary.h $
 //
 // Revision history:
 //  2-Nov-95 - Original Version
@@ -100,7 +100,7 @@
 #define cxx_opt_ipaa_summary_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *opt_ipaa_summary_rcs_id = "$Source$ $Revision$";
+static char *opt_ipaa_summary_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.opt_ipaa_summary.h $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 // Trace flag for IPAA summary file build/output:

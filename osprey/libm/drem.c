@@ -89,7 +89,17 @@ extern	double	__remainder(double, double);
 #pragma weak __remainder = __drem
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __drem( double x, double y );
+double drem( double x, double y ) {
+  return __drem(x, y);
+}
+#pragma weak drem
+double remainder( double x, double y ) {
+  return __remainder(x, y);
+}
+#pragma weak remainder
+#elif defined(__GNUC__)
 extern  double  __drem(double, double);
 
 double    drem() __attribute__ ((weak, alias ("__drem")));
@@ -473,7 +483,16 @@ __remainder( double x, double y )
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+long double dreml( long double x, long double y ) {
+  return __dreml(x, y);
+}
+#pragma weak dreml
+long double remainderl( long double x, long double y ) {
+  return __remainderl(x, y);
+}
+#pragma weak remainderl
+#elif defined(__GNUC__)
 extern  long double  __dreml(long double, long double);
 
 long double    dreml() __attribute__ ((weak, alias ("__dreml")));

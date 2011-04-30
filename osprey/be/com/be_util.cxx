@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: be_util.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/be_util.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:34-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.be_util.cxx $
  *
  * Revision history:
  *  06-Dec -95 - Original Version
@@ -118,4 +118,12 @@ extern BOOL Wn_Is_Intconst(WN *ldid, INT64 *val)
 /* official builds will link with identfile that defines _Release_ID */
 extern const char *__Release_ID;
 const char *Default_Release_ID = "none";
+#if defined(SHARED_BUILD)
+#if defined(BUILD_OS_DARWIN)
+#pragma weak __Release_ID
+const char *__Release_ID = "none";
+#else /* defined(BUILD_OS_DARWIN) */
 #pragma weak __Release_ID = Default_Release_ID
+#endif /* defined(BUILD_OS_DARWIN) */
+#endif
+

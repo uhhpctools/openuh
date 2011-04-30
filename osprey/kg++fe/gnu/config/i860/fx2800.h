@@ -163,14 +163,7 @@ Boston, MA 02111-1307, USA.  */
 	fprintf (file, "\t.stab \"\",.,0x%x,0,%d\n",	\
 		N_SLINE,num)
 
-#if 0	/* Alliant dbx only reads first N_SO, so it
-	   ignores the filename if dir is present. */
-#define DBX_OUTPUT_MAIN_SOURCE_DIRECTORY(file,name)		\
-	fprintf (file, ".stab \"%s/\",.Ltext0,0x%x,0,0\n",	\
-		name, N_SO)
-#else
 #define DBX_OUTPUT_MAIN_SOURCE_DIRECTORY(file,name)
-#endif
 
 #define DBX_OUTPUT_MAIN_SOURCE_FILENAME(file,name)		\
 	fprintf (file, ".stab ");				\

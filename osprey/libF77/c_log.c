@@ -58,5 +58,10 @@ complex c_log_(complex *z)
   return __clog(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_log(complex *z) { return c_log_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_log_, c_log);
+#endif /* defined(BUILD_OS_DARWIN) */
 

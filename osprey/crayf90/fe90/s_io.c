@@ -512,7 +512,7 @@ void buffer_stmt_semantics (void)
    make_io_type_code(ATD_TYPE_IDX(base_attr), the_constant); /* BRIANJ */
    IL_FLD(list_idx) = CN_Tbl_Idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) && ! defined(_TYPE_CODE_64_BIT)
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)) && ! defined(_TYPE_CODE_64_BIT)
    /* the type information goes in a 64 bit thing for mongoose */
    the_constant[1] = the_constant[0];
    the_constant[0] = 0;
@@ -550,16 +550,6 @@ void buffer_stmt_semantics (void)
                                             NULL);
       COPY_OPND(IR_OPND_R(ir_idx), opnd);
       create_io_call_descriptor(ir_idx, Buffer_Desc);
-# if 0
-# if defined(_FILE_IO_OPRS)
-      if (buffer_in) {
-         IR_OPR(ir_idx) = Buffer_In_Opr;
-      }
-      else {
-         IR_OPR(ir_idx) = Buffer_Out_Opr;
-      }
-# endif
-# endif
    }
 
    /* restore arg_info_list to previous "stack frame" */
@@ -901,7 +891,7 @@ void encode_decode_stmt_semantics (void)
                   PRINTMSG(line, 1099, Error, col);
                }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
                if (ATD_ASSIGN_TMP_IDX(attr_idx) != NULL_IDX) {
                   OPND_FLD(opnd) = AT_Tbl_Idx;
                   OPND_IDX(opnd) = ATD_ASSIGN_TMP_IDX(attr_idx);
@@ -1853,54 +1843,6 @@ void print_stmt_semantics (void)
 
       if (namelist_descriptor_attr) {
 
-# if 0
-        /* call the namelist table dump routine */
-
-        {int	_call_idx, _list_idx, _loc_idx;
-         int	_dump_nml_idx;
-        _dump_nml_idx = create_lib_entry_attr("DUMP_NML",
-                                            8,
-                                            stmt_start_line,
-                                            stmt_start_col);
-
-        ADD_ATTR_TO_LOCAL_LIST(_dump_nml_idx);
-   
-        NTR_IR_TBL(_call_idx);
-        IR_OPR(_call_idx) = Call_Opr;
-        IR_TYPE_IDX(_call_idx) = CG_INTEGER_DEFAULT_TYPE;
-        IR_LINE_NUM(_call_idx) = stmt_start_line;
-        IR_COL_NUM(_call_idx) = stmt_start_col;
-        IR_FLD_L(_call_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_call_idx) = _dump_nml_idx;
-        IR_LINE_NUM_L(_call_idx) = stmt_start_line;
-        IR_COL_NUM_L(_call_idx) = stmt_start_col;
-   
-        NTR_IR_LIST_TBL(_list_idx);
-        IR_FLD_R(_call_idx) = IL_Tbl_Idx;
-        IR_IDX_R(_call_idx) = _list_idx;
-        IR_LIST_CNT_R(_call_idx) = 1;
-   
-        NTR_IR_TBL(_loc_idx);
-        IR_OPR(_loc_idx) = Aloc_Opr;
-        IR_TYPE_IDX(_loc_idx) = CRI_Ptr_8;
-        IR_LINE_NUM(_loc_idx) = stmt_start_line;
-        IR_COL_NUM(_loc_idx)  = stmt_start_col;
-        IL_FLD(_list_idx) = IR_Tbl_Idx;
-        IL_IDX(_list_idx) = _loc_idx;
-   
-        IR_FLD_L(_loc_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_loc_idx) = namelist_descriptor_attr;
-        IR_LINE_NUM_L(_loc_idx) = stmt_start_line;
-        IR_COL_NUM_L(_loc_idx)  = stmt_start_col;
-   
-        gen_sh(Before, Call_Stmt, stmt_start_line,
-                stmt_start_col, FALSE, FALSE, TRUE);
-   
-        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = _call_idx;
-        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-        }
-   
-# endif
          NTR_IR_LIST_TBL(list_idx);
          IR_FLD_R(ir_idx)		= IL_Tbl_Idx;
          IR_LIST_CNT_R(ir_idx)		= 1;
@@ -2145,54 +2087,6 @@ void read_stmt_semantics (void)
       }
 
       if (namelist_descriptor_attr) {
-# if 0
-        /* call the namelist table dump routine */
-
-        {int    _call_idx, _list_idx, _loc_idx;
-         int    _dump_nml_idx;
-        _dump_nml_idx = create_lib_entry_attr("DUMP_NML",
-                                            8,
-                                            stmt_start_line,
-                                            stmt_start_col);
-
-        ADD_ATTR_TO_LOCAL_LIST(_dump_nml_idx);
-   
-        NTR_IR_TBL(_call_idx);
-        IR_OPR(_call_idx) = Call_Opr;
-        IR_TYPE_IDX(_call_idx) = CG_INTEGER_DEFAULT_TYPE;
-        IR_LINE_NUM(_call_idx) = stmt_start_line;
-        IR_COL_NUM(_call_idx) = stmt_start_col;
-        IR_FLD_L(_call_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_call_idx) = _dump_nml_idx;
-        IR_LINE_NUM_L(_call_idx) = stmt_start_line;
-        IR_COL_NUM_L(_call_idx) = stmt_start_col;
-   
-        NTR_IR_LIST_TBL(_list_idx);
-        IR_FLD_R(_call_idx) = IL_Tbl_Idx;
-        IR_IDX_R(_call_idx) = _list_idx;
-        IR_LIST_CNT_R(_call_idx) = 1;
-   
-        NTR_IR_TBL(_loc_idx);
-        IR_OPR(_loc_idx) = Aloc_Opr;
-        IR_TYPE_IDX(_loc_idx) = CRI_Ptr_8;
-        IR_LINE_NUM(_loc_idx) = stmt_start_line;
-        IR_COL_NUM(_loc_idx) = stmt_start_col;
-        IL_FLD(_list_idx) = IR_Tbl_Idx;
-        IL_IDX(_list_idx) = _loc_idx;
-   
-        IR_FLD_L(_loc_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_loc_idx) = namelist_descriptor_attr;
-        IR_LINE_NUM_L(_loc_idx) = stmt_start_line;
-        IR_COL_NUM_L(_loc_idx) = stmt_start_col;
-  
-        gen_sh(Before, Call_Stmt, stmt_start_line,
-                stmt_start_col, FALSE, FALSE, TRUE);
-  
-        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = _call_idx;
-        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-        }
-
-# endif
 
          NTR_IR_LIST_TBL(list_idx);
          IR_FLD_R(ir_idx)		= IL_Tbl_Idx;
@@ -2671,54 +2565,6 @@ void write_stmt_semantics (void)
       }
 
       if (namelist_descriptor_attr) {
-# if 0
-        /* call the namelist table dump routine */
-
-        {int    _call_idx, _list_idx, _loc_idx;
-         int    _dump_nml_idx;
-        _dump_nml_idx = create_lib_entry_attr("DUMP_NML",
-                                            8,
-                                            stmt_start_line,
-                                            stmt_start_col);
-
-        ADD_ATTR_TO_LOCAL_LIST(_dump_nml_idx);
-   
-        NTR_IR_TBL(_call_idx);
-        IR_OPR(_call_idx) = Call_Opr;
-        IR_TYPE_IDX(_call_idx) = CG_INTEGER_DEFAULT_TYPE;
-        IR_LINE_NUM(_call_idx) = stmt_start_line;
-        IR_COL_NUM(_call_idx) = stmt_start_col;
-        IR_FLD_L(_call_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_call_idx) = _dump_nml_idx;
-        IR_LINE_NUM_L(_call_idx) = stmt_start_line;
-        IR_COL_NUM_L(_call_idx) = stmt_start_col;
-   
-        NTR_IR_LIST_TBL(_list_idx);
-        IR_FLD_R(_call_idx) = IL_Tbl_Idx;
-        IR_IDX_R(_call_idx) = _list_idx;
-        IR_LIST_CNT_R(_call_idx) = 1;
-   
-        NTR_IR_TBL(_loc_idx);
-        IR_OPR(_loc_idx) = Aloc_Opr;
-        IR_TYPE_IDX(_loc_idx) = CRI_Ptr_8;
-        IR_LINE_NUM(_loc_idx) = stmt_start_line;
-        IR_COL_NUM(_loc_idx) = stmt_start_col;
-        IL_FLD(_list_idx) = IR_Tbl_Idx;
-        IL_IDX(_list_idx) = _loc_idx;
-   
-        IR_FLD_L(_loc_idx) = AT_Tbl_Idx;
-        IR_IDX_L(_loc_idx) = namelist_descriptor_attr;
-        IR_LINE_NUM_L(_loc_idx) = stmt_start_line;
-        IR_COL_NUM_L(_loc_idx) = stmt_start_col;
-  
-        gen_sh(Before, Call_Stmt, stmt_start_line,
-                stmt_start_col, FALSE, FALSE, TRUE);
-  
-        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = _call_idx;
-        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
-        }
-
-# endif
 
          NTR_IR_LIST_TBL(list_idx);
          IR_FLD_R(ir_idx)		= IL_Tbl_Idx;
@@ -2883,7 +2729,7 @@ static boolean io_ctl_list_semantics(opnd_type     *list_opnd,
    boolean	 semantically_correct = TRUE;
    int		 tmp_idx;
 
-# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		 ir_idx;
 # endif
 
@@ -3271,7 +3117,7 @@ static boolean io_ctl_list_semantics(opnd_type     *list_opnd,
 
                   attr_idx = find_left_attr(&opnd);
 
-# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if ! (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
                   if ((exp_desc.type == Integer &&
                        storage_bit_size_tbl[exp_desc.linear_type] !=
                        storage_bit_size_tbl[
@@ -3439,7 +3285,7 @@ static boolean io_ctl_list_semantics(opnd_type     *list_opnd,
                         PRINTMSG(line, 1099, Error, col);
                      }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
                      if (ATD_ASSIGN_TMP_IDX(attr_idx) != NULL_IDX) {
                         OPND_FLD(opnd) = AT_Tbl_Idx;
                         OPND_IDX(opnd) = ATD_ASSIGN_TMP_IDX(attr_idx);
@@ -3803,6 +3649,50 @@ static boolean io_ctl_list_semantics(opnd_type     *list_opnd,
    return(semantically_correct);
 
 }  /* io_ctl_list_semantics */
+#ifdef KEY /* Bug 2611 */
+
+/*
+ * Whe constructing an Io_Item_Type_Code_Opr, the Cray FE ordinarily uses the
+ * type which appears in the tree of IR_Tbl_Idx and AT_Tbl_Idx nodes. For a
+ * handful of character-related intrinsics returning integers, when -i8 is in
+ * effect, the type seen by the Cray FE is integer*8 but the WHIRL op emitted
+ * by the SGI portion of the FE is integer*4. When the intrinsic is called as
+ * an operand, or as the RHS of a variable, or as the actual value of a dummy
+ * argument of type integer, this isn't a problem, because the SGI code emits
+ * conversions as a matter of course, and that code ignores the type in the
+ * Cray tree, but pays attention to the type of the WHIRL intrinsic op.
+ *
+ * But there are no conversions when generating WHIRL for an I/O list item,
+ * because a dope constant is generated to describe the type of the item to
+ * the runtime system.
+ *
+ * If we generate the wrong type in the Io_Item_Type_Code_Opr based on the
+ * type in the Cray tree, the Cray FE generates the wrong dope constant. So,
+ * although it's horrible to hard-wire a list of special cases here, there's
+ * no good alternative: the SGI world doesn't know how to map an
+ * Io_Item_Type_Code_Opr onto a dope constant, and the Cray world doesn't know
+ * what WHIRL intrinsic op will be generated (nor does it know how to discover
+ * the type of a WHIRL node.)
+ *
+ * See the call to WNRTY(wn) in cwh_convert_to_ty() for a demonstration of
+ * how type conversions gets generated in expressions or assignments.
+ *
+ * opnd		operand which is an IO list item
+ * exp_desc	description of that operand
+ * returns	type to use in constructing Io_Item_Type_Code_Opr
+ */
+static Uint
+intrinsic_special_case(opnd_type *opnd, expr_arg_type *exp_desc) {
+  if (opnd->fld == IR_Tbl_Idx) {
+    operator_type op = IR_OPR(opnd->idx);
+    if (op == Len_Trim_Opr || op == Index_Opr || op == Scan_Opr ||
+      op == Verify_Opr) {
+      return CG_INTEGER_DEFAULT_TYPE;
+      }
+    }
+  return exp_desc->type_idx;
+  }
+#endif /* KEY Bug 2611 */
 
 /******************************************************************************\
 |*									      *|
@@ -4592,7 +4482,11 @@ static boolean io_list_semantics(opnd_type     *top_opnd,
 
             NTR_IR_TBL(asg_idx);
             IR_OPR(asg_idx) = Io_Item_Type_Code_Opr;
+#ifdef KEY /* Bug 2611 */
+            IR_TYPE_IDX(asg_idx) = intrinsic_special_case(&opnd, &exp_desc);
+#else /* KEY Bug 2611 */
             IR_TYPE_IDX(asg_idx) = exp_desc.type_idx;
+#endif /* KEY Bug 2611 */
             IR_LINE_NUM(asg_idx) = line;
             IR_COL_NUM(asg_idx) = col;
 
@@ -4851,7 +4745,7 @@ void create_namelist_descriptor(int	namelist_attr)
       in_module = TRUE;
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx = CG_INTEGER_DEFAULT_TYPE;
@@ -4870,7 +4764,7 @@ void create_namelist_descriptor(int	namelist_attr)
                   (NML_GRP_ITEM_SIZE * ATN_NUM_NAMELIST(namelist_attr));
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    /* the version item is always 64 bits */
    /* add one for the header version, and one for each item entry */
    if (TYP_LINEAR(type_idx) == Integer_4) {
@@ -4988,7 +4882,7 @@ void create_namelist_descriptor(int	namelist_attr)
    
    /* tmp is character */
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    loc_idx = gen_ir(OPND_FLD(opnd), OPND_IDX(opnd),
                 Loc_Opr, CRI_Ch_Ptr_8, line, col,
                     NO_Tbl_Idx, NULL_IDX);
@@ -5120,7 +5014,7 @@ void create_namelist_descriptor(int	namelist_attr)
 
       /* tmp is character */
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       loc_idx = gen_ir(OPND_FLD(opnd), OPND_IDX(opnd),
                    Loc_Opr, CRI_Ch_Ptr_8, line, col,
                        NO_Tbl_Idx, NULL_IDX);
@@ -5218,7 +5112,7 @@ void create_namelist_descriptor(int	namelist_attr)
                gen_dv_whole_def(&l_opnd, &opnd, &exp_desc);
             }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             loc_idx = gen_ir(OPND_FLD(l_opnd), OPND_IDX(l_opnd),
                          Loc_Opr, CRI_Ptr_8, line, col,
                              NO_Tbl_Idx, NULL_IDX);
@@ -5346,7 +5240,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
    TRACE (Func_Entry, "namelist_static_dv_whole_def", NULL);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx2 = SA_INTEGER_DEFAULT_TYPE;
  
    if (type_idx2 == Integer_8) {
@@ -5364,7 +5258,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
    num_words    = DV_HD_WORD_SIZE + (rank * DV_DIM_WORD_SIZE);
    num_elements = num_words;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (TYP_LINEAR(type_idx2) == Integer_8) {
       num_elements = num_elements / 2;
    }
@@ -5384,8 +5278,14 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
    CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
    TYP_TYPE(TYP_WORK_IDX)	= Typeless;
+#if defined (TARG_X8664) && defined (_HOST64)
+   // OSP_TODO, need to be re-checked
+   TYP_BIT_LEN(TYP_WORK_IDX)    = (num_words - words_in_address) *
+	                          ((SET_POINTER_SIZE) ? 64 : 32);
+#else
    TYP_BIT_LEN(TYP_WORK_IDX)	= (num_words - words_in_address) * 
                                                     TARGET_BITS_PER_WORD;
+#endif
    type_idx			= ntr_type_tbl();
 
    const_idx    = ntr_const_tbl(type_idx, FALSE, NULL);
@@ -5410,7 +5310,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 # endif
 
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    loc_idx = gen_ir(OPND_FLD(opnd), OPND_IDX(opnd),
                 Loc_Opr, TYP_TYPE(ATD_TYPE_IDX(attr_idx)) == Character ?
                                CRI_Ch_Ptr_8 : CRI_Ptr_8, line, col,
@@ -5501,7 +5401,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
          cast_opnd_to_type_idx(&opnd, type_idx2);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (TYP_LINEAR(type_idx2) == Integer_8) {
             DV_SET_EL_LEN(*dv_ptr, *(long long *)&(CN_CONST(OPND_IDX(opnd))));
          }
@@ -5571,7 +5471,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
             }
          }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (TYP_LINEAR(type_idx2) == Integer_8) {
             DV_SET_EL_LEN(*dv_ptr, *(long long *)&(CN_CONST(OPND_IDX(opnd))));
          }
@@ -5632,7 +5532,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
       cast_opnd_to_type_idx(&opnd, type_idx2);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(type_idx2) == Integer_8) {
          DV_SET_LOW_BOUND(*dv_ptr,i, 
                     *(long long *)&(CN_CONST(OPND_IDX(opnd))));
@@ -5656,7 +5556,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
       cast_opnd_to_type_idx(&opnd, type_idx2);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(type_idx2) == Integer_8) {
          DV_SET_EXTENT(*dv_ptr,i,
                     *(long long *)&(CN_CONST(OPND_IDX(opnd))));
@@ -5680,7 +5580,7 @@ static void namelist_static_dv_whole_def(opnd_type         *l_opnd,
 
       cast_opnd_to_type_idx(&opnd, type_idx2);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(type_idx2) == Integer_8) {
          DV_SET_STRIDE_MULT(*dv_ptr,i,
                     *(long long *)&(CN_CONST(OPND_IDX(opnd))));
@@ -5747,7 +5647,7 @@ static int create_scalar_type_tbl(opnd_type	*opnd,
    |* create scalar type tbl attr    *|
    \**********************************/
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx = CG_INTEGER_DEFAULT_TYPE;
@@ -5783,7 +5683,7 @@ static int create_scalar_type_tbl(opnd_type	*opnd,
       num = NML_SCALAR_ENTRY_SIZE;
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    if (TYP_LINEAR(type_idx) == Integer_4) {
       num++;
    }
@@ -5846,7 +5746,7 @@ static int create_scalar_type_tbl(opnd_type	*opnd,
    }
 # endif
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    loc_idx = gen_ir(OPND_FLD(opnd2), OPND_IDX(opnd2),
                 Loc_Opr, TYP_TYPE(ATD_TYPE_IDX(base_attr)) == Character ?
                                CRI_Ch_Ptr_8 : CRI_Ptr_8, line, col,
@@ -6004,7 +5904,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
 
    TRACE (Func_Entry, "create_strct_tbl", NULL);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx2 = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx2 = CG_INTEGER_DEFAULT_TYPE;
@@ -6026,7 +5926,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
                    (NML_STRCT_ITEM_SIZE * ATT_NUM_CPNTS(type_idx));
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    /* the version item is always 64 bits */
    /* add one for the header version, and one for each cpnt entry */
    if (TYP_LINEAR(type_idx2) == Integer_4) {
@@ -6145,7 +6045,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
          gen_dv_whole_def(&l_opnd, &opnd, &exp_desc);
       }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       loc_idx = gen_ir(OPND_FLD(l_opnd), OPND_IDX(l_opnd),
                    Loc_Opr, CRI_Ptr_8, line, col,
                        NO_Tbl_Idx, NULL_IDX);
@@ -6163,7 +6063,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
    }
    else {
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       loc_idx = gen_ir(OPND_FLD((*base_opnd)), OPND_IDX((*base_opnd)),
                    Loc_Opr, CRI_Ptr_8, line, col,
                        NO_Tbl_Idx, NULL_IDX);
@@ -6296,7 +6196,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
 
       /* tmp is character */
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       loc_idx = gen_ir(OPND_FLD(opnd), OPND_IDX(opnd),
                    Loc_Opr, CRI_Ch_Ptr_8, line, col,
                        NO_Tbl_Idx, NULL_IDX);
@@ -6403,7 +6303,7 @@ static int create_strct_tbl(opnd_type	*base_opnd,
                gen_dv_whole_def(&l_opnd, &opnd, &exp_desc);
             }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             loc_idx = gen_ir(OPND_FLD(l_opnd), OPND_IDX(l_opnd),
                          Loc_Opr, CRI_Ptr_8, line, col,
                              NO_Tbl_Idx, NULL_IDX);
@@ -8164,7 +8064,7 @@ static void create_io_call_descriptor(int			call_idx,
    col = IR_COL_NUM(call_idx);
    line = IR_LINE_NUM(call_idx);
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    type_idx = SA_INTEGER_DEFAULT_TYPE;
 # else
    type_idx = CG_INTEGER_DEFAULT_TYPE;
@@ -8219,7 +8119,7 @@ static void create_io_call_descriptor(int			call_idx,
          the_constant		= 1 + IR_LIST_CNT_R(call_idx);
       }
    
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       /* the version item is always 64 bits */
       if (TYP_LINEAR(type_idx) == Integer_4) {
          the_constant++;
@@ -8277,7 +8177,7 @@ static void create_io_call_descriptor(int			call_idx,
       IR_IDX_L(asg_idx)            = subscript_idx;
 
       IR_FLD_R(asg_idx)    = CN_Tbl_Idx;
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(type_idx) == Integer_4) {
          IR_IDX_R(asg_idx)    = CN_INTEGER_ZERO_IDX;
       }
@@ -8297,7 +8197,7 @@ static void create_io_call_descriptor(int			call_idx,
       item_cnt++;
       the_constant = 2;
    
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
       if (TYP_LINEAR(type_idx) == Integer_4) {
          NTR_IR_TBL(asg_idx);
          IR_OPR(asg_idx) = Asg_Opr;
@@ -8492,24 +8392,11 @@ static void create_io_call_descriptor(int			call_idx,
 
       /* replace the call list with the descriptor */
 
-# if 0
-      if (IR_IDX_L(call_idx) == glb_tbl_idx[Buffer_In_Attr_Idx] ||
-          IR_IDX_L(call_Idx) == glb_tbl_idx[Buffer_Out_Attr_Idx]) {
-   
-         list_idx = IR_IDX_R(call_idx);
-      }
-      else {
-         IR_LIST_CNT_R(call_idx) = 1;
-         NTR_IR_LIST_TBL(list_idx);
-         IR_IDX_R(call_idx) = list_idx;
-      }
-# else
 
       IR_LIST_CNT_R(call_idx) = 1;
       NTR_IR_LIST_TBL(list_idx);
       IR_IDX_R(call_idx) = list_idx;
 
-# endif
 
       NTR_IR_TBL(loc_idx);
       IR_OPR(loc_idx) = Aloc_Opr;
@@ -8759,21 +8646,28 @@ static void gen_array_element_init(int		attr_idx,
    if (OPND_FLD((*rhs_opnd)) == CN_Tbl_Idx) {
 
       if (TYP_LINEAR(type_idx) == Integer_4 &&
-          sizeof(long_type) == 4 &&
+          (sizeof(long_type) == 4 || Is_Target_32bit()) &&  /* OSP_456 */
           TYP_LINEAR(CN_TYPE_IDX(OPND_IDX((*rhs_opnd)))) == Integer_8) {
+ 
+         // OSP_456
+         // in 32-bit compiler, the_constant[0] = CP_CONSTANT[idx]
+         //                     the_constant[1] = CP_CONSTANT[idx+1]
+         // in 64-bit compiler, the_constant[0] = CP_CONSTANT[idx] & 0xffffffff
+         //                     the_constant[1] = CP_CONSTANT[idx] >> 32
+         // TODO: the byte order
+         int* the_constant = (int *) &CP_CONSTANT(CN_POOL_IDX(
+                                                 OPND_IDX((*rhs_opnd)))); 
          gen_opnd(&(opnd[0]), 
                   ntr_const_tbl(Integer_4,
                                 FALSE,
-                                &CP_CONSTANT(CN_POOL_IDX(
-                                            OPND_IDX((*rhs_opnd))))),
+                                the_constant),
                   CN_Tbl_Idx,
                   line,
                   col);
          gen_opnd(&(opnd[1]), 
                   ntr_const_tbl(Integer_4,
                                 FALSE,
-                                &CP_CONSTANT(1 + CN_POOL_IDX(
-                                            OPND_IDX((*rhs_opnd))))),
+                                the_constant + 1),
                   CN_Tbl_Idx,
                   line,
                   col);

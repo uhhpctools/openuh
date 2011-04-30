@@ -201,6 +201,9 @@ Boston, MA 02111-1307, USA.  */
 /* Note that options taking arguments may appear multiple times on a
    command line with different arguments each time, so put a * after
    their names so all of them get passed.  */
+#ifdef KEY /* Mac port */
+#undef LINK_SPEC
+#endif /* KEY Mac port */
 #define LINK_SPEC  \
   "%{static}%{!static:-dynamic} \
    %{!Zdynamiclib: \

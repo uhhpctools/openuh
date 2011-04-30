@@ -3496,9 +3496,6 @@ static unsigned have_location_lists;
 
 /* Record whether the function being analyzed contains inlined functions.  */
 static int current_function_has_inlines;
-#if 0 && defined (MIPS_DEBUGGING_INFO)
-static int comp_unit_has_inlines;
-#endif
 
 /* Forward declarations for functions defined in this file.  */
 
@@ -3508,9 +3505,6 @@ static int is_tagged_type		PARAMS ((tree));
 static const char *dwarf_tag_name	PARAMS ((unsigned));
 static const char *dwarf_attr_name	PARAMS ((unsigned));
 static const char *dwarf_form_name	PARAMS ((unsigned));
-#if 0
-static const char *dwarf_type_encoding_name PARAMS ((unsigned));
-#endif
 static tree decl_ultimate_origin	PARAMS ((tree));
 static tree block_ultimate_origin	PARAMS ((tree));
 static tree decl_class_context		PARAMS ((tree));
@@ -3709,14 +3703,8 @@ static void add_type_attribute		PARAMS ((dw_die_ref, tree, int, int,
 						 dw_die_ref));
 static const char *type_tag	        PARAMS ((tree));
 static tree member_declared_type	PARAMS ((tree));
-#if 0
-static const char *decl_start_label	PARAMS ((tree));
-#endif
 static void gen_array_type_die		PARAMS ((tree, dw_die_ref));
 static void gen_set_type_die		PARAMS ((tree, dw_die_ref));
-#if 0
-static void gen_entry_point_die		PARAMS ((tree, dw_die_ref));
-#endif
 static void gen_inlined_enumeration_type_die PARAMS ((tree, dw_die_ref));
 static void gen_inlined_structure_type_die PARAMS ((tree, dw_die_ref));
 static void gen_inlined_union_type_die	PARAMS ((tree, dw_die_ref));
@@ -4296,34 +4284,6 @@ dwarf_form_name (form)
 
 /* Convert a DWARF type code into its string name.  */
 
-#if 0
-static const char *
-dwarf_type_encoding_name (enc)
-     unsigned enc;
-{
-  switch (enc)
-    {
-    case DW_ATE_address:
-      return "DW_ATE_address";
-    case DW_ATE_boolean:
-      return "DW_ATE_boolean";
-    case DW_ATE_complex_float:
-      return "DW_ATE_complex_float";
-    case DW_ATE_float:
-      return "DW_ATE_float";
-    case DW_ATE_signed:
-      return "DW_ATE_signed";
-    case DW_ATE_signed_char:
-      return "DW_ATE_signed_char";
-    case DW_ATE_unsigned:
-      return "DW_ATE_unsigned";
-    case DW_ATE_unsigned_char:
-      return "DW_ATE_unsigned_char";
-    default:
-      return "DW_ATE_<unknown>";
-    }
-}
-#endif
 
 /* Determine the "ultimate origin" of a decl.  The decl may be an inlined
    instance of an inlined instance of a decl which is local to an inline
@@ -6040,12 +6000,6 @@ break_out_includes (die)
 	}
     }
 
-#if 0
-  /* We can only use this in debugging, since the frontend doesn't check
-     to make sure that we leave every include file we enter.  */
-  if (unit != NULL)
-    abort ();
-#endif
 
   assign_symbol_names (die);
   cu_hash_table = htab_create (10, htab_cu_hash, htab_cu_eq, htab_cu_del);
@@ -7479,18 +7433,6 @@ output_line_info ()
     {
       dw_line_info_ref line_info = &line_info_table[lt_index];
 
-#if 0
-      /* Disable this optimization for now; GDB wants to see two line notes
-	 at the beginning of a function so it can find the end of the
-	 prologue.  */
-
-      /* Don't emit anything for redundant notes.  Just updating the
-         address doesn't accomplish anything, because we already assume
-         that anything after the last address is this line.  */
-      if (line_info->dw_line_num == current_line
-	  && line_info->dw_file_num == current_file)
-	continue;
-#endif
 
       /* Emit debug info for the address of the current line.
 
@@ -7586,13 +7528,6 @@ output_line_info ()
       dw_separate_line_info_ref line_info
 	= &separate_line_info_table[lt_index];
 
-#if 0
-      /* Don't emit anything for redundant notes.  */
-      if (line_info->dw_line_num == current_line
-	  && line_info->dw_file_num == current_file
-	  && line_info->function == function)
-	goto cont;
-#endif
 
       /* Emit debug info for the address of the current line.  If this is
 	 a new function, or the first line of a function, then we need
@@ -7660,9 +7595,6 @@ output_line_info ()
       else
 	dw2_asm_output_data (1, DW_LNS_copy, "DW_LNS_copy");
 
-#if 0
-    cont:
-#endif
 
       lt_index++;
 
@@ -7942,18 +7874,12 @@ modified_type_die (type, is_const_type, is_volatile_type, context_die)
 	{
 	  mod_type_die = new_die (DW_TAG_pointer_type, comp_unit_die, type);
 	  add_AT_unsigned (mod_type_die, DW_AT_byte_size, PTR_SIZE);
-#if 0
-	  add_AT_unsigned (mod_type_die, DW_AT_address_class, 0);
-#endif
 	  item_type = TREE_TYPE (type);
 	}
       else if (code == REFERENCE_TYPE)
 	{
 	  mod_type_die = new_die (DW_TAG_reference_type, comp_unit_die, type);
 	  add_AT_unsigned (mod_type_die, DW_AT_byte_size, PTR_SIZE);
-#if 0
-	  add_AT_unsigned (mod_type_die, DW_AT_address_class, 0);
-#endif
 	  item_type = TREE_TYPE (type);
 	}
       else if (is_base_type (type))
@@ -10172,26 +10098,6 @@ member_declared_type (member)
 /* Get the decl's label, as described by its RTL. This may be different
    from the DECL_NAME name used in the source file.  */
 
-#if 0
-static const char *
-decl_start_label (decl)
-     tree decl;
-{
-  rtx x;
-  const char *fnname;
-
-  x = DECL_RTL (decl);
-  if (GET_CODE (x) != MEM)
-    abort ();
-
-  x = XEXP (x, 0);
-  if (GET_CODE (x) != SYMBOL_REF)
-    abort ();
-
-  fnname = XSTR (x, 0);
-  return fnname;
-}
-#endif
 
 /* These routines generate the internal representation of the DIE's for
    the compilation unit.  Debugging information is collected by walking
@@ -10225,16 +10131,6 @@ gen_array_type_die (type, context_die)
       add_AT_flag (array_die, DW_AT_GNU_vector, 1);
     }
 
-#if 0
-  /* We default the array ordering.  SDB will probably do
-     the right things even if DW_AT_ordering is not present.  It's not even
-     an issue until we start to get into multidimensional arrays anyway.  If
-     SDB is ever caught doing the Wrong Thing for multi-dimensional arrays,
-     then we'll have to put the DW_AT_ordering attribute back in.  (But if
-     and when we find out that we need to put these in, we will only do so
-     for multidimensional arrays.  */
-  add_AT_unsigned (array_die, DW_AT_ordering, DW_ORD_row_major);
-#endif
 
 #ifdef MIPS_DEBUGGING_INFO
   /* The SGI compilers handle arrays of unknown bound by setting
@@ -10274,30 +10170,6 @@ gen_set_type_die (type, context_die)
   add_type_attribute (type_die, TREE_TYPE (type), 0, 0, context_die);
 }
 
-#if 0
-static void
-gen_entry_point_die (decl, context_die)
-     tree decl;
-     dw_die_ref context_die;
-{
-  tree origin = decl_ultimate_origin (decl);
-  dw_die_ref decl_die = new_die (DW_TAG_entry_point, context_die, decl);
-
-  if (origin != NULL)
-    add_abstract_origin_attribute (decl_die, origin);
-  else
-    {
-      add_name_and_src_coords_attributes (decl_die, decl);
-      add_type_attribute (decl_die, TREE_TYPE (TREE_TYPE (decl)),
-			  0, 0, context_die);
-    }
-
-  if (DECL_ABSTRACT (decl))
-    equate_decl_number_to_die (decl, decl_die);
-  else
-    add_AT_lbl_id (decl_die, DW_AT_low_pc, decl_start_label (decl));
-}
-#endif
 
 /* Walk through the list of incomplete types again, trying once more to
    emit full debugging info for them.  */
@@ -10800,13 +10672,6 @@ gen_subprogram_die (decl, context_die)
 	= frame_pointer_needed ? hard_frame_pointer_rtx : stack_pointer_rtx;
       add_AT_loc (subr_die, DW_AT_frame_base, reg_loc_descriptor (fp_reg));
 
-#if 0
-      /* ??? This fails for nested inline functions, because context_display
-	 is not part of the state saved/restored for inline functions.  */
-      if (current_function_needs_context)
-	add_AT_location_description (subr_die, DW_AT_static_link,
-			     loc_descriptor (lookup_static_chain (decl)));
-#endif
     }
 
   /* Now output descriptions of the arguments for this function. This gets
@@ -10885,17 +10750,6 @@ gen_subprogram_die (decl, context_die)
       current_function_has_inlines = 0;
       decls_for_scope (outer_scope, subr_die, 0);
 
-#if 0 && defined (MIPS_DEBUGGING_INFO)
-      if (current_function_has_inlines)
-	{
-	  add_AT_flag (subr_die, DW_AT_MIPS_has_inlines, 1);
-	  if (! comp_unit_has_inlines)
-	    {
-	      add_AT_flag (comp_unit_die, DW_AT_MIPS_has_inlines, 1);
-	      comp_unit_has_inlines = 1;
-	    }
-	}
-#endif
     }
 }
 
@@ -11147,43 +11001,6 @@ gen_field_die (decl, context_die)
     add_AT_unsigned (decl_die, DW_AT_accessibility, DW_ACCESS_private);
 }
 
-#if 0
-/* Don't generate either pointer_type DIEs or reference_type DIEs here.
-   Use modified_type_die instead.
-   We keep this code here just in case these types of DIEs may be needed to
-   represent certain things in other languages (e.g. Pascal) someday.  */
-
-static void
-gen_pointer_type_die (type, context_die)
-     tree type;
-     dw_die_ref context_die;
-{
-  dw_die_ref ptr_die
-    = new_die (DW_TAG_pointer_type, scope_die_for (type, context_die), type);
-
-  equate_type_number_to_die (type, ptr_die);
-  add_type_attribute (ptr_die, TREE_TYPE (type), 0, 0, context_die);
-  add_AT_unsigned (mod_type_die, DW_AT_byte_size, PTR_SIZE);
-}
-
-/* Don't generate either pointer_type DIEs or reference_type DIEs here.
-   Use modified_type_die instead.
-   We keep this code here just in case these types of DIEs may be needed to
-   represent certain things in other languages (e.g. Pascal) someday.  */
-
-static void
-gen_reference_type_die (type, context_die)
-     tree type;
-     dw_die_ref context_die;
-{
-  dw_die_ref ref_die
-    = new_die (DW_TAG_reference_type, scope_die_for (type, context_die), type);
-
-  equate_type_number_to_die (type, ref_die);
-  add_type_attribute (ref_die, TREE_TYPE (type), 0, 0, context_die);
-  add_AT_unsigned (mod_type_die, DW_AT_byte_size, PTR_SIZE);
-}
-#endif
 
 /* Generate a DIE for a pointer to a member type.  */
 
@@ -11266,10 +11083,6 @@ gen_string_type_die (type, context_die)
 
   /* ??? Fudge the string length attribute for now.
      TODO: add string length info.  */
-#if 0
-  string_length_attribute (TYPE_MAX_VALUE (TYPE_DOMAIN (type)));
-  bound_representation (upper_bound, 0, 'u');
-#endif
 }
 
 /* Generate the DIE for a base class.  */

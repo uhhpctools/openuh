@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -44,7 +48,11 @@
 #pragma hdrstop
 #include <unistd.h>		    /* for close(), etc. */
 #include <sys/stat.h>		    /* for fstat() */
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#else
 #include <sys/mman.h>		    /* for mmap() */
+#endif
 #include <fcntl.h>		    /* for open() */
 #include "elf_stuff.h"		    /* for all Elf stuff */
 #include <sys/elf_whirl.h>	    /* for WHIRL sections */
@@ -77,6 +85,7 @@
 #include "wn_core.h"		    /* for WN */
 #include "wn.h"		            /* for max_region_id */
 #include "wn_map.h"		    /* for WN maps */
+
 #define USE_DST_INTERNALS
 #include "dwarf_DST_mem.h"	    /* for dst */
 #include "pu_info.h"
@@ -84,12 +93,18 @@
 #include "ir_bwrite.h"
 #include "ir_bcom.h"
 #include "ir_bread.h"
+#include "config_opt.h"
 
 #if defined(BACK_END)
 #include "xstats.h"
+#include "ipa_be_read.h"
 #endif
 #if defined(BACK_END) || defined(BUILD_WHIRL2C) || defined(BUILD_WHIRL2F)
 #include "pf_cg.h"
+#endif
+
+#if defined(BACK_END) || defined(IR_TOOLS) || defined(BUILD_WHIRL2C) || defined(BUILD_WHIRL2F)
+#include "wssa_io.h"
 #endif
 
 #ifdef BACK_END
@@ -108,6 +123,7 @@ static off_t local_mapped_size;
 
 static char file_revision[80];	/* save revision string */
 
+BOOL Read_ALIAS_CGNODE_Map = FALSE;
 
 #define DOUBLE_ALIGNED(sz)	(((sz) % 8) == 0 ? (sz) : (sz)+(8-((sz)%8)))
 #define ERROR_VALUE -1
@@ -395,6 +411,56 @@ WN_get_strtab (void *handle)
     return 0;
 } // WN_get_strtab
 
+/*
+ *  Note: get SSA info from file into memory 
+ */
+#ifdef Is_True_On
+WSSA::WHIRL_SSA_MANAGER* G_ssa;
+#endif
+
+INT
+WN_get_SSA (void *handle, PU_Info *pu, MEM_POOL* pool)
+{
+  WSSA::WHIRL_SSA_MANAGER* wssa_mgr;
+  Subsect_State st = PU_Info_state(pu, WT_SSA);
+  if (st == Subsect_InMem) {
+    Is_True(PU_Info_ssa_ptr(pu) != NULL, ("WSSA manager is null"));
+    return 0;
+  }
+  else if (st == Subsect_Written) {
+    return ERROR_RETURN;
+  }
+  else if (st != Subsect_Exists) {
+    wssa_mgr = new WSSA::WHIRL_SSA_MANAGER(pool);
+#ifdef Is_True_On
+    G_ssa = wssa_mgr;
+    Is_True(PU_Info_ssa_ptr(pu) == NULL, ("WSSA manager is not null"));
+#endif
+    Set_PU_Info_ssa_ptr(pu, wssa_mgr);
+    Set_PU_Info_state(pu, WT_SSA, Subsect_InMem);
+    return 0;
+  }
+
+  OFFSET_AND_SIZE shdr = get_section (handle, SHT_MIPS_WHIRL, WT_PU_SECTION);
+  if (shdr.offset == 0)
+    return ERROR_RETURN;
+
+  char *base = (char *) handle + shdr.offset +
+  PU_Info_subsect_offset (pu, WT_SSA);
+
+  wssa_mgr = PU_Info_ssa_ptr(pu);
+  FmtAssert(wssa_mgr != NULL, ("WSSA manager is null"));
+
+#ifdef Is_True_On
+  G_ssa = wssa_mgr;
+#endif
+
+  //read PHI,CHI,MU tables into memory
+  WSSA::WHIRL_SSA_IO wssa_io(wssa_mgr);
+  wssa_io.Read_SSA_From_File(base);
+  
+  Set_PU_Info_state(pu, WT_SSA, Subsect_InMem);
+}
 
 /*
  *  Note: fix_tree is a hot spot for the binary reader, so be very careful
@@ -402,7 +468,7 @@ WN_get_strtab (void *handle)
  */
 
 static INT
-fix_tree (WN *node, char *base, Elf64_Word size)
+fix_tree (PU_Info* pu, WN *node, char *base, Elf64_Word size)
 {
     OPCODE opcode = (OPCODE) WN_opcode (node);
     WN *wn;
@@ -438,7 +504,7 @@ fix_tree (WN *node, char *base, Elf64_Word size)
 	    CONVERT_OFFSET(WN*, WN_last(node));
 
 	    do {
-		if (fix_tree (wn, base, size) == ERROR_VALUE)
+		if (fix_tree (pu, wn, base, size) == ERROR_VALUE)
 		    return ERROR_VALUE;
 		wn = WN_next(wn);
 	    } while (wn);
@@ -456,7 +522,7 @@ fix_tree (WN *node, char *base, Elf64_Word size)
 	    } else {
 		CONVERT_OFFSET(WN*, wn);
 		*wn_ptr = wn;
-		if (fix_tree (wn, base, size) == ERROR_VALUE)
+		if (fix_tree (pu, wn, base, size) == ERROR_VALUE)
     	            return ERROR_VALUE;
 	    }
 	}
@@ -490,6 +556,14 @@ fix_tree (WN *node, char *base, Elf64_Word size)
 	    *last_id_ptr = map_id;
 	}
     }
+
+#if defined(BACK_END) || defined(IR_TOOLS)
+    WSSA::WHIRL_SSA_MANAGER* mgr = PU_Info_ssa_ptr(pu);
+    if (WN_map_id(node) != -1 && mgr != NULL) {
+        // create the map between WN* and map_id
+        mgr->Add_wn(node);
+    }
+#endif
 
     return 0;
 } /* fix_tree */
@@ -679,8 +753,13 @@ WN_massage_input (char *baseaddr, Elf64_Word size, char* file_revision)
 } /* WN_massage_input */
 
 
+#ifdef __MINGW32__
+static void *
+read_file (char *filename, off_t* mapped_size, char* file_revision, int *ret_fd, HANDLE *retMapHd)
+#else
 static void *
 read_file (char *filename, off_t* mapped_size, char* file_revision)
+#endif /* __MINGW32__ */
 {
     int fd;
     INT st;
@@ -694,17 +773,36 @@ read_file (char *filename, off_t* mapped_size, char* file_revision)
     if (fstat (fd, &stat_buf) != 0)
 	return (void *) (INTPTR) ERROR_RETURN;
 
+#ifdef __MINGW32__
+    *retMapHd = CreateFileMapping((HANDLE)_get_osfhandle(fd), NULL, 
+                                  PAGE_READONLY, 0, stat_buf.st_size, filename);
+    if (*retMapHd == NULL)
+	return (void *) (INTPTR)ERROR_RETURN;
+    map_addr = (char *)MapViewOfFileEx(*retMapHd, FILE_MAP_COPY,
+                                       0,0,stat_buf.st_size, 0);
+#else
     map_addr = (char *) mmap (0, stat_buf.st_size, PROT_READ|PROT_WRITE,
 			      MAP_PRIVATE, fd, 0);
+#endif
     if (map_addr == (char *)(INTPTR)(ERROR_VALUE)) {
 	close (fd);
 	return (void *) (INTPTR) ERROR_RETURN;
     }
 
+#ifdef __MINGW32__
+    CloseHandle((HANDLE)_get_osfhandle(fd));
+    if (ret_fd) *ret_fd = fd;
+#else
     close (fd);
+#endif /* __MINGW32__ */
 
     if ((st = WN_massage_input (map_addr, stat_buf.st_size,file_revision)) <= 0) {
+#ifdef __MINGW32__
+        UnmapViewOfFile(map_addr);
+        CloseHandle(*retMapHd);
+#else
 	munmap (map_addr, stat_buf.st_size);
+#endif /* __MINGW32__ */
 	return (void *) (INTPTR) (st);
     }
 
@@ -731,8 +829,13 @@ Get_Elf_Section_Size (void *handle, Elf64_Word type, Elf64_Word info)
  * Otherwise, it returns (void *) READER_ERROR and sets errno.
  */
 
+#ifdef __MINGW32__
+void *
+WN_open_input (char *filename, off_t *mapped_size, int *fd, HANDLE *mapHd)
+#else
 void *
 WN_open_input (char *filename, off_t *mapped_size)
+#endif /* __MINGW32__ */
 {
     if (filename == 0) {
 	errno = ENOENT;
@@ -741,7 +844,11 @@ WN_open_input (char *filename, off_t *mapped_size)
 
     errno = 0;
 
+#ifdef __MINGW32__
+    return read_file (filename, mapped_size, file_revision, fd, mapHd);
+#else
     return read_file (filename, mapped_size, file_revision);
+#endif /* __MINGW32__ */
     
 } /* WN_open_input */
 
@@ -750,8 +857,13 @@ WN_open_input (char *filename, off_t *mapped_size)
  * file inlining. Note, mapped file size is not saved in the
  * static variable.
  */
+#ifdef __MINGW32__
+extern void *
+WN_inline_open_file(char* file_name, off_t *mapped_size, char* file_revision, HANDLE *mapHd)
+#else
 extern void *
 WN_inline_open_file(char* file_name, off_t *mapped_size, char* file_revision)
+#endif /* __MINGW32__ */
 {
     if (file_name == 0) {
 	errno = ENOENT;
@@ -760,7 +872,11 @@ WN_inline_open_file(char* file_name, off_t *mapped_size, char* file_revision)
 
     errno = 0;
 
+#ifdef __MINGW32__
+    return read_file	 (file_name, mapped_size, file_revision, 0, mapHd);
+#else
     return read_file (file_name, mapped_size, file_revision);
+#endif /* __MINGW32__ */
       
 }
 
@@ -878,7 +994,7 @@ WN_get_tree (void *handle, PU_Info *pu)
        map table */
 
     Current_Map_Tab = PU_Info_maptab(pu);
-    if (fix_tree (wn, tree_base, size) == ERROR_VALUE)
+    if (fix_tree (pu, wn, tree_base, size) == ERROR_VALUE)
 	return (WN *)ERROR_VALUE;
 
     WN_next(wn) = NULL;
@@ -1092,7 +1208,7 @@ WN_get_prefetch (void *handle, PU_Info *pu)
 
 	if (node_offset == -1) break;
 
-	cur_addr = (char *)ir_b_align((off_t)cur_addr,
+	cur_addr = (char *)(INTPS)ir_b_align((off_t)(INTPS) cur_addr,
 #ifndef __GNUC__
 				      __builtin_alignof(PF_POINTER),
 #else
@@ -1171,6 +1287,10 @@ WN_get_mod_ref_table (void * handle)
     Mod_Ref_Info_Table[index].ref = CXX_NEW_ARRAY (mUINT8, bv_size, Malloc_Mem_Pool);
     memcpy (Mod_Ref_Info_Table[index].ref, p, bv_size);
     p += bv_size;
+    
+    Mod_Ref_Info_Table[index].same_entry_exit_value_or_1  = CXX_NEW_ARRAY (mUINT8, bv_size, Malloc_Mem_Pool);
+    memcpy (Mod_Ref_Info_Table[index].same_entry_exit_value_or_1, p, bv_size);
+    p += bv_size;
   }
 }
 #endif
@@ -1243,7 +1363,7 @@ WN_read_generic_map(void           *handle,
       break;
 
     // Why do we align here but not for the WN offset? -- RK 980615
-    cur_addr = (char *) ir_b_align ((off_t) cur_addr,
+    cur_addr = (char *)(INTPS)ir_b_align ((off_t) (INTPS)cur_addr,
 				    sizeof(MAP_ENTRY_TYPE),
 				    0);
     map_value = * (MAP_ENTRY_TYPE *) cur_addr;
@@ -1293,13 +1413,23 @@ WN_get_voidptr_map(void    *handle,
  * pointers returned by WN_get_tree() will no longer be valid.
  */
 
+#ifdef __MINGW32__
+void
+WN_free_input (void *handle, HANDLE *mapHd, off_t mapped_size)
+#else
 void
 WN_free_input (void *handle, off_t mapped_size)
+#endif /* __MINGW32__ */
 {
     if (handle == 0 || handle == (void *)(-1))
 	return;
 
+#ifdef __MINGW32__
+    UnmapViewOfFile((char *)handle);
+    CloseHandle(*mapHd);
+#else
     munmap (handle, mapped_size);
+#endif /* __MINGW32__ */
 } /* WN_free_input */
 
 
@@ -1309,18 +1439,35 @@ WN_free_input (void *handle, off_t mapped_size)
  * These routines use the standard compiler error reporting mechanism.
  */
 
+#ifdef __MINGW32__
+static void *global_fhandle = NULL;	/* file handle */
+void *local_fhandle = NULL;	/* file handle */
+static HANDLE global_mapHandle = NULL;	/* file handle */
+static HANDLE local_mapHandle = NULL;	/* file handle */
+#else
 static void *global_fhandle;	/* file handle */
-static void *local_fhandle;	/* file handle */
+void *local_fhandle;	/* file handle, used in isr.cxx  */
+#endif /* __MINGW32__ */
 static char *global_ir_file;	/* name of ir input file */
 static char *local_ir_file;	/* name of ir input file */
 
+#ifdef __MINGW32__
+static void
+open_specified_input (char *input_file,
+	char **ir_input, void **fhandle, HANDLE * mapHd, off_t *mapped_size, int *fd = 0)
+#else
 static void
 open_specified_input (char *input_file, 
 	char **ir_input, void **fhandle, off_t *mapped_size)
+#endif /* __MINGW32__ */
 {
     Set_Error_Phase ( "Reading WHIRL file" );
     *ir_input = input_file;
+#ifdef __MINGW32__
+    *fhandle = WN_open_input (input_file, mapped_size, fd, mapHd);
+#else
     *fhandle = WN_open_input (input_file, mapped_size);
+#endif /* __MINGW32__ */
     if (*fhandle == (void*) REVISION_MISMATCH) {
 	ErrMsg ( EC_IR_Revision, file_revision, *ir_input);
     } else if (*fhandle == (void*) ABI_MISMATCH) {
@@ -1336,8 +1483,14 @@ open_specified_input (char *input_file,
 void *
 Open_Input_Info (char *input_file)
 {
+#ifdef __MINGW32__
+	open_specified_input (input_file,
+		&global_ir_file, &global_fhandle, &global_mapHandle, &global_mapped_size);
+	local_mapHandle = global_mapHandle;
+#else
 	open_specified_input (input_file, 
 		&global_ir_file, &global_fhandle, &global_mapped_size);
+#endif /* __MINGW32__ */
 	local_ir_file = global_ir_file;
 	local_fhandle = global_fhandle;
 	local_mapped_size = global_mapped_size;
@@ -1347,16 +1500,26 @@ Open_Input_Info (char *input_file)
 void *
 Open_Global_Input (char *input_file)
 {
+#ifdef __MINGW32__
+	open_specified_input (input_file,
+		&global_ir_file, &global_fhandle, &global_mapHandle, &global_mapped_size);
+#else
 	open_specified_input (input_file, 
 		&global_ir_file, &global_fhandle, &global_mapped_size);
+#endif /* __MINGW32__ */
 	return global_fhandle;
 }
 
 void *
 Open_Local_Input (char *input_file)
 {
+#ifdef __MINGW32__
+	open_specified_input (input_file,
+		&local_ir_file, &local_fhandle, &local_mapHandle, &local_mapped_size);
+#else
 	open_specified_input (input_file, 
 		&local_ir_file, &local_fhandle, &local_mapped_size);
+#endif /* __MINGW32__ */
 	return local_fhandle;
 }
 
@@ -1429,6 +1592,12 @@ Read_Local_Info (MEM_POOL *pool, PU_Info *pu)
     else
 	Current_pu = &Pu_Table[ST_pu (Scope_tab[CURRENT_SYMTAB].st)];
 
+#if defined(BACK_END) || defined(IR_TOOLS)
+    if (PU_Info_state(pu, WT_SSA) == Subsect_Exists) {
+        // having WSSA in the IR file, create the SSA manager
+        Set_PU_Info_ssa_ptr(pu, new WSSA::WHIRL_SSA_MANAGER(pool));
+    }
+#endif
 
     if (WN_get_tree (local_fhandle, pu) == (WN*) -1) {
 	ErrMsg ( EC_IR_Scn_Read, "tree", local_ir_file);
@@ -1452,17 +1621,33 @@ Read_Local_Info (MEM_POOL *pool, PU_Info *pu)
     }
 #endif
 
+#if defined(BACK_END) || defined(IR_TOOLS)
+    if (WN_get_SSA (local_fhandle, pu, pool) == -1) {
+	ErrMsg ( EC_IR_Scn_Read, "WHIRL SSA", local_ir_file);
+    }
+#endif
 
     if (WN_get_INT32_map(local_fhandle, pu,
 			 WT_ALIAS_CLASS, WN_MAP_ALIAS_CLASS) == -1) {
       ErrMsg ( EC_IR_Scn_Read, "alias class map", local_ir_file);
     }
 
+    if (WN_get_INT32_map(local_fhandle, pu,
+			 WT_ALIAS_CGNODE, WN_MAP_ALIAS_CGNODE) == -1) {
+      ErrMsg ( EC_IR_Scn_Read, "alias cgnode map", local_ir_file);
+    }
+    // Check if we have read in the WN to CGNodeId map
+    if (PU_Info_state(pu, WT_ALIAS_CGNODE) == Subsect_InMem)
+      Read_ALIAS_CGNODE_Map = TRUE;
+
     if (WN_get_voidptr_map(local_fhandle, pu,
 			   WT_AC_INTERNAL, WN_MAP_AC_INTERNAL) == -1) {
       ErrMsg ( EC_IR_Scn_Read, "alias class internal map", local_ir_file);
     }
-
+    
+#ifdef BACK_END
+    IPA_read_alias_summary(local_fhandle, pu, pool);
+#endif
     Set_Error_Phase(save_phase);
 }
 
@@ -1491,6 +1676,32 @@ Free_Dep_Graph (void)
 #endif /* BACK_END */
 } 
 
+#ifdef __MINGW32__
+void
+Free_Local_Input(void)
+{
+  WN_free_input(local_fhandle, &local_mapHandle, local_mapped_size);
+  //local_fhandle = 0;
+  //local_mapHandle = NULL;
+}
+
+void
+Free_Input_Info (void)
+{
+	WN_free_input(global_fhandle, &global_mapHandle, global_mapped_size);
+    if (global_fhandle != local_fhandle) {
+      Free_Local_Input();
+    }
+    else
+    {
+	    local_fhandle = 0;
+	    local_mapHandle = NULL;
+    }
+    global_fhandle = 0;
+	global_mapHandle = NULL;
+}
+
+#else
 void
 Free_Local_Input(void)
 {
@@ -1507,6 +1718,7 @@ Free_Input_Info (void)
     }
     global_fhandle = 0;
 }
+#endif /* __MINGW32__ */
 
 #endif	/* OWN_ERROR_PACKAGE */
 

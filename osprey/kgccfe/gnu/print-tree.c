@@ -58,11 +58,15 @@ print_tree (FILE *file, tree node)
 #if (GCC_VERSION >= 3000)
   char *object = (char *) really_call_malloc (0);
   table = (struct bucket **) really_call_malloc (HASH_SIZE * sizeof (struct bucket *));
+#ifdef __MINGW32__
+  BZERO ((char *) table, HASH_SIZE * sizeof (struct bucket *));
+#else
   really_call_bzero ((char *) table, HASH_SIZE * sizeof (struct bucket *));
+#endif /* __MINGW32__ */
 #else
   char *object = (char *) malloc (0);
   table = (struct bucket **) malloc (HASH_SIZE * sizeof (struct bucket *));
-  bzero ((char *) table, HASH_SIZE * sizeof (struct bucket *));
+  BZERO ((char *) table, HASH_SIZE * sizeof (struct bucket *));
 #endif
 
   print_node (file, "", node, 0);

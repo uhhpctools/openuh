@@ -138,7 +138,7 @@ void Emit_Definitions (FILE *hfile, const char *prefix)
     pos = fprintf(hfile, "#define %s%s ", prefix, def->name);
     while (pos++ < 40) fputc(' ', hfile);
     fprintf(hfile, "(\"");
-    while (c = *s++) {
+    while ((c = *s++) != '\0') {
       if (c == '\\') {
 	fprintf(hfile, "\\\\");
       } else if (c < ' ') {

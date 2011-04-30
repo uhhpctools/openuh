@@ -74,7 +74,7 @@ struct CGB_COMMAND {
   char _command;
   CGB_REQUIRED_PIECES _required_fields;
   CGB_COMMAND* _subcommand;
-  char* _text;
+  const char* _text;
 };
 
 class CG_BROWSER { 
@@ -102,7 +102,7 @@ protected:
   char Command(INT i) {return (_command_list)[i]._command;};
   CGB_REQUIRED_PIECES Required_Fields(INT i)
     {return (_command_list)[i]._required_fields;}
-  char* Command_Text(INT i) {return (_command_list)[i]._text;}
+  const char* Command_Text(INT i) {return (_command_list)[i]._text;}
   CGB_COMMAND* Subcommand(INT i) {return (_command_list)[i]._subcommand;};
   void Set_Subcommand(char ch);
   void Reset_Subcommand();
@@ -214,7 +214,7 @@ public:
   void Tlog_Mod_Ref_Formals(); 
   void Tlog_Mod_Ref_Commons(); 
   // Primary interface 
-  void Sdebug(char init_buffer[]);
+  void Sdebug(const char init_buffer[]);
   void Debug(); 
 }; 
 

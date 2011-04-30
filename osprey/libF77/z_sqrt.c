@@ -68,4 +68,9 @@ dcomplex z_sqrt_(dcomplex *z)
   return __zsqrt(z->dreal, z->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+dcomplex z_sqrt(dcomplex *z) { return z_sqrt_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(z_sqrt_, z_sqrt);
+#endif /* defined(BUILD_OS_DARWIN) */

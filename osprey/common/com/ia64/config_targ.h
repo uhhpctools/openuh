@@ -53,18 +53,18 @@ extern "C" {
  *  25-Sep-91 - Added subprogram interface pointers.
  *  27-Nov-91 - Reconfiguration of target representation for TP.
  *  21-Apr-93 - Set TARG_NEEDS_QUAD_OP to 1
- *  14-Mar-97 - Removed most -TARG group flags to config_TARG.h.
+ *  14-Mar-97 - Removed most -TARG group flags to config_targ_opt.h.
  *
  * Description:
  *
  * This file defines general configuration parameters which are
  * specific to the compiler's target machine and system.
  * There is an approximate distinction between -TARG option group
- * flags and their configuration (in config_TARG.[hc]), and more
+ * flags and their configuration (in config_targ_opt.[hc]), and more
  * generic target configuration (in this file).  Note that this file
  * is included in config.h, and hence indirectly in most source files,
- * whereas config_TARG.h is only included directly, so putting new
- * -TARG option-related variables in config_TARG.[hc] is to be
+ * whereas config_targ_opt.h is only included directly, so putting new
+ * -TARG option-related variables in config_targ_opt.[hc] is to be
  * preferred to putting them here.
  *
  * See com/config.h for a detailed description of configuration

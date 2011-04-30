@@ -8,6 +8,7 @@
 #include "wb_util.h"
 #include "ir_reader.h"
 #include "srcpos.h"
+#include "cxx_memory.h"
 #include "parmodel.h"
 #include "uh_util.h"
 

@@ -3983,10 +3983,6 @@ fold_rtx (x, insn)
 		 don't know their sign.  */
 	      if (const_arg1 == const0_rtx
 		  && (NONZERO_BASE_PLUS_P (folded_arg0)
-#if 0  /* Sad to say, on sysvr4, #pragma weak can make a symbol address
-	  come out as 0.  */
-		      || GET_CODE (folded_arg0) == SYMBOL_REF
-#endif
 		      || GET_CODE (folded_arg0) == LABEL_REF
 		      || GET_CODE (folded_arg0) == CONST))
 		{
@@ -5072,29 +5068,6 @@ cse_insn (insn, libcall_insn)
 	 simplified result, which may not necessarily be valid.  */
       src_folded = fold_rtx (src, insn);
 
-#if 0
-      /* ??? This caused bad code to be generated for the m68k port with -O2.
-	 Suppose src is (CONST_INT -1), and that after truncation src_folded
-	 is (CONST_INT 3).  Suppose src_folded is then used for src_const.
-	 At the end we will add src and src_const to the same equivalence
-	 class.  We now have 3 and -1 on the same equivalence class.  This
-	 causes later instructions to be mis-optimized.  */
-      /* If storing a constant in a bitfield, pre-truncate the constant
-	 so we will be able to record it later.  */
-      if (GET_CODE (SET_DEST (sets[i].rtl)) == ZERO_EXTRACT
-	  || GET_CODE (SET_DEST (sets[i].rtl)) == SIGN_EXTRACT)
-	{
-	  rtx width = XEXP (SET_DEST (sets[i].rtl), 1);
-
-	  if (GET_CODE (src) == CONST_INT
-	      && GET_CODE (width) == CONST_INT
-	      && INTVAL (width) < HOST_BITS_PER_WIDE_INT
-	      && (INTVAL (src) & ((HOST_WIDE_INT) (-1) << INTVAL (width))))
-	    src_folded
-	      = GEN_INT (INTVAL (src) & (((HOST_WIDE_INT) 1
-					  << INTVAL (width)) - 1));
-	}
-#endif
 
       /* Compute SRC's hash code, and also notice if it
 	 should not be recorded at all.  In that case,
@@ -5120,19 +5093,6 @@ cse_insn (insn, libcall_insn)
 	  && REGNO (dest) >= FIRST_PSEUDO_REGISTER)
 	sets[i].src_volatile = 1;
 
-#if 0
-      /* It is no longer clear why we used to do this, but it doesn't
-	 appear to still be needed.  So let's try without it since this
-	 code hurts cse'ing widened ops.  */
-      /* If source is a perverse subreg (such as QI treated as an SI),
-	 treat it as volatile.  It may do the work of an SI in one context
-	 where the extra bits are not being used, but cannot replace an SI
-	 in general.  */
-      if (GET_CODE (src) == SUBREG
-	  && (GET_MODE_SIZE (GET_MODE (src))
-	      > GET_MODE_SIZE (GET_MODE (SUBREG_REG (src)))))
-	sets[i].src_volatile = 1;
-#endif
 
       /* Locate all possible equivalent forms for SRC.  Try to replace
          SRC in the insn with each cheaper equivalent.

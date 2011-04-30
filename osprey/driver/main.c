@@ -1,5 +1,13 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
  */
 
 /*
@@ -78,9 +86,14 @@ boolean show_copyright;
 boolean dump_version;
 boolean show_search_path;
 boolean show_defaults;
+boolean print_help = FALSE;
 
-extern void check_for_combos(void);
-extern boolean is_replacement_combo(int);
+HUGEPAGE_DESC hugepage_desc;
+boolean add_heap_limit;
+int heap_limit;
+int hugepage_attr;
+
+
 extern void toggle_implicits(void);
 extern void set_defaults(void);
 extern void add_special_options (void);
@@ -134,6 +147,7 @@ main (int argc, char *argv[])
 #ifdef KEY
 	char *unrecognized_dashdash_option_name = NULL;
 #endif
+        hugepage_desc = NULL;
 
 	init_error_list();
 	program_name = drop_path(argv[0]);	/* don't print path */
@@ -177,8 +191,9 @@ main (int argc, char *argv[])
 
 	/* Try to find where the compiler is located and set the phase
 	   and library directories appropriately. */
+#if !defined(TARG_SL)
 	set_executable_dir();
-
+#endif
 	// "-o -" will set this to TRUE.
 	dump_outfile_to_stdout = FALSE;
 
@@ -232,15 +247,9 @@ main (int argc, char *argv[])
 				      unrecognized_dashdash_option_name =
 				        option_name;
 				    }
-				    else if (option_was_seen(O_compat_gcc) ||
-					#ifdef PSC_TO_OPEN64
-					     getenv("OPEN64_STRICT_GCC")) {
-					#endif
-				      /* leave this env var undocumented */
+				    else {
+				      /* warn about unknown single-dash options */
 				      warning("unknown flag: %s", option_name);
-				    } else {
-				      /* print as error or not at all? */
-				      parse_error(option_name, "unknown flag");
 				    }
 				}
 			}
@@ -352,52 +361,20 @@ main (int argc, char *argv[])
 	/* Check target specifications for consistency: */
 	Check_Target ();
 
-    if (dump_version) {
-        if (option_was_seen(O_compat_gcc))
-	 #ifdef PSC_TO_OPEN64
-        puts(OPEN64_GCC_VERSION);
-        else
-        puts(OPEN64_FULL_VERSION);
-	 #endif
-    }
-
-        if (show_version) {
-            fprintf(stderr, "Open64 Compiler Suite: "
-            "Version %s\n", compiler_version);
-        if (show_version > 1) {
-        fprintf(stderr, "ChangeSet: %s\n", cset_id);
-        fprintf(stderr, "Built by: %s@%s in %s\n", build_user,
-            build_host, build_root);
-        }
-            fprintf(stderr, "Built on: %s\n", build_date);
-            fprintf(stderr, "Thread model: posix\n");   // Bug 4608.
-#ifdef PSC_TO_OPEN64
-#if defined(TARG_IA64)
-            fprintf(stderr, "GNU gcc version " OPEN64_GCC_VERSION
-                      " (Open64 " OPEN64_FULL_VERSION " driver)\n");
-#else
-            fprintf(stderr, "GNU gcc version " OPEN64_GCC_VERSION
-                    " (Open64 " OPEN64_FULL_VERSION " driver)\n");
-#endif
-#endif
-        }
-	if (show_copyright) {
-	    if (show_version)
-		fputc('\n', stderr);
-	    char *exe_dir = get_executable_dir();
-
-	    fprintf(stderr, "Copyright 2000, 2001 Silicon Graphics, Inc.  "
-		    "All Rights Reserved.\n");
-	    fprintf(stderr, "Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.\n");
-
-	    fprintf(stderr, "See complete copyright, patent and legal notices "
-		    "in the\n");
-	#ifdef PSC_TO_OPEN64
-	    fprintf(stderr, "%.*s/share/doc/open64-" 
-	    	    OPEN64_FULL_VERSION "/LEGAL.pdf file.\n",
-		    (int)(strlen(exe_dir) - 4), exe_dir);
-	#endif
+#if defined(TARG_NVISA)
+	if (show_version) {
+	    /* Echo information about the compiler version */
+	    fprintf(stderr, "NVIDIA (R) CUDA Open64 Compiler\n");
+	    fprintf(stderr, "%s\n", cset_id);
+	    fprintf(stderr, "Built on %s\n", build_date);
 	}
+	if (show_copyright) {
+	    fprintf(stderr, "Portions Copyright (c) 2005-2008 NVIDIA Corporation\n");
+	    fprintf(stderr, "Portions Copyright (c) 2002-2005 PathScale, Inc.\n");
+	    fprintf(stderr, "Portions Copyright (c) 2000-2001 Silicon Graphics, Inc.\n");
+	    fprintf(stderr, "All Rights Reserved.\n");
+	}
+#endif //TARG_NVISA
 	if (show_search_path) {
 		print_search_path();
 	}
@@ -410,12 +387,11 @@ main (int argc, char *argv[])
 		no_args();
 	}
 	
-	if (option_was_seen(O_help) || option_was_seen(O__help) ||
-	    help_pattern != NULL)
+	if (print_help || help_pattern != NULL)
 	{
 		print_help_msg();
 	}
-	if ( ! execute_flag && ! show_flag && ! dump_version) {
+	if ( ! show_version && ! execute_flag && ! show_flag && ! v_flag && ! dump_version) {
 		do_exit(RC_OKAY);	/* just exit */
 	}
 	if (source_kind == S_NONE || read_stdin) {
@@ -429,10 +405,11 @@ main (int argc, char *argv[])
 #endif
 				source_lang = L_cpp;
 			} else {
+				char *obj_name;
 				source_kind = get_source_kind(source_file);
-				source_lang = invoked_lang;
-				char *obj_name =
-				  get_object_file(
+				if (source_lang == L_NONE)
+				    source_lang = invoked_lang;
+				obj_name = get_object_file(
 				    fix_name_by_lang(source_file));
 				add_object (O_object, obj_name);
 			}
@@ -456,8 +433,7 @@ main (int argc, char *argv[])
 		}
 	}
 
-	/* check for certain combinations of options */
-	check_for_combos();
+
 	if ((option_was_seen(O_fpic) ||
 	     option_was_seen(O_fPIC))
 	     && mem_model == M_MEDIUM) {
@@ -513,37 +489,37 @@ main (int argc, char *argv[])
 	set_defaults();
 
 #ifdef KEY
-        // Perform GNU4-related checks after set_defaults has run, since
-        // set_defaults can change gnu_version.  Bug 10250.
-        if (gnu_version == 4) {
-          if (option_was_seen(O_fwritable_strings) ||
-              option_was_seen(O_fno_writable_strings)) {
-            warning("ignored -fwritable-strings/-fno-writable-strings because"
-                    " option not supported under GNU GCC 4");
-            set_option_unseen(O_fwritable_strings);
-            set_option_unseen(O_fno_writable_strings);
-          }
-          if ((source_lang == L_cc ||
-               source_lang == L_CC) &&
-              option_was_seen(O_mp)) {  // bug 11896
-            warning("ignored -mp because option not yet supported under"
-                    " GNU GCC 4");
-            set_option_unseen(O_mp);
-          }
-        } else {        // not GNU 4
-          if (option_was_seen(O_fgnu_exceptions) ||     // bug 11732
-              option_was_seen(O_fno_gnu_exceptions)) {
-            warning("ignored -fgnu-exceptions/-fno-gnu-exceptions because"
-                    " option is for GNU GCC 4 only");
-            set_option_unseen(O_fgnu_exceptions);
-            set_option_unseen(O_fno_gnu_exceptions);
-            gnu_exceptions = UNDEFINED;
-          }
-        }
+	// Perform GNU4-related checks after set_defaults has run, since
+	// set_defaults can change the gnu version.  Bug 10250.
+	if (gnu_major_version == 4) {
+	  if (option_was_seen(O_fwritable_strings) ||
+	      option_was_seen(O_fno_writable_strings)) {
+	    warning("ignored -fwritable-strings/-fno-writable-strings because"
+		    " option not supported under GNU GCC 4");
+	    set_option_unseen(O_fwritable_strings);
+	    set_option_unseen(O_fno_writable_strings);
+	  }
+	  if ((source_lang == L_cc ||
+	       source_lang == L_CC) &&
+	      option_was_seen(O_mp) &&	// bug 11896
+	      gnu_minor_version < 2) {
+	    warning("ignored -mp because option not supported under"
+		    " GNU GCC 4.0");
+	    set_option_unseen(O_mp);
+	  }
+	  else if (gnu_minor_version >= 2 &&
+	           !option_was_seen(O_fno_cxx_openmp)) {
+	    add_option_seen(O_fcxx_openmp);
+	    toggle(&fcxx_openmp,1);
+	  }
+	}
+
+	// Select the appropriate GNU version front-end.
+	init_frontend_phase_names(gnu_major_version, gnu_minor_version);
 #endif
 
 	// Display version after running set_defaults, which can change
-	// gnu_version.
+	// gnu_major_version.
         if (show_version || dump_version) {
 	  display_version(dump_version);
 	  if (!execute_flag ||
@@ -609,10 +585,62 @@ main (int argc, char *argv[])
 	       run_prof();
         }
 
+        add_heap_limit = FALSE;
+        heap_limit = HUGEPAGE_LIMIT_DEFAULT;
+        hugepage_attr = 0;
+
+        if (option_was_seen(O_HP)
+            && (instrumentation_invoked != TRUE)) {
+            HUGEPAGE_DESC desc;
+            boolean do_heap = FALSE;
+            boolean BD_or_BDT_with_1GBP = FALSE; /* BD or BDT mapping with 1GB pages */
+            
+            for (desc = hugepage_desc; desc != NULL; desc = desc->next) {
+                if (desc->alloc == ALLOC_HEAP) {
+                    do_heap = TRUE;
+                    heap_limit = desc->limit;
+
+                    if (desc->size == SIZE_2M)
+                        hugepage_attr |= ( 1 << HEAP_2M_BIT);
+                    else if (desc->size == SIZE_1G)
+                        hugepage_attr |= ( 1 << HEAP_1G_BIT);
+                }
+                else if (desc->size == SIZE_1G
+                         && (desc->alloc == ALLOC_BD
+                             || desc->alloc == ALLOC_BDT)) {
+                    BD_or_BDT_with_1GBP = TRUE;
+                }
+            }
+
+            /* With BD or BDT mappings using 1GB pages, the rest
+             * of the 1GB page used to map data and BSS will be
+             * automatically be used for heap, thus a heap page limit
+             * of 1 is assumed by default.  However to ensure, that any
+             * incompatible mallopt call that could be performed by
+             * the subroutine call that is generated by specifying
+             * the -OPT:malloc_alg option, we always add
+             * -OPT:hugepage_heap_limit when invoking the back end if
+             * BD or BDT mappings use 1GB pages.  This ensures that
+             * the heap allocation initialization routine will be
+             * called to revert any incorrect mallopt setting that
+             * will occcur when -OPT:malloc_alg is supplied.
+             */
+            if (BD_or_BDT_with_1GBP == TRUE && do_heap == FALSE) {
+                do_heap = TRUE;
+                hugepage_attr |= ( 1 << HEAP_1G_BIT);
+                heap_limit = 1;
+            }
+            if (do_heap == FALSE)
+                heap_limit = 0;
+            else
+                add_heap_limit = TRUE;
+        }
+        
 	if (read_stdin) {
 		if ( option_was_seen(O_E) 
 			|| (source_lang != L_NONE && source_kind != S_o)) 
 		{
+		        run_inline = UNDEFINED;
 			run_compiler(argc, argv);
 		}
 		else {
@@ -624,7 +652,7 @@ main (int argc, char *argv[])
 
 	for (p = files->head, q=file_suffixes->head; p != NULL; p = p->next, q=q->next) 
 	{
-		source_file = p->name;
+            source_file = p->name;
 #ifdef KEY
 		run_inline = UNDEFINED;	// bug 11325
 
@@ -695,6 +723,8 @@ static void set_executable_dir (void) {
   /* Try to find where the compiler is located in the
      filesystem, and relocate the phase and library
      directories based on where the executable is found. */
+  /* Note that if have a symbolic link to driver,
+   * it may operate on directory containing driver not cc. */
   dir = get_executable_dir ();
   if (dir == NULL) return;	
 
@@ -712,6 +742,9 @@ static void set_executable_dir (void) {
   ldir = drop_path (dir);
   if (strcmp (ldir, "bin") == 0) {
     char *basedir = directory_path (dir);
+#if defined(TARG_NVISA)
+    substitute_phase_dirs ("/lib", basedir, "/lib/");
+#endif
 #ifdef PSC_TO_OPEN64
     substitute_phase_dirs ("/lib", basedir, "/lib/" OPEN64_FULL_VERSION);
     substitute_phase_dirs ("/lib/" OPEN64_NAME_PREFIX "cc-lib",
@@ -880,18 +913,7 @@ dump_args (char *msg)
 	printf("dump args %s: ", msg);
 	FOREACH_OPTION_SEEN(i) {
 		if (i == O_Unrecognized) continue;
-		/* there are some combos that result in a warning 
-		 * and replacing one of the args; in that case the
-		 * option name looks like "arg1 arg2" but the implied
-		 * list is just "arg1". */
-		if (is_replacement_combo(i)) {
-			int iflag;
-			FOREACH_IMPLIED_OPTION(iflag, i) {
-				printf(" %s", get_current_implied_name());
-			}
-		} else {
-			printf(" %s", get_option_name(i));
-		}
+		printf(" %s", get_option_name(i));
 	}
 	printf("\n");
 }
@@ -946,8 +968,14 @@ void set_explicit_lang(const char *flag, const char *lang)
 	for (x = explicit_langs; x->name != NULL; x++) {
 		if (strcmp(lang, x->name) == 0) {
 			ignore_suffix = x->lang != S_NONE;
-			source_kind = default_source_kind = x->kind;
-			source_lang = x->lang;
+			if (x->kind == S_NONE) {
+				ignore_suffix = FALSE;
+				default_source_kind = S_NONE;
+			} else {
+				ignore_suffix = TRUE;
+				source_kind = default_source_kind = x->kind;
+				source_lang = x->lang;
+			}
 			break;
 		}
 	}
@@ -973,8 +1001,6 @@ prescan_options (int argc, char *argv[])
       keep_flag = TRUE;
     } else if (!strcmp(argv[i], "-save_temps")) {
       keep_flag = TRUE;
-    } else if (!strcmp(argv[i], "-compat-gcc")) {
-      compat_gcc = TRUE;
     } else if (!strcmp(argv[i], "-S")) {
       ipa_conflict_option = argv[i];
     } else if (!strcmp(argv[i], "-fbgen")) {
@@ -995,23 +1021,7 @@ prescan_options (int argc, char *argv[])
     }
   }
 
-  // Turn off IPA for certain flag combinations.  Must turn off IPA before
-  // adding objects because the objects' suffix depends on whether IPA is
-  // invoked.  Bug 7879.
-  if (ipa &&
-      ipa_conflict_option != NULL) {
-    char msg[200];
-    for (i = 1; i < argc; i++) {
-      if (!strcasecmp(argv[i], "-ipa") ||
-	  !strcmp(argv[i], "-Ofast")) {
-	sprintf(msg, "%s %s combination not allowed, replaced with %s",
-		argv[i], ipa_conflict_option, ipa_conflict_option);
-	warning(msg);
-	ipa = FALSE;
-	argv[i] = "-dummy";
-      }
-    }
-  }
+  // Disable for SiCortex 5069.
 }
 
 static void
@@ -1028,12 +1038,25 @@ print_defaults(int argc, char *argv[])
   else
     fprintf(stderr, " -O%d", olevel);
 
+  if (oscale == TRUE)
+      fprintf(stderr, "-mso");
+
   // target CPU
   if (target_cpu != NULL)
     fprintf(stderr, " -mcpu=%s", target_cpu);
   else
     internal_error("no default target cpu");
 
+#if defined(TARG_MIPS) || defined(TARG_LOONGSON)
+  // ABI
+  switch (abi) {
+    case ABI_N32:	fprintf(stderr, " -n32"); break;
+    case ABI_64:	fprintf(stderr, " -64");  break;
+    default:		internal_error("unknown default ABI");
+  }
+#endif
+
+#ifdef TARG_X8664
   // ABI
   switch (abi) {
     case ABI_N32:	fprintf(stderr, " -m32"); break;
@@ -1041,16 +1064,29 @@ print_defaults(int argc, char *argv[])
     default:		internal_error("unknown default ABI");
   }
 
-  // SSE, SSE2, SSE3, 3DNow
+  // SSE, SSE2, SSE3, 3DNow, SSE4a
   fprintf(stderr, " -msse");
   fprintf(stderr, " %s", sse2 == TRUE ? "-msse2" : "-mno-sse2");
   fprintf(stderr, " %s", sse3 == TRUE ? "-msse3" : "-mno-sse3");
   fprintf(stderr, " %s", m3dnow == TRUE ? "-m3dnow" : "-mno-3dnow");
+  fprintf(stderr, " %s", sse4a == TRUE ? "-msse4a" : "-mno-sse4a");
+  // SSSE3, SSE41, SSE42
+  fprintf(stderr, " %s", ssse3 == TRUE ? "-mssse3" : "-mno-ssse3");
+  fprintf(stderr, " %s", sse41 == TRUE ? "-msse41" : "-mno-sse41");
+  fprintf(stderr, " %s", sse42 == TRUE ? "-msse42" : "-mno-sse42");
+  // AES, PCLMUL
+  fprintf(stderr, " %s", aes == TRUE ? "-maes" : "-mno-aes");
+  fprintf(stderr, " %s", pclmul == TRUE ? "-mpclmul" : "-mno-pclmul");
+  // AVX, XOP, FMA4
+  fprintf(stderr, " %s", avx == TRUE ? "-mavx" : "-mno-avx");
+  fprintf(stderr, " %s", xop == TRUE ? "-mxop" : "-mno-xop");
+  fprintf(stderr, " %s", fma4 == TRUE ? "-mfma4" : "-mno-fma4");
+#endif
 
   // -gnu3/-gnu4
   if ((invoked_lang == L_cc ||
        invoked_lang == L_CC) &&
-      !is_toggled(gnu_version)) {
+      !is_toggled(gnu_major_version)) {
     int gcc_version = get_gcc_major_version();
     if (gcc_version == 3 ||
 	gcc_version == 4) {
@@ -1234,6 +1270,7 @@ append_default_options (int *argc, char *(*argv[]))
     int new_argc = *argc + default_options_count + 1;
     char **new_argv = malloc(new_argc * sizeof(char*));
     int i, index;
+    string_item_t *p;
 
     // Copy command line options to new argv;
     for (index = 0; index < *argc; index++) {
@@ -1244,7 +1281,6 @@ append_default_options (int *argc, char *(*argv[]))
     new_argv[index++] = "-default_options";
 
     // Copy default options to new argv.
-    string_item_t *p;
     for (p = default_options_list->head; p != NULL; p = p->next) {
       new_argv[index++] = p->name;
     }
@@ -1289,13 +1325,22 @@ append_open64_env_flags (int *argc, char *(*argv[]), char *env_var)
   }
 
   /* We only want to do this substitution once. */
+#if defined(__MINGW32__)
+  // no unsetenv on mingw, but can get same effect with putenv("name=")
+  {
+    string tmp = concat_strings(env_var, "=");
+    putenv (tmp);
+  }
+#else
   unsetenv (env_var);
+#endif
 }
 
 static FILE *
 read_gcc_output(char *cmdline)
 {
-	char *gcc_path = get_full_phase_name(P_ld);
+	/* P_ld may not be gcc, bug gcpp should be */
+	char *gcc_path = get_full_phase_name(P_gcpp);
 	char *gcc_cmd = NULL;
 	FILE *fp = NULL;
 
@@ -1389,6 +1434,11 @@ get_gcc_version(int *v, int nv)
 	static int patch;
 
 	if (version[0] == '\0') {
+#if defined(__MINGW32__)
+		/* cannot rely on accessing system,
+		 * so just use what we were built with */
+		sprintf(version, "%d.%d", __GNUC__, __GNUC_MINOR__);
+#else
 		FILE *fp = read_gcc_output("-dumpversion");
 		char *c;
 		fread(version, 1, sizeof(version) - 1, fp);
@@ -1399,6 +1449,7 @@ get_gcc_version(int *v, int nv)
 		if ((c = strchr(version, '\n'))) {
 			*c = '\0';
 		}
+#endif
 	}
 
 	if (v) {
@@ -1420,6 +1471,9 @@ get_gcc_version(int *v, int nv)
 	return version;
 }
 
+#if defined(TARG_SL)
+  unsigned int SL_version = 0x00204000;	// version 002.04.xxx
+#endif
 static void
 display_version(boolean dump_version_only)
 {
@@ -1428,30 +1482,36 @@ display_version(boolean dump_version_only)
 
   // Get GCC version.
 
-  if (is_toggled(gnu_version))
-    gcc_version = gnu_version;
-  else
+  if (is_toggled(gnu_major_version))
     gcc_version = get_gcc_major_version();
 
-#ifdef PSC_TO_OPEN64
-  if (gcc_version == 3)
+  if (gnu_major_version == 3)
     open64_gcc_version = OPEN64_GCC_VERSION;
-  else if (gcc_version == 4)
-    open64_gcc_version = OPEN64_GCC4_VERSION;
-  else
-    internal_error("display_version: unknown GCC version %d\n", gcc_version);
-#endif
+  else if (gnu_major_version == 4) {
+    if (gnu_minor_version == 0)
+      open64_gcc_version = OPEN64_GCC40_VERSION;
+    else if (gnu_minor_version == 2)
+      open64_gcc_version = OPEN64_GCC42_VERSION;
+    else
+      internal_error("display_version: unexpected GCC version 4.%d\n",
+		     gnu_minor_version);
+  } else
+    internal_error("display_version: unexpected GCC version %d\n",
+		   gnu_major_version);
 
   if (dump_version_only == TRUE) {
-  #ifdef PSC_TO_OPEN64
-    if (option_was_seen(O_compat_gcc))
-      puts(open64_gcc_version);
-    else
-      puts(OPEN64_FULL_VERSION);
-  #endif
+    puts(OPEN64_FULL_VERSION);
     return;
   }
 
+#if defined(TARG_SL)
+  fprintf(stderr, "Open64 version: %s.\n",OPEN64_FULL_VERSION);
+  fprintf(stderr, "GNU gcc version %s.\n", open64_gcc_version);
+  fprintf(stderr, "Simplnano internal release version %03x.%02x.%03x\n", (SL_version>>20), (SL_version>>12)&0xFF , SL_version&0xFFF);
+
+  fprintf(stderr, "Built on :%s \n", build_date);
+  fprintf(stderr, "Portions Copyright (c) 2006-2009 Simplnano Corporation\n");
+#else
   fprintf(stderr, "Open64 Compiler Suite: Version %s\n",
 	  compiler_version);
   if (show_version > 1) {
@@ -1459,11 +1519,13 @@ display_version(boolean dump_version_only)
     fprintf(stderr, "Built by: %s@%s in %s\n", build_user, build_host,
 	    build_root);
   }
+
   fprintf(stderr, "Built on: %s\n", build_date);
   fprintf(stderr, "Thread model: posix\n");	// Bug 4608.
-
   #ifdef PSC_TO_OPEN64
   fprintf(stderr, "GNU gcc version %s", open64_gcc_version);
   fprintf(stderr, " (Open64 " OPEN64_FULL_VERSION " driver)\n");
   #endif
+#endif
+
 }

@@ -255,6 +255,9 @@ Rename_Locals(OP* op, hTN_MAP dup_tn_map)
   }
 }
 
+#if !defined(TARG_IA64) && !defined(TARG_SL) && !defined(TARG_MIPS)
+static
+#endif
 /////////////////////////////////////
 BB*
 Copy_BB_For_Tail_Duplication(HB* hb, BB* old_bb)

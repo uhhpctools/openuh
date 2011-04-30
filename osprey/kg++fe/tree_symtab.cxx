@@ -1,7 +1,10 @@
 /*
- * Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
+/*
+* Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+*/ 
 /* 
    Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
    File modified October 9, 2003 by PathScale, Inc. to update Open64 C/C++ 
@@ -54,7 +57,9 @@
 #include <values.h>
 #include "defs.h"
 #include "errors.h"
+extern "C" {
 #include "gnu_config.h"
+}
 #ifdef KEY	// get HW_WIDE_INT for flags.h
 #include "gnu/hwint.h"
 #endif	/* KEY */
@@ -65,6 +70,9 @@ extern "C" {
 #include "cp-tree.h"
 }
 #undef TARGET_PENTIUM // hack around macro definition in gnu
+#if defined(TARG_PPC32)
+#undef TARGET_POWERPC
+#endif /* TARG_PPC32 */
 #include "symtab.h"
 #include "strtab.h"
 #include "wn.h"
@@ -80,8 +88,8 @@ extern "C" {
 #endif
 #include "tree_cmp.h"
 
-#include <ext/hash_set>
-using __gnu_cxx::hash_set;
+#include <ext/hash_map>
+using __gnu_cxx::hash_map;
 typedef struct {
     size_t operator()(void* p) const { return reinterpret_cast<size_t>(p); }
 } void_ptr_hash;
@@ -175,6 +183,89 @@ Get_Name (tree node)
 		FmtAssert(FALSE, ("Get_Name unexpected tree"));
 		return NULL;
 }
+#ifdef TARG_SL
+/* this function only return signed mtype and the function MTYPE_complement will do 
+ * conversion from signed type to unsigned type if current type is unsigned type */
+TYPE_ID
+Get_Mtype_For_Integer_Type(tree type_tree, INT64 tsize) 
+{
+     TYPE_ID mtype;
+     switch(tsize) {
+       case 1:
+       /*
+       	 if(TYPE_VBUF_P(type_tree)) {
+       		if(TYPE_VBUF1(type_tree))  {
+		      mtype = MTYPE_VBUF1;
+            }
+            else if(TYPE_VBUF2(type_tree))
+	        {
+		      mtype = MTYPE_VBUF2;
+	        }
+            else if(TYPE_VBUF4(type_tree))
+	        {
+		      mtype = MTYPE_VBUF4;
+	        }
+       	 }
+	     else if(TYPE_SBUF(type_tree)) {
+	          mtype = MTYPE_SB1;
+	     }
+	     else if(TYPE_SDRAM(type_tree)){
+	          mtype = MTYPE_SD1;
+	     }
+	     else {
+	         mtype = MTYPE_I1;
+	     }
+	     */
+/* we will use above code when mtype is ready */
+	     mtype = MTYPE_I1;
+	     break;
+	  case 2:
+	/*
+	    if(TYPE_SBUF(type_tree)) {
+	          mtype = MTYPE_SB2;
+	    }
+	    else if(TYPE_SDRAM(type_tree)) {
+	          mtype = MTYPE_SD2;
+	    }
+	    else {
+	         mtype = MTYPE_I2;
+	    }
+	 */
+	    mtype = MTYPE_I2;
+	    break;
+	  case 4: 
+ /*
+	     if(TYPE_SBUF(type_tree)) {
+	          mtype = MTYPE_SB4;
+	     }
+	     else if(TYPE_SDRAM(type_tree)){
+	          mtype = MTYPE_SD4;
+	     }
+	     else {
+	         mtype = MTYPE_I4;
+	     }
+*/
+         mtype = MTYPE_I4;
+	     break;
+	  case 8:
+	     DevWarn("8 byte types being used");
+	     mtype = MTYPE_I8;
+	  /*
+	     if(TYPE_SBUF(type_tree)) {
+	          mtype = MTYPE_SB8;
+	     }
+	     else if(TYPE_SDRAM(type_tree)){
+	          mtype = MTYPE_SD8;
+	     }
+	     else {
+	         mtype = MTYPE_I8;
+	     }
+	  */ 
+	     break;
+    }
+    return mtype;
+}
+#endif 
 
 static void
 dump_field(tree field)
@@ -291,9 +382,8 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
           return idx;
 	}
 
-
 #ifdef KEY
-	UINT align = TYPE_ALIGN(type_tree) / BITSPERBYTE;
+        UINT align = TYPE_ALIGN(type_tree) / BITSPERBYTE;
 #endif
 	// for typedefs get the information from the base type
 	if (TYPE_NAME(type_tree) &&
@@ -310,11 +400,13 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 #ifdef KEY
 		if (TYPE_RESTRICT(type_tree))
 			Set_TY_is_restrict (idx);
-		Set_TY_align (idx, align); // bug 10533
+                Set_TY_align (idx, align); // bug 10533
 #endif
 		TYPE_TY_IDX(type_tree) = idx;
 		if(Debug_Level >= 2) {
-		  defer_DST_type(type_tree, idx, orig_idx);
+		  DST_INFO_IDX dst = Create_DST_type_For_Tree(type_tree,
+			idx,orig_idx);
+		  TYPE_DST_IDX(type_tree) = dst;
 	        }
 		TYPE_FIELD_IDS_USED(type_tree) =
 			TYPE_FIELD_IDS_USED(TYPE_MAIN_VARIANT(type_tree));
@@ -366,11 +458,38 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 	case BOOLEAN_TYPE:
 	case INTEGER_TYPE:
 		switch (tsize) {
-		case 1:  mtype = MTYPE_I1;  break;
-		case 2:  mtype = MTYPE_I2;  break;
-		case 4:  mtype = MTYPE_I4;  break;
-		case 8:  mtype = MTYPE_I8;  break;
-#if !defined(TARG_X8664) && !defined(TARG_IA64)
+		case 1: 
+#ifdef TARG_SL		
+		  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else  
+		  mtype = MTYPE_I1;
+#endif 
+		  break;
+		case 2: 
+#ifdef TARG_SL 
+         mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+		 mtype = MTYPE_I2; 
+#endif 
+		 break;
+
+		case 4: 
+#ifdef TARG_SL 
+        mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+        mtype = MTYPE_I4; 
+#endif 
+                 break;
+
+		case 8: 
+#ifdef TARG_SL 
+		  mtype = Get_Mtype_For_Integer_Type(type_tree, tsize); 
+#else 
+		  mtype = MTYPE_I8; 
+#endif 
+		  break;
+
+#if !defined(TARG_X8664) && !defined(TARG_MIPS) && !defined(TARG_IA64) && !defined(TARG_LOONGSON) || defined(TARG_SL) 
 #ifdef _LP64
 		case 16:  mtype = MTYPE_I8; break;
 #endif /* _LP64 */
@@ -388,18 +507,24 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			mtype = MTYPE_complement(mtype);
 		}
 #ifdef KEY
-		if (lookup_attribute ("may_alias", TYPE_ATTRIBUTES (type_tree)))
-		{
-		  // bug 9975: Handle may_alias attribute, we need to create
-		  // a new type to which we can attach the flag.
-		  TY &ty = New_TY (idx);
-		  TY_Init (ty, tsize, KIND_SCALAR, mtype,
-		           Save_Str(Get_Name(TYPE_NAME(type_tree))) );
-		  Set_TY_no_ansi_alias (ty);
-		} else
+                if (lookup_attribute ("may_alias", TYPE_ATTRIBUTES (type_tree)))
+                {
+                  // bug 9975: Handle may_alias attribute, we need to cr        eate
+                  // a new type to which we can attach the flag.
+                  TY &ty = New_TY (idx);
+                  TY_Init (ty, tsize, KIND_SCALAR, mtype,
+                           Save_Str(Get_Name(TYPE_NAME(type_tree))) );
+                  Set_TY_no_ansi_alias (ty);
+#if defined(TARG_SL)
+                  // for -m32, it is not the predefined type, alignment shoule be set.
+                  // Corresponding to following code about bug#2932.
+                  if (!TARGET_64BIT)  
+                    Set_TY_align (idx, align);
+#endif
+                } else
 #endif
 		idx = MTYPE_To_TY (mtype);	// use predefined type
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_SL)
 		/* At least for -m32, the alignment is not the same as the data
 		   type's natural size. (bug#2932)
 		*/
@@ -426,13 +551,13 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		case 4:  mtype = MTYPE_F4; break;
 		case 8:  mtype = MTYPE_F8; break;
 #if defined(TARG_IA64)
-		case 12:
-		case 16: mtype = MTYPE_F10; break;
-#elif defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664)
-		case 12:
-		case 16: mtype = MTYPE_FQ; break;
+                case 12:
+                case 16: mtype = MTYPE_F10; break;
+#elif defined(TARG_MIPS) || defined(TARG_IA32) || defined(TARG_X8664) || defined(TARG_LOONGSON)
+                case 12:
+                case 16: mtype = MTYPE_FQ; break;
 #else
-		case 16: mtype = MTYPE_F16; break;
+                case 16: mtype = MTYPE_F16; break;
 #endif
 		default:  FmtAssert(FALSE, ("Get_TY unexpected size"));
 		}
@@ -446,9 +571,9 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		case 24:  mtype = MTYPE_CQ; break;
 #endif
 #if defined(TARG_IA64)
-		case 32: mtype = MTYPE_C10; break;
+                case 32: mtype = MTYPE_C10; break;
 #else
-		case 32: mtype = MTYPE_CQ; break;
+                case 32: mtype = MTYPE_CQ; break;
 #endif
 		default:  FmtAssert(FALSE, ("Get_TY unexpected size"));
 		}
@@ -472,8 +597,8 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			Save_Str(Get_Name(TYPE_NAME(type_tree))) );
 		Set_TY_etype (ty, Get_TY (TREE_TYPE(type_tree)));
 		Set_TY_align (idx, TY_align(TY_etype(ty)));
-	        if (TYPE_ANONYMOUS_P(type_tree) || TYPE_NAME(type_tree) == NULL)
-	            Set_TY_anonymous(ty);
+                if (TYPE_ANONYMOUS_P(type_tree) || TYPE_NAME(type_tree) == NULL)
+                    Set_TY_anonymous(ty);
 		// assumes 1 dimension
 		// nested arrays are treated as arrays of arrays
 		ARB_HANDLE arb = New_ARB ();
@@ -487,12 +612,12 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		if (TREE_CODE(TYPE_SIZE(TREE_TYPE(type_tree))) == INTEGER_CST) {
 			Set_ARB_const_stride (arb);
 			Set_ARB_stride_val (arb, 
-				Get_Integer_Value (TYPE_SIZE(TREE_TYPE(type_tree))) 
-				/ BITSPERBYTE);
+				Get_Integer_Value (TYPE_SIZE_UNIT(TREE_TYPE(type_tree))));
 		}
 		else {
 			WN *swn;
-			swn = WFE_Expand_Expr (TYPE_SIZE(TREE_TYPE(type_tree)));
+			swn = WFE_Expand_Expr (TYPE_SIZE_UNIT(TREE_TYPE(type_tree)));
+			
 			if (WN_opcode (swn) == OPC_U4I4CVT ||
 			    WN_opcode (swn) == OPC_U8I8CVT) {
 				swn = WN_kid0 (swn);
@@ -503,9 +628,8 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			// and use LDID of that stored address as swn.
 			// Copied from Wfe_Save_Expr in wfe_expr.cxx
 			if (WN_operator (swn) != OPR_LDID) {
-			  TY_IDX    ty_idx  = 
-			    Get_TY (TREE_TYPE (type_size));
-			  TYPE_ID   mtype   = TY_mtype (ty_idx);
+			  TYPE_ID   mtype   = WN_rtype(swn);
+			  TY_IDX    ty_idx  = MTYPE_To_TY(mtype);
 			  ST       *st;
 			  st = Gen_Temp_Symbol (ty_idx, "__save_expr");
 			  WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);
@@ -552,7 +676,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 			TY_IDX ty_idx;
 			WN *wn;
 			if (WN_operator (uwn) != OPR_LDID) {
-				ty_idx = Get_TY (TREE_TYPE (TYPE_MAX_VALUE (TYPE_DOMAIN (type_tree)) ) );
+				ty_idx  = MTYPE_To_TY(WN_rtype(uwn));
 				st = Gen_Temp_Symbol (ty_idx, "__vla_bound");
 #ifdef KEY
 			  	WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);
@@ -577,7 +701,9 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		}
 		if (variable_size) {
 			WN *swn, *wn;
-			swn = WFE_Expand_Expr (type_size);
+
+			swn = WFE_Expand_Expr (TYPE_SIZE_UNIT(type_tree));
+
 			if (TY_size(TY_etype(ty))) {
 				if (WN_opcode (swn) == OPC_U4I4CVT ||
 				    WN_opcode (swn) == OPC_U8I8CVT) {
@@ -589,12 +715,11 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				// and use LDID of that stored address as swn.
 				// Copied from Wfe_Save_Expr in wfe_expr.cxx
 				if (WN_operator (swn) != OPR_LDID) {
-				  TY_IDX    ty_idx  = 
-				    Get_TY (TREE_TYPE (type_size));
-				  TYPE_ID   mtype   = TY_mtype (ty_idx);
+				  TYPE_ID   mtype   = WN_rtype(swn);
+				  TY_IDX    ty_idx  = MTYPE_To_TY(mtype);
 				  ST       *st;
 				  st = Gen_Temp_Symbol (ty_idx, "__save_expr");
-			  	  WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);
+				  WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);
 				  WFE_Set_ST_Addr_Saved (swn);
 				  swn = WN_Stid (mtype, 0, st, ty_idx, swn);
 				  WFE_Stmt_Append (swn, Get_Srcpos());
@@ -606,7 +731,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				ST *st = WN_st (swn);
 				TY_IDX ty_idx = ST_type (st);
 				TYPE_ID mtype = TY_mtype (ty_idx);
-				swn = WN_Div (mtype, swn, WN_Intconst (mtype, BITSPERBYTE));
+
 				wn = WN_Stid (mtype, 0, st, ty_idx, swn);
 				WFE_Stmt_Append (wn, Get_Srcpos());
 			}
@@ -636,6 +761,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		    is_empty_class(type_tree))
 			tsize = 0;
 #endif	// KEY
+
                 // For typedef A B, tree A and tree B link to the same TY C
                 // When parsing A, C's name is set to A
                 // When parsing B, C's name is set to B
@@ -645,13 +771,14 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
                     TY_Init(ty, tsize, KIND_STRUCT, MTYPE_M,
                             Save_Str(Get_Name(TYPE_NAME(TYPE_MAIN_VARIANT(type_tree)))));
                 else
-		    TY_Init (ty, tsize, KIND_STRUCT, MTYPE_M, 
-			    Save_Str(Get_Name(TYPE_NAME(type_tree))) );
-	        if (TYPE_ANONYMOUS_P(type_tree) || TYPE_NAME(type_tree) == NULL)
-	            Set_TY_anonymous(ty);		
-		if (TREE_CODE(type_tree) == UNION_TYPE) {
-			Set_TY_is_union(idx);
-		}
+                    TY_Init (ty, tsize, KIND_STRUCT, MTYPE_M,
+                            Save_Str(Get_Name(TYPE_NAME(type_tree))) );
+                if (TYPE_ANONYMOUS_P(type_tree) || TYPE_NAME(type_tree) == NULL)
+                    Set_TY_anonymous(ty);
+                if (TREE_CODE(type_tree) == UNION_TYPE) {
+                        Set_TY_is_union(idx);
+                }
+
 #ifdef KEY
 		if (aggregate_value_p(type_tree)) {
 			Set_TY_return_in_mem(idx);
@@ -720,7 +847,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		tree method = TYPE_METHODS(type_tree);
 		FLD_HANDLE fld;
 		INT32 next_field_id = 1;
-		hash_set <tree, void_ptr_hash> anonymous_base;
+		hash_map <tree, tree, void_ptr_hash> anonymous_base;
 
 		// Generate an anonymous field for every direct, nonempty,
 		// nonvirtual base class.  
@@ -748,7 +875,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		      offset += Type_Size_Without_Vbases (basetype);
                       // For the field with base class type,
                       // set it to anonymous and base class,
-                      // and add it into anonymous_base set 
+                      // and add it into anonymous_base set
                       // to avoid create the anonymous field twice in the TY
                       Set_FLD_is_anonymous(fld);
                       Set_FLD_is_base_class(fld);
@@ -776,7 +903,7 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
                   INT32 i;
                   for (i = 0; i < TREE_VEC_LENGTH(basetypes); ++i) {
                     tree basetype = BINFO_TYPE(TREE_VEC_ELT(basetypes, i));
-                    anonymous_base.insert(CLASSTYPE_AS_BASE(basetype));
+                    anonymous_base[CLASSTYPE_AS_BASE(basetype)] = basetype;
                   }
                 }
 
@@ -788,11 +915,11 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				continue;
 			}
 			if (TREE_CODE(field) == CONST_DECL) {
-                // Just for the time being, we need to investigate 
-                // whether this criteria is reasonable. 
+                // Just for the time being, we need to investigate
+                // whether this criteria is reasonable.
                 static BOOL once_is_enough=FALSE;
                 if (!once_is_enough) {
-				  DevWarn ("got CONST_DECL in field list");
+                                  DevWarn ("got CONST_DECL in field list");
                   once_is_enough=TRUE;
                 }
 				continue;
@@ -813,9 +940,13 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				Get_Integer_Value(DECL_FIELD_BIT_OFFSET(field))
 					/ BITSPERBYTE);
                         if (DECL_NAME(field) == NULL)
-                                Set_FLD_is_anonymous(fld);
-                        if (anonymous_base.find(TREE_TYPE(field)) != anonymous_base.end())
-                                Set_FLD_is_base_class(fld);
+                          Set_FLD_is_anonymous(fld);
+                        if (anonymous_base.find(TREE_TYPE(field)) != anonymous_base.end()) {
+                          Set_FLD_is_base_class(fld);
+                          // set the base class type;
+                          tree base_class = anonymous_base[TREE_TYPE(field)];
+                          Set_FLD_type(fld, Get_TY(base_class));
+                        }
 		}
 
 		TYPE_FIELD_IDS_USED(type_tree) = next_field_id - 1;
@@ -865,11 +996,13 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 				continue;
 			}
 #endif
-			TY_IDX fty_idx = Get_TY(TREE_TYPE(field));
+                        if (anonymous_base.find(TREE_TYPE(field)) == anonymous_base.end()) {
+                          TY_IDX fty_idx = Get_TY(TREE_TYPE(field));
 
-			if ((TY_align (fty_idx) > align) || (TY_is_packed (fty_idx)))
-				Set_TY_is_packed (ty);
-			Set_FLD_type(fld, fty_idx);
+                          if ((TY_align (fty_idx) > align) || (TY_is_packed (fty_idx)))
+                            Set_TY_is_packed (ty);
+                          Set_FLD_type(fld, fty_idx);
+                        }
 
 			if ( ! DECL_BIT_FIELD(field)
 				&& Get_Integer_Value(DECL_SIZE(field)) > 0
@@ -1015,10 +1148,6 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
 		}
 		else
 			Set_TYLIST_type (New_TYLIST (tylist_idx), 0);
-                        if (TREE_CODE(type_tree) == METHOD_TYPE) {
-                            TY_IDX base = Get_TY(TYPE_METHOD_BASETYPE(type_tree));
-                            Set_TY_baseclass(ty, base);
-                        }
 		} // end FUNCTION_TYPE scope
 		break;
 #ifdef TARG_X8664
@@ -1037,7 +1166,8 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
                           idx = MTYPE_To_TY (MTYPE_M8I2);
                           break;
                         case 4:
-                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)                            idx = MTYPE_To_TY (MTYPE_M8I4);
+                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)
+                            idx = MTYPE_To_TY (MTYPE_V8I4);
                           else
                             idx = MTYPE_To_TY (MTYPE_M8F4);
                           break;
@@ -1054,12 +1184,14 @@ Create_TY_For_Tree (tree type_tree, TY_IDX idx)
                           idx = MTYPE_To_TY (MTYPE_V16I2);
                           break;
                         case 4:
-                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)                            idx = MTYPE_To_TY (MTYPE_V16I4);
+                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)
+                            idx = MTYPE_To_TY (MTYPE_V16I4);
                           else
                             idx = MTYPE_To_TY (MTYPE_V16F4);
                           break;
                         case 8:
-                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)                            idx = MTYPE_To_TY (MTYPE_V16I8);
+                          if (TREE_CODE (TREE_TYPE (type_tree)) == INTEGER_TYPE)
+                            idx = MTYPE_To_TY (MTYPE_V16I8);
                           else
                             idx = MTYPE_To_TY (MTYPE_V16F8);
                           break;
@@ -1221,17 +1353,19 @@ Create_ST_For_Tree (tree decl_node)
         if (DECL_PURE_VIRTUAL_P(decl_node) || strncmp(p, "__cxa_pure_virtual", 18) == 0)
             Set_ST_is_pure_vfunc(st);
 
-	p = IDENTIFIER_POINTER (DECL_NAME (decl_node));
-	if (!strncmp(p,"operator",8))
-		Set_PU_is_operator(pu);
+        p = IDENTIFIER_POINTER (DECL_NAME (decl_node));
+        if (!strncmp(p,"operator",8))
+                Set_PU_is_operator(pu);
 #else
         ST_Init (st,
                  Save_Str ( IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl_node))),
                  CLASS_FUNC, sclass, eclass, TY_IDX (pu_idx));
 #endif
-	if (TREE_CODE(TREE_TYPE(decl_node)) == METHOD_TYPE) {
-		Set_ST_is_method_func(st);
-	}
+        if (TREE_CODE(TREE_TYPE(decl_node)) == METHOD_TYPE) {
+                Set_ST_is_method_func(st);
+                TY_IDX base = Get_TY(TYPE_METHOD_BASETYPE(TREE_TYPE(decl_node)));
+                Set_PU_base_class(pu, base);
+        }
 
 	if (DECL_THUNK_P(decl_node) &&
             TREE_CODE(CP_DECL_CONTEXT(decl_node)) != NAMESPACE_DECL)
@@ -1280,18 +1414,18 @@ Create_ST_For_Tree (tree decl_node)
 	      }
 	      else
               	sclass = SCLASS_EXTERN;
-#ifdef TARG_IA64		
-	      // bug fix for OSP_89 && OSP_173 && OSP_169
-	      if (!flag_pic) { 
-	        if (Use_Call_Shared_Link && Gp_Rel_Aggresive_Opt &&
-		    sclass != SCLASS_EXTERN &&  sclass != SCLASS_COMMON) 
-		  eclass = EXPORT_PROTECTED;
- 	        else
-		  eclass = EXPORT_PREEMPTIBLE;
-	      }
-	      else {
-		eclass = EXPORT_PREEMPTIBLE;
-	      }
+#ifdef TARG_IA64
+              // bug fix for OSP_89 && OSP_173 && OSP_169
+              if (!flag_pic) {
+                if (Use_Call_Shared_Link && Gp_Rel_Aggresive_Opt &&
+                    sclass != SCLASS_EXTERN &&  sclass != SCLASS_COMMON)
+                  eclass = EXPORT_PROTECTED;
+                else
+                  eclass = EXPORT_PREEMPTIBLE;
+              }
+              else {
+                eclass = EXPORT_PREEMPTIBLE;
+              }
             }
 #else
               eclass = EXPORT_PREEMPTIBLE;
@@ -1311,9 +1445,9 @@ Create_ST_For_Tree (tree decl_node)
             }
 #ifdef KEY
 	    // Bug 8652: If GNU marks it as COMMON, we should the same.
-	    else if (!flag_no_common && TREE_STATIC (decl_node) &&
-	             DECL_COMMON (decl_node) &&
-		     TREE_PUBLIC (decl_node)) {
+            else if (!flag_no_common && TREE_STATIC (decl_node) &&
+                     DECL_COMMON (decl_node) &&
+                     TREE_PUBLIC (decl_node)) {
 	      sclass = SCLASS_COMMON;
 	      level = GLOBAL_SYMTAB;
 	      eclass = EXPORT_PREEMPTIBLE;
@@ -1396,6 +1530,8 @@ Create_ST_For_Tree (tree decl_node)
 	  Set_ST_is_thread_private (st);
 	if (TREE_CODE (decl_node) == VAR_DECL && anon_st)
 	  WFE_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);
+        if (TREE_CODE (decl_node) == VAR_DECL && DECL_THREAD_LOCAL (decl_node))
+          Set_ST_is_thread_local (st);
 
         if (DECL_SIZE_UNIT (decl_node) &&
             TREE_CODE (DECL_SIZE_UNIT (decl_node)) != INTEGER_CST)
@@ -1530,10 +1666,10 @@ Create_ST_For_Tree (tree decl_node)
 	eclass != EXPORT_LOCAL_INTERNAL &&
 	// Don't make symbol weak if it is defined in current file.  Workaround
 	// for SLES 8 linker.  Bug 3758.
-	WEAK_WORKAROUND(st) != WEAK_WORKAROUND_dont_make_weak &&
-	// Don't make builtin functions weak.  Bug 9534.
-	!(TREE_CODE(decl_node) == FUNCTION_DECL &&
-	  DECL_BUILT_IN(decl_node))) {
+        WEAK_WORKAROUND(st) != WEAK_WORKAROUND_dont_make_weak &&
+        // Don't make builtin functions weak.  Bug 9534.
+        !(TREE_CODE(decl_node) == FUNCTION_DECL &&
+          DECL_BUILT_IN(decl_node))) {
       Set_ST_is_weak_symbol (st);
       WEAK_WORKAROUND(st) = WEAK_WORKAROUND_made_weak;
     }
@@ -1547,21 +1683,48 @@ Create_ST_For_Tree (tree decl_node)
 #endif
 
   if (DECL_SECTION_NAME (decl_node)) {
-    DevWarn ("section %s specified for %s",
-             TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node)),
-             ST_name (st));
-    if (TREE_CODE (decl_node) == FUNCTION_DECL)
-      level = GLOBAL_SYMTAB;
-    ST_ATTR_IDX st_attr_idx;
-    ST_ATTR&    st_attr = New_ST_ATTR (level, st_attr_idx);
-    ST_ATTR_Init (st_attr, ST_st_idx (st), ST_ATTR_SECTION_NAME,
-                  Save_Str (TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node))));
+    if (strncmp(TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node)),
+                ".gnu.linkonce.",
+                14) != 0 ) {
+      // OSP, only handle non-.gnu.linkonce.* section name
+      DevWarn ("section %s specified for %s",
+               TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node)),
+               ST_name (st));
+      if (TREE_CODE (decl_node) == FUNCTION_DECL)
+        level = GLOBAL_SYMTAB;
+      ST_ATTR_IDX st_attr_idx;
+      ST_ATTR&    st_attr = New_ST_ATTR (level, st_attr_idx);
+      ST_ATTR_Init (st_attr, ST_st_idx (st), ST_ATTR_SECTION_NAME,
+                    Save_Str (TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node))));
+      Set_ST_has_named_section (st);
+    }
+    else {
+      // OSP. Ignore .gnu.linkonce.* section name
+      DevWarn ("Ignore %s specified for %s",
+               TREE_STRING_POINTER (DECL_SECTION_NAME (decl_node)),
+               ST_name (st));
+    }
   }
+
 /*
   if (DECL_SYSCALL_LINKAGE (decl_node)) {
 	Set_PU_has_syscall_linkage (Pu_Table [ST_pu(st)]);
   }
 */
+#if defined(TARG_SL)
+  if(DECL_SL_MODEL_NAME(decl_node)) {
+    if(TREE_CODE(decl_node) == VAR_DECL && 
+       TREE_CODE(DECL_SL_MODEL_NAME(decl_node)) == STRING_CST) 
+    {
+      if(!strcmp(TREE_STRING_POINTER(DECL_SL_MODEL_NAME(decl_node)), "small"))
+        Set_ST_gprel(st); 
+      else if(!strcmp(TREE_STRING_POINTER(DECL_SL_MODEL_NAME(decl_node)), "large"))
+        Set_ST_not_gprel(st); 
+      else 
+        Fail_FmtAssertion("incorrect model type for sl data model"); 
+    }
+  }
+#endif 
   if(Debug_Level >= 2) {
 #ifdef KEY
     // Bug 559
@@ -1577,6 +1740,71 @@ Create_ST_For_Tree (tree decl_node)
     DECL_DST_IDX(decl_node) = dst;
 #endif
   }
+  /* NOTES:
+ * Following code is temporarily used since mtype isn't 
+ * ready for now. After mtype handling has been finished we will
+ * use new normal method to handle section assignment. */
+
+/* Description:
+ * Set ST Flags for variant internal buffer type 
+ * VBUF is only to be file scope variable and gp-relative
+ * SBUF need to decide if SBUF is explicitly declared. If 
+ * declared the flag Set_ST_in_sbuf need to be set to indicate 
+ * the variable will be processed by CP2. */
+#ifdef TARG_SL 
+	const char* section_name;
+	int has_assigned_section = 0;
+	if(DECL_VBUF(decl_node)) // || DECL_SBUF(decl_node))
+	{
+           if(DECL_V1BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node))) 
+          { 
+             Set_ST_in_v1buf(st);
+             Set_ST_gprel(st);
+          }	 
+          else if(DECL_V2BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node)))
+          {
+             Set_ST_in_v2buf(st);
+       	     Set_ST_gprel(st);
+             TY_IDX st_ty_idx=ST_type(st);
+             Set_TY_size (st_ty_idx, TY_size(st_ty_idx)*2);
+          }
+          else if(DECL_V4BUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+            && !POINTER_TYPE_P(TREE_TYPE(decl_node))) 
+          {
+             Set_ST_in_v4buf(st);       
+             Set_ST_gprel(st);
+             TY_IDX st_ty_idx=ST_type(st);
+             Set_TY_size (st_ty_idx, TY_size(st_ty_idx)*4);
+          }
+	}
+	else if(DECL_SBUF(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+		&& !POINTER_TYPE_P(TREE_TYPE(decl_node))) {
+	  if(TREE_CODE(TREE_TYPE(decl_node)) == ARRAY_TYPE)
+	  {
+	     tree element_type = TREE_TYPE(decl_node); 
+	     while(TREE_CODE(element_type) == ARRAY_TYPE)
+	       element_type = TREE_TYPE(element_type); 
+
+	     if(!POINTER_TYPE_P(element_type))
+	     {
+                Set_ST_in_sbuf(st);
+ 	        Set_ST_gprel(st); 
+	     }
+	  }
+	  else 
+	  {
+	     Set_ST_in_sbuf(st);
+ 	     Set_ST_gprel(st); 
+	  }
+	}
+	else if(DECL_SDRAM(decl_node) && TREE_CODE(decl_node) != FUNCTION_DECL 
+          && !POINTER_TYPE_P(TREE_TYPE(decl_node))) {
+              Set_ST_in_sdram(st);
+	}
+#endif  // TARG_SL
+
   return st;
 }
 

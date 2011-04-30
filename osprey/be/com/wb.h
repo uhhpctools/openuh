@@ -60,7 +60,7 @@ extern void WB_Initialize(WB_BROWSER* wb, WN* wn_global, PU* pu,
 
 extern void WB_Terminate(WB_BROWSER* wb);
 
-extern void sdebug(char init_buffer[]);
+extern void sdebug(const char init_buffer[]);
 
 extern void swb(char init_buffer[]);
 

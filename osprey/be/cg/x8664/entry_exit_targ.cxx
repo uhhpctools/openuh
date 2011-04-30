@@ -1,4 +1,16 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2008 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 Pathscale, LLC.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -39,7 +51,6 @@
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
-
 
 #include "defs.h"
 #include "tn.h"
@@ -117,34 +128,30 @@ void EETARG_Generate_PIC_Entry_Code( BB* bb, OPS* ops )
 
   CGSPILL_Store_To_Memory( ebx_tn, save_ebx_loc, ops, CGSPILL_LCL, bb );
   //Set_OP_no_move_before_gra( OPS_last(ops) );
-    
+
+  // Create BB #1.
   BB* call_bb = Gen_And_Insert_BB_Before(bb);
   BB_Transfer_Entryinfo( bb, call_bb );
+  Set_BB_after_pic_entry(bb); // bb is original entry and now it's after the pic entry  
   REGION_First_BB = call_bb;
   Entry_BB_Head = BB_LIST_Delete( bb, Entry_BB_Head );
   Entry_BB_Head = BB_LIST_Push( call_bb, Entry_BB_Head, &MEM_pu_pool );
-
   Chain_BBs( call_bb, bb );
   Link_Pred_Succ_with_Prob( call_bb, bb, 1.0 );
-
   BB_rid( call_bb ) = BB_rid( bb );
   BB_freq( call_bb ) = BB_freq( bb );
   if( BB_freq_fb_based( bb ) )
     Set_BB_freq_fb_based( call_bb );
 
-  BB* pop_bb = Gen_And_Insert_BB_Before(bb);
-
-  Chain_BBs( pop_bb, bb );
-  Link_Pred_Succ_with_Prob( pop_bb, bb, 1.0 );
-
-  BB_rid( pop_bb ) = BB_rid( bb );
-  BB_freq( pop_bb ) = BB_freq( bb );
-  if( BB_freq_fb_based( bb ) )
-    Set_BB_freq_fb_based( pop_bb );
-
-  Change_Succ( call_bb, bb, pop_bb );
-
-  const LABEL_IDX bb_label = Gen_Label_For_BB( pop_bb );
+  // Create BB #2.
+  BB* bb2 = Gen_And_Insert_BB_Before(bb);
+  Chain_BBs(bb2, bb);
+  Link_Pred_Succ_with_Prob(bb2, bb, 1.0);
+  BB_rid(bb2) = BB_rid(bb);
+  BB_freq(bb2) = BB_freq(bb);
+  if (BB_freq_fb_based(bb))
+    Set_BB_freq_fb_based(bb2);
+  Change_Succ(call_bb, bb, bb2);
 
   PU_IDX pu_idx;
   PU& pu = New_PU (pu_idx);
@@ -163,9 +170,12 @@ void EETARG_Generate_PIC_Entry_Code( BB* bb, OPS* ops )
 
   PU_Init( pu, func_ty_idx, CURRENT_SYMTAB );
 
-  if (Is_Target_EM64T() ||
+  if (Is_Target_EM64T()    ||
+      Is_Target_Wolfdale() ||
       Is_Target_Core())
   {
+    const LABEL_IDX bb_label = Gen_Label_For_BB(bb2);
+
     ST_Init( st, Save_Str(LABEL_name(bb_label)),
              CLASS_FUNC, SCLASS_EXTERN,
              EXPORT_PREEMPTIBLE,
@@ -183,16 +193,26 @@ void EETARG_Generate_PIC_Entry_Code( BB* bb, OPS* ops )
 
     OPS_Remove_All( ops );
 
-    Build_OP( TOP_popl, ebx_tn, ops );
+    Build_OP( TOP_popl, ebx_tn, SP_TN, SP_TN, ops );
     Set_OP_computes_got( OPS_last(ops) );
     Exp_ADD( Pointer_Mtype,
              ebx_tn, ebx_tn,
              Gen_Symbol_TN(st, 0, TN_RELOC_IA32_GLOBAL_OFFSET_TABLE), ops );
     Set_OP_computes_got( OPS_last(ops) );
-    BB_Append_Ops( pop_bb, ops );
+    BB_Append_Ops(bb2, ops);
   }
   else // AMD architectures like Opteron.
   {
+    // Create BB #3.
+    BB *bb3 = Gen_And_Insert_BB_Before(bb);
+    Chain_BBs(bb3, bb);
+    Link_Pred_Succ_with_Prob(bb3, bb, 1.0 );
+    BB_rid(bb3) = BB_rid(bb);
+    BB_freq(bb3) = BB_freq(bb);
+    if (BB_freq_fb_based(bb))
+      Set_BB_freq_fb_based(bb3);
+    Change_Succ(bb2, bb, bb3);
+
     // Generate a call to a function to retrieve current instruction pointer.
     ST_Init( st, Save_Str(ip_calc_funcname),
              CLASS_FUNC, SCLASS_TEXT,
@@ -212,15 +232,17 @@ void EETARG_Generate_PIC_Entry_Code( BB* bb, OPS* ops )
 
     OPS_Remove_All( ops );
 
-    Exp_ADD( Pointer_Mtype,
-             ebx_tn, ebx_tn,
-             Gen_Symbol_TN(st, 0, TN_RELOC_IA32_GLOBAL_OFFSET_TABLE), ops );
-    Set_OP_computes_got( OPS_last(ops) );
-    BB_Append_Ops( pop_bb, ops );
+    // Create ADD.  Put it in a BB by itself to avoid LRA, which might
+    // otherwise insert spill OPs before the ADD (bug 14452).
+    Exp_ADD(Pointer_Mtype,
+            ebx_tn, ebx_tn,
+            Gen_Symbol_TN(st, 0, TN_RELOC_IA32_GLOBAL_OFFSET_TABLE), ops);
+    Set_OP_computes_got(OPS_last(ops));
+    BB_Append_Ops(bb2, ops);
     need_ip = TRUE;
   }
 
-  OPS_Remove_All( ops );
+  OPS_Remove_All(ops);
 
   return;
 }

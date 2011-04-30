@@ -64,7 +64,17 @@ _DATE_AND_TIME (dat, tim, zon, values)
 	struct tm	*timer;
 	struct timeval	tv;
 	size_t		res;
+#ifdef KEY /* Mac port */
+	/* The POSIX global "timzone" is available on Linux, but doesn't work,
+	 * and is not available on Darwin.  The "gettimeofday" function works
+	 * on both Linux and Darwin. */
+	struct timeval tp;
+	struct timezone tzp;
+	gettimeofday(&tp, &tzp);
+	time_t timezone = 60 * tzp.tz_minuteswest;
+#else /* KEY Mac port */
 	extern time_t	timezone;
+#endif /* KEY Mac port */
 	int		hr, min;
 	char		sign;
 	_f_int		*vptr;
@@ -101,7 +111,11 @@ _DATE_AND_TIME (dat, tim, zon, values)
 	    tlen = _fcdlen (tim);
 	    res = strftime (tmp, 10, "%H %M %S", timer);
 	    tmp[8] = '\0';
+#ifdef KEY /* Mac port */
+	    sprintf (tmp, "%s.%3.3ld", tmp, (long) tv.tv_usec/1000);
+#else /* KEY Mac port */
 	    sprintf (tmp, "%s.%3.3ld", tmp, tv.tv_usec/1000);
+#endif /* KEY Mac port */
 /*
  *	This seemingly useless loop is necessary because SCM expands the
  *	format string into something which is not desired.  The only way
@@ -220,3 +234,58 @@ _DATE_AND_TIME (dat, tim, zon, values)
 	    }
 	}
 }
+
+#ifdef KEY /* Bug 11640 */
+#include <math.h>
+
+/* Easy way to init these to zero without knowing internals */
+static _fcd dat, tim, zon;
+
+/*
+ * G77 intrinsic "secnds"
+ * start	Initial time in wall-clock seconds since midnight
+ * return	Wall-clock time in seconds since "start"
+ */
+float secnds_vms(float *start) {
+  DopeVectorType dv;
+  _f_int4 values[8];
+
+# define N_BITS_PER_CHAR 8
+  /* Set dope vector well enough to satisfy DATE_AND_TIME */
+  dv.type_lens.kind_or_star = DVD_DEFAULT;
+  dv.type_lens.int_len = sizeof(values[0]) * N_BITS_PER_CHAR;
+  dv.base_addr.a.ptr = values;
+  _DATE_AND_TIME(dat, tim, zon, &dv);
+
+  float result = 3600.0 * values[4] + 60.0 * values[5] + values[6] +
+    values[7] / 1000.0;
+#define SECPERDAY 86400
+  float stemp = fmod(*start, (float) SECPERDAY);
+  stemp = (result >= stemp) ? stemp : (stemp - (float) SECPERDAY);
+  return result - stemp;
+}
+
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+float secnds_(float *start) { return secnds_vms(start); }
+#else /* defined(BUILD_OS_DARWIN) */
+float secnds_(float *);
+#pragma weak secnds_ = secnds_vms
+#endif /* defined(BUILD_OS_DARWIN) */
+
+double dsecnds_vms(double *start) {
+  float temp = *start;
+  float result = secnds_vms(&temp);
+  *start = temp;
+  return result;
+}
+
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+double dsecnds_(double *start) { return dsecnds_vms(start); }
+#else /* defined(BUILD_OS_DARWIN) */
+double dsecnds_(double *);
+#pragma weak dsecnds_ = dsecnds_vms
+#endif /* defined(BUILD_OS_DARWIN) */
+
+#endif /* KEY Bug 11640 */

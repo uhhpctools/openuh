@@ -86,7 +86,7 @@
  *
  ****************************************************************************
  */
-#ifndef linux
+#if ! (defined(linux) || defined(BUILD_OS_DARWIN))
 #include <bstring.h>
 #endif
 #include <ctype.h>
@@ -144,7 +144,7 @@ struct mdrule {
 	char		*toolname;	/* name of language processor */
 	char		*filename;	/* name of make-dependencies file */
 	char		*target;	/* make rule left-hand side */
-	void		(*error)(char*,...);	/* error reporting function */
+	void		(*error)(const char*,...); /* error reporting function */
 	unsigned int	entries;	/* number of active entries */
 	unsigned int	freecount;	/* number of free hash table entries */
 	unsigned int	hashmask;	/* hash mask, i.e. (table size - 1) */
@@ -157,7 +157,7 @@ struct mdrule {
 
 typedef	struct	mdfile {
 	int	f;		/* dependency file	*/
-	char*	filename;	/* filename		*/
+	const char*	filename;	/* filename		*/
 	char*	base;		/* map base, if mapped	*/
 	char*	limit;		/* map limit, if mapped	*/
 	int	size;		/* map size		*/
@@ -192,7 +192,7 @@ MDfile_init ( MDfile_t *m ) {
 static
 int	
 MDtoolcmp ( const char *tool, const char *s, int slen ) {
-	char	*t;
+	const char *t;
 	int	toollen;
 	
 	t = strpbrk(tool," \n");	
@@ -215,7 +215,7 @@ MDtoolcmp ( const char *tool, const char *s, int slen ) {
 static
 int	
 MDtargcmp ( const char *targ, const char *s, int slen ) {
-	char	*t;
+	const char *t;
 	int	targlen;
 	
 	t = strpbrk(targ,": ");	
@@ -226,28 +226,6 @@ MDtargcmp ( const char *targ, const char *s, int slen ) {
 	return strncmp(targ,s,slen);
 }
 
-#if 0
-/*
- * MDstrcatdup
- *
- * Concatenates the two strings into a new, malloc'd string and
- * returns the pointer to the new string. 
- *
- */
-static
-char * MDstrcatdup ( const char *s1, const char *s2 ) {
-	int s1_len, s2_len, targ_len;
-	char *targ;
-	s1_len	= strlen(s1);
-	s2_len	= strlen(s2);
-	targ_len= s1_len + s2_len;
-	targ = (char*)malloc(targ_len);
-	bcopy(s1,targ,s1_len);
-	bcopy(s2,&targ[s1_len], s2_len);
-	targ[targ_len]='\0';
-	return targ;
-}
-#endif
 
 /*
  * MDnewstab
@@ -282,7 +260,7 @@ MDnewstab(MDhandle h)
  *
  */
 char *
-MDstrcpy(MDhandle h, char * src ) 
+MDstrcpy(MDhandle h, const char * src ) 
 { 
 	char  *dest;
 	int	freespace;
@@ -405,7 +383,7 @@ MDgrow(MDhandle h)
  * Allocate a table for INITIALSIZE entries.
  */
 MDhandle
-MDopen(char *toolname, char *filename, char *target, void (*error)(char*,...))
+MDopen(const char *toolname, const char *filename, const char *target, void (*error)(const char*,...))
 {
 	MDhandle h;
 	Dependency *table;

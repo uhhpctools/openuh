@@ -54,6 +54,9 @@
 #if defined(UNICOS) || defined(UNIX_NAMING_CONVENTION)
 #define SUBNAME1 _C4GEMMX
 #define SUBNAME2 _C4GEMVX
+#elif defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME1 underscore_c4gemmx__
+#define SUBNAME2 underscore_c4gemvx__
 #else
 #define SUBNAME1 _c4gemmx__
 #define SUBNAME2 _c4gemvx__

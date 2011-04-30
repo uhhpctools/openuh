@@ -417,7 +417,7 @@ depend:
 	$(MAKEDEPEND) -o".o" $(INCLUDE_PATH) *.c
 
 P:
-	gmake PURIFY=1
+	make PURIFY=1
 
 clean: 
 	rm -f $(KAPI_LINKOBJS) $(KAPI_ia64_LINKOBJS) $(BINARY) $(GENFILES) libkapi.$(LIBSUF) libkapi_ia64.$(LIBSUF) src.tar *.d

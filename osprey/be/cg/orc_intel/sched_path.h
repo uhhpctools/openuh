@@ -50,7 +50,6 @@
 #ifndef sched_path_INCLUDED
 #define sched_path_INCLUDED
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 
 #include <list> 

@@ -40,6 +40,10 @@
 #include "region.h"
 #include "cgtarget.h"
 
+// During Forceed If Conversion biased areas are still converted if they are small
+// compared to the whole loop.
+#define IF_CONV_BIASE_THRESHOLD 20 //in percent
+
 //*****************************************************************************
 //  if_conv.h
 //
@@ -324,16 +328,22 @@ protected:
     BOOL     Is_BB_Container_Member(BB_CONTAINER&, BB*);
 
 private:
+    // variables
+    INT32 _loop_length;
+    
     // do initialization
     void     If_Conversion_Init(REGION *region, 
                                AREA_CONTAINER& area_list);
 
     // select proper if-conversion-candicates
-    void     Select_Candidates(AREA_CONTAINER&);
+    void     Select_Candidates (AREA_CONTAINER&, BOOL forced=FALSE);
     CFLOW_TYPE 
-             Detect_Type (IF_CONV_AREA *, AREA_CONTAINER&);
-    BOOL     Worth_If_Convert(AREA_CONTAINER&, 
-                              CFLOW_TYPE);
+             Detect_Type (IF_CONV_AREA *, 
+                          AREA_CONTAINER&,
+                          BOOL forced = FALSE);
+    BOOL     Worth_If_Convert (AREA_CONTAINER&, 
+                               CFLOW_TYPE,
+                               BOOL forced=FALSE);
     void     Reduce_By_Type(AREA_CONTAINER&, 
                             CFLOW_TYPE, 
                             AREA_CONTAINER&);
@@ -357,7 +367,7 @@ private:
     BOOL     Insert_Predicate(IF_CONV_AREA *area);
 
     // merge basic blocks
-    void     Convert_Candidates(AREA_CONTAINER& areas);
+    BOOL     Convert_Candidates(AREA_CONTAINER& areas);
     BB_MERGE_TYPE 
              Classify_BB(BB *,IF_CONV_AREA *);
     void     Merge_Blocks(BB *, BB *);
@@ -368,7 +378,8 @@ private:
 
     void     Print_All_Areas(AREA_CONTAINER&, FILE* file = stderr);
     void     Print_BB_Merge_Type(BB_MERGE_TYPE, FILE* file = stderr); 
-    
+    INT32    Calculate_Loop_Critical_Length (IF_CONV_AREA* area);
+    INT32    Calculate_Loop_Cycled_Critical_Length (IF_CONV_AREA* area);
 
 public:
     IF_CONVERTOR(void);

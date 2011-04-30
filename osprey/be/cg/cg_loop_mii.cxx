@@ -168,12 +168,6 @@ static void Trace_Min_II_Resource_LOH(
     pmin_ii = loh_mii;
     fprintf(TFile,"<cg_loop_mii> Min LOH resource II %d",loh_mii);
 
-#if 0
-    fprintf(TFile, " (");
-    Print_Resource_Vec(CG_LOOP_critical_loh_resource_vec,
-                       CG_LOOP_critical_loh_resource_count);
-    fprintf(TFile, ")");
-#endif
     fprintf(TFile,"\n");
   }
 }
@@ -805,22 +799,7 @@ Calculate_Component_Max_Costs_And_Min_Recurrence_II(
 	 */
 	if (i == j && j == k) continue;
 
-#if 0
-	// NOTE: the following is old ragnarok logic:
-	/*
-	 * If we're going to try and fix recurrences later, we can't
-	 * use CG_LOOP_min_ii for cost pruning since it may be decreased by
-	 * our fixes (which will increase intra-scc omegas).  Instead,
-	 * use the maximum of the min_ii as determined by resource
-	 * constraints and the current recurrence min_ii for scc. (We
-	 * assume that fixing recurrences adjusts the intra-scc omegas
-	 * and the scc rec_min_ii uniformly.)
-	 */
-	min_ii = LS_enable_fix_recurrences ?
-	  Max(LS_res_min_ii, CG_LOOP_SCC_rec_mii(scc)) : LS_min_ii;
-#else
 	min_ii = CG_LOOP_min_ii;
-#endif
 
         /* Consider the existing costs of paths from i to j and the
          * costs of paths from i to j via k.  Filter out those that

@@ -155,4 +155,8 @@ void PROC_Create (const char *proc_name, ...)
 		"}\n");
 
   Emit_Footer (hfile);
+
+  fclose(hfile);
+  fclose(cfile);
+  fclose(efile);
 }

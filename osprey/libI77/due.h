@@ -56,7 +56,6 @@ extern int   s_wdue_mp(cilist *, unit **);
 extern int   e_rdue_mp(unit **);
 extern int   e_wdue_mp(unit **);
 
-#if 11
 extern int   f_find64(flist64 *);
 extern int   s_rdue64(cilist64 *);
 extern int   s_wdue64(cilist64 *);
@@ -67,7 +66,6 @@ extern int   s_rdue64_mp(cilist64 *, unit **);
 extern int   s_wdue64_mp(cilist64 *, unit **);
 extern int   e_rdue64_mp(unit **);
 extern int   e_wdue64_mp(unit **);
-#endif
 
 #endif /* C || C++ */
 

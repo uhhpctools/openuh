@@ -348,7 +348,7 @@ BOOL  W2C_Verbose = TRUE;           /* Show translation information */
 BOOL  W2C_No_Pragmas = FALSE;       /* Do not emit pragmas */
 BOOL  W2C_Emit_Adims = FALSE;       /* Emit comments for array dims */
 BOOL  W2C_Emit_Prefetch = FALSE;    /* Emit comments for prefetches */
-BOOL  W2C_Emit_All_Regions = FALSE; /* Emit cmplr-generated regions */
+BOOL  W2C_Emit_All_Regions = TRUE;  /* Emit cmplr-generated regions */
 BOOL  W2C_Emit_Linedirs = FALSE;    /* Emit preproc line-directives */
 BOOL  W2C_Emit_Nested_PUs = FALSE;  /* Emit code for nested PUs */
 BOOL  W2C_Before_CG = FALSE;        /* Invoke whirl2c before CG , Liao*/
@@ -464,8 +464,15 @@ Process_Filename_Options(const char *src_filename, const char *irb_filename)
     */
    fname = Last_Pathname_Component(filename);
    if ( W2C_File_Name[W2C_DOTH_FILE] == NULL ) {
-      W2C_File_Name[W2C_DOTH_FILE] = 
+     if ( W2C_File_Name[W2C_DOTC_FILE] == NULL ) {
+       W2C_File_Name[W2C_DOTH_FILE] = 
 	 New_Extension ( fname, W2C_Extension(W2C_DOTH_FILE) );
+     }
+     else {
+       /* create from dotc file name */
+       W2C_File_Name[W2C_DOTH_FILE] = 
+	 New_Extension ( W2C_File_Name[W2C_DOTC_FILE], W2C_Extension(W2C_DOTH_FILE) );
+     }
    }
    if ( W2C_File_Name[W2C_DOTC_FILE] == NULL ) {
       W2C_File_Name[W2C_DOTC_FILE] = 
@@ -833,8 +840,8 @@ W2C_Should_Before_CG(void)
 
 
 void
-W2C_Process_Command_Line (INT phase_argc, char * const phase_argv[],
-			  INT argc, char * const argv[])
+W2C_Process_Command_Line (INT phase_argc, const char * const phase_argv[],
+			  INT argc, const char * const argv[])
 {
     /* Get the program name
      */
@@ -1265,7 +1272,7 @@ W2C_Fini(void)
       W2C_Verbose = TRUE;           /* Show translation information */
       W2C_No_Pragmas = FALSE;       /* Do not emit pragmas */
       W2C_Emit_Adims = FALSE;       /* Emit comments for array dims */
-      W2C_Emit_Prefetch = FALSE;    /* Emit comments for prefetches */
+      W2C_Emit_Prefetch = FALSE;     /* Emit comments for prefetches */
       W2C_Emit_All_Regions = FALSE; /* Emit cmplr-generated regions */
       W2C_Emit_Linedirs = FALSE;    /* Emit preproc line-directives */
       W2C_Emit_Nested_PUs = FALSE;  /* Emit code for nested PUs */
@@ -1381,7 +1388,8 @@ W2C_Outfile_Init(BOOL emit_global_decls)
 
       /* Include <whirl2c.h> in the .h file */
       Write_String(W2C_File[W2C_DOTH_FILE], NULL/* No srcpos map */,
-		   "/* Include builtin types and operators */\n"
+		   "/* Include builtin types and operators.*/"
+           "\n/* It is like under $TOOLROOT/include/$REL_VER/ */\n"
 		   "#include <whirl2c.h>\n\n");
 
       /* Include the .h file in the .c file */

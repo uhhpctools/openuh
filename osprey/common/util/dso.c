@@ -52,7 +52,7 @@
  * Assume that LD_LIBRARY_PATH has already been set up correctly.
  */
 void
-load_so (char *soname, char *path, BOOL verbose)
+load_so (const char *soname, char *path, BOOL verbose)
 {
     register char *full_path;
 
@@ -66,13 +66,13 @@ load_so (char *soname, char *path, BOOL verbose)
 	    fprintf (stderr, "\nReplacing default %s with %s\n", soname, full_path);
         }
     } else {
-        full_path = soname;
+        full_path = (char *)soname;
     }
-
-#ifndef linux
+  
+#if defined(IRIX)
     if (sgidladd (full_path, RTLD_LAZY) == NULL)
 #else
-    if (dlopen (full_path, /*RTLD_NOW |*/ RTLD_LAZY|RTLD_GLOBAL) == NULL)
+    if (dlopen (full_path, RTLD_LAZY | RTLD_GLOBAL) == NULL)
 #endif
     {
 	fprintf (stderr, "Error loading %s: %s\n", full_path, dlerror());

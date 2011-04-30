@@ -49,7 +49,9 @@
 // ====================================================================
 
 #include <alloca.h>             // alloca
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"               // standard definitions
 #include "wn.h"                 // WN
@@ -71,7 +73,7 @@
 
 #include "dra_internal.h"       // Internal DRA interface
 
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN) || !defined(SHARED_BUILD)
 extern void (*CG_Change_Elf_Symbol_To_Undefined_p) (ST*);
 #define CG_Change_Elf_Symbol_To_Undefined (*CG_Change_Elf_Symbol_To_Undefined_p)
 #else

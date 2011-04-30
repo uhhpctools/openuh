@@ -115,12 +115,6 @@ static void cleanup(em_environ *, Elf32_Ehdr *, Elf32_Phdr *);
 extern void error(char * fmt, ... );
 
 /* UNUSED PROTOTYPES *****************************************/
-#if 0
-static void mapSegs(Elf32_Ehdr *, Elf32_Phdr *, em_environ *);
-static int domap(mm_vector *, int, unsigned, unsigned, em_environ *);
-static int trymap(mm_vector *, int, int, em_environ *);
-static int addrInUse(void *);
-#endif
 
 /**************************************************************
 *

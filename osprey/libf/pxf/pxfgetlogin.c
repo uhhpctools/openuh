@@ -46,6 +46,11 @@
 #ifndef _UNICOS
 #include <stddef.h>
 #endif
+#if defined(BUILD_OS_DARWIN)
+#include <sys/types.h>
+#include <unistd.h>
+#include <pwd.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #define BLANK   ((int) ' ')
 
@@ -103,7 +108,13 @@ _PXFGETLOGIN(
   ierr = 0;
 
   /* get user's login name */
-  if ((loginptr = cuserid(NULL)) != NULL) {
+#if defined(BUILD_OS_DARWIN)
+  struct passwd *p_passwd = getpwuid(geteuid());
+  if (p_passwd != NULL & (loginptr = p_passwd->pw_name) != NULL)
+#else /* defined(BUILD_OS_DARWIN) */
+  if ((loginptr = cuserid(NULL)) != NULL)
+#endif /* defined(BUILD_OS_DARWIN) */
+  {
     loginlen = strlen(loginptr);
     *ILEN = loginlen;    
 

@@ -142,7 +142,16 @@ _set_stride(
 
 		default:
 			for (i = 0; i < count; i++)
+#ifdef KEY /* Bug 14261 */
+				/* Other cases implicitly multiply by elsize
+				 * due to C array-indexing or pointer-addition
+				 * semantics, but here we treat "dest" as a
+				 * (char *), so we must multiply explicitly */
+				(void) memcpy((char *)dest + i * inc * elsize,
+				   src, elsize);
+#else /* KEY Bug 14261 */
 				(void) memcpy((char *)dest + i*inc, src, elsize);
+#endif /* KEY Bug 14261 */
 	} /* switch */
 
 	return;

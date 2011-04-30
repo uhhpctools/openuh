@@ -51,7 +51,6 @@ restrictions:
 
 ================================================================*/
 
-
 #ifndef PQSTEST
 #include "defs.h"
 #include "pqs_defs.h"
@@ -612,12 +611,6 @@ PQS_MANAGER::never_true_together(PQS_TN t1, PQS_TN t2, PQS_NODE_IDX tni)
 	    t1 == PQS_NODE_get_out_pred2(tni)))) {
      printf("bad tni %d\n",tni);
    }
-#if 0
-   Is_True((t1 == PQS_NODE_get_out_pred1(tni) &&
-	    t2 == PQS_NODE_get_out_pred2(tni)) ||
-	   (t2 == PQS_NODE_get_out_pred1(tni) &&
-	    t1 == PQS_NODE_get_out_pred2(tni)),("Bad args to never_true_together"));
-#endif
 
    /* Check for getting set under an unconditional FALSE */
    if ((PQS_NODE_get_qual_pred(tni) == PQS_IDX_TRUE) &&
@@ -1204,9 +1197,9 @@ PQS_MANAGER::Simplify_In_Set(PQS_NODE_IDX tni, PQS_TN tn, PQS_TNI_SET &tnis)
 //================================================================
 
 // Dumping routines
-static char * itype_name(PQS_ITYPE p)
+static const char * itype_name(PQS_ITYPE p)
 {
-   char *r;
+   const char *r;
    switch (p) {
     case PQS_ITYPE_INVALID: r = " PQS_ITYPE_INVALID"; break;
     case PQS_ITYPE_NOPREDICATES: r = " PQS_ITYPE_NOPREDICATES"; break;
@@ -1242,7 +1235,7 @@ void PQS_MANAGER::Print_idx(PQS_NODE_IDX p, FILE *f)
    _data[p].Print(f);
 }
 
-static char * get_nq_flag(TN *tn)
+static const char * get_nq_flag(TN *tn)
 {
   if (tn && PQS_TN_no_query(tn)) return ("*");
   return ("");

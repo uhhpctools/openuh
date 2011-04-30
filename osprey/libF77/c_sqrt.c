@@ -67,4 +67,9 @@ complex c_sqrt_(complex *z)
   return __csqrt(z->real, z->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_sqrt(complex *z) { return c_sqrt_(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_sqrt_, c_sqrt);
+#endif /* defined(BUILD_OS_DARWIN) */

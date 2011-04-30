@@ -728,7 +728,9 @@ declare_nonlocal_label (label)
   nonlocal_goto_handler_slots
     = gen_rtx_EXPR_LIST (VOIDmode, slot, nonlocal_goto_handler_slots);
 #ifdef SGI_MONGOOSE
+#ifndef KEY
   WFE_Declare_Nonlocal_Label (label);
+#endif
 #endif /* SGI_MONGOOSE */
 }
 

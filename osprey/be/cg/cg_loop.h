@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * =======================================================================
  *
  *  Module: cg_loop.h
- *  $Revision: 1.1.1.1 $
- *  $Date: 2005/10/21 19:00:00 $
- *  $Author: marcel $
- *  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cg_loop.h,v $
+ *  $Revision: 1.6 $
+ *  $Date: 05/12/05 08:59:03-08:00 $
+ *  $Author: bos@eng-24.pathscale.com $
+ *  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cg_loop.h $
  *
  *  Revision comments:
  *
@@ -444,6 +448,8 @@ extern BB *CG_LOOP_epilog_end;
 extern UINT32 CG_LOOP_unroll_times_max;
 extern UINT32 CG_LOOP_unrolled_size_max;
 extern BOOL CG_LOOP_unroll_fully;
+extern UINT32 CG_LOOP_unroll_level;
+extern BOOL CG_LOOP_unroll_fb_required;
 extern BOOL CG_LOOP_unroll_remainder_fully;
 extern UINT32 CG_LOOP_unroll_min_trip;
 extern BOOL CG_LOOP_unroll_analysis;
@@ -598,16 +604,16 @@ public:
   void Set_unroll_factor(INT32 n) { unroll_factor = n; }
 #ifdef TARG_IA64
   INT32 Acyclic_len (void) const  { return acyclic_len; }
-  void Set_acyclic_len (INT32 len) { acyclic_len = len; }
+  void Set_acyclic_len(INT32 len) { acyclic_len = len; }
   INT32 Acyclic_len_wo_dspec (void) const { return acyclic_len_wo_dspec; }
   void Set_acyclic_len_wo_dspec (INT32 len) { acyclic_len_wo_dspec = len; }
 #endif
 
   void Recompute_Liveness();
-  bool Determine_Unroll_Fully();
+  bool Determine_Unroll_Fully(BOOL count_multi_bb);
   void Determine_Unroll_Factor();
   void Determine_SWP_Unroll_Factor();
-  void Build_CG_LOOP_Info();
+  void Build_CG_LOOP_Info(BOOL single_bb);
   void EBO_Before_Unrolling();
   void EBO_After_Unrolling();
   void Print(FILE *fp);
@@ -628,19 +634,20 @@ struct SWP_FIXUP {
     prolog(bb1),body(bb2),epilog(bb3), control_loc(cntrl_loc) {}
 };
 
-typedef std::vector<SWP_FIXUP> SWP_FIXUP_VECTOR;
+typedef vector<SWP_FIXUP> SWP_FIXUP_VECTOR;
 
 
 #include "tn_map.h"
 
 // Create the mapping from a TN to its first definition 
-// in the loop body (only for single BB loop).
+// in the loop body.
 //
 struct CG_LOOP_DEF {
   TN_MAP tn_map;
   OP *Get(TN *tn); 
   BOOL Is_invariant(TN *tn);
-  CG_LOOP_DEF(BB *bb);
+  CG_LOOP_DEF(LOOP_DESCR *loop);
+  CG_LOOP_DEF(BB *body);
   ~CG_LOOP_DEF();
 };
 
@@ -650,8 +657,8 @@ struct CG_LOOP_DEF {
 //
 struct OP_VECTOR {
   typedef int index_type;
-  typedef std::vector<OP *>::iterator iterator;
-  std::vector<OP *> op_vec;
+  typedef vector<OP *>::iterator iterator;
+  vector<OP *> op_vec;
   
   iterator begin() { return op_vec.begin(); }
 
@@ -676,12 +683,23 @@ struct OP_VECTOR {
 
 extern CG_LOOP *Current_CG_LOOP;
 
-#ifdef TARG_IA64
+#if defined(TARG_IA64) || defined(TARG_SL)  || defined(TARG_MIPS)
 extern void Perform_Loop_Optimizations(void *rgn_loop_update=NULL);
-extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, SWP_FIXUP_VECTOR& fixup, void **, void *);
+
+extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, SWP_FIXUP_VECTOR& fixup, 
+                void **par_rgn, void *rgn_loop_update);
 #else
 extern void Perform_Loop_Optimizations();
+
 extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, SWP_FIXUP_VECTOR& fixup);
+#endif
+
+#if defined(TARG_SL)
+#define TRACE_ZDL_GEN     0x1
+#define TRACE_ZDL_IR      0x2
+#define TRACE_ZDL_SEQ_NO  0x4
+#define TRACE_ZDL_ALL     0x7
+extern void CG_LOOP_zero_delay_loop_gen();
 #endif
 
 extern BOOL Perform_SWP(CG_LOOP& cl, SWP_FIXUP_VECTOR& fixup, bool is_doloop);

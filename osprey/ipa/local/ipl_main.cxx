@@ -59,11 +59,17 @@
  * This phase reads in the IR files and collects summary 
  * information
  *----------------------------------------------------------*/
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>	    // for WHIRL revision number
 #include <sys/types.h>		    // for ir_bwrite.h
+#if defined(__MINGW32__)
+#include <WINDOWS.h>
+#endif
 #include "defs.h"
 
 #define BACK_END		    // needed by config.h
@@ -109,7 +115,7 @@ BOOL Do_Split_Commons_Set = FALSE;
 BOOL Do_Common_Const = FALSE;
 BOOL IPL_Enable_Outline = FALSE;
 BOOL IPL_Enable_Unknown_Frequency = FALSE;
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 BOOL IPL_Generate_Elf_Symtab = TRUE;
 #else
 BOOL IPL_Generate_Elf_Symtab = FALSE;
@@ -315,7 +321,7 @@ Ipl_Extra_Output (Output_File *ir_output)
     if (driver_argc > 0)
 	WN_write_flags (driver_argc, driver_argv, ir_output);
 
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
     // write out the Elf version of global symtab
     IPL_Write_Elf_Symtab (ir_output);
 #endif // __linux__

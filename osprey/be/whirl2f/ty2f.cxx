@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: ty2f.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/ty2f.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:43 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/ty2f.cxx,v $
  *
  * Revision history:
  *  12-Apr-95 - Original Version
@@ -128,7 +132,7 @@ TY2F_Append_Array_Bnd_Ph(TOKEN_BUFFER decl_tokens,
 			 BOOL         purple_assumed_size)
 {
    char ptr_string[128];
-   char * p = "%s";
+   const char * p = "%s";
 
    if (purple_assumed_size)
    {
@@ -1103,6 +1107,7 @@ TY2F_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty_idx)
    case MTYPE_F4:
    case MTYPE_F8:
    case MTYPE_F10:
+   case MTYPE_F16:
    case MTYPE_FQ:
       base_name = "REAL";
       break;
@@ -1110,6 +1115,7 @@ TY2F_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty_idx)
    case MTYPE_C4:
    case MTYPE_C8:
    case MTYPE_C10:
+   case MTYPE_C16:
    case MTYPE_CQ:
       base_name = "COMPLEX";
       break;
@@ -1118,7 +1124,8 @@ TY2F_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty_idx)
       base_name = "memory block";
       break;
 
-#ifdef TARG_X8664
+#ifdef KEY
+#if defined(TARG_X8664)
    case MTYPE_V16I1:
    case MTYPE_V16I2:
    case MTYPE_V16I4:
@@ -1127,6 +1134,7 @@ TY2F_scalar(TOKEN_BUFFER decl_tokens, TY_IDX ty_idx)
    case MTYPE_V16F8:
       base_name = "REAL";
       break;
+#endif
 #endif /* KEY */
    default:
       ASSERT_DBG_FATAL(FALSE,
@@ -1282,9 +1290,6 @@ TY2F_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty)
 
       if (TY2F_Pointer_To_Dope(ty))
       {
-#if 0
-	Prepend_Token_String(decl_tokens,",POINTER ::");
-#endif
 	TY2F_translate(decl_tokens,Be_Type_Tbl(Pointer_Mtype));
       } 
       else
@@ -1293,10 +1298,6 @@ TY2F_pointer(TOKEN_BUFFER decl_tokens, TY_IDX ty)
 
 	if (TY_kind(TY_pointed(ty)) == KIND_STRUCT)
 	{
-#if 0
-	  Prepend_Token_String(decl_tokens,",POINTER ::");
-	  Prepend_Token_String(decl_tokens,W2CF_Symtab_Nameof_Ty(TY_pointed(ty)));
-#endif
  	  TY2F_translate(decl_tokens,Be_Type_Tbl(Pointer_Mtype));
 
 	} else

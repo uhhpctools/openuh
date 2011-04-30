@@ -289,16 +289,6 @@ SWP_Noop_Property(CG_GROUPING &grouping,
   bool                   found_prop = false;
   ISA_EXEC_UNIT_PROPERTY prop;
 
-#if 0  
-  // When we fill up a bundle at the end of a group, always use a
-  // B unit if possible (these are least resource constrained).
-  //
-  if (end_of_group)
-  {
-    prop = ISA_EXEC_PROPERTY_B_Unit;
-    found_prop = TI_BUNDLE_Slot_Available(bundle, prop, slot_pos);
-  }
-#endif
   
   // We first try to chose a unit from one of our preferences for the
   // slot, such that we do not overflow our resources.

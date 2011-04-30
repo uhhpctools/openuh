@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -39,58 +43,6 @@
 
 // this file is -*- C++ -*-  Really!
 
-#if 0
-
-#include <math.h>
-#include <sys/types.h>
-#include <limits.h>
-#include "pu_info.h"
-#include "lnoutils.h"
-#include "lnopt_main.h"
-#include "stab.h"
-#include "targ_const.h"
-#include "wn_simp.h"
-#include "stdlib.h"
-#include "lwn_util.h"
-#include "strtab.h"
-#include "config.h"
-#include "optimizer.h"
-#include "opt_du.h"
-#include "name.h"
-#include "wintrinsic.h"
-#include "lno_bv.h"
-#include "dep_graph.h"
-#include "debug.h"
-#include "scalar_expand.h"
-#include "cxx_memory.h"
-#include "reduc.h"
-#include "snl_utils.h"
-#include "sxlist.h"
-#include "snl_dist.h"
-#include "permute.h"
-#include "sxlimit.h"
-#include "parallel.h"
-#include "fiz_fuse.h"
-#include "ara.h"
-#include "snl_deps.h"
-#include "lego_util.h"
-#include "tile.h"
-#include "model.h"
-#include "cache_model.h"
-#include "config_cache.h"
-#include "parmodel.h"
-#include "sdlist.h"
-#include "doacross.h"
-#include "prompf.h"
-#include "anl_driver.h"
-#include "parids.h"
-#include "cond.h"
-#include "move.h"
-#include "tlog.h"
-#include "call_info.h"
-#include "cross_snl.h"
-
-#endif
 
 static double Parallel_Cost(WN* wn_outer, 
 		     INT permutation[], 
@@ -563,7 +515,7 @@ void SNL_Parallelization_Costs(WN* wn_outer, INT nloops, PARALLEL_INFO_ST  *pist
 				      &work_estimate, TRUE); 
     if (work_estimate == 0.0) 
       DevWarn("Work Estimate for loop %s at %d is 0", 
-	      WB_Whirl_Symbol(wn_new_outer), (INT) WN_linenum(wn_new_outer));
+	      WB_Whirl_Symbol(wn_new_outer), Srcpos_To_Line(WN_linenum(wn_new_outer)));
     min_parallel_cycles = SNL_Min_Parallel_Overhead_Cost(wn_new_outer, 
 							 new_nloops, i);
 

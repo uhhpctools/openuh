@@ -62,7 +62,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
@@ -1012,7 +1012,7 @@ cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd, I
   sz = MTYPE_size_best(TY_mtype(FLD_type(fl)));
   ft = fl ;
   
-# ifdef linux
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
   {
     dope_header1_type	dh1;
  
@@ -1084,7 +1084,7 @@ cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd, I
   fl = FLD_next(ft);
   
   if (dp[6] != NULL ) {
-# ifdef linux
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
      dope_header2_type dh2;
 
      dh2.unused = 0;

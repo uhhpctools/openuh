@@ -224,9 +224,6 @@ locale_charset ()
      (like SunOS 4 or DJGPP) have only the C locale.  Therefore we don't
      use setlocale here; it would return "C" when it doesn't support the
      locale name the user has set.  */
-#  if HAVE_SETLOCALE && 0
-  locale = setlocale (LC_CTYPE, NULL);
-#  endif
   if (locale == NULL || locale[0] == '\0')
     {
       locale = getenv ("LC_ALL");

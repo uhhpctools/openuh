@@ -71,7 +71,7 @@
  * ====================================================================
  */
 /*REFERENCED*/
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_auxst.cxx $ $Revision: 1.8 $";
@@ -452,7 +452,7 @@ cwh_auxst_add_item(ST * parent, ST *st, enum list_name list)
  ====================================================
 */
 extern ST *
-cwh_auxst_find_item(LIST *l, char * name)
+cwh_auxst_find_item(LIST *l, const char * name)
 {
   ITEM  *t ;
   ST    *st;
@@ -494,41 +494,6 @@ cwh_auxst_add_list(ST * parent, LIST *l, enum list_name list)
     *AUXST_Namelist(o) = *l;
     break;
 
-#if 0
-  case l_COMLIST:
-    *AUXST_Commons(o) = *l ;
-    break;
-
-#ifdef KEY /* Bug 5271 */
-  case l_PU_COMLIST:
-    *AUXST_PU_Commons(o) = *l ;
-    break;
-#endif /* KEY Bug 5271 */
-
-  case l_ALTENTRY:
-    *AUXST_Altentries(o) = *l ;
-    break;
-
-  case l_RETURN_TEMPS:
-    *AUXST_RtnTemps(o) = *l;
-    break;
-  
-  case l_SPLITLIST:
-    *AUXST_SplitCommons(o) = *l ;
-    break;
-
-  case l_EQVLIST:
-    *AUXST_Equivs(o) = *l;
-    break;
-
-  case l_DST_COMLIST:
-    *AUXST_Dstcomlist(o) = *l;
-    break;
-
-  case l_DST_PARMLIST:
-    *AUXST_Dstparmlist(o) = *l;
-    break;
-#endif 
 
   default:
     DevAssert((0),("list?"));

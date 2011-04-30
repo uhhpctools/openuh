@@ -456,9 +456,25 @@ rrd:
 				if (c == endnmlchar) {
 
 					/* get END, if present. */
+#ifdef KEY /* Bug 14200 */
+					/* Correct erroneous assumption in
+					 * original code that a blank will
+					 * follow '&end'. */
+					char c_e, c_n, c_d;
+					MAINGT(c_e);
+					MAINGT(c_n);
+					MAINGT(c_d);
+					if (tolower(c_e) != 'e' ||
+					  tolower(c_n) != 'n' ||
+					  tolower(c_d) != 'd') {
+					  errn = FERDNLEF;
+					  ERROR1(errf, css, errn, buf);
+					}
+#else /* KEY Bug 14200 */
 					do {
 						MAINGT(c);
 					} while (!ISBLANK(c));
+#endif /* KEY Bug 14200 */
 					goto rrd;
 				}
 			}
@@ -727,6 +743,39 @@ static nmlist_goli_t
 	return (NULL);
 }
 
+#ifdef KEY /* Bug 11889 */
+/*
+ * dvdm		Bounds of array
+ * dimnsn	Bounds of array reference
+ * ndim		Rank of array
+ * return	1 if array reference obeys Fortran in-bounds rules, else 0
+ */
+static int
+bounds_ok(struct DvDimen *dvdm, struct DvDimen *dimnsn, int ndim) {
+			
+  int nc;
+  for (nc = 0; nc < ndim; nc++) {
+    if (dvdm[nc].extent) {
+      int lb = dimnsn[nc].low_bound;
+      int ext = (dimnsn[nc].stride_mult < 0) ?
+	(-dimnsn[nc].extent) :
+        dimnsn[nc].extent;
+      int glb = dvdm[nc].low_bound;
+      if (dimnsn[nc].stride_mult < 0) {
+        if (lb >= (glb + dvdm[nc].extent) || (lb - ext + 1) < glb) {
+	  return 0;
+	}
+      } else {
+	if (lb < glb || ((lb + ext) > (glb + dvdm[nc].extent))) {
+	  return 0;
+	}
+      }
+    }
+  }
+  return 1;
+}
+#endif /* KEY Bug 11889 */
+
 /* _getnlval - get values for namelist io
  *
  * On entry:
@@ -930,6 +979,11 @@ _getnlval(FIOSPTR css, nmlist_goli_t *nlvar, char *lastc, unit *cup)
 
 			/* array element. */
 			if (encnt == 0 && icnt == 0) {
+#ifdef KEY /* Bug 11889 */
+                                if (!bounds_ok(dvdm, dimnsn, ndim)) {
+				  return(FENLBNDY);
+				}
+#endif /* KEY Bug 11889 */
 				offs	= dimnsn[0].low_bound - (dvdm[0].low_bound);
 				incrmt	= 1;
 				for (nc = 1; nc < ndim; nc++) {
@@ -990,7 +1044,13 @@ _getnlval(FIOSPTR css, nmlist_goli_t *nlvar, char *lastc, unit *cup)
 						elsize, cntp, incrmt, &c);
 				*lastc	= c;
 			} else {
+#ifdef KEY /* Bug 11889 */
+                                if (!bounds_ok(dvdm, dimnsn, ndim)) {
+				  return(FENLBNDY);
+				}
+#endif /* KEY Bug 11889 */
 				for (nc = 0; nc < ndim; nc++) {
+#ifndef KEY /* Bug 11889 */
 					if (dimnsn[nc].extent !=
 						dvdm[nc].extent) {
 						if (dimnsn[nc].extent >
@@ -998,12 +1058,34 @@ _getnlval(FIOSPTR css, nmlist_goli_t *nlvar, char *lastc, unit *cup)
 							return(FENLBNDY);
 						}
 					}
+#endif /* KEY Bug 11889 */
+#ifdef KEY /* Bug 11635 */
+				   /* Multiply stride for consecutive elements
+				    * of the array times stride for the section
+				    * of the array. Not clear why original
+				    * author wanted to skip this. For example,
+				    * for an i*8 array, the consecutive-element
+				    * stride is 2; and if the section stride
+				    * is also 2, we want the resulting stride
+				    * to be 4 (skipping every other element)
+				    * even though 2 == 2.
+				    *
+				    * Note also the weird (but correct) code
+				    * above: "if (x!=y) if (x > y) ..."; it
+				    * looks like something is missing, but
+				    * no problems have surfaced yet.
+				    */
+						dimnsn[nc].stride_mult =
+						  dimnsn[nc].stride_mult *
+						  dvdm[nc].stride_mult;
+#else /* KEY Bug 11635 */
 					if (dimnsn[nc].stride_mult !=
 					    dvdm[nc].stride_mult) {
 						dimnsn[nc].stride_mult =
 						  dimnsn[nc].stride_mult *
 						  dvdm[nc].stride_mult;
 					}
+#endif /* KEY Bug 11635 */
 				}
 				c	= *lastc;
 				errn	= _nl_stride_dv(css, cup, nldv,
@@ -1349,6 +1431,10 @@ _nlread(FIOSPTR css, ftype_t type, unit *cup, void *ptr, long elsize,
 			 */
 			ncntp	= ncntp - lcount;
 			wptr	= wptr + (lcount * elsize);
+#ifdef KEY /* Bug 11635 */
+			/* Stride may be 0 (for scalar), pos, or neg */
+                        wptr += incrm ? (elsize * (incrm - 1)) : 0;
+#endif /* KEY Bug 11635 */
 			vaddr	= wptr;
 		}
 		else {
@@ -1356,8 +1442,21 @@ _nlread(FIOSPTR css, ftype_t type, unit *cup, void *ptr, long elsize,
 			int *iptr;
 			int ix, lim;
 			bcont *siptr;
-			move	= MIN(ncntp,lcount);
+#ifdef KEY /* Bug 11635 */
+			/* stride may be zero (for scalar), positive,
+			 * or negative */
+			long abs_incrm = (incrm > 0) ? incrm : (-incrm);
+			long ncntp_tmp = abs_incrm ?
+			  ((ncntp + abs_incrm + 1) / abs_incrm) :
+			  ncntp;
+			move	= MIN(ncntp_tmp,lcount);
 			lim	= elsize/(sizeof(bcont));
+			long extra_dest_stride =
+			  incrm ? (lim * (incrm - 1)) : 0;
+#else /* KEY Bug 11635 */
+			lim	= elsize/(sizeof(bcont));
+			move	= MIN(ncntp,lcount);
+#endif /* KEY Bug 11635 */
 			siptr	= (bcont*) vaddr;
 			/* move what's needed from data group */
 			while (move != 0) {
@@ -1373,7 +1472,12 @@ _nlread(FIOSPTR css, ftype_t type, unit *cup, void *ptr, long elsize,
 					siptr	= siptr + lim;
 				vaddr	= siptr;
 				move--;
+#ifdef KEY /* Bug 11635 */
+                                ncntp -= abs_incrm ? abs_incrm : 1;
+				siptr = (vaddr += extra_dest_stride);
+#else /* KEY Bug 11635 */
 				ncntp--;
+#endif /* KEY Bug 11635 */
 				lcount--;
 			}
 		}
@@ -1496,11 +1600,20 @@ indxgetext:
 				/* calculate extent from upper bound
 				 * (upperbound - lowerbound) + 1
 				 */
+#ifdef KEY /* Bug 8046, 11635 */
+				/* Array section might stride downward: Cray
+				 * dope vector extents are never negative,
+				 * but strides may be */
+				long extent_tmp = (*((_f_int8 *)tempbuf) -
+						   dvdn[i].low_bound);
+				extent_tmp =
+				  (extent_tmp < 0) ? (-extent_tmp) : extent_tmp;
+				dvdn[i].extent = extent_tmp + 1;
+#else /* KEY Bug 8046, 11635 */
 				dvdn[i].extent	= (*((_f_int8 *)tempbuf) -
 						   dvdn[i].low_bound) + 1;
-#ifndef KEY /* Bug 8046 */
 				en1++;
-#endif /* KEY Bug 8046 */
+#endif /* KEY Bug 8046, 11635 */
 indxgetinc:
 				/* point beyond subscript extent. */
 				cup->ulineptr	= field_begin + field_width;
@@ -1533,11 +1646,18 @@ indxforloop:
 					cup->ulineptr	= field_begin + field_width;
 					cup->ulinecnt	= cup->ulinecnt - field_width;
 				}
+#ifdef KEY /* Bug 11635 */
+				/* No ":" after extent implies stride == 1 */
+				else {
+					dvdn[i].stride_mult = 1;
+				}
+#endif /* KEY Bug 11635 */
 			}
 #ifdef KEY /* Bug 8046 */
-			/* No ":" after low bound implies extent is 1 */
+			/* No ":" after low bound implies extent, stride == 1 */
                         else {
-				dvdn[i].extent	= 1;
+				dvdn[i].extent = 1;
+				dvdn[i].stride_mult = 1;
 			}
 #endif /* KEY Bug 8046 */
 			/* increment the number of subscripts */

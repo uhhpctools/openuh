@@ -54,41 +54,6 @@ static struct obstack temporary_obstack;
 #define IDENTIFIER_REPO_USED(NODE)   (TREE_LANG_FLAG_3 (NODE))
 #define IDENTIFIER_REPO_CHOSEN(NODE) (TREE_LANG_FLAG_4 (NODE))
 
-#if 0
-/* Record the flags used to compile this translation unit.  */
-
-void
-repo_compile_flags (argc, argv)
-     int argc;
-     char **argv;
-{
-}
-
-/* If this template has not been seen before, add a note to the repository
-   saying where the declaration was.  This may be used to find the
-   definition at link time.  */
-
-void
-repo_template_declared (t)
-     tree t;
-{}
-
-/* Note where the definition of a template lives so that instantiations can
-   be generated later.  */
-
-void
-repo_template_defined (t)
-     tree t;
-{}
-
-/* Note where the definition of a class lives to that template
-   instantiations can use it.  */
-
-void
-repo_class_defined (t)
-     tree t;
-{}
-#endif
 
 static tree
 repo_get_id (t)
@@ -155,49 +120,6 @@ repo_template_used (t)
     }
 }
 
-#if 0
-/* Note that the vtable for a class has been used, and offer to emit it.  */
-
-static void
-repo_vtable_used (t)
-     tree t;
-{
-  if (! flag_use_repository)
-    return;
-
-  pending_repo = tree_cons (NULL_TREE, t, pending_repo);
-}
-
-/* Note that an inline with external linkage has been used, and offer to
-   emit it.  */
-
-void
-repo_inline_used (fn)
-     tree fn;
-{
-  if (! flag_use_repository)
-    return;
-
-  /* Member functions of polymorphic classes go with their vtables.  */
-  if (DECL_FUNCTION_MEMBER_P (fn) 
-      && TYPE_POLYMORPHIC_P (DECL_CONTEXT (fn)))
-    {
-      repo_vtable_used (DECL_CONTEXT (fn));
-      return;
-    }
-
-  pending_repo = tree_cons (NULL_TREE, fn, pending_repo);
-}
-
-/* Note that a particular typeinfo node has been used, and offer to
-   emit it.  */
-
-void
-repo_tinfo_used (ti)
-     tree ti;
-{
-}
-#endif
 
 void
 repo_template_instantiated (t, extern_p)

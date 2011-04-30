@@ -63,57 +63,22 @@ static int one = 1;
 static char     ctlz = '\032';
 
 /* fwd decl. */
-#if 00
-static int f_end_com (alist64 *a, int lock);
-#else
 static int f_end_com (alist *a, int lock);
-#endif
 
 int
 f_end (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-    return( f_end_com( &a64, 0 ) );
-#else
     return( f_end_com( a, 0 ) );
-#endif
 }
 
 int
 f_end_mp (alist *a)
 {
-#if 00
-    alist64 a64;
-    a64.aerr = a->aerr;
-    a64.aunit = a->aunit;
-    return( f_end_com( &a64, 1 ) );
-#else
-    return( f_end_com( a, 1 ) );
-#endif
-}
-
-#if 00
-int
-f_end64 (alist64 *a)
-{
-    return( f_end_com( a, 0 ) );
-}
-
-int
-f_end64_mp (alist64 *a)
-{
     return( f_end_com( a, 1 ) );
 }
 
-static int
-f_end_com (alist64 *a, int lock)
-#else
 static int
 f_end_com (alist *a, int lock)
-#endif
 {
    unit           *b, *ftnunit;
    int		   n;

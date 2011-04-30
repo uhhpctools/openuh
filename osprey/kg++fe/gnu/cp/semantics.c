@@ -550,8 +550,6 @@ finish_switch_cond (cond, switch_stmt)
   tree orig_type = NULL;
   if (!processing_template_decl)
     {
-      tree index;
-
       /* Convert the condition to an integer or enumeration type.  */
       cond = build_expr_type_conversion (WANT_INT | WANT_ENUM, cond, 1);
       if (cond == NULL_TREE)
@@ -564,18 +562,6 @@ finish_switch_cond (cond, switch_stmt)
 	{
 	  cond = default_conversion (cond);
 	  cond = fold (build1 (CLEANUP_POINT_EXPR, TREE_TYPE (cond), cond));
-	}
-
-      if (cond != error_mark_node)
-	{
-	  index = get_unwidened (cond, NULL_TREE);
-	  /* We can't strip a conversion from a signed type to an unsigned,
-	     because if we did, int_fits_type_p would do the wrong thing
-	     when checking case values for being in range,
-	     and it's too hard to do the right thing.  */
-	  if (TREE_UNSIGNED (TREE_TYPE (cond))
-	      == TREE_UNSIGNED (TREE_TYPE (index)))
-	    cond = index;
 	}
     }
   FINISH_COND (cond, switch_stmt, SWITCH_COND (switch_stmt));
@@ -2547,28 +2533,6 @@ genrtl_finish_function (fn)
 {
   tree t;
 
-#if 0
-  if (write_symbols != NO_DEBUG)
-    {
-      /* Keep this code around in case we later want to control debug info
-	 based on whether a type is "used".  (jason 1999-11-11) */
-
-      tree ttype = target_type (fntype);
-      tree parmdecl;
-
-      if (IS_AGGR_TYPE (ttype))
-	/* Let debugger know it should output info for this type.  */
-	note_debug_info_needed (ttype);
-
-      for (parmdecl = DECL_ARGUMENTS (fndecl); parmdecl; parmdecl = TREE_CHAIN (parmdecl))
-	{
-	  ttype = target_type (TREE_TYPE (parmdecl));
-	  if (IS_AGGR_TYPE (ttype))
-	    /* Let debugger know it should output info for this type.  */
-	    note_debug_info_needed (ttype);
-	}
-    }
-#endif
 
   /* Clean house because we will need to reorder insns here.  */
   do_pending_stack_adjust ();
@@ -2607,13 +2571,6 @@ genrtl_finish_function (fn)
   if (function_depth > 1)
     ggc_pop_context ();
 
-#if 0
-  /* Keep this code around in case we later want to control debug info
-     based on whether a type is "used".  (jason 1999-11-11) */
-
-  if (ctype && TREE_ASM_WRITTEN (fn))
-    note_debug_info_needed (ctype);
-#endif
 
   /* If this function is marked with the constructor attribute, add it
      to the list of functions to be called along with constructors

@@ -174,7 +174,7 @@ extern void  Apply_Controls ( void );
 
 /* Get the current value of a control: */
 extern INT32 Get_Int_Ctrl_Val  ( CONTROL a );
-extern char *Get_Name_Ctrl_Val ( CONTROL a );
+extern const char *Get_Name_Ctrl_Val ( CONTROL a );
 
 /* Pop once values of all controls of given level: */
 extern void Pop_Controls ( INT32 level );
@@ -187,13 +187,13 @@ extern void Restore_Routine_Top_Ctrls ( void );
 extern void Restore_Cmd_Line_Ctrls ( void );
 
 /* Print the current values of the controls: */
-extern void Print_Controls ( FILE *fp, char *tag, BOOL def );
+extern void Print_Controls ( FILE *fp, const char *tag, BOOL def );
 
 /* Process a pragma, entering it in the control table: */
 extern INT Process_Pragma ( char *x );
 
 /* Process a control options */
-extern INT Process_Control_Opt ( char *save_a, INT flags );
+extern INT Process_Control_Opt (const char *save_a, INT flags );
 
 /* Handle -g/-O combinations */
 extern void Fix_g_O(void);

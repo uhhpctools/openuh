@@ -3259,6 +3259,10 @@ Global_Insn_Sched (REGION_TREE* rgn_tree, BOOL prepass) {
                                          TRUE,  /* global code motion */
                                          TFile) ;
 
+    // reset the order field of OPs
+    for (BB *bp = REGION_First_BB; bp; bp = BB_next(bp)) {
+        BB_Update_OP_Order(bp);
+    }
     Stop_Timer(T_Ipfec_GLOS_CU);
 }
 
@@ -3335,6 +3339,10 @@ Local_Insn_Sched (BOOL prepass) {
                                          FALSE,  /* after code motion  */
                                          FALSE,  /* local code motion */
                                          TFile) ;
+    // reset the order field of OPs
+    for (BB *bp = REGION_First_BB; bp; bp = BB_next(bp)) {
+        BB_Update_OP_Order(bp);
+    }
 
     Stop_Timer(T_Ipfec_LOCS_CU);
 }

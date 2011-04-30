@@ -183,7 +183,7 @@ extern void   cwh_auxst_add_item(ST * parent, ST *st, enum list_name list);
 extern ITEM * cwh_auxst_next_element(ST * parent, ITEM *i, enum list_name list) ;
 extern BOOL   cwh_auxst_read_flag(ST * st, enum flags_a f) ;
 extern void   cwh_auxst_set_flag(ST * st, enum flags_a f, BOOL val);
-extern ST *   cwh_auxst_find_item(LIST *l, char * name);
+extern ST *   cwh_auxst_find_item(LIST *l, const char * name);
 #ifdef KEY /* Bug 5271 */
 extern void cwh_clear_PU_common_list(ST *st);
 #endif /* KEY Bug 5271 */

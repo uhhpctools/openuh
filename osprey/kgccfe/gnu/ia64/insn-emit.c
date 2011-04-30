@@ -2772,24 +2772,6 @@ gen_insv (operand0, operand1, operand2, operand3)
 
       FAIL;
 
-#if 0
-      /* This code may be useful for other IA-64 processors, so we leave it in
-	 for now.  */
-      while (width > 16)
-	{
-	  rtx tmp;
-
-	  emit_insn (gen_insv (operands[0], GEN_INT (16), GEN_INT (shift),
-			       operands[3]));
-	  shift += 16;
-	  width -= 16;
-	  tmp = gen_reg_rtx (DImode);
-	  emit_insn (gen_lshrdi3 (tmp, operands[3], GEN_INT (16)));
-	  operands[3] = tmp;
-	}
-      operands[1] = GEN_INT (width);
-      operands[2] = GEN_INT (shift);
-#endif
     }
 }
     operand0 = operands[0];

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -61,7 +65,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_intrin.cxx $ $Revision: 1.9 $";
@@ -130,7 +134,7 @@ static ST *derfc_st = NULL;
  *================================================================
 */
 static WN * 
-cwh_intrin_get_return_value(TYPE_ID rtype, char *name )
+cwh_intrin_get_return_value(TYPE_ID rtype, const char *name )
 {
    PREG_NUM rpreg;
    PREG_det rpreg_det;
@@ -196,7 +200,7 @@ cwh_intrin_null_parm(void)
  *================================================================
 */
 extern
-ST * cwh_intrin_make_intrinsic_symbol(char *name, TYPE_ID bt) 
+ST * cwh_intrin_make_intrinsic_symbol(const char *name, TYPE_ID bt) 
 {
    ST *st;
    st = cwh_stab_mk_fn_0args(name, EXPORT_PREEMPTIBLE, GLOBAL_SYMTAB + 1,
@@ -1794,7 +1798,7 @@ fei_ieee_trunc(TYPE type)
    cwh_stk_push_typed(r,WN_item,ty);
 }
 
-/* Build POPCNT and LEADZ */
+/* Build POPCNT and LEADZ (and POPPAR) */
 /* type is the type of the intrinsic, arg is the type of the argument */
 static void
 cwh_intrin_popcnt_leadz_helper(INTRINSIC i1, INTRINSIC i2, INTRINSIC i4, INTRINSIC i8,
@@ -1826,22 +1830,18 @@ cwh_intrin_popcnt_leadz_helper(INTRINSIC i1, INTRINSIC i2, INTRINSIC i4, INTRINS
    } else {
       ti = t;
    }
+
+   // 12969: For MTYPE_U1, MTYPE_I1, MTYPE_U2, and MTYPE_U4,
+   // we won't worry about zeroing out the upper bits here.
+   // Instead, our library functions ignore the higher bits.
    switch (ti) {
-    case MTYPE_U1: case MTYPE_I1:
-       intr = i1;
-       /* need to mask off low bits and convert to U4 */
-       wn = cwh_expr_bincalc(OPR_BAND,WN_Intconst(MTYPE_U4,255),wn);
-       break;
-    case MTYPE_U2: case MTYPE_I2:
-       intr = i2;
-       /* need to mask off low bits and convert to U4 */
-       wn = cwh_expr_bincalc(OPR_BAND,WN_Intconst(MTYPE_U4,65535),wn);
-       break;
+    case MTYPE_U1: case MTYPE_I1: intr = i1; break;
+    case MTYPE_U2: case MTYPE_I2: intr = i2; break;
     case MTYPE_U4: case MTYPE_I4: intr = i4; break;
     case MTYPE_U8: case MTYPE_I8: intr = i8; break;
     default: DevAssert(0,("Unknown type"));
    }
-   
+
    wn = cwh_intrin_wrap_value_parm(wn);
    r = WN_Create_Intrinsic(OPC_I4INTRINSIC_OP,intr,1,&wn);
    r = cwh_convert_to_ty(r,rt);
@@ -1865,15 +1865,12 @@ fei_leadz (TYPE type, TYPE arg)
 				  INTRN_I4LEADZ,INTRN_I8LEADZ,type,arg);
 }
 
+
 void
 fei_poppar (TYPE type, TYPE arg)
 {
-   WN *wn;
-   WN *ae=NULL;
-   fei_popcnt(type, arg);
-   wn = cwh_expr_bincalc(OPR_BAND,cwh_expr_operand(&ae),WN_Intconst(MTYPE_I4,1));
-   wn = cwh_expr_restore_arrayexp(wn,ae);
-   cwh_stk_push(wn,WN_item);
+   cwh_intrin_popcnt_leadz_helper(INTRN_I4POPPAR,INTRN_I4POPPAR,
+				  INTRN_I4POPPAR,INTRN_I8POPPAR,type,arg);
 }
 
 
@@ -2076,7 +2073,7 @@ fei_fpclass(TYPE type)
 /* Helper function for IEEE intrinsics */
 static void
 cwh_intrin_ieee_intrin_call_helper(INTRINSIC intrin, TYPE_ID type, INT nargs, 
-				   BOOL issue_warning, char * iname)
+				   BOOL issue_warning, const char * iname)
 {
    BOOL v[2];
    WN *args[2];
@@ -2123,7 +2120,7 @@ IEEE_INTRINCALL(fei_enbl_interupt,ENABLE_IEEE_INTERRUPT,MTYPE_V,1,TRUE);
 
 /* Helper function for IEEE intrinsics */
 static void
-cwh_intrin_ieee_intrin_helper(INTRINSIC intrin,BOOL issue_warning,char *iname)
+cwh_intrin_ieee_intrin_helper(INTRINSIC intrin,BOOL issue_warning,const char *iname)
 {
    WN *args;
    WN *sz;
@@ -2343,7 +2340,7 @@ fei_lock_release(void)
 
 #ifdef KEY /* Bug 1324 */
 static void
-help_make_intrin_symbol(ST **symbol, char *func_name, TYPE_ID result_type) {
+help_make_intrin_symbol(ST **symbol, const char *func_name, TYPE_ID result_type) {
   if (! *symbol) {
      *symbol = cwh_intrin_make_intrinsic_symbol(func_name,result_type);
   }
@@ -2363,7 +2360,7 @@ fei_erf (TYPE type, int complement) {
    WN *call;
    INT64 flags = 0;
 
-   char *func_name;
+   const char *func_name;
    TYPE_ID result_type = TY_mtype(cast_to_TY(t_TY(type)));
    ST *symbol;
 
@@ -2524,23 +2521,4 @@ cwh_intrin_build(WN **k, INTRINSIC intr,TYPE_ID bt, INT numargs)
 extern void
 cwh_whirl_simplfier_control(BOOL onoff)
 {
-#if 0 /* do nothing for now */
-   static INT32 onoff_count=0;
-   static BOOL  simplifier_enabled;
-
-   printf("onoff count = %d\n",onoff_count);
-   if (onoff) {
-      /* Turn it back on */
-      if (onoff_count == 1) {
-	 (void) WN_Simplifier_Enable(save_wn_simplifier_enable);
-      }
-      if (onoff_count > 0) {
-	 onoff_count -= 1;
-      }
-   } else {
-      /* Turn simplifier off */
-      (void) WN_Simplifier_Enable(save_wn_simplifier_enable);
-      onoff_count += 1;
-   }
-#endif
 }

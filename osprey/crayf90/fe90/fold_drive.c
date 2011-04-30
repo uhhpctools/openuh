@@ -253,6 +253,60 @@ static void f90_character_compare(char		*ch_ptr1,
 }  /* f90_character_compare */
 
 
+#ifdef KEY /* Bug 12014 */
+/*
+ * After a call to ntr_const_tbl(), which may have reallocated the const_pool,
+ * adjust the values of a pointer known to point into that pool. For
+ * use inside folder_driver().
+ * l_value_offset	offset of pointer inside const_pool
+ * returns		new value of pointer inside const_pool
+ */
+#define CORRECT_THE_POINTER(l_value_offset) \
+  (((char *)const_pool) + l_value_offset)
+#endif /* KEY Bug 12014 */
+
+#ifdef KEY /* Bug 12482 */
+/*
+ * Copy the value of a typeless or boz constant (e.g. b'1', o'7', or z'f')
+ * from its source in the constant pool to a destination in a variable which
+ * can later be passed to ntr_const_tbl() along with a desired type. For
+ * unknown reasons, on a little-endian host, the data is divided into
+ * words in big-endian fashion when it's typeless (e.g. z'1f2f3f4f5f6f7f8f'
+ * in the source generates a word 0x1f2f3f4f followed by 0x5f6f7f8f) but must
+ * be little-endian when passed to ntr_const_tbl. On a little-endian host, we
+ * reverse the order of words; on a big-endian host, we leave the order alone
+ * but insert padding at the beginning of the buffer or omit high-order words
+ * as need be. Hopefully that achieves the right result on a big-endian or
+ * cross-endian compiler--no chance to test so far.
+ *
+ * dst		Array of words to be passed to ntr_const_tbl() later
+ * dst_words	Number of words in dst
+ * src		Array of words from typeless constant
+ * src_words	Number of words in src
+ */
+void
+copy_and_pad_boz(long_type *dst, Uint dst_words, long_type *src, Uint src_words) {
+  for (int i = 0; i < dst_words; i++) {
+     dst[i] = 0;	/* Zero the entire result */
+  }
+  /* For type like integer*2, if the caller computed these based on the bit
+   * size, it's a fraction of a word, so round up */
+  src_words = (0 == src_words) ? 1 : src_words;
+  dst_words = (0 == dst_words) ? 1 : dst_words;
+  int start = (src_words > dst_words) ? (src_words - dst_words) : 0;
+# if defined(_HOST_LITTLE_ENDIAN) && defined(_TARGET_LITTLE_ENDIAN)
+  int reverse = src_words - 1;
+  for (int i = start; i < src_words; i++) {
+     dst[reverse - i] = src[i];
+  }
+# else
+  int pad = dst_words - src_words;
+  for (int i = start; i < src_words; i++) {
+     dst[i + pad] = src[i];
+  }
+# endif
+}
+#endif /* KEY Bug 12482 */
 /******************************************************************************\
 |*									      *|
 |* Description:								      *|
@@ -555,6 +609,21 @@ boolean folder_driver(char		*l_value_ptr,
 
 CONTINUE:
 
+#ifdef KEY /* Bug 12014 */
+   /*
+    * The authors outsmarted themselves by using pointers instead of indices
+    * as the formal arguments to function folder_driver(). If the calls to
+    * ntr_const_tbl() below reallocate the const_pool, the pointers are no
+    * longer correct. Rather than change every call to folder_driver() in the
+    * entire front end, we correct the pointers as needed after each call to
+    * ntr_const_tbl(). (Actually it seems that r_value_ptr is never used
+    * after such a call, but we correct it for safety's sake and rely on opt
+    * to discard dead code.)
+    */
+   {
+   size_t l_value_offset = l_value_ptr - (char *) const_pool;
+   size_t r_value_offset = r_value_ptr - (char *) const_pool;
+#endif /* KEY Bug 12014 */
    switch (opr) {
       case Reshape_Opr :
          mask = AR_reshape((void *)result,
@@ -614,6 +683,10 @@ CONTINUE:
          *res_type_idx = ntr_type_tbl();
 
          result[0] = ntr_const_tbl((*res_type_idx), TRUE, NULL);
+#ifdef KEY /* Bug 12014 */
+         l_value_ptr = CORRECT_THE_POINTER(l_value_offset);
+         r_value_ptr = CORRECT_THE_POINTER(r_value_offset);
+#endif /* KEY Bug 12014 */
          char_ptr = (char *) &CN_CONST(result[0]);
 
          for (i = 0; i < char_len; i++) {
@@ -650,6 +723,10 @@ CONTINUE:
          *res_type_idx = ntr_type_tbl();
 
          result[0] = ntr_const_tbl((*res_type_idx), TRUE, NULL);
+#ifdef KEY /* Bug 12014 */
+         l_value_ptr = CORRECT_THE_POINTER(l_value_offset);
+         r_value_ptr = CORRECT_THE_POINTER(r_value_offset);
+#endif /* KEY Bug 12014 */
          char_ptr = (char *) &CN_CONST(result[0]);
 
          length = CP_CONSTANT(CN_POOL_IDX(TYP_IDX(l_type_idx)) +
@@ -893,6 +970,10 @@ CONTINUE:
 
       case SIK_Opr :
          cn_idx = ntr_const_tbl(l_type_idx, FALSE, &l_value.v[0]);
+#ifdef KEY /* Bug 12014 */
+         l_value_ptr = CORRECT_THE_POINTER(l_value_offset);
+         r_value_ptr = CORRECT_THE_POINTER(r_value_offset);
+#endif /* KEY Bug 12014 */
 
          if (compare_cn_and_value(cn_idx, RANGE_INT1_F90, Le_Opr)) {
             i = 1;
@@ -1007,7 +1088,7 @@ CONTINUE:
          if (TYP_TYPE(l_type_idx) == Logical &&
              TYP_TYPE((*res_type_idx)) == Logical) {
 
-# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if defined(_TARGET_OS_SOLARIS) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             if (l_linear_type == Logical_8 &&
                 (res_linear_type == Logical_1 ||
                  res_linear_type == Logical_2 ||
@@ -1128,7 +1209,7 @@ CONTINUE:
          arith_type_l = linear_to_arith[l_linear_type];
 
 # if defined(_TARGET_OS_MAX) || defined(_TARGET_OS_SOLARIS) ||  \
-     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+     (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
          if (TYP_TYPE((*res_type_idx)) == Integer) {
             arith_type = input_arith_type[res_linear_type];
@@ -2667,6 +2748,10 @@ CONTINUE:
          /* the character result constant.                 */
 
          result[0] = ntr_const_tbl(l_type_idx, TRUE, NULL);
+#ifdef KEY /* Bug 12014 */
+         l_value_ptr = CORRECT_THE_POINTER(l_value_offset);
+         r_value_ptr = CORRECT_THE_POINTER(r_value_offset);
+#endif /* KEY Bug 12014 */
 
          *res_type_idx = l_type_idx;
 
@@ -2697,6 +2782,10 @@ CONTINUE:
          result[0] = ntr_const_tbl(l_type_idx,
                                    TRUE,
                                    (long_type *) char_buf);
+#ifdef KEY /* Bug 12014 */
+         l_value_ptr = CORRECT_THE_POINTER(l_value_offset);
+         r_value_ptr = CORRECT_THE_POINTER(r_value_offset);
+#endif /* KEY Bug 12014 */
 
          *res_type_idx = l_type_idx;
 
@@ -2834,6 +2923,9 @@ CONTINUE:
          PRINTMSG(line, 828, Internal, col);
          break;
    }
+#ifdef KEY /* Bug 12014 */
+   }
+#endif /* KEY Bug 12014 */
 
 # ifdef _TARGET_OS_MAX
    if (res_linear_type == Complex_4) {  /* KAYKAY */
@@ -3624,7 +3716,7 @@ int	ntr_int_const_tbl(int		type_idx,
 # if !defined(_HOST64) || !defined(_TARGET64)
    int		 new_type;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    long		*cn_ptr; 
 # endif
 # endif
@@ -3658,7 +3750,7 @@ int	ntr_int_const_tbl(int		type_idx,
         the_constant[1] = 0;
    }
 
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    if (type_idx == NULL_IDX) { /* Set type according to size */
       new_type = cval_to_f_int(the_constant,

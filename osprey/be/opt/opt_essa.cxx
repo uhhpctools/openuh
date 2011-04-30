@@ -155,7 +155,8 @@ private:
   void                Process_delayed_rename(EXP_OCCURS *, CODEREP *) const;
   BOOL                Same_base_diff_offset(const CODEREP *,
 					    const CODEREP *) const;
-
+  BOOL                Same_base_same_offset(const CODEREP *,
+					    const CODEREP *) const;
 public:
                     ESSA(ETABLE *etable, EXP_WORKLST *worklist,
 			 ALIAS_RULE *ar);
@@ -241,6 +242,23 @@ ESSA::Same_base_diff_offset(const CODEREP *cr1, const CODEREP *cr2) const
 }
 
 
+// Return TRUE if their base and offset are the same
+BOOL
+ESSA::Same_base_same_offset(const CODEREP *cr1, const CODEREP *cr2) const
+{
+  if (cr1->Kind() != CK_IVAR || cr2->Kind() != CK_IVAR)
+    return FALSE;
+
+  CODEREP *base1 = cr1->Ilod_base() ? cr1->Ilod_base() : cr1->Istr_base();
+  CODEREP *base2 = cr2->Ilod_base() ? cr2->Ilod_base() : cr2->Istr_base();
+  if (base1 == base2) {
+    if (cr1->Offset() ==  cr2->Offset()) 
+      return TRUE;
+  }
+  return FALSE;
+}
+
+
 BOOL
 ESSA::Ilod_modified_phi_result(const BB_NODE *phi_bb, const CODEREP *cr) const
 {
@@ -272,9 +290,25 @@ ESSA::Ilod_modified_phi_result(const BB_NODE *phi_bb, const CODEREP *cr) const
     if (sr == NULL || !OPCODE_is_store(sr->Op())) return TRUE;
 
 #ifdef KEY // bug 7814
+#ifdef TARG_NVISA
+// bug 7814 is for a fortran program that was too aggressive in optimizing.
+// But for nvidia's bug 417551, this is a safe optimization that helps perf.
+// The root problem seems to be a weakness of alias analysis, as taking
+// the address of a temp is blocking the optimization.
+// Until we find a non-working program or come up with a better workaround,
+// put this check under a flag.
+    if ( ! WOPT_Enable_Aggressive_Iload_CSE)
+#endif
     if (vsym->Aux_id() == Opt_stab()->Default_vsym())
       return TRUE;
 #endif
+
+    //since the ansi rule is turned on by default, but now there're
+    //still some unsafe things. we need to do a fix here
+    //this's definite alias case, which we can do before apply the
+    //the alias rule
+    if(Same_base_same_offset(sr->Lhs(), cr))
+      return TRUE;
 
     // Seems like the following can lead to use-before-def if the
     // defstmt's result is not aliased with the use (i.e., with
@@ -290,6 +324,7 @@ ESSA::Ilod_modified_phi_result(const BB_NODE *phi_bb, const CODEREP *cr) const
 			      cr->Ilod_ty(), TRUE) &&
 	!Same_base_diff_offset(sr->Lhs(), cr))
       return TRUE;
+    
 
     // Fix 459756.  Also see comments above.  Update the mu-node of the
     // CK_IVAR to point the chi of the aliased defstmt.  This fixed the
@@ -351,6 +386,7 @@ ESSA::Ilod_modified_real_occ_phi_opnd(const BB_NODE *def_bb, const CODEREP *cr,
     if (sr == NULL || !OPCODE_is_store(sr->Op())) return TRUE;
 
 #ifdef KEY // bug 7814
+    // NVISA:  this instance of the check so far seems to not cause a problem
     if (vsym->Aux_id() == Opt_stab()->Default_vsym())
       return TRUE;
 #endif

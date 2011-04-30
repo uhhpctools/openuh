@@ -3257,15 +3257,6 @@ yyerrlab1:
 | error token.                                                       |
 `-------------------------------------------------------------------*/
 yyerrdefault:
-#if 0
-  /* This is wrong; only states that explicitly want error tokens
-     should shift them.  */
-
-  /* If its default is to accept any token, ok.  Otherwise pop it.  */
-  yyn = yydefact[yystate];
-  if (yyn)
-    goto yydefault;
-#endif
 
 
 /*---------------------------------------------------------------.

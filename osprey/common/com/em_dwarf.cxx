@@ -77,13 +77,13 @@ static Dwarf_Unsigned eh_cie_index;
 
 typedef struct {
   UINT16 dwarf_idx;
-  char *path;
+  const char *path;
 } INCL;
 
 typedef struct {
   UINT16 dwarf_idx;
   UINT16 incl_idx;
-  char *filename;
+  const char *filename;
 } FNAME;
 
 static INCL *incl_table;
@@ -192,13 +192,13 @@ Increase_Incl_Table_Size (UINT16 incl_idx)
     if (incl_table == NULL) {
       ErrMsg ( EC_No_Mem, "Increase_Incl_Table_Size" );
     }
-    bzero (&incl_table[incl_table_size], new_idx - incl_table_size);
+    BZERO (&incl_table[incl_table_size], new_idx - incl_table_size);
     incl_table_size = new_idx;
   }
 }
 
 void
-Em_Dwarf_Add_Include (UINT16 incl_idx, char *name)
+Em_Dwarf_Add_Include (UINT16 incl_idx, const char *name)
 {
   Dwarf_Unsigned dwarf_idx;
 
@@ -226,7 +226,7 @@ Increase_File_Table_Size (UINT16 file_idx)
     if (file_table == NULL) {
       ErrMsg ( EC_No_Mem, "Increase_File_Table_Size" );
     }
-    bzero (&file_table[file_table_size], new_idx - file_table_size);
+    BZERO (&file_table[file_table_size], new_idx - file_table_size);
     file_table_size = new_idx;
   }
 }
@@ -235,7 +235,7 @@ Increase_File_Table_Size (UINT16 file_idx)
 void
 Em_Dwarf_Add_File (
   UINT16 file_idx, 
-  char *name, 
+  const char *name, 
   UINT16 incl_idx,
   Dwarf_Unsigned modification_time,
   Dwarf_Unsigned file_size)
@@ -267,7 +267,7 @@ Em_Dwarf_Begin (BOOL is_64bit, BOOL dwarf_trace, BOOL is_cplus,
 		symbol_index_recorder record_symidx)
 {
   Dwarf_Unsigned flags;
-  char *augmenter;
+  const char *augmenter;
   Dwarf_Unsigned personality=0;
 
 #define EXT_OP(v)  (DW_CFA_extended | v)
@@ -336,7 +336,7 @@ Em_Dwarf_Begin (BOOL is_64bit, BOOL dwarf_trace, BOOL is_cplus,
     else
       augmenter = "";
 
-  char *cie_augmenter;
+  const char *cie_augmenter;
   Dwarf_Small code_alignent_factor;
   Dwarf_Small return_reg;
   Dwarf_Ptr cie_init_bytes;
@@ -371,7 +371,7 @@ Em_Dwarf_Begin (BOOL is_64bit, BOOL dwarf_trace, BOOL is_cplus,
 				 cie_init_byte_len,
 				 &dw_error);
 
-#ifdef KEY
+#if defined(KEY) && !defined(TARG_SL) && !defined(TARG_MIPS)
   // Generate a CIE for .eh_frame only if it is C++ or if -DEBUG:eh_frame=on
   if (is_cplus || DEBUG_Emit_Ehframe)
     eh_cie_index = dwf_add_ehframe_cie (dw_dbg, augmenter,
@@ -522,7 +522,12 @@ Em_Dwarf_Write_Scns (Cg_Dwarf_Sym_To_Elfsym_Ofst translate_dwarf_sym)
     Dwarf_Signed j = find_indexed_section(current_scn + 1, link_scn);
 
     BOOL is_debug_line =
-      (strcmp(".debug_line",
+      (strcmp(
+#ifdef KEY /* Mac port */
+      DEBUG_LINE_SECTNAME,
+#else /* KEY Mac port */
+      ".debug_line",
+#endif /* KEY Mac port */
 	      Em_Get_Section_Name(index_to_buffer_map[j].cursection)) == 0);
 
     buffer =
@@ -732,7 +737,24 @@ void Em_Dwarf_Process_PU (Dwarf_Unsigned begin_label,
 				(Dwarf_Unsigned) end_label,
 				end_offset,
 				eh_offset, eh_symindex, &dw_error);
-
+#ifdef TARG_PPC32
+    if (eh_offset == DW_DLX_NO_EH_OFFSET)	/* no exception handler */
+  	dwf_add_ehframe_fde_b (dw_dbg, fde, PU_die, eh_cie_index, 
+			       begin_offset,
+			       0 /* dummy code length */,
+			       (Dwarf_Unsigned) begin_label,
+			       (Dwarf_Unsigned) end_label,
+			       end_offset,
+			       &dw_error);
+  else
+  	dwf_add_ehframe_info_b (dw_dbg, fde, PU_die, eh_cie_index, 
+				begin_offset,
+				0 /* dummy code length */,
+				(Dwarf_Unsigned) begin_label,
+				(Dwarf_Unsigned) end_label,
+				end_offset,
+				eh_offset, eh_symindex, &dw_error);
+#endif
 #ifdef TARG_X8664
   if (eh_fde == NULL)
   	return;

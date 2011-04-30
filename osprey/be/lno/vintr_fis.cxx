@@ -1,12 +1,4 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
- */
-
-/*
- * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
- */
-
-/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -367,6 +359,10 @@ static WN* find_loop_var_in_simple_ub(WN* loop) {
         loop_index=use;
   }
 
+#ifdef KEY
+   FmtAssert(loop_index,
+   ("The index variable does not appear in the loop end (try compiling without -WOPT:copy=off)!"));
+#endif
   WN* tmp=LWN_Get_Parent(loop_index);
   OPERATOR opr=WN_operator(tmp);
   if (opr==OPR_MPY) {
@@ -851,43 +847,56 @@ static BOOL UB_Defined_In_Loop(WN * wn, WN* loop,
 }
 #endif
 
-
+static char fail_msg[128];
 
 // Fission a inner loop 'innerloop' such that the intrinsic ops inside
 // can be separated and be vectorized
 static INT Vintrinsic_Fission(WN* innerloop)
 {
+  if(!Do_Loop_Is_Good(innerloop)){
+    sprintf(fail_msg, "Do loop has unmapped loads/stores/calls");
+    return 0;
+  }
+  if (Do_Loop_Has_Calls(innerloop)){
+    sprintf(fail_msg, "Do loop has calls");
+    return 0;
+  }
 
-  if (!Do_Loop_Is_Good(innerloop) || 
-       Do_Loop_Has_Calls(innerloop) || Do_Loop_Has_Gotos(innerloop)) {
-    Is_True(0, ("Bad loop passed to Vintrinsic_Fission().\n"));
+  if(Do_Loop_Has_Gotos(innerloop)){
+    sprintf(fail_msg, "Do loop has gotos");
+    return 0;  
+  }
+
+  if(Do_Loop_Is_Mp(innerloop)){
+    sprintf(fail_msg, "Do loop is a MP loop");
     return 0;
   }
-  if (!Do_Loop_Is_Inner(innerloop)) {
-    Is_True(0, ("Non-innermost loop passed to Vintrinsic_Fission().\n"));
-    return 0;
-  }
+  //double check ?
   DO_LOOP_INFO* dli=Get_Do_Loop_Info(innerloop);
   if (dli->Has_Gotos || dli->Has_Calls) {
-    Is_True(0, ("Loop with gotos or calls passed to Fission().\n"));
+    sprintf(fail_msg, "Do loop has calls or gotos");
     return 0;
   }
 
 #ifdef TARG_X8664
   // Disregard the remainder loop from SIMD vectorizer.
   if (dli->Is_Generally_Unimportant()) {
+    sprintf(fail_msg, "It is a reminder loop from SIMD vectorizer");
     return 0;
   }
 #endif
   // if there are too few iterations, we will not fission
-  if (dli->Est_Num_Iterations < Iteration_Count_Threshold)
+  if (dli->Est_Num_Iterations < Iteration_Count_Threshold) {
+    sprintf(fail_msg, "Too few iterations");
     return 0;
+  }
 
   // if the loop index var is live at exit and cannot be finalized,
   // we will not vectorize
   if (Index_Variable_Live_At_Exit(innerloop)) {
   
     if (Upper_Bound_Standardize(WN_end(innerloop),TRUE)==FALSE) {
+      sprintf(fail_msg, "Upper bound could not be standarized");
       return 0;
     }
     Finalize_Index_Variable(innerloop,FALSE);
@@ -895,15 +904,19 @@ static INT Vintrinsic_Fission(WN* innerloop)
   }
 
   // if the loop upper bound is too complicated, we will not vectorize
-  if (find_loop_var_in_simple_ub(innerloop)==NULL)
+  if (find_loop_var_in_simple_ub(innerloop)==NULL){
+    sprintf(fail_msg, "Loop upper bound is too complicated");
     return 0;
+  }
 
 #ifdef KEY
   // Bug 10421: if ub has a definition in the loop, we will not vectorize
   if(UB_Defined_In_Loop(WN_end(innerloop), innerloop,
                         SYMBOL(WN_index(innerloop)),
-                        Du_Mgr))
+                        Du_Mgr)){
+   sprintf(fail_msg, "Loop upper bound has a definition in the loop body");
    return 0;
+  }
 #endif 
 
   MEM_POOL_Push(&VINTR_FIS_default_pool);
@@ -960,6 +973,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
   if (intrinsic_ops->Elements()==0) { // no intrinsic op in this loop
     CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "No intrinsic ops in the loop");
     return 0;
   }
 
@@ -986,6 +1000,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
 	if (WN_Simp_Compare_Trees(arg_intrini, arg_intrinj) == 0) {
 	  CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
 	  MEM_POOL_Pop(&VINTR_FIS_default_pool);
+          sprintf(fail_msg, "Vectorization may inhibit converting to SINCOS");
 	  return 0;	
 	}
       }
@@ -1061,6 +1076,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
 	// without performing vectorization.
         CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
         MEM_POOL_Pop(&VINTR_FIS_default_pool);
+        sprintf(fail_msg, "Failed to split using array");
         return 0;
 #endif
       }
@@ -1072,6 +1088,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
     // no vecorizable intrinsic op in this loop
     CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "No vectorizable intrinsic operations");
     return 0;
   }
 
@@ -1104,6 +1121,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
     DevWarn("Error in gathering references");
     CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "Error in gathering references");
     return 0;
   }
 
@@ -1113,6 +1131,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
       DevWarn("Statement dependence graph problem");
       CXX_DELETE(dep_g_p, &VINTR_FIS_default_pool);
       MEM_POOL_Pop(&VINTR_FIS_default_pool);
+      sprintf(fail_msg, "Statement dependence graph problem");
       return 0;
     }
     stmt_to_vertex->Enter(stmt, v);
@@ -1163,6 +1182,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
       CXX_DELETE(sdg, &VINTR_FIS_default_pool);
       WN_MAP_Delete(sdm);
       MEM_POOL_Pop(&VINTR_FIS_default_pool);
+      sprintf(fail_msg, "Error in mapping stmt to level graph");
       return(0);
     }
   }
@@ -1176,6 +1196,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
     CXX_DELETE(sdg, &VINTR_FIS_default_pool);
     WN_MAP_Delete(sdm);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "Statement dependence graph problem");
     return(0);
   }
 
@@ -1187,6 +1208,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
     CXX_DELETE(sdg, &VINTR_FIS_default_pool);
     WN_MAP_Delete(sdm);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "Statement dependence graph problem");
     return(0);
   }
 
@@ -1365,6 +1387,7 @@ static INT Vintrinsic_Fission(WN* innerloop)
     CXX_DELETE(sdg, &VINTR_FIS_default_pool);
     WN_MAP_Delete(sdm);
     MEM_POOL_Pop(&VINTR_FIS_default_pool);
+    sprintf(fail_msg, "Dependence cycle exists");
     return(0);
   }
 
@@ -1854,15 +1877,51 @@ static INT Vintrinsic_Fission(WN* innerloop)
   
 }
 
+#ifdef KEY //14182
+static BOOL Tree_Contains_Intrinsic(WN *wn)
+{
+ if(WN_operator(wn)==OPR_INTRINSIC_OP)
+  return TRUE;
+ else if(WN_operator(wn)==OPR_BLOCK){
+   for(WN* stmt=WN_first(wn); stmt; stmt=WN_next(stmt)){
+     if(Tree_Contains_Intrinsic(stmt))
+       return TRUE;
+   }
+ }
+ for (UINT kidno=0; kidno<WN_kid_count(wn); kidno++){
+  if(Tree_Contains_Intrinsic(WN_kid(wn,kidno)))
+   return TRUE;
+ }
+ return FALSE;
+} 
+#endif
+
 static void Vintrinsic_Fission_Walk(WN* wn) {
   OPCODE opc=WN_opcode(wn);
 
   if (!OPCODE_is_scf(opc)) 
     return;
   else if (opc==OPC_DO_LOOP) {
+#ifndef KEY
     if (Do_Loop_Is_Good(wn) && Do_Loop_Is_Inner(wn) && !Do_Loop_Has_Calls(wn)
 	&& !Do_Loop_Is_Mp(wn) && !Do_Loop_Has_Gotos(wn))
       Vintrinsic_Fission(wn);
+#else //bug 14182: report non-vectorizable reasons only for an inner loop that
+      //           contains intrinsics. Also gives up earlier if the loop does
+      //           not has any intrinsics.
+    if(Do_Loop_Is_Inner(wn) && Tree_Contains_Intrinsic(wn)){
+      sprintf(fail_msg, "Unknown reason");
+      if(Vintrinsic_Fission(wn)==0){
+        if (LNO_Vintr_Verbose) {
+          printf("(%s:%d) %s, ",
+               Src_File_Name,
+               Srcpos_To_Line(WN_Get_Linenum(wn)),
+               fail_msg);
+          printf("loop was not intrinsic vectorized!\n");
+        }
+      }
+    }
+#endif
     else
       Vintrinsic_Fission_Walk(WN_do_body(wn));
   } else if (opc==OPC_BLOCK)

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -70,68 +74,102 @@ static char *mtypes_rcs_id = "$Source: common/com/SCCS/s.mtypes.h $ $Revision: 1
 #endif /* _KEEP_RCS_ID */
 
 /* The predefined machine data types, present on many machines: */
-#define MTYPE_UNKNOWN	0
-#define MTYPE_FIRST	1
-#define MTYPE_B		1	/* BOOL */
-#define MTYPE_I1	2	/*   8-bit integer */
-#define MTYPE_I2	3	/*  16-bit integer */
-#define MTYPE_I4	4	/*  32-bit integer */
-#define MTYPE_I8	5	/*  64-bit integer */
-#define MTYPE_U1	6	/*   8-bit unsigned integer */
-#define MTYPE_U2	7	/*  16-bit unsigned integer */
-#define MTYPE_U4	8	/*  32-bit unsigned integer */
-#define MTYPE_U8	9	/*  64-bit unsigned integer */
-#define MTYPE_F4	10	/*  32-bit IEEE floating point */
-#define MTYPE_F8	11	/*  64-bit IEEE floating point */
-#define MTYPE_F10	12	/*  80-bit IEEE floating point */
-#define MTYPE_F16	13	/* 128-bit IEEE floating point */
+enum MTYPE_t {
+    MTYPE_UNKNOWN=0,
+    MTYPE_FIRST=1,
+    MTYPE_B=1,           /* BOOL */
+    MTYPE_I1=2,          /*   8-bit integer */
+    MTYPE_I2=3,          /*  16-bit integer */
+    MTYPE_I4=4,          /*  32-bit integer */
+    MTYPE_I8=5,          /*  64-bit integer */
+    MTYPE_U1=6,          /*   8-bit unsigned integer */
+    MTYPE_U2=7,          /*  16-bit unsigned integer */
+    MTYPE_U4=8,          /*  32-bit unsigned integer */
+    MTYPE_U8=9,          /*  64-bit unsigned integer */
+    MTYPE_F4=10,         /*  32-bit IEEE floating point */
+    MTYPE_F8=11,         /*  64-bit IEEE floating point */
+    MTYPE_F10=12,        /*  80-bit IEEE floating point */
+    MTYPE_F16=13,        /* 128-bit IEEE floating point */
 
-#define MTYPE_STR	14	/* char strings - TCONs only */
-#define MTYPE_STRING	MTYPE_STR
-#define MTYPE_FQ	15	/* for SGI long double */
-#define MTYPE_M		16	/* memory chunk, for structures */
-#define MTYPE_C4	17	/* for 32-bit complex */
-#define MTYPE_C8	18	/* for 64-bit complex */
-#define MTYPE_CQ	19	/* for quad complex */
-#define MTYPE_V		20	/* for void type */
+    MTYPE_STR=14,        /* char strings - TCONs only */
+    MTYPE_STRING=MTYPE_STR,
+    MTYPE_FQ=15,         /* for SGI long double */
+    MTYPE_M=16,          /* memory chunk, for structures */
+    MTYPE_C4=17,         /* for 32-bit complex */
+    MTYPE_C8=18,         /* for 64-bit complex */
+    MTYPE_CQ=19,         /* for quad complex */
+    MTYPE_V=20,          /* for void type */
 
-#define MTYPE_BS	21	/* Bits */
-#define MTYPE_A4	22	/* 32-bit address */
-#define MTYPE_A8	23	/* 64-bit address */
-#define MTYPE_C10	24	/*  80-bit IEEE floating point complex */
-#define MTYPE_C16	25	/* 128-bit IEEE floating point complex */
-#define MTYPE_I16       26      /* 128-bit signed integer              */
-#define MTYPE_U16       27      /* 128-bit unsigned integer            */
+    MTYPE_BS=21,         /* Bits */
+    MTYPE_A4=22,         /* 32-bit address */
+    MTYPE_A8=23,         /* 64-bit address */
+    MTYPE_C10=24,        /*  80-bit IEEE floating point complex */
+    MTYPE_C16=25,        /* 128-bit IEEE floating point complex */
+    MTYPE_I16=26,        /* 128-bit signed integer              */
+    MTYPE_U16=27,        /* 128-bit unsigned integer            */
 
 #ifdef TARG_X8664
-#define MTYPE_V16C4	28	/* vector type for C4 */
-#define MTYPE_V16C8	29	/* vector type for C8 */
-#define MTYPE_V16I1     30      /* 128-bit vector of signed bytes            */
-#define MTYPE_V16I2     31      /* 128-bit vector of signed short ints       */
-#define MTYPE_V16I4     32      /* 128-bit vector of signed ints             */
-#define MTYPE_V16I8     33      /* 128-bit vector of signed long long ints   */
-#define MTYPE_V16F4     34      /* 128-bit vector of signed floats           */
-#define MTYPE_V16F8     35      /* 128-bit vector of signed doubles          */
+    MTYPE_V16C4=28,       /* vector type for C4 */
+    MTYPE_V16C8=29,       /* vector type for C8 */
+    MTYPE_V16I1=30,       /* 128-bit vector of signed bytes            */
+    MTYPE_V16I2=31,       /* 128-bit vector of signed short ints       */
+    MTYPE_V16I4=32,       /* 128-bit vector of signed ints             */
+    MTYPE_V16I8=33,       /* 128-bit vector of signed long long ints   */
+    MTYPE_V16F4=34,       /* 128-bit vector of signed floats           */
+    MTYPE_V16F8=35,       /* 128-bit vector of signed doubles          */
+ 
+    MTYPE_V8I1=36,        /* 64-bit vector of signed bytes */
+    MTYPE_V8I2=37,        /* 64-bit vector of signed short ints */
+    MTYPE_V8I4=38,        /* 64-bit vector of signed ints */
+    MTYPE_V8I8=39,        /* 64-bit vector of signed ints */
+    MTYPE_V8F4=40,        /* 64-bit vector of signed floats */
 
-#define MTYPE_V8I1      36      /* 64-bit vector of signed bytes */
-#define MTYPE_V8I2      37      /* 64-bit vector of signed short ints */
-#define MTYPE_V8I4      38      /* 64-bit vector of signed ints */
-#define MTYPE_V8F4      39      /* 64-bit vector of signed floats */
+    MTYPE_M8I1=41,        /* 64-bit MMX vector of signed bytes */
+    MTYPE_M8I2=42,        /* 64-bit MMX vector of signed short ints */
+    MTYPE_M8I4=43,        /* 64-bit MMX vector of signed ints */
+    MTYPE_M8F4=44,        /* 64-bit MMX vector of signed floats */
 
-#define MTYPE_M8I1      40      /* 64-bit MMX vector of signed bytes */
-#define MTYPE_M8I2      41      /* 64-bit MMX vector of signed short ints */
-#define MTYPE_M8I4      42      /* 64-bit MMX vector of signed ints */
-#define MTYPE_M8F4      43      /* 64-bit MMX vector of signed floats */
-
-/* must define MTYPE_LAST as the index of the last one defined. */
-#define MTYPE_LAST	43	/* Must be defined */
+    MTYPE_V32C4=45,       /* 256-bit vector of C4                    */
+    MTYPE_V32C8=46,       /* 256-bit vector of C8                    */
+    MTYPE_V32I1=47,       /* 256-bit vector of signed bytes          */
+    MTYPE_V32I2=48,       /* 256-bit vector of signed short ints     */
+    MTYPE_V32I4=49,       /* 256-bit vector of signed ints           */
+    MTYPE_V32I8=50,       /* 256-bit vector of signed long long ints */
+    MTYPE_V32F4=51,       /* 256-bit vector of floats                */
+    MTYPE_V32F8=52,       /* 256-bit vector of doubles               */
+    MTYPE_LAST = MTYPE_V32F8
+#elif defined(TARG_SL)
+  /* mtype list for sbuf type */
+    MTYPE_SB1=28,
+    MTYPE_SB2=29,
+    MTYPE_SB4=30,
+    MTYPE_SB8=31,
+    MTYPE_SBU1=32,
+    MTYPE_SBU2=33,
+    MTYPE_SBU4=34,
+    MTYPE_SBU8=35,
+ /* mtype list for sdram type */
+    MTYPE_SD1=36,
+    MTYPE_SD2=37,
+    MTYPE_SD4=38,
+    MTYPE_SD8=39,
+    MTYPE_SDU1=40,
+    MTYPE_SDU2=41,
+    MTYPE_SDU4=42,
+    MTYPE_SDU8=43,
+  /* mtype list for vbuf type */  
+    MTYPE_VBUF1=44,
+    MTYPE_VBUF2=45,
+    MTYPE_VBUF4=46,
+    MTYPE_LAST = MTYPE_VBUF4
 #else
-#define MTYPE_LAST	27	/* Must be defined */
+    MTYPE_LAST = MTYPE_U16
 #endif // TARG_X8664
+};
 
 /* Define the type: */
 typedef UINT8	TYPE_ID;
-typedef mUINT8	mTYPE_ID;
+typedef UINT8	mTYPE_ID;
 
 
 /* Type_class_bits */
@@ -141,11 +179,10 @@ typedef mUINT8	mTYPE_ID;
 #define MTYPE_CLASS_UNSIGNED	0x08
 #define MTYPE_CLASS_STR		0x10
 #define MTYPE_CLASS_VECTOR	0x20
-#ifdef KEY
-#define MTYPE_CLASS_SVECTOR	0x60 // 2 bits for short vector (64-bit vector)
-#endif
 #ifdef TARG_X8664
-#define MTYPE_CLASS_MVECTOR	0xa0 // 2 bits for MMX vector (64-bit vector)
+#define MTYPE_CLASS_SVECTOR	0x60  // 2 bits for short vector (64-bit vector)
+#define MTYPE_CLASS_MVECTOR	0xa0  // 2 bits for MMX vector (64-bit vector)
+#define MTYPE_CLASS_AVECTOR	0x120 // 2 bits for AVX vector (256-bit vector)
 #endif
 #define MTYPE_CLASS_UNSIGNED_INTEGER (MTYPE_CLASS_UNSIGNED|MTYPE_CLASS_INTEGER)
 #define MTYPE_CLASS_COMPLEX_FLOAT (MTYPE_CLASS_COMPLEX|MTYPE_CLASS_FLOAT)
@@ -163,8 +200,8 @@ typedef struct type_desc {
   mBOOL		signed_type;	/* Signed numeric type? */
   mBOOL		float_type;	/* Floating point type? */
   mCLASS_INDEX	dummy4;		/* remove when incompatible change */
-  char		*name;		/* Print name */
-  mUINT8        type_class_bits;/* The classification bits used by the simplifier */
+  const char   *name;		/* Print name */
+  mUINT16       type_class_bits;/* The classification bits used by the simplifier */
   mUINT8        type_order;	/* The order of types (I8 > I4 for example) */
   mCLASS_INDEX	complement;	/* complementary signed partner (ex. U1 -> I1) */
 } TYPE_DESC;
@@ -175,7 +212,7 @@ typedef struct type_desc {
 extern TYPE_DESC Machine_Types[];
 
 /* Define the access functions: */
-#define MTYPE_id(n)		(Machine_Types[n].id)
+#define MTYPE_id(n)		((TYPE_ID)(Machine_Types[n].id))
 #define MTYPE_bit_size(n)	(Machine_Types[n].bit_size)
 #define MTYPE_byte_size(n)	(MTYPE_bit_size(n) >> 3)
 #define MTYPE_size_reg(n)	MTYPE_bit_size(n)
@@ -214,14 +251,24 @@ extern TYPE_DESC Machine_Types[];
 #define MTYPE_is_m(n)		((n)==MTYPE_M)
 #define MTYPE_is_void(n)	((n)==MTYPE_V)
 
+#define MTYPE_is_F10(n)	        ((n)==MTYPE_F10)
+#define MTYPE_is_F10_or_C10(n)	((n)==MTYPE_F10 ||(n)==MTYPE_C10 )
+#define MTYPE_is_F16(n)	        ((n)==MTYPE_F16)
 #define MTYPE_is_quad(n)	((n)==MTYPE_FQ || (n)==MTYPE_CQ)
 #define MTYPE_is_pointer(n)	((n)==Pointer_type || (n)==Pointer_type2)
 #define MTYPE_is_boolean(n)	((n)==Boolean_type || (n)==Boolean_type2)
-
+#define MTYPE_refs_x87(n)       (MTYPE_is_F10_or_C10( n ) || \
+	                         ( MTYPE_is_float( n ) &&    \
+	                           Is_Target_32bit()))
 /* Register size in bytes */
 #define	MTYPE_RegisterSize(n)	MTYPE_byte_size(n)
 
 #define MTYPE_is_size_double(n)	(MTYPE_bit_size(n) == MTYPE_bit_size(MTYPE_I8))
+
+#if defined(TARG_SL) || defined(TARG_PPC32)
+#define MTYPE_is_longlong(n) (MTYPE_is_integral(n) && (MTYPE_bit_size(n) == 64))
+#define MTYPE_is_double(n) (MTYPE_is_float(n) && (MTYPE_bit_size(n) == 64))
+#endif
 
 /* Define a mask of machine types, for use in register descriptors: */
 typedef UINT32 MTYPE_MASK;
@@ -260,7 +307,7 @@ extern MTYPE_MASK Machine_Types_Available;
  *
  */
 
-extern char    *Mtype_Name ( TYPE_ID );
+extern const char *Mtype_Name ( TYPE_ID );
 extern TYPE_ID	Mtype_AlignmentClass( INT32 , mUINT8 );
 extern TYPE_ID	Mtype_Promote_to_A4A8( TYPE_ID );
 extern TYPE_ID	Mtype_TransferSign( TYPE_ID, TYPE_ID );
@@ -270,6 +317,7 @@ extern TYPE_ID  Mtype_comparison( TYPE_ID );
 extern TYPE_ID  Mtype_next_alignment( TYPE_ID);
 extern TYPE_ID  Mtype_prev_alignment( TYPE_ID);
 
+extern TYPE_ID  Mtype_vector_elemtype( TYPE_ID);
 
 #ifdef __cplusplus
 }

@@ -57,6 +57,7 @@ extern void EETARG_Call_Mcount(BB *bb);
 
 // target-specific adjustments to entry ops
 extern void EETARG_Fixup_Entry_Code (BB *bb);
+extern void EETARG_Fixup_Exit_Code (BB *bb);
 
 //  Replace the call OP with a jump.
 extern OP *EETARG_Build_Jump_Instead_Of_Call(OP *call_op);

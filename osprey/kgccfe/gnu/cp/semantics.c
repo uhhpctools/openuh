@@ -2532,28 +2532,6 @@ genrtl_finish_function (fn)
 {
   tree t;
 
-#if 0
-  if (write_symbols != NO_DEBUG)
-    {
-      /* Keep this code around in case we later want to control debug info
-	 based on whether a type is "used".  (jason 1999-11-11) */
-
-      tree ttype = target_type (fntype);
-      tree parmdecl;
-
-      if (IS_AGGR_TYPE (ttype))
-	/* Let debugger know it should output info for this type.  */
-	note_debug_info_needed (ttype);
-
-      for (parmdecl = DECL_ARGUMENTS (fndecl); parmdecl; parmdecl = TREE_CHAIN (parmdecl))
-	{
-	  ttype = target_type (TREE_TYPE (parmdecl));
-	  if (IS_AGGR_TYPE (ttype))
-	    /* Let debugger know it should output info for this type.  */
-	    note_debug_info_needed (ttype);
-	}
-    }
-#endif
 
   /* Clean house because we will need to reorder insns here.  */
   do_pending_stack_adjust ();
@@ -2592,13 +2570,6 @@ genrtl_finish_function (fn)
   if (function_depth > 1)
     ggc_pop_context ();
 
-#if 0
-  /* Keep this code around in case we later want to control debug info
-     based on whether a type is "used".  (jason 1999-11-11) */
-
-  if (ctype && TREE_ASM_WRITTEN (fn))
-    note_debug_info_needed (ctype);
-#endif
 
   /* If this function is marked with the constructor attribute, add it
      to the list of functions to be called along with constructors

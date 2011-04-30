@@ -419,7 +419,8 @@ pexecute (program, argv, this_pname, temp_base, errmsg_fmt, errmsg_arg, flags)
     }
 
   pid = (flags & PEXECUTE_SEARCH ? _spawnvp : _spawnv)
-    (_P_NOWAIT, program, fix_argv(argv));
+    /* cast away const in argv to avoid gcc warning */
+    (_P_NOWAIT, program, fix_argv((char**)argv));
 
   if (input_desc != STDIN_FILE_NO)
     {
@@ -436,7 +437,11 @@ pexecute (program, argv, this_pname, temp_base, errmsg_fmt, errmsg_arg, flags)
   if (pid == -1)
     {
       *errmsg_fmt = install_error_msg;
+#ifdef __MINGW32__
+      *errmsg_arg = (char*)program;
+#else
       *errmsg_arg = program;
+#endif /* __MINGW32__ */
       return -1;
     }
 

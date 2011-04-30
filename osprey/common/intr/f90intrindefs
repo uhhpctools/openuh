@@ -46,10 +46,21 @@ SET_EXPONENT ; AF ;; _SET_EXPONENT_4,_SET_EXPONENT,_SET_EXPONENT_16
 SPACING ; AF ;;  _SPACING_4,_SPACING,_SPACING_16
 
 # miscellaneous
-NEXTAFTER ; AF ;; _IEEE_NEXT_AFTER_H, nextafter, qnextafter
+# KEY Bug 11103
+# The GNU libm -m32 version of "nextafter" fails to set exceptions. If that
+# bug is fixed, we could resume calling "nextafter" directly, and for that
+# matter, we could call "nextafterf" for F4NEXTAFTER.
+NEXTAFTER ; AF ;; _IEEE_NEXT_AFTER_H, _IEEE_NEXT_AFTER, qnextafter
+#NEXTAFTER ; AF ;; _IEEE_NEXT_AFTER_H, nextafter, qnextafter
 ISNAN ; AF ;; isnanf, isnan, isnanq
 SCALB ; AF ;; ldexp, ldexp, qldexp
-IEEE_REMAINDER ; AF ;; drem, drem, _IEEE_REMAINDER_Q
+# KEY Bug 10261
+# GNU libm drem and remainder have a bug: they don't ignore the rounding
+# mode as required by C99 (and F90 ieee_rem.) Using "remainder" instead of
+# "drem" causes pathcc (and pathf90) to link the version provided by
+# libmpath, which works correctly.
+IEEE_REMAINDER ; AF ;; remainder, remainder, _IEEE_REMAINDER_Q
+#IEEE_REMAINDER ; AF ;; drem, drem, _IEEE_REMAINDER_Q
 LOGB ; AF ;; logb, logb, __qlogb
 ILOGB ; AF ; I4,I4,I4 ; __ilogbf, __ilogb, __iqlogb
 FPCLASS ; AF; I4,I4,I4;_fp_class_f, _fp_class_d, _fp_class_q

@@ -1,5 +1,12 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright (C) 2007 PathScale, LLC.  All Rights Reserved.
+ */
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -48,10 +55,10 @@
 //
 /////////////////////////////////////
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/common/targ_info/generate/si_gen.cxx,v $
+//  $Revision: 1.6 $
+//  $Date: 04/12/21 14:57:26-08:00 $
+//  $Author: bos@eng-25.internal.keyresearch.com $
+//  $Source: /home/bos/bk/kpro64-pending/common/targ_info/generate/SCCS/s.si_gen.cxx $
 
 
 #include <assert.h>
@@ -59,18 +66,20 @@
 #include <unistd.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
 #include <list>
 #include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "topcode.h"
 #include "targ_isa_properties.h"
 #include "targ_isa_subset.h"
 #include "targ_isa_operands.h"
-
+#include "gen_util.h"
 #include "si_gen.h"
-
-static ISA_SUBSET machine_isa;
 
 // Parameters:
 const int bits_per_long = 32;
@@ -78,6 +87,55 @@ const int bits_per_long_long = 64;
 const bool use_long_longs = true;       // For now always
 const int max_operands = ISA_OPERAND_max_operands;
 const int max_results = ISA_OPERAND_max_results;
+const int max_machine_slots = 16;
+
+static int current_machine_slot;
+static ISA_SUBSET machine_isa[max_machine_slots];
+static std::string machine_name[max_machine_slots];
+
+static const char * const interface[] = {
+  "/* ====================================================================",
+  " * ====================================================================",
+  " *",
+  " * Description:",
+  " *",
+  " *   Raw processor-specific scheduling information.",
+  " *",
+  " *   Clients should access this information through the public interface",
+  " *   defined in \"ti_si.h\".  See that interface for more detailed",
+  " *   documentation.",
+  " *",
+  " *   The following variables are exported:",
+  " *",
+  " *   const SI_RRW SI_RRW_initializer",
+  " *       Initial value (no resources reserved) for resource reservation",
+  " *       entry.",
+  " *",
+  " *   const SI_RRW SI_RRW_overuse_mask",
+  " *       Mask used to determine if a resource reservation entry has an",
+  " *       overuse.",
+  " *",
+  " *   const INT SI_resource_count",
+  " *       Count of elements in SI_resources array.",
+  " *",
+  " *   const SI_RESOURCE* const SI_resources[n]",
+  " *       Fixed-size array of SI_RESOURCE records.",
+  " *",
+  " *   const SI SI_all[m]",
+  " *       Fixed-size array of all SI records.",
+  " *",
+  " *   const SI_MACHINE si_machines[p]",
+  " *       Fixed-size array of SI_MACHINE records.",
+  " *",
+  " *   int si_current_machine",
+  " *       Global index into the si_machines array, defined here for",
+  " *       convenience.",
+  " *",
+  " * ====================================================================",
+  " * ====================================================================",
+  " */",
+  NULL
+};
 
 /////////////////////////////////////
 int Mod( int i, int j )
@@ -128,19 +186,21 @@ class GNAME {
 public:
   GNAME();
   // Generate a unique name.  Don't care about prefix.
-  GNAME(char* prefix);
+  GNAME(const char* prefix);
   // Generate a unique name.  Force a particular prefix.
-  GNAME(GNAME& other);
+  GNAME(const GNAME& other);
   // Generate a name that is a copy of <other>.  The name will not be unique.
   // Really only useful when <other> is about to be destructed, but we still
   // need to refer to it.
-  char* Gname();
+  const char* Gname() const;
   // Return the name.  This is the name under which the object is defined.
-  char* Addr_Of_Gname();
+  const char* Addr_Of_Gname() const;
   // Return a pointer to the named object.
   void Stub_Out();
   // We've decided not to define the object after all but we may still want a
   // pointer to it.  After this call, Addr_Of_Gname will return 0.
+  static GNAME Stub_Gname();
+  // Return pre-built stub name.
 
 private:
   char gname[16];       // Where to keep the name.  (This could be more
@@ -155,23 +215,23 @@ GNAME::GNAME() : stubbed(false) {
   sprintf(gname,"&gname%d",count++);
 }
 
-GNAME::GNAME(char* prefix) : stubbed(false) {
+GNAME::GNAME(const char* prefix) : stubbed(false) {
   assert(strlen(prefix) <= 8);
   sprintf(gname,"&%s%d",prefix,count++);
 }
 
-GNAME::GNAME(GNAME& other) : stubbed(false) {
+GNAME::GNAME(const GNAME& other) : stubbed(other.stubbed) {
   sprintf(gname,"%s",other.gname);
 }
 
-char* GNAME::Gname() {
+const char* GNAME::Gname() const {
   if (stubbed)
     return "0";
   else
     return gname + 1;
 }
 
-char* GNAME::Addr_Of_Gname() {
+const char* GNAME::Addr_Of_Gname() const {
   if (stubbed)
     return "0";
   else
@@ -180,6 +240,12 @@ char* GNAME::Addr_Of_Gname() {
 
 void GNAME::Stub_Out() {
   stubbed = true;
+}
+
+GNAME GNAME::Stub_Gname() {
+  static GNAME stub_gname;
+  stub_gname.Stub_Out();
+  return stub_gname;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -228,10 +294,15 @@ private:
   long long overuse_mask;               // Bits to check
                                         //   for overuse after adding new
                                         //   resources
-  static std::list<RES_WORD*> res_words;     // Of all res_words in order
-  static int count;                     // Of all resource words
-  static bool has_long_long_word;       // Will we need to use long longs for
-                                        //   resource words?
+
+  static std::list<RES_WORD*> res_words;
+  // List of all res_words in order.
+
+  static int count;
+  // Count of all resource words.
+
+  static bool has_long_long_word;
+  // Will we need to use long longs for resource words?
 
   RES_WORD()
     : bit_inx(0),
@@ -258,8 +329,8 @@ bool RES_WORD::Allocate_Field(int width, int count, int &word, int &bit)
 {
   int new_inx = bit_inx + width;
 
-  if (    use_long_longs && new_inx >= bits_per_long_long
-       || !use_long_longs && new_inx >= bits_per_long
+  if (    (use_long_longs && new_inx >= bits_per_long_long)
+       || (!use_long_longs && new_inx >= bits_per_long)
   ) {
     return false;
   }
@@ -304,10 +375,10 @@ void RES_WORD::Output_All(FILE* fd)
   else {
     // Important special case.  We don't need a vector of resource words at all
     // and can just use a scalar.
-    fprintf(fd,"const SI_RRW SI_RRW_initializer = 0x%llx;\n",
-               res_words.front()->initializer);
-    fprintf(fd,"const SI_RRW SI_RRW_overuse_mask = 0x%llx;\n",
-               res_words.front()->overuse_mask);
+    fprintf(fd,"const SI_RRW SI_RRW_initializer = 0x%" LL_FORMAT "x;\n",
+            res_words.front()->initializer);
+    fprintf(fd,"const SI_RRW SI_RRW_overuse_mask = 0x%" LL_FORMAT "x;\n",
+            res_words.front()->overuse_mask);
   }
 }
 
@@ -321,17 +392,17 @@ class RES {
 /////////////////////////////////////
 
 public:
-  RES(char *name,int count);
+  static RES* Create(const char *name, int count);
   // <name> is used for documentation and debugging.  <count> is the number of
   // elements in the class.
 
   static RES* Get(int id);
   // Find and return the resource with the given <id>.
 
-  char* Name() const { return name; }
+  const char* Name() const { return name; }
   // Return debugging name.
 
-  char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
+  const char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
   // Return name of pointer to this resource object (in generated code).
 
   unsigned int Count() const { return count; }
@@ -351,19 +422,25 @@ public:
   static void Output_All( FILE* fd );
   // Write out all the resource info to <fd>.
 
+  static int Total() { return total; }
+  // Total number of different RESs.
+
 private:
   const int count;          // Available per cycle
-  char* const name;         // For documentation and debugging
+  const char* name;         // For documentation and debugging
+  const int id;             // Unique numerical identifier
   GNAME gname;              // Generated symbolic name
   int word;                 // Which word in the table?
   int field_width;          // How wide the field?
   int shift_count;          // How much to shift (starting pos of the low
                             //   order bit
-  const int id;             // Unique numerical identifier
   static int total;         // Total number of different RESs (not the the
                             //   total of their counts, 1 for each RES)
   static std::map<int,RES*> resources;
                             // Map of all resources, ordered by their Id's
+
+  RES(const char *name, int count);
+
   void Calculate_Field_Width();
   void Calculate_Field_Pos();
 
@@ -378,11 +455,22 @@ private:
 int  RES::total = 0;
 std::map<int,RES*> RES::resources;
 
-RES::RES(char *name, int count)
+RES::RES(const char *name, int count)
 // constructor maintains list of all resources.
   : count(count), name(name), id(total++), gname("resource")
 {
   resources[id] = this;
+}
+
+RES* RES::Create(const char *name, int count)
+{
+  int i;
+
+  for ( i = 0; i < total; ++i )
+    if (resources[i]->count == count && strcmp(resources[i]->name, name) == 0)
+      return resources[i];
+
+  return new RES(name,count);
 }
 
 RES* RES::Get(int i)
@@ -401,7 +489,7 @@ void RES::Output_All( FILE* fd )
     resources[i]->Output(fd);
 
   fprintf(fd,"const int SI_resource_count = %d;\n",total);
-  fprintf(fd,"SI_RESOURCE * const SI_resources[] = {");
+  fprintf(fd,"const SI_RESOURCE * const SI_resources[%d] = {",total);
 
   bool is_first = true;
   for ( i = 0; i < total; ++i ) {
@@ -454,7 +542,7 @@ void RES::Output( FILE* fd )
 // Allocate my field in the resource reservation table.
 /////////////////////////////////////
 {
-  fprintf(fd,"SI_RESOURCE %s = {\"%s\",%d,%d,%d,%d};\n",
+  fprintf(fd,"static const SI_RESOURCE %s = {\"%s\",%d,%d,%d,%d};\n",
              gname.Gname(),
              name,
              id,
@@ -476,6 +564,9 @@ class RES_REQ {
 public:
   RES_REQ();
 
+  RES_REQ(const RES_REQ& rhs);
+  // Copy constructor.
+
   bool Add_Resource(const RES* res, int cycle);
   // Require an additional resource <res> at the given <cycle> relative to
   // my start.  Return indication of success.  If adding the resource would
@@ -484,15 +575,16 @@ public:
   void Output(FILE* fd);
   // Output my definition and initialization.
 
-  char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
+  const char* Addr_Of_Gname() const;
   // Return name of pointer to me (in generated code).
 
-  char* Gname() { return gname.Gname(); }
+  const char* Gname() const;
   // Return my name (in generated code).
+  // The RES_REQ must be Output first.
 
   bool Compute_Maybe_Output_II_RES_REQ(int ii, FILE* fd,
                                        GNAME*& res_req_gname,
-                                       GNAME*& resource_id_set_gname );
+                                       GNAME*& resource_id_set_gname);
   // When software pipelining, we want to check all the resources for a given
   // cycle of the schedule at once.  Because the resource requirement may be
   // longer than the II into which we are trying to schedule it, we statically
@@ -504,7 +596,7 @@ public:
   // A cycle indexed set of resource id's used is also output under the GNAME
   // <resource_id_set_gname>.
 
-  int Max_Res_Cycle() { return max_res_cycle; }
+  int Max_Res_Cycle() const { return max_res_cycle; }
   // Return the cycle (relative to my start) of the latest resource I
   // require.  (Used to know how many II relative resource requirements need
   // to be computed/output.)
@@ -513,15 +605,18 @@ public:
   // Count up all the resources of each kind that I require (in all my cycles)
   // and output a definition and initialization.
 
-  char* Res_Count_Vec_Gname() { return res_count_vec_gname.Gname(); }
+  const char* Res_Count_Vec_Gname() const;
   // Return name of pointer to start of my resource count vector.
 
   int Res_Count_Vec_Size() const { return res_count_vec_size; }
   // Return length of my resource count vector.
 
-  char* Res_Id_Set_Gname() { return res_id_set_gname.Gname(); }
+  const char* Res_Id_Set_Gname() const;
   // Return name of pointer to start of vector of resource id sets, one per
   // cycle.
+
+  friend bool operator < (const RES_REQ& lhs, const RES_REQ& rhs);
+  // Comparison operator for std::map.
 
 private:
 
@@ -537,25 +632,20 @@ private:
     CYCLE_RES(int cycle, const RES* res) : cycle(cycle), res_id(res->Id()) {}
     // Construct the <cycle,res> combination.
 
+    CYCLE_RES(const CYCLE_RES& rhs) : cycle(rhs.cycle), res_id(rhs.res_id) {}
+    // Copy constructor for use by STL map.
+
     int Cycle() const { return cycle; }
     // Return cycle component.
 
     RES* Res() const { return RES::Get(res_id); }
     // Return resource component.
 
-    friend bool operator < (const CYCLE_RES a, const CYCLE_RES b)
+    friend bool operator < (const CYCLE_RES& a, const CYCLE_RES& b)
     // Ordering for map.
-    {  // I didn't want to put this inline, but mongoose C++ forced me to.
-      return    a.cycle< b.cycle
-             || a.cycle == b.cycle && a.res_id < b.res_id;
-    }
-
-    CYCLE_RES()
-    // Horrible useless required constructor required by STL map.
-     : cycle(0), res_id(0)
-    {  // Also forced inline by mongoose C++.
-      fprintf(stderr,"### Default initializer for CYCLE_RES"
-              " shouldn't happen.\n");
+    {
+      return    (a.cycle < b.cycle)
+             || (a.cycle == b.cycle && a.res_id < b.res_id);
     }
 
   private:
@@ -563,7 +653,7 @@ private:
     const short res_id;
   };
 
-  typedef std::map< CYCLE_RES,int,std::less <CYCLE_RES> > CYCLE_RES_COUNT_MAP;
+  typedef std::map<CYCLE_RES,int> CYCLE_RES_COUNT_MAP;
   // For keeping track of the number of resources of a given type in a given
   // cycle.  <cycle,res> => count
 
@@ -573,24 +663,79 @@ private:
   CYCLE_RES_COUNT_MAP cycle_res_count;
   // <cycle,res> -> count required
 
-  GNAME gname;
-  // My symbolic name.
-
   GNAME res_count_vec_gname;
   // Symbolic name of my resource count vector.
-
-  GNAME res_id_set_gname;
-  // Symbolic name of vector of resource id sets
 
   int res_count_vec_size;
   // How big it is.
 
   bool Compute_II_RES_REQ(int ii, RES_REQ& ii_res_req);
+
+  static std::map<RES_REQ,GNAME> res_req_name_map;
+  // Map of already-printed RES_REQ instances to names.
+
+  typedef std::vector<unsigned long long> RES_ID_SET;
+
+  struct res_id_set_cmp {
+    bool operator () (const RES_ID_SET* lhs, const RES_ID_SET* rhs) const {
+      if (lhs == 0 && rhs != 0)
+        return true;
+      else if (rhs == 0)
+        return false;
+      return *lhs < *rhs;  // std::lexicographical_compare
+    }
+  };
+  typedef std::map<RES_ID_SET*,GNAME,res_id_set_cmp> RES_ID_SET_NAME_MAP;
+  // Map of RES_ID_SET pointers to names.
+
+  static std::vector<RES_ID_SET*> all_res_id_sets;
+  // List of all allocated resource id sets.
+
+  static RES_ID_SET_NAME_MAP res_id_set_name_map;
+  // Map of weak RES_ID_SET references to names.
+
+  RES_ID_SET* res_used_set_ptr;
+  // Weak reference to res_used_set for this RES_REQ.
+
+  typedef std::map<int,int> RES_COUNT_VEC;
+  // Actually a map of resource ids to counts.
+
+  struct res_count_vec_cmp {
+    bool operator () (const RES_COUNT_VEC* lhs, const RES_COUNT_VEC* rhs) const {
+      if (lhs == 0 && rhs != 0)
+        return true;
+      else if (rhs == 0)
+        return false;
+      return *lhs < *rhs;  // std::map lexicographical_compare
+    }
+  };
+  typedef std::map<RES_COUNT_VEC*,GNAME,res_count_vec_cmp> RES_COUNT_NAME_MAP;
+
+  static std::vector<RES_COUNT_VEC*> all_res_count_vecs;
+  // List of all allocated resource count vectors.
+
+  static RES_COUNT_NAME_MAP res_count_name_map;
+  // Map of RES_COUNT_VEC weak references to names.
+
+  RES_COUNT_VEC* res_count_vec_ptr;
+  // Weak reference to res_count_vec for this RES_REQ.
 };
 
+std::map<RES_REQ,GNAME> RES_REQ::res_req_name_map;
+std::vector<RES_REQ::RES_ID_SET*> RES_REQ::all_res_id_sets;
+RES_REQ::RES_ID_SET_NAME_MAP RES_REQ::res_id_set_name_map;
+std::vector<RES_REQ::RES_COUNT_VEC*> RES_REQ::all_res_count_vecs;
+RES_REQ::RES_COUNT_NAME_MAP RES_REQ::res_count_name_map;
+
 RES_REQ::RES_REQ()
-  : max_res_cycle(-1),
-    gname("res_req")
+  : max_res_cycle(-1)
+{}
+
+RES_REQ::RES_REQ(const RES_REQ& rhs)
+  : max_res_cycle(rhs.max_res_cycle),
+    cycle_res_count(rhs.cycle_res_count),
+    res_count_vec_gname(rhs.res_count_vec_gname),
+    res_count_vec_size(rhs.res_count_vec_size)
 {}
 
 bool RES_REQ::Add_Resource(const RES* res, int cycle)
@@ -606,6 +751,32 @@ bool RES_REQ::Add_Resource(const RES* res, int cycle)
 
   cycle_res_count[cr] = ++count;
   return true;
+}
+
+const char* RES_REQ::Addr_Of_Gname() const
+{
+  return res_req_name_map[*this].Addr_Of_Gname();
+}
+
+const char* RES_REQ::Gname() const
+{
+  return res_req_name_map[*this].Gname();
+}
+
+const char* RES_REQ::Res_Count_Vec_Gname() const
+{
+  if ( res_count_vec_size == 0 )
+    return "0";
+
+  return res_count_name_map[res_count_vec_ptr].Gname();
+}
+
+const char* RES_REQ::Res_Id_Set_Gname() const
+{
+  if ( max_res_cycle < 0 )
+    return "0";
+
+  return res_id_set_name_map[res_used_set_ptr].Gname();
 }
 
 /////////////////////////////////////
@@ -633,7 +804,7 @@ bool RES_REQ::Compute_II_RES_REQ(int ii, RES_REQ& ii_res_req)
 
 bool RES_REQ::Compute_Maybe_Output_II_RES_REQ(int ii, FILE* fd,
                                               GNAME*& res_req_gname,
-                                              GNAME*& res_id_set_gname_ref )
+                                              GNAME*& res_id_set_gname_ref)
 {
   RES_REQ ii_res_req;
 
@@ -641,8 +812,11 @@ bool RES_REQ::Compute_Maybe_Output_II_RES_REQ(int ii, FILE* fd,
     return false;
 
   ii_res_req.Output(fd);
-  res_req_gname = new GNAME(ii_res_req.gname);
-  res_id_set_gname_ref = new GNAME(ii_res_req.res_id_set_gname);
+  res_req_gname = new GNAME(res_req_name_map[ii_res_req]);
+  if ( max_res_cycle < 0 )
+    res_id_set_gname_ref = new GNAME(GNAME::Stub_Gname());
+  else
+    res_id_set_gname_ref = new GNAME(res_id_set_name_map[res_used_set_ptr]);
   return true;
 }
 
@@ -661,34 +835,45 @@ void RES_REQ::Compute_Output_Resource_Count_Vec(FILE* fd)
 
   res_count_vec_size = res_inx_count.size();
 
-  if ( res_count_vec_size == 0 ) {
-    res_count_vec_gname.Stub_Out();
+  if ( res_count_vec_size == 0 )
     return;
+
+  // Avoid printing duplicate RES_REQ definitions.
+  RES_COUNT_NAME_MAP::iterator rcmi = res_count_name_map.find(&res_inx_count);
+  if ( rcmi == res_count_name_map.end() ) {
+    // Allocate and save a copy of the local res_inx_count variable.
+    RES_COUNT_VEC* res_inx_copy = new RES_COUNT_VEC(res_inx_count);
+    all_res_count_vecs.push_back(res_inx_copy);
+    res_count_vec_ptr = res_inx_copy;
+
+    // Generate a name and add it to the map.
+    GNAME gname;
+    res_count_name_map[res_inx_copy] = gname;
+
+    fprintf(fd,"static const SI_RESOURCE_TOTAL %s[] = {", gname.Gname());
+
+    bool is_first = true;
+    RES_COUNT_VEC::iterator mj;
+    for (mj = res_inx_count.begin(); mj != res_inx_count.end(); ++mj) {
+      RES* res = RES::Get((*mj).first);  // You'd think STL would allow
+      int count = (*mj).second;          // something less ugly!  But no.
+
+      Maybe_Print_Comma(fd,is_first);
+      fprintf(fd,"\n  {%s,%d} /* %s */",
+              RES::Get(res->Id())->Addr_Of_Gname(),count,res->Name());
+    }
+    fprintf(fd,"\n};\n");
   }
-
-  // Print it out
-  fprintf(fd,"static SI_RESOURCE_TOTAL %s[] = {",
-             res_count_vec_gname.Gname());
-
-  bool is_first = true;
-  std::map<int,int,std::less<int> >::iterator mj;
-  for (mj = res_inx_count.begin(); mj != res_inx_count.end(); ++mj) {
-    RES* res = RES::Get((*mj).first);  // You'd think STL would allow
-    int count = (*mj).second;          // something less ugly!  But no.
-
-    Maybe_Print_Comma(fd,is_first);
-    fprintf(fd,"\n  {%s,%d} /* %s */",
-               RES::Get(res->Id())->Addr_Of_Gname(),count,res->Name());
-  }
-  fprintf(fd,"\n};\n");
+  else
+    res_count_vec_ptr = rcmi->first;
 }
 
 void RES_REQ::Output(FILE* fd)
 {
   int i;
   CYCLE_RES_COUNT_MAP::iterator mi;
-  std::vector<unsigned long long> res_vec((size_t) max_res_cycle + 1,0);
-  std::vector<unsigned long long> res_used_set((size_t) max_res_cycle + 1,0);
+  RES_ID_SET res_vec((size_t) max_res_cycle + 1,0);
+  RES_ID_SET res_used_set((size_t) max_res_cycle + 1,0);
 
   for (mi = cycle_res_count.begin(); mi != cycle_res_count.end(); ++mi) {
     int cycle = (*mi).first.Cycle();  // You'd think this could be abstracted,
@@ -699,30 +884,91 @@ void RES_REQ::Output(FILE* fd)
     res_used_set[cycle] |= 1ll << res->Id();
   }
 
-  fprintf(fd,"static const SI_RRW %s[] = {\n  %d",
-             gname.Gname(),
-             max_res_cycle + 1);
+  // Avoid printing duplicate RES_REQ definitions.
+  std::map<RES_REQ,GNAME>::iterator rrmi = res_req_name_map.find(*this);
+  if ( rrmi == res_req_name_map.end() ) {
+    // Generate a name and add it to the map.
+    GNAME gname("res_req");
+    res_req_name_map[*this] = gname;
 
-  for ( i = 0; i <= max_res_cycle; ++i )
-    fprintf(fd,",\n  0x%llx",res_vec[i]);
+    fprintf(fd,"static const SI_RRW %s[%d] = {\n  %d",
+            gname.Gname(),
+            max_res_cycle + 2,
+            max_res_cycle + 1);
 
-  fprintf(fd,"\n};\n");
+    for ( i = 0; i <= max_res_cycle; ++i )
+      fprintf(fd,",\n  0x%" LL_FORMAT "x",res_vec[i]);
 
-  if ( max_res_cycle < 0 ) {
-    res_id_set_gname.Stub_Out();
+    fprintf(fd,"\n};\n");
+  }
+
+  if ( max_res_cycle < 0 )
     return;
+
+  // Avoid printing duplicate resource id sets.
+  RES_ID_SET_NAME_MAP::iterator rsmi = res_id_set_name_map.find(&res_used_set);
+  if ( rsmi == res_id_set_name_map.end() ) {
+    // Allocate and save a copy of the local res_used_set variable.
+    RES_ID_SET* res_set_copy = new RES_ID_SET(res_used_set);
+    all_res_id_sets.push_back(res_set_copy);
+    res_used_set_ptr = res_set_copy;
+
+    // Generate a name and add it to the map.
+    GNAME gname;
+    res_id_set_name_map[res_set_copy] = gname;
+
+    fprintf(fd,"static const SI_RESOURCE_ID_SET %s[%d] = {", gname.Gname(),
+            max_res_cycle + 1);
+
+    bool is_first = true;
+    for ( i = 0; i <= max_res_cycle; ++i ) {
+      Maybe_Print_Comma(fd,is_first);
+      fprintf(fd,"\n  0x%" LL_FORMAT "x",res_used_set[i]);
+    }
+
+    fprintf(fd,"\n};\n");
+  }
+  else
+    res_used_set_ptr = rsmi->first;
+}
+
+bool operator < (const RES_REQ& lhs, const RES_REQ& rhs)
+{
+  // Check for differing max_res_cycle values.
+  if (lhs.max_res_cycle != rhs.max_res_cycle)
+    return lhs.max_res_cycle < rhs.max_res_cycle;
+
+  // Compute the res_vec vector as in RES_REQ::Output.
+  std::vector<unsigned long long> res_vec_lhs((size_t) lhs.max_res_cycle + 1,0);
+
+  RES_REQ::CYCLE_RES_COUNT_MAP::const_iterator mi;
+  for (mi = lhs.cycle_res_count.begin(); mi != lhs.cycle_res_count.end(); ++mi)
+  {
+    int cycle = (*mi).first.Cycle();
+    RES* res = (*mi).first.Res();
+    long long count = (*mi).second;
+
+    res_vec_lhs[cycle] += count << res->Shift_Count();
   }
 
-  fprintf(fd,"static const SI_RESOURCE_ID_SET %s[] = {",
-             res_id_set_gname.Gname());
+  std::vector<unsigned long long> res_vec_rhs((size_t) rhs.max_res_cycle + 1,0);
+  for (mi = rhs.cycle_res_count.begin(); mi != rhs.cycle_res_count.end(); ++mi)
+  {
+    int cycle = (*mi).first.Cycle();
+    RES* res = (*mi).first.Res();
+    long long count = (*mi).second;
 
-  bool is_first = true;
-  for ( i = 0; i <= max_res_cycle; ++i ) {
-    Maybe_Print_Comma(fd,is_first);
-    fprintf(fd,"\n  0x%llx",res_used_set[i]);
+    res_vec_rhs[cycle] += count << res->Shift_Count();
   }
 
-  fprintf(fd,"\n};\n");
+  // Compare values in res_vec vectors.
+  int i;
+  for ( i = 0; i <= lhs.max_res_cycle; ++i )
+    if (res_vec_lhs[i] != res_vec_rhs[i])
+      return res_vec_lhs[i] < res_vec_rhs[i];
+
+  // The two RES_REQ instances will be identical in output.
+  return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -737,62 +983,73 @@ class ISLOT {
 /////////////////////////////////////
 
 public:
-  ISLOT(char* name, int skew, int avail_count);
+  ISLOT(const char* name, int skew, int avail_count);
   // <name> is for documentation and debugging.  <skew> gives a latency skew
   // instructions issued in me.
 
-  char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
+  const char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
   // Return pointer to my name in generated.
 
-  static int Count() { return count; }
-  // How may instructions can issue in me.
-
-  static void Output_All(FILE* fd);
+  static void Output_Data(FILE* fd, int machine_slot);
   // Output all the issue slots and a vector of pointers to them all.
 
+  static void Output_Members(FILE* fd, int machine_slot);
+  // Output the count of issue slots and a pointer to the vector.
+
 private:
-  char* const name;             // User supplied for documentation & debugging
+  const char* name;             // User supplied for documentation & debugging
   const int skew;               // Latency skew
   const int avail_count;        // How many instructions can happen in it
   GNAME gname;                  // Symbolic name in generated
-  static std::list<ISLOT*> islots;  // All the created islot
-  static int count;             // How many issue slots total?
+
+  static std::list<ISLOT*> islots[max_machine_slots];
+  // All the created islot lists.
+
+  static int count[max_machine_slots];
+  // How many issue slots in each list?
 };
 
-std::list<ISLOT*> ISLOT::islots;
-int ISLOT::count = 0;
+std::list<ISLOT*> ISLOT::islots[max_machine_slots];
+int ISLOT::count[max_machine_slots] = { 0 };
 
-ISLOT::ISLOT(char* name, int skew, int avail_count)
+ISLOT::ISLOT(const char* name, int skew, int avail_count)
   : name(name),
     skew(skew),
     avail_count(avail_count)
 {
-  islots.push_back(this);
-  ++count;
+  islots[current_machine_slot].push_back(this);
+  ++count[current_machine_slot];
 }
 
-void ISLOT::Output_All(FILE* fd)
+void ISLOT::Output_Data(FILE* fd, int machine_slot)
 {
   std::list<ISLOT*>::iterator isi;
 
-  fprintf(fd,"const int SI_issue_slot_count = %d;\n",count);
-
-  for ( isi = islots.begin(); isi != islots.end(); ++isi ) {
+  for ( isi = islots[machine_slot].begin();
+        isi != islots[machine_slot].end();
+        ++isi
+  ) {
     ISLOT* islot = *isi;
-    fprintf(fd,"static SI_ISSUE_SLOT %s = { \"%s\",%d,%d};\n",
+    fprintf(fd,"static const SI_ISSUE_SLOT %s = { \"%s\",%d,%d};\n",
             islot->gname.Gname(),
             islot->name,
             islot->skew,
             islot->avail_count);
   }
 
-  if ( count == 0 )
-    fprintf(fd,"SI_ISSUE_SLOT * const SI_issue_slots[1] = {0};\n");
+  if ( count[machine_slot] == 0 )
+    fprintf(fd, "\n"
+            "static const SI_ISSUE_SLOT * const SI_issue_slots_%d[1] = {0};\n",
+            machine_slot);
   else {
-    fprintf(fd,"SI_ISSUE_SLOT * const SI_issue_slots[%d] = {",count);
+    fprintf(fd,"\nstatic const SI_ISSUE_SLOT * const SI_issue_slots_%d[%d] = {",
+            machine_slot, count[machine_slot]);
 
     bool is_first = true;
-    for ( isi = islots.begin(); isi != islots.end(); ++isi ) {
+    for ( isi = islots[machine_slot].begin();
+          isi != islots[machine_slot].end();
+          ++isi
+    ) {
       ISLOT* islot = *isi;
       Maybe_Print_Comma(fd,is_first);
       fprintf(fd,"\n  %s",islot->Addr_Of_Gname());
@@ -800,6 +1057,12 @@ void ISLOT::Output_All(FILE* fd)
 
     fprintf(fd,"\n};\n");
   }
+}
+
+void ISLOT::Output_Members(FILE* fd, int machine_slot)
+{
+  fprintf(fd,"    %-20d  /* SI_issue_slot_count */,\n",count[machine_slot]);
+  fprintf(fd,"    SI_issue_slots_%-5d  /* si_issue_slots */,\n",machine_slot);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -816,6 +1079,9 @@ public:
   LATENCY_INFO(int max_elements);
   // <max_elements> is the maximum number either of operands or results.
 
+  LATENCY_INFO(const LATENCY_INFO& rhs);
+  // Copy constructor
+
   void Set_Any_Time(int time);
   // Any (all) of the operands or results have <time> as access or available
   // time.
@@ -826,32 +1092,45 @@ public:
   void Output(FILE* fd);
   // Output latency vector to <fd>.
 
-  char* Gname() { return gname.Gname(); }
+  const char* Gname() const;
   // Return name of pointer to me in generated file.
+  // The latency vector must be output first.
+
+  friend bool operator < (const LATENCY_INFO& a, const LATENCY_INFO& b);
+  // Comparison operator for std::map.
 
 private:
-  GNAME gname;                  // Name in generated
   const int max_elements;       // Maximum number of operands or results
   bool any_time_defined;        // Overriding time defined
   int any_time;                 // And here it is
   std::vector<bool> times_defined;   // Times for each operands defined?
   std::vector<int> times;            // And here they are
+
+  static std::map<LATENCY_INFO,GNAME> output_latencies;
 };
 
+std::map<LATENCY_INFO,GNAME> LATENCY_INFO::output_latencies;
+
 LATENCY_INFO::LATENCY_INFO(int max_elements)
-  : gname("latency"),
-    max_elements(max_elements),
+  : max_elements(max_elements),
     any_time_defined(false),
     times_defined(max_elements,false),
     times(max_elements)
 {}
 
+LATENCY_INFO::LATENCY_INFO(const LATENCY_INFO& rhs)
+  : max_elements(rhs.max_elements),
+    any_time_defined(rhs.any_time_defined),
+    any_time(rhs.any_time),
+    times_defined(rhs.times_defined),
+    times(rhs.times)
+{}
+
 void LATENCY_INFO::Set_Any_Time(int time)
 {
   if ( any_time_defined ) {
-    fprintf(stderr,"### Warning any_time redefined for %s.  "
+    fprintf(stderr,"### Warning any_time redefined for latency.  "
                    "Was %d.  Is %d\n",
-                   gname.Gname(),
                    any_time,
                    time);
   }
@@ -863,9 +1142,8 @@ void LATENCY_INFO::Set_Any_Time(int time)
 void LATENCY_INFO::Set_Time(int index, int time)
 {
   if ( any_time_defined ) {
-    fprintf(stderr,"### WARNING: %s setting specific time after any time.  "
+    fprintf(stderr,"### WARNING: latency setting specific time after any time.  "
                    "Any %d.  Specific %d\n",
-                   gname.Gname(),
                    any_time,
                    time);
   }
@@ -873,9 +1151,8 @@ void LATENCY_INFO::Set_Time(int index, int time)
   assert(index < max_elements);
 
   if ( times_defined[index] ) {
-    fprintf(stderr,"### WARNING: Resetting %s time.  "
+    fprintf(stderr,"### WARNING: Resetting latency time.  "
                    "Was %d. Now is %d\n",
-                   gname.Gname(),
                    time,
                    times[index]);
   }
@@ -886,7 +1163,16 @@ void LATENCY_INFO::Set_Time(int index, int time)
 
 void LATENCY_INFO::Output(FILE* fd)
 {
-  fprintf(fd,"static const mUINT8 %s[] = {",gname.Gname());
+  // Avoid output of duplicate latencies.
+  std::map<LATENCY_INFO,GNAME>::iterator lmi = output_latencies.find(*this);
+  if ( lmi != output_latencies.end() )
+    return;
+
+  // Generate a name and add it to the map.
+  GNAME gname("latency");
+  output_latencies[*this] = gname;
+
+  fprintf(fd,"static const mUINT8 %s[%lu] = {",gname.Gname(),times.size());
 
     bool is_first = true;
     std::vector<int>::iterator i;
@@ -896,6 +1182,27 @@ void LATENCY_INFO::Output(FILE* fd)
     }
 
     fprintf(fd,"};\n");
+}
+
+const char* LATENCY_INFO::Gname() const
+{
+  return output_latencies[*this].Gname();
+}
+
+bool operator < (const LATENCY_INFO& a, const LATENCY_INFO& b)
+{
+  if ( a.times.size() != b.times.size() )
+    return a.times.size() < b.times.size();
+
+  for (int i = 0; i < a.times.size(); ++i) {
+    int t_a = a.any_time_defined ? a.any_time : a.times[i];
+    int t_b = b.any_time_defined ? b.any_time : b.times[i];
+    if ( t_a != t_b )
+      return t_a < t_b;
+  }
+
+  // The two latencies will be identical in output.
+  return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -910,7 +1217,7 @@ class INSTRUCTION_GROUP {
 
 public:
   // These functions correspond exactly with the defined C client interface.
-  INSTRUCTION_GROUP(char* name);
+  INSTRUCTION_GROUP(const char* name);
   void Set_Any_Operand_Access_Time(int time);
   void Set_Operand_Access_Time(int operand_index, int time);
   void Set_Any_Result_Available_Time(int time);
@@ -919,29 +1226,40 @@ public:
   void Set_Last_Issue_Cycle( int time );
   void Set_Store_Available_Time( int time );
   void Add_Resource_Requirement(const RES* res, int cycle);
+  void Add_Alternative_Resource_Requirement(const RES* res, int cycle);
   void Add_Valid_ISLOT(ISLOT* islot);
   void Set_Write_Write_Interlock();
 
   static void Output_All(FILE* fd);
   // Write them all out
 
-  char* Addr_Of_Gname() { return gname.Addr_Of_Gname(); }
-  // Name of pointer to me in generated file.
+  static void Output_Data(FILE* fd, int machine_slot);
+  // Write out per-machine list of pointers.
+
+  static void Output_Members(FILE* fd, int machine_slot);
+  // Write out count and pointer to data.
+
+  unsigned int Id();
+  // Unique id (available only after call to Output_All).
+
+  static unsigned int Count();
+  // Number of unique SI records (available only after call to Output_All).
 
 private:
   int id;                               // Index in vector of same
-  GNAME gname;                          // Variable name in generated    
-  char* const name;                     // User supplied name for documentation
+  const char* name;                     // User supplied name for documentation
   RES_REQ res_requirement;              // Required to issue
+  RES_REQ alternative_res_requirement;  // Alternative resource if
+                                        // res_requirement cannot be satisified
 
-  std::list<ISLOT*> valid_islots;            // If there are any issue slots at all
+  std::list<ISLOT*> valid_islots;       // If there are any issue slots at all
   GNAME islot_vec_gname;                // Variable name of above in generated
 
   LATENCY_INFO operand_latency_info;    // When operands latch
   LATENCY_INFO result_latency_info;     // When results available
 
   int load_access_time;                 // When loads access memory
-  int last_issue_cycle;			// Last issue cycle in simulated insts
+  int last_issue_cycle;                 // Last issue cycle in simulated insts
   int store_available_time;             // When stores make value available in
                                         //   memory 
 
@@ -961,27 +1279,138 @@ private:
   // bad IIs, but I think this will be enough.
 
   static std::list<INSTRUCTION_GROUP*> instruction_groups;
-  // All the defined instruction groups.
+  // All the defined instruction groups (may have duplicates).
 
-  static int count;
-  // Of all instruction groups.  Used to generate ids.
+  static std::list<INSTRUCTION_GROUP*>
+    by_machine_instruction_groups[max_machine_slots];
+  // List of instruction groups for each machine.
 
-  int II_Info_Size() { return res_requirement.Max_Res_Cycle(); }
+  static int by_machine_count[max_machine_slots];
+  // Count of instruction groups for each machine.
+
+  int II_Info_Size() const { return res_requirement.Max_Res_Cycle(); }
   // Latest cycle in which I need a resource
 
   void Output_II_Info(FILE* fd);
   void Output_Latency_Info(FILE* fd);
   void Output_Issue_Slot_Info(FILE* fd);
-  void Output(FILE* fd);
+  void Output_Members(FILE* fd);
+  void Output(FILE* fd) const;
+
+  struct instruction_group_cmp {
+    bool operator () (const INSTRUCTION_GROUP* lhs,
+                      const INSTRUCTION_GROUP* rhs) const
+    {
+      if (lhs == NULL && rhs != NULL)
+        return true;
+      else if (rhs == NULL)
+        return false;
+
+      // Compare fields as in Output member function.
+
+#ifdef Is_True_On
+      // name
+      if (lhs->name == NULL && rhs->name != NULL)
+        return true;
+      else if (rhs->name == NULL)
+        return false;
+      if (strcmp(lhs->name, rhs->name) != 0)
+        return strcmp(lhs->name, rhs->name) < 0;
+#endif
+
+      // operand_latency_info
+      if (strcmp(lhs->operand_latency_info.Gname(),
+                 rhs->operand_latency_info.Gname()) != 0)
+        return strcmp(lhs->operand_latency_info.Gname(),
+                      rhs->operand_latency_info.Gname()) < 0;
+
+      // result_latency_info
+      if (strcmp(lhs->result_latency_info.Gname(),
+                 rhs->result_latency_info.Gname()) != 0)
+        return strcmp(lhs->result_latency_info.Gname(),
+                      rhs->result_latency_info.Gname()) < 0;
+
+      // load_access_time
+      if (lhs->load_access_time != rhs->load_access_time)
+        return lhs->load_access_time < rhs->load_access_time;
+
+      // last_issue_cycle
+      if (lhs->last_issue_cycle != rhs->last_issue_cycle)
+        return lhs->last_issue_cycle < rhs->last_issue_cycle;
+
+      // store_available_time
+      if (lhs->store_available_time != rhs->store_available_time)
+        return lhs->store_available_time < rhs->store_available_time;
+
+      // res_requirement
+      if (strcmp(lhs->res_requirement.Gname(),
+                 rhs->res_requirement.Gname()) != 0)
+        return strcmp(lhs->res_requirement.Gname(),
+                      rhs->res_requirement.Gname()) < 0;
+
+      // alternative_res_requirement
+      if (strcmp(lhs->alternative_res_requirement.Gname(),
+                 rhs->alternative_res_requirement.Gname()) != 0)
+        return strcmp(lhs->alternative_res_requirement.Gname(),
+                      rhs->alternative_res_requirement.Gname()) < 0;
+
+      // Res_Id_Set_Gname, II_Info_Size: redundant (res_requirement)
+
+      // ii_res_req_gname
+      if (strcmp(lhs->ii_res_req_gname.Gname(),
+                 rhs->ii_res_req_gname.Gname()) != 0)
+        return strcmp(lhs->ii_res_req_gname.Gname(),
+                      rhs->ii_res_req_gname.Gname()) < 0;
+
+      // ii_res_id_set_gname
+      if (strcmp(lhs->ii_res_id_set_gname.Gname(),
+                 rhs->ii_res_id_set_gname.Gname()) != 0)
+        return strcmp(lhs->ii_res_id_set_gname.Gname(),
+                      rhs->ii_res_id_set_gname.Gname()) < 0;
+
+      // bad_iis
+      int i;
+      for (i = 0; i < sizeof(lhs->bad_iis) / sizeof(lhs->bad_iis[0]); ++i)
+        if (lhs->bad_iis[i] != rhs->bad_iis[i])
+          return lhs->bad_iis[i] < rhs->bad_iis[i];
+
+      // valid_islots
+      if (lhs->valid_islots.size() != rhs->valid_islots.size())
+        return lhs->valid_islots.size() < rhs->valid_islots.size();
+
+      // islot_vec_gname
+      if (strcmp(lhs->islot_vec_gname.Gname(),
+                 rhs->islot_vec_gname.Gname()) != 0)
+        return strcmp(lhs->islot_vec_gname.Gname(),
+                      rhs->islot_vec_gname.Gname()) < 0;
+
+      // Res_Count_Vec_Size, Res_Count_Vec_Gname: redundant (res_requirment)
+
+      // write_write_interlock
+      if (lhs->write_write_interlock != rhs->write_write_interlock)
+        return lhs->write_write_interlock < rhs->write_write_interlock;
+
+      return false;
+    }
+  };
+  typedef std::set<INSTRUCTION_GROUP*,instruction_group_cmp>
+    INSTRUCTION_GROUP_SET;
+
+  static INSTRUCTION_GROUP_SET instruction_group_set;
+  // Set of all unique instruction group objects.
 };
 
 
 std::list<INSTRUCTION_GROUP*> INSTRUCTION_GROUP::instruction_groups;
-int INSTRUCTION_GROUP::count = 0;
 
-INSTRUCTION_GROUP::INSTRUCTION_GROUP(char* name)
-    : id(count++),
-      name(name),
+std::list<INSTRUCTION_GROUP*>
+  INSTRUCTION_GROUP::by_machine_instruction_groups[max_machine_slots];
+
+INSTRUCTION_GROUP::INSTRUCTION_GROUP_SET
+  INSTRUCTION_GROUP::instruction_group_set;
+
+INSTRUCTION_GROUP::INSTRUCTION_GROUP(const char* name)
+    : name(name),
       operand_latency_info(max_operands),
       result_latency_info(max_results),
       load_access_time(0),
@@ -993,6 +1422,7 @@ INSTRUCTION_GROUP::INSTRUCTION_GROUP(char* name)
   bad_iis[0] = 0;
   bad_iis[1] = 0;
   instruction_groups.push_back(this);
+  by_machine_instruction_groups[current_machine_slot].push_back(this);
 }
 
 void INSTRUCTION_GROUP::Set_Any_Operand_Access_Time(int time)
@@ -1033,6 +1463,16 @@ void INSTRUCTION_GROUP::Set_Store_Available_Time( int time )
 void INSTRUCTION_GROUP::Add_Resource_Requirement(const RES* res, int cycle)
 {
   if (! res_requirement.Add_Resource(res,cycle)) {
+    fprintf(stderr,"### ERROR: Impossible resource request for "
+                    "instruction group %s.\n",
+                    name);
+    fprintf(stderr,"###    %s at cycle %d.\n",res->Name(),cycle);
+  }
+}
+
+void INSTRUCTION_GROUP::Add_Alternative_Resource_Requirement(const RES* res, int cycle)
+{
+  if (! alternative_res_requirement.Add_Resource(res,cycle)) {
     fprintf(stderr,"### ERROR: Impossible resource request for "
                     "instruction group %s.\n",
                     name);
@@ -1091,8 +1531,9 @@ void INSTRUCTION_GROUP::Output_II_Info(FILE* fd)
     }
   }
 
-  for ( i = 0; i < sizeof(bad_iis) / sizeof(bad_iis[0]); ++i ) {
-    bad_iis[i] = 0ULL;
+  unsigned int j;
+  for ( j = 0; j < sizeof(bad_iis) / sizeof(bad_iis[0]); ++j ) {
+    bad_iis[j] = 0ULL;
   }
 
   for ( i = 0; i <= greatest_bad_ii; ++i ) {
@@ -1171,88 +1612,143 @@ void INSTRUCTION_GROUP::Output_Issue_Slot_Info(FILE* fd)
   fprintf(fd,"\n};\n");
 }
 
-void INSTRUCTION_GROUP::Output(FILE* fd)
+void INSTRUCTION_GROUP::Output_Members(FILE* fd)
 {
-  int i;
+  unsigned int i;
 
-  fprintf(fd,"\n/* Instruction group %s */\n",name);
   res_requirement.Output(fd);
   res_requirement.Compute_Output_Resource_Count_Vec(fd);
+  alternative_res_requirement.Output(fd); 
+  alternative_res_requirement.Compute_Output_Resource_Count_Vec(fd);
   Output_II_Info(fd);
   Output_Latency_Info(fd);
   Output_Issue_Slot_Info(fd);
 
+  // Keep track of duplicate instruction group data.
+  INSTRUCTION_GROUP_SET::iterator mi = instruction_group_set.find(this);
+  if (mi == instruction_group_set.end()) {
+    instruction_group_set.insert(this);
+  }
+}
 
-  fprintf(fd,"static SI %s = {\n",gname.Gname());
-  fprintf(fd,"  \"%s\",\n",name);
-  fprintf(fd,"  %-15d, /* id */\n",id);
-  fprintf(fd,"  %-15s, /* operand latency */\n",
+void INSTRUCTION_GROUP::Output(FILE* fd) const
+{
+  unsigned int i;
+
+  assert(id != 0);
+
+  fprintf(fd,"  {                  /* SI id %u */\n",id);
+#ifdef Is_True_On
+  fprintf(fd,"    \"%s\",\n",name);
+#endif
+  fprintf(fd,"    %-15s, /* operand latency */\n",
              operand_latency_info.Gname());
-  fprintf(fd,"  %-15s, /* result latency */\n",
+  fprintf(fd,"    %-15s, /* result latency */\n",
              result_latency_info.Gname());
-  fprintf(fd,"  %-15d, /* load access time */\n",
+  fprintf(fd,"    %-15d, /* load access time */\n",
              load_access_time);
-  fprintf(fd,"  %-15d, /* last issue cycle */\n",
+  fprintf(fd,"    %-15d, /* last issue cycle */\n",
              last_issue_cycle);
-  fprintf(fd,"  %-15d, /* store available time */\n",
+  fprintf(fd,"    %-15d, /* store available time */\n",
              store_available_time);
-  fprintf(fd,"  %-15s, /* resource requirement */\n",
+  fprintf(fd,"    %-15s, /* resource requirement */\n",
              res_requirement.Gname());
-  fprintf(fd,"  %-15s, /* res id used set vec */\n",
+  fprintf(fd,"    %-15s, /* alternative resource requirement */\n",
+             alternative_res_requirement.Gname());
+  fprintf(fd,"    %-15s, /* res id used set vec */\n",
              res_requirement.Res_Id_Set_Gname());
-  fprintf(fd,"  %-15d, /* II info size */\n",
+  fprintf(fd,"    %-15d, /* II info size */\n",
              II_Info_Size() >= 0 ? II_Info_Size() : 0);
-  fprintf(fd,"  %-15s, /* II resource requirement vec */\n",
+  fprintf(fd,"    %-15s, /* II resource requirement vec */\n",
              ii_res_req_gname.Gname());
-  fprintf(fd,"  %-15s, /* II res id used set vec */\n",
+  fprintf(fd,"    %-15s, /* II res id used set vec */\n",
              ii_res_id_set_gname.Gname());
-  fprintf(fd,"  {{");
+  fprintf(fd,"    {{");
   for ( i = 0; i < sizeof(bad_iis) / sizeof(bad_iis[0]); ++i ) {
-    fprintf(fd, "0x%llx", bad_iis[i]);
+    fprintf(fd, "0x%" LL_FORMAT "x", bad_iis[i]);
     if ( i < sizeof(bad_iis) / sizeof(bad_iis[0]) - 1 ) fprintf(fd, ",");
   }
-  fprintf(fd, "}}    , /* Bad IIs */\n");
-  fprintf(fd,"  %-15d, /* valid issue slots vec size */\n",
-             valid_islots.size());
-  fprintf(fd,"  %-15s, /* valid issue slots vec */\n",
+  fprintf(fd, "}}    , /* bad IIs */\n");
+  fprintf(fd,"    %-15d, /* valid issue slots vec size */\n",
+             (unsigned int) valid_islots.size());
+  fprintf(fd,"    %-15s, /* valid issue slots vec */\n",
              islot_vec_gname.Gname());
-  fprintf(fd,"  %-15d, /* resource count vec size */\n",
+  fprintf(fd,"    %-15d, /* resource count vec size */\n",
              res_requirement.Res_Count_Vec_Size());
-  fprintf(fd,"  %-15s, /* resource count vec */\n",
+  fprintf(fd,"    %-15s, /* resource count vec */\n",
              res_requirement.Res_Count_Vec_Gname());
-  fprintf(fd,"  %-15s  /* write-write interlock */\n",
+  fprintf(fd,"    %-15s  /* write-write interlock */\n",
              write_write_interlock ? "1" : "0");
-  fprintf(fd,"};\n");
+  fprintf(fd,"  }");
 }
 
 void INSTRUCTION_GROUP::Output_All(FILE* fd)
 {
   std::list<INSTRUCTION_GROUP*>::iterator iig;
+  INSTRUCTION_GROUP_SET::iterator mi;
+  unsigned int i;
 
   for (iig = instruction_groups.begin();
        iig != instruction_groups.end();
        ++iig
   ) {
-    (*iig)->Output(fd);
+    (*iig)->Output_Members(fd);
   }
 
-  fprintf(fd,"SI * const SI_ID_si[] = {");
+  i = 1;
+  fprintf(fd,"\nconst SI SI_all[%lu] = {\n", instruction_group_set.size());
+  for (mi = instruction_group_set.begin();
+       mi != instruction_group_set.end();
+       ++mi
+  ) {
+    if (i > 1)
+      fprintf(fd,",\n");
+    (*mi)->id = i;
+    (*mi)->Output(fd);
+    i++;
+  }
+  fprintf(fd,"\n};\n");
+}
+
+void INSTRUCTION_GROUP::Output_Data(FILE* fd, int machine_slot)
+{
+  std::list<INSTRUCTION_GROUP*>::iterator iig;
+
+  fprintf(fd,"\nstatic const int SI_ID_si_%d[%lu] = {",machine_slot,
+          by_machine_instruction_groups[machine_slot].size());
 
   bool is_first = true;
-  for (iig = instruction_groups.begin();
-       iig != instruction_groups.end();
+  for (iig = by_machine_instruction_groups[machine_slot].begin();
+       iig != by_machine_instruction_groups[machine_slot].end();
        ++iig
   ) {
     Maybe_Print_Comma(fd,is_first);
-    fprintf(fd,"\n  %s",(*iig)->Addr_Of_Gname());
+    fprintf(fd,"\n  %u",(*iig)->Id());
   }
 
   fprintf(fd,"\n};\n");
 
-  fprintf(fd,"const int SI_ID_count = %d;\n",count);
-
   fprintf(fd,"\n"); // One extra new line to separate from what follows.
+}
 
+void INSTRUCTION_GROUP::Output_Members(FILE* fd, int machine_slot)
+{
+  fprintf(fd,"    %-20lu  /* SI_ID_count */,\n",
+          by_machine_instruction_groups[machine_slot].size());
+  fprintf(fd,"    SI_ID_si_%-11d  /* SI_ID_si */,\n",machine_slot);
+}
+
+unsigned int INSTRUCTION_GROUP::Id()
+{
+  // Use the id from the representative instruction group object.
+  INSTRUCTION_GROUP_SET::iterator mi = instruction_group_set.find(this);
+  assert(mi != instruction_group_set.end());
+  return (*mi)->id;
+}
+
+unsigned int INSTRUCTION_GROUP::Count()
+{
+  return instruction_group_set.size();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1269,82 +1765,119 @@ public:
   static void Add_Entry( TOP top, INSTRUCTION_GROUP* ig );
   // Add entry to the map.  <top> uses <ig>'s scheduling information.
 
-  static void Output( FILE* fd );
+  static void Output_Data( FILE* fd , int machine_slot );
   // Write out the map.
 
+  static void Output_Members( FILE* fd, int machine_slot );
+  // Write out a pointer to the map.
+
   static void Create_Dummies( void );
-  // Create schedling info for the "dummy" instructions.
+  // Create scheduling info for the "dummy" instructions.
 
 private:
-  static std::vector<char*> top_sched_info_ptr_map;  // The map itself.
-  static std::vector<bool> top_sched_info_defined;   // Which elements defined
+  static std::vector<INSTRUCTION_GROUP*> top_sched_info_ptr_map[max_machine_slots];
+  // Map to instruction group instances.
+
+  static std::vector<bool> top_sched_info_defined[max_machine_slots];
+  // Which elements defined
+
+  static INSTRUCTION_GROUP* machine_dummies[max_machine_slots];
+  // Pointer to dummy instruction used to fill unused slots
 };
 
-std::vector<char*> TOP_SCHED_INFO_MAP::top_sched_info_ptr_map(TOP_count,"0");
-std::vector<bool> TOP_SCHED_INFO_MAP::top_sched_info_defined(TOP_count,false);
+std::vector<INSTRUCTION_GROUP*>
+  TOP_SCHED_INFO_MAP::top_sched_info_ptr_map[max_machine_slots];
+std::vector<bool>
+  TOP_SCHED_INFO_MAP::top_sched_info_defined[max_machine_slots];
+
+INSTRUCTION_GROUP* TOP_SCHED_INFO_MAP::machine_dummies[max_machine_slots];
 
 void TOP_SCHED_INFO_MAP::Create_Dummies( void )
 {
   INSTRUCTION_GROUP *dummies = NULL;
 
+  top_sched_info_ptr_map[current_machine_slot].resize(TOP_count,NULL);
+  top_sched_info_defined[current_machine_slot].resize(TOP_count,false);
+
   for ( int i = 0; i < TOP_count; ++i ) {
     if ( TOP_is_dummy((TOP)i) ) {
       if ( !dummies ) {
-	dummies = new INSTRUCTION_GROUP("Dummy instructions");
-	dummies->Set_Any_Operand_Access_Time(0);
-	dummies->Set_Any_Result_Available_Time(0);
+        dummies = new INSTRUCTION_GROUP("Dummy instructions");
+        dummies->Set_Any_Operand_Access_Time(0);
+        dummies->Set_Any_Result_Available_Time(0);
       }
-      top_sched_info_ptr_map[i] = dummies->Addr_Of_Gname();
+      top_sched_info_ptr_map[current_machine_slot][i] = dummies;
     }
   }
+  machine_dummies[current_machine_slot] = dummies;
 }
 
 void TOP_SCHED_INFO_MAP::Add_Entry( TOP top, INSTRUCTION_GROUP* ig )
 {
-  if ( top_sched_info_defined[(int) top] ) {
+  if ( top_sched_info_defined[current_machine_slot][(int) top] ) {
     fprintf(stderr,"### Warning: scheduling information for %s redefined.\n",
             TOP_Name(top));
   }
 
-  top_sched_info_ptr_map[(int) top] = ig->Addr_Of_Gname();
-  top_sched_info_defined[(int) top] = true;
+  top_sched_info_ptr_map[current_machine_slot][(int) top] = ig;
+  top_sched_info_defined[current_machine_slot][(int) top] = true;
 }
 
-void TOP_SCHED_INFO_MAP::Output( FILE* fd )
+void TOP_SCHED_INFO_MAP::Output_Data( FILE* fd, int machine_slot )
 {
   int i;
 
-  fprintf(fd,"SI * const SI_top_si[%d] = {",TOP_count);
+  fprintf(fd,"static const int SI_top_si_%d[%d] = {",machine_slot,TOP_count);
 
   bool err = false;
   bool is_first = true;
   for ( i = 0; i < TOP_count; ++i ) {
-    bool isa_member = ISA_SUBSET_Member(machine_isa, (TOP)i);
+    bool isa_member = ISA_SUBSET_Member(machine_isa[machine_slot], (TOP)i);
     bool is_dummy = TOP_is_dummy((TOP)i);
 
-    Maybe_Print_Comma(fd,is_first);
-
-    fprintf(fd,"\n  %-10s  /* %s */",top_sched_info_ptr_map[i],
-                                     TOP_Name((TOP)i));
-
-    if ( top_sched_info_defined[i] ) {
+    if ( top_sched_info_defined[machine_slot][i] ) {
       if ( ! isa_member ) {
-	fprintf(stderr,"### Warning: scheduling info for non-%s ISA opcode %s\n",
-                       ISA_SUBSET_Name(machine_isa), TOP_Name((TOP)i));
+        fprintf(stderr,
+                "### Warning: scheduling info for non-%s ISA opcode %s (%s)\n",
+                ISA_SUBSET_Name(machine_isa[machine_slot]),
+                TOP_Name((TOP)i),
+                machine_name[machine_slot].c_str());
       } else if ( is_dummy ) {
-	fprintf(stderr,"### Warning: scheduling info for dummy opcode %s\n",
-                       TOP_Name((TOP)i));
+        fprintf(stderr,
+                "### Warning: scheduling info for dummy opcode %s (%s)\n",
+                TOP_Name((TOP)i),
+                machine_name[machine_slot].c_str());
       }
+
     } else {
       if ( isa_member && ! is_dummy ) {  
-	fprintf(stderr,"### Error: no scheduling info for opcode %s\n",
-                       TOP_Name((TOP)i));
-	err = true;
+        fprintf(stderr,
+                "### Error: no scheduling info for opcode %s for machine %s\n",
+                TOP_Name((TOP)i),
+                machine_name[machine_slot].c_str());
+        err = true;
       }
+    }
+
+    // If we have seen a fatal error, skip printing the entry to avoid a crash.
+    if ( ! err ) {
+      Maybe_Print_Comma(fd,is_first);
+      if ( ! isa_member )
+        fprintf(fd,"\n  %-4u  /* %s (dummy, not in ISA subset %s) */",
+                machine_dummies[machine_slot]->Id(),TOP_Name((TOP)i),
+                ISA_SUBSET_Name(machine_isa[machine_slot]));
+      else
+        fprintf(fd,"\n  %-4u  /* %s */",
+                top_sched_info_ptr_map[machine_slot][i]->Id(),TOP_Name((TOP)i));
     }
   }
   fprintf(fd,"\n};\n");
   if (err) exit(EXIT_FAILURE);
+}
+
+void TOP_SCHED_INFO_MAP::Output_Members( FILE* fd, int machine_slot )
+{
+  fprintf(fd,"    SI_top_si_%-10d  /* SI_top_si */\n",machine_slot);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1354,25 +1887,30 @@ void TOP_SCHED_INFO_MAP::Output( FILE* fd )
 
 static INSTRUCTION_GROUP* current_instruction_group;
 
-/*ARGSUSED*/
-void Machine(char* name, ISA_SUBSET isa, int argc, char** argv)
+void Targ_SI( void )
 {
-  machine_isa = isa;
+  current_machine_slot = 0;
+}
+
+void Machine( const char* name, ISA_SUBSET isa )
+{
+  machine_name[current_machine_slot] = name;
+  machine_isa[current_machine_slot] = isa;
 
   TOP_SCHED_INFO_MAP::Create_Dummies();
 }
 
-RESOURCE RESOURCE_Create(char* name, int count)
+RESOURCE RESOURCE_Create(const char* name, int count)
 {
-  return new RES(name,count);
+  return RES::Create(name,count);
 }
 
-ISSUE_SLOT ISSUE_SLOT_Create(char* name, int skew, int count)
+ISSUE_SLOT ISSUE_SLOT_Create(const char* name, int skew, int count)
 {
   return new ISLOT(name,skew,count);
 }
 
-void Instruction_Group(char* name,...)
+void Instruction_Group(const char* name,...)
 {
   va_list ap;
   TOP opcode;
@@ -1427,33 +1965,110 @@ void Resource_Requirement( RESOURCE resource, int time )
   current_instruction_group->Add_Resource_Requirement(resource,time);
 }
 
+void Alternative_Resource_Requirement( RESOURCE resource, int time )
+{
+  current_instruction_group->Add_Alternative_Resource_Requirement(resource,time);
+}
+
 void Valid_Issue_Slot( ISSUE_SLOT slot )
 {
   current_instruction_group->Add_Valid_ISLOT(slot);
 }
 
-void Write_Write_Interlock()
+void Write_Write_Interlock( void )
 {
   current_instruction_group->Set_Write_Write_Interlock();
 }
 
-void Machine_Done( char* filename )
+void Machine_Done( void )
 {
-  FILE* fd = fopen(filename,"w");
+  current_machine_slot++;
+  if (current_machine_slot == max_machine_slots) {
+    fprintf(stderr,"### Error: max_machine_slots is %d\n",max_machine_slots);
+    exit(EXIT_FAILURE);
+  }
+}
 
-  if ( fd == NULL ) {
-    fprintf(stderr,"### Error: couldn't write %s\n",filename);
+void Targ_SI_Done( const char* basename )
+{
+  std::string h_filename(basename);
+  std::string c_filename(basename);
+
+  h_filename.append(".h");
+  c_filename.append(".c");
+
+  FILE* hfile = fopen(h_filename.c_str(),"w");
+  FILE* cfile = fopen(c_filename.c_str(),"w");
+
+  if ( hfile == NULL ) {
+    fprintf(stderr,"### Error: couldn't write %s\n",h_filename.c_str());
     return;
   }
 
-  fprintf(fd,"#include \"ti_si.h\"\n");
-  RES::Output_All(fd);
-  RES_WORD::Output_All(fd);
-  ISLOT::Output_All(fd);
-  INSTRUCTION_GROUP::Output_All(fd);
-  TOP_SCHED_INFO_MAP::Output(fd);
+  if ( cfile == NULL ) {
+    fprintf(stderr,"### Error: couldn't write %s\n",c_filename.c_str());
+    return;
+  }
 
-  //  Print_End_Boiler_Plate(fd);
+  Emit_Header(hfile, basename, interface);
 
-  fclose(fd);
+  fprintf(hfile,"#include \"ti_si_types.h\"\n");
+
+  fprintf(cfile,"#include \"%s\"\n", h_filename.c_str());
+
+  bool is_first = true;
+  int i;
+
+  // output global data
+  RES::Output_All(cfile);
+  RES_WORD::Output_All(cfile);
+  INSTRUCTION_GROUP::Output_All(cfile);
+
+  // output per-machine data
+  for (i = 0; i < current_machine_slot; ++i) {
+    ISLOT::Output_Data(cfile, i);
+    INSTRUCTION_GROUP::Output_Data(cfile, i);
+    TOP_SCHED_INFO_MAP::Output_Data(cfile, i);
+  }
+
+  fprintf(hfile,"\nextern const SI_RRW SI_RRW_initializer;\n");
+  fprintf(hfile,"extern const SI_RRW SI_RRW_overuse_mask;\n");
+
+  fprintf(hfile,"\nextern const INT SI_resource_count;\n");
+  fprintf(hfile,"extern const SI_RESOURCE* const SI_resources[%d];\n",
+          RES::Total());
+
+  fprintf(hfile,"\nextern const SI SI_all[%u];\n",INSTRUCTION_GROUP::Count());
+
+  fprintf(hfile,"\nextern const SI_MACHINE si_machines[%d];\n",
+          current_machine_slot);
+
+  fprintf(cfile,"\nconst SI_MACHINE si_machines[%d] = {",current_machine_slot);
+
+  // output SI_MACHINE members
+  for (i = 0; i < current_machine_slot; ++i) {
+    std::string quoted_name("\"");
+    quoted_name.append(machine_name[i]);
+    quoted_name.append("\"");
+
+    Maybe_Print_Comma(cfile, is_first);
+    fprintf(cfile,"\n  {\n");
+    fprintf(cfile,"    %-20s  /* name */,\n", quoted_name.c_str());
+    ISLOT::Output_Members(cfile, i);
+    INSTRUCTION_GROUP::Output_Members(cfile, i);
+    TOP_SCHED_INFO_MAP::Output_Members(cfile, i);
+    fprintf(cfile,"  }");
+  }
+
+  fprintf(cfile,"\n};\n");
+
+  fprintf(hfile,"\nextern int si_current_machine;\n");
+
+  fprintf(cfile,"\nint si_current_machine;   /* index into si_machines */\n");
+
+  Emit_Footer(hfile);
+
+  fclose(hfile);
+  fclose(cfile);
 }
+

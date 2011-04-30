@@ -1513,16 +1513,6 @@ extern struct rtx_def *i960_compare_op0, *i960_compare_op1;
 
 #define BUILTIN_SETJMP_FRAME_VALUE hard_frame_pointer_rtx
 
-#if 0
-/* Promote char and short arguments to ints, when want compatibility with
-   the iC960 compilers.  */
-
-/* ??? In order for this to work, all users would need to be changed
-   to test the value of the macro at run time.  */
-#define PROMOTE_PROTOTYPES	TARGET_CLEAN_LINKAGE
-/* ??? This does not exist.  */
-#define PROMOTE_RETURN		TARGET_CLEAN_LINKAGE
-#endif
 
 /* Instruction type definitions.  Used to alternate instructions types for
    better performance on the C series chips.  */

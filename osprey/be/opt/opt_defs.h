@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
@@ -153,45 +157,72 @@ Is_fortran(void)
  * Tracing flags:  -ttPHASE-NUMBER:FLAG
  */
 
+/* TP_ALIAS (phase-number) */
+/* Flags for tracing the Nystrom alias analyzer */
+#define NYSTROM_SOLVER_FLAG       0x00000001 /* trace constraint graph solver */
+#define NYSTROM_CG_PRE_FLAG       0x00000002 /* text dump of constraint graph after build */
+#define NYSTROM_CG_POST_FLAG      0x00000004 /* text dump of constraint graph after solve */
+#define NYSTROM_CG_VCG_FLAG       0x00000008 /* dump vcg before/after solve */
+#define NYSTROM_QUERY_TRACE_FLAG  0x00000010 /* emit trace of all "aliased()" queries */
+#define NYSTROM_CG_OPT_FLAG       0x00000020 /* emit trace of optimized nodes */
+#define NYSTROM_MEMORY_TRACE_FLAG 0x00000040 /* collect emit memory tracing */
+#define NYSTROM_CG_BE_MAP_FLAG    0x00000080 /* CG clone and map updates 
+                                                during IPA for BE */
+#define NYSTROM_CG_BUILD_FLAG     0x00000100 /* CG build trace */
+#define NYSTROM_SUMMARY_FLAG      0x00000200 /* IPA-BE summary trace */
+#define NYSTROM_ALIAS_TAG_FLAG    0x00000400 /* be alias tag after 
+                                                Transfer_alias_tag_to_occ_and_aux */
+#define NYSTROM_LW_SOLVER_FLAG    0x00000800 /* light weight trace constraint graph solver */
+
 /* TP_GLOBOPT (phase-number) */
-#define DOM_DUMP_FLAG	     0x0001 /* print dominator tree	      	    */
-#define SSA_DUMP_FLAG	     0x0002 /* trace construction of phi functions  */
-#define CFG_VERF_FLAG        0x0004 /* verify control flow graph  	    */ 
-#define CFG_DUMP_FLAG        0x0008 /* dump control flow graph    	    */ 
-#define DSE_DUMP_FLAG        0x0010 /* trace dead-store elim (preopt)       */
-#define PROP_DUMP_FLAG       0x0020 /* dump copy propagation's output       */
-#define FOLD_DUMP_FLAG	     0x0040 /* trace simple folding to constants    */
-#define DCE_DUMP_FLAG        0x0080 /* dump dead-code elim (on stmtrep)     */
-#define IVR_DUMP_FLAG        0x0100 /* dump/trace IV recognition            */
-#define DU_DUMP_FLAG         0x0200 /* dump/trace D-U chain construction    */
+#define DOM_DUMP_FLAG	     0x0001 /* print dominator tree */
+#define SSA_DUMP_FLAG	     0x0002 /* trace construction of phi functions */
+#define CFG_VERF_FLAG        0x0004 /* verify control flow graph */ 
+#define CFG_DUMP_FLAG        0x0008 /* dump control flow graph */ 
+#define DSE_DUMP_FLAG        0x0010 /* trace dead-store elim (preopt) */
+#define PROP_DUMP_FLAG       0x0020 /* dump copy propagation's output */
+#define FOLD_DUMP_FLAG	     0x0040 /* trace simple folding to constants */
+#define DCE_DUMP_FLAG        0x0080 /* dump dead-code elim (on stmtrep) */
+#define IVR_DUMP_FLAG        0x0100 /* dump/trace IV recognition */
+#define DU_DUMP_FLAG         0x0200 /* dump/trace D-U chain construction */
 #define EMIT_DUMP_FLAG       0x0400 /* dump after converting back into WHIRL*/
-#define ALIAS_DUMP_FLAG      0x0800 /* trace alias analysis		    */
-#define ITAB_DUMP_FLAG	     0x1000 /* itable dump flag		            */
-#define DFEQN_DUMP_FLAG	     0x2000 /* data-flow equations dump flag	    */
-#define CR_DUMP_FLAG         0x4000 /* dump CODEMAP, STMTREP and CODEREP    */
-#define DFLOC_DUMP_FLAG	     0x8000 /* data-flow equations dump flag	    */
-#define RVI_TRACE_FLAG      0x10000 /* reg-variable identification trace    */
-#define MAIN_EMIT_DUMP_FLAG 0x20000 /* main-emitter dump flag               */
-#define INDUCTION_DUMP_FLAG 0x40000 /* mainopt find induction trace flag    */
-#define OPT_LOWER_FLAG      0x80000 /* dump lowered tree in pre/main opt    */
-#define LFTR_FLAG          0x100000 /* linear function test replacement     */
-#define IVE_TRACE_FLAG     0x200000 /* induction var elim trace             */
+#define ALIAS_DUMP_FLAG      0x0800 /* trace alias analysis */
+#define ITAB_DUMP_FLAG	     0x1000 /* itable dump flag */
+#define DFEQN_DUMP_FLAG	     0x2000 /* data-flow equations dump flag */
+#define CR_DUMP_FLAG         0x4000 /* dump CODEMAP, STMTREP and CODEREP */
+#define DFLOC_DUMP_FLAG	     0x8000 /* data-flow equations dump flag */
+#define RVI_TRACE_FLAG      0x10000 /* reg-variable identification trace  */
+#define MAIN_EMIT_DUMP_FLAG 0x20000 /* main-emitter dump flag */
+#define INDUCTION_DUMP_FLAG 0x40000 /* mainopt find induction trace flag */
+#define OPT_LOWER_FLAG      0x80000 /* dump lowered tree in pre/main opt*/
+#define LFTR_FLAG          0x100000 /* linear function test replacement */
+#define IVE_TRACE_FLAG     0x200000 /* induction var elim trace */
 #define LPRE_DUMP_FLAG     0x400000 /* trace SSA-LPRE */
-#define LDX_DUMP_FLAG      0x800000 /* Index load optimization              */
-#define ALIAS_TRACE_FLAG  0x1000000 /* trace alias analysis for CG          */
-#define EXC_TRACE_FLAG    0x2000000 /* trace C++ exception handling         */
-#define TAIL_TRACE_FLAG   0x4000000 /* trace tail recursion 		    */
+#define LDX_DUMP_FLAG      0x800000 /* Index load optimization */
+#define ALIAS_TRACE_FLAG  0x1000000 /* trace alias analysis for CG */
+#define EXC_TRACE_FLAG    0x2000000 /* trace C++ exception handling */
+#define TAIL_TRACE_FLAG   0x4000000 /* trace tail recursion */
 #define EPRE_DUMP_FLAG    0x8000000 /* trace SSA-EPRE */
 #define SPRE_DUMP_FLAG   0x10000000 /* trace SSA-SPRE */
 #define MEM_DUMP_FLAG    0x20000000 /* mem_pool trace */
 #define STATISTICS_FLAG  0x40000000 /* trace statistics */
 #define ENABLE_STAT      0x80000000 /* enable statistics */
+/* TP_WOPT2 (phase-number) */
 #define SECOND_RENAME_FLAG      0x2 /* second CODEMAP renaming */
 #define BOOL_SIMP_FLAG          0x4 /* boolean expr simplification */
 #define FB_PRE_FLAG             0x8 /* trace feedback PRE */
 #define CFG_OPT_FLAG           0x10 /* trace CFG optimzation */
 #define WOVP_DUMP_FLAG         0x20 /* dump after write-once variable promotion*/
 #define PT_SUMMARY_FLAG        0x40 /* trace the points-to summary */    
+#define LOOP_MULTVER_FLAG      0x80 /* Loop multiversioning */ 
+#define LOOP_NORM_FLAG   0x00000100 /* Trace Loop Normalization */
+#define LCLSC_TRACE_FLAG 0x00000200 /* trace stack shrink optimization */
+#define PRO_TRANS_TRACE_FLAG 0x00000400 /* trace proactive loop fusion transformation */
+#define PRO_TRANS_DUMP_FLAG  0x00000800 /* dump proactive loop fusion transformation */
+#define ULSE_TRACE_FLAG      0x00001000 /* trace the useless store remove transformation */
+#define REASSO_DUMP_FLAG_DEBUG	     0x2000 /* reassociation before and after dump flag */
+#define REASSO_DUMP_FLAG	     0x4000 /* trace into reassociation flag */
+
 
 /* Flags associated with value numbering scheme and the 
  * WOPT_Enable_Value_Numbering option.

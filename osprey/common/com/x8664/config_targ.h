@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007, 2008. Pathscale, LLC. All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -61,18 +69,18 @@ extern "C" {
  *  25-Sep-91 - Added subprogram interface pointers.
  *  27-Nov-91 - Reconfiguration of target representation for TP.
  *  21-Apr-93 - Set TARG_NEEDS_QUAD_OP to 1
- *  14-Mar-97 - Removed most -TARG group flags to config_TARG.h.
+ *  14-Mar-97 - Removed most -TARG group flags to config_targ_opt.h.
  *
  * Description:
  *
  * This file defines general configuration parameters which are
  * specific to the compiler's target machine and system.
  * There is an approximate distinction between -TARG option group
- * flags and their configuration (in config_TARG.[hc]), and more
+ * flags and their configuration (in config_targ_opt.[hc]), and more
  * generic target configuration (in this file).  Note that this file
  * is included in config.h, and hence indirectly in most source files,
- * whereas config_TARG.h is only included directly, so putting new
- * -TARG option-related variables in config_TARG.[hc] is to be
+ * whereas config_targ_opt.h is only included directly, so putting new
+ * -TARG option-related variables in config_targ_opt.[hc] is to be
  * preferred to putting them here.
  *
  * See com/config.h for a detailed description of configuration
@@ -117,9 +125,20 @@ typedef enum {
 } TARGET_ABI;
 
 extern TARGET_ABI Target_ABI;
+extern BOOL Target_MMX;
+extern BOOL Target_SSE;
 extern BOOL Target_SSE2;
 extern BOOL Target_SSE3;
 extern BOOL Target_3DNow;
+extern BOOL Target_SSE4a;
+extern BOOL Target_SSSE3;
+extern BOOL Target_SSE41;
+extern BOOL Target_SSE42;
+extern BOOL Target_AES;
+extern BOOL Target_PCLMUL;
+extern BOOL Target_AVX;
+extern BOOL Target_XOP;
+extern BOOL Target_FMA4;
 extern int Target_x86_Precision;
 
 /* ================ */
@@ -132,10 +151,13 @@ extern int Target_x86_Precision;
 typedef enum {
   TARGET_UNDEF,		/* Undefined */
   TARGET_opteron,	/* AMD Opteron and Athlon64 FX */
+  TARGET_barcelona,     /* AMD Barcelona (opteron) */
+  TARGET_orochi,        /* AMD Orochi (opteron) */
   TARGET_athlon64,	/* AMD Athlon64 */
   TARGET_athlon,	/* AMD Athlon */
   TARGET_em64t,		/* Intel EM64T */
   TARGET_core,		/* Intel Core */
+  TARGET_wolfdale,	/* Intel Wolfdale */
   TARGET_anyx86,	/* Generic x86 processor */
   TARGET_pentium4,	/* Intel Pentium 4 */
   TARGET_xeon,		/* Intel Pentium 4 Xeon */
@@ -144,20 +166,34 @@ typedef enum {
 extern TARGET_PROCESSOR Target;		/* -Tc */
 
 /* return the target name for <target> */
-extern char *Targ_Name (TARGET_PROCESSOR target);
+extern const char *Targ_Name (TARGET_PROCESSOR target);
 
 // NOTE: for this definition, all processors are treated x86-64!
 #define Is_Target_x86_64()	(Target >= TARGET_opteron && Target <= TARGET_xeon)
 #define Is_Target_64bit()       (Target_ABI == ABI_n64)
 #define Is_Target_32bit()       (Target_ABI == ABI_n32)
+#define Is_Target_MMX()         (Target_MMX == TRUE)
+#define Is_Target_SSE()         (Target_SSE == TRUE)
 #define Is_Target_SSE2()        (Target_SSE2 == TRUE)
 #define Is_Target_SSE3()        (Target_SSE3 == TRUE)
 #define Is_Target_3DNow()       (Target_3DNow == TRUE)
+#define Is_Target_SSE4a()       (Target_SSE4a == TRUE)
+#define Is_Target_SSSE3()       (Target_SSSE3 == TRUE)
+#define Is_Target_SSE41()       (Target_SSE41 == TRUE)
+#define Is_Target_SSE42()       (Target_SSE42 == TRUE)
+#define Is_Target_AES()         (Target_AES   == TRUE)
+#define Is_Target_PCLMUL()      (Target_PCLMUL == TRUE)
+#define Is_Target_AVX()         (Target_AVX   == TRUE)
+#define Is_Target_XOP()         (Target_XOP   == TRUE)
+#define Is_Target_FMA4()        (Target_FMA4  == TRUE)
 #define Is_Target_Pentium4()    (Target == TARGET_pentium4)
 #define Is_Target_EM64T()	(Target == TARGET_em64t)
 #define Is_Target_Core()	(Target == TARGET_core)
+#define Is_Target_Wolfdale()	(Target == TARGET_wolfdale)
 #define Is_Target_Anyx86()      (Target == TARGET_anyx86)
 #define Target_x87_precision()	(Target_x87_Precision+0)
+#define Is_Target_Barcelona()   (Target == TARGET_barcelona)
+#define Is_Target_Orochi()      (Target == TARGET_orochi)
 
 
 /* ========== */

@@ -54,22 +54,15 @@ extern int e_rsue(void);
 extern int e_rsue_mp(unit**);
 extern int unf_position(FILE *, unit *);
 
-#if 11
 extern int wsue (cilist64 *a, unit **fu);
 extern int c_sue (cilist64 *a, unit **fu);
-#else
-extern int wsue (cilist *a, unit **fu);
-extern int c_sue (cilist *a, unit **fu);
-#endif
 
-#if 11
 extern int s_rsue64 (cilist64 *a);
 extern int s_rsue64_mp (cilist64 *a, unit **fu);
 extern int s_wsue64 (cilist64 *a);
 extern int s_wsue64_mp (cilist64 *a, unit **fu);
 extern int e_rsue64(void);
 extern int e_rsue64_mp(unit**);
-#endif
 
 
 #endif /* C || C++ */

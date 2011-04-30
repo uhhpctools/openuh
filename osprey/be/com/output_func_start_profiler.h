@@ -61,9 +61,9 @@ private:
     const char* _file_name;
     PU_Info** _pu_tree_p;
 
-    static char* _prefix;
-    static char* _init_proc;
-    static char* _lpbx_0;
+    static const char* _prefix;
+    static const char* _init_proc;
+    static const char* _lpbx_0;
    
     ST* _func_st;
     ST* _lpbx_st;
@@ -73,13 +73,13 @@ private:
     SYMTAB_IDX _func_level;
     char* _func_name;
 
-    char* Construct_Func_Name(char *name);
+    char* Construct_Func_Name(const char *name);
 public:
 
     void Set_file_name(const char* file) { _file_name = file; }
     void Set_pu_tree(PU_Info** p) { _pu_tree_p = p; }
 
-    static char* Get_prefix() { return _prefix; }
+    static const char* Get_prefix() { return _prefix; }
 
     OUTPUT_FUNC_START_PROFILER (const char* src_file_name = NULL, PU_Info** pu_tree_p = NULL);
     ~OUTPUT_FUNC_START_PROFILER (void) {}

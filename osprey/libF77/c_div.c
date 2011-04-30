@@ -72,4 +72,9 @@ complex c_div_(complex *a, complex *b)
   return __cdiv(a->real, a->imag, b->real, b->imag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+complex c_div(complex *a, complex *b) { return c_div_(a, b); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_div_, c_div);
+#endif /* defined(BUILD_OS_DARWIN) */

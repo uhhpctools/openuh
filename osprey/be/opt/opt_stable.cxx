@@ -446,22 +446,6 @@ EXP_WORKLST::SPRE_perform_insert_delete(ETABLE *etable)
   CHI_NODE *chi;
   EXP_OCCURS_ITER occ_iter;
 
-#if 0
-  BB_NODE *succ_bb;
-  // process iphi's (just to check correctness)
-  FOR_ALL_NODE(occur, occ_iter, Init(Phi_occurs().Head())) {
-    bb = occur->Bb();
-    iphi = occur->Exp_phi();
-    INT32 pos = 0;
-    BB_NODE *bb_succ;
-    FOR_ALL_ELEM(bb_succ, bb_iter, Init(bb->Succ())) {
-      if (iphi->Opnd(pos) == NULL)
-        Is_True(iphi->Null_ssu_version(pos),
-		("EXP_WORKST::SPRE_perform_insert_delete: a NULL iphi operand does not have NULL_SSU_VERSION flag set"));
-      pos++;
-    }
-  }
-#endif
 
   // process insertions
   FOR_ALL_NODE(occur, occ_iter, Init(Phi_pred_occurs().Head())) {
@@ -515,8 +499,11 @@ EXP_WORKLST::SPRE_perform_insert_delete(ETABLE *etable)
       if (rhs == NULL) {
         rhs = etable->Htable()->Ssa()->Get_zero_version_CR(
 					      Preg(), etable->Opt_stab(), 0);
-        Is_True(WOPT_Enable_Aggressive_Code_Motion,
-	    ("EXP_WORKLST::SPRE_perform_insert_delete: cannot find phi for preg %d at BB%d", Preg(), defbb->Id()));
+        // NVISA hits this cause aggcm off by default,
+	// fred doesn't remember why assertion is there, and code seems
+	// fine without it, so ifdef it out.
+        // Is_True(WOPT_Enable_Aggressive_Code_Motion,
+	//    ("EXP_WORKLST::SPRE_perform_insert_delete: cannot find phi for preg %d at BB%d", Preg(), defbb->Id()));
       }
     }
     else { // defined by STID

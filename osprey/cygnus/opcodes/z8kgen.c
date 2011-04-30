@@ -837,41 +837,6 @@ sub (char *x, char c)
 }
 
 
-#if 0
-#define D(x) ((x) == '1' || (x) =='0')
-#define M(y) (strncmp(y,x,4)==0)
-static void
-printmangled (char *x)
-{
-  return;
-  while (*x)
-    {
-      if (D (x[0]) && D (x[1]) && D (x[2]) && D (x[3]))
-	{
-	  printf ("XXXX");
-	}
-      else if (M ("ssss"))
-	{
-	  printf ("ssss");
-	}
-      else if (M ("dddd"))
-	{
-	  printf ("dddd");
-	}
-      else
-	printf ("____");
-
-      x += 4;
-
-      if (x[0] == ' ')
-	{
-	  printf ("_");
-	  x++;
-	}
-    }
-
-}
-#endif
 
 /*#define WORK_TYPE*/
 static void
@@ -1237,10 +1202,6 @@ gas (void)
   printf ("#define OPC_ldctlb 189\n");
   printf ("#define OPC_trtdb  190\n");
   printf ("#define OPC_brk    191\n");
-#if 0
-  for (i = 0; toks[i].token; i++)
-    printf ("#define %s\t0x%x\n", toks[i].token, i * 16);
-#endif
   printf ("\ntypedef struct {\n");
 
   printf ("#ifdef NICENAMES\n");

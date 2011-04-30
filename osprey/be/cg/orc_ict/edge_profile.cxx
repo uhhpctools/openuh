@@ -2099,8 +2099,27 @@ INT32 Get_Return_Reg_Sum(BB* bb)
   {
     TN* return_result_reg = 
             Build_Dedicated_TN( ISA_REGISTER_CLASS_integer,RETURN_REG + i, 8);
-    if ( Opnd_Tn_In_BB( bb,return_result_reg ) )
-      return i + 1;                
+    
+    OP* opcode = bb->ops.first;
+    int j;
+    for( ; opcode != NULL; opcode = OP_next( opcode ))
+    {
+      for ( j = 0; j < OP_opnds( opcode ); j++ )  
+      {
+        if ( return_result_reg == OP_opnd( opcode,j ) ) 
+        {
+          return i+1; 
+        }  
+      }
+      for ( j = 0; j < OP_results( opcode ); j++)
+      {
+        if ( return_result_reg == OP_result( opcode,j ) )
+	{
+          opcode = bb->ops.last;	  
+          break;
+	}
+      }
+    }
   }                  
   return 0;
 }
@@ -2112,8 +2131,27 @@ INT32 Get_Float_Return_Reg_Sum(BB* bb)
   {
     TN* f_return_result_reg = 
         Build_Dedicated_TN( ISA_REGISTER_CLASS_float,FLOAT_RETURN_REG + i, 0);
-    if ( Opnd_Tn_In_BB( bb,f_return_result_reg ) )
-      return i + 1;
+
+    OP* opcode = bb->ops.first;
+    int j;
+    for( ; opcode != NULL; opcode = OP_next( opcode ))
+    {
+      for ( j = 0; j < OP_opnds( opcode ); j++ )  
+      {
+        if ( f_return_result_reg == OP_opnd( opcode,j ) ) 
+        {
+          return i+1; 
+        }  
+      }
+      for ( j = 0; j < OP_results( opcode ); j++)
+      {
+        if ( f_return_result_reg == OP_result( opcode,j ) )
+	{
+          opcode = bb->ops.last;	  
+          break;
+	}
+      }
+    }
   }                  
   return 0;
 }

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -36,7 +40,20 @@
   http://oss.sgi.com/projects/GenInfo/NoticeExplan
 
 */
-
+#ifdef KEY
+/* DON'T ADD ANY #include HERE */
+/* On Fedora Core 5, with gcc 4.1.1 installed, and "-D_XOPEN_SOURCE{,_EXTENDED}"
+ * on the command line, "pathcc -gnu40" gives an "implicit declaration" error
+ * for snprintf. Using -std=c99 fixes the problem, but applying that to the
+ * entire libu requires zillions of fixes to obsolete C idioms (e.g., implicit
+ * "int" typing of functions) plus a couple of FP-related changes that might
+ * break things. I have no idea why _XOPEN_SOURCE and _XOPEN_SOURCE_EXTENDED
+ * are required (perhaps stuff related to "struct timeval" in other source
+ * files?) but we don't want it here.
+ */
+#undef _XOPEN_SOURCE
+#undef _XOPEN_SOURCE_EXTENDED
+#endif /* KEY */
 
 #pragma ident "@(#) libu/errmsg/lmessage.c	92.4	10/14/99 17:05:30"
 #include <liberrno.h>
@@ -76,6 +93,8 @@ extern	char	**_argv;
 
 #endif
 
+extern	char	*libu_defgets(int msg_num);
+
 /*
  *	_lmessage - run-time library message processor
  *
@@ -93,12 +112,7 @@ _lmessage(int errn, char *severity, va_list args)
 	char		*mcnm;		/* Pointer to msg. catalog name	*/
 	char		*bmsg;		/* Pointer to back-up message	*/
 	char		*smsg;		/* Pointer to severity text	*/
-	nl_catd		mcfd;		/* Message catalog descriptor	*/
-#ifdef	__mips
-	static nl_catd	lib_mcfd;	/* lib msg cat file descriptor	*/
-	static int	lib_mcfd_opnd = 0; /* lib msg cat already open flag */
-	int		lib_mcat = 0;	/* lib msg catalog indicator	*/
-#endif	/* __mips */
+	char		*dmsg;		/* Pointer to default message text	*/
 
 #ifdef	_UNICOS
 	if (_numargs() == 0)
@@ -162,9 +176,6 @@ _lmessage(int errn, char *severity, va_list args)
 		if (flmn < (BASE+999) ||
 		    (flmn >= FDC_ERRB && flmn < (FDC_ERRB+999))) {
 			mcnm	= FEMCN;	/* Library catalog name */
-#ifdef	__mips
-			lib_mcat	= 1;
-#endif	/* __mips */
 			smsg	= "UNRECOVERABLE library error";
 
 			/*
@@ -196,51 +207,19 @@ _lmessage(int errn, char *severity, va_list args)
 	if (severity != NULL)
 		smsg	= severity;
 
-	/* Open the message catalog */
-
-#ifdef	__mips
-	/* if this is the library message catalog, then... */ 
-	if (lib_mcat) {
-		if (lib_mcfd_opnd) {
-			/* set lib msg cat fd to opened lib msg cat fd */
-			mcfd	= lib_mcfd;
-		} else {
-			/* message catalog not opened yet, do the following:
-			 * 1. open it
-			 * 2. save the lib msg cat fd
-			 * 3. set flag indicating it was opened
-			 */
-			mcfd	= catopen(mcnm, 0);
-			lib_mcfd	= mcfd;
-			lib_mcfd_opnd	= 1;
-		}
-	} else {
-		/* not the lib message catalog, open catalog */
-		mcfd	= catopen(mcnm, 0);
-	}
-#else	/* __mips */
-	mcfd	= catopen(mcnm, 0);
-#endif	/* __mips */
-
 	/* Retrieve the raw message text */
 
-#ifdef KEY /* bug 6682 */
-	/* If we can't get the NLS message, print something lest the user
-	 * think that the boilerplate surrounding the missing message (e.g.
-	 * "Unit n not connected") is the real problem. Usual cause is a
-	 * C-coded "main" which hides the Fortran runtime "main".
-	 */
-	char *cgm_result;
-	if (((nl_catd) -1) == mcfd ||
-	  0 ==
-	    (cgm_result = catgetmsg(mcfd, NL_MSGSET, flmn, &mbuf[1], MAXMLN)) ||
-	  0 == *cgm_result) {
-	  strcpy(mbuf,
-	    "\nUnable to find error message (check NLSPATH, file lib.cat)");
+	dmsg = libu_defgets(flmn);
+	if (dmsg != NULL) {
+		size_t len;
+
+		len = strlen(dmsg); 
+		if (len >= MAXMLN)
+			len = MAXMLN - 1;
+
+		(void) strncpy(&mbuf[1], dmsg, len);
+		mbuf[len + 1] = '\0';
 	}
-#else /* KEY bug 6682 */
-	(void) catgetmsg(mcfd, NL_MSGSET, flmn, &mbuf[1], MAXMLN);
-#endif /* KEY bug 6682 */
 
 	/* Edit the message */
 

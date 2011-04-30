@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -93,7 +96,11 @@
 #define call_info_INCLUDED
 
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #ifndef _ara_loop_info_INCLUDED
 #include "ara_loop.h"
 #endif

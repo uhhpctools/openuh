@@ -45,9 +45,12 @@
 //  extern void IPL_Finalize_Projected_Regions(..)
 //
 //--------------------------------------------------------------------------
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>
 #include <sys/types.h>
 
@@ -240,20 +243,6 @@ process_scalar_node(WN* node, IPA_SECTION_TYPE type)
 	  if ((loop) && (d->Is_entry()))
 	    cd_idx = loop_idx;
 
-#if 0
-	  if (d->Is_if_stmt() && loop)
-	    {
-	      summary_stmt = Search_for_summary_stmt(loop, branch,
-						     stmt_idx);
-	      FmtAssert(summary_stmt != NULL,("process_scalar_node: NULL summary stmt"));
-	    }
-	  else if (d->Is_if_stmt())
-	    {
-	      summary_stmt = Search_for_summary_stmt(node, branch,
-						     stmt_idx);
-	      FmtAssert(summary_stmt != NULL,("process_scalar_node: NULL summary stmt"));
-	    }
-#endif
 	  // get the branch information
 	  // if it is not part of some array then it is
 	  // likely to be part of some control flow node
@@ -714,14 +703,6 @@ Proj_Node_Has_Two_Strides (PROJECTED_NODE* proj_node,
   
   // Must take care of the signs of coefficients vs. Max-Min
   if (l_coeff * (outer_ub - outer_lb) < stride) {
-#if 0
-    printf("Double-strided section:\nlb = %d\nub= %d\nstep = %d\nsegment_length = %d\nsegment_stride = %d\n",
-           l_coeff * outer_lb + l_offset,
-           u_coeff * outer_ub + u_offset,
-           (stride % l_coeff == 0) ? l_coeff : 1,
-           l_coeff * (outer_ub - outer_lb) + 1,
-           stride);
-#endif
     
     proj_node->Set_constant_two_strided_section(l_coeff*outer_lb + l_offset,
       l_coeff*outer_ub + u_offset, stride % l_coeff ? 1 : l_coeff,

@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -99,7 +106,11 @@ enum    blk_cntxt_values       {Unknown_Blk,
                                 Open_Mp_Parallel_Workshare_Blk, /* by jhs, 02/7/18 */
                                 Contains_Blk,
                                 Interface_Blk,
-				Derived_Type_Blk };
+				Derived_Type_Blk,
+#ifdef KEY /* Bug 10572 */
+				Enum_Blk
+#endif /* KEY Bug 10572 */
+				};
 
 enum	do_loop_values		{Unknown_Loop,
          			 Iterative_Loop,
@@ -191,6 +202,9 @@ enum stmt_category_values	{Init_Stmt_Cat,
 				 Sub_Func_Stmt_Cat,
 				 Dir_Integer_Stmt_Cat,
 				 Use_Stmt_Cat,
+#ifdef KEY /* Bug 11741 */
+				 Import_Stmt_Cat,
+#endif /* KEY Bug 11741 */
 				 Implicit_None_Stmt_Cat,
 				 Implicit_Stmt_Cat,
 				 Declaration_Stmt_Cat,
@@ -370,6 +384,10 @@ extern	boolean	merge_pointer (boolean, int, int, int);
 extern	boolean	merge_save (boolean, int, int, int);
 extern	boolean	merge_target (boolean, int, int, int);
 extern	boolean	merge_volatile (boolean, int, int, int);
+#ifdef KEY /* Bug 14150 */
+extern  boolean merge_bind(boolean, int, int, int);
+extern  boolean merge_value(boolean, int, int, int);
+#endif /* KEY Bug 14150 */
 extern	int	move_blk_to_end(int);
 extern  boolean next_arg_is_kwd_equal (void);
 extern  boolean next_id_is_imp_control (void);
@@ -392,6 +410,10 @@ extern  boolean stmt_has_double_colon (void);
 extern  boolean stmt_is_DATA_stmt (void);
 extern  boolean stmt_is_DO_stmt (void);
 extern  boolean stmt_is_save_stmt(int, int);
+#ifdef KEY /* Bug 14110 */
+extern void surprise_volatile(char *);
+extern void revisit_volatile();
+#endif /* KEY Bug 14110 */
 
 /*********************\
 |* statement parsers *|
@@ -435,6 +457,18 @@ extern	void parse_function_stmt (void);
 extern	void parse_goto_stmt (void);
 extern	void parse_if_stmt (void);
 extern	void parse_implicit_stmt (void);
+#ifdef KEY /* Bug 11741 */
+extern	void parse_import_stmt (void);
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+extern	void parse_enum_stmt (void);
+extern	void parse_enumerator_stmt (void);
+extern	boolean	parse_int_spec_expr(long *, fld_type *, boolean, boolean);
+#endif /* KEY Bug 10572 */
+#ifdef KEY /* Bug 14150 */
+extern	void parse_bind_stmt (void);
+extern	void parse_value_stmt (void);
+#endif /* KEY Bug 14150 */
 extern	void parse_inquire_stmt (void);
 extern	void parse_intent_stmt (void);
 extern	void parse_interface_stmt (void);
@@ -488,6 +522,10 @@ extern  int		parse_non_char_kind_selector(boolean);
 #endif /* KEY Bug 8422 */
 extern	boolean		parse_type_spec (boolean);
 extern	void		parse_typed_function_stmt (void);
+#ifdef KEY /* Bug 14150 */
+extern int		parse_language_binding_spec(token_type *result);
+extern void		set_binding_label(fld_type, int, token_type *);
+#endif /* KEY Bug 14150 */
 
 /*******************************\
 |* globally accessible objects *|
@@ -516,6 +554,13 @@ extern	token_type		 label_token;		/* defed in p_driver.h*/
 extern	token_type		 main_token;  		/* defed in p_driver.h*/
 
 extern	intent_type		 new_intent;		/* defed in p_driver.h*/
+#ifdef KEY /* Bug 14150 */
+/* Overload token error field of new_binding_label to indicate whether "bind"
+ * includes optional name= clause */
+#  define BIND_SPECIFIES_NAME(nbl) (!TOKEN_ERR(nbl))
+#  define SET_BIND_SPECIFIES_NAME(nbl,val) (TOKEN_ERR(nbl) = !(val))
+extern token_type		 new_binding_label;	/* def'd in p_driver.h*/
+#endif /* KEY Bug 14150 */
 
 extern	char			*obj_str[];		/* defed in p_driver.h*/
 extern	int			 stmt_construct_idx;	/* defed in p_driver.h*/

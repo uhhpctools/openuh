@@ -239,11 +239,11 @@ DST_IDX DST_mk_string(DST_TYPE dst_vptr, MEM_POOL* p, const char* s)
 DST_IDX DST_mk_include_dir(DST_TYPE dst, MEM_POOL* p, const char* path,
                            DST_IDX prev_idx)
 {
-  Is_True((prev_idx == DST_INVALID_IDX) ||
-          (DST_get_include_dirs(dst) != DST_INVALID_IDX),
+  Is_True((DST_IS_NULL(prev_idx)) ||
+          (!DST_IS_NULL(DST_get_include_dirs(dst))),
           ("For first DST include dir, idx of prev node must be null"));
-  Is_True((prev_idx != DST_INVALID_IDX) ||
-          (DST_get_include_dirs(dst) == DST_INVALID_IDX),
+  Is_True((!DST_IS_NULL(prev_idx)) ||
+          (DST_IS_NULL(DST_get_include_dirs(dst))),
           ("This is not the first DST include dir, but idx of prev is null"));
 
   DST_IDX idx = DST_allocate(dst, p,
@@ -253,7 +253,7 @@ DST_IDX DST_mk_include_dir(DST_TYPE dst, MEM_POOL* p, const char* path,
   DST_INCLUDE_DIR_path(dir) = DST_mk_string(dst, p, path);
   DST_INCLUDE_DIR_next(dir) = DST_INVALID_IDX;
 
-  if (prev_idx != DST_INVALID_IDX) {
+  if(!DST_IS_NULL(prev_idx)) {
     DST_INCLUDE_DIR* prev = DST_get_include_dir(dst, prev_idx);
     DST_INCLUDE_DIR_next(prev) = idx;
   }
@@ -265,12 +265,12 @@ DST_IDX DST_mk_filename(DST_TYPE dst, MEM_POOL* p, const char* name,
                         UINT16 dir, UINT64 size, UINT64 modt,
                         DST_IDX prev_idx)
 {
-  Is_True((prev_idx == DST_INVALID_IDX) ||
-          (DST_get_file_names(dst) != DST_INVALID_IDX),
-          ("For first DST filename, idx of prev node must be null"));
-  Is_True((prev_idx != DST_INVALID_IDX) ||
-          (DST_get_file_names(dst) == DST_INVALID_IDX),
-          ("This is not the first DST filename, but idx of prev is null"));
+  Is_True((DST_IS_NULL(prev_idx)) ||
+          (!DST_IS_NULL(DST_get_file_names(dst))),
+          ("For first DST include dir, idx of prev node must be null"));
+  Is_True((!DST_IS_NULL(prev_idx)) ||
+          (DST_IS_NULL(DST_get_file_names(dst))),
+          ("This is not the first DST include dir, but idx of prev is null"));
 
   DST_IDX idx = DST_allocate(dst, p,
                              sizeof(DST_FILE_NAME), DST_default_align,
@@ -282,7 +282,7 @@ DST_IDX DST_mk_filename(DST_TYPE dst, MEM_POOL* p, const char* name,
   DST_FILE_NAME_modt(file) = modt;
   DST_FILE_NAME_next(file) = DST_INVALID_IDX;
 
-  if (prev_idx != DST_INVALID_IDX) {
+  if (!DST_IS_NULL(prev_idx)) {
     DST_FILE_NAME* prev = DST_get_file_name(dst, prev_idx);
     DST_FILE_NAME_next(prev) = idx;
   }
@@ -328,7 +328,7 @@ void DST_init_info(DST_TYPE dst, DST_IDX info_idx,
   DST_INFO_sibling(info)    = DST_INVALID_IDX;
   DST_INFO_attributes(info) = attr;
   DST_INFO_dieptr(info)     = NULL;
-  if (prev_info_idx != DST_INVALID_IDX) {
+  if (!DST_IS_NULL(prev_info_idx)) {
     DST_INFO* const prev_info = DST_get_info(dst, prev_info_idx);
     DST_INFO_sibling(prev_info) = info_idx;
   }
@@ -346,14 +346,13 @@ DST_IDX DST_mk_compile_unit(DST_TYPE dst,
   Is_True(name != 0 && comp_info != 0, ("Strings may not be null pointers"));
   // Note that comp_dir may be a null pointer.
 
-  Is_True((prev == DST_INVALID_IDX && !DST_has_compile_unit(dst)) ||
-          (prev != DST_INVALID_IDX && DST_has_compile_unit(dst)),
+  Is_True((DST_IS_NULL(prev) && !DST_has_compile_unit(dst)) ||
+          (!DST_IS_NULL(prev) && DST_has_compile_unit(dst)),
           ("Must create first compile unit once and only once"));
 
   // Always put a new compile unit in a new block.
-  if (prev == DST_INVALID_IDX)
+  if (DST_IS_NULL(prev)) 
     DST_new_block(dst, p, DST_file_scope_block, sizeof(DST_INFO));
-                  
 
   DST_IDX info_idx = DST_allocate(dst, p, sizeof(DST_INFO),
                                   DST_default_align, DST_file_scope_block);
@@ -389,13 +388,13 @@ DST_IDX DST_copy_compile_unit(DST_TYPE src, DST_TYPE dest,
   DST_IDX comp_dir_idx = DST_COMPILE_UNIT_comp_dir(cu);
   DST_IDX producer_idx = DST_COMPILE_UNIT_producer(cu);
 
-  Is_True(name_idx != DST_INVALID_IDX,
+  Is_True(!DST_IS_NULL(name_idx),
           ("Compile unit name is invalid"));
-  char* comp_dir = (comp_dir_idx != DST_INVALID_IDX) ?
+  char* comp_dir = (!DST_IS_NULL(comp_dir_idx)) ?
                    DST_IDX_to_string(src, comp_dir_idx) :
                    0;
 
-  Is_True(producer_idx != DST_INVALID_IDX,
+  Is_True(!DST_IS_NULL(producer_idx),
           ("Compile unit compile line is invalid"));
 
   return DST_mk_compile_unit(dest, p, prev,
@@ -424,8 +423,8 @@ DST_IDX DST_mk_subpr_decl(DST_TYPE dst,
   Is_True(name != 0, ("Subprogram declaration name may not be null pointer"));
   // Note that the mangled name may be a null pointer.
 
-  Is_True((prev == DST_INVALID_IDX) ==
-          (DST_COMPILE_UNIT_first_child(cu) == DST_INVALID_IDX),
+  Is_True((DST_IS_NULL(prev) ==
+          DST_IS_NULL(DST_COMPILE_UNIT_first_child(cu))),
           ("Every subprogram except the first must have a previous node"));
   Is_True(DST_IS_declaration(flag), ("Not a declaration"));
   
@@ -452,7 +451,7 @@ DST_IDX DST_mk_subpr_decl(DST_TYPE dst,
 
   DST_init_info(dst, info_idx, DW_TAG_subprogram, flag, attr_idx, prev);
   DST_COMPILE_UNIT_last_child(cu) = info_idx;
-  if (prev == DST_INVALID_IDX)
+  if (DST_IS_NULL(prev))
     DST_COMPILE_UNIT_first_child(cu) = info_idx;
 
   return info_idx;
@@ -478,8 +477,8 @@ DST_IDX DST_mk_subpr_def(DST_TYPE dst,
   Is_True(name != 0, ("Subprogram definition name may not be null pointer"));
   // Note that the other two names may be null pointers.
 
-  Is_True((prev == DST_INVALID_IDX) ==
-          (DST_COMPILE_UNIT_first_child(cu) == DST_INVALID_IDX),
+  Is_True((DST_IS_NULL(prev)) ==
+          (DST_IS_NULL(DST_COMPILE_UNIT_first_child(cu))),
           ("Every subprogram except the first must have a previous node"));
   Is_True(!DST_IS_declaration(flag) && !DST_IS_memdef(flag),
           ("Not a definition"));
@@ -511,7 +510,7 @@ DST_IDX DST_mk_subpr_def(DST_TYPE dst,
 
   DST_init_info(dst, info_idx, DW_TAG_subprogram, flag, attr_idx, prev);
   DST_COMPILE_UNIT_last_child(cu) = info_idx;
-  if (prev == DST_INVALID_IDX)
+  if (DST_IS_NULL(prev))
     DST_COMPILE_UNIT_first_child(cu) = info_idx;
 
   return info_idx;
@@ -528,8 +527,8 @@ DST_IDX DST_mk_memdef(DST_TYPE dst,
   DST_INFO* cu_info = DST_get_info(dst, cu_idx);
   DST_COMPILE_UNIT* cu = DST_get_compile_unit_attr(dst, cu_info);
 
-  Is_True((prev == DST_INVALID_IDX) ==
-          (DST_COMPILE_UNIT_first_child(cu) == DST_INVALID_IDX),
+  Is_True( DST_IS_NULL(prev) ==
+           DST_IS_NULL(DST_COMPILE_UNIT_first_child(cu)),
           ("Every subprogram except the first must have a previous node"));
   Is_True(DST_IS_memdef(flag), ("Not a memdef"));
 
@@ -550,7 +549,7 @@ DST_IDX DST_mk_memdef(DST_TYPE dst,
 
   DST_init_info(dst, info_idx, DW_TAG_subprogram, flag, attr_idx, prev);
   DST_COMPILE_UNIT_last_child(cu) = info_idx;
-  if (prev == DST_INVALID_IDX)
+  if (DST_IS_NULL(prev))
     DST_COMPILE_UNIT_first_child(cu) = info_idx;
 
   return info_idx;
@@ -574,10 +573,10 @@ DST_IDX DST_copy_subprogram(DST_TYPE src, DST_TYPE dest,
   else if (DST_IS_declaration(flag)) {
     DST_IDX name_idx         = DST_SUBPROGRAM_decl_name(sub);
     DST_IDX linkage_name_idx = DST_SUBPROGRAM_decl_linkage_name(sub);
-    Is_True(name_idx != DST_INVALID_IDX,
+    Is_True(!DST_IS_NULL(name_idx),
             ("Subprogram declaration has no name"));
     const char* name = DST_IDX_to_string(src, name_idx);
-    const char* linkage_name = (linkage_name_idx != DST_INVALID_IDX) ?
+    const char* linkage_name = !DST_IS_NULL(linkage_name_idx) ?
                                DST_IDX_to_string(src, linkage_name_idx) :
                                0;
 
@@ -594,14 +593,14 @@ DST_IDX DST_copy_subprogram(DST_TYPE src, DST_TYPE dest,
     DST_IDX name_idx         = DST_SUBPROGRAM_def_name(sub);
     DST_IDX linkage_name_idx = DST_SUBPROGRAM_def_linkage_name(sub);
     DST_IDX pubname_idx      = DST_SUBPROGRAM_def_pubname(sub);
-    if (name_idx == DST_INVALID_IDX)
+    if (DST_IS_NULL(name_idx))
 	DevWarn ("Subprogram definition has no name");
-    const char* name = (name_idx != DST_INVALID_IDX) ?
+    const char* name = (!DST_IS_NULL(name_idx)) ?
 	DST_IDX_to_string(src, name_idx) : "";
-    const char* linkage_name = (linkage_name_idx != DST_INVALID_IDX) ?
+    const char* linkage_name = (!DST_IS_NULL(linkage_name_idx)) ?
                                DST_IDX_to_string(src, linkage_name_idx) :
                                0;
-    const char* pubname = (pubname_idx != DST_INVALID_IDX) ?
+    const char* pubname = (!DST_IS_NULL(pubname_idx)) ?
                           DST_IDX_to_string(src, pubname_idx) :
                           0;
 

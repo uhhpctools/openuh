@@ -41,10 +41,10 @@
 //
 /**
 *** Module: graph_template.h
-*** $Revision: 1.1.1.1 $
-*** $Date: 2005/10/21 19:00:00 $
-*** $Author: marcel $
-*** $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/graph_template.h,v $
+*** $Revision: 1.8 $
+*** $Date: 05/12/05 08:59:13-08:00 $
+*** $Author: bos@eng-24.pathscale.com $
+*** $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.graph_template.h $
 *** 
 *** Revision history:
 ***
@@ -218,7 +218,7 @@
 #define graph_template_INCLUDED "graph_template.h"
 
 #ifdef _KEEP_RCS_ID
-static char *graph_template_rcs_id = graph_template_INCLUDED "$Revision: 1.7 $";
+static char *graph_template_rcs_id = graph_template_INCLUDED "$Revision: 1.8 $";
 #endif /* _KEEP_RCS_ID */
 
 #ifndef defs_INCLUDED

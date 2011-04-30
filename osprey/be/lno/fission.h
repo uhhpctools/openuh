@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -163,7 +167,8 @@
 ***             fission-able.
 ***
 ***     FISSION_FUSION_STATUS
-***          Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level)
+***          Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level,
+***            BOOL parition_based)
 ***
 ***             Fission 'in_loop' such that the two statements 'stmt1'
 ***             and 'stmt2' are at different loop after fission. Performs
@@ -276,7 +281,13 @@ extern FISSION_FUSION_STATUS
 // fission in_loop such that the two statements 'stmt1' and 'stmt2'
 // are at different loop after fission
 extern FISSION_FUSION_STATUS
-    Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level);
+    Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level,
+      BOOL partition_based);
+
+// gather serial distribution boundary lists
+extern void
+    Get_Distribution_List(FF_STMT_LIST& stl_1, WN* in_loop, 
+      UINT8 fission_level);
 
 // fission init routine
 extern void Fission_Init();

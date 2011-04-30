@@ -1,5 +1,5 @@
 /*
- * Copyright 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -37,10 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <ctype.h>
 #include "wn.h"
 #include "wn_map.h"
@@ -59,8 +62,8 @@
 void SUMMARY_SYMBOL::WB_Print(FILE* fp,
 			      INT symbol_index, 
 			      BOOL is_list,
-			      char* name, 
-			      char* func_name,
+			      const char* name, 
+			      const char* func_name,
 			      INT fancy_level)
 { 
   if (func_name == NULL || func_name[0] == '\0') {
@@ -155,8 +158,8 @@ void IVAR::WB_Print(FILE* fp,
 
 void SUMMARY_FORMAL::WB_Print(FILE* fp, 
 			      INT formal_index, 
-			      char* name,
-                              char* func_name)
+			      const char* name,
+                              const char* func_name)
 {
   if (func_name == NULL || func_name[0] == '\0') {
     fprintf(fp, "FORMAL[%d]: SYMBOL[%d] REGION[%d] \"%s\" POSITION(%d) ",
@@ -221,7 +224,7 @@ void SUMMARY_COMMON_SHAPE::WB_Print(FILE* fp,
 
 void SUMMARY_PROCEDURE::WB_Print(FILE* fp,
                                  INT procedure_index,
-				 char* name,
+				 const char* name,
 				 INT fancy_level)
 {
   INT symbol_index = Get_symbol_index();
@@ -333,8 +336,8 @@ void SUMMARY_GLOBAL::WB_Print(FILE* fp,
 
 void SUMMARY_CALLSITE::WB_Print(FILE* fp,
                                 INT callsite_index,
-			        char* name, 
-				char* func_name)
+			        const char* name, 
+				const char* func_name)
 {
   fprintf(fp, "CALLSITE[%d]: ACTUAL[%d:%d] MAP_ID(%d) ", callsite_index,
     Get_actual_index(), Get_param_count(), Get_map_id());
@@ -388,8 +391,8 @@ void SUMMARY_CONTROL_DEPENDENCE::WB_Print(FILE* fp,
 
 void SUMMARY_ACTUAL::WB_Print(FILE* fp,
                               INT actual_index,
-			      char* name,
-			      char* func_name)
+			      const char* name,
+			      const char* func_name)
 {
   fprintf(fp, "ACTUAL[%d]: ", actual_index);
   if (Pass_type_name() != NULL) {
@@ -521,8 +524,8 @@ void CFG_NODE_INFO::WB_Print(FILE* fp,
 
 void SCALAR_INFO::WB_Print(FILE* fp,
                            INT scalar_index,
-			   char* name, 
-			   char* func_name)
+			   const char* name, 
+			   const char* func_name)
 {
   if (func_name == NULL || func_name[0] == '\0')
     fprintf(fp, "SCALAR[%d]: SYMBOL[%d] \"%s\" ",
@@ -566,8 +569,8 @@ void SCALAR_INFO::WB_Print(FILE* fp,
 
 void REGION_ARRAYS::WB_Print(FILE* fp,
                              INT region_index,
-			     char* name,
-			     char* func_name)
+			     const char* name,
+			     const char* func_name)
 { 
   if (func_name == NULL || func_name[0] == '\0')
     fprintf(fp, "REGION[%d]: SYMBOL[%d] \"%s\" ", region_index,
@@ -761,8 +764,8 @@ void SUMMARY_PHI::WB_Print(FILE* fp,
 
 void SUMMARY_CHI::WB_Print(FILE* fp,
                            INT chi_index,
-			   char* name,
-			   char* func_name)
+			   const char* name,
+			   const char* func_name)
 {
   fprintf(fp, "CHI[%d]: CALLSITE[%d] ", chi_index, Get_call_index());
   if (Get_symbol_index() != -1) {
@@ -843,8 +846,8 @@ void SUMMARY_EXPR::WB_Print(FILE* fp,
 
 void SUMMARY_STID::WB_Print(FILE* fp,
                             INT stid_index,
-			    char* name,
-			    char* func_name) 
+			    const char* name,
+			    const char* func_name) 
 {
   fprintf(fp, "STID[%d]: ", stid_index);
   if (func_name == NULL || func_name[0] == '\0')
@@ -867,8 +870,8 @@ void SUMMARY_STID::WB_Print(FILE* fp,
 
 void SUMMARY_STMT::WB_Print(FILE* fp,
                             INT stmt_index,
-			    char* name,
-			    char* func_name)
+			    const char* name,
+			    const char* func_name)
 { 
   fprintf(fp, "STMT[%d]: ", stmt_index);
   if (Is_expr())

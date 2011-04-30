@@ -38,8 +38,5 @@
 
 extern int used_gp_area;
 
-#if 0
-extern int open_file (string, int, int, int*);
-#endif
 
 #endif /* __PASS1_H__ */

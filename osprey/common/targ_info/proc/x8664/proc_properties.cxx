@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007, 2008.  Pathscale, LLC. All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -49,7 +57,7 @@
 #include "targ_proc.h"
 #include "proc_properties_gen.h"
 
-main()
+int main()
 {
   PROC_PROPERTY 
     branch_delay_slot,		/* branch delay slot */
@@ -85,8 +93,11 @@ main()
   out_of_order = PROC_Property_Create ("is_out_of_order");
   Processor_Group (out_of_order, 
 		   PROCESSOR_opteron,
+                   PROCESSOR_barcelona,
+                   PROCESSOR_orochi,
 		   PROCESSOR_em64t,
 		   PROCESSOR_core,
+		   PROCESSOR_wolfdale,
 		   PROCESSOR_UNDEFINED);
 
   /* Can the current target issue multiple instructions per cycle?
@@ -94,8 +105,11 @@ main()
   superscalar = PROC_Property_Create ("is_superscalar");
   Processor_Group (superscalar,
 		   PROCESSOR_opteron,
+                   PROCESSOR_barcelona,
+                   PROCESSOR_orochi,
 		   PROCESSOR_em64t,
 		   PROCESSOR_core,
+		   PROCESSOR_wolfdale,
 		   PROCESSOR_UNDEFINED);
 
   /* Does the target execute insts as sequence of bundles, or require 

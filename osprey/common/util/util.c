@@ -35,7 +35,7 @@
 
 
 static char *source_file = __FILE__;
-static char *rcs_id = "$Source$ $Revision$";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/util.c,v $ $Revision: 1.1 $";
 #include <unistd.h>
 #include <errno.h>
 #include "defs.h"
@@ -79,6 +79,35 @@ INT Execute (
     fprintf ( stderr, "\n" );
   }
 
+#ifdef __MINGW32__
+  if (stdoutfile != NULL) {
+      if( freopen(stdoutfile, "w", stdout) == NULL) _exit(errno);
+    }
+    int spawnRet = _spawnvp(_P_WAIT, cmd, (const char*const*)argv);
+	if (spawnRet == -1)
+		return (EAGAIN);
+		/*switch(errno)
+		{
+			case E2BIG:
+				error("Spawn:Too many arguments\n");
+				break;
+			case EINVAL:
+				error("Spawn:Invalid mode\n");
+				break;
+			case ENOENT:
+				error("Spawn: File/Path not found\n");
+				break;
+			case ENOEXEC:
+				error("Spawn: Bad executable file\n");
+				break;
+			case ENOMEM:
+				error("Spawn: Not enough memory\n");
+				break;
+		}*/
+	/* A spawnRet that is not -1 is the exit status of the spawned process */
+  	if ( (spawnRet&0377) != 0 ) return ( 0400 + t );
+  	return ((spawnRet>>8) & 0377);
+#else /* __MINGW32__ */
   /* Fork and check for failure: */
   child = fork();
   if (child == -1) return (EAGAIN);
@@ -101,6 +130,7 @@ INT Execute (
   while (child != wait(&status)) {};
   if ( (t=(status&0377)) != 0 ) return ( 0400 + t );
   return ((status>>8) & 0377);
+#endif /* __MINGW32__ */
 
 }
 

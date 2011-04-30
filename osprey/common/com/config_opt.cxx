@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -82,9 +90,13 @@ BOOL Show_OPT_Warnings = TRUE;          /* Display OPT warning messages */
 
 /***** Aliasing control *****/
 OPTION_LIST *Alias_Option = NULL;
+INT32 Alias_Query_Limit=INT32_MAX;
+char *Alias_Query_File=NULL;
+INT32 Alias_Nystrom_Solver_Track=0;
+BOOL Alias_Nystrom_Global_Cycle_Detection = TRUE;
 BOOL Alias_Pointer_Parms = TRUE;        /* Parms ptr indep? */
 BOOL Alias_Pointer_Cray = FALSE;        /* Cray pointer semantics? */
-#ifdef TARG_IA64
+#if defined(TARG_SL)
 BOOL Alias_Pointer_Types = TRUE;	/* Ptrs to distinct basic types indep? */
 #else
 BOOL Alias_Pointer_Types = FALSE;       /* Ptrs to distinct basic types indep? */
@@ -100,13 +112,15 @@ BOOL Alias_Common_Scalar = FALSE;       /* Distinguish scalar from array */
  * for use in overriding the default -- not intended for user use.
  */
 static BOOL Alias_Pointer_Cckr = FALSE;	/* -cckr default rules? */
-#ifdef TARG_IA64
+#if defined(TARG_SL)
 static BOOL Alias_Pointer_Types_Set = TRUE;	/* alias=typed set? */
 #else
 static BOOL Alias_Pointer_Types_Set = FALSE;	/* alias=typed set? */
 #endif
 static BOOL Alias_Not_In_Union_Set  = FALSE;	/* alias=nounion set? */
 BOOL  Alias_F90_Pointer_Unaliased = FALSE;  /* Are F90 pointers unaliased? */
+
+BOOL  Alias_Nystrom_Analyzer = FALSE;  /* Using Nystrom-based alias analysis? */
 
 /***** Alignment control *****/
 BOOL Align_Object = TRUE;	/* Try to improve alignment of objects */
@@ -126,7 +140,11 @@ BOOL Enable_Cfold_Reassociate = FALSE;	/* Re-association allowed? */
 static BOOL Cfold_Reassoc_Set = FALSE;	/* ... option seen? */
 BOOL Enable_Cfold_Intrinsics = FALSE;	/* Intrinsic constant folding? */
 BOOL Cfold_Intrinsics_Set = FALSE;	/* ... option seen? */
+#ifdef TARG_X8664
 BOOL CIS_Allowed = TRUE;	/* combine sin(x) and cos(x) to cis(x) */
+#else
+BOOL CIS_Allowed = FALSE;	/* combine sin(x) and cos(x) to cis(x) */
+#endif
 static BOOL CIS_Set = FALSE;	/* ... option seen? */
 BOOL Enable_CVT_Opt= FALSE;	/* Remove useless convert operators */
 BOOL Enable_CVT_Opt_Set= FALSE;	/* ... option seen? */
@@ -159,6 +177,11 @@ BOOL Enable_WN_Simp = TRUE;             /* Use the WHIRL simplifier */
 static BOOL Enable_WN_Simp_Set=FALSE;   /* ... option seen? */
 # ifdef KEY
 INT32 Enable_WN_Simp_Expr_Limit = -1;
+#if defined(TARG_SL) 
+INT32 OPT_Madd_Height = 0;
+#else
+INT32 OPT_Madd_Height = 4;
+#endif
 # endif
 BOOL GCM_Eager_Null_Ptr_Deref = FALSE; /* allow speculation past NULL ptr
 					  test. assumes page zero as
@@ -192,17 +215,25 @@ SKIPLIST *Region_Skip_List = NULL;		/* Processed list */
 #ifdef KEY
 static OPTION_LIST *Goto_Skip = NULL;		/* Raw list */
 SKIPLIST *Goto_Skip_List = NULL;		/* Processed list */
+#if defined(TARG_SL)
+static OPTION_LIST *DDB_Skip = NULL;            /* for delete dead branch */
+SKIPLIST *DDB_Skip_List = NULL;                 /* for delete dead branch */
+#endif // TARG_SL
 #endif
 
 /***** Miscellaneous -OPT: group options *****/
-BOOL Olegacy = FALSE;    /* -OPT:Olegacy to resume original default flag*/
 char *Ofast = NULL;		/* -OPT:Ofast platform name */
 BOOL OPT_Pad_Common = FALSE;	/* Do internal common block padding? */
 BOOL OPT_Reorg_Common = FALSE;	/* Do common block reorganization (split)? */
 BOOL OPT_Reorg_Common_Set = FALSE;	/* ... option seen? */
 BOOL OPT_Unroll_Analysis = TRUE;	/* Enable unroll limitations? */
 BOOL OPT_Unroll_Analysis_Set = FALSE;	/* ... option seen? */
+#if defined(TARG_NVISA)
+BOOL OPT_Lower_Speculate = TRUE;	/* speculate CAND/CIOR */
+#else
 BOOL OPT_Lower_Speculate = FALSE;	/* speculate CAND/CIOR */
+#endif
+BOOL OPT_Lower_Speculate_Set = FALSE;	/* ... option seen? */
 BOOL OPT_Lower_Treeheight = FALSE;	/* reassociate commutative ops */
 static BOOL OPT_Lower_Treeheight_Set = FALSE;
 BOOL OPT_Inline_Divide = TRUE;		/* inline divide sequences */
@@ -224,11 +255,19 @@ BOOL OPT_shared_memory = TRUE;	// assume use of shared memory
 /* Put each function in its own text section */
 BOOL Section_For_Each_Function = FALSE;
 BOOL Inline_Intrinsics_Early=FALSE;    /* Inline intrinsics just after VHO */
+#if defined(TARG_PPC32)
+BOOL Enable_extract_bits=FALSE;
+#else
 BOOL Enable_extract_bits=TRUE;     /* This is also forced off for MIPS and IA32 in
                                           config_targ.cxx */
+#endif
+#if defined(TARG_SL)
+BOOL Enable_compose_bits=TRUE;
+#else
 BOOL Enable_compose_bits=FALSE;
+#endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 BOOL Enable_WFE_DFE = FALSE;
 #endif /* __linux __ */
 
@@ -262,6 +301,7 @@ BOOL Instrumentation_Epilog = FALSE;
 
 
 #ifdef KEY
+INT32  OPT_Cyg_Instrument = 0;
 BOOL   Asm_Memory = FALSE;
 BOOL   Align_Unsafe = FALSE; 
 UINT32 Div_Exe_Counter = 40000;  /* A number that can avoid regression on facerec. */
@@ -270,7 +310,7 @@ UINT32 Div_Exe_Candidates = 2;  /* The top entries that will be considered. */
 UINT32 Mpy_Exe_Counter = 90000000;  
 UINT32 Mpy_Exe_Ratio = 100;      /* A cut-off percentage for value profiling. */
 BOOL   profile_arcs = FALSE;
-BOOL   OPT_Lower_To_Memlib = TRUE;  /* transform to library calls */
+UINT32 OPT_Lower_To_Memlib = 1;  /* transform to library calls */
 INT32  OPT_Threshold_To_Memlib = 256;    /* threshold to transform to mem calls */
 INT32  OPT_Enable_Lower_To_Memlib_Limit = -1;
 BOOL   OPT_Enable_Simp_Fold = TRUE;  /* enables new float/complex/str/intrinsic foldings */
@@ -298,8 +338,19 @@ BOOL OPT_Funsafe_Math_Optimizations = FALSE;
 static BOOL OPT_Funsafe_Math_Optimizations_Set = FALSE;
 BOOL    OPT_Float_Via_Int = FALSE; // when on, perform FP copies using int regs
 
-UINT32 OPT_Malloc_Alg = 0;      /* select malloc algorithm */
-#endif
+UINT32 OPT_Malloc_Alg = 0;	/* select malloc algorithm */
+BOOL OPT_Malloc_Alg_Set = FALSE; 
+INT32 OPT_Hugepage_Heap_Limit = -1;  /* set huge page limit */
+BOOL OPT_Hugepage_Heap_Set = FALSE;
+INT32 OPT_Hugepage_Attr = 1;  /* set huge page mallopt */
+BOOL OPT_Scale=FALSE; // Enable scalability optimization */
+BOOL Early_Goto_Conversion = TRUE; // Goto conversion applied before VHO(C/C++)
+BOOL Early_Goto_Conversion_Set = FALSE;
+#endif	// KEY
+
+
+BOOL OPT_Enable_WHIRL_SSA = FALSE;  // SSA on WHIRL, disabled by default
+BOOL OPT_Enable_BUILD_WHIRL_SSA = FALSE;  // SSA on WHIRL, disabled by default
 
 /***** Obsolete options *****/
 static BOOL Fprop_Limit_Set = FALSE;
@@ -329,6 +380,27 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_LIST,	OV_VISIBLE,	TRUE, 	"alias",		"alia",
     0, 0, 0,	&Alias_Option,	NULL,
     "Control interpretation of possible variable aliasing" },
+
+  { OVK_INT32,  OV_INTERNAL, TRUE,  "alias_query_limit", "alias_query_limit",
+    INT32_MAX, 0, INT32_MAX,  &Alias_Query_Limit, NULL,
+    "Upper bound on alias analysis query - beyond which may alias returned"
+  },
+
+  { OVK_NAME, OV_INTERNAL, TRUE, "alias_query_file", "alias_query_file",
+      0, 0, 0, &Alias_Query_File, NULL,
+    "File specifies responses to alias queries"
+  },
+
+  { OVK_INT32, OV_INTERNAL, TRUE, "nystrom_pts_track", "nystrom_pts_track",
+      0, 0, INT32_MAX, &Alias_Nystrom_Solver_Track, NULL,
+      "Track updates to the points-to set of provided node"
+  },
+
+  { OVK_BOOL, OV_INTERNAL, TRUE, "nystrom_global_cycle_detect",
+        "nystrom_global_cycle_detect",
+        0, 0, 0, &Alias_Nystrom_Global_Cycle_Detection, NULL,
+        "Control the use of cycle detection in the ipa constraint graph"
+  },
 
   { OVK_INT32,	OV_SHY,		TRUE, "align_instructions",	"align_i",
     16, 0, 1024, ALIGN_INSTS,	NULL,
@@ -402,6 +474,10 @@ static OPTION_DESC Options_OPT[] = {
     0, 0, 0, &OPT_MP_Barrier_Opt, NULL,
     "Optimize generation of barrier calls for OpenMP" },
 
+  { OVK_INT32, OV_VISIBLE,      TRUE,   "cyg_instr",    "",
+    3, 0, 4, &OPT_Cyg_Instrument, NULL,
+    "Insert calls to __cyg_profile_func_enter/exit" },
+
   { OVK_BOOL, OV_INTERNAL, 	TRUE,	"icall_instr", "",
     0, 0, 0, &OPT_Icall_Instr, NULL,
     "perform profiling of indirect calls to get their called functions" },
@@ -418,6 +494,9 @@ static OPTION_DESC Options_OPT[] = {
     0, 0, 0, &OPT_Ffast_Math, &OPT_Ffast_Math_Set,
     "Determines conformance to IEEE-754 arithmetic rules" },
 
+  { OVK_BOOL, OV_INTERNAL, 	TRUE,	"scale", "",
+    0, 0, 0, &OPT_Scale, NULL, "Perform scalability optimizations" },
+
   { OVK_BOOL, OV_INTERNAL, 	TRUE,	"funsafe_math_optimizations", "",
     0, 0, 0, &OPT_Funsafe_Math_Optimizations,
     &OPT_Funsafe_Math_Optimizations_Set,
@@ -427,8 +506,20 @@ static OPTION_DESC Options_OPT[] = {
     "perform floating-point memory copies using integer registers" },
 
   { OVK_UINT32, OV_VISIBLE,     TRUE,   "malloc_algorithm", "malloc_alg",
-    0, 0, 1, &OPT_Malloc_Alg, NULL,
+    0, 0, 3, &OPT_Malloc_Alg, &OPT_Malloc_Alg_Set,
     "Use alternate malloc algorithm" },
+
+  { OVK_INT32, OV_VISIBLE,     TRUE,    "hugepage_heap_limit", NULL,
+    0, -1, 50000, &OPT_Hugepage_Heap_Limit, &OPT_Hugepage_Heap_Set,
+    "Set huge page heap limit" },
+
+  { OVK_INT32, OV_VISIBLE, 	TRUE,	"hugepage_attr", NULL,
+    1, 0, 127, &OPT_Hugepage_Attr, NULL,
+    "Set mallopt in libhugetlbfs" },
+
+  { OVK_BOOL,   OV_INTERNAL,    TRUE, "early_goto_conv", "",
+    0, 0, 0,    &Early_Goto_Conversion, &Early_Goto_Conversion_Set,
+    "Do GOTO conversion before VHO" },
 #endif
 
   { OVK_BOOL,	OV_INTERNAL,	TRUE, "early_mp",		"early_mp",
@@ -630,7 +721,7 @@ static OPTION_DESC Options_OPT[] = {
     "Bias optimizations to minimize code space" },
 
   { OVK_BOOL,	OV_INTERNAL,	TRUE, "speculate",		"",
-    0, 0, 0,	&OPT_Lower_Speculate, NULL,
+    0, 0, 0,	&OPT_Lower_Speculate, &OPT_Lower_Speculate_Set,
     "Allow speculation for CAND/COR operators" },
 
   { OVK_BOOL,   OV_INTERNAL,    TRUE, "speculative_null_ptr_deref","",
@@ -645,8 +736,8 @@ static OPTION_DESC Options_OPT[] = {
     0, 0, 0,    &Enable_SWP,	&Enable_SWP_overridden,
     "Enable software pipelining" },
 
-  { OVK_BOOL,   OV_INTERNAL,    FALSE, "transform_to_memlib",   "transform",
-    0, 0, 0,    &OPT_Lower_To_Memlib, NULL,
+  { OVK_UINT32,   OV_INTERNAL,    FALSE, "transform_to_memlib",   "transform",
+    1, 0, 2,    &OPT_Lower_To_Memlib, NULL,
     "Allow loop or struct memory copy/set to be library calls" },
 
   { OVK_INT32,  OV_INTERNAL,    TRUE, "threshold_to_memlib",    "",
@@ -672,9 +763,17 @@ static OPTION_DESC Options_OPT[] = {
     0, 0, INT32_MAX, &OPT_unroll_size, &OPT_unroll_size_overridden,
     "Maximum size of loops to be unrolled" },
 
-  { OVK_INT32,	OV_VISIBLE,	TRUE, "unroll_times_max",	"unroll",
+  { OVK_INT32,	OV_VISIBLE,	TRUE, "unroll_times_max",	"unroll_times",
     0, 0, INT32_MAX, &OPT_unroll_times, &OPT_unroll_times_overridden,
     "Maximum number of times to unroll loops" },
+
+  { OVK_INT32,	OV_VISIBLE,	TRUE, "unroll_level",	"unroll_lev",
+    0, 1, 2, &OPT_unroll_level, &OPT_unroll_level,
+    "Aggressive level to unroll loops" },
+
+  { OVK_BOOL,	OV_VISIBLE,	TRUE, "keep_ext",	"keep_ext",
+    0, 0, 0, &OPT_keep_extsyms, &OPT_keep_extsyms,
+    "Preserve symbol info for externs under ipa" },
 
   { OVK_BOOL,	OV_INTERNAL,	TRUE, "wn_simplify",		"wn_simp",
     0, 0, 0,	&Enable_WN_Simp, &Enable_WN_Simp_Set,
@@ -694,12 +793,34 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_LIST,	OV_SHY,		FALSE, "goto_skip_after",	"goto_skip_a",
     0, 0, 4096,	&Goto_Skip,	NULL,
     "Skip goto conversion of subprograms after this one" },
+#if defined(TARG_SL)
+  // For delete-dead-branch
+  { OVK_LIST,	OV_SHY,		FALSE, "ddb_skip_equal",	"ddb_skip_e",
+    0, 0, 4096,	&DDB_Skip,	NULL,
+    "Skip ddb of this branch" },
+
+  { OVK_LIST,	OV_SHY,		FALSE, "ddb_skip_before",	"ddb_skip_b",
+    0, 0, 4096,	&DDB_Skip,	NULL,
+    "Skip ddb of branch before this one" },
+
+  { OVK_LIST,	OV_SHY,		FALSE, "ddb_skip_after",	"ddb_skip_a",
+    0, 0, 4096,	&DDB_Skip,	NULL,
+    "Skip ddb of branch after this one" },
+#endif
+#ifdef TARG_MIPS
+  { OVK_INT32,  OV_VISIBLE,    TRUE, "madd_height",    "",
+    4, 1, INT32_MAX,    &OPT_Madd_Height, NULL,
+    "Maximum length of MADD chain allowed before transforming it to sum of shorter MADD chains"},
+#endif
 #endif
   { OVK_BOOL,	OV_VISIBLE,	TRUE, "wrap_around_unsafe_opt", "wrap_around_unsafe",
     0, 0, 0,	&Allow_wrap_around_opt,	&Allow_wrap_around_opt_Set,
     "Allow LFTR which may wrap around MAX_INT" },
 
   /* intrinsic expansion for bzero/blkclr/bcopy/memset/memcpy/memmove */
+  {OVK_BOOL,    OV_VISIBLE,	TRUE,	"emulate_memset",       "",
+    0, 0, 0,    &Emulate_memset, NULL,
+    "Enable inline expansion of memset" },
   {OVK_BOOL,    OV_VISIBLE,	TRUE,	"mem_intrinsics",       "",
     0, 0, 0,    &CG_mem_intrinsics, NULL,
     "Enable inline expansion of memory intrinsics (bzero, blkclr, bcopy, memset, memcpy, memmove)" },
@@ -816,15 +937,19 @@ static OPTION_DESC Options_OPT[] = {
     0, 0, 0,  &LANG_Ansi_Setjmp_On,   &LANG_Ansi_Setjmp_Set,
     "C/C++: enable optimization of functions with calls to setjmp" },
 
-  { OVK_BOOL,   OV_SHY,       FALSE, "Olegacy",    "Olegacy",
-    0, 0, 0,    &Olegacy,               NULL,
-    "default options for performance on shared and alias" },
-
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
   { OVK_BOOL,	OV_INTERNAL,	TRUE, "wfe_dfe",	"wfe_dfe",
     0, 0, 0,	&Enable_WFE_DFE,	NULL,
     "Enable dead function elimination in the frontend" },
 #endif /* __linux__ */
+
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "wssa",	NULL,
+    0, 0, 0,	&OPT_Enable_WHIRL_SSA,	NULL,
+    "Enable building up SSA on WHIRL" },
+
+  { OVK_BOOL,	OV_INTERNAL,	FALSE, "wssa_build",	NULL,
+    0, 0, 0,	&OPT_Enable_BUILD_WHIRL_SSA,	NULL,
+    "Enable building WHIRL SSA directly on WHIRL" },
 
   /* Obsolete options: */
 

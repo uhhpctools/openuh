@@ -47,7 +47,9 @@
 #ifdef HAVE_ALLOCA_H
 #include <alloca.h>
 #endif
+#if ! defined(BUILD_OS_DARWIN)
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #define MINIMUM_POSSIBLE_PROLOG_LEN 10  /* 10 is  based on */
 	/*  the definition of the DWARF2/3 line table prolog.

@@ -142,7 +142,10 @@ EETARG_Fixup_Entry_Code (BB *bb)
 			ISA_REGISTER_CLASS_integer);
 		num_rotating = REGISTER_Number_Stacked_Rotating(
 			ISA_REGISTER_CLASS_integer);
-		num_output = MAX(num_output, num_rotating - num_local);
+		// set num_rotating not larg than num_local to prevent function
+		// call parameter error.
+		num_local = MAX(num_local, num_rotating);
+
 		if (num_local + num_output + num_rotating == 0) {
 			BB_Remove_Op (bb, op);
 		}

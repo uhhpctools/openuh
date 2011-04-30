@@ -78,15 +78,3 @@ Boston, MA 02111-1307, USA.  */
    compatibility.  */
 #define DEFAULT_PCC_STRUCT_RETURN 0
 
-#if 0 /* This would be needed except that the 29k doesn't have strict
-	 alignment requirements.  */
-
-#define FUNCTION_ARG_BOUNDARY(MODE, TYPE)				\
-  (((TYPE) != 0)							\
-	? ((TYPE_ALIGN(TYPE) <= PARM_BOUNDARY)				\
-		? PARM_BOUNDARY						\
-		: TYPE_ALIGN(TYPE))					\
-	: ((GET_MODE_ALIGNMENT(MODE) <= PARM_BOUNDARY)			\
-		? PARM_BOUNDARY						\
-		: GET_MODE_ALIGNMENT(MODE)))
-#endif

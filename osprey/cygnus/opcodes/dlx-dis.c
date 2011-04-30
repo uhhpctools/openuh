@@ -319,10 +319,6 @@ dlx_aluI_type (info)
       { OPC(SGTUIOP),  "sgtui" },  /* Store word.      */
       { OPC(SLEUIOP),  "sleui" },  /* Store word.      */
       { OPC(SGEUIOP),  "sgeui" },  /* Store word.      */
-#if 0						       
-      { OPC(MVTSOP),   "mvts"  },  /* Store word.      */
-      { OPC(MVFSOP),   "mvfs"  },  /* Store word.      */
-#endif
     };
   int dlx_aluI_opcode_num =
     (sizeof dlx_aluI_opcode) / (sizeof dlx_aluI_opcode[0]);
@@ -497,16 +493,6 @@ print_insn_dlx (memaddr, info)
   imm16= dlx_get_imm16 (insn_word);
   imm26= dlx_get_imm26 (insn_word);
 
-#if 0
-  printf ("print_insn_big_dlx: opc = 0x%02x\n"
-	  "                    rs1 = 0x%02x\n"
-	  "                    rs2 = 0x%02x\n"
-	  "                    rd  = 0x%02x\n"
-	  "                  func  = 0x%08x\n"
-	  "                 imm16  = 0x%08x\n"
-	  "                 imm26  = 0x%08x\n",
-	  opc, rs1, rs2, rd, func, imm16, imm26);
-#endif
 
   /* Scan through all the insn type and print the insn out.  */
   rtn_code = 0;

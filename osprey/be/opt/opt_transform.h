@@ -1,6 +1,10 @@
 //-*-c++-*-
 
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -375,29 +379,11 @@ struct CACHE_TEMPLATE : public PER_PU_CACHE {
 };
 
 
-#if 0
-struct SHARED_CACHE : public CACHE_TEMPLATE<UINT32> {
-  static UINT32 _next_key;
-  UINT32 Alloc_key() { 
-    if (_next_key == 0) Clear_visited(); 
-    return _next_key++;
-  }
-};
-
-SHARED_CACHE::_next_key = 1;
-
-STMTREP   *Get_cache_key(STMTREP *, STMTREP *stmt, BB_NODE *bb, INT32 temp_key) { return stmt; }
-BB_NODE   *Get_cache_key(BB_NODE *, STMTREP *stmt, BB_NODE *bb, INT32 temp_key) { return bb; }
-COMP_UNIT *Get_cache_key(COMP_UNIT *, STMTREP *stmt, BB_NODE *bb, INT32 temp_key) { return NULL; }
-INT32      Get_cache_key(INT32, STMTREP *stmt, BB_NODE *bb, INT32 temp_key) { return temp_key; }
-
-#else
 
 inline STMTREP   *Get_cache_key(STMTREP *, STMTREP *stmt, BB_NODE *bb) { return stmt; }
 inline BB_NODE   *Get_cache_key(BB_NODE *, STMTREP *stmt, BB_NODE *bb) { return bb; }
 inline COMP_UNIT *Get_cache_key(COMP_UNIT *, STMTREP *stmt, BB_NODE *bb) { return NULL; }
 
-#endif
 
 
 typedef CACHE_TEMPLATE<STMTREP*>   PER_SR_CACHE;
@@ -497,6 +483,9 @@ UPDATE<TRANSFORM, CACHE, VERSION>::Process_CR_no_repeat(CODEREP *cr, bool is_mu,
       if (ilod_base || mload_size || mu) {
 	CODEREP *newcr = Alloc_stack_cr(cr->Extra_ptrs_used());
 	newcr->Copy(*cr);  
+#ifdef KEY // bug 12390: without this, would do wrong ivar copy propagation
+	newcr->Set_ivar_defstmt(NULL);
+#endif
 	if (ilod_base) 
 	  newcr->Set_ilod_base(ilod_base);
 	newcr->Set_istr_base(NULL);
@@ -646,7 +635,7 @@ struct NULL_TRANSFORM {
 // substitue a CR with another
 //
 struct SUBSTITUE : public NULL_TRANSFORM {
-  char  *Name() const { return "Substitute"; }
+  const char  *Name() const { return "Substitute"; }
   CODEREP *_oldcr;
   CODEREP *_newcr;
   CODEREP *Apply_cr(CODEREP *cr, bool is_mu, STMTREP *stmt, BB_NODE *, CODEMAP *htable) const

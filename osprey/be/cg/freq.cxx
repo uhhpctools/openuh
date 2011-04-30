@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -40,10 +44,10 @@
 /* ====================================================================
  *
  * Module: freq.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/freq.cxx,v $
+ * $Revision: 1.9 $
+ * $Date: 05/12/05 08:59:06-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.freq.cxx $
  *
  * Description:
  *
@@ -56,7 +60,7 @@
 
 #include <math.h>
 #include <alloca.h>
-#include <map>
+#include <stack>
 
 #include "defs.h"
 #include "config.h"
@@ -89,6 +93,7 @@
 #include "cg_flags.h"
 #include "ipfec_options.h"
 #endif
+
 /* ====================================================================
  * ====================================================================
  *
@@ -101,11 +106,15 @@
        BOOL    FREQ_freqs_computed; // True if freqs computed for region
 static BB_SET *Never_BBs;	// Set of BBs having "never" freq pragmas
 static BB_SET *Frequent_BBs;	// Set of BBs having "frequent" freq pragmas
+static BB_SET *LMV_Precond_BBs;
 static float   Frequent_Never_Ratio;
 static BB_MAP  dfo_map;		// Depth-first order mapping
 static BB    **dfo_vec;		// Vector of BBs ordered depth-first
 static INT32   max_dfo_id;	// Max value in dfo_map
 static float   EH_Freq;		// Freq that exc hndlrs are executed
+#ifdef KEY
+static float   Non_Local_Target_Freq;	// Freq that non-local targs are exec'd.
+#endif
 static LOOP_DESCR *loop_list;	// Loop descriptors for the PU
 
 
@@ -206,9 +215,7 @@ typedef struct edge {
 
 #define EF_PROB_FB_BASED        0x0001
 #define EF_FB_PROPAGATED	0x0002
-#ifdef KEY /* bug 6693 */
-#define EF_PROB_HINT_BASED      0x0004
-#endif
+#define EF_PROB_HINT_BASED	0x0004    /* bug 6693 */
 
 /* Indicate if this edge probability is based on feedback.
  */
@@ -222,14 +229,11 @@ typedef struct edge {
 #define Set_EDGE_fb_propagated(e)   (EDGE_flags(e) |= EF_FB_PROPAGATED)
 #define Reset_EDGE_fb_propagated(e) (EDGE_flags(e) &= ~EF_FB_PROPAGATED)
 
-#ifdef KEY /* bug 6693 */
 /* Indicate if this edge probability is based on user hint, through
-   pragma or builtins.
- */
+  pragma or builtins. */
 #define EDGE_prob_hint_based(e)   (EDGE_flags(e) & EF_PROB_HINT_BASED)
 #define Set_EDGE_prob_hint_based(e)   (EDGE_flags(e) |= EF_PROB_HINT_BASED)
 #define Reset_EDGE_prob_hint_based(e) (EDGE_flags(e) &= ~EF_PROB_HINT_BASED)
-#endif
 
 /* Since we don't ever need to modify the CFG, we simply preallocate
  * a vector for chains of successor and predecessor edges, both indexed
@@ -438,7 +442,7 @@ Trace_Frequencies(void)
 
   for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
     INT n;
-    char *s;
+    const char *s;
     EDGE *edge;
 
     /* Predecessors...
@@ -458,10 +462,10 @@ Trace_Frequencies(void)
 
     /* The BB...
      */
-    fprintf(TFile, "\nBB:%d frequency = %#.2f%s",
+    fprintf(TFile, "\nBB:%d freq = %#.2f%s",
 	    BB_id(bb),
 	    BB_freq(bb),
-	    BB_freq_fb_based(bb) ? " (feedback based)" : "");
+	    BB_freq_fb_based(bb) ? " (fb based)" : "");
 
     /* And the successors.
      */
@@ -546,7 +550,7 @@ static const struct heuristic_info heuristic[] = {
   { Opcode_Heuristic,		"OH"  },
   { Pointer_Heuristic,		"PH"  },
   { Store_Heuristic,		"SH"  },
-#if (defined KEY && defined TARG_X8664)
+#ifdef KEY
   { Sequential_Branch_Heuristic, "SBH" },
 #endif
 };
@@ -651,16 +655,10 @@ BOOL WN_Is_Pointer(WN *wn)
     return TRUE;
 
   case OPR_LDID:
-#if 0
-    if (WN_class(wn) == CLASS_PREG) {
-
-      /* need to handle pregs specially, but how...
-       */
-    }
-#endif
     /*FALLTHROUGH*/
 
   case OPR_ILOAD:
+  case OPR_ILOADX:
     {
       TY_IDX ty = WN_ty(wn);
       if (TY_kind(ty) == KIND_POINTER) return TRUE;
@@ -783,6 +781,11 @@ Pointer_Heuristic(
   if (br_opc != OPC_FALSEBR && br_opc != OPC_TRUEBR) return FALSE;
 
   cond_wn = WN_kid0(br_wn);
+
+#if defined(TARG_SL) || defined(TARG_PPC32)  
+  if (cond_wn == 0)  return FALSE;
+#endif
+
   cond_oper = WN_operator(cond_wn);
   if (cond_oper != OPR_NE && cond_oper != OPR_EQ) return FALSE;
 
@@ -879,6 +882,11 @@ Opcode_Heuristic(
   WN *br_wn = BB_branch_wn(bb);
   if (br_wn) {
     WN *cond_wn = WN_kid0(br_wn);
+
+#if defined(TARG_SL) || defined(TARG_PPC32)
+    if (!cond_wn) return FALSE;
+#endif    
+
     OPERATOR cond_oper = WN_operator(cond_wn);
     if (OPERATOR_is_compare(cond_oper)) {
       if (WN_Is_Pointer(WN_kid0(cond_wn)) || WN_Is_Pointer(WN_kid1(cond_wn))) {
@@ -1509,6 +1517,137 @@ Find_Freq_Hint_Pragmas(
   }
 }
 
+void
+Find_Freq_LMV_Predecessors(LOOP_DESCR *the_loops,
+                           BB_SET **freq_bbs,
+                           MEM_POOL *pool)
+{
+  INT i;
+  FILE *tfile = TFile;
+
+  i = 0;
+  for (LOOP_DESCR *cloop = the_loops; cloop != NULL;
+       cloop = LOOP_DESCR_next(cloop)) {
+    LOOPINFO *loopinfo = LOOP_DESCR_loopinfo(cloop);
+    if (loopinfo && LOOPINFO_multiversion(loopinfo)) {
+      BOOL found_lmv_pattern = FALSE;
+      std::stack<BB *> lmv_bbs;
+
+      BB *loophead = LOOP_DESCR_loophead(cloop);
+
+      // Find the header predecessor that is not inside the current
+      // loop, i.e. the loop preheader
+      BB *preheader = NULL;
+      EDGE *edge;
+      FOR_ALL_PRED_EDGES(loophead,edge) {
+        BB *pred = EDGE_pred(edge);
+        ANNOTATION *annot = ANNOT_Get(BB_annotations(pred),ANNOT_LOOPINFO);
+        if (annot == NULL || ANNOT_loopinfo(annot) != loopinfo) {
+          preheader = pred;
+          break;
+        }
+      }
+      if (!preheader)
+        continue;
+      lmv_bbs.push(preheader);
+
+      // Follow the chain of single predecessors to find the
+      // LMV pre-condition chain.  The first block with multiple
+      // predecessors is the tail of the precondition chain, which
+      // has the following structure:
+      //
+      //         X (pred1)
+      //        / \
+      //       /   Y (pred2)
+      //       \  / \
+      //        \/   Z : path to conservative LMV loop (offpath)
+      //        M (merge)
+      //
+      int n_preds;
+      BB *bb = preheader;
+      do {
+        BB *single_pred;
+        n_preds = 0;
+        FOR_ALL_PRED_EDGES(bb,edge) {
+          single_pred = EDGE_pred(edge);
+          n_preds++;
+        }
+        if (n_preds == 1) {
+          bb = single_pred;
+          lmv_bbs.push(bb);
+        }
+      } while (n_preds == 1);
+
+      // At this point we have the first block having multiple predecessors.
+      // Look for the pattern
+      BOOL match_pattern = FALSE;
+      BB *merge = bb;
+      BB *off_path = NULL;
+      BB *pred1 = NULL;
+      BB *pred2 = NULL;
+      do {
+        n_preds = 0;
+        match_pattern = FALSE;
+        FOR_ALL_PRED_EDGES(merge,edge) {
+          n_preds++;
+        }
+        if (n_preds == 2) {
+          BB *pred[2];
+          int i = 0;
+          FOR_ALL_PRED_EDGES(merge,edge) {
+            pred[i++] = EDGE_pred(edge);
+          }
+          if (BB_Find_Succ_Edge(pred[0],pred[1])) {
+            pred1 = pred[0];
+            pred2 = pred[1];
+          }
+          else if (BB_Find_Succ_Edge(pred[1],pred[0])) {
+            pred1 = pred[1];
+            pred2 = pred[0];
+          }
+          else
+             break;
+
+          BOOL off_path_match = FALSE;
+          int n_succ = 0;
+          FOR_ALL_SUCC_EDGES(pred2,edge) {
+            n_succ++;
+            if (EDGE_succ(edge) != merge) {
+              if (!off_path) {
+                off_path = EDGE_succ(edge);
+                off_path_match = TRUE;
+              }
+              else if (off_path == EDGE_succ(edge))
+                off_path_match = TRUE;
+            }
+          }
+          if (n_succ != 2 || !off_path_match)
+            break;
+
+          lmv_bbs.push(pred2);
+          lmv_bbs.push(merge);
+
+          merge = pred1;
+          match_pattern = TRUE;
+          found_lmv_pattern = TRUE;
+        }
+      } while (match_pattern);
+
+      /* If we managed to find the hammock pattern of the lmv precondition
+       * chain, we now insert all discovered BBs into the lmv hint set
+       */
+      if (found_lmv_pattern) {
+        if (*freq_bbs == NULL)
+          *freq_bbs = BB_SET_Create_Empty(PU_BB_Count + 2, pool);
+        while (!lmv_bbs.empty()) {
+          BB *bb = lmv_bbs.top();
+          lmv_bbs.pop();
+          BB_SET_Union1D(*freq_bbs,bb,NULL);
+        }
+      }
+    }
+  }
+}
 
 /* ====================================================================
  *
@@ -1673,6 +1812,38 @@ Compute_BR_Prob_From_Hint(BB *bb, INT n_succs)
 }
 
 
+static BOOL
+Compute_BR_Prob_From_LMV_Hint(BB *bb)
+{
+  EDGE *sedge;
+  enum prob_src {ps_heuristic, ps_never, ps_frequent} *prob_src;
+  INT isucc;
+  INT n_heuristic;
+  INT n_never = 0;
+  INT n_frequent = 0;
+
+  BB *lmv_succ = NULL;
+  FOR_ALL_SUCC_EDGES(bb, sedge) {
+    BB *succ = EDGE_succ(sedge);
+    if (BB_SET_MemberP(LMV_Precond_BBs,succ)) {
+      if (lmv_succ == NULL)
+        lmv_succ = succ;
+      else
+        return FALSE;
+    }
+  }
+  if (lmv_succ) {
+    FOR_ALL_SUCC_EDGES(bb, sedge) {
+        BB *succ = EDGE_succ(sedge);
+        EDGE_prob(sedge) = (succ == lmv_succ)? 1.0 : 0.0;
+    }
+    return TRUE;
+  }
+  else
+    return FALSE;
+}
+
+
 /* ====================================================================
  *
  * Compute_Branch_Probabilities
@@ -1726,9 +1897,13 @@ Compute_Branch_Probabilities(void)
        * is common, and the probability can only be 1.0, we just
        * set it here and save a little bit of work.
        */
+#if defined (TARG_SL)     
+      if(!BB_freq_unbalanced(bb) || !CG_PU_Has_Feedback)
+#endif	  	
       EDGE_prob(BB_succ_edges(bb)) = 1.0;
-    } else if (   (Frequent_BBs || Never_BBs)
-	       && Compute_BR_Prob_From_Hint(bb, n_succs)
+    } else if (   ((Frequent_BBs || Never_BBs)
+	       && Compute_BR_Prob_From_Hint(bb, n_succs)) ||
+	       (LMV_Precond_BBs && Compute_BR_Prob_From_LMV_Hint(bb))
     ) {
       if (CFLOW_Trace_Freq) {
 	#pragma mips_frequency_hint NEVER
@@ -1846,16 +2021,15 @@ Compute_Branch_Probabilities(void)
         EDGE *edge2 = EDGE_next_succ(edge1);
         BB *succ1 = EDGE_succ(edge1);
         BB *succ2 = EDGE_succ(edge2);
-
+ 
         fprintf(TFile, "\n User builtin BB:%-3d -> BB:%-3d BB:%-3d -> BB:%-3d\n"
-                       "    ============================================\n",
-                       BB_id(bb), BB_id(succ1), BB_id(bb), BB_id(succ2));
+                      "    ============================================\n",
+                      BB_id(bb), BB_id(succ1), BB_id(bb), BB_id(succ2));
         fprintf(TFile, "     Combined  %.13f  %.13f\n",
-                       EDGE_prob(edge1), EDGE_prob(edge2));
+                      EDGE_prob(edge1), EDGE_prob(edge2));
       }
     }
 #endif
- 
     else {
 
       /* 2-way branch
@@ -1879,25 +2053,22 @@ Compute_Branch_Probabilities(void)
 	prob_succ2 = 1.0 - prob_succ1;
       } else {
 #ifdef TARG_IA64
-	 // prob_succ1 = 0.5;
-	 // prob_succ2 = 0.5;
-	
-	if (IPFEC_Enable_Random_Prob)
-	{
+	if (IPFEC_Enable_Random_Prob) {
 	  double freq_succ1 = (double)(random() + 1);
 	  double freq_succ2 = (double)(random() + 1);
 	  prob_succ1 = freq_succ1 / (freq_succ1 + freq_succ2);
           prob_succ2 = freq_succ2 / (freq_succ1 + freq_succ2);
-        }else
-        {
+        } 
+	else {
           prob_succ1 = 0.5;
           prob_succ2 = 0.5;
         }
 #else
 	prob_succ1 = 0.5;
 	prob_succ2 = 0.5;
-#endif  
-	
+
+#endif
+
 	/* Using "Dempster-Shafer" combine probabilities for each
 	 * heuristic that applies to this branch.
 	 */
@@ -2216,6 +2387,21 @@ Compute_Frequencies(void)
    */
   BB_SET_UniverseD(to_visit, PU_BB_Count + 2, NULL);
   BB_SET_ClearD(visited);
+
+#ifdef KEY
+  // Assign frequencies to non-local goto targets that don't have predecessor
+  // BBs.
+  if (PU_Has_Nonlocal_Goto_Target) {
+    for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+      if (!BB_entry(bb) &&
+	  BB_has_non_local_label(bb) &&
+	  BB_preds(bb) == NULL) {
+	Propagate_Freq(bb, bb, Non_Local_Target_Freq, to_visit, visited);
+      }
+    }
+  }
+#endif
+
   if (Compiling_Proper_REGION) {
 
     /* Region.
@@ -2418,7 +2604,6 @@ Normalize_BB_Frequencies(void)
  */
 BB_SET *FREQ_Find_Never_BBs(MEM_POOL *pool)
 {
-#if 1
   BB_SET *pragma_bbs;
   BB_SET *never_bbs;
   BB *bb;
@@ -2485,75 +2670,6 @@ BB_SET *FREQ_Find_Never_BBs(MEM_POOL *pool)
   } while (!BB_SET_EmptyP(pragma_bbs));
 
   Free_Dominators_Memory();
-#endif
-#if 0
-  BB_SET *never_bbs;
-  INT32 i;
-  BB *bb;
-  BB_MAP topo_map;
-  INT32 max_topo_idx;
-  BB **topo_vec;
-  BOOL never_bbs_added;
-
-  Find_Freq_Hint_Pragmas(&never_bbs, NULL, pool);
-  if (never_bbs == NULL) return NULL;
-
-  topo_map = BB_Topological_Map(NULL, NULL);
-  topo_vec = (BB **)alloca(sizeof(BB *) * PU_BB_Count);
-  bzero(topo_vec, sizeof(BB *) * PU_BB_Count);
-  max_topo_idx = 0;
-  for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
-    INT32 topo_id = BB_MAP32_Get(topo_map, bb);
-    DevAssert(topo_id >= 0 && topo_id <= PU_BB_Count, ("bad <topo_map> value"));
-    if (topo_id > 0) {
-      max_topo_idx = MAX(topo_id, max_topo_idx);
-      topo_vec[topo_id - 1] = bb;
-    }
-  }
-  BB_MAP_Delete(topo_map);
-
-  do {
-    never_bbs_added = FALSE;
-
-    for (i = 0; i <= max_topo_idx; ++i) {
-      BBLIST *edge;
-      BB *bb = topo_vec[i];
-
-     if (bb == NULL) continue;
-
-      if (BB_preds(bb) && !BB_SET_MemberP(never_bbs, bb)) {
-	FOR_ALL_BB_PREDS(bb, edge) {
-	  BB *pred = BBLIST_item(edge);
-	  if (!BB_SET_MemberP(never_bbs, pred)) goto next_fwd_bb;
-	}
-	BB_SET_Union1D(never_bbs, bb, NULL);
-	never_bbs_added = TRUE;
-      }
-
-    next_fwd_bb:
-      ;
-    }
-
-    for (i = max_topo_idx; i >= 0; --i) {
-      BBLIST *edge;
-      BB *bb = topo_vec[i];
-
-      if (bb == NULL) continue;
-
-      if (BB_succs(bb) && !BB_SET_MemberP(never_bbs, bb)) {
-	FOR_ALL_BB_SUCCS(bb, edge) {
-	  BB *succ = BBLIST_item(edge);
-	  if (!BB_SET_MemberP(never_bbs, succ)) goto next_rev_bb;
-	}
-	BB_SET_Union1D(never_bbs, bb, NULL);
-	never_bbs_added = TRUE;
-      }
-
-    next_rev_bb:
-      ;
-    }
-  } while (never_bbs_added);
-#endif
 
   return never_bbs;
 }
@@ -2659,9 +2775,9 @@ FREQ_Print_BB_Note(
 
   fprintf(file, "%s<freq>\n", prefix);
 
-  fprintf(file, "%s<freq> BB:%d frequency = %#.5f (%s)\n",
+  fprintf(file, "%s<freq> BB:%d freq = %#.5f (%s)\n",
 	  prefix, bb_id, BB_freq(bb),
-	  (BB_freq_fb_based(bb) ? "feedback" : "heuristic"));
+	  (BB_freq_fb_based(bb) ? "fb" : "heur"));
 
   /* Don't bother printing only one successor edge frequency; it's obvious
    * what it is and we don't need more clutter.
@@ -2670,7 +2786,7 @@ FREQ_Print_BB_Note(
     BBLIST *succ;
 
     FOR_ALL_BBLIST_ITEMS(bb_succs, succ) {
-      fprintf(file, "%s<freq> BB:%d => BB:%d probability = %#.5f\n",
+      fprintf(file, "%s<freq> BB:%d => BB:%d prob = %#.3f\n",
 	      prefix,
 	      bb_id,
 	      BB_id(BBLIST_item(succ)),
@@ -2698,11 +2814,26 @@ FREQ_Region_Initialize(void)
   if (!inited) {
     Frequent_Never_Ratio = atof(FREQ_frequent_never_ratio);
     EH_Freq = atof(FREQ_eh_freq);
+#ifdef KEY
+    Non_Local_Target_Freq = atof(FREQ_non_local_targ_freq);
+#endif
     inited = TRUE;
   }
   FREQ_freqs_computed = FALSE;
 }
 
+#if defined(TARG_SL)
+static void
+Initialize_Freq_BBs(void)
+{
+  for (BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb))  {
+    if(!BB_freq_fb_based(bb) && BB_freq(bb)!=0.0)
+      BB_freq(bb) = 0.0;
+  }
+  return;
+}
+
+#endif
 
 /* ====================================================================
  *
@@ -2725,6 +2856,13 @@ Initialize_Compute_BB_Frequencies(void)
 
   Initialize_Freq_Edges();
 
+#if defined(TARG_SL)
+  //initialize bb freq, because the freq of some bb in black regions
+  //  were computed by heuristic during the seperate compiling phase,
+  //  these values should be rest to zero
+  Initialize_Freq_BBs();
+#endif
+
   Find_Freq_Hint_Pragmas(&Never_BBs, &Frequent_BBs, &MEM_local_pool);
   if (CFLOW_Trace_Freq) {
     #pragma mips_frequency_hint NEVER
@@ -2741,6 +2879,14 @@ Initialize_Compute_BB_Frequencies(void)
   if (CFLOW_Trace_Freq) {
     #pragma mips_frequency_hint NEVER
     LOOP_DESCR_Print_List();
+  }
+
+  Find_Freq_LMV_Predecessors(loop_list,&LMV_Precond_BBs,&MEM_local_pool);
+  if (CFLOW_Trace_Freq) {
+    #pragma mips_frequency_hint NEVER
+    fprintf(TFile, "BBs hinted as begin in LMV precondition chain: ");
+    BB_SET_Print(LMV_Precond_BBs,TFile);
+    fprintf(TFile,"\n");
   }
 }
 
@@ -2763,6 +2909,13 @@ Finalize_Compute_BB_Frequencies(void)
 
   MEM_POOL_Pop(&MEM_local_pool);
   MEM_POOL_Pop(&MEM_local_nz_pool);
+
+  /* Make sure that we reset the bit sets allocated from the
+   * pools that we have just popped.
+   */
+  Frequent_BBs = NULL;
+  Never_BBs = NULL;
+  LMV_Precond_BBs = NULL;
 
   Free_Dominators_Memory();
 
@@ -3153,11 +3306,11 @@ FREQ_Incorporate_Feedback(const WN* entry)
 	      float freq_take = fb_take.Value();
 	      float freq_fall = fb_fall.Value();
 	      if (take_edge) {
-		EDGE_prob(take_edge) = freq_take / freq_bb;
+		EDGE_prob(take_edge) += freq_take / freq_bb;
 		Set_EDGE_prob_fb_based(take_edge);
 	      }
 	      if (fall_edge) {
-		EDGE_prob(fall_edge) = freq_fall / freq_bb;
+		EDGE_prob(fall_edge) += freq_fall / freq_bb;
 		Set_EDGE_prob_fb_based(fall_edge);
 	      }
 	    }
@@ -3206,7 +3359,7 @@ FREQ_Incorporate_Feedback(const WN* entry)
 		  FB_FREQ fb_case = Cur_PU_Feedback->Query(wn,
 							   FB_EDGE_SWITCH(i));
 		  float freq_case = FB_FREQ_Value(fb_case);
-		  EDGE_prob(edge) = freq_case / freq_bb;
+		  EDGE_prob(edge) += freq_case / freq_bb;
 		  Set_EDGE_prob_fb_based(edge);
 		}
 	      }
@@ -3214,6 +3367,32 @@ FREQ_Incorporate_Feedback(const WN* entry)
 	  }
 	}
 	break;
+
+#if defined (TARG_SL)	  
+      case  OPR_SL2_FORK_MAJOR:
+      case  OPR_SL2_FORK_MINOR:  
+      	{
+	   INT i;
+         FB_FREQ fb0 = Cur_PU_Feedback->Query(wn, FB_EDGE_SWITCH(0)); 
+         FB_FREQ fb1 = Cur_PU_Feedback->Query(wn, FB_EDGE_SWITCH(1));
+         if(fb0.Known() && fb1.Known())  {
+	      FmtAssert(fb0 == fb1, (" freq of forked two threads are not equal "));
+	      BB_freq(bb)=FB_FREQ_Value(fb0); 
+	      Set_BB_freq_fb_based(bb);
+  	      
+	      LABEL_IDX label = WN_label_number(wn);
+	      BB *take_bb = Get_Label_BB(label);
+	      EDGE *take_edge = BB_Find_Succ_Edge(bb, take_bb);
+	      EDGE *fall_edge = BB_Find_Succ_Edge(bb, BB_next(bb));
+	      EDGE_prob(take_edge) = 1.0;
+	      Set_EDGE_prob_fb_based(take_edge);
+	      EDGE_prob(fall_edge) = 1.0;
+	      Set_EDGE_prob_fb_based(fall_edge);		  
+	  }
+         Set_BB_freq_unbalanced(bb);
+      	}
+	break;
+#endif
       }
     }
     else if (BB_call(bb)) {
@@ -3244,6 +3423,9 @@ FREQ_Incorporate_Feedback(const WN* entry)
       /* Straight line code, set the outgoing edge probability to 1.0
        */
       EDGE *edge = BB_succ_edges(bb);
+#if defined(TARG_SL)
+      if(!BB_freq_unbalanced(bb))
+#endif
       if (edge) {
 	EDGE_prob(edge) = 1.0;
 	Set_EDGE_prob_fb_based(edge);
@@ -3347,7 +3529,7 @@ FREQ_Verify(const char *caller)
   BB     *bb, *succ;
   BBLIST *lst;
   float total_prob;
-  char *s;
+  const char *s;
 
   fprintf(TFile,"%s<freq> Freq_Verify after %s\n%s", DBar, caller, DBar);
 
@@ -3384,6 +3566,9 @@ FREQ_Verify(const char *caller)
 
     // Display a message if total outgoing probability is not 1.0
     if (! FREQ_Match(total_prob, 1.0) && BB_succs(bb)) {
+#if defined(TARG_SL)
+	if(!BB_freq_unbalanced(bb) && !CG_PU_Has_Feedback)
+#endif
       fprintf(TFile, "FAIL total_prob == %#.4f != 1.0\n", total_prob);
       all_ok = FALSE;
     }

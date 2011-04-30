@@ -21,13 +21,18 @@ BEGIN {
 	dup_arr["0"] = ""
 }
 {
-	if (skipit && $1 == "#endif") {
-		skipit = 0
+	# want to emit #if defined(TARG_*) same as source,
+	# but ignore #ifdef DWARF_H markers.
+	# Warning:  this requires #if defined() not #ifdef,
+	# also doesn't work for nested #if
+	if ($1 == "#if") {
+		inif = 1
+		printf "%s\n", $0
 		next
 	}
-	if ($2 == 0 || skipit) {
-		# if 0, skip to endif
-		skipit = 1
+	if ($1 == "#endif" && inif) {
+		inif = 0
+		printf "%s\n", $0
 		next
 	}
 	if ($1 == "#define") {

@@ -27,10 +27,6 @@ Boston, MA 02111-1307, USA.  */
 /* GNU/Linux uses ctype from glibc.a. I am not sure how complete it is.
    For now, we play safe. It may change later.  */
 
-#if 0
-#undef MULTIBYTE_CHARS
-#define MULTIBYTE_CHARS 1
-#endif
 
 #undef MD_EXEC_PREFIX
 #undef MD_STARTFILE_PREFIX
@@ -116,7 +112,6 @@ Boston, MA 02111-1307, USA.  */
 /* We no longer link with libc_p.a or libg.a by default. If you
    want to profile or debug the GNU/Linux C library, please add
    -lc_p or -ggdb to LDFLAGS at the link time, respectively.  */
-#if 1
 #ifdef USE_GNULIBC_1
 #define LIB_SPEC \
   "%{!shared: %{p:-lgmon} %{pg:-lgmon} %{profile:-lgmon -lc_p} \
@@ -126,12 +121,6 @@ Boston, MA 02111-1307, USA.  */
   "%{shared: -lc} \
    %{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
      %{profile:-lc_p} %{!profile: -lc}}"
-#endif
-#else
-#define LIB_SPEC \
-  "%{!shared: \
-     %{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
-       %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}}"
 #endif
 
 /* Provide a LINK_SPEC appropriate for GNU/Linux.  Here we provide support

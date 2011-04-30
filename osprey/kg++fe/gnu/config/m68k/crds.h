@@ -58,11 +58,6 @@ Boston, MA 02111-1307, USA.  */
   "%{pg:gcrt0.o%s}%{!pg:%{p:mc68rt0.o%s}%{!p:c68rt0.o%s}}"
 
 /* CC1 spec */
-#if 0
-/* c.sac only used in _s_call_r() in libunos.a and malloc() in libmalloc.a */
-/* so we do not need to bother ! */
-#define CC1_SPEC "-fpcc-struct-return"
-#endif
 
 /* -O2 for MAX optimization */
 #undef CC1_SPEC
@@ -78,13 +73,8 @@ Boston, MA 02111-1307, USA.  */
 
 /* UNOS need stack probe :-( */
 
-#if 0
-#define HAVE_probe 1
-#define gen_probe()  gen_rtx_ASM_INPUT (VOIDmode, "tstb -2048(sp)\t;probe\n")
-#else
 #undef NEED_PROBE
 #define NEED_PROBE (-2048)
-#endif
 
 /* use memcpy, memset instead of bcopy, etc.  */
 
@@ -223,85 +213,6 @@ do {  size_t i, limit = (SIZE);						\
 }
 
 
-#if 0
-/* Print operand X (an rtx) in assembler syntax to file FILE.
-   CODE is a letter or dot (`z' in `%z0') or 0 if no letter was specified.
-   For `%' followed by punctuation, CODE is the punctuation and X is null.
-
-   On the 68000, we use several CODE characters:
-   '.' for dot needed in Motorola-style opcode names.
-   '-' for an operand pushing on the stack:
-       sp@-, -(sp) or -(%sp) depending on the style of syntax.
-   '+' for an operand pushing on the stack:
-       sp@+, (sp)+ or (%sp)+ depending on the style of syntax.
-   '@' for a reference to the top word on the stack:
-       sp@, (sp) or (%sp) depending on the style of syntax.
-   '#' for an immediate operand prefix (# in MIT and Motorola syntax
-       but & in SGS syntax, $ in unos syntax).
-   '!' for the fpcr register (used in some float-to-fixed conversions).
-
-   'b' for byte insn (no effect, on the Sun; this is for the ISI).
-   'd' to force memory addressing to be absolute, not relative.
-   'f' for float insn (print a CONST_DOUBLE as a float rather than in hex)
-   'w' for FPA insn (print a CONST_DOUBLE as a SunFPA constant rather
-       than directly).  Second part of 'y' below.
-   'x' for float insn (print a CONST_DOUBLE as a float rather than in hex),
-       or print pair of registers as rx:ry.
-   'y' for a FPA insn (print pair of registers as rx:ry).  This also outputs
-       CONST_DOUBLE's as SunFPA constant RAM registers if
-       possible, so it should not be used except for the SunFPA.  */
-
-#undef PRINT_OPERAND_PUNCT_VALID_P
-#define PRINT_OPERAND_PUNCT_VALID_P(CODE)				\
-  ((CODE) == '.' || (CODE) == '#' || (CODE) == '-'			\
-   || (CODE) == '+' || (CODE) == '@' || (CODE) == '!')
-
-#undef PRINT_OPERAND
-#define PRINT_OPERAND(FILE, X, CODE)  \
-{ int i;								\
-  if (CODE == '.') ;							\
-  else if (CODE == '#') fprintf (FILE, "$");				\
-  else if (CODE == '-') fprintf (FILE, "-(sp)");			\
-  else if (CODE == '+') fprintf (FILE, "(sp)+");			\
-  else if (CODE == '@') fprintf (FILE, "(sp)");				\
-  else if (CODE == '!') fprintf (FILE, "fpcr");				\
-  else if (CODE == '/')							\
-    ;									\
-  else if (GET_CODE (X) == REG)						\
-    { if (REGNO (X) < 16 && (CODE == 'y' || CODE == 'x') && GET_MODE (X) == DFmode)	\
-        fprintf (FILE, "%s:%s", reg_names[REGNO (X)], reg_names[REGNO (X)+1]); \
-      else								\
-        fprintf (FILE, "%s", reg_names[REGNO (X)]);			\
-    }									\
-  else if (GET_CODE (X) == MEM)						\
-    {									\
-      output_address (XEXP (X, 0));					\
-      if (CODE == 'd' && ! TARGET_68020					\
-	  && CONSTANT_ADDRESS_P (XEXP (X, 0)))				\
-	/* fprintf (FILE, ".l") */;					\
-    }									\
-  else if ((CODE == 'y' || CODE == 'w')					\
-	   && GET_CODE(X) == CONST_DOUBLE				\
-	   && (i = standard_sun_fpa_constant_p (X)))			\
-    fprintf (FILE, "%%%d", i & 0x1ff);					\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == SFmode)	\
-    { REAL_VALUE_TYPE r; long l;					\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      if (CODE == 'f')							\
-	ASM_OUTPUT_FLOAT_OPERAND (CODE, FILE, r);			\
-      else								\
-        { REAL_VALUE_TO_TARGET_SINGLE (r, l);				\
-          fprintf (FILE, "$0x%lx", l); } }				\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == DFmode)	\
-    { REAL_VALUE_TYPE r;						\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      ASM_OUTPUT_DOUBLE_OPERAND (FILE, r); }				\
-  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) == XFmode)	\
-    { REAL_VALUE_TYPE r;						\
-      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
-      ASM_OUTPUT_LONG_DOUBLE_OPERAND (FILE, r); }			\
-  else { putc ('$', FILE); output_addr_const (FILE, X); }}
-#endif
 
 /* Note that this contains a kludge that knows that the only reason
    we have an address (plus (label_ref...) (reg...))

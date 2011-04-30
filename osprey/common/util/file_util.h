@@ -42,7 +42,7 @@ extern "C" {
 
 
 #ifdef _KEEP_RCS_ID
-static char *file_util_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/util/file_util.h,v $ $Revision: 1.1.1.1 $";
+static char *file_util_rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/common/util/file_util.h,v $ $Revision: 1.1 $";
 #endif /* _KEEP_RCS_ID */
 
 /* stdio.h (included in defs.h) defines the following:

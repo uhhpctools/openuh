@@ -42,10 +42,10 @@
 // ====================================================================
 //
 // Module: instr_reader.h
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/common/com/instr_reader.h,v $
+// $Revision: 1.9 $
+// $Date: 05/12/05 08:59:36-08:00 $
+// $Author: bos@eng-24.pathscale.com $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/common/com/SCCS/s.instr_reader.h $
 //
 // Revision history:
 //  10-Aug-98 - Original Version
@@ -86,9 +86,20 @@
      if (fseek(_fd, _position, whence) != 0) \
            profile_error(_error_message, _error_arg);
 
+#if defined(BUILD_OS_DARWIN)
+/* fcntl TIOCFLUSH defines FREAD to set a bit that clears the input queue;
+ * we don't need that */
+#undef FREAD
+#endif /* defined(BUILD_OS_DARWIN) */
 #define FREAD(_buffer, _size, _nitems, _fp, _error_message, _error_arg) \
         if (fread((void *)_buffer, _size, _nitems, _fp) != _nitems) \
            profile_error(_error_message, _error_arg);
+
+#if defined(TARG_SL)
+#define FWRITE(_buffer, _size, _nitems, _fp, _error_message, _error_arg) \
+	if (fwrite((void *)_buffer, _size, _nitems, _fp) != _nitems) \
+	   profile_error(_error_message, _error_arg);
+#endif
 
 #ifdef _BUILD_INSTR
 
@@ -106,6 +117,9 @@ typedef vector<FB_Info_Value>   FB_Value_Vector;
 #ifdef KEY
 typedef vector<FB_Info_Value_FP_Bin>   FB_Value_FP_Bin_Vector;
 #endif
+#ifdef TARG_LOONGSON
+typedef vector<FB_Info_Cache>   FB_Cache_Vector;
+#endif
 #endif
 
 struct PU_Profile_Handle
@@ -122,6 +136,9 @@ struct PU_Profile_Handle
     FB_Value_Vector     Value_Profile_Table;
 #ifdef KEY
     FB_Value_FP_Bin_Vector  Value_FP_Bin_Profile_Table;
+#endif
+#ifdef TARG_LOONGSON
+    FB_Cache_Vector	Cache_Profile_Table;
 #endif
     FB_Value_Vector     Stride_Profile_Table; 
   
@@ -240,6 +257,11 @@ struct PU_Profile_Handle
     FB_Value_Vector& Get_Stride_Table() {
        return Stride_Profile_Table;
     }
+#ifdef TARG_LOONGSON
+    FB_Cache_Vector& Get_Cache_Table() {
+       return Cache_Profile_Table;
+    }
+#endif
 
 };
 
@@ -430,6 +452,9 @@ extern FB_Info_Value_FP_Bin& Get_Value_FP_Bin_Profile(PU_PROFILE_HANDLE pu_handl
 #endif
 extern FB_Info_Value& Get_Stride_Profile(PU_PROFILE_HANDLE pu_handle, INT32 id);
 
+#ifdef TARG_LOONGSON
+extern FB_Info_Cache& Get_Cache_Profile(PU_PROFILE_HANDLE pu_handle, INT32 id);
+#endif
 
 #endif // _BUILD_INSTR
 

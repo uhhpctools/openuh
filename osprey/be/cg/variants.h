@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -44,10 +48,10 @@
  * ====================================================================
  *
  * Module: variants.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/variants.h,v $
+ * $Revision: 1.9 $
+ * $Date: 05/12/05 08:59:09-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.variants.h $
  *
  * Revision history:
  *  01-Nov-89 - Original Version (STAPUFT GE/PE)
@@ -64,7 +68,7 @@
  */
 
 #ifdef _KEEP_RCS_ID
-static const char variants_rcs_id[] = "$Source: be/cg/SCCS/s.variants.h $ $Revision: 1.8 $";
+static const char variants_rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.variants.h $ $Revision: 1.9 $";
 #endif /* _KEEP_RCS_ID */
 
 /* Type used to hold a variant:
@@ -178,53 +182,60 @@ typedef UINT64 VARIANT;
 #else // TARG_IA64
 
 #ifdef KEY
-#define V_BR_I4EQ0	55/* Signed integer A = 0 */
-#define V_BR_I4NE0	56/* Signed integer A != 0 */
-#define V_BR_I4GT0	57/* Signed integer A > 0 */
-#define V_BR_I4GE0	58/* Signed integer A >= 0 */
-#define V_BR_I4LT0	59/* Signed integer A < 0 */
-#define V_BR_I4LE0	60/* Signed integer A <= 0 */
+#define V_BR_I4EQ0	55	/* Signed integer A = 0 */
+#define V_BR_I4NE0	56	/* Signed integer A != 0 */
+#define V_BR_I4GT0	57	/* Signed integer A > 0 */
+#define V_BR_I4GE0	58	/* Signed integer A >= 0 */
+#define V_BR_I4LT0	59	/* Signed integer A < 0 */
+#define V_BR_I4LE0	60	/* Signed integer A <= 0 */
 #endif
 
-#define V_BR_I4EQ	61/* 4-byte signed integer A = B */
-#define V_BR_I4NE	62/* 4-byte signed integer A != B */
-#define V_BR_I4GT	63/* 4-byte signed integer A > B */
-#define V_BR_I4GE	64/* 4-byte signed integer A >= B */
-#define V_BR_I4LT	65/* 4-byte signed integer A < B */
-#define V_BR_I4LE	66/* 4-byte signed integer A <= B */
+#define V_BR_I4EQ	61	/* 4-byte signed integer A = B */
+#define V_BR_I4NE	62	/* 4-byte signed integer A != B */
+#define V_BR_I4GT	63	/* 4-byte signed integer A > B */
+#define V_BR_I4GE	64	/* 4-byte signed integer A >= B */
+#define V_BR_I4LT	65	/* 4-byte signed integer A < B */
+#define V_BR_I4LE	66	/* 4-byte signed integer A <= B */
 
 #ifdef KEY
-#define V_BR_U4EQ0	67/* Unsigned integer A = 0 */
-#define V_BR_U4NE0	68/* Unsigned integer A != 0 */
-#define V_BR_U4GT0	69/* Unsigned integer A > 0 */
-#define V_BR_U4GE0	70/* Unsigned integer A >= 0 */
-#define V_BR_U4LT0	71/* Unsigned integer A < 0 */
-#define V_BR_U4LE0	72/* Unsigned integer A <= 0 */
+#define V_BR_U4EQ0	67	/* Unsigned integer A = 0 */
+#define V_BR_U4NE0	68	/* Unsigned integer A != 0 */
+#define V_BR_U4GT0	69	/* Unsigned integer A > 0 */
+#define V_BR_U4GE0	70	/* Unsigned integer A >= 0 */
+#define V_BR_U4LT0	71	/* Unsigned integer A < 0 */
+#define V_BR_U4LE0	72	/* Unsigned integer A <= 0 */
 #endif
 
-#define V_BR_U4EQ	73/* 4-byte unsigned integer A = B */
-#define V_BR_U4NE	74/* 4-byte unsigned integer A != B */
-#define V_BR_U4GT	75/* 4-byte unsigned integer A > B */
-#define V_BR_U4GE	76/* 4-byte unsigned integer A >= B */
-#define V_BR_U4LT	77/* 4-byte unsigned integer A < B */
-#define V_BR_U4LE	78/* 4-byte unsigned integer A <= B */
+#define V_BR_U4EQ	73	/* 4-byte unsigned integer A = B */
+#define V_BR_U4NE	74	/* 4-byte unsigned integer A != B */
+#define V_BR_U4GT	75	/* 4-byte unsigned integer A > B */
+#define V_BR_U4GE	76	/* 4-byte unsigned integer A >= B */
+#define V_BR_U4LT	77	/* 4-byte unsigned integer A < B */
+#define V_BR_U4LE	78	/* 4-byte unsigned integer A <= B */
 
-#define V_BR_F_FALSE	79/* Floating point (fcc) false */
-#define V_BR_F_TRUE	80/* Floating point (fcc) true */
+#define V_BR_F_FALSE	79	/* Floating point (fcc) false */
+#define V_BR_F_TRUE	80	/* Floating point (fcc) true */
 
-#define V_BR_P_TRUE	81/* Predicate true */
-#define V_BR_PEQ	82/* Predicate A = B */
-#define V_BR_PNE	83/* Predicate A != B */
+#define V_BR_P_TRUE	81	/* Predicate true */
+#define V_BR_PEQ	82	/* Predicate A = B */
+#define V_BR_PNE	83	/* Predicate A != B */
 
-#define V_BR_CLOOP	84/* Counted loop */
-#define V_BR_CTOP	85/* Mod-sched counted loop (top) */
-#define V_BR_CEXIT	86/* Mod-sched counted loop (exit) */
-#define V_BR_WTOP	87/* Mod-sched while loop (top) */
-#define V_BR_WEXIT	88/* Mod-sched while loop (exit) */
+#define V_BR_CLOOP	84	/* Counted loop */
+#define V_BR_CTOP	85	/* Mod-sched counted loop (top) */
+#define V_BR_CEXIT	86	/* Mod-sched counted loop (exit) */
+#define V_BR_WTOP	87	/* Mod-sched while loop (top) */
+#define V_BR_WEXIT	88	/* Mod-sched while loop (exit) */
 
-#define V_BR_ALWAYS	89/* Unconditional branch */
-#define V_BR_NEVER	90/* Never branch */
-#define V_BR_LAST	91/* Last one defined */
+#define V_BR_XEQ        89      /* Double extended  A = B */
+#define V_BR_XNE        90      /* Double extended  A != B */
+#define V_BR_XGT        91      /* Double extended  A > B */
+#define V_BR_XGE        92      /* Double extended  A >= B */
+#define V_BR_XLT        93      /* Double extended  A < B */
+#define V_BR_XLE        94      /* Double extended  A <= B */
+
+#define V_BR_ALWAYS	95	/* Unconditional branch */
+#define V_BR_NEVER	96	/* Never branch */
+#define V_BR_LAST	97	/* Last one defined, must < 128 */
 
 #endif // TARG_IA64
 
@@ -299,7 +310,7 @@ extern const char *BR_Variant_Name(VARIANT variant);
 #ifdef TARG_IA64
 #define	V_alignment(v)			(((v) & V_ALIGNMENT) - 1)
 #else
-#define V_alignment(v)                  ((v) & V_ALIGNMENT)
+#define	V_alignment(v)			((v) & V_ALIGNMENT)
 #endif
 #define V_align_offset(v)		(((v) & V_ALIGN_OFFSET) >> 4)
 #define V_align_offset_unknown(v)	((v) & V_ALIGN_OFFSET_UNKNOWN)
@@ -310,7 +321,7 @@ extern const char *BR_Variant_Name(VARIANT variant);
 #define	Set_V_alignment(v,a)		\
 	((v) = ((v) & ~V_ALIGNMENT) | (((a) + 1) & V_ALIGNMENT))
 #else
-#define Set_V_alignment(v,a)            ((v) = ((v) & ~V_ALIGNMENT) | ((a)&V_ALIGNMENT))
+#define	Set_V_alignment(v,a)		((v) = ((v) & ~V_ALIGNMENT) | ((a)&V_ALIGNMENT))
 #endif
 #define Set_V_align_offset(v,a)		((v) = ((v) & ~V_ALIGN_OFFSET) | (((a)&V_ALIGNMENT)<<4))
 #define	Set_V_align_offset_unknown(v)	((v) |= V_ALIGN_OFFSET_UNKNOWN)
@@ -326,6 +337,9 @@ extern const char *BR_Variant_Name(VARIANT variant);
 #define Set_V_volatile(v)		((v) |= V_VOLATILE)
 #define Reset_V_volatile(v)		((v) &= ~V_VOLATILE)
 
+/*the high/low 64 bit of the 128 bit data is load/stored */
+#define V_HIGH64		0x0400
+#define V_LOW64			0x0800
 /* Prefetch flags: The prefetch flags, if any, for a memory OP are
  * stored in the V_PF_FLAGS field.
  */
@@ -335,6 +349,26 @@ extern const char *BR_Variant_Name(VARIANT variant);
 #define Set_V_pf_flags(v,f)		((v) = ((v) & ~V_PF_FLAGS) | ((VARIANT)(f) << 32))
 #define Reset_V_pf_flags(v)		((v) &= ~V_PF_FLAGS)
 
+#ifdef TARG_NVISA
+/* memory space flags */
+#define V_GLOBAL_MEM		0x00010000
+#define V_SHARED_MEM		0x00020000
+#define V_LOCAL_MEM		0x00040000
+#define V_CONST_MEM		0x00080000
+#define V_PARAM_MEM		0x00100000
+#define V_MEM_SPACE		0x001f0000	/* Mask for memory space */
+#define V_global_mem(v)		((v) & V_GLOBAL_MEM)
+#define Set_V_global_mem(v)	((v) |= V_GLOBAL_MEM)
+#define V_shared_mem(v)		((v) & V_SHARED_MEM)
+#define Set_V_shared_mem(v)	((v) |= V_SHARED_MEM)
+#define V_local_mem(v)		((v) & V_LOCAL_MEM)
+#define Set_V_local_mem(v)	((v) |= V_LOCAL_MEM)
+#define V_const_mem(v)		((v) & V_CONST_MEM)
+#define Set_V_const_mem(v)	((v) |= V_CONST_MEM)
+#define V_param_mem(v)		((v) & V_PARAM_MEM)
+#define Set_V_param_mem(v)	((v) |= V_PARAM_MEM)
+#define V_memory_space(v)	((v) & V_MEM_SPACE)
+#endif
 
 /* ====================================================================
  *

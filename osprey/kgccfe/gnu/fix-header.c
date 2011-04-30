@@ -326,11 +326,6 @@ strtok\0strxfrm\0" },
 S_IFBLK\0S_IFCHR\0S_IFIFO\0S_IFREG\0S_IFLNK\0" },
   { CONTINUED, XOPEN_EXTENDED_SYMBOL, "fchmod\0" },
 
-#if 0
-/* How do we handle fd_set? */
-  { "sys/time.h", XOPEN_EXTENDED_SYMBOL, "select\0" },
-  { "sys/select.h", XOPEN_EXTENDED_SYMBOL /* fake */, "select\0" },
-#endif
 
   { "sys/times.h", POSIX1_SYMBOL, "times\0" },
   /* "sys/types.h" add types (not in old g++-include) */

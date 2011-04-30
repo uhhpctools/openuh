@@ -47,7 +47,7 @@
 
 // From be/com/ipa_cost_util.cxx:
 
-#if !defined(linux)
+#if !(defined(linux) || defined(BUILD_OS_DARWIN))
 #ifdef IPA_SUMMARY
 #include "ipl_summary.h"
 #else 
@@ -55,7 +55,7 @@
 #endif
 #endif 
 
-#if !defined(linux)
+#if !(defined(linux) || defined(BUILD_OS_DARWIN))
 
 // Forward declaration.
 
@@ -1301,7 +1301,7 @@ extern void IPL_EX_Add_Expr_Offsets(DYN_ARRAY<SUMMARY_EXPR>* sx,
   }
 }
 
-#if !defined(linux) 
+#if !(defined(linux) || defined(BUILD_OS_DARWIN))
 //-----------------------------------------------------------------------
 // NAME: Print_Exprs
 // FUNCTION: Print a representation of the pair ('sv','sx') to the file 

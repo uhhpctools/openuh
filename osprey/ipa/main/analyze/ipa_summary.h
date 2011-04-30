@@ -79,6 +79,14 @@ class TERM;
 class IVAR;
 class SCALAR_INFO;
 class SUMMARY_STRUCT_ACCESS;
+#ifdef KEY
+class SUMMARY_TY_INFO;
+#endif
+class SUMMARY_CONSTRAINT_GRAPH_NODE;
+class SUMMARY_CONSTRAINT_GRAPH_EDGE;
+class SUMMARY_CONSTRAINT_GRAPH_STINFO;
+class SUMMARY_CONSTRAINT_GRAPH_CALLSITE;
+class SUMMARY_CONSTRAINT_GRAPH_MODRANGE;
 
 class IPL_SUMMARY_PTRS
 {
@@ -131,6 +139,10 @@ SUMMARY_GLOBAL*
 IPA_get_global_file_array (const IP_FILE_HDR& hdr, INT32& size);
 SUMMARY_STRUCT_ACCESS*
 IPA_get_struct_access_file_array (const IP_FILE_HDR& hdr, INT32& size);
+#ifdef KEY
+SUMMARY_TY_INFO*
+IPA_get_ty_info_file_array (const IP_FILE_HDR& hdr, INT32& size);
+#endif
 
 
 // ---------------------------------------------------------------
@@ -175,8 +187,27 @@ SUMMARY_FORMAL*
 IPA_get_formal_file_array (const IP_FILE_HDR& hdr, INT32& size);
 SUMMARY_ACTUAL* 
 IPA_get_actual_file_array (const IP_FILE_HDR& hdr, INT32& size);
+SUMMARY_CALLSITE* 
+IPA_get_callsite_file_array (const IP_FILE_HDR& hdr, INT32& size); 
 SUMMARY_STRUCT_ACCESS*
 IPA_get_struct_access_file_array (const IP_FILE_HDR& hdr, INT32& size);
+#ifdef KEY
+SUMMARY_TY_INFO*
+IPA_get_ty_info_file_array (const IP_FILE_HDR& hdr, INT32& size);
+#endif
+SUMMARY_CONSTRAINT_GRAPH_NODE *
+IPA_get_constraint_graph_nodes_array (const IP_FILE_HDR& hdr, INT32& size);
+SUMMARY_CONSTRAINT_GRAPH_EDGE *
+IPA_get_constraint_graph_edges_array (const IP_FILE_HDR& hdr, INT32& size);
+SUMMARY_CONSTRAINT_GRAPH_STINFO *
+IPA_get_constraint_graph_stinfos_array (const IP_FILE_HDR& hdr, INT32& size);
+SUMMARY_CONSTRAINT_GRAPH_CALLSITE *
+IPA_get_constraint_graph_callsites_array (const IP_FILE_HDR& hdr, INT32& size);
+UINT32 *
+IPA_get_constraint_graph_node_ids_array (const IP_FILE_HDR& hdr, INT32& size);
+SUMMARY_CONSTRAINT_GRAPH_MODRANGE *
+IPA_get_constraint_graph_modranges_array (const IP_FILE_HDR& hdr, INT32& size);
+
 
 // ----------------------------------------------------------------
 // Access to the following SUMMARY arrays will go through the file

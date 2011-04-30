@@ -53,7 +53,7 @@ LCDEFS += -DI90
 # we add -DFTN90_IO for compiling using the new fortran 90 I/O library
 LCDEFS += -DFTN90_IO
 
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 CFILES_FOOBAR = \
 	pow_ci.c \
 	pow_di.c \
@@ -652,6 +652,10 @@ endif
 #
 #endif
 
+ifneq ($(BUILD_OS),DARWIN)
+# Their underscoring collides with that of .c files, it's hard to see what
+# the underscoring is supposed to match, and it probably wouldn't match on
+# DARWIN anyway
 CAPFFILES += \
 	c_cosf.F \
 	c_divf.F \
@@ -672,6 +676,7 @@ CAPFFILES += \
 	z_logf.F \
 	z_sinf.F \
 	z_sqrtf.F
+endif
 
 
 HFILES	+= \

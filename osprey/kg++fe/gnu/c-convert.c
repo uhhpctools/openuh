@@ -90,12 +90,6 @@ convert (type, expr)
     }
   if (code == VOID_TYPE)
     return build1 (CONVERT_EXPR, type, e);
-#if 0
-  /* This is incorrect.  A truncation can't be stripped this way.
-     Extensions will be stripped by the use of get_unwidened.  */
-  if (TREE_CODE (expr) == NOP_EXPR)
-    return convert (type, TREE_OPERAND (expr, 0));
-#endif
   if (code == INTEGER_TYPE || code == ENUMERAL_TYPE)
     return fold (convert_to_integer (type, e));
   if (code == BOOLEAN_TYPE)

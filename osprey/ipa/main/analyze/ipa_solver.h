@@ -98,7 +98,7 @@ extern void Reverse_Graph ( GRAPH *g );
 extern void Trace_Callgraph (
   IPA_CALL_GRAPH &cg,		// Callgraph to trace
   DF_DIRECTION direction,	// Direction to use
-  char *msg			// Message to add to heading
+  const char *msg		// Message to add to heading
 );
 
 // ====================================================================

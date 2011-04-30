@@ -32,7 +32,7 @@
 #include "opt_cfg.h"          //CFG
 #include "opt_sym.h"          //OPT_STAB
 #include "opt_htable.h"       //CODEREP && STMTREP
-#include "error.h"            //Is_True DevWarn
+#include "errors.h"            //Is_True DevWarn
 #include "defs.h"             //IDTYPE
 #include "vector"             //Vector
 
@@ -74,6 +74,7 @@ private:
   CODEREP*  Find_by_id(CODEREP *cr, IDTYPE id);
   void      Print_wo_loc(FILE *fp=stderr);
   BOOL      Write_once_check(IDTYPE id, BB_LIST_CONTAINER *bb_queue);
+  void      Canon_cr();
 
 public:
   WOVP(CFG *cfg, OPT_STAB *opt_stab)

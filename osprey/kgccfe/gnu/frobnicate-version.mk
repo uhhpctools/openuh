@@ -22,6 +22,12 @@
 # Temple Place - Suite 330, Boston MA 02111-1307, USA.
 
 hg_root := $(shell hg root 2>/dev/null || echo unknown)
+ifeq ($(BUILD_OS), LINUX)
+hg_hostname := $(shell hostname -f)
+else
+# -f not accepted on cygwin
+hg_hostname := $(shell hostname)
+endif
 
 version-hg.c: version.c
 	@echo 'GEN    $@'
@@ -31,7 +37,7 @@ version-hg.c: version.c
 	@echo >> $@
 	@echo 'const char *const cset_id = HG_CSET_ID;' >> $@
 	@echo 'const char *const build_root = "$(hg_root)";' >> $@
-	@echo 'const char *const build_host = "$(shell hostname -f)";' >> $@
+	@echo 'const char *const build_host = "$(hg_hostname)";' >> $@
 	@echo 'const char *const build_user = "$(shell id -un)";' >> $@
 	@echo 'const char *const build_date = "$(shell date +'%Y-%m-%d %H:%M:%S %z')";' >> $@
 

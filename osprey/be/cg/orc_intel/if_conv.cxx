@@ -1306,6 +1306,9 @@ IF_CONVERTOR::If_Conversion_Init(REGION *region,
 //                   IF_THEN_TYPE: head -- then -- tail
 //                   IF_THEN_ELSE_TYPE: head - then - else - tail
 //                                  or  head - else - then - tail
+//     - forced : default is FALSE
+//                If TRUE a more aggresive pattern matching is used.
+//                This should be only used during forced/relaxed if conversion
 // Output : 
 //     the type of the control flow pattern of the head area and its successors
 // Description :
@@ -1318,7 +1321,8 @@ IF_CONVERTOR::If_Conversion_Init(REGION *region,
 
 CFLOW_TYPE 
 IF_CONVERTOR::Detect_Type(IF_CONV_AREA* area, 
-                          AREA_CONTAINER& cand_list)
+                          AREA_CONTAINER& cand_list,
+                          BOOL forced)
 {
     if (area -> Area_Type() == UNSUITABLE
         || area -> Area_Type() == DOWNWARD_UNSUITABLE)
@@ -1410,6 +1414,67 @@ IF_CONVERTOR::Detect_Type(IF_CONV_AREA* area,
         }
     }
 
+    if (forced && area -> Succ_Num() == 3) {
+      IF_CONV_AREA *area1, *area2, *area3;
+      IF_CONV_AREA *succ1, *succ2, *common_succ;
+      iter = succs.begin();
+      area1 = *iter;
+      iter++;
+      area2 = *iter;
+      iter++;
+      area3 = *iter;
+
+      if (   area1->Pred_Num() >= 3
+          && area2->Pred_Num() == 1
+          && area3->Pred_Num() == 1) 
+      {
+        // area1 might be common successor
+        common_succ = area1;
+        succ1       = area2;
+        succ2       = area3;
+      }
+      else if (   area1->Pred_Num() == 1
+               && area2->Pred_Num() >= 3
+               && area3->Pred_Num() == 1) 
+      {
+        // area2 might be common successor
+        common_succ = area2;
+        succ1       = area1;
+        succ2       = area3;
+      }
+      else if (   area1->Pred_Num() == 1
+               && area2->Pred_Num() == 1
+               && area3->Pred_Num() >= 3) 
+      {
+        // area3 might be common successor
+        common_succ = area3;
+        succ1       = area1;
+        succ2       = area2;
+      }
+      else {
+        return NO_TYPE;
+      }
+      
+      if (Find_Area (succ1->Succ_Set(), common_succ) 
+          == succ1->Succ_Set().end())
+      {
+        return NO_TYPE;
+      }
+
+      if (Find_Area (succ2->Succ_Set(), common_succ)
+          == succ2->Succ_Set().end())
+      {
+        return NO_TYPE;
+      }
+      
+      cand_list.push_back(area);
+      cand_list.push_back(succ1);
+      cand_list.push_back(succ2);
+      cand_list.push_back(common_succ);
+      
+      return IF_THEN_ELSE_TYPE;
+    }
+
     return NO_TYPE;
 }
 
@@ -1430,8 +1495,9 @@ IF_CONVERTOR::Detect_Type(IF_CONV_AREA* area,
 //*****************************************************************************
 
 BOOL
-IF_CONVERTOR::Worth_If_Convert(AREA_CONTAINER& cand_list, 
-                               CFLOW_TYPE type)
+IF_CONVERTOR::Worth_If_Convert (AREA_CONTAINER& cand_list, 
+                                CFLOW_TYPE type,
+                                BOOL forced)
 {
     if ( Get_Trace(TP_A_IFCONV, TT_IF_CONV_DETAILED))
     {
@@ -1579,13 +1645,19 @@ IF_CONVERTOR::Worth_If_Convert(AREA_CONTAINER& cand_list,
     // decide if it is worth if-convertion
     // here, if the execution time of predicated code is less then the 
     // execution time of unpredicated code, we think it should be if-converted
-    if (IPFEC_Force_If_Conv || unpredicated_time > predicated_time) 
+    if (unpredicated_time > predicated_time) {
+      return TRUE;
+    } 
+    else if (forced &&
+             ((predicated_time*100) < (_loop_length*IF_CONV_BIASE_THRESHOLD))) 
     {
-        return true;
-    } else {
-        return false;
+      return TRUE;
+    }
+    else {
+      return FALSE;
     }
 }
+
 
 //*****************************************************************************
 // Function : Reduce_By_Type 
@@ -1770,7 +1842,7 @@ IF_CONVERTOR::Reduce_By_Type(AREA_CONTAINER& cand_list,
 //*****************************************************************************
 
 void
-IF_CONVERTOR::Select_Candidates(AREA_CONTAINER& area_list) 
+IF_CONVERTOR::Select_Candidates (AREA_CONTAINER& area_list, BOOL forced) 
 { 
     IF_CONV_ALLOC temp_alloc(&_m);
 
@@ -1802,7 +1874,7 @@ IF_CONVERTOR::Select_Candidates(AREA_CONTAINER& area_list)
             
             // first, we try to find out an if-conversion area, whose head is 
 			// the head of area, according to the control flow
-            CFLOW_TYPE type = Detect_Type (area, cand_list);
+            CFLOW_TYPE type = Detect_Type (area, cand_list, forced);
             if (type == NO_TYPE)  continue;
 
             if ( Get_Trace(TP_A_IFCONV, TT_IF_CONV_SUMMARY))
@@ -1819,9 +1891,10 @@ IF_CONVERTOR::Select_Candidates(AREA_CONTAINER& area_list)
             }
             
             // profitability checking
-            if ( type == SERIAL_TYPE || Worth_If_Convert(cand_list, type))
+            if (type == SERIAL_TYPE || 
+                Worth_If_Convert (cand_list, type, forced))
             {    
-                reduced = TRUE;
+              reduced = TRUE;
             }
             else {
                 continue;
@@ -4206,10 +4279,11 @@ IF_CONVERTOR::Merge_Blocks(BB *bb_first,
 // 
 //*****************************************************************************
 
-void
+BOOL
 IF_CONVERTOR::Convert_Candidates(AREA_CONTAINER&  areas)
 {    
     AREA_CONTAINER:: iterator iter;
+    BOOL converted = FALSE;
     for ( iter = areas.begin(); 
     iter != areas.end(); 
     iter++) 
@@ -4222,6 +4296,7 @@ IF_CONVERTOR::Convert_Candidates(AREA_CONTAINER&  areas)
         if ( area -> Conv_Type() != FULLY_IF_CONV)
             continue;
 
+        converted = TRUE;
         char if_conversion_key[6] = "";
         char input_string[100] = "";
         char output_string[60] = "";
@@ -4291,6 +4366,7 @@ IF_CONVERTOR::Convert_Candidates(AREA_CONTAINER&  areas)
             area -> Print_IR(TFile);
         }
     }
+    return converted;
 }
 
 //*****************************************************************************
@@ -4327,6 +4403,7 @@ IF_CONVERTOR::IF_CONVERTOR(REGION_TREE *region_tree)
         draw_global_cfg();
     }
 
+    BOOL changed = TRUE;
     for (INNERMOST_REGION_FIRST_ITER iter(region_tree);
          iter != 0; 
          ++iter)
@@ -4354,7 +4431,10 @@ IF_CONVERTOR::IF_CONVERTOR(REGION_TREE *region_tree)
         if (region->Region_Type () == IMPROPER) 
             continue;
 
-        Calculate_Dominators();
+        // Calculate_Dominators is time comsumption, only recalculate
+        // when the cfg changed
+        if( changed )
+            Calculate_Dominators();
   
         // do something to initialize 
         IF_CONV_ALLOC temp_alloc(&_m);
@@ -4392,7 +4472,7 @@ IF_CONVERTOR::IF_CONVERTOR(REGION_TREE *region_tree)
             fprintf(TFile, " \n Start to convert candidates!\n");
         }
         //convert the if-conversion candidates to predicated code
-        Convert_Candidates(areas);
+        changed = Convert_Candidates(areas);
         
         if (Get_Trace(TP_A_IFCONV, TT_IF_CONV_GRAPHIC)) 
         {
@@ -4400,9 +4480,11 @@ IF_CONVERTOR::IF_CONVERTOR(REGION_TREE *region_tree)
         }
 
         CXX_DELETE(&areas, &_m);
-        Free_Dominators_Memory();
+        if( changed )
+            Free_Dominators_Memory();
     }
-    
+    if(!changed)
+        Free_Dominators_Memory();
 
     if (Get_Trace(TP_A_IFCONV, TT_IF_CONV_GRAPHIC))
     { 
@@ -4425,6 +4507,8 @@ IF_CONVERTOR::IF_CONVERTOR()
      {
          init_op_info = hTN_MAP_Create(&(info_mem._m));
      }
+
+     _loop_length = 0;
 }
 //*****************************************************************************
 // Function : Force_If_Conversion
@@ -4487,90 +4571,134 @@ IF_CONVERTOR::Force_If_Convert(LOOP_DESCR *loop, BOOL allow_multi_bb)
     {    
         return NULL;
     }
+ 
+    // When relaxed if conversion is used, we don't blindly merge all areas to 
+    // one singel area and apply if conversion. Instead we use a similar approch 
+    // as the normal if conversion does, but the heuristics to calculate the 
+    // profitability is more relaxed because we might gain additional performance
+    // through SWP.
+    if (IPFEC_Relaxed_If_Conv) {
+      if (Get_Trace (TP_A_IFCONV, TT_IF_CONV_SUMMARY)) {
+        fprintf(TFile, " ======use relaxed_if_conv\n\n");
+      }
+      
+      // Calculate a rough estimate of the critical path of the loop 
+      INT32 loop_length1, loop_length2;
+      loop_length1 = Calculate_Loop_Critical_Length (areas[0]);
+      loop_length2 = Calculate_Loop_Cycled_Critical_Length (areas[0]);
     
-    // merge all areas
-    AREA_CONTAINER::iterator area_iter;
-    area_iter = areas.begin(); 
-    IF_CONV_AREA *head_area = *area_iter;
-    area_iter++;
-    for (; area_iter != areas.end(); 
-    area_iter++)
-    {
-        head_area -> Combine_Blocks_With(*area_iter, &_m);
-    }
-    AREA_CONTAINER  areas1(temp_alloc);
-    head_area -> Conv_Type(FULLY_IF_CONV);
-    areas1.push_back(head_area);
+      _loop_length = loop_length1 > loop_length2 ? loop_length1 : loop_length2;
 
-    BOOL can_one_bb = Can_Merge_Into_One_BB(head_area);
-    if (Get_Trace(TP_A_IFCONV, TT_IF_CONV_SUMMARY)) 
-    {
-        fprintf(TFile, " can_one_bb: %d\n", (int) can_one_bb);
+      if (Get_Trace (TP_A_IFCONV, TT_IF_CONV_DETAILED)) {
+        fprintf (TFile, 
+                 " Loop Length: %i\n",
+                 _loop_length);
+      }
+    
+      Select_Candidates (areas, /*forced=*/TRUE);
+   
+      if (Get_Trace (TP_A_IFCONV, TT_IF_CONV_DETAILED)) {
+        fprintf (TFile, " IF_CONV_AREAs after selection:\n\n");
+        Print_All_Areas (areas, TFile);
+      }
+
+      // Check if the loop has been reduced to one area.
+      // If not we will not If Convert the loop
+      if (areas.size()!=1) {
+        return NULL;
+      }
+    }
+    else {
+      // merge all areas
+      AREA_CONTAINER::iterator area_iter;
+      area_iter = areas.begin();
+      IF_CONV_AREA *head_area = *area_iter;
+      area_iter++;
+                         
+      for (; area_iter != areas.end(); area_iter++) {
+        head_area -> Combine_Blocks_With (*area_iter, &_m);
+      }
+      // We can now delete all areas except the first one,
+      // because all the other areas have been merged into
+      // the first area
+      areas.erase (areas.begin()+1,areas.end());
+      head_area -> Conv_Type(FULLY_IF_CONV);                                                     
+    }
+
+    BOOL can_one_bb = Can_Merge_Into_One_BB (*(areas.begin()));
+    if (Get_Trace(TP_A_IFCONV, TT_IF_CONV_SUMMARY)) {
+        fprintf (TFile, " can_one_bb: %d\n", (int) can_one_bb);
     } 
 
     // Do the if-conversion
-    if (can_one_bb || allow_multi_bb) 
-    {
-        Convert_Candidates(areas1);
-        // Update the loop descriptor
-        BB* fall_thru_bb = NULL;
-        BB* bb;
-        IF_CONV_AREA* area = *(areas1.begin());
-        BB_CONTAINER del_blks(&_m);
-        BB_CONTAINER::iterator bb_iter;
-        for (bb_iter = area -> Blocks().begin();
-             bb_iter != area -> Blocks().end();
-             bb_iter ++)
-        {
+    if (can_one_bb || allow_multi_bb) {
+      if (Get_Trace (TP_A_IFCONV, TT_IF_CONV_SUMMARY)) {
+        fprintf (TFile, " \n Start to convert candidates!\n");
+      }
+      Convert_Candidates(areas);
+      
+      // Update the loop descriptor
+      BB* fall_thru_bb = NULL;
+      BB* bb;
+      IF_CONV_AREA* area = *(areas.begin());
+      BB_CONTAINER del_blks(&_m);
+      BB_CONTAINER::iterator bb_iter;
+      for (bb_iter  = area -> Blocks().begin();
+           bb_iter != area -> Blocks().end();
+           bb_iter++)
+      {
+        bb = *bb_iter;
+        REGIONAL_CFG_NODE* node = Regional_Cfg_Node(bb);
+        REGION* home_region = node ? node -> Home_Region() : NULL;
+        // home_region == NULL means the bb has been deleted
+        if (!home_region) {
+          // get rid of all the old blocks from the loop descriptors
+          // Due to some bugs, when BB set in LOOP_DESCR is changed,
+          // the "delete" operations should be performed after "add"
+          // is done.
+          // LOOP_DESCR_Delete_BB(loop, bb);
+          del_blks.push_back (bb);
+        } 
+        else if (home_region != region) {
+          FmtAssert (fall_thru_bb == NULL, 
+                     (" can only have one fall_thru_bb\n"));
+          fall_thru_bb = bb;
+          // Add the fall_thru_block to the loop descriptors 
+          // for all the enclosing loops
+          LOOP_DESCR *enc_loop = LOOP_DESCR_Next_Enclosing_Loop(loop);
+          if (enc_loop) {
+            LOOP_DESCR_Add_BB (enc_loop, fall_thru_bb);
+          }
+        }
+      }
+      
+      for (BB_CONTAINER::iterator iter = del_blks.begin();
+	         iter != del_blks.end (); 
+           iter++) 
+      {
+        LOOP_DESCR_Delete_BB (loop, *iter);
+	    }
 
-            bb = *bb_iter;
-            REGIONAL_CFG_NODE* node = Regional_Cfg_Node(bb);
-            REGION* home_region = node ? node -> Home_Region() : NULL;
-            // home_region == NULL means the bb has been deleted
-            if (!home_region)
-            {
-                // get rid of all the old blocks from the loop descriptors
-                // Due to some bugs, when BB set in LOOP_DESCR is changed, 
-		// the "delete" operations should be performed after "add" 
-		// is done. 
-		// LOOP_DESCR_Delete_BB(loop, bb);
-                del_blks.push_back (bb);
-            } else if (home_region != region)
-            {
-                FmtAssert(fall_thru_bb == NULL, 
-                    (" can only have one fall_thru_bb\n"));
-                fall_thru_bb = bb;
-                // Add the fall_thru_block to the loop descriptors 
-                // for all the enclosing loops
-                LOOP_DESCR *enc_loop = LOOP_DESCR_Next_Enclosing_Loop(loop);
-                if (enc_loop) 
-                {
-                    LOOP_DESCR_Add_BB(enc_loop, fall_thru_bb);
-                }
-            }
+      BB* single_bb = NULL;
+      if (can_one_bb) {
+        FmtAssert (areas.size() ==1, (" loop should be shrinked to one bb"));
+        IF_CONV_AREA* area = *(areas.begin());
+        if (BB_SET_Size(LOOP_DESCR_bbset(loop)) == 1) {
+          single_bb = area -> Entry_BB();
         }
-        for (BB_CONTAINER::iterator iter = del_blks.begin();
-	     iter != del_blks.end (); iter++) {
-           LOOP_DESCR_Delete_BB(loop, *iter);
-	}
-
-        BB* single_bb = NULL;
-        if (can_one_bb) 
-        {
-            FmtAssert( areas1.size() ==1, (" loop should be shrinked to one bb"));
-            IF_CONV_AREA* area = *(areas1.begin());
-            if (BB_SET_Size(LOOP_DESCR_bbset(loop)) == 1)
-              single_bb = area -> Entry_BB();
-        }
-        if (Get_Trace(TP_A_IFCONV, TT_IF_CONV_GRAPHIC)) 
-        {
-            draw_regional_cfg(region);
-        }
-        return single_bb;
+      }
+      
+      if (Get_Trace (TP_A_IFCONV, TT_IF_CONV_GRAPHIC)) {
+        draw_regional_cfg(region);
+      }
+      
+      return single_bb;
     }
+    
     return NULL;
-   
 }
+
+
 BOOL
 IF_CONVERTOR::Can_Merge_Into_One_Area(AREA_CONTAINER& areas)
 {
@@ -4727,6 +4855,95 @@ IF_CONVERTOR::Print_All_Areas(AREA_CONTAINER& areas, FILE* file)
         area -> Print(TFile);
     }
 }
+
+
+// This function calculates a rough estimate of the loop critical path
+INT32
+IF_CONVERTOR::Calculate_Loop_Critical_Length (IF_CONV_AREA* area) {
+  INT32 critical_length = 0;
+  INT32 length1, length2;
+  AREA_CONTAINER::iterator area_succs;
+  
+  FmtAssert(area!=NULL, ("Parameter area is NULL pointer!"));
+
+  critical_length += area->Critical_Len ();
+
+  area_succs = area->Succ_Set().begin();
+
+  switch (area->Succ_Num ()) {
+    case 0: break;
+
+    case 1: critical_length += 
+              Calculate_Loop_Critical_Length (*area_succs);
+            break;
+
+    case 2: length1 = 
+              Calculate_Loop_Critical_Length (*area_succs);
+            area_succs++;
+            length2 = 
+              Calculate_Loop_Critical_Length (*area_succs);
+
+            if (length1 > length2 ) {
+              critical_length += length1;
+            }
+            else {
+              critical_length += length2;
+            }
+            break;
+
+    default: FmtAssert (0, ("Unexpected number of successors!"));
+             break;
+    
+  }
+
+  return critical_length;
+}
+
+
+// This function calculates a rough estimate of the loop critical path under
+// the assumption that one instruction takes one cycle
+INT32
+IF_CONVERTOR::Calculate_Loop_Cycled_Critical_Length (IF_CONV_AREA* area) {
+  INT32 cycled_critical_length = 0;
+  INT32 length1, length2;
+  AREA_CONTAINER::iterator area_succs;
+  
+  FmtAssert(area!=NULL, ("Parameter area is NULL pointer!"));
+
+  cycled_critical_length += area->Cycled_Critical_Len ();
+
+  area_succs = area->Succ_Set().begin();
+
+  switch (area->Succ_Num ()) {
+    case 0: break;
+
+    case 1: cycled_critical_length += 
+              Calculate_Loop_Cycled_Critical_Length (*area_succs);
+            break;
+
+    case 2: length1 = 
+              Calculate_Loop_Cycled_Critical_Length (*area_succs);
+            area_succs++;
+            length2 = 
+              Calculate_Loop_Cycled_Critical_Length (*area_succs);
+
+            if (length1 > length2 ) {
+              cycled_critical_length += length1;
+            }
+            else {
+              cycled_critical_length += length2;
+            }
+            break;
+
+    default: FmtAssert (0, ("Unexpected number of successors!"));
+             break;
+    
+  }
+
+  return cycled_critical_length;
+}
+
+
 void     
 IF_CONV_AREA::Print(FILE* file)
 {

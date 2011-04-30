@@ -3194,9 +3194,6 @@ static int pre_parse_format(int	const_idx,
    the_func    = &emit_format_msg;
 
 /* bhj wants this to hang around please */
-# if 0
-printf("format -->%s<--\n",(char *)&CN_CONST(const_idx));
-# endif
 
    new_fmt = _fmt_parse(&the_func,
                         (char *)&CN_CONST(const_idx) + lbl_name_len,
@@ -3214,9 +3211,6 @@ printf("format -->%s<--\n",(char *)&CN_CONST(const_idx));
 
    if (new_fmt != NULL) {
 
-# if 0
-      pre_parse_idx = translate_pp_format((fmt_type *)new_fmt, format_len);
-# endif
 
 # if defined(_HOST32) && defined(_TARGET64)
       CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
@@ -3293,7 +3287,7 @@ static int create_format_tmp (int      const_idx)
    attr_idx                     = gen_compiler_tmp(stmt_start_line,
                                                    stmt_start_col,
                                                    Shared, TRUE);
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    ATD_TYPE_IDX(attr_idx)	= Integer_8;
 # else
    ATD_TYPE_IDX(attr_idx)	= CG_INTEGER_DEFAULT_TYPE;
@@ -3307,7 +3301,7 @@ static int create_format_tmp (int      const_idx)
    if (TYP_TYPE(CN_TYPE_IDX(const_idx)) == Character) {
       num_els = 1L + 
            TARGET_BYTES_TO_WORDS(CN_INT_TO_C(TYP_IDX(CN_TYPE_IDX(const_idx))));
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifndef _WHIRL_HOST64_TARGET64
       num_els = (num_els + 1) / 2;
 # endif
@@ -3325,7 +3319,7 @@ static int create_format_tmp (int      const_idx)
 
       num_els = TARGET_BITS_TO_WORDS((long)TYP_BIT_LEN(CN_TYPE_IDX(const_idx)));
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # ifndef _WHIRL_HOST64_TARGET64
       num_els = (num_els + 1) / 2;
 # endif
@@ -3413,139 +3407,3 @@ static int create_format_tmp (int      const_idx)
    return(attr_idx);
 
 }  /* create_format_tmp */
-# if 0
-# if defined(_HOST32) && defined(_TARGET64)
-
-/******************************************************************************\
-|*									      *|
-|* Description:								      *|
-|*	<description>							      *|
-|*									      *|
-|* Input parameters:							      *|
-|*	NONE								      *|
-|*									      *|
-|* Output parameters:							      *|
-|*	NONE								      *|
-|*									      *|
-|* Returns:								      *|
-|*	NOTHING								      *|
-|*									      *|
-\******************************************************************************/
-
-static int translate_pp_format(fmt_type		*old_const,
-                               int		 num_host_wds)
-
-{
-   int		cn_idx;
-   int		cn_offset;
-   int		i;
-   int		new_idx;
-   int		new_revert_idx;
-   int		num_bits;
-   int		num_elements;
-   int		revert_idx;
-   int		revert_val;
-   int		str_cnt;
-   int		type_idx;
-
-   TRACE (Func_Entry, "translate_pp_format", NULL);
-
-   num_elements = num_host_wds/FMT_ENTRY_WORD_SIZE;
-
-   /* since the size of the new constant is dependent on the number */
-   /* of character strings, I will keep it as the original size and */
-   /* shrink it when I'm done. The parsfmt routine will stick char  */
-   /* strings into consecutive structures which are 20 bytes long   */
-   /* on the sun. The structure is 16 bytes on crays so I can't     */
-   /* calculate the new size.                                       */
-
-   num_bits = num_host_wds * HOST_BITS_PER_WORD;
-
-   /* get constant */
-
-   CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
-   TYP_TYPE(TYP_WORK_IDX)	= Typeless;
-   TYP_BIT_LEN(TYP_WORK_IDX)	= num_bits;
-   type_idx			= ntr_type_tbl();
-
-   cn_idx = ntr_const_tbl(type_idx, FALSE, NULL);
-
-# ifdef _DEBUG
-   if (old_const[num_elements-1].op_code != REVERT_OP) {
-      PRINTMSG(stmt_start_line, 1095, Internal, stmt_start_col);
-   }
-# endif
-
-   revert_val = old_const[num_elements-1].rep_count;
-   revert_idx = revert_val + (num_elements - 1);
-   
-   /* now fill in the constant */
-
-   cn_offset = 0;
-
-   for (i = 0; i < num_elements; i++) {
-
-      new_idx = cn_offset/2;
-
-      if (i == revert_idx) {
-         new_revert_idx = new_idx;
-      }
-
-      CP_CONSTANT(CN_POOL_IDX(cn_idx) + cn_offset) =   /* BRIANJ */
-             ((long_type)(old_const[i].op_code))       << 57  |
-             ((long_type)(old_const[i].reserved1))     << 54  |
-             ((long_type)(old_const[i].exponent))      << 48  |
-             ((long_type)(old_const[i].decimal_field)) << 24  |
-             old_const[i].field_width;
-
-      cn_offset++;
-
-      CP_CONSTANT(CN_POOL_IDX(cn_idx) + cn_offset) =   /* BRIANJ */
-             ((long_type)(old_const[i].rgcdedf))   << 63  |
-             ((long_type)(old_const[i].reserved2)) << 48  |
-             ((long_type)(old_const[i].offset))    << 32;
-
-      if (i == num_elements - 1) {
-         CP_CONSTANT(CN_POOL_IDX(cn_idx) + cn_offset) |= /* BRIANJ */
-                ((new_revert_idx - new_idx) & 037777777777);
-      }
-      else {
-         CP_CONSTANT(CN_POOL_IDX(cn_idx) + cn_offset) |= /* BRIANJ */
-                (old_const[i].rep_count & 037777777777);
-      }
-
-      cn_offset++;
-
-      if (old_const[i].op_code == STRING_ED) {
-
-         /* the string is in the next node */
-         str_cnt = old_const[i].field_width;
-
-         strncpy((char *)&(CP_CONSTANT(CN_POOL_IDX(cn_idx) + cn_offset)),
-                 (char *)&(old_const[i+1]),
-                 str_cnt);
-
-
-         /* now calculate where we are */
-         cn_offset += ((str_cnt + 15) / 16) * 2;
-         i += (str_cnt + FMT_ENTRY_BYTE_SIZE - 1) / FMT_ENTRY_BYTE_SIZE;
-      }
-   }
-
-   /* now calculate the new length */
-   num_bits = cn_offset * TARGET_BITS_PER_WORD;
-
-   CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
-   TYP_TYPE(TYP_WORK_IDX)	= Typeless;
-   TYP_BIT_LEN(TYP_WORK_IDX)	= num_bits;
-   type_idx			= ntr_type_tbl();
-
-   CN_TYPE_IDX(cn_idx)		= type_idx;
-
-   TRACE (Func_Exit, "translate_pp_format", NULL);
-
-   return(cn_idx);
-
-}  /* translate_pp_format */
-# endif
-# endif

@@ -1035,7 +1035,15 @@ _F90_ALLOCATE_B(long size,
 	return (base);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+void *
+_F90_ALLOCATE(long size, int assoc, int flags, int *statvar, void *oldval) {
+  return _F90_ALLOCATE_B(size, assoc, flags, statvar, oldval);
+}
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(_F90_ALLOCATE_B, _F90_ALLOCATE);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #endif	/* __mips */
 #ifdef _DEBUG

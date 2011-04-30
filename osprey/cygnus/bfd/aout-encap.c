@@ -20,11 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* THIS MODULE IS NOT FINISHED.  IT PROBABLY DOESN'T EVEN COMPILE.  */
 
-#if 0
-#define	TARGET_PAGE_SIZE	4096
-#define	SEGMENT_SIZE	TARGET_PAGE_SIZE
-#define TEXT_START_ADDR 0
-#endif
 
 #include "bfd.h"
 #include "sysdep.h"

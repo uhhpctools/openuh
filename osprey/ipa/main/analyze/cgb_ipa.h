@@ -45,7 +45,7 @@ class IPA_CALL_GRAPH;
 extern void CGB_IPA_Initialize(IPA_CALL_GRAPH* ipa_cg);
 extern void CGB_IPA_Terminate();
 
-extern void s_cg_ipa_debug(char init_buffer[]);
+extern void s_cg_ipa_debug(const char init_buffer[]);
 
 #endif /* cgb_ipl_INCLUDED */
 

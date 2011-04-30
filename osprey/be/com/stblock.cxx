@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -40,10 +44,10 @@
 /* ====================================================================
  * ====================================================================
  *
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/stblock.cxx,v $
+ * $Revision: 1.10 $
+ * $Date: 05/12/05 08:59:14-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.stblock.cxx $
  *
  * Revision history:
  *  11-Nov-94 - Original Version
@@ -60,10 +64,17 @@
 #include "be_com_pch.h"
 #endif /* USE_PCH */
 #pragma hdrstop
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <cmplrs/rcodes.h>
+#ifndef __MINGW32__
 #include <sys/resource.h>
+#endif /* __MINGW32__ */
 #include "defs.h"
+#include "config_asm.h"
 #include "erglob.h"
 #include "erbe.h"
 #include "config.h"
@@ -167,7 +178,7 @@ Adjusted_Alignment(ST *sym)
     */
     if( ST_sclass(sym) == SCLASS_AUTO &&
 	Align_Double ){
-      if( ( TY_mtype(ty) == MTYPE_FQ ||
+      if( ( TY_mtype(ty) == MTYPE_FQ || TY_mtype(ty) == MTYPE_F10 ||
 	    TY_mtype(ty) == MTYPE_F8 ) &&
 	  ( align < 8 ) ){
 	Is_True( Stack_Alignment() >= 8, ("stack is not double word aligned") );
@@ -204,7 +215,14 @@ Adjusted_Alignment(ST *sym)
     *  let string fall into their natural alignment class
     *	 ex	size (1 -> 1), (2 ->2), (3,4 -> 4) , etc
     */
+#ifdef KEY
+    /* Under -LANG:global_asm, the ASMs may have .section attributes,
+     * so the compiler cannot be sure about offset/alignment of
+     * compiler allocated objects, so use minimum alignment (bug 14506) */
+    if ( /* Optimize_Space==FALSE */ LANG_Enable_Global_Asm == FALSE )
+#else
     if ( /* Optimize_Space==FALSE */ TRUE )
+#endif
     {
       INT64 size = ST_size(sym);
 
@@ -260,6 +278,14 @@ INT32 ST_alignment(ST *sym)
       basealign=	Adjusted_Alignment(base);
 
       Is_True((basealign>=align), ("sym has align > than base"));
+
+#ifdef TARG_NVISA
+      // When we emit ptx we ignore the allocation offset
+      // and emit each variable separately, then let OCG 
+      // assign addresses.  So it is not safe to change alignment
+      // based on the offset and segment.
+      return align;
+#endif
 
       while (basealign > align)
       {
@@ -336,19 +362,6 @@ Create_And_Set_ST_Base(ST *blk1, ST *blk2, STACK_DIR dir)
 {
   ST *base;
   ST *blk1_base = Base_Symbol(blk1);
-#if 0
-  Is_True(ST_sclass(blk1) != SCLASS_UNKNOWN &&
-	  ST_sclass(blk2) != SCLASS_UNKNOWN,
-	  ("Block_Merge: Invalid SCLASS %d, %d",
-	   ST_sclass(blk1), ST_sclass(blk2)));
-
-  Is_True(ST_sclass(blk1) == ST_sclass(blk2),
-	  ("Block_Merge: Different SCLASS %d, %d",
-	   ST_sclass(blk1), ST_sclass(blk2)));
-
-  FmtAssert(Has_No_Base_Block(blk2),
-	    ("Block_Merge: ST_base of blk2 is already initialized"));
-#endif
   if (ST_class(blk1_base) != CLASS_BLOCK) {
       base = New_ST_Block (Save_Str2(ST_name(blk1_base),".BLOCK"), 
 	Is_Global_Symbol(blk1_base), 
@@ -475,7 +488,9 @@ Create_Slink_Symbol (void)
 struct is_slink_sym
 {
     BOOL operator () (UINT32, const ST *st) const {
-	return (strncmp (ST_name (st), "__slink_sym", 11) == 0);
+	return (strncmp (ST_name (st), 
+			 Temp_Symbol_Prefix "__slink_sym", 
+			 sizeof(Temp_Symbol_Prefix "__slink_sym") - 1 ) == 0);
     }
 };
 
@@ -582,6 +597,68 @@ BOOL ST_is_uplevelTemp(const ST *st)
 
   return FALSE;
 }
+#ifdef KEY // for supporting label being jumped to from a nested function
+	   // function containing a label being jumped to from a nested 
+	   // function needs to have save locations for its FP and SP
+
+ST *
+Create_FPSave_Symbol (void)
+{
+  return Gen_Temp_Symbol(MTYPE_To_TY(Pointer_type), "__fpsave_sym");
+}
+
+struct is_fpsave_sym
+{
+    BOOL operator () (UINT32, const ST *st) const {
+	return (strncmp (ST_name (st), 
+			 Temp_Symbol_Prefix "__fpsave_sym", 
+			 sizeof(Temp_Symbol_Prefix "__fpsave_sym") - 1) == 0);
+    }
+};
+
+ST *
+Find_FPSave_Symbol (SYMTAB_IDX stab)
+{
+    if (!PU_has_nonlocal_goto_label(Get_Scope_PU (stab)))
+	return NULL;
+
+    ST_IDX st_idx = For_all_until (St_Table, stab, is_fpsave_sym ());
+
+    if (st_idx == 0)
+	return NULL;
+    else
+	return &St_Table[st_idx];
+} // Find_FPSave_Symbol
+
+ST *
+Create_SPSave_Symbol (void)
+{
+  return Gen_Temp_Symbol(MTYPE_To_TY(Pointer_type), "__spsave_sym");
+}
+
+struct is_spsave_sym
+{
+    BOOL operator () (UINT32, const ST *st) const {
+	return (strncmp (ST_name (st), 
+			 Temp_Symbol_Prefix "__spsave_sym",
+			 sizeof(Temp_Symbol_Prefix "__spsave_sym") - 1 ) == 0);
+    }
+};
+
+ST *
+Find_SPSave_Symbol (SYMTAB_IDX stab)
+{
+    if (!PU_has_nonlocal_goto_label(Get_Scope_PU (stab)))
+	return NULL;
+
+    ST_IDX st_idx = For_all_until (St_Table, stab, is_spsave_sym ());
+
+    if (st_idx == 0)
+	return NULL;
+    else
+	return &St_Table[st_idx];
+} // Find_SPSave_Symbol
+#endif
 
 
 /* ====================================================================
@@ -616,6 +693,8 @@ Base_Symbol_And_Offset_For_Addressing (
   /* 3. For weak symbol, we cannot use the base where the symbol
         is allocated since weak symbol could be defined in another file.
 	(bug#3052)
+     4. For thread-local symbols, don't use the base where the symbol is
+	allocated.
    */
 #endif // KEY
 
@@ -624,9 +703,10 @@ Base_Symbol_And_Offset_For_Addressing (
 
   while( (ST_base(base) != base  ) 
 	 && (ST_sclass(base) != SCLASS_TEXT) 
-	 && !((Gen_PIC_Shared || Gen_PIC_Call_Shared) && ST_is_preemptible(base))
+	 && !((Gen_PIC_Shared || Gen_PIC_Call_Shared) && !ST_is_export_local(base))
 #ifdef KEY
 	 && !ST_is_weak_symbol(base)
+	 && !ST_is_thread_local(base)
 #endif // KEY
 	 )
   {

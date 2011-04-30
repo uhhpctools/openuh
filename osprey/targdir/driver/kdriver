@@ -1,0 +1,102 @@
+#!/bin/sh
+# 
+#  Copyright (C) 2006-2009 Tsinghua University.  All Rights Reserved.
+#
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+#
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement 
+#  or the like.  Any license provided herein, whether implied or 
+#  otherwise, applies only to this software file.  Patent licenses, if 
+#  any, provided herein do not apply to combinations of this program with 
+#  other software, or any other product whatsoever.  
+#
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+
+# This is a wraper around opencc to be compatible with gcc for:
+# ia32 native, Linux kernel build, tested version: 2.6.27
+# Useage:
+#	make CC=kopencc 
+
+ARGS=$@
+
+#optimize -O2
+OPENCC_OPTS=" -O2 "
+#Use gcc 4 front end for x86 machine
+OPENCC_OPTS=" $OPENCC_OPTS -m32 -gnu4 "
+#speculation off for kernel compilation
+#It's only for IA64. If you are compileing kernel for IA64, uncomment next line
+#OPENCC_OPTS=" $OPENCC_OPTS -Wb,-IPFEC:spec=off -IPFEC:spec=off "
+#swp off for kernel
+OPENCC_OPTS=" $OPENCC_OPTS -OPT:swp=off -OPT:Olimit=0 "
+#for debug, can use these options to show compilation process and keep inter-files
+# OPENCC_OPTS=" $OPENCC_OPTS -show -keep"
+#for kernel
+OPENCC_OPTS=" $OPENCC_OPTS -D__KERNEL__ "
+
+NEWARGS="$OPENCC_OPTS "
+
+if [ -z "$GCC" ] 
+then
+	GCC=/usr/bin/gcc
+fi
+
+for ARG in $@  
+do
+
+case $ARG in
+-D__KERNEL__ )
+	NEWARGS="$NEWARGS $KERNEL_OPTS $ARG"
+	;;
+
+-O1 | -O2 | -O3 )
+	;;
+
+-v )
+	opencc -v
+	exit 0
+	;;
+
+-help )
+	opencc -help
+	echo
+	echo kopencc: Wrapper around opencc for gcc compatibility
+	exit  $?
+	;;
+
+# ignore these gcc options
+-Wstrict-prototypes | -Wwrite-strings | -Winline | -Wno-uninitialized 	\
+| -Wno-format | -Wno-trigraphs | -Wno-unused | -nostdinc | -Wall	\
+| -fno-inline-functions | -finhibit-size-directive | -fno-exceptions 	\
+| -fno-inline | -ffloat-store | -fno-builtin | -fexceptions | -pipe 	\
+| -fomit-frame-pointer | --param | max-inline-insns=* 			\
+| -frename-registers | -falign-functions=* | -fno-strict-aliasing 	\
+| -fno-common | -ffixed-r13 | -mb-step            			\
+| -mpreferred-stack-boundary=2 | -march=* | -malign-functions=* 	\
+| -malign-jumps=* | -malign-loops=* | -gstabs				\
+| -fno-optimize-sibling-calls \
+| -mconstant-gp | -mno-mmx | -fno-asynchronous-unwind-tables \
+| -mtune=* \
+| -msoft-float | -mregparm=3 | -maccumulate-outgoing-args \
+| -dynamic-linker | -fno-delete-null-pointer-checks )
+	;;
+
+* )
+	NEWARGS="$NEWARGS $ARG"
+	;;
+esac
+
+done
+
+opencc $NEWARGS 
+
+exit $?
+

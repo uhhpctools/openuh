@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -553,6 +557,12 @@ extern BOOL SNL_Is_Non_Varying_Access_Array(ACCESS_ARRAY* aa,
                                             INT outer_depth);
 
 extern WN* SNL_Get_Inner_Snl_Loop(WN* outer, INT nloops);
+
+extern BOOL SNL_Compare_Logic(WN *bound_exp,
+                        WN *bound_var,
+                        WN *loop,
+                        WN *stmt,
+                        BOOL is_first);
 
 extern BOOL SNL_Is_Invariant(DOLOOP_STACK *stack,
                         INT d,

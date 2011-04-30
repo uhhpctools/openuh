@@ -396,17 +396,8 @@ tail_recurse:			/* :::::::::::::::::::: */
 	  || ((ffedata_storage_ != NULL)
 	      && (ffestorag_init (ffedata_storage_) != NULL)))
 	{
-#if 0
-	  ffebad_start (FFEBAD_DATA_REINIT);
-	  ffest_ffebad_here_current_stmt (0);
-	  ffebad_string (ffesymbol_text (ffedata_symbol_));
-	  ffebad_finish ();
-	  ffedata_reported_error_ = TRUE;
-	  return FALSE;
-#else
 	  ffedata_reinit_ = TRUE;
 	  return TRUE;
-#endif
 	}
       ffedata_basictype_ = ffesymbol_basictype (ffedata_symbol_);
       ffedata_kindtype_ = ffesymbol_kindtype (ffedata_symbol_);
@@ -455,17 +446,8 @@ tail_recurse:			/* :::::::::::::::::::: */
 	  || ((ffedata_storage_ != NULL)
 	      && (ffestorag_init (ffedata_storage_) != NULL)))
 	{
-#if 0
-	  ffebad_start (FFEBAD_DATA_REINIT);
-	  ffest_ffebad_here_current_stmt (0);
-	  ffebad_string (ffesymbol_text (ffedata_symbol_));
-	  ffebad_finish ();
-	  ffedata_reported_error_ = TRUE;
-	  return FALSE;
-#else
 	  ffedata_reinit_ = TRUE;
 	  return TRUE;
-#endif
 	}
       ffedata_basictype_ = ffesymbol_basictype (ffedata_symbol_);
       ffedata_kindtype_ = ffesymbol_kindtype (ffedata_symbol_);
@@ -523,17 +505,8 @@ tail_recurse:			/* :::::::::::::::::::: */
 	    || ((ffedata_storage_ != NULL)
 		&& (ffestorag_init (ffedata_storage_) != NULL)))
 	  {
-#if 0
-	    ffebad_start (FFEBAD_DATA_REINIT);
-	    ffest_ffebad_here_current_stmt (0);
-	    ffebad_string (ffesymbol_text (ffedata_symbol_));
-	    ffebad_finish ();
-	    ffedata_reported_error_ = TRUE;
-	    return FALSE;
-#else
 	    ffedata_reinit_ = TRUE;
 	    return TRUE;
-#endif
 	  }
 	ffedata_basictype_ = ffesymbol_basictype (ffedata_symbol_);
 	ffedata_kindtype_ = ffesymbol_kindtype (ffedata_symbol_);
@@ -797,42 +770,12 @@ ffedata_eval_integer1_ (ffebld expr)
       }
       break;
 
-#if 0				/* Only for character basictype. */
-    case FFEBLD_opCONCATENATE:
-      error =;
-      break;
-#endif
 
     case FFEBLD_opNOT:
       error = ffetarget_not_integer1 (&result,
 			       ffedata_eval_integer1_ (ffebld_left (expr)));
       break;
 
-#if 0				/* Only for logical basictype. */
-    case FFEBLD_opLT:
-      error =;
-      break;
-
-    case FFEBLD_opLE:
-      error =;
-      break;
-
-    case FFEBLD_opEQ:
-      error =;
-      break;
-
-    case FFEBLD_opNE:
-      error =;
-      break;
-
-    case FFEBLD_opGT:
-      error =;
-      break;
-
-    case FFEBLD_opGE:
-      error =;
-      break;
-#endif
 
     case FFEBLD_opAND:
       error = ffetarget_and_integer1 (&result,
@@ -867,70 +810,11 @@ ffedata_eval_integer1_ (ffebld expr)
     case FFEBLD_opPAREN:
       return ffedata_eval_integer1_ (ffebld_left (expr));
 
-#if 0				/* ~~ no idea how to do this */
-    case FFEBLD_opPERCENT_LOC:
-      error =;
-      break;
-#endif
 
-#if 0				/* not allowed by ANSI, but perhaps as an
-				   extension someday? */
-    case FFEBLD_opCONVERT:
-      switch (ffeinfo_basictype (ffebld_info (ffebld_left (expr))))
-	{
-	case FFEINFO_basictypeINTEGER:
-	  switch (ffeinfo_kindtype (ffebld_info (ffebld_left (expr))))
-	    {
-	    default:
-	      error = FFEBAD_DATA_EVAL;
-	      break;
-	    }
-	  break;
 
-	case FFEINFO_basictypeREAL:
-	  switch (ffeinfo_kindtype (ffebld_info (ffebld_left (expr))))
-	    {
-	    default:
-	      error = FFEBAD_DATA_EVAL;
-	      break;
-	    }
-	  break;
-	}
-      break;
-#endif
 
-#if 0				/* not valid ops */
-    case FFEBLD_opREPEAT:
-      error =;
-      break;
 
-    case FFEBLD_opBOUNDS:
-      error =;
-      break;
-#endif
 
-#if 0				/* not allowed by ANSI, but perhaps as an
-				   extension someday? */
-    case FFEBLD_opFUNCREF:
-      error =;
-      break;
-#endif
-
-#if 0				/* not valid ops */
-    case FFEBLD_opSUBRREF:
-      error =;
-      break;
-
-    case FFEBLD_opARRAYREF:
-      error =;
-      break;
-#endif
-
-#if 0				/* not valid for integer1 */
-    case FFEBLD_opSUBSTR:
-      error =;
-      break;
-#endif
 
     default:
       error = FFEBAD_DATA_EVAL;

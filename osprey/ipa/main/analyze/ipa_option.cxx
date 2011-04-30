@@ -61,7 +61,6 @@
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/ipa/main/analyze/ipa_option.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "linker.h"
 
@@ -70,6 +69,7 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/ipa/main/analy
 #define USE_STANDARD_TYPES
 #include "defs.h"
 #include "config.h"
+#include "config_opt.h"
 #include "erglob.h"		/* Include the error tables */
 #include "file_util.h"		/* for creating trace filename */
 #include "flags.h"		/* for OPTION_LIST, etc. */
@@ -145,6 +145,19 @@ Process_IPA_Options ( INT argc, char **argv )
 		/* Just toss it for now... */
 		break;
 
+#ifdef TARG_LOONGSON
+            /*add support for 2e and 2f in ipa_link*/
+            case 'l':
+                 if (strcmp(argv[i],"-loongson2e") == 0) {
+                     ld_ipa_opt[LD_IPA_ISA].flag = TOS_LOONGSON_2e; // used TOS_LOONGSON_2e in fake_ld
+                 } else if (strcmp(argv[i],"-loongson2f") == 0) {
+                    ld_ipa_opt[LD_IPA_ISA].flag = TOS_LOONGSON_2f;
+                 } else if (strcmp(argv[i],"-loongson3") == 0) {
+                    ld_ipa_opt[LD_IPA_ISA].flag = TOS_LOONGSON_3;
+                 }
+                 break;
+#endif
+
 	    default:			/* What's this? */
 		ErrMsg ( EC_Unknown_Flag, argv[i][0], argv[i] );
 		break;
@@ -152,6 +165,8 @@ Process_IPA_Options ( INT argc, char **argv )
 	}
     }
 
+    Configure_IPA();
+    
     if (LNO_Prompl)
 	ProMP_Listing = TRUE;
 
@@ -165,6 +180,9 @@ Process_IPA_Options ( INT argc, char **argv )
     /* Specfile- and post-processing of GP partition options: */
     Process_IPA_Specfile_Options ();
 #endif
+
+    // for -OPT:alias=nystrom
+    Configure_Alias_Options();
 
     /* check consistency for Hard/Soft PU Limits */
     if (IPA_PU_Limit_Set) {
@@ -194,6 +212,18 @@ Process_IPA_Options ( INT argc, char **argv )
 	IPA_Max_Output_File_Size +=
 	    IPA_Max_Output_File_Size / 100 * IPA_Output_File_Size;
     }
+
+#if defined(TARG_SL)
+    if (ld_ipa_opt[LD_IPA_IPISR].flag) {
+        if (IPA_Enable_PU_Reorder != REORDER_DISABLE) 
+            DevWarn("IPA_Enable_PU_Reorder is overrided by -ipisr option!"); 
+        IPA_Enable_PU_Reorder = REORDER_BY_BFS; 
+
+        if (IPA_Enable_Source_PU_Order) 
+            DevWarn("IPA_Enable_Source_PU_Order is overrided by -ipisr option!"); 
+        IPA_Enable_Source_PU_Order = FALSE;
+    }
+#endif
 
     if ( Get_Trace ( TKIND_ALLOC, TP_IPA ) ) {
 	IPA_Enable_Memtrace = TRUE;
@@ -226,12 +256,12 @@ Process_IPA_Options ( INT argc, char **argv )
 
     /* Get IPAA summary file name if required: */
     if ( IPA_Enable_Simple_Alias && Ipa_File_Name == NULL ) {
-	Ipa_File_Name = concat_names ( outfilename, ".ipaa" );
+	Ipa_File_Name = concat_names ( outfilename, (const string)".ipaa" );
     }
 
     /* Set up for tracing -- file, timers, etc.: */
     if ( Tracing_Enabled ) {
-	char * cmd_file_name = concat_names ( outfilename, ".ipa.t" );
+	char * cmd_file_name = concat_names ( outfilename, (const string)".ipa.t" );
 
 	Set_Trace_File ( cmd_file_name );
 
@@ -253,7 +283,7 @@ Process_IPA_Options ( INT argc, char **argv )
 	 Get_Trace ( TP_PTRACE1, TP_PTRACE1_IPALNO)) {
 	if ( Tlog_File_Name == NULL ) {
 	    /* Replace source file extension to get trace file: */
-	    Tlog_File_Name =  concat_names ( outfilename, ".tlog" );
+	    Tlog_File_Name =  concat_names ( outfilename, (const string)".tlog" );
 	}
 	if ( (Tlog_File = fopen ( Tlog_File_Name, "w" ) ) == NULL ) {
 	    ErrMsg ( EC_Tlog_Open, Tlog_File_Name, errno );

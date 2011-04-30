@@ -373,4 +373,37 @@ static const _COMPLEX32 _One_C4 = {1.0F, 0.0F};
 #define _C8RSQRT(v) (_Tmp_C8 = _C8SQRT(v), _C8DIV(_One_C8, _Tmp_C8))
 #define _CQRSQRT(v) (_Tmp_CQ = _CQSQRT(v), _CQDIV(_One_CQ, _Tmp_CQ))
 
+/* Macros for operators like "I4CVTL n", "U8CVTL n" where n is not 8|16|32|64.
+ * *NOT* all combinations are defined here. It would otherwise makes 
+ * the header file unwieldy.
+ */
+
+/* NOTE: <rty_bits> and <cvtl_len> should not have side-effect. */
+#define INT_CVTL_N(val, rty, cvtl_len) \
+    (((val) << (sizeof(rty)*8-(cvtl_len))) >> (sizeof(rty)*8-(cvtl_len)))
+
+#define UINT_CVTL_N(val, rty, cvtl_len) \
+    ((val) & (((rty)1)<<cvtl_len)-1)
+
+#define INT32_CVTL_2(x) (INT_CVTL_N((x), _INT32, 2))  /*for "I4CVTL 2" */ 
+#define UINT32_CVTL_3(x) (UINT_CVTL_N((x), _UINT64, 3)) /*for "U8CVTL 3"*/
+
+/* Vector type */
+#if defined(__x86_64) || defined(__i386)
+
+#ifdef __GNUC__
+    #define VECT16_ATTR __attribute__ ((vector_size (16)))
+#else 
+    #error need GCC compatible front-end
+#endif 
+
+typedef _INT8   V16I1 VECT16_ATTR ;
+typedef _INT16  V16I2 VECT16_ATTR ;
+typedef _INT32  V16I4 VECT16_ATTR ;
+typedef _INT64  V16I8 VECT16_ATTR ;
+typedef _IEEE32 V16F4 VECT16_ATTR ;
+typedef _IEEE64 V16F8 VECT16_ATTR ;
+
+#endif
+
 #endif /* __WHIRL2C_H__ */

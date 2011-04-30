@@ -27,19 +27,11 @@
 #include "gspin-mempool.h"
 
 // following 3 defines must be in sync with each other
-#if 0 // this version for testing
-#define GS_MEMBLOCK_SIZE 0x1000 // must be power of 2 and multiple of
-				 // sizeof(struct gspin) so that we can easily
-				 // convert between index and byte address
-#define GS_BLOCK_IDX_SHIFT_AMT 12
-#define GS_OFST_IN_BLK_MASK 0xfff
-#else
 #define GS_MEMBLOCK_SIZE 0x1000000// must be power of 2 and multiple of
 				 // sizeof(struct gspin) so that we can easily
 				 // convert between index and byte address
 #define GS_BLOCK_IDX_SHIFT_AMT 24
 #define GS_OFST_IN_BLK_MASK 0xffffff
-#endif
 
 gs_arena_t gs_mempool[GS_ARENA_COUNT] = {
 
@@ -66,12 +58,6 @@ void *__gs_mempool_alloc(unsigned int arena_id, unsigned int count)
   gs_arena_t *arena = &gs_mempool[arena_id];
   gs_memblock_t *memblk = arena->lastblock;
   if (memblk == NULL) {
-#ifdef TARG_IA64
-    // On IA64, the sizeof(gspin_t) is 32
-    GS_ASSERT(sizeof(gspin_t) == 32, "struct gspin size has changed.");
-#else
-    GS_ASSERT(sizeof(gspin_t) == 20, "struct gspin size has changed.");
-#endif
     memblk = gs_new_memblock(0);
     arena->firstblock = arena->lastblock = memblk;
     arena->current_index = 0;

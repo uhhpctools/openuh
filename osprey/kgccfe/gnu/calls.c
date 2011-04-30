@@ -169,6 +169,35 @@ int stack_arg_under_construction;
 static int calls_function	PARAMS ((tree, int));
 static int calls_function_1	PARAMS ((tree, int));
 
+/* Nonzero if this is a call to a `const' function.  */
+#define ECF_CONST		1
+/* Nonzero if this is a call to a `volatile' function.  */
+#define ECF_NORETURN		2
+/* Nonzero if this is a call to malloc or a related function.  */
+#define ECF_MALLOC		4
+/* Nonzero if it is plausible that this is a call to alloca.  */
+#define ECF_MAY_BE_ALLOCA	8
+/* Nonzero if this is a call to a function that won't throw an exception.  */
+#define ECF_NOTHROW		16
+/* Nonzero if this is a call to setjmp or a related function.  */
+#define ECF_RETURNS_TWICE	32
+/* Nonzero if this is a call to `longjmp'.  */
+#define ECF_LONGJMP		64
+/* Nonzero if this is a syscall that makes a new process in the image of
+   the current one.  */
+#define ECF_FORK_OR_EXEC	128
+#define ECF_SIBCALL		256
+/* Nonzero if this is a call to "pure" function (like const function,
+   but may read memory.  */
+#define ECF_PURE		512
+/* Nonzero if this is a call to a function that returns with the stack
+   pointer depressed.  */
+#define ECF_SP_DEPRESSED	1024
+/* Nonzero if this call is known to always return.  */
+#define ECF_ALWAYS_RETURN	2048
+/* Create libcall block around the call.  */
+#define ECF_LIBCALL_BLOCK	4096
+
 static void emit_call_1		PARAMS ((rtx, tree, tree, HOST_WIDE_INT,
 					 HOST_WIDE_INT, HOST_WIDE_INT, rtx,
 					 rtx, int, rtx, int,
@@ -205,6 +234,7 @@ static rtx emit_library_call_value_1 		PARAMS ((int, rtx, rtx,
 							 enum machine_mode,
 							 int, va_list));
 static int special_function_p			PARAMS ((tree, int));
+int flags_from_decl_or_type 			PARAMS ((tree));
 static rtx try_to_integrate			PARAMS ((tree, tree, rtx,
 							 int, tree, rtx));
 static int check_sibcall_argument_overlap_1	PARAMS ((rtx));

@@ -1,15 +1,25 @@
-!  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+!  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
 !
-!  Copyright (C) 2005, 2006 PathScale, Inc. All rights reserved.
-!                                                                               
-!  Copied from the OpenMP Application Program Interface Version 2.5 Public
-!  Draft, November 2004.
-!                                                                               
-!  Copyright (C) 1997-2004 OpenMP Architecture Review Board.
-!  Permission to copy without fee all or part of this material is granted,
-!  provided the OpenMP Architecture Review Board copyright notice and the
-!  titled of this document appear. Notice is given that copying is by
-!  permission of OpenMP Architecture Review Board.
+!  Copyright (C) 2003 - 2009 Tsinghua University.
+!
+!  This library is free software; you can redistribute it and/or
+!  modify it under the terms of the GNU Lesser General Public
+!  License as published by the Free Software Foundation; either
+!  version 2.1 of the License, or (at your option) any later version.
+!
+!  This library is distributed in the hope that it will be useful,
+!  but WITHOUT ANY WARRANTY; without even the implied warranty of
+!  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+!  Lesser General Public License for more details.
+!
+!  You should have received a copy of the GNU Lesser General Public
+!  License along with this library; if not, write to the Free Software
+!  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+!  
+!  Contact information: HPC Institute, Department of Computer Science and Technology,
+!  Tsinghua University, Beijing 100084, CHINA, or:
+!
+!  http://hpc.cs.tsinghua.edu.cn
 
 C the "C" of this comment starts in column 1
 	integer omp_lock_kind

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -53,6 +57,8 @@
 #ifndef symtab_INCLUDED
 #include "symtab.h"                     // for Scope_tab
 #endif
+
+#include "symtab_defs.h"
 
 // ======================================================================
 // Auxiliary functions used by ST::Verify()
@@ -165,26 +171,23 @@ ST_Verify_Sclass_Export (ST_SCLASS storage_class, ST_EXPORT export_class,
     case SCLASS_DISTR_ARRAY:
     case SCLASS_THREAD_PRIVATE_FUNCS:
     case SCLASS_COMMENT:
-#ifndef TARG_IA64
-      Is_True (export_class == EXPORT_LOCAL ||
-               export_class == EXPORT_LOCAL_INTERNAL,
-               (msg, Export_Name(export_class), Sclass_Name (storage_class)));
-#else
-      // bug fix for OSP_145
+      // bug fix for OSP_145, OSP_339, __attribute__((alias(...)))
       if ( export_class == EXPORT_PREEMPTIBLE ) {
         // maybe alias to FSTATIC
         ST_IDX base_idx = ST_base_idx (st);
         Is_True ( base_idx != ST_st_idx (st),
 		  (msg, Export_Name(export_class), Sclass_Name (storage_class)));
-        Is_True ( storage_class == ST_sclass(St_Table[base_idx]),
-		  (msg, Export_Name(export_class), Sclass_Name (storage_class)));
+        if (! (ST_sclass(St_Table[base_idx]) == SCLASS_UNKNOWN &&
+               ST_class(St_Table[base_idx])  == CLASS_BLOCK) )
+          Is_True ( storage_class == ST_sclass(St_Table[base_idx]),
+                    (msg, Export_Name(export_class),
+                     Sclass_Name (storage_class)) );
       }
       else {
         Is_True (export_class == EXPORT_LOCAL ||
                  export_class == EXPORT_LOCAL_INTERNAL,
 		 (msg, Export_Name(export_class), Sclass_Name (storage_class)));
       }
-#endif
       break;
     case SCLASS_COMMON:
     case SCLASS_DGLOBAL:
@@ -360,6 +363,10 @@ ST_Verify_Flags (const ST &s)
 
   if (ST_is_temp_var (s))
     Is_True(ST_sclass(s) == SCLASS_AUTO ||
+#if defined(TARG_NVISA)
+	    // may treat auto as pstatic
+            ST_sclass(s) == SCLASS_PSTATIC ||
+#endif
             ST_sclass(s) == SCLASS_FORMAL ||
             ST_sclass(s) == SCLASS_FORMAL_REF,
             (msg, "Storage class", Sclass_Name(ST_sclass(s)), 
@@ -370,7 +377,10 @@ ST_Verify_Flags (const ST &s)
             (msg, "Class", Class_Name(ST_sym_class(s)), "ST_IS_CONST_VAR")); 
 
     Is_True(ST_sclass(s) != SCLASS_AUTO   &&
+#if !defined(TARG_NVISA)
+            /* okay to have const formal in nvisa */
             ST_sclass(s) != SCLASS_FORMAL &&
+#endif
             ST_sclass(s) != SCLASS_FORMAL_REF,
             (msg, "Storage class", Sclass_Name(ST_sclass(s)), 
 	     "ST_IS_CONST_VAR")); 
@@ -440,7 +450,9 @@ ST_Verify_Fields(const ST &s)
 
   switch (ST_sym_class (s)) {
   case CLASS_FUNC:
+#ifndef KEY
     Is_True (ST_level (&s) == GLOBAL_SYMTAB, (msg, "sym_class"));
+#endif
     Is_True( 0 < ST_pu(s) && ST_pu(s) < PU_Table_Size (), (msg, "pu")); 
 
     // Verify the PU associated with this st
@@ -553,10 +565,39 @@ ST::Verify (UINT) const
 #endif // Is_True_On
 } // ST::Verify
 
+
+static BOOL
+zero_dim_array(ST_IDX st_idx)
+{ 
+  ST& st = St_Table[st_idx];
+  const TY& ty = Ty_Table[ST_type(st)];
+  if (( TY_kind (ty) != KIND_ARRAY)
+      ||   (ty.Arb() == 0)) 
+    return FALSE;
+
+  // Now check the bounds in each
+  // dimension. 
+
+  ARB_HANDLE arb(ty.Arb());
+  INT i,ndim;
+  ndim = ARB_dimension(arb);
+  for (i = 0; i < ndim; i++) {
+    if (ARB_const_lbnd (arb[i])
+        && ARB_const_ubnd(arb[i]))
+    { 
+      if (ARB_lbnd_val(arb[i]) > ARB_ubnd_val(arb[i]))
+	return TRUE;
+    } 
+  }
+  return FALSE; 
+}
+
 // ======================================================================
 //  INITO::Verify(): other INITO related checks go into this function
 // ======================================================================
 // (See table 25 and 26 in the Whirl Symbol Table Specification)
+
+
 
 void INITO::Verify(UINT level) const 
 {
@@ -564,12 +605,18 @@ void INITO::Verify(UINT level) const
   Is_True(ST_IDX_index (st_idx) > 0 &&
 	  ST_IDX_index (st_idx) < ST_Table_Size (ST_IDX_level (st_idx)),
 	  ("Invalid st_idx for INITO"));
+#ifndef KEY // no longer true because INITO is used to link up nested functions
   Is_True(ST_is_initialized (St_Table[st_idx]),
 	   ("ST_IS_INITIALIZED not set"));
-  Is_True(0 <  val && val < INITV_Table_Size(),
-           ("Invalid field for INITO: val"));
-  Is_True(level == ST_IDX_level(st_idx),
-	  ("INITO/st_idx level mismatch"));
+#endif
+
+  if (!zero_dim_array(st_idx))
+  { 
+    Is_True(0 <  val && val < INITV_Table_Size(),
+             ("Invalid field for INITO: val"));
+    Is_True(level == ST_IDX_level(st_idx),
+	    ("INITO/st_idx level mismatch"));
+  }
 #endif
 }
 
@@ -619,8 +666,19 @@ void INITV::Verify(UINT) const
     break;	// we are using 'unused' as flags
 #endif // KEY
   case INITVKIND_LABEL:
+    Is_True ( u.lab.flags >= INITVLABELFLAGS_FIRST && u.lab.flags <= INITVLABELFLAGS_LAST,
+	     (msg, "bad label flag"));
+    if ( u.lab.flags == INITVLABELFLAGS_UNUSED ) {
+      Is_True ( u.lab.mtype == MTYPE_UNKNOWN, (msg, "bad mtype for lab") );
+    }
+    else {
+      Is_True ( u.lab.mtype != MTYPE_UNKNOWN, (msg, "bad mtype for lab value") );
+    }
+    Is_True ( repeat1 != 0,
+              (msg, "repeat1: should not be 0"));
+    break;
   case INITVKIND_PAD:
-    Is_True (u.lab.unused == 0,
+    Is_True (u.pad.unused == 0,
 	     (msg, "unused fillers for lab, blk, and  pad must be zero"));
     // fall through
   case INITVKIND_SYMDIFF:
@@ -1016,10 +1074,12 @@ void PU::Verify(UINT) const
 	   ("Invalid TY_IDX in PU::prototype"));
 
 #ifdef KEY
-// We are using 'unused' to store ST_IDXs of 2 special variables for
-// C++ exception handling.
-  if (!(src_lang & PU_CXX_LANG))
-#endif // !KEY
+// We are using 'misc' to store ST_IDXs of 2 special variables for
+// C++ exception handling, or for C nested functions.
+  if (!(src_lang & PU_CXX_LANG) && !(src_lang & PU_C_LANG))
+    Is_True (misc == 0, ("misc fields must be zero"));
+#endif // KEY
+
   Is_True (unused == 0, ("unused fields must be zero"));
 
   // Verify flags

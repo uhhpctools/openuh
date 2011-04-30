@@ -39,7 +39,11 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#ifdef __MINGW32__
+#include <time.h>
+#else
 #include <sys/resource.h>
+#endif /* __MINGW32__ */
 #include "timelib.h"
 
 #ifdef __cplusplus
@@ -50,7 +54,10 @@ extern "C" {
 
 static double get_cpu()
 {
-   struct rusage ru;
+#ifdef __MINGW32__
+   return clock();
+#else
+    struct rusage ru;
    double cpu;
 
    getrusage (RUSAGE_SELF, &ru);
@@ -59,6 +66,7 @@ static double get_cpu()
        (double)ru.ru_stime.tv_sec +
 	 (double)ru.ru_stime.tv_usec * 1e-6;
    return(cpu);
+#endif /* __MINGW32__ */
 }
 
 #define MAX_TIMERS 100

@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: whirl2f.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/whirl2f.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:42 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/whirl2f.cxx,v $
  *
  * Revision history:
  *  07-Nov-94 - Original Version
@@ -77,7 +77,7 @@
  * ====================================================================
  */
 static char *source_file = __FILE__;
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/whirl2f.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/whirl2f.cxx,v $ $Revision: 1.1 $";
 
 #include <unistd.h>		    /* for close(), etc. */
 #include <elf.h>              /* for wn.h */

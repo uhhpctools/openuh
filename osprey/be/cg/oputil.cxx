@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: oputil.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/oputil.cxx,v $
+ * $Revision: 1.28 $
+ * $Date: 06/03/14 14:38:58-08:00 $
+ * $Author: tkong@hyalite.keyresearch $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.oputil.cxx $
  *
  * Revision history:
  *  12-Oct-89 - Original Version
@@ -89,11 +93,10 @@
 #include "cgprep.h"
 #include "cg_loop.h"
 #include "cgtarget.h"
-
+#include "cg_spill.h"
 #ifdef TARG_IA64
 #include "targ_sim.h"
 #endif
-
 #include "wn.h"
 #include "whirl2ops.h"
 #include "cgexp.h"
@@ -102,7 +105,6 @@
 
 /* Allocate OPs for the duration of the PU. */
 #define OP_Alloc(size)  ((OP *)Pu_Alloc(size))
-
 
 /* OP mutators that are NOT to be made public */
 #define Set_OP_code(o,opc)	((o)->opr = (mTOP)(opc))
@@ -168,7 +170,17 @@ OP_def_ar_lc(OP *op)
   if(TN_is_constant(res_tn)) return FALSE;
   return TN_is_lc_reg(res_tn);
 }
-#endif
+
+static inline void
+Copy_GOT_Sym_Info (OP* new_op, OP* op) {
+  if (OP_load_GOT_entry(op)){
+     OP_MAP_Set (OP_Ld_GOT_2_Sym_Map, 
+                new_op, 
+		OP_MAP_Get (OP_Ld_GOT_2_Sym_Map, op));
+  }
+}
+
+#endif // TARG_IA64
 
 // ----------------------------------------
 // Copy ASM_OP_ANNOT when duplicating an OP
@@ -181,16 +193,6 @@ Copy_Asm_OP_Annot(OP* new_op, OP* op)
   }
 }
 
-#ifdef TARG_IA64
-static inline void
-Copy_GOT_Sym_Info (OP* new_op, OP* op) {
-  if (OP_load_GOT_entry(op)){
-     OP_MAP_Set (OP_Ld_GOT_2_Sym_Map, 
-                new_op, 
-		OP_MAP_Get (OP_Ld_GOT_2_Sym_Map, op));
-  }
-}
-#endif
 
 /* ====================================================================
  *
@@ -201,27 +203,24 @@ Copy_GOT_Sym_Info (OP* new_op, OP* op) {
  * ====================================================================
  */
 
+static OP *
 #ifdef TARG_IA64
-static OP *
 New_OP ( INT results, INT opnds, INT hidden_opnds)
-{ 
-  OP *op = OP_Alloc (OP_sizeof (results, opnds+hidden_opnds));
-  PU_OP_Cnt++;
-  Set_OP_opnds(op, opnds);
-  Set_OP_results(op, results);
-  return op;
-}
 #else
-static OP *
 New_OP ( INT results, INT opnds )
+#endif
 {
-  OP *op = OP_Alloc ( OP_sizeof(results, opnds) );
+  OP *op = OP_Alloc ( OP_sizeof(results, opnds
+#if defined(TARG_IA64)
+				+hidden_opnds
+#endif
+				) );
   PU_OP_Cnt++;
   Set_OP_opnds(op, opnds);
   Set_OP_results(op, results);
   return op;
 }
-#endif
+
 
 /* ====================================================================
  *
@@ -243,6 +242,7 @@ Dup_OP ( OP *op )
 #else
   OP *new_op = New_OP ( results, opnds );
 #endif
+
   memcpy(new_op, op, OP_sizeof(results, opnds));
   new_op->next = new_op->prev = NULL;
   new_op->bb = NULL;
@@ -253,19 +253,26 @@ Dup_OP ( OP *op )
     Copy_GOT_Sym_Info (new_op, op);
   }
 #endif
-
   if (OP_has_tag(op)) {
 	Set_OP_Tag (new_op, Gen_Tag());
   }
-
-
+  
 #ifdef TARG_X8664
   if ( TOP_is_vector_high_loadstore ( OP_code ( new_op ) ) )
     Set_OP_cond_def_kind(new_op, OP_ALWAYS_COND_DEF);
 #endif
+#if defined(KEY) && !defined(TARG_NVISA)
+  // If OP is a restore, increment the spill location's restore count.
+  if (OP_load(op)) {
+    ST *spill_loc = CGSPILL_OP_Spill_Location(op);
+    if (spill_loc != (ST *)0)		// It's a spill OP.
+      CGSPILL_Inc_Restore_Count(spill_loc);
+  }
+#endif
+
   return new_op;
 }
-
+
 /* =====================================================================
  *			      OPS stuff
  *		(see "op.h" for interface description)
@@ -623,7 +630,7 @@ void BB_Insert_Op(BB *bb, OP *point, OP *op, BOOL before)
   setup_ops(bb, op, op, 1);
 }
 
- 
+
 void BB_Insert_Op_Before(BB *bb, OP *point, OP *op)
 {
   Is_True(bb, ("can't insert in NULL BB"));
@@ -810,8 +817,17 @@ OP *BB_Remove_Branch(BB *bb)
 
 void BB_Remove_Op(BB *bb, OP *op)
 {
+  OP *orig_last_op = BB_last_op(bb);
+
   OPS_Remove_Op(&bb->ops, op);
   op->bb = NULL;
+
+#ifdef TARG_SL
+  if (BB_has_tag(bb) && BB_length(bb)==0) {
+    OP *nop = Mk_OP( TOP_nop );
+    BB_Append_Op(bb, nop);
+  }
+#endif
 }
 
 
@@ -826,13 +842,14 @@ void BB_Remove_Ops(BB *bb, OPS *ops)
   FOR_ALL_OPS_OPs(ops, op) op->bb = NULL;
 }
 
+TOP Remap_topcode(OP *op, TOP opr);
 
 void BB_Remove_All(BB *bb)
 {
   BB_Remove_Ops(bb, &bb->ops);
   BB_next_op_map_idx(bb) = 0;
 }
-
+
 /* ====================================================================
  *
  * Mk_OP / Mk_VarOP
@@ -846,15 +863,25 @@ Mk_OP(TOP opr, ...)
 {
   va_list ap;
   INT i;
-  INT results = TOP_fixed_results(opr);
-  INT opnds = TOP_fixed_opnds(opr);
+  INT results;
+  INT opnds;
+  OP *op;
+
+#ifdef TARG_X8664
+  opr = Remap_topcode(op, opr);
+#endif
+
+  results = TOP_fixed_results(opr);
+  opnds = TOP_fixed_opnds(opr);
+
 #ifdef TARG_IA64
-  OP *op = New_OP(results, opnds, CGTARG_Max_Number_of_Hidden_Opnd(opr));
+  op = New_OP(results, opnds, CGTARG_Max_Number_of_Hidden_Opnd(opr));
 #else
-  OP *op = New_OP(results, opnds);
+  op = New_OP(results, opnds);
 #endif
 
   FmtAssert(!TOP_is_var_opnds(opr), ("Mk_OP not allowed with variable operands"));
+  FmtAssert(opr != TOP_UNDEFINED,   ("Mk_OP not allowed with TOP_UNDEFINED"));
 
   Set_OP_code(op, opr);
 
@@ -939,6 +966,8 @@ Mk_VarOP(TOP opr, INT results, INT opnds, TN **res_tn, TN **opnd_tn)
 #else
   OP *op = New_OP(results, opnds);
 #endif
+
+  FmtAssert(opr != TOP_UNDEFINED,   ("Mk_VarOP not allowed with TOP_UNDEFINED"));
   Set_OP_code(op, opr);
 
   for (i = 0; i < results; ++i) Set_OP_result(op, i, res_tn[i]);
@@ -950,7 +979,7 @@ Mk_VarOP(TOP opr, INT results, INT opnds, TN **res_tn, TN **opnd_tn)
 
   return op;
 }
-
+
 /* ====================================================================
  *
  * Print_OP / Print_OP_No_SrcLine / Print_OPs / Print_OPS
@@ -970,11 +999,12 @@ void Print_OP_No_SrcLine(const OP *op)
 #ifdef TARG_IA64
   if (OP_start_bundle(op)) fprintf( TFile, " }\n{\n");
   fprintf (TFile, "[%3d] ", OP_map_idx(op));
-#endif
-#ifdef TARG_X8664
-  fprintf (TFile, "[%4d] ", OP_scycle(op) );
-#endif
   fprintf (TFile, "[%4d] ", Srcpos_To_Line(OP_srcpos(op)));
+#elif defined(TARG_X8664) 
+  fprintf (TFile, "[%4d,%2d] ", Srcpos_To_Line(OP_srcpos(op)), OP_scycle(op) );
+#else
+  fprintf (TFile, "[%4d] ", Srcpos_To_Line(OP_srcpos(op)));
+#endif
   if (OP_has_tag(op)) {
 	LABEL_IDX tag = Get_OP_Tag(op);
 	fprintf (TFile, "<tag %s>: ", LABEL_name(tag));
@@ -1000,6 +1030,27 @@ void Print_OP_No_SrcLine(const OP *op)
     if (OP_Defs_TN(op, tn)) fprintf(TFile, "<defopnd>");
     fprintf(TFile, " ");
   }
+
+#ifdef TARG_SL
+  /* print out the extra operands, due to LUT */
+  TN_LIST *extra_opnds = op->extra_operand;
+  if( extra_opnds )
+    fprintf( TFile, " ExtraOpndList: ");
+  while( extra_opnds ){
+    TN* opnd_tn = TN_LIST_first( extra_opnds );
+    Print_TN( opnd_tn, FALSE );
+    extra_opnds = TN_LIST_rest( extra_opnds );
+  }
+
+  TN_LIST *extra_results = op->extra_result;
+  if( extra_results )
+    fprintf( TFile, " ExtraResultList: ");
+  while( extra_results ){
+    TN* res_tn = TN_LIST_first( extra_results );
+    Print_TN( res_tn, FALSE );
+    extra_results = TN_LIST_rest( extra_results );
+  }
+#endif
 
   fprintf(TFile, ";");
 
@@ -1073,7 +1124,7 @@ void Print_OPS_No_SrcLines( const OPS *ops )
     Print_OP_No_SrcLine(op);
 }
 
-
+
 
 /* ====================================================================
  *
@@ -1240,6 +1291,7 @@ OP_Real_Inst_Words( const OP *op )
   else if ( OP_simulated(op) ) {
     return Simulated_Op_Real_Inst_Words (op);
   }
+
   return OP_inst_words(op);
 }
 
@@ -1295,7 +1347,7 @@ Is_Delay_Slot_Op (OP *xfer_op, OP *op)
 
 
 // Debugging routine
-void dump_op(const OP *op)
+void dump_op (const OP *op)
 {
    FILE *f;
    f = TFile;
@@ -1304,6 +1356,14 @@ void dump_op(const OP *op)
    Set_Trace_File_internal(f);
 }
 
+void dump_ops (const OPS *ops)
+{
+   FILE *f;
+   f = TFile;
+   Set_Trace_File_internal(stdout);
+   Print_OPS(ops);
+   Set_Trace_File_internal(f);
+}
 
 /* ====================================================================
  *
@@ -1317,7 +1377,7 @@ void dump_op(const OP *op)
 BOOL OP_cond_def(const OP *op) 
 {
   return OP_cond_def_kind(op) == OP_ALWAYS_COND_DEF ||
-    ((OP_cond_def_kind(op) == OP_PREDICATED_DEF) && 
+    ((OP_cond_def_kind(op) == OP_PREDICATED_DEF) &&
      !TN_is_true_pred(OP_opnd(op, OP_PREDICATE_OPND)));
 }
 
@@ -1372,20 +1432,63 @@ void OP_Base_Offset_TNs(OP *memop, TN **base_tn, TN **offset_tn)
   // instruction which sets the offset and matches the base_tn.
 
   if (offset_num < 0) {
-
-    DEF_KIND kind;
-    OP *defop = TN_Reaching_Value_At_Op(*base_tn, memop, &kind, TRUE);
-    if (defop && OP_iadd(defop) && kind == VAL_KNOWN) {
-      TN *defop_offset_tn = OP_opnd(defop, 1);
-      TN *defop_base_tn = OP_opnd(defop, 2);
-      if (defop_base_tn == *base_tn && TN_has_value(defop_base_tn)) {
-	*offset_tn = defop_offset_tn;
+    if( *base_tn ){
+      DEF_KIND kind;
+      OP *defop = TN_Reaching_Value_At_Op(*base_tn, memop, &kind, TRUE);
+      if (defop && OP_iadd(defop) && kind == VAL_KNOWN) {
+        TN *defop_offset_tn = OP_opnd(defop, 1);
+        TN *defop_base_tn = OP_opnd(defop, 2);
+        if (defop_base_tn == *base_tn && TN_has_value(defop_base_tn)) {
+          *offset_tn = defop_offset_tn;
+        }
       }
     }
   } else {
     *offset_tn = OP_opnd(memop, offset_num);
   }
 }
+
+
+/* Is <op> a copy from a callee-saves register into its save-TN?
+ */
+BOOL
+OP_Is_Copy_To_Save_TN(const OP* op)
+{
+  INT i;
+
+  for ( i = OP_results(op) - 1; i >= 0; --i ) {
+    TN* tn = OP_result(op,i);
+    if ( TN_is_save_reg(tn)) return TRUE;
+  }
+
+  return FALSE;
+}
+
+/*  Is <op> a copy to a callee-saves register from its save-TN?
+ */
+BOOL
+OP_Is_Copy_From_Save_TN( const OP* op )
+{
+  INT i;
+
+  // You'd think there'd be a better way than groveling through the operands,
+  // but short of marking these when we make them, this seems to be the most
+  // bullet-proof
+
+  for ( i = OP_results(op) - 1; i >= 0; --i ) {
+    if ( TN_is_dedicated(OP_result(op,i)) ) break;
+  }
+  if ( i < 0 ) return FALSE;
+
+  for ( i = OP_opnds(op) - 1; i >= 0; --i ) {
+    TN* tn = OP_opnd(op,i);
+    if ( TN_Is_Allocatable(tn) && TN_is_save_reg(tn))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
 
 #ifdef TARG_IA64
 /* ====================================================================
@@ -1478,6 +1581,7 @@ Add_Hidden_Operands (OP* op, const vector<TN*>& hopnds) {
 
 #endif // TARG_IA64
 
+
 #ifdef KEY
 /* ====================================================================
  *
@@ -1498,6 +1602,7 @@ TN_Pair_In_OP(OP* op, struct tn *tn_res, struct tn *tn_opnd)
     }
   }
   if (i == OP_results(op)) {
+    TN_size(tn_res);	// TK debug
     // If tn_res has an assigned register, check if it matches a result.  (This
     // changes the semantics of TN_Pair_In_OP, but that's ok since the only
     // user of TN_Pair_In_OP is LRA, which wants this check.)  Bug 9489.
@@ -1551,43 +1656,879 @@ TN_Resnum_In_OP (OP* op, struct tn *tn, BOOL match_assigned_reg)
 }
 #endif
 
-/* Is <op> a copy from a callee-saves register into its save-TN?
- */
-BOOL
-OP_Is_Copy_To_Save_TN(const OP* op)
+#if defined(TARG_SL) || defined(TARG_MIPS)
+#include "targ_sim.h"
+BOOL OP_def_return_value(OP* op)
 {
-  INT i;
+    for (INT i = OP_results(op) - 1 ; i >= 0 ; i--) {
+        mTN_NUM n = TN_number(OP_result(op,i));
+        if ((n >= First_Int_Preg_Return_Offset && 
+             n <= Last_Int_Preg_Return_Offset)       ||
+            (n >= First_Float_Preg_Return_Offset &&
+             n <= Last_Float_Preg_Return_Offset)) {
+            return TRUE;    
+        }
+    }         
+    return FALSE;
+}        
 
-  for ( i = OP_results(op) - 1; i >= 0; --i ) {
-    TN* tn = OP_result(op,i);
-    if ( TN_is_save_reg(tn)) return TRUE;
+#endif
+
+#ifdef TARG_X8664
+typedef struct {
+  TOP legacy_mode;
+  TOP vex_mode;
+} Top_Trans_Group;
+
+static Top_Trans_Group Top_Leg_To_Vex_Mode_Group[TOP_count+1];
+
+static Top_Trans_Group Top_SSE_To_Vex_Mode_Group_Table[] = {
+    // LEGACY MODE          VEX MODE
+    {TOP_faddsub128v32,     TOP_vfaddsub128v32},
+    {TOP_fhadd128v32,       TOP_vfhadd128v32},
+    {TOP_fhsub128v32,       TOP_vfhsub128v32},
+    {TOP_faddsub128v64,     TOP_vfaddsub128v64},
+    {TOP_fhadd128v64,       TOP_vfhadd128v64},
+    {TOP_fhsub128v64,       TOP_vfhsub128v64},
+    {TOP_faddsubx128v32,    TOP_vfaddsubx128v32},
+    {TOP_fhaddx128v32,      TOP_vfhaddx128v32},
+    {TOP_fhsubx128v32,      TOP_vfhsubx128v32},
+    {TOP_faddsubx128v64,    TOP_vfaddsubx128v64},
+    {TOP_fhaddx128v64,      TOP_vfhaddx128v64},
+    {TOP_fhsubx128v64,      TOP_vfhsubx128v64},
+    {TOP_faddsubxx128v32,   TOP_vfaddsubxx128v32},
+    {TOP_fhaddxx128v32,     TOP_vfhaddxx128v32},
+    {TOP_fhsubxx128v32,     TOP_vfhsubxx128v32},
+    {TOP_faddsubxx128v64,   TOP_vfaddsubxx128v64},
+    {TOP_fhaddxx128v64,     TOP_vfhaddxx128v64},
+    {TOP_fhsubxx128v64,     TOP_vfhsubxx128v64},
+    {TOP_faddsubxxx128v32,  TOP_vfaddsubxxx128v32},
+    {TOP_fhaddxxx128v32,    TOP_vfhaddxxx128v32},
+    {TOP_fhsubxxx128v32,    TOP_vfhsubxxx128v32},
+    {TOP_faddsubxxx128v64,  TOP_vfaddsubxxx128v64},
+    {TOP_fhaddxxx128v64,    TOP_vfhaddxxx128v64},
+    {TOP_fhsubxxx128v64,    TOP_vfhsubxxx128v64},
+    {TOP_addx128v8,         TOP_vaddx128v8},
+    {TOP_addx128v16,        TOP_vaddx128v16},
+    {TOP_addx128v32,        TOP_vaddx128v32},
+    {TOP_addx128v64,        TOP_vaddx128v64},
+    {TOP_faddx128v32,       TOP_vfaddx128v32},
+    {TOP_faddx128v64,       TOP_vfaddx128v64},
+    {TOP_andx128v8,         TOP_vandx128v8},
+    {TOP_andx128v16,        TOP_vandx128v16},
+    {TOP_andx128v32,        TOP_vandx128v32},
+    {TOP_andx128v64,        TOP_vandx128v64},
+    {TOP_fandx128v32,       TOP_vfandx128v32},
+    {TOP_fandx128v64,       TOP_vfandx128v64},
+    {TOP_orx128v8,          TOP_vorx128v8},
+    {TOP_orx128v16,         TOP_vorx128v16},
+    {TOP_orx128v32,         TOP_vorx128v32},
+    {TOP_orx128v64,         TOP_vorx128v64},
+    {TOP_forx128v32,        TOP_vforx128v32},
+    {TOP_forx128v64,        TOP_vforx128v64},
+    {TOP_xorx128v8,         TOP_vxorx128v8},
+    {TOP_xorx128v16,        TOP_vxorx128v16},
+    {TOP_xorx128v32,        TOP_vxorx128v32},
+    {TOP_xorx128v64,        TOP_vxorx128v64},
+    {TOP_fxorx128v32,       TOP_vfxorx128v32},
+    {TOP_fxorx128v64,       TOP_vfxorx128v64},
+    {TOP_fmaxx128v32,       TOP_vfmaxx128v32},
+    {TOP_fmaxx128v64,       TOP_vfmaxx128v64},
+    {TOP_fminx128v32,       TOP_vfminx128v32},
+    {TOP_fminx128v64,       TOP_vfminx128v64},
+    {TOP_fdivx128v32,       TOP_vfdivx128v32},
+    {TOP_fdivx128v64,       TOP_vfdivx128v64},
+    {TOP_fmulx128v32,       TOP_vfmulx128v32},
+    {TOP_fmulx128v64,       TOP_vfmulx128v64},
+    {TOP_cmpgtx128v8,       TOP_vcmpgtx128v8},
+    {TOP_cmpgtx128v16,      TOP_vcmpgtx128v16},
+    {TOP_cmpgtx128v32,      TOP_vcmpgtx128v32},
+    {TOP_cmpeqx128v8,       TOP_vcmpeqx128v8},
+    {TOP_cmpeqx128v16,      TOP_vcmpeqx128v16},
+    {TOP_cmpeqx128v32,      TOP_vcmpeqx128v32},
+    {TOP_maxx128v8,         TOP_vmaxux128v8},
+    {TOP_maxx128v16,        TOP_vmaxux128v16},
+    {TOP_minx128v8,         TOP_vminux128v8},
+    {TOP_minx128v16,        TOP_vminux128v16},
+    {TOP_subx128v8,         TOP_vsubx128v8},
+    {TOP_subx128v16,        TOP_vsubx128v16},
+    {TOP_subx128v32,        TOP_vsubx128v32},
+    {TOP_subx128v64,        TOP_vsubx128v64},
+    {TOP_fsubx128v32,       TOP_vfsubx128v32},
+    {TOP_fsubx128v64,       TOP_vfsubx128v64},
+    {TOP_addxx128v8,        TOP_vaddxx128v8},
+    {TOP_addxx128v16,       TOP_vaddxx128v16},
+    {TOP_addxx128v32,       TOP_vaddxx128v32},
+    {TOP_addxx128v64,       TOP_vaddxx128v64},
+    {TOP_faddxx128v32,      TOP_vfaddxx128v32},
+    {TOP_faddxx128v64,      TOP_vfaddxx128v64},
+    {TOP_andxx128v8,        TOP_vandxx128v8},
+    {TOP_andxx128v16,       TOP_vandxx128v16},
+    {TOP_andxx128v32,       TOP_vandxx128v32},
+    {TOP_andxx128v64,       TOP_vandxx128v64},
+    {TOP_fandxx128v32,      TOP_vfandxx128v32},
+    {TOP_fandxx128v64,      TOP_vfandxx128v64},
+    {TOP_orxx128v8,         TOP_vorxx128v8},
+    {TOP_orxx128v16,        TOP_vorxx128v16},
+    {TOP_orxx128v32,        TOP_vorxx128v32},
+    {TOP_orxx128v64,        TOP_vorxx128v64},
+    {TOP_forxx128v32,       TOP_vforxx128v32},
+    {TOP_forxx128v64,       TOP_vforxx128v64},
+    {TOP_xorxx128v8,        TOP_vxorxx128v8},
+    {TOP_xorxx128v16,       TOP_vxorxx128v16},
+    {TOP_xorxx128v32,       TOP_vxorxx128v32},
+    {TOP_xorxx128v64,       TOP_vxorxx128v64},
+    {TOP_fxorxx128v32,      TOP_vfxorxx128v32},
+    {TOP_fxorxx128v64,      TOP_vfxorxx128v64},
+    {TOP_fmaxxx128v32,      TOP_vfmaxxx128v32},
+    {TOP_fmaxxx128v64,      TOP_vfmaxxx128v64},
+    {TOP_fminxx128v32,      TOP_vfminxx128v32},
+    {TOP_fminxx128v64,      TOP_vfminxx128v64},
+    {TOP_fdivxx128v32,      TOP_vfdivxx128v32},
+    {TOP_fdivxx128v64,      TOP_vfdivxx128v64},
+    {TOP_fmulxx128v32,      TOP_vfmulxx128v32},
+    {TOP_fmulxx128v64,      TOP_vfmulxx128v64},
+    {TOP_cmpgtxx128v8,      TOP_vcmpgtxx128v8},
+    {TOP_cmpgtxx128v16,     TOP_vcmpgtxx128v16},
+    {TOP_cmpgtxx128v32,     TOP_vcmpgtxx128v32},
+    {TOP_cmpeqxx128v8,      TOP_vcmpeqxx128v8},
+    {TOP_cmpeqxx128v16,     TOP_vcmpeqxx128v16},
+    {TOP_cmpeqxx128v32,     TOP_vcmpeqxx128v32},
+    {TOP_maxxx128v8,        TOP_vmaxuxx128v8},
+    {TOP_maxxx128v16,       TOP_vmaxuxx128v16},
+    {TOP_minxx128v8,        TOP_vminuxx128v8},
+    {TOP_minxx128v16,       TOP_vminuxx128v16},
+    {TOP_subxx128v8,        TOP_vsubxx128v8},
+    {TOP_subxx128v16,       TOP_vsubxx128v16},
+    {TOP_subxx128v32,       TOP_vsubxx128v32},
+    {TOP_subxx128v64,       TOP_vsubxx128v64},
+    {TOP_fsubxx128v32,      TOP_vfsubxx128v32},
+    {TOP_fsubxx128v64,      TOP_vfsubxx128v64},
+    {TOP_addxxx128v8,       TOP_vaddxxx128v8},
+    {TOP_addxxx128v16,      TOP_vaddxxx128v16},
+    {TOP_addxxx128v32,      TOP_vaddxxx128v32},
+    {TOP_addxxx128v64,      TOP_vaddxxx128v64},
+    {TOP_faddxxx128v32,     TOP_vfaddxxx128v32},
+    {TOP_faddxxx128v64,     TOP_vfaddxxx128v64},
+    {TOP_andxxx128v8,       TOP_vandxxx128v8},
+    {TOP_andxxx128v16,      TOP_vandxxx128v16},
+    {TOP_andxxx128v32,      TOP_vandxxx128v32},
+    {TOP_andxxx128v64,      TOP_vandxxx128v64},
+    {TOP_fandxxx128v32,     TOP_vfandxxx128v32},
+    {TOP_fandxxx128v64,     TOP_vfandxxx128v64},
+    {TOP_orxxx128v8,        TOP_vorxxx128v8},
+    {TOP_orxxx128v16,       TOP_vorxxx128v16},
+    {TOP_orxxx128v32,       TOP_vorxxx128v32},
+    {TOP_orxxx128v64,       TOP_vorxxx128v64},
+    {TOP_forxxx128v32,      TOP_vforxxx128v32},
+    {TOP_forxxx128v64,      TOP_vforxxx128v64},
+    {TOP_xorxxx128v8,       TOP_vxorxxx128v8},
+    {TOP_xorxxx128v16,      TOP_vxorxxx128v16},
+    {TOP_xorxxx128v32,      TOP_vxorxxx128v32},
+    {TOP_xorxxx128v64,      TOP_vxorxxx128v64},
+    {TOP_fxorxxx128v32,     TOP_vfxorxxx128v32},
+    {TOP_fxorxxx128v64,     TOP_vfxorxxx128v64},
+    {TOP_fmaxxxx128v32,     TOP_vfmaxxxx128v32},
+    {TOP_fmaxxxx128v64,     TOP_vfmaxxxx128v64},
+    {TOP_fminxxx128v32,     TOP_vfminxxx128v32},
+    {TOP_fminxxx128v64,     TOP_vfminxxx128v64},
+    {TOP_fdivxxx128v32,     TOP_vfdivxxx128v32},
+    {TOP_fdivxxx128v64,     TOP_vfdivxxx128v64},
+    {TOP_fmulxxx128v32,     TOP_vfmulxxx128v32},
+    {TOP_fmulxxx128v64,     TOP_vfmulxxx128v64},
+    {TOP_cmpgtxxx128v8,     TOP_vcmpgtxxx128v8},
+    {TOP_cmpgtxxx128v16,    TOP_vcmpgtxxx128v16},
+    {TOP_cmpgtxxx128v32,    TOP_vcmpgtxxx128v32},
+    {TOP_cmpeqxxx128v8,     TOP_vcmpeqxxx128v8},
+    {TOP_cmpeqxxx128v16,    TOP_vcmpeqxxx128v16},
+    {TOP_cmpeqxxx128v32,    TOP_vcmpeqxxx128v32},
+    {TOP_maxxxx128v8,       TOP_vmaxuxxx128v8},
+    {TOP_maxxxx128v16,      TOP_vmaxuxxx128v16},
+    {TOP_minxxx128v8,       TOP_vminuxxx128v8},
+    {TOP_minxxx128v16,      TOP_vminuxxx128v16},
+    {TOP_subxxx128v8,       TOP_vsubxxx128v8},
+    {TOP_subxxx128v16,      TOP_vsubxxx128v16},
+    {TOP_subxxx128v32,      TOP_vsubxxx128v32},
+    {TOP_subxxx128v64,      TOP_vsubxxx128v64},
+    {TOP_fsubxxx128v32,     TOP_vfsubxxx128v32},
+    {TOP_fsubxxx128v64,     TOP_vfsubxxx128v64},
+    {TOP_mul128v16,         TOP_vmul128v16},
+    {TOP_add128v8,          TOP_vadd128v8},
+    {TOP_add128v16,         TOP_vadd128v16},
+    {TOP_add128v32,         TOP_vadd128v32},
+    {TOP_add128v64,         TOP_vadd128v64},
+    {TOP_fadd128v32,        TOP_vfadd128v32},
+    {TOP_fadd128v64,        TOP_vfadd128v64},
+    {TOP_and128v8,          TOP_vand128v8},
+    {TOP_and128v16,         TOP_vand128v16},
+    {TOP_and128v32,         TOP_vand128v32},
+    {TOP_and128v64,         TOP_vand128v64},
+    {TOP_fand128v32,        TOP_vfand128v32},
+    {TOP_fand128v64,        TOP_vfand128v64},
+    {TOP_or128v8,           TOP_vor128v8},
+    {TOP_or128v16,          TOP_vor128v16},
+    {TOP_or128v32,          TOP_vor128v32},
+    {TOP_or128v64,          TOP_vor128v64},
+    {TOP_for128v32,         TOP_vfor128v32},
+    {TOP_for128v64,         TOP_vfor128v64},
+    {TOP_xor128v8,          TOP_vxor128v8},
+    {TOP_xor128v16,         TOP_vxor128v16},
+    {TOP_xor128v32,         TOP_vxor128v32},
+    {TOP_xor128v64,         TOP_vxor128v64},
+    {TOP_fxor128v32,        TOP_vfxor128v32},
+    {TOP_fxor128v64,        TOP_vfxor128v64},
+    {TOP_andps,             TOP_vandps},
+    {TOP_andpd,             TOP_vandpd},
+    {TOP_xorps,             TOP_vxorps},
+    {TOP_xorpd,             TOP_vxorpd},
+    {TOP_orps,              TOP_vorps},
+    {TOP_orpd,              TOP_vorpd},
+    {TOP_fmax128v32,        TOP_vfmax128v32},
+    {TOP_fmax128v64,        TOP_vfmax128v64},
+    {TOP_fmin128v32,        TOP_vfmin128v32},
+    {TOP_fmin128v64,        TOP_vfmin128v64},
+    {TOP_fdiv128v32,        TOP_vfdiv128v32},
+    {TOP_fdiv128v64,        TOP_vfdiv128v64},
+    {TOP_fmul128v32,        TOP_vfmul128v32},
+    {TOP_fmul128v64,        TOP_vfmul128v64},
+    {TOP_cmpgt128v8,        TOP_vcmpgt128v8},
+    {TOP_cmpgt128v16,       TOP_vcmpgt128v16},
+    {TOP_cmpgt128v32,       TOP_vcmpgt128v32},
+    {TOP_cmpeq128v8,        TOP_vcmpeq128v8},
+    {TOP_cmpeq128v16,       TOP_vcmpeq128v16},
+    {TOP_cmpeq128v32,       TOP_vcmpeq128v32},
+    {TOP_pcmpeqb,           TOP_vcmpeq128v8},
+    {TOP_pcmpeqw,           TOP_vcmpeq128v16},
+    {TOP_pcmpeqd,           TOP_vcmpeq128v32},
+    {TOP_pcmpgtb,           TOP_vcmpgt128v8},
+    {TOP_pcmpgtw,           TOP_vcmpgt128v16},
+    {TOP_pcmpgtd,           TOP_vcmpgt128v32},
+    {TOP_max128v8,          TOP_vmaxu128v8},
+    {TOP_max128v16,         TOP_vmaxu128v16},
+    {TOP_min128v8,          TOP_vminu128v8},
+    {TOP_min128v16,         TOP_vminu128v16},
+    {TOP_frcp128v32,        TOP_vfrcp128v32},
+    {TOP_fsqrt128v32,       TOP_vfsqrt128v32},
+    {TOP_frsqrt128v32,      TOP_vfrsqrt128v32},
+    {TOP_fsqrt128v64,       TOP_vfsqrt128v64},
+    {TOP_addsd,             TOP_vfaddsd},
+    {TOP_addss,             TOP_vfaddss},
+    {TOP_addxsd,            TOP_vfaddxsd},
+    {TOP_addxss,            TOP_vfaddxss},
+    {TOP_addxxsd,           TOP_vfaddxxsd},
+    {TOP_addxxss,           TOP_vfaddxxss},
+    {TOP_addxxxsd,          TOP_vfaddxxxsd},
+    {TOP_addxxxss,          TOP_vfaddxxxss},
+    {TOP_comisd,            TOP_vcomisd},
+    {TOP_comixsd,           TOP_vcomixsd},
+    {TOP_comixxsd,          TOP_vcomixxsd},
+    {TOP_comixxxsd,         TOP_vcomixxxsd},
+    {TOP_comiss,            TOP_vcomiss},
+    {TOP_comixss,           TOP_vcomixss},
+    {TOP_comixxss,          TOP_vcomixxss},
+    {TOP_comixxxss,         TOP_vcomixxxss},
+    {TOP_cvtdq2pd,          TOP_vcvtdq2pd},
+    {TOP_cvtdq2ps,          TOP_vcvtdq2ps},
+    {TOP_cvtps2pd,          TOP_vcvtps2pd},
+    {TOP_cvtpd2ps,          TOP_vcvtpd2ps},
+    {TOP_cvtss2si,          TOP_vcvtss2si},
+    {TOP_cvtsd2si,          TOP_vcvtsd2si},
+    {TOP_cvtss2siq,         TOP_vcvtss2siq},
+    {TOP_cvtsd2siq,         TOP_vcvtsd2siq},
+    {TOP_cvttss2si,         TOP_vcvttss2si},
+    {TOP_cvttsd2si,         TOP_vcvttsd2si},
+    {TOP_cvttss2siq,        TOP_vcvttss2siq},
+    {TOP_cvttsd2siq,        TOP_vcvttsd2siq},
+    {TOP_cvtps2dq,          TOP_vcvtps2dq},
+    {TOP_cvttps2dq,         TOP_vcvttps2dq},
+    {TOP_cvtpd2dq,          TOP_vcvtpd2dq},
+    {TOP_cvttpd2dq,         TOP_vcvttpd2dq},
+    {TOP_cvtsi2sd,          TOP_vcvtsi2sd},
+    {TOP_cvtsi2ss,          TOP_vcvtsi2ss},
+    {TOP_cvtsi2sdq,         TOP_vcvtsi2sdq},
+    {TOP_cvtsi2ssq,         TOP_vcvtsi2ssq},
+    {TOP_cvtss2sd,          TOP_vcvtss2sd},
+    {TOP_cvtsd2ss,          TOP_vcvtsd2ss},
+    {TOP_cvtsd2ss_x,        TOP_vcvtsd2ssx},
+    {TOP_cvtsd2ss_xx,       TOP_vcvtsd2ssxx},
+    {TOP_cvtsd2ss_xxx,      TOP_vcvtsd2ssxxx},
+    {TOP_cvtsi2sd_x,        TOP_vcvtsi2sdx},
+    {TOP_cvtsi2sd_xx,       TOP_vcvtsi2sdxx},
+    {TOP_cvtsi2sd_xxx,      TOP_vcvtsi2sdxxx},
+    {TOP_cvtsi2ss_x,        TOP_vcvtsi2ssx},
+    {TOP_cvtsi2ss_xx,       TOP_vcvtsi2ssxx},
+    {TOP_cvtsi2ss_xxx,      TOP_vcvtsi2ssxxx},
+    {TOP_cvtsi2sdq_x,       TOP_vcvtsi2sdqx},
+    {TOP_cvtsi2sdq_xx,      TOP_vcvtsi2sdqxx},
+    {TOP_cvtsi2sdq_xxx,     TOP_vcvtsi2sdqxxx},
+    {TOP_cvtsi2ssq_x,       TOP_vcvtsi2ssqx},
+    {TOP_cvtsi2ssq_xx,      TOP_vcvtsi2ssqxx},
+    {TOP_cvtsi2ssq_xxx,     TOP_vcvtsi2ssqxxx},
+    {TOP_cvtdq2pd_x,        TOP_vcvtdq2pdx},
+    {TOP_cvtdq2ps_x,        TOP_vcvtdq2psx},
+    {TOP_cvtps2pd_x,        TOP_vcvtps2pdx},
+    {TOP_cvtpd2ps_x,        TOP_vcvtpd2psx},
+    {TOP_cvtps2dq_x,        TOP_vcvtps2dqx},
+    {TOP_cvttps2dq_x,       TOP_vcvttps2dqx},
+    {TOP_cvttpd2dq_x,       TOP_vcvttpd2dqx},
+    {TOP_cvtdq2pd_xx,       TOP_vcvtdq2pdxx},
+    {TOP_cvtdq2ps_xx,       TOP_vcvtdq2psxx},
+    {TOP_cvtps2pd_xx,       TOP_vcvtps2pdxx},
+    {TOP_cvtpd2ps_xx,       TOP_vcvtpd2psxx},
+    {TOP_cvtps2dq_xx,       TOP_vcvtps2dqxx},
+    {TOP_cvttps2dq_xx,      TOP_vcvttps2dqxx},
+    {TOP_cvttpd2dq_xx,      TOP_vcvttpd2dqxx},
+    {TOP_cvtdq2pd_xxx,      TOP_vcvtdq2pdxxx},
+    {TOP_cvtdq2ps_xxx,      TOP_vcvtdq2psxxx},
+    {TOP_cvtps2pd_xxx,      TOP_vcvtps2pdxxx},
+    {TOP_cvtpd2ps_xxx,      TOP_vcvtpd2psxxx},
+    {TOP_cvtps2dq_xxx,      TOP_vcvtps2dqxxx},
+    {TOP_cvttps2dq_xxx,     TOP_vcvttps2dqxxx},
+    {TOP_cvttpd2dq_xxx,     TOP_vcvttpd2dqxxx},
+    {TOP_divsd,             TOP_vdivsd},
+    {TOP_divxsd,            TOP_vdivxsd},
+    {TOP_divxxsd,           TOP_vdivxxsd},
+    {TOP_divxxxsd,          TOP_vdivxxxsd},
+    {TOP_divss,             TOP_vdivss},
+    {TOP_divxss,            TOP_vdivxss},
+    {TOP_divxxss,           TOP_vdivxxss},
+    {TOP_divxxxss,          TOP_vdivxxxss},
+    {TOP_sub128v8,          TOP_vsub128v8},
+    {TOP_sub128v16,         TOP_vsub128v16},
+    {TOP_sub128v32,         TOP_vsub128v32},
+    {TOP_sub128v64,         TOP_vsub128v64},
+    {TOP_fsub128v32,        TOP_vfsub128v32},
+    {TOP_fsub128v64,        TOP_vfsub128v64},
+    {TOP_subsd,             TOP_vsubsd},
+    {TOP_subss,             TOP_vsubss},
+    {TOP_subxsd,            TOP_vsubxsd},
+    {TOP_subxss,            TOP_vsubxss},
+    {TOP_subxxsd,           TOP_vsubxxsd},
+    {TOP_subxxss,           TOP_vsubxxss},
+    {TOP_subxxxsd,          TOP_vsubxxxsd},
+    {TOP_subxxxss,          TOP_vsubxxxss},
+    {TOP_mulsd,             TOP_vmulsd},
+    {TOP_mulss,             TOP_vmulss},
+    {TOP_mulxsd,            TOP_vmulxsd},
+    {TOP_mulxss,            TOP_vmulxss},
+    {TOP_mulxxsd,           TOP_vmulxxsd},
+    {TOP_mulxxss,           TOP_vmulxxss},
+    {TOP_mulxxxsd,          TOP_vmulxxxsd},
+    {TOP_mulxxxss,          TOP_vmulxxxss},
+    {TOP_movsd,             TOP_vmovapd},
+    {TOP_movss,             TOP_vmovaps},
+    {TOP_movdq,             TOP_vmovdqa},
+    {TOP_movapd,            TOP_vmovapd},
+    {TOP_movaps,            TOP_vmovaps},
+    {TOP_movg2x64,          TOP_vmovg2x64},
+    {TOP_movg2x,            TOP_vmovg2x},
+    {TOP_movx2g64,          TOP_vmovx2g64},
+    {TOP_movx2g,            TOP_vmovx2g},
+    {TOP_ldsd,              TOP_vldsd},
+    {TOP_ldsdx,             TOP_vldsdx},
+    {TOP_ldsdxx,            TOP_vldsdxx},
+    {TOP_ldsd_n32,          TOP_vldsd_n32},
+    {TOP_ldss,              TOP_vldss},
+    {TOP_ldssx,             TOP_vldssx},
+    {TOP_ldssxx,            TOP_vldssxx},
+    {TOP_ldss_n32,          TOP_vldss_n32},
+    {TOP_lddqa,             TOP_vlddqa},
+    {TOP_lddqa_n32,         TOP_vlddqa_n32},
+    {TOP_stdqa,             TOP_vstdqa},
+    {TOP_stdqa_n32,         TOP_vstdqa_n32},
+    {TOP_stntpd,            TOP_vstntpd},
+    {TOP_stntps,            TOP_vstntps},
+    {TOP_lddqu,             TOP_vlddqu},
+    {TOP_lddqu_n32,         TOP_vlddqu_n32},
+    {TOP_ldlps,             TOP_vldlps},
+    {TOP_ldlps_n32,         TOP_vldlps_n32},
+    {TOP_ldhps,             TOP_vldhps},
+    {TOP_ldhps_n32,         TOP_vldhps_n32},
+    {TOP_ldlpd,             TOP_vldlpd},
+    {TOP_ldlpd_n32,         TOP_vldlpd_n32},
+    {TOP_ldhpd,             TOP_vldhpd},
+    {TOP_ldhpd_n32,         TOP_vldhpd_n32},
+    {TOP_ldapd,             TOP_vldapd},
+    {TOP_ldapd_n32,         TOP_vldapd_n32},
+    {TOP_ldaps,             TOP_vldaps},
+    {TOP_ldaps_n32,         TOP_vldaps_n32},
+    {TOP_ldupd,             TOP_vldupd},
+    {TOP_ldupdx,            TOP_vldupdx},
+    {TOP_ldupdxx,           TOP_vldupdxx},
+    {TOP_ldupd_n32,         TOP_vldupd_n32},
+    {TOP_ldups,             TOP_vldups},
+    {TOP_ldups_n32,         TOP_vldups_n32},
+    {TOP_stdqu,             TOP_vstdqu},
+    {TOP_stdqu_n32,         TOP_vstdqu_n32},
+    {TOP_stlps,             TOP_vstlps},
+    {TOP_sthps,             TOP_vsthps},
+    {TOP_stlpd,             TOP_vstlpd},
+    {TOP_sthpd,             TOP_vsthpd},
+    {TOP_stlps_n32,         TOP_vstlps_n32},
+    {TOP_sthps_n32,         TOP_vsthps_n32},
+    {TOP_stlpd_n32,         TOP_vstlpd_n32},
+    {TOP_sthpd_n32,         TOP_vsthpd_n32},
+    {TOP_lddqax,            TOP_vlddqax},
+    {TOP_stdqax,            TOP_vstdqax},
+    {TOP_stntpdx,           TOP_vstntpdx},
+    {TOP_stntpsx,           TOP_vstntpsx},
+    {TOP_lddqux,            TOP_vlddqux},
+    {TOP_ldlpsx,            TOP_vldlpsx},
+    {TOP_ldhpsx,            TOP_vldhpsx},
+    {TOP_ldlpdx,            TOP_vldlpdx},
+    {TOP_ldhpdx,            TOP_vldhpdx},
+    {TOP_ldapdx,            TOP_vldapdx},
+    {TOP_ldapsx,            TOP_vldapsx},
+    {TOP_stdqux,            TOP_vstdqux},
+    {TOP_stlpdx,            TOP_vstlpdx},
+    {TOP_sthpdx,            TOP_vsthpdx},
+    {TOP_stlpsx,            TOP_vstlpsx},
+    {TOP_sthpsx,            TOP_vsthpsx},
+    {TOP_lddqaxx,           TOP_vlddqaxx},
+    {TOP_stdqaxx,           TOP_vstdqaxx},
+    {TOP_stntpdxx,          TOP_vstntpdxx},
+    {TOP_stntpsxx,          TOP_vstntpsxx},
+    {TOP_lddquxx,           TOP_vlddquxx},
+    {TOP_ldlpsxx,           TOP_vldlpsxx},
+    {TOP_ldhpsxx,           TOP_vldhpsxx},
+    {TOP_ldlpdxx,           TOP_vldlpdxx},
+    {TOP_ldhpdxx,           TOP_vldhpdxx},
+    {TOP_ldapdxx,           TOP_vldapdxx},
+    {TOP_ldapsxx,           TOP_vldapsxx},
+    {TOP_stdquxx,           TOP_vstdquxx},
+    {TOP_stlpdxx,           TOP_vstlpdxx},
+    {TOP_sthpdxx,           TOP_vsthpdxx},
+    {TOP_stlpsxx,           TOP_vstlpsxx},
+    {TOP_sthpsxx,           TOP_vsthpsxx},
+    {TOP_staps,             TOP_vstaps},
+    {TOP_staps_n32,         TOP_vstaps_n32},
+    {TOP_stups,             TOP_vstups},
+    {TOP_stupsx,            TOP_vstupsx},
+    {TOP_stupsxx,           TOP_vstupsxx},
+    {TOP_stups_n32,         TOP_vstups_n32},
+    {TOP_stupd,             TOP_vstupd},
+    {TOP_stupdx,            TOP_vstupdx},
+    {TOP_stupdxx,           TOP_vstupdxx},
+    {TOP_stupd_n32,         TOP_vstupd_n32},
+    {TOP_stapd,             TOP_vstapd},
+    {TOP_stapd_n32,         TOP_vstapd_n32},
+    {TOP_stapsx,            TOP_vstapsx},
+    {TOP_stapdx,            TOP_vstapdx},
+    {TOP_stapsxx,           TOP_vstapsxx},
+    {TOP_stapdxx,           TOP_vstapdxx},
+    {TOP_stss,              TOP_vstss},
+    {TOP_stss_n32,          TOP_vstss_n32},
+    {TOP_stssx,             TOP_vstssx},
+    {TOP_stssxx,            TOP_vstssxx},
+    {TOP_stntss,            TOP_vstntss},
+    {TOP_stntssx,           TOP_vstntssx},
+    {TOP_stntssxx,          TOP_vstntssxx},
+    {TOP_stsd,              TOP_vstsd},
+    {TOP_stsd_n32,          TOP_vstsd_n32},
+    {TOP_stsdx,             TOP_vstsdx},
+    {TOP_stsdxx,            TOP_vstsdxx},
+    {TOP_stntsd,            TOP_vstntsd},
+    {TOP_stntsdx,           TOP_vstntsdx},
+    {TOP_stntsdxx,          TOP_vstntsdxx},
+    {TOP_maxss,             TOP_vfmaxss},
+    {TOP_maxsd,             TOP_vfmaxsd},
+    {TOP_minss,             TOP_vfminss},
+    {TOP_minsd,             TOP_vfminsd},
+    {TOP_rcpss,             TOP_vfrcpss},
+    {TOP_rsqrtss,           TOP_vfrsqrtss},
+    {TOP_sqrtss,            TOP_vfsqrtss},
+    {TOP_sqrtsd,            TOP_vfsqrtsd},
+    {TOP_andnps,            TOP_vfandn128v32},
+    {TOP_andnpd,            TOP_vfandn128v64},
+    {TOP_cmpss,             TOP_vfcmpss},
+    {TOP_cmpsd,             TOP_vfcmpsd},
+    {TOP_cmpps,             TOP_vfcmp128v32},
+    {TOP_cmppd,             TOP_vfcmp128v64},
+    {TOP_cmpeqps,           TOP_vfcmp128v32}, 
+    {TOP_cmpltps,           TOP_vfcmp128v32},
+    {TOP_cmpleps,           TOP_vfcmp128v32},
+    {TOP_cmpunordps,        TOP_vfcmp128v32},
+    {TOP_cmpneqps,          TOP_vfcmp128v32},
+    {TOP_cmpnltps,          TOP_vfcmp128v32},
+    {TOP_cmpnleps,          TOP_vfcmp128v32},
+    {TOP_cmpordps,          TOP_vfcmp128v32},
+    {TOP_cmpeqss,           TOP_vfcmpss},
+    {TOP_cmpltss,           TOP_vfcmpss},
+    {TOP_cmpless,           TOP_vfcmpss},
+    {TOP_cmpunordss,        TOP_vfcmpss},
+    {TOP_cmpneqss,          TOP_vfcmpss},
+    {TOP_cmpnltss,          TOP_vfcmpss},
+    {TOP_cmpnless,          TOP_vfcmpss},
+    {TOP_cmpordss,          TOP_vfcmpss},
+    {TOP_unpckhpd,          TOP_vunpckh128v64},
+    {TOP_unpckhps,          TOP_vunpckh128v32},
+    {TOP_unpcklpd,          TOP_vunpckl128v64},
+    {TOP_unpcklps,          TOP_vunpckl128v32},
+    {TOP_punpcklbw,         TOP_vpunpckl64v8},
+    {TOP_punpcklwd,         TOP_vpunpckl64v16},
+    {TOP_punpckldq,         TOP_vpunpckl64v32},
+    {TOP_punpckhbw,         TOP_vpunpckh64v8},
+    {TOP_punpckhwd,         TOP_vpunpckh64v16},
+    {TOP_punpckhdq,         TOP_vpunpckh64v32},
+    {TOP_packsswb,          TOP_vpacksswb},
+    {TOP_packssdw,          TOP_vpackssdw},
+    {TOP_packuswb,          TOP_vpackuswb},
+    {TOP_pshufd,            TOP_vpshuf128v32},
+    // TOP_vpshufw and vpshufd not consistant in the AVX names
+    {TOP_pshufw,            TOP_vpshufw64v16},
+    {TOP_pshuflw,           TOP_vpshuflw},
+    {TOP_pshufhw,           TOP_vpshufhw},
+    // TBD - need mem opnd forms of TOP_shufx128v{32|64}
+    {TOP_shufpd,            TOP_vfshuf128v64},
+    {TOP_shufps,            TOP_vfshuf128v32},
+    {TOP_movhlps,           TOP_vmovhlps},
+    {TOP_movlhps,           TOP_vmovlhps},
+    {TOP_psrldq,            TOP_vpsrldq},
+    {TOP_psrlq128v64,       TOP_vpsrlq},
+    {TOP_pslldq,            TOP_vpslldq},
+    {TOP_psllw,             TOP_vpsllw},
+    {TOP_pslld,             TOP_vpslld},
+    {TOP_psllq,             TOP_vpsllq},
+    {TOP_psrlw,             TOP_vpsrlw},
+    {TOP_psrld,             TOP_vpsrld},
+    {TOP_psrlq,             TOP_vpsrlq},
+    {TOP_psraw,             TOP_vpsraw},
+    {TOP_psrad,             TOP_vpsrad},
+    {TOP_xzero32,           TOP_vxzero32},
+    {TOP_xzero64,           TOP_vxzero64},
+    {TOP_xzero128v32,       TOP_vxzero128v32},
+    {TOP_xzero128v64,       TOP_vxzero128v64},
+    {TOP_subus128v16,       TOP_vsubus128v16},
+    {TOP_pavgb,             TOP_vpavgb},
+    {TOP_pavgw,             TOP_vpavgw},
+    {TOP_psadbw,            TOP_vpsadbw},
+    {TOP_storenti128,       TOP_vstorenti128},
+    {TOP_storelpd,          TOP_vstorelpd},
+    {TOP_pshufw64v16,       TOP_vpshufw64v16},
+    {TOP_pmovmskb128,       TOP_vpmovmskb128},
+    // SSE 4.1
+    {TOP_mpsadbw,            TOP_vmpsadbw},
+    {TOP_mpsadbwx,           TOP_vmpsadbwx},
+    {TOP_mpsadbwxx,          TOP_vmpsadbwxx},
+    {TOP_mpsadbwxxx,         TOP_vmpsadbwxxx},
+    {TOP_muldq,              TOP_vmuldq},
+    {TOP_muldqx,             TOP_vmuldqx},
+    {TOP_muldqxx,            TOP_vmuldqxx},
+    {TOP_muldqxxx,           TOP_vmuldqxxx},
+    {TOP_mul128v32,          TOP_vmul128v32},
+    {TOP_mulx128v32,         TOP_vmulx128v32},
+    {TOP_mulxx128v32,        TOP_vmulxx128v32},
+    {TOP_mulxxx128v32,       TOP_vmulxxx128v32},
+    {TOP_fdp128v32,          TOP_vfdp128v32},
+    {TOP_fdpx128v32,         TOP_vfdpx128v32},
+    {TOP_fdpxx128v32,        TOP_vfdpxx128v32},
+    {TOP_fdpxxx128v32,       TOP_vfdpxxx128v32},
+    {TOP_fdp128v64,          TOP_vfdp128v64},
+    {TOP_fdpx128v64,         TOP_vfdpx128v64},
+    {TOP_fdpxx128v64,        TOP_vfdpxx128v64},
+    {TOP_fdpxxx128v64,       TOP_vfdpxxx128v64},
+    {TOP_fblend128v32,       TOP_vfblend128v32},
+    {TOP_fblendx128v32,      TOP_vfblendx128v32},
+    {TOP_fblendxx128v32,     TOP_vfblendxx128v32},
+    {TOP_fblendxxx128v32,    TOP_vfblendxxx128v32},
+    {TOP_fblend128v64,       TOP_vfblend128v64},
+    {TOP_fblendx128v64,      TOP_vfblendx128v64},
+    {TOP_fblendxx128v64,     TOP_vfblendxx128v64},
+    {TOP_fblendxxx128v64,    TOP_vfblendxxx128v64},
+    {TOP_fblendv128v32,      TOP_vfblendv128v32},
+    {TOP_fblendvx128v32,     TOP_vfblendvx128v32},
+    {TOP_fblendvxx128v32,    TOP_vfblendvxx128v32},
+    {TOP_fblendvxxx128v32,   TOP_vfblendvxxx128v32},
+    {TOP_fblendv128v64,      TOP_vfblendv128v64},
+    {TOP_fblendvx128v64,     TOP_vfblendvx128v64},
+    {TOP_fblendvxx128v64,    TOP_vfblendvxx128v64},
+    {TOP_fblendvxxx128v64,   TOP_vfblendvxxx128v64},
+    {TOP_blendv128v8,        TOP_vblendv128v8},
+    {TOP_blendvx128v8,       TOP_vblendvx128v8},
+    {TOP_blendvxx128v8,      TOP_vblendvxx128v8},
+    {TOP_blendvxxx128v8,     TOP_vblendvxxx128v8},
+    {TOP_blend128v16,        TOP_vblend128v16},
+    {TOP_blendx128v16,       TOP_vblendx128v16},
+    {TOP_blendxx128v16,      TOP_vblendxx128v16},
+    {TOP_blendxxx128v16,     TOP_vblendxxx128v16},
+    {TOP_mins128v8,          TOP_vmins128v8},
+    {TOP_minsx128v8,         TOP_vminsx128v8},
+    {TOP_minsxx128v8,        TOP_vminsxx128v8},
+    {TOP_minsxxx128v8,       TOP_vminsxxx128v8},
+    {TOP_maxs128v8,          TOP_vmaxs128v8},
+    {TOP_maxsx128v8,         TOP_vmaxsx128v8},
+    {TOP_maxsxx128v8,        TOP_vmaxsxx128v8},
+    {TOP_maxsxxx128v8,       TOP_vmaxsxxx128v8},
+    {TOP_minu128v16,         TOP_vminu128v16},
+    {TOP_minux128v16,        TOP_vminux128v16},
+    {TOP_minuxx128v16,       TOP_vminuxx128v16},
+    {TOP_minuxxx128v16,      TOP_vminuxxx128v16},
+    {TOP_maxu128v16,         TOP_vmaxu128v16},
+    {TOP_maxux128v16,        TOP_vmaxux128v16},
+    {TOP_maxuxx128v16,       TOP_vmaxuxx128v16},
+    {TOP_maxuxxx128v16,      TOP_vmaxuxxx128v16},
+    {TOP_minu128v32,         TOP_vminu128v32},
+    {TOP_minux128v32,        TOP_vminux128v32},
+    {TOP_minuxx128v32,       TOP_vminuxx128v32},
+    {TOP_minuxxx128v32,      TOP_vminuxxx128v32},
+    {TOP_maxu128v32,         TOP_vmaxu128v32},
+    {TOP_maxux128v32,        TOP_vmaxux128v32},
+    {TOP_maxuxx128v32,       TOP_vmaxuxx128v32},
+    {TOP_maxuxxx128v32,      TOP_vmaxuxxx128v32},
+    {TOP_mins128v32,         TOP_vmins128v32},
+    {TOP_minsx128v32,        TOP_vminsx128v32},
+    {TOP_minsxx128v32,       TOP_vminsxx128v32},
+    {TOP_minsxxx128v32,      TOP_vminsxxx128v32},
+    {TOP_maxs128v32,         TOP_vmaxs128v32},
+    {TOP_maxsx128v32,        TOP_vmaxsx128v32},
+    {TOP_maxsxx128v32,       TOP_vmaxsxx128v32},
+    {TOP_maxsxxx128v32,      TOP_vmaxsxxx128v32},
+    {TOP_round128v32,        TOP_vround128v32},
+    {TOP_roundx128v32,       TOP_vroundx128v32},
+    {TOP_roundxx128v32,      TOP_vroundxx128v32},
+    {TOP_roundxxx128v32,     TOP_vroundxxx128v32},
+    {TOP_roundss,            TOP_vroundss},
+    {TOP_roundxss,           TOP_vroundxss},
+    {TOP_roundxxss,          TOP_vroundxxss},
+    {TOP_roundxxxss,         TOP_vroundxxxss},
+    {TOP_round128v64,        TOP_vround128v64},
+    {TOP_roundx128v64,       TOP_vroundx128v64},
+    {TOP_roundxx128v64,      TOP_vroundxx128v64},
+    {TOP_roundxxx128v64,     TOP_vroundxxx128v64},
+    {TOP_roundsd,            TOP_vroundsd},
+    {TOP_roundxsd,           TOP_vroundxsd},
+    {TOP_roundxxsd,          TOP_vroundxxsd},
+    {TOP_roundxxxsd,         TOP_vroundxxxsd},
+    {TOP_finsr128v32,        TOP_vfinsr128v32},
+    {TOP_finsrx128v32,       TOP_vfinsrx128v32},
+    {TOP_finsrxx128v32,      TOP_vfinsrxx128v32},
+    {TOP_finsrxxx128v32,     TOP_vfinsrxxx128v32},
+    {TOP_insr128v8,          TOP_vinsr128v8},
+    {TOP_insrx128v8,         TOP_vinsrx128v8},
+    {TOP_insrxx128v8,        TOP_vinsrxx128v8},
+    {TOP_insrxxx128v8,       TOP_vinsrxxx128v8},
+    {TOP_insr128v16,         TOP_vinsr128v16},
+    {TOP_insrx128v16,        TOP_vinsrx128v16},
+    {TOP_insrxx128v16,       TOP_vinsrxx128v16},
+    {TOP_insrxxx128v16,      TOP_vinsrxxx128v16},
+    {TOP_insr128v32,         TOP_vinsr128v32},
+    {TOP_insrx128v32,        TOP_vinsrx128v32},
+    {TOP_insrxx128v32,       TOP_vinsrxx128v32},
+    {TOP_insrxxx128v32,      TOP_vinsrxxx128v32},
+    {TOP_insr128v64,         TOP_vinsr128v64},
+    {TOP_insrx128v64,        TOP_vinsrx128v64},
+    {TOP_insrxx128v64,       TOP_vinsrxx128v64},
+    {TOP_insrxxx128v64,      TOP_vinsrxxx128v64},
+    {TOP_fextr128v32,        TOP_vfextr128v32},
+    {TOP_fextrx128v32,       TOP_vfextrx128v32},
+    {TOP_fextrxx128v32,      TOP_vfextrxx128v32},
+    {TOP_fextrxxx128v32,     TOP_vfextrxxx128v32},
+    {TOP_extr128v8,          TOP_vextr128v8},
+    {TOP_extrx128v8,         TOP_vextrx128v8},
+    {TOP_extrxx128v8,        TOP_vextrxx128v8},
+    {TOP_extrxxx128v8,       TOP_vextrxxx128v8},
+    {TOP_extr128v16,         TOP_vextr128v16},
+    {TOP_extrx128v16,        TOP_vextrx128v16},
+    {TOP_extrxx128v16,       TOP_vextrxx128v16},
+    {TOP_extrxxx128v16,      TOP_vextrxxx128v16},
+    {TOP_extr128v32,         TOP_vextr128v32},
+    {TOP_extrx128v32,        TOP_vextrx128v32},
+    {TOP_extrxx128v32,       TOP_vextrxx128v32},
+    {TOP_extrxxx128v32,      TOP_vextrxxx128v32},
+    {TOP_extr128v64,         TOP_vextr128v64},
+    {TOP_extrx128v64,        TOP_vextrx128v64},
+    {TOP_extrxx128v64,       TOP_vextrxx128v64},
+    {TOP_extrxxx128v64,      TOP_vextrxxx128v64},
+    {TOP_pmovsxbw,           TOP_vpmovsxbw},
+    {TOP_pmovsxbwx,          TOP_vpmovsxbwx},
+    {TOP_pmovsxbwxx,         TOP_vpmovsxbwxx},
+    {TOP_pmovsxbwxxx,        TOP_vpmovsxbwxxx},
+    {TOP_pmovzxbw,           TOP_vpmovzxbw},
+    {TOP_pmovzxbwx,          TOP_vpmovzxbwx},
+    {TOP_pmovzxbwxx,         TOP_vpmovzxbwxx},
+    {TOP_pmovzxbwxxx,        TOP_vpmovzxbwxxx},
+    {TOP_pmovsxbd,           TOP_vpmovsxbd},
+    {TOP_pmovsxbdx,          TOP_vpmovsxbdx},
+    {TOP_pmovsxbdxx,         TOP_vpmovsxbdxx},
+    {TOP_pmovsxbdxxx,        TOP_vpmovsxbdxxx},
+    {TOP_pmovzxbd,           TOP_vpmovzxbd},
+    {TOP_pmovzxbdx,          TOP_vpmovzxbdx},
+    {TOP_pmovzxbdxx,         TOP_vpmovzxbdxx},
+    {TOP_pmovzxbdxxx,        TOP_vpmovzxbdxxx},
+    {TOP_pmovsxbq,           TOP_vpmovsxbq},
+    {TOP_pmovsxbqx,          TOP_vpmovsxbqx},
+    {TOP_pmovsxbqxx,         TOP_vpmovsxbqxx},
+    {TOP_pmovsxbqxxx,        TOP_vpmovsxbqxxx},
+    {TOP_pmovzxbq,           TOP_vpmovzxbq},
+    {TOP_pmovzxbqx,          TOP_vpmovzxbqx},
+    {TOP_pmovzxbqxx,         TOP_vpmovzxbqxx},
+    {TOP_pmovzxbqxxx,        TOP_vpmovzxbqxxx},
+    {TOP_pmovsxwd,           TOP_vpmovsxwd},
+    {TOP_pmovsxwdx,          TOP_vpmovsxwdx},
+    {TOP_pmovsxwdxx,         TOP_vpmovsxwdxx},
+    {TOP_pmovsxwdxxx,        TOP_vpmovsxwdxxx},
+    {TOP_pmovzxwd,           TOP_vpmovzxwd},
+    {TOP_pmovzxwdx,          TOP_vpmovzxwdx},
+    {TOP_pmovzxwdxx,         TOP_vpmovzxwdxx},
+    {TOP_pmovzxwdxxx,        TOP_vpmovzxwdxxx},
+    {TOP_pmovsxwq,           TOP_vpmovsxwq},
+    {TOP_pmovsxwqx,          TOP_vpmovsxwqx},
+    {TOP_pmovsxwqxx,         TOP_vpmovsxwqxx},
+    {TOP_pmovsxwqxxx,        TOP_vpmovsxwqxxx},
+    {TOP_pmovzxwq,           TOP_vpmovzxwq},
+    {TOP_pmovzxwqx,          TOP_vpmovzxwqx},
+    {TOP_pmovzxwqxx,         TOP_vpmovzxwqxx},
+    {TOP_pmovzxwqxxx,        TOP_vpmovzxwqxxx},
+    {TOP_pmovsxdq,           TOP_vpmovsxdq},
+    {TOP_pmovsxdqx,          TOP_vpmovsxdqx},
+    {TOP_pmovsxdqxx,         TOP_vpmovsxdqxx},
+    {TOP_pmovsxdqxxx,        TOP_vpmovsxdqxxx},
+    {TOP_pmovzxdq,           TOP_vpmovzxdq},
+    {TOP_pmovzxdqx,          TOP_vpmovzxdqx},
+    {TOP_pmovzxdqxx,         TOP_vpmovzxdqxx},
+    {TOP_pmovzxdqxxx,        TOP_vpmovzxdqxxx},
+    {TOP_ptest128,           TOP_vptest128},
+    {TOP_ptestx128,          TOP_vptestx128},
+    {TOP_ptestxx128,         TOP_vptestxx128},
+    {TOP_ptestxxx128,        TOP_vptestxxx128},
+    {TOP_cmpeq128v64,        TOP_vcmpeq128v64},
+    {TOP_cmpeqx128v64,       TOP_vcmpeqx128v64},
+    {TOP_cmpeqxx128v64,      TOP_vcmpeqxx128v64},
+    {TOP_cmpeqxxx128v64,     TOP_vcmpeqxxx128v64},
+    {TOP_packusdw,           TOP_vpackusdw},
+    {TOP_packusdwx,          TOP_vpackusdwx},
+    {TOP_packusdwxx,         TOP_vpackusdwxx},
+    {TOP_packusdwxxx,        TOP_vpackusdwxxx},
+    {TOP_ldntdqa,            TOP_vldntdqa},
+    {TOP_ldntdqax,           TOP_vldntdqax},
+    {TOP_ldntdqaxx,          TOP_vldntdqaxx},
+    {TOP_stntdq,             TOP_vstntdq},
+    {TOP_stntdqx,            TOP_vstntdqx},
+    {TOP_stntdqxx,           TOP_vstntdqxx},
+    // SSE4.2
+    {TOP_cmpestri,           TOP_vcmpestri},
+    {TOP_cmpestrix,          TOP_vcmpestrix},
+    {TOP_cmpestrixx,         TOP_vcmpestrixx},
+    {TOP_cmpestrixxx,        TOP_vcmpestrixxx},
+    {TOP_cmpestrm,           TOP_vcmpestrm},
+    {TOP_cmpestrmx,          TOP_vcmpestrmx},
+    {TOP_cmpestrmxx,         TOP_vcmpestrmxx},
+    {TOP_cmpestrmxxx,        TOP_vcmpestrmxxx},
+    {TOP_cmpistri,           TOP_vcmpistri},
+    {TOP_cmpistrix,          TOP_vcmpistrix},
+    {TOP_cmpistrixx,         TOP_vcmpistrixx},
+    {TOP_cmpistrixxx,        TOP_vcmpistrixxx},
+    {TOP_cmpistrm,           TOP_vcmpistrm},
+    {TOP_cmpistrmx,          TOP_vcmpistrmx},
+    {TOP_cmpistrmxx,         TOP_vcmpistrmxx},
+    {TOP_cmpistrmxxx,        TOP_vcmpistrmxxx},
+    {TOP_cmpgt128v64,        TOP_vcmpgt128v64},
+    {TOP_cmpgtx128v64,       TOP_vcmpgtx128v64},
+    {TOP_cmpgtxx128v64,      TOP_vcmpgtxx128v64},
+    {TOP_cmpgtxxx128v64,     TOP_vcmpgtxxx128v64},
+    // SSSE3
+    {TOP_psign128v8,         TOP_vpsign128v8},
+    {TOP_psignx128v8,        TOP_vpsignx128v8},
+    {TOP_psignxx128v8,       TOP_vpsignxx128v8},
+    {TOP_psignxxx128v8,      TOP_vpsignxxx128v8},
+    {TOP_psign128v16,        TOP_vpsign128v16},
+    {TOP_psignx128v16,       TOP_vpsignx128v16},
+    {TOP_psignxx128v16,      TOP_vpsignxx128v16},
+    {TOP_psignxxx128v16,     TOP_vpsignxxx128v16},
+    {TOP_psign128v32,        TOP_vpsign128v32},
+    {TOP_psignx128v32,       TOP_vpsignx128v32},
+    {TOP_psignxx128v32,      TOP_vpsignxx128v32},
+    {TOP_psignxxx128v32,     TOP_vpsignxxx128v32},
+    {TOP_pabs128v8,          TOP_vabs128v8},
+    {TOP_pabsx128v8,         TOP_vabsx128v8},
+    {TOP_pabsxx128v8,        TOP_vabsxx128v8},
+    {TOP_pabsxxx128v8,       TOP_vabsxxx128v8},
+    {TOP_pabs128v16,         TOP_vabs128v16},
+    {TOP_pabsx128v16,        TOP_vabsx128v16},
+    {TOP_pabsxx128v16,       TOP_vabsxx128v16},
+    {TOP_pabsxxx128v16,      TOP_vabsxxx128v16},
+    {TOP_pabs128v32,         TOP_vabs128v32},
+    {TOP_pabsx128v32,        TOP_vabsx128v32},
+    {TOP_pabsxx128v32,       TOP_vabsxx128v32},
+    {TOP_pabsxxx128v32,      TOP_vabsxxx128v32},
+    {TOP_palignr128,         TOP_vpalignr128},
+    {TOP_palignrx128,        TOP_vpalignrx128},
+    {TOP_palignrxx128,       TOP_vpalignrxx128},
+    {TOP_palignrxxx128,      TOP_vpalignrxxx128},
+    {TOP_pshuf128v8,         TOP_vpshuf128v8},
+    {TOP_pshufx128v8,        TOP_vpshufx128v8},
+    {TOP_pshufxx128v8,       TOP_vpshufxx128v8},
+    {TOP_pshufxxx128v8,      TOP_vpshufxxx128v8},
+    {TOP_pmulhrsw128,        TOP_vmulhrsw},
+    {TOP_pmulhrswx128,       TOP_vmulhrswx},
+    {TOP_pmulhrswxx128,      TOP_vmulhrswxx},
+    {TOP_pmulhrswxxx128,     TOP_vmulhrswxxx},
+    {TOP_pmaddubsw128,       TOP_vpmaddubsw128},
+    {TOP_pmaddubswx128,      TOP_vpmaddubswx128},
+    {TOP_pmaddubswxx128,     TOP_vpmaddubswxx128},
+    {TOP_pmaddubswxxx128,    TOP_vpmaddubswxxx128},
+    {TOP_phsub128v16,        TOP_vphsub128v16},
+    {TOP_phsubx128v16,       TOP_vphsubx128v16},
+    {TOP_phsubxx128v16,      TOP_vphsubxx128v16},
+    {TOP_phsubxxx128v16,     TOP_vphsubxxx128v16},
+    {TOP_phsub128v32,        TOP_vphsub128v32},
+    {TOP_phsubx128v32,       TOP_vphsubx128v32},
+    {TOP_phsubxx128v32,      TOP_vphsubxx128v32},
+    {TOP_phsubxxx128v32,     TOP_vphsubxxx128v32},
+    {TOP_phsubs128v16,       TOP_vphsubs128v16},
+    {TOP_phsubsx128v16,      TOP_vphsubsx128v16},
+    {TOP_phsubsxx128v16,     TOP_vphsubsxx128v16},
+    {TOP_phsubsxxx128v16,    TOP_vphsubsxxx128v16},
+    {TOP_phadd128v16,        TOP_vphadd128v16},
+    {TOP_phaddx128v16,       TOP_vphaddx128v16},
+    {TOP_phaddxx128v16,      TOP_vphaddxx128v16},
+    {TOP_phaddxxx128v16,     TOP_vphaddxxx128v16},
+    {TOP_phadd128v32,        TOP_vphadd128v32},
+    {TOP_phaddx128v32,       TOP_vphaddx128v32},
+    {TOP_phaddxx128v32,      TOP_vphaddxx128v32},
+    {TOP_phaddxxx128v32,     TOP_vphaddxxx128v32},
+    {TOP_phadds128v16,       TOP_vphadds128v16},
+    {TOP_phaddsx128v16,      TOP_vphaddsx128v16},
+    {TOP_phaddsxx128v16,     TOP_vphaddsxx128v16},
+    {TOP_phaddsxxx128v16,    TOP_vphaddsxxx128v16},
+};
+
+void Init_LegacySSE_To_Vex_Group(void)
+{
+  int i, j;
+ 
+  for (i = 0; i <= TOP_count; i++) {
+    Top_Leg_To_Vex_Mode_Group[i].legacy_mode = (TOP)i;
+    Top_Leg_To_Vex_Mode_Group[i].vex_mode = TOP_UNDEFINED;
   }
 
-  return FALSE;
+  UINT table_size = sizeof(Top_SSE_To_Vex_Mode_Group_Table) / 
+                    sizeof(Top_Trans_Group);
+
+  // now populate the vex_mode translations
+  for (i = 0; i <= TOP_count; i++) {
+    for (j = 0; j < table_size; j++) {
+      if (Top_SSE_To_Vex_Mode_Group_Table[j].legacy_mode == i) {
+        Top_Leg_To_Vex_Mode_Group[i].vex_mode =
+          Top_SSE_To_Vex_Mode_Group_Table[j].vex_mode;
+      }
+    }
+  }
 }
 
-/*  Is <op> a copy to a callee-saves register from its save-TN?
- */
-BOOL
-OP_Is_Copy_From_Save_TN( const OP* op )
+TOP Remap_topcode(OP *op, TOP opr)
 {
-  INT i;
+  if (Is_Target_Orochi() && Is_Target_AVX()) {
+    if (Top_Leg_To_Vex_Mode_Group[opr].vex_mode == TOP_UNDEFINED)
+      return opr;
 
-  // You'd think there'd be a better way than groveling through the operands,
-  // but short of marking these when we make them, this seems to be the most
-  // bullet-proof
+    opr = Top_Leg_To_Vex_Mode_Group[opr].vex_mode;
 
-  for ( i = OP_results(op) - 1; i >= 0; --i ) {
-    if ( TN_is_dedicated(OP_result(op,i)) ) break;
+    // TODO: add operand size check for 256-bit
+    if (PU_has_avx128 == FALSE)
+      PU_has_avx128 = TRUE;
   }
-  if ( i < 0 ) return FALSE;
-
-  for ( i = OP_opnds(op) - 1; i >= 0; --i ) {
-    TN* tn = OP_opnd(op,i);
-    if ( TN_Is_Allocatable(tn) && TN_is_save_reg(tn))
-      return TRUE;
-  }
-
-  return FALSE;
+  return opr;
 }
 
+#endif

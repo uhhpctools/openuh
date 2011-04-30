@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: w2f_driver.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/w2f_driver.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:42 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/w2f_driver.cxx,v $
  *
  * Revision history:
  *  07-Oct-95 - Original Version
@@ -61,7 +61,7 @@
  */
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/w2f_driver.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/w2f_driver.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include <sys/elf_whirl.h>  /* for WHIRL_REVISION */
@@ -95,7 +95,7 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/w2f
  */
 
 /* Default extensions for input/outfile files: */
-static char *W2F_File_Extension[W2F_NUM_FILES] = 
+static const char *W2F_File_Extension[W2F_NUM_FILES] = 
 {
    ".f",       /* Fortran input file */
    ".w2f.f",   /* Fortran output file */
@@ -103,7 +103,7 @@ static char *W2F_File_Extension[W2F_NUM_FILES] =
 };
 
 /* CITE extensions for input/outfile files: */
-static char *W2F_Cite_Extension[W2F_NUM_FILES] = 
+static const char *W2F_Cite_Extension[W2F_NUM_FILES] = 
 {
    ".c",	        /* original input file */
    "-after-lno.f",	/* transformed source */
@@ -111,7 +111,7 @@ static char *W2F_Cite_Extension[W2F_NUM_FILES] =
 };
 
 /* PROMPF extensions for input/outfile files: */
-static char *W2F_Prompf_Extension[W2F_NUM_FILES] = 
+static const char *W2F_Prompf_Extension[W2F_NUM_FILES] = 
 {
    ".c",	 /* original input file */
    ".m",	 /* transformed source */
@@ -136,7 +136,7 @@ static BOOL         W2F_Initialized = FALSE;
 static BOOL         W2F_Outfile_Initialized = FALSE;
 static FORMAT_KIND  W2F_Format_Kind = F77_TAB_FORMAT;
 static WN2F_CONTEXT Global_Context = INIT_WN2F_CONTEXT;
-static char        *W2F_Progname = "";
+static const char  *W2F_Progname = "";
 static const char  *W2F_File_Name[W2F_NUM_FILES] = {NULL, NULL, NULL};
 static BOOL         File_Is_Created[W2F_NUM_FILES] = {FALSE, FALSE, FALSE};
 static MEM_POOL     W2F_Parent_Pool;
@@ -586,14 +586,6 @@ W2F_Enter_Global_Symbols(void)
 
    For_all(St_Table,GLOBAL_SYMTAB,enter_st());
 
-#if 0
-   // FIX constants ??
-   FOR_ALL_CONSTANTS(st, const_idx)
-   {
-      if (ST_symclass(st) != CLASS_SYM_CONST)
-	(void)W2CF_Symtab_Nameof_St(st);
-   }
-#endif
 
 
 } /* W2F_Enter_Global_Symbols */
@@ -651,8 +643,8 @@ W2F_Should_Emit_Nested_PUs(void)
 
 
 void
-W2F_Process_Command_Line (INT phase_argc, char *phase_argv[],
-			  INT argc, char *argv[])
+W2F_Process_Command_Line (INT phase_argc, const char *phase_argv[],
+			  INT argc, const char *argv[])
 {
     /* Get the program name
      */

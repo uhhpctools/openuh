@@ -43,7 +43,8 @@
 #include <fortran.h>
 #include <unistd.h>
 #include <sys/time.h>
-#ifdef KEY /* from <sys/time.h> but ifdef'ed out; needed in order to compile */
+/* In Linux <sys/time.h> this is ifdef'ed out */
+#if defined(KEY) && ! defined(BUILD_OS_DARWIN)
 struct timezone
   {
     int tz_minuteswest;		/* Minutes west of GMT.  */
@@ -147,6 +148,50 @@ timef_(void)
 	return( (_f_real) retval);
 }
 
+#ifdef KEY /* Bug 12813 */
+_f_real8
+_Timef(void)
+{
+	static int64	initial_rt = -1; /* Clock value from initial call */
+	int64		rt, rtdif;
+	double		retval;
+
+	{
+        struct timeval  buf;
+	struct timezone	buf2;
+	(void) gettimeofday (&buf, &buf2);
+        rt = (long long)buf.tv_sec * 1000000LL + buf.tv_usec;
+	}
+
+	if (initial_rt < 0) {
+		initial_rt	= rt;
+		rtdif		= 0;
+		/*
+		 * force rtdif to 0 to prevent anomalies due to possible
+		 * race conditions between 2 or more tasks calling TIMEF
+		 * concurrently on the initial call.
+		 */
+	}
+	else
+		rtdif		= rt - initial_rt;
+
+/*
+ *	On pre-7.0 UNICOS CX/CEA systems and on all CRAY-2 systems the 
+ *	real-time hardware clock is set to 0 on reboot.  If a restarted 
+ *	process had called TIMEF before the system was brought down 
+ *	and then after reboot, a negative difference in the real-time 
+ *	clock value would be observed.  To minimize the impact of
+ *	wrong timings being returned, we return 0 when this situation is 
+ *	detected.
+ */
+	if (rtdif < 0) {
+		initial_rt	= rt;
+		rtdif		= 0;
+	}
+
+	return (_f_real8) rtdif * MSECPERCLK;
+}
+#endif	/* KEY Bug 12813 */
 #endif	/* ! __mips */
 
 /*

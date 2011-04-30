@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -47,7 +51,6 @@
 *** always distributable.
 ***/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -55,7 +58,7 @@
 #pragma hdrstop
 
 #define snl_CXX      "snl.cxx"
-static char *rcs_id =   snl_CXX "$Revision: 1.9 $";
+const static char *rcs_id =   snl_CXX "$Revision: 1.9 $";
 
 #include <sys/types.h>
 #include <alloca.h>
@@ -87,6 +90,7 @@ static char *rcs_id =   snl_CXX "$Revision: 1.9 $";
 #include "wind_down.h"
 #include "ff_utils.h"
 #include "ipa_lno_util.h"
+#include "wn_simp.h"
 
 //-----------------------------------------------------------------------
 // ROUTINES FOR PEELING A SINGLE ITERATION OFF AN SNL 
@@ -480,6 +484,299 @@ extern void SNL_Peel_Iteration(WN* wn,
   }
 
   WN* wn_next = NULL; 
+#ifdef KEY
+  // Bug 5489 - If the only statement inside the DO_LOOP 
+  // is another DO_LOOP then, first = last = NULL because 
+  // DO_LOOPs are already deleted out of new_block.
+  for (WN* wn_temp = first; wn_temp; wn_temp = wn_next) {
+#else
+  for (WN* wn_temp = first; ; wn_temp = wn_next) {
+#endif
+    wn_next = WN_next(wn_temp);  
+    Remove_Redundant_Stids(wn_temp, du); 
+    if (wn_temp == last) 
+      break;
+  }
+  MEM_POOL_Pop(&SNL_local_pool);
+} 
+
+static void Cleanup_For_Inner_Loop_Peeling(WN *body, WN *current_stmt, 
+                                           WN *match_stmt, BOOL clear_match)
+{
+  // Now cleanup both the code and the dependence graph for
+  // the removed if-test in the loop and the
+  // match_stmt in newblock using the appropriate routines.
+  if (match_stmt) {
+    // In either case, always propagate the
+    // contents of the then block back into the existing loop.
+    WN *stmt = WN_first(WN_then(current_stmt));
+    while (stmt) {
+      WN *next = WN_next(stmt);
+      LWN_Insert_Block_Before(body, current_stmt,
+                              LWN_Extract_From_Block(stmt));
+      stmt = next;
+    }
+    LWN_Delete_Tree(current_stmt);
+    if (clear_match) {
+      LWN_Delete_LNO_dep_graph(match_stmt);
+      LWN_Delete_Tree(match_stmt);
+    }
+  }
+}
+
+//-----------------------------------------------------------------------
+// NAME: SNL_Peel_Iteration_Inner
+// FUNCTION: Peel an iteration off either the front or back of 'wn'.  If 
+//   'first_iter' is TRUE, peel the first iteration and place it in front
+//   of the loop, otherwise peel off the last iteration and place it after
+//   the loop.  
+//-----------------------------------------------------------------------
+
+extern void SNL_Peel_Iteration_Inner(WN* wn,
+                                     WN *stmt,
+                                     BOOL exclusion,
+			             BOOL first_iter)
+{
+
+// Peel last steration of this loop.  The hard part is updating dependences
+// efficiently.  Here's how I'll do this:  First, get a map of all the new
+// vertices to all the old ones and of all the old ones to all the new ones.
+// Note that some old ones are in the loop but don't have a corresponding new
+// one if loops_go_zero is true.  In those cases, give the value -1.
+
+// So now iterate through the new nodes.  For each arc entering or leaving
+// the corresponding old node, if the other end new, then we ignore it --
+// it's added in this phase and doesn't concern us.  Otherwise, we add arcs
+// replacing the old node with the new one, and shortenting the dependence
+// accordingly.  This is not very accurate, because it does not take into
+// account last iteration information.  That doesn't matter in the current
+// implementation, when the innermost loop only is peeled, so we
+// recompute the dependences to be safe.  That's probably cheap, since we
+// already know all the arcs along which a dependence could occur, which
+// shouldn't be that many.  
+
+  ARRAY_DIRECTED_GRAPH16*	dg = Array_Dependence_Graph;
+  DU_MANAGER*			du = Du_Mgr;
+  DO_LOOP_INFO*			dli = Get_Do_Loop_Info(wn);
+
+  // No guard test is needed, our criteria is that the loop is initialized
+  // with a positive trip and that via the transformation test the stride is 1.
+  WN* wn_inner = SNL_Get_Inner_Snl_Loop(wn, 1); 
+  DO_LOOP_INFO* dli_inner = Get_Do_Loop_Info(wn_inner); 
+
+  WN *loop_body = WN_do_body(wn);
+  WN* newblock = LWN_Copy_Tree(loop_body, TRUE, LNO_Info_Map);
+  LWN_Set_Frequency_Tree(newblock,1);
+  LWN_Adjust_Frequency_Tree(WN_do_body(wn), -1);
+  LWN_Adjust_Frequency(WN_step(wn), -1);
+
+  // Now walk newblock and find the match to our stmt, then remove it
+  // as the neither the first or the last iteration will need the copy
+  // as it was proven to be excluded.
+  WN *cur, *match_stmt;
+  match_stmt = NULL;
+  int num_stmts = 0;
+  for (cur = WN_first(newblock); cur; cur = WN_next(cur)) {
+    if (WN_opcode(cur) == OPC_IF) {
+      WN *stmt_if = WN_if_test(stmt);
+      WN *cur_if = WN_if_test(cur);
+      if ((match_stmt == NULL) && 
+          (WN_Simp_Compare_Trees(stmt_if, cur_if) == 0)) {
+        match_stmt = cur;
+      }
+    }
+    num_stmts++;
+  }
+
+  // insert in newblock, but using value of upper/lower bound.  Also
+  // adjust bound in wn.
+
+  if (first_iter) {
+    Replace_Ldid_With_Exp_Copy(WN_index(wn), newblock,
+			       WN_kid0(WN_start(wn)), du);
+    Increase_By(WN_kid0(WN_start(wn)), 1, WN_start(wn), 0);
+    Is_True(dli->LB->Num_Vec() == 1, ("Bug in Peel_Iteration()"));
+    dli->LB->Dim(0)->Const_Offset++;
+  }
+  else {
+    Upper_Bound_Standardize(WN_end(wn));
+    Replace_Ldid_With_Exp_Copy(WN_index(wn), newblock,
+			       SNL_UBexp(WN_end(wn)), du);
+    Increase_By(SNL_UBexp(WN_end(wn)), -1, WN_end(wn));
+    Is_True(dli->UB->Num_Vec() == 1, ("Bug in Peel_Iteration()"));
+    dli->UB->Dim(0)->Const_Offset--;
+  }
+  if (dli->Est_Num_Iterations > 0)
+    dli->Est_Num_Iterations--;
+
+  // check to see if there are other stmts in newblock before adding it
+  if ((num_stmts == 1) && (match_stmt != NULL)) {
+    Cleanup_For_Inner_Loop_Peeling(loop_body, stmt, match_stmt, FALSE);
+    LWN_Delete_Tree(newblock);
+    return;
+  }
+
+  WN* tmp_unrolls[2];
+  tmp_unrolls[0] = WN_do_body(wn);
+  tmp_unrolls[1] = newblock;
+
+  if (red_manager != NULL) red_manager->Unroll_Update(tmp_unrolls, 2);
+  // dli->Depth is the loop further out, so don't need to subtract 1
+  Unrolled_DU_Update(tmp_unrolls, 2, dli->Depth, TRUE, FALSE);
+
+  MEM_POOL_Push(&SNL_local_pool);
+
+  BOOL disaster = FALSE;
+  INT lex = 0;
+
+  typedef HASH_TABLE<VINDEX16, SNL_NEWINFO> VSNL_HASH_TABLE;
+  VSNL_HASH_TABLE 
+    *new2old = CXX_NEW(VSNL_HASH_TABLE(43,&SNL_local_pool),&SNL_local_pool);
+  HASH_TABLE_ITER<VINDEX16,SNL_NEWINFO>	iter(new2old);
+  if (!Build_New_To_Old(WN_do_body(wn), newblock, dg, new2old, lex)) {
+    disaster = TRUE;
+    goto disaster;
+  }
+
+  {
+    if (first_iter)
+      LWN_Insert_Block_Before(LWN_Get_Parent(wn), wn, newblock);
+    else
+      LWN_Insert_Block_After(LWN_Get_Parent(wn), wn, newblock);
+
+    // Dependence graph update
+
+    INT count = 0;
+    VINDEX16				vnew;
+    SNL_NEWINFO				newinfo;
+    while (iter.Step(&vnew, &newinfo)) {
+      HASH_TABLE<WN*,INT> old_nodes(MIN(dg->Get_Edge_Count(), 512),
+	&SNL_local_pool);
+      INT lex = newinfo.Lex;
+      VINDEX16 vold = newinfo.Vold;
+      Is_True(vold > 0, ("Missing vold vertex"));
+      WN* wnnew = dg->Get_Wn(vnew);
+      DOLOOP_STACK stack(&SNL_local_pool);
+      Build_Doloop_Stack(wnnew, &stack);
+
+      // from new stuff to anywhere that preexisted
+
+      EINDEX16 e;
+      for (e = dg->Get_Out_Edge(vold); e; e = dg->Get_Next_Out_Edge(e)) {
+	VINDEX16 vsink = dg->Get_Sink(e);
+	Is_True(vsink, ("Sink has null vertex"));
+
+	if (new2old->Find(vsink).Vold != 0)	// copy only old arcs
+	  continue;
+
+	WN* own = dg->Get_Wn(vsink);
+	old_nodes.Enter(own, 1); 
+	DOLOOP_STACK ostack(&SNL_local_pool);
+	Build_Doloop_Stack(own, &ostack);
+
+	count++;
+	BOOL ok = dg->Add_Edge( wnnew, &stack, own, &ostack, first_iter);
+	if (!ok) {
+	  LNO_Erase_Dg_From_Here_In(wnnew, dg);
+	  LNO_Erase_Dg_From_Here_In(own, dg);
+	  disaster = TRUE;
+	  goto disaster;
+	}
+      }
+
+      // to new stuff from anywhere that preexisted
+
+      for (e = dg->Get_In_Edge(vold); e; e = dg->Get_Next_In_Edge(e)) {
+	VINDEX16 vsource = dg->Get_Source(e);
+	Is_True(vsource, ("Source has null vertex"));
+
+	if (new2old->Find(vsource).Vold != 0)	// copy only old arcs
+	  continue;
+
+	WN* own = dg->Get_Wn(vsource);
+	if (old_nodes.Find(own) != 0) 
+	  continue; 
+	DOLOOP_STACK ostack(&SNL_local_pool);
+	Build_Doloop_Stack(own, &ostack);
+
+	count++;
+	BOOL ok = dg->Add_Edge( wnnew, &stack, own, &ostack, first_iter);
+	if (!ok) {
+	  LNO_Erase_Dg_From_Here_In(wnnew, dg);
+	  LNO_Erase_Dg_From_Here_In(own, dg);
+	  disaster = TRUE;
+	  goto disaster;
+	}
+      }
+    }
+
+    // now add arcs from new to new
+
+    {
+      HASH_TABLE_ITER<VINDEX16,SNL_NEWINFO> iter(new2old);
+      VINDEX16				vnew;
+      SNL_NEWINFO				newinfo;
+      while (iter.Step(&vnew, &newinfo)) {
+	INT lex = newinfo.Lex;
+	WN* wnnew = dg->Get_Wn(vnew);
+	if (OPCODE_is_load(WN_opcode(wnnew)))
+	  continue;
+
+	DOLOOP_STACK stack(&SNL_local_pool);
+	Build_Doloop_Stack(wnnew, &stack);
+
+	HASH_TABLE_ITER<VINDEX16,SNL_NEWINFO> iter2(new2old);
+	VINDEX16				vnew2;
+	SNL_NEWINFO			newinfo2;
+	while (iter2.Step(&vnew2, &newinfo2)) {
+	  INT lex2 = newinfo2.Lex;
+	  WN* wnnew2 = dg->Get_Wn(vnew2);
+	  BOOL is_load = OPCODE_is_load(WN_opcode(wnnew2));
+
+	  if (!is_load && lex < lex2)		// redundant
+	    continue;
+
+	  count++;
+	  BOOL ok = dg->Add_Edge( wnnew, &stack, wnnew2, &stack, lex < lex2);
+	  if (!ok) {
+	    LNO_Erase_Dg_From_Here_In(WN_kid1(wnnew), dg);
+	    LNO_Erase_Dg_From_Here_In(WN_kid(wnnew2,is_load?0:1), dg);
+	    disaster = TRUE;
+	    goto disaster;
+	  }
+	}
+      }
+    }
+
+    SNL_DEBUG1(1, "Peeling added %d edges\n", count);
+  }
+
+  Cleanup_For_Inner_Loop_Peeling(loop_body, stmt, match_stmt, TRUE); 
+
+ disaster:
+  if (disaster) {
+    SNL_DEBUG0(0, "Ran out of edges in peeling");
+    HASH_TABLE_ITER<VINDEX16,SNL_NEWINFO> iter(new2old);
+    VINDEX16		v;
+    SNL_NEWINFO		dummy;
+    while (iter.Step(&v, &dummy)) {
+      EINDEX16 e;
+      EINDEX16 enext = 0;
+      for (e = dg->Get_In_Edge(v); e; e = enext) {
+	enext = dg->Get_Next_In_Edge(e);
+	dg->Delete_Array_Edge(e);
+      }
+      for (e = dg->Get_Out_Edge(v); e; e = enext) {
+	enext = dg->Get_Next_Out_Edge(e);
+	dg->Delete_Array_Edge(e);
+      }
+      dg->Delete_Vertex(v);
+    }
+  }
+
+  WN* wn_next = NULL; 
+  WN* first = WN_first(newblock);
+  WN* last = WN_last(newblock);
 #ifdef KEY
   // Bug 5489 - If the only statement inside the DO_LOOP 
   // is another DO_LOOP then, first = last = NULL because 
@@ -2095,7 +2392,7 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
       }
 
       DO_LOOP_INFO* dli = CXX_NEW(DO_LOOP_INFO(&LNO_default_pool,
-        NULL, NULL, NULL, FALSE, FALSE,FALSE, FALSE,FALSE, FALSE, FALSE),
+        NULL, NULL, NULL, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
         &LNO_default_pool);
       Set_Do_Loop_Info(d[i], dli);
       Is_True(Get_Do_Loop_Info(d[i]) == dli, ("Big bug"));
@@ -2103,22 +2400,6 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
       DO_LOOP_INFO* olddli;
       if (t->Rectangular()) {
         INT num = t->Stripsz(i);
-#if 0
-	if (Cur_PU_Feedback) {
-	  INT32 orig_count = WN_MAP32_Get(WN_MAP_FEEDBACK, WN_start(innerloop));
-	  if (orig_count>0) {
-	    INT32 orig_test = WN_MAP32_Get(WN_MAP_FEEDBACK, WN_end(innerloop));
-	    INT32 outer_count = orig_count;
-	    INT32 outer_test = MAX(orig_test/num,1);
-	    LWN_Set_Frequency(d[i], outer_count);
-	    LWN_Set_Frequency(WN_start(d[i]), outer_count);
-	    LWN_Set_Frequency(WN_step(d[i]), outer_test-1);
-
-	    LWN_Set_Frequency(innerloop, outer_test-1);
-	    LWN_Set_Frequency(WN_start(innerloop), outer_test-1);
-	  }
-	}
-#endif
         olddli= Get_Do_Loop_Info(stack.Bottom_nth(first_in_stack+t->Iloop(i)));
 
         dli->Est_Num_Iterations = (olddli->Est_Num_Iterations + num - 1) / num;
@@ -2135,23 +2416,6 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
       }
       else {
         //TODO OK, but at some point get a better estimate, somewhat easy
-#if 0
-	if (Cur_PU_Feedback) {
-	  INT32 orig_count = WN_MAP32_Get(WN_MAP_FEEDBACK, WN_start(innerloop));
-	  if (orig_count>0) {
-	    INT32 orig_test = WN_MAP32_Get(WN_MAP_FEEDBACK, WN_end(innerloop));
-	    INT32 outer_count = orig_count;
-	    INT32 outer_test = MAX(orig_test/20,1);
-	    LWN_Set_Frequency(d[i], outer_count);
-	    LWN_Set_Frequency(WN_start(d[i]), outer_count);
-	    LWN_Set_Frequency(WN_step(d[i]), outer_test-1);
-
-	    LWN_Set_Frequency(innerloop, outer_test-1);
-	    LWN_Set_Frequency(WN_start(innerloop), outer_test-1);
-	    LWN_Set_Frequency(WN_index(innerloop), outer_test-1);
-	  }
-	}
-#endif
         olddli = Get_Do_Loop_Info(innerloop);
         dli->Est_Num_Iterations = (olddli->Est_Num_Iterations + 19) / 20;
         olddli->Est_Num_Iterations = 20;

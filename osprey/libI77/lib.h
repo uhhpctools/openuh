@@ -50,12 +50,10 @@ extern int setolist(olist *, int, char *, char *, char *, int, char *, int);
 extern int stcllist(cllist *, int, char *, int);
 extern int setalist(alist *, int, int);
 
-#if 11
 extern int setcilist64(cilist64 *, ftnint, char *, XINT64, int, int);
 extern int setolist64(olist64 *, ftnint, char *, char *, char *, int, char *, int);
 /* extern int setcllist64(cllist64 *, ftnint, char *, int); */
 /* extern int setalist64(alist64 *, ftnint, int); */
-#endif
 
 #endif /* C || C++ */
 

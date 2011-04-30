@@ -44,7 +44,11 @@
 #if defined(_UNICOS)
 #include <fp.h>
 #else
+#if defined(BUILD_OS_DARWIN)
+#include <limits.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <values.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <math.h>
 #endif
 #include <cray/fmtconv.h>

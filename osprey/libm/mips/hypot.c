@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: hypot.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/hypot.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:21-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.hypot.c $
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -56,7 +56,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/hypot.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.hypot.c $ $Revision: 1.5 $";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -72,7 +72,13 @@ extern	double	hypot(double, double);
 #pragma weak hypot = __hypot
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __hypot(double, double);
+#pragma weak hypot
+double hypot( double arg1, double arg2) {
+  return __hypot( arg1, arg2 );
+}
+#elif defined(__GNUC__)
 extern  double  __hypot(double, double);
 
 double    hypot() __attribute__ ((weak, alias ("__hypot")));
@@ -339,7 +345,12 @@ struct exception	exstruct;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern  long double  __hypotl(long double, long double);
+long double hypotl( long double arg1, long double arg2) {
+  return ( (long double)__hypot((double)arg1, (double)arg2) );
+}
+#elif defined(__GNUC__)
 extern  long double  __hypotl(long double, long double);
 long double    hypotl() __attribute__ ((weak, alias ("__hypotl")));
 

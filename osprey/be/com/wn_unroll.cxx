@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -34,6 +34,7 @@
 #endif /* USE_PCH */
 #pragma hdrstop
 
+#include <stdint.h>
 #include "defs.h"
 #include "config.h"
 #include "opt_config.h"
@@ -45,6 +46,8 @@
 #include "wn.h"
 #include "wn_util.h"
 #include "wn_lower.h"
+
+static INT loop_count = 0;
 
 class WN_UNROLL { // for implementing the actual unrolling mechanism
 private:
@@ -141,6 +144,26 @@ public:
 	if (_step_amt > 0)
 	  _trips = WN_Sub(_rtype, _end, WN_COPY_Tree_With_Map(_start));
 	else _trips = WN_Sub(_rtype, WN_COPY_Tree_With_Map(_start), _end);
+        // if not already adjusted for LE/GE, and has remainder, then adjust
+        // e.g. for (i = 0; i < 5; i+=2) has 5/2+1 trips
+        if (! (WN_operator(_end_cond) == OPR_LE || 
+	       WN_operator(_end_cond) == OPR_GE))
+        {
+          WN *tmp = WN_Binary(OPR_MOD, _rtype, WN_COPY_Tree_With_Map(_trips), 
+                            WN_Intconst(_rtype, _abs_step_amt));
+          tmp = WN_Select(_rtype, WN_EQ(_rtype, tmp, WN_Intconst(_rtype, 0)), 
+                        WN_Intconst(_rtype, 0),
+                        WN_Intconst(_rtype, 1));
+          // trips should be number of trips actually needed, so divide by step
+          _trips = WN_Div(_rtype, _trips, WN_Intconst(_rtype, _abs_step_amt));
+          _trips = WN_Add(_rtype, _trips, tmp);
+        }
+        else {
+          // trips should be number of trips actually needed, so divide by step
+          _trips = WN_Div(_rtype, _trips, WN_Intconst(_rtype, _abs_step_amt));
+        }
+
+
       }
 
       if (WN_kid_count(doloop) == 6)
@@ -208,7 +231,8 @@ WN_UNROLL::Analyze_body_expr(WN *tree)
 
   // binary
   case OPR_MLOAD:
-  case OPR_MPY:
+  case OPR_ILOADX:
+  case OPR_MPY: case OPR_HIGHMPY:
   case OPR_DIV: 
   case OPR_MOD: case OPR_REM:
   case OPR_DIVREM:
@@ -241,7 +265,7 @@ WN_UNROLL::Analyze_body_expr(WN *tree)
       Analyze_body_expr(WN_kid(tree,i)); 
     return;
 
-  default: Is_True(FALSE,("unexpected operator"));
+  default: Is_True(FALSE,("unexpected operator %s", OPERATOR_name(opr)));
   }
 
   return;
@@ -271,6 +295,7 @@ WN_UNROLL::Analyze_body_stmt(WN *tree)
     return;
 
   case OPR_MSTORE:
+  case OPR_ISTOREX:
     Analyze_body_expr(WN_kid2(tree));
     // fall-thru
 
@@ -318,11 +343,7 @@ WN_UNROLL::Replicate_expr(WN *expr, INT rep_cnt)
   INT i;
 
   WN *new_expr = WN_CopyNode(expr);
-#if 0
-  WN_COPY_All_Maps(new_expr, expr);
-#else
   WN_set_map_id(new_expr, (WN_MAP_ID) (-1));
-#endif
 
 
   switch (opr) {
@@ -372,7 +393,7 @@ WN_UNROLL::Replicate_expr(WN *expr, INT rep_cnt)
 
   // binary
   case OPR_MLOAD:
-  case OPR_MPY:
+  case OPR_MPY: case OPR_HIGHMPY:
   case OPR_DIV: 
   case OPR_MOD: case OPR_REM:
   case OPR_DIVREM:
@@ -431,11 +452,7 @@ WN_UNROLL::Replicate_stmt(WN *stmt, INT rep_cnt)
     }
 
   WN *new_stmt = WN_CopyNode(stmt);
-#if 0
-  WN_COPY_All_Maps(new_stmt, stmt);
-#else
   WN_set_map_id(new_stmt, (WN_MAP_ID) (-1));
-#endif
 
   switch (opr) {
   case OPR_COMMENT:
@@ -500,6 +517,10 @@ WN_UNROLL::Unroll(INT unroll_times)
   INT i;
   WN *stmt, *new_stmt;
 
+#if defined(TARG_NVISA)
+  DevWarn("wn_unroll loop%d %d times", loop_count, unroll_times);
+#endif
+
   // change _orig_wn to a BLOCK node
   WN_set_operator(_orig_wn, OPR_BLOCK);
   WN_set_rtype(_orig_wn, MTYPE_V);
@@ -517,11 +538,10 @@ WN_UNROLL::Unroll(INT unroll_times)
     const_trips = WN_const_val(_trips);
   WN *unrolled_end_cond;
   if (const_trips) 
-    unrolled_trips = WN_Intconst(_rtype, const_trips / 
-    				 (unroll_times * _abs_step_amt) * 
-				 (unroll_times * _abs_step_amt));
+    unrolled_trips = WN_Intconst(_rtype, (const_trips / unroll_times ) *
+                                 (unroll_times * _abs_step_amt));
   else {
-    unrolled_trips = WN_Div(_rtype, _trips, WN_Intconst(_rtype, unroll_times*_abs_step_amt));
+    unrolled_trips = WN_Div(_rtype, _trips, WN_Intconst(_rtype, unroll_times));
     unrolled_trips = WN_Mpy(_rtype, unrolled_trips, WN_Intconst(_rtype, unroll_times*_abs_step_amt));
   }
   unrolled_end_cond = WN_Relational(_step_amt > 0 ? OPR_LT : OPR_GT, _rtype, 
@@ -551,6 +571,20 @@ WN_UNROLL::Unroll(INT unroll_times)
     if (WN_kid1(_loop_info))
       WN_kid1(_loop_info) = WN_Div(_rtype, WN_kid1(_loop_info),
 					   WN_Intconst(_rtype, unroll_times));
+
+    if (const_trips && (const_trips % unroll_times == 0)
+      && WN_kid1(_loop_info) != NULL
+      && WN_operator(WN_kid1(_loop_info)) == OPR_INTCONST
+      && WN_const_val(WN_kid1(_loop_info)) == 1)
+    {
+      // only 1 iteration of loop (fully unrolled), 
+      // so remove loop structure to enable more optimization
+      DevWarn("only 1 iteration of loop, so remove");
+      WN_INSERT_BlockLast(_orig_wn, unrolled_init_stmt);
+      WN_INSERT_BlockLast(_orig_wn, unrolled_body);
+      WN_INSERT_BlockLast(_orig_wn, unrolled_incr_stmt);
+      return;
+    }
   }
   WN *unrolled_do_loop = WN_CreateDO(WN_CopyNode(_indx_var), unrolled_init_stmt,
 				     unrolled_end_cond, unrolled_incr_stmt, 
@@ -559,15 +593,15 @@ WN_UNROLL::Unroll(INT unroll_times)
 
   WN_INSERT_BlockLast(_orig_wn, unrolled_do_loop);
 
-  if (const_trips && (const_trips % (unroll_times*_abs_step_amt) == 0))
+  if (const_trips && (const_trips % unroll_times == 0))
     return;
 
   // form remainder loop
   if (const_trips)
     WN_kid0(_init_stmt) = WN_Binary(_step_amt > 0 ? OPR_ADD : OPR_SUB, _rtype, 
     	WN_COPY_Tree(_start),
-    	WN_Intconst(_rtype, const_trips / (unroll_times * _abs_step_amt) * 
-				(unroll_times * _abs_step_amt)));
+        WN_Intconst(_rtype, (const_trips / unroll_times) *
+                                (unroll_times * _abs_step_amt)));
   else WN_kid0(_init_stmt) = WN_CopyNode(WN_kid0(_end_cond));
   WN *loop_info = WN_CreateLoopInfo(WN_CopyNode(WN_kid0(_end_cond)),
   				    NULL, unroll_times-1, 
@@ -587,26 +621,95 @@ WN_UNROLL::Unroll(INT unroll_times)
 static void
 WN_UNROLL_loop(WN *doloop)
 {
+  // look for pragma unroll in previous stmt;
+  // look past intermediate stores or other pragmas 
+  // that may get inserted between pragma and loop
+  UINT pragma_unroll_times = 0;
+  WN *stmt = WN_prev(doloop);
+  while (stmt) {
+    if (WN_operator(stmt) == OPR_PRAGMA) {
+      if (WN_pragma(stmt) == WN_PRAGMA_UNROLL) {
+        pragma_unroll_times = WN_pragma_arg1(stmt);
+        break;
+      }
+    }
+    else if ( ! OPERATOR_is_store(WN_operator(stmt)))
+      break;
+    stmt = WN_prev(stmt);
+  }
+
   WN_UNROLL wn_unroll(doloop);
   if (wn_unroll.Step_amt() == 0) 
     return; // variable step amount
+  if (wn_unroll.End() == NULL)
+    return; // non-well-formed loop
   if (wn_unroll.Loop_info()) {
     if (WN_Loop_Unimportant_Misc(wn_unroll.Loop_info()))
       return;
+  }
+  UINT unroll_times = 0;
+  UINT max_unroll_size;
+  USRCPOS srcpos;
+  USRCPOS_srcpos(srcpos)  = WN_Get_Linenum(doloop);
+
+#ifdef TARG_NVISA
+  ++loop_count;
+  if ( Query_Skiplist ( WOPT_Unroll_Skip_List, loop_count ) )
+    return;
+
+  // We only want to unroll small loops with known trip count,
+  // or loops that user specifies with pragma unroll.
+  // We unroll here cause no lno or cg unroller and we want 
+  // to create constant array indexes that can be optimized.
+  if (wn_unroll.Loop_info()) {
+    if (WN_loop_trip_est(wn_unroll.Loop_info())
+      && WN_operator(wn_unroll.Trips()) == OPR_INTCONST) 
+    {
+      unroll_times = WN_const_val(wn_unroll.Trips());
+    }
+    // if no known trip count, try to use pragma info
+    if (unroll_times == 0) {
+      if (pragma_unroll_times == UINT32_MAX) {
+        DevWarn("pragma unroll but no trip count, so ignore");
+        return;
+      }
+      unroll_times = pragma_unroll_times;
+    }
+    if (unroll_times == 0)
+      return;	// unknown trip count
+    if (pragma_unroll_times && unroll_times > pragma_unroll_times) {
+      DevWarn("pragma says to unroll less than full unrolling");
+      unroll_times = pragma_unroll_times;
+    }
+    wn_unroll.Analyze_body_stmt(WN_kid(doloop, 4));
+    if (wn_unroll.Node_count() == 0)
+      return; // empty loop (seems silly, but can happen)
+
+    // Can either check that times and size are each less than max,
+    // or that times*size is small enough.
+    // Do latter since result size is what really matters.
+DevWarn("unrolled size would be %d * %d", wn_unroll.Node_count(), unroll_times);
+    // if pragma unroll with no arg, then want to unroll no matter what size
+    max_unroll_size = OPT_unroll_times * OPT_unroll_size;
+    max_unroll_size = MAX(pragma_unroll_times, max_unroll_size);
+
+    // use the size limit if there was no pragma specified unroll amount
+    if (pragma_unroll_times == 0 && (unroll_times * wn_unroll.Node_count()) > max_unroll_size)
+      return;	// too big
+  }
+  else
+    return;	// no loop info
+#else // TARG_NVISA
+  if (wn_unroll.Loop_info()) {
     if (WN_loop_trip_est(wn_unroll.Loop_info()) <= 16)
       return;
   }
-  if (wn_unroll.End() == NULL)
-    return; // non-well-formed loop
   if (WN_operator(wn_unroll.Trips()) == OPR_INTCONST)
     if (WN_const_val(wn_unroll.Trips()) <= 16)
       return; // constant trip count too low
   wn_unroll.Analyze_body_stmt(WN_kid(doloop, 4));
   if (WOPT_Enable_WN_Unroll < 2 && wn_unroll.If_count() == 0)
     return; // CG will unroll it
-  USRCPOS srcpos;
-  USRCPOS_srcpos(srcpos)  = WN_Get_Linenum(doloop);
-  INT unroll_times;
   if (wn_unroll.Istore_count() == 0) {
     if (wn_unroll.Node_count() < 40)
       unroll_times = 8;
@@ -631,6 +734,7 @@ WN_UNROLL_loop(WN *doloop)
       return;
     }
   }
+#endif // TARG_NVISA
   wn_unroll.Unroll(unroll_times);
   if (WOPT_Enable_Verbose)
     fprintf(stderr, "WN_UNROLL has unrolled loop at %s:%d %d times\n",
@@ -686,6 +790,7 @@ WN_UNROLL_suitable(WN *tree)
   case OPR_ASSERT:
   case OPR_XPRAGMA:
   case OPR_ISTORE:
+  case OPR_ISTOREX:
   case OPR_STID:
   case OPR_ISTBITS:
   case OPR_STBITS:
@@ -740,8 +845,22 @@ WN_UNROLL_suitable(WN *tree)
 void
 WN_unroll(WN *tree)
 {
+#ifdef TARG_X8664
+  UINT32 saved_unrolled_size_max;
+  UINT32 saved_unroll_times_max;
+#endif
+
   if (WOPT_Enable_WN_Unroll == 0)
     return;
+
+#ifdef TARG_X8664
+  if (WN_Loop_Multiversion_Alias(tree)) {
+    saved_unrolled_size_max = OPT_unroll_size;
+    saved_unroll_times_max = OPT_unroll_times;
+    OPT_unroll_size = 256;
+    OPT_unroll_times = 8;
+  }
+#endif
 
   Start_Timer(T_Lower_CU);
   Set_Error_Phase("WN_unroll");
@@ -759,6 +878,13 @@ WN_unroll(WN *tree)
   WN_Lower_Checkdump("After wn_unroll", tree, 0);   
 
   WN_verifier(tree);
+
+#ifdef TARG_X8664
+  if (WN_Loop_Multiversion_Alias(tree)) {
+    OPT_unroll_size = saved_unrolled_size_max;
+    OPT_unroll_times = saved_unroll_times_max;
+  }
+#endif
 
   return;
 }

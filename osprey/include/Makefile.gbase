@@ -1,5 +1,7 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -85,19 +87,32 @@ LINUX_HFILES = \
 	sgidefs.h \
 	standards.h
 
+ifeq ($(BUILD_OS), CYGWIN)
+LINUX_HFILES += elf.h
+endif
+ifeq ($(BUILD_OS), MINGW)
+LINUX_HFILES += elf.h
+endif
+ifeq ($(BUILD_OS), DARWIN)
+LINUX_HFILES += elf.h malloc.h
+endif
+
 LINUX_SYS_HFILES = \
 	syssgi.h
+
+LIBDWARF_HFILES = \
+	dwarf.h \
+	libdwarf.h 
 
 INCLUDE_HFILES = \
 	compact_reloc.h \
 	defalias.h \
-	dwarf.h \
+	dwarf_stuff.h \
 	elf_abi.h \
 	elf_mips.h \
 	elfaccess.h \
 	fp_class.h \
 	isam.h \
-	libdwarf.h \
 	libXlate.h \
 	objlist.h  \
 	obj_list.h  \
@@ -105,6 +120,13 @@ INCLUDE_HFILES = \
 	rld_interface.h \
 	stamp.h \
 	svr4_math.h
+
+ifeq ($(BUILD_OS), MINGW)
+INCLUDE_HFILES += \
+	translatetypes.h \
+	alloca.h \
+	ar.h
+endif
 
 CMPLR_HFILES = \
 	cif_c.h \
@@ -134,11 +156,23 @@ SYS_DIRS = \
 endif
 ifeq ($(BUILD_TARGET), MIPS)
 SYS_DIRS = \
-	ia64
+	mips
+endif
+ifeq ($(BUILD_TARGET), SL)
+SYS_DIRS = \
+        sl
 endif
 ifeq ($(BUILD_TARGET), X8664)
 SYS_DIRS = \
 	ia64
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+SYS_DIRS = \
+	ia64
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+SYS_DIRS = \
+        ia64
 endif
 
 LIBELF_HFILES = \
@@ -149,51 +183,68 @@ LIBELF_HFILES = \
 
 LIBELF_DIRS = libelf
 
+.PHONY: default
 default: pathscale_defs.h
 	@: Make directories in case they do not exist.
 	@for d in sys cmplrs libelf; do \
 	    if [ ! -d $$d ]; then \
-		mkdir $$d && echo Making $$d; \
+		$(MKDIR) $$d && echo Making $$d; \
 	    fi; \
 	done	
 	@for h in $(LINUX_HFILES); do \
+	    if ! test -e $$h; then \
+	      $(LN) -sf $(BUILD_TOT)/linux/include/$$h $$h; \
+	    fi; \
+	done
+	@for h in $(LIBELF_HFILES); do \
 	    if ! test -a $$h; then \
-	      ln -sf $(BUILD_TOT)/linux/include/$$h $$h; \
+	      ln -sf $(BUILD_TOT)/libelf/lib/$$h libelf/$$h; \
 	    fi; \
 	done
 	@for h in $(LINUX_SYS_HFILES); do \
-	    if ! test -a $$h; then \
-	      ln -sf $(BUILD_TOT)/linux/include/sys/$$h sys/$$h; \
+	    if ! test -e $$h; then \
+	      $(LN) -sf $(BUILD_TOT)/../linux/include/sys/$$h sys/$$h; \
 	    fi; \
 	done
 	@for h in $(INCLUDE_HFILES); do \
-	    if ! test -a $$h; then \
-	      ln -sf $(BUILD_TOT)/include/$$h $$h; \
+	    if ! test -e $$h; then \
+	      $(LN) -sf $(BUILD_TOT)/include/$$h $$h; \
+	    fi; \
+	done
+	@for h in $(LIBDWARF_HFILES); do \
+	    if ! test -e $$h; then \
+	      $(LN) -sf $(BUILD_TOT)/libdwarf/libdwarf/$$h $$h; \
 	    fi; \
 	done
 	@for h in $(CMPLR_DIRS); do \
-	    if ! test -a $$h; then \
-	      mkdir $$h; \
+	    if ! test -e $$h; then \
+	      $(MKDIR) $$h; \
 	    fi; \
 	done
 	@for h in $(CMPLR_HFILES); do \
-	    if ! test -a cmplrs/$$h; then \
-	      ln -sf $(BUILD_TOT)/../include/cmplrs/$$h cmplrs/$$h; \
+	    if ! test -e cmplrs/$$h; then \
+	      $(LN) -sf $(BUILD_TOT)/include/cmplrs/$$h cmplrs/$$h; \
 	    fi; \
 	done
 	@for h in $(SYS_HFILES); do \
-	    if ! test -a sys/$$h; then \
-	      ln -sf $(BUILD_TOT)/../include/sys/$$h sys/$$h; \
+	    if ! test -e sys/$$h; then \
+	      $(LN) -sf $(BUILD_TOT)/include/sys/$$h sys/$$h; \
 	    fi; \
 	done
 	@for h in $(SYS_DIRS); do \
-	    if ! test -a sys/$$h; then \
-	      ln -sf $(BUILD_TOT)/../include/sys/$$h sys/$$h; \
+	    if ! test -e sys/$$h; then \
+	      $(LN) -sf $(BUILD_TOT)/include/sys/$$h sys/$$h; \
+	    fi; \
+	done
+	@for h in $(LIBELF_HFILES); do \
+	    if ! test -e $$h; then \
+	      $(LN) -sf $(BUILD_TOT)/libelf/lib/$$h libelf/$$h; \
 	    fi; \
 	done
 
 pathscale_defs.h: $(BUILD_TOT)/../defs.mk 
 	echo '#ifndef __pathscale_defs_h' > $@
+	echo '#define __pathscale_defs_h' >> $@
 	echo '#define OPEN64_NAME_PREFIX "${OPEN64_NAME_PREFIX}"' >> $@
 	echo '#define OPEN64_MAJOR_VERSION_NUM ${OPEN64_MAJOR_VERSION}' >> $@
 	echo '#define OPEN64_MINOR_VERSION_NUM ${OPEN64_MINOR_VERSION}' >> $@
@@ -201,13 +252,12 @@ pathscale_defs.h: $(BUILD_TOT)/../defs.mk
 	echo '#define OPEN64_MINOR_VERSION "${OPEN64_MINOR_VERSION}"' >> $@
 	echo '#define OPEN64_FULL_VERSION "${OPEN64_FULL_VERSION}"' >> $@
 	echo '#define OPEN64_GCC_VERSION "${OPEN64_GCC_VERSION}"' >> $@
-	echo '#define OPEN64_GCC4_VERSION "${OPEN64_GCC4_VERSION}"' >> $@
+	echo '#define OPEN64_GCC40_VERSION "${OPEN64_GCC40_VERSION}"' >> $@
+	echo '#define OPEN64_GCC42_VERSION "${OPEN64_GCC42_VERSION}"' >> $@
 	echo '#define OPEN64_INSTALL_PREFIX "${OPEN64_INSTALL_PREFIX}"' >> $@
 	echo '#define OPEN64_TARGET "${OPEN64_TARGET}"' >> $@
 	echo '#define OPEN64_PATCH_LEVEL "${OPEN64_PATCH_LEVEL}"' >> $@ 
 	echo "#endif" >> $@
 
-clean:
-
-clobber:
+clean clobber:
 	@rm -rf *.h *.sg $(CMPLR_DIRS) $(LIBELF_DIRS) ia64 stl sys

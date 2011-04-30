@@ -390,8 +390,14 @@ BOOL CR_match_kids(CODEREP *cr1, CODEREP *cr2)
 	return FALSE;
 	if (cr1->Ivar_mu_node()->OPND() != cr2->Ivar_mu_node()->OPND()) 
 	  return FALSE;
-    if (cr1->Offset() != cr2->Offset())
-      return FALSE;	// offset not the same
+    if (cr1->Opr() != OPR_ILOADX) {
+      if (cr1->Offset() != cr2->Offset())
+	return FALSE;	// offset not the same
+    }
+    else {
+      if (cr1->Index() != cr2->Index())
+	return FALSE;	// index not the same
+    }
     if (Get_mtype_class(cr1->Dtyp()) != Get_mtype_class(cr2->Dtyp()))
       return FALSE;	// type class not the same
     if (MTYPE_size_min(cr1->Dsctyp()) != MTYPE_size_min(cr2->Dsctyp()))

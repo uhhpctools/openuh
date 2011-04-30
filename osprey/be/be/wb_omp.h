@@ -44,6 +44,6 @@ extern void WB_OMP_Set_Prompf_Info(PROMPF_INFO* prompf_info);
 
 extern void WB_OMP_Terminate();
 
-extern void s_omp_debug(char init_buffer[]);
+extern void s_omp_debug(const char init_buffer[]);
 
 #endif /* wb_omp_INCLUDED */

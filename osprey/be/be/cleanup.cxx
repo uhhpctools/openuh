@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: cleanup.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/be/cleanup.cxx,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:17-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/be/SCCS/s.cleanup.cxx $
  *
  * Revision history:
  *  21-Feb-95 - Original Version
@@ -52,11 +52,12 @@
  * ====================================================================
  */
 
+#if ! defined(BUILD_OS_DARWIN)
 #include <elf.h>		    /* for wn.h */
+#endif /* defined(BUILD_OS_DARWIN) */
 #ifndef _SYS_TYPES_H
 #include <sys/types.h>              /* for off_t */
 #endif /* _SYS_TYPES_H */
-
 
 #include "defs.h"
 #include "glob.h"		    /* for Src_File_Name, etc. */
@@ -69,7 +70,9 @@
 #include "wn.h"			    /* for ir_bread.h */
 #include "pu_info.h"		    /* for ir_bread.h */
 #include "ir_bread.h"		    /* Free_Input_Info () */
+#ifndef BUILD_SKIP_PROMPF
 #include "anl_driver.h"		    /* Prompf related */
+#endif
 #include "w2c_driver.h"		    /* Whirl2c related */
 #include "w2f_driver.h"		    /* Whirl2f related */
 #include "instr_reader.h"
@@ -87,8 +90,10 @@ BOOL Whirl2c_loaded = FALSE;
 #include "w2c_weak.h"
 #include "w2f_weak.h"
 
-#ifndef __linux__
+#if !(defined(__linux__) || defined(BUILD_OS_DARWIN))
+#ifndef BUILD_SKIP_PROMPF
 #pragma weak Anl_Cleanup
+#endif
 #endif
 
 
@@ -155,9 +160,11 @@ Cleanup_Files (BOOL report,         /* Report errors during cleanup? */
        W2C_Cleanup();
     if (Whirl2f_loaded)
        W2F_Cleanup();
-#ifndef __linux__
+#if !(defined( __linux__) || defined(BUILD_OS_DARWIN))
+#ifndef BUILD_SKIP_PROMPF
     if (Prompf_anl_loaded)
        Anl_Cleanup();
+#endif
 #endif
 
     /* Close trace file: */

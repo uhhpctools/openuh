@@ -1615,7 +1615,7 @@ intrin_tbl_type         intrin_tbl[] =
    {"CLOC",4,0,1,0,0,0,0,0,1,0,Cloc_Intrinsic,0,0},
       {"C",1,0,0,0,0,0,1,0,0,7,0,CHARACTER_MASK,0},
 {"CLOCK",5,0,1,0,1,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_CLOCK_",11,0,1,0,1,0,0,0,1,0,Clock_Intrinsic,0,0},
 # else
    {"_CLOCK",6,0,1,0,1,0,0,0,1,0,Clock_Intrinsic,TYPELESS_DEFAULT_TYPE,0},
@@ -1625,8 +1625,13 @@ intrin_tbl_type         intrin_tbl[] =
       {"X",1,0,0,0,0,0,0,0,0,0,0,COMPLEX_MASK,0},
 {"CMPLX",5,1,1,0,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY|G77_FAMILY},
    {"CMPLX",5,1,1,0,0,0,0,0,0,0,Cmplx_Intrinsic,Complex_4,0},
+#ifdef KEY /* Bug 12482 */
+      {"X",1,0,0,0,0,0,0,0,0,0,0,IRC_MASK|TYPELESS_MASK,0},
+      {"Y",1,0,0,0,0,1,0,0,0,0,0,IRC_MASK|TYPELESS_MASK,0},
+#else /* KEY Bug 12482 */
       {"X",1,0,0,0,0,0,0,0,0,0,0,IRC_MASK,0},
       {"Y",1,0,0,0,0,1,0,0,0,0,0,IRC_MASK,0},
+#endif /* KEY Bug 12482 */
       {"KIND",4,0,0,0,0,1,0,0,0,0,0,INTEGER_MASK,0},
 {"COMMAND_ARGUMENT_COUNT",22,0,1,0,1,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
    {"_Command_argument_count",23,0,1,0,1,0,0,0,0,0,Pathf90_Intrinsic,Integer_4,0},
@@ -1984,7 +1989,7 @@ intrin_tbl_type         intrin_tbl[] =
    {"DATAND",6,1,1,0,0,0,0,0,0,0,Datand_Intrinsic,Real_8,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,S8_MASK,0},
 {"DATE",4,0,1,0,1,0,0,1,0,1,0,0,TRADITIONAL_FAMILY|PGI_FAMILY|G77_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_DATE_",10,0,1,0,1,0,0,0,1,0,Date_Intrinsic,0,0},
 # else
    {"_DATE",5,0,1,0,1,0,0,0,1,0,Date_Intrinsic,TYPELESS_DEFAULT_TYPE,0},
@@ -1996,7 +2001,7 @@ intrin_tbl_type         intrin_tbl[] =
       {"DATE",4,0,0,0,0,0,0,0,0,0,0,CHARACTER_MASK,0},
 #endif /* KEY Bug 1683 */
 {"DATE_AND_TIME",13,0,0,0,1,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY|G77_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_DATE_AND_TIME",18,0,0,0,1,0,0,0,0,0,0,0,0},
 # else
    {"_DATE_AND_TIME",14,0,0,0,1,0,0,0,0,0,0,0,0},
@@ -2029,7 +2034,11 @@ intrin_tbl_type         intrin_tbl[] =
 #endif /* KEY Bug 1683 */
 {"DBLE",4,1,1,0,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY|G77_FAMILY},
    {"DBLE",4,1,1,0,0,0,0,0,0,0,Dble_Intrinsic,Real_8,0},
+#ifdef KEY /* Bug 12482 */
+      {"A",1,0,0,0,0,0,0,0,0,0,0,IRC_MASK|TYPELESS_MASK,0},
+#else /* KEY Bug 12482 */
       {"A",1,0,0,0,0,0,0,0,0,0,0,IRC_MASK,0},
+#endif /* KEY Bug 12482 */
 {"DBLEQ",5,1,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
    {"DBLEQ",5,1,1,0,0,0,0,0,0,0,Dbleq_Intrinsic,Real_8,0},
       {"A",1,0,0,0,0,0,0,0,0,0,0,S16_MASK,0},
@@ -2656,7 +2665,7 @@ intrin_tbl_type         intrin_tbl[] =
 {"DSINH",5,1,1,1,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY|G77_FAMILY},
    {"DSINH",5,1,1,0,0,0,0,0,0,0,Dsinh_Intrinsic,Real_8,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,S8_MASK,0},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 {"DSM_CHUNKSIZE",13,0,1,0,1,0,0,1,0,7,0,0,TRADITIONAL_FAMILY},
    {"dsm_chunksize",13,0,1,0,1,0,0,0,0,0,DSM_Chunksize_Intrinsic,Integer_8,0},
       {"ARRAY",5,0,0,0,0,0,0,0,0,1,0,ALL_MASK,0},
@@ -3260,7 +3269,7 @@ intrin_tbl_type         intrin_tbl[] =
 {"FRACTION",8,1,1,0,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
    {"FRACTION",8,1,1,0,0,0,0,0,0,0,Fraction_Intrinsic,0,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,REAL_MASK,0},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 {"FREE",4,1,0,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY|PGI_FAMILY},
    {"FREE",4,1,0,0,0,0,0,0,1,0,Free_Intrinsic,0,0},
       {"P",1,0,0,0,0,0,0,0,0,0,0,INTEGER_POINTER_MASK,0},
@@ -3751,7 +3760,7 @@ intrin_tbl_type         intrin_tbl[] =
       {"TARRAY",6,0,0,0,0,0,0,0,0,1,0,I4_MASK,0},
 #endif /* KEY Bug 1683 */
 {"JDATE",5,0,1,0,1,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_JDATE_",11,0,1,0,1,0,0,0,1,0,Jdate_Intrinsic,0,0},
 # else
    {"_JDATE",6,0,1,0,1,0,0,0,1,0,Jdate_Intrinsic,TYPELESS_DEFAULT_TYPE,0},
@@ -4155,7 +4164,7 @@ intrin_tbl_type         intrin_tbl[] =
 {"M@UL",4,1,1,0,0,0,0,1,0,1,0,0,0},
    {"M@UL",4,1,1,0,0,0,0,0,1,0,Mul_Intrinsic,0,0},
 # endif
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 {"MALLOC",6,1,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY|PGI_FAMILY},
    {"MALLOC",6,1,1,0,0,0,0,0,0,0,Malloc_Intrinsic,0,0},
       {"I",1,0,0,0,0,0,0,0,0,0,0,INTEGER_MASK,0},
@@ -11273,7 +11282,7 @@ intrin_tbl_type         intrin_tbl[] =
    {"QREAL",5,1,1,0,0,0,0,0,0,0,Qreal_Intrinsic,Real_16,0},
       {"A",1,0,0,0,0,0,0,0,0,0,0,(IRC_MASK|TYPELESS_MASK),0},
 {"QSIGN",5,1,1,1,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_QSIGN",6,1,1,0,0,0,0,0,0,0,Qsign_Intrinsic,Real_16,0},
 # else
    {"QSIGN",5,1,1,0,0,0,0,0,0,0,Qsign_Intrinsic,Real_16,0},
@@ -11393,7 +11402,7 @@ intrin_tbl_type         intrin_tbl[] =
       {"STATUS",6,0,0,0,0,1,0,0,0,0,0,I4_MASK,0},
 #endif /* KEY Bug 1683 */
 {"REPEAT",6,0,1,0,1,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_REPEAT",11,0,1,0,1,0,1,0,0,0,Repeat_Intrinsic,0,0},
 # else
    {"_REPEAT",7,0,1,0,1,0,1,0,0,0,Repeat_Intrinsic,0,0},
@@ -11598,7 +11607,7 @@ intrin_tbl_type         intrin_tbl[] =
       {"A",1,0,0,0,0,0,0,0,0,0,0,S8_MASK,0},
       {"B",1,0,0,0,0,0,0,0,0,0,0,S8_MASK,0},
 # endif
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_QSIGN",6,1,1,0,0,0,0,0,0,0,Sign_Intrinsic,0,0},
       {"A",1,0,0,0,0,0,0,0,0,0,0,S16_MASK,0},
       {"B",1,0,0,0,0,0,0,0,0,0,0,S16_MASK,0},
@@ -13165,7 +13174,7 @@ intrin_tbl_type         intrin_tbl[] =
       {"PATH2",5,0,0,0,0,0,0,0,0,0,0,CHARACTER_MASK,0},
       {"STATUS",6,0,0,0,0,1,0,0,0,0,0,I4_MASK,0},
 #endif /* KEY Bug 1683 */
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 {"SYNCHRONIZE",11,1,0,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
    {"SYNCHRONIZE",11,1,0,0,0,0,0,0,0,0,Synchronize_Intrinsic,0,0},
 # endif
@@ -13297,6 +13306,10 @@ intrin_tbl_type         intrin_tbl[] =
    {"_TIME",5,0,0,0,1,0,0,0,1,0,Time_Intrinsic,0,0},
       {"BUF",1,0,0,0,0,0,1,0,0,7,0,(IRC_MASK|CHARACTER_MASK),0},
 #endif /* KEY Bug 4135 */
+#ifdef KEY /* Bug 12813 */
+{"TIMEF",5,0,1,0,1,0,0,1,0,1,0,0,0 /* No family */},
+   {"_Timef",6,0,1,0,1,0,0,0,1,0,Pathf90_Intrinsic,Real_8,0},
+#endif /* KEY Bug 12813 */
 {"TINY",4,1,1,0,0,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
    {"TINY",4,1,1,0,0,0,0,0,0,0,Tiny_Intrinsic,0,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,REAL_MASK,0},
@@ -13753,7 +13766,7 @@ intrin_tbl_type         intrin_tbl[] =
    {"_TRANS",6,0,1,0,1,0,1,0,0,2,Transpose_Intrinsic,0,0},
       {"MATRIX",6,0,0,0,0,0,1,0,0,2,0,ALL_MASK,0},
 {"TRIM",4,0,1,0,1,0,0,1,0,1,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY|PGI_FAMILY},
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    {"_F90_TRIM",9,0,1,0,1,0,1,0,0,0,Trim_Intrinsic,0,0},
 # else
    {"_TRIM",5,0,1,0,1,0,1,0,0,0,Trim_Intrinsic,0,0},
@@ -14027,6 +14040,12 @@ void	(*intrinsic_semantics[]) ()	= {
 	cvmgp_intrinsic,        	/*  Cvmgp_Intrinsic         	     */
 	cvmgp_intrinsic,        	/*  Cvmgt_Intrinsic         	     */
 	cvmgp_intrinsic,        	/*  Cvmgz_Intrinsic         	     */
+#ifdef KEY /* Bug 14150 */
+        c_f_pointer_intrinsic,		/*  C_F_Pointer_Intrinsic	     */
+        c_f_pointer_intrinsic,		/*  C_F_Procpointer_Intrinsic	     */
+        loc_intrinsic,			/*  C_Funloc_Intrinsic		     */
+        loc_intrinsic,			/*  C_Loc_Iso_Intrinsic	             */
+#endif /* KEY Bug 14150 */
 	loc_intrinsic,         		/*  C_Loc_Intrinsic          	     */
 	abs_intrinsic,			/*  Dabs_Intrinsic          	     */
 	sin_intrinsic,			/*  Dacos_Intrinsic          	     */
@@ -14493,7 +14512,7 @@ intrin_map_type         intrin_map[MAX_INTRIN_MAP_SIZE] =
 /*              KIND=4          KIND=8                                    */
 {
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
    {"ABS",	"r_abs",	"d_abs"},
    {"ACOS",	"r_acos",	"d_acos"},

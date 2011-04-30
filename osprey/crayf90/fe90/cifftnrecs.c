@@ -285,29 +285,6 @@ void Cif_Srcfile_Rec(FILE	*c_i_f,
 |*                                                                            *|
 \******************************************************************************/
 
-# if 0
-void Cif_Doshared_Cdir_Rec(FILE		*c_i_f,
-		     	   int	 	 doshared_type,
-		     	   int	 	 random,
-		     	   int	 	 file_id,
-			   int		 line_number,
-			   int		 column_number,
-		      	   char		*m_value,
-		     	   int	 	 m_file_id,
-			   int		 m_line_number,
-			   int		 m_column_number,
-		           int		 num_control_vars,
-		     	   long		*control_var_sym_id)
-{
-   if (fprintf(c_i_f, "%d%c",
-                      CIF_CDIR_DOSHARED, EOR) < 0) {
-      Cif_Error();
-   }
-
-   return;
-
-}  /* Cif_Doshared_Cdir_Rec */
-# endif
 
 
 /******************************************************************************\
@@ -539,17 +516,6 @@ void Cif_Stmt_Type_Rec(FILE	*c_i_f,
 |*                                                                            *|
 \******************************************************************************/
 
-# if 0
-void Cif_Mpp_Geometry_Rec(FILE			*c_i_f,
-			  char  		*name,
-			  int      	         sym_id,
-			  int			 num_dims,
-			  Cif_geometry_dim	*dim)
-{
-   return;
-
-}  /* Cif_Mpp_Geometry_Rec */
-# endif
 
 
 /******************************************************************************\

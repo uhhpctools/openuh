@@ -839,7 +839,8 @@ done:
 	return(stat);
 }
 
-#if	defined(__mips) || (defined(_LITTLE_ENDIAN) && defined(__sv2))
+#if	defined(BUILD_OS_DARWIN)
+#elif	defined(__mips) || (defined(_LITTLE_ENDIAN) && defined(__sv2))
 #include <ieeefp.h>
 #elif	defined(_LITTLE_ENDIAN) && !(__sv2)
 #include <fpu_control.h>

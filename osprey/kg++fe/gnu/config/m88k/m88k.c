@@ -1622,17 +1622,11 @@ output_file_start (file, f_options, f_len, W_options, W_len)
       sprintf (indent, "]\"\n%s\"@(#)%s [", IDENT_ASM_OP, main_input_filename);
       fprintf (file, indent+3);
       pos = fprintf (file, "gcc %s, %.24s,", version_string, ctime (&now));
-#if 1
       /* ??? It would be nice to call print_switch_values here (and thereby
 	 let us delete output_options) but this is kept in until it is known
 	 whether the change in content format matters.  */
       output_options (file, f_options, f_len, W_options, W_len,
 		      pos, 150 - strlen (indent), " ", indent, "]\"\n\n");
-#else
-      fprintf (file, "]\"\n");
-      print_switch_values (file, 0, 150 - strlen (indent),
-			   indent + 3, " ", "]\"\n");
-#endif
     }
 }
 
@@ -2860,16 +2854,7 @@ print_operand (file, x, code)
 		   && GET_CODE (XEXP (x, 0)) == LO_SUM
 		   && rtx_equal_p (XEXP (XEXP (x, 0), 1), last_addr)))
 	    fprintf (file,
-#if 0
-#ifdef AS_BUG_FLDCR
-		     "fldcr\t %s,%scr63\n\t",
-#else
-		     "fldcr\t %s,%sfcr63\n\t",
-#endif
-		     reg_names[0], m88k_pound_sign);
-#else /* 0 */
 		     "tb1\t 1,%s,0xff\n\t", reg_names[0]);
-#endif /* 0 */
 	  m88k_volatile_code = code;
 	  last_addr = (GET_CODE (XEXP (x, 0)) == LO_SUM
 		       ? XEXP (XEXP (x, 0), 1) : 0);

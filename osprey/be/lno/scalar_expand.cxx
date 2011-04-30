@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -45,7 +49,6 @@
 *** $Source: be/lno/SCCS/s.scalar_expand.cxx $
 **/
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -257,15 +260,16 @@ static void SE_Indxs_and_Bounds(WN* loops[],
 	   (wtype == MTYPE_I2 || wtype == MTYPE_U2) ? 2 :  
 	   (wtype == MTYPE_I8 || wtype == MTYPE_U8 ||
 	    wtype == MTYPE_F8 || wtype == MTYPE_C4) ? 8 :
-#if defined(TARG_IA64)
+#if defined(TARG_IA64) || defined(TARG_X8664)
 	   (wtype == MTYPE_F10) ? 16 :
+	   (wtype == MTYPE_C10) ? 32 :
 #endif
 	   (wtype == MTYPE_I4 || wtype == MTYPE_U4 ||
 	    wtype == MTYPE_F4) ? 4 :
 	   (wtype == MTYPE_F8) ? 8 :
            (wtype == MTYPE_F16) ? 16 :
 	   (wtype == MTYPE_FQ || wtype == MTYPE_C8) ? 16 :
-	   (wtype == MTYPE_CQ) ? 32 : 0;
+	   (wtype == MTYPE_CQ || wtype == MTYPE_C16 ) ? 32 : 0;
   FmtAssert(sz > 0, ("Bad type in scalar expansion"));
 
   TYPE_ID bsztype;
@@ -1356,7 +1360,7 @@ extern STACK<WN*>* Scalar_Equivalence_Class(WN* ref, DU_MANAGER* du,
 
     if (potential_read) {
       DEF_LIST *def_list=du->Ud_Get_Def(scalar_ref);
-      if (def_list->Incomplete()) {
+      if (!def_list || def_list->Incomplete()) {
 	if (find_restrict) 
 	  *wn_outer_loop = NULL; 
         CXX_DELETE(class_stack, pool);
@@ -1388,7 +1392,7 @@ extern STACK<WN*>* Scalar_Equivalence_Class(WN* ref, DU_MANAGER* du,
 
     if (potential_write) {
       USE_LIST *use_list=du->Du_Get_Use(scalar_ref);
-      if (use_list && use_list->Incomplete()) {
+      if (!use_list || use_list->Incomplete()) {
 	if (find_restrict) 
 	  *wn_outer_loop = NULL; 
         CXX_DELETE(class_stack, pool);
@@ -1872,7 +1876,7 @@ static INT unique_se_id = 0;
 
 static TY_IDX se_type_array[MTYPE_LAST + 1]; 
 
-extern void SE_Symbols_For_SE(SYMBOL* ptr_array, char* pref, INT unique_id, 
+extern void SE_Symbols_For_SE(SYMBOL* ptr_array, const char* pref, INT unique_id, 
   TYPE_ID mtype)
 {
   char name[64];
@@ -1912,7 +1916,7 @@ extern void SE_Symbols_For_SE(SYMBOL* ptr_array, char* pref, INT unique_id,
 
 extern WN* Get_Expansion_Space(SYMBOL se_ptrsym, 
 			       WN* bsz, 
-			       char* pref,
+			       const char* pref,
 			       INT unique_id,
 			       TYPE_ID wtype,
 			       WN* allocregion,
@@ -2387,11 +2391,11 @@ extern void Scalar_Expand(WN* allocregion,
     fprintf(stdout, "Scalar expanding %s %s%sin loop %s at %d\n",
       symbol.Name(), has_lcd ? "(with lcd) " : "", 
       finalize ? "(with finalization) " : "", 
-      WB_Whirl_Symbol(wn_outer), (INT) WN_linenum(wn_outer));
+      WB_Whirl_Symbol(wn_outer), Srcpos_To_Line(WN_linenum(wn_outer)));
     fprintf(TFile, "Scalar expanding %s %s%sin loop %s at %d\n",
       symbol.Name(), has_lcd ? "(with lcd) " : "", 
       finalize ? "(with finalization) " : "", 
-      WB_Whirl_Symbol(wn_outer), (INT) WN_linenum(wn_outer));
+      WB_Whirl_Symbol(wn_outer), Srcpos_To_Line(WN_linenum(wn_outer)));
   }
 
   // Step 1: How much space do we need, in bytes?  Put that in bsz.

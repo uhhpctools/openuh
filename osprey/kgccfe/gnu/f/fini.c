@@ -425,16 +425,6 @@ main (int argc, char **argv)
       n->next = newname;
     }
 
-#if 0
-  for (len = 0; len < ARRAY_SIZE (name); ++len)
-    {
-      if (names[len].first == (name) &names[len])
-	continue;
-      printf ("Length %d:\n", len);
-      for (n = names[len].first; n != (name) &names[len]; n = n->next)
-	printf ("    %s %s %s\n", n->name_uc, n->name_lc, n->name_ic);
-    }
-#endif
 
   if (do_exit)
     return (1);

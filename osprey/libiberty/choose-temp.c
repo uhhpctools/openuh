@@ -22,6 +22,11 @@ Boston, MA 02111-1307, USA.  */
 #endif
 
 #include <stdio.h>	/* May get P_tmpdir.  */
+#ifdef __MINGW32__
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#endif /* __MINGW32__ */
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif

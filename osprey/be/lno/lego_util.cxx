@@ -58,7 +58,7 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
+const static char *source_file = __FILE__;
 
 #include <alloca.h>
 #include <sys/types.h>

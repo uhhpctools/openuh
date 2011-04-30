@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -196,6 +200,9 @@ class SX_PNODE : public CHAIN_NODE {
   friend class SX_PLIST;
   friend class SX_PITER;
   friend class SX_INFO;
+
+  DECL_CXX_ALLOC_AS_FRIEND(SX_PNODE); 
+
  private:
   WN* _wn_symbol; 
   SYMBOL _symbol;
@@ -205,9 +212,10 @@ class SX_PNODE : public CHAIN_NODE {
   mINT8 _outer_se_reqd;
   mINT8 _outer_se_not_reqd;
   mINT8 _defining_def_depth;
+  mINT8 _non_red_depth;
   SX_PNODE(WN* wn_sym, const SYMBOL& symbol, WN* reduction_carried_by,
     INT outer_se_reqd, INT outer_se_not_reqd, INT defining_def_depth,
-    INT lcd_depth, BOOL finalize); 
+	   INT lcd_depth, BOOL finalize, INT non_red_depth); 
   ~SX_PNODE() {}
  public:
   enum STATUS {ILLEGAL=234, SE_REQD, SE_NOT_REQD};
@@ -266,10 +274,11 @@ struct SX_INFO {
   const SX_PNODE* Find(const SYMBOL&) const;
   void Enter(WN* wn_def, const SYMBOL&, WN* reduction_carried_by, 
     INT se_not_depth, INT se_depth, INT defining_def_depth, 
-    INT lcd_depth, BOOL finalize);
+	     INT lcd_depth, BOOL finalize, INT non_red_depth=-1);
   void Remove(SX_PNODE*);
   void Print(FILE*) const;
   INT First_Transformable_Depth(const SX_PNODE** = NULL) const;
+  INT First_Transformable_Depth_Reduction(const SX_PNODE** = NULL) const;
   void Make_Sx_Info(WN* wn_outer, INT nloops, BOOL ignore_illegal=FALSE);
   void Update_Reduction_Loop_Stmts(WN* wn_inner);
   INT Lcd_Depth();

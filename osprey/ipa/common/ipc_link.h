@@ -50,6 +50,11 @@ ipa_init_link_line (int argc, char **argv);
 extern void
 ipa_add_link_flag (const char *str);
 
+// modify link flag for mixed archive: replace -labc with /path/libabc.a
+extern void
+ipa_modify_link_flag (char *lname, char *fname);
+
+
 extern void
 ipa_add_comma_list (const char* name);
 
@@ -60,6 +65,7 @@ ipa_compose_comma_list (const char* name);
 
 #pragma weak ipa_init_link_line
 #pragma weak ipa_add_link_flag
+#pragma weak ipa_modify_link_flag
 #pragma weak ipa_add_comma_list
 #pragma weak ipa_compose_comma_list
 

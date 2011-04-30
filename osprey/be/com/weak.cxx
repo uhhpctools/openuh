@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -44,7 +48,13 @@
 // This file contains only Linux-specific code and should be entirely
 // #ifdef'd out for Irix.
 
-#ifdef __linux__
+#ifdef KEY /* Mac port */
+// Some references to the symbols defined in this file are not protected
+// by #ifdef __linux__, so it's no longer possible to avoid using this file
+// without finding and fixing those references.
+#endif /* KEY Mac port */
+
+#if !defined(IRIX)
 
 // Work around the "undefined weak symbol" bug in Linux.
 //
@@ -87,8 +97,14 @@
 #include "defs.h"
 #include "wn.h"
 #include "pu_info.h"
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include "ir_bwrite.h"
-
+#if defined(TARG_SL)  || defined(TARG_MIPS)
+#include "topcode.h"
+#include "ti_si.h"
+#endif
 // ----------------------------------------------------------------------
 // symbols defined in lno.so:
 // from be/lno/lnodriver.h
@@ -97,6 +113,12 @@ void (*lno_main_p) (INT, char**, INT, char**);
 void (*Lno_Init_p) ();
 void (*Lno_Fini_p) ();
 WN* (*Perform_Loop_Nest_Optimization_p) (PU_Info*, WN*, WN*, BOOL);
+
+#include "access_vector.h"
+void (*Print_ACCESS_ARRAY_p) (FILE*, ACCESS_ARRAY*);
+
+#include "if_info.h"
+void (*Print_IF_INFO_p) (FILE*, IF_INFO*);
 
 // ----------------------------------------------------------------------
 // symbols defined in wopt.so:
@@ -116,6 +138,7 @@ WN* (*Perform_Global_Optimization_p) (WN *, WN *, struct ALIAS_MANAGER *);
 
 // from be/opt/optimizer.h
 WN* (*Pre_Optimizer_p) (INT32, WN*, DU_MANAGER*, ALIAS_MANAGER*);
+void (*choose_from_complete_struct_for_relayout_candidates_p)();
 DU_MANAGER* (*Create_Du_Manager_p) (MEM_POOL *);
 void (*Delete_Du_Manager_p) (DU_MANAGER *, MEM_POOL *);
 
@@ -125,10 +148,8 @@ BOOL (*Verify_alias_p) (ALIAS_MANAGER *, WN *);
 // from be/opt/opt_alias_analysis.cxx
 void (*Print_points_to_p) (FILE *fp, POINTS_TO *ptmp);
 
-#ifdef SHARED_BUILD
 // from be/opt/opt_wn.h
 AUX_ID (*WN_aux_p) (const WN*);
-#endif
 
 // from be/opt/opt_du.h
 BOOL (DU_MANAGER::*CD_is_br_taken_p) (IDTYPE);
@@ -155,18 +176,21 @@ void (*CG_PU_Finalize_p) ();
 void (*CG_Change_Elf_Symbol_To_Undefined_p) (ST*);
 WN* (*CG_Generate_Code_p) (WN*, ALIAS_MANAGER*, DST_IDX, BOOL);
 void (*CG_Dump_Region_p) (FILE*, WN*);
-
 // from be/cg/eh_region.h
 void (*EH_Generate_Range_List_p) (WN *);
+#if defined(TARG_IA64) || defined(TARG_X8664) 
 void (*EH_Dump_INITOs_p) (WN *, FILE *);
-
+#endif
 #ifdef TARG_X8664
 void (*CG_Set_Is_Stack_Used_p) ();
+INT (*Push_Pop_Int_Saved_Regs_p) (void);
 #endif
 
 // ----------------------------------------------------------------------
 // symbols defined in ipl.so:
 // from ipa/local/ipl_main.cxx
+#include "wb_browser.h"
+#include "loop_info.h"
 
 void (*Ipl_Extra_Output_p) (Output_File *);
 void (*Ipl_Init_p) ();
@@ -174,6 +198,9 @@ void (*Ipl_Fini_p) ();
 void (*ipl_main_p) (INT, char **);
 void (*Perform_Procedure_Summary_Phase_p) (WN*, DU_MANAGER*, ALIAS_MANAGER*,
 					   void*);
+void (*WB_BROWSER_Summary_p) (FILE*, WB_BROWSER*);
+void (*Print_DO_LOOP_INFO_BASE_p) (FILE*, DO_LOOP_INFO_BASE*);
+
 #ifdef KEY
 void (*Preprocess_struct_access_p) (void);
 #endif
@@ -244,4 +271,4 @@ void (*W2F_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize,
 void (*W2F_Translate_Wn_p)(FILE *outfile, WN *wn);
 void (*W2F_Translate_Wn_Str_p)(char *strbuf, UINT bufsize, WN *wn);
 
-#endif // __linux__
+#endif // !IRIX

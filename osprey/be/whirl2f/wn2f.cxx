@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: wn2f.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f.cxx,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:43 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f.cxx,v $
  *
  * Revision history:
  *  12-Apr-95 - Original Version
@@ -66,7 +66,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f.cxx,v $ $Revision: 1.1 $";
 #endif
 
 #include <alloca.h>
@@ -86,7 +86,7 @@ static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2
 extern WN_MAP *W2F_Construct_Map;   /* Defined in w2f_driver.c */
 extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
 
-char * sgi_comment_str = "CSGI$ " ;
+const char * sgi_comment_str = "CSGI$ " ;
 
 static BOOL  PU_Need_End_Contains = FALSE;  // f90 needs CONTAINS/END around nested procs.
 static BOOL  PU_Dangling_Contains = FALSE;  // f90 have done CONTAINS, need END...
@@ -492,9 +492,6 @@ WN2F_Offset_Symref(TOKEN_BUFFER tokens,
    /* Do the symbol translation from the base of fully split common symbols */
    if (ST_is_split_common(st))
    {
-#if 0
-      offset += Stab_Full_Split_Offset(st);  /* offset of split common now zero. */
-#endif
       Clear_BE_ST_w2fc_referenced(st);       /* don't put out split base, just user COMMON */
       st = ST_full(st);
       Set_BE_ST_w2fc_referenced(st);
@@ -1265,7 +1262,7 @@ WN2F_End_Routine_Strings(TOKEN_BUFFER tokens, INT32 func_id)
     }
     else {
 
-      char * p ;
+      const char * p ;
 
       if (PU_is_mainpu(pu)) 
 	p = "END";

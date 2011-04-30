@@ -1,5 +1,3 @@
-Note: This is the OpenUH branch of Open64.
-
 The SGI Pro64(TM) compiler suite includes optimizing compilers 
 and runtime support for C, C++, and Fortran90. These compilers 
 produce code that follows the Linux/IA-64 ABI.  This means that 
@@ -106,7 +104,3 @@ The README.src file provides information about building the
 pro64 compilers and libraries from the kpro64 source tree.
 The sgicc(1), sgiCC(1) and sgif90(1) man pages provide information
 about the SGI C, C++ and Fortran90 compiler commands.
-
-To use OpenMP, you need to add -gnu3 to enable the gnu 3.3 frontend that supports OpenMP directives. 
-
-% uhcc -O3 -mp -gnu3 test.c

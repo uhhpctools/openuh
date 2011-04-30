@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -43,7 +47,6 @@
 
 // -*-C++-*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -94,7 +97,7 @@ static void Check_Zero_Linear_Coefficients(WN* wn_ref, ACCESS_VECTOR *av)
   for (INTSYMB_NODE *lin_node=lin_iter.First(); !lin_iter.Is_Empty();
     lin_node = lin_iter.Next())
     SC_ASSERT(lin_node->Coeff != 0, 
-      ("Access vector for 0x%p has 0 linear coefficient", wn_ref));  
+      ("Access vector for %p has 0 linear coefficient", wn_ref));  
 }
 
 #endif 
@@ -108,7 +111,7 @@ static INT Check_Depth(WN* wn)
     depth++;
     DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn);
     FmtAssert(dli->Depth == depth,
-              ("DO confusion: %d %d (loop %s: 0x%p)",
+              ("DO confusion: %d %d (loop %s: %p)",
                dli->Depth, depth, SYMBOL(WN_index(wn)).Name(), wn));
     return depth;
   }
@@ -607,7 +610,7 @@ static SANITY_CHECK_RVAL SNL_Sanity_Check_Loop(WN* wn, INT depth)
 
   DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn);
   SC_ASSERT(dli->LB && dli->UB && dli->Step,
-	    ("sanity check failed: Missing LB, UB or Step (0x%p)", wn));
+	    ("sanity check failed: Missing LB, UB or Step (%p)", wn));
 
   if (!dli->LB->Too_Messy) {
     for (INT i = 0; i < dli->LB->Num_Vec(); i++) {
@@ -615,7 +618,7 @@ static SANITY_CHECK_RVAL SNL_Sanity_Check_Loop(WN* wn, INT depth)
       if (!av->Too_Messy) {
         INT lval = av->Loop_Coeff(dli->Depth);
         SC_ASSERT(lval < 0,
-                  ("sanity check failed: lbval=%d depth=%d index=%s (0x%p)",
+                  ("sanity check failed: lbval=%d depth=%d index=%s (%p)",
                    lval, dli->Depth, indexname, wn));
 	Check_Zero_Linear_Coefficients(wn, av); 
       }
@@ -627,7 +630,7 @@ static SANITY_CHECK_RVAL SNL_Sanity_Check_Loop(WN* wn, INT depth)
       if (!av->Too_Messy) {
         INT uval = av->Loop_Coeff(dli->Depth);
         SC_ASSERT(uval > 0,
-                  ("sanity check failed: ubval=%d depth=%d index=%s (0x%p)",
+                  ("sanity check failed: ubval=%d depth=%d index=%s (%p)",
                    uval, dli->Depth, indexname, wn));
 	Check_Zero_Linear_Coefficients(wn, av); 
       }
@@ -638,23 +641,15 @@ static SANITY_CHECK_RVAL SNL_Sanity_Check_Loop(WN* wn, INT depth)
 
   if (!r.has_io) {
     SC_ASSERT((r.has_loops == FALSE) == (dli->Is_Inner != FALSE),
-              ("sanity check failed: index=%s (0x%p): has_loops: %d %d",
+              ("sanity check failed: index=%s (%p): has_loops: %d %d",
                indexname, wn, r.has_loops, dli->Is_Inner));
-#if 0
-    // this would be a good idea, but the malloc() and free() cannot
-    // be marked bad without messing up the dependence graph, so
-    // we have to make r.has_calls recognize that malloc/free are not calls.
-    SC_ASSERT((r.has_calls == FALSE) == (dli->Has_Calls == FALSE),
-              ("sanity check failed: index=%s (0x%p): has_calls: %d %d",
-               indexname, wn, r.has_calls, dli->Has_Calls));
-#endif
     SC_ASSERT(depth+1 == dli->Depth,
-              ("sanity check failed: index=%s (0x%p): depth: %d %d",
+              ("sanity check failed: index=%s (%p): depth: %d %d",
                indexname, wn, depth+1, dli->Depth));
 
     SC_ASSERT((dli->Has_Bad_Mem != 0) == (r.has_bad_mem != NULL) ||
               (dli->Has_Bad_Mem && (dli->Has_Calls || dli->Has_Gotos)),
-              ("sanity check failed: index=%s (0x%p): has_bad_mem: %d 0x%p",
+              ("sanity check failed: index=%s (%p): has_bad_mem: %d %p",
                indexname, wn, dli->Has_Bad_Mem, r.has_bad_mem));
   }
 
@@ -687,10 +682,10 @@ static SANITY_CHECK_RVAL SNL_Sanity_Check_If(WN* wn, INT depth)
   FmtAssert(ii->Condition, ("Missing If Condition"));
   if (!rt.has_io) {
     SC_ASSERT((rt.has_loops||re.has_loops) == (ii->Contains_Do_Loops!=FALSE),
-              ("Bad if info: has_loops disagreement: %d %d %d 0x%p",
+              ("Bad if info: has_loops disagreement: %d %d %d %p",
                rt.has_loops, re.has_loops, ii->Contains_Do_Loops, wn));
     SC_ASSERT((rt.has_regions||re.has_regions) == (ii->Contains_Regions!=FALSE),
-              ("Bad if info: has_regions disagreement: %d %d %d 0x%p",
+              ("Bad if info: has_regions disagreement: %d %d %d %p",
                rt.has_regions, re.has_regions, ii->Contains_Regions, wn));
   }
 
@@ -725,45 +720,22 @@ WN* SNL_Sanity_Check_Exp(WN* wn)
   }
 
   if (opr == OPR_STID) {
-#if 0
-    if (!Alias_Mgr->Id(wn)) {
-      fprintf(stdout,
-              "sanity check warning(%s): missing alias for def of %s in\n",
-              Cur_PU_Name, SYMBOL(wn).Name());
-      fflush(stdout);
-    }
-#endif
     USE_LIST* ul = Du_Mgr->Du_Get_Use(wn);
     if ((!ul || (!ul->Incomplete() && ul->Len() == 0)) &&
         !((ST_class(WN_st(wn))==CLASS_PREG)
            && Preg_Is_Dedicated(WN_offset(wn)))) {
-      fprintf(stdout,
-              "sanity check warning(%s): missing uses for def (0x%p) of %s <%s>\n",
+      DevWarn("sanity check warning(%s): missing uses for def (%p) of %s <%s>\n",
               Cur_PU_Name, wn, SYMBOL(wn).Name(),
               ul ? "empty list" : "missing list");
-      fflush(stdout);
     }
   }
   else if (opr == OPR_LDID) {
-#if 0
-    if (!Alias_Mgr->Id(wn)) {
-      fprintf(stdout,
-              "sanity check warning(%s): missing alias for use of %s in\n",
-              Cur_PU_Name, SYMBOL(wn).Name());
-      WN* prnt = LWN_Get_Parent(wn);
-      fflush(stdout);
-    }
-#endif
     DEF_LIST* dl = Du_Mgr->Ud_Get_Def(wn);
     if (!dl || dl->Len() == 0) {
-      fprintf(stdout, "sanity check warning(%s): missing defs for use ",
-        Cur_PU_Name);
-      fprintf(stdout, "(0x%p) of %s <%s> <id %d:%d>\n", wn, SYMBOL(wn).Name(),
-	dl ? "empty list" : "missing list", OPCODE_mapcat(WN_opcode(wn)), 
-	WN_map_id(wn));
-      WN* prnt = LWN_Get_Parent(wn);
-      Dump_WN(prnt ? prnt : wn, stdout, 1, 2, 2);
-      fflush(stdout);
+      DevWarn("sanity check warning(%s): missing defs for use (%p) of %s <%s> <id %d:%d>\n",
+	      Cur_PU_Name, wn, SYMBOL(wn).Name(),
+	      dl ? "empty list" : "missing list", OPCODE_mapcat(WN_opcode(wn)), 
+	      WN_map_id(wn));
     }
   }
   else if (opr == OPR_INTRINSIC_OP) {
@@ -860,7 +832,7 @@ void SNL_Sanity_Check_Region(SNL_REGION region)
 {
 
   if (!Valid_SNL_Region(region)) { 
-    DevWarn("SNL_Sanity_Check_Region: Invalid SNL region 0x%p->0x%p", 
+    DevWarn("SNL_Sanity_Check_Region: Invalid SNL region %p->%p", 
       region.First, region.Last); 
     return;
   } 
@@ -1143,10 +1115,10 @@ void SNL_Print_Ldid_Pointers(WN* wn)
     if (OPCODE_operator(opc) == OPR_LDID) {
       DEF_LIST* dl = Du_Mgr->Ud_Get_Def(wn);
       if (dl == NULL)
-	printf("0x%p <missing deflist>\n", wn);
+	printf("%p <missing deflist>\n", wn);
       else {
 	WN* loop = dl->Loop_stmt();
-	printf("0x%p 0x%p %s\n", wn, loop,
+	printf("%p %p %s\n", wn, loop,
 	       loop ? SYMBOL(WN_index(loop)).Name() : "<none>");
       }
     }
@@ -1446,6 +1418,608 @@ extern BOOL SNL_Is_Non_Varying_Access_Array(ACCESS_ARRAY* aa,
       return FALSE;
     }
   }
+  return TRUE;
+}
+
+typedef enum {
+  RELOP_LT,
+  RELOP_LE,
+  RELOP_GT,
+  RELOP_GE,
+  RELOP_EQ,
+  RELOP_NE,
+  ARITH_SUB,
+  ARITH_ADD,
+  NULL_OPR
+} NT_OPR;
+
+typedef enum {
+  EXPR_TERM,
+  EXPR_VAL,
+  EXPR_SYM,
+  EXPR_OPR,
+  EXPR_EMPTY
+} SNL_STACK_ATTR;
+
+typedef struct SNL_EXPR_STACK_INFO_s {
+  SNL_STACK_ATTR attr;
+  SYMBOL         var;
+  INT            val;
+  INT            depth;
+  NT_OPR         opr;
+  WN*            wn;
+} SNL_EXPR_STACK_INFO;
+
+INT SNL_Evaluate_ExprNT(SNL_EXPR_STACK_INFO *if_stack,
+                        UINT8 if_stack_size,
+                        UINT8 i,
+                        UINT8 key_idx,
+                        UINT8 seed,
+                        SNL_EXPR_STACK_INFO *sub_expr_stack,
+                        UINT8 sub_stack_size,
+                        UINT8 j);
+
+INT SNL_Evaluate_ExprTerm(SNL_EXPR_STACK_INFO *if_stack,
+                          UINT8 if_stack_size,
+                          UINT8 i,
+                          UINT8 key_idx,
+                          UINT8 seed,
+                          SNL_EXPR_STACK_INFO *sub_expr_stack,
+                          UINT8 sub_stack_size,
+                          UINT8 j)
+{
+  INT rhs, lhs, val;
+
+  switch(if_stack[i].opr) {
+  case RELOP_GT:
+  case RELOP_GE:
+  case RELOP_LT:
+  case RELOP_LE:
+  case RELOP_EQ:
+  case RELOP_NE:
+    // Bin op: lhs
+    lhs = SNL_Evaluate_ExprNT(if_stack,
+                              if_stack_size,
+                              i+1,
+                              key_idx,
+                              seed,
+                              sub_expr_stack,
+                              sub_stack_size,
+                              j);
+    // Bin op: rhs
+    rhs = SNL_Evaluate_ExprNT(if_stack,
+                              if_stack_size,
+                              i+2,
+                              key_idx,
+                              seed,
+                              sub_expr_stack,
+                              sub_stack_size,
+                              j);
+
+    // Now evaluate the expression.
+    switch(if_stack[i].opr) {
+    case RELOP_GT:
+      val = (lhs > rhs);
+      break;
+
+    case RELOP_GE:
+      val = (lhs >= rhs);
+      break;
+
+    case RELOP_LT:
+      val = (lhs < rhs);
+      break;
+
+    case RELOP_LE:
+      val = (lhs <= rhs);
+      break;
+
+    case RELOP_EQ:
+      val = (lhs == rhs);
+      break;
+
+    case RELOP_NE:
+      val = (lhs != rhs);
+      break;
+    }
+    break;
+
+  case ARITH_ADD:
+  case ARITH_SUB:
+    // Bin op: lhs
+    lhs = SNL_Evaluate_ExprNT(if_stack,
+                              if_stack_size,
+                              i+1,
+                              key_idx,
+                              seed,
+                              sub_expr_stack,
+                              sub_stack_size,
+                              j);
+    // Bin op: rhs
+    rhs = SNL_Evaluate_ExprNT(if_stack,
+                              if_stack_size,
+                              i+2,
+                              key_idx,
+                              seed,
+                              sub_expr_stack,
+                              sub_stack_size,
+                              j);
+
+     
+    if (if_stack[i].opr == ARITH_ADD)
+      val = lhs + rhs;  
+    else if (if_stack[i].opr == ARITH_ADD)
+      val = lhs - rhs;  
+
+    break;
+
+  default:
+    val = 1;
+    break;
+  }
+
+  return val;
+}
+
+INT SNL_Evaluate_ExprNT(SNL_EXPR_STACK_INFO *if_stack,
+                        UINT8 if_stack_size,
+                        UINT8 i,
+                        UINT8 key_idx,
+                        UINT8 seed,
+                        SNL_EXPR_STACK_INFO *sub_expr_stack,
+                        UINT8 sub_stack_size,
+                        UINT8 j)
+{
+  INT val = 0;
+
+  switch(if_stack[i].attr) {
+  case EXPR_VAL:
+    val = if_stack[i].val;
+    break;
+
+  case EXPR_SYM:
+    if (key_idx == i) {
+      // Here is where we substitute the induction variable
+      // with the evaluation of the given sub expression.
+      val = SNL_Evaluate_ExprTerm(sub_expr_stack,
+                                  sub_stack_size,
+                                  j,
+                                  -1,
+                                  seed,
+                                  sub_expr_stack,
+                                  sub_stack_size,
+                                  j);
+    } else {
+      // For expressions where we will substitute via a subexpression,
+      // the symbol values are 1, else we use the seed value.
+      if (key_idx == -2)
+        val = seed;
+      else
+        val = 1;
+    }
+    break;
+  case EXPR_TERM:
+    val = SNL_Evaluate_ExprTerm(if_stack,
+                                if_stack_size,
+                                i,
+                                key_idx,
+                                seed,
+                                sub_expr_stack,
+                                sub_stack_size,
+                                j);
+    break;
+  default:
+    break;
+  }
+
+  return val;
+}
+
+// This works like a recursive decent parser.
+BOOL SNL_Evaluate_ExprStack(SNL_EXPR_STACK_INFO *if_stack,
+                            UINT8 if_stack_size, 
+                            UINT8 key_idx,
+                            UINT8 seed,
+                            UINT8 num_vars,
+                            SNL_EXPR_STACK_INFO *sub_expr_stack,
+                            UINT8 sub_stack_size)
+{
+  UINT8 i, j;
+  INT val;
+  
+  // Only solve for single variable solutions, we are substituting for 
+  // the induction variable.
+  if (num_vars > 1) {
+    return FALSE;
+  }
+
+  i = 0;
+  j = 0;
+  val = 1;
+  if (if_stack[i].attr == EXPR_OPR) {
+    // There will only be 1 RELOP followed by a lhs and rhs
+    val = SNL_Evaluate_ExprTerm(if_stack,
+                                if_stack_size,
+                                i,
+                                key_idx,
+                                seed,
+                                sub_expr_stack,
+                                sub_stack_size,
+                                j);
+  }
+  return (val == 0);
+}
+
+SNL_STACK_ATTR configure_expr_wn(WN *wn,
+                                 UINT8 *num_syms, 
+                                 NT_OPR *opr, 
+                                 INT *val, 
+                                 SYMBOL *sym)
+{
+  SNL_STACK_ATTR attr;
+  INT cur_syms = *num_syms;
+
+  *opr = NULL_OPR;
+  switch (WN_operator(wn)) {
+  case OPR_LDID:
+     attr = EXPR_SYM;
+     cur_syms++;
+     *num_syms = cur_syms;
+     *sym = SYMBOL(wn);
+     break;
+  case OPR_GT:
+     *opr = RELOP_GT;
+     attr = EXPR_OPR;
+     break;
+  case OPR_GE:
+     *opr = RELOP_GE;
+     attr = EXPR_OPR;
+     break;
+  case OPR_LT:
+     *opr = RELOP_LT;
+     attr = EXPR_OPR;
+     break;
+  case OPR_LE:
+     *opr = RELOP_LE;
+     attr = EXPR_OPR;
+     break;
+  case OPR_EQ:
+     *opr = RELOP_EQ;
+     attr = EXPR_OPR;
+     break;
+  case OPR_NE:
+     *opr = RELOP_NE;
+     attr = EXPR_OPR;
+     break;
+  case OPR_ADD:
+     attr = EXPR_TERM;
+     *opr = ARITH_ADD;
+     break;
+  case OPR_SUB:
+     attr = EXPR_TERM;
+     *opr = ARITH_SUB;
+     break;
+  case OPR_INTCONST:
+     attr = EXPR_VAL;
+     *val = WN_const_val(wn);
+     break;
+  default:
+     attr = EXPR_EMPTY;
+     break;
+  }
+
+  return attr;
+}
+
+SNL_EXPR_STACK_INFO *SNL_Walk_ExpTree(WN *expr, 
+                                      UINT8 *num_syms,
+                                      UINT8 *expr_depth,
+                                      UINT8 *stack_idx )
+{
+  SNL_EXPR_STACK_INFO *cur_stack;
+  UINT8 i, j;
+  UINT8 depth = *expr_depth;
+  INT num_relops = 0;
+  INT idx = *stack_idx;
+  BOOL simple_exp = TRUE;
+
+  cur_stack = CXX_NEW_ARRAY(SNL_EXPR_STACK_INFO, 20, &LNO_local_pool);
+
+  // First we add the expr node itself
+  // load expr stack
+  cur_stack[idx].attr = 
+    configure_expr_wn(expr, 
+                      num_syms,
+                      &cur_stack[idx].opr,
+                      &cur_stack[idx].val,
+                      &cur_stack[idx].var);
+  cur_stack[idx].depth = 0;
+  if (cur_stack[idx].attr == EXPR_OPR)
+    num_relops++;
+
+  cur_stack[idx++].wn = expr;
+
+  // Now walk the sub tree
+  for (i = 0; i < WN_kid_count(expr); i++) {
+    WN *d1_wn = WN_kid(expr,i);
+
+    // load expr stack
+    cur_stack[idx].attr = 
+      configure_expr_wn(d1_wn, 
+                        num_syms,
+                        &cur_stack[idx].opr,
+                        &cur_stack[idx].val,
+                        &cur_stack[idx].var);
+    cur_stack[idx].depth = 1;
+    if (cur_stack[idx].attr == EXPR_OPR)
+      num_relops++;
+
+    cur_stack[idx++].wn = d1_wn;
+
+    // Record depth
+    if (depth == 0) depth++;
+
+    // Now walk the inner sub tree
+    for (j = 0; j < WN_kid_count(d1_wn); j++) {
+      WN *d2_wn = WN_kid(d1_wn,j);
+ 
+      // load expr stack
+      cur_stack[idx].attr = 
+        configure_expr_wn(d2_wn, 
+                          num_syms,
+                          &cur_stack[idx].opr, 
+                          &cur_stack[idx].val, 
+                          &cur_stack[idx].var);
+      cur_stack[idx].depth = 2;
+      if (cur_stack[idx].attr == EXPR_OPR)
+        num_relops++;
+
+      cur_stack[idx++].wn = d2_wn;
+
+      // record depth
+      if (depth == 1) depth++;
+
+      // depth limit is 2
+      if (WN_kid_count(d2_wn) > 0) {
+        simple_exp = FALSE;
+      }
+    }
+  }
+  *expr_depth = depth;
+  *stack_idx = idx;
+
+  // For now do not support compound expressions. 
+  if (num_relops > 1)
+    simple_exp = FALSE;
+
+  // Now check the result to see if any unmapped WN's were seen
+  for (i = 0; i < idx; i++) {
+    if (cur_stack[i].attr == EXPR_EMPTY) {
+      simple_exp = FALSE; 
+      break;
+    }
+  }
+
+  if (simple_exp == FALSE) {
+    CXX_DELETE_ARRAY(cur_stack, &LNO_local_pool);
+    cur_stack = NULL;
+  }
+
+  return cur_stack;
+}
+
+//
+// A return state of TRUE means one of:
+//
+//  a.) Either the if_test or the loop_test has a non trivial expression
+//  b.) The depth of if_test is not equivalent to loop_test's depth
+//  c.) The expression was still consistent when evaluated.
+//
+// A return state of FALSE means the evaluated expression with
+// the applied constraint of first or last iteration exclusion produced
+// an inconsistent expression.
+//
+extern BOOL SNL_Compare_Logic(WN *bound_exp, 
+                        WN *bound_var, 
+                        WN *loop,
+                        WN *stmt, 
+                        BOOL is_last)
+{
+  SNL_EXPR_STACK_INFO *if_expr_stack;
+  UINT8 if_stack_idx = 0;
+  UINT8 num_if_syms = 0;
+  UINT8 induc_loc;
+  WN *UB_wn =  bound_exp;
+  WN *UB_var = bound_var;
+  WN *LB_wn =  WN_kid0(WN_start(loop));
+  WN *induc = WN_index(loop);
+  SYMBOL induction_var;
+  BOOL stmt_contains_induc = FALSE;
+  BOOL simple_exp = TRUE;
+  UINT8 i, j;
+  UINT8 if_test_depth = 0;
+
+  // Now test the init value, it needs to be positive, the 
+  // transformation test told us the the trip was positive and 
+  // the stride was 1.
+  if (WN_operator(LB_wn) == OPR_INTCONST) {
+    if (WN_const_val(LB_wn) < 0)
+      return TRUE;
+  } else {
+    return TRUE;
+  }
+
+  // Must have an induction var
+  if (induc)
+    induction_var = SYMBOL(induc);
+  else 
+    return TRUE;
+
+  // First configure the attributes of the if_test tree, depth, size, 
+  // and load the expr stack with the info about each wn in the tree.
+  WN *if_test = WN_if_test(stmt);
+  if (WN_else_is_empty(stmt) == FALSE)
+    return TRUE;
+  if_expr_stack = SNL_Walk_ExpTree(if_test, 
+                                   &num_if_syms, 
+                                   &if_test_depth,
+                                   &if_stack_idx);
+  if (if_expr_stack == NULL)
+    return TRUE;
+
+  // Now determine if the induction var is referenced 
+  // in the if_test.
+  for (i = 0; i < if_stack_idx; i++) {
+    if (if_expr_stack[i].attr == EXPR_SYM) {
+      if (if_expr_stack[i].var == induction_var) {
+        induc_loc = i;
+        stmt_contains_induc = TRUE;
+        break;
+      }
+    }
+  }
+
+  // The if_test must contain a reference to the induction var
+  if (stmt_contains_induc == FALSE) {
+    CXX_DELETE_ARRAY(if_expr_stack, &LNO_local_pool);
+    return TRUE;
+  }
+
+  // We do more work on checking the upper boundary test against the
+  // if_test expr than we would for checking for a constant value
+  // exclusion in an induction var comparison.
+  if ((is_last) && (induc)) {
+    SNL_EXPR_STACK_INFO *lc_expr_stack;
+    UINT8 lc_stack_idx = 0;
+    UINT8 num_lc_syms = 0;
+    UINT8 loop_test_depth = 0;
+    BOOL not_similar = FALSE;
+    BOOL bound_includes = TRUE;
+  
+    // Now configure the attributes of the loop_test tree, depth, size, 
+    // and load the expr stack with the info about each wn in the tree.
+    WN *loop_test = WN_end(loop);
+   
+    // Does the upper bound test include the bound_exp or exclude it?
+    // If it include it, we use the bound_exp unmodified later, else
+    // if excluded, we alter the value by -1 to include the last iteration
+    // in a copy of the expression.
+    if (WN_operator(loop_test) == OPR_LT)
+      bound_includes = FALSE;
+
+    // Now build the loop test expression stack
+    lc_expr_stack = SNL_Walk_ExpTree(loop_test, 
+                                     &num_lc_syms, 
+                                     &loop_test_depth,
+                                     &lc_stack_idx);
+    if (lc_expr_stack == NULL)
+      return TRUE;
+
+    // Trees are not equivalent, cannot compare
+    if (if_test_depth != loop_test_depth) {
+      CXX_DELETE_ARRAY(if_expr_stack, &LNO_local_pool);
+      CXX_DELETE_ARRAY(lc_expr_stack, &LNO_local_pool);
+      return TRUE;
+    }
+
+    // The first constraint is that the number of symbols
+    // existing in the two expressions is the same
+    if (num_if_syms == num_lc_syms) {
+      // Since the induction var was seen, we need to ensure that 
+      // for each var in the if test, there is a matching var
+      // in the lc test.
+      for (i = 0; i < if_stack_idx; i++) {
+        SYMBOL if_sym;
+        if (if_expr_stack[i].attr == EXPR_SYM) {
+          BOOL found_sym = FALSE;
+          if_sym = if_expr_stack[i].var; 
+          for (j = 0; j < lc_stack_idx; j++) {
+            if (lc_expr_stack[j].attr == EXPR_SYM) {
+              if (if_sym == lc_expr_stack[j].var) {
+                found_sym = TRUE;
+                break;
+              }
+            }
+          }
+
+          // If the expressions are not similar we cannot compare
+          if (found_sym == FALSE) {
+            not_similar = TRUE;
+            break;
+          }
+        }
+      }
+
+      // Now if the two expressions are similar, locate the induction
+      // var in the if_test and reform the if_test expression stack
+      // substituting the induction var with the bound_exp.
+      if (not_similar == FALSE) {
+        SNL_EXPR_STACK_INFO *bound_exp_stack;
+        UINT8 bound_stack_idx = 0;
+        UINT8 num_bound_syms = 0;
+        UINT8 bound_depth = 0;
+        BOOL is_consistent = TRUE;
+
+        // Substitute the bound_exp by one which will include the last iter.
+        if (bound_includes == FALSE) {
+          bound_exp = LWN_Copy_Tree(bound_exp, FALSE, LNO_Info_Map);
+          Increase_By(bound_exp, -1, bound_exp, 0);
+        }
+
+        // First form an expression stack with bound_exp
+        bound_exp_stack = SNL_Walk_ExpTree(bound_exp, 
+                                           &num_bound_syms, 
+                                           &bound_depth,
+                                           &bound_stack_idx);
+        if (bound_exp_stack == NULL) {
+          CXX_DELETE_ARRAY(if_expr_stack, &LNO_local_pool);
+          CXX_DELETE_ARRAY(lc_expr_stack, &LNO_local_pool);
+          return TRUE;
+        }
+
+        // Now there are only num_if_syms - 1 vars in the if_expr_stack,
+        // evaluate the contents to see if it can logically
+        // ever be true.  If not, we have made it inconsistent.
+        if (SNL_Evaluate_ExprStack(if_expr_stack,
+                                   if_stack_idx,
+                                   induc_loc,
+                                   0,
+                                   num_if_syms - 1,
+                                   bound_exp_stack,
+                                   bound_stack_idx))
+          is_consistent = FALSE;
+
+        // Now clean up
+        CXX_DELETE_ARRAY(bound_exp_stack, &LNO_local_pool);
+        CXX_DELETE_ARRAY(if_expr_stack, &LNO_local_pool);
+        CXX_DELETE_ARRAY(lc_expr_stack, &LNO_local_pool);
+
+        // Now see if we made the if_test inconsistant
+        if (!is_consistent)
+          return FALSE;
+      }
+    }
+  } else if (is_last == FALSE) {
+    BOOL is_consistent = TRUE;
+    INT seed = WN_const_val(LB_wn); 
+    // Detect first iteration exclusion.  Note: This is greatly similar
+    // to what is needed for loop splitting, perhaps this test can be used
+    // to find those cases.
+    if (SNL_Evaluate_ExprStack(if_expr_stack,
+                               if_stack_idx,
+                               -2,
+                               seed,
+                               num_if_syms,
+                               NULL,
+                               0))
+      is_consistent = FALSE;
+
+    CXX_DELETE_ARRAY(if_expr_stack, &LNO_local_pool);
+    // Now see if we made the if_test inconsistant
+    if (!is_consistent)
+      return FALSE;
+  }
+
   return TRUE;
 }
 
@@ -2325,9 +2899,9 @@ static void Fix_Do_Du_Info_X(WN* wn, SNL_TRANS_INDEX_DATA* td,
 
   if (opr == OPR_DO_LOOP) {
     FmtAssert(Du_Mgr->Du_Get_Use(WN_start(wn)),
-              ("Didn't find uses for WN_index=0x%p", WN_index(wn)));
+              ("Didn't find uses for WN_index=%p", WN_index(wn)));
     FmtAssert(Du_Mgr->Du_Get_Use(WN_step(wn)),
-              ("Didn't find uses for WN_step=0x%p", WN_step(wn)));
+              ("Didn't find uses for WN_step=%p", WN_step(wn)));
   }
 }
 

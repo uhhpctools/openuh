@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: betarget.cxx
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/x8664/betarget.cxx,v $
+ * $Revision: 1.22 $
+ * $Date: 05/05/13 15:03:55-07:00 $
+ * $Author: kannann@iridot.keyresearch $
+ * $Source: be/com/x8664/SCCS/s.betarget.cxx $
  *
  * Description:
  *
@@ -85,6 +89,7 @@ OPCODE_To_TOP (OPCODE opcode)
   switch (opr) {
 
   case OPR_GOTO:
+  case OPR_GOTO_OUTER_BLOCK:
     return TOP_jmp;
 
   case OPR_FORWARD_BARRIER:
@@ -108,6 +113,7 @@ OPCODE_To_TOP (OPCODE opcode)
     else if (rtype == MTYPE_F8) return TOP_noop;
 #ifdef TARG_X8664
     else if (rtype == MTYPE_FQ) return TOP_noop;
+    else if (rtype == MTYPE_F10) return TOP_noop;
     else if (rtype == MTYPE_I1) return TOP_noop;
     else if (rtype == MTYPE_I2) return TOP_noop;
     else if (rtype == MTYPE_I4) return TOP_noop;
@@ -153,9 +159,12 @@ TAS_To_TOP (WN *tas_wn)
 	return TOP_UNDEFINED;
       return MTYPE_float(kid_mtype) ? TOP_movx2g : TOP_nop;
     case OPC_F8TAS:
-      if (Is_Target_32bit())
+      if (MTYPE_float(kid_mtype))
+        return TOP_nop;
+      else if (Is_Target_32bit())
 	return TOP_UNDEFINED;
-      return MTYPE_float(kid_mtype) ? TOP_nop : TOP_movg2x64;
+      else
+        return TOP_movg2x64;
     case OPC_F4TAS:
       if (Is_Target_32bit() && !Is_Target_SSE2())
 	return TOP_UNDEFINED;

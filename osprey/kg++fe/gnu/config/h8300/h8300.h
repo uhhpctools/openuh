@@ -27,9 +27,6 @@ Boston, MA 02111-1307, USA.  */
 
 /* Which CPU to compile for.
    We use int for CPU_TYPE to avoid lots of casts.  */
-#if 0 /* defined in insn-attr.h, here for documentation */
-enum attr_cpu { CPU_H8300, CPU_H8300H };
-#endif
 extern int cpu_type;
 
 /* Various globals defined in h8300.c.  */

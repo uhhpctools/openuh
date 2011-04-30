@@ -539,23 +539,6 @@ extern int target_flags;
    We allocate in the following order:
  */
 
-#if 0
-#define REG_ALLOC_ORDER					\
-{ REG_R0, REG_R1, REG_R2, REG_PROD, REG_Y, REG_X,       \
-  REG_PRODL, REG_YL, REG_AR0, REG_AR1,                  \
-  REG_RB, REG_A0, REG_A1, REG_A0L,                      \
-  REG_A1L, REG_AR2, REG_AR3,                            \
-  REG_YBASE, REG_J, REG_K, REG_PR, REG_PT, REG_C0,      \
-  REG_C1, REG_C2, REG_R3,				\
-  REG_YBASE0, REG_YBASE1, REG_YBASE2, REG_YBASE3,       \
-  REG_YBASE4, REG_YBASE5, REG_YBASE6, REG_YBASE7,       \
-  REG_YBASE8, REG_YBASE9, REG_YBASE10, REG_YBASE11,     \
-  REG_YBASE12, REG_YBASE13, REG_YBASE14, REG_YBASE15,   \
-  REG_YBASE16, REG_YBASE17, REG_YBASE18, REG_YBASE19,   \
-  REG_YBASE20, REG_YBASE21, REG_YBASE22, REG_YBASE23,   \
-  REG_YBASE24, REG_YBASE25, REG_YBASE26, REG_YBASE27,   \
-  REG_YBASE28, REG_YBASE29, REG_YBASE30, REG_YBASE31 }
-#else
 #define REG_ALLOC_ORDER                                 \
 {                                                       \
   REG_A0, REG_A0L, REG_A1, REG_A1L, REG_Y, REG_YL,      \
@@ -572,7 +555,6 @@ extern int target_flags;
   REG_YBASE28, REG_YBASE29, REG_YBASE30, REG_YBASE31,   \
   REG_R3, REG_YBASE, REG_PT, REG_C0, REG_C1, REG_C2,    \
   REG_PR }
-#endif
 /* Zero or more C statements that may conditionally modify two
    variables `fixed_regs' and `call_used_regs' (both of type `char
    []') after they have been initialized from the two preceding
@@ -997,9 +979,6 @@ enum reg_class
      Don't define this macro unless the target machine has limitations
      which require the macro to do something nontrivial.  */
 
-#if 0
-#define LIMIT_RELOAD_CLASS(MODE, CLASS) dsp16xx_limit_reload_class (MODE, CLASS)
-#endif
 
 /* A C expression for the maximum number of consecutive registers of class CLASS
    needed to hold a value of mode MODE */

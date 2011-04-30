@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -132,6 +136,8 @@ typedef enum {
 	T_LRA_Comp,	
 	T_GRA_CU,		/* Register allocation */
 	T_GRA_Comp,	
+        T_GRU_CU,		/* Fuse Spills */
+	T_GRU_COMP,
 	T_Emit_CU,		/* Code emission */
 	T_Emit_Comp,	
 	T_Region_Finalize_CU,	/* Region Finalize */
@@ -158,12 +164,16 @@ typedef enum {
 	T_Ipfec_Speculation_Comp,
 	T_Ipfec_Multi_Branch_CU,	/* Ipfec Multiple branch */
 	T_Ipfec_Multi_Branch_Comp,
+     T_Ipfec_DAG_CU,
+     T_Ipfec_DAG_Comp,
 
 #ifdef SPECMT_LT
         T_SPECMT_BG,
         T_SPECMT_PA,
 #endif
-		
+	T_WSSA_EMIT_CU,		/* WSSA PreOpt emitter */
+	T_WSSA_EMIT_Comp,	
+
 	T_LAST			/* Last index defined */
 } TIMER_ID;
 

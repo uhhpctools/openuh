@@ -57,14 +57,14 @@ static const INT16 al_off[17]= {0,  /* align 0 */
 			        4   /* align 128 bits */
 			       };
 
-static const STRING alstr[ALIGNS-1]= {
+static const char * alstr[ALIGNS-1]= {
 				    ".align1",  /* align 8 bits */
   			            ".align2",  /* align 16 bits */
 			            ".align4",  /* align 32 bits */
 			            ".align8",  /* align 64 bits */
                                     }; 
 
-static const STRING logstr[ALIGNS-1]= { ".log.1",".log.2",".log.4",".log.8" } ;
+static const char * logstr[ALIGNS-1]= { ".log.1",".log.2",".log.4",".log.8" } ;
 
 static TY_IDX  unaligned_type [MTYPE_LAST+1][ALIGNS];
 static TY_IDX basic_logical_ty[NUM_LOG_KINDS][ALIGNS];
@@ -212,7 +212,7 @@ WN	*decl_distribute_pragmas;
  * scheme was a mess anyway. */
 #endif /* KEY Bug 6845 */
 
-static const STRING dope_name [DOPE_NM] = { 
+static const char * dope_name [DOPE_NM] = { 
 	"base",	
 	"el_len",
 	"assoc",
@@ -288,7 +288,7 @@ ADDR_OFFSET,4,8,8,8,8,8,12,16,24,28
 #endif /* KEY Bug 6845 */
 };
 
-static const STRING bound_name [BOUND_NM] = { 
+static const char * bound_name [BOUND_NM] = { 
  "lb",
  "ext",
  "str_m",				
@@ -423,7 +423,7 @@ static BOOL in_hosted_dtype = FALSE ;
 
 /* forward references */
 
-static FLD_HANDLE cwh_types_fld_util(char* name_string, TY_IDX  fld_ty,  OFFSET_64 offset, BOOL global) ;
+static FLD_HANDLE cwh_types_fld_util(const char* name_string, TY_IDX  fld_ty,  OFFSET_64 offset, BOOL global) ;
 static void   cwh_types_fill_type(INT32 flag_bits, TYPE *t, TY_IDX  ty) ;
 static TY_IDX cwh_types_dim_struct_TY(void);
 static TY_IDX cwh_types_dim_TY(INT32 num_dims) ;
@@ -437,7 +437,7 @@ static TY_IDX    cwh_types_mk_misaligned_TY(TY_IDX ty, mUINT16 alignment) ;
 
 static TY_IDX cwh_types_mk_array_TY(ARB_HANDLE bounds,INT16 n,TY_IDX base, INT64 size);
 static TY_IDX cwh_types_mk_basic_TY (BASIC_TYPE, INTPTR size, mUINT16 alignment) ;
-static TY_IDX cwh_types_mk_struct(INT64 size, INT32 align, FLD_HANDLE list,char *name) ;
+static TY_IDX cwh_types_mk_struct(INT64 size, INT32 align, FLD_HANDLE list, const char *name) ;
 static TY_IDX cwh_types_shared_dope(FLD_HANDLE  list,int ndims, BOOL is_ptr,
 #ifdef KEY /* Bug 6845 */
   int n_allocatable_cpnt

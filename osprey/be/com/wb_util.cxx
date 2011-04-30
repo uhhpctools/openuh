@@ -1,5 +1,5 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -38,7 +38,6 @@
 
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "be_com_pch.h"
@@ -60,6 +59,7 @@
 #include "wb_carray.h" 
 #include "targ_sim.h"
 #include "wutil.h"
+#include "intrn_info.h"
 
 //-----------------------------------------------------------------------
 // NAME: WB_Bell

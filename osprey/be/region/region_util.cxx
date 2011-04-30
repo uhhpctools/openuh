@@ -1,5 +1,9 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -40,10 +44,10 @@
 /*-*-c++-*-*/
 /* ====================================================================
  * Module: opt_region_util.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/region/region_util.cxx,v $
+ * $Revision: 1.6 $
+ * $Date: 05/12/05 08:59:31-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/region/SCCS/s.region_util.cxx $
  *
  * Revision history:
  *  31-MAY-95 wdl - Original Version
@@ -70,7 +74,11 @@
 /* this next header should be after the external declarations in the others */
 #include "pragma_weak.h"	/* weak pragmas for Valid_alias...	*/
 
-#ifdef __linux__
+#if defined(TARG_SL)
+#include "fb_whirl.h"
+#endif
+
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 extern void (*Print_points_to_p) (FILE *fp, POINTS_TO *ptmp);
 #define Print_points_to (*Print_points_to_p)
 #else
@@ -213,7 +221,11 @@ BOOL REGION_has_black_regions(RID *rid)
 	  ("REGION_has_black_regions, called on a transparent region"));
 
   /* 7.3 specific assertion */
+#ifdef TARG_SL //region_type_for_major
+  Is_True(RID_TYPE_func_entry(rid) || RID_TYPE_olimit(rid) || RID_TYPE_major(rid) || 
+#else 
   Is_True(RID_TYPE_func_entry(rid) || RID_TYPE_olimit(rid) ||
+#endif  
 	  RID_TYPE_pragma(rid),
 	  ("REGION_has_no_black_regions, unsupported region type"));
 
@@ -610,6 +622,7 @@ REGION_LEVEL RID_preopt_level(INT phase)
     case PREOPT_IPA0_PHASE:	return RL_IPA_PREOPT;
     case PREOPT_IPA1_PHASE:	return RL_IPA_PREOPT;
     case PREOPT_LNO_PHASE:	return RL_LNO_PREOPT;
+    case PREOPT_LNO1_PHASE:     return RL_LNO1_PREOPT;
     case PREOPT_DUONLY_PHASE:	return RL_DU_PREOPT;
     case PREOPT_PHASE:		return RL_PREOPT;
     case MAINOPT_PHASE:		return RL_MAINOPT;
@@ -690,11 +703,7 @@ BOOL REGION_add_preg_in(RID *rid, PREG_NUM pr, TYPE_ID quad)
   if (npregs == 2) { // quad
     // for quads, put on quad list and pr+1
     // for C4, it actually is two F4's so not a quad
-#ifdef TARG_IA64
     if ((quad == MTYPE_FQ || quad == MTYPE_C8 || quad == MTYPE_C10) &&
-#else
-    if ((quad == MTYPE_FQ || quad == MTYPE_C8) &&
-#endif
 	!REGION_search_preg_set(RID_pregs_quad(rid), pr)) {
       RID_pregs_quad(rid) = PREG_LIST_Push(pr, RID_pregs_quad(rid), 
 					   &REGION_mem_pool);
@@ -709,7 +718,7 @@ BOOL REGION_add_preg_in(RID *rid, PREG_NUM pr, TYPE_ID quad)
 		       "PREG %d to in-set, RGN %d\n", pr+1, RID_id(rid)));
     }
   } else if (npregs == 4) { // complex quad
-    Is_True(quad == MTYPE_CQ, ("REGION_add_preg_in, not a complex quad"));
+    Is_True(quad == MTYPE_CQ || quad == MTYPE_C16, ("REGION_add_preg_in, not a complex quad"));
     // for complex quads, put on complex list, and pr, pr+1, pr+2, pr+3
     if (!REGION_search_preg_set(RID_pregs_complex_quad(rid), pr)) {
       RID_pregs_complex_quad(rid) = PREG_LIST_Push(pr,
@@ -772,11 +781,7 @@ BOOL REGION_add_preg_out(RID *rid, INT32 which_set, PREG_NUM pr, TYPE_ID quad)
   if (npregs == 2) { // quad
     // for quads, put on quad list and pr+1
     // for C4, it actually is two F4's so not a quad
-#ifdef TARG_IA64
-    if ((quad == MTYPE_FQ || quad == MTYPE_C8 || quad == MTYPE_C10) &&
-#else
     if ((quad == MTYPE_FQ || quad == MTYPE_C8) &&
-#endif
 	!REGION_search_preg_set(RID_pregs_quad(rid), pr)) {
       RID_pregs_quad(rid) = PREG_LIST_Push(pr, RID_pregs_quad(rid), 
 					   &REGION_mem_pool);
@@ -793,7 +798,7 @@ BOOL REGION_add_preg_out(RID *rid, INT32 which_set, PREG_NUM pr, TYPE_ID quad)
 		       pr+1, which_set, RID_id(rid)));
     }
   } else if (npregs == 4) { // complex quad
-    Is_True(quad == MTYPE_CQ, ("REGION_add_preg_in, not a complex quad"));
+    Is_True(quad == MTYPE_CQ || quad == MTYPE_C16, ("REGION_add_preg_in, not a complex quad"));
     // for complex quads, put on complex list, and pr, pr+1, pr+2, pr+3
     if (!REGION_search_preg_set(RID_pregs_complex_quad(rid), pr)) {
       RID_pregs_complex_quad(rid) = PREG_LIST_Push(pr,
@@ -933,6 +938,7 @@ REGION_add_exit(WN *block, WN *after, WN *region)
   wn_label = WN_CreateLabel(label, 0, NULL);
   WN_Set_Linenum(wn_label, (after) ? WN_Get_Linenum(after) :
 		 		     WN_Get_Linenum(block));
+
   WN_INSERT_BlockBefore(block, after, wn_label); /* after can be NULL */
 
   /* REGION_EXIT for end of region */
@@ -1043,6 +1049,7 @@ char *RID_level_str(RID *rid)
     case RL_MP:		strcpy(buff,"RL_MP");		break;
     case RL_RGN_INIT:	strcpy(buff,"RL_RGN_INIT");	break;
     case RL_LNO_PREOPT:	strcpy(buff,"RL_LNO_PREOPT");	break;
+    case RL_LNO1_PREOPT: strcpy(buff,"RL_LNO1_PREOPT");	break;
     case RL_LNO:	strcpy(buff,"RL_LNO");		break;
     case RL_RAIL:	strcpy(buff,"RL_RAIL");		break;
     case RL_RBI:	strcpy(buff,"RL_RBI");		break;
@@ -1085,6 +1092,12 @@ char *RID_type_str(RID_TYPE type)
     strcat(buff," COLD");
   if (type & RID_TYPE_swp)
     strcat(buff," SWP");
+#ifdef TARG_SL //fork_joint
+  if (type & RID_TYPE_major)
+    strcat(buff," SL2_MAJOR");
+  if(type & RID_TYPE_minor)
+    strcat(buff, "SL2_MINOR");
+#endif
   if (type & RID_TYPE_try)
     strcat(buff," TRY");
   if (type & RID_TYPE_cleanup)
@@ -1150,7 +1163,7 @@ Dump_preg_list(FILE *FD, PREG_LIST *plist)
 }
 
 static void
-Dump_points_to_list(FILE *FD, POINTS_TO_SET *ptset, char *str)
+Dump_points_to_list(FILE *FD, POINTS_TO_SET *ptset, const char *str)
 {
   fprintf(FD,"  %s\n",str);
   if (ptset == NULL)
@@ -1327,6 +1340,20 @@ void RID_Tree_Print(FILE *FD, RID *rid)
   }
 }
 
+/* =======================================================================
+   RID_is_valid: to check whether rid is valid in the rid tree
+   ====================================================================*/
+bool RID_is_valid(RID *parent, RID *rid)
+{
+    if (parent) {
+        if ( parent == rid) return true;
+        for (RID *kid = RID_first_kid(parent); kid; kid=RID_next(kid))
+            if (RID_is_valid(kid, rid))
+                return true;
+    }        
+    return false;
+}
+
 /* ======================================================================
    RID_WN_Tree_Print
    ====================================================================== */
@@ -1442,7 +1469,11 @@ REGION_CS_Next(REGION_CS_ITER *iter)
   RID_TYPE type = REGION_CS_ITER_type(iter);
   RID *parent = (me != NULL) ? RID_parent(me) : NULL;
   Is_True(type & RID_TYPE_loop || type & RID_TYPE_pragma ||
+#ifdef TARG_SL //region_type_for_major
+	  type & RID_TYPE_olimit || type & RID_TYPE_func_entry || type & RID_TYPE_major || 
+#else 
 	  type & RID_TYPE_olimit || type & RID_TYPE_func_entry ||
+#endif 	  
 	  type & RID_TYPE_eh,
 	  ("REGION_CS_Next, unknown region type, 0x%x",type));
 
@@ -1496,6 +1527,7 @@ void REGION_CS_NoEarlierSub_Next(REGION_CS_ITER *iter)
     if (REGION_CS_ITER_kid(iter) != NULL) { // if is is NULL we are done
       RID *rid;
       rid = REGION_CS_ITER_kid(iter);
+
       Is_True(RID_type(rid) != RID_TYPE_undefined,
 	      ("REGION_CS_NoEarlierSub_Next, undefined RID type"));
 #ifdef Is_True_On
@@ -1596,6 +1628,9 @@ WN *REGION_remove_and_mark(WN *pu, REGION_CS_ITER *iter)
 
   // create a new region node and move kids over
   new_rwn = WN_CopyNode(rwn);
+#if defined(TARG_SL)
+  WN_CopyMap(new_rwn,WN_MAP_FEEDBACK,rwn);
+#endif
   WN_region_exits(new_rwn) = WN_region_exits(rwn);
   WN_region_pragmas(new_rwn) = WN_region_pragmas(rwn);
   WN_region_body(new_rwn) = WN_region_body(rwn);
@@ -1777,6 +1812,23 @@ BOOL REGION_is_mp(WN * wn)
   return WN_region_kind(wn) == REGION_KIND_MP;
 }
 
+#if defined(TARG_SL)
+/* REGION_KIND_MP is not a mask */
+BOOL REGION_is_sl2_para(WN * wn)
+{
+  if (WN_region_kind(wn) == REGION_KIND_MAJOR || 
+       WN_region_kind(wn) == REGION_KIND_MINOR) {
+
+    RID *rid = REGION_get_rid(wn);
+    if (rid) /* rid may not be set yet */
+      Is_True(RID_TYPE_sl2_para(rid),
+	      ("REGION_is_sl2_para, region type/kind inconsistency"));
+  }
+  return (WN_region_kind(wn) == REGION_KIND_MAJOR || 
+               WN_region_kind(wn) == REGION_KIND_MINOR);
+}
+#endif 
+
 REGION_KIND REGION_type_to_kind(RID *rid)
 {
   Is_True(rid != NULL, ("REGION_type_to_kind, NULL RID"));
@@ -1797,6 +1849,12 @@ REGION_KIND REGION_type_to_kind(RID *rid)
     return REGION_KIND_COLD;
   if (RID_type(rid) & RID_TYPE_swp)
     return REGION_KIND_SWP;
+#ifdef TARG_SL //fork_joint
+  if (RID_type(rid) & RID_TYPE_major)
+    return REGION_KIND_MAJOR;
+  if(RID_type(rid)  & RID_TYPE_minor)
+    return REGION_KIND_MINOR;
+#endif 
   if (RID_type(rid) & RID_TYPE_try)
     return REGION_KIND_TRY;
   if (RID_type(rid) & RID_TYPE_cleanup)
@@ -1867,6 +1925,15 @@ void REGION_kind_to_type(WN *wn, RID *rid)
       case REGION_KIND_SWP:
 	RID_TYPE_swp_Set(rid);
 	break;
+#ifdef TARG_SL //fork_joint
+      case REGION_KIND_MINOR:
+	RID_TYPE_minor_Set(rid);
+	break;
+	case REGION_KIND_MAJOR:
+	RID_TYPE_major_Set(rid);
+	break;
+#endif 
+	
       default:
 	Is_True(FALSE,("REGION_kind_to_type, unknown kind"));
 	break;

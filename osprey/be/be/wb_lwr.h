@@ -40,6 +40,6 @@ extern void WB_LWR_Initialize(WN* wn_global, ALIAS_MANAGER* Alias_Mgr);
 
 extern void WB_LWR_Terminate();
 
-extern void s_lwr_debug(char init_buffer[]);
+extern void s_lwr_debug(const char init_buffer[]);
 
 #endif /* wb_lwr_INCLUDED */

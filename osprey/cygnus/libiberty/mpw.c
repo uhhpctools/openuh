@@ -409,12 +409,6 @@ getrusage (int who, struct rusage *rusage)
 {
   int clk = clock ();
 
-#if 0
-  rusage->ru_utime.tv_sec = clk / CLOCKS_PER_SEC;
-  rusage->ru_utime.tv_usec = ((clk * 1000) / CLOCKS_PER_SEC) * 1000;
-  rusage->ru_stime.tv_sec = 0;
-  rusage->ru_stime.tv_usec = 0;
-#endif
 }
 
 int

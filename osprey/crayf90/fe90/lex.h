@@ -147,6 +147,9 @@ static	kwd_type		kwd[] = {
 				"BACKSPACE",	     Tok_Kwd_Backspace,
 				"BUFFER",	     Tok_Kwd_Buffer,
 				"BLOCK",	     Tok_Kwd_Block,
+#ifdef KEY /* Bug 10572 */
+				"BIND",		     Tok_Kwd_Bind,
+#endif /* KEY Bug 10572 */
 				"BYTE",		     Tok_Kwd_Byte,
 
 				"CHARACTER",	     Tok_Kwd_Character,
@@ -168,11 +171,17 @@ static	kwd_type		kwd[] = {
 				"DO",		     Tok_Kwd_Do,
 
 				"EQUIVALENCE",	     Tok_Kwd_Equivalence,
+#ifdef KEY /* Bug 10572 */
+				"ENUMERATOR",	     Tok_Kwd_Enumerator,
+#endif /* KEY Bug 10572 */
 				"ELEMENTAL",	     Tok_Kwd_Elemental,
 				"EXTERNAL",	     Tok_Kwd_External,
 				"ENCODE",	     Tok_Kwd_Encode,
 				"ENTRY",	     Tok_Kwd_Entry,
 				"ELSE",		     Tok_Kwd_Else,
+#ifdef KEY /* Bug 10572 */
+				"ENUM",		     Tok_Kwd_Enum,
+#endif /* KEY Bug 10572 */
 				"EXIT",		     Tok_Kwd_Exit,
 				"END",		     Tok_Kwd_End,
 
@@ -188,6 +197,9 @@ static	kwd_type		kwd[] = {
 				"IMPLICIT",	     Tok_Kwd_Implicit,
 				"INQUIRE",	     Tok_Kwd_Inquire,
 				"INTEGER",	     Tok_Kwd_Integer,
+#ifdef KEY /* Bug 11741 */
+				"IMPORT",	     Tok_Kwd_Import,
+#endif /* KEY Bug 11741 */
 				"INTENT",	     Tok_Kwd_Intent,
 				"IF",		     Tok_Kwd_If,
 				"IN",		     Tok_Kwd_In,
@@ -204,6 +216,9 @@ static	kwd_type		kwd[] = {
 #endif /* KEY Bug 5089 */
 				"NAMELIST",	     Tok_Kwd_Namelist,
 				"NULLIFY",	     Tok_Kwd_Nullify,
+#ifdef KEY /* Bug 10572 */
+				"NAME",		     Tok_Kwd_Name,
+#endif /* KEY Bug 10572 */
 				"NONE",		     Tok_Kwd_None,
 
 				"OPERATOR",	     Tok_Kwd_Operator,
@@ -249,6 +264,9 @@ static	kwd_type		kwd[] = {
 				"USE",		     Tok_Kwd_Use,
 
 				"VOLATILE",	     Tok_Kwd_Volatile,
+#ifdef KEY /* Bug 14150 */
+				"VALUE",	     Tok_Kwd_Value,
+#endif /* KEY Bug 14150 */
  
 				"WHERE",	     Tok_Kwd_Where,
 				"WHILE",	     Tok_Kwd_While,

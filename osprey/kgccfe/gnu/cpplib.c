@@ -143,6 +143,29 @@ static void handle_assertion	PARAMS ((cpp_reader *, const char *, int));
    are deprecated.  The name is where the extension appears to have
    come from.  */
 
+#ifdef __MINGW32__
+/* 2465 is different for MINGW32 */
+#define DIRECTIVE_TABLE							\
+D(define,	T_DEFINE = 0,	KANDR,     IN_I)	   /* 270554 */ \
+D(include,	T_INCLUDE,	KANDR,     INCL | EXPAND)  /*  52262 */ \
+D(endif,	T_ENDIF,	KANDR,     COND)	   /*  45855 */ \
+D(ifdef,	T_IFDEF,	KANDR,     COND | IF_COND) /*  22000 */ \
+D(if,		T_IF,		KANDR, COND | IF_COND | EXPAND) /*  18162 */ \
+D(else,		T_ELSE,		KANDR,     COND)	   /*   9863 */ \
+D(ifndef,	T_IFNDEF,	KANDR,     COND | IF_COND) /*   9675 */ \
+D(undef,	T_UNDEF,	KANDR,     IN_I)	   /*   4837 */ \
+D(line,		T_LINE,		KANDR,     IN_I)	   /*   2465 */ \
+D(elif,		T_ELIF,		STDC89,    COND | EXPAND)  /*    610 */ \
+D(error,	T_ERROR,	STDC89,    0)		   /*    475 */ \
+D(pragma,	T_PRAGMA,	STDC89,    IN_I)	   /*    195 */ \
+D(warning,	T_WARNING,	EXTENSION, 0)		   /*     22 */ \
+D(include_next,	T_INCLUDE_NEXT,	EXTENSION, INCL | EXPAND)  /*     19 */ \
+D(ident,	T_IDENT,	EXTENSION, IN_I)	   /*     11 */ \
+D(import,	T_IMPORT,	EXTENSION, INCL | EXPAND)  /* 0 ObjC */	\
+D(assert,	T_ASSERT,	EXTENSION, 0)		   /* 0 SVR4 */	\
+D(unassert,	T_UNASSERT,	EXTENSION, 0)		   /* 0 SVR4 */	\
+D(sccs,		T_SCCS,		EXTENSION, 0)		   /* 0 SVR4? */
+#else
 #define DIRECTIVE_TABLE							\
 D(define,	T_DEFINE = 0,	KANDR,     IN_I)	   /* 270554 */ \
 D(include,	T_INCLUDE,	KANDR,     INCL | EXPAND)  /*  52262 */ \
@@ -163,6 +186,7 @@ D(import,	T_IMPORT,	EXTENSION, INCL | EXPAND)  /* 0 ObjC */	\
 D(assert,	T_ASSERT,	EXTENSION, 0)		   /* 0 SVR4 */	\
 D(unassert,	T_UNASSERT,	EXTENSION, 0)		   /* 0 SVR4 */	\
 D(sccs,		T_SCCS,		EXTENSION, 0)		   /* 0 SVR4? */
+#endif /* __MINGW32__ */
 
 /* Use the table to generate a series of prototypes, an enum for the
    directive names, and an array of directive handlers.  */
@@ -1131,10 +1155,18 @@ do_pragma_once (pfile)
      cpp_reader *pfile;
 {
   if (CPP_OPTION (pfile, warn_deprecated))
+  {
+#ifndef TARG_NVISA
     cpp_error (pfile, DL_WARNING, "#pragma once is obsolete");
+#endif
+  }
 
   if (pfile->buffer->prev == NULL)
+  {
+#ifndef TARG_NVISA
     cpp_error (pfile, DL_WARNING, "#pragma once in main file");
+#endif
+  }
   else
     _cpp_never_reread (pfile->buffer->inc);
 

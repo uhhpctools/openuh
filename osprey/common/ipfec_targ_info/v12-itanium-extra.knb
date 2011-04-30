@@ -1866,7 +1866,7 @@ regsubclassprop += "lc, application, 65, -1";
 
 TYPE ABI = enum(i32, i64);
 TYPE ABIPROP = enum( entry_ptr, allocatable, callee, caller, stacked, func_arg, 
-                     func_val, static_link, global_ptr, frame_ptr, stack_ptr, 
+                     func_val, static_link, global_ptr, frame_ptr, stack_ptr, thread_ptr,
                      zero, fzero, fone, true_predicate, ret_addr, prev_funcstate, 
                      loop_count, epilog_count );
 
@@ -1897,6 +1897,7 @@ regprop += " integer, static_link, 14, -1 ";
 regprop += " integer, global_ptr, 1, -1 ";
 regprop += " integer, frame_ptr, 7, -1 ";
 regprop += " integer, stack_ptr, 12, -1 ";
+regprop += " integer, thread_ptr, 13, -1 ";
 regprop += " integer, zero, 0, -1 ";
 
 #  float register class

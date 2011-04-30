@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -39,7 +43,6 @@
 
 // -*-C++-*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -69,7 +72,6 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.fiz_fu
 #include "parallel.h"
 #include "prompf.h" 
 
-
 typedef HASH_TABLE<WN*,INT> WN2INT;
 typedef enum { INFO, FAIL, SUCCEED } INFO_TYPE;
 
@@ -78,7 +80,7 @@ static void fiz_fuse_analysis_info(
   SRCPOS        srcpos1,
   SRCPOS        srcpos2,
   UINT32        level,
-  char*         message)
+  const char*         message)
 {
   switch (info_type) {
     case INFO:
@@ -113,7 +115,7 @@ static void fiz_fuse_tlog_info(
   SRCPOS        srcpos1,
   SRCPOS        srcpos2,
   UINT32        level,
-  char*         message)
+  const char*   message)
 {
   char tmp_string[300];
   sprintf(tmp_string,"%d %d %d %d",
@@ -808,6 +810,9 @@ extern FISSION_FUSION_STATUS
 extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
 
   FIZ_FUSE_INFO *info, *rval;
+  BOOL partition_based_fission = FALSE;
+  BOOL fission_succeeded = FALSE;
+  BOOL fusion_succeeded = FALSE;
 
   rval = CXX_NEW(FIZ_FUSE_INFO(mpool), mpool);
 
@@ -994,6 +999,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
         fusion_status= Failed;
       if (fusion_status==Succeeded || 
           fusion_status==Succeeded_and_Inner_Loop_Removed) {
+        fusion_succeeded = TRUE;
         // successfully fused, continue to work on the next child loop
         if (LNO_Analysis)
           fiz_fuse_analysis_info(SUCCEED, srcpos1, srcpos2, min_snl_level,
@@ -1029,11 +1035,11 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
         fiz_fuse_tlog_info(INFO, srcpos1, srcpos2, sloops.Lastidx()+1,
       "Attempted to fission in between to create a deeper Simply Nested Loop");
 
-      fission_status= Fission(parent_wn, wn1, wn2, sloops.Lastidx()+1);
+      fission_status= Fission(parent_wn, wn1, wn2, sloops.Lastidx()+1, FALSE);
       if (fission_status==Succeeded)
       {
         // successfully fissioned
-
+        fission_succeeded = TRUE;
         if (LNO_Analysis)
           fiz_fuse_analysis_info(SUCCEED, srcpos1, srcpos2, sloops.Lastidx()+1,
             "Created a deeper Simply Nested Loop by fission");
@@ -1095,6 +1101,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
         fusion_status=Failed;
       if (fusion_status==Succeeded ||
           fusion_status==Succeeded_and_Inner_Loop_Removed) {
+        fusion_succeeded = TRUE;
         if (LNO_Analysis)
           fiz_fuse_analysis_info(SUCCEED, srcpos1, srcpos2, min_snl_level,
             "Fused to create a deeper Simply Nested Loop");
@@ -1144,6 +1151,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
       if (fusion_status==Succeeded ||
           fusion_status==Succeeded_and_Inner_Loop_Removed) {
 
+        fusion_succeeded = TRUE;
         if (LNO_Analysis)
           fiz_fuse_analysis_info(SUCCEED, srcpos1, srcpos2, min_snl_level,
             "Fused to create a deeper Simply Nested Loop");
@@ -1219,7 +1227,8 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
       for (j=0; j<sloops.Lastidx()+1; j++) {
 
         if (Fission(LWN_Get_Parent(LWN_Get_Parent(last_loop_nest)),
-                    last_loop_nest, current_loop_nest, 1)==Succeeded) {
+                    last_loop_nest, current_loop_nest, 1, FALSE)==Succeeded) {
+          fission_succeeded = TRUE;
           fissioned_level++;
           last_loop_nest=LWN_Get_Parent(LWN_Get_Parent(last_loop_nest));
           current_loop_nest=LWN_Get_Parent(LWN_Get_Parent(current_loop_nest));
@@ -1310,6 +1319,100 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
     // fissioned, the parent loop is Not_Inner
     rval->Set_Type(relts-1,Not_Inner);
 
+  }
+
+  // We do not want to undo what fusion did and we wish to avoid
+  // a duplicate action with fission.  Also it is noteworth to
+  // to consider the fact that fission operates on a divergent list
+  // of fission points that what are discovered for partition bounaries
+  // here, so the functionality really is exclusive.
+  if ((LNO_Serial_Distribute!=0) && !Get_Do_Loop_Info(loop)->No_Fission &&
+       !Do_Loop_Is_Mp(loop) && Do_Loop_Is_Inner(loop) && !Early_MP_Processing &&
+       (fusion_succeeded == FALSE) && 
+       ((OPT_unroll_level == 2) || 
+        (Get_Do_Loop_Info(loop)->Multiversion_Alias)) &&
+       (fission_succeeded == FALSE)) {
+    FF_STMT_LIST stl_1;
+    WN* wn1;
+    WN* wn2;
+    SRCPOS srcpos1;
+    SRCPOS srcpos2;
+
+    // try to get a distribution list
+    Get_Distribution_List(stl_1, loop, sloops.Lastidx()+1);
+
+    // try to fission at at scc boundaries.
+    FF_STMT_NODE *stmt_node1, *stmt_node2;
+    FF_STMT_ITER stmt_iter_1(&stl_1);
+
+    last_loop=0;
+    i=1;
+    if (stmt_iter_1.First()) {
+      for (stmt_node1 = stmt_iter_1.First(), stmt_node2 =  stmt_iter_1.Next();
+        stmt_node1 && stmt_node2; 
+        stmt_node1 = stmt_iter_1.Next(), stmt_node2 = stmt_iter_1.Next()) {
+        FISSION_FUSION_STATUS fission_status=Failed;
+        wn1 = stmt_node1->Get_Stmt();
+        wn2 = stmt_node2->Get_Stmt();
+        WN *loop_body = WN_do_body(loop);
+
+        if ((LWN_Get_Parent(wn1)!=loop_body) || 
+            (LWN_Get_Parent(wn2)!=loop_body))
+          continue;
+
+        srcpos1=WN_Get_Linenum(wn1);
+        srcpos2=WN_Get_Linenum(wn2);
+        if (LNO_Analysis)
+          fiz_fuse_analysis_info(INFO, srcpos1, srcpos2, sloops.Lastidx()+1,
+            "Attempted Distrubted style fission on Simply Nested Loop");
+        if ( LNO_Tlog )
+          fiz_fuse_tlog_info(INFO, srcpos1, srcpos2, sloops.Lastidx()+1,
+            "Attempted Distrubted style fission on Simply Nested Loop");
+
+        partition_based_fission = TRUE;
+        fission_status=Fission(loop, wn1, wn2, sloops.Lastidx()+1, 
+                               partition_based_fission);
+        if (fission_status==Succeeded)
+        {
+          // successfully fissioned
+          if (LNO_Analysis)
+            fiz_fuse_analysis_info(SUCCEED, srcpos1, 
+                                   srcpos2, sloops.Lastidx()+1,
+              "Serialially Distributed fission of a Simply Nested Loop");
+          if ( LNO_Tlog )
+            fiz_fuse_tlog_info(SUCCEED, srcpos1, srcpos2, sloops.Lastidx()+1,
+              "Serialially Distributed fission of a Simply Nested Loop");
+
+          rval->Set_Depth(relts-1, sloops.Lastidx()+1);
+
+          // put the child loop i and the outer loops in rval
+          WN *new_loop = LWN_Get_Parent(LWN_Get_Parent(wn2));
+          rval->New_Snl(new_loop,sloops.Lastidx()+1,Inner);
+
+          DO_LOOP_INFO* loop_info=Get_Do_Loop_Info(loop);
+          DO_LOOP_INFO* new_loop_info =
+            CXX_NEW(DO_LOOP_INFO(loop_info,
+                                 &LNO_default_pool), &LNO_default_pool);
+          Set_Do_Loop_Info(new_loop,new_loop_info);
+          new_loop_info->No_Fusion = TRUE;
+
+	  relts++;
+	  last_loop=i;
+          last_fissioned_level=sloops.Lastidx()+1;
+          max_fissioned_level=0;
+        } else {
+          // fission failed
+          if (LNO_Analysis)
+            fiz_fuse_analysis_info(FAIL, srcpos1, srcpos2, sloops.Lastidx()+1,
+              "Failed to Distrubute Simply Nested Loop by fission");
+          if ( LNO_Tlog )
+            fiz_fuse_tlog_info(FAIL, srcpos1, srcpos2, sloops.Lastidx()+1,
+              "Failed to Distrubute Simply Nested Loop by fission");
+          break;
+        }
+        i++;
+      }
+    }
   }
 
   if (!Do_Loop_Is_Good(rval->Get_Wn(relts-1)) ||

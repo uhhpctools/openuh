@@ -70,7 +70,7 @@
 #include "ipl_tlog.h"
 const INT32 MAX_WARN_LEN = 1024;
 
-static char* tlog_phase = "IPL";
+static const char* tlog_phase = "IPL";
 
 static BOOL
 Ipl_tlog_trace( void )
@@ -79,14 +79,14 @@ Ipl_tlog_trace( void )
 }
 
 static  
-void Ipl_tlog2(char *keyword, INT64 srcpos, char *msg )
+void Ipl_tlog2(const char *keyword, INT64 srcpos, const char *msg )
 {
   // use the keyword as both the transformation name and keyword
   Generate_Tlog( tlog_phase, keyword, (SRCPOS)srcpos, keyword, msg, "","" );
 }
 
 static void 
-Ipl_tlog( char *keyword, INT64 srcpos, const char *fmt,va_list vp)
+Ipl_tlog( const char *keyword, INT64 srcpos, const char *fmt, va_list vp)
 {
   char msg_buf[MAX_WARN_LEN];
   INT32 len;
@@ -107,7 +107,7 @@ Ipl_tlog( char *keyword, INT64 srcpos, const char *fmt,va_list vp)
 // TLOG external interface for reporting optimizations
 // ====================================================================
 extern "C" void 
-Ipl_record_tlog(char *keyword, SRCPOS srcpos, const char *fmt, ...)
+Ipl_record_tlog(const char *keyword, SRCPOS srcpos, const char *fmt, ...)
 {
   va_list ap; 
   va_start(ap, fmt);

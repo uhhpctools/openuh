@@ -59,7 +59,7 @@ static	last_msg_queue_type	last_msg_queue[LAST_MSG_QUEUE_SIZE]	= {
        char	*command_name;	
        char	 group_code[]	= "cf95";
 
-# if defined(_TARGET_OS_LINUX)
+# if defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN)
 #ifdef PSC_TO_OPEN64
        char      message_prefix[]       = OPEN64_NAME_PREFIX "f95";
 #endif

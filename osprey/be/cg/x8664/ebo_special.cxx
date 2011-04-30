@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ *  Copyright (C) 2007, 2008 PathScale, LLC.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006, 2007.  QLogic Corporation. All Rights Reserved.
  */
 
@@ -74,7 +82,7 @@ static const char source_file[] = __FILE__;
 
 #include <stdarg.h>
 #include "defs.h"
-#include "config_TARG.h"
+#include "config_targ_opt.h"
 #include "errors.h"
 #include "mempool.h"
 #include "tracing.h"
@@ -104,17 +112,22 @@ static const char source_file[] = __FILE__;
 #include "stblock.h"
 #include "cxx_hash.h"
 #include "op.h"
+#ifdef TARG_X8664
+#include "opt_alias_interface.h"
+#include "opt_alias_mgr.h"
+#endif
 
 #include "ebo.h"
 #include "ebo_info.h"
 #include "ebo_special.h"
 #include "ebo_util.h"
 #include "cgtarget.h"
+#include "dominate.h"
 
 #include "config_lno.h"
 
 extern BOOL TN_live_out_of( TN*, BB* );
-
+extern void Set_flags_strcmp_expand();
 
 /* Define a macro to strip off any bits outside of the left most 4 bytes. */
 #define TRUNC_32(val) (val & 0x00000000ffffffffll)
@@ -153,23 +166,11 @@ static TOP Get_Top_For_Addr_Mode (TOP, ADDR_MODE);
 static OP *Compose_Mem_Op_And_Copy_Info (OP *op, TN *index, TN *offset,
 					 TN *scale, TN *base,
 					 EBO_TN_INFO **load_actual_tninfo);
-
+void expand_strcmp_bb(BB * call_bb);
 /* Initialize and finalize ebo special routines. */
 void
 EBO_Special_Start (MEM_POOL *pool)
 {
-#if 0
-  st_initv_map = CXX_NEW(ST_TO_INITV_MAP(31, pool), pool);
-  st_initv_map_inited = FALSE;
-  work_gtn_set = GTN_SET_Create_Empty(Last_TN + 1, pool);
-  work_defined_set = BS_Create_Empty(Last_TN + 1, pool);
-  work_pool = pool;
-
-  INT32 idummy;
-  double ddummy;
-  CGTARG_Compute_Branch_Parameters(&idummy, &fixed_branch_cost,
-				   &taken_branch_cost, &ddummy);
-#endif
 
   Init_Addr_Modes();
 }
@@ -182,6 +183,25 @@ EBO_Special_Finish (void)
   work_gtn_set = NULL;
   work_defined_set = NULL;
   work_pool = NULL;
+}
+
+// Return TRUE if a predessor OP's operand is available at OP.  The predecessor
+// defines the TN identified by TNINFO.  PRED_OPND_IDX tells which predecessor
+// operand.
+static BOOL
+Pred_Opnd_Avail (OP *op, EBO_TN_INFO *tninfo, int pred_opnd_idx,
+		 EBO_TN_INFO **pred_tninfo_p = NULL)
+{
+  EBO_OP_INFO *pred_opinfo;
+  EBO_TN_INFO *pred_tninfo;
+
+  pred_opinfo = locate_opinfo_entry(tninfo);
+  if (pred_opinfo == NULL)
+    return FALSE;
+  pred_tninfo = pred_opinfo->actual_opnd[pred_opnd_idx];
+  if (pred_tninfo_p != NULL)
+    *pred_tninfo_p = pred_tninfo;
+  return EBO_tn_available(OP_bb(op), pred_tninfo);
 }
 
 
@@ -365,11 +385,14 @@ BOOL Combine_L1_L2_Prefetches( OP* op, TN** opnd_tn, EBO_TN_INFO** opnd_tninfo )
     OP* new_op = Dup_OP( op );
     Set_OP_opnd( new_op, 0 , Gen_Enum_TN( ECV_pfhint_L1_L2_load ) );
 
-    TOP new_top = TOP_prefetcht0;
+    //Bug 13609 : keep prefetchnta suggested by LNO
+    BOOL nt = (OP_code(op)==TOP_prefetchnta);
+    TOP  new_top = nt?TOP_prefetchnta:TOP_prefetcht0;
+   
     if( OP_find_opnd_use( op, OU_base ) < 0 )
-      new_top = TOP_prefetcht0xx;
+      new_top = nt?TOP_prefetchntaxx:TOP_prefetcht0xx;
     else if( OP_find_opnd_use( op, OU_index ) >= 0 )
-      new_top = TOP_prefetcht0x;
+      new_top = nt?TOP_prefetchntax:TOP_prefetcht0x;
 
     OP_Change_Opcode( new_op, new_top );
 
@@ -517,13 +540,14 @@ static void Get_Size_Ext_Info( TOP top, SIZE_EXT_INFO* info )
   case TOP_ld32:
   case TOP_ldx32:
   case TOP_ldxx32:
-  case TOP_ld32_m:
+  case TOP_ld32_abs:
     SET_SIZE_EXT_INFO( info, 4, 4, false );
     break;
   case TOP_ld64:
   case TOP_ldx64:
   case TOP_ldxx64:
-  case TOP_ld64_m:
+  case TOP_ld64_abs:
+  case TOP_ld64_off:
     SET_SIZE_EXT_INFO( info, 8, 8, false );
     break;
   case TOP_ld8_32_n32:
@@ -538,7 +562,7 @@ static void Get_Size_Ext_Info( TOP top, SIZE_EXT_INFO* info )
   case TOP_ldxxu8_32:
     SET_SIZE_EXT_INFO( info, 1, 4, false );
     break;
-  case TOP_ld8_m:
+  case TOP_ld8_abs:
     SET_SIZE_EXT_INFO( info, 1, 1, false );
     break;
   case TOP_ld16_32_n32:
@@ -553,32 +577,37 @@ static void Get_Size_Ext_Info( TOP top, SIZE_EXT_INFO* info )
   case TOP_ldxxu16_32:
     SET_SIZE_EXT_INFO( info, 2, 4, false );
     break;
-  case TOP_ld16_m:
+  case TOP_ld16_abs:
     SET_SIZE_EXT_INFO( info, 2, 2, false );
     break;
   case TOP_ld8_64:
   case TOP_ldx8_64:
   case TOP_ldxx8_64:
+  case TOP_ld8_64_off:
     SET_SIZE_EXT_INFO( info, 1, 8, true );
     break;
   case TOP_ldu8_64:
   case TOP_ldxu8_64:
   case TOP_ldxxu8_64:
+  case TOP_ldu8_64_off:
     SET_SIZE_EXT_INFO( info, 1, 8, false );
     break;
   case TOP_ld16_64:
   case TOP_ldx16_64:
   case TOP_ldxx16_64:
+  case TOP_ld16_64_off:
     SET_SIZE_EXT_INFO( info, 2, 8, true );
     break;
   case TOP_ldu16_64:
   case TOP_ldxu16_64:
   case TOP_ldxxu16_64:
+  case TOP_ldu16_64_off:
     SET_SIZE_EXT_INFO( info, 2, 8, false );
     break;
   case TOP_ld32_64:
   case TOP_ldx32_64:
   case TOP_ldxx32_64:
+  case TOP_ld32_64_off:
     SET_SIZE_EXT_INFO( info, 4, 8, true );
     break;
 
@@ -665,13 +694,16 @@ delete_subset_mem_op(OP *op,
     return FALSE;
   }
 
-  if( size_succ == 1 &&
-      EBO_in_peep ){
-    const REGISTER reg = TN_register(pred_result);
-    const REGISTER_SET regs =
-      REGISTER_CLASS_eight_bit_regs(TN_register_class(pred_result));
-    if( !REGISTER_SET_MemberP( regs, reg ) )
-      return FALSE;
+  if (size_succ == 1 &&
+      EBO_in_peep){
+    // All integer registers are byteable under m64.
+    if (Is_Target_32bit()) {
+      const REGISTER reg = TN_register(pred_result);
+      const REGISTER_SET regs =
+	REGISTER_SUBCLASS_members(ISA_REGISTER_SUBCLASS_m32_8bit_regs);
+      if (!REGISTER_SET_MemberP(regs, reg))
+	return FALSE;
+    }
   }
 
   if (EBO_Trace_Optimization) {
@@ -1330,13 +1362,6 @@ delete_memory_op (OP *op,
     if( EBO_Trace_Optimization ){
       fprintf( TFile, "Load - Store combination is not optimized\n" );
     }
-#if 0
-    if( OP_load( opinfo->in_op ) &&
-	OP_prev(op) == opinfo->in_op &&
-	OP_result( opinfo->in_op, 0 ) == OP_opnd( op, 0 ) ){
-      return TRUE;
-    }
-#endif
     return FALSE;
   }
 
@@ -1617,7 +1642,9 @@ static BOOL Convert_Imm_And( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
 	EBO_in_peep) {
       const REGISTER reg = TN_register(tn);
       const REGISTER_SET regs =
-	      REGISTER_CLASS_eight_bit_regs(TN_register_class(tn));
+	      REGISTER_SUBCLASS_members(ISA_REGISTER_SUBCLASS_m32_8bit_regs);
+      Is_True(TN_register_class(tn) == ISA_REGISTER_CLASS_integer,
+	      ("Convert_Imm_And: TN not integer register class"));
       if (!REGISTER_SET_MemberP(regs, reg))
         return FALSE;
     }
@@ -2553,11 +2580,6 @@ static BOOL move_ext_is_replaced( OP* op, const EBO_TN_INFO* tninfo )
   OPS ops = OPS_EMPTY;
 
   if( TOP_is_move_ext( pred_top ) ){
-#if 0
-    if( ( OP_bb( pred ) != OP_bb( op ) ) &&
-	has_assigned_reg( OP_opnd(pred,0) ) )
-      return FALSE;
-#endif
     EBO_TN_INFO* opnd_info = get_tn_info( OP_opnd(pred,0) );
     if( opnd_info != NULL && opnd_info->sequence_num > tninfo->sequence_num )
       return FALSE;
@@ -2747,6 +2769,674 @@ BOOL Delete_Unwanted_Prefetches ( OP* op )
   return FALSE;
 }
 
+
+// define X8664 status flag register marco.
+// the expression SF==OF is treated as a sigle status flag register.
+// because SF==OF is used in jl/jge
+// some transformation may affect SF or OF, but not change SF==OF
+#define OF_MASK   0x00000001
+#define SF_MASK   0x00000002
+#define ZF_MASK   0x00000004
+#define AF_MASK   0x00000008
+#define CF_MASK   0x00000010
+#define PF_MASK   0x00000020
+#define SF_EQ_OF_MASK   0x00000040
+#define ALL_FLAG_MASK   0x0000005f
+
+/*
+ * Test_Compare_Size
+ *    return test/compare instruction's compare operand size.
+ */
+static 
+INT32 Test_Compare_Size( const TOP top )
+{
+  switch ( top ) {
+    case TOP_test8:
+    case TOP_testx8:
+    case TOP_testxx8:
+    case TOP_testxxx8:
+    case TOP_testi8:
+    case TOP_cmp8:
+    case TOP_cmpx8:
+    case TOP_cmpxx8:
+    case TOP_cmpxxx8:
+    case TOP_cmpi8:
+    case TOP_cmpxi8:
+    case TOP_cmpxxi8:
+    case TOP_cmpxxxi8:
+      return 1;
+    case TOP_test16:
+    case TOP_testx16:
+    case TOP_testxx16:
+    case TOP_testxxx16:
+    case TOP_testi16:
+    case TOP_cmp16:
+    case TOP_cmpx16:
+    case TOP_cmpxx16:
+    case TOP_cmpxxx16:
+    case TOP_cmpi16:
+    case TOP_cmpxi16:
+    case TOP_cmpxxi16:
+    case TOP_cmpxxxi16:
+      return 2;
+    case TOP_test32:
+    case TOP_testx32:
+    case TOP_testxx32:
+    case TOP_testxxx32:
+    case TOP_testi32:
+    case TOP_cmp32:
+    case TOP_cmpx32:
+    case TOP_cmpxx32:
+    case TOP_cmpxxx32:
+    case TOP_cmpi32:
+    case TOP_cmpxi32:
+    case TOP_cmpxxi32:
+    case TOP_cmpxxxi32:
+      return 4;
+    case TOP_test64:
+    case TOP_testx64:
+    case TOP_testxx64:
+    case TOP_testxxx64:
+    case TOP_testi64:
+    case TOP_cmp64:
+    case TOP_cmpx64:
+    case TOP_cmpxx64:
+    case TOP_cmpxxx64:
+    case TOP_cmpi64:
+    case TOP_cmpxi64:
+    case TOP_cmpxxi64:
+    case TOP_cmpxxxi64:
+      return 8;
+  }
+  Is_True (FALSE, ("unexpected op\n"));
+  return 0;
+}
+
+/*
+ * Read_Flags_Mask
+ *    return which status regsiter flag is read by top instruction.
+ * For unkonwed instruction read rflags,just assume read all rflags
+ */
+static 
+INT32 Read_Flags_Mask ( const TOP top )
+{
+  Is_True ( TOP_is_read_rflags ( top ), (" unxpected op \n") ) ;
+  switch ( top ) {
+    case TOP_jb:
+    case TOP_jae:
+    case TOP_cmovb:
+    case TOP_cmovae:
+    case TOP_fcmovb:
+    case TOP_fcmovnb:
+      return CF_MASK;
+    case TOP_jp:
+    case TOP_jnp:
+    case TOP_cmovp:
+    case TOP_cmovnp:
+    case TOP_fcmovu:
+    case TOP_fcmovnu:
+      return PF_MASK;
+    case TOP_je:
+    case TOP_jne:
+    case TOP_cmove:
+    case TOP_cmovne:
+    case TOP_fcmove:
+    case TOP_fcmovne:
+      return ZF_MASK;
+    case TOP_jbe:
+    case TOP_ja:
+    case TOP_cmovbe:
+    case TOP_cmova:
+    case TOP_fcmovbe:
+    case TOP_fcmovnbe:
+      return CF_MASK | ZF_MASK;
+    case TOP_jl:
+    case TOP_jge:
+    case TOP_cmovl:
+    case TOP_cmovge:
+      return SF_EQ_OF_MASK;
+    case TOP_jle:
+    case TOP_jg:
+    case TOP_cmovle:
+    case TOP_cmovg:
+      return SF_EQ_OF_MASK | ZF_MASK;
+    case TOP_js:
+    case TOP_jns:
+    case TOP_cmovs:
+    case TOP_cmovns:
+      return SF_MASK;
+  }
+  return ALL_FLAG_MASK;
+}
+
+/*
+ * table for indicate which status flag register will be affected by 
+ * mov-ext/load-ext opt.
+ */
+
+#define TEST_IDX(same_src_size, sign0, sign1)   \
+          ( ( ( ( same_src_size ) & 1 ) << 2 ) | \
+            ( ( ( sign0 ) & 1 ) << 1)  | \
+            ( ( sign1 ) & 1 ) )
+
+static INT32 Test_Updated_Flags[8] = 
+     { // list 8 combinations for BOOL vlaue same_src_size, sign0, sign1
+       // the first case is test's two srouce are same size movzbl
+       SF_MASK,
+       SF_MASK,
+       SF_MASK,
+       0,
+       SF_MASK,
+       SF_MASK | ZF_MASK, // exception is movzbl + movswl change to testb, only affect SF
+       SF_MASK | ZF_MASK, // however movzwl+movsbl change to testb, affect SF and ZF
+       SF_MASK | ZF_MASK,
+     };
+
+#define TESTI_IDX(sign, tmsb,  smsb, in)   \
+          (( ( ( sign ) & 1 ) << 3 ) | \
+            ( ( ( tmsb ) & 1 ) << 2 ) | \
+            ( ( ( smsb ) & 1 ) << 1)  | \
+            ( ( in ) & 1 ) )
+// ZF,SF,PF
+static INT32 TestI_Updated_Flags[16] = 
+     { // sign, constant  test msb, src_size msb, in range
+       // in range means [0,255], [0,65535]
+       0,             // 0, 0, 0, 0
+       0,             // 0, 0, 0, 1
+       SF_MASK, // 0, 0, 1, 0
+       SF_MASK, // 0, 0, 1, 1
+       0,             // 0, 1, 0, 0
+       0,             // 0, 1, 0, 1
+       SF_MASK, // 0, 1, 1, 0
+       SF_MASK, // 0, 1, 1, 1
+       
+       ZF_MASK, // 1, 0, 0, 0
+       0,             // 1, 0, 0, 1
+       SF_MASK|ZF_MASK, // 1, 0, 1, 0
+       SF_MASK, // 1, 0, 1, 1
+       
+       SF_MASK|ZF_MASK,             // 1, 1, 0, 0
+       SF_MASK,             // 1, 1, 0, 1
+       ZF_MASK, // 1, 1, 1, 0
+       0, // 1, 1, 1, 1
+     };
+
+
+static INT32 Compare_Updated_Flags[8] = 
+     { // list 8 combinations for BOOL vlaue same_src_size, sign0, sign1
+       SF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       OF_MASK | SF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+       ZF_MASK | SF_MASK | CF_MASK | OF_MASK | SF_EQ_OF_MASK,
+     };
+
+
+/*
+ * if src's in op is really a mov-ext, get extend info.
+ * if not, assume, there is a movll or movqq instruction for src.
+ *   this can unfiy two src.
+ */
+static 
+TN* Test_Get_Size_Ext_Info ( const OP* mov_op, SIZE_EXT_INFO* info,
+                             INT32 test_size, TN* src)
+{
+  if ( mov_op && TOP_is_move_ext ( OP_code( mov_op ) ) ) {
+    Get_Size_Ext_Info ( OP_code ( mov_op ), info );
+    return OP_opnd ( mov_op, 0 );
+  }
+  else {
+    info->src_size = test_size;
+    info->dest_size = test_size;
+    info->sign_ext = FALSE;
+    return src;
+  }
+}
+
+/*
+ * suppose a constant is used in cmpi/testi, treat it as a mov extend to 
+ * unfiy the processing.
+ * For example:
+ * movzbl %ax, %eax
+ * cmpl $1, %eax
+ *
+ * treat $1 is movzbl $1
+ */
+static
+void Get_Constant_Size_Ext_Info ( INT64 val, SIZE_EXT_INFO* info,
+                                  INT32 test_size )
+{
+  info->dest_size = test_size;
+  if ( val >= 0 ) {
+    info->sign_ext = FALSE;
+    if ( val <= 0xff ) {
+      info->src_size = 1;
+    }
+    else if ( val <= 0xffff ) {
+      info->src_size = 2;
+    }
+    else if ( val <= 0xffffffffLL ) {
+      info->src_size = 4;
+    }
+    else {
+      info->src_size = 8;
+    }
+  }
+  else {
+    info->sign_ext = TRUE;
+    if ( val >= -128 ) {
+      info->src_size = 1;
+    }
+    else if( val >= -65536 ) {
+      info->src_size = 2;
+    }
+    else if ( val >= 0xffffffff80000000LL ) {
+      info->src_size = 4;
+    }
+    else {
+      info->src_size = 8;
+    }
+  }
+}
+
+/*
+ * check if a TN (after register allocation)'s def at def_op
+ * can live to current op.
+ * This is used to check if def_op's source is stiall valid
+ * form def_op to current_op
+ */
+static
+BOOL is_movext_source_tn_valid(OP *current_op, OP* mov_ext_op, TN *tn)
+{
+  // Now the condition is strict.
+  // mov_op and current_op is same BB.
+  INT num_results;
+  
+  Is_True ( TOP_is_move_ext ( OP_code( mov_ext_op ) ), 
+            ("expect mov_ext op\n") );
+
+  if( OP_bb ( current_op ) != OP_bb ( mov_ext_op ) )  {
+    return FALSE;
+  }
+
+  OP *op = OP_next ( mov_ext_op );
+  while ( op ) {
+    if ( op == current_op ) {
+      return TRUE;
+    }
+    num_results = OP_results ( op );
+      
+    for ( int resnum = 0; resnum < num_results; resnum++ ) {
+      if ( tn_registers_identical ( tn, OP_result ( op, resnum ) ) ) {
+        return FALSE;
+      }
+    }
+      
+    op = OP_next ( op );
+  }
+  
+  return FALSE;
+}
+
+/*
+ * ICMP_Is_Replaced
+ *  Replace mov-ext/load-ext + test/compare with more precious instruction
+ *  Expect remove mov-ext and load-ext instruction.
+ *  When mov-ext is not removed, it seems no harm.
+ *  When load-ext is not revmoed, maybe introduce more memory load.
+ *    Maybe need provide a function to load_exectue to tell if load-ext combine
+ *    is legal or not.
+ *    Or borrow some logical from load_exectue opt.
+ */
+extern INT32 Current_PU_Count();
+static 
+BOOL ICMP_Is_Replaced ( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
+{ 
+  const TOP top = OP_code( op );
+  Is_True( TOP_is_icmp ( top ), ( "unexpected opcode" ) );
+  TN* src0 = opnd_tn[0];
+  TN* src1 = opnd_tn[1];
+  EBO_TN_INFO *tninfo0 = opnd_tninfo[0];
+  EBO_TN_INFO *tninfo1 = opnd_tninfo[1];
+
+  // 1. op must be test or comapre
+  //    category test/compare into test/testi/compare/comparei
+  BOOL is_test = FALSE;
+  BOOL is_testi = FALSE;
+  BOOL is_cmp = FALSE;
+  BOOL is_cmpi = FALSE;
+  switch ( top ) {
+    case TOP_test8:
+    case TOP_test16:
+    case TOP_test32:
+    case TOP_test64:
+      if ( TN_has_value(src1) )
+        is_testi = TRUE;
+      else if ( TN_has_value(src0) ) {
+        is_testi = TRUE;
+        // interchange src0, src1
+        src0 = opnd_tn[1];
+        src1 = opnd_tn[0];
+        tninfo0 = opnd_tninfo[1];
+        tninfo1 = opnd_tninfo[0];
+      }
+      else 
+        is_test = TRUE;
+      break;
+    case TOP_testi8:
+    case TOP_testi16:
+    case TOP_testi32:
+    case TOP_testi64:
+      is_testi = TRUE;
+      break;
+    case TOP_cmp8:
+    case TOP_cmp16:
+    case TOP_cmp32:
+    case TOP_cmp64:
+      if ( TN_has_value(src1) )
+        is_cmpi = TRUE;
+      else if ( TN_has_value(src0) ) 
+        return FALSE;
+      else 
+        is_cmp = TRUE;
+      break;
+    case TOP_cmpi8:
+    case TOP_cmpi16:
+    case TOP_cmpi32:
+    case TOP_cmpi64:
+      is_cmpi = TRUE;
+      break;
+    default:
+      return FALSE;
+  }
+
+  // 2. test's src register's in_op is mov-ext or load-ext
+  //    compare's src register are mov-ext or load-ext
+  // 
+  //    here genreate change_mask indicate which status flag register
+  //    will be changed if test/compare is changed.
+  INT32 change_mask = 0;
+  OP* mov_ext0 = NULL;
+  OP* mov_ext1 = NULL;
+  INT32 test_size = Test_Compare_Size( top );
+  struct SIZE_EXT_INFO ext_info0;
+  struct SIZE_EXT_INFO ext_info1;
+  TN* new_src0;     // source in new op
+  TN* new_src1;
+  
+  if ( is_test ) {
+    mov_ext0 = tninfo0 == NULL ? NULL : tninfo0->in_op;
+    if ( TNs_Are_Equivalent ( src0, src1 ) ) {
+      mov_ext1 = mov_ext0;
+    }
+    else {
+      mov_ext1 = tninfo1 == NULL ? NULL : tninfo1->in_op;
+    }
+
+    if (mov_ext0 == NULL && mov_ext1 == NULL)
+      return FALSE;
+
+    new_src0 = Test_Get_Size_Ext_Info ( mov_ext0, &ext_info0, test_size, src0 );
+    new_src1 = Test_Get_Size_Ext_Info ( mov_ext1, &ext_info1, test_size, src1 );
+
+    if ( ext_info0.src_size >= test_size && ext_info1.src_size >= test_size )
+        return FALSE;
+
+    if ( ext_info0.dest_size != test_size || ext_info1.dest_size != test_size )
+       return FALSE;
+
+    // special case for movzbl, movswl as input
+    // unsgined mov-ext has smaller src_size
+    if ( ext_info0.sign_ext != ext_info1.sign_ext &&
+        ( ( !ext_info0.sign_ext && ext_info0.src_size < ext_info1.src_size ) ||
+          ( !ext_info1.sign_ext && ext_info1.src_size < ext_info0.src_size ) ) ) {
+       change_mask = SF_MASK;
+    }
+    // movsbl, movswl, can chagne to testw, not change movsbl's dest TN
+    else if ( ext_info0.sign_ext &&
+              ext_info1.sign_ext &&
+              ext_info0.src_size != ext_info1.src_size &&
+              ext_info0.src_size < test_size &&
+              ext_info1.src_size < test_size ) {
+       if (ext_info0.src_size < ext_info1.src_size) {
+         new_src0 = Test_Get_Size_Ext_Info ( NULL, &ext_info0, test_size, src0 );
+       }
+       else {
+         new_src1 = Test_Get_Size_Ext_Info ( NULL, &ext_info1, test_size, src1 );
+       }
+       change_mask = SF_MASK;
+    }
+    else {
+      INT32 idx = TEST_IDX ( ext_info0.src_size != ext_info1.src_size,
+        ext_info0.sign_ext, ext_info1.sign_ext );
+     
+      change_mask = Test_Updated_Flags[idx];
+    }
+    
+  }
+  else if ( is_testi ) {
+    Is_True ( TN_has_value ( src1 ), ("testi src1 expect to be constant\n") );
+    INT64 val = TN_value ( src1 );
+    mov_ext0 = tninfo0 == NULL ? NULL : tninfo0->in_op;
+    if(mov_ext0 == NULL)
+      return FALSE;
+    new_src0 = Test_Get_Size_Ext_Info ( mov_ext0, &ext_info0, test_size, src0 );
+    if ( ext_info0.src_size >= test_size || ext_info0.dest_size != test_size )
+      return FALSE;
+
+     // sign, constant  test msb, src_size msb, in range
+     INT test_msb =  ( val >> ( test_size * 8 -1 ) ) & 0x1;
+     INT src_msb =   ( val >> ( ext_info0.src_size * 8 - 1 ) ) & 0x1;
+     BOOL inrange = val & ( ~ ( ( 1 << ext_info0.src_size ) - 1 ) ) == 0;
+     INT32 idx = TESTI_IDX ( ext_info0.sign_ext, test_msb, src_msb, inrange );
+     change_mask = TestI_Updated_Flags[idx];
+     new_src1 = src1;
+  }
+  else if ( is_cmp ) {
+    mov_ext0 = tninfo0 == NULL ? NULL : tninfo0->in_op;
+    mov_ext1 = tninfo1 == NULL ? NULL : tninfo1->in_op;
+    if ( mov_ext0 == NULL && mov_ext1 == NULL )
+      return FALSE;
+    new_src0 = Test_Get_Size_Ext_Info ( mov_ext0, &ext_info0, test_size, src0 );
+    new_src1 = Test_Get_Size_Ext_Info ( mov_ext1, &ext_info1, test_size, src1 );
+
+    if ( ext_info0.src_size >= test_size && ext_info1.src_size >= test_size )
+        return FALSE;
+
+    if ( ext_info0.dest_size != test_size || ext_info1.dest_size != test_size )
+       return FALSE;
+
+    INT32 idx = TEST_IDX ( ext_info0.src_size != ext_info1.src_size,
+        ext_info0.sign_ext, ext_info1.sign_ext );
+     
+    change_mask = Compare_Updated_Flags[idx];
+  }
+  else if ( is_cmpi ) {
+    Is_True ( TN_has_value(src1), ("cmpi src1 expect to be constant\n") );
+    INT64 val = TN_value ( src1 );
+    mov_ext0 = tninfo0 == NULL ? NULL : tninfo0->in_op;
+    if ( mov_ext0 == NULL )
+      return FALSE;
+    new_src0 = Test_Get_Size_Ext_Info ( mov_ext0, &ext_info0, test_size, src0 );
+    if ( ext_info0.src_size >= test_size || ext_info0.dest_size != test_size )
+      return FALSE;
+
+    // consider constant as movzbl or movsbl and use Compare_Updated_Flags
+    new_src1 = src1;
+    Get_Constant_Size_Ext_Info ( val, &ext_info1, test_size );
+    if ( ext_info1.src_size >= test_size )
+      return FALSE;
+    if ( ext_info1.src_size < ext_info0.src_size )
+      ext_info1.src_size = ext_info0.src_size;
+    INT32 idx = TEST_IDX ( ext_info0.src_size != ext_info1.src_size,
+        ext_info0.sign_ext, ext_info1.sign_ext );
+     
+    change_mask = Compare_Updated_Flags[idx];
+  }
+  else {
+    return FALSE;
+  }
+
+  // this means all flags is changed.
+  if ( change_mask == ALL_FLAG_MASK )
+    return FALSE;
+  
+  // 3. gather which status flag used by jump or cmov
+  //    search ops after test/comapre, if find op update rflags, abort
+  //    Determin if its valid to perform transform
+  if ( change_mask != 0 ) {
+    OP* next_op = OP_next ( op );
+    while ( next_op ) {
+      TOP next_top = OP_code ( next_op );
+
+      if ( TOP_is_read_rflags ( next_top ) ) {
+        INT32 read_flags = Read_Flags_Mask ( next_top );
+        if ( read_flags & change_mask )
+          return FALSE;
+      }
+
+      if ( TOP_is_change_rflags ( next_top ) ) {
+        break;
+      }
+      next_op = OP_next(next_op);
+    }
+  }
+  // check if mov-ext's result TN will live out of BB.
+  // like
+  // char a
+  // if ( a > 10 )
+  //    use a;
+  BOOL find_opt = FALSE;
+  if ( mov_ext0 && new_src0 != src0 && 
+       !TN_live_out_of( OP_result(mov_ext0 , 0 ), OP_bb ( op ) ) ) {
+    find_opt = TRUE;
+  }
+  if ( mov_ext1 && new_src1 != src1 && 
+       !TN_live_out_of( OP_result(mov_ext1 , 0 ), OP_bb ( op ) ) ) {
+    find_opt = TRUE;
+  }
+  if ( find_opt == FALSE )
+    return FALSE;
+
+
+  // 4. check TN register is not modified through definition to usage.
+  //    like movzbl %al, %esi
+  //         movzbl %bx, %eax
+  //         testl %esi, %eax
+  //    it can't change to 
+  //         testb %al, %bx
+  //    check if %al is modified in later code sequence.
+  if ( mov_ext0 && new_src0 != src0 &&
+       !is_movext_source_tn_valid ( op, mov_ext0, new_src0 ) ) {
+    return FALSE;
+  }
+  if ( mov_ext1 && new_src1 != src1 &&
+       !is_movext_source_tn_valid ( op, mov_ext1, new_src1 ) ) {
+    return FALSE;
+  } 
+ 
+  // 4. transform here
+  TOP new_top;
+  if ( is_test ) {
+    INT32 new_size = MIN ( ext_info0.src_size, ext_info1.src_size );
+    if(new_size == 1)
+        new_top = TOP_test8;
+    else if(new_size == 2)
+        new_top = TOP_test16;
+    else if(new_size == 4)
+        new_top = TOP_test32;
+    else
+        return FALSE;
+  }
+  else if ( is_testi ) {
+    INT32 new_size = ext_info0.src_size;
+    INT64 new_val = TN_Value ( new_src1 );
+    // truncate value to avoid warning in assembler
+    if(new_size == 1) {
+        new_val &= 0xff;
+        new_top = TOP_testi8;
+    }
+    else if(new_size == 2) {
+        new_val &= 0xffff;
+        new_top = TOP_testi16;
+    }
+    else if(new_size == 4) {
+        new_val &= 0xffffffff;
+        new_top = TOP_testi32;
+    }
+    else
+        return FALSE;
+    new_src1 = Dup_TN ( new_src1 );
+    Set_TN_size ( new_src1, new_size );
+    Set_TN_value ( new_src1, new_val );
+  }
+  else if ( is_cmp ) {
+    INT32 new_size = MIN ( ext_info0.src_size, ext_info1.src_size );
+    if ( new_size == 1 )
+        new_top = TOP_cmp8;
+    else if(new_size == 2)
+        new_top = TOP_cmp16;
+    else if(new_size == 4)
+        new_top = TOP_cmp32;
+    else
+        return FALSE;
+  }
+  else if ( is_cmpi ) {
+    INT32 new_size = ext_info0.src_size;
+    INT64 new_val = TN_Value ( new_src1 );
+    // if value is unsigned, truncate
+    // if value is signed, truncate and sign ext.
+    if ( new_size == 1 ) {
+      if ( ext_info0.sign_ext )
+        new_val =  ( new_val << ( sizeof(INT64) * 8 - 8 ) ) >> ( sizeof(INT64) * 8 - 8 );
+      else
+        new_val &= 0xff;
+      new_top = TOP_cmpi8;
+    }
+    else if ( new_size == 2 ) {
+      if(ext_info0.sign_ext)
+        new_val =  ( new_val << ( sizeof(INT64) * 8 - 16 ) ) >> ( sizeof(INT64) * 8 - 16 );
+      else
+        new_val &= 0xffff;
+      new_top = TOP_cmpi16;
+    }
+    else if ( new_size == 4 ) {
+      if(ext_info0.sign_ext)
+        new_val =  ( new_val << ( sizeof(INT64) * 8 - 32 ) ) >> ( sizeof(INT64) * 8 - 32 );
+      else
+        new_val &= 0xffffffff;
+      new_top = TOP_cmpi32;
+    }
+    else
+        return FALSE;
+    new_src1 = Dup_TN ( new_src1 );
+    Set_TN_size ( new_src1, new_size );
+    Set_TN_value ( new_src1, new_val );
+  }
+  else {
+    return FALSE;
+  }
+
+  OP* new_op = Mk_OP( new_top, Rflags_TN(), new_src0, new_src1 );
+  Set_OP_unrolling( new_op, OP_unrolling ( op ) );
+  Set_OP_orig_idx( new_op, OP_map_idx ( op ) );
+  Set_OP_unroll_bb( new_op, OP_unroll_bb ( op ) );
+  
+  Copy_WN_For_Memory_OP( new_op, op );
+  if ( OP_volatile( op ) )
+     Set_OP_volatile( op );
+  OP_srcpos( new_op ) = OP_srcpos( op );
+  BB_Insert_Op_After( OP_bb(op), op, new_op );
+  return TRUE;
+}
+
+
+extern void dump_bb (BB *bb);
+extern void dump_tn (TN *tn);
+
 /*
  * Look at an expression and it's inputs to identify special sequences
  * that can be simplified.
@@ -2807,7 +3497,13 @@ BOOL Special_Sequence( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
       return TRUE;
   }
 
-  if( ( top == TOP_test32 || top == TOP_test64 ) &&
+  if ( CG_Movext_ICMP && TOP_is_icmp ( top ) ) {
+    if ( ICMP_Is_Replaced ( op, opnd_tn, opnd_tninfo ) )
+      return TRUE;
+  }
+
+  if( ( top == TOP_test8 || top == TOP_test16 ||
+        top == TOP_test32 || top == TOP_test64 ) &&
       TNs_Are_Equivalent( OP_opnd(op,0), OP_opnd(op,1) ) ){
 
     const EBO_TN_INFO* tninfo = opnd_tninfo[0];
@@ -2900,7 +3596,7 @@ BOOL Special_Sequence( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
     if ( TOP_is_vector_packed_single ( OP_code (alu_op ) ) )
       op->opr = TOP_movaps;
     else if ( TOP_is_vector_packed_double ( OP_code (alu_op ) ) )
-      op->opr = TOP_movapd;
+      op->opr = TOP_movaps;
   }
 
   else if( top == TOP_jne || top == TOP_je ) {
@@ -2915,7 +3611,9 @@ BOOL Special_Sequence( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
     OP* test_op = tninfo == NULL ? NULL : tninfo->in_op;
     if ( test_op && 
 	 ( OP_code( test_op ) == TOP_test32 ||
-	   OP_code( test_op ) == TOP_test64 ) &&
+	   OP_code( test_op ) == TOP_test64 ||
+       OP_code( test_op ) == TOP_test8  ||
+       OP_code( test_op ) == TOP_test16 ) &&
 	 TNs_Are_Equivalent( OP_opnd(test_op, 0), OP_opnd(test_op, 1) ) ) {
       const EBO_TN_INFO* test_tninfo = get_tn_info( OP_opnd(test_op, 0 ));
       OP* set_op = test_tninfo == NULL ? NULL : test_tninfo->in_op;
@@ -2977,19 +3675,8 @@ BOOL Special_Sequence( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
       int new_right_shift_val = TN_value(right) - TN_value(left);
       if (new_right_shift_val < 0)
 	return FALSE;
-
-      // Make sure alu_op opnd is not redefined between alu_op and op.
-      EBO_TN_INFO *alu_opnd0_tninfo = get_tn_info(OP_opnd(alu_op, 0));
-      EBO_TN_INFO *alu_result_tninfo = get_tn_info(OP_result(alu_op, 0));
-      if (// Give up if alu_op result is redefined because
-	  // alu_result_tninfo->sequence_num wouldn't correspond to alu_op's
-	  // sequence number in this case.  We need alu_op's sequence number
-	  // for the comparison below.
-	  alu_result_tninfo->in_op != alu_op ||
-	  // Test against alu_op's sequence number.
-          (alu_opnd0_tninfo == NULL ||
-	   alu_opnd0_tninfo->sequence_num >= alu_result_tninfo->sequence_num))
-        return FALSE;
+      if (!Pred_Opnd_Avail(op, opnd_tninfo[0], 0))
+	return FALSE;
 
       TOP mov_opcode;
       int field_size = 64 - TN_value(right);
@@ -3010,6 +3697,42 @@ BOOL Special_Sequence( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
       new_move = Mk_OP(mov_opcode, OP_result(op, 0), tmp_tn);
       BB_Insert_Op_After(OP_bb(op), new_shift, new_move);
       return TRUE;
+    }
+  }
+
+  else if (top == TOP_shli32 ||
+	   top == TOP_shli64) {
+
+    if (EBO_in_peep)	// Can't break the x86-style property.  Bug 14424.
+      return FALSE;
+
+    // Replace:
+    //   movzbl			; zero-extend
+    //   shift-left 31		; shift left 31 bits
+    // with:
+    //   shift-left 31
+    // The shift-left makes the zero-extend obsolete by shifting over the
+    // zero-extended field.
+    const EBO_TN_INFO* tninfo = opnd_tninfo[0];
+    TN *left = OP_opnd(op, 1);	// shift amount
+    Is_True(TN_Is_Constant(left) && TN_has_value(left),
+	    ("Special_Sequence: shift amount not integer constant"));
+    int left_shift_amount = TN_value(left);
+    OP* alu_op = tninfo == NULL ? NULL : tninfo->in_op;
+    EBO_TN_INFO *alu_opnd0_tninfo = NULL;
+
+    if (alu_op &&
+	((OP_code(alu_op) == TOP_movzbl && left_shift_amount >= 31) ||
+	 (OP_code(alu_op) == TOP_movzwl && left_shift_amount >= 31) ||
+	 (OP_code(alu_op) == TOP_movzbq && left_shift_amount >= 63) ||
+	 (OP_code(alu_op) == TOP_movzwq && left_shift_amount >= 63) ||
+	 (OP_code(alu_op) == TOP_movzlq && left_shift_amount >= 63)) &&
+	Pred_Opnd_Avail(op, opnd_tninfo[0], 0, &alu_opnd0_tninfo)) {
+      Set_OP_opnd(op, 0, OP_opnd(alu_op, 0));
+      dec_ref_count(opnd_tninfo[0]);
+      inc_ref_count(alu_opnd0_tninfo);
+      opnd_tninfo[0] = alu_opnd0_tninfo;
+      return FALSE;
     }
   }
 
@@ -3055,7 +3778,8 @@ void Redundancy_Elimination()
 		   ("Redundancy_Elimination: src/result not registers in EBO_in_peep (1)"));
 	
 	// do not delete assignment to result if result is live out
-	if (REG_LIVE_Outof_BB (TN_register_class(result), 
+	if (EBO_no_liveness_info_available ||
+	    REG_LIVE_Outof_BB (TN_register_class(result), 
 			       TN_register(result), bb)) {
 	  // see if the register is re-defined before block end
 	  // we can still delete the op if there is a re-definition
@@ -3174,7 +3898,8 @@ void Redundancy_Elimination()
       FmtAssert( false, ("Redundancy_Elimination: UNIMPLEMENTED (1)") );
 
       // do not delete assignment to result if result is live out
-      if (REG_LIVE_Outof_BB (TN_register_class(result), 
+      if (EBO_no_liveness_info_available ||
+	  REG_LIVE_Outof_BB (TN_register_class(result), 
 			     TN_register(result), bb)) {
 	// see if the register is re-defined before block end
 	// we can still delete the op if there is a re-definition
@@ -3264,7 +3989,10 @@ static TN* Compose_Addr_offset( TN* ofst1, TN* ofst2, TN* scale )
     ST* sym = TN_var(ofst1);
     const INT64 ofst = TN_value(ofst2) * TN_value(scale) + TN_offset(ofst1);
 
-    return Gen_Symbol_TN( sym, ofst, TN_RELOC_NONE );
+    // keep the relocs for TLS object
+    Is_True ( TN_relocs(ofst2) == TN_RELOC_NONE, ("bad TN relocs for ofst2") );
+    return Gen_Symbol_TN( sym, ofst,
+                          ST_is_thread_local(sym) ? TN_relocs(ofst1) : TN_RELOC_NONE );
   }
 
   if( TN_is_symbol(ofst2) ){
@@ -3274,7 +4002,10 @@ static TN* Compose_Addr_offset( TN* ofst1, TN* ofst2, TN* scale )
     ST* sym = TN_var(ofst2);
     const INT64 ofst = TN_value(ofst1) + TN_offset(ofst2);
 
-    return Gen_Symbol_TN( sym, ofst, TN_RELOC_NONE );
+    // keep the relocs for TLS object
+    Is_True ( TN_relocs(ofst1) == TN_RELOC_NONE, ("bad TN relocs for ofst1") );
+    return Gen_Symbol_TN( sym, ofst, 
+                          ST_is_thread_local(sym) ? TN_relocs(ofst2) : TN_RELOC_NONE );
   }
 
   const INT64 value = TN_value(ofst1) + TN_value(ofst2) * TN_value(scale);
@@ -3315,12 +4046,18 @@ static BOOL Compose_Addr( OP* mem_op, EBO_TN_INFO* pt_tninfo,
 
   switch( top ){
   case TOP_lea32:
+    if( Is_Target_64bit() )
+      return FALSE;
+    // fall thru
   case TOP_lea64:
     a.base   = OP_opnd_use( addr_op, OU_base );
     a.offset = OP_opnd_use( addr_op, OU_offset );
     break;
 
   case TOP_leaxx32:
+    if( Is_Target_64bit() )
+      return FALSE;
+    // fall thru
   case TOP_leaxx64:
     a.index  = OP_opnd_use( addr_op, OU_index );
     a.offset = OP_opnd_use( addr_op, OU_offset );
@@ -3334,6 +4071,9 @@ static BOOL Compose_Addr( OP* mem_op, EBO_TN_INFO* pt_tninfo,
     break;
 
   case TOP_leax32:
+    if( Is_Target_64bit() )
+      return FALSE;
+    // fall thru
   case TOP_leax64:
     a.index  = OP_opnd_use( addr_op, OU_index );
     a.offset = OP_opnd_use( addr_op, OU_offset );
@@ -3608,6 +4348,16 @@ static BOOL Compose_Addr( OP* mem_op, EBO_TN_INFO* pt_tninfo,
       !ISA_LC_Value_In_Class( TN_value(*offset), LC_simm32 ) )
     return FALSE;
 
+  /* Bug 14488: under -mcmodel=kernel, if the offset is with
+     respect to a section name, check for a smaller offset size,
+     so that the final relocation produced by the linker using
+     possibly custom linker scripts can fit R_X86_64_32S. */
+  if (mcmodel == KERNEL &&
+      TN_is_symbol(*offset) &&
+      ST_sym_class(TN_var(*offset)) == CLASS_BLOCK &&
+      !ISA_LC_Value_In_Class(TN_offset(*offset), LC_simm16))
+    return FALSE;
+
   if( *scale != NULL && !IS_VALID_SCALE( TN_value(*scale) ) ){
     if( *base != NULL ||
 	TN_value(*scale) > 8 )
@@ -3668,15 +4418,17 @@ static Addr_Mode_Group *Top_To_Addr_Mode_Group[TOP_count+1];
 // listed in any order.  No duplicates allowed.  The table doesn't have to be
 // complete; it may list only those OPs that EBO can do something about.
 static Addr_Mode_Group Addr_Mode_Group_Table[] = {
-  // REG_MODE	BASE_MODE	BASE_INDEX_MODE	INDEX_MODE	N32_MODE
+  // REG_MODE	BASE_MODE	BASE_INDEX_MODE	INDEX_MODE     N32_MODE (offset)
 
   // Load and stores.
   {TOP_UNDEFINED, TOP_store8,	TOP_storex8,	TOP_storexx8,	TOP_store8_n32},
   {TOP_UNDEFINED, TOP_store16,	TOP_storex16,	TOP_storexx16, TOP_store16_n32},
   {TOP_UNDEFINED, TOP_store32,	TOP_storex32,	TOP_storexx32, TOP_store32_n32},
-  {TOP_UNDEFINED, TOP_store64,	TOP_storex64,	TOP_storexx64,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_store64,	TOP_storex64,	TOP_storexx64, TOP_store64_off},
   {TOP_UNDEFINED, TOP_stss,	TOP_stssx,	TOP_stssxx,	TOP_stss_n32},
   {TOP_UNDEFINED, TOP_stsd,	TOP_stsdx,	TOP_stsdxx,	TOP_stsd_n32},
+  {TOP_UNDEFINED, TOP_stntss,   TOP_stntssx,    TOP_stntssxx,   TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_stntsd,   TOP_stntsdx,    TOP_stntsdxx,   TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_stdqa,	TOP_stdqax,	TOP_stdqaxx,	TOP_stdqa_n32},
   {TOP_UNDEFINED, TOP_stntpd,	TOP_stntpdx,	TOP_stntpdxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_stdqu,	TOP_stdqux,	TOP_stdquxx,	TOP_UNDEFINED},
@@ -3686,6 +4438,7 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED, TOP_ldss,	TOP_ldssx,	TOP_ldssxx,	TOP_ldss_n32},
   {TOP_UNDEFINED, TOP_ldsd,	TOP_ldsdx,	TOP_ldsdxx,	TOP_ldsd_n32},
   {TOP_UNDEFINED, TOP_lddqa,	TOP_lddqax,	TOP_lddqaxx,	TOP_lddqa_n32},
+  {TOP_UNDEFINED, TOP_ldupd,	TOP_ldupdx,	TOP_ldupdxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_lddqu,	TOP_lddqux,	TOP_lddquxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_ldlps,	TOP_ldlpsx,	TOP_ldlpsxx,	TOP_ldlps_n32},
   {TOP_UNDEFINED, TOP_ldlpd,	TOP_ldlpdx,	TOP_ldlpdxx,	TOP_UNDEFINED},
@@ -3695,21 +4448,49 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED, TOP_stlpd,	TOP_stlpdx,	TOP_stlpdxx,	TOP_stlpd_n32},
   {TOP_UNDEFINED, TOP_staps,	TOP_stapsx,	TOP_stapsxx,	TOP_staps_n32},
   {TOP_UNDEFINED, TOP_stapd,	TOP_stapdx,	TOP_stapdxx,	TOP_stapd_n32},
+  {TOP_UNDEFINED, TOP_stups,	TOP_stupsx,	TOP_stupsxx,	TOP_stups_n32},
+  {TOP_UNDEFINED, TOP_stupd,	TOP_stupdx,	TOP_stupdxx,	TOP_stupd_n32},
   {TOP_UNDEFINED, TOP_ldhps,	TOP_ldhpsx,	TOP_ldhpsxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_ldhpd,	TOP_ldhpdx,	TOP_ldhpdxx,	TOP_ldhpd_n32},
   {TOP_UNDEFINED, TOP_sthps,	TOP_sthpsx,	TOP_sthpsxx,	TOP_UNDEFINED},
-  {TOP_UNDEFINED, TOP_sthpd,	TOP_sthpdx,	TOP_sthpdxx,	TOP_sthpd_n32},
-  {TOP_UNDEFINED, TOP_ld8_64,	TOP_ldx8_64,	TOP_ldxx8_64,	TOP_UNDEFINED},
-  {TOP_UNDEFINED, TOP_ldu8_64,	TOP_ldxu8_64,	TOP_ldxxu8_64,	TOP_UNDEFINED},
-  {TOP_UNDEFINED, TOP_ld16_64,	TOP_ldx16_64,	TOP_ldxx16_64,	TOP_UNDEFINED},
-  {TOP_UNDEFINED, TOP_ldu16_64,	TOP_ldxu16_64,	TOP_ldxxu16_64,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vstss,	TOP_vstssx,	TOP_vstssxx,	TOP_vstss_n32},
+  {TOP_UNDEFINED, TOP_vstsd,	TOP_vstsdx,	TOP_vstsdxx,	TOP_vstsd_n32},
+  {TOP_UNDEFINED, TOP_vstntss,  TOP_vstntssx,   TOP_vstntssxx,  TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vstntsd,  TOP_vstntsdx,   TOP_vstntsdxx,  TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vstdqa,	TOP_vstdqax,	TOP_vstdqaxx,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vstntpd,	TOP_vstntpdx,	TOP_vstntpdxx,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vstdqu,	TOP_vstdqux,	TOP_vstdquxx,	TOP_vstdqu_n32},
+  //{TOP_vmovsldup, TOP_vmovsldupx, TOP_vmovsldupxx, TOP_vmovsldupxxx, TOP_UNDEFINED},
+  //{TOP_vfmovshdup, TOP_vmovshdupx, TOP_vmovshdupxx, TOP_vmovshdupxxx, TOP_UNDEFINED},
+  {TOP_vmovddup,  TOP_vmovddupx,    TOP_vmovddupxx,   TOP_vmovddupxxx,   TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vldss,	TOP_vldssx,	TOP_vldssxx,	TOP_vldss_n32},
+  {TOP_UNDEFINED, TOP_vldsd,	TOP_vldsdx,	TOP_vldsdxx,	TOP_vldsd_n32},
+  {TOP_UNDEFINED, TOP_vlddqa,	TOP_vlddqax,	TOP_vlddqaxx,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_vldupd,	TOP_vldupdx,	TOP_vldupdxx,	TOP_vldupd_n32},
+  {TOP_UNDEFINED, TOP_vlddqu,	TOP_vlddqux,	TOP_vlddquxx,	TOP_vlddqu_n32},
+  {TOP_UNDEFINED, TOP_vldlps,	TOP_vldlpsx,	TOP_vldlpsxx,	TOP_vldlps_n32},
+  {TOP_UNDEFINED, TOP_vldlpd,	TOP_vldlpdx,	TOP_vldlpdxx,	TOP_vldlpd_n32},
+  {TOP_UNDEFINED, TOP_vldaps,	TOP_vldapsx,	TOP_vldapsxx,	TOP_vldaps_n32},
+  {TOP_UNDEFINED, TOP_vldapd,	TOP_vldapdx,	TOP_vldapdxx,	TOP_vldapd_n32},
+  {TOP_UNDEFINED, TOP_vstlps,	TOP_vstlpsx,	TOP_vstlpsxx,	TOP_vstlps_n32},
+  {TOP_UNDEFINED, TOP_vstlpd,	TOP_vstlpdx,	TOP_vstlpdxx,	TOP_vstlpd_n32},
+  {TOP_UNDEFINED, TOP_vstaps,	TOP_vstapsx,	TOP_vstapsxx,	TOP_vstaps_n32},
+  {TOP_UNDEFINED, TOP_vstapd,	TOP_vstapdx,	TOP_vstapdxx,	TOP_vstapd_n32},
+  {TOP_UNDEFINED, TOP_vldhps,	TOP_vldhpsx,	TOP_vldhpsxx,	TOP_vldhps_n32},
+  {TOP_UNDEFINED, TOP_vldhpd,	TOP_vldhpdx,	TOP_vldhpdxx,	TOP_vldhpd_n32},
+  {TOP_UNDEFINED, TOP_vsthps,	TOP_vsthpsx,	TOP_vsthpsxx,	TOP_vsthps_n32},
+  {TOP_UNDEFINED, TOP_vsthpd,	TOP_vsthpdx,	TOP_vsthpdxx,	TOP_vsthpd_n32},
+  {TOP_UNDEFINED, TOP_ld8_64,	TOP_ldx8_64,	TOP_ldxx8_64,	TOP_ld8_64_off},
+  {TOP_UNDEFINED, TOP_ldu8_64,	TOP_ldxu8_64,	TOP_ldxxu8_64, TOP_ldu8_64_off},
+  {TOP_UNDEFINED, TOP_ld16_64,	TOP_ldx16_64,	TOP_ldxx16_64, TOP_ld16_64_off},
+  {TOP_UNDEFINED, TOP_ldu16_64,	TOP_ldxu16_64,	TOP_ldxxu16_64,	TOP_ldu16_64_off},
   {TOP_UNDEFINED, TOP_ld8_32,	TOP_ldx8_32,	TOP_ldxx8_32,  TOP_ld8_32_n32},
   {TOP_UNDEFINED, TOP_ldu8_32,	TOP_ldxu8_32,	TOP_ldxxu8_32, TOP_ldu8_32_n32},
   {TOP_UNDEFINED, TOP_ld16_32,	TOP_ldx16_32,	TOP_ldxx16_32, TOP_ld16_32_n32},
   {TOP_UNDEFINED, TOP_ldu16_32,	TOP_ldxu16_32,	TOP_ldxxu16_32, TOP_ldu16_32_n32},
   {TOP_UNDEFINED, TOP_ld32,	TOP_ldx32,	TOP_ldxx32,	TOP_ld32_n32},
-  {TOP_UNDEFINED, TOP_ld32_64,	TOP_ldx32_64,	TOP_ldxx32_64,	TOP_UNDEFINED},
-  {TOP_UNDEFINED, TOP_ld64,	TOP_ldx64,	TOP_ldxx64,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_ld32_64,	TOP_ldx32_64,	TOP_ldxx32_64, TOP_ld32_64_off},
+  {TOP_UNDEFINED, TOP_ld64,	TOP_ldx64,	TOP_ldxx64,	TOP_ld64_off},
   {TOP_UNDEFINED, TOP_prefetch,	TOP_prefetchx,	TOP_prefetchxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_prefetchw,  TOP_prefetchwx,  TOP_prefetchwxx, TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_prefetcht0, TOP_prefetcht0x, TOP_prefetcht0xx, TOP_UNDEFINED},
@@ -3725,10 +4506,15 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_add64,	TOP_addx64,	TOP_addxx64,	TOP_addxxx64,	TOP_UNDEFINED},
   {TOP_addss,	TOP_addxss,	TOP_addxxss,	TOP_addxxxss,	TOP_UNDEFINED},
   {TOP_addsd,	TOP_addxsd,	TOP_addxxsd,	TOP_addxxxsd,	TOP_UNDEFINED},	
-  {TOP_add128v8,  TOP_addx128v8,  TOP_addxx128v8,  TOP_addxxx128v8, TOP_UNDEFINED},
+  {TOP_addsd,	TOP_addxsd,	TOP_addxxsd,	TOP_addxxxsd,	TOP_UNDEFINED},	
+  {TOP_vfaddsd, TOP_vfaddxsd,   TOP_vfaddxxsd,  TOP_vfaddxxxsd, TOP_UNDEFINED},
   {TOP_add128v16, TOP_addx128v16, TOP_addxx128v16, TOP_addxxx128v16, TOP_UNDEFINED},
   {TOP_add128v32, TOP_addx128v32, TOP_addxx128v32, TOP_addxxx128v32, TOP_UNDEFINED},
   {TOP_add128v64, TOP_addx128v64, TOP_addxx128v64, TOP_addxxx128v64, TOP_UNDEFINED},
+  {TOP_vadd128v8,  TOP_vaddx128v8,  TOP_vaddxx128v8,  TOP_vaddxxx128v8, TOP_UNDEFINED},
+  {TOP_vadd128v16, TOP_vaddx128v16, TOP_vaddxx128v16, TOP_vaddxxx128v16, TOP_UNDEFINED},
+  {TOP_vadd128v32, TOP_vaddx128v32, TOP_vaddxx128v32, TOP_vaddxxx128v32, TOP_UNDEFINED},
+  {TOP_vadd128v64, TOP_vaddx128v64, TOP_vaddxx128v64, TOP_vaddxxx128v64, TOP_UNDEFINED},
   {TOP_fadd128v32,	TOP_faddx128v32,	TOP_faddxx128v32,	TOP_faddxxx128v32,	TOP_UNDEFINED},
   {TOP_fadd128v64,	TOP_faddx128v64,	TOP_faddxx128v64,	TOP_faddxxx128v64,	TOP_UNDEFINED},
   {TOP_fhadd128v32,	TOP_fhaddx128v32,	TOP_fhaddxx128v32,	TOP_fhaddxxx128v32,	TOP_UNDEFINED},
@@ -3737,53 +4523,95 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_faddsub128v64,	TOP_faddsubx128v64,	TOP_faddsubxx128v64,	TOP_faddsubxxx128v64,	TOP_UNDEFINED},
   {TOP_fhsub128v32,	TOP_fhsubx128v32,	TOP_fhsubxx128v32,	TOP_fhsubxxx128v32,	TOP_UNDEFINED},
   {TOP_fhsub128v64,	TOP_fhsubx128v64,	TOP_fhsubxx128v64,	TOP_fhsubxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_vfadd128v32,	TOP_vfaddx128v32,	TOP_vfaddxx128v32,	TOP_vfaddxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfadd128v64,	TOP_vfaddx128v64,	TOP_vfaddxx128v64,	TOP_vfaddxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfhadd128v32,	TOP_vfhaddx128v32,	TOP_vfhaddxx128v32,	TOP_vfhaddxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfhadd128v64,	TOP_vfhaddx128v64,	TOP_vfhaddxx128v64,	TOP_vfhaddxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfaddsub128v32,	TOP_vfaddsubx128v32,	TOP_vfaddsubxx128v32,	TOP_vfaddsubxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfaddsub128v64,	TOP_vfaddsubx128v64,	TOP_vfaddsubxx128v64,	TOP_vfaddsubxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfhsub128v32,	TOP_vfhsubx128v32,	TOP_vfhsubxx128v32,	TOP_vfhsubxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfhsub128v64,	TOP_vfhsubx128v64,	TOP_vfhsubxx128v64,	TOP_vfhsubxxx128v64,	TOP_UNDEFINED},
   {TOP_sub32,	TOP_subx32,	TOP_subxx32,	TOP_subxxx32,	TOP_UNDEFINED},
   {TOP_sub64,	TOP_subx64,	TOP_subxx64,	TOP_subxxx64,	TOP_UNDEFINED},
   {TOP_subss,	TOP_subxss,	TOP_subxxss,	TOP_subxxxss,	TOP_UNDEFINED},
   {TOP_subsd,	TOP_subxsd,	TOP_subxxsd,	TOP_subxxxsd,	TOP_UNDEFINED},
+  {TOP_vsubss,	TOP_vsubxss,	TOP_vsubxxss,	TOP_vsubxxxss,	TOP_UNDEFINED},
+  {TOP_vsubsd,	TOP_vsubxsd,	TOP_vsubxxsd,	TOP_vsubxxxsd,	TOP_UNDEFINED},
   {TOP_sub128v8,	TOP_subx128v8,	TOP_subxx128v8,	TOP_subxxx128v8,	TOP_UNDEFINED},
   {TOP_sub128v16,	TOP_subx128v16,	TOP_subxx128v16,	TOP_subxxx128v16,	TOP_UNDEFINED},
   {TOP_sub128v32,	TOP_subx128v32,	TOP_subxx128v32,	TOP_subxxx128v32,	TOP_UNDEFINED},
   {TOP_sub128v64,	TOP_subx128v64,	TOP_subxx128v64,	TOP_subxxx128v64,	TOP_UNDEFINED},
   {TOP_fsub128v32,	TOP_fsubx128v32, TOP_fsubxx128v32,	TOP_fsubxxx128v32,	TOP_UNDEFINED},
   {TOP_fsub128v64,	TOP_fsubx128v64, TOP_fsubxx128v64,	TOP_fsubxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_vsub128v8,	TOP_vsubx128v8,		TOP_vsubxx128v8,	TOP_vsubxxx128v8,	TOP_UNDEFINED},
+  {TOP_vsub128v16,	TOP_vsubx128v16,	TOP_vsubxx128v16,	TOP_vsubxxx128v16,	TOP_UNDEFINED},
+  {TOP_vsub128v32,	TOP_vsubx128v32,	TOP_vsubxx128v32,	TOP_vsubxxx128v32,	TOP_UNDEFINED},
+  {TOP_vsub128v64,	TOP_vsubx128v64,	TOP_vsubxx128v64,	TOP_vsubxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfsub128v32,	TOP_vfsubx128v32, 	TOP_vfsubxx128v32,	TOP_vfsubxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfsub128v64,	TOP_vfsubx128v64, 	TOP_vfsubxx128v64,	TOP_vfsubxxx128v64,	TOP_UNDEFINED},
   {TOP_mulss,	TOP_mulxss,	TOP_mulxxss,	TOP_mulxxxss,	TOP_UNDEFINED},
   {TOP_mulsd,	TOP_mulxsd,	TOP_mulxxsd,	TOP_mulxxxsd,	TOP_UNDEFINED},
+  {TOP_vmulss,	TOP_vmulxss,	TOP_vmulxxss,	TOP_vmulxxxss,	TOP_UNDEFINED},
+  {TOP_vmulsd,	TOP_vmulxsd,	TOP_vmulxxsd,	TOP_vmulxxxsd,	TOP_UNDEFINED},
   {TOP_fmul128v32, TOP_fmulx128v32, TOP_fmulxx128v32, TOP_fmulxxx128v32,	TOP_UNDEFINED},
   {TOP_fmul128v64, TOP_fmulx128v64, TOP_fmulxx128v64, TOP_fmulxxx128v64,	TOP_UNDEFINED},
   {TOP_cmpgt128v8, TOP_cmpgtx128v8, TOP_cmpgtxx128v8, TOP_cmpgtxxx128v8,	TOP_UNDEFINED},
+  {TOP_vfmul128v32, TOP_vfmulx128v32, TOP_vfmulxx128v32, TOP_vfmulxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfmul128v64, TOP_vfmulx128v64, TOP_vfmulxx128v64, TOP_vfmulxxx128v64,	TOP_UNDEFINED},
+  {TOP_vcmpgt128v8, TOP_vcmpgtx128v8, TOP_vcmpgtxx128v8, TOP_vcmpgtxxx128v8,	TOP_UNDEFINED},
   {TOP_cmpgt128v16,	TOP_cmpgtx128v16,	TOP_cmpgtxx128v16,	TOP_cmpgtxxx128v16,	TOP_UNDEFINED},
   {TOP_cmpgt128v32,	TOP_cmpgtx128v32,	TOP_cmpgtxx128v32,	TOP_cmpgtxxx128v32,	TOP_UNDEFINED},
   {TOP_cmpeq128v8,	TOP_cmpeqx128v8,	TOP_cmpeqxx128v8,	TOP_cmpeqxxx128v8,	TOP_UNDEFINED},
   {TOP_cmpeq128v16,	TOP_cmpeqx128v16,	TOP_cmpeqxx128v16,	TOP_cmpeqxxx128v16,	TOP_UNDEFINED},
   {TOP_cmpeq128v32,	TOP_cmpeqx128v32,	TOP_cmpeqxx128v32,	TOP_cmpeqxxx128v32,	TOP_UNDEFINED},
+  {TOP_vcmpgt128v16,	TOP_vcmpgtx128v16,	TOP_vcmpgtxx128v16,	TOP_vcmpgtxxx128v16,	TOP_UNDEFINED},
+  {TOP_vcmpgt128v32,	TOP_vcmpgtx128v32,	TOP_vcmpgtxx128v32,	TOP_vcmpgtxxx128v32,	TOP_UNDEFINED},
+  {TOP_vcmpeq128v8,	TOP_vcmpeqx128v8,	TOP_vcmpeqxx128v8,	TOP_vcmpeqxxx128v8,	TOP_UNDEFINED},
+  {TOP_vcmpeq128v16,	TOP_vcmpeqx128v16,	TOP_vcmpeqxx128v16,	TOP_vcmpeqxxx128v16,	TOP_UNDEFINED},
+  {TOP_vcmpeq128v32,	TOP_vcmpeqx128v32,	TOP_vcmpeqxx128v32,	TOP_vcmpeqxxx128v32,	TOP_UNDEFINED},
   {TOP_max128v8,	TOP_maxx128v8,	TOP_maxxx128v8,	TOP_maxxxx128v8,	TOP_UNDEFINED},
   {TOP_max128v16,	TOP_maxx128v16,	TOP_maxxx128v16, TOP_maxxxx128v16,	TOP_UNDEFINED},
   {TOP_min128v8,	TOP_minx128v8,	TOP_minxx128v8,	TOP_minxxx128v8,	TOP_UNDEFINED},
   {TOP_min128v16,	TOP_minx128v16,	TOP_minxx128v16, TOP_minxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmaxs128v8,	TOP_vmaxsx128v8,	TOP_vmaxsxx128v8,	TOP_vmaxsxxx128v8,	TOP_UNDEFINED},
+  {TOP_vmaxs128v16,	TOP_vmaxsx128v16,	TOP_vmaxsxx128v16,	TOP_vmaxsxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmins128v8,	TOP_vminsx128v8,	TOP_vminsxx128v8,	TOP_vminsxxx128v8,	TOP_UNDEFINED},
+  {TOP_vmins128v16,	TOP_vminsx128v16,	TOP_vminsxx128v16,	TOP_vminsxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmaxu128v8,	TOP_vmaxux128v8,	TOP_vmaxuxx128v8,	TOP_vmaxuxxx128v8,	TOP_UNDEFINED},
+  {TOP_vmaxu128v16,	TOP_vmaxux128v16,	TOP_vmaxuxx128v16,	TOP_vmaxuxxx128v16,	TOP_UNDEFINED},
+  {TOP_vminu128v8,	TOP_vminux128v8,	TOP_vminuxx128v8,	TOP_vminuxxx128v8,	TOP_UNDEFINED},
+  {TOP_vminu128v16,	TOP_vminux128v16,	TOP_vminuxx128v16,	TOP_vminuxxx128v16,	TOP_UNDEFINED},
   {TOP_divss,	TOP_divxss,	TOP_divxxss,	TOP_divxxxss,	TOP_UNDEFINED},
   {TOP_divsd,	TOP_divxsd,	TOP_divxxsd,	TOP_divxxxsd,	TOP_UNDEFINED},
+  {TOP_vdivss,	TOP_vdivxss,	TOP_vdivxxss,	TOP_vdivxxxss,	TOP_UNDEFINED},
+  {TOP_vdivsd,	TOP_vdivxsd,	TOP_vdivxxsd,	TOP_vdivxxxsd,	TOP_UNDEFINED},
   {TOP_fdiv128v32,	TOP_fdivx128v32,	TOP_fdivxx128v32,	TOP_fdivxxx128v32,	TOP_UNDEFINED},
   {TOP_fdiv128v64,	TOP_fdivx128v64,	TOP_fdivxx128v64,	TOP_fdivxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_vfdiv128v32,	TOP_vfdivx128v32,	TOP_vfdivxx128v32,	TOP_vfdivxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfdiv128v64,	TOP_vfdivx128v64,	TOP_vfdivxx128v64,	TOP_vfdivxxx128v64,	TOP_UNDEFINED},
   {TOP_and8,	TOP_andx8,	TOP_andxx8,	TOP_andxxx8,	TOP_UNDEFINED},
   {TOP_and16,	TOP_andx16,	TOP_andxx16,	TOP_andxxx16,	TOP_UNDEFINED},
   {TOP_and32,	TOP_andx32,	TOP_andxx32,	TOP_andxxx32,	TOP_UNDEFINED},
   {TOP_and64,	TOP_andx64,	TOP_andxx64,	TOP_andxxx64,	TOP_UNDEFINED},
-  {TOP_and128v8,	TOP_andx128v8,	TOP_andxx128v8,	TOP_andxxx128v8,	TOP_UNDEFINED},
-  {TOP_and128v16,	TOP_andx128v16,	TOP_andxx128v16,	TOP_andxxx128v16,	TOP_UNDEFINED},
-  {TOP_and128v32,	TOP_andx128v32,	TOP_andxx128v32,	TOP_andxxx128v32,	TOP_UNDEFINED },
-  {TOP_and128v64,	TOP_andx128v64,	TOP_andxx128v64,	TOP_andxxx128v64,	TOP_UNDEFINED},
+  {TOP_and128v8,	TOP_andx128v8,	        TOP_andxx128v8,	        TOP_andxxx128v8,	TOP_UNDEFINED},
+  {TOP_and128v16,	TOP_andx128v16,	        TOP_andxx128v16,	TOP_andxxx128v16,	TOP_UNDEFINED},
+  {TOP_and128v32,	TOP_andx128v32,	        TOP_andxx128v32,	TOP_andxxx128v32,	TOP_UNDEFINED },
+  {TOP_and128v64,	TOP_andx128v64,	        TOP_andxx128v64,	TOP_andxxx128v64,	TOP_UNDEFINED},
+  {TOP_vand128v8,	TOP_vandx128v8,		TOP_vandxx128v8,        TOP_vandxxx128v8,        TOP_UNDEFINED},
+  {TOP_vand128v16,	TOP_vandx128v16,	TOP_vandxx128v16,       TOP_vandxxx128v16,        TOP_UNDEFINED},
+  {TOP_vand128v32,	TOP_vandx128v32,	TOP_vandxx128v32,       TOP_vandxxx128v32,        TOP_UNDEFINED},
+  {TOP_vand128v64,	TOP_vandx128v64,	TOP_vandxx128v64,       TOP_vandxxx128v64,        TOP_UNDEFINED},
   {TOP_fand128v32,	TOP_fandx128v32,	TOP_fandxx128v32,	TOP_fandxxx128v32,	TOP_UNDEFINED},
   {TOP_fand128v64,	TOP_fandx128v64,	TOP_fandxx128v64,	TOP_fandxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfand128v32,	TOP_vfandx128v32,	TOP_vfandxx128v32,	TOP_vfandxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfand128v64,	TOP_vfandx128v64,	TOP_vfandxx128v64,	TOP_vfandxxx128v64,	TOP_UNDEFINED},
   // andps/andpd share the same load-execute OPs as fand128v32/fand128v64.
   // Must put andps/andpd after fand128v32/fand128v64 so that the load-execute
   // OPs will have fand128v32/fand128v64 as the base mode.
   {TOP_andps,	TOP_fandx128v32,	TOP_fandxx128v32,	TOP_fandxxx128v32,	TOP_UNDEFINED},
   {TOP_andpd,	TOP_fandx128v64,	TOP_fandxx128v64,	TOP_fandxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_vfand128v32,	TOP_vfandx128v32,	TOP_vfandxx128v32,	TOP_vfandxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfand128v64,	TOP_vfandx128v64,	TOP_vfandxx128v64,	TOP_vfandxxx128v64,	TOP_UNDEFINED},
   {TOP_or8,	TOP_orx8,	TOP_orxx8,	TOP_orxxx8,	TOP_UNDEFINED},
   {TOP_or16,	TOP_orx16,	TOP_orxx16,	TOP_orxxx16,	TOP_UNDEFINED},
   {TOP_or32,	TOP_orx32,	TOP_orxx32,	TOP_orxxx32,	TOP_UNDEFINED},
@@ -3794,33 +4622,51 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_or128v64,	TOP_orx128v64,	TOP_orxx128v64,	TOP_orxxx128v64,	TOP_UNDEFINED},
   {TOP_for128v32,	TOP_forx128v32,	TOP_forxx128v32,	TOP_forxxx128v32,	TOP_UNDEFINED},
   {TOP_for128v64,	TOP_forx128v64,	TOP_forxx128v64,	TOP_forxxx128v64,	TOP_UNDEFINED},
+  {TOP_vor128v8,	TOP_vorx128v8,		TOP_vorxx128v8,		TOP_vorxxx128v8,	TOP_UNDEFINED},
+  {TOP_vor128v16,	TOP_vorx128v16,		TOP_vorxx128v16,	TOP_vorxxx128v16,	TOP_UNDEFINED},
+  {TOP_vor128v32,	TOP_vorx128v32,		TOP_vorxx128v32,	TOP_vorxxx128v32,	TOP_UNDEFINED},
+  {TOP_vor128v64,	TOP_vorx128v64,		TOP_vorxx128v64,	TOP_vorxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfor128v32,	TOP_vforx128v32,	TOP_vforxx128v32,	TOP_vforxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfor128v64,	TOP_vforx128v64,	TOP_vforxx128v64,	TOP_vforxxx128v64,	TOP_UNDEFINED},
   // orps/orpd share the same load-execute OPs as for128v32/for128v64.  Must
   // put orps/orpd after for128v32/for128v64 so that the load-execute OPs will
   // have for128v32/for128v64 as the base mode.
-  {TOP_orps,	TOP_forx128v32,	TOP_forxx128v32,	TOP_forxxx128v32,	TOP_UNDEFINED},
-  {TOP_orpd,	TOP_forx128v64,	TOP_forxx128v64,	TOP_forxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_orps,	        TOP_forx128v32,	        TOP_forxx128v32,	TOP_forxxx128v32,	TOP_UNDEFINED},
+  {TOP_orpd,	        TOP_forx128v64,	        TOP_forxx128v64,	TOP_forxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfor128v32,	TOP_vforx128v32,	TOP_vforxx128v32,	TOP_vforxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfor128v64,	TOP_vforx128v64,	TOP_vforxx128v64,	TOP_vforxxx128v64,	TOP_UNDEFINED},
   {TOP_xor8,	TOP_xorx8,	TOP_xorxx8,	TOP_xorxxx8,	TOP_UNDEFINED},
   {TOP_xor16,	TOP_xorx16,	TOP_xorxx16,	TOP_xorxxx16,	TOP_UNDEFINED},
   {TOP_xor32,	TOP_xorx32,	TOP_xorxx32,	TOP_xorxxx32,	TOP_UNDEFINED},
   {TOP_xor64,	TOP_xorx64,	TOP_xorxx64,	TOP_xorxxx64,	TOP_UNDEFINED},
-  {TOP_xor128v8,	TOP_xorx128v8,	TOP_xorxx128v8,	TOP_xorxxx128v8,	TOP_UNDEFINED},
+  {TOP_xor128v8,	TOP_xorx128v8,	TOP_xorxx128v8,	        TOP_xorxxx128v8,	TOP_UNDEFINED},
   {TOP_xor128v16,	TOP_xorx128v16,	TOP_xorxx128v16,	TOP_xorxxx128v16,	TOP_UNDEFINED},
   {TOP_xor128v32,	TOP_xorx128v32,	TOP_xorxx128v32,	TOP_xorxxx128v32,	TOP_UNDEFINED},
   {TOP_xor128v64,	TOP_xorx128v64,	TOP_xorxx128v64,	TOP_xorxxx128v64,	TOP_UNDEFINED},
   {TOP_fxor128v32,	TOP_fxorx128v32,	TOP_fxorxx128v32,	TOP_fxorxxx128v32,	TOP_UNDEFINED},
   {TOP_fxor128v64,	TOP_fxorx128v64,	TOP_fxorxx128v64,	TOP_fxorxxx128v64,	TOP_UNDEFINED},
+  {TOP_vxor128v8,	TOP_vxorx128v8,	        TOP_vxorxx128v8,	TOP_vxorxxx128v8,	TOP_UNDEFINED},
+  {TOP_vxor128v16,	TOP_vxorx128v16,	TOP_vxorxx128v16,	TOP_vxorxxx128v16,	TOP_UNDEFINED},
+  {TOP_vxor128v32,	TOP_vxorx128v32,	TOP_vxorxx128v32,	TOP_vxorxxx128v32,	TOP_UNDEFINED},
+  {TOP_vxor128v64,	TOP_vxorx128v64,	TOP_vxorxx128v64,	TOP_vxorxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfxor128v32,	TOP_vfxorx128v32,	TOP_vfxorxx128v32,	TOP_vfxorxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfxor128v64,	TOP_vfxorx128v64,	TOP_vfxorxx128v64,	TOP_vfxorxxx128v64,	TOP_UNDEFINED},
   // xorps/xorpd share the same load-execute OPs as fxor128v32/fxor128v64.
   // Must put xorps/xorpd after fxor128v32/fxor128v64 so that the load-execute
   // OPs will have fxor128v32/fxor128v64 as the base mode.
-  {TOP_xorps,	TOP_fxorx128v32,	TOP_fxorxx128v32,	TOP_fxorxxx128v32,	TOP_UNDEFINED},
-  {TOP_xorpd,	TOP_fxorx128v64,	TOP_fxorxx128v64,	TOP_fxorxxx128v64,	TOP_UNDEFINED},
+  {TOP_xorps,	TOP_fxorx128v32,	        TOP_fxorxx128v32,	TOP_fxorxxx128v32,	TOP_UNDEFINED},
+  {TOP_xorpd,	TOP_fxorx128v64,	        TOP_fxorxx128v64,	TOP_fxorxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfxor128v32,	TOP_vfxorx128v32,	TOP_vfxorxx128v32,	TOP_vfxorxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfxor128v64,	TOP_vfxorx128v64,	TOP_vfxorxx128v64,	TOP_vfxorxxx128v64,	TOP_UNDEFINED},
 
   {TOP_fmax128v32,	TOP_fmaxx128v32,	TOP_fmaxxx128v32,	TOP_fmaxxxx128v32,	TOP_UNDEFINED},
   {TOP_fmax128v64,	TOP_fmaxx128v64,	TOP_fmaxxx128v64,	TOP_fmaxxxx128v64,	TOP_UNDEFINED},
   {TOP_fmin128v32,	TOP_fminx128v32,	TOP_fminxx128v32,	TOP_fminxxx128v32,	TOP_UNDEFINED},
   {TOP_fmin128v64,	TOP_fminx128v64,	TOP_fminxx128v64,	TOP_fminxxx128v64,	TOP_UNDEFINED},
-
+  {TOP_vfmax128v32,	TOP_vfmaxx128v32,	TOP_vfmaxxx128v32,	TOP_vfmaxxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfmax128v64,	TOP_vfmaxx128v64,	TOP_vfmaxxx128v64,	TOP_vfmaxxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfmin128v32,	TOP_vfminx128v32,	TOP_vfminxx128v32,	TOP_vfminxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfmin128v64,	TOP_vfminx128v64,	TOP_vfminxx128v64,	TOP_vfminxxx128v64,	TOP_UNDEFINED},
   {TOP_cmp8,	TOP_cmpx8,	TOP_cmpxx8,	TOP_cmpxxx8,	TOP_UNDEFINED},
   {TOP_cmp16,	TOP_cmpx16,	TOP_cmpxx16,	TOP_cmpxxx16,	TOP_UNDEFINED},
   {TOP_cmp32,	TOP_cmpx32,	TOP_cmpxx32,	TOP_cmpxxx32,	TOP_UNDEFINED},
@@ -3831,26 +4677,290 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_cmpi32,	TOP_cmpxi32,	TOP_cmpxxi32,	TOP_cmpxxxi32,	TOP_UNDEFINED},
   {TOP_cmpi64,	TOP_cmpxi64,	TOP_cmpxxi64,	TOP_cmpxxxi64,	TOP_UNDEFINED},
 
+  {TOP_test8,	TOP_testx8,	    TOP_testxx8,	TOP_testxxx8,	TOP_UNDEFINED},
+  {TOP_test16,	TOP_testx16,	TOP_testxx16,	TOP_testxxx16,	TOP_UNDEFINED},
   {TOP_test32,	TOP_testx32,	TOP_testxx32,	TOP_testxxx32,	TOP_UNDEFINED},
   {TOP_test64,	TOP_testx64,	TOP_testxx64,	TOP_testxxx64,	TOP_UNDEFINED},
   {TOP_comiss,	TOP_comixss,	TOP_comixxss,	TOP_comixxxss,	TOP_UNDEFINED},
-  {TOP_comisd,	TOP_comixsd,	TOP_comixxsd,	TOP_comixxxsd,	TOP_UNDEFINED},
-
-  {TOP_icall,	TOP_icallx,	TOP_icallxx,	TOP_icallxxx,	TOP_UNDEFINED},
-  {TOP_ijmp,	TOP_ijmpx,	TOP_ijmpxx,	TOP_ijmpxxx,	TOP_UNDEFINED},
-
-  {TOP_cvtsd2ss,	TOP_cvtsd2ss_x,	TOP_cvtsd2ss_xx,	TOP_cvtsd2ss_xxx,	TOP_UNDEFINED},
-  {TOP_cvtsi2ss,	TOP_cvtsi2ss_x,	TOP_cvtsi2ss_xx,	TOP_cvtsi2ss_xxx,	TOP_UNDEFINED},
-  {TOP_cvtsi2ssq,	TOP_cvtsi2ssq_x,	TOP_cvtsi2ssq_xx,	TOP_cvtsi2ssq_xxx,	TOP_UNDEFINED},
-  {TOP_cvtsi2sd,	TOP_cvtsi2sd_x,	TOP_cvtsi2sd_xx,	TOP_cvtsi2sd_xxx,	TOP_UNDEFINED},
-  {TOP_cvtsi2sdq,	TOP_cvtsi2sdq_x,	TOP_cvtsi2sdq_xx,	TOP_cvtsi2sdq_xxx,	TOP_UNDEFINED},
-
-  {TOP_cvtdq2pd,	TOP_cvtdq2pd_x,	TOP_cvtdq2pd_xx,	TOP_cvtdq2pd_xxx,	TOP_UNDEFINED},
-  {TOP_cvtdq2ps,	TOP_cvtdq2ps_x,	TOP_cvtdq2ps_xx,	TOP_cvtdq2ps_xxx,	TOP_UNDEFINED},
- {TOP_cvtps2pd,		TOP_cvtps2pd_x,	TOP_cvtps2pd_xx,	TOP_cvtps2pd_xxx,	TOP_UNDEFINED},
-  {TOP_cvtpd2ps,	TOP_cvtpd2ps_x,	TOP_cvtpd2ps_xx,	TOP_cvtpd2ps_xxx,	TOP_UNDEFINED},
-  {TOP_cvttps2dq,	TOP_cvttps2dq_x,	TOP_cvttps2dq_xx,	TOP_cvttps2dq_xxx,	TOP_UNDEFINED},
-  {TOP_cvttpd2dq,	TOP_cvttpd2dq_x,	TOP_cvttpd2dq_xx,	TOP_cvttpd2dq_xxx,	TOP_UNDEFINED}
+  {TOP_comisd,	TOP_comixsd,	TOP_comixxsd,	TOP_comixxxsd, 	TOP_UNDEFINED},
+  {TOP_vcomiss,	TOP_vcomixss,	TOP_vcomixxss,	TOP_vcomixxxss,	TOP_UNDEFINED},
+  {TOP_vcomisd,	TOP_vcomixsd,	TOP_vcomixxsd,	TOP_vcomixxxsd,	TOP_UNDEFINED},
+  {TOP_vfmaddss,       TOP_vfmaddxss,	    TOP_vfmaddxxss,	  TOP_vfmaddxxxss,          TOP_UNDEFINED},
+  {TOP_vfmaddsd,       TOP_vfmaddxsd,	    TOP_vfmaddxxsd,	  TOP_vfmaddxxxsd,          TOP_UNDEFINED},
+  {TOP_vfmaddps,       TOP_vfmaddxps,	    TOP_vfmaddxxps,	  TOP_vfmaddxxxps,          TOP_UNDEFINED},
+  {TOP_vfmaddpd,       TOP_vfmaddxpd,  	    TOP_vfmaddxxpd,	  TOP_vfmaddxxxpd,          TOP_UNDEFINED},
+  {TOP_vfmaddsubps,    TOP_vfmaddsubxps,    TOP_vfmaddsubxxps,	  TOP_vfmaddsubxxxps,       TOP_UNDEFINED},
+  {TOP_vfmaddsubpd,    TOP_vfmaddsubxpd,    TOP_vfmaddsubxxpd,	  TOP_vfmaddsubxxxpd,       TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddxrss,      TOP_vfmaddxxrss,      TOP_vfmaddxxxrss,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddxrsd,      TOP_vfmaddxxrsd,      TOP_vfmaddxxxrsd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddxrps,      TOP_vfmaddxxrps,      TOP_vfmaddxxxrps,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddxrpd,      TOP_vfmaddxxrpd,      TOP_vfmaddxxxrpd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddsubxrps,   TOP_vfmaddsubxxrps,   TOP_vfmaddsubxxxrps,      TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmaddsubxrpd,   TOP_vfmaddsubxxrpd,   TOP_vfmaddsubxxxrpd,      TOP_UNDEFINED},
+  {TOP_vfmsubss,       TOP_vfmsubxss,	    TOP_vfmsubxxss,	  TOP_vfmsubxxxss,          TOP_UNDEFINED},
+  {TOP_vfmsubsd,       TOP_vfmsubxsd,	    TOP_vfmsubxxsd,	  TOP_vfmsubxxxsd,          TOP_UNDEFINED},
+  {TOP_vfmsubps,       TOP_vfmsubxps,	    TOP_vfmsubxxps,	  TOP_vfmsubxxxps,          TOP_UNDEFINED},
+  {TOP_vfmsubpd,       TOP_vfmsubxpd,  	    TOP_vfmsubxxpd, 	  TOP_vfmsubxxxpd,          TOP_UNDEFINED},
+  {TOP_vfmsubaddps,    TOP_vfmsubaddxps,    TOP_vfmsubaddxxps,	  TOP_vfmsubaddxxxps,       TOP_UNDEFINED},
+  {TOP_vfmsubaddpd,    TOP_vfmsubaddxpd,    TOP_vfmsubaddxxpd, 	  TOP_vfmsubaddxxxpd,       TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubxrss,      TOP_vfmsubxxrss,      TOP_vfmsubxxxrss,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubxrsd,      TOP_vfmsubxxrsd,      TOP_vfmsubxxxrsd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubxrps,      TOP_vfmsubxxrps,      TOP_vfmsubxxxrps,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubxrpd,      TOP_vfmsubxxrpd,      TOP_vfmsubxxxrpd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubaddxrps,   TOP_vfmsubaddxxrps,   TOP_vfmsubaddxxxrps,      TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfmsubaddxrpd,   TOP_vfmsubaddxxrpd,   TOP_vfmsubaddxxxrpd,      TOP_UNDEFINED},
+  {TOP_icall,	       TOP_icallx,	    TOP_icallxx,	  TOP_icallxxx,	            TOP_UNDEFINED},
+  {TOP_ijmp,	       TOP_ijmpx,	    TOP_ijmpxx,	          TOP_ijmpxxx,	            TOP_UNDEFINED},
+  {TOP_cvtsd2ss,       TOP_cvtsd2ss_x,	    TOP_cvtsd2ss_xx,	  TOP_cvtsd2ss_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtsi2ss,       TOP_cvtsi2ss_x,	    TOP_cvtsi2ss_xx,	  TOP_cvtsi2ss_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtsi2ssq,      TOP_cvtsi2ssq_x,     TOP_cvtsi2ssq_xx,	  TOP_cvtsi2ssq_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtsi2sd,       TOP_cvtsi2sd_x,	    TOP_cvtsi2sd_xx,	  TOP_cvtsi2sd_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtsi2sdq,      TOP_cvtsi2sdq_x,     TOP_cvtsi2sdq_xx,	  TOP_cvtsi2sdq_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtdq2pd,       TOP_cvtdq2pd_x,	    TOP_cvtdq2pd_xx,	  TOP_cvtdq2pd_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtdq2ps,       TOP_cvtdq2ps_x,	    TOP_cvtdq2ps_xx,	  TOP_cvtdq2ps_xxx,	    TOP_UNDEFINED},
+ {TOP_cvtps2pd,	       TOP_cvtps2pd_x,	    TOP_cvtps2pd_xx,	  TOP_cvtps2pd_xxx,	    TOP_UNDEFINED},
+  {TOP_cvtpd2ps,       TOP_cvtpd2ps_x,	    TOP_cvtpd2ps_xx,	  TOP_cvtpd2ps_xxx,	    TOP_UNDEFINED},
+  {TOP_cvttps2dq,      TOP_cvttps2dq_x,     TOP_cvttps2dq_xx,	  TOP_cvttps2dq_xxx,	    TOP_UNDEFINED},
+  {TOP_cvttpd2dq,      TOP_cvttpd2dq_x,     TOP_cvttpd2dq_xx,	  TOP_cvttpd2dq_xxx,	    TOP_UNDEFINED},
+  {TOP_vcvtsd2ss,      TOP_vcvtsd2ssx,	    TOP_vcvtsd2ssxx,	  TOP_vcvtsd2ssxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtsi2ss,      TOP_vcvtsi2ssx,	    TOP_vcvtsi2ssxx,	  TOP_vcvtsi2ssxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtsi2ssq,     TOP_vcvtsi2ssqx,     TOP_vcvtsi2ssqxx,	  TOP_vcvtsi2ssqxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtsi2sd,      TOP_vcvtsi2sdx,      TOP_vcvtsi2sdxx,	  TOP_vcvtsi2sdxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtsi2sdq,     TOP_vcvtsi2sdqx,     TOP_vcvtsi2sdqxx,	  TOP_vcvtsi2sdqxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtdq2pd,      TOP_vcvtdq2pdx,	    TOP_vcvtdq2pdxx,	  TOP_vcvtdq2pdxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtdq2ps,      TOP_vcvtdq2psx,	    TOP_vcvtdq2psxx,	  TOP_vcvtdq2psxxx,	    TOP_UNDEFINED},
+ {TOP_vcvtps2pd,       TOP_vcvtps2pdx,	    TOP_vcvtps2pdxx,	  TOP_vcvtps2pdxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtpd2dq,      TOP_vcvtpd2dqx,	    TOP_vcvtpd2dqxx,	  TOP_vcvtpd2dqxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtpd2dqy,     TOP_vcvtpd2dqyx,	    TOP_vcvtpd2dqyxx,	  TOP_vcvtpd2dqyxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtpd2ps,      TOP_vcvtpd2psx,	    TOP_vcvtpd2psxx,	  TOP_vcvtpd2psxxx,	    TOP_UNDEFINED},
+  {TOP_vcvtpd2psy,     TOP_vcvtpd2psyx,	    TOP_vcvtpd2psyxx,	  TOP_vcvtpd2psyxxx,	    TOP_UNDEFINED},
+  {TOP_vcvttps2dq,     TOP_vcvttps2dqx,     TOP_vcvttps2dqxx,	  TOP_vcvttps2dqxxx,	    TOP_UNDEFINED},
+  {TOP_vcvttpd2dq,     TOP_vcvttpd2dqx,     TOP_vcvttpd2dqxx,	  TOP_vcvttpd2dqxxx,	    TOP_UNDEFINED},
+  {TOP_vcvttpd2dqy,    TOP_vcvttpd2dqyx,    TOP_vcvttpd2dqyxx,	  TOP_vcvttpd2dqyxxx,	    TOP_UNDEFINED},
+  // SSE 4.1:
+  {TOP_mpsadbw,        TOP_mpsadbwx,        TOP_mpsadbwxx,        TOP_mpsadbwxxx,           TOP_UNDEFINED},
+  {TOP_muldq,          TOP_muldqx,          TOP_muldqxx,          TOP_muldqxxx,             TOP_UNDEFINED},
+  {TOP_mul128v32,      TOP_mulx128v32,      TOP_mulxx128v32,      TOP_mulxxx128v32,         TOP_UNDEFINED},
+  {TOP_fdp128v32,      TOP_fdpx128v32,      TOP_fdpxx128v32,      TOP_fdpxxx128v32,         TOP_UNDEFINED},
+  {TOP_fdp128v64,      TOP_fdpx128v64,      TOP_fdpxx128v64,      TOP_fdpxxx128v64,      TOP_UNDEFINED},
+  {TOP_fblend128v32,   TOP_fblendx128v32,   TOP_fblendxx128v32,   TOP_fblendxxx128v32,      TOP_UNDEFINED},
+  {TOP_fblend128v64,   TOP_fblendx128v64,   TOP_fblendxx128v64,   TOP_fblendxxx128v64,      TOP_UNDEFINED},
+  {TOP_fblendv128v32,  TOP_fblendvx128v32,  TOP_fblendvxx128v32,  TOP_fblendvxxx128v32,     TOP_UNDEFINED},
+  {TOP_fblendv128v64,  TOP_fblendvx128v64,  TOP_fblendvxx128v64,  TOP_fblendvxxx128v64,     TOP_UNDEFINED},
+  {TOP_blendv128v8,    TOP_blendvx128v8,    TOP_blendvxx128v8,    TOP_blendvxxx128v8,       TOP_UNDEFINED},
+  {TOP_blend128v16,    TOP_blendx128v16,    TOP_blendxx128v16,    TOP_blendxxx128v16,       TOP_UNDEFINED},
+  {TOP_mins128v8,      TOP_minsx128v8,      TOP_minsxx128v8,      TOP_minsxxx128v8,         TOP_UNDEFINED},
+  {TOP_maxs128v8,      TOP_maxsx128v8,      TOP_maxsxx128v8,      TOP_maxsxxx128v8,         TOP_UNDEFINED},
+  {TOP_minu128v16,     TOP_minux128v16,     TOP_minuxx128v16,     TOP_minuxxx128v16,        TOP_UNDEFINED},
+  {TOP_maxu128v16,     TOP_maxux128v16,     TOP_maxuxx128v16,     TOP_maxuxxx128v16,        TOP_UNDEFINED},
+  {TOP_minu128v32,     TOP_minux128v32,     TOP_minuxx128v32,     TOP_minuxxx128v32,        TOP_UNDEFINED},
+  {TOP_maxu128v32,     TOP_maxux128v32,     TOP_maxuxx128v32,     TOP_maxuxxx128v32,        TOP_UNDEFINED},
+  {TOP_mins128v32,     TOP_minsx128v32,     TOP_minsxx128v32,     TOP_minsxxx128v32,        TOP_UNDEFINED},
+  {TOP_maxs128v32,     TOP_maxsx128v32,     TOP_maxsxx128v32,     TOP_maxsxxx128v32,        TOP_UNDEFINED},
+  {TOP_round128v32,    TOP_roundx128v32,    TOP_roundxx128v32,    TOP_roundxxx128v32,       TOP_UNDEFINED},
+  {TOP_roundss,        TOP_roundxss,        TOP_roundxxss,        TOP_roundxxxss,           TOP_UNDEFINED},
+  {TOP_round128v64,    TOP_roundx128v64,    TOP_roundxx128v64,    TOP_roundxxx128v64,       TOP_UNDEFINED},
+  {TOP_roundsd,        TOP_roundxsd,        TOP_roundxxsd,        TOP_roundxxxsd,           TOP_UNDEFINED},
+  {TOP_finsr128v32,    TOP_finsrx128v32,    TOP_finsrxx128v32,    TOP_finsrxxx128v32,       TOP_UNDEFINED},
+  {TOP_insr128v8,      TOP_insrx128v8,      TOP_insrxx128v8,      TOP_insrxxx128v8,         TOP_UNDEFINED},
+  {TOP_insr128v16,     TOP_insrx128v16,     TOP_insrxx128v16,     TOP_insrxxx128v16,        TOP_UNDEFINED},
+  {TOP_insr128v32,     TOP_insrx128v32,     TOP_insrxx128v32,     TOP_insrxxx128v32,        TOP_UNDEFINED},
+  {TOP_insr128v64,     TOP_insrx128v64,     TOP_insrxx128v64,     TOP_insrxxx128v64,        TOP_UNDEFINED},
+  {TOP_fextr128v32,    TOP_fextrx128v32,    TOP_fextrxx128v32,    TOP_fextrxxx128v32,       TOP_UNDEFINED},
+  {TOP_extr128v8,      TOP_extrx128v8,      TOP_extrxx128v8,      TOP_extrxxx128v8,         TOP_UNDEFINED},
+  {TOP_extr128v16,     TOP_extrx128v16,     TOP_extrxx128v16,     TOP_extrxxx128v16,        TOP_UNDEFINED},
+  {TOP_extr128v32,     TOP_extrx128v32,     TOP_extrxx128v32,     TOP_extrxxx128v32,        TOP_UNDEFINED},
+  {TOP_extr128v64,     TOP_extrx128v64,     TOP_extrxx128v64,     TOP_extrxxx128v64,        TOP_UNDEFINED},
+  {TOP_pmovsxbw,       TOP_pmovsxbwx,       TOP_pmovsxbwxx,       TOP_pmovsxbwxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxbw,       TOP_pmovzxbwx,       TOP_pmovzxbwxx,       TOP_pmovzxbwxxx,          TOP_UNDEFINED},
+  {TOP_pmovsxbd,       TOP_pmovsxbdx,       TOP_pmovsxbdxx,       TOP_pmovsxbdxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxbd,       TOP_pmovzxbdx,       TOP_pmovzxbdxx,       TOP_pmovzxbdxxx,          TOP_UNDEFINED},
+  {TOP_pmovsxbq,       TOP_pmovsxbqx,       TOP_pmovsxbqxx,       TOP_pmovsxbqxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxbq,       TOP_pmovzxbqx,       TOP_pmovzxbqxx,       TOP_pmovzxbqxxx,          TOP_UNDEFINED},
+  {TOP_pmovsxwd,       TOP_pmovsxwdx,       TOP_pmovsxwdxx,       TOP_pmovsxwdxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxwd,       TOP_pmovzxwdx,       TOP_pmovzxwdxx,       TOP_pmovzxwdxxx,          TOP_UNDEFINED},
+  {TOP_pmovsxwq,       TOP_pmovsxwqx,       TOP_pmovsxwqxx,       TOP_pmovsxwqxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxwq,       TOP_pmovzxwqx,       TOP_pmovzxwqxx,       TOP_pmovzxwqxxx,          TOP_UNDEFINED},
+  {TOP_pmovsxdq,       TOP_pmovsxdqx,       TOP_pmovsxdqxx,       TOP_pmovsxdqxxx,          TOP_UNDEFINED},
+  {TOP_pmovzxdq,       TOP_pmovzxdqx,       TOP_pmovzxdqxx,       TOP_pmovzxdqxxx,          TOP_UNDEFINED},
+  {TOP_ptest128,       TOP_ptestx128,       TOP_ptestxx128,       TOP_ptestxxx128,          TOP_UNDEFINED},
+  {TOP_cmpeq128v64,    TOP_cmpeqx128v64,    TOP_cmpeqxx128v64,    TOP_cmpeqxxx128v64,       TOP_UNDEFINED},
+  {TOP_packusdw,       TOP_packusdwx,       TOP_packusdwxx,       TOP_packusdwxxx,          TOP_UNDEFINED},
+  // SSE4.2
+  {TOP_crc32b,         TOP_crc32bx,         TOP_crc32bxx,         TOP_crc32bxxx,            TOP_UNDEFINED},
+  {TOP_crc32w,         TOP_crc32wx,         TOP_crc32wxx,         TOP_crc32wxxx,            TOP_UNDEFINED},
+  {TOP_crc32d,         TOP_crc32dx,         TOP_crc32dxx,         TOP_crc32dxxx,            TOP_UNDEFINED},
+  {TOP_crc32q,         TOP_crc32qx,         TOP_crc32qxx,         TOP_crc32qxxx,            TOP_UNDEFINED},
+  {TOP_cmpestri,       TOP_cmpestrix,       TOP_cmpestrixx,       TOP_cmpestrixxx,          TOP_UNDEFINED},
+  {TOP_cmpestrm,       TOP_cmpestrmx,       TOP_cmpestrmxx,       TOP_cmpestrmxxx,          TOP_UNDEFINED},
+  {TOP_cmpistri,       TOP_cmpistrix,       TOP_cmpistrixx,       TOP_cmpistrixxx,          TOP_UNDEFINED},
+  {TOP_cmpistrm,       TOP_cmpistrmx,       TOP_cmpistrmxx,       TOP_cmpistrmxxx,          TOP_UNDEFINED},
+  {TOP_cmpgt128v64,    TOP_cmpgtx128v64,    TOP_cmpgtxx128v64,    TOP_cmpgtxxx128v64,       TOP_UNDEFINED},
+  {TOP_popcnt16,       TOP_popcntx16,       TOP_popcntxx16,       TOP_popcntxxx16,          TOP_UNDEFINED},
+  {TOP_popcnt32,       TOP_popcntx32,       TOP_popcntxx32,       TOP_popcntxxx32,          TOP_UNDEFINED},
+  {TOP_popcnt64,       TOP_popcntx64,       TOP_popcntxx64,       TOP_popcntxxx64,          TOP_UNDEFINED},
+  // SSSE3
+  {TOP_psign128v8,     TOP_psignx128v8,     TOP_psignxx128v8,     TOP_psignxxx128v8,        TOP_UNDEFINED},
+  {TOP_psign128v16,    TOP_psignx128v16,    TOP_psignxx128v16,    TOP_psignxxx128v16,       TOP_UNDEFINED},
+  {TOP_psign128v32,    TOP_psignx128v32,    TOP_psignxx128v32,    TOP_psignxxx128v32,       TOP_UNDEFINED},
+  {TOP_pabs128v8,      TOP_pabsx128v8,      TOP_pabsxx128v8,      TOP_pabsxxx128v8,         TOP_UNDEFINED},
+  {TOP_pabs128v16,     TOP_pabsx128v16,     TOP_pabsxx128v16,     TOP_pabsxxx128v16,        TOP_UNDEFINED},
+  {TOP_pabs128v32,     TOP_pabsx128v32,     TOP_pabsxx128v32,     TOP_pabsxxx128v32,        TOP_UNDEFINED},
+  {TOP_palignr128,     TOP_palignrx128,     TOP_palignrxx128,     TOP_palignrxxx128,        TOP_UNDEFINED},
+  {TOP_pshuf128v8,     TOP_pshufx128v8,     TOP_pshufxx128v8,     TOP_pshufxxx128v8,        TOP_UNDEFINED},
+  {TOP_pmulhrsw128,    TOP_pmulhrswx128,    TOP_pmulhrswxx128,    TOP_pmulhrswxxx128,        TOP_UNDEFINED},
+  {TOP_pmaddubsw128,   TOP_pmaddubswx128,   TOP_pmaddubswxx128,   TOP_pmaddubswxxx128,       TOP_UNDEFINED},
+  {TOP_phsub128v16,    TOP_phsubx128v16,    TOP_phsubxx128v16,    TOP_phsubxxx128v16,       TOP_UNDEFINED},
+  {TOP_phsub128v32,    TOP_phsubx128v32,    TOP_phsubxx128v32,    TOP_phsubxxx128v32,       TOP_UNDEFINED},
+  {TOP_phsubs128v16,   TOP_phsubsx128v16,   TOP_phsubsxx128v16,   TOP_phsubsxxx128v16,      TOP_UNDEFINED},
+  {TOP_phadd128v16,    TOP_phaddx128v16,    TOP_phaddxx128v16,    TOP_phaddxxx128v16,       TOP_UNDEFINED},
+  {TOP_phadd128v32,    TOP_phaddx128v32,    TOP_phaddxx128v32,    TOP_phaddxxx128v32,       TOP_UNDEFINED},
+  {TOP_phadds128v16,   TOP_phaddsx128v16,   TOP_phaddsxx128v16,   TOP_phaddsxxx128v16,      TOP_UNDEFINED},
+  // VEX SSE 4.1:
+  {TOP_vmpsadbw,       TOP_vmpsadbwx,       TOP_vmpsadbwxx,       TOP_vmpsadbwxxx,          TOP_UNDEFINED},
+  {TOP_vmuldq,         TOP_vmuldqx,         TOP_vmuldqxx,         TOP_vmuldqxxx,            TOP_UNDEFINED},
+  {TOP_vmulld,         TOP_vmulldx,         TOP_vmulldxx,         TOP_vmulldxxx,            TOP_UNDEFINED},
+  {TOP_vmul128v16,     TOP_vmulx128v16,     TOP_vmulxx128v16,     TOP_vmulxxx128v16,            TOP_UNDEFINED},
+  {TOP_vfdp128v32,     TOP_vfdpx128v32,     TOP_vfdpxx128v32,     TOP_vfdpxxx128v32,        TOP_UNDEFINED},
+  {TOP_vfdp128v64,     TOP_vfdpx128v64,     TOP_vfdpxx128v64,     TOP_vfdpxxx128v64,         TOP_UNDEFINED},
+  {TOP_vfblend128v32,  TOP_vfblendx128v32,  TOP_vfblendxx128v32,  TOP_vfblendxxx128v32,     TOP_UNDEFINED},
+  {TOP_vfblend128v64,  TOP_vfblendx128v64,  TOP_vfblendxx128v64,  TOP_vfblendxxx128v64,     TOP_UNDEFINED},
+  {TOP_vfblendv128v32, TOP_vfblendvx128v32, TOP_vfblendvxx128v32, TOP_vfblendvxxx128v32,    TOP_UNDEFINED},
+  {TOP_vfblendv128v64, TOP_vfblendvx128v64, TOP_vfblendvxx128v64, TOP_vfblendvxxx128v64,    TOP_UNDEFINED},
+  {TOP_vblendv128v8,   TOP_vblendvx128v8,   TOP_vblendvxx128v8,   TOP_vblendvxxx128v8,      TOP_UNDEFINED},
+  {TOP_vblend128v16,   TOP_vblendx128v16,   TOP_vblendxx128v16,   TOP_vblendxxx128v16,      TOP_UNDEFINED},
+  {TOP_vmins128v8,     TOP_vminsx128v8,     TOP_vminsxx128v8,     TOP_vminsxxx128v8,        TOP_UNDEFINED},
+  {TOP_vmaxs128v8,     TOP_vmaxsx128v8,     TOP_vmaxsxx128v8,     TOP_vmaxsxxx128v8,        TOP_UNDEFINED},
+  {TOP_vminu128v16,    TOP_vminux128v16,    TOP_vminuxx128v16,    TOP_vminuxxx128v16,       TOP_UNDEFINED},
+  {TOP_vmaxu128v16,    TOP_vmaxux128v16,    TOP_vmaxuxx128v16,    TOP_vmaxuxxx128v16,       TOP_UNDEFINED},
+  {TOP_vminu128v32,    TOP_vminux128v32,    TOP_vminuxx128v32,    TOP_vminuxxx128v32,       TOP_UNDEFINED},
+  {TOP_vmaxu128v32,    TOP_vmaxux128v32,    TOP_vmaxuxx128v32,    TOP_vmaxuxxx128v32,       TOP_UNDEFINED},
+  {TOP_vmins128v32,    TOP_vminsx128v32,    TOP_vminsxx128v32,    TOP_vminsxxx128v32,       TOP_UNDEFINED},
+  {TOP_vmaxs128v32,    TOP_vmaxsx128v32,    TOP_vmaxsxx128v32,    TOP_vmaxsxxx128v32,       TOP_UNDEFINED},
+  {TOP_vround128v32,   TOP_vroundx128v32,   TOP_vroundxx128v32,   TOP_vroundxxx128v32,      TOP_UNDEFINED},
+  {TOP_vroundss,       TOP_vroundxss,       TOP_vroundxxss,       TOP_vroundxxxss,          TOP_UNDEFINED},
+  {TOP_vround128v64,   TOP_vroundx128v64,   TOP_vroundxx128v64,   TOP_vroundxxx128v64,      TOP_UNDEFINED},
+  {TOP_vroundsd,       TOP_vroundxsd,       TOP_vroundxxsd,       TOP_vroundxxxsd,          TOP_UNDEFINED},
+  {TOP_vfinsr128v32,   TOP_vfinsrx128v32,   TOP_vfinsrxx128v32,   TOP_vfinsrxxx128v32,      TOP_UNDEFINED},
+  {TOP_vinsr128v8,     TOP_vinsrx128v8,     TOP_vinsrxx128v8,     TOP_vinsrxxx128v8,        TOP_UNDEFINED},
+  {TOP_vinsr128v16,    TOP_vinsrx128v16,    TOP_vinsrxx128v16,    TOP_vinsrxxx128v16,       TOP_UNDEFINED},
+  {TOP_vinsr128v32,    TOP_vinsrx128v32,    TOP_vinsrxx128v32,    TOP_vinsrxxx128v32,       TOP_UNDEFINED},
+  {TOP_vinsr128v64,    TOP_vinsrx128v64,    TOP_vinsrxx128v64,    TOP_vinsrxxx128v64,       TOP_UNDEFINED},
+  {TOP_vfextr128v32,   TOP_vfextrx128v32,   TOP_vfextrxx128v32,   TOP_vfextrxxx128v32,      TOP_UNDEFINED},
+  {TOP_vextr128v8,     TOP_vextrx128v8,     TOP_vextrxx128v8,     TOP_vextrxxx128v8,        TOP_UNDEFINED},
+  {TOP_vextr128v16,    TOP_vextrx128v16,    TOP_vextrxx128v16,    TOP_vextrxxx128v16,       TOP_UNDEFINED},
+  {TOP_vextr128v32,    TOP_vextrx128v32,    TOP_vextrxx128v32,    TOP_vextrxxx128v32,       TOP_UNDEFINED},
+  {TOP_vextr128v64,    TOP_vextrx128v64,    TOP_vextrxx128v64,    TOP_vextrxxx128v64,       TOP_UNDEFINED},
+  {TOP_vpmovsxbw,      TOP_vpmovsxbwx,      TOP_vpmovsxbwxx,      TOP_vpmovsxbwxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxbw,      TOP_vpmovzxbwx,      TOP_vpmovzxbwxx,      TOP_vpmovzxbwxxx,         TOP_UNDEFINED},
+  {TOP_vpmovsxbd,      TOP_vpmovsxbdx,      TOP_vpmovsxbdxx,      TOP_vpmovsxbdxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxbd,      TOP_vpmovzxbdx,      TOP_vpmovzxbdxx,      TOP_vpmovzxbdxxx,         TOP_UNDEFINED},
+  {TOP_vpmovsxbq,      TOP_vpmovsxbqx,      TOP_vpmovsxbqxx,      TOP_vpmovsxbqxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxbq,      TOP_vpmovzxbqx,      TOP_vpmovzxbqxx,      TOP_vpmovzxbqxxx,         TOP_UNDEFINED},
+  {TOP_vpmovsxwd,      TOP_vpmovsxwdx,      TOP_vpmovsxwdxx,      TOP_vpmovsxwdxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxwd,      TOP_vpmovzxwdx,      TOP_vpmovzxwdxx,      TOP_vpmovzxwdxxx,         TOP_UNDEFINED},
+  {TOP_vpmovsxwq,      TOP_vpmovsxwqx,      TOP_vpmovsxwqxx,      TOP_vpmovsxwqxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxwq,      TOP_vpmovzxwqx,      TOP_vpmovzxwqxx,      TOP_vpmovzxwqxxx,         TOP_UNDEFINED},
+  {TOP_vpmovsxdq,      TOP_vpmovsxdqx,      TOP_vpmovsxdqxx,      TOP_vpmovsxdqxxx,         TOP_UNDEFINED},
+  {TOP_vpmovzxdq,      TOP_vpmovzxdqx,      TOP_vpmovzxdqxx,      TOP_vpmovzxdqxxx,         TOP_UNDEFINED},
+  {TOP_vptest128,      TOP_vptestx128,      TOP_vptestxx128,      TOP_vptestxxx128,         TOP_UNDEFINED},
+  {TOP_vcmpeq128v64,   TOP_vcmpeqx128v64,   TOP_vcmpeqxx128v64,   TOP_vcmpeqxxx128v64,      TOP_UNDEFINED},
+  {TOP_vpackusdw,      TOP_vpackusdwx,      TOP_vpackusdwxx,      TOP_vpackusdwxxx,         TOP_UNDEFINED},
+  // VEX SSE4.2
+  {TOP_vcmpestri,      TOP_vcmpestrix,      TOP_vcmpestrixx,      TOP_vcmpestrixxx,         TOP_UNDEFINED},
+  {TOP_vcmpestrm,      TOP_vcmpestrmx,      TOP_vcmpestrmxx,      TOP_vcmpestrmxxx,         TOP_UNDEFINED},
+  {TOP_vcmpistri,      TOP_vcmpistrix,      TOP_vcmpistrixx,      TOP_vcmpistrixxx,         TOP_UNDEFINED},
+  {TOP_vcmpistrm,      TOP_vcmpistrmx,      TOP_vcmpistrmxx,      TOP_vcmpistrmxxx,         TOP_UNDEFINED},
+  {TOP_vcmpgt128v64,   TOP_vcmpgtx128v64,   TOP_vcmpgtxx128v64,   TOP_vcmpgtxxx128v64,      TOP_UNDEFINED},
+  // VEX SSSE3
+  {TOP_vpsign128v8,    TOP_vpsignx128v8,    TOP_vpsignxx128v8,    TOP_vpsignxxx128v8,       TOP_UNDEFINED},
+  {TOP_vpsign128v16,   TOP_vpsignx128v16,   TOP_vpsignxx128v16,   TOP_vpsignxxx128v16,      TOP_UNDEFINED},
+  {TOP_vpsign128v32,   TOP_vpsignx128v32,   TOP_vpsignxx128v32,   TOP_vpsignxxx128v32,      TOP_UNDEFINED},
+  {TOP_vabs128v8,      TOP_vabsx128v8,      TOP_vabsxx128v8,      TOP_vabsxxx128v8,        TOP_UNDEFINED},
+  {TOP_vabs128v16,     TOP_vabsx128v16,     TOP_vabsxx128v16,     TOP_vabsxxx128v16,       TOP_UNDEFINED},
+  {TOP_vabs128v32,     TOP_vabsx128v32,     TOP_vabsxx128v32,     TOP_vabsxxx128v32,       TOP_UNDEFINED},
+  {TOP_vpalignr128,    TOP_vpalignrx128,    TOP_vpalignrxx128,    TOP_vpalignrxxx128,       TOP_UNDEFINED},
+  {TOP_vpshuf128v8,    TOP_vpshufx128v8,    TOP_vpshufxx128v8,    TOP_vpshufxxx128v8,       TOP_UNDEFINED},
+  {TOP_vmulhrsw,       TOP_vmulhrswx,       TOP_vmulhrswxx,       TOP_vmulhrswxxx,          TOP_UNDEFINED},
+  {TOP_vpmaddubsw128,  TOP_vpmaddubswx128,  TOP_vpmaddubswxx128,  TOP_vpmaddubswxxx128,     TOP_UNDEFINED},
+  {TOP_vphsub128v16,   TOP_vphsubx128v16,   TOP_vphsubxx128v16,   TOP_vphsubxxx128v16,      TOP_UNDEFINED},
+  {TOP_vphsub128v32,   TOP_vphsubx128v32,   TOP_vphsubxx128v32,   TOP_vphsubxxx128v32,      TOP_UNDEFINED},
+  {TOP_vphsubs128v16,  TOP_vphsubsx128v16,  TOP_vphsubsxx128v16,  TOP_vphsubsxxx128v16,     TOP_UNDEFINED},
+  {TOP_vphadd128v16,   TOP_vphaddx128v16,   TOP_vphaddxx128v16,   TOP_vphaddxxx128v16,      TOP_UNDEFINED},
+  {TOP_vphadd128v32,   TOP_vphaddx128v32,   TOP_vphaddxx128v32,   TOP_vphaddxxx128v32,      TOP_UNDEFINED},
+  {TOP_vphadds128v16,  TOP_vphaddsx128v16,  TOP_vphaddsxx128v16,  TOP_vphaddsxxx128v16,     TOP_UNDEFINED},
+  // XOP
+  {TOP_vfrczpd,        TOP_vfrczpdx,        TOP_vfrczpdxx,        TOP_vfrczpdxxx,           TOP_UNDEFINED},
+  {TOP_vfrczps,        TOP_vfrczpsx,        TOP_vfrczpsxx,        TOP_vfrczpsxxx,           TOP_UNDEFINED},
+  {TOP_vfrczsd,        TOP_vfrczsdx,        TOP_vfrczsdxx,        TOP_vfrczsdxxx,           TOP_UNDEFINED},
+  {TOP_vfrczss,        TOP_vfrczssx,        TOP_vfrczssxx,        TOP_vfrczssxxx,           TOP_UNDEFINED},
+  {TOP_vpcmov,        TOP_vpcmovx,          TOP_vpcmovxx,         TOP_vpcmovxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpcmovxr,         TOP_vpcmovxxr,        TOP_vpcmovxxxr,           TOP_UNDEFINED},
+  {TOP_vpcomb,        TOP_vpcombx,          TOP_vpcombxx,         TOP_vpcombxxx,            TOP_UNDEFINED},
+  {TOP_vpcomd,        TOP_vpcomdx,          TOP_vpcomdxx,         TOP_vpcomdxxx,            TOP_UNDEFINED},
+  {TOP_vpcomq,        TOP_vpcomqx,          TOP_vpcomqxx,         TOP_vpcomqxxx,            TOP_UNDEFINED},
+  {TOP_vpcomub,       TOP_vpcomubx,         TOP_vpcomubxx,        TOP_vpcomubxxx,           TOP_UNDEFINED},
+  {TOP_vpcomud,       TOP_vpcomudx,         TOP_vpcomudxx,        TOP_vpcomudxxx,           TOP_UNDEFINED},
+  {TOP_vpcomuq,       TOP_vpcomuqx,         TOP_vpcomuqxx,        TOP_vpcomuqxxx,           TOP_UNDEFINED},
+  {TOP_vpcomuw,       TOP_vpcomuwx,         TOP_vpcomuwxx,        TOP_vpcomuwxxx,           TOP_UNDEFINED},
+  {TOP_vpcomw,        TOP_vpcomwx,          TOP_vpcomwxx,         TOP_vpcomwxxx,            TOP_UNDEFINED},
+  {TOP_vphaddbd,      TOP_vphaddbdx,        TOP_vphaddbdxx,       TOP_vphaddbdxxx,          TOP_UNDEFINED},
+  {TOP_vphaddbq,      TOP_vphaddbqx,        TOP_vphaddbqxx,       TOP_vphaddbqxxx,          TOP_UNDEFINED},
+  {TOP_vphaddbw,      TOP_vphaddbwx,        TOP_vphaddbwxx,       TOP_vphaddbwxxx,          TOP_UNDEFINED},
+  {TOP_vphadddq,      TOP_vphadddqx,        TOP_vphadddqxx,       TOP_vphadddqxxx,          TOP_UNDEFINED},
+  {TOP_vphaddubd,     TOP_vphaddubdx,       TOP_vphaddubdxx,      TOP_vphaddubdxxx,         TOP_UNDEFINED},
+  {TOP_vphaddubq,     TOP_vphaddubqx,       TOP_vphaddubqxx,      TOP_vphaddubqxxx,         TOP_UNDEFINED},
+  {TOP_vphaddubw,     TOP_vphaddubwx,       TOP_vphaddubwxx,      TOP_vphaddubwxxx,         TOP_UNDEFINED},
+  {TOP_vphaddudq,     TOP_vphaddudqx,       TOP_vphaddudqxx,      TOP_vphaddudqxxx,         TOP_UNDEFINED},
+  {TOP_vphadduwd,     TOP_vphadduwdx,       TOP_vphadduwdxx,      TOP_vphadduwdxxx,         TOP_UNDEFINED},
+  {TOP_vphadduwq,     TOP_vphadduwqx,       TOP_vphadduwqxx,      TOP_vphadduwqxxx,         TOP_UNDEFINED},
+  {TOP_vphaddwd,      TOP_vphaddwdx,        TOP_vphaddwdxx,       TOP_vphaddwdxxx,          TOP_UNDEFINED},
+  {TOP_vphaddwq,      TOP_vphaddwqx,        TOP_vphaddwqxx,       TOP_vphaddwqxxx,          TOP_UNDEFINED},
+  {TOP_vphsubbw,      TOP_vphsubbwx,        TOP_vphsubbwxx,       TOP_vphsubbwxxx,          TOP_UNDEFINED},
+  {TOP_vphsubdq,      TOP_vphsubdqx,        TOP_vphsubdqxx,       TOP_vphsubdqxxx,          TOP_UNDEFINED},
+  {TOP_vphsubwd,      TOP_vphsubwdx,        TOP_vphsubwdxx,       TOP_vphsubwdxxx,          TOP_UNDEFINED},
+  {TOP_vpmacsdd,      TOP_vpmacsddx,        TOP_vpmacsddxx,       TOP_vpmacsddxxx,          TOP_UNDEFINED},
+  {TOP_vpmacsdqh,     TOP_vpmacsdqhx,       TOP_vpmacsdqhxx,      TOP_vpmacsdqhxxx,         TOP_UNDEFINED},
+  {TOP_vpmacsdql,     TOP_vpmacsdqlx,       TOP_vpmacsdqlxx,      TOP_vpmacsdqlxxx,         TOP_UNDEFINED},
+  {TOP_vpmacsdd,      TOP_vpmacsddx,        TOP_vpmacsddxx,       TOP_vpmacsddxxx,          TOP_UNDEFINED},
+  {TOP_vpmacssdqh,    TOP_vpmacssdqhx,      TOP_vpmacssdqhxx,     TOP_vpmacssdqhxxx,        TOP_UNDEFINED},
+  {TOP_vpmacssdql,    TOP_vpmacssdqlx,      TOP_vpmacssdqlxx,     TOP_vpmacssdqlxxx,        TOP_UNDEFINED},
+  {TOP_vpmacsswd,     TOP_vpmacsswdx,       TOP_vpmacsswdxx,      TOP_vpmacsswdxxx,         TOP_UNDEFINED},
+  {TOP_vpmacssww,     TOP_vpmacsswwx,       TOP_vpmacsswwxx,      TOP_vpmacsswwxxx,         TOP_UNDEFINED},
+  {TOP_vpmacswd,      TOP_vpmacswdx,        TOP_vpmacswdxx,       TOP_vpmacswdxxx,          TOP_UNDEFINED},
+  {TOP_vpmacsww,      TOP_vpmacswwx,        TOP_vpmacswwxx,       TOP_vpmacswwxxx,          TOP_UNDEFINED},
+  {TOP_vpmadcsswd,    TOP_vpmadcsswdx,      TOP_vpmadcsswdxx,     TOP_vpmadcsswdxxx,        TOP_UNDEFINED},
+  {TOP_vpmadcswd,     TOP_vpmadcswdx,       TOP_vpmadcswdxx,      TOP_vpmadcswdxxx,         TOP_UNDEFINED},
+  {TOP_vpperm,        TOP_vppermx,          TOP_vppermxx,         TOP_vppermxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vppermxr,         TOP_vppermxxr,        TOP_vppermxxxr,           TOP_UNDEFINED},
+  {TOP_vprotbi,       TOP_vprotbix,         TOP_vprotbixx,        TOP_vprotbixxx,           TOP_UNDEFINED},
+  {TOP_vprotb,        TOP_vprotbx,          TOP_vprotbxx,         TOP_vprotbxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vprotbxr,         TOP_vprotbxxr,        TOP_vprotbxxxr,           TOP_UNDEFINED},
+  {TOP_vprotdi,       TOP_vprotdix,         TOP_vprotdixx,        TOP_vprotdixxx,           TOP_UNDEFINED},
+  {TOP_vprotd,        TOP_vprotdx,          TOP_vprotdxx,         TOP_vprotdxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vprotdxr,         TOP_vprotdxxr,        TOP_vprotdxxxr,           TOP_UNDEFINED},
+  {TOP_vprotqi,       TOP_vprotqix,         TOP_vprotqixx,        TOP_vprotqixxx,           TOP_UNDEFINED},
+  {TOP_vprotq,        TOP_vprotqx,          TOP_vprotqxx,         TOP_vprotqxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vprotqxr,         TOP_vprotqxxr,        TOP_vprotqxxxr,           TOP_UNDEFINED},
+  {TOP_vprotwi,       TOP_vprotwix,         TOP_vprotwixx,        TOP_vprotwixxx,           TOP_UNDEFINED},
+  {TOP_vprotw,        TOP_vprotwx,          TOP_vprotwxx,         TOP_vprotwxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vprotwxr,         TOP_vprotwxxr,        TOP_vprotwxxxr,           TOP_UNDEFINED},
+  {TOP_vpshab,        TOP_vpshabx,          TOP_vpshabxx,         TOP_vpshabxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshabxr,         TOP_vpshabxxr,        TOP_vpshabxxxr,           TOP_UNDEFINED},
+  {TOP_vpshad,        TOP_vpshadx,          TOP_vpshadxx,         TOP_vpshadxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshadxr,         TOP_vpshadxxr,        TOP_vpshadxxxr,           TOP_UNDEFINED},
+  {TOP_vpshaq,        TOP_vpshaqx,          TOP_vpshaqxx,         TOP_vpshaqxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshaqxr,         TOP_vpshaqxxr,        TOP_vpshaqxxxr,           TOP_UNDEFINED},
+  {TOP_vpshaw,        TOP_vpshawx,          TOP_vpshawxx,         TOP_vpshawxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshawxr,         TOP_vpshawxxr,        TOP_vpshawxxxr,           TOP_UNDEFINED},
+  {TOP_vpshlb,        TOP_vpshlbx,          TOP_vpshlbxx,         TOP_vpshlbxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshlbxr,         TOP_vpshlbxxr,        TOP_vpshlbxxxr,           TOP_UNDEFINED},
+  {TOP_vpshld,        TOP_vpshldx,          TOP_vpshldxx,         TOP_vpshldxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshldxr,         TOP_vpshldxxr,        TOP_vpshldxxxr,           TOP_UNDEFINED},
+  {TOP_vpshlq,        TOP_vpshlqx,          TOP_vpshlqxx,         TOP_vpshlqxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshlqxr,         TOP_vpshlqxxr,        TOP_vpshlqxxxr,           TOP_UNDEFINED},
+  {TOP_vpshlw,        TOP_vpshlwx,          TOP_vpshlwxx,         TOP_vpshlwxxx,            TOP_UNDEFINED},
+  {TOP_UNDEFINED,     TOP_vpshlwxr,         TOP_vpshlwxxr,        TOP_vpshlwxxxr,           TOP_UNDEFINED},
 };
 
 // Associate an address mode group to an opcode.
@@ -4009,6 +5119,69 @@ Compose_Mem_Op_And_Copy_Info(OP* op, TN* index_tn, TN* offset_tn, TN* scale_tn,
   return new_op;
 }
 
+static
+BOOL examine_backward_bb(BS * visit_set, OP* last_op, OP *def_op, TN* base_tn) 
+{
+
+    Is_True(!BS_MemberP(visit_set, BB_id(OP_bb(last_op))), ("bb should not visited"));
+    Is_True(TN_is_gra_homeable(base_tn), ("only homeable tn is passed"));
+    
+    visit_set = BS_Union1D(visit_set, BB_id(OP_bb(last_op)), &MEM_local_pool);
+    OP* op = NULL;
+    for (op = last_op; op != NULL; op = OP_prev(op)) {
+
+        if (op == def_op)  break;
+
+        if (OP_store(op)) {
+            WN *wn = Get_WN_From_Memory_OP(op);
+            if (wn != NULL) {
+
+                // if there is no alias manager, be conservative
+                if (Alias_Manager == NULL) return TRUE;
+                
+                ALIAS_RESULT result = Aliased(Alias_Manager, TN_home(base_tn), wn);
+                if (result == POSSIBLY_ALIASED || result == SAME_LOCATION )
+                    return TRUE;
+            }
+        }
+   }
+
+   return FALSE;
+
+}
+
+static
+BOOL search_preds_for_alias(BS* visit_set, OP * last_op, OP *def_op, TN* base_tn)
+{
+    if (!BS_MemberP(visit_set, BB_id(OP_bb(last_op)) && 
+        examine_backward_bb(visit_set, last_op, def_op, base_tn)))
+        return TRUE;
+    
+    BBLIST *lst;
+    for (lst = BB_preds(OP_bb(last_op)); lst != NULL; lst = BBLIST_next(lst)) {
+        BB * cur_bb = BBLIST_item(lst);
+        if (BB_last_op(cur_bb) &&
+            search_preds_for_alias(visit_set, BB_last_op(cur_bb), def_op, base_tn)) 
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+// check whether there is a store that is alias with base_tn's home
+// in the path from def_op to use_op
+static
+BOOL alias_store_in_path(OP* use_op, OP* def_op, TN* base_tn)
+{
+    BB_SET* visit_set = BB_SET_Universe(PU_BB_Count+2, &MEM_local_pool);
+    BS_ClearD(visit_set);
+    
+    if(search_preds_for_alias(visit_set, use_op, def_op, base_tn))
+        return TRUE;
+
+    return FALSE;
+    
+}
 
 BOOL EBO_Merge_Memory_Addr( OP* op,
 			    TN** opnd_tn,
@@ -4065,9 +5238,30 @@ BOOL EBO_Merge_Memory_Addr( OP* op,
   if( base_tn == NULL && index_tn == NULL )
     return FALSE;
 
+  // disable merging memory addr on TLS initial-exec
+  if( TN_relocs(offset_tn) == TN_RELOC_X8664_GOTTPOFF )
+    return FALSE;
+
   TN* rip = Rip_TN();
   if ( index_tn == rip || base_tn == rip )
     return FALSE;
+
+  // when base_tn is gra_homeable and there is an alias
+  // def in between, we need to make tn to be none homeable
+  // For example,
+  // s1: t = ld x
+  // s2: t1 = t
+  // s3: st x
+  // s4: st t1
+  // after ebo merging address, s4 changes to
+  // s4: st t
+  // If t is homeable and is chosen to be spilled, it will be restored
+  // from its home location at s4. Thus, it will have wrong value. 
+  if(base_tn != NULL && TN_is_gra_homeable(base_tn) &&
+     alias_store_in_path(op, addr_op, base_tn)){
+     Reset_TN_is_gra_homeable(base_tn);
+     Set_TN_home(base_tn, NULL);
+  }
 
   OP* new_op = Compose_Mem_Op_And_Copy_Info(op, index_tn, offset_tn, scale_tn,
 					    base_tn, actual_tninfo);
@@ -4186,9 +5380,66 @@ static BOOL Check_loadbw_execute( int ld_bytes, OP* ex_op )
 }
 
 
+/*
+ * If the cmp's load operand is not in the form that the 
+ * load exec table can allow, morph it here, as it can only
+ * support 1 type of mapping when this case there are 2.
+ */
+static TOP Fit_Cmp_By_Load_Usage( TOP cur_top, BOOL use_right )
+{
+  TOP new_top = cur_top;
+ 
+  if( use_right ){
+    switch(cur_top){
+    case TOP_cmpx8:
+      new_top = TOP_cmpxr8;
+      break;
+    case TOP_cmpxx8:
+      new_top = TOP_cmpxxr8;
+      break;
+    case TOP_cmpxxx8:
+      new_top = TOP_cmpxxxr8;
+      break;
+    case TOP_cmpx16:
+      new_top = TOP_cmpxr16;
+      break;
+    case TOP_cmpxx16:
+      new_top = TOP_cmpxxr16;
+      break;
+    case TOP_cmpxxx16:
+      new_top = TOP_cmpxxxr16;
+      break;
+    case TOP_cmpx32:
+      new_top = TOP_cmpxr32;
+      break;
+    case TOP_cmpxx32:
+      new_top = TOP_cmpxxr32;
+      break;
+    case TOP_cmpxxx32:
+      new_top = TOP_cmpxxxr32;
+      break;
+    case TOP_cmpx64:
+      new_top = TOP_cmpxr64;
+      break;
+    case TOP_cmpxx64:
+      new_top = TOP_cmpxxr64;
+      break;
+    case TOP_cmpxxx64:
+      new_top = TOP_cmpxxxr64;
+      break;
+    default:
+      break;
+    }
+  }
+
+  return new_top;
+}
+
+
 // What is the load-execute instruction corresponding to 
 // load "op" and execute "ex_op"
-static TOP Load_Execute_Format( OP* ld_op, OP* ex_op, ADDR_MODE mode )
+static TOP
+Load_Execute_Format (OP *ld_op, OP *ex_op, ADDR_MODE mode)
 {
   TOP new_top = OP_code( ex_op );
   const int ld_bytes = CGTARG_Mem_Ref_Bytes( ld_op );
@@ -4242,14 +5493,17 @@ static TOP Load_Execute_Format( OP* ld_op, OP* ex_op, ADDR_MODE mode )
 
   /* Not all the registers are 8-bit addressable under i386 target.
    */
-  if( Is_Target_32bit() &&
+  if (Is_Target_32bit() &&
       EBO_in_peep       &&
-      OP_opnd_size( fake_new_op, 0 ) == 8 ){
-    TN* opnd = OP_opnd( ex_op, 0 );
-    const ISA_REGISTER_CLASS cl = TN_register_class(opnd);
+      OP_opnd_size(fake_new_op, 0) == 8) {
+    TN *opnd = OP_opnd(ex_op, 0);
     const REGISTER reg = TN_register(opnd);
+    const REGISTER_SET regs =
+      REGISTER_SUBCLASS_members(ISA_REGISTER_SUBCLASS_m32_8bit_regs);
+    Is_True(TN_register_class(opnd) == ISA_REGISTER_CLASS_integer,
+	    ("Load_Execute_Format: opnd not integer register class"));
 
-    if( !REGISTER_SET_MemberP( REGISTER_CLASS_eight_bit_regs(cl), reg ) )
+    if (!REGISTER_SET_MemberP(regs, reg))
       new_top = TOP_UNDEFINED;
   }
 
@@ -4285,8 +5539,17 @@ static BOOL test_is_replaced( OP* alu_op, OP* test_op, const EBO_TN_INFO* tninfo
     */
     if( OP_load( alu_op ) &&
 	!TN_live_out_of( OP_result(alu_op,0), OP_bb(test_op) ) ){
-      new_op = Mk_OP( OP_code(test_op) == TOP_test64 ? TOP_cmpi64 : TOP_cmpi32,
-		      Rflags_TN(), OP_opnd(test_op,0), Gen_Literal_TN( 0, 4) );
+      TOP cmpi_op;
+      if( OP_code ( test_op ) == TOP_test64 )
+        cmpi_op = TOP_cmpi64;
+      else if( OP_code ( test_op ) == TOP_test32 )
+        cmpi_op = TOP_cmpi32;
+      else if( OP_code ( test_op ) == TOP_test16 )
+        cmpi_op = TOP_cmpi16;
+      else if( OP_code ( test_op ) == TOP_test8 )
+        cmpi_op = TOP_cmpi8;
+      new_op = Mk_OP( cmpi_op, Rflags_TN(), OP_opnd(test_op,0), Gen_Literal_TN( 0, 4) );
+
       Set_OP_unrolling( new_op, OP_unrolling(test_op) );
       Set_OP_orig_idx( new_op, OP_map_idx(test_op) );
       Set_OP_unroll_bb( new_op, OP_unroll_bb(test_op) );
@@ -4520,7 +5783,8 @@ void Init_Load_Exec_Map( BB* bb, MEM_POOL* pool )
     FOR_ALL_ISA_REGISTER_CLASS(cl) {
       for (REGISTER reg = 0; reg <= REGISTER_MAX; reg++) {
 	if (last_TN[cl][reg] &&
-	    REG_LIVE_Outof_BB(cl, reg, bb)) {
+	    (EBO_no_liveness_info_available ||
+	     REG_LIVE_Outof_BB(cl, reg, bb))) {
 	  hTN_MAP32_Set(_load_exec_map, last_TN[cl][reg], CG_load_execute + 2);
 	}
       }
@@ -4529,18 +5793,916 @@ void Init_Load_Exec_Map( BB* bb, MEM_POOL* pool )
 }
 
 
-BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
+BOOL EBO_Not_Load_Exec_Opnd( OP* ld_op )
+{
+  const INT32 load_uses = hTN_MAP32_Get( _load_exec_map, 
+                                         OP_result(ld_op,0) ) - 1;
+  return ( load_uses > CG_load_execute );
+}
+
+
+// Convert movss and movsd to moco-buffer forms that allow the mov src
+// operand to have a micro-op optimization form in the pipeine.  Also
+// attempt to schedule the compute-to operation closer to the canonical
+// mov form.
+void EBO_SIMD_Compute_To( OP* simd_op )
+{
+  BB *bb = OP_bb(simd_op);
+  OP *anti_op = NULL;
+  ARC_LIST *true_arcs, *arcs;
+  ARC_LIST *anti_arcs;
+  BOOL hoist_only_cand = FALSE;
+  BOOL convert_cand = FALSE;
+  BOOL found_anti_dep = FALSE;
+  BOOL cand_ok = FALSE;
+  BOOL found_dep = FALSE;
+  TN *tnr = OP_results(simd_op) ? OP_result(simd_op, 0) : NULL;
+  int i;
+  int num_ops;
+
+  // check for xmm/mmx register class
+  if (tnr && TN_is_register(tnr)) {
+    if (TN_register_class(tnr) != ISA_REGISTER_CLASS_float)
+      return;
+
+    if (OP_load(simd_op))
+      return;
+
+    if (!TOP_is_move(OP_code(simd_op)))
+      return;
+
+    if ((TN_size(tnr) != 8) && (TN_size(tnr) != 16))
+      return;
+
+    // Map all the mov candidates, and also allow
+    // translations on movss/movsd to movaps/movapd.
+    switch (OP_code(simd_op)) {
+    case TOP_movaps:
+    case TOP_movapd:
+    case TOP_movdq:
+    case TOP_vmovaps:
+    case TOP_vmovapd:
+    case TOP_vmovdqa:
+      hoist_only_cand = TRUE;
+      break;
+    case TOP_movss:
+    case TOP_movsd:
+    case TOP_vmovss:
+    case TOP_vmovsd:
+      convert_cand = TRUE;
+      break;
+    default:
+      return;
+    }
+  } else {
+    return;
+  }
+
+  // First check to see if the register allocator produced
+  // an identity copy which will be elimated later.
+  for (i = 0; i < OP_opnds(simd_op); i++) {
+    TN *src_tn = OP_opnd(simd_op, i);
+    if (TN_is_register(src_tn)) {
+      if (TN_register(tnr) == TN_register(src_tn))
+        return;
+    }
+  }
+
+  // check for anti-deps on the simd_op's src operands
+  for (anti_arcs = OP_succs(simd_op); 
+       anti_arcs != NULL; anti_arcs = ARC_LIST_rest(anti_arcs)) {
+    ARC *anti_arc = ARC_LIST_first(anti_arcs);
+    OP *succ_op = ARC_succ(anti_arc);
+    if (ARC_kind(anti_arc) != CG_DEP_REGANTI) continue;
+
+    // Iff the src only operand of the simd_op has an anti arc
+    // note it, we will check to see if the operands def occurs
+    // between the flow dependent edges we will attempt to 
+    // convert for, as the moco buffer will be invalidated.
+    TN *src_tn = OP_opnd(simd_op, ARC_opnd(anti_arc));
+    if (src_tn &&
+        (TN_register_class(src_tn) == ISA_REGISTER_CLASS_float)  &&
+        (src_tn != tnr)) {
+      anti_op = succ_op;
+      break;
+    }
+  }
+
+  // See if there are uses of this simd_op's src which occur 
+  // between use_op and the simd_op, since we know its a move. 
+  for (true_arcs = OP_succs(simd_op); 
+       true_arcs != NULL; true_arcs = ARC_LIST_rest(true_arcs)) {
+    ARC *true_arc = ARC_LIST_first(true_arcs);
+    OP *succ_op = ARC_succ(true_arc);
+    if (ARC_kind(true_arc) != CG_DEP_REGIN) continue;
+
+    // no move - move opt
+    if (TOP_is_move( OP_code(succ_op)) ) continue;
+
+    if (OP_flop(succ_op)) {
+      OP *cur_op, *first_op;
+      BOOL first_time = TRUE;
+
+      first_op = succ_op;
+      num_ops = 0;
+
+      // If we are on in a loop, check the position of the 
+      // succ_op relative to the simd_op
+      if (BB_loop_head_bb(bb)) {
+        // Skip loop carried successor arcs
+        if (OP_Precedes(succ_op, simd_op))
+          continue;
+      }
+
+      // Find the closest suitable op to succ_op if there are flow 
+      // dependencies.
+      cur_op = NULL;
+      if (OP_next(simd_op) != succ_op) {
+        for (arcs = OP_preds(succ_op); 
+             arcs != NULL; arcs = ARC_LIST_rest(arcs)) {
+          ARC *arc = ARC_LIST_first(arcs);
+          if (ARC_pred(arc) == simd_op) continue;
+          if (OP_Precedes(simd_op, ARC_pred(arc))) {
+            cur_op = ARC_pred(arc);
+            if ((OP_Precedes(first_op, cur_op) || first_time) &&
+                OP_Precedes(cur_op, succ_op)) {
+              if (OP_next(cur_op) != succ_op) {
+                first_op = cur_op;
+                first_time = FALSE;
+              } else {
+                // dep arc prevents motion
+                first_op = succ_op;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Now evaluate the results
+      if (first_op != succ_op) { 
+        if (OP_load(first_op)) {
+          hoist_only_cand = convert_cand = FALSE; 
+        } else if (anti_op && (OP_Precedes(anti_op, first_op))) {
+          hoist_only_cand = convert_cand = FALSE; 
+        } else {
+          found_dep = TRUE;
+          first_op = OP_next(first_op);
+        }
+      } else if (cur_op == NULL) {
+        // If there are no dependencies but there are instructions in
+        // between, allow motioning up next to the simd_op.
+        if (OP_next(simd_op) != succ_op) {
+          first_op = OP_next(simd_op);
+        }
+      }
+
+      // See if the new hoist position is inside the latency 
+      // shadow of a conversion candidate.
+      if ((convert_cand || hoist_only_cand) && 
+          (first_op != succ_op)) {
+        for (cur_op = OP_next(simd_op); 
+             cur_op != succ_op; cur_op = OP_next(cur_op)) {
+          num_ops++;
+          if (cur_op == first_op)
+            break;
+        }
+      }
+
+      // We want to gate a conversion and hoisting based on if we can 
+      // move the op into the latency shadow.
+      if ((convert_cand || hoist_only_cand) && 
+          (num_ops > 0) &&
+          (ARC_latency(true_arc) < num_ops)) {
+        hoist_only_cand = convert_cand = FALSE;
+      }
+
+      // Apply hoist-ability here
+      if (first_op != succ_op) {
+        // Now do the hoist if we can
+        if (convert_cand || hoist_only_cand) {
+          cand_ok = TRUE;
+          if (EBO_Trace_Data_Flow) {
+            if (found_dep) {
+              fprintf( TFile, "dep(conv=%s): hoist to succ compute-to\n",
+                       convert_cand ? "true" : "false");
+            } else {
+              fprintf( TFile, "clean(conv=%s): hoist to succ compute-to\n",
+                       convert_cand ? "true" : "false");
+            }
+          }
+
+          BB_Move_Op_Before(bb, first_op, bb, succ_op);
+          break;
+        }
+      } else if (convert_cand) {
+        // Allow conversion if they are right next to each other
+        if (EBO_Trace_Data_Flow) {
+          fprintf( TFile, "convert(no hoist) for succ compute-to\n");
+        }
+        cand_ok = TRUE;
+      }
+    }
+  }
+
+  // Convert the candidate if we passed all tests and the op
+  // is not yet in the cannonical form.
+  if (convert_cand && cand_ok) {
+    // we have a single dependence arc on this def, we can convert
+    if (OP_code(simd_op) == TOP_movsd) {
+      OP_Change_Opcode( simd_op, TOP_movaps );
+    } else if (OP_code(simd_op) == TOP_movss) {
+      OP_Change_Opcode( simd_op, TOP_movaps );
+    }
+    if (OP_code(simd_op) == TOP_vmovsd) {
+      OP_Change_Opcode( simd_op, TOP_vmovapd );
+    } else if (OP_code(simd_op) == TOP_vmovss) {
+      OP_Change_Opcode( simd_op, TOP_vmovaps );
+    }
+  }
+}
+
+
+// Do basic block level compute-to opts
+void EBO_Compute_To ( BB* bb )
+{
+  OP *op;
+
+  // We need to do this step only once for the bb, as the code
+  // is static, we will only change opcodes and move ops, no ops are
+  // deleted or inserted, ergo, the DDG is static.
+  CG_DEP_Compute_Graph ( bb,
+                         INCLUDE_ASSIGNED_REG_DEPS,
+                         NON_CYCLIC,
+                         NO_MEMREAD_ARCS,
+                         INCLUDE_MEMIN_ARCS,
+                         NO_CONTROL_ARCS,
+                         NULL);
+
+  FOR_ALL_BB_OPs (bb, op) {
+    if (OP_flop(op))
+      EBO_SIMD_Compute_To(op);
+  }
+
+  CG_DEP_Delete_Graph (bb);
+}
+
+
+// Attempt to fold a constant onto the index calcuation of an array
+BOOL EBO_Fold_Lea_Const_Component( OP* mem_op )
+{
+  OP *const_op, *pred_op;
+  BB *bb = OP_bb(mem_op);
+  ARC_LIST *arcs;
+  TN *lea_tnr;
+  int i;
+
+  // Identify the lea tns.
+  int base_loc = OP_find_opnd_use( mem_op, OU_base );
+  TN *base_tn = base_loc >= 0 ?  OP_opnd( mem_op, base_loc ) : NULL;
+  int index_loc = OP_find_opnd_use( mem_op, OU_index );
+  TN *index_tn = index_loc >= 0 ?  OP_opnd( mem_op, index_loc ) : NULL;
+  int scale_loc = OP_find_opnd_use( mem_op, OU_scale );
+  TN *scale_tn = scale_loc >= 0 ?  OP_opnd( mem_op, scale_loc ) : NULL;
+  int offset_loc = OP_find_opnd_use( mem_op, OU_offset );
+  TN *offset_tn = offset_loc >= 0 ?  OP_opnd( mem_op, offset_loc ) : NULL;
+
+  if ((base_tn == NULL) ||
+      (index_tn == NULL) ||
+      (scale_tn == NULL) ||
+      (offset_tn == NULL))
+    return FALSE;
+
+  if (!TN_is_constant(offset_tn)) return FALSE;
+  if (TN_value(offset_tn) != 0) return FALSE;
+  if (TN_size(index_tn) != 4) return FALSE;
+
+  // for this bb, obtain the dependence graph so that we can
+  // walk this mem_op's expression tree.
+  CG_DEP_Compute_Graph ( bb,
+                         INCLUDE_ASSIGNED_REG_DEPS,
+                         NON_CYCLIC,
+                         NO_MEMREAD_ARCS,
+                         NO_MEMIN_ARCS,
+                         NO_CONTROL_ARCS,
+                         NULL);
+
+  // locate the ldc32(const_op) and evaluate it
+  const_op = NULL;
+  for (arcs = OP_preds(mem_op); arcs != NULL; arcs = ARC_LIST_rest(arcs)) {
+    ARC *arc = ARC_LIST_first(arcs);
+    OP *pred_op = ARC_pred(arc);
+    if (OP_code(pred_op) == TOP_ldc32) {
+      TN *tnr = OP_result(pred_op, 0);
+      if (TN_is_register(tnr) && !TN_is_global_reg(tnr)) {
+        if (TN_register(tnr) == TN_register(base_tn)) {
+          const_op = pred_op;
+          break;
+        }
+      }
+    }
+  }
+
+  // If we fail to match any part of the expression, we are done
+  if (const_op == NULL) return FALSE;
+
+  // A non global ldc32 can have but 1 use to transform this expression.
+  int num_ldc_uses = 0;
+  for (arcs = OP_succs(const_op); arcs != NULL; arcs = ARC_LIST_rest(arcs)) {
+    ARC *arc = ARC_LIST_first(arcs);
+    if (ARC_kind(arc) != CG_DEP_REGIN) continue;
+    OP *succ_op = ARC_succ(arc);
+    for (i = 0; i < OP_opnds(succ_op); i++) {
+      if (OP_opnd(succ_op, i) == base_tn)
+        num_ldc_uses++;
+    }
+  }
+
+  // Nothing to do, the constant cannot be folded.
+  if (num_ldc_uses > 1) return FALSE;
+
+  // Now fold the constant from the ldc32 onto the lea as an offset field.
+  TN *const_tn = OP_opnd(const_op, 0);
+  lea_tnr = OP_result(mem_op, 0);
+  OP *new_op = Mk_OP(TOP_leaxx32, 
+                     lea_tnr, 
+                     index_tn,
+                     scale_tn,
+                     const_tn);
+  Set_OP_unrolling( new_op, OP_unrolling(mem_op) );
+  Set_OP_orig_idx( new_op, OP_map_idx(mem_op) );
+  Set_OP_unroll_bb( new_op, OP_unroll_bb(mem_op) );
+  OP_srcpos( new_op ) = OP_srcpos( mem_op );
+  BB_Insert_Op_After( bb, mem_op, new_op );
+  OP_Change_To_Noop( const_op );
+
+  CG_DEP_Delete_Graph (bb);
+
+  return TRUE;
+}
+
+
+// Attempt scalar replacement of const init array elements with ldc32 to
+// to register, this only within the interation.
+BOOL EBO_Opt_Const_Array( OP* mem_op,
+                          LOOP_DESCR* loop,
+                          INT loop_iter_size )
+{
+  LOOPINFO *info = loop->loopinfo;
+  WN *loop_info = LOOPINFO_wn(info);
+  WN *loop_indvar =  WN_loop_induction(loop_info);
+  WN *load_wn = Get_WN_From_Memory_OP(mem_op);
+  BB *bb = OP_bb(mem_op);
+  POINTS_TO *load_data;
+  BOOL ret_val = FALSE;
+  int value;
+  int unroll_iter = OP_unrolling(mem_op);
+
+  // For now only do up counting loops
+  if (WN_Loop_Up_Trip(loop_info) == FALSE)
+    return ret_val;
+
+  if ((loop_indvar == NULL) || (load_wn == NULL))
+    return ret_val;
+
+  if (Alias_Manager && Valid_alias(Alias_Manager, load_wn)) {
+    load_data = Points_to(Alias_Manager, load_wn);
+  } else {
+    return ret_val;
+  }
+
+  if (load_data && load_data->Base()) {
+    ST *load_sym = load_data->Base();
+
+    // we can only proceed when processing vars
+    if (ST_class(load_sym) != CLASS_VAR)
+      return ret_val;
+
+    // only handle some types of storage
+    switch (ST_sclass(load_sym)) {
+    case SCLASS_AUTO:
+    case SCLASS_PSTATIC:
+    case SCLASS_FSTATIC:
+    case SCLASS_EXTERN:
+      break;
+    default:
+      return ret_val;
+    }
+
+    TY_IDX sym_type = ST_type(load_sym);
+    if (TY_kind(sym_type) == KIND_ARRAY) {
+      TY_IDX ty_ele = TY_etype(sym_type);
+      if(TY_kind(ty_ele) == KIND_SCALAR) {
+        OPCODE opcode = WN_opcode(load_wn);
+        OPERATOR oper = OPCODE_operator(opcode); 
+
+        if ((oper == OPR_ILOAD) &&
+            (WN_operator(WN_kid0(load_wn)) == OPR_LDID)) {
+          WN *index_var = WN_kid0(load_wn);
+          char *index_name = ST_name(WN_st(index_var));
+          char *indvar_name = ST_name(WN_st(loop_indvar));
+          if (index_name == indvar_name) {
+            int element_size = TY_mtype (ty_ele);
+            // See if we have a const array or not, if so
+            // and since our index is the loop induction var, we can 
+            // try to obtain the initialized data to attempt
+            // an unrolled replacement of the data items as immediates
+            // via ldc32 moves instead of via memory.
+            if ((TY_is_const(ty_ele)) && 
+                (TY_AR_ndims(sym_type) == 1) &&
+                (element_size == 4)) {
+              int array_size = TY_size(sym_type);
+              // Because of this constraint, we do not need to examine
+              // the initial value of the induction variable, but 
+              // we can only do this on up counted loops.
+              if ((array_size / element_size) == loop_iter_size) {
+                TCON *init_array = new TCON[loop_iter_size];
+                INITO_IDX inito = Find_INITO_For_Symbol(load_sym);
+                INITO ino = Inito_Table[inito];
+                INITV_IDX idx;
+                INT32 i,j;
+                BOOL no_val = FALSE;
+
+                // fetch the contents of the initalized const array.
+                if (INITO_val(ino) != (INITO_IDX) NULL) {
+                  FOREACH_INITV (INITO_val(ino), idx) {
+                    INITV_IDX ninv;
+                    INITV inv = Initv_Table[idx];
+                    j = 0;
+                    if (INITV_kind(inv) != INITVKIND_BLOCK) continue;
+                    for (i = 0; i < INITV_repeat1(inv); i++) {
+                      for (ninv = INITV_blk(inv); ninv; 
+                           ninv = INITV_next(ninv)) {
+                        INITV inv_ele = Initv_Table[ninv];
+                        TCON tcon;
+                        switch ( INITV_kind(inv_ele) ) {
+                        case INITVKIND_ZERO:
+                          tcon = Host_To_Targ (INITV_mtype (inv_ele), 0);
+                          break;
+                        case INITVKIND_ONE:
+                          tcon = Host_To_Targ (INITV_mtype (inv_ele), 1);
+                          break;
+                        case INITVKIND_VAL:
+                          tcon = INITV_tc_val(inv_ele);
+                          break;
+                        default:
+                          no_val = TRUE;
+                        }
+                        init_array[j++] = tcon;
+                      }
+                    }
+                  }
+                }
+
+                // If we ever trip over an element we cannot dereference, we 
+                // fail.
+                if (no_val)
+                  return ret_val;
+
+                // Now begin processing the scalar replacement candidate
+                value = TCON_ival(init_array[unroll_iter]);
+                if (ISA_LC_Value_In_Class( value, LC_simm32 )) {
+                  TN *tnr = NULL;
+                  OP *new_op;
+                  // There will only be the 1 result on this load anyways.
+                  for (i = 0; i < OP_results(mem_op); i++) {
+                    tnr = OP_result(mem_op, i);
+                  }
+                  // This step happens before register allocation
+                  if (tnr) {
+                    new_op = Mk_OP(TOP_ldc32, tnr, Gen_Literal_TN(value, 4));
+                    Set_OP_unrolling( new_op, OP_unrolling(mem_op) );
+                    Set_OP_orig_idx( new_op, OP_map_idx(mem_op) );
+                    Set_OP_unroll_bb( new_op, OP_unroll_bb(mem_op) );
+                    OP_srcpos( new_op ) = OP_srcpos( mem_op );
+                    BB_Insert_Op_After( bb, mem_op, new_op );
+                    ret_val = TRUE;
+                  }
+                } 
+                delete init_array;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return ret_val;
+}
+
+
+BOOL EBO_Process_SSE5_Load_Exectute_FMA_p1(TOP new_top, 
+                                           ADDR_MODE mode, 
+                                           TN* base, 
+                                           TN* scale, 
+                                           TN* index, 
+                                           TN* offset, 
+                                           TN* result,
+                                           OP* ld_op,
+                                           OP* alu_op,
+                                           EBO_TN_INFO** actual_tninfo)
+{
+  OP* new_op = NULL;
+  EBO_TN_INFO* tninfo;
+  TN *opnd0;
+  TN *opnd1;
+  BB* bb = OP_bb( alu_op );
+
+  // add load form: both mul opnds persist
+  tninfo = actual_tninfo[0];
+  opnd0 = tninfo->local_tn;
+  tninfo = actual_tninfo[1];
+  opnd1 = tninfo->local_tn;
+
+  if( mode == BASE_MODE ){
+    // base + offset
+    new_op = Mk_OP( new_top, result, opnd0, opnd1, base, offset );
+  } else if( mode == BASE_INDEX_MODE ){
+    // offset + base + index * scale
+    new_op = Mk_OP( new_top, result, opnd0, opnd1, base, index, scale, offset );
+  } else {
+    // offset + index * scale
+    new_op = Mk_OP( new_top, result, opnd0, opnd1, index, scale, offset );
+  }
+
+  Is_True( !EBO_in_loop, ("EBO_Process_SSE5_Load_Exectute_FMA_p1: NYI (1)") );
+
+  Set_OP_unrolling( new_op, OP_unrolling(alu_op) );
+  Set_OP_orig_idx( new_op, OP_map_idx(alu_op) );
+  Set_OP_unroll_bb( new_op, OP_unroll_bb(alu_op) );
+
+  Copy_WN_For_Memory_OP( new_op, ld_op );
+  if (OP_volatile(ld_op)) {
+    Reset_OP_volatile(ld_op);	// allow OP to be deleted
+    Set_OP_volatile(new_op);
+  }
+  OP_srcpos( new_op ) = OP_srcpos( alu_op );
+  BB_Insert_Op_After( bb, alu_op, new_op );
+
+  // If folding a restore of a spilled value, mark the spill store as needed
+  // even if all the restores are deleted.
+  ST *spill_loc = CGSPILL_OP_Spill_Location(ld_op);
+  if (spill_loc != (ST *)0) {		// It's a spill OP.
+    SPILL_SYM_INFO &info = CGSPILL_Get_Spill_Sym_Info(spill_loc);
+    info.Set_Used_By_Load_Exe();
+  }
+
+  if( EBO_Trace_Data_Flow ){
+    #pragma mips_frequency_hint NEVER
+    fprintf( TFile, "EBO_Process_SSE5_Load_Exectute_FMA_p1 merges " );
+    Print_OP_No_SrcLine( ld_op );
+    fprintf( TFile, "                   with   " );
+    Print_OP_No_SrcLine( alu_op );
+
+    fprintf( TFile, "                   new op " );
+    Print_OP_No_SrcLine( new_op );
+  }
+
+  return TRUE;
+}
+
+
+BOOL EBO_Process_SSE5_Load_Exectute_FMA_p2(TOP new_top, 
+                                           ADDR_MODE mode, 
+                                           TN* base, 
+                                           TN* scale, 
+                                           TN* index, 
+                                           TN* offset, 
+                                           TN* result,
+                                           OP* ld_op,
+                                           OP* alu_op,
+                                           EBO_TN_INFO** actual_tninfo)
+{
+  OP* new_op = NULL;
+  EBO_TN_INFO* tninfo;
+  TN *opnd0;
+  TN *opnd2;
+  BB* bb = OP_bb( alu_op );
+
+  // mul load form: the opnd0(the other mul opnd) and opnd2(add opnd) persist
+  tninfo = actual_tninfo[0];
+  opnd0 = tninfo->local_tn;
+  tninfo = actual_tninfo[2];
+  opnd2 = tninfo->local_tn;
+
+  if( mode == BASE_MODE ){
+    // base + offset
+    new_op = Mk_OP( new_top, result, opnd0, 
+                    base, offset, opnd2 );
+  } else if( mode == BASE_INDEX_MODE ){
+    // offset + base + index * scale
+    new_op = Mk_OP( new_top, result, opnd0, base, 
+                    index, scale, offset, opnd2 );
+  } else {
+    // offset + index * scale
+    new_op = Mk_OP( new_top, result, opnd0, 
+                    index, scale, offset, opnd2 );
+  }
+
+  Is_True( !EBO_in_loop, ("EBO_Process_SSE5_Load_Exectute_FMA_p1: NYI (1)") );
+
+  Set_OP_unrolling( new_op, OP_unrolling(alu_op) );
+  Set_OP_orig_idx( new_op, OP_map_idx(alu_op) );
+  Set_OP_unroll_bb( new_op, OP_unroll_bb(alu_op) );
+
+  Copy_WN_For_Memory_OP( new_op, ld_op );
+  if (OP_volatile(ld_op)) {
+    Reset_OP_volatile(ld_op);	// allow OP to be deleted
+    Set_OP_volatile(new_op);
+  }
+  OP_srcpos( new_op ) = OP_srcpos( alu_op );
+  BB_Insert_Op_After( bb, alu_op, new_op );
+
+  // If folding a restore of a spilled value, mark the spill store as needed
+  // even if all the restores are deleted.
+  ST *spill_loc = CGSPILL_OP_Spill_Location(ld_op);
+  if (spill_loc != (ST *)0) {		// It's a spill OP.
+    SPILL_SYM_INFO &info = CGSPILL_Get_Spill_Sym_Info(spill_loc);
+    info.Set_Used_By_Load_Exe();
+  }
+
+  if( EBO_Trace_Data_Flow ){
+    #pragma mips_frequency_hint NEVER
+    fprintf( TFile, "EBO_Process_SSE5_Load_Exectute_FMA_p1 merges " );
+    Print_OP_No_SrcLine( ld_op );
+    fprintf( TFile, "                   with   " );
+    Print_OP_No_SrcLine( alu_op );
+
+    fprintf( TFile, "                   new op " );
+    Print_OP_No_SrcLine( new_op );
+  }
+
+  return TRUE;
+}
+
+
+TOP EBO_Reset_Top(TOP top, ADDR_MODE mode)
+{
+  Addr_Mode_Group *group = Top_To_Addr_Mode_Group[top+4];
+  if (group != NULL) {
+    switch (mode) {
+      case BASE_MODE:           return group->base_mode;
+      case BASE_INDEX_MODE:     return group->base_index_mode;
+      case INDEX_MODE:          return group->index_mode;
+      case N32_MODE:            return group->n32_mode;
+    }
+    FmtAssert(FALSE, ("EBO_Reset_Top: address mode not handled"));
+  }
+  return TOP_UNDEFINED;
+}
+
+
+BOOL EBO_Process_SSE5_Load_Execute(TOP new_top, 
+                                   ADDR_MODE mode, 
+                                   int idx,
+                                   TN* base, 
+                                   TN* scale, 
+                                   TN* index, 
+                                   TN* offset, 
+                                   TN* result,
+                                   OP* ld_op,
+                                   OP* alu_op,
+                                   EBO_TN_INFO** actual_tninfo)
+{
+  // use the mul memopnd form if the add form is not present
+  if (idx != 2) {
+    Addr_Mode_Group *group = Top_To_Addr_Mode_Group[new_top];
+    new_top = EBO_Reset_Top(group->base_mode, mode);
+  }
+
+  switch (new_top) {
+
+  // pattern 1 - add src is memop
+  case TOP_vfmaddxss:
+  case TOP_vfmaddxxss:
+  case TOP_vfmaddxxxss:
+  case TOP_vfmaddxsd:
+  case TOP_vfmaddxxsd:
+  case TOP_vfmaddxxxsd:
+  case TOP_vfnmaddxss:
+  case TOP_vfnmaddxxss:
+  case TOP_vfnmaddxxxss:
+  case TOP_vfnmaddxsd:
+  case TOP_vfnmaddxxsd:
+  case TOP_vfnmaddxxxsd:
+  case TOP_vfmaddxps:
+  case TOP_vfmaddxxps:
+  case TOP_vfmaddxxxps:
+  case TOP_vfmaddxpd:
+  case TOP_vfmaddxxpd:
+  case TOP_vfmaddxxxpd:
+  case TOP_vfmaddsubxps:
+  case TOP_vfmaddsubxxps:
+  case TOP_vfmaddsubxxxps:
+  case TOP_vfmaddsubxpd:
+  case TOP_vfmaddsubxxpd:
+  case TOP_vfmaddsubxxxpd:
+  case TOP_vfnmaddxps:
+  case TOP_vfnmaddxxps:
+  case TOP_vfnmaddxxxps:
+  case TOP_vfnmaddxpd:
+  case TOP_vfnmaddxxpd:
+  case TOP_vfnmaddxxxpd:
+  case TOP_vfmsubxss:
+  case TOP_vfmsubxxss:
+  case TOP_vfmsubxxxss:
+  case TOP_vfmsubxsd:
+  case TOP_vfmsubxxsd:
+  case TOP_vfmsubxxxsd:
+  case TOP_vfnmsubxss:
+  case TOP_vfnmsubxxss:
+  case TOP_vfnmsubxxxss:
+  case TOP_vfnmsubxsd:
+  case TOP_vfnmsubxxsd:
+  case TOP_vfnmsubxxxsd:
+  case TOP_vfmsubxps:
+  case TOP_vfmsubxxps:
+  case TOP_vfmsubxxxps:
+  case TOP_vfmsubxpd:
+  case TOP_vfmsubxxpd:
+  case TOP_vfmsubxxxpd:
+  case TOP_vfmsubaddxps:
+  case TOP_vfmsubaddxxps:
+  case TOP_vfmsubaddxxxps:
+  case TOP_vfmsubaddxpd:
+  case TOP_vfmsubaddxxpd:
+  case TOP_vfmsubaddxxxpd:
+  case TOP_vfnmsubxps:
+  case TOP_vfnmsubxxps:
+  case TOP_vfnmsubxxxps:
+  case TOP_vfnmsubxpd:
+  case TOP_vfnmsubxxpd:
+  case TOP_vfnmsubxxxpd:
+    return EBO_Process_SSE5_Load_Exectute_FMA_p1(new_top, mode, base, 
+                                                 scale, index, offset, 
+                                                 result, ld_op,
+                                                 alu_op, actual_tninfo);
+
+  // pattern 2 - 2nd mul src is memop
+  case TOP_vfmaddxrss:
+  case TOP_vfmaddxxrss:
+  case TOP_vfmaddxxxrss:
+  case TOP_vfmaddxrsd:
+  case TOP_vfmaddxxrsd:
+  case TOP_vfmaddxxxrsd:
+  case TOP_vfnmaddxrss:
+  case TOP_vfnmaddxxrss:
+  case TOP_vfnmaddxxxrss:
+  case TOP_vfnmaddxrsd:
+  case TOP_vfnmaddxxrsd:
+  case TOP_vfnmaddxxxrsd:
+  case TOP_vfmaddxrps:
+  case TOP_vfmaddxxrps:
+  case TOP_vfmaddxxxrps:
+  case TOP_vfmaddxrpd:
+  case TOP_vfmaddxxrpd:
+  case TOP_vfmaddxxxrpd:
+  case TOP_vfmaddsubxrps:
+  case TOP_vfmaddsubxxrps:
+  case TOP_vfmaddsubxxxrps:
+  case TOP_vfmaddsubxrpd:
+  case TOP_vfmaddsubxxrpd:
+  case TOP_vfmaddsubxxxrpd:
+  case TOP_vfnmaddxrps:
+  case TOP_vfnmaddxxrps:
+  case TOP_vfnmaddxxxrps:
+  case TOP_vfnmaddxrpd:
+  case TOP_vfnmaddxxrpd:
+  case TOP_vfnmaddxxxrpd:
+  case TOP_vfmsubxrss:
+  case TOP_vfmsubxxrss:
+  case TOP_vfmsubxxxrss:
+  case TOP_vfmsubxrsd:
+  case TOP_vfmsubxxrsd:
+  case TOP_vfmsubxxxrsd:
+  case TOP_vfnmsubxrss:
+  case TOP_vfnmsubxxrss:
+  case TOP_vfnmsubxxxrss:
+  case TOP_vfnmsubxrsd:
+  case TOP_vfnmsubxxrsd:
+  case TOP_vfnmsubxxxrsd:
+  case TOP_vfmsubxrps:
+  case TOP_vfmsubxxrps:
+  case TOP_vfmsubxxxrps:
+  case TOP_vfmsubxrpd:
+  case TOP_vfmsubxxrpd:
+  case TOP_vfmsubxxxrpd:
+  case TOP_vfmsubaddxrps:
+  case TOP_vfmsubaddxxrps:
+  case TOP_vfmsubaddxxxrps:
+  case TOP_vfmsubaddxrpd:
+  case TOP_vfmsubaddxxrpd:
+  case TOP_vfmsubaddxxxrpd:
+  case TOP_vfnmsubxrps:
+  case TOP_vfnmsubxxrps:
+  case TOP_vfnmsubxxxrps:
+  case TOP_vfnmsubxrpd:
+  case TOP_vfnmsubxxrpd:
+  case TOP_vfnmsubxxxrpd:
+    return EBO_Process_SSE5_Load_Exectute_FMA_p2(new_top, mode, base, 
+                                                 scale, index, offset, 
+                                                 result, ld_op,
+                                                 alu_op, actual_tninfo);
+
+  // not yet implemented
+  default:
+    FmtAssert( FALSE, ("EBO_Process_SSE5_Load_Execute: NYI") );
+    break;
+  }
+
+  return FALSE;
+}
+
+
+BOOL EBO_Is_FMA4( OP* alu_op)
+{
+  const TOP top = OP_code(alu_op);
+  BOOL ret_val;
+
+  switch (top) {
+  case TOP_vfmaddss:
+  case TOP_vfmaddsd:
+  case TOP_vfmaddps:
+  case TOP_vfmaddpd:
+  case TOP_vfmaddsubps:
+  case TOP_vfmaddsubpd:
+  case TOP_vfmsubss:
+  case TOP_vfmsubsd:
+  case TOP_vfmsubps:
+  case TOP_vfmsubpd:
+  case TOP_vfmsubaddps:
+  case TOP_vfmsubaddpd:
+    ret_val = TRUE;
+    break;
+  default:
+    ret_val = FALSE;
+    break;
+  }
+
+  return ret_val;
+}
+
+static BOOL EBO_Allowable_Unaligned_Vector( OP *alu_op )
+{
+  const TOP top = OP_code(alu_op);
+  BOOL ret_val;
+
+  // no alignment constraint on orochi targets for vector ops
+  if (Is_Target_Orochi() && OP_sse5(alu_op))
+    return TRUE;
+
+  switch (top) {
+  case TOP_vcvtdq2pd:
+  case TOP_vcvtps2pd:
+  case TOP_cvtdq2pd:
+  case TOP_cvtps2pd:
+    ret_val = TRUE;
+    break;
+
+  default:
+    ret_val = FALSE;
+    break;
+  }
+  return ret_val;
+}
+
+static BOOL Process_Side_Effects(TN** opnd_tn, 
+                                 EBO_TN_INFO** actual_tninfo,
+                                 BOOL rval,
+                                 BOOL opnds_swapped)
+{
+  if ( !rval && opnds_swapped ) {
+    // return operands to original state
+    TN *tmp = opnd_tn[0];
+    EBO_TN_INFO* tninfo = actual_tninfo[0];
+    actual_tninfo[0] = actual_tninfo[1];
+    opnd_tn[0] = opnd_tn[1];
+    actual_tninfo[1] = tninfo;
+    opnd_tn[1] = tmp;
+  }
+  return rval;
+}
+
+BOOL EBO_Load_Execution( OP* alu_op, 
+                         TN** opnd_tn,     
+                         EBO_TN_INFO** actual_tninfo,
+                         int alu_cmp_idx )
 {
 #if Is_True_On
   if (!(EBO_Opt_Mask & EBO_LOAD_EXECUTION)) return FALSE;
 #endif
   const TOP top = OP_code(alu_op);
+  BOOL opnds_swapped = FALSE;
+  BOOL rval = FALSE;
 
   if( top == TOP_xor64 ||
       top == TOP_or64  ||
       top == TOP_and64 ||
-      top == TOP_cmp64 ||
       top == TOP_test64 )
+    return FALSE;
+
+  if ((top == TOP_cmp64) && (EBO_flow_safe == FALSE))
     return FALSE;
 
   if (TOP_is_load_exe(top) ||		// Skip if TOP is already load-execute.
@@ -4556,25 +6718,83 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   EBO_TN_INFO* tninfo = NULL;
   int opnd0_indx = 0;  // indicate which opnd will be kept for the new op.
 
-  for( int i = OP_opnds(alu_op) - 1; i >= 0; i-- ){
+  if( EBO_flow_safe ){
+    int i = alu_cmp_idx;
     if( TN_is_register( OP_opnd( alu_op, i ) ) ){
       tninfo = actual_tninfo[i];
       opnd0_indx = OP_opnds(alu_op) - 1 - i;
       Is_True( opnd0_indx >= 0, ("NYI") );
-      break;
+    }
+  } else if ( EBO_Is_FMA4(alu_op) ) {
+    int i;
+    OP *mul_in_op = actual_tninfo[1]->in_op;
+    OP *add_sub_in_op2 = actual_tninfo[2]->in_op;
+
+    if (CG_fma4_load_exec == FALSE)
+      return FALSE;
+
+    i = (mul_in_op && OP_load(mul_in_op)) ? 1 : -1;
+    if (i == -1) {
+      i = (add_sub_in_op2 && OP_load(add_sub_in_op2)) ? 2 : -1;
+    }
+    
+    // FMA4 ops can only have loads on opnd1 and opnd2.
+    if (i == -1) {
+      // However we can swap opnd1 and opnd0 because the mul part of the fma
+      // is communitive.
+      if (actual_tninfo[0]->in_op && OP_load(actual_tninfo[0]->in_op)) {
+        TN *tmp = opnd_tn[0];
+        tninfo = actual_tninfo[0];
+        actual_tninfo[0] = actual_tninfo[1];
+        opnd_tn[0] = opnd_tn[1];
+        actual_tninfo[1] = tninfo;
+        opnd_tn[1] = tmp;
+        i = 1;
+        opnds_swapped = TRUE;
+      } else
+        return FALSE;
+    } 
+
+    // none of the load operands for fma4 can be move contrained
+    if (actual_tninfo[i]->in_opinfo->op_must_not_be_moved)
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+
+    alu_cmp_idx = i;
+    if( TN_is_register( OP_opnd( alu_op, i ) ) ){
+      tninfo = actual_tninfo[i];
+      opnd0_indx = OP_opnds(alu_op) - 1 - i;
+      Is_True( opnd0_indx >= 0, ("NYI") );
+    }
+  } else {
+    for( int i = OP_opnds(alu_op) - 1; i >= 0; i-- ){
+      if( TN_is_register( OP_opnd( alu_op, i ) ) ){
+        tninfo = actual_tninfo[i];
+        opnd0_indx = OP_opnds(alu_op) - 1 - i;
+        Is_True( opnd0_indx >= 0, ("NYI") );
+        break;
+      }
     }
   }
 
   OP* ld_op = tninfo == NULL ? NULL : tninfo->in_op;
   EBO_OP_INFO* ld_opinfo = tninfo == NULL ? NULL : tninfo->in_opinfo;
 
+  // If we cannot use the op we were directed to use, there is no other
+  // action to do.
+  if (( EBO_flow_safe ) && 
+      ( ld_op != NULL) && 
+      ( ld_opinfo->op_must_not_be_moved ))
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+
   if( ld_op == NULL || !OP_load( ld_op ) ||
       ld_opinfo->op_must_not_be_moved ){
       
     // Now, try opnd0
 
-    if( !TOP_is_commutative( OP_code(alu_op) ) )
-      return FALSE;
+    if( !EBO_flow_safe ) {
+      if( !TOP_is_commutative( OP_code(alu_op) ) )
+        return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+    } 
 
     tninfo = actual_tninfo[0];
     ld_op = tninfo == NULL ? NULL : tninfo->in_op;
@@ -4582,22 +6802,30 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 
     if( ld_op == NULL || !OP_load( ld_op ) ||
 	ld_opinfo->op_must_not_be_moved )
-      return FALSE;
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
 
     // Check whether we can swap opnd0 and opnd1 of <alu_op>
     TN* result = OP_result( alu_op, 0 );
     TN* opnd0 = OP_opnd( alu_op, 0 );
 
     if( EBO_in_peep && TNs_Are_Equivalent( result, opnd0 ) )
-      return FALSE;
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
 
     opnd0_indx = 1;
   }
 
   BB* bb = OP_bb( alu_op );
 
-  if( OP_bb( ld_op ) != bb )
-    return FALSE;
+  if( (OP_bb( ld_op ) != bb) && !EBO_flow_safe )
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+
+#ifdef TARG_X8664
+  if ((OP_bb( ld_op ) != bb) && EBO_flow_safe ) {
+    BB *ld_bb = OP_bb( ld_op );
+    if (!BS_MemberP(BB_dom_set(bb), BB_id(ld_bb)))
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+  }
+#endif
 
   /* bug#1480
      The memory opnd of an alu op must be aligned.
@@ -4607,8 +6835,9 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
      a 16-byte boundary ..."
    */
   if( OP_unalign_mem( ld_op ) &&
+      !EBO_Allowable_Unaligned_Vector( alu_op ) &&
       TOP_is_vector_op( OP_code(ld_op) ) ){
-    return FALSE;
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
   }
 
   /* Check <index> and <base> will not be re-defined between
@@ -4629,14 +6858,14 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   if( mode == N32_MODE ){
     // We need to add one more addressing mode for m32.
     //DevWarn( "Support me!!!" );
-    return FALSE;
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
   }
 
   if( index_reg >= 0 ){
     const TN* opnd = OP_opnd( ld_op, index_reg );
     const EBO_TN_INFO* ptinfo = get_tn_info( opnd );
     if( ptinfo != NULL && ptinfo->sequence_num >= tninfo->sequence_num ){
-      return FALSE;
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
     }
   }
 
@@ -4644,7 +6873,7 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
     const TN* opnd = OP_opnd( ld_op, base_reg );
     const EBO_TN_INFO* ptinfo = get_tn_info( opnd );
     if( ptinfo != NULL && ptinfo->sequence_num >= tninfo->sequence_num ){
-      return FALSE;
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
     }
   }
 
@@ -4668,16 +6897,20 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
          pred_op &&	// Bug 7596
 #endif
 	 OP_store( pred_op ) )
-	return FALSE;
+        return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
 
       opinfo = opinfo->same;
     }
   }
 
-  const TOP new_top = Load_Execute_Format( ld_op, alu_op, mode );
+  TOP new_top = Load_Execute_Format( ld_op, alu_op, mode );
 
   if( new_top == TOP_UNDEFINED )
-    return FALSE;
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+
+  if( EBO_flow_safe && (opnd0_indx == 1) ) {
+    new_top = Fit_Cmp_By_Load_Usage( new_top, TRUE );
+  }
 
   const INT32 load_uses = hTN_MAP32_Get( _load_exec_map, OP_result(ld_op,0) ) - 1;
 
@@ -4685,7 +6918,14 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
    */
   if( ( load_uses > CG_load_execute ) &&
       ( CGTARG_Latency(top) < CGTARG_Latency(new_top) ) ){
-    return FALSE;
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+  }
+
+  // If load is volatile, replace with exactly one load-exe OP, in order to
+  // maintain the same number of memory accesses.
+  if (OP_volatile(ld_op) &&
+      load_uses != 1) {
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
   }
 
   TN* offset = OP_opnd( ld_op, OP_find_opnd_use( ld_op, OU_offset ) );
@@ -4698,14 +6938,28 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   TN* opnd1 = NULL;
   TN* opnd0 = OP_opnd( alu_op, opnd0_indx );
 
+
   // For TOP_cmpi cases
-  if( opnd0_indx == 1 && TN_has_value(opnd0) ){
+  if( opnd0_indx == 1 && (TN_has_value(opnd0) || EBO_flow_safe ) ){
     opnd1 = opnd0;
     opnd0 = NULL;
   }
 
   OP* new_op = NULL;
 
+  if (OP_sse5(alu_op) && EBO_Is_FMA4(alu_op)) {
+    // succeed or fail based on layout match
+    rval = EBO_Process_SSE5_Load_Execute(new_top, mode, alu_cmp_idx, base,
+                                           scale, index, offset,
+                                           result, ld_op, alu_op, 
+                                           actual_tninfo);
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+  }
+
+  if( OP_opnds(alu_op) > 2 )
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+
+  // Standard Load Execute processing
   if( mode == BASE_MODE ){
     // base + offset
     if( OP_opnds(alu_op) == 1 ){
@@ -4751,8 +7005,10 @@ BOOL EBO_Load_Execution( OP* alu_op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   Set_OP_unroll_bb( new_op, OP_unroll_bb(alu_op) );
 
   Copy_WN_For_Memory_OP( new_op, ld_op );
-  if ( OP_volatile( ld_op ) )
-    Set_OP_volatile( new_op );
+  if (OP_volatile(ld_op)) {
+    Reset_OP_volatile(ld_op);	// allow OP to be deleted
+    Set_OP_volatile(new_op);
+  }
   OP_srcpos( new_op ) = OP_srcpos( alu_op );
   BB_Insert_Op_After( bb, alu_op, new_op );
 
@@ -4813,37 +7069,6 @@ Check_No_Use_Between (OP* from, OP* to, TN* result)
 	    TNs_Are_Equivalent(FP_TN, opnd))
 	  return FALSE;
       }
-    }
-  }
-
-  return TRUE;
-}
-
-BOOL
-Check_No_Redef_Between (OP* from, OP* to, TN* opnd)
-{
-  if (!TN_is_register(opnd))
-    return FALSE;
-
-  for (OP* op = to->prev; op && op != from; op = op->prev) {
-    for (INT i = 0; i < OP_opnds(op); i ++) {
-      TN* tmp_opnd = OP_opnd(op, i);
-      if (TN_is_register(tmp_opnd) &&
-	  TNs_Are_Equivalent(tmp_opnd, opnd)) {
-	EBO_TN_INFO *src0_info, *src1_info;
-	src0_info = get_tn_info( tmp_opnd );
-	src1_info = get_tn_info( opnd );
-	if (!src0_info || !src1_info)
-	  return FALSE;
-	if (src0_info->sequence_num != src1_info->sequence_num)
-	  return FALSE;
-      }
-    }
-    for (INT i = 0; i < OP_results(op); i ++) {
-      TN* tmp_res = OP_result(op, i);
-      if (TN_is_register(tmp_res) &&
-	  TNs_Are_Equivalent(tmp_res, opnd))
-	return FALSE;
     }
   }
 
@@ -5007,10 +7232,7 @@ EBO_Lea_Insertion( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 	    TNs_Are_Equivalent(OP_opnd(alu_op, 0),OP_opnd(op, 1)) &&
 	    TNs_Are_Equivalent(OP_opnd(alu_op, 0),OP_opnd(alu_op, 1)) &&
 	    Check_No_Use_Between(alu_op, op, OP_result(alu_op, 0)) &&
-	    // Bug 129: tninfo sequence number is no good after Register
-	    // allocation. Another TN could be assigned the same register
-	    // and be defined/re-defined between op and alu_op.
-	    Check_No_Redef_Between(alu_op, op, OP_opnd(alu_op, 0))) {
+	    Pred_Opnd_Avail(op, actual_tninfo[0], 0)) {
 	  new_op = Mk_OP ((code == TOP_add32)?TOP_leax32:TOP_leax64, 
 			  OP_result(op, 0), OP_opnd(alu_op, 0), 
 			  OP_opnd(alu_op, 1), 
@@ -5059,7 +7281,7 @@ EBO_Lea_Insertion( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 	      break;
 	    
 	    // There should be no redefinitions of alu_op's first opnd.
-	    if (!Check_No_Redef_Between(alu_op, op, OP_opnd(alu_op, 0)))
+	    if (!Pred_Opnd_Avail(op, actual_tninfo[1], 0))
 	      break;
 
 	    new_op = Mk_OP ((code == TOP_add32)?TOP_leax32:TOP_leax64, 
@@ -5386,7 +7608,7 @@ EBO_Lea_Insertion( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 	  // There should be no other uses of result of alu_op
 	  Check_No_Use_Between(alu_op, op, OP_result(alu_op, 0)) &&
 	  // There should be no redefinitions of alu_op's first opnd.
-	  Check_No_Redef_Between(alu_op, op, OP_opnd(alu_op, 0)) &&
+	  Pred_Opnd_Avail(op, actual_tninfo[0], 0) &&
 	  // The following scenario occurs when LRA removes a copy op between
 	  // a local TN and a GTN, after register allocation, and later EBO
 	  // deletes the assignment to the local TN. 
@@ -5526,7 +7748,7 @@ EBO_Lea_Insertion( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 	     (op->next == NULL && 
 	      !GTN_SET_MemberP(BB_live_out(OP_bb(op)), OP_result(alu_op, 0)))) &&
 	    Check_No_Use_Between(alu_op, op, OP_result(alu_op, 0)) &&
-	    Check_No_Redef_Between(alu_op, op, OP_opnd(alu_op, 0))) {
+	    Pred_Opnd_Avail(op, actual_tninfo[0], 0)) {
 	  EBO_TN_INFO *src0_info, *src1_info;
 	  src0_info = get_tn_info( OP_opnd(op, 1));
 	  src1_info = get_tn_info( OP_opnd(alu_op, 0));
@@ -5619,38 +7841,32 @@ EBO_Lea_Insertion( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 		!is_live_tn(op->next, OP_result(alu_op, 0))) ||
 	       (op->next == NULL && 
 		!GTN_SET_MemberP(BB_live_out(OP_bb(op)), OP_result(alu_op, 0)))) &&
-	      Check_No_Use_Between(alu_op, op, OP_result(alu_op, 0))) {
-	    EBO_TN_INFO *src0_info, *src1_info;
-	    src0_info = get_tn_info( OP_opnd(op, 0));
-	    src1_info = get_tn_info( OP_opnd(alu_op, 0));
-	    if (src0_info && src1_info &&
-		src0_info->sequence_num <= src1_info->sequence_num) {
-	      new_op = Mk_OP ((code == TOP_leax32)?TOP_leax32:TOP_leax64, 
-			      OP_result(op, 0), OP_opnd(alu_op, 0), 
-			      OP_opnd(alu_op, 1), 
-			      Gen_Literal_TN(2, 4), Gen_Literal_TN(0, 4));	  
+	      Check_No_Use_Between(alu_op, op, OP_result(alu_op, 0)) &&
+	      Pred_Opnd_Avail(op, actual_tninfo[1], 0)) {
+	    new_op = Mk_OP ((code == TOP_leax32)?TOP_leax32:TOP_leax64, 
+			    OP_result(op, 0), OP_opnd(op, 0), 
+			    OP_opnd(alu_op, 1), 
+			    Gen_Literal_TN(2, 4), Gen_Literal_TN(0, 4));	  
+	    if (rflags_read && 
+		((TOP_is_change_rflags( OP_code(new_op) ) &&
+		  !TOP_is_change_rflags( OP_code(op) )) ||
+		 (!TOP_is_change_rflags( OP_code(new_op) ) &&
+		  TOP_is_change_rflags( OP_code(op) ))))
+	      return FALSE;
 
-	      if (rflags_read && 
-		  ((TOP_is_change_rflags( OP_code(new_op) ) &&
-		    !TOP_is_change_rflags( OP_code(op) )) ||
-		   (!TOP_is_change_rflags( OP_code(new_op) ) &&
-		    TOP_is_change_rflags( OP_code(op) ))))
-		return FALSE;
+	    if (alu_op_defines_rflags_used(alu_op, op))
+	      return FALSE;
 
-	      if (alu_op_defines_rflags_used(alu_op, op))
-		return FALSE;
-
-	      OP_srcpos( new_op ) = OP_srcpos( op );
-	      if( EBO_Trace_Data_Flow ){
-		fprintf( TFile, "Lea_Insertion merges " );
-		Print_OP_No_SrcLine(op);
-		fprintf( TFile, "and " );
-		Print_OP_No_SrcLine(alu_op);
-		fprintf( TFile, "with " );
-		Print_OP_No_SrcLine(new_op);
-	      }
-	      BB_Remove_Op(OP_bb(alu_op), alu_op);
+	    OP_srcpos( new_op ) = OP_srcpos( op );
+	    if( EBO_Trace_Data_Flow ){
+	      fprintf( TFile, "Lea_Insertion merges " );
+	      Print_OP_No_SrcLine(op);
+	      fprintf( TFile, "and " );
+	      Print_OP_No_SrcLine(alu_op);
+	      fprintf( TFile, "with " );
+	      Print_OP_No_SrcLine(new_op);
 	    }
+	    BB_Remove_Op(OP_bb(alu_op), alu_op);
 	  } else if (CG_fold_shiftadd && alu_op && alu_op->bb == op->bb && 
 		     ((OP_code(alu_op) == TOP_leaxx64 && 
 		       code == TOP_leax64) ||
@@ -5788,14 +8004,17 @@ EBO_Fold_Load_Duplicate( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   if (!(EBO_Opt_Mask & EBO_FOLD_LOAD_DUPLICATE)) return FALSE;
 #endif
 
-  if (OP_code(op) != TOP_fmovddup)
+  BOOL do_unpckhpd = FALSE;
+  if (OP_code(op) != TOP_fmovddup && OP_code(op) != TOP_vmovddup)
     return FALSE;
 
   OP* shuf_op = actual_tninfo[0]->in_op;
   if (!shuf_op || shuf_op->bb != op->bb || 
       (OP_code(shuf_op) != TOP_shufpd && 
        OP_code(shuf_op) != TOP_ldhpd &&
-       OP_code(shuf_op) != TOP_ldapd))
+       OP_code(shuf_op) != TOP_ldapd &&
+       OP_code(shuf_op) != TOP_ldupd &&
+       OP_code(shuf_op) != TOP_ldsd))
     return FALSE;
 
   if (!TOP_is_load(OP_code(shuf_op)) &&
@@ -5828,77 +8047,101 @@ EBO_Fold_Load_Duplicate( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
 
   EBO_TN_INFO *loaded_tn_info = get_tn_info( OP_opnd(shuf_op, 0) );
   OP* load = loaded_tn_info->in_op;
-  if (!load || load->bb != shuf_op->bb || !TOP_is_load(OP_code(load)))
-    return FALSE;
-
-  EBO_TN_INFO *src_info = get_tn_info( OP_result(load, 0) );
-  if (loaded_tn_info->sequence_num > src_info->sequence_num)
-    return FALSE;
-  
   OP* new_op = NULL;
-  INT base_loc = OP_find_opnd_use( load, OU_base );
-  INT offset_loc = OP_find_opnd_use( load, OU_offset );
-  INT index_loc = OP_find_opnd_use( load, OU_index );
-  INT scale_loc = OP_find_opnd_use( load, OU_scale );
-  
-  TN *base   = NULL;
-  TN *offset   = NULL;
-  TN *index   = NULL;
-  TN *scale   = NULL;
-  if (base_loc >= 0) 
-    base = OP_opnd( load, OP_find_opnd_use( load, OU_base ) );
-  if (offset_loc >= 0) 
-    offset = OP_opnd( load, OP_find_opnd_use( load, OU_offset ) );
-  if (index_loc >= 0) 
-    index = OP_opnd( load, OP_find_opnd_use( load, OU_index ) );
-  if (scale_loc >= 0) 
-    scale = OP_opnd( load, OP_find_opnd_use( load, OU_scale ) );
-  
-  if (!offset || TN_is_symbol(offset))
-    return FALSE;
-  
-  // base and index, if defined, should not be re-defined between
-  // load and op.
-  if (base && !Check_No_Redef_Between(load, op, base))
-    return FALSE;
-  if (index && !Check_No_Redef_Between(load, op, index))
-    return FALSE;
-  
-  if (base && offset && index && scale)
-    new_op = Mk_OP (TOP_fmovddupxx, 
+  if (!load || load->bb != shuf_op->bb || !TOP_is_load(OP_code(load)))
+  {
+    if(OP_code(shuf_op) == TOP_shufpd && 
+       TNs_Are_Equivalent(OP_opnd(shuf_op, 1), OP_opnd(shuf_op, 0)))
+    {
+      do_unpckhpd = TRUE; 
+      new_op = Mk_OP (TOP_unpckhpd, 
 		    OP_result(op, 0), 
-		    OP_opnd(load, 0), 
+		    OP_opnd(shuf_op, 0), 
+		    OP_opnd(shuf_op, 0)); 
+    } else
+    return FALSE;
+  }
+
+  if (!do_unpckhpd)
+  {
+    EBO_TN_INFO *src_info = get_tn_info( OP_result(load, 0) );
+    if (loaded_tn_info->sequence_num > src_info->sequence_num)
+      return FALSE;
+
+    INT base_loc = OP_find_opnd_use( load, OU_base );
+    INT offset_loc = OP_find_opnd_use( load, OU_offset );
+    INT index_loc = OP_find_opnd_use( load, OU_index );
+    INT scale_loc = OP_find_opnd_use( load, OU_scale );
+
+    TN *base   = NULL;
+    TN *offset   = NULL;
+    TN *index   = NULL;
+    TN *scale   = NULL;
+    if (base_loc >= 0) 
+      base = OP_opnd( load, OP_find_opnd_use( load, OU_base ) );
+    if (offset_loc >= 0) 
+      offset = OP_opnd( load, OP_find_opnd_use( load, OU_offset ) );
+    if (index_loc >= 0) 
+      index = OP_opnd( load, OP_find_opnd_use( load, OU_index ) );
+    if (scale_loc >= 0) 
+      scale = OP_opnd( load, OP_find_opnd_use( load, OU_scale ) );
+
+    if (!offset || TN_is_symbol(offset))
+      return FALSE;
+
+    // base and index, if defined, should not be re-defined between
+    // load and op.
+    if (base_loc >= 0 && !Pred_Opnd_Avail(op, loaded_tn_info, base_loc))
+      return FALSE;
+    if (index_loc >= 0 && !Pred_Opnd_Avail(op, loaded_tn_info, index_loc))
+      return FALSE;
+
+    TOP topcode;
+    if (base && offset && index && scale) {
+      topcode = TOP_fmovddupxx;
+      if (Is_Target_Orochi() && Is_Target_AVX())
+	topcode = TOP_vmovddupxx;
+      new_op = Mk_OP (topcode, 
+	  OP_result(op, 0), 
+	  OP_opnd(load, 0), 
 		    OP_opnd(load, 1), 
 		    OP_opnd(load, 2), 
 		    OP_opnd(load, 3));
-  else if (base && offset)
-    new_op = Mk_OP (TOP_fmovddupx, 
-		    OP_result(op, 0), 
-		    OP_opnd(load, 0), 
-		    OP_opnd(load, 1));
-  else if (index && scale && offset)
-    new_op = Mk_OP (TOP_fmovddupxxx, 
-		    OP_result(op, 0), 
-		    OP_opnd(load, 0), 
-		    OP_opnd(load, 1), 
-		    OP_opnd(load, 2));
-  
-  if ( op == shuf_op /* op uses result of a load */ &&
-       TOP_is_vector_high_loadstore( OP_code( load ) ) ) {
-    INT offset_loc = OP_find_opnd_use( new_op, OU_offset );
-    INT offset_value = TN_value( OP_opnd( new_op, offset_loc ) );
-    Set_OP_opnd( new_op, offset_loc, 
-		 Gen_Literal_TN( offset_value - 8, 
-				 TN_size( OP_opnd( new_op, offset_loc ) ) ) );    
-  }
-  else if ( !TOP_is_vector_high_loadstore( OP_code( load ) ) ) {
-    INT offset_loc = OP_find_opnd_use( new_op, OU_offset );
-    INT offset_value = TN_value( OP_opnd( new_op, offset_loc ) );
-    Set_OP_opnd( new_op, offset_loc, 
+    } else if (base && offset) {
+      topcode = TOP_fmovddupx;
+      if (Is_Target_Orochi() && Is_Target_AVX())
+	topcode = TOP_vmovddupx;
+      new_op = Mk_OP (topcode, 
+	  OP_result(op, 0), 
+	  OP_opnd(load, 0), 
+	  OP_opnd(load, 1));
+    } else if (index && scale && offset) {
+      topcode = TOP_fmovddupxxx;
+      if (Is_Target_Orochi() && Is_Target_AVX())
+	topcode = TOP_vmovddupxxx;
+      new_op = Mk_OP (topcode, 
+	  OP_result(op, 0), 
+	  OP_opnd(load, 0), 
+	  OP_opnd(load, 1), 
+	  OP_opnd(load, 2));
+    }
+
+    if ( op == shuf_op /* op uses result of a load */ &&
+	TOP_is_vector_high_loadstore( OP_code( load ) ) ) {
+      INT offset_loc = OP_find_opnd_use( new_op, OU_offset );
+      INT offset_value = TN_value( OP_opnd( new_op, offset_loc ) );
+      Set_OP_opnd( new_op, offset_loc, 
+	  Gen_Literal_TN( offset_value - 8, 
+	    TN_size( OP_opnd( new_op, offset_loc ) ) ) );    
+    }
+    else if ( op != shuf_op && !TOP_is_vector_high_loadstore( OP_code( load ) ) ) {
+      INT offset_loc = OP_find_opnd_use( new_op, OU_offset );
+      INT offset_value = TN_value( OP_opnd( new_op, offset_loc ) );
+      Set_OP_opnd( new_op, offset_loc, 
 		 Gen_Literal_TN( offset_value + 8, 
 				 TN_size( OP_opnd( new_op, offset_loc ) ) ) );
+    }
   }
-
   if (new_op) {
     if (shuf_op != op) {
       if( EBO_Trace_Data_Flow ){
@@ -5926,4 +8169,253 @@ EBO_Fold_Load_Duplicate( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
   }
 
   return FALSE;
+}
+
+// Return TRUE if OP has no operands but can be eliminated if it is a
+// duplicate.
+BOOL
+EBO_Can_Eliminate_Zero_Opnd_OP (OP *op)
+{
+  switch (OP_code(op)) {
+    case TOP_zero32:
+    case TOP_zero64:
+    case TOP_xzero32:
+    case TOP_xzero64:
+    case TOP_xzero128v32:
+    case TOP_xzero128v64:
+      return TRUE;
+  }
+  return FALSE;
+}
+void expand_strcmp_bb(BB * call_bb) {
+  int i;
+  BB *bb;
+  TOP loadc;
+  int dont_expand = 0;
+  BB *beg_bb, *diff_bb, *same_bb, *cmpz_bb, *cmpbyte2_bb, *incidx_bb, *old_succ;
+  TN *beglb_tn, *difflb_tn, *oldsucclb_tn, *samelb_tn;
+  TN *arg1,*stack_arg1,*stack_arg2,*char1of1, *cmp_res, *arg2, *cmpz_res, *char2of1, *char1of2,*result, *ret_reg,*char1of3;
+  LABEL_IDX beglb, difflb, oldsucclb, samelb;
+  OP *ld_arg1, *ld_byte1, *ld_byte3, *cmp_bytes, *ld_arg2, *jne, *cmpz_byte, *je, *ld_byte2,*ld1,*ld2;
+  OP *inc_arg1, *inc_arg2, *reset_result, *jmp, *set_result, *op_iter;
+  static int first_store = 1;
+
+  Set_flags_strcmp_expand();
+  is_str_expand = TRUE;
+  /* assume that call to strcmp is the last op. This assumption is correct,
+     but should we have an IsTrue and verify to make sure?
+     verify that last op of BB is call to strcmp.
+     can also be jmp */
+  OP* last_op = BB_last_op(call_bb);
+  Is_True(OP_code(last_op) == TOP_call, ("Last op of BB is not a call"));
+
+  if (OP_code(last_op) == TOP_call) {
+    BBLIST* old_ftsucc_list = BBlist_Fall_Thru_Succ(call_bb);
+    if (old_ftsucc_list)
+      old_succ = old_ftsucc_list->item;
+  }
+
+  TOP last_op_code = OP_code(last_op);
+  if(last_op_code != TOP_call) {
+    fprintf(stderr, "unexpected opcode\n");
+  }
+
+  BB* last_bb;
+  for(last_bb = REGION_First_BB; BB_next(last_bb); last_bb = BB_next(last_bb))
+    ;
+  REGISTER rx,reg;
+  ISA_REGISTER_CLASS rc;
+  arg1 = 0;
+  arg2 = 0;
+
+  for (ld_arg1 = OP_prev(last_op); ld_arg1; ld_arg1 = OP_prev(ld_arg1)) {
+      result = OP_result(ld_arg1, 0);
+      if((OP_code(ld_arg1) == TOP_store32) && (first_store == 1))
+      {
+        TN *opnd = OP_opnd(ld_arg1, 0);
+        arg2 = opnd;
+        stack_arg2 = OP_opnd(ld_arg1, 1);
+        first_store++;
+      }
+      else
+      {
+        if((OP_code(ld_arg1) == TOP_store32) && (first_store == 2))
+        {
+          TN *opnd = OP_opnd(ld_arg1, 0);
+          arg1 = opnd;
+          stack_arg1 = OP_opnd(ld_arg1, 1);
+          first_store = 1;
+          break;
+        }
+      }
+    }
+    /* Create the 6 blocks needed to expand strcmp.
+     * Add them between the call block and its successor.
+     * Chain them together by setting their prev/next fields.
+     * Set up their pred/succ and fallthrough attributes
+     */
+  BB* mylist = Gen_BB_N (6);
+
+  beg_bb = &mylist[0];
+  beglb = Gen_Label_For_BB(beg_bb);
+  beglb_tn = Gen_Label_TN(beglb, 0);
+
+  diff_bb = &mylist[5];
+  difflb = Gen_Label_For_BB(diff_bb);
+  difflb_tn = Gen_Label_TN(difflb, 0);
+  Unlink_Pred_Succ(call_bb, old_succ);
+  Target_Simple_Fall_Through_BB(call_bb, &mylist[0]);
+
+  for(i = 1; i < 6; i++){
+    Insert_BB(&mylist[i], &mylist[i-1]);
+    if (i != 5)
+      Target_Simple_Fall_Through_BB(&mylist[i-1], &mylist[i]);
+  }
+
+  Target_Simple_Fall_Through_BB(&mylist[5], old_succ);
+  Set_TN_is_global_reg(arg1); //This will make TN6 map to %rsi stay
+  Set_TN_is_global_reg(arg2);
+  Reset_TN_is_gra_homeable(arg1);
+  Reset_TN_is_gra_homeable(arg2);
+  Reset_TN_is_rematerializable(arg1);
+  Reset_TN_is_rematerializable(arg2);
+  Set_TN_home(arg1,NULL);
+  Set_TN_home(arg2,NULL);
+  Set_TN_is_global_reg(stack_arg1); //This will make TN6 map to %rsi stay
+  Set_TN_is_global_reg(stack_arg2);
+  char1of1 = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 4);
+  Set_TN_is_global_reg(char1of1);
+  char1of2 = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 4);
+  Set_TN_is_global_reg(char1of2);
+  char1of3 = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 1);
+  Set_TN_is_global_reg(char1of3);
+  ld_byte1 = Mk_OP(TOP_ld32,char1of1,arg1,Gen_Literal_TN(0, 4));
+
+  BB_Append_Op(beg_bb,ld_byte1);
+
+
+  cmp_res = Gen_Register_TN(ISA_REGISTER_CLASS_rflags, 8);
+  Set_TN_is_global_reg(cmp_res);
+  cmp_bytes = Mk_OP(TOP_cmpxxx8, cmp_res, char1of1, arg2,
+                    Gen_Literal_TN(1, 8) /* scaling factor */,
+                    Gen_Literal_TN(0,8));
+  BB_Append_Op(beg_bb, cmp_bytes);
+  jne = Mk_OP(TOP_jne, cmp_res, difflb_tn);
+  BB_Append_Op(beg_bb, jne);
+  oldsucclb = Gen_Label_For_BB(old_succ);
+  oldsucclb_tn = Gen_Label_TN(oldsucclb, 0);
+  Link_Pred_Succ(beg_bb, diff_bb);
+  BB_Remove_Op(call_bb, last_op);
+  /* remove the tag that says this is a call block */
+
+  ANNOTATION *ant = ANNOT_Get(BB_annotations(call_bb), ANNOT_CALLINFO);
+  BB_annotations(call_bb) = ANNOT_Unlink(BB_annotations(call_bb), ant);
+  Reset_BB_call(call_bb);
+
+  same_bb = &mylist[4];
+
+  samelb = Gen_Label_For_BB(same_bb);
+  samelb_tn = Gen_Label_TN(samelb, 0);
+
+  cmpz_bb = &mylist[1];
+  cmpz_res = cmp_res;
+  cmpz_byte = Mk_OP(TOP_test8, cmpz_res, char1of1, char1of1);
+  BB_Append_Op(cmpz_bb, cmpz_byte);
+  je = Mk_OP(TOP_je, cmpz_res, samelb_tn);
+  BB_Append_Op(cmpz_bb, je);
+  Link_Pred_Succ(cmpz_bb, same_bb);
+  cmpbyte2_bb = &mylist[2];
+  char2of1 = char1of1;
+  ld_byte2 = Mk_OP(TOP_ld8_32, char2of1, arg1, Gen_Literal_TN(1, 8));
+  BB_Append_Op(cmpbyte2_bb, ld_byte2);
+ cmp_bytes = Mk_OP(TOP_cmpxxx8, cmp_res, char2of1, arg2, Gen_Literal_TN(1, 8), Gen_Literal_TN(1,8));
+  BB_Append_Op(cmpbyte2_bb, cmp_bytes);
+  jne = Mk_OP(TOP_jne, cmp_res, difflb_tn);
+  BB_Append_Op(cmpbyte2_bb, jne);
+  Link_Pred_Succ(cmpbyte2_bb, diff_bb);
+
+
+  incidx_bb = &mylist[3];
+  TOP ptr_add = Is_Target_32bit() ? TOP_add32 : TOP_add64;
+  inc_arg1 = Mk_OP(ptr_add, arg1, arg1, Gen_Literal_TN(2, 8));
+  BB_Append_Op(incidx_bb, inc_arg1);
+  inc_arg2 = Mk_OP(ptr_add, arg2, arg2, Gen_Literal_TN(2, 8));
+  BB_Append_Op(incidx_bb, inc_arg2);
+
+  cmpz_byte = Mk_OP(TOP_test8, cmpz_res, char1of1, char1of1);
+  BB_Append_Op(incidx_bb, cmpz_byte);
+  jne = Mk_OP(TOP_jne, cmpz_res, beglb_tn);
+  BB_Append_Op(incidx_bb, jne);
+  Link_Pred_Succ(incidx_bb, beg_bb);
+  if(Is_Target_32bit()){
+    loadc = TOP_zero32;
+  }
+  else
+   loadc = TOP_zero64;
+  result = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 8);
+  Set_TN_is_global_reg(result);
+  reset_result = Mk_OP(loadc, result, Gen_Literal_TN(0, 8));
+  BB_Append_Op(same_bb, reset_result);
+  jmp = Mk_OP(TOP_jmp, oldsucclb_tn);
+  Link_Pred_Succ(same_bb, old_succ);
+
+  set_result = Mk_OP(TOP_sbb32, result, result, result);
+  BB_Append_Op(diff_bb, set_result);
+  set_result = Mk_OP(TOP_or32, result, Gen_Literal_TN(1, 8));
+  BB_Append_Op(diff_bb, set_result);
+  ld_byte1 = Mk_OP(TOP_ld32,arg1,stack_arg1/*arg1*/,Gen_Literal_TN(0, 4));
+  ld_byte2 = Mk_OP(TOP_ld32,arg2,stack_arg2/*arg1*/,Gen_Literal_TN(4, 8));
+  BB_Prepend_Op(old_succ,ld_byte1);
+  BB_Prepend_Op(old_succ,ld_byte2);
+  BB_Append_Op(same_bb, jmp);
+
+  if (BB_preds_len(old_succ) == 2) {
+    /* %eax in this block refers to result of strcmp,
+       replace its use with the result register in all
+       ops of old_succ till it is defined
+     */
+    int result_reg_def = 0;
+    for (op_iter = BB_first_op(old_succ); (!result_reg_def && op_iter);
+         op_iter = OP_next(op_iter)) {
+      for (i = 0; i < OP_opnds(op_iter); i++) {
+        TN *otn = OP_opnd(op_iter, i);
+        if (TN_is_dedicated(otn) // the dedicated tag should be removed
+            && (TN_register_and_class(otn) == CLASS_AND_REG_v0)) { //<-- int ret value
+
+          Set_OP_opnd(op_iter, i, result);
+        }
+      }
+      for (i = 0; i < OP_results(op_iter); i++) {
+        TN *rtn = OP_result(op_iter, i);
+        if (TN_is_dedicated(rtn)
+            && (TN_register_and_class(rtn) == CLASS_AND_REG_v0)) {
+          result_reg_def = 1;
+          continue;
+        }
+      }
+    }
+  }
+  else {
+    /* %eax in this block could refer to result of call to another
+       instruction in one of the other predecessor. In this case,
+       put result of strcmp in %eax in bb #9 and #10.
+     */
+    /* this case is unlikely to happen. check with a test case. if so, place an assertion here.*/
+    ret_reg = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 8);
+    Set_TN_register_and_class(ret_reg, CLASS_AND_REG_v0);//missing a call in this or earlier block-maybe
+    Set_TN_is_dedicated(ret_reg); // might not need this
+    Set_TN_is_global_reg(ret_reg);
+    TOP mov = Is_Target_32bit() ? TOP_mov32 : TOP_mov64;
+    OP *copy_result = Mk_OP(mov, ret_reg, result);
+   BB_Insert_Op(same_bb, jmp, copy_result, true);
+
+    ret_reg = Gen_Register_TN(ISA_REGISTER_CLASS_integer, 8);
+    Set_TN_register_and_class(ret_reg, CLASS_AND_REG_v0);//missing a call in this or earlier block-maybe
+    Set_TN_is_dedicated(ret_reg); // might not need this
+    Set_TN_is_global_reg(ret_reg);
+    mov = Is_Target_32bit() ? TOP_mov32 : TOP_mov64;
+    copy_result = Mk_OP(mov, ret_reg, result);
+    BB_Append_Op(diff_bb, copy_result);
+  }
+  GRA_LIVE_Recalc_Liveness(NULL);
 }

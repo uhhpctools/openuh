@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: cgdriver.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cgdriver.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:22-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cgdriver.h $
  *
  * Revision history:
  *  20-Feb-95 - Original Version

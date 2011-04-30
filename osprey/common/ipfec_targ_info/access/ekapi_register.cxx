@@ -217,8 +217,9 @@ char *EKAPI_GetRegName(void *pknobs, EKAPI_REGISTER_CLASS_INFO *reginfo,
                        int rid)
 {
     int index;
-    char *str, regname[100];
+    char *str;
     char *name;
+    static char regname[100];
     
     if (reginfo){
         str = itos(rid);

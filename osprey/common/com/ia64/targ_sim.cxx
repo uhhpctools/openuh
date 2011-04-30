@@ -503,6 +503,8 @@ Get_Return_Info (TY_IDX rtype, Mtype_Return_Level level)
 
         UINT64 size = TY_size(Ty_Table[rtype]);
 
+        if (size == 0) info.return_via_first_arg = FALSE;
+
         if (size > 0 && 8 * size <= 2 * SIM_INFO.max_struct_result) {
 
           TYPE_ID hfa_mtype = MTYPE_V;
@@ -558,10 +560,13 @@ Get_Return_Info (TY_IDX rtype, Mtype_Return_Level level)
               case MTYPE_C8:
               case MTYPE_C10:
 		// bug fix for OSP_257
-		// 
-                n = TY_size (rtype) / TY_size (Be_Type_Tbl (MTYPE_F8));
-                step = TY_size (Be_Type_Tbl (hfa_mtype)) /
-                       TY_size (Be_Type_Tbl (MTYPE_F8));
+		// bug fix for OSP_387
+		if ( hfa_mtype == MTYPE_F8 || hfa_mtype == MTYPE_C8)
+			n = TY_size (rtype) / TY_size (Be_Type_Tbl (MTYPE_F8));
+		else
+			n = TY_size (rtype) / TY_size (Be_Type_Tbl (MTYPE_F10));
+		// The elements of the HFA are placed in successive fp regs.
+		step = 1;
                 info.count = n;
 
                 for (i = 0; i < n; i++) {

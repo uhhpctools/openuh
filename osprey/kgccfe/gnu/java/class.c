@@ -599,20 +599,6 @@ add_interface (this_class, interface_class)
   add_interface_do (basetype_vec, interface_class, i);
 }
 
-#if 0
-/* Return the address of a pointer to the first FUNCTION_DECL
-   in the list (*LIST) whose DECL_NAME is NAME. */
-
-static tree *
-find_named_method (list, name)
-     tree *list;
-     tree name;
-{
-  while (*list && DECL_NAME (*list) != name)
-    list = &TREE_CHAIN (*list);
-  return list;
-}
-#endif
 
 static tree
 build_java_method_type (fntype, this_class, access_flags)
@@ -812,22 +798,6 @@ set_constant_value (field, constant)
 
 /* Count the number of Unicode chars encoded in a given Ut8 string. */
 
-#if 0
-int
-strLengthUtf8 (str, len)
-     char *str;
-     int len;
-{
-  register unsigned char* ptr = (unsigned char*) str;
-  register unsigned char *limit = ptr + len;
-  int str_length = 0;
-  for (; ptr < limit; str_length++) {
-    if (UTF8_GET (ptr, limit) < 0)
-      return -1;
-  }
-  return str_length;
-}
-#endif
 
 
 /* Calculate a hash value for a string encoded in Utf8 format.

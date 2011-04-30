@@ -44,7 +44,14 @@ extern	float	sqrtf(float);
 #pragma weak sqrtf = __sqrtf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern  float  __sqrtf(float);
+#pragma weak sqrtf
+float sqrtf( float x )
+{
+  return __sqrtf(x);
+}
+#elif defined(__GNUC__)
 extern  float  __sqrtf(float);
 float    sqrtf(float) __attribute__ ((weak, alias ("__sqrtf")));
 #endif

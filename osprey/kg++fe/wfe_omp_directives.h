@@ -102,6 +102,22 @@ WFE_expand_start_section ();
 extern void 
 WFE_expand_end_section ( );
 
+#ifdef TARG_SL2 
+extern void 
+WFE_expand_start_sl2_sections (BOOL is_minor_thread);
+
+extern void 
+WFE_expand_end_sl2_sections( );
+
+extern void 
+WFE_expand_start_sl2_section (BOOL is_minor_thread);
+
+extern void 
+WFE_expand_end_sl2_section ();
+#endif 
+
+
+
 struct Single_clause_wn_type
 {
    ST_list *private_clause;

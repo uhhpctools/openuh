@@ -27,8 +27,15 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 /* struct lang_identifier is private to c-decl.c, but langhooks.c needs to
    know how big it is.  This is sanity-checked in c-decl.c.  */
+/* Bug 12755: On mips native, there is a extra four bytes (of alignment
+ * padding?) somewhere */
+#ifdef ARCH_MIPS
+#define C_SIZEOF_STRUCT_LANG_IDENTIFIER \
+  (sizeof (struct c_common_identifier) + 3 * sizeof (void *) + 4)
+#else
 #define C_SIZEOF_STRUCT_LANG_IDENTIFIER \
   (sizeof (struct c_common_identifier) + 3 * sizeof (void *))
+#endif
 
 /* For gc purposes, return the most likely link for the longest chain.  */
 #define C_LANG_TREE_NODE_CHAIN_NEXT(T)				\

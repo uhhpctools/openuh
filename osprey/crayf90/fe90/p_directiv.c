@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -378,7 +381,7 @@ void parse_directive_stmt (void)
 
 #        if defined(_ACCEPT_TASK)
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
             if ((cdir_switches.task == FALSE || 
                  cmd_line_flags.disregard_all_mics) &&
                 TOKEN_VALUE(token) != Tok_Mic_Cncall &&
@@ -440,7 +443,7 @@ void parse_directive_stmt (void)
          goto EXIT;
       }
    }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
    else if (TOKEN_STR(token)[0] == '$' &&
             TOKEN_STR(token)[1] == 'S' &&
             TOKEN_STR(token)[2] == 'G' &&
@@ -773,6 +776,13 @@ static void parse_ignore_tkr(void)
                LN_DEF_LOC(name_idx)     = TRUE;
             }
 
+#ifdef KEY /* Bug 14150 */
+	 /* Now that we allow ignore_tkr on a dummy argument, don't set class
+	  * if we already know it */
+         if (AT_OBJ_CLASS(attr_idx) == Pgm_Unit) {
+	 }
+	 else
+#endif /* KEY Bug 14150 */
             ATD_CLASS(attr_idx)		= Dummy_Argument;
             ATD_IGNORE_TKR(attr_idx)	= TRUE;
          }
@@ -1340,17 +1350,6 @@ static void parse_slash_common_dirs(void)
 
                SB_COMMON_NEEDS_OFFSET(sb_idx)	= TRUE;
 	       SB_IS_COMMON(sb_idx)	= TRUE;
-# if 0
-               /* This is allowed now, but I'll leave the message in, */
-               /* just in case. BHJ                                   */
-
-               SB_DCL_ERR(sb_idx)		= TRUE;
-
-               /* Must be specified in a common block before THREAD PRIVATE */
-
-               PRINTMSG(TOKEN_LINE(token), 1479, Error, TOKEN_COLUMN(token),
-                        TOKEN_STR(token));
-# endif
             }
             else if (SB_USE_ASSOCIATED(sb_idx)) {
 
@@ -1376,6 +1375,15 @@ static void parse_slash_common_dirs(void)
                SB_BLK_TYPE(sb_idx)	= Threadprivate;
                SB_RUNTIME_INIT(sb_idx)	= FALSE;
                SB_IS_COMMON(sb_idx)	= TRUE;
+
+               /* Mark elements of the common block as thread private.
+                */
+               attr_idx	= SB_FIRST_ATTR_IDX(sb_idx);
+
+               while (attr_idx != NULL_IDX) {
+                  ATD_TASK_PRIVATE(attr_idx) = TRUE;
+                  attr_idx	= ATD_NEXT_MEMBER_IDX(attr_idx);
+               }
             }
 
             if (LA_CH_VALUE == SLASH) {
@@ -1409,12 +1417,33 @@ static void parse_slash_common_dirs(void)
 	    AT_OBJ_CLASS(attr_idx) = Data_Obj;
 	    SET_IMPL_TYPE(attr_idx);
 	 }
+	 /* Note that symbols in blocks are now marked to be thread private
+	  * since it is possible that some symbols can be referenced as thread
+	  * private and some as global.
+	  */
+	 ATD_TASK_PRIVATE(attr_idx) = TRUE;
 #ifdef KEY
          if (ATD_STOR_BLK_IDX(attr_idx) == NULL_IDX) {
             assign_storage_blk(attr_idx);
          }
          SB_BLK_TYPE(ATD_STOR_BLK_IDX(attr_idx)) = Threadprivate;
 #endif
+#ifdef KEY /* Bug 9029 */
+	 /* The current function (parse_slash_common_dirs) is called only if
+	  * the token is Tok_Open_Mp_Dir_Threadprivate, so none of the
+	  * following code is relevant, and calling fnd_semantic_err with
+	  * Obj_Section_Non_Gp causes spurious errors when the identifier is
+	  * a module variable or when it is allocatable. Probably we need to
+	  * add an Attr_Threadprivate to the enumerations used in nameres.h,
+	  * and then add the corresponding table entries, and thereby make
+	  * sure that the variable cited in the THREADPRIVATE directive is
+	  * allowed by the OpenMP spec (e.g. it must not be in common, it must
+	  * not be equivalenced, and it must either have the SAVE attribute
+	  * or be a module variable.
+	  * But for now, we just disable the fnd_semantic_err check without
+	  * adding a new, more correct check.
+	  */
+#else /* KEY Bug 9029 */
 	 if(!fnd_semantic_err((token_value == Tok_SGI_Dir_Section_Gp) ?
 				 Obj_Section_Gp : Obj_Section_Non_Gp,
 				 TOKEN_LINE(token),
@@ -1456,6 +1485,7 @@ static void parse_slash_common_dirs(void)
 	    else if(token_value == Tok_SGI_Dir_Section_Non_Gp)
 	      ATD_SECTION_NON_GP(attr_idx) = TRUE;
 	  }
+#endif /* KEY Bug 9029 */
       }
       /* the above is added by jhs, 02.9.9 */
       else if (!parse_err_flush(Find_Comma_Rparen, "/common-block-name/ or identifier")) {
@@ -1770,7 +1800,7 @@ static void parse_doall_cmic(void)
 
             case Tok_Dir_Autoscope:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                PRINTMSG(TOKEN_LINE(token), 1415, Error, TOKEN_COLUMN(token));
 # else
                IL_FLD(list_array[4]) = CN_Tbl_Idx;
@@ -1830,7 +1860,7 @@ static void parse_doall_cmic(void)
 
             case Tok_Dir_Maxcpus:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                PRINTMSG(TOKEN_LINE(token), 1436, Warning,
                         TOKEN_COLUMN(token), "MAXCPUS");
                
@@ -1852,7 +1882,7 @@ static void parse_doall_cmic(void)
                   parse_err_flush(Find_EOS, "(");
                   goto EXIT;
                }
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                IL_OPND(list_array[7]) = null_opnd;
 # endif
                break;
@@ -1912,7 +1942,7 @@ static void parse_doall_cmic(void)
 
             case Tok_Dir_Numchunks:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                PRINTMSG(TOKEN_LINE(token), 1436, Warning,
                         TOKEN_COLUMN(token), "NUMCHUNKS");
 # endif
@@ -1950,7 +1980,7 @@ static void parse_doall_cmic(void)
                   goto EXIT;
                }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                IL_OPND(list_array[8]) = null_opnd;
 # endif
                break;
@@ -2042,7 +2072,7 @@ static void parse_doall_cmic(void)
 # ifdef _TARGET_OS_SOLARIS
       IL_IDX(list_array[8]) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
                                           CMIC_WORK_DIST_NCPUS_CHUNKS);
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
       IL_IDX(list_array[8]) = CN_INTEGER_ZERO_IDX;
 # else
       IL_IDX(list_array[8]) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
@@ -2134,74 +2164,6 @@ static boolean parse_var_name_list(opnd_type   *list_opnd)
    return(result);
 
 }  /* parse_var_name_list */
-# if 0
-
-/* No one uses this routine */
-
-
-/******************************************************************************\
-|*									      *|
-|* Description:								      *|
-|*	This routine parses a list of expressions seperated by commas.        *|
-|*									      *|
-|* Input parameters:							      *|
-|*	NONE								      *|
-|*									      *|
-|* Output parameters:							      *|
-|*	opnd - points to list of expressions.                                 *|
-|*									      *|
-|* Returns:								      *|
-|*	NOTHING								      *|
-|*									      *|
-\******************************************************************************/
-
-static void parse_expr_list(opnd_type *list_opnd)
-
-{
-   int		list_idx = NULL_IDX;
-   boolean      ok = TRUE;
-   opnd_type	opnd;
-
-
-   TRACE (Func_Entry, "parse_expr_list", NULL);
-
-   while(TRUE) {
-
-      ok &= parse_expr(&opnd);
-
-      if (ok) {
-
-         if (list_idx == NULL_IDX) {
-            NTR_IR_LIST_TBL(list_idx);
-            OPND_FLD((*list_opnd)) = IL_Tbl_Idx;
-            OPND_IDX((*list_opnd)) = list_idx;
-            OPND_LIST_CNT((*list_opnd)) = 1;
-         }
-         else {
-            NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
-            IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
-            (OPND_LIST_CNT((*list_opnd)))++;
-            list_idx = IL_NEXT_LIST_IDX(list_idx);
-         }
-         COPY_OPND(IL_OPND(list_idx), opnd);
-      }
-      else {
-         parse_err_flush(Find_Comma_Rparen, NULL);
-         break;
-      }
-
-      if (LA_CH_VALUE != COMMA) {
-         break;
-      }
-      NEXT_LA_CH;
-   }
-
-   TRACE (Func_Exit, "parse_expr_list", NULL);
-
-   return;
-
-}  /* parse_expr_list */
-# endif
 
 /******************************************************************************\
 |*									      *|
@@ -2312,7 +2274,7 @@ static void parse_doparallel_cmic(void)
 
       case Tok_Dir_Numchunks:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
          PRINTMSG(TOKEN_LINE(token), 1436, Warning,
                   TOKEN_COLUMN(token), "NUMCHUNKS");
 # endif
@@ -2349,7 +2311,7 @@ static void parse_doparallel_cmic(void)
             goto EXIT;
          }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
          IL_OPND(list_array[0]) = null_opnd;
 # endif
          break;
@@ -2439,7 +2401,7 @@ EXIT:
    if (IL_FLD(list_array[0]) == NO_Tbl_Idx) {
       IL_FLD(list_array[0]) = CN_Tbl_Idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
       IL_IDX(list_array[0]) = CN_INTEGER_ZERO_IDX;
 # else
       IL_IDX(list_array[0]) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
@@ -2658,7 +2620,7 @@ static void parse_parallel_cmic(void)
 
             case Tok_Dir_Autoscope:
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                PRINTMSG(TOKEN_LINE(token), 1415, Error, TOKEN_COLUMN(token));
 # else
 
@@ -3105,7 +3067,7 @@ static void parse_permutation_mic(void)
    int		attr_idx;
    int		name_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
    int		ir_idx;
    int		list_idx = NULL_IDX;
 # endif
@@ -3118,7 +3080,7 @@ static void parse_permutation_mic(void)
       return;
    }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
    ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
    IR_OPR(ir_idx) = Assert_Star_Opr;
 
@@ -3158,7 +3120,7 @@ static void parse_permutation_mic(void)
             }
          }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
          if (list_idx == NULL_IDX) {
             NTR_IR_LIST_TBL(list_idx);
             IR_FLD_R(ir_idx) = IL_Tbl_Idx;
@@ -3645,7 +3607,7 @@ static void parse_dir_directives(void)
    int			stmt_num;
    int			type_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
    int			cvrt_idx;
 # endif
 
@@ -3981,7 +3943,7 @@ static void parse_dir_directives(void)
                 TOKEN_LEN(token) == 6 &&
                 strncmp("SAFEVL", TOKEN_STR(token), 6) == IDENTICAL) {
 
-#              if defined(_TARGET_OS_MAX) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#              if defined(_TARGET_OS_MAX) || (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
 
                   /* If SAFEVL specified, issue warning and ignore ivdep */
 
@@ -3998,7 +3960,7 @@ static void parse_dir_directives(void)
                   }
                   else {
 
-#                    if !defined(_TARGET_OS_MAX) && !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#                    if !defined(_TARGET_OS_MAX) && !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX)) || defined(_TARGET_OS_DARWIN)
                         COPY_OPND(IR_OPND_L(ir_idx), opnd);
 #                    endif
                   }
@@ -4242,7 +4204,7 @@ static void parse_dir_directives(void)
 
       case Tok_Dir_Notask:
 
-# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (opt_flags.task_lvl == Task_Lvl_0) {
             parse_err_flush(Find_Comma, NULL);
             break;
@@ -4341,7 +4303,7 @@ static void parse_dir_directives(void)
                NEXT_LA_CH;  /* Pick up Rparen. */
             }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             /* turn this into a call */
 
             COPY_OPND(IR_OPND_R(ir_idx), IR_OPND_L(ir_idx));
@@ -4433,7 +4395,7 @@ static void parse_dir_directives(void)
 
       case Tok_Dir_Prefertask:
 
-#        if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#        if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
             if (!cdir_switches.task) {
                parse_err_flush(Find_Comma, NULL);
@@ -4444,7 +4406,7 @@ static void parse_dir_directives(void)
          cdir_switches.prefertask = TRUE;
          ir_idx			  = gen_directive_ir(Prefertask_Cdir_Opr);
 
-#        if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#        if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             IR_OPR(ir_idx)	= Assert_Star_Opr;
             IR_FLD_L(ir_idx)	= CN_Tbl_Idx;
             IR_IDX_L(ir_idx)	= C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
@@ -4666,7 +4628,7 @@ static void parse_dir_directives(void)
 
       case Tok_Dir_Task:
 
-# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if !(defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          if (opt_flags.task_lvl == Task_Lvl_0) {
             parse_err_flush(Find_Comma, NULL);
          }
@@ -4868,7 +4830,7 @@ static void parse_mic_directives(void)
    boolean	ok		= TRUE;
    opnd_type	opnd;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int		cvrt_idx;
    int		list_idx;
 # endif
@@ -5168,7 +5130,7 @@ static void parse_mic_directives(void)
                NEXT_LA_CH;  /* Pick up Rparen. */
             }
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             /* turn this into a call */
 
             COPY_OPND(IR_OPND_R(ir_idx), IR_OPND_L(ir_idx));
@@ -10109,7 +10071,7 @@ static void parse_id_directive(void)
                                       sb_len[What_Blk],
                                       line,
                                       column,
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
                                       Coment); /* different class on IRIX */
 # else
                                       Static_Named);
@@ -10119,7 +10081,7 @@ static void parse_id_directive(void)
 
          ATD_STOR_BLK_IDX(tmp_idx) = sb_idx;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          /* Attach the string in CDIR$ ID "string" to the compiler temp. */
          ATD_TMP_IDX(tmp_idx) = OPND_IDX(opnd);
          ATD_FLD(tmp_idx) = CN_Tbl_Idx;
@@ -10174,7 +10136,7 @@ static void parse_id_directive(void)
 
          NTR_IR_TBL(init_idx);
          IR_OPR(init_idx)	= Init_Opr;
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
          IR_OPR(init_idx)	= Null_Opr;
 # endif
 
@@ -11272,7 +11234,7 @@ static void parse_open_mp_clauses(open_mp_directive_type directive)
    int		opr_ir_idx;
    long		the_constant;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
    int          column;
    int          line;
    int          list2_idx;
@@ -11981,7 +11943,7 @@ static void parse_open_mp_clauses(open_mp_directive_type directive)
                }
                break;
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
             case Tok_Open_Mp_Dir_Affinity:
 
                if (! open_mp_clause_allowed[directive][Affinity_Omp_Clause]) {

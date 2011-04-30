@@ -61,8 +61,8 @@ extern void (*W2F_Outfile_Fini_p)(void);
 extern void (*W2F_Outfile_Init_p)(void);
 extern void (*W2F_Outfile_Translate_Pu_p)(WN *pu);
 extern void (*W2F_Pop_PU_p)(void);
-extern void (*W2F_Process_Command_Line_p)(INT phase_argc, char *phase_argv[], 
-  INT argc, char *argv[]);
+extern void (*W2F_Process_Command_Line_p)(INT phase_argc, const char *phase_argv[], 
+  INT argc, const char *argv[]);
 extern void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 extern void (*W2F_Set_Prompf_Emission_p)(WN_MAP *construct_map);
 extern void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);

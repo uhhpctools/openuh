@@ -172,7 +172,11 @@ RVI_CTAB::Hash( const WN *wn ) const
     else {
       // lda case
       // hash the opcode, the st's val, and the offset
+#ifdef TARG_SL
+      return (((UINT32)opc+val+(UINT32)WN_lda_offset(wn) + (UINT32)WN_is_internal_mem_ofst(wn)) % RVI_CTAB_SIZE);
+#else 
       return (((UINT32)opc+val+(UINT32)WN_lda_offset(wn)) % RVI_CTAB_SIZE);
+#endif
     }
   }
   else {
@@ -510,7 +514,7 @@ RVI_NODE::St( void ) const
 // The name of this variable
 // ====================================================================
 
-char *
+const char *
 RVI_NODE::Name( void ) const
 {
   ST *st = NULL;

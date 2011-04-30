@@ -35,8 +35,14 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifndef __MINGW32__
 #include <sys/mman.h>
+#endif
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -167,7 +173,7 @@ Digest_Archive (void* handle, MEM_POOL* m, INT64 file_size)
     p->hash_table = (struct archive_hash **)
 	MEM_POOL_Alloc (m, sizeof(struct archive_hash *) * p->size);
 
-    bzero ((char *)p->hash_table, sizeof(struct archive_hash *) * p->size);
+    BZERO ((char *)p->hash_table, sizeof(struct archive_hash *) * p->size);
 
     p->buckets = buckets = (struct archive_hash *)
 	MEM_POOL_Alloc (m, sizeof(struct archive_hash) * n_entries);
@@ -268,7 +274,7 @@ Read_Member_Name (struct ar_hdr *header, void* handle, MEM_POOL* m)
     if (header->ar_name[0] == '/') {
 	int str_offset = atoi (header->ar_name + 1);
 	if (p->str_table == 0)
-	    return "";
+	    return const_cast<char *>("");
 
 	name = (char *) p->str_table + sizeof(struct ar_hdr) + str_offset;
     } else {

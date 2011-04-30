@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 /* -*- c++ -*-
  *
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -78,7 +82,8 @@ using std::forward_iterator_tag;
 #endif
 
 // ARRAY_Ptr is pointer to SEG_ARRAY,
-// _PTR is pointer to SEG_ARRAY::value_type,
+// VALUE_Ptr is pointer to SEG_ARRAY::value_type,
+// (Changed _PTR to VALUE_Ptr to avoid conflict on cygwin)
 // REF is reference to SEG_ARRAY::value_type.
 //
 // These are template parameters because we need both constant and
@@ -90,21 +95,21 @@ using std::forward_iterator_tag;
 // TO DO: add a conversion from the mutable version to the constant
 // version.
 
-template <class ARRAY_Ptr, class T, class _PTR, class REF>
+template <class ARRAY_Ptr, class T, class VALUE_Ptr, class REF>
 class SEGMENTED_ARRAY_ITERATOR
 {
 public:
   typedef T                         value_type;
   typedef UINT                      difference_type;
   typedef std::forward_iterator_tag iterator_category;
-  typedef _PTR                      pointer;
+  typedef VALUE_Ptr                 pointer;
   typedef REF                       reference;
 
 private:
     
     ARRAY_Ptr segmented_array;
-    _PTR ptr;				// pointer to the current element
-    _PTR segment_last;			// ptr after the current segment
+    VALUE_Ptr ptr;			// pointer to the current element
+    VALUE_Ptr segment_last;		// ptr after the current segment
     UINT map_idx;			// index to the map array
 
 private:
@@ -128,8 +133,8 @@ public:
     SEGMENTED_ARRAY_ITERATOR () {}
 
     REF operator* () const		{ return *ptr; }
-    _PTR Ptr () const			{ return ptr; }
-    _PTR operator->() const              { return ptr; }
+    VALUE_Ptr Ptr () const		{ return ptr; }
+    VALUE_Ptr operator->() const        { return ptr; }
     UINT Index () const {
       return map_idx * segmented_array->Block_size() +
              (ptr - segmented_array->Block_begin(map_idx));
@@ -358,9 +363,9 @@ SEGMENTED_ARRAY<T,block_size>::Update_Map(T    *marker,
 {
   do {
     map.push_back(std::pair<T*, BOOL>(marker, own_memory));
-    // own_memory = FALSE;
     new_size -= block_size;
     marker += block_size;
+    own_memory = FALSE;
   } while (new_size);
 } // SEGMENTED_ARRAY<T,block_size>::Update_Map
 
@@ -534,25 +539,6 @@ For_all_entries (SEGMENTED_ARRAY<T, block_size>& array, const OP &op,
 // The following function is ifdefed out because, until we have
 // partial ordering of function templates, the compiler will flag it
 // as ambiguous.
-#if 0
-
-template <class T, UINT block_size, class OP>
-inline void
-For_all_entries (const SEGMENTED_ARRAY<T, block_size>& array, const OP &op,
-		 UINT32 first = 0)
-{
-    UINT last = array.size ();
-
-    while (first < last) {
-	const T *block = &array[first];
-	UINT size = array.Get_block_size (first);
-	for (UINT j = 0; j < size; ++j, ++block)
-	    op (first + j, block);
-	first += size;
-    }
-}
-
-#endif
 
 template <class T, UINT block_size, class OP>
 inline void

@@ -84,7 +84,7 @@
 # define MAX_DV_EL_LEN		1073741823		/* (2**30) -1 bits  */
 # endif
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # define UNNAMED_PROGRAM_NAME		"MAIN__"
 # define UNNAMED_PROGRAM_NAME_LEN	6
 # define BLANK_COMMON_NAME		"_BLNK__"
@@ -124,7 +124,7 @@
 /*  The MODULE_USE_SYSTEM_PATH stuff should be phased out.                    */
 # endif
 
-# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+# if (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 # define MODULE_USE_SYSTEM_PATH_VAR		"FTN_SYSTEM_MODULES"
 # else
 # define MODULE_USE_SYSTEM_PATH_VAR		"CRAYLIBS"
@@ -134,7 +134,7 @@
 # define SYSTEM_MODULE_USE_VAR			"FORTRAN_SYSTEM_MODULES"
 
 
-# if defined(KEY) /* Bug 4469 */ && defined(_HOST_OS_LINUX)
+# if defined(KEY) /* Bug 4469 */ && (defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 /* Standard C stdio guarantees FILENAME_MAX will be defined (we don't need to
  * know the value for a particular filesystem, just the max which this stdio
  * supports); Posix guarantees HOST_NAME_MAX */
@@ -226,7 +226,7 @@
 # define CG_LOGICAL_DEFAULT_TYPE	Logical_8
 # endif
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
 # define SA_INTEGER_DEFAULT_TYPE ((cmd_line_flags.s_pointer8) ? \
 					 Integer_8 : Integer_4)
@@ -272,7 +272,7 @@
 #       define MAX_STORAGE_SIZE_IN_WORDS	8388608		/* 2**23 */
 #    endif
 
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #    undef MAX_STORAGE_SIZE_IN_WORDS		/* Hard coded inline. */
 
 # elif defined(_TARGET_OS_MAX)
@@ -283,7 +283,7 @@
 #    define MAX_STORAGE_SIZE_IN_WORDS		8388608		/* 2**23 */
 # endif
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # define	ISSUE_STORAGE_SIZE_EXCEEDED_MSG(ATTR_IDX, ERR_LVL)	       \
 		PRINTMSG(AT_DEF_LINE(ATTR_IDX), 1435, ERR_LVL, 		       \
                          AT_DEF_COLUMN(ATTR_IDX),                              \
@@ -318,7 +318,7 @@
 
 /* Used to set ATP_EXT_NAME_IDX */
 
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 # define MAKE_EXTERNAL_NAME(ATTR_IDX, NAME_IDX, NAME_LEN)		       \
 	make_external_name(ATTR_IDX, NAME_IDX, NAME_LEN);
 # else
@@ -513,7 +513,7 @@
 
 #	undef		_ACCEPT_DIR_SHORTLOOP128
 
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #	define		_INLINE_INTRINSICS		TRUE
 
 #	undef		_ACCEPT_BL
@@ -821,7 +821,7 @@
 #	define		CDIR_USES_EREGS			TRUE
 #	define		CDIR_VFUNCTION			FALSE
 
-# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+# elif (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #	define		CDIR_ALIGN			FALSE
 #	define		CDIR_AUXILIARY			FALSE
 #	define		CDIR_BLOCKABLE			FALSE

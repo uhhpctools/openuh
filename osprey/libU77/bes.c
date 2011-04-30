@@ -58,11 +58,19 @@ G77_besy0_0 (const real * x)
 float
 G77_besy1_0 (const real * x)
 {
-  return (float) y1f ((double) *x);
+#if defined(BUILD_OS_DARWIN)
+  return (float) y1 ((double) *x);
+#else /* defined(BUILD_OS_DARWIN) */
+  return y1f (*x);
+#endif /* defined(BUILD_OS_DARWIN) */
 }
 
 float
 G77_besyn_0 (const integer * n, real * x)
 {
-  return (float) ynf (*n, (double) *x);
+#if defined(BUILD_OS_DARWIN)
+  return (float) yn (*n, (double) *x);
+#else /* defined(BUILD_OS_DARWIN) */
+  return ynf (*n, *x);
+#endif /* defined(BUILD_OS_DARWIN) */
 }

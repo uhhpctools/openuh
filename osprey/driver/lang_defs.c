@@ -1,5 +1,9 @@
 /*
- * Copyright 2002, 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
+ * Copyright 2002, 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -46,6 +50,12 @@
 #include "file_utils.h"
 #include "string_utils.h"
 #include "errors.h"
+#if defined(_WIN32)
+#include <ctype.h>
+#endif
+
+extern int external_gcc;
+
 char *ldpath_for_pixie = NULL;
 
 /*
@@ -65,8 +75,13 @@ static lang_info_t language_info[] = {
 	{'A',	0x0fffffff,	{""}},		/* ALL */
 	{'p',	0x00000001,	{"cpp"}},		/* cpp */
 	#ifdef PSC_TO_OPEN64
+#if defined(TARG_NVISA)
+	{'c',	0x00000002,	{"cc", "opencc", OPEN64_NAME_PREFIX "cc", OPEN64_TARGET "-" OPEN64_NAME_PREFIX "cc", "c89"}},	/* cc */
+	{'C',	0x00000004,	{"CC", "openCC", OPEN64_NAME_PREFIX "CC", OPEN64_NAME_PREFIX "++"}},	/* c++ */
+#else
 	{'c',	0x00000002,	{"cc", OPEN64_NAME_PREFIX "cc", OPEN64_TARGET "-" OPEN64_NAME_PREFIX "cc","gcc","c89"}},	/* cc */
 	{'C',	0x00000004,	{"CC", OPEN64_NAME_PREFIX "CC", OPEN64_NAME_PREFIX "++","g++"}},	/* c++ */
+#endif
 	{'f',	0x00000008,	{"f77", OPEN64_NAME_PREFIX "f77","gf77","fort77"}}, /* f77 */
 	{'F',	0x00000010,	{"f90", OPEN64_NAME_PREFIX "f95"}},		/* f90/95 */
 	{'a',	0x00000020,	{"as", OPEN64_NAME_PREFIX "as","gas"}},		/* as */
@@ -96,8 +111,13 @@ static phase_info_t phase_info[] = {
    /* invoke gcc driver directly rather than cpp
     * because cpp can have different paths, reads spec file,
     * and may eventually be merged with cc1. */
+#ifndef TARG_SL
    {'p',  0x0000000000000020LL,	NAMEPREFIX "gcc", ALTBINPATH, FALSE, TRUE}, /* gcpp */
    {'p',  0x0000000000000040LL,	NAMEPREFIX "g++", ALTBINPATH, FALSE, TRUE}, /* gcpp_plus */
+#else
+   {'p',  0x0000000000000020LL, NAMEPREFIX "gcc", ALTBINPATH, FALSE, FALSE}, /* gcpp */
+   {'p',  0x0000000000000040LL, NAMEPREFIX "g++", ALTBINPATH, FALSE, FALSE}, /* gcpp_plus */
+#endif
    {'p',  0x0000000000000080LL,	"fec",	 PHASEPATH,	FALSE, FALSE},	/* c_cpp */
    {'p',  0x0000000000000100LL, "cpp",   PHASEPATH,     FALSE, FALSE}, /* cplus_cpp */
    {'p',  0x0000000000000200LL,	"mfef77",PHASEPATH,	FALSE, FALSE},	/* f_cpp */
@@ -135,7 +155,7 @@ static phase_info_t phase_info[] = {
 #ifdef KEY
    {'f',  0x0000000000400000LL, "cc1"   ,PHASEPATH, TRUE , FALSE}, /* spin_cc1  */
    {'f',  0x0000000000800000LL, "cc1plus",PHASEPATH,    TRUE , FALSE}, /* spin_cc1plus */
-   {'f',  0x0000000001000000LL, "wgen",PHASEPATH,   TRUE , FALSE}, /* wgen      */
+   {'w',  0x0000000001000000LL, "wgen",PHASEPATH,   TRUE , FALSE}, /* wgen      */
 #endif
    /* place-holder for generic fe, whose mask unites all fe's; */
    /* this is so -Wf will apply to whatever fe is being invoked. */
@@ -150,24 +170,43 @@ static phase_info_t phase_info[] = {
    {'i',  0x00000000f0000000LL,	"",	"",		TRUE, FALSE},	/* ipl, inline*/
 
    {'b',  0x0000000100000000LL,	"be",	PHASEPATH,	TRUE, FALSE},	/* be */
+#if defined(TARG_NVISA)
+   {'b',  0x0000000200000000LL,	"bec", PHASEPATH, TRUE, FALSE}, /* bec */
+   {'b',  0x0000000f00000000LL,	"", "", TRUE, FALSE}, /* any_be */
+#endif
    /* We use 'B' for options to be passed to be via ipacom. */
 
    {'a',  0x0000001000000000LL,	"asm",	PHASEPATH,	FALSE, FALSE},	/* as */
 #if defined(TARG_X8664) || ( defined(KEY) && !defined(CROSS_COMPILATION))
    /* on x8664, we alwayse use gcc as the assembler */
    {'a',  0x0000002000000000LL,	NAMEPREFIX "gcc", BINPATH, FALSE, TRUE}, /* gcc */
+#elif defined(TARG_SL)
+   {'a',  0x0000002000000000LL, NAMEPREFIX "as", BINPATH, FALSE, FALSE},  /* as*/
+#elif defined(TARG_LOONGSON)
+   {'a',  0x0000002000000000LL,	"as", PHASEPATH, FALSE, FALSE}, /* as */
 #else
    {'a',  0x0000002000000000LL,	"as",	BINPATH,	FALSE, TRUE},	/* gas */
 #endif
    {'a',  0x0000003000000000LL,	"",	"",		FALSE, FALSE},	/* any_as */
 
    {'d',  0x0000008000000000LL, "dsm_prelink", PHASEPATH,FALSE, FALSE},/* dsm_prelink*/
+#ifndef TARG_SL
    {'j',  0x0000010000000000LL,	"ipa_link", GNUPHASEPATH, TRUE, FALSE},	/* ipa_link */
+#else
+   {'j',  0x0000010000000000LL, "ipa_link", BINPATH, TRUE, FALSE}, /* ipa_link */
+#endif
+#ifdef TARG_LOONGSON
+   {'l',  0x0000020000000000LL,	"collect2", GNUPHASEPATH,TRUE, FALSE},	/* collect */
+#else
    {'l',  0x0000020000000000LL,	"ld", BINPATH, TRUE, TRUE},	/* collect */
-#if defined(TARG_X8664) || ( defined(KEY) && !defined(CROSS_COMPILATION))
+#endif
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) || ( defined(KEY) && !defined(CROSS_COMPILATION))
    /* on x8664, we alwayse use gcc/g++ as the linker */
    {'l',  0x0000040000000000LL,	NAMEPREFIX "gcc", BINPATH, FALSE, TRUE}, /* ld */
    {'l',  0x0000080000000000LL,	NAMEPREFIX "g++", BINPATH, FALSE, TRUE}, /* ldplus */
+#elif defined(TARG_SL)
+   {'l',  0x0000040000000000LL, NAMEPREFIX "ld", BINPATH, FALSE, FALSE}, /* ld */
+   {'l',  0x0000080000000000LL, NAMEPREFIX "ld", BINPATH, FALSE, FALSE}, /* ldplus */
 #else
    {'l',  0x0000040000000000LL,	"ld", BINPATH, FALSE, TRUE}, /* ld */
    {'l',  0x0000080000000000LL,	"ld", BINPATH, FALSE, TRUE}, /* ldplus */
@@ -180,10 +219,15 @@ static phase_info_t phase_info[] = {
    {'R',  0x0001000000000000LL, "ar",  BINPATH,      FALSE, FALSE}, /* ar */
 
    {'S',  0x0010000000000000LL,	"crt",	LIBPATH,	FALSE, FALSE},	/* startup */
+#ifdef TARG_SL
+   {'S',  0x0010000000000000LL, "crt",  "/usr/libsl5",  FALSE, FALSE}, /*sl5_startup*/
+#endif
    {'I',  0x0020000000000000LL,	"inc",	"/include",	FALSE, FALSE},	/* include */
    {'L',  0x0040000000000000LL,	"lib",	LIBPATH,	FALSE, FALSE},	/* library */
    {'L',  0x0080000000000000LL,	"alib",	ALTLIBPATH,	FALSE, FALSE},	/* alt_library */
 };
+mask_t OPEN64_PHASE_MASK=
+          0x0000f19fffffff90LL;
 mask_t PHASE_MASK=
           0x000fffffffffffffLL;
 mask_t LIB_MASK =
@@ -209,12 +253,27 @@ static source_info_t source_info[] = {
 	{"r"},				/* r */
 	{"i"},				/* i */
 	{"ii"},				/* ii */
+#if defined(TARG_NVISA)
+	{"ptx"},			/* s */
+#else
 	{"s"},				/* s */
+#endif
 	{"S"},				/* S */
+#if defined(TARG_NVISA)
+	/* windows doesn't distinguish between upper and lower case. */
+	{"BI"},				/* I */
+#else
 	{"I"},				/* I */
+#endif
 	{"B"},				/* B */
+	{"P"},				/* P */
 	{"N"},				/* N */
+#if defined(TARG_NVISA)
+	/* windows doesn't distinguish between upper and lower case. */
+	{"W"},				/* O */
+#else
 	{"O"},				/* O */
+#endif
 	{"o"},				/* o */
 };
 
@@ -308,6 +367,7 @@ set_phase_dir (mask_t mask, char *path)
 	for (i = P_NONE; i < P_LAST; i++) {
 		if ((phase_info[i].mask & mask) != 0) {
 			phase_info[i].dir = string_copy(path);
+			phase_info[i].find_dir_by_path = FALSE;
 			if (i == P_ld)
 			  ldpath_for_pixie = string_copy(path);
 		}
@@ -373,6 +433,7 @@ append_phase_dir (phases_t index, char *path)
 	phase_info[index].dir = concat_strings (phase_info[index].dir, path);
 }
 
+#if defined(__linux__) || defined(__APPLE__)
 /* read output of cmd from pipe */
 char *
 read_cmd_out(char *cmd, char *out_buf)
@@ -396,15 +457,32 @@ read_cmd_out(char *cmd, char *out_buf)
 
 	return out_buf;
 }
+#endif
 
 /* return phase path */
 char *
 get_phase_dir (phases_t index)
 {
-	if (index == P_ipa_link) {
-	  return phase_info[index].dir;
-	}
-	else if(phase_info[index].find_dir_by_path) {
+#if defined(__linux__) || defined(__APPLE__)
+	char *name = phase_info[index].name;
+
+    if (external_gcc != TRUE) {
+
+        /* Construct the path to the internal gcc binaries. */
+        if (strcmp(name, "gcc") == 0 || strcmp(name, "g++") == 0) {
+            char *root_dir = directory_path(get_executable_dir());
+            char *bin_dir = concat_path(root_dir, INTERNAL_GCC_BIN);
+            char *gcc_path = concat_path(bin_dir, name);
+
+            if (is_executable(gcc_path)) {
+                free(gcc_path);
+                return bin_dir;
+            }
+            free(gcc_path);
+            free(bin_dir);
+        }
+    }
+	if (phase_info[index].find_dir_by_path) {
 		char cmd[PATH_BUF_LEN];
 		char result[PATH_BUF_LEN];
 
@@ -413,7 +491,8 @@ get_phase_dir (phases_t index)
 			return phase_info[index].dir;
 		return string_copy(result);
 	}
-	  return phase_info[index].dir;
+#endif
+	return phase_info[index].dir;
 }
 
 void
@@ -433,6 +512,7 @@ get_phases_real_path (void) {
        }
 }
 
+/* return LD_LIBRARY_PATH, if needed */
 char *
 get_phase_ld_library_path (phases_t index)
 {
@@ -446,7 +526,11 @@ get_phase_ld_library_path (phases_t index)
 char *
 get_phase_name (phases_t index)
 {
+#if defined(_WIN32)
+	return concat_strings(phase_info[index].name, ".exe");
+#else
 	return phase_info[index].name;
+#endif
 }
 
 /* set phase name */
@@ -470,7 +554,11 @@ get_full_phase_name (phases_t index)
 char *
 get_lang_name (languages_t index)
 {
+#if defined(_WIN32)
+	return concat_strings(language_info[index].name[0], ".exe");
+#else
 	return language_info[index].name[0];
+#endif
 }
 
 languages_t
@@ -486,8 +574,27 @@ get_named_language (char *name)
 #endif
 	    *p = '\0';
 	    name = nomen;
+#ifdef PSC_TO_OPEN64
 	}
+#endif
 	
+#if defined(_WIN32)
+        /* Windows filesystems are case-insensitive, but there are some
+           case-sensitive comparisons here that assume lowercase names.
+           Convert the name to lowercase.  */
+        int name_len = strlen(name);
+        char *new_name = (char *) malloc(name_len + 5);
+        for (j = 0; j < name_len; j++)
+            new_name[j] = tolower(name[j]);
+        new_name[name_len] = 0;
+        name = new_name;
+
+	/* for comparison purposes, remove .exe suffix */
+        if (strcmp(name + name_len - 4, ".exe") == 0) {
+	    name[name_len - 4] = NIL;
+        }
+#endif	
+
 	for (i = L_NONE; i < L_LAST; i++) {
 	    for (j = 0; j < MAX_LANG_NAMES && language_info[i].name[j] != NULL; j++) {
 		/* skip if blank string */
@@ -508,6 +615,9 @@ get_named_language (char *name)
 
  done:
 	free(nomen);
+#if defined(_WIN32)
+	free(new_name);
+#endif
 	return lang;
 }
 
@@ -580,6 +690,7 @@ get_source_lang (source_kind_t sk)
 	case S_i:
 	case S_B:
 	case S_I:
+	case S_P:
 	case S_N:
 	case S_O:
 		/* for intermediate file, determine type from invoker */
@@ -606,4 +717,16 @@ get_source_lang (source_kind_t sk)
 		return invoked_lang;
 	}
 	return L_NONE;
+}
+
+void
+override_phase(int phase, char *phase_name, char *new_path, char *new_name)
+{
+	phase_info[phase].set_ld_library_path = FALSE;
+	if (new_path != NULL) {
+		phase_info[phase].find_dir_by_path = FALSE;
+		phase_info[phase].dir = string_copy(new_path);
+	}
+	if (new_name != NULL)
+		phase_info[phase].name = string_copy(new_name);
 }

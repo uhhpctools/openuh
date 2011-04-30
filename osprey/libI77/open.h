@@ -54,17 +54,11 @@ extern int inc_var(ftnintu *, ftnint, int);
 extern int set_var(ftnintu *, ftnint, int, long long);
 extern int f_dfnf(struct dfnf_struct *);
 extern int f_dfnf1(struct dfnf_struct *, ftnint *);
-#if 11
 extern int f_duped (olist64 *, unit *, unit **);
-#else
-extern int f_duped (olist *, unit *, unit **);
-#endif
 
-#if 11
 extern int f_open064 (olist64 *a, int *mask);
 extern int f_open064x (olist64 *a, XINT xmask);
 extern int f_open064x_mp (olist64 *a, XINT xmask);
-#endif
 
 
 #endif /* C || C++ */

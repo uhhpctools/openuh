@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -224,9 +228,6 @@ boolean parse_cc_line(void)
                
                   scan_cc_line();
 
-# if 0
-                  printf("%s", &(cc_stmt_buf[1]));
-# endif
 
                   if (CC_LA_CH_VALUE == EOS) {
                      ntr_next_msg_queue(CC_LA_CH_LINE, 1165, Error,
@@ -349,9 +350,6 @@ boolean parse_cc_line(void)
 
             scan_cc_line();
 
-# if 0
-            printf("%s", &(cc_stmt_buf[1]));
-# endif
             if (CC_LA_CH_VALUE == EOS) {
                ntr_next_msg_queue(CC_LA_CH_LINE, 1165, Error,
                                   CC_LA_CH_COLUMN,
@@ -712,10 +710,6 @@ static void parse_define_str(int attr_idx)
             }
             arg_tail->name_len = TOKEN_LEN(cc_token);
             CC_AT_NUM_ARGS(attr_idx) += 1;
-# if 0
-            printf("arg %d = >%s<\n", CC_AT_NUM_ARGS(attr_idx),
-                                      arg_tail->name.string);
-# endif
          }
          else {
             ntr_next_msg_queue(TOKEN_LINE(cc_token), 1165, Error,
@@ -777,9 +771,6 @@ static void parse_define_str(int attr_idx)
 
                      if (strcmp(TOKEN_STR(cc_token), arg_tail->name.string)
                                 == 0) {
-# if 0
-                        printf("found match for %s\n", TOKEN_STR(cc_token));
-# endif
 
                         shift_cc_stmt_buf(id_start_idx+TOKEN_LEN(cc_token),
                                           3 - TOKEN_LEN(cc_token));
@@ -807,9 +798,6 @@ static void parse_define_str(int attr_idx)
 
       flush_cc_line();
 
-# if 0
-      printf("len = %d >%s<\n", len, CC_AT_STR_PTR(attr_idx));
-# endif
    }
    else if (CC_LA_CH_VALUE == EOS) {
       CC_AT_NUM_ARGS(attr_idx) = 0;
@@ -852,9 +840,6 @@ static void parse_define_str(int attr_idx)
 
       flush_cc_line();
 
-# if 0
-      printf(">%s<\n", CC_AT_STR_PTR(attr_idx));
-# endif
    }
 
    CC_AT_DEFINED(attr_idx) = TRUE;
@@ -2212,7 +2197,7 @@ void enter_predefined_macros(void)
 
 
 #if defined(_HOST_OS_UNICOS)  ||  defined(_HOST_OS_SOLARIS)  ||  \
-    defined(_HOST_OS_MAX) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX))
+    defined(_HOST_OS_MAX) || (defined(_HOST_OS_IRIX) || defined(_HOST_OS_LINUX) || defined(_HOST_OS_DARWIN))
 
    /******************\
    |* Predefine unix *|
@@ -3242,17 +3227,6 @@ static void cc_get_stmt(void)
          while (! (cc_stmt_buf[cc_stmt_buf_idx] == '*' &&
                    cc_stmt_buf[cc_stmt_buf_idx + 1] == '/')) {
 
-# if 0
-            if (cc_stmt_buf[cc_stmt_buf_idx] == eos ||
-                cc_stmt_buf_idx >= MAX_STMT_CHAR_SIZE - MAX_SRC_LINE_SIZE) {
-               ntr_next_msg_queue(start_line, xxxx, Error,
-                                  start_col,
-                                  (char *)NULL,
-                                  0,
-                                  NO_ARG);
-               goto EXIT;
-            }
-# endif
 
             if (cc_stmt_buf[cc_stmt_buf_idx] == newline) {
                cc_stmt_buf_idx--;
@@ -3359,9 +3333,6 @@ static void cc_get_stmt(void)
                          NO_ARG);
    }
 
-# if 0
-EXIT:
-# endif
 
    cc_stmt_buf_line[cc_stmt_buf_num_lines+1].line = 
              cc_stmt_buf_line[cc_stmt_buf_num_lines].line;
@@ -3403,9 +3374,6 @@ static boolean parse_cc_expr (opnd_type   *result)
 
    COPY_OPND((*result), opnd);
 
-# if 0
-   print_ir(OPND_IDX(opnd));
-# endif
 
    TRACE (Func_Exit, "parse_cc_expr", NULL);
 
@@ -4310,8 +4278,7 @@ static int srch_cc_sym_tbl (char  *name_str,
       TRACE (Func_Exit, "srch_cc_sym_tbl", NULL);
    }
    else {
-      TRACE (Func_Exit, "srch_cc_sym_tbl", 
-             &str_pool[CC_LN_NAME_IDX(idx)].name_char);
+      TRACE (Func_Exit, "srch_cc_sym_tbl", CC_LN_NAME_PTR(idx));
       idx = CC_LN_ATTR_IDX(idx);
    }
    return (idx);

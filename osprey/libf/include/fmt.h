@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -97,34 +101,34 @@
  * These macros check an edit-descriptor against a data type.
  */
 
-#define INVALID_WTYPE(op, type) (*(long *)(&_WCHK[type-1]) & (1L << (op-1)))
-#define INVALID_RTYPE(op, type) (*(long *)(&_RCHK[type-1]) & (1L << (op-1)))
+#if defined(TARG_IA32) || defined(TARG_X8664)
+#define INVALID_WTYPE(op, type) (*(int *)(&_WCHK[type-1]) & (1 << (31-(op-1))))
+#define INVALID_RTYPE(op, type) (*(int *)(&_RCHK[type-1]) & (1 << (31-(op-1))))
+#else
+#define INVALID_WTYPE(op, type) (*(int *)(&_WCHK[type-1]) & (1 << (op-1)))
+#define INVALID_RTYPE(op, type) (*(int *)(&_RCHK[type-1]) & (1 << (op-1)))
+#endif
 
 /*
  *	Structures
  */
 
 typedef struct fmtchk {
-
-#ifndef _WORD32
-	unsigned long	  	:32;		/* skip 32-bit half word */
-#endif
-	unsigned long	  	:18;		/* right justify */
-
-	unsigned long	q 	:1;
-	unsigned long	z 	:1;
-	unsigned long	r 	:1;
-	unsigned long	o 	:1;
-	unsigned long	l 	:1;
-	unsigned long	i 	:1;
-	unsigned long	g 	:1;
-	unsigned long	f 	:1;
-	unsigned long	es	:1;
-	unsigned long	en	:1;
-	unsigned long	e 	:1;
-	unsigned long	d 	:1;
-	unsigned long	b 	:1;
-	unsigned long	a 	:1;
+	unsigned int	  	:18;		/* right justify */
+	unsigned int	q 	:1;
+	unsigned int	z 	:1;
+	unsigned int	r 	:1;
+	unsigned int	o 	:1;
+	unsigned int	l 	:1;
+	unsigned int	i 	:1;
+	unsigned int	g 	:1;
+	unsigned int	f 	:1;
+	unsigned int	es	:1;
+	unsigned int	en	:1;
+	unsigned int	e 	:1;
+	unsigned int	d 	:1;
+	unsigned int	b 	:1;
+	unsigned int	a 	:1;
 } fmtchk_t;
 
 /*

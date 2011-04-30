@@ -40,6 +40,24 @@
 #include <stdarg.h>
 #include <cray/portdefs.h>
 
+#ifdef KEY /* Bug 7479 */
+/*
+ * Issue informational "comment" message (imitating the front end) using
+ * standard the error-message machinery
+ *
+ * errn		Error number (see liberrno.h)
+ * ...		Optional arguments to be inserted into error message
+ */
+void
+_lcomment(int errn, ...)
+{
+	va_list		args;		/* Variable argument list	*/
+	va_start(args, errn);
+	_lmessage(errn, "COMMENT", args);
+	va_end(args);
+}
+#endif /* KEY Bug 7479 */
+
 /*
  *	_lwarn - library run-time warning processor
  *

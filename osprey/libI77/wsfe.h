@@ -45,11 +45,7 @@
 
 #if defined(_LANGUAGE_C) || defined(_LANGUAGE_C_PLUS_PLUS)
 /* PROTOTYPES */
-#if 11
 extern int wsfe(cilist64 *, unit **, int);
-#else
-extern int wsfe(cilist *, unit **, int);
-#endif
 extern int s_wsfe(cilist *);
 extern int s_wsfe_mp(cilist *, unit **);
 extern int x_putc(unit *, XINT, char, char *);
@@ -58,10 +54,8 @@ extern int x_wEND(unit *);
 extern int xw_end(unit *);
 extern int xw_rev(unit *);
 
-#if 11
 extern int s_wsfe64 (cilist64 *a);
 extern int s_wsfe64_mp (cilist64 *a, unit **fu);
-#endif	/* -n32 and -64 */
 
 
 #endif /* C || C++ */

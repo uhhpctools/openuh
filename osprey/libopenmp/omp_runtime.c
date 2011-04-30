@@ -1,26 +1,33 @@
 /*
- *  Copyright (C) 2000, 2001 HPC,Tsinghua Univ.,China .  All Rights Reserved.
- *
- *      This program is free software; you can redistribute it and/or modify it
- *  under the terms of version 2 of the GNU General Public License as
- *  published by the Free Software Foundation.
- *
- *      This program is distributed in the hope that it would be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- *      Further, this software is distributed without any warranty that it is
- *  free of the rightful claim of any third person regarding infringement
- *  or the like.  Any license provided herein, whether implied or
- *  otherwise, applies only to this software file.  Patent licenses, if
- *  any, provided herein do not apply to combinations of this program with
- *  other software, or any other product whatsoever.
- *
- *      You should have received a copy of the GNU General Public License along
- *  with this program; if not, write the Free Software Foundation, Inc., 59
- *  Temple Place - Suite 330, Boston MA 02111-1307, USA.
- *
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
+
+/*
+
+  OpenMP runtime library to be used in conjunction with Open64 Compiler Suites.
+
+  Copyright (C) 2003 - 2009 Tsinghua University.
+
+  This library is free software; you can redistribute it and/or
+  modify it under the terms of the GNU Lesser General Public
+  License as published by the Free Software Foundation; either
+  version 2.1 of the License, or (at your option) any later version.
+
+  This library is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public
+  License along with this library; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+  
+  Contact information: HPC Institute, Department of Computer Science and Technology,
+  Tsinghua University, Beijing 100084, CHINA, or:
+
+  http://hpc.cs.tsinghua.edu.cn
+  
+*/
 
 /*
  * File: omp_runtime.c
@@ -37,7 +44,7 @@
 #include "omp_rtl.h"
 
 /* a system level lock, used for malloc in __ompc_get_thdprv ,by Liao*/
-omp_lock_t _ompc_thread_lock;
+ompc_spinlock_t _ompc_thread_lock;
 
 /* RTL API related with schedule */
 
@@ -113,8 +120,8 @@ __ompc_static_init_4 (omp_int32 global_tid, omp_sched_t schedtype,
   team_size = p_vthread->team_size;
   if (team_size == 1) {
     /* single thread schdule*/
-    block_size = (incr > 0) ? (*pupper - *plower - 1) :
-      (*pupper - *plower + 1);
+    block_size = (incr > 0) ? (*pupper - *plower + 1) :
+      (*pupper - *plower - 1);
     /* plower, pupper are not changed*/
     *pstride = block_size;
     //*plastiter = 1;
@@ -339,10 +346,10 @@ __ompc_scheduler_init_4 (omp_int32 global_tid, omp_sched_t schedtype,
 
   p_vthread->loop_count++;
 
-  __ompc_lock(&(p_team->schedule_lock));
+  __ompc_lock_spinlock(&(p_team->schedule_lock));
   if (p_team->loop_count >= p_vthread->loop_count) {
     /* We assume that the initialization has already OK */
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
     return;
   } else {
     /* The first one call schedule_init do the initialization work */
@@ -358,7 +365,7 @@ __ompc_scheduler_init_4 (omp_int32 global_tid, omp_sched_t schedtype,
     /* Initialization finished */
     p_team->loop_count++;
 
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     return;
   }
@@ -420,10 +427,10 @@ __ompc_scheduler_init_8 (omp_int32 global_tid, omp_sched_t schedtype,
 
   p_vthread->loop_count++;
 
-  __ompc_lock(&(p_team->schedule_lock));
+  __ompc_lock_spinlock(&(p_team->schedule_lock));
   if (p_team->loop_count >= p_vthread->loop_count) {
     /* We assume that the initialization has already OK */
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
     return;
   } else {
     /* The first one call schedule_init do the initialization work */
@@ -439,7 +446,7 @@ __ompc_scheduler_init_8 (omp_int32 global_tid, omp_sched_t schedtype,
     /* Initialization finished */
     p_team->loop_count++;
 
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     return;
   }
@@ -603,7 +610,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     return 1;
     break;
   case OMP_SCHED_GUIDED:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -612,7 +619,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     trip_count = (global_upper - global_lower) / incr ;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -620,14 +627,14 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
 
     trip_count += 1;
     my_lower = global_lower;
-    block_size = trip_count / team_size;
+    block_size = trip_count / (2 * team_size);
     chunk = p_team->chunk_size;
     if (block_size > chunk) 
       chunk = block_size;
     my_upper = my_lower + (chunk - 1) * incr;
     p_team->loop_lower_bound = my_lower + chunk * incr;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     *plower = my_lower;
     *pupper = my_upper;
@@ -637,7 +644,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     break;
 
   case OMP_SCHED_DYNAMIC:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -647,7 +654,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     /* Need to fix the trip_count for trip_count = 1 case */
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -659,7 +666,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     my_upper = my_lower + (chunk - 1) * incr;
     p_team->loop_lower_bound = my_lower + chunk * incr;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     *plower = my_lower;
     *pupper = my_upper;
@@ -750,7 +757,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
 
     break;
   case OMP_SCHED_ORDERED_DYNAMIC:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -759,7 +766,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     trip_flag = (global_upper - global_lower) * 1.0 / (float)incr;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -770,7 +777,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     p_team->loop_lower_bound = my_lower + chunk * incr;
     p_team->schedule_count++;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     trip_count = (global_upper - global_lower) / incr + 1;
     my_upper = my_lower + (chunk - 1) * incr;
@@ -785,7 +792,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     return 1;
     break;
   case OMP_SCHED_ORDERED_GUIDED:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -796,7 +803,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
 
     if ( trip_flag < 0)
       {
-	__ompc_unlock(&(p_team->schedule_lock));
+	__ompc_unlock_spinlock(&(p_team->schedule_lock));
 	/* No more iterations */
         __ompc_set_state(THR_WORK_STATE);
 	return 0;
@@ -811,7 +818,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     p_team->loop_lower_bound = my_lower + chunk * incr;
     p_team->schedule_count +=1;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     p_vthread->ordered_count = schedule_count;
     p_vthread->rest_iter_count = chunk;
@@ -978,7 +985,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     return 1;
     break;
   case OMP_SCHED_GUIDED:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -987,21 +994,21 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     trip_count = (global_upper - global_lower) / incr ;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
     }
     trip_count += 1;
     my_lower = global_lower;
-    block_size = trip_count / team_size;
+    block_size = trip_count / (2 * team_size);
     chunk = p_team->chunk_size;
     if (block_size > chunk) 
       chunk = block_size;
     my_upper = my_lower + (chunk - 1) * incr;
     p_team->loop_lower_bound = my_lower + chunk * incr;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     *plower = my_lower;
     *pupper = my_upper;
@@ -1011,7 +1018,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
 
     break;
   case OMP_SCHED_DYNAMIC:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -1020,7 +1027,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     trip_count = (global_upper - global_lower) / incr;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -1031,7 +1038,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     my_upper = my_lower + (chunk - 1) * incr;
     p_team->loop_lower_bound = my_lower + chunk * incr;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     *plower = my_lower;
     *pupper = my_upper;
@@ -1122,7 +1129,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
 
     break;
   case OMP_SCHED_ORDERED_DYNAMIC:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -1132,7 +1139,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     trip_count = (global_upper - global_lower) / incr;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -1144,7 +1151,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     p_team->loop_lower_bound = my_lower + chunk * incr;
     p_team->schedule_count += 1;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     p_vthread->ordered_count = schedule_count;
     p_vthread->rest_iter_count = chunk;
@@ -1157,7 +1164,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
 
     break;
   case OMP_SCHED_ORDERED_GUIDED:
-    __ompc_lock(&(p_team->schedule_lock));
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
 
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -1167,7 +1174,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     schedule_count = p_team->schedule_count;
 
     if ( trip_flag < 0) {
-      __ompc_unlock(&(p_team->schedule_lock));
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
       /* No more iterations */
       __ompc_set_state(THR_WORK_STATE);
       return 0;
@@ -1183,7 +1190,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     p_team->schedule_count +=1;
     p_vthread->rest_iter_count = chunk;
 			
-    __ompc_unlock(&(p_team->schedule_lock));
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
 
     p_vthread->ordered_count = schedule_count;
 
@@ -1233,16 +1240,16 @@ __ompc_ordered (omp_int32 global_tid)
   if (p_team->team_size == 1)
     return;
 
-  pthread_mutex_lock(&(p_team->schedule_lock));
+  pthread_mutex_lock(&(p_team->ordered_mutex));
   while (p_team->ordered_count != p_vthread->ordered_count) {
-     omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
     p_vthread->thr_odwt_state_id++;
     __ompc_set_state(THR_ODWT_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_ODWT);
-    pthread_cond_wait(&(p_team->ordered_cond), &(p_team->schedule_lock));
-   }
-    __ompc_event_callback(OMP_EVENT_THR_END_ODWT);
-  pthread_mutex_unlock(&(p_team->schedule_lock));
+    pthread_cond_wait(&(p_team->ordered_cond), &(p_team->ordered_mutex));
+  }
+  __ompc_event_callback(OMP_EVENT_THR_END_ODWT);
+  pthread_mutex_unlock(&(p_team->ordered_mutex));
   __ompc_set_state(THR_WORK_STATE);
 }
 
@@ -1266,10 +1273,10 @@ __ompc_end_ordered (omp_int32 global_tid)
   if (p_team->team_size == 1)
     return;
   
-  __ompc_lock(&(p_team->schedule_lock));
+  pthread_mutex_lock(&(p_team->ordered_mutex));
   p_team->ordered_count++;
   pthread_cond_broadcast(&(p_team->ordered_cond));
-  __ompc_unlock(&(p_team->schedule_lock));
+  pthread_mutex_unlock(&(p_team->ordered_mutex));
   __ompc_event_callback(OMP_EVENT_THR_END_ORDERED);
 }
 
@@ -1320,7 +1327,9 @@ __ompc_single (omp_int32 global_tid)
     is_first = 1;
   }
   __ompc_unlock(&(p_team->single_lock));
+
   if (is_first) __ompc_set_state(THR_WORK_STATE);
+
   return is_first;
 }
 
@@ -1328,8 +1337,8 @@ __ompc_single (omp_int32 global_tid)
 void
 __ompc_end_single (omp_int32 global_tid) 
 {
-    __ompc_event_callback(OMP_EVENT_THR_END_SINGLE);
-   __ompc_set_state(THR_WORK_STATE);
+  __ompc_event_callback(OMP_EVENT_THR_END_SINGLE);
+  __ompc_set_state(THR_WORK_STATE);
   /* The single flags should be reset here*/
   /* Do nothing*/
 }
@@ -1339,11 +1348,10 @@ omp_int32
 __ompc_master (omp_int32 global_tid) 
 {
   __ompc_set_state(THR_OVHD_STATE);
-  if (global_tid == 0) 
-  {
-   __ompc_event_callback(OMP_EVENT_THR_BEGIN_MASTER);
-   __ompc_set_state(THR_WORK_STATE);
-   return 1;
+  if (global_tid == 0) {
+    __ompc_event_callback(OMP_EVENT_THR_BEGIN_MASTER);
+    __ompc_set_state(THR_WORK_STATE);
+    return 1;
   }
   return 0;	
 }
@@ -1378,21 +1386,24 @@ __ompc_get_thdprv(void *** thdprv_p, omp_int64 size, void *datap,omp_int32 globa
   num_threads=OMP_MAX_NUM_THREADS;
 //  printf("ompc_get_thdprv: num_threads = %d\n", num_threads);
   if((pp = *thdprv_p) == NULL) {
-    __ompc_lock(&_ompc_thread_lock);
+    __ompc_lock_spinlock(&_ompc_thread_lock);
 
     if((pp = *thdprv_p) == NULL) {
-      pp = (void *)malloc(sizeof(void *)*num_threads);
-      bzero(pp,sizeof(void *)*num_threads);
+      // put the shared data aligned with the cache line size
+      pp = aligned_malloc(sizeof(void *)*num_threads, CACHE_LINE_SIZE);
       Is_True (pp !=NULL, "cannot allocate memory");
+      bzero(pp,sizeof(void *)*num_threads);
       *thdprv_p = pp;
     }
-    __ompc_unlock(&_ompc_thread_lock);
+    __ompc_unlock_spinlock(&_ompc_thread_lock);
   }
   if((p = pp[global_tid]) == NULL) {
     if(global_tid == 0)
       p = datap;
-    else
-      p = (void *)malloc((int)size);
+    else {
+      p = aligned_malloc((int)size, CACHE_LINE_SIZE);
+      Is_True (p !=NULL, "cannot allocate memory");
+    }
     pp[global_tid] = p;
   }
 //  printf("ompc_get_thdprv: pp[%d] = %d\n", global_tid, *((int *)p));

@@ -76,5 +76,9 @@ extern BOOL List_Source;	/* -LIST:source - source code listing */
 extern BOOL List_Symbols;	/* -LIST:symbols - symbol table listing */
 extern BOOL List_Notes;		/* -LIST:notes - in .s file */
 extern BOOL List_Software_Names; /* -LIST:software_names - in .s file */
+extern char* List_Build_Date;	/* -LIST:build_date=<name> */
+#if defined(TARG_SL)
+extern BOOL List_Profile;
+#endif
 
 #endif /* config_list_INCLUDED */

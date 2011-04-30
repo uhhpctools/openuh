@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -37,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -590,7 +593,7 @@ _xfunc_has_stmts2prevent_shackle(QUEUE<WN *> *stmts)
 // We just want to return a ST that is meaningful
 static ST* Array_Base_St (WN* node)
 {
-  if (OPCODE_is_load(WN_opcode(node))) return WN_st(node);
+  if (OPCODE_is_load(WN_opcode(node)) && WN_has_sym(node)) return WN_st(node);
 
   // Recurse
   ST* sym;
@@ -625,8 +628,9 @@ Identical_Array_Refbase (WN *array1, WN *array2)
        OPCODE_is_store (WN_opcode (p1))) &&
       (OPCODE_is_load (WN_opcode (p2)) || 
        OPCODE_is_store (WN_opcode (p2)))) {
-    if (DEP_CONTINUE == DEPV_COMPUTE::Base_Test (p1, NULL, 
-						 p2, NULL)) {
+    if ((DEP_CONTINUE == DEPV_COMPUTE::Base_Test (p1, NULL, 
+						 p2, NULL))
+	&& (WN_operator(t1) != OPR_ILOAD)) {
       // assert (WN_array_base (array1) == WN_array_base (array2));
 #ifdef KEY // Bug 2484
       if (WN_Simp_Compare_Trees(t1, t2) != 0)
@@ -1302,8 +1306,8 @@ Create_Simple_Shackle_Loops(WN                    *main_body,
 	dl->Set_loop_stmt (current_do);
 	DO_LOOP_INFO *dli = CXX_NEW (DO_LOOP_INFO (&LNO_default_pool,
 						   NULL, NULL, NULL,
-						   FALSE, FALSE, FALSE, FALSE,
-						   FALSE,FALSE, FALSE),
+						   FALSE, FALSE, FALSE, FALSE, FALSE,
+						   FALSE, FALSE, FALSE),
 				     &LNO_default_pool);
 	Set_Do_Loop_Info (current_do, dli);
 	sh->Set_Loop_Stmt (i, current_do);

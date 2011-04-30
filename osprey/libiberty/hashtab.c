@@ -49,8 +49,10 @@ Boston, MA 02111-1307, USA.  */
 #include <string.h>
 #endif
 
+#if ! defined(BUILD_OS_DARWIN)
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #endif
 
 #include <stdio.h>

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -200,7 +204,15 @@ private:
   static const mUINT32 _ehinfo_updated =   0x2000000;   // summary updated
   static const mUINT32 _pending_icalls =   0x4000000;   // need icall conversion
 #endif
+  static const mUINT32 _part_inl_candidate = 0x8000000; // whether this PU 
+                                                        // a partial inlining
+                                                        // candidate
+  static const mUINT32 _leftover_rtn_const = 0x10000000;
+                                             // whether the leftover function
+                                             // from partial inlining returns
+                                             // an (int) constant.
 
+  static const mUINT32 _pending_vfuns =   0x20000000;   // need icall conversion
   // map to the file I/O info
   mINT32 _file_index;			// index into the file header structure
   mINT32 _proc_info_index;		// index into the proc info structure
@@ -216,6 +228,9 @@ private:
   CALLEE_STATE      *_callee_state;	// callee state
 
   PU_SIZE            _pu_size;		// estimated size of this PU
+#if defined(TARG_SL)
+  mINT32             _emit_id;          // emit id of the PU in the *.I, start from 0
+#endif // TARG_SL
 
 #ifdef KEY
   struct pu_info    *_builtin_pu_info;
@@ -246,6 +261,13 @@ private:
   INLINED_BODY_LIST  _inlined_list;     // Hold pts to all inlined callees
                                         // for this node
 #endif // _LIGHTWEIGHT_INLINER
+
+  // Auxiliary fields added for partial inlining.
+  WN*       _leftover_body;           // leftover function body
+  INT64     _leftover_rtn_val;        // The return const value of the leftover
+                                      // function from partial inlining.
+                                      // Meaningful only when 
+                                      // _leftover_rtn_const is set.
 
 public:
 
@@ -284,6 +306,7 @@ public:
     ,_sizeof_eh_spec (0)
     ,_file_id (-1)
 #endif
+    ,_leftover_body (NULL)
   {
 #ifdef KEY
     // If we are constructing for a builtin, then skip the info that a builtin
@@ -397,6 +420,10 @@ public:
   INLINED_BODY_LIST& Inlined_list ()    { return _inlined_list; }
 #endif // _LIGHTWEIGHT_INLINER
 
+  // return true if the call expresion node has an edge in the 
+  // IPA_NODE
+  BOOL has_edge_for_node(WN *wn) const;
+
   // node is the result of cloning  
   void Set_Clone ()	        { _flags |= _clone; }
   BOOL Is_Clone () const        { return _flags & _clone; }
@@ -460,6 +487,17 @@ public:
   void Set_Clone_Candidate ()	        { _flags |= _clone_candidate; }
   void Clear_Clone_Candidate ()		{ _flags &= ~_clone_candidate; }
   BOOL Is_Clone_Candidate () const	{ return _flags & _clone_candidate; }
+
+  // node needs to be partially inlined
+  void Set_Part_Inl_Candidate ()	{ _flags |= _part_inl_candidate; }
+  void Clear_Part_Inl_Candidate ()	{ _flags &= ~_part_inl_candidate; }
+  BOOL Is_Part_Inl_Candidate () const	{ return _flags & _part_inl_candidate; }
+
+  // Whether the leftover function (from partial inlining) returns an 
+  // int const.
+  void Set_Leftover_Rtn_Const ()	{ _flags |= _leftover_rtn_const; }
+  void Clear_Leftover_Rtn_Const ()	{ _flags &= ~_leftover_rtn_const; }
+  BOOL Is_Leftover_Rtn_Const () const	{ return _flags & _leftover_rtn_const; }
 
   // node has common blocks that need to be padded
   void Set_Needs_Padding ()     { _flags |= _padding; }
@@ -527,6 +565,9 @@ public:
   void Set_Pending_Icalls () { _flags |= _pending_icalls; }
   BOOL Has_Pending_Icalls () const { return _flags & _pending_icalls; }
 
+  void Set_Pending_Virtual_Functions () { _flags |= _pending_vfuns; }
+  BOOL Has_Pending_Virtual_Functions () const { return _flags & _pending_vfuns; }
+
   static mINT32 next_file_id; // public field
 #endif
 
@@ -584,6 +625,12 @@ public:
   void Clear_Inline_Attrib ()     { Clear_PU_is_inline_function (Get_PU ()); }
   BOOL Has_Inline_Attrib () const { return PU_is_inline_function (Get_PU ()); }
 
+  void Set_Leftover_Body(WN* wn)        { _leftover_body = wn; }
+  WN  *Leftover_Body()                  { return _leftover_body; }
+  void      Set_Leftover_Rtn_Val(INT64 val)  
+                                        { _leftover_rtn_val = val; }
+  INT64     Leftover_Rtn_Val()          { return _leftover_rtn_val; }
+
   BOOL Is_Nested_PU () const { return PU_is_nested_func(Get_PU()); }
     
   BOOL Has_Varargs () const 
@@ -639,13 +686,6 @@ public:
   struct pu_info *PU_Info(void) const 
   {
     Is_True(_func_st != 0, ("IPA NODE must have valid st"));
-#if 0
-    Is_True(&St_Table[PU_Info_proc_sym(IP_FILE_HDR_proc_info(
-                                                             File_Header())[Proc_Info_Index()].info)]
-            == _func_st,
-            ("IPA_NODE: file/proc indices [%d:%d] inconsistent with st",
-             _file_index, _proc_info_index));
-#endif
 
 #ifdef KEY
     if (this->Is_Builtin())
@@ -683,6 +723,8 @@ public:
 
   void Write_PU ();
 
+  void Un_Read_PU ();
+
   void Set_Global_Tables(IPA_CALL_GRAPH*) 
   {
     DevWarn("Use IPA_NODE_CONTEXT instead of IPA_NODE::Set_Global_Tables");
@@ -709,6 +751,8 @@ public:
   {
     fprintf (fp, "%s\n", Name());
   }
+
+  void Print(FILE *fp, IPA_CALL_GRAPH *cg);
 
   void Trace () const 
   {
@@ -772,6 +816,11 @@ public:
 
 #endif // _LIGHTWEIGHT_INLINER
 
+#if defined(TARG_SL)
+  void Set_Emit_Id(mINT32 i) { _emit_id = i; }
+  mINT32 Emit_Id() const     { return _emit_id; }
+#endif // TARG_SL
+
 }; // IPA_NODE
 
 #ifdef KEY
@@ -829,6 +878,8 @@ private:
   static const mUINT32 _inline		= 0x10;
   static const mUINT32 _must_inline	= 0x20;
   static const mUINT32 _no_inline	= 0x40;
+  static const mUINT32 _partial_inline	= 0x80;
+  static const mUINT32 _updated_caller  = 0x100; // for a deletable edge caller has been updated.  
   
   EDGE_INDEX _edge_index;			// index to the edge array in graph
   IPA_EDGE_INDEX _array_index;		// index into the IPA_EDGE_ARRAY
@@ -910,6 +961,9 @@ public:
   void Set_Deletable ()			{ _flags |= _deletable; }
   BOOL Is_Deletable () const		{ return _flags & _deletable; }
 
+  void Set_Updated_Caller()      	{ _flags |= _updated_caller; }
+  BOOL Has_Updated_Caller() const	{ return _flags & _updated_caller; }
+
   void Set_Recursive ()			{ _flags |= _recursive; }
   BOOL Is_Recursive () const		{ return _flags & _recursive;}
 
@@ -922,7 +976,12 @@ public:
   void Set_Noinline_Attrib ()		{ _flags |= _no_inline; }
   BOOL Has_Noinline_Attrib () const	{ return _flags & _no_inline; }
 
-  void Clear_All_Inline_Attrib ()	{ _flags &= ~(_inline|_must_inline); }
+  void Set_Partial_Inline_Attrib ()	{ _flags |= _partial_inline; }
+  void Clear_Partial_Inline_Attrib ()	{ _flags &= ~_partial_inline; }
+  BOOL Has_Partial_Inline_Attrib () const { return _flags & _partial_inline; }
+
+  void Clear_All_Inline_Attrib ()	{ _flags &= ~(_inline|_must_inline|
+                                                      _partial_inline); }
 
   // we use a bit vector to represent actual parameters that are readonly
   // up to a max. of 32 parameters are recorded, the rests are ignored.
@@ -1087,6 +1146,11 @@ public:
     }
     caller->Incr_Total_Succ();
   }
+
+  void Delete_Edge(IPA_EDGE *edge)
+  {
+      _graph->Delete_Edge(edge->Edge_Index());
+  }
     
   IPA_NODE* Caller (EDGE_INDEX edge_idx) const
   {
@@ -1135,14 +1199,14 @@ public:
 
 
   void Print_vobose (FILE*);
-  void Print_vobose (FILE*, TRAVERSAL_ORDER);
+  void Print_vobose (FILE*, TRAVERSAL_ORDER, BOOL);
 
   
   // map callsites in the caller to WN nodes
   void Map_Callsites(IPA_NODE* caller);
 
   // Create a clone of the given node
-  IPA_NODE* Create_Clone (IPA_NODE* node);
+  IPA_NODE* Create_Clone (IPA_NODE* node, BOOL update_cg = TRUE);
 
   // Quasi clones are present only as IPA_NODEs with cprop annotations
   // their WHIRL and ST are not cloned
@@ -1234,7 +1298,7 @@ public:
 	pool (m), edge_size (cg->Edge_Size()) {
 	UINT size = sizeof(EDGE) * edge_size;
 	data = (EDGE*) MEM_POOL_Alloc (pool, size);
-	bzero (data, size);
+	BZERO (data, size);
     }
 
     ~AUX_IPA_EDGE () { MEM_POOL_FREE (pool, data); }
@@ -1273,7 +1337,7 @@ public:
 	pool (m), node_size (cg->Node_Size()) {
 	UINT size = sizeof(NODE) * node_size;
 	data = (NODE*) MEM_POOL_Alloc (pool, size);
-	bzero (data, size);
+	BZERO (data, size);
     }
 
     ~AUX_IPA_NODE () { MEM_POOL_FREE (pool, data); }
@@ -1286,7 +1350,7 @@ public:
             UINT size = sizeof(NODE) * node_size;
             node_size *= 2;
             data = (NODE*) MEM_POOL_Realloc (pool, data, size, size*2);
-	    bzero (((char *)data)+size, size);
+	    BZERO (((char *)data)+size, size);
         }
 #else // _LIGHTWEIGHT_INLINER || !_STANDALONE_INLINER
 	Is_True (node->Array_Index () < node_size, ("Subscript out of bound"));
@@ -1299,7 +1363,7 @@ public:
             UINT size = sizeof(NODE) * node_size;
             node_size *= 2;
             data = (NODE*) MEM_POOL_Realloc (pool, data, size, size*2);
-	    bzero (data+size, size);
+	    BZERO (data+size, size);
         }
 #else // _LIGHTWEIGHT_INLINER || !_STANDALONE_INLINER
 	Is_True (node->Array_Index () < node_size, ("Subscript out of bound"));
@@ -1313,7 +1377,7 @@ public:
             UINT size = sizeof(NODE) * node_size;
             node_size *= 2;
             data = (NODE*) MEM_POOL_Realloc (pool, data, size, size*2);
-	    bzero (data+size, size);
+	    BZERO (data+size, size);
         }
 #else // _LIGHTWEIGHT_INLINER || !_STANDALONE_INLINER
 	Is_True (n_idx < node_size, ("Subscript out of bound"));
@@ -1326,7 +1390,7 @@ public:
             UINT size = sizeof(NODE) * node_size;
             node_size *= 2;
             data = (NODE*) MEM_POOL_Realloc (pool, data, size, size*2);
-	    bzero (data+size, size);
+	    BZERO (data+size, size);
 	}
 #else // _LIGHTWEIGHT_INLINER || !_STANDALONE_INLINER
 	Is_True (n_idx < node_size, ("Subscript out of bound"));

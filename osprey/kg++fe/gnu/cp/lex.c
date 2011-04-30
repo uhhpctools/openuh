@@ -337,7 +337,13 @@ struct resword
 #define D_EXT		0x01	/* GCC extension */
 #define D_ASM		0x02	/* in C99, but has a switch to turn it off */
 
+#if defined(TARG_SL2)
+// we have added 5 more new keywords, sizeof(unsigned long) is 4 and CHAR_BIT is 8, so 32 bit 
+// is not enough to hold all type modifier, we need use unsigned long long. 
+CONSTRAINT(ridbits_fit, RID_LAST_MODIFIER < sizeof(unsigned long long) * CHAR_BIT);
+#else
 CONSTRAINT(ridbits_fit, RID_LAST_MODIFIER < sizeof(unsigned long) * CHAR_BIT);
+#endif 
 
 static const struct resword reswords[] =
 {
@@ -369,11 +375,19 @@ static const struct resword reswords[] =
   { "__real__",		RID_REALPART,	0 },
   { "__restrict",	RID_RESTRICT,	0 },
   { "__restrict__",	RID_RESTRICT,	0 },
-  { "__signed",		RID_SIGNED,	0 },
+#ifdef TARG_SL
+  { "__sbuf",          RID_SBUF,       0 }, 
+#endif
+  { "__signed",	RID_SIGNED,	0 },
   { "__signed__",	RID_SIGNED,	0 },
   { "__thread",		RID_THREAD,	0 },
   { "__typeof",		RID_TYPEOF,	0 },
   { "__typeof__",	RID_TYPEOF,	0 },
+#ifdef TARG_SL
+  { "__v1buf",          RID_V1BUF,      0 }, 
+  { "__v2buf",          RID_V2BUF,      0 }, 
+  { "__v4buf",          RID_V4BUF,      0 }, 
+#endif
   { "__volatile",	RID_VOLATILE,	0 },
   { "__volatile__",	RID_VOLATILE,	0 },
   { "asm",		RID_ASM,	D_ASM },
@@ -461,13 +475,18 @@ const short rid_to_yy[RID_MAX] =
   /* RID_SIGNED */	TYPESPEC,
   /* RID_AUTO */	SCSPEC,
   /* RID_RESTRICT */	CV_QUALIFIER,
-
+  /* SL2 Keywords extension */ 
+#if defined(TARG_SL)  
+  /* RID_SBUF  */       CV_QUALIFIER,
+  /* RID_V1BUF */       CV_QUALIFIER,
+  /* RID_V2BUF */       CV_QUALIFIER, 
+  /* RID_V4BUF */       CV_QUALIFIER, 
+#endif  
   /* C extensions.  Bounded pointers are not yet in C++ */
   /* RID_BOUNDED */	0,
   /* RID_UNBOUNDED */	0,
   /* RID_COMPLEX */	TYPESPEC,
   /* RID_THREAD */	SCSPEC,
-
   /* C++ */
   /* RID_FRIEND */	SCSPEC,
   /* RID_VIRTUAL */	SCSPEC,
@@ -743,10 +762,6 @@ static int *reduce_count;
 
 int *token_count;
 
-#if 0
-#define REDUCE_LENGTH ARRAY_SIZE (yyr2)
-#define TOKEN_LENGTH (256 + ARRAY_SIZE (yytname))
-#endif
 
 #ifdef GATHER_STATISTICS
 #ifdef REDUCE_LENGTH

@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 
@@ -42,10 +42,10 @@
  * ====================================================================
  *
  * Module: j1.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/j1.c,v $
+ * $Revision: 1.5 $
+ * $Date: 04/12/21 14:58:22-08:00 $
+ * $Author: bos@eng-25.internal.keyresearch.com $
+ * $Source: /home/bos/bk/kpro64-pending/libm/mips/SCCS/s.j1.c $
  *
  * Revision history:
  *  28-May-93 - Original Version
@@ -57,7 +57,7 @@
  * ====================================================================
  */
 
-/* $Header: /proj/osprey/CVS/open64/osprey1.0/libm/mips/j1.c,v 1.1.1.1 2005/10/21 19:00:00 marcel Exp $ */
+/* $Header: /home/bos/bk/kpro64-pending/libm/mips/j1.c 1.5 04/12/21 14:58:22-08:00 bos@eng-25.internal.keyresearch.com $ */
 
 /****************************  IMPORTANT NOTE  ****************************
  *
@@ -120,7 +120,18 @@ extern	double	y1(double);
 #pragma weak y1 = __y1
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern double __j1(double);
+extern double __y1(double);
+#pragma weak j1
+#pragma weak y1
+double j1( double arg ) {
+  return __j1( arg );
+}
+double y1( double arg ) {
+  return __y1( arg );
+}
+#elif defined(__GNUC__)
 extern  double  __j1(double);
 
 double    j1() __attribute__ ((weak, alias ("__j1")));
@@ -624,7 +635,18 @@ double	num, denom, result;
 
 #ifdef NO_LONG_DOUBLE
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern long double __j1l(long double);
+extern long double __y1l(long double);
+#pragma weak j1l
+#pragma weak y1l
+long double j1l( long double x ) {
+  return ( (long double)__j1((double)x) );
+}
+long double y1l( long double x ) {
+  return ( (long double)__y1((double)x) );
+}
+#elif defined(__GNUC__)
 extern  long double  __j1l(long double);
 
 long double    j1l() __attribute__ ((weak, alias ("__j1l")));

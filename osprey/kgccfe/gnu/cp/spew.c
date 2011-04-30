@@ -374,10 +374,6 @@ feed_input (input)
      struct unparsed_text *input;
 {
   struct feed *f;
-#if 0
-  if (feed)
-    abort ();
-#endif
 
   f = ggc_alloc (sizeof (struct feed));
 

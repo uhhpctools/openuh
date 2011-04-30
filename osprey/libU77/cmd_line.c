@@ -105,6 +105,7 @@ _Get_command(char *command, pathf90_i4 *length, pathf90_i4 *status,
       int copy_len = MIN(src_len, tmp_len);
       if (i > 0) {
 	*tmp++ = ' ';
+	tmp_len--;
         }
       memcpy(tmp, ARGV[i], copy_len);
       tmp += copy_len;

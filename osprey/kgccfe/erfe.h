@@ -100,6 +100,13 @@ static char *erfe_rcs_id = "$Source: kgccfe/SCCS/s.erfe.h $ $Revision: 1.6 $";
 #define EC_Diff_Decl	EC_BASE_FE+22		/* str */
 #define EC_Flag_Var	EC_BASE_FE+23		/* stab */
 
+#ifdef TARG_NVISA
+#define EC_Inline_Prototype	EC_BASE_FE+24		/* str */
+#define EC_Inline_Ptr		EC_BASE_FE+25		/* str */
+#define EC_Inline_Return_Values EC_BASE_FE+26		/* str */
+#define EC_Inline_Parameters	EC_BASE_FE+27		/* str */
+#endif
+
 #if defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS) || \
     defined(FRONT_END_FORTRAN)
 #define EC_Null_Backptr	EC_BASE_FE+100		/* tree,str */

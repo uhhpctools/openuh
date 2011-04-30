@@ -86,8 +86,8 @@
 #endif // USE_PCH
 #pragma hdrstop
 
-static char *source_file = __FILE__;
-static char *rcs_id = "$Source: be/lno/SCCS/s.dead.cxx $ $Revision: 1.5 $";
+static const char *source_file = __FILE__;
+static const char *rcs_id = "$Source: be/lno/SCCS/s.dead.cxx $ $Revision: 1.5 $";
 
 #include <sys/types.h>
 #include "lnopt_main.h"
@@ -155,7 +155,9 @@ extern void Process_Store(WN *store_wn, VINDEX16 v,
 
   ACCESS_ARRAY *store = 
 	(ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map,WN_kid1(store_wn));
-
+#ifdef KEY //bug 5970: see explanation below
+  if(!store) return;
+#endif
   if (debug) {
     fprintf(TFile,"Processing the store ");
     store->Print(TFile);

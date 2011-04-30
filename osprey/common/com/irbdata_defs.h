@@ -90,6 +90,18 @@ enum INITVFLAGS {	// currently only for EH
 };
 #endif // KEY
 
+enum INITVLABELFLAGS {           // for Label, only used by label values so far
+    INITVLABELFLAGS_FIRST  = 0,        // first valid value
+
+    INITVLABELFLAGS_UNUSED = 0,  // not used by default
+    INITVLABELFLAGS_VALUES_FIRST, // first label in label values expr, imply PLUS
+    INITVLABELFLAGS_VALUES_PLUS,  // the label whose value is added to the expr
+    INITVLABELFLAGS_VALUES_MINUS, // the label whose value is substracted from the expr
+    INITVLABELFLAGS_VALUES_LAST,  // last label in label values expr, imply MINUS
+
+    INITVLABELFLAGS_LAST = INITVLABELFLAGS_VALUES_LAST,     // last valid value
+};
+
 struct INITV
 {
     INITV_IDX next;			// next value for non-scalar member
@@ -106,7 +118,8 @@ struct INITV
 
 	struct {
 	    LABEL_IDX lab;		// for INITVKIND_LABEL
-	    mINT32 unused;		// filler, must be zero
+	    mINT16 flags;		// flags, see INITVLABELFLAGS
+            mTYPE_ID mtype;             // type for label values
 	} lab;
 	
 	struct {
@@ -142,6 +155,8 @@ struct INITV
     INT32 Ofst () const			{ return u.sto.ofst; }
 
     LABEL_IDX Lab () const		{ return u.lab.lab; }
+    INT16 Lab_flags () const            { return u.lab.flags; }
+    mTYPE_ID Lab_mtype () const         { return u.lab.mtype; }
 
     LABEL_IDX Lab1 () const		{ return u.stdiff.lab1; }
     ST_IDX St2 () const			{ return u.stdiff.st2; }

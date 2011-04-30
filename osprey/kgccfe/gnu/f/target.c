@@ -1363,17 +1363,6 @@ ffetarget_integerbinary (ffetargetIntegerDefault *val, ffelexToken integer)
 	  c = 0;
 	}
 
-#if 0				/* Don't complain about signed overflow; just
-				   unsigned overflow. */
-      if ((x == FFETARGET_integerALMOST_BIG_OVERFLOW_BINARY)
-	  && (c == FFETARGET_integerFINISH_BIG_OVERFLOW_BINARY)
-	  && (*(p + 1) == '\0'))
-	{
-	  *val = FFETARGET_integerBIG_OVERFLOW_BINARY;
-	  return TRUE;
-	}
-      else
-#endif
 #if FFETARGET_integerFINISH_BIG_OVERFLOW_BINARY == 0
       if ((x & FFETARGET_integerALMOST_BIG_OVERFLOW_BINARY) != 0)
 #else
@@ -1456,17 +1445,6 @@ ffetarget_integerhex (ffetargetIntegerDefault *val, ffelexToken integer)
 	  c = 0;
 	}
 
-#if 0				/* Don't complain about signed overflow; just
-				   unsigned overflow. */
-      if ((x == FFETARGET_integerALMOST_BIG_OVERFLOW_HEX)
-	  && (c == FFETARGET_integerFINISH_BIG_OVERFLOW_HEX)
-	  && (*(p + 1) == '\0'))
-	{
-	  *val = FFETARGET_integerBIG_OVERFLOW_HEX;
-	  return TRUE;
-	}
-      else
-#endif
 #if FFETARGET_integerFINISH_BIG_OVERFLOW_HEX == 0
       if (x >= FFETARGET_integerALMOST_BIG_OVERFLOW_HEX)
 #else
@@ -1549,17 +1527,6 @@ ffetarget_integeroctal (ffetargetIntegerDefault *val, ffelexToken integer)
 	  c = 0;
 	}
 
-#if 0				/* Don't complain about signed overflow; just
-				   unsigned overflow. */
-      if ((x == FFETARGET_integerALMOST_BIG_OVERFLOW_OCTAL)
-	  && (c == FFETARGET_integerFINISH_BIG_OVERFLOW_OCTAL)
-	  && (*(p + 1) == '\0'))
-	{
-	  *val = FFETARGET_integerBIG_OVERFLOW_OCTAL;
-	  return TRUE;
-	}
-      else
-#endif
 #if FFETARGET_integerFINISH_BIG_OVERFLOW_OCTAL == 0
       if (x >= FFETARGET_integerALMOST_BIG_OVERFLOW_OCTAL)
 #else

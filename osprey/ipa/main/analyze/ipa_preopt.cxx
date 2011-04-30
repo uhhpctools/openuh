@@ -56,7 +56,6 @@
 // ====================================================================
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <dlfcn.h>                      // sgidladd, dlerror
 
@@ -715,7 +714,7 @@ IPA_Preoptimize (IPA_NODE* node)
   PU_adjust_addr_flags(Get_Current_PU_ST(), wn);
 
   DU_MANAGER* du_mgr = Create_Du_Manager (MEM_pu_nz_pool_ptr);
-  ALIAS_MANAGER* alias_mgr = Create_Alias_Manager (MEM_pu_nz_pool_ptr);
+  ALIAS_MANAGER* alias_mgr = Create_Alias_Manager (MEM_pu_nz_pool_ptr, wn);
 
   // call the preopt, which then calls Perform_Procedure_Summary_Phase
   WN* opt_wn = Pre_Optimizer (PREOPT_IPA1_PHASE, wn, du_mgr, alias_mgr);

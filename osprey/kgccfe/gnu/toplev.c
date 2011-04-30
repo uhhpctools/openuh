@@ -152,6 +152,14 @@ static int print_single_switch PARAMS ((FILE *, int, int, const char *,
 static void print_switch_values PARAMS ((FILE *, int, int, const char *,
 				       const char *, const char *));
 
+#ifdef TARG_SL
+/* Supporting long long type. -mlong-long */
+bool Long_Long_Support = FALSE;
+
+/* Supporting float point emulation. -msoft-float */
+bool Float_Point_Support = FALSE;
+#endif
+
 /* Nonzero to dump debug info whilst parsing (-dy option).  */
 static int set_yydebug;
 
@@ -1344,7 +1352,14 @@ documented_lang_options[] =
     N_("Override the underlying type for wchar_t to `unsigned short'") },
   { "-fno-short-wchar", "" },
 
-  { "-Wall",
+#ifdef TARG_SL
+  {"-mlong-long",
+    N_("Long long supported") },
+  {"-msoft-float",
+    N_("Float point emulation supported") },
+#endif
+
+	{ "-Wall",
     N_("Enable most warning messages") },
   { "-Wbad-function-cast",
     N_("Warn about casting functions to incompatible types") },
@@ -1725,7 +1740,7 @@ read_integral_parameter (p, pname, defval)
   if (*endp != 0)
     {
       if (pname != 0)
-	error ("invalid option `%s'", pname);
+       error ("invalid option `%s'", pname);
       return defval;
     }
 
@@ -1809,7 +1824,11 @@ static void
 crash_signal (signo)
      int signo;
 {
+#ifdef __MINGW32__
+  internal_error ("%s", "caught");
+#else
   internal_error ("%s", strsignal (signo));
+#endif /* __MINGW32__ */
 }
 
 /* Strip off a legitimate source ending from the input string NAME of
@@ -4547,11 +4566,34 @@ independent_decode_option (argc, argv)
       /* Already been treated in main (). Do nothing.  */
       break;
 
-    case 'm':
+		case 'm':
+#ifdef TARG_SL
+			/* Handle -mlong-long option to supporting long long type */
+			if(!strcmp(arg, "mlong-long"))
+			{
+				Long_Long_Support = TRUE;	
+			} 
+			else if(!strcmp(arg, "msoft-float"))
+			/* Handle -msoft-float option to supporting float point emulation */
+			{
+				Float_Point_Support = TRUE;	
+			}
+			else 
+			{
+				set_target_switch (arg + 1);
+			}
+#else
+				set_target_switch (arg + 1);
+#endif
+			break;
+#ifdef TARG_LOONGSON
+      /* Deal with options -n32/ -n64 */
+    case 'n':
       set_target_switch (arg + 1);
       break;
-
-    case 'f':
+#endif
+    
+		case 'f':
       return decode_f_option (arg + 1);
 
     case 'g':
@@ -4593,6 +4635,12 @@ independent_decode_option (argc, argv)
       else
 	return 0;
       break;
+
+#ifdef SGI_MONGOOSE
+    case 't':
+	/* trace flags handled by sgi processing */
+	break;
+#endif
 
     case 'v':
       if (!strcmp (arg, "version"))
@@ -5156,7 +5204,9 @@ parse_options_and_default_flags (argc, argv)
 
   if (optimize >= 3)
     {
+#ifndef TARG_NVISA // rely on open64 inliner
       flag_inline_functions = 1;
+#endif
       flag_rename_registers = 1;
     }
 

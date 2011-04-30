@@ -262,23 +262,8 @@ DST_allocate (INT32 size, INT32 align)
 	current_DST = (DST_Type *)Current_DST;
 
 #if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER) || defined(MONGOOSE_BE)
-#if 0
-	if ((current_DST->dst_blocks == current_DST->current_dst) &&
-	    (current_DST->current_dst->kind != DST_local_scope_block)) {
-	    /* we should set current_dst to a new block */
-	    current = new_block (DST_local_scope_block, size);
-	    /* recalculate the alignment padding in the current_block */
-	    align_padding = 0;
-	    total_size = size;
-	    set_current_dst_to_current();
-	}
-	else {
-#endif
 	    set_current_dst_to_current();
 	    current = current_DST->current_dst;
-#if 0
-	}
-#endif
 #else
 	    current = current_DST->current_dst;
 #endif

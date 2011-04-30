@@ -49,6 +49,8 @@ long *pid, *sig;
 #ifdef KEY /* Bug 1683 */
 void
 pathf90_subr_kill(int *pid, int *sig, int *status) {
-	*status = KILL(pid, sig);
+	long lpid = *pid;
+	long lsig = *sig;
+	*status = KILL(&lpid, &lsig);
 }
 #endif /* KEY Bug 1683 */

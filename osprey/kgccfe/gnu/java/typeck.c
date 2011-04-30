@@ -318,10 +318,6 @@ mark_addressable (exp)
       case RESULT_DECL:
       case FUNCTION_DECL:
 	TREE_ADDRESSABLE (x) = 1;
-#if 0  /* poplevel deals with this now.  */
-	if (DECL_CONTEXT (x) == 0)
-	  TREE_ADDRESSABLE (DECL_ASSEMBLER_NAME (x)) = 1;
-#endif
 	/* drops through */
       default:
 	return 1;
@@ -722,10 +718,6 @@ set_java_signature (type, sig)
   if (old_sig != NULL_TREE && old_sig != sig)
     abort ();
   TYPE_SIGNATURE (type) = sig;
-#if 0 /* careful about METHOD_TYPE */
-  if (IDENTIFIER_SIGNATURE_TYPE (sig) == NULL_TREE && TREE_PERMANENT (type))
-    IDENTIFIER_SIGNATURE_TYPE (sig) = type;
-#endif
 }
 
 /* Search in class SEARCHED_CLASS (and its superclasses) for a method

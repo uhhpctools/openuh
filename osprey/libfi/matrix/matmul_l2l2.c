@@ -49,7 +49,11 @@
 /*
  * Name of routine called do computation (if any)
  */
+#if defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN)
+#define SUBNAME underscore_l2gemmx__
+#else /* defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN) */
 #define SUBNAME _l2gemmx__
+#endif /* defined(BUILD_COMPILER_GNU) && defined(BUILD_OS_DARWIN) */
 /*
  * Type of constants alpha and beta
  */

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -54,7 +58,7 @@ private:
 
   void Tighten_Release_Time( OP* );
   OP* last_mem_op;
-  OP* Winner( OP*, OP* );
+  OP* Winner( OP*, OP*, int );
   OP* Select_Variable( int );
 
   void Init();

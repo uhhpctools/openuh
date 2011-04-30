@@ -220,15 +220,9 @@ enum h8_flags
 #define MS32	(SRC | L_32 | MACREG)
 #define MD32	(DST | L_32 | MACREG)
 
-#if 1
   OR8  =	RS8,		/* ??? OR as in One Register.  */
   OR16 =	RS16,
   OR32 =	RS32,
-#else
-  OR8  =	RD8,
-  OR16 =	RD16,
-  OR32 =	RD32
-#endif
 };
 
 enum ctrlreg

@@ -37,7 +37,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 // This file contains utilities used during inlining.
 // These utilities should not be member functions of IPO_INLINE

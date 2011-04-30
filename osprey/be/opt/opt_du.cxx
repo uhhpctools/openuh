@@ -1,12 +1,20 @@
+/*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
+ * Copyright 2005-2007 NVIDIA Corporation.  All rights reserved.
+ */
+
 //-*-c++-*-
 // ====================================================================
 // ====================================================================
 //
 // Module: opt_du.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/opt/opt_du.cxx,v $
+// $Revision: 1.2 $
+// $Date: 02/11/07 23:41:53-00:00 $
+// $Author: fchow@keyresearch.com $
+// $Source: /scratch/mee/Patch0002-taketwo/kpro64-pending/be/opt/SCCS/s.opt_du.cxx $
 //
 // Revision history:
 //  21-DEC-94 shin - Original Version
@@ -357,10 +365,8 @@ DU_MANAGER::Ud_Add_Def(WN *use, WN *def)
 	!OPCODE_is_stmt(WN_opcode(use)))
     {
       if (!Aliased(_alias_mgr, use, def)) {
-	ErrMsg(EC_Development_Warning, "DU_MANAGER::Ud_Add_Def",
-	   "Use and Def are not aliased");
-	dump_wn(def);
-	dump_wn(use);
+	DevWarn("DU_MANAGER::Ud_Add_Def: Use %d [%p] and Def %d [%p] are not aliased",
+		WN_map_id(use), use, WN_map_id(def), def);
       }
     }
   }
@@ -395,6 +401,7 @@ void
 DU_MANAGER::Add_Def_Use( WN *def, WN *use )
 {
   if ((_opt_phase == PREOPT_PHASE || _opt_phase == PREOPT_LNO_PHASE ||
+       _opt_phase == PREOPT_LNO1_PHASE ||
        _opt_phase == PREOPT_DUONLY_PHASE) &&
       OPERATOR_is_scalar_iload (WN_operator(use)) &&
       !OPERATOR_is_scalar_store (WN_operator(def)))
@@ -1075,9 +1082,16 @@ EMITTER::Compute_use_def_stmt( DU_MANAGER *du_mgr, WN *wn, BB_NODE *wn_bb )
     RID *rid = REGION_get_rid(wn);
     Is_True(rid != NULL, ("EMITTER::Compute_use_def_stmt, NULL RID"));
     // see PV 457243
+#if defined(TARG_SL2)
+    if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid) || RID_TYPE_olimit(rid) ||
+	RID_TYPE_major(rid) || RID_TYPE_minor(rid) ||
+	RID_TYPE_pragma(rid) ||
+	RID_level(rid) < Cfg()->Rgn_level()) {
+#else
     if (RID_TYPE_mp(rid) || RID_TYPE_eh(rid) || RID_TYPE_olimit(rid) ||
 	RID_TYPE_pragma(rid) ||
 	RID_level(rid) < Cfg()->Rgn_level()) {
+#endif
       Compute_use_def_stmt(du_mgr, WN_region_body(wn), wn_bb);
       // need to do pragmas also because of xpragmas
       if (RID_TYPE_mp(rid))
@@ -1186,7 +1200,8 @@ EMITTER::Compute_use_def(DU_MANAGER *du_mgr)
   }
 
   // do not generate info for LNO if no loops
-  if (du_mgr->Opt_phase() == PREOPT_LNO_PHASE && 
+  if ((du_mgr->Opt_phase() == PREOPT_LNO_PHASE
+       || du_mgr->Opt_phase() == PREOPT_LNO1_PHASE) &&
       !Has_do_loop() &&
       !PU_mp_needs_lno(Get_Current_PU())
       )
@@ -1787,7 +1802,7 @@ DU_MANAGER::Alloc_IPA_summary(CFG *cfg)
 {
   _bb_cnt = cfg->Total_bb_count();
   _bb_summary = (BB_SUMMARY_INFO *) CXX_NEW_ARRAY(BB_SUMMARY_INFO, _bb_cnt, &_mem_pool);
-  bzero(_bb_summary, sizeof(BB_SUMMARY_INFO) * _bb_cnt);
+  BZERO (_bb_summary, sizeof(BB_SUMMARY_INFO) * _bb_cnt);
 }
 
 

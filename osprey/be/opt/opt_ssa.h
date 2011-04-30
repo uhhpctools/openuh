@@ -105,7 +105,7 @@ private:
   CODEREP  *Revive_phi_chi_opnd(VER_ID du);
   void	    Make_live_phi_chi_opnd(VER_ID du);
 #ifdef KEY
-  void      Print_ssa_ver_for_wn(WN* wn);
+  void      Print_ssa_ver_for_wn(WN* wn, INT indent);
 #endif
 public:
             SSA(MEM_POOL *gpool,
@@ -125,6 +125,7 @@ public:
   void      Value_number_mu_node(MU_NODE *mu_node);
   void	    Resurrect_phi(PHI_NODE *phi);
   void	    Resurrect_chi(CHI_NODE *chi);
+  void      Print();
 };
 
 class CODEREP;

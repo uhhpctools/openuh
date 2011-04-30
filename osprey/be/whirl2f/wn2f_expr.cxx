@@ -1,5 +1,5 @@
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,10 +41,10 @@
  * ====================================================================
  *
  * Module: wn2f_expr.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_expr.cxx,v $
+ * $Revision: 1.15 $
+ * $Date: 05/12/05 08:59:32-08:00 $
+ * $Author: bos@eng-24.pathscale.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2f/SCCS/s.wn2f_expr.cxx $
  *
  * Revision history:
  *  12-Apr-95 - Original Version
@@ -62,7 +62,7 @@
 
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f_expr.cxx,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2f/SCCS/s.wn2f_expr.cxx $ $Revision: 1.15 $";
 #endif
 
 #include "whirl2f_common.h"
@@ -1143,9 +1143,6 @@ WN2F_select(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    WN2F_translate(tokens, WN_kid0(wn), context);
    
    Append_Token_Special(tokens, ')');
-#if 0
-   ASSERT_DBG_WARN(FALSE, (DIAG_UNIMPLEMENTED, "WN2F_select"));
-#endif
 
    return EMPTY_WN2F_STATUS;
 } /* WN2F_select */

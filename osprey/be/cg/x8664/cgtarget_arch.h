@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -158,7 +162,9 @@ CGTARG_Is_OP_Barrier(OP *op)
     return (WN_Asm_Clobbers_Mem(ASM_OP_wn(asm_info)));
 #endif
   } else if (OP_code(op) == TOP_fwd_bar ||	// bug 4850
-	     OP_code(op) == TOP_bwd_bar) {
+	     OP_code(op) == TOP_bwd_bar ||
+	     OP_code(op) == TOP_stmxcsr ||
+	     OP_code(op) == TOP_ldmxcsr) {
     return TRUE;
   } else
     return FALSE;

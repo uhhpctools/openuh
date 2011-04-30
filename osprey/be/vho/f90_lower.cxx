@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -41,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"
 #include "errors.h"
@@ -76,8 +75,10 @@
 #include "f90_lower.h"
 
 #ifdef __GNUC__
+#if ! defined(BUILD_OS_DARWIN)
 #pragma weak Anl_File_Path
 #pragma weak New_Construct_Id
+#endif /* defined(BUILD_OS_DARWIN) */
 #endif
 
 /* Useful macros */
@@ -1186,7 +1187,7 @@ static F90_LOWER_AUX_DATA * F90_Lower_Copy_Aux_Data(F90_LOWER_AUX_DATA * adata)
  *================================================================
  */
 
-static char * create_tempname(char * name)
+static char * create_tempname(const char * name)
 {
    static char buf[64];
    num_temps += 1;
@@ -1197,7 +1198,7 @@ static char * create_tempname(char * name)
 //================================================================
 // Utility routine to create an ST* for the many temp symbols generated
 //================================================================
-static ST * new_temp_st(char * name)
+static ST * new_temp_st(const char * name)
 {
    ST * st;
    st = New_ST();
@@ -2187,8 +2188,8 @@ static void F90_Lower_Init_Dep_Info(DEP_INFO *d, INT ndim)
 
 static void print_dep_info(DEP_INFO *d)
 {
-   static char * summ[4] = {"UNK","IND","===","REM"};
-   static char * dirr[5] = {"/","+","-","0","?"};
+   static const char * summ[4] = {"UNK","IND","===","REM"};
+   static const char * dirr[5] = {"/","+","-","0","?"};
    INT i;
    
    fprintf(TFile,"%s ",summ[d->summary]);
@@ -2359,7 +2360,7 @@ INT f90_fdump(INT f)
    return (0);
 }
 
-static char * f90_depsum_name(DEP_SUMMARY d)
+static const char * f90_depsum_name(DEP_SUMMARY d)
 {
    switch (d) {
     case DEP_UNKNOWN: return ("UNKNOWN"); 
@@ -2709,6 +2710,9 @@ static DIR_FLAG Analyze_index(WN *i1, WN *i2) {
 
    /* if neither is a triplet, return here as well */
    if (opr1 != OPR_TRIPLET && opr2 != OPR_TRIPLET) {
+      /* if we do not know more about the two scalars, to assume DIR_ZERO 
+       * is safe, and it is better than DIR_UNKNOWN */
+      r = DIR_ZERO; 
       SHOW_REASON("no triplets");
       return(r);
    }
@@ -3841,13 +3845,23 @@ static BOOL F90_Do_Copies(WN *stmt, WN *block)
 	 }
 	 WN_kid0(assignment) = new_rhs;
       } else {
-	 /* It's a CASSIGNSTMT statement, create an MLOAD of the RHS (kid1), and move
+	 /* It's a CASSIGNSTMT or CALL statement, create an MLOAD of the RHS (kid1), and move
 	  * it to a temp.
 	  */
+	 TY_IDX ety;
+	 WN *wn_size;
 	 copy_adata = F90_Lower_Copy_Aux_Data(adata);
 	 rhs = WN_kid0(WN_kid1(assignment));
-	 ty = WN_ty(WN_kid0(assignment));
-	 rhs = WN_CreateMload(0,ty,rhs,WN_COPY_Tree(WN_kid0(WN_kid(assignment,3)))); 
+	 if (assign_opr == OPR_CALL)
+	 {
+	    ety = TY_AR_etype(ST_type(WN_st(WN_kid0(WN_kid0(rhs)))));
+	    wn_size = WN_CreateIntconst(OPCint, TY_size(ety));
+	    ty = Make_Pointer_Type(ety);
+	 } else {
+	    ty = WN_ty(WN_kid0(assignment));
+	    wn_size = WN_COPY_Tree(WN_kid0(WN_kid(assignment,3)));
+	 }
+	 rhs = WN_CreateMload(0,ty,rhs, wn_size); 
 	 new_rhs = F90_Lower_Copy_To_ATemp(&ALLOC_PRELIST(copy_adata), &DEALLOC_POSTLIST(adata),
 					   &copy_store,rhs,
 					   ITER_COUNT_PTR(adata), NDIM(adata));
@@ -4212,6 +4226,10 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
    TYPE_ID ty;
    WN* region;
 
+#ifdef KEY // bug14194
+   for (i=0; i<MAX_NDIM; i++)
+     sizes[i] = NULL;
+#endif
 
    if (kids[1]) {
       dim = F90_Get_Dim(kids[1]);
@@ -4345,7 +4363,11 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
       
       /* Create a single loopnest */
       num_temps += 1;
+#ifdef KEY // bug14194
+      dim = rank + 1 - dim; /* account for ordering */
+#else
       dim = ndim + 2 - dim; /* account for ordering */
+#endif /* KEY */
       sprintf(tempname,"@f90red_%d",num_temps);
       loopnest = create_doloop(&index,tempname,sizes[dim-1],DIR_POSITIVE,loopnest);
       for (i=0,j=0; i < ndim+1; i++) {
@@ -4425,6 +4447,11 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
    ST * retval;
    TY_IDX  retty, ret_elem_ptr;
    TYPE_ID expr_ty;
+
+#ifdef KEY // bug14194
+   for (i=0; i<MAX_NDIM; i++)
+     sizes[i] = NULL;
+#endif
 
    if (kids[1]) {
       dim = F90_Get_Dim(kids[1]);
@@ -4566,7 +4593,11 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
       
       /* Create a single loopnest */
       num_temps += 1;
+#ifdef KEY // bug14194
+      dim = rank + 1 - dim; /* account for ordering */
+#else
       dim = ndim + 2 - dim; /* account for ordering */
+#endif /* KEY */
       sprintf(tempname,"@f90red_%d",num_temps);
 #ifdef KEY /* Bug 3395 */
       loopnest = create_doloop(&index,tempname,sizes[dim-1],DIR_NEGATIVE,loopnest);
@@ -5625,10 +5656,12 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
    char tempname[32]; /* This isn't going to overflow */
    BOOL add_prompf;
 
+#ifndef KEY // bug 8567
    /* Don't walk I/O statements */
    if (WN_operator(stmt) == OPR_IO) {
       return(TRUE);
    }
+#endif
 
    adata = GET_F90_MAP(stmt);
    if (adata) {
@@ -5738,7 +5771,7 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
 #define SET_P_MAP(x,t) WN_MAP_Set(f90_parent_map,(x),(void *) (t))
 #define GET_P_MAP(x) ((WN *) WN_MAP_Get(f90_parent_map,(x)))
 
-static void check_for_duplicates(WN *pu,char *str)
+static void check_for_duplicates(WN *pu, const char *str)
 {
    /* Set up a parent map */
    static WN_MAP f90_parent_map;

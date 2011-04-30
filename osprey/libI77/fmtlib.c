@@ -122,11 +122,6 @@ char *llcvt(ftnll value, int *ndigit, int *sign, char *buf)
    }
    abuf = buf + MAXOCTLENGTH - 1;
    (*abuf--) = '\0';
-#if 0
-   while ((*(long *) &value > 0) || (*(long *) &value == 0 &&
-				     *((long *) &value + 1) != 0))
-      /* basically 'while (value > (long long 0))' */
-#endif
    while (value > 0LL) {
       long long       temp;
 

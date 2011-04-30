@@ -38,10 +38,10 @@
  * ====================================================================
  *
  * Module: sinf.c
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/sinf.c,v $
+ * $Revision$
+ * $Date$
+ * $Author$
+ * $Source$
  *
  * Revision history:
  *  09-Jun-93 - Original Version
@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/libm/mips/sinf.c,v $ $Revision: 1.1.1.1 $";
+static char *rcs_id = "$Source$ $Revision$";
 
 #ifdef _CALL_MATHERR
 #include <stdio.h>
@@ -70,7 +70,13 @@ extern	float	sinf(float);
 #pragma weak sinf = __sinf
 #endif
 
-#ifdef __GNUC__
+#if defined(BUILD_OS_DARWIN) /* Mach-O doesn't support aliases */
+extern float __sinf(float);
+#pragma weak sinf
+float sinf( float x ) {
+  return __sinf( x );
+}
+#elif defined(__GNUC__)
 extern  float  __sinf(float);
 float    sinf(float) __attribute__ ((weak, alias ("__sinf")));
 #endif

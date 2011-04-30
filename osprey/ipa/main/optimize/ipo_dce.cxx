@@ -39,7 +39,6 @@
 
 //* -*-Mode: c++;-*- (Tell emacs to use c++ mode) */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "defs.h"
 #include "symtab.h"			// symbol table

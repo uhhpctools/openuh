@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -37,7 +41,6 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include "linker.h"			/* linker headers */
 #include "process.h"                    /* For create_tmpdir. */
@@ -60,6 +63,8 @@
 
 #include "ipc_weak.h"
 
+#include "ipc_link.h"
+#include "config_ipa.h"
 
 /***************************************************************************/
 /* gets the ABI type from the linker                */
@@ -67,23 +72,10 @@
 static void 
 IP_set_target(void)
 {
-#ifdef _TARG_MIPS
-    switch (ld_ipa_opt[LD_IPA_TARGOS].flag) {
-    case TOS_MIPS_O32:
-	Target_ABI = ABI_32;
-	break;
-	
-    case TOS_MIPS_N32:
-	Target_ABI = ABI_N32;
-	break;
-
-    case TOS_MIPS_64:
-	Target_ABI = ABI_64;
-	break;
-    default:
-	Target_ABI = ABI_N32;
-	break;
-    }
+#ifdef TARG_MIPS
+    // 12343: Use IPA_Target_Type instead of ld_ipa_opt[LD_IPA_TARGOS].flag
+    // to distinguish between n32 and 64 in IPA
+    Target_ABI = IPA_Target_Type == IP_64_bit_ABI ? ABI_N64 : ABI_N32;
 
     switch (ld_ipa_opt[LD_IPA_ISA].flag) {
     case 1:
@@ -102,7 +94,7 @@ IP_set_target(void)
 	break;				// use default
     }
 
-    Use_32_Bit_Pointers = (Target_ABI < ABI_64);
+    Use_32_Bit_Pointers = (Target_ABI == ABI_N32);
 #endif
 
 #ifdef TARG_IA64
@@ -111,14 +103,32 @@ IP_set_target(void)
     Use_32_Bit_Pointers = FALSE;
 #endif
 
-#ifdef _TARG_IA32
+#ifdef TARG_IA32
     Target_ABI = ABI_I32;
     Target_ISA = TRUE;
+#endif
+
+#ifdef TARG_PPC32
+    Target_ABI = ABI_P32;
+    Target_ISA = TARGET_ISA_P5;
+    Use_32_Bit_Pointers = TRUE;
 #endif
 
 #ifdef TARG_X8664
     Target_ABI = IPA_Target_Type == IP_64_bit_ABI ? ABI_n64 : ABI_n32;
     Target_ISA = TARGET_ISA_x86_64;
+    Use_32_Bit_Pointers = IPA_Target_Type == IP_32_bit_ABI;
+#endif
+
+#ifdef TARG_SL
+    Target_ABI = IPA_Target_Type == IP_64_bit_ABI ? ABI_N64 : ABI_N32;
+    Target_ISA = TARGET_ISA_M4;
+    Use_32_Bit_Pointers = IPA_Target_Type == IP_32_bit_ABI;
+#endif
+
+#ifdef TARG_LOONGSON
+    Target_ABI = IPA_Target_Type == IP_64_bit_ABI ? ABI_n64 : ABI_n32;
+    Target_ISA = TARGET_ISA_LOONGSON;
     Use_32_Bit_Pointers = IPA_Target_Type == IP_32_bit_ABI;
 #endif
 
@@ -178,6 +188,76 @@ static int get_num_procs (void)
 }
 #endif // KEY
 
+extern ARGV *ld_flags_part2;
+
+// list of known system libraries, this list is not complete
+
+static char * known_library[] = {
+    "-lgcc", "-lc", "-lopenmp", "-lopen64rt", "-lm", "-lmv",
+    "-lacml_mv", "-lffio","-lfortran", "-lhugetlbfs_open64", "-linstr",
+    "-lopen64rt_shared","-lrt","-lrpcsvc","-lpthread",
+    "-lstdc++", "-lgcc_s", "-ldl",
+    ""
+};
+
+
+// detect whether it is in whole program mode
+static void detect_whole_program_mode()
+{
+    // user already specify whole program mode
+    if (IPA_Enable_Whole_Program_Mode_Set)
+        return;
+        
+    //1) all the libraries are known system libraries
+    BOOL no_unknown_library = TRUE;
+    ARGV::iterator i;
+    for (i=ld_flags_part2->begin();i!=ld_flags_part2->end();i++)
+    {
+        if (strncmp(*i,"-l",2) == 0)
+        {
+            BOOL found = false;
+            int j = 0;
+            const char * lib = known_library[0];
+            while(strcmp(lib, ""))
+            {
+                if (!strcmp(lib, *i)) {
+                    found = true;
+                    break;
+                }    
+                lib = known_library[++j];
+            }    
+            if (!found) 
+            {
+                no_unknown_library = false;
+                return;
+            }    
+        }    
+    }
+
+    //2) no dlopen
+    // we are conservative here: we go through the global
+    // symbol table, if we find dlopen symbol then we are not in
+    // whole program mode
+    BOOL no_dlopen = true;
+    for (ST_IDX sts = 1; sts < ST_Table_Size(GLOBAL_SYMTAB) ; ++sts) {
+        ST* cur_st = &St_Table(GLOBAL_SYMTAB,sts);
+        if (!strcmp(ST_name(cur_st), "dlopen"))
+        {
+            no_dlopen = false;
+            return;
+        }    
+    }
+
+    //3) we are build a.out (i.e., not -r or not -shared)
+    if((ld_ipa_opt[LD_IPA_SHARABLE].flag != F_MAKE_SHARABLE) &&
+        (ld_ipa_opt[LD_IPA_SHARABLE].flag != F_RELOCATABLE))
+    {    
+        Is_True((no_unknown_library == true && no_dlopen == true), 
+            ("already checked"));
+        IPA_Enable_Whole_Program_Mode = true;
+    }    
+}
+
 void
 ipa_driver (INT argc, char **argv)
 {
@@ -193,19 +273,17 @@ ipa_driver (INT argc, char **argv)
 
     // turn off these features until they are ported.
     IPA_Enable_Cloning = FALSE;
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_SL)
     IPA_Enable_AutoGnum = FALSE;
 #else
     IPA_Enable_AutoGnum = TRUE;
 #endif
-#if 1
     IPA_Enable_DST = FALSE;
-#else
-    IPA_Enable_DST = TRUE;
-#endif
 
     Process_IPA_Options (argc, argv);
 
+    detect_whole_program_mode();
+    
 #ifdef KEY
     if (Annotation_Filename == NULL ) // no feedback
       IPA_Enable_PU_Reorder = REORDER_DISABLE;

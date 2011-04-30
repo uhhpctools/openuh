@@ -26,10 +26,6 @@ Boston, MA 02111-1307, USA.  */
 /* GNU/Linux uses ctype from glibc.a. I am not sure how complete it is.
    For now, we play safe. It may change later.  */
 
-#if 0
-#undef MULTIBYTE_CHARS
-#define MULTIBYTE_CHARS 1
-#endif
 
 #undef ASM_APP_ON
 #define ASM_APP_ON "#APP\n"
@@ -96,7 +92,6 @@ Boston, MA 02111-1307, USA.  */
 /* We no longer link with libc_p.a or libg.a by default. If you
    want to profile or debug the GNU/Linux C library, please add
    -profile or -ggdb to LDFLAGS at the link time, respectively.  */
-#if 1
 #ifdef USE_GNULIBC_1
 #define LIB_SPEC \
   "%{!shared: %{p:-lgmon} %{pg:-lgmon} %{profile:-lgmon -lc_p} \
@@ -106,12 +101,6 @@ Boston, MA 02111-1307, USA.  */
   "%{pthread:-lpthread} \
    %{shared:-lc} \
    %{!shared:%{mieee-fp:-lieee} %{profile:-lc_p}%{!profile:-lc}}"
-#endif
-#else
-#define LIB_SPEC \
-  "%{!shared: \
-     %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
-       %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}}"
 #endif
 
 #if !defined(USE_GNULIBC_1) && defined(HAVE_LD_EH_FRAME_HDR)

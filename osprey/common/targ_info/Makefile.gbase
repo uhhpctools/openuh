@@ -1,5 +1,11 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
+#  Copyright (C) 2007. Pathscale, LLC. All Rights Reserved.
+#
+#  Copyright (C) 2006, 2007. QLogic Corporation. All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -35,15 +41,6 @@
 #  Makefile.base for targ_info
 #
 
-#
-#  Verify that BUILD_TYPE is "SHARED" only.
-#
-ifneq ($(BUILD_TYPE), SHARED)
-default:
-	@echo Error: Only BUILD_TYPE = SHARED is supported - $(BUILD_TYPE).
-	@exit 1
-endif
-
 #----------------------------------------------------------------------
 #  Include the usual commondefs
 #----------------------------------------------------------------------
@@ -68,6 +65,10 @@ HOSTDEFS =
 
 TARGDEFS =
 
+ifeq ($(BUILD_OPTIMIZE), DEBUG)
+HOSTDEFS += -DIs_True_On
+endif
+
 #----------------------------------------------------------------------
 #  List of directories, and source files of interest
 #----------------------------------------------------------------------
@@ -75,6 +76,7 @@ TARGDEFS =
 CURRENT_DIR		= .
 COMMON_DIR		= $(BUILD_TOT)/common
 COMMON_COM_DIR		= $(COMMON_DIR)/com
+COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 TARGINFO_DIR		= $(BUILD_BASE)
 TARGINFO_ACCESS_DIR	= $(TARGINFO_DIR)/access
 TARGINFO_GENERATE_DIR 	= $(TARGINFO_DIR)/generate
@@ -93,7 +95,10 @@ SRC_DIRS = \
   $(TARGINFO_GENERATE_DIR)	\
   $(TARGINFO_ISA_DIR)		\
   $(TARGINFO_PROC_DIR)		\
-  $(TARGINFO_ABI_DIR)
+  $(TARGINFO_ABI_DIR)           \
+  $(TARGINFO_DIR)/include	\
+  $(COMMON_COM_DIR)		\
+  $(COMMON_UTIL_DIR)
 
 #----------------------------------------------------------------------
 #  List of source files.  Please keep them in alphabetical order.
@@ -122,46 +127,11 @@ else
 CXXLDFLAGS = $(CXXFLAGS) $(LDFLAGS)
 endif
 
-# setup stuff to build shared
-GLDOPTS = $(STD_LOAD_OPTS)
-
-# we don't have a so_locations to update, so don't do anything
-DSOSTARTOPT = 
-DSOSTARTOPT_32 = $(DSOSTARTOPT)
-DSOSTARTOPT_N32 = $(DSOSTARTOPT)
-
-
 LDIRT += *.[ch] *.Exported isa_gen isa_subset_gen isa_operands_gen \
 	 isa_properties_gen isa_hazards_gen isa_pack_gen isa_print_gen \
 	 isa_decode_gen isa_pseudo_gen isa_registers_gen isa_enums_gen \
 	 isa_lits_gen abi_properties_gen proc_gen proc_properties_gen \
-	 isa_bundle_gen si_gen.so ii_files so_locations
-
-ifeq ($(BUILD_TARGET), MIPS)
-LDIRT += r10000_si_gen sb1_si_gen # r8000_si_gen r5000_si_gen r4000_si_gen 
-SO_TARGETS = \
-	r10000.so	\
-	sb1.so
-#	r8000.so	\
-#	r5000.so	\
-#	r4000.so
-endif
-ifeq ($(BUILD_TARGET), IA64)
-LDIRT += itanium_si_gen
-SO_TARGETS = \
-	itanium.so
-endif
-ifeq ($(BUILD_TARGET), X8664)
-LDIRT += opteron_si_gen em64t_si_gen
-SO_TARGETS = \
-	opteron.so \
-	em64t.so
-endif
-ifeq ($(BUILD_TARGET), IA32)
-LDIRT += pentium_si_gen
-SO_TARGETS = \
-	pentium.so
-endif
+	 isa_bundle_gen targ_si_gen ii_files
 
 HDRS_LOC = /usr/include/cmplrs/$(BUILD_TARGET_DIR)
 
@@ -175,8 +145,17 @@ endif
 TARGINFO_ACCESS_SRCS = \
 	ti_asm.c		\
 	ti_bundle.c		\
-	ti_latency.c		\
-	ti_errors.c
+	ti_errors.c 
+
+ifneq ($(BUILD_TARGET), NVISA)
+TARGINFO_ACCESS_SRCS += \
+	ti_latency.c
+endif
+
+TARGINFO_ACCESS_SRCS += \
+        ti_res.c           \
+        ti_res_count.c     \
+        ti_res_res.c
 
 TARGINFO_ACCESS_HDRS = $(TARGINFO_ACCESS_SRCS:.c=.h)
 TARGINFO_ACCESS_OBJS = $(TARGINFO_ACCESS_SRCS:.c=.o)
@@ -197,7 +176,8 @@ TARG_INFO_SRCS = \
 	targ_abi_properties.c	\
 	targ_isa_bundle.c	\
 	targ_proc.c		\
-	targ_proc_properties.c
+	targ_proc_properties.c	\
+	targ_si.c
 
 TARG_INFO_HDRS = $(TARG_INFO_SRCS:.c=.h)
 TARG_INFO_OBJS = $(TARG_INFO_SRCS:.c=.o)
@@ -207,28 +187,57 @@ LIBTARGINFO_OBJS = \
 	$(TARG_INFO_OBJS)
 
 TARGETS = \
-	$(SO_TARGETS)	\
 	$(TARGINFO_ACCESS_HDRS) \
 	$(TARG_INFO_HDRS)	\
 	$(TARG_INFO_SRCS)	\
 	$(TARG_INFO_LIB)
-
-TARGETS +=	si_gen.a
 
 #----------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
 #----------------------------------------------------------------------
 LLDLIBS = 
 
-default: first $(TARGETS) last
+#----------------------------------------------------------------------
+#  Set COPYSOURCEDIR if the *.h and *.c files below should be copied
+#  from another targ subdirectory, instead of being generated here.
+#  This is useful when cross-compiling the compiler.
+#----------------------------------------------------------------------
+
+ifeq ($(BUILD_ARCH), MIPS64)
+ifeq ($(BUILD_HOST), IA32)
+ifeq ($(BUILD_TARGET), SL)
+COPYSOURCEDIR = ../../targia32_sl1/targ_info
+else
+COPYSOURCEDIR = ../../targia32_mips/targ_info
+endif
+else
+COPYSOURCEDIR = FALSE
+endif
+else
+COPYSOURCEDIR = FALSE
+endif
+
+
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS) 
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is 
 #  built.
 #----------------------------------------------------------------------
 first:
-ifeq ($(BUILD_OS), LINUX)
+ifndef SKIP_DEP_BUILD
+ # Verify that COPYSOURCEDIR is up to date
+ ifneq ($(COPYSOURCEDIR), FALSE)
+        $(call submake,$(COPYSOURCEDIR))
+ endif
+ ifeq ($(BUILD_OS), LINUX)
 	$(call submake,$(BUILD_AREA)/include)
+ endif
 endif
 
 #----------------------------------------------------------------------
@@ -265,11 +274,11 @@ ti_asm.o: ti_asm.c topcode.h targ_isa_operands.h targ_isa_print.h \
 	  targ_isa_pseudo.h ti_errors.h ti_asm.h 
 	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_asm.c
 
-ti_bundle.o: ti_bundle.c ti_si.h targ_isa_bundle.h ti_bundle.h 
+ti_bundle.o: ti_bundle.c ti_si.h targ_isa_bundle.h ti_bundle.h targ_si.h
 	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_bundle.c
 
 ti_latency.o: ti_latency.c ti_si.h targ_isa_properties.h targ_isa_hazards.h \
-	      targ_isa_subset.h ti_errors.h ti_latency.h 
+	      targ_isa_subset.h ti_errors.h ti_latency.h targ_si.h
 	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_latency.c
 
 ti_errors.o: ti_errors.c ti_errors.h 
@@ -285,11 +294,25 @@ gen_util.o: gen_util.cxx gen_util.h
 targ_proc.o: proc_gen targ_proc.c
 	$(cc) $(CFLAGS) -c targ_proc.c
 
+## ti_res.o ti_res_count.o ti_res_res.o ##
+ti_res.o: ti_res.c ti_res.h topcode.h targ_proc.h targ_proc_properties.h targ_si.h
+	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_res.c
+ti_res_count.o: ti_res_count.c ti_res_count.h topcode.h targ_si.h
+	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_res_count.c
+ti_res_res.o: ti_res_res.c ti_res_res.h topcode.h targ_si.h
+	$(cc) $(CFLAGS) -c $(TARGINFO_ACCESS_DIR)/ti_res_res.c
+
 ## topcode.[ch] ##
 
-topcode.c: topcode.h
-topcode.h: isa_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+topcod%.c topcod%.h: isa_gen
 	$(run) ./isa_gen
+else
+topcode.c: $(COPYSOURCEDIR)/topcode.c
+	cp $(COPYSOURCEDIR)/topcode.c .
+topcode.h: $(COPYSOURCEDIR)/topcode.h
+	cp $(COPYSOURCEDIR)/topcode.h .
+endif
 
 isa_gen: isa_gen.o gen_util.o isa.o
 	$(cxx) $(CXXLDFLAGS) isa_gen.o gen_util.o isa.o -o isa_gen
@@ -303,9 +326,15 @@ isa.o: isa.cxx isa_gen.h
 
 ## targ_isa_enums.[ch] ##
 
-targ_isa_enums.c: targ_isa_enums.h
-targ_isa_enums.h: isa_enums_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_enums.c tar%_isa_enums.h: isa_enums_gen
 	$(run) ./isa_enums_gen
+else
+targ_isa_enums.c: $(COPYSOURCEDIR)/targ_isa_enums.c
+	cp $(COPYSOURCEDIR)/targ_isa_enums.c .
+targ_isa_enums.h: $(COPYSOURCEDIR)/targ_isa_enums.h
+	cp $(COPYSOURCEDIR)/targ_isa_enums.h .
+endif
 
 isa_enums_gen: isa_enums_gen.o gen_util.o isa_enums.o
 	$(cxx) $(CXXLDFLAGS) isa_enums.o isa_enums_gen.o gen_util.o \
@@ -319,9 +348,15 @@ isa_enums.o: isa_enums.cxx isa_enums_gen.h
 
 ## targ_isa_lits.[ch] ##
 
-targ_isa_lits.c: targ_isa_lits.h
-targ_isa_lits.h: isa_lits_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_lits.c tar%_isa_lits.h: isa_lits_gen
 	$(run) ./isa_lits_gen
+else
+targ_isa_lits.c: $(COPYSOURCEDIR)/targ_isa_lits.c
+	cp $(COPYSOURCEDIR)/targ_isa_lits.c .
+targ_isa_lits.h: $(COPYSOURCEDIR)/targ_isa_lits.h
+	cp $(COPYSOURCEDIR)/targ_isa_lits.h .
+endif
 
 isa_lits_gen: isa_lits_gen.o gen_util.o isa_lits.o
 	$(cxx) $(CXXLDFLAGS) isa_lits.o isa_lits_gen.o gen_util.o \
@@ -335,9 +370,15 @@ isa_lits.o: isa_lits.cxx isa_lits_gen.h
 
 ## targ_isa_registers.[ch] ##
 
-targ_isa_registers.c: targ_isa_registers.h
-targ_isa_registers.h: isa_registers_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_registers.c tar%_isa_registers.h: isa_registers_gen
 	$(run) ./isa_registers_gen
+else
+targ_isa_registers.c: $(COPYSOURCEDIR)/targ_isa_registers.c
+	cp $(COPYSOURCEDIR)/targ_isa_registers.c .
+targ_isa_registers.h: $(COPYSOURCEDIR)/targ_isa_registers.h
+	cp $(COPYSOURCEDIR)/targ_isa_registers.h .
+endif
 
 isa_registers_gen: isa_registers_gen.o gen_util.o isa_registers.o topcode.o \
 		targ_isa_subset.o
@@ -353,9 +394,15 @@ isa_registers.o: isa_registers.cxx isa_registers_gen.h targ_isa_subset.h
 
 ## targ_isa_hazards.[ch] ##
 
-targ_isa_hazards.c: targ_isa_hazards.h
-targ_isa_hazards.h: isa_hazards_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_hazards.c tar%_isa_hazards.h: isa_hazards_gen
 	$(run) ./isa_hazards_gen
+else
+targ_isa_hazards.c: $(COPYSOURCEDIR)/targ_isa_hazards.c
+	cp $(COPYSOURCEDIR)/targ_isa_hazards.c .
+targ_isa_hazards.h: $(COPYSOURCEDIR)/targ_isa_hazards.h
+	cp $(COPYSOURCEDIR)/targ_isa_hazards.h .
+endif
 
 isa_hazards_gen: isa_hazards_gen.o gen_util.o isa_hazards.o topcode.o \
 		targ_isa_subset.o
@@ -371,9 +418,15 @@ isa_hazards.o: isa_hazards.cxx isa_hazards_gen.h topcode.h targ_isa_subset.h
 
 ## targ_isa_subset.[ch] ##
 
-targ_isa_subset.c: targ_isa_subset.h
-targ_isa_subset.h: isa_subset_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_subset.c tar%_isa_subset.h: isa_subset_gen
 	$(run) ./isa_subset_gen
+else
+targ_isa_subset.c: $(COPYSOURCEDIR)/targ_isa_subset.c
+	cp $(COPYSOURCEDIR)/targ_isa_subset.c .
+targ_isa_subset.h: $(COPYSOURCEDIR)/targ_isa_subset.h
+	cp $(COPYSOURCEDIR)/targ_isa_subset.h .
+endif
 
 isa_subset_gen: isa_subset_gen.o gen_util.o isa_subset.o topcode.o
 	$(cxx) $(CXXLDFLAGS) isa_subset.o isa_subset_gen.o gen_util.o \
@@ -388,9 +441,15 @@ isa_subset.o: isa_subset.cxx isa_subset_gen.h topcode.h
 
 ## targ_isa_properties.[ch] ##
 
-targ_isa_properties.c: targ_isa_properties.h
-targ_isa_properties.h: isa_properties_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_properties.c tar%_isa_properties.h: isa_properties_gen
 	$(run) ./isa_properties_gen
+else
+targ_isa_properties.c: $(COPYSOURCEDIR)/targ_isa_properties.c
+	cp $(COPYSOURCEDIR)/targ_isa_properties.c .
+targ_isa_properties.h: $(COPYSOURCEDIR)/targ_isa_properties.h
+	cp $(COPYSOURCEDIR)/targ_isa_properties.h .
+endif
 
 isa_properties_gen: isa_properties_gen.o gen_util.o isa_properties.o topcode.o
 	$(cxx) $(CXXLDFLAGS) isa_properties.o isa_properties_gen.o gen_util.o \
@@ -405,9 +464,15 @@ isa_properties.o: isa_properties.cxx isa_properties_gen.h topcode.h
 
 ## targ_isa_operands.[ch] ##
 
-targ_isa_operands.c: targ_isa_operands.h
-targ_isa_operands.h: isa_operands_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_operands.c tar%_isa_operands.h: isa_operands_gen
 	$(run) ./isa_operands_gen
+else
+targ_isa_operands.c: $(COPYSOURCEDIR)/targ_isa_operands.c
+	cp $(COPYSOURCEDIR)/targ_isa_operands.c .
+targ_isa_operands.h: $(COPYSOURCEDIR)/targ_isa_operands.h
+	cp $(COPYSOURCEDIR)/targ_isa_operands.h .
+endif
 
 targ_isa_operands.o: targ_isa_operands.c targ_isa_operands.h targ_isa_properties.h
 	$(cc) $(CFLAGS) -c targ_isa_operands.c
@@ -425,15 +490,21 @@ isa_operands_gen.o: isa_operands_gen.cxx isa_operands_gen.h \
 
 isa_operands.o: isa_operands.cxx isa_operands_gen.h targ_isa_registers.h \
 	targ_isa_enums.h targ_isa_lits.h topcode.h
-	$(cxx) $(CXXFLAGS) -c -I$(COMMON_COM_DIR) \
+	$(cxx) $(CXXFLAGS) -c -I$(COMMON_COM_DIR) -I$(COMMON_UTIL_DIR) \
 	$(TARGINFO_ISA_DIR)/isa_operands.cxx
 
 
 ## targ_isa_pack.[ch] ##
 
-targ_isa_pack.c: targ_isa_pack.h
-targ_isa_pack.h: isa_pack_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_pack.c tar%_isa_pack.h: isa_pack_gen
 	$(run) ./isa_pack_gen
+else
+targ_isa_pack.c: $(COPYSOURCEDIR)/targ_isa_pack.c
+	cp $(COPYSOURCEDIR)/targ_isa_pack.c .
+targ_isa_pack.h: $(COPYSOURCEDIR)/targ_isa_pack.h
+	cp $(COPYSOURCEDIR)/targ_isa_pack.h .
+endif
 
 isa_pack_gen: gen_util.o isa_pack_gen.o gen_util.o isa_pack.o \
 	      topcode.o targ_isa_properties.o
@@ -449,9 +520,15 @@ isa_pack.o: isa_pack.cxx isa_pack_gen.h topcode.h
 
 ## targ_isa_decode.[ch] ##
 
-targ_isa_decode.c: targ_isa_decode.h
-targ_isa_decode.h: isa_decode_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_decode.c tar%_isa_decode.h: isa_decode_gen
 	$(run) ./isa_decode_gen
+else
+targ_isa_decode.c: $(COPYSOURCEDIR)/targ_isa_decode.c
+	cp $(COPYSOURCEDIR)/targ_isa_decode.c .
+targ_isa_decode.h: $(COPYSOURCEDIR)/targ_isa_decode.h
+	cp $(COPYSOURCEDIR)/targ_isa_decode.h .
+endif
 
 isa_decode_gen: gen_util.o isa_decode_gen.o gen_util.o isa_decode.o topcode.o targ_isa_bundle.o 
 	$(cxx) $(CXXLDFLAGS) isa_decode.o isa_decode_gen.o gen_util.o \
@@ -467,9 +544,15 @@ isa_decode.o: isa_decode.cxx isa_decode_gen.h topcode.h targ_isa_bundle.h \
 
 ## targ_isa_pseudo.[ch] ##
 
-targ_isa_pseudo.c: targ_isa_pseudo.h
-targ_isa_pseudo.h: isa_pseudo_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_pseudo.c tar%_isa_pseudo.h: isa_pseudo_gen
 	$(run) ./isa_pseudo_gen
+else
+targ_isa_pseudo.c: $(COPYSOURCEDIR)/targ_isa_pseudo.c
+	cp $(COPYSOURCEDIR)/targ_isa_pseudo.c .
+targ_isa_pseudo.h: $(COPYSOURCEDIR)/targ_isa_pseudo.h
+	cp $(COPYSOURCEDIR)/targ_isa_pseudo.h .
+endif
 
 isa_pseudo_gen: gen_util.o isa_pseudo_gen.o gen_util.o isa_pseudo.o topcode.o \
 		targ_isa_operands.o targ_isa_operands.o targ_isa_registers.o \
@@ -488,16 +571,23 @@ isa_pseudo.o: isa_pseudo.cxx isa_pseudo_gen.h topcode.h
 
 ## targ_isa_print.[ch] ##
 
-targ_isa_print.c: targ_isa_print.h
-targ_isa_print.h: isa_print_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_print.c tar%_isa_print.h: isa_print_gen
 	$(run) ./isa_print_gen
+else
+targ_isa_print.c: $(COPYSOURCEDIR)/targ_isa_print.c
+	cp $(COPYSOURCEDIR)/targ_isa_print.c .
+targ_isa_print.h: $(COPYSOURCEDIR)/targ_isa_print.h
+	cp $(COPYSOURCEDIR)/targ_isa_print.h .
+endif
 
 isa_print_gen: gen_util.o isa_print_gen.o isa_print.o \
 	       topcode.o targ_isa_properties.o
 	$(cxx) $(CXXLDFLAGS) isa_print.o isa_print_gen.o gen_util.o \
 	    topcode.o targ_isa_properties.o -o isa_print_gen
 
-isa_print_gen.o: isa_print_gen.cxx isa_print_gen.h topcode.h targ_isa_properties.h
+isa_print_gen.o: isa_print_gen.cxx isa_print_gen.h topcode.h \
+	         targ_isa_properties.h targ_isa_operands.h
 	$(cxx) $(CXXFLAGS) -c $(TARGINFO_GENERATE_DIR)/isa_print_gen.cxx
 
 isa_print.o: isa_print.cxx isa_print_gen.h topcode.h
@@ -506,9 +596,15 @@ isa_print.o: isa_print.cxx isa_print_gen.h topcode.h
 
 ## targ_abi_properties.[ch] ##
 
-targ_abi_properties.c: targ_abi_properties.h
-targ_abi_properties.h: abi_properties_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_abi_properties.c tar%_abi_properties.h: abi_properties_gen
 	$(run) ./abi_properties_gen
+else
+targ_abi_properties.c: $(COPYSOURCEDIR)/targ_abi_properties.c
+	cp $(COPYSOURCEDIR)/targ_abi_properties.c .
+targ_abi_properties.h: $(COPYSOURCEDIR)/targ_abi_properties.h
+	cp $(COPYSOURCEDIR)/targ_abi_properties.h .
+endif
 
 abi_properties_gen: abi_properties_gen.o gen_util.o abi_properties.o \
 		targ_isa_subset.o targ_isa_registers.o
@@ -524,9 +620,15 @@ abi_properties.o: abi_properties.cxx abi_properties_gen.h targ_isa_registers.h
 
 ## targ_isa_bundle.[ch] ##
 
-targ_isa_bundle.c: targ_isa_bundle.h
-targ_isa_bundle.h: isa_bundle_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_isa_bundle.c tar%_isa_bundle.h: isa_bundle_gen
 	$(run) ./isa_bundle_gen
+else
+targ_isa_bundle.c: $(COPYSOURCEDIR)/targ_isa_bundle.c
+	cp $(COPYSOURCEDIR)/targ_isa_bundle.c .
+targ_isa_bundle.h: $(COPYSOURCEDIR)/targ_isa_bundle.h
+	cp $(COPYSOURCEDIR)/targ_isa_bundle.h .
+endif
 
 isa_bundle_gen: gen_util.o isa_bundle_gen.o gen_util.o isa_bundle.o \
 	topcode.o targ_isa_properties.o
@@ -542,9 +644,15 @@ isa_bundle.o: isa_bundle.cxx isa_bundle_gen.h topcode.h
 
 ## targ_proc.[ch] ##
 
-targ_proc.c: targ_proc.h
-targ_proc.h: proc_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_proc.c tar%_proc.h: proc_gen
 	$(run) ./proc_gen
+else
+targ_proc.c: $(COPYSOURCEDIR)/targ_proc.c
+	cp $(COPYSOURCEDIR)/targ_proc.c .
+targ_proc.h: $(COPYSOURCEDIR)/targ_proc.h
+	cp $(COPYSOURCEDIR)/targ_proc.h .
+endif
 
 proc_gen: proc_gen.o gen_util.o proc.o
 	$(cxx) $(CXXLDFLAGS) proc_gen.o gen_util.o proc.o -o proc_gen
@@ -557,9 +665,15 @@ proc.o: proc.cxx proc_gen.h
 
 ## targ_proc_properties.[ch] ##
 
-targ_proc_properties.c: targ_proc_properties.h
-targ_proc_properties.h: proc_properties_gen
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_proc_properties.c tar%_proc_properties.h: proc_properties_gen
 	$(run) ./proc_properties_gen
+else
+targ_proc_properties.c: $(COPYSOURCEDIR)/targ_proc_properties.c
+	cp $(COPYSOURCEDIR)/targ_proc_properties.c .
+targ_proc_properties.h: $(COPYSOURCEDIR)/targ_proc_properties.h
+	cp $(COPYSOURCEDIR)/targ_proc_properties.h .
+endif
 
 proc_properties_gen: proc_properties_gen.o gen_util.o proc_properties.o targ_proc.o
 	$(cxx) $(CXXLDFLAGS) proc_properties_gen.o gen_util.o proc_properties.o targ_proc.o -o proc_properties_gen
@@ -570,204 +684,95 @@ proc_properties_gen.o: proc_properties_gen.cxx proc_properties_gen.h targ_proc.h
 proc_properties.o: proc_properties.cxx proc_properties_gen.h targ_proc.h
 	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/proc_properties.cxx
 
-## si_gen.so ##
-# Need the current working directory so that rld doesn't get confused later
-CWD := $(shell pwd)
-
 si_gen.o: si_gen.cxx si_gen.h topcode.h targ_isa_properties.h \
           targ_isa_subset.h targ_isa_operands.h
 	$(cxx) $(CXXFLAGS) -c $(TARGINFO_GENERATE_DIR)/si_gen.cxx 
 
-si_gen.so: si_gen.o topcode.h si_gen.h targ_isa_operands.h \
-        targ_isa_operands.o targ_isa_properties.o targ_isa_registers.o \
-	targ_isa_subset.o targ_isa_enums.o targ_isa_lits.o
-	$(cxx) $(CXXLDFLAGS) si_gen.o \
-	targ_isa_subset.o targ_isa_properties.o targ_isa_operands.o \
-	targ_isa_registers.o targ_isa_enums.o targ_isa_lits.o \
-	-shared -o si_gen.so
-
-si_gen.a: si_gen.o topcode.h si_gen.h targ_isa_operands.h \
-        targ_isa_operands.o targ_isa_properties.o targ_isa_registers.o \
-	targ_isa_subset.o targ_isa_enums.o targ_isa_lits.o
-	$(ar) rc si_gen.a si_gen.o \
-	targ_isa_subset.o targ_isa_properties.o targ_isa_operands.o \
-	targ_isa_registers.o targ_isa_enums.o targ_isa_lits.o 
-
-
 ifeq ($(BUILD_TARGET), MIPS)
-## r10000 ##
+PROC_SI_OBJS = \
+	r10000_si.o \
+	sb1_si.o
+endif
 
-r10000.so: r10000.o $(SI_EXPORT_LIST)
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) -exports_file $(SI_EXPORT_LIST)       \
-               r10000.o -o r10000.so
-
-r10000.o: r10000.c ti_si.h
-	$(cc) $(CFLAGS) -c r10000.c
-
-r10000.c: r10000_si_gen
-	$(run) ./r10000_si_gen
-
-r10000_si_gen: si_gen.a r10000_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) r10000_si.o topcode.o si_gen.a -o r10000_si_gen
-
-r10000_si.o: r10000_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/r10000_si.cxx
-
-
-## r8000 ##
-
-r8000.so: r8000.o $(SI_EXPORT_LIST)
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) -exports_file $(SI_EXPORT_LIST)       \
-               r8000.o -o r8000.so
-
-r8000.o: r8000.c ti_si.h
-	$(cc) $(CFLAGS) -c r8000.c
-
-r8000.c: r8000_si_gen
-	$(run) ./r8000_si_gen
-
-r8000_si_gen: si_gen.so r8000_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) r8000_si.o topcode.o si_gen.so -o r8000_si_gen
-
-r8000_si.o: r8000_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/r8000_si.cxx
-
-
-## r5000 ##
-
-r5000.so: r5000.o $(SI_EXPORT_LIST)
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) -exports_file $(SI_EXPORT_LIST)       \
-               r5000.o -o r5000.so
-
-r5000.o: r5000.c ti_si.h
-	$(cc) $(CFLAGS) -c r5000.c
-
-r5000.c: r5000_si_gen
-	$(run) ./r5000_si_gen
-
-r5000_si_gen: si_gen.so r5000_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) r5000_si.o topcode.o si_gen.so -o r5000_si_gen
-
-r5000_si.o: r5000_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/r5000_si.cxx
-
-
-## r4000 ##
-
-r4000.so: r4000.o $(SI_EXPORT_LIST)
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) -exports_file $(SI_EXPORT_LIST)       \
-               r4000.o -o r4000.so
-
-r4000.o: r4000.c ti_si.h
-	$(cc) $(CFLAGS) -c r4000.c
-
-r4000.c: r4000_si_gen
-	$(run) ./r4000_si_gen
-
-r4000_si_gen: si_gen.so r4000_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) r4000_si.o topcode.o si_gen.so -o r4000_si_gen
-
-r4000_si.o: r4000_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/r4000_si.cxx
-
-
-## sb1 ##
-
-sb1.so: sb1.o $(SI_EXPORT_LIST)
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) -exports_file $(SI_EXPORT_LIST)       \
-               sb1.o -o sb1.so
-
-sb1.o: sb1.c ti_si.h
-	$(cc) $(CFLAGS) -c sb1.c
-
-sb1.c: sb1_si_gen
-	$(run) ./sb1_si_gen
-
-sb1_si_gen: si_gen.a sb1_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) sb1_si.o topcode.o si_gen.a -o sb1_si_gen
-
-sb1_si.o: sb1_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/sb1_si.cxx
-
+ifeq ($(BUILD_TARGET), SL)
+PROC_SI_OBJS = \
+	sl1_pcore_si.o \
+	sl1_dsp_si.o \
+	sl2_pcore_si.o \
+	sl2_mcore_si.o \
+	sl5_si.o
 endif
 
 ifeq ($(BUILD_TARGET), IA64)
+PROC_SI_OBJS = \
+	itanium_si.o
+endif
 
-itanium.so: itanium.o
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) itanium.o -shared -o itanium.so
-
-itanium.o: itanium.c ti_si.h
-	$(cc) $(CFLAGS) -c itanium.c
-
-itanium.c: itanium_si_gen
-	$(SETPATH) $(RUN) ./itanium_si_gen
-
-itanium_si_gen: si_gen.a itanium_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) itanium_si.o topcode.o si_gen.a -o itanium_si_gen
-
-itanium_si.o: itanium_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/itanium_si.cxx
-
+ifeq ($(BUILD_TARGET), PPC32)
+PROC_SI_OBJS = \
+	ppc_si.o
 endif
 
 ifeq ($(BUILD_TARGET), X8664)
-
-## opteron ##
-
-opteron.so: opteron.o
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) opteron.o -shared -o opteron.so
-
-opteron.o: opteron.c ti_si.h
-	$(cc) $(CFLAGS) -c opteron.c
-
-opteron.c: opteron_si_gen
-	$(SETPATH) $(RUN) ./opteron_si_gen
-
-opteron_si_gen: si_gen.a opteron_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) opteron_si.o topcode.o si_gen.a -o opteron_si_gen
-
-opteron_si.o: opteron_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/opteron_si.cxx
-
-## em64t ##
-
-em64t.so: em64t.o
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) em64t.o -shared -o em64t.so
-
-em64t.o: em64t.c ti_si.h
-	$(cc) $(CFLAGS) -c em64t.c
-
-em64t.c: em64t_si_gen
-	$(SETPATH) $(RUN) ./em64t_si_gen
-
-em64t_si_gen: si_gen.a em64t_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) em64t_si.o topcode.o si_gen.a -o em64t_si_gen
-
-em64t_si.o: em64t_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/em64t_si.cxx
-
+PROC_SI_OBJS = \
+	barcelona_si.o \
+	core_si.o \
+	em64t_si.o \
+	opteron_si.o \
+	orochi_si.o \
+	wolfdale_si.o
 endif
 
-ifeq ($(BUILD_TARGET), IA32)
+ifeq ($(BUILD_TARGET), LOONGSON)
+PROC_SI_OBJS = \
+	loongson_si.o
+endif
 
-pentium.so: pentium.o
-	$(cc) $(CFLAGS) $(STD_DSO_LOADOPTS) pentium.o -o pentium.so
+ifeq ($(BUILD_TARGET), NVISA)
+PROC_SI_OBJS = \
+	nvisa1_si.o
+endif
 
-pentium.o: pentium.c ti_si.h
-	$(cc) $(CFLAGS) -c pentium.c
+targ_si.o: targ_si.c ti_si_types.h targ_proc.h
+	$(cc) $(CFLAGS) -c targ_si.c
 
-pentium.c: pentium_si_gen
-	$(SETPATH) $(RUN) ./pentium_si_gen
+%_si.o: $(TARGINFO_PROC_DIR)/%_si.cxx si_gen.h targ_isa_subset.h topcode.h
+	$(cxx) $(CXXFLAGS) -c $<
 
-pentium_si_gen: si_gen.a pentium_si.o topcode.o
-	$(cxx) $(CXXLDFLAGS) pentium_si.o topcode.o si_gen.a -o pentium_si_gen
+SI_GEN_OBJS = \
+	proc_si.o \
+	si_gen.o \
+	gen_util.o \
+	targ_isa_enums.o \
+	targ_isa_lits.o \
+	targ_isa_operands.o \
+	targ_isa_properties.o \
+	targ_isa_registers.o \
+	targ_isa_subset.o \
+	topcode.o \
+	$(PROC_SI_OBJS)
 
-pentium_si.o: pentium_si.cxx targ_isa_subset.h topcode.h si_gen.h
-	$(cxx) $(CXXFLAGS) -c $(TARGINFO_PROC_DIR)/pentium_si.cxx
+targ_si_gen: $(SI_GEN_OBJS)
+	$(cxx) $(CXXLDFLAGS) $^ -o $@
+
+ifeq ($(COPYSOURCEDIR), FALSE)
+tar%_si.c tar%_si.h: targ_si_gen
+	$(run) ./targ_si_gen
+else
+targ_si.c: $(COPYSOURCEDIR)/targ_si.c
+	cp $< .
+targ_si.h: $(COPYSOURCEDIR)/targ_si.h
+	cp $< .
 endif
 
 libtarginfo.a: $(LIBTARGINFO_OBJS)
+ifeq ($(BUILD_OS), DARWIN)
+	ld -o $(@:.a=.o) -r $^
+	$(ar) cr $@ $(@:.a=.o)
+# necessary to force symbol resolution...
+else
 	$(ar) cru $@ $^
+endif
 
 
 exports: default
@@ -776,21 +781,18 @@ exports: default
 	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) -F $(LIB_LOC) $(TARG_INFO_LIB)
 
 ifeq ($(BUILD_OS), LINUX)
-install: $(SO_TARGETS) $(TARG_INFO_LIB)
+install: $(TARG_INFO_LIB)
 	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) $(SO_TARGETS) $(STD_MONGOOSE_LINUX_LOC)
  ifeq ($(BUILD_TARGET), IA64)
+	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) -D $(TARG_INFO_LIB) $(LIB_LOC)/$(TARG_INFO_LIB)
+ endif
+ ifeq ($(BUILD_TARGET), PPC32)
 	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) -D $(TARG_INFO_LIB) $(LIB_LOC)/$(TARG_INFO_LIB)
  endif
 else
 
 install: exports
-	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -F $(STD_MONGOOSE_LOC) $(SO_TARGETS)
- ifeq ($(BUILD_TYPE), SHARED)
-  ifndef NOSYSGEN
-	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) \
-		-F /usr/cpu/sysgen/root$(STD_MONGOOSE_LOC) $(SO_TARGETS)
-  endif
- endif
+	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -F $(STD_MONGOOSE_LOC)
 endif
 
 #----------------------------------------------------------------------

@@ -13,16 +13,28 @@
 /* #undef HAVE_DWARF2_99_EXTENSION */
 
 /* Define to 1 if the elf64_getehdr function is in libelf.a. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_ELF64_GETEHDR
+#else /* ! defined(BUILD_OS_DARWIN) */
 #define HAVE_ELF64_GETEHDR 1
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /* Define to 1 if the elf64_getshdr function is in libelf.a. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_ELF64_GETSHDR
+#else /* ! defined(BUILD_OS_DARWIN) */
 #define HAVE_ELF64_GETSHDR 1
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /* Define to 1 if you have the <elfaccess.h> header file. */
 /* #undef HAVE_ELFACCESS_H */
 
 /* Define to 1 if you have the <elf.h> header file. */
+#if defined(BUILD_OS_DARWIN)
+#undef HAVE_ELF_H
+#else /* KEY Mac port */
 #define HAVE_ELF_H 1
+#endif /* KEY Mac port */
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
@@ -72,6 +84,9 @@
 
 /* Define 1 if __uint32_t is in sgidefs.h. */
 /* #undef HAVE___UINT32_T_IN_SGIDEFS_H */
+#ifdef __MINGW32__
+#define HAVE___UINT32_T_IN_SGIDEFS_H 1
+#endif /* __MINGW32__ */
 
 /* Define 1 if sys/types.h defines __uint32_t. */
 #define HAVE___UINT32_T_IN_SYS_TYPES_H 1
@@ -81,6 +96,9 @@
 
 /* Define 1 if __uint64_t is in sgidefs.h. */
 /* #undef HAVE___UINT64_T_IN_SGIDEFS_H */
+#ifdef __MINGW32__
+#define HAVE___UINT64_T_IN_SGIDEFS_H 1
+#endif /* __MINGW32__ */
 
 /* Define 1 if sys/types.h defines __uint64_t. */
 #define HAVE___UINT64_T_IN_SYS_TYPES_H 1

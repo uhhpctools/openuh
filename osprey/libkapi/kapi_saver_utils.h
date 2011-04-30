@@ -251,16 +251,9 @@ static void KAPI_save_as_header_int_array_list(FILE *fp,int *pint,int number_of_
 static void KAPI_save_as_header_String(FILE *fp,char *pch)
 {
 	FILE *fpTmp=fp;
-#if 0
-	fwrite("\"",sizeof(char),strlen("\""),fp);
-	fwrite(pch,sizeof(char),strlen(pch),fp);
-	fwrite("\"",sizeof(char),strlen("\""),fp);
-#endif
-#if 1 /* save string as comment */
 	fwrite("NULL/*",sizeof(char),strlen("NULL/*"),fp);
 	fwrite(pch,sizeof(char),strlen(pch),fp);
 	fwrite("*/",sizeof(char),strlen("*/"),fp);
-#endif
 }
 static void KAPI_save_as_header_String_list(FILE *fp,char *pch)
 {

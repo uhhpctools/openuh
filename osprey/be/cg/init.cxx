@@ -43,7 +43,7 @@
 // This file define initialization of pointer variables to symbols defined
 // in cg.so but referenced in be/be.so.
 
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 
 #include "defs.h"
 #include "cgdriver.h"
@@ -51,6 +51,7 @@
 #include "eh_region.h"
 #ifdef TARG_X8664
 #include "cgexp.h"
+#include "calls.h"
 #endif
 
 // from be/cg/cgdriver.h
@@ -69,11 +70,9 @@ extern void (*CG_Dump_Region_p) (FILE*, WN*);
 // from be/cg/eh_region.h
 extern void (*EH_Generate_Range_List_p) (WN *);
 
-extern void (*EH_Dump_INITOs_p) (WN *, FILE *);
-
 #ifdef TARG_X8664
-// from be/cg/cgexp.h
 extern void (*CG_Set_Is_Stack_Used_p) ();
+extern INT (*Push_Pop_Int_Saved_Regs_p) (void);
 #endif
 
 struct CG_INIT
@@ -88,9 +87,9 @@ struct CG_INIT
 	CG_Generate_Code_p = CG_Generate_Code;
 	CG_Dump_Region_p = CG_Dump_Region;
 	EH_Generate_Range_List_p = EH_Generate_Range_List;
-        EH_Dump_INITOs_p = EH_Dump_INITOs;
 #ifdef TARG_X8664
 	CG_Set_Is_Stack_Used_p = CG_Set_Is_Stack_Used;
+	Push_Pop_Int_Saved_Regs_p = Push_Pop_Int_Saved_Regs;
 #endif
     }
 } Cg_Initializer;

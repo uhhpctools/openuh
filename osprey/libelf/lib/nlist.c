@@ -194,7 +194,7 @@ _elf_nlist(Elf *elf, struct nlist *nl) {
 	}
 	if (*name != '\0') {
 	    table[i].name = name;
-	    table[i].hash = elf_hash(name);
+	    table[i].hash = elf_hash((unsigned char *) name);
 	    hash = table[i].hash % PRIME;
 	    table[i].next = first[hash];
 	    first[hash] = i;
@@ -205,7 +205,7 @@ _elf_nlist(Elf *elf, struct nlist *nl) {
      * Lookup symbols, one by one.
      */
     for (np = nl; (name = np->n_name) && *name; np++) {
-	hash = elf_hash(name);
+	hash = elf_hash((unsigned char *) name);
 	for (i = first[hash % PRIME]; i; i = table[i].next) {
 	    if (table[i].hash == hash && !strcmp(table[i].name, name)) {
 		break;

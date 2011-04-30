@@ -125,6 +125,7 @@ typedef CODEREP * simpnode;
 #define SIMPNODE_element_size(x)	(x)->Elm_siz()
 #define SIMPNODE_idname_offset(x)	(x)->Offset()
 #define SIMPNODE_lda_offset(x)		(x)->Offset()
+#define SIMPNODE_label_number(x)	(x)->Offset() 
 #define SIMPNODE_num_dim(x)		(x)->Num_dim()
 #define SIMPNODE_array_base(x)		(x)->Opnd(0)
 #define SIMPNODE_array_index(x,y)	(x)->Opnd((x)->Num_dim()+y+1)

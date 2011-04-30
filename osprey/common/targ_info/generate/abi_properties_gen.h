@@ -61,6 +61,10 @@
 //	i.e. it identifies the role of particular registers in the ABI.
 //	The variable argument specifies the register numbers, terminated
 //	by -1.
+//  void Reg_Property_Range(ABI_PROPERTY prop, ISA_REGISTER_CLASS rc, 
+//		INT minreg, INT maxreg); 
+//	Same as Reg_Property except rather than list each register it will
+// 	use every register in [minreg..maxreg] range.
 //
 //  void Reg_Names(ISA_REGISTER_CLASS rc, 
 //		   INT minreg, 
@@ -72,6 +76,8 @@
 //	The register names are specified in an array pointed to by <names>.
 //	<minreg> gives the register number of the first name in the
 //	<names> array; <maxreg> gives the last.
+//  void Set_Reg_Name(ISA_REGISTER_CLASS rc, INT reg, const char *name);
+//      Like Reg_Names, but only set single name.
 //
 //  void ABI_Properties_End(void)
 //      Complete processing of ABI properties.
@@ -91,8 +97,11 @@ extern void ABI_Properties_Begin(const char *name);
 extern ABI_PROPERTY Create_Reg_Property(const char *name);
 extern void Begin_ABI(const char *name);
 extern void Reg_Property(ABI_PROPERTY prop, ISA_REGISTER_CLASS rc, ...);
+extern void Reg_Property_Range(ABI_PROPERTY prop, ISA_REGISTER_CLASS rc, 
+	INT minreg, INT maxreg);
 extern void Reg_Names(ISA_REGISTER_CLASS rc, 
 		      INT minreg, 
 		      INT maxreg, 
 		      const char **names);
+extern void Set_Reg_Name(ISA_REGISTER_CLASS rc, INT reg, const char *name);
 extern void ABI_Properties_End(void);

@@ -6996,11 +6996,6 @@ ffeexpr_convert (ffebld source, ffelexToken source_token, ffelexToken dest_token
       || (rk != 0)		/* Can't convert from or to arrays yet. */
       || (ffeinfo_rank (info) != 0)
       || (sz != ffebld_size_known (source)))
-#if 0	/* Nobody seems to need this spurious CONVERT node. */
-      || ((context != FFEEXPR_contextLET)
-	  && (bt == FFEINFO_basictypeCHARACTER)
-	  && (sz == FFETARGET_charactersizeNONE)))
-#endif
     {
       switch (ffeinfo_basictype (info))
 	{
@@ -8176,9 +8171,6 @@ ffeexpr_cb_end_loc_ (ffelexToken ft UNUSED, ffebld expr, ffelexToken t)
 				FFEINFO_kindENTITY,
 				FFEINFO_whereFLEETING,
 				FFETARGET_charactersizeNONE));
-#if 0				/* ~~ */
-  e->u.operand = ffeexpr_collapse_percent_loc (e->u.operand, ft);
-#endif
   ffeexpr_exprstack_push_operand_ (e);
 
   /* Now, if the token is a close parenthese, we're in great shape so return
@@ -8265,9 +8257,6 @@ ffeexpr_cb_end_notloc_ (ffelexToken ft, ffebld expr, ffelexToken t)
       break;
     }
   ffebld_set_info (e->u.operand, ffebld_info (expr));
-#if 0				/* ~~ */
-  e->u.operand = ffeexpr_collapse_percent_ ? ? ? (e->u.operand, ft);
-#endif
   ffeexpr_exprstack_push_operand_ (e);
 
   /* Now, if the token is a close parenthese, we're in great shape so return
@@ -9449,13 +9438,6 @@ ffeexpr_fulfill_call_ (ffebld *expr, ffelexToken t)
 		  as = FFEGLOBAL_argsummaryALTRTN;
 		  break;
 
-#if 0
-		  /* No, %LOC(foo) is just like any INTEGER(KIND=7)
-		     expression, so don't treat it specially.  */
-		case FFEBLD_opPERCENT_LOC:
-		  as = FFEGLOBAL_argsummaryPTR;
-		  break;
-#endif
 
 		case FFEBLD_opPERCENT_VAL:
 		  as = FFEGLOBAL_argsummaryVAL;
@@ -9470,17 +9452,6 @@ ffeexpr_fulfill_call_ (ffebld *expr, ffelexToken t)
 		  break;
 
 		case FFEBLD_opFUNCREF:
-#if 0
-		  /* No, LOC(foo) is just like any INTEGER(KIND=7)
-		     expression, so don't treat it specially.  */
-		  if ((ffebld_op (ffebld_left (item)) == FFEBLD_opSYMTER)
-		      && (ffesymbol_specific (ffebld_symter (ffebld_left (item)))
-			  == FFEINTRIN_specLOC))
-		    {
-		      as = FFEGLOBAL_argsummaryPTR;
-		      break;
-		    }
-#endif
 		  /* Fall through.  */
 		default:
 		  if (ffebld_op (item) == FFEBLD_opSYMTER)
@@ -10911,11 +10882,6 @@ ffeexpr_reduced_power_ (ffebld reduced, ffeexprExpr_ l, ffeexprExpr_ op,
     {
       ffeexpr_type_combine (&nbt, &nkt, lbt, lkt, rbt, rkt, op->token);
 
-#if 0	/* INTEGER4**INTEGER4 works now. */
-      if ((nbt == FFEINFO_basictypeINTEGER)
-	  && (nkt != FFEINFO_kindtypeINTEGERDEFAULT))
-	nkt = FFEINFO_kindtypeINTEGERDEFAULT;	/* Highest kt we can power! */
-#endif
       if (((nbt == FFEINFO_basictypeREAL)
 	   || (nbt == FFEINFO_basictypeCOMPLEX))
 	  && (nkt != FFEINFO_kindtypeREALDEFAULT))
@@ -12211,16 +12177,7 @@ again:				/* :::::::::::::::::::: */
 	{
 	case FFEINFO_basictypeHOLLERITH:
 	case FFEINFO_basictypeTYPELESS:
-#if 0				/* Should never get here. */
-	  expr = ffeexpr_convert (expr, ft, ft,
-				  FFEINFO_basictypeINTEGER,
-				  FFEINFO_kindtypeINTEGERDEFAULT,
-				  0,
-				  FFETARGET_charactersizeNONE,
-				  FFEEXPR_contextLET);
-#else
 	  assert ("why hollerith/typeless in actualarg_?" == NULL);
-#endif
 	  break;
 
 	default:
@@ -13513,16 +13470,6 @@ ffeexpr_token_rhs_ (ffelexToken t)
 	}
       return (ffelexHandler) ffeexpr_token_rhs_;
 
-#if 0
-    case FFELEX_typeEQUALS:
-    case FFELEX_typePOINTS:
-    case FFELEX_typeCLOSE_ANGLE:
-    case FFELEX_typeCLOSE_PAREN:
-    case FFELEX_typeCOMMA:
-    case FFELEX_typeCOLON:
-    case FFELEX_typeEOS:
-    case FFELEX_typeSEMICOLON:
-#endif
     default:
       return (ffelexHandler) ffeexpr_finished_ (t);
     }
@@ -13712,25 +13659,6 @@ ffeexpr_token_real_ (ffelexToken t)
 	     || ffesrc_char_match_init (d, 'Q', 'q')))
 	   && ffeexpr_isdigits_ (++p)))
     {
-#if 0
-      /* This code has been removed because it seems inconsistent to
-	 produce a diagnostic in this case, but not all of the other
-	 ones that look for an exponent and cannot recognize one.  */
-      if (((ffelex_token_type (t) == FFELEX_typeNAME)
-	   || (ffelex_token_type (t) == FFELEX_typeNAMES))
-	  && ffest_ffebad_start (FFEBAD_INVALID_EXPONENT))
-	{
-	  char bad[2];
-
-	  ffebad_here (0, ffelex_token_where_line (t), ffelex_token_where_column (t));
-	  ffebad_here (1, ffelex_token_where_line (ffeexpr_tokens_[0]),
-		       ffelex_token_where_column (ffeexpr_tokens_[0]));
-	  bad[0] = *(p - 1);
-	  bad[1] = '\0';
-	  ffebad_string (bad);
-	  ffebad_finish ();
-	}
-#endif
       ffeexpr_make_float_const_ (ffesrc_char_internal_init ('E', 'e'), NULL,
 				 ffeexpr_tokens_[0], ffeexpr_tokens_[1],
 				 NULL, NULL, NULL);
@@ -14143,25 +14071,6 @@ ffeexpr_token_number_real_ (ffelexToken t)
 	     || ffesrc_char_match_init (d, 'Q', 'q')))
 	   && ffeexpr_isdigits_ (++p)))
     {
-#if 0
-      /* This code has been removed because it seems inconsistent to
-	 produce a diagnostic in this case, but not all of the other
-	 ones that look for an exponent and cannot recognize one.  */
-      if (((ffelex_token_type (t) == FFELEX_typeNAME)
-	   || (ffelex_token_type (t) == FFELEX_typeNAMES))
-	  && ffest_ffebad_start (FFEBAD_INVALID_EXPONENT))
-	{
-	  char bad[2];
-
-	  ffebad_here (0, ffelex_token_where_line (t), ffelex_token_where_column (t));
-	  ffebad_here (1, ffelex_token_where_line (ffeexpr_tokens_[0]),
-		       ffelex_token_where_column (ffeexpr_tokens_[0]));
-	  bad[0] = *(p - 1);
-	  bad[1] = '\0';
-	  ffebad_string (bad);
-	  ffebad_finish ();
-	}
-#endif
       ffeexpr_make_float_const_ (ffesrc_char_internal_init ('E', 'e'),
 				 ffeexpr_tokens_[0], ffeexpr_tokens_[1],
 				 ffeexpr_tokens_[2], NULL, NULL, NULL);
@@ -14542,18 +14451,6 @@ ffeexpr_token_binary_ (ffelexToken t)
       ffeexpr_tokens_[0] = ffelex_token_use (t);
       return (ffelexHandler) ffeexpr_token_binary_period_;
 
-#if 0
-    case FFELEX_typeOPEN_PAREN:
-    case FFELEX_typeCLOSE_PAREN:
-    case FFELEX_typeEQUALS:
-    case FFELEX_typePOINTS:
-    case FFELEX_typeCOMMA:
-    case FFELEX_typeCOLON:
-    case FFELEX_typeEOS:
-    case FFELEX_typeSEMICOLON:
-    case FFELEX_typeNAME:
-    case FFELEX_typeNAMES:
-#endif
     default:
       return (ffelexHandler) ffeexpr_finished_ (t);
     }
@@ -15100,12 +14997,6 @@ ffeexpr_token_name_lhs_ (ffelexToken t)
 	}
       break;
 
-#if 0
-    case FFELEX_typePERIOD:
-    case FFELEX_typePERCENT:
-      assert ("FOO%, FOO. not yet supported!~~" == NULL);
-      break;
-#endif
 
     default:
       break;
@@ -15436,13 +15327,6 @@ ffeexpr_token_name_rhs_ (ffelexToken t)
 	}
       break;
 
-#if 0
-    case FFELEX_typePERIOD:
-    case FFELEX_typePERCENT:
-      ~~Support these two someday, though not required
-	assert ("FOO%, FOO. not yet supported!~~" == NULL);
-      break;
-#endif
 
     default:
       break;
@@ -17059,15 +16943,7 @@ ffeexpr_sym_lhs_impdoctrl_ (ffesymbol s, ffelexToken t)
 				   diagnosed later, because it means an item
 				   in this list didn't reference this
 				   iterator. */
-#if 1
 	  ffesymbol_error (s, t);	/* For now, complain. */
-#else /* Someday will detect all cases where initializer doesn't reference
-	 all applicable iterators, in which case reenable this code. */
-	  ffesymbol_signal_change (s);
-	  ffesymbol_set_state (s, FFESYMBOL_stateUNCERTAIN);
-	  ffesymbol_set_maxentrynum (s, ffeexpr_level_);
-	  ffesymbol_signal_unreported (s);
-#endif
 	}
       break;
 
@@ -19021,22 +18897,6 @@ ffeexpr_token_substring_1_ (ffelexToken ft, ffebld last, ffelexToken t)
   else
     size = FFETARGET_charactersizeNONE;	/* The size is not known. */
 
-#if 0				/* Don't do this, or "is size of target
-				   known?" would no longer be easily
-				   answerable.	To see if there is a max
-				   size, use ffebld_size_max; to get only the
-				   known size, else NONE, use
-				   ffebld_size_known; use ffebld_size if
-				   values are sure to be the same (not
-				   opSUBSTR or opCONCATENATE or known to have
-				   known length). By getting rid of this
-				   "useful info" stuff, we don't end up
-				   blank-padding the constant in the
-				   assignment "A(I:J)='XYZ'" to the known
-				   length of A. */
-  if (size == FFETARGET_charactersizeNONE)
-    size = strop_size_max;	/* Assume we use the entire string. */
-#endif
 
   substrlist
     = ffebld_new_item

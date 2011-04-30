@@ -55,13 +55,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <assert.h>
-#include <strings.h>
+#include <string.h>
 #include <list>
 #include <vector>
 #include "topcode.h"
 #include "targ_isa_properties.h"
 #include "gen_util.h"
 #include "isa_bundle_gen.h"
+#include "bstring.h"
 
 #define MAX_SLOTS 3	// max # of slots the generator can handle
 #define TAG_SHIFT 12    // max # of bits required to encode all the
@@ -86,7 +87,14 @@ struct isa_bundle_type {
 static int isa_exec_property_count = 0; 
 
 static int num_bundles = 0;
-static int max_slots = 0;
+/* Bundles are really only for ia64. cgemit has assumptions that slot >= 1.
+ * x86 gets around this by setting slots to 1 by creating a dummy bundle: 
+ * ISA_Bundle_Type_Create("i", ".i", 1);
+ * Creating a dummy bundle is not necessary, so NVISA just changed max_slots 
+ * to start at 1, and then everything works okay.  
+ * This should be fine for other platforms.
+*/
+static int max_slots = 1;
 static int bundle_bits;
 static std::list<ISA_EXEC_UNIT_TYPE> all_exec_types; 
 static std::list<ISA_BUNDLE_TYPE> all_bundles; 
@@ -341,7 +349,7 @@ static void Emit_Bundle_Scheduling(FILE *hfile, FILE *cfile, FILE *efile)
   std::list<ISA_BUNDLE_TYPE>::iterator ibi;
   int i;
 
-  const char * const isa_exec_type_format = "  %3llu,  /* %s: ";
+  const char * const isa_exec_type_format = "  %3" LL_FORMAT "u,  /* %s: ";
   const char *info_index_type;
 
   int index = 0;
@@ -349,7 +357,7 @@ static void Emit_Bundle_Scheduling(FILE *hfile, FILE *cfile, FILE *efile)
 								  ++iei) {
   }
 
-  char *int_suffix;
+  const char *int_suffix;
   // select the ISA_EXEC_unit_prop based on the number of exec info types.
   if (index <= 8) {
     info_index_type = "mUINT8";
@@ -375,7 +383,7 @@ static void Emit_Bundle_Scheduling(FILE *hfile, FILE *cfile, FILE *efile)
   fprintf (hfile, "\n");
   for (iei = all_exec_types.begin(); iei != all_exec_types.end(); ++iei) {
     ISA_EXEC_UNIT_TYPE curr_exec_type = *iei;
-    fprintf (hfile, "#define ISA_EXEC_PROPERTY_%-15s (0x%llx%s)\n",
+    fprintf (hfile, "#define ISA_EXEC_PROPERTY_%-15s (0x%" LL_FORMAT "x%s)\n",
 		    curr_exec_type->name,
 		    (1ULL << curr_exec_type->bit_position), int_suffix);
   }
@@ -414,9 +422,9 @@ static void Emit_Bundle_Scheduling(FILE *hfile, FILE *cfile, FILE *efile)
     ISA_BUNDLE_TYPE curr_exec_type = *ibi;
     fprintf (cfile, " {\n    \"%s\",%*s \"%s\",%*s %d,", 
 		    curr_exec_type->name, 
-		    13 - strlen(curr_exec_type->name), "",
+		    13 - (int)strlen(curr_exec_type->name), "",
 		    curr_exec_type->asm_name, 
-		    8 - strlen(curr_exec_type->asm_name), "",
+		    8 - (int)strlen(curr_exec_type->asm_name), "",
 		    curr_exec_type->slot_count);
 
     unsigned long long slot_mask = 0;
@@ -449,13 +457,15 @@ static void Emit_Bundle_Scheduling(FILE *hfile, FILE *cfile, FILE *efile)
 
     fprintf(cfile, "\n    %2d,", curr_exec_type->pack_code);
     fprintf(cfile, " 0x%1x,", stop_mask);
-    fprintf(cfile, " 0x%0*llx\n  },\n", slot_mask_digits, slot_mask);
+    fprintf(cfile, " 0x%0*" LL_FORMAT "x\n  },\n", slot_mask_digits, slot_mask);
   }
   fprintf (cfile, "  {\n    \"template_MAX\", \"\", -1,\n    { -1 /* ??????? */");
   for (i = 1; i < max_slots; ++i) fprintf (cfile, ", -1 /* ??????? */");
-  fprintf (cfile, ",},\n    { FALSE");
+  fprintf (cfile, " },\n    { FALSE");
   for (i = 1; i < max_slots; ++i) fprintf (cfile, ", FALSE");
-  fprintf (cfile, ",},\n    -1, 0x0, 0x%0*x\n  }\n};\n", slot_mask_digits, 0);
+  fprintf (cfile, " },\n    { 0");
+  for (i = 1; i < max_slots; ++i) fprintf (cfile, ", 0");
+  fprintf (cfile, " },\n    -1, 0x0, 0x%0*x\n  }\n};\n", slot_mask_digits, 0);
 
   fprintf(hfile,"\n#define ISA_MAX_BUNDLES %d\n",num_bundles);
 
@@ -619,7 +629,7 @@ void ISA_Bundle_Pack_Create (ISA_BUNDLE_PACK_ENDIAN endian)
   }
 
   bundle_pack_info = new(BUNDLE_PACK_INFO);
-  bzero(bundle_pack_info, sizeof(*bundle_pack_info));
+  memset(bundle_pack_info, 0, sizeof(*bundle_pack_info));
   bundle_pack_info->endian = endian;
 }
 
@@ -711,7 +721,7 @@ static void Emit_Pack_Component(
   if (first_comps[comp] < 0) first_comps[comp] = *pack_index;
 
   if (comp == END) {
-    fprintf (cfile, "  { %-30s, %2d, %2d, %2d,   %16lld },  /* %s */\n",
+    fprintf (cfile, "  { %-30s, %2d, %2d, %2d,   %16" LL_FORMAT "d },  /* %s */\n",
 		    pack_comp_name[comp],
 		    -1,
 		    -1,
@@ -740,7 +750,7 @@ static void Emit_Pack_Component(
       int b = bundle_pos % incr;
       int w = width;
       if (b + width > incr) w = incr - b;
-      fprintf (cfile, "  { %-30s, %2d, %2d, %2d, 0x%016llx },  /* %s */\n",
+      fprintf (cfile, "  { %-30s, %2d, %2d, %2d, 0x%016" LL_FORMAT "x },  /* %s */\n",
 		      pack_comp_name[comp],
 		      index,
 		      comp_pos,

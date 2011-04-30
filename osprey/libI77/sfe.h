@@ -47,11 +47,7 @@
 /* PROTOTYPES */
 extern int e_rsfe(void);
 extern int e_rsfe_mp(unit **);
-#if 11
 extern int c_sfe (cilist64 *a, unit **fu);
-#else
-extern int c_sfe (cilist *a, unit **fu);
-#endif
 extern int e_wsfe(void);
 extern int e_wsfe_mp(unit **);
 extern int e_xsfe(void);
@@ -59,7 +55,6 @@ extern int e_xsfe_mp(unit **);
 extern int e_wsue(void);
 extern int e_wsue_mp(unit **);
 
-#if 11
 extern int e_rsfe64(void);
 extern int e_rsfe64_mp(unit **);
 extern int e_wsfe64(void);
@@ -68,7 +63,6 @@ extern int e_xsfe64(void);
 extern int e_xsfe64_mp(unit **);
 extern int e_wsue64(void);
 extern int e_wsue64_mp(unit **);
-#endif
 
 #endif /* C || C++ */
 

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -56,7 +60,8 @@
 #include "opt_sym.h"
 #include "opt_util.h"
 
-#ifdef __linux__
+#ifdef SHARED_BUILD
+#if defined(__linux__) || defined(BUILD_OS_DARWIN)
 #ifdef SHARED_BUILD
 extern AUX_ID (*WN_aux_p) (const WN*);
 #define WN_aux (*WN_aux_p)
@@ -66,6 +71,7 @@ extern AUX_ID WN_aux (const WN*);
 #else
 #pragma weak WN_aux__GPC2WN
 #endif // __linux__
+#endif // SHARED_BUILD
 
 
 // ************************************************************************
@@ -114,6 +120,23 @@ base_action_tbl[MAX_BASE_KIND][MAX_BASE_KIND] = {
   {  NO_INFO, NO_INFO,	  NO_INFO,   NO_INFO}, // UNKNOWN
 };
   
+#if defined(TARG_SL)
+ST* POINTS_TO::Get_ST_base(ST* st) const
+{
+    if(st==NULL)
+        return NULL;
+    else {
+      ST *st_base=st;
+      ST* base=ST_base(st);
+      while(base!=NULL && st_base!=base)  {
+        st_base=base;
+        base=ST_base(st_base);
+      }
+      return st_base;
+    }
+}
+#endif
+
 
 //  TRUE:  base are the same
 //  FALSE: don't know
@@ -121,9 +144,10 @@ base_action_tbl[MAX_BASE_KIND][MAX_BASE_KIND] = {
 BOOL POINTS_TO::Same_base(const POINTS_TO *pt) const
 {
   BASE_ACTION a = base_action_tbl[this->Base_kind()][pt->Base_kind()];
-  if ((a == COMP_BASE || a == SAME_BASE) &&
-      this->Base() == pt->Base())
-    return TRUE;
+  if ((a == COMP_BASE || a == SAME_BASE)) {
+    if(this->Base() == pt->Base())
+      return TRUE;
+  }
   return FALSE;
 }
 
@@ -177,8 +201,15 @@ BOOL POINTS_TO::Different_base(const POINTS_TO *pt) const
   BASE_ACTION a = base_action_tbl[this->Base_kind()][pt->Base_kind()];
   if (a == DIFF) {
     return TRUE;
-  } else if (a == COMP_BASE && this->Base() != pt->Base()) {
-    return TRUE;
+  } else if (a == COMP_BASE) {
+#if defined(TARG_SL)
+    if (this->Base_kind() == BASE_IS_FIXED && pt->Base_kind() == BASE_IS_FIXED) {
+      if (Get_ST_base(this->Base()) != Get_ST_base(pt->Base()))
+        return TRUE;
+    } else 
+#endif
+    if(this->Base() != pt->Base())
+      return TRUE;
   }
   return FALSE;
 }
@@ -250,6 +281,17 @@ void POINTS_TO::Meet_info_from_alias_class(const POINTS_TO *pt)
   }
     
   if (!pt->Not_alloca_mem())   Reset_not_alloca_mem();
+}
+
+// We are performing a meet operation on two AliasTags
+// The key assumption here is that we are performing the
+// meet such that AliasTag of 'pt' will be unioned with
+// that of 'this'.
+void POINTS_TO::Meet_alias_tag(const POINTS_TO *pt, AliasAnalyzer *aa)
+{
+  AliasTag tag = aa->meet(Alias_tag(),pt->Alias_tag());
+  if (tag != Alias_tag())
+    Set_alias_tag(tag);
 }
 
 //  Combine *this and *pt in a conservative manner.
@@ -385,9 +427,8 @@ void POINTS_TO::Meet(const POINTS_TO *pt, ST *definition)
     Reset_known_f90_pointer();
   }
 
-  if (Malloc_id() != pt->Malloc_id()) {
-    Set_malloc_id(0);
-  }
+  // If anntations disagree, invalidate them
+  _mem_annot.Meet(pt->_mem_annot);
 
   CHECK_POINTS_TO(this);
 }
@@ -432,6 +473,18 @@ Expand_ST_into_base_and_ofst(ST *st, INT64 st_ofst, ST **base, INT64 *ofst)
     if (ST_sclass(tmpbase) == SCLASS_FORMAL &&
 	ST_class(ST_base(tmpbase)) == CLASS_BLOCK)
       break;
+
+#ifdef TARG_X8664
+    // Allow extern syms which are about to flattened into a section
+    // to retain symbolic/type information.
+    if ((OPT_keep_extsyms) &&
+        ST_sclass(tmpbase) == SCLASS_EXTERN &&
+	ST_class(ST_base(tmpbase)) == CLASS_BLOCK) {
+      // Excluding C++.
+      if (PU_src_lang(Get_Current_PU()) != PU_CXX_LANG)
+        break;
+    }
+#endif
 
     // several places in wopt assumed that ST_sclass(st) == ST_sclass(ST_base(st))
     // and it is not always true.  
@@ -804,6 +857,8 @@ void POINTS_TO::Lower_to_base(WN *wn)
       return;
     }
 
+    if (TY_kind(ST_type(base)) == KIND_ARRAY)
+	Set_is_array();
     Expand_ST_into_base_and_ofst (base, 0, &base, &ofst);
 
     // if the pt already has an offset, shift it.
@@ -1024,11 +1079,12 @@ void POINTS_TO::Print(FILE *fp) const
   }
   fprintf(fp, "per-PU class %d, ", Alias_class());
   fprintf(fp, "global class %d, ", Ip_alias_class());
+  fprintf(fp, "alias tag %d, ", Alias_tag());
   fprintf(fp, "ty=%d, hlty=%d, ", Ty(), Highlevel_Ty ());
 
   // print attributes
   fprintf(fp, "attr=");
-  char *pr_separator = "";
+  const char *pr_separator = "";
   if (Not_addr_saved()) {
     fprintf(fp, "%snot_addr_saved", pr_separator);
     pr_separator = "|";
@@ -1115,6 +1171,10 @@ void POINTS_TO::Print(FILE *fp) const
     pr_separator = "|";
   }
 #endif
+  if (Is_array()) {
+    fprintf(fp, "%sis_array", pr_separator);
+    pr_separator = "|";
+  }
 
 #ifdef _LP64
 #define UNDEFINED_PTR    (void *)0xa5a5a5a5a5a5a5a5LL
@@ -1126,7 +1186,7 @@ void POINTS_TO::Print(FILE *fp) const
     fprintf(fp, ", based_sym=%s(%d)\n", (Based_sym() == UNDEFINED_PTR) ?
 	    "*UNDEFINED*" : ST_name(Based_sym()), Based_sym_depth());
   else
-    fprintf(fp, ", based_sym=null");
+    fprintf(fp, ", based_sym=null\n");
 
   if (Pointer_is_named_symbol () || Pointer_is_aux_id () || 
       Pointer_is_coderep_id ()) {
@@ -1148,6 +1208,10 @@ void POINTS_TO::Print(FILE *fp) const
       if (Bit_Size() != 0)
         fprintf(fp, "bit size is %d, ", Bit_Size());
     }
+  }
+
+  if (_mem_annot.Has_annotation ()) {
+    _mem_annot.Print (fp, FALSE);
   }
 
   fprintf (fp, "\n");

@@ -46,9 +46,6 @@
 #if defined(_LANGUAGE_C) || defined(_LANGUAGE_C_PLUS_PLUS)
 /* PROTOTYPES */
 extern int flush_(ftnint *);
-#if 00
-extern int flush64_(XINT *);
-#endif
 
 #endif /* C || C++ */
 

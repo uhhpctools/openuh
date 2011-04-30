@@ -37,7 +37,9 @@
 
 */
 
-
+#ifdef __MINGW32__
+#include "translatetypes.h"
+#endif /* __MINGW32__ */
 
 #include "libdwarfdefs.h"
 

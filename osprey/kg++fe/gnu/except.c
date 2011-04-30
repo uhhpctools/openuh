@@ -3151,7 +3151,11 @@ expand_eh_return ()
 
 #ifdef HAVE_eh_return
   if (HAVE_eh_return)
+#ifdef TARG_LOONGSON
+    emit_insn (gen_eh_return (cfun->eh->ehr_handler,cfun->eh->ehr_handler));
+#else
     emit_insn (gen_eh_return (cfun->eh->ehr_handler));
+#endif
   else
 #endif
     {

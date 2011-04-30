@@ -33,7 +33,7 @@
 */
 
 
-char * MFMC_msgs[] = {
+const char * MFMC_msgs[] = {
   "No error",
   "Source and sink sets intersect",
   "Problem is infeasible",

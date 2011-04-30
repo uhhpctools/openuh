@@ -62,7 +62,7 @@
 #ifndef bin_tree_INCLUDED
 #define bin_tree_INCLUDED 
 
-static char *bin_tree_rcs_id  = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/com/btree.h,v $ $Revision: 1.1.1.1 $";
+static const char *bin_tree_rcs_id  = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.btree.h $ $Revision: 1.2 $";
 
 
 #ifndef defs_INCLUDED

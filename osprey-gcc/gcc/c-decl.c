@@ -3792,8 +3792,28 @@ c_build_bitfield_integer_type (unsigned HOST_WIDE_INT width, int unsignedp)
   if (width == TYPE_PRECISION (long_integer_type_node))
     return unsignedp ? long_unsigned_type_node : long_integer_type_node;
   if (width == TYPE_PRECISION (long_long_integer_type_node))
+  {
+#ifdef TARG_SL
+
+	if (Long_Long_Support == TRUE)
+	{
+	  return (unsignedp ? long_long_unsigned_type_node : long_long_integer_type_node);
+	}
+	else
+	{
+	  warning("\"long long\" is mapped to \"long\", "
+	            "Please use \"-mlong-long\" option to enbale long long type suporting");
+      return unsignedp ? long_unsigned_type_node : long_integer_type_node;
+	}
+
+#else
+
     return (unsignedp ? long_long_unsigned_type_node
 	    : long_long_integer_type_node);
+
+#endif
+
+  }
   return build_nonstandard_integer_type (width, unsignedp);
 }
 
@@ -5618,9 +5638,23 @@ finish_enum (tree enumtype, tree values, tree attributes)
       tem = c_common_type_for_size (precision, unsign);
       if (tem == NULL)
 	{
+#ifdef TARG_SL
+    if (Long_Long_Support == TRUE)
+    {
+      warning ("enumeration values exceed range of largest integer");
+      tem = long_long_integer_type_node;
+    }
+    else
+    {
+      error("\"long long\" is mapped to \"long\", "
+            "Please use \"-mlong-long\" option to enbale long long type suporting."
+            "enumeration values exceed range of largest integer");
+    }
+#else	
 	  warning ("enumeration values exceed range of largest integer");
 	  tem = long_long_integer_type_node;
-	}
+#endif
+  }
     }
   else
     tem = unsign ? unsigned_type_node : integer_type_node;
@@ -6142,6 +6176,29 @@ store_parm_decls_oldstyle (tree fndecl, const struct c_arg_info *arg_info)
     gcc_assert (TREE_CODE (b->decl) != PARM_DECL || !DECL_WEAK (b->decl));
 #endif
 
+#ifdef TARG_SL
+/* Don't support old-style function definition for float/double type */
+    tree parm_t;
+    int float_flag = 0;
+    for (parm_t = parmids; parm_t != NULL; parm_t = TREE_CHAIN(parm_t))
+    {
+        tree type_node = TYPE_MAIN_VARIANT(TREE_TYPE((I_SYMBOL_BINDING (TREE_VALUE (parm_t))->decl)));
+        if (type_node == float_type_node || type_node == double_type_node) 
+        {
+            float_flag = 1;
+            break;
+        }
+    }
+    if (float_flag == 1)
+    {
+       error("Old-style function definition is not supported for float/double type");
+    }
+    else
+    {
+       warning("Old-style function definition");
+    }
+#endif
+
   if (warn_old_style_definition && !in_system_header)
     warning ("%Jold-style function definition", fndecl);
 
@@ -6592,6 +6649,9 @@ finish_function (void)
         }
       else
         {
+#ifdef KEY /* bug 11761 */
+          error ("Nested functions not supported");
+#endif
           /* Register this function with cgraph just far enough to get it
             added to our parent's nested function list.  Handy, since the
             C front end doesn't have such a list.  */
@@ -7460,9 +7520,29 @@ finish_declspecs (struct c_declspecs *specs)
       gcc_assert (!(specs->long_p && specs->short_p));
       gcc_assert (!(specs->signed_p && specs->unsigned_p));
       if (specs->long_long_p)
-	specs->type = (specs->unsigned_p
+      {
+#ifdef TARG_SL
+		if (Long_Long_Support == TRUE)
+		{
+		  specs->type = (specs->unsigned_p
 		       ? long_long_unsigned_type_node
 		       : long_long_integer_type_node);
+		}
+		else
+		{
+		  warning("\"long long\" is mapped to \"long\", "
+			        "Please use \"-mlong-long\" option to enbale long long type suporting");
+          specs->type = (specs->unsigned_p
+                         ? long_unsigned_type_node
+                         : long_integer_type_node);
+		}
+#else
+		specs->type = (specs->unsigned_p
+		       ? long_long_unsigned_type_node
+		       : long_long_integer_type_node);
+    
+#endif
+      }
       else if (specs->long_p)
 	specs->type = (specs->unsigned_p
 		       ? long_unsigned_type_node
@@ -7477,6 +7557,9 @@ finish_declspecs (struct c_declspecs *specs)
 		       : integer_type_node);
       if (specs->complex_p)
 	{
+#ifdef TARG_SL
+      error("Unsupported type: \"complex\"");
+#endif
 	  if (pedantic)
 	    pedwarn ("ISO C does not support complex integer types");
 	  specs->type = build_complex_type (specs->type);
@@ -7488,6 +7571,22 @@ finish_declspecs (struct c_declspecs *specs)
       specs->type = (specs->complex_p
 		     ? complex_float_type_node
 		     : float_type_node);
+		     
+#ifdef TARG_SL
+      if (TYPE_MAIN_VARIANT(specs->type) == float_type_node)
+			{
+			  if (Float_Point_Support == FALSE)
+        {    
+          error("\"float\" type is not supported in default mode, "
+                  "Please use \"-msoft-float\" option to enable float point emulation");
+        }
+			}
+      else
+      {
+        warning("Unsupported type: \"complex float\"");
+      }
+#endif
+
       break;
     case cts_double:
       gcc_assert (!specs->long_long_p && !specs->short_p
@@ -7504,7 +7603,23 @@ finish_declspecs (struct c_declspecs *specs)
 			 ? complex_double_type_node
 			 : double_type_node);
 	}
-      break;
+	
+#ifdef TARG_SL 
+    if (TYPE_MAIN_VARIANT(specs->type) == double_type_node)
+		{
+		  if (Float_Point_Support == FALSE)
+      {     
+        error("\"double\" type is not supported in default mode, "
+              "Please use \"-msoft-float\" option to enable float point emulation");
+      }
+		}
+    else
+    {
+        warning("Unsupported type: \"complex/long double\"");
+    }
+#endif
+
+    break;
     default:
       gcc_unreachable ();
     }

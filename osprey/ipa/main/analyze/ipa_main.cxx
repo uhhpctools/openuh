@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
  */
 
@@ -42,9 +46,12 @@
 
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #include "defs.h"
 #include "errors.h"
@@ -78,6 +85,8 @@ extern void (*Preprocess_struct_access_p)(void);
 #endif /* KEY */
 #include "ipa_reorder.h"
 
+#include "ipa_nystrom_alias_analyzer.h"
+
 FILE* STDOUT = stdout; 
 
 //-----------------------------------------------------------------------
@@ -85,7 +94,7 @@ FILE* STDOUT = stdout;
 // FUNCTION: Dump the array sections to the file 'fp'.
 //-----------------------------------------------------------------------
 
-static void Print_Array_Sections(char buffer[])
+static void Print_Array_Sections(const char buffer[])
 {
   CG_BROWSER cgb_print;
   CGB_Initialize(&cgb_print, IPA_Call_Graph);
@@ -244,6 +253,9 @@ static void Perform_Inline_Script_Analysis(IPA_CALL_GRAPH* cg, MEM_POOL* pool, M
 }
 #endif /* KEY */
 
+extern void IPA_struct_opt_legality (void);
+
+extern void IPA_identify_no_return_procs(void);
 
 //-------------------------------------------------------------------------
 // the main analysis phase at work! 
@@ -308,6 +320,10 @@ Perform_Interprocedural_Analysis ()
     {
 	Temporary_Error_Phase ephase ("IPA Call Graph Construction");
 
+        // Instantiate the Nystrom alias analyzer
+        if (Alias_Nystrom_Analyzer)
+          IPA_NystromAliasAnalyzer::create();
+
 	if ( Get_Trace ( TKIND_ALLOC, TP_IPA ) ) {
 	    fprintf ( TFile,
 		      "\n%s%s\tMemory allocation information before Build_call_graph\n%s%s\n",
@@ -325,26 +341,19 @@ Perform_Interprocedural_Analysis ()
 	
 	Build_Call_Graph ();
 
-        if (IPA_Enable_Devirtualization) {
-            Temporary_Error_Phase ephase ("IPA Devirtualization");
-            IPA_Class_Hierarchy = Build_Class_Hierarchy();
-            IPA_devirtualization();
-        }
+	if(Get_Trace(TP_IPA, IPA_TRACE_TUNING)) // -tt19:0x40000
+	{
+  	  FILE *tmp_call_graph = fopen("cg_dump.log", "w");
 
-#ifdef KEY
-	if( IPA_Enable_Icall_Opt ){
-	  if( has_nested_pu ){
-	    Build_Nested_Pu_Relations();
-	    if (Verbose) {
-		fprintf (stderr, "Building Nested PU Relations...");
-		fflush (stderr);
-	    }
-	    has_nested_pu = FALSE;
+	  if(tmp_call_graph != NULL)
+	  {	  
+	    fprintf(tmp_call_graph, "\t+++++++++++++++++++++++++++++++++++++++\n");
+	    // KEY
+  	    IPA_Call_Graph->Print_vobose(tmp_call_graph);
+	    fprintf(tmp_call_graph, "\t+++++++++++++++++++++++++++++++++++++++\n");
 	  }
-
-	  IPA_Convert_Icalls( IPA_Call_Graph );
+	  fclose(tmp_call_graph);
 	}
-#endif // KEY
 
 #ifdef KEY
         {
@@ -508,6 +517,11 @@ Perform_Interprocedural_Analysis ()
     if(IPA_Enable_Reorder && !merged_access->empty())
 		IPA_reorder_legality_process(); 	
 
+#ifdef KEY
+    if (IPA_Enable_Struct_Opt)
+        IPA_struct_opt_legality();
+#endif
+
     //  mark all unreachable nodes that are either EXPORT_LOCAL (file
     //  static) or EXPORT_INTERNAL *AND* do not have address taken as
     // "deletable".  Functions that are completely inlined to their
@@ -545,11 +559,54 @@ Perform_Interprocedural_Analysis ()
 #endif
     }
 
+/*
+on virtual function optimization pass:
+The virtual function optimization pass is invoked here 
+in ipa_main.cxx Perform_Interprocedural_Analysis function after
+Build_Call_Graph.
+this is the psuedo code that describes where the optimization must be 
+placed.
+Perform_Interprocedural_Analysis() { // ipa/main/analyze/ipa_main.cxx
+    ... // Need to have built the call graph prior to my pass
+    Build_Call_Graph ();
+    ...
+        // Note 1: We need a call graph prior to making this function call
+        // Note 2: Uncommenting the following function: IPA_fast_static_analysis_VF
+        // may lead to unknown behavior.
+        // if you want to disable virtual function optimization,
+        // use the BOOL variable in config/config_ipa.cxx,
+        // IPA_Enable_fast_static_analysis_VF. Set it to FALSE to disable 
+        // the pass.
+    IPA_fast_static_analysis_VF () ; //  ipa/main/analyze/ipa_devirtual.cxx 
+
+    ...
+}
+*/
+
+#if defined(KEY) && !defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER)
+    if (IPA_Enable_Fast_Static_Analysis_VF == TRUE) {
+        IPA_Fast_Static_Analysis_VF ();
+    }
+#endif // KEY && !(_STANDALONE_INLINER) && !(_LIGHTWEIGHT_INLINER)
+    // Devirtualization using IPA_Enable_Devirtualization enabled path is not used from open64 4.2.2-1. Please use IPA_Enable_Fast_Static_Analysis_VF enabled path for understanding devirtualization.
+
+    if (IPA_Enable_Devirtualization) { 
+        Temporary_Error_Phase ephase ("IPA Devirtualization"); 
+        IPA_Class_Hierarchy = Build_Class_Hierarchy(); 
+        IPA_devirtualization(); 
+    } 
+
     if ( IPA_Enable_Simple_Alias ) {
       Temporary_Error_Phase ephase ("Interprocedural Alias Analysis");
       if (Verbose) {
 	  fprintf (stderr, "Alias analysis ...");
 	  fflush (stderr);
+      }
+
+      IPA_NystromAliasAnalyzer *ipa_naa =
+                                    IPA_NystromAliasAnalyzer::aliasAnalyzer();
+      if (ipa_naa) {
+        ipa_naa->solver(IPA_Call_Graph);
       }
 
       IPAA ipaa(NULL);
@@ -654,15 +711,6 @@ Perform_Interprocedural_Analysis ()
         IPA_Call_Graph->Print(TFile);
       }
     
-#if 0
-      // Optionally, we could remove quasi clones without making them real
-      for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
-        IPA_NODE* node = (IPA_NODE*) cg_iter.Current();
-        if (node && node->Is_Quasi_Clone()) {
-          IPA_Call_Graph->Remove_Quasi_Clone(node);
-        }
-      }
-#endif
     
       if (IPA_Enable_Common_Const) {
         MEM_POOL_Pop(&local_cprop_pool);
@@ -785,8 +833,7 @@ Perform_Interprocedural_Analysis ()
 
 	if (Trace_IPA || Trace_Perf) {
 	    fprintf (TFile, "\n\tTotal code expansion = %d%%, total prog WHIRL size = 0x%x \n",
-		     (Total_Prog_Size - (INT) Orig_Prog_Weight) * 100 /
-		     (INT) Orig_Prog_Weight,
+		     Orig_Prog_Weight == 0 ? 0 : (Total_Prog_Size - (INT) Orig_Prog_Weight) * 100 / (INT) Orig_Prog_Weight,
 		     Total_Prog_Size);
 	    fprintf (TFile, "\t<<<Inlining analysis completed>>>\n");
 	}
@@ -806,4 +853,5 @@ Perform_Interprocedural_Analysis ()
     CGB_IPA_Terminate();
 #endif
 
+   IPA_identify_no_return_procs();
 }

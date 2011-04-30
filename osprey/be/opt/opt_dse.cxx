@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -97,6 +101,9 @@ class DSE {
     WN_MAP _live_wns;		// map of live WNs
 
     BOOL _tracing;		// are we tracing?
+#ifdef TARG_SL
+    vector <WN *> *_injury_aux_intrnop;
+#endif
 
     //
     // access methods
@@ -127,12 +134,21 @@ class DSE {
     void Set_Required_CHI( CHI_NODE *chi ) const;
     void Set_Required_WN( WN *wn ) const;
     void Add_EH_exposed_use(WN *call) const;
+#ifdef KEY
+    void Add_entry_exposed_uses(WN *call) const;
+#endif
     void Update_MU_list_for_call(BB_NODE *bb) const;
     // some inlined functions
     BOOL Live_wn( WN *wn ) const
 		{ return WN_MAP32_Get( _live_wns, wn ); }
     void Set_live_wn( WN *wn ) const
 		{ WN_MAP32_Set( _live_wns, wn, 1 ); }
+
+#if defined(TARG_SL)
+    void Repair_Injured_AuxIntrnOP(void) const ;
+    void Append_Injured_AuxIntrnOp(WN *wn) const { _injury_aux_intrnop->insert(_injury_aux_intrnop->begin(), wn);};
+#endif
+
   public:
 
     DSE( CFG *cfg, OPT_STAB *opt_stab, MEM_POOL *pool, EXC *exc, BOOL tracing )
@@ -141,6 +157,10 @@ class DSE {
       {
 	// create a map to track live WNs
 	_live_wns = WN_MAP32_Create(Loc_pool());
+#ifdef TARG_SL
+        _injury_aux_intrnop = CXX_NEW(vector<WN *>, pool);
+#endif
+
       }
 
     ~DSE( void )
@@ -240,6 +260,11 @@ DSE::Required_stid( const WN *wn ) const
     s = Opt_stab()->St(Opt_stab()->Du_aux_id(WN_ver(WN_kid0(wn))));
     if (ST_class(s) == CLASS_PREG && Preg_Is_Dedicated(WN_offset(wn)))
       return TRUE;
+  }
+#endif
+#ifdef TARG_SL
+  if (WN_Intrinsic_OP_Slave(WN_kid0(wn))) {
+    Append_Injured_AuxIntrnOp((WN *)wn);
   }
 #endif
   
@@ -366,7 +391,9 @@ DSE::Required_stmt( const WN *wn ) const
 void 
 DSE::Set_Required_VSE( VER_STAB_ENTRY *vse, BOOL real_use, WN *ref_wn ) const
 {
-  if ( vse->Real_use() ) return;
+  // This line exists in PSC3.2. But it causes problems in OSP
+  //if ( vse->Real_use() ) return;
+
   if (real_use)
     vse->Set_Real_use();
 
@@ -374,13 +401,15 @@ DSE::Set_Required_VSE( VER_STAB_ENTRY *vse, BOOL real_use, WN *ref_wn ) const
   // was not already marked as having a use
   if ( vse->Any_use() ) return;
   vse->Set_Any_use();
-  
+ 
   // now recursively follow this symbol's use-def chain
   switch ( vse->Type() ) {
     case WHIRL_STMT:
+      vse->Set_Any_use();
       Set_Required_WN( vse->Wn() );
       break;
     case PHI_STMT:
+      vse->Set_Any_use();
       if (ref_wn != NULL)
 	vse->Set_ref_wn(ref_wn);
       Set_Required_PHI( vse, ref_wn );
@@ -442,6 +471,7 @@ DSE::Set_Required_MU( MU_NODE *mu, BOOL real_use ) const
   VER_STAB_ENTRY *ver = Opt_stab()->Ver_stab_entry(mu->Opnd());
   Set_Required_VSE( ver, real_use, NULL );
 }
+
 
 
 static bool Is_identity_asgn(WN *wn, OPT_STAB *opt_stab)
@@ -526,21 +556,7 @@ DSE::Set_Required_WN( WN *wn ) const
        WN_map_id(wn), OPERATOR_name(opr) );
   }
 
-  if ( WN_has_ver(wn) ) {
-    VER_STAB_ENTRY *sym = Opt_stab()->Ver_stab_entry(WN_ver(wn));
-    Set_Required_VSE( sym, TRUE, wn );
-  }
-
-  // do not dive into "black-boxes" and just rely on the mu/chi lists
-  // any region node that made it this far (past CFG) is black to wopt
-  if (opr != OPR_BLOCK && ! OPERATOR_is_black_box(opr) && opr != OPR_REGION) {
-    // because all of the kids in this tree are used by a real whirl
-    // node, their uses are real
-    for ( INT32 kidnum = 0; kidnum < WN_kid_count(wn); kidnum++ ) {
-      Set_Required_WN( WN_kid(wn,kidnum) );
-    }
-  }
-
+ 
   // don't make the chi operands required, because the chi may be dead
   
   // make the vsym corresponding to ISTOREs required and real use
@@ -557,6 +573,21 @@ DSE::Set_Required_WN( WN *wn ) const
         Set_Required_VSE( vsym, TRUE, NULL );
         break;
       }
+    }
+  }
+
+  if ( WN_has_ver(wn) ) {
+    VER_STAB_ENTRY *sym = Opt_stab()->Ver_stab_entry(WN_ver(wn));
+    Set_Required_VSE( sym, TRUE, wn );
+  }
+
+  // do not dive into "black-boxes" and just rely on the mu/chi lists
+  // any region node that made it this far (past CFG) is black to wopt
+  if (opr != OPR_BLOCK && ! OPERATOR_is_black_box(opr) && opr != OPR_REGION) {
+    // because all of the kids in this tree are used by a real whirl
+    // node, their uses are real
+    for ( INT32 kidnum = 0; kidnum < WN_kid_count(wn); kidnum++ ) {
+      Set_Required_WN( WN_kid(wn,kidnum) );
     }
   }
 
@@ -590,8 +621,11 @@ DSE::Set_Required_WN( WN *wn ) const
       FOR_ALL_NODE( mu, mu_iter, Init(mu_list)) {
 	Set_Required_MU( mu, mu_reqd || mu_of_parm);
       }
-    } else 
+    } else  {
       Set_Required_MU( occ->Mem_mu_node(), mu_reqd || mu_of_parm);
+      //OSP_468
+      //Set_Required_Imp_VSE(occ->Mem_mu_node()->Opnd(), mu_reqd || mu_of_parm);
+    }
   }
 }
 
@@ -684,6 +718,35 @@ DSE::Is_deleted_statement( WN *stmt ) const
   return FALSE;
 }
 
+#if defined(TARG_SL)
+/* result = intrnsic_slave_op( master, ar2,ar3...)
+ * the master is the result of master intrnsic op
+ * if master is live, stmt of slave-intrnsic-op must live
+ */
+void 
+DSE::Repair_Injured_AuxIntrnOP (void) const{
+  for (INT32 i = 0; i < _injury_aux_intrnop->size(); i++) {
+    WN *wn = (*_injury_aux_intrnop)[i];
+    if (WN_operator(wn) == OPR_STID) {
+      WN *rhs = WN_kid0(wn);
+      if (WN_Intrinsic_OP_Slave(rhs)) {
+        WN *op1 = WN_kid0(WN_kid0(rhs));// get first parameter of slave intrn op	
+        if (WN_has_ver(op1)) {
+          VER_STAB_ENTRY *sym = Opt_stab()->Ver_stab_entry(WN_ver(op1));
+          if (sym->Real_use()) {
+            // if the first parameter has the real use, set stmt of slave intrnsic op is require  
+            Set_Required_WN(wn);
+          }
+        }	
+      }
+    }
+    
+  }
+
+}
+
+#endif
+
 // ====================================================================
 // Driver for the dead-store elimination phase
 // ====================================================================
@@ -760,6 +823,10 @@ DSE::Dead_store_elim( void ) const
       }
     }
   } // end bb iteration
+    // repair stmt ,which rsh is a aux intrinsic op	 
+#if defined(TARG_SL)
+    Repair_Injured_AuxIntrnOP();
+#endif
 
   // Update liveness of the ver-stab entries.
   // Must be after all updates of Any_use and Real_use.
@@ -783,7 +850,11 @@ DSE::Dead_store_elim( void ) const
     }
   }
 
-  if (Opt_stab()->Has_exc_handler()) {
+  if (Opt_stab()->Has_exc_handler()
+#ifdef KEY
+      || Opt_stab()->Has_nonlocal_goto_target()
+#endif
+      ) {
     Add_MU_list_for_calls();
 
     // update liveness because Add_MU_list_for_calls
@@ -947,6 +1018,43 @@ DSE::Add_EH_exposed_use(WN *call) const
 }
 
 
+#ifdef KEY
+void
+DSE::Add_entry_exposed_uses(WN *call) const
+{
+  // we append additional variables in the mu list due to nonlocal goto targets.
+  // The mu-list has already been process all address taken variables.
+
+  MU_LIST   *mu_list = _opt_stab->Get_stmt_mu_list(call);
+  MU_NODE   *mu;
+  AUX_ID     var;
+  VER_ID     vse;
+  WN 	    *optchi;
+  CHI_LIST *chi;
+  CHI_LIST_ITER chi_iter;
+  CHI_NODE *cnode;
+  BB_LIST_ITER entry_iter(_cfg->Fake_entry_bb()->Succ());
+  FOR_ALL_ITEM(entry_iter, Init()) {
+    BB_NODE *bb = entry_iter.Cur_bb();
+    optchi = bb->Firststmt();
+    if (optchi == NULL)
+      continue;
+    Is_True(WN_operator(optchi) == OPR_OPT_CHI,
+	("DSE::Add_entry_exposed_uses: cannot find chi-list"));
+    chi = _opt_stab->Get_stmt_chi_list(optchi);
+    Is_True(chi != NULL,
+	    ("DSE::Add_entry_exposed_uses: NULL chi"));
+    FOR_ALL_NODE(cnode, chi_iter, Init(chi)) {
+      var = cnode->Aux_id();
+      vse = _opt_stab->Stack(var)->Top();
+      mu = mu_list->New_mu_node_w_cur_vse(var, vse, _cfg->Mem_pool());
+      if (mu) 
+	Set_Required_MU( mu, FALSE );
+    }
+  }
+}
+#endif
+
 // ====================================================================
 // Visit the dominator tree to add mu to all calls nested inside any
 // exception scope
@@ -977,7 +1085,14 @@ void DSE::Update_MU_list_for_call(BB_NODE *bb) const
 
     // Process Calls
     if ( opr == OPR_CALL || opr == OPR_ICALL ) {
+#ifdef KEY
+      if (_opt_stab->Has_exc_handler())
+#endif
       Add_EH_exposed_use(wn);
+#ifdef KEY
+      else if (_opt_stab->Has_nonlocal_goto_target())
+	Add_entry_exposed_uses(wn);
+#endif
     }
 
     // Process Lhs

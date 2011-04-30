@@ -54,7 +54,11 @@
  * ====================================================================
  */
 
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>		    // for ipa_cg.h (Elf64_Word)
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>		    // for pid_t
 #include <unistd.h>		    // for fork(), pipe(), etc.
 #include <signal.h>		    // for SIGINT
@@ -215,7 +219,7 @@ daVinci::Translate_Call_Graph (void)
 	return;
 
     mUINT8 *visit = CXX_NEW_ARRAY (mUINT8, GRAPH_vmax (g), m);
-    bzero (visit, sizeof(mUINT8)*GRAPH_vmax(g));
+    BZERO (visit, sizeof(mUINT8)*GRAPH_vmax(g));
 
     fprintf (to_display, "new_term([");
     NODE_ITER vitr(g, GRAPH_root(g));

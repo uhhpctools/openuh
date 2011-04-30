@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -34,10 +38,10 @@
 
 //  Spill functions for GRA
 
-//  $Revision: 1.1.1.1 $
-//  $Date: 2005/10/21 19:00:00 $
-//  $Author: marcel $
-//  $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_spill.h,v $
+//  $Revision: 1.2 $
+//  $Date: 02/11/07 23:41:30-00:00 $
+//  $Author: fchow@keyresearch.com $
+//  $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_spill.h $
 
 
 #ifndef GRA_SPILL_INCLUDED
@@ -46,7 +50,7 @@
 #ifndef GRA_SPILL_RCS_ID
 #define GRA_SPILL_RCS_ID
 #ifdef _KEEP_RCS_ID
-static char *gra_spill_rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gra_mon/gra_spill.h,v $ $Revision: 1.1.1.1 $";
+static char *gra_spill_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/gra_mon/SCCS/s.gra_spill.h $ $Revision: 1.2 $";
 #endif
 #endif
 
@@ -55,6 +59,7 @@ extern void GRA_Note_Restore_Above( LUNIT* lunit );
 extern void GRA_Spill_Initialize(void);
 extern void GRA_Note_Spill( LRANGE* lrange );
 extern void GRA_Spill(void);
+extern void GRU_Fuse(void);
 
 extern void GRA_Remove_Predicates_Save_Restore(void);
 #ifdef TARG_IA64

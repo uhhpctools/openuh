@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -33,7 +36,11 @@
 */
 
 
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>                    /* for wn.h */
+#endif /* defined(BUILD_OS_DARWIN) */
 #include "wn.h"                     /* for WN */
 #include "defs.h"                   /* for pu_info.h */
 #include "config.h"                 /* for LNO_Path, etc. */
@@ -47,9 +54,12 @@ extern void Prompf_Emit_Whirl_to_Source(PU_Info* current_pu,
 {
 }  
 
+#if ! defined(BUILD_OS_DARWIN)
+/* Changed this to be inline; see comment in anl_driver.h about weak syms */
 extern INT64 New_Construct_Id()
 {
   return 0;
 }
+#endif /* ! defined(BUILD_OS_DARWIN) */
 
   

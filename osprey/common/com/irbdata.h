@@ -239,10 +239,29 @@ inline LABEL_IDX
 INITV_lab (const INITV_IDX initv) {
     return INITV_lab (Initv_Table[initv]);
 }
+inline INT16
+INITV_lab_flags (const INITV& initv) {
+    INITV_read_check (initv.kind == INITVKIND_LABEL);
+    return initv.Lab_flags ();
+}
+inline INT16
+INITV_lab_flags (const INITV_IDX initv) {
+    return INITV_lab_flags (Initv_Table[initv]);
+}
+inline mTYPE_ID
+INITV_lab_mtype (const INITV& initv) {
+    INITV_read_check (initv.kind == INITVKIND_LABEL);
+    return initv.Lab_mtype();
+}
+inline mTYPE_ID
+INITV_lab_mtype (const INITV_IDX initv) {
+    return INITV_lab_mtype (Initv_Table[initv]);
+}
 inline void
 Set_INITV_lab (INITV& inv, LABEL_IDX lab) { 
 	inv.u.lab.lab = lab;
-	inv.u.lab.unused = 0;
+	inv.u.lab.flags = INITVLABELFLAGS_UNUSED;
+        inv.u.lab.mtype = MTYPE_UNKNOWN;
 }
 inline void
 Set_INITV_lab (INITV_IDX inv, LABEL_IDX lab) { 
@@ -407,7 +426,7 @@ extern void
 INITV_Init_Symiplt (INITV_IDX inv, ST *st, INT64 ofst, UINT16 repeat = 1);
 #endif
 extern void
-INITV_Init_Label (INITV_IDX inv, LABEL_IDX lab, UINT16 repeat = 1);
+INITV_Init_Label (INITV_IDX inv, LABEL_IDX lab, UINT16 repeat = 1, INT16 flags = INITVLABELFLAGS_UNUSED, mTYPE_ID mtype = MTYPE_UNKNOWN);
 
 extern void
 INITV_Init_Symdiff (INITV_IDX inv, 
@@ -486,12 +505,13 @@ INITV_Set_SYMIPLT (INITV& initv, mUINT16 rp1, ST_IDX st, INT32 ofst) {
 #endif
 
 inline void
-INITV_Set_LABEL (INITV& initv, mUINT16 rp1, LABEL_IDX lab) {
+INITV_Set_LABEL (INITV& initv, mUINT16 rp1, LABEL_IDX lab, INT16 flags = INITVLABELFLAGS_UNUSED, mTYPE_ID mtype = MTYPE_UNKNOWN) {
     initv.next = 0;
     initv.kind = INITVKIND_LABEL;
     initv.repeat1 = rp1;
     initv.u.lab.lab = lab;
-    initv.u.lab.unused = 0;
+    initv.u.lab.flags = flags;
+    initv.u.lab.mtype = mtype;
 }
 
 inline void

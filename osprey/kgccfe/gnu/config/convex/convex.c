@@ -58,11 +58,6 @@ static char cmp_modech;
 
 /* Forwards */
 
-#if 0
-static rtx frame_argblock;
-static int frame_argblock_size;
-static rtx convert_arg_pushes ();
-#endif
 static void expand_movstr_call PARAMS ((rtx *));
 static void convex_output_function_prologue PARAMS ((FILE *, HOST_WIDE_INT));
 static void convex_output_function_epilogue PARAMS ((FILE *, HOST_WIDE_INT));
@@ -628,16 +623,12 @@ print_operand (file, x, code)
       REAL_VALUE_FROM_CONST_DOUBLE (d, x);
       switch (GET_MODE (x)) {
       case DFmode:
-#if 0 /* doesn't work, produces dfloats */
-	REAL_VALUE_TO_TARGET_DOUBLE (d, u); 
-#else
 	{
 	  union { double d; int i[2]; } t;
 	  t.d = d;
 	  u[0] = t.i[0];
 	  u[1] = t.i[1];
 	}
-#endif
 	if (code == 'u')
 	  fprintf (file, "#%#lx", u[0]);
 	else if (code == 'v')

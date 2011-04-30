@@ -125,8 +125,8 @@ extern void     cwh_stab_end_procs(void);
 extern void     cwh_stab_add_pragma(ST *st, WN_PRAGMA_ACCESSED_FLAGS flag );
 extern void     cwh_stab_set_symtab(ST *st) ;
 extern ST *     cwh_stab_const_ST(WN *wn) ;
-extern ST *     cwh_stab_address_temp_ST(char * name, TY_IDX  ty , BOOL uniq);
-extern ST *     cwh_stab_temp_ST(TY_IDX ty,char * name) ;
+extern ST *     cwh_stab_address_temp_ST(const char * name, TY_IDX  ty , BOOL uniq);
+extern ST *     cwh_stab_temp_ST(TY_IDX ty, const char * name) ;
 extern WN *     cwh_load_distribute_temp(void);
 extern ST *     cwh_stab_main_ST(void) ;
 extern TY_IDX   cwh_stab_altentry_TY(ST *st, BOOL expr);
@@ -138,7 +138,7 @@ extern void   cwh_stab_init_auxst_tab_size(void);
 extern void   cwh_stab_set_tylist_for_entries(ST *st);
 extern LABEL& F90_New_LABEL(SYMTAB_IDX scope, LABEL_IDX& label_idx);
 extern void   cwh_stab_emit_commons_and_equivalences(SYMTAB_IDX level);
-extern ST *   cwh_stab_mk_fn_0args(char *name, ST_EXPORT eclass,SYMTAB_IDX level,TY_IDX rty) ;
+extern ST *   cwh_stab_mk_fn_0args(const char *name, ST_EXPORT eclass,SYMTAB_IDX level,TY_IDX rty) ;
 
 #endif /* CWH_STAB_INCLUDED */
 

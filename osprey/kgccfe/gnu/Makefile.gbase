@@ -83,6 +83,18 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
 HOSTDEFS += -DTARGET_NAME=\"key-linux\"
 endif
+ifeq ($(BUILD_TARGET), SL)
+HOSTDEFS += -DTARGET_NAME=\"sl-linux\"
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+HOSTDEFS += -DTARGET_NAME=\"nvisa\"
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+HOSTDEFS += -DTARGET_NAME=\"ppc32-linux\"
+endif
+ifeq ($(BUILD_TARGET),LOONGSON)
+HOSTDEFS += -DTARGET_NAME=\"$(PSC_TARGET)\"
+endif
 
 HOSTDEFS += -DLONGLONG
 HOSTDEFS += -DFRONT_END
@@ -115,6 +127,10 @@ ifeq ($(BUILD_COMPILER), GNU)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
 
+ifeq ($(BUILD_OS),DARWIN)
+LDFLAGS += -flat_namespace
+endif
+
 #----------------------------------------------------------------------
 #  List of directories, and source files of interest
 #----------------------------------------------------------------------
@@ -138,6 +154,20 @@ GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/i386
 endif
 ifeq ($(BUILD_TARGET), MIPS)
 GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/mips
+endif
+ifeq ($(BUILD_TARGET), SL)
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/sl
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+GNU_TARG_DIR = $(GNU_DIR)/i386
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/i386
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/rs6000
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
+GNU_TARG_DIR = $(GNU_DIR)/loongson
+GNU_CONFIG_TARG_DIR = $(GNU_CONFIG_DIR)/loongson
 endif
 
 TARG_COMUTIL_DIR	= $(TARGDIR)/libcomutil
@@ -330,6 +360,19 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
   GNU_SRCS += mips.c
 endif
+ifeq ($(BUILD_TARGET), SL)
+  GNU_SRCS += mips.c
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+  GNU_SRCS += i386.c
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+  GNU_SRCS += rs6000-c.c \
+              rs6000.c
+endif
+ifeq ($(BUILD_TARGET),LOONGSON)
+  GNU_SRCS += $(GNU_CONFIG_DIR)/loongson/mips.c
+endif
 
 GNU_SRCS += 		\
   c-aux-info.c		\
@@ -350,7 +393,7 @@ LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCDEFS = $(HOSTDEFS) $(TARGDEFS)
 LCINCS = $(addprefix -I, $(INC_DIRS))
 
-LDIRT = c-parse.h c-parse.c version-hg.c
+LDIRT = c-parse.h c-parse.c version-hg.c \
 	#$(GNU_GEN) genemit genrecog genextract \
 	genattr genflags genattrtab genopinit \
 	gencodes genoutput genconfig genpeep \
@@ -367,15 +410,22 @@ LDIRT = c-parse.h c-parse.c version-hg.c
 LIBRARY = libgfec.a
 TARGETS = $(LIBRARY)
 
-default: first $(TARGETS) last
+.PHONY: default first last install
+
+default:
+	$(MAKE) first
+	$(MAKE) $(TARGETS)
+	$(MAKE) last
 
 #----------------------------------------------------------------------
 #  The commands in this section are done BEFORE any other target is 
 #  built.
 #----------------------------------------------------------------------
 first:
+ifndef SKIP_DEP_BUILD
 	$(call submake,$(BUILD_AREA)/include)
 	$(call submake,$(TARG_LIBIBERTY_DIR))
+endif
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is 
@@ -392,10 +442,13 @@ $(LIBRARY): $(OBJECTS)
 
 include $(BUILD_TOT)/kgccfe/gnu/frobnicate-version.mk
 
+LDIRT += $(TARGETS)
+
 c-parse.c: c-parse.y
 	@-rm -f $(<:.y=.[ch])
 	$(bison) -d -o $@ $<
 	@grep '#define YYEMPTY' $@ >> $(@:.c=.h)
+c-parse.h: c-parse.c
 
 ifeq ($(BUILD_TARGET), __disable__)
 #----------------------------------------------------------------------
@@ -407,6 +460,7 @@ ifeq ($(BUILD_TARGET), __disable__)
   insn-emit.c insn-recog.c insn-extract.c insn-output.c insn-peep.c \
   insn-attr.h insn-attrtab.c
 
+ifeq ($(BUILD_TARGET), MIPS)
 TM_FILE = MIPS/mips.h MIPS/mips.c MIPS/mips.md MIPS/linux.h
 BUILD_XM_FILE = 
 HOST_XM_FILE = 
@@ -428,6 +482,31 @@ HOST_ERRORS = $(HOST_PREFIX)errors.o
 MD_FILE = MIPS/mips.md
 PREMADE_ATTRTAB_MD = Makefile  # Guaranteed not to cmp equal to md.
 PREMADE_ATTRTAB = 
+else 
+ifeq ($(BUILD_TARGET), SL)
+TM_FILE = SL/sl.h SL/mips.c SL/mips.md SL/linux.h
+BUILD_XM_FILE =
+HOST_XM_FILE =
+
+CONFIG_H = $(HOST_XM_FILE) $(TM_FILE)
+RTL_H = rtl.h rtl.def machmode.h machmode.def
+TREE_H = tree.h real.h tree.def machmode.h machmode.def
+BYTECODE_H = bytecode.h bc-emit.h bc-optab.h
+BASIC_BLOCK_H = basic-block.h bitmap.h
+
+HOST_PREFIX =
+
+HOST_RTL = $(HOST_PREFIX)rtl.o $(HOST_PREFIX)bitmap.o \
+                $(HOST_PREFIX)read-rtl.o $(HOST_PREFIX)ggc-none.o \
+                gensupport.o
+HOST_PRINT = $(HOST_PREFIX)print-rtl.o
+HOST_ERRORS = $(HOST_PREFIX)errors.o
+
+MD_FILE = SL/mips.md
+PREMADE_ATTRTAB_MD = Makefile  # Guaranteed not to cmp equal to md.
+PREMADE_ATTRTAB =
+endif
+endif
 
 HOST_CFLAGS = $(CFLAGS)
 ALL_CFLAGS = $(CFLAGS)

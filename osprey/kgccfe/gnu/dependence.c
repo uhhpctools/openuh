@@ -60,14 +60,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 */
 
 enum dependence_type {dt_flow, dt_anti, dt_output, dt_none};
-#if 0
-static const char *const dependence_string [] = {"flow", "anti", "output", "none"};
-#endif
 enum direction_type {lt, le, eq, gt, ge, star, independent, undef};
-#if 0
-static const char *const direction_string [] = {"<", "<=", "=", ">", ">=", "*",
-					   "INDEPENDENT", "UNDEFINED"};
-#endif
 enum def_use_type {def, use, init_def_use};
 
 enum du_status_type {seen, unseen};
@@ -211,10 +204,6 @@ static int find_gcd PARAMS ((int, int));
 static void merge_dependencies PARAMS ((enum direction_type[][MAX_SUBSCRIPTS],
 					int[][MAX_SUBSCRIPTS], int, int));
 static void dump_array_ref PARAMS ((tree));
-#if 0
-static void dump_one_node PARAMS ((def_use*, varray_type*));
-static void dump_node_dependence PARAMS ((void));
-#endif
 int search_dependence PARAMS ((tree));
 void remember_dest_for_dependence PARAMS ((tree));
 int have_dependence_p PARAMS ((rtx, rtx, enum direction_type[], int[]));
@@ -1298,75 +1287,6 @@ dump_array_ref (node)
 
 /* Dump def/use DU.  */
 
-#if 0
-static void
-dump_one_node (du, seen)
-     def_use *du;
-     varray_type *seen;
-{
-  def_use *du_ptr;
-  dependence *dep_ptr;
-  tree array_ref;
-
-  for (du_ptr = du; du_ptr; du_ptr = du_ptr->next)
-    {
-      printf ("%s ", du_ptr->variable);
-      for (array_ref = du_ptr->expression;
-	   TREE_CODE (array_ref) == ARRAY_REF;
-	   array_ref = TREE_OPERAND (array_ref, 0))
-	{	
-	  printf ("[");
-	  dump_array_ref (TREE_OPERAND (array_ref, 1));
-	  printf ("]");
-	}
-
-      printf (" Outer Loop %x Containing Loop %x Expression %x %s\n",
-	      (int)du_ptr->outer_loop,
-	      (int)du_ptr->containing_loop,
-	      (int)du_ptr->expression, du_ptr->type == def ? "Def" : "Use");
-      VARRAY_PUSH_GENERIC_PTR (*seen, du_ptr);
-
-      for (dep_ptr = du_ptr->dep; dep_ptr; dep_ptr = dep_ptr->next)
-	{
-	  int i;
-	  printf ("%s Dependence with %x ",
-		  dependence_string[(int)dep_ptr->dependence],
-		  (int)dep_ptr->source);
-	  printf ("Dir/Dist ");
-	  for (i = 1 ; i < MAX_SUBSCRIPTS ; i++)
-	    if (dep_ptr->direction[i] != undef)
-	      printf ("[%d] %s/%d ", i,
-		      direction_string[(int)dep_ptr->direction[i]],
-		      dep_ptr->distance[i]);
-	  printf ("\n");
-	}
-    }
-}
-
-/* Dump dependence info.  */
-
-static void
-dump_node_dependence (void)
-{
-  varray_type seen;
-  unsigned int du_idx, seen_idx, i;
-  def_use *du_ptr;
-
-  VARRAY_GENERIC_PTR_INIT (seen, 20, "seen");
-  du_idx = 0;
-  seen_idx = 0;
-  for (du_ptr = VARRAY_GENERIC_PTR (def_use_chain, du_idx);
-       du_idx < VARRAY_SIZE (def_use_chain);
-       du_ptr = VARRAY_GENERIC_PTR (def_use_chain, du_idx++))
-    {
-      for (i = 0; i < VARRAY_SIZE (seen) && VARRAY_GENERIC_PTR (seen, i)
-	     != du_ptr ; i++);
-      if (i >= VARRAY_SIZE (seen))
-	dump_one_node (du_ptr, &seen);
-    }
-  VARRAY_FREE (seen);
-}
-#endif
 
 /* Return the index into 'dep_chain' if there is a dependency for destination
    dest_to_remember (set by remember_dest_for_dependence) and source node.

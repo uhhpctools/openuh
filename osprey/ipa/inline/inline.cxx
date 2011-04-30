@@ -56,10 +56,13 @@
 // ====================================================================
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stdio.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>
 #include <cmplrs/host.h>
 #ifndef _LIGHTWEIGHT_INLINER
@@ -73,6 +76,7 @@
 #include "stab.h"		    // ST, TY
 #include "config.h"             // WHIRL_Comma_Rcomma_On
 #include "config_ipa.h"		// IPA_Enable_*, IPA_Max_Depth, ...
+#include "config_opt.h"         // OPT_Cyg_Instrument
 #include "dwarf_DST_mem.h"	// DST_TYPE, DST_IDX
 #include "pu_info.h"		// PU_Info
 #include "ir_bread.h"		// Read_*_Info
@@ -438,9 +442,12 @@ static void
 Write_callee(IPA_NODE* callee, BOOL non_local, BOOL inline_performed)
 {
     if (All_Calls_Processed (callee, IPA_Call_Graph)) {
-
-	if (IPA_Enable_DFE && All_Calls_Inlined (callee, IPA_Call_Graph) &&
-	    !callee->Is_Externally_Callable ()
+      if (IPA_Enable_DFE
+#ifdef KEY
+	  && OPT_Cyg_Instrument == 0  // Bug 750; TODO: Relax restriction
+#endif
+	  && All_Calls_Inlined (callee, IPA_Call_Graph)
+	  && !callee->Is_Externally_Callable ()
 #ifdef KEY
 	    && ! PU_no_delete(Pu_Table[ST_pu(callee->Func_ST())])
 #endif
@@ -794,13 +801,17 @@ Inliner_Write_PUs (PU_Info *pu_tree, INT *p_num_PU)
             if ((INLINE_Inlined_Pu_Call_Graph || INLINE_Inlined_Pu_Call_Graph) && PU_is_inline_function(this_pu))
 #endif // _LIGHTWEIGHT_INLINER
 	    {
-                if (IPA_Enable_DFE && 
-		    	All_Calls_Inlined (node, IPA_Call_Graph) &&
-                    	!node->Is_Externally_Callable ()
+	      if (IPA_Enable_DFE
 #ifdef KEY
-		        && ! PU_no_delete(Pu_Table[ST_pu(node->Func_ST())])
+		  && ! OPT_Cyg_Instrument
 #endif
-			) {
+		  && All_Calls_Inlined (node, IPA_Call_Graph)
+		  && !node->Is_Externally_Callable ()
+#ifdef KEY
+		  && ! PU_no_delete(Pu_Table[ST_pu(node->Func_ST())])
+#endif
+		  ) {
+
                     node->Set_Deletable();
                     /* mark this ST not_used */
                     Set_ST_is_not_used(node->Func_ST());

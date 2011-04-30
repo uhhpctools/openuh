@@ -1,5 +1,11 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
+#  Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
+#
+#  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+#
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -96,7 +102,19 @@ endif
 ifeq ($(BUILD_TARGET), MIPS)
 HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
 endif
+ifeq ($(BUILD_TARGET), SL)
+HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
+endif
 ifeq ($(BUILD_TARGET), X8664)
+HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), NVISA)
+HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), PPC32)
+HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
+endif
+ifeq ($(BUILD_TARGET), LOONGSON)
 HOSTDEFS += -D__MIPS_AND_IA64_ELF_H
 endif
 
@@ -149,6 +167,7 @@ HEADER_DIRS = \
   $(BE_VHO_DIR)		\
   $(BE_REGION_DIR)      \
   $(TARGDIR)/be         \
+  $(BUILD_SRC_AREA)/be  \
   $(BUILD_TOT)/include
 
 IPA_LOCAL_CXX_SRCS = \
@@ -233,27 +252,43 @@ TARGETS = ipl.so
 
 LDIRT = be.so wopt.so be ipl ii_files
 
-default: first $(TARGETS) last
+#----------------------------------------------------------------------
+#  For parallel makes, makefile must satisfy:
+#  -> Submake for include/ finished before building any objects;
+#  -> All archive/library submakes finished before linking targets;
+#  -> All targets finished before make_deps or make_libdeps.
+#----------------------------------------------------------------------
+
+DEP_OBJECTS = $(IPA_OBJS) $(IPA_CXX_OBJS)
+
+.PHONY: default first make_deps install
+
+default:
+	$(MAKE) first
+	$(MAKE) make_deps
+
+make_deps: $(TARGETS)
+$(DEP_OBJECTS): $(BUILD_AREA)/be/preg_list.h
+.PHONY: default make_deps
 
 #----------------------------------------------------------------------
-#  The commands in this section are done BEFORE any other target is
-#  built.
+#  Library prerequisites are updated via submake
 #----------------------------------------------------------------------
+
+.PHONY: first
 first:
-ifeq ($(BUILD_OS), LINUX)
-	if ! test -a be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
+ifndef SKIP_DEP_BUILD
+	$(call submake,$(TARG_BE_DIR))
 endif
-## verify that wopt.so is up to date
-	$(call submake,$(TARG_OPT_DIR))
+	ln -sf $(TARG_BE_DIR)/be.so .
 
 #----------------------------------------------------------------------
 #  The commands in this section are done AFTER every other target is
 #  built.
 #----------------------------------------------------------------------
-last: make_deps
 
 install:: default
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -D $(TARGETS) $(STD_MONGOOSE_LINUX_LOC)/$(TARGETS)
 else
 	$(STD_INSTALL) $(STD_INSTALL_EXEC_MASK) -F $(STD_MONGOOSE_LOC) ipl.so
@@ -266,29 +301,35 @@ else
  endif
 endif
 
-ipl: $(IPA_OBJS) $(IPA_CXX_OBJS) $(IPA_DSOS)
-	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) $(IPA_DSOS) $(LDFLAGS)
-	if [ ! -l wopt.so ]; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
-	if [ ! -l be.so ]; then ln -sf $(TARG_BE_DIR)/be.so .; fi
-
-ifeq ($(BUILD_OS), LINUX)
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
 # dso's must be in same directory
-LINK_DSOS = be.so
+IPL_LINK_DSOS = be.so
 else
-LINK_DSOS = $(TARG_BE_DIR)/be.so
+IPL_LINK_DSOS = $(TARG_BE_DIR)/be.so
 endif
+
+# BUILD OF ipl IS BROKEN
+ipl: $(IPA_OBJS) $(IPA_CXX_OBJS) $(IPA_DSOS) \
+		$(TARG_OPT_DIR)/wopt.so $(TARG_BE_DIR)/be.so
+ifeq ($(BUILD_OS_LINUX_OR_DARWIN), TRUE)
+	if ! test -e be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
+endif
+	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) $(IPA_DSOS) \
+	$(IPL_LINK_DSOS) $(LDFLAGS)
+	if ! test -e wopt.so; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
 
 ipl.so: $(IPA_OBJS) $(IPA_CXX_OBJS) $(LINK_DSOS) \
 		$(BE_BE_DIR)/so_locations $(IPA_LOCAL_DIR)/Exported
 	$(link.c++f) -o $@  $(STD_DSO_LOADOPTS) $(EXPORT_LIST)	\
-		$(IPA_OBJS) $(IPA_CXX_OBJS)			\
-		$(LINK_DSOS) $(LLDLIBS)
-	if ! test -a wopt.so; then ln -sf $(TARG_OPT_DIR)/wopt.so .; fi
-	if ! test -a be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
-	if ! test -a ipl ; then ln -sf ../be_driver/be ipl; fi
+		$(IPA_OBJS) $(IPA_CXX_OBJS) $(LINK_DSOS) $(LLDLIBS)
+	if ! test -e ipl ; then ln -sf ../be/be ipl; fi
 
 #----------------------------------------------------------------------
 #  Include the usual commonrules
 #----------------------------------------------------------------------
 include $(COMMONRULES)
 
+#----------------------------------------------------------------------
+#  Temporary workaround
+#----------------------------------------------------------------------
+ipl_summarize_util.o: OPTIMIZER += -CG:all_sched=0

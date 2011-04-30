@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2007, 2008. PathScale, LLC. All Rights Reserved.
+ */
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -98,7 +101,11 @@ enum    attr_obj_values	       {Attr_Assumed_Type_Ch,	Attr_Dimension,
 				Attr_External,		Attr_Intrinsic,
 				Attr_Data_Init,		Attr_Type,
 				Attr_Co_Array,		Attr_Automatic,
-				Attr_Volatile,		Attr_Done };
+				Attr_Volatile,
+#ifdef KEY /* Bug 14150 */
+				Attr_Bind,		Attr_Value,
+#endif /* KEY Bug 14150 */
+				Attr_Done };
 
 enum    dir_obj_values	       {Dir_Auxiliary,		Dir_Vfunction,
 				Dir_No_Side_Effects,	Dir_Inline,
@@ -166,7 +173,12 @@ static  char    *attr_str[Attr_Done] =		{
 						/* actual type.  ie:  REAL */
 			"co-array DIMENSION",
 			"AUTOMATIC",
-			"VOLATILE"};
+			"VOLATILE",
+#ifdef KEY /* Bug 14150 */
+			"BIND",
+			"VALUE"
+#endif /* KEY Bug 14150 */
+			};
 
 static	char	*dir_str[Dir_Done]	=	{
 			"AUXILIARY",
@@ -228,6 +240,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Expl_Shp_Arr		ie: DIMENSION A(1)	 */
@@ -245,6 +260,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 
@@ -262,6 +280,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Defrd_Shp_Arr		ie: DIMENSION A(:)	*/
@@ -278,6 +299,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Assum_Shp_Arr		ie: DIMENSION A (1:)	*/
@@ -294,6 +318,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Co_Array		ie: DIMENSION A[3,4]	*/
@@ -310,6 +337,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Allocatable		ie: ALLOCATABLE A(:)	*/
@@ -331,7 +361,46 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
+
+#ifdef KEY /* Bug 14150 */
+	/*  Obj_Bind		ie: BIND(C [, NAME=x ])	*/
+
+	((1 << Attr_Assumed_Type_Ch) |	(1 << Attr_Parameter) |
+	 (0 << Attr_Explicit_Shp_Arr) |	(0 << Attr_Dimension) |
+	 (1 << Attr_Assumed_Size_Arr) |	(1 << Attr_Deferred_Shp_Arr) |
+	 (1 << Attr_Assumed_Shp_Arr) |	(1 << Attr_Allocatable) |
+	 (1 << Attr_Intent) |           (1 << Attr_Optional) |
+	 (0 << Attr_Public) |
+	 (0 << Attr_Private) |		(0 << Attr_Target) |
+	 (0 << Attr_Data_Init) |	(1 << Attr_Equivalence) |
+	 (0 << Attr_Save) |		(1 << Attr_Pointer) |
+	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
+	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
+	 (1 << Attr_Automatic) |	(0 << Attr_Volatile) |
+         (0 << Attr_Bind) |		(1 << Attr_Value)
+	),
+
+	/*  Obj_Value		ie: VALUE A	*/
+
+	((1 << Attr_Assumed_Type_Ch) |	(1 << Attr_Parameter) |
+	 (1 << Attr_Explicit_Shp_Arr) |	(1 << Attr_Dimension) |
+	 (1 << Attr_Assumed_Size_Arr) |	(1 << Attr_Deferred_Shp_Arr) |
+	 (1 << Attr_Assumed_Shp_Arr) |	(1 << Attr_Allocatable) |
+	 (0 << Attr_Intent) |           (1 << Attr_Optional) |
+	 (1 << Attr_Public) |
+	 (1 << Attr_Private) |		(0 << Attr_Target) |
+	 (1 << Attr_Data_Init) |	(1 << Attr_Equivalence) |
+	 (1 << Attr_Save) |		(1 << Attr_Pointer) |
+	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
+	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
+	 (1 << Attr_Automatic) |	(1 << Attr_Volatile) |
+         (1 << Attr_Bind) |		(0 << Attr_Value)
+	),
+#endif /* KEY Bug 14150 */
 
 	/*  Obj_Constant		ie: PARAMETER (A=1.0)	*/
 
@@ -347,6 +416,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Intent			ie: INTENT (IN) A	  	    */
@@ -366,10 +438,19 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_Optional) |		(0 << Attr_Public) |
 	 (0 << Attr_Private) |		(0 << Attr_Target) |
 	 (1 << Attr_Data_Init) |	(1 << Attr_Equivalence) |
+#ifdef KEY /* Bug 14150
+	 /* F2003 allows intent and pointer together */
+	 (1 << Attr_Save) |		(0 << Attr_Pointer) |
+#else /* KEY Bug 14150 */
 	 (1 << Attr_Save) |		(1 << Attr_Pointer) |
+#endif /* KEY Bug 14150 */
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+	 /* Adding intent to value is special because intent(in) is ok */
+         | (1 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Optional		ie: OPTIONAL A	*/
@@ -392,6 +473,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Private			ie: PRIVATE A	*/
@@ -408,6 +492,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Public			ie: PUBLIC A	*/
@@ -424,6 +511,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Target			ie: TARGET A	*/
@@ -440,6 +530,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Equiv			ie: EQUIVALENCE (AB)	*/
@@ -456,6 +549,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Saved			ie: SAVE A	*/
@@ -472,6 +568,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Automatic		ie: AUTOMATIC A	*/
@@ -488,6 +587,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Pointer			ie: POINTER :: A	*/
@@ -496,7 +598,12 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_Explicit_Shp_Arr) |	(0 << Attr_Dimension) |
 	 (1 << Attr_Assumed_Size_Arr) |	(0 << Attr_Deferred_Shp_Arr) |
 	 (1 << Attr_Assumed_Shp_Arr) |	(1 << Attr_Allocatable) |
+#ifdef KEY /* Bug 14150 */
+	 /* F2003 allows intent and pointer together */
+	 (0 << Attr_Intent) |
+#else /* KEY Bug 14150 */
 	 (1 << Attr_Intent) |
+#endif /* KEY Bug 14150 */
 	 (0 << Attr_Optional) |		(0 << Attr_Public) |
 	 (0 << Attr_Private) |		(1 << Attr_Target) |
 	 (0 << Attr_Data_Init) |	(1 << Attr_Equivalence) |
@@ -504,6 +611,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Dcl_Extern		ie: EXTERNAL A	*/
@@ -520,6 +630,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Dcl_Intrin		ie: INTRINSIC A	*/
@@ -536,6 +649,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Data_Init		ie: DATA A /1.0/	*/
@@ -552,6 +668,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Typed			ie: INTEGER A	*/
@@ -571,6 +690,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Volatile		ie: VOLATILE A	*/
@@ -587,6 +709,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Copy_Assumed_Shape	ie: !DIR$ COPY_ASSUMED_SHAPE A	*/
@@ -603,6 +728,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Auxiliary		ie: !DIR$ AUXILIARY A	*/
@@ -619,6 +747,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Vfunction		ie: !DIR$ VFUNCTION A	*/
@@ -635,6 +766,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_No_Side_Effects		ie: !DIR$ NOSIDEEFFECTS A */
@@ -651,6 +785,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Symmetric		ie: !DIR$ SYMMETRIC A */
@@ -667,6 +804,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Inline			ie: !DIR$ INLINE ALWAYS/NEVER A */
@@ -683,6 +823,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Ipa			ie: !*$* IPA  */
@@ -699,6 +842,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Align_Symbol		ie: !*$* ALIGN_SYMBOL A */
@@ -715,6 +861,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Fill_Symbol		ie: !*$* FILL_SYMBOL A */
@@ -731,6 +880,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Section_Gp		ie: !*$* SECTION_GP A */
@@ -747,6 +899,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Section_Non_Gp		ie: !*$* SECTION_NON_GP A */
@@ -763,6 +918,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Ignore_TKR		ie: !DIR$ IGNORE_TKR darg */
@@ -775,10 +933,19 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_Optional) |		(0 << Attr_Public) |
 	 (0 << Attr_Private) |		(0 << Attr_Target) |
 	 (1 << Attr_Data_Init) |	(1 << Attr_Equivalence) |
+#ifdef KEY /* Bug 14150 */
+	 /* Need ignore_tkr+pointer to implement iso_c_binding */
+	 (1 << Attr_Save) |		(0 << Attr_Pointer) |
+	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
+#else /* KEY Bug 14150 */
 	 (1 << Attr_Save) |		(1 << Attr_Pointer) |
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
+#endif /* KEY Bug 14150 */
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Optional_Dir		ie: !*$* optional(External name) */
@@ -795,6 +962,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_Intrinsic) |	(0 << Attr_Type) |
 	 (1 << Attr_Co_Array) |		(1 << Attr_Automatic) |	
 	 (1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Name			ie: !DIR$ Name(Fort_name="ext_name") */
@@ -811,6 +981,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Cri_Ptr			ie: POINTER (A,B)	*/
@@ -827,6 +1000,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Cri_Pointee		ie: POINTER (B,A)		*/
@@ -843,6 +1019,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Cri_Ch_Pointee		ie: POINTER (B,A)		*/
@@ -866,6 +1045,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Ntry_Func_Result	ie: ENTRY ABC() RESULT A	*/
@@ -884,6 +1066,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind)  | /* ? */	(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Dummy_Arg		ie: FUNCTION ABC(A)		*/
@@ -901,6 +1086,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Common_Obj		ie: COMMON // A	*/
@@ -917,6 +1105,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Namelist_Obj		ie: NAMELIST /G/ A	*/
@@ -933,6 +1124,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Module_Proc		ie: MODULE PROCEDURE A	*/
@@ -949,6 +1143,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Derived_Type		ie: TYPE A	*/
@@ -965,6 +1162,10 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+	 /* Can't use type id in separate "BIND" statement */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Generic_Interface	ie: INTERFACE A	*/
@@ -981,6 +1182,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 	
 	/*  Obj_Namelist_Grp		ie: NAMELIST /A/ B	*/
@@ -997,6 +1201,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Stmt_Func		ie: A(XY) = ...		*/
@@ -1014,6 +1221,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Construct		ie: A : IF (I.EQ.J) THEN	*/
@@ -1030,6 +1240,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Entry_Func		ie: ENTRY A	*/
@@ -1046,6 +1259,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Entry_Subr		ie: ENTRY A	*/
@@ -1062,6 +1278,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Intern_Func		ie: FUNCTION A()	*/
@@ -1078,6 +1297,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Intern_Subr		ie: SUBROUTINE A()	*/
@@ -1094,6 +1316,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Module_Func		ie: FUNCTION A()	*/
@@ -1110,6 +1335,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Module_Subr		ie: SUBROUTINE A()	*/
@@ -1126,6 +1354,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Sf_Darg			ie: sf(A) =	*/
@@ -1142,6 +1373,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Sf_Actual_Arg		ie: x = sf(A)		*/
@@ -1158,6 +1392,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Var_Len_Ch		ie: CHARACTER*(N) A	    */
@@ -1179,6 +1416,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Var_Len_Arr		ie: DIMENSION A(N)		    */
@@ -1199,6 +1439,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Sym_Constant_Array	ie: DIMENSION A(N$PES)	 */
@@ -1215,6 +1458,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) /* ? */ |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Interface_Func		ie: FUNCTION ABC()	*/
@@ -1231,6 +1477,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Interface_Subr		ie: SUBROUTINE ABC()	*/
@@ -1247,6 +1496,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_Extern_Func		ie: B = A()		 */
@@ -1263,6 +1515,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_Extern_Subr		ie: CALL A()	*/
@@ -1279,6 +1534,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_In_Expr		ie: X = A + B	*/
@@ -1295,6 +1553,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_Derived_Type	ie: TYPE (A)	*/
@@ -1311,6 +1572,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (1 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (1 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_Spec_Expr		ie: DIMENSION ARRAY(A) */
@@ -1327,6 +1591,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (0 << Attr_External) |		(0 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(0 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(0 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (0 << Attr_Bind) |		(0 << Attr_Value)
+#endif /* KEY Bug 14150 */
 	),
 
 	/*  Obj_Use_Init_Expr		ie: PARAMETER (I=A)	*/
@@ -1343,6 +1610,9 @@ long	obj_to_attr[Obj_Done]	=	{
 	 (1 << Attr_External) |		(1 << Attr_Intrinsic) |
 	 (0 << Attr_Type) |		(1 << Attr_Co_Array) |
 	 (0 << Attr_Automatic) |	(1 << Attr_Volatile)
+#ifdef KEY /* Bug 14150 */
+         | (1 << Attr_Bind) |		(1 << Attr_Value)
+#endif /* KEY Bug 14150 */
 
 	) };
 
@@ -1424,6 +1694,28 @@ long	obj_to_dir[Obj_Done]	=	{
 	 (1 << Dir_Section_Gp) |	(1 << Dir_Section_Non_Gp) |
 	 (1 << Dir_Optional) |		(1 << Dir_Ignore_TKR) |
 	 (1 << Dir_Ipa) |		(1 << Dir_Name)),
+
+#ifdef KEY /* Bug 14150 */
+	/*	Obj_Bind		ie: BIND(C [, NAME=x ] 	*/
+
+	((1 << Dir_Auxiliary) |		(1 << Dir_Vfunction) |
+	 (1 << Dir_No_Side_Effects) |	(1 << Dir_Inline) |
+	 (1 << Dir_Symmetric) |		(1 << Dir_Copy_Assumed_Shape) |
+	 (1 << Dir_Align_Symbol) |	(1 << Dir_Fill_Symbol) |
+	 (1 << Dir_Section_Gp) |	(1 << Dir_Section_Non_Gp) |
+	 (1 << Dir_Optional) |		(1 << Dir_Ignore_TKR) |
+	 (1 << Dir_Ipa) |		(1 << Dir_Name)),
+
+	/*	Obj_Value		ie: VALUE A 	*/
+
+	((1 << Dir_Auxiliary) |		(1 << Dir_Vfunction) |
+	 (1 << Dir_No_Side_Effects) |	(1 << Dir_Inline) |
+	 (1 << Dir_Symmetric) |		(1 << Dir_Copy_Assumed_Shape) |
+	 (1 << Dir_Align_Symbol) |	(1 << Dir_Fill_Symbol) |
+	 (1 << Dir_Section_Gp) |	(1 << Dir_Section_Non_Gp) |
+	 (1 << Dir_Optional) |		(1 << Dir_Ignore_TKR) |
+	 (1 << Dir_Ipa) |		(1 << Dir_Name)),
+#endif /* KEY Bug 14150 */
 
 	/*	Obj_Constant		ie: PARAMETER (A=1.0)	*/
 
@@ -1524,7 +1816,12 @@ long	obj_to_dir[Obj_Done]	=	{
 	 (1 << Dir_Symmetric) |		(1 << Dir_Copy_Assumed_Shape) |
 	 (0 << Dir_Align_Symbol) |	(0 << Dir_Fill_Symbol) |
 	 (0 << Dir_Section_Gp) |	(0 << Dir_Section_Non_Gp) |
+#ifdef KEY /* Bug 14150 */
+	 /* Need pointer+ignore_tkr to implement iso_c_binding */
+	 (1 << Dir_Optional) |		(0 << Dir_Ignore_TKR) |
+#else /* KEY Bug 14150 */
 	 (1 << Dir_Optional) |		(1 << Dir_Ignore_TKR) |
+#endif /* KEY Bug 14150 */
 	 (0 << Dir_Ipa) |		(1 << Dir_Name)),
 
 	/*	Obj_Dcl_Extern		ie: EXTERNAL A	*/
@@ -2198,6 +2495,38 @@ long	obj_to_name[Obj_Done]	=	{
 	 (1 << Name_Curr_Func) |	(1 << Name_Curr_Subr) |
 #endif /* KEY Bug 6845 */
 	 (1 << Name_Internal_Func) |	(1 << Name_Internal_Subr)),
+
+#ifdef KEY /* Bug 14150 */
+	/*	Obj_Bind		ie: BIND(C [, NAME=x ] 	*/
+
+	((0 << Name_Variable) |		(1 << Name_Common_Obj) |
+	 (1 << Name_Cri_Pointer) |	(1 << Name_Dummy_Arg) |
+	 (1 << Name_Cri_Pointee) |	(1 << Name_Cri_Ch_Pointee) |
+	 (1 << Name_Func_Result) |	(1 << Name_Intrinsic_Func) |
+	 (1 << Name_Intrinsic_Subr) |	(0 << Name_Module_Proc) |
+	 (1 << Name_Derived_Type) |	(1 << Name_Generic_Interface) |
+	 (1 << Name_Namelist_Group) |	(1 << Name_Namelist_Group_Obj)|
+	 (1 << Name_Statement_Func) |	(1 << Name_Construct) |
+	 (1 << Name_Module) |		(1 << Name_Blockdata) |
+	 (1 << Name_Program) |		(1 << Name_Function) |
+	 (0 << Name_Curr_Func) |	(0 << Name_Curr_Subr) |
+	 (1 << Name_Internal_Func) |	(1 << Name_Internal_Subr)),
+
+	/*	Obj_Value		ie: VALUE A 	*/
+
+	((1 << Name_Variable) |		(1 << Name_Common_Obj) |
+	 (1 << Name_Cri_Pointer) |	(0 << Name_Dummy_Arg) |
+	 (1 << Name_Cri_Pointee) |	(1 << Name_Cri_Ch_Pointee) |
+	 (1 << Name_Func_Result) |	(1 << Name_Intrinsic_Func) |
+	 (1 << Name_Intrinsic_Subr) |	(1 << Name_Module_Proc) |
+	 (1 << Name_Derived_Type) |	(1 << Name_Generic_Interface) |
+	 (1 << Name_Namelist_Group) |	(1 << Name_Namelist_Group_Obj)|
+	 (1 << Name_Statement_Func) |	(1 << Name_Construct) |
+	 (1 << Name_Module) |		(1 << Name_Blockdata) |
+	 (1 << Name_Program) |		(1 << Name_Function) |
+	 (1 << Name_Curr_Func) |	(1 << Name_Curr_Subr) |
+	 (1 << Name_Internal_Func) |	(1 << Name_Internal_Subr)),
+#endif /* KEY Bug 14150 */
 
 	/*	Obj_Constant		ie: PARAMETER (A=1.0)	*/
 
@@ -3245,6 +3574,38 @@ long	obj_to_other[Obj_Done]	=	{
 	 (1 << Other_Not_Visible) |
 	 (1 << Other_Npes)),
 
+#ifdef KEY /* Bug 14150 */
+	/*	Obj_Bind		ie: BIND(C [, NAME=x ]	*/
+
+	((1 << Other_Var_Len_Ch) |
+	 (1 << Other_Var_Len_Arr) |
+	 (1 << Other_Use_Func) |
+	 (1 << Other_Use_Subr) |
+	 (1 << Other_Expl_Interface) |
+	 (1 << Other_Use_Variable) |
+	 (1 << Other_Use_Dummy_Arg) |
+	 (1 << Other_Host_Assoc) |
+	 (1 << Other_Use_Assoc) |
+	 (1 << Other_Use_Char_Rslt) |
+	 (1 << Other_Not_Visible) |
+	 (1 << Other_Npes)),
+
+	/*	Obj_Value		ie: VALUE A	*/
+
+	((1 << Other_Var_Len_Ch) |
+	 (1 << Other_Var_Len_Arr) |
+	 (1 << Other_Use_Func) |
+	 (1 << Other_Use_Subr) |
+	 (1 << Other_Expl_Interface) |
+	 (1 << Other_Use_Variable) |
+	 (0 << Other_Use_Dummy_Arg) |
+	 (1 << Other_Host_Assoc) |
+	 (1 << Other_Use_Assoc) |
+	 (1 << Other_Use_Char_Rslt) |
+	 (1 << Other_Not_Visible) |
+	 (1 << Other_Npes)),
+#endif /* KEY Bug 14150 */
+
 	/*	Obj_Constant		ie: PARAMETER (A=1.0)	*/
 
 	((1 << Other_Var_Len_Ch) |
@@ -3464,8 +3825,13 @@ long	obj_to_other[Obj_Done]	=	{
 	 (1 << Other_Expl_Interface) |
 	 (0 << Other_Use_Variable) |
 	 (0 << Other_Use_Dummy_Arg) |
+#ifdef KEY /* Bug 14110 */
+	 (0 << Other_Host_Assoc) |
+	 (0 << Other_Use_Assoc) |
+#else /* KEY Bug 14110 */
 	 (1 << Other_Host_Assoc) |
 	 (1 << Other_Use_Assoc) |
+#endif /* KEY Bug 14110 */
 	 (0 << Other_Use_Char_Rslt) |
 	 (1 << Other_Not_Visible) |
 	 (1 << Other_Npes)),
@@ -4255,6 +4621,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Assum_Type_Ch	 	Attr_Co_Array		*/
 	  550,	/* Obj_Assum_Type_Ch	 	Attr_Automatic		*/
 	    0	/* Obj_Assum_Type_Ch	 	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Assum_Type_Ch	 	Attr_Bind		*/
+	, 550	/* Obj_Assum_Type_Ch	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4322,6 +4692,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Expl_Shp_Arr		Attr_Co_Array		*/
 	    0,	/* Obj_Expl_Shp_Arr		Attr_Automatic		*/
 	    0	/* Obj_Expl_Shp_Arr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Expl_Shp_Arr	 	Attr_Bind		*/
+	, 550	/* Obj_Expl_Shp_Arr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4381,6 +4755,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Assum_Size_Arr	Attr_Co_Array			*/
 	  550,	/* Obj_Assum_Size_Arr	Attr_Automatic			*/
 	    0	/* Obj_Assum_Size_Arr	Attr_Volatile			*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Assum_Size_Arr	Attr_Bind			*/
+	, 550	/* Obj_Assum_Size_Arr	Attr_Value			*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4446,6 +4824,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Defrd_Shp_Arr	 	Attr_Co_Array		*/
 	    0,	/* Obj_Defrd_Shp_Arr	 	Attr_Automatic		*/
 	    0	/* Obj_Defrd_Shp_Arr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Defrd_Shp_Arr	 	Attr_Bind		*/
+	, 550	/* Obj_Defrd_Shp_Arr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/********************* Obj_Assum_Shp_Arr ************************/
@@ -4508,6 +4890,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Assum_Shp_Arr	 	Attr_Co_Array		*/
 	  550,	/* Obj_Assum_Shp_Arr	 	Attr_Automatic		*/
 	    0	/* Obj_Assum_Shp_Arr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Assum_Shp_Arr	 	Attr_Bind		*/
+	, 550	/* Obj_Assum_Shp_Arr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/********************* Obj_Co_Array *************************/
@@ -4537,6 +4923,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Co_Array		Attr_Co_Array		*/
 	  550,	/* Obj_Co_Array		Attr_Automatic		*/
 	    0	/* Obj_Co_Array		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Co_Array	 	Attr_Bind		*/
+	, 550	/* Obj_Co_Array	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	
@@ -4601,9 +4991,73 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Allocatable		Attr_Co_Array		*/
 	  550,	/* Obj_Allocatable		Attr_Automatic		*/
 	    0	/* Obj_Allocatable		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Allocatable	 	Attr_Bind		*/
+	, 550	/* Obj_Allocatable	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
+#ifdef KEY /* Bug 14150 */
+	/*********************	Obj_Bind	************************/
+	/***************************************************************/
 
+	{  550,	/* Obj_Bind			Attr_Assumed_Type_Ch	*/
+	    0,	/* Obj_Bind			Attr_Dimension		*/
+	    0,	/* Obj_Bind			Attr_Explicit_Shp_Arr	*/
+	  550,	/* Obj_Bind			Attr_Assumed_Size_Arr	*/
+	  550,	/* Obj_Bind			Attr_Deferred_Shp_Arr	*/
+	  550,	/* Obj_Bind			Attr_Assumed_Shp_Arr	*/
+	  550,	/* Obj_Bind			Attr_Allocatable	*/
+	  550,	/* Obj_Bind			Attr_Parameter		*/
+	  550,	/* Obj_Bind			Attr_Intent		*/
+	  550,	/* Obj_Bind			Attr_Optional		*/
+	    0,	/* Obj_Bind			Attr_Private		*/
+	    0,	/* Obj_Bind			Attr_Public		*/
+	    0,	/* Obj_Bind			Attr_Target		*/
+	  550,	/* Obj_Bind			Attr_Equivalence	*/
+	    0,	/* Obj_Bind			Attr_Save		*/
+	  550,	/* Obj_Bind			Attr_Pointer		*/
+	  550,	/* Obj_Bind			Attr_External		*/
+	  550,	/* Obj_Bind			Attr_Intrinsic		*/
+	    0,	/* Obj_Bind			Attr_Data_Init		*/
+	    0,	/* Obj_Bind			Attr_Type		*/
+	  550,	/* Obj_Bind			Attr_Co_Array		*/
+	  550,	/* Obj_Bind			Attr_Automatic		*/
+	    0	/* Obj_Bind			Attr_Volatile		*/
+	,   0	/* Obj_Bind		 	Attr_Bind		*/
+	, 550	/* Obj_Bind		 	Attr_Value		*/
+	},
+
+	/*********************	Obj_Value	************************/
+	/***************************************************************/
+
+	{  550,	/* Obj_Value			Attr_Assumed_Type_Ch	*/
+	  550,	/* Obj_Value			Attr_Dimension		*/
+	  550,	/* Obj_Value			Attr_Explicit_Shp_Arr	*/
+	  550,	/* Obj_Value			Attr_Assumed_Size_Arr	*/
+	  550,	/* Obj_Value			Attr_Deferred_Shp_Arr	*/
+	  550,	/* Obj_Value			Attr_Assumed_Shp_Arr	*/
+	  550,	/* Obj_Value			Attr_Allocatable	*/
+	  550,	/* Obj_Value			Attr_Parameter		*/
+	    0,	/* Obj_Value			Attr_Intent		*/
+	  550,	/* Obj_Value			Attr_Optional		*/
+	  550,	/* Obj_Value			Attr_Private		*/
+	  550,	/* Obj_Value			Attr_Public		*/
+	    0,	/* Obj_Value			Attr_Target		*/
+	  550,	/* Obj_Value			Attr_Equivalence	*/
+	  550,	/* Obj_Value			Attr_Save		*/
+	  550,	/* Obj_Value			Attr_Pointer		*/
+	  550,	/* Obj_Value			Attr_External		*/
+	  550,	/* Obj_Value			Attr_Intrinsic		*/
+	  550,	/* Obj_Value			Attr_Data_Init		*/
+	    0,	/* Obj_Value			Attr_Type		*/
+	  550,	/* Obj_Value			Attr_Co_Array		*/
+	  550,	/* Obj_Value			Attr_Automatic		*/
+	  550	/* Obj_Value			Attr_Volatile		*/
+	, 550	/* Obj_Value		 	Attr_Bind		*/
+	,   0	/* Obj_Value		 	Attr_Value		*/
+	},
+#endif /* KEY Bug 14150 */
 
 	/********************* Obj_Constant *****************************/
 	/* The named constant must have its type, shape and any type	*/
@@ -4663,6 +5117,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Constant			Attr_Co_Array		*/
 	  550,	/* Obj_Constant			Attr_Automatic		*/
 	  550	/* Obj_Constant			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Constant		 	Attr_Bind		*/
+	, 550	/* Obj_Constant		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4712,8 +5170,12 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Intent			Attr_Save		*/
 		/* Save can't be a dummy arg.	(5.2.4)			*/
 
+#ifdef KEY /* Bug 14150 */
+	    0,	/* Obj_Intent			Attr_Pointer		*/
+#else /* KEY Bug 14150 */
 	  550,	/* Obj_Intent			Attr_Pointer		*/
 		/* (5.1)						*/
+#endif /* KEY Bug 14150 */
 
 	  550,	/* Obj_Intent			Attr_External		*/
 	  550,	/* Obj_Intent			Attr_Intrinsic		*/
@@ -4727,6 +5189,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Intent			Attr_Co_Array		*/
 	  550,	/* Obj_Intent			Attr_Automatic		*/
 	    0	/* Obj_Intent			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Intent		 	Attr_Bind		*/
+	,   0	/* Obj_Intent		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4789,6 +5255,11 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Optional			Attr_Co_Array		*/
 	  550,	/* Obj_Optional			Attr_Automatic		*/
 	    0	/* Obj_Optional			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Optional		 	Attr_Bind		*/
+	,   0	/* Obj_Optional		 	Attr_Value		*/
+
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4833,6 +5304,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Private			Attr_Co_Array		*/
 	    0,	/* Obj_Private			Attr_Automatic		*/
 	    0	/* Obj_Private			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Private		 	Attr_Bind		*/
+	, 550	/* Obj_Private		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4877,6 +5352,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Public			Attr_Co_Array		*/
 	    0,	/* Obj_Public			Attr_Automatic		*/
 	    0	/* Obj_Public			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Public		 	Attr_Bind		*/
+	, 550	/* Obj_Public		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/*********************** Obj_Target ******************************/
@@ -4919,6 +5398,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Target			Attr_Co_Array		*/
 	    0,	/* Obj_Target			Attr_Automatic		*/
 	    0	/* Obj_Target			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Target		 	Attr_Bind		*/
+	,   0	/* Obj_Target		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -4968,6 +5451,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Equiv		 Attr_Co_Array			*/
 	    0,	/* Obj_Equiv		 Attr_Automatic			*/
 	    0	/* Obj_Equiv		 Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Equiv		 Attr_Bind			*/
+	, 550	/* Obj_Equiv		 Attr_Value			*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5018,6 +5505,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Saved		 Attr_Co_Array			*/
 	  550,	/* Obj_Saved		 Attr_Automatic			*/
 	    0	/* Obj_Saved		 Attr_Volatile			*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Saved	 	Attr_Bind			*/
+	, 550	/* Obj_Saved	 	Attr_Value			*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5047,6 +5538,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Automatic		Attr_Co_Array		*/
 	    0,	/* Obj_Automatic		Attr_Automatic		*/
 	    0	/* Obj_Automatic		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Automatic	 	Attr_Bind		*/
+	, 550	/* Obj_Automatic	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5074,8 +5569,12 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 		/* 5.1 constraint					*/
 
 	  550,	/* Obj_Pointer			Attr_Parameter		*/
+#ifdef KEY /* Bug 14150 */
+	    0,	/* Obj_Pointer			Attr_Intent		*/
+#else /* KEY Bug 14150 */
 	  550,	/* Obj_Pointer			Attr_Intent		*/
 		/* 5.2.7						*/
+#endif /* KEY Bug 14150 */
 
 	    0,	/* Obj_Pointer			Attr_Optional		*/
 	    0,	/* Obj_Pointer			Attr_Private		*/
@@ -5107,6 +5606,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Pointer			Attr_Co_Array		*/
 	    0,	/* Obj_Pointer			Attr_Automatic		*/
 	    0	/* Obj_Pointer			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Pointer		 	Attr_Bind		*/
+	, 550	/* Obj_Pointer		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5162,6 +5665,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Dcl_Extern		Attr_Co_Array		*/
 	  550,	/* Obj_Dcl_Extern		Attr_Automatic		*/
 	  550	/* Obj_Dcl_Extenr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Dcl_Extern	 	Attr_Bind		*/
+	, 550	/* Obj_Dcl_Extern	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5221,6 +5728,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  550,	/* Obj_Dcl_Intrin		Attr_Co_Array		*/
 	  550,	/* Obj_Dcl_Intrin		Attr_Automatic		*/
 	  550	/* Obj_Dcl_Intrin		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 550	/* Obj_Dcl_Intrin	 	Attr_Bind		*/
+	, 550	/* Obj_Dcl_Intrin	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 
 	},
 
@@ -5271,6 +5782,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Data_Init		Attr_Co_Array		*/
 	  550,	/* Obj_Data_Init		Attr_Automatic		*/
 	    0	/* Obj_Data_Init		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Data_Init	 	Attr_Bind		*/
+	, 550	/* Obj_Data_Init	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5311,6 +5826,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Typed		 	Attr_Automatic		*/
 	    0,	/* Obj_Typed		 	Attr_Co_Array		*/
 	    0	/* Obj_Typed			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Typed		 	Attr_Bind		*/
+	,   0	/* Obj_Typed		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Volatile	*************************/
@@ -5340,6 +5859,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Volatile			Attr_Co_Array		*/
 	    0,	/* Obj_Volatile			Attr_Automatic		*/
 	    0	/* Obj_Volatile			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Volatile		 	Attr_Bind		*/
+	, 550	/* Obj_Volatile		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/******************* Obj_Copy_Assumed_Shape *********************/
@@ -5368,6 +5891,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Copy_Assumed_Shape	Attr_Co_Array		*/
 	 1441, 	/* Obj_Copy_Assumed_Shape	Attr_Automatic		*/
 	    0 	/* Obj_Copy_Assumed_Shape	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Copy_Assumed_Shape	Attr_Bind		*/
+	,1441	/* Obj_Copy_Assumed_Shape	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5419,6 +5946,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Auxiliary		Attr_Co_Array		*/
 	 1441,	/* Obj_Auxiliary		Attr_Automatic		*/
 	    0	/* Obj_Auxiliary		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Auxiliary	 	Attr_Bind		*/
+	,1441	/* Obj_Auxiliary	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Vfunction	*************************/
@@ -5449,6 +5980,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Vfunction		Attr_Co_Array		*/
 	 1441,	/* Obj_Vfunction		Attr_Automatic		*/
 	 1441	/* Obj_Vfunction		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Vfunction	 	Attr_Bind		*/
+	,1441	/* Obj_Vfunction	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5480,6 +6015,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_No_Side_Effects		Attr_Co_Array		*/
 	 1441,	/* Obj_No_Side_Effects		Attr_Automatic		*/
 	 1441	/* Obj_No_Side_Effects		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_No_Side_Effects	 	Attr_Bind		*/
+	,1441	/* Obj_No_Side_Effects	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Symmetric	*************************/
@@ -5509,6 +6048,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Symmetric		Attr_Co_Array		*/
 	 1441,	/* Obj_Symmetric		Attr_Automatic		*/
 	    0	/* Obj_Symmetric		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Symmetric	 	Attr_Bind		*/
+	,1441	/* Obj_Symmetric	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5539,6 +6082,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Inline			Attr_Co_Array		*/
 	    0,	/* Obj_Inline			Attr_Automatic		*/
 	 1441	/* Obj_Inline			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Inline		 	Attr_Bind		*/
+	,1441	/* Obj_Inline		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5569,6 +6116,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Ipa			Attr_Co_Array		*/
 	    0,	/* Obj_Ipa			Attr_Automatic		*/
 	 1441	/* Obj_Ipa			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Ipa		 	Attr_Bind		*/
+	,1441	/* Obj_Ipa		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5599,6 +6150,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Align_Symbol		Attr_Co_Array		*/
 	    0,	/* Obj_Align_Symbol		Attr_Automatic		*/
 	    0	/* Obj_Align_Symbol		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Align_Symbol	 	Attr_Bind		*/
+	,1441	/* Obj_Align_Symbol	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************* Obj_Fill_Symbol **********************/
@@ -5628,6 +6183,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Fill_Symbol		Attr_Co_Array		*/
 	    0,	/* Obj_Fill_Symbol		Attr_Automatic		*/
 	    0	/* Obj_Fill_Symbol		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Fill_Symbol	 	Attr_Bind		*/
+	,1441	/* Obj_Fill_Symbol	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************* Obj_Section_Gp ***********************/
@@ -5657,6 +6216,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Section_Gp		Attr_Co_Array		*/
 	 1441,	/* Obj_Section_Gp		Attr_Automatic		*/
 	    0	/* Obj_Section_Gp		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Section_Gp	 	Attr_Bind		*/
+	,1441	/* Obj_Section_Gp	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/********************** Obj_Section_Non_Gp **********************/
@@ -5686,9 +6249,13 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Section_Non_Gp		Attr_Co_Array		*/
 	 1441,	/* Obj_Section_Non_Gp		Attr_Automatic		*/
 	    0	/* Obj_Section_Non_Gp		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1440	/* Obj_Section_Non_Gp	 	Attr_Bind		*/
+	,1440	/* Obj_Section_Non_Gp	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
-	/************************ Obj_Ingore_TKR ************************/
+	/************************ Obj_Ignore_TKR ************************/
 	/****************************************************************/
 
 	{   0,	/* Obj_Ignore_TKR		Attr_Assumed_Type_Ch	*/
@@ -5706,14 +6273,23 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Ignore_TKR		Attr_Target		*/
 	 1441,	/* Obj_Ignore_TKR		Attr_Equivalence	*/
 	 1441,	/* Obj_Ignore_TKR		Attr_Save		*/
+#ifdef KEY /* Bug 14150 */
+	    0,	/* Obj_Ignore_TKR		Attr_Pointer		*/
+	    0,	/* Obj_Ignore_TKR		Attr_External		*/
+#else /* KEY Bug 14150 */
 	 1441,	/* Obj_Ignore_TKR		Attr_Pointer		*/
 	 1441,	/* Obj_Ignore_TKR		Attr_External		*/
+#endif /* KEY Bug 14150 */
 	 1441,	/* Obj_Ignore_TKR		Attr_Intrinsic		*/
 	 1441,	/* Obj_Ignore_TKR		Attr_Data_Init		*/
 	    0,	/* Obj_Ignore_TKR		Attr_Type		*/
 	    0,	/* Obj_Ignore_TKR		Attr_Co_Array		*/
 	 1441,	/* Obj_Ignore_TKR		Attr_Automatic		*/
 	    0 	/* Obj_Ignore_TKR		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Ignore_TKR	 	Attr_Bind		*/
+	,1441	/* Obj_Ignore_TKR	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/******************** Obj_Optional_Dir	*************************/
@@ -5742,6 +6318,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Optional_Dir		Attr_Co_Array		*/
 	 1441,	/* Obj_Optional_Dir		Attr_Automatic		*/
 	 1441	/* Obj_Optional_Dir		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Optional_Dir	 	Attr_Bind		*/
+	,1441	/* Obj_Optional_Dir	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Name ******************************/
@@ -5771,6 +6351,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1441,	/* Obj_Name			Attr_Co_Array		*/
 	 1441,	/* Obj_Name			Attr_Automatic		*/
 	 1441	/* Obj_Name			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1441	/* Obj_Name		 	Attr_Bind		*/
+	,1441	/* Obj_Name		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Cri_Ptr ***************************/
@@ -5797,11 +6381,9 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Cri_Ptr			Attr_Private		*/
 	    0,	/* Obj_Cri_Ptr			Attr_Public		*/
 	  552,	/* Obj_Cri_Ptr			Attr_Target		*/
-		/* Cray extension - Do not mix Fortran 90		*/
-
-	    0,	/* Obj_Cri_Ptr			Attr_Equivalence	*/
-	    0,	/* Obj_Cri_Ptr			Attr_Save		*/
-
+	        /* Cray extension - Do not mix Fortran 90		*/
+	  0,	/* Obj_Cri_Ptr			Attr_Equivalence	*/
+	  0,	/* Obj_Cri_Ptr			Attr_Save		*/ 
 	  552,	/* Obj_Cri_Ptr			Attr_Pointer		*/
 		/* Cray extentsion - Do not mix Fortran 90		*/
 
@@ -5817,6 +6399,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Cri_Ptr			Attr_Co_Array		*/
 	    0,	/* Obj_Cri_Ptr			Attr_Automatic		*/
 	    0	/* Obj_Cri_Ptr			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Cri_Ptr		 	Attr_Bind		*/
+	, 552	/* Obj_Cri_Ptr		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5868,6 +6454,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Cri_Pointee		Attr_Co_Array		*/
 	  552,	/* Obj_Cri_Pointee		Attr_Automatic		*/
 	    0	/* Obj_Cri_Pointee		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Cri_Pointee	 	Attr_Bind		*/
+	, 552	/* Obj_Cri_Pointee	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -5921,6 +6511,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Cri_Ch_Pointee		Attr_Co_Array		*/
 	  552,	/* Obj_Cri_Ch_Pointee		Attr_Automatic		*/
 	    0	/* Obj_Cri_Ch_Pointee		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Cri_Ch_Pointee	 	Attr_Bind		*/
+	, 552	/* Obj_Cri_Ch_Pointee	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Ntry_Func_Result ******************/
@@ -5985,6 +6579,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Ntry_Func_Result		Attr_Co_Array		*/
 	    0,	/* Obj_Ntry_Func_Result		Attr_Automatic		*/
 	  552	/* Obj_Ntry_Func_Result		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Ntry_Func_Result	 	Attr_Bind		*/
+	, 552	/* Obj_Ntry_Func_Result	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6037,6 +6635,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Dummy_Arg		Attr_Co_Array		*/
 	  552,	/* Obj_Dummy_Arg		Attr_Automatic		*/
 	    0	/* Obj_Dummy_Arg		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Dummy_Arg	 	Attr_Bind		*/
+	,   0	/* Obj_Dummy_Arg	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6092,6 +6694,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Common_Obj		Attr_Co_Array		*/
 	  552,	/* Obj_Common_Obj		Attr_Automatic		*/
 	    0	/* Obj_Common_Obj		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Common_Obj	 	Attr_Bind		*/
+	, 552	/* Obj_Common_Obj	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6138,6 +6744,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Namelist_Obj		Attr_Co_Array		*/
 	    0,	/* Obj_Namelist_Obj		Attr_Automatic		*/
 	    0	/* Obj_Namelist_Obj		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Namelist_Obj	 	Attr_Bind		*/
+	,   0	/* Obj_Namelist_Obj	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Module_Proc ***********************/
@@ -6181,6 +6791,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Module_Proc		Attr_Co_Array		*/
 	    0,	/* Obj_Module_Proc		Attr_Automatic		*/
 	  552	/* Obj_Module_Proc		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Pointer		 	Attr_Bind		*/
+	, 552	/* Obj_Pointer		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	
@@ -6217,6 +6831,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Derived_Type		Attr_Co_Array		*/
 	  552,	/* Obj_Derived_Type		Attr_Automatic		*/
 	  552	/* Obj_Derived_Type		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Derived_Type	 	Attr_Bind		*/
+	, 552	/* Obj_Derived_Type	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6253,6 +6871,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Generic_Interface	Attr_Co_Array		*/
 	  552,	/* Obj_Generic_Interface	Attr_Automatic		*/
 	  552	/* Obj_Generic_Interface	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Generic_Interface 	Attr_Bind		*/
+	, 552	/* Obj_Generic_Interface 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6289,6 +6911,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Namelist_Grp		Attr_Co_Array		*/
 	  552,	/* Obj_Namelist_Grp		Attr_Automatic		*/
 	  552	/* Obj_Namelist_Grp		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Namelist_Grp	  	Attr_Bind		*/
+	, 552	/* Obj_Namelist_Grp	  	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6327,6 +6953,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Stmt_Func		Attr_Co_Array		*/
 	  552,	/* Obj_Stmt_Func		Attr_Automatic		*/
 	  552	/* Obj_Stmt_Func		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Stmt_Func	 	Attr_Bind		*/
+	, 552	/* Obj_Stmt_Func	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6363,6 +6993,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Construct		Attr_Co_Array		*/
 	  552,	/* Obj_Construct		Attr_Automatic		*/
 	  552	/* Obj_Construct		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Construct	 	Attr_Bind		*/
+	, 552	/* Obj_Construct	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6432,6 +7066,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Entry_Func		Attr_Co_Array		*/
 	    0,  /* Obj_Entry_Func		Attr_Automatic		*/
 	  552   /* Obj_Entry_Func		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Entry_Func	 	Attr_Bind		*/
+	, 552	/* Obj_Entry_Func	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6466,6 +7104,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Entry_Subr		Attr_Co_Array		*/
 	  552,	/* Obj_Entry_Subr		Attr_Automatic		*/
 	  552	/* Obj_Entry_Subr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Entry_Subr	 	Attr_Bind		*/
+	, 552	/* Obj_Entry_Subr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6511,6 +7153,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Intern_Func		Attr_Co_Array		*/
 	  552,	/* Obj_Intern_Func		Attr_Automatic		*/
 	  552	/* Obj_Intern_Func		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Intern_Func	 	Attr_Bind		*/
+	, 552	/* Obj_Intern_Func	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6547,6 +7193,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Intern_Subr		Attr_Co_Array		*/
 	  552,	/* Obj_Intern_Subr		Attr_Automatic		*/
 	  552	/* Obj_Intern_Subr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Intern_Subr	 	Attr_Bind		*/
+	, 552	/* Obj_Intern_Subr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6592,6 +7242,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Module_Func		Attr_Co_Array		*/
 	    0,	/* Obj_Module_Func		Attr_Automatic		*/
 	  552 	/* Obj_Module_Func		Attr_Automatic		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Module_Func		Attr_Bind		*/
+	, 552	/* Obj_Module_Func		Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6628,6 +7282,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Module_Subr		Attr_Co_Array		*/
 	  552,	/* Obj_Module_Subr		Attr_Automatic		*/
 	  552	/* Obj_Module_Subr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Module_Subr	 	Attr_Bind		*/
+	, 552	/* Obj_Module_Subr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6660,6 +7318,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  552,	/* Obj_Sf_Darg			Attr_Co_Array		*/
 	    0,	/* Obj_Sf_Darg			Attr_Automatic		*/
 	  552	/* Obj_Sf_Darg			Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 552	/* Obj_Sf_Darg		 	Attr_Bind		*/
+	, 552	/* Obj_Sf_Darg		 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6691,6 +7353,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  759,	/* Obj_Sf_Actual_Arg	 	Attr_Co_Array		*/
 	    0,	/* Obj_Sf_Actual_Arg	 	Attr_Automatic		*/
 	    0	/* Obj_Sf_Actual_Arg	 	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Sf_Actual_Arg	 	Attr_Bind		*/
+	,   0	/* Obj_Sf_Actual_Arg	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6764,6 +7430,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Var_Len_Ch		Attr_Co_Array		*/
 	  576,	/* Obj_Var_Len_Ch		Attr_Automatic		*/
 	    0	/* Obj_Var_Len_Ch		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 576	/* Obj_Var_Len_Ch	 	Attr_Bind		*/
+	, 576	/* Obj_Var_Len_Ch	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6828,6 +7498,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Var_Len_Arr		Attr_Co_Array		*/
 	  582,	/* Obj_Var_Len_Arr		Attr_Automatic		*/
 	    0 	/* Obj_Var_Len_Arr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 582	/* Obj_Var_Len_Arr	 	Attr_Bind		*/
+	, 582	/* Obj_Var_Len_Arr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 	/************************ Obj_Sym_Constant_Arr ******************/
@@ -6864,6 +7538,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	 1223,	/* Obj_Sym_Constant_Arr		Attr_Co_Array		*/
 	    0,	/* Obj_Sym_Constant_Arr		Attr_Automatic		*/
 	 1223	/* Obj_Sym_Constant_Arr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,1223	/* Obj_Sym_Constant_Arr	 	Attr_Bind		*//*?*/
+	,1223	/* Obj_Sym_Constant_Arr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6913,6 +7591,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  608,	/* Obj_Interface_Func		Attr_Co_Array		*/
 	    0,	/* Obj_Interface_Func		Attr_Automatic		*/
 	  608	/* Obj_Interface_Func		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Interface_Func	 	Attr_Bind		*/
+	, 550	/* Obj_Interface_Func	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -6950,6 +7632,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  608,	/* Obj_Interface_Subr		Attr_Co_Array		*/
 	  608,	/* Obj_Interface_Subr		Attr_Automatic		*/
 	  608	/* Obj_Interface_Subr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Interface_Subr	 	Attr_Bind		*/
+	, 608	/* Obj_Interface_Subr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7010,6 +7696,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  628,	/* Obj_Use_Extern_Func		Attr_Co_Array		*/
 	    0,	/* Obj_Use_Extern_Func		Attr_Automatic		*/
 	  628	/* Obj_Use_Extern_Func		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Use_Extern_Func	 	Attr_Bind		*/
+	, 628	/* Obj_Use_Extern_Func	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7047,6 +7737,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  633,	/* Obj_Use_Extern_Subr		Attr_Co_Array		*/
 	  633,	/* Obj_Use_Extern_Subr		Attr_Automatic		*/
 	  633	/* Obj_Use_Extern_Subr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Use_Extern_Subr	 	Attr_Bind		*/
+	, 633	/* Obj_Use_Extern_Subr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7077,6 +7771,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Use_In_Expr		Attr_Co_Array		*/
 	    0,	/* Obj_Use_In_Expr		Attr_Automatic		*/
 	    0	/* Obj_Use_In_Expr		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Use_In_Expr	 	Attr_Bind		*/
+	,   0	/* Obj_Use_In_Expr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7112,6 +7810,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  644,	/* Obj_Use_Derived_Type		Attr_Co_Array		*/
 	  644,	/* Obj_Use_Derived_Type		Attr_Automatic		*/
 	  644	/* Obj_Use_Derived_Type		Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Use_Derived_Type	 	Attr_Bind		*/
+	, 644	/* Obj_Use_Derived_Type	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7146,6 +7848,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Use_Spec_Expr	 	Attr_Co_Array		*/
 	    0,	/* Obj_Use_Spec_Expr	 	Attr_Automatic		*/
 	    0	/* Obj_Use_Spec_Expr	 	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	,   0	/* Obj_Use_Spec_Expr	 	Attr_Bind		*/
+	,   0	/* Obj_Use_Spec_Expr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	},
 
 
@@ -7204,6 +7910,10 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	  210,	/* Obj_Use_Init_Expr	 	Attr_Co_Array		*/
 	    0,	/* Obj_Use_Init_Expr	 	Attr_Automatic		*/
 	  210	/* Obj_Use_Init_Expr	 	Attr_Volatile		*/
+#ifdef KEY /* Bug 14150 */
+	, 210	/* Obj_Use_Init_Expr	 	Attr_Bind		*/
+	, 210	/* Obj_Use_Init_Expr	 	Attr_Value		*/
+#endif /* KEY Bug 14150 */
 	}
 };
 
@@ -7322,6 +8032,39 @@ long	dir_msg_num[Obj_Done] [Dir_Done]	= {
 	 1459 	/* Obj_Allocatable		Dir_Name		*/
 	},
 
+#ifdef KEY /* Bug 14150 */
+	{1459,	/* Obj_Bind			Dir_Auxiliary		*/
+	 1459,	/* Obj_Bind			Dir_Vfunction		*/
+	 1459, 	/* Obj_Bind			Dir_No_Side_Effects	*/
+	 1459, 	/* Obj_Bind			Dir_Inline		*/
+	 1459,	/* Obj_Bind			Dir_Symmetric		*/
+	 1459,	/* Obj_Bind			Dir_Copy_Assumed_Shape	*/
+	 1459,	/* Obj_Bind			Dir_Align_Symbol	*/
+	 1459,	/* Obj_Bind			Dir_Fill_Symbol		*/
+	 1459,	/* Obj_Bind			Dir_Section_Gp		*/
+	 1459,	/* Obj_Bind			Dir_Section_Non_Gp	*/
+	 1459,	/* Obj_Bind			Dir_Ignore_TKR		*/
+	 1459,	/* Obj_Bind			Dir_Optional		*/
+	 1459,	/* Obj_Bind			Dir_Ipa			*/
+	 1459 	/* Obj_Bind			Dir_Name		*/
+	},
+
+	{1459,	/* Obj_Value			Dir_Auxiliary		*/
+	 1459,	/* Obj_Value			Dir_Vfunction		*/
+	 1459, 	/* Obj_Value			Dir_No_Side_Effects	*/
+	 1459, 	/* Obj_Value			Dir_Inline		*/
+	 1459,	/* Obj_Value			Dir_Symmetric		*/
+	 1459,	/* Obj_Value			Dir_Copy_Assumed_Shape	*/
+	 1459,	/* Obj_Value			Dir_Align_Symbol	*/
+	 1459,	/* Obj_Value			Dir_Fill_Symbol		*/
+	 1459,	/* Obj_Value			Dir_Section_Gp		*/
+	 1459,	/* Obj_Value			Dir_Section_Non_Gp	*/
+	 1459,	/* Obj_Value			Dir_Ignore_TKR		*/
+	 1459,	/* Obj_Value			Dir_Optional		*/
+	 1459,	/* Obj_Value			Dir_Ipa			*/
+	 1459 	/* Obj_Value			Dir_Name		*/
+	},
+#endif /* KEY Bug 14150 */
 
 	{1459,	/* Obj_Constant			Dir_Auxiliary		*/
 	 1459,	/* Obj_Constant			Dir_Vfunction		*/
@@ -7477,7 +8220,11 @@ long	dir_msg_num[Obj_Done] [Dir_Done]	= {
 	    0,	/* Obj_Pointer			Dir_Fill_Symbol		*/
 	    0,	/* Obj_Pointer			Dir_Section_Gp		*/
 	    0,	/* Obj_Pointer			Dir_Section_Non_Gp	*/
+#ifdef KEY /* Bug 14150 */
+	    0,	/* Obj_Pointer			Dir_Ignore_TKR		*/
+#else /* KEY Bug 14150 */
 	 1459,	/* Obj_Pointer			Dir_Ignore_TKR		*/
+#endif /* KEY Bug 14150 */
 	 1459,	/* Obj_Pointer			Dir_Optional		*/
 	    0,	/* Obj_Pointer			Dir_Ipa			*/
 	 1459 	/* Obj_Pointer			Dir_Name		*/
@@ -8721,6 +9468,66 @@ long	name_msg_num[Obj_Done] [Name_Done]	= {
 	  551,	/* Obj_Allocatable		Name_Internal_Func	*/
 	  551	/* Obj_Allocatable		Name_Internal_Subr	*/
 	},
+
+#ifdef KEY /* Bug 14150 */
+	/************************ Obj_Bind        ***********************/
+	/****************************************************************/
+
+	{   0,	/* Obj_Bind			Name_Variable		*/
+	  551,	/* Obj_Bind			Name_Common_Obj		*/
+	  551,	/* Obj_Bind			Name_Cri_Pointer	*/
+	  551,	/* Obj_Bind			Name_Cri_Pointee	*/
+	  551,	/* Obj_Bind			Name_Cri_Ch_Pointee	*/
+	  551,	/* Obj_Bind			Name_Func_Result	*/
+	  551,	/* Obj_Bind			Name_Dummy_Arg		*/
+	    0,	/* Obj_Bind			Name_Module_Proc	*/
+	  551,	/* Obj_Bind			Name_Derived_Type	*/
+	  551,	/* Obj_Bind			Name_Generic_Interface	*/
+	  551,	/* Obj_Bind			Name_Namelist_Group	*/
+	  551,	/* Obj_Bind			Name_Namelist_Group_Obj	*/
+	  551,	/* Obj_Bind			Name_Statement_Func	*/
+	  551,	/* Obj_Bind			Name_Construct		*/
+	  551,	/* Obj_Bind			Name_Intrinsic_Func	*/
+	  551,	/* Obj_Bind			Name_Intrinsic_Subr	*/
+	  551,	/* Obj_Bind			Name_Module		*/
+	  551,	/* Obj_Bind			Name_Blockdata		*/
+	  551,	/* Obj_Bind			Name_Program		*/
+	  551,	/* Obj_Bind			Name_Function		*/
+	    0,	/* Obj_Bind			Name_Curr_Func		*/
+	    0, 	/* Obj_Bind			Name_Curr_Subr		*/
+	  551,	/* Obj_Bind			Name_Internal_Func	*/
+	  551	/* Obj_Bind			Name_Internal_Subr	*/
+	},
+
+	/************************ Obj_Value        ***********************/
+	/****************************************************************/
+
+	{ 551,	/* Obj_Value			Name_Variable		*/
+	  551,	/* Obj_Value			Name_Common_Obj		*/
+	  551,	/* Obj_Value			Name_Cri_Pointer	*/
+	  551,	/* Obj_Value			Name_Cri_Pointee	*/
+	  551,	/* Obj_Value			Name_Cri_Ch_Pointee	*/
+	  551,	/* Obj_Value			Name_Func_Result	*/
+	    0,	/* Obj_Value			Name_Dummy_Arg		*/
+	  551,	/* Obj_Value			Name_Module_Proc	*/
+	  551,	/* Obj_Value			Name_Derived_Type	*/
+	  551,	/* Obj_Value			Name_Generic_Interface	*/
+	  551,	/* Obj_Value			Name_Namelist_Group	*/
+	  551,	/* Obj_Value			Name_Namelist_Group_Obj	*/
+	  551,	/* Obj_Value			Name_Statement_Func	*/
+	  551,	/* Obj_Value			Name_Construct		*/
+	  551,	/* Obj_Value			Name_Intrinsic_Func	*/
+	  551,	/* Obj_Value			Name_Intrinsic_Subr	*/
+	  551,	/* Obj_Value			Name_Module		*/
+	  551,	/* Obj_Value			Name_Blockdata		*/
+	  551,	/* Obj_Value			Name_Program		*/
+	  551,	/* Obj_Value			Name_Function		*/
+	  551,	/* Obj_Value			Name_Curr_Func		*/
+	  551, 	/* Obj_Value			Name_Curr_Subr		*/
+	  551,	/* Obj_Value			Name_Internal_Func	*/
+	  551	/* Obj_Value			Name_Internal_Subr	*/
+	},
+#endif /* KEY Bug 14150 */
 
 
 	/************************ Obj_Constant **************************/
@@ -11274,6 +12081,42 @@ long	other_msg_num[Obj_Done] [Other_Done]	= {
 	 1134	/* Obj_Allocatable		Other_Npes		*/
 	},
 
+#ifdef KEY /* Bug 14150 */
+	/************************ Obj_Bind        ***********************/
+	/****************************************************************/
+
+	{ 560,	/* Obj_Bind			Other_Var_Len_Ch	*/
+	  562,	/* Obj_Bind			Other_Var_Len_Arr	*/
+	  566,	/* Obj_Bind			Other_Expl_Interface	*/
+	  572,	/* Obj_Bind			Other_Use_Func		*/
+	  574,	/* Obj_Bind			Other_Use_Subr		*/
+	  559,	/* Obj_Bind			Other_Use_Variable	*/
+	 1039,	/* Obj_Bind			Other_Use_Dummy_Arg	*/
+	  920,	/* Obj_Bind			Other_Host_Assoc	*/
+	  922, 	/* Obj_Bind			Other_Use_Assoc		*/
+	 1501, 	/* Obj_Bind			Other_Use_Char_Rslt	*/
+	  486,	/* Obj_Bind			Other_Not_Visible	*/
+	 1134	/* Obj_Bind			Other_Npes		*/
+	},
+
+	/************************ Obj_Value        ***********************/
+	/****************************************************************/
+
+	{ 560,	/* Obj_Value			Other_Var_Len_Ch	*/
+	  562,	/* Obj_Value			Other_Var_Len_Arr	*/
+	  566,	/* Obj_Value			Other_Expl_Interface	*/
+	  572,	/* Obj_Value			Other_Use_Func		*/
+	  574,	/* Obj_Value			Other_Use_Subr		*/
+	  559,	/* Obj_Value			Other_Use_Variable	*/
+	    0,	/* Obj_Value			Other_Use_Dummy_Arg	*/
+	  920,	/* Obj_Value			Other_Host_Assoc	*/
+	  922, 	/* Obj_Value			Other_Use_Assoc		*/
+	 1501, 	/* Obj_Value			Other_Use_Char_Rslt	*/
+	  486,	/* Obj_Value			Other_Not_Visible	*/
+	 1134	/* Obj_Value			Other_Npes		*/
+	},
+#endif /* KEY Bug 14150 */
+
 
 
 	/************************ Obj_Constant **************************/
@@ -11626,8 +12469,13 @@ long	other_msg_num[Obj_Done] [Other_Done]	= {
 	  574,	/* Obj_Volatile		 	Other_Use_Subr		*/
 	    0,	/* Obj_Volatile			Other_Use_Variable	*/
 	    0,	/* Obj_Volatile			Other_Use_Dummy_Arg	*/
+#ifdef KEY /* Bug 14110 */
+	    0,	/* Obj_Volatile			Other_Host_Assoc	*/
+	    0, 	/* Obj_Volatile			Other_Use_Assoc		*/
+#else /* KEY Bug 14110 */
 	  920,	/* Obj_Volatile			Other_Host_Assoc	*/
 	  922, 	/* Obj_Volatile			Other_Use_Assoc		*/
+#endif /* KEY Bug 14110 */
 	    0, 	/* Obj_Volatile			Other_Use_Char_Rslt	*/
 	  486,	/* Obj_Volatile			Other_Not_Visible	*/
 	 1134	/* Obj_Volatile			Other_Npes		*/
@@ -12704,6 +13552,10 @@ char	*attr_obj_type_str[Attr_Done]	= {
 		"Attr_Co_Array",
 		"Attr_Automatic",
 		"Attr_Volatile"
+#ifdef KEY /* Bug 14150 */
+	      , "Attr_Bind"
+	      , "Attr_Value"
+#endif /* KEY Bug 14150 */
 		};
 
 char	*dir_obj_type_str[Dir_Done]	=	{
@@ -12758,6 +13610,10 @@ char	*obj_type_str[Obj_Done]	= {
 		"Obj_Assum_Shp_Arr",
 		"Obj_Co_Array",
 		"Obj_Allocatable",
+#ifdef KEY /* Bug 14150 */
+		"Obj_Bind",
+		"Obj_Value",
+#endif /* KEY Bug 14150 */
 		"Obj_Constant",
 		"Obj_Intent",
 		"Obj_Optional",

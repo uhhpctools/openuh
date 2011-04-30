@@ -42,10 +42,10 @@
 // ====================================================================
 //
 // Module: fb_whirl.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/fb_whirl.cxx,v $
+// $Revision: 1.28 $
+// $Date: 06/01/13 15:35:23-08:00 $
+// $Author: gautam@jacinth.keyresearch $
+// $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.fb_whirl.cxx $
 //
 // Description:
 //
@@ -71,7 +71,6 @@
 #pragma hdrstop
 #define USE_STANDARD_TYPES
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <cmplrs/fb.h>
 #include <stdlib.h>
@@ -475,6 +474,9 @@ FEEDBACK::Same_in_out( const WN *wn ) {
   switch ( opr ) {
   case OPR_FUNC_ENTRY: case OPR_ALTENTRY:
   case OPR_RETURN: case OPR_RETURN_VAL:
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     return false;
 
   fb_opr_cases_call:
@@ -516,6 +518,22 @@ FEEDBACK::FB_set_in_out_same( WN *wn )
     FB_set_in_out_same_node( iter.Wn() );
 }
 
+#if defined(TARG_SL) && defined(TARG_SL2)
+void
+FEEDBACK::FB_reset_in_out_same_node( WN *wn )
+{
+  // Set in_out_same true for all calls
+  if ( FB_valid_opr_call( wn ) ) {
+
+    if ( _trace )
+      fprintf( TFile, "FEEDBACK::FB_set_in_out_same_node(0x%p):\n", wn );
+
+    FB_Info_Call info_call = Query_call( wn );
+    info_call.in_out_same = false;
+    Annot_call( wn, info_call );
+  }
+}
+#endif
 
 // ====================================================================
 // Print function displays feedback info for tracing purposes
@@ -962,7 +980,11 @@ FEEDBACK::Query_total_out( const WN *wn ) const
     // else fall through
 
   fb_opr_cases_invoke:
-    if ( opr == OPR_RETURN || opr == OPR_RETURN_VAL )
+    if ( opr == OPR_RETURN || opr == OPR_RETURN_VAL
+#ifdef KEY
+  	 || opr == OPR_GOTO_OUTER_BLOCK
+#endif
+       )
       freq     = FB_FREQ_ZERO;
     else {
       fb_index = Get_index_invoke( wn );
@@ -1177,23 +1199,6 @@ FEEDBACK::Annot_icall( WN *wn, const FB_Info_Icall& fb_info )
   INT32 fb_index = Add_index_icall( wn );
   _icalls[fb_index] = fb_info;
 
-#if 0
-  UINT64 counter = 0;
-  int i;
-  for( i = 0; i < FB_TNV_SIZE; i++ ){
-    if( fb_info.tnv._values[i] == 0 )
-      break;
-    counter += fb_info.tnv._counters[i];
-  }
-
-  if( i < FB_TNV_SIZE ){
-    FmtAssert( fb_info.tnv._exec_counter == counter,
-	       ("icall counters don't match") );
-  } else {
-    FmtAssert( fb_info.tnv._exec_counter >= counter,
-	       ("icall counters don't match") );
-  }
-#endif // Is_True_On
 
   if ( _trace ) {
     fprintf( TFile, "FEEDBACK::Annot_icall(0x%p):\n", wn );
@@ -3687,7 +3692,13 @@ Read_Feedback_Info (FEEDBACK* fb, WN* tree, const Pu_Hdr& pu_hdr)
 
 } // Read_Feedback_Info
 
-#if 1
+#if ! defined(BUILD_OS_DARWIN) /* Temporarily remove whirl browser */
+#include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
+#include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/types.h>
 #include <elf.h>
 #include <ctype.h>

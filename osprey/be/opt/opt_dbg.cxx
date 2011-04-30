@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -79,8 +83,6 @@ static char *rcs_id = 	opt_dbg_CXX"$Revision: 1.4 $";
 #include "opt_main.h"
 #include "opt_cfg_trans.h"
 #include "opt_htable.h"
-
-#ifdef Is_True_On
 
 COMP_UNIT *g_comp_unit;
 OPT_STAB *g_opt_stab;
@@ -315,9 +317,5 @@ void show_all_zones(successor_graph& g, zone_iterator first, zone_iterator last)
     ++first;
   }
 }
-
-
-
-#endif
 
 

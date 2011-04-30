@@ -42,7 +42,7 @@
 #define cgemit_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static char *cgemit_rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/cg/SCCS/s.cgemit.h $ $Revision: 1.7 $";
+static char *cgemit_rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cgemit.h $ $Revision: 1.8 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "dwarf_DST_mem.h"
@@ -61,7 +61,17 @@ extern void EMT_End_File ( void );
 extern void EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn);
 
 /* put symbol in elf symbol table */ 
+#if defined(BUILD_OS_DARWIN)
+/* Generally, global-scope symbols require a preceding underscore
+ * Calls to external functions require a jump to a stub
+ * Other references to external functions require an indirect pointer
+ */
+typedef enum { DO_UNDERSCORE, DO_STUB, DO_NON_LAZY_PTR } darwin_indirect_t;
+extern mINT32 EMT_Put_Elf_Symbol (ST *sym,
+  darwin_indirect_t indirect = DO_UNDERSCORE);
+#else
 extern mINT32 EMT_Put_Elf_Symbol (ST *sym);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /* change existing elf symbol to undefined */
 extern void EMT_Change_Symbol_To_Undefined (ST *sym);
@@ -88,5 +98,12 @@ extern BOOL CG_inhibit_size_directive;
 
 /* Write a qualified name to a file. */
 extern void EMT_Write_Qualified_Name (FILE *f, ST *st);
+
+#if defined(BUILD_OS_DARWIN)
+/* Return log base two of an integer (used for .align) */
+extern int logtwo(int value);
+extern const char *map_section_name(const char *section_name);
+extern int is_debug_section(const char *section_name);
+#endif /* defined(BUILD_OS_DARWIN) */
 
 #endif /* cgemit_INCLUDED */

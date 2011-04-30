@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -73,7 +77,9 @@
 using namespace::std;
 #include <string.h>
 #include <sys/types.h>
+#ifndef __MINGW32__
 #include <sys/mman.h>
+#endif /* __MINGW32__ */
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -94,7 +100,7 @@ using namespace::std;
 #include "stab.h"
 #include "const.h"
 #include "targ_const.h"
-extern char * Targ_Print ( char *fmt, TCON c );
+extern char * Targ_Print (const char *fmt, TCON c );
 #include "targ_sim.h"
 #include "strtab.h"
 #include "irbdata.h"
@@ -104,6 +110,7 @@ extern char * Targ_Print ( char *fmt, TCON c );
 #include "dwarf_DST_mem.h"
 #include "ir_reader.h"
 #include "tracing.h"
+#include "config_opt.h"
 
 #ifdef BACK_END
 #include "opt_alias_mgr.h"
@@ -113,10 +120,24 @@ extern char * Targ_Print ( char *fmt, TCON c );
 #include "wintrinsic.h"
 #include "wn_pragmas.h"
 #include "wutil.h"
+#if defined(TARG_NVISA)
+#include "intrn_info.h"
+#endif
 #ifdef BACK_END
+#include "intrn_info.h"
 #include "region_util.h"
 #include "dvector.h"
 #endif /* BACK_END */
+
+#if defined(BACK_END) || defined(IR_TOOLS)
+/*for whirl ssa*/
+#include "wssa_mgr.h"
+#include "wssa_wn.h"
+#include "pu_info.h"
+#endif
+
+#include <sstream> 
+using namespace std; 
 
 /* Extended Ascii-WHIRL */
 
@@ -156,7 +177,7 @@ enum OPC_EXTENDED {
 };
 
 typedef struct {
-  char *pr_name;
+  const char *pr_name;
   INT  n_kids;
   INT  flags;
 } IR_OPCODE_TABLE;
@@ -198,7 +219,7 @@ typedef struct {
   char *args[IR_MAX_ARGS+1];
 } TOKEN;
 
-static void ir_error(char *s);
+static void ir_error(const char *s);
 static INT ir_get_expr_list(void);
 static WN * ir_get_expr(void);
 static WN * ir_get_stmt(void);
@@ -208,12 +229,12 @@ static void ir_match_token(OPERATOR opr);
 static void ir_expect_token(OPERATOR opc);
 static TOKEN *ir_next_token(void);
 static void ir_get_token(TOKEN *token);
-static BOOL ir_insert_hash(char *s, IR_OPCODE_TABLE *irt);
+static BOOL ir_insert_hash(const char *s, IR_OPCODE_TABLE *irt);
 static INT ir_lookup(char *s);
 static void ir_build_hashtable(void);
 static void ir_put_wn(WN * wn, INT indent);
 static void ir_put_expr(WN * wn, INT indent);
-static void ir_put_marker(char *str, INT indent);
+static void ir_put_marker(const char *str, INT indent);
 static void ir_put_stmt(WN * wn, INT indent);
 static void WN_TREE_put_stmt(WN *, INT); // fwd declaration
 
@@ -231,7 +252,7 @@ extern void fdump_dep_tree(FILE *, const WN *, struct ALIAS_MANAGER *);
 
 /*  Suppress warning if not resolved at link-time. */
 /* CG_Dump_Region is defined in cg.so, only call if cg.so is loaded */
-#ifdef __linux__
+#if defined(__linux__) || defined(BUILD_OS_DARWIN) || !defined(SHARED_BUILD)
 extern void (*CG_Dump_Region_p) (FILE*, WN*);
 #define CG_Dump_Region (*CG_Dump_Region_p)
 #else
@@ -243,8 +264,7 @@ extern void (*CG_Dump_Region_p) (FILE*, WN*);
 BOOL IR_dump_map_info = FALSE;
 BOOL IR_dump_region = FALSE;
 BOOL IR_DUMPDEP_info = FALSE;
-BOOL IR_dump_line_numbers = FALSE;
-BOOL IR_dump_wn_addr = FALSE;
+BOOL IR_dump_line_numbers = TRUE;
 
 WN_MAP IR_alias_map = WN_MAP_UNDEFINED;
 const struct ALIAS_MANAGER *IR_alias_mgr = NULL;
@@ -327,7 +347,7 @@ static INT  ir_line;
 static char *line;
 static char *errmsg;
 #endif
-static BOOL follow_st;
+BOOL follow_st;
 static USRCPOS last_srcpos;
 static BOOL is_initialized = FALSE;
 static WN_MAP ir_put_map = WN_MAP_UNDEFINED;
@@ -421,7 +441,7 @@ extern void IR_close_output(void)
 
 #define ir_chk_kids(m,n)   {if (m != n) ir_error("wrong number of kids"); }
 
-static void ir_error(char *s)
+static void ir_error(const char *s)
 {
   fprintf(stderr, "Error parsing ascii IR at line %d: %s.\n", ir_line, s);
   exit(RC_INTERNAL_ERROR);
@@ -562,6 +582,13 @@ extern void IR_Dwarf_Gen_File_Table (BOOL dump_filenames)
       incl_table[count] = name;
       count++;
     }
+#if defined(TARG_SL)
+  /* Wenbo/2007-04-29: Because we use incl_table's 0th entry for current
+     working dir. */
+  if (incl_table == NULL)
+    incl_table = (char **) malloc ((count + 2) * sizeof (char *));
+  incl_table[0] = "./";
+#endif
   
   ir_print_filename(dump_filenames); /* print the loc 0 0 heading */
 
@@ -808,9 +835,9 @@ print_source (SRCPOS srcpos)
 /*
  *  Find a new entry from the string in the operator table.
  */
-static BOOL ir_insert_hash(char *s, IR_OPCODE_TABLE *opcode_entry)
+static BOOL ir_insert_hash(const char *s, IR_OPCODE_TABLE *opcode_entry)
 {
-  char *p;
+  const char *p;
   UINT sum = 0;
   INT i;
 
@@ -857,7 +884,7 @@ static INT ir_lookup(char *s)
 /*
  *  Enter opcode into the IR table.
  */
-static void enter_opcode_table(char *name, OPCODE opc, INT opr)
+static void enter_opcode_table(const char *name, OPCODE opc, INT opr)
 {
     ir_opcode_table[opc].pr_name = name;
     if (!ir_insert_hash(ir_opcode_table[opc].pr_name, &ir_opcode_table[opc])) {
@@ -868,7 +895,7 @@ static void enter_opcode_table(char *name, OPCODE opc, INT opr)
 
 
 static inline
-void enter_opcode_table (char *name, OPC_EXTENDED opc, INT opr)
+void enter_opcode_table (const char *name, OPC_EXTENDED opc, INT opr)
 {
     enter_opcode_table (name, (OPCODE) opc, opr);
 }
@@ -984,6 +1011,59 @@ ir_put_ty(TY_IDX ty)
    fprintf(ir_ofile, ">");
 }
 
+#if defined(BACK_END) || defined(IR_TOOLS)
+static void ir_put_phi_list(WN* wn, INT indent)
+{
+   const WSSA::WHIRL_SSA_MANAGER * wsm = PU_Info_ssa_ptr(Current_PU_Info);
+   if (wsm->Stat() != WSSA::STAT_DUMP)
+      return;
+
+   if (! wsm->WN_has_phi(wn))
+      return;
+
+   ir_put_marker("PHI NODES",indent);
+   for (WSSA::WHIRL_SSA_MANAGER::const_phi_iterator phi_iter = wsm->WN_phi_begin(wn);
+        phi_iter != wsm->WN_phi_end(wn);
+        ++phi_iter) {
+      phi_iter->Print(ir_ofile, indent);
+   }
+} 
+
+static void ir_put_chi_list(WN* wn, INT indent)
+{
+   const WSSA::WHIRL_SSA_MANAGER * wsm = PU_Info_ssa_ptr(Current_PU_Info);
+   if (wsm->Stat() != WSSA::STAT_DUMP)
+      return;
+
+   if (! wsm->WN_has_chi(wn))
+      return;
+
+   ir_put_marker("CHI NODES",indent);
+   for (WSSA::WHIRL_SSA_MANAGER::const_chi_iterator chi_iter = wsm->WN_chi_begin(wn);
+        chi_iter != wsm->WN_chi_end(wn);
+        ++chi_iter) {
+      chi_iter->Print(ir_ofile, indent);
+   }
+}
+
+static void ir_put_mu_list(WN* wn, INT indent)
+{
+   const WSSA::WHIRL_SSA_MANAGER * wsm = PU_Info_ssa_ptr(Current_PU_Info);
+   if (wsm->Stat() != WSSA::STAT_DUMP)
+       return;
+
+   if (! wsm->WN_has_mu(wn))
+      return;
+
+   ir_put_marker("MU NODES",indent);
+   for (WSSA::WHIRL_SSA_MANAGER::const_mu_iterator mu_iter = wsm->WN_mu_begin(wn);
+        mu_iter != wsm->WN_mu_end(wn);
+        ++mu_iter) {
+      mu_iter->Print(ir_ofile, indent);
+   }
+}
+#endif
+
 /*
  *  Write an WN * in ascii form on an individual line.
  */ 
@@ -996,8 +1076,11 @@ static void ir_put_wn(WN * wn, INT indent)
     	fprintf(ir_ofile, "### error: null WN pointer\n");
    	return;
     } else {
+	if (IR_dump_wn_id) {
+	    fprintf(ir_ofile, "[%6u] ", WN_id(wn));
+	}
 	if (IR_dump_wn_addr) {
-	    fprintf(ir_ofile, "0x%8p: ", wn);
+	    fprintf(ir_ofile, "%8p: ", wn);
 	}
 	opcode = WN_opcode(wn);
     }
@@ -1015,6 +1098,12 @@ static void ir_put_wn(WN * wn, INT indent)
 	}
 	fprintf(ir_ofile, "[%5d]", handle);
     }
+
+#if defined(BACK_END) || defined(IR_TOOLS)
+    if (OPT_Enable_WHIRL_SSA && WSSA::WN_has_mu(wn)) {
+        ir_put_mu_list(wn, indent);
+    }
+#endif
 
     if (indent > 0 && opcode == OPC_LABEL)
 	fprintf(ir_ofile, "%*s", indent-1, "");
@@ -1054,7 +1143,12 @@ static void ir_put_wn(WN * wn, INT indent)
 #endif /* BACK_END */
       fprintf(ir_ofile, " (kind=%d)",WN_region_kind(wn));
       break;
-
+#if defined(TARG_SL)
+    case OPR_LDA:
+    case OPR_ISTORE:
+      fprintf(ir_ofile, "im:%d", WN_is_internal_mem_ofst(wn)); 
+      break; 
+#endif
     case OPR_LDBITS:
     case OPR_ILDBITS:
     case OPR_STBITS:
@@ -1088,8 +1182,10 @@ static void ir_put_wn(WN * wn, INT indent)
 	    Is_True(OPCODE_operator(opcode) == OPR_INTRINSIC_OP ||
 		    OPCODE_operator(opcode) == OPR_INTRINSIC_CALL,
 		    ("ir_put_wn, expected an intrinsic"));
+#if defined(BACK_END) || defined(IR_TOOLS)
 	    fprintf(ir_ofile, " <%d,%s>", WN_intrinsic(wn),
 		    INTRINSIC_name((INTRINSIC) WN_intrinsic(wn)));
+#endif
 	    break;
 	}
     }
@@ -1101,7 +1197,23 @@ static void ir_put_wn(WN * wn, INT indent)
     if (OPCODE_has_flags(opcode)) 
 	fprintf(ir_ofile, " %d", WN_flag(wn));
     if (OPCODE_has_sym(opcode)) {
-	ir_put_st (WN_st_idx(wn));
+        ir_put_st (WN_st_idx(wn));
+#if defined(BACK_END) || defined(IR_TOOLS)
+        if (OPT_Enable_WHIRL_SSA) {
+            WSSA::WHIRL_SSA_MANAGER * wsm = PU_Info_ssa_ptr(Current_PU_Info);
+            Is_True( wsm != NULL, ("WHIRL SSA MANAGER is NULL") );
+            if (wsm->Stat() == WSSA::STAT_DUMP) {
+                if (wsm->WN_has_ver(wn)) {
+                    WSSA::VER_IDX ver = wsm->Get_wn_ver(wn);
+                    fprintf(ir_ofile, " ");
+                    Print_ver(ir_ofile, ver);
+                }
+                else {
+                    fprintf(ir_ofile, " INV_VER");
+                }
+            }
+        }
+#endif
     }
 
     if (OPCODE_has_1ty(opcode)) {
@@ -1124,7 +1236,7 @@ static void ir_put_wn(WN * wn, INT indent)
     if (OPCODE_has_ndim(opcode))
 	fprintf(ir_ofile, " %d", WN_num_dim(wn));
     if (OPCODE_has_esize(opcode))
-	fprintf(ir_ofile, " %lld", WN_element_size(wn));
+	fprintf(ir_ofile, " %" LL_FORMAT "d", WN_element_size(wn));
 
     if (OPCODE_has_num_entries(opcode))
 	fprintf(ir_ofile, " %d", WN_num_entries(wn));
@@ -1132,10 +1244,10 @@ static void ir_put_wn(WN * wn, INT indent)
 	fprintf(ir_ofile, " %d", WN_last_label(wn));
 
     if (OPCODE_has_value(opcode)) {
-	fprintf(ir_ofile, " %lld", WN_const_val(wn));
+	fprintf(ir_ofile, " %" LL_FORMAT "d", WN_const_val(wn));
 	/* Also print the hex value for INTCONSTs */
 	if (OPCODE_operator(opcode) == OPR_INTCONST || opcode == OPC_PRAGMA) {
-	    fprintf(ir_ofile, " (0x%llx)", WN_const_val(wn));
+	    fprintf(ir_ofile, " (0x%" LL_FORMAT "x)", WN_const_val(wn));
 	}
     }
 
@@ -1247,6 +1359,9 @@ static void ir_put_wn(WN * wn, INT indent)
 	INT flag =  WN_flag(wn);
 	fprintf(ir_ofile, " # ");
 	if (flag & WN_PARM_BY_REFERENCE) fprintf(ir_ofile, " by_reference ");
+#if defined(TARG_SL)
+	if (flag & WN_PARM_DEREFERENCE) fprintf(ir_ofile, " by_dereference ");
+#endif
 	if (flag & WN_PARM_BY_VALUE)     fprintf(ir_ofile, " by_value ");
 	if (flag & WN_PARM_OUT)          fprintf(ir_ofile, " out ");
 	if (flag & WN_PARM_DUMMY)        fprintf(ir_ofile, " dummy ");
@@ -1285,7 +1400,7 @@ static void ir_put_wn(WN * wn, INT indent)
 	USRCPOS srcpos;
 	USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
 
-	fprintf(ir_ofile, " {line: %d}", USRCPOS_linenum(srcpos));
+	fprintf(ir_ofile, " {line: %d/%d}", USRCPOS_filenum(srcpos), USRCPOS_linenum(srcpos));
     }
 
 #ifdef BACK_END
@@ -1311,9 +1426,31 @@ static void ir_put_wn(WN * wn, INT indent)
       fprintf(ir_ofile, " {class %d}",
 	      WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn));
     }
-    fprintf(ir_ofile, "\n");
-}
 
+    if (Current_Map_Tab != NULL &&
+        WN_MAP32_Get(WN_MAP_ALIAS_CGNODE, wn) != 0) 
+    {
+      if (OPERATOR_is_call(WN_operator(wn)))
+        fprintf(ir_ofile, " {callsite %d}",
+                WN_MAP32_Get(WN_MAP_ALIAS_CGNODE, wn));
+      else
+        fprintf(ir_ofile, " {cgnode %d}",
+                WN_MAP32_Get(WN_MAP_ALIAS_CGNODE, wn));
+    }
+
+#ifdef BACK_END
+    AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+    if (Current_Map_Tab != NULL && aa != NULL && aa->getAliasTag(wn) != 0)
+      fprintf(ir_ofile," {alias_tag %d}", aa->getAliasTag(wn));
+#endif
+
+    fprintf(ir_ofile, "\n");
+#if defined(BACK_END) || defined(IR_TOOLS)
+    if (OPT_Enable_WHIRL_SSA && WSSA::WN_has_chi(wn)) {
+        ir_put_chi_list(wn, indent);
+    }
+#endif
+}
 
 /*
  *  Write an expression and its children in postfix order.
@@ -1354,7 +1491,7 @@ static void ir_put_expr(WN * wn, INT indent)
 /*
  *  Write out a marker at the indentation level.
  */
-static void ir_put_marker(char *str, INT indent)
+static void ir_put_marker(const char *str, INT indent)
 {
   fprintf(ir_ofile, "%*s%s\n", indent, "", str);
 }
@@ -1380,7 +1517,7 @@ static void ir_put_stmt(WN * wn, INT indent)
       fprintf(ir_ofile, "%*sLOC %d %d\n", indent, "",
 		USRCPOS_filenum(srcpos), USRCPOS_linenum(srcpos));
 #else
-      print_source(USRCPOS_srcpos(srcpos));
+      //print_source(USRCPOS_srcpos(srcpos));
 #endif
     }
 
@@ -1427,6 +1564,10 @@ static void ir_put_stmt(WN * wn, INT indent)
       if ( WN_label_loop_info(wn) != NULL ) {
 	ir_put_stmt(WN_label_loop_info(wn), indent+1);
       }
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA)
+        ir_put_phi_list(wn, indent);
+#endif
       already_dumped_wn = TRUE;
       break;
 
@@ -1441,12 +1582,21 @@ static void ir_put_stmt(WN * wn, INT indent)
 	ir_put_stmt(WN_else(wn), indent+1);
       }
       ir_put_marker("END_IF", indent);
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA)
+        ir_put_phi_list(wn, indent);
+#endif
       break;
 
     case OPC_DO_LOOP:
       ir_put_expr(WN_index(wn), indent+1);
       ir_put_marker("INIT",indent);
       ir_put_stmt(WN_start(wn), indent+1);
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA) {
+        ir_put_phi_list(wn, indent+1);
+      }
+#endif
       ir_put_marker("COMP", indent);
       ir_put_expr(WN_end(wn), indent+1);
       ir_put_marker("INCR", indent);
@@ -1457,6 +1607,30 @@ static void ir_put_stmt(WN * wn, INT indent)
       }
       ir_put_marker("BODY", indent);
       ir_put_stmt(WN_do_body(wn), indent+1);
+      break;
+
+    case OPC_WHILE_DO:
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA) {
+        ir_put_phi_list(wn, indent+1);
+      }
+#endif
+      ir_put_marker("COMP",indent);
+      ir_put_expr(WN_kid(wn, 0), indent+1);
+      ir_put_marker("BODY", indent);
+      ir_put_stmt(WN_kid(wn, 1), indent+1);
+      break;
+
+    case OPC_DO_WHILE:
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA) {
+        ir_put_phi_list(wn, indent+1);
+      }
+#endif
+      ir_put_marker("BODY", indent);
+      ir_put_stmt(WN_kid(wn, 1), indent+1);
+      ir_put_marker("COMP",indent);
+      ir_put_expr(WN_kid(wn, 0), indent+1);
       break;
 
     case OPC_LOOP_INFO:
@@ -1488,6 +1662,11 @@ static void ir_put_stmt(WN * wn, INT indent)
       if (WN_kid_count(wn) > 2)
 	ir_put_stmt(WN_kid(wn,2), indent+1);
       ir_put_marker("END_SWITCH", indent);
+#if defined(BACK_END) || defined(IR_TOOLS)
+      if (OPT_Enable_WHIRL_SSA) {
+        ir_put_phi_list(wn, indent+1);
+      }
+#endif
       already_dumped_wn = TRUE;
       break;
 
@@ -1766,7 +1945,7 @@ extern void fdump_tree(FILE *f, WN *wn)
   else if (WN_opcode(wn) == OPC_FUNC_ENTRY)
     IR_put_func(wn, NULL);
   else
-    fprintf(ir_ofile, "unknown opcode in (WN *) 0x%p\n", wn);
+    fprintf(ir_ofile, "unknown opcode in (WN *) %p\n", wn);
   ir_ofile = save;
 }
 
@@ -2122,7 +2301,7 @@ extern void WN_TREE_fdump_tree(FILE *f, WN *wn)
   else if (WN_opcode(wn) == OPC_FUNC_ENTRY)
   WN_TREE_put_func(wn, NULL);
   else
-    fprintf(ir_ofile, "unknown opcode in (WN *) 0x%p\n", wn);
+    fprintf(ir_ofile, "unknown opcode in (WN *) %p\n", wn);
   ir_ofile = save;
 } 
 
@@ -2160,15 +2339,15 @@ extern void fdump_dep_tree( FILE *f, WN *wn, struct ALIAS_MANAGER *alias)
 }
 #endif /* BACK_END */
 
-extern void Check_for_IR_Dump(INT phase, WN *pu, char *phase_name)
+static void Check_for_IR_Dump0(INT phase, WN *pu, const char *phase_name, BOOL before)
 {
     BOOL dump_ir;
     BOOL dump_symtab;
     dump_ir = Get_Trace ( TKIND_IR, phase );
     dump_symtab =  Get_Trace ( TKIND_SYMTAB, phase );
     if (dump_ir || dump_symtab) {
-	fprintf(TFile,"\n\n========== Driver dump after %s ==========\n",
-		phase_name);
+	fprintf(TFile,"\n\n========== Driver dump %s %s ==========\n",
+		before == TRUE ? "before" : "after", phase_name);
 	if (dump_ir) fdump_tree (TFile,pu);
 	if (dump_symtab) {
 	    Print_symtab (TFile, GLOBAL_SYMTAB);
@@ -2176,3 +2355,1219 @@ extern void Check_for_IR_Dump(INT phase, WN *pu, char *phase_name)
 	}
     }
 }
+
+extern void Check_for_IR_Dump(INT phase, WN *pu, const char *phase_name)
+{
+    Check_for_IR_Dump0(phase, pu, phase_name, FALSE);
+}
+
+extern void Check_for_IR_Dump_Before_Phase(INT phase, WN *pu, const char *phase_name)
+{
+    Check_for_IR_Dump0(phase, pu, phase_name, TRUE);
+}
+
+
+// The following routines convert an ir data structure
+// into a string.  We use helper routines to build the 
+// string using stringstream.  Then the string is copied
+// into a memory pool.  
+//
+//  ir_put_wn  -> help_image_wn(stringstream &ss, WN *, INT indent);
+//  ir_put_expr -> help_image_expr(stringstream &ss, WN *wn, INT indent);
+//  ir_put_stmt -> help_image_stmt(stringstream &ss, WN *wn, INT indent);
+//  ir_put_WN_TREE_expr -> help_WN_TREE_image_expr(stringstream &ss, WN *wn, INT indent);
+//  ir_put_WN_TREE_stmr -> help_WN_TREE_image_stmt(stringstream &ss, WN *wn, INT indent);
+//  ir_put_wn  -> char *image_wn(MEM_POOL *p, WN *wn);
+
+
+// foward declarations. 
+
+static  void image_marker(stringstream &ss, const char *str, INT indent); 
+char *image_st(MEM_POOL *pool, ST_IDX st_idx);
+char *image_ty(MEM_POOL *pool, ST_IDX st_idx);
+char *image_wn(MEM_POOL *pool, WN *wn);
+char *image_stmt(MEM_POOL *pool, WN *wn);
+char *image_WN_TREE_stmt(MEM_POOL *pool, WN *wn);
+char *image_expr(MEM_POOL *pool, WN *wn);
+char *image_WN_TREE_expr(MEM_POOL *pool, WN *wn);
+char *image_lineno(MEM_POOL *pool, WN *wn);
+
+void help_image_lineno(stringstream &ss, WN *wn);
+void help_image_st (stringstream &ss, ST_IDX st_idx);
+void help_image_ty(stringstream &ss, TY_IDX ty);
+void help_image_expr(stringstream &ss, WN * wn, INT indent);
+void help_image_wn(stringstream &ss, WN *wn, INT indent);
+void help_image_stmt(stringstream &ss, WN * wn, INT indent);
+void help_WN_TREE_image_stmt(stringstream &ss, WN *wn, int indent);
+void help_WN_TREE_image_expr(stringstream &ss, WN * wn, INT indent);
+
+
+/*
+ *  Write out a marker at the indentation level.
+ */
+static 
+void image_marker(stringstream &ss, const char *str, INT indent)
+{
+  int i;
+  for (i = 0; i < indent; i++)
+     ss << ' ';
+  ss << str; 
+}
+
+char *
+image_st(MEM_POOL *pool, ST_IDX st_idx)
+{ 
+  stringstream ss; 
+  help_image_st(ss, st_idx);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+char *
+image_ty(MEM_POOL *pool, TY_IDX ty_idx)
+{ 
+  stringstream ss; 
+  help_image_ty(ss, ty_idx);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+void
+help_image_st (stringstream &ss, ST_IDX st_idx)
+{
+  char *name;
+  char *p;
+  
+  if (st_idx == (ST_IDX) 0) {
+    /* labels may have empty st */
+    ss << " <null-st>";
+
+  } else if (!follow_st) {
+    /* Do not follow ST *, so that it can dump useful information
+       even when ST * is not valid */
+    ss << " <st ";
+    ss << (INT32) st_idx;
+    ss << ">";
+
+  } else {
+    const ST* st = &St_Table[st_idx];
+    if (ST_class(st) == CLASS_CONST) {
+      name = Targ_Print(NULL, STC_val(st));
+      /* new lines and spaces in constant strings 
+       * will mess up the ascii reader,
+       * so replace with underlines */
+      for (p = name; *p != '\0'; p++)
+	switch (*p) {
+	case ' ':
+	case '\t':
+	case '\n':
+	  *p = '_';
+	}
+    } else
+    { 
+      name = ST_name(st);
+      ss << name; 
+    }
+  }
+}
+
+void
+help_image_ty(stringstream &ss, TY_IDX ty)
+{
+   ss << " T<";
+   ss << TY_id(ty);
+   ss << ",";
+   ss << TY_name(ty);
+   ss << ",";
+   ss << TY_align(ty);
+   
+   if (TY_is_restrict(ty)) 
+      ss << ",R";
+   
+   if (TY_is_volatile(ty)) 
+      ss << ",V";
+   
+   if (TY_is_const(ty)) 
+      ss << ",C";
+   
+   ss << ">";
+}
+
+char *
+image_lineno(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_image_lineno(ss, wn);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+void
+help_image_lineno(stringstream &ss, WN *wn)
+{ 
+  USRCPOS srcpos;
+  USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
+  if (USRCPOS_srcpos(srcpos) != 0)
+  {
+    ss << USRCPOS_linenum(srcpos);
+  } 
+} 
+
+char *
+image_wn(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_image_wn(ss, wn, 0);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+char *
+image_stmt(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_image_stmt(ss, wn, 0);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+
+
+
+char *
+image_WN_TREE_stmt(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_WN_TREE_image_stmt(ss, wn, 0);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+char *
+image_expr(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_image_expr(ss, wn, 0);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));  
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+char *
+image_WN_TREE_expr(MEM_POOL *pool, WN *wn)
+{ 
+  stringstream ss; 
+  help_WN_TREE_image_expr(ss, wn, 0);
+  char *str  = (char *) MEM_POOL_Alloc(pool, strlen(ss.str().data()) + 1);
+  Is_True(str != NULL, ("Allocation failed"));
+  // copy string into mempool.
+  strcpy(str, ss.str().data()); 
+  return str; 
+}
+
+
+/*
+ *  Write an expression and its children in postfix order.
+ *  If dump_parent_before_children, write it in prefix order instead.
+ */
+
+void
+help_image_expr(stringstream &ss, WN * wn, INT indent)
+{
+  INT i;
+  WN * wn2;
+
+  /* See if the parent op should be dumped before or after the children */
+  if (dump_parent_before_children) {
+     help_image_wn(ss,wn,indent);
+  }
+  for (i = 0; i < WN_kid_count(wn); i++) {
+    wn2 = WN_kid(wn,i);
+    if (wn2) {
+      OPCODE op = WN_opcode(wn2);
+      if ((OPCODE_FIRST <= op && op <= OPCODE_LAST) &&
+	  (OPCODE_is_expression(op) || OPCODE_is_call(op)))
+	      help_image_expr(ss, WN_kid(wn,i), indent+1);
+      else
+      if (    op == OPC_BLOCK
+           && (    (WN_operator(wn) == OPR_RCOMMA && i == 1)
+                || (WN_operator(wn) == OPR_COMMA && i == 0)))
+        help_image_stmt(ss, wn2, indent+1);
+      else
+      { 
+        int i; 
+        for (i = 0; i < indent+1; i++) ss << ' ';
+	ss << "opcode ";
+        ss << op; 
+        ss << " not an expression\n";
+      } 
+    } else  
+    { 
+        int i; 
+        for (i = 0; i < indent+1; i++) ss << ' ';
+        ss << "null-expression\n";
+    } 
+  }
+  if (!dump_parent_before_children) {
+     help_image_wn(ss, wn, indent);
+  }
+}
+
+
+/*
+ *  Write an WN * in ascii form on an individual line.
+ */ 
+void
+help_image_wn(stringstream &ss, WN *wn, INT indent)
+{ 
+    OPCODE opcode;
+
+    if (wn == NULL) {
+    	/* null statement */
+        ss << "### error: null WN pointer\n";
+   	return;
+    } else {
+	if (IR_dump_wn_addr) {
+	    char buff[32];
+            sprintf(buff, "0x%8p: ", wn);
+            ss << buff;
+	}
+	opcode = WN_opcode(wn);
+    }
+    if (opcode == 0) {
+        ss << "### error: WN opcode 0\n";
+	return;
+    }
+
+    if (indent > 0)
+    { 
+      image_marker(ss, "", indent);
+    } 
+    /*
+     *  for dependency dumping, dump a handle to refer to later
+     */
+    if (IR_DUMPDEP_info) {
+	INT32 handle=  0;
+	if (OPCODE_has_alias_info(WN_opcode(wn)) && WN_map_id(wn) != -1) {
+	    handle= AddToDUMPDEP(wn);
+	}
+	char buff[32];
+        sprintf(buff, "[%5d]", handle);
+        ss << buff;
+    }
+    if (indent > 0 && opcode == OPC_LABEL)
+	image_marker(ss, "", indent-1);
+    else
+        image_marker(ss,"",indent);
+
+
+    ss << OPCODE_name(opcode) + strlen("OPC_");
+
+    if (OPCODE_has_offset(opcode)) {
+	if (OPCODE_operator(opcode) == OPR_PRAGMA || 
+	    OPCODE_operator(opcode) == OPR_XPRAGMA)
+	{
+	    ss << " ";
+	    ss << WN_pragma_flags(wn);
+            ss << " ";
+            ss << WN_pragma(wn);
+	}
+	else
+	{
+	  ss << " ";
+          ss << WN_offset(wn);
+	}
+    } else if (OPCODE_has_2offsets(opcode)) {
+      ss << " ";
+      ss << WN_loop_trip_est(wn);
+      ss << " ";
+      ss << WN_loop_depth(wn);
+    }
+
+    switch (OPCODE_operator(opcode)) {
+
+    case OPR_INTRINSIC_OP:
+    case OPR_ARRAYEXP:
+#ifdef KEY
+    case OPR_PURE_CALL_OP:
+#endif
+      {
+	ss << " ";
+        ss << WN_kid_count(wn);
+        break;
+      }
+
+    case OPR_REGION:
+	ss << " ";
+        ss << WN_region_id(wn);
+
+#ifdef BACK_END
+      {
+	RID *rid = REGION_get_rid(wn);
+	if (rid != NULL)
+        {
+	  ss << " ";
+          ss << RID_id(rid);
+        }
+      }
+#endif /* BACK_END */
+      ss << "(kind=";
+      ss << WN_region_kind(wn);
+      ss << ")";
+      break;
+#if defined(TARG_SL)
+    case OPR_LDA:
+    case OPR_ISTORE:
+      ss << "im:";
+      ss << WN_is_internal_mem_ofst(wn);
+      break; 
+#endif
+    case OPR_LDBITS:
+    case OPR_ILDBITS:
+    case OPR_STBITS:
+    case OPR_ISTBITS:
+    case OPR_EXTRACT_BITS:
+    case OPR_COMPOSE_BITS:
+      ss << " <bofst:";
+      ss << WN_bit_offset(wn);
+      ss << " bsize:";
+      ss << WN_bit_size(wn);
+      ss << ">";
+      break;
+
+    case OPR_ASM_INPUT:
+      ss << " opnd:";
+      ss << WN_asm_opnd_num(wn);
+      break;
+
+    default:
+      break;
+    }
+
+    if (OPCODE_has_inumber(opcode)) {
+	switch (opcode) {
+	case OPC_IO:
+	  ss << " <";
+          ss << WN_intrinsic(wn);
+          ss << ",";
+          ss << IOSTATEMENT_name((IOSTATEMENT) WN_intrinsic(wn));
+          ss << ","; 
+          ss <<     get_iolibrary_name(WN_IO_Library(wn)); 
+          ss << ">";
+          break;
+	case OPC_IO_ITEM:
+	  ss << " <";
+          ss << WN_intrinsic(wn);
+          ss << ",";
+          ss << IOITEM_name((IOITEM) WN_intrinsic(wn));
+          ss << ">";
+          break;
+	default:		/* intrinsic */
+	    Is_True(OPCODE_operator(opcode) == OPR_INTRINSIC_OP ||
+		    OPCODE_operator(opcode) == OPR_INTRINSIC_CALL,
+		    ("ir_put_wn, expected an intrinsic"));
+#if defined(BACK_END) || defined(IR_TOOLS) || defined(TARG_NVISA)
+	    ss << " <";
+            ss << WN_intrinsic(wn);
+            ss << "," ;
+            ss << INTRINSIC_name((INTRINSIC) WN_intrinsic(wn));
+            ss << ">";
+		
+#endif
+	    break;
+	}
+    }
+
+    if (OPCODE_has_bits(opcode))
+    {
+      ss << " ";
+      ss << WN_cvtl_bits(wn);
+    }
+    if (OPCODE_has_label(opcode))
+    {
+      ss << " L";
+      ss << WN_label_number(wn);
+    }
+    if (OPCODE_has_flags(opcode)) 
+    {
+      ss << " ";
+      ss << WN_flag(wn);
+    }
+    if (OPCODE_has_sym(opcode)) {
+	help_image_st (ss,WN_st_idx(wn));
+    }
+
+    if (OPCODE_has_1ty(opcode)) {
+	if (WN_ty(wn) != (TY_IDX) 0) 
+	   help_image_ty(ss, WN_ty(wn));
+	else
+	    if (opcode != OPC_IO_ITEM)
+	      ss << " T<### ERROR: null ptr>";
+    } else if (OPCODE_has_2ty(opcode)) {
+	if (WN_ty(wn) != (TY_IDX) 0) 
+	   help_image_ty(ss,WN_ty(wn));
+	else
+	  ss << " T<### ERROR: null ptr>";
+	if (WN_load_addr_ty(wn) != (TY_IDX) 0) 
+	   help_image_ty(ss, WN_load_addr_ty(wn));
+	else
+	  ss << " T<### ERROR: null ptr>";
+    }
+
+    if (OPCODE_has_ndim(opcode))
+    { 
+      ss << " ";
+      ss << WN_num_dim(wn);
+    }
+    if (OPCODE_has_esize(opcode))
+    {
+        ss << " ";
+        ss << WN_element_size(wn);
+    }
+    if (OPCODE_has_num_entries(opcode))
+    {
+      ss << " ";
+      ss << WN_num_entries(wn);
+    }
+    if (OPCODE_has_last_label(opcode))
+    { 
+      ss << " ";
+      ss << WN_last_label(wn);
+    }
+
+    if (OPCODE_has_value(opcode)) {
+      ss << " ";
+      ss << WN_const_val(wn);
+      /* Also print the hex value for INTCONSTs */
+      if (OPCODE_operator(opcode) == OPR_INTCONST || opcode == OPC_PRAGMA) {
+	ss << " (0x";
+        ss << hex << WN_const_val(wn);
+      }
+    }
+
+    if (OPCODE_has_field_id(opcode) && WN_field_id(wn)) {
+      ss << " <field_id:";
+      ss << WN_field_id(wn);
+      ss << ">";
+    }
+    
+    if (OPCODE_has_ereg_supp(opcode)) {
+	INITO_IDX ino = WN_ereg_supp(wn);
+	if (ino != 0)
+	  {
+	    ss << " INITO<";
+            ss << INITO_IDX_index (ino); 
+            ss << ",";
+            ss << INITO_IDX_index (ino);
+            ss << ">";
+	  }
+    }
+    if (opcode == OPC_COMMENT) {
+      ss << " # ";
+      ss << Index_To_Str(WN_offset(wn));
+    }
+
+    if (follow_st && OPCODE_has_sym(opcode) && OPCODE_has_offset(opcode)
+	&& WN_st_idx(wn) != (ST_IDX) 0 && (ST_class(WN_st(wn)) == CLASS_PREG)
+        && opcode != OPC_PRAGMA)
+	{
+	    if (Preg_Is_Dedicated(WN_offset(wn))) {
+		if (Preg_Offset_Is_Int(WN_offset(wn))) {
+		  ss << " # $r";
+                  ss << WN_offset(wn);
+		}
+		else if (Preg_Offset_Is_Float(WN_offset(wn))) {
+		  ss << " # $f";
+                  ss << WN_offset(wn) - Float_Preg_Min_Offset;
+		}
+#ifdef TARG_X8664
+		else if (Preg_Offset_Is_X87(WN_offset(wn))) {
+		  ss << " # $st";
+                  ss << WN_offset(wn) - X87_Preg_Min_Offset;
+		}
+#endif
+	    }
+	    else { 
+	    	/* reference to a non-dedicated preg */
+		if ((WN_offset(wn) - Last_Dedicated_Preg_Offset) 
+			< PREG_Table_Size (CURRENT_SYMTAB) )
+	    	{ 
+                  ss << " # ";
+                  ss << Preg_Name(WN_offset(wn));
+		}
+		else
+		{ 
+		  ss << " # <Invalid PREG Table index (";
+                  ss << WN_offset(wn);
+                  ss << ")>";
+		}
+	    }
+	}
+
+    if (opcode == OPC_XPRAGMA) {
+      ss << " # ";
+      ss << WN_pragmas[WN_pragma(wn)].name;
+    }
+
+    if (OPCODE_operator(opcode) == OPR_ASM_INPUT) {
+      ss << " # \"";
+      ss << WN_asm_input_constraint(wn);
+      ss << "\"";
+    }
+
+    if (opcode == OPC_PRAGMA) {
+        ss << " # ";
+        ss << WN_pragmas[WN_pragma(wn)].name;
+	switch(WN_pragma(wn)) {
+	case WN_PRAGMA_DISTRIBUTE:
+	case WN_PRAGMA_REDISTRIBUTE:
+	case WN_PRAGMA_DISTRIBUTE_RESHAPE:
+	  ss << ", ";
+          ss << WN_pragma_index(wn);
+          switch(WN_pragma_distr_type(wn)) {
+	    case DISTRIBUTE_STAR:
+	      ss << ", *";
+              break;
+	    case DISTRIBUTE_BLOCK:
+	      ss << ", BLOCK";
+		break;
+	    case DISTRIBUTE_CYCLIC_CONST:
+	      ss << ", CYCLIC(";
+              ss << WN_pragma_preg(wn);
+              ss << ")";
+		break;
+	    case DISTRIBUTE_CYCLIC_EXPR:
+	      ss << ", CYCLIC(expr)";
+		break;
+	    }
+	    break;
+	case WN_PRAGMA_ASM_CONSTRAINT:
+	  ss << ", \"";
+          ss <<   WN_pragma_asm_constraint(wn);
+          ss << "\", opnd:";
+          ss << 		  WN_pragma_asm_opnd_num(wn);
+          ss << " preg:" ;
+          ss <<   WN_pragma_asm_copyout_preg(wn);
+	  break;
+	default:
+            if (WN_pragma_arg2(wn) != 0 ) 
+	    { 
+	      ss << ", ";
+	      ss << WN_pragma_arg1(wn), WN_pragma_arg2(wn);
+              ss << ", ";
+              ss << WN_pragma_arg2(wn);
+	    }
+            else
+		if (WN_pragma_arg1(wn) != 0 )
+		  { 
+		    ss << ", ";
+                    ss << WN_pragma_arg1(wn);
+		  }
+	    break;
+	} /* switch */
+    }
+
+    if (OPCODE_operator(opcode) == OPR_ASM_STMT) {
+      ss << " # \"";
+      ss << WN_asm_string(wn); 
+      ss << "\"";
+      if (WN_Asm_Volatile(wn))
+      	ss << " (volatile)";
+      if (WN_Asm_Clobbers_Mem(wn))
+      	ss << " (memory)";
+      if (WN_Asm_Clobbers_Cc(wn))
+      	ss << " (cc)";
+    }
+
+    if (OPCODE_is_call(opcode))
+    {
+      ss << " # flags 0x";
+      ss << hex << WN_call_flag(wn);
+    }
+
+    if (OPCODE_operator(opcode) == OPR_PARM) {
+	INT flag =  WN_flag(wn);
+	ss << " # ";
+	if (flag & WN_PARM_BY_REFERENCE) 
+	  ss << " by_reference ";
+#if defined(TARG_SL)
+	if (flag & WN_PARM_DEREFERENCE)  
+          ss << " by_dereference ";
+#endif
+	if (flag & WN_PARM_BY_VALUE)     
+	  ss << " by_value ";
+	if (flag & WN_PARM_OUT)          
+          ss << " out ";
+	if (flag & WN_PARM_DUMMY)        
+          ss << " dummy ";
+	if (flag & WN_PARM_READ_ONLY)    
+          ss << " read_only ";
+	if (flag & WN_PARM_PASSED_NOT_SAVED) 
+          ss << "passed_not_saved ";
+	if (flag & WN_PARM_NOT_EXPOSED_USE) 
+          ss << " not_euse ";
+	if (flag & WN_PARM_IS_KILLED) 
+          ss << " killed ";
+    }
+
+    if (IR_dump_map_info) {
+      ss << " # <id ";
+      ss << OPCODE_mapcat(opcode);
+      ss << ":";
+      ss << WN_map_id(wn);
+      ss << ">";
+		
+	if (ir_put_map && ( WN_map_id(wn) != -1 )) {
+	    switch ( WN_MAP_Get_Kind( ir_put_map ) ) {
+	    case WN_MAP_KIND_VOIDP:
+	      ss << " <map ";
+              ss << hex << WN_MAP_Get( ir_put_map, wn );
+              ss << ">";
+		break;
+	    case WN_MAP_KIND_INT32:
+	      ss << " <map 0x";
+              ss << hex << WN_MAP32_Get( ir_put_map, wn );
+              ss << ">";
+		break;
+	    case WN_MAP_KIND_INT64:
+	      ss <<  " <map 0x", 
+ 	      ss << WN_MAP64_Get( ir_put_map, wn );
+              ss << ">";
+	      break;
+	    }
+	}
+#ifdef BACK_END
+	if (UINT16 vertex = LNOGetVertex(wn)) {
+	  ss << " <lno vertex ";
+          ss << vertex;
+          ss << ">";
+	}
+#endif
+    }
+
+    if (OPCODE_is_scf(WN_opcode(wn)) || OPCODE_is_stmt(WN_opcode(wn))) {
+
+	USRCPOS srcpos;
+	USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
+
+	ss <<  " {line: ";
+        ss << USRCPOS_filenum(srcpos); 
+        ss <<  "/";
+        ss << USRCPOS_linenum(srcpos); 
+        ss << "}"; 
+    }
+
+#ifdef BACK_END
+    if (IR_dump_alias_info(WN_opcode(wn))) {
+      ss << " [alias_id: ";
+      ss << WN_MAP32_Get(IR_alias_map, wn);
+      ss << (IR_alias_mgr && IR_alias_mgr->Safe_to_speculate(wn) ? ",fixed" : "");
+      ss << "]";
+	      
+    }
+#endif
+
+    if (IR_freq_map != WN_MAP_UNDEFINED && (OPCODE_is_scf(WN_opcode(wn)) ||
+					    OPCODE_is_stmt(WN_opcode(wn)))) {
+	USRCPOS srcpos;
+	USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
+
+	ss << " {freq: ";
+        ss << WN_MAP32_Get(IR_freq_map, wn);
+        ss << ", ln: ";
+        ss << USRCPOS_linenum(srcpos);
+        ss << ", col: ";
+        ss << USRCPOS_column(srcpos);
+        ss << "}";
+		
+    }
+    if (Current_Map_Tab != NULL 
+    	&& WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn) != 0) 
+    {
+      ss << " {class ";
+      ss <<      WN_MAP32_Get(WN_MAP_ALIAS_CLASS, wn);
+      ss << "}";
+    }
+    ss <<  "\n";
+}
+
+
+/*
+ *  Write a statement WN * and its children in prefix order.
+ */
+void help_image_stmt(stringstream &ss, WN * wn, INT indent)
+{
+  INT i;
+  WN * wn2;
+  USRCPOS srcpos;
+
+  if (wn) { 
+
+    OPCODE opc = WN_opcode(wn);
+    BOOL already_dumped_wn = FALSE;
+  
+    if (OPCODE_is_scf(opc) || dump_parent_before_children) {
+      help_image_wn(ss, wn, indent);
+      already_dumped_wn = TRUE;
+    }
+
+    switch (opc) {
+
+    case OPC_BLOCK:
+      wn2 = WN_first(wn);
+      while (wn2) {
+	help_image_stmt(ss,wn2, indent);
+	wn2 = WN_next(wn2);
+      }
+      image_marker(ss, "END_BLOCK", indent);
+      break;
+
+    case OPC_REGION:
+      image_marker(ss, "REGION EXITS", indent);
+      help_image_stmt(ss, WN_region_exits(wn), indent+1);
+
+      image_marker(ss, "REGION PRAGMAS", indent);
+      help_image_stmt(ss, WN_region_pragmas(wn), indent+1);
+
+      image_marker(ss, "REGION BODY", indent);
+      help_image_stmt(ss, WN_region_body(wn), indent+1);
+
+      /* check to make sure cg.so is loaded first */
+      /* IR_dump_region will be NULL if it is not */
+#ifdef BACK_END
+      if (IR_dump_region)
+	//CG_Dump_Region(ir_ofile, wn);
+#endif /* BACK_END */
+      { char str[20];
+	sprintf(str,"END_REGION %d", WN_region_id(wn));
+	image_marker(ss,str, indent);
+      }
+      break;
+      
+    case OPC_LABEL:
+      help_image_wn(ss,wn, indent);
+      if ( WN_label_loop_info(wn) != NULL ) {
+	help_image_stmt(ss,WN_label_loop_info(wn), indent+1);
+      }
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_IF:
+      help_image_expr(ss,WN_if_test(wn), indent+1);
+      if (WN_then(wn)) {
+	image_marker(ss,"THEN", indent);
+	help_image_stmt(ss, WN_then(wn), indent+1);
+      }
+      if (WN_else(wn)) {
+	image_marker(ss,"ELSE", indent);
+	help_image_stmt(ss,WN_else(wn), indent+1);
+      }
+      image_marker(ss,"END_IF", indent);
+      break;
+
+    case OPC_DO_LOOP:
+      help_image_expr(ss,WN_index(wn), indent+1);
+      image_marker(ss,"INIT",indent);
+      help_image_stmt(ss,WN_start(wn), indent+1);
+      image_marker(ss,"COMP", indent);
+      help_image_expr(ss,WN_end(wn), indent+1);
+      image_marker(ss,"INCR", indent);
+      help_image_stmt(ss,WN_step(wn), indent+1);
+      /* optional loop_info */
+      if ( WN_do_loop_info(wn) != NULL ) {
+	help_image_stmt(ss,WN_do_loop_info(wn), indent);
+      }
+      image_marker(ss,"BODY", indent);
+      help_image_stmt(ss,WN_do_body(wn), indent+1);
+      break;
+
+    case OPC_LOOP_INFO:
+      help_image_wn(ss,wn, indent);
+      if ( WN_loop_induction(wn) != NULL ) {
+	help_image_expr(ss,WN_loop_induction(wn), indent+1);
+      }
+      if ( WN_loop_trip(wn) != NULL ) {
+	help_image_expr(ss,WN_loop_trip(wn), indent+1);
+      }
+      image_marker(ss,"END_LOOP_INFO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_COMPGOTO:
+      help_image_wn(ss,wn, indent);
+      help_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_image_stmt(ss,WN_kid(wn,1), indent+1);
+      if (WN_kid_count(wn) > 2)
+	help_image_stmt(ss,WN_kid(wn,2), indent+1);
+      image_marker(ss,"END_COMPGOTO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_SWITCH:
+      help_image_wn(ss,wn, indent);
+      help_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_image_stmt(ss,WN_kid(wn,1), indent+1);
+      if (WN_kid_count(wn) > 2)
+	help_image_stmt(ss,WN_kid(wn,2), indent+1);
+      image_marker(ss,"END_SWITCH", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_XGOTO:
+      help_image_wn(ss,wn, indent);
+      help_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_image_stmt(ss,WN_kid(wn,1), indent+1);
+      image_marker(ss,"END_XGOTO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_WHERE:
+      help_image_expr(ss,WN_kid(wn,0), indent+1);
+      image_marker(ss,"BODY", indent);
+      help_image_stmt(ss,WN_kid(wn,1), indent+1);
+      help_image_stmt(ss,WN_kid(wn,2), indent+1);
+      break;
+
+    case OPC_EXC_SCOPE_BEGIN:
+      {
+        INT i;
+	for (i = 0; i < WN_kid_count(wn); i++)
+	  help_image_stmt(ss,WN_kid(wn, i), indent+1);
+	break;
+      }
+    case OPC_EXC_SCOPE_END:
+     break;
+
+    case OPC_ASM_STMT:
+      help_image_wn(ss,wn, indent);
+      already_dumped_wn = TRUE;
+      help_image_stmt(ss,WN_kid(wn,0), indent+1);
+      help_image_stmt(ss,WN_kid(wn,1), indent+1);
+      image_marker(ss,"ASM_INPUTS", indent);
+      {
+	INT i;
+	for (i = 2; i < WN_kid_count(wn); i++) {
+	  help_image_expr(ss,WN_kid(wn,i), indent+1);
+	}
+      }
+      image_marker(ss,"END_ASM_INPUTS", indent);
+      break;
+
+    default: 
+      {
+	INT last_is_expr = TRUE;
+	OPCODE opc2;
+	for (i = 0; i < WN_kid_count(wn); i++) {
+	  wn2 = WN_kid(wn,i);
+	  if (wn2) {
+	    opc2 = WN_opcode(wn2);
+	    if (opc2 == 0) {
+	       fprintf(ir_ofile, "### error: WN opcode 0\n");
+	    } else if (OPCODE_is_expression(opc2)) {
+	      help_image_expr(ss,wn2, indent+1);
+	      last_is_expr = 1;
+	    }
+	    else if (OPCODE_is_stmt(opc2) || OPCODE_is_scf(opc2)) {
+	      if (last_is_expr) {
+      		image_marker(ss,"BODY", indent);
+		help_image_stmt(ss,wn2, indent+1);
+	      } else
+		help_image_stmt(ss,WN_kid(wn,i), indent+1);
+	      last_is_expr = 0;
+	    } else {
+	       ss << "### error: unknown opcode type ";
+               ss << opc2;
+               ss << "\n";
+	    }
+	  } else
+	    help_image_stmt(ss,wn2, indent+1);
+	}
+      }
+    }
+    if (!already_dumped_wn)
+      help_image_wn(ss,wn, indent);
+ } else
+      help_image_wn(ss,wn, indent);
+}
+
+
+void
+help_WN_TREE_image_stmt(stringstream& ss, WN *wn, int indent)
+{
+  INT i;
+  WN * wn2;
+  USRCPOS srcpos;
+
+  Is_True(wn != 0, ("WN_TREE_image_stmt called with null whirl tree"));
+
+  OPCODE opc = WN_opcode(wn);
+  Is_True(OPCODE_is_scf(opc) || OPCODE_is_stmt(opc),
+          ("WN_TREE_image_stmt invoked on non statement: opcode = %s", OPCODE_name(opc)));
+
+  if (wn)
+  { 
+    BOOL already_dumped_wn = FALSE;
+    if (OPCODE_is_scf(opc) || dump_parent_before_children) {
+      help_image_wn(ss, wn, indent);
+      already_dumped_wn = TRUE;
+    }
+
+    // create an iterator to go through the statements in a block;
+    WN_TREE_ITER<PRE_ORDER> tree_iter(wn);
+
+   switch (opc) {
+
+      if (WN_first(wn)) {
+          ++tree_iter; // get to the first kid of the block
+#ifndef __GNU_BUG_WORKAROUND
+        while (tree_iter != LAST_PRE_ORDER_ITER) {
+#else
+        while (tree_iter != WN_TREE_ITER<PRE_ORDER, WN*>()) {
+#endif
+          wn2 = tree_iter.Wn();
+          help_WN_TREE_image_stmt(ss, wn2, indent);// traverse the tree under wn2
+          tree_iter.Unwind(); // have already traversed the tree under wn2
+                              // skip going down the tree again
+        }
+      }
+      image_marker(ss,"END_BLOCK", indent);
+      break;
+
+    case OPC_REGION:
+      image_marker(ss, "REGION EXITS", indent);
+      help_WN_TREE_image_stmt(ss,WN_region_exits(wn), indent+1);
+
+      image_marker(ss,"REGION PRAGMAS", indent);
+      help_WN_TREE_image_stmt(ss, WN_region_pragmas(wn), indent+1);
+
+      image_marker(ss, "REGION BODY", indent);
+      help_WN_TREE_image_stmt(ss, WN_region_body(wn), indent+1);
+
+      /* check to make sure cg.so is loaded first */
+      /* IR_dump_region will be NULL if it is not */
+#ifdef BACK_END
+      if (IR_dump_region)
+	CG_Dump_Region(ir_ofile, wn);
+#endif /* BACK_END */
+      { 
+        char str[20];
+	sprintf(str,"END_REGION %d", WN_region_id(wn));
+        ss << "END_REGION ";
+        ss << str; 
+      }
+      break;
+      
+    case OPC_LABEL:
+      help_image_wn(ss, wn, indent);
+      if ( WN_label_loop_info(wn) != NULL ) {
+	help_WN_TREE_image_stmt(ss,WN_label_loop_info(wn), indent+1);
+      }
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_IF:
+      help_WN_TREE_image_expr(ss, WN_if_test(wn), indent+1);
+      if (WN_then(wn)) {
+	image_marker(ss, "THEN", indent);
+	help_WN_TREE_image_stmt(ss,WN_then(wn), indent+1);
+      }
+      if (WN_else(wn)) {
+	image_marker(ss,"ELSE", indent);
+	help_WN_TREE_image_stmt(ss, WN_else(wn), indent+1);
+      }
+      image_marker(ss,"END_IF", indent);
+      break;
+
+    case OPC_DO_LOOP:
+      help_WN_TREE_image_expr(ss,WN_index(wn), indent+1);
+      image_marker(ss, "INIT",indent);
+      help_WN_TREE_image_stmt(ss,WN_start(wn), indent+1);
+      image_marker(ss,"COMP", indent);
+      help_WN_TREE_image_expr(ss,WN_end(wn), indent+1);
+      image_marker(ss,"INCR", indent);
+      help_WN_TREE_image_stmt(ss,WN_step(wn), indent+1);
+      /* optional loop_info */
+      if ( WN_do_loop_info(wn) != NULL ) {
+	help_WN_TREE_image_stmt(ss,WN_do_loop_info(wn), indent);
+      }
+      image_marker(ss,"BODY", indent);
+      help_WN_TREE_image_stmt(ss,WN_do_body(wn), indent+1);
+      break;
+
+    case OPC_LOOP_INFO:
+      help_image_wn(ss,wn, indent);
+      if ( WN_loop_induction(wn) != NULL ) {
+	help_WN_TREE_image_expr(ss,WN_loop_induction(wn), indent+1);
+      }
+      if ( WN_loop_trip(wn) != NULL ) {
+	help_WN_TREE_image_expr(ss,WN_loop_trip(wn), indent+1);
+      }
+      image_marker(ss,"END_LOOP_INFO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_COMPGOTO:
+      help_image_wn(ss,wn, indent);
+      help_WN_TREE_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_WN_TREE_image_stmt(ss,WN_kid(wn,1), indent+1);
+      if (WN_kid_count(wn) > 2)
+	help_WN_TREE_image_stmt(ss,WN_kid(wn,2), indent+1);
+      image_marker(ss,"END_COMPGOTO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_SWITCH:
+      help_image_wn(ss,wn, indent);
+      help_WN_TREE_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_WN_TREE_image_stmt(ss,WN_kid(wn,1), indent+1);
+      if (WN_kid_count(wn) > 2)
+	help_WN_TREE_image_stmt(ss,WN_kid(wn,2), indent+1);
+      image_marker(ss,"END_SWITCH", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_XGOTO:
+      help_image_wn(ss,wn, indent);
+      help_WN_TREE_image_expr(ss,WN_kid(wn,0), indent+1);
+      help_WN_TREE_image_stmt(ss,WN_kid(wn,1), indent+1);
+      image_marker(ss,"END_XGOTO", indent);
+      already_dumped_wn = TRUE;
+      break;
+
+    case OPC_WHERE:
+      help_WN_TREE_image_expr(ss,WN_kid(wn,0), indent+1);
+      image_marker(ss,"BODY", indent);
+      help_WN_TREE_image_stmt(ss,WN_kid(wn,1), indent+1);
+      help_WN_TREE_image_stmt(ss,WN_kid(wn,2), indent+1);
+      break;
+
+    case OPC_EXC_SCOPE_BEGIN:
+      {
+        INT i;
+	for (i = 0; i < WN_kid_count(wn); i++)
+	  help_WN_TREE_image_stmt(ss,WN_kid(wn, i), indent+1);
+	break;
+      }
+    case OPC_EXC_SCOPE_END:
+     break;
+    default: 
+      {
+	INT last_is_expr = TRUE;
+	OPCODE opc2;
+	for (i = 0; i < WN_kid_count(wn); i++) {
+	  wn2 = WN_kid(wn,i);
+	  if (wn2) {
+	    opc2 = WN_opcode(wn2);
+	    if (opc2 == 0) {
+	      ss << "### error: WN opcode 0\n";
+	    } else if (OPCODE_is_expression(opc2)) {
+	      help_WN_TREE_image_expr(ss,wn2, indent+1);
+	      last_is_expr = 1;
+	    }
+	    else if (OPCODE_is_stmt(opc2) || OPCODE_is_scf(opc2)) {
+	      if (last_is_expr) {
+      		image_marker(ss,"BODY", indent);
+		help_WN_TREE_image_stmt(ss,wn2, indent+1);
+	      } else
+		help_WN_TREE_image_stmt(ss,WN_kid(wn,i), indent+1);
+	      last_is_expr = 0;
+	    } else {
+	      ss << "### error: unknown opcode type ";
+              ss << opc2;
+	    }
+	  } else
+	    help_WN_TREE_image_stmt(ss,wn2, indent+1);
+	}
+      }
+   }
+   if (!already_dumped_wn)
+     help_image_wn(ss,wn, indent);
+  }
+}
+
+
+
+
+void 
+help_WN_TREE_image_expr(stringstream &ss, WN * wn, INT indent) {
+  WN * wn2;
+  WN * parent_wn;
+
+  Is_True(OPCODE_is_expression(WN_opcode(wn)) || OPCODE_is_call(WN_opcode(wn)),
+          ("WN_TREE_put_expr invoked with non-expression, opcode = %s",
+           OPCODE_name(WN_opcode(wn))));
+
+  // See if the parent op should be dumped before the children  (PRE_ORDER)
+  if (dump_parent_before_children) {
+    // create PRE_ORDER tree iterator; use stack of default size
+
+    WN_TREE_ITER<PRE_ORDER> tree_iter(wn);
+
+#ifndef __GNU_BUG_WORKAROUND
+    while (tree_iter != LAST_PRE_ORDER_ITER) {
+#else
+    while (tree_iter != WN_TREE_ITER<PRE_ORDER, WN*>()) {
+#endif
+      wn2 = tree_iter.Wn();
+
+      if (OPCODE_is_expression(WN_opcode(wn2)) ||
+          OPCODE_is_call(WN_opcode(wn2)))
+        help_image_wn(ss,wn2,indent+tree_iter.Depth());
+
+      else if (WN_operator(wn2) == OPR_BLOCK) {
+        // block under an expression had better be due to comma/rcomma
+        parent_wn = tree_iter.Get_parent_wn();
+        Is_True(parent_wn && 
+                ((WN_operator(parent_wn) == OPR_COMMA) ||
+                 (WN_operator(parent_wn) == OPR_RCOMMA)),
+                ("block under expression not a part of comma/rcomma"));
+
+        help_WN_TREE_image_stmt(ss,wn2, indent + tree_iter.Depth()); 
+        tree_iter.Unwind();// have already traversed down the tree 
+                           //  skip going down this tree again
+      }
+
+      else
+        //fprintf(ir_ofile, "%*sopcode %d not an expression\n", 
+        //        indent+1,"", WN_opcode(wn2));
+      ++tree_iter;
+    } // while
+  } // if dump_parent_before_children
+  else {
+    // post order traversal of expressions falls back on ir_put_expr
+    // this is so because expressions can contain statements (through comma)
+    // and in post order, we need to stop going down at statement boundaries 
+    // which is not currently possible with the generic post_order tree
+    // iterator
+    help_WN_TREE_image_expr(ss,wn,indent);
+  } 
+}
+
+
+
+

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -94,7 +98,7 @@
 #define DIGITS_INT8_F90_IEEE     63   /* Integer (KIND=8) */
 #define DIGITS_REAL4_F90_IEEE    24   /* Real (KIND=4)    */
 #define DIGITS_REAL8_F90_IEEE    53   /* Real (KIND=8)    */
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define DIGITS_REAL16_F90_IEEE   107  /* Real (KIND=16)   */
 #else 
 #define DIGITS_REAL16_F90_IEEE   113  /* Real (KIND=16)   */
@@ -129,7 +133,7 @@
 /* IEEE: */
 #define EPSILON_REAL4_F90_IEEE  "1.192092895507812500E-07"
 #define EPSILON_REAL8_F90_IEEE  "2.220446049250313081E-16"
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define EPSILON_REAL16_F90_IEEE "1.23259516440783094595582588325435348E-32"
 #else
 #define EPSILON_REAL16_F90_IEEE "1.925929944387235853055977942584927319E-34"
@@ -170,7 +174,7 @@
 #define HUGE_INT8_F90_IEEE  "9223372036854775807"
 #define HUGE_REAL4_F90_IEEE   "3.4028234663852886E+38"
 #define HUGE_REAL8_F90_IEEE   "1.7976931348623158E+308"
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define HUGE_REAL16_F90_IEEE  "8.98846567431157953864652595394506827E+307"
 #else
 #define HUGE_REAL16_F90_IEEE  "1.189731495357231765085759326628007016E+4932"
@@ -199,7 +203,7 @@
 /* IEEE: */
 #define MAXEXPONENT_REAL4_F90_IEEE	 128
 #define MAXEXPONENT_REAL8_F90_IEEE	1024
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define MAXEXPONENT_REAL16_F90_IEEE     1023
 #else
 #define MAXEXPONENT_REAL16_F90_IEEE    16384
@@ -220,7 +224,7 @@
 /* IEEE: */
 #define MINEXPONENT_REAL4_F90_IEEE	 -125
 #define MINEXPONENT_REAL8_F90_IEEE	-1021
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define MINEXPONENT_REAL16_F90_IEEE      -915
 #else
 #define MINEXPONENT_REAL16_F90_IEEE    -16381
@@ -244,7 +248,7 @@
 /* IEEE: */
 #define PRECISION_REAL4_F90_IEEE    6  
 #define PRECISION_REAL8_F90_IEEE   15  
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define PRECISION_REAL16_F90_IEEE  31  
 #else
 #define PRECISION_REAL16_F90_IEEE  33  
@@ -288,7 +292,7 @@
 #define RANGE_INT8_F90_IEEE     18
 #define RANGE_REAL4_F90_IEEE    37
 #define RANGE_REAL8_F90_IEEE   307
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define RANGE_REAL16_F90_IEEE  275
 #else
 #define RANGE_REAL16_F90_IEEE 4931
@@ -327,11 +331,11 @@
 #define TINY_REAL16_F90_Y "0.0"
 #endif
 /* IEEE: */
-#define TINY_REAL4_F90_IEEE   "1.175494350822287508E-38"
-#define TINY_REAL8_F90_IEEE   "2.225073858507201383E-308"
+#define TINY_REAL4_F90_IEEE   "1.1754944E-38"
+#define TINY_REAL8_F90_IEEE   "2.2250738585072014E-308"
 
 /* until REAL16 is ready on Cray ieee, this must be the same as REAL8 */
-#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX))
+#if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #define TINY_REAL16_F90_IEEE  "0.1805194375864829576069262081173747E-275"
 #else
 #define TINY_REAL16_F90_IEEE  "3.362103143112093506262677817321752603E-4932"

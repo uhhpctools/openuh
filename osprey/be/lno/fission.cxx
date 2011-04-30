@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -87,6 +91,7 @@ const mUINT16  FISSION_BIT_SINGLY_NESTING=             0x0004;
 const mUINT16  FISSION_BIT_SCALAR_EXPANSION=           0x0008;
 const mUINT16  FISSION_BIT_EXPRESSION_BASED=           0x0010;
 const mUINT16  FISSION_BIT_TWO_LOOPS_ONLY=             0x0020;
+const mUINT16  FISSION_BIT_PARTITION_BASED=            0x0040;
 const mUINT16  FISSION_BIT_TEST_ONLY=                  0x1000;
 
 const mUINT16 OPT_FLAG_STMT_SIMPLE=                  0;
@@ -107,9 +112,20 @@ static void fission_verbose_info(
   BOOL          ,   // success
   SRCPOS        srcpos,
   UINT32        fission_level,
-  char*         message)
+  const char*         message)
 {
   printf("#### Fission(%d:%d): %s\n",
+    Srcpos_To_Line(srcpos), fission_level, message);
+
+}
+
+static void distribute_verbose_info(
+  BOOL          ,   // success
+  SRCPOS        srcpos,
+  UINT32        fission_level,
+  const char*         message)
+{
+  printf("#### Distribute(%d:%d): %s\n",
     Srcpos_To_Line(srcpos), fission_level, message);
 
 }
@@ -118,7 +134,7 @@ static void fission_analysis_info(
   BOOL          success,
   SRCPOS        srcpos,
   UINT32        fission_level,
-  char*         message)
+  const char*         message)
 {
   if (success)
     fprintf(LNO_Analysis,"( LNO_Fission_Success ");
@@ -133,7 +149,7 @@ static void fission_tlog_info(
   FISSION_FUSION_STATUS     status,
   WN*           loop,
   UINT32        level,
-  char*         message)
+  const char*         message)
 {
   char in_string[30];
   char out_string[30];
@@ -730,10 +746,23 @@ DYN_ARRAY<FF_STMT_LIST>& loop, MEM_POOL* pool)
   for (stmt = WN_first(WN_do_body(in_loop));
     stmt; stmt = WN_next(stmt)) {
     // map the stmts to vertices in dep_g
+#if HOST_IS_BIG_ENDIAN
+    union {
+      struct {
+#if HOST_IS_64BIT
+          mUINT32 padding1;
+#endif
+          mUINT16 padding0;
+          VINDEX16 v;
+      };
+      void *p;
+    } v;
+#else
     union {
       VINDEX16 v;
       void *p;
     } v;
+#endif
     v.p = NULL;
     v.v = dep_g_p->Add_Vertex();
     if (v.v==0) {
@@ -760,7 +789,11 @@ DYN_ARRAY<FF_STMT_LIST>& loop, MEM_POOL* pool)
     VINDEX16 v=sdg->Get_Vertex(stmt);
     if (v ==0) {
       OPCODE opc=WN_opcode(stmt);
-      if (opc!=OPC_LABEL && opc!=OPC_RETURN && opc!=OPC_GOTO) {
+      if (opc!=OPC_LABEL && opc!=OPC_RETURN && opc!=OPC_GOTO
+#ifdef KEY
+  	  && opc!=OPC_GOTO_OUTER_BLOCK
+#endif
+	 ) {
         // depends on everything else
         DevWarn("Statement dependence graph problem");
         INT m=loop.Newidx();
@@ -895,6 +928,289 @@ DYN_ARRAY<FF_STMT_LIST>& loop, MEM_POOL* pool)
 
   CXX_DELETE(dep_g_p, pool);
 
+}
+
+static BOOL
+has_back_edges(ARRAY_DIRECTED_GRAPH16* sdg, 
+               SCC_DIRECTED_GRAPH16 *dep_g_p,
+               WN_MAP dep_graph_map,
+               WN *scc_first,  
+               int j,
+               VINDEX16 *queue, 
+               VINDEX16 total_scc)
+{
+  BOOL ret_val = FALSE;
+  int i;
+  VINDEX16 v=sdg->Get_Vertex(scc_first);
+  EINDEX16 e=sdg->Get_Out_Edge(v);
+  while (e) {
+    VINDEX16 v1 = sdg->Get_Sink(e);
+    WN* stmt = sdg->Get_Wn(v1);
+    VINDEX16 scc_id = dep_g_p->Get_Scc_Id(
+      (mUINT32)(INTPTR)WN_MAP_Get(dep_graph_map, stmt));
+    for (i = j - 1; i >= 0; i--) {
+      if (queue[i] == scc_id) {
+        ret_val = TRUE;
+        break;
+      }
+    }
+    if (ret_val) break;
+    e = sdg->Get_Next_Out_Edge(e);
+  }
+
+  return ret_val;
+}
+
+static void
+Find_Partitions(FF_STMT_LIST& stl_1, WN* in_loop, UINT8 fission_level,
+ARRAY_DIRECTED_GRAPH16* sdg,
+MEM_POOL* pool)
+{
+  SCC_DIRECTED_GRAPH16 *dep_g_p = CXX_NEW(SCC_DIRECTED_GRAPH16(0, 0), pool);
+  WN_MAP dep_graph_map;	// map from stmts to vertices in dep_g
+  WN* stmt;
+  VINDEX16 i;
+  int j, num_stmts;
+
+  dep_graph_map = WN_MAP_Create(pool);
+  FmtAssert(dep_graph_map != -1,("Ran out of mappings in Fission"));
+
+  // now form the SCCs
+  for (stmt = WN_first(WN_do_body(in_loop));
+    stmt; stmt = WN_next(stmt)) {
+    // map the stmts to vertices in dep_g
+    union {
+      VINDEX16 v;
+      void *p;
+    } v;
+    v.p = NULL;
+    v.v = dep_g_p->Add_Vertex();
+    if (v.v==0) {
+      DevWarn("Statement scc graph too big");
+      WN_MAP_Delete(dep_graph_map);
+      CXX_DELETE(dep_g_p, pool);
+      return;
+    }
+    WN_MAP_Set(dep_graph_map, stmt, v.p);
+    // TODO: really want to use 16 bits in the map
+  }
+
+  DO_LOOP_INFO *loop_info;
+  loop_info = (DO_LOOP_INFO *)WN_MAP_Get(LNO_Info_Map, in_loop);
+  UINT8 in_loop_level = loop_info->Depth;
+  for (stmt = WN_first(WN_do_body(in_loop));
+    stmt; stmt = WN_next(stmt)) {
+
+    VINDEX16 v=sdg->Get_Vertex(stmt);
+    if (v ==0) {
+      OPCODE opc=WN_opcode(stmt);
+      if (opc!=OPC_LABEL && opc!=OPC_RETURN && opc!=OPC_GOTO
+#ifdef KEY
+          && opc!=OPC_GOTO_OUTER_BLOCK
+#endif
+         ) {
+        // depends on everything else
+        DevWarn("Statement dependence graph problem");
+        WN_MAP_Delete(dep_graph_map);
+        CXX_DELETE(dep_g_p, pool);
+        return;
+      }
+    } else {
+      EINDEX16 e=sdg->Get_Out_Edge(v);
+      while (e) {
+
+        if (sdg->Level(e) >= in_loop_level-fission_level+1) {
+          VINDEX16 v1 = sdg->Get_Sink(e);
+          WN* stmt1 = sdg->Get_Wn(v1);
+
+          EINDEX16 e1=dep_g_p->Add_Unique_Edge(
+            (mUINT32)(INTPTR)WN_MAP_Get(dep_graph_map, stmt),
+            (mUINT32)(INTPTR)WN_MAP_Get(dep_graph_map, stmt1));
+
+          if (e1==0) {
+            DevWarn("Statement scc graph too big");
+            WN_MAP_Delete(dep_graph_map);
+            CXX_DELETE(dep_g_p, pool);
+            return;
+          }
+        }
+        e = sdg->Get_Next_Out_Edge(e);
+      }
+    }
+  }
+
+  WN *loop_body = WN_do_body(in_loop);
+  VINDEX16 total_scc = dep_g_p->Get_Scc_Count();
+  VINDEX16 *queue=CXX_NEW_ARRAY(VINDEX16,total_scc+1,pool);
+  long *dist_array=CXX_NEW_ARRAY(long,total_scc+1,pool);
+  BOOL has_dist_list = FALSE;
+
+  // scc[i] is a list of statemens in i-th SCC
+  FF_STMT_LIST *scc = CXX_NEW_ARRAY(FF_STMT_LIST, total_scc+1, pool);
+
+  // Append statements to the statement list of proper SCC.
+  i = 0;
+  num_stmts = 0;
+  for (stmt = WN_first(WN_do_body(in_loop)); stmt; stmt = WN_next(stmt)) {
+    VINDEX16 scc_id = dep_g_p->Get_Scc_Id(
+      (mUINT32)(INTPTR)WN_MAP_Get(dep_graph_map, stmt));
+    FF_STMT_ITER s_iter(&scc[scc_id]);
+    if (s_iter.Is_Empty())
+      queue[i++] = scc_id;
+    scc[scc_id].Append(stmt, pool);
+    num_stmts++;
+  }
+
+  // Now we are going to look for breaks in connectivity in the 
+  // condensed graph, these will be the places to fission or the
+  // the distribution partition boundaries of the loop.
+  WN *first = WN_first(loop_body);
+  WN *last = WN_last(loop_body);
+  VINDEX16 last_scc_id = dep_g_p->Get_Scc_Id(
+    (mUINT32)(INTPTR)WN_MAP_Get(dep_graph_map, last));
+  SCC_DIRECTED_GRAPH16 *ac_g;
+  ac_g = dep_g_p->Acyclic_Condensation(pool);
+  mUINT16 *level = CXX_NEW_ARRAY(mUINT16,ac_g->Get_Vertex_Count()+1,pool);
+  
+  // first clear the levels so that what ever we find it usable
+  for (j = 0; j < ac_g->Get_Vertex_Count()+1; j++)
+    level[j] = 0;
+
+  ac_g->Get_Level(level);
+  // Walk the scc nodes lexically from the bottom of the loop up.
+  for (j=total_scc-1; j>=0; j--) {
+    i = queue[j];
+    dist_array[j] = 0;
+    BOOL no_in_arcs = (ac_g->Get_In_Edge(i) == 0);
+    BOOL no_out_arcs = (ac_g->Get_Out_Edge(i) == 0);
+    WN *scc_first = NULL;
+    if (no_in_arcs || no_out_arcs) {
+      // We split before always.
+      // However, we must check if this scc is the first in the loop as
+      // we cannot fission at the start of the loop.
+      FF_STMT_ITER s_iter(&scc[i]);
+      if (!s_iter.Is_Empty()) {
+        FF_STMT_NODE* stmt_node = s_iter.First();
+        scc_first = stmt_node->Get_Stmt();
+      }
+
+      if (scc_first == NULL) continue;
+      if (scc_first != first) {
+        VINDEX16 scc_id = queue[j-1];
+
+        // First check to see if scc_id is disconnected in the ac_g.
+        // If both it and scc_first are disconnected, we want the partition
+        // to exist before the first or after the last diconnected node in 
+        // the ac_g, effectively grouping the empty nodes via partitioning.
+        SRCPOS srcpos=WN_Get_Linenum(in_loop);
+        if (no_in_arcs && no_out_arcs) {
+          if ((ac_g->Get_In_Edge(scc_id) == 0) &&
+              (ac_g->Get_Out_Edge(scc_id) == 0)) {
+            if (LNO_Verbose) {
+              char message[200];
+              sprintf(message, "bypassing scc edge: %d with %d, reason: %s",
+                      i, scc_id, "both edges are disconnected");
+              distribute_verbose_info(FALSE,srcpos,fission_level,message);
+            }
+            continue;
+          }
+        } else if(level[scc_id] > level[i]) {
+          // As per Muraoka's theses, this is the tree height test,
+          // if we fail to reduce the tree height and the ith node
+          // is not isolated, we do not provide a partition.
+          if (level[i] != 0) {
+            if (LNO_Verbose) {
+              char message[200];
+              sprintf(message, "bypassing scc edge: %d with %d: reason: %s",
+                      i, scc_id, "no tree height reduction");
+              distribute_verbose_info(FALSE,srcpos,fission_level,message);
+            }
+            continue;
+          }
+        }
+        // see if the SCC graph has back edges from scc node i
+        if (has_back_edges(sdg, dep_g_p, dep_graph_map, 
+                           scc_first, j, queue, total_scc))
+          continue;
+
+        if (has_dist_list == FALSE)
+          has_dist_list = TRUE;
+
+        dist_array[j] = (long)scc_first;
+        if (LNO_Verbose) {
+          char message[200];
+          sprintf(message, "partition found between scc(%d,%d) and scc(%d,%d)",
+                  scc_id, level[scc_id], i, level[i]);
+          distribute_verbose_info(FALSE,srcpos,fission_level,message);
+        }
+      }
+    }
+  }
+
+  // only reorder if we have a distribution list
+  if (has_dist_list) {
+    // Reorder the statements in the loop according to SCCs, but in the
+    // current ordering schema, this cleans up overlap.
+    if (num_stmts > total_scc) {
+      for (i=0; i<total_scc; ++i) {
+        UINT cur = queue[i];
+        FF_STMT_NODE* stmt_node;
+        while(stmt_node = scc[cur].Remove_Headnode()) {
+          stmt=stmt_node->Get_Stmt();
+          LWN_Insert_Block_Before(loop_body, NULL, 
+                                  LWN_Extract_From_Block(stmt));
+        }
+      }
+    }
+
+    // Now build the distribution list
+    for (j=total_scc-1; j>=0; j--) {
+      WN *scc_first = (WN*)dist_array[j];
+      if (scc_first) {
+        WN *scc_last = WN_prev(scc_first);
+        stl_1.Append(scc_last, &LNO_local_pool);
+        stl_1.Append(scc_first, &LNO_local_pool);
+      }
+    }
+  }
+
+  CXX_DELETE_ARRAY(queue, pool);
+  CXX_DELETE_ARRAY(dist_array, pool);
+  CXX_DELETE_ARRAY(scc, pool);
+  CXX_DELETE_ARRAY(level, pool);
+  CXX_DELETE(ac_g, pool);
+
+  WN_MAP_Delete(dep_graph_map);
+  CXX_DELETE(dep_g_p, pool);
+}
+
+extern void
+Get_Distribution_List(FF_STMT_LIST& stl_1, WN* in_loop, UINT8 fission_level)
+{
+  MEM_POOL_Push(&FISSION_default_pool);
+
+  WN_MAP sdm=WN_MAP_Create(&FISSION_default_pool);
+  WN* outer_most_loop = in_loop;
+
+  ARRAY_DIRECTED_GRAPH16* sdg=Build_Statement_Dependence_Graph(
+        outer_most_loop, red_manager, adg, sdm,
+        &FISSION_default_pool);
+  Statement_Dependence_Graph = sdg;
+  if (sdg==NULL) {
+    DevWarn("Statement dependence graph problem");
+    WN_MAP_Delete(sdm);
+    MEM_POOL_Pop(&FISSION_default_pool);    
+    return;
+  }
+
+  Find_Partitions(stl_1, in_loop, fission_level, 
+                  sdg, &FISSION_default_pool);
+
+  Statement_Dependence_Graph = NULL;
+  CXX_DELETE(sdg,&FISSION_default_pool);
+
+  WN_MAP_Delete(sdm);
+  MEM_POOL_Pop(&FISSION_default_pool);    
 }
 
 /**
@@ -1105,7 +1421,8 @@ Fission(WN* in_loop, WN* stmt, UINT8 fission_level)
 **/
 
 extern FISSION_FUSION_STATUS
-Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level)
+Fission(WN* in_loop, WN* stmt1, WN* stmt2, 
+        UINT8 fission_level, BOOL partition_based)
 {
 
   if (stmt1 == stmt2)
@@ -1124,26 +1441,43 @@ Fission(WN* in_loop, WN* stmt1, WN* stmt2, UINT8 fission_level)
   // form two statement lists which contains statements up to 'stmt1'
   // and statements after 'stmt2', respectively
   FF_STMT_LIST stl_1;
-  WN *wn;
-  for (wn=WN_first(loop_body); wn!=stmt1; wn=WN_next(wn)) {
-    stl_1.Append(wn,&FISSION_default_pool);
-  }
-  stl_1.Append(stmt1,&FISSION_default_pool);
-
-  for (wn=WN_next(stmt1); wn && wn!=stmt2; wn=WN_next(wn));
-
-  FmtAssert(wn==stmt2,
-    ("Incorrect ordering of stmt1 and stmt2 in Fission()\n"));
-
   FF_STMT_LIST stl_2;
-  for (wn=stmt2; wn; wn=WN_next(wn)) {
-    stl_2.Append(wn,&FISSION_default_pool);
+  WN *wn;
+  if (partition_based) {
+    for (wn=WN_first(loop_body); wn!=stmt2; wn=WN_next(wn)) {
+      stl_1.Append(wn,&FISSION_default_pool);
+    }
+
+    for (wn=stmt2; wn; wn=WN_next(wn)) {
+      stl_2.Append(wn,&FISSION_default_pool);
+    }
+  } else {
+    for (wn=WN_first(loop_body); wn!=stmt1; wn=WN_next(wn)) {
+      stl_1.Append(wn,&FISSION_default_pool);
+    }
+    stl_1.Append(stmt1,&FISSION_default_pool);
+
+    for (wn=WN_next(stmt1); wn && wn!=stmt2; wn=WN_next(wn));
+
+    FmtAssert(wn==stmt2,
+      ("Incorrect ordering of stmt1 and stmt2 in Fission()\n"));
+
+    for (wn=stmt2; wn; wn=WN_next(wn)) {
+      stl_2.Append(wn,&FISSION_default_pool);
+    }
   }
 
   // now fission 'in_loop' without reordering based on the
   // two statement lists
-  return Fission(in_loop, FISSION_BIT_TWO_LOOPS_ONLY, fission_level, -1, 0,
-    &stl_1, &stl_2);
+  if (partition_based) {
+    return Fission(in_loop, 
+      FISSION_BIT_TWO_LOOPS_ONLY|FISSION_BIT_PARTITION_BASED, 
+      fission_level, -1, 0,
+      &stl_1, &stl_2);
+  } else {
+    return Fission(in_loop, FISSION_BIT_TWO_LOOPS_ONLY, fission_level, -1, 0,
+      &stl_1, &stl_2);
+  }
 }
 
 /**

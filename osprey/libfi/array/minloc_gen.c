@@ -100,7 +100,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -149,7 +154,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -180,7 +190,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -193,14 +208,26 @@ DopeVectorType	*mask)
 	if (*(i1 *) array_p < accum ) {
 	  accum = *(i1 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(i1 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -298,7 +325,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -347,7 +379,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -378,7 +415,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -391,14 +433,26 @@ DopeVectorType	*mask)
 	if (*(i2 *) array_p < accum ) {
 	  accum = *(i2 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(i2 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -496,7 +550,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -545,7 +604,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -576,7 +640,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -589,14 +658,26 @@ DopeVectorType	*mask)
 	if (*(i4 *) array_p < accum ) {
 	  accum = *(i4 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(i4 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -694,7 +775,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -743,7 +829,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -774,7 +865,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -787,14 +883,26 @@ DopeVectorType	*mask)
 	if (*(i8 *) array_p < accum ) {
 	  accum = *(i8 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(i8 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -892,7 +1000,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -941,7 +1054,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -972,7 +1090,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -985,14 +1108,26 @@ DopeVectorType	*mask)
 	if (*(r4 *) array_p < accum ) {
 	  accum = *(r4 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(r4 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -1090,7 +1225,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -1139,7 +1279,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -1170,7 +1315,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -1183,14 +1333,26 @@ DopeVectorType	*mask)
 	if (*(r8 *) array_p < accum ) {
 	  accum = *(r8 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(r8 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {
@@ -1288,7 +1450,12 @@ DopeVectorType	*mask)
   size_t  offs;
   size_t  lexts[2];
 
-  if (mask == NULL) {   /* is third arg mask or dim? */
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {   /* is third arg mask or dim? */
     if (dim != NULL) {
       if (GET_DV_LOGICAL_FROM_DESC(dim)) {
 	mask = (DopeVectorType	*) dim ;
@@ -1337,7 +1504,12 @@ DopeVectorType	*mask)
 
   result_b = GET_ADDRESS_FROM_DESC(result);
 
-  if (mask != NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask != NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     msk_typ_sz = GET_ELEMENT_SZ_FROM_DESC(mask);
     mask_b     = (char *) GET_ADDRESS_FROM_DESC(mask) + OFFSET_TO_TF_BYTE(msk_typ_sz) ;
@@ -1368,7 +1540,12 @@ DopeVectorType	*mask)
   }
   array_p = array_b ;
   result_p = result_b ;
-  if (mask == NULL) {
+#ifdef KEY /* Bug 10410 */
+  if (!HAVE_MASK(mask))
+#else /* KEY Bug 10410 */
+  if (mask == NULL)
+#endif /* KEY Bug 10410 */
+  {
 
     a_size   = src_extent[0] ;
     a_stride = src_stride[0] ;
@@ -1381,14 +1558,26 @@ DopeVectorType	*mask)
 	if (*(r16 *) array_p < accum ) {
 	  accum = *(r16 *) array_p ;
 	  newaddr = array_p;
+#ifdef KEY /* Bug 12134 */
+	  UPDATE_MINMAXLOC_RESULT(dim, result, result_p, count + 1);
+#else /* KEY Bug 12134 */
 	  count ++ ;
+#endif /* KEY Bug 12134 */
 	}
 	array_p += a_stride ;
+#ifdef KEY /* Bug 12134 */
+	count ++ ;
+#else /* KEY Bug 12134 */
 	if (dim !=NULL) {
 	  *(r16 *) result_p = count ;
 	  accum = initv ;
 	}
+#endif /* KEY Bug 12134 */
       }
+#ifdef KEY /* Bug 12134 */
+      /* Restart the comparisons if we're doing one dimension at a time */
+      (dim != NULL) ? (accum = initv) : 0;
+#endif /* KEY Bug 12134 */
       counter[0] = a_size  ;
       j = 0 ;
       while ((counter[j] == src_extent[j]) && (j < src_rank)) {

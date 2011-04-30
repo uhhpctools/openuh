@@ -1,5 +1,5 @@
 /*
- * Copyright 2004 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 /*
@@ -37,10 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <ctype.h>
 #include "wn.h"
 #include "wn_map.h"
@@ -76,7 +79,7 @@ void WB_BROWSER::Summary_Symbol(FILE* fp,
     return; 
   } 
   SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
-  char* name = ST_name(ss->St_idx());
+  const char* name = ST_name(ss->St_idx());
   ss->WB_Print(fp, symbol_index, is_list, name, "",  Fancy_Level());
 } 
   
@@ -115,7 +118,7 @@ void WB_BROWSER::Summary_Formal(FILE* fp,
   SUMMARY_FORMAL* sf = Scalar_Summary()->Get_formal(formal_index);
   INT symbol_index = sf->Get_symbol_index();
   SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
-  char* name = ST_name(ss->St_idx());
+  const char* name = ST_name(ss->St_idx());
   sf->WB_Print(fp, formal_index, name, "");
 } 
 
@@ -210,7 +213,7 @@ void WB_BROWSER::Summary_Callsite(FILE* fp,
     return; 
   } 
   SUMMARY_CALLSITE* sc = Scalar_Summary()->Get_callsite(callsite_index);
-  char* name = NULL; 
+  const char* name = NULL; 
   if (!sc->Is_intrinsic() && !sc->Is_func_ptr()) {
     INT symbol_index = sc->Get_symbol_index();
     SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
@@ -253,7 +256,7 @@ void WB_BROWSER::Summary_Actual(FILE* fp,
     return; 
   } 
   SUMMARY_ACTUAL* sa = Scalar_Summary()->Get_actual(actual_index);
-  char* name = NULL; 
+  const char* name = NULL; 
   if (sa->Get_symbol_index() != -1) {
     INT symbol_index = sa->Get_symbol_index();
     SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
@@ -315,7 +318,7 @@ void WB_BROWSER::Summary_Region(FILE* fp,
   REGION_ARRAYS* ra = Array_Summary()->Get_region_array(region_index);
   INT symbol_index = ra->Get_sym_id();
   SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
-  char* name = ST_name(ss->St_idx());
+  const char* name = ST_name(ss->St_idx());
   ra->WB_Print(fp, region_index, name, "");
 } 
 
@@ -427,7 +430,7 @@ void WB_BROWSER::Summary_Chi(FILE* fp,
     return; 
   } 
   SUMMARY_CHI* sc = Scalar_Summary()->Get_chi(chi_index);
-  char* name = NULL; 
+  const char* name = NULL; 
   if (sc->Get_symbol_index() != -1) { 
     INT symbol_index = sc->Get_symbol_index();
     SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
@@ -470,7 +473,7 @@ void WB_BROWSER::Summary_Stid(FILE* fp,
     return; 
   } 
   SUMMARY_STID* stid = Scalar_Summary()->Get_global_stid(stid_index);
-  char* name = NULL; 
+  const char* name = NULL; 
   if (!stid->Is_array_assignment()) { 
     INT symbol_index = stid->Get_symbol_index();
     SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
@@ -494,7 +497,7 @@ void WB_BROWSER::Summary_Stmt(FILE* fp,
     return; 
   } 
   SUMMARY_STMT* stmt = Scalar_Summary()->Get_stmt(stmt_index);
-  char* name = NULL; 
+  const char* name = NULL; 
   if (stmt->Is_var()) { 
     INT symbol_index = stmt->Get_var_index();
     SUMMARY_SYMBOL* ss = Scalar_Summary()->Get_symbol(symbol_index);
@@ -819,3 +822,7 @@ void WB_BROWSER::Summary(FILE* fp)
   Reset_Subcommand();
 } 
 
+extern "C" void WB_BROWSER_Summary (FILE *fp, WB_BROWSER *wb)
+{
+  wb->Summary(fp);
+}

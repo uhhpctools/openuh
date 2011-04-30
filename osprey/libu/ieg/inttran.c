@@ -72,6 +72,9 @@ struct endian_info_packet {
 #if	defined(__mips) || defined(_LITTLE_ENDIAN)
 struct overflow_count t$generic_;
 #define	set_overflow()	(t$generic_.oflows++)
+#if defined(BUILD_OS_DARWIN)
+extern
+#endif /* defined(BUILD_OS_DARWIN) */
 struct endian_info_packet	t$endian_;
 #define	uint16	unsigned short
 #define	uint32	unsigned int

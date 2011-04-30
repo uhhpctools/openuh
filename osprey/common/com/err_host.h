@@ -101,7 +101,7 @@ static char *err_host_rcs_id = "$Source$ $Revision$";
  * is expected to copy the formatted string out of the result before
  * calling this routine again.
  */
-extern char *Host_Format_Parm (
+extern const char *Host_Format_Parm (
   INT kind,	/* One of the parameter types in errors.h or above */
   MEM_PTR parm	/* A message parameter passed by the reporter */
 );

@@ -62,7 +62,7 @@
  * ====================================================================
  */
 
-static char *source_file = __FILE__;
+static const char *source_file = __FILE__;
 
 #ifdef _KEEP_RCS_ID
   static char *rcs_id = " $Id: cwh_io.cxx 1.6 05/11/10 13:51:51-08:00 scorrell@soapstone.internal.keyresearch.com $ ";

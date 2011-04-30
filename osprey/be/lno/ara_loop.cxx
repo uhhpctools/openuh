@@ -1,5 +1,5 @@
 /*
- * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -39,7 +39,6 @@
 
 // This may look like C code, but it is really -*- C++ -*-
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #ifdef USE_PCH
 #include "lno_pch.h"
@@ -1213,13 +1212,6 @@ ARA_LOOP_INFO::Annotate_Invariant_Def()
 ARA_REF * Contains(ARA_REF_ST & ara_st, WN *array_wn)
 {
 
-#if 0
-  Is_True((WN_operator(wn) == OPR_ILOAD) ||
-	  (WN_operator(wn) == OPR_ISTORE),
-	  ("Contains: Bad WN passed in"));
-  WN* array_wn = (WN_operator(source)== OPR_ILOAD) ? 
-    kid0(wn) : kid1(wn);
-#endif
   for (INT i = 0; i < ara_st.Elements(); ++i) {
     ARA_REF *cur = ara_st.Bottom_nth(i);
     if (OPCODE_has_sym(WN_opcode(WN_array_base(array_wn))))
@@ -2021,11 +2013,7 @@ void ARA_LOOP_INFO::Walk_Rhs(WN *wn, WN *skip_store_id)
       rhs = LWN_WALK_TreeNext(rhs);
       rhs = LWN_WALK_TreeNext(rhs);
 
-    } else if (WN_operator(wn) == OPR_LDID
-#ifdef KEY // bug 7444: MP lowerer cannot handle reduction of field in a struct
-    	       && TY_kind(ST_type(WN_st(wn))) != KIND_STRUCT
-#endif
-    	      ) {
+    } else if (WN_operator(wn) == OPR_LDID) {
       if (Is_Covered(wn))
 	_scalar_pri.Add_Scalar(wn,0);
       else if (red_manager && red_manager->Which_Reduction(wn) != RED_NONE) {
@@ -2085,7 +2073,7 @@ ARA_LOOP_INFO::Walk_Block(WN *block_stmt)
       Walk_Rhs(stmt, skip_store_id);
       
       // Process the LHS for write
-      ARA_REF* new_def = CXX_NEW(ARA_REF(lfs,WN_offset(lfs),this),&ARA_memory_pool);
+      ARA_REF* new_def = CXX_NEW(ARA_REF(lfs,WN_offset(stmt),this),&ARA_memory_pool);
       if (new_def->Has_Bad_Alias()) 
 	CXX_DELETE(new_def, &ARA_memory_pool);
       else {
@@ -2277,8 +2265,14 @@ ARA_LOOP_INFO::Walk_Loop()
       }
     }
   }
-  
-  if (!_info || _info->Has_Exits || _info->Has_Bad_Mem) {
+ 
+  if ( _info->Has_EH_Regions ) {
+    Default_For_Bad_Loop();
+    Set_To_Sequential();
+    return;
+  }
+ 
+  if ( _info->Has_Exits || _info->Has_Bad_Mem ) {
     Default_For_Bad_Loop();
     return;
   }
@@ -2891,17 +2885,6 @@ INT64 Loop_FP_Size(WN* wn)
 	     (oper == OPR_PARM) || (oper == OPR_PAREN)) {
     // no-ops
   } else if (OPCODE_is_expression(opcode) && (oper != OPR_CONST)) {
-#if 0
-    // an fp expression
-    if ((OPCODE_desc(opcode)==MTYPE_FQ) || (OPCODE_rtype(opcode)==MTYPE_FQ) ||
-	(OPCODE_desc(opcode)==MTYPE_CQ) || (OPCODE_rtype(opcode)==MTYPE_CQ) ||
-	(OPCODE_desc(opcode)==MTYPE_F4) || (OPCODE_desc(opcode)==MTYPE_F8) ||
-	(OPCODE_rtype(opcode)==MTYPE_F4)|| 
-	(OPCODE_rtype(opcode)==MTYPE_F8)|| (OPCODE_desc(opcode)==MTYPE_C4) || 
-	(OPCODE_desc(opcode)==MTYPE_C8) || (OPCODE_rtype(opcode)==MTYPE_C4)||
-	(OPCODE_rtype(opcode)==MTYPE_C8))  {
-    }
-#endif      
     if ((oper == OPR_MAX) || (oper == OPR_MIN) || 
 	(oper == OPR_ADD) || (oper == OPR_SUB) || (oper == OPR_MPY) ||
 	(oper == OPR_NEG))
@@ -3250,7 +3233,7 @@ WN* ARA_LOOP_INFO::Create_New_IF_Clause(BOOL is_pdo)
   DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn_outer); 
   if (dli->Suggested_Parallel && dli->Work_Estimate == 0) 
     DevWarn("Work Estimate for loop %s at %d is 0", WB_Whirl_Symbol(wn_outer),
-      (INT) WN_linenum(wn_outer)); 
+      Srcpos_To_Line(WN_linenum(wn_outer))); 
   if (!dli->Suggested_Parallel) {
       // This can only happen in the case that Robert's and Peng's
       // selections of which loop to parallelize are not in agreement.
@@ -3365,30 +3348,30 @@ WN* ARA_LOOP_INFO::Create_New_IF_Clause(BOOL is_pdo)
   OPCODE subop = OPCODE_make_op(OPR_SUB, proc_type, MTYPE_V);
   WN* wn_pminus1 = LWN_CreateExp2(subop, wn_procs1, wn_one); 
 #ifdef KEY // bug 7772
-  WN* wn_rhs = LWN_CreateExp2(OPC_I4MPY, wn_prod_trips, wn_pminus1);
+  WN* wn_rhs = LWN_CreateExp2(OPC_I8MPY, wn_prod_trips, wn_pminus1);
       // get P * Tp in wn_PTp
   WN* wn_procs2 = Current_Numprocs(_loop, is_pdo);  
   WN* wn_Tp = LWN_Make_Icon(MTYPE_I4, (INT) Tp_Parallel_Cost());
-  WN* wn_PTp = LWN_CreateExp2(OPC_I4MPY, wn_procs2, wn_Tp); 
+  WN* wn_PTp = LWN_CreateExp2(OPC_I8MPY, wn_procs2, wn_Tp); 
       // get LHS expression P * (Tc + P * Tp) in wn_lhs
-  WN* wn_Tc = LWN_Make_Icon(MTYPE_I4, (INT) Tc_Parallel_Cost());
-  WN* wn_lhs_sum = LWN_CreateExp2(OPC_I4ADD, wn_Tc, wn_PTp);
+  WN* wn_Tc = LWN_Make_Icon(MTYPE_I8, (INT64) Tc_Parallel_Cost());
+  WN* wn_lhs_sum = LWN_CreateExp2(OPC_I8ADD, wn_Tc, wn_PTp);
   WN* wn_procs3 = Current_Numprocs(_loop, is_pdo);
-  WN* wn_lhs = LWN_CreateExp2(OPC_I4MPY, wn_procs3, wn_lhs_sum);
+  WN* wn_lhs = LWN_CreateExp2(OPC_I8MPY, wn_procs3, wn_lhs_sum);
   WN* wn_result;
   if (wn_base_ival != 0) {
     if (WN_operator(wn_lhs) == OPR_INTCONST) {
       WN_const_val(wn_lhs) = WN_const_val(wn_lhs) / wn_base_ival;
-      wn_result = LWN_CreateExp2(OPC_I4I4GT, wn_rhs, wn_lhs);
+      wn_result = LWN_CreateExp2(OPC_I4I8GT, wn_rhs, wn_lhs);
     }
-    else wn_result = LWN_CreateExp2(OPC_I4I4GT, 
-    			       LWN_CreateExp2(OPC_I4MPY, wn_rhs,
-			       		LWN_Make_Icon(MTYPE_I4, wn_base_ival)),
+    else wn_result = LWN_CreateExp2(OPC_I4I8GT, 
+    			       LWN_CreateExp2(OPC_I8MPY, wn_rhs,
+			       		LWN_Make_Icon(MTYPE_I8, wn_base_ival)),
 			       wn_lhs);
   }
   else { // use F8 type
-    wn_rhs = LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_F8, MTYPE_I4),wn_rhs);
-    wn_lhs = LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_F8, MTYPE_I4),wn_lhs);
+    wn_rhs = LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_F8, MTYPE_I8),wn_rhs);
+    wn_lhs = LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_F8, MTYPE_I8),wn_lhs);
     wn_result = LWN_CreateExp2(OPC_I4F8GT, 
     			       LWN_CreateExp2(OPC_F8MPY, wn_rhs, wn_base),
 			       wn_lhs);
@@ -3473,7 +3456,7 @@ static void Print_Non_Parallel_Loop(FILE* fp,
 				    WN* wn_loop)
 {
   fprintf(fp, "NOT Auto Parallelizing Loop %s at %d (SMALL TRIP COUNT)\n",
-    WB_Whirl_Symbol(wn_loop), (INT) WN_linenum(wn_loop));
+    WB_Whirl_Symbol(wn_loop), Srcpos_To_Line(WN_linenum(wn_loop)));
 }
 
 #ifdef KEY
@@ -3550,6 +3533,10 @@ ARA_LOOP_INFO::Generate_Parallel_Pragma()
 
   // Adjust Suggested_Parallel for convexity considerations. 
   DO_LOOP_INFO* dli = Get_Do_Loop_Info(_loop); 
+#ifdef KEY //bug 14284 : don't parallelize if contains calls to nested functions
+  if(!dli || dli->Has_Nested_Calls)
+    return;
+#endif
   if (dli->Suggested_Parallel && _peel_value == -1) {
     dli->Suggested_Parallel = FALSE; 
     if (Get_Trace(TP_LNOPT2, TT_LNO_PARALLEL_DEBUG))
@@ -3562,7 +3549,7 @@ ARA_LOOP_INFO::Generate_Parallel_Pragma()
     if (!Get_Trace(TP_LNOPT2, TT_LNO_NO_AUTO_PARALLEL)
 	&& !_info->Suggested_Parallel)
       DevWarn("Auto-parallelizing unexpected loop %s at %d", 
-	WB_Whirl_Symbol(_loop), (INT) WN_linenum(_loop)); 
+	WB_Whirl_Symbol(_loop), Srcpos_To_Line(WN_linenum(_loop))); 
 
     _info->Auto_Parallelized = TRUE; 
     if (Has_Last_Value_Array()) {
@@ -3704,6 +3691,10 @@ ARA_LOOP_INFO::Generate_Parallel_Pragma()
 	FmtAssert(FALSE,("ARA_LOOP_INFO::Generate_Parallel_Pragma, exposed scalar use overlaps with local scalar, something is wrong"));
       if (!Overlap_Reduction_Scalar(_scalar_use.Bottom_nth(i)->_scalar)) {
 #ifdef KEY
+	// bug 11914: pregs with negative offset are used for ASM outputs
+	if (ST_class(_scalar_use.Bottom_nth(i)->_scalar.St()) == CLASS_PREG &&
+	    _scalar_use.Bottom_nth(i)->_scalar.WN_Offset() < 0)
+	  continue;
 	// Bug 6386 
 	// need to use a temporary instead of a preg for shared variables.
 	if (ST_class(_scalar_use.Bottom_nth(i)->_scalar.St()) == CLASS_PREG) {
@@ -3889,7 +3880,7 @@ ARA_LOOP_INFO::Generate_Parallel_Pragma()
   } else {
     if (Is_OK_Parallel())
       DevWarn("Heuristic prefers INNER parallel loop to loop %s at %d", 
-        WB_Whirl_Symbol(_loop), (INT) WN_linenum(_loop));
+        WB_Whirl_Symbol(_loop), Srcpos_To_Line(WN_linenum(_loop)));
     for (INT i = 0; i < _children.Elements(); ++i) 
       _children.Bottom_nth(i)->Generate_Parallel_Pragma();
   }
@@ -4292,7 +4283,7 @@ ARA_LOOP_INFO::Generate_Copyout_Loop()
     Set_SYMTAB_has_rgn(Current_Symtab);
     Set_SYMTAB_uplevel(Current_Symtab);
 #endif
-  Create_Single_Region(wn_after_loop, NULL); 
+  Create_Single_Region(parent_block, wn_after_loop, NULL); 
   Set_Enclosing_If_Has_Region(region);
   if (Index_Variable_Live_At_Exit(_loop)) { 
     WN* wn_inner_region = LWN_Get_Parent(LWN_Get_Parent(_loop)); 

@@ -79,7 +79,6 @@
  * ====================================================================
  */
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
 //#include "frac.h"
@@ -752,17 +751,6 @@ void SYSTEM_OF_EQUATIONS::Elim_Simple_Redundant(const INT32 min_var)
 	    _is_redundant[j] = TRUE;
 	  }
 
-#if 0
-	  // if i or j is redundant make sure we will compact following original order
-	  if (_is_redundant[i]) {
-	    _work_const[i] = _work_const[j];
-	    for (INT32 col=min_var; col<_work_cols; col++) {
-	      _work[i][col] = _work[j][col];
-	    }
-	    _is_redundant[j] = TRUE;
-	    _is_redundant[i] = FALSE;
-	  }
-#endif
 
 	}
       }

@@ -1,6 +1,10 @@
 //-*-c++-*-
 
 /*
+ *  Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -8,10 +12,10 @@
 // ====================================================================
 //
 // Module: opt_rviwn.cxx
-// $Revision: 1.1.1.1 $
-// $Date: 2005/10/21 19:00:00 $
-// $Author: marcel $
-// $Source: /proj/osprey/CVS/open64/osprey1.0/be/opt/opt_rviwn.cxx,v $
+// $Revision: 1.11 $
+// $Date: 04/12/21 14:57:19-08:00 $
+// $Author: bos@eng-25.internal.keyresearch.com $
+// $Source: /home/bos/bk/kpro64-pending/be/opt/SCCS/s.opt_rviwn.cxx $
 //
 // ====================================================================
 //
@@ -223,7 +227,7 @@ RVI::Insert_statement( BB_NODE *bb, WN *wn, RVI_INSERT insert ) const
   }
 
   if ( Tracing() ) {
-    char *msg;
+    const char *msg;
     switch ( insert ) {
       case RVI_INS_TOP:         msg = "at top"; break;
       case RVI_INS_BEFORE_IREF: msg = "before iref"; break;
@@ -546,6 +550,11 @@ RVI::Is_const_candidate( const WN *parent, const WN *constant, INT whichkid ) co
     ("RVI::Is_const_candidate: Bad const: %s", OPCODE_name(con_opc)) );
   const INT64 con_val = WN_const_val(constant);
 
+#if defined(TARG_MIPS) || defined(TARG_LOONGSON)
+  if (con_val == 0)
+    return FALSE;
+#endif
+
   return !Can_Be_Immediate(par_opr, con_val, par_dtyp, whichkid, stid_st);
 }
 
@@ -588,6 +597,10 @@ RVI::Is_lda_candidate( const WN *parent, const WN *lda, INT whichkid ) const
 		  Preg_Is_Dedicated(WN_offset(rhs))));
       }
       return TRUE;
+
+    case OPR_ILOADX:
+    case OPR_ISTOREX:
+      return FALSE;
 
     case OPR_CALL:
     case OPR_ICALL:

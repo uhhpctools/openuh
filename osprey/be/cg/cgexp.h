@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -41,10 +45,10 @@
  * ====================================================================
  *
  * Module: cgexp.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/cgexp.h,v $
+ * $Revision: 1.26 $
+ * $Date: 06/01/04 18:49:38-08:00 $
+ * $Author: tkong@hyalite.keyresearch $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/cg/SCCS/s.cgexp.h $
  *
  * Description:
  * ------------
@@ -108,8 +112,16 @@ extern void Exp_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3,
 /* Generate code to load the address of 'sym'+'ofst' into 'tgt_tn'. 
  * The 'call_opr' parameter indicates whether the LDA is for a call.
  */
+#if defined(TARG_SL)
+extern void Exp_Lda (
+  TYPE_ID mtype, TN *tgt_tn, ST *sym, INT64 ofst, OPERATOR call_opr, OPS *ops,  BOOL is_internal_mem_ofst = FALSE);
+#elif defined(TARG_PPC32)
+extern void Exp_Lda (
+  TYPE_ID mtype, TN *tgt_tn, ST *sym, INT64 ofst, OPERATOR call_opr, OPS *ops, INTRINSIC intrn_id = INTRINSIC_INVALID);
+#else 
 extern void Exp_Lda (
   TYPE_ID mtype, TN *tgt_tn, ST *sym, INT64 ofst, OPERATOR call_opr, OPS *ops);
+#endif
 
 /* Generate code to load memory location 'sym'+'ofst' into 'tgt_tn',
  * with rtype & desc explicitly given
@@ -130,10 +142,10 @@ extern void Exp_COPY (TN *tgt_tn, TN *src_tn, OPS *ops, BOOL copy_pair=FALSE);
 extern void Exp_COPY (TN *tgt_tn, TN *src_tn, OPS *ops); 
 #endif
 
-#ifdef TARG_X8664
+#if defined(TARG_X8664) || defined(TARG_MIPS)
 /* Generate a copy from 'src_tn' to 'tgt_tn' with zero/sign extension. */
 extern void Exp_COPY_Ext (TOP opcode, TN *tgt_tn, TN *src_tn, OPS *ops); 
-#endif /* TARG_X8664 */
+#endif /* TARG_X8664 or TARG_MIPS  */
 
 /* Given a simulated <op>, expand it into the sequence of instructions
  * that must be generated. The <pc_value> is the PC location of the 
@@ -156,6 +168,14 @@ extern TN * Exp_Intrinsic_Call (
   INTRINSIC id, TN *op0, TN *op1, TN *op2, OPS *ops, 
   LABEL_IDX *label, OPS *loop_ops);
 
+#if defined(TARG_SL) || defined(TARG_PPC32)
+/* Expansion of co-processor instructions */
+extern TN * Exp_SL_Intrinsic_Call (INTRINSIC id, WN *intrncall, OPS *ops,
+				     LABEL_IDX *label, OPS *loop_ops, TN* result = NULL);
+TN* 
+Build_SL_Intrinsic_OP( INTRINSIC id, WN* intrncall, OPS *ops, TN* result =NULL);
+#endif
+
 #ifdef TARG_X8664
 /* Expansion of INTRN_SAVEXMMS into TOP_savexmms pseudo instruction */
 extern void Exp_Savexmms_Intrinsic(WN *intrncall, TN *rax_tn, LABEL_IDX *label, 
@@ -163,25 +183,23 @@ extern void Exp_Savexmms_Intrinsic(WN *intrncall, TN *rax_tn, LABEL_IDX *label,
 
 extern void Exp_Landingpadentry_Intrinsic (ST *dest1, ST *dest2, OPS* ops);
 
-extern void Exp_Fetch_and_Add( TN*, TN*, TYPE_ID, OPS* );
-extern void Exp_Fetch_and_And( TN*, TN*, TYPE_ID, OPS* );
-extern void Exp_Fetch_and_Or( TN*, TN*, TYPE_ID, OPS* );
-extern void Exp_Fetch_and_Xor( TN*, TN*, TYPE_ID, OPS* );
-extern void Exp_Fetch_and_Sub( TN*, TN*, TYPE_ID, OPS* );
-extern TN*  Exp_Compare_and_Swap( TN*, TN*, TN*, TYPE_ID, OPS* );
-
 /* expand intrinsic op */
-extern void Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TYPE_ID mtype, OPS *ops);
+extern void Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, TN *op4, TYPE_ID mtype, OPS *ops);
 
-#else 
-
-/* expand intrinsic op */
+#elif defined(TARG_IA64) || defined(TARG_LOONGSON)
 extern void Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, OPS *ops);
+#else
+/* expand intrinsic op */
+extern void Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TYPE_ID mtype, OPS *ops);
 #endif // TARG_X8664
 
 /* Expand TN(const) into a sequence of ops (used in prolog)
  */
+#ifdef TARG_SL
+extern void Exp_Immediate (TN *dest, TN *src, TYPE_ID rtype, OPS *);
+#else
 extern void Exp_Immediate (TN *dest, TN *src, BOOL is_signed, OPS *);
+#endif
 
 /* create add/sub/mpy op of given mtype */
 #define Exp_ADD(mtype,dest,src1,src2,ops)	\
@@ -209,10 +227,37 @@ extern void Exp_Select_And_VLdid (
 #endif
 
 /* create select and condition for select */
+#if defined(TARG_SL)
+extern void Exp_Select_And_Condition (
+        WN* wn_select, OPCODE select, TN *result, TN *true_tn, TN *false_tn,
+        OPCODE compare, TN *cmp_kid1, TN *cmp_kid2, VARIANT variant, OPS *ops);
+#else
 extern void Exp_Select_And_Condition (
         OPCODE select, TN *result, TN *true_tn, TN *false_tn,
         OPCODE compare, TN *cmp_kid1, TN *cmp_kid2, VARIANT variant, OPS *ops);
+#endif
 
+#if defined(TARG_SL)
+extern BOOL Exp_Opt_Select_And_Condition (WN * select, TN * result, TN * true_tn,
+        TN * false_tn, TN * cmp_kid1, TN * cmp_kid2, OPS * ops);
+extern void Exp_2inst_MC_Zero (TOP mc_op, TN* dest_tn, TN* true_tn, TN* false_tn, 
+        TN* cond_tn, TYPE_ID true_type, TYPE_ID false_type, INT unsignedflag, OPS* ops );
+#endif
+
+#if defined(TARG_PPC32) // not used ?
+extern BOOL Exp_Opt_Select_And_Condition (WN * select, TN * result, TN * true_tn,
+        TN * false_tn, TN * cmp_kid1, TN * cmp_kid2, OPS * ops);
+extern void Exp_2inst_MC_Zero (TOP mc_op, TN* dest_tn, TN* true_tn, TN* false_tn, 
+        TN* cond_tn, int unsignedflag, OPS* ops );
+extern void Build_MC_OP (TOP mc_op, TN *result, TN *rs1, TN *rs2, int unsignedflag,
+        OPS *ops, OP_COND_DEF_KIND kind);
+#endif
+
+#if defined(TARG_SL) || defined(TARG_PPC32)
+extern LABEL_IDX Exp_Select_Part1(
+        OPCODE select, TN *result, TN *true_tn, TN *false_tn,
+        OPCODE compare, TN *cmp_kid1, TN *cmp_kid2, OPS *ops);
+#endif
 
 /*
  * By default, when we expand multi-instruction sequences, we use a new
@@ -249,8 +294,13 @@ extern void Exp_Deposit_Bits (TYPE_ID rtype, TYPE_ID desc,
 			      UINT bit_offset, UINT bit_size, 
 			      TN *tgt_tn, TN *src1_tn, TN *src2_tn, OPS *ops);
 
-/* expand return instruction */
 #ifdef TARG_X8664
+/* generate instructions to set a bit field to all 1's */
+extern void Exp_Set_Bits (TYPE_ID rtype, TYPE_ID desc,
+			      UINT bit_offset, UINT bit_size, 
+			      TN *tgt_tn, TN *src1_tn, OPS *ops);
+
+/* expand return instruction */
 extern void Exp_Return (TN *return_address, int sp_adjust, OPS *ops);
 #else
 extern void Exp_Return (TN *return_address, OPS *ops);
@@ -301,6 +351,10 @@ extern void Expand_Cmov (TOP top, TN *result, TN *src, TN *rflags, OPS *ops,
 			 TN *result2 = NULL, TN *src2 = NULL);
 #endif
 
+#ifdef TARG_X8664
+extern void Setup_Builtin_Apply_Args(OPS *ops);
+#endif
+
 /* Predicate manipulation routines.
  *
  * Most if not all of these routines take two result TNs. The second
@@ -319,6 +373,16 @@ extern void Exp_Pred_Compare(TN *dest, TN *cdest, TN *src1, TN *src2,
  * True if target can, false if should use target-independent logic.
  */
 extern BOOL Target_Has_Immediate_Operand (WN *parent, WN *expr);
+
+#if defined(TARG_SL) || defined(TARG_PPC32) 
+extern TN * Expand_Expr (WN *expr, WN *parent, TN *result, INTRINSIC intrn_id = INTRINSIC_INVALID);
+// On IA-64, Expand_Expr is static in whirl2ops.cxx
+//#elif defined(TARG_IA64)
+//extern TN * Expand_Expr (WN *expr, WN *parent, TN *result);
+/*  for 64bit expand */
+extern void Expand_Start();
+extern void Expand_Finish();
+#endif 
 
 #ifdef TARG_X8664
 extern void CG_Set_Is_Stack_Used();

@@ -72,10 +72,6 @@ double __dsign(double a, double b)
     if (b < 0.0)
 	x = -x;
     return (x);
-#if 0
-    x = (a >= 0.0 ? a : - a);
-    return( b >= 0.0 ? x : -x);
-#endif
 }
 
 #ifdef KEY /* Bug 3405 */

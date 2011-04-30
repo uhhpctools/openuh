@@ -35,10 +35,10 @@
 ### =======================================================================
 ### =======================================================================
 ###  Module: gen_preg_list.csh
-###  $Revision$
-###  $Date$
-###  $Author$
-###  $Source$
+###  $Revision: 1.1.1.1 $
+###  $Date: 2005/06/23 02:15:38 $
+###  $Author: sxyang $
+###  $Source: /u/cvs/Pathscale.MIPS/be/com/gen_preg_list.csh,v $
 ###  Revision comments:
 ###  31-May-1995 - Initial version
 ###  ============

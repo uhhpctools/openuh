@@ -48,6 +48,7 @@
 
 #ifdef _LIBELF_XTND_EXPANDED_DATA
 #pragma weak xlate_pro_add_reg_info_xtnd = _xlate_pro_add_reg_info_xtnd
+#elif defined(BUILD_OS_DARWIN)
 #else
 #pragma weak xlate_pro_add_reg_info = _xlate_pro_add_reg_info
 #endif
@@ -96,10 +97,10 @@ int xlate_pro_add_reg_info(xlate_table_pro     table,
 	    regAssemble[0] |= val1;
 	    if(is64bit) {
 	      leb128_length = 
-		_leb128_unsigned_encode64(val2>>2, &regAssemble[1]);
+		_leb128_unsigned_encode64(val2>>2, (char *) &regAssemble[1]);
 	    } else {
 	      leb128_length = 
-		_leb128_unsigned_encode32(val2>>2, &regAssemble[1]);
+		_leb128_unsigned_encode32(val2>>2, (char *) &regAssemble[1]);
 	    }
 	    regAssembleSize = 1 + leb128_length;
 	    break;
@@ -163,15 +164,15 @@ int xlate_pro_add_reg_info(xlate_table_pro     table,
 		return XLATE_TB_STATUS_BAD_REG_VAL;
 	    }
 	    leb128_length =
-		_leb128_unsigned_encode32(val1, &regAssemble[1]);
+		_leb128_unsigned_encode32(val1, (char *) &regAssemble[1]);
 	    regAssembleSize = 1 + leb128_length;
 
 	    if(is64bit) {
 	      leb128_length = _leb128_unsigned_encode64((val2 >> 2), 
-		&regAssemble[regAssembleSize]);
+		(char *) &regAssemble[regAssembleSize]);
 	    } else {
 	      leb128_length = _leb128_unsigned_encode32((val2 >> 2), 
-		&regAssemble[regAssembleSize]);
+		(char *) &regAssemble[regAssembleSize]);
 	    }
 	    regAssembleSize += leb128_length;
 	    break;
@@ -184,7 +185,7 @@ int xlate_pro_add_reg_info(xlate_table_pro     table,
 		return XLATE_TB_STATUS_BAD_REG_VAL;
 	    }
 	    leb128_length =
-		_leb128_unsigned_encode32(val1, &regAssemble[1]);
+		_leb128_unsigned_encode32(val1, (char *) &regAssemble[1]);
 	    regAssembleSize = 1 + leb128_length;
 	    break;
 
@@ -194,14 +195,14 @@ int xlate_pro_add_reg_info(xlate_table_pro     table,
 		return XLATE_TB_STATUS_BAD_REG_VAL;
 	    }
 	    leb128_length =
-		_leb128_unsigned_encode32(val1, &regAssemble[1]);
+		_leb128_unsigned_encode32(val1, (char *) &regAssemble[1]);
 	    regAssembleSize = 1 + leb128_length;
 
 	    if (val2 >= DW_FRAME_LAST_REG_NUM) {
 		return XLATE_TB_STATUS_BAD_REG_VAL;
 	    }
 	    leb128_length = _leb128_unsigned_encode32(val2, 
-		&regAssemble[regAssembleSize]);
+		(char *) &regAssemble[regAssembleSize]);
 	    regAssembleSize += leb128_length;
 	    break;
 
@@ -214,10 +215,12 @@ int xlate_pro_add_reg_info(xlate_table_pro     table,
 	case DW_CFA_def_cfa_offset :
 	    if(is64bit) {
 	      leb128_length =
-		_leb128_unsigned_encode64((val1 >> 2), &regAssemble[1]);
+		_leb128_unsigned_encode64((val1 >> 2),
+		  (char *) &regAssemble[1]);
 	    } else {
 	      leb128_length =
-		_leb128_unsigned_encode32((val1 >> 2), &regAssemble[1]);
+		_leb128_unsigned_encode32((val1 >> 2),
+		  (char *) &regAssemble[1]);
 	    }
 	    regAssembleSize = 1 + leb128_length;
 	    break;

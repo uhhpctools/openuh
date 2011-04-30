@@ -38,9 +38,9 @@
 ### ====================================================================
 ### Module: gen_cg_loop_scc_prop.csh
 ### $Revision: 1.1.1.1 $
-### $Date: 2005/10/21 19:00:00 $
-### $Author: marcel $
-### $Source: /proj/osprey/CVS/open64/osprey1.0/be/cg/gen_cg_loop_scc_prop.csh,v $
+### $Date: 2005/06/23 02:15:36 $
+### $Author: sxyang $
+### $Source: /u/cvs/Pathscale.MIPS/be/cg/gen_cg_loop_scc_prop.csh,v $
 ### Revision history:
 ###   11-Aug-92
 ###

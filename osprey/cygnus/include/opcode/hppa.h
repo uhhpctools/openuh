@@ -275,12 +275,6 @@ Float registers for fmpyadd and fmpysub:
 */
 
 
-#if 0
-/* List of characters not to put a space after.  Note that
-   "," is included, as the "spopN" operations use literal
-   commas in their completer sections.  */
-static const char *const completer_chars = ",CcY<>?!@+&U~FfGHINnOoZMadu|/=0123%e$m}";
-#endif
 
 /* The order of the opcodes in this table is significant:
 

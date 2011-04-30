@@ -1091,7 +1091,11 @@ install-am: all-am
 install: install-recursive
 uninstall-am: uninstall-man
 uninstall: uninstall-recursive
+#ifdef TARG_SL
 all-am: Makefile $(PROGRAMS) $(MANS) config.h
+#else
+all-am: Makefile $(PROGRAMS) config.h
+#endif
 all-redirect: all-recursive-am
 install-strip:
 	$(MAKE) $(AM_MAKEFLAGS) AM_INSTALL_PROGRAM_FLAGS=-s install

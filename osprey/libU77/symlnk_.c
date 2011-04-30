@@ -49,7 +49,11 @@ char id_symlnk[] = "@(#)symlnk_.c	1.1";
  *	ierror will be 0 if successful; a system error code otherwise.
  */
 
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <unistd.h>
 #include <sys/param.h>
 #include "cmplrs/f_errno.h"

@@ -35,7 +35,11 @@
 #include "head.h"
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(BUILD_OS_DARWIN)
+#include <stdlib.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <string.h>
 #include <sys/types.h>
 

@@ -39,10 +39,10 @@
  * ====================================================================
  *
  * Module: wn2f.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/whirl2f/wn2f.h,v $
+ * $Revision: 1.1 $
+ * $Date: 2005/07/27 02:13:42 $
+ * $Author: kevinlo $
+ * $Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f.h,v $
  *
  * Revision history:
  *  07-Apr-1995 - Original Version
@@ -348,7 +348,7 @@ extern void
 
 /* the preamble to put out for comments eg: CSGI$ start 1 */
 
-extern  char * sgi_comment_str ;
+extern  const char * sgi_comment_str ;
 
    /* -------- Facilities to effect a WN to Fortran translation --------- */
    /* ------------------------------------------------------------------- */

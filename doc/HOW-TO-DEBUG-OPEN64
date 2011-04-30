@@ -828,7 +828,7 @@ To see details of software pipeliner register allocation:
 	-ttSRA:0x0010	final allocation
 
 To see details of scheduler:
-	-ttSCH:		TBD ?
+	-ttSCH:0x0001   HyperBlock Scheduler summary
 	-ttGCM:		TBD ?
 	-ttPSG:		TBD ?
 	-ttTHR:		TBD ?
@@ -1140,8 +1140,37 @@ To see details of EH intermediate info:
     relative to the main entry point. [0.1]
 
   // LRA options:			TBD dew
-  // GCM options:			TBD ?
-  // Scheduling options:		TBD ?
+
+  // GCM options:
+  gcm[=Bool]
+    Enable Global Code Motion scheduling [TRUE]
+  pre_gcm[=Bool]
+    Enable Pre GCM scheduling [TRUE]
+
+  // Global Scheduling options (IGLS):
+  all_sched[=Bool]
+    Turns off all scheduling (LOCS, HBS, GCM) for triaging [TRUE]
+  hb_sched[=Bool]
+    Enable Hyperblock scheduling [TRUE]
+  pre_hb_sched[=Bool]
+    Enable Pre Hyperblock scheduling [FALSE]
+
+  // Local Scheduling options (LOCS):
+  local_sched[=Bool]
+    Enable Local scheduling [TRUE]
+  pre_local_schedu[=Bool]
+    Enable Pre Local scheduling [TRUE]
+  locs_balance_ready_types[=Bool]
+    Enable heuristic to balance the number of int and fp OPs in the ready vector [FALSE]
+  locs_balance_unsched_types[=Bool]
+    Enable heuristic to balance the number of unscheduled int and fp OPs [FALSE]
+  locs_best[=Bool]
+    Select best schedule produced by different scheduling heuristics [FALSE]
+  local_sched_alg[=int (0 to 1)]
+    Select basic block instruction scheduling algorithm
+    0 = List Scheduling Backward
+    1 = List Scheduling Forward
+
 
   // Hyperblock formation (HBF) options:
   hb_formation 

@@ -39,7 +39,11 @@
 #endif /* USE_PCH */
 #pragma hdrstop
 #include <sys/types.h>
+#if defined(BUILD_OS_DARWIN)
+#include "darwin_elf.h"
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <ctype.h>
 #include "wn.h"
 #include <stdio.h> 
@@ -70,7 +74,7 @@ void WB_BUFFER::Load_Buffer()
 //   input from 'stdin'.
 //-----------------------------------------------------------------------
 
-void WB_BUFFER::Load_Buffer(char s[])
+void WB_BUFFER::Load_Buffer(const char s[])
 {
   INT i;
   for (i = 0; s[i] != '\0'; i++) {

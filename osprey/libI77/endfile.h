@@ -48,13 +48,8 @@
 extern int  f_end(alist *);
 extern int  f_end_mp(alist *);
 
-#if 00
-extern int  f_end64(alist64 *);
-extern int  f_end64_mp(alist64 *);
-#else
 extern int  f_end64(alist *);
 extern int  f_end64_mp(alist *);
-#endif
 #endif /* C || C++ */
 
 #endif /* !__ENDFILE_H__ */

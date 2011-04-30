@@ -37,10 +37,10 @@
  * ====================================================================
  *
  * Module: betarget.h
- * $Revision: 1.1.1.1 $
- * $Date: 2005/10/21 19:00:00 $
- * $Author: marcel $
- * $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/betarget.h,v $
+ * $Revision: 1.2 $
+ * $Date: 02/11/07 23:41:34-00:00 $
+ * $Author: fchow@keyresearch.com $
+ * $Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.betarget.h $
  *
  * Description: Target Specific Miscellany
  *
@@ -64,7 +64,7 @@
 #define betarget_INCLUDED
 
 #ifdef _KEEP_RCS_ID
-static const char betarget_rcs_id[] = "$Source: /proj/osprey/CVS/open64/osprey1.0/be/com/betarget.h,v $ $Revision: 1.1.1.1 $";
+static const char betarget_rcs_id[] = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/com/SCCS/s.betarget.h $ $Revision: 1.2 $";
 #endif /* _KEEP_RCS_ID */
 
 #include "topcode.h"
@@ -81,6 +81,10 @@ extern INT Max_Small_Frame_Offset;
 
 extern BOOL Targ_Lower_Float_To_Unsigned;
 extern BOOL Targ_Lower_Unsigned_To_Float;
+
+/* return whether DIV will be translated into shifts */
+extern  BOOL Can_Do_Fast_Divide (TYPE_ID mtype, INT64 dividend);
+extern  BOOL Can_Do_Fast_Remainder (TYPE_ID mtype, INT64 dividend);
 
 #ifdef __cplusplus
 }

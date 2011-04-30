@@ -482,7 +482,11 @@ void OPT_TAIL::Fixup_exit(BB_NODE *bb)
 // Bug 1640
     static INT Temp_Index = 0;
     UINT len = strlen("_temp_") + 17;
+#ifdef __MINGW32__
+    char *new_str = (char *) __builtin_alloca (len);
+#else
     char *new_str = (char *) alloca (len);
+#endif /* __MINGW32__ */
     sprintf(new_str, "%s%d", "_temp_", Temp_Index++);
     AUX_ID tmp_preg = _opt_stab->Create_preg(arg_type_id, new_str);
 #else

@@ -37,10 +37,13 @@
 */
 
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stdio.h>
+#if defined(BUILD_OS_DARWIN)
+#include <darwin_elf.h>
+#else /* defined(BUILD_OS_DARWIN) */
 #include <elf.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 #include <sys/elf_whirl.h>
 #include <sys/types.h>
 #include <ctype.h>
@@ -76,7 +79,7 @@ extern void CGB_IPA_Terminate()
   CGB_Terminate(&cgb_ipa); 
 } 
 
-extern void s_cg_ipa_debug(char init_buffer[])
+extern void s_cg_ipa_debug(const char init_buffer[])
 { 
   cgb_ipa.Sdebug(init_buffer); 
 } 

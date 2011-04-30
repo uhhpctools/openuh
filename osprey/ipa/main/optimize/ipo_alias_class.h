@@ -444,9 +444,6 @@ public:
       return _type_info._sort;
     }
 
-#if 0
-  BOOL              In_pending(IP_ALIAS_CLASS_REP *);
-#endif
   void              Add_pending(IP_ALIAS_CLASS_REP *, BOOL);
   void              Merge_pending(IP_ALIAS_CLASS_REP &, BOOL);
   void              Process_pending(IP_ALIAS_CLASS_MEMBER *,

@@ -45,7 +45,9 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#if ! defined(BUILD_OS_DARWIN)
 #include <malloc.h>
+#endif /* defined(BUILD_OS_DARWIN) */
 
 /*
     These files are included to get the sizes

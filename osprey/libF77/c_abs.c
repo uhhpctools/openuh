@@ -54,5 +54,11 @@ float c_abs__(float z[2])
   return(hypotf(z[0], z[1]));
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+float c_abs_(float z[2]) { return c_abs__(z); }
+float c_abs(float z[2]) { return c_abs__(z); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(c_abs__, c_abs_);
 defalias(c_abs__, c_abs);
+#endif /* defined(BUILD_OS_DARWIN) */

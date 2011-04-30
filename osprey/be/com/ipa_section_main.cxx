@@ -58,16 +58,19 @@
 // ====================================================================
 // ====================================================================
 
-#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <sys/types.h>
 #include <alloca.h>
 
+#ifdef __MINGW32__
+#include <WINDOWS.h>
+#endif /* __MINGW32__ */
 #include "defs.h"
 #include "cxx_memory.h"
 #include "soe.h"
 #include "ipa_section.h"
 #include "ipa_lno_util.h"
+#include "opt_sys.h"
 
 #ifndef IPA_SUMMARY
 INT IPA_Ivar_Global_Count;
@@ -526,7 +529,7 @@ LINEX::Add_access(SYSTEM_OF_EQUATIONS *soe,
   }
 
   mINT32* v = (mINT32*) alloca(sizeof(mINT32) * vector_size);
-  bzero(v, sizeof(mINT32) * vector_size);
+  BZERO(v, sizeof(mINT32) * vector_size);
 
   // for each term store the coeff in the right place in the vector
   for (INT i = 0; i <= Num_terms(); ++i) {
@@ -1270,9 +1273,9 @@ LINEX* LINEX::Merge(LINEX *l1)
   INT* coeff = (INT*) alloca(sizeof(INT) * (coeff_max + 1));
   INT* sub_coeff = (INT*) alloca(sizeof(INT) * (sub_coeff_max + 1));
   INT* isym_coeff = (INT*) alloca(sizeof(INT) * (isym_coeff_max + 1));
-  bzero(coeff, sizeof(INT) * (coeff_max + 1));
-  bzero(sub_coeff, sizeof(INT) * (sub_coeff_max + 1));
-  bzero(isym_coeff, sizeof(INT) * (isym_coeff_max + 1));
+  BZERO(coeff, sizeof(INT) * (coeff_max + 1));
+  BZERO(sub_coeff, sizeof(INT) * (sub_coeff_max + 1));
+  BZERO(isym_coeff, sizeof(INT) * (isym_coeff_max + 1));
 
   LINEX* l = CXX_NEW(LINEX(mem_pool), mem_pool);
 
@@ -1390,9 +1393,9 @@ LINEX* LINEX::Subtract(LINEX *l1)
   INT* coeff = (INT*) alloca(sizeof(INT) * (coeff_max + 1));
   INT* sub_coeff = (INT*) alloca(sizeof(INT) * (sub_coeff_max + 1));
   INT* isym_coeff = (INT*) alloca(sizeof(INT) * (isym_coeff_max + 1));
-  bzero(coeff, sizeof(INT) * (coeff_max + 1));
-  bzero(sub_coeff, sizeof(INT) * (sub_coeff_max + 1));
-  bzero(isym_coeff, sizeof(INT) * (isym_coeff_max + 1));
+  BZERO(coeff, sizeof(INT) * (coeff_max + 1));
+  BZERO(sub_coeff, sizeof(INT) * (sub_coeff_max + 1));
+  BZERO(isym_coeff, sizeof(INT) * (isym_coeff_max + 1));
 
   LINEX* l = CXX_NEW(LINEX(mem_pool), mem_pool);
 

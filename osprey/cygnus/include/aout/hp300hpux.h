@@ -63,10 +63,6 @@ struct hp300hpux_header_extension
 
 #define N_HEADER_IN_TEXT(x) 0
 
-#if 0 /* libaout.h only uses the lower 8 bits */
-#define HP98x6_ID 0x20A
-#define HP9000S200_ID 0x20C
-#endif
 #define HP98x6_ID 0x0A
 #define HP9000S200_ID 0x0C
 

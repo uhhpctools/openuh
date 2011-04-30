@@ -19,8 +19,4 @@ const char version_string[] = "3.3.1 20030915 (Red Hat Linux 3.3.1-5)";
    forward us bugs reported to you, if you determine that they are
    not bugs in your modifications.)  */
 
-#ifdef KEY
-const char bug_report_url[] = "<URL:http://www.pathscale.com/support.html>";
-#else
-const char bug_report_url[] = "<URL:http://bugzilla.redhat.com/bugzilla>";
-#endif
+const char bug_report_url[] = "<URL:http://bugs.open64.net>";

@@ -2,6 +2,8 @@
 
 # ltcf-c.sh - Create a C compiler specific configuration
 #
+# Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 # Copyright (C) 1996-2000, 2001 Free Software Foundation, Inc.
 # Originally by Gordon Matzigkeit <gord@gnu.ai.mit.edu>, 1996
 #
@@ -239,7 +241,7 @@ EOF
 
   if test "$ld_shlibs" = yes; then
     runpath_var=LD_RUN_PATH
-    hardcode_libdir_flag_spec='${wl}--rpath ${wl}$libdir'
+    hardcode_libdir_flag_spec='${wl}-rpath ${wl}$libdir'
     export_dynamic_flag_spec='${wl}--export-dynamic'
     case $host_os in
     cygwin* | mingw*)

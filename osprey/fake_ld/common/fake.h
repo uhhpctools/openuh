@@ -366,10 +366,6 @@ typedef unsigned short	ELF_SECTION;
 #define FCLOSE(stream) \
     fclose ((FILE *)(stream))
 
-#if 0
-#define FSEEK(stream, offset, whence) \
-    fseek ((FILE *)(stream), (long)(offset), (int)(whence))
-#endif
 
 #define FTRUNCATE(fildes, length) \
     ftruncate ((int)(fildes), (off_t)(length)
@@ -450,11 +446,15 @@ typedef unsigned short	ELF_SECTION;
 #define MEMCMP(s1, s2, n) \
     memcmp((void *)(s1), (void *)(s2), (size_t)(n))
 
+#ifndef BZERO
 #define BZERO(b, len) \
     bzero((void *)(b), (int)(len))
+#endif
 
+#ifndef BCOPY
 #define BCOPY(src, dst, len) \
     bcopy((const void *)(src), (void *)(dst), (int)(len))    	       
+#endif
 
 #define PCREATEVE(path, argv, envp) \
     pcreateve((const char *)(path), (char *const *)(argv), \
@@ -470,7 +470,7 @@ extern "C" {
 
 extern void msg(int, int, ...);
 
-extern string concat_names(string, string);
+extern char* concat_names(const char*, const char*);
 
 extern EXTSYM *
 slookup_mext(char *);

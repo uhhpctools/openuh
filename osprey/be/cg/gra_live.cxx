@@ -1,4 +1,8 @@
 /*
+ *  Copyright (C) 2007 QLogic Corporation.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -91,6 +95,10 @@
 #include "pqs_cg.h"
 #include "cgtarget.h"
 #include "eh_region.h"
+
+#ifdef TARG_IA64
+extern TN *Caller_GP_TN;  // OSP_426, always mark Caller_GP_TN global
+#endif
 
 static BB_LIST *region_entry_list;
 static BB_SET  *region_exit_set;
@@ -588,18 +596,26 @@ Compute_Force_TNs(void)
       Force_Live_Add(CALLEE_tn(i));
   }
 
-#ifdef TARG_IA64
-  if (Find_Special_Return_Address_Symbol() == NULL) {
-#else
-    if (Find_Special_Return_Address_Symbol() == NULL &&
-	RA_TN != NULL) {
-#endif
+  if (Find_Special_Return_Address_Symbol() == NULL &&
+      RA_TN != NULL) {
 
     /* No horrible return address builtin was used, hence we have to force
      * the return address save TN to be live */
 
     Force_Live_Add(SAVE_tn(Return_Address_Reg));
   }
+#ifdef TARG_MIPS
+  else if (SAVE_tn(Return_Address_Reg) != NULL) {
+    Force_Live_Add(SAVE_tn(Return_Address_Reg));
+  }
+#endif
+
+#if !defined(TARG_X8664) && !defined(TARG_LOONGSON) && !defined(TARG_PPC32)
+  // OSP_426, always mark Caller_GP_TN global
+  if (Caller_GP_TN != NULL) {
+    Force_Live_Add(Caller_GP_TN);
+  }
+#endif
 }
 
 
@@ -1138,6 +1154,38 @@ Region_Boundary_Fixup(void)
 }
 
 
+#ifdef TARG_MIPS
+/* =======================================================================
+ *
+ *  Handler_Boundary_Fixup
+ *
+ *  For exception handler entries to the PU, mark the callee-save registers
+ *  defreach_in at the entry BB.
+ *
+ * =======================================================================
+ */
+static void
+Handler_Boundary_Fixup(void)
+{
+  BB *bb;
+
+  for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+    if (BB_handler(bb)) {
+      if (SAVE_tn(Return_Address_Reg) != NULL) {
+	BB_defreach_in(bb) = GTN_SET_Union1D(BB_defreach_in(bb),
+					     SAVE_tn(Return_Address_Reg),
+					     &liveness_pool);
+      }
+      if (Caller_GP_TN != NULL) {
+	BB_defreach_in(bb) = GTN_SET_Union1D(BB_defreach_in(bb),
+					     Caller_GP_TN,
+					     &liveness_pool);
+      }
+    }
+  }
+}
+#endif
+
 
 /* =======================================================================
  *
@@ -1197,14 +1245,10 @@ Live_Init(
                                       BB_live_use(bb),
                                       &liveness_pool);
 #ifdef TARG_IA64
-#ifdef OSP_OPT
   /* if current PU haven't landing pad at all, 
    * needn't to added the corresponding defreach and live info
    */
   if (PU_has_exc_scopes(Get_Current_PU()) && !PU_Need_Not_Create_LSDA ()) {
-#else
-  if (PU_has_exc_scopes(Get_Current_PU())) {
-#endif
     extern TN *Caller_GP_TN;
     extern TN *Caller_FP_TN;
     extern TN *Caller_Pfs_TN;
@@ -1556,6 +1600,11 @@ GRA_LIVE_Region_Compute_Global_Live_Info(void)
                                            Do_Nothing);
 
   Region_Boundary_Fixup();
+
+#ifdef TARG_MIPS
+  Handler_Boundary_Fixup();	// Bug 12703
+#endif
+
   /* We'll keep iterating so long as either the defreach or live
    * calculation changes anything.  I suppose sometimes this will mean
    * that we calculate liveness or defreachness after it has reached the
@@ -1880,14 +1929,6 @@ GRA_LIVE_Merge_Blocks( BB *dst, BB *a, BB *b )
   GTN_SET *live_use;
   GTN_SET *live_def;
 
-#if 0
-  /* The 'in' vectors of the merged block is the same as the 'in'
-   * vectors of the first block. Since the first block will become
-   * the merged block, there's nothing to do.
-   */
-  BB_live_in(dst) = GTN_SET_CopyD(BB_live_in(a),&liveness_pool);
-  BB_defreach_in(dst) = GTN_SET_CopyD(BB_defreach_in(a),&liveness_pool);
-#endif
 
   /* The 'out' vectors of the merged block are the 'out' vectors of the
    * block being merged in.
@@ -2387,40 +2428,53 @@ Clear_Defreach(
 
 
 // Detect TNs that should be renamed in the <bb>. 
-void
-#ifdef TARG_IA64 
-Rename_TNs_For_BB (BB *bb, GTN_SET *multiple_defined_set)
-#else
+void 
 Rename_TNs_For_BB (BB *bb, GTN_SET *multiple_defined_set
 #ifdef KEY
-		     , OP *rename_local_TN_op
+		   , OP *rename_local_TN_op
 #endif
-		     )
-#endif
+		   )
 {
   TN_MAP op_for_tn = TN_MAP_Create ();
   OP *op;
-#ifndef TARG_IA64
+#ifdef KEY
   BOOL rename_local_TNs = FALSE;
 #endif
 
   FOR_ALL_BB_OPs_FWD (bb, op) {
-#ifndef TARG_IA64
+#ifdef KEY
     // Rename local TNs starting at rename_local_TN_op, if it exists,
     // Bug 4327.
     rename_local_TNs |= (rename_local_TN_op == op);
 #endif
     for (INT i = 0; i < OP_results(op); i++) {
       TN *tn = OP_result(op, i);
-      
       // Don't rename under the following conditions.
       if (TN_is_dedicated(tn) || OP_cond_def(op) || OP_same_res(op)) continue;
 
       OP *last_def = (OP *) TN_MAP_Get (op_for_tn, tn);
-      if (last_def != NULL) {
+#ifdef TARG_LOONGSON
+      if ((last_def != NULL) && (OP_code(op) != TOP_ldl && OP_code(op) != TOP_lwl))
+#else
+      if (last_def != NULL)
+#endif
+      {
         // rename tn to new_tn between last_def and op.
         Rename_TN_In_Range (tn, last_def, op);
       }
+#ifdef TARG_IA64
+      else if (tn == Caller_GP_TN) {
+        // OSP_426, Don't rename the caller GP TN, keep it global
+      }
+#endif
+#ifdef TARG_MIPS
+      else if (PU_Has_Exc_Handler &&
+	       (tn == Caller_GP_TN ||
+	        tn == SAVE_tn(Return_Address_Reg))) {
+	// Don't rename the caller GP TN and the saved return address TN.  They
+	// should remain global.
+      }
+#endif
       else if (TN_is_global_reg(tn) &&
 	       !TN_is_const_reg(tn) &&
 	       !GTN_SET_MemberP(BB_live_out(bb), tn)) {
@@ -2476,7 +2530,7 @@ Rename_TNs_For_BB (BB *bb, GTN_SET *multiple_defined_set
 	}
 
       }
-#ifndef TARG_IA64
+#ifdef KEY
       else if (rename_local_TNs &&
 	       !TN_is_global_reg(tn) &&
 	       !TN_is_const_reg(tn)) {
@@ -2510,8 +2564,3 @@ void GRA_LIVE_Rename_TNs (void)
 
   MEM_POOL_Pop (&MEM_local_pool);
 }
-
-
-
-
-

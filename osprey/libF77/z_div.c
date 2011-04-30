@@ -79,4 +79,9 @@ dcomplex z_div_(dcomplex *a, dcomplex *b)
   return __zdiv(a->dreal, a->dimag, b->dreal, b->dimag);
 }
 
+#if defined(BUILD_OS_DARWIN)
+/* Mach-O doesn't support aliases */
+dcomplex z_div(dcomplex *a, dcomplex *b) { return z_div_(a, b); }
+#else /* defined(BUILD_OS_DARWIN) */
 defalias(z_div_, z_div);
+#endif /* defined(BUILD_OS_DARWIN) */

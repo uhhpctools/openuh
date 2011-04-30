@@ -166,10 +166,8 @@ Get_ST (gs_t decl_tree)
 		    !ST_is_weak_symbol(st) &&
 		    !gs_decl_external(decl_tree)        &&
 		    !gs_decl_initial(decl_tree)
-#if 1 // wgen, bug 10324
 		     &&
 		    gs_tree_static(decl_tree)
-#endif
 		    )
 		{
 		    if (flag_no_common || gs_decl_section_name(decl_tree))
@@ -242,6 +240,7 @@ Get_ST (gs_t decl_tree)
                 }
 #endif
         }
+	else st = Create_ST_For_Tree (decl_tree);
 	if ((CURRENT_SYMTAB > GLOBAL_SYMTAB + 1) &&
 	    ((gs_tree_code(decl_tree) == GS_VAR_DECL) ||
 	     (gs_tree_code(decl_tree) == GS_PARM_DECL)) &&
@@ -254,6 +253,10 @@ Get_ST (gs_t decl_tree)
 			Set_ST_has_nested_ref (base_st);
 		}
 	}
+#ifdef KEY
+	if (ST_is_thread_private(st) && CURRENT_SYMTAB != GLOBAL_SYMTAB)
+	  Set_PU_has_mp(Get_Current_PU());
+#endif
 	return st;
 }
 

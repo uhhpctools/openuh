@@ -247,9 +247,6 @@ static void note_addr_stored PARAMS ((rtx, rtx, void *));
 static void note_set_pseudo_multiple_uses PARAMS ((rtx, rtx, void *));
 static int loop_reg_used_before_p PARAMS ((const struct loop *, rtx, rtx));
 static void scan_loop PARAMS ((struct loop*, int));
-#if 0
-static void replace_call_address PARAMS ((rtx, rtx, rtx));
-#endif
 static rtx skip_consec_insns PARAMS ((rtx, int));
 static int libcall_benefit PARAMS ((rtx));
 static void ignore_some_movables PARAMS ((struct loop_movables *));
@@ -2329,69 +2326,6 @@ loop_movables_free (movables)
     }
 }
 
-#if 0
-/* Scan X and replace the address of any MEM in it with ADDR.
-   REG is the address that MEM should have before the replacement.  */
-
-static void
-replace_call_address (x, reg, addr)
-     rtx x, reg, addr;
-{
-  enum rtx_code code;
-  int i;
-  const char *fmt;
-
-  if (x == 0)
-    return;
-  code = GET_CODE (x);
-  switch (code)
-    {
-    case PC:
-    case CC0:
-    case CONST_INT:
-    case CONST_DOUBLE:
-    case CONST:
-    case SYMBOL_REF:
-    case LABEL_REF:
-    case REG:
-      return;
-
-    case SET:
-      /* Short cut for very common case.  */
-      replace_call_address (XEXP (x, 1), reg, addr);
-      return;
-
-    case CALL:
-      /* Short cut for very common case.  */
-      replace_call_address (XEXP (x, 0), reg, addr);
-      return;
-
-    case MEM:
-      /* If this MEM uses a reg other than the one we expected,
-	 something is wrong.  */
-      if (XEXP (x, 0) != reg)
-	abort ();
-      XEXP (x, 0) = addr;
-      return;
-
-    default:
-      break;
-    }
-
-  fmt = GET_RTX_FORMAT (code);
-  for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
-    {
-      if (fmt[i] == 'e')
-	replace_call_address (XEXP (x, i), reg, addr);
-      else if (fmt[i] == 'E')
-	{
-	  int j;
-	  for (j = 0; j < XVECLEN (x, i); j++)
-	    replace_call_address (XVECEXP (x, i, j), reg, addr);
-	}
-    }
-}
-#endif
 
 /* Return the number of memory refs to addresses that vary
    in the rtx X.  */
@@ -3433,38 +3367,6 @@ consec_sets_invariant_p (loop, reg, n_sets, insn)
   return 1 + (value & 2);
 }
 
-#if 0
-/* I don't think this condition is sufficient to allow INSN
-   to be moved, so we no longer test it.  */
-
-/* Return 1 if all insns in the basic block of INSN and following INSN
-   that set REG are invariant according to TABLE.  */
-
-static int
-all_sets_invariant_p (reg, insn, table)
-     rtx reg, insn;
-     short *table;
-{
-  rtx p = insn;
-  int regno = REGNO (reg);
-
-  while (1)
-    {
-      enum rtx_code code;
-      p = NEXT_INSN (p);
-      code = GET_CODE (p);
-      if (code == CODE_LABEL || code == JUMP_INSN)
-	return 1;
-      if (code == INSN && GET_CODE (PATTERN (p)) == SET
-	  && GET_CODE (SET_DEST (PATTERN (p))) == REG
-	  && REGNO (SET_DEST (PATTERN (p))) == regno)
-	{
-	  if (! loop_invariant_p (loop, SET_SRC (PATTERN (p)), table))
-	    return 0;
-	}
-    }
-}
-#endif /* 0 */
 
 /* Look at all uses (not sets) of registers in X.  For each, if it is
    the single use, set USAGE[REGNO] to INSN; if there was a previous use in
@@ -6001,11 +5903,6 @@ check_final_value (loop, v)
      - it's not used before the it's set
      - no assignments to the biv occur during the giv's lifetime.  */
 
-#if 0
-  /* This is only called now when replaceable is known to be false.  */
-  /* Clear replaceable, so that it won't confuse final_giv_value.  */
-  v->replaceable = 0;
-#endif
 
   if ((final_value = final_giv_value (loop, v))
       && (v->always_executed
@@ -7406,13 +7303,6 @@ combine_givs_p (g1, g2)
       /* ??? Looses, especially with -fforce-addr, where *g2->location
 	 will always be a register, and so anything more complicated
 	 gets discarded.  */
-#if 0
-#ifdef ADDRESS_COST
-      && ADDRESS_COST (tem) <= ADDRESS_COST (*g2->location)
-#else
-      && rtx_cost (tem, MEM) <= rtx_cost (*g2->location, MEM)
-#endif
-#endif
       )
     {
       return ret;
@@ -9101,43 +8991,6 @@ maybe_eliminate_biv_1 (loop, x, insn, bl, eliminate_p, where_bb, where_insn)
 	     we try to process biv.  It doesn't seem worthwhile to do
 	     this sort of thing now.  */
 
-#if 0
-	  /* Otherwise the reg compared with had better be a biv.  */
-	  if (GET_CODE (arg) != REG
-	      || REG_IV_TYPE (ivs, REGNO (arg)) != BASIC_INDUCT)
-	    return 0;
-
-	  /* Look for a pair of givs, one for each biv,
-	     with identical coefficients.  */
-	  for (v = bl->giv; v; v = v->next_iv)
-	    {
-	      struct induction *tv;
-
-	      if (v->ignore || v->maybe_dead || v->mode != mode)
-		continue;
-
-	      for (tv = REG_IV_CLASS (ivs, REGNO (arg))->giv; tv;
-		   tv = tv->next_iv)
-		if (! tv->ignore && ! tv->maybe_dead
-		    && rtx_equal_p (tv->mult_val, v->mult_val)
-		    && rtx_equal_p (tv->add_val, v->add_val)
-		    && tv->mode == mode)
-		  {
-		    if (! biv_elimination_giv_has_0_offset (bl->biv, v, insn))
-		      continue;
-
-		    if (! eliminate_p)
-		      return 1;
-
-		    /* Replace biv with its giv's reduced reg.  */
-		    XEXP (x, 1 - arg_operand) = v->new_reg;
-		    /* Replace other operand with the other giv's
-		       reduced reg.  */
-		    XEXP (x, arg_operand) = tv->new_reg;
-		    return 1;
-		  }
-	    }
-#endif
 	}
 
       /* If we get here, the biv can't be eliminated.  */

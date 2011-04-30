@@ -452,7 +452,7 @@ Set_ST_assigned_to_dedicated_preg (ST* s)
 inline void
 Clear_ST_assigned_to_dedicated_preg (ST* s)	
 	{ s->flags &= ~ST_ASSIGNED_TO_DEDICATED_PREG; }
-
+	
 inline BOOL
 ST_addr_taken (const ST* s)
 {
@@ -822,6 +822,20 @@ PU_is_mainpu (const PU_IDX pui)		{ return Pu_Table[pui].flags & PU_IS_MAINPU; }
 
 inline UINT64 
 PU_src_lang (const PU_IDX pui)		{ return Pu_Table[pui].src_lang; }
+
+inline BOOL
+PU_no_inline (const PU_IDX pui)		{ return Pu_Table[pui].flags & PU_NO_INLINE; }
+inline void
+Set_PU_no_inline (PU_IDX pui)		{ Pu_Table[pui].flags |= PU_NO_INLINE; }
+inline void
+Clear_PU_no_inline (PU_IDX pui)		{ Pu_Table[pui].flags &= ~PU_NO_INLINE; }
+
+inline BOOL
+PU_must_inline (const PU_IDX pui)	{ return Pu_Table[pui].flags & PU_MUST_INLINE; }
+inline void
+Set_PU_must_inline (PU_IDX pui)		{ Pu_Table[pui].flags |= PU_MUST_INLINE; }
+inline void
+Clear_PU_must_inline (PU_IDX pui)	{ Pu_Table[pui].flags &= ~PU_MUST_INLINE; }
 
 // decrement the symtab/scope level
 #define SYMTAB_parent(s)	(s-1)

@@ -2539,9 +2539,6 @@ final_scan_insn (insn, file, optimize, prescan, nopeepholes)
 
 	if (optimize)
 	  {
-#if 0
-	    rtx set = single_set (insn);
-#endif
 
 	    if (set
 		&& GET_CODE (SET_DEST (set)) == CC0
@@ -2851,14 +2848,6 @@ final_scan_insn (insn, file, optimize, prescan, nopeepholes)
 #endif
 #endif
 
-#if 0
-	/* It's not at all clear why we did this and doing so interferes
-	   with tests we'd like to do to use REG_WAS_0 notes, so let's try
-	   with this out.  */
-
-	/* Mark this insn as having been output.  */
-	INSN_DELETED_P (insn) = 1;
-#endif
 
 	/* Emit information for vtable gc.  */
 	note = find_reg_note (insn, REG_VTABLE_REF, NULL_RTX);

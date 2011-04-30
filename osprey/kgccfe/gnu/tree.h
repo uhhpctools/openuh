@@ -171,6 +171,13 @@ struct tree_common GTY(())
   unsigned lang_flag_5 : 1;
   unsigned lang_flag_6 : 1;
   unsigned unused_1 : 1;
+#if defined(TARG_SL) 
+  unsigned sbuf   : 1;
+  unsigned sdram  : 1;
+  unsigned v1buf : 1;
+  unsigned v2buf : 1;
+  unsigned v4buf : 1;
+#endif // TARG_SL
 };
 
 /* The following table lists the uses of each of the above flags and
@@ -1164,11 +1171,29 @@ struct tree_block GTY(())
    combined by bitwise-or to form the complete set of qualifiers for a
    type.  */
 
+#if defined(TARG_SL)
+ 
+#define TYPE_SBUF(NODE) (TYPE_CHECK (NODE)->common.sbuf)
+#define TYPE_SDRAM(NODE) (TYPE_CHECK (NODE)->common.sdram)
+
+#define TYPE_V1BUF(NODE) (TYPE_CHECK (NODE)->common.v1buf)
+#define TYPE_V2BUF(NODE) (TYPE_CHECK (NODE)->common.v2buf)
+#define TYPE_V4BUF(NODE) (TYPE_CHECK (NODE)->common.v4buf)
+#define TYPE_VBUF_P(NODE)  (TYPE_V1BUF(NODE)||TYPE_V2BUF(NODE)||TYPE_V4BUF(NODE))
+#endif // TARG_SL
+
 #define TYPE_UNQUALIFIED   0x0
 #define TYPE_QUAL_CONST    0x1
 #define TYPE_QUAL_VOLATILE 0x2
 #define TYPE_QUAL_RESTRICT 0x4
 #define TYPE_QUAL_BOUNDED  0x8
+#if defined(TARG_SL)
+#define TYPE_QUAL_SBUF     0x10
+#define TYPE_QUAL_SDRAM    0x20
+#define TYPE_QUAL_V1BUF    0x40
+#define TYPE_QUAL_V2BUF    0x80
+#define TYPE_QUAL_V4BUF    0x100
+#endif // TARG_SL
 
 /* The set of type qualifiers for this type.  */
 #define TYPE_QUALS(NODE)					\
@@ -1176,6 +1201,15 @@ struct tree_block GTY(())
    | (TYPE_VOLATILE (NODE) * TYPE_QUAL_VOLATILE)		\
    | (TYPE_RESTRICT (NODE) * TYPE_QUAL_RESTRICT)		\
    | (BOUNDED_INDIRECT_TYPE_P (NODE) * TYPE_QUAL_BOUNDED))
+
+#if defined(TARG_SL)
+#define TYPE_VBUF_QUALS(NODE)                 \
+  ((TYPE_V1BUF(NODE) * TYPE_QUAL_V1BUF)          \
+   | (TYPE_V2BUF(NODE) * TYPE_QUAL_V2BUF)          \
+   | (TYPE_V4BUF(NODE) * TYPE_QUAL_V4BUF)         \
+   | (TYPE_SBUF(NODE) * TYPE_QUAL_SBUF)          \
+   | (TYPE_SDRAM(NODE) * TYPE_QUAL_SDRAM))
+#endif // TARG_SL
 
 /* The set of qualifiers pertinent to an expression node.  */
 #define TREE_EXPR_QUALS(NODE)				\
@@ -1685,6 +1719,10 @@ struct tree_type GTY(())
 #define DECL_DST_IDX(NODE) (TYPE_CHECK(NODE)->decl.decl_dst_id)
 #endif /* SGI_MONGOOSE */
 
+#if defined(TARG_SL)
+#define DECL_SL_MODEL_NAME(NODE) (DECL_CHECK(NODE) -> decl.sl_model_name)
+#endif
+
 /* In a VAR_DECL or FUNCTION_DECL,
    nonzero means external reference:
    do not allocate storage, and refer to a definition elsewhere.  */
@@ -1897,6 +1935,30 @@ struct tree_type GTY(())
 #define DECL_WIDEN_RETVAL(NODE) (DECL_CHECK (NODE)->decl.widen_retval_flag)
 #endif /* SGI_MONGOOSE */
 
+#define DECL_CDECL(NODE)       (DECL_CHECK (NODE)->decl.is_cdecl)
+
+#ifdef TARG_NVISA
+#define DECL_GLOBAL(NODE)       (DECL_CHECK (NODE)->decl.is_global)
+#define DECL_SHARED(NODE)       (DECL_CHECK (NODE)->decl.is_shared)
+#define DECL_LOCAL(NODE)        (DECL_CHECK (NODE)->decl.is_local)
+#define DECL_CONSTANT(NODE)     (DECL_CHECK (NODE)->decl.is_constant)
+#define DECL_TEXTURE(NODE)      (DECL_CHECK (NODE)->decl.is_texture)
+#define DECL_THREAD_LIMIT(NODE) (DECL_CHECK (NODE)->decl.limit.thread_limit)
+#define DECL_BLOCK_LIMIT(NODE)  (DECL_CHECK (NODE)->decl.limit.block_limit)
+#endif /* TARG_NVISA */
+
+
+#if defined(TARG_SL)
+/* Internal Buffer Extension */
+#define DECL_SBUF(NODE) (DECL_CHECK(NODE)->decl.sbuf_flag)
+#define DECL_SDRAM(NODE) (DECL_CHECK(NODE)->decl.sdram_flag)
+#define DECL_V1BUF(NODE) (DECL_CHECK(NODE)->decl.v1buf_flag)
+#define DECL_V2BUF(NODE) (DECL_CHECK(NODE)->decl.v2buf_flag)
+#define DECL_V4BUF(NODE) (DECL_CHECK(NODE)->decl.v4buf_flag)
+#define DECL_VBUF(NODE) (DECL_V1BUF(NODE)||DECL_V2BUF(NODE)||DECL_V4BUF(NODE))
+
+#endif // TARG_SL
+
 struct function;
 
 struct tree_decl GTY(())
@@ -1915,6 +1977,16 @@ struct tree_decl GTY(())
   unsigned virtual_flag : 1;
   unsigned ignored_flag : 1;
   unsigned abstract_flag : 1;
+
+#if defined(TARG_SL)
+  /* Internal Buffer Extension */
+  unsigned sbuf_flag : 1;
+  unsigned sdram_flag : 1;
+  unsigned v1buf_flag : 1;
+  unsigned v2buf_flag : 1;
+  unsigned v4buf_flag : 1;
+  
+#endif // TARG_SL
 
   unsigned in_system_header_flag : 1;
   unsigned common_flag : 1;
@@ -1956,10 +2028,26 @@ struct tree_decl GTY(())
   unsigned syscall_linkage_flag : 1;    /* has syscall_linkage attribute */
   unsigned widen_retval_flag : 1;       /* widen return value attribute */
 #endif /* SGI_MONGOOSE */
+  unsigned is_cdecl: 1;			/* microsoft cdecl attribute */
+#ifdef TARG_NVISA
+  unsigned is_global : 1;
+  unsigned is_shared : 1;
+  unsigned is_local : 1;
+  unsigned is_constant : 1;
+  unsigned is_texture : 1;
+#endif /* TARG_NVISA */
 #ifdef KEY
   unsigned promote_static : 1;		// promote this static var to global
   unsigned always_inline_attrib : 1;
 #endif // KEY
+#ifdef TARG_NVISA
+    /* In a FUNCTION_DECL for, this is used for
+       the lauch_bounds if is_global is true.  */
+    struct tree_decl_u1_limits {
+      unsigned short thread_limit; 
+      unsigned short block_limit; 
+    } limit;
+#endif /* TARG_NVISA */
 
   union tree_decl_u1 {
     /* In a FUNCTION_DECL for which DECL_BUILT_IN holds, this is
@@ -2026,6 +2114,11 @@ struct tree_decl GTY(())
   } sgi_u2;
   struct mongoose_gcc_DST_IDX decl_dst_id; /* whirl DST */
 #endif /* SGI_MONGOOSE */
+
+#if defined(TARG_SL)
+tree sl_model_name; 
+#endif
+
 };
 
 #ifdef KEY
@@ -3192,37 +3285,39 @@ extern rtx emit_line_note		PARAMS ((const char *, int));
 /* In calls.c */
 
 /* Nonzero if this is a call to a `const' function.  */
-#define ECF_CONST		1
+#define ECF_CONST               1
 /* Nonzero if this is a call to a `volatile' function.  */
-#define ECF_NORETURN		2
+#define ECF_NORETURN            2
 /* Nonzero if this is a call to malloc or a related function.  */
-#define ECF_MALLOC		4
+#define ECF_MALLOC              4
 /* Nonzero if it is plausible that this is a call to alloca.  */
-#define ECF_MAY_BE_ALLOCA	8
+#define ECF_MAY_BE_ALLOCA       8
 /* Nonzero if this is a call to a function that won't throw an exception.  */
-#define ECF_NOTHROW		16
+#define ECF_NOTHROW             16
 /* Nonzero if this is a call to setjmp or a related function.  */
-#define ECF_RETURNS_TWICE	32
+#define ECF_RETURNS_TWICE       32
 /* Nonzero if this is a call to `longjmp'.  */
-#define ECF_LONGJMP		64
+#define ECF_LONGJMP             64
 /* Nonzero if this is a syscall that makes a new process in the image of
    the current one.  */
-#define ECF_FORK_OR_EXEC	128
-#define ECF_SIBCALL		256
+#define ECF_FORK_OR_EXEC        128
+#define ECF_SIBCALL             256
 /* Nonzero if this is a call to "pure" function (like const function,
    but may read memory.  */
-#define ECF_PURE		512
+#define ECF_PURE                512
 /* Nonzero if this is a call to a function that returns with the stack
    pointer depressed.  */
-#define ECF_SP_DEPRESSED	1024
+#define ECF_SP_DEPRESSED        1024
 /* Nonzero if this call is known to always return.  */
-#define ECF_ALWAYS_RETURN	2048
+#define ECF_ALWAYS_RETURN       2048
 /* Create libcall block around the call.  */
-#define ECF_LIBCALL_BLOCK	4096
+#define ECF_LIBCALL_BLOCK       4096
+
 
 extern int setjmp_call_p		PARAMS ((tree));
 extern bool alloca_call_p		PARAMS ((tree));
-extern int flags_from_decl_or_type	PARAMS ((tree));
+extern int flags_from_decl_or_type      PARAMS ((tree));
+
 
 /* In attribs.c.  */
 
@@ -3374,6 +3469,5 @@ extern const char *dump_flag_name	PARAMS ((enum tree_dump_index));
 extern void fancy_abort PARAMS ((const char *, int, const char *))
     ATTRIBUTE_NORETURN;
 #define abort() fancy_abort (__FILE__, __LINE__, __FUNCTION__)
-
 
 #endif  /* GCC_TREE_H  */

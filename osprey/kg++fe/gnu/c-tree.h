@@ -134,12 +134,6 @@ struct lang_type GTY(())
 #define C_TYPE_VARIABLE_SIZE(TYPE) TYPE_LANG_FLAG_1 (TYPE)
 #define C_DECL_VARIABLE_SIZE(TYPE) DECL_LANG_FLAG_0 (TYPE)
 
-#if 0 /* Not used.  */
-/* Record whether a decl for a function or function pointer has
-   already been mentioned (in a warning) because it was called
-   but didn't have a prototype.  */
-#define C_MISSING_PROTOTYPE_WARNED(DECL) DECL_LANG_FLAG_2 (DECL)
-#endif
 
 /* Store a value in that field.  */
 #define C_SET_EXP_ORIGINAL_CODE(EXP, CODE) \

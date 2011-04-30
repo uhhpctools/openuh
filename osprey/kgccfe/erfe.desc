@@ -126,6 +126,21 @@ ERROR_DESC EDESC_FE[] = {
     "Illegal flag variable '%s' in SET_FLAG",
     1, ET_SYMTAB, 0, 0,0,0,0 },
 
+#ifdef TARG_NVISA
+  { EC_Inline_Prototype,	EM_User | ES_WARNING,	RAG_EN_NONE,
+    "Non-inlined functions must be prototyped, so overriding noinline attribute on '%s'",
+    1, ET_STRING, 0, 0,0,0,0 },
+  { EC_Inline_Ptr,	EM_User | ES_WARNING,	RAG_EN_NONE,
+    "Pointer parameters must be inlined, so overriding noinline attribute on '%s'",
+    1, ET_STRING, 0, 0,0,0,0 },
+  { EC_Inline_Parameters,	EM_User | ES_WARNING,	RAG_EN_NONE,
+    "Cannot handle calls with non-register parameters, so overriding noinline attribute on '%s'",
+    1, ET_STRING, 0, 0,0,0,0 },
+  { EC_Inline_Return_Values,	EM_User | ES_WARNING,	RAG_EN_NONE,
+    "Cannot handle calls with non-register return values, so overriding noinline attribute on '%s'",
+    1, ET_STRING, 0, 0,0,0,0 },
+#endif
+
 #if defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS) || \
     defined(FRONT_END_FORTRAN)
   /* IR building: */

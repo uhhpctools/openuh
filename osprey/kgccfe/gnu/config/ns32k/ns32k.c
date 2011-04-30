@@ -503,19 +503,6 @@ int register_move_cost (CLASS1, CLASS2)
   return 2;
 }
 
-#if 0
-/* We made the insn definitions copy from floating point to general
-  registers via the stack. */
-int secondary_memory_needed (CLASS1, CLASS2, M)
-     enum reg_class CLASS1;
-     enum reg_class CLASS2;
-     enum machine_mode M;
-{
-  int ret = ((SUBSET_P (CLASS1, FP_REGS) && !SUBSET_P (CLASS2, FP_REGS))
-   || (!SUBSET_P (CLASS1, FP_REGS) && SUBSET_P (CLASS2, FP_REGS)));
-  return ret;
-}
-#endif
     
 
 /* ADDRESS_COST calls this.  This function is not optimal

@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 //-*-c++-*-
 
 /*
@@ -75,10 +79,12 @@
 #include "pf_cg.h"
 
 #include "cxx_base.h"
+#include "erbe.h"
 
 #include "opt_base.h"
 #include "opt_bb.h"
 #include "opt_config.h"
+#include "config_opt.h"  // OPT_Cyg_Instrument
 #include "opt_sys.h"
 #include "bb_node_set.h"
 #include "idx_32_set.h"
@@ -158,6 +164,15 @@ class DCE {
                                          // analysis during dce 
 
     MOD_PHI_BB_CONTAINER *_mod_phis;     // NULL if !Htable()->Phi_hash_valid()
+#if defined(TARG_SL)
+    vector<STMTREP *> *_injured_aux_intrnop; // stacks used for store aux intrinsic op need repaired to live
+#endif
+
+    // If a block belong to neither _may_throw_bbs nor _nothrow_bbs, 
+    // it must be a new block created after Collect_may_throw_bbs() is called. 
+    //
+    std::map<IDTYPE, BOOL> _may_throw_bbs;
+    std::map<IDTYPE, BOOL> _nothrow_bbs;
 
     // which phase of DCE is running
     enum {
@@ -337,11 +352,20 @@ class DCE {
 		    case OPR_RETURN:
 		    case OPR_RETURN_VAL:
 		    case OPR_TRUEBR:
+#ifdef KEY
+		    case OPR_GOTO_OUTER_BLOCK:
+#endif
 		      return TRUE;
 		    default:
 		      return FALSE;
 		  }
 		}
+
+     void Collect_may_throw_bbs (void);
+     BOOL BB_may_throw (BB_NODE* b);
+     BOOL Strip_try_region_helper (BB_REGION*);
+     BOOL Strip_try_region (void);
+
 public:
 
     DCE(CFG *cfg, OPT_STAB *optstab, ALIAS_RULE *alias_rule, 
@@ -416,6 +440,9 @@ public:
 				       cfg->Loc_pool()),
 	_retvsym_visited = BS_Create_Empty(Htable()->Coderep_id_cnt() + 1,
 					   cfg->Loc_pool());
+#if defined(TARG_SL)
+        _injured_aux_intrnop = CXX_NEW(vector<STMTREP *>, cfg->Loc_pool());
+#endif
       }
 
     ~DCE(void)
@@ -443,11 +470,60 @@ public:
     void Set_phase_dead_store( void )
 		{ _dce_phase = DCE_DEAD_STORE; }
     BOOL Tracing(void) const	{ return _tracing; }
-    BOOL Unreachable_code_elim(void) const;
+    BOOL Unreachable_code_elim(void);
     BOOL Dead_store_elim(void) ;
     void Init_return_vsym( void );
+#if defined(TARG_SL)
+    void Append_Injured_AuxIntrnOp (STMTREP *stmt) const {
+       _injured_aux_intrnop->insert(_injured_aux_intrnop->begin(), (STMTREP *)stmt);
+    };
+    void Repair_Injured_AuxIntrnOP() const;
+#endif
     
 }; // end of class DCE
+
+
+#if defined(TARG_SL)
+void
+DCE::Repair_Injured_AuxIntrnOP() const {
+
+  for (INT32 i = 0; i < _injured_aux_intrnop->size(); i++) {
+    STMTREP *stmt = (*_injured_aux_intrnop)[i];
+    if (stmt->Live_stmt())
+      continue;
+    CODEREP *rhs = stmt->Rhs();
+    if (CR_Intrinsic_Op_Slave(rhs)) {
+      CODEREP *parm2cr = rhs->Opnd(0);	// first parameter
+      Is_True(parm2cr->Kind() == CK_IVAR, ("Repair_Injured_AuxIntrnOP::kid of intrinsic op must be parameter"));
+      CODEREP *op2cr = parm2cr->Ilod_base();
+      if (op2cr) {
+        switch (op2cr->Kind()) {
+          case CK_VAR: 
+          {
+            if(op2cr->Defstmt()->Live_stmt())	
+	      Mark_statement_live(stmt);	
+	  }
+	  break;	
+	  case CK_OP: 
+          {
+	    Mark_statement_live(stmt);
+	  };
+     	  break; 	
+          case CK_CONST:
+            break; // do nothing	
+	  default:
+	    Is_True (0, ("Repair_Injured_AuxIntrnOP::slave intrinsic op(c3_ptr): first parameter is unsupported kind coderep"));	
+        } // end switch
+      } else {
+        Is_True (0, ("Repair_Injured_AuxIntrnOP::slave intrinsic op(c3_ptr): first parameter is null"));
+      }
+    } else {
+      Is_True(0, ("Repair_Injured_AuxIntrnOP::rhs is not injure AuxIntrn"));
+    }
+  }
+  return;
+}
+#endif
 
 // ====================================================================
 // Keep this only until we figure it out, then re-inline it above
@@ -1136,7 +1212,6 @@ DCE::Check_conditional_branches_pred( CFG *cfg ) const
 //   evalcond + eval -- is the context
 //   They determine if origcond can be simplified
 // ====================================================================
-
 COND_EVAL
 Eval_redundant_cond_br( CODEREP *origcond, CODEREP *evalcond, COND_EVAL eval ) 
 {
@@ -1664,7 +1739,7 @@ DCE::Check_unreachable_blocks( void ) const
 // ====================================================================
 
 BOOL
-DCE::Unreachable_code_elim( void ) const
+DCE::Unreachable_code_elim( void ) 
 {
   // say no blocks are reached initially
   CFG_ITER cfg_iter(_cfg);
@@ -1682,6 +1757,8 @@ DCE::Unreachable_code_elim( void ) const
     changed_cflow = Check_conditional_branches_dom( _cfg->Entry_bb(), &cb_path );
     changed_cflow |= Check_conditional_branches_pred( _cfg );
   }
+
+  changed_cflow |= Strip_try_region ();
 
   // find the blocks that are reached
   _cfg->Find_not_reached();
@@ -1718,6 +1795,20 @@ DCE::Unreachable_code_elim( void ) const
       // remove the block and then change the kind of the block
       Remove_unreached_statements( bb );
 
+      // Bug 13821: Don't delete unreachable blocks whose labels are
+      // taken and passed to __cyg_instrument_entry/exit
+#if !defined(TARG_SL)
+      if ( OPT_Cyg_Instrument > 0 && bb->Labnam() != 0 &&
+	   LABEL_addr_saved( bb->Labnam() ) ) {
+#else
+      if ( 0 && bb->Labnam() != 0 &&
+	   LABEL_addr_saved( bb->Labnam() ) ) {
+#endif
+	Keep_unreached_bb( bb );
+	// Restore LABEL deleted by Remove_unreached_statements
+	Check_for_label( bb );
+      }
+
       // the only kind of block whose type we won't try to change,
       // because it's otherwise illegal, is an exit block and region exit
       if ( bb->Kind() != BB_EXIT && bb->Kind() != BB_REGIONEXIT )
@@ -1735,6 +1826,10 @@ DCE::Unreachable_code_elim( void ) const
 	  nextsucc = succ_ref->Next();
 	  changed_cflow |= Update_predecessor_lists( succ_ref->Node() );
 	}
+        if (bb->Pred() == NULL) {
+          // bb from fake entry is removed, cfg is changed
+          changed_cflow = TRUE;
+        }
 	    
 	_cfg->Remove_bb(bb);
 #ifdef Is_True_On
@@ -1836,42 +1931,6 @@ DCE::Find_current_version( const STMTREP *ref_stmt, const CODEREP *cr ) const
 }
 
 
-#if 0
-// Do not use this function.  Use the one defined in opt_htable 
-// because COPYPROP and DCE need to cooperate.
-//
-// ====================================================================
-// Determine if the assignment is " i = i "
-// ====================================================================
-
-BOOL
-DCE::Is_identity_assignment( const STMTREP *stmt ) const
-{
-  if ( ! Allow_dce_prop() )
-    return FALSE;
-
-  Is_True ( stmt->Opr() == OPR_STID,
-    ("DCE::Is_identity_assignment: non-STID operator") );
-
-  const CODEREP *lhs = stmt->Lhs();
-
-  // store to a volatile location?
-  if (lhs->Is_var_volatile())
-    return ( FALSE );
-
-  // statements of form i = i are not required (unless volatile)
-  //  (even it stores a dedicated register)
-  if (stmt->Rhs()->Kind() == CK_VAR &&
-      stmt->Rhs()->Aux_id() == stmt->Lhs()->Aux_id() &&
-      !stmt->Rhs()->Is_var_volatile() &&
-      Find_current_version(stmt, stmt->Rhs()) == stmt->Rhs() )
-  {
-    return ( TRUE );
-  }
-
-  return ( FALSE );
-}
-#endif
 
 // ====================================================================
 // Required_store -  Is this direct   store statement required?
@@ -1889,6 +1948,12 @@ DCE::Required_store( const STMTREP *stmt, OPERATOR oper ) const
   // store to a volatile location?
   if (lhs->Is_var_volatile())
     return ( TRUE );
+
+#if defined(TARG_SL)
+  if (CR_Intrinsic_Op_Slave(stmt->Rhs())) {
+    Append_Injured_AuxIntrnOp((STMTREP *)stmt);
+  }
+#endif
 
   // statement of form i = i are not required
   //  (even it stores a dedicated register)
@@ -1942,13 +2007,6 @@ DCE::Required_istore( const STMTREP *stmt, OPERATOR oper ) const
     return ( TRUE );
 
   // remove the following as part of the fix for 597561.
-#if 0
-  // istore to unqiue pt
-  if (stmt->Lhs()->Points_to(Opt_stab())->Unique_pt()) {
-    Warn_todo("Handle unique pts.");
-    return TRUE;
-  }
-#endif
   // istore to restrict pt
   // All items aliased with dereferences of __restrict pointers are
   // assumed to be live because of C scoping rules. A __restrict
@@ -2148,6 +2206,9 @@ DCE::Required_stmt( const STMTREP *stmt ) const
   case OPR_RETURN_VAL:
   case OPR_REGION_EXIT:
   case OPR_OPT_CHI: // entry chi is required, pv 454154
+#ifdef KEY
+  case OPR_GOTO_OUTER_BLOCK:
+#endif
     return TRUE;
 
   case OPR_CALL:
@@ -2326,55 +2387,6 @@ DCE::Mark_chinode_live( CHI_NODE *chi, STMTREP *def_stmt ) const
        chi->OPND()->Aux_id() == Return_vsym() )
     return;
  
-#if 0
-  // These optimizations are turned off because they create overlapped 
-  // live-ranges
-
-  // may not need to make this chi live if it's not aliased
-  if ( Enable_dce_alias() && def_stmt != NULL &&
-	Points_to_stack()->Elements() > 0 )
-  {
-    if ( ! Aliased( def_stmt->Points_to(Opt_stab()), 
-		    Points_to_stack()->Top() ) )
-    {
-      MU_NODE *tos_mu = Mu_stack()->Top();
-      CODEREP *old_opnd = tos_mu->OPND();
-
-      // the "current" mu is not really defined by this chi, but is
-      // instead possibly defined by what defines its operand
-      Warn_todo( "DCE::Mark_chinode_live: update pvl list?" );
-      tos_mu->Set_OPND( chi->OPND() );
-
-      if ( Tracing() ) {
-	fprintf( TFile, "DCE::Mark_chinode_live: revising chi from\n" );
-	old_opnd->Print( 0, TFile );
-	fprintf( TFile, "  to\n" );
-	chi->OPND()->Print( 0, TFile );
-      }
-
-      // no need to follow the chi-chain any further
-      return;
-    }
-  }
-
-
-  CODEREP *opnd = chi->OPND();
-  CODEREP *res  = chi->RESULT();
-  
-  //  For eliminating 
-  //    *p = ...
-  //    *p = ...
-  if ( Allow_dce_prop() && opnd->Is_flag_set(CF_DEF_BY_CHI) ) {
-    Is_True(res->Kind() == CK_VAR && opnd->Kind() == CK_VAR, ("chi must contain CK_VAR."));
-    if (res->Defstmt()->Same_lhs(opnd->Defstmt())) {
-      // update the chi opnd to skip this definition.
-      chi->Set_OPND( opnd->Defchi()->OPND());
-      // follow the chi-chain.
-      Mark_chinode_live( chi, def_stmt );
-      return;
-    }
-  }
-#endif
 
   CODEREP *cr = Dce_prop(chi->OPND());
   if (cr != NULL) {
@@ -2622,11 +2634,17 @@ DCE::Mark_coderep_live( CODEREP *cr ) const
 	
       case CK_IVAR:
 	// handle the base
-	Mark_coderep_live( cr->Ilod_base() );
+	if ( cr->Istr_base() != NULL ) 
+	  Mark_coderep_live( cr->Istr_base() );
+	else
+          Mark_coderep_live( cr->Ilod_base() );
 	
 	// Is there a size also?
 	if ( cr->Opr() == OPR_MLOAD ) {
 	  Mark_coderep_live( cr->Mload_size() );
+	}
+	else if ( cr->Opr() == OPR_ILOADX ) {
+	  Mark_coderep_live( cr->Index() );
 	}
 
 	if ( cr->Opr() == OPR_PARM ) {
@@ -2792,7 +2810,8 @@ DCE::Mark_branch_related_live( STMTREP *stmt ) const
 	  // back out during PRE
 	  // NOTE: this also picks up the Trip_count_stmt().
 	  BB_NODE *dohead = loop->Start();
-	  if ( dohead && dohead->Kind() == BB_DOHEAD ) {
+	  if ( (dohead && loop->Is_flag_set(LOOP_DO) && dohead->Kind() == BB_DOHEAD) ||
+           (dohead && loop->Is_flag_set(LOOP_PRE_DO) && dohead->Kind() == BB_DOSTART) ) {
 	    STMTREP_ITER stmt_iter(dohead->Stmtlist());
 	    STMTREP *dohead_stmt;
 	    FOR_ALL_NODE( dohead_stmt, stmt_iter, Init() ) {
@@ -3079,6 +3098,8 @@ DCE::Propagate_return_vsym_cr( CODEREP *cr ) const
 
 	if ( cr->Opr() == OPR_MLOAD )
 	  Propagate_return_vsym_cr( cr->Mload_size() );
+	else if ( cr->Opr() == OPR_ILOADX )
+	  Propagate_return_vsym_cr( cr->Index() );
 
 	MU_NODE *mu = cr->Ivar_mu_node();
 	if ( mu && mu->OPND()->Aux_id() == Return_vsym() ) {
@@ -3470,11 +3491,6 @@ DCE::Mark_block_live( BB_NODE *bb ) const
 void
 DCE::Mark_statements_dead( void ) const
 {
-#if 0
-  // Clear all the DCE_VISITED flags to allow DCE to be called for
-  // the second time
-  Htable()->Reset_DCE_visited_flags();
-#endif
 
   CFG_ITER cfg_iter(_cfg);
   BB_NODE *bb;
@@ -3764,7 +3780,11 @@ DCE::Check_required_whileend( BB_NODE *bb ) const
     // having a live branch is all that's necessary for a valid loop,
     // but make sure we keep around interesting blocks
     if ( _cfg->Lower_fully() ) {
-      Keep_unreached_bb(bb->Loopstart());
+      if (bb->Loopstart())
+        Keep_unreached_bb(bb->Loopstart());
+      else { 
+        Is_True(bb->Loop()->Is_flag_set(LOOP_PRE_WHILE),("wrong non bottom test loop lowering!\n"));
+      }
       Keep_unreached_bb(bb->Loopbody());
       Keep_unreached_bb(bb->Loopmerge());
 
@@ -3994,6 +4014,246 @@ DCE::Check_required_region( BB_NODE *bb ) const
   // just save a list of the start blocks, and we'll deal with them
   // all together once we've processed all of the blocks.
   Region_start_bbs()->Union1D( bb );
+}
+
+BOOL
+DCE::BB_may_throw (BB_NODE* bb) {
+
+  if (_may_throw_bbs.find (bb->Id()) != _may_throw_bbs.end()) {
+    return TRUE;
+  }
+
+  if (_nothrow_bbs.find (bb->Id ()) != _nothrow_bbs.end ()) {
+    return FALSE;
+  }
+
+  if (!bb->Hascall ()) {
+    return FALSE;
+  }
+
+  BOOL may_throw = FALSE;
+
+  // Examine STMTREPs
+  //
+  if (bb->First_stmtrep ()) {
+    STMTREP_ITER stmt_iter(bb->Stmtlist());
+    STMTREP *stmt;
+    FOR_ALL_NODE (stmt, stmt_iter, Init()) {
+      OPERATOR opr = stmt->Opr ();
+      if (!OPERATOR_is_call (opr)) {
+          continue;
+      }
+  
+      if (opr == OPR_CALL) {
+        ST* st = stmt->St ();
+        PU& pu = Pu_Table [ST_pu(*st)];
+        if (!PU_nothrow (pu)) {
+          may_throw = TRUE;
+          break;
+        }
+      } else {
+        // not able to handle indirect calls, virtual functions calls
+        may_throw = TRUE;
+        break;
+      }
+    } // end of FOR_ALL_NODE 
+  }
+
+  // Examine WN statements
+  //
+  if (!may_throw && bb->Firststmt ()) {
+    // HINT: calls are not necessarily at the end of the block depending on 
+    //   CFG::Calls_break().
+    //
+    WN* wn;
+    STMT_ITER iter;
+    FOR_ALL_ELEM (wn, iter, Init (bb->Firststmt(), bb->Laststmt())) {
+      OPERATOR opr = WN_operator (wn);  
+      if (!OPERATOR_is_call (opr)) {
+        continue;
+      }
+  
+      if (opr == OPR_CALL) {
+        ST* st = WN_st (wn);
+        PU& pu = Pu_Table [ST_pu(*st)];
+        if (!PU_nothrow (pu)) {
+          may_throw = TRUE;
+          break;
+        }
+      } else {
+        // not able to handle indirect calls, virtual functions calls
+        may_throw = TRUE;
+        break;
+      }
+    } // end of FOR_ALL_ELEM 
+  }
+  
+  if (may_throw) {
+    _may_throw_bbs[bb->Id()] = TRUE;
+  } else {
+    _nothrow_bbs[bb->Id()] = TRUE;
+  }
+
+  return may_throw;
+}
+
+void
+DCE::Collect_may_throw_bbs (void) {
+
+  if (!_cfg->Has_regions () || Language != LANG_CPLUS) {
+    _may_throw_bbs.clear ();
+  }
+
+  {
+    CFG_ITER iter(_cfg);
+    BB_NODE *bb;
+    FOR_ALL_NODE (bb, iter, Init()) {
+
+      if (!bb->Hascall () || !BB_may_throw (bb)) {
+        _nothrow_bbs[bb->Id()] = TRUE;
+      } else {
+        _may_throw_bbs[bb->Id()] = TRUE;
+      }
+    } // end of FOR_ALL_NODE(..) 
+  }
+}
+
+BOOL
+DCE::Strip_try_region_helper (BB_REGION* rgn) {
+
+  BB_NODE* rgn_first_bb = rgn->Region_start();
+  BB_NODE* rgn_last_bb = rgn->Region_end(); 
+  if (!RID_TYPE_try (rgn->Rid())) {
+    // not appliable
+    return FALSE;
+  }
+
+  // step 1: don't touch this region if it isn't in good shape.
+  //
+  if (rgn_first_bb->Next() != rgn_last_bb) {
+    for (BB_NODE* t = rgn_first_bb->Next(); TRUE; t = t->Next ()) {
+      if (t->Kind () == BB_REGIONSTART) {
+        // We need to skip inner regions, therefore the region-info
+        // should be well maintained.
+        //
+        BB_REGION* inner_rgn = t->Regioninfo ();
+        if (!inner_rgn || !inner_rgn->Region_end () || 
+            inner_rgn->Region_end () == rgn_last_bb) {
+          if (Tracing ()) {
+            fprintf (TFile, 
+                     "Strip_try_region_helper: skip region started at BB%d "
+                     "because inner region start at BB%d isn't in good shape",
+                     rgn_first_bb->Id(), t->Id());
+          } 
+          return FALSE;
+        }
+      }
+
+      if (t == rgn_last_bb) {
+        break;
+      }
+    } // end of for-loop
+  }
+
+  // step 2 :check the calls in the region
+  //
+  for (BB_NODE* bb = rgn_first_bb; bb; bb = bb->Next ()) {
+      if (BB_may_throw (bb)) return FALSE; 
+      if (bb == rgn_last_bb) break;
+  }
+
+  if (Tracing ()) {
+    fprintf (TFile, 
+             "Strip_try_region_helper: identify unnecessary try region"
+             " bb%d->bb%d\n", rgn_first_bb->Id(), rgn_last_bb->Id());
+  }
+
+  // step 3: remove the region information associated with the 1st block of 
+  //   the region.
+  //
+  Remove_region_entry (rgn_first_bb);
+  rgn_first_bb->Set_kind (BB_GOTO);
+
+  // step 4: Convert OPR_REGION_EXIT to goto; change BB_REGIONEXIT to BB_GOTO.
+  //
+  for (BB_NODE* blk = rgn_first_bb; TRUE; ) {
+
+    // skip innert regions 
+    //
+    BB_NODE* next_blk = blk->Next ();
+    if (blk->Kind () == BB_REGIONSTART) {
+      next_blk = blk->Regioninfo()->Region_end ()->Next();
+    }
+
+    // Change BB_REGIONEXIT to BB_GOTO, and remove region information associated
+    // with it.
+    //
+    if (blk->Kind() == BB_REGIONEXIT) {
+      blk->Set_regioninfo (NULL);
+      blk->Set_kind (BB_GOTO);
+    }
+
+    if (STMTREP* stmt = blk->Last_stmtrep()) {
+      if (stmt->Opr() == OPR_REGION_EXIT) {
+        INT32 lab_num = stmt->Label_number ();
+        blk->Remove_stmtrep (stmt);
+        stmt = CXX_NEW (STMTREP (OPC_GOTO), _cfg->Mem_pool());
+        stmt->Set_label_number (lab_num);
+        blk->Append_stmtrep (stmt);
+      }
+    } else if (WN* wn = blk->Laststmt ()) {
+      if (WN_operator (wn) == OPR_REGION_EXIT) {
+        INT32 lab_num = WN_label_number (wn);
+        Is_True (FALSE, ("TODO: replace OPR_REGION_EXIT with OPR_GOTO"));
+      }
+    }
+
+    // advance to next block
+    //
+    if (blk == rgn_last_bb) { break; }
+    blk = next_blk;
+  }
+  
+  return TRUE;
+}
+
+// Get rid of the "try" region if the calls in the region don't throw exception.
+//
+BOOL
+DCE::Strip_try_region (void) {
+
+  if ( ! _cfg->Has_regions() )
+    return FALSE;
+
+  if (!WOPT_Enable_Nothrow_Opt)
+    return FALSE;
+
+  BOOL change = FALSE;
+
+  // step 1: identify those blocks which contains a call which may throw exception.
+  //
+  Collect_may_throw_bbs ();
+
+  // step 2: loop over each try-region, examining the code in it. Remove the region 
+  //  if the calls in the region won't throw exception.
+  //
+  CFG_ITER cfg_iter(_cfg);
+  BB_NODE *bb;
+  FOR_ALL_NODE (bb, cfg_iter, Init() ) {
+
+    if (bb->Kind() != BB_REGIONSTART) {
+      continue; 
+    }
+
+    BB_REGION* rgn = bb->Regioninfo();
+    if (rgn && RID_TYPE_try (rgn->Rid())) {
+      if (Strip_try_region_helper (rgn)) {
+        change = TRUE;
+      }
+    }
+  }
+
+  return change;
 }
 
 // ====================================================================
@@ -4349,6 +4609,9 @@ DCE::Find_required_statements( void ) const
     }
 
   } // end loop through blocks
+#ifdef TARG_SL
+  Repair_Injured_AuxIntrnOP();
+#endif
 
   // see if there are infinite loops that we need to keep around
   Mark_infinite_loops_live();
@@ -4575,7 +4838,7 @@ DCE::Remove_dead_statements( void )
 
       // entire block found to be unreached
       if ( Tracing() ) {
-	fprintf( TFile, "DCE_A: BB%d unreached (0x%p)\n", bb->Id(), bb );
+	fprintf( TFile, "DCE_A: BB%d unreached (%p)\n", bb->Id(), bb );
       }
 
       if ( Enable_aggressive_dce() ) {
@@ -4922,7 +5185,7 @@ COMP_UNIT::Do_dead_code_elim(BOOL do_unreachable,
       unreachable = dce.Unreachable_code_elim();
 
       if ( unreachable ) {
-	Cfg()->Invalidate_and_update_aux_info();
+	Cfg()->Invalidate_and_update_aux_info(TRUE);
       }
     }
 
@@ -4935,7 +5198,7 @@ COMP_UNIT::Do_dead_code_elim(BOOL do_unreachable,
     unreachable = dce.Dead_store_elim();
 
     if ( unreachable ) {
-      Cfg()->Invalidate_and_update_aux_info();
+      Cfg()->Invalidate_and_update_aux_info(TRUE);
     }
 
     // fake blocks should not be considered as reached
@@ -5017,8 +5280,7 @@ COMP_UNIT::Find_uninit_locals_for_entry(BB_NODE *bb)
       }
     }
 
-    fprintf(stderr, "Warning: variable %s in %s might be used uninitialized\n",
-	    output_var_name, output_pu_name);
+    ErrMsg(EC_Uninitialized, output_var_name, Cur_PU_Name);
     if (p != NULL && p != Cur_PU_Name)
       free(p);
     if (v != NULL && v != &Str_Table[sym->St()->u1.name_idx])

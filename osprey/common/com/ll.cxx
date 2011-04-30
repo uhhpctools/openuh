@@ -173,11 +173,6 @@ get_license( char * feature_name, int soft, int tiers )
    fprintf(stderr," required) or an Evaluation license please\n");
    fprintf(stderr," visit our license request web page: \n");
    fprintf(stderr,"\n");
-#if 0
-   fprintf(stderr,"    Internal SGI Users refer to:\n");
-   fprintf(stderr,"         http://wwclass.csd.sgi.com/swl-internal/beta_lice.html\n");
-   fprintf(stderr,"    Otherwise:\n");
-#endif
    fprintf(stderr,"         http://www.sgi.com/Products/license.html \n");
    fprintf(stderr,"\n");
    fprintf(stderr,"         or send a blank email message to: \n");
@@ -196,11 +191,6 @@ get_license( char * feature_name, int soft, int tiers )
    fprintf(stderr," If you are Outside of North America or you are not a Silicon \n");
    fprintf(stderr," Graphics support customer then contact your local support provider. \n");
    fprintf(stderr,"\n");
-#if 0
-   fprintf(stderr," Note: Permanent Licenses require verification of entitlement \n");
-   fprintf(stderr," (i.e., Proof-of-Purchase). \n");
-   fprintf(stderr,"  \n");
-#endif
 
   
    if (!soft)

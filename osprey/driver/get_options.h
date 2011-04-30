@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -61,3 +65,59 @@ extern string_list_t *feedback_files;
 
 /* explicitly set language */
 void set_explicit_lang(const char *flag, const char *lang);
+
+#ifndef HUGEPAGE_DEF
+#define HUGEPAGE_DEF
+typedef enum 
+{
+    SIZE_NA = 0,
+    SIZE_2M,
+    SIZE_1G,
+    SIZE_2M1G,  /* add a new entry before SIZE_END, append its name in the name table below */
+    SIZE_END
+} HUGEPAGE_SIZE;
+
+/* name table */
+static const char * hugepage_size_name[SIZE_END] = {"NA", "2M", "1G", "2M1G"};
+
+/* huge page allocation type */
+
+typedef enum
+{
+    ALLOC_NA = 0,
+    ALLOC_HEAP,
+    ALLOC_BD,
+    ALLOC_BDT,
+    ALLOC_BSS,  /* add a new entry before ALLOC_END, then append its name in the name table below */
+    ALLOC_END
+} HUGEPAGE_ALLOC;
+
+/* name table */
+static const char * hugepage_alloc_name[ALLOC_END] = {"NA", "HEAP", "BD", "BDT", "BSS"};
+
+typedef struct hugepage_desc_tag {
+    HUGEPAGE_ALLOC alloc;
+    HUGEPAGE_SIZE  size;
+    int            limit;
+    struct hugepage_desc_tag * next;
+} HUGEPAGE_DESC_TAG;
+
+typedef HUGEPAGE_DESC_TAG * HUGEPAGE_DESC;
+    
+extern HUGEPAGE_DESC hugepage_desc;
+
+/* hugepage default values */
+
+#define HUGEPAGE_ALLOC_DEFAULT ALLOC_HEAP
+#define HUGEPAGE_SIZE_DEFAULT  SIZE_2M
+#define HUGEPAGE_LIMIT_DEFAULT -1
+
+/* This has to be in sync with bit mask definitions from modified libhugetlbfs */
+
+
+#define HEAP_BEGIN  3
+
+#define HEAP_2M_BIT HEAP_BEGIN
+#define HEAP_1G_BIT (HEAP_BEGIN + 1)
+
+#endif

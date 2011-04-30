@@ -246,7 +246,6 @@ e_wsue_mp (unit **fu)
    return (0);
 }
 
-#if 11
 #pragma weak e_rsfe64 = e_rsfe		/* extern int e_rsfe64(void); */
 #pragma weak e_rsfe64_mp = e_rsfe_mp	/* extern int e_rsfe64_mp(unit **); */
 #pragma weak e_wsfe64 = e_wsfe		/* extern int e_wsfe64(void); */
@@ -256,4 +255,3 @@ e_wsue_mp (unit **fu)
 #pragma weak e_wsue64 = e_wsue		/* extern int e_wsue64(void); */
 #pragma weak e_wsue64_mp = e_wsue_mp	/* extern int e_wsue64_mp(unit **); */
 
-#endif

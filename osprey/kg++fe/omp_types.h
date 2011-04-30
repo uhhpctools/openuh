@@ -53,6 +53,15 @@ enum omp_tree_type
   ordered_cons_b,
   ordered_cons_e,
   options_dir,
+#ifdef TARG_SL //fork_joint   
+  sl2_sections_cons_b,
+  sl2_minor_sections_cons_b,
+  sl2_sections_cons_e,
+  sl2_section_cons_b,
+  sl2_section_cons_e,   
+  sl2_minor_section_cons_b,
+  sl2_minor_section_cons_e,
+#endif
   exec_freq_dir
 };
 

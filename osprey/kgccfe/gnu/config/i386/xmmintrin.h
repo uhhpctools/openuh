@@ -683,16 +683,8 @@ _mm_cvtps_pi8(__m128 __A)
 }
 
 /* Selects four specific SPFP values from A and B based on MASK.  */
-#if 0
-static __inline __m128
-_mm_shuffle_ps (__m128 __A, __m128 __B, int __mask)
-{
-  return (__m128) __builtin_ia32_shufps ((__v4sf)__A, (__v4sf)__B, __mask);
-}
-#else
 #define _mm_shuffle_ps(A, B, MASK) \
  ((__m128) __builtin_ia32_shufps ((__v4sf)(A), (__v4sf)(B), (MASK)))
-#endif
 
 
 /* Selects and interleaves the upper two SPFP values from A and B.  */
@@ -972,43 +964,15 @@ _mm_move_ss (__m128 __A, __m128 __B)
 }
 
 /* Extracts one of the four words of A.  The selector N must be immediate.  */
-#if 0
-static __inline int
-_mm_extract_pi16 (__m64 __A, int __N)
-{
-  return __builtin_ia32_pextrw ((__v4hi)__A, __N);
-}
-
-static __inline int
-_m_pextrw (__m64 __A, int __N)
-{
-  return _mm_extract_pi16 (__A, __N);
-}
-#else
 #define _mm_extract_pi16(A, N) \
   __builtin_ia32_pextrw ((__v4hi)(A), (N))
 #define _m_pextrw(A, N)		_mm_extract_pi16((A), (N))
-#endif
 
 /* Inserts word D into one of four words of A.  The selector N must be
    immediate.  */
-#if 0
-static __inline __m64
-_mm_insert_pi16 (__m64 __A, int __D, int __N)
-{
-  return (__m64)__builtin_ia32_pinsrw ((__v4hi)__A, __D, __N);
-}
-
-static __inline __m64
-_m_pinsrw (__m64 __A, int __D, int __N)
-{
-  return _mm_insert_pi16 (__A, __D, __N);
-}
-#else
 #define _mm_insert_pi16(A, D, N) \
   ((__m64) __builtin_ia32_pinsrw ((__v4hi)(A), (D), (N)))
 #define _m_pinsrw(A, D, N)	 _mm_insert_pi16((A), (D), (N))
-#endif
 
 /* Compute the element-wise maximum of signed 16-bit values.  */
 static __inline __m64
@@ -1091,23 +1055,9 @@ _m_pmulhuw (__m64 __A, __m64 __B)
 
 /* Return a combination of the four 16-bit values in A.  The selector
    must be an immediate.  */
-#if 0
-static __inline __m64
-_mm_shuffle_pi16 (__m64 __A, int __N)
-{
-  return (__m64) __builtin_ia32_pshufw ((__v4hi)__A, __N);
-}
-
-static __inline __m64
-_m_pshufw (__m64 __A, int __N)
-{
-  return _mm_shuffle_pi16 (__A, __N);
-}
-#else
 #define _mm_shuffle_pi16(A, N) \
   ((__m64) __builtin_ia32_pshufw ((__v4hi)(A), (N)))
 #define _m_pshufw(A, N)		_mm_shuffle_pi16 ((A), (N))
-#endif
 
 /* Conditionally store byte elements of A into P.  The high bit of each
    byte in the selector N determines whether the corresponding byte from
@@ -1167,16 +1117,8 @@ _m_psadbw (__m64 __A, __m64 __B)
 
 /* Loads one cache line from address P to a location "closer" to the
    processor.  The selector I specifies the type of prefetch operation.  */
-#if 0
-static __inline void
-_mm_prefetch (void *__P, enum _mm_hint __I)
-{
-  __builtin_prefetch (__P, 0, __I);
-}
-#else
 #define _mm_prefetch(P, I) \
   __builtin_prefetch ((P), 0, (I))
-#endif
 
 /* Stores the data in A to the address P without polluting the caches.  */
 static __inline void

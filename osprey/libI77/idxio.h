@@ -65,7 +65,6 @@ extern int s_xsfe(cilist *);
 extern int s_xsfe_mp(cilist *, unit **);
 extern int e_xsue(void);
 extern int e_xsue_mp(unit **);
-#if 11
 extern int f_del64(alist *);
 extern int f_del64_mp (alist *a);
 extern int f_unl64(alist *);
@@ -78,7 +77,6 @@ extern int s_xsfe64(cilist64 *);
 extern int s_xsfe64_mp(cilist64 *, unit **);
 extern int e_xsue64(void);
 extern int e_xsue64_mp(unit **);
-#endif
 
 #endif /* C || C++ */
 

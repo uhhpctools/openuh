@@ -113,6 +113,7 @@ CGEMIT_Prn_Scn_In_Asm (FILE       *asm_file,
   if (scn_flags & SHF_WRITE) *p++ = 'w';
   if (scn_flags & SHF_ALLOC) *p++ = 'a';
   if (scn_flags & SHF_EXECINSTR) *p++ = 'x';
+  if (scn_flags & SHF_TLS) *p++ = 'T';
   // short sections are only recognized by name, not by "s" qualifier
   // if (scn_flags & SHF_IRIX_GPREL) *p++ = 's';
   *p = '\0'; // null terminate the string.
@@ -131,14 +132,7 @@ CGEMIT_Prn_Scn_In_Asm (FILE       *asm_file,
     strcpy(p, "progbits");
   }
   fprintf (asm_file, " \"%s\"\n", scn_type_string);
-#if 0   // contrary to document, it should be align, not power of it.
-  UINT32 tmp, power;
-  power = 0;
-  for (tmp = scn__align; tmp > 1; tmp >>= 1) power++;
-  fprintf (asm_file, "\t%s\t%d\n", AS_ALIGN, power);
-#else
   fprintf (asm_file, "\t%s\t%d\n", AS_ALIGN, scn_align);  
-#endif
 }
 
 extern void
@@ -157,7 +151,10 @@ CGEMIT_Use_Base_ST_For_Reloc (INT reloc, ST *st)
 	if (reloc == TN_RELOC_IA_LTOFF_FPTR) 
 		// gas doesn't like addends
 		return FALSE;
-	else 
+        // OSP 490
+        else if (ST_is_thread_local(st))
+                return FALSE;
+        else 
 		return ST_is_export_local(st);
 }
 
@@ -185,6 +182,25 @@ CGEMIT_Relocs_In_Asm (TN *t, ST *st, vstring *buf, INT64 *val)
         	*buf = vstr_concat (*buf, "@ltoff(@fptr");
 		++paren;
 		break;
+	case TN_RELOC_IA_LTOFF_DTPMOD22:
+		*buf = vstr_concat (*buf, "@ltoff(@dtpmod");
+		++paren;
+		break;
+	case TN_RELOC_IA_LTOFF_DTPREL22:
+		*buf = vstr_concat (*buf, "@ltoff(@dtprel");
+		++paren;
+		break;
+	case TN_RELOC_IA_DTPREL22:
+		*buf = vstr_concat (*buf, "@dtprel");
+		break;
+	case TN_RELOC_IA_LTOFF_TPREL22:
+		*buf = vstr_concat (*buf, "@ltoff(@tprel");
+		++paren;
+		break;
+	case TN_RELOC_IA_TPREL22:
+		*buf = vstr_concat (*buf, "@tprel");
+		break;
+	
     	default:
 		#pragma mips_frequency_hint NEVER
     		FmtAssert (FALSE, ("relocs_asm: illegal reloc TN"));
@@ -266,12 +282,6 @@ CGEMIT_Gen_Asm_Frame (INT64 frame_len)
 {
   // .fframe is only used for unwind info,
   // and we plan on emitting that info directly.
-#if 0
-  if (Current_PU_Stack_Model != SMODEL_SMALL)
-	fprintf ( Asm_File, "\t%s\t%lld\n", AS_FRAME, frame_len);
-  else
-	fprintf ( Asm_File, "\t%s\t%lld\n", AS_FRAME, frame_len);
-#endif
 }
 
 
@@ -322,10 +332,13 @@ CGEMIT_Alias (ST *sym, ST *strongsym)
 	fprintf ( Asm_File, "\t.set %s#, ", ST_name(sym));
 	if ( ST_is_export_local(strongsym) && ST_class(strongsym) == CLASS_VAR) {
 		// file scope local symbol
-		if (ST_level(strongsym) == GLOBAL_SYMTAB)
-			fprintf (Asm_File, "%s%s%d#\n",
-			    ST_name(strongsym), Label_Name_Separator, ST_index(strongsym));
-		else
+		if (ST_level(strongsym) == GLOBAL_SYMTAB) {
+                        // OSP 490
+                        if (Emit_Global_Data || ST_sclass(strongsym) == SCLASS_PSTATIC)
+			        fprintf (Asm_File, "%s%s%d#\n",
+			            ST_name(strongsym), Label_Name_Separator, ST_index(strongsym));
+                }
+                else
 			Is_True(0, ("Impossible alias to a PU scope variable"));
 	}
 	else // global export symbol

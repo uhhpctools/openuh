@@ -49,12 +49,12 @@ IP_FILE_HDR_TABLE IP_File_header;	// array of IP_FILE_HDR, which
 		
 	 *******************************************************/
 IP_FILE_HDR&
-Setup_File_Header (const char *file_name, void *mmap_addr)
+Setup_File_Header (const char *file_name, void *mmap_addr, off_t mmap_size)
 {
     UINT index;
 
     IP_FILE_HDR& file_header = IP_File_header.New_entry (index);
-    new (&file_header) IP_FILE_HDR (file_name, mmap_addr);
+    new (&file_header) IP_FILE_HDR (file_name, mmap_addr, mmap_size);
 
 #ifdef TODO
     NAME(IP_get_malloced_info)(p_obj, &(s[i].str_table),
@@ -147,7 +147,7 @@ IP_FILE_HDR_Add_New_PU (IP_FILE_HDR& hdr)
   
   // allocate and initialize a new PU_Info struct
   PU_Info* pu = (PU_Info*) MEM_POOL_Alloc (Malloc_Mem_Pool, sizeof(PU_Info));
-  bzero(pu, sizeof(PU_Info));
+  BZERO(pu, sizeof(PU_Info));
   PU_Info_init(pu);
   
   // connect it to the list of IPA-created PUs

@@ -6043,10 +6043,6 @@ main (argc, argv)
 		  "BINUTILS", PREFIX_PRIORITY_LAST, 0, NULL, 1);
       add_prefix (&startfile_prefixes, standard_startfile_prefix_2,
 		  "BINUTILS", PREFIX_PRIORITY_LAST, 0, NULL, 1);
-#if 0 /* Can cause surprises, and one can use -B./ instead.  */
-      add_prefix (&startfile_prefixes, "./", NULL,
-		  PREFIX_PRIORITY_LAST, 1, NULL, 0);
-#endif
     }
   else
     {
