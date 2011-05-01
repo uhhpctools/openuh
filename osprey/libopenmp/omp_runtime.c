@@ -499,9 +499,9 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     *pupper = __omp_root_team.loop_upper_bound;
     /* Warning: Don't know how pstride should be properly set*/
     *pstride = __omp_root_team.loop_increament;
-    //*plastiter = 1;
     __omp_root_v_thread.ordered_count = 0;
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
   }
 
@@ -530,6 +530,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     *pstride = p_team->loop_increament;
     p_vthread->ordered_count = 0;
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
   }
 
@@ -539,8 +540,8 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     /* specified by OMP_SCHEDULE */
     if (p_vthread->schedule_count != 0) {
       /* no more iteration*/
-       __ompc_set_state(THR_WORK_STATE);
-       return 0;
+      __ompc_set_state(THR_WORK_STATE);
+      return 0;
     }
     global_lower = p_team->loop_lower_bound;
     global_upper = p_team->loop_upper_bound;
@@ -571,6 +572,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
 	return 0;
     } 
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
     break;
   case OMP_SCHED_STATIC:
@@ -712,6 +714,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
 	return 0;
     }
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
     break;
   case OMP_SCHED_ORDERED_STATIC:
@@ -834,6 +837,7 @@ omp_int32 __ompc_schedule_next_4 (omp_int32 global_tid,
     Not_Valid(" unknown schedule type specified");
   }
   __ompc_set_state(THR_WORK_STATE);
+
   return 0;
 }
 
@@ -871,10 +875,10 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     *pupper = __omp_root_team.loop_upper_bound;
     /* Warning: Don't know how pstride should be properly set*/
     *pstride = __omp_root_team.loop_increament;
-    //*plastiter = 1;
     __omp_root_v_thread.ordered_count = 0;
     /* no need to schedule anymore iterations*/
     __ompc_set_state(THR_WORK_STATE);
+    /* note: TSU does return 1; */
     return 0;
   }
 
@@ -903,7 +907,8 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     *pstride = p_team->loop_increament;
     p_vthread->ordered_count = 0;
     __ompc_set_state(THR_WORK_STATE);
-    return 0;
+
+    return 1;
   }
 
   /* Normal multi-thread multi-time schedule*/
@@ -944,6 +949,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
 	return 0;
     } 
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
     break;
   case OMP_SCHED_STATIC:
@@ -1085,6 +1091,7 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
 	return 0;
     }
     __ompc_set_state(THR_WORK_STATE);
+
     return 1;
     break;
   case OMP_SCHED_ORDERED_STATIC:
@@ -1206,7 +1213,443 @@ omp_int32 __ompc_schedule_next_8 (omp_int32 global_tid,
     Not_Valid(" unknown schedule type specified");
   }
   __ompc_set_state(THR_WORK_STATE);
+
   return 0;
+}
+
+static void
+__ompc_collapsed_loop_info_init(omp_team_t *p_team, omp_uint32 collapse_count, va_list ap)
+{
+  omp_loop_info_t* loop_info;
+  omp_uint64 iter_count = 1;
+  int i;
+  p_team->collapse_count = collapse_count;
+  if (collapse_count > p_team->loop_info_size) {
+    if (p_team->loop_info_size == 0) {
+      p_team->loop_info_size = 4;
+    }
+    while (collapse_count > p_team->loop_info_size) {
+      p_team->loop_info_size *= 2;
+    }
+    if (p_team->loop_info) {
+      free(p_team->loop_info);
+      free(p_team->loop_lenv);
+    }
+    p_team->loop_info = (omp_loop_info_t*) malloc(sizeof(omp_loop_info_t) * p_team->loop_info_size);
+    p_team->loop_lenv = malloc(sizeof(omp_uint64) * p_team->loop_info_size);
+  }
+  loop_info = p_team->loop_info;
+  for (i = 0; i < collapse_count; i++) {
+    loop_info->is_64bit = va_arg(ap, omp_uint32);
+    if (loop_info->is_64bit) {
+      loop_info->lower_bound = va_arg(ap, omp_uint64);
+      loop_info->upper_bound = va_arg(ap, omp_uint64);
+      loop_info->incr = va_arg(ap, omp_int64);
+      if (loop_info->incr > 0) {
+        if (loop_info->upper_bound >= loop_info->lower_bound) {
+          p_team->loop_lenv[i] = ((omp_uint64)(loop_info->upper_bound - loop_info->lower_bound)) / ((omp_uint64)loop_info->incr) + 1;
+        } else {
+          p_team->loop_lenv[i] = 0;
+        }
+      } else {
+        if (loop_info->upper_bound <= loop_info->lower_bound) {
+          p_team->loop_lenv[i] = ((omp_uint64)(loop_info->lower_bound - loop_info->upper_bound)) / ((omp_uint64)(-loop_info->incr)) + 1;
+        } else {
+          p_team->loop_lenv[i] = 0;
+        }
+      }
+    } else {
+      loop_info->lower_bound = va_arg(ap, omp_uint32);
+      loop_info->upper_bound = va_arg(ap, omp_uint32);
+      loop_info->incr = va_arg(ap, omp_int32);
+      if (loop_info->incr > 0) {
+        if (loop_info->upper_bound >= loop_info->lower_bound) {
+          p_team->loop_lenv[i] = ((omp_uint32)(loop_info->upper_bound - loop_info->lower_bound)) / ((omp_uint32)loop_info->incr) + 1;
+        } else {
+          p_team->loop_lenv[i] = 0;
+        }
+      } else {
+        if (loop_info->upper_bound <= loop_info->lower_bound) {
+          p_team->loop_lenv[i] = ((omp_uint32)(loop_info->lower_bound - loop_info->upper_bound)) / ((omp_uint32)(-loop_info->incr)) + 1;
+        } else {
+          p_team->loop_lenv[i] = 0;
+        }
+      }
+    }
+    iter_count *= p_team->loop_lenv[i];
+    loop_info++;
+  }
+  p_team->loop_lower_bound = 0;
+  p_team->loop_upper_bound = iter_count;
+  va_end(ap);
+}
+
+/*
+ * VAARGS:
+ *    for each loop level:
+ *         omp_uint32 is_64bit    // 0 - 32 bit index; 1 - 64 bit index
+ *         omp_int{32,64} lower   // lower bound of current loop
+ *         omp_int{32,64} upper   // upper bound of current loop
+ *         omp_int{32,64} stride  // stride of current loop
+ */
+void 
+__ompc_collapse_init (omp_int32 global_tid, omp_sched_t schedtype,
+                        omp_int64 chunk, omp_uint32 collapse_count, ...)
+{
+  va_list        ap;
+  omp_team_t     *p_team;
+  omp_v_thread_t *p_vthread;
+  unsigned       i;
+  omp_loop_info_t *loop_info;
+
+  va_start(ap, collapse_count);
+  __ompc_set_state(THR_OVHD_STATE);
+  /* TODO: The validity of the parameters should be checked here*/
+  if (schedtype == OMP_SCHED_RUNTIME) {
+    /* The logic is still not complete*/
+    schedtype = __omp_rt_sched_type;
+    chunk = __omp_rt_sched_size;
+		
+  } else if (schedtype == OMP_SCHED_ORDERED_RUNTIME) {
+    schedtype = __omp_rt_sched_type + OMP_SCHED_ORDERED_GAP;
+    chunk = __omp_rt_sched_size;
+  }
+
+  if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+    /* Need a place to hold the information*/
+    __ompc_collapsed_loop_info_init(&__omp_root_team, collapse_count, ap);
+    va_end(ap);
+    __omp_root_team.schedule_count = 0;
+    return;
+  } else if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
+    p_team = &__omp_level_1_team_manager;
+    p_vthread = &__omp_level_1_team[global_tid];
+  } else {
+    p_vthread = __ompc_get_v_thread_by_num(global_tid);
+    p_team  = p_vthread->team;
+  }
+  p_vthread->schedule_count = 0;
+
+  if (p_team->team_size == 1) {
+    __ompc_collapsed_loop_info_init(p_team, collapse_count, ap);
+    va_end(ap);
+    p_team->schedule_count = 0;
+    if (__ompc_is_ordered(schedtype))
+      p_team->ordered_count = 0;
+
+    /* TODO: all set ready?*/
+    return;
+
+  }
+
+  /* Warning: Does threads in the same team request for different 
+   * loop scheduling and thus cause the scheduler collision?
+   */
+
+  p_vthread->loop_count++;
+
+  __ompc_lock_spinlock(&(p_team->schedule_lock));
+  if (p_team->loop_count >= p_vthread->loop_count) {
+    /* We assume that the initialization has already OK */
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    return;
+  } else {
+    /* The first one call schedule_init do the initialization work */
+    /* Initializing */
+    p_team->schedule_type = schedtype;
+    p_team->chunk_size = chunk;
+    p_team->schedule_count = 0;
+    if (__ompc_is_ordered(schedtype))
+      p_team->ordered_count = 0;
+    __ompc_collapsed_loop_info_init(p_team, collapse_count, ap);
+    va_end(ap);
+    /* Initialization finished */
+    p_team->loop_count++;
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    return;
+  }
+}         
+
+/*
+ * VAARGS:
+ *    for each loop level:
+ *         omp_int{32,64} *plower // output lower bound of the local loop
+ *         omp_int{32,64} *pupper // output upper bound of current loop
+ */
+omp_int32 __ompc_collapse_next (omp_int32 global_tid, ...)
+{
+  omp_team_t	*p_team;
+  omp_v_thread_t  *p_vthread;
+  omp_int32	team_size;
+  omp_int64	stride;
+  omp_int64	chunk;
+  omp_uint64	my_lower, my_upper, iter_count;
+  omp_int64	schedule_count;
+  int           schedule_full_loop;
+  va_list       ap;
+  unsigned      collapse_count;           
+  int           i;
+  omp_loop_info_t *loop_info;
+  omp_int64* loop_lenv;
+  omp_int32     result;
+  omp_int64     lb, ub;
+  unsigned      mark0, mark1, remainder;
+
+  __ompc_set_state(THR_OVHD_STATE);
+  schedule_full_loop = 0;
+  
+  if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+    /*Judge whether there are more iterations*/
+    if ( __omp_root_team.schedule_count != 0) {
+      /* No more iterations */
+      __ompc_set_state(THR_WORK_STATE);
+      return 0;
+    }
+    __omp_root_team.schedule_count = 1;
+    
+    /* Warning: Don't know how pstride should be properly set*/
+    __omp_root_v_thread.ordered_count = 0;
+    /* no need to schedule anymore iterations*/
+    __ompc_set_state(THR_WORK_STATE);
+    p_team = &__omp_root_team;
+    schedule_full_loop = 1;
+  } else {
+    if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
+      p_vthread = &__omp_level_1_team[global_tid];
+      p_team = &__omp_level_1_team_manager;
+    } else {
+      p_vthread = __ompc_get_v_thread_by_num(global_tid);
+      p_team = p_vthread->team;
+    }
+
+    team_size = p_team->team_size;
+    if (team_size == 1) {
+      /* Single thread team running: for sequentialized nested team*/
+      /* Judge whether there are more iterations*/
+      if (p_team->schedule_count != 0) {
+        /* No more iterations*/
+        __ompc_set_state(THR_WORK_STATE);
+        return 0;
+      }
+      p_team->schedule_count = 1;
+
+      schedule_full_loop = 1;
+      p_vthread->ordered_count = 0;
+      __ompc_set_state(THR_WORK_STATE);
+    }
+  }
+
+  collapse_count = p_team->collapse_count;
+  loop_info = p_team->loop_info;
+  loop_lenv = p_team->loop_lenv;
+  iter_count = p_team->loop_upper_bound;
+
+  va_start(ap, global_tid);
+  if (schedule_full_loop) {
+    for (i = collapse_count - 1; i >= 0; i++) {
+      if (loop_info[i].is_64bit) {
+        *(va_arg(ap, omp_int64*)) = loop_info[i].lower_bound;
+        *(va_arg(ap, omp_int64*)) = (i == 0 ? (loop_info[i].lower_bound + loop_info[i].incr * (loop_lenv[i] + 1)) : (loop_info[i].lower_bound));
+      } else {
+        *(va_arg(ap, omp_int32*)) = (omp_int32) loop_info[i].lower_bound;
+        *(va_arg(ap, omp_int32*)) = (i == 0 ? ((omp_int32) loop_info[i].lower_bound + (omp_int32)loop_info[i].incr * ((omp_int32) loop_lenv[i] + 1)) : ((omp_int32) loop_info[i].lower_bound));
+      }
+    }
+    va_end(ap);
+    return 1;
+  }
+  
+  /* Normal multi-thread multi-time schedule*/
+  switch (p_team->schedule_type) {
+  case OMP_SCHED_STATIC_EVEN:
+    /* specified by OMP_SCHEDULE */
+    if (p_vthread->schedule_count != 0) {
+      /* no more iteration*/
+      __ompc_set_state(THR_WORK_STATE);
+      va_end(ap);
+      return 0;
+    }
+
+    remainder = iter_count % team_size;
+    mark0 = (remainder * global_tid) / team_size;
+    mark1 = (remainder * (global_tid + 1)) / team_size;
+    my_lower = iter_count / team_size * global_tid + mark0;
+    my_upper = iter_count / team_size * (global_tid + 1) + mark1;
+    p_vthread->schedule_count = 1;
+    /* Need to set plastiter right*/
+    result = (my_lower != my_upper);
+    break;
+  case OMP_SCHED_STATIC:
+    chunk = p_team->chunk_size;
+    /* Determine whether there are more iterations*/
+    
+    my_lower = p_vthread->schedule_count * chunk * team_size 
+      + global_tid * chunk;
+
+    if ( my_lower >= iter_count ) {
+      /* No more iterations*/
+      result = 0;
+    } else {
+      p_vthread->schedule_count ++;
+      my_lower = my_lower;
+      my_upper = my_lower + chunk;
+      if (my_upper > iter_count) my_upper = iter_count;
+      result = 1;
+    }
+    break;
+
+  case OMP_SCHED_DYNAMIC:
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
+
+    my_lower = p_team->loop_lower_bound;
+    if ( my_lower >= iter_count) {
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
+      /* No more iterations */
+      __ompc_set_state(THR_WORK_STATE);
+      result = 0;
+      break;
+    }
+    my_upper = my_lower + p_team->chunk_size;
+    if (my_upper > iter_count) my_upper = iter_count;
+    p_team->loop_lower_bound = my_upper;
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    result = 1;
+    break;
+
+  case OMP_SCHED_GUIDED:
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
+
+    my_lower = p_team->loop_lower_bound;
+    if ( my_lower >= iter_count) {
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
+      /* No more iterations */
+      __ompc_set_state(THR_WORK_STATE);
+      result = 0;
+      break;
+    }
+    chunk = (p_team->loop_upper_bound - my_lower) / (2 * team_size);
+    if (chunk < p_team->chunk_size)
+      chunk = p_team->chunk_size;
+    my_upper = my_lower + chunk;
+    if (my_upper > iter_count) my_upper = iter_count;
+    p_team->loop_lower_bound = my_upper;
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    result = 1;
+    break;
+
+  case OMP_SCHED_ORDERED_STATIC_EVEN:
+    /* specified by OMP_SCHEDULE */
+    if (p_vthread->schedule_count != 0) {
+      /* no more iteration*/
+      __ompc_set_state(THR_WORK_STATE);
+      va_end(ap);
+      return 0;
+    }
+
+    remainder = iter_count % team_size;
+    mark0 = (remainder * global_tid) / team_size;
+    mark1 = (remainder * (global_tid + 1)) / team_size;
+    my_lower = iter_count / team_size * global_tid + mark0;
+    my_upper = iter_count / team_size * (global_tid + 1) + mark1;
+
+    p_vthread->schedule_count = 1;
+    p_vthread->ordered_count = global_tid;
+    p_vthread->rest_iter_count = my_upper - my_lower;
+
+    /* Need to set plastiter right*/
+    result = (my_lower != my_upper);
+    break;
+
+  case OMP_SCHED_ORDERED_STATIC:
+    chunk = p_team->chunk_size;
+    /* Determine whether there are more iterations*/
+    
+    my_lower = p_vthread->schedule_count * chunk * team_size 
+      + global_tid * chunk;
+
+    if ( my_lower >= iter_count ) {
+      /* No more iterations*/
+      result = 0;
+    } else {
+      my_upper = my_lower + chunk;
+      if (my_upper > iter_count) my_upper = iter_count;
+      p_vthread->ordered_count = p_vthread->schedule_count * team_size 
+        + global_tid;
+      p_vthread->schedule_count++;
+      p_vthread->rest_iter_count = my_upper - my_lower;
+      result = 1;
+    }
+    break;
+
+  case OMP_SCHED_ORDERED_DYNAMIC:
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
+
+    my_lower = p_team->loop_lower_bound;
+    schedule_count = p_team->schedule_count;
+    if ( my_lower >= iter_count) {
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
+      /* No more iterations */
+      __ompc_set_state(THR_WORK_STATE);
+      result = 0;
+      break;
+    }
+    my_upper = my_lower + p_team->chunk_size;
+    if (my_upper > iter_count) my_upper = iter_count;
+    p_team->loop_lower_bound = my_upper;
+    p_team->schedule_count++;
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    p_vthread->ordered_count = schedule_count;
+    p_vthread->rest_iter_count = my_upper - my_lower;
+    result = 1;
+    break;
+
+  case OMP_SCHED_ORDERED_GUIDED:
+    __ompc_lock_spinlock(&(p_team->schedule_lock));
+
+    my_lower = p_team->loop_lower_bound;
+    schedule_count = p_team->schedule_count;
+    if ( my_lower >= iter_count) {
+      __ompc_unlock_spinlock(&(p_team->schedule_lock));
+      /* No more iterations */
+      __ompc_set_state(THR_WORK_STATE);
+      result = 0;
+      break;
+    }
+    chunk = (p_team->loop_upper_bound - my_lower) / (2 * team_size);
+    if (chunk < p_team->chunk_size)
+      chunk = p_team->chunk_size;
+    my_upper = my_lower + chunk;
+    if (my_upper > iter_count) my_upper = iter_count;
+    p_team->loop_lower_bound = my_upper;
+    p_team->schedule_count++;
+    __ompc_unlock_spinlock(&(p_team->schedule_lock));
+    p_vthread->ordered_count = schedule_count;
+    p_vthread->rest_iter_count = my_upper - my_lower;
+    result = 1;
+    break;
+
+  default:
+    /* runtime schedule type should have been resolved yet*/
+    Not_Valid(" unknown schedule type specified");
+  }
+  if (result) {
+    for (i = collapse_count - 1; i >= 0; i--) {
+      lb = loop_info[i].lower_bound + loop_info[i].incr * (omp_int64)(i == 0 ? my_lower : my_lower % loop_lenv[i]);
+      my_lower /= loop_lenv[i];
+      ub = loop_info[i].lower_bound + loop_info[i].incr * (omp_int64)(i == 0 ? my_upper : my_upper % loop_lenv[i]);
+      my_upper /= loop_lenv[i];
+      if (loop_info[i].is_64bit) {
+        *(va_arg(ap, omp_int64*)) = lb;
+        *(va_arg(ap, omp_int64*)) = ub;
+      } else {
+        *(va_arg(ap, omp_int32*)) = lb;
+        *(va_arg(ap, omp_int32*)) = ub;
+      }
+    }
+  }
+  va_end(ap);
+  __ompc_set_state(THR_WORK_STATE);
+  return result;
 }
 
 /* Must be called after the schedule*/
@@ -1234,6 +1677,7 @@ __ompc_ordered (omp_int32 global_tid)
     return;
   
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_ORDERED);
+  __ompc_event_callback(OMP_EVENT_THR_BEGIN_ORDERED);
   p_vthread = __ompc_get_v_thread_by_num(global_tid);
   p_team = p_vthread->team;
 
@@ -1242,7 +1686,7 @@ __ompc_ordered (omp_int32 global_tid)
 
   pthread_mutex_lock(&(p_team->ordered_mutex));
   while (p_team->ordered_count != p_vthread->ordered_count) {
-    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num(__omp_myid);
     p_vthread->thr_odwt_state_id++;
     __ompc_set_state(THR_ODWT_STATE);
     __ompc_event_callback(OMP_EVENT_THR_BEGIN_ODWT);
@@ -1327,6 +1771,7 @@ __ompc_single (omp_int32 global_tid)
     is_first = 1;
   }
   __ompc_unlock(&(p_team->single_lock));
+  if (is_first) __ompc_set_state(THR_WORK_STATE);
 
   if (is_first) __ompc_set_state(THR_WORK_STATE);
 
@@ -1340,7 +1785,6 @@ __ompc_end_single (omp_int32 global_tid)
   __ompc_event_callback(OMP_EVENT_THR_END_SINGLE);
   __ompc_set_state(THR_WORK_STATE);
   /* The single flags should be reset here*/
-  /* Do nothing*/
 }
 
 
@@ -1406,7 +1850,7 @@ __ompc_get_thdprv(void *** thdprv_p, omp_int64 size, void *datap,omp_int32 globa
     }
     pp[global_tid] = p;
   }
-//  printf("ompc_get_thdprv: pp[%d] = %d\n", global_tid, *((int *)p));
+
   return 1;
 }
 

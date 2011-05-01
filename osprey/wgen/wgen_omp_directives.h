@@ -44,6 +44,12 @@ extern void
 WGEN_expand_end_parallel ();
 
 extern void 
+WGEN_expand_start_task (gs_t stmt);
+
+extern void 
+WGEN_expand_end_task ();
+
+extern void 
 WGEN_expand_start_for (gs_t stmt);
 
 extern void 
@@ -92,6 +98,8 @@ extern void  WGEN_expand_start_ordered (void);
 extern void  WGEN_expand_end_ordered (void);
 
 extern void  WGEN_expand_barrier ( );
+
+extern void  WGEN_expand_taskwait ( );
 
 extern void  WGEN_expand_flush (WN_list *flush_variables);
 

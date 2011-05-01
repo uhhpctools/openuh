@@ -253,98 +253,100 @@ typedef enum {
     MPR_PARALLEL_DO_32       = 9,
     MPR_PARALLEL_DO_64       = 10,
     MPR_PARALLEL_REGION      = 11,
+    MPR_TASK_REGION          = 12,
 
-    MPR_BEGIN_PDO_32         = 12,
-    MPR_BEGIN_PDO_64         = 13,
-    MPR_NEXT_ITERS_32        = 14,
-    MPR_NEXT_ITERS_64        = 15,
-    MPR_END_PDO              = 16,
+    MPR_BEGIN_PDO_32         = 13,
+    MPR_BEGIN_PDO_64         = 14,
+    MPR_NEXT_ITERS_32        = 15,
+    MPR_NEXT_ITERS_64        = 16,
+    MPR_END_PDO              = 17,
 
-    MPR_BEGIN_SINGLE_PROCESS = 17,
-    MPR_END_SINGLE_PROCESS   = 18,
+    MPR_BEGIN_SINGLE_PROCESS = 18,
+    MPR_END_SINGLE_PROCESS   = 19,
 
-    MPR_ENTER_GATE           = 19,
-    MPR_EXIT_GATE            = 20,
+    MPR_ENTER_GATE           = 20,
+    MPR_EXIT_GATE            = 21,
 
-    MPR_BEGIN_INDEPENDENT    = 21,
-    MPR_END_INDEPENDENT      = 22,
+    MPR_BEGIN_INDEPENDENT    = 22,
+    MPR_END_INDEPENDENT      = 23,
 
-    MPR_MY_THREADNUM         = 23,
+    MPR_MY_THREADNUM         = 24,
 
-  MPR_OMP_PARALLEL_REGION    = 24,
-  MPR_OMP_BEGIN_SPR          = 25,      /* serialized parallel region */
-  MPR_OMP_END_SPR            = 26,
-  MPR_OMP_PARALLEL_DO_32     = 27,
-  MPR_OMP_PARALLEL_DO_64     = 28,
+  MPR_OMP_PARALLEL_REGION    = 25,
+  MPR_OMP_BEGIN_SPR          = 26,      /* serialized parallel region */
+  MPR_OMP_END_SPR            = 27,
+  MPR_OMP_PARALLEL_DO_32     = 28,
+  MPR_OMP_PARALLEL_DO_64     = 29,
   
-  MPR_OMP_BEGIN_PDO_64         = 29,
-  MPR_OMP_NEXT_ITERS_64        = 30,
-  MPR_OMP_END_PDO              = 31,
+  MPR_OMP_BEGIN_PDO_64         = 30,
+  MPR_OMP_NEXT_ITERS_64        = 31,
+  MPR_OMP_END_PDO              = 32,
 
-  MPR_OMP_BEGIN_SINGLE_PROCESS = 32,
-  MPR_OMP_END_SINGLE_PROCESS   = 33,
-  MPR_OMP_BARRIER_OLD          = 34, /* conflict with new API */
+  MPR_OMP_BEGIN_SINGLE_PROCESS = 33,
+  MPR_OMP_END_SINGLE_PROCESS   = 34,
+  MPR_OMP_BARRIER_OLD          = 35, /* conflict with new API */
 
-  MPR_OMP_PDO_ORDERED_BEGIN    = 35,
-  MPR_OMP_PDO_ORDERED_END      = 36,
-  MPR_OMP_ORDERED_BEGIN_OLD    = 37, /* conflict with new API */
-  MPR_OMP_ORDERED_END_OLD      = 38, /* conflict with new API */
+  MPR_OMP_PDO_ORDERED_BEGIN    = 36,
+  MPR_OMP_PDO_ORDERED_END      = 37,
+  MPR_OMP_ORDERED_BEGIN_OLD    = 38, /* conflict with new API */
+  MPR_OMP_ORDERED_END_OLD      = 39, /* conflict with new API */
 
-  MPR_OMP_COPYIN               = 39,
-  MPR_OMP_NONPOD_COPYIN        = 40,
-  MPR_OMP_NONPOD_ARRAY_COPYIN  = 41,
+  MPR_OMP_COPYIN               = 40,
+  MPR_OMP_NONPOD_COPYIN        = 41,
+  MPR_OMP_NONPOD_ARRAY_COPYIN  = 42,
 
   // Begin KMPC RTL calls.
-  MPR_OMP_IN_PARALLEL		  = 42,	/* test if in parallel region */
-  MPR_OMP_CAN_FORK		  = 43,	/* test fork, to be eliminated*/
-  MPR_OMP_SET_NUM_THREADS	  = 44,	/* for threadnum setting, not used*/
-  MPR_OMP_INIT_RTL		  = 45, /* obsoleted */
-  MPR_OMP_FINI_RTL		  = 46, /* obsoleted */
+  MPR_OMP_IN_PARALLEL		  = 43,	/* test if in parallel region */
+  MPR_OMP_CAN_FORK		  = 44,	/* test fork, to be eliminated*/
+  MPR_OMP_SET_NUM_THREADS	  = 45,	/* for threadnum setting, not used*/
+  MPR_OMP_INIT_RTL		  = 46, /* obsoleted */
+  MPR_OMP_FINI_RTL		  = 47, /* obsoleted */
   
-  MPR_OMP_SERIALIZED_PARALLEL     = 47, /* para-region serialized, can delete */
-  MPR_OMP_END_SERIALIZED_PARALLEL = 48, /* Can be deleted */
-  MPR_OMP_GET_THREAD_NUM	  = 49,
-  MPR_OMP_GET_NUM_THREADS	  = 50, 
+  MPR_OMP_SERIALIZED_PARALLEL     = 48, /* para-region serialized, can delete */
+  MPR_OMP_END_SERIALIZED_PARALLEL = 49, /* Can be deleted */
+  MPR_OMP_GET_THREAD_NUM	  = 50,
+  MPR_OMP_GET_NUM_THREADS	  = 51, 
 
-  MPR_OMP_FORK			  = 51,
+  MPR_OMP_FORK			  = 52,
 
-  MPR_OMP_STATIC_INIT_4		 = 52,
-  MPR_OMP_STATIC_INIT_8	 	 = 53,
-  MPR_OMP_STATIC_FINI	  	 = 54, /* Can be deleted */
+  MPR_OMP_STATIC_INIT_4		 = 53,
+  MPR_OMP_STATIC_INIT_8	 	 = 54,
+  MPR_OMP_STATIC_FINI	  	 = 55, /* Can be deleted */
 
-  MPR_OMP_SCHEDULER_INIT_4	  = 55,
-  MPR_OMP_SCHEDULER_INIT_8	  = 56,
-  MPR_OMP_SCHEDULER_NEXT_4	  = 57,
-  MPR_OMP_SCHEDULER_NEXT_8	  = 58,
+  MPR_OMP_SCHEDULER_INIT_4	  = 56,
+  MPR_OMP_SCHEDULER_INIT_8	  = 57,
+  MPR_OMP_SCHEDULER_NEXT_4	  = 58,
+  MPR_OMP_SCHEDULER_NEXT_8	  = 59,
   
-  MPR_OMP_SINGLE		  = 59,
-  MPR_OMP_END_SINGLE		  = 60,
+  MPR_OMP_SINGLE		  = 60,
+  MPR_OMP_END_SINGLE		  = 61,
 
-  MPR_OMP_MASTER		  = 61,
-  MPR_OMP_END_MASTER		  = 62,
+
+  MPR_OMP_MASTER		  = 62,
+  MPR_OMP_END_MASTER		  = 63,
   
-  MPR_OMP_BARRIER		  = 63,
-  MPR_OMP_EBARRIER              = 64,
-  MPR_OMP_CRITICAL		= 65,
-  MPR_OMP_END_CRITICAL		= 66,
-  MPR_OMP_REDUCTION             = 67,
-  MPR_OMP_END_REDUCTION         = 68,
-  MPR_OMP_ORDERED		= 69,
-  MPR_OMP_END_ORDERED		= 70,
+  MPR_OMP_BARRIER		  = 64,
+  MPR_OMP_EBARRIER              = 65,
+  MPR_OMP_CRITICAL		= 66,
+  MPR_OMP_END_CRITICAL		= 67,
+  MPR_OMP_REDUCTION             = 68,
+  MPR_OMP_END_REDUCTION         = 69,
+  MPR_OMP_ORDERED		= 70,
+  MPR_OMP_END_ORDERED		= 71,
 
-  MPR_OMP_FLUSH			= 71,	/* Not really needed? to be deleted*/
-  MPR_OMP_TASKWAIT              = 72,
-  MPR_OMP_TASK                  = 73,
-  MPR_OMP_END_TASK              = 74,
-#ifdef KEY
-  MPR_OMP_GET_THDPRV            = 75,
-  MPR_OMP_COPYIN_THDPRV         = 76,
-  MPR_OMP_COPYPRIVATE           = 77,
-  MPRUNTIME_LAST = MPR_OMP_COPYPRIVATE
-#else
-  MPRUNTIME_LAST = MPR_OMP_END_TASK
-#endif
+  MPR_OMP_FLUSH			= 72,	/* Not really needed? to be deleted*/
+  MPR_OMP_TASKWAIT              = 73,
+  MPR_OMP_TASK_CREATE           = 74,
+  MPR_OMP_TASK_BODY_START       = 75,
+  MPR_OMP_TASK_EXIT             = 76,
+  MPR_OMP_GET_THDPRV            = 77,
+  MPR_OMP_COPYIN_THDPRV         = 78,
+  MPR_OMP_COPYPRIVATE           = 79,
 
+  MPR_OMP_COLLAPSE_INIT         = 80,
+  MPR_OMP_COLLAPSE_NEXT	        = 81,
+
+  MPRUNTIME_LAST = MPR_OMP_COLLAPSE_NEXT
 } MPRUNTIME;
 
 
@@ -375,6 +377,7 @@ typedef enum {
   PAR_FUNC_DO32,
   PAR_FUNC_DO64,
   PAR_FUNC_REGION,
+  PAR_FUNC_TASK,
   PAR_FUNC_LAST = PAR_FUNC_REGION
 } PAR_FUNC_TYPE;
 
@@ -517,28 +520,26 @@ static WN *do_preamble_block;	/* Do preamble block */
 static INT64 line_number;	/* Line number of parallel do/region */
 
 static ST *parallel_proc;	/* Extracted parallel process */
-static ST *local_start;   /* Parallel Do local start, obsolete */
-static ST *local_ntrip;   /* Parallel Do local ntrip, obsolete */
-static ST *thread_info;   /* Parallel Do thread info, obsolete */
-static ST *local_upper = NULL;   /* Parallel Do local upper bound */
-static ST *local_lower = NULL;   /* Parallel Do local lower bound */
-static ST *local_stride = NULL;  /* Parallel Do local stride for next chunk */
+static vector<ST *> local_upper;   /* Parallel Do local upper bound */
+static vector<ST *> local_lower;   /* Parallel Do local lower bound */
+static vector<ST *> local_stride;  /* Parallel Do local stride for next chunk */
 static ST *last_iter;      /* Is local execute last iteration? */
-static ST *local_limit;   /* Parallel Do local limit */
-static ST *limit_st;      /* Temp var to store do_limit. can be preg. */
-static WN_OFFSET limit_ofst;
+static vector<ST *> limit_st;      /* Temp var to store do_limit. can be preg. */
+static vector<WN_OFFSET> limit_ofst;
+static vector<ST *> base_st;      /* Temp var to store do_base. can be preg. */
+static vector<WN_OFFSET> base_ofst;
 static ST *local_gtid;		/* Microtask local gtid */
 static ST *local_btid;		/* Microtask local btid */
-static WN *base_node;		  /* Parallel do base */
-static WN *limit_node = NULL;		/* Parallel do limit */
+static vector<WN *> base_node;		  /* Parallel do base */
+static vector<WN *> limit_node;		/* Parallel do limit */
 static WN *ntrip_node;		/* Parallel do trip count */
-static WN *stride_node;		/* Parallel do stride */
+static vector<WN *> stride_node;		/* Parallel do stride */
 static WN *parallel_func;	/* Parallel do function */
 static FEEDBACK *parallel_pu_fb;  /* Feedback for parallel function */
 static WN *reference_block;	/* Parallel funciton reference block */
 static INT32 func_level;	/* Parallel function stab level */
-static ST *do_index_st;		/* User do index variable ST */
-static TYPE_ID do_index_type;	/* User do index variable type */
+static vector<ST *> do_index_st;		/* User do index variable ST */
+static vector<TYPE_ID> do_index_type;	/* User do index variable type */
 static BOOL fast_doacross;	/* Flag if doacross meets fastpath requirement*/
 
 static INT32 copyin_count;	/* Count of copyins */
@@ -553,6 +554,8 @@ static WN *chunk_node;		/* Points to (optional) chunk node */
 static WN *copyin_nodes;	/* Points to (optional) copyin nodes */
 static WN *copyin_nodes_end;	/* Points to (optional) copyin nodes end */
 static WN *if_node;		/* Points to (optional) if node */
+static BOOL untied;             /* untied flag */
+static UINT32 collapse_count;   /* collapse count */
 static WN *lastlocal_nodes;	/* Points to (optional) lastlocal nodes */
 static WN *lastthread_node;	/* Points to (optional) lastthread node */
 static WN *local_nodes;		/* Points to (optional) local nodes */
@@ -677,6 +680,7 @@ static const char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__mp_parallel_do",		/* MPR_PARALLEL_DO_32 */
   "__mp_parallel_do_64",	/* MPR_PARALLEL_DO_64 */
   "__mp_region",		/* MPR_PARALLEL_REGION */
+  "__mp_task_region",		/* MPR_TASK_REGION */
   "__mp_begin_pdo",		/* MPR_BEGIN_PDO_32 */
   "__mp_begin_pdo_64",		/* MPR_BEGIN_PDO_64 */
   "__mp_next_iters",		/* MPR_NEXT_ITERS_32 */
@@ -738,13 +742,16 @@ static const char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_end_ordered",         /* MPR_OMP_ORDERED */
   "__ompc_flush",               /* MPR_OMP_FLUSH  */
   "__ompc_task_wait",           /* MPR_OMP_TASKWAIT */
-  "__ompc_task",                /* MPR_OMP_TASK */
-  "__ompc_end_task",            /* MPR_OMP_END_TASK */
+  "__ompc_task_create",         /* MPR_OMP_TASK_CREATE */
+  "__ompc_task_body_start",     /* MPR_OMP_TASK_BODY_START */
+  "__ompc_task_exit",           /* MPR_OMP_TASK_EXIT */
 #ifdef KEY
   "__ompc_get_thdprv",          /* MPR_OMP_GET_THDPRV */
   "__ompc_copyin_thdprv",       /* MPR_OMP_COPYIN_THDPRV */
   "__ompc_copyprivate",         /* MPR_OMP_COPYPRIVATE */
 #endif
+  "__ompc_collapse_init",       /* MPR_OMP_COLLAPSE_INIT */
+  "__ompc_collapse_next",       /* MPR_OMP_COLLAPSE_NEXT */
 };
 
 
@@ -765,6 +772,7 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,	 /* MPR_PARALLEL_DO_32 */
   ST_IDX_ZERO,	 /* MPR_PARALLEL_DO_64 */
   ST_IDX_ZERO,	 /* MPR_PARALLEL_REGION */
+  ST_IDX_ZERO,	 /* MPR_TASK_REGION */
   ST_IDX_ZERO,	 /* MPR_BEGIN_PDO_32 */
   ST_IDX_ZERO,	 /* MPR_BEGIN_PDO_64 */
   ST_IDX_ZERO,	 /* MPR_NEXT_ITERS_32 */
@@ -826,8 +834,9 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_END_ORDERED */
   ST_IDX_ZERO,   /* MPR_OMP_FLUSH */
   ST_IDX_ZERO,   /* MPR_OMP_TASKWAIT */
-  ST_IDX_ZERO,   /* MPR_OMP_TASK */
-  ST_IDX_ZERO,   /* MPR_OMP_END_TASK */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_CREATE */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_BODY_START */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_EXIT */
 #ifdef KEY
   ST_IDX_ZERO,   /* MPR_OMP_GET_THDPRV */
   ST_IDX_ZERO,   /* MPR_OMP_COPYIN_THDPRV */
@@ -1166,6 +1175,86 @@ Gen_Fork (ST *proc, WN *nThreads)
 }
 
 /*
+Generate RT calls to create task.
+*/
+static WN *
+Gen_Task_Create (ST *proc) 
+{
+  WN * wn;
+  WN * wnx;
+  wn = WN_Create(OPC_VCALL, 4 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_CREATE);
+
+  WN_Set_Call_Non_Data_Mod(wn);
+  WN_Set_Call_Non_Data_Ref(wn);
+  WN_Set_Call_Non_Parm_Mod(wn);
+  WN_Set_Call_Non_Parm_Ref(wn);
+  WN_Set_Call_Parm_Ref(wn);
+  WN_linenum(wn) = line_number;
+
+  wnx = WN_Lda( Pointer_type, 0, proc);
+  WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx, 
+                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+  WN *link = WN_LdidPreg( Pointer_type, Frame_Pointer_Preg_Offset);
+  WN_kid(wn, 1) = WN_CreateParm(Pointer_type, link, WN_ty(link),
+                     WN_PARM_BY_REFERENCE);
+
+  WN *may_delay_wn;
+  if (if_node)
+    may_delay_wn = WN_COPY_Tree(WN_kid0(if_node));
+  else
+    may_delay_wn = WN_Intconst(MTYPE_I4, 1);
+  WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, may_delay_wn, MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
+
+  WN_kid(wn, 3) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, untied ? 0 : 1), MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
+
+  return wn;
+}
+
+/*
+Generate RT call to start the body of a task.
+*/
+static WN *
+Gen_Task_Body_Start ()
+{
+  WN * wn;
+  wn = WN_Create(OPC_VCALL, 0 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_BODY_START);
+  return wn;
+}
+
+
+/*
+Generate RT call to terminate a task.
+*/
+static WN *
+Gen_Task_Exit ()
+{
+  WN * wn;
+  wn = WN_Create(OPC_VCALL, 0 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_EXIT);
+  return wn;
+}
+
+/*
+Insert RT calls to terminate a task before any return statement.
+*/
+static void
+Insert_Task_Exits (WN *node)
+{
+  if (WN_operator(node) == OPR_BLOCK) {
+    for (WN *stmt = WN_first(node); stmt; stmt = WN_next(stmt)) {
+      if (WN_operator(stmt) == OPR_RETURN)
+        WN_INSERT_BlockBefore(node, stmt, Gen_Task_Exit());
+      Insert_Task_Exits(stmt);
+    }
+  } else {
+    for (UINT i = 0; i < WN_kid_count(node); i++)
+      Insert_Task_Exits(WN_kid(node, i));
+  }
+}
+
+/*
 Generate RT calls to initialize RTL. This call should be invocated at the 
 beginning of the program. For Profiling only. obsoleted.
 */
@@ -1429,6 +1518,8 @@ Gen_End_Serialized_Parallel( ST *gtid )
 static WN *Gen_Master( ST *gtid );
 static void Create_Preg_or_Temp ( TYPE_ID mtype, char *name, ST **st,
                                   WN_OFFSET *ofst );
+static void Create_Preg_or_Temp ( TYPE_ID mtype, char *name, UINT32 id, ST **st,
+                                  WN_OFFSET *ofst );
 static WN * Gen_MP_Load ( ST * st, WN_OFFSET offset, BOOL scalar_only = FALSE );
 static WN * Gen_Barrier ( ST* gtid );
 static WN * Gen_EBarrier ( ST* gtid);
@@ -1438,11 +1529,11 @@ static WN * Gen_Taskwait(void);
 * Generate RT calls to start critical section
 */
 static WN *
-Gen_Critical (ST *gtid, ST *lck, BOOL isReduction)
+Gen_Critical (ST *gtid, ST *lck, BOOL is_reduction)
 {
   WN *wn = WN_Create(OPC_VCALL, 2);
 
-  if(isReduction)
+  if(is_reduction)
    WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_REDUCTION);
   else
     WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_CRITICAL);
@@ -1519,13 +1610,13 @@ Gen_Critical (ST *gtid, ST *lck, BOOL isReduction)
 * Generate RT calls to end critical section
 */
 static WN *
-Gen_End_Critical (ST *gtid, ST *lck, BOOL isReduction=FALSE)
+Gen_End_Critical (ST *gtid, ST *lck, BOOL is_reduction=FALSE)
 {
   WN *wn = WN_Create(OPC_VCALL, 2);
-  if(isReduction)
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_REDUCTION);
+  if(is_reduction)
+    WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_REDUCTION);
   else
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_CRITICAL);
+    WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_END_CRITICAL);
   
   WN_Set_Call_Non_Data_Mod(wn);
   WN_Set_Call_Non_Data_Ref(wn);
@@ -1994,8 +2085,12 @@ Pop_Some_Globals( )
 static void 
 Init_PU_Globals( )
 {
-
   local_gtid = NULL;
+  if (PU_mp(PU_Info_pu(Current_PU_Info))) {
+    WN* func_entry = PU_Info_tree_ptr(Current_PU_Info);
+    if (WN_num_formals(func_entry) == 2)
+      local_gtid = WN_st(WN_formal(func_entry, 0));
+  }
 }
 
 /*
@@ -2323,6 +2418,26 @@ Create_Temp( TYPE_ID mtype, const char *name, ST **st )
   *st = new_st;
 }
 
+/*
+Because sometimes we may merely need a temp var, not a preg, e.g. the var
+to accept a value as the function's formal parameter.
+So, this function just allocate a temp var in current scope.
+*/
+static void 
+Create_Temp( TYPE_ID mtype, const char *name, UINT32 id, ST **st )
+{
+  ST *new_st;
+  new_st = New_ST (CURRENT_SYMTAB);
+  ST_Init (new_st,
+           Save_Str2i ( "__ompv_temp_", name, id),
+           CLASS_VAR,
+           SCLASS_AUTO,
+           EXPORT_LOCAL,
+           MTYPE_To_TY (mtype));
+  Set_ST_is_temp_var ( new_st );
+  *st = new_st;
+}
+
 #ifdef KEY
 // If old_st_idx has already been localized, return the new
 // st_idx. Else, create a new local symbol and return its st_idx.
@@ -2542,15 +2657,21 @@ parallel function's symtab becomes CURRENT_SYMTAB.
 static void 
 Create_MicroTask ( PAR_FUNC_TYPE func_type )
 {
-  BOOL is_do32 = FALSE, is_do64 = FALSE, is_region = FALSE;
+  BOOL is_do32 = FALSE, is_do64 = FALSE, is_region = FALSE, has_gtid = FALSE;
   switch (func_type) {  // validate input, set type flag
   case PAR_FUNC_DO32:
     is_do32 = TRUE;
+    has_gtid = TRUE;
     break;
   case PAR_FUNC_DO64:
     is_do64 = TRUE;
+    has_gtid = TRUE;
     break;
   case PAR_FUNC_REGION:
+    is_region = TRUE;
+    has_gtid = TRUE;
+    break;
+  case PAR_FUNC_TASK:
     is_region = TRUE;
     break;
   default:
@@ -2559,7 +2680,7 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
   }
 
     // should be merged up after done. Currently reserved for Debug
-  const char *construct_type_str = is_region ? "ompregion" : "ompdo";
+  const char *construct_type_str = is_region ? "omprg" : "ompdo";
   char temp_str[64];
 
 
@@ -2581,10 +2702,9 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
     Set_TYLIST_type(parm_list, Be_Type_Tbl(MTYPE_V));  // return type
 
       // Two basic parameters
-    Set_TYLIST_type(New_TYLIST(parm_idx), // gtid
-                      Be_Type_Tbl(Pointer_type));
-    Set_TYLIST_type(New_TYLIST(parm_idx), // btid
-                      Be_Type_Tbl(Pointer_type));
+    if (has_gtid)
+      Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // gtid
+    Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // btid
 
     Set_TYLIST_type(New_TYLIST(parm_idx), TY_IDX_ZERO); // end of parm list
 
@@ -2613,10 +2733,10 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
   const char *old_st_name = ST_name(PU_Info_proc_sym(Current_PU_Info));
   char *st_name = (char *) alloca(strlen(old_st_name) + 32);
   if (mp_construct_num == 0)
-    sprintf ( st_name, "__%s_%s%d", construct_type_str, old_st_name,
+    sprintf ( st_name, "__%s_%s_%d", construct_type_str, old_st_name,
 	      mp_region_num );
   else
-    sprintf ( st_name, "__%s_%s%d.%d", construct_type_str, old_st_name,
+    sprintf ( st_name, "__%s_%s_%d.%d", construct_type_str, old_st_name,
 	      mp_region_num, mp_construct_num );
 
 
@@ -2640,6 +2760,7 @@ is inheriting pu_recursive OK?
   Set_PU_no_inline(pu);
   Set_PU_is_nested_func(pu);
   Set_PU_mp(pu);
+  Set_PU_has_mp(pu);
 #ifdef KEY
   Set_PU_mp_lower_generated(pu);
 #endif // KEY
@@ -2695,14 +2816,17 @@ is inheriting pu_recursive OK?
 
     // create ST's for parameters
 
-  ST *arg_gtid = New_ST( CURRENT_SYMTAB );
-  ST_Init (arg_gtid,
+  ST *arg_gtid = NULL;
+  if (has_gtid) {
+    arg_gtid = New_ST( CURRENT_SYMTAB );
+    ST_Init (arg_gtid,
              Save_Str ( "__ompv_gtid_a" ),
              CLASS_VAR,
              SCLASS_FORMAL,
              EXPORT_LOCAL,
              Be_Type_Tbl(MTYPE_I4));
-  Set_ST_is_value_parm( arg_gtid );
+    Set_ST_is_value_parm( arg_gtid );
+  }
 
   ST *arg_slink = New_ST( CURRENT_SYMTAB );
   ST_Init( arg_slink,
@@ -2737,12 +2861,16 @@ is inheriting pu_recursive OK?
   }
 #endif
   // Currently, don't pass data via arguments.
-  WN *func_entry = WN_CreateEntry ( 2, parallel_proc,
+  UINT arg_cnt = (has_gtid ? 2 : 1);
+  UINT slink_arg_pos = arg_cnt - 1;
+  WN *func_entry = WN_CreateEntry ( arg_cnt, parallel_proc,
                                     parallel_func, WN_CreateBlock ( ),
 				    reference_block );
 
-  WN_kid0(func_entry) = WN_CreateIdname ( 0, arg_gtid );
-  WN_kid1(func_entry) = WN_CreateIdname ( 0, arg_slink );
+  if (has_gtid) {
+    WN_kid0(func_entry) = WN_CreateIdname ( 0, arg_gtid );
+  }
+  WN_kid(func_entry, slink_arg_pos) = WN_CreateIdname ( 0, arg_slink );
      // TODO: variable arguments list should be added here.
 
   WN_linenum(func_entry) = line_number;
@@ -2762,14 +2890,16 @@ is inheriting pu_recursive OK?
   // of gtid in another temp vars.
   // The gtid can be eniminated, since the symbol of arguments are also 
   // local storage.
-  Create_Temp( MTYPE_I4, "gtid", &local_gtid );
-  WN *wn_store_gtid = Gen_MP_Store( local_gtid, 0,
-      WN_Ldid( MTYPE_I4, 0, arg_gtid, ST_type(arg_gtid), 0 ));
-//      WN_IloadLdid( MTYPE_I4, 0, Be_Type_Tbl( MTYPE_I4 ), arg_gtid, 0 ));
-  WN_linenum( wn_store_gtid ) = line_number;
-  WN_INSERT_BlockLast( parallel_func, wn_store_gtid );    
-  // create PU_Info for nested function
+  if (has_gtid) {
+    Create_Temp( MTYPE_I4, "gtid", &local_gtid );
+    WN *wn_store_gtid = Gen_MP_Store( local_gtid, 0,
+                                      WN_Ldid( MTYPE_I4, 0, arg_gtid, ST_type(arg_gtid), 0 ));
+    //      WN_IloadLdid( MTYPE_I4, 0, Be_Type_Tbl( MTYPE_I4 ), arg_gtid, 0 ));
+    WN_linenum( wn_store_gtid ) = line_number;
+    WN_INSERT_BlockLast( parallel_func, wn_store_gtid );    
+  }
 
+  // create PU_Info for nested function
 
   PU_Info *parallel_pu = TYPE_MEM_POOL_ALLOC ( PU_Info, Malloc_Mem_Pool );
   PU_Info_init ( parallel_pu );
@@ -2849,7 +2979,8 @@ is inheriting pu_recursive OK?
   Current_pu = &Current_PU_Info_pu();
   Current_Map_Tab = pmaptab;
 
-  Add_DST_variable ( arg_gtid, nested_dst, line_number, DST_INVALID_IDX );
+  if (has_gtid)
+    Add_DST_variable ( arg_gtid, nested_dst, line_number, DST_INVALID_IDX );
   Add_DST_variable ( arg_slink, nested_dst, line_number, DST_INVALID_IDX );
 
 }
@@ -2880,6 +3011,31 @@ Create_Preg_or_Temp ( TYPE_ID mtype, const char *name, ST **st,
   }
 }
 
+/*  Create either a preg or a temp depending on presence of C++ exception
+    handling.  */
+
+static void 
+Create_Preg_or_Temp ( TYPE_ID mtype, const char *name, UINT32 id, ST **st,
+				  WN_OFFSET *ofst )
+{
+  ST *new_st;
+
+  if (!pu_has_eh) {
+    *st = MTYPE_To_PREG ( mtype );
+    *ofst = Create_Preg (mtype, name);
+  } else {
+    new_st = New_ST (CURRENT_SYMTAB);
+    ST_Init (new_st,
+             Save_Str2i ( "__ompv_temp_", name, id ),
+             CLASS_VAR,
+             SCLASS_AUTO,
+             EXPORT_LOCAL,
+             MTYPE_To_TY (mtype));
+    Set_ST_is_temp_var ( new_st );
+    *st = new_st;
+    *ofst = 0;
+  }
+}
 
 /*
 If tree is the test for whether a thread is the MASTER, return TRUE, else
@@ -3075,6 +3231,68 @@ The lowered WHIRL for the guarding MP constructs is as follows:
     Enter_Guarded_WNs(guarded_set, nodes_in_critsect[i], TRUE);
 }
 
+static WN_PRAGMA_ACCESSED_FLAGS Get_Access_Flag(WN* node, WN* parent, WN* grandparent)
+{
+  WN_PRAGMA_ACCESSED_FLAGS flags;
+  OPERATOR opr = WN_operator(node);
+  ST* st = WN_st(node);
+  BOOL a_pointer = (TY_kind(ST_type(st)) == KIND_POINTER);
+
+  if (opr == OPR_LDID && !a_pointer)
+    flags = ACCESSED_LOAD;
+  else if (opr == OPR_STID)
+    flags = ACCESSED_STORE;
+  else if ((opr == OPR_LDA) && !a_pointer)
+    if (WN_operator(parent) == OPR_ILOAD)
+      flags = ACCESSED_LOAD;
+    else if (WN_operator(parent) == OPR_ISTORE)
+      flags = ACCESSED_STORE;
+    else if (WN_operator(parent) == OPR_ARRAY)
+      if (WN_operator(grandparent) == OPR_ILOAD)
+        flags = ACCESSED_LOAD;
+      else if (WN_operator(grandparent) == OPR_ISTORE)
+        flags = ACCESSED_STORE;
+      else
+        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                            ACCESSED_STORE |
+                                            ACCESSED_ILOAD |
+                                            ACCESSED_ISTORE);
+    else
+      flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                          ACCESSED_STORE |
+                                          ACCESSED_ILOAD |
+                                          ACCESSED_ISTORE);
+  else if ((opr == OPR_LDID) && a_pointer)
+    if (WN_operator(parent) == OPR_ILOAD)
+      flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                          ACCESSED_ILOAD);
+    else if (WN_operator(parent) == OPR_ISTORE)
+      flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                          ACCESSED_ISTORE);
+    else if (WN_operator(parent) == OPR_ARRAY)
+      if (WN_operator(grandparent) == OPR_ILOAD)
+        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                            ACCESSED_ILOAD);
+      else if (WN_operator(grandparent) == OPR_ISTORE)
+        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                            ACCESSED_ISTORE);
+      else
+        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                            ACCESSED_STORE |
+                                            ACCESSED_ILOAD |
+                                            ACCESSED_ISTORE);
+    else
+      flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                          ACCESSED_STORE |
+                                          ACCESSED_ILOAD |
+                                          ACCESSED_ISTORE);
+  else
+    flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
+                                        ACCESSED_STORE |
+                                        ACCESSED_ILOAD |
+                                        ACCESSED_ISTORE);
+  return flags;
+}
 
 /*  Walk tree to locate all uplevel references and build list of them.
     guarded_set is the set of WNs guarded by SINGLE or MASTER constructs;
@@ -3092,7 +3310,6 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
   OPCODE op;
   OPERATOR opr;
 
-  BOOL a_pointer;
   WN_PRAGMA_ACCESSED_FLAGS flags;
 
   Is_True(level >= 2, ("impossible symtab level == %d", level));
@@ -3119,62 +3336,7 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
     if (OPCODE_has_sym(op) && (st = WN_st(tree)) != NULL &&
         ST_level(st) < level && ST_class(st) == CLASS_VAR) {
 
-      a_pointer = (TY_kind(ST_type(st)) == KIND_POINTER);
-
-      if (opr == OPR_LDID && !a_pointer)
-         flags = ACCESSED_LOAD;
-      else if (opr == OPR_STID)
-         flags = ACCESSED_STORE;
-      else if ((opr == OPR_LDA) && !a_pointer)
-        if (WN_operator(parent) == OPR_ILOAD)
-           flags = ACCESSED_LOAD;
-        else if (WN_operator(parent) == OPR_ISTORE)
-           flags = ACCESSED_STORE;
-        else if (WN_operator(parent) == OPR_ARRAY)
-	        if (WN_operator(grandparent) == OPR_ILOAD)
-             flags = ACCESSED_LOAD;
-          else if (WN_operator(grandparent) == OPR_ISTORE)
-             flags = ACCESSED_STORE;
-          else
-            flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-                     ACCESSED_STORE |
-                     ACCESSED_ILOAD |
-                     ACCESSED_ISTORE);
-        else
-           flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-					      ACCESSED_STORE |
-					      ACCESSED_ILOAD |
-					      ACCESSED_ISTORE);
-      else if ((opr == OPR_LDID) && a_pointer)
-	      if (WN_operator(parent) == OPR_ILOAD)
-          flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-					      ACCESSED_ILOAD);
-        else if (WN_operator(parent) == OPR_ISTORE)
-          flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-					      ACCESSED_ISTORE);
-        else if (WN_operator(parent) == OPR_ARRAY)
-          if (WN_operator(grandparent) == OPR_ILOAD)
-             flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-                      ACCESSED_ILOAD);
-          else if (WN_operator(grandparent) == OPR_ISTORE)
-             flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-                      ACCESSED_ISTORE);
-        else
-             flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-                      ACCESSED_STORE |
-                      ACCESSED_ILOAD |
-                      ACCESSED_ISTORE);
-      else
-        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-            ACCESSED_STORE |
-            ACCESSED_ILOAD |
-            ACCESSED_ISTORE);
-    else
-        flags = (WN_PRAGMA_ACCESSED_FLAGS) (ACCESSED_LOAD |
-					    ACCESSED_STORE |
-					    ACCESSED_ILOAD |
-					    ACCESSED_ISTORE);
-
+      flags = Get_Access_Flag(tree, parent, grandparent);
       wn = WN_first(block);
       while (wn && (WN_st(wn) < st))
           wn = WN_next(wn);
@@ -3239,6 +3401,62 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
     if (op == OPC_REGION)
       pu_has_region = TRUE;
 
+  }
+}
+
+static BOOL
+St_Is_In_List(WN* node_list, ST* st)
+{
+  for (WN* wn = node_list; wn; wn = WN_next(wn))
+    if (WN_st_idx(wn) == ST_st_idx(st))
+      return TRUE;
+  return FALSE;
+}
+
+/*  Walk tree to locate all variable references which storage is not
+    specified, and add them in node_list. */
+
+static void 
+Collect_Default_Variables (  WN * tree, WN *& node_list, WN_PRAGMA_ID pragma_id, WN * parent = NULL, WN * grandparent = NULL )
+{
+  WN *wn;
+  ST *st;
+  OPCODE op;
+  OPERATOR opr;
+  BOOL a_pointer;
+  WN_PRAGMA_ACCESSED_FLAGS flags;
+
+  if (tree) {
+
+    op = WN_opcode(tree);
+    opr = WN_operator(tree);
+
+    if (op == OPC_BLOCK)
+      for (WN* node = WN_first(tree); node; node = WN_next(node))
+	Collect_Default_Variables(node, node_list, pragma_id, tree, parent);
+    else
+      for (INT32 i = 0; i < WN_kid_count(tree); i++)
+	Collect_Default_Variables(WN_kid(tree, i), node_list, pragma_id, tree, parent);
+
+    if (OPCODE_has_sym(op) && (st = WN_st(tree)) != NULL &&
+        ST_class(st) == CLASS_VAR && ST_level(st) == PU_lexical_level(Current_PU_Info_pu())) {
+      if ((local_nodes == node_list || !St_Is_In_List(local_nodes, st)) && 
+          (shared_nodes == node_list || !St_Is_In_List(shared_nodes, st)) &&
+          (firstprivate_nodes == node_list || !St_Is_In_List(firstprivate_nodes, st))) {
+        flags = Get_Access_Flag(tree, parent, grandparent);
+        for (wn = node_list; wn; wn = WN_next(wn))
+          if (WN_st_idx(wn) == ST_st_idx(st))
+            break;
+        if (wn) {
+          WN_pragma_flags(wn) |= flags;
+        } else {
+          wn = WN_CreatePragma(pragma_id, st, 0, 0);
+          WN_pragma_flags(wn) = flags;
+          WN_next(wn) = node_list;
+          node_list = wn;
+        }
+      }
+    }
   }
 }
 
@@ -3639,6 +3857,7 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
     case MPP_PDO:
     case MPP_ORPHANED_PDO:
     case MPP_PARALLEL_REGION:
+    case MPP_TASK_REGION:
       break;
     default:
       Fail_FmtAssertion("non-POD object invalidly privatized on construct "
@@ -4380,6 +4599,7 @@ Create_Local_Variables ( VAR_TABLE * vtab, WN * reductions,
     break;
   case MPP_PARALLEL_DO:
   case MPP_PARALLEL_REGION:
+  case MPP_TASK_REGION:
 #ifdef KEY
   case MPP_ORPHAN:
 #endif
@@ -4656,6 +4876,7 @@ Process_Exception_Region ( WN * node, VAR_TABLE * vtab )
   case MPP_PDO:
   case MPP_PARALLEL_DO:
   case MPP_PARALLEL_REGION:
+  case MPR_TASK_REGION:
   case MPP_ORPHAN:
     break;
   default:
@@ -5156,6 +5377,25 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
 }   
 
 
+static void
+Extract_Index_Info ( WN* pdo_node )
+{
+  do_index_st.clear();
+  do_index_type.clear();
+  for (UINT32 i = 0; i < collapse_count; i++) {
+    ST * tmp_do_index_st = WN_st(WN_index(pdo_node));
+    TYPE_ID tmp_do_index_type = TY_mtype(ST_type(tmp_do_index_st));
+    if (tmp_do_index_type == MTYPE_I1 || tmp_do_index_type == MTYPE_I2)
+      tmp_do_index_type = MTYPE_I4;
+    else if (tmp_do_index_type == MTYPE_U1 || tmp_do_index_type == MTYPE_U2)
+      tmp_do_index_type = MTYPE_U4;
+    do_index_st.push_back(tmp_do_index_st);
+    do_index_type.push_back(tmp_do_index_type);
+    pdo_node = WN_first(WN_do_body(pdo_node));
+  }
+}
+
+
 /*
 * Create any needed temporaries in local scope. especially for Dos 
 * This function has been modified by csc.
@@ -5165,24 +5405,49 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
 static void 
 Make_Local_Temps ( void )
 {
+  limit_st.clear();
+  base_st.clear();
+  limit_ofst.clear();
+  base_ofst.clear();
+  local_upper.clear();
+  local_lower.clear();
+  local_stride.clear();
+
+  for (UINT32 i = 0; i < collapse_count; i++) {
+    ST *tmp_limit_st;
+    ST *tmp_base_st;
+    WN_OFFSET tmp_limit_ofst;
+    WN_OFFSET tmp_base_ofst;
+    ST *tmp_local_upper;
+    ST *tmp_local_lower;
+    ST *tmp_local_stride;
+
     // note that if multiple orphaned PDO's appear in a PU, then multiple
     // instances of these local variables will be inserted into the PU's
     // symbol table
-  //Maybe need to be changed to Create_Temp
-  Create_Preg_or_Temp( do_index_type, "temp_limit", &limit_st, &limit_ofst );
+    //Maybe need to be changed to Create_Temp
+    Create_Preg_or_Temp( do_index_type[0], "temp_limit", i, &tmp_limit_st, &tmp_limit_ofst );
+    limit_st.push_back(tmp_limit_st);
+    limit_ofst.push_back(tmp_limit_ofst);
 
-  Create_Temp( do_index_type, "do_upper", &local_upper );
-  Set_ST_addr_passed( local_upper );
+    Create_Preg_or_Temp( do_index_type[0], "temp_base", i, &tmp_base_st, &tmp_base_ofst );
+    base_st.push_back(tmp_base_st);
+    base_ofst.push_back(tmp_base_ofst);
 
-  Create_Temp( do_index_type, "do_lower", &local_lower );
-  Set_ST_addr_passed( local_lower );
+    Create_Temp( do_index_type[i], "do_upper", i, &tmp_local_upper );
+    Set_ST_addr_passed( tmp_local_upper );
+    local_upper.push_back(tmp_local_upper);
 
-  Create_Temp( do_index_type, "do_stride", &local_stride );
-  Set_ST_addr_passed( local_stride );
+    Create_Temp( do_index_type[i], "do_lower", i, &tmp_local_lower );
+    Set_ST_addr_passed( tmp_local_lower );
+    local_lower.push_back(tmp_local_lower);
 
+    Create_Temp( do_index_type[i], "do_stride", i, &tmp_local_stride );
+    Set_ST_addr_passed( tmp_local_stride );
+    local_stride.push_back(tmp_local_stride);
+  }
   Create_Temp( MTYPE_I4, "last_iter", &last_iter );
   Set_ST_addr_passed( last_iter );
-
 }
 
 
@@ -6901,7 +7166,7 @@ Gen_MP_Reduction(VAR_TABLE *var_table, INT num_vars, WN **init_block,
       ST *mplock = Create_Critical_Lock( );
       WN_INSERT_BlockFirst( *store_block, 
 	                  Gen_Critical( local_gtid, mplock, TRUE ));
-      unlock = Gen_End_Critical ( local_gtid, mplock,TRUE );
+      unlock = Gen_End_Critical ( local_gtid, mplock, TRUE );
       WN_INSERT_BlockLast( *store_block, unlock );
       // Does this barrier necessary?
       WN_INSERT_BlockLast( *store_block, Gen_Barrier(local_gtid));
@@ -7598,9 +7863,7 @@ static WN *Lower_Master( WN *master_region )
   WN_INSERT_BlockLast( mp_master_block, if_wn );
 
   // end_master call.
-// #ifndef KEY
   WN_INSERT_BlockLast( mp_master_block, Gen_End_Master(local_gtid));
-// #endif
 
   return mp_master_block;
 } // Lower_Master()
@@ -7837,10 +8100,10 @@ Delayed_MP_Translation( WN * tree )
           lock_stack[lptr++] = lock_st;
           if(lock_st){
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_Critical( local_gtid, lock_st,FALSE ); /*oscar attempt 1*/
+            new_kid = Gen_Critical( local_gtid, lock_st, FALSE ); /*oscar attempt 1*/
           } else {
             Linenum_Pusher p(WN_Get_Linenum(kid));
-            new_kid = Gen_Critical( local_gtid, unnamed_lock_st,FALSE );
+            new_kid = Gen_Critical( local_gtid, unnamed_lock_st, FALSE );
           }
           if (WN_prev(kid))
             WN_next(WN_prev(kid)) = new_kid;
@@ -8008,8 +8271,10 @@ Strip_Nested_MP ( WN * tree, BOOL pcf_ok )
 #ifdef KEY /* Bug 4828 */
           if (region_type != WN_PRAGMA_PWORKSHARE_BEGIN)
 #endif
-  	  Strip_Nested_MP ( WN_region_body(kid), FALSE );
-     } else {
+  	  Strip_Nested_MP ( WN_region_body(kid), TRUE );
+        } else if (region_type == WN_PRAGMA_TASK_BEGIN) {
+          /* do nothing */
+        } else {
 	  if (region_type == WN_PRAGMA_PDO_BEGIN)
 	    Move_Non_POD_Finalization_Code(WN_region_body(kid));
 
@@ -8677,9 +8942,9 @@ Copy_Non_MP_Tree_Rec ( WN * tree , V_STACK *mp_vertices,
           lock_stack[lptr++] = lock_st;
           Create_Gtid_ST( );
           if (lock_st)
-            new_kid = Gen_Critical( local_gtid, lock_st,FALSE );
+            new_kid = Gen_Critical( local_gtid, lock_st, FALSE );
           else
-            new_kid = Gen_Critical( local_gtid, unnamed_lock_st,FALSE );
+            new_kid = Gen_Critical( local_gtid, unnamed_lock_st, FALSE );
           WN_prev(new_kid) = prev_kid;
           if (prev_kid)
             WN_next(prev_kid) = new_kid;
@@ -8859,7 +9124,7 @@ Standardize_Do (WN* do_tree)
 */
 
 static void 
-Extract_Do_Info ( WN * do_tree )
+Extract_Per_Level_Do_Info ( WN * do_tree, UINT32 level_id )
 {
   // standardize do tree.
   Standardize_Do(do_tree);
@@ -8983,40 +9248,59 @@ Extract_Do_Info ( WN * do_tree )
 
   /* Generate mp scheduling expressions */
 
-  base_node = do_init;
+  base_node.push_back(do_init);
     // used by Rewrite_Do, need to be copied ?
-  limit_node = WN_COPY_Tree( do_limit );
+  limit_node.push_back(WN_COPY_Tree( do_limit ));
+  stride_node.push_back(do_stride);
 
-  if (((WN_operator(WN_end(do_tree)) == OPR_LT) && was_kid0) ||
-      ((WN_operator(WN_end(do_tree)) == OPR_GT) && !was_kid0)) { 
-    WN* wn_exp0 = WN_Sub(do_index_type, do_limit, WN_COPY_Tree(do_init));
-    wn_exp0 = WN_Integer_Cast(wn_exp0, do_index_type, WN_rtype(wn_exp0));
-    WN* wn_exp1 = WN_Add(do_index_type, wn_exp0, WN_COPY_Tree(do_stride));
-    wn_exp1 = WN_Integer_Cast(wn_exp1, do_index_type, WN_rtype(wn_exp1));
-    WN* wn_exp2 = WN_Sub(do_index_type, wn_exp1, WN_Intconst(do_index_type, 1));
-    wn_exp2 = WN_Integer_Cast(wn_exp2, do_index_type, WN_rtype(wn_exp2));
-    WN* wn_exp3 = WN_Div(do_index_type, wn_exp2, WN_COPY_Tree(do_stride));
-    ntrip_node = wn_exp3; 
-  } else if (((WN_operator(WN_end(do_tree)) == OPR_GT) && was_kid0) ||
-           ((WN_operator(WN_end(do_tree)) == OPR_LT) && !was_kid0)) { 
-    WN* wn_exp0 = WN_Sub(do_index_type, do_limit, WN_COPY_Tree(do_init));
-    wn_exp0 = WN_Integer_Cast(wn_exp0, do_index_type, WN_rtype(wn_exp0));
-    WN* wn_exp1 = WN_Add(do_index_type, wn_exp0, WN_Intconst(do_index_type, 1));
-    wn_exp1 = WN_Integer_Cast(wn_exp1, do_index_type, WN_rtype(wn_exp1));
-    WN* wn_exp2 = WN_Add(do_index_type, wn_exp1, WN_COPY_Tree(do_stride));
-    wn_exp2 = WN_Integer_Cast(wn_exp2, do_index_type, WN_rtype(wn_exp2));
-    WN* wn_exp3 = WN_Div(do_index_type, wn_exp2, WN_COPY_Tree(do_stride));
-    ntrip_node = wn_exp3; 
-  } else { 
-    WN* wn_exp0 = WN_Sub(do_index_type, do_limit, WN_COPY_Tree(do_init));
-    wn_exp0 = WN_Integer_Cast(wn_exp0, do_index_type, WN_rtype(wn_exp0));
-    WN* wn_exp1 = WN_Add(do_index_type, wn_exp0, WN_COPY_Tree(do_stride));
-    wn_exp1 = WN_Integer_Cast(wn_exp1, do_index_type, WN_rtype(wn_exp1));
-    WN* wn_exp2 = WN_Div(do_index_type, wn_exp1, WN_COPY_Tree(do_stride));
-    ntrip_node = wn_exp2; 
-  } 
-  stride_node = do_stride;
+  TYPE_ID current_index_type = do_index_type[level_id];
+  if (collapse_count == 1) {
+    if (((WN_operator(WN_end(do_tree)) == OPR_LT) && was_kid0) ||
+        ((WN_operator(WN_end(do_tree)) == OPR_GT) && !was_kid0)) { 
+      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
+      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
+      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_COPY_Tree(do_stride));
+      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
+      WN* wn_exp2 = WN_Sub(current_index_type, wn_exp1, WN_Intconst(current_index_type, 1));
+      wn_exp2 = WN_Integer_Cast(wn_exp2, current_index_type, WN_rtype(wn_exp2));
+      WN* wn_exp3 = WN_Div(current_index_type, wn_exp2, WN_COPY_Tree(do_stride));
+      ntrip_node = wn_exp3; 
+    } else if (((WN_operator(WN_end(do_tree)) == OPR_GT) && was_kid0) ||
+               ((WN_operator(WN_end(do_tree)) == OPR_LT) && !was_kid0)) { 
+      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
+      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
+      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_Intconst(current_index_type, 1));
+      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
+      WN* wn_exp2 = WN_Add(current_index_type, wn_exp1, WN_COPY_Tree(do_stride));
+      wn_exp2 = WN_Integer_Cast(wn_exp2, current_index_type, WN_rtype(wn_exp2));
+      WN* wn_exp3 = WN_Div(current_index_type, wn_exp2, WN_COPY_Tree(do_stride));
+      ntrip_node = wn_exp3; 
+    } else { 
+      WN* wn_exp0 = WN_Sub(current_index_type, do_limit, WN_COPY_Tree(do_init));
+      wn_exp0 = WN_Integer_Cast(wn_exp0, current_index_type, WN_rtype(wn_exp0));
+      WN* wn_exp1 = WN_Add(current_index_type, wn_exp0, WN_COPY_Tree(do_stride));
+      wn_exp1 = WN_Integer_Cast(wn_exp1, current_index_type, WN_rtype(wn_exp1));
+      WN* wn_exp2 = WN_Div(current_index_type, wn_exp1, WN_COPY_Tree(do_stride));
+      ntrip_node = wn_exp2; 
+    } 
+  }
 
+}
+
+/*
+* Extract do info for mp scheduling. 
+*/
+
+static void 
+Extract_Do_Info ( WN * do_tree )
+{
+  base_node.clear();
+  limit_node.clear();
+  stride_node.clear();
+  for (UINT32 i = 0; i < collapse_count; i++) {
+    Extract_Per_Level_Do_Info(do_tree, i);
+    do_tree = WN_first(WN_do_body(do_tree));
+  }
 }
 
 /*
@@ -9153,6 +9437,75 @@ Rewrite_Do_New ( WN * do_tree,
   return do_tree;
 } // Rewrite_Do_New()
 
+static void
+Rewrite_Collapsed_Do ( WN * block, WN * do_tree, vector<BOOL>& is_LE )
+{
+  WN * start_block = WN_CreateBlock();
+  WN * cond = NULL;
+  WN * incr_block = NULL;
+  
+  for (UINT32 i = 0; i < collapse_count; i++) {
+    if (i > 0) {
+      do_tree = WN_first(WN_do_body(do_tree));
+    }
+
+    WN        *do_idname  = WN_index(do_tree);
+    ST        *do_id_st   = WN_st(do_idname);
+    WN_OFFSET  do_id_ofst = WN_offsetx(do_idname);
+    UINT       do_id_field_id = WN_field_id(do_idname);
+    
+    ST * lower = local_lower[i];
+    ST * upper = local_upper[i];
+    ST * stride = local_stride[i];
+
+    WN * wn_local_start = Gen_MP_Load(lower, 0);
+    WN * lower_wn = WN_Integer_Cast(wn_local_start, ST_mtype(do_id_st), WN_rtype(wn_local_start));
+    WN * init_wn = WN_Stid(ST_mtype(do_id_st), do_id_ofst, do_id_st, ST_type(do_id_st), lower_wn, do_id_field_id);
+    WN_INSERT_BlockLast(start_block, init_wn);
+
+    WN * wn_local_end = Gen_MP_Load(upper, 0);
+    WN * upper_wn = WN_Integer_Cast(wn_local_end, ST_mtype(do_id_st), WN_rtype(wn_local_end));
+    WN * index_wn = WN_Ldid(ST_mtype(do_id_st), do_id_ofst, do_id_st, ST_type(do_id_st), do_id_field_id);
+    WN * cond_wn = WN_NE(ST_mtype(do_id_st), index_wn, upper_wn);
+    if (cond == NULL) {
+      cond = cond_wn;
+    } else {
+      cond = WN_LIOR(cond_wn, cond);
+    }
+
+    WN * current_incr_block = WN_CreateBlock();
+    WN * next_index_wn = WN_Add(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), WN_COPY_Tree(stride_node[i]));
+    WN * incr_wn = WN_Stid(ST_mtype(do_id_st), do_id_ofst, do_id_st, ST_type(do_id_st), next_index_wn, do_id_field_id);
+    WN_INSERT_BlockLast(current_incr_block, incr_wn);
+    if (incr_block != NULL) {
+      WN * limit_wn = WN_Integer_Cast(WN_Ldid(ST_mtype(limit_st[i]), limit_ofst[i], limit_st[i], ST_type(limit_st[i]), 0), ST_mtype(do_id_st), ST_mtype(limit_st[i]));
+      WN * overflow_cond;
+      if (is_LE[i]) {
+        overflow_cond = WN_GT(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), limit_wn);
+      } else {
+        overflow_cond = WN_LT(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), limit_wn);
+      }
+
+      WN * base_wn = WN_Integer_Cast(WN_Ldid(ST_mtype(base_st[i]), base_ofst[i], base_st[i], ST_type(base_st[i]), 0), ST_mtype(do_id_st), ST_mtype(base_st[i]));
+      WN * reset_index_wn = WN_Stid(ST_mtype(do_id_st), do_id_ofst, do_id_st, ST_type(do_id_st), base_wn, do_id_field_id);
+      WN_INSERT_BlockLast(incr_block, reset_index_wn);
+
+      WN * overflow_test = WN_CreateIf(overflow_cond, incr_block, WN_CreateBlock());
+      WN_INSERT_BlockLast(current_incr_block, overflow_test);
+    }
+    incr_block = current_incr_block;
+  }
+
+  WN * loop_body = WN_do_body(do_tree);
+  WN_do_body(do_tree) == NULL;
+
+  WN_INSERT_BlockLast(block, start_block);
+
+  WN * while_loop = WN_CreateWhileDo(cond, loop_body);
+  WN_INSERT_BlockLast(loop_body, incr_block);
+  WN_INSERT_BlockLast(block, while_loop);
+}
+
 /*
 Transform do statement. This is a new version
 written by csc.
@@ -9161,22 +9514,18 @@ return a tree to replace do_tree, and do_tree should not be
 contained in other trees..
 */
 
-static WN *
+static inline WN *
 Transform_Do( WN * do_tree, 
-                         SCHEDULE_TYPE schedule, 
-                         WN * chunk_size)
+              SCHEDULE_TYPE schedule, 
+              WN * chunk_size)
 {
   WN        *wn, *wn_tmp;
-  WN        *do_idname  = WN_index(do_tree);
-  ST        *do_id_st   = WN_st(do_idname);
-  WN_OFFSET  do_id_ofst = WN_offsetx(do_idname);
-  WN        *do_stride;
+  vector<WN*> do_stride(collapse_count);
   WN        *do_schedule;
   WN	      *if_wn;
   WN        *test_wn, *then_wn, *else_wn;
   WN        *while_wn;
   WN        *while_test, *while_body;
-//  WN        *wn_prev_do, *wn_next_do;
 
   WN        *call_wn;
   
@@ -9187,15 +9536,9 @@ Transform_Do( WN * do_tree,
   WN_OFFSET return_ofst;
   WN        *return_wn = WN_CreateBlock( );
 
-  // Now, move to global scope.
-//  ST        *limit_st;
-//  WN_OFFSET  limit_ofst;
-
-//  WN_OFFSET  temp_ofst;
   WN        *do_init_call = NULL;
   BOOL       is_do32 = TRUE;
-  BOOL       is_LE = TRUE;
-  BOOL       is_kid0_do_id = TRUE;
+  vector<BOOL> is_LE(collapse_count, TRUE);
 
   is_do32 = fast_doacross ? TRUE : FALSE;
 //  wn_prev_do = WN_prev( do_tree );
@@ -9207,102 +9550,103 @@ Transform_Do( WN * do_tree,
   // as the local ones. So, we have to do works in Extra_Do_Info again.
   // Maybe we should modify Extra_Do_Info instead.
 
-  if ((WN_operator(WN_kid0(WN_kid0(WN_step(do_tree)))) == OPR_LDID) &&
-      (WN_st(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_st) &&
-      (WN_offsetx(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_ofst))
-  {
-    do_stride = WN_kid1(WN_kid0(WN_step(do_tree)));
-#ifdef KEY
-    if (WN_operator (WN_kid0 (WN_step (do_tree))) == OPR_SUB)
-    { // the loop goes down, don't miss '-' in (- non-const-stride)
-      OPCODE negop = OPCODE_make_op (OPR_NEG, WN_rtype (do_stride), MTYPE_V);
-      do_stride = WN_CreateExp1 (negop, do_stride);
-    }
-#endif // KEY
-  }
-  else
-    do_stride = WN_kid0(WN_kid0(WN_step(do_tree)));
-
-  // first, we determine the operation type of do termination comparison.
-  // In the form: do_index opr const
-  // opr is supposed to be LE/GE, but since currently we don't standardize
-  // the loop, we also should include LT/GT.
-  if(( WN_kid0( WN_end( do_tree )) != NULL ) &&
-     ( WN_operator( WN_kid0( WN_end( do_tree ))) == OPR_LDID ) &&
-     ( WN_st( WN_kid0( WN_end( do_tree ))) == do_id_st ) &&
-     ( WN_offsetx( WN_kid0( WN_end( do_tree ))) == do_id_ofst )) 
-  {
-    is_kid0_do_id = TRUE;
-  }
-  else
-  {
-    is_kid0_do_id = FALSE;
-  }
-  if(( WN_operator( WN_end( do_tree )) == OPR_LT ) ||
-     ( WN_operator( WN_end( do_tree )) == OPR_LE ))
-  {
-    is_LE = TRUE;
-  }
-  else
-  {
-    is_LE = FALSE;
-  }
-  if( is_kid0_do_id == FALSE )
-  {
-    if( is_LE == TRUE )
-      is_LE = FALSE;
-    else
-      is_LE = TRUE;
-  }
-
   do_prefix = WN_CreateBlock( );
   do_suffix = WN_CreateBlock( );
-   // These vars need to be type casted?
-//  Create_Preg_or_Temp( do_index_type, "temp_limit", &limit_st, &limit_ofst );
-  wn = WN_COPY_Tree ( limit_node );
-  wn_tmp = WN_Stid ( do_index_type, limit_ofst, 
-                  limit_st, ST_type(limit_st), wn );
-  WN_INSERT_BlockLast( do_prefix, wn_tmp );
-//  Create_Temp( do_index_type, "do_upper", &local_upper );
-//  if ((WN_operator(WN_end(do_tree)) == OPR_LT) ||
-//      (WN_operator(WN_end(do_tree)) == OPR_GT))
-//    wn = WN_Add ( do_index_type,
-//		  Gen_MP_Load ( local_start, 0 ),
-//		  WN_Mpy ( do_index_type,
-//			   Gen_MP_Load ( local_ntrip, 0 ),
-//			   WN_COPY_Tree ( do_stride )));
-//  else
-//    wn = WN_Sub ( do_index_type,
-//		  WN_Add ( do_index_type,
-//			   Gen_MP_Load ( local_start, 0 ),
-//			   WN_Mpy ( do_index_type,
-//				    Gen_MP_Load ( local_ntrip, 0 ),
-//				    WN_COPY_Tree ( do_stride ))),
-//		  WN_COPY_Tree ( do_stride ));
+  WN *current_do = do_tree;
+  for (UINT32 i = 0; i < collapse_count; i++) {
+    WN        *do_idname  = WN_index(current_do);
+    ST        *do_id_st   = WN_st(do_idname);
+    WN_OFFSET  do_id_ofst = WN_offsetx(do_idname);
+    BOOL       is_kid0_do_id;
+    if ((WN_operator(WN_kid0(WN_kid0(WN_step(current_do)))) == OPR_LDID) &&
+        (WN_st(WN_kid0(WN_kid0(WN_step(current_do)))) == do_id_st) &&
+        (WN_offsetx(WN_kid0(WN_kid0(WN_step(current_do)))) == do_id_ofst))
+    {
+      do_stride[i] = WN_kid1(WN_kid0(WN_step(current_do)));
+#ifdef KEY
+      if (WN_operator (WN_kid0 (WN_step (current_do))) == OPR_SUB)
+      { // the loop goes down, don't miss '-' in (- non-const-stride)
+        OPCODE negop = OPCODE_make_op (OPR_NEG, WN_rtype (do_stride[i]), MTYPE_V);
+        do_stride[i] = WN_CreateExp1 (negop, do_stride[i]);
+      }
+#endif // KEY
+    }
+    else
+      do_stride[i] = WN_kid0(WN_kid0(WN_step(current_do)));
+
+    // first, we determine the operation type of do termination comparison.
+    // In the form: do_index opr const
+    // opr is supposed to be LE/GE, but since currently we don't standardize
+    // the loop, we also should include LT/GT.
+    if(( WN_kid0( WN_end( current_do )) != NULL ) &&
+       ( WN_operator( WN_kid0( WN_end( current_do ))) == OPR_LDID ) &&
+       ( WN_st( WN_kid0( WN_end( current_do ))) == do_id_st ) &&
+       ( WN_offsetx( WN_kid0( WN_end( current_do ))) == do_id_ofst )) 
+    {
+      is_kid0_do_id = TRUE;
+    }
+    else
+    {
+      is_kid0_do_id = FALSE;
+    }
+    is_LE[i] = (( WN_operator( WN_end( current_do )) == OPR_LT ) ||
+                ( WN_operator( WN_end( current_do )) == OPR_LE ))
+      ^ (is_kid0_do_id == FALSE);
+    
+    // These vars need to be type casted?
+    //  Create_Preg_or_Temp( do_index_type, "temp_limit", &limit_st, &limit_ofst );
+    wn = WN_COPY_Tree ( limit_node[i] );
+    wn_tmp = WN_Stid ( do_index_type[i], limit_ofst[i], 
+                       limit_st[i], ST_type(limit_st[i]), wn );
+    WN_INSERT_BlockLast( do_prefix, wn_tmp );
+
+    wn = WN_COPY_Tree ( base_node[i] );
+    wn_tmp = WN_Stid ( do_index_type[i], base_ofst[i], 
+                       base_st[i], ST_type(base_st[i]), wn );
+    WN_INSERT_BlockLast( do_prefix, wn_tmp );
+    //  Create_Temp( do_index_type, "do_upper", &local_upper );
+    //  if ((WN_operator(WN_end(current_do)) == OPR_LT) ||
+    //      (WN_operator(WN_end(current_do)) == OPR_GT))
+    //    wn = WN_Add ( do_index_type,
+    //		  Gen_MP_Load ( local_start, 0 ),
+    //		  WN_Mpy ( do_index_type,
+    //			   Gen_MP_Load ( local_ntrip, 0 ),
+    //			   WN_COPY_Tree ( do_stride )));
+    //  else
+    //    wn = WN_Sub ( do_index_type,
+    //		  WN_Add ( do_index_type,
+    //			   Gen_MP_Load ( local_start, 0 ),
+    //			   WN_Mpy ( do_index_type,
+    //				    Gen_MP_Load ( local_ntrip, 0 ),
+    //				    WN_COPY_Tree ( do_stride ))),
+    //		  WN_COPY_Tree ( do_stride ));
     // Maybe using limit_node itself is also OK.
     // Note that, the type of local vars may be wrong.
-//  wn = WN_COPY_Tree ( limit_node );
-  wn_tmp = WN_Stid ( do_index_type, 0, 
-    local_upper, ST_type(local_upper),
-    Gen_MP_Load( limit_st, limit_ofst ));
-  WN_linenum( wn_tmp ) = line_number;
-  WN_INSERT_BlockLast ( do_prefix, wn_tmp );
+    //  wn = WN_COPY_Tree ( limit_node );
+    wn_tmp = WN_Stid ( do_index_type[i], 0, 
+                       local_upper[i], ST_type(local_upper[i]),
+                       Gen_MP_Load( limit_st[i], limit_ofst[i] ));
+    WN_linenum( wn_tmp ) = line_number;
+    WN_INSERT_BlockLast ( do_prefix, wn_tmp );
   
-//  Create_Temp( do_index_type, "do_lower", &local_lower );
-  wn = WN_COPY_Tree( base_node );
-  wn_tmp = WN_Stid( do_index_type, 0, 
-                  local_lower, ST_type(local_lower), wn );
-  WN_linenum( wn_tmp ) = line_number;
-  WN_INSERT_BlockLast( do_prefix, wn_tmp );
+    //  Create_Temp( do_index_type, "do_lower", &local_lower );
+    wn = WN_COPY_Tree( base_node[i] );
+    wn_tmp = WN_Stid( do_index_type[i], 0, 
+                      local_lower[i], ST_type(local_lower[i]), wn );
+    WN_linenum( wn_tmp ) = line_number;
+    WN_INSERT_BlockLast( do_prefix, wn_tmp );
 
-//  Create_Temp( do_index_type, "do_stride", &local_stride );
+    //  Create_Temp( do_index_type, "do_stride", &local_stride );
   
-//  Create_Temp( MTYPE_I4, "last_iter", &last_iter );
+    //  Create_Temp( MTYPE_I4, "last_iter", &last_iter );
 
-  wn = WN_Stid( MTYPE_I4, 0, last_iter, ST_type( last_iter ), 
+    wn = WN_Stid( MTYPE_I4, 0, last_iter, ST_type( last_iter ), 
                   WN_CreateIntconst( OPC_I4INTCONST, 0 )); 
-  WN_linenum( wn ) = line_number;
-  WN_INSERT_BlockLast( do_prefix, wn );
+    WN_linenum( wn ) = line_number;
+    WN_INSERT_BlockLast( do_prefix, wn );
+
+    current_do = WN_first(WN_do_body(current_do));
+  }
 
     
   do_schedule = WN_CreateIntconst( OPC_I4INTCONST, schedule );
@@ -9320,7 +9664,51 @@ Transform_Do( WN * do_tree,
   // How about If last_iter, local_upper|lower != NULL?
   // And how to determine the type of RTL calls?
 
-  if (( schedule == OMP_SCHED_STATIC_EVEN ) ||
+  if ( collapse_count > 1 ) {
+    // Prefix code for Dynamic code
+    do_init_call = WN_Create( OPC_VCALL, 4 + 4 * collapse_count);
+    WN_st_idx( do_init_call ) = GET_MPRUNTIME_ST(MPR_OMP_COLLAPSE_INIT);
+    WN_Set_Call_Non_Data_Mod( do_init_call );
+    WN_Set_Call_Non_Data_Ref( do_init_call );
+#ifndef KEY // bug 4671
+    WN_Set_Call_Non_Parm_Mod( do_init_call );
+#endif
+    WN_Set_Call_Non_Parm_Ref( do_init_call );
+    WN_Set_Call_Parm_Ref( do_init_call );
+    WN_linenum( do_init_call ) = line_number;
+    
+    WN_kid( do_init_call, 0 ) = WN_CreateParm( MTYPE_I4, 
+        Gen_MP_Load( local_gtid, 0 ),
+        Be_Type_Tbl( MTYPE_I4 ), WN_PARM_BY_VALUE );
+    WN_kid( do_init_call, 1 ) = WN_CreateParm( MTYPE_I4, do_schedule, 
+        Be_Type_Tbl( MTYPE_I4 ), WN_PARM_BY_VALUE );
+    wn_tmp = WN_Integer_Cast( chunk_size, MTYPE_I8, WN_rtype( chunk_size ));
+    WN_kid( do_init_call, 2 ) = WN_CreateParm( MTYPE_I8,
+       wn_tmp, Be_Type_Tbl( MTYPE_I8 ), WN_PARM_BY_VALUE ); 
+    WN_kid( do_init_call, 3 ) = WN_CreateParm( MTYPE_U4,
+       WN_Intconst( MTYPE_U4, collapse_count), Be_Type_Tbl( MTYPE_U4 ), WN_PARM_BY_VALUE);
+
+    for (UINT32 i = 0; i < collapse_count; i++) {
+      is_do32 = (do_index_type[i] != MTYPE_I8 && do_index_type[i] != MTYPE_U8);
+      WN_kid( do_init_call, 4 * i + 4 ) = WN_CreateParm( MTYPE_U4, WN_Intconst(MTYPE_U4, (is_do32 ? 0 : 1)), Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+
+      wn_tmp = Gen_MP_Load( local_lower[i], 0 );
+      WN_kid( do_init_call, 4 * i + 5 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
+        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ), 
+        WN_PARM_BY_VALUE );
+      wn_tmp = Gen_MP_Load( local_upper[i], 0 );
+      WN_kid( do_init_call, 4 * i + 6 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
+        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ), 
+        WN_PARM_BY_VALUE );
+      wn_tmp = WN_COPY_Tree( do_stride[i] );
+      wn_tmp = WN_Integer_Cast( wn_tmp, is_do32 ? MTYPE_I4 : MTYPE_I8, 
+	  	 WN_rtype( wn_tmp )); 
+      WN_kid( do_init_call, 4 * i + 7 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
+        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ),
+        WN_PARM_BY_VALUE );
+    }
+       // The type of chunk size also need to be fixed.
+  } else if (( schedule == OMP_SCHED_STATIC_EVEN ) ||
       ( schedule == OMP_SCHED_STATIC )) 
 //      ( schedule == OMP_SCHED_ORDERED_STATIC_EVEN ) ||
 //      ( schedule == OMP_SCHED_ORDERED_STATIC ))
@@ -9349,17 +9737,17 @@ Transform_Do( WN * do_tree,
     WN_kid( do_init_call, 2 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
 #endif
-    wn_tmp = WN_Lda( Pointer_type, 0, local_lower );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_lower[0] );
     WN_kid( do_init_call, 2 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
-    wn_tmp = WN_Lda( Pointer_type, 0, local_upper );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_upper[0] );
     WN_kid( do_init_call, 3 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
-    wn_tmp = WN_Lda( Pointer_type, 0, local_stride );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_stride[0] );
     WN_kid( do_init_call, 4 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
        // What if the do_stride is not the same type as M_I4/ M_I8?
-    wn = WN_COPY_Tree( do_stride );
+    wn = WN_COPY_Tree( do_stride[0] );
     wn_tmp = WN_Integer_Cast( wn, is_do32 ? MTYPE_I4 : MTYPE_I8, 
 	  	 WN_rtype( wn )); 
     WN_kid( do_init_call, 5 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8, 
@@ -9371,8 +9759,7 @@ Transform_Do( WN * do_tree,
     WN_kid( do_init_call, 6 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ),
        WN_PARM_BY_VALUE ); 
-  }else 
-  {
+  } else {
     // Prefix code for Dynamic code
     do_init_call = WN_Create( OPC_VCALL, 6);
     WN_st_idx( do_init_call ) = GET_MPRUNTIME_ST( is_do32
@@ -9391,11 +9778,11 @@ Transform_Do( WN * do_tree,
         Be_Type_Tbl( MTYPE_I4 ), WN_PARM_BY_VALUE );
     WN_kid( do_init_call, 1 ) = WN_CreateParm( MTYPE_I4, do_schedule, 
         Be_Type_Tbl( MTYPE_I4 ), WN_PARM_BY_VALUE );
-    wn_tmp = Gen_MP_Load( local_lower, 0 );
+    wn_tmp = Gen_MP_Load( local_lower[0], 0 );
     WN_kid( do_init_call, 2 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ), 
        WN_PARM_BY_VALUE );
-    wn_tmp = Gen_MP_Load( local_upper, 0 );
+    wn_tmp = Gen_MP_Load( local_upper[0], 0 );
     WN_kid( do_init_call, 3 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
        wn_tmp, Be_Type_Tbl( is_do32 ? MTYPE_I4 : MTYPE_I8 ), 
        WN_PARM_BY_VALUE );
@@ -9403,7 +9790,7 @@ Transform_Do( WN * do_tree,
 //    WN_kid( do_init_call, 5 ) = WN_CreateParm( Pointer_type, wn_tmp,  
 //        WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
        // What if the do_stride is not the same type as M_I4/ M_I8?
-    wn_tmp = WN_COPY_Tree( do_stride );
+    wn_tmp = WN_COPY_Tree( do_stride[0] );
     wn_tmp = WN_Integer_Cast( wn_tmp, is_do32 ? MTYPE_I4 : MTYPE_I8, 
 	  	 WN_rtype( wn_tmp )); 
     WN_kid( do_init_call, 4 ) = WN_CreateParm( is_do32 ? MTYPE_I4 : MTYPE_I8,
@@ -9419,36 +9806,156 @@ Transform_Do( WN * do_tree,
 
   WN_INSERT_BlockLast( do_prefix, do_init_call );
 
-  if ( schedule == OMP_SCHED_STATIC_EVEN ) 
-//      ( schedule == OMP_SCHED_ORDERED_STATIC_EVEN )) 
+  if ( collapse_count > 1 ) {
+    // Rewrite DO body for Other SCHEDULEs
+    // while test
+    // need to be rewritten.
+    call_wn = WN_Create( OPC_I4CALL, 1 + 2 * collapse_count);
+    WN_st_idx( call_wn ) = GET_MPRUNTIME_ST(MPR_OMP_COLLAPSE_NEXT);
+    WN_Set_Call_Non_Data_Mod( call_wn );
+    WN_Set_Call_Non_Data_Ref( call_wn );
+#ifndef KEY // bug 4671
+    WN_Set_Call_Non_Parm_Mod( call_wn );
+#endif
+    WN_Set_Call_Non_Parm_Ref( call_wn );
+    WN_Set_Call_Parm_Mod( call_wn );
+    WN_Set_Call_Parm_Ref( call_wn );
+    WN_linenum( call_wn ) = line_number;
+    
+    WN_kid( call_wn, 0 ) = WN_CreateParm( MTYPE_I4, 
+        Gen_MP_Load( local_gtid, 0),
+        Be_Type_Tbl( MTYPE_I4 ), WN_PARM_BY_VALUE );
+#ifndef KEY
+    wn_tmp = WN_Lda( Pointer_type, 0, last_iter );
+    WN_kid( call_wn, 1 ) = WN_CreateParm( Pointer_type, wn_tmp,  
+        WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
+#endif
+    for (UINT32 i = 0; i < collapse_count; i++) {
+      wn_tmp = WN_Lda( Pointer_type, 0, local_lower[i] );
+      WN_kid( call_wn, 2 * (collapse_count - i) - 1 ) = WN_CreateParm( Pointer_type, wn_tmp,  
+        WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
+      wn_tmp = WN_Lda( Pointer_type, 0, local_upper[i] );
+      WN_kid( call_wn, 2 * (collapse_count - i)) = WN_CreateParm( Pointer_type, wn_tmp,  
+        WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
+       // What if the do_stride is not the same type as M_I4/ M_I8?
+    }
+    WN_INSERT_BlockLast( do_prefix , call_wn );
+
+    Create_Preg_or_Temp ( MTYPE_I4, "mpni_status", &return_st, &return_ofst );
+    GET_RETURN_PREGS(rreg1, rreg2, MTYPE_I4);
+    wn = WN_Stid ( MTYPE_I4, return_ofst, return_st, ST_type(return_st),
+		    WN_LdidPreg ( MTYPE_I4, rreg1 ));
+    WN_linenum(wn) = line_number;
+    WN_INSERT_BlockLast( do_prefix , wn );
+
+    while_test = Gen_MP_Load( return_st, return_ofst );
+    // while body
+    while_body = WN_CreateBlock( );
+    // insert do
+    Rewrite_Collapsed_Do ( while_body, do_tree, is_LE );
+    WN_INSERT_BlockLast( while_body, WN_COPY_Tree( call_wn ));
+    WN_INSERT_BlockLast( while_body, WN_COPY_Tree( wn )); 
+      // increase lower and upper.
+     
+    // replace original do with a new While wrapping do
+    while_wn = WN_CreateWhileDo( while_test, while_body );
+      // Does this cause new problems? if late operation must
+      // check the type of do_tree, we must take a new method
+      // to work around this.
+#ifdef KEY
+    {
+      // Initialize the do-loop index variable outside the while loop, so
+      // that a thread not doing any iteration does not land up with a 
+      // wrong (uninitialized) value of the index variable. This is 
+      // especially important for lastprivate handling which does a compare
+      // to find out the last iteration.
+      //
+      WN * current_do_tree = do_tree;
+      for (UINT i = 0; i < collapse_count; i++) {
+        WN * ldid_lower = WN_Ldid (TY_mtype (Ty_Table[ST_type (local_lower[i])]),
+                                   0,
+				   local_lower[i],
+				   ST_type (local_lower[i]));
+        ST * do_index = WN_st (WN_index (current_do_tree));
+        INT do_offset = WN_offset (WN_index (current_do_tree));
+        WN * init_do_index = WN_Stid (WN_rtype (ldid_lower),
+                                      do_offset,
+				      do_index,
+				      ST_type (do_index),
+				      ldid_lower);
+        WN_linenum (init_do_index) = WN_linenum(current_do_tree);
+        // Insert the initialization before the schedule_next function call
+        WN_INSERT_BlockBefore (do_prefix, call_wn, init_do_index);
+        current_do_tree = WN_first(WN_do_body(current_do_tree));
+      }
+    }
+#endif
+
+    do_tree = while_wn; 
+
+    // last thread node.
+    if( lastlocal_nodes || nested_lastlocal_nodes)
+    {
+#ifdef KEY
+      WN * old_do_tree = do_tree;
+      // generate an if-stmt to check if this is the last iteration, and then
+      // set last_iter, which will be checked to set lastprivate variables
+      if( is_LE[0] )
+      {
+        test_wn = WN_GT (do_index_type[0],
+                         Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
+
+      }
+      else
+      {
+        test_wn = WN_LT (do_index_type[0],
+                         Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
+      }
+      then_wn =  WN_CreateBlock( );
+      wn_tmp = WN_Stid ( MTYPE_I4 , 0, 
+        last_iter, ST_type( last_iter ), 
+		    WN_CreateIntconst( OPC_I4INTCONST, 1 ));
+      WN_INSERT_BlockLast( then_wn, wn_tmp );
+      else_wn = WN_CreateBlock( );
+      if_wn = WN_CreateIf( test_wn, then_wn, else_wn );
+      WN_linenum( if_wn ) = line_number;
+      WN_INSERT_BlockLast( do_suffix, if_wn );
+#endif
+      // Indeed, the RTL set the last_iter, so nothing to do.
+        // adjust lower/upper first.
+      // Flush/ barrier needed?
+    }
+  } else if ( schedule == OMP_SCHED_STATIC_EVEN ) 
   {
     // Rewrite DO body for STATIC EVEN SCHEDULE
     // If clause to fix upper returned by RTL
     // Must consider situation for stride < 0
       // adjust upper
-    if( is_LE )
+    if( is_LE[0] )
     {
-       test_wn = WN_GT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_GT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     else
     {
-       test_wn = WN_LT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_LT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     then_wn =  WN_CreateBlock( );
-    wn_tmp = WN_Stid ( do_index_type, 0, 
-      local_upper, ST_type(local_upper), 
-		  Gen_MP_Load( limit_st, limit_ofst ));
+    wn_tmp = WN_Stid ( do_index_type[0], 0, 
+      local_upper[0], ST_type(local_upper[0]), 
+		  Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     WN_INSERT_BlockLast( then_wn, wn_tmp );
     else_wn = WN_CreateBlock( );
     if_wn = WN_CreateIf( test_wn, then_wn, else_wn );
     WN_linenum( if_wn ) = line_number;
     WN_INSERT_BlockLast( do_prefix, if_wn );
 
-    Rewrite_Do_New( do_tree, local_lower, local_upper, NULL );
+    Rewrite_Do_New( do_tree, local_lower[0], local_upper[0], NULL );
     //return_wn = do_tree;
     // Maybe we should insert do_tree here.
     // Now, setup lastthread info. The lastiter is not set
@@ -9457,13 +9964,13 @@ Transform_Do( WN * do_tree,
 
     if ( lastlocal_nodes || nested_lastlocal_nodes )
     {
-      if( is_LE )
+      if( is_LE[0] )
       {
 // Bug 4660
 #ifdef KEY
-        test_wn = WN_GT (do_index_type,
+        test_wn = WN_GT (do_index_type[0],
                          Gen_MP_Load( WN_st(WN_kid0(do_tree)), WN_offsetx(WN_kid0(do_tree)) ),
-                         Gen_MP_Load( limit_st, limit_ofst ));
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
 
 #else
         test_wn = WN_CAND( WN_LE( do_index_type,
@@ -9478,9 +9985,9 @@ Transform_Do( WN * do_tree,
       {
 // Bug 4660
 #ifdef KEY
-        test_wn = WN_LT (do_index_type,
+        test_wn = WN_LT (do_index_type[0],
                          Gen_MP_Load( WN_st(WN_kid0(do_tree)), WN_offsetx(WN_kid0(do_tree)) ),
-                         Gen_MP_Load( limit_st, limit_ofst ));
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
 #else
         test_wn = WN_CAND( WN_GE( do_index_type,
                                   Gen_MP_Load( local_lower, 0 ),
@@ -9526,55 +10033,55 @@ Transform_Do( WN * do_tree,
   {
     // Rewrite DO body for STATIC SCHEDULE 
     // while test
-    if( is_LE)
+    if( is_LE[0])
     {
-      while_test = WN_LE( do_index_type,
-                          Gen_MP_Load( local_lower, 0 ),
-                          Gen_MP_Load( limit_st, limit_ofst ));
+      while_test = WN_LE( do_index_type[0],
+                          Gen_MP_Load( local_lower[0], 0 ),
+                          Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     else
     {
-      while_test = WN_GE( do_index_type,
-                          Gen_MP_Load( local_lower, 0 ),
-                          Gen_MP_Load( limit_st, limit_ofst ));
+      while_test = WN_GE( do_index_type[0],
+                          Gen_MP_Load( local_lower[0], 0 ),
+                          Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     // while body
     while_body = WN_CreateBlock( );
       // adjust upper
-    if( is_LE )
+    if( is_LE[0] )
     {
-       test_wn = WN_GT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_GT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     else
     {
-       test_wn = WN_LT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_LT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     then_wn =  WN_CreateBlock( );
-    wn_tmp = WN_Stid ( do_index_type, 0, 
-      local_upper, ST_type(local_upper), 
-		  Gen_MP_Load( limit_st, limit_ofst ));
+    wn_tmp = WN_Stid ( do_index_type[0], 0, 
+      local_upper[0], ST_type(local_upper[0]), 
+		  Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     WN_INSERT_BlockLast( then_wn, wn_tmp );
     else_wn = WN_CreateBlock( );
     if_wn = WN_CreateIf( test_wn, then_wn, else_wn );
     WN_linenum( if_wn ) = line_number;
     WN_INSERT_BlockLast( while_body, if_wn );
       // insert do
-    Rewrite_Do_New( do_tree, local_lower, local_upper, NULL);
+    Rewrite_Do_New( do_tree, local_lower[0], local_upper[0], NULL);
     WN_INSERT_BlockLast( while_body, do_tree );
       // increase lower and upper.
-    wn_tmp = WN_Add( do_index_type, 
-                     Gen_MP_Load( local_lower, 0 ),
-                     Gen_MP_Load( local_stride, 0 )); 
-    wn = Gen_MP_Store( local_lower, 0, wn_tmp );
+    wn_tmp = WN_Add( do_index_type[0], 
+                     Gen_MP_Load( local_lower[0], 0 ),
+                     Gen_MP_Load( local_stride[0], 0 )); 
+    wn = Gen_MP_Store( local_lower[0], 0, wn_tmp );
     WN_INSERT_BlockLast( while_body, wn );
-    wn_tmp = WN_Add( do_index_type,
-                     Gen_MP_Load( local_upper, 0 ),
-                     Gen_MP_Load( local_stride, 0 ));
-    wn = Gen_MP_Store( local_upper, 0, wn_tmp );
+    wn_tmp = WN_Add( do_index_type[0],
+                     Gen_MP_Load( local_upper[0], 0 ),
+                     Gen_MP_Load( local_stride[0], 0 ));
+    wn = Gen_MP_Store( local_upper[0], 0, wn_tmp );
     WN_INSERT_BlockLast( while_body, wn );
     
     // replace original do with a new While wrapping do
@@ -9595,33 +10102,33 @@ Transform_Do( WN * do_tree,
     if ( lastlocal_nodes || nested_lastlocal_nodes )
     {
         // adjust lower/upper first.
-      wn_tmp = WN_Sub( do_index_type, 
-                       Gen_MP_Load( local_lower, 0 ),
-                       Gen_MP_Load( local_stride, 0 )); 
-      wn = Gen_MP_Store( local_lower, 0, wn_tmp );
+      wn_tmp = WN_Sub( do_index_type[0], 
+                       Gen_MP_Load( local_lower[0], 0 ),
+                       Gen_MP_Load( local_stride[0], 0 )); 
+      wn = Gen_MP_Store( local_lower[0], 0, wn_tmp );
       WN_INSERT_BlockLast( do_suffix, wn );
-      wn_tmp = WN_Sub( do_index_type,
-                       Gen_MP_Load( local_upper, 0 ),
-                       Gen_MP_Load( local_stride, 0 ));
-      wn = Gen_MP_Store( local_upper, 0, wn_tmp );
+      wn_tmp = WN_Sub( do_index_type[0],
+                       Gen_MP_Load( local_upper[0], 0 ),
+                       Gen_MP_Load( local_stride[0], 0 ));
+      wn = Gen_MP_Store( local_upper[0], 0, wn_tmp );
       WN_INSERT_BlockLast( do_suffix, wn );
-      if( is_LE )
+      if( is_LE[0] )
       {
-        test_wn = WN_CAND( WN_LE( do_index_type,
-                                  Gen_MP_Load( local_lower, 0 ),
-                                  Gen_MP_Load( limit_st, limit_ofst )),
-                           WN_GE( do_index_type,
-                                  Gen_MP_Load( local_upper, 0 ),
-                                  Gen_MP_Load( limit_st, limit_ofst )));
+        test_wn = WN_CAND( WN_LE( do_index_type[0],
+                                  Gen_MP_Load( local_lower[0], 0 ),
+                                  Gen_MP_Load( limit_st[0], limit_ofst[0] )),
+                           WN_GE( do_index_type[0],
+                                  Gen_MP_Load( local_upper[0], 0 ),
+                                  Gen_MP_Load( limit_st[0], limit_ofst[0] )));
       }
       else
       {
-        test_wn = WN_CAND( WN_GE( do_index_type,
-                                  Gen_MP_Load( local_lower, 0 ),
-                                  Gen_MP_Load( limit_st, limit_ofst )),
-                           WN_LE( do_index_type,
-                                  Gen_MP_Load( local_upper, 0 ),
-                                  Gen_MP_Load( limit_st, limit_ofst )));
+        test_wn = WN_CAND( WN_GE( do_index_type[0],
+                                  Gen_MP_Load( local_lower[0], 0 ),
+                                  Gen_MP_Load( limit_st[0], limit_ofst[0] )),
+                           WN_LE( do_index_type[0],
+                                  Gen_MP_Load( local_upper[0], 0 ),
+                                  Gen_MP_Load( limit_st[0], limit_ofst[0] )));
       }
       then_wn =  WN_CreateBlock( );
       wn_tmp = WN_Stid ( MTYPE_I4 , 0, 
@@ -9678,13 +10185,13 @@ Transform_Do( WN * do_tree,
     WN_kid( call_wn, 1 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
 #endif
-    wn_tmp = WN_Lda( Pointer_type, 0, local_lower );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_lower[0] );
     WN_kid( call_wn, 1 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
-    wn_tmp = WN_Lda( Pointer_type, 0, local_upper );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_upper[0] );
     WN_kid( call_wn, 2 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
-    wn_tmp = WN_Lda( Pointer_type, 0, local_stride );
+    wn_tmp = WN_Lda( Pointer_type, 0, local_stride[0] );
     WN_kid( call_wn, 3 ) = WN_CreateParm( Pointer_type, wn_tmp,  
         WN_ty( wn_tmp ), WN_PARM_BY_REFERENCE );
        // What if the do_stride is not the same type as M_I4/ M_I8?
@@ -9701,29 +10208,29 @@ Transform_Do( WN * do_tree,
     // while body
     while_body = WN_CreateBlock( );
       // adjust upper
-    if( is_LE )
+    if( is_LE[0] )
     {
-       test_wn = WN_GT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_GT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     else
     {
-       test_wn = WN_LT( do_index_type,
-                        Gen_MP_Load( local_upper, 0 ),
-                        Gen_MP_Load( limit_st, limit_ofst ));
+       test_wn = WN_LT( do_index_type[0],
+                        Gen_MP_Load( local_upper[0], 0 ),
+                        Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     }
     then_wn =  WN_CreateBlock( );
-    wn_tmp = WN_Stid ( do_index_type, 0, 
-      local_upper, ST_type(local_upper), 
-		  Gen_MP_Load( limit_st, limit_ofst ));
+    wn_tmp = WN_Stid ( do_index_type[0], 0, 
+      local_upper[0], ST_type(local_upper[0]), 
+		  Gen_MP_Load( limit_st[0], limit_ofst[0] ));
     WN_INSERT_BlockLast( then_wn, wn_tmp );
     else_wn = WN_CreateBlock( );
     if_wn = WN_CreateIf( test_wn, then_wn, else_wn );
     WN_linenum( if_wn ) = line_number;
     WN_INSERT_BlockLast( while_body, if_wn );
       // insert do
-    Rewrite_Do_New( do_tree, local_lower, local_upper, local_stride);
+    Rewrite_Do_New( do_tree, local_lower[0], local_upper[0], local_stride[0]);
     WN_INSERT_BlockLast( while_body, do_tree );
     WN_INSERT_BlockLast( while_body, WN_COPY_Tree( call_wn ));
     WN_INSERT_BlockLast( while_body, WN_COPY_Tree( wn )); 
@@ -9743,10 +10250,10 @@ Transform_Do( WN * do_tree,
       // especially important for lastprivate handling which does a compare
       // to find out the last iteration.
       //
-      WN * ldid_lower = WN_Ldid (TY_mtype (Ty_Table[ST_type (local_lower)]),
+      WN * ldid_lower = WN_Ldid (TY_mtype (Ty_Table[ST_type (local_lower[0])]),
                                  0,
-				 local_lower,
-				 ST_type (local_lower));
+				 local_lower[0],
+				 ST_type (local_lower[0]));
       ST * do_index = WN_st (WN_index (old_do_tree));
       INT do_offset = WN_offset (WN_index (old_do_tree));
       WN * init_do_index = WN_Stid (WN_rtype (ldid_lower),
@@ -9768,18 +10275,18 @@ Transform_Do( WN * do_tree,
 #ifdef KEY
       // generate an if-stmt to check if this is the last iteration, and then
       // set last_iter, which will be checked to set lastprivate variables
-      if( is_LE )
+      if( is_LE[0] )
       {
-        test_wn = WN_GT (do_index_type,
+        test_wn = WN_GT (do_index_type[0],
                          Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
-                         Gen_MP_Load( limit_st, limit_ofst ));
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
 
       }
       else
       {
-        test_wn = WN_LT (do_index_type,
+        test_wn = WN_LT (do_index_type[0],
                          Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
-                         Gen_MP_Load( limit_st, limit_ofst ));
+                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
       }
       then_wn =  WN_CreateBlock( );
       wn_tmp = WN_Stid ( MTYPE_I4 , 0, 
@@ -9795,7 +10302,7 @@ Transform_Do( WN * do_tree,
         // adjust lower/upper first.
       // Flush/ barrier needed?
     }
-}
+  }
 
   WN_INSERT_BlockLast( return_wn, do_prefix );
   WN_INSERT_BlockLast( return_wn, do_tree );
@@ -9821,110 +10328,7 @@ Transform_Do( WN * do_tree,
 #endif // !KEY
 
   return return_wn;
-} // Transform_Do()
-
-/*  Rewrite do statement.  */
-//CAN BE DELETED.
-//TODO: delete and clean up this routine.
-static void 
-Rewrite_Do ( WN * do_tree )
-{
-  WN        *wn;
-  WN        *do_idname  = WN_index(do_tree);
-  ST        *do_id_st   = WN_st(do_idname);
-  WN_OFFSET  do_id_ofst = WN_offsetx(do_idname);
-  WN        *do_stride;
-  WN        *loop_info;
-  // The following variables move to global scope
-//  ST        *limit_st;
-//  WN_OFFSET  limit_ofst;
-
-  /* Generate do preamble code to calculate limit value */
-
-  if ((WN_operator(WN_kid0(WN_kid0(WN_step(do_tree)))) == OPR_LDID) &&
-      (WN_st(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_st) &&
-      (WN_offsetx(WN_kid0(WN_kid0(WN_step(do_tree)))) == do_id_ofst))
-    do_stride = WN_kid1(WN_kid0(WN_step(do_tree)));
-  else
-    do_stride = WN_kid0(WN_kid0(WN_step(do_tree)));
-
-  Create_Preg_or_Temp ( do_index_type, "do_limit", &limit_st, &limit_ofst );
-  if ((WN_operator(WN_end(do_tree)) == OPR_LT) ||
-      (WN_operator(WN_end(do_tree)) == OPR_GT))
-    wn = WN_Add ( do_index_type,
-		  Gen_MP_Load ( local_start, 0 ),
-		  WN_Mpy ( do_index_type,
-			   Gen_MP_Load ( local_ntrip, 0 ),
-			   WN_COPY_Tree ( do_stride )));
-  else
-    wn = WN_Sub ( do_index_type,
-		  WN_Add ( do_index_type,
-			   Gen_MP_Load ( local_start, 0 ),
-			   WN_Mpy ( do_index_type,
-				    Gen_MP_Load ( local_ntrip, 0 ),
-				    WN_COPY_Tree ( do_stride ))),
-		  WN_COPY_Tree ( do_stride ));
-  do_prefix = WN_Stid ( do_index_type, limit_ofst, limit_st, ST_type(limit_st),
-			wn );
-  WN_linenum(do_prefix) = line_number;
-
-  /* Fix up the do loop controls */
-
-/* Temporary fix for PV 381272.  Wopt cannot handle double convert of I8 -> I1/2
-   and so we coerce I8 to I4 first.  Note that the offset (4) is correct for
-   little endian systems only. */
-  if ((ST_sclass(local_start) == SCLASS_AUTO) &&
-      (ST_btype(local_start) == MTYPE_I8) &&
-      ((WN_desc(WN_start(do_tree)) == MTYPE_I1) ||
-       (WN_desc(WN_start(do_tree)) == MTYPE_I2))) { 
-    WN_kid0(WN_start(do_tree)) = WN_RLdid ( Promote_Type(MTYPE_I4), MTYPE_I4, 4,
-					    local_start, MTYPE_To_TY(MTYPE_I4));
-  } else { 
-/* End temporary fix for PV 381272. */
-    WN* wn_local_start = Gen_MP_Load(local_start, 0);
-    WN* wn_new_local_start = WN_Integer_Cast(wn_local_start, Promote_Type(WN_desc(WN_start(do_tree))), WN_rtype(wn_local_start));
-    WN_kid0(WN_start(do_tree)) = wn_new_local_start; 
-  } 
-
-  WN* wn_ldid = WN_Ldid(do_index_type, limit_ofst, limit_st, 
-    ST_type(limit_st));
-  WN* wn_cvt_ldid = wn_ldid; 
-  if (WN_rtype(wn_cvt_ldid) != WN_desc(WN_end(do_tree)))
-     wn_cvt_ldid = WN_Integer_Cast(wn_cvt_ldid, WN_desc(WN_end(do_tree)),
-       WN_rtype(wn_cvt_ldid));
-  if (WN_kid0(WN_end(do_tree)) == NULL) { 
-    WN_kid0(WN_end(do_tree)) = wn_cvt_ldid; 
-  } else { 
-    WN_kid1(WN_end(do_tree)) = wn_cvt_ldid;
-  } 
-
-  /* Fix up the optional LOOP_INFO node */
-
-  loop_info = WN_do_loop_info(do_tree);
-#ifndef KEY
-  if (loop_info)
-#else
-  // Bug 4809 - we will preserve the loop trip count information if the 
-  // original trip count is an integer constant. For MP DO loops, the loop
-  // bounds are determined at run-time. However, if the loop bounds for the 
-  // original loop was a compile time constant, it helps to transfer that 
-  // information to the later compilation phases (the trip count information
-  // is an estimate). In the case of STREAM -mp, this fix specifically lets the
-  // CG loop optimizer to convert stores to non-temporal stores because the
-  // loop trip count is now made available.
-  if (loop_info && (!WN_loop_trip(loop_info) || 
-		    !WN_operator_is(WN_loop_trip(loop_info), OPR_INTCONST)))
-#endif
-  if (loop_info) {
-    WN_loop_trip_est(loop_info) = 0;
-    WN_loop_depth(loop_info) = 1;
-    WN_Reset_Loop_Nz_Trip ( loop_info );
-    if (WN_loop_trip(loop_info)) {
-      WN_DELETE_Tree ( WN_loop_trip(loop_info) );
-      WN_set_loop_trip ( loop_info, Gen_MP_Load ( local_ntrip, 0 ));
-    }
-  }
-} // Rewrite_Do()
+}
 
 /*
 Scale FB for do_loop to reflect worksharing of its iterations among all
@@ -10137,10 +10541,10 @@ Transform_Parallel_Block ( WN * tree )
 		      "missing pragma (CRITICAL_SECTION_END) in MP processing");
 	  if (lock_st) {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-	    wn = Gen_End_Critical(local_gtid, lock_st,FALSE);
+	    wn = Gen_End_Critical(local_gtid, lock_st, FALSE);
 	  } else {
 	    Linenum_Pusher p(WN_Get_Linenum(cur_node));
-      wn = Gen_End_Critical(local_gtid, unnamed_lock_st,FALSE);
+            wn = Gen_End_Critical(local_gtid, unnamed_lock_st, FALSE);
 	  }
 	  WN_next(WN_prev(cur_node)) = wn;
 	  WN_prev(wn) = WN_prev(cur_node);
@@ -10209,6 +10613,9 @@ Transform_Parallel_Block ( WN * tree )
         //WN_INSERT_BlockAfter (tree, prev_node, Gen_OMP_End_Ordered());
         WN_DELETE_FromBlock (tree, cur_node);
         break;
+        
+    case WN_PRAGMA_TASK_BEGIN:
+        break;
 
 	default:
 	  Fail_FmtAssertion (
@@ -10269,7 +10676,6 @@ Transform_Parallel_Block ( WN * tree )
       mpt = save_mpt;
 
     } else if (is_region &&
-               WN_first(WN_region_pragmas(cur_node)) &&
 	       WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
                   WN_PRAGMA_SINGLE_PROCESS_BEGIN) {
 
@@ -10293,7 +10699,6 @@ Transform_Parallel_Block ( WN * tree )
 
 #ifdef KEY /* Bug 4828 */
     } else if (is_region &&
-               WN_first(WN_region_pragmas(cur_node)) &&
 	       WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
                   WN_PRAGMA_PWORKSHARE_BEGIN) {
 
@@ -10318,9 +10723,8 @@ Transform_Parallel_Block ( WN * tree )
 #endif
 
     } else if (is_region &&
-               WN_first(WN_region_pragmas(cur_node)) &&
-	             ( WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
-               WN_PRAGMA_MASTER_BEGIN)) {
+               WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
+                  WN_PRAGMA_MASTER_BEGIN) {
 
       BOOL save_comp_gen_construct = comp_gen_construct;
       comp_gen_construct = ( WN_pragma_compiler_generated(
@@ -10340,6 +10744,11 @@ Transform_Parallel_Block ( WN * tree )
       comp_gen_construct = save_comp_gen_construct; // restore old value
       mpt = save_mpt;
 
+    } else if (is_region &&
+               WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
+                  WN_PRAGMA_TASK_BEGIN) {
+      
+      /* Do nothing. This region will be handled properly during excution of lower_mp for nested PU. */
     } else {
       for (i = 0; i < WN_kid_count(cur_node); i++)
         if (WN_kid(cur_node, i) &&
@@ -10551,6 +10960,7 @@ Process_PDO ( WN * tree )
   WN_Delete ( cur_node );
 #endif
 
+  collapse_count = 1;
   while (cur_node = next_node) {
 
     next_node = WN_next(cur_node);
@@ -10696,6 +11106,10 @@ Process_PDO ( WN * tree )
 	    WN_Delete ( cur_node );
 	  break;
 
+        case WN_PRAGMA_COLLAPSE:
+          collapse_count = WN_pragma_arg1(cur_node);
+          break;
+
 	default:
 	  Fail_FmtAssertion (
 		  "out of context pragma (%s) in MP {region pragma} processing",
@@ -10773,7 +11187,7 @@ Process_PDO ( WN * tree )
     WN *nested_non_pod_finalization_nodes;
 
     if (non_pod_finalization_nodes) {
-        // In non-orphaned PDO, Process_Parallel_Region() will have
+        // In non-orphaned PDO, Process_MP_Region() will have
         // extracted non-POD finalization code (if any), so we re-insert it
       if (mpt != MPP_PDO)
         Fail_FmtAssertion("out of place non-POD finalization code");
@@ -10826,43 +11240,22 @@ Process_PDO ( WN * tree )
 
     /* Determine user's real do index and type. */
 
-    do_index_st = WN_st(WN_index(pdo_node));
+    Extract_Index_Info(pdo_node);
 
-    do_index_type = TY_mtype(ST_type(do_index_st));
-    if (do_index_type == MTYPE_I1 || do_index_type == MTYPE_I2)
-      do_index_type = MTYPE_I4;
-    else if (do_index_type == MTYPE_U1 || do_index_type == MTYPE_U2)
-      do_index_type = MTYPE_U4;
-
+    if (collapse_count == 1) {
 #if defined(TARG_X8664) || defined(TARG_MIPS)
-    // Bug 7275 - this depends on the library implementation
-    if (MTYPE_byte_size(do_index_type) == 4)
+      // Bug 7275 - this depends on the library implementation
+      if (MTYPE_byte_size(do_index_type[0]) == 4)
 #else 
-    if (do_index_type == MTYPE_I4)
+      if (do_index_type[0] == MTYPE_I4)
 #endif
-    {
-/*        if (lastthread_node)
-           fast_doacross = TRUE;
-        else if (ordered_node)
-           fast_doacross = FALSE;
-        else if (mpsched_node)
-           fast_doacross =
-             (WN_pragma_arg1(mpsched_node) == WN_PRAGMA_SCHEDTYPE_SIMPLE);
-        else if (pu_mpsched_node)
-           fast_doacross =
-             (WN_pragma_arg1(pu_mpsched_node) == WN_PRAGMA_SCHEDTYPE_SIMPLE);
-        else if (chunk_node || pu_chunk_node)
-           fast_doacross = FALSE;
-        else
-*/           fast_doacross = TRUE;
-    }
-    else
+        fast_doacross = TRUE;
+      else
+        fast_doacross = FALSE;
+    } else {
       fast_doacross = FALSE;
-        
-//    if( orphaned )
-//    {
+    }      
     Make_Local_Temps( );
-//    }
     /* Translate do statement itself. */
 
     Extract_Do_Info ( pdo_node );
@@ -11024,62 +11417,6 @@ Process_PDO ( WN * tree )
     WN *last = WN_last( return_wn );
     WN_INSERT_BlockAfter( body_block, prev_node, return_wn );
     prev_node = last;
-    // Why always 64?
-/*
-    if (nested_ordered_node && WN_pragma_omp(nested_ordered_node)) {
-      WN *order_begin;
-      order_begin = Gen_OMP_Pdo_Ordered_Begin(WN_kid0(nested_do_order_lb),
-                                              WN_kid0(nested_do_order_stride));
-      WN_INSERT_BlockAfter (body_block, prev_node, order_begin);
-      prev_node = order_begin;
-    }
-
-    if (numthreads_node)
-      wn = Gen_MP_BeginPDO_64 ( base_node, ntrip_node, stride_node,
-				WN_CreateIntconst ( OPC_I4INTCONST,
-						    num_constructs ),
-				WN_COPY_Tree ( WN_kid0(numthreads_node) ),
-				mpsched_wn, chunk_wn, is_omp );
-    else
-      wn = Gen_MP_BeginPDO_64 ( base_node, ntrip_node, stride_node,
-				WN_CreateIntconst ( OPC_I4INTCONST,
-						    num_constructs ),
-				WN_CreateIntconst ( OPC_I4INTCONST, 0 ),
-				mpsched_wn, chunk_wn, is_omp );
-
-
-    WN_INSERT_BlockAfter(body_block, prev_node, wn);
-    prev_node = wn;
-*/
-/*    wn1 = Gen_MP_NextIters_64 ( WN_CreateIntconst ( OPC_I4INTCONST,
-						    num_constructs ),
-				WN_Lda ( Pointer_type, 0, mpbase_st ),
-				WN_Lda ( Pointer_type, 0, mptrips_st ),
-				WN_Lda ( Pointer_type, 0, mpflags_st ),
-                                is_omp );
-    WN_INSERT_BlockAfter(body_block, prev_node, wn1);
-    prev_node = wn1;
-
-    Create_Preg_or_Temp ( MTYPE_I4, "mpni_status", &return_st, &return_ofst );
-    GET_RETURN_PREGS(rreg1, rreg2, MTYPE_I4);
-    wn2 = WN_Stid ( MTYPE_I4, return_ofst, return_st, ST_type(return_st),
-		    WN_LdidPreg ( MTYPE_I4, rreg1 ));
-    WN_linenum(wn2) = line_number;
-    WN_INSERT_BlockAfter(body_block, prev_node, wn2);
-    prev_node = wn2;
-
-    while_block = WN_CreateBlock ( );
-    WN_INSERT_BlockLast ( while_block, do_prefix );
-    WN_INSERT_BlockLast ( while_block, pdo_node );
-    WN_INSERT_BlockLast ( while_block, WN_COPY_Tree ( wn1 ) );
-    WN_INSERT_BlockLast ( while_block, WN_COPY_Tree ( wn2 ) );
-    wn = WN_CreateWhileDo ( WN_Ldid ( MTYPE_I4, return_ofst, return_st,
-				      ST_type(return_st) ),
-			    while_block );
-    WN_linenum(wn) = line_number;
-    WN_INSERT_BlockAfter(body_block, prev_node, wn);
-    prev_node = wn;
- */ 
 #ifdef KEY
     if (code_after_pdo) {
         // insert post-PDO sandwich code after all lowered PDO code
@@ -11728,11 +12065,11 @@ Process_Parallel_Do ( void )
 /*  Process the contents of a parallel region.  */
 
 static void 
-Process_Parallel_Region ( void )
+Process_MP_Region ( void )
 {
   WN *wn, *reduction_init_block = NULL, *reduction_store_block = NULL;
 
-  Is_True(mpt == MPP_PARALLEL_REGION, ("not in a PARALLEL region"));
+  Is_True(mpt == MPP_PARALLEL_REGION || mpt == MPP_TASK_REGION, ("not in a PARALLEL region or TASK region"));
 
   /* Initialization. */
 
@@ -11754,7 +12091,7 @@ Process_Parallel_Region ( void )
 
 
   Push_Some_Globals( );
-  Create_MicroTask( PAR_FUNC_REGION );
+  Create_MicroTask( mpt == MPP_PARALLEL_REGION ? PAR_FUNC_REGION : PAR_FUNC_TASK );
   Delayed_MP_Translation( stmt_block );
 
   /* Create any needed local temps. */
@@ -11793,14 +12130,15 @@ Process_Parallel_Region ( void )
   }
 
   Transform_Parallel_Block ( stmt_block );
-  Verify_No_MP(stmt_block);
 #ifdef KEY
   Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
 #endif
 
-  if (reduction_count)  /* Generate init/finish reduction code */
+  if (reduction_count) {  /* Generate init/finish reduction code */
+    Is_True(mpt == MPP_PARALLEL_REGION, ("reduction only allowed in parallel region"));
     Gen_MP_Reduction(var_table, local_count, &reduction_init_block,
                      &reduction_store_block);
+  }
 
   /* Consolidate all portions of nested parallel procedure */
 
@@ -11811,6 +12149,8 @@ Process_Parallel_Region ( void )
 			                  0, 0 ));
   if (firstprivate_block)
     WN_INSERT_BlockLast ( parallel_func, firstprivate_block );
+  if (mpt == MPP_TASK_REGION)
+    WN_INSERT_BlockLast ( parallel_func, Gen_Task_Body_Start() );
   if (reduction_init_block)
     WN_INSERT_BlockLast ( parallel_func, reduction_init_block );
   WN_INSERT_BlockLast ( parallel_func, stmt_block );
@@ -11822,6 +12162,11 @@ Process_Parallel_Region ( void )
   wn = WN_CreateReturn ( );
   WN_linenum(wn) = line_number;
   WN_INSERT_BlockLast ( parallel_func, wn );
+
+  /* Generate code to call __ompc_task_exit() before any return */
+
+  if (mpt == MPP_TASK_REGION)
+    Insert_Task_Exits(parallel_func);
 
   /* Transfer any mappings for nodes moved from parent to parallel function */
 
@@ -11858,7 +12203,7 @@ Process_Parallel_Region ( void )
   Current_pu = &Current_PU_Info_pu();
   Current_Map_Tab = pmaptab;
   Pop_Some_Globals( );
-} // Process_Parallel_Region()
+} // Process_MP_Region()
 
 // Localize variables in serialzed version of parallel region
 static void Localize_in_serialized_parallel (void)
@@ -11874,6 +12219,7 @@ static void Localize_in_serialized_parallel (void)
                                           var_table_l, &lps_l, FALSE , 
                                           &non_pod_finalization_nodes );
 }
+
 
 /*  This is the main routine used to process parallel do's and parallel
     regions.  It calls support routines to handle the contents of the
@@ -11900,6 +12246,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   WN   *chunk_wn;		/* Real wn for chunk node */
   WN   *mp_call_wn;		/* Real wn for mp call */
   WN   *if_cond_wn;		/* Real wn for if condition */
+  BOOL mp_if;			/* MP if transformation flag */
   ST   *lock_st;		/* ST for critical section lock */
   ST   *ntrip_st;		/* ST for loop trip count */
   ST   *return_st;		/* ST for mp status return */
@@ -11908,7 +12255,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   PREG_NUM rreg1, rreg2;	/* Pregs with I4 return values */
   INT32 num_criticals;		/* Number of nested critical sections */
   BOOL  while_seen;		/* While seen where do should be */
-  BOOL  mp_if;			/* MP if transformation flag */
 
   /* Validate input arguments. */
 
@@ -11981,6 +12327,8 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   firstprivate_block = NULL;
   liveout_block      = NULL;
   if_cond_wn         = NULL;
+  untied             = FALSE;
+  collapse_count     = 1;
   if_preamble_block  = NULL;
   if_postamble_block = NULL;
   do_preamble_block  = NULL;
@@ -12059,8 +12407,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_Delete( store_gtid );
       return return_wn;
 
-    } 
-    else if (WN_pragma(node) == WN_PRAGMA_TASKWAIT) {
+    } else if (WN_pragma(node) == WN_PRAGMA_TASKWAIT) {
       //orphaned taskwait, cca 06/27/08
       WN *call, *block;
       wn = WN_next(node);
@@ -12075,8 +12422,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_DELETE_Tree(node);
       WN_Delete(block);
       return return_wn;
-    }
-    else if (WN_pragma(node) == WN_PRAGMA_CHUNKSIZE) {
+    } else if (WN_pragma(node) == WN_PRAGMA_CHUNKSIZE) {
       pu_chunk_node = node;
       return (WN_next(node));
 
@@ -12152,7 +12498,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     case WN_PRAGMA_SINGLE_PROCESS_BEGIN:
       ++num_constructs;
       mpt = MPP_ORPHANED_SINGLE;
-      Strip_Nested_MP(WN_region_body(node), FALSE);
+      Strip_Nested_MP(WN_region_body(node), TRUE);
       wn = Gen_MP_SingleProcess_Region(node);
       if ((WN_next(wn) = WN_next(node)) != NULL)
         WN_prev(WN_next(wn)) = wn;
@@ -12187,6 +12533,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     case WN_PRAGMA_PARALLEL_WORKSHARE:
 #endif
       mpt = MPP_PARALLEL_REGION;
+      break;
+
+    case WN_PRAGMA_TASK_BEGIN:
+      mpt = MPP_TASK_REGION;
       break;
 
     default:
@@ -12456,10 +12806,17 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 	case WN_PRAGMA_DEFAULT:
 	  break;
 	  
-	  default:
-	    Fail_FmtAssertion (
-	       "out of context pragma (%s) in MP {top-level pragma} processing",
-	       WN_pragmas[WN_pragma(cur_node)].name);
+        case WN_PRAGMA_UNTIED:
+          untied = TRUE;
+          break;
+
+        case WN_PRAGMA_COLLAPSE:
+          collapse_count = WN_pragma_arg1(cur_node);
+          break;
+
+        default:
+          Fail_FmtAssertion ("out of context pragma (%s) in MP {top-level pragma} processing",
+                             WN_pragmas[WN_pragma(cur_node)].name);
 
 	}
 
@@ -12607,38 +12964,21 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     line_number = WN_linenum(do_node);
     Set_Error_Line(line_number);
 
-    do_index_st = WN_st(WN_index(do_node));
+    Extract_Index_Info(do_node);
 
-    do_index_type = TY_mtype(ST_type(do_index_st));
-    if (do_index_type == MTYPE_I1 || do_index_type == MTYPE_I2)
-      do_index_type = MTYPE_I4;
-    else if (do_index_type == MTYPE_U1 || do_index_type == MTYPE_U2)
-      do_index_type = MTYPE_U4;
-
+    if (collapse_count == 1) {
 #if defined(TARG_X8664) || defined(TARG_MIPS)
-    // Bug 7275 - this depends on the library implementation
-    if (MTYPE_byte_size(do_index_type) == 4)
+      // Bug 7275 - this depends on the library implementation
+      if (MTYPE_byte_size(do_index_type[0]) == 4)
 #else 
-    if (do_index_type == MTYPE_I4)
+        if (do_index_type[0] == MTYPE_I4)
 #endif
-    {
-/*      if (lastthread_node)
-        fast_doacross = TRUE;
-      else if (ordered_node)
-        fast_doacross = FALSE;
-      else if (mpsched_node)
-        fast_doacross =
-           (WN_pragma_arg1(mpsched_node) == WN_PRAGMA_SCHEDTYPE_SIMPLE);
-      else if (pu_mpsched_node)
-        fast_doacross =
-            (WN_pragma_arg1(pu_mpsched_node) == WN_PRAGMA_SCHEDTYPE_SIMPLE);
-      else if (chunk_node || pu_chunk_node)
-        fast_doacross = FALSE;
-      else
-*/        fast_doacross = TRUE;
-    }
-    else
+          fast_doacross = TRUE;
+        else
+          fast_doacross = FALSE;
+    } else {
       fast_doacross = FALSE;
+    }
 
     vsize = (local_count + 1) * sizeof(VAR_TABLE);
     var_table = (VAR_TABLE *) alloca ( vsize );
@@ -12691,17 +13031,19 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     /* do this always -- serial portion may have had a begin/end ordered */
     Cleanup_Ordered (serial_stmt_block, serial_stmt_block);
 
-    Create_Preg_or_Temp ( do_index_type, "trip_count", &ntrip_st, &ntrip_ofst );
-    temp_node = WN_Stid ( do_index_type, ntrip_ofst, ntrip_st, 
-		    ST_type(ntrip_st), ntrip_node );
-    WN_linenum(temp_node) = line_number;
+    if (collapse_count == 1) {
+      Create_Preg_or_Temp ( do_index_type[0], "trip_count", &ntrip_st, &ntrip_ofst );
+      temp_node = WN_Stid ( do_index_type[0], ntrip_ofst, ntrip_st, 
+                            ST_type(ntrip_st), ntrip_node );
+      WN_linenum(temp_node) = line_number;
 #ifdef KEY
-    if (!ntrip_calc)
+      if (!ntrip_calc)
 #endif
-    ntrip_calc = WN_CreateBlock ( );
-    WN_INSERT_BlockLast ( ntrip_calc, temp_node );
-    ntrip_node = WN_Ldid ( do_index_type, ntrip_ofst, ntrip_st,
-			   ST_type(ntrip_st) );
+        ntrip_calc = WN_CreateBlock ( );
+      WN_INSERT_BlockLast ( ntrip_calc, temp_node );
+      ntrip_node = WN_Ldid ( do_index_type[0], ntrip_ofst, ntrip_st,
+                             ST_type(ntrip_st) );
+    }
 
     if( numthreads_node )
     {
@@ -12788,7 +13130,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       serial_stmt_block = Copy_Non_MP_Tree ( stmt_block );
 
 
-    Process_Parallel_Region ( );
+    Process_MP_Region ( );
 
 #ifndef KEY // bug 7281
     if (is_omp) {
@@ -12798,7 +13140,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       if( numthreads_node )
       {
     	mp_call_wn = Gen_Fork ( parallel_proc, 
-          	WN_COPY_Tree ( WN_kid0 ( numthreads_node ))); 
+               WN_COPY_Tree ( WN_kid0 ( numthreads_node ))); 
       }
       else
       {
@@ -12832,7 +13174,30 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     RID_Delete ( Current_Map_Tab, node );
     WN_Delete ( node );
 
-  }
+  } else if (mpt == MPP_TASK_REGION) {
+
+    Collect_Default_Variables(stmt_block, firstprivate_nodes, WN_PRAGMA_FIRSTPRIVATE);
+
+    if (serial_stmt_block) {
+      Is_True(inside_versioning_if,
+              ("where did serial_stmt_block come from???"));
+      Move_Non_POD_Finalization_Code(serial_stmt_block);
+      Strip_Nested_MP ( serial_stmt_block, FALSE );
+    } else
+      serial_stmt_block = Copy_Non_MP_Tree ( stmt_block );
+
+    vsize = (local_count + 1) * sizeof(VAR_TABLE);
+    var_table = (VAR_TABLE *) alloca ( vsize );
+    BZERO ( var_table, vsize );
+
+    Process_MP_Region ( );
+
+    mp_call_wn = Gen_Task_Create ( parallel_proc );
+	
+    RID_Delete ( Current_Map_Tab, node );
+    WN_Delete ( node );
+    
+ }
 
   /* Build final code for parallel loops and regions. */
 
@@ -12879,11 +13244,11 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 	      WN_INSERT_BlockLast ( replace_block, ntrip_calc );
       if (if_node)
 	      if_cond_wn = WN_COPY_Tree ( WN_kid0(if_node) );
-      if (mpt == MPP_PARALLEL_DO) {
+      if (mpt == MPP_PARALLEL_DO && collapse_count == 1) {
            // The threshold can be more proper(other than 1). csc
-	      temp_node = WN_GT ( do_index_type, WN_Ldid ( do_index_type, ntrip_ofst,
+	      temp_node = WN_GT ( do_index_type[0], WN_Ldid ( do_index_type[0], ntrip_ofst,
 		                  ntrip_st, ST_type(ntrip_st) ), 
-                                  WN_Intconst ( do_index_type, 1 ));
+                                  WN_Intconst ( do_index_type[0], 1 ));
 	      if (if_cond_wn)
 	        if_cond_wn = WN_CAND ( if_cond_wn, temp_node );
 	      else
@@ -12995,6 +13360,8 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_INSERT_BlockLast ( replace_block, do_preamble_block );
     WN_INSERT_BlockLast ( replace_block, stmt_block );
 
+  } else if (mpt == MPP_TASK_REGION) {
+    WN_INSERT_BlockLast ( replace_block, mp_call_wn );
   }
 
 

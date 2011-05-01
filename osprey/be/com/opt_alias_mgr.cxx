@@ -454,7 +454,9 @@ ALIAS_MANAGER::ALIAS_MANAGER(WN *entryWN)
   _vec = CXX_NEW(DYN_ARRAY<POINTS_TO*>(&_mem_pool), &_mem_pool);
   _vec->Initidx(_preg_id);   // do not use the 0-entry and 1-entry.
   _map = WN_MAP32_Create(&_mem_pool);
+  WN_MAP_Set_dont_copy(_map, TRUE);
   _homing_map = WN_MAP32_Create(&_mem_pool);
+  WN_MAP_Set_dont_copy(_homing_map, TRUE);
   _last_alias_id = _preg_id;   // starting from preg id.
   _no_alias_info_id = New_alias_id();
 

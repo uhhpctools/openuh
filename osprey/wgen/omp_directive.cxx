@@ -112,6 +112,21 @@ expand_end_parallel ()
      WGEN_expand_end_parallel ();
 }
 
+void
+expand_start_task (gs_t stmt)
+{
+     WGEN_expand_start_task (stmt);
+     WGEN_Expand_Stmt (gs_omp_task_body(stmt));
+     expand_end_task ();
+
+}
+
+void
+expand_end_task ()
+{
+     WGEN_expand_end_task ();
+}
+
 
 
 extern void WGEN_Expand_DO (gs_t);

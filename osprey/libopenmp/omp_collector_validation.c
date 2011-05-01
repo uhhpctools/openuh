@@ -6,14 +6,11 @@
 
 const int OMP_COLLECTORAPI_HEADERSIZE=4*sizeof(int);
 
-/*This routine is to test the OMP_REQ_START request to the collector */
+/* This routine is to test the OMP_REQ_START request to the collector */
 
 void dummyfunc(OMP_COLLECTORAPI_EVENT event)
 {
   printf("\n** EVENT:%s **",OMP_EVENT_NAME[event-1]);
-  // omp_v_thread_t *p_vthread =  __ompc_get_current_v_thread();
-  //printf("Thread %d EVENT=%s STATE=%s\n",p_vthread->vthread_id,OMP_EVENT_NAME[event-1], OMP_STATE_NAME[p_vthread->state-1]);  
-
 }
 
 void fill_header(void *message, int sz, OMP_COLLECTORAPI_REQUEST rq, OMP_COLLECTORAPI_EC ec, int rsz, int append_zero)

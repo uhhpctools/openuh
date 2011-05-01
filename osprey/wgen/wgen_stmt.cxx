@@ -4024,6 +4024,10 @@ WGEN_Expand_Omp (gs_t stmt)
       expand_start_parallel_or_combined_parallel (stmt);
       break;
 
+    case GS_OMP_TASK:
+      expand_start_task (stmt);
+      break;
+
     case GS_OMP_CRITICAL:
       expand_start_critical (stmt);
       break;
@@ -4066,6 +4070,7 @@ WGEN_Expand_DO (gs_t stmt)
 {
   Is_True (gs_tree_code(stmt) == GS_OMP_FOR, ("Unexpected tree code"));
   gs_t init, incr, cond, body;
+  gs_int_t nest_cnt;
 
   WGEN_Record_Loop_Switch  (GS_DO_STMT);
 
@@ -4073,7 +4078,14 @@ WGEN_Expand_DO (gs_t stmt)
   incr = gs_omp_for_incr (stmt);
   cond = gs_omp_for_cond (stmt);
   body = gs_omp_for_body (stmt);
-  expand_start_do_loop (init, cond, incr);
+
+  nest_cnt = gs_tree_vec_length(init);
+  Is_True (nest_cnt == gs_tree_vec_length(incr), ("The length of incr vector and init vector should match"));
+  Is_True (nest_cnt == gs_tree_vec_length(cond), ("The length of cond vector and init vector should match"));
+
+  for (int i = nest_cnt - 1; i >= 0; i--)
+    expand_start_do_loop (gs_tree_vec_elt(init, i), gs_tree_vec_elt(cond, i), gs_tree_vec_elt(incr, i));
+
   while (body)
   {
     WGEN_Expand_Stmt (body);
@@ -4092,7 +4104,8 @@ WGEN_Expand_DO (gs_t stmt)
   }
 
   // loop ends
-  expand_end_do_loop ();
+  for (int i = 0; i < nest_cnt; i++)
+    expand_end_do_loop ();
 
   // label for break
   if (break_continue_info_stack [break_continue_info_i].break_label_idx)
@@ -4282,6 +4295,7 @@ WGEN_Expand_Stmt(gs_t stmt, WN* target_wn)
 
 #ifdef FE_GNU_4_2_0
     case GS_OMP_PARALLEL:
+    case GS_OMP_TASK:
     case GS_OMP_CRITICAL:
     case GS_OMP_SECTION:
     case GS_OMP_SECTIONS:

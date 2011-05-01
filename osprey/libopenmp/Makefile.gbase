@@ -76,11 +76,12 @@ CFILES = \
 	omp_util.c \
 	omp_queue.c \
 	omp_task.c \
-	pcl.c  \
-	omp_collector_util.c
+	pcl.c \
+	omp_collector_util.c \
+
 
 CXXFILES = \
-	omp_init.cxx
+	omp_init.cxx \
 
 ifeq ($(BUILD_COMPILER), GNU)
 NO_UNWIND=-fno-unwind-tables
@@ -90,7 +91,7 @@ endif
 
 # Adding -fno-exceptions to avoid EH related stuffs, 
 #  which may cause undefined symbols in C program
-CXXFLAGS += -fno-exceptions -nostdinc++ $(NO_UNWIND)
+CXXFLAGS += -fno-exceptions $(NO_UNWIND)
 
 default:
 	$(MAKE)  first

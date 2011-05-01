@@ -43,6 +43,7 @@
 #include "omp_util.h"
 #include "pcl.h"
 #include <time.h>
+#include <unistd.h>
 
 /* Interfaces have already been defined in omp_rtl.h.
  * Since implementations are included here, not include
@@ -50,6 +51,17 @@
  */
 
 extern pthread_mutex_t __omp_hash_table_lock;
+
+extern int __ompc_init_rtl(int num_threads);
+
+extern int __ompc_check_num_threads(const int _num_threads);
+extern void __ompc_expand_level_1_team(int new_num_threads);
+
+static inline void __ompc_check_rtl_init()
+{
+  if (__omp_rtl_initialized == 0)
+    __ompc_init_rtl(0);
+}
 
 inline void __ompc_set_nested(const int __nested)
 {
@@ -74,6 +86,7 @@ inline int __ompc_get_nested(void)
 
 inline int __omp_get_cpu_num()
 {
+#ifndef TARG_LOONGSON
   cpu_set_t cpuset;
   int return_val, i, cur_count = 0;
 
@@ -84,38 +97,26 @@ inline int __omp_get_cpu_num()
     if (CPU_ISSET(i, &cpuset)) cur_count ++;
 
   return cur_count;
+#else
+  return (int) sysconf(_SC_NPROCESSORS_ONLN);
+#endif
 }
 
 inline int __ompc_get_max_threads(void)
 {
   /*Could be called in 1. sequential part or 2. parallel region
 
-    1.  for sequential part invoking: 
+  1.  for sequential part invoking: 
     return the value of OMP_NUM_THREADS or
-    number of available processors
+		    number of available processors
     cannot use the internal var because the RTL may not yet been initialized!!
-    2. for a parallel region: return the initialized internal var.
-    By Liao. 8/30/2006 bug 157
-    */
+  2. for a parallel region: return the initialized internal var.
+  */
   char *env_var_str;
   int  env_var_val;
 
-  if (__omp_rtl_initialized == 1)
-    return __omp_nthreads_var;
-  else {
-    /*
-    env_var_str = getenv("OMP_NUM_THREADS");
-    if (env_var_str != NULL) {
-      sscanf(env_var_str, "%d", &env_var_val);
-      Is_Valid(env_var_val > 0, ("OMP_NUM_THREAD should > 0"));
-      if (env_var_val > __omp_max_num_threads)
-        env_var_val = __omp_max_num_threads;
-      return env_var_val;
-    } 
-    else
-    */
-      return __omp_get_cpu_num(); /* return Get_SMP_CPU_num();*/
-  }
+  __ompc_check_rtl_init();
+  return __omp_nthreads_var;
 }
 
 inline int __ompc_get_num_procs(void)
@@ -129,6 +130,8 @@ inline int __ompc_get_num_procs(void)
 inline void __ompc_set_num_threads(const int __num_threads)
 {
   int num_threads;
+
+  __ompc_check_rtl_init();
 
   // check the validity of _num_threads
   num_threads = __ompc_check_num_threads(__num_threads);
@@ -286,6 +289,7 @@ inline omp_team_t * __ompc_get_current_team(void)
 
 extern __thread int total_tasks;
 extern long int __omp_spin_count; // defined in omp_thread.c
+extern __thread int total_tasks;
 
 /* Should not be called directly, use __ompc_barrier instead*/
 inline void __ompc_barrier_wait(omp_team_t *team)
@@ -300,21 +304,20 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 
   barrier_flag = *barrier_flag_p;
 
-  /*
   __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
 
-  while (__omp_level_1_team_manager.num_tasks != 0) {
+  while(__omp_level_1_team_manager.num_tasks != 0) {
     __ompc_task_schedule(&next);
-    if (next != NULL) {
+    if(next != NULL) {
       __ompc_task_switch(__omp_level_1_team_tasks[__omp_myid], next);
     }
   }
-  */
 
   new_count = __ompc_atomic_inc(&team->barrier_count);
 
   if (new_count == team->team_size) {
     /* The last one reset flags*/
+    __omp_level_1_team_manager.num_tasks += new_count;
     team->barrier_count = 0;
     team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
 
@@ -364,11 +367,9 @@ inline void __ompc_barrier(void)
   __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR); 
   if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
-    //		if (__omp_level_1_team_size != 1)
-    //		{
     __ompc_barrier_wait(&__omp_level_1_team_manager);
     __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
-     __ompc_set_state(THR_WORK_STATE);
+    __ompc_set_state(THR_WORK_STATE);
     return;
     //		}
     //		else
@@ -382,19 +383,19 @@ inline void __ompc_barrier(void)
   temp_v_thread = __ompc_get_current_v_thread();
   if(temp_v_thread->team_size == 1) {
     __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
-     __ompc_set_state(THR_WORK_STATE);
+    __ompc_set_state(THR_WORK_STATE);
     return;
   }
   else {
     __ompc_barrier_wait(temp_v_thread->team);
   }
-  __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
-   __ompc_set_state(THR_WORK_STATE);
+__ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+__ompc_set_state(THR_WORK_STATE);
 }
 
 inline void __ompc_ebarrier(void)
 {
-  omp_v_thread_t *temp_v_thread;
+    omp_v_thread_t *temp_v_thread;
    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
     p_vthread->thr_ebar_state_id++;
   __ompc_set_state(THR_EBAR_STATE);
@@ -418,42 +419,15 @@ inline void __ompc_ebarrier(void)
   /* other situations*/
   temp_v_thread = __ompc_get_current_v_thread();
   if(temp_v_thread->team_size == 1) {
-    __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
-     __ompc_set_state(THR_WORK_STATE);
+    __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+    __ompc_set_state(THR_WORK_STATE);
     return;
-    }
+  }
   else {
     __ompc_barrier_wait(temp_v_thread->team);
   }
-   __ompc_set_state(THR_WORK_STATE);
-  __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
-}
-
-/* Check the _num_threads against __omp_max_num_threads*/
-int
-__ompc_check_num_threads(const int _num_threads)
-{
-  int num_threads = _num_threads;
-  Is_Valid( num_threads > 0,
-	    ("number of threads must be positive!"));
-
-  if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
-    /* request for level 1 threads*/
-    if (num_threads - __omp_level_1_team_alloc_size > __omp_max_num_threads) {
-      /* Exceed current limitat*/
-      Warning(" Exceed the thread number limit: Reduce to Max");
-      num_threads = __omp_level_1_team_alloc_size + __omp_max_num_threads;
-    }
-  } else {/* Request for nest team*/
-    if ((num_threads - 1) > __omp_max_num_threads) {
-      /* Exceed current limit*/
-      /* The master is already there, need not to be allocated*/
-      Warning(" Exceed the thread number limit: Reduce to Max");
-      num_threads = __omp_max_num_threads + 1; 
-    } 
-  }
-
-  return num_threads;
+  __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+  __ompc_set_state(THR_WORK_STATE);
 }
 
 /* Exposed API should be moved to somewhere else, instead of been inlined*/
@@ -480,6 +454,7 @@ inline void __ompc_end(void)
   /* do nothing */
 }
 
+#ifndef TARG_LOONGSON
 inline void __omp_get_available_processors()
 {
   cpu_set_t cpuset;
@@ -542,5 +517,6 @@ inline void __ompc_bind_pthread_to_cpu(pthread_t thread)
   cur_cpu_to_bind = (cur_cpu_to_bind + 1) % __omp_core_list_size; 
 
 }
+#endif //TARG_LOONGSON
 
 #endif /* __omp_rtl_thread_included */

@@ -39,7 +39,9 @@
  */
 
 typedef int 	  omp_int32;
+typedef unsigned  omp_uint32;
 typedef long long omp_int64;
+typedef unsigned long long omp_uint64;
 typedef float	  omp_real32;
 typedef double	  omp_real64;
 typedef int	  omp_bool;

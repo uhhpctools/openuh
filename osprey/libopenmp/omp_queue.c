@@ -30,7 +30,6 @@ void __ompc_task_q_init(omp_task_q_t *tq)
   if(tq->tail == NULL)
     printf("tail = NULL\n");
 
-
   tq->size = 0;
   tq->head->next = tq->tail;
   tq->tail->prev = tq->head;
@@ -41,7 +40,6 @@ void __ompc_task_q_init(omp_task_q_t *tq)
 void __ompc_task_q_get_head(omp_task_q_t *tq, omp_task_t **task)
 {
   __ompc_lock(&tq->lock);
-
   if(tq->head->next == tq->tail) {
     *task = NULL;
   } else {
@@ -86,25 +84,24 @@ void __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task)
 
 void __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task)
 {
-    omp_task_t *temp;
+  omp_task_t *temp;
 
-    __ompc_lock(&tq->lock);
+  __ompc_lock(&tq->lock);
 #ifdef TASK_DEBUG
-    printf("%d: putting %X on quueue %lu\n", __omp_myid, task, tq);
-    printf("%d: tail = %X; tail->prev = %X;\n", __omp_myid, tq->tail, tq->tail->prev);
+  printf("%d: putting %X on quueue %lu\n", __omp_myid, task, tq);
+  printf("%d: tail = %X; tail->prev = %X;\n", __omp_myid, tq->tail, tq->tail->prev);
 #endif
-    temp = tq->tail->prev;
-    tq->tail->prev = task;
-    task->next = tq->tail;
-    task->prev = temp;
-    temp->next = task;
+  temp = tq->tail->prev;
+  tq->tail->prev = task;
+  task->next = tq->tail;
+  task->prev = temp;
+  temp->next = task;
 #ifdef TASK_DEBUG
-    printf("%d: task->prev = %X; task->next = %X\n", __omp_myid, task->prev, task->next);
+  printf("%d: task->prev = %X; task->next = %X\n", __omp_myid, task->prev, task->next);
 #endif
-    tq->size = tq->size + 1;
-    __ompc_unlock(&tq->lock);
+  tq->size = tq->size + 1;
+  __ompc_unlock(&tq->lock);
 }
-
 
 
 /* old task queue implementation */

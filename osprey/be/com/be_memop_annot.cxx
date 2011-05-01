@@ -264,6 +264,7 @@ WN_MEMOP_ANNOT_MGR::Init (void) {
   MEMOP_ANNOT_MGR::Init (); 
   if (_wn_map != WN_MAP_UNDEFINED) { WN_MAP_Delete (_wn_map);}
   _wn_map = WN_MAP_Create (_mp);
+  WN_MAP_Set_dont_copy(_wn_map, TRUE);
 }
 
 WN_MEMOP_ANNOT_MGR::WN_MEMOP_ANNOT_MGR (MEM_POOL* mp): 

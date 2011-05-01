@@ -2348,7 +2348,7 @@ openmp_construct:
         |  atomic_construct
         |  ordered_construct
         |  sl2_sections_construct
-        |  task_construct
+	|  task_construct
         ;
 
 sl2_sections_construct:
@@ -2434,11 +2434,12 @@ sl2_section_construct:
         }      	   
         ;
 
+                                                                                
 pragma_directives:
         barrier_directive
         | flush_directive
         | threadprivate_directive
-    {}
+	{}
 	| taskwait_directive
         | options_directive
 	| exec_freq_directive
@@ -2722,6 +2723,7 @@ task_construct:
 	  add_stmt (build_omp_stmt (task_cons_e, NULL));
 	  $$ = NULL;
 	}
+    ;
 
 task_directive:
         PRAGMA_OMP TASK '\n'

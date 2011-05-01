@@ -2522,6 +2522,9 @@ static void Lower_Atomic(WN *atomic)
 {
   WN *store = WN_next(atomic);
 
+#ifdef TARG_LOONGSON
+  Atomic_Using_Critical(atomic, store);
+#else
   if (OPCODE_is_store(WN_opcode(store)) && 
 	(!WN_kid_count(WN_kid0(store))) || 
 	(OPCODE_is_load(WN_opcode(WN_kid0(store))))) {
@@ -2585,6 +2588,7 @@ static void Lower_Atomic(WN *atomic)
   default:
     Fail_FmtAssertion("invalid ATOMIC_Lowering_Class");
   }
+#endif //TARG_LOONGSON
 }
 
   // Determine lowering class of an ATOMIC, also validates that atomic is

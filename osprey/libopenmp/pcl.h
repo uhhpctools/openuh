@@ -28,6 +28,7 @@
 extern "C" {
 #endif
 
+
 #define CO_USE_UCONEXT
 
 #if defined(CO_USE_UCONEXT)
@@ -51,16 +52,16 @@ typedef enum {
 
 
 typedef struct s_co_ctx {
-	co_core_ctx_t cc;
+  co_core_ctx_t cc;
 } co_ctx_t;
 
 typedef struct s_coroutine {
-	co_ctx_t ctx;
-	int alloc;
-	struct s_coroutine *caller;
-	struct s_coroutine *restarget;
-	void (*func)(void *);
-	void *data;
+  co_ctx_t ctx;
+  int alloc;
+  struct s_coroutine *caller;
+  struct s_coroutine *restarget;
+  void (*func)(void *);
+  void *data;
 
   struct s_coroutine *next;
   struct s_coroutine *prev;

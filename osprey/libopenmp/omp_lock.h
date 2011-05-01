@@ -67,6 +67,7 @@ typedef struct {
 
 #endif
 
+
 static inline void
 __ompc_init_spinlock(ompc_spinlock_t *lck_p)
 {

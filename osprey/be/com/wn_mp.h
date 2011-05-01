@@ -92,7 +92,7 @@
 extern "C" {
 #endif
 
-extern WN * lower_mp (WN *, WN *, INT32);
+extern WN * lower_mp (WN * block, WN * node, INT32 actions);
 extern void LowerMP_PU_Init (void);
 
 extern WN * Gen_MP_Getlock ( ST * lock );
@@ -117,6 +117,7 @@ typedef enum {
   MPP_ORPHANED_PDO,
   MPP_PARALLEL_DO,
   MPP_PARALLEL_REGION,
+  MPP_TASK_REGION,
   MPP_MASTER,
   MPP_ORPHANED_MASTER,
 #ifdef KEY /* Bug 4828 */

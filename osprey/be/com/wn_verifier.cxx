@@ -240,6 +240,7 @@ WN_Verifier::WN_Verifier(WN *wn)
   MEM_POOL_Initialize(&_mem_pool, "Verifier_Pool", FALSE);
   MEM_POOL_Push(&_mem_pool);
   _map = WN_MAP_Create(&_mem_pool);
+  WN_MAP_Set_dont_copy(_map, TRUE);
   
   // Empty WHIRL tree is OK
 

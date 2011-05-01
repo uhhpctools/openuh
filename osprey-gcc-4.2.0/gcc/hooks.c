@@ -278,6 +278,14 @@ hook_tree_tree_tree_null (tree t0 ATTRIBUTE_UNUSED, tree t1 ATTRIBUTE_UNUSED)
   return NULL;
 }
 
+tree
+hook_tree_tree_tree_tree_null (tree t0 ATTRIBUTE_UNUSED,
+			       tree t1 ATTRIBUTE_UNUSED,
+			       tree t2 ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
 /* Generic hook that takes a rtx and returns a NULL string.  */
 const char *
 hook_constcharptr_rtx_null (rtx r ATTRIBUTE_UNUSED)

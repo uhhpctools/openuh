@@ -37,7 +37,7 @@
  * include it in the RTL implementation.
  */
 
-#define frame_pointer_t void*
+typedef void *frame_pointer_t;
 
 typedef int omp_int32;
 typedef long long omp_int64;
@@ -48,7 +48,7 @@ typedef omp_int32 omp_tid;
 
 typedef void (*omp_micro)(omp_int32 , frame_pointer_t);
 typedef void (*omp_task_func)(void *args);
-typedef void (*omp_cond_func)();
+typedef int (*omp_cond_func)();
 
 typedef enum {
   OMP_SCHED_UNKNOWN             = 0,

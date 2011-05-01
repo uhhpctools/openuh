@@ -819,6 +819,16 @@ static void WGEN_process_omp_clause (gs_t clauses, WN * region = 0)
     }
     break;
 
+    case GS_OMP_CLAUSE_UNTIED:
+      WGEN_Set_Cflag(clause_untied); 
+      wn = WN_CreatePragma(WN_PRAGMA_UNTIED, (ST_IDX)NULL, 0, 0);
+      break;
+
+    case GS_OMP_CLAUSE_COLLAPSE:
+      wn = WN_CreateXpragma(WN_PRAGMA_COLLAPSE, (ST_IDX) NULL, 1);
+      WN_kid0(wn) = WGEN_Expand_Expr (gs_omp_clause_collapse_level(clauses));
+      break;
+
     default:
       DevWarn ("WGEN_process_omp_clause: unhandled OpenMP clause");
   }
@@ -832,6 +842,16 @@ static void WGEN_process_omp_clause (gs_t clauses, WN * region = 0)
       WN_INSERT_BlockLast(WN_region_pragmas(region), wn);
     else
       WGEN_Stmt_Append (wn, Get_Srcpos());
+  }
+}
+
+void WGEN_process_omp_for_collapse (gs_t stmt, WN * region)
+{
+  UINT collapse_count = gs_tree_vec_length(gs_omp_for_init(stmt));
+  if (collapse_count > 1) {
+    WN * collapse = WN_CreatePragma(WN_PRAGMA_COLLAPSE, (ST *)NULL, collapse_count, 0);
+    WN_set_pragma_omp(collapse);
+    WN_INSERT_BlockLast(WN_region_pragmas(region), collapse);
   }
 }
 
@@ -898,6 +918,68 @@ void WGEN_expand_end_parallel ()
 
 
 
+
+void WGEN_expand_start_task (gs_t stmt)
+{
+  /* create a region on current block */
+       
+  WN * region = WGEN_region(REGION_KIND_MP);
+
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_TASK_BEGIN, 
+       	                     (ST_IDX) NULL, 
+       	                     0, 
+       	                     0);   
+  WN_set_pragma_omp(wn);
+  WGEN_Stmt_Append (wn, Get_Srcpos());
+       
+  ///// omp check stack action ///////
+  SRCPOS srcpos = Get_Srcpos();
+  WGEN_CS_push(wgen_omp_task, SRCPOS_linenum(srcpos),
+               SRCPOS_filenum(srcpos));
+  WGEN_Set_Prag(WGEN_Stmt_Top());
+  WGEN_Set_Region (region);
+
+
+  /////required?///////
+  Set_PU_has_mp (Get_Current_PU ());
+  Set_FILE_INFO_has_mp (File_info);
+  Set_PU_uplevel (Get_Current_PU ());
+
+  gs_t clauses = gs_omp_task_clauses (stmt);
+
+  for (; clauses; clauses = gs_omp_clause_chain(clauses))
+    WGEN_process_omp_clause(clauses, region);
+
+  WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
+
+  if (lang_cplus)
+  {
+    if (!dtor_call_stack.empty() &&
+        WN_operator (dtor_call_stack.top()) == OPR_CALL)
+      dtor_call_stack.push (region);
+
+    if (!local_node_stack.empty() &&
+        WN_operator (local_node_stack.top()) == OPR_PRAGMA)
+      local_node_stack.push (region);
+  }
+}
+
+void WGEN_expand_end_task ()
+{
+    if (lang_cplus)
+    {
+      WN * wn = WGEN_Stmt_Top ();
+      WGEN_maybe_call_dtors (wn);
+      WGEN_maybe_localize_vars (wn);
+      WGEN_maybe_do_eh_cleanups ();
+    }
+
+    WGEN_Stmt_Pop (wgen_stmk_scope);
+    WGEN_CS_pop (wgen_omp_task);
+};
+
 static WN * Setup_MP_Enclosing_Region (void);
 
 void WGEN_expand_start_for (gs_t stmt)
@@ -956,6 +1038,8 @@ void WGEN_expand_start_for (gs_t stmt)
     region = enclosing_region;
   for (; clauses; clauses = gs_omp_clause_chain(clauses))
     WGEN_process_omp_clause(clauses, region);
+
+  WGEN_process_omp_for_collapse(stmt, region);
 
   WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
 
@@ -1277,6 +1361,8 @@ void WGEN_expand_start_parallel_for (gs_t stmt)
 
   for (; clauses; clauses = gs_omp_clause_chain(clauses))
     WGEN_process_omp_clause(clauses);
+
+  WGEN_process_omp_for_collapse(gs_bind_expr_body(gs_omp_parallel_body(stmt)), region);
 
   // Now process any clauses in enclosed FOR pragma
   stmt = gs_omp_parallel_body(stmt);
@@ -1730,6 +1816,29 @@ void  WGEN_expand_barrier ()
        Set_PU_uplevel (Get_Current_PU ());
        
        WGEN_CS_pop(wgen_omp_barrier);
+}
+
+void  WGEN_expand_taskwait ()
+{
+       WN *wn;
+       wn = WN_CreatePragma(WN_PRAGMA_TASKWAIT, 
+                             (ST_IDX) NULL,
+                             0,
+                             0);   
+       WN_set_pragma_omp(wn);
+       WGEN_Stmt_Append (wn, Get_Srcpos());
+       //////////////// OPENMP CHECK STACK /////////////
+       SRCPOS srcpos = Get_Srcpos();
+       WGEN_CS_push(wgen_omp_taskwait,SRCPOS_linenum(srcpos), SRCPOS_filenum(srcpos));
+    
+    //   WGEN_check_barrier();
+ 
+       /////required?///////
+       Set_PU_has_mp (Get_Current_PU ());
+       Set_FILE_INFO_has_mp (File_info);
+       Set_PU_uplevel (Get_Current_PU ());
+       
+       WGEN_CS_pop(wgen_omp_taskwait);
 }
 
 

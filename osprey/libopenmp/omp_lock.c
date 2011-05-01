@@ -44,7 +44,7 @@
 #include "omp_sys.h"
 
 extern int __omp_spin_user_lock;
-omp_int_t omp_get_thread_num(void);
+
 inline void 
 __ompc_init_lock (volatile ompc_lock_t *lp)
 {
@@ -72,8 +72,8 @@ __ompc_lock_s(volatile ompc_lock_t *lp)
       __ompc_event_callback(OMP_EVENT_THR_BEGIN_LKWT);
       pthread_mutex_lock((pthread_mutex_t *)lp);
       __ompc_event_callback(OMP_EVENT_THR_END_LKWT);
-  }
-   __ompc_set_state(THR_WORK_STATE);
+    }
+  __ompc_set_state(THR_WORK_STATE);
 }
 
 
@@ -283,9 +283,9 @@ inline void
 __ompc_critical(int gtid, volatile ompc_lock_t **lck)
 {
   __ompc_set_state(THR_OVHD_STATE);
-  if (*lck ==NULL) {
+  if (*lck == NULL) {
     __ompc_lock_spinlock(&_ompc_thread_lock);
-    if ((ompc_lock_t*)*lck == NULL){
+    if ((ompc_lock_t*)*lck == NULL) {
       // put the shared data aligned with cache line
       volatile ompc_lock_t* new_lock = 
         aligned_malloc(sizeof(ompc_lock_t), CACHE_LINE_SIZE);
@@ -297,28 +297,28 @@ __ompc_critical(int gtid, volatile ompc_lock_t **lck)
     __ompc_unlock_spinlock(&_ompc_thread_lock);
   }
 
-  if (!__ompc_test_lock(*lck)) {
-      omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
-      p_vthread->thr_ctwt_state_id++;
-      __ompc_set_state(THR_CTWT_STATE);
-      __ompc_event_callback(OMP_EVENT_THR_BEGIN_CTWT);
-      __ompc_lock((volatile ompc_lock_t *)*lck);
-       __ompc_event_callback(OMP_EVENT_THR_END_CTWT);
+  if(!__ompc_test_lock(*lck)) {
+    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);
+    p_vthread->thr_ctwt_state_id++;
+    __ompc_set_state(THR_CTWT_STATE);
+    __ompc_event_callback(OMP_EVENT_THR_BEGIN_CTWT);
+    __ompc_lock(*lck);
+    __ompc_event_callback(OMP_EVENT_THR_END_CTWT);
   }
-   __ompc_set_state(THR_WORK_STATE);
+  __ompc_set_state(THR_WORK_STATE);
 }
 
 inline void
 __ompc_end_critical(int gtid, volatile ompc_lock_t **lck)
 {
-  __ompc_unlock((volatile ompc_lock_t *)*lck);
+  __ompc_unlock(*lck);
   __ompc_set_state(THR_WORK_STATE);
 }
 
 inline void
 __ompc_reduction(int gtid, volatile ompc_lock_t **lck)
 {
-    __ompc_set_state(THR_OVHD_STATE);
+  __ompc_set_state(THR_OVHD_STATE);
   if (*lck ==NULL) {
     __ompc_lock_spinlock(&_ompc_thread_lock);
     if ((ompc_lock_t*)*lck == NULL){
@@ -339,6 +339,6 @@ __ompc_reduction(int gtid, volatile ompc_lock_t **lck)
 inline void
 __ompc_end_reduction(int gtid, volatile ompc_lock_t **lck)
 {
-  __ompc_unlock((volatile ompc_lock_t *)*lck);
+  __ompc_unlock(*lck);
   __ompc_set_state(THR_WORK_STATE);
 }

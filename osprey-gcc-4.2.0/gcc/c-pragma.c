@@ -828,6 +828,8 @@ init_pragma (void)
 	{ "section", PRAGMA_OMP_SECTION },
 	{ "sections", PRAGMA_OMP_SECTIONS },
 	{ "single", PRAGMA_OMP_SINGLE },
+        { "task", PRAGMA_OMP_TASK },
+        { "taskwait", PRAGMA_OMP_TASKWAIT },
 	{ "threadprivate", PRAGMA_OMP_THREADPRIVATE }
       };
 

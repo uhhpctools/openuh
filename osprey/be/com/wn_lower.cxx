@@ -15352,12 +15352,12 @@ static WN *lower_entry(WN *tree, LOWER_ACTIONS actions)
          WN *ld, *wn;
 #if defined(TARG_IA32) || defined(TARG_X8664)
 	 if (Is_Target_32bit()) {
-	   WN *formal = WN_formal(current_function, 1);// 2nd incoming parameter
+	   WN *formal = WN_formal(current_function, WN_num_formals(tree) - 1);// last incoming parameter
 	   ld = WN_Ldid(Pointer_type, 0, WN_st(formal), WN_type(formal));
 	 }
 	 else
 #endif
-         ld = WN_LdidPreg( Pointer_type, First_Int_Preg_Param_Offset+1 ); //$r33
+           ld = WN_LdidPreg( Pointer_type, First_Int_Preg_Param_Offset + WN_num_formals(tree) - 1); //$r33
                                                                                                                                                              
          wn = WN_Stid( Pointer_type, 0, slink, ST_type( slink ), ld );
                                                                                                                                                              
@@ -15451,6 +15451,7 @@ static WN *lower_entry(WN *tree, LOWER_ACTIONS actions)
       WN_INSERT_BlockFirst(WN_func_body(tree), block);
     }
 #endif
+
     return tree;
   }
   else

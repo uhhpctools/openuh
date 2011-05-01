@@ -220,6 +220,7 @@ is_gimple_stmt (tree t)
     case PHI_NODE:
     case STATEMENT_LIST:
     case OMP_PARALLEL:
+    case OMP_TASK:
     case OMP_FOR:
     case OMP_SECTIONS:
     case OMP_SECTION:

@@ -471,6 +471,12 @@ static ST *Create_Global_Threadprivate_Symbol(ST *old_st)
   new_name = (char *) alloca(strlen(old_name) + 32);
   sprintf(new_name, "__thdprv_common_%s", old_name);
 
+  ST_TAB* global_st_tab = Scope_tab[GLOBAL_SYMTAB].st_tab;
+  for (ST_TAB::iterator iter = global_st_tab->begin(); iter != global_st_tab->end(); ++iter) {
+    if (strcmp(ST_name(*iter), new_name) == 0)
+      return &*iter;
+  }
+
   ST *new_thdprv_st = New_ST(GLOBAL_SYMTAB); 
 
   ST_SCLASS sclass = ((ST_sclass (old_st) == SCLASS_FSTATIC

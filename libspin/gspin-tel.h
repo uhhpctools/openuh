@@ -435,6 +435,9 @@ extern gs_t gs_build_2(gs_tree_code_class_t code_class,
 #define GS_OMP_PARALLEL_BODY            7
 #define GS_OMP_PARALLEL_CLAUSES         8
 
+#define GS_OMP_TASK_BODY                7
+#define GS_OMP_TASK_CLAUSES             8
+
 #define GS_OMP_CRITICAL_BODY            7
 #define GS_OMP_CRITICAL_NAME            8
 
@@ -568,6 +571,8 @@ extern gs_t gs_build_2(gs_tree_code_class_t code_class,
 
 #define GS_OMP_CLAUSE_SCHEDULE_KIND        5
 #define GS_OMP_CLAUSE_SCHEDULE_CHUNK_EXPR  6
+
+#define GS_OMP_CLAUSE_COLLAPSE_LEVEL       GS_OMP_CLAUSE_DECL
 #endif
 /*   ==== end GS_TCC_EXCEPTIONAL fields */
 
@@ -1160,6 +1165,8 @@ GS_LOOKUP (gs_obj_type_ref_token, GS_OBJ_TYPE_REF_TOKEN)
 #ifdef FE_GNU_4_2_0
 GS_LOOKUP (gs_omp_parallel_body, GS_OMP_PARALLEL_BODY)
 GS_LOOKUP (gs_omp_parallel_clauses, GS_OMP_PARALLEL_CLAUSES)
+GS_LOOKUP (gs_omp_task_body, GS_OMP_TASK_BODY)
+GS_LOOKUP (gs_omp_task_clauses, GS_OMP_TASK_CLAUSES)
 GS_LOOKUP (gs_omp_critical_body, GS_OMP_CRITICAL_BODY)
 GS_LOOKUP (gs_omp_critical_name, GS_OMP_CRITICAL_NAME)
 GS_LOOKUP (gs_omp_sections_body, GS_OMP_SECTIONS_BODY)
@@ -1223,6 +1230,7 @@ GS_LOOKUP (gs_omp_clause_decl, GS_OMP_CLAUSE_DECL)
 GS_LOOKUP (gs_omp_clause_num_threads_expr, GS_OMP_CLAUSE_NUM_THREADS_EXPR)
 GS_LOOKUP (gs_omp_clause_if_expr, GS_OMP_CLAUSE_IF_EXPR)
 GS_LOOKUP (gs_omp_clause_chain, GS_TREE_CHAIN) /* OMP_CLAUSE_CHAIN */
+GS_LOOKUP (gs_omp_clause_collapse_level, GS_OMP_CLAUSE_COLLAPSE_LEVEL)
 
 static inline gs_omp_clause_default_kind_t gs_omp_clause_default_kind (gs_t t)
 {

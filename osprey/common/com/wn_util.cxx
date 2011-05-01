@@ -1941,7 +1941,8 @@ extern void Add_Pragma_To_MP_Regions (WN_VECTOR *wnv,
 
       if (need_pragma == TRUE &&
           (Pragma_is_Parallel_Region(pragma) ||
-           Pragma_is_Work_Sharing(pragma))) {
+           Pragma_is_Work_Sharing(pragma) ||
+           pragma == WN_PRAGMA_TASK_BEGIN)) {
       
         WN *local_pwn = WN_CreatePragma (pragma_id, st, ofst, 0);
         if (make_compiler_generated) {

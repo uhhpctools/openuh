@@ -197,7 +197,7 @@ unsigned const char omp_clause_num_ops[] =
   1, /* OMP_CLAUSE_PRIVATE  */
   1, /* OMP_CLAUSE_SHARED  */
   1, /* OMP_CLAUSE_FIRSTPRIVATE  */
-  1, /* OMP_CLAUSE_LASTPRIVATE  */
+  2, /* OMP_CLAUSE_LASTPRIVATE  */
   4, /* OMP_CLAUSE_REDUCTION  */
   1, /* OMP_CLAUSE_COPYIN  */
   1, /* OMP_CLAUSE_COPYPRIVATE  */
@@ -206,7 +206,9 @@ unsigned const char omp_clause_num_ops[] =
   1, /* OMP_CLAUSE_SCHEDULE  */
   0, /* OMP_CLAUSE_NOWAIT  */
   0, /* OMP_CLAUSE_ORDERED  */
-  0  /* OMP_CLAUSE_DEFAULT  */
+  0, /* OMP_CLAUSE_DEFAULT  */
+  3, /* OMP_CLAUSE_COLLAPSE  */
+  0  /* OMP_CLAUSE_UNTIED   */
 };
 
 const char * const omp_clause_code_name[] =
@@ -224,7 +226,9 @@ const char * const omp_clause_code_name[] =
   "schedule",
   "nowait",
   "ordered",
-  "default"
+  "default",
+  "collapse",
+  "untied"
 };
 
 /* Init tree.c.  */
@@ -3671,7 +3675,7 @@ merge_dllimport_decl_attributes (tree old, tree new)
     }
   else if (DECL_DLLIMPORT_P (old) && !DECL_DLLIMPORT_P (new))
     {
-      /* Warn about overriding a symbol that has already been used. eg:
+      /* Warn about overriding a symbol that has already been used, e.g.:
            extern int __attribute__ ((dllimport)) foo;
 	   int* bar () {return &foo;}
 	   int foo;
@@ -7632,7 +7636,6 @@ walk_tree (tree *tp, walk_tree_fn func, void *data, struct pointer_set_t *pset)
 	case OMP_CLAUSE_PRIVATE:
 	case OMP_CLAUSE_SHARED:
 	case OMP_CLAUSE_FIRSTPRIVATE:
-	case OMP_CLAUSE_LASTPRIVATE:
 	case OMP_CLAUSE_COPYIN:
 	case OMP_CLAUSE_COPYPRIVATE:
 	case OMP_CLAUSE_IF:
@@ -7644,7 +7647,21 @@ walk_tree (tree *tp, walk_tree_fn func, void *data, struct pointer_set_t *pset)
 	case OMP_CLAUSE_NOWAIT:
 	case OMP_CLAUSE_ORDERED:
 	case OMP_CLAUSE_DEFAULT:
+	case OMP_CLAUSE_UNTIED:
 	  WALK_SUBTREE_TAIL (OMP_CLAUSE_CHAIN (*tp));
+
+	case OMP_CLAUSE_LASTPRIVATE:
+	  WALK_SUBTREE (OMP_CLAUSE_DECL (*tp));
+	  WALK_SUBTREE (OMP_CLAUSE_LASTPRIVATE_STMT (*tp));
+	  WALK_SUBTREE_TAIL (OMP_CLAUSE_CHAIN (*tp));
+
+	case OMP_CLAUSE_COLLAPSE:
+	  {
+	    int i;
+	    for (i = 0; i < 3; i++)
+	      WALK_SUBTREE (OMP_CLAUSE_OPERAND (*tp, i));
+	    WALK_SUBTREE_TAIL (OMP_CLAUSE_CHAIN (*tp));
+	  }
 
 	case OMP_CLAUSE_REDUCTION:
 	  {
@@ -7963,6 +7980,7 @@ gcc2gs (int code)
    case OMP_MASTER: return GS_OMP_MASTER;
    case OMP_ORDERED: return GS_OMP_ORDERED;
    case OMP_PARALLEL: return GS_OMP_PARALLEL;
+   case OMP_TASK: return GS_OMP_TASK;
    case OMP_SECTION: return GS_OMP_SECTION;
    case OMP_SECTIONS: return GS_OMP_SECTIONS;
    case OMP_SINGLE: return GS_OMP_SINGLE;
@@ -8751,6 +8769,7 @@ gcc_built_in2gsbi (enum built_in_function code)
     case BUILT_IN_GOMP_ATOMIC_START: return GSBI_BUILT_IN_GOMP_ATOMIC_START;
     case BUILT_IN_GOMP_ATOMIC_END: return GSBI_BUILT_IN_GOMP_ATOMIC_END;
     case BUILT_IN_GOMP_BARRIER: return GSBI_BUILT_IN_GOMP_BARRIER;
+    case BUILT_IN_GOMP_TASKWAIT: return GSBI_BUILT_IN_GOMP_TASKWAIT;
     case BUILT_IN_GOMP_CRITICAL_START: return GSBI_BUILT_IN_GOMP_CRITICAL_START;
     case BUILT_IN_GOMP_CRITICAL_END: return GSBI_BUILT_IN_GOMP_CRITICAL_END;
     case BUILT_IN_GOMP_CRITICAL_NAME_START: return GSBI_BUILT_IN_GOMP_CRITICAL_NAME_START;
@@ -9669,6 +9688,7 @@ gcc_omp_clause_code2gs_occ (enum omp_clause_code c)
     case OMP_CLAUSE_NOWAIT: return GS_OMP_CLAUSE_NOWAIT;
     case OMP_CLAUSE_ORDERED: return GS_OMP_CLAUSE_ORDERED;
     case OMP_CLAUSE_DEFAULT: return GS_OMP_CLAUSE_DEFAULT;
+    case OMP_CLAUSE_UNTIED: return GS_OMP_CLAUSE_UNTIED;
   }
   gcc_assert (0);
   return (gsbi_ts_t) 0;
@@ -11927,10 +11947,15 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
                   gs_set_operand((gs_t) GS_NODE(t), GS_OMP_CLAUSE_DEFAULT_KIND,
                                  default_kind);
                 }
+                case OMP_CLAUSE_COLLAPSE:
+                  gs_set_operand((gs_t) GS_NODE(t),
+                                 GS_OMP_CLAUSE_COLLAPSE_LEVEL,
+                                 gs_x_1(OMP_CLAUSE_COLLAPSE_EXPR(t), seq_num));
                 break;
 
                 case OMP_CLAUSE_NOWAIT:
                 case OMP_CLAUSE_ORDERED:
+                case OMP_CLAUSE_UNTIED:
                   /* Do nothing. */
                   break;
 

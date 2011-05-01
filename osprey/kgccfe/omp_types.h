@@ -65,7 +65,7 @@ enum omp_tree_type
   exec_freq_dir,
   task_cons_b,
   task_cons_e,
-  taskwait_dir
+  taskwait_dir,
 };
 
 ///////////////////////////////////////////////////////////////////

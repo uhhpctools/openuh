@@ -381,6 +381,7 @@ typedef enum {
   WN_PRAGMA_TASK_END, /* by cca, 11/20/2007 */
   WN_PRAGMA_TASKWAIT, /*by cca, 11/20/2007 */
   WN_PRAGMA_UNTIED, /*by cca, 11/20/2007 */
+  WN_PRAGMA_COLLAPSE,
   MAX_WN_PRAGMA			/* last one in enum			*/
 } WN_PRAGMA_ID;
 

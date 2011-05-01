@@ -32,6 +32,7 @@ typedef enum {
    wgen_cscf,
    wgen_other_ompscope,
    wgen_omp_parallel,
+   wgen_omp_task,
    wgen_omp_for,
    wgen_omp_single,
    wgen_omp_sections,
@@ -42,6 +43,7 @@ typedef enum {
    wgen_omp_critical,
    wgen_omp_ordered,
    wgen_omp_barrier,
+   wgen_omp_taskwait,
    wgen_omp_flush,
    wgen_omp_atomic,
    wgen_omp_threadprivate
@@ -58,7 +60,8 @@ typedef enum{
    clause_private        =0x80,
    clause_reduction      =0x100,
    clause_schedule      =0x200,
-   clause_shared        =0x400   
+   clause_shared        =0x400,
+   clause_untied        =0x800
 
 }WGEN_CLAUSE_KIND;
 

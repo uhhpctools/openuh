@@ -48,7 +48,7 @@
 #include "omp_lock.h"
 #include "omp_collector_api.h"
 
-/*Cody - header files for tasks */
+/* Cody - header files for tasks */
 #include "pcl.h"
 
 
@@ -71,9 +71,9 @@
  */
 #define OMP_MAX_NUM_THREADS 	256
 #define OMP_STACK_SIZE_DEFAULT	0x400000L /* 4MB*/
+
 #define OMP_POINTER_SIZE	8
 
-/* cody - task related defaults */
 #define OMP_TASK_STACK_SIZE_DEFAULT     0x010000L /* 1KB */
 #define OMP_TASK_Q_UPPER_LIMIT_DEFAULT 10
 #define OMP_TASK_Q_LOWER_LIMIT_DEFAULT 1
@@ -90,18 +90,6 @@
 */
 // The following def should not be changed
 // It should be consistent with def in wn_mp.cxx
-
-struct collector_message
-{
-   int sz;
-   int r;
-   int ec;   
-   int rsz;
-   char *mem;
-};
-
-
-
 typedef enum {
   OMP_SCHED_UNKNOWN     = 0,
   OMP_SCHED_STATIC      = 1,
@@ -130,10 +118,11 @@ typedef enum {
  *  Maybe need to revise.
  */
 
+
 /*Cody - changed frame_pointer from char * to void *, seems to be OK
   Did it because the Portable Coroutine Library takes a void * as an argument
 */
-typedef void * frame_pointer_t;
+typedef void* frame_pointer_t;
 
 /* The entry function prototype is nolonger 
  * the seem as GUIDE*/
@@ -166,7 +155,6 @@ extern int 	    __omp_rtl_initialized;
 /* Can only be set through environment variable OMP_sTACK_SIZE*/
 extern volatile unsigned long int __omp_stack_size;
 
-
 /* a system level lock, used for malloc in __ompc_get_thdprv ,by Liao*/
 extern ompc_spinlock_t _ompc_thread_lock;
 
@@ -189,7 +177,7 @@ extern volatile omp_exe_mode_t __omp_exe_mode;
 typedef struct omp_u_thread omp_u_thread_t;
 typedef struct omp_v_thread omp_v_thread_t;
 typedef struct omp_team	    omp_team_t;
-
+typedef struct omp_loop_info omp_loop_info_t;
 
 /* kernel thread*/
 struct omp_u_thread{
@@ -198,6 +186,14 @@ struct omp_u_thread{
   omp_v_thread_t *task;		/* task(vthread)*/
   char *stack_pointer;
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE))) ;
+
+struct omp_loop_info {
+  int       is_64bit;
+  omp_int64 lower_bound;
+  omp_int64 upper_bound;
+  omp_int64 incr;
+  omp_uint64 next_index;
+};
 
 /* team*/
 struct omp_team{
@@ -210,24 +206,31 @@ struct omp_team{
   /* for loop schedule*/
 
   ompc_spinlock_t schedule_lock;
-  volatile long loop_lower_bound;
-  long	loop_upper_bound;
-  long	loop_increament;
+  volatile omp_int64 loop_lower_bound;
+  omp_int64	loop_upper_bound;
+  omp_int64	loop_increament;
 	
   int	schedule_type;
-  long	chunk_size;
+  omp_int64	chunk_size;
   /* For static schedule*/
   //	long	loop_stride;
   /* For ordered dynamic schedule*/
-  volatile long schedule_count;
+  volatile omp_int64 schedule_count;
   /* We still need a semphore for scheduler initialization */
   volatile int loop_count;
+
+  /* for collapsed loop */
+  unsigned collapse_count;
+  unsigned loop_info_size;
+  omp_loop_info_t* loop_info;
+  omp_uint64* loop_lenv;
+
   /* For scheduler initialization count. */
   //	volatile int schedule_in_count;
 
   /* for ordered schedule*/
   /* Using schedule_lock as the ordered lock*/
-  volatile long	ordered_count;
+  volatile omp_int64 ordered_count;
   // using a dummy field to make the following layout better
   int dummy11;
   // offset = 128, when -m64 
@@ -249,13 +252,12 @@ struct omp_team{
   // offset = 320
   volatile int barrier_count;
 
-
-
   /* Still need a flag to indicate there are new tasks for level_1 team,
    * To avoid pthread allowed spurious wake up, and for nested teams,
    * use this as a semphore to synchronize all thread before they really start*/
   volatile int new_task;
   pthread_mutex_t ordered_mutex;
+
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
 
@@ -267,7 +269,6 @@ struct omp_team{
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
 
-
 /* user thread*/
 struct omp_v_thread {
   int	vthread_id;
@@ -275,47 +276,44 @@ struct omp_v_thread {
   int	team_size;	/* redundant with team->team_size */
   
   omp_u_thread_t *executor;	/* needed? used anywhere?*/
-  //  omp_v_thread_t *creator;      
+  //	omp_v_thread_t *creator;      
   omp_team_t     *team;
 	
   volatile omp_micro entry_func;
   volatile frame_pointer_t frame_pointer;
 
-
   /* For RUNTIME assigned STATIC schedule only*/
-  long schedule_count;
+  omp_int64 schedule_count;
   /* For ordered schedule*/
-  long ordered_count;
-  long rest_iter_count;
+  omp_int64 ordered_count;
+  omp_int64 rest_iter_count;
   /* For single sections*/
   int	single_count;
   /* For Dynamic scheduler initialization*/
   int	loop_count;
   /* for 'lastprivate'? used ?*/
   //	int is_last;
-   unsigned long thr_lkwt_state_id;
-   unsigned long thr_ctwt_state_id;
-   unsigned long thr_atwt_state_id;
-   unsigned long thr_ibar_state_id;
-   unsigned long thr_ebar_state_id;
-   unsigned long thr_odwt_state_id;
+  unsigned long thr_lkwt_state_id;
+  unsigned long thr_ctwt_state_id;
+  unsigned long thr_atwt_state_id;
+  unsigned long thr_ibar_state_id;
+  unsigned long thr_ebar_state_id;
+  unsigned long thr_odwt_state_id;
 
   /* Maybe a few more bytes should be here for alignment.*/
   /* TODO: stuff bytes*/
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 
-
-
 /* The array for level 1 thread team, 
  * using vthread_id to index them
  */
-
 extern omp_v_thread_t *  __omp_level_1_team; 
 extern omp_u_thread_t *  __omp_level_1_pthread;
 extern int		 __omp_level_1_team_size;
 extern volatile omp_team_t	 __omp_level_1_team_manager;
 extern int		 __omp_level_1_team_alloc_size;
 extern omp_u_thread_t *  __omp_uthread_hash_table[UTHREAD_HASH_SIZE]; 
+
 /* Where do they should be initialized? */
 extern pthread_t 	 __omp_root_thread_id;
 extern omp_v_thread_t	 __omp_root_v_thread; /* necessary?*/
@@ -457,7 +455,7 @@ extern __thread omp_task_t *__omp_current_task;
 
 
 /*External tasking API*/
-extern int __ompc_task_create(omp_task_func func, void *args, int is_tied);
+extern int __ompc_task_create(omp_task_func func, void *args, int may_delay, int is_tied);
 extern void __ompc_task_wait();
 extern void __ompc_task_exit();
 extern cond_func __ompc_task_create_cond;
