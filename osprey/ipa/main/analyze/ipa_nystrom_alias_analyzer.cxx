@@ -370,8 +370,27 @@ ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
         repPNodeParent->merge(cgNode);
         cgNode->repParent(repPNodeParent);
       }
+      else if (repPNode != cgNode && cgNode->checkFlags(CG_NODE_FLAGS_COLLAPSED)) {
+        // summNode parent is not cgNode, and cgNode is summNode parent's
+        // parent. Here is a cyclic repParent chain.
+        // if cgNode is collapsed node(means it will not used in points to),
+        // break the chain and make cgNode not top repParent.
+        repPNodeParent = repPNode;
+        while (true) {
+          if (repPNodeParent->repParent() == cgNode) {
+            repPNodeParent->repParent(NULL);
+            break;
+          }
+          repPNodeParent = repPNodeParent->repParent();
+        }
+        repPNodeParent->clearFlags(CG_NODE_FLAGS_MERGED);
+        repPNodeParent->merge(cgNode);
+        cgNode->repParent(repPNode);
+      }
+      else {
+        // here it is break the chain, and let cgNode be top repParent.
+      }
     }
-
     // Set the collapsed parent
     if (cgNode->checkFlags(CG_NODE_FLAGS_COLLAPSED)) {
       if (summNode.collapsedParent() != 0) {
@@ -444,8 +463,11 @@ ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
       if (pNode->checkFlags(CG_NODE_FLAGS_COLLAPSED)) {
         FmtAssert(pNode != pNode->parent(), ("Expecting a distinct parent "
                   "for COLLAPSED node: %d\n", pNode->id()));
-        change = cgNode->parent()->addPointsTo(
-                 ConstraintGraph::cgNode(pNode->collapsedParent()), CQ_GBL);
+        ConstraintGraphNode* collapseParent =
+                             ConstraintGraph::cgNode(pNode->collapsedParent());
+        while (collapseParent->checkFlags(CG_NODE_FLAGS_COLLAPSED))
+          collapseParent = ConstraintGraph::cgNode(collapseParent->collapsedParent());
+        change = cgNode->parent()->addPointsTo(collapseParent, CQ_GBL);
       } else
         change = cgNode->parent()->addPointsTo(pNode, CQ_GBL);
       // Mark a changed global as modified so that its outgoing edges
@@ -465,8 +487,11 @@ ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
       if (pNode->checkFlags(CG_NODE_FLAGS_COLLAPSED)) {
         FmtAssert(pNode != pNode->parent(), ("Expecting a distinct parent "
                   "for COLLAPSED node: %d\n", pNode->id()));
-        change = cgNode->parent()->addPointsTo(
-                 ConstraintGraph::cgNode(pNode->collapsedParent()), CQ_HZ);
+        ConstraintGraphNode* collapseParent =
+                             ConstraintGraph::cgNode(pNode->collapsedParent());
+        while (collapseParent->checkFlags(CG_NODE_FLAGS_COLLAPSED))
+          collapseParent = ConstraintGraph::cgNode(collapseParent->collapsedParent());
+        change = cgNode->parent()->addPointsTo(collapseParent, CQ_HZ);
       } else
         change = cgNode->parent()->addPointsTo(pNode, CQ_HZ);
       // Mark a changed global as modified so that its outgoing edges
@@ -486,8 +511,11 @@ ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
       if (pNode->checkFlags(CG_NODE_FLAGS_COLLAPSED)) {
         FmtAssert(pNode != pNode->parent(), ("Expecting a distinct parent "
                   "for COLLAPSED node: %d\n", pNode->id()));
-        change = cgNode->parent()->addPointsTo(
-                 ConstraintGraph::cgNode(pNode->collapsedParent()), CQ_DN);
+        ConstraintGraphNode* collapseParent =
+                             ConstraintGraph::cgNode(pNode->collapsedParent());
+        while (collapseParent->checkFlags(CG_NODE_FLAGS_COLLAPSED))
+          collapseParent = ConstraintGraph::cgNode(collapseParent->collapsedParent());
+        change = cgNode->parent()->addPointsTo(collapseParent, CQ_DN);
       } else
         change = cgNode->parent()->addPointsTo(pNode, CQ_DN);
       if (change && cgNode->parent()->cg() == globalCG()) {
@@ -703,6 +731,15 @@ ConstraintGraph::buildCGNode(SUMMARY_CONSTRAINT_GRAPH_NODE *summ,
                                        summ->flags(), summ->inKCycle(),
                                        newCGNodeId, this), _memPool);
   cgNode->ty_idx(summ->ty_idx());
+  // if cg node is preg update preg's max offset.
+  // for create this preg's new cg node in ipa
+  StInfo* si = cgNode->stInfo();
+  if (si->checkFlags(CG_ST_FLAGS_PREG)) {
+    Is_True(summ->offset() % CG_PREG_SCALE == 0, ("incorrect offset\n"));
+    if (summ->offset() > si->maxOffsets()*CG_PREG_SCALE) {
+      si->maxOffsets(summ->offset()/CG_PREG_SCALE);
+    }
+  }
 
   // Add to maps in the current ConstraintGraph
   cgIdToNodeMap[newCGNodeId] = cgNode;
@@ -2184,6 +2221,697 @@ IPA_NystromAliasAnalyzer::updateCGForBE(IPA_NODE *ipaNode)
 }
 
 void 
+IPA_NystromAliasAnalyzer::updateCloneTreeWithCgnode(WN* tree)
+{
+  for (WN_ITER *wni = WN_WALK_TreeIter(tree);
+      wni; wni = WN_WALK_TreeNext(wni)) {
+    WN *wn = WN_ITER_wn(wni);
+
+    UINT32 id = IPA_WN_MAP32_Get(Current_Map_Tab, WN_MAP_ALIAS_CGNODE, wn);
+    if (id == 0)
+      continue;
+
+    UINT32 cs_id = getInlineNodeMap(id);
+    if (cs_id == 0)
+      continue;
+
+    if (OPERATOR_is_call(WN_operator(wn))) {
+      // havn't processing callsite points to info yet.
+      Is_True(FALSE, ("unexpected case\n"));
+    } else {
+      WN_MAP_CGNodeId_Set(wn, cs_id);
+    }
+  }
+
+  _inline_node_map.clear();
+}
+
+// if callee's formal has more accurate points to info when inline.
+// try to solve the constraint graph nodes used in callee with more accurate points to set.
+// for example
+//   foo(int *p)
+//     use *(P+4)
+//   
+//  call foo(&a);
+//  processInlineFormal will make a new CG node for p in inlined body only points to a.
+//  solveInlineConstraints will solve p+4 copy skew edge.
+//
+//  the whole function will have the fllowing steps.
+//  1. iterate _inline_node_map, collect initial nodes workset. return if set is empty
+//  2. prcess each node in work set untill empty
+//     iterate all out edges from this node
+//     recompute the diff set of points to
+//     update if points to set is narrowed.
+//       create new cg node record new points to set.
+//       add node into work set.
+//  
+void 
+IPA_NystromAliasAnalyzer::solveInlineConstraints(IPA_NODE *callee, IPA_NODE *caller) 
+{
+  // initial work list is the formals with updated points to set.
+  NodeWorkList nodeWorkList;
+  if (_inline_node_map.size() == 0)
+    return;
+  hash_map<UINT32, UINT32>::const_iterator formal_iter = _inline_node_map.begin();
+  for (;formal_iter != _inline_node_map.end(); formal_iter++) {
+    nodeWorkList.push(ConstraintGraph::cgNode(formal_iter->first));
+  }
+
+  Is_True(!nodeWorkList.empty() != 0, ("initial work list can't be empty\n"));
+  ConstraintGraph* callee_cg = cg(callee->Node_Index());
+  
+  do {
+    ConstraintGraphNode *old_node = nodeWorkList.pop();
+    ConstraintGraphNode *new_node = ConstraintGraph::cgNode(getInlineNodeMap(old_node->id()));
+    const CGEdgeSet &outCopySkew = old_node->outCopySkewEdges();
+
+    // process copy skew edge
+    for (CGEdgeSetIterator iter = outCopySkew.begin();
+       iter != outCopySkew.end();
+       iter++) {
+      ConstraintGraphEdge *edge = *iter;
+      if (inlineSolveNode(edge->destNode(), callee_cg, caller)) {
+        nodeWorkList.push(edge->destNode());
+      }
+    }
+  } while(!nodeWorkList.empty());
+}
+
+
+// first check, if newly computed points is accurate then current points to.
+// 1. copy node's points to to diff.
+// 2. process incopyskew edges
+//    iterate source node's points to qual
+//       compute the dest's qual
+//       dest's diff_points_to[qual] &= ~source_points_to[qual]
+// 3. if diff points to is not empty, (this indicate has some improvment on points to)
+//    create a new node, update its points to as 
+//    new_node[qual] = node[qual] & ~node_diff[qual]
+//    map old node with new node
+bool 
+IPA_NystromAliasAnalyzer::inlineSolveNode(ConstraintGraphNode *node, ConstraintGraph* callee_cg,
+                     IPA_NODE* caller)
+{
+  // not handling global nodes
+  // because <global_st, offset> is unique in constraint graph representation.
+  if (node->checkFlags(CG_NODE_FLAGS_UNKNOWN) ||
+       node->stInfo()->checkFlags(CG_ST_FLAGS_GLOBAL)) {
+    return false;
+  }
+  // check node is local in callee
+  if (!callee_cg->nodeInGraph(node))
+    return false;
+
+  // if node has parent, its points to comes from parent.
+  if (node->repParent() != NULL && node->repParent() != node)
+    return false;
+
+  // don't handle nodes has in loadstore edge.
+  // this is because when solve the constraints graph inloadstoredge
+  // is translate into incopyskew edge, see ConstraintGraphSolve::addCopiesForLoadStore.
+  // If these copies edge still exist,  the analysis result will always consertevertive.
+  const CGEdgeSet &inloadstore = node->inLoadStoreEdges();
+  if (!inloadstore.empty())
+    return false;
+
+  // if node already has been optimized and record in inlineNodeMap
+  // during the following analysis
+  // 1. get points to set by new nodes
+  // 2. get edge set by orignal nodes.
+  CGNodeId new_id = getInlineNodeMap(node->id());
+  ConstraintGraphNode *new_node = NULL;
+  if (new_id != 0) {
+    new_node = ConstraintGraph::cgNode(new_id);
+  }
+
+  // copy pts points to to diff points to.
+  ConstraintGraphNode *updating_node;
+  if (new_node)
+    updating_node = new_node;
+  else
+    updating_node = node;
+  PointsTo origPointsTo;
+  updating_node->UnionPointsToSet(origPointsTo);
+  
+  // process copy skew edge
+  const CGEdgeSet &inCopySkew = node->inCopySkewEdges();
+  for (CGEdgeSetIterator iter = inCopySkew.begin();
+       iter != inCopySkew.end(); iter++) {
+    ConstraintGraphEdge *edge = *iter;
+
+    // get edge in node, if in node is cloned, use new node
+    ConstraintGraphNode *in_node = edge->srcNode();
+    bool cntxt = 
+       !in_node->cg()->stInfo(in_node->cg_st_idx())->checkFlags(CG_ST_FLAGS_NOCNTXT);
+    
+    CGNodeId in_node_new_id = getInlineNodeMap(in_node->id());
+    if (in_node_new_id != 0) {
+      in_node = ConstraintGraph::cgNode(in_node_new_id);
+    }
+
+    if (edge->edgeType() == ETYPE_COPY) {
+      if (edge->checkFlags(CG_EDGE_PARENT_COPY)) {
+        // in node must hae offset -1, no points to propagate.
+      }
+      else {
+        // iterate in node's points to, exclude from current node's diff
+        for ( PointsToIterator pti(in_node); pti != 0; ++pti ) {
+            ConstraintGraphSolve::Exclude(*pti, ETYPE_COPY, pti.qual(),
+                edge->edgeQual(), cntxt, origPointsTo);
+        }
+      }
+    }
+    else {
+      Is_True(edge->edgeType() == ETYPE_SKEW, ("must be skew\n"));
+      for ( PointsToIterator pti(in_node); pti != 0; ++pti ) {
+        CGEdgeQual dstQual = ConstraintGraphSolve::qualMap(ETYPE_COPY,
+            pti.qual(),edge->edgeQual(),cntxt);
+        if(dstQual == CQ_NONE)
+          continue;
+        PointsTo &srcPTS = *pti;
+        for (PointsTo::SparseBitSetIterator iter(&srcPTS,0); iter != 0; iter++) {
+          CGNodeId nodeId = *iter;
+          ConstraintGraphNode *pt_node = ConstraintGraph::cgNode(nodeId);
+          StInfo *st = pt_node->stInfo();
+          FmtAssert(!st->checkFlags(CG_ST_FLAGS_PREG),
+                  ("processSkew: preg found in pts set of node: %d\n", 
+                  pt_node->id()));
+          INT32 newOffset;
+          if (pt_node->offset() == -1)
+            newOffset = -1;
+          else {
+            newOffset = pt_node->offset() + edge->skew();
+            if (newOffset < 0) newOffset = -newOffset;
+          }
+          ConstraintGraphNode *skewNode = 
+            pt_node->cg()->getCGNode(pt_node->cg_st_idx(),newOffset);
+          origPointsTo.clearBit(skewNode->id());
+        }
+      
+      }
+    }
+    if (origPointsTo.isEmpty())
+      return false;
+  }
+
+
+  // check final result
+  // if all points to cg nodes is found during checking input copy skew edge.
+  // then this node's points to set has no no improvment.
+  if (origPointsTo.isEmpty())
+      return false;
+
+  ConstraintGraphNode *clone_node = getCloneNode(node, callee_cg, caller);
+
+  if (clone_node == NULL)
+    return false;
+
+  // update points to set.
+  clone_node->excludePointsTo(origPointsTo);
+  return true;
+}
+
+// get a node to record new points to information.
+//  there are two kinds nodes in callee cg needs be cloned
+//  1. local ST cloned into caller
+//      ConstraintGraph::cloneConstraintGraphMaps will clone callee local var's 
+//      constraint graph node to caller, (same points to and id, but differnt cg_st_idx)
+//      When a function in inlined into caller several times (multiple calls in same function),
+//      one local var in callee still map to one local var in caller.
+//      for example
+//        foo
+//           call bar p->a, analysis result for this inline. 
+//           ...
+//           call bar p->b, analysis result for this inline. 
+//           ..
+//        bar
+//          p->a,b,c, analysis reuslt before inline.
+//      then p in foo function should points to a and b.
+//      use two flags, cgnode_visited, cgnode_
+//
+//
+//
+//      If IPO_INLINE can use two local st for p in foo, than each 
+//      it can get more accurate points to, like p1->a, p2->b
+//  2. preg 
+//      nodes is simply cloned into caller cg. with a unique offset.
+ConstraintGraphNode* 
+IPA_NystromAliasAnalyzer::getCloneNode(ConstraintGraphNode *callee_node, 
+                                           ConstraintGraph* callee_cg, IPA_NODE* caller)
+{
+  // get callee_node's cg_st_idx, get its st_idx in caller by ConstraintGraph::origToCloneStIdxMap, 
+  CG_ST_IDX orig_cg_st_idx = callee_node->cg_st_idx();
+  ConstraintGraphNode* clone_node;
+  
+  // 1. callee_node already has been cloned.
+  CGNodeId id = callee_node->id();
+  CGNodeId clone_id;
+  if (clone_id = getInlineNodeMap(id))
+    return ConstraintGraph::cgNode(clone_id);
+  
+  // 2. not yet map in _inline_node_map, but cloned into caller's graph
+  CG_ST_IDX cloned_cg_st_idx = ConstraintGraph::getOrigCloneStIdx(SYM_ST_IDX(orig_cg_st_idx));
+  ConstraintGraph* caller_cg = cg(caller->Node_Index());
+  if (cloned_cg_st_idx != ST_IDX_ZERO) {
+    cloned_cg_st_idx = ConstraintGraph::adjustCGstIdx(caller, cloned_cg_st_idx);
+    clone_node = caller_cg->getCGNode(cloned_cg_st_idx, callee_node->offset());
+
+    // this node is not optimized in last inline into same caller
+    if (clone_node->checkFlags(CG_NODE_FLAGS_INLINE_NO_BENEFIT))
+      return NULL;
+    
+    Is_True(clone_node, ("must be cloned in mapcloneconstraintgraph\n"));
+    if (clone_node->id() != callee_node->id()) {
+      clone_node->deletePointsToSet();
+      clone_node->deleteRevPointsToSet();
+    }
+    else {
+      Is_True(ConstraintGraph::cgNode(clone_node->id()) != clone_node,
+        ("clone_node not id's primiary node\n"));
+      caller_cg->newNodeId(clone_node);
+    }
+    
+    // duplicated points to and add into inlineNodeMap.
+    clone_node->copyPointsTo(callee_node);
+    addInlineNodeMap(callee_node->id(), clone_node->id());
+    clone_node->addFlags(CG_NODE_FLAGS_VISITED);
+    return clone_node;
+  }
+
+  // 3. preg to be mapped into caller cg later in updateCGforBE
+  if (ST_IDX_level(SYM_ST_IDX(orig_cg_st_idx)) == GLOBAL_SYMTAB) {
+    // this must be a preg, that is boht local and not cloned symbol in new alias
+    ST_IDX st_idx = SYM_ST_IDX(orig_cg_st_idx);
+    Is_True(ST_class(&St_Table[st_idx]) == CLASS_PREG, ("must be preg\n"));
+    StInfo *stinfo = callee_cg->stInfo(orig_cg_st_idx);
+    if (! caller_cg->stInfo(orig_cg_st_idx) )
+        caller_cg->mapStInfo(stinfo, orig_cg_st_idx, orig_cg_st_idx);
+    
+    clone_node = caller_cg->getCGNode(orig_cg_st_idx, (stinfo->maxOffsets()+1)*CG_PREG_SCALE);
+    stinfo->maxOffsets(stinfo->maxOffsets()+1);
+
+    clone_node->copyPointsTo(callee_node);
+    addInlineNodeMap(callee_node->id(), clone_node->id());
+    return clone_node;
+  }
+  return NULL;
+}
+
+
+// clear orig_to_clone map introduced in inline.
+// CG_NODE_FLAGS_VISITED means clone_node is optimized 
+// by nystrom inline support.
+// 
+// If it's not optimized, it can't be optimized in caller.
+// When same callee is inlined to same caller.
+void
+ConstraintGraph::clearOrigToCloneStIdxMap(IPA_NODE *caller, IPA_NODE *callee)
+{
+  ConstraintGraph *callerCG = 
+            IPA_NystromAliasAnalyzer::aliasAnalyzer()->cg(caller->Node_Index());
+  ConstraintGraph *calleeCG = 
+            IPA_NystromAliasAnalyzer::aliasAnalyzer()->cg(callee->Node_Index());
+  for (hash_map<ST_IDX, ST_IDX>::iterator iter = origToCloneStIdxMap.begin(); 
+       iter != origToCloneStIdxMap.end(); iter++) {
+    ST_IDX orig_st_idx  = iter->first;
+    ST_IDX clone_st_idx = iter->second;
+
+    CG_ST_IDX orig_cg_st_idx = 
+              ConstraintGraph::adjustCGstIdx(callee, orig_st_idx);
+    StInfo *origStInfo = calleeCG->stInfo(orig_cg_st_idx);
+    if (origStInfo == NULL)
+      continue;
+
+    CG_ST_IDX clone_cg_st_idx = 
+              ConstraintGraph::adjustCGstIdx(caller, clone_st_idx);
+    ConstraintGraphNode *orig_node = origStInfo->firstOffset();
+    while (orig_node) {
+      ConstraintGraphNode *clone_node = callerCG->getCGNode(clone_cg_st_idx, orig_node->offset());
+      if (!clone_node->checkFlags(CG_NODE_FLAGS_VISITED)) {
+        clone_node->addFlags(CG_NODE_FLAGS_INLINE_NO_BENEFIT);
+        CGNodeId id = clone_node->id();
+        if (id != orig_node->id()) {
+          clone_node->deletePointsToSet();
+          clone_node->copy(orig_node);
+          clone_node->setId(id);
+        }
+      }
+      else {
+        clone_node->clearFlags(CG_NODE_FLAGS_VISITED);
+        clone_node->unionDiffToPts();
+      }
+      orig_node = orig_node->nextOffset(); 
+    }
+  }
+  origToCloneStIdxMap.clear();
+}
+
+
+//
+// get WN node's cg node, from WN map or <st, offset>
+//
+ConstraintGraphNode* 
+IPA_NystromAliasAnalyzer::getCGNode(WN* wn, IPA_NODE* ipaNode)
+{
+  if (!ConstraintGraph::exprMayPoint(wn)) {
+    return ConstraintGraph::notAPointer();
+  }
+  
+  OPERATOR opr = WN_operator(wn);
+  switch(opr) {
+    case OPR_ILOAD: {
+      CGNodeId id;
+#ifdef Is_True_On
+      id = IPA_WN_MAP32_Get(Current_Map_Tab, WN_MAP_ALIAS_CGNODE, wn);
+      Is_True(id == 0, ("iload can't directly has cg node in IPA\n"));
+#endif
+      id = IPA_WN_MAP32_Get(Current_Map_Tab, WN_MAP_ALIAS_CGNODE, WN_kid0(wn));
+      ConstraintGraphNode* node = NULL;
+      if (id == 0) {
+        node = getCGNode(WN_kid0(wn), ipaNode);
+        if(node == NULL)
+          return NULL;
+      }
+      else {
+        node = ConstraintGraph::cgNode(id);
+      }
+      
+      if (WN_offset(wn) != 0)
+        return NULL;
+
+      const CGEdgeSet &outset = node->outLoadStoreEdges();
+      for (CGEdgeSetIterator iter = outset.begin(); iter != outset.end(); ++iter) {
+         ConstraintGraphEdge *edge = *iter;
+         if (edge->edgeType() == ETYPE_LOAD) {
+           ConstraintGraphNode* destNode = edge->destNode();
+           if (destNode->inLoadStoreEdges().size() == 1)
+            {
+              return destNode;
+            }
+         }
+      }
+      break;
+    }
+    case OPR_ADD:
+    case OPR_SUB: {
+      ConstraintGraphNode *kid0CGNode, *kid1CGNode;
+      if (!(kid0CGNode = getCGNode(WN_kid0(wn), ipaNode)))
+        return NULL;
+      if (!(kid1CGNode = getCGNode(WN_kid1(wn), ipaNode)))
+        return NULL;
+
+      if (kid0CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER) &&
+         kid1CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER)) {
+        return ConstraintGraph::globalCG()->notAPointer();
+      }
+      ConstraintGraphNode *kidCGNode = NULL;
+      if (!kid0CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER))
+        kidCGNode = kid0CGNode;
+      else if (!kid1CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER))
+        kidCGNode = kid1CGNode;
+     
+      WN *intConst = NULL;
+      if (WN_operator(WN_kid0(wn)) == OPR_INTCONST)
+        intConst = WN_kid0(wn);
+      else if (WN_operator(WN_kid1(wn)) == OPR_INTCONST)
+        intConst = WN_kid1(wn);
+      
+      Is_True(kidCGNode, ("kidCGNode can't be NULL\n"));
+      if (kidCGNode && intConst) {
+        // find node has only one edge that is incopykew edge
+        // fromt his node.
+        const CGEdgeSet &outCopySkewSet = kidCGNode->outCopySkewEdges();
+        for (CGEdgeSetIterator eiter = outCopySkewSet.begin();
+              eiter != outCopySkewSet.end(); eiter++) {
+          ConstraintGraphEdge *edge = *eiter;
+          if (edge->edgeType() != ETYPE_SKEW)
+            continue;
+          if (edge->skew() != WN_const_val(intConst))
+            continue;
+          ConstraintGraphNode *destNode = edge->destNode();
+          if (destNode->inCopySkewEdges().size() == 1 && 
+              destNode->inCopySkewEdges().empty()) {
+            return destNode;
+          }
+        }
+        return NULL;
+      }
+      return kidCGNode;
+    }
+    case OPR_LDID: {
+      // get cg node with <st, offset>
+      // get the node only points to this cg node.
+      CG_ST_IDX st_idx = WN_st_idx(wn);
+      WN_OFFSET offset = WN_offset(wn);
+      ConstraintGraph* nodeCg = cg(ipaNode->Node_Index());
+      ST_SCLASS storage_class = ST_sclass(WN_st(wn));
+      if (storage_class == SCLASS_FSTATIC ||
+        (storage_class == SCLASS_PSTATIC && ST_IDX_level(st_idx) == GLOBAL_SYMTAB)||
+        storage_class == SCLASS_COMMON ||
+        storage_class == SCLASS_UGLOBAL ||
+        storage_class == SCLASS_DGLOBAL ||
+        storage_class == SCLASS_UNKNOWN ||
+        storage_class == SCLASS_TEXT ||
+        storage_class == SCLASS_EXTERN) {
+        nodeCg = ConstraintGraph::globalCG();
+      }
+      else {
+        st_idx = ConstraintGraph::adjustCGstIdx(ipaNode, st_idx);
+      }
+      if (ST_class(WN_st(wn)) == CLASS_PREG)
+        offset *= CG_PREG_SCALE;
+      ConstraintGraphNode *node = nodeCg->checkCGNode(st_idx, offset);
+      // when this st's cg nodes are collpased, can't find the cg node.
+      return node;
+    }
+    case OPR_LDA: {
+      // get cg node with <st, offset>
+      // get the node only points to this cg node.
+      CG_ST_IDX st_idx = WN_st_idx(wn);
+      WN_OFFSET offset = WN_offset(wn);
+      ConstraintGraph* nodeCg = cg(ipaNode->Node_Index());
+      ST_SCLASS storage_class = ST_sclass(WN_st(wn));
+      if (storage_class == SCLASS_FSTATIC ||
+        (storage_class == SCLASS_PSTATIC && ST_IDX_level(st_idx) == GLOBAL_SYMTAB)||
+        storage_class == SCLASS_COMMON ||
+        storage_class == SCLASS_UGLOBAL ||
+        storage_class == SCLASS_DGLOBAL ||
+        storage_class == SCLASS_UNKNOWN ||
+        storage_class == SCLASS_TEXT ||
+        storage_class == SCLASS_EXTERN) {
+        nodeCg = ConstraintGraph::globalCG();
+      }
+      else {
+        st_idx = ConstraintGraph::adjustCGstIdx(ipaNode, st_idx);
+      }
+      ConstraintGraphNode *node = nodeCg->checkCGNode(st_idx, offset);
+      if (node == NULL)
+        return NULL;
+
+      // get node only points to this actual node.
+      StInfo* stinfo = nodeCg->stInfo(st_idx);
+      CGEdgeQual qual = CQ_HZ;
+      if (stinfo->checkFlags(CG_ST_FLAGS_NOCNTXT))
+        qual = CQ_GBL;
+
+      const PointsTo& rev_pts = node->myRevPointsTo(qual);
+      for (PointsTo::SparseBitSetIterator sbsi(&rev_pts, 0); sbsi != 0; ++sbsi) {
+        CGNodeId id = *sbsi;
+        ConstraintGraphNode *pt_node = ConstraintGraph::cgNode(id);
+        
+        // if pt_node only points to node
+        BOOL match = true;
+        for (PointsToIterator pti(pt_node); pti != 0; ++pti) {
+          PointsTo &pts = *pti;
+          CGEdgeQual pt_qual = pti.qual();
+          if (pt_qual != qual) {
+            if (!pts.isEmpty()) {
+              match = false;
+              break;
+            }
+          }
+          else {
+            if (pts.numBits() != 1) {
+              match = false;
+              break;
+            }
+          }
+        }
+        if (match)
+          return pt_node;
+      }
+      return NULL;
+    }
+    case OPR_CVT:
+    case OPR_CVTL:{
+      if (MTYPE_byte_size(WN_rtype(wn)) < Pointer_Size ||
+          !MTYPE_is_unsigned(WN_rtype(wn)) || 
+          !MTYPE_is_unsigned(WN_rtype(WN_kid0(wn)))) {
+        return ConstraintGraph::notAPointer();
+      }
+      else {
+        return getCGNode(WN_kid0(wn), ipaNode);
+      }
+    }
+    case OPR_INTCONST:{
+      return ConstraintGraph::notAPointer();
+    }
+    default:
+      break;
+  }
+  return NULL;
+}
+
+bool
+IPA_NystromAliasAnalyzer::processInlineFormal(IPA_NODE *caller,
+                       IPA_NODE *callee, WN* actual, ST* formal_st)
+{
+  if (!ConstraintGraph::exprMayPoint(actual))
+    return false;
+
+  // not handling MTYPE now
+  if (WN_rtype(actual) == MTYPE_M)
+    return false;
+  ConstraintGraph* caller_cg = cg(caller->Node_Index());
+  ConstraintGraph* callee_cg = cg(callee->Node_Index());
+  ConstraintGraph* global_cg = ConstraintGraph::globalCG();
+
+  // get original formal st in caller symtable
+  ST_IDX orig_idx = ConstraintGraph::getCloneOirgStIdx(ST_st_idx(formal_st));
+  if (orig_idx == ST_IDX_ZERO)
+    return false;
+
+  CG_ST_IDX formal_st_idx = ConstraintGraph::adjustCGstIdx(callee, orig_idx);
+  ConstraintGraphNode *formal_node = callee_cg->checkCGNode(formal_st_idx, 0);
+  Is_True(formal_node != NULL, ("can't get formal_st cg node\n"));
+  if (formal_node->checkFlags(CG_NODE_FLAGS_NOT_POINTER)) {
+    return false;
+  }
+
+
+  // get actual's cg node from caller or global graph
+  ConstraintGraphNode *actual_node = getCGNode(actual, caller);
+  if (actual_node == NULL)
+    return false;
+  if (actual_node->repParent() && actual_node->repParent() != actual_node)
+    return false;
+  // if actual node is merge parent of formal node, they must have same 
+  // points to.
+  if (formal_node->checkFlags(CG_NODE_FLAGS_MERGED) &&
+     formal_node->findRep() == actual_node) {
+    return false;
+  }
+  
+  // only handle scalar 
+  StInfo *callee_orig_st_info = callee_cg->stInfo(formal_st_idx);
+  Is_True(callee_orig_st_info->numOffsets() == 1, ("formal in callee has only one node\n"));
+
+  // check formal node has only in edge is in copy edge DN.
+  // if it has other in edge, can't optimize 
+  // better solution maybe resolved the points to set and compare with current points to.
+  // in case of formal is also modified in this function.
+  const CGEdgeSet& inLoadStoreSet = formal_node->inLoadStoreEdges();
+  if (!inLoadStoreSet.empty())
+    return false;
+  const CGEdgeSet& inCopySkewSet = formal_node->inCopySkewEdges();
+  for (CGEdgeSetIterator eiter = inCopySkewSet.begin();
+       eiter != inCopySkewSet.end(); eiter++) {
+    ConstraintGraphEdge *edge = *eiter;
+    if (edge->edgeQual() != CQ_DN)
+      return false;
+  }
+
+  ConstraintGraphNode *new_formal_node = NULL;
+  BOOL create_new = FALSE;
+  // check actaul nodes's points to set is a sub set of formal node's subset.
+  // DN copy edge always add points to into DN set, see ConstraintGraphSolve::qualMap
+  // so only need check if formal's DN points to set includes actual's all points to.
+  // itearate actual_node's points to set.
+  const PointsTo &formal_DN_set = formal_node->pointsTo(CQ_DN);
+  // if formal node has no DN points to set, no improvement
+  if (formal_DN_set.isEmpty())
+    return false;
+
+  PointsTo actual_union;
+  for (PointsToIterator pti(actual_node); pti != 0; ++pti) {
+    PointsTo &pts = *pti;
+    actual_union.setUnion(pts);
+  }
+  // actual's points to set is a true subset of formal's DN points to set.
+  bool pointsToUpdate = true;
+  if (!formal_DN_set.subset(actual_union) ||
+       formal_DN_set.numBits() == actual_union.numBits())
+    pointsToUpdate = false;
+
+  // TODO:
+  // if formal has no optimized chance and its parent function will not be inlined.
+  // then it also has no chance to improve points to, when caller is inlined.
+
+
+  // create a new node with DN points to has actual_union's points to.
+  CG_ST_IDX new_cg_st_idx = ConstraintGraph::adjustCGstIdx(caller, ST_st_idx(formal_st));
+  // 1. add new stinfo in caller cg.
+  StInfo *cloneStInfo = caller_cg->stInfo(new_cg_st_idx);
+  Is_True(cloneStInfo == NULL, ("callee's formal ST's stinfo already setup\n"));
+  caller_cg->cloneStInfo(callee_orig_st_info, new_cg_st_idx);
+  new_formal_node = caller_cg->getCGNode(new_cg_st_idx, 0);
+  new_formal_node->addFlags(formal_node->flags());
+  new_formal_node->unionPointsTo(actual_union, CQ_DN);
+  new_formal_node->updatePointsToForClone(formal_node);
+
+  // add copy edge from actual node to new formal node
+  if (new_formal_node->checkFlags(CG_NODE_FLAGS_MERGED)) {
+    new_formal_node->clearFlags(CG_NODE_FLAGS_MERGED);
+    new_formal_node->repParent(NULL);
+  }
+  bool added;
+  caller_cg->addEdge(actual_node, new_formal_node, ETYPE_COPY, CQ_DN, ST_size(formal_st), added);  
+
+  // only add node into inline node map, when it is optimized.
+  if (pointsToUpdate == true)
+    addInlineNodeMap(formal_node->id(), new_formal_node->id());
+
+  if (Get_Trace(TP_ALIAS,NYSTROM_INLINE_FLAG)) {
+    fprintf(TFile, "cs inline, actual is\n");
+    fdump_tree(TFile, actual);
+    formal_node->print(TFile);
+    actual_node->print(TFile);
+    new_formal_node->print(TFile);
+  }
+  return true;
+}
+
+void 
+ConstraintGraph::cloneStInfo(StInfo* orig, CG_ST_IDX cg_st_idx) 
+{
+  StInfo *si = CXX_NEW(StInfo(orig->flags(), orig->varSize(), orig->ty_idx(), _memPool), _memPool);
+  if (orig->checkFlags(CG_ST_FLAGS_MODRANGE)) {
+    si->modRange(orig->modRange());
+  }
+  else {
+    si->mod(orig->mod());
+  }
+  _cgStInfoMap[cg_st_idx] = si;
+}
+
+void 
+ConstraintGraphNode::updatePointsToForClone(ConstraintGraphNode *orig)
+{
+  // iterate orig node's reverse pts nodes.
+  // mark they also points to this.
+
+  for ( PointsToIterator pti(orig, PtsRev); pti != 0; ++pti ) {
+    CGEdgeQual qual = pti.qual();
+    PointsTo &pointsTo = _getPointsTo(qual, PtsRev);
+    pointsTo = *pti;
+    for (PointsTo::SparseBitSetIterator iter(&pointsTo,0); iter != 0; iter++) {
+      CGNodeId nodeId = *iter;
+      ConstraintGraph::cgNode(nodeId)->_addPointsTo(id(), qual);
+    }
+  }
+}
+
+void 
 ConstraintGraph::cloneConstraintGraphMaps(IPA_NODE *caller, IPA_NODE *callee)
 {
   ConstraintGraph *callerCG = 
@@ -2217,18 +2945,48 @@ ConstraintGraph::cloneConstraintGraphMaps(IPA_NODE *caller, IPA_NODE *callee)
     CG_ST_IDX clone_cg_st_idx = 
               ConstraintGraph::adjustCGstIdx(caller, clone_st_idx);
     StInfo *cloneStInfo = callerCG->stInfo(clone_cg_st_idx);
-    // if StInfo does not exist, add
-    if (cloneStInfo == NULL) {
+
+    if(cloneStInfo == NULL) {
       // Map the StInfo
-      callerCG->mapStInfo(origStInfo, orig_cg_st_idx, clone_cg_st_idx);
+      callerCG->cloneStInfo(origStInfo, clone_cg_st_idx);
+      cloneStInfo = callerCG->stInfo(clone_cg_st_idx);
+      ConstraintGraphNode *orig_node = origStInfo->firstOffset();
+      ConstraintGraphNode *prev_node = NULL;
+      while (orig_node) {
+        ConstraintGraphNode *clone_node = callerCG->cloneCGNode(orig_node, clone_cg_st_idx);
+        if (prev_node == NULL) {
+          cloneStInfo->firstOffset(clone_node);
+        }
+        else {
+          prev_node->nextOffset(clone_node);
+        }
+        clone_node->clearFlags(CG_NODE_FLAGS_VISITED);
+        clone_node->clearFlags(CG_NODE_FLAGS_INLINE_NO_BENEFIT);
+        clone_node->deleteDiffPointsToSet();
+        prev_node = clone_node;
+        orig_node = orig_node->nextOffset(); 
+      }
+    }
+    else {
+      // already cloned
       ConstraintGraphNode *orig_node = origStInfo->firstOffset();
       while (orig_node) {
-        callerCG->cloneCGNode(orig_node, clone_cg_st_idx);
+        ConstraintGraphNode *clone_node = callerCG->getCGNode(clone_cg_st_idx, orig_node->offset());
+        // set info for inline analysis
+        // formal nodes updated when processinlineformal is visited and optimized.
+        if (IPA_NystromAliasAnalyzer::aliasAnalyzer()->getInlineNodeMap(orig_node->id()) == clone_node->id())
+          clone_node->addFlags(CG_NODE_FLAGS_VISITED);
+        else
+          clone_node->clearFlags(CG_NODE_FLAGS_VISITED);
+        // copy pts to pts diff. 
+        if (!clone_node->checkFlags(CG_NODE_FLAGS_INLINE_NO_BENEFIT)) {
+          clone_node->deleteDiffPointsToSet();
+          clone_node->copyPtsToDiff();
+        }
         orig_node = orig_node->nextOffset(); 
       }
     }
   }
-  origToCloneStIdxMap.clear();
 }
 
 void

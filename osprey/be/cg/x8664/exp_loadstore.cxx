@@ -192,7 +192,7 @@ Pick_Load_Instruction (TYPE_ID rtype, TYPE_ID desc,
     if ( rclass == ISA_REGISTER_CLASS_mmx )
       return base != NULL ? TOP_ld64_2m : TOP_ld64_2m_n32;
     else if ( rclass == ISA_REGISTER_CLASS_float )
-      return base != NULL ? TOP_ld64_2sse : TOP_ld64_2sse_n32;
+      return base != NULL ? TOP_ldlps : TOP_ldlps_n32;
     else
       return base != NULL ? TOP_ld64 : TOP_ld64_off;
   case MTYPE_M8I1:

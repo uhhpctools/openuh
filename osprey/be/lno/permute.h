@@ -42,7 +42,8 @@
 ***	BOOL SNL_Legal_Permutation(WN* outer_loop,
 ***                                  WN* inner_loop,
 ***                                  INT permutation[],
-***                                  INT nloops)
+***                                  INT nloops,
+***                                  BOOL has_removable_branch)
 ***
 ***	    Returns TRUE if the SNL defined between loops 'outer_loop'
 ***	    and 'inner_loop' which consists of 'nloops' loops can be legally
@@ -78,7 +79,8 @@
 extern BOOL SNL_Legal_Permutation(WN* outer_loop,
 				  WN* inner_loop, 
                                   INT permutation[], 
-				  INT nloops); 
+				  INT nloops,
+                                  BOOL has_removable_branch); 
 
 extern INT Permutation_Last(INT first,
                             INT permutation[],

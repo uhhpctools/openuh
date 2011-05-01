@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011, Hewlett-Packard Development Company, L.P. All Rights Reserved.  
+ */
+
+/*
  * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -4895,7 +4899,7 @@ DCE::Remove_dead_statements( void )
         bb = bb->Succ()->Node();
         if (bb->Succ()->Len() == 1 &&
             bb->Succ()->Node()->Pred()->Len() == 1 &&
-            bb->Succ()->Node()->Phi_list()->Is_Empty() &&
+            (bb->Succ()->Node()->Phi_list()== NULL || bb->Succ()->Node()->Phi_list()->Is_Empty()) &&
             bb->Phi_list() != NULL)
           bb = NULL;
       }

@@ -287,6 +287,13 @@ static BOOL is_vectorizable_op (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc) {
       return TRUE;
     else
       return FALSE;
+  case OPR_BAND:
+  case OPR_SHL:
+  case OPR_BXOR:
+    if (MTYPE_is_integral(rtype))
+      return TRUE;
+    else
+      return FALSE;    
   case OPR_SQRT:
     if (rtype == MTYPE_F4 || rtype == MTYPE_F8)
       return TRUE;
@@ -333,6 +340,14 @@ static SIMD_OPERAND_KIND simd_operand_kind(WN* wn, WN* loop) {
       return Reference;
     wn=WN_kid0(wn);
     opr=WN_operator(wn);
+  }
+
+  // Recognize an invariant expression rooted at OPR_SHL.
+  // Should eventually be generalized to any 2 operand operation.
+  if (opr == OPR_SHL) {
+    if ((simd_operand_kind(WN_kid0(wn), loop) == Invariant) &&
+        (simd_operand_kind(WN_kid1(wn), loop) == Invariant))
+      return Invariant;
   }
 
   if (opr==OPR_CONST || opr==OPR_INTCONST) {
@@ -734,6 +749,20 @@ static BOOL Is_Well_Formed_Simd ( WN* wn, WN* loop)
     kid1 = WN_kid2(wn);
   }
  
+  // For all vectorized versions of the shift-left operation psll(w/d/q/dq), 
+  // each  w/d/q/dq in the first operand is left shifted by the same number 
+  // of bits given by the second argument. Hence for a scalar shift in a 
+  // loop to be vectorized, the second operand to the shift must be a loop invariant. 
+  if (WN_operator(wn) == OPR_SHL) {
+    SIMD_OPERAND_KIND shl_op_kind = simd_operand_kind(WN_kid1(wn), LWN_Get_Parent(WN_do_body(loop)));
+    if (shl_op_kind != Invariant)
+      return FALSE;
+    // cannot vectorize a 128-bit or 8-bit shift since there is no corresponding vectorized instruction.
+    if (WN_rtype(wn) == MTYPE_I16 || WN_rtype(wn) == MTYPE_U16 ||
+	WN_rtype(wn) == MTYPE_I1  || WN_rtype(wn) == MTYPE_U1)
+      return FALSE;
+  }
+
   if (OPCODE_is_compare(WN_opcode(wn)) && WN_operator(parent) != OPR_SELECT)
     return FALSE;
 
@@ -1418,6 +1447,15 @@ BOOL Gather_Vectorizable_Ops(
   TYPE_ID rtype = WN_rtype(wn);
   TYPE_ID desc = WN_desc(wn);
   
+  // Recognize invariant sub-expression rooted at OPR_SHL and do not
+  // push it onto the stack of vectorizable operations. 
+  // Should eventually be generalized to prevent any 2 operand invariant
+  // from being vectorized.
+  if (opr == OPR_SHL && 
+      simd_operand_kind(WN_kid0(wn), LWN_Get_Parent(WN_do_body(loop))) == Invariant &&
+      simd_operand_kind(WN_kid1(wn), LWN_Get_Parent(WN_do_body(loop))) == Invariant)
+    if (is_vectorizable_op(WN_operator(wn), WN_rtype(wn), WN_desc(wn)))
+      return TRUE;
   if (opr == OPR_IF || opr == OPR_REGION){
     Report_Non_Vectorizable_Op(wn);
     return FALSE;
@@ -3828,6 +3866,70 @@ static WN *Simd_Create_Remainder_Loop(WN *innerloop)
  return remainderloop; 
 } 
 
+// Simd_Handle_Negative_Coefficient_Helper() is helper function of 
+// Simd_Handle_Negative_Coefficient(). This function is to handle 
+// the vectorizable expression like "(double)a[i]" where a[i] is 
+// either 4 byte integer or floating point.
+//
+static void Simd_Handle_Negative_Coefficient_Helper(
+  WN *parent,     // shffle's parent
+  INT which_kid,  // which kid 
+  WN *array,      // array to shuffle
+  WN *loop,       // the loop
+  BOOL no_shuffle) {
+
+  // step 1: derive vector length etc
+  //
+
+  // This func is supposed to be called only by Simd_Handle_Negative_Coefficient.
+  //
+  Is_True (WN_operator(parent) == OPR_CVT, ("wrong caller"));
+
+  INT vect_len = 16/MTYPE_byte_size (WN_rtype(parent)); 
+  Is_True (vect_len == 2 && WN_element_size(array) == 4, 
+           ("For now, this func only handle F8I4CVT and F8F4CVT"));
+
+  ACCESS_ARRAY* aa = (ACCESS_ARRAY*)WN_MAP_Get (LNO_Info_Map,array);
+  Is_True (aa->Dim(aa->Num_Vec()-1)->Loop_Coeff(Do_Loop_Depth(loop))==-1,
+           ("loop coefficient is not -1"));
+
+  WN *opnd = LWN_Get_Parent(array);
+  TYPE_ID vect_ty = MTYPE_is_float (WN_desc(opnd)) ? MTYPE_V8F4 : MTYPE_V8I4;
+
+  // step 2: adjust array index. e.g. If the vectorizable expression is 
+  //  "(double)a[i]" where sizeof(a[i]) = 4, the index need to subtract by 
+  //  "vector_length - 1". In this case, vect-len = 2, so, the ultimate
+  //  vectorized expression is like "F16F8V8I4CVT shuffle ((*(V8I4*)&a[i-1])).
+  //
+  TYPE_ID idx_ty = WN_rtype(WN_end(loop));
+  OPCODE adjust = OPCODE_make_op (OPR_INTCONST, idx_ty, MTYPE_V);
+  OPCODE sub_opc = OPCODE_make_op (OPR_SUB,
+                    Mtype_TransferSign (MTYPE_I4, idx_ty), MTYPE_V);
+
+  WN* orig_idx = WN_array_index (array, WN_num_dim(array)-1);
+  WN_array_index (array, WN_num_dim(array)-1) = 
+          LWN_CreateExp2 (sub_opc, orig_idx,
+                          WN_CreateIntconst(adjust, vect_len-1));
+
+  LWN_Parentize (array);
+  if (!no_shuffle) {
+    WN_kid (parent, which_kid) = 
+      LWN_CreateExp1 (OPCODE_make_op(OPR_SHUFFLE, vect_ty, vect_ty),
+                             WN_kid(parent, which_kid));
+    // "0" means reverse vector elements. As of I write this note, 
+    // CG doesn't respect this parameter -- it bindly reverses elements 
+    // regardless WN_offset() is 0 or not.
+    //
+    // Since the vector involved here is shorter (8 byte) than underlying 
+    // machine is providing, care must be take by CG to only swap elements 
+    // 0 and 1, instead of all four elements.
+    //
+    WN_offset (WN_kid(parent, which_kid)) = 0; 
+  }
+
+  LWN_Parentize(parent);
+}
+
 //handle negative loop coefficient
 static void Simd_Handle_Negative_Coefficient(
                                       WN *parent,/*shffle's parent*/
@@ -3837,9 +3939,29 @@ static void Simd_Handle_Negative_Coefficient(
                                       BOOL no_shuffle)
 {
   FmtAssert(WN_element_size(array), ("NYI"));
-  INT incr = 16/ABS(WN_element_size(array));
+
   ACCESS_ARRAY* aa = (ACCESS_ARRAY*)WN_MAP_Get(LNO_Info_Map,array);
-  if (aa->Dim(aa->Num_Vec()-1)->Loop_Coeff(Do_Loop_Depth(loop))==-1){
+  if (aa->Dim(aa->Num_Vec()-1)->Loop_Coeff(Do_Loop_Depth(loop)) != -1)
+    return;
+
+  TYPE_ID res_ty = WN_rtype (parent);
+  TYPE_ID desc_ty = WN_desc (parent);
+  if (WN_operator (parent) == OPR_CVT && 
+      MTYPE_is_float(res_ty) && 
+      MTYPE_byte_size(res_ty) != MTYPE_byte_size(desc_ty)) {
+    if (MTYPE_byte_size(res_ty) == 8 && MTYPE_byte_size(desc_ty) == 4) {
+      Simd_Handle_Negative_Coefficient_Helper (parent, which_kid, array, 
+                                               loop, no_shuffle);
+      return;
+    } else {
+      FmtAssert (FALSE, ("Don't know how to handle %s", 
+                 OPCODE_name (WN_opcode(parent))));
+    }
+  }
+
+  INT incr = 16/ABS(WN_element_size(array));
+    
+  {
       TYPE_ID vector_type;
       WN *opnd = LWN_Get_Parent(array);
       switch(ABS(WN_element_size(array))) {
@@ -3952,6 +4074,14 @@ static TYPE_ID Simd_Get_Vector_Type(WN *istore)
 }
 
 
+// When vectorizing constants and invariants, care must be taken to appropriately 
+// vectorize the second operand of OPR_SHL. Most constants/invariant can be vectorized 
+// by replicating them in each b/w/d/q of the xmm register as per the type of the vector.
+// In the case of packed shift left (psllw/d/q), the second operand must always be 
+// loaded into the lower 64-bits of the 128-bit xmm reg or memory.  Note that if the 
+// second argument is a constant it can be placed in a 1 byte immediate if it fits. 
+// But the first option has been chosen because it fits easier with the existing framework.
+
 static WN *Simd_Vectorize_Constants(WN *const_wn,//to be vectorized 
                                     WN *istore,  //parent of simd_op
                                     WN *simd_op) //const_wn's parent
@@ -4000,10 +4130,16 @@ static WN *Simd_Vectorize_Constants(WN *const_wn,//to be vectorized
           const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I1, MTYPE_V, sym);
           break;
      case MTYPE_U2: case MTYPE_I2: case MTYPE_V16I2:
-          const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I2, MTYPE_V, sym);
+          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn)
+	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
+	  else
+	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I2, MTYPE_V, sym);
           break;
      case MTYPE_U4: case MTYPE_I4: case MTYPE_V16I4:
-          const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I4, MTYPE_V, sym);
+          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn)
+	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
+	  else
+	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I4, MTYPE_V, sym);
           break;
      case MTYPE_U8: case MTYPE_I8: case MTYPE_V16I8:
           const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
@@ -4057,14 +4193,32 @@ static WN *Simd_Vectorize_Invariants(WN *inv_wn,
                            inv_wn);
           break;
      case MTYPE_V16I2: case MTYPE_U2: case MTYPE_I2:
-          inv_wn =
-            LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I2, MTYPE_I2),
-                           inv_wn);
+          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == inv_wn) {
+	    WN* cvt_wn = 
+	      LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_I8, MTYPE_I2),
+			     inv_wn);
+	    inv_wn =
+	      LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I8, MTYPE_I8),
+			     cvt_wn);
+	  }
+	  else
+	    inv_wn =
+	      LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I2, MTYPE_I2),
+			     inv_wn);
           break;
      case MTYPE_V16I4: case MTYPE_U4: case MTYPE_I4:
-          inv_wn =
-            LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I4, MTYPE_I4),
-                           inv_wn);
+          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == inv_wn) {
+	    WN* cvt_wn = 
+	      LWN_CreateExp1(OPCODE_make_op(OPR_CVT, MTYPE_I8, MTYPE_I4),
+			     inv_wn);
+	    inv_wn =
+	      LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I8, MTYPE_I8),
+			     inv_wn);
+	  }
+	  else
+	    inv_wn =
+	      LWN_CreateExp1(OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I4, MTYPE_I4),
+			     inv_wn);
           break;
      case MTYPE_V16I8: case MTYPE_U8: case MTYPE_I8:
           inv_wn =

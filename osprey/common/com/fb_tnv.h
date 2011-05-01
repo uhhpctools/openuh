@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -62,7 +66,11 @@ struct FB_TNV{
   FB_TNV():_address(0),_sample_counter(0),_zero_std_counter(0),_stride_steps(0){}
     
   void Print( FILE *fp ) const {
-    fprintf(fp, "id(%u), exec_counter(%llu), flag(%d), zero_std_counter(%llu), (values(counters)=( %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu), %lld(%llu) ) )\n",
+#ifdef TARG_SL
+    fprintf(fp, "id(%u), exec_counter(%u), flag(%d), zero_std_counter(%u), (values(counters)=( %u(%u), %u(%u), %u(%u), %u(%u), %u(%u), %u(%u), %u(%u), %u(%u), %u(%u), %u(%u)))\n",
+#else
+    fprintf(fp, "id(%u), exec_counter(%llu), flag(%d), zero_std_counter(%llu), (values(counters)=( %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu), %#llx(%llu) ) )\n",
+#endif
 	    _id, _exec_counter, _flag, _zero_std_counter,
 	    _values[0], _counters[0] , _values[1], _counters[1], 
 	    _values[2], _counters[2], _values[3], _counters[3], _values[4], _counters[4], 

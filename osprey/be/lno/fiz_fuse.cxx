@@ -745,7 +745,7 @@ extern FISSION_FUSION_STATUS
 
   for (INT j=0; j< fusion_level; j++) {
 
-    if (Move_Adjacent(loop1,loop2)==FALSE) {
+    if (Move_Adjacent(loop1,loop2, FALSE)==FALSE) {
       fusion_status=Failed;
       break;
     }
@@ -969,9 +969,10 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
     }    
 #endif
 
-    BOOL try_fission = (LNO_Fission!=0) && !dli0->No_Fission &&
+    BOOL prefer_fission = (LNO_Fission != 0) ? TRUE : FALSE;
+    BOOL try_fission = prefer_fission && !dli0->No_Fission &&
        !Do_Loop_Is_Mp(Enclosing_Do_Loop(LWN_Get_Parent(wn1))) &&
-       (type1 == Inner || type1 == Not_Inner) &&
+			(type1 == Inner || type1 == Not_Inner) &&
        (type2 == Inner || type2 == Not_Inner) &&
        (((last_fissioned_level!=0) && (type1==Inner)) || (type2==Inner));
     BOOL cannot_fuse = FALSE;
@@ -992,7 +993,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
           "Attempted to fuse to create a deeper Simply Nested Loop");
 
       // move the loops to be fused closer to each other
-      if (Move_Adjacent(info->Get_Wn(last_loop), info->Get_Wn(i))==TRUE)
+      if (Move_Adjacent(info->Get_Wn(last_loop), info->Get_Wn(i), FALSE)==TRUE)
         fusion_status= Fuse(wn1, wn2, min_snl_level,
 			    peeling_limit,TRUE);
       else
@@ -1086,7 +1087,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
       }
 
     }
-    if (try_fusion && !cannot_fuse) {
+   if (try_fusion && !cannot_fuse) {
       if (LNO_Analysis)
         fiz_fuse_analysis_info(INFO, srcpos1, srcpos2, min_snl_level,
           "Attempted to fuse to create a deeper Simply Nested Loop");
@@ -1094,7 +1095,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
         fiz_fuse_tlog_info(INFO, srcpos1, srcpos2, min_snl_level,
           "Attempted to fuse to create a deeper Simply Nested Loop");
 
-      if (Move_Adjacent(info->Get_Wn(last_loop), info->Get_Wn(i))==TRUE)
+      if (Move_Adjacent(info->Get_Wn(last_loop), info->Get_Wn(i), FALSE)==TRUE)
         fusion_status=Fuse(info->Get_Wn(last_loop), info->Get_Wn(i),
 		min_snl_level, peeling_limit,TRUE);
       else
@@ -1310,7 +1311,7 @@ extern FIZ_FUSE_INFO* Fiz_Fuse(WN* loop, FIZ_FUSE_INFO* snls, MEM_POOL* mpool) {
     // neither fission nor fusion works so move i-th child loop
     // closer to (i+1)th child loop
     if (i!=info->Num_Snl()-1)
-      (void)Move_Adjacent(info->Get_Wn(i), info->Get_Wn(i+1));
+      (void)Move_Adjacent(info->Get_Wn(i), info->Get_Wn(i+1), FALSE);
 
     snls->Copy_Snl(info,last_loop);
     last_loop=i;

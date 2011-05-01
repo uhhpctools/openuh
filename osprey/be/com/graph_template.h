@@ -283,6 +283,7 @@ public:
 
   VINDEX16	Get_Vertex() const;
   VINDEX16	Get_Next_Vertex(VINDEX16 v) const;
+  VINDEX16	Get_Next_Vertex_In_Edit(VINDEX16 v) const;
 
   EINDEX16	Get_Edge() const;
   EINDEX16	Get_Next_Edge(EINDEX16 e) const;
@@ -300,6 +301,8 @@ public:
 		  return _e[e].Get_Sink(); }
 
   EINDEX16 	Get_In_Edge(VINDEX16 v) const 	{ 
+                  if (!Vertex_Is_In_Graph(v))
+                      FmtAssert(FALSE, (" "));
 		  Is_True (Vertex_Is_In_Graph(v), ("Vertex not in graph\n"));
 		  return _v[v].Get_In_Edge(); }
   EINDEX16 	Get_Out_Edge(VINDEX16 v) const 	{ 
@@ -526,6 +529,16 @@ DIRECTED_GRAPH16<EDGE_TYPE,VERTEX_TYPE>::Get_Next_Vertex(VINDEX16 v) const {
 
   Is_True( Vertex_Is_In_Graph(v), ("Vertex does not exist in graph\n"));
 
+  do {
+    v--;
+  } while (v>0 && _v[v].Is_Free() );	// skip over free vertices
+
+  return v;
+}
+
+template <class EDGE_TYPE, class VERTEX_TYPE>
+VINDEX16
+DIRECTED_GRAPH16<EDGE_TYPE,VERTEX_TYPE>::Get_Next_Vertex_In_Edit(VINDEX16 v) const {
   do {
     v--;
   } while (v>0 && _v[v].Is_Free() );	// skip over free vertices

@@ -269,6 +269,9 @@ ModulusRange::build(TY_IDX ty_idx, UINT32 offset, MEM_POOL *memPool)
       while (TY_kind(Ty_Table[etyIdx]) == KIND_ARRAY)
         etyIdx = TY_etype(Ty_Table[etyIdx]);
       UINT32 elmtSize = TY_size(Ty_Table[etyIdx]);
+      // same handling as StInfo::init
+      if (elmtSize == 0)
+        elmtSize = 1;
       newRange = 
          CXX_NEW(ModulusRange(start,end,elmtSize,FLD_type(fld)),memPool);
     }
@@ -489,6 +492,8 @@ StInfo::StInfo(ST_IDX st_idx, MEM_POOL *memPool)
   // Set the flags
   ST_SCLASS storage_class = ST_sclass(st);
   if (storage_class == SCLASS_FSTATIC ||
+      (storage_class == SCLASS_PSTATIC &&
+       ST_IDX_level(st_idx) == GLOBAL_SYMTAB) ||
       storage_class == SCLASS_COMMON ||
       storage_class == SCLASS_UGLOBAL ||
       storage_class == SCLASS_DGLOBAL ||
@@ -500,8 +505,10 @@ StInfo::StInfo(ST_IDX st_idx, MEM_POOL *memPool)
   if (ST_class(st) == CLASS_FUNC)
     addFlags(CG_ST_FLAGS_FUNC);
 
-  if (ST_class(st) == CLASS_PREG)
+  if (ST_class(st) == CLASS_PREG) {
     addFlags(CG_ST_FLAGS_PREG);
+    maxOffsets(0);
+  }
 
   // Globals are treated context-insensitive
   if (checkFlags(CG_ST_FLAGS_GLOBAL))
@@ -759,6 +766,7 @@ ConstraintGraph::adjustPointsToForKCycle(ConstraintGraphNode *cgNode)
     }
     ptsTo.clear();
     cgNode->unionPointsTo(tmp, pti.qual());
+    tmp.clear();
   }
 }
 
@@ -977,6 +985,35 @@ ConstraintGraph::genTempCGNode()
   return tmpCGNode;
 }
 
+static bool INITV_BLKIsFlat(INITV_IDX initv_idx)
+{
+  const INITV &initv = Initv_Table[initv_idx];
+  if (INITV_kind(initv) == INITVKIND_BLOCK) {
+    // only has one child is val or pad
+    INITV_IDX child_initv_idx = INITV_blk(initv);
+    if ((INITV_kind(child_initv_idx) == INITVKIND_VAL ||
+       INITV_kind(child_initv_idx) == INITVKIND_PAD) &&
+       INITV_next(child_initv_idx) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// get WN node's TY, used for determin kcycle
+TY&
+ConstraintGraph::getTY(const WN* wn, const ConstraintGraphNode* node)
+{
+  if (OPERATOR_has_1ty(WN_operator(wn))) {
+    TY_IDX ty_idx = WN_ty(wn);
+    return Ty_Table[ty_idx];
+  }
+  else {
+    ST *st = &St_Table[SYM_ST_IDX(node->cg_st_idx())];
+    return Ty_Table[ST_type(st)];
+  }
+}
+
 // This just recursively processes all initvs starting from initv_idx
 // and adds any nodes that correspond to symbols to pts
 void
@@ -996,7 +1033,12 @@ ConstraintGraph::processInitv(INITV_IDX initv_idx, PointsTo &pts)
         node = notAPointer();
       else {
         // Do initial value processing for the symbol
-        processInitValues(ST_st_idx(base_st));
+        if (ST_is_initialized(*base_st) &&
+              (_processedInitVals.find(ST_st_idx(base_st)) ==
+               _processedInitVals.end())) {
+          processInitValues(ST_st_idx(base_st));
+          _processedInitVals.insert(ST_st_idx(base_st));
+        }
         node = getCGNode(CG_ST_st_idx(base_st), base_offset);
       }
       pts.setBit(node->id());
@@ -1029,9 +1071,13 @@ ConstraintGraph::processFlatInitvals(TY &ty,
   FmtAssert(TY_kind(ty) == KIND_ARRAY || TY_kind(ty) == KIND_STRUCT,
             ("Expecting KIND_ARRAY or KIND_STRUCT"));
   FmtAssert(INITV_kind(Initv_Table[initv_idx]) == INITVKIND_VAL ||
-            INITV_kind(Initv_Table[initv_idx]) == INITVKIND_PAD,
-            ("Expecting INITVKIND_VAL or INITVKIND_PAD"));
+            INITV_kind(Initv_Table[initv_idx]) == INITVKIND_PAD ||
+            INITV_BLKIsFlat(initv_idx),
+            ("Expecting INITVKIND_VAL, INITVKIND_PAD or flat BLK"));
   UINT32 size = 0;
+  if(INITV_BLKIsFlat(initv_idx)) {
+    initv_idx = INITV_blk(initv_idx);
+  }
   // Iterate over all INITVKIND_VALs/PADs until size of ty
   while (size < TY_size(ty) && initv_idx != 0) {
     used_repeat++;
@@ -1079,21 +1125,6 @@ ConstraintGraph::processFlatInitvals(TY &ty,
   OffsetPointsToList *valList = CXX_NEW(OffsetPointsToList(), memPool);
   valList->push_back(make_pair(startOffset, pts));
   return valList;
-}
-
-static bool INITV_BLKIsFlat(INITV_IDX initv_idx)
-{
-  const INITV &initv = Initv_Table[initv_idx];
-  if(INITV_kind(initv) == INITVKIND_BLOCK) {
-    // only has one child is val or pad
-    INITV_IDX child_initv_idx = INITV_blk(initv);
-    if((INITV_kind(child_initv_idx) == INITVKIND_VAL ||
-         INITV_kind(child_initv_idx) == INITVKIND_PAD) &&
-         INITV_next(child_initv_idx) == 0) {
-         return true;
-    }
-  }
-  return false;
 }
 
 
@@ -1146,9 +1177,14 @@ ConstraintGraph::processInitv(TY &ty, INITV_IDX initv_idx, UINT32 startOffset,
       node = notAPointer();
     else {
       // Process the init vals of this symbol
-      if (Get_Trace(TP_ALIAS,NYSTROM_CG_BUILD_FLAG))
-        fprintf(stderr, "Processing symbol value...\n");
-      processInitValues(ST_st_idx(base_st));
+      if (ST_is_initialized(*base_st) &&
+          (_processedInitVals.find(ST_st_idx(base_st)) ==
+           _processedInitVals.end())) {
+        if (Get_Trace(TP_ALIAS,NYSTROM_CG_BUILD_FLAG))
+          fprintf(stderr, "Processing symbol value...\n");
+        processInitValues(ST_st_idx(base_st));
+        _processedInitVals.insert(ST_st_idx(base_st));
+      }
       if (Get_Trace(TP_ALIAS,NYSTROM_CG_BUILD_FLAG))
         fprintf(stderr, "End processing symbol value...\n");
       node = getCGNode(CG_ST_st_idx(base_st), base_offset);
@@ -1332,8 +1368,11 @@ ConstraintGraph::processInito(const INITO *const inito)
     }
 
     // If the init vals did not have a pointer, ignore any initializations
-    if (!foundPtr)
+    if (!foundPtr) {
+      MEM_POOL_Delete(&memPool);
+      tmp.clear();
       return;
+    }
 
     ConstraintGraphNode::sanitizePointsTo(tmp,NULL,CQ_NONE);
     ConstraintGraphNode *node = getCGNode(CG_ST_st_idx(base_st), base_offset);
@@ -1344,6 +1383,8 @@ ConstraintGraph::processInito(const INITO *const inito)
       node->print(stderr);
       fprintf(stderr, "\n");
     }
+    MEM_POOL_Delete(&memPool);
+    tmp.clear();
     return;
   }
 
@@ -1855,8 +1896,7 @@ ConstraintGraph::processExpr(WN *expr)
         // size of the pointed-to type.
         if (!kid0CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER) && 
             kid1CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER)) {
-          ST *st = &St_Table[SYM_ST_IDX(kid0CGNode->cg_st_idx())];
-          TY &ty = Ty_Table[ST_type(st)];
+          TY &ty = getTY(WN_kid0(expr), kid0CGNode);
           INT32 size = 1;
           if (TY_kind(ty) == KIND_POINTER)
             size = TY_size(Ty_Table[TY_pointed(ty)]);
@@ -1870,8 +1910,7 @@ ConstraintGraph::processExpr(WN *expr)
         // Check the other kid
         if (!kid1CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER) && 
             kid0CGNode->checkFlags(CG_NODE_FLAGS_NOT_POINTER)) {
-          ST *st = &St_Table[SYM_ST_IDX(kid1CGNode->cg_st_idx())];
-          TY &ty = Ty_Table[ST_type(st)];
+          TY &ty = getTY(WN_kid1(expr), kid1CGNode);
           INT32 size = 1;
           if (TY_kind(ty) == KIND_POINTER)
             size = TY_size(Ty_Table[TY_pointed(ty)]);
@@ -1890,14 +1929,12 @@ ConstraintGraph::processExpr(WN *expr)
         // is of a pointer type, set it to the size of the pointed-to type. 
         // Compute size from first kid
         INT32 size0 = 1;
-        ST *kid0st = &St_Table[SYM_ST_IDX(kid0CGNode->cg_st_idx())];
-        TY &kid0ty = Ty_Table[ST_type(kid0st)];
+        TY &kid0ty = getTY(WN_kid0(expr), kid0CGNode);
         if (TY_kind(kid0ty) == KIND_POINTER)
           size0 = TY_size(Ty_Table[TY_pointed(kid0ty)]);
         // Compute size from other kid
         INT32 size1 = 1;
-        ST *kid1st = &St_Table[SYM_ST_IDX(kid1CGNode->cg_st_idx())];
-        TY &kid1ty = Ty_Table[ST_type(kid1st)];
+        TY &kid1ty = getTY(WN_kid1(expr), kid1CGNode);
         if (TY_kind(kid1ty) == KIND_POINTER)
           size1 = TY_size(Ty_Table[TY_pointed(kid1ty)]);
 
@@ -2752,7 +2789,7 @@ StInfo::alignOffset(TY_IDX ty_idx, INT64 offset)
   // is not need to adjust.  It is the sub-pointer size offsets
   // that will cause issues, especially if the offsets to not
   // match up with a valid field offset in the current TY
-  if (offset & (~(Pointer_Size-1)) == offset)
+  if ((offset & (~(Pointer_Size-1))) == offset)
     return offset;
 
   TY ty = Ty_Table[ty_idx];
@@ -2773,8 +2810,16 @@ StInfo::alignOffset(TY_IDX ty_idx, INT64 offset)
   if (kind == KIND_SCALAR ||
       kind == KIND_FUNCTION ||
       kind == KIND_POINTER ||
-      kind == KIND_VOID)
-    offset = offset & (~(TY_size(ty)-1));
+      kind == KIND_VOID) {
+    UINT64 size = TY_size(ty);
+    // if scalar type is a complex, no need align to start of
+    // complex, it can also align to the imaginary part.
+    // Complex actually need treated as a struct.
+    if (MTYPE_is_complex(TY_mtype(ty))) {
+      size = size / 2;
+    }
+    offset = offset & (~(size-1));
+  }
   else { // kind == KIND_STRUCT
     FmtAssert(kind == KIND_STRUCT,("Expecting only structs here"));
 
@@ -2786,6 +2831,12 @@ StInfo::alignOffset(TY_IDX ty_idx, INT64 offset)
          if (TY_kind(fty) == KIND_ARRAY ||
              TY_kind(fty) == KIND_STRUCT)
            offset = start + alignOffset(FLD_type(fld),(offset-start));
+         // treat complex as a struct
+         else if (MTYPE_is_complex(TY_mtype(fty))) {
+           UINT64 size = TY_size(fty);
+           size = size / 2;
+           offset = start + ((offset-start) & (~(size-1)));
+         }
          else
            offset = start;
          break;
@@ -2873,6 +2924,15 @@ ConstraintGraph::getCGNode(CG_ST_IDX cg_st_idx, INT64 offset)
     }
     si->incrNumOffsets();
   }
+  else {
+    // record preg has how many offset.
+    // recomrd max preg number in maxOffsets
+    si->incrNumOffsets();
+    Is_True(offset % CG_PREG_SCALE == 0, ("incorrect offset\n"));
+    if(offset > si->maxOffsets()*CG_PREG_SCALE) {
+        si->maxOffsets(offset/CG_PREG_SCALE);
+    }
+  }
 
   cgNode = CXX_NEW(ConstraintGraphNode(cg_st_idx, offset, this), _memPool);
 
@@ -2913,6 +2973,15 @@ ConstraintGraph::checkCGNode(CG_ST_IDX cg_st_idx, INT64 offset)
   if (cgIter != _cgNodeToIdMap.end())
     return cgIter->first;
   return NULL;
+}
+
+bool
+ConstraintGraph::nodeInGraph(ConstraintGraphNode* node)
+{
+  CGNodeToIdMapIterator cgIter = _cgNodeToIdMap.find(node);
+  if (cgIter != _cgNodeToIdMap.end())
+    return true;
+  return false;
 }
 
 PointsTo &
@@ -3103,6 +3172,17 @@ StInfo::collapse()
     firstOffset()->nextOffset()->collapse(firstOffset());
     firstOffset(firstOffset()->nextOffset());
     firstOffset()->nextOffset(NULL);
+  }
+}
+
+bool 
+StInfo::isCollapse()
+{
+  if (checkFlags(CG_ST_FLAGS_MODRANGE)) {
+    return modRange()->mod() == 1;
+  }
+  else {
+    return mod()==1;
   }
 }
 
@@ -3381,6 +3461,49 @@ ConstraintGraphNode::deleteRevPointsToSet()
     p = np;
   }
   _revPointsToList = NULL;
+}
+
+void 
+ConstraintGraphNode::deleteDiffPointsToSet()
+{
+  PointsToList *p = _diffPointsToList;
+  PointsToList *np;
+  while (p) {
+    np = p->next();
+    CXX_DELETE(p, cg()->memPool());
+    p = np;
+  }
+  _diffPointsToList = NULL;
+}
+
+// union node's points to, to a single set.
+void 
+ConstraintGraphNode::UnionPointsToSet(PointsTo &unionPts)
+{
+  for ( PointsToIterator pti(this); pti != 0; ++pti ) {
+    unionPts.setUnion(*pti);
+  }
+}
+
+void 
+ConstraintGraphNode::copyPtsToDiff()
+{
+  for ( PointsToIterator pti(this); pti != 0; ++pti ) {
+    PointsTo &diffPts = _getPointsTo(pti.qual(), PtsDiff);
+    diffPts = *pti;
+  }
+}
+
+void 
+ConstraintGraphNode::unionDiffToPts() 
+{
+  for ( PointsToIterator pti(this); pti != 0; ++pti ) {
+    PointsTo *diffPts = _findPointsTo(pti.qual(), PtsDiff);
+    if ( diffPts != NULL ) {
+      PointsTo &pts = *pti;
+      pts.setUnion(*diffPts);
+    }
+  }
 }
 
 void
@@ -3926,6 +4049,29 @@ ConstraintGraph::updateCloneStIdxMap(ST_IDX old_clone_idx,
   }
 }
 
+ST_IDX
+ConstraintGraph::getCloneOirgStIdx(ST_IDX clone_idx)
+{
+  for ( hash_map<ST_IDX, ST_IDX>::iterator iter = origToCloneStIdxMap.begin();
+        iter != origToCloneStIdxMap.end(); iter++ ) {
+    ST_IDX orig_st_idx  = iter->first;
+    ST_IDX clone_st_idx = iter->second;
+    if ( clone_st_idx == clone_idx ) {
+      return orig_st_idx;
+    }
+  }
+  return ST_IDX_ZERO;
+}
+
+ST_IDX 
+ConstraintGraph::getOrigCloneStIdx(ST_IDX orig_idx)
+{
+  hash_map<ST_IDX, ST_IDX>::iterator iter = origToCloneStIdxMap.find(orig_idx);
+  if ( iter != origToCloneStIdxMap.end() )
+    return iter->second;
+  return ST_IDX_ZERO;
+}
+
 void
 ConstraintGraph::updateOrigToCloneStIdxMap(ST_IDX orig_st_idx,
                                            ST_IDX clone_st_idx)
@@ -3964,6 +4110,56 @@ ConstraintGraphNode::copy(ConstraintGraphNode *node)
   //_maxAccessSize = node->_maxAccessSize;
 }
 
+
+// copy node's points to set to this.
+void 
+ConstraintGraphNode::copyPointsTo(ConstraintGraphNode *node)
+{
+  if ( repParent() != NULL && repParent() != this )
+    return;
+  
+  _pointsToList = _revPointsToList = NULL;
+  // copy node's points_to to this.
+  // add revPointsTo for the pointed node
+  for ( PointsToIterator pti(node); pti != 0; ++pti ) {
+    CGEdgeQual qual = pti.qual();
+    PointsTo &pointsTo = _getPointsTo(qual, Pts);
+    pointsTo = *pti;
+    for ( PointsTo::SparseBitSetIterator iter(&pointsTo,0); iter != 0; iter++ ) {
+      CGNodeId nodeId = *iter;
+      ConstraintGraph::cgNode(nodeId)->_addRevPointsTo(id(), qual);
+    }
+  }
+
+  // for nodes which points to input node, also points to this
+  for ( PointsToIterator pti(node, PtsRev); pti != 0; ++pti ) {
+    CGEdgeQual qual = pti.qual();
+    PointsTo &pointsTo = _getPointsTo(qual, PtsRev);
+    pointsTo = *pti;
+    for ( PointsTo::SparseBitSetIterator iter(&pointsTo,0); iter != 0; iter++ ) {
+      CGNodeId nodeId = *iter;
+      ConstraintGraph::cgNode(nodeId)->_addPointsTo(id(), qual);
+    }
+  }
+}
+
+
+// exclude nodes in exclude sets from this node's points to set
+void 
+ConstraintGraphNode::excludePointsTo(PointsTo &exclude)
+{
+  for ( PointsTo::SparseBitSetIterator iter(&exclude,0); iter != 0; iter++ ) {
+    CGNodeId nodeId = *iter;
+    ConstraintGraphNode *ptNode = ConstraintGraph::cgNode(nodeId);
+    for ( PointsToIterator pti(this); pti != 0; ++pti ) {
+      if(_checkPointsTo(nodeId, pti.qual())) {
+        removePointsTo(nodeId, pti.qual());
+        ptNode->removeRevPointsTo(id(), pti.qual());
+      }
+    }
+  }
+}
+
 // Create a new ConstraintGraphNode with new_cg_st_idx, but the old node's id
 // and offset. The new node is added to this CG using the new_cg_st_idx.
 ConstraintGraphNode *
@@ -3984,6 +4180,22 @@ ConstraintGraph::cloneCGNode(ConstraintGraphNode *node, CG_ST_IDX new_cg_st_idx)
             node->cg()->name(), printCGStIdx(newCGNode->cg_st_idx(), buf2, 128),
             newCGNode->offset(), name());
   return newCGNode;
+}
+
+
+// create a new node id for node, update maps use node id.
+void 
+ConstraintGraph::newNodeId(ConstraintGraphNode *node)
+{
+#ifdef Is_True_On
+  CGNodeToIdMapIterator cgIter = _cgNodeToIdMap.find(node);
+  Is_True(cgIter != _cgNodeToIdMap.end(), ("node not in current graph\n"));
+#endif
+  
+  node->setId(nextCGNodeId);
+  _cgNodeToIdMap[node] = nextCGNodeId;
+  cgIdToNodeMap[nextCGNodeId] = node;
+  nextCGNodeId++;
 }
 
 // Remap node to this CG using new cg_st_idx

@@ -214,6 +214,7 @@ extern BOOL WOPT_Enable_MP_varref;      /* trust the var list in the nested proc
 extern const BOOL WOPT_Enable_MP_Const_Prop;  /* perform const prop into MP region */
 extern BOOL WOPT_Enable_New_SR;		/* new strength-reduction */
 extern BOOL WOPT_Enable_New_SR_Limit;
+extern BOOL WOPT_Enable_SIB;		/* abandon some SR candidate for x86 SIB */
 extern BOOL WOPT_Enable_Output_Copy;    /* output copy propagation */
 extern BOOL WOPT_Enable_Ocopy_Lookupstmt;
 extern BOOL WOPT_Enable_Parm;		/* insert OPTPARM over parms */
@@ -248,6 +249,9 @@ extern INT32 WOPT_Enable_Simple_If_Conv; /* enable simple if-conversion at CFG b
 extern INT32 WOPT_Enable_If_Conv_Limit; /* max number of leaf nodes allowed in a
 					   simple expr in simple if conv */
 extern BOOL WOPT_Enable_If_Conv_For_Istore; /* if-conversion is applied if lhs is istore */
+#if defined(TARG_SL)
+extern BOOL WOPT_Enable_If_Conv_For_Iload;  /* if-conversion is applied if rhs is iload */
+#endif
 extern char *WOPT_Enable_Skip;
 extern struct option_list *WOPT_Skip;	/* Skip option list */
 extern struct skiplist *WOPT_Skip_List;	/* Preprocessed skip list */

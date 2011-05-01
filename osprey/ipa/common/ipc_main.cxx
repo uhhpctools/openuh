@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -196,7 +196,7 @@ static char * known_library[] = {
     "-lgcc", "-lc", "-lopenmp", "-lopen64rt", "-lm", "-lmv",
     "-lacml_mv", "-lffio","-lfortran", "-lhugetlbfs_open64", "-linstr",
     "-lopen64rt_shared","-lrt","-lrpcsvc","-lpthread",
-    "-lstdc++", "-lgcc_s", "-ldl",
+    "-lstdc++", "-lgcc_s", "-ldl", "-lsmartheap", "-lg++",
     ""
 };
 

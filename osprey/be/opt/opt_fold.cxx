@@ -923,12 +923,6 @@ CR_opcode(CODEREP *cr)
       // cr->Dsctyp() is meaningless for FP constants
       return OPCODE_make_op(OPR_CONST, cr->Dtyp(), MTYPE_V);
     case CK_VAR:
-#ifdef TARG_SL
-      if ( cr->Dtyp() == MTYPE_I2 &&  cr->Dsctyp() == MTYPE_I2) {
-        return OPCODE_make_op(cr->Bit_field_valid() ? OPR_LDBITS : OPR_LDID,
-			      MTYPE_I4, cr->Dsctyp());
-      } else
-#endif
       return OPCODE_make_op(cr->Bit_field_valid() ? OPR_LDBITS : OPR_LDID,
 			    cr->Dtyp(), cr->Dsctyp());
     default:

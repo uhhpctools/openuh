@@ -1002,7 +1002,19 @@ STR_RED::Defined_by_iv_update_no_def(      CODEREP *use_cr,
   return FALSE;
 }
 
+static
+BOOL Is_address_const(OPERATOR opr, const CODEREP *expr, 
+                      const CODEREP *expr_sib, const CODEREP *expr_parent)
+{
+    if (!WOPT_Enable_SIB) return FALSE;
+    if (opr == OPR_MPY && expr->Kind() == CK_CONST &&
+        (expr->Const_val() == 2 || 
+         expr->Const_val() == 4 ||
+         expr->Const_val() == 8 )) 
+        return TRUE;
 
+    return FALSE;
+}
 
 //======================================================================
 // Determine if this occurrence is a strength-reduction candidate
@@ -1102,7 +1114,8 @@ STR_RED::Candidate( const CODEREP *cr,
 				opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0) &&
+        !Is_address_const(opr, use_opnd1, use_opnd0, cr)) {
 	  return TRUE;
         }
       }
@@ -1115,7 +1128,8 @@ STR_RED::Candidate( const CODEREP *cr,
 				opr == OPR_ADD || opr == OPR_SUB))
       {
         if (Is_cvt_linear(use_opnd1) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1)) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1) &&
+        !Is_address_const(opr, use_opnd0, use_opnd1, cr)) {
 	  return TRUE;
         }
       }
@@ -1187,7 +1201,8 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
 				       opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd0) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0)) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd0) &&
+        !Is_address_const(opr, use_opnd1, use_opnd0, cr)) {
 	  return TRUE;
 	}
       }
@@ -1200,7 +1215,8 @@ STR_RED::Candidate_phi_res( const CODEREP *cr,
 				       opr == OPR_ADD || opr == OPR_SUB))
       {
 	if (Is_cvt_linear(use_opnd1) &&
-	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1)) {
+	    Is_implicit_cvt_linear(cr->Dtyp(), use_opnd1) &&
+        !Is_address_const(opr, use_opnd0, use_opnd1, cr)) {
 	  return TRUE;
 	}
       }

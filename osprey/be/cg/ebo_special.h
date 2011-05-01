@@ -206,6 +206,8 @@ void Lea_Insertion ();
 void Init_Load_Exec_Map( BB*, MEM_POOL* );
 BOOL Delete_Unwanted_Prefetches( OP* );
 BOOL EBO_Can_Eliminate_Zero_Opnd_OP(OP *);
+void Counter_Merge();
+void Peel_Spills();
 #endif /* TARG_X8664 */
 
 BOOL EBO_Can_Merge_Into_Offset (OP *op);

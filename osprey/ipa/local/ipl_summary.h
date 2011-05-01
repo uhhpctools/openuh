@@ -108,6 +108,8 @@
 
 struct IPC_GLOBAL_IDX_MAP;              // forward declaration
 
+extern INT    ICALL_MAX_PROMOTE_PER_CALLSITE;
+
 //////////////////////////////////////////////////////////////////
 //                      IMPORTANT
 // if you change any of the following -- data types, adding classes etc
@@ -1124,8 +1126,6 @@ public:
 //-----------------------------------------------------------------
 // all summary information for a callsite node must be stored here
 //-----------------------------------------------------------------
-class SUMMARY_CALLSITE
-{
 #define IPL_FUNC_PTR		0x01
 #define IPL_INTRINSIC_FUNC	0x02
 #define IPL_HAS_CALLSITE_FREQ	0x04
@@ -1155,7 +1155,10 @@ File 3: osprey/ipa/local/ipl_summary.h
 */
 
 #define IPL_VIRTUAL_FUNCTION_TARGET     0x100
+#define IPL_DUMMY_CALLSITE              0x200
     
+class SUMMARY_CALLSITE
+{
 private:
 
     union {
@@ -1188,6 +1191,8 @@ private:
     TY_IDX _virtual_class;              // the class of the virtual function 
     mUINT32 _vtable_offset;             // virtual function position, the offset of the vtable 
     mUINT64 _vptr_offset;               // vtable field offset of this call 
+    mINT32  _matching_map_id;           // for dummy call site, the associated WN node's map id
+                                        // used to match dummy callsite and the WN node
 
     mUINT32 _constraint_graph_callsite_id; // For the Nystrom alias analyzer
 
@@ -1227,6 +1232,9 @@ public:
 		 ("Value index for indirect callsite only"));
 	return u2._value_index;
     }
+
+    void Set_matching_map_id(mINT32 map_id)  { _matching_map_id = map_id; }
+    mINT32 Get_matching_map_id(void) const  { return _matching_map_id; }
 
     mUINT16 Get_state() const { return _state;}
 
@@ -1304,6 +1312,10 @@ public:
     {
       _constraint_graph_callsite_id = callSiteId;
     }
+
+    void Set_dummy_callsite ()		{ _state |= IPL_DUMMY_CALLSITE; }
+    void Reset_dummy_callsite ()	{ _state &= ~IPL_DUMMY_CALLSITE; }
+    BOOL Is_dummy_callsite () const	{ return (_state & IPL_DUMMY_CALLSITE); }
 
     /* operations */
 

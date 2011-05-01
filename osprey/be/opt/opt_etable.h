@@ -2104,7 +2104,7 @@ public:
                                        STMTREP *old_stmt);
 
   void 		  Replace_by_temp(EXP_OCCURS *occur, CODEREP *tempcr);
-  void 		  Replace_by_const(EXP_OCCURS *occur, TCON tcon);
+  void 		  Replace_by_const(EXP_OCCURS *occur, TCON tcon, TYPE_ID vect_ty);
 
   // Always use Rehash_exp() instead of Htable()->rehash() for an etable.
   CODEREP        *Rehash_exp(CODEREP *cr, UINT32 gvn, BOOL canon=TRUE) const;

@@ -1637,14 +1637,14 @@ CFG::LMV_gen_precondioning_stuff (LMV_CFG_ADAPTOR* adaptor) {
   Connect_predsucc (precond, orig_phdr);
 
   // Likewise if the preheader is the merge point of a lowered IF/THEN/ELSE
-  // then we must update the merge point on the immediate dominator
-  BB_NODE *idom = orig_phdr->Idom();
-  while (idom) {
-    if (idom->Kind()==BB_LOGIF && idom->If_merge() == orig_phdr) {
-      idom->Ifinfo()->Set_merge(precond);
-      break;
+  // use idom to find if parent is not safe.
+  // Case can be multientry, entry directly jump to header BB. 
+  // Iterate all BBs and if bb's if_merge is header, change to precond.
+  for (IDTYPE id = _first_bb_id+1; id <= _last_bb_id; id++) {
+    BB_NODE *bb = _bb_vec[id];
+    if (bb && bb->Kind() == BB_LOGIF && bb->If_merge() == orig_phdr) {
+      bb->Ifinfo()->Set_merge(precond);
     }
-    idom = idom->Idom();
   }
 
   // If the original preheader is the body of the parent loop we need

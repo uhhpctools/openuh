@@ -1077,7 +1077,9 @@ static void ir_put_wn(WN * wn, INT indent)
    	return;
     } else {
 	if (IR_dump_wn_id) {
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
 	    fprintf(ir_ofile, "[%6u] ", WN_id(wn));
+#endif
 	}
 	if (IR_dump_wn_addr) {
 	    fprintf(ir_ofile, "%8p: ", wn);
@@ -1493,6 +1495,14 @@ static void ir_put_expr(WN * wn, INT indent)
  */
 static void ir_put_marker(const char *str, INT indent)
 {
+  if (IR_dump_wn_id) {
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+    indent += 9;
+#endif
+  }
+  if (IR_dump_wn_addr) {
+    indent += 10;
+  }
   fprintf(ir_ofile, "%*s%s\n", indent, "", str);
 }
 

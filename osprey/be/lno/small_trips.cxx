@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -449,6 +449,9 @@ extern void Remove_Unity_Trip_Loop(WN* wn_loop,
 	*wn_first = WN_next(*wn_first);
 	if (*wn_first == NULL)
 	  *wn_last = NULL; 
+	else if ((*wn_last) && (WN_next(*wn_last) == *wn_first))
+	  *wn_last = *wn_first;
+
 	LWN_Delete_Tree(lb);
       }
     }

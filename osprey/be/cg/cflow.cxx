@@ -2686,6 +2686,14 @@ Convert_If_To_Goto ( BB *bp )
   tn1 = BBINFO_condval1(bp); 
   tn2 = BBINFO_condval2(bp); 
   compare_op = BBINFO_compare_op(bp);
+
+#ifdef TARG_X8664
+  /* load execute TOP access memory, so is not possible to be evaluated 
+   * at compile time. */
+  if (TOP_is_load_exe(OP_code(compare_op)))
+    return FALSE;
+#endif
+
 #ifdef TARG_LOONGSON
   /* for loongson, there are some branch instructions with only one operand, such as:
        "mipsbgez",

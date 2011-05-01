@@ -554,7 +554,9 @@ private:
     void Process_alt_procedure (WN *w, INT formal_index, INT formal_count);
     void Process_callsite (WN *w, INT id, INT loopnest, float =-1);
 #if defined(KEY) && !defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER)
-    SUMMARY_CALLSITE * Process_icall (SUMMARY_PROCEDURE *, WN *, INT, float);
+    void Process_icall (SUMMARY_PROCEDURE *, WN *, INT, float);
+    SUMMARY_CALLSITE * Create_dummy_callsite(SUMMARY_PROCEDURE *, WN *, INT, float,
+                                             ST *, UINT64, UINT64);
 #endif
 /*
     this function is added to enable IPA to apply

@@ -1216,10 +1216,7 @@ CFG::Is_simple_expr(WN *wn) {
     return 0;
   if (opr == OPR_SELECT)
     return 1;
-  if (opr == OPR_MIN || opr == OPR_MAX || opr == OPR_ILOAD) 
-    return Is_simple_expr(WN_kid0(wn));
-  if (opr == OPR_NEG || opr == OPR_MIN || opr == OPR_MAX || opr == OPR_SELECT ||
-      opr == OPR_CVTL || opr == OPR_ILOAD || opr == OPR_ABS) 
+  if (WOPT_Enable_If_Conv_For_Iload && (opr == OPR_ILOAD))
     return Is_simple_expr(WN_kid0(wn));
 #endif
   if (opr == OPR_NEG || opr == OPR_ABS || opr == OPR_CVTL)
@@ -1272,6 +1269,9 @@ CFG::Is_simple_expr(WN *wn) {
 #ifdef TARG_NVISA
       // mpy is usually fast on nvisa
       opr == OPR_MPY ||
+#endif
+#ifdef TARG_SL
+      opr == OPR_MIN || opr == OPR_MAX ||
 #endif
       opr == OPR_BAND || opr == OPR_BIOR || opr == OPR_BNOR || opr == OPR_BXOR)
   { INT kid0ans, kid1ans;
@@ -1827,11 +1827,6 @@ CFG::if_convert(WN *wn)
       else 
         rtype = Mtype_TransferSign(dsctyp, rtype);
       
-#ifdef TARG_SL
-      if (rtype == MTYPE_I2 && dsctyp == MTYPE_I2) {
-        rtype = MTYPE_I4;
-      }
-#endif
       load = WN_CreateIload(OPR_ILOAD, rtype, dsctyp, WN_offset(stmt), 
                 TY_pointed(WN_ty(stmt)), WN_ty(stmt), 
                 Copy_addr_expr(WN_kid1(stmt), _opt_stab->Alias_classification()), 

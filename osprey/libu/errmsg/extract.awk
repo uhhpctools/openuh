@@ -1,5 +1,5 @@
 #
-#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of the GNU Lesser General Public License as published
@@ -32,19 +32,24 @@ BEGIN {
     printf "\tchar *msg;\n";
     printf "} libu_default_msgs[] = {\n";
 }
-{
-    # note: using gawk extension to set 'result'
-    if (match($0, /^\$msg ([0-9]+) (.+)$/, result)) {
-        if (count > 0) {
-            printf ",\n";
-        }
-        count++;
-
-        # escape double-quotes in message text
-        msg = result[2];
-        gsub(/"/, "\\\"", msg)
-        printf "\t{ %s, \"%s\" }", result[1], msg
+/^\$msg ([0-9]+) (.+)$/ {
+    if (count > 0) {
+        printf ",\n";
     }
+    count++;
+
+    # the message number is the text between the first and second spaces
+    sp1 = index($0, " ")
+    sp2 = sp1 + index(substr($0, sp1 + 1), " ")
+    num = substr($0, sp1 + 1, sp2 - sp1 - 1)
+
+    # the message is the remainder following the second space in the line
+    msg = substr($0, sp2 + 1)
+
+    # escape double-quotes in message text
+    gsub(/"/, "\\\"", msg)
+
+    printf "\t{ %s, \"%s\" }", num, msg
 }
 END {
     printf "\n};\n";

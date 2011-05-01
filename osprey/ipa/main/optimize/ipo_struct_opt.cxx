@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 ////////////////////////////////////////////////////////////////////////////
@@ -1669,6 +1669,10 @@ static BOOL wn_can_be_array_remapping_candidate(WN *wn)
         TY_mtype(TY_etype(TY_pointed(WN_ty(array_base_wn)))) !=
           array_remapping_candidate_mtype)
       return FALSE; // array of another type
+    if (WN_operator(array_base_wn) == OPR_LDA &&
+        WN_field_id(array_base_wn) != 0)
+      return FALSE; // base array just a little too complicated:  e.g. it is a
+                    // member of a struct, etc.
   }
   return TRUE;
 }

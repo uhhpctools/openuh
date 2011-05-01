@@ -136,7 +136,7 @@
 #include "opt_cvtl_rule.h"
 
 #include "opt_vn.h"
-
+#include "opt_vn_expr_taxonomy.h"
 
 // Number of predefined value numbers for integer literals.
 //
@@ -292,7 +292,7 @@ VN::_init_integer_valnum_map()
    for (INT64 literal = 0; literal <= VN_MAX_PREDEFINED_INT; literal++)
    {
       const TCON         tc = Host_To_Targ(MTYPE_I8, literal);
-      const VN_EXPR::PTR expr = VN_EXPR::Create_Literal(tc);
+      const VN_EXPR::PTR expr = VN_EXPR::Create_Literal(tc, MTYPE_UNKNOWN);
 
       _vn_to_expr.set_map(_next_valnum, expr);
       _next_valnum = VN_VALNUM::Next(_next_valnum);
@@ -337,7 +337,7 @@ VN::_valnum_integer(INT64 literal,
       //
       const MTYPE                    mty = (is_signed? MTYPE_I8 : MTYPE_U8);
       const TCON                     tc = Host_To_Targ(mty, literal);
-      const VN_EXPR::PTR             expr = VN_EXPR::Create_Literal(tc);
+      const VN_EXPR::PTR             expr = VN_EXPR::Create_Literal(tc, MTYPE_UNKNOWN);
       const VN_HASHTAB::EXPR_MAPPING map = 
 	 _status.expr_to_vn->lookup_or_insert(expr, _next_valnum);
 
@@ -403,10 +403,8 @@ VN::_valnum_vn_expr(EXPRID         exprid,   // Coderep (or WHIRL?) id
 	    "in VN::_valnum_vn_expr()", (INT32)exprid));
    
    if (simplified->get_kind() == VN_EXPR::LITERAL && 
-#ifdef TARG_X8664
-       !MTYPE_is_vector(TCON_ty(simplified->get_tcon())) &&
-#endif
-       MTYPE_is_integral(TCON_ty(simplified->get_tcon())))
+       MTYPE_is_integral(TCON_ty(simplified->get_tcon())) &&
+       !(static_cast<const VN_LITERAL_EXPR*>(simplified))->is_const_vect ())
    {
       const BOOL  is_signed = MTYPE_is_signed(TCON_ty(simplified->get_tcon()));
       const INT64 intval = Targ_To_Host(simplified->get_tcon());
@@ -699,17 +697,26 @@ VN::_valnum_expr(CODEREP *cr)
 	 break;
 
       case CK_CONST:
-	 valnum = _valnum_integer(cr->Const_val(), 
-				  MTYPE_is_signed(cr->Dtyp()));
-	 _set_valnum(exprid, valnum, _exprid_to_vn, *_status.locked_to_vn);
-	 break;
+         // Constant vector, no matter its element type is int or fp, is 
+         // depicted by a CR of type CK_RCONST. 
+         //
+         Is_True (!MTYPE_is_vector (cr->Dtyp()),
+                  ("vect cannot be described by a CR_CONST"));
+         valnum = _valnum_integer(cr->Const_val(), 
+                                  MTYPE_is_signed(cr->Dtyp()));
+         _set_valnum(exprid, valnum, _exprid_to_vn, *_status.locked_to_vn);
+         break;
 
       case CK_RCONST:
-	 vn_expr_ptr = VN_EXPR::Create_Literal(STC_val(cr->Const_id()));
-	 valnum = _valnum_vn_expr(exprid, vn_expr_ptr,
-				  _exprid_to_vn,
-				  *_status.locked_to_vn);
-	 break;
+         {
+         TYPE_ID vect_ty = MTYPE_is_vector(cr->Dtyp()) ? 
+                             cr->Dtyp() : MTYPE_UNKNOWN;
+         vn_expr_ptr = VN_EXPR::Create_Literal(STC_val(cr->Const_id()), vect_ty);
+         valnum = _valnum_vn_expr(exprid, vn_expr_ptr,
+                                  _exprid_to_vn,
+                                  *_status.locked_to_vn);
+         }
+         break;
 
       case CK_IVAR:
 	 if (cr->Opr() == OPR_PARM)

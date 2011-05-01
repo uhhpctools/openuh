@@ -3093,9 +3093,24 @@ HB_Schedule::Init(std::list<BB*> bblist, HBS_TYPE hbs_type, mINT8 *regs_avail)
 void
 HB_Schedule::Schedule_BB (BB *bb, BBSCH *bbsch, int scheduling_algorithm)
 {
+#if defined(TARG_X8664)
+  bool clear_minregs_flag = false;
+#endif
+
   /* In some cases, the bb is an empty one */
   if( BB_length(bb) == 0 )
     return;
+
+#if defined(TARG_X8664)
+  // Experiment: in prescheduling schedule for reg pressure for unrolled loops
+  if (HBS_Before_GRA() && HBS_Before_LRA() && 
+      HBS_Depth_First() && !HBS_Minimize_Regs() && 
+      ((BB_unrollings(bb) && LOCS_PRE_Enable_Unroll_RegPressure_Sched) || 
+       (LOCS_PRE_Enable_General_RegPressure_Sched))) {
+    clear_minregs_flag = true;
+    _hbs_type |= HBS_MINIMIZE_REGS;
+  }
+#endif
 
   Invoke_Pre_HBS_Phase(bb);
 
@@ -3196,6 +3211,11 @@ HB_Schedule::Schedule_BB (BB *bb, BBSCH *bbsch, int scheduling_algorithm)
     }
   }
 
+#if defined(TARG_X8664)
+  if (clear_minregs_flag) {
+    _hbs_type &= ~HBS_MINIMIZE_REGS;
+  }
+#endif
 }
 
 void

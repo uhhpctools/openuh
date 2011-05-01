@@ -86,6 +86,7 @@
 #include "wn_mp.h"                    // for WN_has_pragma_with_side_effect
 #include "ipl_lno_util.h" 
 #include "wb_ipl.h"
+#include "ipa_trace.h"
 
 // Generate summary information for Nystrom alias analyzer
 #include "ipa_be_summary.h"
@@ -2233,25 +2234,24 @@ SUMMARIZE<program>::Process_virtual_function (SUMMARY_PROCEDURE * proc,
 // that IPA may add for this icall. Fix other summary data as if proc now
 // has another callsite.
 template <PROGRAM program>
-SUMMARY_CALLSITE *
+void
 SUMMARIZE<program>::Process_icall (SUMMARY_PROCEDURE * proc, WN * wn,
                                    INT loopnest, float probability)
 {
   Is_True (WN_operator (wn) == OPR_ICALL, ("Process_icall: ICALL expected"));
 
-  SUMMARY_CALLSITE * cs = NULL;
   // Tune this parameter
   const int freq_threshold = IPA_Icall_Min_Freq;
 
   const FB_Info_Call& info_call = Cur_PU_Feedback->Query_call(wn);
   if (!info_call.freq_entry.Known())
-    return cs;
+    return ;
   if (info_call.freq_entry.Value() < freq_threshold)
-    return cs;
+    return ;
 
   FB_Info_Icall info_icall = Cur_PU_Feedback->Query_icall(wn);
   if (info_icall.Is_uninit())
-    return cs;
+    return ;
 
   if (info_icall.tnv._exec_counter < info_call.freq_entry.Value())
   {
@@ -2263,27 +2263,9 @@ SUMMARIZE<program>::Process_icall (SUMMARY_PROCEDURE * proc, WN * wn,
   }
 
   const UINT64 exec_counter   = info_icall.tnv._exec_counter;
-  const UINT64 callee_counter = info_icall.tnv._counters[0];
-  const UINT64 callee_addr    = info_icall.tnv._values[0];
 
-  if (exec_counter == 0 || callee_counter == 0)
-    return cs;
-
-  // For now, we have decided to proceed with ICALL transformation for
-  // this icall, IPA will finally decide whether to actually transform it.
-  //
-  // Create a dummy callsite for a CALL. Pretend as if we are adding a call
-  // to the current pu. The dummy callee is of the form "void dummy (void)".
-  // NOTE: this prototype is likely to be different than the actual icall
-  // prototype. Since this ST is just for temporary use in summary data, we
-  // do not try to be accurate here.
-
-  cs = New_callsite();
-  cs->Set_callsite_id (proc->Get_callsite_count());
-  cs->Set_loopnest (loopnest);
-  cs->Set_probability (probability);
-  cs->Set_param_count (WN_num_actuals (wn));
-  cs->Set_return_type (WN_rtype (wn));
+  if (exec_counter == 0)
+    return ;
 
   // Get a new symbol for the dummy icall target
   static ST * st = NULL;
@@ -2293,7 +2275,7 @@ SUMMARIZE<program>::Process_icall (SUMMARY_PROCEDURE * proc, WN * wn,
     PU_IDX pu_idx;
     PU& pu = New_PU (pu_idx);
 
-    // a dummy placeholder for prototype
+    // a dummy placeholderexec_counter for prototype
     PU_Init (pu, MTYPE_TO_TY_array[MTYPE_V], GLOBAL_SYMTAB+1);
 
     st = New_ST (GLOBAL_SYMTAB);
@@ -2303,13 +2285,60 @@ SUMMARIZE<program>::Process_icall (SUMMARY_PROCEDURE * proc, WN * wn,
     vector<IPL_ST_INFO>& aux_st = Aux_Symbol_Info[GLOBAL_SYMTAB];
     aux_st.insert (aux_st.end(), 1, IPL_ST_INFO ());
   }
+  // For now, we have decided to proceed with ICALL transformation for
+  // this icall, IPA will finally decide whether to actually transform it.
+  //
+  // Create a dummy callsite for a CALL. Pretend as if we are adding a call
+  // to the current pu. The dummy callee is of the form "void dummy (void)".
+  // NOTE: this prototype is likely to be different than the actual icall
+  // prototype. Since this ST is just for temporary use in summary data, we
+  // do not try to be accurate here.
+
+  const int trace = Get_Trace(TP_IPL, TT_IPL_IPA);
+  for (int i = 0; i < FB_TNV_SIZE; i++) {
+    const UINT64 callee_counter = info_icall.tnv._counters[i];
+    const UINT64 callee_addr    = info_icall.tnv._values[i];
+    if (callee_counter == 0 || 
+          ((float)callee_counter/exec_counter)*100 < IPA_Icall_Target_Min_Rate ||
+         i >= ICALL_MAX_PROMOTE_PER_CALLSITE ) 
+      break;
+    
+    if (trace) {
+      fprintf(TFile, "\n[added dummy icall site %d] callee_counter=%lld/total_exec=%lld, callee_addr=%#llx\n",
+                     i, callee_counter, exec_counter, callee_addr);
+    }
+    SUMMARY_CALLSITE * cs = 
+           Create_dummy_callsite(proc, wn, loopnest, probability,
+                                 st, callee_counter, callee_addr);
+    proc->Incr_callsite_count ();
+    proc->Incr_call_count ();
+  }
+  return ;
+} // SUMMARIZE::Process_icall
+
+template <PROGRAM program>
+SUMMARY_CALLSITE * 
+SUMMARIZE<program>::Create_dummy_callsite(SUMMARY_PROCEDURE * proc, WN * wn,
+                                 INT loopnest, float probability,
+                                 ST *st, UINT64 callee_counter,
+                                 UINT64 callee_addr)
+{
+  SUMMARY_CALLSITE * cs = New_callsite();
+  cs->Set_callsite_id (proc->Get_callsite_count());
+  cs->Set_loopnest (loopnest);
+  cs->Set_probability (probability);
+  cs->Set_param_count (WN_num_actuals (wn));
+  cs->Set_return_type (WN_rtype (wn));
+
   cs->Set_symbol_index (Get_symbol_index (st));
  
   FB_FREQ freq ((float) callee_counter, FB_FREQ_TYPE_EXACT);
   cs->Set_callsite_freq ();
   cs->Set_frequency_count (freq);
+  cs->Set_dummy_callsite ();
   cs->Set_icall_target ();
   cs->Set_targ_runtime_addr (callee_addr);
+  cs->Set_matching_map_id(WN_map_id(wn));
 
   // If there are parameters in this routine then process them one at a time
 
@@ -2319,10 +2348,12 @@ SUMMARIZE<program>::Process_icall (SUMMARY_PROCEDURE * proc, WN * wn,
   if (cs->Get_param_count () > 0)
     cs->Set_actual_index (Get_actual_idx () - cs->Get_param_count () + 1);
 
-  proc->Incr_callsite_count ();
-  proc->Incr_call_count ();
+  if (Get_Trace(TP_IPL, TT_IPL_IPA)) {
+    fprintf(TFile, "\n[added dummy icall site] callee_counter=%lld, callee_addr=%#llx\n",
+                   callee_counter, callee_addr);
+  }
   return cs;
-} // SUMMARIZE::Process_icall
+} // SUMMARIZE::Create_dummy_callsite
 #endif // KEY && !(_STANDALONE_INLINER) && !(_LIGHTWEIGHT_INLINER)
 
 //-----------------------------------------------------------

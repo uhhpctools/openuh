@@ -3270,7 +3270,7 @@ static WN* Mp_Permute_Nested_Loops(WN* wn_outer_loop,
     permutation[pindex++] = first_loops[i] + tiling_depth[i] - 1; 
   WN* wn_inner_loop = SNL_Get_Inner_Snl_Loop(wn_outer_loop, nloops); 
   if (SNL_Legal_Permutation(wn_outer_loop, wn_inner_loop, 
-      permutation, nloops)) {
+      permutation, nloops, FALSE)) {
     wn_outer_loop = SNL_INV_Permute_Loops(wn_outer_loop, permutation, 
       nloops, TRUE);
   } else {

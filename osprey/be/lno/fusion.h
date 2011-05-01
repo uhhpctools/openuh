@@ -128,7 +128,7 @@
 ***         returns NULL except when all the regions are under the
 ***         returned loop.
 ***
-***     BOOL Move_Adjacent(WN* stmt1, WN* stmt2)
+***     BOOL Move_Adjacent(WN* stmt1, WN* stmt2, BOOL move_up_only)
 ***
 ***         Move the two statements closer to each other to increase
 ***         the chance of a successful fusion. Dependence informations
@@ -152,6 +152,7 @@
 #include "wn.h"
 #include "dep_graph.h"
 #include "ff_utils.h"
+#include "be_util.h"
 
 // fuse two loops
 extern FISSION_FUSION_STATUS
@@ -162,7 +163,9 @@ Fuse(WN* in_loop1, WN* in_loop2, mUINT8 fusion_level,
 
 extern void Pre_loop_peeling(WN* in_loop, UINT32 iter_count,
                              BOOL unrolled=TRUE,
-                             BOOL preserve_loop_index=TRUE);
+                             BOOL preserve_loop_index=TRUE,
+                             BOOL do_precom = FALSE
+                             );
 extern void Post_loop_peeling(WN* in_loop, UINT32 iter_count,
                               BOOL unrolled=TRUE,
                               BOOL preserve_loop_index=TRUE);
@@ -172,9 +175,15 @@ extern void Fusion_Init();
 extern void Fusion_Finish();
 
 extern WN* Get_Only_Loop_Inside(const WN* wn, BOOL regions_ok);
-extern BOOL Move_Adjacent(WN* stmt1, WN* stmt2);
+extern BOOL Move_Adjacent(WN* stmt1, WN* stmt2, BOOL move_up_only);
 
 extern INT Compare_Bounds(WN* bound1, WN* index1, WN* bound2, WN* index2);
-
+extern BOOL Same_Bounds(WN *, WN *);
+extern BOOL Pass_Child_Prefer_Fuse(WN *);
+extern BOOL Has_Unit_Refs(WN *, int);
+extern BOOL Check_Removable_Branch(WN *, int *, int *, WN **);
+extern void Remove_Cond_Branch(WN *, WN *);
+extern BOOL Has_Loop_Carried_Dependence(WN *);
+extern BOOL Do_Loop_Depth(WN *);
 #endif
 

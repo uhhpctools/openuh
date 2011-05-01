@@ -78,7 +78,11 @@ typedef enum {
     // for cases where innermost loop disappear after fusion and peeling
   Partially_fused=3,
     // in this case, two SNL were partially fused and a non-SNL is created
-  Try_Level_By_Level=4
+  Try_Level_By_Level=4,
+  // Retry after 1st SNL is peeled.
+  Retry_and_Peel_First_SNL = 5,
+  // Retry after 2nd SNL is peeled.
+  Retry_and_Peel_Second_SNL = 6,
 } FISSION_FUSION_STATUS;
 
 typedef STACK<SCALAR_REF> SCALAR_REF_STACK;

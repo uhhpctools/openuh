@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2011, Hewlett-Packard Development Company, L.P. All Rights Reserved.
+ */
 //-*-c++-*-
 
 /*
@@ -1612,7 +1615,7 @@ SSA::Resurrect_chi(CHI_NODE *chi)
   chi->Set_dse_dead(FALSE);
 
   if (sr->Op() == OPC_OPT_CHI)
-    chi->Set_OPND( Get_zero_version_CR(chi->Aux_id(), _opt_stab, du));
+    chi->Set_OPND( Get_zero_version_CR(chi->Aux_id(), _opt_stab, chi->Opnd()));
   else {
     chi->Set_OPND(Revive_phi_chi_opnd(chi->Opnd()));
     chi->OPND()->Set_flag(CF_DONT_PROP);

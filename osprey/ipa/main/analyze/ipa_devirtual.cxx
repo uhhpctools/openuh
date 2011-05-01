@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -99,7 +99,8 @@ Find_inito_by_st(ST_IDX st_idx)
                 return idx;
             }
         }
-        Is_True(FALSE, ("Cannot find vtable by ST."));
+        st_inito_map[st_idx] = INITO_IDX_ZERO;
+        return INITO_IDX_ZERO;
     }
     return st_inito_map[st_idx];
 }
@@ -673,6 +674,8 @@ IPA_Fast_Static_Analysis_VF ()
     IPA_VIRTUAL_FUNCTION_TRANSFORM vf_transform;
     vf_transform.Initialize_Virtual_Function_Transform ();
     vf_transform.Prepare_Virtual_Function_Transform ();
+if(IPA_Enable_New_VF)
+    vf_transform.Build_Virtual_Function_Overridden_Map();
     vf_transform.Dump_Constructors();
     vf_transform.Transform_Virtual_Functions ();
     vf_transform.Fixup_Virtual_Function_Callsites ();
@@ -689,10 +692,16 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Initialize_Virtual_Function_Transform ()
     if (Enable_Debug == true) {
         Virtual_Whirls = fopen ("Virtual_Whirls.log", "w");
         Transformed_Whirls = fopen ("Tranformed_Whirls.log", "w");
+        Callsite_Dump_file = fopen ("Callsite_Dump_.log", "w");
+        Enable_Statistics = true;
     } else {
         Virtual_Whirls = NULL;
         Transformed_Whirls = NULL;
+        Callsite_Dump_file = NULL;
+        Enable_Statistics = false;
     }
+
+    Read_Callsite(); // get callsite devirtualization spec from file
 
     Enable_Profile = false;
     // In case profiling is enabled locate the global STs 
@@ -721,7 +730,6 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Initialize_Virtual_Function_Transform ()
         Hit_ST_IDX = ST_IDX_ZERO;
     }
     
-    Enable_Statistics = false;
     Num_VFs_Count = 0;
     Class_Hierarchy_Transform_Count = 0;
     Class_Instance_Transform_Count = 0;
@@ -737,6 +745,7 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Finalize_Virtual_Function_Transform ()
     if (Enable_Debug == true) {
         fclose(Virtual_Whirls);
         fclose(Transformed_Whirls);
+        fclose(Callsite_Dump_file);
     }
 }
 
@@ -774,6 +783,95 @@ int IPA_VIRTUAL_FUNCTION_TRANSFORM::Get_Callsite_Count (IPA_NODE* method)
         method_summary->Get_callsite_index();
     int count = method_summary->Get_callsite_count();
     return count;
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Dump_Callsite( IPA_NODE *method,
+                                                    SUMMARY_CALLSITE* callsite,
+                                                    WN_IPA_MAP& wn_map, 
+                                                    bool devirtualized,
+                                                    ST_IDX callee_st_idx)
+{
+  //
+  if (Callsite_Dump_file == NULL)
+    return;
+  if (callsite->Is_virtual_call() ) {
+    WN *wn = wn_map[callsite->Get_map_id()];
+
+    Is_True(wn != NULL, ("WN node is empty for the virtual function call"));
+    fprintf(Callsite_Dump_file, "Caller:%s line:%d callsite_id:%d",
+              method->Name(), Srcpos_To_Line(WN_linenum(wn)),
+              callsite->Get_callsite_id() );
+    fprintf(Callsite_Dump_file, " vtable_offset:%d vptr_offset:%d", 
+            callsite->Get_vtable_offset(), (int)callsite->Get_vptr_offset());
+    if (devirtualized)
+       fprintf(Callsite_Dump_file, " devirtualized callee:%s",
+               ST_name(ST_ptr(callee_st_idx)));
+    fprintf(Callsite_Dump_file, "\n");
+  }
+}
+
+static IPA_VIRTUAL_FUNCTION_TRANSFORM::DevirCallsiteMap theDevirCallsiteMap;
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Read_Callsite()
+{
+   if (IPA_Devirtualization_Input_File) {
+      FILE *fp = fopen(IPA_Devirtualization_Input_File, "r");
+      if (fp == NULL) {
+         fprintf(stderr, "Invalid DEVIR_CALLSITE file %s!\n", IPA_Devirtualization_Input_File);
+         return;
+      }
+      size_t sz = 4096;
+      char *linebuf = (char*)malloc(sz);
+      char buffer[2048];
+      int lineno;
+      int callsite_id;
+      while (getline(&linebuf, &sz, fp) != -1) {
+         if (*linebuf == '#') {
+            // comment line starts with #
+            continue;
+         }
+         if ( sscanf(linebuf, "Caller:%s line:%d callsite_id:%d",
+                     buffer, &lineno, &callsite_id) == 3) {
+            DevirCallsiteInfo *p = new DevirCallsiteInfo(buffer, lineno, callsite_id);
+            DevirCallsiteMap::iterator itr = theDevirCallsiteMap.find(buffer);
+            if (itr == theDevirCallsiteMap.end()) {
+               // create a new entry with a new vector
+                  vector<DevirCallsiteInfo *> *v = new vector<DevirCallsiteInfo *> ( );
+               v->push_back(p);
+               theDevirCallsiteMap.insert(std::make_pair(strdup(buffer), v));
+            }
+            else {
+               // add the callsite info to the end of the exisiting vector
+               itr->second->push_back(p);
+            }
+         }
+#if 0 // def Is_True_On
+         printf("Read callsite: Caller:%s line:%d callsite_id:%d\n", 
+                 buffer, lineno, callsite_id);
+#endif
+      }
+   }
+}
+
+DevirCallsiteInfo *
+IPA_VIRTUAL_FUNCTION_TRANSFORM::Find_Callsite(IPA_NODE *method,
+                                              SUMMARY_CALLSITE* callsite,
+                                              WN_IPA_MAP& wn_map)
+
+{
+   Is_True(method && callsite, ("method or callsite empty"));
+    DevirCallsiteMap::iterator itr = theDevirCallsiteMap.find(method->Name());
+    if (itr == theDevirCallsiteMap.end()) return NULL;
+    vector<DevirCallsiteInfo *> *v = itr->second;
+    if (v) {
+       vector<DevirCallsiteInfo *>::iterator itr = v->begin();
+       while (itr != v->end()) {
+          DevirCallsiteInfo *d = *itr++;
+          if (d->callsite_id == callsite->Get_callsite_id())
+             return d;
+       }
+    }
+    return NULL;
 }
 
 // Following two functions,Identify_Constructors, Get_Constructor_Type
@@ -872,24 +970,280 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Prepare_Virtual_Function_Transform ()
     Identify_Constructors ();
 }
 
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Build_Virtual_Function_Overridden_Map()
+{
+    Record_Virtual_Functions_for_Class();
+    Mark_Secondary_Bases_Unusable();
+    Propagate_Overridden_Info();
+    if (Enable_Debug == true) {
+       Print_Overridden_Map(stdout);
+    }
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Record_Virtual_Functions_for_Class() {
+    UINT32 num_type = TY_Table_Size();
+
+    // for every type in Ty_tab
+    for (UINT32 i = 1; i < num_type; i++) {
+        TY &ty = Ty_tab[i];    
+        if (Is_Structure_Type(ty) && !TY_is_union(ty) && ty.Vtable()) {
+            if (Enable_Debug == true)
+               fprintf(stdout, "Type Name: %s, TY_INDEX: %d\n", TY_name(ty), i);
+
+            Virtual_Functions VFs;
+			
+            ST_IDX vtab_st_idx = ty.Vtable();
+            VFs.Set_class_ty_index(i);
+            VFs.Set_vtable_st_idx(vtab_st_idx);
+
+            Is_True (vtab_st_idx != 0, ("invalid vtable index"));
+            class_vf_map[i] = VFs;
+  
+            // Find the INITO entry via ST index
+            INITO_IDX inito_idx = Find_inito_by_st(vtab_st_idx);
+	
+            if(inito_idx == INITO_IDX_ZERO)
+            {
+                class_vf_map[i].Set_Unusable();
+                continue;
+            }
+
+            // Get the INITV entry, then find the target function call
+            INITV_IDX initv_idx = INITO_val(inito_idx);
+            // The position of target function call in INITO entry
+            // is at func_offset after base_offset.
+
+            Is_True (initv_idx > INITV_IDX_ZERO, ("vtable is empty"));
+			
+            if(INITV_kind(initv_idx) == INITVKIND_BLOCK)
+                initv_idx = INITV_blk(initv_idx);
+
+            bool start = false;
+            UINT32 vf_count = 0;
+            UINT32 offset = 0;
+            while(initv_idx > INITV_IDX_ZERO)
+            {
+                if(INITV_kind(initv_idx) == INITVKIND_SYMOFF && ST_class(INITV_st(initv_idx)) == CLASS_FUNC)
+                {
+                    if(!start)
+                    {
+                        start = true;
+                        class_vf_map[i].Set_vtable_offset(offset * Pointer_Size);
+                    }
+        
+                    Virtual_Function vf(i, INITV_st(initv_idx), vf_count * Pointer_Size);
+                    class_vf_map[i].Add_Virtual_Function(vf);
+                    vf_count++;
+                }
+                else if(start)
+                {
+                    break;
+                }
+                offset++;
+                initv_idx = INITV_next(initv_idx);
+            }
+            if (Enable_Debug == true)
+            {
+                //  dump vf info
+               fprintf(stdout, "Added %d virtual functions to class_vf_map[%d]\n", vf_count, i);
+               class_vf_map[i].Print(stdout);
+               fprintf(stdout, "\n");
+            }
+        }
+    }
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Mark_Secondary_Bases_Unusable()
+{
+    for(CLASS_VF_MAP::iterator iter = class_vf_map.begin(); iter != class_vf_map.end(); iter++)
+    {
+        if(iter->second.Is_Usable())
+        {
+            TY_INDEX ty_idx = iter->first;
+            Virtual_Functions &vf = iter->second;
+            UINT32 base_num = IPA_Class_Hierarchy->Get_Num_Base_Classes(ty_idx);
+            if(base_num > 0)
+            {
+                // check if the first base is virtual base, we cannot
+                // handle virtual base either
+                if (IPA_Class_Hierarchy->Is_Virtual_Base(ty_idx,
+                                               IPA_Class_Hierarchy->Get_Base_Class(ty_idx, 0)))
+                    Mark_Self_And_Ancestor_Unusable(IPA_Class_Hierarchy->Get_Base_Class(ty_idx, 0));
+
+                for(int i = 1; i < base_num; i++)
+                {
+                    Mark_Self_And_Ancestor_Unusable(IPA_Class_Hierarchy->Get_Base_Class(ty_idx, i));
+                }
+            }
+        }
+
+    }
+    // if the class has any derived class which doesn't has vtable, 
+    // make the base and derived class unusable
+    for(CLASS_VF_MAP::iterator iter = class_vf_map.begin(); iter != class_vf_map.end(); iter++)
+    {
+        if(iter->second.Is_Usable())
+        {
+            TY_INDEX ty_idx = iter->first;
+            TY &base_ty = Ty_tab[ty_idx];    
+            FmtAssert(base_ty.Vtable(), ("The vtable should not be empty!"));
+            Virtual_Functions &vf = iter->second;
+            UINT32 sub_num = IPA_Class_Hierarchy->Get_Num_Sub_Classes(ty_idx);
+            if(sub_num > 0)
+            {
+                for(int i = 0; i < sub_num; i++)
+                {
+                   TY_INDEX sub_ty_idx = IPA_Class_Hierarchy->Get_Sub_Class(ty_idx, i);
+                   TY &sub_ty = Ty_tab[sub_ty_idx];    
+                   FmtAssert(sub_ty_idx && Is_Structure_Type(sub_ty) && !TY_is_union(sub_ty), 
+                         ("Invalid sub class!"));
+                   if (!sub_ty.Vtable()) {
+                      // set base unusable in case the sub class is not in class_vf_map
+                      iter->second.Set_Unusable();
+                      Mark_Self_And_Ancestor_Unusable(IPA_Class_Hierarchy->Get_Sub_Class(sub_ty_idx, i));
+                   }
+                }
+            }
+        }
+
+    }
+
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Mark_Self_And_Ancestor_Unusable(TY_INDEX declared_class)
+{	
+    if(IPA_Class_Hierarchy->Get_Num_Base_Classes(declared_class) != 0)
+    {
+        for(UINT32 i = 0; i < IPA_Class_Hierarchy->Get_Num_Base_Classes(declared_class); i++)
+        {
+            Mark_Self_And_Ancestor_Unusable(IPA_Class_Hierarchy->Get_Base_Class(declared_class, i));
+        }
+    }
+    if (class_vf_map.find(declared_class) == class_vf_map.end())
+       return ;  // the base is not in class_vf_map
+    class_vf_map[declared_class].Set_Unusable();
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Propagate_Overridden_Info()
+{
+    for(IPA_CLASS_HIERARCHY::CLASS_RELATIONSHIP::iterator iter = IPA_Class_Hierarchy->Get_Begin_Sub_Classes();
+	iter != IPA_Class_Hierarchy->Get_End_Sub_Classes(); iter++)
+    {
+        Propagate_Overridden_Info_For_Class(iter->first);
+    }
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Propagate_Overridden_Info_For_Class(TY_INDEX declared_class)
+{
+    if(class_vf_map.find(declared_class) == class_vf_map.end())
+        return;
+
+    if(!class_vf_map[declared_class].Is_Usable())
+        return;
+	
+    if(class_vf_map[declared_class].Is_Propagated())
+        return;
+
+    if(IPA_Class_Hierarchy->Get_Num_Sub_Classes(declared_class) != 0)
+    {
+        for(UINT32 i = 0; i < IPA_Class_Hierarchy->Get_Num_Sub_Classes(declared_class); i++)
+        {
+            Propagate_Overridden_Info_For_Class(IPA_Class_Hierarchy->Get_Sub_Class(declared_class, i));
+        }
+    
+        for(UINT32 i = 0; i < class_vf_map[declared_class].Get_Count(); i++)
+        {
+            for(UINT32 j = 0; j <IPA_Class_Hierarchy->Get_Num_Sub_Classes(declared_class); j++)
+            {
+                TY_INDEX sub_class_index = IPA_Class_Hierarchy->Get_Sub_Class(declared_class, j);
+                if(class_vf_map.find(sub_class_index) != class_vf_map.end() &&
+                     class_vf_map[sub_class_index].Get_Count() > 0 )
+                {
+                    class_vf_map[declared_class].Add_Overriders(i, 
+                          class_vf_map[sub_class_index].Get_Virtual_Function_by_Index(i));
+                }
+            }
+        }
+    }
+	
+    class_vf_map[declared_class].Set_Propagated();
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Print_Overridden_Map(FILE *fp)
+{
+    IPA_Class_Hierarchy->Print_IPA_CLASS_HIERARCHY();
+    for(CLASS_VF_MAP::iterator iter = class_vf_map.begin(); iter != class_vf_map.end(); iter++)
+    {
+        Virtual_Functions &vf = iter->second;
+        if (vf.Get_class_ty_index() != 0)
+           vf.Print(fp);
+        else
+           FmtAssert(0, ("class_ty_index should not be 0!"));
+    }
+}
+
+UINT32 IPA_VIRTUAL_FUNCTION_TRANSFORM::Candidate_Count(TY_INDEX declared_class, size_t offset)
+{
+    if(class_vf_map.find(declared_class) == class_vf_map.end() ||
+          class_vf_map[declared_class].Get_Count() == 0)
+        return INVALID_VIRTUAL_FUNCTION_COUNT;
+
+    if(!class_vf_map[declared_class].Is_Usable())
+        return INVALID_VIRTUAL_FUNCTION_COUNT;
+
+    if(class_vf_map[declared_class].Out_Of_Range(offset))
+        return INVALID_VIRTUAL_FUNCTION_COUNT;
+
+    return class_vf_map[declared_class].Get_Virtual_Function_by_Offset(offset)->Candidate_count();
+}
+
+ST_IDX IPA_VIRTUAL_FUNCTION_TRANSFORM::Get_The_Only_Candidate(TY_INDEX declared_class, size_t offset)
+{
+    Virtual_Function* p_vf = class_vf_map[declared_class].Get_Virtual_Function_by_Offset(offset);
+    return p_vf->Get_The_Only_Candidate();
+}
+
+
 // This function does the crux of the work, find virtual function and transform them
 // after heuristic analysis
 void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions ()
 {
     IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
-    for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
-        IPA_NODE *method = cg_iter.Current();
-        if (method == NULL) 
-            continue;
 
-        BOOL is_cxx = PU_cxx_lang(method->Get_PU());
-        if (!is_cxx)
-            continue;
-        Transform_Virtual_Functions_Per_Node (method);
+    if(IPA_Enable_Original_VF)
+    {
+        IPA_During_Original_VF = TRUE;
+        IPA_During_New_VF = FALSE;
+        for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+            IPA_NODE *method = cg_iter.Current();
+            if (method == NULL) 
+                continue;
+    
+            BOOL is_cxx = PU_cxx_lang(method->Get_PU());
+            if (!is_cxx)
+                continue;
+            Transform_Virtual_Functions_Per_Node_ORIG(method);
+        }
+    }
+	
+    if(IPA_Enable_New_VF)
+    {
+        IPA_During_Original_VF = FALSE;
+        IPA_During_New_VF = TRUE;
+        for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+            IPA_NODE *method = cg_iter.Current();
+            if (method == NULL) 
+                continue;
+    
+            BOOL is_cxx = PU_cxx_lang(method->Get_PU());
+            if (!is_cxx)
+                continue;
+            Transform_Virtual_Functions_Per_Node_NEW (method);
+        }
     }
 }
 
-void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node (
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node_ORIG (
         IPA_NODE *method)
 {
     Is_True ((method != NULL), 
@@ -970,6 +1324,8 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node (
                     }
                     if (a_wn_ipa_map.find(callsite->Get_map_id()) != 
                             a_wn_ipa_map.end()) {
+                        bool devirtualized = false;
+                        ST_IDX callee_st_idx = ST_IDX_ZERO;
                         hash_set<TY_INDEX> instance_set = 
                             Identify_Instances_From_Subclass_Hierarchy (
                                     TY_IDX_index( 
@@ -1018,6 +1374,8 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node (
                                 vcand.Dummy_Call_Site = dummy_cs;
                                 vcand.Caller = method;
                                 vcands.push_back(vcand);
+                                devirtualized = true;
+                                callee_st_idx = vcand.Transform_Function_ST_IDX;
                                 if (Enable_Debug == true) {
                                     // the set of classes that may been instantiated 
                                     // is stored in vf_object_instances, which is
@@ -1062,18 +1420,23 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node (
                                 vcand.Dummy_Call_Site = dummy_cs;
                                 vcand.Caller = method;
                                 vcands.push_back(vcand);
+                                devirtualized = true;
+                                callee_st_idx = vcand.Transform_Function_ST_IDX;
                                 if (Enable_Debug == true) {
                                     vf_object_instances[callsite->Get_map_id()] = 
                                             instance_set;
                                 }
                             }
                         }
-                        else {
+                        else if(!IPA_Enable_New_VF){
                             // change the dummy callsite to icall target so later 
                             // the icall_process can handle the call
                             dummy_cs->Set_icall_target();
                             dummy_cs->Reset_virtual_function_target();
                         }
+                        if (devirtualized || !IPA_Enable_New_VF)
+                            Dump_Callsite(method, callsite, a_wn_ipa_map,
+                                  devirtualized, callee_st_idx);
                     }
                     callsite_array++;
                     count--;
@@ -1102,6 +1465,218 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node (
                 VIRTUAL_FUNCTION_CANDIDATE vcand = *vc_cit;
                 Apply_Virtual_Function_Transform (vcand);
             }
+            if (Enable_Debug) {   
+                IPA_NODE_CONTEXT context(method);
+                fprintf (Transformed_Whirls, "\n%s after transformation...\n", method->Name());
+                fdump_tree (Transformed_Whirls, method->Whirl_Tree(TRUE));
+                fprintf (Transformed_Whirls, "Caller->Total_Succ():%d", 
+                method->Total_Succ());
+                fprintf (Transformed_Whirls, "...done\n");
+            }
+        }
+    }
+}
+
+void IPA_VIRTUAL_FUNCTION_TRANSFORM::Transform_Virtual_Functions_Per_Node_NEW (
+        IPA_NODE *method)
+{
+    Is_True ((method != NULL), 
+             ("IPA_fast_static_analysis_VF:%s %s\n",
+              "Test method != NULL fails in", 
+              "Transform_Virtual_Functions_Per_Node"));
+    PU_IDX pui = ST_pu(method->Func_ST());
+    if (pu_node_index_map.find(pui) == pu_node_index_map.end()) {
+        //printf ("Skipping method:pu_node_index_map does not carry pui:%d\n",
+        //        pui);
+        return;
+    }
+    WN_IPA_MAP a_wn_ipa_map;
+    // This function maps virtual function whirlnodes in a method 
+    // to their WN_map_id.
+    // if there are no virtual functions in a method, 
+    // a_wn_ipa_map will be empty
+    Build_Virtual_Function_Whirl_Map (method, a_wn_ipa_map);
+
+    if (a_wn_ipa_map.size() != 0) {
+        // we have passed stage_1 test. i.e we have 
+        // a virtual function callsite in 'method'. 
+        int count = Get_Callsite_Count(method);
+        SUMMARY_PROCEDURE* method_summary = method->Summary_Proc();
+        SUMMARY_CALLSITE* callsite_array = IPA_get_callsite_array(method) + 
+            method_summary->Get_callsite_index();
+
+        list<VIRTUAL_FUNCTION_CANDIDATE> vcands;
+        // vf_object_instances is only used for getting debug data
+        hash_map <WN_MAP_ID, hash_set<TY_INDEX> > vf_object_instances;
+
+        while (count > 0) {
+            // 
+            // This is what we expect to do for
+            // virtual functions. For each virtual function
+            // site, ipl had added a sister call site
+            // with a call to a dummy_callee
+            // This dummy callsite precedes virtual function 
+            // callsite in callsite_array.
+            //
+            // 1: After this transformation we have an additional CALL
+            // instruction in the WHIRL for a 
+            // transformed WHIRL node. The dummy callsite
+            // is used to insert an edge into the call graph 
+            // for this additional CALL instruction. 
+            // 2: Many of the VFs may never get through the heuristics.
+            // If there are no replacements due to that, 
+            // there are going to be unused dummy callsites
+            // in the SUMMARY_CALLSITE* array used by
+            // the IPA_NODE. 
+            // 3: The virtual function ICALL WN* and 
+            // the callsite will always remain in WHIRL.
+            // 4: It should be noted that it is required to pass
+            // a SUMMARY_CALLSITE* to Add_New_Edge in order 
+            // to insert IPA_EDGEs into the IPA_CALL_GRAPH. 
+            // The actual WN* corresponding to the CALL
+            // instruction is not required. Thus we have a 
+            // somewhat disjoint representation
+            // for the IPA_CALL_GRAPH mainly because the graph
+            // is not directly tied to the WHIRL. 
+            // 
+            // Finally please note that we are decrementing 
+            // callsite count variable 2 times in
+            // every iteration in case the present 
+            // callsite is a dummy callsite
+            // 
+            SUMMARY_CALLSITE * dummy_cs = callsite_array;
+            callsite_array++;
+            count--;
+            if (count == 0) break;
+            if (dummy_cs->Is_virtual_function_target()) {
+                if (callsite_array->Is_virtual_call()) {
+                    SUMMARY_CALLSITE* callsite = callsite_array;
+                    TY_INDEX class_ty_index = TY_IDX_index(callsite->Get_virtual_class());
+                    UINT32 func_offset = callsite->Get_vtable_offset();
+                    VIRTUAL_FUNCTION_CANDIDATE vcand;
+					
+                    if (Enable_Statistics == true) {
+                        Update_Class_Hierarchy_Depth(
+                            IPA_Class_Hierarchy->Num_Sub_Class_In_Hierarchy (class_ty_index)); 
+                    }
+                    if (a_wn_ipa_map.find(callsite->Get_map_id()) != 
+                            a_wn_ipa_map.end()) {
+                        hash_set<TY_INDEX> instance_set = 
+                            Identify_Instances_From_Subclass_Hierarchy (class_ty_index);
+
+                        DevirCallsiteInfo *dc = NULL;
+                        bool devirtualized = false;
+                        ST_IDX callee_st_idx = ST_IDX_ZERO;
+                        if (theDevirCallsiteMap.size() > 0) {
+                            // get devirtualization candidates from a file which uses
+                            // the callsite id to specify which callsite should be
+                            // devirtualized. The spec file normally is dumped by
+                            // open64 compiler, which guarantees the callsite id is valid
+                            dc = Find_Callsite(method, callsite, a_wn_ipa_map);
+                            if (Enable_Debug && dc) {
+                                fprintf(Virtual_Whirls,
+                                        "Found callsite %s line:%d, id:%d to devirtualize\n",
+                                         dc->caller, dc->lineno, dc->callsite_id);
+                            }
+                        }
+                        if (Class_Hierarchy_Analysis == true &&
+                            callsite->Get_vptr_offset() == 0 && // cannot handle multiple inheritance now  
+                            (Candidate_Count(class_ty_index, func_offset) == 1)) {
+                            
+                            vcand.Virtual_Table_st_idx = class_vf_map[class_ty_index].Get_vtable_st_idx();
+                            vcand.Offset = class_vf_map[class_ty_index].Get_vtable_offset();							
+                            vcand.Transform_Function_ST_IDX = Get_The_Only_Candidate(class_ty_index, func_offset);
+                            vcand.Caller = method;
+                            if (vcand.Transform_Function_ST_IDX != 
+                                ST_IDX_ZERO) {
+                                // Now that we have infered a call target
+                                // and added that to vcand, 
+                                // we also fill vcand up 
+                                // rest of data that is used during 
+                                // transformation and finally push vcand into
+                                // a list, 'vcands', that holds all transform 
+                                // candidates.
+
+                                if (Enable_Statistics == true) {
+                                    Class_Hierarchy_Transform_Count++;
+                                }
+                                vcand.Single_Callee =
+                                        (IPA_Enable_Whole_Program_Mode == true);
+                                vcand.Virtual_Call_Site = callsite;
+                                vcand.Dummy_Call_Site = dummy_cs;
+                                vcand.Caller = method;
+                                // do not add the vcand to the list if devirtual callsite is
+                                // specified by a spec file (theDevirCallsiteMap.size() > 0)
+                                // and the callsite is not found in the file
+                                if (dc || theDevirCallsiteMap.size() == 0)  {
+                                    devirtualized = true;
+                                    callee_st_idx = vcand.Transform_Function_ST_IDX;
+                                    vcands.push_back(vcand);
+                                    if (Enable_Debug == true) {
+                                        // the set of classes that may been instantiated 
+                                        // is stored in vf_object_instances, which is
+                                        // used to get debug dumps only
+                                       vf_object_instances[callsite->Get_map_id()] = 
+                                            instance_set;
+                                    }
+                                    if (Enable_Debug && dc) {
+                                        ST_IDX calle_st = vcand.Transform_Function_ST_IDX;
+                                        ST *callee_st = ST_ptr (calle_st);
+                                        fprintf(Virtual_Whirls,
+                                                "  the virtual function is %s\n", 
+                                                 ST_name(callee_st));
+                                    }
+                                }
+                            }
+                        }
+                        if (!devirtualized) {
+                            // change the dummy callsite to icall target so later 
+                            // the icall_process can handle the call
+                            dummy_cs->Set_icall_target();
+                            dummy_cs->Reset_virtual_function_target();
+                            if (Enable_Debug && dc) {
+                                fprintf(Virtual_Whirls,
+                                        "  the Candidate_Count is not 1, no devirtualization is done!\n");
+                            }
+                        }
+                        Dump_Callsite(method, callsite, a_wn_ipa_map, 
+                                      devirtualized, callee_st_idx);
+                    }
+                    callsite_array++;
+                    count--;
+                }
+            }
+        }
+
+        // if analysis found some virtual functions
+        if (vcands.size() > 0) {
+            Node_Transform_Lists[method->Node_Index()] = vcands;
+            Node_Virtual_Function_Whirl_Map[method->Node_Index()] = 
+                a_wn_ipa_map;
+            if (Enable_Debug == true) {
+                Transform_Debug_Data[method->Node_Index()] = 
+                    vf_object_instances;
+            }
+            for (list <VIRTUAL_FUNCTION_CANDIDATE>::iterator  vc_cit = 
+                vcands.begin(); vc_cit != vcands.end(); ++vc_cit) {
+                // We could have done this right after
+                // the virtual function ST_IDX was found, 
+                // but I find this kind of check pointing useful 
+                // while debugging.
+                // Obviously this means we double traverse 
+                // but that is on a small list and the cost will not 
+                // be much.
+                VIRTUAL_FUNCTION_CANDIDATE vcand = *vc_cit;
+                Apply_Virtual_Function_Transform (vcand);
+            }
+            if (Enable_Debug) {   
+                IPA_NODE_CONTEXT context(method);
+                fprintf (Transformed_Whirls, "\n%s after transformation...\n", method->Name());
+                fdump_tree (Transformed_Whirls, method->Whirl_Tree(TRUE));
+                fprintf (Transformed_Whirls, "Caller->Total_Succ():%d", 
+                method->Total_Succ());
+                fprintf (Transformed_Whirls, "...done\n");
+            }
         }
     }
 }
@@ -1120,6 +1695,8 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
     SUMMARY_CALLSITE *callsite = vcand.Virtual_Call_Site;
     SUMMARY_CALLSITE *dummy_cs = vcand.Dummy_Call_Site;
     WN *vtab = vcand.Virtual_Table;
+    ST_IDX vtab_st_idx = vcand.Virtual_Table_st_idx;
+    UINT32 vtab_offset = vcand.Offset;
     BOOL assert_single_target = vcand.Single_Callee;
 
     IPA_NODE_CONTEXT context(method);
@@ -1178,15 +1755,18 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
               ("Transformation only for ICALL"));
 
      if (Enable_Debug == true) {   
-         fprintf (Transformed_Whirls, "Going to transform... \n");
+         fprintf (Transformed_Whirls, "\n%s Going to transform callsite %d... \n",
+                  method->Name(),
+                  callsite->Get_callsite_id() );
          fprintf (Transformed_Whirls, "Caller->Total_Succ():%d\n",
                    method->Total_Succ());
          fprintf (Transformed_Whirls, "Single_Callee: %d\n",assert_single_target);
-         fdump_tree (Transformed_Whirls, method->Whirl_Tree(TRUE));
+         fdump_tree (Transformed_Whirls, old_wn);
      }
  
      WN_verifier (method->Whirl_Tree(TRUE));
 
+     WN *transformed_wn = NULL;
      if ( assert_single_target ) {
          /* Generate a new direct call operation with the same parameters */
           WN *new_wn = WN_generic_call (OPR_CALL,
@@ -1242,6 +1822,10 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
                                     pu_node_index_map[ST_pu(callee_st)]);
                                     
            edge->Set_Whirl_Node(new_wn);
+           if(IPA_During_Original_VF)
+               edge->Set_Orig_Devirtualized();
+           if(IPA_During_New_VF)
+               edge->Set_New_Devirtualized();
            
            // set edge frequency in order to inline this direct call, 
            // if we can find icall's frequency set to it
@@ -1273,12 +1857,20 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
                }
            }
            Is_True(found == true,("Unable to find indirect callsite"));
+           transformed_wn = new_wn;
      }
      else {
-         WN *copy_lda = WN_CreateLda (Use_32_Bit_Pointers ?
+         WN *copy_lda;
+     if(IPA_During_Original_VF)
+         copy_lda = WN_CreateLda (Use_32_Bit_Pointers ?
                  OPC_U4LDA : OPC_U8LDA,
                  0, Make_Pointer_Type (ty_callee),
                  WN_st(WN_kid(vtab,0)));
+     if((IPA_During_New_VF))
+         copy_lda = WN_CreateLda (Use_32_Bit_Pointers ?
+                 OPC_U4LDA : OPC_U8LDA,
+                 0, Make_Pointer_Type (ty_callee),
+                 &St_Table[vtab_st_idx]);
 
          /* Generate a new direct call operation with the same parameters */
          WN *new_wn = WN_generic_call (OPR_CALL,
@@ -1307,11 +1899,18 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
 
          OPCODE incopcode = OPCODE_make_op(OPR_SUB,
                  WN_rtype(copy_load),MTYPE_V);
-         WN * sub_op = WN_CreateExp2 (incopcode,
+         WN * sub_op;
+    if(IPA_During_Original_VF)
+         sub_op = WN_CreateExp2 (incopcode,
                  WN_COPY_Tree_With_Map(copy_load),
                  WN_CreateIntconst(OPC_I4INTCONST,
                          (WN_lda_offset(WN_kid0(vtab)))));
-
+    if(IPA_During_New_VF)
+         sub_op = WN_CreateExp2 (incopcode,
+                 WN_COPY_Tree_With_Map(copy_load),
+                 WN_CreateIntconst(OPC_I4INTCONST,
+                         vtab_offset));
+	
          WN *cmp = WN_Create (Use_32_Bit_Pointers?
                  OPC_U4U4EQ:OPC_U8U8EQ,2);
 
@@ -1325,9 +1924,9 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
 
          WN_INSERT_BlockLast (then_blk, new_wn);
          WN_INSERT_BlockLast (else_blk, aold_wn);
-
-         for (WN* stmt = WN_next (old_wn); stmt != NULL &&
-         Is_Return_Store_Stmt (stmt);) {
+         
+         for (WN* stmt = WN_next (old_wn); 
+               stmt != NULL && Is_Return_Store_Stmt (stmt);) {
              WN_INSERT_BlockLast (then_blk, WN_COPY_Tree(stmt));
              WN_INSERT_BlockLast (else_blk, WN_COPY_Tree(stmt));
              WN * ret_wn = stmt;
@@ -1424,6 +2023,11 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
                  method->Node_Index(),
                  pu_node_index_map[ST_pu(callee_st)]);
          edge->Set_Whirl_Node(new_wn);
+         if(IPA_During_Original_VF)
+               edge->Set_Orig_Devirtualized();
+         if(IPA_During_New_VF)
+               edge->Set_New_Devirtualized();
+         transformed_wn = block;
      }
 
     // verify if the whirl_tree is proper after my insertions into it
@@ -1441,11 +2045,8 @@ void IPA_VIRTUAL_FUNCTION_TRANSFORM::Apply_Virtual_Function_Transform (
     }
 
     if (Enable_Debug == true) {   
-        fprintf (Transformed_Whirls, "After transformation...\n");
-        fdump_tree (Transformed_Whirls, method->Whirl_Tree(TRUE));
-        fprintf (Transformed_Whirls, "Caller->Total_Succ():%d", 
-        method->Total_Succ());
-        fprintf (Transformed_Whirls, "...done\n");
+        fprintf (Transformed_Whirls, "\nTransformed to ...\n");
+        fdump_tree (Transformed_Whirls, transformed_wn);
     }
 }
 

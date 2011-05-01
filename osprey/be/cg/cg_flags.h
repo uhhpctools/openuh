@@ -533,6 +533,7 @@ extern BOOL CG_dispatch_schedule;
 extern BOOL CG_128bitstore;
 extern BOOL CG_branch_fuse;
 extern BOOL CG_strcmp_expand;
+extern BOOL CG_merge_counters_x86;
 #endif
 extern INT CG_opt_level;
 extern BOOL CG_localize_tns;
@@ -640,6 +641,9 @@ extern BOOL CGSPILL_Enable_Force_Rematerialization;
 
 /* GCM, LOCS and IGLS */
 
+extern UINT32 LOCS_PRE_Enable_Minreg_Level;
+extern BOOL LOCS_PRE_Enable_General_RegPressure_Sched;
+extern BOOL LOCS_PRE_Enable_Unroll_RegPressure_Sched;
 extern BOOL LOCS_PRE_Enable_Scheduling;
 extern BOOL LOCS_POST_Enable_Scheduling;
 extern BOOL LOCS_Enable_Bundle_Formation;

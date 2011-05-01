@@ -323,7 +323,7 @@ public:
    //     opnd(1..num_dims())                       == dimension_size
    //     opnd(num_dims()+1..num_dims()+num_dims()) == index
    //
-   static PTR Create_Literal(const TCON &tcon);
+   static PTR Create_Literal(const TCON &elem_ton, TYPE_ID vect_ty);
    static PTR Create_Unary(OPCODE opc, 
 			   const VN_VALNUM &vn1);
    static PTR Create_Binary(OPCODE opc, 

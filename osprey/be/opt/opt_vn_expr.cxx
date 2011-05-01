@@ -130,15 +130,23 @@ Create_Folded_Literal(OPCODE             opc,
 		      VN_EXPR::CONST_PTR opnd1, 
 		      VN_EXPR::CONST_PTR opnd2)
 {
+   if ((static_cast<const VN_LITERAL_EXPR*>(opnd1))->is_const_vect () ||
+       (static_cast<const VN_LITERAL_EXPR*>(opnd2))->is_const_vect ()) {
+     FmtAssert (FALSE, ("not yet able to fold constant vector"));
+   }
+
    // Returns NULL if we cannot fold the given TCONs.
    //
    BOOL folded = FALSE;
    TCON tcon1 = opnd1->get_tcon();
    TCON tcon2 = opnd2->get_tcon();
    TCON tcon = Targ_WhirlOp(opc, tcon1, tcon2, &folded);
-   if (folded)
-      return VN_EXPR::Create_Literal(tcon); // Create new literal VN_EXPR;
-   else
+   if (folded) {
+     // Create new literal VN_EXPR;
+      TYPE_ID vect_ty = (static_cast<const VN_LITERAL_EXPR*>(opnd1))->
+                            get_vect_type ();
+      return VN_EXPR::Create_Literal(tcon, vect_ty);
+   } else
       return NULL;
 }
 
@@ -300,14 +308,14 @@ Create_Scalar_Literal_From_Int(MTYPE mty, INT64 i)
    case MTYPE_U2:
    case MTYPE_U4:
    case MTYPE_U8:
-      p = VN_EXPR::Create_Literal(Host_To_Targ(mty, i));
+      p = VN_EXPR::Create_Literal(Host_To_Targ(mty, i), MTYPE_UNKNOWN);
       break;
 	 
    case MTYPE_F4:
    case MTYPE_F8:
    case MTYPE_F10:
    case MTYPE_FQ:
-      p = VN_EXPR::Create_Literal(Host_To_Targ_Float(mty, i));
+      p = VN_EXPR::Create_Literal(Host_To_Targ_Float(mty, i), MTYPE_UNKNOWN);
       break;
       
    default:
@@ -383,9 +391,9 @@ VN_EXPR::Reclaim_Free_Lists()
 
 
 VN_EXPR::PTR 
-VN_EXPR::Create_Literal(const TCON &tcon)
+VN_EXPR::Create_Literal(const TCON &tcon, TYPE_ID vect_ty)
 {
-   return VN_LITERAL_EXPR::Create(tcon);
+   return VN_LITERAL_EXPR::Create(tcon, vect_ty);
 }
 
 
@@ -603,9 +611,14 @@ VN_LITERAL_EXPR::is_equal_to(CONST_PTR expr) const
       const MTYPE other_mty = TCON_ty(other_tcon);
 
 #ifdef TARG_X8664
+      // FIXME: this is statement is a nop as TCON_ty() won't return vector ty.
       if (MTYPE_is_vector(this_mty) || 	MTYPE_is_vector(other_mty))
 	return FALSE;
 #endif
+      
+      if (_vect_ty != (static_cast<const VN_LITERAL_EXPR*>(expr))->_vect_ty)
+        return FALSE;
+
       if (MTYPE_is_integral(this_mty) && MTYPE_is_integral(other_mty))
       {
 	 // We only care about the value and the signedness of integral types,
@@ -639,8 +652,7 @@ VN_LITERAL_EXPR::is_equal_to(CONST_PTR expr) const
 	          TCON_R4(other_tcon) == 0 && TCON_R4(_tcon) == 0)
 	    truth = TCON_word0(other_tcon) == TCON_word0(_tcon);
 #endif
-	 else
-	 {
+         else {
 	    BOOL folded;
 	    other_tcon = 
 	       Targ_WhirlOp(OPCODE_make_op(OPR_EQ, 
@@ -699,8 +711,14 @@ VN_UNARY_EXPR::simplify(VN *v)
    }
    else if (Is_Literal_Expr(opnd))
    {
+     if (MTYPE_is_vector (OPCODE_rtype(_opc))) {
+       // TODO: handle expression like "OPC_V16F4V16I4CVT V16I4-const"
+       //
+     } else if ((static_cast<const VN_LITERAL_EXPR*>(opnd))->is_const_vect ()) {
+       // TODO: handle expression like "OPC_F4V16F4REDUCE_ADD VF6F4-const"  
+       //
+     } else if (
      // for IA-32, do not fold away I8I4CVT
-     if (
 #ifndef TARG_X8664
          !Split_64_Bit_Int_Ops ||
 #endif
@@ -1264,16 +1282,7 @@ VN_BINARY_EXPR::simplify(VN *v)
    CONST_PTR      opnd2 = v->valnum_expr(_vn[1]);
    const BOOL     is_integral = 
       (OPERATOR_is_compare(opr)? 
-       MTYPE_is_integral(OPCODE_desc(_opc)) 
-#ifdef TARG_X8664 // bug 7554
-       	&& ! MTYPE_is_vector(OPCODE_desc(_opc))
-#endif
-       :
-       MTYPE_is_integral(rty)
-#ifdef TARG_X8664 // bug 7554
-       	&& ! MTYPE_is_vector(rty)
-#endif
-       );
+       MTYPE_is_integral(OPCODE_desc(_opc)) : MTYPE_is_integral(rty));
 
    PTR   simplified = this;
    INT64 intconst;
@@ -1288,6 +1297,8 @@ VN_BINARY_EXPR::simplify(VN *v)
    if (has_bottom_opnd() || has_top_opnd())
    {
       simplified = Create_Unary(OPC_VPARM, VN_VALNUM::Bottom());
+   } else if (MTYPE_is_vector(rty)) {
+      // TODO : perform simplification for vectorized bin-op.
    }
    else if (Is_Literal_Expr(opnd1) && Is_Literal_Expr(opnd2))
    {
@@ -1512,7 +1523,7 @@ VN_BINARY_EXPR::simplify(VN *v)
 	    if (intconst == 0)
 	       simplified = Create_Unary(OPC_VPARM, _vn[0]);
 	    else if (intconst != 0)
-	       simplified = Create_Literal(opnd2->get_tcon());
+	       simplified = Create_Literal(opnd2->get_tcon(), MTYPE_UNKNOWN);
 	 }
 	 else if (Is_Literal_Expr(opnd1))
 	 {
@@ -1520,7 +1531,7 @@ VN_BINARY_EXPR::simplify(VN *v)
 	    if (intconst == 0)
 	       simplified = Create_Unary(OPC_VPARM, _vn[1]);
 	    else if (intconst != 0)
-	       simplified = Create_Literal(opnd1->get_tcon());
+	       simplified = Create_Literal(opnd1->get_tcon(), MTYPE_UNKNOWN);
 	 }
 	 break;
 
@@ -1692,7 +1703,7 @@ VN_INTR_OP_EXPR::simplify(VN *v)
 	 TCON folded_tcon = Targ_IntrinsicOp(_intr_opc, arg_tconsts, &folded);
 	 if (folded)
 	 {
-	    simplified = Create_Literal(folded_tcon);
+	    simplified = Create_Literal(folded_tcon, MTYPE_UNKNOWN);
 	 }
       }
    }

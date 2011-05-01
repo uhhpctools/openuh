@@ -159,7 +159,7 @@ typedef hash_map<const TCON*, TCON_IDX, tcon_hash, eq_tcon,
 struct eq_const_st
 {
     bool operator() (const ST* st1, const ST* st2) const {
-	return memcmp (st1, st2, sizeof(ST) - sizeof(ST_IDX) * 2) == 0;
+	return memcmp (st1, st2, sizeof(ST) - sizeof(ST_IDX) * 2 - sizeof(TY_IDX)) == 0;
     }
 };
 
@@ -1363,6 +1363,12 @@ Enter_Original_St(const IPC_GLOBAL_TABS& original_tabs,
 	}
     }
     Set_ST_st_idx(new_st, new_st_idx);
+    if(ST_vtable_ty_idx(original_st))
+    {
+        TY_IDX ty_idx = (*New_Ty_Idx)[ST_vtable_ty_idx(original_st)];
+        Set_ST_vtable_ty_idx(new_st, ty_idx);
+        Set_TY_vtable(ty_idx, new_st_idx);
+    }
 
     ST_IDX base_idx =
 	ST_raw_base_idx (original_st) == ST_st_idx (original_st) ?

@@ -4,4 +4,13 @@ program analysis tools.
 
 Merge History:
 
-- merged through 3520 of Open64 main trunk. (4/30/11)
+[2]   merged r3520:3576 of Open64 main trunk. (4/30/11).
+[1]   merged through 3520 of Open64 main trunk. (4/30/11)
+
+
+Notes:
+
+For merge [2], I turned off some assertion checks in
+common/com/x8664/targ_const.cxx, because they were causing the bootstrapped
+library build to fail with --with-build-optimize=DEBUG. The same problem was
+observed for Open64 main trunk, as of revision r3576. --Deepak

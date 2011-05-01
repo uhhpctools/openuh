@@ -63,6 +63,12 @@ public:
 
   static void postProcessPointsTo();
 
+  static void Exclude(PointsTo &src, CGEdgeType et, CGEdgeQual aq, 
+                        CGEdgeQual eq, bool cs, PointsTo &orig);
+
+  // Edge qualifier matrix mapping
+  static CGEdgeQual qualMap(CGEdgeType et,CGEdgeQual aq,CGEdgeQual eq, bool cs);
+
   static void printStats();
 
 private:
@@ -88,9 +94,6 @@ private:
   void removeFieldSensitiveEdges(CGEdgeType etype,ConstraintGraphEdge *edge);
 
   EdgeDelta &edgeDelta() { return _edgeDelta; }
-
-  // Edge qualifier matrix mapping
-  CGEdgeQual qualMap(CGEdgeType et,CGEdgeQual aq,CGEdgeQual eq, bool cs);
 
   ConstraintGraph *_cg;
   ConstraintGraph *_globalCG;

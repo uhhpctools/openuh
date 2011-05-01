@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 /* -*- c++ -*-
  *
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -143,6 +147,10 @@ private:
   UINT64     _runtime_func_addr;  // run time function address
 #endif
 
+  FB_Info_Call _info_call;
+  FB_Info_Icall _info_icall;
+  WN *_last_wn_icall;
+
   // For Whirl nodes, the map WN_MAP_FEEDBACK holds an index into
   // one of the following vectors:
 
@@ -275,7 +283,10 @@ public:
   void FB_lower_compgoto ( WN *wn_compgoto, WN *wn_xgoto, WN *wn_branch );
 
   void FB_lower_call ( WN *wn_call, WN *wn_new_call );
-  void FB_lower_icall( WN *wn_icall, WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if );
+  void FB_lower_icall( WN *wn_icall, WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if, int icall_no = 0 );
+  void FB_lower_icall( FB_Info_Call &info_call, FB_Info_Icall &info_icall,
+                       WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if, 
+                       int icall_no );
   void FB_lower_return_val ( WN *wn_return_val, WN *wn_return );
 
   void FB_lower_mstore_to_loop ( WN *wn_mstore, WN *wn_loop, INT64 nMoves );

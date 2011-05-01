@@ -6739,6 +6739,9 @@ void Cache_Model(ARRAY_REF*	arl,
     iloop[s] = i;
   }
 
+#ifndef TARG_X8664
+  // Ignoring bad reference bias heuristic to allow the right choice of inner loop
+  // Only do this for X8664
   if (depth != required_inner && arl->Num_Bad()) {
     INT nbodies = 1;
     INT i;
@@ -6751,6 +6754,8 @@ void Cache_Model(ARRAY_REF*	arl,
     } 
     *cycles_per_iter += bias / nbodies;
   }
+#endif /* TARG_X8664 */
+
   if (Debug_Cache_Model) {
     fprintf(TFile, "*** END CACHE MODEL (REQUIRED INNER LOOP=%d, ", 
       required_inner); 

@@ -99,22 +99,308 @@ const static char *rcs_id = "$Source: be/lno/SCCS/s.sclrze.cxx $ $Revision: 1.7 
 
 static void Process_Store(WN *, VINDEX16 , ARRAY_DIRECTED_GRAPH16 *, BOOL,
 			  BOOL, REDUCTION_MANAGER *red_manager);
-static BOOL Dominates(WN *wn1, WN *wn2);
 static BOOL Intervening_Write(INT,VINDEX16, 
 			VINDEX16 ,ARRAY_DIRECTED_GRAPH16 *);
 static BOOL Is_Invariant(ACCESS_ARRAY *store, WN *store_wn);
 static BOOL MP_Problem(WN *wn1, WN *wn2);
+static HASH_TABLE<ST *, INT> * Array_Use_Hash;
+static int DSE_Count = 0;
+extern BOOL ST_Has_Dope_Vector(ST *);
+
+// Query whether 'st' represents a local variable.
+static BOOL Is_Local_Var(ST * st)
+{
+  if ((ST_sclass(st) == SCLASS_AUTO) 
+      && (ST_base_idx(st) == ST_st_idx(st))
+      && !ST_has_nested_ref(st)
+      && (ST_class(st) == CLASS_VAR))
+    return TRUE;
+
+  return FALSE;
+}
+
+// Query whether use references to 'st' is tracked in "Mark_Array_Uses".
+// Limit to local allocate arrays.
+static BOOL Is_Tracked(ST * st)
+{
+  return (Is_Local_Var(st) && ST_Has_Dope_Vector(st));
+}
+
+// bit mask for symbol attributes.
+#define HAS_ESCAPE_USE 1  // has a use not reachable by a dominating def.
+#define ADDR_TAKEN 2 // is address-taken.
+#define HAS_USE 4  // has a use.
+#define IS_ALLOC 8  // is allocated/dealloacted.
+
+// Query whether 'store_wn' is dead, i.e., its address is not taken and it has no use.
+static BOOL Is_Dead_Store(WN * store_wn)
+{
+  OPERATOR opr = WN_operator(store_wn);
+  if (!OPERATOR_is_scalar_store(opr)) {
+    WN * base = WN_array_base(WN_kid(store_wn,1));
+    if (WN_has_sym(base)) {
+      ST * st = WN_st(base);
+      if (st && Is_Tracked(st)
+	  && Array_Use_Hash
+	  && (Array_Use_Hash->Find(st) == IS_ALLOC))
+	return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+// Given an array reference 'load_wn", query where there exists a reaching def that dominates it.
+static BOOL Has_Dom_Reaching_Def(ARRAY_DIRECTED_GRAPH16 * dep_graph, WN * load_wn)
+{
+  OPERATOR opr = WN_operator(load_wn);
+  if (!OPERATOR_is_load(opr) || OPERATOR_is_scalar_load(opr))
+    return FALSE;
+
+  VINDEX16 v = dep_graph->Get_Vertex(load_wn);
+  if (!v)
+    return FALSE;
+
+  WN * kid = WN_kid0(load_wn);
+  if (WN_operator(kid) != OPR_ARRAY)
+    return FALSE;
+
+  ACCESS_ARRAY * load = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+
+  if (!load)
+    return FALSE;
+  
+  for (EINDEX16 e = dep_graph->Get_In_Edge(v); e; e = dep_graph->Get_Next_In_Edge(e)) {
+    VINDEX16 source = dep_graph->Get_Source(e);
+    WN * store_wn = dep_graph->Get_Wn(source);
+    OPERATOR opr = WN_operator(store_wn);
+    if (OPERATOR_is_store(opr) && !OPERATOR_is_scalar_store(opr)) {
+      kid = WN_kid1(store_wn);
+      if (WN_operator(kid) != OPR_ARRAY)
+	continue;
+
+      ACCESS_ARRAY * store = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+      if (Equivalent_Access_Arrays(store,load,store_wn,load_wn)
+	  && (DEPV_COMPUTE::Base_Test(store_wn,NULL,load_wn,NULL) == DEP_CONTINUE)) {
+	if (Dominates(store_wn, load_wn)
+	    && !Intervening_Write(dep_graph->Depv_Array(e)->Max_Level(),
+				  source, v, dep_graph)
+	    && !MP_Problem(store_wn, load_wn))
+	  return TRUE;
+      }
+    }
+  }
+  
+  return FALSE;
+}
+
+// Given an array reference 'store_wn', query whether there exists a kill that post-dominates it.
+static BOOL Has_Post_Dom_Kill(ARRAY_DIRECTED_GRAPH16 * dep_graph, WN * store_wn)
+{
+  OPERATOR opr = WN_operator(store_wn);
+  if (!OPERATOR_is_store(opr) || OPERATOR_is_scalar_store(opr))
+    return FALSE;
+
+  VINDEX16 v = dep_graph->Get_Vertex(store_wn);
+  if (!v)
+    return FALSE;
+
+  WN * kid = WN_kid1(store_wn);
+  if (WN_operator(kid) != OPR_ARRAY)
+    return FALSE;
+
+  WN * base = WN_array_base(kid);
+
+  if (!WN_has_sym(base))
+    return FALSE;
+
+  ST * st = WN_st(base);
+
+  // limit it to local non-address-taken arrays.
+  if (!Is_Local_Var(st) || !Array_Use_Hash
+      || ((Array_Use_Hash->Find(st) & ADDR_TAKEN) != 0))
+    return FALSE;
+  
+  ACCESS_ARRAY * store = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+  if (!store)
+    return FALSE;
+
+  for (EINDEX16 e = dep_graph->Get_Out_Edge(v); e; e = dep_graph->Get_Next_Out_Edge(e)) {
+    VINDEX16 sink = dep_graph->Get_Sink(e);
+    WN * kill_wn = dep_graph->Get_Wn(sink);
+
+    if (kill_wn == store_wn)
+      continue;
+
+    OPERATOR opr = WN_operator(kill_wn);
+    if (OPERATOR_is_store(opr) && !OPERATOR_is_scalar_store(opr)) {
+      kid = WN_kid1(kill_wn);
+      if (WN_operator(kid) != OPR_ARRAY)
+	continue;
+
+      ACCESS_ARRAY * kill = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+      if (Equivalent_Access_Arrays(store, kill, store_wn, kill_wn)
+	  && (DEPV_COMPUTE::Base_Test(store_wn, NULL, kill_wn, NULL) == DEP_CONTINUE)) {
+	if ((LWN_Get_Parent(store_wn) == LWN_Get_Parent(kill_wn))
+	    && !MP_Problem(store_wn, kill_wn)) {
+	  WN * next = WN_next(store_wn);
+	  while (next) {
+	    if (next == kill_wn)
+	      return TRUE;
+	    next = WN_next(next);
+	  }
+	}
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+// Check usage of a local allocate array.
+static void Check_use(ST * st, WN * wn, ARRAY_DIRECTED_GRAPH16 * dep_graph, BOOL escape)
+{
+  if (st && Is_Tracked(st)) {
+    int val = Array_Use_Hash->Find(st);
+    val |= HAS_USE;
+
+    if (escape || !Has_Dom_Reaching_Def(dep_graph, wn)) {
+      val |= HAS_ESCAPE_USE;	  
+    }
+
+    if (val) {
+      Array_Use_Hash->Find_And_Set(st, val);
+    }
+  }
+}
+
+// Check use references to local allocate arrays and mark attributes.
+// Limit it to Fortran programs currently.
+static void Mark_Array_Uses(ARRAY_DIRECTED_GRAPH16 * dep_graph, WN * wn)
+{
+  FmtAssert(Array_Use_Hash, ("Expect a hash table."));
+
+  WN * kid;
+  ST * st;
+  OPERATOR opr = WN_operator(wn);
+
+  switch (opr) {
+  case  OPR_BLOCK:
+    kid = WN_first(wn);
+    while (kid) {
+      Mark_Array_Uses(dep_graph, kid);
+      kid = WN_next(kid);
+    }
+    break;
+  case OPR_LDA:
+    st = WN_st(wn);
+    if (Is_Tracked(st)) {
+      int val = Array_Use_Hash->Find(st);
+      BOOL is_pure = FALSE;	
+      WN * wn_p = LWN_Get_Parent(wn);
+
+      if (wn_p && ST_Has_Dope_Vector(st)) {
+	OPERATOR p_opr = WN_operator(wn_p);
+	if (p_opr == OPR_PARM) {
+	  wn_p = LWN_Get_Parent(wn_p);
+	  if (wn_p
+	      && (WN_operator(wn_p) == OPR_CALL)) {
+	    char * name = ST_name(WN_st_idx(wn_p));
+	    if ((strcmp(name, "_DEALLOCATE") == 0)
+		|| (strcmp(name, "_DEALLOC") == 0)
+		|| (strcmp(name, "_F90_ALLOCATE_B") == 0)) {
+	      is_pure = TRUE;
+	      val |= IS_ALLOC;
+	    }
+	  }
+	}
+	else if ((p_opr == OPR_STID) && WN_has_sym(wn_p)) {
+	  ST * p_st = WN_st(wn_p);
+	  TY_IDX ty = ST_type(p_st);
+	  if (strncmp(TY_name(ty), ".alloctemp.", 11) == 0)
+	    is_pure = TRUE;
+	}
+      }
+
+      if (!is_pure)
+	val |= ADDR_TAKEN;
+
+      if (val) {
+	Array_Use_Hash->Find_And_Set(st, val);
+      }
+    }
+
+    break;
+  case OPR_LDID:
+    if (WN_has_sym(wn)) {
+      st = WN_st(wn);
+      WN * store = Find_Containing_Store(wn);
+      if (store && (WN_operator(store) == OPR_STID)
+	  && (WN_st(store) != st)) {
+	if (WN_kid0(store) == wn) {
+	  // Be conservative for direct assignment to a different variable.
+	  // Consider it as an escape use.
+	  Check_use(st, wn, dep_graph, TRUE);
+	}
+	else
+	  Check_use(st, wn, dep_graph, FALSE);
+      }
+    }
+    break;
+
+  case OPR_ILOAD:
+    kid = WN_kid0(wn);
+    if (WN_operator(kid) == OPR_ARRAY) {
+      WN * base = WN_array_base(kid);
+      if (WN_has_sym(base)) {
+	st = WN_st(base);
+	Check_use(st, wn, dep_graph, FALSE);
+      }
+    }
+    break;
+
+  default:
+    ;
+  }
+
+  if (opr == OPR_FUNC_ENTRY)
+    Mark_Array_Uses(dep_graph,WN_func_body(wn));
+  else {
+    INT start = (opr == OPR_ARRAY) ? 1 : 0;
+    for (INT kidno = start; kidno < WN_kid_count(wn); kidno++) {
+      kid = WN_kid(wn, kidno);
+      Mark_Array_Uses(dep_graph, kid);
+    }
+  }
+}
 
 void Scalarize_Arrays(ARRAY_DIRECTED_GRAPH16 *dep_graph,
-	BOOL do_variants, BOOL do_invariants, REDUCTION_MANAGER *red_manager)
+		      BOOL do_variants, BOOL do_invariants, REDUCTION_MANAGER *red_manager, WN * wn)
 {
   if (Get_Trace(TP_LNOPT,TT_LNO_SCLRZE)) {
     fprintf(TFile,"Scalarizing arrays \n");
   }
 
+  Array_Use_Hash = NULL;
+  PU & pu = Get_Current_PU();
+
+  if (Do_Aggressive_Fuse && wn 
+      && ((PU_src_lang(Get_Current_PU()) & PU_F90_LANG)
+	  || (PU_src_lang(Get_Current_PU()) & PU_F77_LANG))) {
+    ST * st;
+    INT i;
+    Array_Use_Hash = CXX_NEW((HASH_TABLE<ST *, INT>) (100, &LNO_default_pool),
+			      &LNO_default_pool);
+    Mark_Array_Uses(Array_Dependence_Graph, wn);
+  }
+
   // search for a store
   VINDEX16 v;
-  for (v = dep_graph->Get_Vertex(); v; v = dep_graph->Get_Next_Vertex(v)) {
+  VINDEX16 v_next;
+  DSE_Count = 0;
+  for (v = dep_graph->Get_Vertex(); v; v = v_next) {
+    v_next = dep_graph->Get_Next_Vertex_In_Edit(v);
+    if (!dep_graph->Vertex_Is_In_Graph(v))
+      continue;
     WN *wn = dep_graph->Get_Wn(v);
     OPCODE opcode = WN_opcode(wn);
     if (OPCODE_is_store(opcode) && (WN_kid_count(wn) == 2)) {
@@ -132,19 +418,103 @@ void Scalarize_Arrays(ARRAY_DIRECTED_GRAPH16 *dep_graph,
 #endif
 	    if (ST_sclass(st) == SCLASS_AUTO &&
 		ST_base_idx(st) == ST_st_idx(st)) {
-	      if (!ST_has_nested_ref(st)) {
+	      if (!ST_has_nested_ref(st)) 
                 Process_Store(wn,v,dep_graph,do_variants,do_invariants,
-					red_manager);
-              }
+			      red_manager);
             }
           }
+	  else if (Is_Global_As_Local(st)) {
+	    Process_Store(wn,v,dep_graph,do_variants,do_invariants, red_manager);
+	  }
         }
       }
     }
   }
+
+  if (DSE_Count > 0) {
+    if (Get_Trace(TP_LNOPT,TT_LNO_SCLRZE))
+      printf("####Func: %d scalar replacement delete %d stores.\n", Current_PU_Count(), DSE_Count);
+  }
+
+  if (Array_Use_Hash)
+    CXX_DELETE(Array_Use_Hash, &LNO_default_pool);
 }
 
-// Process a store
+// Given a store to an array element 'wn', query whether it is read outside its enclosing loop
+// assuming unequal acccess arrays refer to disjointed locations.
+static BOOL Live_On_Exit(WN * wn)
+{
+  ARRAY_DIRECTED_GRAPH16 * adg = Array_Dependence_Graph;
+  OPERATOR opr = WN_operator(wn);
+  FmtAssert(OPERATOR_is_store(opr) && !OPERATOR_is_scalar_store(opr), ("Expect a store."));
+  
+  VINDEX16 v = adg->Get_Vertex(wn);
+  if (!v)
+    return TRUE;
+
+  WN * kid = WN_kid1(wn);
+  if (WN_operator(kid) != OPR_ARRAY)
+    return TRUE;
+
+  ACCESS_ARRAY * store = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+
+  if (!store)
+    return TRUE;
+
+  WN * loop_st = Enclosing_Loop(wn);
+
+  for (EINDEX16 e = adg->Get_Out_Edge(v); e; e = adg->Get_Next_Out_Edge(e)) {
+    VINDEX16 sink = adg->Get_Sink(e);
+    WN * load_wn = adg->Get_Wn(sink);
+    OPERATOR opr = WN_operator(load_wn);
+    if (OPERATOR_is_load(opr) && !OPERATOR_is_scalar_load(opr)) {
+      kid = WN_kid0(load_wn);
+      if (WN_operator(kid) != OPR_ARRAY)
+	continue;
+
+      if (Enclosing_Loop(load_wn) == loop_st)
+	continue;
+
+      ACCESS_ARRAY * load = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, kid);
+      if (Equivalent_Access_Arrays(store,load,wn,load_wn)
+	  && (DEPV_COMPUTE::Base_Test(wn,NULL,load_wn,NULL) == DEP_CONTINUE)) {
+	return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+// Query whether 'wn' is located in a loop nest that allows dead store removal
+// after scalarization.
+static BOOL Do_Sclrze_Dse(WN * wn)
+{
+  WN * wn_p = LWN_Get_Parent(wn);
+  while (wn_p) {
+    if (WN_operator(wn_p) == OPR_DO_LOOP) {
+      DO_LOOP_INFO * dli = Get_Do_Loop_Info(wn_p);
+      if (dli && (dli->Sclrze_Dse == 1))
+	return TRUE;
+    }
+    wn_p = LWN_Get_Parent(wn_p);
+  }
+  return FALSE;
+}
+
+// Delete 'store_wn'.
+static void Delete_Store(WN * store_wn, ARRAY_DIRECTED_GRAPH16 * dep_graph)
+{
+  UINT32 limit = LNO_Sclrze_Dse_Limit;
+  if ((limit > 0) && (DSE_Count > limit))
+    return;
+  
+  LWN_Update_Dg_Delete_Tree(store_wn, dep_graph);
+  LWN_Delete_Tree(store_wn);	   
+  DSE_Count++;
+}
+
+// Process a store.
 static void Process_Store(WN *store_wn, VINDEX16 v, 
 		ARRAY_DIRECTED_GRAPH16 *dep_graph, BOOL do_variants,
 		BOOL do_invariants, REDUCTION_MANAGER *red_manager)
@@ -173,6 +543,15 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
     fprintf(TFile,"\n");
   }
 
+  if (Do_Aggressive_Fuse) {
+    if (Is_Dead_Store(store_wn)) {
+      if (!red_manager || (red_manager->Which_Reduction(store_wn) == RED_NONE)) {
+	Delete_Store(store_wn, dep_graph);
+	return;
+      }
+    }
+  }
+
   BOOL is_invariant = Is_Invariant(store,store_wn);
   if (!do_variants && !is_invariant) {
     return;
@@ -191,13 +570,24 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
   TYPE_ID type = Promote_Type(store_type);
 
   EINDEX16 e,next_e=0;
+  BOOL all_loads_scalarized = TRUE;
+  BOOL has_post_dom_kill = FALSE;
+
+  if (Do_Aggressive_Fuse)
+    has_post_dom_kill = Has_Post_Dom_Kill(dep_graph, store_wn);
+
   for (e = dep_graph->Get_Out_Edge(v); e; e=next_e) {
     next_e = dep_graph->Get_Next_Out_Edge(e);
     VINDEX16 sink = dep_graph->Get_Sink(e);
     WN *load_wn = dep_graph->Get_Wn(sink);
     OPCODE opcode = WN_opcode(load_wn);
     if (OPCODE_is_load(opcode)) {
-      if (OPCODE_operator(opcode) != OPR_LDID) {
+      if (OPCODE_operator(opcode) != OPR_LDID && 
+	  // Do not scalarize MTYPE_M loads as this may result in a parent MTYPE_M store
+	  // having a child that is not MTYPE_M and function 'Add_def' may not be able to 
+	  // handle such stores during coderep creation. The check here catches 'uses' involving 
+	  // MTYPE_M whereas the check at the beginning of 'Process_Store' catches 'defs'.
+	  (WN_rtype(load_wn) != MTYPE_M) && (WN_desc(load_wn) != MTYPE_M)) {
         ACCESS_ARRAY *load = (ACCESS_ARRAY *) 
 	  WN_MAP_Get(LNO_Info_Map,WN_kid0(load_wn));
         if (WN_operator(WN_kid0(load_wn)) == OPR_ARRAY && 
@@ -210,12 +600,14 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
              WN_field_id(store_wn)==WN_field_id(load_wn)
 #endif
                       ) {
+	  BOOL scalarized_this_load = FALSE;	  
 	  if (Dominates(store_wn,load_wn)) {
            if (!red_manager || 
 	     (red_manager->Which_Reduction(store_wn) == RED_NONE)) {
 	    if (!Intervening_Write(dep_graph->Depv_Array(e)->Max_Level(),
 				v,sink,dep_graph)) {
              if (!MP_Problem(store_wn,load_wn)) {
+	       scalarized_this_load = TRUE;
 	      if (!scalarized_this_store) { 
                 if (debug) {
                   fprintf(TFile,"Scalarizing the load ");
@@ -276,6 +668,7 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
 	        if (WN_kid(parent,i) == load_wn) {
 	          WN_kid(parent,i) = new_load;
 		  LWN_Set_Parent(new_load,parent);
+		  LWN_Update_Dg_Delete_Tree(load_wn, dep_graph);
 	          LWN_Delete_Tree(load_wn);
 		  break;
                 }
@@ -285,44 +678,45 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
 	      Du_Mgr->Add_Def_Use(preg_store,new_load);
 	     }
 	    }
+	   if (!scalarized_this_load) 
+	     all_loads_scalarized = FALSE;
 	   }
 	  }
         }
       }
     }
   }
-}
 
-// Does wn1 dominate wn2, be conservative in that you can always say FALSE
-// Wn1 must be a statement 
-static BOOL Dominates(WN *wn1, WN *wn2)
-{
-  Is_True(!OPCODE_is_expression(WN_opcode(wn1)),
-    ("Non statement 1 in Dominates"));
+  if (Do_Aggressive_Fuse) {
+    OPERATOR opr = WN_operator(store_wn);
 
-  // wn1's parent has to be an ancestor of wn2
-  WN *parent1 = LWN_Get_Parent(wn1);
-  WN *ancestor2 = LWN_Get_Parent(wn2);
-  WN *kid2 = wn2;
-  while (ancestor2 && (ancestor2 != parent1)) {
-   kid2 = ancestor2;
-   ancestor2 = LWN_Get_Parent(ancestor2);
-  }
-  if (!ancestor2) return FALSE;
-
-
-  // at this point, wn1 is a sibling of kid2
-  // return TRUE if wn1 comes before kid2
-  wn1 = WN_next(wn1);
-  while (wn1) {
-    if (wn1 == kid2) {
-      return TRUE;
+    if (!OPERATOR_is_scalar_store(opr)
+	&& scalarized_this_store && all_loads_scalarized) {
+      WN * base = WN_array_base(WN_kid(store_wn,1));
+      if (WN_has_sym(base)) {
+	ST * st = WN_st(base);
+	if (st) {
+	  int val = Array_Use_Hash ? Array_Use_Hash->Find(st) : 0;
+	
+	  if (Is_Global_As_Local(st) && ST_Has_Dope_Vector(st)) {
+	    if (Do_Sclrze_Dse(store_wn)
+		&& !Live_On_Exit(store_wn)
+		&& (ST_export(st) == EXPORT_LOCAL)) {
+	      Delete_Store(store_wn, dep_graph);
+	    }
+	  }
+	  else if (val && ((val & ADDR_TAKEN) == 0)
+		   && ((val & IS_ALLOC) != 0)) {
+	    if (has_post_dom_kill 
+		|| ((val & HAS_ESCAPE_USE) == 0)) {
+	      Delete_Store(store_wn, dep_graph); 
+	    }
+	  }
+	}
+      }
     }
-    wn1 = WN_next(wn1);
   }
-  return FALSE;
 }
-
 
 // Given that there is a must dependence between store and load,
 // is there ary other store that might occur between the the store and the

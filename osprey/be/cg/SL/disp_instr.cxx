@@ -864,11 +864,12 @@ void Check_Br16 () {
       Is_True(tn_registers_identical(op2tn, Zero_TN), ("second operand is zero"));
       if (TN_is_label(op3tn)) {
 	 LABEL_IDX lab = TN_label(op3tn);
-         if (Is_Br16_Offset(op, lab)) { 
+         if (!Is_Br16_Offset(op, lab)) { 
 	   TOP newtop = (OP_code(op)==TOP_br16_eqz) ? TOP_beq : TOP_bne ;
            OP_Change_Opcode(op, newtop);
 	   OP *prev16 = OP_prev_real_op(op);
 	   
+	   if (prev16 == NULL) continue;
 	   if (OP_code(prev16) == TOP_nop16) {
 	     OP_Change_To_Noop(prev16);
 	   } else if (OP_16bit_op(prev16)) {

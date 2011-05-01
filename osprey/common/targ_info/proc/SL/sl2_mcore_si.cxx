@@ -65,7 +65,7 @@ void Generate_SL2_MCore (void)
 {
   INT i;
   
-  Machine("sl2_mcore", ISA_SUBSET_MIPS4);
+  Machine("sl2_mcore", ISA_SUBSET_SL2);
 
   res_issue = RESOURCE_Create("issue", 4);
   res_memory = RESOURCE_Create("memory", 2);
@@ -93,118 +93,6 @@ void Generate_SL2_MCore (void)
   res_sl2_vadd = RESOURCE_Create("sl2_vadd", 1); 
 #endif
 
-#if defined(TARG_SL)
-  Instruction_Group("c3-alu", 
-                    // new C3 
-                    TOP_c3_bitr,
-                    TOP_c3_mvfs,
-                    TOP_c3_mvts,
-                    TOP_c3_mvtacc,
-                    TOP_c3_mvtaddr,
-                    TOP_c3_mvtadds,
-                    TOP_c3_mvfacc,
-                    TOP_c3_mvfaddr,
-                    TOP_c3_mvfadds,
-                    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(1);
-  Resource_Requirement(res_integer_or_memory, 0);
-  Resource_Requirement(res_integer, 0);
-  Resource_Requirement(res_issue, 0);
- 
-  Instruction_Group("c3-mac",
-                    // new c3
-                    TOP_c3_aadda,
-                    TOP_c3_nega,
-                    TOP_c3_cs,
-                    TOP_c3_dadd,
-                    TOP_c3_dmac,
-                    TOP_c3_dmacn,
-                    TOP_c3_dmac_a,
-                    TOP_c3_dmacn_a,
-                    TOP_c3_dmula,
-                    TOP_c3_dmulan,
-                    TOP_c3_dmula_a,
-                    TOP_c3_dmulan_a,
-                    TOP_c3_dshll_i,
-                    TOP_c3_dshrl_i,
-                    TOP_c3_dsub,
-                    TOP_c3_lead,
-                    TOP_c3_mac,
-                    TOP_c3_macn,
-                    TOP_c3_mac_a,
-                    TOP_c3_macn_a,
-                    TOP_c3_mac_ar,
-                    TOP_c3_macn_ar,
-                    TOP_c3_mac_i,
-                    TOP_c3_macn_i,
-                    TOP_c3_mula,
-                    TOP_c3_mulan,
-                    TOP_c3_mula_a,
-                    TOP_c3_mula_ar,
-                    TOP_c3_mula_i,
-                    TOP_c3_muls,
-                    TOP_c3_mulus,
-                    TOP_c3_revb,
-                    TOP_c3_round,
-                    TOP_c3_saadd_a,
-                    TOP_c3_saaddh_a,
-                    TOP_c3_saadds,
-                    TOP_c3_saaddsh,
-                    TOP_c3_sadda,
-                    TOP_c3_sadda_a,
-                    TOP_c3_samulh_a,
-                    TOP_c3_samulsh,
-                    TOP_c3_sasub_a,
-                    TOP_c3_sasubh_a,
-                    TOP_c3_sasubs,
-                    TOP_c3_sasubsh,
-                    TOP_c3_shav,
-                    TOP_c3_shlafa_i,
-                    TOP_c3_shlata_i,
-                    TOP_c3_shla_i,
-                    TOP_c3_shrafa_i,
-                    TOP_c3_shrata_i,
-                    TOP_c3_shra_i,
-	            TOP_c3_subc,
-                    TOP_UNDEFINED);
- Any_Operand_Access_Time(0);
- Any_Result_Available_Time(2);
- Resource_Requirement(res_issue, 0);
- Resource_Requirement(res_mac, 0);
-
- Instruction_Group("c3-load",
-                    // new C3 
-                    TOP_c3_fftld,
-                    TOP_c3_ld,
-                    TOP_UNDEFINED);
- Any_Operand_Access_Time(0);
- Any_Result_Available_Time(2);
- Resource_Requirement(res_issue, 0);
- Resource_Requirement(res_integer_or_memory, 0);
- Resource_Requirement(res_memory, 0);
- Load_Access_Time(1);
-
- Instruction_Group("c3-store",
-                   // new c3 
-                   TOP_c3_fftst,
-                   TOP_c3_st,
-                   TOP_UNDEFINED);
- Any_Operand_Access_Time(0);
- Resource_Requirement(res_issue, 0);
- Resource_Requirement(res_integer_or_memory, 0);
- Resource_Requirement(res_memory, 0);
- Store_Available_Time(1);
-
- Instruction_Group("c3-ffe",
-                    // new c3 
-                    TOP_c3_ffe,
-                    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(14);
-  Resource_Requirement(res_issue,0);
-  Resource_Requirement(res_ffe,0);
-#endif
 
 #if defined(TARG_SL)
   Instruction_Group("movespe",
@@ -249,7 +137,6 @@ void Generate_SL2_MCore (void)
 		    TOP_mthi,
 		    TOP_mtlo,
 #ifdef TARG_SL		    
-		    TOP_loop,
 		    TOP_mc_abs,
 		    TOP_mc_zc_eq,
         	    TOP_mc_zc_ne,
@@ -341,29 +228,6 @@ void Generate_SL2_MCore (void)
   Resource_Requirement(res_integer, 0);
   Resource_Requirement(res_issue, 0);
 
-  Instruction_Group("imult",
-		    TOP_mult,
-		    TOP_multu,
-		    TOP_dmult,
-		    TOP_dmultu,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(7);
-  Resource_Requirement(res_integer_or_memory, 0); 
-  Resource_Requirement(res_integer, 0);
-  Resource_Requirement(res_issue, 0);
-
-  Instruction_Group("idiv",
-		    TOP_div,
-		    TOP_divu,
-		    TOP_ddiv,
-		    TOP_ddivu,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(67);
-  Resource_Requirement(res_integer_or_memory, 0); 
-  Resource_Requirement(res_integer, 0);
-  Resource_Requirement(res_issue, 0);
 
   Instruction_Group("load",
 		    TOP_lb,
@@ -452,101 +316,6 @@ void Generate_SL2_MCore (void)
   Resource_Requirement(res_integer_or_memory, 0); 
   Resource_Requirement(res_integer, 0);
   Resource_Requirement(res_branch, 0);
-
-  Instruction_Group("coproc1",
-		    TOP_c_f_s,
-		    TOP_c_f_d,
-		    TOP_c_t_s,
-		    TOP_c_t_d,
-		    TOP_c_un_s,
-		    TOP_c_un_d,
-		    TOP_c_or_s,
-		    TOP_c_or_d,
-		    TOP_c_eq_s,
-		    TOP_c_eq_d,
-		    TOP_c_neq_s,
-		    TOP_c_neq_d,
-		    TOP_c_ueq_s,
-		    TOP_c_ueq_d,
-		    TOP_c_olg_s,
-		    TOP_c_olg_d,
-		    TOP_c_olt_s,
-		    TOP_c_olt_d,
-		    TOP_c_uge_s,
-		    TOP_c_uge_d,
-		    TOP_c_ult_s,
-		    TOP_c_ult_d,
-		    TOP_c_oge_s,
-		    TOP_c_oge_d,
-		    TOP_c_ole_s,
-		    TOP_c_ole_d,
-		    TOP_c_ugt_s,
-		    TOP_c_ugt_d,
-		    TOP_c_ule_s,
-		    TOP_c_ule_d,
-		    TOP_c_ogt_s,
-		    TOP_c_ogt_d,
-		    TOP_c_sf_s,
-		    TOP_c_sf_d,
-		    TOP_c_st_s,
-		    TOP_c_st_d,
-		    TOP_c_ngle_s,
-		    TOP_c_ngle_d,
-		    TOP_c_gle_s,
-		    TOP_c_gle_d,
-		    TOP_c_seq_s,
-		    TOP_c_seq_d,
-		    TOP_c_sne_s,
-		    TOP_c_sne_d,
-		    TOP_c_ngl_s,
-		    TOP_c_ngl_d,
-		    TOP_c_gl_s,
-		    TOP_c_gl_d,
-		    TOP_c_lt_s,
-		    TOP_c_lt_d,
-		    TOP_c_nlt_s,
-		    TOP_c_nlt_d,
-		    TOP_c_nge_s,
-		    TOP_c_nge_d,
-		    TOP_c_ge_s,
-		    TOP_c_ge_d,
-		    TOP_c_le_s,
-		    TOP_c_le_d,
-		    TOP_c_nle_s,
-		    TOP_c_nle_d,
-		    TOP_c_ngt_s,
-		    TOP_c_ngt_d,
-		    TOP_c_gt_s,
-		    TOP_c_gt_d,
-		    TOP_abs_s,
-		    TOP_abs_d,
-		    TOP_add_s,
-		    TOP_add_d,
-		    TOP_neg_s,
-		    TOP_neg_d,
-		    TOP_sub_s,
-		    TOP_sub_d,
-		    TOP_cfc1,
-		    TOP_ctc1,
-		    TOP_mov_s,
-		    TOP_mov_d,
-		    TOP_movf_s,
-		    TOP_movf_d,
-		    TOP_movn_s,
-		    TOP_movn_d,
-		    TOP_movt_s,
-		    TOP_movt_d,
-		    TOP_movz_s,
-		    TOP_movz_d,
-		    TOP_bc1f,
-		    TOP_bc1t,
-		    TOP_cvt_d_s,
-		    TOP_cvt_s_d,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(1);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
 
 #ifdef TARG_SL2
 
@@ -1254,86 +1023,6 @@ for(i = 3; i < 7; i++) {
   Resource_Requirement(res_sl2, 0);
 #endif // TARG_SL2
 
-  Instruction_Group("coproc1-moves",
-		    TOP_mfc1,
-		    TOP_mtc1,
-		    TOP_dmfc1,
-		    TOP_dmtc1,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(3);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
-
-  Instruction_Group("float-int-convert",
-		    TOP_cvt_d_w,
-		    TOP_cvt_d_l,
-		    TOP_cvt_l_s,
-		    TOP_cvt_l_d,
-		    TOP_cvt_s_w,
-		    TOP_cvt_s_l,
-		    TOP_cvt_w_s,
-		    TOP_cvt_w_d,
-		    TOP_ceil_w_s,
-		    TOP_ceil_w_d,
-		    TOP_ceil_l_s,
-		    TOP_ceil_l_d,
-		    TOP_floor_w_s,
-		    TOP_floor_w_d,
-		    TOP_floor_l_s,
-		    TOP_floor_l_d,
-		    TOP_round_w_s,
-		    TOP_round_w_d,
-		    TOP_round_l_s,
-		    TOP_round_l_d,
-		    TOP_trunc_w_s,
-		    TOP_trunc_w_d,
-		    TOP_trunc_l_s,
-		    TOP_trunc_l_d,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(4);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
-
-  Instruction_Group("float-mult",
-		    TOP_mul_s,
-		    TOP_mul_d,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(2);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
-
-  Instruction_Group("float-divide",
-		    TOP_div_s,
-		    TOP_div_d,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(12);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
-
-  Instruction_Group("float-others",
-		    TOP_sqrt_s,
-		    TOP_sqrt_d,
-		    TOP_madd_s,
-		    TOP_madd_d,
-		    TOP_msub_s,
-		    TOP_msub_d,
-		    TOP_nmadd_s,
-		    TOP_nmadd_d,
-		    TOP_nmsub_s,
-		    TOP_nmsub_d,
-		    TOP_recip_s,
-		    TOP_recip_d,
-		    TOP_rsqrt_s,
-		    TOP_rsqrt_d,
-		    TOP_UNDEFINED);
-  Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(8);
-  Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_float, 0);
 
   Instruction_Group("sync",
 		    TOP_sync,
@@ -1363,14 +1052,6 @@ for(i = 3; i < 7; i++) {
 		    TOP_asm,
 		    TOP_intrncall,
 		    TOP_spadjust,
-                    TOP_begin_pregtn,
-                    TOP_end_pregtn,
-                    TOP_bwd_bar,
-                    TOP_fwd_bar,
-#if defined(TARG_SL) || defined(TARG_SL2)
-                  TOP_peripheral_rw_begin, 
-                  TOP_peripheral_rw_end, 
-#endif                  
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(1);

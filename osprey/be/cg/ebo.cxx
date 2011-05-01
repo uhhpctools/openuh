@@ -2970,6 +2970,12 @@ Find_BB_TNs (BB *bb)
                 op_replaced = Constant_Operand1 (op, opnd_tn, opnd_tninfo);
               }
             }
+#ifdef TARG_X8664
+	    if (!op_replaced && (OP_code(op) == TOP_inc32 || OP_code(op) == TOP_dec32 
+			       	|| OP_code(op) == TOP_inc64 || OP_code(op) == TOP_dec64 )
+	       )
+              op_replaced = Constant_Operand1 (op, opnd_tn, opnd_tninfo);
+#endif
             if (o1_idx >= 0) {
               tn = opnd_tn[o1_idx];
               if (!op_replaced &&

@@ -993,6 +993,7 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
 #endif // KEY
 
                 hash_set <gs_t, void_ptr_hash> anonymous_base;
+                hash_set <gs_t, void_ptr_hash> virtual_base;
                 gs_t type_binfo, basetypes;
 
                 // find all base classes
@@ -1004,6 +1005,8 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
                     gs_t binfo = gs_operand(list, 0);
                     gs_t basetype = gs_binfo_type(binfo);
                     anonymous_base.insert(basetype);
+                    if (gs_binfo_virtual_p(binfo))
+                       virtual_base.insert(basetype);
                   } 
                 } 
 
@@ -1048,6 +1051,8 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
                             Set_FLD_is_anonymous(fld);
                         if (anonymous_base.find(gs_tree_type(field)) != anonymous_base.end())
                             Set_FLD_is_base_class(fld); 
+                        if (virtual_base.find(gs_tree_type(field)) != virtual_base.end())
+                            Set_FLD_is_virtual(fld); 
 		}
 
 		TYPE_FIELD_IDS_USED(type_tree) = next_field_id - 1;
@@ -1925,6 +1930,13 @@ Create_ST_For_Tree (gs_t decl_node)
 	if (*p == '*')
 	  p++;
         ST_Init (st, Save_Str(p), CLASS_VAR, sclass, eclass, ty_idx);
+		
+      if (gs_decl_virtual_p(decl_node) && strncmp(name, "_ZTV", 4) == 0)
+      {
+          Set_ST_is_vtable(st);
+          Set_ST_vtable_ty_idx(st, Get_TY(gs_cp_decl_context(decl_node)));
+      }
+	  
 #ifdef KEY
 #ifdef FE_GNU_4_2_0
 	if (gs_tree_code (decl_node) == GS_VAR_DECL &&

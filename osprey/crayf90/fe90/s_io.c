@@ -1537,7 +1537,7 @@ void inquire_stmt_semantics (void)
       }
       else {
 
-         attr_idx = find_left_attr(&opnd);
+         attr_idx = find_base_attr(&opnd, &line, &col);
 
          /* create tmp for iolength */
 

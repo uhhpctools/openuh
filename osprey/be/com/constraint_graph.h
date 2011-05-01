@@ -122,6 +122,7 @@ class EdgeDelta;
 #define CG_NODE_FLAGS_COLLAPSED_PARENT 0x00100000 // Target of a collapse
 
 #define CG_NODE_FLAGS_FORMAL_REF_PARAM 0x00200000 // formal parm, SCLASS_FORMAL_REF
+#define CG_NODE_FLAGS_INLINE_NO_BENEFIT 0x00400000 // Used by cs-inline
 
 // Call site flags
 #define CS_FLAGS_UNKNOWN     0x01
@@ -576,7 +577,7 @@ public:
   }
 #endif
 
-  const PointsTo &revPointsTo(CGEdgeQual qual)
+  const PointsTo &revPointsTo(CGEdgeQual qual) 
   {
     return findRep()->_revPointsTo(qual);
   }
@@ -686,6 +687,7 @@ public:
   void deleteOutEdgeSet();
   void deletePointsToSet();
   void deleteRevPointsToSet();
+  void deleteDiffPointsToSet();
   void deleteEdgesAndPtsSetList();
 
   // Meant be called from createAliasTags, to provide a points-to
@@ -698,7 +700,10 @@ public:
   // processing.  This includes handling if Kcycle adjustments, <ST,-1>
   // cleanup and establishing the reverse points-to relationship.
   bool updatePointsToFromDiff(void);
-
+  void UnionPointsToSet(PointsTo &unionPts);
+  void copyPtsToDiff();
+  void unionDiffToPts();
+  
   // Remove redundant nodes, in the presence of <ST, -1>
   void sanitizePointsTo(CGEdgeQual qual);
   static void sanitizePointsTo(PointsTo &,ConstraintGraphNode *,CGEdgeQual);
@@ -708,12 +713,21 @@ public:
 
   bool sanityCheckPointsTo(CGEdgeQual qual);
 
+
+  // current node is cloned from oirg.
+  // if some node points to orig, it also points to current node
+  void updatePointsToForClone(ConstraintGraphNode *orig);
+
   void dbgPrint();
   void print(FILE *file);
   void print(ostream &str);
 
   // Copy contents of node into 'this'
   void copy(ConstraintGraphNode *node);
+
+  void copyPointsTo(ConstraintGraphNode *node);
+
+  void excludePointsTo(PointsTo &exclude);
 
   void checkIsPtrAligned();
 
@@ -1040,6 +1054,8 @@ public:
     _memPool(memPool)
   {
     _u._modulus = 0;
+    if (checkFlags(CG_ST_FLAGS_PREG))
+      maxOffsets(0);
   }
 
   // To create local symbols during IPA
@@ -1103,6 +1119,7 @@ public:
   // inter-procedural skew cycles that we are not removing from the
   // constraint graph
   UINT16 maxOffsets(void) const { return _maxOffsets; }
+  UINT16 maxOffsets(UINT16 offset) { _maxOffsets = offset; }
   UINT16 numOffsets(void) const { return _numOffsets; }
   void incrNumOffsets(void)     { _numOffsets += 1; }
 
@@ -1134,6 +1151,7 @@ public:
   void ty_idx(TY_IDX idx) { _ty_idx = idx; }
 
   void collapse();
+  bool isCollapse();
 
   MEM_POOL *memPool() { return _memPool; }
 
@@ -1291,8 +1309,14 @@ public:
 
   static void updateCloneStIdxMap(ST_IDX old_clone_idx, ST_IDX new_clone_idx);
 
+  static ST_IDX getCloneOirgStIdx(ST_IDX clone_idx);
+
+  static ST_IDX getOrigCloneStIdx(ST_IDX orig_idx);
+
   static void updateOrigToCloneStIdxMap(ST_IDX orig_st_idx,
                                         ST_IDX clone_st_idx);
+
+  static void clearOrigToCloneStIdxMap(IPA_NODE *caller, IPA_NODE *callee);
 
   static void updatePromoteStIdxMap(ST_IDX local_st_idx,  ST_IDX global_st_idx);
 
@@ -1310,6 +1334,8 @@ public:
   static void ipaSimpleOptimizer();
 
   static void stats(void);
+
+  static bool exprMayPoint(WN *const wn);
 
   static char *
   printCGStIdx(CG_ST_IDX cg_st_idx, char *buf, int n) 
@@ -1464,6 +1490,8 @@ public:
   // Return CGNode mapped to (cg_st_idx, offset), if not return NULL
   ConstraintGraphNode *checkCGNode(CG_ST_IDX cg_st_idx, INT64 offset);
 
+  bool nodeInGraph(ConstraintGraphNode* node);
+
   ConstraintGraphNode *handleAlloca(WN *stmt);
 
   CG_ST_IDX buildLocalStInfo(TY_IDX ty_idx);
@@ -1475,8 +1503,6 @@ public:
   bool nonIPASolver();
 
   void simpleOptimizer();
-
-  bool exprMayPoint(WN *const wn);
 
   list<CGNodeId> &parameters(void) { return _parameters; }
   list<CGNodeId> &returns(void) { return _returns; }
@@ -1521,6 +1547,8 @@ public:
   ConstraintGraphNode *cloneCGNode(ConstraintGraphNode *node,
                                    CG_ST_IDX new_cg_st_idx);
 
+  void newNodeId(ConstraintGraphNode *node);
+
   void remapCGNode(ConstraintGraphNode *node, CG_ST_IDX new_cg_st_idx);
 
   void mapCGNode(ConstraintGraphNode *node);
@@ -1538,6 +1566,9 @@ public:
   ConstraintGraphNode *aliasedSym(ConstraintGraphNode *n);
 
   void map_blk_Section_STs();
+
+  void cloneStInfo(StInfo* orig, CG_ST_IDX cg_st_idx);
+
   sec_blk_elements* Get_BLK_Map_Set(ST_IDX st_idx, BOOL create=FALSE);
   ST* Get_blk_Section_ST(ST* base_st, INT64 offset, INT64& new_offset);
   void print_section_map(FILE* f, sec_blk_elements* blk_elems);
@@ -1623,6 +1654,8 @@ private:
   ConstraintGraphNode *getCGNode(WN *wn);
 
   ConstraintGraphNode *genTempCGNode();
+
+  TY& getTY(const WN* wn, const ConstraintGraphNode* node);
 
   UINT32 findMaxTypeSize();
 

@@ -533,6 +533,24 @@ public:
     return *this;
   }
 
+  bool operator==(const SparseBitSet &rhs)
+  {
+    SparseBitSetElement *ptr;
+    SparseBitSetElement *ptr_rhs;
+    for (ptr = _firstElem, ptr_rhs = rhs._firstElem; 
+         ptr && ptr_rhs; 
+         ptr = ptr->_next, ptr_rhs = ptr_rhs->_next) {
+      if (ptr->_idx != ptr_rhs->_idx)
+        return false;
+      if (memcmp(ptr->_bits, ptr_rhs->_bits, sizeof(ptr->_bits)))
+        return false;
+    }
+
+    if(ptr == NULL && ptr_rhs == NULL)
+      return true;
+    return false;
+  }
+
   // Return true if this AND rhs is not empty.
   bool
   intersect(const SparseBitSet& rhs) const
@@ -609,6 +627,41 @@ public:
     assert (!_currElem == !_firstElem);
     assert (!_currElem || _currIdx == _currElem->_idx);
     return changed != 0;
+  }
+
+  // return true if rhs is a subset of this.
+  bool
+  subset(const SparseBitSet& rhs) const
+  {
+    SparseBitSetElement *thisElt = _firstElem;
+    SparseBitSetElement *rhsElt = rhs._firstElem;
+    if (rhs.isEmpty())
+      return true;
+    if (isEmpty())
+      return false;
+    
+    // rhs's element must be found in this
+    while (rhsElt && thisElt) {
+      if (thisElt->_idx > rhsElt->_idx) {
+        return false;
+      }
+      else if (thisElt->_idx == rhsElt->_idx) {
+        // compare each word
+        for (UINT32 ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++) {
+          if (thisElt->_bits[ix] != (thisElt->_bits[ix] | rhsElt->_bits[ix]))
+            return false;
+        }
+        rhsElt = rhsElt->_next;
+        thisElt = thisElt->_next;
+      }
+      else {
+        thisElt = thisElt->_next;
+      }
+    }
+    // all thisElt's idx smaller than rhsElt's idx
+    if(rhsElt)
+      return false;
+    return true;
   }
 
   bool isEmpty() const { return _firstElem == NULL; }

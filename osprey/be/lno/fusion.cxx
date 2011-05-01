@@ -71,6 +71,7 @@
 #include "prompf.h" 
 #include "anl_driver.h"
 #include "parallel.h"
+#include "bitset.h"
 
 #pragma weak New_Construct_Id 
 
@@ -203,6 +204,33 @@ MEM_POOL FUSION_default_pool;   // pool used by fusion only
 
 static UINT New_Name_Count=0;
 
+// check if variable is live outside this loop.
+static BOOL var_is_live_on_exit(WN * wn_def, WN * loop)
+{
+  USE_LIST *use_list=Du_Mgr->Du_Get_Use(wn_def);
+  
+  if (use_list->Incomplete())
+    return TRUE;
+
+  USE_LIST_ITER u_iter(use_list);
+  for (DU_NODE *use_node=(DU_NODE *)u_iter.First(); !u_iter.Is_Empty();
+       use_node=(DU_NODE *)u_iter.Next()) {
+  
+    WN* use=use_node->Wn();
+    while (use) {
+      if (use == loop)
+	break;
+      use = LWN_Get_Parent(use);
+    }
+
+    if (use != loop)
+      return TRUE;	// loop index var is live outside the loop
+  }
+
+  return FALSE;
+
+}
+
 // TODO: to really check if loop index wn is live after this loop
 static BOOL loop_var_is_live_on_exit(WN* loop) {
 
@@ -217,7 +245,7 @@ static BOOL loop_var_is_live_on_exit(WN* loop) {
        use_node=(DU_NODE *)u_iter.Next()) {
   
     WN* use=use_node->Wn();
-    while (use != loop && WN_opcode(use)!=OPC_FUNC_ENTRY)
+    while (use && (use != loop) && (WN_opcode(use)!=OPC_FUNC_ENTRY))
       use=LWN_Get_Parent(use);
     if (use != loop)
       return TRUE;	// loop index var is live outside the loop
@@ -310,13 +338,28 @@ extern INT Compare_Bounds(
 
 }
 
+// Check whether two loops have the same bounds.
+BOOL Same_Bounds(WN * wn1, WN * wn2)
+{
+  if ((Compare_Bounds(WN_start(wn1), WN_index(wn1),
+		     WN_start(wn2), WN_index(wn2)) == 0)
+      && (Compare_Bounds(WN_end(wn1), WN_index(wn1),
+			 WN_end(wn2), WN_index(wn2)) == 0))
+    return TRUE;
+
+  return FALSE;
+}
+
 // Computes the maximal dependence distance in iterations for level i (i is
 // between 0 and max_dv_dim-1) between EVERY pair of references from 
 // source_list and sink_list. 'step[]' contains the (absolute value of)
 // stride in each loop level. So the result is the dependence distance
 // in loop index values for each loop level with positive loop stride
 // or the negation of the dependence distance in loop index values
-// for each loop level with negative loop stride.
+// for each loop level with negative loop stride.  If 'dg' is non-NULL,
+// build dependence graph. If 'vts' is non-NULL,  collect dynamic arrays of
+// to-vertexes for edges having positive dependence distance.
+//
 // E.g.
 //
 // 	1	3	5 ...
@@ -331,14 +374,18 @@ extern INT Compare_Bounds(
 static mINT32* Max_Dep_Distance(
   REF_LIST_STACK *source_list, REF_LIST_STACK *sink_list,
   mUINT8 common_nest, mUINT8 max_dv_dim, INT32 step[],
-  BOOL use_bounds)
+  BOOL use_bounds, ARRAY_DIRECTED_GRAPH16 *dg, DYN_ARRAY<VINDEX16> ** vts,
+  mINT32 * max_neg_dist
+  )
 {
 
   INT i;
 
   mINT32 *max_distance=CXX_NEW_ARRAY(mINT32, max_dv_dim, &FUSION_default_pool);
 
-  for (i = 0; i< max_dv_dim; i++) max_distance[i] = MIN_INT32;
+  for (i = 0; i< max_dv_dim; i++)  max_distance[i] = MIN_INT32;
+
+  *max_neg_dist = 0;
 
   if (max_dv_dim>LNO_MAX_DO_LOOP_DEPTH) {
     Is_True(0, ("Loops nested too deep (>%d) in Max_Dep_Distance()\n",
@@ -346,6 +393,8 @@ static mINT32* Max_Dep_Distance(
     max_distance[max_dv_dim-1] = MAX_INT32;
     return max_distance;
   }
+
+  DEP * saved_dep = CXX_NEW_ARRAY(DEP, max_dv_dim, &FUSION_default_pool);
 
   // for every pair of references from source_list and sink_list ..
   for (INT ii=0;ii<source_list->Elements(); ii++) {
@@ -390,72 +439,193 @@ static mINT32* Max_Dep_Distance(
           // compute the dependences ..
           WN* src_wn=n1->Wn;
           WN* sink_wn=n2->Wn;
+	  for (i = 0; i < max_dv_dim; i++) saved_dep[i] = 0;
+
           DEPV_LIST *tmp = CXX_NEW(DEPV_LIST(src_wn,sink_wn, local_common_nest,
             dv_dim,use_bounds,&FUSION_default_pool,n1->Stack,n2->Stack),
 	    &FUSION_default_pool);
-	    if (!tmp->Is_Empty()) {	// dependences exists
 
-              if (LNO_Test_Dump) {
-                // dump backward dependences for fusion
-                Dump_WN(src_wn, stdout, TRUE, 4, 4);
-                printf("-->");
-                Dump_WN(sink_wn, stdout, TRUE, 4, 4);
-                tmp->Print(stdout);
-                printf("\n");
-              }
+	  if (!tmp->Is_Empty()) {	// dependences exists
+
+	    if (LNO_Test_Dump) {
+	      // dump backward dependences for fusion
+	      Dump_WN(src_wn, stdout, TRUE, 4, 4);
+	      printf("-->");
+	      Dump_WN(sink_wn, stdout, TRUE, 4, 4);
+	      tmp->Print(stdout);
+	      printf("\n");
+	    }
   
-	      DEPV_ITER dep_iter(tmp);
+	    DEPV_ITER dep_iter(tmp);
   
-              // for each dependence
-              for (DEPV_NODE *dn=dep_iter.First();
-	        !dep_iter.Is_Empty(); dn=dep_iter.Next()) {
+	    // for each dependence
+	    for (DEPV_NODE *dn=dep_iter.First();
+		 !dep_iter.Is_Empty(); dn=dep_iter.Next()) {
   
-                // for each dimension
-	        for (i=0; i<dv_dim; i++) {
-	        
-	          DEP dep = DEPV_Dep(dn->Depv,i);
-	          if ( !DEP_IsDistance(dep) ) {
-		    if (i==0) {
-                      // a dep. direction '*' at outer-most loop,
-		      // give up fusion
-	              MEM_POOL_Pop(&FUSION_default_pool);
-		      max_distance[max_dv_dim-1] = MAX_INT32;
-	              return (max_distance);
-                    } else {
-                      // a '*' occurs at some inner loop
-                      // find an outer loop whose offset distance
-                      // can be used to guarantees that this '*' can be ignored
-                      INT j;
-		      for (j=i-1; j>=0; j--)
-		        if (max_distance[j]<0)
-		          break;
-                      if (j<0) {
-		        max_distance[i-1]+=step[i-1];
-		      } else {
-                        // j-dimension has no constraint on distance
-                        // so it has a MIN_INT32 value
-		        max_distance[j]=step[j];
-		      }
-		      break;
+	      // for each dimension
+	      for (i=0; i<dv_dim; i++) {
+		DEP dep = DEPV_Dep(dn->Depv,i);
+
+		if ( !DEP_IsDistance(dep) ) {
+		  if (i==0) {
+		    // a dep. direction '*' at outer-most loop,
+		    // give up fusion
+		    MEM_POOL_Pop(&FUSION_default_pool);
+		    max_distance[max_dv_dim-1] = MAX_INT32;
+		    return (max_distance);
+		  } else {
+		    // a '*' occurs at some inner loop
+		    // find an outer loop whose offset distance
+		    // can be used to guarantees that this '*' can be ignored
+		    INT j;
+		    for (j=i-1; j>=0; j--)
+		      if (max_distance[j]<0)
+			break;
+		    if (j<0) {
+		      max_distance[i-1]+=step[i-1];
+		    } else {
+		      // j-dimension has no constraint on distance
+		      // so it has a MIN_INT32 value
+		      max_distance[j]=step[j];
 		    }
-	          } else if (max_distance[i] > step[i]*DEP_Distance(dep))
 		    break;
-                    // all depdence in inner loops are satisfied, too
-	          else if (max_distance[i] == step[i]*DEP_Distance(dep))
-		    continue;
-	          else
-	            max_distance[i] = step[i]*DEP_Distance(dep);
-  
-	        }
-  
+		  }
+		} else if (max_distance[i] > step[i]*DEP_Distance(dep)) {
+		  saved_dep[i] = dep;
+		  break;
+		}
+		// all depdence in inner loops are satisfied, too
+		else if (max_distance[i] == step[i]*DEP_Distance(dep)) {
+		  saved_dep[i] = dep;
+		  continue;
+		}
+		else {
+		  max_distance[i] = step[i]*DEP_Distance(dep);
+		  saved_dep[i] = dep;
+		}
 	      }
 	    }
+	  }
+
           MEM_POOL_Pop(&FUSION_default_pool);
+
+	  if (dg) {
+	    for (i = 0; i < max_dv_dim; i++) {
+	      DEP dep = saved_dep[i];
+	      if (dep) {
+		mINT32 distance = step[i] * DEP_Distance(dep);
+		if (distance > 0) {
+		  WN * wn_from = sink_wn;
+		  WN * wn_to = src_wn;
+		  VINDEX16 from = dg->Get_Vertex(wn_from);
+		  if (!from)
+		    from = dg->Add_Vertex(wn_from);
+		  VINDEX16 to = dg->Get_Vertex(wn_to);
+		  if (!to)
+		    to = dg->Add_Vertex(wn_to);
+		  if (!dg->Get_Edge(from, to))
+		    dg->Add_Edge(from, to, dep);
+		  if (vts) {
+		    if (vts[i] == NULL)
+		      vts[i] = CXX_NEW(DYN_ARRAY<VINDEX16>(&FUSION_default_pool),
+				       &FUSION_default_pool);
+		    FmtAssert(to > 0, ("Illegal to vertex."));
+		    vts[i]->AddElement(to);
+		  }
+		}
+		else if (distance < 0) {
+		  *max_neg_dist = MAX(-1 * distance, *max_neg_dist);
+		  // Clear ST_IS_GLOBAL_AS_LOCAL bit if negative distances exist
+		  // among global-as-local symbol references so that store references
+		  // won't be removed.
+		  OPERATOR opr = WN_operator(sink_wn);
+		  WN * array = OPERATOR_is_store(opr) ? WN_kid1(sink_wn) : WN_kid0(sink_wn);
+		  WN * base = (WN_operator(array) == OPR_ARRAY) ? WN_array_base(array) : NULL;
+		  if (base && WN_has_sym(base)) {
+		    ST * st = WN_st(base);
+		    if (ST_is_global_as_local(st))
+		      Clear_ST_is_global_as_local(st);
+		  }
+		}
+	      }
+	    }
+	  }
         }
       }
     }
   }
   return(max_distance);
+}
+
+// Check whether scalar-dependence inputs of 'wn' are outside of 'wn_loop'.
+static BOOL
+Scalar_Input_Is_Invariant(WN * wn, WN * wn_loop)
+{
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    WN * wn_kid = WN_kid(wn, i);
+
+    if (WN_operator(wn_kid) == OPR_ARRAY)
+      continue;
+
+    DEF_LIST * def_list = Du_Mgr->Ud_Get_Def(wn_kid);
+    DEF_LIST_ITER iter(def_list);
+    const DU_NODE * nnext = NULL;
+    const DU_NODE * node = NULL;
+    for (node = iter.First(); !iter.Is_Empty(); node = nnext) {
+      nnext = iter.Next();
+      WN * def = node->Wn();
+      WN * wn_p = LWN_Get_Parent(def);
+      while (wn_p) {
+	if (wn_p == wn_loop)
+	  return FALSE;
+	wn_p = LWN_Get_Parent(wn_p);
+      }
+    }
+    
+    if (!Scalar_Input_Is_Invariant(wn_kid, wn_loop))
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+#define PRECOM_INTERNAL 1  // Internal nodes in a pre-computation tree.
+#define PRECOM_ROOT 2  // Root of a pre-computation tree.
+#define PRECOM_IS_DEF(x)  ((x == PRECOM_INTERNAL) || (x == PRECOM_ROOT))
+
+// Check whether array-dependence inputs of 'wn' have the same parent and the parent is
+// 'wn_parent'. If so, annotate inputs in 'map' and return number of 
+// unique inputs.
+static BOOL
+Array_Input_Has_Same_Parent(WN * wn, WN_MAP map, WN * wn_parent, int * input_cnt)
+{
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    WN * wn_kid = WN_kid(wn, i);
+    VINDEX16 v = Array_Dependence_Graph->Get_Vertex(wn_kid);
+    if (v) {
+      for (EINDEX16 in_edge=Array_Dependence_Graph->Get_In_Edge(v); 
+	   in_edge; in_edge=Array_Dependence_Graph->Get_Next_In_Edge(in_edge)) {
+	VINDEX16 v_src = Array_Dependence_Graph->Get_Source(in_edge);
+	WN * wn_src = Array_Dependence_Graph->Get_Wn(v_src);
+	if (map) {
+	  UINT val = (UINT) (INTPTR) WN_MAP_Get(map, wn_src);
+	  if (!val) {
+	    WN_MAP_Set(map, wn_src, (void *) (INTPTR) (UINT) PRECOM_INTERNAL);
+	    (*input_cnt)++;
+	  }
+	}
+	
+	if (LWN_Get_Parent(wn_src) != wn_parent)
+	  return FALSE;
+	else if (!Array_Input_Has_Same_Parent(wn_src, map, wn_parent, input_cnt))
+	  return FALSE;
+      }
+    }
+
+    if (!Array_Input_Has_Same_Parent(wn_kid, map, wn_parent, input_cnt))
+      return FALSE;
+  }
+  return TRUE;
 }
 
 // Computes the maximal dependence distance for level i (i is
@@ -465,25 +635,23 @@ static mINT32* Max_Dep_Distance(
 // 1) WRITE in in_loop1 and WRITE in_loop2
 // 2) READ in in_loop1 and WRITE in_loop2
 // 3) WRITE in in_loop1 and READ in_loop2
+// Return a dependence graph 'dg' for data dependences between two loops.
+// Return an array of vertexes 'vst' in the dependence graph whose value
+// can be pre-computed.
 static mINT32* Max_Dep_Distance(
   WN *in_loop1, WN *in_loop2,
-  mUINT8 dv_dim, INT32 step[], BOOL use_bounds)
+  mUINT8 dv_dim, INT32 step[], BOOL use_bounds,
+  ARRAY_DIRECTED_GRAPH16 *dg, DYN_ARRAY<VINDEX16> ** vts, mINT32 * max_neg_dist)
 {
-
-    WN* wn1;
-    WN* wn2;
     mINT8 i;
+    WN * wn1 = in_loop1;
+    WN * wn2 = in_loop2;
 
-    wn1 = in_loop1;
-    wn2 = in_loop2;
+    DO_LOOP_INFO * dli1 = Get_Do_Loop_Info(wn1);
+    DO_LOOP_INFO * dli2 = Get_Do_Loop_Info(wn2);
 
     WN* loop_body1=WN_do_body(wn1);	// get the loop bodies (blocks)
     WN* loop_body2=WN_do_body(wn2);
-
-    for (i=0; i<dv_dim-1; i++) {
-      wn1 = Get_Only_Loop_Inside(wn1,FALSE);
-      wn2 = Get_Only_Loop_Inside(wn2,FALSE);
-    }
 
     mINT32 *max_distance = CXX_NEW_ARRAY(mINT32, dv_dim, &FUSION_default_pool);
     for (i = 0; i< dv_dim; i++) max_distance[i] = MIN_INT32;
@@ -549,8 +717,9 @@ static mINT32* Max_Dep_Distance(
 
     // compute max dependence distance between writes in in_loop2
     // and writes in in_loop1
-    tmp = Max_Dep_Distance(writes2, writes1, common_nest, 
-				dv_dim, step, use_bounds);
+    tmp = Max_Dep_Distance(writes2, writes1,common_nest, 
+			   dv_dim, step, use_bounds, NULL, NULL, max_neg_dist);
+
     for (i = 0; i< dv_dim; i++) {
       if (tmp[i] > max_distance[i]) max_distance[i] = tmp[i];
       // if non-constant dependences or unknown dependences
@@ -565,33 +734,263 @@ static mINT32* Max_Dep_Distance(
     // compute max dependence distance between writes in in_loop2
     // and reads in in_loop1
     tmp = Max_Dep_Distance(writes2, reads1, common_nest, 
-				dv_dim, step, use_bounds);
+			   dv_dim, step, use_bounds, NULL, NULL, max_neg_dist);
     for (i = 0; i< dv_dim; i++) {
       if (tmp[i] > max_distance[i]) max_distance[i] = tmp[i];
       if (tmp[i] == MAX_INT32) 
 	abort = TRUE;
     }
     if (abort) {
-      max_distance[dv_dim-1] = MAX_INT32;
+      max_distance[dv_dim-1] = MAX_INT32; 
       return max_distance;
     }
 
     // compute max dependence distance between reads in in_loop2
     // and writes in in_loop1
+
     tmp = Max_Dep_Distance(reads2, writes1, common_nest,
-				dv_dim, step, use_bounds);
+			   dv_dim, step, use_bounds, dg, vts, max_neg_dist);
     for (i = 0; i< dv_dim; i++) {
       if (tmp[i] > max_distance[i]) max_distance[i] = tmp[i];
       if (tmp[i] == MAX_INT32) 
 	abort = TRUE;
     }
+
     if (abort) {
       max_distance[dv_dim-1] = MAX_INT32;
+      if (dg) {
+	dg->Erase_Graph();
+	for (i = 0; i < dv_dim; i++) {
+	  DYN_ARRAY<VINDEX16> * v_array = vts[i];
+	  if (v_array) {
+	    CXX_DELETE(v_array, &FUSION_default_pool);
+	    vts[i] = NULL;
+	  }
+	}
+      }
       return max_distance;
     }
-  
-    return max_distance;
+    else if (vts) {
+      // Legality check for pre-computation.
+      int input_cnt = 0;
+      WN_MAP input_map = WN_MAP_Create(&FUSION_default_pool);
 
+      for (int i = 0; i < dv_dim; i++) {
+	DYN_ARRAY<VINDEX16> * v_array = vts[i];
+	if (v_array && (step[i] == 1)) {
+	  DYN_ARRAY<VINDEX16> * defs = 
+	    CXX_NEW(DYN_ARRAY<VINDEX16>(&FUSION_default_pool),
+		    &FUSION_default_pool);
+  
+	  for (int j = 0; j < v_array->Elements(); j++) {
+	    VINDEX16 v = (*v_array)[j];
+	    EINDEX16 e = dg->Get_In_Edge(v);
+	    DEP dep = dg->Dep(e);
+	    VINDEX16 v_def = dg->Get_Source(e);
+	    WN * wn_from = dg->Get_Wn(v_def);
+	    WN * wn_to = dg->Get_Wn(v);
+	    int count = 0;
+
+	    // A use should have single definition and contained in a store statement.
+	    while (e) {
+	      count++;
+	      e = dg->Get_Next_In_Edge(e);
+	    }
+
+	    if ((count > 1) 
+		|| !Find_Containing_Store(wn_to)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    FmtAssert(WN_operator(wn_from) == OPR_ISTORE, ("Illegal source."));
+	    FmtAssert(WN_operator(wn_to) == OPR_ILOAD, ("Illegal sink."));
+
+	    // The definition is at a dominating point in in_loop1s body,
+	    // and the definition's enclosing loops are perfectly-nested
+	    // Do-loops.
+	    WN * wn_parent = LWN_Get_Parent(wn_from);
+	    WN * last_loop = NULL;
+	    while (wn_parent && (wn_parent != in_loop1)) {
+	      switch (WN_operator(wn_parent)) {
+	      case OPR_BLOCK:
+		wn_parent = LWN_Get_Parent(wn_parent);
+		break;
+	      case OPR_DO_LOOP:
+		if (last_loop 
+		    && (Get_Only_Loop_Inside(wn_parent,FALSE) != last_loop)) {
+		  wn_parent = NULL;
+		}
+		else {
+		  last_loop = wn_parent;
+		  wn_parent = LWN_Get_Parent(wn_parent);
+		}
+		break;
+	      default:
+		wn_parent = NULL;
+		;
+	      }
+	    }
+
+	    if (wn_parent != in_loop1) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // The def and the use should be in a do-loop nest with the same depth.
+	    if (Loop_Depth(wn_to) != Loop_Depth(wn_from)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // Inputs of scalar dependence should have definitions outside of the loop.
+	    if (!Scalar_Input_Is_Invariant(wn_from, in_loop1)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // Inputs of array dependence should have the same parent as wn_from.
+	    if (!Array_Input_Has_Same_Parent(wn_from, input_map, 
+					     LWN_Get_Parent(wn_from), &input_cnt)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // Compare def and use's ACCESS_VECTORs, they should have no dependence 
+	    // on all but one dimensions.  For the dimension having dependence,
+	    // loop coefficient should be 1 for the outermost loop, and difference
+	    // of dependence vectors should be a constant.
+	    // For example, if the loop nest is (j,k,i)
+	    // A pair of def and use should have a pattern like: 
+	    // [i][j][k] and [i][j+1][k].
+	    // where, no dependence exists in the first and the last dimension,
+	    // for the second dimension, loop coefficient is 1 for the outermost loop.
+	    // the different between 'j+1' and 'j' is a constant.
+	    
+	    WN * addr_from = WN_kid(wn_from, 1);
+	    WN * addr_to = WN_kid(wn_to, 0);
+	    ACCESS_ARRAY * array_from = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, addr_from);
+	    ACCESS_ARRAY * array_to = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, addr_to);
+
+	    FmtAssert(array_from && array_to, ("Missing ACCESS_ARRAY."));
+	    int count0 = 0;
+	    int count1 = 0;
+	    BOOL abort = FALSE;
+	    FmtAssert(array_from->Num_Vec() == array_to->Num_Vec(), ("Unmatched dimensions."));
+
+	    for (int iter = 0; iter < array_from->Num_Vec(); iter++) {
+	      ACCESS_VECTOR * to_vec = array_to->Dim(iter);
+
+	      // Skip those having non linear terms and variant symbolics.
+	      if (to_vec->Contains_Non_Lin_Symb()
+		  || (to_vec->Non_Const_Loops() != 0)) {
+		abort = TRUE;
+		break;
+	      }
+		
+	      if ((*array_from->Dim(iter)) == (*array_to->Dim(iter)))
+		continue;
+	      count0++;
+
+	      ACCESS_VECTOR * from_vec = array_from->Dim(iter);
+	      ACCESS_VECTOR * diff = Subtract(to_vec, from_vec, &FUSION_default_pool);
+	      if (diff && diff->Is_Const() && (diff->Const_Offset == DEP_Distance(dep))
+		  && (from_vec->Loop_Coeff(0) == 1)
+		  && (from_vec->Const_Offset == 0)) {
+		count1++;
+		CXX_DELETE(diff, &FUSION_default_pool);
+	      }
+	      else {
+		count1 = 0;
+		if (diff)
+		  CXX_DELETE(diff, &FUSION_default_pool);
+		break;
+	      }
+	    }
+	    
+	    if (abort || (count0 != count1)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // Use has no array dependence in its nesting loop.
+	    VINDEX16 v_adep = Array_Dependence_Graph->Get_Vertex(wn_to);
+	    if (v_adep && Array_Dependence_Graph->Get_In_Edge(v_adep)) {
+	      CXX_DELETE(v_array, &FUSION_default_pool);
+	      vts[i] = NULL;
+	      break;
+	    }
+
+	    // Def's access array must be equal to those of its array dependence uses 
+	    // in its nesting loop.
+	    v_adep = Array_Dependence_Graph->Get_Vertex(wn_from);
+	    if (v_adep) {
+	      BOOL use_satisfy = TRUE;
+	      for (EINDEX16 edge = Array_Dependence_Graph->Get_Out_Edge(v_adep); edge;
+		   edge = Array_Dependence_Graph->Get_Next_Out_Edge(edge)) {
+		VINDEX16 v_cur = Array_Dependence_Graph->Get_Sink(edge);
+		WN * wn_cur = Array_Dependence_Graph->Get_Wn(v_cur);
+
+		if (WN_operator(wn_cur) == OPR_ILOAD) {
+		  ACCESS_ARRAY * array_cur = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map,
+									 WN_kid(wn_cur, 0));
+		  if (*array_from == *array_cur) 
+		    ;
+		  else {
+		    use_satisfy = FALSE;
+		    break;
+		  }
+		}
+	      }
+	      if (!use_satisfy) {
+		CXX_DELETE(v_array, &FUSION_default_pool);
+		vts[i] = NULL;
+		break;
+	      }
+	    }
+
+	    BOOL seen = FALSE;
+	    for (int k = 0; k < defs->Elements(); k++) {
+	      VINDEX16 v_cur =  (*defs)[k];
+	      if (v_cur == v_def) {
+		seen = TRUE;
+		break;
+	      }
+	    }
+	    if (!seen) 
+	      defs->AddElement(v_def);
+	  }
+
+	  CXX_DELETE(defs, &FUSION_default_pool);
+	}
+	else {
+	  CXX_DELETE(v_array, &FUSION_default_pool);
+	  vts[i] = NULL;
+	}
+      }
+      
+      // Estimate cost and benefit of pre-computation, invalidate returned value
+      // if not worth it.
+      DO_LOOP_INFO * dli1 = Get_Do_Loop_Info(in_loop1);
+      if (dli1 && (dli1->Prefer_Fuse == 1)
+	  && (input_cnt > LNO_Fusion_Ddep_Limit)) {
+	for (int i = 0; i < dv_dim; i++) {
+	  if (vts[i])
+	    CXX_DELETE(vts[i], &FUSION_default_pool);
+	  vts[i] = NULL;
+	}
+      }
+
+      WN_MAP_Delete(input_map);
+    }
+    
+    return max_distance;
 }
 
 static WN* Scalar_Dependence_Prevent_Fusion(WN* in_loop1, WN* in_loop2)
@@ -780,6 +1179,439 @@ static WN* Scalar_Dependence_Prevent_Fusion(WN* in_loop1, WN* in_loop2)
 
 }
 
+// Delete dependence graph and related data structures.
+static void Delete_Dep_Graph
+(ARRAY_DIRECTED_GRAPH16 *dg, DYN_ARRAY<VINDEX16> ** vts, int fusion_level)
+{
+  if (dg) {
+    CXX_DELETE(dg, &FUSION_default_pool);
+    dg->Delete_Map();
+    if (vts) {
+      for (int i = 0; i < fusion_level; i++) {
+	DYN_ARRAY<VINDEX16> * v_array = vts[i];
+	if (v_array) {
+	  CXX_DELETE(v_array, &FUSION_default_pool);
+	  vts[i] = NULL;
+	}
+      }
+      CXX_DELETE(vts, &FUSION_default_pool);
+    }
+  }
+}
+
+// Given a comparison expression `wn_compare', check whether the condition can be
+// evaluated to 'cval', where 'cval' is a TRUE or FALSE, (e.g., an equal comparison
+// with a value outside of the loop bounds can be evaluated to a FALSE).  
+// If 'prolog_out' or 'epilog_out' is non-NULL, check whether loop peeling can be 
+// used to make the evaluation possible, and return number of peeling iterations 
+// in 'prolog_out' and 'epilog_out'. 
+// TODO: implementation to be completed.
+static BOOL
+Removable_branch(WN * loop, WN * wn_compare, int * prolog_out, int * epilog_out, BOOL cval)
+{
+  WN * lower_bound;
+  WN * upper_bound;
+  WN * wn_step;
+  OPCODE ub_compare;
+  WN * kid0;
+  WN * kid1;
+
+  switch (WN_operator(wn_compare)) {
+  case OPR_CIOR: 
+    if (!cval) {
+      if (Removable_branch(loop, WN_kid(wn_compare, 0), prolog_out, epilog_out, cval)
+	  && Removable_branch(loop, WN_kid(wn_compare, 1), prolog_out, epilog_out, cval))
+	return TRUE;
+    }
+    else {
+      if (Removable_branch(loop, WN_kid(wn_compare, 0), prolog_out, epilog_out, cval)
+	  || Removable_branch(loop, WN_kid(wn_compare, 1), prolog_out, epilog_out, cval))
+	return TRUE;
+    }
+
+    break;
+  case OPR_EQ:
+    kid0 = WN_kid(wn_compare, 0);
+    kid1 = WN_kid(wn_compare, 1);
+
+    if (WN_Simp_Compare_Trees(kid0, kid1) == 0) {
+      if (!cval)
+	return FALSE;
+      else
+	return TRUE;
+    }
+    else {
+      WN * wn_const = (WN_operator(kid1) == OPR_INTCONST) ? kid1 : 
+	((WN_operator(kid0) == OPR_INTCONST) ? kid0 : NULL);
+      if (wn_const) {
+	WN * wn_ref = (wn_const == kid0) ? kid1 : kid0;
+	switch (WN_operator(wn_ref)) {
+	case OPR_ADD:
+	  kid0 = WN_kid(wn_ref, 0);
+	  kid1 = WN_kid(wn_ref, 1);
+	  if ((WN_operator(kid0) == OPR_INTCONST)
+	      && (WN_operator(kid1) == OPR_INTCONST)
+	      && ((WN_const_val(kid0) + WN_const_val(kid1)) == WN_const_val(wn_const))) {
+	    if (!cval)
+	      return FALSE;
+	    else
+	      return TRUE;
+	  }
+	  break;
+	case OPR_INTCONST:
+	  if (!cval)
+	    return (WN_const_val(wn_const) != WN_const_val(wn_ref));
+	  else
+	    return (WN_const_val(wn_const) == WN_const_val(wn_ref));
+	  break;
+
+	default:
+	  ;
+	}
+      }
+    }
+
+    if (loop) {
+      lower_bound = WN_LOOP_LowerBound(loop);
+      upper_bound = WN_LOOP_UpperBound(loop, &ub_compare, TRUE);
+      wn_step = WN_step(loop);
+      wn_step = wn_step ? WN_kid(wn_step, 0) : NULL;
+      wn_step = wn_step ? WN_kid(wn_step, 0) : NULL;
+
+      if (wn_step && (WN_Simp_Compare_Trees(WN_kid(wn_compare,0), wn_step) == 0)) {
+	WN * wn_kid = WN_kid(wn_compare, 1);
+	if (WN_Simp_Compare_Trees(wn_kid, lower_bound) == 0) {
+	  if (!cval) {
+	    // Pre-peeling one iteration can make the condition expression FALSE.
+	    if (prolog_out) {
+	      *prolog_out = 1;
+	      return TRUE;
+	    }
+	  }
+	}
+	else if (WN_Simp_Compare_Trees(wn_kid, upper_bound) == 0) {
+	  // Post-peeling one iteration can make the condition expression FALSE.
+	  if (!cval) {
+	    if (epilog_out) {
+	      *epilog_out = 1;
+	      return TRUE;
+	    }
+	  }
+	}
+	else {
+	  // An equal comparison to a value outside the loop bound can be evaluated to
+	  // a 'FALSE'.
+	  int diff = 0;
+	  if (!cval) {
+	    if (WN_has_const_diff(wn_kid, lower_bound, &diff) && (diff < 0)) 
+	      return TRUE;
+
+	    if (WN_has_const_diff(wn_kid, upper_bound, &diff)) {
+	      if  (diff > 0)
+		return TRUE;
+
+	      OPERATOR opr = OPCODE_operator(ub_compare);
+	      BOOL is_incr;
+	      WN * wn_incr = WN_LOOP_Increment(loop, &is_incr);
+	      if ((opr == OPR_LT) && (diff == -1) && is_incr 
+		  && (WN_operator(wn_incr) == OPR_INTCONST)
+		  && (WN_const_val(wn_incr) == 1)) {
+		*epilog_out = 1;
+		return TRUE;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+    break;
+  default:
+    ;
+  }
+
+  return FALSE;
+}
+
+// Given a 'loop', find a condition branch in the loop that can be removed by loop peeling.
+static WN *
+Removable_branch_loop_peeling(WN * loop, ARRAY_DIRECTED_GRAPH16 * dg, DYN_ARRAY<VINDEX16> * use, int * prolog_out, int * epilog_out)
+{
+  *prolog_out = 0;
+  *epilog_out = 0;
+  
+  for (int i = 0; i < use->Elements(); i++) {
+    VINDEX16 v = (*use)[i];
+    WN * wn = dg->Get_Wn(v);
+    WN * wn_p = LWN_Get_Parent(wn);
+    while (wn_p && (wn_p != loop)) {
+      if (WN_operator(wn_p) == OPR_IF) {
+	if (Removable_branch(loop, WN_if_test(wn_p), prolog_out, epilog_out, FALSE)
+	    && (*prolog_out || *epilog_out))
+	  return wn_p;
+      }
+      wn_p = LWN_Get_Parent(wn_p);
+    }
+  }
+
+  return NULL;
+}
+
+// Check whether all condition branches in the WHILE tree 'wn' that can be removed by pre/post
+// peeling of its enclosing loop.  Return the enclosing loop that peeling is applied to
+// in 'loop', return peeling iterations in 'prolog' and 'epilog'. 
+BOOL Check_Removable_Branch(WN * wn, int *prolog, int *epilog, WN ** loop)
+{
+  OPERATOR opr = WN_operator(wn);
+  WN * wn_ret = NULL;
+  
+  if (opr == OPR_BLOCK) {
+    for (WN * wn_iter = WN_first(wn); wn_iter; wn_iter = WN_next(wn_iter)) {
+      if (!Check_Removable_Branch(wn_iter, prolog, epilog, loop)) {
+	*loop = NULL;
+	return FALSE;
+      }
+    }
+  }
+  else if (opr == OPR_IF) {
+    WN * wn_p = LWN_Get_Parent(wn);
+    while (wn_p) {
+      if (WN_operator(wn_p) == OPR_DO_LOOP) {
+	int cur_prolog = 0;
+	int cur_epilog = 0;
+	if (Removable_branch(wn_p, WN_if_test(wn), &cur_prolog, &cur_epilog, FALSE)) {
+	  WN * wn_tmp = *loop;
+	  if ((wn_tmp == NULL)
+	      || ((wn_tmp == wn_p) 
+		  && (cur_prolog == *prolog) 
+		  && (cur_epilog == *epilog))) {
+	    *loop = wn_p;
+	    *prolog = cur_prolog;
+	    *epilog = cur_epilog;
+	    return TRUE;
+	  }
+	}
+      }
+      wn_p = LWN_Get_Parent(wn_p);
+    }
+    *loop = NULL;
+    return FALSE;
+  }
+  
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    if (!Check_Removable_Branch(WN_kid(wn,i), prolog, epilog, loop)) {
+      *loop = NULL;
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+// For every array reference in 'wn', if it has a loop coefficient,
+// check whether its loop coefficient is 1 and its constant offset is 0.
+// e.g, it has a pattern like: [i][j][k], [i][j][k][0] and etc.
+BOOL Has_Unit_Refs(WN * wn, int dim)
+{
+  OPERATOR opr = WN_operator(wn);
+  WN * array = NULL;
+
+  if (opr == OPR_BLOCK) {
+    for (WN * wn_iter = WN_first(wn); wn_iter; wn_iter = WN_next(wn_iter)) {
+      if (!Has_Unit_Refs(wn_iter, dim))
+	return FALSE;
+    }
+  }
+  else if (opr == OPR_ARRAY)
+    array = wn;
+  
+  if (array && (WN_operator(array) == OPR_ARRAY)) {
+    ACCESS_ARRAY * access = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, array);
+    if (access && (access->Num_Vec() > dim)) {
+      ACCESS_VECTOR * vec = access->Dim(dim);
+      if (vec) {
+	if (vec->Contains_Non_Lin_Symb())
+	  return FALSE;
+	int coeff = vec->Loop_Coeff(dim);
+	if (coeff && ((coeff != 1) || (vec->Const_Offset != 0)))
+	  return FALSE;
+      }
+    }
+  }
+
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    if (!Has_Unit_Refs(WN_kid(wn, i), dim))
+      return FALSE;
+  }
+  return TRUE;
+}
+
+// Check whether 'wn' is a loop start or loop increment.
+static BOOL Is_Loop_Index(WN * wn)
+{
+  WN * wn_iter = Enclosing_Loop(wn);
+  while (wn_iter) {
+    if ((WN_start(wn_iter) == wn) 
+	|| (WN_step(wn_iter) == wn)) {
+      return TRUE;
+    }
+    WN * parent = Enclosing_Loop(wn_iter);
+    wn_iter = (parent == wn_iter) ? NULL : parent;
+  }
+  return FALSE;
+}
+
+// Check whether there is scalar loop-carried dependenence in the 'loop'.
+static BOOL Has_Scalar_Loop_Carried_Dependence
+(SCALAR_STACK *source_list, SCALAR_STACK *sink_list, WN * loop)
+{
+  if (loop_var_is_live_on_exit(loop))
+    return TRUE;
+
+  // check definitions.
+  for (int i = 0; i < source_list->Elements(); i++) {
+    SCALAR_NODE *src_node = source_list->Bottom_nth(i);
+    for (int ii = 0; ii < src_node->Elements(); ii++) {
+      WN * src_wn = src_node->Bottom_nth(ii)->Wn;
+      if (Is_Loop_Index(src_wn))
+	  continue;
+      OPERATOR opr = WN_operator(src_wn);
+
+      if (OPERATOR_is_store(opr)) {
+	if (var_is_live_on_exit(src_wn, loop))
+	  return TRUE;
+
+	if (opr == OPR_STID) {
+	  ST * st = WN_st(src_wn);
+	  if (!st || (ST_class(st) != CLASS_VAR)
+	      || ST_addr_passed(st) || ST_addr_saved(st))
+	    return TRUE;
+	  if ((WN_sclass(src_wn) != SCLASS_AUTO)
+	      && (WN_sclass(src_wn) != SCLASS_REG))
+	    return TRUE;
+	}
+      }
+    }
+  }
+
+  // check uses.  
+  for (int j = 0; j < sink_list->Elements(); j++) {
+    SCALAR_NODE *sink_node = sink_list->Bottom_nth(j);
+    for (int jj = 0; jj < sink_node->Elements(); jj++) {
+      WN * sink_wn = sink_node->Bottom_nth(jj)->Wn;
+      DEF_LIST *def_list = Du_Mgr->Ud_Get_Def(sink_wn);
+      
+      if (def_list->Incomplete())
+	return TRUE;
+      
+      // No induction definitions.
+      int inside_def_cnt = 0;
+      int outside_def_cnt = 0;
+      DEF_LIST_ITER d_iter(def_list);
+      for (DU_NODE *def_node=(DU_NODE *)d_iter.First(); !d_iter.Is_Empty();
+	   def_node = (DU_NODE *) d_iter.Next()) {
+	WN * def = def_node->Wn();
+	while (def && (def != loop) && (WN_opcode(def) != OPC_FUNC_ENTRY))
+	  def = LWN_Get_Parent(def);
+	if (def != loop)
+	  outside_def_cnt++;
+	else
+	  inside_def_cnt++;
+      }
+
+      if (inside_def_cnt && outside_def_cnt)
+	return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+// Check whether pairs of memory references from source_list and sink_list
+// have loop-carried dependence at the given nesting level 'dim'.
+// Current implementation is conservative.
+static BOOL Has_Array_Loop_Carried_Dependence
+(REF_LIST_STACK * source_list, REF_LIST_STACK * sink_list, mUINT8 dim)
+{
+  for (INT ii=0;ii<source_list->Elements(); ii++) {
+    for (INT jj=0;jj<sink_list->Elements(); jj++) {
+      REFERENCE_ITER iter1(source_list->Bottom_nth(ii));
+      for (REFERENCE_NODE *n1=iter1.First(); !iter1.Is_Empty();
+	   n1=iter1.Next()) {
+	REFERENCE_ITER iter2(sink_list->Bottom_nth(jj));
+	for (REFERENCE_NODE *n2=iter2.First();!iter2.Is_Empty();
+	     n2=iter2.Next()) {
+	  WN * src_wn = n1->Wn;
+	  WN * sink_wn = n2->Wn;
+
+	  if (DEPV_COMPUTE::Base_Test(src_wn,NULL,sink_wn,NULL) == DEP_INDEPENDENT)
+	    continue;
+
+	  if (!Array_Dependence_Graph->Get_Vertex(src_wn))
+	    return TRUE;
+
+	  if (OPERATOR_is_store(WN_operator(src_wn)))
+	    src_wn = WN_kid1(src_wn);
+
+	  if (OPERATOR_is_store(WN_operator(sink_wn)))
+	    sink_wn = WN_kid1(sink_wn);
+
+	  if (!Has_Unit_Refs(src_wn, dim) 
+	      || !Has_Unit_Refs(sink_wn, dim))
+	    return TRUE;
+	}
+      }
+    }
+  }
+  return FALSE;
+}
+
+// Check whether there is loop-carried dependence in the given loop.
+BOOL Has_Loop_Carried_Dependence(WN * loop)
+{
+  if (Do_Loop_Has_Calls(loop))
+    return TRUE;
+
+  MEM_POOL_Push(&FUSION_default_pool);
+  REF_LIST_STACK *writes = CXX_NEW(REF_LIST_STACK(&FUSION_default_pool),
+				   &FUSION_default_pool);
+  REF_LIST_STACK *reads = CXX_NEW(REF_LIST_STACK(&FUSION_default_pool),
+				  &FUSION_default_pool);
+  SCALAR_STACK *scalar_writes = CXX_NEW(SCALAR_STACK(&FUSION_default_pool),
+					&FUSION_default_pool);
+  SCALAR_STACK *scalar_reads = CXX_NEW(SCALAR_STACK(&FUSION_default_pool),
+				       &FUSION_default_pool);
+  SCALAR_REF_STACK *params = CXX_NEW(SCALAR_REF_STACK(&FUSION_default_pool),
+				     &FUSION_default_pool);
+  DOLOOP_STACK *stack=CXX_NEW(DOLOOP_STACK(&FUSION_default_pool),
+			      &FUSION_default_pool);
+  Build_Doloop_Stack(loop, stack);
+  
+  // Make a list of all the references
+  WN* loop_body=WN_do_body(loop);
+  INT32 status=0;
+  for (WN* wn=WN_first(loop_body); wn && status!= -1; wn=WN_next(wn)) 
+    status=New_Gather_References(wn,writes,reads,stack,scalar_writes,scalar_reads,
+				 params,&FUSION_default_pool);
+  
+  if (status == -1) {
+    DevWarn("Aborted from New_Gather_References");
+    MEM_POOL_Pop(&FUSION_default_pool);
+    return FALSE;
+  }
+
+  DO_LOOP_INFO * dli = Get_Do_Loop_Info(loop);
+  mUINT8 dim = dli->Depth;
+  BOOL ret_val = FALSE;
+
+  if (Has_Array_Loop_Carried_Dependence(writes, reads, dim)
+      || Has_Array_Loop_Carried_Dependence(writes, writes, dim)
+      || Has_Scalar_Loop_Carried_Dependence(scalar_writes, scalar_reads, loop))
+    ret_val = TRUE;
+  
+  MEM_POOL_Pop(&FUSION_default_pool);
+  return ret_val;
+}
+
 // Test routine for multiply-nesting fusion.
 // Returns an array which gives the offset at each level.
 // in_loop1 and in_loop2 are outer-most loop of the two loop nests to be
@@ -787,13 +1619,17 @@ static WN* Scalar_Dependence_Prevent_Fusion(WN* in_loop1, WN* in_loop2)
 // prolog_out, epilog_out and epilog_loop_out are the number of peeled
 // iterations in prolog (which is always from in_loop1), epilog (which
 // can be from in_loop1 or in_loop2) and the loop which results in
-// iterations in epilog.
+// iterations in epilog, prolog2_out and epilog2_out are the number of
+// peeled iterations in prolog and epilog from in_loop2.
 // Returns prolog==epilog==offset[inner_most_level]=MAX_INT32 if the loop
 // nests are not in the fuse-able form.
+// Return a dependence graph 'dg' for data dependences between two loops.
+// Return an array of vertexes 'vst' in the dependence graph whose value
+// can be pre-computed.
 static FISSION_FUSION_STATUS
 Fuse_Test(WN* in_loop1, WN* in_loop2, mUINT8 fusion_level, UINT32 threshold, 
-UINT64 *prolog_out, UINT64 *epilog_out, WN** epilog_loop_out,
-mINT32 offset[])
+UINT64 *prolog_out, UINT64 *epilog_out, UINT64 * prolog2_out, UINT64 *epilog2_out, WN** epilog_loop_out,
+	  mINT32 offset[], ARRAY_DIRECTED_GRAPH16 * dg, DYN_ARRAY<VINDEX16> ** vts, UINT64 *precom_out)
 {
 
   WN* loop_nest1[LNO_MAX_DO_LOOP_DEPTH];
@@ -821,13 +1657,17 @@ mINT32 offset[])
   FmtAssert(WN_opcode(in_loop2)==OPC_DO_LOOP, 
     ("non-loop input node in Fuse_Test()\n") );
 
+  DO_LOOP_INFO * dli1 = Get_Do_Loop_Info(in_loop1);
+  DO_LOOP_INFO * dli2 = Get_Do_Loop_Info(in_loop2);
+
   UINT8 inner_most_level = fusion_level - 1;
   //mINT32 *offset = CXX_NEW_ARRAY(mINT32, fusion_level, &FUSION_default_pool);
   offset[inner_most_level] = MAX_INT32;
   for (i=1; i<fusion_level-1; i++) offset[i] = 0;
 
-  *prolog_out = *epilog_out = MAX_INT32;
-
+  *prolog_out = *epilog_out = *prolog2_out = *epilog2_out = MAX_INT32;
+  *precom_out = 0;
+  
   if (WN_next(in_loop1)!=in_loop2) {
     DevWarn("non-adjacent input loop nodes in Fuse_Test()");
     return Failed;
@@ -911,8 +1751,6 @@ mINT32 offset[])
 
 #ifdef KEY
  {
-   DO_LOOP_INFO* dli1 = Get_Do_Loop_Info(in_loop1);
-   DO_LOOP_INFO* dli2 = Get_Do_Loop_Info(in_loop2);
    if (LNO_Run_Simd > 0 && LNO_Simd_Avoid_Fusion && 
        (dli1->Vectorizable ^ dli2->Vectorizable)) {
     if (LNO_Verbose)
@@ -1285,9 +2123,11 @@ mINT32 offset[])
     return Failed;
   }
 
+  mINT32 max_neg_dist = 0;
   // get dist[] which gives max dep. dist. at each level
   mINT32* dist =
-	Max_Dep_Distance(in_loop1,in_loop2,fusion_level,step,bounds_are_equal);
+    Max_Dep_Distance(in_loop1,in_loop2,fusion_level,step,bounds_are_equal, dg, vts, &max_neg_dist);
+
   if (dist[fusion_level-1]==MAX_INT32) {
     if (LNO_Verbose)
       fusion_verbose_info(srcpos1,srcpos2,fusion_level,
@@ -1307,7 +2147,68 @@ mINT32 offset[])
 
   BOOL completely_aligned = TRUE;
   BOOL outer_peeling = FALSE;
-  
+  BOOL outer_precompute = FALSE;
+  int precom_dist = dist[0];
+  BOOL peel_loop2 = FALSE;
+
+  if ((fusion_level == 1) && (precom_dist > 0) && vts && vts[0]
+      && is_positive[0] && (lb_diff[0] < 0)
+      && (Enclosing_Loop(in_loop1) == in_loop1)
+      && !Has_Loop_Carried_Dependence(in_loop1)) {
+    // Check dependence in the inner loops.
+    VINDEX16 v = (*vts[0])[0];
+    WN * wn_use = dg->Get_Wn(v);
+    int common_depth = Loop_Depth(wn_use);
+    INT32 c_step[LNO_MAX_DO_LOOP_DEPTH];
+    mINT32 inner_neg_dist;
+    // Pretend step is 1.
+    for (int i = 0; i < common_depth; i++) c_step[i] = 1;
+    mINT32 * c_dist = Max_Dep_Distance(in_loop1, in_loop2, common_depth + 1, c_step, FALSE, 
+				       NULL, NULL, &inner_neg_dist);
+    BOOL inner_no_dep = TRUE;
+    for (int i = 1; i < common_depth; i++) {
+      if (c_dist[i] > 0) {
+	inner_no_dep = FALSE;
+	break;
+      }
+    }
+    
+    // Attempt pre-computation if two loops have inter-loop dependence,
+    // the loops are the outermost loops and no inter-loop dependence exists
+    // in the inner loops.  Limit it to the case that the fusion
+    // level is 1, loop step is positive, and in_loop1's lower bound is less than 
+    // in_loop2's lower bound.
+    if (inner_no_dep) {
+      dist[0] = 0;
+      outer_precompute = TRUE;
+    
+      if (LNO_Verbose)
+	fusion_verbose_info(srcpos1,srcpos2,precom_dist, "Attempt precomputation !!");
+    }
+  }
+  else {
+    // For loops containing pre-computation defs and uses, if in_loop1's lower bound
+    // is larger that in_loop2' lower bound and if in_loop1's upper bound is smaller than
+    // in_loop2's upper bound, attempt peeling for in_loop2 so that its bounds are aligned
+    // with in_loop1's bounds to avoid shifting of array address in in_loop2 which will
+    // shut down scalar replacement opportunities. Also limit it to the case that
+    // the fusion level is 1, loop step is positive and the in_loop2 has no loop-carried
+    // dependence.
+    if ((fusion_level == 1) && (dli1->Has_Precom_Def == 1) 
+	&& (dli2->Has_Precom_Use == 1) && (dist[0] == 0) 
+	&& is_positive[0] && (lb_diff[0] > 0) && (ub_diff[0] < 0)
+	&& !Has_Loop_Carried_Dependence(in_loop2)) 
+      peel_loop2 = TRUE;
+  }
+
+  if (!outer_precompute && vts) {
+    for (int i = 0; i < fusion_level; i++) {
+      if (vts[i])
+	CXX_DELETE(vts[i], &FUSION_default_pool);
+      vts[i] = NULL;
+    }
+  }
+
   // no prolog or epilog is allowed except for the innermost loop
   // i.e. outer loops must be completely aligned
   for (i=0; i<fusion_level; i++) {
@@ -1452,9 +2353,9 @@ mINT32 offset[])
   }
   
   // test for special case when there is no prolog or epilog needed
-  if (completely_aligned) {
+  if (completely_aligned && !outer_precompute) {
     
-      *prolog_out = *epilog_out = 0;
+      *prolog_out = *epilog_out = *epilog2_out = 0;
       *epilog_loop_out = NULL;
       return Succeeded;
   
@@ -1535,7 +2436,11 @@ mINT32 offset[])
       if (loop1_lb_ub < prolog)
         prolog = loop1_lb_ub;
     }
-    if (prolog<0) prolog = 0;
+    if (prolog < 0 ) {
+      if (peel_loop2) 
+	*prolog2_out = -prolog;
+      prolog = 0;
+    }
     else {
       FmtAssert(prolog%step[inner_most_level] ==0, ("misaligned prolog\n"));
       prolog = prolog / step[inner_most_level];
@@ -1586,14 +2491,58 @@ mINT32 offset[])
       epilog = 0;
       *epilog_loop_out = NULL;
     } else {
-      FmtAssert(epilog%step[inner_most_level] ==0, ("misaligned epilog\n"));
-      epilog = epilog / step[inner_most_level];
-      epilog ++;
+      if (peel_loop2 && ((*epilog_loop_out) == loop_nest2[inner_most_level])) {
+	*epilog2_out = epilog;
+	epilog = 0;
+      }
+      else {
+	FmtAssert(epilog%step[inner_most_level] ==0, ("misaligned epilog\n"));
+	epilog = epilog / step[inner_most_level];
+	epilog ++;
+      }
+    }
+
+    if (outer_precompute) {
+      // If no peeling is from in_loop2, check whether extra peelings can be added to
+      // remove conditional branches in_loop2.
+      if ((prolog >= 0) && (epilog >= 0)
+	  && (((*epilog_loop_out) == NULL)
+	      || ((*epilog_loop_out) == loop_nest1[inner_most_level]))) {
+	int extra_prolog = 0;
+	int extra_epilog = 0;
+	Removable_branch_loop_peeling(loop_nest2[inner_most_level], dg, vts[0],
+				      &extra_prolog, &extra_epilog);
+	prolog += extra_prolog;
+	epilog += extra_epilog;
+	*prolog2_out = extra_prolog;
+	*epilog2_out = extra_epilog;
+      }
+      
+      // in_loop1 may need extra pre-peeling to satisfy negative distance dependencies.
+      if (max_neg_dist > 0) 
+	prolog = MAX(prolog, max_neg_dist);
+
+      // in_loop1 may need an extra post-peeling to make sure its iteration space
+      // after loop fusion does not exceed the original program. 
+      // in_loop2 may also need a post-peeling.
+      if (precom_dist > epilog) {
+	if (*epilog_loop_out) 
+	  FmtAssert((*epilog_loop_out) == loop_nest1[inner_most_level],
+		    ("Unexpected epilog."));
+	*epilog_loop_out = loop_nest1[inner_most_level];
+	epilog = precom_dist;
+
+	if (ub_diff[0] < epilog)
+	  *epilog2_out = epilog - ub_diff[0];
+      }
     }
   
     *prolog_out = prolog;
     *epilog_out = epilog;
-  
+    if (outer_precompute)
+      *precom_out = precom_dist;
+    if (peel_loop2)
+      offset[0] = 0;
   } else {	// step is negative
     
     INT64 prolog;
@@ -1670,7 +2619,6 @@ mINT32 offset[])
   
 
   }
-  
   return Succeeded; 
 
 }
@@ -1722,6 +2670,42 @@ void Loop_Stmt_Update(
 
 }
 
+// Check whether a WHIRL tree rooted at 'wn' contains a SYMBOL that matches 'symbol'.
+static BOOL Has_symbol(WN * wn, SYMBOL symbol)
+{
+  OPERATOR opr = WN_operator(wn);
+  if (opr == OPR_LDID)
+    return (symbol == SYMBOL(wn));
+
+  for (int k = 0; k < WN_kid_count(wn); k++) {
+    if (Has_symbol(WN_kid(wn, k), symbol))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+// Walk WHIRL tree rooted at 'wn', find array index expressions that use the symbol
+// 'symbol', add 'offset' to the expression.
+static void Add_index_offset(WN * wn, SYMBOL symbol, int offset, OPERATOR step_operator)
+{
+  if (WN_operator(wn) == OPR_ARRAY) {
+    for (int index = 0; index < WN_num_dim(wn); index++) {
+      WN * wn_dim = WN_array_index(wn, index);
+      if (Has_symbol(wn_dim, symbol)) {
+	WN_array_index(wn, index) = 
+	  LWN_CreateExp2(
+			 OPCODE_make_op(step_operator, WN_rtype(wn_dim), MTYPE_V),
+			 wn_dim,
+			 LWN_Make_Icon(WN_rtype(wn_dim), offset));
+      }
+    }
+  }
+  else {
+    for (int i = 0; i < WN_kid_count(wn); i++)
+      Add_index_offset(WN_kid(wn,i), symbol, offset, step_operator);
+  }
+}
 
 // if 'unrolled' is TRUE (default)
 // peel 'iter_count' iterations from the beginning of in_loop
@@ -1757,11 +2741,13 @@ void Loop_Stmt_Update(
 // if loop index 'i' is live on loop exit, the final value is preserved
 // by making another copy of it after the loop
 //
+
 extern void Pre_loop_peeling(WN* in_loop, UINT32 iter_count,
-BOOL unrolled, BOOL preserve_loop_index)
+BOOL unrolled, BOOL preserve_loop_index, BOOL precom_map)
 {
 
   ARRAY_DIRECTED_GRAPH16* adg=Array_Dependence_Graph; // LNO array graph
+  BOOL do_precom = precom_map ? TRUE : FALSE;
 
   FmtAssert(WN_opcode(in_loop)==OPC_DO_LOOP, 
     ("non-loop input node\n") );
@@ -1789,7 +2775,6 @@ BOOL unrolled, BOOL preserve_loop_index)
   OPERATOR step_operator =
     WN_operator(WN_kid0(WN_step(in_loop)));
 
-
   if (unrolled==FALSE) {
     // generate a loop for the peeled portion
   
@@ -1798,6 +2783,15 @@ BOOL unrolled, BOOL preserve_loop_index)
     new_iter[0]=WN_do_body(in_loop);
     BOOL out_of_edge=FALSE;
     new_iter[1] = LWN_Copy_Tree(WN_do_body(in_loop),TRUE,LNO_Info_Map);
+
+    if (do_precom) {
+      LWN_Copy_Map(new_iter[0], new_iter[1], precom_map);
+      if (LNO_Verbose) {
+	DO_LOOP_INFO * dli = Get_Do_Loop_Info(in_loop);
+	printf("####Add precomputation loop to loop num: %d\n", (dli ? dli->Get_Id() : 0));
+      }
+    }
+
     BOOL all_internal = WN_Rename_Duplicate_Labels(WN_do_body(in_loop),
                           new_iter[1], Current_Func_Node, &LNO_local_pool);
     Is_True(all_internal, ("external labels renamed"));
@@ -1876,11 +2870,12 @@ BOOL unrolled, BOOL preserve_loop_index)
     Get_Do_Loop_Info(in_loop)->Est_Num_Iterations= -1;
     Get_Do_Loop_Info(new_loop)->Est_Num_Iterations= -1;
 
-    WN_kid0(WN_start(in_loop))=
-      LWN_CreateExp2(				// m+(iter_count)
-        OPCODE_make_op(OPR_ADD, index_type, MTYPE_V),
-        WN_kid0(WN_start(in_loop)),
-        LWN_Make_Icon(index_type,(iter_count)*Step_Size(in_loop)));
+    if (!do_precom)
+      WN_kid0(WN_start(in_loop))=
+	LWN_CreateExp2(				// m+(iter_count)
+		       OPCODE_make_op(OPR_ADD, index_type, MTYPE_V),
+		       WN_kid0(WN_start(in_loop)),
+		       LWN_Make_Icon(index_type,(iter_count)*Step_Size(in_loop)));
 
     wn=LWN_Copy_Tree(WN_kid0(WN_start(new_loop)),TRUE,LNO_Info_Map);
     if (!Array_Dependence_Graph->
@@ -1898,6 +2893,75 @@ BOOL unrolled, BOOL preserve_loop_index)
           LWN_Make_Icon(index_type,(iter_count-1)*Step_Size(in_loop))),
         WN_kid1(WN_end(new_loop)));
 
+    if (do_precom) {
+      WN * wn_iter = new_loop;
+      while (wn_iter && (WN_operator(wn_iter) == OPR_DO_LOOP)) {
+	wn_iter = WN_do_body(wn_iter);
+	wn_iter = WN_first(wn_iter);
+      }
+      
+      FmtAssert(wn_iter, ("Unexpected NULL body"));
+      WN * wn_next;
+
+      // Pre-computation initialization.
+      for (; wn_iter; wn_iter = wn_next) {
+	wn_next = WN_next(wn_iter);
+	UINT val = (INTPTR) WN_MAP_Get(precom_map, wn_iter);
+	if (!PRECOM_IS_DEF(val)) {
+	  // Delete wn_iter.
+	  LWN_Update_Def_Use_Delete_Tree(wn_iter, Du_Mgr);
+	  LNO_Erase_Dg_From_Here_In(wn_iter, Array_Dependence_Graph);
+	  LWN_Extract_From_Block(wn_iter);
+	  LWN_Delete_Tree(wn_iter);
+	}
+      }
+
+      DO_LOOP_INFO * dli_new = Get_Do_Loop_Info(new_loop);
+      dli_new->Is_Precom_Init = 1;
+
+      wn_iter = in_loop;
+      while (wn_iter && (WN_operator(wn_iter) == OPR_DO_LOOP)) {
+	DO_LOOP_INFO * dli_iter = Get_Do_Loop_Info(wn_iter);
+	if (dli_iter)
+	  dli_iter->Has_Precom_Def = 1;
+	wn_iter = WN_do_body(wn_iter);
+	wn_iter = WN_first(wn_iter);
+      }
+      
+      FmtAssert(wn_iter, ("Unexpected NULL body"));
+      WN * wn_insert = wn_iter;
+      WN* wn_block = wn_iter;
+      while (wn_block && (WN_operator(wn_block) != OPR_BLOCK))
+	wn_block = LWN_Get_Parent(wn_block);
+      FmtAssert(wn_block, ("Unexpected NULL block."));
+      
+      for (; wn_iter; wn_iter = wn_next) {
+	wn_next = WN_next(wn_iter);
+	UINT val = (UINT) (INTPTR) WN_MAP_Get(precom_map, wn_iter);
+	// shift offset of pre-computed array references in in_loop.	
+	if (val) {
+	  WN * wn_shift = NULL;
+	  if (val == PRECOM_INTERNAL) {
+	    // make a copy
+	    wn_shift = LWN_Copy_Tree(wn_iter, TRUE, LNO_Info_Map);
+	    LWN_Copy_Def_Use(WN_kid(wn_iter, 1), WN_kid(wn_shift,1), Du_Mgr);
+	    LWN_Copy_Def_Use(WN_kid(wn_iter, 0), WN_kid(wn_shift,0), Du_Mgr);
+	    LWN_Insert_Block_Before(wn_block, wn_insert, wn_shift);
+	  }
+	  else if (val == PRECOM_ROOT) {
+	    wn_shift = wn_iter;
+	    if (wn_shift != wn_insert) {
+	      WN_EXTRACT_FromBlock(wn_block, wn_shift);
+	      WN_INSERT_BlockBefore(wn_block, wn_insert, wn_shift);
+	    }
+  	  }
+	  
+	  // Add a constant offset to array index expressions.
+	  Add_index_offset(wn_shift, index_symbol, iter_count, step_operator);
+	}
+      }
+    }
+
     DOLOOP_STACK *loop_stack=CXX_NEW(DOLOOP_STACK(&LNO_local_pool),
                                &LNO_local_pool);
     Build_Doloop_Stack(LWN_Get_Parent(in_loop), loop_stack);
@@ -1907,15 +2971,18 @@ BOOL unrolled, BOOL preserve_loop_index)
     LWN_Parentize(new_loop);
 
     LNO_Build_Access(new_loop, loop_stack, &LNO_default_pool);
-    LNO_Build_Do_Access(in_loop, loop_stack);
 
+    if (do_precom)
+      LNO_Build_Access(in_loop, loop_stack, &LNO_default_pool);
+
+    LNO_Build_Do_Access(in_loop, loop_stack);
+    
     if (!adg->Build_Region(new_loop,in_loop,loop_stack,TRUE,TRUE)) {
       DevWarn("Array dependence graph overflowed in Pre_loop_peeling()");
       LNO_Erase_Dg_From_Here_In(LWN_Get_Parent(in_loop), adg);  
     } 
-
   } else {
-
+    FmtAssert(!do_precom, ("TODO. precomp pre-peeling."));
     WN *index_expr;
     WN **new_iter=CXX_NEW_ARRAY(WN*, iter_count+1, &LNO_local_pool);
 
@@ -1923,6 +2990,7 @@ BOOL unrolled, BOOL preserve_loop_index)
     BOOL out_of_edge=FALSE;
     INT i;
     for (i=1; i<=iter_count; i++) {
+
       new_iter[i] = LWN_Copy_Tree(WN_do_body(in_loop),TRUE,LNO_Info_Map);
       BOOL all_internal = WN_Rename_Duplicate_Labels(WN_do_body(in_loop),
                             new_iter[i], Current_Func_Node, &LNO_local_pool);
@@ -2652,7 +3720,7 @@ BOOL unrolled, BOOL preserve_loop_index)
     post_peeling_tlog_info(in_loop,iter_count);
 }
 
-extern BOOL Move_Adjacent(WN* stmt1, WN* stmt2) {
+extern BOOL Move_Adjacent(WN* stmt1, WN* stmt2, BOOL move_down_only) {
 
   ARRAY_DIRECTED_GRAPH16* adg=Array_Dependence_Graph; // LNO array graph
   WN* parent;
@@ -2695,7 +3763,7 @@ extern BOOL Move_Adjacent(WN* stmt1, WN* stmt2) {
     return FALSE;
   }
 
-  if (stmt1) {
+  if (stmt1 && !move_down_only) {
     INT2PTR* up_hash_table=
       CXX_NEW(INT2PTR(50, &FUSION_default_pool),&FUSION_default_pool);
     up_hash_table->Enter((INT)sdg->Get_Vertex(stmt1), (void*)1);
@@ -3141,6 +4209,327 @@ static void Prompf_Record_Eliminations(WN* wn_tree)
   }
 }
 
+// Remove conditional branches in the given WHIRL tree whose condition expressions can be
+// evaluated to a TRUE or FALSE according to lower/upper bounds of the given loop 'loop'.
+void
+Remove_Cond_Branch(WN * wn, WN * loop)
+{
+  OPERATOR opr = WN_operator(wn);
+  WN * wn_next;
+  switch (opr) {
+  case OPR_BLOCK:
+    for (WN * wn_iter = WN_first(wn); wn_iter; wn_iter = wn_next) {
+      wn_next = WN_next(wn_iter);
+      Remove_Cond_Branch(wn_iter, loop);
+    }
+    break;
+  case OPR_DO_LOOP:
+    Remove_Cond_Branch(WN_do_body(wn), loop);
+    break;
+  case OPR_REGION:
+    Remove_Cond_Branch(WN_region_body(wn), loop);
+    break;
+  case OPR_DO_WHILE:
+  case OPR_WHILE_DO:
+    Remove_Cond_Branch(WN_while_body(wn), loop);
+    break;
+  case OPR_IF: 
+    {
+      WN * wn_else = WN_else(wn);
+      WN * wn_then = WN_then(wn);
+      WN * wn_cond = WN_if_test(wn);
+      WN * wn_block = LWN_Get_Parent(wn);
+
+      if (Removable_branch(loop, WN_if_test(wn), NULL, NULL, FALSE)) {
+	LWN_Insert_Block_Before(wn_block, WN_next(wn), wn_else);
+	LWN_Update_Def_Use_Delete_Tree(wn_then, Du_Mgr);
+	LWN_Update_Def_Use_Delete_Tree(wn_cond, Du_Mgr);
+	LWN_Delete_Tree(wn_then);
+	LWN_Delete_Tree(wn_cond);
+	LWN_Delete_From_Block(wn_block, wn);
+      }
+      else if (Removable_branch(loop, WN_if_test(wn), NULL, NULL, TRUE)) {
+	LWN_Insert_Block_Before(wn_block, WN_next(wn), wn_then);
+	LWN_Update_Def_Use_Delete_Tree(wn_else, Du_Mgr);
+	LWN_Update_Def_Use_Delete_Tree(wn_cond, Du_Mgr);
+	LWN_Delete_Tree(wn_else);
+	LWN_Delete_Tree(wn_cond);
+	LWN_Delete_From_Block(wn_block, wn);
+      }
+      else {
+	Remove_Cond_Branch(WN_then(wn), loop);
+	Remove_Cond_Branch(WN_else(wn), loop);
+      }
+    }
+    break;
+  default:
+    ;
+  }
+}
+
+// Given a pair of def and use 'wn_def' and 'wn_use', add nodes and edge to 'dg'.
+static void
+Add_Dep_Graph_U(ARRAY_DIRECTED_GRAPH16 * dg, WN * wn_def, WN * wn_use)
+{
+  VINDEX16 v_def = dg->Get_Vertex(wn_def);
+  if (!v_def)
+    v_def = dg->Add_Vertex(wn_def);
+  VINDEX16 v_use = dg->Get_Vertex(wn_use);
+  if (!v_use)
+    v_use = dg->Add_Vertex(wn_use);
+  if (!dg->Get_Edge(v_def, v_use))
+    dg->Add_Edge(v_def, v_use, 0, FALSE);
+}
+
+// Given 'dg', query whether there exists a sink node of 'def' that dominates 'use'.
+static BOOL 
+Has_Dominate_Use(ARRAY_DIRECTED_GRAPH16 * dg, WN * def, WN * use)
+{
+  VINDEX16 v = dg->Get_Vertex(def);
+  if (v) {
+    WN * stmt = Find_Containing_Store(use);
+    if (!stmt)
+      return FALSE;
+
+    for (EINDEX16 edge = dg->Get_Out_Edge(v); edge; edge = dg->Get_Next_Out_Edge(edge)) {
+      VINDEX16 v_sink = dg->Get_Sink(edge);
+      WN * sink = dg->Get_Wn(v_sink);
+      WN * sink_stmt = Find_Containing_Store(sink);
+      if (sink_stmt && ((sink_stmt == stmt) || Dominates(sink_stmt, stmt)))
+	return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+// Walk WHIRL tree 'wn', find nodes mapped in 'LNO_Precom_Map", if the node is a dominating use,
+// connect it to its def in 'dg'. Limited to the case that defs and uses have the same enclosing
+// loop.
+static void
+Connect_Def_Use(ARRAY_DIRECTED_GRAPH16 * dg, WN * wn) {
+  OPERATOR opr = WN_operator(wn);
+  
+  if (opr == OPR_BLOCK) {
+    for (WN * wn_iter = WN_first(wn); wn_iter; wn_iter = WN_next(wn_iter)) {
+      Connect_Def_Use(dg, wn_iter);
+    }
+  }
+  else if (OPERATOR_is_load(opr)) {
+    if (WN_MAP_Get(LNO_Precom_Map, wn)) {
+      ARRAY_DIRECTED_GRAPH16 * adg = Array_Dependence_Graph;
+      VINDEX16 v = adg->Get_Vertex(wn);
+      WN * loop_u = Enclosing_Loop(wn);
+
+      for (EINDEX16 edge = adg->Get_In_Edge(v); edge; edge = adg->Get_Next_In_Edge(edge)) {
+	VINDEX16 v_def = adg->Get_Source(edge);
+	WN * wn_def = adg->Get_Wn(v_def);
+	if (!OPERATOR_is_store(WN_operator(wn_def)))
+	  continue;
+
+	WN * loop_d = Enclosing_Loop(wn_def);
+	if (loop_d != loop_u) 
+	  continue;
+	
+	if (!Has_Dominate_Use(dg, wn_def, wn))
+	  Add_Dep_Graph_U(dg, wn_def, wn);
+      }
+    }
+  }
+  else {
+    if (OPERATOR_is_store(opr)) 
+      Connect_Def_Use(dg, WN_kid0(wn));
+    else {
+      for (int i = 0; i < WN_kid_count(wn); i++) 
+	Connect_Def_Use(dg, WN_kid(wn, i));
+    }
+  }
+}
+
+// Pass down Prefer_Fuse bit to the immediate child loop.
+extern BOOL Pass_Child_Prefer_Fuse(WN * wn)
+{
+  DO_LOOP_INFO * dli = Get_Do_Loop_Info(wn);
+  if (dli->Prefer_Fuse == 1) {
+    WN * wn_child = WN_first(WN_do_body(wn));
+    if (wn_child && (WN_operator(wn_child) == OPR_DO_LOOP)) {
+      DO_LOOP_INFO * dli_child = Get_Do_Loop_Info(wn_child);
+      if (dli_child)
+	dli_child->Prefer_Fuse = 1;
+    }
+  }
+}
+
+// Walk input statements of 'wn', build dependence graph.
+static void Build_Dep_Graph(ARRAY_DIRECTED_GRAPH16 * dg, WN * wn)
+{
+  int kid_count = WN_kid_count(wn);
+  OPERATOR opr = WN_operator(wn);
+
+  if (OPERATOR_is_store(opr))
+    kid_count = 1;
+  else if (OPERATOR_is_load(opr))
+    kid_count = 0;
+
+  for (int i = 0; i < kid_count; i++) {
+    WN * wn_kid = WN_kid(wn, i);
+    VINDEX16 v = Array_Dependence_Graph->Get_Vertex(wn_kid);
+    if (v) {
+      FmtAssert(OPERATOR_is_load(WN_operator(wn_kid)), ("Expect a load."));
+      WN * stmt = Find_Containing_Store(wn_kid);
+      for (EINDEX16 in_edge=Array_Dependence_Graph->Get_In_Edge(v); 
+	   in_edge; in_edge=Array_Dependence_Graph->Get_Next_In_Edge(in_edge)) {
+	VINDEX16 v_src = Array_Dependence_Graph->Get_Source(in_edge);
+	WN * wn_src = Array_Dependence_Graph->Get_Wn(v_src);
+	FmtAssert(OPERATOR_is_store(WN_operator(wn_src)), ("Expect a store"));
+	Add_Dep_Graph_U(dg, wn_src, stmt);
+	Build_Dep_Graph(dg, wn_src);
+      }
+    }
+    Build_Dep_Graph(dg, wn_kid);
+  }
+}
+
+// Starting from 'wn', walk input edges of 'dg', map nodes to 'id'.
+static void Grow_Cluster(ARRAY_DIRECTED_GRAPH16 * dg, WN * wn, WN_MAP map, UINT id)
+{
+  if (!WN_MAP_Get(map, wn)) {
+    VINDEX16 v = dg->Get_Vertex(wn);
+    if (v) {
+      WN_MAP_Set(map, wn, (void *) (INTPTR) id);
+      for (EINDEX16 e = dg->Get_In_Edge(v); e; e = dg->Get_Next_In_Edge(e)) {
+	VINDEX16 v_src = dg->Get_Source(e);
+	WN * wn_src = dg->Get_Wn(v_src);
+	Grow_Cluster(dg, wn_src, map, id);
+      }
+    }
+  }
+}
+
+// Instantiate expressions that belong to the same cluster as 'use' and insert them 
+// before 'use' assuming all such expressions are contained in 'block'.
+static void Instantiate_Def(ARRAY_DIRECTED_GRAPH16 * dg, WN * use, WN_MAP map, WN * block)
+{
+  VINDEX16 v = dg->Get_Vertex(use);
+  if (v) {
+    WN * ins = Find_Containing_Store(use);
+    UINT use_cluster = (UINT) (INTPTR) WN_MAP_Get(map, use);
+    WN_MAP ins_map = WN_MAP_Create(&FUSION_default_pool);
+    
+    for (VINDEX16 v = dg->Get_Vertex(); v; v = dg->Get_Next_Vertex(v)) {
+      if (!dg->Get_Out_Edge(v)) {
+	WN * wn = dg->Get_Wn(v);
+	UINT id = (UINT) (INTPTR) WN_MAP_Get(map, wn);
+	if (id == use_cluster)
+	  Grow_Cluster(dg, wn, ins_map, id);
+      }
+    }
+
+    WN * wn_next;
+    WN * first_def = NULL;
+    for (WN * wn_iter = WN_first(block); wn_iter; wn_iter = wn_next) {
+      wn_next = WN_next(wn_iter);
+      if (wn_iter == first_def)
+	break;
+
+      if (wn_iter != ins) {
+	UINT id = (UINT) (INTPTR) WN_MAP_Get(ins_map, wn_iter);
+	if (id == use_cluster) {
+	  UINT def_cluster = (UINT) (INTPTR) WN_MAP_Get(map, wn_iter);
+	  WN * def = NULL;
+	  if (def_cluster == use_cluster) 
+	    def = LWN_Extract_From_Block(wn_iter);
+	  else {
+	    def = LWN_Copy_Tree(wn_iter, TRUE, LNO_Info_Map);
+	    LWN_Copy_Def_Use(wn_iter, def, Du_Mgr);
+	  }
+	  if (!first_def)
+	    first_def = def;
+
+	  LWN_Insert_Block_Before(NULL, ins, def);
+	}
+      }   
+    }
+
+    WN_MAP_Delete(ins_map);
+  }
+}
+
+// Instantiate pre-computation definitions at the first dominating appearances of uses.
+static BOOL Instantiate_Defs(WN * wn)
+{
+  WN_MAP sdm = WN_MAP_Create(&FUSION_default_pool);
+  ARRAY_DIRECTED_GRAPH16 * dg = CXX_NEW(ARRAY_DIRECTED_GRAPH16(100, 500, sdm, DEP_ARRAY_GRAPH),
+					&FUSION_default_pool);
+
+  // Connect defs and uses of precomputation expressions.
+  Connect_Def_Use(dg, wn);
+
+  if (!dg->Get_Vertex()) {
+    Delete_Dep_Graph(dg, NULL, 0);
+    return FALSE;
+  }
+  
+  WN * block = NULL;
+  // Complete dependence graph.
+  for (VINDEX16 v = dg->Get_Vertex(); v; v = dg->Get_Next_Vertex(v)) {
+    if (dg->Get_Out_Edge(v)) {
+      WN * wn_iter = dg->Get_Wn(v);      
+      Build_Dep_Graph(dg, wn_iter);
+      WN * parent = LWN_Get_Parent(wn_iter);
+      FmtAssert((!block || (block == parent)), ("Unexpected def."));
+      block = parent;
+    }
+  }
+
+  DYN_ARRAY<WN *> * first_uses = CXX_NEW(DYN_ARRAY<WN *>(&FUSION_default_pool),
+				   &FUSION_default_pool);
+  WN_MAP cluster_map = WN_MAP_Create(&FUSION_default_pool);
+  UINT id = 0;
+
+  // Find clusters.
+  for (VINDEX16 v = dg->Get_Vertex(); v; v = dg->Get_Next_Vertex(v)) {
+    if (!dg->Get_Out_Edge(v)) {
+      WN * wn_iter = dg->Get_Wn(v);
+      WN * stmt_iter = Find_Containing_Store(wn_iter);
+      UINT cur_id = 0;
+
+      for (int i = 0; i < first_uses->Elements(); i++) {
+	WN * use = (*first_uses)[i];
+	WN * stmt = Find_Containing_Store(use);
+	BOOL is_first_use = Dominates(stmt_iter, stmt) ? TRUE : FALSE;
+
+	if ((stmt == stmt_iter) || Dominates(stmt, stmt_iter) || is_first_use) {
+	  cur_id = (UINT) (INTPTR) WN_MAP_Get(cluster_map, use);
+	  if (is_first_use) 
+	    first_uses->ReplaceElement(i, wn_iter);
+	  break;
+	}
+      }
+
+      if (!cur_id) {
+	cur_id = (++id);
+	first_uses->AddElement(wn_iter);
+      }
+
+      Grow_Cluster(dg, wn_iter, cluster_map, cur_id);
+    }
+  }
+
+  for (int i = first_uses->Elements() - 1; i >= 0; i--) {
+    WN * use = (*first_uses)[i];
+    UINT id = (UINT) (INTPTR) WN_MAP_Get(cluster_map, use);
+    WN * stmt = Find_Containing_Store(use);
+    Instantiate_Def(dg, use, cluster_map, block);
+  }
+
+  CXX_DELETE(first_uses, &FUSION_default_pool);
+  WN_MAP_Delete(cluster_map);
+  Delete_Dep_Graph(dg, NULL, 0);
+
+  return TRUE;
+}
+
 // multiply-nesting fusion routine.
 // returns TRUE if fusion is done, FALSE otherwise.
 // in_loop1 and in_loop2 are outer-most loop of the two loop nests to be
@@ -3158,6 +4547,41 @@ static void Prompf_Record_Eliminations(WN* wn_tree)
 // if offset_out==NULL or offset_out[inner_most_level]== MAX_INT32,
 // dependence analysis is performed.
 // if offset_out != NULL, the final offset info is copied out.
+//
+// This routine also does pre-computation transformations to enable scalar replacement.
+// Original code:
+// do i=2,n-1
+//   a[i] = b[i]
+// end do
+// do i=2,n-1
+//   c[i] = a[i+1] + a[i]
+// end do
+//
+// after pre-computation transformation:
+// do i=2,n-2
+//   a[i] = b[i]
+//   a[i+1] = b[i+1]  <==  add extra computation/rematerization to remove loop-carried dependences.
+//  c[i] = a[i+1] + a[i]
+// end do
+//
+// do i=n-1
+// c[i] = a[i+1] + a[i]  <=  post-peeling to keep the orginal semantics.
+// end do
+// 
+// Thus the transformation enables scalar replacement in sclrze.cxx
+// do i=2,n-2
+//   t1 = b[i]    
+//   t2 = b[i+1]  
+//   c[i] = t2 + t1
+// end do
+// do i=n-1
+//   c[i] = a[i+1] + a[i]
+// end do
+// Notice that the pre-computation transformation introduces extra computations. It is only
+// useful for programs that are stressed with high memory bandwidths and can afford
+// sacrificing some CPU cycles to reduce bandwidth demand.  We currently enable this under
+// "-mso" and use a simple heuristic that limits number of scalar replacement patterns to
+// 9 or above.
 extern FISSION_FUSION_STATUS
 Fuse(WN* in_loop1, WN* in_loop2, mUINT8 fusion_level,
 UINT32 threshold, BOOL peeling_unrolled,
@@ -3194,6 +4618,29 @@ WN** epilog_loop_out, mINT32 offset_out[])
 
   DO_LOOP_INFO *dli1=Get_Do_Loop_Info(in_loop1);
   DO_LOOP_INFO *dli2=Get_Do_Loop_Info(in_loop2);
+
+  // Enumerate loops for debugging.
+  if (dli1 && (dli1->Get_Id() == 0))
+    Enum_loops(in_loop1);
+
+  if (dli2 && (dli2->Get_Id() == 0))
+    Enum_loops(in_loop2);
+
+  // Avoid aggressive fusion if both candidates are non-SNL and 'loop2' has possibly
+  // interloop dependencies.
+  if (Do_Aggressive_Fuse) {
+    if ((dli2->Depth >= 2) && !Get_Only_Loop_Inside(in_loop1, FALSE)
+	&& !Get_Only_Loop_Inside(in_loop2, FALSE)
+	&& Has_Unit_Refs(in_loop1, dli1->Depth)
+	&& !Has_Unit_Refs(in_loop2, dli2->Depth))
+      return Failed;
+  }
+
+  BOOL is_precom_loop = FALSE;
+
+  if (dli1 && (dli1->Has_Precom_Def == 1)
+      && (dli2 && (dli2->Has_Precom_Use == 1))) 
+    is_precom_loop = TRUE;
 
   // -- temporary fix for pv 597324: if index variables of candidate
   //    loops have different type then don't attempt to fuse.
@@ -3287,8 +4734,9 @@ WN** epilog_loop_out, mINT32 offset_out[])
         "Upper bound of loop1 is too complicated.");
     return Failed;
   }
-  if (loop_var_is_live_on_exit(in_loop1))
+  if (loop_var_is_live_on_exit(in_loop1)) 
     Finalize_Index_Variable(in_loop1,FALSE);
+
   scalar_rename(WN_start(in_loop1));
 
   if (Upper_Bound_Standardize(WN_end(in_loop2),TRUE)==FALSE) {
@@ -3307,7 +4755,6 @@ WN** epilog_loop_out, mINT32 offset_out[])
     Finalize_Index_Variable(in_loop2,TRUE);
     scalar_rename(WN_start(in_loop2));
   }
-
 
   UINT8 inner_most_level = fusion_level - 1;
   loop_nest1[0] = in_loop1;
@@ -3329,7 +4776,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
   // between loops.
   if (WN_next(in_loop1)!=in_loop2)
     if (Good_Do_Depth(in_loop1)>0)
-      if (Move_Adjacent(in_loop1, in_loop2)==FALSE) {
+      if (Move_Adjacent(in_loop1, in_loop2, FALSE)==FALSE) {
         if (LNO_Verbose)
           fusion_verbose_info(srcpos1,srcpos2,fusion_level,
             "Cannot move statement in between after reversal");
@@ -3423,6 +4870,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
           "Upper bound of loop1 is too complicated.");
       return Failed;
     }
+
     if (loop_var_is_live_on_exit(loop_nest1[i]))
       Finalize_Index_Variable(loop_nest1[i],FALSE);
     scalar_rename(WN_start(loop_nest1[i]));
@@ -3445,7 +4893,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
     }
 
     lwn= loop_nest1[i];
-    if (Move_Adjacent(lwn, NULL)==FALSE) {
+    if (Move_Adjacent(lwn, NULL, FALSE)==FALSE) {
       if (LNO_Verbose)
         fusion_verbose_info(srcpos1,srcpos2,fusion_level,
           "Statements after the first loop forbid fusion.");
@@ -3462,7 +4910,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
     }
 
     lwn= loop_nest2[i];
-    if (Move_Adjacent(NULL, lwn)==FALSE) {
+    if (Move_Adjacent(NULL, lwn, FALSE)==FALSE) {
       if (LNO_Verbose)
         fusion_verbose_info(srcpos1,srcpos2,fusion_level,
           "Statements before the second loop forbid fusion.");
@@ -3477,27 +4925,87 @@ WN** epilog_loop_out, mINT32 offset_out[])
       }
       return Try_Level_By_Level;
     }
-
+    
   }
-
 
   UINT64 prolog = 0;
   UINT64 epilog = 0;
   WN* epilog_loop = NULL;
+  UINT64 epilog2 = 0;
+  UINT64 prolog2 = 0;
+  UINT64 precom = 0;
   mINT32 *offset=CXX_NEW_ARRAY(mINT32, fusion_level, &FUSION_default_pool);
+  ARRAY_DIRECTED_GRAPH16 * dg = NULL;
+  WN_MAP sdm = 0;
+  WN_MAP precom_map = 0;
+  DYN_ARRAY<VINDEX16> ** vts = NULL;
+  BOOL do_instantiate = FALSE;
 
   if (!offset_out || (offset_out)[inner_most_level]==MAX_INT32) {
     // an offset is not provided
     // !Block_is_empty(loop_body1) && !Block_is_empty(loop_body2) 
 
-    FISSION_FUSION_STATUS status=
-      Fuse_Test(in_loop1, in_loop2, fusion_level, threshold, &prolog, &epilog,
-        &epilog_loop, offset);
+    if (Do_Aggressive_Fuse) {
+      sdm = WN_MAP_Create(&FUSION_default_pool);
+      dg = CXX_NEW(ARRAY_DIRECTED_GRAPH16(100,500,sdm,DEP_ARRAY_GRAPH),
+		   &FUSION_default_pool);
+      vts = CXX_NEW_ARRAY(DYN_ARRAY<VINDEX16> *, fusion_level, &FUSION_default_pool);
+      for (i = 0; i < fusion_level; i++)
+	vts[i] = NULL;
+    }
 
-    if (status!=Succeeded)
+    FISSION_FUSION_STATUS status=
+      Fuse_Test(in_loop1, in_loop2, fusion_level, threshold, &prolog, &epilog, &prolog2, &epilog2,
+		&epilog_loop, offset, dg, vts, &precom);
+
+    // Annotate WHIRLs that need a precomputation in precom_map.
+    if (dg) {
+      if (precom > 0) {
+	precom_map = WN_MAP_Create(&FUSION_default_pool);
+	for (i = 0; i < fusion_level; i++) {
+	  DYN_ARRAY<VINDEX16> * v_array = vts[i];
+	  if (v_array) {
+	    for (int j = 0; j < v_array->Elements(); j++) {
+	      VINDEX16 v = (*v_array)[j];
+	      EINDEX16 e = dg->Get_In_Edge(v);
+	      VINDEX16 v_def = dg->Get_Source(e);
+	      WN * wn_def = dg->Get_Wn(v_def);
+	      WN * wn_use = dg->Get_Wn(v);
+	      WN_MAP_Set(LNO_Precom_Map, wn_use, wn_def);
+	      WN * wn_iter = LWN_Get_Parent(wn_use);
+	      while( wn_iter) {
+		if (WN_operator(wn_iter) == OPR_DO_LOOP) {
+		  DO_LOOP_INFO * dli_iter = Get_Do_Loop_Info(wn_iter);
+		  if (dli_iter)
+		    dli_iter->Has_Precom_Use = 1;
+		}
+		wn_iter = LWN_Get_Parent(wn_iter);
+	      }
+
+	      if (!WN_MAP_Get(precom_map, wn_def)) {
+		WN_MAP_Set(precom_map, wn_def, (void *) (INTPTR) (UINT) PRECOM_ROOT);
+		int count = 0;
+		if (!Array_Input_Has_Same_Parent(wn_def, precom_map, 
+						 LWN_Get_Parent(wn_def), &count))
+		  FmtAssert(FALSE, ("Unexpected def for pre-computation."));
+	      }
+	    }
+	  }
+	}
+      }
+      Delete_Dep_Graph(dg, vts, fusion_level);	      
+    }
+
+    if (status!=Succeeded) {
+      if (precom_map) 
+	WN_MAP_Delete(precom_map);
       return status;
+    }
 
     if (prolog > threshold) {
+      if (precom_map)
+	WN_MAP_Delete(precom_map);
+
       if (prolog<MAX_INT32) {
         if (LNO_Verbose)
           fusion_verbose_info(srcpos1,srcpos2,fusion_level,
@@ -3509,11 +5017,14 @@ WN** epilog_loop_out, mINT32 offset_out[])
           fusion_tlog_info(Failed,in_loop1,in_loop2,fusion_level,
     "Failed because of too many pre-peeled iterations required after fusion.");
         return (Failed);
-      } else
+      } else 
         return Try_Level_By_Level;
     }
 
     if (epilog > threshold) {
+      if (precom_map)
+	WN_MAP_Delete(precom_map);
+
       if (epilog<MAX_INT32) {
         if (LNO_Verbose)
           fusion_verbose_info(srcpos1,srcpos2,fusion_level,
@@ -3529,6 +5040,40 @@ WN** epilog_loop_out, mINT32 offset_out[])
         return Try_Level_By_Level;
     }
 
+    if (precom > 0) {
+      do_instantiate = TRUE;
+      FmtAssert(offset[0] == 0, ("Pre-computation expects zero offset."));
+
+      if (prolog > 0) {
+	if (prolog ==1)   // only 1 iteration, use the unrolled peeling 
+	  Pre_loop_peeling(in_loop1, prolog, TRUE, FALSE, 0);
+	else
+	  Pre_loop_peeling(in_loop1, prolog, peeling_unrolled, FALSE, 0);
+	prolog = 0;
+      }
+      
+      if (epilog_loop == in_loop1 && epilog) {
+	if (epilog==1)  // only 1 iteration, use the unrolled peeling
+	  Post_loop_peeling(in_loop1, epilog, TRUE, FALSE);
+	else
+	  Post_loop_peeling(in_loop1, epilog, peeling_unrolled, FALSE);
+
+	LWN_Insert_Block_Before(LWN_Get_Parent(in_loop1), in_loop1, 
+				LWN_Extract_From_Block(WN_next(in_loop1)));
+	epilog = 0;
+	epilog_loop = NULL;
+      }
+
+      if (precom == 1)
+	Pre_loop_peeling(in_loop1, precom, TRUE, FALSE, precom_map);
+      else
+	Pre_loop_peeling(in_loop1, precom, FALSE, FALSE, precom_map);
+
+      precom = 0;
+      if (precom_map) 
+	WN_MAP_Delete(precom_map);
+    }
+    
     if (prolog_out) *prolog_out = prolog;
     if (epilog_out) *epilog_out = epilog;
     if (epilog_loop_out) *epilog_loop_out = epilog_loop;
@@ -3554,29 +5099,28 @@ WN** epilog_loop_out, mINT32 offset_out[])
   SYMBOL new_loop_var_symbol[LNO_MAX_DO_LOOP_DEPTH];
   SYMBOL pre_loop_var_symbol[LNO_MAX_DO_LOOP_DEPTH];
 
-  WN* wn;
+  WN* wn = NULL;
 
   TYPE_ID index_type;
   OPERATOR step_operator;
   // adjust loop index to reflect the offset
   for (i=0; i<fusion_level; i++) {
-
-
     loop1_var_symbol[i].Init(WN_start(loop_nest1[i]));
     loop2_var_symbol[i].Init(WN_start(loop_nest2[i]));
 
-    index_type=WN_desc(WN_start(loop_nest1[i]));
+    WN * wn_loop =  loop_nest1[i];
+    index_type=WN_desc(WN_start(wn_loop));
     step_operator =
-      WN_operator(WN_kid0(WN_step(loop_nest1[i])));
+      WN_operator(WN_kid0(WN_step(wn_loop)));
 
     char new_loop_var_name[80];
 
     ST *st;
     const char* name;
-    st=WN_st(WN_start(loop_nest1[i]));
+    st=WN_st(WN_start(wn_loop));
     //if (st==Int_Preg || st==Float_Preg)
     if (ST_class(st) == CLASS_PREG)
-      name=Preg_Name(WN_offset(WN_start(loop_nest1[i])));
+      name=Preg_Name(WN_offset(WN_start(wn_loop)));
     else
       name=ST_name(st);
 
@@ -3586,6 +5130,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
       strcpy(new_loop_var_name,"name_too_long");
     } else
       sprintf(new_loop_var_name, "_%s_%d", name, New_Name_Count++);
+
     new_loop_var_symbol[i] = Create_Preg_Symbol(new_loop_var_name, index_type);
 
     // temporary used in pre_loop_peeling
@@ -3595,7 +5140,7 @@ WN** epilog_loop_out, mINT32 offset_out[])
     // memory) and point to illegal memory. So, need to reinitialize 'name'.
     // - exposed by bug 2658.
     if (ST_class(st) == CLASS_PREG)
-      name=Preg_Name(WN_offset(WN_start(loop_nest1[i])));
+      name=Preg_Name(WN_offset(WN_start(wn_loop)));
     else
       name=ST_name(st);
 #endif
@@ -3603,7 +5148,8 @@ WN** epilog_loop_out, mINT32 offset_out[])
       DevWarn("Loop var %s name too long",name);
       strcpy(pre_loop_var_name,"name_too_long");
     } else
-      sprintf(pre_loop_var_name, "_i%d_tmp", Do_Loop_Depth(loop_nest1[i])+1);
+      sprintf(pre_loop_var_name, "_i%d_tmp", Do_Loop_Depth(wn_loop)+1);
+
     pre_loop_var_symbol[i]=Create_Preg_Symbol(pre_loop_var_name, index_type);
 
     WN* start2=WN_start(loop_nest2[i]);
@@ -3687,16 +5233,17 @@ WN** epilog_loop_out, mINT32 offset_out[])
     //Du_Mgr->Ud_Get_Def(ldid_wn)->Set_loop_stmt((WN*)NULL);
 
     wn = LWN_CreateExp2(
-      OPCODE_make_op(inverse_step_operator, Promote_Type(index_type), MTYPE_V),
-      ldid_wn,
-      LWN_Make_Icon(Promote_Type(index_type), offset[i]));
+			OPCODE_make_op(inverse_step_operator, Promote_Type(index_type), MTYPE_V),
+			ldid_wn,
+			LWN_Make_Icon(Promote_Type(index_type), offset[i]));
     LWN_Copy_Frequency_Tree(wn, ldid_wn);
 
     // shift iterations of in_loop2 right for 'offset' distance
+      
     WN_kid0(new_start2)=
       LWN_CreateExp2(OPCODE_make_op(step_operator, 
-	Promote_Type(index_type), MTYPE_V), WN_kid0(new_start2),
-      LWN_Make_Icon(Promote_Type(index_type), offset[i]));
+				    Promote_Type(index_type), MTYPE_V), WN_kid0(new_start2),
+		     LWN_Make_Icon(Promote_Type(index_type), offset[i]));
 
     LWN_Copy_Frequency_Tree(WN_kid0(new_start2), new_start2);
 
@@ -3710,25 +5257,23 @@ WN** epilog_loop_out, mINT32 offset_out[])
 
     if (kid0_symbol==new_loop_var_symbol[i]) {
       WN_kid1(old_end2)=
-        LWN_CreateExp2(OPCODE_make_op(step_operator, 
-		Promote_Type(index_type), MTYPE_V), WN_kid1(old_end2),
-        LWN_Make_Icon(Promote_Type(index_type), offset[i]));
+	LWN_CreateExp2(OPCODE_make_op(step_operator, 
+				      Promote_Type(index_type), MTYPE_V), WN_kid1(old_end2),
+		       LWN_Make_Icon(Promote_Type(index_type), offset[i]));
       LWN_Copy_Frequency_Tree(WN_kid1(old_end2), old_end2);
-
     } else if (kid1_symbol==new_loop_var_symbol[i]) {
       WN_kid0(old_end2)=
-        LWN_CreateExp2(OPCODE_make_op(step_operator, 
-				Promote_Type(index_type), MTYPE_V),
-        WN_kid0(old_end2),
-        LWN_Make_Icon(Promote_Type(index_type), offset[i]));
+	LWN_CreateExp2(OPCODE_make_op(step_operator, 
+				      Promote_Type(index_type), MTYPE_V),
+		       WN_kid0(old_end2),
+		       LWN_Make_Icon(Promote_Type(index_type), offset[i]));
       LWN_Copy_Frequency_Tree(WN_kid0(old_end2), old_end2);
-
     } else {
       Replace_Ldid_With_Exp_Copy(
-        new_loop_var_symbol[i],
-        old_end2,
-        wn,
-        Du_Mgr);
+				 new_loop_var_symbol[i],
+				 old_end2,
+				 wn,
+				 Du_Mgr);
     }
 
     Replace_Ldid_With_Exp_Copy(
@@ -3737,13 +5282,23 @@ WN** epilog_loop_out, mINT32 offset_out[])
       ldid_wn,
       Du_Mgr);
 
-    Replace_Ldid_With_Exp_Copy(
-       loop2_var_symbol[i],
-       WN_do_body(loop_nest2[i]),
-       wn,
-       Du_Mgr);
-
-    LWN_Delete_Tree(wn);
+    if (wn) {
+      Replace_Ldid_With_Exp_Copy(
+				 loop2_var_symbol[i],
+				 WN_do_body(loop_nest2[i]),
+				 wn,
+				 Du_Mgr);
+      
+      LWN_Delete_Tree(wn);
+    }
+    else {
+      Replace_Ldid_With_Exp_Copy(
+				 loop2_var_symbol[i],
+				 WN_do_body(loop_nest2[i]),
+				 ldid_wn,
+				 Du_Mgr);
+      
+    }
 
     //Update_Du_For_Loop_Start(Du_Mgr, loop_nest1[i], loop_nest2[i], lv1, lv2);
 
@@ -3815,20 +5370,59 @@ WN** epilog_loop_out, mINT32 offset_out[])
     LWN_Delete_Tree(WN_end(loop_nest2[i]));
     LWN_Delete_From_Block(LWN_Get_Parent(loop_nest2[i]), loop_nest2[i]);
   }
- 
-  // peel the first loop for 'prolog' iterations
-  if (prolog>0){
 
-    WN* wn1 = WN_prev(inner_loop1);
-    if (prolog==1)  // only 1 iteration, use the unrolled peeling
-      Pre_loop_peeling(inner_loop1, prolog, TRUE, FALSE);
+  WN* wn1 = WN_prev(inner_loop1);
+  // peel the first loop for 'prolog' iterations
+  if (prolog > 0) {
+    if (prolog ==1)   // only 1 iteration, use the unrolled peeling 
+      Pre_loop_peeling(inner_loop1, prolog, TRUE, FALSE, 0);
     else
-      Pre_loop_peeling(inner_loop1, prolog, peeling_unrolled, FALSE);
-    for (WN* stmt = WN_prev(inner_loop1); stmt != wn1; stmt=WN_prev(stmt))
+      Pre_loop_peeling(inner_loop1, prolog, peeling_unrolled, FALSE, 0);
+  }
+
+  for (WN* stmt = WN_prev(inner_loop1); stmt != wn1; stmt=WN_prev(stmt))
+    Replace_Symbol(stmt,
+		   new_loop_var_symbol[inner_most_level],
+		   pre_loop_var_symbol[inner_most_level], NULL);
+  Replace_Symbol(WN_kid0(WN_start(inner_loop1)),
+		 new_loop_var_symbol[inner_most_level],
+		 pre_loop_var_symbol[inner_most_level], NULL);
+
+  if (prolog2 && (prolog2 != MAX_INT32)) {
+    WN * wn2 = WN_prev(inner_loop2);
+    if (prolog2 > 0) {
+      if (prolog2 == 1)
+	Pre_loop_peeling(inner_loop2, prolog2, TRUE, FALSE, 0);
+      else
+	Pre_loop_peeling(inner_loop2, prolog2, peeling_unrolled, FALSE, 0);
+
+      WN * wn_if = WN_prev(inner_loop2);
+      if (WN_operator(wn_if) == OPR_IF) {
+	WN * wn_then = WN_then(wn_if);
+	Remove_Cond_Branch(wn_then, NULL);
+
+	WN * wn_loop = wn_then ? WN_first(wn_then) : NULL;
+	while (wn_loop) {
+	  if (WN_operator(wn_loop) == OPR_DO_LOOP) 
+	    break;
+	  wn_loop = WN_next(wn_loop);
+	}
+	
+	if (wn_loop && (WN_operator(wn_loop) == OPR_DO_LOOP)) {
+	  DO_LOOP_INFO * dli_loop = Get_Do_Loop_Info(wn_loop);
+	  if (dli_loop && dli1 && (dli1->Prefer_Fuse == 1)) {
+	    dli_loop->Prefer_Fuse = 1;
+	    Pass_Child_Prefer_Fuse(wn_loop);
+	  }
+	}
+      }
+    }
+
+    for (WN* stmt = WN_prev(inner_loop2); stmt != wn2; stmt=WN_prev(stmt))
       Replace_Symbol(stmt,
         new_loop_var_symbol[inner_most_level],
         pre_loop_var_symbol[inner_most_level], NULL);
-    Replace_Symbol(WN_kid0(WN_start(inner_loop1)),
+    Replace_Symbol(WN_kid0(WN_start(inner_loop2)),
       new_loop_var_symbol[inner_most_level],
       pre_loop_var_symbol[inner_most_level], NULL);
   }
@@ -3846,6 +5440,35 @@ WN** epilog_loop_out, mINT32 offset_out[])
       Post_loop_peeling(inner_loop2, epilog, peeling_unrolled, FALSE);
   }
 
+  // peel'in_loop2' for epilog iterations.
+  if (epilog2 && (epilog2 != MAX_INT32)) {
+    if (epilog2 == 1)
+      Post_loop_peeling(inner_loop2, epilog2, TRUE, FALSE);
+    else
+      Post_loop_peeling(inner_loop2, epilog2, peeling_unrolled, FALSE);
+
+    WN * wn_if = WN_next(inner_loop2);
+    if (WN_operator(wn_if) == OPR_IF) {
+      WN * wn_then = WN_then(wn_if);
+      Remove_Cond_Branch(wn_then, NULL);
+
+      WN * wn_loop = (wn_then) ? WN_first(wn_then) : NULL;
+      while (wn_loop) {
+	if (WN_operator(wn_loop) == OPR_DO_LOOP) 
+	  break;
+	wn_loop = WN_next(wn_loop);
+      }
+
+      if (wn_loop && (WN_operator(wn_loop) == OPR_DO_LOOP)) {
+	DO_LOOP_INFO * dli_loop = Get_Do_Loop_Info(wn_loop);
+	if (dli_loop && dli1 && (dli1->Prefer_Fuse == 1)) {
+	  dli_loop->Prefer_Fuse = 1;
+	  Pass_Child_Prefer_Fuse(wn_loop);
+	}
+      }
+    }
+  }
+
   WN* start1=WN_start(inner_loop1);
   WN* step1=WN_step(inner_loop1);
   index_type=WN_desc(WN_start(inner_loop1));
@@ -3857,6 +5480,10 @@ WN** epilog_loop_out, mINT32 offset_out[])
     Du_Mgr->Add_Def_Use(start1,use);
     Du_Mgr->Add_Def_Use(step1,use);
   }
+
+  if ((prolog2 && (prolog2 != MAX_INT32))
+      || (epilog2 && (epilog2 != MAX_INT32)))
+    Remove_Cond_Branch(WN_do_body(inner_loop2), inner_loop2);
 
   Fusion_Loop_Stmt_Update(&inner_loop1, &inner_loop2, 1, Du_Mgr);
 
@@ -4010,11 +5637,51 @@ WN** epilog_loop_out, mINT32 offset_out[])
         break;
     }
 
+  if (Do_Aggressive_Fuse) {
+    if (Instantiate_Defs(inner_loop1)) {
+      DOLOOP_STACK *loop_stack=CXX_NEW(DOLOOP_STACK(&FUSION_default_pool),
+				       &FUSION_default_pool);
+      Build_Doloop_Stack(LWN_Get_Parent(inner_loop1), loop_stack);
+      LNO_Build_Access(inner_loop1, loop_stack, &LNO_default_pool);
+      if (!adg->Build_Region(inner_loop1,inner_loop1,loop_stack, TRUE))
+	LNO_Erase_Dg_From_Here_In(LWN_Get_Parent(inner_loop1), adg);  
+
+      // Flag 'Sclrze_Dse' bit for pre-computation initialization loop-nest
+      // and pre-computation main loop-nest.  It is safe to scalarize
+      // global-as-local candidates in these loops.
+      WN * outermost = Outermost_Enclosing_Loop(inner_loop1);
+      WN * wn_iter = WN_prev(outermost);
+      while (wn_iter) {
+	if (WN_operator(wn_iter) == OPR_DO_LOOP) {
+	  DO_LOOP_INFO * dli_iter = Get_Do_Loop_Info(wn_iter);
+	  if (dli_iter && (dli_iter->Is_Precom_Init == 1)) {
+	    dli_iter->Sclrze_Dse = 1;
+	    break;
+	  }
+	}
+	wn_iter = WN_prev(wn_iter);
+      }
+      wn_iter = inner_loop1;
+      while (wn_iter) {
+	if (WN_operator(wn_iter) == OPR_DO_LOOP) {
+	  DO_LOOP_INFO * dli_iter = Get_Do_Loop_Info(wn_iter);
+	  if (dli_iter)
+	    dli_iter->Sclrze_Dse = 1;
+	}
+	wn_iter = LWN_Get_Parent(wn_iter);
+      }
+    }
+  }
+
   if (LNO_Test_Dump) adg->Print(stdout);
 
-  if (LNO_Verbose)
+  if (LNO_Verbose) {
     fusion_verbose_info(srcpos1,srcpos2,fusion_level,
       "Successfully fused !!");
+    if ((dli1->Get_Id() > 0) || (dli2->Get_Id() > 0))
+      printf("     loop num(%d+%d)\n", dli1->Get_Id(), dli2->Get_Id());
+  }
+
   if (LNO_Analysis)
     fusion_analysis_info(TRUE,srcpos1,srcpos2,fusion_level,
       "Successfully fused !!");
@@ -4028,6 +5695,15 @@ WN** epilog_loop_out, mINT32 offset_out[])
                   ST_name(WN_st(WN_index(in_loop1))),
                   in_string, out_string, "Successfully fused !!");
   }
+
+  // Pass down Prefer_Fuse bit to the immediate child loop.
+  Pass_Child_Prefer_Fuse(in_loop1);
+
+  // Do not want to fuse a loop containing both pre-computation defs and uses
+  // with the other loops.
+  if (is_precom_loop) 
+    dli1->No_Fusion = TRUE;
+
   if (inner_loop_removed)
     return Succeeded_and_Inner_Loop_Removed;
   else

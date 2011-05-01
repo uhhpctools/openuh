@@ -451,6 +451,7 @@ extern void LWN_Delete_Tree(WN *wn);
 class DU_MANAGER;
 class ARRAY_DIRECTED_GRAPH16;
 
+extern void LWN_Copy_Map(WN *, WN *, WN_MAP);
 extern void LWN_Copy_Def_Use_Node(WN*, WN*, DU_MANAGER*);
 extern void LWN_Copy_Def_Use(WN*, WN*, DU_MANAGER*);
 extern void LWN_Delete_DU(WN *wn);

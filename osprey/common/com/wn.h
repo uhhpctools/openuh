@@ -61,6 +61,7 @@
 #include "wn_pragmas.h"
 
 #include "stab.h"
+#include "wn_util.h"
 
 
 /**                     Intermediate Language Tree Nodes
@@ -1541,6 +1542,10 @@ extern int  WN_get_bit_from_const(WN *);
 extern WN * WN_get_bit_from_expr(WN *);
 extern BOOL WN_is_power_of_2(WN *);
 extern WN * WN_get_bit_reduction(WN *);
+extern WN * WN_find_loop_by_index(WN *, ST *, WN_MAP);
+extern BOOL WN_has_const_diff(WN *, WN *, int *);
+extern BOOL WN_has_compatible_iter_space(WN *, WN *, int *, int *, BOOL);
+
 
 #if defined(TARG_SL)
 extern WN* WN_CreateFork(INT32 label_number, BOOL major);

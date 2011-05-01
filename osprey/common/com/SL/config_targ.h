@@ -138,7 +138,10 @@ typedef enum {
   TARGET_ISA_M2,
   TARGET_ISA_M3,
   TARGET_ISA_M4,
-  TARGET_ISA_Mips64
+  TARGET_ISA_Mips64,
+  TARGET_ISA_SL1,
+  TARGET_ISA_SL2,
+  TARGET_ISA_SL5
 } TARGET_ISA;
 
 extern TARGET_ISA Target_ISA;	/* -Tc.Rc */
@@ -151,6 +154,9 @@ extern char *Isa_Name (TARGET_ISA target_isa);
 #define Is_Target_ISA_M3()	(Target_ISA==TARGET_ISA_M3)
 #define Is_Target_ISA_M4()	(Target_ISA==TARGET_ISA_M4)
 #define Is_Target_ISA_Mips64()	(Target_ISA==TARGET_ISA_Mips64)
+#define Is_Target_ISA_SL1()	(Target_ISA==TARGET_ISA_SL1)
+#define Is_Target_ISA_SL2()	(Target_ISA==TARGET_ISA_SL2)
+#define Is_Target_ISA_SL5()	(Target_ISA==TARGET_ISA_SL5)
 #define Is_Target_ISA_M1Plus()	(Target_ISA >= TARGET_ISA_M1)
 #define Is_Target_ISA_M2Plus()	(Target_ISA >= TARGET_ISA_M2)
 #define Is_Target_ISA_M3Plus()	(Target_ISA >= TARGET_ISA_M3)

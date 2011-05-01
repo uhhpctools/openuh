@@ -109,6 +109,7 @@
 #include "opt_lftr2.h"  // Should we ever create any of these?
 #include "opt_vn.h"
 #include "opt_vn_ivc.h" // Induction variable classification for coalescing
+#include "opt_vn_expr_taxonomy.h"
 
 // #define DO_VNFRE_TRACE 1
 
@@ -3330,10 +3331,10 @@ VALNUM_FRE::_substitute_literal(VN_VALNUM v)
    TCON            tcon = expr->get_tcon();
    EXP_OCCURS *    occ;
    EXP_OCCURS_ITER occ_iter;
+   TYPE_ID vect_ty = (static_cast<const VN_LITERAL_EXPR*>(expr))->get_vect_type ();
    FOR_ALL_NODE(occ, occ_iter, Init(head))
    {
-      _etable->Replace_by_const(occ, tcon);
-	 
+      _etable->Replace_by_const(occ, tcon, vect_ty);
    }
 } // VALNUM_FRE::_substitute_literal
 

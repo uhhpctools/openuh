@@ -2332,11 +2332,6 @@ CODEMAP::Add_def(IDTYPE st, mINT16 version, STMTREP *stmt,
       dtyp = dsctyp;  // necessary canonicalization
   }
   
-#ifdef TARG_SL
-  if (dtyp == MTYPE_I2 && dsctyp == MTYPE_I2) {
-    dtyp = MTYPE_I4;
-  }
-#endif  
 #ifdef Is_True_On
   // check dtyp and dsctyp consistency
   if (MTYPE_is_float(dtyp)) {
@@ -4123,11 +4118,6 @@ STMTREP::Enter_lhs(CODEMAP *htable, OPT_STAB *opt_stab, COPYPROP *copyprop)
         }
         dtyp = Mtype_from_class_size(dsctyp, dtyp);
       }
-#ifdef TARG_SL
-        if (dtyp == MTYPE_I2 && dsctyp == MTYPE_I2) {
-          dtyp = MTYPE_I4;
-        }
-#endif
       opc = OPCODE_make_op(opr == OPR_ISTORE ? OPR_ILOAD : OPR_ILDBITS, dtyp, dsctyp);
       base_ccr.Set_scale(base_ccr.Scale() + WN_offset(Wn()));
       base_ccr.Trim_to_16bits(WN_kid(Wn(), 1), htable);

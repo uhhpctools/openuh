@@ -94,6 +94,10 @@
 //
 //		Return the data if it is in the table, NULL otherwise.
 //
+//          void Find_And_Set(SIG_TYPE signature, DATA_TYPE data)
+//              If the element is in the table, reset its data. 
+//              Otherwise, enter into the table.
+//
 //	     void Remove(SIG_TYPE signature)
 //
 //		If it's in the table, remove it
@@ -288,6 +292,7 @@ public:
 
   void Enter_If_Unique(SIG_TYPE signature,DATA_TYPE data); 
   DATA_TYPE Find(SIG_TYPE signature) const;
+  void Find_And_Set(SIG_TYPE signature,DATA_TYPE data); 
   void Remove(SIG_TYPE signature); 
 
   // Destructor -- remove all entries and the pointer array:
@@ -521,6 +526,23 @@ HASH_TABLE<SIG_TYPE,DATA_TYPE> :: Find (
 }
 
 template <class SIG_TYPE, class DATA_TYPE>
+void
+HASH_TABLE<SIG_TYPE,DATA_TYPE> :: Find_And_Set (
+  SIG_TYPE signature, DATA_TYPE data ) 
+{
+  typedef HASH_ELEMENT<SIG_TYPE,DATA_TYPE> *HASH_ELEMENTP;
+  HASH_ELEMENTP hash_element = _data[abs((INT)(INTPS)signature) % _num_elements];
+
+  for (; hash_element != NULL; hash_element = hash_element->_next) {
+    if (hash_element->_signature == signature) {
+        hash_element->_data = data;
+        return;
+    }
+  }
+  Enter(signature, data);
+}
+
+template <class SIG_TYPE, class DATA_TYPE>
 void HASH_TABLE<SIG_TYPE,DATA_TYPE> :: Remove (
   SIG_TYPE signature ) 
 {
@@ -681,6 +703,7 @@ CLASS_USER_HASH_TABLE :: Find ( KEY_TYPE key ) const
 
   return((DATA_TYPE)0);
 }
+
 
 TEMPLATE_USER_HASH_TABLE
 BOOL

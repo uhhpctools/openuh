@@ -237,6 +237,14 @@ public:
         Decidx();
     }
   }
+
+  void ReplaceElement(mUINT32 idx, const T& val) 
+  {
+      if (idx <= _lastidx) {
+          _array[idx] = val;
+      }
+  }
+
   mUINT32 Elements () const  { return (_lastidx+1); }
 
   mUINT32 Newidx(void);                  // allocate a valid index

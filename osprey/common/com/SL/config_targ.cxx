@@ -272,6 +272,9 @@ Isa_Name ( TARGET_ISA b)
 
   switch ( b ) {
     case TARGET_ISA_Mips64:	return "mips64";
+  case TARGET_ISA_SL1:          return "mips-sl1";
+  case TARGET_ISA_SL2:          return "mips-sl2";
+  case TARGET_ISA_SL5:          return "mips-sl5";
     default:
       r = bnb[bnb_used].name;
       bnb_used = (bnb_used + 1) % 4;
@@ -286,13 +289,18 @@ Targ_Name ( TARGET_PROCESSOR b)
   char *r;
 
   switch ( b ) {
-    case TARGET_R10K: return "r10000";
-    case TARGET_sb1: return "sb1";
-    default:
-      r = bnb[bnb_used].name;
-      bnb_used = (bnb_used + 1) % 4;
-      sprintf (r, "PROCESSOR_%d", b);
-      return r;
+  case TARGET_R10K: return "r10000";
+  case TARGET_sb1: return "sb1";
+  case TARGET_sl1_pcore: return "sl1_pcore";
+  case TARGET_sl1_dsp:   return "sl1_dsp";
+  case TARGET_sl2_pcore: return "sl2_pcore";
+  case TARGET_sl2_mcore: return "sl2_mcore";
+  case TARGET_sl5:       return "sl5";
+  default:
+    r = bnb[bnb_used].name;
+    bnb_used = (bnb_used + 1) % 4;
+    sprintf (r, "PROCESSOR_%d", b);
+    return r;
   }
 }
 
@@ -439,26 +447,32 @@ Prepare_Target ( void )
 	break;
 #ifdef TARG_SL
     case TARGET_sl1_pcore:
-        Target_ISA = TARGET_ISA_Mips64;
+        Target_ISA = TARGET_ISA_SL1;
         Target = TARGET_sl1_pcore;
         break;
     case TARGET_sl1_dsp:
-        Target_ISA = TARGET_ISA_Mips64;
+        Target_ISA = TARGET_ISA_SL1;
         Target = TARGET_sl1_dsp;
         break;
     case TARGET_sl2_pcore:
-        Target_ISA = TARGET_ISA_Mips64;
+        Target_ISA = TARGET_ISA_SL2;
         Target = TARGET_sl2_pcore;
         break;
     case TARGET_sl2_mcore:
-        Target_ISA = TARGET_ISA_Mips64;
+        Target_ISA = TARGET_ISA_SL2;
         Target = TARGET_sl2_mcore;
         break;
     case TARGET_sl5:
-        Target_ISA = TARGET_ISA_Mips64;
+        Target_ISA = TARGET_ISA_SL5;
         Target = TARGET_sl5;
         break;
 #endif
+#ifdef TARG_SL
+    case TARGET_UNDEF:
+        Target_ISA = TARGET_ISA_SL1;
+        Target = TARGET_sl1_pcore;
+        break;
+#else
     case TARGET_UNDEF:
       Target = targ_default;
       if ( Target == TARGET_UNDEF ) {
@@ -467,6 +481,7 @@ Prepare_Target ( void )
 	Target = TARGET_sb1;
       }
       break;
+#endif
   }
 
   /* Now deal with FP register count: */

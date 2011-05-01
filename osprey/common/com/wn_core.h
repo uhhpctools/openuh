@@ -490,7 +490,9 @@ public:
       mUINT32           kid_count   :14; /* gives kid_count for free */
       mINT64            map_id      :30;
       TYPE_ID           desc        : 6;  /* descriptor type */
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
       UINT32            wn_id;            /* unique id for the whirl node */
+#endif
    } common;
 
    union {
@@ -582,9 +584,13 @@ public:
 
 public:
 
+  friend void Check_Traced_Wn_Node(WN *);
   void set_unique_id() {
      the_unique_id++;
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
      common.wn_id = the_unique_id;
+#endif
+     Check_Traced_Wn_Node(this);
   }
   friend inline WN_OFFSET   WN_load_offset (const WN *);
   friend inline WN_OFFSET&  WN_load_offset (WN *);
@@ -682,8 +688,9 @@ public:
   friend inline TYPE_ID     WN_desc (const WN *);
   friend inline void        WN_set_desc (WN *, TYPE_ID);
   friend inline INT32       WN_map_id (const WN *);
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
   friend inline UINT32      WN_id (const WN *);
-
+#endif
   friend inline TY_IDX      WN_ty (const WN *, const int);
   friend inline TY_IDX&     WN_ty (WN *, const int);
   friend inline WN*         WN_kid (const WN *, const int);
@@ -835,7 +842,9 @@ inline void       WN_set_map_id (WN* wn, INT32 m)
    Check_Traced_Wn_Node(wn);
 #endif
 }
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
 inline UINT32      WN_id (const WN *wn) { return wn->common.wn_id; }
+#endif
 
 inline WN* WN_kid (const WN* wn, int i) { return wn->u3.kids [i]; }
 inline WN*& WN_kid (WN* wn, int i) { return wn->u3.kids [i]; }

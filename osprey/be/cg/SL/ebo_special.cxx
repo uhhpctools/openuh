@@ -395,18 +395,21 @@ delete_subset_mem_op(OP *op,
      * 
      * otherwise, it will be translated to be
      *       stb $5, 1($7)
-     *       and.i $6, $5, 0xff (it can't be deleted)
+     *       extrb $6, $5, 7, 8 (it can't be deleted)
      */
       WN *pred_wn = OP_hoisted(pred_op) ? NULL : Get_WN_From_Memory_OP(pred_op);
 
       if (pred_wn && WN_kid0(pred_wn) && (WN_rtype(WN_kid0(pred_wn)) == WN_rtype(pred_wn))) {
         Build_OP(TOP_or, OP_result(op, 0), OP_opnd(pred_op, 0), Zero_TN, &ops);
       } else {
+        TOP top_t = (((OP_code(op) == TOP_lb) || (OP_code(op) == TOP_lh)) ? TOP_extrbs : TOP_extrbu);
         if (OP_is_hw_store(pred_op))
-          Build_OP(TOP_andi, OP_result(op, 0), OP_opnd(pred_op, 0), Gen_Literal_TN(0xFFFF, 4), &ops);
+          Build_OP(top_t, OP_result(op, 0), OP_opnd(pred_op, 0),  
+                   Gen_Literal_TN(15, 4), Gen_Literal_TN(16, 4), &ops);
 
         if (OP_is_byte_store(pred_op))
-          Build_OP(TOP_andi, OP_result(op, 0), OP_opnd(pred_op, 0), Gen_Literal_TN(0xFF, 4), &ops);
+          Build_OP(top_t, OP_result(op, 0), OP_opnd(pred_op, 0),  
+                   Gen_Literal_TN(7, 4), Gen_Literal_TN(8, 4), &ops);
       }
     } else {
       Build_OP(TOP_or, OP_result(op, 0), OP_opnd(pred_op, 0), Zero_TN, &ops);

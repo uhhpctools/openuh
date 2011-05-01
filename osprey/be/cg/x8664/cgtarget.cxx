@@ -166,6 +166,11 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_ldhpdx:
       case TOP_ldhpdxx:
       case TOP_ldhpd_n32:
+      // only source operand of cvtps2pd can be memory, so the ref is 8 bytes.
+      case TOP_cvtps2pd:
+      case TOP_cvtps2pd_x:
+      case TOP_cvtps2pd_xx:
+      case TOP_cvtps2pd_xxx:
         return 8;
       default:
         return 16;
@@ -387,6 +392,8 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_ldaps:
       case TOP_ldaps_n32:
       case TOP_ldups:
+      case TOP_ldupsx:
+      case TOP_ldupsxx:
       case TOP_ldups_n32:
       case TOP_ldupd:
       case TOP_ldupdx:
@@ -439,6 +446,8 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vldaps:
       case TOP_vldaps_n32:
       case TOP_vldups:
+      case TOP_vldupsx:
+      case TOP_vldupsxx:
       case TOP_vldups_n32:
       case TOP_vldupd:
       case TOP_vldupdx:

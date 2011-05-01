@@ -125,6 +125,7 @@ BOOL CG_128bitstore = TRUE;
 BOOL CG_branch_fuse = TRUE;
 BOOL CG_dispatch_schedule = FALSE;
 BOOL CG_strcmp_expand = TRUE;
+BOOL CG_merge_counters_x86 = FALSE;
 #endif
 BOOL CG_opt_level;
 BOOL CG_localize_tns = FALSE;
@@ -229,6 +230,9 @@ BOOL CG_tail_call = TRUE;
 BOOL GCM_Speculative_Loads = FALSE;
 BOOL GCM_Predicated_Loads = FALSE;
 #endif
+UINT32 LOCS_PRE_Enable_Minreg_Level = 0;
+BOOL LOCS_PRE_Enable_General_RegPressure_Sched = FALSE;
+BOOL LOCS_PRE_Enable_Unroll_RegPressure_Sched = FALSE;
 BOOL LOCS_PRE_Enable_Scheduling = TRUE;
 BOOL LOCS_POST_Enable_Scheduling = TRUE;
 BOOL LOCS_Enable_Scheduling = TRUE;
@@ -296,7 +300,7 @@ BOOL CG_use_short_form = FALSE;
 UINT64 CG_p2align_freq = 10000;
 UINT32 CG_p2align_max_skip_bytes = 3;
 UINT32 CG_movnti = 1000;
-BOOL CG_use_incdec = FALSE;
+BOOL CG_use_incdec = TRUE;
 BOOL CG_use_xortozero = TRUE; // bug 8592
 BOOL CG_use_xortozero_Set = FALSE;
 BOOL CG_use_test = FALSE;

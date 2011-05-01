@@ -7479,6 +7479,11 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(WN * wn, SC_NODE * sc_loop, WN ** wn_
 {
   OPERATOR opr = WN_operator(wn);
 
+  // WN_aux(wn) may not be set correctly in the memory references
+  // in the expression trees for IO statements, so we should avoid
+  // traversing these statements.
+  if (opr == OPR_IO)
+    return FALSE;
   if (OPERATOR_is_load(opr) || OPERATOR_is_store(opr)) {
     if (OPERATOR_is_scalar_store(opr)) 
       return FALSE;

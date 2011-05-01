@@ -499,6 +499,7 @@ main (int argc, char *argv[])
 	    set_option_unseen(O_fwritable_strings);
 	    set_option_unseen(O_fno_writable_strings);
 	  }
+#ifndef TARG_SL
 	  if ((source_lang == L_cc ||
 	       source_lang == L_CC) &&
 	      option_was_seen(O_mp) &&	// bug 11896
@@ -510,8 +511,9 @@ main (int argc, char *argv[])
 	  else if (gnu_minor_version >= 2 &&
 	           !option_was_seen(O_fno_cxx_openmp)) {
 	    add_option_seen(O_fcxx_openmp);
-	    toggle(&fcxx_openmp,1);
+            toggle(&fcxx_openmp,1);
 	  }
+#endif
 	}
 
 	// Select the appropriate GNU version front-end.
@@ -1344,7 +1346,11 @@ read_gcc_output(char *cmdline)
 	char *gcc_cmd = NULL;
 	FILE *fp = NULL;
 
+#ifdef TARG_X8664
+	if (asprintf(&gcc_cmd, "%s %s %s", gcc_path, (abi == ABI_N32)?"-m32":"", cmdline) == -1) {
+#else
 	if (asprintf(&gcc_cmd, "%s %s", gcc_path, cmdline) == -1) {
+#endif
 		internal_error("cannot allocate memory");
 		goto bail;
 	}
@@ -1472,7 +1478,7 @@ get_gcc_version(int *v, int nv)
 }
 
 #if defined(TARG_SL)
-  unsigned int SL_version = 0x00204000;	// version 002.04.xxx
+  unsigned int SL_version = 0x00302000;	// version 003.02.xxx
 #endif
 static void
 display_version(boolean dump_version_only)

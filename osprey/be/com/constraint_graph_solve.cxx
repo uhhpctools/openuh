@@ -333,6 +333,7 @@ SCCDetection::pointsToAdjust(NodeToKValMap &nodeToKValMap)
       }
       ptsTo.clear();
       rep->unionPointsTo(tmp, pti.qual());
+      tmp.clear();
     }
   }
 }
@@ -1035,6 +1036,19 @@ ConstraintGraphSolve::postProcessPointsTo()
   }
 }
 
+// give a src points to, and its points to qual and edge qual
+// exclude the src points to from dest points to set.
+void 
+ConstraintGraphSolve::Exclude(PointsTo &src, CGEdgeType et, CGEdgeQual aq, 
+                                CGEdgeQual eq, bool cs, PointsTo &dest)
+{
+  CGEdgeQual targetqual = qualMap(et, aq, eq, cs);
+  if (targetqual == CQ_NONE)
+    return;
+  else
+    dest.setDiff(src);
+}
+
 void
 ConstraintGraph::addEdgesToWorkList(ConstraintGraphNode *node)
 {
@@ -1274,6 +1288,7 @@ ConstraintGraphNode::unionDiffPointsTo(const PointsTo &ptsToSet,
 
 
   bool change = dst.setUnion(diff);
+  diff.clear();
   return change;
 }
 
@@ -1363,6 +1378,7 @@ ConstraintGraphNode::unionPointsTo(const PointsTo &ptsToSet, CGEdgeQual qual)
     printPointsTo(dst);
     fprintf(stderr,"\n");
   }
+  diff.clear();
 
   Is_True(sanityCheckPointsTo(qual),
           ("Node %d destination contains <ST,x> and <ST,-1>\n",id()));
@@ -1456,7 +1472,6 @@ ConstraintGraphSolve::processAssign(const ConstraintGraphEdge *edge)
   }
 
   CGNodeId trackNodeId = 0;
-  PointsTo origPts;
 
   UINT32 assignSize = edge->size();
   StInfo *dstStInfo = dst->cg()->stInfo(dst->cg_st_idx());
@@ -1559,6 +1574,7 @@ ConstraintGraphSolve::processSkew(const ConstraintGraphEdge *edge)
         ConstraintGraph::solverModList()->push(dst);
         updateOffsets(dst,tmp,dstQual);
       }
+      tmp.clear();
     }
   }
 }

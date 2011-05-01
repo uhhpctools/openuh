@@ -9542,6 +9542,14 @@ WGEN_Expand_Expr (gs_t exp,
             case IRETURN_I2:   ret_mtype = MTYPE_I4;   break; // promote to I4
 	    default: ;
 	    }
+#else 
+#if defined(TARG_SL)
+            switch (ret_mtype) {
+            case MTYPE_I1:
+            case MTYPE_I2: ret_mtype = MTYPE_I4;   break;
+            default: ;
+            }
+#endif
 #endif
 	    wn = WN_Create_Intrinsic (OPR_INTRINSIC_OP, ret_mtype, MTYPE_V,
 				      iopc, num_args, ikids);

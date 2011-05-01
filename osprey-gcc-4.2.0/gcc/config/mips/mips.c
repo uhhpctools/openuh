@@ -4859,6 +4859,10 @@ override_options (void)
 	warning (0, "%<-G%> is incompatible with %<-mabicalls%>");
     }
 
+#ifdef TARG_SL
+  flag_pic = 0;
+#endif
+
   /* mips_split_addresses is a half-way house between explicit
      relocations and the traditional assembler macros.  It can
      split absolute 32-bit symbolic constants into a high/lo_sum

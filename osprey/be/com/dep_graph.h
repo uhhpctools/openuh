@@ -529,6 +529,8 @@ public:
     DIRECTED_GRAPH16<ARRAY_EDGE16,ARRAY_VERTEX16>::Delete_Vertex(v);
   }
 
+  void Delete_Map() { WN_MAP_Delete(_map); _map = 0;};
+
   WN* Get_Wn(VINDEX16 v) {
     return _v[v].Wn;
   }

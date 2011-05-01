@@ -1122,7 +1122,7 @@ static void flatten_regions (void)
           last_child = first_child = i;
         if ( first_child != no_child && i != last_child )
         {
-          EH_RANGE new_range (range_list[i].rid);
+          EH_RANGE new_range (range_list[j].rid);
           new_range.start_label = range_list[last_child].end_label;
           new_range.end_label = range_list[i].start_label;
           new_range.end_bb = Get_Label_BB(range_list[i].start_label);

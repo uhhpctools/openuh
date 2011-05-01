@@ -849,6 +849,30 @@ void LWN_Copy_Def_Use_Node(WN* from_node, WN* to_node, DU_MANAGER* du)
   }
 } 
 
+// If 'from_exp' is set in 'map', set up pointers to each other for 
+// 'from_exp' and "to_exp'.
+void LWN_Copy_Map(WN * from_exp, WN * to_exp, WN_MAP map)
+{
+  if (map) {
+    if (WN_opcode(from_exp) == OPC_BLOCK) {
+      WN * wn_from = WN_first(from_exp);
+      WN * wn_to = WN_first(to_exp);
+
+      while (wn_from) {
+	LWN_Copy_Map(wn_from, wn_to, map);
+	wn_from = WN_next(wn_from);
+	wn_to = WN_next(wn_to);
+      }
+    }
+    else {
+      WN_CopyMap(to_exp, map, from_exp);
+      
+      for (INT k = 0; k < WN_kid_count(from_exp); k++)
+	LWN_Copy_Map(WN_kid(from_exp, k), WN_kid(to_exp, k), map);
+    }
+  } 
+}
+
 void LWN_Copy_Def_Use(WN* from_exp, WN* to_exp, DU_MANAGER* du)
 {
   OPCODE fop = WN_opcode(from_exp);

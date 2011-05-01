@@ -45,6 +45,15 @@ void Initialize_Targ_Info(void)
   case TARGET_ISA_M4:
     isa = ISA_SUBSET_MIPS4;
     break;
+  case TARGET_ISA_SL1:
+    isa = ISA_SUBSET_SL1;
+    break;
+  case TARGET_ISA_SL2:
+    isa = ISA_SUBSET_SL2;
+    break;
+  case TARGET_ISA_SL5:
+    isa = ISA_SUBSET_SL5;
+    break;
   default:
     FmtAssert(FALSE, ("targinfo doesn't handle isa: %s\n", Isa_Name(Target_ISA)));
     /*NOTREACHED*/

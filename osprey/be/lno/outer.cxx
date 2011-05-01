@@ -61,6 +61,7 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.outer.
 #include "fiz_fuse.h"
 #include "name.h"
 #include "lwn_util.h"
+#include "wn_simp.h"
 #include "lno_bv.h"
 #include "ff_utils.h"
 #include "wn_map.h"
@@ -68,12 +69,15 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.outer.
 #include "glob.h"
 #include "tlog.h"
 #include "parallel.h"
+#include "permute.h"
 
 typedef HASH_TABLE<WN*,UINT> WN2UINT;
 
 typedef enum { NORMAL, SKIP } OUTER_FUSION_STATUS;
 
 typedef enum { INFO, FAIL, SUCCEED } INFO_TYPE;
+
+OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn, FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi);
 
 static void outer_fusion_verbose_info(
   SRCPOS        srcpos1,
@@ -273,6 +277,56 @@ Array_Names_In_Loop(REF_LIST_STACK *writes, REF_LIST_STACK *reads) {
   return bv;
 }
 
+// Count number of data dependence between array references.
+static int
+Array_Data_Dependence_Count(REF_LIST_STACK * writes, REF_LIST_STACK * reads)
+{
+  int count = 0;
+
+  for (int i = 0; i < writes->Elements(); i++) {
+    REFERENCE_ITER w_iter(writes->Bottom_nth(i));
+
+    for (REFERENCE_NODE * node1 = w_iter.First(); !w_iter.Is_Empty();
+	 node1 = w_iter.Next()) {
+      WN * w_node = node1->Wn;
+      WN * w_array = (w_node && (WN_operator(w_node) == OPR_ISTORE)) ? WN_kid(w_node,1) : NULL;
+      if (w_array && (WN_operator(w_array) != OPR_ARRAY))
+	w_array = NULL;
+
+      if (w_array == NULL)
+	continue;
+
+      ACCESS_ARRAY * array1 = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, w_array);
+
+      if (!array1)
+	continue;
+      
+      for (int j = 0; j < reads->Elements(); j++) {
+	REFERENCE_ITER r_iter(reads->Bottom_nth(j));
+
+	for (REFERENCE_NODE * node2 = r_iter.First(); !r_iter.Is_Empty();
+	     node2 = r_iter.Next()) {
+	  WN * r_node = node2->Wn;
+	  WN * r_array = (r_node && (WN_operator(r_node) == OPR_ILOAD)) ? WN_kid(r_node,0) : NULL;
+	  
+	  if (r_array == NULL)
+	    continue;
+	  
+	  ACCESS_ARRAY * array2 = (ACCESS_ARRAY *) WN_MAP_Get(LNO_Info_Map, r_array);
+
+	  if (!array2)
+	    continue;
+	  
+	  if (*array1 == *array2) {
+	    count++;
+	  }
+	}
+      }
+    }
+  }
+  
+  return count;
+}
 
 // --------------------------------------------------
 // Test if any of the loops in an SNL is parallizable
@@ -293,9 +347,12 @@ Any_Loop_In_SNL_Parallelizable(WN* loop, INT depth)
 }
   
 
-static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
+static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN** loop1_p, WN** loop2_p,
                       FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi,
                       UINT* fusion_level_io) {
+
+  WN * loop1 = *loop1_p;
+  WN * loop2 = *loop2_p;
 
   Is_True(Do_Loop_Is_Good(loop1) && !Do_Loop_Has_Calls(loop1) &&
 				    !Do_Loop_Has_Gotos(loop1), 
@@ -363,8 +420,125 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
     return Failed;
   }
 
+  INT * permutation = NULL;
+
+  if (Do_Aggressive_Fuse) {
+    // Choose a simply-nested loop as the candidate for permutation.
+    WN * permute_loop = Get_Only_Loop_Inside(loop1, FALSE) ? loop1 : 
+      (Get_Only_Loop_Inside(loop2, FALSE) ? loop2 : NULL);      
+
+    if (permute_loop) {
+      WN * ref_loop = (permute_loop == loop1) ? loop2 : loop1;
+      WN * only_loop = Get_Only_Loop_Inside(permute_loop, FALSE);
+      int prolog = 0;
+      int epilog = 0;
+      WN * peel_loop = NULL;
+      WN * child_loop;
+      int loop_enum = 0;
+
+      // Attempt permutation followed by loop peeling to remove conditional branches. 
+      // Limit peeled iterations to 1 to minimize perturbation of spatial locality.
+      if (WN_has_compatible_iter_space(loop1, loop2, NULL, NULL, FALSE)
+	  && !Get_Only_Loop_Inside(ref_loop, FALSE)
+	  && Check_Removable_Branch(permute_loop, &prolog, &epilog, &peel_loop) 
+	  && (peel_loop == Get_Only_Loop_Inside(permute_loop, FALSE))
+	  && !Has_Loop_Carried_Dependence(peel_loop)
+	  && (prolog <= 1)
+	  && (epilog <= 1)) {
+	child_loop = WN_first(WN_do_body(permute_loop));
+	while (child_loop && (WN_operator(child_loop) == WN_operator(permute_loop))) {
+	  loop_enum++;
+	  if (child_loop == peel_loop) {
+	    permutation = CXX_NEW_ARRAY(INT, loop_enum+1, &LNO_local_pool);
+	    for (int i = 1; i < loop_enum; i++)
+	      permutation[i] = i;
+	    permutation[0] = loop_enum;
+	    permutation[loop_enum] = 0;
+	    if (SNL_Legal_Permutation(permute_loop, child_loop, permutation, loop_enum+1, TRUE)) {
+	      permute_loop = SNL_INV_Permute_Loops(permute_loop, permutation, loop_enum+1, FALSE);
+	      FISSION_FUSION_STATUS status;
+	      if (ref_loop == loop1) {
+		loop2 = permute_loop;
+		*loop2_p = loop2;
+		dli2 = Get_Do_Loop_Info(loop2);
+		dli2->Has_Conditional = FALSE;
+		status = Retry_and_Peel_Second_SNL;
+	      }
+	      else {
+		loop1 = permute_loop;
+		*loop1_p = loop1;
+		dli1 = Get_Do_Loop_Info(loop1);
+		dli1->Has_Conditional = FALSE;
+		status = Retry_and_Peel_First_SNL;
+	      }
+
+	      // After permutation, peel loops and remove conditional branches.
+	      if (prolog > 0) {
+		Pre_loop_peeling(permute_loop, prolog, TRUE, FALSE);
+		Remove_Cond_Branch(WN_prev(permute_loop), NULL);
+	      }
+
+	      if (epilog > 0) {
+		Post_loop_peeling(permute_loop, epilog, TRUE, FALSE);
+		Remove_Cond_Branch(WN_next(permute_loop), NULL);
+	      }
+
+	      Remove_Cond_Branch(WN_do_body(permute_loop), permute_loop);
+
+	      return status;
+	    }
+	  }
+	  child_loop = WN_first(WN_do_body(child_loop));
+	}
+      }
+
+      OPCODE ub_compare;
+      WN * lower_bound = WN_LOOP_LowerBound(permute_loop);
+      WN * upper_bound = WN_LOOP_UpperBound(permute_loop, &ub_compare, TRUE);
+
+      // Attempt permutation so that the outermost loop-nests have compatible iteration spaces
+      // for loop fusion.
+      if (!WN_has_compatible_iter_space(permute_loop, ref_loop, NULL, NULL, FALSE)
+	  && lower_bound && upper_bound 
+	  && ((WN_operator(lower_bound) != OPR_INTCONST)
+	      || (WN_operator(upper_bound) != OPR_INTCONST))) {
+	// Find a child loop in the permute_loop's loop-nest whose iteration space
+	// is compatible to the ref_loop.
+	child_loop = WN_first(WN_do_body(permute_loop));
+	loop_enum = 0;
+	while (child_loop && (WN_operator(child_loop) == WN_operator(permute_loop))) {
+	  loop_enum++;
+	  if (WN_has_compatible_iter_space(child_loop, ref_loop, NULL, NULL, FALSE)) {
+	    permutation = CXX_NEW_ARRAY(INT, loop_enum+1, &LNO_local_pool);
+	    for (int i = 1; i < loop_enum; i++)
+	      permutation[i] = i;
+	    permutation[0] = loop_enum;
+	    permutation[loop_enum] = 0;
+	    if (SNL_Legal_Permutation(permute_loop, child_loop, permutation, loop_enum+1, FALSE)) {
+	      WN * wn_p = LWN_Get_Parent(permute_loop);
+	      permute_loop = SNL_INV_Permute_Loops(permute_loop, permutation, loop_enum+1, FALSE);
+
+	      if (ref_loop == loop1) {
+		loop2 = permute_loop;
+		*loop2_p = loop2;
+		dli2 = Get_Do_Loop_Info(loop2);
+	      }
+	      else {
+		loop1 = permute_loop;
+		*loop1_p = loop1;
+		dli1 = Get_Do_Loop_Info(loop1);
+	      }
+	    }
+	    break;
+	  }
+	  child_loop = WN_first(WN_do_body(child_loop));
+	}
+      }
+    }
+  }
+
   UINT ffi_index=wn2ffi->Find(loop1);
-  Is_True(ffi_index,("Missing SNL info for loop1 in Fuse_Outer_Loops()."));
+  Is_True((permutation || ffi_index),("Missing SNL info for loop1 in Fuse_Outer_Loops()."));
   if (ffi_index == 0) {
     SNL_INFO snl_info(loop1);
     ffi_index=ffi->New_Snl(snl_info);
@@ -374,7 +548,7 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
   SNL_TYPE type1=ffi->Get_Type(ffi_index);
 
   ffi_index=wn2ffi->Find(loop2);
-  Is_True(ffi_index,("Missing SNL info for loop2 in Fuse_Outer_Loops()."));
+  Is_True((permutation || ffi_index),("Missing SNL info for loop2 in Fuse_Outer_Loops()."));
   if (ffi_index == 0) {
     SNL_INFO snl_info(loop2);
     ffi_index=ffi->New_Snl(snl_info);
@@ -382,44 +556,6 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
   }
   UINT snl_level2=ffi->Get_Depth(ffi_index);
   SNL_TYPE type2=ffi->Get_Type(ffi_index);
-
-  if (LNO_Verbose)
-    outer_fusion_verbose_info(srcpos1,srcpos2,
-      "Attempt to fuse outer loops to improve locality.");
-  if (LNO_Analysis)
-    outer_fusion_analysis_info(INFO,srcpos1,srcpos2,snl_level1,snl_level2,
-      "Attempt to fuse outer loops to improve locality.");
-  if (LNO_Tlog)
-    outer_fusion_tlog_info(INFO,srcpos1,srcpos2,snl_level1,snl_level2,
-      "Attempt to fuse outer loops to improve locality.");
-
-  if (snl_level1!=snl_level2 && LNO_Fusion<2) {
-    if (LNO_Verbose)
-      outer_fusion_verbose_info(srcpos1,srcpos2,
-        "Unequal SNL levels.");
-    if (LNO_Analysis)
-      outer_fusion_analysis_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
-        "Unequal SNL levels.");
-    if (LNO_Tlog)
-      outer_fusion_tlog_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
-        "Unequal SNL levels.");
-    *fusion_level_io=0;
-    return Failed;
-  }
-
-  if (type1!=type2 && LNO_Fusion<2) {
-    if (LNO_Verbose)
-      outer_fusion_verbose_info(srcpos1,srcpos2,
-        "Fusing SNL with non-SNL.");
-    if (LNO_Analysis)
-      outer_fusion_analysis_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
-        "Fusing SNL with non-SNL.");
-    if (LNO_Tlog)
-      outer_fusion_tlog_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
-        "Fusing SNL with non-SNL.");
-    *fusion_level_io=0;
-    return Failed;
-  }
 
   BOOL parallel1 = (Run_autopar && LNO_Run_AP > 0 &&
                     Any_Loop_In_SNL_Parallelizable(loop1, snl_level1));
@@ -437,6 +573,16 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
         "Do not fuse parallel with serial loop.");
     return Failed;
   }
+
+  if (LNO_Verbose)
+    outer_fusion_verbose_info(srcpos1,srcpos2,
+      "Attempt to fuse outer loops to improve locality.");
+  if (LNO_Analysis)
+    outer_fusion_analysis_info(INFO,srcpos1,srcpos2,snl_level1,snl_level2,
+      "Attempt to fuse outer loops to improve locality.");
+  if (LNO_Tlog)
+    outer_fusion_tlog_info(INFO,srcpos1,srcpos2,snl_level1,snl_level2,
+      "Attempt to fuse outer loops to improve locality.");
 
   mapping_dictionary =
     CXX_NEW(BINARY_TREE<NAME2BIT>(&OLF_default_pool),&OLF_default_pool);
@@ -481,7 +627,47 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
   if (array_ref_count2 == -1)
     return Failed;
 
-  if (array_ref_count1+array_ref_count2>OLF_size_upperbound && LNO_Fusion<2) {
+  BOOL prefer_fuse = FALSE;
+  
+  if (Do_Aggressive_Fuse) {
+    // If two loops have many array data dependencies, fusion can enable scalarization
+    // to reduce memory bandwith.
+    if ((dli1->Prefer_Fuse != 1)
+	&& (Array_Data_Dependence_Count(writes1, reads2) >= LNO_Fusion_Ddep_Limit))
+      dli1->Prefer_Fuse = 1;
+    prefer_fuse = (dli1->Prefer_Fuse == 1) ? TRUE : FALSE;
+  }
+
+  if (!prefer_fuse && snl_level1!=snl_level2 && LNO_Fusion<2) {
+    if (LNO_Verbose)
+      outer_fusion_verbose_info(srcpos1,srcpos2,
+        "Unequal SNL levels.");
+    if (LNO_Analysis)
+      outer_fusion_analysis_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
+        "Unequal SNL levels.");
+    if (LNO_Tlog)
+      outer_fusion_tlog_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
+        "Unequal SNL levels.");
+    *fusion_level_io=0;
+    return Failed;
+  }
+
+  if (!prefer_fuse && type1!=type2 && LNO_Fusion<2) {
+    if (LNO_Verbose)
+      outer_fusion_verbose_info(srcpos1,srcpos2,
+        "Fusing SNL with non-SNL.");
+    if (LNO_Analysis)
+      outer_fusion_analysis_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
+        "Fusing SNL with non-SNL.");
+    if (LNO_Tlog)
+      outer_fusion_tlog_info(FAIL,srcpos1,srcpos2,snl_level1,snl_level2,
+        "Fusing SNL with non-SNL.");
+    *fusion_level_io=0;
+    return Failed;
+  }
+
+  if (array_ref_count1+array_ref_count2>OLF_size_upperbound && LNO_Fusion<2
+      && !prefer_fuse) {
     if (LNO_Verbose)
       outer_fusion_verbose_info(srcpos1,srcpos2,
         "Number of array references after merge is too big (>100)!!.");
@@ -498,7 +684,7 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
 
   INT outer_level1 = dli1->Depth; 
   INT outer_level2 = dli2->Depth; 
-  if (Stride_One_Level(writes1,reads1,outer_level1,snl_level1)
+  if (!prefer_fuse && Stride_One_Level(writes1,reads1,outer_level1,snl_level1)
       !=Stride_One_Level(writes2,reads2,outer_level2,snl_level2) 
       && LNO_Fusion<2) {
     if (LNO_Verbose)
@@ -560,16 +746,17 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
     peeling_limit=MIN(peeling_limit,dli1->Est_Num_Iterations);
   if (dli2->Est_Num_Iterations>=0)
     peeling_limit=MIN(peeling_limit,dli2->Est_Num_Iterations);
-  if (snl_level1!=snl_level2 || type1!=Inner || type2!=Inner)
+  if (!prefer_fuse && (snl_level1!=snl_level2 || type1!=Inner || type2!=Inner))
     peeling_limit=0;
   FISSION_FUSION_STATUS level_fusion_status;
   FISSION_FUSION_STATUS status=
     Fuse(loop1,loop2,fusion_level,peeling_limit,TRUE);
+
   if (status==Succeeded || status==Succeeded_and_Inner_Loop_Removed) {
     if (LNO_Verbose || Get_Trace(TP_WOPT2, PRO_TRANS_TRACE_FLAG)) {
       outer_fusion_verbose_info(srcpos1,srcpos2,
         "Successfully fused outer loops.");
-      if ((dli1->Get_Id() > 0) && (dli2->Get_Id() > 0))
+      if ((dli1->Get_Id() > 0) || (dli2->Get_Id() > 0))
 	printf("     loop num(%d+%d)\n", dli1->Get_Id(), dli2->Get_Id());
     }
     if (LNO_Analysis)
@@ -583,7 +770,11 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN* loop1, WN* loop2,
       fusion_level--;
     *fusion_level_io=fusion_level;
     return status;
-  } else if (((snl_level1>1 && status==Try_Level_By_Level) || LNO_Fusion==2) &&
+  }
+  else if ((status == Retry_and_Peel_First_SNL) || (status == Retry_and_Peel_Second_SNL))
+    return status;
+  else if (((snl_level1>1 && status==Try_Level_By_Level) || LNO_Fusion==2) &&
+	     (!prefer_fuse || (status != Failed)) && 
              ((level_fusion_status=Fuse_Level_By_Level(loop1,loop2,
                        &fusion_level_tmp,peeling_limit,
                        LNO_Fusion==2,TRUE,ffi))==Succeeded ||
@@ -669,7 +860,114 @@ static BOOL Same_Loop_Body ( WN* wn, WN* copy,
   return TRUE;
 }
 #endif
-static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
+
+// Fuse peeled iterations in 'wn'.
+static void Peel_Loop_Fusion_Walk(WN * wn, FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi) 
+{
+  if (WN_operator(wn) == OPR_IF) {
+    wn = WN_then(wn);
+    for (wn = WN_first(wn); wn; wn = WN_next(wn)) {
+      if (WN_operator(wn) == OPR_DO_LOOP) {
+	DO_LOOP_INFO * dli = Get_Do_Loop_Info(wn);
+	dli->Prefer_Fuse = 1;
+	Pass_Child_Prefer_Fuse(wn);
+	Outer_Loop_Fusion_Walk(wn, ffi, wn2ffi);
+	break;
+      }
+    }
+  }
+}
+
+// Fuse child loops nested in 'wn'.
+static void Child_Loop_Fusion_Walk(WN * wn, FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi) 
+{
+  WN * wn_child = WN_first(WN_do_body(wn));
+  if (wn_child && (WN_operator(wn_child) == OPR_DO_LOOP)) {
+    DO_LOOP_INFO * dli_child = Get_Do_Loop_Info(wn_child);
+    if (dli_child && (dli_child->Prefer_Fuse == 1)) {
+      // Find next loop and move it adjacent to the 'wn_child'.
+      WN * wn_next = WN_next(wn_child);
+      while (wn_next && (WN_operator(wn_next) != OPR_DO_LOOP))
+	wn_next = WN_next(wn_next);
+
+      if (wn_next && (WN_operator(wn_next) == OPR_DO_LOOP)) {
+	if (WN_next(wn_child) != wn_next) 
+	  Move_Adjacent(wn_child,wn_next, FALSE);
+	// Examine loops following 'wn_next', check whether to delay 
+	// the fusion of 'wn_child' and 'wn_next'.  Delay is prefered
+	// if 'wn_next' and its following loops have the same bound
+	// but 'wn_next' and 'wn_child' do not have the same bound.
+	if ((WN_next(wn_child) == wn_next) && !Same_Bounds(wn_next, wn_child)) {
+	  WN * wn_iter = WN_next(wn_next);
+	  int count = 0;
+	  BOOL delay_fuse = TRUE;
+	  while (wn_iter && (WN_operator(wn_iter) == OPR_DO_LOOP)) {
+	    if (!Same_Bounds(wn_iter, wn_next)) {
+	      delay_fuse = FALSE;
+	      break;
+	    }
+	    else
+	      count++;
+	    wn_iter = WN_next(wn_iter);
+	  }
+	  if (delay_fuse && (count > 0)) {
+	    // Try to fuse loops following 'wn_next'.
+	    if (dli_child->Has_Precom_Def == 1) {
+	      // Find the last loop containing precomputation uses.
+	      wn_iter = wn_next;
+	      WN * last_use = NULL;
+	      int use_cnt = 0;
+	      while (wn_iter && (WN_operator(wn_iter) == OPR_DO_LOOP)) {
+		DO_LOOP_INFO * dli_iter = Get_Do_Loop_Info(wn_iter);
+		if (dli_iter->Has_Precom_Use == 1) {
+		  last_use = wn_iter;
+		  use_cnt++;
+		}
+		wn_iter = WN_next(wn_iter);
+	      }
+
+	      if (use_cnt == 1) {
+		int dim = Loop_Depth(wn_child);
+		// Find the first loop in (wn_child, last_use) that potentially has
+		// loop-carried dependencies that prevents loop fusion.
+		wn_iter = WN_next(wn_child);
+		WN * wn_dep = NULL;
+		while (wn_iter && (WN_operator(wn_iter) == OPR_DO_LOOP)
+		       && (wn_iter != last_use)) {
+		  if (!Has_Unit_Refs(wn_iter, dim)) {
+		    wn_dep = wn_iter;
+		    break;
+		  }
+		  wn_iter = WN_next(wn_iter);
+		}
+
+		if (wn_dep) {
+		  // Move loops in [wn_dep, last_use) below last_use and flag
+		  // no fusion bit for 'wn_dep' .
+		  if (Move_Adjacent(WN_prev(wn_dep), last_use, TRUE)) {
+		    // Fuse loops starting from wn_dep, and flag No_Fusion bit.
+		    Outer_Loop_Fusion_Walk(wn_dep, ffi, wn2ffi); 
+		    DO_LOOP_INFO * dli_dep = Get_Do_Loop_Info(wn_dep);
+		    dli_dep->No_Fusion = TRUE;
+		  }
+		}
+	      }
+	    }
+	    wn_next = WN_next(wn_child);
+	    DO_LOOP_INFO * dli_next = Get_Do_Loop_Info(wn_next);
+	    if (!dli_next->No_Fusion) {
+	      dli_next->Prefer_Fuse = 1;
+	      Outer_Loop_Fusion_Walk(wn_next, ffi, wn2ffi); 
+	    }
+	  }
+	}
+      }
+      Outer_Loop_Fusion_Walk(wn_child, ffi, wn2ffi); 
+    }
+  }
+}
+
+OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
        FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi) {
   OPCODE opc=WN_opcode(wn);
 
@@ -724,8 +1022,15 @@ static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
 	  next_next_copy = 
 	    LWN_Copy_Tree(WN_next(next_wn), TRUE, LNO_Info_Map);	
 #endif
+
+	WN * wn_prev1 = WN_prev(wn);
+	WN * wn_prev2 = WN_prev(next_wn);
+	WN * wn_next2 = WN_next(next_wn);
+
         FISSION_FUSION_STATUS fusion_status=
-           Fuse_Outer_Loops(wn,next_wn,ffi,wn2ffi,&fused_level);
+	  Fuse_Outer_Loops(&wn,&next_wn,ffi,wn2ffi,&fused_level);
+	wn_index = wn2ffi->Find(wn);	  
+
         if (fusion_status==Succeeded || fusion_status==Partially_fused) {
           WN* wn1=wn;
           WN* wn2=wn;
@@ -759,6 +1064,20 @@ static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
           ffi->Set_Depth(wn_index,level);
           ffi->Set_Type(next_wn_index,Invalid);
           wn2ffi->Enter(next_wn, 0);
+
+	  if (Do_Aggressive_Fuse && Enclosing_Loop(wn)) {
+	    // Fuse peeled iterations for inner loops.
+	    DO_LOOP_INFO * dli = Get_Do_Loop_Info(wn);
+	    if (dli && (dli->Prefer_Fuse == 1)) {
+	      WN * wn_iter = WN_next(wn_prev2);
+	      WN * next_iter;
+	      while (wn_iter && (wn_iter != wn_next2)) {
+		next_iter = WN_next(wn_iter);
+		Peel_Loop_Fusion_Walk(wn_iter, ffi, wn2ffi);
+		wn_iter = next_iter;
+	      }
+	    }
+	  }
         } else if (fusion_status==Succeeded_and_Inner_Loop_Removed) {
           ffi->Set_Type(wn2ffi->Find(next_wn),Invalid);
           wn2ffi->Enter(next_wn, 0);
@@ -769,13 +1088,71 @@ static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
             wn2ffi->Enter(wn, 0);
             return state; // the original loop has been removed
           }
-        } else {
+        }
+	else {
+	  WN * wn_iter;
+	  WN * next_iter;
+	  if (fusion_status == Retry_and_Peel_First_SNL) {
+	    // Fuse child loops in 'wn'.
+	    WN * child = Get_Only_Loop_Inside(wn, FALSE);
+	    FmtAssert(child, ("Expect a child loop."));
+	    Pass_Child_Prefer_Fuse(child);
+	    Child_Loop_Fusion_Walk(child, ffi, wn2ffi);
+
+	    wn_iter = wn_prev1 ? WN_next(wn_prev1) : NULL;
+	    // Fuse pre-peeled iterations.
+	    while (wn_iter && (wn_iter != wn)) {
+	      next_iter = WN_next(wn_iter);
+	      Peel_Loop_Fusion_Walk(wn_iter, ffi, wn2ffi);
+	      wn_iter = next_iter;
+	    }
+
+	    WN * parent = LWN_Get_Parent(wn);	      
+	    wn_iter = WN_next(wn);
+	    // Fuse post-peeled iterations and hoist up post-peeled iterations.
+	    while (wn_iter && (wn_iter != next_wn)) {
+	      next_iter = WN_next(wn_iter);
+	      Peel_Loop_Fusion_Walk(wn_iter, ffi, wn2ffi);
+	      LWN_Insert_Block_Before(parent, wn, LWN_Extract_From_Block(wn_iter));
+	      wn_iter = next_iter;
+	    }
+	      
+	    next_wn = WN_next(wn);
+	    continue;
+	  }
+	  else if (fusion_status == Retry_and_Peel_Second_SNL) {
+	    wn_iter = WN_prev(next_wn);
+	    WN * parent = LWN_Get_Parent(next_wn);
+	    // Fuse pre-peeled iterations and push down pre-peeled iterations.
+	    while (wn_iter && (wn_iter != wn_prev2)) {
+	      next_iter = WN_prev(wn_iter);
+	      Peel_Loop_Fusion_Walk(wn_iter, ffi, wn2ffi);
+	      LWN_Insert_Block_After(parent, next_wn, LWN_Extract_From_Block(wn_iter));
+	      wn_iter = next_iter;
+	    }
+	    
+	    // Fuse post-peeled iterations.
+	    wn_iter = WN_next(next_wn);
+	    while (wn_iter && (wn_iter != wn_next2)) {
+	      next_iter = WN_next(wn_iter);
+	      Peel_Loop_Fusion_Walk(wn_iter, ffi, wn2ffi);
+	      wn_iter = next_iter;
+	    }
+	    
+	    next_wn = WN_next(wn);
+	    continue;
+	  }
+	  
           WN* new_next_wn=WN_next(wn);
           if (next_wn!=new_next_wn) {
             ffi->Set_Wn(wn2ffi->Find(next_wn),new_next_wn);
             wn2ffi->Enter(new_next_wn,wn2ffi->Find(next_wn));
             wn2ffi->Enter(next_wn,0);
           }
+
+	  if (Do_Aggressive_Fuse) 
+	    Child_Loop_Fusion_Walk(wn, ffi, wn2ffi);
+	  
           return state;
         }
         next_wn=WN_next(wn);
@@ -790,8 +1167,12 @@ static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
 	    // adjacent loops and we had a remainder loop and there is no 
 	    // point trying to fuse them again.
 	     (!Same_Loop_Body(next_wn, next_next_copy, 
-			      WN_index(next_wn), WN_index(next_next_copy)))))
+			      WN_index(next_wn), WN_index(next_next_copy))))) {
+	  if (Do_Aggressive_Fuse)
+	    Child_Loop_Fusion_Walk(wn, ffi, wn2ffi);
+
 	  return SKIP;
+	}
 #endif
 
         // hacked to remove pragmas produced by inlining
@@ -808,9 +1189,11 @@ static OUTER_FUSION_STATUS Outer_Loop_Fusion_Walk(WN* wn,
                  WN_pragma(next_wn) == WN_PRAGMA_COPYIN_BOUND))) {
           LWN_Delete_Tree_From_Block(next_wn);
           next_wn=WN_next(wn);
-        } 
-
+        }
       }
+
+      if (Do_Aggressive_Fuse) 
+	Child_Loop_Fusion_Walk(wn, ffi, wn2ffi);
     } else
       (void)Outer_Loop_Fusion_Walk(WN_do_body(wn),ffi,wn2ffi);
   } else if (opc==OPC_BLOCK) {

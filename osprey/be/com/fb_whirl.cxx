@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -159,7 +163,8 @@ FEEDBACK::FEEDBACK( WN *wn, MEM_POOL *m,
   _values_fp_bin  ( 1, FB_Info_Value_FP_Bin(),   m ),
   _runtime_func_addr( runtime_fun_address ),
 #endif
-  _switches( 1, FB_Info_Switch(),  m )
+  _switches( 1, FB_Info_Switch(),  m ),
+  _last_wn_icall( 0 )
 {
   if ( _trace )
     fprintf( TFile, "==================================================\n"
@@ -1754,13 +1759,45 @@ FEEDBACK::FB_lower_call( WN *wn_call, WN *wn_new_call )
     Delete( wn_call );
 }
 
+//  wn_icall  is transformed to 
+//      if (*fptr == new_call1)    // <== new_if 1
+//         new_call1(...);         // <== new_call [icall_no1]
+//      else {
+//         if (*fptr == new_call2) // <== new_if 2
+//            new_call2(...);      // <== new_call [icall_no2]
+//         else {
+//            ...
+//            fptr(...);           // <== new_icall
+//      }
+//  the wn_new_icall may be null if it is not for the last
+//  if-else statement
+void 
+FEEDBACK::FB_lower_icall( WN *wn_icall, WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if, int icall_no )
+{
+  if (wn_new_icall != 0) {
+    // initialize the FB info from the icall node when wn_new_icall is not
+    // empty (when it is first time called by Covert_Icall for the wn_icall ), 
+    // the FB info will be overwrite by the copied new_icall node which shares
+   //  the same FB info in the FB map
+    _info_call = Query_call( wn_icall );
+    _info_icall = Query_icall( wn_icall );
+    _last_wn_icall = wn_icall;
+  }
+
+  Is_True( wn_icall == _last_wn_icall, ("invalid last_wn_icall %#p\n", wn_icall) );
+  FB_lower_icall (_info_call, _info_icall, wn_new_icall, wn_new_call, wn_new_if, icall_no);
+}
+
 void
-FEEDBACK::FB_lower_icall( WN *wn_icall, WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if )
+FEEDBACK::FB_lower_icall( FB_Info_Call &info_call, FB_Info_Icall &info_icall,
+                          WN *wn_new_icall, WN * wn_new_call, WN * wn_new_if, 
+                          int icall_no )
 {
   if ( _trace )
-    fprintf( TFile, "FEEDBACK::FB_lower_icall(0x%p, 0x%p, 0x%p, 0x%p):\n",
-	     wn_icall, wn_new_icall, wn_new_call, wn_new_if );
+    fprintf( TFile, "FEEDBACK::FB_lower_icall(0x%p, ,0x%p, 0x%p, 0x%p, 0x%p, %d):\n",
+	     &info_call, &info_icall, wn_new_icall, wn_new_call, wn_new_if, icall_no );
 
+#if 0
   Is_True( wn_icall != NULL,
 	   ( "FEEDBACK::FB_lower_icall expects non-NULL wn_icall" ) );
 
@@ -1768,44 +1805,51 @@ FEEDBACK::FB_lower_icall( WN *wn_icall, WN *wn_new_icall, WN * wn_new_call, WN *
 	   ( "FEEDBACK::FB_lower_icall encounted unexpected operator" ) );
   FB_Info_Call info_call = Query_call( wn_icall );
   FB_Info_Icall info_icall = Query_icall( wn_icall );
+#endif
 
-  Is_True( info_call.freq_entry._value >= (float) info_icall.tnv._counters[0], 
-		  ("entry count of icall less than counter[0]! impossible!")  );
+  Is_True( info_call.freq_entry._value >= (float) info_icall.tnv._counters[icall_no], 
+		  ("entry count of icall less than counter[%d]! impossible!", icall_no)  );
 
-  FB_FREQ freq_taken((float)info_icall.tnv._counters[0],true);
-  FB_FREQ freq_nottaken(info_call.freq_entry._value-(float)info_icall.tnv._counters[0],true);
+  FB_FREQ freq_taken((float)info_icall.tnv._counters[icall_no],true);
+  // compute the no-taken frequency
+  // summrize the previous calls taken frequency
+  UINT64 prev_freq = 0;
+  for (int i=0; i<=icall_no; i++)
+     prev_freq += info_icall.tnv._counters[i];
+  FB_FREQ freq_nottaken(info_call.freq_entry._value - (float)prev_freq, true);
 
   Is_True( FB_valid_opr_branch(wn_new_if), 
 		  ("FEEDBACK::FB_lower_icall encounted unexpected operator") );
   Annot_branch(wn_new_if, FB_Info_Branch(freq_taken,freq_nottaken)); //...
-  Is_True( FB_valid_opr_call( wn_new_icall ),
+  Is_True(wn_new_icall == NULL || FB_valid_opr_call( wn_new_icall ),
 	   ( "FEEDBACK::FB_lower_icall encounted unexpected operator" ) );
 
   if ( ! info_call.in_out_same )
   {
     Annot_call( wn_new_call, FB_Info_Call(freq_taken,FB_FREQ_UNKNOWN,false) );
-    Annot_call( wn_new_icall, FB_Info_Call(freq_nottaken,FB_FREQ_UNKNOWN,false) );
+    if (wn_new_icall)
+      Annot_call( wn_new_icall, FB_Info_Call(freq_nottaken,FB_FREQ_UNKNOWN,false) );
   }
   else
   {
     Annot_call( wn_new_call, FB_Info_Call(freq_taken) );
-    Annot_call( wn_new_icall, FB_Info_Call(freq_nottaken) );
+    if (wn_new_icall)
+      Annot_call( wn_new_icall, FB_Info_Call(freq_nottaken) );
   }
 
+  if (wn_new_icall) {
 #ifdef KEY
-  FB_Info_Icall info_new_icall = info_icall;
-  const UINT64 taken = (UINT64)freq_taken.Value();
+    FB_Info_Icall info_new_icall = info_icall;
+    const UINT64 taken = (UINT64)freq_taken.Value();
 
-  info_new_icall.tnv._exec_counter -= taken;
-  info_new_icall.tnv._counters[0]  -= taken;
-  // Don't convert it more than once.
-  info_new_icall.tnv._flag = FB_TNV_FLAG_UNINIT;
+    info_new_icall.tnv._exec_counter -= taken;
+    info_new_icall.tnv._counters[icall_no]  -= taken;
+    // Don't convert it more than once.
+    info_new_icall.tnv._flag = FB_TNV_FLAG_UNINIT;
 
-  Annot_icall( wn_new_icall, info_new_icall );
+    Annot_icall( wn_new_icall, info_new_icall );
 #endif
-
-  if ( wn_icall != wn_new_icall )
-    Delete( wn_icall );
+  }
 }
 
 

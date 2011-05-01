@@ -146,8 +146,11 @@ extern BOOL IPA_Consult_Inliner_For_Icall_Opt; // Consult inliner for icallopt?
 extern UINT32 IPA_Icall_Min_Freq;	// Min icall freq for icall opt
 extern BOOL IPA_Enable_Source_PU_Order;
 extern UINT32 IPA_Enable_Struct_Opt;
+extern UINT32 IPA_Enable_Global_As_Local;
 extern UINT32 IPA_Update_Struct;
 #endif
+
+extern UINT32 IPA_Icall_Target_Min_Rate; 
 
 /* ===== Inlining heuristics: ===== */
 
@@ -354,6 +357,15 @@ extern BOOL IPA_Enable_Old_Type_Merge;
 
 extern BOOL IPA_Enable_Devirtualization;
 extern BOOL IPA_Enable_Fast_Static_Analysis_VF;
+extern BOOL IPA_Enable_Original_VF;
+extern BOOL IPA_Enable_New_VF;
+extern BOOL IPA_Inline_Original_VF;
+extern BOOL IPA_Inline_New_VF;
+extern const char* IPA_Devirtualization_Input_File;
+
+extern BOOL IPA_During_Original_VF;
+extern BOOL IPA_During_New_VF;
+
 
 /* assert whole program mode to enable more aggressive ipo */
 extern BOOL IPA_Enable_Whole_Program_Mode;

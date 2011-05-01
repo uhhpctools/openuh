@@ -204,7 +204,11 @@ struct Pu_Hdr {
   	fprintf(fp, "\n**********   PU Header No %d   **************\n", id);
   	fprintf(fp, "pu_checksum = %d\n", pu_checksum);
   	fprintf(fp, "pu_size = %d\n", pu_size);
+#ifdef TARG_SL
+  	fprintf(fp, "runtime_fun_address= %u\n", runtime_fun_address);
+#else
   	fprintf(fp, "runtime_fun_address= %llu\n", runtime_fun_address);
+#endif
   	fprintf(fp, "pu_name_index = %u\n", pu_name_index);
   	fprintf(fp, "pu_file_offset = %u\n", pu_file_offset);
   	fprintf(fp, "pu_inv_offset = %u\n", pu_inv_offset);

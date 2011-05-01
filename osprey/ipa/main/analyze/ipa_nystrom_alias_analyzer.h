@@ -129,6 +129,29 @@ public:
 
   void updateCGForBE(IPA_NODE *node);
 
+  bool processInlineFormal(IPA_NODE *caller, IPA_NODE *callee, WN* actaul, ST* formal_st);
+
+  ConstraintGraphNode* getCGNode(WN* wn, IPA_NODE* ipaNode);
+
+  void solveInlineConstraints(IPA_NODE *callee, IPA_NODE *caller);
+
+  bool inlineSolveNode(ConstraintGraphNode *node, ConstraintGraph* callee_cg, IPA_NODE *caller);
+
+  ConstraintGraphNode* getCloneNode(ConstraintGraphNode *callee_node, ConstraintGraph* callee_cg, IPA_NODE* caller);
+
+  void addInlineNodeMap(CGNodeId orig, CGNodeId new_cs) {
+    _inline_node_map[orig] = new_cs;
+  }
+
+  CGNodeId getInlineNodeMap(CGNodeId orig) {
+    hash_map<UINT32, UINT32>::const_iterator iter = _inline_node_map.find(orig);
+    if (iter == _inline_node_map.end())
+      return 0;
+    return iter->second;
+  }
+
+  void updateCloneTreeWithCgnode(WN* tree);
+
   // For IPA call graph SCC detection
   void allocSCCInfo(IPA_CALL_GRAPH *icg)
   {
@@ -213,6 +236,9 @@ private:
 
   // The set of external calls made from within the IPA scope
   hash_set<ST_IDX> _extCallSet;
+
+  // hashmap map original cg node id with cloned cg node for nystrom inline
+  hash_map<UINT32, UINT32> _inline_node_map;
 };
 
 #endif

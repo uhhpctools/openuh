@@ -3946,11 +3946,6 @@ Local_Insn_Sched (BOOL prepass)
             }
 #endif 	    
 #ifdef TARG_SL
-            if (!CG_Gen_16bit) {
-              extern void Repl_Tmp_TN(BB *bb);
-              Repl_Tmp_TN(bb);
-            }		
-			
 	    if( ! BB_Should_Skip(bb) 
                 && ( !BB_scheduled(bb) 
                      || ( !BB_scheduled(bb) && BB_scheduled_hbs(bb) ) 

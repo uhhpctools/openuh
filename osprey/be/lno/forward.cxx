@@ -79,7 +79,7 @@ const INT FS_LOAD_AND_LEAF_LIMIT = 1;
 const INT FS_ARRAY_EXP_LIMIT = 80; 
 const INT FS_NODE_HASH_SIZE = 247;
 const INT FS_SIBLING_HASH_SIZE = 247;
-const INT FS_MAX_STRING_LENGTH = 80;
+const INT FS_MAX_STRING_LENGTH = 200;
 
 static WN *Find_MP(WN *wn);
 
@@ -1390,6 +1390,7 @@ extern void Array_Substitution(WN* func_nd)
     fprintf(stdout, "Applying Array Substitution\n"); 
     fprintf(TFile, "Applying Array Substitution\n"); 
   } 
+
   dg = Array_Dependence_Graph; 
   du = Du_Mgr;
   rm = red_manager;  

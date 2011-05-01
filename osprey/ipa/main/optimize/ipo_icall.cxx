@@ -49,6 +49,7 @@
 #include "ipl_summarize.h"
 #include "ipa_option.h"
 #include "ipa_trace.h"
+#include "fb_whirl.h"
 
 #include <deque>
 #include <queue>
@@ -78,15 +79,55 @@ Is_Return_Store_Stmt (WN * wn)
   return FALSE;
 }
 
+static BOOL
+is_dummy_call_site( SUMMARY_CALLSITE *callsite )
+{
+   if  (callsite && (callsite->Is_dummy_callsite())) {
+      return TRUE;
+   }
+   else return FALSE;
+}
+
+ void Copy_Return_STID(WN *block, WN *wn)
+{
+  OPERATOR opr =  WN_operator(wn);
+  Is_True(opr == OPR_CALL || opr == OPR_ICALL,
+          ("invalid call node"));
+  // Put return stid statements in the end of the block
+  WN* stmt = WN_next(wn);
+  if (Is_Return_Store_Stmt (stmt))
+    WN_INSERT_BlockLast (block, WN_COPY_Tree(stmt));
+
+  return;
+}
+
 // ======================================================================
 // wn: icall
 // edge: edge added for call generated in icall transformation.
 // Do the actual icall transformation (i.e. generation of if-else stmt)
 // Set WN node in edge.
+//
+//    if (*fptr == foo) {
+//       foo(...);
+//    }
+//    else {
+//       if (*fptr == bar) {
+//          bar(...);
+//       }
+//       else {
+//          fptr(...);
+//       }
+//    }
+//
 // ======================================================================
-static void
-Convert_Icall (WN * wn, IPA_EDGE * edge)
+static WN *
+Convert_Icall (WN * wn,  vector<IPA_EDGE *> & dummy_edge_list, int start)
 {
+  int num = dummy_edge_list.size();
+  Is_True(num > 0, ("invalid dummy callsite number"));
+  WN * wn_first_if = NULL;
+  // create if-then part 
+  IPA_EDGE * edge = dummy_edge_list[start];
   IPA_NODE * caller = IPA_Call_Graph->Caller (edge);
   IPA_NODE * callee = IPA_Call_Graph->Callee (edge);
   ST * st_callee = callee->Func_ST();
@@ -119,49 +160,71 @@ Convert_Icall (WN * wn, IPA_EDGE * edge)
   WN_st_idx(if_then) = ST_st_idx(st_callee);
 
   WN_INSERT_BlockLast (if_then_block, if_then);
+  // copy return stid if there is any
+  Copy_Return_STID(if_then_block, wn);
 
-  // Else, do the indirect call.
-  WN* if_else = WN_COPY_Tree_With_Map (wn);
+  // Else part,
+  WN* if_else;
   WN* if_else_block = WN_CreateBlock();
-  WN_INSERT_BlockLast (if_else_block, if_else);
+  if (start == num -1) { 
+    // last else, do the indirect call.
+    if_else = WN_COPY_Tree_With_Map (wn);
+    WN_INSERT_BlockLast (if_else_block, if_else);
+    // copy return stid if there is any
+    Copy_Return_STID(if_else_block, wn);
+  }
+  else {
+    // handle next indirect call candidate
+    if_else = Convert_Icall (wn,  dummy_edge_list, start+1);
+    WN_INSERT_BlockLast (if_else_block, if_else);
+  }
 
   WN * block = WN_Get_Parent (wn, caller->Parent_Map(), caller->Map_Table());
-  // Put return stid statements in both branches of IF.
-  for (WN* stmt = WN_next(wn);
-           stmt != NULL && Is_Return_Store_Stmt (stmt);)
-  {
-    WN_INSERT_BlockLast (if_then_block, WN_COPY_Tree(stmt));
-    WN_INSERT_BlockLast (if_else_block, WN_COPY_Tree(stmt));
-
-    // Empty the stmt
-    WN * ret_wn = stmt;
-    stmt = WN_next (stmt);
-
-    WN_EXTRACT_FromBlock (block, ret_wn);
-  }
 
   WN_Parentize (if_then_block, caller->Parent_Map(), caller->Map_Table());
   WN_Parentize (if_else_block, caller->Parent_Map(), caller->Map_Table());
 
   WN* wn_if = WN_CreateIf (test, if_then_block, if_else_block);
+
   // ************* TEMPORARY WORKAROUND ************************
   // Why does not IPA have feedback at -O0/-O1?
   // We reach here actually means the compilation has feedback.
   if (Cur_PU_Feedback)
   {
-    Cur_PU_Feedback->FB_lower_icall (wn, if_else, if_then, wn_if);
-
-    // Delete the map info. We delete it from <Cur_PU_Feedback>
-    Cur_PU_Feedback->Delete(wn);
+    Cur_PU_Feedback->FB_lower_icall (wn, start == num -1 ? if_else
+                                                         : NULL, if_then, wn_if, start);
   }
 
-  // Replace wn with call_wn.
-  WN_INSERT_BlockAfter (block, wn, wn_if);
-  WN_EXTRACT_FromBlock (block, wn);
-  WN_Parentize (block, caller->Parent_Map(), caller->Map_Table());
+  // clean up and fix up the old icall node
+  if ( start == 0 ) {
+    if (Cur_PU_Feedback) {
+      // Delete the map info if all other icall targets are promoted. 
+      // We delete it from <Cur_PU_Feedback>
+      Cur_PU_Feedback->Delete(wn);
+    }
+    
+    // remove return stid statements from the original block
+    WN* stmt = WN_next(wn);
+    if (Is_Return_Store_Stmt (stmt))
+      WN_EXTRACT_FromBlock (block, stmt);
+    
+    // Replace wn with call_wn.
+    WN_INSERT_BlockAfter (block, wn, wn_if);
+    WN_EXTRACT_FromBlock (block, wn);
+    WN_Parentize (block, caller->Parent_Map(), caller->Map_Table());
+  }
+  return wn_if;
 } // Convert_Icall
 
-
+// return true if the edge has the dummy callsite
+// corresponding to the ICALL node w
+static bool Is_dummy_edge_for_node(IPA_EDGE *edge, WN *n)
+{
+   SUMMARY_CALLSITE* callsite = edge->Summary_Callsite();
+   return WN_operator(n) == OPR_ICALL &&
+          callsite->Is_dummy_callsite() &&
+          callsite->Get_matching_map_id() == WN_map_id(n);
+}
 
 // ======================================================================
 // Top-level function for icall-transformation.
@@ -174,6 +237,7 @@ Convert_Icall (WN * wn, IPA_EDGE * edge)
 void
 IPO_Process_Icalls (IPA_NODE * node)
 {
+  bool do_trace =  Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL) ;
   FmtAssert (!node->Is_Visited(),
              ("Node is getting visited NOT for the first time"));
 
@@ -220,20 +284,23 @@ IPO_Process_Icalls (IPA_NODE * node)
       edge_order.push (edge);
   }
 
-  if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
-    int i;
-    // print ipa call graph
-    fprintf( TFile, "\n\nIPA_Call_Graph:\n");
-    IPA_Call_Graph->Print(TFile);
-
-    fprintf( TFile, "Ordered edges \n");
+  if (do_trace) {
+    bool header_printed = false;
     std::priority_queue<IPA_EDGE *,
                       vector<IPA_EDGE *>,
                       order_by_callsite_id> edges = edge_order;
     while (!edges.empty()) {
        IPA_EDGE * edge = edges.top();
+       IPA_NODE * caller = IPA_Call_Graph->Caller (edge);
+       IPA_NODE * callee = IPA_Call_Graph->Callee (edge);
+
        edges.pop();
-       fprintf( TFile, "\n[callsite %d] ", edge->Callsite_Id());
+       if (!header_printed) {
+          fprintf( TFile, "\n\nOrdered edges for Caller %s\n", caller->Name());
+          header_printed = true;
+       }
+       fprintf( TFile, "\n[callsite %d, callee %s] ", edge->Callsite_Id(),
+                callee->Name());
        edge->Print(TFile, IPA_Call_Graph);
        if (edge->Whirl_Node()) {
           fdump_tree(TFile, edge->Whirl_Node());
@@ -241,7 +308,7 @@ IPO_Process_Icalls (IPA_NODE * node)
     }
 
     fprintf( TFile, "\n\ncallsite_map \n");
-    for (i=0; i < callsite_map.size(); i++) {
+    for (int i=0; i < callsite_map.size(); i++) {
        fprintf( TFile, "\n[callsite %d] \n", i);
        fdump_tree(TFile, callsite_map[i]);
     }
@@ -263,9 +330,27 @@ IPO_Process_Icalls (IPA_NODE * node)
     IPA_EDGE * edge = edge_order.top();
     edge_order.pop();
 
-    // Remove WN nodes for which we don't have an edge
-    for (; callsite_idx < edge->Callsite_Id(); callsite_idx++) {
-      if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
+    IPA_NODE * caller = IPA_Call_Graph->Caller (edge);
+    IPA_NODE * callee = IPA_Call_Graph->Callee (edge);
+    ST * st_callee = callee->Func_ST();
+    TY_IDX ty_callee = ST_pu_type (st_callee);
+
+
+    // Remove WN nodes for which we don't have an edge:
+    // INTRINSIC_CALL and ICALL have no edge in the call graph,
+    // but the ICALL may have dummy edges (corresponding to 
+    // the dummy callsites of the ICALL node)
+    // some CALL node may also have no edge (the callee may
+    // be in library)
+    WN * w = callsite_map.front();
+    while (1) {
+      if (Is_dummy_edge_for_node(edge, w) ||
+           (WN_operator (w) == OPR_CALL && ST_st_idx(st_callee) == ST_st_idx(WN_st(w)))) {
+        // some ICALL may have dummy call edges in call graph
+        // don't skip them
+        break; 
+      } 
+      if (do_trace) {
         fprintf( TFile, "\n[pop callsite %d from callsite_map]\n", callsite_idx);
         if (edge->Whirl_Node()) {
           fprintf( TFile, "Original edge->Whirl_Node:\n");
@@ -275,25 +360,36 @@ IPO_Process_Icalls (IPA_NODE * node)
         fdump_tree(TFile, callsite_map.front());
       }
       callsite_map.pop_front();
+      callsite_idx++;
+      FmtAssert( !callsite_map.empty(),
+                 ("Error in sync edge and whirl node"));
+      w = callsite_map.front();
     }
 
     // sync edge->Whirl_Node() with call node in callsite_map, which could 
     // could happen if the call is transformed from de-virtualization
     if (edge->Whirl_Node() && edge->Whirl_Node() != callsite_map.front()) {
       while (callsite_map.front() != edge->Whirl_Node() && !callsite_map.empty() ) {
+        if (do_trace) {
+          fprintf( TFile, "\n[pop callsite %d from callsite_map]\n", callsite_idx);
+          if (edge->Whirl_Node()) {
+            fprintf( TFile, "Original edge->Whirl_Node:\n");
+            fdump_tree(TFile, edge->Whirl_Node());
+          }
+          fprintf( TFile, "whirl node from callsite_map:\n");
+          fdump_tree(TFile, callsite_map.front());
+        }
         callsite_map.pop_front();
+        callsite_idx++;
       }
       FmtAssert (!callsite_map.empty(), 
                  ("Invalid edge, cannot find matching call node"));
-      callsite_idx = edge->Callsite_Id();
     }
-    FmtAssert (callsite_idx == edge->Callsite_Id(),
-               ("IPO_Process_Icalls: Invalid callsite index"));
 
-    WN * w = callsite_map.front();
     if (WN_operator (w) == OPR_CALL) {
-      if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
-        fprintf( TFile, "\n[edge %d, callsite %d]\n", edge->Edge_Index(), callsite_idx);
+      if (do_trace) {
+        fprintf( TFile, "\n[edge %d, callsite %d, callee %s]\n", edge->Edge_Index(), 
+                 callsite_idx, callee->Name());
         if (edge->Whirl_Node()) {
           fprintf( TFile, "Original edge->Whirl_Node:\n");
           fdump_tree(TFile, edge->Whirl_Node());
@@ -301,21 +397,27 @@ IPO_Process_Icalls (IPA_NODE * node)
         fprintf( TFile, "Set to new whirl node:\n");
         fdump_tree(TFile, w);
       }
+      FmtAssert ( ST_st_idx(st_callee) == ST_st_idx(WN_st(w)),
+                  ("Error in sync edge and whirl node"));
       edge->Set_Whirl_Node (w);
     }
     else // do icall optimization
     {
-      FmtAssert (WN_operator (w) == OPR_ICALL,
-                 ("IPO_Process_Icalls: Expected ICALL"));
+      FmtAssert (Is_dummy_edge_for_node(edge, w),
+                 ("IPO_Process_Icalls: Expected dummy edge for ICALL node"));
       IPA_EDGE * next_edge = (!edge_order.empty()) ?
                         edge_order.top() : NULL;
 
+#ifdef USE_OLD_ICALL_PROMOTION
       if (edge->Summary_Callsite()->Is_func_ptr())
-      { // We decided not to do icall conversion, but IPA data flow
-        // has the answer.
+      { 
+        // There is no dummy call site added for the ICALL at
+        // summary phase, that means we decided not to do icall
+        // conversion based on IPA data flow
         edge->Set_Whirl_Node (w);
-        if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
-          fprintf( TFile, "\n[edge %d, callsite %d]\n", edge->Edge_Index(), callsite_idx);
+        if (do_trace) {
+          fprintf( TFile, "\n[edge %d, callsite %d, callee %s]\n", edge->Edge_Index(), 
+                   callsite_idx, callee->Name());
           if (edge->Whirl_Node()) {
             fprintf( TFile, "Original edge->Whirl_Node:\n");
             fdump_tree(TFile, edge->Whirl_Node());
@@ -327,8 +429,9 @@ IPO_Process_Icalls (IPA_NODE * node)
       else if (next_edge && next_edge->Summary_Callsite()->Is_func_ptr() &&
                (edge->Callsite_Id() + 1 == next_edge->Callsite_Id()))
       {
-        if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
-          fprintf( TFile, "\n[delete edge %d, callsite %d]\n", edge->Edge_Index(), callsite_idx);
+        if (do_trace) {
+          fprintf( TFile, "\n[edge %d, callsite %d, callee %s]\n", edge->Edge_Index(), 
+                   callsite_idx, callee->Name());
           if (edge->Whirl_Node()) {
             fprintf( TFile, "deleted edge->Whirl_Node:\n");
             fdump_tree(TFile, edge->Whirl_Node());
@@ -352,9 +455,10 @@ IPO_Process_Icalls (IPA_NODE * node)
         edge_order.pop();
       }
       else
+#endif
       {
         // Do the actual transformation, set WN node in edge.
-        if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
+        if (do_trace) {
           fprintf( TFile, "\n[convert icall for edge %d, callsite %d]\n", 
                 edge->Edge_Index(), callsite_idx);
           if (edge->Whirl_Node()) {
@@ -364,13 +468,47 @@ IPO_Process_Icalls (IPA_NODE * node)
           fprintf( TFile, "whirl node before icall convert:\n");
           fdump_tree(TFile, w);
         }
-        Convert_Icall (w, edge);
-        if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
-          fprintf( TFile, "After convert, new edge->Whirl_Node:\n");
-          fdump_tree(TFile, edge->Whirl_Node());
+        // find the number of dummy icalls site associated with icall
+        // node and convert these dymmy icall sites in one shot
+        vector<IPA_EDGE *> dummy_edge_list;
+        while (edge && Is_dummy_edge_for_node(edge, w))
+        {
+          dummy_edge_list.push_back(edge);
+          callsite_idx++;  // for the call added
+          if (!edge_order.empty()) {
+            edge =  edge_order.top();
+            if (!Is_dummy_edge_for_node(edge, w))
+               break;
+            edge_order.pop();
+#ifdef USE_OLD_ICALL_PROMOTION
+            // the dummy callsites id for one icall node are all
+            // continuous
+            // there may be a case which two icalls in a row and
+            // the callsites are dummy callsite but they have 
+            // discontinous
+            if (edge->Callsite_Id() > last_edge->Callsite_Id() + 1)
+               break;
+#endif
+          }
+          else
+             break;
+        } 
+
+        FmtAssert (dummy_edge_list.size() <= ICALL_MAX_PROMOTE_PER_CALLSITE,
+                  ("IPO_Process_Icalls: Invalid number of dummy callsites"));
+        
+        if (Cur_PU_Feedback && do_trace) {
+          fprintf( TFile, "\nThe feedback info:\n");
+          Cur_PU_Feedback->Print(TFile, w);
         }
 
-        callsite_idx++;  // for the call added
+        WN *promoted_tree = Convert_Icall (w, dummy_edge_list, 0);
+
+        if (do_trace) {
+          fprintf( TFile, "\nAfter convert, new edge->Whirl_Node:\n");
+          fdump_tree(TFile, promoted_tree);
+        }
+
       }
     }
 

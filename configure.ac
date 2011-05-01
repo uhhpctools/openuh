@@ -241,14 +241,19 @@ case "$target" in
 		GCC_CONFIGURE_HOST=mips-redhat-linux
 		CYGNUS_CONFIGURE_TARG=mipsel-elf-linux
 		GCC_CONFIGURE_TARG=mips-redhat-linux
-		GCC_CONFIGURE_CFLAGS="-m32 -DTARG_SL"
-		CYGNUS_CONFIGURE_CFLAGS="-m32"
+		GCC_CONFIGURE_CFLAGS+=" -m32 -DTARG_SL"
+		CYGNUS_CONFIGURE_CFLAGS=" -m32"
 		BUILD_MULTILIB=NO
 		;;
 	*)
 		AC_MSG_ERROR(["open64 is not supported on $target"])
 		;;
 esac
+
+if test "${BUILD_TARGET}" = "SL"; then
+   BUILD_GNU3="YES"
+   BUILD_FORTRAN="NO"
+fi
 
 UNAME_MACHINE=`uname -m`
 if test "$UNAME_MACHINE" = "x86_64"; then
@@ -402,10 +407,19 @@ fi
 AC_CONFIG_FILES([
   osprey/targdir_lib/Makefile
   osprey/targdir_lib/include/Makefile
+])
+
+if test "${BUILD_TARGET}" = "SL"; then
+AC_CONFIG_FILES([
+  osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in
+])
+else
+AC_CONFIG_FILES([
   osprey/targdir_lib/libopenmp/Makefile
   osprey/targdir_lib/libhugetlbfs/Makefile
   osprey/targdir_lib/libmv/Makefile
 ])
+fi
 
 if test "${BUILD_FORTRAN}" = "YES"; then
    AC_CONFIG_FILES([

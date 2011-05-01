@@ -157,7 +157,11 @@ struct FB_Info_Value {
   void Print( FILE* fp ) const {
     fprintf( fp, "execution counter: %d\n", (int)exe_counter.Value() );
     for( int i = 0; i < num_values; i++ ){
+#ifdef TARG_SL
+      fprintf( fp, "value %d\t freq %f\n", value[i], freq[i].Value() );
+#else
       fprintf( fp, "value %lld\t freq %f\n", value[i], freq[i].Value() );
+#endif
     }
   }
 };

@@ -695,7 +695,9 @@ ifeq ($(BUILD_ABI), N32BIT)
   endif
  else # MIPS4
   ifeq ($(BUILD_TYPE), SHARED)
-    STD_LOAD_OPTS += -n32 -L$(ROOT)/usr/lib32/mips4 -L$(ROOT)/usr/lib32
+    ifneq ($(BUILD_TARGET),SL)
+      STD_LOAD_OPTS += -n32 -L$(ROOT)/usr/lib32/mips4 -L$(ROOT)/usr/lib32
+    endif
   else
     STD_LOAD_OPTS += -n32 -L$(ROOT)/usr/lib32/mips4/nonshared -L$(ROOT)/usr/lib32/nonshared
   endif

@@ -186,7 +186,10 @@ static LNO_FLAGS Default_LNO = {
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
   1,		/* Fusion */
+  0,            /* Aggression_fusion_limit */
+  0,            /* Sclrze_dse_limit */
   5,		/* Fusion_peeling_limit */
+  9,            /* Fusion_ddep_limit */
   1,		/* Gather_Scatter */
   0xfffe,	/* Graph_capacity */
   TRUE,		/* Hoist_messy_bounds */
@@ -401,7 +404,10 @@ LNO_FLAGS Initial_LNO = {
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
   1,		/* Fusion */
+  0,            /* Aggressive_fusion_limit */
+  0,            /* Sclrze_dse_limit */
   5,		/* Fusion_peeling_limit */
+  9,            /* Fusion_ddep_limit */
   1,		/* Gather_Scatter */
   0xfffe,	/* Graph_capacity */
   TRUE,		/* Hoist_messy_bounds */
@@ -721,8 +727,14 @@ static OPTION_DESC Options_LNO[] = {
 					Fission_inner_register_limit ),
   LNOPT_BOOL ( "forward_substitution",	NULL,	Forward_substitution ),
   LNOPT_U32  ( "fusion",		"fus",	1,0,2,	Fusion ),
+  LNOPT_U32  ( "aggressive_fusion_limit",	NULL,	0,0,99999,
+					Aggressive_fusion_limit ),
+  LNOPT_U32  ( "sclrze_dse_limit",	NULL,	0,0,99999,
+	                                Sclrze_dse_limit ),
   LNOPT_U32  ( "fusion_peeling_limit",	NULL,	5,0,99999,
 					Fusion_peeling_limit ),
+  LNOPT_U32  ( "fusion_ddep_limit",	NULL,	9,0,99999,
+					Fusion_ddep_limit ),
   LNOPT_U32  ( "gather_scatter",	"gath",	1,0,100, Gather_Scatter ),
   LNOPT_U32  ( "gc",			NULL,	0xfffe, 0, 0xfffe,
 					Graph_capacity ),

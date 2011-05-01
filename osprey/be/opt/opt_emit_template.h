@@ -654,13 +654,6 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
     {
       AUX_STAB_ENTRY *aux_entry = 
 	emitter->Opt_stab()->Aux_stab_entry(exp->Aux_id());
-#ifdef TARG_SL
-      if (exp->Dtyp() == MTYPE_I2 && exp->Dsctyp() == MTYPE_I2) {
-        wn = WN_Create((aux_entry->Bit_size() > 0 && aux_entry->Field_id() == 0)
-			? OPR_LDBITS : OPR_LDID,
-	   	        MTYPE_I4, exp->Dsctyp(), 0); 
-      } else
-#endif
       wn = WN_Create((aux_entry->Bit_size() > 0 && aux_entry->Field_id() == 0)
 			? OPR_LDBITS : OPR_LDID,
 		     exp->Dtyp(), exp->Dsctyp(), 0); 

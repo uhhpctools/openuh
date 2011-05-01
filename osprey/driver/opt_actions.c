@@ -849,8 +849,8 @@ Check_Target ( void )
 #ifdef TARG_SL
       case ABI_N32:
       case ABI_64:
-        opt_val = ISA_MIPS4;
-        opt_id = O_mips4;
+        opt_val = ISA_MIPS64;
+        opt_id = O_mips64;
         toggle ( &isa, opt_val );
         add_option_seen ( opt_id );
         option_name = get_option_name ( opt_id );

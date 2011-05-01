@@ -345,7 +345,7 @@ typedef struct {
 } CONTROL_GROUP_INFO;
 
 #define CGI_IS_INT_TYPE       0x0001
-#define CGI_is_int_type(c)		((c)->flags & CGI_IS_INT_TYPE != 0)
+#define CGI_is_int_type(c)		((((c)->flags) & CGI_IS_INT_TYPE) != 0)
 
 static O_GR_EXP o_group_expansion[] = {
   /*0*/ { "no-opt",

@@ -1590,8 +1590,8 @@ case "$target" in
 		GCC_CONFIGURE_HOST=mips-redhat-linux
 		CYGNUS_CONFIGURE_TARG=mipsel-elf-linux
 		GCC_CONFIGURE_TARG=mips-redhat-linux
-		GCC_CONFIGURE_CFLAGS="-m32 -DTARG_SL"
-		CYGNUS_CONFIGURE_CFLAGS="-m32"
+		GCC_CONFIGURE_CFLAGS+=" -m32 -DTARG_SL"
+		CYGNUS_CONFIGURE_CFLAGS=" -m32"
 		BUILD_MULTILIB=NO
 		;;
 	*)
@@ -1600,6 +1600,11 @@ echo "$as_me: error: \"open64 is not supported on $target\"" >&2;}
    { (exit 1); exit 1; }; }
 		;;
 esac
+
+if test "${BUILD_TARGET}" = "SL"; then
+   BUILD_GNU3="YES"
+   BUILD_FORTRAN="NO"
+fi
 
 UNAME_MACHINE=`uname -m`
 if test "$UNAME_MACHINE" = "x86_64"; then
@@ -1712,8 +1717,16 @@ else
   fi
 fi
 
-                                                  ac_config_files="$ac_config_files osprey/targdir_lib/Makefile osprey/targdir_lib/include/Makefile osprey/targdir_lib/libopenmp/Makefile osprey/targdir_lib/libhugetlbfs/Makefile osprey/targdir_lib/libmv/Makefile"
+                    ac_config_files="$ac_config_files osprey/targdir_lib/Makefile osprey/targdir_lib/include/Makefile"
 
+
+if test "${BUILD_TARGET}" = "SL"; then
+          ac_config_files="$ac_config_files osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in"
+
+else
+                              ac_config_files="$ac_config_files osprey/targdir_lib/libopenmp/Makefile osprey/targdir_lib/libhugetlbfs/Makefile osprey/targdir_lib/libmv/Makefile"
+
+fi
 
 if test "${BUILD_FORTRAN}" = "YES"; then
                        ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile"
@@ -2343,6 +2356,7 @@ do
   "osprey/targdir/g++fe/gnu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/g++fe/gnu/Makefile" ;;
   "osprey/targdir_lib/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/Makefile" ;;
   "osprey/targdir_lib/include/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/include/Makefile" ;;
+  "osprey/targdir_lib/libinstr/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in" ;;
   "osprey/targdir_lib/libopenmp/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libopenmp/Makefile" ;;
   "osprey/targdir_lib/libhugetlbfs/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libhugetlbfs/Makefile" ;;
   "osprey/targdir_lib/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libmv/Makefile" ;;

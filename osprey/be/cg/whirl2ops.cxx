@@ -1785,7 +1785,7 @@ Handle_Call_Site (WN *call, OPERATOR call_opr)
 /*
  * Determine the Exp_OP variant for a memory operation.
  */
-static VARIANT Memop_Variant(WN *memop)
+VARIANT Memop_Variant(WN *memop)
 {
   VARIANT variant = V_NONE;
 #if defined(TARG_SL)
@@ -1834,12 +1834,10 @@ static VARIANT Memop_Variant(WN *memop)
 	if (TY_kind(ty) == KIND_POINTER) ty = TY_pointed(ty);
 	ty_align = TY_align(ty);
 	offset = WN_load_offset(memop);
-#if defined(TARG_SL) 
 	if (offset) {
 	  INT offset_align = offset % required_alignment;
 	  if (offset_align) ty_align = MIN(ty_align, offset_align);
 	}
-#endif
       }
       break;
     case OPR_ISTORE:

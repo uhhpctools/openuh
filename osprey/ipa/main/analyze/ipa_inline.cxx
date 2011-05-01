@@ -1910,9 +1910,15 @@ Get_Sorted_Callsite_List (IPA_NODE *n, IPA_CALL_GRAPH *cg,
 	IPA_EDGE *edge = edge_iter.Current_Edge ();
 
 	if (edge) {
+          IPA_NODE* callee = cg->Callee (edge);
+          BOOL small_callee =  callee->Weight() <= IPA_PU_Minimum_Size;
+          if ( small_callee || 
+              !(edge->Is_Orig_Devirtualized() && !IPA_Inline_Original_VF) && 
+              !(edge->Is_New_Devirtualized() && !IPA_Inline_New_VF)) {
 	    IPA_EDGE_INDEX idx = edge->Array_Index ();
 	    cost_vector[idx] = Estimated_Invocation_Cost (edge, cg);
 	    callsite_list.push_back (idx);
+	  }
 	}
     }   
 

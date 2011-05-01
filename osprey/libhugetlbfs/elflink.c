@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -681,29 +681,9 @@ int parse_elf_relinked(struct dl_phdr_info *info, size_t size, void *data)
 		if (save_phdr(htlb_num_segs, i, &info->dlpi_phdr[i]))
 			return 1;
 
-
-#ifdef OPEN64_MOD
-		if (info->dlpi_phdr[i].p_flags & PF_W) {
-			struct seg_info *seg = &htlb_seg_table[htlb_num_segs];
-			void *cur_brk = sbrk(0);
-			void *end_addr = seg->vaddr + seg->memsz;
-			if (end_addr != cur_brk) {
-				seg->extrasz = (cur_brk - seg->vaddr) - seg->filesz;
-				DEBUG("memory already allocated: end_addr=%p, cur_brk=%p\n",
-				      end_addr, cur_brk);
-			}
-			/* No need to call get_extracopy, since we know we already need
-			 * to copy past the address of any symbol that is in the dynamic
-			 * symbol table.
-			 */
-		} else {
-			get_extracopy(&htlb_seg_table[htlb_num_segs],
-				      &info->dlpi_phdr[0], info->dlpi_phnum);
-		}
-#else
 		get_extracopy(&htlb_seg_table[htlb_num_segs],
 				&info->dlpi_phdr[0], info->dlpi_phnum);
-#endif
+
 		htlb_num_segs++;
 	}
 	if (__hugetlbfs_debug)

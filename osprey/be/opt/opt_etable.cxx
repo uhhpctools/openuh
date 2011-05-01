@@ -70,6 +70,7 @@
 #include "defs.h"
 #include "cxx_memory.h"
 #include "glob.h"       // for Cur_PU_Name
+#include "const.h"      // for New_Const_Sym
 
 #include "opt_base.h"
 #include "opt_bb.h"
@@ -2911,11 +2912,6 @@ ETABLE::Bottom_up_cr(STMTREP *stmt, INT stmt_kid_num, CODEREP *cr,
 	}
 	if (cr->Opr() == OPR_ILOADX)
 	  Warn_todo("ETABLE::Bottom_up_cr: Indexed load.");
-#ifdef TARG_SL
-        if (cr->Dtyp() == MTYPE_I2 && cr->Dsctyp() == MTYPE_I2) {
-            cr->Set_dtyp(MTYPE_I4);
-        } 
-#endif        
 	if (!is_istore) {
 	  CODEREP *ivar_vsym = cr->Get_ivar_vsym();
 	  if (cr->Ilod_base()->Is_non_volatile_terminal(Opt_stab()) &&
@@ -3301,6 +3297,12 @@ private:
    CODEREP         *_cr;
    TCON             _tcon;
 
+   // If the occurrence is a vectorized constant (all the elements should hold 
+   // same value), <_vect_ty> indicate the vect type, and the value of 
+   // elements are held by _tcon.
+   //
+   TYPE_ID _vect_ty;
+
    CODEREP *_replace_by_cr(CODEREP *x)
    {
       // Replace "x" by "_cr". Adjust usecnts.
@@ -3326,7 +3328,7 @@ private:
       return replacement;
    }
 
-   CODEREP *_replace_by_const(CODEMAP *htable, CODEREP *x)
+   CODEREP *_replace_by_scalar_const(CODEMAP *htable, CODEREP *x)
    {
       // Create a CODEREP corresponding to the TCON and the result-type
       // of "x", and return it. Adjust usecnts.
@@ -3349,6 +3351,42 @@ private:
       tcon_cr->IncUsecnt();
       return tcon_cr;
    }
+
+   CODEREP *_replace_by_vect_const(CODEMAP *htable, CODEREP *x)
+   {
+      // step 1: derive element type from vector type
+      //
+      TYPE_ID elem_ty = Mtype_vector_elemtype (_vect_ty);
+
+      Is_True (MTYPE_byte_size (_vect_ty) == MTYPE_byte_size(x->Dtyp()),
+               ("discrepance in vector type"));
+        
+      // step 2: generate a symbol for the constant value.
+      //
+      ST* sym;
+      sym = New_Const_Sym (Enter_tcon (_tcon), Be_Type_Tbl (TCON_ty(_tcon)));
+    
+      // step 3: generate the const vector
+      //
+      CODEREP* cr = Alloc_stack_cr (0);
+      cr->Init_rconst (_vect_ty, sym);
+      cr = htable->Hash_Rconst(cr);
+
+      // step 4: get rid of the orignial expr
+      //
+      x->DecUsecnt_rec();
+
+      return cr;
+   }
+
+   CODEREP *_replace_by_const(CODEMAP *htable, CODEREP *x)
+   {
+      if (_vect_ty == MTYPE_UNKNOWN) {
+        return _replace_by_scalar_const (htable, x);
+      }
+
+      return _replace_by_vect_const (htable, x);
+   }
    
 public:
 
@@ -3358,10 +3396,12 @@ public:
       _kind = (type_conv? REPL_BY_TYPED_CR : REPL_BY_CR);
    }
    
-   OCCUR_REPLACEMENT(TCON replace_by_tcon):
+   OCCUR_REPLACEMENT(TCON replace_by_tcon, TYPE_ID vect_ty):
       _tcon(replace_by_tcon), 
       _kind(REPL_BY_CONST)
-   {}
+   {
+     _vect_ty = vect_ty;
+   }
    
    CODEREP *apply(CODEMAP    *htable,
 		  ETABLE     *etable,
@@ -3885,11 +3925,11 @@ ETABLE::Replace_by_temp(EXP_OCCURS *occur, CODEREP *tempcr)
 // and the tree containing it needs to be rehashed.
 // =====================================================================
 void
-ETABLE::Replace_by_const(EXP_OCCURS *occur, TCON tcon)
+ETABLE::Replace_by_const(EXP_OCCURS *occur, TCON tcon, TYPE_ID vect_ty)
 {
   // Top level routine, traversing down from statement level.
   //
-  OCCUR_REPLACEMENT repl(tcon);
+  OCCUR_REPLACEMENT repl(tcon, vect_ty);
   Replace_occurs(occur, &repl);
 }
 

@@ -1594,6 +1594,8 @@ do {							\
 /* There is no point aligning anything to a rounder boundary than this.  */
 #define BIGGEST_ALIGNMENT LONG_DOUBLE_TYPE_SIZE
 
+#define ADJUST_FIELD_ALIGN(FIELD, COMPUTED) SL_field_alignment(FIELD, COMPUTED)
+
 /* Set this nonzero if move instructions will actually fail to work
    when given unaligned data.  */
 #define STRICT_ALIGNMENT 1

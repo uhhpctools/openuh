@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2008-2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -90,6 +94,7 @@
 #include "cxx_memory.h"
 #include "glob.h"			// for Ipa_File_Name
 #include "wn.h"
+#include "wn_simp.h"
 #include "symtab.h"
 #include "pu_info.h"			// For struct pu_info
 #include "ipc_file.h"			// IP_FILE_HDR
@@ -233,6 +238,22 @@ vector<inline_info> inline_list;
 typedef AUX_IPA_NODE<UINT32> NUM_CALLS_PROCESSED;
 static NUM_CALLS_PROCESSED* Num_In_Calls_Processed;
 static NUM_CALLS_PROCESSED* Num_Out_Calls_Processed;
+
+// Scratch storage for identifying global-as-local candidates.
+typedef enum {
+  NONE = 0,
+  INNERMOST_DOM = 1,
+} DEF_FLAG;
+#define MAX_GLOBAL_AS_LOCAL 20 // maximum number of global arrays to track.
+static WN * Global_Defs[MAX_GLOBAL_AS_LOCAL];
+static DEF_FLAG Global_Flags[MAX_GLOBAL_AS_LOCAL];
+static ST * Global_Sts[MAX_GLOBAL_AS_LOCAL];
+static INT Global_As_Local_Ndx = -1;
+typedef HASH_TABLE<void *, UINT64> GLOBAL_AS_LOCAL_HASH;
+static GLOBAL_AS_LOCAL_HASH * Global_As_Local_Hash;
+static WN_MAP PU_Parent_Map;
+static WN_MAP_TAB * PU_Map_Tab;
+static MEM_POOL Temp_pool;
 
 //FILE *inlining_result ;
 
@@ -704,7 +725,7 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
 
     /* write out the original */
     node->Write_PU();
-
+    
     node = cloned_node;
   }
     
@@ -898,6 +919,440 @@ Delete_Proc (IPA_NODE *node)
 
 } // Delete_Proc
 
+// check whether 'st' has been seen in the array 'Global_Sts'.
+// If so, return the index.
+static INT Find_Global_As_Local_Ndx(ST * st)
+{
+  INT st_ndx = -1;
+  for (int i = 0; i <= Global_As_Local_Ndx; i++) {
+    if (Global_Sts[i] == st) {
+      st_ndx = i;
+      break;
+    }
+  }
+  return st_ndx;
+}
+
+// Find containing store statement for 'wn'.
+static WN * Find_Containing_Stmt(WN * wn)
+{
+  WN * wn_iter = wn;
+  while (wn_iter) {
+    OPERATOR opr = WN_operator(wn_iter);
+    if (OPERATOR_is_store(opr))
+      return wn_iter;
+    wn_iter = (WN *) WN_MAP_Get(PU_Parent_Map, wn_iter);
+  }
+  return NULL;
+}
+
+// Obtain outermost nesting loop for 'wn'.
+static WN * Outermost_Do_Loop(WN * wn)
+{
+  WN * wn_iter = wn;
+  WN * outermost = NULL;
+
+  while (wn_iter) {
+    if (WN_operator(wn_iter) == OPR_DO_LOOP)
+      outermost = wn_iter;
+    wn_iter = (WN *) WN_MAP_Get(PU_Parent_Map, wn_iter);
+  }
+
+  return outermost;
+}
+
+// Check whether there exists a OPR_CALL or OPR_GOTO in 'wn'.
+static BOOL Has_Call_Or_Goto(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+  if (opr == OPR_DO_LOOP) {
+    UINT64 val = Global_As_Local_Hash->Find((void *) wn);
+    if (val > 0)
+      return FALSE;
+  }
+
+  if ((opr == OPR_CALL) || (opr == OPR_GOTO))
+    return TRUE;
+  else if (opr == OPR_BLOCK) {
+    for (WN * wn_iter = WN_first(wn); wn_iter; wn_iter = WN_next(wn_iter)) {
+      if (Has_Call_Or_Goto(wn_iter))
+	return TRUE;
+    }
+  }
+  else {
+    for (int i = 0; i < WN_kid_count(wn); i++) {
+      if (Has_Call_Or_Goto(WN_kid(wn, i)))
+	return TRUE;
+    }
+  }
+
+  if (opr == OPR_DO_LOOP)
+    Global_As_Local_Hash->Enter((void *) wn, 1);
+
+  return FALSE;
+}
+
+// Categorize properties of 'def":
+// "INNERMOST_DOM": 'def' is unconditionally evaluated in a loop-nest that is an
+// immediate child of 'FUNC_ENTRY', the loop-nest is perfectly-nested and contains
+// no calls and gotos.
+// "NONE": default value.
+static DEF_FLAG Get_Def_Flag(WN * def) 
+{
+  DEF_FLAG flag = NONE;
+
+  WN * outermost = Outermost_Do_Loop(def);
+  if (!outermost)
+    return flag;
+
+  WN * wn_p = (WN *) WN_MAP_Get(PU_Parent_Map, outermost);
+  if (WN_operator(wn_p) != OPR_BLOCK)
+    return flag;
+
+  wn_p = (WN *) WN_MAP_Get(PU_Parent_Map, wn_p);
+  if (WN_operator(wn_p) != OPR_FUNC_ENTRY)
+    return flag;
+  
+  WN * def_p = (WN *) WN_MAP_Get(PU_Parent_Map, def);
+  while (def_p && (def_p != outermost)) {
+    OPERATOR opr = WN_operator(def_p);
+    
+    if (opr == OPR_DO_LOOP) {
+      if (WN_next(def_p) || WN_prev(def_p))
+	return flag;
+    }
+    else if (opr != OPR_BLOCK)
+      return flag;
+
+    def_p = (WN *) WN_MAP_Get(PU_Parent_Map, def_p);
+  }
+  
+  if (Has_Call_Or_Goto(outermost))
+    return flag;
+  
+  return INNERMOST_DOM;
+}
+
+// Check whether the evaluation of 'def' dominates the evaluation of 'use'.
+// This includes dominance in both control flow and iteration space.
+static BOOL Dominate(WN * def, WN * use, INT ndx)
+{
+  WN * use_p = Find_Containing_Stmt(use);
+
+  if (!use_p)
+    return FALSE;
+
+  WN * def_p = (WN *) WN_MAP_Get(PU_Parent_Map, def);
+  use_p = (WN *) WN_MAP_Get(PU_Parent_Map, use_p);
+  BOOL same_scope = FALSE;
+
+  while (use_p) {
+    if (def_p == use_p) {
+      same_scope = TRUE;
+      break;
+    }
+    use_p = (WN *) WN_MAP_Get(PU_Parent_Map, use_p);
+  }
+
+  switch (Global_Flags[ndx]) {
+  case INNERMOST_DOM:
+    break;
+  default:
+    if (!same_scope)
+      return FALSE;
+    ;
+  }
+
+  // Check whether use's iteration space is a subset of def's iteration space.
+  WN * array_def = WN_kid(def, 1);
+  WN * array_use = WN_kid(use, 0);
+  int dim = WN_num_dim(array_def);
+
+  for (int i = 0; i < dim; i++) {
+    WN * index1 = WN_array_index(array_def, i);
+    WN * index2 = WN_array_index(array_use, i);
+    OPERATOR opr1 = WN_operator(index1);
+    OPERATOR opr2 = WN_operator(index2);
+
+    if ((opr1 != opr2) || (opr1 != OPR_SUB))
+      return FALSE;
+
+    index1 = WN_kid0(index1);
+    index2 = WN_kid0(index2);
+    opr1 = WN_operator(index1);
+    opr2 = WN_operator(index2);
+
+    if (opr1 == OPR_CVT) 
+      index1 = WN_kid0(index1);
+
+    if (opr2 == OPR_CVT)
+      index2 = WN_kid0(index2);
+
+    ST * st1 = NULL;
+    ST * st2 = NULL;
+
+    if (WN_operator(index1) == OPR_LDID)
+      st1 = WN_st(index1);
+
+    if (WN_operator(index2) == OPR_LDID)
+      st2 = WN_st(index2);
+
+    WN * loop1 = WN_find_loop_by_index(array_def, st1, PU_Parent_Map);
+
+    if (!loop1)
+      return FALSE;
+
+    WN * loop2 = WN_find_loop_by_index(array_use, st2, PU_Parent_Map);
+
+    if (loop2) {
+      if (loop1 != loop2) {
+	int lower_diff = 0;
+	int upper_diff = 0;
+	if (!WN_has_compatible_iter_space(loop1, loop2, &lower_diff, &upper_diff, FALSE)
+	    || (lower_diff > 0) 
+	    || (upper_diff < 0))
+	  return FALSE;
+      }
+    }
+    else if (WN_operator(index2) != OPR_INTCONST) 
+      return FALSE;
+    else {
+      int cval = WN_const_val(index2);
+      OPCODE ub_compare;
+      WN * lb = WN_LOOP_LowerBound(loop1);
+      WN * ub = WN_LOOP_UpperBound(loop1, &ub_compare, TRUE);
+      OPERATOR opr = OPCODE_operator(ub_compare);
+
+      if (((opr == OPR_LE) || (opr == OPR_LT))
+	  && lb && ub
+	  && (WN_operator(lb) == OPR_INTCONST)
+	  && (WN_operator(ub) == OPR_INTCONST)
+	  && (cval >= WN_const_val(lb))
+	  && ((cval < WN_const_val(ub)) || ((cval == WN_const_val(ub)) && (opr == OPR_LE)))) {
+      }
+      else
+	return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+// If 'wn1' and 'wn2' has a common parent that is a if-statement and
+// 'wn1' and 'wn2' locate in the then-path and the else-path separately,
+// and every node on the path between the common parent and the two nodes
+// is either a block or a do-loop with the same iteration space, return 
+// the common parent.
+static WN * Get_Common_If(WN * wn1, WN * wn2)
+{
+  WN * wn_iter1 = (WN *) WN_MAP_Get(PU_Parent_Map, wn1);
+  WN * wn_iter2 = (WN *) WN_MAP_Get(PU_Parent_Map, wn2);
+  int lower_diff = 0;
+  int upper_diff = 0;
+
+  while (wn_iter1 && wn_iter2) {
+    OPERATOR opr1 = WN_operator(wn_iter1);
+    OPERATOR opr2 = WN_operator(wn_iter2);
+    
+    if (opr1 != opr2)
+      break;
+    
+    switch (opr1) {
+    case OPR_BLOCK:
+      break;
+    case OPR_DO_LOOP:
+      if (!WN_has_compatible_iter_space(wn_iter1, wn_iter2, 
+					&lower_diff, &upper_diff, TRUE)
+	  || (lower_diff != 0)
+	  || (upper_diff != 0)) {
+	return NULL;
+      }
+      break;
+    case OPR_IF:
+      if (wn_iter1 == wn_iter2) 
+	return wn_iter1;
+
+    default:
+      return NULL;
+    }
+
+    wn_iter1 = (WN *) WN_MAP_Get(PU_Parent_Map, wn_iter1);
+    wn_iter2 = (WN *) WN_MAP_Get(PU_Parent_Map, wn_iter2);
+  }
+  
+  return NULL;
+}
+
+// Legality check for the global-as-local candidate 'wn'
+// whose base symbol is 'st'.
+static void Enter_Global_As_Local(WN * wn , ST * st)
+{
+  if (!st || !ST_is_global_as_local(st))
+    return;
+
+  int st_ndx = Find_Global_As_Local_Ndx(st);
+  if (st_ndx < 0)
+    return;
+
+  if (ST_export(st) == EXPORT_PREEMPTIBLE) {
+    Clear_ST_is_global_as_local(st);
+    return;
+  }
+
+  OPERATOR opr = WN_operator(wn);
+  
+  if (opr == OPR_LDA) {
+    // Address-taken.
+    Clear_ST_is_global_as_local(st);
+  }
+
+  WN * def = Global_Defs[st_ndx];
+
+  if (OPERATOR_is_store(opr)) {
+    if (def) {
+      WN * array1 = WN_kid1(def);
+      WN * array2 = WN_kid1(wn);
+      BOOL do_clear = TRUE;
+      if (WN_Simp_Compare_Trees(array1, array2) == 0) {
+	WN * wn_if = Get_Common_If(def, wn);
+	if (wn_if) {
+	  // Allow defs in the then-path and the else-path of a if-statement
+	  // if the if-statement is at a dominating point in the innermost loop.
+	  WN * parent = (WN *) WN_MAP_Get(PU_Parent_Map, wn_if);
+	  DEF_FLAG flag = Get_Def_Flag(parent);
+	  if (flag == INNERMOST_DOM) {
+	    Global_Flags[st_ndx] = flag;
+	    do_clear = FALSE;
+	  }
+	}
+      }
+      if (do_clear)
+	Clear_ST_is_global_as_local(st);
+    }
+    else {
+      // Is a first-def.
+      Global_Defs[st_ndx] = wn;
+      Global_Flags[st_ndx] = Get_Def_Flag(wn);
+    }
+  }
+  else {
+    if (def) {
+      if (!Dominate(def, wn, st_ndx)) {
+	Clear_ST_is_global_as_local(st);
+      }
+    }
+    else {
+      // Is a upward-exposed use.
+      Clear_ST_is_global_as_local(st);
+    }
+  }
+}
+
+// Traverse 'tree' to do legality check for global-as-local candidates.
+// The candidate's use must not be upward-exposed, i.e., every use has 
+// a dominating reaching def in the same function.
+// Notice that the logic here applies to Fortran programs only, and we
+// only tracks initialized global data without equivalences.
+static void Traverse_Tree_For_Global_As_Local(WN * tree)
+{
+  OPERATOR opr = WN_operator(tree);
+  ST * st;
+  char * name;
+  WN * wn;
+  int ndx;
+
+  if (opr == OPR_BLOCK) {
+    for (WN * wn_iter = WN_first(tree); wn_iter; wn_iter = WN_next(wn_iter)) {
+      Traverse_Tree_For_Global_As_Local(wn_iter);
+    }
+  }
+  else {
+    switch (opr) {
+    case OPR_LDA:
+      st = WN_st(tree);
+      Enter_Global_As_Local(tree, st);
+      break;
+
+    case OPR_CALL:
+      st = WN_st(tree);
+      if (st) {
+	name = ST_name(st);
+	if ((strcmp(name, "_DEALLOCATE") == 0)
+	    || (strcmp(name, "_DEALLOC") == 0)
+	    || (strcmp(name, "_F90_ALLOCATE_B") == 0)
+	    || (strcmp(name, "_SIZE_4") == 0)) {
+	  return;
+	}
+      }
+
+      break;
+
+    case OPR_ISTORE:
+      // track store data first.
+      wn = WN_kid(tree, 0);
+      Traverse_Tree_For_Global_As_Local(wn);
+
+      wn = WN_kid(tree, 1);
+      if (WN_operator(wn) == OPR_ARRAY) {	
+	WN * base = WN_array_base(wn);
+	if (base && WN_has_sym(base)) {
+	  Enter_Global_As_Local(tree, WN_st(base));
+	}
+      }
+
+      break;
+
+    case OPR_ILOAD:
+      wn = WN_kid(tree, 0);
+      if (WN_operator(wn) == OPR_ARRAY) {
+	WN * base = WN_array_base(wn);
+	if (base && WN_has_sym(base)) {
+	  Enter_Global_As_Local(tree, WN_st(base));
+	}
+      }
+      break;
+
+    default:
+      ;
+    }
+
+    for (INT kidno = 0; kidno < WN_kid_count(tree); kidno++) {
+      wn = WN_kid(tree, kidno);
+      Traverse_Tree_For_Global_As_Local(wn);
+    }
+  }
+}
+
+// Identify global-as-local candidates for 'node'.
+static void
+Identify_Global_As_Local_Candidates(IPA_NODE * node)
+{
+  if (!IPA_Enable_Global_As_Local || (Global_As_Local_Ndx < 0))
+    return;
+
+  if (!node->PU_Info())
+    return;
+
+  IPA_NODE_CONTEXT context (node); 
+  WN * tree = node->Whirl_Tree(FALSE);
+  if (!tree)
+    return;
+  
+  for (int i = 0; i <= Global_As_Local_Ndx; i++) {
+    Global_Defs[i] = NULL;
+    Global_Flags[i] = NONE;
+  }
+
+  PU_Parent_Map = node->Parent_Map();
+  PU_Map_Tab = node->Map_Table();
+  WN_Parentize(tree, PU_Parent_Map, PU_Map_Tab);
+  MEM_POOL_Initialize(&Temp_pool, "global-as-local temp pool", FALSE);
+  MEM_POOL_Push(&Temp_pool);
+  Global_As_Local_Hash = CXX_NEW(GLOBAL_AS_LOCAL_HASH(100, &Temp_pool), &Temp_pool);
+  Traverse_Tree_For_Global_As_Local(WN_func_body(tree));
+  MEM_POOL_Pop(&Temp_pool);
+}
+
 static void
 Perform_Transformation (IPA_NODE* caller, IPA_CALL_GRAPH* cg)
 {
@@ -1063,6 +1518,7 @@ Perform_Transformation (IPA_NODE* caller, IPA_CALL_GRAPH* cg)
 	    {
 #endif // KEY
 	    IPA_Rename_Builtins(caller);
+	    Identify_Global_As_Local_Candidates(caller);
 	    caller->Write_PU ();
 #ifdef _DEBUG_CALL_GRAPH
    	    printf("Writing   %s \n", caller->Name());
@@ -1073,6 +1529,8 @@ Perform_Transformation (IPA_NODE* caller, IPA_CALL_GRAPH* cg)
 
 	}
     }
+    else
+      Identify_Global_As_Local_Candidates(caller);
 
 #ifdef TODO
     if (IPA_Enable_Recycle) {
@@ -1888,6 +2346,14 @@ IPO_main (IPA_CALL_GRAPH* cg)
     if (IPA_Enable_EH_Region_Removal)
     	IPA_Remove_Regions (walk_order, cg); // Remove EH regions that are not required
 #endif
+    
+    if (!IPA_Enable_Scale)
+      IPA_Enable_Global_As_Local = FALSE;
+
+    if (Get_Trace(TP_IPA, IPA_TRACE_ICALL_DEVIRTURAL)) {
+       fprintf( TFile, "\n\nIPA_Call_Graph:\n");
+       IPA_Call_Graph->Print(TFile);
+    }
 
     // we will use the following loop to check whether it is legal to perform
     // the complete structure relayout optimization; later (in the subsequent
@@ -1906,9 +2372,14 @@ IPO_main (IPA_CALL_GRAPH* cg)
     {
       int argument_num;
 
+      // Limit global-as-local analysis to Fortran programs.  C/C++ programs will
+      // need more work.
+      if (!PU_f77_lang((*first)->Get_PU()) 
+	  && !PU_f90_lang((*first)->Get_PU()))
+	IPA_Enable_Global_As_Local = FALSE;
+      
       if (IPA_Enable_Struct_Opt != 0 &&
-          PU_src_lang((*first)->Get_PU()) & PU_C_LANG)
-      {
+	  (PU_src_lang((*first)->Get_PU()) & PU_C_LANG)) {
         IPA_NODE_CONTEXT context(*first);
         IPO_WN_Update_For_Complete_Structure_Relayout_Legality(*first);
 
@@ -1960,6 +2431,26 @@ IPO_main (IPA_CALL_GRAPH* cg)
       }
     }
 
+    if (IPA_Enable_Global_As_Local) {
+      int i;
+      ST * s;
+      Global_As_Local_Ndx = -1;
+      // Initialize global-as-local scratch data.
+      FOREACH_SYMBOL(GLOBAL_SYMTAB, s, i) {
+	if ((ST_sclass(s) == SCLASS_DGLOBAL) 
+	    && !ST_is_equivalenced(s)
+	    && (ST_export(s) != EXPORT_PREEMPTIBLE)) {
+	  Global_As_Local_Ndx++;
+	  if (Global_As_Local_Ndx < MAX_GLOBAL_AS_LOCAL) {
+	    Set_ST_is_global_as_local(s);
+	    Global_Sts[Global_As_Local_Ndx] = s;
+	  }
+	  else
+	    break;
+	}
+      }
+    }
+
     for (IPA_NODE_VECTOR::iterator first = walk_order.begin ();
 	 first != walk_order.end ();
 	 ++first) {
@@ -1971,7 +2462,6 @@ IPO_main (IPA_CALL_GRAPH* cg)
       //ST *func_st = (*first)->Func_ST();
       //Set_PU_rse_budget(Pu_Table[ST_pu(func_st)],30);   
       Perform_Transformation (*first, cg);
-
     }
 
 #if defined(TARG_SL)

@@ -896,10 +896,8 @@ add_file_args (string_list_t *args, phases_t index)
 		  add_string(args, "-m32");
 		}
 #elif defined(TARG_SL)
-		add_string(args, "-U__i386__");
 		add_string(args, "-D__JAVI__");
 		add_string(args, "-D__SL__");
-		add_string(args, "-D__MIPSEL__");
 		add_string(args, "-DRAND32");
 		/* add uclibc micro */
 		if (Float_Point_Support == TRUE)
@@ -907,6 +905,8 @@ add_file_args (string_list_t *args, phases_t index)
 		  add_string(args, "-D__UCLIBC_HAS_FLOATS__");
 		  add_string(args, "-D__HAS_FPU__");
 		}
+                add_string(args, "-B");
+                add_string(args, concat_strings(global_toolroot,"/usr/altbin"));
 #elif defined(TARG_MIPS) || defined(TARG_LOONGSON)
 		if( abi == ABI_N32 )
 		  add_string(args, "-mabi=n32");
@@ -1303,12 +1303,14 @@ add_file_args (string_list_t *args, phases_t index)
 		  }
 #endif
 		}
+#ifndef TARG_SL
 		if (fcxx_openmp == 1) {
 		  add_string(args, "-fcxx-openmp");
 		}
 		else if (fcxx_openmp == 0) {
 		  add_string(args, "-fno-cxx-openmp");
 		}
+#endif
 	        // fall through
 #endif
 	case P_c_gfe:
@@ -1496,6 +1498,11 @@ add_file_args (string_list_t *args, phases_t index)
 #if defined(TARG_NVISA)
 	case P_bec:
 #endif
+#ifdef TARG_SL
+          if (use_sl1_dsp != TRUE && use_sl5 != TRUE) {
+            add_string(args,"-TARG:processor=sl1_pcore");
+          }
+#endif           
 #ifdef TARG_LOONGSON
 		add_string(args,"-TENV:pic2");
 #endif
@@ -1703,18 +1710,9 @@ add_file_args (string_list_t *args, phases_t index)
 		add_string(args, "-c");		// gcc -c
 #endif
 #ifdef TARG_SL
-		//add_string(args, "-mips4");
-		add_string(args, "-mips64");
-		add_string(args, "-qwa2");
-		if (target_cpu != NULL) {
-			if (strcmp(target_cpu, "sl1_dsp") == 0 || (strcmp(target_cpu, "sl1_pcore") == 0)) {
-				add_string(args, "-march=sl1");
-			} else if (strcmp(target_cpu, "sl2_pcore") == 0) {
-				add_string(args, "-march=sl2");
-			} else if (strcmp(target_cpu, "sl5") == 0) {
-				add_string(args, "-march=sl5");
-			} 
-		}
+                if ( use_sl5 != TRUE ) {
+                  add_string(args,"-qwa2");
+                }
 #endif
 		add_string(args, "-o");
 		/* cc -c -o <file> puts output from as in <file>,

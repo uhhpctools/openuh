@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -158,6 +162,8 @@ OPTION_GROUP IPL_Option_Groups[] = {
     { NULL }			    // List terminator -- must be last
 };
 
+
+INT    ICALL_MAX_PROMOTE_PER_CALLSITE = 2;
 
 SUMMARY *Summary;			// class for all the summary work
 WN_MAP Parent_Map;

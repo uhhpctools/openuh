@@ -229,14 +229,14 @@ Check_TCON ( TCON *tc )
     case MTYPE_U2:
     case MTYPE_U4:
     case MTYPE_F4:
-     Is_True ( TCON_v1(*tc)|TCON_v2(*tc)|TCON_v3(*tc) == 0,
+     Is_True ( (TCON_v1(*tc)|TCON_v2(*tc)|TCON_v3(*tc)) == 0,
 	       ("High order word of %s TCON non zero %x",
 		Mtype_Name(TCON_ty(*tc)), TCON_v1(*tc)) );
      break;
     case MTYPE_I8:
     case MTYPE_U8:
     case MTYPE_F8:
-     Is_True ( TCON_v2(*tc)|TCON_v3(*tc) == 0,
+     Is_True ( (TCON_v2(*tc)|TCON_v3(*tc)) == 0,
 	       ("High order word of %s TCON non zero %x",
 		Mtype_Name(TCON_ty(*tc)), TCON_v1(*tc)) );
      break;

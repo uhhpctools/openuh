@@ -83,7 +83,7 @@ static char *sclrze = "$Source$ $Revision$";
 #ifndef SCLRZE_DECLARE
 
 void Scalarize_Arrays(ARRAY_DIRECTED_GRAPH16 *dep_graph,
-	BOOL do_variants, BOOL do_invariants, REDUCTION_MANAGER *red_manager);
+                      BOOL do_variants, BOOL do_invariants, REDUCTION_MANAGER *red_manager, WN * wn);
 
 #endif  // SCLRZE_DECLARE
 

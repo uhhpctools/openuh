@@ -174,6 +174,8 @@ static LOCAL_SPILLS lra_float32_spills;
 static LOCAL_SPILLS lra_int32_spills;
 #endif
 
+extern VARIANT Memop_Variant(WN *);
+
 /*
  * only rematerialize LDID's homeable by gra if spilling in service
  * to gra.
@@ -743,7 +745,7 @@ CGSPILL_Cost_Estimate (TN *tn, ST *mem_loc,
       {
 	OPCODE opcode = WN_opcode(home);
 	Exp_Load (OPCODE_rtype(opcode), OPCODE_desc(opcode), tn, WN_st(home),
-		  WN_offset(home), &OPs, V_NONE);
+		  WN_offset(home), &OPs, home ? Memop_Variant (home) : V_NONE);
 #ifdef TARG_IA64
         ld_2_ld_fill (&OPs) ;
 #endif
@@ -837,7 +839,7 @@ CGSPILL_Load_From_Memory (TN *tn, ST *mem_loc, OPS *ops, CGSPILL_CLIENT client,
     case OPR_LDID:
       /* homing load */
       Exp_Load (OPCODE_rtype(opcode), OPCODE_desc(opcode), tn,
-		WN_st(home), WN_offset(home), ops, V_NONE);
+		WN_st(home), WN_offset(home), ops, home ? Memop_Variant (home) : V_NONE);
       if (Trace_Remat && !TN_is_gra_homeable(tn)) {
 #pragma mips_frequency_hint NEVER
 	fprintf(TFile, "<Rematerialize> LDID for rematerializeable TN%d\n",
@@ -961,7 +963,7 @@ CGSPILL_Store_To_Memory (TN *src_tn, ST *mem_loc, OPS *ops,
     WN *home = TN_home(src_tn);
     if (WN_operator(home) == OPR_LDID) {
       Exp_Store (OPCODE_desc(WN_opcode(home)), src_tn, WN_st(home),
-		 WN_offset(home), ops, V_NONE);
+		 WN_offset(home), ops, home ? Memop_Variant (home) : V_NONE);
 #ifdef TARG_IA64
       st_2_st_spill (ops) ;
 #endif

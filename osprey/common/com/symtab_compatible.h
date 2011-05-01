@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -180,6 +184,12 @@ ST_st_idx (const ST* s)
   { return (s != NULL? s->st_idx : (ST_IDX) 0); }
 inline void
 Set_ST_st_idx (ST* s, ST_IDX idx)	{ s->st_idx = idx; }
+
+inline TY_IDX
+ST_vtable_ty_idx (const ST* s)
+  { return (s != NULL? s->vtable_ty_idx : (TY_IDX) 0); }
+inline void
+Set_ST_vtable_ty_idx (ST* s, TY_IDX idx)	{ s->vtable_ty_idx = idx; }
 
 inline BOOL
 ST_is_weak_symbol (const ST* s)		{ return s->flags & ST_IS_WEAK_SYMBOL;}

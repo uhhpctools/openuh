@@ -44,14 +44,11 @@ static RESOURCE res_issue,
 
 void Generate_SL5 (void)
 {
-  Machine("sl5", ISA_SUBSET_MIPS4);
+  Machine("sl5", ISA_SUBSET_SL5);
 
   res_issue = RESOURCE_Create("issue", 1);
   res_memory = RESOURCE_Create("memory", 1);
   res_integer = RESOURCE_Create("integer", 1);
-
-  res_mac = RESOURCE_Create("res_mac", 1);
-  res_ffe = RESOURCE_Create("res_ffe", 1);
 
   Instruction_Group("movespe",
       TOP_mvtc,
@@ -93,7 +90,6 @@ void Generate_SL5 (void)
       TOP_mthi,
       TOP_mtlo,
       TOP_smult,
-      TOP_loop,
       TOP_mc_abs,
       TOP_mc_zc_eq,
       TOP_mc_zc_ne,
@@ -267,16 +263,27 @@ void Generate_SL5 (void)
       TOP_UNDEFINED);
   Resource_Requirement(res_issue, 0);
 
+  Instruction_Group("sync",
+		    TOP_sync,
+		    TOP_UNDEFINED);
+  Resource_Requirement(res_issue, 0);
+  Resource_Requirement(res_integer, 0);   
+  Resource_Requirement(res_memory, 0);
+
+  Instruction_Group("prefetch",
+		    TOP_pref,
+		    TOP_prefx,
+		    TOP_UNDEFINED);
+  Any_Operand_Access_Time(0);
+  Resource_Requirement(res_issue, 0);
+  Resource_Requirement(res_integer, 0);   
+  Resource_Requirement(res_memory, 0);
+
+
   Instruction_Group("dummy",
       TOP_asm,
       TOP_intrncall,
       TOP_spadjust,
-      TOP_begin_pregtn,
-      TOP_end_pregtn,
-      TOP_bwd_bar,
-      TOP_fwd_bar,
-      TOP_peripheral_rw_begin, 
-      TOP_peripheral_rw_end, 
       TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(1);

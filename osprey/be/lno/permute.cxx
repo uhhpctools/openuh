@@ -176,6 +176,9 @@ static BOOL Is_Non_Dependent_Load(WN* wn,
     if (def_list->Loop_stmt() == 0x0) {
       for (node = iter.First(); !iter.Is_Empty(); node = iter.Next()) {
 	WN* def = node->Wn(); 
+	// Avoid infinite loop on reduction expressions.
+	if (Find_Containing_Store(wn) == def)
+	  return FALSE;
 	if (!Is_Non_Dependent_Expression(def, outerloop))
 	  return FALSE; 
       }
@@ -254,12 +257,15 @@ static BOOL SNL_Legal_Perm_Bounds(DOLOOP_STACK* stack,
 // FUNCTION: Returns TRUE if the scalar dependences on the node 'wn' are
 //   still legal after permutaing the 'stack' of loops according to the 
 //   'permutation' of length 'nloops'.  Returns FALSE otherwise.  
+// 'has_removable_branch' indicates whether to ignore if-conditions in 
+// the loop body.
 //-----------------------------------------------------------------------
 
 static BOOL SNL_Legal_Perm_Scalar(DOLOOP_STACK* stack, 
 				  WN* wn,
                                   INT permutation[],
-                                  INT nloops) 
+                                  INT nloops,
+				  BOOL has_removable_branch) 
 {
   if (WN_operator(wn) == OPR_STID) {
     if (dg->Get_Vertex(wn))
@@ -273,7 +279,7 @@ static BOOL SNL_Legal_Perm_Scalar(DOLOOP_STACK* stack,
     for (wn_tp = wn; wn_tp != NULL; wn_tp = LWN_Get_Parent(wn_tp))
       if (WN_opcode(wn_tp) == OPC_IF) 
 	break;
-    if (wn_tp != NULL) 
+    if (wn_tp != NULL && (!has_removable_branch || (WN_operator(wn_tp) != OPR_IF)))
       return FALSE; 
     return TRUE; 
   } else if (WN_operator(wn) == OPR_LDID) {
@@ -306,22 +312,25 @@ static BOOL SNL_Legal_Perm_Scalar(DOLOOP_STACK* stack,
 // FUNCTION: Returns TRUE if the scalar dependences on the tree rooted at 
 //   'wn' are still legal after permuting the 'stack' of loops according 
 //   to the 'permutation' of length 'nloops'.  Returns FALSE otherwise.  
+// 'has_removable_branch' indicates whether to ignore if-conditions in 
+// the loop body.
 //-----------------------------------------------------------------------
 
 static BOOL SNL_Legal_Perm_Scalars(DOLOOP_STACK* stack, 
 				  WN* wn,
                                   INT permutation[],
-                                  INT nloops)
+                                  INT nloops,
+				  BOOL has_removable_branch)
 {
-  if (!SNL_Legal_Perm_Scalar(stack, wn, permutation, nloops)) 
+  if (!SNL_Legal_Perm_Scalar(stack, wn, permutation, nloops, has_removable_branch)) 
     return FALSE;
   if (WN_opcode(wn) == OPC_BLOCK) {
     for (WN* wn_tp = WN_first(wn); wn_tp != NULL; wn_tp = WN_next(wn_tp))
-      if (!SNL_Legal_Perm_Scalars(stack, wn_tp, permutation, nloops))
+      if (!SNL_Legal_Perm_Scalars(stack, wn_tp, permutation, nloops, has_removable_branch))
         return FALSE;
   } else {
     for (INT i = 0; i < WN_kid_count(wn); i++) 
-      if (!SNL_Legal_Perm_Scalars(stack, WN_kid(wn, i), permutation, nloops))
+      if (!SNL_Legal_Perm_Scalars(stack, WN_kid(wn, i), permutation, nloops, has_removable_branch))
         return FALSE;
   }
   return TRUE;
@@ -557,7 +566,8 @@ static BOOL SNL_Parallel_Serial_Order_OK(DOLOOP_STACK* stack,
 extern BOOL SNL_Legal_Permutation(WN* outer_loop, 
 				  WN* inner_loop, 
 				  INT permutation[], 
-				  INT nloops)
+				  INT nloops,
+				  BOOL has_removable_branch)
 {
   dg = Array_Dependence_Graph;
   du = Du_Mgr;
@@ -583,7 +593,7 @@ extern BOOL SNL_Legal_Permutation(WN* outer_loop,
   if (!SNL_Legal_Perm_Bounds(&stack, permutation, nloops))
     return FALSE; 
   if (!SNL_Legal_Perm_Scalars(&stack, WN_do_body(inner_loop), permutation, 
-      nloops))
+      nloops, has_removable_branch))
     return FALSE; 
   if (!Sandwiched_Code_Sinkable_In(wn_outer_loop, wn_inner_loop, du))
     return FALSE; 
@@ -677,7 +687,7 @@ static BOOL SNL_Lift_Lego_Tile_Loops_Once(WN* outer_loop,
     if (!dli_loop->Is_Outer_Lego_Tile) 
       permutation[j++] = i - first_in_stack; 
   }
-  if (SNL_Legal_Permutation(outer_loop, inner_loop, permutation, nloops)) {
+  if (SNL_Legal_Permutation(outer_loop, inner_loop, permutation, nloops, FALSE)) {
     if (LNO_Tlog)
       Tlog_Lego_Interchange(outer_loop, permutation, nloops);
     SNL_INV_Permute_Loops(outer_loop, permutation, nloops, TRUE);
@@ -734,7 +744,7 @@ static void SNL_Lift_Lego_Tile_Loops_Shifts(WN* outer_loop,
 	permutation[k] = k - 1;  
       for (k = j + 1; k < nloops; k++)
 	permutation[k] = k;   
-      if (SNL_Legal_Permutation(outer_loop, inner_loop, permutation, nloops)) {
+      if (SNL_Legal_Permutation(outer_loop, inner_loop, permutation, nloops, FALSE)) {
 	if (LNO_Tlog)
 	  Tlog_Lego_Interchange(outer_loop, permutation, nloops);
 	SNL_INV_Permute_Loops(outer_loop, permutation, nloops, TRUE);

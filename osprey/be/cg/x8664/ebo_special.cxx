@@ -126,6 +126,15 @@ static const char source_file[] = __FILE__;
 
 #include "config_lno.h"
 
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <set>
+#include <vector>
+#include <list>
+#include <deque>
+#include <map>
+
 extern BOOL TN_live_out_of( TN*, BB* );
 extern void Set_flags_strcmp_expand();
 
@@ -148,7 +157,7 @@ static INT32 fixed_branch_cost, taken_branch_cost;
 static BOOL Convert_Imm_And( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
 static BOOL Convert_Imm_Mul( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
 static BOOL Convert_Imm_Or( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
-static BOOL Convert_Imm_Add( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
+static BOOL Convert_Imm_Add( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo, BOOL simplify_iadd );
 static BOOL Convert_Imm_Xor( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
 static BOOL Convert_Imm_Cmp( OP* op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo );
 
@@ -1477,7 +1486,8 @@ static TOP TOP_with_Imm_Opnd( OP* op, int opnd, INT64 imm_val )
 /* Attempt to convert an add of 'tn' + 'imm_val' into an addi. Return
    TRUE if we succeed, FALSE otherwise. */
 static BOOL
-Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo)
+Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val, 
+                 EBO_TN_INFO *tninfo, BOOL simplify_iadd)
 {
 #if Is_True_On
   if (!(EBO_Opt_Mask & EBO_CONVERT_IMM_ADD)) return FALSE;
@@ -1501,11 +1511,26 @@ Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo)
     new_op = Mk_OP(new_opcode, tnr, tn);
 
   } else if (ISA_LC_Value_In_Class ( imm_val, LC_simm32)) {
-    if ( OP_code(op) == TOP_addi32 || OP_code(op) == TOP_addi64 ||
-	 OP_code(op) == TOP_lea32 || OP_code(op) == TOP_lea64 )
+    // Use simplify_iadd to guard against inc/dec forms which
+    // come from addi-addi combinations.
+    if ( simplify_iadd ) {
+      if ( OP_code(op) == TOP_lea32 || OP_code(op) == TOP_lea64 ) {
+        return FALSE;
+      } else if ( OP_code(op) == TOP_addi32 || OP_code(op) == TOP_addi64 ) {
+        if ( ( imm_val != 1 ) && ( imm_val != -1 ) )
+          return FALSE;
+        else if ( Is_Target_32bit() ) 
+          return FALSE;
+      }
+    } else if ( OP_code(op) == TOP_addi32 || OP_code(op) == TOP_addi64 ||
+                OP_code(op) == TOP_lea32  || OP_code(op) == TOP_lea64 ) {
       return FALSE;
+    }
     new_opcode = is_64bit ? TOP_addi64 : TOP_addi32;
     BOOL rflags_read = FALSE;
+    if ( simplify_iadd )
+      new_opcode = OP_code(op);
+
     // If there is an instruction that is awaiting a rflags update then, 
     // do not convert the current op.
     for( OP* next_op = OP_next(op); next_op != NULL;
@@ -1534,6 +1559,17 @@ Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO *tninfo)
 	  (!TOP_is_change_rflags( new_opcode ) && 
 	   TOP_is_change_rflags( OP_code(op) )))))
       return FALSE;
+
+    if ( simplify_iadd ) {
+      bool valid_inc_dec = true;
+      if ( is_64bit && (OP_code(op) != TOP_addi64))
+        valid_inc_dec = false;
+      else if (!is_64bit && (OP_code(op) != TOP_addi32))
+        valid_inc_dec = false;
+
+      if (valid_inc_dec == false)
+        return FALSE;
+    }
 
     if (new_opcode != TOP_inc32 && new_opcode != TOP_inc64 &&
 	new_opcode != TOP_dec32 && new_opcode != TOP_dec64)
@@ -1617,7 +1653,8 @@ Constant_Operand0 (OP *op,
       opcode == TOP_add64 ||
       opcode == TOP_lea32 ||
       opcode == TOP_lea64)
-    return Convert_Imm_Add(op, tnr, tn1, TN_value(tn0), opnd_tninfo[o1_idx]);
+    return Convert_Imm_Add(op, tnr, tn1, TN_value(tn0), 
+                           opnd_tninfo[o1_idx], false);
 
   return FALSE;
 }
@@ -1850,6 +1887,17 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
   return TRUE;
 }
 
+BOOL OP_iadd_inc(OP* op)
+{
+  if (OP_iadd(op)) return TRUE;
+  TOP top = OP_code(op);
+  if (top == TOP_inc32 || top == TOP_inc64 ||
+      top == TOP_dec32 || top == TOP_dec64)
+	 return TRUE;
+  return FALSE; 
+
+}
+
 
 /*
  * Look at an exression that has a constant second operand and attempt to
@@ -1886,6 +1934,11 @@ Constant_Operand1 (OP *op,
 
   TN *tn0 = opnd_tn[o0_idx];
   TN *tn1 = opnd_tn[o1_idx];
+  if (OP_code(op) == TOP_inc32 || OP_code(op) == TOP_inc64)
+    tn1 = Gen_Literal_TN(1, 4);
+  else if (OP_code(op) == TOP_dec32 || OP_code(op) == TOP_dec64)
+    tn1 = Gen_Literal_TN(-1, 4);
+
   TN *tnr = OP_has_result(op) ? OP_result(op,0) : NULL;
 
   /* Don't mess with symbols. */
@@ -1921,7 +1974,9 @@ Constant_Operand1 (OP *op,
       opcode == TOP_add64 ||
       opcode == TOP_lea32 || 
       opcode == TOP_lea64 )
-    return Convert_Imm_Add(op, tnr, tn0, imm_val, opnd_tninfo[o0_idx]);
+    return Convert_Imm_Add( op, tnr, tn0, imm_val, 
+                            opnd_tninfo[o0_idx], false );
+
 
   if( OP_imul( op ) )
     return Convert_Imm_Mul( op, tnr, tn0, imm_val, opnd_tninfo[o0_idx] );
@@ -1943,12 +1998,16 @@ Constant_Operand1 (OP *op,
   TOP pred_opcode = OP_code(pred_op);
 
   /* Look for a sequence of two addi that can be combined. */
-  if (OP_iadd(op) && OP_iadd(pred_op))
+  if (OP_iadd_inc(op) && OP_iadd_inc(pred_op))
   {
     INT ptn0_idx = 0;
     INT ptn1_idx = 1;
     TN *ptn0 = OP_opnd(pred_op, ptn0_idx);
     TN *ptn1 = OP_opnd(pred_op, ptn1_idx);
+    if (OP_code(pred_op) == TOP_inc32 || OP_code(pred_op) == TOP_inc64)
+      ptn1 = Gen_Literal_TN(1, 4);
+    else if (OP_code(pred_op) == TOP_dec32 || OP_code(pred_op) == TOP_dec64)
+      ptn1 = Gen_Literal_TN(-1, 4);
 
     if (TN_is_constant(ptn1) && !TN_is_symbol(ptn1))
     {
@@ -1958,7 +2017,7 @@ Constant_Operand1 (OP *op,
       if (EBO_tn_available(bb, ptn0_tninfo))
       {
 	const INT64 new_val = imm_val + TN_value(ptn1);
-	if (Convert_Imm_Add(op, tnr, ptn0, new_val, ptn0_tninfo))
+	if (Convert_Imm_Add(op, tnr, ptn0, new_val, ptn0_tninfo, false))
 	{
 	  if (EBO_Trace_Optimization)
 	    fprintf(TFile,"\tcombine immediate adds\n");
@@ -1966,6 +2025,14 @@ Constant_Operand1 (OP *op,
 	  return TRUE;
 	}
       }
+    }
+  }
+
+  if ( opcode == TOP_addi32 ||
+       opcode == TOP_addi64 ) {
+    if ( ( imm_val == 1 ) || ( imm_val == -1 ) ) {
+      return Convert_Imm_Add( op, tnr, tn0, imm_val, 
+                              opnd_tninfo[o0_idx], true );
     }
   }
 
@@ -2691,6 +2758,7 @@ static BOOL move_ext_is_replaced( OP* op, const EBO_TN_INFO* tninfo )
 
   return TRUE;
 }
+static inline TN* OP_opnd_use( OP* op, ISA_OPERAND_USE use );
 
 BOOL Delete_Unwanted_Prefetches ( OP* op )
 {
@@ -2703,7 +2771,9 @@ BOOL Delete_Unwanted_Prefetches ( OP* op )
   OP *incr = NULL;
   OP *as_opnd = NULL;
   OP *as_result = NULL;
+  OP *leaxx = NULL;
   OP *load_store = NULL;
+  BOOL sib = FALSE;
   BB* bb = OP_bb( op );
   OP *next = BB_first_op( bb );
 
@@ -2714,7 +2784,9 @@ BOOL Delete_Unwanted_Prefetches ( OP* op )
   if(PF_GET_KEEP_ANYWAY(WN_prefetch_flag(mem_wn)))
    return FALSE;
 #endif  
-  if (OP_find_opnd_use( op, OU_base ) >= 0)
+  if (OP_find_opnd_use( op, OU_base ) >= 0 && 
+      // the prefetch instruction has passed a call of this function, so pass it.
+      Get_Top_For_Addr_Mode(OP_code(op), BASE_MODE) == OP_code(op))
     base = OP_opnd( op, OP_find_opnd_use( op, OU_base ));
   else
     return FALSE; // Can not analyze further; make safe assumption.
@@ -2729,21 +2801,43 @@ BOOL Delete_Unwanted_Prefetches ( OP* op )
 	as_result = next;
       else if (OP_opnd(next, 0) == base)
 	as_opnd = next;
-    }
+    } else if ((OP_code(next) == TOP_leax32 || OP_code(next) == TOP_leax64) 
+		    && OP_result(next, 0) == base)
+	    leaxx = next;
     
     next = OP_next(next);
   }
   
+  INT delta_base;
   if (!incr) {
-    if (!as_result && !as_opnd)
+    if (!as_result && !as_opnd && !leaxx)
       return TRUE;
-    else if (as_result)
-      incr = as_result;
+    else if (leaxx)
+    {  // further analyze the two terms for RPR
+      TN* term;
+      term = OP_opnd_use(leaxx, OU_index);
+
+      OP *w_incr;
+        for (w_incr = BB_first_op(bb); w_incr != NULL; w_incr = OP_next(w_incr))
+	{
+          if (((OP_code(w_incr) == TOP_addi32 || OP_code(w_incr) == TOP_addi64)) &&
+            (OP_results(w_incr) != 0 && OP_result(w_incr, 0) == term && 
+             OP_opnd(w_incr, 0) == term))
+	  break;
+	}
+      if (w_incr != NULL){
+	sib = TRUE;
+        delta_base = TN_value(OP_opnd(w_incr,1)) * (TN_value(OP_opnd_use(leaxx,OU_scale)));
+      } else
+        return TRUE;
+    } else if (as_result)
+	    incr = as_result;
     else 
       incr = as_opnd;
   }
   
-  INT delta_base = TN_value(OP_opnd(incr, 1));
+  if (!sib) 
+    delta_base = TN_value(OP_opnd(incr, 1));
 
   next = BB_first_op( bb );
   while (next && !load_store) {
@@ -4110,12 +4204,21 @@ static BOOL Compose_Addr( OP* mem_op, EBO_TN_INFO* pt_tninfo,
     break;
 
   case TOP_addi32:
+  case TOP_inc32:
+  case TOP_dec32:
     if( Is_Target_64bit() )
       return FALSE;
     // fall thru
   case TOP_addi64:
+  case TOP_inc64:
+  case TOP_dec64:
     a.base = OP_opnd( addr_op, 0 );
-    a.offset = OP_opnd( addr_op, 1 );
+    if (top == TOP_inc32 || top == TOP_inc64)
+      a.offset = Gen_Literal_TN(1, 4);
+    else if (top == TOP_dec32 || top == TOP_dec64)
+      a.offset = Gen_Literal_TN(-1, 4);
+    else
+      a.offset = OP_opnd( addr_op, 1 );
     break;
 
   case TOP_mov32:
@@ -4439,6 +4542,7 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED, TOP_ldsd,	TOP_ldsdx,	TOP_ldsdxx,	TOP_ldsd_n32},
   {TOP_UNDEFINED, TOP_lddqa,	TOP_lddqax,	TOP_lddqaxx,	TOP_lddqa_n32},
   {TOP_UNDEFINED, TOP_ldupd,	TOP_ldupdx,	TOP_ldupdxx,	TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_ldups,	TOP_ldupsx,	TOP_ldupsxx,	TOP_ldups_n32},
   {TOP_UNDEFINED, TOP_lddqu,	TOP_lddqux,	TOP_lddquxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_ldlps,	TOP_ldlpsx,	TOP_ldlpsxx,	TOP_ldlps_n32},
   {TOP_UNDEFINED, TOP_ldlpd,	TOP_ldlpdx,	TOP_ldlpdxx,	TOP_UNDEFINED},
@@ -4496,6 +4600,8 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED, TOP_prefetcht0, TOP_prefetcht0x, TOP_prefetcht0xx, TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_prefetcht1, TOP_prefetcht1x, TOP_prefetcht1xx, TOP_UNDEFINED},
 
+  {TOP_UNDEFINED, TOP_prefetchnta, TOP_prefetchntax, TOP_prefetchntaxx, TOP_UNDEFINED},
+  {TOP_UNDEFINED, TOP_sthpd,	TOP_sthpdx,	TOP_sthpdxx,	TOP_sthpd_n32},
   // LEA
   {TOP_UNDEFINED, TOP_lea32,	TOP_leax32,	TOP_leaxx32,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_lea64,	TOP_leax64,	TOP_leaxx64,	TOP_UNDEFINED},
@@ -4569,16 +4675,15 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_vcmpeq128v8,	TOP_vcmpeqx128v8,	TOP_vcmpeqxx128v8,	TOP_vcmpeqxxx128v8,	TOP_UNDEFINED},
   {TOP_vcmpeq128v16,	TOP_vcmpeqx128v16,	TOP_vcmpeqxx128v16,	TOP_vcmpeqxxx128v16,	TOP_UNDEFINED},
   {TOP_vcmpeq128v32,	TOP_vcmpeqx128v32,	TOP_vcmpeqxx128v32,	TOP_vcmpeqxxx128v32,	TOP_UNDEFINED},
-  {TOP_max128v8,	TOP_maxx128v8,	TOP_maxxx128v8,	TOP_maxxxx128v8,	TOP_UNDEFINED},
-  {TOP_max128v16,	TOP_maxx128v16,	TOP_maxxx128v16, TOP_maxxxx128v16,	TOP_UNDEFINED},
-  {TOP_min128v8,	TOP_minx128v8,	TOP_minxx128v8,	TOP_minxxx128v8,	TOP_UNDEFINED},
-  {TOP_min128v16,	TOP_minx128v16,	TOP_minxx128v16, TOP_minxxx128v16,	TOP_UNDEFINED},
   {TOP_vmaxs128v8,	TOP_vmaxsx128v8,	TOP_vmaxsxx128v8,	TOP_vmaxsxxx128v8,	TOP_UNDEFINED},
   {TOP_vmaxs128v16,	TOP_vmaxsx128v16,	TOP_vmaxsxx128v16,	TOP_vmaxsxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmaxs128v32,	TOP_vmaxsx128v32,	TOP_vmaxsxx128v32,	TOP_vmaxsxxx128v32,	TOP_UNDEFINED},
   {TOP_vmins128v8,	TOP_vminsx128v8,	TOP_vminsxx128v8,	TOP_vminsxxx128v8,	TOP_UNDEFINED},
   {TOP_vmins128v16,	TOP_vminsx128v16,	TOP_vminsxx128v16,	TOP_vminsxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmins128v32,	TOP_vminsx128v32,	TOP_vminsxx128v32,	TOP_vminsxxx128v32,	TOP_UNDEFINED},
   {TOP_vmaxu128v8,	TOP_vmaxux128v8,	TOP_vmaxuxx128v8,	TOP_vmaxuxxx128v8,	TOP_UNDEFINED},
   {TOP_vmaxu128v16,	TOP_vmaxux128v16,	TOP_vmaxuxx128v16,	TOP_vmaxuxxx128v16,	TOP_UNDEFINED},
+  {TOP_vmaxu128v32,	TOP_vmaxux128v32,	TOP_vmaxuxx128v32,	TOP_vmaxuxxx128v32,	TOP_UNDEFINED},
   {TOP_vminu128v8,	TOP_vminux128v8,	TOP_vminuxx128v8,	TOP_vminuxxx128v8,	TOP_UNDEFINED},
   {TOP_vminu128v16,	TOP_vminux128v16,	TOP_vminuxx128v16,	TOP_vminuxxx128v16,	TOP_UNDEFINED},
   {TOP_divss,	TOP_divxss,	TOP_divxxss,	TOP_divxxxss,	TOP_UNDEFINED},
@@ -4749,10 +4854,14 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_fblendv128v64,  TOP_fblendvx128v64,  TOP_fblendvxx128v64,  TOP_fblendvxxx128v64,     TOP_UNDEFINED},
   {TOP_blendv128v8,    TOP_blendvx128v8,    TOP_blendvxx128v8,    TOP_blendvxxx128v8,       TOP_UNDEFINED},
   {TOP_blend128v16,    TOP_blendx128v16,    TOP_blendxx128v16,    TOP_blendxxx128v16,       TOP_UNDEFINED},
+  {TOP_minu128v8,      TOP_minux128v8,      TOP_minuxx128v8,      TOP_minuxxx128v8,         TOP_UNDEFINED},
   {TOP_mins128v8,      TOP_minsx128v8,      TOP_minsxx128v8,      TOP_minsxxx128v8,         TOP_UNDEFINED},
+  {TOP_maxu128v8,      TOP_maxux128v8,      TOP_maxuxx128v8,      TOP_maxuxxx128v8,         TOP_UNDEFINED},
   {TOP_maxs128v8,      TOP_maxsx128v8,      TOP_maxsxx128v8,      TOP_maxsxxx128v8,         TOP_UNDEFINED},
   {TOP_minu128v16,     TOP_minux128v16,     TOP_minuxx128v16,     TOP_minuxxx128v16,        TOP_UNDEFINED},
   {TOP_maxu128v16,     TOP_maxux128v16,     TOP_maxuxx128v16,     TOP_maxuxxx128v16,        TOP_UNDEFINED},
+  {TOP_mins128v16,     TOP_minsx128v16,     TOP_minsxx128v16,     TOP_minsxxx128v16,        TOP_UNDEFINED},
+  {TOP_maxs128v16,     TOP_maxsx128v16,     TOP_maxsxx128v16,     TOP_maxsxxx128v16,        TOP_UNDEFINED},
   {TOP_minu128v32,     TOP_minux128v32,     TOP_minuxx128v32,     TOP_minuxxx128v32,        TOP_UNDEFINED},
   {TOP_maxu128v32,     TOP_maxux128v32,     TOP_maxuxx128v32,     TOP_maxuxxx128v32,        TOP_UNDEFINED},
   {TOP_mins128v32,     TOP_minsx128v32,     TOP_minsxx128v32,     TOP_minsxxx128v32,        TOP_UNDEFINED},
@@ -5027,6 +5136,915 @@ Get_Top_For_Addr_Mode (TOP top, ADDR_MODE mode)
     FmtAssert(FALSE, ("Get_Top_For_Addr_Mode: address mode not handled"));
   }
   return TOP_UNDEFINED;
+}
+
+
+bool 
+Test_if_base_mode (OP* op) {
+  //function that banks on the number of operands to figure
+  // out if the BASE MODE is being used
+  ADDR_MODE mode = BASE_MODE;
+  const TOP new_top = Get_Top_For_Addr_Mode(OP_code(op), mode);
+  if (new_top == OP_code(op)) {
+      if (OP_store(op) || OP_load(op) || OP_prefetch(op))
+          return true;
+
+      if (OP_load_exe(op)) {
+          if (OP_icmp(op)) { 
+              // Some integer compares are not easy to convert to SIB
+              return false;
+          } 
+          if (OP_opnds(op) > 3) {
+              return false;
+          } else if (OP_opnds(op) == 2 || OP_opnds(op) == 3) {
+              if (OP_results(op) == 1) {
+                  return true;
+              } else {
+                  return false;
+              }
+          } else {
+              return false;
+          }
+      } else {
+          return false;
+      }
+  } else {
+      return false;
+  }
+}
+
+OP *
+Compose_Mem_Base_Index_Mode ( OP* op, TN* index, TN* offset, TN* scale, TN* base )
+{
+    // Based on existing function
+  Is_True( offset != NULL, ("Compose_Mem_Base_Index_Mode: offset is NULL") );
+  Is_True( index != NULL, ("Compose_Mem_Base_Index_Mode: index is NULL") );
+  Is_True( scale != NULL, ("Compose_Mem_Base_Index_Mode: scale is NULL") );
+  Is_True( base != NULL, ("Compose_Mem_Base_Index_Mode: base is NULL") );
+  OP* new_op = NULL;
+  ADDR_MODE mode = BASE_INDEX_MODE;
+  const TOP new_top = Get_Top_For_Addr_Mode(OP_code(op), mode);
+  FmtAssert( new_top != TOP_UNDEFINED, ("Compose_Mem_Op: unknown top") );
+  if( TOP_is_prefetch( new_top ) ){
+      new_op = Mk_OP( new_top, OP_opnd( op, 0 ), base, offset, index, scale );
+  } else {
+    TN* storeval = NULL;
+
+    if( TOP_is_store(new_top) ){
+      storeval = OP_opnd( op, OP_find_opnd_use( op, OU_storeval ) );
+    } else {
+      storeval = OP_result( op, 0 );
+    }
+    if (OP_load(op) || OP_store(op) || OP_prefetch(op)) {
+        new_op = Mk_OP( new_top, storeval, base, offset, index, scale );
+    } else if (OP_load_exe(op)) {
+        if (OP_opnds(op) == 2) {
+            FmtAssert ((storeval != NULL), 
+                    ("Unsupported storeval with operands == 2 || == 1"));
+            new_op = Mk_OP( new_top, storeval, base, index, scale, offset );
+            return new_op;
+        } else if (OP_opnds(op) == 3) {
+            FmtAssert ((storeval != NULL), 
+                    ("Unsupported storeval with operands >2"));
+            new_op = Mk_OP( new_top, storeval, 
+                        OP_opnd(op,0), base, index, scale, offset );
+            return new_op;
+        }
+        FmtAssert(0,("Unsupported for Compose_Mem_Base_Index_Mode\n"));
+    } else {
+        FmtAssert(0,("Unsupported for Compose_Mem_Base_Index_Mode\n"));
+    }
+  }
+  Copy_WN_For_Memory_OP(new_op, op);
+  if (OP_volatile(op)) // Bug 4245 - copy "volatile" flag
+    Set_OP_volatile(new_op);
+  OP_srcpos(new_op) = OP_srcpos(op);
+
+  Set_OP_unrolling(new_op, OP_unrolling(op));
+  Set_OP_orig_idx(new_op, OP_map_idx(op));
+  Set_OP_unroll_bb(new_op, OP_unroll_bb(op));
+
+  return new_op;
+}
+
+static bool histogram_of_index_counters (
+    std::set<TN*> counted_base_regs,
+    std::map<int,std::list<OP*> >& val_lis_map,
+    std::map<TN*,OP*> add_map) {
+    if (counted_base_regs.size() < 3)
+        return false;
+    std::set<TN*>::const_iterator counted_base_regs_it;
+    for (counted_base_regs_it = counted_base_regs.begin();
+         counted_base_regs_it != counted_base_regs.end();
+         ++counted_base_regs_it) {
+        OP* add_op_c = add_map[*counted_base_regs_it];
+        TN* constant_tn = OP_opnd(add_op_c,1);
+        val_lis_map[TN_value(constant_tn)].push_front(add_op_c);
+    }
+
+    if (val_lis_map.size() != 1) {
+        return false;
+    } else if (val_lis_map.begin()->first < 4) {
+        return false;
+    }
+    return true;
+}
+
+static bool test_change_affects_flags (
+    std::set<TN*> counted_base_regs,
+    std::map<TN*,OP*> add_map) {
+    std::set<TN*>::const_iterator counted_base_regs_it;
+    for (counted_base_regs_it = counted_base_regs.begin();
+         counted_base_regs_it != counted_base_regs.end();
+         ++counted_base_regs_it) {
+        OP* whc = add_map[*counted_base_regs_it];
+        bool anychange = false;
+        for (OP *tesop = OP_next(whc); 
+                tesop != NULL; 
+                tesop = OP_next(tesop)) {
+	    TOP top = OP_code(tesop);
+	    if (OP_reads_rflags(tesop)) {
+	        return true;
+	    }
+	    if (TOP_is_change_rflags(top)) {
+                anychange = true;
+	        break;
+            }
+        }
+        if (anychange == false)
+            return false;
+    }
+    return false;
+}
+
+static bool collect_counters (bool pdom_header, 
+    bool compare_undo, BB *fromwhere, 
+    GTN_SET* otherliveins, std::map<TN*, bool>& avoid_table, 
+    std::set<TN*>& seen_defs, std::set<TN*>& used_at_all, 
+    std::map<TN*, OP*>& add_map, BB** add_bb,
+    std::map<TN*,std::deque<OP*> >& use_map,
+    std::map<TN*, OP*>& compare_map,
+    std::set<TN*>& compare_opnds) {
+    OP* op;
+    op = BB_first_op(fromwhere);
+    int insnum = 0;
+    while(op != NULL) {
+        // avoid_table holds operands for which 
+        // SIB is not to be done
+        // known defs tracks all defs along the
+        // traversed control flow path
+        for (INT i = 0; i < OP_opnds(op); ++i) {
+            if (avoid_table.find(OP_opnd(op,i)) == avoid_table.end()) {
+                avoid_table[OP_opnd(op,i)] = false;
+            }
+        }
+        for (INT i = 0; i < OP_results(op); ++i) {
+            if (avoid_table.find(OP_result(op,i)) == avoid_table.end()) {
+                avoid_table[OP_result(op,i)] = false;
+            }
+        }
+        std::ostringstream reason;
+        {
+            bool doesnotapply = false;
+            if (OP_load_exe(op) || OP_load(op) 
+                    || OP_store(op) || OP_prefetch(op)) {
+                if (Test_if_base_mode(op) == false) {
+                    doesnotapply = true;
+                } else if (!(TN_has_value(OP_opnd(op, 
+                                    OP_find_opnd_use(op,OU_offset))))) {
+                    doesnotapply = true;
+                }
+            } else {
+                if (pdom_header) {
+                    if (compare_undo) {
+                        if (!(OP_iadd(op) && 
+                          (OP_result(op,0) == OP_opnd(op,0) &&
+                          (TN_is_constant((OP_opnd(op,1)))))) && 
+                          !((OP_code(op) == TOP_cmp64) && 
+                            (TN_is_register(OP_opnd(op,1)) == TRUE) &&
+                          (TN_is_register(OP_opnd(op,0)) == TRUE)) &&
+                          !((OP_code(op) == TOP_cmp32) 
+                            && (TN_is_register(OP_opnd(op,1)) == TRUE) &&
+                            (TN_is_register(OP_opnd(op,0)) == TRUE))) {
+                            doesnotapply = true;
+                        }
+                    } else {
+                        if (!(OP_iadd(op) && 
+                          (OP_result(op,0) == OP_opnd(op,0) &&
+                          (TN_is_constant((OP_opnd(op,1))))))) {
+                            doesnotapply = true;
+                        }
+                    }
+                } else {
+                    doesnotapply = true;
+                }
+            }
+            if (doesnotapply) {
+                // 
+                // cases for which SIB is not applicable
+                // we need to ensure that the registers
+                // used in these cases are not used in  
+                // a SIB situation (simplifying assumption)
+                // add operands to the avoid_table
+                // 
+                for (INT i = 0; i < OP_opnds(op); ++i) {
+                    avoid_table[OP_opnd(op,i)] = true;
+                }
+                for (INT i = 0; i < OP_results(op); ++i) {
+                    avoid_table[OP_result(op,i)] = true;
+                }
+            } else {
+                if (OP_load_exe(op) || OP_load(op) 
+                        || OP_store(op) || OP_prefetch(op)) {
+                    for (INT i = 0; i < OP_results(op); ++i) {
+                        avoid_table[OP_result(op,i)] = true;
+                    }
+                    TN* which_base = OP_opnd(op,
+                            TOP_Find_Operand_Use(OP_code(op), OU_base));
+
+                    for (INT i = 0; i < OP_opnds(op); ++i) {
+                        if (OP_opnd(op,i) != which_base) {
+                            avoid_table[OP_opnd(op,i)] = true;
+                        }
+                    }
+                    if (avoid_table[which_base] == false) {
+                        used_at_all.insert(which_base);
+                        // This will not replace an exiting mapping
+                        use_map[which_base].push_front(op); 
+                    }
+                } else if (pdom_header && OP_iadd(op) 
+                            && (OP_result(op,0) == OP_opnd(op,0) 
+                            && (TN_is_constant((OP_opnd(op,1)))))) {
+                    FmtAssert((OP_results(op) == 1), 
+                                ("Add operation with more than one result"));
+                    if (avoid_table[OP_result(op,0)] == false) {
+                        if (otherliveins != NULL) {
+                            if (GTN_SET_MemberP(otherliveins, 
+                                        OP_result(op,0)) == 0) {
+                                if (*add_bb == NULL)
+                                    *add_bb = op->bb;
+                                if (*add_bb != op->bb) 
+                                    return false;
+                                add_map[OP_result(op,0)] = op;
+                                if (seen_defs.find (OP_result(op,0)) 
+                                        == seen_defs.end())
+                                    seen_defs.insert(OP_result(op,0));
+                                else 
+                                    avoid_table[OP_result(op,0)] = true;
+                            } else {
+                                // Some SIB like counters are 
+                                // used outside the loop. we need 
+                                // a special case fix for these.
+                                // as of now we don't enable 
+                                // SIB for these.
+                                reason << " reason:LiveOut variable";
+                                avoid_table[OP_result(op,0)] = true;
+                            }
+                        } else {
+                            if (*add_bb == NULL)
+                                *add_bb = op->bb;
+                            if (*add_bb != op->bb) {
+                                return false;
+                            }
+
+                            add_map[OP_result(op,0)] = op;
+                            if (seen_defs.find (OP_result(op,0)) 
+                                    == seen_defs.end())
+                                seen_defs.insert(OP_result(op,0));
+                            else 
+                                avoid_table[OP_result(op,0)] = true;
+                        }
+                    }
+                } else if (compare_undo && (OP_code(op) == TOP_cmp64
+                                || OP_code(op) == TOP_cmp32)) {
+                    for (INT i = 0; i < OP_opnds(op); ++i) {
+                        if (TN_is_register(OP_opnd(op,i))) {
+                            if (avoid_table[OP_opnd(op,i)] == false) {
+                                if (otherliveins != NULL) {
+                                    if (GTN_SET_MemberP(otherliveins, 
+                                            OP_result(op,0)) == 0) {
+                                        if (compare_map.find(OP_opnd(op,i)) == compare_map.end()) {
+                                            compare_map[OP_opnd(op,i)] = op;
+                                            compare_opnds.insert(OP_opnd(op,i));
+                                        } else {
+                                            avoid_table[OP_opnd(op,i)] = true;
+                                        }
+                                    } else {
+                                        avoid_table[OP_opnd(op,i)] = true;
+                                    }
+                                } else {
+                                    if (compare_map.find(OP_opnd(op,i)) == compare_map.end()) {
+                                        compare_map[OP_opnd(op,i)] = op;
+                                        compare_opnds.insert(OP_opnd(op,i));
+                                    } else {
+                                        avoid_table[OP_opnd(op,i)] = true;
+                                    }
+                                }
+                            } 
+                        }
+                    }
+                } else {
+                    if (pdom_header || compare_undo) {
+                        return false;
+                    } else {
+                        for (INT i = 0; i < OP_opnds(op); ++i) {
+                            avoid_table[OP_opnd(op,i)] = true;
+                        }
+                        for (INT i = 0; i < OP_results(op); ++i) {
+                            avoid_table[OP_result(op,i)] = true;
+                        }
+                    }
+                }
+            }
+        }
+        op = OP_next(op);
+        insnum++;
+    }
+    return true;
+}
+
+static void fix_base_instructions (char* Cur_PU_Name, 
+        LOOP_DESCR* loop, GTN_SET* otherliveins) {
+    std::map<TN*, bool> avoid_table;
+    std::set<TN*> seen_defs;
+    std::set<TN*> used_at_all;
+    std::map<TN*, OP*> add_map; 
+    std::map<TN*,std::deque<OP*> > use_map;
+    std::set<OP*> dep_map;
+    std::set<TN*> counted_base_regs;
+    std::map<TN*, OP*> compare_map;
+    std::set<TN*> compare_opnds;
+    BB *lhead;
+    lhead = LOOP_DESCR_loophead(loop);
+    BB *add_bb;
+    BB *abbinloop;
+    OP *opi;
+    bool outofhere = false;
+    add_bb = NULL;
+    FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+        bool pdom_header = false;
+        bool compare_undo = false;
+        if (BS_MemberP(BB_pdom_set(lhead), BB_id(abbinloop))) {
+            pdom_header = true;
+        } else {
+            pdom_header = false;
+        }
+
+        if (collect_counters (pdom_header, 
+                    compare_undo && pdom_header, abbinloop, 
+                    otherliveins, avoid_table, 
+                    seen_defs, used_at_all, 
+                    add_map, &add_bb, use_map, 
+                    compare_map, compare_opnds) == false) {
+            outofhere == true;
+            break;
+        }
+    }
+
+    if (outofhere) {
+        return;
+    } else if (add_bb == NULL) {
+        return;
+    }
+
+    for (std::set<TN*>::iterator sdit = 
+        seen_defs.begin(); sdit != seen_defs.end(); ++sdit) {
+        if (avoid_table[*sdit] == false) {
+            if (used_at_all.find(*sdit) != used_at_all.end()) {
+                counted_base_regs.insert(*sdit);
+            }
+        }
+    }
+
+    //
+    // find out the implications of reordering the add instruction
+    // We do a walk on the counted_base_regs, get the use_map 
+    // for each such reg, and check if the def is either
+    // dominating or post-dominating it. If it is dominating it,
+    // we dont need compensation code for it. If it is post-dominating 
+    // and the new inc's location is not post-dominating it, 
+    // then we need compensation code for the use.
+    //
+
+    std::set<TN*>::iterator cbreg_it;
+    std::set<TN*> skip_set;
+    for (cbreg_it = counted_base_regs.begin(); 
+         cbreg_it != counted_base_regs.end();
+         ++cbreg_it) {
+        std::map<TN*, std::deque<OP*> >::iterator use_map_it;
+        if (add_map.find(*cbreg_it) == add_map.end()) {
+            skip_set.insert (*cbreg_it);
+        }
+    }
+
+    for (std::set<TN*>::iterator skip_it = skip_set.begin();
+         skip_it != skip_set.end(); ++skip_it) {
+        counted_base_regs.erase(*skip_it);
+    }
+
+    
+    for (cbreg_it = counted_base_regs.begin(); 
+         cbreg_it != counted_base_regs.end();
+         ++cbreg_it) {
+        OP* defing_ins = add_map[*cbreg_it];
+        BB* defing_bb = defing_ins->bb;
+
+        std::deque<OP*>::iterator use_deq_it;
+        for (use_deq_it = use_map[*cbreg_it].begin();
+                 use_deq_it != use_map[*cbreg_it].end();
+                 ++use_deq_it) {
+            BB* where_used = (*use_deq_it)->bb;
+            if (defing_bb == where_used) {
+                bool usefirst = true;
+                for (OP* whichop = *use_deq_it;
+                        whichop != NULL;
+                        whichop = OP_prev(whichop)) {
+                    if (whichop == defing_ins) {
+                        usefirst = false;
+                        break;
+                    }
+                }
+                if (usefirst == true) 
+                    dep_map.insert (*use_deq_it);
+            }
+        }
+    }
+
+    std::map<int,std::list<OP*> > val_lis_map;
+    if (histogram_of_index_counters (counted_base_regs, 
+              val_lis_map, add_map) == false) {
+        return;
+    }
+
+    if (test_change_affects_flags (counted_base_regs, 
+                      add_map) == true) {
+          return;
+    }
+
+    OP* add_template = val_lis_map.begin()->second.front();
+    if (counted_base_regs.size() == 0) {
+          return;
+    } else {
+          TN* newinc; 
+          newinc = OP_opnd(add_template,1);
+          if (TN_value(newinc) <= 0 ) {
+              return;
+          }
+    }
+    
+    TN* newinc; 
+    if (Is_Target_32bit()) {
+        newinc = Gen_Literal_TN (TN_value(OP_opnd(add_template,1)), 4);
+    } else {
+        newinc = Gen_Literal_TN (TN_value(OP_opnd(add_template,1)), 8);
+    }
+    OP* newadd;
+    TN* newres = Build_TN_Like(OP_result(add_template,0));
+    Set_TN_is_global_reg(newres);
+    TOP alea;
+    if (Is_Target_32bit()) {
+        alea = TOP_lea32;
+    } else {
+        alea = TOP_lea64;
+    }
+    newadd = Mk_OP(alea, newres, newres, newinc);
+    newadd->bb = add_bb;
+    BB_Prepend_Op(add_bb,newadd);
+    bool aft_prnt = false;
+    std::set<TN*>::const_iterator counted_base_regs_it;
+    std::set<OP*> changed_ops;
+    for (counted_base_regs_it = counted_base_regs.begin();
+         counted_base_regs_it != counted_base_regs.end();
+         ++counted_base_regs_it) {
+        std::deque<OP*> used_ops;
+        used_ops = use_map[(*counted_base_regs_it)];
+        std::deque<OP*>::iterator used_ops_it;
+        for (used_ops_it = used_ops.begin(); 
+             used_ops_it != used_ops.end();
+             ++used_ops_it) {
+            OP* whatnow;
+            OP* newadd; 
+            OP* newmovop;
+            TN *movtn; 
+            TN* scale;
+            if( Is_Target_32bit() ){
+                scale = Gen_Literal_TN(1,4);
+            } else {
+                scale = Gen_Literal_TN(1,8);
+            }
+            
+            TN* offset_d;
+            if (dep_map.find(*used_ops_it) == dep_map.end()) {
+                if (Is_Target_32bit()) {
+                    offset_d = Gen_Literal_TN (TN_value(OP_opnd(*used_ops_it,
+                          TOP_Find_Operand_Use(OP_code(*used_ops_it), 
+                      OU_offset))), 4); 
+                } else {
+                    offset_d = Gen_Literal_TN (TN_value(OP_opnd(*used_ops_it,
+                          TOP_Find_Operand_Use(OP_code(*used_ops_it), 
+                      OU_offset))), 4); 
+                }
+            } else {
+                if( Is_Target_32bit() ){
+                    offset_d = Gen_Literal_TN (
+                                TN_value(OP_opnd(*used_ops_it,
+                                  TOP_Find_Operand_Use(
+                                    OP_code(*used_ops_it), OU_offset))) 
+                                - TN_value(newinc), 4);
+                } else {
+                    offset_d = Gen_Literal_TN (
+                                TN_value(OP_opnd(*used_ops_it,
+                                    TOP_Find_Operand_Use(
+                                        OP_code(*used_ops_it), OU_offset)))
+                                - TN_value(newinc), 8);
+                }
+            }
+
+            whatnow = Compose_Mem_Base_Index_Mode(*used_ops_it,
+                  newres, offset_d, scale, 
+                  OP_opnd(*used_ops_it,
+                      TOP_Find_Operand_Use(OP_code(*used_ops_it), 
+                  OU_base)));
+            OP_scycle(whatnow) = OP_scycle(*used_ops_it);
+
+            BB_Insert_Op_Before((*used_ops_it)->bb,*used_ops_it,whatnow);
+            whatnow->bb = (*used_ops_it)->bb;
+            changed_ops.insert(whatnow);
+            OPS_Remove_Op(&((*used_ops_it)->bb->ops), *used_ops_it);
+        }
+    }
+
+    for (counted_base_regs_it = counted_base_regs.begin();
+         counted_base_regs_it != counted_base_regs.end();
+         ++counted_base_regs_it) {
+        OP* anaddop = add_map[*counted_base_regs_it];
+        BB_Remove_Op(anaddop->bb,anaddop);
+    }
+
+    std::set<OP*>::iterator changed_ops_it;
+    bool enable_large_disp_opt = false;
+    std::set<OP*> large_disp_ops;
+    if (enable_large_disp_opt) {
+        for (changed_ops_it = changed_ops.begin();
+             changed_ops_it != changed_ops.end();
+             ++changed_ops_it) {
+            TN* theofst = OP_opnd(*changed_ops_it, 
+                    TOP_Find_Operand_Use(OP_code(*changed_ops_it),
+                        OU_offset));
+            FmtAssert ((TN_is_constant(theofst)), 
+                    ("Not a constant offset\n"));
+            INT64 theval = TN_value(theofst);
+            // make a new lea op Mk_Op
+            if (theval < 127) 
+                if (theval > -128)
+                    continue;
+            TOP alea;
+            TN* zeroval;
+            if (Is_Target_32bit()) {
+                zeroval = Gen_Literal_TN (0,4);
+                alea = TOP_lea32;
+            } else {
+                zeroval = Gen_Literal_TN (0,8);
+                alea = TOP_lea64;
+            }
+            TN* thebase = OP_opnd(*changed_ops_it,
+                        TOP_Find_Operand_Use(OP_code(*changed_ops_it),
+                            OU_base));
+            TN* newgprtn = Build_TN_Like(thebase);
+            OP* thelea = Mk_OP(alea, newgprtn, thebase, theofst);
+            INT offset_loc, base_loc;
+            offset_loc = TOP_Find_Operand_Use(OP_code(*changed_ops_it),
+                        OU_offset);
+            base_loc = TOP_Find_Operand_Use(OP_code(*changed_ops_it),
+                        OU_base);
+            Set_OP_opnd(*changed_ops_it, offset_loc, zeroval);
+            Set_OP_opnd(*changed_ops_it, base_loc, newgprtn);
+            large_disp_ops.insert(thelea);
+        }
+    }
+    
+    BBLIST* predlis = BB_preds(LOOP_DESCR_loophead(loop));
+    bool inserted_some = false;
+    while (predlis) {
+        BB *pred = BBLIST_item(predlis);
+        predlis = BBLIST_next(predlis);
+        if (!BB_SET_MemberP(LOOP_DESCR_bbset(loop), pred)) {
+            inserted_some = true;
+            OP* init_co;
+            TN* zeroval;
+            TOP whichldc;
+            if( Is_Target_32bit()) {
+                zeroval = Gen_Literal_TN (0,4);
+                whichldc = TOP_ldc32;
+            } else {
+                whichldc = TOP_ldc64;
+                zeroval = Gen_Literal_TN (0,8);
+            }
+            init_co = Mk_OP (whichldc, newres, zeroval , newres);
+            if (BB_branch_op(pred)) {
+                BB_Insert_Op_Before(pred,BB_branch_op(pred),init_co);
+                init_co->bb = pred;
+                std::set<OP*>::iterator init_ops_it;
+                if (enable_large_disp_opt) {
+                    for (init_ops_it = large_disp_ops.begin();
+                       init_ops_it != large_disp_ops.end();
+                       ++init_ops_it) {
+                        OP* toinse;
+                        toinse = Mk_OP (OP_code(*init_ops_it), 
+                            OP_result (*init_ops_it,0),
+                            OP_opnd (*init_ops_it,0),
+                            OP_opnd (*init_ops_it,1));
+                        BB_Insert_Op_Before(pred,BB_branch_op(pred),toinse);
+                    }
+                }
+            } else {
+                BB_Append_Op(pred,init_co);
+                init_co->bb = pred;
+                std::set<OP*>::iterator init_ops_it;
+                if (enable_large_disp_opt) {
+                    for (init_ops_it = large_disp_ops.begin();
+                         init_ops_it != large_disp_ops.end();
+                         ++init_ops_it) {
+                        OP* toinse;
+                        toinse = Mk_OP (OP_code(*init_ops_it), 
+                                 OP_result (*init_ops_it,0),
+                                 OP_opnd (*init_ops_it,0),
+                                 OP_opnd (*init_ops_it,1));
+                        BB_Append_Op(pred,toinse);
+                    }
+                }
+            }
+        }
+    }
+    FmtAssert(inserted_some == true, 
+            ("No init instruction inserted!"));
+    GRA_LIVE_Recalc_Liveness (NULL);
+}
+
+static void fix_compare_binding (LOOP_DESCR* loop, 
+        GTN_SET* otherliveins) {
+      std::map<TN*, bool> avoid_table;
+      std::set<TN*> seen_defs;
+      std::set<TN*> used_at_all;
+      std::map<TN*, OP*> add_map; 
+      std::map<TN*,std::deque<OP*> > use_map;
+      std::set<OP*> dep_map;
+      std::set<TN*> counted_base_regs;
+      std::map<TN*, OP*> compare_map;
+      std::set<TN*> compare_opnds;
+      BB *lhead;
+      lhead = LOOP_DESCR_loophead(loop);
+      BB *add_bb;
+      add_bb = NULL;
+      BB *abbinloop;
+      OP *opi;
+      bool outofhere = false;
+      FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+          bool pdom_header = false;
+          bool compare_undo = true;
+          if (BS_MemberP(BB_pdom_set(lhead), BB_id(abbinloop))) {
+              pdom_header = true;
+          } else {
+              pdom_header = false;
+          }
+
+          if (collect_counters (pdom_header, 
+                      compare_undo && pdom_header, abbinloop, 
+                      otherliveins, avoid_table, 
+                      seen_defs, used_at_all, 
+                      add_map, &add_bb, use_map, 
+                      compare_map, compare_opnds) == false) {
+              outofhere == true;
+              break;
+          }
+      }
+
+      if (outofhere) {
+          return;
+      } else if (add_bb == NULL) {
+          return;
+      }
+
+      // additional checks
+      for (std::set<TN*>::iterator sdit = 
+          seen_defs.begin(); sdit != seen_defs.end(); ++sdit) {
+          if (avoid_table[*sdit] == false) {
+              if (used_at_all.find(*sdit) != used_at_all.end()) {
+                  counted_base_regs.insert(*sdit);
+              }
+          }
+      }
+
+      //
+      // find out the implications of reordering the add instruction
+      // We do a walk on the counted_base_regs, get the use_map 
+      // for each such reg, and check if the def is either
+      // dominating or post-dominating it. If it is dominating it,
+      // we dont need compensation code for it. If it is post-dominating 
+      // and the new inc's location is not post-dominating it, 
+      // then we need compensation code for the use.
+      //
+
+      std::set<TN*>::iterator cbreg_it;
+      std::set<TN*> skip_set;
+      // additional checks
+      for (cbreg_it = counted_base_regs.begin(); 
+           cbreg_it != counted_base_regs.end();
+           ++cbreg_it) {
+          std::map<TN*, std::deque<OP*> >::iterator use_map_it;
+          if (add_map.find(*cbreg_it) == add_map.end()) {
+              skip_set.insert (*cbreg_it);
+          }
+      }
+
+      for (std::set<TN*>::iterator skip_it = skip_set.begin();
+           skip_it != skip_set.end(); ++skip_it) {
+          counted_base_regs.erase(*skip_it);
+      }
+
+      std::map<int,std::list<OP*> > val_lis_map;
+      if (histogram_of_index_counters (counted_base_regs, 
+              val_lis_map, add_map) == false) {
+          return;
+      }
+
+      if (test_change_affects_flags (counted_base_regs, 
+                      add_map) == true) {
+          return;
+      }
+
+      int cardinale = 0;
+      std::set<TN*> interset;
+      for (std::set<TN*>::iterator comit = 
+           compare_opnds.begin(); comit != compare_opnds.end(); ++comit) {
+          if (counted_base_regs.find(*comit) != counted_base_regs.end()) {
+              cardinale++;
+              interset.insert(*comit);
+          }
+      }
+
+      if (cardinale != 1) {
+          for (std::set<TN*>::iterator comit = 
+             compare_opnds.begin(); comit != compare_opnds.end(); ++comit) {
+              counted_base_regs.erase (*comit);
+          }
+      } else {
+          TN* bound_name = *(interset.begin());
+          counted_base_regs.erase (bound_name);
+          TOP whichmov;
+          TN* homing_gr;
+          if (Is_Target_32bit()) {
+              whichmov = TOP_mov32;
+          } else {
+              whichmov = TOP_mov64;
+          }
+          homing_gr = Build_TN_Like(bound_name);
+          OP* new_add_op;
+          TOP add_opcod;
+          if (Is_Target_32bit()) {
+              add_opcod = TOP_addi32;
+          } else {
+              add_opcod = TOP_addi64;
+          }
+
+          new_add_op = Mk_OP(add_opcod, homing_gr, homing_gr, 
+                OP_opnd(add_map[bound_name],1)); 
+          BB_Insert_Op_Before (add_bb, add_map[bound_name], new_add_op);
+          OP_scycle(new_add_op) = OP_scycle(add_map[bound_name]);
+          new_add_op->bb = add_bb;
+
+          FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+              FOR_ALL_BB_OPs (abbinloop,opi) {
+                  if (opi != compare_map [bound_name] 
+                          && opi != add_map[bound_name]) {
+                      for (int i = 0; i < OP_opnds(opi); i++) {
+                          if (OP_opnd(opi,i) == bound_name)
+                              Set_OP_opnd (opi, i, homing_gr);
+                      }
+                      for (int i = 0; i < OP_results(opi); i++) {
+                          if (OP_result(opi,i) == bound_name)
+                              Set_OP_result (opi, i, homing_gr);
+                      }
+                  }
+              }
+          }
+
+          use_map[homing_gr] = use_map[bound_name];
+          use_map.erase(bound_name);
+          add_map[homing_gr] = new_add_op;
+          add_map.erase(bound_name);
+          counted_base_regs.insert (homing_gr);
+          counted_base_regs.erase (bound_name);
+
+          BBLIST* predlis = BB_preds(LOOP_DESCR_loophead(loop));
+          while (predlis) {
+              BB *pred = BBLIST_item(predlis);
+              predlis = BBLIST_next(predlis);
+              if (!BB_SET_MemberP(LOOP_DESCR_bbset(loop), pred)) {
+                  if (BB_branch_op(pred)) {
+                      OP* homing_mov;
+                      homing_mov = Mk_OP(whichmov, homing_gr, bound_name);
+                      BB_Insert_Op_Before (pred, BB_branch_op(pred), homing_mov);
+                      homing_mov->bb = pred;
+                  } else {
+                      OP* homing_mov;
+                      homing_mov = Mk_OP(whichmov, homing_gr, bound_name);
+                      BB_Append_Op(pred,homing_mov);
+                      homing_mov->bb = pred;
+                  }
+              }
+          }
+          GRA_LIVE_Recalc_Liveness (NULL);
+      }
+}
+
+void Counter_Merge (char *Cur_PU_Name) {
+  GRA_LIVE_Recalc_Liveness (NULL);
+  MEM_POOL loop_descr_pool;
+  MEM_POOL_Initialize(&loop_descr_pool, "loop_descriptors", TRUE);
+  MEM_POOL_Push (&loop_descr_pool);
+  Calculate_Dominators();
+
+  LOOP_DESCR *theloops = LOOP_DESCR_Detect_Loops(&loop_descr_pool);
+  for (LOOP_DESCR *loop = theloops; loop; loop = LOOP_DESCR_next(loop)) {
+      if (!BB_innermost(LOOP_DESCR_loophead(loop)))
+          continue;
+      BB *abbinloop;
+      OP *opi;
+      bool dontdoit = false;
+      FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+        FOR_ALL_BB_OPs (abbinloop,opi) {
+            // escape hatch for loops that hold volatile
+            // registers or have calls. calls may modify
+            // contents of SIB registers
+            if (OP_volatile(opi))
+                dontdoit = true;
+            if (OP_call(opi))
+                dontdoit = true;
+        }
+      }
+      if (dontdoit) continue;
+
+      //
+      // collect the LiveIn sets of pdoms of loop header
+      // which are not part of the loop
+      // 
+      GTN_SET* otherliveins;
+      otherliveins = NULL;
+      MEM_POOL merge_counter_pool;
+      MEM_POOL_Initialize(&merge_counter_pool, 
+            "loop_descriptors", TRUE);
+      MEM_POOL_Push (&merge_counter_pool);
+
+      // We collect the live-ins of successors of the loop BBs
+      // which are not part of the loop.
+      // We will avoid doing SIB for the variables which are 
+      // part of that live-in set
+      FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+          BBLIST* succlis = BB_succs(abbinloop);
+          while (succlis) {
+              BB *succ = BBLIST_item(succlis);
+              succlis = BBLIST_next(succlis);
+              if (!BB_SET_MemberP(LOOP_DESCR_bbset(loop), succ)) {
+                  if (otherliveins == NULL) {
+                      otherliveins = BB_live_in(succ);
+                  } else {
+                      otherliveins = GTN_SET_Union (otherliveins,
+                          BB_live_in (succ), &merge_counter_pool);
+                  }
+              }
+          }
+      }
+
+      fix_compare_binding (loop, otherliveins);
+
+      // collect otherliveins again as fix_compare_binding may have
+      // changed liveness
+      otherliveins = NULL;
+      FOR_ALL_BB_SET_members(LOOP_DESCR_bbset(loop), abbinloop) {
+          BBLIST* succlis = BB_succs(abbinloop);
+          while (succlis) {
+              BB *succ = BBLIST_item(succlis);
+              succlis = BBLIST_next(succlis);
+              if (!BB_SET_MemberP(LOOP_DESCR_bbset(loop), succ)) {
+                  if (otherliveins == NULL) {
+                      otherliveins = BB_live_in(succ);
+                  } else {
+                      otherliveins = GTN_SET_Union (otherliveins,
+                          BB_live_in (succ), &merge_counter_pool);
+                  }
+              }
+          }
+      }
+
+      fix_base_instructions (Cur_PU_Name, loop, otherliveins);
+
+      MEM_POOL_Pop(&merge_counter_pool);
+  }
+
+  MEM_POOL_Pop (&loop_descr_pool);
+  MEM_POOL_Delete(&loop_descr_pool);
+  Free_Dominators_Memory ();
 }
 
 static OP *
@@ -6839,6 +7857,12 @@ BOOL EBO_Load_Execution( OP* alu_op,
       TOP_is_vector_op( OP_code(ld_op) ) ){
     return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
   }
+
+  if ((OP_code(ld_op) == TOP_ldhps ||
+	OP_code(ld_op) == TOP_ldhpsx ||
+	OP_code(ld_op) == TOP_ldhpsxx) &&
+      OP_code(alu_op) == TOP_cvtps2pd)
+    return FALSE;
 
   /* Check <index> and <base> will not be re-defined between
      <ld_op> and <alu_op>, inclusive.

@@ -11231,7 +11231,6 @@ static WN *lower_call(WN *block, WN *tree, LOWER_ACTIONS actions)
 #ifdef KEY // handle actual parameter being a complex under LOWER_COMPLEX action
     if (WN_operator(WN_actual(tree,i)) == OPR_PARM &&
 	MTYPE_is_complex(WN_rtype(WN_actual(tree,i))) && 
-	!OPERATOR_is_leaf(WN_operator(WN_kid0(WN_actual(tree,i)))) &&
 	Action(LOWER_COMPLEX))
     {
       TYPE_ID mtype = WN_rtype(WN_actual(tree,i));

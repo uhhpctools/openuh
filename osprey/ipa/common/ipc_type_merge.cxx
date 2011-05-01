@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -54,9 +54,16 @@
 #include <ext/hash_map>
 using __gnu_cxx::hash_set;
 using __gnu_cxx::hash_map;
+using __gnu_cxx::hash_multimap;
 
 // For every struct type, this table maps its name to its TY index
 hash_map <STR_IDX, TY_INDEX, __new_hash::hash<STR_IDX>, std::equal_to<STR_IDX> > struct_by_name_idx;
+
+// For each struct type, if there are more than one type in the merged type table
+typedef hash_multimap<STR_IDX, TY_INDEX, 
+              __new_hash::hash<STR_IDX>, 
+              std::equal_to<STR_IDX> > multimap_type;
+multimap_type duplicated_types;
 
 // For the new incomplete struct TYs that should be updated after main type merge phase 
 hash_set <TY_INDEX> to_update_incomplete_ty;
@@ -875,9 +882,48 @@ Insert_Ty (TY_INDEX index, TY_IDX_MAP& ty_map, const SYMSTR_IDX_MAP& str_map)
                 if (TY_align(TY_pointed(return_idx)) == 1)
                     Set_TY_align(Ty_Table[return_idx].u2.pointed, TY_align(TY_pointed(ty)));
                 break;
-            case KIND_STRUCT:
-                struct_by_name_idx[TY_name_idx(return_idx)] = TY_IDX_index(return_idx);
+            case KIND_STRUCT: 
+            {
+                STR_IDX name_idx = TY_name_idx(return_idx);
+#ifdef HANDLE_DUPLICATED_STRUCT_TYPE
+                // handle duplicated struct/class type
+                if (struct_by_name_idx.find(name_idx) != struct_by_name_idx.end() &&
+                    struct_by_name_idx[name_idx] != 0 &&
+                    struct_by_name_idx[name_idx] != TY_IDX_index(return_idx)) {
+                   // the type index are different although they have the same
+                   // it is caused by the fact the the fields are not merged to
+                   // the corresponding fields of the old merged struct type 
+                   // fields
+                   TY_INDEX find_ty = struct_by_name_idx[name_idx];
+                   duplicated_types.insert(multimap_type::value_type(name_idx, find_ty));
+                   TY_IDX find_ty_idx = make_TY_IDX(find_ty);
+                   if (TY_vtable(find_ty_idx)) {
+                      // propogate the vtable info to new type
+                      Is_True(!TY_vtable(return_idx) || 
+                              TY_vtable(find_ty_idx) == TY_vtable(return_idx),
+                              ("Invalid vtable symbol"));
+                      Set_TY_vtable(return_idx, TY_vtable(find_ty_idx));
+
+                   } else if (TY_vtable(return_idx)) {
+                      // the new type has vtable set but not the old one,
+                      // propogate the vtable info to old type index
+                      pair<multimap_type::const_iterator, 
+                           multimap_type::const_iterator> p =
+                             duplicated_types.equal_range(name_idx);
+                      for (multimap_type::const_iterator i = p.first; 
+                                                         i != p.second; ++i) {
+                         TY_INDEX ty_index = (*i).second;
+                         TY_IDX ty_idx = make_TY_IDX(ty_index);
+                         if (!TY_vtable(ty_idx)) {
+                            Set_TY_vtable(ty_idx, TY_vtable(return_idx));
+                         }
+                      }
+                   }
+                }
+#endif
+                struct_by_name_idx[name_idx] = TY_IDX_index(return_idx);
                 break;
+            }
         }
     }
 

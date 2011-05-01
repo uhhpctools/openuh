@@ -2540,7 +2540,7 @@ void Finalize_Index_Variable(WN* loop, BOOL insert_after_loop, BOOL try_sink)
     WN* use=use_node->Wn();
     use_node=(DU_NODE *)iter.Next();
     WN* new_loop=use;
-    while (new_loop !=loop && WN_opcode(new_loop)!=OPC_FUNC_ENTRY)
+    while (new_loop && new_loop !=loop && WN_opcode(new_loop)!=OPC_FUNC_ENTRY)
         new_loop=LWN_Get_Parent(new_loop);
     if (new_loop!=loop) {
       // a use outside the first loop
@@ -3880,6 +3880,28 @@ BOOL Is_Local_Array_Reference(WN* array)
   return FALSE;
 }
 
+// Find containing store statement for 'wn'.
+WN * Find_Containing_Store(WN * wn)
+{
+  while (wn) {
+    OPERATOR opr = WN_operator(wn);
+    if (OPERATOR_is_store(opr))
+      return wn;
+    wn = LWN_Get_Parent(wn);
+  }
+  return NULL;
+}
+
+// Query whether a global symbol can be treated as a local one,
+// i.e., uses of the global variable are not upward-exposed in
+// any funtion.  IPA analysis sets this bit.
+BOOL Is_Global_As_Local(ST * st)
+{
+  if (st && ST_is_global_as_local(st))
+    return TRUE;
+  return FALSE;
+}
+
 #ifdef Is_True_On
 void LNO_Check_Graph(ARRAY_DIRECTED_GRAPH16* dg)
 {
@@ -4940,5 +4962,35 @@ extern void Replace_Index_Variable(WN* loop,
   Create_Preg_Symbol(buf, wtype), NULL, cp_loop);
   // the loop variables are independent in the two bodies
   Fix_Do_Du_Info(cp_loop, NULL, TRUE, NULL, 1);
+}
+
+// Does 'wn1' dominate 'wn2', be conservative in that you can always say FALSE
+// 'wn1' must be a statement.
+BOOL Dominates(WN *wn1, WN *wn2)
+{
+  Is_True(!OPCODE_is_expression(WN_opcode(wn1)),
+    ("Non statement 1 in Dominates"));
+
+  // wn1's parent has to be an ancestor of wn2
+  WN *parent1 = LWN_Get_Parent(wn1);
+  WN *ancestor2 = LWN_Get_Parent(wn2);
+  WN *kid2 = wn2;
+  while (ancestor2 && (ancestor2 != parent1)) {
+   kid2 = ancestor2;
+   ancestor2 = LWN_Get_Parent(ancestor2);
+  }
+  if (!ancestor2) return FALSE;
+
+
+  // at this point, wn1 is a sibling of kid2
+  // return TRUE if wn1 comes before kid2
+  wn1 = WN_next(wn1);
+  while (wn1) {
+    if (wn1 == kid2) {
+      return TRUE;
+    }
+    wn1 = WN_next(wn1);
+  }
+  return FALSE;
 }
 

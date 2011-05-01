@@ -920,6 +920,8 @@ static WN* BND_Min_Expr(WN* wn,
   OPCODE wn_op = WN_opcode(wn);  
   OPERATOR wn_oper = OPCODE_operator(wn_op); 
   switch (wn_oper) { 
+  case OPR_PAREN:
+    return BND_Min_Expr(WN_kid0(wn), loops, nloops);
   case OPR_INTCONST: 
     return LWN_Copy_Tree(wn, TRUE, LNO_Info_Map); 
   case OPR_LDID: 
@@ -1047,6 +1049,8 @@ static WN* BND_Max_Expr(WN* wn,
   WN* wn_new = NULL; 
 
   switch (wn_oper) {
+  case OPR_PAREN:
+    return BND_Max_Expr(WN_kid0(wn), loops, nloops);
   case OPR_INTCONST: 
     return LWN_Copy_Tree(wn, TRUE, LNO_Info_Map); 
   case OPR_LDID: 

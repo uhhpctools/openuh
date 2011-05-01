@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -52,6 +52,26 @@ IPA_CLASS_HIERARCHY::Get_Num_Sub_Classes(TY_INDEX tyi) {
     if (node != subclass.end())
         return node->second.size();
     return 0;
+}
+
+IPA_CLASS_HIERARCHY::CLASS_RELATIONSHIP::iterator IPA_CLASS_HIERARCHY::Get_Begin_Base_Classes()
+{
+    return baseclass.begin();
+}
+
+IPA_CLASS_HIERARCHY::CLASS_RELATIONSHIP::iterator IPA_CLASS_HIERARCHY::Get_End_Base_Classes()
+{
+    return baseclass.end();
+}
+
+IPA_CLASS_HIERARCHY::CLASS_RELATIONSHIP::iterator IPA_CLASS_HIERARCHY::Get_Begin_Sub_Classes()
+{
+    return subclass.begin();
+}
+
+IPA_CLASS_HIERARCHY::CLASS_RELATIONSHIP::iterator IPA_CLASS_HIERARCHY::Get_End_Sub_Classes()
+{
+    return subclass.end();
 }
 
 TY_INDEX
@@ -120,6 +140,33 @@ IPA_CLASS_HIERARCHY::Is_Ancestor(TY_INDEX ancestor, TY_INDEX descendant) {
     return FALSE;
 }
 
+void 
+IPA_CLASS_HIERARCHY::Add_Virtual_Base(TY_INDEX tyi, TY_INDEX base)
+{
+    _ty_idx_list list;
+    if (virtual_bases.find(tyi) != virtual_bases.end()) { 
+        virtual_bases[tyi].push_back(base);
+    }
+    else {
+        _ty_idx_list list;
+        list.push_back(base);
+        virtual_bases[tyi] = list;
+    }  
+    return;
+}
+
+BOOL
+IPA_CLASS_HIERARCHY::Is_Virtual_Base(TY_INDEX tyi, TY_INDEX base)
+{
+    if (virtual_bases.find(tyi) != virtual_bases.end()) {
+        _ty_idx_list &list = virtual_bases[tyi];
+	for (size_t i = 0; i < list.size(); i++)
+	    if (list[i] == base)
+                return TRUE;
+    }
+    return FALSE;
+}
+
 void IPA_CLASS_HIERARCHY::Get_Sub_Class_Hierarchy (TY_INDEX declared_class,
     hash_set<TY_INDEX>& targets) {
     targets.insert(declared_class);
@@ -158,6 +205,8 @@ Build_Class_Hierarchy() {
                     TY_INDEX base = TY_IDX_index(FLD_type(fld));
                     chg->Add_Base_Class(i, base);
                     chg->Add_Sub_Class(base, i);
+                    if (FLD_is_virtual(fld))
+                       chg->Add_Virtual_Base(i, base);
                 }
                 if (FLD_last_field(fld))
                     break;

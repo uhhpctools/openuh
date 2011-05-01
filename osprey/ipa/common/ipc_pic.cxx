@@ -309,6 +309,7 @@ struct Opt_global_var
 
 	BOOL common_block_element = FALSE;
 	ST_EXPORT export_class = ST_export (st);
+	Clear_ST_is_global_as_local(st);
 
 	switch (ST_sclass (st)) {
 	case SCLASS_COMMON:

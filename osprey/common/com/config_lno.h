@@ -247,7 +247,10 @@ typedef struct lno_flags {
   UINT32 Fission_inner_register_limit;
   BOOL	Forward_substitution;
   UINT32 Fusion;
+  UINT32 Aggressive_fusion_limit;
+  UINT32 Sclrze_dse_limit;    
   UINT32 Fusion_peeling_limit;
+  UINT32 Fusion_ddep_limit;    
   UINT32 Gather_Scatter;
   UINT32 Graph_capacity;
   BOOL	Hoist_messy_bounds;
@@ -490,7 +493,10 @@ extern LNO_FLAGS Initial_LNO;
 	Current_LNO->Fission_inner_register_limit
 #define LNO_Forward_Substitution	Current_LNO->Forward_substitution
 #define LNO_Fusion			Current_LNO->Fusion
+#define LNO_Aggressive_Fusion_Limit     Current_LNO->Aggressive_fusion_limit;
+#define LNO_Sclrze_Dse_Limit            Current_LNO->Sclrze_dse_limit;
 #define LNO_Fusion_Peeling_Limit	Current_LNO->Fusion_peeling_limit
+#define LNO_Fusion_Ddep_Limit	        Current_LNO->Fusion_ddep_limit
 #define LNO_Gather_Scatter		Current_LNO->Gather_Scatter
 #define LNO_Graph_Capacity		Current_LNO->Graph_capacity
 #define LNO_Hoist_Messy_Bounds		Current_LNO->Hoist_messy_bounds

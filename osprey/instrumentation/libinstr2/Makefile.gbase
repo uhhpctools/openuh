@@ -242,11 +242,15 @@ last : make_libdeps
 #
 #----------------------------------------------------------------------
 
-
+ifeq ($(BUILD_TARGET),SL)
+install: default
+	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) $(TARGETS) $$TOOLROOT/usr/lib/$(TARGETS)
+else
 install: default
 	$(STD_INSTALL) $(STD_INSTALL_READ_MASK) -F $(STD_LIBRARY_LOC) $(TARGETS)
 ifeq ($(BUILD_TYPE), SHARED)
 	$(STD_INSTALL) -F $(STD_DSO_LOC) -lns $(LINK) $(DSO)
+endif
 endif
 
 so_locations: $(SO_LOCATION_DIR)/so_locations

@@ -72,7 +72,7 @@
 #include "clone_DST_utils.h"
 
 #include "ipo_inline.h"
-
+#include "ipa_nystrom_alias_analyzer.h"
 static INT initial_initv_tab_size;
 
 MEM_POOL Ipo_mem_pool;
@@ -3127,9 +3127,12 @@ IPO_INLINE::Process_Copy_In (PARM_ITER parm, WN* copy_in_block)
 	parm->Set_formal_preg (wn_offset);
 	parm->Set_replace_st (ST_st_idx (copy_st));
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
-        if (Alias_Nystrom_Analyzer)
+        if (Alias_Nystrom_Analyzer) {
           ConstraintGraph::updateCloneStIdxMap(ST_st_idx(formal_st),
                                                ST_st_idx(copy_st));
+          IPA_NystromAliasAnalyzer::aliasAnalyzer()->processInlineFormal(
+              Caller_node(), Callee_node(), actual, copy_st);
+        }
 #endif
 
     } else {
@@ -3249,9 +3252,12 @@ IPO_INLINE::Process_Copy_In_Copy_Out (PARM_ITER p, IPO_INLINE_AUX& aux)
     p->Set_replace_st (ST_st_idx (copy_st));
 
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
-    if (Alias_Nystrom_Analyzer)
+    if (Alias_Nystrom_Analyzer){
       ConstraintGraph::updateCloneStIdxMap(ST_st_idx(formal_st),
                                            ST_st_idx(copy_st));
+      IPA_NystromAliasAnalyzer::aliasAnalyzer()->processInlineFormal(
+            Caller_node(), Callee_node(), wn_iload, copy_st);
+    }
 #endif
     
     
@@ -4464,6 +4470,9 @@ IPO_INLINE::Process_Callee (IPO_INLINE_AUX& aux, BOOL same_file)
     if (Alias_Nystrom_Analyzer) {
       ConstraintGraph::promoteLocals(Callee_node());
       ConstraintGraph::cloneConstraintGraphMaps(Caller_node(), Callee_node());
+      IPA_NystromAliasAnalyzer::aliasAnalyzer()->solveInlineConstraints(Callee_node(), Caller_node());
+      IPA_NystromAliasAnalyzer::aliasAnalyzer()->updateCloneTreeWithCgnode(aux.inlined_body);
+      ConstraintGraph::clearOrigToCloneStIdxMap(Caller_node(), Callee_node());
     }
 #endif
 

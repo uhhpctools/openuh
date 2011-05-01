@@ -214,24 +214,45 @@ private:
    
    static FREE_STACK *_Free;
 
+   // If the liternal is a vector, the <_vect_ty> indicates the vector 
+   // type, and the _tcon hold the elements value. All elements should
+   // hold same value.
+   // 
+   // If the liternal is a scalar, _vect_ty should be set to MTYPE_UNKNOWN.
+   //
    TCON _tcon;
+   TYPE_ID _vect_ty;
 
-   VN_LITERAL_EXPR(const TCON &tcon) : _tcon(tcon) {}
-   
+   VN_LITERAL_EXPR(const TCON &tcon) : _tcon(tcon) {} 
 public:
 
    static void Init_Free_List() {_Free = CXX_NEW(FREE_STACK(_Mpool), _Mpool);}
    static void Reclaim_Free_List() {CXX_DELETE(_Free, _Mpool); _Free = NULL;}
   
-   static VN_LITERAL_EXPR *Create(const TCON &tcon) 
+   static VN_LITERAL_EXPR *Create(const TCON &tcon, TYPE_ID vect_ty) 
    {
       VN_LITERAL_EXPR *expr = (VN_LITERAL_EXPR *)_Free->pop();
       if (expr == NULL)
 	 expr = CXX_NEW(VN_LITERAL_EXPR(tcon), _Mpool);
       else
 	 expr->_tcon = tcon;
+
+      expr->_vect_ty = vect_ty;
+      Is_True (vect_ty == MTYPE_UNKNOWN || MTYPE_is_vector (vect_ty),
+               ("vect_ty is invalid"));
+
       return expr;
    }
+
+   BOOL is_const_vect (void) const {
+     if (_vect_ty != MTYPE_UNKNOWN) {
+       Is_True (MTYPE_is_vector (_vect_ty), ("isn't vector type"));
+       return TRUE;
+     }
+     return FALSE;
+   }
+
+   TYPE_ID get_vect_type (void) const { return _vect_ty; }
 
    void free() 
    {
@@ -278,9 +299,13 @@ public:
    
    BOOL is_equal_to(CONST_PTR expr) const;
 
+   // Gee, why make dump function inlinable?
+   //
    void print(FILE *fp = stderr) const
    {
-      fprintf(fp, "%s_const", MTYPE_name(TCON_ty(_tcon)));
+      fprintf(fp, "%s_const", 
+              _vect_ty == MTYPE_UNKNOWN ? 
+              MTYPE_name(TCON_ty(_tcon)) : MTYPE_name(_vect_ty));
       fprintf(fp, "(%s)", Targ_Print(NULL, _tcon)); // Using default formatting
    }
 

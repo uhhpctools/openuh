@@ -4425,16 +4425,12 @@ Init_CG_Expand (void)
   Trace_Exp = Get_Trace (TP_CGEXP, 1);
   /* whirl2ops uses -ttexp:2 */
   Trace_Exp2 = Get_Trace (TP_CGEXP, 4);
+  Disable_Const_Mult_Opt = Get_Trace (TP_CGEXP, 32);
   
   if (Is_Target_Sl5()) { 
     // SL5 do not support zero-delay-loop
     extern BOOL CG_enable_zero_delay_loop;
     CG_enable_zero_delay_loop = FALSE;
-
-    // multiple operation of SL5 only need one cycle.
-    Disable_Const_Mult_Opt = TRUE;
-  } else {
-    Disable_Const_Mult_Opt = Get_Trace (TP_CGEXP, 32);
   }
   
   if (Initialized) return;

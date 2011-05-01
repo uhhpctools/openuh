@@ -2200,7 +2200,7 @@ static simpnode  simp_add_sub(OPCODE opc,
    if (r) return r;
 
 #ifdef TARG_X8664
-   if (MTYPE_C8 == ty)
+   if (MTYPE_C8 == ty && Opt_Level != 0)
    {
       if (MTYPE_F8 == SIMPNODE_rtype(k0) && MTYPE_F8 == SIMPNODE_rtype(k1))
       {
@@ -2899,7 +2899,7 @@ static simpnode  simp_times( OPCODE opc,
    }
    if (r) return r;
 #ifdef TARG_X8664
-   if (MTYPE_C8 == ty || MTYPE_V16C8 == ty)
+   if ((MTYPE_C8 == ty || MTYPE_V16C8 == ty) && Opt_Level != 0)
    {
       if (SIMPNODE_rtype(k1) == MTYPE_F8 && SIMPNODE_rtype(k0) == MTYPE_F8)
       {
@@ -3167,7 +3167,7 @@ static simpnode  simp_div( OPCODE opc,
       }
    }
 #ifdef TARG_X8664
-   if (MTYPE_C8 == ty)
+   if (MTYPE_C8 == ty && Opt_Level != 0)
    {
       /* complex const converted to real const */
       if (k0const && SIMPNODE_rtype(k0) == ty)

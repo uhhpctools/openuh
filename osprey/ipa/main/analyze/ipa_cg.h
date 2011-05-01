@@ -880,6 +880,8 @@ private:
   static const mUINT32 _no_inline	= 0x40;
   static const mUINT32 _partial_inline	= 0x80;
   static const mUINT32 _updated_caller  = 0x100; // for a deletable edge caller has been updated.  
+  static const mUINT32 _orig_devirtualized  = 0x200;
+  static const mUINT32 _new_devirtualized  = 0x400;
   
   EDGE_INDEX _edge_index;			// index to the edge array in graph
   IPA_EDGE_INDEX _array_index;		// index into the IPA_EDGE_ARRAY
@@ -982,6 +984,12 @@ public:
 
   void Clear_All_Inline_Attrib ()	{ _flags &= ~(_inline|_must_inline|
                                                       _partial_inline); }
+
+  void Set_Orig_Devirtualized ()		{ _flags |= _orig_devirtualized; }
+  BOOL Is_Orig_Devirtualized () const	{ return _flags & _orig_devirtualized; }
+
+  void Set_New_Devirtualized ()		{ _flags |= _new_devirtualized; }
+  BOOL Is_New_Devirtualized () const	{ return _flags & _new_devirtualized; }
 
   // we use a bit vector to represent actual parameters that are readonly
   // up to a max. of 32 parameters are recorded, the rests are ignored.

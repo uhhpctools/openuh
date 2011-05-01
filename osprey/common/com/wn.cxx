@@ -420,6 +420,8 @@ void IPA_WN_Delete(WN_MAP_TAB *maptab, WN *wn)
 
   free_list = use_free_list ? Which_WN_FREE_LIST(WN_Size(wn)) : 0;
 	  
+  // trace delete
+  Check_Traced_Wn_Node(wn);
 
 #ifdef KEEP_WHIRLSTATS
   whirl_num_deallocated++;
@@ -545,7 +547,9 @@ void Check_Traced_Wn_Node(WN *n)
 {
    if (n && (n == trace_wn_node 
              || trace_wn_mapid != -1 && WN_map_id(n) == trace_wn_mapid
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
              || trace_wn_id != 0 && trace_wn_id == WN_id(n)
+#endif
              ) ) {
       gdb_stop_here();
    }
@@ -555,18 +559,22 @@ static set<UINT32> copied_ids;
 
 void Set_Trace_Wn_id(UINT32 wn_id) 
 { 
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
    trace_wn_id = wn_id; 
    copied_ids.insert(wn_id);
+#endif
 }
 
 void Trace_Wn_Copy(const WN *wn, const WN *src_wn)
 {
+#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
    set<UINT32>::iterator itr = copied_ids.find(WN_id(src_wn));
    if (itr != copied_ids.end()) {
       // found src_wn's wn_id in copied list
       copied_ids.insert(WN_id(wn));
       gdb_stop_here();
    }
+#endif
 }
 
 /* ---------------------------------------------------------------------
@@ -3586,5 +3594,163 @@ WN_get_bit_reduction(WN * wn)
     }
   }
   
+  return NULL;
+}
+
+// Check whether wn1 and wn2 have values whose difference is a constant.
+// Return FALSE if the difference is not a constant or if we can't tell.
+// Return the difference of wn1 and wn2 in 'diff'.
+BOOL
+WN_has_const_diff(WN * wn1, WN * wn2, int * diff)
+{
+  if (WN_Simp_Compare_Trees(wn1, wn2) == 0) {
+    if (diff)
+      *diff = 0;
+    return TRUE;
+  }
+
+  OPERATOR opr1 = WN_operator(wn1);
+  OPERATOR opr2 = WN_operator(wn2);
+
+  if ((opr1 == opr2) && (opr1 == OPR_INTCONST)) {
+    if (diff)
+      *diff = (WN_const_val(wn1) - WN_const_val(wn2));
+    return TRUE;
+  }
+  else {
+    if ((opr1 == OPR_ADD) || (opr1 == OPR_SUB)) {
+      WN * kid1 = WN_kid(wn1, 1);
+      if (WN_operator(kid1) == OPR_INTCONST) {
+	if (WN_has_const_diff(WN_kid(wn1, 0), wn2, diff)) {
+	  if (opr1 == OPR_ADD) {
+	    if (diff)
+	      *diff = *(diff) + WN_const_val(kid1);
+	  }
+	  else {
+	    if (diff)
+	      *diff = (*diff) - WN_const_val(kid1);
+	  }
+	  return TRUE;
+	}
+      }
+    }
+     
+    if ((opr2 == OPR_ADD) || (opr2 == OPR_SUB)) {
+      WN * kid1 = WN_kid(wn2, 1);
+      if (WN_operator(kid1) == OPR_INTCONST) {
+	if (WN_has_const_diff(WN_kid(wn2, 0), wn1, diff)) {
+	  if (opr2 == OPR_ADD) {
+	    if (diff)
+	      *diff = -1 * (*diff) - WN_const_val(kid1);
+	  }
+	  else {
+	    if (diff)
+	      *diff = -1 * (*diff) + WN_const_val(kid1);
+	  }
+	  return TRUE;
+	}
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+// Check whether two loops have compatible iteration spaces:
+// 1. Difference of the lower bounds is a constant.
+// 2. Difference of the upper bounds is a constant.
+// 3. Loop increment is the same.
+// 4. End-tests's operators are compatible.
+// 
+// If 'lower_diff' is not NULL, return difference of lower bound in it.
+// If 'upper_diff' is not NULL, return difference of upper bound in it.
+// If 'do_eq' is TRUE, End-tests' operators must be equal to be considered as compatible.
+BOOL WN_has_compatible_iter_space(WN * wn1, WN * wn2, int *lower_diff, int* upper_diff, BOOL do_eq)
+{
+  OPCODE ub_compare;
+  WN * lower_bound = WN_LOOP_LowerBound(wn1);
+  WN * upper_bound = WN_LOOP_UpperBound(wn1, &ub_compare, TRUE);
+  BOOL is_incr;
+  WN * loop_step = WN_LOOP_Increment(wn1, &is_incr);
+  OPCODE cmp_ub_compare;
+  WN * cmp_lower_bound = WN_LOOP_LowerBound(wn2);
+  WN * cmp_upper_bound = WN_LOOP_UpperBound(wn2, &cmp_ub_compare, TRUE);
+  BOOL cmp_is_incr;
+  WN * cmp_loop_step = WN_LOOP_Increment(wn2, &cmp_is_incr);
+  int adjustment = 0;
+
+  if (ub_compare != cmp_ub_compare) {
+    OPERATOR opr1 = OPCODE_operator(ub_compare);
+    OPERATOR opr2 = OPCODE_operator(cmp_ub_compare);
+    BOOL is_compatible = FALSE;
+
+    if (!do_eq) {
+      switch (opr1) {
+      case OPR_LT:
+      case OPR_LE:
+	if ((opr2 == OPR_LE) || (opr2 == OPR_LT))
+	  is_compatible = TRUE;
+	break;
+      case OPR_GE:
+      case OPR_GT:
+	if ((opr2 == OPR_GE) || (opr2 == OPR_GT))
+	  is_compatible = TRUE;
+	break;
+      default:
+	break;
+      }
+    }
+    else if (opr1 != opr2)
+      is_compatible = FALSE;
+
+    if (!is_compatible)
+      return FALSE;
+
+    if (is_incr) {
+      if ((opr1 == OPR_LT) || (opr1 == OPR_GT))
+	adjustment = -1;
+      if ((opr2 == OPR_LT) || (opr2 == OPR_GT))
+	adjustment = 1;
+    }
+    else {
+      if ((opr1 == OPR_LT) || (opr1 == OPR_GT))
+	adjustment = 1;
+      if ((opr2 == OPR_LT) || (opr2 == OPR_GT))
+	adjustment = -1;
+    }
+  }
+	    
+  if ((is_incr == cmp_is_incr)
+      && lower_bound && cmp_lower_bound
+      && upper_bound && cmp_upper_bound
+      && (WN_Simp_Compare_Trees(loop_step, cmp_loop_step) == 0)
+      && WN_has_const_diff(lower_bound, cmp_lower_bound, lower_diff)
+      && WN_has_const_diff(upper_bound, cmp_upper_bound, upper_diff)) {
+    if (upper_diff)
+      (*upper_diff) += adjustment;
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+// Find containing loop of 'wn' whose index's symbol is identical to 'index',
+// 'parent_map' gives a map of a WHIRL node to its parent node.
+WN *
+WN_find_loop_by_index(WN * wn, ST * index, WN_MAP parent_map)
+{
+  if (index != NULL) {
+    WN * wn_iter = wn;
+    while (wn_iter) {
+      if (WN_operator(wn_iter) == OPR_DO_LOOP) {
+	WN * wn_ind = WN_index(wn_iter);
+	ST * st2 = WN_st(wn_ind);
+	if (index == st2)
+	  return wn_iter;
+      }
+      wn_iter = (WN *) WN_MAP_Get(parent_map, wn_iter);
+    }
+  }
+
   return NULL;
 }

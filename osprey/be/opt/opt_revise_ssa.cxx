@@ -148,6 +148,12 @@ private:
   OPT_REVISE_SSA(const OPT_REVISE_SSA&); // REQUIRED UNDEFINED UNWANTED methods
   OPT_REVISE_SSA& operator = (const OPT_REVISE_SSA&); // REQUIRED UNDEFINED UNWANTED methods
 
+  TY_IDX Compose_TY_IDX (TY_IDX idx_part, TY_IDX subty_part) {
+    TY_IDX new_ty = subty_part;
+    Set_TY_IDX_index (new_ty, TY_IDX_index (idx_part));
+    return new_ty;  
+  }
+
 public:
   OPT_REVISE_SSA( OPT_STAB *opt_stab, CODEMAP *htable, CFG *cfg, MEM_POOL *lpool, INT trace_flag): 
 	_opt_stab(opt_stab), _htable(htable), _cfg(cfg), _loc_pool(lpool) {
@@ -269,6 +275,7 @@ OPT_REVISE_SSA::Find_scalars_from_lowering_bitfld_cr(CODEREP *cr)
       _symbols_to_revise->Union1D(idx);
       AUX_STAB_ENTRY *aux = _opt_stab->Aux_stab_entry(idx);
       aux->Points_to()->Set_expr_kind(EXPR_IS_ADDR);
+      aux->Points_to()->Set_ofst_kind(OFST_IS_FIXED);
       aux->Points_to()->Set_named();
 
       cr->Set_scalar_aux_id(idx);
@@ -389,6 +396,7 @@ OPT_REVISE_SSA::Find_scalars_from_lowering_bitfld(void)
 	  _symbols_to_revise->Union1D(idx);
 	  AUX_STAB_ENTRY *aux = _opt_stab->Aux_stab_entry(idx);
 	  aux->Points_to()->Set_expr_kind(EXPR_IS_ADDR);
+	  aux->Points_to()->Set_ofst_kind(OFST_IS_FIXED);
 	  aux->Points_to()->Set_named();
 
 	  lhs->Set_scalar_aux_id(idx);
@@ -483,6 +491,7 @@ OPT_REVISE_SSA::Find_scalars_from_lda_iloads(CODEREP *cr)
     _symbols_to_revise->Union1D(idx);
     AUX_STAB_ENTRY *aux = _opt_stab->Aux_stab_entry(idx);
     aux->Points_to()->Set_expr_kind(EXPR_IS_ADDR);
+    aux->Points_to()->Set_ofst_kind(OFST_IS_FIXED);
     aux->Points_to()->Set_named();
 
     cr->Set_scalar_aux_id(idx);
@@ -592,6 +601,7 @@ OPT_REVISE_SSA::Find_scalars_from_lda_indirects(void)
 	  _symbols_to_revise->Union1D(idx);
 	  AUX_STAB_ENTRY *aux = _opt_stab->Aux_stab_entry(idx);
 	  aux->Points_to()->Set_expr_kind(EXPR_IS_ADDR);
+	  aux->Points_to()->Set_ofst_kind(OFST_IS_FIXED);
 	  aux->Points_to()->Set_named();
 
 	  lhs->Set_scalar_aux_id(idx);
@@ -1327,6 +1337,8 @@ OPT_REVISE_SSA::Fold_lda_iloads(CODEREP *cr)
   CODEREP *new_cr = Alloc_stack_cr(cr->Extra_ptrs_used());
   BOOL need_rehash;
   INT32 i;
+  TY_IDX orig_ld_ty;
+
   switch (cr->Kind()) {
   case CK_CONST:
   case CK_RCONST:
@@ -1334,6 +1346,7 @@ OPT_REVISE_SSA::Fold_lda_iloads(CODEREP *cr)
   case CK_VAR:
     return NULL;
   case CK_IVAR:
+    orig_ld_ty = cr->Ilod_ty ();
     x = Fold_lda_iloads(cr->Ilod_base());
     if (x)
       cr->Set_ilod_base(x);
@@ -1388,7 +1401,8 @@ OPT_REVISE_SSA::Fold_lda_iloads(CODEREP *cr)
     x->Set_field_id(cr->I_field_id());
     if (x->Field_id() == 0 && x->Dsctyp() != MTYPE_M && 
 	TY_size(x->Lod_ty()) != MTYPE_byte_size(x->Dsctyp()))
-      x->Set_lod_ty(MTYPE_To_TY(x->Dsctyp()));
+      x->Set_lod_ty(Compose_TY_IDX (MTYPE_To_TY(x->Dsctyp()), orig_ld_ty));
+
     if (cr->Dsctyp() == MTYPE_BS) // cannot use offset from opt_stab
       x->Set_offset(cr->Offset()+cr->Ilod_base()->Offset());
     if (cr->Opr() == OPR_ILDBITS) 
@@ -1483,6 +1497,8 @@ OPT_REVISE_SSA::Fold_lda_indirects(void)
       }
 
       if (OPERATOR_is_store(opr)) {
+        TY_IDX orig_ty;
+
 	CODEREP *lhs = stmt->Lhs();
 	AUX_ID vaux;
         switch (opr) {
@@ -1496,6 +1512,7 @@ OPT_REVISE_SSA::Fold_lda_indirects(void)
 	  break;
         case OPR_ISTORE:
         case OPR_ISTBITS:
+	  orig_ty = lhs->Ilod_ty ();
 	  if (lhs->Istr_base()->Kind() != CK_LDA) {
 	    x = Fold_lda_iloads(lhs->Istr_base());
 	    if (x)
@@ -1520,8 +1537,11 @@ OPT_REVISE_SSA::Fold_lda_indirects(void)
 			TY_pointed(lhs->Ilod_base_ty()), lhs->I_field_id(), 
 			TRUE));
 	  if (stmt->Lhs()->Field_id() == 0 && stmt->Lhs()->Dsctyp() != MTYPE_M && 
-	      TY_size(stmt->Lhs()->Lod_ty()) != MTYPE_byte_size(stmt->Lhs()->Dsctyp()))
-	    stmt->Lhs()->Set_lod_ty(MTYPE_To_TY(stmt->Lhs()->Dsctyp()));
+	      TY_size(stmt->Lhs()->Lod_ty()) != MTYPE_byte_size(stmt->Lhs()->Dsctyp())) {
+	    TY_IDX new_ty =
+	      Compose_TY_IDX (MTYPE_To_TY(stmt->Lhs()->Dsctyp()), orig_ty);
+	    stmt->Lhs()->Set_lod_ty (new_ty);
+	  }
 	  if (lhs->Dsctyp() == MTYPE_BS) // cannot use offset from opt_stab
 	    stmt->Lhs()->Set_offset(lhs->Offset()+lhs->Istr_base()->Offset());
 	  if (stmt->Opr() == OPR_ISTORE)

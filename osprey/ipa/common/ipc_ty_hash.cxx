@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -117,6 +117,13 @@ namespace
 
     struct TY_HASH {
 	size_t operator() (const TY& key) const {
+            if (TY_kind(key) == KIND_STRUCT && !TY_anonymous(key)) {
+               // for named struct/class, use its name index as hash key
+               // the hash method down below has problem when two
+               // struct/class has same name but the pre-merge field 
+               // ids are different
+               return key.name_idx;  // the name_idx is after merge idx
+            }
 	    const UINT64 *p = reinterpret_cast<const UINT64*> (&key);
 	    UINT64 tmp;
             if (IPA_Enable_Old_Type_Merge) {
@@ -140,6 +147,9 @@ namespace
         BOOL operator() (const TY &k1, const TY &k2) const {
             // some fields like vtable is refreshed after TY merge
             // so do not compare them at this time
+            // 
+            // if we want to merge class definitions (fields)
+            // we cannot compare fld either
             if (k1.size != k2.size || 
                 k1.kind != k2.kind || 
                 k1.mtype != k2.mtype ||

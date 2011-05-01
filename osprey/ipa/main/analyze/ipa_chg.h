@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -53,6 +53,13 @@ public:
     INT Get_Num_Base_Classes(TY_INDEX tyi);
     INT Get_Num_Sub_Classes(TY_INDEX tyi);
 
+    CLASS_RELATIONSHIP::iterator Get_Begin_Base_Classes();
+    CLASS_RELATIONSHIP::iterator Get_End_Base_Classes();
+    CLASS_RELATIONSHIP::iterator Get_Begin_Sub_Classes();
+    CLASS_RELATIONSHIP::iterator Get_End_Sub_Classes();
+    CLASS_RELATIONSHIP::iterator Get_Begin_Virtual_Base();
+    CLASS_RELATIONSHIP::iterator Get_End_Virtual_Base();
+
     TY_INDEX Get_Base_Class(TY_INDEX tyi, INT index); 
     TY_INDEX Get_Sub_Class(TY_INDEX tyi, INT index);
 
@@ -61,6 +68,9 @@ public:
 
     BOOL Is_Sub_Class(TY_INDEX tyi, TY_INDEX sub);
     BOOL Is_Ancestor(TY_INDEX ancestor, TY_INDEX descendant); 
+
+    void Add_Virtual_Base(TY_INDEX tyi, TY_INDEX base);
+    BOOL Is_Virtual_Base(TY_INDEX tyi, TY_INDEX base);
 
     size_t Get_Ancestor_Offset(TY_INDEX sub, TY_INDEX anc);
 
@@ -74,16 +84,18 @@ public:
       fprintf(_debug, 
           "Baseclass_relationship_size:%zu; Subclass_relationship_size:%zu\n", 
           baseclass.size(), subclass.size());
-      fprintf(_debug, "basetypes\n");
-      Print_helper(baseclass,_debug); 
-      fprintf(_debug, "subtypes\n");
-      Print_helper(subclass,_debug); 
+      Print_helper(baseclass,_debug,true); 
+      Print_helper(subclass,_debug,false); 
       fclose(_debug);
     }
 
 
-    void Print_helper(CLASS_RELATIONSHIP myhier, FILE *_debug) {
+    void Print_helper(CLASS_RELATIONSHIP myhier, FILE *_debug, bool for_bases) {
       CLASS_RELATIONSHIP::iterator _iterator;
+      if (for_bases)
+          fprintf(_debug, "basetypes\n");
+      else
+          fprintf(_debug, "subtypes\n");
       fprintf(_debug, "in type ids\n");
       for (_iterator = myhier.begin(); 
           _iterator != myhier.end();
@@ -94,7 +106,11 @@ public:
         for (_viterator = _vect.begin();
             _viterator != _vect.end();
             ++_viterator) {
-          fprintf (_debug, " %d", *_viterator);
+          const char *vir = 
+             (for_bases && 
+              Is_Virtual_Base(_iterator->first, *_viterator)) ?
+              " virtual " : " ";
+          fprintf (_debug, "%s%d", vir, *_viterator);
         }
         fprintf (_debug, "\n");
       }
@@ -102,13 +118,20 @@ public:
       for (_iterator = myhier.begin(); 
           _iterator != myhier.end();
           ++_iterator) {
+        fprintf(_debug, "\n[Type_idx %d] ", _iterator->first);
         Ty_tab[_iterator->first].Print(_debug);
         _ty_idx_list::iterator _viterator;
         _ty_idx_list _vect = _iterator->second;
         for (_viterator = _vect.begin();
             _viterator != _vect.end();
             ++_viterator) {
-          fprintf (_debug, "+++++++");
+          const char *vir = 
+             (for_bases && 
+              Is_Virtual_Base(_iterator->first, *_viterator)) ?
+              " virtual " : " ";
+          fprintf (_debug, "+++++++ %s [type_idx %d] %s", 
+                for_bases ? "base class" : "derived class",
+                *_viterator, vir);
           Ty_tab[*_viterator].Print(_debug);
           fprintf (_debug, "+++++++\n");
         }
@@ -119,6 +142,7 @@ private:
 
     CLASS_RELATIONSHIP baseclass;
     CLASS_RELATIONSHIP subclass;
+    CLASS_RELATIONSHIP virtual_bases;
 };
 
 // Global class hierarchy graph

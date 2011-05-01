@@ -818,9 +818,9 @@ Configure_Source_Target ( char * /* filename */ )
   if ( DEBUG_Trap_Uv )
     FP_Exception_Enable_Min |= FPX_V;
 
-// TMP: ignore cpic until we figure out what to do with it
+  // TMP: ignore cpic until we figure out what to do with it
   if (Gen_PIC_Call_Shared)
-	Gen_PIC_Call_Shared = FALSE;
+    Gen_PIC_Call_Shared = FALSE;
 
   return;
 }
