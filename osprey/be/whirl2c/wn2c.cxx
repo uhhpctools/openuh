@@ -5364,7 +5364,9 @@ WN2C_istore(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       // if lhs is a field access (e.g. f1->x), we want the type of the field 
       // instead of the struct
       TY_IDX base_ty = TY_pointed(WN_ty(wn));
-      TY_IDX actual_ty = (WN_field_id(wn) > 0) ? Make_Pointer_Type(Get_Field_Type(base_ty, WN_field_id(wn))) : WN_ty(wn);
+      TY_IDX actual_ty = (WN_field_id(wn) > 0) ? 
+          Make_Pointer_Type(Get_Field_Type(base_ty, WN_field_id(wn))) : 
+          WN_ty(wn);
 
       STAB_OFFSET offt = WN_store_offset(wn);
       if (TY_is_union(base_ty) && WN_field_id(wn) > 0) {

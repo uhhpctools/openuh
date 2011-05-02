@@ -124,7 +124,7 @@ WN_Cvtl_Ty(const WN *wn)
    return Stab_Mtype_To_Ty(cvtl_mtype);
 } /* WN_Cvtl_Ty */
 
-TY_IDX Get_Field_Type(TY_IDX base, int field_id) 
+TY_IDX Get_Field_Type(TY_IDX base, INT field_id) 
 {
 
   Is_True(TY_Is_Structured(base), ("CALLING GET_FIELD_TYPE with a non struct type"));
