@@ -1797,13 +1797,14 @@ ConstraintGraph::connect(CallSiteId id, ConstraintGraph *callee,
   // If we have more actuals than formals either we either have a
   // signature mismatch or varargs.  For now we don't worry about
   // the other mismatch cases.
-  if (actualIter != cs->parms().end() &&
+  // It is possible lastFormal is NULL, and PU is vararg.
+  // When PU is a merged result (merge vararg PU into a non vararg PU).
+  // It's safe to not add any points to to callee, no actual param usage.
+  if (lastFormal != NULL && actualIter != cs->parms().end() &&
       formalIter == callee->parameters().end() &&
-      TY_is_varargs(ST_pu_type(calleeST))) {
+      TY_is_varargs(ST_pu_type(calleeST)) &&
+      lastFormal->stInfo()->checkFlags(CG_ST_FLAGS_VARARGS)) {
     // Hook up remaining actuals to the "varargs" node
-    FmtAssert(callee->stInfo(lastFormal->cg_st_idx())
-                  ->checkFlags(CG_ST_FLAGS_VARARGS),
-                  ("Expect last formal to be varargs!\n"));
     for ( ; actualIter != cs->parms().end(); ++actualIter) {
       ConstraintGraphNode *actual = cgNode(*actualIter);
       if (actual->checkFlags(CG_NODE_FLAGS_NOT_POINTER))
