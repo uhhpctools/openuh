@@ -299,6 +299,7 @@ BE_LNOPT_NLX_CXX_SRCS = \
 
 ifeq ($(BUILD_TARGET), X8664)
 BE_LNOPT_NLX_CXX_SRCS += simd.cxx
+BE_LNOPT_NLX_CXX_SRCS += simd_util.cxx
 endif
 
 BE_LNOPT_LX_CXX_SRCS = \

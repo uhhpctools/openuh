@@ -483,6 +483,10 @@ typedef	struct bb {
 #ifdef KEY
   struct bb     *aux;
 #endif 
+#if defined(TARG_X8664)
+  /* array of all target register classes used to supply pressure info */
+  bool           has_regpressure[ISA_REGISTER_CLASS_MAX+1]; 
+#endif
 #if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS) || defined(TARG_LOONGSON)
   INT		bb_cycle; 
 #if !defined(TARG_SL)
@@ -519,6 +523,9 @@ typedef	struct bb {
 #define	BB_first_op(b)	(CAN_USE_BB(b)->ops.first+0)
 #define	BB_last_op(b)	(CAN_USE_BB(b)->ops.last+0)
 #define BB_unrollings(b) (CAN_USE_BB(b)->unrollings+0)
+#if defined(TARG_X8664)
+#define BB_regpressure(b,rc) (CAN_USE_BB(b)->has_regpressure[rc])
+#endif
 #define BB_loop_head_bb(b) (CAN_USE_BB(b)->loop_head_bb+0)
 #define BB_loophead(bb) (BB_loop_head_bb(bb) == (bb))
 #ifdef KEY
@@ -528,6 +535,12 @@ typedef	struct bb {
 inline void Set_BB_unrollings(BB *bb, UINT16 u) {
   bb->unrollings = u;
 }
+
+#if defined(TARG_X8664)
+inline void Set_BB_regpressure(BB *bb, bool x, ISA_REGISTER_CLASS cl) {
+  bb->has_regpressure[cl] = x;
+}
+#endif
 
 inline void Set_BB_loop_head_bb(BB *bb, BB *head) {
   bb->loop_head_bb = head;

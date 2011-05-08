@@ -477,6 +477,8 @@ static OPTION_DESC Options_CG[] = {
     0, 0, 0,    &CG_strcmp_expand, NULL },
   { OVK_BOOL,   OV_VISIBLE, TRUE, "merge_counters_x86", "",
     0, 0, 0,    &CG_merge_counters_x86, NULL },
+  { OVK_BOOL,   OV_VISIBLE, TRUE, "interior_ptrs", "",
+    0, 0, 0,    &CG_interior_ptrs_x86, NULL },
 #endif
   { OVK_BOOL,	OV_INTERNAL, TRUE, "skip_local_sched", "",
     0, 0, 0,	&CG_skip_local_sched, NULL },
@@ -2631,6 +2633,14 @@ CG_Init (void)
       //       we have binutils support
       if (CG_loop32 == FALSE)
         CG_loop32 = TRUE; 
+    }
+    if (Is_Target_Orochi() || Is_Target_Barcelona()) {
+      if (CG_interior_ptrs_x86) {
+        // Enable sib translation and scheduling for register pressure
+        // for unrolled loops.
+        CG_merge_counters_x86 = TRUE;
+        LOCS_PRE_Enable_Unroll_RegPressure_Sched = TRUE;
+      }
     }
 #endif //TARG_X8664
 #endif // KEY

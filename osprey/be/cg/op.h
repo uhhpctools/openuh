@@ -531,6 +531,7 @@ enum OP_COND_DEF_KIND {
 
 #ifdef TARG_X8664
 #define OP_MASK_MEMORY_HI     0x00040000 /* Is OP load/store the high 32-bit? */
+#define OP_RES_NORENAME       0x00080000 /* lock result tn as non renamable */
 #define OP_MASK_COMPUTES_GOT  0x00100000 /* Does OP compute GOT ? */
 #define OP_MASK_PREFIX_LOCK   0x01000000
 #endif
@@ -675,6 +676,9 @@ enum OP_COND_DEF_KIND {
 #endif
 
 #ifdef TARG_X8664
+# define OP_res_norename(o)	(OP_flags(o) & OP_RES_NORENAME)
+# define Set_OP_res_norename(o)	(OP_flags(o) |= OP_RES_NORENAME)
+# define Reset_OP_res_norename(o)	(OP_flags(o) &= ~OP_RES_NORENAME)
 # define OP_memory_hi(o)	(OP_flags(o) & OP_MASK_MEMORY_HI)
 # define Set_OP_memory_hi(o)	(OP_flags(o) |= OP_MASK_MEMORY_HI)
 # define Reset_OP_memory_hi(o)	(OP_flags(o) &= ~OP_MASK_MEMORY_HI)

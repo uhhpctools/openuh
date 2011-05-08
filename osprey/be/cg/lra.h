@@ -79,6 +79,19 @@ extern mINT8 *LRA_Compute_Register_Request (BB *bb, MEM_POOL *pool);
 extern void LRA_Estimate_Fat_Points (BB* bb, mINT8* fatpoint,
 				     INT* regs_in_use, MEM_POOL* pool);
 
+/* A collection of routines to analyze differences in
+ * code where the utility routines below manipulate the
+ * final result, and which comparisons of live range pressure
+ * can be made.
+ */
+extern TN_MAP Calculate_All_Conflicts(ISA_REGISTER_CLASS rclass);
+extern void Merge_Live_Ranges(TN *tn1, TN *tn2, bool make_tn1_span);
+extern bool Query_Conflicts_Improved(TN_MAP orig_map,
+                                     TN_MAP new_map,
+                                     INT num_reserved,
+                                     INT *num_ranges_mitigated,
+                                     ISA_REGISTER_CLASS rclass);
+
 /* Returns the number of registers LRA is requesting from GRA for
  * the class <cl> in the basic block <bb>. If we run the scheduling
  * pass before register allocation for the bb, this returns an 

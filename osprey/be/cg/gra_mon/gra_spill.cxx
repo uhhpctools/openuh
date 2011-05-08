@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1314,6 +1314,7 @@ LRANGE_Spill( LRANGE* lrange )
 #ifdef TARG_X8664
   TN*     orig_tn = lrange->Original_TN();
   if (CG_push_pop_int_saved_regs && ! Gen_Frame_Pointer &&
+      ! (PU_cxx_lang (Get_Current_PU()) && PU_has_region (Get_Current_PU())) &&
       ! TN_is_float(orig_tn) && TN_is_save_reg(orig_tn)) {
     // put saved location info in Saved_Callee_Saved_Regs for dwarf generation
     SAVE_REG_LOC sr;

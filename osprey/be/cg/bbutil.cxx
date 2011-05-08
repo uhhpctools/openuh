@@ -948,6 +948,7 @@ Print_LOOPINFO(LOOPINFO *info)
   if (WN_Loop_Symb_Trip(loop_info)) fprintf(TFile, "SYMB_TRIP ");
   if (WN_Loop_Up_Trip(loop_info)) fprintf(TFile, "UP_TRIP ");
   if (LOOPINFO_multiversion(info)) fprintf(TFile, "LMV");
+  if (LOOPINFO_vectorized(info)) fprintf(TFile, "VEC");
   fprintf(TFile, "\n");
   if (LOOPINFO_trip_count_tn(info)) {
     fprintf(TFile, "    trip count TN = ");

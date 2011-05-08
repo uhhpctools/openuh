@@ -1420,6 +1420,9 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
 /* Is the memory alias improved via loop multi-versioning */
 #define WN_LOOP_MULTIVERSION_ALIAS 0x80
 
+/* Is the loop vectorized in Simd */
+#define WN_LOOP_VECTORIZED	0x10000
+
 /* Is the loop an innermost loop */
 #define WN_Loop_Innermost(x)		(WN_loop_flag(x) & WN_LOOP_INNERMOST)
 #define WN_Set_Loop_Innermost(x)	(WN_loop_flag(x) |= WN_LOOP_INNERMOST)
@@ -1482,6 +1485,16 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
   (WN_loop_flag(x) |= WN_LOOP_MULTIVERSION_ALIAS)
 #define WN_Reset_Multiversion_Alias(x) \
   (WN_loop_flag(x) &= ~WN_LOOP_MULTIVERSION_ALIAS)
+
+/* Mark the fact that we vectorized a loop so that the optimizer
+ * and code generator can make use it.
+ */
+#define WN_Loop_Vectorized(x) \
+  (WN_loop_flag(x) & WN_LOOP_VECTORIZED)
+#define WN_Set_Vectorized(x) \
+  (WN_loop_flag(x) |= WN_LOOP_VECTORIZED)
+#define WN_Reset_Vectorized(x) \
+  (WN_loop_flag(x) &= ~WN_LOOP_VECTORIZED)
 
 #define WN_LABEL_HANDLER_BEGIN 0x2
 #define WN_Label_Is_Handler_Begin(x)	   (WN_label_flag(x) & \

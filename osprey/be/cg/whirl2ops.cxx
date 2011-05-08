@@ -4596,6 +4596,65 @@ Handle_Shift_Operation(WN* expr, TN* result)
 
 void dump_op(const OP* op);
 
+static TN*
+Handle_Replicate (WN* expr, WN* parent, TN* result) {
+  
+  if (result == NULL) { result = Allocate_Result_TN(expr, NULL); }
+
+  WN* elmt_val = WN_kid0(expr);
+  if (WN_operator (elmt_val) == OPR_INTCONST) {
+
+    INT64 value = WN_const_val (elmt_val);
+    if (value == 0) {
+      Build_OP (TOP_pxor, result, result, result, &New_OPs);
+      return result;
+    }
+
+    TYPE_ID elmt_mty = MTYPE_UNKNOWN;
+    TYPE_ID vect_mty = MTYPE_UNKNOWN;
+    switch (WN_opcode (expr)) {
+    case OPC_V16I8I8REPLICA:
+        elmt_mty = MTYPE_I8; vect_mty = MTYPE_V16I8;
+        break;
+
+    case OPC_V16I4I4REPLICA:
+        elmt_mty = MTYPE_I4; vect_mty = MTYPE_V16I4;
+        break;
+
+    case OPC_V16I2I2REPLICA:     
+        elmt_mty = MTYPE_I2; vect_mty = MTYPE_V16I2;
+        break;
+
+    case OPC_V16I1I1REPLICA:
+        elmt_mty = MTYPE_I1; vect_mty = MTYPE_V16I1;
+        break;
+    } 
+
+    if (elmt_mty != MTYPE_UNKNOWN) {
+        TCON elmt_tcon;
+        if (MTYPE_is_size_double (elmt_mty)) {
+            elmt_tcon = Host_To_Targ(MTYPE_I8, value);
+        } else {
+            elmt_tcon = Host_To_Targ(MTYPE_I4, value);
+        }
+
+        TCON vect_tcon = Create_Simd_Const (vect_mty, elmt_tcon);
+        ST *vect_sym = 
+            New_Const_Sym (Enter_tcon (vect_tcon), Be_Type_Tbl(vect_mty));
+        Allocate_Object (vect_sym);
+        TN* vect_tn = Gen_Symbol_TN (vect_sym, 0, 0);
+        Exp_OP1 (OPCODE_make_op (OPR_CONST, vect_mty, MTYPE_V), 
+                 result, vect_tn, &New_OPs); 
+
+        return result;
+    }
+  }
+  TN* kid_tn  = Expand_Expr (elmt_val, expr, NULL);
+  Expand_Replicate (WN_opcode(expr), result, kid_tn, &New_OPs);
+
+  return result;
+}
+
 static TN* 
 Handle_Fma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
 {
@@ -5278,6 +5337,9 @@ Expand_Expr (WN *expr, WN *parent, TN *result)
       return Handle_Shift_Operation(expr, result); 
     }
 #elif defined(TARG_X8664)
+  case OPR_REPLICATE:
+    return Handle_Replicate (expr, parent, result);
+
   case OPR_SUB:
   case OPR_ADD:
     if ((CG_opt_level > 1) && Is_Target_Orochi() && 
@@ -7120,6 +7182,7 @@ static void Expand_Statement (WN *stmt)
       LOOPINFO_srcpos(info) = srcpos;
       LOOPINFO_trip_count_tn(info) = trip_tn;
       LOOPINFO_multiversion(info) = WN_Loop_Multiversion_Alias(loop_info);
+      LOOPINFO_vectorized(info) = WN_Loop_Vectorized(loop_info);
 
 #ifndef TARG_NVISA
       if (!CG_PU_Has_Feedback && WN_loop_trip_est(loop_info) == 0)

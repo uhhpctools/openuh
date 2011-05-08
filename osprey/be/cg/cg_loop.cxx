@@ -2772,6 +2772,100 @@ static void unroll_xfer_annotations(BB *unrolled_bb, BB *orig_bb)
 }
   
 
+static BB *Copy_Replicate_Body(LOOP_DESCR *loop)
+{
+  BB *body = LOOP_DESCR_loophead(loop);
+  BB *copied_body = Gen_BB_Like(body);
+  OP *op;
+  ANNOTATION *annot = ANNOT_Get(BB_annotations(body), ANNOT_LOOPINFO);
+  LOOPINFO *info = ANNOT_loopinfo(annot);
+  TN *trip_count = LOOPINFO_trip_count_tn(info);
+  INT16 new_trip_count_val;
+  LOOPINFO *copied_info = TYPE_P_ALLOC(LOOPINFO);
+  WN *wn = WN_COPY_Tree(LOOPINFO_wn(info));
+  TYPE_ID ttype = WN_rtype(WN_loop_trip(wn));
+  OPCODE opc_intconst = OPCODE_make_op(OPR_INTCONST, ttype, MTYPE_V);
+  WN *ntimes_wn = WN_CreateIntconst(opc_intconst, 1);
+  OPCODE opc_div = OPCODE_make_op(OPR_DIV, ttype, MTYPE_V);
+
+  /* Catch calls that should be going to unroll_multi_bb instead */
+  Is_True(BB_SET_Size(LOOP_DESCR_bbset(loop)) == 1,
+	    ("unroll_replicate_body passed multi-bb loop body"));
+
+  if (BB_freq_fb_based(body)) Set_BB_freq_fb_based(copied_body);
+
+  if (TN_is_constant(trip_count)) {
+    new_trip_count_val = TN_value(trip_count);
+    Is_True((new_trip_count_val > 1),
+	    ("new_trip_count_val does not make sense."));
+  }
+
+  /* Setup new <copied_body> LOOPINFO.
+   */
+  WN_set_loop_trip(wn, WN_CreateExp2(opc_div, WN_loop_trip(wn), ntimes_wn));
+  LOOPINFO_wn(copied_info) = wn;
+  LOOPINFO_srcpos(copied_info) = LOOPINFO_srcpos(info);
+  LOOPINFO_vectorized(copied_info) = LOOPINFO_vectorized(info);
+  if (TN_is_constant(trip_count))
+    LOOPINFO_trip_count_tn(copied_info) =
+      Gen_Literal_TN(new_trip_count_val, TN_size(trip_count));
+  Set_BB_unrollings(copied_body, 1);
+  BB_Add_Annotation(copied_body, ANNOT_LOOPINFO, copied_info);
+
+  bool trace_pref = Get_Trace(TP_CGLOOP, 2);
+
+  /* Replicate the body, and remember this new loop
+   * has not been found yet, so no descriptor is available.
+   */
+  FOR_ALL_BB_OPs(body, op) {
+    if (!OP_br(op)) {
+      UINT8 opnd;
+      UINT8 res;
+      OP *new_op = Dup_OP(op);
+      CGPREP_Init_Op(new_op);
+
+      // Need to copy WN info for all mem ops
+      WN *mem_wn = (WN*) OP_MAP_Get(OP_to_WN_map, op);
+      if (mem_wn)
+        OP_MAP_Set(OP_to_WN_map, new_op, mem_wn);
+
+      Set_OP_unrolling(new_op, OP_unrolling(op));
+      Set_OP_orig_idx(new_op, OP_map_idx(op));
+      Set_OP_unroll_bb(new_op, copied_body);
+      BB_Append_Op(copied_body, new_op);
+    }
+  }
+
+  unroll_xfer_annotations(copied_body, body);
+
+  /*
+   * Generate new label for top of loop and fix branch instruction,
+   * and place <unrolled_body> on its own succs/preds list.
+   */
+  op = BB_branch_op(body);
+  OP *new_op = Dup_OP(op);
+  Is_True(new_op, ("didn't insert loopback branch correctly"));
+  Set_OP_opnd(new_op,
+	      Branch_Target_Operand(new_op),
+	      Gen_Label_TN(Gen_Label_For_BB(copied_body), 0));
+  BB_Append_Op(copied_body, new_op);
+  INT loop_count = WN_loop_trip_est(wn) ? WN_loop_trip_est(wn) : 100;
+  Link_Pred_Succ_with_Prob(copied_body, copied_body,
+			   (loop_count - 1.0) / loop_count);
+
+  if (FREQ_Frequencies_Computed() || BB_freq_fb_based(body)) {
+    BB_freq(copied_body) = BB_freq(body);
+  }
+
+  /* GRA liveness info
+   */
+  GRA_LIVE_Compute_Local_Info(copied_body);
+
+  return copied_body;
+}
+
+
+
 static BB *Unroll_Replicate_Body(LOOP_DESCR *loop, INT32 ntimes, BOOL unroll_fully)
 /* -----------------------------------------------------------------------
  * Requires: unroll_make_remainder_loop has not yet been called
@@ -2819,6 +2913,7 @@ static BB *Unroll_Replicate_Body(LOOP_DESCR *loop, INT32 ntimes, BOOL unroll_ful
   WN_loop_trip_est(wn) = WN_loop_trip_est(wn) / ntimes;
   LOOPINFO_wn(unrolled_info) = wn;
   LOOPINFO_srcpos(unrolled_info) = LOOPINFO_srcpos(info);
+  LOOPINFO_vectorized(unrolled_info) = LOOPINFO_vectorized(info);
   if (TN_is_constant(trip_count))
     LOOPINFO_trip_count_tn(unrolled_info) =
       Gen_Literal_TN(new_trip_count_val, TN_size(trip_count));
@@ -4510,6 +4605,106 @@ CG_LOOP_Append_BB_To_Prolog(BB *loop_prolog, BB *loop_head)
   return new_bb;
 }
 
+BB*
+CG_LOOP_Append_BB_To_Prolog_MV(BB *loop_prolog, BB *loop_head)
+/* -----------------------------------------------------------------------
+ * See "cg_loop.h" for interface.
+ * -----------------------------------------------------------------------
+ */
+{
+  OP *br_op = BB_branch_op(loop_prolog);
+  BB *new_bb = Gen_And_Insert_BB_After(loop_prolog);
+  BB *br_targ_bb = NULL;
+  BOOL freqs = FREQ_Frequencies_Computed();
+
+  // first get the succ block of the current prolog, it will 
+  // be the BB we want to make our cond branch target.
+  BBLIST *blsucc = BB_succs(loop_prolog);
+
+  if (br_op == NULL) {
+    br_targ_bb = BBLIST_item(blsucc);
+    Add_Goto(loop_prolog, br_targ_bb);
+    br_op = BB_branch_op(loop_prolog);
+  }
+
+  LOOP_DESCR *prolog_loop = LOOP_DESCR_Find_Loop(loop_prolog);
+  if (BB_freq_fb_based(loop_prolog)) Set_BB_freq_fb_based(new_bb);
+  BB_rid(new_bb) = BB_rid(loop_prolog);
+
+  // Get info about current branch target and its bb.
+  TN *br_targ_bb_tn = NULL; 
+  if (br_op) {
+    INT br_targ_opnd = Branch_Target_Operand(br_op);
+    if (TN_is_label(OP_opnd(br_op, br_targ_opnd))) {
+      br_targ_bb_tn = OP_opnd(br_op, br_targ_opnd);
+      LABEL_IDX label = TN_label(OP_opnd(br_op, br_targ_opnd));
+      if (blsucc) {
+        br_targ_bb = BBLIST_item(blsucc);
+        Is_True(!TN_is_label(br_targ_bb_tn) ||
+	         Is_Label_For_BB(TN_label(OP_opnd(br_op, br_targ_opnd )), 
+                                 br_targ_bb),
+	         ("explicit branch target should be <br_targ_bb>"));
+      } else {
+        return NULL;
+      }
+    } else {
+      return NULL;
+    }
+  } else {
+    return NULL;
+  }
+
+  BB_Remove_Op(loop_prolog, br_op);
+  Unlink_Pred_Succ(loop_prolog, br_targ_bb);
+  // add new_bb as simple fall through from loop_prolog
+  Target_Simple_Fall_Through_BB(loop_prolog, new_bb);
+
+  // fill in the cmp_res rflags with a TOP_cmp later
+  TN *cmp_res = Gen_Register_TN(ISA_REGISTER_CLASS_rflags, 8);
+  OP *op_jcc = Mk_OP(TOP_je, cmp_res, br_targ_bb_tn);
+  BB_Append_Op(loop_prolog, op_jcc);
+  Target_Cond_Branch(loop_prolog, br_targ_bb, 0.0);
+  Link_Pred_Succ(loop_prolog, br_targ_bb);
+
+  // Add an edge between the new prolog end and its corresponding loop
+  Add_Goto(new_bb, loop_head);
+  Link_Pred_Succ(new_bb, loop_head);
+
+  if (freqs || BB_freq_fb_based(loop_prolog))
+    BB_freq(loop_head) += BB_freq(new_bb);
+
+  if (prolog_loop) LOOP_DESCR_Add_BB(prolog_loop, new_bb);
+
+  return new_bb;
+}
+
+BB*
+CG_LOOP_Prepend_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head)
+/* -----------------------------------------------------------------------
+ * See "cg_loop.h" for interface.
+ * -----------------------------------------------------------------------
+ */
+{
+  BB *new_bb = Gen_And_Insert_BB_After(loop_head);
+  BOOL freqs = FREQ_Frequencies_Computed();
+
+  LOOP_DESCR *epilog_loop = LOOP_DESCR_Find_Loop(loop_epilog);
+  if (BB_freq_fb_based(loop_epilog)) Set_BB_freq_fb_based(new_bb);
+  BB_rid(new_bb) = BB_rid(loop_epilog);
+
+  // add flow edges
+  Link_Pred_Succ(loop_head, new_bb);
+  Add_Goto(new_bb, loop_epilog);
+  Link_Pred_Succ(new_bb, loop_epilog);
+
+  if (freqs || BB_freq_fb_based(loop_epilog))
+    BB_freq(loop_head) += BB_freq(new_bb);
+
+  if (epilog_loop) LOOP_DESCR_Add_BB(epilog_loop, new_bb);
+
+  return new_bb;
+}
+
 
 /* =======================================================================
  *
@@ -4614,6 +4809,39 @@ void Unroll_Do_Loop_guard(LOOP_DESCR *loop,
 }
 
 
+//  Copy a single-bb do-loop
+//
+BB *Copy_Do_Loop(CG_LOOP& cl, MEM_POOL *pool)
+{
+  LOOP_DESCR *loop = cl.Loop();
+  if (Get_Trace(TP_CGLOOP, 2))
+    CG_LOOP_Trace_Loop(loop,
+		       "Copy_Do_Loop: Before Loop Copy BB:%d",
+		       BB_id(LOOP_DESCR_loophead(loop)));
+
+  BB *head = LOOP_DESCR_loophead(loop);
+  BB *copied_body = NULL;
+  ANNOTATION *annot;
+  LOOPINFO *copied_info;
+
+  OPS ops = OPS_EMPTY;
+
+  /* Replicate the loop body <ntimes> and replace <head>
+   * with unrolled version. */
+  copied_body = Copy_Replicate_Body(loop);
+  annot = ANNOT_Get(BB_annotations(copied_body), ANNOT_LOOPINFO);
+  FmtAssert(annot, ("copied body has no LOOPINFO annotation"));
+  copied_info = ANNOT_loopinfo(annot);
+
+  if (Get_Trace(TP_CGLOOP, 2))
+    CG_LOOP_Trace_Loop(loop, "Copy_Do_Loop: After Copy  BB:%d",
+		       BB_id(head));
+
+  return copied_body;
+}
+
+//  Fully unroll a single-bb do-loop
+//
 //  Unroll a single-bb do-loop
 //
 void Unroll_Do_Loop(CG_LOOP& cl, UINT32 ntimes)
@@ -6857,6 +7085,61 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
 
   return TRUE;
 }
+
+
+#if defined(TARG_X8664)
+
+void CG_LOOP_Multiversion(LOOP_DESCR *loop, 
+                          INT num_copies, 
+                          MEM_POOL *pool)
+{
+  INT i;
+  CG_LOOP cg_loop(loop);
+  BOOL trace_loop_opt = Get_Trace(TP_CGLOOP, 0x4);
+
+  cg_loop.Build_CG_LOOP_Info(TRUE);
+
+  if (trace_loop_opt) 
+    CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_DOLOOP_MV ***");
+
+  // Use the orig epilog's successor as a common join block for MV
+  BB *loop_head =  LOOP_DESCR_loophead(loop);
+  BB *epilog_start = cg_loop.Epilog_start();
+  BB *mv_join_bb = NULL;
+  for ( BBLIST *lst = BB_succs(epilog_start); lst != NULL;
+        lst = BBLIST_next(lst) ) {
+    BB *bb = BBLIST_item(lst);
+    if (bb != epilog_start) {
+      mv_join_bb = bb;
+      break;
+    }
+  }
+
+  // Now construct the multiversion copies of the orig loop with their own
+  // prolog/epilog pairs for fixup.
+  BB *last_bb = cg_loop.Prolog_end();
+  BB *prolog_end_orig = last_bb;
+  cg_loop.Recompute_Liveness();
+  for (i = 0; i < num_copies; i++) {
+    BB *new_loop_bb = Copy_Do_Loop(cg_loop, pool);
+    Set_BB_unrollings(new_loop_bb, BB_unrollings(loop_head));
+    BB *new_prolog_end = CG_LOOP_Append_BB_To_Prolog_MV(cg_loop.Prolog_end(), 
+                                                        new_loop_bb);
+    FmtAssert((new_prolog_end != NULL), ("empty prolog of copied loop"));
+    BB_bbregs(new_prolog_end) = NULL;
+    GRA_LIVE_Compute_Liveness_For_BB(new_prolog_end);
+
+    Insert_BB(new_loop_bb, new_prolog_end);
+    cg_loop.Set_prolog_end(new_prolog_end);
+
+    BB *new_epilog_end = CG_LOOP_Prepend_BB_To_Epilog_MV(mv_join_bb,
+                                                         new_loop_bb);
+    FmtAssert((new_epilog_end != NULL), ("empty epilog of copied loop"));
+    BB_bbregs(new_epilog_end) = NULL;
+    GRA_LIVE_Compute_Liveness_For_BB(new_epilog_end);
+  }
+}
+#endif
 
 
 /*

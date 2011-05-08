@@ -4,6 +4,7 @@ program analysis tools.
 
 Merge History:
 
+[5]   merged r3579:3590 of Open64 main trunk. (5/8/11)
 [4]   merged r3576:3579 of Open64 main trunk. (5/3/11)
 [3]   merged r3477:3556 of openmp3.0 branch. (5/1/11)
 [2]   merged r3520:3576 of Open64 main trunk. (4/30/11)
@@ -11,6 +12,10 @@ Merge History:
 
 
 Notes:
+
+For merge [5], commit 3590 addresses the issue encountered in targ_const.cxx
+during merge [2] (see note below). I re-enabled the assertion check. See the
+open64 commit log for more details. -- Deepak
 
 For merge [2], I turned off some assertion checks in
 common/com/x8664/targ_const.cxx, because they were causing the bootstrapped

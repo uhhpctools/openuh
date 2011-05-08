@@ -85,10 +85,12 @@ static char *rcs_id = "$Source: be/lno/SCCS/s.simd.cxx $ $Revision: 1.244 $";
 #include "data_layout.h"	   // for Stack_Alignment
 #include "cond.h"                  // for Guard_A_Do
 #include "config_opt.h"            // for Align_Unsafe
+#include "be_util.h"               // for Current_PU_Count()
 #include "region_main.h" 	   // for creating new region id.
 #include "lego_util.h"             // for AWN_StidIntoSym, AWN_Add
 #include "minvariant.h"            // for Minvariant_Removal
 #include "prompf.h"
+#include "simd_util.h"
 
 #define ABS(a) ((a<0)?-(a):(a))
 
@@ -119,34 +121,28 @@ static REDUCTION_MANAGER *curr_simd_red_manager;
 static void Simd_Mark_Code (WN* wn);
 
 static INT Last_Vectorizable_Loop_Id = 0;
+SIMD_VECTOR_CONF Simd_vect_conf;
 
-static BOOL Too_Few_Iterations(INT64 iters, WN *body)
+// Return TRUE iff there are too few iterations to generate a single 
+// vectorized iteration.
+//
+// One interesting snippet to challenge this function is following:
+//
+//     float f[]; double d[];
+//     for (i = 0; i < 2; i++) { d[i] = (double)f[i]; }
+//
+// This func should not be folled by "f[i]". Currently, it is ok because 
+// "(double)f[i]" instead of "f[i]" is considered as vectorizable expr.
+// 
+static BOOL Too_Few_Iterations (WN* loop, SCALAR_REF_STACK* vect_exprs) 
 {
-   if(iters < Iteration_Count_Threshold) //watch performance
-    return TRUE;
-   if(iters >= 16) //should always be fine, not too few
+  DO_LOOP_INFO *dli = Get_Do_Loop_Info (loop);
+  if (dli->Est_Num_Iterations >= Simd_vect_conf.Get_Vect_Byte_Size ()) 
     return FALSE;
-   //bug 12056: no matter what Iteration_Count_Threshold is, we should
-   //           make sure at least one iter of the vectorized version
-   for(WN *stmt = WN_first(body); stmt; stmt = WN_next(stmt)){
-    switch(WN_desc(stmt)){
-      case MTYPE_I1: case MTYPE_U1:
-       return TRUE;
-      case MTYPE_I2: case MTYPE_U2:
-       if(iters < 8)
-         return TRUE;
-       break;
-      case MTYPE_I4: case MTYPE_U4: case MTYPE_F4:
-       if(iters < 4)
-         return TRUE;
-       break;
-      case MTYPE_I8: case MTYPE_U8: case MTYPE_F8: case MTYPE_C4:
-       if(iters < 2)
-         return TRUE;
-       break;
-    }//end switch;
-   }//end for
-  return FALSE;
+
+  SIMD_EXPR_MGR expr_mgr (loop, &SIMD_default_pool);
+  expr_mgr.Convert_From_Lagacy_Expr_List (vect_exprs);
+  return expr_mgr.Get_Max_Vect_Len () > dli->Est_Num_Iterations;
 }
      
 // Bug 10136: use a stack to count the number of different
@@ -261,26 +257,27 @@ static BOOL is_vectorizable_op (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc) {
   case OPR_SUB:
     return TRUE;
   case OPR_MPY:
-    if (rtype == MTYPE_F8 || rtype == MTYPE_F4 || 
-#ifdef TARG_X8664
-	((rtype == MTYPE_C4 || rtype == MTYPE_C8) && Is_Target_SSE3()) ||
-#endif
-	// I2MPY followed by I2STID is actually I4MPY followed by I2STID 
-	// We will distinguish between I4MPY and I2MPY in Is_Well_Formed_Simd
-	rtype == MTYPE_I4)
+    if (rtype == MTYPE_F8 || rtype == MTYPE_F4)
       return TRUE;
-    else
-      return FALSE;
+    else if (rtype == MTYPE_I4) {
+	    // I2MPY followed by I2STID is actually I4MPY followed by I2STID 
+	    // We will distinguish between I4MPY and I2MPY in Is_Well_Formed_Simd
+      return TRUE;
+    } else if (Simd_vect_conf.Is_SSE3() && 
+               (rtype == MTYPE_C4 || rtype == MTYPE_C8)) {
+      // TODO: explain why requires SSE3
+      return TRUE;      
+    }
+
+    return FALSE;
+
   case OPR_DIV:
-    // Look at icc
-    if (rtype == MTYPE_F8 || rtype == MTYPE_F4
-#ifdef TARG_X8664
-        || (rtype == MTYPE_C4 && Is_Target_SSE3())
-#endif
-       )
+    if (rtype == MTYPE_F8 || rtype == MTYPE_F4 || 
+        (rtype == MTYPE_C4 && Simd_vect_conf.Is_SSE3()))
       return TRUE;
     else
       return FALSE;
+
   case OPR_MAX:
   case OPR_MIN:
     if (rtype == MTYPE_F4 || rtype == MTYPE_F8 || rtype == MTYPE_I4)
@@ -300,7 +297,6 @@ static BOOL is_vectorizable_op (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc) {
     else
       return FALSE;
   case OPR_RSQRT:
-//case OPR_RECIP:
 #ifdef TARG_X8664
   case OPR_ATOMIC_RSQRT:
 #endif
@@ -464,6 +460,7 @@ static BOOL Is_Under_Array(WN *wn)
  * (2) If the SIMD operand size is < 8 bytes.
  */
 static BOOL Simd_Benefit (WN* wn) {
+  int store_granular_size = (LNO_Iter_threshold) ? 8 : 4;
 
   if (LNO_Run_Simd == 0)
     return FALSE;
@@ -492,7 +489,7 @@ static BOOL Simd_Benefit (WN* wn) {
     return TRUE;
 
   if (OPCODE_is_store(WN_opcode(wn)) &&
-      (MTYPE_byte_size(WN_desc(wn)) < 8 || //bug 5582 stid is fine
+      (MTYPE_byte_size(WN_desc(wn)) <= store_granular_size || //bug 5582 stid is fine
        MTYPE_is_complex(WN_desc(wn)) || opr == OPR_STID))
     return TRUE;
 
@@ -2764,12 +2761,6 @@ static BOOL Simd_Pre_Analysis(WN *innerloop, char *verbose_msg)
     return FALSE;
    }
   
-   //if there are too few iterations, we will not vectorize
-   if(Too_Few_Iterations(dli->Est_Num_Iterations, WN_do_body(innerloop))){
-     sprintf(verbose_msg, "Loop has too few iterations.");
-     return FALSE;
-   }
-
   // Bug 3784
   // Check for useless loops (STID's use_list is empty) of the form
   // do i
@@ -2827,12 +2818,10 @@ static BOOL Simd_Pre_Analysis(WN *innerloop, char *verbose_msg)
           WN_operator(enclosing_parallel_region) != OPR_REGION)
       enclosing_parallel_region =
         LWN_Get_Parent(enclosing_parallel_region);
-#ifdef KEY
     if (PU_cxx_lang(Get_Current_PU()) &&
         Is_Eh_Or_Try_Region(enclosing_parallel_region))
       enclosing_parallel_region =
         LWN_Get_Parent(LWN_Get_Parent(enclosing_parallel_region));
-#endif
     FmtAssert(enclosing_parallel_region, ("NYI"));
     region_pragma = WN_first(WN_region_pragmas(enclosing_parallel_region));
     while(region_pragma && (!reduction || !pdo)) {
@@ -3114,12 +3103,10 @@ static void SA_Version_F90_Loops_For_Contiguous(WN *innerloop)
               WN_operator(enclosing_parallel_region) != OPR_REGION)
           enclosing_parallel_region =
             LWN_Get_Parent(enclosing_parallel_region);
-#ifdef KEY
         if (PU_cxx_lang(Get_Current_PU()) &&
             Is_Eh_Or_Try_Region(enclosing_parallel_region))
           enclosing_parallel_region =
             LWN_Get_Parent(LWN_Get_Parent(enclosing_parallel_region));
-#endif
         WN *stmt_before_region = WN_prev(enclosing_parallel_region);
         FmtAssert(stmt_before_region, ("NYI"));
         WN *parent_block = LWN_Get_Parent(enclosing_parallel_region);
@@ -3169,6 +3156,11 @@ static BOOL Simd_Analysis(WN *innerloop, char *verbose_msg)
 
   if (simd_ops->Elements()==0) {//no simd op in this loop
       sprintf(verbose_msg, "Loop has 0 vectorizable ops.");
+      return FALSE;
+  }
+
+  if (Too_Few_Iterations (innerloop, simd_ops)) {
+      sprintf(verbose_msg, "Too few iterations.");
       return FALSE;
   }
 
@@ -4082,12 +4074,29 @@ static TYPE_ID Simd_Get_Vector_Type(WN *istore)
 // second argument is a constant it can be placed in a 1 byte immediate if it fits. 
 // But the first option has been chosen because it fits easier with the existing framework.
 
+static WN* Simd_Vectorize_Shift_Left_Amt (WN* const_wn, 
+                                          WN *istore,  //parent of simd_op
+                                          WN *simd_op) //const_wn's parent
+{
+  Is_True (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn, 
+           ("input WN isn't SHL"));
+
+    WN* shift_amt = WN_Intconst (MTYPE_I8, WN_const_val (const_wn));
+    WN* res = LWN_CreateExp1 (OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I8, MTYPE_I8), 
+                              shift_amt);
+    return res;
+}
+
 static WN *Simd_Vectorize_Constants(WN *const_wn,//to be vectorized 
                                     WN *istore,  //parent of simd_op
                                     WN *simd_op) //const_wn's parent
 {
    FmtAssert(const_wn && (WN_operator(const_wn)==OPR_INTCONST ||
              WN_operator(const_wn)==OPR_CONST),("not a constant operand"));
+
+   if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn) {
+        return Simd_Vectorize_Shift_Left_Amt (const_wn, istore, simd_op);
+   }
 
    TYPE_ID type;
    TCON tcon;
@@ -4105,17 +4114,9 @@ static WN *Simd_Vectorize_Constants(WN *const_wn,//to be vectorized
           WN_intrinsic(istore) == INTRN_SUBSU2) {
         type = WN_desc(LWN_Get_Parent(istore));
     }
-    if (!MTYPE_is_float(type)){
-          if (MTYPE_is_size_double(type)){
-            INT64 value = (INT64)WN_const_val(const_wn);
-            tcon = Host_To_Targ(MTYPE_I8, value);
-          } else {
-            INT value = (INT)WN_const_val(const_wn);
-            tcon = Host_To_Targ(MTYPE_I4, value);
-            }
-          sym = New_Const_Sym (Enter_tcon (tcon),
-                               Be_Type_Tbl(type));
-    }
+
+    WN* orig_const_wn = const_wn;
+
     switch (type) {
      case MTYPE_F4: case MTYPE_V16F4:
           WN_set_rtype(const_wn, MTYPE_V16F4);
@@ -4126,27 +4127,34 @@ static WN *Simd_Vectorize_Constants(WN *const_wn,//to be vectorized
      case MTYPE_C4: case MTYPE_V16C4:
           WN_set_rtype(const_wn, MTYPE_V16C4);
           break;
+
      case MTYPE_U1: case MTYPE_I1: case MTYPE_V16I1:
-          const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I1, MTYPE_V, sym);
+          const_wn = 
+            LWN_CreateExp1 (OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I1, MTYPE_I1), 
+                            orig_const_wn);
           break;
+
      case MTYPE_U2: case MTYPE_I2: case MTYPE_V16I2:
-          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn)
-	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
-	  else
-	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I2, MTYPE_V, sym);
+          const_wn = 
+            LWN_CreateExp1 (OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I2, MTYPE_I2), 
+                            orig_const_wn);
           break;
+
      case MTYPE_U4: case MTYPE_I4: case MTYPE_V16I4:
-          if (WN_operator(simd_op) == OPR_SHL && WN_kid1(simd_op) == const_wn)
-	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
-	  else
-	    const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I4, MTYPE_V, sym);
+          const_wn = 
+            LWN_CreateExp1 (OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I4, MTYPE_I4), 
+                            orig_const_wn);
           break;
+
      case MTYPE_U8: case MTYPE_I8: case MTYPE_V16I8:
-          const_wn = WN_CreateConst (OPR_CONST, MTYPE_V16I8, MTYPE_V, sym);
+          const_wn = 
+            LWN_CreateExp1 (OPCODE_make_op(OPR_REPLICATE, MTYPE_V16I8, MTYPE_I8), 
+                            orig_const_wn);
           break;
-     }//end switch
+
+     } // end switch
       
-   return const_wn;
+    return const_wn;
 }
 
 static WN *Simd_Vectorize_Invariants(WN *inv_wn, 
@@ -5337,8 +5345,9 @@ static void Simd_Finalize_Loops(WN *innerloop, WN *remainderloop, INT vect, WN *
 // Vectorize an innerloop
 static INT Simd(WN* innerloop)
 {
-// Don't do anything for now for non-x8664
-#ifdef TARG_X8664
+  if (!Simd_vect_conf.Arch_Has_Vect ())
+    return 0;
+
   INT good_vector = 0;
 
   //pre_analysis to filter out loops that can not be vectorized
@@ -5355,8 +5364,12 @@ static INT Simd(WN* innerloop)
     Last_Vectorizable_Loop_Id ++;
     if (Last_Vectorizable_Loop_Id < LNO_Simd_Loop_Skip_Before ||
 	Last_Vectorizable_Loop_Id > LNO_Simd_Loop_Skip_After ||
-	Last_Vectorizable_Loop_Id == LNO_Simd_Loop_Skip_Equal)
+	Last_Vectorizable_Loop_Id == LNO_Simd_Loop_Skip_Equal) {
+      fprintf (stderr, "SIMD: loop (%s:%d) of PU:%d is skipped\n", 
+               Src_File_Name, Srcpos_To_Line(WN_Get_Linenum(innerloop)),
+               Current_PU_Count ());
       return 0;
+    }
   }
  
   MEM_POOL_Push(&SIMD_default_pool);
@@ -5568,6 +5581,7 @@ static INT Simd(WN* innerloop)
    if (simd_op_last_in_loop[i])
       Simd_Finalize_Loops(innerloop, remainderloop, vect, reduction_node);
   }
+  dli->Loop_Vectorized = TRUE;
  }
  MEM_POOL_Pop(&SIMD_default_pool);
 
@@ -5581,10 +5595,6 @@ static INT Simd(WN* innerloop)
   }
 
   return 1;
-#else
-  return 0;
-#endif // TARG_X8664
-  
 }
 
 static void Simd_Walk(WN* wn) {
@@ -5595,8 +5605,11 @@ static void Simd_Walk(WN* wn) {
   else if (opc==OPC_DO_LOOP) {
     if (Do_Loop_Is_Good(wn) && Do_Loop_Is_Inner(wn) && !Do_Loop_Has_Calls(wn)
 	&& !Do_Loop_Has_Gotos(wn)) {
-      if (Simd(wn))
+      if (Simd(wn)) {
         Simd_Align = TRUE;
+        WN *loop_info = WN_do_loop_info(wn);
+        WN_Set_Vectorized(loop_info);
+      }
     } else
       Simd_Walk(WN_do_body(wn));
   } else if (opc==OPC_BLOCK)

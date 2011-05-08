@@ -2450,7 +2450,9 @@ Rename_TNs_For_BB (BB *bb, GTN_SET *multiple_defined_set
     for (INT i = 0; i < OP_results(op); i++) {
       TN *tn = OP_result(op, i);
       // Don't rename under the following conditions.
-      if (TN_is_dedicated(tn) || OP_cond_def(op) || OP_same_res(op)) continue;
+      if (TN_is_dedicated(tn) || OP_cond_def(op) || 
+          TN_is_norename(tn) || OP_res_norename(op) || 
+          OP_same_res(op)) continue;
 
       OP *last_def = (OP *) TN_MAP_Get (op_for_tn, tn);
 #ifdef TARG_LOONGSON

@@ -893,6 +893,7 @@ public:
   mBOOL Inside_Critical_Section;
   mBOOL Has_Barriers; 
   mBOOL Multiversion_Alias;
+  mBOOL Loop_Vectorized;  // attribute to mark loops which are vectorized
   mINT8 Required_Unroll;
   mINT8 Prefer_Fuse;
   mINT8 Has_Precom_Def;

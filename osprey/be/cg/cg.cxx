@@ -753,7 +753,8 @@ CG_Generate_Code(
 // Cannot enable emit_unwind_info if Force_Frame_Pointer is not set
 // Need this flag set for C++ exceptions and for -g
   if (!CG_emit_unwind_info_Set)
-  	CG_emit_unwind_info = Force_Frame_Pointer;
+  	CG_emit_unwind_info = (Force_Frame_Pointer 
+	  || (PU_cxx_lang (Get_Current_PU()) && PU_has_region (Get_Current_PU())));
 
   // Don't eliminate prologue OPs in main because they guide cgemit.cxx on
   // where to insert OPs to set up the control registers.  Bug 8141.

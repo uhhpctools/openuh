@@ -79,6 +79,17 @@ getArraySize(WN *wn)
   return 0;
 }
 
+static TY_IDX
+get_field_type (TY_IDX struct_type, UINT field_id)
+{
+  Is_True (TY_kind (struct_type) == KIND_STRUCT, ("expecting KIND_STRUCT"));
+  UINT cur_field_id = 0;
+  FLD_HANDLE fld = FLD_get_to_field (struct_type, field_id, cur_field_id);
+  Is_True (! fld.Is_Null(), ("Invalid field id %d for type 0x%x",
+                            field_id, struct_type));
+  return FLD_type (fld);
+}
+
 void
 ConstraintGraph::remapDeletedNode(WN *wn)
 {
@@ -1036,8 +1047,8 @@ ConstraintGraph::processInitv(INITV_IDX initv_idx, PointsTo &pts)
         if (ST_is_initialized(*base_st) &&
               (_processedInitVals.find(ST_st_idx(base_st)) ==
                _processedInitVals.end())) {
-          processInitValues(ST_st_idx(base_st));
           _processedInitVals.insert(ST_st_idx(base_st));
+          processInitValues(ST_st_idx(base_st));
         }
         node = getCGNode(CG_ST_st_idx(base_st), base_offset);
       }
@@ -1182,8 +1193,8 @@ ConstraintGraph::processInitv(TY &ty, INITV_IDX initv_idx, UINT32 startOffset,
            _processedInitVals.end())) {
         if (Get_Trace(TP_ALIAS,NYSTROM_CG_BUILD_FLAG))
           fprintf(stderr, "Processing symbol value...\n");
-        processInitValues(ST_st_idx(base_st));
         _processedInitVals.insert(ST_st_idx(base_st));
+        processInitValues(ST_st_idx(base_st));
       }
       if (Get_Trace(TP_ALIAS,NYSTROM_CG_BUILD_FLAG))
         fprintf(stderr, "End processing symbol value...\n");
@@ -1514,8 +1525,13 @@ ConstraintGraph::handleAlloca(WN *stmt)
   WN *rhs = WN_kid0(stmt);
   FmtAssert(WN_operator(rhs) == OPR_ALLOCA, ("Expecting alloca as kid 0"));
   // Handle ALLOCA which must appear as the rhs of a store 
-  TY &stack_ptr_ty = Ty_Table[WN_ty(stmt)];
-  if (TY_kind(stack_ptr_ty) != KIND_POINTER) {
+  TY_IDX ty_idx = WN_ty(stmt);
+  if (TY_kind(ty_idx) == KIND_STRUCT) {
+    ty_idx = get_field_type(ty_idx, WN_field_id(stmt));
+  }
+  TY &stack_ptr_ty = Ty_Table[ty_idx];
+  if (TY_kind(stack_ptr_ty) != KIND_POINTER &&
+      TY_mtype(stack_ptr_ty) != Pointer_Mtype) {
     // May be looking at an ALLOCA with size 0, in which
     // case we will simply skip this RHS.  These can result
     // when lowering INTRN_F90_STACKTEMPALLOC for example.
@@ -1526,7 +1542,14 @@ ConstraintGraph::handleAlloca(WN *stmt)
                   "0 byte allocation\n"));
     return ConstraintGraph::notAPointer();
   } else {
-    TY_IDX stack_ty_idx = TY_pointed(stack_ptr_ty);
+    TY_IDX stack_ty_idx;
+    if (TY_kind(stack_ptr_ty) != KIND_POINTER) {
+      // don't know pointer type, assume char *
+      stack_ty_idx = MTYPE_To_TY(MTYPE_I1);
+    }
+    else {
+      stack_ty_idx = TY_pointed(stack_ptr_ty);
+    }
     // We create a local variable that represents the dynamically
     // allocated stack location.
     // Create a symbol based in the pointed to type
@@ -2128,6 +2151,11 @@ ConstraintGraph::handleMemcopy(CallSite *cs)
 
   ConstraintGraphNode *p1Node = cgNode(firstParmId);
   ConstraintGraphNode *p2Node = cgNode(secondParmId);
+  // this can happen when configure generate a file 
+  // with dummy memcpy, memmove call
+  if (p1Node == NULL || p2Node == NULL) {
+    return;
+  }
   ConstraintGraphNode *tmp = genTempCGNode();
 
   // Now, we model the semantics by inserting a read edge from
@@ -2543,8 +2571,8 @@ ConstraintGraph::getCGNode(WN *wn)
   // If this is the first time we encounter this symbol/node
   if (ST_is_initialized(*base_st) && 
       _processedInitVals.find(ST_st_idx(base_st)) == _processedInitVals.end()) {
-    processInitValues(ST_st_idx(base_st));
     _processedInitVals.insert(ST_st_idx(base_st));
+    processInitValues(ST_st_idx(base_st));
   }
 
   n = getCGNode(CG_ST_st_idx(base_st), base_offset);

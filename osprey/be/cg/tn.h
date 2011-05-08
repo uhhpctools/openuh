@@ -239,7 +239,7 @@ struct tn {
     } reg_tn;
   } u1;
   /* offset 8 */
-  mUINT16	flags;		/* Attribute flags */
+  mUINT32	flags;		/* Attribute flags */
 #ifdef TARG_NVISA
   /* nvisa doesn't use relocs, needs space info, so overlap space and relocs */
   union {
@@ -284,6 +284,7 @@ struct tn {
 #ifdef TARG_X8664
 #define TN_PREALLOCATED	    0x4000  /* TN is pre-allocated in LRA */
 #define TN_THREAD_SEG_PTR   0x8000  /* TN is pointer to thread-local storage */
+#define TN_NO_RENAME        0x10000 /* TN does not get auto renamed */
 #endif
 
 #ifdef TARG_IA64
@@ -573,6 +574,10 @@ inline void  Set_TN_number(TN *t, int x)
 #define       TN_is_thread_seg_ptr(r)	(TN_flags(r) &   TN_THREAD_SEG_PTR)
 #define   Set_TN_is_thread_seg_ptr(r)	(TN_flags(r) |=  TN_THREAD_SEG_PTR)
 #define Reset_TN_is_thread_seg_ptr(r)	(TN_flags(r) &= ~TN_THREAD_SEG_PTR)
+
+#define       TN_is_norename(r)	(TN_flags(r) &   TN_NO_RENAME)
+#define   Set_TN_is_norename(r)	(TN_flags(r) |=  TN_NO_RENAME)
+#define Reset_TN_is_norename(r)	(TN_flags(r) &= ~TN_NO_RENAME)
 #endif
 
 /* Macros to check if a TN is a particular dedicated register. */

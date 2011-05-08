@@ -177,6 +177,7 @@ typedef struct loopinfo {
  struct tn *trip_count_tn;	/* TN holding trip count (if any) */
  SRCPOS srcpos;			/* source position of start of body */
  BOOL   is_multiversion;
+ BOOL   is_vectorized;          /* loop is vectorized (yes/no) */
 } LOOPINFO;
 
 #define LOOPINFO_wn(x)			((x)->wn)
@@ -184,6 +185,7 @@ typedef struct loopinfo {
 #define LOOPINFO_line(x)		(Srcpos_To_Line(LOOPINFO_srcpos(x)))
 #define LOOPINFO_trip_count_tn(x)	((x)->trip_count_tn)
 #define LOOPINFO_multiversion(x)	((x)->is_multiversion)
+#define LOOPINFO_vectorized(x)          ((x)->is_vectorized)
 
 
 typedef	struct entryinfo {

@@ -1993,7 +1993,7 @@ Preorder_Process_PUs (PU_Info *current_pu)
         Pu_Table [ST_pu (St_Table [PU_Info_proc_sym (current_pu)])];
 
     // C++ PU having exception regions, or with -g
-    if ((PU_cxx_lang (func) && PU_has_region (func)) || Debug_Level > 0
+    if (Debug_Level > 0 
 #ifdef KEY
         || PU_has_goto_outer_block(func)
 #endif

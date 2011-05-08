@@ -289,6 +289,21 @@
  *    puts the branch there. This is used as a placeholder  <bb> to keep 
  *    all the instructions which are moved out of the loop. This relies on
  *    CFLOW pass to later merge them.
+ *
+ *  BB* CG_LOOP_Append_BB_To_Prolog_MV(BB *loop_prolog, BB *loop_head)
+ *    Create and append a <new_bb) to the <loop_prolog> bb (if necessary),
+ (*    such that if it ends in a branch, it creates a fall-through block and
+ *    puts a branch there, will added a conditional branch from the
+ *    old prolog block to its branch target.  This is used as a 
+ *    placeholder  <bb> to keep all the instructions which are moved 
+ *    out of the loop. This relies on CFLOW pass to later merge them.
+ *
+ *  BB* CG_LOOP_Prepend_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head)
+ *    Create and append a <new_bb> after a <loop_body> bb (if necessary), 
+ *    such that it creates a goto from the <new_bb> to the formal
+ *    epilog.  This is used as a placeholder  <bb> to keep 
+ *    all the instructions which are moved out of the loop. This relies on
+ *    CFLOW pass to later merge them.
  *  
  *  double CG_LOOP_Prefetch_Stride(OP *pref)
  *    Requires: OP_prefetch(pref)
@@ -527,6 +542,8 @@ void CG_LOOP_Remove_Prolog_OPs(BB *head);
 void CG_LOOP_Remove_Epilog_OPs(BB *tail);
 BB* CG_LOOP_Gen_And_Prepend_To_Prolog(BB *loop_head, LOOP_DESCR* loop);
 BB* CG_LOOP_Append_BB_To_Prolog(BB *loop_prolog, BB *loop_head);
+BB* CG_LOOP_Append_BB_To_Prolog_MV(BB *loop_prolog, BB *loop_head);
+BB* CG_LOOP_Append_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head);
 
 void CG_LOOP_Coalesce_Backedges(LOOP_DESCR *loop);
 
@@ -588,6 +605,7 @@ public:
   void Set_has_prolog()   { flags |= CG_LOOP_HAS_PROLOG; }
   void Set_has_epilog()   { flags |= CG_LOOP_HAS_EPILOG; }
   BB  *Prolog_start() const { return prolog_start; }
+  void Set_prolog_end(BB *new_prolog_end) { prolog_end = new_prolog_end; }
   BB  *Prolog_end() const { return prolog_end; }
   BB  *Epilog_start() const { return epilog_start; }
   BB  *Epilog_end() const { return epilog_end; }
@@ -691,7 +709,12 @@ extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, SWP_FIXUP_VECTOR& fixup,
 #else
 extern void Perform_Loop_Optimizations();
 
-extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, SWP_FIXUP_VECTOR& fixup);
+extern BOOL CG_LOOP_Optimize(LOOP_DESCR *loop, vector<SWP_FIXUP>& fixup);
+#endif
+
+#if defined(TARG_X8664)
+extern void CG_LOOP_Multiversion(LOOP_DESCR *loop, INT num_copies,
+                                 MEM_POOL *pool);
 #endif
 
 #if defined(TARG_SL)

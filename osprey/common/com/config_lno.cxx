@@ -179,9 +179,11 @@ static LNO_FLAGS Default_LNO = {
 #ifdef TARG_X8664
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
+  0,		/* Iter_threshold */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
+  0,		/* Iter_threshold */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -397,9 +399,11 @@ LNO_FLAGS Initial_LNO = {
 #ifdef TARG_X8664
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
+  0,		/* Iter_threshold */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
+  0,		/* Iter_threshold */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -719,9 +723,11 @@ static OPTION_DESC Options_LNO[] = {
 #ifdef TARG_X8664
   LNOPT_U32  ( "fission",		"fis",	0,0,2,	Fission ),
   LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
+  LNOPT_U32  ( "iter_threshold",	NULL,	0,0,16, Iter_threshold ),
 #else
   LNOPT_U32  ( "fission",		"fis",	1,0,2,	Fission ),
   LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
+  LNOPT_U32  ( "iter_threshold",	NULL,	0,0,16, Iter_threshold ),
 #endif
   LNOPT_U32  ( "fission_inner_register_limit",	NULL,	32,0,99999,
 					Fission_inner_register_limit ),

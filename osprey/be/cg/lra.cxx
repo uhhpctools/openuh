@@ -784,7 +784,7 @@ Print_Live_Range (LIVE_RANGE *lr)
 }
 
 
-static void
+void
 Print_Live_Ranges (BB *bb)
 {
   LIVE_RANGE *lr;
@@ -794,6 +794,126 @@ Print_Live_Ranges (BB *bb)
   fprintf (TFile, "--------------------------------------------\n");
   for (lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
     Print_Live_Range (lr);
+  }
+}
+
+
+static int
+Find_Max_End_Range(void)
+{
+  int max_use = 0;
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    if (LR_last_use(lr) > max_use)
+      max_use = LR_last_use(lr);
+  }
+  return max_use;
+}
+
+
+static int
+Calculate_Conflicting_Live_Ranges(TN *tn)
+{
+  LIVE_RANGE *cur_lr = LR_For_TN(tn);
+  int conflict_count = 0;
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    if (cur_lr == lr) continue;
+    if ((LR_first_def(lr) == 0) && (LR_last_use(lr) == 0)) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    TN *cur_tn = LR_tn(lr);
+    if (TN_register_class(tn) != TN_register_class(cur_tn)) continue;
+    if (LR_conflicts_with_reg_LR(lr, cur_lr)) conflict_count++;
+  }
+  return conflict_count;
+}
+
+
+TN_MAP
+Calculate_All_Conflicts(ISA_REGISTER_CLASS rclass)
+{
+  TN_MAP conflict_map = TN_MAP_Create();
+
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    TN *tn = LR_tn(lr);
+    INT num_conflicts;
+    if (TN_register_class(tn) != rclass) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    num_conflicts = Calculate_Conflicting_Live_Ranges(tn);
+    TN_MAP_Set(conflict_map, tn, (void*)num_conflicts);
+  }
+
+  return conflict_map;
+}
+
+
+bool
+Query_Conflicts_Improved(TN_MAP orig_map, 
+                         TN_MAP new_map, 
+                         INT num_reserved,
+                         INT *num_ranges_mitigated,
+                         ISA_REGISTER_CLASS rclass)
+{
+  INT num_improved = 0;
+  INT num_degraded = 0;
+  INT num_ranges_moved_below_pr_pressure = 0;
+  INT num_pr = REGISTER_CLASS_register_count(rclass) - num_reserved;
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    TN *tn = LR_tn(lr);
+    INT num_conflicts;
+    if (TN_register_class(tn) != rclass) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    INT orig_conflicts = (INT)TN_MAP_Get(orig_map, tn);
+    INT new_conflicts = (INT)TN_MAP_Get(new_map, tn);
+    if ((orig_conflicts < num_pr) && (new_conflicts < num_pr)) continue;
+    // Do not count the cases where we do not change.
+    if (orig_conflicts > new_conflicts)
+      num_improved++;
+    else if (orig_conflicts < new_conflicts)
+      num_degraded++;
+
+    // Now track the live ranges which fell below the pr threshold.
+    if ((orig_conflicts >= (num_pr + num_reserved)) &&
+        (new_conflicts < (num_pr + num_reserved))) {
+      num_ranges_moved_below_pr_pressure++;
+    }
+  }
+  *num_ranges_mitigated = num_ranges_moved_below_pr_pressure; 
+  TN_MAP_Delete(orig_map);
+  TN_MAP_Delete(new_map);
+ 
+  return (num_improved > num_degraded);
+}
+
+
+void Merge_Live_Ranges(TN *tn1, TN *tn2, bool make_tn1_span)
+{
+  LIVE_RANGE *lr1 = LR_For_TN(tn1);
+  LIVE_RANGE *lr2 = LR_For_TN(tn2);
+
+  // if lr1's first def is above lr2's, it becomes the new first def,
+  // else we already have the first def.
+  if (LR_first_def(lr1) < LR_first_def(lr2))
+    LR_first_def(lr2) = LR_first_def(lr1);
+
+  // override an existing exposed use from lr1 if we meet the conditions
+  if (LR_upward_exposed_use(lr1) && LR_upward_exposed_use(lr2)) {
+    if (LR_upward_exposed_use(lr1) < LR_upward_exposed_use(lr2))
+      LR_upward_exposed_use(lr2) = LR_upward_exposed_use(lr1);
+  }
+
+  // if lr1's last use is below lr2's, it becomes the new last use,
+  // else we already have the last use.
+  if (LR_last_use(lr1) > LR_last_use(lr2))
+    LR_last_use(lr2) = LR_last_use(lr1);
+
+  LR_use_cnt(lr2) += LR_use_cnt(lr1);
+
+  // now nullify the live range so we do not count it
+  if (make_tn1_span) {
+    LR_first_def(lr1) = 0;
+    LR_last_use(lr1) = Find_Max_End_Range();
+  } else {
+    LR_first_def(lr1) = 0;
+    LR_last_use(lr1) = 0;
   }
 }
 

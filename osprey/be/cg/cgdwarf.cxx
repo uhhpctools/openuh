@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2438,15 +2438,25 @@ Cg_Dwarf_Process_PU (Elf64_Word	scn_index,
 			    end_offset,
 			    low_pc, high_pc);
 #else
-  Dwarf_Unsigned pushbp_entry = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
-						      eh_pushbp_label[0],
-						      scn_index);
-  Dwarf_Unsigned movespbp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
-							  eh_movespbp_label[0],
-							  scn_index);
-  Dwarf_Unsigned adjustsp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
-							  eh_adjustsp_label[0],
-							  scn_index);
+  Dwarf_Unsigned pushbp_entry;
+  Dwarf_Unsigned movespbp_entry;
+  if (Current_PU_Stack_Model != SMODEL_SMALL)
+  {
+    pushbp_entry = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
+					      eh_pushbp_label[0],
+					      scn_index);
+    movespbp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
+						  eh_movespbp_label[0],
+						  scn_index);
+  }
+  Dwarf_Unsigned adjustsp_entry;
+  if (eh_adjustsp_label[0] != 0)
+     adjustsp_entry = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
+						  eh_adjustsp_label[0],
+						  scn_index);
+  else 
+    adjustsp_entry = begin_entry;
+
   Dwarf_Unsigned callee_saved_reg;
   INT num_callee_saved_regs;
   if (num_callee_saved_regs = Cgdwarf_Num_Callee_Saved_Regs())
@@ -2508,12 +2518,15 @@ Cg_Dwarf_Process_PU (Elf64_Word	scn_index,
       end_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
 					  last_bb_labels[pu_entry],
 					  scn_index);
-      pushbp_entry = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
+      if (Current_PU_Stack_Model != SMODEL_SMALL)
+      {
+        pushbp_entry = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
 					   eh_pushbp_label[pu_entry],
 					   scn_index);
-      movespbp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
+        movespbp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
 					       eh_movespbp_label[pu_entry],
 					       scn_index);
+      }
       adjustsp_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
 					       eh_adjustsp_label[pu_entry],
 					       scn_index);

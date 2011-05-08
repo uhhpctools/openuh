@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
  */
 /*
@@ -100,37 +104,68 @@ Build_Fde_For_Proc (Dwarf_P_Debug dw_dbg, BB *firstbb,
 		    INT       low_pc,
 		    INT       high_pc)
 {
+  BOOL stack_used = FALSE;
   Dwarf_Error dw_error;
   Dwarf_P_Fde fde;
 
   if ( ! CG_emit_unwind_info) return NULL;
 
+  {
+    OP *op;
+    for (op = BB_first_op(firstbb); op != NULL; op = OP_next(op))
+    {
+      if (OP_result(op, 0) == SP_TN  || 
+        OP_code(op) == TOP_pushq || OP_code(op) == TOP_pushl)
+      {
+        stack_used = TRUE;
+        break;
+      }
+    }
+  }
+
   fde = dwarf_new_fde (dw_dbg, &dw_error);
 
-  // Generate FDE instructions
-  dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
+  if (Current_PU_Stack_Model != SMODEL_SMALL)
+  {
+    // Generate FDE instructions
+    dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
 		      begin_label, movespbp_label, &dw_error);
-  dwarf_add_fde_inst (fde, DW_CFA_def_cfa_offset, 
+    dwarf_add_fde_inst (fde, DW_CFA_def_cfa_offset, 
 		      Is_Target_64bit() ? 0x10 : 0x8, 
 		      0x0, &dw_error);
-  dwarf_add_fde_inst (fde, DW_CFA_offset, Is_Target_64bit() ? 0x6 : 0x5, 
+    dwarf_add_fde_inst (fde, DW_CFA_offset, Is_Target_64bit() ? 0x6 : 0x5, 
 		      0x2, &dw_error);
-  dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
+    dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
 		      movespbp_label, adjustsp_label, &dw_error);
-  dwarf_add_fde_inst (fde, DW_CFA_def_cfa_register, 
+    dwarf_add_fde_inst (fde, DW_CFA_def_cfa_register, 
 		      Is_Target_64bit() ? 0x6 : 0x5, 0x0, &dw_error);
-  if (Cgdwarf_Num_Callee_Saved_Regs()) {
+  } else {
+    dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
+		      begin_label, adjustsp_label, &dw_error);
+    if (stack_used && Frame_Len != 0)
+      dwarf_add_fde_inst (fde, DW_CFA_def_cfa_offset, 
+		      Frame_Len + (Push_Pop_Int_Saved_Regs() + 1)*(Is_Target_64bit()?8:4), 
+		      0x0, &dw_error);
+    else
+      dwarf_add_fde_inst (fde, DW_CFA_def_cfa_offset, 
+		      Is_Target_64bit()?8:4,
+		      0x0, &dw_error);
+  }
+  if (stack_used && Cgdwarf_Num_Callee_Saved_Regs() != 0) {
     INT num = Cgdwarf_Num_Callee_Saved_Regs();    
     dwarf_add_fde_inst (fde, DW_CFA_advance_loc4, 
 			adjustsp_label,
-			callee_saved_reg, &dw_error);
+		 	callee_saved_reg, &dw_error);
     for (INT i = num - 1; i >= 0; i --) {
       TN* tn = Cgdwarf_Nth_Callee_Saved_Reg(i);
       ST* sym = Cgdwarf_Nth_Callee_Saved_Reg_Location(i);
       INT n = Is_Target_64bit() ? 16 : 8;
       // data alignment factor
       INT d_align = Is_Target_64bit() ? 8 : 4;
+      INT64 d_frame_len;
       mUINT8 reg_id = REGISTER_machine_id (TN_register_class(tn), TN_register(tn));
+
+      d_frame_len = Frame_Len/d_align + (Push_Pop_Int_Saved_Regs() + 1);
       // If we need the DWARF register id's for all registers, we need a 
       // general register mapping from REGISTER_machine_id to DWARF register
       // id. But the following suffices for this case,
@@ -144,11 +179,22 @@ Build_Fde_For_Proc (Dwarf_P_Debug dw_dbg, BB *firstbb,
 	  reg_id = 6;
 	else if (reg_id == 4) // %edi
 	  reg_id = 7;
+	else if (reg_id == 2) // %ebp
+	  reg_id = 5; 
+      } else {
+	if (reg_id == 2) //%rbp
+	  reg_id = 6; 
       }
       if (reg_id == 1) reg_id = 3; // %rbx
-      dwarf_add_fde_inst (fde, DW_CFA_offset, reg_id,
-	          ((ST_base(sym) == FP_Sym ? -1 : 1)*ST_ofst(sym)+n)/d_align,
+      if (Current_PU_Stack_Model != SMODEL_SMALL)
+        dwarf_add_fde_inst (fde, DW_CFA_offset, reg_id,
+	          (((ST_base(sym) == FP_Sym) ? -1 : 1)*ST_ofst(sym)+n)/d_align,
 	          &dw_error);
+      else 
+        dwarf_add_fde_inst (fde, DW_CFA_offset, reg_id,
+	          d_frame_len - (ST_ofst(sym))/d_align,
+	          &dw_error);
+
     }
   }
   

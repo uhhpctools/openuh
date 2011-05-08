@@ -239,6 +239,16 @@ Check_TCON ( TCON *tc )
     case MTYPE_I1:
     case MTYPE_I2:
     case MTYPE_I4:
+      // since I1/I2/I4 is negative and sign extend to I8
+      // then store to TCON, tcon_v1 wil be 0xffffffff
+      if (((mINT32)TCON_v0(*tc)) < 0) {
+        Is_True ( ((mINT32)TCON_v1(*tc) == ((mINT32)-1)) &&
+                 ((TCON_v2(*tc)|TCON_v3(*tc)) == 0),
+	       ("TCONV_1 is not -1 or high order word of %s TCON non zero %x",
+		  Mtype_Name(TCON_ty(*tc)), TCON_v1(*tc)) );
+        break;
+      }
+      /* fall thru */
     case MTYPE_U1:
     case MTYPE_U2:
     case MTYPE_U4:
