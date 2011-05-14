@@ -1,8 +1,21 @@
+OpenUH Overview
+---------------
+
 OpenUH is a branch of the Open64 repository, focusing on compiler
 implementation for parallel programming models and support for parallel
 program analysis tools.
 
+
+OpenUH Features
+---------------
+
+- OpenMP
+  - OpenMP 3.0 (in progress)
+  - OpenMP Collector API
+
+
 Merge History:
+--------------
 
 [5]   merged r3579:3590 of Open64 main trunk. (5/8/11)
 [4]   merged r3576:3579 of Open64 main trunk. (5/3/11)
@@ -21,3 +34,4 @@ For merge [2], I turned off some assertion checks in
 common/com/x8664/targ_const.cxx, because they were causing the bootstrapped
 library build to fail with --with-build-optimize=DEBUG. The same problem was
 observed for Open64 main trunk, as of revision r3576. --Deepak
+
