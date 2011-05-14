@@ -8176,6 +8176,14 @@ code).
 static void 
 Strip_Nested_MP ( WN * tree, BOOL pcf_ok )
 {
+	
+  /* nested MP pragmas/regions supported for x8664 */
+#ifdef TARG_X8664
+  Force_Frame_Pointer = TRUE; 
+  Force_Frame_Pointer_Set = TRUE; 
+  return; 
+#endif
+	
   INT32 kidno;
   ST *lock_st;
   WN *new_kid;
@@ -10411,8 +10419,7 @@ Transform_Parallel_Block ( WN * tree )
 
 	case WN_PRAGMA_BARRIER:
 
-    //      wn = Gen_MP_Barrier (WN_pragma_omp(cur_node));
-          wn = Gen_EBarrier(local_gtid);
+      wn = Gen_EBarrier(local_gtid);
 	  if (prev_node)
 	    WN_next(prev_node) = wn;
 	  else
@@ -10616,6 +10623,8 @@ Transform_Parallel_Block ( WN * tree )
         
     case WN_PRAGMA_TASK_BEGIN:
         break;
+    case WN_PRAGMA_PARALLEL_BEGIN:
+        break;
 
 	default:
 	  Fail_FmtAssertion (
@@ -10745,8 +10754,10 @@ Transform_Parallel_Block ( WN * tree )
       mpt = save_mpt;
 
     } else if (is_region &&
-               WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
-                  WN_PRAGMA_TASK_BEGIN) {
+               ((WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
+                     WN_PRAGMA_TASK_BEGIN)    ||
+               (WN_pragma(WN_first(WN_region_pragmas(cur_node))) == 
+                  WN_PRAGMA_PARALLEL_BEGIN)) ) {
       
       /* Do nothing. This region will be handled properly during excution of lower_mp for nested PU. */
     } else {
@@ -11433,7 +11444,6 @@ Process_PDO ( WN * tree )
       BOOL found_non_pod = FALSE;
       WN *first_and_last_mp_barrier = non_pod_first_and_lastprivate ?
                                         Gen_Barrier(local_gtid) : NULL;
-//                                      Gen_MP_Barrier(FALSE) : NULL;
 
       wn = WN_CreateBlock ( );
       for (i = 0; i < nested_local_count; i++) {
@@ -11445,7 +11455,6 @@ Process_PDO ( WN * tree )
             // prevent the race condition described in PV 566923
 	  if (v->is_last_and_firstprivate && !first_and_last_mp_barrier)
 	    first_and_last_mp_barrier = Gen_Barrier(local_gtid);
-	    //first_and_last_mp_barrier = Gen_MP_Barrier(FALSE);
 
             // generate finalization code, unless frontend already did so
 	  if (!v->is_non_pod) {

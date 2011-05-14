@@ -440,8 +440,13 @@ inline void __ompc_flush(void *p)
 /* stuff function. Required by legacy code for Guide*/
 inline int __ompc_can_fork(void)
 {
-  /* always return true currently*/
-  return 1;
+	if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)
+		return 1;
+	else if (__omp_exe_mode & OMP_EXE_MODE_NORMAL && __omp_nested == 1)
+		return 1;
+	else if (__omp_exe_mode & OMP_EXE_MODE_NESTED )
+		return 1;
+	else return 0;
 }
 
 inline void __ompc_begin(void)

@@ -1897,6 +1897,14 @@ Preprocess_PU (PU_Info *current_pu)
   }
 #endif
 
+  /* 
+   * Unset RID_map before VHO_Lower_driver, because if this is a nested PU
+   * with a REGION (e.g. microtask with a nested parallel region) then the
+   * REGION ID map is not availabe until REGION_Initialize is called down
+   * below. 
+   */ 
+  RID_map = WN_MAP_UNDEFINED; 
+
   Set_Error_Phase ( "VHO Processing" );
   pu = VHO_Lower_Driver (current_pu, pu);
 
