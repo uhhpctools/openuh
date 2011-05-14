@@ -9,9 +9,13 @@ program analysis tools.
 OpenUH Features
 ---------------
 
-- OpenMP
-  - OpenMP 3.0 (in progress)
-  - OpenMP Collector API
+- OpenMP 3.0 (in progress)
+- (OpenMP) Performance Collection API
+
+Coming soon:
+- Dragon (program analysis tool) support
+- New language enhancements to OpenMP
+- CAF
 
 
 Merge History:
