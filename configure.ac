@@ -469,3 +469,37 @@ AC_CONFIG_SUBDIRS(osprey/cygnus)
 AC_CONFIG_SUBDIRS(osprey-gcc-4.2.0)
 
 AC_OUTPUT
+
+
+# --------
+# save configure arguments
+# --------
+
+AC_SUBST([uh_config_arguments])
+
+changequote(,)dnl
+# Compile in configure arguments.
+if test -f configargs.h ; then
+	# Being re-configured.
+	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
+	uh_config_arguments="$uh_config_arguments : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS"
+else
+    uh_config_arguments="--with-build-compiler=$BUILD_COMPILER "
+    uh_config_arguments+="--with-build-optimize=$BUILD_OPTIMIZE "
+fi
+
+# Double all backslashes and backslash all quotes to turn
+# uh_config_arguments into a C string.
+sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
+$uh_config_arguments
+EOF
+uh_config_arguments_str=`cat conftest.out`
+rm -f conftest.out
+
+cat > configargs.h <<EOF
+/* Generated automatically. */
+static const char configuration_arguments[] = "$uh_config_arguments_str";
+EOF
+changequote([,])dnl
+
+

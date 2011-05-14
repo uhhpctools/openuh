@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN GCC_CONFIGURE_TARG GCC_DIR LIBLIST subdirs LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN GCC_CONFIGURE_TARG GCC_DIR LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -2940,4 +2940,36 @@ echo "$as_me: error: $ac_sub_configure failed for $ac_dir" >&2;}
     cd $ac_popdir
   done
 fi
+
+
+
+# --------
+# save configure arguments
+# --------
+
+
+
+# Compile in configure arguments.
+if test -f configargs.h ; then
+	# Being re-configured.
+	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
+	uh_config_arguments="$uh_config_arguments : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS"
+else
+    uh_config_arguments="--with-build-compiler=$BUILD_COMPILER "
+    uh_config_arguments+="--with-build-optimize=$BUILD_OPTIMIZE "
+fi
+
+# Double all backslashes and backslash all quotes to turn
+# uh_config_arguments into a C string.
+sed -e 's/\\/\\\\/g; s/"/\\"/g' <<EOF >conftest.out
+$uh_config_arguments
+EOF
+uh_config_arguments_str=`cat conftest.out`
+rm -f conftest.out
+
+cat > configargs.h <<EOF
+/* Generated automatically. */
+static const char configuration_arguments[] = "$uh_config_arguments_str";
+EOF
+
 

@@ -34,6 +34,13 @@
 #
 #
 
+
+# To override the prefix installation path, specify an alternate full path for
+# PREFIX. 
+
+PREFIX              = @prefix@
+GNUFE_PREFIX_OVERRIDE = prefix=$(PREFIX)/open64-gcc-4.2.0
+
 # The directory where all native compiler component build subdirectories
 # are located
 #
@@ -298,7 +305,7 @@ backend: $(BASIC_PHONY_TARGET)
 
 ifeq ($(BUILD_TARGET), SL)
 install:
-	export TOOLROOT=@prefix@; \
+	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
 		$(TOP_SRCDIR)/INSTALL.cross.sl @abs_top_builddir@
 else
@@ -306,20 +313,20 @@ install: install_fe install_compiler
 
 install_fe:
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-common
+	    install-common $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-headers
+	    install-headers $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-libgcc
+	    install-libgcc $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-cpp
+	    install-cpp $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-driver
+	    install-driver $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
-	    install
+	    install $(GNUFE_PREFIX_OVERRIDE)
 
 install_compiler:
-	export TOOLROOT=@prefix@; \
+	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
 		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO")
 endif
@@ -403,17 +410,22 @@ endif
 
 help:
 	@echo "Help of the Makefile for Open64 compiler source"
+	@echo "Note: It is strongly recommended that you unset TOOLROOT variable"
 	@echo "Available targets:"
 	@echo "  - (DEFAULT)"
 	@echo "    Build the components of the compiler"
 	@echo "  - help"
 	@echo "    Display this help"
 	@echo "  - install"
-	@echo "    Install the components of the compiler."
-	@echo "    If TOOLROOT is set, the compiler will be installed under the TOOLROOT,"
-	@echo "    otherwise, you will be prompted to input the path\n"
+	@echo "    Install the components of the compiler under prefix."
+	@echo "  - install_fe"
+	@echo "    Install the GNU FE components of the compiler."
+	@echo "  - install_compiler"
+	@echo "    Install the components of the compiler other than GNU FE, and libraries."
 	@echo "  - library"
-	@echo "    Build the libraries needed by the compiler"
+	@echo "    Build the libraries needed by the compiler ($(LIB_MACHINE_TYPE))"
+	@echo "  - library2"
+	@echo "    Build the libraries needed by the compiler ($(LIB2_MACHINE_TYPE))"
 	@echo "  - clean-lib"
 	@echo "    Remove intermediate files generated in building libraries"
 	@echo "  - clean"

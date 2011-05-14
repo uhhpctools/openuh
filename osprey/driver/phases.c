@@ -3193,6 +3193,10 @@ run_ld (void)
 		error ("ipa.so is not installed on %s", get_phase_dir (ldphase));
 		return;
 	    }
+
+        if (show_flag)
+            add_string(args, "-show");
+
 	    // Tell ipa_link about the LD_LIBRARY_PATH that was in effect
 	    // before the compiler was run.
 	    str = "-INTERNAL:old_ld_lib_path=";

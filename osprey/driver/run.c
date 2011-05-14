@@ -312,6 +312,8 @@ run_phase (phases_t phase, char *name, string_list_t *args)
 
 	if (show_flag) {
 		/* echo the command */
+        static const char *separator = "----------";
+        fprintf(stderr, "\n%s %s %s\n", separator, get_phase_name(phase), separator);
 		fprintf(stderr, "%s ", name);
 		print_string_list(stderr, args);
 	}
