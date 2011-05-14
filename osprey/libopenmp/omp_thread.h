@@ -306,7 +306,9 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 
   __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
 
-  while(__omp_level_1_team_manager.num_tasks != 0) {
+  /* Besar:what if there is no task ? num_task will be negative after decrement */
+  /* while(__omp_level_1_team_manager.num_tasks != 0) { */
+  while(__omp_level_1_team_manager.num_tasks > 0) {
     __ompc_task_schedule(&next);
     if(next != NULL) {
       __ompc_task_switch(__omp_level_1_team_tasks[__omp_myid], next);

@@ -463,7 +463,8 @@ __ompc_level_1_barrier(const int vthread_id)
   __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
     
 
-  while(__omp_level_1_team_manager.num_tasks != 0) {
+  /* while(__omp_level_1_team_manager.num_tasks != 0) { */ /* Besar */
+  while(__omp_level_1_team_manager.num_tasks > 0) {
     __ompc_task_schedule(&next);
     if(next != NULL) {
       __ompc_task_switch(__omp_current_task, next);
@@ -1099,6 +1100,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* level 1 thread fork */
     /* How about num_threads < __omp_level_1_team_size */
     /* TODO: fix this condition*/
+    /*
     static int first_time = 0;
     if (first_time) {
       current_region_id++;
@@ -1107,6 +1109,10 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     } else {
       first_time=1;
     } 
+    */
+    current_region_id++;
+    __ompc_set_state(THR_OVHD_STATE);
+    __ompc_event_callback(OMP_EVENT_FORK);
 
     // Adjust the number of the number of thread in the team
     if (num_threads == 0) {
@@ -1210,7 +1216,10 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* A lock is needed to protect global variables */
     /* TODO: need a global lock*/
     __omp_max_num_threads -= num_threads - 1;
+
+    __ompc_set_state(THR_OVHD_STATE);
     __ompc_event_callback(OMP_EVENT_FORK);
+
     for (i=1; i<num_threads; i++) {
       nest_v_thread_team[i].vthread_id = i;
       nest_v_thread_team[i].single_count = 0;
@@ -1259,6 +1268,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     micro_task(0, frame_pointer);
 
     __ompc_exit_barrier(&(nest_v_thread_team[0]));
+    __ompc_set_state(THR_OVHD_STATE);
 
     for (i=1; i<num_threads; i++) {
       __ompc_remove_from_hash_table(nest_u_thread_team[i].uthread_id);
@@ -1266,6 +1276,11 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     aligned_free(nest_v_thread_team);
     aligned_free(nest_u_thread_team);
+
+	/* Besar: do we need to destroy the just created threads? */
+	__ompc_event_callback(OMP_EVENT_JOIN);
+	__ompc_set_state(THR_WORK_STATE);
+    __omp_exe_mode = OMP_EXE_MODE_NORMAL;
 
     current_u_thread->task = original_v_thread;
 			
