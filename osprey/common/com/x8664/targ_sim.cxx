@@ -822,6 +822,13 @@ Get_Parameter_Location (TY_IDX ty, BOOL is_output)
           if (Is_Target_32bit() && ploc.size == 8) {
             ++Current_Int_Param_Num;
           }
+          // for IA-32, stack needs to be aligned. So, if the last formal argument  
+          // needs pading, the total stack size computed from (just) function decl
+          // is different from the stack size computed from actual callsite    
+          if (Is_Target_32bit() && PLOC_on_stack(ploc)) {
+              ploc.size += rpad;
+              rpad = 0;
+          }
 	}
 	break;
 	

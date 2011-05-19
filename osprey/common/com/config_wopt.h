@@ -315,11 +315,14 @@ extern BOOL  WOPT_Enable_Pt_Summary;  // Points-to summary/annotation
 extern BOOL  WOPT_Enable_Reassociation_CSE; // Enables reassociative CSE
 extern BOOL  WOPT_Enable_Pro_Loop_Fusion_Trans; // Enables proactive loop fusion transformation
 extern BOOL  WOPT_Enable_Pro_Loop_Interchange_Trans; // Enables proactive loop interchange transformation.
+extern BOOL WOPT_Enable_Pro_Loop_Ext_Trans; // Enables proactive loop extended transformation.
 extern BOOL  WOPT_Enable_Mem_Clear_Remove;  // Enables removal of redundant mem clear after a calloc
 extern INT32 WOPT_Enable_Pro_Loop_Fusion_Func_Limit; // Enable proactive loop fusion transformation
                                                      // for functions within the limit.
 extern INT32 WOPT_Enable_Pro_Loop_Interchange_Func_Limit; // Enable proactive loop interchange
                                                           // transformation for functions within the limit.
+extern INT32 WOPT_Enable_Pro_Loop_Ext_Func_Limit; // Enable proactive loop extended transformation
+                                                  // for functions within the limit.
                                                          
 extern INT32 WOPT_Enable_Pro_Loop_Limit;  // Limit number of proactive loop transformations per function.
 extern INT32 WOPT_Tail_Dup_Max_Clone; // Limit code size bloats (in statement count)

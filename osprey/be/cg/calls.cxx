@@ -1182,6 +1182,50 @@ Can_Be_Tail_Call(ST *pu_st, BB *exit_bb)
     }
   }
 
+  /* Don't perform tail call optimization if the caller and callee have different stack
+     adjustment size
+     see: Generate_Exit
+     */
+  if ( Is_Target_32bit() && call_st ){
+      // call_st might be NULL in indirect calls;
+      const TY_IDX caller_ty = ST_pu_type(pu_st);
+      const BOOL   caller_ff2c_abi = PU_ff2c_abi(Pu_Table[ST_pu(pu_st)]);
+      const RETURN_INFO caller_return_info = 
+          Get_Return_Info( TY_ret_type(caller_ty), No_Simulated, caller_ff2c_abi );
+
+      const TY_IDX callee_ty = func_type;
+      const BOOL   callee_ff2c_abi = PU_ff2c_abi(Pu_Table[ST_pu(call_st)]);
+      const RETURN_INFO callee_return_info =
+          Get_Return_Info( TY_ret_type(callee_ty), No_Simulated, callee_ff2c_abi );
+      
+      int   caller_sp_adjust = 0;
+      int   callee_sp_adjust = 0;
+
+      if( RETURN_INFO_return_via_first_arg(caller_return_info) ||
+              TY_return_to_param( caller_ty ) ){
+          caller_sp_adjust = Pointer_Size;
+      }
+
+      // callee adjust SP for stdcall/fastcall at return time
+      if (TY_has_stdcall(caller_ty) || TY_has_fastcall(caller_ty)) {
+          caller_sp_adjust += Get_PU_arg_area_size(caller_ty);
+      }
+
+      if( RETURN_INFO_return_via_first_arg(callee_return_info) ||
+              TY_return_to_param( callee_ty ) ){
+          callee_sp_adjust = Pointer_Size;
+      }
+
+      // callee adjust SP for stdcall/fastcall at return time
+      if (TY_has_stdcall(callee_ty) || TY_has_fastcall(callee_ty)) {
+          callee_sp_adjust += Get_PU_arg_area_size(callee_ty);
+      }
+
+      if ( caller_sp_adjust != callee_sp_adjust ) {
+          return NULL;
+      }
+  }
+
   /* Under -m32 -fpic, don't do tail call optimization, because the caller
      needs to restore GOT before return.
   */

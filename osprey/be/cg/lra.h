@@ -57,6 +57,7 @@
 #include "bb.h"
 #include "op.h"
 #include "register.h"
+#include "tn_map.h"
 
 /* Initialize LRA data structures for PU/region. */
 extern void LRA_Init (void);

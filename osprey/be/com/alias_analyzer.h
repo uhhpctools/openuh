@@ -150,6 +150,8 @@ public:
 
    bool checkQueryFile(UINT32 pu, AliasTag tag1, AliasTag tag2, bool &result);
 
+   WN_MAP aliasTagMap() { return _aliasTagMap; }
+
 private:
 
    void loadQueryFile(char *filename);

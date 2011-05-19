@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2313,10 +2313,12 @@ if(red_manager){
   return FALSE; 
 }
 
+// NB: the two constructors for DO_LOOP_INFO need to remain in sync.
 DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
 	ACCESS_VECTOR *step, BOOL has_calls, BOOL has_nested_calls, BOOL has_unsummarized_calls,
 	BOOL has_unsummarized_call_cost, BOOL has_gotos, BOOL has_exits, 
-	BOOL has_gotos_this_level,BOOL is_inner) {
+	BOOL has_gotos_this_level,BOOL is_inner)
+{
     _pool = pool;
     _id = 0;
     LB = lb;
@@ -2328,9 +2330,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     Has_Unsummarized_Call_Cost = has_unsummarized_call_cost;
     Has_Threadprivate = FALSE; 
     Has_Gotos = has_gotos;
-#ifndef KEY
     Has_Conditional = FALSE;
-#endif
     Has_Gotos_This_Level = has_gotos_this_level;
     Has_Exits = has_exits;
     Has_EH_Regions = FALSE;
@@ -2345,9 +2345,12 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     No_Fission = FALSE;
     No_Fusion = FALSE; 
     Aggressive_Inner_Fission = FALSE;
+    Depth = 0;
     _wind_down_flags = 0;
     Est_Num_Iterations = -1;
     Est_Max_Iterations_Index = -1;
+    // Est_Register_Usage has it's own constructor
+    // Matching comment (provides a hint for tkdiff).
     Num_Iterations_Symbolic = TRUE;
     Num_Iterations_Profile = FALSE;
     Guard = NULL;
@@ -2367,6 +2370,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
       Required_Blocksize[i] = -1;
     Permutation_Spec_Array = NULL;
     Permutation_Spec_Count = 0;
+    // Matching comment (provides a hint for tkdiff).
     Blockable_Specification = 0;
     Is_Inner_Tile = FALSE; 
     Is_Outer_Tile = FALSE; 
@@ -2379,7 +2383,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     Is_Doacross = FALSE; 
     Doacross_Tile_Size = 0; 
     Sync_Distances[0] = NULL_DIST; 
-    Sync_Distances[0] = NULL_DIST; 
+    Sync_Distances[1] = NULL_DIST; 
     Parallelizable = FALSE; 
 #ifdef KEY
     Vectorizable = FALSE; 
@@ -2421,28 +2425,29 @@ extern BOOL Last_Value_Peeling()
   return last_value_peeling; 
 } 
 
-DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
+// NB: the two constructors for DO_LOOP_INFO need to remain in sync.
+DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool)
+{
     _pool = pool;
     _id = 0;
     if (dli->LB) LB = CXX_NEW(ACCESS_ARRAY(dli->LB,pool),pool);
     if (dli->UB) UB = CXX_NEW(ACCESS_ARRAY(dli->UB,pool),pool);
     if (dli->Step) Step = CXX_NEW(ACCESS_VECTOR(dli->Step,pool),pool);
     Has_Calls = dli->Has_Calls;
-#ifdef KEY //bug 14284
     Has_Nested_Calls = dli->Has_Nested_Calls;
-#endif    
     Has_Unsummarized_Calls = dli->Has_Unsummarized_Calls;
     Has_Unsummarized_Call_Cost = dli->Has_Unsummarized_Call_Cost;
     Has_Threadprivate = dli->Has_Threadprivate; 
     Has_Gotos = dli->Has_Gotos;
+    Has_Conditional = dli->Has_Conditional;
     Has_Gotos_This_Level = dli->Has_Gotos_This_Level;
     Has_Exits = dli->Has_Exits;
     Has_EH_Regions = dli->Has_EH_Regions;
+    Is_Inner = dli->Is_Inner;
     Has_Bad_Mem = dli->Has_Bad_Mem;
     Has_Barriers = dli->Has_Barriers;
     Multiversion_Alias = dli->Multiversion_Alias;
     Loop_Vectorized = dli->Loop_Vectorized;
-    Is_Inner = dli->Is_Inner;
     Is_Ivdep = dli->Is_Ivdep;
     Is_Concurrent_Call = dli->Is_Concurrent_Call;
     Concurrent_Directive = dli->Concurrent_Directive;
@@ -2454,6 +2459,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
     Est_Num_Iterations = dli->Est_Num_Iterations;
     Est_Max_Iterations_Index = dli->Est_Max_Iterations_Index;
     Est_Register_Usage = dli->Est_Register_Usage;
+    // Matching comment (provides a hint for tkdiff).
     Num_Iterations_Symbolic = dli->Num_Iterations_Symbolic;
     Num_Iterations_Profile = dli->Num_Iterations_Profile;
     Guard = dli->Guard;
@@ -2464,6 +2470,11 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
     Serial_Version_of_Concurrent_Loop = dli->Serial_Version_of_Concurrent_Loop;
     Auto_Parallelized = dli->Auto_Parallelized; 
     Required_Unroll = dli->Required_Unroll;
+    Prefer_Fuse = dli->Prefer_Fuse;
+    Has_Precom_Def = dli->Has_Precom_Def;
+    Has_Precom_Use = dli->Has_Precom_Use;
+    Is_Precom_Init = dli->Is_Precom_Init;
+    Sclrze_Dse = dli->Sclrze_Dse;
     for (INT i = 0; i < MHD_MAX_LEVELS; i++)
       Required_Blocksize[i] = dli->Required_Blocksize[i];
     Permutation_Spec_Array = NULL;  
@@ -2474,6 +2485,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
       for (INT i = 0; i < Permutation_Spec_Count; i++) 
 	Permutation_Spec_Array[i] = dli->Permutation_Spec_Array[i]; 
     }
+    // Matching comment (provides a hint for tkdiff).
     Blockable_Specification = dli->Blockable_Specification;
     Is_Inner_Tile = dli->Is_Inner_Tile; 
     Is_Outer_Tile = dli->Is_Outer_Tile; 
@@ -2495,7 +2507,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool) {
     Last_Value_Peeled = dli->Last_Value_Peeled; 
     Not_Enough_Parallel_Work = dli->Not_Enough_Parallel_Work; 
     Inside_Critical_Section = dli->Inside_Critical_Section;
-    Work_Estimate= dli->Work_Estimate; 
+    Work_Estimate = dli->Work_Estimate; 
     Lego_Mp_Key_Lower = dli->Lego_Mp_Key_Lower; 
     Lego_Mp_Key_Upper = dli->Lego_Mp_Key_Upper; 
     Lego_Mp_Key_Depth = dli->Lego_Mp_Key_Depth; 

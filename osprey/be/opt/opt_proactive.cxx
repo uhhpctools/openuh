@@ -54,6 +54,7 @@ SC_NODE::Clear()
   parent = NULL;
   kids = NULL;
   _flag = 0;
+  next = NULL;
 }
 
 // Unmask given value from this SC_NODE's flag.
@@ -269,6 +270,51 @@ SC_NODE::Get_nesting_if(SC_NODE * sc_bound)
   return ret_val;
 }
 
+// Get closest nesting SC_IF and query whether this node is in an else-path.
+std::pair<SC_NODE *, bool>
+SC_NODE::Get_nesting_if()
+{
+  SC_NODE * tmp = this->Parent();
+  BOOL is_else = FALSE;
+
+  while (tmp) {
+    switch (tmp->Type()) {
+    case SC_ELSE:
+      is_else = TRUE;
+      break;
+    case SC_THEN:
+      is_else = FALSE;
+      break;
+    default:
+	;
+    }
+
+    if (tmp->Type() == SC_IF)
+      return std::pair<SC_NODE *, bool>(tmp, is_else);
+    tmp = tmp->Parent();
+  }
+  return std::pair<SC_NODE *, bool> (NULL, is_else);
+}
+
+// Get outermost nesting SC_IF and number of nesting if-conditions.
+std::pair<SC_NODE *, int>
+SC_NODE::Get_outermost_nesting_if()
+{
+  std::pair<SC_NODE *, bool> p_ret = Get_nesting_if();
+  SC_NODE * sc_if = p_ret.first;
+  SC_NODE * sc_out = NULL;
+  int count = 0;
+
+  while (sc_if) {
+    sc_out = sc_if;
+    p_ret = sc_if->Get_nesting_if();
+    sc_if = p_ret.first;
+    count++;
+  }
+
+  return std::pair<SC_NODE *, int> (sc_out, count);
+}
+
 // Return closest next sibling SC_NODE of the given type
 SC_NODE *
 SC_NODE::Next_sibling_of_type(SC_TYPE match_type)
@@ -455,6 +501,23 @@ SC_NODE::Get_real_parent()
   }
 
   return ret_val;
+}
+
+// Find the real parent that is 'level' above this node.
+SC_NODE *
+SC_NODE::Get_real_parent(int level)
+{
+  int l = 1;
+  SC_NODE * parent = Get_real_parent();
+
+  while (parent) {
+    if (l == level)
+      return parent;
+    l++;
+    parent = parent->Get_real_parent();
+  }
+
+  return NULL;
 }
 
 // Obtain the last BB_NODE in source order for the SC tree rooted at this SC_NODE.
@@ -1137,6 +1200,281 @@ SC_NODE::Is_empty_block()
   return TRUE;
 }
 
+// Query whether the SC tree rooted at this node contain empty blocks.
+BOOL
+SC_NODE::Is_empty()
+{
+  switch (type) {
+  case SC_THEN:
+  case SC_ELSE:
+  case SC_LP_START:
+  case SC_LP_COND:
+  case SC_LP_STEP:
+  case SC_LP_BODY:
+  case SC_LP_BACKEDGE:
+    break;
+  case SC_BLOCK:
+    return Is_empty_block();
+  default:
+    return FALSE;
+  }
+
+  SC_LIST_ITER sc_list_iter;
+  SC_NODE * sc_tmp;
+
+  FOR_ALL_ELEM(sc_tmp, sc_list_iter, Init(kids)) {
+    if (!sc_tmp->Is_empty())
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+// Obtain condition-setting WN if this SC_NODE is a SC_IF.
+WN *
+SC_NODE::Get_cond()
+{
+  if (type == SC_IF) {
+    BB_NODE * bb = u1.bb_rep;
+    WN * last_wn = bb->Laststmt();
+    OPERATOR opr = WN_operator(last_wn);
+    
+    if ((opr == OPR_FALSEBR) || (opr == OPR_TRUEBR)) {
+      return WN_kid0(last_wn);
+    }
+  }
+
+  return NULL;
+
+}
+
+// Get the last element in the list linked by the 'next' field.
+SC_NODE *
+SC_NODE::Last() {
+  SC_NODE * sc_iter = this;
+  SC_NODE * sc_last = NULL;
+
+  while (sc_iter) {
+    sc_last = sc_iter;
+    sc_iter = sc_iter->Next();
+  }
+  return sc_last;
+}
+
+// Find init, end-test and step statement for this SC_LOOP node.
+BOOL
+SC_NODE::Get_bounds(WN ** p_start, WN ** p_end, WN ** p_step)
+{
+  FmtAssert(p_start && p_end && p_step, ("Unexpected NULL pointers."));
+  *p_start = NULL;
+  *p_end = NULL;
+  *p_step = NULL;
+
+  SC_NODE * sc = this;
+  FmtAssert(sc->Type() == SC_LOOP, ("Expect a SC_LOOP."));
+
+  SC_NODE * sc_start = sc->Find_kid_of_type(SC_LP_START);
+  SC_NODE * sc_end = sc->Find_kid_of_type(SC_LP_COND);
+  SC_NODE * sc_step = sc->Find_kid_of_type(SC_LP_STEP);
+  
+  if (!sc_start || !sc_end || !sc_step)
+    return FALSE;
+  
+  BB_NODE * bb_start = sc_start->First_bb();
+  BB_NODE * bb_end = sc_end->First_bb();
+  BB_NODE * bb_step = sc_step->First_bb();
+
+  if (!bb_start || !bb_end || !bb_step)
+    return FALSE;
+
+  WN * wn_start = bb_start->Laststmt();  
+  WN * wn_end = bb_end->Laststmt();
+  WN * wn_step = bb_step->Laststmt();
+
+  if (wn_step && (WN_operator(wn_step) == OPR_GOTO))
+    wn_step = WN_prev(wn_step);
+
+  if (!wn_start || !wn_end || !wn_step)
+    return FALSE;
+
+  *p_start = wn_start;
+  *p_end = wn_end;
+  *p_step = wn_step;
+}
+
+// Get upper bound of 'sc'.
+WN *
+CFG_TRANS::Get_upper_bound(SC_NODE * sc)
+{
+  WN * low = NULL;
+  WN * high = NULL;
+  WN * step = NULL;
+  
+  if (!sc->Get_bounds(&low, &high, &step))
+    return NULL;
+
+  WN * ub = Get_upper_bound(sc, WN_kid0(high));
+  return ub;
+}
+
+// Get upper bound of 'sc' from 'wn' which is a comparison expression.
+WN *
+CFG_TRANS::Get_upper_bound(SC_NODE * sc, WN * wn)
+{
+  WN * index = Get_index_load(sc);
+  OPERATOR opr = WN_operator(wn);
+  WN * op1;
+  WN * op2;
+  STACK<WN *> * l_stk = CXX_NEW(STACK<WN *> (_pool), _pool);
+  STACK<WN *> * r_stk = CXX_NEW(STACK<WN *> (_pool), _pool);
+  int r_const = 0;
+
+  // Conceptually normalize condition expressions to  "<" comparisons, 
+  // collect left-hand side of "<" in "l_stk", and right-hand side of "<"
+  // in "r_stk".
+  switch (opr) {
+  case OPR_GT:
+    op1 = WN_kid0(wn);
+    op2 = WN_kid1(wn);
+
+    opr = WN_operator(op1);
+    if ((opr != OPR_ADD) && (opr != OPR_SUB))
+      r_stk->Push(op1);
+    else 
+      Collect_operands(op1, r_stk, l_stk);
+
+    opr = WN_operator(op2);
+    if ((opr != OPR_ADD) && (opr != OPR_SUB))
+      l_stk->Push(op2);
+    else
+      Collect_operands(op2, l_stk, r_stk);
+    break;
+
+  case OPR_LE:
+    op1 = WN_kid0(wn);
+    op2 = WN_kid1(wn);
+
+    opr = WN_operator(op1);
+    if ((opr != OPR_ADD) && (opr != OPR_SUB))
+	l_stk->Push(op1);
+    else 
+      Collect_operands(op1, l_stk, r_stk);
+
+    opr = WN_operator(op2);
+
+    if ((opr != OPR_ADD) && (opr != OPR_SUB))
+      r_stk->Push(op2);
+    else
+      Collect_operands(op2, r_stk, l_stk);
+    r_const = 1;
+    break;
+  default:
+    ;
+  }
+
+  // Check left-hand side of a "<" compare.
+  int count = 0;
+  WN * wn_tmp;
+  while (!l_stk->Is_Empty()) {
+    wn_tmp = l_stk->Pop();
+    opr = WN_operator(wn_tmp);
+
+    if (opr == OPR_INTCONST)
+      r_const -= WN_const_val(wn_tmp);
+    else if (WN_Simp_Compare_Trees(index, wn_tmp) == 0)
+      count++;
+    else {
+      CXX_DELETE(l_stk, _pool);
+      CXX_DELETE(r_stk,_pool);
+      return NULL;
+    }
+  }
+
+  if (count != 1) {
+    CXX_DELETE(l_stk, _pool);
+    CXX_DELETE(r_stk,_pool);
+    return NULL;
+  }
+
+  WN * wn_last = NULL;
+
+  while (!r_stk->Is_Empty()) {
+    wn_tmp = r_stk->Pop();
+    opr = WN_operator(wn_tmp);
+    
+    if (opr == OPR_INTCONST)
+      r_const += WN_const_val(wn_tmp);
+    else if (!Is_invariant(sc, wn_tmp, 0)) {
+      CXX_DELETE(l_stk, _pool);
+      CXX_DELETE(r_stk,_pool);
+      return NULL;
+    }
+    else if (!wn_last)
+      wn_last = wn_tmp;
+    else 
+      wn_last = WN_CreateExp2(OPR_ADD, MTYPE_I4, MTYPE_V, wn_last, wn_tmp);
+  }
+
+  wn_tmp = NULL;
+
+  r_const--;
+
+  if (r_const) 
+    wn_tmp = WN_CreateIntconst(OPR_INTCONST, (r_const > 0) ? MTYPE_U4 : MTYPE_I4, MTYPE_V, r_const);
+
+  if (!wn_last) 
+    wn_last = wn_tmp;
+  else 
+    wn_last = WN_CreateExp2(OPR_ADD, MTYPE_I4, MTYPE_V, wn_last, wn_tmp);
+  
+  CXX_DELETE(l_stk, _pool);
+  CXX_DELETE(r_stk,_pool);
+  
+  return wn_last;
+}
+
+// Query whether 'sc1' and 'sc2' have the same trip count.
+BOOL
+CFG_TRANS::Have_same_trip_count(SC_NODE * sc1, SC_NODE * sc2)
+{
+  WN * low1 = NULL;
+  WN * low2 = NULL;
+  WN * high1 = NULL;
+  WN * high2 = NULL;
+  WN * step1 = NULL;
+  WN * step2 = NULL;
+  
+  if (sc1->Get_bounds(&low1, &high1, &step1)
+      && sc2->Get_bounds(&low2, &high2, &step2)) {
+    if (!Has_same_shape(low1, low2)
+	|| !Has_same_shape(step1, step2))
+      return FALSE;
+
+    if (Has_same_shape(high1, high2))
+      return TRUE;
+
+    OPERATOR opr = WN_operator(high1);
+    if ((opr == OPR_FALSEBR)
+	&& (opr == WN_operator(high2))) {
+      high1 = WN_kid0(high1);
+      high2 = WN_kid0(high2);
+      WN * ub1 = Get_upper_bound(sc1, high1);
+      WN * ub2 = Get_upper_bound(sc2, high2);
+      if (ub1 && ub2) {
+	if (WN_Simp_Compare_Trees(ub1, ub2) == 0) {
+	  WN_Delete(ub1);
+	  WN_Delete(ub2);
+	  return TRUE;
+	}
+	WN_Delete(ub1);
+	WN_Delete(ub2);
+      }
+    }
+  }
+
+  return FALSE;
+}
+
 // Dump a SC_NODE.  If dump_tree is TRUE, dump the SC tree
 // rooetd at this SC_NODE.
 void 
@@ -1360,6 +1698,32 @@ CFG_TRANS::Delete_invar_map()
   _invar_map = NULL;
 }
 
+// Delete data that live through this object's life time.
+void
+CFG_TRANS::Delete()
+{
+  if (_const_wn_map) {
+    MAP_LIST * tmp;
+    MAP_LIST_ITER map_lst_iter;
+
+    for (UINT32 idx = 0; idx < _const_wn_map->Size(); idx++) {
+      FOR_ALL_NODE(tmp, map_lst_iter, Init(_const_wn_map->Get_bucket(idx))) {
+	WN * wn = (WN *) tmp->Val();
+	if (wn)
+	  WN_Delete(wn);
+      }
+    }
+  }
+
+  CXX_DELETE(_const_wn_map, _pool);
+  _const_wn_map = NULL;
+
+  if (_def_cnt_map)
+    CXX_DELETE(_def_cnt_map, _pool);
+
+  _def_cnt_map = NULL;
+}
+
 // Query whether given aux_id represents a scalar non-address-taken non-virtual variable.
 
 BOOL CFG_TRANS::Is_trackable_var(AUX_ID aux_id)
@@ -1412,25 +1776,71 @@ BOOL CFG_TRANS::Is_trackable_expr(WN * wn)
 
 
 // Query whether the values of loads in the given expression tree 
-// are modified by the given SC_NODE.  We perform a quick and simple
-// value-number hashing to the given SC_NODE. 
-// eval_true indicates whether wn is evaluated to TRUE at the entry
-// of sc.
-BOOL CFG_TRANS::Val_mod(SC_NODE * sc, WN * wn, BOOL eval_true)
+// are modified by the given SC_NODE. 'do_recursive' indicates whether to 
+// recursively track the values among children of 'sc'.
+// 'eval_true' indicates whether wn can be evaluated to TRUE at the entry
+// of 'sc'.
+// We perform a quick and simple value-number hashing to the given SC_NODE. 
+
+BOOL CFG_TRANS::Val_mod(SC_NODE * sc, WN * wn, BOOL eval_true, BOOL do_recursive)
 {
   BOOL ret_val = TRUE;
 
   OPT_POOL_Push(_pool, MEM_DUMP_FLAG + 1);
-  Init_val_map(wn, eval_true);
+  Init_val_map(wn);
+
+  if (eval_true)
+    Infer_non_zero(wn, TRUE);
+
+  SC_TYPE type = sc->Type();
+  if (type == SC_THEN) {
+    SC_NODE * sc_if = sc->Get_real_parent();
+    WN * wn_cond = sc_if->Get_cond();
+    if (wn_cond)
+      Infer_non_zero(wn_cond, TRUE);
+  }
+  else if (type == SC_ELSE) {
+    SC_NODE * sc_if = sc->Get_real_parent();
+    WN * wn_cond = sc_if->Get_cond();
+    if (wn_cond)
+      Infer_non_zero(wn_cond, FALSE);
+  }
 
   if (_val_map != NULL) {
-    Track_val(sc, sc->First_bb(), wn);
+    Track_val(sc, sc->First_bb(), wn, do_recursive);
     ret_val = !Val_match(wn);
   }
 
   Delete_val_map();
   OPT_POOL_Pop(_pool, MEM_DUMP_FLAG + 1);
   return ret_val;
+}
+
+
+// Query whether the values of loads in the given expression tree 
+// are modified by the given SC_NODE and its children. 
+// 'eval_true' indicates whether wn can be evaluated to TRUE at the entry
+// of 'sc'.
+
+BOOL CFG_TRANS::Val_mod(SC_NODE * sc, WN * wn, BOOL eval_true)
+{
+  if (!Val_mod(sc, wn, eval_true, TRUE))
+    return FALSE;
+  
+  if (!Val_mod(sc, wn, eval_true, FALSE)) {
+    SC_LIST * kids = sc->Kids();
+    if (kids != NULL) {
+      SC_LIST_ITER sc_list_iter(kids);
+      SC_NODE *tmp;
+      FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
+	if (Val_mod(tmp, wn, FALSE))
+	  return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  return TRUE;
 }
 
 // Query whether the values of loads in the given expression tree match
@@ -1466,10 +1876,37 @@ CFG_TRANS::Delete_val_map()
     _true_val = NULL;
 }
 
-// Initialize _val_map by hashing all loads in the given wn.
-// eval_true indicates whether wn is evaluated to TRUE.
+// Given a condition expression 'wn', infer whether there is a load in the expression 
+// that has an non-zero value. 'eval_true' gives the value of 'wn' which is a TRUE or a FALSE.
 void
-CFG_TRANS::Init_val_map(WN * wn, BOOL eval_true)
+CFG_TRANS::Infer_non_zero(WN * wn, BOOL eval_true)
+{
+  OPERATOR op = WN_operator(wn);
+  if (((op == OPR_NE) || (op == OPR_EQ))
+      && (WN_operator(WN_kid1(wn)) == OPR_INTCONST)
+      && OPERATOR_is_scalar_load(WN_operator(WN_kid0(wn)))) {
+    AUX_ID aux_id = WN_aux(WN_kid0(wn));
+    INT64 const_val = WN_const_val(WN_kid1(wn));
+    BOOL is_non_zero = FALSE;
+
+    if (eval_true) {
+      if (((op == OPR_NE) && (const_val == 0))
+	  || ((op == OPR_EQ) && (const_val != 0)))
+	is_non_zero = TRUE;
+    }
+
+    if (is_non_zero) {
+      if (_true_val == NULL) 
+	_true_val = BS_Create_Empty(_cu->Opt_stab()->Lastidx() + 1, _pool);
+      
+      _true_val = BS_Union1D(_true_val, aux_id, _pool);
+    } 
+  } 
+}
+
+// Initialize _val_map by hashing all loads in the given wn.
+void
+CFG_TRANS::Init_val_map(WN * wn)
 {
   if (OPERATOR_is_scalar_load(WN_operator(wn))) {
     AUX_ID aux_id = WN_aux(wn);
@@ -1480,27 +1917,22 @@ CFG_TRANS::Init_val_map(WN * wn, BOOL eval_true)
     }
   }
 
-  OPERATOR op = WN_operator(wn);
-
-  // Infer non-zero values
-  if (eval_true
-      && ((op == OPR_NE) || (op == OPR_EQ))
-      && (WN_operator(WN_kid1(wn)) == OPR_INTCONST)
-      && OPERATOR_is_scalar_load(WN_operator(WN_kid0(wn)))) {
-    AUX_ID aux_id = WN_aux(WN_kid0(wn));
-    INT64 const_val = WN_const_val(WN_kid1(wn));
-
-    if (((op == OPR_NE) && (const_val == 0))
-	|| ((op == OPR_EQ) && (const_val != 0))) {
-      if (_true_val == NULL) 
-	_true_val = BS_Create_Empty(_cu->Opt_stab()->Lastidx() + 1, _pool);
-
-      _true_val = BS_Union1D(_true_val, aux_id, _pool);
-    }
+  for ( int i = 0; i < WN_kid_count(wn); i++) {
+    Init_val_map(WN_kid(wn, i));
   }
+}
 
-  for ( int i = 0; i < WN_kid_count(wn); i++) 
-    Init_val_map(WN_kid(wn, i), FALSE);
+// Delete _unlink_sc.
+void
+CFG_TRANS::Delete_unlink_sc()
+{
+  while (!_unlink_sc->Is_Empty()) {
+    SC_NODE * sc_tmp = _unlink_sc->Pop();
+    sc_tmp->Delete();
+  }
+  CXX_DELETE(_unlink_sc, _pool);
+  _unlink_sc = NULL;
+
 }
 
 // Obtain the hashed value number for the given AUX_ID.
@@ -1529,6 +1961,107 @@ BOOL CFG_TRANS::Is_aliased(WN * wn1, WN * wn2)
   ALIAS_MANAGER * alias_mgr = _cu->Alias_mgr();
   WN * call_wn = NULL;
   WN * load_wn = NULL;
+  TY_ITER i ;
+  ST *st;
+  int ii;
+  int par_match_found = 0;
+  int is_mod = 1;
+
+  /* If wn1 or wn2 is ICALL we get the parameter list and compare
+   * in global symbol table for the function with same
+   * parameter list and check for those function if
+   * function modifies the pointer.
+   */
+  if((WN_operator(wn1) == OPR_ICALL)||(WN_operator(wn2) == OPR_ICALL))
+  {
+    TY_IDX ty_idx;
+
+    if(WN_operator(wn1) == OPR_ICALL)
+      ty_idx  = WN_ty(wn1);
+    else
+      ty_idx  = WN_ty(wn2);
+
+    TY &ty = Ty_Table[ty_idx];
+    FOREACH_SYMBOL (GLOBAL_SYMTAB, st, ii) {
+      if(ST_sym_class(st) ==  CLASS_FUNC){
+        ty_idx = PU_prototype (Pu_Table[ST_pu(st)]);
+        const TY& ty1 = Ty_Table [ty_idx];
+        char* st_name = ST_name(st);
+        if (TY_kind(ty1) == KIND_FUNCTION)
+        {
+          TYLIST_IDX idx1 = TY_tylist(ty1);
+          TYLIST_IDX idx2 = TY_tylist(ty);
+          /* Traverse the parameter list for icall and function in the
+           * symbol table to check if they match
+           */
+          while (  (Tylist_Table[idx1] != 0) || (Tylist_Table[idx2] != 0)) {
+
+            const TY& parm_x1 = Ty_Table[Tylist_Table[idx1]];
+            const char *name1 =
+                  TY_name_idx (parm_x1) == 0 ? "(anon)" : TY_name (parm_x1);
+            const TY& parm_x2 = Ty_Table[Tylist_Table[idx2]];
+            const char *name2 =
+                  TY_name_idx (parm_x2) == 0 ? "(anon)" : TY_name (parm_x2);
+            if((strcmp(name1,name2) == 0) &&
+               (TY_align(Tylist_Table[idx2]) == TY_align(Tylist_Table[idx1])))
+            {
+
+              par_match_found = 1;
+            }
+            else{
+
+              par_match_found  = 0;
+              break;
+            }
+            idx1++;
+            idx2++;
+         }
+         if( ( Tylist_Table[idx1] != 0) ||  ( Tylist_Table[idx2] != 0))
+           par_match_found = 0;
+
+         if((Tylist_Table[idx1] == 0) &&  (Tylist_Table[idx2] == 0) &&
+             (par_match_found ==1))
+         {
+           INT mod = 0;
+           INT ref = 0;
+           WN  *ld_wn = NULL;
+           if(WN_operator(wn1) == OPR_ICALL)
+           {
+             if (OPERATOR_is_scalar_load(WN_operator(wn2)))
+               ld_wn = wn2;
+           }
+           if(WN_operator(wn2) == OPR_ICALL)
+           {
+             if (OPERATOR_is_scalar_load(WN_operator(wn1)))
+               ld_wn = wn1;
+           }
+           if (ld_wn){
+
+             ST *ld_st= NULL;
+             INT mod = 0;
+             INT ref = 0;
+             AUX_ID load_aux = WN_aux(ld_wn);
+             OPT_STAB * opt_stab = _cu->Opt_stab();
+             if (load_aux && (load_aux <= opt_stab->Lastidx()))
+               ld_st = opt_stab->Aux_stab_entry(load_aux)->St();
+             if (Is_trackable_var(load_aux)) {
+               opt_stab->check_ipa_mod_ref_info(st, ld_st, &mod, &ref);
+               if (mod == 0)
+               {
+                  is_mod = 0;
+               }
+             }
+             else if (ld_st && (ST_class(ld_st) == CLASS_PREG))
+             {
+               return FALSE;
+             }
+           }
+         }
+       }
+     }
+   }
+   if(!is_mod) return FALSE;
+  }
 
   if (WN_operator(wn1) == OPR_CALL)
     call_wn = wn1;
@@ -1564,7 +2097,7 @@ BOOL CFG_TRANS::Is_aliased(WN * wn1, WN * wn2)
 	  INT same_entry_exit_value_or_1 = 0;	  
 	  opt_stab->check_ipa_same_entry_exit_value_or_1_info(call_st, load_st,
 							      &same_entry_exit_value_or_1);
-	  if (same_entry_exit_value_or_1)
+	  if (same_entry_exit_value_or_1) 
 	    return FALSE;
 	}
       }
@@ -1670,13 +2203,14 @@ void CFG_TRANS::Remove_val(WN * wn_iter, WN * wn)
 
 // Track the flow of values for loads in the given WN tree by 
 // evaluating all blocks in the given sc in source order. 
-// bb_entry gives the initial Gen block of tracked values.
+// 'bb_entry' gives the initial Gen block of tracked values.
+// 'do_recursive' indicates whether to visit children of 'sc'.
 //
 // Current implementation is quick and light-weight.
 // In the future, consider using existing value-numbering
 // mechanism.
  
-void CFG_TRANS::Track_val(SC_NODE * sc, BB_NODE * bb_entry, WN * wn)
+void CFG_TRANS::Track_val(SC_NODE * sc, BB_NODE * bb_entry, WN * wn, BOOL do_recursive)
 {
 
   FmtAssert(_val_map, ("Expect non-NULL _val_map"));
@@ -1696,13 +2230,15 @@ void CFG_TRANS::Track_val(SC_NODE * sc, BB_NODE * bb_entry, WN * wn)
     }
   }
 
-  SC_LIST * kids = sc->Kids();
+  if (do_recursive) {
+    SC_LIST * kids = sc->Kids();
   
-  if (kids != NULL) {
-    SC_LIST_ITER sc_list_iter(kids);
-    SC_NODE *tmp;
-    FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
-      Track_val(tmp, bb_entry, wn);
+    if (kids != NULL) {
+      SC_LIST_ITER sc_list_iter(kids);
+      SC_NODE *tmp;
+      FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
+	Track_val(tmp, bb_entry, wn, do_recursive);
+      }
     }
   }
 }
@@ -1771,7 +2307,7 @@ IF_MERGE_TRANS::Top_down_trans(SC_NODE * sc)
     sc2 = sc1->Next_sibling_of_type(SC_IF);
     
     while (sc2 != NULL) {
-      sc_new = Do_merge(sc1, sc2);
+      sc_new = Do_merge(sc1, sc2, TRUE);
 
       if (sc_new) {
 	sc1 = sc_new;
@@ -1791,7 +2327,7 @@ IF_MERGE_TRANS::Top_down_trans(SC_NODE * sc)
     sc2 = sc1->Next_sibling_of_type(SC_IF);
     
     while (sc2 != NULL) {
-      sc_new = Do_merge(sc1, sc2);
+      sc_new = Do_merge(sc1, sc2, TRUE);
       
       if (sc_new) {
 	sc1 = sc_new;
@@ -1812,7 +2348,7 @@ IF_MERGE_TRANS::Top_down_trans(SC_NODE * sc)
       sc2 = sc1->Next_sibling_of_type(SC_IF);
     
       while (sc2 != NULL) {
-	sc_new = Do_merge(sc1, sc2);
+	sc_new = Do_merge(sc1, sc2, TRUE);
       
 	if (sc_new) {
 	  sc1 = sc_new;
@@ -2063,15 +2599,15 @@ IF_MERGE_TRANS::Merge_SC(SC_NODE * sc1, SC_NODE * sc2)
 }
 
 // Attempt if-merging for the given pair of SC_NODEs.  If successful, return
-// the merged SC_NODE.
+// the merged SC_NODE. 'do_legal_check' indicates whether to do legality check.
 SC_NODE *
-IF_MERGE_TRANS::Do_merge(SC_NODE * sc1, SC_NODE * sc2)
+IF_MERGE_TRANS::Do_merge(SC_NODE * sc1, SC_NODE * sc2, BOOL do_legal_check)
 {
   if ((WOPT_Enable_Pro_Loop_Limit >= 0)
       && (Transform_count() >= WOPT_Enable_Pro_Loop_Limit))
     return NULL;
 
-  if (!Is_candidate(sc1, sc2, FALSE))
+  if (do_legal_check && !Is_candidate(sc1, sc2, FALSE))
     return NULL;
 
   // Merge CFG BBs.
@@ -2156,14 +2692,23 @@ CFG_TRANS::Maybe_assigned_expr(WN * wn1, WN * wn_root)
 	&& Is_aliased(wn1, wn_root))
       return TRUE;
   }
-  if (WOPT_Simplify_Bit_Op) {
+  if (WOPT_Simplify_Bit_Op && (_low_map >= 0) && (_high_map >= 0)) {
     // No alias if wn1 is a reduction of a single bit operation on an object, 
     // and wn_root is a bit operation on a different bit of the same object.
     WN * wn_bit_op = WN_get_bit_reduction(wn1);
+    WN * wn_expr = wn_root;
+    OPERATOR opr = WN_operator(wn_expr);
 
-    if (wn_bit_op && WN_is_bit_op(wn_root)
-	&& (WN_Simp_Compare_Trees(WN_kid(wn_root,0), WN_kid(wn_bit_op, 0)) == 0)) {
-      WN * wn_tmp1 = WN_kid(wn_root, 1);
+    if (OPERATOR_is_compare(opr)) {
+      if (WN_operator(WN_kid(wn_expr, 0)) == OPR_INTCONST)
+	wn_expr = WN_kid(wn_expr, 1);
+      else if (WN_operator(WN_kid(wn_expr, 1)) == OPR_INTCONST)
+	wn_expr = WN_kid(wn_expr, 0);
+    }
+
+    if (wn_bit_op && WN_is_bit_op(wn_expr)
+	&& (WN_Simp_Compare_Trees(WN_kid(wn_expr,0), WN_kid(wn_bit_op, 0)) == 0)) {
+      WN * wn_tmp1 = WN_kid(wn_expr, 1);
 
       if (WN_is_power_of_2(wn_tmp1)) {
 	WN * wn_tmp2 = WN_kid(wn_bit_op, 1);
@@ -2453,6 +2998,59 @@ IF_MERGE_TRANS::Is_if_collapse_cand(SC_NODE * sc1, SC_NODE * sc2)
   return TRUE;
 }
 
+// Flip then-path and else-path for 'sc2', which is a SC_IF.
+void
+CFG_TRANS::Do_flip(SC_NODE * sc2)
+{
+  if (sc2->Type() != SC_IF)
+    return;
+
+  CFG * cfg = _cu->Cfg();
+  MEM_POOL * pool = cfg->Mem_pool();
+  SC_NODE * sc_then = sc2->Find_kid_of_type(SC_THEN);
+  SC_NODE * sc_else = sc2->First_kid_of_type(SC_ELSE);
+  BB_NODE * bb_head = sc2->Head();
+  BB_NODE * bb_then = sc2->Then();
+  BB_NODE * bb_else = sc2->Else();
+  BB_NODE * bb_then_end = sc2->Then_end();
+  BB_NODE * bb_else_end = sc2->Else_end();
+  BB_NODE * bb_tmp = bb_then->Prev();
+  bb_tmp->Set_next(bb_else);
+  bb_else->Set_prev(bb_tmp);
+  bb_tmp = bb_else_end->Next();
+  bb_else_end->Set_next(bb_then);
+  bb_then->Set_prev(bb_else_end);
+  bb_then_end->Set_next(bb_tmp);
+  bb_tmp->Set_prev(bb_then_end);
+  bb_tmp = bb_head->Last_succ();
+  bb_head->Remove_succ(bb_tmp, pool);
+  bb_head->Prepend_succ(bb_tmp, pool);
+  cfg->Add_label_with_wn(bb_then);
+  WN * branch_wn = bb_head->Branch_wn();
+  WN_label_number(branch_wn) = bb_then->Labnam();
+      
+  SC_LIST * then_kids = sc_then->Kids();
+  SC_LIST * else_kids = sc_else->Kids();
+  sc_then->Set_kids(else_kids);
+  sc_else->Set_kids(then_kids);
+      
+  SC_LIST_ITER sc_list_iter;
+  SC_NODE * sc_tmp;
+
+  FOR_ALL_ELEM(sc_tmp, sc_list_iter, Init(else_kids)) {
+    sc_tmp->Set_parent(sc_then);
+  }
+
+  FOR_ALL_ELEM(sc_tmp, sc_list_iter, Init(then_kids)) {
+    sc_tmp->Set_parent(sc_else);
+  }
+     
+  cfg->Fix_info(sc2);
+  cfg->Invalidate_and_update_aux_info(FALSE);
+  cfg->Invalidate_loops();
+  Inc_transform_count();
+}
+
 // Check whether the given pair of SC_NODEs are if-merging candidates.
 // where, sc1 precedes sc2 in source order.  Do not invoke tail duplication
 // transformation if do_query is TRUE.
@@ -2498,7 +3096,6 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
   // If merge SC is a SC_BLOCK, it should be a SESE.
 
   SC_NODE * next_sibling = sc1->Next_sibling();
-
   if (next_sibling
       && (next_sibling->Type() == SC_BLOCK)
       && !next_sibling->Is_sese())
@@ -2510,7 +3107,7 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
       && (next_sibling->Type() == SC_BLOCK)
       && !next_sibling->Is_sese())
     return FALSE;
-  
+
   // Check whether sc2 can be if-collapsed with sc1.
   // See IF_MERGE_TRANS:Is_if_collapse_cand.
   if (_action == DO_IFCOLLAPSE) {
@@ -2555,8 +3152,23 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
   Infer_val_range(sc1, sc2);
 
   BOOL do_flip = FALSE;
+  BOOL can_skip_taildup = FALSE;
 
   if (!no_alias) {
+    if (!do_query && (_action == DO_IFFLIP)) {
+      WN * wn_tmp = WN_kid0(expr1);
+      if (wn_tmp) {
+	BOOL result1 = FALSE;
+	BOOL result2 = FALSE;
+	if (Do_flip_tail_merge(sc1, wn_tmp))
+	  result1 = TRUE;
+	if (Do_flip_tail_merge(sc2, wn_tmp))
+	  result2 = TRUE;
+	if (result1 && result2)
+	  can_skip_taildup = TRUE;
+      }
+    }
+
     // sc1' then-path and else-path should not modify condition expression.
     FOR_ALL_ELEM(tmp, sc_list_iter, Init(sc1->Kids())) {
       if (Maybe_assigned_expr(tmp, expr1, (tmp->Type() == SC_THEN) ? TRUE : FALSE)) {
@@ -2697,6 +3309,17 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
     }
   }
 
+  if (_pass == PASS_EXT) {
+    Delete_val_range_maps();
+    return TRUE;
+  }
+
+  if (do_flip && can_skip_taildup) {
+    Delete_val_range_maps();
+    Do_flip(sc2);
+    return TRUE;
+  }
+
   // For every sibling between sc1 and sc2 (exclusive), if it has 
   // dependency on sc2, and all siblings are SC_BLOCKs, do tail
   // duplication.
@@ -2708,10 +3331,8 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
 
   next_sibling = sc1->Next_sibling();
   int count = 0;
-
   while (next_sibling && (next_sibling != sc2)) {
     count++;
-
     FOR_ALL_ELEM(tmp, sc_list_iter, Init(sc2->Kids())) {
       if (Has_dependency(next_sibling, tmp))
 	has_dep = TRUE;
@@ -2747,7 +3368,8 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
   // SC_NODEs contain loop.
 
   if ((_pass == PASS_GLOBAL)
-      && (!sc1->Has_loop() || !sc2->Has_loop()))
+      && (!sc1->Has_loop() || !sc2->Has_loop())
+      && ( count != 1))
     return FALSE;
 
   if (!do_query) {
@@ -2760,50 +3382,7 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
 
     // Swap SC_THEN and SC_ELSE for sc2.
     if (do_flip) {
-      CFG * cfg = _cu->Cfg();
-      MEM_POOL * pool = cfg->Mem_pool();
-      SC_NODE * sc_then = sc2->Find_kid_of_type(SC_THEN);
-      SC_NODE * sc_else = sc2->First_kid_of_type(SC_ELSE);
-      BB_NODE * bb_head = sc2->Head();
-      BB_NODE * bb_then = sc2->Then();
-      BB_NODE * bb_else = sc2->Else();
-      BB_NODE * bb_then_end = sc2->Then_end();
-      BB_NODE * bb_else_end = sc2->Else_end();
-      BB_NODE * bb_tmp = bb_then->Prev();
-      bb_tmp->Set_next(bb_else);
-      bb_else->Set_prev(bb_tmp);
-      bb_tmp = bb_else_end->Next();
-      bb_else_end->Set_next(bb_then);
-      bb_then->Set_prev(bb_else_end);
-      bb_then_end->Set_next(bb_tmp);
-      bb_tmp->Set_prev(bb_then_end);
-      bb_tmp = bb_head->Last_succ();
-      bb_head->Remove_succ(bb_tmp, pool);
-      bb_head->Prepend_succ(bb_tmp, pool);
-      cfg->Add_label_with_wn(bb_then);
-      WN * branch_wn = bb_head->Branch_wn();
-      WN_label_number(branch_wn) = bb_then->Labnam();
-      
-      SC_LIST * then_kids = sc_then->Kids();
-      SC_LIST * else_kids = sc_else->Kids();
-      sc_then->Set_kids(else_kids);
-      sc_else->Set_kids(then_kids);
-      
-      SC_LIST_ITER sc_list_iter;
-      SC_NODE * sc_tmp;
-
-      FOR_ALL_ELEM(sc_tmp, sc_list_iter, Init(else_kids)) {
-	sc_tmp->Set_parent(sc_then);
-      }
-
-      FOR_ALL_ELEM(sc_tmp, sc_list_iter, Init(then_kids)) {
-	sc_tmp->Set_parent(sc_else);
-      }
-     
-      cfg->Fix_info(sc2);
-      cfg->Invalidate_and_update_aux_info(FALSE);
-      cfg->Invalidate_loops();
-      Inc_transform_count();
+      Do_flip(sc2);
     }
   }
 
@@ -2987,20 +3566,9 @@ CFG_TRANS::Has_side_effect(WN * wn)
   return TRUE;
 }
 
-// Delete _def_cnt_map.
-void
-PRO_LOOP_INTERCHANGE_TRANS::Delete()
-{
-  if (_def_cnt_map)
-    CXX_DELETE(_def_cnt_map, _pool);
-
-  _def_cnt_map = NULL;
-}
-
-
 // Hash _def_cnt_map for all statements in the given sc.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Hash_def_cnt_map(BB_NODE * bb)
+CFG_TRANS::Hash_def_cnt_map(BB_NODE * bb)
 {
   STMT_ITER stmt_iter;
   WN * wn_iter;
@@ -3024,7 +3592,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Hash_def_cnt_map(BB_NODE * bb)
 
 // Hash _def_cnt_map for all statements in the given sc.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Hash_def_cnt_map(SC_NODE * sc)
+CFG_TRANS::Hash_def_cnt_map(SC_NODE * sc)
 {
   if (_def_cnt_map == NULL)
     _def_cnt_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
@@ -3101,30 +3669,11 @@ PRO_LOOP_FUSION_TRANS::Collect_classified_loops(SC_NODE * sc)
 BOOL
 PRO_LOOP_FUSION_TRANS::Is_worthy(SC_NODE * sc)
 {
-  FmtAssert(sc->Type() == SC_LOOP, ("Expect a SC_LOOP."));
+  WN * wn_start = NULL;
+  WN * wn_end = NULL;
+  WN * wn_step = NULL;
 
-  SC_NODE * sc_start = sc->Find_kid_of_type(SC_LP_START);
-  SC_NODE * sc_end = sc->Find_kid_of_type(SC_LP_COND);
-  SC_NODE * sc_step = sc->Find_kid_of_type(SC_LP_STEP);
-
-  if (!sc_start || !sc_end || !sc_step)
-    return FALSE;
-
-  BB_NODE * bb_start = sc_start->First_bb();
-  BB_NODE * bb_end = sc_end->First_bb();
-  BB_NODE * bb_step = sc_step->First_bb();
-
-  if (!bb_start || !bb_end || !bb_step)
-    return FALSE;
-
-  WN * wn_start = bb_start->Laststmt();  
-  WN * wn_end = bb_end->Laststmt();
-  WN * wn_step = bb_step->Laststmt();
-
-  if (wn_step && (WN_operator(wn_step) == OPR_GOTO))
-    wn_step = WN_prev(wn_step);
-
-  if (!wn_start || !wn_end || !wn_step)
+  if (!sc->Get_bounds(&wn_start, &wn_end, &wn_step))
     return FALSE;
 
   WN * wn_lower = NULL;
@@ -3158,7 +3707,7 @@ PRO_LOOP_FUSION_TRANS::Is_worthy(SC_NODE * sc)
     }
   }
   
-  // Find step.
+  // Find increment.
   if (wn_step && (WN_operator(wn_step) == OPR_STID)) {
     wn_kid = WN_kid0(wn_step);
     opr = WN_operator(wn_kid);
@@ -3170,10 +3719,10 @@ PRO_LOOP_FUSION_TRANS::Is_worthy(SC_NODE * sc)
 	((WN_operator(wn_kid1) == OPR_LDID) ? wn_kid0 : NULL);
     }
   }
-  
+
   if (wn_lower && wn_upper && wn_incr) {
     if ((WN_operator(wn_lower) == OPR_INTCONST)
-	&& (WN_operator(wn_step) == OPR_INTCONST)
+	&& (WN_operator(wn_incr) == OPR_INTCONST)
 	&& (WN_operator(wn_upper) == OPR_INTCONST)) {
       int trip_count = abs(WN_const_val(wn_upper) - WN_const_val(wn_lower))
 	/ abs(WN_const_val(wn_incr));
@@ -3184,6 +3733,30 @@ PRO_LOOP_FUSION_TRANS::Is_worthy(SC_NODE * sc)
   }
 
   return TRUE;
+}
+
+// Initialize scratch data used for the PRO_LOOP_FUSION_TRANS sub-object.
+void
+PRO_LOOP_FUSION_TRANS::Init()
+{
+  _unlink_sc = CXX_NEW(STACK<SC_NODE *>(_pool), _pool); 
+}
+
+// Delete scratch data used for the PRO_LOOP_FUSION_TRANS sub-object.
+void
+PRO_LOOP_FUSION_TRANS::Delete()
+{
+  Delete_unlink_sc();
+}
+
+// Driver for proactive loop fusion.
+void
+PRO_LOOP_FUSION_TRANS::Doit(SC_NODE * sc)
+{
+  Classify_loops(sc);
+  Init();
+  Top_down_trans(sc);
+  Delete();
 }
 
 // Find a pair of proactive loop fusion candidates for the SC_tree rooted at sc_root.
@@ -3220,7 +3793,7 @@ PRO_LOOP_FUSION_TRANS::Find_cand
   // 2.1 Is kid of LCP.
   // 2.2 SC_TYPE is a SC_IF or a SC_LOOP.
   // 2.3 For all the sibling nodes between cand1 and cand2 EXCLUSIVE,
-  //    - It must be a SC_BLOCK or a SC_IF.
+  //    - It must be a SC_BLOCK, a SC_IF or a SC_LOOP.
   //    - In the case of a SC_BLOCK, it should have no dependency on loop1.
   //      It can be speculative.  It should have a single-entry and single-exit.
   //      It should also have a single successor that has a single predecessor.
@@ -3230,6 +3803,8 @@ PRO_LOOP_FUSION_TRANS::Find_cand
   //      motion or a merge block for a SC_IF after tail duplication.
   //    - In the case of a SC_IF, there must exist at least one path that does not
   //      have dependency on both loop1 and loop2. 
+  //    - In the case of SC_LOOP, it should have no dependency and control equivalent
+  //      to cand1, and it can be speculative.  cand1 should be a SC_LOOP.
   //
   // Limit is used to control code size bloat due to head/tail duplication.
   // 
@@ -3418,7 +3993,7 @@ PRO_LOOP_FUSION_TRANS::Find_cand
 		    cand2 = NULL;
 		    break;
 		  }
-
+		  
 		  if (!next->Is_sese()) {
 		    cand1 = NULL;
 		    cand2 = NULL;
@@ -3487,8 +4062,18 @@ PRO_LOOP_FUSION_TRANS::Find_cand
 		  // Head/tail duplication doubles statement count.
 		  stmt_count *= 2;
 		}
+		else if (next_type == SC_LOOP) {
+		  if (!Get_ext_trans()
+		      || (cand1->Type() != SC_LOOP)
+		      || !Can_be_speculative(next)
+		      || Has_dependency(cand1, next) 
+		      || !cand1->Is_ctrl_equiv(next)) {
+		    cand1 = NULL;
+		    cand2 = NULL;
+		    break;
+		  }
+		}
 		else {
-		  // Must be a SC_BLOCK or a SC_IF
 		  cand1 = NULL;
 		  cand2 = NULL;
 		  break;
@@ -3532,8 +4117,13 @@ CFG_TRANS::Clear()
   _high_map = -1;
   _def_wn_map = NULL;
   _const_wn_map = NULL;
+  _unlink_sc = NULL;
+  _tmp_stack = NULL;
+  _def_map = NULL;
+  _def_cnt_map = NULL;
+  _ext_trans = FALSE;
+  _current_scope = NULL;
 }
-
 
 // Get COMP_UNIT *
 COMP_UNIT * 
@@ -3550,7 +4140,6 @@ CFG_TRANS::Do_code_motion(SC_NODE * sc1, SC_NODE * sc2)
   FmtAssert((sc1->Parent() == sc2->Parent()), ("Expect sibling SC_NODEs"));
   BB_NODE * first_bb1 = sc1->First_bb();
   BB_NODE * first_bb2 = sc2->First_bb();
-  BB_NODE * last_bb2 = sc2->Last_bb();
   CFG * cfg = _cu->Cfg();
   SC_NODE * sc1_prev = sc1->Prev_sibling();
   SC_NODE * sc2_prev = sc2->Prev_sibling();
@@ -3566,13 +4155,7 @@ CFG_TRANS::Do_code_motion(SC_NODE * sc1, SC_NODE * sc2)
 
   BB_LIST_ITER bb_list_iter;
   BB_NODE * tmp;
-
-  // last_bb2_succ will become new loop merge
-  FmtAssert((last_bb2->Succ()->Len() == 1), ("Expect single successor"));
-  BB_NODE * last_bb2_succ = last_bb2->Succ()->Node();
-
-  FmtAssert((first_bb2->Pred()->Len() == 1), ("Expect single predecessor"));
-  BB_NODE * first_bb2_pred = first_bb2->Pred()->Node();
+  SC_TYPE sc2_type = sc2->Type();
 
   // Fix pred/succ
   FOR_ALL_ELEM(tmp, bb_list_iter, Init(first_bb1->Pred())) {
@@ -3583,58 +4166,165 @@ CFG_TRANS::Do_code_motion(SC_NODE * sc1, SC_NODE * sc2)
     if (cfg->Feedback()) 
       cfg->Feedback()->Move_edge_dest(tmp->Id(), first_bb1->Id(), first_bb2->Id());
   }
+
+  if (sc2_type == SC_BLOCK) {
+    BB_NODE * last_bb2 = sc2->Last_bb();
+    // last_bb2_succ will become new loop merge
+    FmtAssert((last_bb2->Succ()->Len() == 1), ("Expect single successor"));
+    BB_NODE * last_bb2_succ = last_bb2->Succ()->Node();
+
+    FmtAssert((first_bb2->Pred()->Len() == 1), ("Expect single predecessor"));
+    BB_NODE * first_bb2_pred = first_bb2->Pred()->Node();
+
+    last_bb2_succ->Replace_pred(last_bb2, first_bb2_pred);
+    first_bb2_pred->Replace_succ(first_bb2, last_bb2_succ);
+
+    if (cfg->Feedback())
+      cfg->Feedback()->Move_edge_dest(first_bb2_pred->Id(), first_bb2->Id(), last_bb2_succ->Id());
+    
+    first_bb2->Set_pred(first_bb1->Pred());
+    last_bb2->Replace_succ(last_bb2_succ, first_bb1);
+
+    if (cfg->Feedback())
+      cfg->Feedback()->Move_edge_dest(last_bb2->Id(), last_bb2_succ->Id(), first_bb1->Id());
+
+    BB_LIST * new_pred = CXX_NEW(BB_LIST(last_bb2), cfg->Mem_pool());
+    first_bb1->Set_pred(new_pred);
+
+    // Fix up prev/next 
+    BB_NODE * first_bb1_prev = first_bb1->Prev();
+    BB_NODE * first_bb2_prev = first_bb2->Prev();
+    BB_NODE * last_bb2_next = last_bb2->Next();
+
+    first_bb1_prev->Set_next(first_bb2);
+    first_bb2->Set_prev(first_bb1_prev);
+    last_bb2->Set_next(first_bb1);
+    first_bb1->Set_prev(last_bb2);
   
-  last_bb2_succ->Replace_pred(last_bb2, first_bb2_pred);
-  first_bb2_pred->Replace_succ(first_bb2, last_bb2_succ);
+    first_bb2_prev->Set_next(last_bb2_next);
+    last_bb2_next->Set_prev(first_bb2_prev);
 
-  if (cfg->Feedback())
-    cfg->Feedback()->Move_edge_dest(first_bb2_pred->Id(), first_bb2->Id(), last_bb2_succ->Id());
+    if (last_bb2_succ->Prev() == last_bb2)
+      last_bb2_succ->Set_prev(first_bb1_prev);
 
-  first_bb2->Set_pred(first_bb1->Pred());
-  last_bb2->Replace_succ(last_bb2_succ, first_bb1);
+    if (sc1->Type() == SC_LOOP) {
+      // Update loop info.
+      BB_NODE * merge = sc1->Merge();
+      FmtAssert(merge == first_bb2, ("Unexpected merge block"));
+      sc1->Loopinfo()->Set_merge(last_bb2_succ);
 
-  if (cfg->Feedback())
-    cfg->Feedback()->Move_edge_dest(last_bb2->Id(), last_bb2_succ->Id(), first_bb1->Id());
+      // fix label on loop exit.
+      cfg->Add_label_with_wn(last_bb2_succ);
+      BB_NODE * bb_exit = sc1->Exit();
+      WN * branch_wn = bb_exit->Branch_wn();
+      FmtAssert(WN_label_number(branch_wn), ("Null label"));
+      WN_label_number(branch_wn) = last_bb2_succ->Labnam();
+    }
+  }
+  else if (sc2_type == SC_LOOP) {
+    BB_NODE * bb_merge2 = sc2->Merge();
+    BB_NODE * bb_merge1 = sc1->Merge();
 
-  BB_LIST * new_pred = CXX_NEW(BB_LIST(last_bb2), cfg->Mem_pool());
-  first_bb1->Set_pred(new_pred);
+    FmtAssert(bb_merge1 == first_bb2, ("Unexpected merge."));
+    
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(bb_merge1->Pred())) {
+      tmp->Replace_succ(bb_merge1, bb_merge2);
+      if (cfg->Feedback()) 
+	  cfg->Feedback()->Move_edge_dest(tmp->Id(), bb_merge1->Id(), bb_merge2->Id());
+    }
 
-  // Fix up prev/next 
-  BB_NODE * first_bb1_prev = first_bb1->Prev();
-  BB_NODE * first_bb2_prev = first_bb2->Prev();
-  BB_NODE * last_bb2_next = last_bb2->Next();
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(bb_merge2->Pred())) {
+      tmp->Replace_succ(bb_merge2, first_bb1);
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), bb_merge2->Id(), first_bb1->Id());
+    }
 
-  first_bb1_prev->Set_next(first_bb2);
-  first_bb2->Set_prev(first_bb1_prev);
-  last_bb2->Set_next(first_bb1);
-  first_bb1->Set_prev(last_bb2);
-  
-  first_bb2_prev->Set_next(last_bb2_next);
-  last_bb2_next->Set_prev(first_bb2_prev);
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(first_bb1->Pred())) {
+      tmp->Replace_succ(first_bb1, first_bb2);
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), first_bb1->Id(), first_bb2->Id());
+    }
 
-  if (last_bb2_succ->Prev() == last_bb2)
-    last_bb2_succ->Set_prev(first_bb1_prev);
+    BB_LIST * bb_list = first_bb2->Pred();
+    first_bb2->Set_pred(first_bb1->Pred());
+    first_bb1->Set_pred(bb_merge2->Pred());
+    bb_merge2->Set_pred(bb_list);
 
-  SC_NODE * parent = sc1->Parent();
-  
-  if (sc1->Type() == SC_LOOP) {
-    // Update loop info.
-    BB_NODE * merge = sc1->Merge();
-    FmtAssert(merge == first_bb2, ("Unexpected merge block"));
-    sc1->Loopinfo()->Set_merge(last_bb2_succ);
+    BB_NODE * tmp2 = first_bb1->Prev();
+    tmp = bb_merge2->Prev();
+    tmp->Set_next(first_bb1);
+    first_bb1->Set_prev(tmp);
 
-    // fix label on loop exit.
-    cfg->Add_label_with_wn(last_bb2_succ);
+    tmp = bb_merge1->Prev();
+    tmp->Set_next(bb_merge2);
+    bb_merge2->Set_prev(tmp);
+
+    tmp2->Set_next(first_bb2);
+    first_bb2->Set_prev(tmp2);
+
+    // Update loop info
+    sc1->Loopinfo()->Set_merge(bb_merge2);
+    sc2->Loopinfo()->Set_merge(first_bb1);
+
+    // Fix label on loop exit
     BB_NODE * bb_exit = sc1->Exit();
     WN * branch_wn = bb_exit->Branch_wn();
     FmtAssert(WN_label_number(branch_wn), ("Null label"));
-    WN_label_number(branch_wn) = last_bb2_succ->Labnam();
+    WN_label_number(branch_wn) = bb_merge2->Labnam();
   }
+  else if (sc2_type == SC_IF) {
+    BB_NODE * bb_merge = sc2->Merge();
+    FmtAssert(sc1->Merge() == first_bb2, ("Unexpected merge."));
+    
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(bb_merge->Pred())) {
+      tmp->Replace_succ(bb_merge, first_bb1);
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), bb_merge->Id(), first_bb1->Id());
+    }
+
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(first_bb2->Pred())) {
+      tmp->Replace_succ(first_bb2, bb_merge);
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), first_bb2->Id(), bb_merge->Id());
+    }
+
+    BB_LIST * bb_list = first_bb2->Pred();
+    first_bb2->Set_pred(first_bb1->Pred());
+    first_bb1->Set_pred(bb_merge->Pred());
+    bb_merge->Set_pred(bb_list);
+
+    // Fix up prev/next
+    BB_NODE * tmp2 = first_bb2->Prev();
+    tmp = first_bb1->Prev();
+    tmp->Set_next(first_bb2);
+    first_bb2->Set_prev(tmp);
+    tmp = bb_merge->Prev();
+    bb_merge->Set_prev(tmp2);
+    tmp2->Set_next(bb_merge);
+    tmp->Set_next(first_bb1);
+    first_bb1->Set_prev(tmp);
+
+    sc1->Loopinfo()->Set_merge(bb_merge);
+    sc2->Head()->Ifinfo()->Set_merge(first_bb1);
+    
+    // fix label on loop exit
+    BB_NODE * bb_exit = sc1->Exit();
+    WN * branch_wn = bb_exit->Branch_wn();
+    FmtAssert(WN_label_number(branch_wn), ("Null label"));
+    cfg->Add_label_with_wn(bb_merge);
+    WN_label_number(branch_wn) = bb_merge->Labnam();
+    
+  }
+  else {
+    FmtAssert(FALSE, ("Unimplemented code motion"));
+  }
+  
+  SC_NODE * parent = sc1->Parent();
 
   // Fix label on branch to sc1.
   if (first_bb1->Labnam() != 0) {
     cfg->Add_label_with_wn(first_bb2);
-      
+    
     FOR_ALL_ELEM(tmp, bb_list_iter, Init(first_bb2->Pred())) {
       FmtAssert(!sc1->Contains(tmp), ("TODO: back edge"));
 
@@ -3654,6 +4344,25 @@ CFG_TRANS::Do_code_motion(SC_NODE * sc1, SC_NODE * sc2)
 	    }
 	  }
 	}
+      }
+    }
+  }
+
+  if (sc2_type == SC_LOOP) {
+    // fix label on loop exit.
+    BB_NODE * bb_exit = sc2->Exit();
+    WN * branch_wn = bb_exit->Branch_wn();
+    FmtAssert(WN_label_number(branch_wn), ("Null label"));
+    WN_label_number(branch_wn) = first_bb1->Labnam();
+  }
+  else if (sc2_type == SC_IF) {
+    BB_NODE * bb_merge = sc1->Merge();
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(first_bb1->Pred())) {
+      if (tmp->Is_branch_to(bb_merge)) {
+	WN * branch_wn = tmp->Branch_wn();
+	FmtAssert(WN_label_number(branch_wn), ("Null label"));
+	cfg->Add_label_with_wn(first_bb1);
+	WN_label_number(branch_wn) = first_bb1->Labnam();
       }
     }
   }
@@ -3778,10 +4487,17 @@ CFG_TRANS::Do_head_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
 {
   FmtAssert((sc_dst->Type() == SC_IF), ("Expect a SC_IF"));
   FmtAssert(sc_src->Is_sese(), ("Expect a single entry single exit"));
+  CFG * cfg = _cu->Cfg();
 
-  // Other kinds of loop not tested yet.
-  if (sc_src->Type() == SC_LOOP)
+  // Other kinds of loop not tested yet.    
+  SC_TYPE type = sc_src->Type();
+
+  if (type == SC_LOOP) 
     FmtAssert((sc_src->Loopinfo()->Is_flag_set(LOOP_PRE_DO)), ("TODO: Test code motion"));  
+  else if (type == SC_IF) {
+    FmtAssert(sc_src->Next_sibling() == sc_dst, ("Expect adjacent nodes"));
+    cfg->Insert_block_before(sc_dst);
+  }
 
   if (_trace) {
     printf("\n\t\t Head-duplication (SC%d,SC%d)\n", 
@@ -3794,7 +4510,6 @@ CFG_TRANS::Do_head_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   BB_NODE * dst_else = sc_dst->Else();
   BB_NODE * dst_then = sc_dst->Then();
   BB_IFINFO * ifinfo;
-  CFG * cfg = _cu->Cfg();
   float scale = 0.0;
   BB_LIST * bb_list;
   FB_FREQ freq;
@@ -3807,9 +4522,8 @@ CFG_TRANS::Do_head_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
       scale = freq.Value();
   }
 
-  SC_NODE * prev_sibling = sc_src->Prev_sibling();
-
-  SC_NODE * sc_new = cfg->Clone_sc(sc_src, TRUE, scale);
+  SC_NODE * sc_merge = NULL;
+  SC_NODE * sc_new = cfg->Clone_sc(sc_src, TRUE, scale, &sc_merge);
   FmtAssert(sc_new, ("NULL clone"));
 
   // Fix CFG.
@@ -3830,8 +4544,8 @@ CFG_TRANS::Do_head_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   SC_NODE * sc_then;
   SC_NODE * sc_else;
   SC_NODE * sc_tmp;
-  
-  switch (sc_new->Type()) {
+
+  switch (type) {
   case SC_LOOP:
     old_entry = sc_src->Head();
     src_merge = sc_src->Merge();
@@ -4045,17 +4759,107 @@ CFG_TRANS::Do_head_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
     cfg->Fix_info(sc_dst->Get_real_parent());
     break;
   case SC_IF:
-    FmtAssert(FALSE,("TODO"));
+    old_entry = sc_src->Head();
+    old_exit = sc_src->Merge();
+    new_entry = sc_new->Head();
+    new_exit = sc_new->Merge();
+
+    // Fix label on if-branch.
+    if (dst_head->Is_branch_to(dst_else)) {
+      branch_wn = dst_head->Branch_wn();
+      cfg->Add_label_with_wn(new_entry);
+      WN_label_number(branch_wn) = new_entry->Labnam();
+    }
+    
+    // Insert BB_NODEs into else-path.
+    Insert_region(new_entry, new_exit, dst_head, dst_else, pool);
+
+    if (cfg->Feedback()) {
+      FB_EDGE_TYPE edge_type = cfg->Feedback()->Get_edge_type(dst_head->Id(), dst_else->Id());
+      cfg->Feedback()->Move_edge_dest(dst_head->Id(), dst_else->Id(), new_entry->Id());
+      cfg->Feedback()->Add_edge(new_exit->Id(), dst_else->Id(), 
+				edge_type,
+				cfg->Feedback()->Get_edge_freq(dst_head->Id(), new_entry->Id()));
+    }
+
+    // Prepend sc_new and src_merge to SC_ELSE's kids.
+    sc_insert_before = sc_dst->Find_kid_of_type(SC_ELSE);
+    sc_insert_before->Prepend_kid(sc_merge);
+    sc_merge->Set_parent(sc_insert_before);
+    sc_insert_before->Prepend_kid(sc_new);
+    sc_new->Set_parent(sc_insert_before);
+    
+    // Update sc_dst's ifinfo
+    ifinfo = dst_head->Ifinfo();
+    ifinfo->Set_else(new_entry);
+
+    // Disconnect BB_NODEs in src from CFG and then insert it into the then-path.
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(old_entry->Pred())) {
+      tmp->Replace_succ(old_entry, dst_head);
+      
+      if (tmp->Is_branch_to(old_entry)) {
+	branch_wn = tmp->Branch_wn();
+	cfg->Add_label_with_wn(dst_head);	
+	WN_label_number(branch_wn) = dst_head->Labnam();
+      }
+
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), old_entry->Id(), dst_head->Id());
+    
+    }
+    
+    dst_head->Set_pred(old_entry->Pred());
+    old_entry->Set_pred(NULL);
+    old_exit->Remove_succ(dst_head, pool);
+    old_exit->Set_next(NULL);
+
+    if (cfg->Feedback()) {
+      FB_EDGE_TYPE edge_type = cfg->Feedback()->Get_edge_type(dst_head->Id(), dst_then->Id());
+      cfg->Feedback()->Move_edge_dest(dst_head->Id(), dst_then->Id(), old_entry->Id());
+      cfg->Feedback()->Move_edge_dest(old_exit->Id(), dst_head->Id(), dst_then->Id());
+      edge = cfg->Feedback()->Get_edge(old_exit->Id(), dst_then->Id());
+      freq = cfg->Feedback()->Get_edge_freq(dst_head->Id(), old_entry->Id());
+      cfg->Feedback()->Change_edge_freq(edge, freq);
+    }
+
+    tmp = old_entry->Prev();
+    tmp->Set_next(dst_head);
+    dst_head->Set_prev(tmp);
+    old_entry->Set_prev(NULL);
+    
+    // Fix label on if-branch.
+    if (dst_head->Is_branch_to(dst_then)) {
+      branch_wn = dst_head->Branch_wn();
+      cfg->Add_label_with_wn(old_entry);
+      WN_label_number(branch_wn) = old_entry->Labnam();
+    }
+
+    Insert_region(old_entry, old_exit, dst_head, dst_then, pool);
+
+    sc_insert_before = sc_dst->Find_kid_of_type(SC_THEN);
+    sc_tmp = sc_src->Next_sibling();
+    sc_tmp->Unlink();
+    sc_insert_before->Prepend_kid(sc_tmp);
+    sc_tmp->Set_parent(sc_insert_before);
+    sc_src->Unlink();    
+    sc_insert_before->Prepend_kid(sc_src);
+    sc_src->Set_parent(sc_insert_before);
+
+    ifinfo = dst_head->Ifinfo();
+    ifinfo->Set_then(old_entry);
+    
+    Fix_parent_info(sc_src, sc_dst);
     break;
+
   default:
     FmtAssert(FALSE, ("Unexpected SC type"));
   }
 
-  if (prev_sibling) {
-    BB_NODE * merge = prev_sibling->Merge();
+  if (sc_prev) {
+    BB_NODE * merge = sc_prev->Merge();
     if (merge) {
       FmtAssert((merge == sc_src->First_bb()), ("Unexpected merge block"));
-      prev_sibling->Set_merge(dst_head);
+      sc_prev->Set_merge(dst_head);
     }
   }
 
@@ -4079,8 +4883,16 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   FmtAssert(sc_src->Is_sese(), ("Expect a single entry single exit"));
 
   // Other kinds of loops not tested yet.
-  if (sc_src->Type() == SC_LOOP)
+  SC_TYPE type = sc_src->Type();
+  CFG * cfg = _cu->Cfg();
+
+  if (type == SC_LOOP)
     FmtAssert((sc_src->Loopinfo()->Is_flag_set(LOOP_PRE_DO)), ("TODO: test other loops"));
+  else if (type == SC_IF) {
+    FmtAssert(sc_dst->Next_sibling() == sc_src, ("Expect adjacent nodes."));
+    cfg->Insert_block_after(sc_src);
+    cfg->Insert_block_after(sc_dst);
+  }
 
   if (_trace) {
     printf("\n\t\t Tail-duplication (SC%d,SC%d)\n", 
@@ -4092,11 +4904,13 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   BB_NODE * dst_else = sc_dst->Else();
   BB_NODE * dst_else_end = sc_dst->Else_end();
   BB_NODE * dst_then_end = sc_dst->Then_end();
-  CFG * cfg = _cu->Cfg();
   float scale = 0.0;
   FB_FREQ      then_edge_freq;
   FB_FREQ      else_edge_freq;
   FB_EDGE_TYPE exit_edge_type;
+  FB_FREQ freq;
+  IDTYPE edge;
+  SC_NODE * sc_tmp;
 
   if (cfg->Feedback()) {
     FB_FREQ freq = cfg->Feedback()->Get_edge_freq(dst_head->Id(), dst_else->Id()) 
@@ -4108,7 +4922,8 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
 
   }
 
-  SC_NODE * sc_new = cfg->Clone_sc(sc_src, TRUE, scale);
+  SC_NODE * sc_merge = NULL;
+  SC_NODE * sc_new = cfg->Clone_sc(sc_src, TRUE, scale, &sc_merge);
   FmtAssert(sc_new, ("NULL clone"));
 
   // Fix CFG
@@ -4132,7 +4947,7 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   SC_NODE * sc_blk;
   WN * branch_wn;
 
-  switch (sc_new->Type()) {
+  switch (type) {
   case SC_LOOP:
     old_entry = sc_src->Head();
     src_merge = sc_src->Merge();
@@ -4372,6 +5187,88 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
     }
     break;
 
+  case SC_IF:
+    old_entry = sc_src->Head();
+    old_exit = sc_src->Merge();
+    new_entry = sc_new->Head();
+    new_exit = sc_new->Merge();
+
+    if (dst_else_end->Is_branch_to(dst_merge)) {
+      FmtAssert(FALSE, ("TODO: fix label"));
+    }
+
+    Insert_region(new_entry, new_exit, dst_else_end, dst_merge, pool);    
+
+    if (cfg->Feedback()) {
+      FB_EDGE_TYPE edge_type = cfg->Feedback()->Get_edge_type(dst_else_end->Id(), dst_merge->Id());
+      cfg->Feedback()->Move_edge_dest(dst_else_end->Id(), dst_merge->Id(), new_entry->Id());
+      cfg->Feedback()->Add_edge(new_exit->Id(), dst_merge->Id(), edge_type,
+				cfg->Feedback()->Get_edge_freq(dst_else_end->Id(), new_entry->Id()));
+    }
+
+    // Append sc_new and src_merge to SC_ELSE's kids.
+    sc_insert_after = sc_dst->Find_kid_of_type(SC_ELSE);
+    sc_blk = sc_insert_after->Last_kid();
+
+    sc_insert_after->Append_kid(sc_new);
+    sc_new->Set_parent(sc_insert_after);
+    sc_insert_after->Append_kid(sc_merge);
+    sc_merge->Set_parent(sc_insert_after);
+
+    if (sc_blk)
+      cfg->Fix_info(sc_blk);
+
+    // Disconnect BB_NODEs in src from CFG and then insert it into the then-path.
+    sc_merge = sc_src->Next_sibling()->Next_sibling();
+    tmp2 = sc_merge->First_bb();
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init(old_entry->Pred())) {
+      tmp->Replace_succ(old_entry, tmp2);
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(tmp->Id(), old_entry->Id(),tmp2->Id());
+    }
+
+    tmp2->Set_pred(old_entry->Pred());
+    old_exit->Remove_succ(tmp2, pool);
+    old_entry->Set_pred(NULL);
+    old_exit->Set_next(NULL);
+    tmp = old_entry->Prev();
+    tmp->Set_next(tmp2);
+    tmp2->Set_prev(tmp);
+    old_entry->Set_prev(NULL);
+    old_exit->Set_next(NULL);
+
+    if (cfg->Feedback()) {
+      FB_EDGE_TYPE edge_type = cfg->Feedback()->Get_edge_type(dst_then_end->Id(), dst_merge->Id());
+      cfg->Feedback()->Move_edge_dest(dst_then_end->Id(), dst_merge->Id(), old_entry->Id());
+      cfg->Feedback()->Move_edge_dest(old_exit->Id(), tmp2->Id(), dst_merge->Id());
+      edge = cfg->Feedback()->Get_edge(old_exit->Id(), dst_merge->Id());
+      freq = cfg->Feedback()->Get_edge_freq(dst_then_end->Id(), old_entry->Id());
+      cfg->Feedback()->Change_edge_freq(edge, freq);
+    }
+
+    if (dst_then_end->Is_branch_to(dst_merge)) {
+      FmtAssert(FALSE, ("Fix branch target."));
+    }
+
+    Insert_region(old_entry, old_exit, dst_then_end, dst_merge, pool);
+
+    sc_insert_after = sc_dst->Find_kid_of_type(SC_THEN);
+    sc_blk = sc_insert_after->Last_kid();
+    sc_tmp = sc_src->Next_sibling();
+    sc_src->Unlink();
+    sc_insert_after->Append_kid(sc_src);
+    sc_src->Set_parent(sc_insert_after);
+    sc_tmp->Unlink();
+    sc_insert_after->Append_kid(sc_tmp);
+    sc_tmp->Set_parent(sc_insert_after);
+
+    if (sc_blk)
+      cfg->Fix_info(sc_blk);
+
+    cfg->Fix_info(sc_insert_after);
+    
+    break;
+
   default:
     FmtAssert(FALSE, ("Unexpected SC type"));
   }
@@ -4426,7 +5323,7 @@ PRO_LOOP_FUSION_TRANS::Traverse_trans(SC_NODE * sc1, SC_NODE * sc2)
     case SC_IF:
       if (sc_type == SC_IF) {
 	if (IF_MERGE_TRANS::Is_candidate(sc, next, TRUE))
-	  Do_merge(sc, next);
+	  Do_merge(sc, next, TRUE);
 	else {
 	  // FmtAssert(FALSE, ("TODO"));
 	  ret_val = FALSE;
@@ -4434,9 +5331,16 @@ PRO_LOOP_FUSION_TRANS::Traverse_trans(SC_NODE * sc1, SC_NODE * sc2)
       }
       else if (sc_type == SC_LOOP) {
 	if (sc->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
-	  // Do head duplication.
-	  Do_head_duplication(sc, next);
-	  sc = next;
+	  if (Get_ext_trans() 
+	      && sc->Is_ctrl_equiv(next)
+	      && !Has_dependency(sc, next)) {
+	    Do_code_motion(sc, next);
+	  }
+	  else {
+	    // Do head duplication.
+	    Do_head_duplication(sc, next);
+	    sc = next;
+	  }
 	}
 	else {
 	  ret_val = FALSE;
@@ -4458,6 +5362,18 @@ PRO_LOOP_FUSION_TRANS::Traverse_trans(SC_NODE * sc1, SC_NODE * sc2)
 	  ret_val = FALSE;
 	  if (_trace)
 	    printf("\n\t\t  Skip non-DO-LOOP (SC%d)\n", next->Id());
+	}
+      }
+      else if (sc_type == SC_LOOP) {
+	if (sc->Loopinfo()->Is_flag_set(LOOP_PRE_DO)
+	    && next->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
+	  if  (next != sc2) {
+	    Do_code_motion(sc, next);
+	  }
+	  else if (Get_ext_trans() && Can_fuse(sc)) {
+	    sc = Do_loop_fusion(sc, 1);
+	    _loop_list = _loop_list->Remove(sc2, _pool);
+	  }
 	}
       }
       break;
@@ -4560,7 +5476,7 @@ PRO_LOOP_FUSION_TRANS::Top_down_trans(SC_NODE * sc_root)
 {
   if (sc_root->Has_flag(HAS_SYMM_LOOP)) {
     int orig_transform_count = _transform_count;
-    Nonrecursive_trans(sc_root, TRUE);
+   Nonrecursive_trans(sc_root, TRUE);
 
     if (_transform_count > orig_transform_count) {
       IF_MERGE_TRANS::Top_down_trans(sc_root);
@@ -4677,11 +5593,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Clear()
   _inner_stack = NULL;
   _local_stack = NULL;
   _restart_stack = NULL;
-  _tmp_stack = NULL;
-  _action = DO_INTERCHANGE_NONE;
-  _def_map = NULL;
-  _unlink_sc = NULL;
-  _def_cnt_map = NULL;
+  _action = DO_NONE;
 }
 
 // Query whether given SC_LOOP has a perfect loop nest, i.e.,
@@ -4722,7 +5634,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Is_perfect_loop_nest(SC_NODE * sc)
 // Proactive loop fusion can be performed in lock-steps for sc_inner and its buddy.
 // See PRO_LOOP_INTERCHANGE_TRANS::Do_lock_step_fusion.
 SC_NODE *
-PRO_LOOP_INTERCHANGE_TRANS::Find_fusion_buddy(SC_NODE * sc_inner, STACK<SC_NODE *> * sc_stack)
+CFG_TRANS::Find_fusion_buddy(SC_NODE * sc_inner, STACK<SC_NODE *> * sc_stack)
 {
   if (sc_inner->Parent() == NULL)
     return NULL;
@@ -4765,7 +5677,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_lock_step_fusion(SC_NODE * sc1, SC_NODE * sc2)
 
   Set_region_id(sc_lcp->Id());
   
-  _action = DO_INTERCHANGE_NONE;
+  _action = DO_NONE;
   _action |= DO_TREE_HEIGHT_RED;
 
   // Do canonicalization and tree height reduction in lock steps.
@@ -4783,11 +5695,11 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_lock_step_fusion(SC_NODE * sc1, SC_NODE * sc2)
       break;
 
     if (sc_tmp1->Next_sibling_of_type(SC_IF) == sc_tmp2) {
-      Do_merge(sc_tmp1, sc_tmp2);
+      Do_merge(sc_tmp1, sc_tmp2, TRUE);
       IF_MERGE_TRANS::Top_down_trans(sc_tmp1);
     }
     else if (sc_tmp2->Next_sibling_of_type(SC_IF) == sc_tmp1) {
-      Do_merge(sc_tmp2, sc_tmp1);
+      Do_merge(sc_tmp2, sc_tmp1, TRUE);
       IF_MERGE_TRANS::Top_down_trans(sc_tmp2);
     }
     else
@@ -4816,7 +5728,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_lock_step_fusion(SC_NODE * sc1, SC_NODE * sc2)
 // (See PRO_LOOP_INTERCHANGE_TRANS::Is_perfect_loop_nest)
 // 
 // Here we only do it for the simplest loop-nest that satisfies:
-// 1. Has unique memory reference (see PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref).
+// 1. Has unique memory reference (see CFG_TRANS::Get_unique_ref).
 // 2. The memory reference iterarates only on the inner loop's dimension.
 // 3. Loop index for both the outer loop and the inner loop are a AUTO or a REG.
 // 4. LP_START, LP_COND and LP_STEP only reference loop indexes or loop invariants w.r.t.
@@ -4859,24 +5771,47 @@ PRO_LOOP_INTERCHANGE_TRANS::Can_interchange(SC_NODE * outer_loop, SC_NODE * inne
   return FALSE;
 }
 
+// Initialize scratch fields of PRO_LOOP_INTERCHANGE_TRANS sub-object.
+void
+PRO_LOOP_INTERCHANGE_TRANS::Init()
+{
+  New_invar_map();
+  _local_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  _outer_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  _inner_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  _restart_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  _unlink_sc = CXX_NEW(STACK<SC_NODE *>(_pool), _pool); 
+}
+
+// Delete scratch fields of PRO_LOOP_INTERCHANGE_TRANS sub-object.
+void
+PRO_LOOP_INTERCHANGE_TRANS::Delete()
+{
+  Delete_invar_map();
+  CXX_DELETE(_local_stack, _pool);
+  _local_stack = NULL;
+  CXX_DELETE(_outer_stack, _pool);
+  _outer_stack = NULL;
+  CXX_DELETE(_inner_stack, _pool);
+  _inner_stack = NULL;
+    
+  while (!_restart_stack->Is_Empty())
+    _restart_stack->Pop();
+  CXX_DELETE(_restart_stack, _pool);
+  _restart_stack = NULL;
+
+  Delete_unlink_sc();
+}
+
 // Visit the SC tree rooted at the given node in a top down order
 // and invoke proactive loop interchange transformation. 
 // Inner loop nests are processed before outer loop nests.
 // Return TRUE if there is no need to continue the iteration.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
+PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc)
 {
   SC_NODE * outer_loop = NULL;
   SC_NODE * inner_loop;
-
-  if (do_init) {
-    New_invar_map();
-    _local_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
-    _outer_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
-    _inner_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
-    _restart_stack = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
-    _unlink_sc = CXX_NEW(STACK<SC_NODE *>(_pool), _pool); 
-  }
 
   if (sc->Type() == SC_LOOP) {
     if (!_local_stack->Is_Empty()) {
@@ -4891,8 +5826,9 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
   SC_LIST_ITER sc_iter;
 
   FOR_ALL_ELEM(child, sc_iter, Init(sc->Kids())) {
-    if (Top_down_trans(child, FALSE))
+    if (Top_down_trans(child)) {
       return FALSE;
+    }
   }
 
   BOOL do_restart = FALSE;
@@ -4951,7 +5887,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
     }
 
     if (size > 0) {
-      _action = DO_INTERCHANGE_NONE;
+      _action = DO_NONE;
       _action |= DO_TREE_HEIGHT_RED;
       _action |= DO_IF_COND_DIS;     
       _action |= DO_LOOP_UNS;
@@ -4978,7 +5914,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
       if (do_restart) {
 	// Save restart point
 	_restart_stack->Push(sc_p);
-	Top_down_trans(sc_p, FALSE);
+	Top_down_trans(sc_p);
       }
     }
     else if (!_restart_stack->Is_Empty()) {
@@ -5000,9 +5936,10 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
 	if (inner_loop && inner_loop->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
 	  // Do loop fusion 
 	  if (Can_fuse(inner_loop)) {
-	    sc_tmp = Do_loop_fusion(inner_loop);
-	    if (sc_tmp)
+	    sc_tmp = Do_loop_fusion(inner_loop, 0);
+	    if (sc_tmp){
 	      IF_MERGE_TRANS::Top_down_trans(sc_tmp->Find_kid_of_type(SC_LP_BODY));
+            }
 	  }
 
 	  // Do loop distribution
@@ -5023,34 +5960,12 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc, BOOL do_init)
     }
   }
 
-  if (do_init) {
-    Delete_invar_map();
-    CXX_DELETE(_local_stack, _pool);
-    _local_stack = NULL;
-    CXX_DELETE(_outer_stack, _pool);
-    _outer_stack = NULL;
-    CXX_DELETE(_inner_stack, _pool);
-    _inner_stack = NULL;
-    
-    while (!_restart_stack->Is_Empty())
-      _restart_stack->Pop();
-    CXX_DELETE(_restart_stack, _pool);
-    _restart_stack = NULL;
-
-    while (!_unlink_sc->Is_Empty()) {
-      SC_NODE * sc_tmp = _unlink_sc->Pop();
-      sc_tmp->Delete();
-    }
-    CXX_DELETE(_unlink_sc, _pool);
-    _unlink_sc = NULL;
-  }
-
   return do_restart;
 }
 
 // Remove the given block from the CFG.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Remove_block(BB_NODE * bb)
+CFG_TRANS::Remove_block(BB_NODE * bb)
 {
   CFG * cfg = _cu->Cfg();
   BB_NODE * bb_succ = bb->Nth_succ(0);
@@ -5083,7 +5998,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Remove_block(BB_NODE * bb)
 
 // Remove all blocks in the given SC_BLOCK from the CFG.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Remove_block(SC_NODE * sc)
+CFG_TRANS::Remove_block(SC_NODE * sc)
 {
   FmtAssert((sc->Type() == SC_BLOCK), ("Expect a SC_BLOCK"));
   BB_NODE * bb_tmp;
@@ -5106,11 +6021,108 @@ PRO_LOOP_INTERCHANGE_TRANS::Remove_block(SC_NODE * sc)
     cfg->Fix_info(sc_parent);
 }
 
+// Remove 'sc' which is a SC_LOOP.
+void
+CFG_TRANS::Remove_loop(SC_NODE * sc)
+{
+  CFG * cfg = _cu->Cfg();
+  FmtAssert((sc->Type() == SC_LOOP), ("Expect a SC_LOOP"));
+  BB_NODE * bb_head = sc->Head();
+  BB_NODE * bb_merge = sc->Merge();
+  BB_NODE * bb_tmp;
+  BB_LIST_ITER bb_list_iter;
+  SC_NODE * sc_prev = sc->Prev_sibling();
+  SC_NODE * sc_parent = sc->Get_real_parent();
+
+  FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_head->Pred())) {
+    if (bb_tmp->Is_branch_to(bb_head)) {
+      WN * branch_wn = bb_tmp->Branch_wn();
+      cfg->Add_label_with_wn(bb_merge);
+      WN_label_number(branch_wn) = bb_merge->Labnam();
+    }
+
+    bb_tmp->Replace_succ(bb_head, bb_merge);
+
+    if (cfg->Feedback())
+      cfg->Feedback()->Move_edge_dest(bb_tmp->Id(), bb_head->Id(), bb_merge->Id());
+  }
+
+  bb_merge->Set_pred(bb_head->Pred());
+  bb_tmp = bb_head->Prev();
+  bb_tmp->Set_next(bb_merge);
+  bb_merge->Set_prev(bb_tmp);
+  
+  sc->Unlink();
+  sc->Delete();
+
+  if (sc_prev)
+    cfg->Fix_info(sc_prev);
+
+  if (sc_parent)
+    cfg->Fix_info(sc_parent);
+
+  cfg->Invalidate_and_update_aux_info(FALSE);
+  cfg->Invalidate_loops();
+  Inc_transform_count();
+}
+
+// Remove nodes between 'sc1' and 'sc2' which are SC_LOOPs with the same parent.
+void
+CFG_TRANS::Remove_peel(SC_NODE * sc1, SC_NODE * sc2)
+{
+  if ((sc1->Type() == SC_LOOP) && (sc2->Type() == SC_LOOP)
+      && (sc1->Parent() == sc2->Parent())
+      && (sc1->Next_sibling() != sc2)) {
+    CFG * cfg = _cu->Cfg();
+    BB_NODE * merge1 = sc1->Merge();
+    BB_NODE * head2 = sc2->Head();
+    BB_NODE * bb_tmp;
+    BB_LIST_ITER bb_list_iter;
+    SC_NODE * sc_parent = sc1->Get_real_parent();
+    
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(merge1->Pred())) {
+      if (bb_tmp->Is_branch_to(merge1)) {
+	WN * branch_wn = bb_tmp->Branch_wn();
+	cfg->Add_label_with_wn(head2);
+	WN_label_number(branch_wn) = head2->Labnam();
+      }
+
+      bb_tmp->Replace_succ(merge1, head2);
+      
+      if (cfg->Feedback())
+	cfg->Feedback()->Move_edge_dest(bb_tmp->Id(), merge1->Id(), head2->Id());
+    }
+
+    head2->Set_pred(merge1->Pred());
+    bb_tmp = merge1->Prev();
+    bb_tmp->Set_next(head2);
+    head2->Set_prev(bb_tmp);
+
+    SC_NODE * sc_iter = sc1->Next_sibling();
+    SC_NODE * sc_next;
+    while (sc_iter && (sc_iter != sc2)) {
+      sc_next = sc_iter->Next_sibling();
+      sc_iter->Unlink();
+      sc_iter->Delete();
+      sc_iter = sc_next;
+    }
+
+    cfg->Fix_info(sc1);
+
+    if (sc_parent)
+      cfg->Fix_info(sc_parent);
+
+    cfg->Invalidate_and_update_aux_info(FALSE);
+    cfg->Invalidate_loops();
+    Inc_transform_count();
+  }
+}
+
 // Backward iterate statements in sc1, which is a single-BB-NODE SC_BLOCK,
 // find those having no dependencies to sc_loop and sc_loop's
 // consecutive siblings and create a new BB_NODE to host them.
 SC_NODE *
-PRO_LOOP_INTERCHANGE_TRANS::Split(SC_NODE * sc1, SC_NODE * sc_loop)
+CFG_TRANS::Split(SC_NODE * sc1, SC_NODE * sc_loop)
 {
   CFG * cfg = _cu->Cfg();
   MEM_POOL * pool = cfg->Mem_pool();
@@ -5197,7 +6209,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Split(SC_NODE * sc1, SC_NODE * sc_loop)
 
 // Add map of aux_id to WN * in _def_map.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Add_def_map(AUX_ID aux_id, WN * wn)
+CFG_TRANS::Add_def_map(AUX_ID aux_id, WN * wn)
 {
   WN * wn_tmp = (WN *) _def_map->Get_val((POINTER) aux_id);
   if (wn_tmp == NULL)
@@ -5210,7 +6222,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Add_def_map(AUX_ID aux_id, WN * wn)
 
 // Do copy propagation for all loads in the wn.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(WN * wn)
+CFG_TRANS::Copy_prop(WN * wn)
 {
   for ( int i = 0; i < WN_kid_count(wn); i++) {
     WN * wn_kid = WN_kid(wn, i);
@@ -5233,7 +6245,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(WN * wn)
 
 // Do copy propagation for all loads in the bb.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(BB_NODE * bb)
+CFG_TRANS::Copy_prop(BB_NODE * bb)
 {
   STMT_ITER stmt_iter;
   WN * wn_iter;
@@ -5245,7 +6257,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(BB_NODE * bb)
 
 // Do copy propagation for all loads in the sc.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(SC_NODE * sc)
+CFG_TRANS::Copy_prop(SC_NODE * sc)
 {
   BB_NODE * bb = sc->Get_bb_rep();
   
@@ -5282,7 +6294,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Copy_prop(SC_NODE * sc)
 // Return the first element in Group 2.
 
 SC_NODE *
-PRO_LOOP_INTERCHANGE_TRANS::Do_partition(SC_NODE * sc_loop)
+CFG_TRANS::Do_partition(SC_NODE * sc_loop)
 {
   SC_NODE * sc_begin = sc_loop;
   SC_NODE * sc1 = sc_begin->Prev_sibling();
@@ -5323,7 +6335,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_partition(SC_NODE * sc_loop)
 // Move all SC_BLOCKs succeeding the loop before the loop excluding the last empty block.
 // Return TRUE if successful.
 BOOL 
-PRO_LOOP_INTERCHANGE_TRANS::Hoist_succ_blocks(SC_NODE * sc_loop)
+CFG_TRANS::Hoist_succ_blocks(SC_NODE * sc_loop)
 {
   SC_NODE * sc_parent = sc_loop->Parent();
   SC_NODE * sc1 = sc_loop;
@@ -5369,7 +6381,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Hoist_succ_blocks(SC_NODE * sc_loop)
 //
 // Return the first SC_NODE * that has dependency on the SC_LOOPs.
 SC_NODE * 
-PRO_LOOP_INTERCHANGE_TRANS::Do_pre_dist(SC_NODE * sc_loop, SC_NODE * outer_loop)
+CFG_TRANS::Do_pre_dist(SC_NODE * sc_loop, SC_NODE * outer_loop)
 {
   CFG * cfg = _cu->Cfg();
   SC_NODE * sc1;
@@ -5517,7 +6529,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_pre_dist(SC_NODE * sc_loop, SC_NODE * outer_loop)
 
 // Split head of sc_if so that it contains a single statement.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Do_split_if_head(SC_NODE * sc_if)
+CFG_TRANS::Do_split_if_head(SC_NODE * sc_if)
 {
   CFG * cfg = _cu->Cfg();
   MEM_POOL * pool = cfg->Mem_pool();
@@ -5599,7 +6611,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_split_if_head(SC_NODE * sc_if)
 // 2. Head is the 1st block of its parent.
 // 3. Merge is an empty block.
 void
-PRO_LOOP_INTERCHANGE_TRANS::Do_canon(SC_NODE * outer_loop, SC_NODE * inner_loop, int action)
+CFG_TRANS::Do_canon(SC_NODE * outer_loop, SC_NODE * inner_loop, int action)
 {
   CFG * cfg = _cu->Cfg();
   MEM_POOL * pool = cfg->Mem_pool();
@@ -5646,7 +6658,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_canon(SC_NODE * outer_loop, SC_NODE * inner_loop,
     }
   }
 
-  // Do tail duplication so that the merge of a if-region is an empty block.
+  // DO tail duplication so that the merge of a if-region is an empty block.
   if ((action & TAIL_DUP) != 0) {
     for (i = 0; i < size; i++) {
       SC_NODE * sc_if = _tmp_stack->Top_nth(i);
@@ -5657,6 +6669,27 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_canon(SC_NODE * outer_loop, SC_NODE * inner_loop,
       
       if (!last_sibling->Is_empty_block()) 
 	cfg->Insert_block_after(last_sibling);
+      else if (last_sibling->First_bb() != last_sibling->Last_bb()) {
+	BB_LIST * bb_list = last_sibling->Get_bbs();
+	BB_LIST_ITER bb_list_iter(bb_list);
+	BB_NODE * bb_last = last_sibling->Last_bb();
+	BB_NODE * tmp;
+
+	FOR_ALL_ELEM(tmp, bb_list_iter, Init()) {
+	  if (tmp != bb_last) {
+	    SC_NODE * sc_new = cfg->Create_sc(SC_BLOCK);
+	    sc_new->Append_bbs(tmp);
+	    last_sibling->Insert_before(sc_new);
+	    cfg->Fix_info(last_sibling->Get_real_parent());
+	  }
+	}
+
+	while (bb_list)
+	  bb_list = bb_list->Remove(bb_list->Node(), pool);
+
+	last_sibling->Set_bbs(NULL);
+	last_sibling->Append_bbs(bb_last);
+      }
       
       last_sibling = sc_parent->Last_kid();
       next_sibling = sc_if->Next_sibling();
@@ -5750,13 +6783,15 @@ void
 CFG_TRANS::Hash_invar(BB_NODE * bb, SC_NODE * sc)
 {
   MAP * invar_map = Get_invar_map();
-  SC_NODE * sc_tmp = (SC_NODE *) invar_map->Get_val((POINTER) bb->Id());
+  if (invar_map) {
+    SC_NODE * sc_tmp = (SC_NODE *) invar_map->Get_val((POINTER) bb->Id());
 
-  if (!sc_tmp)
-    invar_map->Add_map((POINTER) bb->Id(), (POINTER) sc);
-  else if ((sc_tmp->Parent() == NULL) || sc->Is_pred_in_tree(sc_tmp)) {
-    MAP_LIST * map_lst = invar_map->Find_map_list((POINTER) bb->Id());    
-    map_lst->Set_val((POINTER) sc);
+    if (!sc_tmp)
+      invar_map->Add_map((POINTER) bb->Id(), (POINTER) sc);
+    else if ((sc_tmp->Parent() == NULL) || sc->Is_pred_in_tree(sc_tmp)) {
+      MAP_LIST * map_lst = invar_map->Find_map_list((POINTER) bb->Id());    
+      map_lst->Set_val((POINTER) sc);
+    }
   }
 }
 
@@ -6083,27 +7118,21 @@ PRO_LOOP_INTERCHANGE_TRANS::Is_candidate(SC_NODE * outer_loop, SC_NODE * inner_l
   return is_cand;
 }
 
-
 // Given a SC_IF, obtain a copy of its condition-setting WN and
 // invert its opcode if do_invert is TRUE.
 WN *
-PRO_LOOP_INTERCHANGE_TRANS::Get_cond(SC_NODE * sc, BOOL do_invert)
+CFG_TRANS::Get_cond(SC_NODE * sc, BOOL do_invert)
 {
-  if (sc->Type() == SC_IF) {
-    BB_NODE * bb = sc->Get_bb_rep();
-    WN * last_wn = bb->Laststmt();
-    OPERATOR opr = WN_operator(last_wn);
-    
-    if ((opr == OPR_FALSEBR) || (opr == OPR_TRUEBR)) {
-      WN * old_cond = WN_kid0(last_wn);
-      OPCODE opc_inv = get_inverse_relop(WN_opcode(old_cond));
+  WN * old_cond = sc->Get_cond();
+
+  if (old_cond) {
+    OPCODE opc_inv = get_inverse_relop(WN_opcode(old_cond));
       
-      if (opc_inv != OPCODE_UNKNOWN) {
-	WN *new_cond = WN_COPY_Tree_With_Map(old_cond);
-	if (do_invert) 
-	  WN_set_opcode(new_cond, opc_inv);
-	return new_cond;
-      }
+    if (opc_inv != OPCODE_UNKNOWN) {
+      WN *new_cond = WN_COPY_Tree_With_Map(old_cond);
+      if (do_invert) 
+	WN_set_opcode(new_cond, opc_inv);
+      return new_cond;
     }
   }
 
@@ -6112,7 +7141,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_cond(SC_NODE * sc, BOOL do_invert)
 
 // Merge two condition expression WNs using the given operator.
 WN *
-PRO_LOOP_INTERCHANGE_TRANS::Merge_cond(WN * wn1, WN * wn2, OPERATOR opr)
+CFG_TRANS::Merge_cond(WN * wn1, WN * wn2, OPERATOR opr)
 {
   if (wn1 == NULL)
     return wn2;
@@ -6125,10 +7154,35 @@ PRO_LOOP_INTERCHANGE_TRANS::Merge_cond(WN * wn1, WN * wn2, OPERATOR opr)
   }
 }
 
+// Merge two adjacent control equivalent SC_BLOCKs.
+// Return merged block.
+SC_NODE *
+CFG_TRANS::Merge_block(SC_NODE * sc1, SC_NODE * sc2)
+{
+  if ((sc1->Type() == SC_BLOCK)
+      && (sc2->Type() == SC_BLOCK)
+      && (sc1->Next_sibling() == sc2)
+      && sc1->Is_ctrl_equiv(sc2)) {
+    BB_LIST * bbs = sc2->Get_bbs();
+    MEM_POOL * pool = sc2->Get_pool();
+    while (bbs) {
+      BB_NODE * bb = bbs->Node();
+      sc1->Append_bbs(bb);
+      bbs = bbs->Remove(bb, pool);
+    }
+
+    sc2->Set_bbs(NULL);
+    sc2->Unlink();
+    sc2->Delete();
+    return sc1;
+  }
+  return NULL;
+}
+
 // Reduce height of if-condition tree between sc1 and sc2, where sc1 is in the ancestor 
 // sub-tree of sc2.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_tree_height_reduction(SC_NODE * sc1, SC_NODE * sc2)
+CFG_TRANS::Do_if_cond_tree_height_reduction(SC_NODE * sc1, SC_NODE * sc2)
 {
   SC_NODE * cur_node;
   SC_NODE * parent_node;
@@ -6170,13 +7224,12 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_tree_height_reduction(SC_NODE * sc1, SC_N
 
     old_cond = Get_cond(parent_node, do_inverse);
     new_cond = Merge_cond(old_cond, new_cond, OPR_CAND);
-    
     cur_node = parent_node;
     parent_node = cur_node->Parent();
   }
 
   FmtAssert(new_cond, ("NULL condition"));
-
+  
   // Remove a then-path or a else-path in a CFG (last successor is fall-through).
   // BB39 is head of sc1, BB42 is head of sc2.
   // 
@@ -6436,8 +7489,8 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_tree_height_reduction(SC_NODE * sc1, SC_N
 
   sc111->Set_bbs(NULL);
   sc111->Append_bbs(bb_new);
-
   sc_new->Append_bbs(bb64);
+
   sc74->Set_kids(sc66->Kids());
   FOR_ALL_ELEM(sc_tmp1, sc_list_iter, Init(sc74->Kids())) {
     sc_tmp1->Set_parent(sc74);
@@ -6450,7 +7503,6 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_tree_height_reduction(SC_NODE * sc1, SC_N
   sc73->Set_parent(sc66);
 
   cfg->Fix_info(sc1_p);
-
   if (sc1_prev)
     cfg->Fix_info(sc1_prev);
   
@@ -7066,7 +8118,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_loop_dist(SC_NODE * sc_loop, BOOL do_interchange)
   }
 
   // Clone sc_loop and insert before it.
-  SC_NODE * sc_new = cfg->Clone_sc(sc_loop, TRUE, 1.0);
+  SC_NODE * sc_new = cfg->Clone_sc(sc_loop, TRUE, 1.0, NULL);
   BB_NODE * bb_lp_head = sc_loop->Head();
   BB_NODE * bb_lp_end = bb_lp_head->Loopend();
   BB_NODE * bb_lp_merge = sc_loop->Merge();
@@ -7186,27 +8238,37 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_loop_dist(SC_NODE * sc_loop, BOOL do_interchange)
 
 // Duplicate a if-condition bb_cond and wrap it around the given SC_NODE *,
 // "is_then" tells whether the wrapped region should show up in the then-path.
-void
-PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_wrap( BB_NODE * bb_cond,
-				     SC_NODE * sc_begin,
-				     BOOL is_then)
+// Return the duplicated SC_IF node.
+SC_NODE *
+CFG_TRANS::Do_if_cond_wrap( BB_NODE * bb_cond,
+			    SC_NODE * sc_begin,
+			    BOOL is_then)
 {
   CFG * cfg = _cu->Cfg();
   MEM_POOL * pool = cfg->Mem_pool();
 
   SC_NODE * sc_p = sc_begin->Get_real_parent();
+  SC_NODE * sc_prev = sc_begin->Prev_sibling();
   BB_NODE * bb_new = NULL;
   cfg->Clone_bbs(bb_cond, bb_cond, &bb_new, &bb_new, TRUE, 1.0);
 
   BB_NODE * bb_then = bb_cond->If_then();
   BB_NODE * bb_else = bb_cond->If_else();
-
   BB_NODE * bb_first = sc_begin->First_bb();
-  BB_NODE * bb_last = sc_begin->Last_bb();
+  BB_NODE * bb_last;
+
+  if (sc_begin->Type() == SC_IF) {
+    SC_NODE * sc_merge = sc_begin->Next_sibling();
+    if (!sc_merge->Is_empty_block())
+      sc_merge = cfg->Insert_block_before(sc_merge);
+    bb_last = sc_merge->First_bb();
+  }
+  else 
+    bb_last = sc_begin->Last_bb();
 
   BB_NODE * bb_e = cfg->Create_and_allocate_bb(BB_GOTO);
   BB_NODE * bb_merge = cfg->Create_and_allocate_bb(BB_GOTO);
-
+  
   SC_NODE * sc_if = cfg->Create_sc(SC_IF);
   SC_NODE * sc_then = cfg->Create_sc(SC_THEN);
   SC_NODE * sc_else = cfg->Create_sc(SC_ELSE);
@@ -7369,7 +8431,8 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_wrap( BB_NODE * bb_cond,
   bb_list_tmp = CXX_NEW(BB_LIST(bb_merge), pool);
   bb_e->Set_succ(bb_list_tmp);
 
-  if (sc_begin->Type() == SC_LP_BODY) {
+  SC_TYPE type = sc_begin->Type();
+  if (type == SC_LP_BODY) {
     //                           |
     //                         LP_BODY
     //                        /     \
@@ -7406,11 +8469,146 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_wrap( BB_NODE * bb_cond,
     sc_then->Set_parent(sc_if);
     sc_else->Set_parent(sc_if);
   }
+  else if (type == SC_IF) {
+    SC_NODE * sc_next = sc_begin->Next_sibling();
+    sc_next->Insert_before(sc_if);
+    sc_p->Remove_kid(sc_begin);
+    sc_p->Remove_kid(sc_next);
+    sc_if->Append_kid(sc_then);
+    sc_if->Append_kid(sc_else);
+    sc_then->Set_parent(sc_if);
+    sc_else->Set_parent(sc_if);
+    if (is_then) {
+      sc_then->Append_kid(sc_begin);
+      sc_then->Append_kid(sc_next);
+      sc_begin->Set_parent(sc_then);
+      sc_next->Set_parent(sc_then);
+      sc_else->Append_kid(sc_e);
+      sc_e->Set_parent(sc_else);
+    } 
+    else {
+      sc_else->Append_kid(sc_begin);
+      sc_else->Append_kid(sc_next);
+      sc_begin->Set_parent(sc_else);
+      sc_next->Set_parent(sc_else);
+      sc_then->Append_kid(sc_e);
+      sc_e->Set_parent(sc_then);
+    }
+    sc_if->Insert_after(sc_merge);
+  }
   else {
     FmtAssert(FALSE, ("TODO"));
   }
 
+  if (sc_prev)
+    cfg->Fix_info(sc_prev);
   cfg->Fix_info(sc_p);
+  
+  cfg->Invalidate_and_update_aux_info(FALSE);
+  cfg->Invalidate_loops();
+  Inc_transform_count();
+
+  return sc_if;
+}
+
+// Given 'sc_if', remove the if-condition so that its then-path and else-path are unconditionally
+// executed.
+void
+CFG_TRANS::Do_if_cond_unwrap(SC_NODE * sc_if)
+{
+  CFG * cfg = _cu->Cfg();
+  
+  SC_NODE * sc_then = sc_if->Find_kid_of_type(SC_THEN);
+  SC_NODE * sc_else = sc_if->Find_kid_of_type(SC_ELSE);
+
+  FmtAssert((sc_then->Is_empty() || sc_else->Is_empty()), 
+	    ("Expect an empty then-path or else-path"));
+
+  SC_NODE * sc_p = sc_if->Parent();
+  SC_NODE * sc_prev = sc_if->Prev_sibling();
+  SC_NODE * sc_merge = sc_if->Next_sibling();
+
+  BB_NODE * bb_head = sc_if->Head();
+  BB_NODE * bb_merge = sc_if->Merge();
+  BB_NODE * bb_first = NULL;
+  BB_NODE * bb_last = NULL;
+
+  for (int i = 0; i < 2; i ++) {
+    SC_NODE * sc_kid;
+
+    if (i == 0)
+      sc_kid = sc_then;
+    else
+      sc_kid = sc_else;
+
+    if (sc_kid->Is_empty()) {
+      continue;
+    }
+
+    SC_NODE * sc_tmp = sc_kid->First_kid();
+
+    while (sc_tmp) {
+      SC_NODE * sc_next = sc_tmp->Next_sibling();
+      if (!bb_first)
+	bb_first = sc_tmp->First_bb();
+      bb_last = sc_tmp->Last_bb();
+      sc_tmp->Unlink();
+      sc_merge->Insert_before(sc_tmp);
+      sc_tmp = sc_next;
+    }
+  }
+
+  sc_if->Unlink();
+  sc_if->Delete();
+  
+  BB_NODE * bb_tmp;
+  BB_LIST_ITER bb_list_iter;
+  FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_head->Pred())) {
+    bb_tmp->Replace_succ(bb_head, bb_first);
+    if (cfg->Feedback())
+      cfg->Feedback()->Move_edge_dest(bb_tmp->Id(), bb_head->Id(), bb_first->Id());
+  }
+  
+  MEM_POOL * pool = cfg->Mem_pool();
+  bb_first->Remove_preds(pool);
+  bb_first->Set_pred(bb_head->Pred());
+  bb_tmp = bb_head->Prev();
+  bb_tmp->Set_next(bb_first);
+  bb_first->Set_prev(bb_tmp);
+
+  FmtAssert(bb_last && (bb_last->Succ()->Len() == 1),
+	    ("Expect a single block."));
+
+  if (cfg->Feedback()) {
+    cfg->Feedback()->Delete_node(bb_head->Id());
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_last->Succ())) {
+      cfg->Feedback()->Move_edge_dest(bb_last->Id(), bb_tmp->Id(), bb_merge->Id());
+    }
+
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_merge->Pred())) {
+      if (bb_tmp != bb_last) {
+	cfg->Feedback()->Delete_edge(bb_tmp->Id(), bb_merge->Id());
+      }
+    }
+  }
+
+  bb_last->Remove_succs(pool);
+  BB_LIST * bb_list_new = CXX_NEW(BB_LIST(bb_merge), pool);
+  bb_last->Set_succ(bb_list_new);
+  bb_merge->Remove_preds(pool);
+  bb_list_new = CXX_NEW(BB_LIST(bb_last), pool);
+  bb_merge->Set_pred(bb_list_new);
+  bb_last->Set_next(bb_merge);
+  bb_merge->Set_prev(bb_last);
+
+  if (sc_prev)
+    cfg->Fix_info(sc_prev);
+
+  cfg->Fix_info(sc_p);
+
+  cfg->Invalidate_and_update_aux_info(FALSE);
+  cfg->Invalidate_loops();
+  Inc_transform_count();
 }
 
 // Find whether the given sc has a unique read/write reference, i.e.,
@@ -7421,12 +8619,12 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_wrap( BB_NODE * bb_cond,
 // Return the address of the non-scalar load/store in *wn_addr.
 // Return TRUE if the uniqueness is verified.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE * sc, SC_NODE * sc_loop, WN ** wn_addr)
+CFG_TRANS::Get_unique_ref(SC_NODE * sc, SC_NODE * sc_loop, WN ** wn_addr)
 {
   BB_NODE * bb = sc->Get_bb_rep();
 
   if (bb != NULL) {
-    if (!Get_unique_ref(bb, sc_loop, wn_addr))
+    if (!Get_unique_ref(bb, sc_loop, wn_addr, sc))
       return FALSE;
   }
 
@@ -7437,7 +8635,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE * sc, SC_NODE * sc_loop, WN *
     BB_NODE * tmp;
     
     FOR_ALL_ELEM(tmp, bb_list_iter, Init()) {
-      if (!Get_unique_ref(tmp, sc_loop, wn_addr))
+      if (!Get_unique_ref(tmp, sc_loop, wn_addr, sc))
 	return FALSE;
     }
   }
@@ -7449,7 +8647,16 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE * sc, SC_NODE * sc_loop, WN *
     SC_NODE * tmp;
     
     FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
-      if (!Get_unique_ref(tmp, sc_loop, wn_addr))
+      if (tmp->Type() == SC_LOOP) {
+	if (!Check_index(tmp)
+	    || !Check_iteration(tmp, SC_LP_COND, sc_loop)
+	    || !Check_iteration(tmp, SC_LP_STEP, sc_loop))
+	  return FALSE;
+	else
+	  tmp = tmp->Find_kid_of_type(SC_LP_BODY);
+      }
+      
+      if (!tmp || !Get_unique_ref(tmp, sc_loop, wn_addr))
 	return FALSE;
     }
   }
@@ -7458,14 +8665,15 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE * sc, SC_NODE * sc_loop, WN *
 }
 
 // Find whether the given bb has a unique read/write reference.
-// See PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE *, SC_NODE *, WN **)
+// See CFG_TRANS::Get_unique_ref(SC_NODE *, SC_NODE *, WN **)
+// 'sc_loc' gives the containing SC_NODE of 'bb'.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(BB_NODE * bb, SC_NODE * sc_loop, WN ** wn_addr)
+CFG_TRANS::Get_unique_ref(BB_NODE * bb, SC_NODE * sc_loop, WN ** wn_addr, SC_NODE * sc_loc)
 {
   STMT_ITER stmt_iter;
   WN * wn_iter;
   FOR_ALL_ELEM (wn_iter, stmt_iter, Init(bb->Firststmt(), bb->Laststmt())) {
-    if (!Get_unique_ref(wn_iter, sc_loop, wn_addr))
+    if (!Get_unique_ref(wn_iter, sc_loop, wn_addr, sc_loc))
       return FALSE;
   }
 
@@ -7473,9 +8681,10 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(BB_NODE * bb, SC_NODE * sc_loop, WN *
 }
 
 // Find whether the given wn has a unique read/write reference.
-// See PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(SC_NODE *, SC_NODE *, WN **)
+// See CFG_TRANS::Get_unique_ref(SC_NODE *, SC_NODE *, WN **)
+// 'sc_loc' gives the containing SC_NODE of 'wn'.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(WN * wn, SC_NODE * sc_loop, WN ** wn_addr)
+CFG_TRANS::Get_unique_ref(WN * wn, SC_NODE * sc_loop, WN ** wn_addr, SC_NODE * sc_loc)
 {
   OPERATOR opr = WN_operator(wn);
 
@@ -7485,24 +8694,41 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(WN * wn, SC_NODE * sc_loop, WN ** wn_
   if (opr == OPR_IO)
     return FALSE;
   if (OPERATOR_is_load(opr) || OPERATOR_is_store(opr)) {
-    if (OPERATOR_is_scalar_store(opr)) 
+    if (OPERATOR_is_scalar_store(opr)) {
       return FALSE;
-    else if (OPERATOR_is_scalar_load(opr))
-      return Is_invariant(sc_loop, wn, 0);
+    }
+    else if (OPERATOR_is_scalar_load(opr)) {
+      SC_NODE * sc_iter = sc_loc;
+      BOOL is_index = FALSE;
+      // Check whether this is a load of a nesting loop's index.
+      while (sc_iter && (sc_iter != sc_loop)) {
+	if (sc_iter->Type() == SC_LOOP) {
+	  WN * index = Get_index_load(sc_iter);
+	  if (index && (WN_aux(index) == WN_aux(wn))) {
+	    is_index = TRUE;
+	    break;
+	  }
+	}
+	sc_iter = sc_iter->Parent();
+      }
+      if (!is_index)
+	return Is_invariant(sc_loop, wn, 0);
+    }
     else {
       WN * wn_tmp = OPERATOR_is_load(opr) ? WN_kid0(wn) : WN_kid1(wn);
 
       if ((*wn_addr) == NULL) 
 	*wn_addr = wn_tmp;
-      else if (WN_Simp_Compare_Trees(*wn_addr, wn_tmp) != 0)
+      else if (WN_Simp_Compare_Trees(*wn_addr, wn_tmp) != 0) {
 	return FALSE;
+      }
     }
 
     return TRUE;
   }
 
   for (int i = 0; i < WN_kid_count(wn); i++) {
-    if (!Get_unique_ref(WN_kid(wn, i), sc_loop, wn_addr))
+    if (!Get_unique_ref(WN_kid(wn, i), sc_loop, wn_addr, sc_loc))
       return FALSE;
   }
 
@@ -7511,7 +8737,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_unique_ref(WN * wn, SC_NODE * sc_loop, WN ** wn_
 
 // Find a load of the given ST * in the WHIRL tree rooted at wn.
 WN *
-PRO_LOOP_INTERCHANGE_TRANS::Get_index_load(WN * wn, ST * st)
+CFG_TRANS::Get_index_load(WN * wn, ST * st)
 {
   OPT_STAB * opt_stab = _cu->Opt_stab();
   OPERATOR opr = WN_operator(wn);
@@ -7535,7 +8761,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_index_load(WN * wn, ST * st)
 
 // Given a SC_LOOP, find a load of its index.
 WN *
-PRO_LOOP_INTERCHANGE_TRANS::Get_index_load(SC_NODE * sc)
+CFG_TRANS::Get_index_load(SC_NODE * sc)
 {
   if (sc->Type() == SC_LOOP) {
     WN * wn_index = sc->Index();
@@ -7558,9 +8784,10 @@ PRO_LOOP_INTERCHANGE_TRANS::Get_index_load(SC_NODE * sc)
 }
 
 // Do loop fusion for sc and its consecutive loops.
+// If 'limit' is greater than zero, it gives the maximum number of loop fusions allowed.
 // Return the fused loop.
 SC_NODE * 
-PRO_LOOP_INTERCHANGE_TRANS::Do_loop_fusion(SC_NODE * sc)
+CFG_TRANS::Do_loop_fusion(SC_NODE * sc, int limit)
 {
   FmtAssert((sc->Type() == SC_LOOP), ("Expect a SC_LOOP"));
 
@@ -7579,12 +8806,18 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_loop_fusion(SC_NODE * sc)
   SC_NODE * sc_tmp1;
   SC_NODE * sc_tmp2;
   BB_LIST_ITER bb_list_iter;
+  int count = 0;
 
   if (sc_body->Last_bb()) {
     _def_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
     WN *  wn_index = Get_index_load(sc);
 
     while (sc_tmp && (sc_tmp->Type() == SC_LOOP)) {
+      if ((limit > 0) && (count >= limit))
+	break;
+
+      count++;
+
       BB_NODE * bb2 = sc_body->Last_bb();      
       SC_NODE * cur_sc_body = sc_tmp->Find_kid_of_type(SC_LP_BODY);
       BB_NODE * cur_bb1 = cur_sc_body->First_bb();
@@ -7668,13 +8901,11 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_loop_fusion(SC_NODE * sc)
       cfg->Fix_info(sc->Parent());
       cfg->Fix_info(sc->Get_real_parent());
     }
-
+    
     CXX_DELETE(_def_map, _pool);
   }
 
-  sc_tmp = sc->Next_sibling();
-  
-  if (!sc_tmp || (sc_tmp->Type() != SC_LOOP)) {
+  if (count > 0) {
     cfg->Invalidate_and_update_aux_info(FALSE);    
     cfg->Invalidate_loops();
     Inc_transform_count();
@@ -7688,7 +8919,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_loop_fusion(SC_NODE * sc)
 // Loads of loop indexes are considered to be the same.
 
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Compare_trees(WN * wn1, SC_NODE * loop1, WN * wn2, SC_NODE * loop2)
+CFG_TRANS::Compare_trees(WN * wn1, SC_NODE * loop1, WN * wn2, SC_NODE * loop2)
 {
   OPERATOR op1 = WN_operator(wn1);
   OPERATOR op2 = WN_operator(wn2);
@@ -7721,7 +8952,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Compare_trees(WN * wn1, SC_NODE * loop1, WN * wn2, S
 
 // Check whether given SC_LOOP's index is a AUTO or a REG.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Check_index(SC_NODE * sc)
+CFG_TRANS::Check_index(SC_NODE * sc)
 {
   WN * wn_index = sc->Index();
   if (!wn_index)
@@ -7738,7 +8969,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Check_index(SC_NODE * sc)
 // Given a sc_loop, check whether loads/stores in the sc_loop's kid of sc_type are either loop 
 // invariants w.r.t. sc_ref or loop indexes w.r.t to sc_loop.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Check_iteration(SC_NODE * sc_loop, SC_TYPE sc_type, SC_NODE * sc_ref)
+CFG_TRANS::Check_iteration(SC_NODE * sc_loop, SC_TYPE sc_type, SC_NODE * sc_ref)
 {
   WN * wn_load = Get_index_load(sc_loop);
   AUX_ID loop_aux_id = wn_load ? WN_aux(wn_load) : 0;
@@ -7757,7 +8988,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Check_iteration(SC_NODE * sc_loop, SC_TYPE sc_type, 
 
 // Check whether sc_loop can be fused with its consecutive succeeding loops.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Can_fuse(SC_NODE * sc_loop)
+CFG_TRANS::Can_fuse(SC_NODE * sc_loop)
 {
   if (sc_loop->Type() != SC_LOOP)
     return FALSE;
@@ -7803,7 +9034,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Can_fuse(SC_NODE * sc_loop)
 
 // Do reversed loop unswitching.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Do_reverse_loop_unswitching
+IF_MERGE_TRANS::Do_reverse_loop_unswitching
 (SC_NODE * sc1, SC_NODE * sc2, SC_NODE * outer_loop)
 {
   FmtAssert((sc1->Type() == SC_IF) && (sc2->Type() == SC_LOOP), ("Unexpected SC type"));
@@ -7855,7 +9086,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_reverse_loop_unswitching
     lp_u = sc_begin;
 
     // Do loop fusion if possible.
-    sc_tmp1 = Do_loop_fusion(sc_begin);
+    sc_tmp1 = Do_loop_fusion(sc_begin, 0);
     if (sc_tmp1) 
       sc2 = sc_tmp1;
   }
@@ -8089,13 +9320,139 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_reverse_loop_unswitching
   Inc_transform_count();
 
   if (Can_fuse(sc2)) {
-    sc_tmp1 = Do_loop_fusion(sc2);
+    sc_tmp1 = Do_loop_fusion(sc2, 0);
     if (sc_tmp1) {
-      IF_MERGE_TRANS::Top_down_trans(sc_tmp1->Find_kid_of_type(SC_LP_BODY));
+      Top_down_trans(sc_tmp1->Find_kid_of_type(SC_LP_BODY));
     }
   }
 
   return TRUE;
+}
+
+// Remove consecutive bitop operations that flip the same bit.
+void
+IF_MERGE_TRANS::Remove_redundant_bitops(SC_NODE * sc)
+{
+  if (sc->Type() == SC_BLOCK) {
+    BB_LIST * bb_list = sc->Get_bbs();
+    BB_LIST_ITER bb_list_iter(bb_list);
+    BB_NODE * bb_tmp;
+    WN * wn1 = NULL;
+    BB_NODE * bb1 = NULL;
+
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init()) {
+      WN * wn_iter = bb_tmp->Firststmt();
+      WN * wn_next = NULL;
+
+      while (wn_iter) {
+	wn_next = WN_next(wn_iter);
+	WN * wn_bit_op = WN_get_bit_reduction(wn_iter);
+	
+	if (wn_bit_op) {
+	  if (!wn1) {
+	    wn1 = wn_iter;
+	    bb1= bb_tmp;
+	  }
+	  else if ((WN_operator(wn_bit_op) == OPR_BXOR)
+		   && (WN_Simp_Compare_Trees(WN_kid1(wn1), WN_kid1(wn_iter)) == 0)
+		   && (WN_Simp_Compare_Trees(wn_bit_op,WN_get_bit_reduction(wn1)) == 0)) {
+	    bb1->Remove_stmt(wn1);
+	    bb_tmp->Remove_stmt(wn_iter);
+	    wn_iter = wn_next;
+	  }
+	  else {
+	    wn1 = wn_iter;
+	    bb1 = bb_tmp;
+	  }
+	}
+	else if (WN_is_executable(wn_iter)) {
+	  wn1 = NULL;
+	  bb1 = NULL;
+	}
+	wn_iter = wn_next;
+      }
+    }
+  }
+}
+
+// Bottom-up prune dead codes for the SC tree rooted at 'sc'.
+void
+IF_MERGE_TRANS::Bottom_up_prune(SC_NODE * sc)
+{
+  SC_NODE * tmp = sc->First_kid();
+  while (tmp) {
+    // Merge consecutive blocks if possible.
+    SC_NODE * sc_next = tmp->Next_sibling();
+    if (tmp->Type() == SC_BLOCK) {
+      SC_NODE * sc_cur = tmp;
+      while (sc_next && (sc_next->Type() == SC_BLOCK)) {
+	sc_cur = Merge_block(sc_cur, sc_next);
+	if (sc_cur) 
+	  sc_next = sc_cur->Next_sibling();
+	else
+	  sc_next = NULL;
+      }
+    }
+
+    sc_next = tmp->Next_sibling();
+    Bottom_up_prune(tmp);
+    tmp = sc_next;
+  }
+  
+  SC_TYPE type = sc->Type();
+  BOOL do_iter = FALSE;
+  SC_NODE * sc_prev = sc->Prev_sibling();
+  SC_NODE * sc_parent = sc->Get_real_parent();
+  CFG * cfg = _cu->Cfg();
+  tmp = sc->Parent();
+
+  switch (type) {
+  case SC_IF:
+      if (sc->First_kid()->Is_empty()
+	  && sc->Last_kid()->Is_empty()) {
+	BB_NODE * bb_tmp;
+	BB_LIST_ITER bb_list_iter;
+	BB_NODE * bb_head = sc->Head();
+	BB_NODE * bb_merge = sc->Merge();
+
+	FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_head->Pred())) {
+	  if (bb_tmp->Is_branch_to(bb_head)) {
+	    WN * branch_wn = bb_tmp->Branch_wn();
+	    cfg->Add_label_with_wn(bb_merge);
+	    WN_label_number(branch_wn) = bb_merge->Labnam();
+	  }
+
+	  bb_tmp->Replace_succ(bb_head, bb_merge);
+	  if (cfg->Feedback())
+	    cfg->Feedback()->Move_edge_dest(bb_tmp->Id(), bb_head->Id(), bb_merge->Id());
+	}
+
+	bb_merge->Set_pred(bb_head->Pred());
+	bb_tmp  = bb_head->Prev();
+	bb_tmp->Set_next(bb_merge);
+	bb_merge->Set_prev(bb_tmp);
+
+	sc->Unlink();
+	sc->Delete();
+	do_iter = TRUE;
+	if (sc_prev)
+	  cfg->Fix_info(sc_prev);
+	cfg->Fix_info(sc_parent);
+	cfg->Invalidate_and_update_aux_info(FALSE);
+	cfg->Invalidate_loops();
+	Inc_transform_count();
+      }
+      break;
+  case SC_BLOCK:
+    Remove_redundant_bitops(sc);
+    break;
+  default:
+    ;
+  }
+
+  if (do_iter) {
+    Bottom_up_prune(tmp);
+  }
 }
 
 // Check whether the expression tree rooted at the given wn has the following characteristic:
@@ -8105,7 +9462,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_reverse_loop_unswitching
 // - Can be speculative.
 
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Can_reorder_cond(WN * wn, WN * cond_wn)
+CFG_TRANS::Can_reorder_cond(WN * wn, WN * cond_wn)
 {
   if (!Can_be_speculative(wn))
     return FALSE;
@@ -8161,7 +9518,7 @@ PRO_LOOP_INTERCHANGE_TRANS::Can_reorder_cond(WN * wn, WN * cond_wn)
 
 // Distribute if-condition in sc to its children.
 BOOL
-PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_dist(SC_NODE * sc)
+CFG_TRANS::Do_if_cond_dist(SC_NODE * sc)
 {
   if ((sc->Type() != SC_IF) || (sc->Head()->Executable_stmt_count() != 1))
     return FALSE;
@@ -8233,6 +9590,16 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_dist(SC_NODE * sc)
       || Has_dependency(sc_else, sc->Head()))
     return FALSE;
 
+  // The following two cases are short-circuits for un-implemented cases.
+  sc_tmp = sc_then->First_kid();
+  if ((sc_tmp->Type() != SC_IF) || (sc_tmp->Next_sibling()->Next_sibling()))
+    return FALSE;
+
+  sc_tmp = sc_else->First_kid();
+  if ((sc_tmp->Type() == SC_BLOCK) 
+      && (!sc_tmp->Is_empty() || sc_tmp->Next_sibling()))
+    return FALSE;
+  
   if ((WOPT_Enable_Pro_Loop_Limit >= 0)
       && (Transform_count() >= WOPT_Enable_Pro_Loop_Limit))
     return FALSE;
@@ -8281,7 +9648,6 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_dist(SC_NODE * sc)
 
   for (int i = 0; i < 2; i++) {
     sc_tmp = (i == 0) ? sc_then->First_kid() : sc_else->First_kid();
-
     while (sc_tmp) {
       switch (sc_tmp->Type()) {
       case SC_IF:
@@ -8432,9 +9798,10 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_dist(SC_NODE * sc)
 
 	// Fix 4<->6
 	if (sc_tmp == sc_then->First_kid()) {
+	  bb_head->Remove_preds(pool);
+	  bb_head->Set_pred(bb5->Pred());
 	  FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb5->Pred())) {
 	    bb_tmp->Replace_succ(bb5, bb_head);
-	    bb_head->Replace_pred(bb5, bb_tmp);
 	    if (cfg->Feedback()) 
 	      cfg->Feedback()->Move_edge_dest(bb_tmp->Id(), bb5->Id(), bb_head->Id());
 	  }
@@ -8700,6 +10067,18 @@ PRO_LOOP_INTERCHANGE_TRANS::Do_if_cond_dist(SC_NODE * sc)
 
 	bb_last = bb_head;
 	break;
+      case SC_BLOCK:
+	FmtAssert(((i == 1) && (sc_tmp->Is_empty())), ("Unexpected block."));
+	bb_last = sc_tmp->Last_bb();
+	FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb65->Pred())) {
+	  if (bb_tmp != bb_last) {
+	    bb65->Remove_pred(bb_tmp, pool);
+	    if (cfg->Feedback())
+	      cfg->Feedback()->Delete_edge(bb_tmp->Id(), bb65->Id());
+	  }
+	}
+	sc_tmp = sc_tmp->Next_sibling();
+	break;
       default:
 	FmtAssert(FALSE, ("TODO"));
 	sc_tmp = sc_tmp->Next_sibling();
@@ -8884,20 +10263,1175 @@ PRO_LOOP_INTERCHANGE_TRANS::Nonrecursive_trans
   return ret_val;
 }
 
+
+// Driver for proactive loop interchange.
+void
+PRO_LOOP_INTERCHANGE_TRANS::Doit(SC_NODE * sc)
+{
+  Init();
+  Top_down_trans(sc);
+  Delete();
+}
+
 // Reset/clear fields.
 void
 PRO_LOOP_TRANS::Clear(void)
 {
   PRO_LOOP_FUSION_TRANS::Clear();
   PRO_LOOP_INTERCHANGE_TRANS::Clear();
+  PRO_LOOP_EXT_TRANS::Clear();
 }
 
-// Delete dynamically allocated objects for all sub-objects.
+// Delete data that live through this object's life time.
 void
 PRO_LOOP_TRANS::Delete(void)
 {
   CFG_TRANS::Delete();
-  PRO_LOOP_INTERCHANGE_TRANS::Delete();
+}
+
+// Driver to invoke extended proactive loop optimizations.
+// Without this extension, proactive loop optimizations are limited to
+// SC_NODEs on symmetric paths (see SC_NODE::Has_symmetric_path for
+// definition).  The extension allows merging of if-regions from non-symmetric
+// paths by first transforming non-symmetric paths into symmetric path 
+// (PRO_LOOP_EXT_TRANS::Normalize) then invoke if-merging, proactive loop fusion,
+// and head/tail duplication to bring if-regions under the same parent.  The
+// extension allows aggressive if-mergings and exposes dead code removal
+// opportunities that follow the if-merging.
+void
+PRO_LOOP_TRANS::Do_ext_trans(SC_NODE * sc_root)
+{
+  PRO_LOOP_EXT_TRANS::Init();
+  SC_NODE * sc_lcp = Normalize(sc_root);
+  PRO_LOOP_EXT_TRANS::Delete();
+
+  if (sc_lcp) {
+    IF_MERGE_TRANS::Top_down_trans(sc_lcp);
+    Set_ext_trans(TRUE);
+    PRO_LOOP_FUSION_TRANS::Doit(sc_lcp);
+    PRO_LOOP_EXT_TRANS::Top_down_trans(sc_lcp);
+  }
+}
+
+// Obtain hash key for 'wn'.
+UINT32
+PRO_LOOP_EXT_TRANS::Get_key(WN * wn)
+{
+  UINT32 val = 0;
+  OPERATOR opr = WN_operator(wn);
+
+  switch (opr) {
+  case OPR_INTCONST:
+    return WN_const_val(wn);
+  case OPR_LDID:
+    return WN_aux(wn);
+  default:
+    ;
+  }
+
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    WN * kid = WN_kid(wn, i);
+    val = (val << 4) + Get_key(kid);
+  }
+
+  val += (val << 4) + (UINT32) opr;
+  return val;
+}
+
+// Hash if-compare expressions in 'wn_cond'.
+// Return hashed value in '*val'.
+void
+PRO_LOOP_EXT_TRANS::Get_val(WN * wn_cond, IF_CMP_VAL * val)
+{
+  OPERATOR opr = WN_operator(wn_cond);
+  WN * op1;
+  WN * op2;
+  IF_CMP_VAL val1, val2;
+  UINT32 key;
+  STACK<WN *> * stk;
+
+  IF_CMP_VAL ret_val = (IF_CMP_VAL) _wn_to_val_num_map->Get_val((POINTER) wn_cond);  
+  if (ret_val) {
+    *val = ((*val) << MAX_IF_CMP_BITS) + ret_val;
+    return;
+  }
+  
+  switch (opr) {
+  case OPR_EQ:
+  case OPR_NE:
+  case OPR_BAND:
+    key = Get_key(wn_cond);
+    stk = _key_to_wn_hash[key % IF_CMP_HASH_SIZE];
+    if (stk) {
+      for (int i = 0; i < stk->Elements(); i++) {
+	WN * wn_iter = stk->Top_nth(i);
+	if ((wn_cond == wn_iter) || (WN_Simp_Compare_Trees(wn_cond, wn_iter) == 0)) {
+	  ret_val = (IF_CMP_VAL) _wn_to_val_num_map->Get_val((POINTER) wn_iter);
+	  break;
+	}
+      }
+    }
+     
+    if (!ret_val && (_next_valnum < MAX_VAL_NUM)) {
+      ret_val = _next_valnum;
+      _wn_to_val_num_map->Add_map((POINTER) wn_cond, (POINTER) _next_valnum);
+      _next_valnum++;
+      if (!stk) 
+	stk = CXX_NEW(STACK<WN *>(_pool), _pool);
+      stk->Push(wn_cond);
+      _key_to_wn_hash[key % IF_CMP_HASH_SIZE] = stk;
+    }
+
+    if (ret_val) 
+      *val = ((*val) << MAX_IF_CMP_BITS) + ret_val;
+    else
+      *val = 0;
+    break;
+
+  case OPR_CAND:
+    op1 = WN_kid0(wn_cond);
+    op2 = WN_kid1(wn_cond);
+    Get_val(op2, val);
+    if (*val == 0)
+      break;
+    Get_val(op1, val);
+    break;
+  default:
+    *val = 0;
+  }
+}
+
+// Get inverted conditional WHIRL for 'sc_if' which is a SC_IF.
+WN *
+PRO_LOOP_EXT_TRANS::Get_inverted_cond(SC_NODE * sc_if)
+{
+  WN * wn_invert = NULL;
+  
+  if (sc_if->Type() == SC_IF) {
+    WN * wn_cond = sc_if->Get_cond();
+    if (wn_cond) {
+      wn_invert = (WN *) _wn_to_wn_map->Get_val((POINTER) wn_cond);
+      if (!wn_invert) {
+	wn_invert = Get_cond(sc_if, TRUE);
+	if (wn_invert) {
+	  _wn_to_wn_map->Add_map((POINTER) wn_cond, (POINTER) wn_invert);
+	  _wn_list->Push(wn_invert);
+	}
+      }
+    }
+  }
+  return wn_invert;
+}
+
+// Hash values of loops' nesting if-conditions.
+void 
+PRO_LOOP_EXT_TRANS::Hash_if_conds(SC_NODE * sc)
+{
+  if (sc->Type() == SC_LOOP) {
+    sc->Set_next(NULL);
+    std::pair<SC_NODE *, bool> p_ret = sc->Get_nesting_if();
+    SC_NODE * sc_if = p_ret.first;
+    BOOL is_else = p_ret.second;
+    
+    IF_CMP_VAL val = 0;
+    int level = 0;
+
+    while (sc_if) {
+      if (level == MAX_IF_CMP_LEVEL) {
+	val = 0;
+	break;
+      }
+      WN * wn_cond = NULL;
+
+      if (is_else) 
+	wn_cond = Get_inverted_cond(sc_if);
+      else
+	wn_cond = sc_if->Get_cond();
+
+      if (wn_cond)
+	Get_val(wn_cond, &val);
+      
+      if (val == 0) 
+	break;
+      
+      p_ret = sc_if->Get_nesting_if();
+      sc_if = p_ret.first;
+      is_else = p_ret.second;
+      level++;
+    }
+    
+    if (val) {
+      SC_NODE * sc_rep = (SC_NODE *) _val_to_sc_map->Get_val((POINTER) val);
+      // Check whether duplicating 'sc' into its sibling SC_IF can make 
+      // 'sc' belong to a group of loops having the same nesting if-conditions.
+      if (!sc_rep) {
+	// Find next SC_IF, skip empty blocks in-between.
+	SC_NODE * next_if = sc->Next_sibling_of_type(SC_IF);
+	if (next_if && !Has_dependency(sc, next_if->Head())) {
+	  SC_NODE * sc_iter = sc->Next_sibling();
+	  while (sc_iter && (sc_iter != next_if)) {
+	    if (!sc_iter->Is_empty_block()) {
+	      next_if = NULL;
+	      break;
+	    }
+	    sc_iter = sc_iter->Next_sibling();
+	  }
+
+	  if (next_if) {
+	    WN * wn_cond = Get_cond(next_if, FALSE);  
+	    if (wn_cond) {
+	      IF_CMP_VAL next_val = 0;
+	      Get_val(wn_cond, &next_val);
+	      if (next_val) {
+		for (int i2 = 1; i2 <= level; i2++) {
+		  next_val = (next_val << MAX_IF_CMP_BITS);
+		}
+		next_val += val;
+		SC_NODE * sc_tmp = (SC_NODE *) _val_to_sc_map->Get_val((POINTER) next_val);
+		if (sc_tmp) {
+		  // Remove empty blocks between 'sc' and 'next_if'
+		  SC_NODE * sc1 = sc->Next_sibling();
+		  SC_NODE * sc2;
+		  while (sc1 && (sc1 != next_if)) {
+		    sc2 = sc1->Next_sibling();
+		    if (sc1->Is_empty_block()) 
+		      Remove_block(sc1);
+		    sc1 = sc2;
+		  }
+		  
+		  // Do head duplication.
+		  Do_head_duplication(sc, next_if);
+		  sc_rep = sc_tmp;
+		  FmtAssert((sc == next_if->Find_kid_of_type(SC_THEN)->First_kid()),
+			    ("Unexpect loop after head duplication."));
+
+		}
+	      }
+	    }
+	  }
+	}
+      }
+
+      if (!sc_rep) {
+	_val_to_sc_map->Add_map((POINTER) val, (POINTER) sc);
+	STACK<IF_CMP_VAL> * stk = _if_cmp_vals[level-1];
+	if (!stk)
+	  stk = CXX_NEW(STACK<IF_CMP_VAL>(_pool), _pool);
+	stk->Push(val);
+	_if_cmp_vals[level-1] = stk;
+      }
+      else {
+	SC_NODE * sc_last = sc_rep->Last();
+	sc_last->Set_next(sc);
+      }
+    }
+    // Only do it for the outermost loop at this time.
+    return;
+  }
+
+  SC_LIST_ITER kids_iter;
+  SC_NODE * tmp;
+  FOR_ALL_ELEM(tmp, kids_iter, Init(sc->Kids())) {
+    Hash_if_conds(tmp);
+  }
+}
+
+// Initialize scratch data used for the PRO_LOOP_EXT_TRANS sub-object.
+void
+PRO_LOOP_EXT_TRANS::Init()
+{
+  _next_valnum = 1;
+  _val_to_sc_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
+  _wn_to_val_num_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
+  _wn_to_wn_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
+  _wn_list = CXX_NEW(STACK<WN *>(_pool), _pool);
+
+  for (int i = 0; i < IF_CMP_HASH_SIZE; i++)
+    _key_to_wn_hash[i] = NULL;
+
+  for (int i = 0; i < MAX_IF_CMP_LEVEL; i++)
+    _if_cmp_vals[i] = NULL;
+
+  _unlink_sc = CXX_NEW(STACK<SC_NODE *>(_pool), _pool); 
+}
+
+// Clear fields.
+void
+PRO_LOOP_EXT_TRANS::Clear()
+{
+  _val_to_sc_map = NULL;
+  _wn_to_val_num_map = NULL;
+  _wn_to_wn_map = NULL;
+
+  for (int i = 0; i < IF_CMP_HASH_SIZE; i++) 
+    _key_to_wn_hash[i] = NULL;
+
+  for (int i = 0; i < MAX_IF_CMP_LEVEL; i++) 
+    _if_cmp_vals[i] = NULL;
+  
+  _wn_list = NULL;
+  
+}
+
+// Delete sratch data used for the PRO_LOOP_EXT_TRANS sub-object.
+void
+PRO_LOOP_EXT_TRANS::Delete()
+{
+  if (_val_to_sc_map) 
+    CXX_DELETE(_val_to_sc_map, _pool);
+  _val_to_sc_map = NULL;
+
+  if (_wn_to_val_num_map)
+    CXX_DELETE(_wn_to_val_num_map, _pool);
+  _wn_to_val_num_map = NULL;
+
+  if (_wn_to_wn_map)
+    CXX_DELETE(_wn_to_wn_map, _pool);
+  _wn_to_wn_map = NULL;
+
+  for (int i = 0; i < IF_CMP_HASH_SIZE; i++) {
+    STACK<WN *> * stk = _key_to_wn_hash[i];
+    if (stk)
+      CXX_DELETE(stk,_pool);
+    _key_to_wn_hash[i] = NULL;
+  }
+  for (int i = 0; i < MAX_IF_CMP_LEVEL; i++) {
+    STACK<IF_CMP_VAL> * stk = _if_cmp_vals[i];
+    if (stk)
+      CXX_DELETE(stk,_pool);
+    _if_cmp_vals[i] = NULL;
+  }
+
+  if (_wn_list) {
+    while (!_wn_list->Is_Empty()) {
+      WN * wn = _wn_list->Pop();
+      WN_Delete(wn);
+    }
+    CXX_DELETE(_wn_list, _pool);
+  }
+  _wn_list = NULL;
+  Delete_unlink_sc();
+}
+
+// Remove adjacent loops in the link threaded by the 'next' field.
+void
+PRO_LOOP_EXT_TRANS::Remove_adjacent_loops(SC_NODE * sc)
+{
+  SC_NODE * sc_last = sc;
+
+  while (sc_last) {
+    SC_NODE * sc_iter = sc_last;
+    SC_NODE * sc_next = sc_iter->Next();
+  
+    while (sc_next && (sc_next == sc_iter->Next_sibling())) {
+      sc_iter = sc_next;
+      sc_next = sc_next->Next();
+    }
+    if (sc_last != sc_iter) {
+      sc_last->Set_next(sc_next);
+      sc_last = sc_next;
+    }
+    else
+      sc_last = sc_iter->Next();
+  }
+}
+
+// Iterate nodes in the list threaded by the 'next' field of 'sc', check whether there
+// exists a pair of nodes whose outermost-nesting if-conditions are adjacent to each other.
+// of 'sc'.
+BOOL
+PRO_LOOP_EXT_TRANS::Has_adjacent_if(SC_NODE * sc)
+{
+  std::pair<SC_NODE *, int> p_ret;
+  while (sc) {
+    SC_NODE * sc_next = sc->Next();
+    p_ret = sc->Get_outermost_nesting_if();
+    SC_NODE * sc_outer1 = p_ret.first;
+  
+    if (sc_next) {
+      p_ret = sc_next->Get_outermost_nesting_if();
+      SC_NODE * sc_outer2 = p_ret.first;
+      if (sc_outer1->Next_sibling() == sc_outer2)
+	return TRUE;
+    }
+    sc = sc_next;
+  }
+
+  return FALSE;
+}
+
+// Iterate nodes in the list threaded by the 'next' field of 'sc', check whether
+// their nesting if-conditions have the same level, if yes, also return the level.
+std::pair<bool, int>
+PRO_LOOP_EXT_TRANS::Has_same_nesting_level(SC_NODE * sc)
+{
+  int level1 ;
+  std::pair<SC_NODE *, int> p_ret = sc->Get_outermost_nesting_if();
+  level1 = p_ret.second;
+
+  SC_NODE * sc_next = sc->Next();
+  while (sc_next) {
+    int level2;
+    p_ret = sc_next->Get_outermost_nesting_if();
+    level2 = p_ret.second;
+
+    if (level1 != level2) {
+      return std::pair<bool, int> (FALSE, 0);
+    }
+    sc_next = sc_next->Next();
+  }
+  
+  return std::pair<bool, int>(TRUE, level1);
+}
+
+// Given 'va', get number of nesting levels it represents.
+int
+PRO_LOOP_EXT_TRANS::Get_level_from_val(IF_CMP_VAL val)
+{
+  int level = 0;
+
+  while (val) {
+    val = val >> MAX_IF_CMP_BITS;
+    level++;
+  }
+
+  return level;
+}
+
+// Decode 'action' to find the portion of if-condition tree for the tree-height-reduction.
+void
+PRO_LOOP_EXT_TRANS::Decode_action(UINT64 action, int * p_outer, int * p_inner)
+{
+  int level = 1;
+  int l_outer = 0;
+  int l_inner = 0;
+  
+  while (action) {
+    if (action & 1) {
+      if (!l_outer)
+	l_outer = level;
+      l_inner = level;
+    }
+    else {
+      if (l_outer) {
+	// Abort if multiple portions need the transformation.
+	l_outer = 0;
+	l_inner = 0;
+	break;
+      }
+    }
+    action >>=  1;
+    level++;
+  }
+
+  *p_outer = l_outer;
+  *p_inner = l_inner;
+}
+
+// Find a pair of candidates among the child nodes of 'sc' to invoke
+// extended transformations.  Such candidates satisfy the following criteria:
+// 1. The type is either a SC_IF or a SC_LOOP.
+// 2. The pair are separated by a SC_IF with an empty else-path or an empty if-path.
+// 3. The pair are if-merging candidates or loops with same trip counts 
+//
+// If found, return the SC_IF node between the candidates.
+
+SC_NODE *
+PRO_LOOP_EXT_TRANS::Find_cand(SC_NODE * sc, SC_NODE ** cand1, SC_NODE ** cand2)
+{
+  *cand1 = NULL;
+  *cand2 = NULL;
+
+  SC_LIST_ITER kids_iter;
+  SC_NODE * tmp;
+  
+  FOR_ALL_ELEM(tmp, kids_iter, Init(sc->Kids())) {
+    SC_TYPE type = tmp->Type();
+
+    if ((type != SC_IF) 
+	|| (!tmp->First_kid()->Is_empty()
+	    && !tmp->Last_kid()->Is_empty()))
+      continue;
+
+    SC_NODE * prev = tmp->Prev_sibling();
+    while (prev && prev->Is_empty_block()) {
+      prev = prev->Prev_sibling();
+    }
+
+    SC_NODE * next = tmp->Next_sibling();
+    while (next && next->Is_empty_block()) {
+      next = next->Next_sibling();
+    }
+
+    if (!prev || !next || (prev->Type() != next->Type()))
+      continue;
+
+    IF_MERGE_PASS s_pass = Get_pass();
+    switch (next->Type()) {
+    case SC_IF:
+      Set_pass(PASS_EXT);
+      if (IF_MERGE_TRANS::Is_candidate(prev, next, TRUE)) {
+	*cand1 = prev;
+	*cand2 = next;
+	Set_pass(s_pass);
+	return tmp;
+      }
+      Set_pass(s_pass);
+      break;
+    case  SC_LOOP:
+      if (Check_index(prev) && Check_index(next)
+	  && Check_iteration(prev, SC_LP_START, prev)
+	  && Check_iteration(prev, SC_LP_COND, prev)
+	  && Check_iteration(prev, SC_LP_STEP, prev)
+	  && Check_iteration(next, SC_LP_START, next)
+	  && Check_iteration(next, SC_LP_COND, next)
+	  && Check_iteration(next, SC_LP_STEP, next)
+	  && Have_same_trip_count(prev, next)) {
+	*cand1 = prev;
+	*cand2 = next;
+	return tmp;
+      }
+      break;
+    default:
+      ;
+    }
+  }
+
+  return NULL;
+}
+
+// Given two adjacent loops 'sc1' and 'sc2' who have the same trip count, 
+// shift iteration space of 'sc1' so that its loop index at the last iteration 
+// is the same as the loop index of 'sc2' at its first iteration, peel the
+// last iteration of 'sc1' and the first iteration of 'sc2', do if-merging
+// and dead code removal on peeled iterations.  If peeded iterations can be
+// optimized away, dido the peeling, if-merging and dead code removal
+// on the remaining iterations until both loops are completely removed.
+// Do nothing if it is impossible to remove the loops.
+void
+PRO_LOOP_EXT_TRANS::Shift_peel_and_remove(SC_NODE * sc1, SC_NODE * sc2)
+{
+  WN * upper = Get_upper_bound(sc1);
+  if (!upper) 
+    return;
+
+  SC_NODE * sc_body1 = sc1->Find_kid_of_type(SC_LP_BODY);
+  SC_NODE * sc_body2 = sc2->Find_kid_of_type(SC_LP_BODY);
+  SC_NODE * sc_kid = sc_body1->First_kid();
+
+  // limit it to the case that the loop body contains a single if-region.
+  if (!sc_kid || (sc_kid->Type() != SC_IF)
+      || (sc_kid->Next_sibling() != sc_body1->Last_kid())
+      || !sc_kid->Next_sibling()->Is_empty_block())
+    return;
+
+  sc_kid = sc_body2->First_kid();
+
+  if (!sc_kid || (sc_kid->Type() != SC_IF)
+      || (sc_kid->Next_sibling() != sc_body2->Last_kid())
+      || !sc_kid->Next_sibling()->Is_empty_block())
+    return;
+
+  // Find insertion point for the peeled iteration.
+  sc_kid = sc1->Next_sibling();
+  if (!sc_kid->Is_empty_block()
+      || (sc_kid != sc2->Prev_sibling()))
+    return;
+
+  BB_NODE * bb_from = sc_kid->Last_bb();
+  BB_NODE * bb_to = sc2->First_bb();
+
+  WN * index2 = Get_index_load(sc2);
+  WN * wn_new = WN_CreateExp2(OPR_SUB, MTYPE_I4, MTYPE_V, upper, index2);
+
+  // copy SC_IF in 'sc1' and insert it between 'bb_from' and 'bb_to'.
+  CFG * cfg = _cu->Cfg();
+  MEM_POOL * pool = cfg->Mem_pool();
+  sc_kid = sc_body1->First_kid();
+  SC_NODE * sc_merge = NULL;
+  SC_NODE * sc_new = cfg->Clone_sc(sc_kid, TRUE, 1.0, &sc_merge);
+  BB_NODE * new_entry = sc_new->Head();
+  BB_NODE * new_exit = sc_new->Merge();
+  SC_NODE * sc_if1 = sc_new;
+
+  Insert_region(new_entry, new_exit, bb_from, bb_to, pool);
+  sc2->Insert_before(sc_new);
+  sc2->Insert_before(sc_merge);
+
+  bb_from = new_exit;
+  sc_kid = sc_body2->First_kid();
+  sc_merge = NULL;
+  sc_new = cfg->Clone_sc(sc_kid, TRUE, 1.0, &sc_merge);
+  SC_NODE * sc_if2 = sc_new;
+  new_entry = sc_new->Head();
+  new_exit = sc_new->Merge();
+
+  Insert_region(new_entry, new_exit, bb_from, bb_to, pool);
+  sc2->Insert_before(sc_new);
+  sc2->Insert_before(sc_merge);
+
+  // Replace loop index of sc_if1.
+  Replace_wn(sc_if1, Get_index_load(sc1), wn_new);
+
+  // If-merging
+  sc_new = Do_merge(sc_if1, sc_if2, TRUE);
+  if (sc_new) {
+    _current_scope = sc2;
+    IF_MERGE_TRANS::Top_down_trans(sc_new->First_kid());
+    IF_MERGE_TRANS::Top_down_trans(sc_new->Last_kid());
+    _current_scope = NULL;
+  }
+}
+
+// Do top-down extended transformations for the SC tree rooted at the given SC_NODE.
+// CFG, LOOPs and SC tree are updated upon exit of this routine.
+void
+PRO_LOOP_EXT_TRANS::Top_down_trans(SC_NODE * sc)
+{
+  SC_LIST_ITER kids_iter;
+  SC_NODE * tmp;
+  SC_NODE * cand1 = NULL;
+  SC_NODE * cand2 = NULL;
+
+  if (sc->Type() == SC_LP_BODY) {
+    SC_NODE * sc_if = Find_cand(sc, &cand1, &cand2);
+
+    while (sc_if) {
+      SC_NODE * sc_iter = cand1->Next_sibling();
+      while (sc_iter && (sc_iter != cand2)) {
+	SC_NODE * sc_next = sc_iter->Next_sibling();
+	if (sc_iter->Is_empty_block())
+	  Remove_block(sc_iter);
+	sc_iter = sc_next;
+      }
+
+      // If cand1 and cand2 are loops, find the empty then-path or
+      // the empty else-path.
+      sc_iter = NULL;
+      if ((cand1->Type() == SC_LOOP) 
+	  && (cand2->Type() == SC_LOOP)) {
+	if (sc_if->First_kid()->Is_empty())
+	  sc_iter = sc_if->First_kid();
+	else if (sc_if->Last_kid()->Is_empty())
+	  sc_iter = sc_if->Last_kid();
+      }
+
+      Do_head_duplication(cand1, sc_if);
+      Do_tail_duplication(cand2, sc_if);
+
+      IF_MERGE_TRANS::Top_down_trans(sc_if->First_kid());
+      IF_MERGE_TRANS::Top_down_trans(sc_if->Last_kid());
+
+      if (sc_iter) {
+	SC_NODE * sc1 = sc_iter->Find_kid_of_type(SC_LOOP);
+	SC_NODE * sc2 = sc1->Next_sibling_of_type(SC_LOOP);
+	if (sc1 && sc2 && !sc1->Has_same_loop_struct(sc2)) {
+	  Shift_peel_and_remove(sc1, sc2);
+	  IF_MERGE_TRANS::Bottom_up_prune(sc_if);
+	  // If there are only empty blocks left betweeen 'sc1' and 'sc2'.
+	  // remove 'sc1' and 'sc2'. Otherwise remove nodes between 'sc1' 
+	  // and 'sc2'.
+	  BOOL remove_loops = TRUE;
+	  BOOL remove_peels = FALSE;
+	  SC_NODE * sc_iter = sc1->Next_sibling();
+	  while (sc_iter && (sc_iter != sc2)) {
+	    if (!sc_iter->Is_empty_block()) {
+	      remove_peels = TRUE;
+	    }
+	    sc_iter = sc_iter->Next_sibling();
+	  }
+
+	  if (remove_loops) {
+	    Remove_loop(sc1);
+	    Remove_loop(sc2);
+	  }
+	  else if (remove_peels) 
+	    Remove_peel(sc1, sc2);
+	}
+      }
+
+      IF_MERGE_TRANS::Bottom_up_prune(sc_if);
+      sc_if = Find_cand(sc, &cand1, &cand2);
+    }
+  }
+  
+  FOR_ALL_ELEM(tmp, kids_iter, Init(sc->Kids())) {
+    this->Top_down_trans(tmp);
+  }
+}
+
+// In the SC tree between this node and 'sc', find a SC_ELSE or a SC_THEN whose parent is
+// 'dist' away from 'sc'.
+SC_NODE *
+SC_NODE::Get_node_at_dist(SC_NODE * sc, int dist)
+{
+  if (dist > 0) {
+    SC_NODE * sc_iter = parent;
+
+    while (sc_iter && (sc_iter != sc)) {
+      if ((sc_iter->Type() == SC_THEN) || (sc_iter->Type() == SC_ELSE)) {
+	SC_NODE * sc_if = sc_iter->Parent();
+	if (sc_if->Get_real_parent(dist) == sc)
+	  return sc_iter;
+      }
+      sc_iter = sc_iter->Parent();
+    }
+  }
+  return NULL;
+}
+
+// Query whether this node is control equivalent to 'sc' and
+// comes before 'sc' in source order.
+BOOL
+SC_NODE::Is_ctrl_equiv(SC_NODE * sc)
+{
+  SC_NODE * sc1 = this;
+  SC_NODE * sc2 = sc;
+
+  if (sc1->Parent() != sc2->Parent())
+    return FALSE;
+
+  SC_NODE * sc_iter = sc1;
+  BOOL in_order = FALSE;
+  
+  while (sc_iter) {
+    if (!sc_iter->Is_sese())
+      return FALSE;
+
+    SC_NODE * sc_next = sc_iter->Next_sibling();
+
+    if (sc_iter == sc2) {
+      in_order = TRUE;
+      break;
+    }
+    
+    if (sc_next) {
+      BB_NODE * bb_first = sc_next->First_bb();
+      if (!bb_first->Is_postdom(sc_iter))
+	return FALSE;
+    }
+
+    sc_iter = sc_next;
+  }
+
+  return in_order;
+}
+
+// Do normalization in lock-step for nesting if-conditions of 'sc1' and 'sc2'.
+// 'action' gives the portion of if-condition tree to apply tree-height-reduction.
+void
+PRO_LOOP_EXT_TRANS::Do_lock_step_normalize(SC_NODE * sc1, SC_NODE * sc2, UINT64 action)
+{
+  SC_NODE * sc_lcp = sc1->Find_lcp(sc2);
+  SC_NODE * sc_parent = sc_lcp->Parent();
+
+  if (!Is_invariant(sc1, sc_lcp->Head(), 0)
+      || !Is_invariant(sc2, sc_lcp->Head(), 0))
+    return;
+
+  if (_trace)
+    printf("\n\t Lock-step normalization (SC%d,SC%d)\n", sc1->Id(), sc2->Id());
+
+  int l_outer = 0;
+  int l_inner = 0;
+  Decode_action(action, &l_outer, &l_inner);
+  
+  if (l_outer && l_inner) {
+    // Find the beginning and ending SC_IFs for the tree-height-reduction.
+    SC_NODE * if1_inner = sc1->Get_node_at_dist(sc_lcp, l_inner);
+    SC_NODE * if2_inner = sc2->Get_node_at_dist(sc_lcp, l_inner);
+
+    SC_NODE * if1_outer = sc1->Get_node_at_dist(sc_lcp, l_outer);
+    if (if1_outer)
+      if1_outer = if1_outer->Parent();
+
+    SC_NODE * if2_outer = sc2->Get_node_at_dist(sc_lcp, l_outer);
+    if (if2_outer)
+      if2_outer = if2_outer->Parent();
+    
+    FmtAssert(if1_inner && if1_outer, ("If-cond candidate not found."));
+
+    // Do tree-height reduction.
+    if (!Do_if_cond_tree_height_reduction(if1_outer, if1_inner))
+      return;
+    if (!Do_if_cond_tree_height_reduction(if2_outer, if2_inner))
+      return;
+  }
+
+  // Do recursive if-cond distribution and if-merging.
+  while (sc_lcp) {
+    SC_NODE * sc_tmp1 = sc1->Get_nesting_if(sc_lcp);
+    SC_NODE * sc_tmp2 = sc2->Get_nesting_if(sc_lcp);    
+
+    if (!sc_tmp1 && !sc_tmp2) {
+      if (!Do_reverse_loop_unswitching(sc_lcp, sc2, NULL))
+	break;
+      Do_reverse_loop_unswitching(sc_lcp, sc1, NULL);
+      break;
+    }
+    
+    if (!Do_if_cond_dist(sc_lcp))
+      return;
+
+    if (sc_tmp1->Next_sibling_of_type(SC_IF) == sc_tmp2) {
+      sc_tmp1 = Do_merge(sc_tmp1, sc_tmp2, FALSE);
+      IF_MERGE_TRANS::Top_down_trans(sc_tmp1);
+      Do_canon(sc_tmp1, sc1, HEAD_DUP | TAIL_DUP);
+      Do_canon(sc_tmp1, sc2, HEAD_DUP | TAIL_DUP);
+      sc_lcp = sc1->Find_lcp(sc2);
+      FmtAssert(sc_lcp->Type() == SC_IF, ("Unexpected SC type"));
+    }
+  }
+}
+
+// Do normalization for nesting if-conditions of 'sc'.
+// 'action' gives the portion of if-condition tree to apply tree-height-reduction.
+void
+PRO_LOOP_EXT_TRANS::Do_normalize(SC_NODE * sc, UINT64 action)
+{
+  std::pair<SC_NODE *, int> p_ret = sc->Get_outermost_nesting_if();
+  SC_NODE * sc_if = p_ret.first;
+  if (!Is_invariant(sc, sc_if->Head(), 0))
+    return;
+
+  if (_trace)
+    printf("\n\t Normalization (SC%d)\n", sc->Id());
+
+  int l_outer = 0;
+  int l_inner = 0;
+  Decode_action(action, &l_outer, &l_inner);
+
+  if (l_outer && l_inner) {
+    // Find the beginning and ending SC_IFs for the tree-height-reduction.
+    SC_NODE * if_inner = sc->Get_node_at_dist(sc_if, l_inner);
+    SC_NODE * if_outer = sc->Get_node_at_dist(sc_if, l_outer);
+    if (if_outer)
+      if_outer = if_outer->Parent();
+    
+    // Do tree-height reduction.
+    if (!Do_if_cond_tree_height_reduction(if_outer, if_inner))
+      return;
+  }
+
+  // Do recursive if-cond distribution and if-merging.
+  int dist = 1;
+  while (sc_if) {
+    SC_NODE * sc_tmp = sc->Get_nesting_if(sc_if);
+
+    if (!sc_tmp) {
+      Do_reverse_loop_unswitching(sc_if, sc, NULL);
+      break;
+    }
+
+    if (!Do_if_cond_dist(sc_if))
+      return;
+
+    p_ret = sc->Get_outermost_nesting_if();
+    sc_if = p_ret.first;
+    Do_canon(sc_if, sc, HEAD_DUP | TAIL_DUP);
+
+    sc_if = sc->Get_node_at_dist(sc_if, dist);
+    if (sc_if)
+      sc_if = sc_if->Parent();
+    dist++;
+  }
+}
+
+// In the nesting if-condition of 'sc', identify the portion of tree that was tree-height reduced.
+UINT64
+PRO_LOOP_EXT_TRANS::Encode_tree_height_reduction(SC_NODE * sc)
+{
+  std::pair<SC_NODE *, bool> p_ret = sc->Get_nesting_if();
+  SC_NODE * sc_iter = p_ret.first;
+  UINT64 word = 0;
+  while (sc_iter) {
+    IF_CMP_VAL val = 0;
+    Get_val(sc_iter->Get_cond(), &val);
+    int shift_cnt = 0;
+    while (val) {
+      val = val >> MAX_IF_CMP_BITS;
+      shift_cnt++;
+    }
+    if (shift_cnt == 1)
+      word = (word << 1);
+    else {
+      while (shift_cnt > 0) {
+	word = (word << 1) + 1;
+	shift_cnt--;
+      }
+    }
+    p_ret = sc_iter->Get_nesting_if();
+    sc_iter = p_ret.first;
+  }
+  return word;
+}
+
+// Query whether every SC_If node between 'inner' and 'outer' satisfies the following condition:
+// 1. It is well-behaved.  
+// 2. If there exists a preceding sibling, the sibling must be a SC_BLOCK or a SC_LOOP which has
+//    no dependencies on all SC_IF nodes on the successor part of the path (head duplication
+//    legality).  If there exists a succeeding sibling, the succeeding sibling must be a SC_BLOCK
+//    or a SC_LOOP.
+BOOL
+PRO_LOOP_EXT_TRANS::Is_candidate(SC_NODE * outer, SC_NODE * inner)
+{
+  std::pair<SC_NODE *, bool> p_ret = inner->Get_nesting_if();
+  SC_NODE * sc_n1 = p_ret.first;
+  SC_NODE * sc_iter = sc_n1;
+  
+  while (sc_iter && (sc_iter != outer)) {
+    if (!sc_iter->Is_well_behaved())
+      return FALSE;
+
+    SC_NODE * sc_tmp = sc_iter->Next_sibling();
+    while (sc_tmp) {
+      if ((sc_tmp->Type() != SC_BLOCK)
+	  && (sc_tmp->Type() != SC_LOOP))
+	return FALSE;
+      sc_tmp = sc_tmp->Next_sibling();
+    }
+
+    sc_tmp = sc_iter->Prev_sibling();
+    while (sc_tmp) {
+      if ((sc_tmp->Type() != SC_BLOCK)
+	  && (sc_tmp->Type() != SC_LOOP))
+	return FALSE;
+
+      SC_NODE * sc_cur = sc_n1;
+      while (sc_cur) {
+	if (Has_dependency(sc_tmp, sc_cur->Head()))
+	  return FALSE;
+	
+	if (sc_cur == sc_iter)
+	  break;
+
+	p_ret = sc_cur->Get_nesting_if();
+	sc_cur = p_ret.first;
+      }
+      
+      sc_tmp = sc_tmp->Prev_sibling();
+    }
+    
+    p_ret = sc_iter->Get_nesting_if();
+    sc_iter = p_ret.first;
+  }
+
+  return TRUE;
+}
+
+// Normalize if-conditions for the tree rooted at 'sc'.
+// Return the LCP of normalized trees.
+SC_NODE * 
+PRO_LOOP_EXT_TRANS::Normalize(SC_NODE * sc)
+{
+  Hash_if_conds(sc);
+
+  STACK<SC_NODE *> * freeze_list = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  STACK<SC_NODE *> * if_list = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  STACK<SC_NODE *> * loop_list = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  STACK<IF_CMP_VAL> * val_list = CXX_NEW(STACK<IF_CMP_VAL>(_pool), _pool);
+  STACK<UINT64> * action_list= CXX_NEW(STACK<UINT64>(_pool), _pool);
+
+  // Collect unsymmetric if-condition trees that are candidates for normalization transformations.
+  for (int i = MAX_IF_CMP_LEVEL - 1; i >= 0; i--) {
+    STACK<IF_CMP_VAL> * stk = _if_cmp_vals[i];
+    if (stk) {
+      for (int j = 0; j < stk->Elements(); j++) {
+	IF_CMP_VAL val = stk->Top_nth(j);
+	SC_NODE * sc = (SC_NODE *) _val_to_sc_map->Get_val((POINTER) val);
+	int v_level = Get_level_from_val(val);
+
+	if (v_level != (i + 1)) {
+	  // Collect loops whose level of nesting if-conditions is the same level as 'v_level'
+	  Remove_adjacent_loops(sc);
+	  SC_NODE * sc_iter = sc->Next();
+	  UINT64 word = Encode_tree_height_reduction(sc);
+	  std::pair<SC_NODE *, int> p_level;
+	  while (sc_iter) {
+	    int i_level = 0;
+	    p_level = sc_iter->Get_outermost_nesting_if();
+	    SC_NODE * sc_if = p_level.first;
+	    i_level = p_level.second;
+	    if (i_level == v_level) {
+	      if_list->Push(sc_if);
+	      loop_list->Push(sc_iter);
+	      action_list->Push(word);
+	      val_list->Push(val);
+	    }
+	    sc_iter = sc_iter->Next();
+	  }
+	  
+	  // Limit it to if-condition trees without compound if-compare expressions like CAND.	  
+	  continue;
+	}
+
+	if (sc && !freeze_list->Contains(sc)) {
+	  // Remove adjacent loops from the list linked by the 'next' field.
+	  // Then check whether remaining nodes's outermost-nesting IFs are adjacent
+	  // to each other.
+	  Remove_adjacent_loops(sc);
+	  if (!Has_adjacent_if(sc)) {
+	    // Check whether removing one level of if-condition will uncover loop
+	    // fusion candidates.
+	    IF_CMP_VAL next_val = (val >> MAX_IF_CMP_BITS);
+	    if (next_val) {
+	      SC_NODE * cand = (SC_NODE *) _val_to_sc_map->Get_val((POINTER) next_val);
+
+	      // Limit it to the case that all nodes in the list linked by the 'next'
+	      // field of 'cand' has the same nesting level.
+	      if (cand) {
+		std::pair<bool, int> p_level = Has_same_nesting_level(cand);
+		if (p_level.first) {
+		  int level = p_level.second;
+		  std::pair<SC_NODE *, int> p_ret = cand->Get_outermost_nesting_if();
+		  SC_NODE * outermost = p_ret.first;
+		  while (sc) {
+		    p_ret = sc->Get_outermost_nesting_if();
+		    SC_NODE * sc_if = p_ret.first;
+		    if (sc_if->Parent() == outermost->Parent()) {
+		      if_list->Push(sc_if);
+		      loop_list->Push(sc);
+		      // Construct an action word to encode the portion of if-condition tree
+		      // that needs a reduction in tree-height.
+		      UINT64 word = 0;
+		      if (i != level) {
+			word = Encode_tree_height_reduction(cand);
+		      }
+		      word |= ( 1 << MAX_IF_CMP_LEVEL);
+		      action_list->Push(word);
+		      val_list->Push(next_val);
+		      // Freeze 'cand' for transformations.
+		      if (!freeze_list->Contains(cand))
+			freeze_list->Push(cand);
+		    }
+		    sc = sc->Next();
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+  while (!freeze_list->Is_Empty())
+    freeze_list->Pop();
+  CXX_DELETE(freeze_list, _pool);
+
+  // Find buddy loops and collect work lists for the normalization.
+  STACK<SC_NODE *> * sc_work_list = CXX_NEW(STACK<SC_NODE *>(_pool), _pool);
+  STACK<UINT64> * action_work_list = CXX_NEW(STACK<UINT64>(_pool), _pool);
+  
+  while (!if_list->Is_Empty()) {
+    SC_NODE * sc_if = if_list->Pop();
+    SC_NODE * sc_loop = loop_list->Pop();
+    UINT64 action = action_list->Pop();
+    IF_CMP_VAL val = val_list->Pop();
+    SC_NODE * sc_buddy = NULL;
+    
+    if (sc_work_list->Contains(sc_if))
+      continue;
+
+    BOOL do_dist = FALSE;
+    BOOL do_tree_height = FALSE;
+
+    if ((action >> MAX_IF_CMP_LEVEL) != 0)
+      do_dist = TRUE;
+    if ((action & IF_CMP_ACTION_MASK) != 0)
+      do_tree_height = TRUE;
+
+    if (!do_tree_height)
+      continue;
+
+    if (do_dist) {
+      // Find buddy loop.
+      for (int i = 0; i < loop_list->Elements(); i++) {
+	SC_NODE * sc_iter = loop_list->Top_nth(i);
+	IF_CMP_VAL val_iter = val_list->Top_nth(i);
+	if ((sc_loop->Find_lcp(sc_iter) != sc_if)
+	    || (val != val_iter))
+	  continue;
+	sc_buddy = sc_iter;
+	break;
+      }
+
+      if (!sc_buddy) {
+	// Either then-path or else-path must be empty.
+	if (!sc_if->First_kid()->Is_empty()
+	    && !sc_if->Last_kid()->Is_empty())
+	  continue;
+      }
+    }
+
+    sc_if->Set_next(sc_loop);
+    sc_loop->Set_next(sc_buddy);
+    if (sc_buddy)
+      sc_buddy->Set_next(NULL);
+    sc_work_list->Push(sc_if);
+    action_work_list->Push(action);
+  }
+
+  CXX_DELETE(if_list, _pool);
+  CXX_DELETE(loop_list, _pool);
+  CXX_DELETE(action_list, _pool);
+  CXX_DELETE(val_list, _pool);
+  
+  // Do if-condition normalizations.
+  int count= 0;
+  SC_NODE * sc_lcp = NULL;
+  
+  while (!sc_work_list->Is_Empty()) {
+    SC_NODE * sc_if = sc_work_list->Pop();
+    UINT64 action = action_work_list->Pop();
+    SC_NODE * sc_loop = sc_if->Next();
+    SC_NODE * sc_buddy = sc_loop->Next();
+
+    Do_split_if_head(sc_if);
+
+    if (!Is_candidate(sc_if, sc_loop))
+      continue;
+
+    if (!sc_lcp)
+      sc_lcp = sc_if->Get_real_parent();
+    else
+      sc_lcp = sc_lcp->Find_lcp(sc_if);
+    
+    BOOL do_dist = FALSE;
+    if ((action >> MAX_IF_CMP_LEVEL) != 0)
+      do_dist = TRUE;
+    
+    action &= IF_CMP_ACTION_MASK;
+    if (do_dist) {
+      Do_canon(sc_if, sc_loop, SPLIT_IF_HEAD | HEAD_DUP | TAIL_DUP);
+      if (sc_buddy) {
+	Do_canon(sc_if, sc_buddy, SPLIT_IF_HEAD | HEAD_DUP | TAIL_DUP);
+	Do_lock_step_normalize(sc_loop, sc_buddy, action);
+      }
+      else {
+	Do_normalize(sc_loop, action);
+      }
+    }
+    else {
+      int l_outer = 0;
+      int l_inner = 0;
+      Decode_action(action, &l_outer, &l_inner);
+
+      if (l_outer && l_inner) {
+	FmtAssert(l_outer == 1, ("Unexpected outer nesting level")); 
+	Do_canon(sc_if, sc_loop, SPLIT_IF_HEAD | HEAD_DUP | TAIL_DUP);	
+	SC_NODE * sc_tmp = Do_if_cond_wrap(sc_if->Head(), sc_if, TRUE);
+	SC_NODE * sc_inner = sc_loop->Get_node_at_dist(sc_if, l_inner - 1);
+	Do_if_cond_tree_height_reduction(sc_if, sc_inner);
+	Do_if_cond_unwrap(sc_tmp);
+      }
+    }
+  }
+  
+  CXX_DELETE(sc_work_list, _pool);
+  CXX_DELETE(action_work_list, _pool);
+
+  return sc_lcp;
 }
 
 // Delete maps for value ranges.
@@ -8920,27 +11454,6 @@ CFG_TRANS::Delete_val_range_maps()
   _def_wn_map = NULL;
 }
 
-// Delete dynamically allocated objects.
-void
-CFG_TRANS::Delete()
-{
-  if (_const_wn_map) {
-    MAP_LIST * tmp;
-    MAP_LIST_ITER map_lst_iter;
-
-    for (UINT32 idx = 0; idx < _const_wn_map->Size(); idx++) {
-      FOR_ALL_NODE(tmp, map_lst_iter, Init(_const_wn_map->Get_bucket(idx))) {
-	WN * wn = (WN *) tmp->Val();
-	if (wn)
-	  WN_Delete(wn);
-      }
-    }
-  }
-
-  CXX_DELETE(_const_wn_map, _pool);
-  _const_wn_map = NULL;
-}
-
 // Get a WHIRL that represents an integer constant of the given value
 // from _const_wn_map.
 WN *
@@ -8961,6 +11474,21 @@ CFG_TRANS::Get_const_wn(long long val)
   }
 
   return wn;
+}
+
+// Given a 'wn_key' whose value is greater or equal to 'val',
+// set up map.
+void
+CFG_TRANS::Set_lo(WN_MAP & map, WN * wn_key, int val)
+{
+  WN * wn_tmp = (WN *) WN_MAP_Get(map, wn_key);
+  int val_tmp;
+
+  if (wn_tmp && WN_get_val(wn_key, &val_tmp, map)
+      && (val_tmp < val))
+    return;
+
+  Set_map(map, wn_key, Get_const_wn(val));
 }
 
 // Set up map of wn_key to wn_val.  Update _def_wn_map is necessary.
@@ -9024,6 +11552,17 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
 
       if (WN_get_val(op1, &val, _low_map)) {
 	Set_map(_low_map, op2, op1);
+	Infer_val_range(op2, TRUE, TRUE);
+      }
+      break;
+
+    case OPR_LE:
+      op1 = WN_kid(wn, 0);
+      op2 = WN_kid(wn, 1);
+
+      if (WN_get_val(op1, &val, _low_map)) {
+	wn_tmp = Get_const_wn(val - 1);
+	Set_map(_low_map, op2, wn_tmp);
 	Infer_val_range(op2, TRUE, TRUE);
       }
       break;
@@ -9101,6 +11640,98 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
   }
 }
 
+// Walk WHIRL tree rooted at 'wn', find shift count expressions and infer value ranges
+// for variables appearing in shift count expression.  'sc_loop' gives the nesting loop
+// of 'wn'.
+void
+CFG_TRANS::Infer_shift_count_val(WN  * wn, SC_NODE * sc_loop)
+{
+  OPERATOR opr = WN_operator(wn);
+  if (opr == OPR_SHL) {
+    WN * wn_tmp = WN_kid1(wn);
+    OPERATOR opr = WN_operator(wn_tmp);
+
+    if ((opr == OPR_ADD) || (opr == OPR_SUB)) {
+      WN * op1 = WN_kid0(wn_tmp);
+      WN * op2 = WN_kid1(wn_tmp);
+      int val;
+      if ((WN_operator(op2) == OPR_INTCONST)
+	  && (OPERATOR_is_scalar_load(WN_operator(op1)))
+	  && Is_invariant(sc_loop, op1, 0)
+	  ) {
+	val = WN_const_val(op2);
+	if (opr == OPR_ADD)
+	  val = val * -1;
+	Set_lo(_low_map, op1, val);
+      }
+    }
+    else if (OPERATOR_is_scalar_load(opr)
+	     && Is_invariant(sc_loop, wn_tmp, 0)) {
+      Set_lo(_low_map, wn_tmp, 0);
+    }
+  }
+  
+  for (int i = 0; i < WN_kid_count(wn); i++)
+    Infer_shift_count_val(WN_kid(wn,i), sc_loop);
+}
+
+// Infer value ranges from loop bounds.
+void
+CFG_TRANS::Infer_lp_bound_val(SC_NODE * sc_lcp)
+{
+  if ((sc_lcp->Type() == SC_LOOP) 
+      && sc_lcp->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
+    SC_NODE * sc_body = sc_lcp->Find_kid_of_type(SC_LP_BODY);
+    SC_NODE * sc_cond = sc_lcp->Find_kid_of_type(SC_LP_COND);
+    SC_NODE * sc_init = sc_lcp->Find_kid_of_type(SC_LP_START);
+    SC_NODE * sc_step = sc_lcp->Find_kid_of_type(SC_LP_STEP);
+    BB_NODE * bb_body = sc_body->First_bb();
+    BB_NODE * bb_cond = sc_cond->First_bb();
+    BB_NODE * bb_init = sc_init->First_bb();
+    BB_NODE * bb_step = sc_step->First_bb();
+
+    if (bb_init && bb_cond && bb_body && bb_step
+	&& !bb_cond->Is_branch_to(bb_body)) {
+      BOOL set_high = FALSE;
+      BOOL set_low = FALSE;
+      WN * wn_init = bb_init->Laststmt();
+      WN * wn_step = bb_step->Laststmt();
+      wn_step = WN_prev(wn_step);
+      WN * wn_add = wn_step ? WN_kid(wn_step, 0) : NULL;
+      WN * wn_load = wn_add ? WN_kid(wn_add, 0) : NULL;
+	  
+      if (wn_step && OPERATOR_is_scalar_store(WN_operator(wn_step))
+	  && wn_init && OPERATOR_is_scalar_store(WN_operator(wn_init))
+	  && (WN_aux(wn_init) == WN_aux(wn_step))
+	  && wn_load && OPERATOR_is_scalar_load(WN_operator(wn_load))
+	  && (WN_aux(wn_load) == WN_aux(wn_step))
+	  && (WN_operator(wn_add) == OPR_ADD)) {
+	int val;
+	if (WN_get_val(WN_kid(wn_add,1), &val, _low_map)) {
+	  if (val > 0)
+	    set_low = TRUE;
+	  else
+	    set_high = TRUE;
+	}
+      }
+	  
+      if (set_high || set_low) {
+	if (Is_invariant(sc_body, bb_init, 0)) 
+	  Infer_val_range(wn_init, set_high, set_low);
+	    
+	WN * wn_cond = bb_cond->Laststmt();
+
+	if (wn_cond && (WN_operator(wn_cond) == OPR_FALSEBR)
+	    && Is_invariant(sc_body, bb_cond, 0)) {
+	  wn_cond = WN_kid(wn_cond, 0);
+	  Match_def(wn_cond);
+	  Infer_val_range(wn_cond, TRUE, TRUE);
+	}
+      }
+    }
+  }
+}
+
 // Given a pair of SC_NODE *, infer value ranges for variables appearing in nesting loops'
 // initialization blocks and condition-testing blocks.
 void
@@ -9108,64 +11739,37 @@ CFG_TRANS::Infer_val_range(SC_NODE * sc1, SC_NODE * sc2)
 {
   SC_NODE * sc_lcp = sc1->Find_lcp(sc2);
 
-  if (_invar_map) {
+  if (_invar_map || Get_ext_trans()) {
     _low_map = WN_MAP_Create(_pool);
     _high_map = WN_MAP_Create(_pool);
     _def_wn_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
 
     while (sc_lcp) {
-      if ((sc_lcp->Type() == SC_LOOP) 
+      SC_TYPE type = sc_lcp->Type();
+      if ((type == SC_LOOP) 
 	  && sc_lcp->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
-	SC_NODE * sc_body = sc_lcp->Find_kid_of_type(SC_LP_BODY);
-	SC_NODE * sc_cond = sc_lcp->Find_kid_of_type(SC_LP_COND);
-	SC_NODE * sc_init = sc_lcp->Find_kid_of_type(SC_LP_START);
-	SC_NODE * sc_step = sc_lcp->Find_kid_of_type(SC_LP_STEP);
-	BB_NODE * bb_body = sc_body->First_bb();
-	BB_NODE * bb_cond = sc_cond->First_bb();
-	BB_NODE * bb_init = sc_init->First_bb();
-	BB_NODE * bb_step = sc_step->First_bb();
+	Infer_lp_bound_val(sc_lcp);
 
-	if (bb_init && bb_cond && bb_body && bb_step
-	    && !bb_cond->Is_branch_to(bb_body)) {
-	  BOOL set_high = FALSE;
-	  BOOL set_low = FALSE;
-	  WN * wn_init = bb_init->Laststmt();
-	  WN * wn_step = bb_step->Laststmt();
-	  wn_step = WN_prev(wn_step);
-	  WN * wn_add = wn_step ? WN_kid(wn_step, 0) : NULL;
-	  WN * wn_load = wn_add ? WN_kid(wn_add, 0) : NULL;
-	  
-	  if (wn_step && OPERATOR_is_scalar_store(WN_operator(wn_step))
-	      && wn_init && OPERATOR_is_scalar_store(WN_operator(wn_init))
-	      && (WN_aux(wn_init) == WN_aux(wn_step))
-	      && wn_load && OPERATOR_is_scalar_load(WN_operator(wn_load))
-	      && (WN_aux(wn_load) == WN_aux(wn_step))
-	      && (WN_operator(wn_add) == OPR_ADD)) {
-	    int val;
-	    if (WN_get_val(WN_kid(wn_add,1), &val, _low_map)) {
-	      if (val > 0)
-		set_low = TRUE;
-	      else
-		set_high = TRUE;
-	    }
-	  }
-	  
-	  if (set_high || set_low) {
-	    if (Is_invariant(sc_body, bb_init, 0)) 
-	      Infer_val_range(wn_init, set_high, set_low);
-	    
-	    WN * wn_cond = bb_cond->Laststmt();
+	if (Get_ext_trans()) {
+	  // Infer value ranges from the loop entry.
+	  SC_NODE * sc_body = sc_lcp->Find_kid_of_type(SC_LP_BODY);
+	  SC_NODE * sc_tmp = sc_body->First_kid();
+	  BB_NODE * bb_body = sc_body->First_bb();
 
-	    if (wn_cond && (WN_operator(wn_cond) == OPR_FALSEBR)
-		&& Is_invariant(sc_body, bb_cond, 0)) {
-	      wn_cond = WN_kid(wn_cond, 0);
-	      Match_def(wn_cond);
-	      Infer_val_range(wn_cond, TRUE, TRUE);
+	  if (!sc_tmp->Is_pred_in_tree(sc1)
+	      && !sc_tmp->Is_pred_in_tree(sc2)) {
+	    WN * tmp;
+	    for (tmp = bb_body->Firststmt(); tmp != NULL; tmp = WN_next(tmp)) {
+	      Infer_shift_count_val(tmp, sc_lcp);
 	    }
 	  }
 	}
-      }
 
+	if (_current_scope && (_current_scope != sc_lcp) 
+	    && sc_lcp->Is_pred_in_tree(_current_scope)) {
+	  Infer_lp_bound_val(_current_scope);
+	}
+      }
       sc_lcp = sc_lcp->Parent();
     }
   }
@@ -9180,7 +11784,7 @@ CFG_TRANS::Match_def(WN * wn)
     if (_def_wn_map) {
       WN * wn_def = (WN *) _def_wn_map->Get_val((POINTER) WN_aux(wn));
 
-      if (wn_def) {
+      if (wn_def && (wn_def != wn)) {
 	if (_low_map) 
 	  WN_MAP_Set(_low_map, wn, wn_def);
 
@@ -9192,4 +11796,249 @@ CFG_TRANS::Match_def(WN * wn)
   
   for (int i = 0; i < WN_kid_count(wn); i++)
     Match_def(WN_kid(wn,i));
+}
+
+// Simplify "ADD" and "SUB" expressions in 'wn'.
+WN * 
+CFG_TRANS::Simplify_wn(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+  if ((opr == OPR_ADD) || (opr == OPR_SUB)) {
+    STACK<WN *> * l_stk = CXX_NEW(STACK<WN *> (_pool), _pool);
+    STACK<WN *> * r_stk = CXX_NEW(STACK<WN *> (_pool), _pool);
+
+    Collect_operands(wn, l_stk, r_stk);
+    WN * wn_tmp;
+    int const_val = 0;
+    OPERATOR opr;
+
+    while (!r_stk->Is_Empty()) {
+      wn_tmp = r_stk->Pop();
+      opr = WN_operator(wn_tmp);
+      if (opr == OPR_INTCONST)
+	const_val -= WN_const_val(wn_tmp);
+      else {
+	// Find a matching element in l_stk.
+	BOOL found = FALSE;
+	for (int i = 0; i < l_stk->Elements(); i++) {
+	  WN * wn2 = l_stk->Top_nth(i);
+	  if (wn2 && (WN_Simp_Compare_Trees(wn_tmp, wn2) == 0)) {
+	    l_stk->Settop_nth(NULL, i);
+	    found = TRUE;
+	    break;
+	  }
+	}
+	if (!found) {
+	  CXX_DELETE(l_stk, _pool);
+	  CXX_DELETE(r_stk, _pool);
+	  return NULL;
+	}
+      }
+    }
+
+    WN * wn_last = NULL;
+    while (!l_stk->Is_Empty()) {
+      wn_tmp = l_stk->Pop();
+      if (wn_tmp) {
+	opr = WN_operator(wn_tmp);
+	if (opr == OPR_INTCONST)
+	  const_val += WN_const_val(wn_tmp);
+	else if (wn_last == NULL) {
+	  wn_last = wn_tmp;
+	}
+	else 
+	  wn_last = WN_CreateExp2(OPR_ADD, MTYPE_I4, MTYPE_V, wn_last, wn_tmp);
+      }
+    }
+
+    if (wn_last && const_val) {
+      wn_tmp = WN_CreateIntconst(OPR_INTCONST, (const_val > 0) ? MTYPE_U4 : MTYPE_I4, 
+				 MTYPE_V, const_val);
+      wn_last = WN_CreateExp2(OPR_ADD, MTYPE_I4, MTYPE_V, wn_last, wn_tmp);
+    }
+
+    CXX_DELETE(l_stk, _pool);
+    CXX_DELETE(r_stk, _pool);
+    return wn_last;
+  }
+
+  return NULL;
+}
+
+// Find WHIRLs in 'wn' that matches 'wn_old' and replace it with 'wn_new'.
+// Return TRUE if replacement happens.
+BOOL
+CFG_TRANS::Replace_wn(WN  * wn, WN * wn_old, WN * wn_new)
+{
+  BOOL ret_val = FALSE;
+  for ( int i = 0; i < WN_kid_count(wn); i++) {
+    WN * wn_kid = WN_kid(wn, i);
+    if (WN_Simp_Compare_Trees(wn_kid, wn_old) == 0) {
+      WN_kid(wn, i) = wn_new;
+      ret_val = TRUE;
+    }
+    else {
+      if (Replace_wn(wn_kid, wn_old, wn_new)) {
+	ret_val = TRUE;
+	wn_kid = Simplify_wn(wn_kid);
+	if (wn_kid)
+	  WN_kid(wn, i) = wn_kid;
+      }
+    }
+  }
+  return ret_val;
+}
+
+// Find WHIRLs in 'bb' that matches 'wn_old' and replace it with 'wn_new'.
+void
+CFG_TRANS::Replace_wn(BB_NODE * bb, WN * wn_old, WN * wn_new)
+{
+  WN * wn;
+  STMT_ITER stmt_iter;
+  FOR_ALL_ELEM (wn, stmt_iter, Init(bb->Firststmt(), bb->Laststmt())) {
+    Replace_wn(wn, wn_old, wn_new);
+  }
+}
+
+// Find WHIRLs in 'sc' that matches 'wn_old' and replace it with 'wn_new'.
+void
+CFG_TRANS::Replace_wn(SC_NODE * sc, WN * wn_old, WN * wn_new)
+{
+  BB_NODE * bb = sc->Get_bb_rep();
+
+  if (bb)
+    Replace_wn(bb, wn_old, wn_new);
+
+  BB_LIST * bb_list = sc->Get_bbs();
+
+  if (bb_list != NULL) {
+    BB_LIST_ITER bb_list_iter(bb_list);
+    BB_NODE * tmp;
+    
+    FOR_ALL_ELEM(tmp, bb_list_iter, Init()) {
+      Replace_wn(tmp, wn_old, wn_new);
+    }
+  }
+
+  SC_LIST * kids = sc->Kids();
+
+  if (kids != NULL) {
+    SC_LIST_ITER sc_list_iter(kids);
+    SC_NODE *tmp;
+
+    FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
+      Replace_wn(tmp, wn_old, wn_new);
+    }
+  }
+}
+
+// Given a SC_IF node 'sc' and a bit-operation expression 'wn', if both the then-path and
+// the else-path contain only SC_BLOCKs whose statements are bit reductions on the same object,
+// and each path has only one statement that alters the same bit as 'wn', sink that statement to 
+// the merge block.  
+BOOL CFG_TRANS::Do_flip_tail_merge(SC_NODE * sc, WN * wn)
+{
+  FmtAssert(sc->Type() == SC_IF, ("Expect a SC_IF."));
+  if (!sc->Is_well_behaved())
+    return FALSE;
+
+  if (!WN_is_bit_op(wn))
+    return FALSE;
+
+  SC_NODE * tmp;
+  for (int i = 0; i < 2; i++) {
+    tmp = (i == 0) ? sc->First_kid() : sc->Last_kid();
+    if (tmp->First_kid() != tmp->Last_kid())
+      return FALSE;
+    tmp = tmp->First_kid();
+    if (tmp->Type() != SC_BLOCK)
+      return FALSE;
+  }
+
+  BB_NODE * bb_merge = sc->Merge();
+  if (!bb_merge->Is_postdom(sc))
+    return FALSE;
+  
+  WN * wn_flip1 = NULL;
+  WN * wn_flip2 = NULL;
+  BB_NODE * bb1 = NULL;
+  BB_NODE * bb2 = NULL;
+
+  for (int i = 0; i < 2; i++) {
+    tmp = (i == 0) ? sc->First_kid() : sc->Last_kid();
+    tmp = tmp->First_kid();
+
+    BB_LIST_ITER bb_list_iter(tmp->Get_bbs());
+    BB_NODE * bb_iter;
+    
+    FOR_ALL_ELEM(bb_iter, bb_list_iter, Init()) {
+      WN * wn_iter;
+      STMT_ITER stmt_iter;
+      FOR_ALL_ELEM(wn_iter, stmt_iter, Init(bb_iter->Firststmt(), bb_iter->Laststmt())) {
+	if (!WN_is_executable(wn_iter))
+	  continue;
+	WN * wn_tmp = WN_get_bit_reduction(wn_iter);
+	if (!wn_tmp || (WN_Simp_Compare_Trees(WN_kid0(wn_tmp), WN_kid0(wn)) != 0)) {
+	  return FALSE;
+	}
+	if (Maybe_assigned_expr(wn_iter, wn)) {
+	  if (i == 0) {
+	    if (!wn_flip1) {
+	      wn_flip1 = wn_iter;
+	      bb1 = bb_iter;
+	    }
+	    else
+	      return FALSE;
+	  }
+	  else {
+	    if (!wn_flip2) {
+	      wn_flip2 = wn_iter;
+	      bb2 = bb_iter;
+	    }
+	    else
+	      return FALSE;
+	  }
+	}
+      }
+    }
+  }
+
+  if (wn_flip1 && wn_flip2
+      && (WN_Simp_Compare_Trees(WN_kid0(wn_flip1), WN_kid0(wn_flip2)) == 0)) {
+    bb1->Unlink_stmt(wn_flip1);
+    bb2->Unlink_stmt(wn_flip2);
+    WN_Delete(wn_flip2);
+    bb_merge->Prepend_stmt(wn_flip1);
+    return TRUE;
+  }
+  return FALSE;
+}
+void IF_MERGE_TRANS::Normalize(SC_NODE *sc)
+{
+    SC_NODE *sc1;
+    SC_LIST_ITER kids_iter;
+    SC_NODE * tmp;
+    SC_LIST_ITER sc_list_iter;
+    BOOL has_dep = FALSE;
+
+    sc1 = sc->First_kid_of_type(SC_IF);
+    while (sc1 != NULL) {
+
+      BB_NODE * bb_head = sc1->Head();
+      FOR_ALL_ELEM(tmp, sc_list_iter, Init(sc1->Kids())) {
+      if (Has_dependency(tmp, bb_head)) {
+       has_dep = TRUE;
+       break;
+      }
+      else
+        has_dep = FALSE;
+    }
+    if(has_dep) 
+      Do_split_if_head(sc1);
+
+    sc1 = sc1->Next_sibling_of_type(SC_IF);
+   }
+   FOR_ALL_ELEM(tmp, kids_iter, Init(sc->Kids())) {
+    this->Normalize(tmp);
+  }
 }

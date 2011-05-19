@@ -1605,6 +1605,10 @@ public:
 					// after any label
 
   void         Remove_stmtrep(STMTREP*);// remove a statement
+  void         Remove_stmt(WN *); // remove a statement
+  void         Unlink_stmt(WN *); // unlink a statement
+  void         Prepend_stmt(WN *); // add a statement to the beginning of a block,
+                                   // but after any non-executable statements.
 
   void	       Append_stmt_before_branch(STMTREP *stmt);
 

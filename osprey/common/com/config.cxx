@@ -1848,7 +1848,7 @@ Configure_Alias_Options()
       Alias_F90_Pointer_Unaliased = TRUE;
     } else if (strncasecmp( val, "f90_pointer_alias", len) == 0) {
       Alias_F90_Pointer_Unaliased = FALSE;
-    } else if (strncasecmp( val, "nystrom", len) == 0) {
+    } else if (strncasecmp( val, "field_sensitive", len) == 0) {
       Alias_Nystrom_Analyzer = TRUE;
     } else {
       ErrMsg ( EC_Inv_OPT, "alias", val );

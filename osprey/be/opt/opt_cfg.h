@@ -735,7 +735,7 @@ public:
   // Clone a BB_LOOP
   BB_LOOP *    Clone_loop(BB_LOOP *);
   // Clone a SC_NODE
-  SC_NODE *    Clone_sc(SC_NODE *, BOOL, float);
+  SC_NODE *    Clone_sc(SC_NODE *, BOOL, float, SC_NODE **);
   // Create a SC node 
   SC_NODE *    Create_sc(SC_TYPE type);
   void         Freq_propagate(SC_NODE *);
@@ -743,6 +743,7 @@ public:
   void         Freq_scale(BB_NODE *, SC_NODE *, float scale);
   SC_NODE *    Split(SC_NODE *);
   SC_NODE *    Insert_block_after(SC_NODE *);
+  SC_NODE *    Insert_block_before(SC_NODE *);
   void         Fix_info(SC_NODE *);
 
   // Create a new block and allocate it.

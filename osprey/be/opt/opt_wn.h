@@ -351,6 +351,7 @@ extern BOOL OPERATOR_is_volatile(OPERATOR oper);
 extern BOOL OPCODE_is_volatile(OPCODE opc);
 extern BOOL WN_get_val(WN *, int *, const WN_MAP&);
 extern BOOL WN_has_disjoint_val_range(WN *, WN *, const WN_MAP&, const WN_MAP&);
+extern void Collect_operands(WN *, STACK<WN *> *, STACK<WN *> *);
 
   WN * WN_copy(WN *wn);  // copy a WN node
   WN * WN_copy_with_map (WN *wn);

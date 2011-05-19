@@ -64,7 +64,8 @@ class SNL_INFO {
   SNL_TYPE	_type;
 public:
   friend class FIZ_FUSE_INFO;
-  SNL_INFO() { _depth=0; _wn=NULL; _type=Invalid; };
+  void Init(void) { _depth=0; _wn=NULL; _type=Invalid; };
+  SNL_INFO() { Init(); }
   ~SNL_INFO(){};
   SNL_INFO(WN* wn);
 };

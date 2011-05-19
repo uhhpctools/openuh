@@ -74,6 +74,10 @@
 //              int flag
 //                    Flag of this SC_NODE.  see SC_NODE_FLAG.
 //
+//              SC_NODE * next
+//                    A pointer to the next node in a lost.  Scratch field.
+//
+//
 //     SC_LIST :SLIST_NODE
 //
 //          A singly linked list of SC_NODEs.  We use this class to build the children node list.
@@ -155,6 +159,7 @@ private:
   IDTYPE _class_id;
   int _depth;
   int _flag;
+  SC_NODE * next;
 
 private:
   BOOL Is_member(BB_NODE *);
@@ -168,6 +173,9 @@ public:
   void         Set_depth(int i)         { _depth = i; }
   int          Flag()            const  { return _flag; }
   void         Set_flag(int i)          { _flag = i; }
+  SC_NODE *    Next()            const { return next; }
+  SC_NODE *    Last();
+  void         Set_next(SC_NODE * node) { next = node; }
   void         Remove_flag(int i);
   BOOL         Has_flag(int i)          { return ((_flag & i) != 0); }
   void         Add_flag(int i)          { if (!Has_flag(i)) {_flag += i; } }
@@ -215,7 +223,7 @@ public:
   SC_LIST *  Kids(void)        const   { return kids; }
   void       Clear(void);
   BOOL       Is_empty_block();
-  
+  BOOL       Is_empty();
   SC_NODE(void)          { Clear(); }
   SC_NODE(const SC_NODE&);
   ~SC_NODE(void)         {}
@@ -234,6 +242,8 @@ public:
   SC_NODE * Next_sibling_of_type(SC_TYPE);
   SC_NODE * Next_in_tree();
   SC_NODE * Get_nesting_if(SC_NODE *);
+  std::pair<SC_NODE *, bool> Get_nesting_if();
+  std::pair<SC_NODE *, int> Get_outermost_nesting_if();
   SC_NODE * First_kid_of_type(SC_TYPE);
   BOOL Contains(BB_NODE *);
   BB_NODE * Then();
@@ -264,6 +274,11 @@ public:
   int Executable_stmt_count();
   BOOL Has_loop();
   SC_NODE * Get_real_parent();
+  SC_NODE * Get_real_parent(int);
+  SC_NODE * Get_node_at_dist(SC_NODE *, int dist);
+  WN * Get_cond();
+  BOOL Is_ctrl_equiv(SC_NODE *);
+  BOOL Get_bounds(WN **, WN **, WN **);
 };
 
 class SC_LIST : public SLIST_NODE {
@@ -337,7 +352,10 @@ private:
   WN_MAP _low_map;  // map from WN * to a constant that gives value's low boundary.
   WN_MAP _high_map; // map from WN * to a constant that gives value's high boundary.
   MAP * _def_wn_map;   // map AUX_ID to definition WN *.
+  MAP * _def_map; //  Map symbol auxiliary Id to definition WN *.
   MAP * _const_wn_map; // map an integer constant to WHIRL.
+  MAP * _def_cnt_map; // hash aux id to def count
+  BOOL _ext_trans;  // do extended transformations.
 
 protected:
   COMP_UNIT * _cu;
@@ -347,25 +365,41 @@ protected:
   MEM_POOL * _pool;
   INT32 _code_bloat_count;
   MAP * _invar_map;  // hash BB_NODE Id to SC_NODE *
+  STACK<SC_NODE *> * _unlink_sc; // scratch field.
+  STACK<SC_NODE *> * _tmp_stack; // scratch field.
+  SC_NODE * _current_scope; // scratch field, point to current nesting SC_NODE.
 
 private:
   void Infer_val_range(WN *, BOOL, BOOL);
   void Match_def(WN *);
-  STACK<WN *> * Collect_operands(WN *);
   void Set_map(WN_MAP &, WN *, WN *);
-
+  void Set_lo(WN_MAP &, WN *, int);
+  SC_NODE * Split(SC_NODE *, SC_NODE *);
+  SC_NODE * Do_partition(SC_NODE *);
+  void Add_def_map(AUX_ID, WN *);
+  void Copy_prop(SC_NODE * sc);
+  void Copy_prop(BB_NODE * bb);
+  void Copy_prop(WN *);
+  unsigned long Get_def_cnt(AUX_ID i) 
+      { return (unsigned long) _def_cnt_map->Get_val((POINTER) i); }
+  BOOL Val_mod(SC_NODE *, WN *, BOOL, BOOL);
+  BOOL Val_match(WN *);
+  void Infer_non_zero(WN *, BOOL);
+  void Init_val_map(WN *);
+  void Infer_shift_count_val(WN *, SC_NODE *);
+  void Infer_lp_bound_val(SC_NODE *);
+    
 protected:
   void Inc_transform_count() { _transform_count++; }
   void Delete_val_map();
-  void Init_val_map(WN *, BOOL);
   void Infer_val_range(SC_NODE *, SC_NODE *);
   void Delete_val_range_maps();
+  void Delete_unlink_sc();
   BOOL Val_mod(SC_NODE *, WN *, BOOL);
-  BOOL Val_match(WN *);
   BOOL Is_trackable_var(AUX_ID);
   BOOL Is_trackable_expr(WN *);
   void Track_val(BB_NODE *, BB_NODE *, WN *);
-  void Track_val(SC_NODE *, BB_NODE *, WN *);
+  void Track_val(SC_NODE *, BB_NODE *, WN *, BOOL);
   AUX_ID Get_val(AUX_ID);
   void Set_val(AUX_ID, AUX_ID);
   void Remove_val(WN *, WN *);
@@ -404,6 +438,44 @@ protected:
   void Set_cu(COMP_UNIT * i) { _cu = i; }
   COMP_UNIT * Get_cu();
   WN * Get_const_wn(long long);
+  WN * Get_cond(SC_NODE *, BOOL);
+  WN * Merge_cond(WN *, WN *, OPERATOR);
+  BOOL Can_reorder_cond(WN *, WN *);
+  BOOL Do_if_cond_tree_height_reduction(SC_NODE *, SC_NODE *);
+  BOOL Do_if_cond_dist(SC_NODE *);
+  void Do_canon(SC_NODE *, SC_NODE *, int);
+  void Remove_block(SC_NODE *);
+  void Remove_loop(SC_NODE *);
+  void Remove_block(BB_NODE *);
+  void Remove_peel(SC_NODE * sc1, SC_NODE * sc2);
+  void Do_split_if_head(SC_NODE *);
+  SC_NODE * Find_fusion_buddy(SC_NODE *, STACK<SC_NODE *> *);
+  SC_NODE * Do_pre_dist(SC_NODE *, SC_NODE *);
+  BOOL Get_unique_ref(SC_NODE *, SC_NODE *, WN **);
+  BOOL Get_unique_ref(BB_NODE *, SC_NODE *, WN **, SC_NODE *);
+  BOOL Get_unique_ref(WN *, SC_NODE *, WN **, SC_NODE *);
+  BOOL Check_index(SC_NODE *);
+  BOOL Check_iteration(SC_NODE *, SC_TYPE, SC_NODE *);
+  BOOL Can_fuse(SC_NODE *);
+  SC_NODE * Do_loop_fusion(SC_NODE *, int);
+  WN * Get_index_load(SC_NODE *);
+  WN * Get_index_load(WN *, ST *);
+  WN * Get_upper_bound(SC_NODE *, WN*);
+  WN * Get_upper_bound(SC_NODE *);
+  void Hash_def_cnt_map(BB_NODE *);  
+  BOOL Compare_trees(WN *, SC_NODE *, WN *, SC_NODE *);
+  SC_NODE * Do_if_cond_wrap(BB_NODE *, SC_NODE *, BOOL);
+  void Do_if_cond_unwrap(SC_NODE *);
+  BOOL Hoist_succ_blocks(SC_NODE *);
+  SC_NODE * Merge_block(SC_NODE *, SC_NODE *);
+  BOOL Have_same_trip_count(SC_NODE *, SC_NODE *);
+  BOOL Get_ext_trans() { return _ext_trans; }
+  void Replace_wn(SC_NODE *, WN *, WN *);
+  void Replace_wn(BB_NODE *, WN *, WN *);
+  BOOL Replace_wn(WN *, WN *, WN *);
+  WN * Simplify_wn(WN *);
+  BOOL Do_flip_tail_merge(SC_NODE *, WN *);
+  void Do_flip(SC_NODE *);
 
 public:
   void Set_trace(BOOL i) { _trace = i; }
@@ -413,6 +485,9 @@ public:
   void Do_code_motion(SC_NODE *, SC_NODE *);
   void Do_head_duplication(SC_NODE *, SC_NODE *);
   void Do_tail_duplication(SC_NODE *, SC_NODE *);
+  void Hash_def_cnt_map(SC_NODE *);
+  void Init();
+  void Set_ext_trans(BOOL in) { _ext_trans = in; }
 };
 
 // bit mask for if-merging actions.
@@ -427,7 +502,8 @@ typedef enum IF_MERGE_ACTION {
 typedef enum IF_MERGE_PASS {
   PASS_NONE = 0x0,
   PASS_GLOBAL = 0x1,
-  PASS_LOCAL = 0x2
+  PASS_FUSION = 0x2,
+  PASS_EXT = 0x4
 };
 
 // If-merging transformation.
@@ -443,20 +519,26 @@ private:
   void Merge_CFG(SC_NODE *, SC_NODE *);
   void Merge_SC(SC_NODE *, SC_NODE *);
   BOOL Is_if_collapse_cand(SC_NODE * sc1, SC_NODE * sc2);
+  void Remove_redundant_bitops(SC_NODE *);
 
 protected:
   void Set_region_id(int i) { _region_id = i; }
-  SC_NODE * Do_merge(SC_NODE *, SC_NODE *);
+  SC_NODE * Do_merge(SC_NODE *, SC_NODE *, BOOL);
   BOOL      Is_candidate(SC_NODE *, SC_NODE *, BOOL);
   void Clear(void);
+  BOOL Do_reverse_loop_unswitching(SC_NODE *, SC_NODE *, SC_NODE *);
+  void Bottom_up_prune(SC_NODE *);
 
 public:
   void Top_down_trans(SC_NODE * sc);
+  void Normalize(SC_NODE *sc);
   IF_MERGE_TRANS(void) { Clear(); }
   IF_MERGE_TRANS(COMP_UNIT * i) { Clear(); Set_cu(i); }
   IF_MERGE_TRANS(const IF_MERGE_TRANS&);
   ~IF_MERGE_TRANS(void) {};
   void Set_pass(IF_MERGE_PASS i) { _pass = i; }
+  IF_MERGE_PASS Get_pass() { return _pass; }
+
 };
 
 // Proactive loop fusion transformation.
@@ -481,17 +563,20 @@ private:
 
 protected:
   void Clear();
+  void Init();
+  void Delete();
+  void Top_down_trans(SC_NODE *);
+  void Classify_loops(SC_NODE *);
 
 public:
   PRO_LOOP_FUSION_TRANS(void) { Clear(); }
   PRO_LOOP_FUSION_TRANS(COMP_UNIT * i) { Clear(); Set_cu(i); }
-  void Top_down_trans(SC_NODE *);
-  void Classify_loops(SC_NODE *);
+  void Doit(SC_NODE *);
 };
 
 // bit mask for proactive loop interchange actions.
-typedef enum PRO_LOOP_INTERCHANGE_ACTION {
-    DO_INTERCHANGE_NONE = 0x0,
+typedef enum IF_COND_ACTION {
+    DO_IF_COND_NONE = 0x0,
     DO_TREE_HEIGHT_RED = 0x1,  // do if-condition tree height reduction
     DO_IF_COND_DIS = 0x2,  // do if-condition distribution
     DO_REV_LOOP_UNS = 0x4,  // do reverse loop-unswitching
@@ -508,86 +593,99 @@ typedef enum CANON_ACTION {
 // Proactive loop interchange transformation.
 class PRO_LOOP_INTERCHANGE_TRANS : virtual public IF_MERGE_TRANS {
 private:
-    MAP * _def_cnt_map; // hash aux id to def count
+
     STACK<SC_NODE *> * _outer_stack; // a stack of outer SC_LOOPs. 
     STACK<SC_NODE *> * _inner_stack; // a stack of inner SC_LOOPs. 
     STACK<SC_NODE *> * _local_stack; // scratch field.
     STACK<SC_NODE *> * _restart_stack; // a stack of SC_NODEs where restarting occurs.
-    STACK<SC_NODE *> * _tmp_stack; // scratch field.
     int _action;
-    MAP * _def_map; //  Map symbol auxiliary Id to definition WN *.
-    STACK<SC_NODE *> * _unlink_sc; // A stack of unlinked SC_NODE *.
 
 private:
     int Nonrecursive_trans(SC_NODE *, SC_NODE *);
     BOOL Is_candidate(SC_NODE *, SC_NODE *);
-    WN * Get_cond(SC_NODE *, BOOL);
-    WN * Merge_cond(WN *, WN *, OPERATOR);
-    BOOL Do_if_cond_tree_height_reduction(SC_NODE *, SC_NODE *);
     BOOL Do_loop_unswitching(SC_NODE *, SC_NODE *);
-    BOOL Do_reverse_loop_unswitching(SC_NODE *, SC_NODE *, SC_NODE *);
     SC_NODE * Do_loop_dist(SC_NODE *, BOOL);
-    BOOL Do_if_cond_dist(SC_NODE *);
-    BOOL Can_reorder_cond(WN *, WN *);
     void Do_hoist(SC_NODE * sc1, SC_NODE * sc2);
-    void Do_if_cond_wrap(BB_NODE *, SC_NODE *, BOOL);
     BOOL Check_sibling(SC_NODE *, SC_NODE *);
-    void Do_canon(SC_NODE *, SC_NODE *, int);
-    void Remove_block(SC_NODE *);
-    void Remove_block(BB_NODE *);
     void Invalidate_invar(SC_NODE *);
     void Invalidate_invar(BB_NODE *);
-    SC_NODE * Split(SC_NODE *, SC_NODE *);
-    SC_NODE * Do_pre_dist(SC_NODE *, SC_NODE *);
-    SC_NODE * Do_partition(SC_NODE *);
-    SC_NODE * Do_loop_fusion(SC_NODE *);
     void Do_lock_step_fusion(SC_NODE *, SC_NODE *);
     BOOL Do_loop_interchange(SC_NODE *, SC_NODE *);
     void Swap_stmt(BB_NODE *, BB_NODE *);
-    void Add_def_map(AUX_ID, WN *);
-    void Copy_prop(SC_NODE * sc);
-    void Copy_prop(BB_NODE * bb);
-    void Copy_prop(WN *);
-    BOOL Get_unique_ref(SC_NODE *, SC_NODE *, WN **);
-    BOOL Get_unique_ref(BB_NODE *, SC_NODE *, WN **);
-    BOOL Get_unique_ref(WN *, SC_NODE *, WN **);
-    BOOL Compare_trees(WN *, SC_NODE *, WN *, SC_NODE *);
-    BOOL Hoist_succ_blocks(SC_NODE *);
-    WN * Get_index_load(SC_NODE *);
-    WN * Get_index_load(WN *, ST *);
     BOOL Is_perfect_loop_nest(SC_NODE *);
-    BOOL Check_iteration(SC_NODE *, SC_TYPE, SC_NODE *);
-    BOOL Check_index(SC_NODE *);
-    SC_NODE * Find_fusion_buddy(SC_NODE *, STACK<SC_NODE *> *);
-    void Do_split_if_head(SC_NODE *);
     SC_NODE * Find_dist_cand(SC_NODE *);
     BOOL Can_interchange(SC_NODE *, SC_NODE *);
-    BOOL Can_fuse(SC_NODE *);
-    unsigned long Get_def_cnt(AUX_ID i) 
-        { return (unsigned long) _def_cnt_map->Get_val((POINTER) i); }
 
 protected:
     void Clear();
+    BOOL Top_down_trans(SC_NODE *);
+    void Init();
     void Delete();
 
 public:
     PRO_LOOP_INTERCHANGE_TRANS(void) { Clear(); }
     PRO_LOOP_INTERCHANGE_TRANS(COMP_UNIT * i) { Clear(); Set_cu(i); }
-    BOOL Top_down_trans(SC_NODE *, BOOL);
-    void Hash_def_cnt_map(SC_NODE *);
-    void Hash_def_cnt_map(BB_NODE *);
+    void Doit(SC_NODE *);
+};
+
+#define IF_CMP_HASH_SIZE 50
+#define MAX_IF_CMP_LEVEL  4  // maximum level of if-compare tree.
+#define MAX_IF_CMP_BITS   8  // maximum number of bits to represent the value of a if-compare expr.
+#define MAX_VAL_NUM ((1 << MAX_IF_CMP_BITS) - 1)
+#define IF_CMP_ACTION_MASK (( 1 << MAX_IF_CMP_LEVEL) - 1)
+typedef UINT32 IF_CMP_VAL;   // The type to represent the value of nested if-conditions.
+
+// Extended proactive loop transformation.
+class PRO_LOOP_EXT_TRANS : virtual public IF_MERGE_TRANS {
+private:
+    IF_CMP_VAL _next_valnum;
+    STACK<IF_CMP_VAL> *  _if_cmp_vals[MAX_IF_CMP_LEVEL]; // A stack of if-compare values at each level
+    MAP * _val_to_sc_map; // Map a IF_CMP_VAL to a SC_NODE *
+    MAP * _wn_to_val_num_map; // Map a WN * to a value number
+    STACK<WN *> * _key_to_wn_hash[IF_CMP_HASH_SIZE]; // Hash a key to a STACK<WN *> *
+    MAP * _wn_to_wn_map; // Map a WN * to a WN *.
+    STACK<WN *> * _wn_list; // a stack of wns.
+private:
+    void Get_val(WN *, IF_CMP_VAL *);
+    UINT32 Get_key(WN *);
+    void Hash_if_conds(SC_NODE *);
+    void Init_hash();
+    void Remove_adjacent_loops(SC_NODE *);
+    BOOL Has_adjacent_if(SC_NODE *);
+    std::pair<bool, int> Has_same_nesting_level(SC_NODE *);
+    int Get_level_from_val(IF_CMP_VAL val);
+    void Do_lock_step_normalize(SC_NODE *, SC_NODE *, UINT64);
+    void Do_normalize(SC_NODE *, UINT64);
+    void Decode_action(UINT64, int *, int *);
+    WN * Get_inverted_cond(SC_NODE *);
+    UINT64 Encode_tree_height_reduction(SC_NODE *);
+    BOOL Is_candidate(SC_NODE *, SC_NODE *);
+    SC_NODE * Find_cand(SC_NODE *, SC_NODE **, SC_NODE **);
+    void Shift_peel_and_remove(SC_NODE *, SC_NODE *);
+
+protected:
+    void Clear();
+    SC_NODE * Normalize(SC_NODE * );
+    void Init();
+    void Delete();
+    void Top_down_trans(SC_NODE *);
+
+public:
+    PRO_LOOP_EXT_TRANS(void) { Clear(); }
 };
 
 // Proactive loop transformations.
 class PRO_LOOP_TRANS :  public PRO_LOOP_FUSION_TRANS, 
-                        public PRO_LOOP_INTERCHANGE_TRANS {
+                        public PRO_LOOP_INTERCHANGE_TRANS,
+                        public PRO_LOOP_EXT_TRANS 
+{
 private:
     void Clear();
-
 public:
     PRO_LOOP_TRANS(void) { Clear(); }
     PRO_LOOP_TRANS(COMP_UNIT * i) { Clear(); Set_cu(i); }
     void Delete();
+    void Do_ext_trans(SC_NODE *);
 };
 
 #endif /*opt_proactive_INCLUDED*/

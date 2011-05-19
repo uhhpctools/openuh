@@ -2032,3 +2032,37 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
   return FALSE;
 }
+
+// Walk the WHIRL tree rooted at 'wn', collect nodes having addition effects in 'l_stk'
+// and nodes having substration effects in 'r_stk'.
+void
+Collect_operands(WN * wn, STACK<WN *> * l_stk, STACK<WN *> * r_stk) 
+{
+  OPERATOR p_opr = WN_operator(wn);
+  if (((p_opr == OPR_ADD) || (p_opr == OPR_SUB))
+      && (WN_rtype(wn) == MTYPE_I4)) {
+    for (int i = 0; i <= 1; i++) {
+      WN * operand = WN_kid(wn, i);
+      OPERATOR c_opr = WN_operator(operand);
+
+      switch (c_opr) {
+      case OPR_ADD:
+      case OPR_SUB:
+	if ((p_opr == OPR_ADD) || (i == 0))
+	  Collect_operands(operand, l_stk, r_stk);
+	else 
+	  Collect_operands(operand, r_stk, l_stk);
+	break;
+      default:
+	if ((p_opr == OPR_ADD) || (i == 0)) {
+	  if (l_stk)
+	    l_stk->Push(operand);
+	}
+	else {
+	  if (r_stk) 
+	    r_stk->Push(operand);
+	}
+      }
+    }
+  }
+}

@@ -861,8 +861,8 @@ Query_Conflicts_Improved(TN_MAP orig_map,
     INT num_conflicts;
     if (TN_register_class(tn) != rclass) continue;
     if (LR_use_cnt(lr) == 0) continue;
-    INT orig_conflicts = (INT)TN_MAP_Get(orig_map, tn);
-    INT new_conflicts = (INT)TN_MAP_Get(new_map, tn);
+    INT orig_conflicts = (INTPTR)TN_MAP_Get(orig_map, tn);
+    INT new_conflicts = (INTPTR)TN_MAP_Get(new_map, tn);
     if ((orig_conflicts < num_pr) && (new_conflicts < num_pr)) continue;
     // Do not count the cases where we do not change.
     if (orig_conflicts > new_conflicts)

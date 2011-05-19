@@ -7192,6 +7192,16 @@ WGEN_Expand_Expr (gs_t exp,
 	 wn1 = WN_CreateCvtl(OPR_CVTL, Widen_Mtype(mtyp1), MTYPE_V,
 			     MTYPE_size_min(mtyp1), wn1);
 
+       if (MTYPE_is_integral(mtyp) && MTYPE_is_integral(mtyp0) &&
+           MTYPE_size_min(mtyp) > MTYPE_size_min(mtyp0) )
+         wn0 = WN_CreateCvtl(OPR_CVTL, Widen_Mtype(mtyp0), MTYPE_V,
+                             MTYPE_size_min(mtyp0), wn0);
+
+       if (MTYPE_is_integral(mtyp) && MTYPE_is_integral(mtyp1) &&
+           MTYPE_size_min(mtyp) > MTYPE_size_min(mtyp1) )
+         wn1 = WN_CreateCvtl(OPR_CVTL, Widen_Mtype(mtyp1), MTYPE_V,
+                             MTYPE_size_min(mtyp1), wn1);
+
 #ifdef TARG_IA64
        wn  = WN_Relational (Operator_From_Tree [code].opr,
 		            Widen_Mtype(mtyp0), wn0, wn1);

@@ -289,6 +289,11 @@ public:
 *** 
 ***     	Set 'val' as the top of the stack (no push and pop involved)
 ***     	if the stack has allocated space (size >= 1).
+***
+***     void    Settop_nth(const T& val, INT32 n)
+***
+***             Set 'val' as the top nth of ths stack (no push and pop involved)
+***             if the stack has allocated space (size >= 1).
 *** 
 ***     T       Pop(void)
 *** 
@@ -317,6 +322,12 @@ public:
 ***     mINT32   Elements() const
 ***
 ***		How many elements are on the stack.
+***
+***     BOOL    Contains(const T& val) const
+***             Whether the stack contains 'val'.
+***
+***     INT32   Get_index(const T& val) const
+***             If the stack contains 'va', get top nth index.  Otherwise return -1.
 *** 
 **/
 
@@ -333,6 +344,7 @@ public:
 	  ~STACK(void)		                {}
   void    Push(const T& val)                    { _stack[_stack.Newidx()]=val;}
   void    Settop(const T& val);
+  void    Settop_nth(const T& val, INT32 n);
   INT32   Topidx(void)                          { return _stack.Lastidx(); }
   T       Pop(void) {
     T t;
@@ -347,6 +359,8 @@ public:
   T&      Bottom_nth(const INT32 n) const;
   T&      Top(void) const;
   BOOL    Is_Empty(void) const;
+  BOOL    Contains(const T&) const;
+  INT32   Get_index(const T& val) const;
   void    Clear(void)                           { _stack.Resetidx(); }
   void    Free()                                { _stack.Free_array(); }
   void    Alloc(const INT32 n)                  { _stack.Alloc_array(n); }
@@ -521,6 +535,14 @@ void STACK<T>::Settop(const T& val)
 }
 
 template <class T>
+void STACK<T>::Settop_nth(const T& val, INT32 n)
+{
+  INT32 idx = _stack.Lastidx();
+  Is_True(idx >= n, ("STACK::Top_nth(): Access beyond stack bottom"));
+  _stack[idx-n] = val;
+}
+
+template <class T>
 T& STACK<T>::Top_nth(const INT32 n) const
 {
   INT32 idx = _stack.Lastidx();
@@ -555,6 +577,28 @@ BOOL STACK<T>::Is_Empty(void) const
   return _stack.Lastidx() < 0;
 }
 
+template <class T>
+BOOL STACK<T>::Contains(const T& val) const
+{
+ INT32 last_idx = _stack.Lastidx();
+ for (INT32 idx = 0; idx <= last_idx; idx++) {
+     if (_stack[idx] == val) {
+         return TRUE;
+     }
+ }
+ return FALSE;
+}
+
+template <class T>
+INT32 STACK<T>::Get_index(const T& val) const
+{
+ INT32 last_idx = _stack.Lastidx();
+ for (INT32 idx = 0; idx <= last_idx; idx++) {
+     if (_stack[idx] == val) 
+         return (last_idx - idx);
+ }
+ return -1;
+}
 
 template <class CONTAINER, class PREDICATE>
 void Remove_if(CONTAINER& container, PREDICATE predicate)

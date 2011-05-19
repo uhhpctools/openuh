@@ -832,24 +832,6 @@ HoistIf (WN* innerloop)
  
   Upper_Bound_Standardize(WN_end(innerloop), TRUE);
 
-  // if the loop index var is live at exit and cannot be finalized,
-  // we will not do hoist if optimization.
-  if (Index_Variable_Live_At_Exit(innerloop)) {
-  
-    if (Upper_Bound_Standardize(WN_end(innerloop),TRUE)==FALSE) {
-      if (debug_hoistif) {
-	printf("(%s:%d) ", 
-	       Src_File_Name, 
-	       Srcpos_To_Line(WN_Get_Linenum(innerloop)));
-	printf("Loop upper bound can not be std. ");
-	printf("Loop is not hoist if optimized.\n");
-      }
-      return 0;
-    }
-    Finalize_Index_Variable(innerloop,FALSE);
-    scalar_rename(WN_start(innerloop));
-  }  
-  
   WN* stmt;
   UINT stmt_count=0;
   WN* body=WN_do_body(innerloop);
@@ -875,6 +857,24 @@ HoistIf (WN* innerloop)
       return 0;
     }
   }
+
+  // if the loop index var is live at exit and cannot be finalized,
+  // we will not do hoist if optimization.
+  if (Index_Variable_Live_At_Exit(innerloop)) {
+  
+    if (Upper_Bound_Standardize(WN_end(innerloop),TRUE)==FALSE) {
+      if (debug_hoistif) {
+	printf("(%s:%d) ", 
+	       Src_File_Name, 
+	       Srcpos_To_Line(WN_Get_Linenum(innerloop)));
+	printf("Loop upper bound can not be std. ");
+	printf("Loop is not hoist if optimized.\n");
+      }
+      return 0;
+    }
+    Finalize_Index_Variable(innerloop,FALSE);
+    scalar_rename(WN_start(innerloop));
+  }  
 
   // At this point, all loop statements are Hoist If optimizable.
   // Assume loop index variable is 'i', loop bounds [lb, ub].

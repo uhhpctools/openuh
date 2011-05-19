@@ -6421,39 +6421,130 @@ CFG::Split(SC_NODE * sc)
 SC_NODE *
 CFG::Insert_block_after(SC_NODE * sc)
 {
-  FmtAssert((sc->Type() == SC_BLOCK), ("Expect a SC_BLOCK"));
+  SC_TYPE type = sc->Type();
+  FmtAssert((type == SC_IF) || (type == SC_BLOCK), ("Expect a SC_BLOCK"));
   BB_NODE * bb_new = Create_and_allocate_bb(BB_GOTO);
   SC_NODE * sc_new = Create_sc(SC_BLOCK);
   sc_new->Append_bbs(bb_new);
 
-  BB_NODE * bb_last = sc->Last_bb();
-  BB_NODE * bb_next = bb_last->Succ()->Node();
-  
-  bb_last->Replace_succ(bb_next, bb_new);
-  bb_next->Replace_pred(bb_last, bb_new);
-  
   MEM_POOL * pool = Mem_pool();
-  BB_LIST * bb_list = CXX_NEW(BB_LIST(bb_next), pool);
-  bb_new->Set_succ(bb_list);
-  bb_list = CXX_NEW(BB_LIST(bb_last), pool);
-  bb_new->Set_pred(bb_list);
 
-  BB_NODE * bb_tmp = bb_last->Next();
-  bb_last->Set_next(bb_new);
-  bb_new->Set_prev(bb_last);
-  bb_new->Set_next(bb_tmp);
-  bb_tmp->Set_prev(bb_new);
+  if (type == SC_BLOCK) {
+    BB_NODE * bb_last = sc->Last_bb();
+    BB_NODE * bb_next = bb_last->Succ()->Node();
+    bb_last->Replace_succ(bb_next, bb_new);
+    bb_next->Replace_pred(bb_last, bb_new);
 
-  if (Feedback()) {
-    Feedback()->Add_node(bb_new->Id());
-    Feedback()->Move_edge_dest(bb_last->Id(), bb_next->Id(), bb_new->Id());
-    FB_FREQ freq = Feedback()->Get_edge_freq(bb_last->Id(), bb_new->Id());
-    Feedback()->Add_edge(bb_new->Id(), bb_next->Id(), FB_EDGE_OUTGOING, freq);
+    BB_LIST * bb_list = CXX_NEW(BB_LIST(bb_next), pool);
+    bb_new->Set_succ(bb_list);
+    bb_list = CXX_NEW(BB_LIST(bb_last), pool);
+    bb_new->Set_pred(bb_list);
+
+    BB_NODE * bb_tmp = bb_last->Next();
+    bb_last->Set_next(bb_new);
+    bb_new->Set_prev(bb_last);
+    bb_new->Set_next(bb_tmp);
+    bb_tmp->Set_prev(bb_new);
+
+    if (Feedback()) {
+      Feedback()->Add_node(bb_new->Id());
+      Feedback()->Move_edge_dest(bb_last->Id(), bb_next->Id(), bb_new->Id());
+      FB_FREQ freq = Feedback()->Get_edge_freq(bb_last->Id(), bb_new->Id());
+      Feedback()->Add_edge(bb_new->Id(), bb_next->Id(), FB_EDGE_OUTGOING, freq);
+    }
+  }
+  else if (type == SC_IF) {
+    BB_NODE * bb_merge = sc->Merge();
+    BB_NODE * bb_tmp;
+    BB_LIST_ITER bb_list_iter;
+    FB_FREQ freq = 0;
+
+    if (Feedback())
+      Feedback()->Add_node(bb_new->Id());
+
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_merge->Pred())) {
+      bb_tmp->Replace_succ(bb_merge, bb_new);
+      if (Feedback()) {
+	Feedback()->Move_edge_dest(bb_tmp->Id(), bb_merge->Id(), bb_new->Id());
+	freq += Feedback()->Get_edge_freq(bb_tmp->Id(), bb_new->Id());
+      }
+
+      if (bb_tmp->Is_branch_to(bb_merge)) {
+	WN * branch_wn = bb_tmp->Branch_wn();
+	Add_label_with_wn(bb_new);
+	WN_label_number(branch_wn) = bb_new->Labnam();
+      }
+    }
+
+    if (Feedback())
+      Feedback()->Add_edge(bb_new->Id(), bb_merge->Id(), FB_EDGE_OUTGOING, freq);
+
+    bb_new->Set_pred(bb_merge->Pred());
+    bb_new->Append_succ(bb_merge, _mem_pool);
+    bb_merge->Set_pred(NULL);
+    bb_merge->Append_pred(bb_new, _mem_pool);
+    
+    bb_tmp = bb_merge->Prev();
+    bb_new->Set_prev(bb_tmp);
+    bb_tmp->Set_next(bb_new);
+    bb_new->Set_next(bb_merge);
+    bb_merge->Set_prev(bb_new);
   }
 
   sc->Insert_after(sc_new);
+  Fix_info(sc);
   Fix_info(sc->Parent());
+  Invalidate_and_update_aux_info(FALSE);
+  Invalidate_loops();
+  return sc_new;
+}
 
+// Insert an empty SC_BLOCK before 'sc'.  Return the inserted SC_BLOCK.
+SC_NODE *
+CFG::Insert_block_before(SC_NODE * sc)
+{
+  FmtAssert((sc->Type() == SC_IF) || (sc->Type() == SC_BLOCK), ("Expect a SC_IF or a SC_BLOCK"));
+  SC_NODE  * sc_prev = sc->Prev_sibling();
+  BB_NODE * bb_new = Create_and_allocate_bb(BB_GOTO);
+  SC_NODE * sc_new = Create_sc(SC_BLOCK);
+  sc_new->Append_bbs(bb_new);
+
+  BB_NODE * bb_head = sc->Get_bb_rep();
+  BB_NODE * bb_prev = bb_head->Prev();
+  BB_LIST_ITER bb_list_iter;
+  BB_NODE * bb_tmp;
+  FB_FREQ freq = 0;
+
+  if (Feedback()) 
+    Feedback()->Add_node(bb_new->Id());
+  
+  FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(bb_head->Pred())) {
+    bb_tmp->Replace_succ(bb_head, bb_new);
+    if (Feedback()) {
+      Feedback()->Move_edge_dest(bb_tmp->Id(), bb_head->Id(), bb_new->Id());
+      freq += Feedback()->Get_edge_freq(bb_tmp->Id(), bb_new->Id());
+    }
+  }
+  
+  if (Feedback())
+    Feedback()->Add_edge(bb_new->Id(), bb_head->Id(), FB_EDGE_OUTGOING, freq);
+
+  bb_new->Set_pred(bb_head->Pred());
+  bb_new->Append_succ(bb_head, _mem_pool);
+  bb_head->Set_pred(NULL);
+  bb_head->Append_pred(bb_new, _mem_pool);
+  
+  bb_new->Set_next(bb_head);
+  bb_head->Set_prev(bb_new);
+  bb_new->Set_prev(bb_prev);
+  bb_prev->Set_next(bb_new);
+
+  sc->Insert_before(sc_new);
+
+  Fix_info(sc_prev);
+  Fix_info(sc->Parent());
+  Invalidate_and_update_aux_info(FALSE);
+  Invalidate_loops();
   return sc_new;
 }
 
@@ -6837,16 +6928,26 @@ CFG::Clone_loop(BB_LOOP * bb_loop)
 }
 
 // Clone given sc, BB_NODEs are cloned only at root level for SESEs.
-
+// if 'sc' is a SC_IF at root level, we also clone its merge block and
+// return cloned merge node via 'p_next'.
 SC_NODE *
-CFG::Clone_sc(SC_NODE * sc, BOOL is_root, float scale)
+CFG::Clone_sc(SC_NODE * sc, BOOL is_root, float scale, SC_NODE ** p_merge)
 {
   SC_NODE * sc_new = NULL;
+  SC_TYPE type = sc->Type();
 
   if (is_root) {
     FmtAssert(sc->Is_sese(), ("Expect a single entry single exit node"));
     BB_NODE * bb_first = sc->First_bb();
-    BB_NODE * bb_last = sc->Last_bb();
+    BB_NODE * bb_last;
+
+    if (type == SC_IF) {
+      SC_NODE * sc_next = sc->Next_sibling();
+      FmtAssert(sc_next->Is_empty_block(), ("Expect an empty merge"));
+      bb_last = sc->Merge();
+    }
+    else
+      bb_last = sc->Last_bb();
     BB_NODE * bb_new_first = NULL;
     BB_NODE * bb_new_last = NULL;
     Clone_bbs(bb_first, bb_last, &bb_new_first, &bb_new_last, TRUE, scale);
@@ -6875,9 +6976,20 @@ CFG::Clone_sc(SC_NODE * sc, BOOL is_root, float scale)
   SC_NODE * new_kid;
 
   FOR_ALL_ELEM(tmp, sc_list_iter, Init()) {
-    new_kid = Clone_sc(tmp, FALSE, scale);
+    new_kid = Clone_sc(tmp, FALSE, scale, NULL);
     sc_new->Append_kid(new_kid);
     new_kid->Set_parent(sc_new);
+  }
+
+  if (is_root
+      && (type == SC_IF)) {
+    SC_NODE * new_merge = Create_sc(SC_BLOCK);
+    bb = sc->Merge();
+    bb_new = Get_cloned_bb(bb);
+    FmtAssert(bb_new, ("BB_NODE not cloned yet"));
+    new_merge->Append_bbs(bb_new);
+    FmtAssert(p_merge, ("Expect a return pointer."));
+    *p_merge = new_merge;
   }
 
   return sc_new;

@@ -262,11 +262,12 @@ void FIZ_FUSE_INFO::Check() {
   }
 }
 
-void FIZ_FUSE_INFO::Build(WN* root, BOOL all_loops) {
+void FIZ_FUSE_INFO::Build(WN* root, BOOL all_loops)
+{
 
   WN2INT *loop_table=CXX_NEW(WN2INT(1024,_mpool),_mpool);
   UINT snl_id=_snl_info.Newidx();
-  _snl_info[snl_id]._type=Invalid;
+  _snl_info[snl_id].Init();
 
   WN_ITER* wn_walker=WN_WALK_SCFIter(root);
   while (WN_WALK_SCFNext(wn_walker)) {

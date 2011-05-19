@@ -918,14 +918,14 @@ write_into_string_buf(const char *from,
     * the "into" buffer and the "into_size" to refer to the
     * remaining part of the buffer.
     */
-   if (from_size >= *into_size)
+   if (into_size && (from_size >= *into_size))
    {
       fprintf(stderr, 
 	      "ERROR: -flist/-clist string-buffer overflow in"
 	      "write_into_string_buf() !");
       from_size = *into_size - 1;
    }
-   if (from_size > 0)
+   if ((from_size > 0) && into)
    {
       strncpy(*into, from, from_size);
       *into = *into + from_size;
@@ -982,7 +982,7 @@ flush_write_buffer(FILE *ofile, char **buffer, UINT *buflen)
 	 write_buffer[write_buffer_next] = '\0';
 	 if (ofile != NULL)
 	    fputs(&write_buffer[0], ofile);
-	 else
+	 else 
 	    write_into_string_buf(
 	       &write_buffer[0], write_buffer_next, buffer, buflen);
 	 if (last_split_pt == write_buffer_next)

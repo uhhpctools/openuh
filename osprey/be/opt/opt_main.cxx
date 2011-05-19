@@ -539,6 +539,7 @@ private:
   BOOL  _useless_store_elimination; // eliminate useless store in a loop
   BOOL _pro_loop_fusion_trans; 
   BOOL _pro_loop_interchange_trans;
+  BOOL _pro_loop_ext_trans;
   BOOL _mem_clear_remove;
   BOOL _bool_simp;
   BOOL _fold_lda_iload_istore;
@@ -710,7 +711,8 @@ private:
       } 
 
       if (WOPT_Enable_Pro_Loop_Fusion_Trans
-	  || WOPT_Enable_Pro_Loop_Interchange_Trans) {
+	  || WOPT_Enable_Pro_Loop_Interchange_Trans
+	  || WOPT_Enable_Pro_Loop_Ext_Trans) {
 	WOPT_Enable_Noreturn_Attr_Opt = FALSE;
       }
       
@@ -750,6 +752,7 @@ private:
     {
       WOPT_Enable_Pro_Loop_Fusion_Trans = FALSE;
       WOPT_Enable_Pro_Loop_Interchange_Trans = FALSE;
+      WOPT_Enable_Pro_Loop_Ext_Trans = FALSE;
     }
   }
 
@@ -846,6 +849,7 @@ private:
 
     WOPT_Enable_Pro_Loop_Fusion_Trans = _pro_loop_fusion_trans;
     WOPT_Enable_Pro_Loop_Interchange_Trans = _pro_loop_interchange_trans;
+    WOPT_Enable_Pro_Loop_Ext_Trans = _pro_loop_ext_trans;
     WOPT_Enable_Mem_Clear_Remove = _mem_clear_remove;
     WOPT_Enable_Noreturn_Attr_Opt = _no_return;
     WOPT_Enable_Nothrow_Opt = _nothrow;
@@ -948,6 +952,7 @@ public:
     _useless_store_elimination = WOPT_Enable_Useless_Store_Elimination;
     _pro_loop_fusion_trans = WOPT_Enable_Pro_Loop_Fusion_Trans;
     _pro_loop_interchange_trans = WOPT_Enable_Pro_Loop_Interchange_Trans;
+    _pro_loop_ext_trans = WOPT_Enable_Pro_Loop_Ext_Trans;
     _mem_clear_remove = WOPT_Enable_Mem_Clear_Remove;
     _bool_simp = WOPT_Enable_Bool_Simp;
     _fold_lda_iload_istore = WOPT_Enable_Fold_Lda_Iload_Istore;

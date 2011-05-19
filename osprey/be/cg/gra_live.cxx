@@ -2451,7 +2451,9 @@ Rename_TNs_For_BB (BB *bb, GTN_SET *multiple_defined_set
       TN *tn = OP_result(op, i);
       // Don't rename under the following conditions.
       if (TN_is_dedicated(tn) || OP_cond_def(op) || 
+#ifdef TARG_X8664
           TN_is_norename(tn) || OP_res_norename(op) || 
+#endif
           OP_same_res(op)) continue;
 
       OP *last_def = (OP *) TN_MAP_Get (op_for_tn, tn);

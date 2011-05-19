@@ -2286,6 +2286,7 @@ main (INT argc, char **argv)
 	// Proactive loop nest transformation interferes with branch profiling.
 	WOPT_Enable_Pro_Loop_Fusion_Trans = FALSE;
 	WOPT_Enable_Pro_Loop_Interchange_Trans = FALSE;
+	WOPT_Enable_Pro_Loop_Ext_Trans = FALSE;
 	
 	Instrumentation_Phase_Num = PROFILE_PHASE_NONE;
       }

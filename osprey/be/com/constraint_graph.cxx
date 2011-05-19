@@ -586,6 +586,15 @@ StInfo::applyModulus(void)
 
       if (modNode->checkFlags(CG_NODE_FLAGS_COLLAPSED))
         modNode = ConstraintGraph::cgNode(modNode->collapsedParent());
+
+      // can't collapse parent into its kid, missing edges
+      // switch parent relation between cur and modNode
+      if (modNode->parent() == cur) {
+        modNode->clearFlags(CG_NODE_FLAGS_MERGED);
+        modNode->repParent(NULL);
+        modNode->merge(cur);
+        cur->repParent(modNode);
+      }
         
       // Now we collapse cur into modNode
       modNode->collapse(cur);
@@ -3222,6 +3231,8 @@ ConstraintGraphNode::collapse(ConstraintGraphNode *cur)
             ("Not expecting this node: %d to be collasped", id()));
   FmtAssert(!cur->checkFlags(CG_NODE_FLAGS_COLLAPSED), 
             ("Not expecting cur node: %d to be collasped", cur->id()));
+  FmtAssert(parent() != cur,
+            ("Not expecting cur node be parent of this "));
 
   // Merge cur with 'this' node
   ConstraintGraphNode *curParent = cur->parent();
@@ -4361,6 +4372,12 @@ ConstraintGraphNode::collapseTypeIncompatibleNodes()
         FmtAssert(ptdNode->stInfo()->firstOffset()->nextOffset() == NULL,
                   ("Only single offset expected"));
         ptdNode = ptdNode->stInfo()->firstOffset();
+        // can't collapse node's parent to its self.
+        if (ptdNode == repNode->parent()) {
+          ConstraintGraphNode *tmp = ptdNode;
+          ptdNode = repNode;
+          repNode = tmp;
+        }
         // SparseBitSetIterator caches ids when iterating. So of the 'effect'
         // of collapsing is not immediately visible, in which case we might
         // encounter collapsed nodes when iterating the pts

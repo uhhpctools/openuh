@@ -140,6 +140,7 @@
 #include "wn_lower.h"
 #include "config_opt.h"
 #endif
+#include "alias_analyzer.h"
 
 /*
 MP lowerer cleanup TODO by DRK:
@@ -2912,6 +2913,18 @@ is inheriting pu_recursive OK?
   Set_PU_Info_state(parallel_pu, WT_TREE, Subsect_InMem);
   Set_PU_Info_state(parallel_pu, WT_PROC_SYM, Subsect_InMem);
   Set_PU_Info_flags(parallel_pu, PU_IS_COMPILER_GENERATED);
+
+  // don't copy nystrom points to analysis, alias_tag map
+  // mp function's points to analysis will be analyzed locally.
+  AliasAnalyzer *aa = AliasAnalyzer::aliasAnalyzer();
+  if (aa) {
+    // Current_Map_Tab is update to PU_Info_maptab(parallel_pu) in PU_Info_maptab
+    Is_True(PU_Info_maptab(parallel_pu) == Current_Map_Tab,
+        ("parallel_pu's PU's maptab isn't parallel_pu\n"));
+    Current_Map_Tab = pmaptab;
+    WN_MAP_Set_dont_copy(aa->aliasTagMap(), TRUE);
+    Current_Map_Tab = PU_Info_maptab(parallel_pu);
+  }
 
     // use hack to save csymtab using parallel_pu, so we can restore it
     // later when we lower parallel_pu; this is necessary because the

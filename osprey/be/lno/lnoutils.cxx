@@ -2056,6 +2056,7 @@ static BOOL All_Uses_Within(WN* def, WN* region)
 
 BOOL Index_Variable_Live_At_Exit(WN* loop)
 {
+  FmtAssert(loop, ("Null loop passed to Index_Variable_Live_At_Exit"));
   return (!All_Uses_Within(WN_step(loop), loop) ||
           !All_Uses_Within(WN_start(loop), loop));
 }

@@ -736,6 +736,74 @@ BB_NODE::Remove_stmtrep( STMTREP *stmt )
   stmt->Reset_live_stmt();  // WHIRL SSA: mark stmt dead
 }
 
+void
+BB_NODE::Unlink_stmt(WN * wn)
+{
+  WN * wn_next = WN_next(wn);
+  WN * wn_prev = WN_prev(wn);
+  
+  if (wn_prev)
+    WN_next(wn_prev) = wn_next;
+
+  if (wn_next)
+    WN_prev(wn_next) = wn_prev;
+
+  WN_prev(wn) = NULL;
+  WN_next(wn) = NULL;
+
+  if (wn == Firststmt())
+    this->Set_firststmt(wn_next);
+
+  if (wn == Laststmt())
+    this->Set_laststmt(wn_prev);
+
+}
+
+// Remove statement 'wn' from this node.
+void
+BB_NODE::Remove_stmt(WN * wn)
+{
+  Unlink_stmt(wn);
+  WN_Delete(wn);
+}
+
+// Add 'wn' to the beginning of this node, but after non-executable statements.
+void
+BB_NODE::Prepend_stmt(WN * wn)
+{
+  WN * wn_iter = Firststmt();
+  WN * insert_after = NULL;
+
+  while (wn_iter && !WN_is_executable(wn_iter)) {
+    insert_after = wn_iter;
+    wn_iter = WN_next(wn_iter);
+  }
+
+  if (insert_after) {
+    WN * wn_next = WN_next(insert_after);
+    WN_prev(wn) = insert_after;
+    WN_next(insert_after) = wn;
+    WN_next(wn) = wn_next;
+    if (wn_next)
+      WN_prev(wn_next) = wn;
+    else 
+      this->Set_laststmt(wn);
+  }
+  else {
+    WN * wn_first = Firststmt();
+    WN * wn_last = Laststmt();
+    WN_next(wn) = NULL;
+    WN_prev(wn) = wn_last;
+    if (wn_last)
+      WN_next(wn_last) = wn;
+    else
+      this->Set_laststmt(wn);
+
+    if (!wn_first)
+      this->Set_firststmt(wn);      
+  }
+}
+
 //====================================================================
 // BB_NODE::Append_stmt_before_branch - Insert the stmtrep node as the last 
 // statement in the BB. It needs to be inserted before any jump statement.  

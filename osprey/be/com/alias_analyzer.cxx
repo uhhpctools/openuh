@@ -97,17 +97,6 @@ AliasAnalyzer::~AliasAnalyzer()
   
   MEM_POOL_Delete(&_memPool);
   IPA_WN_MAP_Delete(Current_Map_Tab, _aliasTagMap);
-  // delete the mp generate pu's map
-  PU_Info *child = PU_Info_child(Current_PU_Info);
-  while (child) {
-    if (PU_mp(PU_Info_pu(child))) {
-      FmtAssert(PU_Info_maptab(child)->_pool[_aliasTagMap] ==
-                PU_Info_maptab(Current_PU_Info)->_pool[_aliasTagMap] ,
-               ("the child mp pu pool is not equal to _memPool"));
-      IPA_WN_MAP_Delete(PU_Info_maptab(child), _aliasTagMap);
-    }
-    child = PU_Info_next(child);
-  }
 }
 
 ALIAS_RESULT

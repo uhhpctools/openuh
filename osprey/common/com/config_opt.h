@@ -225,6 +225,9 @@ extern INT32 OPT_Madd_Height;
 extern BOOL OPT_Enable_WHIRL_SSA;  // enable SSA on WHIRL
 extern BOOL OPT_Enable_BUILD_WHIRL_SSA; // enable build WSSA driect from WHIRL
 
+extern UINT32 AA_force_tag_alias_before_dim1;
+extern UINT32 AA_force_tag_alias_before_dim2;
+
 #endif
 #ifdef __cplusplus
 }

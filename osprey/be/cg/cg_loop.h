@@ -542,8 +542,11 @@ void CG_LOOP_Remove_Prolog_OPs(BB *head);
 void CG_LOOP_Remove_Epilog_OPs(BB *tail);
 BB* CG_LOOP_Gen_And_Prepend_To_Prolog(BB *loop_head, LOOP_DESCR* loop);
 BB* CG_LOOP_Append_BB_To_Prolog(BB *loop_prolog, BB *loop_head);
+
+#if defined(TARG_X8664)
 BB* CG_LOOP_Append_BB_To_Prolog_MV(BB *loop_prolog, BB *loop_head);
-BB* CG_LOOP_Append_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head);
+BB* CG_LOOP_Prepend_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head);
+#endif
 
 void CG_LOOP_Coalesce_Backedges(LOOP_DESCR *loop);
 

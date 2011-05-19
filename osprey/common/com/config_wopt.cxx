@@ -336,8 +336,11 @@ INT32 WOPT_Enable_Pro_Loop_Fusion_Func_Limit = -1; // Enable proactive loop fusi
                                                   // functions within the limit.
 INT32 WOPT_Enable_Pro_Loop_Interchange_Func_Limit = -1; // Enable proactive loop interchange for 
                                                         // functions within the limit.
+INT32 WOPT_Enable_Pro_Loop_Ext_Func_Limit = -1; // Enable proactive loop extended transformation for
+                                                // functions within the limit.
 BOOL  WOPT_Enable_Pro_Loop_Fusion_Trans = TRUE;  // Enables proactive loop fusion transformation
 BOOL  WOPT_Enable_Pro_Loop_Interchange_Trans = TRUE; // Enables proactive loop interchange transformation
+BOOL WOPT_Enable_Pro_Loop_Ext_Trans = TRUE; // Enables proactive loop extended transformation.
 BOOL  WOPT_Simplify_Bit_Op = TRUE; // Enable specialized bit operation optimizations.
 BOOL  WOPT_Enable_Reassociation_CSE = TRUE;  // Enables Reassociation based CSE
 
@@ -787,6 +790,8 @@ static OPTION_DESC Options_WOPT[] = {
     FALSE, 0, 1, &WOPT_Enable_Pro_Loop_Fusion_Trans, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "pro_loop_interchange_trans", "pro_loop_interchange_trans",
     FALSE, 0, 1, &WOPT_Enable_Pro_Loop_Interchange_Trans, NULL },
+  { OVK_BOOL,	OV_VISIBLE,	TRUE, "pro_loop_ext_trans", "pro_loop_ext_trans",
+    FALSE, 0, 1, &WOPT_Enable_Pro_Loop_Ext_Trans, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "simp_bit_op", "simp_bit_op",
     FALSE, 0, 1, &WOPT_Simplify_Bit_Op, NULL },
   { OVK_BOOL,	OV_VISIBLE,	TRUE, "reasso_cse", "reasso_cse",
@@ -801,6 +806,8 @@ static OPTION_DESC Options_WOPT[] = {
     INT32_MAX, 0, INT32_MAX,    &WOPT_Enable_Pro_Loop_Fusion_Func_Limit, NULL },
   { OVK_INT32,  OV_VISIBLE,    FALSE, "pro_loop_interchange_func_limit",              "",
     INT32_MAX, 0, INT32_MAX,    &WOPT_Enable_Pro_Loop_Interchange_Func_Limit, NULL },
+  { OVK_INT32,  OV_VISIBLE,    FALSE, "pro_loop_ext_func_limit",              "",
+    INT32_MAX, 0, INT32_MAX,    &WOPT_Enable_Pro_Loop_Ext_Func_Limit, NULL },
 
 #ifdef KEY
   { OVK_BOOL,	OV_VISIBLE,	TRUE, "mem_opnds", "mem_opnds",

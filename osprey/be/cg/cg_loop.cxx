@@ -4605,6 +4605,8 @@ CG_LOOP_Append_BB_To_Prolog(BB *loop_prolog, BB *loop_head)
   return new_bb;
 }
 
+#if defined(TARG_X8664)
+
 BB*
 CG_LOOP_Append_BB_To_Prolog_MV(BB *loop_prolog, BB *loop_head)
 /* -----------------------------------------------------------------------
@@ -4704,6 +4706,8 @@ CG_LOOP_Prepend_BB_To_Epilog_MV(BB *loop_epilog, BB *loop_head)
 
   return new_bb;
 }
+
+#endif
 
 
 /* =======================================================================

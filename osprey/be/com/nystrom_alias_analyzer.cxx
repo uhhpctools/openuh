@@ -28,6 +28,7 @@
 #include "be_ipa_util.h"
 #include "ipa_be_summary.h"
 #include "ipa_be_read.h"
+#include "config_opt.h"
 
 extern BOOL Write_ALIAS_CGNODE_Map;
 
@@ -140,6 +141,13 @@ NystromAliasAnalyzer::aliased(AliasTag tag1, AliasTag tag2)
     AliasTag tmp = tag2;
     tag2 = tag1;
     tag1 = tmp;
+  }
+
+  // triage, check if this pair of alias tag is force aliased.
+  if(tag1 < AA_force_tag_alias_before_dim1 ||
+     (tag1 == AA_force_tag_alias_before_dim1 &&
+      tag2 <= AA_force_tag_alias_before_dim2)) {
+    return POSSIBLY_ALIASED;
   }
 
   bool result;

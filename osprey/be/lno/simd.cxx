@@ -460,6 +460,7 @@ static BOOL Is_Under_Array(WN *wn)
  * (2) If the SIMD operand size is < 8 bytes.
  */
 static BOOL Simd_Benefit (WN* wn) {
+
   int store_granular_size = (LNO_Iter_threshold) ? 8 : 4;
 
   if (LNO_Run_Simd == 0)
@@ -489,7 +490,7 @@ static BOOL Simd_Benefit (WN* wn) {
     return TRUE;
 
   if (OPCODE_is_store(WN_opcode(wn)) &&
-      (MTYPE_byte_size(WN_desc(wn)) <= store_granular_size || //bug 5582 stid is fine
+      (MTYPE_byte_size(WN_desc(wn)) <= store_granular_size ||
        MTYPE_is_complex(WN_desc(wn)) || opr == OPR_STID))
     return TRUE;
 
@@ -4894,6 +4895,176 @@ static void Simd_Vectorize_SimdOp_And_Kids(WN *simd_op, TYPE_ID vmtype, BOOL *in
       Simd_Vectorize_Intrinsics(simd_op);
 }
 
+// This is a kludge to SIMD code generation. The purpose is to simplify the LB 
+// and UB of the vectorized loop and the remainder loop.  It is better 
+// to directly generate simple LB/Ub in Simd_Finalize_Loops(). Unfornately, 
+// this function was pooly written. It is lot easier simplify the LB/UB by 
+// post-processing them.
+// 
+//  Suppose the loop being vectorized is:
+//   for (int i = 0; i < n; i++) {...}
+//
+//  Before calling this function, the vectorized loop and the remainder loop were: 
+//   vectorized loop: for (i = 0; i <= n/f*f - 1; n+=f)
+//   remainder loop:  for (i = n/f*f; i < n; i++)
+//   where the <f> is unrolling factor (i.e. the vector length)
+//
+//  They are following after calling this func:
+//   vectorized loop: for (i = 0; i <= n-f; i+=f)
+//   remainder loop:  for (i'= i; i' < n; i'++)
+//
+static BOOL Simd_Simplify_LB_UB (WN* vect_loop, WN* remainder, INT vect)
+{
+  if (Do_Loop_Is_Unsigned (vect_loop))
+    return FALSE;
+
+  // This condition is not expected to be true with current implementation since
+  // loop being vectorized is 'standardized' at very early stage. But we perform
+  // this safety check just in case things change in the future.
+  if (remainder && Index_Variable_Live_At_Exit(remainder))
+    return FALSE;
+
+  WN* loop_idx = WN_index(vect_loop);  
+  WN* loop_end = WN_end (vect_loop);
+  WN* loop_start = WN_start (vect_loop);
+
+  // step 1.a: check to see if :
+  //  - loop_end is in the form of "idx < UB" or "idx <= UB", and 
+  //  - loop index's initial value is 0.
+  //
+  if (!WN_has_sym (WN_kid0(loop_end)) || 
+      SYMBOL(WN_kid0(loop_end)) != SYMBOL (loop_idx) ||
+      (WN_operator (loop_end) != OPR_LT && WN_operator(loop_end) != OPR_LE) ||
+      (WN_operator (WN_kid0(loop_start)) != OPR_INTCONST || 
+       WN_const_val (WN_kid0(loop_start)) != 0)) {
+    return FALSE;    
+  }
+
+  // if the UB is already a constant, no room for improvement
+  //
+  if (WN_operator (WN_kid1(loop_end)) == OPR_INTCONST) {
+    return FALSE;
+  }
+
+  // step 1.b: check to see if the UB matches the pattern "<= tc/vect * vect - 1"
+  // or "tc/vect * vect"
+  WN* TC = NULL;
+  WN* UB = WN_kid1(loop_end);
+  if (WN_operator (loop_end) == OPR_LE) {
+    BOOL match = FALSE;
+    if (WN_operator (UB) == OPR_SUB && 
+        WN_operator (WN_kid1(UB)) == OPR_INTCONST &&
+        WN_const_val (WN_kid1(UB)) == 1) {
+      match = TRUE;
+    } else if (WN_operator (UB) == OPR_ADD && 
+               WN_operator (WN_kid1(UB)) == OPR_INTCONST && 
+               WN_const_val (WN_kid1(UB)) == -1) {
+      match = TRUE;
+    }
+    if (!match) 
+      return FALSE;
+    TC = WN_kid0 (UB);
+  } else if (WN_operator (loop_end) == OPR_LT) {
+    TC = UB;
+  } else {
+    // the operator is supposed to be either < or <=
+    return FALSE;
+  }
+
+  if (WN_operator (TC) != OPR_MPY || 
+      WN_operator (WN_kid1(TC)) != OPR_INTCONST ||
+      WN_const_val (WN_kid1(TC)) != vect) {
+    return FALSE;
+  } else {
+    TC = WN_kid0(TC);
+  }
+
+  if (WN_operator (TC) != OPR_DIV || 
+      WN_operator (WN_kid1(TC)) != OPR_INTCONST ||
+      WN_const_val (WN_kid1(TC)) != vect) {
+    return FALSE;
+  } else {
+    TC = WN_kid0(TC);
+  }
+
+  // Delete  the whole WHIRL tree of WN_kid1(WN_end(loop)) except the 
+  // subtree rooted at <TC> as <TC> will be used in the following steps.
+  {
+    WN* dummy = WN_CreateIntconst (OPC_I4INTCONST, 0);
+    WN* parent = LWN_Get_Parent (TC);
+    BOOL replaced = FALSE;
+    for (INT i = 0; i < WN_kid_count (parent); i++) {
+      if (WN_kid(parent, i) == TC) {
+        WN_kid(parent, i) = dummy;
+        replaced = TRUE;
+        break;
+      }
+    }
+    Is_True (replaced, ("parentization must be wrong"));
+    LWN_Delete_Tree (WN_kid1(loop_end));
+  }
+  
+  // step 2: replace the UB (of the vectorized loop) to "i <= TC - vect"
+  //    or "i < TC - vect + 1".
+  //
+  //   More intuitively, if the original loop (before vectorization) is:
+  //      for (i = 0; i <= n-1; i++) {...}
+  //
+  //   Suppose unrolling factor is 4; this loop will be transformed into 
+  //   following by Simd_Finalize_Loops():
+  //      for (i = 0; i <= n/4 * 4 -1 ; i++) {...}
+  //  
+  //   This function will adjust the upper bounder into:
+  //      for (i = 0; i <= n - 4 ; i++) {...}
+  //
+  {
+    OPCODE sub_opc= OPCODE_make_op(OPR_SUB, index_type, MTYPE_V);
+    OPCODE intconst_opc= OPCODE_make_op(OPR_INTCONST, index_type, MTYPE_V);
+    INT64 const_val = (WN_operator (loop_end) == OPR_LE) ? vect : vect - 1;
+    WN* new_UB = LWN_CreateExp2 (sub_opc, TC,
+			         WN_CreateIntconst (intconst_opc, const_val));
+    WN_kid1(loop_end) = new_UB;
+    LWN_Parentize (loop_end);
+  }
+  
+  if (!remainder)
+    return TRUE;
+
+  if (Do_Loop_Is_Mp (vect_loop)) {
+    // Keep the loop index private if it is flagged Do_Loop_Is_Mp().
+    // 
+    return TRUE;
+  }
+
+  // Step 3: replace the init statement of the remainder loop from 
+  //  "loop_idx = complicate_expr" to identity "loop_idx = loop_idx".
+  //
+  {
+    WN* start_r = WN_start (remainder);
+    WN* start = WN_start (vect_loop);
+    Is_True (WN_operator (start_r) == OPR_STID && 
+             WN_operator(start) == OPR_STID, 
+             ("criteria isn't met"));
+
+    OPCODE ld_opc = OPCODE_make_op (OPR_LDID, WN_desc(start), WN_desc(start));
+    WN* ld_idx = LWN_CreateLdid (ld_opc, WN_start(vect_loop));
+
+    Delete_Def_Use (WN_kid0(start_r));
+    LWN_Delete_Tree (WN_kid0(start_r));
+    
+    WN_kid0(start_r) = ld_idx;
+    Du_Mgr->Add_Def_Use (WN_start (vect_loop), ld_idx);
+    Du_Mgr->Add_Def_Use (WN_step (vect_loop), ld_idx);
+    LWN_Parentize (start_r);
+
+  }
+
+  // step 4: rename the loop index of the remainder loop
+  scalar_rename (WN_start (remainder));
+
+  return TRUE;  
+}
+
 static void Simd_Finalize_Loops(WN *innerloop, WN *remainderloop, INT vect, WN *reduction_node)
 {
 
@@ -5318,11 +5489,15 @@ static void Simd_Finalize_Loops(WN *innerloop, WN *remainderloop, INT vect, WN *
                 &LNO_default_pool);
       dli_r->LB->Set_LB(WN_kid0(WN_start(remainderloop)), &stack_r,
                         dli_r->Step->Const_Offset);
+      if (dli_r->Est_Num_Iterations >= vect) {
+        dli_r-> Est_Num_Iterations = vect - 1;
+      }
+
       dli_m->UB = CXX_NEW(ACCESS_ARRAY(num_bounds_m,stack_m.Elements(),
                                        &LNO_default_pool),
                           &LNO_default_pool);
       dli_m->UB->Set_UB(WN_end(innerloop), &stack_m);
-
+      
       // Set Unimportant flag in loop_info.
       if (WN_kid_count(remainderloop) == 6) {
         WN *loop_info = WN_do_loop_info(remainderloop);
@@ -5339,7 +5514,9 @@ static void Simd_Finalize_Loops(WN *innerloop, WN *remainderloop, INT vect, WN *
          Delete_Def_Use(r_stmt); 
       LNO_Erase_Dg_From_Here_In(remainderloop,adg);
    }
-  adg->Fission_Dep_Update(innerloop, 1);
+   
+    Simd_Simplify_LB_UB (innerloop, rloop_needed ? remainderloop : NULL, vect);
+    adg->Fission_Dep_Update(innerloop, 1);
 }
 
 // Vectorize an innerloop
