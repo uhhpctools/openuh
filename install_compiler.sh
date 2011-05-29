@@ -472,14 +472,6 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         (cd ${PHASEPATH}/32; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
         (cd ${PHASEPATH}/32; ln -sf libacml_mv.so.1 libacml_mv.so)
     fi 
-    #install .h files
-    INSTALL_DATA_SUB ./osprey/include/omp/omp.h     ${INC_DIR}/omp.h
-    INSTALL_DATA_SUB ./osprey/include/whirl2c.h     ${INC_DIR}/whirl2c.h
-    INSTALL_DATA_SUB ./osprey/include/whirl2f.h     ${INC_DIR}/whirl2f.h
-    INSTALL_DATA_SUB ./osprey/f90modules/OMP_LIB_KINDS.mod  ${ROOT}/lib/f90modules/OMP_LIB_KINDS.mod 
-    INSTALL_DATA_SUB ./osprey/f90modules/OMP_LIB.mod        ${ROOT}/lib/f90modules/OMP_LIB.mod
-
-
     return 0
 }
 
