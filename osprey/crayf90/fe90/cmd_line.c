@@ -224,6 +224,7 @@ void	process_cmd_line(int   argc, char *argv[])
 
          case 'h':
             dump_options();
+            exit_compiler(RC_OKAY);
 	    return; 
     
 	 case 'i':					/* integer size	      */
