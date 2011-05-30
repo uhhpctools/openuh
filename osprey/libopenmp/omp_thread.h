@@ -84,7 +84,7 @@ inline int __ompc_get_nested(void)
   return __omp_nested;
 }
 
-inline int __omp_get_cpu_num()
+static inline int __omp_get_cpu_num()
 {
 #ifndef TARG_LOONGSON
   cpu_set_t cpuset;
@@ -462,7 +462,7 @@ inline void __ompc_end(void)
 }
 
 #ifndef TARG_LOONGSON
-inline void __omp_get_available_processors()
+static inline void __omp_get_available_processors()
 {
   cpu_set_t cpuset;
   int return_val, i, cur_count=0;
@@ -509,7 +509,7 @@ inline void __omp_get_available_processors()
 static int cur_cpu_to_bind;
 
 /* bind the pthread to a specific cpu */
-inline void __ompc_bind_pthread_to_cpu(pthread_t thread)
+static inline void __ompc_bind_pthread_to_cpu(pthread_t thread)
 {
   cpu_set_t cpuset;
   int return_val;

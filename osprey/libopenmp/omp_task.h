@@ -22,7 +22,7 @@ void inline __ompc_task_switch(omp_task_t *old, omp_task_t *new)
   co_call(new);
 }
 
-void inline __ompc_task_exit_to(omp_task_t *current, omp_task_t *new)
+static void inline __ompc_task_exit_to(omp_task_t *current, omp_task_t *new)
 {
 
 #ifdef TASK_DEBUG
