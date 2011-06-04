@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -299,7 +299,8 @@ INT32 Instrumentation_Nesting_Level = -1;
 BOOL Instrumentation_Tau = FALSE;
 BOOL Instrumentation_Epilog = FALSE;
 
-
+INT32  Optimize_exception_ranges = 1;
+BOOL   Optimize_exception_ranges_set = FALSE;
 #ifdef KEY
 INT32  OPT_Cyg_Instrument = 0;
 BOOL   Asm_Memory = FALSE;
@@ -946,6 +947,10 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_BOOL, OV_VISIBLE,     FALSE, "ansi_setjmp",           "ansi_setjmp",
     0, 0, 0,  &LANG_Ansi_Setjmp_On,   &LANG_Ansi_Setjmp_Set,
     "C/C++: enable optimization of functions with calls to setjmp" },
+
+  { OVK_INT32, OV_VISIBLE,     1, "exception_range_opt",           "",
+    1, 0, 2,  &Optimize_exception_ranges,   &Optimize_exception_ranges_set,
+    "Enable control flow optimization for exception ranges" },
 
 #if defined(__linux__) || defined(BUILD_OS_DARWIN)
   { OVK_BOOL,	OV_INTERNAL,	TRUE, "wfe_dfe",	"wfe_dfe",

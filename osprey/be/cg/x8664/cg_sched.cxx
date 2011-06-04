@@ -68,6 +68,9 @@ static uint16_t sched_group = 0;
 static uint8_t  sched_group_imm_size = 0;
 static uint8_t  sched_group_64bit_imm_count = 0;
 static bool     BB_contains_x87 = false;
+static bool     BB_fails_rid = false;
+static bool     BB_calc_off = false;
+static bool     sched_trace;
 
 typedef struct {
   TN*      mem_base;
@@ -76,6 +79,7 @@ typedef struct {
   uint64_t mem_ofst;
   uint8_t  mem_scale;
   uint8_t  imm_size;
+  uint8_t  insn_size;
 
   uint16_t uses;
   uint16_t latency;
@@ -90,11 +94,33 @@ typedef struct {
   uint16_t num_succs;
   uint16_t num_preds;
 
+  int bb_id;
+  int num_pf_bytes;
   bool is_scheduled;
   bool has_64bit_imm;
 } OPR;
 
 static OPR* opr_array = NULL;
+
+typedef struct {
+  uint16_t sched_group;
+  uint16_t opr_count;
+  uint16_t total_pf_bytes;
+  uint16_t size;
+  long     offset_start;
+  long     offset_end;
+  int      members[4];
+} GROUP_INFO;
+
+typedef struct {
+  GROUP_INFO window_pair[2];
+  long     cur_offset;
+  uint16_t index;
+  int      bb_id;
+  bool     term_pair_for_fit;
+} DECODE_INFO;
+
+static DECODE_INFO window_data;
 
 #define ASSERT(c)   FmtAssert( c, ("KEY_SCH error") );
 
@@ -107,6 +133,7 @@ static OPR* opr_array = NULL;
 #define Reset_OPR_is_scheduled(o) ((o)->is_scheduled = false)
 #define OPR_has_64bit_imm(o)      ((o)->has_64bit_imm == true)
 #define Set_OPR_has_64bit_imm(o)  ((o)->has_64bit_imm = true)
+#define OPR_num_pf_bytes(o)       ((o)->num_pf_bytes)
 #define OPR_num_preds(o)          ((o)->num_preds)
 #define OPR_num_succs(o)          ((o)->num_succs)
 #define OPR_sched_order(o)        ((o)->sched_order)
@@ -118,8 +145,10 @@ static OPR* opr_array = NULL;
 #define OPR_mem_scale(o)          ((o)->mem_scale)
 #define OPR_mem_sym(o)            ((o)->mem_sym)
 #define OPR_imm_size(o)           ((o)->imm_size)
+#define OPR_insn_size(o)          ((o)->insn_size)
 #define OPR_uses(o)               ((o)->uses)
 #define OPR_latency(o)            ((o)->latency)
+#define OPR_bb_id(o)              ((o)->bb_id)
 
 static const int num_fu[] = {
   0,   /* NONE  */
@@ -131,6 +160,8 @@ static const int num_fu[] = {
 class MRT {
 private:
   BOOL trace;
+  BB  *bb;
+  KEY_SCH *sched;
 
   REGISTER_SET live_in[ISA_REGISTER_CLASS_MAX+1];
   REGISTER_SET live_out[ISA_REGISTER_CLASS_MAX+1];
@@ -176,16 +207,6 @@ private:
              top == TOP_leaxx32 || top == TOP_leaxx64 );
   }
 
-  bool TOP_is_push( const TOP top )
-  {
-    return ( top == TOP_pushl || top == TOP_pushq );
-  }
-
-  bool TOP_is_pop( const TOP top )
-  {
-    return ( top == TOP_popl || top == TOP_popq );
-  }
-
   int entries;
   Resource_Table_Entry** Resource_Table;
 
@@ -197,10 +218,22 @@ public:
   static const int issue_rate = 4;
   ICU cur_res;
 
-  void Init( BB*, int, BOOL, MEM_POOL* );
+  void Init( BB*, KEY_SCH *sched, int, BOOL, MEM_POOL* );
   void Reserve_Resources( OP*, int );
   void Set_Completion_Time( OP* );
   void Compute_Issue_Time( OP*, int );
+  BB  *Get_Cur_BB( void ) { return bb; }
+  KEY_SCH *Get_Cur_Sched( void ) { return sched; }
+
+  bool TOP_is_push( const TOP top )
+  {
+    return ( top == TOP_pushl || top == TOP_pushq );
+  }
+
+  bool TOP_is_pop( const TOP top )
+  {
+    return ( top == TOP_popl || top == TOP_popq );
+  }
 
   bool OP_is_memory_load( OP *op )
   {
@@ -287,8 +320,6 @@ public:
     const TOP top = OP_code(op);
     uint8_t non_fp_dbl_ops = entry->dispatched_ops - entry->fp_dbl_ops;
     uint8_t total_ops = ( entry->fp_dbl_ops * 2 ) + non_fp_dbl_ops;
-    uint8_t total_64bit_imms = OPR_has_64bit_imm(opr) + 
-                               sched_group_64bit_imm_count;
 
     // could not map
     if (cur_res == NONE)
@@ -297,17 +328,21 @@ public:
     if( TOP_is_fastpath_db(top) ){
       if( total_ops > 2 )
         return false;
+    }
 
-      if( ( total_64bit_imms == 1) && ( total_ops > 1 ) ) {
+    if( sched_group_64bit_imm_count ) {
+      if( OPR_has_64bit_imm(opr) && sched_group_64bit_imm_count == 2 )
         return false;
-      } else if( total_64bit_imms == 2) {
+
+      if(( sched_group_64bit_imm_count == 1) && (total_ops == 3))
         return false;
-      }
-    } else {
-      if( ( total_64bit_imms == 1) && ( total_ops > 2 ) ) {
+
+      if(( sched_group_64bit_imm_count == 2) && (total_ops == 2))
         return false;
-      } else if( ( total_64bit_imms == 2) && ( total_ops > 1 ) ) {
-        return false;
+
+      if(( sched_group_64bit_imm_count == 1) && (total_ops == 2)) {
+        if( OPR_has_64bit_imm(opr) )
+          return false;
       }
     }
    
@@ -319,6 +354,19 @@ public:
     if( OP_is_memory_load( op ) || OP_is_memory_store( op ) ) {
       if( Memory_Saturated( op, clock ) )
         return false;
+    }
+
+    if( ( window_data.index == 1 ) && 
+        ( window_data.window_pair[1].opr_count ) ){
+      long window_start = window_data.window_pair[0].offset_start;
+      long window_end = window_data.cur_offset;
+      window_start = (window_start / 16) * 16;
+      window_end += OPR_insn_size(opr);
+      window_end = (window_end / 16) * 16;
+      if( ( (window_end - window_start) & 0x30 ) == 0x30 ){
+        window_data.term_pair_for_fit = true;
+        return false;
+      }
     }
 
     return Resource_Table[c]->resources[cur_res][dispatch_unit];
@@ -357,6 +405,187 @@ ICU MRT::Lookup_Property_By_Pipeinfo( OP *op,
   return matched_res;
 }
 
+
+static void Init_Window_Data( void )
+{
+  int i;
+
+  for( i = 0; i < 2; i ++ ){
+    window_data.window_pair[i].sched_group = 0;
+    window_data.window_pair[i].opr_count = 0;
+    window_data.window_pair[i].total_pf_bytes = 0;
+    window_data.window_pair[i].size = 0;
+    window_data.window_pair[i].offset_start = 0;
+    window_data.window_pair[i].offset_end = 0;
+    window_data.window_pair[i].members[0] = 0;
+    window_data.window_pair[i].members[1] = 0;
+    window_data.window_pair[i].members[2] = 0;
+    window_data.window_pair[i].members[3] = 0;
+  }
+
+  window_data.index = 0;
+  window_data.term_pair_for_fit = false;
+  window_data.bb_id = 0;
+}
+
+
+static void Add_OPR_To_Current_Window( OPR *opr, int op_map_idx )
+{
+  uint16_t window_idx = window_data.index;
+  uint16_t opr_idx = window_data.window_pair[window_idx].opr_count;
+  if( window_data.window_pair[window_idx].opr_count == 0) {
+    window_data.window_pair[window_idx].offset_start = window_data.cur_offset;
+  }
+  window_data.window_pair[window_idx].sched_group = OPR_sched_group(opr);
+  window_data.window_pair[window_idx].members[opr_idx] = op_map_idx;
+  window_data.window_pair[window_idx].opr_count++;
+  window_data.window_pair[window_idx].total_pf_bytes += OPR_num_pf_bytes(opr);
+  window_data.window_pair[window_idx].size += OPR_insn_size(opr);
+
+  window_data.cur_offset += OPR_insn_size(opr);
+  window_data.bb_id = OPR_bb_id(opr);
+}
+
+
+static void Pad_Windows( int padding )
+{
+  uint16_t window_idx = window_data.index;
+  uint16_t pad_left = padding;
+  int i, j;
+
+  if( padding == 0 ) return;
+
+  for( i = 0; i <= window_idx; i++ ){
+    int n = window_data.window_pair[i].opr_count;
+    BB* bb = mrt.Get_Cur_BB();
+    for( j = 0; j < n; j++ ){
+      OP* op;
+      int op_map_idx = window_data.window_pair[i].members[j];
+      op = OP_MAP_Idx_Op( bb, op_map_idx );
+      if( op != NULL ){
+        OPR* opr = Get_OPR(op);
+        int opr_pad = OPR_num_pf_bytes(opr);
+        if( pad_left ){
+          if( opr_pad >= pad_left ){
+            OP_dpadd(op) = opr_pad - pad_left;
+            pad_left = 0;
+            break;
+          } else {
+            OP_dpadd(op) = opr_pad;
+            pad_left -= opr_pad;
+          }
+        }
+      }
+    }
+    if( pad_left == 0 ) break;
+  }
+
+  // Add nops if pad_left is non zero
+  if( pad_left != 0 ){
+    int k = window_data.window_pair[window_idx].opr_count - 1;
+    int op_map_idx = window_data.window_pair[window_idx].members[k];
+    BB* bb = mrt.Get_Cur_BB();
+    OP* op = OP_MAP_Idx_Op( bb, op_map_idx );
+    OP* nop = Mk_OP(TOP_nop);
+    KEY_SCH *sched = mrt.Get_Cur_Sched();
+ 
+    printf("creating nop(s) programed to emit %d bytes\n", pad_left);
+
+    // Insert nop(s) and preprogram them to be of size pad_left.
+    // Keep in mind that nops of size 1..12 should be the limit, if
+    // we need 13 bytes, we need 2 nops.
+    OP_dgroup(nop) = sched_group;
+    if( pad_left <= 8 ){
+      OP_dpadd(nop) = 2;
+      pad_left = 0;
+    } else {
+      OP_dpadd(nop) = 1;
+      pad_left -= 8;
+    }
+    Set_OP_unrolling( nop, OP_unrolling(op) );
+    Set_OP_orig_idx( nop, op_map_idx );
+    Set_OP_unroll_bb( nop, OP_unroll_bb(op) ); 
+    BB_Insert_Op_After( bb, op, nop );
+    VECTOR_Add_Element( sched->_sched_vector, nop );
+    if( pad_left > 0 ){
+      OP *prev = nop;
+      nop = Dup_OP(nop);
+      OP_dpadd(nop) = 2;
+      Set_OP_unrolling( nop, OP_unrolling(op) );
+      Set_OP_orig_idx( nop, op_map_idx );
+      Set_OP_unroll_bb( nop, OP_unroll_bb(op) ); 
+      BB_Insert_Op_After( bb, prev, nop );
+      VECTOR_Add_Element( sched->_sched_vector, nop );
+    }
+  }
+}
+
+
+static void Trace_Close_Current_Window( int pair_len, 
+                                        int padding, 
+                                        int total_insns )
+{
+  if( sched_trace ) {
+    uint16_t window_idx = window_data.index;
+    fprintf( TFile, 
+             "terminating dispatch pair(bb=%d, num windows=%d): info...\n", 
+             window_data.bb_id, ( window_idx + 1 ) );
+    fprintf( TFile, 
+             "pair length = %d : padding needed = %d : total insns = %d\n", 
+             pair_len, padding, total_insns );
+    fprintf( TFile, 
+             "padding available = %d\n", 
+             window_data.window_pair[0].total_pf_bytes + 
+             window_data.window_pair[1].total_pf_bytes );
+    fprintf( TFile, 
+             "window pair starts at offset = %p, ends at %p, cur off = %p\n", 
+             (void*)window_data.window_pair[0].offset_start,
+             (void*)window_data.window_pair[window_idx].offset_end,
+             (void*)window_data.cur_offset ); 
+  }
+}
+
+
+static void Close_Current_Window( bool full_close )
+{
+  uint16_t window_idx = window_data.index;
+  window_data.window_pair[window_idx].offset_end = window_data.cur_offset;
+  if( ( window_idx == 0 ) && ( full_close == false ) ) {
+    int total_pf_bytes = window_data.window_pair[window_idx].total_pf_bytes;
+    // Now calculate the amount of padding bytes and configure the new offset
+    int pair_len = window_data.window_pair[window_idx].offset_end -
+                     window_data.window_pair[window_idx].offset_start;
+    long new_offset = 16 + ( ( window_data.cur_offset - 1) & ~ 15 );
+    int padding = new_offset - window_data.cur_offset;
+    int total_insns = window_data.window_pair[window_idx].opr_count;
+
+    // can we stop here?
+    if( padding <= total_pf_bytes ){
+      window_data.cur_offset = new_offset;
+      Pad_Windows( padding );
+      Trace_Close_Current_Window( pair_len, padding, total_insns );
+      Init_Window_Data();
+    } else {
+      window_data.index++;
+    }
+  } else if( ( window_idx == 1 ) || ( full_close  == true ) ){
+    // Now calculate the amount of padding bytes and configure the new offset
+    int pair_len = window_data.window_pair[window_idx].offset_end -
+                     window_data.window_pair[0].offset_start;
+    long new_offset = 16 + ( ( window_data.cur_offset - 1) & ~ 15 );
+    int padding = new_offset - window_data.cur_offset;
+    int total_insns = window_data.window_pair[0].opr_count +
+                        window_data.window_pair[window_idx].opr_count;
+
+    // Now update to the next 16B aligned addr
+    window_data.cur_offset = new_offset;
+    Pad_Windows( padding );
+    Trace_Close_Current_Window( pair_len, padding, total_insns );
+    Init_Window_Data();
+  }
+}
+
+
 static void Print_Register_Set( const char* name, 
                                 REGISTER_SET reg_set, 
                                 ISA_REGISTER_CLASS cl )
@@ -376,10 +605,14 @@ static void Print_Register_Set( const char* name,
   fprintf( TFile, "\n" );
 }
 
-void MRT::Init( BB* bb, int size, BOOL trace, MEM_POOL* mem_pool )
+
+void MRT::Init( BB* cur_bb, KEY_SCH *cur_sched, int size, 
+                BOOL trace, MEM_POOL* mem_pool )
 {
   static bool TOP_2_Res_is_valid = false;
 
+  bb = cur_bb;
+  sched = cur_sched;
   cur_res = NONE;
   entries = size;
   this->trace = trace;
@@ -550,7 +783,7 @@ void MRT::Reserve_Resources( OP* op, int cycle )
 
   if( OPR_imm_size(opr) ) {
     sched_group_imm_size += OPR_imm_size(opr);
-    if ( OPR_has_64bit_imm(opr) )
+    if( OPR_has_64bit_imm(opr) )
       sched_group_64bit_imm_count++;
   }
 
@@ -564,6 +797,8 @@ void MRT::Reserve_Resources( OP* op, int cycle )
     entry->load_ops++;
 
   OP_dgroup(op) = OPR_sched_group(opr);
+  OPR_bb_id(opr) = BB_id(OP_bb(op));
+  Add_OPR_To_Current_Window( opr, OP_map_idx(op) );
 }
 
 
@@ -580,15 +815,24 @@ void KEY_SCH::Build_Ready_Vector()
 }
 
 
-void KEY_SCH::Init()
+void KEY_SCH::Init( BOOL calc_off )
 {
   OP* op = NULL;
+  RID* rid = BB_rid(bb);
 
   // Init schedule info.
   _ready_vector = VECTOR_Init( BB_length(bb), mem_pool );
-  _sched_vector = VECTOR_Init( BB_length(bb), mem_pool );
+  _sched_vector = VECTOR_Init( BB_length(bb)*2, mem_pool );
 
   BB_contains_x87 = false;
+  BB_fails_rid = false;
+  BB_calc_off = calc_off;
+  sched_group_64bit_imm_count = 0;
+
+  Init_Window_Data();
+
+  if( BB_calc_off )
+    BB_offset(bb) = window_data.cur_offset;
 
   int max_indx = 0;
   FOR_ALL_BB_OPs(bb, op){
@@ -596,6 +840,12 @@ void KEY_SCH::Init()
     if( OP_x87(op) )
       BB_contains_x87 = true;
   }
+
+  // Also true of rid blocks which fail the sched test.
+  if( rid != NULL && RID_level( rid ) >= RL_CGSCHED ){
+    BB_fails_rid = true;
+  }
+
   max_indx++;
 
   opr_array = (OPR*) MEM_POOL_Alloc( mem_pool,
@@ -627,14 +877,14 @@ void KEY_SCH::Init()
   rtable_size += max_resource_cycles;
   _U = rtable_size;
 
-  mrt.Init( bb, _U, trace, mem_pool );
+  mrt.Init( bb, this, _U, trace, mem_pool );
 }
 
 
 void KEY_SCH::Reorder_BB()
 {
   // Nothing to do there, the order stays the same.
-  if( BB_contains_x87 || BB_call(bb) )
+  if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off )
     return;
 
   ASSERT( VECTOR_count(_sched_vector) == BB_length(bb) );
@@ -647,6 +897,92 @@ void KEY_SCH::Reorder_BB()
   }
 }
 
+int Find_Imm_Specific( const TOP top )
+{
+  int specific_imm_size = 0;
+  switch( top ){
+  case TOP_cmpi8:
+  case TOP_cmpxi8:
+  case TOP_cmpxxi8:
+  case TOP_cmpxxxi8:
+  case TOP_rori8:
+  case TOP_roli8:
+    specific_imm_size = 1;
+    break;
+  case TOP_cmpi16:
+  case TOP_cmpxi16:
+  case TOP_cmpxxi16:
+  case TOP_cmpxxxi16:
+  case TOP_rori16:
+  case TOP_roli16:
+    specific_imm_size = 2;
+    break;
+  case TOP_adci32:
+  case TOP_cmpi32:
+  case TOP_cmpxi32:
+  case TOP_cmpxxi32:
+  case TOP_cmpxxxi32:
+  case TOP_imuli32:
+  case TOP_ori32:
+  case TOP_rori32:
+  case TOP_roli32:
+  case TOP_storenti32:
+  case TOP_shldi32:
+  case TOP_shrdi32:
+  case TOP_shli32:
+  case TOP_shri32:
+  case TOP_subi32:
+  case TOP_sbbi32:
+  case TOP_testi32:
+  case TOP_xori32:
+  case TOP_movi32_2m:
+  case TOP_movm_2i32:
+  case TOP_cmpi64:
+  case TOP_cmpxi64:
+  case TOP_cmpxxi64:
+  case TOP_cmpxxxi64:
+  case TOP_imuli64:
+  case TOP_ori64:
+  case TOP_rori64:
+  case TOP_roli64:
+  case TOP_storenti64:
+  case TOP_sari64:
+  case TOP_shli64:
+  case TOP_shri64:
+  case TOP_subi64:
+  case TOP_testi64:
+  case TOP_xori64:
+  case TOP_movi64_2m:
+  case TOP_movm_2i64:
+    specific_imm_size = 4;
+    break;
+  default:
+    break;
+  }
+
+  return specific_imm_size;
+}
+
+
+int Calculate_Imm_Range(long val)
+{
+  int cur_imm_size = 0;
+  if( val != 0 ){
+    val = (val < 0) ? (val * -1) : val;
+    for( int j = 0; j < 8; j++ ){
+      if( val > 0 ) 
+        cur_imm_size++;
+      else
+        break;
+
+      // Shift by a byte each time
+      val = val >> 8; 
+    }
+  }
+
+  return cur_imm_size;
+}
+
 
 uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
 {
@@ -655,8 +991,12 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
   int offset_idx = -1;
   int scale_idx  = -1;
   int imm_size = 0; 
-  int val;
+  long val;
   OPR* opr = Get_OPR(op);
+  const TOP top = OP_code(op);
+  int specific_imm_size = Find_Imm_Specific( top );
+  bool has_rip_addr = false;
+  bool requires_disp = false;
 
   if( is_memory_op ){
     base_idx   = TOP_Find_Operand_Use(OP_code(op), OU_base);
@@ -671,43 +1011,117 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
     int cur_imm_size = 0; 
 
     // Skip inconsequential components
-    if( i == base_idx ) continue;
+    if( i == base_idx ){
+      TN *tn = OP_opnd(op, i);  
+      if( TN_is_register(tn) ){
+        if( tn == Rip_TN() )
+          has_rip_addr = true;
+        else if( TN_register(tn) == R13 )
+          requires_disp = true;
+      }
+      continue;
+    }
     if( i == index_idx ) continue;
     if( i == scale_idx ) continue;
 
     val = 0;
     if( i == offset_idx ){
-      val = (int)OPR_mem_ofst(opr);
+      if( has_rip_addr == false ) {
+        val = (long)OPR_mem_ofst(opr);
+        if( ( val == 0 ) && ( requires_disp == true ) )
+          cur_imm_size = 1;
+      } else {
+        cur_imm_size = 4;
+      }
     } else {
       TN *tn = OP_opnd(op, i);
-      if( TN_has_value(tn) )
-        val = TN_value(tn);
-    }
-
-    if( val != 0 ){
-      val = (val < 0) ? (val * -1) : val;
-      for( int j = 0; j < 8; j++ ){
-        if( val > 0 ) 
-          cur_imm_size++;
-
-        // Shift by a byte each time
-        val = val >> 8; 
+      if( TN_has_value(tn) ) {
+        if( ( OP_code(op) == TOP_ldc64 ) || ( OP_code(op) == TOP_ldc32 ) ) {
+          int range_val = TN_value(tn);
+          cur_imm_size = ( Calculate_Imm_Range( range_val ) > 4 ) ? 8 : 4;
+        } else {
+          val = TN_value(tn);
+        }
+      } else {
+        if( ( OP_code(op) == TOP_ldc64 ) || ( OP_code(op) == TOP_ldc32 ) ) {
+          // these kinds of syms require full 32bit imm
+          if( TN_is_symbol(tn) ){
+            ST* st = TN_var(tn);
+            if( strcmp (ST_name(st), ".rodata") == 0 )
+              cur_imm_size = 4;
+          }
+        } else if ( OP_call(op) ) {
+          if( TN_is_symbol(tn) )
+            cur_imm_size = 4;
+        }
       }
     }
 
+    if( val != 0 )
+      cur_imm_size = Calculate_Imm_Range( val );
+
     if( ( is_memory_op ) && ( i == offset_idx ) ) {
       // displacment ops come int 1 and 4 byte imm sizes
-      if ( cur_imm_size > 1 ) imm_size += 4;
-    } else {
-      // all others are 1, 2, or 4, excepting TOP_ldc64
+      if( cur_imm_size > 1 ) 
+        imm_size += 4;
+      else if( cur_imm_size == 1 )
+        imm_size++;
+    } else if ( specific_imm_size == 0 ) {
+      // all others are 1, 2, or 4
       switch( cur_imm_size ) {
+      case 0:
+        break;
       case 1:
-      case 2:
+        imm_size += cur_imm_size;
+        break;
+      case 8:
+        Set_OPR_has_64bit_imm(opr); 
         imm_size += cur_imm_size;
         break;
       default:
-        if( cur_imm_size > 2) imm_size += 4;
+        if( cur_imm_size > 1) imm_size += 4;
         break;
+      }
+    }
+  }
+
+  // Use immediate specific size info when applicable.
+  if( specific_imm_size > 0 ){
+    imm_size += specific_imm_size;
+  }
+
+  // Labels will fail the value test for a const value
+  if( OP_br(op) && !OP_ijump(op) ) {
+    if( BB_calc_off ) {
+      imm_size += 4;
+    } else {
+      // All branch targets are 32 byte aligned on the target
+      // that support this algorithm, making jcc/jmp 4 byte imm offset
+      // for reloff
+      INT opnd;
+      INT opnd_count;
+      CGTARG_Branch_Info(op, &opnd, &opnd_count);
+      if (opnd_count > 0) {
+        BB *bb = op->bb;
+        bool found_target = false;
+        TN *br_targ = OP_opnd(op, opnd);
+        LABEL_IDX label = TN_label(br_targ);
+        if( BB_succs(bb) != NULL ) {
+          BBLIST *slist;  
+          BB *succ;
+          for ( slist = BB_succs( bb ); 
+                slist; slist = BBLIST_next( slist ) ) {
+            succ = BBLIST_item( slist );
+            if( Is_Label_For_BB( label, succ ) ){
+              found_target = true;
+              break;
+            } 
+          }
+          if( found_target ){
+            if ( BB_offset( succ ) < 256 )
+              imm_size += 1;
+          }
+        }
       }
     }
   }
@@ -716,13 +1130,872 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
   if( OP_is4(op) )
     imm_size++;
 
-  // override if 8 byte imm load
-  if( OP_code(op) == TOP_ldc64 ) {
-    imm_size = 8;
-    Set_OPR_has_64bit_imm(opr);
+  return imm_size;
+}
+
+
+bool Uses_AVX_W_bit( const TOP top )
+{
+  bool uses_w_bit = false;
+
+  switch ( top ) {
+  // c4 encoded instructions
+  case TOP_vfmaddss:
+  case TOP_vfmaddxss:
+  case TOP_vfmaddxxss:
+  case TOP_vfmaddxxxss:
+  case TOP_vfmaddxrss:
+  case TOP_vfmaddxxrss:
+  case TOP_vfmaddxxxrss:
+  case TOP_vfmaddsd:
+  case TOP_vfmaddxsd:
+  case TOP_vfmaddxxsd:
+  case TOP_vfmaddxxxsd:
+  case TOP_vfmaddxrsd:
+  case TOP_vfmaddxxrsd:
+  case TOP_vfmaddxxxrsd:
+  case TOP_vfnmaddss:
+  case TOP_vfnmaddxss:
+  case TOP_vfnmaddxxss:
+  case TOP_vfnmaddxxxss:
+  case TOP_vfnmaddxrss:
+  case TOP_vfnmaddxxrss:
+  case TOP_vfnmaddxxxrss:
+  case TOP_vfnmaddsd:
+  case TOP_vfnmaddxsd:
+  case TOP_vfnmaddxxsd:
+  case TOP_vfnmaddxxxsd:
+  case TOP_vfnmaddxrsd:
+  case TOP_vfnmaddxxrsd:
+  case TOP_vfnmaddxxxrsd:
+  case TOP_vfmaddps:
+  case TOP_vfmaddxps:
+  case TOP_vfmaddxxps:
+  case TOP_vfmaddxxxps:
+  case TOP_vfmaddxrps:
+  case TOP_vfmaddxxrps:
+  case TOP_vfmaddxxxrps:
+  case TOP_vfmaddpd:
+  case TOP_vfmaddxpd:
+  case TOP_vfmaddxxpd:
+  case TOP_vfmaddxxxpd:
+  case TOP_vfmaddxrpd:
+  case TOP_vfmaddxxrpd:
+  case TOP_vfmaddxxxrpd:
+  case TOP_vfmaddsubps:
+  case TOP_vfmaddsubxps:
+  case TOP_vfmaddsubxxps:
+  case TOP_vfmaddsubxxxps:
+  case TOP_vfmaddsubxrps:
+  case TOP_vfmaddsubxxrps:
+  case TOP_vfmaddsubxxxrps:
+  case TOP_vfmaddsubpd:
+  case TOP_vfmaddsubxpd:
+  case TOP_vfmaddsubxxpd:
+  case TOP_vfmaddsubxxxpd:
+  case TOP_vfmaddsubxrpd:
+  case TOP_vfmaddsubxxrpd:
+  case TOP_vfmaddsubxxxrpd:
+  case TOP_vfnmaddps:
+  case TOP_vfnmaddxps:
+  case TOP_vfnmaddxxps:
+  case TOP_vfnmaddxxxps:
+  case TOP_vfnmaddxrps:
+  case TOP_vfnmaddxxrps:
+  case TOP_vfnmaddxxxrps:
+  case TOP_vfnmaddpd:
+  case TOP_vfnmaddxpd:
+  case TOP_vfnmaddxxpd:
+  case TOP_vfnmaddxxxpd:
+  case TOP_vfnmaddxrpd:
+  case TOP_vfnmaddxxrpd:
+  case TOP_vfnmaddxxxrpd:
+  case TOP_vfmsubss:
+  case TOP_vfmsubxss:
+  case TOP_vfmsubxxss:
+  case TOP_vfmsubxxxss:
+  case TOP_vfmsubxrss:
+  case TOP_vfmsubxxrss:
+  case TOP_vfmsubxxxrss:
+  case TOP_vfmsubsd:
+  case TOP_vfmsubxsd:
+  case TOP_vfmsubxxsd:
+  case TOP_vfmsubxxxsd:
+  case TOP_vfmsubxrsd:
+  case TOP_vfmsubxxrsd:
+  case TOP_vfmsubxxxrsd:
+  case TOP_vfnmsubss:
+  case TOP_vfnmsubxss:
+  case TOP_vfnmsubxxss:
+  case TOP_vfnmsubxxxss:
+  case TOP_vfnmsubxrss:
+  case TOP_vfnmsubxxrss:
+  case TOP_vfnmsubxxxrss:
+  case TOP_vfnmsubsd:
+  case TOP_vfnmsubxsd:
+  case TOP_vfnmsubxxsd:
+  case TOP_vfnmsubxxxsd:
+  case TOP_vfnmsubxrsd:
+  case TOP_vfnmsubxxrsd:
+  case TOP_vfnmsubxxxrsd:
+  case TOP_vfmsubps:
+  case TOP_vfmsubxps:
+  case TOP_vfmsubxxps:
+  case TOP_vfmsubxxxps:
+  case TOP_vfmsubxrps:
+  case TOP_vfmsubxxrps:
+  case TOP_vfmsubxxxrps:
+  case TOP_vfmsubpd:
+  case TOP_vfmsubxpd:
+  case TOP_vfmsubxxpd:
+  case TOP_vfmsubxxxpd:
+  case TOP_vfmsubxrpd:
+  case TOP_vfmsubxxrpd:
+  case TOP_vfmsubxxxrpd:
+  case TOP_vfmsubaddps:
+  case TOP_vfmsubaddxps:
+  case TOP_vfmsubaddxxps:
+  case TOP_vfmsubaddxxxps:
+  case TOP_vfmsubaddxrps:
+  case TOP_vfmsubaddxxrps:
+  case TOP_vfmsubaddxxxrps:
+  case TOP_vfmsubaddpd:
+  case TOP_vfmsubaddxpd:
+  case TOP_vfmsubaddxxpd:
+  case TOP_vfmsubaddxxxpd:
+  case TOP_vfmsubaddxrpd:
+  case TOP_vfmsubaddxxrpd:
+  case TOP_vfmsubaddxxxrpd:
+  case TOP_vfnmsubps:
+  case TOP_vfnmsubxps:
+  case TOP_vfnmsubxxps:
+  case TOP_vfnmsubxxxps:
+  case TOP_vfnmsubxrps:
+  case TOP_vfnmsubxxrps:
+  case TOP_vfnmsubxxxrps:
+  case TOP_vfnmsubpd:
+  case TOP_vfnmsubxpd:
+  case TOP_vfnmsubxxpd:
+  case TOP_vfnmsubxxxpd:
+  case TOP_vfnmsubxrpd:
+  case TOP_vfnmsubxxrpd:
+  case TOP_vfnmsubxxxrpd:
+  // instructions with Of38h or 0f3ah encoding
+  case TOP_xfmadd132xpd:
+  case TOP_xfmadd132xxpd:
+  case TOP_xfmadd132xxxpd:
+  case TOP_xfmadd213xpd:
+  case TOP_xfmadd213xxpd:
+  case TOP_xfmadd213xxxpd:
+  case TOP_xfmadd231xpd:
+  case TOP_xfmadd231xxpd:
+  case TOP_xfmadd231xxxpd:
+  case TOP_xfmadd132xps:
+  case TOP_xfmadd132xxps:
+  case TOP_xfmadd132xxxps:
+  case TOP_xfmadd213xps:
+  case TOP_xfmadd213xxps:
+  case TOP_xfmadd213xxxps:
+  case TOP_xfmadd231xps:
+  case TOP_xfmadd231xxps:
+  case TOP_xfmadd231xxxps:
+  case TOP_xfmadd132xsd:
+  case TOP_xfmadd132xxsd:
+  case TOP_xfmadd132xxxsd:
+  case TOP_xfmadd213xsd:
+  case TOP_xfmadd213xxsd:
+  case TOP_xfmadd213xxxsd:
+  case TOP_xfmadd231xsd:
+  case TOP_xfmadd231xxsd:
+  case TOP_xfmadd231xxxsd:
+  case TOP_xfmadd132xss:
+  case TOP_xfmadd132xxss:
+  case TOP_xfmadd132xxxss:
+  case TOP_xfmadd213xss:
+  case TOP_xfmadd213xxss:
+  case TOP_xfmadd213xxxss:
+  case TOP_xfmadd231xss:
+  case TOP_xfmadd231xxss:
+  case TOP_xfmadd231xxxss:
+  case TOP_xfmaddsub132xpd:
+  case TOP_xfmaddsub132xxpd:
+  case TOP_xfmaddsub132xxxpd:
+  case TOP_xfmaddsub213xpd:
+  case TOP_xfmaddsub213xxpd:
+  case TOP_xfmaddsub213xxxpd:
+  case TOP_xfmaddsub231xpd:
+  case TOP_xfmaddsub231xxpd:
+  case TOP_xfmaddsub231xxxpd:
+  case TOP_xfmaddsub132xps:
+  case TOP_xfmaddsub132xxps:
+  case TOP_xfmaddsub132xxxps:
+  case TOP_xfmaddsub213xps:
+  case TOP_xfmaddsub213xxps:
+  case TOP_xfmaddsub213xxxps:
+  case TOP_xfmaddsub231xps:
+  case TOP_xfmaddsub231xxps:
+  case TOP_xfmaddsub231xxxps:
+  case TOP_xfmsubadd132xpd:
+  case TOP_xfmsubadd132xxpd:
+  case TOP_xfmsubadd132xxxpd:
+  case TOP_xfmsubadd213xpd:
+  case TOP_xfmsubadd213xxpd:
+  case TOP_xfmsubadd213xxxpd:
+  case TOP_xfmsubadd231xpd:
+  case TOP_xfmsubadd231xxpd:
+  case TOP_xfmsubadd231xxxpd:
+  case TOP_xfmsubadd132xps:
+  case TOP_xfmsubadd132xxps:
+  case TOP_xfmsubadd132xxxps:
+  case TOP_xfmsubadd213xps:
+  case TOP_xfmsubadd213xxps:
+  case TOP_xfmsubadd213xxxps:
+  case TOP_xfmsubadd231xps:
+  case TOP_xfmsubadd231xxps:
+  case TOP_xfmsubadd231xxxps:
+  case TOP_xfmsub132xpd:
+  case TOP_xfmsub132xxpd:
+  case TOP_xfmsub132xxxpd:
+  case TOP_xfmsub213xpd:
+  case TOP_xfmsub213xxpd:
+  case TOP_xfmsub213xxxpd:
+  case TOP_xfmsub231xpd:
+  case TOP_xfmsub231xxpd:
+  case TOP_xfmsub231xxxpd:
+  case TOP_xfmsub132xps:
+  case TOP_xfmsub132xxps:
+  case TOP_xfmsub132xxxps:
+  case TOP_xfmsub213xps:
+  case TOP_xfmsub213xxps:
+  case TOP_xfmsub213xxxps:
+  case TOP_xfmsub231xps:
+  case TOP_xfmsub231xxps:
+  case TOP_xfmsub231xxxps:
+  case TOP_xfmsub132xsd:
+  case TOP_xfmsub132xxsd:
+  case TOP_xfmsub132xxxsd:
+  case TOP_xfmsub213xsd:
+  case TOP_xfmsub213xxsd:
+  case TOP_xfmsub213xxxsd:
+  case TOP_xfmsub231xsd:
+  case TOP_xfmsub231xxsd:
+  case TOP_xfmsub231xxxsd:
+  case TOP_xfmsub132xss:
+  case TOP_xfmsub132xxss:
+  case TOP_xfmsub132xxxss:
+  case TOP_xfmsub213xss:
+  case TOP_xfmsub213xxss:
+  case TOP_xfmsub213xxxss:
+  case TOP_xfmsub231xss:
+  case TOP_xfmsub231xxss:
+  case TOP_xfmsub231xxxss:
+  case TOP_xfnmadd132xpd:
+  case TOP_xfnmadd132xxpd:
+  case TOP_xfnmadd132xxxpd:
+  case TOP_xfnmadd213xpd:
+  case TOP_xfnmadd213xxpd:
+  case TOP_xfnmadd213xxxpd:
+  case TOP_xfnmadd231xpd:
+  case TOP_xfnmadd231xxpd:
+  case TOP_xfnmadd231xxxpd:
+  case TOP_xfnmadd132xps:
+  case TOP_xfnmadd132xxps:
+  case TOP_xfnmadd132xxxps:
+  case TOP_xfnmadd213xps:
+  case TOP_xfnmadd213xxps:
+  case TOP_xfnmadd213xxxps:
+  case TOP_xfnmadd231xps:
+  case TOP_xfnmadd231xxps:
+  case TOP_xfnmadd231xxxps:
+  case TOP_xfnmadd132xsd:
+  case TOP_xfnmadd132xxsd:
+  case TOP_xfnmadd132xxxsd:
+  case TOP_xfnmadd213xsd:
+  case TOP_xfnmadd213xxsd:
+  case TOP_xfnmadd213xxxsd:
+  case TOP_xfnmadd231xsd:
+  case TOP_xfnmadd231xxsd:
+  case TOP_xfnmadd231xxxsd:
+  case TOP_xfnmadd132xss:
+  case TOP_xfnmadd132xxss:
+  case TOP_xfnmadd132xxxss:
+  case TOP_xfnmadd213xss:
+  case TOP_xfnmadd213xxss:
+  case TOP_xfnmadd213xxxss:
+  case TOP_xfnmadd231xss:
+  case TOP_xfnmadd231xxss:
+  case TOP_xfnmadd231xxxss:
+  case TOP_xfnmsub132xpd:
+  case TOP_xfnmsub132xxpd:
+  case TOP_xfnmsub132xxxpd:
+  case TOP_xfnmsub213xpd:
+  case TOP_xfnmsub213xxpd:
+  case TOP_xfnmsub213xxxpd:
+  case TOP_xfnmsub231xpd:
+  case TOP_xfnmsub231xxpd:
+  case TOP_xfnmsub231xxxpd:
+  case TOP_xfnmsub132xps:
+  case TOP_xfnmsub132xxps:
+  case TOP_xfnmsub132xxxps:
+  case TOP_xfnmsub213xps:
+  case TOP_xfnmsub213xxps:
+  case TOP_xfnmsub213xxxps:
+  case TOP_xfnmsub231xps:
+  case TOP_xfnmsub231xxps:
+  case TOP_xfnmsub231xxxps:
+  case TOP_xfnmsub132xsd:
+  case TOP_xfnmsub132xxsd:
+  case TOP_xfnmsub132xxxsd:
+  case TOP_xfnmsub213xsd:
+  case TOP_xfnmsub213xxsd:
+  case TOP_xfnmsub213xxxsd:
+  case TOP_xfnmsub231xsd:
+  case TOP_xfnmsub231xxsd:
+  case TOP_xfnmsub231xxxsd:
+  case TOP_xfnmsub132xss:
+  case TOP_xfnmsub132xxss:
+  case TOP_xfnmsub132xxxss:
+  case TOP_xfnmsub213xss:
+  case TOP_xfnmsub213xxss:
+  case TOP_xfnmsub213xxxss:
+  case TOP_xfnmsub231xss:
+  case TOP_xfnmsub231xxss:
+  case TOP_xfnmsub231xxxss:
+  case TOP_vaesenc:
+  case TOP_vaesencx:
+  case TOP_vaesencxx:
+  case TOP_vaesencxxx:
+  case TOP_vaesenclast:
+  case TOP_vaesenclastx:
+  case TOP_vaesenclastxx:
+  case TOP_vaesenclastxxx:
+  case TOP_vaesdec:
+  case TOP_vaesdecx:
+  case TOP_vaesdecxx:
+  case TOP_vaesdecxxx:
+  case TOP_vaesdeclast:
+  case TOP_vaesdeclastx:
+  case TOP_vaesdeclastxx:
+  case TOP_vaesdeclastxxx:
+  case TOP_vaesimc:
+  case TOP_vaesimcx:
+  case TOP_vaesimcxx:
+  case TOP_vaesimcxxx:
+  case TOP_vaeskeygenassist:
+  case TOP_vaeskeygenassistx:
+  case TOP_vaeskeygenassistxx:
+  case TOP_vaeskeygenassistxxx:
+  case TOP_vfblend128v64:
+  case TOP_vfblendx128v64:
+  case TOP_vfblendxx128v64:
+  case TOP_vfblendxxx128v64:
+  case TOP_vfblend128v32:
+  case TOP_vfblendx128v32:
+  case TOP_vfblendxx128v32:
+  case TOP_vfblendxxx128v32:
+  case TOP_vfblendv128v64:
+  case TOP_vfblendvx128v64:
+  case TOP_vfblendvxx128v64:
+  case TOP_vfblendvxxx128v64:
+  case TOP_vfblendv128v32:
+  case TOP_vfblendvx128v32:
+  case TOP_vfblendvxx128v32:
+  case TOP_vfblendvxxx128v32:
+  case TOP_vfdp128v64:
+  case TOP_vfdpx128v64:
+  case TOP_vfdpxx128v64:
+  case TOP_vfdpxxx128v64:
+  case TOP_vfdp128v32:
+  case TOP_vfdpx128v32:
+  case TOP_vfdpxx128v32:
+  case TOP_vfdpxxx128v32:
+  case TOP_vfextrf128:
+  case TOP_vfextrxf128:
+  case TOP_vfextrxxf128:
+  case TOP_vfextrxxxf128:
+  case TOP_vfextr128v32:
+  case TOP_vfextrx128v32:
+  case TOP_vfextrxx128v32:
+  case TOP_vfextrxxx128v32:
+  case TOP_vfinsrf128:
+  case TOP_vfinsrxf128:
+  case TOP_vfinsrxxf128:
+  case TOP_vfinsrxxxf128:
+  case TOP_vfinsr128v32:
+  case TOP_vfinsrx128v32:
+  case TOP_vfinsrxx128v32:
+  case TOP_vfinsrxxx128v32:
+  case TOP_vmpsadbw:
+  case TOP_vmpsadbwx:
+  case TOP_vmpsadbwxx:
+  case TOP_vmpsadbwxxx:
+  case TOP_vpalignr128:
+  case TOP_vpalignrx128:
+  case TOP_vpalignrxx128:
+  case TOP_vpalignrxxx128:
+  case TOP_vblendv128v8:
+  case TOP_vblendvx128v8:
+  case TOP_vblendvxx128v8:
+  case TOP_vblendvxxx128v8:
+  case TOP_vblend128v16:
+  case TOP_vblendx128v16:
+  case TOP_vblendxx128v16:
+  case TOP_vblendxxx128v16:
+  case TOP_vpclmulqdq:
+  case TOP_vpclmulqdqx:
+  case TOP_vpclmulqdqxx:
+  case TOP_vpclmulqdqxxx:
+  case TOP_vcmpestri:
+  case TOP_vcmpestrix:
+  case TOP_vcmpestrixx:
+  case TOP_vcmpestrixxx:
+  case TOP_vcmpestrm:
+  case TOP_vcmpestrmx:
+  case TOP_vcmpestrmxx:
+  case TOP_vcmpestrmxxx:
+  case TOP_vfperm128v64:
+  case TOP_vfpermx128v64:
+  case TOP_vfpermxx128v64:
+  case TOP_vfpermxxx128v64:
+  case TOP_vfpermi128v64:
+  case TOP_vfpermix128v64:
+  case TOP_vfpermixx128v64:
+  case TOP_vfpermixxx128v64:
+  case TOP_vfperm128v32:
+  case TOP_vfpermx128v32:
+  case TOP_vfpermxx128v32:
+  case TOP_vfpermxxx128v32:
+  case TOP_vfpermi128v32:
+  case TOP_vfpermix128v32:
+  case TOP_vfpermixx128v32:
+  case TOP_vfpermixxx128v32:
+  case TOP_vfperm2f128:
+  case TOP_vfperm2xf128:
+  case TOP_vfperm2xxf128:
+  case TOP_vfperm2xxxf128:
+  case TOP_vextr128v8:
+  case TOP_vextrx128v8:
+  case TOP_vextrxx128v8:
+  case TOP_vextrxxx128v8:
+  case TOP_vextr128v32:
+  case TOP_vextrx128v32:
+  case TOP_vextrxx128v32:
+  case TOP_vextrxxx128v32:
+  case TOP_vextr128v64:
+  case TOP_vextrx128v64:
+  case TOP_vextrxx128v64:
+  case TOP_vextrxxx128v64:
+  case TOP_vextr128v16:
+  case TOP_vextrx128v16:
+  case TOP_vextrxx128v16:
+  case TOP_vextrxxx128v16:
+  case TOP_vinsr128v8:
+  case TOP_vinsrx128v8:
+  case TOP_vinsrxx128v8:
+  case TOP_vinsrxxx128v8:
+  case TOP_vinsr128v32:
+  case TOP_vinsrx128v32:
+  case TOP_vinsrxx128v32:
+  case TOP_vinsrxxx128v32:
+  case TOP_vinsr128v64:
+  case TOP_vinsrx128v64:
+  case TOP_vinsrxx128v64:
+  case TOP_vinsrxxx128v64:
+  case TOP_vinsr128v16:
+  case TOP_vinsrx128v16:
+  case TOP_vinsrxx128v16:
+  case TOP_vinsrxxx128v16:
+  case TOP_vround128v64:
+  case TOP_vroundx128v64:
+  case TOP_vroundxx128v64:
+  case TOP_vroundxxx128v64:
+  case TOP_vround128v32:
+  case TOP_vroundx128v32:
+  case TOP_vroundxx128v32:
+  case TOP_vroundxxx128v32:
+  case TOP_vroundsd:
+  case TOP_vroundxsd:
+  case TOP_vroundxxsd:
+  case TOP_vroundxxxsd:
+  case TOP_vroundss:
+  case TOP_vroundxss:
+  case TOP_vroundxxss:
+  case TOP_vroundxxxss:
+  case TOP_vfbroadcastss:
+  case TOP_vfbroadcastxss:
+  case TOP_vfbroadcastxxss:
+  case TOP_vfbroadcastsd:
+  case TOP_vfbroadcastxsd:
+  case TOP_vfbroadcastxxsd:
+  case TOP_vfbroadcastf128:
+  case TOP_vfbroadcastxf128:
+  case TOP_vfbroadcastxxf128:
+    uses_w_bit = true;
+    break;
+  default:
+    break;
+  }
+ 
+  return uses_w_bit;
+}
+
+
+bool Instruction_Uses_VEX( const TOP top )
+{
+  bool uses_avx = false;
+
+  if( Is_Target_AVX() ){
+    uses_avx = TOP_is_avx( top );
   }
 
-  return imm_size;
+  return uses_avx;
+}
+
+
+bool Vex_W_Needed( TOP top )
+{
+  bool vex_w_needed = true;
+
+  switch ( top ) {
+  case TOP_vcvtdq2pd:
+  case TOP_vcvtdq2pdx:
+  case TOP_vcvtdq2pdxx:
+  case TOP_vcvtdq2pdxxx:
+  case TOP_vcvtdq2ps:
+  case TOP_vcvtdq2psx:
+  case TOP_vcvtdq2psxx:
+  case TOP_vcvtdq2psxxx:
+  case TOP_vcvtpd2dq:
+  case TOP_vcvtpd2dqx:
+  case TOP_vcvtpd2dqxx:
+  case TOP_vcvtpd2dqxxx:
+  case TOP_vcvtpd2dqy:
+  case TOP_vcvtpd2dqyx:
+  case TOP_vcvtpd2dqyxx:
+  case TOP_vcvtpd2dqyxxx:
+  case TOP_vcvtpd2ps:
+  case TOP_vcvtpd2psx:
+  case TOP_vcvtpd2psy:
+  case TOP_vcvtpd2psyx:
+  case TOP_vcvtpd2psyxx:
+  case TOP_vcvtpd2psyxxx:
+  case TOP_vcvtps2dq:
+  case TOP_vcvtps2dqx:
+  case TOP_vcvtps2dqxx:
+  case TOP_vcvtps2dqxxx:
+  case TOP_vcvtps2pd:
+  case TOP_vcvtps2pdx:
+  case TOP_vcvtps2pdxx:
+  case TOP_vcvtps2pdxxx:
+    vex_w_needed = false;
+    break;
+  default:
+    break;
+  }
+
+  return vex_w_needed;
+}
+
+
+bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, bool uses_avx, TOP top )
+{
+  bool uses_rex = false;
+
+  if( constrain_to_upper == false ) {
+    constrain_to_upper = !Vex_W_Needed( top );
+  }
+
+  if( Is_Target_32bit() )
+    return uses_rex;
+
+  if( TN_register_class(opnd) == ISA_REGISTER_CLASS_integer ) {
+    switch( TN_register(opnd) ) {
+    case RAX:
+    case RBX:
+    case RCX:
+    case RDX:
+    case RDI:
+    case RSI:
+    case RBP:
+    case RSP:
+      if( ( TN_size(opnd) == 8 ) && ( constrain_to_upper == false ) )
+        uses_rex = true;
+      break;
+    case R8:
+    case R9:
+    case R10:
+    case R11:
+    case R12:
+    case R13:
+    case R14:
+    case R15:
+    default:
+      uses_rex = true;
+      break;
+    }
+  } else if( TN_register_class(opnd) == ISA_REGISTER_CLASS_float ) {
+    switch( TN_register(opnd) ) {
+    case XMM8:
+    case XMM9:
+    case XMM10:
+    case XMM11:
+    case XMM12:
+    case XMM13:
+    case XMM14:
+    case XMM15:
+      uses_rex = true;
+      break; 
+    default:
+      break;
+    }
+  }
+
+  return uses_rex;
+}
+
+
+bool OP_has_implicit_REX( const TOP top )
+{
+  bool has_rex = false;
+
+  if( Is_Target_32bit() )
+    return has_rex;
+
+  switch( top ){
+  case TOP_crc32w:
+  case TOP_crc32wx:
+  case TOP_crc32wxx:
+  case TOP_crc32wxxx:
+  case TOP_crc32d:
+  case TOP_crc32dx:
+  case TOP_crc32dxx:
+  case TOP_crc32dxxx:
+  case TOP_crc32q:
+  case TOP_crc32qx:
+  case TOP_crc32qxx:
+  case TOP_crc32qxxx:
+  case TOP_crc32b:
+  case TOP_crc32bx:
+  case TOP_crc32bxx:
+  case TOP_crc32bxxx:
+  case TOP_mov64:
+  case TOP_movslq:
+    has_rex = true; 
+    break;
+  default:
+    break;
+  }
+
+  return has_rex;
+}
+
+
+void KEY_SCH::Compute_Insn_Size( OP *op )
+{
+  OPR* opr = Get_OPR(op);
+  const TOP top = OP_code(op);
+  uint8_t insn_size = 0;
+  uint8_t vex_encoding_size = 0;
+  bool uses_avx = Instruction_Uses_VEX( top );
+  bool rex_seen = false;
+  bool has_modrm = false;
+  bool has_sib = false;
+  bool is_memory = false;
+  bool constrain_to_upper = false;
+
+  // Do not determine the insn size if we do not emit it.
+  if ( OP_dummy(op) )
+    return;
+  
+  // What is opcode size?
+  insn_size = TOP_is_opcode_1(top) ? 1 : 
+                TOP_is_opcode_2(top) ? 2 : 
+                  TOP_is_opcode_3(top) ? 3 : 
+                    TOP_is_opcode_4(top) ? 4 : 0;
+
+  // TODO: assert if insn_size still 0
+
+  // Test for existance of modrm byte.
+  // A modrm byte is used for any source which 
+  // utitilizes a register for either for holding a value
+  // or reading one from memory and is not an imm field.
+  if( !mrt.TOP_is_push( top ) && !mrt.TOP_is_pop( top ) ) {
+    for (int i = 0; i < OP_opnds(op) ; i++) {
+      TN* opnd = OP_opnd(op, i);
+      if( TN_is_register(opnd) ){
+        if( has_modrm == false ){
+          has_modrm = true;
+          insn_size++;
+          break;
+        }
+      }
+    }
+    // xor insns are recorded as result only, but really do have modrm form
+    // load const is also a modrm form
+    if( ( has_modrm == false ) && 
+        ( ( top == TOP_zero32 ) ||
+          ( top == TOP_zero64 ) ||
+          ( top == TOP_ldc64  ) ) ){
+      has_modrm = true;
+      insn_size++;
+    }
+  }
+
+  // Do we have a SIB byte?
+  int index_op = TOP_Find_Operand_Use( top, OU_index );
+  if ( index_op != -1 ){
+    TN* opnd = OP_opnd(op, index_op);
+    WN *mem_wn = Get_WN_From_Memory_OP( op );
+    if( mem_wn ){
+      TYPE_ID rtype = WN_rtype(mem_wn);
+      // this is the REX.X case
+      constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
+      rex_seen = Reg_Uses_REX( opnd, constrain_to_upper, uses_avx, top );
+      has_sib = true;
+    } else {
+      // this is the REX.X case
+      rex_seen = Reg_Uses_REX( opnd, false, uses_avx, top );
+      has_sib = true;
+    }
+  } 
+
+  // Count all bytes used for immediates
+  insn_size += OPR_imm_size(opr);
+
+  if( mrt.OP_is_memory_load( op ) || mrt.OP_is_memory_store( op ) ){
+    is_memory = true;
+  }
+ 
+  if( !mrt.TOP_is_push( top ) && !mrt.TOP_is_pop( top ) ) {
+    // Now see if a register utilizes the upper rank of regs, if so 
+    // we have a rex byte.
+    for( int i = 0; i < OP_opnds(op); i++ ){
+      TN* opnd = OP_opnd(op, i);
+      if( i == index_op ) continue;
+      if( TN_is_register(opnd) ){
+        // First check memory load/store size
+        if( i == TOP_Find_Operand_Use( top, OU_base ) ){
+          // first check for REX.X case in base reg
+          if ( TN_register_class(opnd) == ISA_REGISTER_CLASS_integer ) {
+            if( TN_register(opnd) == R12 ) {
+              has_sib = true;
+            } else if( ( TN_register(opnd) == RSP ) && 
+                     ( uses_avx == true) ) {
+              has_sib = true;
+              break;
+            }
+          }
+
+          // Now do a general check
+          WN *mem_wn = Get_WN_From_Memory_OP( op );
+          if( mem_wn ){
+            TYPE_ID rtype = WN_rtype(mem_wn);
+            // This is the REX.B or REX.W case
+            constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
+            if( Reg_Uses_REX( opnd, constrain_to_upper, uses_avx, top ) )
+              rex_seen = true;
+          } else {
+            // This is the REX.B or REX.W case
+            if( Reg_Uses_REX( opnd, false, uses_avx, top ) )
+              rex_seen = true;
+          }
+        } else {
+          // This is the REX.B or REX.W case
+          if( Reg_Uses_REX( opnd, false, uses_avx, top ) )
+            rex_seen = true;
+        }
+      }
+    }
+
+    // Now check the result for REX regs 
+    if( rex_seen == false ){
+      int results = OP_results(op);
+      for( int i = 0; i < results; i++) {
+        TN *opnd = OP_result(op, i);
+        if( TN_is_register(opnd) ){
+          const ISA_OPERAND_INFO *oinfo = ISA_OPERAND_Info( top );
+          const ISA_OPERAND_VALTYP *otype = 
+            ISA_OPERAND_INFO_Operand( oinfo, i );
+          int num_bits = ISA_OPERAND_VALTYP_Size(otype);
+
+          // If this insn was defined to have a result that is larger
+          // than 32bits, test it for REX bit usage.
+          if( num_bits > 32 ) {
+            // This is the REX.B or REX.W case
+            if( Reg_Uses_REX( opnd, false, uses_avx, top ) ){
+              rex_seen = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  } else if( mrt.TOP_is_push( top ) ) {
+    for( int i = 0; i < OP_opnds(op); i++ ){
+      TN* opnd = OP_opnd(op, i);
+      if( TN_is_register(opnd) ){
+        if( Reg_Uses_REX( opnd, true, uses_avx, top ) ){
+          rex_seen = true;
+          break;
+        }
+      }
+    }
+  } else if( mrt.TOP_is_pop( top ) ) {
+    int results = OP_results(op);
+    for( int i = 0; i < results; i++) {
+      TN *opnd = OP_result(op, i);
+      if( TN_is_register(opnd) ){
+        if( Reg_Uses_REX( opnd, true, uses_avx, top ) ){
+          rex_seen = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if( has_sib ){
+    insn_size++;
+  }
+
+  if( (rex_seen == false) && ( OP_has_implicit_REX( top ) ) ){
+    rex_seen = true;
+  }
+
+  // If pure REX usage detected, increase the size
+  // else use the VEX encoding logic
+  if( rex_seen && !uses_avx )
+    insn_size++;
+
+  //
+  // Count vex bytes. The rules are as follows:
+  //
+  // if VEX.W=1, VEX.X=0, VEX.B =0 or opts are in map with 0f3a or 0f38
+  // then the form is a 3 byte form, else its a 2 byte form.
+  // VEX.W = 1 toggles the source operand order for fma4 and vpermil insns
+  //           else it is the width field of legacy Simd insns for the upper
+  //           bank of gpr or xmm regs.
+  // VEX.X = 0 toggles the use to on for the upper bank or xmm or gpr regs
+  //           in the SIB.index field, and is bit inverted from the REX.X bit.
+  // VEX.B = 0 toggles the use to on for the upper bank or xmm or gpr regs
+  //           in the modrm.r/m field and is bit inverted from the REX.B bit.
+  //           operand 3 uses this field typically.
+
+  if( uses_avx ) {
+    // Initially set the vex encoding size to 2 bytes and discover if 
+    // we need the third byte
+    vex_encoding_size = 2;
+    if( Uses_AVX_W_bit( top ) ) {
+      // These are instructions which must use the 3 byte vex encoding
+      vex_encoding_size = 3;
+    } else if( rex_seen ) {
+      // if legacy code under avx uses the rex bits, we have 3 byte form
+      vex_encoding_size = 3;
+    }
+    insn_size += vex_encoding_size;
+  }
+
+  OPR_insn_size(opr) = insn_size;
+  OPR_num_pf_bytes(opr) = (vex_encoding_size) ? 2 : 3;
 }
 
 
@@ -745,6 +2018,9 @@ void KEY_SCH::Build_OPR()
 
     OPR_uses(opr) = 0;
     OPR_latency(opr) = 0;
+    OPR_insn_size(opr) = 0;
+    OPR_num_pf_bytes(opr) = 0;
+    OPR_bb_id(opr) = 0;
 
     for( ARC_LIST* arcs = OP_succs(op); arcs != NULL; 
          arcs = ARC_LIST_rest(arcs) ){
@@ -808,6 +2084,7 @@ void KEY_SCH::Build_OPR()
     } else {
       OPR_imm_size(opr) += Size_Of_Immediates( op, false );
     }
+    Compute_Insn_Size( op );
   }
 
   _true_cp = (int)ceil( mem_ops / 3 );
@@ -1091,8 +2368,8 @@ OP* KEY_SCH::Select_Variable( int cycle )
     OPR* opr = Get_OPR(op);
 
     // For x87/call blocks defer to full compare where we will take the
-    // orderd op by lowest index.
-    if( BB_contains_x87 || BB_call(bb) ){
+    // orderd op by lowest index. Also true is we fail rid test.
+    if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off ){
       break;
     }
 
@@ -1114,7 +2391,7 @@ OP* KEY_SCH::Select_Variable( int cycle )
 
     for( int i = 1; i < num; i++ ){
       OP* op = (OP*)VECTOR_element( _ready_vector, i );
-      if( BB_contains_x87 || BB_call(bb) ){
+      if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off ){
         best = OP_map_idx(best) < OP_map_idx(op) ? best : op;
       } else {
         OPR* opr = Get_OPR(op);
@@ -1145,7 +2422,6 @@ void KEY_SCH::Schedule_BB()
   last_mem_op = NULL;
   sched_group = 0;
   sched_group_imm_size = 0;
-  sched_group_64bit_imm_count = 0;
 
   while( VECTOR_count(_ready_vector) > 0 ){
     OP* op;
@@ -1220,6 +2496,7 @@ void KEY_SCH::Schedule_BB()
     } else {
       cur_clock++;
       sched_group++;
+      Close_Current_Window( false );
       sched_group_imm_size = 0;
       sched_group_64bit_imm_count = 0;
 
@@ -1248,7 +2525,7 @@ void KEY_SCH::Schedule_BB()
 }
 
 
-KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace )
+KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace, BOOL calc_off )
   : bb( bb ), mem_pool( pool ), trace( trace )
 {
   if( CG_skip_local_sched ){
@@ -1275,12 +2552,15 @@ KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace )
       CG_DEP_Trace_Graph( bb );
     }
 
-    Init();
+    Init( calc_off );
     Schedule_BB();
     Reorder_BB();
     Summary_BB();
 
     CG_DEP_Delete_Graph( bb );
+    if( window_data.window_pair[0].opr_count > 0 ){
+      Close_Current_Window( true );
+    }
   }
 
   Set_BB_scheduled( bb );
@@ -1291,6 +2571,8 @@ KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace )
 
 void CG_Sched( MEM_POOL* pool, BOOL trace )
 {
+  int i;
+
   // Note: Only targets which have their machine descriptions modified
   //       to support some of the scheduling logic present should use this
   //       scheduler.
@@ -1301,14 +2583,21 @@ void CG_Sched( MEM_POOL* pool, BOOL trace )
     return;
 
   // compute live-in sets for registers.
+  sched_trace = trace;
+  window_data.cur_offset = 0;
   REG_LIVE_Analyze_Region();
 
-  for( BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb) ){
-    RID* rid = BB_rid(bb);
-    if( rid != NULL && RID_level( rid ) >= RL_CGSCHED )
-      continue;
-
-    KEY_SCH sched( bb, pool, trace );
+  // The rid test is now incorperated so that we do not reorder
+  // when we fail, but we still need to derive all other info.
+  // This is done so that we exactly mimic code layout in emit.
+  // The first iteration is a non reorder pass which calculates
+  // the offset each BB, where a correctness factor will be measured
+  // in with respect to a branch target offset it is within 255 byte of the
+  // the start of the func in pass 2, which is a reording pass.
+  for( i = 0; i < 2; i++ ){
+    for( BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb) ){
+      KEY_SCH sched( bb, pool, trace, i == 0 );
+    }
   }
 
   // Finish with reg_live after cflow so that it can benefit from the info.

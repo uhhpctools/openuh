@@ -50,7 +50,7 @@
 ***
 ***     extern void Remove_Unity_Trip_Loop(WN* wn_loop, BOOL update_access,
 ***	  WN** wn_first, WN** wn_last, ARRAY_DIRECTED_GRAPH16* dg, 
-***	  DU_MANAGER* du)
+***	  DU_MANAGER* du, BOOL verify_trip_count)
 ***
 ***	  Remove the unity trip loop 'wdloop'.  If 'update_access',
 ***	  update the access vectors, and 'update_do_depths' update the do
@@ -96,12 +96,13 @@
 extern void Remove_Zero_Trip_Loop(WN* wn_loop);
 
 extern void Remove_Unity_Trip_Loop(WN* wn_loop, BOOL update_access,
-  WN** wn_first, WN** wn_last, ARRAY_DIRECTED_GRAPH16* dg, DU_MANAGER* du);
+  WN** wn_first, WN** wn_last, ARRAY_DIRECTED_GRAPH16* dg, DU_MANAGER* du, 
+  BOOL verify_trip_count=TRUE);
 
 extern DOLOOP_STACK* Finalizable_Loops(WN* wn_loop, 
   ARRAY_DIRECTED_GRAPH16* dg, DU_MANAGER* du);
 
-extern WN* Finalize_Loops(WN* func_nd); 
+extern void Finalize_Loops(WN* func_nd); 
 
 extern void Remove_Unity_Trip_Loop_Dep_Update(WN* wn_loop,
   ARRAY_DIRECTED_GRAPH16* dg,

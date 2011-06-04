@@ -437,7 +437,7 @@ protected:
   void Delete();
   void Set_cu(COMP_UNIT * i) { _cu = i; }
   COMP_UNIT * Get_cu();
-  WN * Get_const_wn(long long);
+  WN * Get_const_wn(INT64);
   WN * Get_cond(SC_NODE *, BOOL);
   WN * Merge_cond(WN *, WN *, OPERATOR);
   BOOL Can_reorder_cond(WN *, WN *);

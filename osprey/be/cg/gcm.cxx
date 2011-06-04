@@ -657,66 +657,6 @@ OP_Has_Restrictions(OP *op, BB *source_bb, BB *target_bb, mINT32 motion_type)
   if (OP_Defs_TN(op, SP_TN) || OP_Defs_Reg(op, REGISTER_CLASS_sp, REGISTER_sp))
     return TRUE;
 
-#if !defined(TARG_SL)
-  // Do extra processing for BRP instructions.
-  if (OP_branch_predict(op)) {
-    UINT64 num_insts = 0;
-    BB *prev_bb;
-    for (prev_bb = source_bb; prev_bb && prev_bb != target_bb; 
-	 prev_bb = BB_prev(prev_bb)) {
-      num_insts += BB_length(prev_bb);
-    }
-    
-    // It's assumed that about 1/3 nops will be added later, so include the
-    // expansion factor. The below condition checks that BRP instructions
-    // are not scheduled too early, such that they violate the offset
-    // restrictions.
-
-    if ((num_insts * 1.3 * INST_BYTES) >= DEFAULT_BRP_BRANCH_LIMIT)
-      return TRUE;
-  }
-#endif
-
-  // Even SP ref OPS are a trouble for circular scheduling
-  if( Motion_Is_CIRC_ABOVE(motion_type) ) {
-     if (OP_Refs_TN(op,  SP_TN) || 
-	 OP_Refs_Reg(op, REGISTER_CLASS_sp, REGISTER_sp)) return TRUE;
-
-#if !defined(TARG_SL)
-     // No need to circular-schedule BRP ops.
-     if (OP_branch_predict(op)) return TRUE;
-
-     if (OP_memory(op)) {
-       if (OP_no_alias(op) || OP_prefetch(op)) return FALSE;
-       /* Needn't consider the out-of-bound problem .
-        * I'll try to bring in the speculation variable later
-        */
-       // If <PROC> has delayed exception mechanism, either by speculative
-       // loads or predication, return FALSE.
-       if (PROC_has_delayed_exception() && OP_has_predicate(op)) { 
-	 return FALSE;
-       } else {
-
-	 // TODO: Need to add more relaxation rules w.r.t memory accesses 
-	 // which can be verified as safe. Disallow memory references which 
-	 // belong to KIND_ARRAY type since circular scheduling them can lead 
-	 // to out-of-bound accesses. Need to change constant operand 
-	 // reference by a generic item. 
-
-	 if (TN_is_symbol(OP_opnd(op, 1)) && 
-	     ST_class(TN_var(OP_opnd(op, 1))) == CLASS_VAR && 
-	     TY_kind(ST_type(TN_var(OP_opnd(op, 1)))) != KIND_ARRAY) 
-	   return FALSE;
-       }
-       return TRUE;
-     } 
-#endif
-  }
-
-  // for the PRE-GCM stage, don't let local TN's which are ideal 
-  // candidates for peephole opportunities (eg. copy ops) be global TN's.
-  if (!Ignore_TN_Dep && (OP_copy(op) || OP_glue(op))) return TRUE;
-
   // Do extra processing for BRP instructions.
   if (OP_branch_predict(op)) {
     UINT64 num_insts = 0;
@@ -772,7 +712,6 @@ OP_Has_Restrictions(OP *op, BB *source_bb, BB *target_bb, mINT32 motion_type)
 
   if (!Ignore_TN_Dep && (OP_copy(op) || OP_glue(op))) return TRUE;
 
-#if !defined(TARG_SL)
   //TODO: need to check if this is not too conservative.
   INT i;
   for (i = 0; i < OP_results(op); ++i) {
@@ -838,7 +777,6 @@ OP_Has_Restrictions(OP *op, BB *source_bb, BB *target_bb, mINT32 motion_type)
     if (Single_Register_Subclass(subclass) != REGISTER_UNDEFINED)
       return TRUE;
   }
-#endif
 #endif
 
   return FALSE;
@@ -1196,6 +1134,32 @@ Null_Ptr_Deref_Spec(OP *deref_op, BB *src, BB *dest)
   return FALSE;
 }
 
+// ======================================================================
+// Find_Limit_OP
+// finds the <limit_op> of <tgt_bb>. The <limit_op> is the last <op> in
+// <tgt_bb> the <cur_op> can be moved before. The calculation of <limit_op>
+// also depends on whether its' PRE/POST GCM phase.
+// ======================================================================
+static OP*
+Find_Limit_OP(OP *cur_op, BB *cur_bb, BB *src_bb, BB *tgt_bb)
+{
+  OP *limit_op;
+
+  if (Cur_Gcm_Type & GCM_BEFORE_GRA) 
+    limit_op = BB_copy_xfer_op(tgt_bb);
+  else 
+    limit_op = BB_xfer_op(tgt_bb);
+
+  if (cur_bb == src_bb) 
+    limit_op = cur_op;
+  else if (cur_bb == tgt_bb)
+    limit_op = (limit_op) ? OP_prev(limit_op) : BB_last_op(cur_bb);
+  else 
+    limit_op = NULL;
+ 
+  return limit_op;
+}
+
 // =======================================================================
 // Can_Mem_Op_Be_Moved
 // checks to see if a <mem_op> can be moved from <src> to <dest>. For 
@@ -1269,13 +1233,7 @@ Can_Mem_Op_Be_Moved(OP *mem_op, BB *cur_bb, BB *src_bb, BB *dest_bb,
   // we only look for memory dependences here; register dependences and 
   // call dependences will be considered in the later phase only after we 
   // ensure that there aren't any memory dependences.
-  OP *last_op = BB_last_op(dest_bb);
-  if (cur_bb == dest_bb)
-    // check that the inst can be moved to <dest>
-    limit_op = (br_op = BB_xfer_op(dest_bb)) ? OP_prev(br_op) :
-	((last_op = BB_last_op(dest_bb)) ? OP_prev(last_op) : last_op);
-  else 
-    limit_op = (cur_bb == src_bb) ? mem_op : NULL;
+  limit_op = Find_Limit_OP(mem_op, cur_bb, src_bb, dest_bb);
 
   BOOL read_read_dep;
   for (cur_op = ((forw && cur_bb != src_bb) || (!forw && cur_bb == src_bb)) ?
@@ -1327,6 +1285,9 @@ Can_Mem_Op_Be_Moved(OP *mem_op, BB *cur_bb, BB *src_bb, BB *dest_bb,
     }
   }
 #else
+        // if there is true alias, return FALSE
+        if (definite) return FALSE;
+        
         // #676123; first, if there exists an alias and <cur_bb> is not equal
         // to <dest_bb>, then there is nothing much other safety tests can do.
         if (cur_bb != dest_bb) return FALSE;
@@ -1392,6 +1353,7 @@ Can_Mem_Op_Be_Moved(OP *mem_op, BB *cur_bb, BB *src_bb, BB *dest_bb,
        Set_EAGER_PTR_SPEC(*cur_spec_type);
      }
 
+#if 0
     /* Have to be really careful in relaxing this constraint. This will
        allow circular scheduling of unsafe mem ops. More context analysis
        needs to be done on a global basis (not just the path containing
@@ -1399,6 +1361,7 @@ Can_Mem_Op_Be_Moved(OP *mem_op, BB *cur_bb, BB *src_bb, BB *dest_bb,
     if ( Motion_Is_CIRC_ABOVE(motion_type) && (cur_bb == src_bb)) {
       Set_CIRC_PTR_SPEC(*cur_spec_type);
     }
+#endif
 
   }
   if( !alias || EAGER_PTR_SPEC(*cur_spec_type) || CIRC_PTR_SPEC(*cur_spec_type) ) 
@@ -1735,30 +1698,6 @@ GCM_Fill_Branch_Delay_Slots (void)
 
   // Finish with reg_live after cflow so that it can benefit from the info.
   REG_LIVE_Finish ();
-}
-
-// ======================================================================
-// Find_Limit_OP
-// finds the <limit_op> of <tgt_bb>. The <limit_op> is the last <op> in
-// <tgt_bb> the <cur_op> can be moved before. The calculation of <limit_op>
-// also depends on whether its' PRE/POST GCM phase.
-// ======================================================================
-static OP*
-Find_Limit_OP(OP *cur_op, BB *cur_bb, BB *src_bb, BB *tgt_bb)
-{
-  OP *limit_op;
-
-  if (Cur_Gcm_Type & GCM_BEFORE_GRA) 
-    limit_op = BB_copy_xfer_op(tgt_bb);
-  else 
-    limit_op = BB_xfer_op(tgt_bb);
-
-  if (cur_bb == tgt_bb)
-    limit_op = (limit_op) ? OP_prev(limit_op) : BB_last_op(cur_bb);
-  else 
-    limit_op = (cur_bb == src_bb) ? cur_op : NULL;
- 
-  return limit_op;
 }
 
 #if defined(TARG_SL)

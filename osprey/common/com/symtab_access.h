@@ -1136,6 +1136,13 @@ inline UINT64
 PU_src_lang (const PU& pu)		{ return pu.src_lang; }
 
 inline BOOL
+PU_simple_eh(const PU& pu)		{ return (pu.flags & PU_SIMPLE_EH_RANGE) != 0;}
+inline void
+Set_PU_simple_eh(PU& pu)			{ pu.flags |= PU_SIMPLE_EH_RANGE; }
+inline void
+Clear_PU_simple_eh(PU& pu)		{ pu.flags &= ~PU_SIMPLE_EH_RANGE; }
+
+inline BOOL
 PU_mixed_lang (const PU& pu)		{ return (pu.src_lang & PU_MIXED_LANG) != 0; }
 inline void
 Set_PU_mixed_lang (PU& pu)		{ pu.src_lang |= PU_MIXED_LANG; }

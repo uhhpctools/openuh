@@ -1604,7 +1604,7 @@ SSA::Resurrect_chi(CHI_NODE *chi)
   STMTREP *sr = Find_stmt_containing_chi(chi, _opt_stab->Ver_stab_entry(du)->Bb());
   if (_opt_stab->Du_zero_vers(du) ) {
     cr = Get_zero_version_CR(chi->Aux_id(), _opt_stab, du);
-    sr->Set_has_zver();
+    if (sr) sr->Set_has_zver();
   } else {
     cr = Du2cr(_htable, _opt_stab, du, sr);
     cr->Set_flag(CF_DEF_BY_CHI);
@@ -1614,7 +1614,7 @@ SSA::Resurrect_chi(CHI_NODE *chi)
   chi->Set_live(TRUE);
   chi->Set_dse_dead(FALSE);
 
-  if (sr->Op() == OPC_OPT_CHI)
+  if (!sr || sr->Op() == OPC_OPT_CHI)
     chi->Set_OPND( Get_zero_version_CR(chi->Aux_id(), _opt_stab, chi->Opnd()));
   else {
     chi->Set_OPND(Revive_phi_chi_opnd(chi->Opnd()));

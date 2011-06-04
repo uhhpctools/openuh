@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2245,11 +2245,10 @@ EH_Write_Range_Table(WN * wn)
 #endif // KEY
 
   fix_mask_ranges();
-  reorder_range_list();
 #ifdef KEY
   flatten_regions();
-  reorder_range_list();
 #endif
+  reorder_range_list();
 
   ST * st = ST_For_Range_Table(wn);
   eh_pu_range_st = st;

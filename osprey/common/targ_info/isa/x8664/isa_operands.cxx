@@ -300,6 +300,8 @@ int main()
   Operand(0, simm64, opnd1);
 
   Instruction_Group( "int8 arithmetic",
+		     TOP_add8,
+		     TOP_sub8,
 		     TOP_and8,
 		     TOP_or8,
 		     TOP_xor8,
@@ -310,6 +312,8 @@ int main()
 
 
   Instruction_Group( "int16 arithmetic",
+		     TOP_add16,
+		     TOP_sub16,
 		     TOP_and16,
 		     TOP_or16,
 		     TOP_xor16,
@@ -2878,6 +2882,382 @@ int main()
   Operand(1, int64, base);
   Operand(2, simm32, offset);
 
+  Instruction_Group( "int unary mem res",
+                     TOP_negxr8,
+                     TOP_negxr16,
+                     TOP_negxr32,
+                     TOP_negxr64,
+                     TOP_notxr8,
+                     TOP_notxr16,
+                     TOP_notxr32,
+                     TOP_notxr64,
+                     TOP_incxr8,
+                     TOP_incxr16,
+                     TOP_incxr32,
+                     TOP_incxr64,
+                     TOP_decxr8,
+                     TOP_decxr16,
+                     TOP_decxr32,
+                     TOP_decxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, base);
+  Operand(1, simm32, offset);
+
+  Instruction_Group( "int unary index w/ base res",
+                     TOP_negxxr8,
+                     TOP_negxxr16,
+                     TOP_negxxr32,
+                     TOP_negxxr64,
+                     TOP_notxxr8,
+                     TOP_notxxr16,
+                     TOP_notxxr32,
+                     TOP_notxxr64,
+                     TOP_incxxr8,
+                     TOP_incxxr16,
+                     TOP_incxxr32,
+                     TOP_incxxr64,
+                     TOP_decxxr8,
+                     TOP_decxxr16,
+                     TOP_decxxr32,
+                     TOP_decxxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, base);
+  Operand(1, simm32, offset);
+  Operand(2, int64, index);
+  Operand(3, uimm8, scale);
+
+  Instruction_Group( "int unary index w/o base res",
+                     TOP_negxxxr8,
+                     TOP_negxxxr16,
+                     TOP_negxxxr32,
+                     TOP_negxxxr64,
+                     TOP_notxxxr8,
+                     TOP_notxxxr16,
+                     TOP_notxxxr32,
+                     TOP_notxxxr64,
+                     TOP_incxxxr8,
+                     TOP_incxxxr16,
+                     TOP_incxxxr32,
+                     TOP_incxxxr64,
+                     TOP_decxxxr8,
+                     TOP_decxxxr16,
+                     TOP_decxxxr32,
+                     TOP_decxxxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, index);
+  Operand(1, uimm8, scale);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int unary n32 res",
+                     TOP_negxr8_n32,
+                     TOP_negxr16_n32,
+                     TOP_negxr32_n32,
+                     TOP_negxr64_off,
+                     TOP_notxr8_n32,
+                     TOP_notxr16_n32,
+                     TOP_notxr32_n32,
+                     TOP_notxr64_off,
+                     TOP_incxr8_n32,
+                     TOP_incxr16_n32,
+                     TOP_incxr32_n32,
+                     TOP_incxr64_off,
+                     TOP_decxr8_n32,
+                     TOP_decxr16_n32,
+                     TOP_decxr32_n32,
+                     TOP_decxr64_off,
+                     TOP_UNDEFINED);
+  Operand(0, simm32, offset);
+
+  Instruction_Group( "int8 arithmetic mem res",
+                     TOP_addxr8,
+                     TOP_andxr8,
+                     TOP_orxr8,
+                     TOP_subxr8,
+                     TOP_xorxr8,
+                     TOP_UNDEFINED);
+  Operand(0, int8, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int16 arithmetic mem res",
+                     TOP_addxr16,
+                     TOP_andxr16,
+                     TOP_orxr16,
+                     TOP_subxr16,
+                     TOP_xorxr16,
+                     TOP_UNDEFINED);
+  Operand(0, int16, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int32 arithmetic mem res",
+                     TOP_addxr32,
+                     TOP_andxr32,
+                     TOP_orxr32,
+                     TOP_subxr32,
+                     TOP_xorxr32,
+                     TOP_UNDEFINED);
+  Operand(0, int32, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int64 arithmetic mem res",
+                     TOP_addxr64,
+                     TOP_andxr64,
+                     TOP_orxr64,
+                     TOP_subxr64,
+                     TOP_xorxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int8 arithmetic index w/ base res",
+                     TOP_addxxr8,
+                     TOP_andxxr8,
+                     TOP_orxxr8,
+                     TOP_subxxr8,
+                     TOP_xorxxr8,
+                     TOP_UNDEFINED);
+  Operand(0, int8, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group( "int16 arithmetic index w/ base res",
+                     TOP_addxxr16,
+                     TOP_andxxr16,
+                     TOP_orxxr16,
+                     TOP_subxxr16,
+                     TOP_xorxxr16,
+                     TOP_UNDEFINED);
+  Operand(0, int16, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group( "int32 arithmetic index w/ base res",
+                     TOP_addxxr32,
+                     TOP_andxxr32,
+                     TOP_orxxr32,
+                     TOP_subxxr32,
+                     TOP_xorxxr32,
+                     TOP_UNDEFINED);
+  Operand(0, int32, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group( "int64 arithmetic index w/ base res",
+                     TOP_addxxr64,
+                     TOP_andxxr64,
+                     TOP_orxxr64,
+                     TOP_subxxr64,
+                     TOP_xorxxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group( "int8 arithmetic index w/o base res",
+                     TOP_addxxxr8,
+                     TOP_andxxxr8,
+                     TOP_orxxxr8,
+                     TOP_subxxxr8,
+                     TOP_xorxxxr8,
+                     TOP_UNDEFINED);
+  Operand(0, int8, opnd1);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group( "int16 arithmetic index w/o base res",
+                     TOP_addxxxr16,
+                     TOP_andxxxr16,
+                     TOP_orxxxr16,
+                     TOP_subxxxr16,
+                     TOP_xorxxxr16,
+                     TOP_UNDEFINED);
+  Operand(0, int16, opnd1);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group( "int32 arithmetic index w/o base res",
+                     TOP_addxxxr32,
+                     TOP_andxxxr32,
+                     TOP_orxxxr32,
+                     TOP_subxxxr32,
+                     TOP_xorxxxr32,
+                     TOP_UNDEFINED);
+  Operand(0, int32, opnd1);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group( "int64 arithmetic index w/o base res",
+                     TOP_addxxxr64,
+                     TOP_andxxxr64,
+                     TOP_orxxxr64,
+                     TOP_subxxxr64,
+                     TOP_xorxxxr64,
+                     TOP_UNDEFINED);
+  Operand(0, int64, opnd1);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group( "int8 arithmetic n32 res",
+                     TOP_addxr8_n32,
+                     TOP_andxr8_n32,
+                     TOP_orxr8_n32,
+                     TOP_subxr8_n32,
+                     TOP_xorxr8_n32,
+                     TOP_UNDEFINED);
+  Operand(0, int8, opnd1);
+  Operand(1, simm32, offset);
+
+  Instruction_Group( "int16 arithmetic n32 res",
+                     TOP_addxr16_n32,
+                     TOP_andxr16_n32,
+                     TOP_orxr16_n32,
+                     TOP_subxr16_n32,
+                     TOP_xorxr16_n32,
+                     TOP_UNDEFINED);
+  Operand(0, int16, opnd1);
+  Operand(1, simm32, offset);
+
+  Instruction_Group( "int32 arithmetic n32 res",
+                     TOP_addxr32_n32,
+                     TOP_andxr32_n32,
+                     TOP_orxr32_n32,
+                     TOP_subxr32_n32,
+                     TOP_xorxr32_n32,
+                     TOP_UNDEFINED);
+  Operand(0, int32, opnd1);
+  Operand(1, simm32, offset);
+
+  Instruction_Group( "int64 arithmetic 64bit offset",
+                     TOP_addxr64_off,
+                     TOP_andxr64_off,
+                     TOP_orxr64_off,
+                     TOP_subxr64_off,
+                     TOP_xorxr64_off,
+                     TOP_UNDEFINED);
+  Operand(0, int64, opnd1);
+  Operand(1, simm32, offset);
+
+  Instruction_Group( "int32/64 arithmetic mem imm",
+                     TOP_addixr8,
+                     TOP_addixr16,
+                     TOP_addixr32,
+                     TOP_addixr64,
+                     TOP_andixr8,
+                     TOP_andixr16,
+                     TOP_andixr32,
+                     TOP_andixr64,
+                     TOP_orixr8,
+                     TOP_orixr16,
+                     TOP_orixr32,
+                     TOP_orixr64,
+                     TOP_subixr8,
+                     TOP_subixr16,
+                     TOP_subixr32,
+                     TOP_subixr64,
+                     TOP_xorixr8,
+                     TOP_xorixr16,
+                     TOP_xorixr32,
+                     TOP_xorixr64,
+                     TOP_UNDEFINED);
+  Operand(0, simm32, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group( "int32/64 arithmetic index w/ base imm",
+                     TOP_addixxr8,
+                     TOP_addixxr16,
+                     TOP_addixxr32,
+                     TOP_addixxr64,
+                     TOP_andixxr8,
+                     TOP_andixxr16,
+                     TOP_andixxr32,
+                     TOP_andixxr64,
+                     TOP_orixxr8,
+                     TOP_orixxr16,
+                     TOP_orixxr32,
+                     TOP_orixxr64,
+                     TOP_subixxr8,
+                     TOP_subixxr16,
+                     TOP_subixxr32,
+                     TOP_subixxr64,
+                     TOP_xorixxr8,
+                     TOP_xorixxr16,
+                     TOP_xorixxr32,
+                     TOP_xorixxr64,
+                     TOP_UNDEFINED);
+  Operand(0, simm32, opnd1);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group( "int32/64 arithmetic index w/o base imm",
+                     TOP_addixxxr8,
+                     TOP_addixxxr16,
+                     TOP_addixxxr32,
+                     TOP_addixxxr64,
+                     TOP_andixxxr8,
+                     TOP_andixxxr16,
+                     TOP_andixxxr32,
+                     TOP_andixxxr64,
+                     TOP_orixxxr8,
+                     TOP_orixxxr16,
+                     TOP_orixxxr32,
+                     TOP_orixxxr64,
+                     TOP_subixxxr8,
+                     TOP_subixxxr16,
+                     TOP_subixxxr32,
+                     TOP_subixxxr64,
+                     TOP_xorixxxr8,
+                     TOP_xorixxxr16,
+                     TOP_xorixxxr32,
+                     TOP_xorixxxr64,
+                     TOP_UNDEFINED);
+  Operand(0, simm32, opnd1);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group( "int32 arithmetic n32 imm",
+                     TOP_addixr8_n32,
+                     TOP_addixr16_n32,
+                     TOP_addixr32_n32,
+                     TOP_addixr64_off,
+                     TOP_andixr8_n32,
+                     TOP_andixr16_n32,
+                     TOP_andixr32_n32,
+                     TOP_andixr64_off,
+                     TOP_orixr8_n32,
+                     TOP_orixr16_n32,
+                     TOP_orixr32_n32,
+                     TOP_orixr64_off,
+                     TOP_subixr8_n32,
+                     TOP_subixr16_n32,
+                     TOP_subixr32_n32,
+                     TOP_subixr64_off,
+                     TOP_xorixr8_n32,
+                     TOP_xorixr16_n32,
+                     TOP_xorixr32_n32,
+                     TOP_xorixr64_off,
+                     TOP_UNDEFINED);
+  Operand(0, simm32, opnd1);
+  Operand(1, simm32, offset);
+
   Instruction_Group( "int8 arithmetic mem opnd w/ scaled index",
 		     TOP_xorxx8,
 		     TOP_orxx8,
@@ -3014,6 +3394,28 @@ int main()
   Result(0, int64);
   Operand(0, int64, opnd1);
 
+  Instruction_Group("int8 arithmetic with simm",
+		    TOP_addi8,
+		    TOP_subi8,
+		    TOP_andi8,
+		    TOP_ori8,
+		    TOP_xori8,
+		    TOP_UNDEFINED);
+  Result(0, int8);
+  Operand(0, int8, opnd1);
+  Operand(1, simm8, opnd2);
+  
+  Instruction_Group("int16 arithmetic with simm",
+		    TOP_addi16,
+		    TOP_subi16,
+		    TOP_andi16,
+		    TOP_ori16,
+		    TOP_xori16,
+		    TOP_UNDEFINED);
+  Result(0, int16);
+  Operand(0, int16, opnd1);
+  Operand(1, simm16, opnd2);
+  
   Instruction_Group("int32 arithmetic with simm",
 		    TOP_xori32,
 		    TOP_ori32,
@@ -3168,6 +3570,30 @@ int main()
   Operand(0, rax, storeval);
   Operand(1, simm64, offset);
 
+  Instruction_Group("imm8 store w/o base or index",
+		    TOP_storei8_n32,
+		    TOP_UNDEFINED);
+  Operand(0, simm8, storeval);
+  Operand(1, simm32, offset);
+
+  Instruction_Group("imm16 store w/o base or index",
+		    TOP_storei16_n32,
+		    TOP_UNDEFINED);
+  Operand(0, simm16, storeval);
+  Operand(1, simm32, offset);
+
+  Instruction_Group("imm32 store w/o base or index",
+		    TOP_storei32_n32,
+		    TOP_UNDEFINED);
+  Operand(0, simm32, storeval);
+  Operand(1, simm32, offset);
+
+  Instruction_Group("imm64 store w/o base or index",
+		    TOP_storei64_off,
+		    TOP_UNDEFINED);
+  Operand(0, simm64, storeval);
+  Operand(1, simm64, offset);
+
   Instruction_Group("int8 store",
 		    TOP_store8,
 		    TOP_UNDEFINED);
@@ -3195,6 +3621,34 @@ int main()
 		    TOP_storenti64,
 		    TOP_UNDEFINED);
   Operand(0, int64, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group("imm8 store",
+		    TOP_storei8,
+		    TOP_UNDEFINED);
+  Operand(0, simm8, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group("imm16 store",
+		    TOP_storei16,
+		    TOP_UNDEFINED);
+  Operand(0, simm16, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group("imm32 store",
+		    TOP_storei32,
+		    TOP_UNDEFINED);
+  Operand(0, simm32, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+
+  Instruction_Group("imm64 store",
+		    TOP_storei64,
+		    TOP_UNDEFINED);
+  Operand(0, simm64, storeval);
   Operand(1, int64, base);
   Operand(2, simm32, offset);
 
@@ -5063,6 +5517,42 @@ int main()
   Operand(3, int64, index);
   Operand(4, uimm8, scale);
 
+  Instruction_Group("imm8 store w/ indx",
+		    TOP_storeix8,
+		    TOP_UNDEFINED);
+  Operand(0, simm8, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group("imm16 store w/ indx",
+		    TOP_storeix16,
+		    TOP_UNDEFINED);
+  Operand(0, simm16, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group("imm32 store w/ indx",
+		    TOP_storeix32,
+		    TOP_UNDEFINED);
+  Operand(0, simm32, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
+  Instruction_Group("imm64 store w/ indx",
+		    TOP_storeix64,
+		    TOP_UNDEFINED);
+  Operand(0, simm64, storeval);
+  Operand(1, int64, base);
+  Operand(2, simm32, offset);
+  Operand(3, int64, index);
+  Operand(4, uimm8, scale);
+
   Instruction_Group("int8 store w/ indx w/o base",
 		    TOP_storexx8,
 		    TOP_UNDEFINED);
@@ -5093,6 +5583,38 @@ int main()
 		    TOP_storentixx64,
 		    TOP_UNDEFINED);
   Operand(0, int64, storeval);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group("imm8 store w/ indx w/o base",
+		    TOP_storeixx8,
+		    TOP_UNDEFINED);
+  Operand(0, simm8, storeval);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group("imm16 store w/ indx w/o base",
+		    TOP_storeixx16,
+		    TOP_UNDEFINED);
+  Operand(0, simm16, storeval);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group("imm32 store w/ indx w/o base",
+		    TOP_storeixx32,
+		    TOP_UNDEFINED);
+  Operand(0, simm32, storeval);
+  Operand(1, int64, index);
+  Operand(2, uimm8, scale);
+  Operand(3, simm32, offset);
+
+  Instruction_Group("imm64 store w/ indx w/o base",
+		    TOP_storeixx64,
+		    TOP_UNDEFINED);
+  Operand(0, simm64, storeval);
   Operand(1, int64, index);
   Operand(2, uimm8, scale);
   Operand(3, simm32, offset);

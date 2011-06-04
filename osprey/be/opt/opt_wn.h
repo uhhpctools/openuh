@@ -349,7 +349,7 @@ extern BOOL OPERATOR_is_fake(OPERATOR oper);
 extern BOOL OPCODE_is_fake(OPCODE opc);
 extern BOOL OPERATOR_is_volatile(OPERATOR oper);
 extern BOOL OPCODE_is_volatile(OPCODE opc);
-extern BOOL WN_get_val(WN *, int *, const WN_MAP&);
+extern std::pair<bool, int> WN_get_val(WN *, const WN_MAP&);
 extern BOOL WN_has_disjoint_val_range(WN *, WN *, const WN_MAP&, const WN_MAP&);
 extern void Collect_operands(WN *, STACK<WN *> *, STACK<WN *> *);
 

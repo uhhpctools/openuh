@@ -345,7 +345,43 @@ Any_Loop_In_SNL_Parallelizable(WN* loop, INT depth)
   }
   return FALSE;
 }
-  
+
+// Check whether there exists write to formal parameters in 'writes'.
+static BOOL Has_parm_ref(REF_LIST_STACK * writes)
+{
+  for (int i = 0; i < writes->Elements(); i++) {
+    REFERENCE_ITER w_iter(writes->Bottom_nth(i));
+    for (REFERENCE_NODE * node1 = w_iter.First(); !w_iter.Is_Empty();
+	 node1 = w_iter.Next()) {
+      WN * wn_node = node1->Wn;
+      if (wn_node) {
+	OPERATOR opr = WN_operator(wn_node);
+	if (OPERATOR_is_store(opr)) {
+	  if (OPERATOR_is_scalar_store(opr)) {
+	    if (WN_has_sym(wn_node)) {
+	      ST *st = WN_st(wn_node);
+	      if ((ST_sclass(st) == SCLASS_FORMAL)
+		  || (ST_sclass(st) == SCLASS_FORMAL_REF)) {
+		return TRUE;
+	      }
+	    }
+	  }
+	  else {
+	    WN * base = WN_array_base(WN_kid(wn_node,1));
+	    if (base && WN_has_sym(base)) {
+	      ST * st = WN_st(base);
+	      if ((ST_sclass(st) == SCLASS_FORMAL)
+		  || (ST_sclass(st) == SCLASS_FORMAL_REF)) {
+		return TRUE;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
+  return FALSE;
+}
 
 static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN** loop1_p, WN** loop2_p,
                       FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi,
@@ -627,13 +663,34 @@ static FISSION_FUSION_STATUS Fuse_Outer_Loops(WN** loop1_p, WN** loop2_p,
   if (array_ref_count2 == -1)
     return Failed;
 
+  // This is a workaround for Fortran program error that is exposed by
+  // more aggressive loop fusions.
+  if (LNO_Fusion >= 2) {
+    if (Has_parm_ref(writes1)) 
+      dli1->No_Fusion = 1;
+    else if (Has_parm_ref(writes2)) 
+      dli2->No_Fusion = 1;
+    
+    if (dli1->No_Fusion || dli2->No_Fusion) {
+      if (LNO_Verbose)
+	outer_fusion_verbose_info(srcpos1,srcpos2,
+        "Loops with writes to reference parameter cannot be outer fused.");
+      if (LNO_Analysis)
+	outer_fusion_analysis_info(FAIL,srcpos1,srcpos2,0,0,
+        "Loops with writes to reference paramater cannot be outer fused.");
+      if (LNO_Tlog)
+	outer_fusion_tlog_info(FAIL,srcpos1,srcpos2,0,0,
+        "Loops with writes to reference parameter cannot be outer fused.");
+      return Failed;
+    }
+  }
+
   BOOL prefer_fuse = FALSE;
-  
   if (Do_Aggressive_Fuse) {
     // If two loops have many array data dependencies, fusion can enable scalarization
     // to reduce memory bandwith.
     if ((dli1->Prefer_Fuse != 1)
-	&& (Array_Data_Dependence_Count(writes1, reads2) >= LNO_Fusion_Ddep_Limit))
+	&& (Array_Data_Dependence_Count(writes1, reads2) >= LNO_Fusion_Ddep_Limit)) 
       dli1->Prefer_Fuse = 1;
     prefer_fuse = (dli1->Prefer_Fuse == 1) ? TRUE : FALSE;
   }
@@ -947,8 +1004,13 @@ static void Child_Loop_Fusion_Walk(WN * wn, FIZ_FUSE_INFO* ffi, WN2UINT *wn2ffi)
 		  if (Move_Adjacent(WN_prev(wn_dep), last_use, TRUE)) {
 		    // Fuse loops starting from wn_dep, and flag No_Fusion bit.
 		    Outer_Loop_Fusion_Walk(wn_dep, ffi, wn2ffi); 
-		    DO_LOOP_INFO * dli_dep = Get_Do_Loop_Info(wn_dep);
-		    dli_dep->No_Fusion = TRUE;
+		    if (WN_operator(wn_dep) == OPR_DO_LOOP) {
+		      DO_LOOP_INFO * dli_dep = Get_Do_Loop_Info(wn_dep);
+		      dli_dep->No_Fusion = TRUE;
+		    }
+		    else {
+		      DevWarn("Loop may be deleted");
+		    }
 		  }
 		}
 	      }

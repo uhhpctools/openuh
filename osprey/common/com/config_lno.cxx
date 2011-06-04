@@ -269,6 +269,7 @@ static LNO_FLAGS Default_LNO = {
   FALSE,	/* Simd_Verbose */
   TRUE,         /* Simd_Reduction */
   TRUE,         /* Simd_Avoid_Fusion */
+  FALSE,        /* Simd_Rm_Unity_Remainder */  
   TRUE,         /* Run_hoistif */
   TRUE,		/* Ignore_Feedback */
   TRUE,         /* Run_unswitch */
@@ -489,6 +490,7 @@ LNO_FLAGS Initial_LNO = {
   FALSE,	/* Simd_Verbose */
   TRUE,         /* Simd_Reduction */
   TRUE,         /* Simd_Avoid_Fusion */
+  FALSE,         /* Simd_Rm_Unity_Remainder*/
   TRUE,         /* Run_hoistif */
   TRUE,	 	/* Ignore_Feedback */
   TRUE,         /* Run_unswitch */
@@ -874,6 +876,7 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "simd_verbose",		NULL,	Simd_Verbose ),
   LNOPT_BOOL ( "simd_reduction",	"simd_red",	Simd_Reduction ),
   LNOPT_BOOL ( "simd_avoid_fusion",	NULL,	Simd_Avoid_Fusion ),
+  LNOPT_BOOL ( "simd_rm_unity_remainder", NULL,	Simd_Rm_Unity_Remainder),
   LNOPT_BOOL ( "hoistif",		NULL,	Run_hoistif ),
   LNOPT_BOOL ( "ignore_feedback",	NULL,	Ignore_Feedback ),
   LNOPT_BOOL ( "unswitch",		NULL,	Run_unswitch ),

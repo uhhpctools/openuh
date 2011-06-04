@@ -465,6 +465,23 @@ NystromAliasAnalyzer::transferAliasTag(WN *dstWN, const WN *srcWN)
 void
 NystromAliasAnalyzer::createAliasTags(WN *entryWN)
 {
+  // if one node points to a black hole cg node.
+  // it should also points to globals and escaple locals.
+  PointsTo bh_points_to;
+  if (!_isPostIPA) {
+    for (CGNodeToIdMapIterator iter = _constraintGraph->lBegin();
+         iter != _constraintGraph->lEnd(); 
+         iter++) {
+      ConstraintGraphNode *node = iter->first;
+      StInfo *stinfo = node->stInfo();
+      // in ipa mode, not a pointer doesn't have stinfo.
+      // check ConstraintGraph::buildCGFromSummary
+      if (stinfo && stinfo->checkFlags(CG_ST_FLAGS_GLOBAL | CG_ST_FLAGS_ESCLOCAL)) {
+        bh_points_to.setBit(node->id());
+      }
+    }
+  }
+  
   for (WN_ITER *wni = WN_WALK_TreeIter(entryWN);
       wni; wni = WN_WALK_TreeNext(wni))
   {
@@ -511,8 +528,12 @@ NystromAliasAnalyzer::createAliasTags(WN *entryWN)
       AliasTagInfo *aliasTagInfo = _aliasTagInfo[aliasTag];
 
       // Union all the points-to sets
-      if (!_isPostIPA)
+      if (!_isPostIPA) {
         cgNode->findRep()->postProcessPointsTo(aliasTagInfo->pointsTo());
+        if (aliasTagInfo->pointsTo().isSet(ConstraintGraph::blackHoleId())) {
+          aliasTagInfo->pointsTo().setUnion(bh_points_to);
+        }
+      }
       else {
         aliasTagInfo->pointsTo().setUnion(cgNode->pointsTo(CQ_GBL));
         aliasTagInfo->pointsTo().setUnion(cgNode->pointsTo(CQ_DN));

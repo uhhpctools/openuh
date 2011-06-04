@@ -860,6 +860,7 @@ extern BOOL LOCS_Balance_Unsched_Fp_set;
 extern BOOL LOCS_Reduce_Prefetch;
 extern BOOL LOCS_Reduce_Prefetch_set;
 #endif
+extern INT32 CG_p2align;
 #if defined(TARG_X8664) || defined(TARG_LOONGSON)
 extern INT32 CG_sse_load_execute;
 extern INT32 CG_load_execute;
@@ -868,7 +869,6 @@ extern BOOL CG_use_setcc;
 extern BOOL CG_use_short_form;
 extern BOOL CG_loadbw_execute;
 extern BOOL CG_Movext_ICMP;
-extern BOOL CG_p2align;
 extern BOOL CG_loop32;
 extern BOOL CG_compute_to;
 extern UINT64 CG_p2align_freq;

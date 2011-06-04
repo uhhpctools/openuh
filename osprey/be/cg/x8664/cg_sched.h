@@ -44,7 +44,6 @@ private:
   MEM_POOL* mem_pool;
   BB* bb;
 
-  VECTOR _sched_vector;
   VECTOR _ready_vector;
   BOOL trace;
 
@@ -61,7 +60,8 @@ private:
   OP* Winner( OP*, OP*, int );
   OP* Select_Variable( int );
 
-  void Init();
+  void Init( BOOL );
+  void Compute_Insn_Size( OP* );
   void Build_OPR();
   void Build_Ready_Vector();
   void Schedule_BB();
@@ -71,8 +71,9 @@ private:
   REGISTER_SET avail_reg_set[ISA_REGISTER_CLASS_MAX+1];
 
 public:
-  KEY_SCH( BB*, MEM_POOL*, BOOL );
+  KEY_SCH( BB*, MEM_POOL*, BOOL, BOOL );
   ~KEY_SCH() {};
+  VECTOR _sched_vector;
 }; 
 
 

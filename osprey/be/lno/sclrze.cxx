@@ -344,6 +344,18 @@ static void Mark_Array_Uses(ARRAY_DIRECTED_GRAPH16 * dep_graph, WN * wn)
 	else
 	  Check_use(st, wn, dep_graph, FALSE);
       }
+      // Flag ADDR_TAKEN bit for parameters passed by reference.
+      WN * wn_p = LWN_Get_Parent(wn);
+      if (wn_p && (WN_operator(wn_p) == OPR_PARM)) {
+	INT flag = WN_flag(wn_p);
+	if (flag & WN_PARM_BY_REFERENCE) {
+	  int val = Array_Use_Hash->Find(st);
+	  val |= ADDR_TAKEN;
+	  if (val) {
+	    Array_Use_Hash->Find_And_Set(st, val);
+	  }
+	}
+      }
     }
     break;
 
@@ -716,6 +728,7 @@ static void Process_Store(WN *store_wn, VINDEX16 v,
       }
     }
   }
+
 }
 
 // Given that there is a must dependence between store and load,

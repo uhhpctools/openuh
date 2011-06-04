@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 /*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -5786,10 +5786,60 @@ vho_last_stmt_in_region ( WN * wn, BOOL extract )
   return last;
 }
 
+BOOL is_simple_eh_region(WN *wn)
+{
+  FmtAssert((WN_operator(wn) == OPR_REGION) && (WN_region_is_EH(wn)), ("It is not an EH region WN."));
+  if (Optimize_exception_ranges == 0 ||
+      (Optimize_exception_ranges == 1 && !PU_cxx_lang(Get_Current_PU())))
+    return FALSE;
+  if (!WN_block_empty(WN_region_pragmas(wn)))
+    return FALSE;
+  if (!WN_block_empty(WN_region_exits(wn)))
+    return FALSE;
+  INITO_IDX init_idx = WN_ereg_supp (wn);
+  INITV_IDX initv = INITV_blk (INITO_val (init_idx));
+  if (INITV_kind(initv) != INITVKIND_ZERO)
+    return FALSE;
+  return TRUE;
+}
+
+BOOL are_all_simple_eh_regions(WN* root)
+{
+  BOOL met = FALSE;
+  if (Optimize_exception_ranges == 0 ||
+      (Optimize_exception_ranges == 1 && !PU_cxx_lang(Get_Current_PU())))
+    return FALSE;
+  // Iteration of all REGION is needed, the SCFIter is not used,
+  // as there can be comma EXPR in the VH WHIRL, so that SCFIter
+  // and StmtIter can not work properly.
+  for (WN_ITER* wn_walker = WN_WALK_TreeIter(root);
+       wn_walker != NULL;
+       wn_walker = WN_WALK_TreeNext(wn_walker)) {
+    WN *wn = WN_ITER_wn(wn_walker);
+    if ((WN_operator(wn) == OPR_REGION) && (WN_region_is_EH(wn))) {
+      if (is_simple_eh_region(wn))
+        met = TRUE;
+      else
+        return FALSE;
+    }
+  }
+  return met;
+}
+
+static int Enclosing_Simple_EH = 0;
+
 static WN *
 vho_lower_region ( WN * wn, WN * block )
 {
-  WN_region_body(wn) = vho_lower_block ( WN_region_body(wn) );
+  BOOL is_simple_eh = FALSE;
+  if (WN_region_kind(wn) == REGION_KIND_EH && is_simple_eh_region(wn)) {
+    is_simple_eh = TRUE;
+    Enclosing_Simple_EH++;
+    WN_region_body(wn) = vho_lower_block ( WN_region_body(wn) );
+    Enclosing_Simple_EH--;
+  }
+  else
+    WN_region_body(wn) = vho_lower_block ( WN_region_body(wn) );
   
   INT region_id = WN_region_id(wn);
   if ((WN_region_kind(wn) == REGION_KIND_MP) &&
@@ -5887,6 +5937,14 @@ vho_lower_region ( WN * wn, WN * block )
     // Now insert the compgoto after the region
     WN_INSERT_BlockLast (block, last);
     wn = NULL;	// don't insert it again
+  }
+ 
+  if (Enclosing_Simple_EH != 0 && is_simple_eh) {
+    WN *p;
+    p = WN_region_body(wn);
+    WN_region_body(wn) = NULL;
+    WN_Delete(wn);
+    return p;
   }
   return wn;
 } /* vho_lower_region */
@@ -6465,6 +6523,17 @@ vho_lower_check_labels ( WN * wn )
   }
 } /* vho_lower_check_labels */
 
+static void vho_lower_rename_region_id(WN * root)
+{
+  WN * wn;
+  for (WN_ITER* wni = WN_WALK_TreeIter(root);
+         wni != NULL;
+         wni = WN_WALK_TreeNext(wni)) {
+    wn = WN_ITER_wn(wni);
+    if (WN_operator(wn) == OPR_REGION)
+      WN_set_region_id(wn, New_Region_Id());
+  }
+}
 
 static void
 vho_lower_rename_labels_defined ( WN * wn )
@@ -7645,6 +7714,7 @@ vho_lower_while_do ( WN * wn, WN *block )
 
       if ( vho_lower_labels_defined )
         vho_lower_rename_labels_defined ( test_block );
+      vho_lower_rename_region_id ( test_block );
 
       if ( VHO_Use_Do_While ) {
 
@@ -8462,12 +8532,62 @@ vho_lower_entry ( WN * wn )
 #ifdef KEY
   current_pu_id ++;
 #endif
+ 
+  if (are_all_simple_eh_regions(wn))
+    Set_PU_simple_eh(Get_Current_PU());
+  else
+    Clear_PU_simple_eh(Get_Current_PU());
 
   /* See if we need to lower the pu */
   if (    PU_has_very_high_whirl (Get_Current_PU ()) == FALSE
        && VHO_Force_Lowering == FALSE ) {
 
     return wn;
+  }
+
+  if (PU_simple_eh(Get_Current_PU())) {
+    char * pu_name = ST_name(&St_Table[PU_Info_proc_sym(Current_PU_Info)]);
+    WN *region_body = WN_func_body(wn);
+    INITV_IDX initv_label = New_INITV();
+    INITV_Set_ZERO (Initv_Table[initv_label], MTYPE_U4, 1);
+    INITV_IDX blk = New_INITV();
+    INITV_Init_Block (blk, initv_label);
+
+    INITV_IDX iv;
+    iv = New_INITV();
+    INITV_Set_ZERO (Initv_Table[iv], MTYPE_U4, 1);
+
+    Set_INITV_next (initv_label, iv);
+
+    TY_IDX ty = MTYPE_TO_TY_array[MTYPE_U4];
+    ST * ereg = Gen_Temp_Named_Symbol (ty, "ehpit", CLASS_VAR,
+                                       SCLASS_EH_REGION_SUPP);
+    Set_ST_is_initialized (*ereg);
+    Set_ST_is_not_used (*ereg);
+    INITO_IDX ereg_supp = New_INITO (ST_st_idx(ereg), blk);
+    WN * ehr = WN_CreateRegion (REGION_KIND_EH, region_body,
+         WN_CreateBlock(), WN_CreateBlock(), New_Region_Id(), ereg_supp); 
+    WN_func_body(wn) = WN_CreateBlock();
+    WN_INSERT_BlockFirst(WN_func_body(wn), ehr); 
+    WN *preamble_end;
+    WN *eh_block = WN_region_body(ehr);
+    preamble_end = WN_first(eh_block); 
+    while (preamble_end && 
+           !(WN_operator(preamble_end) == OPR_PRAGMA && 
+             WN_pragma(preamble_end) == WN_PRAGMA_PREAMBLE_END))
+      preamble_end = WN_next(preamble_end);
+    if (preamble_end) {
+      WN *first,*p;
+      WN *func_body = WN_func_body(wn);
+      first = WN_first(eh_block);
+      WN_first(eh_block) = WN_next(preamble_end);
+      p = preamble_end;
+      while (p != NULL) {
+        preamble_end = WN_prev(p);
+        WN_INSERT_BlockFirst(func_body, p);
+        p = preamble_end;
+      }
+    }
   }
 
   WN_func_body(wn) = vho_lower_block ( WN_func_body(wn) );

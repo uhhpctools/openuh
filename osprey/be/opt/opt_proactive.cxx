@@ -4946,6 +4946,8 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
   MAP_LIST * map_lst;
   SC_NODE * sc_blk;
   WN * branch_wn;
+  BB_NODE *pred;
+  BB_LIST_ITER bb_iter;
 
   switch (type) {
   case SC_LOOP:
@@ -5102,7 +5104,11 @@ CFG_TRANS::Do_tail_duplication(SC_NODE * sc_src, SC_NODE * sc_dst)
 
     if (cfg->Feedback())
       cfg->Feedback()->Delete_edge(old_exit->Id(), tmp2->Id());
-    
+
+    FOR_ALL_ELEM (pred, bb_iter, Init(tmp2->Pred())) {
+      pred->Set_succ(pred->Succ()->Remove(tmp2, pool));
+    }
+
     bb_list = tmp2->Pred();
     while (bb_list) {
       bb_list = bb_list->Remove(bb_list->Node(), pool);
@@ -5822,15 +5828,16 @@ PRO_LOOP_INTERCHANGE_TRANS::Top_down_trans(SC_NODE * sc)
     _local_stack->Push(sc);
   }
 
-  SC_NODE * child;
-  SC_LIST_ITER sc_iter;
-
-  FOR_ALL_ELEM(child, sc_iter, Init(sc->Kids())) {
+  SC_NODE * child = sc->First_kid();
+  SC_NODE * next;
+  while (child) {
+    next = child->Next_sibling();
     if (Top_down_trans(child)) {
       return FALSE;
     }
+    child = next;
   }
-
+  
   BOOL do_restart = FALSE;
 
   if (sc->Type() == SC_LOOP) {
@@ -10350,7 +10357,7 @@ PRO_LOOP_EXT_TRANS::Get_val(WN * wn_cond, IF_CMP_VAL * val)
   UINT32 key;
   STACK<WN *> * stk;
 
-  IF_CMP_VAL ret_val = (IF_CMP_VAL) _wn_to_val_num_map->Get_val((POINTER) wn_cond);  
+  IF_CMP_VAL ret_val = (IF_CMP_VAL)(INTPTR) _wn_to_val_num_map->Get_val((POINTER) wn_cond);  
   if (ret_val) {
     *val = ((*val) << MAX_IF_CMP_BITS) + ret_val;
     return;
@@ -10366,7 +10373,7 @@ PRO_LOOP_EXT_TRANS::Get_val(WN * wn_cond, IF_CMP_VAL * val)
       for (int i = 0; i < stk->Elements(); i++) {
 	WN * wn_iter = stk->Top_nth(i);
 	if ((wn_cond == wn_iter) || (WN_Simp_Compare_Trees(wn_cond, wn_iter) == 0)) {
-	  ret_val = (IF_CMP_VAL) _wn_to_val_num_map->Get_val((POINTER) wn_iter);
+	  ret_val = (IF_CMP_VAL)(INTPTR) _wn_to_val_num_map->Get_val((POINTER) wn_iter);
 	  break;
 	}
       }
@@ -10427,7 +10434,11 @@ PRO_LOOP_EXT_TRANS::Get_inverted_cond(SC_NODE * sc_if)
 void 
 PRO_LOOP_EXT_TRANS::Hash_if_conds(SC_NODE * sc)
 {
-  if (sc->Type() == SC_LOOP) {
+  // Skip loops that are not flagged LOOP_PRE_DO since the 
+  // the CFG transformation infrastructure does not support
+  // these loops at this moment.
+  if ((sc->Type() == SC_LOOP) 
+      && sc->Loopinfo()->Is_flag_set(LOOP_PRE_DO)) {
     sc->Set_next(NULL);
     std::pair<SC_NODE *, bool> p_ret = sc->Get_nesting_if();
     SC_NODE * sc_if = p_ret.first;
@@ -10742,6 +10753,7 @@ PRO_LOOP_EXT_TRANS::Find_cand(SC_NODE * sc, SC_NODE ** cand1, SC_NODE ** cand2)
   *cand1 = NULL;
   *cand2 = NULL;
 
+  CFG * cfg = Get_cu()->Cfg();
   SC_LIST_ITER kids_iter;
   SC_NODE * tmp;
   
@@ -10776,6 +10788,92 @@ PRO_LOOP_EXT_TRANS::Find_cand(SC_NODE * sc, SC_NODE ** cand1, SC_NODE ** cand2)
 	Set_pass(s_pass);
 	return tmp;
       }
+      else {
+	WN * cond1 = prev->Get_cond(); 
+	WN * cond2 = next->Get_cond();
+	if ((WN_operator(cond1) == WN_operator(cond2))
+	    && (WN_kid_count(cond1) == 2)
+	    && (WN_Simp_Compare_Trees(WN_kid1(cond1), WN_kid1(cond2)) == 0)
+	    && ((WN_operator(cond1) == OPR_NE) || (WN_operator(cond1) == OPR_EQ))
+	    && (WN_operator(WN_kid1(cond1)) == OPR_INTCONST)
+	    && (WN_const_val(WN_kid1(cond1)) == 0)) {
+	  cond1 = WN_kid0(cond1);
+	  cond2 = WN_kid0(cond2);
+	  // match patterns like: "(a bitop (1 << cnt)) == 0" or
+	  // "(a bitop (1 << cnt)) != 0", 
+	  // where 'a' is a 4-byte, one of 'cond1' and 'cond2' is a 8 byte, and 
+	  // the other one is a 4-byte.
+	  if ((WN_operator(cond1) == WN_operator(cond2))
+	      && WN_is_bit_op(cond1)) {
+	    SC_NODE * sc_l = NULL;
+	    SC_NODE * sc_s = NULL;
+
+	    if (MTYPE_byte_size(WN_rtype(cond1)) == 8)
+	      sc_l = prev;
+	    else if (MTYPE_byte_size(WN_rtype(cond2)) == 8)
+	      sc_l = next;
+
+	    if (MTYPE_byte_size(WN_rtype(cond1)) == 4)
+	      sc_s = prev;
+	    else if (MTYPE_byte_size(WN_rtype(cond2)) == 4)
+	      sc_s = next;
+
+	    if (sc_l && sc_s) {
+	      WN * op1 = WN_kid0(cond1);
+	      WN * op2 = WN_kid0(cond2);
+	      op1 = (WN_operator(op1) == OPR_CVT) ? WN_kid0(op1) : op1;
+	      op2 = (WN_operator(op2) == OPR_CVT) ? WN_kid0(op2) : op2;
+	      if ((WN_Simp_Compare_Trees(op1, op2) == 0)
+		  && (MTYPE_byte_size(WN_desc(op1)) == 4)) {
+		op1 = WN_kid1(cond1);
+		op2 = WN_kid1(cond2);
+		if (WN_is_power_of_2(op1) && WN_is_power_of_2(op2)
+		    && (WN_operator(op1) == OPR_SHL)) {
+		  op1 = WN_get_bit_from_expr(op1);
+		  op2 = WN_get_bit_from_expr(op2);
+		  // Create a new SC_IF with comparision expression "if (cnt < 32)"
+		  // and wrap it around 'prev' and 'next'.
+		  if (op1 && op2 && (WN_Simp_Compare_Trees(op1, op2) == 0)
+		      && !Has_dependency(prev, op1)
+		      && !Has_dependency(next, op2)) {
+		    for (int i = 0; i < 2; i++) {
+		      // Create a comparison expression 'if (cnt < 32)'.
+		      WN * wn_tmp = WN_COPY_Tree_With_Map((i == 0) ? op1 : op2);
+		      wn_tmp = WN_CreateExp2(OPR_LT, MTYPE_I4, MTYPE_I4, wn_tmp,
+					     WN_CreateIntconst(OPR_INTCONST, MTYPE_I4, MTYPE_V, 32));
+		      // Create a CFG block to host 'wn_tmp'.
+		      BB_NODE * bb_new = NULL;
+		      SC_NODE * sc_cur = ( i == 0) ? prev : next;
+		      cfg->Clone_bbs(sc_cur->Head(), sc_cur->Head(), &bb_new, &bb_new, TRUE, 1.0);
+		      WN * wn_branch = bb_new->Laststmt();
+		      WN_kid0(wn_branch) = wn_tmp;
+		      // Insert a new if-region before 'prev'.
+		      SC_NODE * sc_tmp = cfg->Insert_if_before(sc_cur, bb_new);
+		      Do_tail_duplication(sc_cur, sc_tmp);
+		      if (i == 0)
+			*cand1 = sc_tmp;
+		      else
+			*cand2 = sc_tmp;
+
+		      if (sc_cur == sc_l) {
+			sc_tmp = sc_tmp->Find_kid_of_type(SC_THEN);
+			sc_tmp = sc_tmp->Find_kid_of_type(SC_IF);
+			FmtAssert(sc_tmp, ("Expect a SC_IF"));
+			WN * branch_l = sc_tmp->Head()->Branch_wn();
+			WN * branch_s = sc_s->Head()->Branch_wn();
+			WN_kid0(branch_l) = WN_COPY_Tree_With_Map(WN_kid0(branch_s));
+		      }
+		    }
+		    Set_pass(s_pass);
+		    return tmp;
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+      }
+
       Set_pass(s_pass);
       break;
     case  SC_LOOP:
@@ -11178,6 +11276,9 @@ PRO_LOOP_EXT_TRANS::Is_candidate(SC_NODE * outer, SC_NODE * inner)
   std::pair<SC_NODE *, bool> p_ret = inner->Get_nesting_if();
   SC_NODE * sc_n1 = p_ret.first;
   SC_NODE * sc_iter = sc_n1;
+
+  if (sc_iter == outer)
+    return FALSE;
   
   while (sc_iter && (sc_iter != outer)) {
     if (!sc_iter->Is_well_behaved())
@@ -11457,7 +11558,7 @@ CFG_TRANS::Delete_val_range_maps()
 // Get a WHIRL that represents an integer constant of the given value
 // from _const_wn_map.
 WN *
-CFG_TRANS::Get_const_wn(long long val)
+CFG_TRANS::Get_const_wn(INT64 val)
 {
   if (!_const_wn_map)
     _const_wn_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
@@ -11484,9 +11585,13 @@ CFG_TRANS::Set_lo(WN_MAP & map, WN * wn_key, int val)
   WN * wn_tmp = (WN *) WN_MAP_Get(map, wn_key);
   int val_tmp;
 
-  if (wn_tmp && WN_get_val(wn_key, &val_tmp, map)
-      && (val_tmp < val))
-    return;
+  if (wn_tmp) {
+    std::pair<bool,int> p_val = WN_get_val(wn_key, map);
+    val_tmp = p_val.second;
+    if (p_val.first
+	&& (val_tmp < val))
+      return;
+  }
 
   Set_map(map, wn_key, Get_const_wn(val));
 }
@@ -11533,13 +11638,16 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
     WN * wn_tmp;
     int val;
     int val2;
+    std::pair<bool,int> p_val;
 
     switch (opr) {
     case OPR_GT:
       op1 = WN_kid(wn, 0);
       op2 = WN_kid(wn, 1);
+      p_val = WN_get_val(op2, _low_map);
+      val = p_val.second;
 
-      if (WN_get_val(op2, &val, _low_map)) {
+      if (p_val.first) {
 	Set_map(_low_map, op1, op2);
 	Infer_val_range(op1, TRUE, TRUE);
       }
@@ -11549,8 +11657,10 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
     case OPR_LT:
       op1 = WN_kid(wn, 0);
       op2 = WN_kid(wn, 1);
-
-      if (WN_get_val(op1, &val, _low_map)) {
+      p_val = WN_get_val(op1, _low_map);
+      val = p_val.second;
+      
+      if (p_val.first) {
 	Set_map(_low_map, op2, op1);
 	Infer_val_range(op2, TRUE, TRUE);
       }
@@ -11559,8 +11669,10 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
     case OPR_LE:
       op1 = WN_kid(wn, 0);
       op2 = WN_kid(wn, 1);
+      p_val = WN_get_val(op1, _low_map);
+      val = p_val.second;
 
-      if (WN_get_val(op1, &val, _low_map)) {
+      if (p_val.first) {
 	wn_tmp = Get_const_wn(val - 1);
 	Set_map(_low_map, op2, wn_tmp);
 	Infer_val_range(op2, TRUE, TRUE);
@@ -11574,23 +11686,30 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
       if (WN_operator(op2) == OPR_INTCONST) {
 	if (_low_map) {
 	  wn_tmp = (WN *) WN_MAP_Get(_low_map, wn);
-
-	  if (wn_tmp && WN_get_val(wn_tmp, &val, _low_map)) {
-	    long long new_val = -1 * WN_const_val(op2) + val;
-	    wn_tmp = Get_const_wn(new_val);
-	    Set_map(_low_map, op1, wn_tmp);
-	    Infer_val_range(op1, TRUE, TRUE);
+	  if (wn_tmp) {
+	    p_val = WN_get_val(wn_tmp, _low_map);
+	    val = p_val.second;	    
+	    if (p_val.first) {
+	      INT64 new_val = -1 * WN_const_val(op2) + val;
+	      wn_tmp = Get_const_wn(new_val);
+	      Set_map(_low_map, op1, wn_tmp);
+	      Infer_val_range(op1, TRUE, TRUE);
+	    }
 	  }
 	}
 	
 	if (_high_map) {
 	  wn_tmp = (WN *) WN_MAP_Get(_high_map, wn);
 
-	  if (wn_tmp && WN_get_val(wn_tmp, &val, _high_map)) {
-	    long long new_val = -1 * WN_const_val(op2) + val;
-	    wn_tmp = Get_const_wn(new_val);
-	    Set_map(_high_map, op1, wn_tmp);
-	    Infer_val_range(op1, TRUE, TRUE);
+	  if (wn_tmp) {
+	    p_val =  WN_get_val(wn_tmp,  _high_map);
+	    val = p_val.second;
+	    if (p_val.first) {
+	      INT64 new_val = -1 * WN_const_val(op2) + val;
+	      wn_tmp = Get_const_wn(new_val);
+	      Set_map(_high_map, op1, wn_tmp);
+	      Infer_val_range(op1, TRUE, TRUE);
+	    }
 	  }
 	}
       }
@@ -11605,14 +11724,22 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
       if (_low_map) {
 	wn_tmp = (WN * ) WN_MAP_Get(_low_map, wn);
 
-	if (wn_tmp && WN_get_val(wn_tmp, &val, _low_map)) {
-	  wn_tmp = (WN *) WN_MAP_Get(_low_map, op2);
-
-	  if (wn_tmp && WN_get_val(op2, &val2, _low_map)) {
-	    long long new_val = val2 + val;
-	    wn_tmp = Get_const_wn(new_val);
-	    Set_map(_low_map, op1, wn_tmp);
-	    Infer_val_range(op1, TRUE, TRUE);
+	if (wn_tmp) {
+	  p_val = WN_get_val(wn_tmp,  _low_map);
+	  val = p_val.second;
+	  if (p_val.first) {
+	    wn_tmp = (WN *) WN_MAP_Get(_low_map, op2);
+	    
+	    if (wn_tmp) {
+	      p_val = WN_get_val(op2, _low_map);
+	      val2 = p_val.second;
+	      if  (p_val.first) {
+		INT64 new_val = val2 + val;
+		wn_tmp = Get_const_wn(new_val);
+		Set_map(_low_map, op1, wn_tmp);
+		Infer_val_range(op1, TRUE, TRUE);
+	      }
+	    }
 	  }
 	}
       }
@@ -11620,14 +11747,22 @@ CFG_TRANS::Infer_val_range(WN * wn, BOOL set_high, BOOL set_low)
       if (_high_map) {
 	wn_tmp = (WN * ) WN_MAP_Get(_high_map, wn);
 
-	if (wn_tmp && WN_get_val(wn_tmp, &val, _high_map)) {
-	  wn_tmp = (WN *) WN_MAP_Get(_high_map, op2);
+	if (wn_tmp) {
+	  p_val = WN_get_val(wn_tmp,  _high_map);
+	  val = p_val.second;
+	  if (p_val.first) {
+	    wn_tmp = (WN *) WN_MAP_Get(_high_map, op2);
 	  
-	  if (wn_tmp && WN_get_val(op2, &val2, _high_map)) {
-	    long long new_val = val2 + val;
-	    wn_tmp = Get_const_wn(new_val);
-	    Set_map(_high_map, op1, wn_tmp);
-	    Infer_val_range(op1, TRUE, TRUE);
+	    if (wn_tmp) {
+	      p_val = WN_get_val(op2,  _high_map);
+	      val2 = p_val.second;
+	      if (p_val.first) {
+		INT64 new_val = val2 + val;
+		wn_tmp = Get_const_wn(new_val);
+		Set_map(_high_map, op1, wn_tmp);
+		Infer_val_range(op1, TRUE, TRUE);
+	      }
+	    }
 	  }
 	}
       }
@@ -11655,14 +11790,33 @@ CFG_TRANS::Infer_shift_count_val(WN  * wn, SC_NODE * sc_loop)
       WN * op1 = WN_kid0(wn_tmp);
       WN * op2 = WN_kid1(wn_tmp);
       int val;
-      if ((WN_operator(op2) == OPR_INTCONST)
-	  && (OPERATOR_is_scalar_load(WN_operator(op1)))
-	  && Is_invariant(sc_loop, op1, 0)
-	  ) {
-	val = WN_const_val(op2);
+      WN * wn_tmp;
+      if (WN_operator(op2) == OPR_INTCONST) {
+	val = WN_const_val(op2);	
 	if (opr == OPR_ADD)
 	  val = val * -1;
-	Set_lo(_low_map, op1, val);
+	if (Is_invariant(sc_loop, op1, 0)) {
+	  opr = WN_operator(op1);
+	  switch (opr) {
+	  case OPR_LDID:
+	    Set_lo(_low_map, op1, val);
+	    break;
+	  case OPR_MPY:
+	    wn_tmp = WN_kid1(op1);
+	    if ((WN_operator(wn_tmp) == OPR_INTCONST)
+		&& (val > 0)
+		&& (val < WN_const_val(wn_tmp))) {
+	      // From pattern: c1 * x >= c2, where c1 > 0, c2 > 0 and c1 > c2,
+	      // we can infer that x >= 1.
+	      wn_tmp = WN_kid0(op1);
+	      if (WN_operator(wn_tmp) == OPR_LDID)
+		Set_lo(_low_map, wn_tmp, 1);
+	    }
+	    break;
+	  default:
+	    ;
+	  }
+	}
       }
     }
     else if (OPERATOR_is_scalar_load(opr)
@@ -11706,8 +11860,10 @@ CFG_TRANS::Infer_lp_bound_val(SC_NODE * sc_lcp)
 	  && wn_load && OPERATOR_is_scalar_load(WN_operator(wn_load))
 	  && (WN_aux(wn_load) == WN_aux(wn_step))
 	  && (WN_operator(wn_add) == OPR_ADD)) {
-	int val;
-	if (WN_get_val(WN_kid(wn_add,1), &val, _low_map)) {
+	std::pair<bool, int> p_val = WN_get_val(WN_kid(wn_add,1),_low_map);
+	int val = p_val.second;
+
+	if (p_val.first) {
 	  if (val > 0)
 	    set_low = TRUE;
 	  else
@@ -11743,6 +11899,7 @@ CFG_TRANS::Infer_val_range(SC_NODE * sc1, SC_NODE * sc2)
     _low_map = WN_MAP_Create(_pool);
     _high_map = WN_MAP_Create(_pool);
     _def_wn_map = CXX_NEW(MAP(CFG_BB_TAB_SIZE, _pool), _pool);
+    SC_NODE * nesting_lp = NULL;
 
     while (sc_lcp) {
       SC_TYPE type = sc_lcp->Type();
@@ -11769,8 +11926,14 @@ CFG_TRANS::Infer_val_range(SC_NODE * sc1, SC_NODE * sc2)
 	    && sc_lcp->Is_pred_in_tree(_current_scope)) {
 	  Infer_lp_bound_val(_current_scope);
 	}
+	nesting_lp = sc_lcp;
       }
       sc_lcp = sc_lcp->Parent();
+    }
+
+    if (nesting_lp) {
+      WN * wn_cond = sc1->Get_cond();
+      Infer_shift_count_val(wn_cond, nesting_lp);
     }
   }
 }

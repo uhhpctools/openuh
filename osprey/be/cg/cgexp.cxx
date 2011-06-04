@@ -554,10 +554,12 @@ Exp_OP (OPCODE opcode, TN *result, TN *op1, TN *op2, TN *op3, VARIANT variant, O
 	// relies on the fact that Mk_OP will ignore unnecessary
 	// trailing arguments.
 	if (result) args[i++] = result;
+#if !defined(TARG_X8664)
 	if (TOP_is_predicated(top)) {
 	  Is_True(OP_PREDICATE_OPND == 0, ("predicate operand is not 0"));
 	  args[i++] = True_TN;
 	}
+#endif
 	args[i++] = op1;
 	args[i++] = op2;
 	args[i] = op3;

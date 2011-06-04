@@ -764,6 +764,7 @@ public:
 #define PU_IS_CDECL             0x0002000000000000LL // __attribute__((cdecl)) semantic
 #define PU_NOTHROW              0x0004000000000000LL // doesn't throw, e.g. decl as "void foo() throw()".
 #define PU_HAS_APPLY_ARGS       0x0008000000000000LL // __builtin_apply_args
+#define PU_SIMPLE_EH_RANGE      0x0010000000000000LL // there is a single eh range in PU, no clean-up or catch
 
 enum PU_SRC_LANG_FLAGS
 {

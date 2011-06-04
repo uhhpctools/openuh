@@ -485,6 +485,7 @@ typedef	struct bb {
 #endif 
 #if defined(TARG_X8664)
   /* array of all target register classes used to supply pressure info */
+  INT64		 offset;
   bool           has_regpressure[ISA_REGISTER_CLASS_MAX+1]; 
 #endif
 #if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS) || defined(TARG_LOONGSON)
@@ -530,6 +531,7 @@ typedef	struct bb {
 #define BB_loophead(bb) (BB_loop_head_bb(bb) == (bb))
 #ifdef KEY
 #define BB_aux(b)       (CAN_USE_BB(b)->aux)
+#define BB_offset(b)    (CAN_USE_BB(b)->offset)
 #endif
 /* mutators */
 inline void Set_BB_unrollings(BB *bb, UINT16 u) {

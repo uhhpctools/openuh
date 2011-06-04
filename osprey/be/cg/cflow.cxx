@@ -231,6 +231,7 @@ typedef struct bbinfo {
     struct vargoto_info v;
   } u;
   mUINT16 eh_rgn;		/* exc handling region number */
+  mUINT16 pseudo_eh_rgn;
   mBOOL cold;			/* part of cold region */
   INT nsuccs;			/* number of successors */
   struct succedge succs[BBINFO_NSUCCS]; /* successor edges; we dynamically
@@ -246,6 +247,8 @@ typedef struct bbinfo {
 #define Set_BBINFO_kind(b,k)		(BB_BBINFO(b)->kind=(k))
 #define     BBINFO_eh_rgn(b)		(BB_BBINFO(b)->eh_rgn+0)
 #define Set_BBINFO_eh_rgn(b, e)		(BB_BBINFO(b)->eh_rgn=(e))
+#define     BBINFO_pseudo_eh_rgn(b)     (BB_BBINFO(b)->pseudo_eh_rgn+0)
+#define Set_BBINFO_pseudo_eh_rgn(b, e)  (BB_BBINFO(b)->pseudo_eh_rgn=(e))
 #define     BBINFO_cold(b)		(BB_BBINFO(b)->cold+0)
 #define Set_BBINFO_cold(b, e)		(BB_BBINFO(b)->cold=(e))
 #define     BBINFO_nsuccs(b)		(BB_BBINFO(b)->nsuccs+0)
@@ -1787,6 +1790,8 @@ Initialize_BB_Info(void)
 				 * points to unused link list elements
 				 */
   INT eh_rgn;			/* The current EH region ID */
+  INT prev_eh_rgn = -2;
+  INT pseudo_eh_rgn = -1;
   INT eh_id;			/* Highest EH region ID used */
   BB *bb;
 
@@ -1866,6 +1871,11 @@ Initialize_BB_Info(void)
     /* Set the exception region ID for this block.
      */
     bbinfo->eh_rgn = eh_rgn;
+    if (eh_rgn != prev_eh_rgn) {
+      prev_eh_rgn = eh_rgn;
+      pseudo_eh_rgn++;
+    }
+    bbinfo->pseudo_eh_rgn = pseudo_eh_rgn;
 
     /* Determine if BB is in cold region or not. We cache this in
      * the BB-info rather than overload BB_local_flag1 since cflow
@@ -5423,18 +5433,30 @@ Init_Chains(BBCHAIN *chains)
      * Exception regions are similar except that the created chain need
      * only consist of the BBs in the same or nested exception region.
      */
-    Is_True(BB_rid(bb) == first_rid, 
-	    ("region nesting botched at BB:%d", BB_id(bb)));
     next_bb = BB_next(tail);
-    while (   next_bb
-	   &&    ((BB_rid(next_bb) != first_rid) 
-	      || (BBINFO_eh_rgn(tail) && BBINFO_eh_rgn(next_bb)))
-    ) {
-      do {
-	tail = next_bb;
-	BB_MAP_Set(chain_map, tail, chains);
-	next_bb = BB_next(tail);
-      } while (next_bb && BB_rid(tail) != first_rid);
+    if (Optimize_exception_ranges != 2 &&
+        !(Optimize_exception_ranges == 1 && PU_cxx_lang(Get_Current_PU()))) {
+      // if the next BB is of different REGION, put them into a chain
+      while (next_bb &&
+             ((BB_rid(next_bb) != first_rid) ||
+             (BBINFO_eh_rgn(tail) && BBINFO_eh_rgn(next_bb)))
+      ) {
+        do {
+          tail = next_bb;
+          BB_MAP_Set(chain_map, tail, chains);
+          next_bb = BB_next(tail);
+        } while (next_bb && BB_rid(tail) != first_rid);
+      }
+    } else if (!PU_simple_eh(Get_Current_PU())) {
+        while (TRUE) {
+          if (next_bb &&
+              (BB_rid(next_bb) != BB_rid(tail) ||
+               BBINFO_pseudo_eh_rgn(next_bb) != BBINFO_pseudo_eh_rgn(tail))) {
+          tail = next_bb;
+          BB_MAP_Set(chain_map, next_bb, chains);
+          next_bb = BB_next(tail);
+          } else break;
+        }
     }
 
     /* Isolate the new chain.
@@ -5518,6 +5540,7 @@ static void
 Weight_Succ_Chains(BB_MAP chain_map, BBCHAIN *chain)
 {
   BB *bb;
+  mINT16 last_rgn = BBINFO_pseudo_eh_rgn(chain->tail);
 
   /* The successors of 'chain' are the successors of the BBs in 'chain'.
    */
@@ -6052,6 +6075,11 @@ Order_Chains(BBCHAIN *unordered, BB_MAP chain_map)
   while (unordered) {
     BBCHAIN *ch;
     double max_weight;
+    BOOL eh_succ;
+    BOOL eh_continue;
+    mINT32 last_eh;
+
+    last_eh = BBINFO_pseudo_eh_rgn(last_ordered->tail);
 
     /* Adjust the weights for the edges from the last ordered chain
      * to the unordered chains.
@@ -6062,10 +6090,25 @@ Order_Chains(BBCHAIN *unordered, BB_MAP chain_map)
      * normal BBs over those with a NEVER freq hint.
      */
     max_weight = unordered->weight;
+    eh_succ = (BBINFO_pseudo_eh_rgn(unordered->head) == last_eh);
+    eh_continue = (BBINFO_pseudo_eh_rgn(unordered->tail) == last_eh);
+
     chain = unordered;
     for (ch = unordered->next; ch; ch = ch->next) {
-      if (   (ch->never == chain->never && ch->weight > max_weight)
-	  || (!ch->never && chain->never))
+      BOOL my_succ = (BBINFO_pseudo_eh_rgn(ch->head) == last_eh);
+      BOOL my_continue = (BBINFO_pseudo_eh_rgn(ch->tail) == last_eh);
+      if (eh_succ && !my_succ)
+        continue;
+      if (eh_continue && !my_continue) 
+        continue;
+      if ((my_succ && !eh_succ) || (my_continue && !eh_continue))
+      {
+        eh_succ = my_succ;
+        eh_continue = my_continue;
+        chain = ch;
+        max_weight = ch->weight;
+      } else if ((ch->never == chain->never && ch->weight > max_weight) ||
+                 (!ch->never && chain->never))
       {
 	chain = ch;
 	max_weight = ch->weight;
@@ -6151,6 +6194,7 @@ Order_Chains(BBCHAIN *unordered, BB_MAP chain_map)
 }
 
 
+static void Print_Chain_BBs(BBCHAIN *chain);
 /* ====================================================================
  *
  * Optimize_Cyclic_Chain
@@ -6193,7 +6237,13 @@ Optimize_Cyclic_Chain(BBCHAIN *chain, BB_MAP chain_map)
     /* Can't place the tail in the middle of an EH region --
      * the EH region must be kept contiguous and in the same order.
      */
-    if (BBINFO_eh_rgn(bb) && BBINFO_eh_rgn(next)) continue;
+    if ((Optimize_exception_ranges != 2 &&
+         !(PU_cxx_lang(Get_Current_PU())) && Optimize_exception_ranges == 1)
+        && BBINFO_eh_rgn(bb) && BBINFO_eh_rgn(next)) continue;
+
+    if (BBINFO_pseudo_eh_rgn(bb) != BBINFO_pseudo_eh_rgn(next) ||
+        BBINFO_pseudo_eh_rgn(bb) != BBINFO_pseudo_eh_rgn(chain->tail) ||
+        BBINFO_pseudo_eh_rgn(bb) != BBINFO_pseudo_eh_rgn(chain->head)) continue;
 
     /* Can't place the tail such that the new head and tail BBs
      * would not be in the same region as originally.
@@ -6291,6 +6341,7 @@ Optimize_Cyclic_Chain(BBCHAIN *chain, BB_MAP chain_map)
       fprintf(TFile,
 	      "  BB:%d would be a better head of cyclic chain than BB:%d\n",
 	      BB_id(best_head), BB_id(orig_head));
+      Print_Chain_BBs(chain);
     }
     Chain_BBs(NULL, best_head);
     Chain_BBs(best_tail, NULL);
@@ -6351,6 +6402,9 @@ Grow_Chains(BBCHAIN *chains, EDGE *edges, INT n_edges, BB_MAP chain_map)
      * another, then combine the chains.
      */
     if ((can_combine) &&
+        BBINFO_pseudo_eh_rgn(succ) == BBINFO_pseudo_eh_rgn(pred) &&
+        (BBINFO_pseudo_eh_rgn(succ) == BBINFO_pseudo_eh_rgn(schain->tail) ||
+         BBINFO_pseudo_eh_rgn(pred) == BBINFO_pseudo_eh_rgn(pchain->head)) &&
         (pchain != schain && pchain->tail == pred && schain->head == succ)) {
       INT j;
       INT nsuccs;

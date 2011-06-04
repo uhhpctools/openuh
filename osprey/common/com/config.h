@@ -593,6 +593,8 @@ extern BOOL Olimit_opt;	/* FALSE => stop optimization if Olimit reached;
 extern BOOL CG_mem_intrinsics;
 extern BOOL Emulate_memset;
 extern INT32 CG_memmove_inst_count;
+extern INT32 Optimize_exception_ranges;
+extern BOOL Optimize_exception_ranges_set;
 extern BOOL CG_memmove_inst_count_overridden;
 extern BOOL CG_bcopy_cannot_overlap;
 extern BOOL CG_memcpy_cannot_overlap;

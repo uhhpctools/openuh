@@ -2028,6 +2028,7 @@ expand_call_inline (basic_block bb, tree stmt, tree *tp, void *data)
     {
       if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn))
 	  /* Avoid warnings during early inline pass. */
+	  && !DECL_IN_SYSTEM_HEADER (fn)
 	  && (!flag_unit_at_a_time || cgraph_global_info_ready))
 	{
 	  sorry ("inlining failed in call to %q+F: %s", fn, reason);

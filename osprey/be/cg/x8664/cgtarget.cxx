@@ -509,6 +509,62 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   }
 
   switch (topcode){ 
+  case TOP_addxr8:
+  case TOP_addxxr8:
+  case TOP_addxxxr8:
+  case TOP_addxr8_n32:
+  case TOP_addixr8:
+  case TOP_addixxr8:
+  case TOP_addixxxr8:
+  case TOP_addixr8_n32:
+  case TOP_subxr8:
+  case TOP_subxxr8:
+  case TOP_subxxxr8:
+  case TOP_subxr8_n32:
+  case TOP_subixr8:
+  case TOP_subixxr8:
+  case TOP_subixxxr8:
+  case TOP_subixr8_n32:
+  case TOP_andxr8:
+  case TOP_andxxr8:
+  case TOP_andxxxr8:
+  case TOP_andxr8_n32:
+  case TOP_andixr8:
+  case TOP_andixxr8:
+  case TOP_andixxxr8:
+  case TOP_andixr8_n32:
+  case TOP_orxr8:
+  case TOP_orxxr8:
+  case TOP_orxxxr8:
+  case TOP_orxr8_n32:
+  case TOP_orixr8:
+  case TOP_orixxr8:
+  case TOP_orixxxr8:
+  case TOP_orixr8_n32:
+  case TOP_xorxr8:
+  case TOP_xorxxr8:
+  case TOP_xorxxxr8:
+  case TOP_xorxr8_n32:
+  case TOP_xorixr8:
+  case TOP_xorixxr8:
+  case TOP_xorixxxr8:
+  case TOP_xorixr8_n32:
+  case TOP_negxr8:
+  case TOP_negxxr8:
+  case TOP_negxxxr8:
+  case TOP_negxr8_n32:
+  case TOP_notxr8:
+  case TOP_notxxr8:
+  case TOP_notxxxr8:
+  case TOP_notxr8_n32:
+  case TOP_incxr8:
+  case TOP_incxxr8:
+  case TOP_incxxxr8:
+  case TOP_incxr8_n32:
+  case TOP_decxr8:
+  case TOP_decxxr8:
+  case TOP_decxxxr8:
+  case TOP_decxr8_n32:
   case TOP_xor8:
   case TOP_xorx8:
   case TOP_xorxx8:
@@ -553,6 +609,62 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   case TOP_lock_xadd8:
     return 1;
       
+  case TOP_addxr16:
+  case TOP_addxxr16:
+  case TOP_addxxxr16:
+  case TOP_addxr16_n32:
+  case TOP_addixr16:
+  case TOP_addixxr16:
+  case TOP_addixxxr16:
+  case TOP_addixr16_n32:
+  case TOP_subxr16:
+  case TOP_subxxr16:
+  case TOP_subxxxr16:
+  case TOP_subxr16_n32:
+  case TOP_subixr16:
+  case TOP_subixxr16:
+  case TOP_subixxxr16:
+  case TOP_subixr16_n32:
+  case TOP_andxr16:
+  case TOP_andxxr16:
+  case TOP_andxxxr16:
+  case TOP_andxr16_n32:
+  case TOP_andixr16:
+  case TOP_andixxr16:
+  case TOP_andixxxr16:
+  case TOP_andixr16_n32:
+  case TOP_orxr16:
+  case TOP_orxxr16:
+  case TOP_orxxxr16:
+  case TOP_orxr16_n32:
+  case TOP_orixr16:
+  case TOP_orixxr16:
+  case TOP_orixxxr16:
+  case TOP_orixr16_n32:
+  case TOP_xorxr16:
+  case TOP_xorxxr16:
+  case TOP_xorxxxr16:
+  case TOP_xorxr16_n32:
+  case TOP_xorixr16:
+  case TOP_xorixxr16:
+  case TOP_xorixxxr16:
+  case TOP_xorixr16_n32:
+  case TOP_negxr16:
+  case TOP_negxxr16:
+  case TOP_negxxxr16:
+  case TOP_negxr16_n32:
+  case TOP_notxr16:
+  case TOP_notxxr16:
+  case TOP_notxxxr16:
+  case TOP_notxr16_n32:
+  case TOP_incxr16:
+  case TOP_incxxr16:
+  case TOP_incxxxr16:
+  case TOP_incxr16_n32:
+  case TOP_decxr16:
+  case TOP_decxxr16:
+  case TOP_decxxxr16:
+  case TOP_decxr16_n32:
   case TOP_xor16:
   case TOP_xorx16:
   case TOP_xorxx16:
@@ -599,6 +711,62 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   case TOP_lock_xadd16:
     return 2;
 
+  case TOP_addxr32:
+  case TOP_addxxr32:
+  case TOP_addxxxr32:
+  case TOP_addxr32_n32:
+  case TOP_addixr32:
+  case TOP_addixxr32:
+  case TOP_addixxxr32:
+  case TOP_addixr32_n32:
+  case TOP_subxr32:
+  case TOP_subxxr32:
+  case TOP_subxxxr32:
+  case TOP_subxr32_n32:
+  case TOP_subixr32:
+  case TOP_subixxr32:
+  case TOP_subixxxr32:
+  case TOP_subixr32_n32:
+  case TOP_andxr32:
+  case TOP_andxxr32:
+  case TOP_andxxxr32:
+  case TOP_andxr32_n32:
+  case TOP_andixr32:
+  case TOP_andixxr32:
+  case TOP_andixxxr32:
+  case TOP_andixr32_n32:
+  case TOP_orxr32:
+  case TOP_orxxr32:
+  case TOP_orxxxr32:
+  case TOP_orxr32_n32:
+  case TOP_orixr32:
+  case TOP_orixxr32:
+  case TOP_orixxxr32:
+  case TOP_orixr32_n32:
+  case TOP_xorxr32:
+  case TOP_xorxxr32:
+  case TOP_xorxxxr32:
+  case TOP_xorxr32_n32:
+  case TOP_xorixr32:
+  case TOP_xorixxr32:
+  case TOP_xorixxxr32:
+  case TOP_xorixr32_n32:
+  case TOP_negxr32:
+  case TOP_negxxr32:
+  case TOP_negxxxr32:
+  case TOP_negxr32_n32:
+  case TOP_notxr32:
+  case TOP_notxxr32:
+  case TOP_notxxxr32:
+  case TOP_notxr32_n32:
+  case TOP_incxr32:
+  case TOP_incxxr32:
+  case TOP_incxxxr32:
+  case TOP_incxr32_n32:
+  case TOP_decxr32:
+  case TOP_decxxr32:
+  case TOP_decxxxr32:
+  case TOP_decxr32_n32:
   case TOP_xorx32:
   case TOP_xorxx32:
   case TOP_xorxxx32:
@@ -672,6 +840,62 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   case TOP_lock_xadd32:
     return 4;
 
+  case TOP_addxr64:
+  case TOP_addxxr64:
+  case TOP_addxxxr64:
+  case TOP_addxr64_off:
+  case TOP_addixr64:
+  case TOP_addixxr64:
+  case TOP_addixxxr64:
+  case TOP_addixr64_off:
+  case TOP_subxr64:
+  case TOP_subxxr64:
+  case TOP_subxxxr64:
+  case TOP_subxr64_off:
+  case TOP_subixr64:
+  case TOP_subixxr64:
+  case TOP_subixxxr64:
+  case TOP_subixr64_off:
+  case TOP_andxr64:
+  case TOP_andxxr64:
+  case TOP_andxxxr64:
+  case TOP_andxr64_off:
+  case TOP_andixr64:
+  case TOP_andixxr64:
+  case TOP_andixxxr64:
+  case TOP_andixr64_off:
+  case TOP_orxr64:
+  case TOP_orxxr64:
+  case TOP_orxxxr64:
+  case TOP_orxr64_off:
+  case TOP_orixr64:
+  case TOP_orixxr64:
+  case TOP_orixxxr64:
+  case TOP_orixr64_off:
+  case TOP_xorxr64:
+  case TOP_xorxxr64:
+  case TOP_xorxxxr64:
+  case TOP_xorxr64_off:
+  case TOP_xorixr64:
+  case TOP_xorixxr64:
+  case TOP_xorixxxr64:
+  case TOP_xorixr64_off:
+  case TOP_negxr64:
+  case TOP_negxxr64:
+  case TOP_negxxxr64:
+  case TOP_negxr64_off:
+  case TOP_notxr64:
+  case TOP_notxxr64:
+  case TOP_notxxxr64:
+  case TOP_notxr64_off:
+  case TOP_incxr64:
+  case TOP_incxxr64:
+  case TOP_incxxxr64:
+  case TOP_incxr64_off:
+  case TOP_decxr64:
+  case TOP_decxxr64:
+  case TOP_decxxxr64:
+  case TOP_decxr64_off:
   case TOP_xorx64:
   case TOP_xorxx64:
   case TOP_xorxxx64:

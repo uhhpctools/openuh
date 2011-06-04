@@ -2923,6 +2923,12 @@ is inheriting pu_recursive OK?
         ("parallel_pu's PU's maptab isn't parallel_pu\n"));
     Current_Map_Tab = pmaptab;
     WN_MAP_Set_dont_copy(aa->aliasTagMap(), TRUE);
+    WN_MAP_Set_dont_copy(WN_MAP_ALIAS_CGNODE, TRUE);
+    Current_Map_Tab = PU_Info_maptab(parallel_pu);
+  }
+  else {
+    Current_Map_Tab = pmaptab;
+    WN_MAP_Set_dont_copy(WN_MAP_ALIAS_CGNODE, TRUE);
     Current_Map_Tab = PU_Info_maptab(parallel_pu);
   }
 

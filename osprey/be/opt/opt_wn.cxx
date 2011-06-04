@@ -1792,40 +1792,68 @@ BOOL OPCODE_is_volatile(OPCODE opc)
   return OPERATOR_is_volatile(OPCODE_operator(opc));
 }
 
-// Evaluate value of an integral WHIRL, return it in *val.
-// Return FALSE if wn is not evaluatable. wn_map gives a WHIRL-to-WHIRL
-// map that maps a WHIRL to another WHIRL containing the same value.
+// Given an integral WHIRL, query whether it is evaluatable and get the evaluated value.
+// 'wn_map' gives a WHIRL-to-WHIRL  map that maps a WHIRL to another WHIRL containing the same value.
 // (TODO: Implementation is incomplete for all operators)
-BOOL
-WN_get_val(WN * wn, int * val, const WN_MAP& wn_map)
+std::pair<bool,int>
+WN_get_val(WN * wn, const WN_MAP& wn_map)
 {
-  int val1, val2;
+  int val1, val2, val;
   OPERATOR opr = WN_operator(wn);
+  WN * op1;
+  WN * op2;
 
   if (opr == OPR_INTCONST) {
-    *val = WN_const_val(wn);
-    return TRUE;
+    val = WN_const_val(wn);
+    return std::pair<bool, int>(TRUE, val);
   }
   else if (wn_map) {
     WN * wn_val = (WN *) WN_MAP_Get(wn_map, wn);
     if (wn_val)
-      return WN_get_val(wn_val, val, wn_map);
+      return WN_get_val(wn_val, wn_map);
   }
 
+  std::pair<bool,int> pair1;
+  std::pair<bool,int> pair2;
   switch (opr) {
   case OPR_ADD:
-    if (WN_get_val(WN_kid(wn,0), &val1, wn_map)
-	&& WN_get_val(WN_kid(wn, 1), &val2, wn_map)) {
-      *val = val1 + val2;
-      return TRUE;
+    pair1 = WN_get_val(WN_kid(wn, 0), wn_map);
+    pair2 = WN_get_val(WN_kid(wn, 1), wn_map);
+    val1 = pair1.second;
+    val2 = pair2.second;
+    if (pair1.first
+	&& pair2.first) {
+      val = val1 + val2;
+      return std::pair<bool,int>(TRUE, val);
     }
     break;
-    
+  case OPR_MPY:
+    op1 = WN_kid(wn, 0);
+    op2 = WN_kid(wn, 1);
+    pair1 = WN_get_val(op1, wn_map);
+    pair2 = WN_get_val(op2, wn_map);
+    val1 = pair1.second;
+    val2 = pair2.second;
+
+    if (pair1.first
+	&& pair2.first
+	&& (val1 > 0)
+	&& (val2 > 0)
+	&& ((WN_operator(op1) == OPR_INTCONST)
+	    || (WN_operator(op2) == OPR_INTCONST))) {
+      // Note that we evaluate "c0 * b" based on ""b <= c1"
+      // Or "b >= c2", where c0, c1, c2 are constants.
+      // The inferred value can be incorrect if either "c0",
+      // "c1" or "c2" is non-positive.
+      val = val1 * val2;
+      return std::pair<bool,int>(TRUE, val);
+    }
+    break;
   default:
     ;
   }
 
-  return FALSE;
+  return std::pair<bool,int>(FALSE,0);
 }
 
 // Walk nodes in the given WHIRL tree, collect operands for ADD operators.
@@ -1891,6 +1919,7 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
   OPERATOR opr1 = WN_operator(wn1);
   OPERATOR opr2 = WN_operator(wn2);
   int val;
+  std::pair<bool,int> p_val;
 
   if ((opr1 == OPR_INTCONST) && (opr2 == OPR_INTCONST)) {
     return (WN_const_val(wn1) != WN_const_val(wn2));
@@ -1905,11 +1934,16 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
     if (opr2 == OPR_INTCONST) {
       int bit2 = WN_get_bit_from_const(wn2);
-
-      if (WN_get_val(bit1, &val, lo_map) && (val > bit2))
+      p_val = WN_get_val(bit1, lo_map);
+      val = p_val.second;
+      if (p_val.first && (val > bit2)) 
 	return TRUE;
-      else if (WN_get_val(bit1, &val, hi_map) && (val < bit2))
-	return TRUE;
+      else {
+	p_val = WN_get_val(bit1, hi_map);
+	val = p_val.second;
+	if (p_val.first && (val < bit2))
+	  return TRUE;
+      }
     }
     else {
       WN * bit2 = WN_get_bit_from_expr(wn2);
@@ -1920,11 +1954,16 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
   }
   else if ( opr2 == OPR_INTCONST) {
     int int_val = WN_const_val(wn2);
-
-    if (WN_get_val(wn1, &val, lo_map) && (val > int_val))
+    p_val = WN_get_val(wn1, lo_map);
+    val = p_val.second;
+    if (p_val.first && (val > int_val))
       return TRUE;
-    else if (WN_get_val(wn1, &val, hi_map) && (val < int_val))
-      return TRUE;
+    else{
+      p_val = WN_get_val(wn1, hi_map);
+      val = p_val.second;
+      if (p_val.first && (val < int_val))
+	return TRUE;
+    }
   }
   else {
     MEM_POOL * pool = Malloc_Mem_Pool;
@@ -1963,6 +2002,7 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
     int delta_lo = delta;
     int delta_hi = delta;
+    std::pair<bool, int> p_val;
 
     if (stack2) {
       for (int i = 0; i < stack2->Elements(); i++) {
@@ -1985,15 +2025,21 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
 	if (!found) {
 	  int val;
+	  p_val = WN_get_val(wn2_iter, lo_map);
+	  val = p_val.second;
 
-	  if (WN_get_val(wn2_iter, &val, lo_map)) 
+	  if (p_val.first)
 	    delta_hi -= val;
-	  else if (WN_get_val(wn2_iter, &val, hi_map))
-	    delta_lo -= val;
 	  else {
-	    CXX_DELETE(stack1, pool);
-	    CXX_DELETE(stack2, pool);
-	    return FALSE;
+	    p_val = WN_get_val(wn2_iter, hi_map);
+	    val = p_val.second;
+	    if (p_val.first)
+	      delta_lo -= val;
+	    else {
+	      CXX_DELETE(stack1, pool);
+	      CXX_DELETE(stack2, pool);
+	      return FALSE;
+	    }
 	  }
 	}
       }
@@ -2006,16 +2052,22 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
 	if (WN_operator(wn_iter) == OPR_INTCONST)
 	  continue;
-	
-	if (WN_get_val(wn_iter, &val, lo_map)) 
+
+	p_val = WN_get_val(wn_iter, lo_map);
+	val = p_val.second;
+	if (p_val.first)
 	  delta_lo += val;
-	else if (WN_get_val(wn_iter, &val, hi_map))
-	  delta_hi += val;
 	else {
-	  CXX_DELETE(stack1, pool);
-	  if (stack2)
-	    CXX_DELETE(stack2, pool);
-	  return FALSE;
+	  p_val = WN_get_val(wn_iter, hi_map);
+	  val = p_val.second;
+	  if (p_val.first)
+	    delta_hi += val;
+	  else {
+	    CXX_DELETE(stack1, pool);
+	    if (stack2)
+	      CXX_DELETE(stack2, pool);
+	    return FALSE;
+	  }
 	}
       }
     }

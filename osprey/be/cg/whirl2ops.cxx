@@ -4869,8 +4869,12 @@ Expand_Expr (WN *expr, WN *parent, TN *result)
   /* get #opnds from topcode or from #kids of whirl
    * (special cases like store handled directly). */
   if (top != TOP_UNDEFINED) {
+#if defined(TARG_X8664)
+    num_opnds =   ISA_OPERAND_INFO_Operands(ISA_OPERAND_Info(top));
+#else
     num_opnds =   ISA_OPERAND_INFO_Operands(ISA_OPERAND_Info(top))
 		- (TOP_is_predicated(top) != 0);
+#endif
   } else {
     num_opnds = OPCODE_nkids(opcode);
   }
@@ -5415,12 +5419,17 @@ Expand_Expr (WN *expr, WN *parent, TN *result)
   if (top != TOP_UNDEFINED) {
     // Build_OP uses OP_opnds to determine # operands, 
     // so doesn't matter if we pass extra unused ops.
+#if defined(TARG_X8664)
+    // there are not predicated ops for this target
+    Build_OP (top, result, opnd_tn[0], opnd_tn[1], opnd_tn[2], &New_OPs);
+#else
     if (TOP_is_predicated(top)) {
       Build_OP (top, result, True_TN, opnd_tn[0], opnd_tn[1], opnd_tn[2], 
 		 &New_OPs);
     } else {
       Build_OP (top, result, opnd_tn[0], opnd_tn[1], opnd_tn[2], &New_OPs);
     }
+#endif
   } else {
     switch (num_opnds) {
     case 0:

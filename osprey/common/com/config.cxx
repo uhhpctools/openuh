@@ -1313,6 +1313,10 @@ Configure (void)
     OPT_Reorg_Common = TRUE;
   }
 
+  if ( ! Optimize_exception_ranges_set && Opt_Level == 0) {
+    Optimize_exception_ranges = 0;
+  }
+
   if (Force_GP_Prolog) Force_Jalr = TRUE;
 #ifdef TARG_X8664
   // Bug 1039 - align aggregates to 16-byte for all optimization levels

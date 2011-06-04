@@ -744,6 +744,7 @@ public:
   SC_NODE *    Split(SC_NODE *);
   SC_NODE *    Insert_block_after(SC_NODE *);
   SC_NODE *    Insert_block_before(SC_NODE *);
+  SC_NODE *    Insert_if_before(SC_NODE *, BB_NODE *);
   void         Fix_info(SC_NODE *);
 
   // Create a new block and allocate it.
