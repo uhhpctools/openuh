@@ -296,6 +296,9 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
   Is_True(rename_common_stack.Elements() == 1,
           ("OMP_Prelower(): rename_common_stack.Elements() != 1"));
 
+  /* don't do threadprivate renaming if its a nested MP  PU */
+  if (!(PU_mp( Get_Current_PU()) && PU_is_nested_func( Get_Current_PU()))) {
+
   RENAMING_SCOPE rename_common(NULL, &omp_pool);
 
   // Note that rename_common_blk renaming scope needs to provide
@@ -321,6 +324,8 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
                              &rename_scope_stack, 
                              &rename_common,
                              rename_common_blk);
+
+  }
 
     // create parent map
   Omp_Parent_Map = WN_MAP_Create(&omp_pool);

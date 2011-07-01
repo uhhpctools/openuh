@@ -66,6 +66,7 @@ endif
 CFLAGS += -DTARG_$(BUILD_TARGET)
 CXXFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
+#CFLAGS += -DTASK_DEBUG
 
 CFILES = \
 	omp_collector_validation.c \

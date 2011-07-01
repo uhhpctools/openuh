@@ -68,11 +68,6 @@ int co_init(int num_threads)
   return 0;
 }
 
-
-
-
-
-cothread
 #endif /* #if defined(CO_USE_SIGCONTEXT) */
 
 
@@ -419,8 +414,12 @@ void co_delete(coroutine_t coro) {
             co_curr);
     exit(1);
   }
-  if (co->alloc)
+
+  //printf("[PCL] co_delete: deleting %x\n", co);
+  if (co->alloc) {
+    bzero(co, co->alloc); /* for debugging purposes */
     free(co);
+  }
 }
 
 
@@ -431,10 +430,7 @@ void co_call(coroutine_t coro) {
 
   co->caller = co_curr;
   co_curr = co;
-
-
-  co->safe_to_enqueue = 0;
-  oldco->safe_to_enqueue = 1;
+  //printf("[PCL] co_call: swapping context %lx->%lx\n", &oldco->ctx.cc, &co->ctx.cc);
   if (swapcontext(&oldco->ctx.cc, &co->ctx.cc) < 0) {
     fprintf(stderr, "[PCL] Context switch failed: curr=%p\n",
             co_curr);

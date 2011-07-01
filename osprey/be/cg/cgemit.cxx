@@ -350,13 +350,23 @@ static FILE *anl_file;
  *  3 : F90 internal procedure
  *  4 : MP PU from internal procedure
  *  5 : Fortran I/O in MP PU
+ *
+ * #define MAX_SYMTAB_DEPTH	6
+ *
+ * static INT32 *elf_index_array[MAX_SYMTAB_DEPTH] =
+ * {NULL,NULL,NULL,NULL,NULL,NULL};
+ * static INT max_elf_index[MAX_SYMTAB_DEPTH] = {0,0,0,0,0,0};
  */
 
-#define MAX_SYMTAB_DEPTH	6
+/*  CHANGE: Actually, nested depth can be arbitrarily deep for supporting
+ *  nested parallel regions. Using vector instead for elf_index_array and
+ *  max_elf_index.
+ */
 
-static INT32 *elf_index_array[MAX_SYMTAB_DEPTH] =
-  {NULL,NULL,NULL,NULL,NULL,NULL};
-static INT max_elf_index[MAX_SYMTAB_DEPTH] = {0,0,0,0,0,0};
+#define INIT_SYMTAB_DEPTH	6
+
+static vector<INT32 *> elf_index_array;
+static vector<INT> max_elf_index;
 
 #ifdef TARG_SL
 vector<UINT32>  *mvtcop = NULL;
@@ -623,9 +633,17 @@ Init_ST_elf_index (UINT stab)
 {
 	UINT level = stab;
 	INT i;
+
+    if (elf_index_array.empty()) elf_index_array.resize(INIT_SYMTAB_DEPTH);
+    if (max_elf_index.empty()) max_elf_index.resize(INIT_SYMTAB_DEPTH);
+
 	Allocate_Elf_Index_Space(GLOBAL_SYMTAB);
-	Is_True((level < MAX_SYMTAB_DEPTH), 
-		("Init_ST_elf_index overflow"));
+
+    if (level >= elf_index_array.size())  {
+      elf_index_array.resize(level+1);
+      max_elf_index.resize(level+1);
+    }
+
 	if (level > GLOBAL_SYMTAB && elf_index_array[level] != NULL) {
 		/* need to clear the values in case leftover 
 	 	 * from previous uplevel */
@@ -640,8 +658,10 @@ static INT32
 ST_elf_index (ST *st)
 {
 	INT level = ST_level(st);
-	Is_True((level < MAX_SYMTAB_DEPTH), 
-		("ST_elf_index overflow"));
+
+    Is_True(elf_index_array.size() > level,
+        ("ST_elf_index overflow"));
+
 	Is_True((ST_index(st) < max_elf_index[level]), 
 		("ST_elf_index overflow"));
 	return elf_index_array[level][ST_index(st)];
@@ -651,8 +671,10 @@ static void
 Set_ST_elf_index (ST *st, INT32 v)
 {
 	INT level = ST_level(st);
-	Is_True((level < MAX_SYMTAB_DEPTH), 
-		("Set_ST_elf_index overflow"));
+
+    Is_True(elf_index_array.size() > level,
+        ("ST_elf_index overflow"));
+
 	Is_True((ST_index(st) < max_elf_index[level]),
 		("Set_ST_elf_index overflow"));
 	elf_index_array[level][ST_index(st)] = v;

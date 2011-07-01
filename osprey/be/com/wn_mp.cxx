@@ -520,6 +520,7 @@ static WN *if_postamble_block;	/* MP if postamble block */
 static WN *do_preamble_block;	/* Do preamble block */
 static INT64 line_number;	/* Line number of parallel do/region */
 
+static WN *last_microtask; /* func entry for last created microtask */
 static ST *parallel_proc;	/* Extracted parallel process */
 static vector<ST *> local_upper;   /* Parallel Do local upper bound */
 static vector<ST *> local_lower;   /* Parallel Do local lower bound */
@@ -537,6 +538,7 @@ static WN *ntrip_node;		/* Parallel do trip count */
 static vector<WN *> stride_node;		/* Parallel do stride */
 static WN *parallel_func;	/* Parallel do function */
 static FEEDBACK *parallel_pu_fb;  /* Feedback for parallel function */
+static WN *pragma_block;	/* Parallel funciton pragma block */
 static WN *reference_block;	/* Parallel funciton reference block */
 static INT32 func_level;	/* Parallel function stab level */
 static vector<ST *> do_index_st;		/* User do index variable ST */
@@ -1891,6 +1893,7 @@ Gen_Threadpriv_Func(WN* prags, WN* block, BOOL prepend)
   WN *wn;
   ST *gtid_st = NULL;
   BOOL need_thread_num = FALSE;
+  WN *first_thrprv_test = NULL;
 
   BOOL target_32bit = Is_Target_32bit();
 
@@ -1996,8 +1999,7 @@ Gen_Threadpriv_Func(WN* prags, WN* block, BOOL prepend)
                              )
                        );
     WN *thrprv_test = WN_CreateIf( test, thrprv_block, WN_CreateBlock());
-
-
+    if (!first_thrprv_test) first_thrprv_test = thrprv_test;
 
     thrprv_assign = WN_Stid(Pointer_type, 0, 
                             ST_ptr(WN_pragma_arg1(prags)), 
@@ -2036,7 +2038,9 @@ Gen_Threadpriv_Func(WN* prags, WN* block, BOOL prepend)
         Fail_FmtAssertion("cannot find a place to insert threadprivate");
       wn = WN_prev(WN_prev(wn));
     }
-    else{
+    else if (first_thrprv_test) {
+      wn = first_thrprv_test;
+    } else {
       wn = Get_First_Stmt_in_Block(block);
       wn = WN_next(WN_next(wn));
     }
@@ -2845,7 +2849,9 @@ is inheriting pu_recursive OK?
 
   parallel_func = WN_CreateBlock ( );
   reference_block = WN_CreateBlock ( );
+  pragma_block = WN_CreateBlock ( );
 #ifdef KEY
+  WN *current_pu_tree = PU_Info_tree_ptr(Current_PU_Info);
   WN *thread_priv_prag = WN_first(WN_func_pragmas(PU_Info_tree_ptr(Current_PU_Info)));
   if (thread_priv_prag) {
     while (thread_priv_prag) { 
@@ -2856,6 +2862,11 @@ is inheriting pu_recursive OK?
                                           WN_st_idx(thread_priv_prag),
 			                  WN_pragma_arg1(thread_priv_prag), 
                                           WN_pragma_arg2(thread_priv_prag) ));
+        WN_INSERT_BlockLast ( pragma_block,
+			WN_CreatePragma ( WN_PRAGMA_THREADPRIVATE,
+                                          WN_st_idx(thread_priv_prag),
+			                  WN_pragma_arg1(thread_priv_prag),
+                                          WN_pragma_arg2(thread_priv_prag) ));
       }
       thread_priv_prag = WN_next(thread_priv_prag);
     }
@@ -2865,8 +2876,9 @@ is inheriting pu_recursive OK?
   UINT arg_cnt = (has_gtid ? 2 : 1);
   UINT slink_arg_pos = arg_cnt - 1;
   WN *func_entry = WN_CreateEntry ( arg_cnt, parallel_proc,
-                                    parallel_func, WN_CreateBlock ( ),
-				    reference_block );
+                                    parallel_func, pragma_block,
+                                    reference_block );
+  last_microtask = func_entry;
 
   if (has_gtid) {
     WN_kid0(func_entry) = WN_CreateIdname ( 0, arg_gtid );
@@ -4000,6 +4012,39 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
         }
       }
     }
+    WN *matched_pragma2 = NULL;
+    if (pragma_block) {
+      thread_priv_prag = WN_first(pragma_block);
+      if (thread_priv_prag) {
+        while (thread_priv_prag) {
+          if (WN_opcode(thread_priv_prag) == OPC_PRAGMA &&
+              WN_pragma(thread_priv_prag) == WN_PRAGMA_THREADPRIVATE) {
+            if (WN_pragma_arg1(thread_priv_prag) == ST_st_idx(old_st)){
+              matched_pragma2 = thread_priv_prag;
+              break;
+            }
+          }
+          thread_priv_prag = WN_next(thread_priv_prag);
+        }
+// Bug 4178
+        thread_priv_prag = WN_first(pragma_block);
+        while (!matched_pragma && thread_priv_prag) {
+          if (WN_opcode(thread_priv_prag) == OPC_PRAGMA &&
+              WN_pragma(thread_priv_prag) == WN_PRAGMA_THREADPRIVATE){
+            FOREACH_SYMBOL (CURRENT_SYMTAB, symbol, i) {
+              if (symbol == ST_ptr(WN_pragma_arg1(thread_priv_prag)) &&
+                  strcmp(localname, ST_name(symbol)) == 0) {
+                sym = symbol;
+                break;
+              }
+            }
+            if (!sym)
+              break;
+          }
+          thread_priv_prag = WN_next(thread_priv_prag);
+        }
+      }
+    }
     // TODO: Remove the above fix for bug 4178
     // Ensure all occurrences of a local thdprv pointer gets the same
     // local copy. Needed for multiple orphan DO regions, when each
@@ -4030,6 +4075,9 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
           Set_ST_addr_passed(sym);
      }
 #ifdef KEY
+     // Disabling the following code for now. Not sure when/why it is needed.
+     // -Deepak
+#if 0
      { // Assumption: The local pragma for a local thdprv ST must be present
        // in the function pragmas
        WN *prag = WN_first(WN_func_pragmas(PU_Info_tree_ptr(Current_PU_Info)));
@@ -4048,8 +4096,11 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
          prag = WN_next (prag);
        }
      }
+#endif
      if (matched_pragma) 
 	WN_pragma_arg1(matched_pragma) = ST_st_idx(sym);
+     if (matched_pragma2)
+	WN_pragma_arg1(matched_pragma2) = ST_st_idx(sym);
 #endif
 
       // Don't do the following; it depends on a back-end-specific table
@@ -6282,7 +6333,11 @@ Post_MP_Processing (WN * pu)
   WN * prags = WN_func_pragmas (pu);
   WN * body = WN_func_body (pu);
 
+  // generate threadprivate code if this is not a nested PU_MP pu
+  if (!(PU_mp( Get_Current_PU()) && PU_is_nested_func( Get_Current_PU()))) {
+
   reference_block = WN_CreateBlock ( );
+  pragma_block = WN_CreateBlock ( );
   WN *thread_priv_prag = WN_first(prags);
   while (thread_priv_prag) {
     if (WN_opcode(thread_priv_prag) == OPC_PRAGMA &&
@@ -6292,11 +6347,18 @@ Post_MP_Processing (WN * pu)
                                           WN_st_idx(thread_priv_prag),
 			                  WN_pragma_arg1(thread_priv_prag), 
                                           WN_pragma_arg2(thread_priv_prag) ));
+      WN_INSERT_BlockLast ( pragma_block,
+			WN_CreatePragma ( WN_PRAGMA_THREADPRIVATE,
+                                          WN_st_idx(thread_priv_prag),
+			                  WN_pragma_arg1(thread_priv_prag), 
+                                          WN_pragma_arg2(thread_priv_prag) ));
     }
     thread_priv_prag = WN_next(thread_priv_prag);
   }
 
   Gen_Threadpriv_Func (prags, body, TRUE);
+
+  }
   
   // Get the set of local nodes from the function pragmas.
   WN * prag_iter, * next_prag_iter = WN_first (prags);
@@ -8198,8 +8260,6 @@ Strip_Nested_MP ( WN * tree, BOOL pcf_ok )
 	
   /* nested MP pragmas/regions supported for x8664 */
 #ifdef TARG_X8664
-  Force_Frame_Pointer = TRUE; 
-  Force_Frame_Pointer_Set = TRUE; 
   return; 
 #endif
 	
@@ -10645,6 +10705,10 @@ Transform_Parallel_Block ( WN * tree )
     case WN_PRAGMA_PARALLEL_BEGIN:
         break;
 
+    case WN_PRAGMA_COPYIN_BOUND:
+        /* this may be generated for local structs */
+        break;
+
 	default:
 	  Fail_FmtAssertion (
 	      "out of context pragma (%s) in MP {parallel region} processing",
@@ -12159,7 +12223,8 @@ Process_MP_Region ( void )
 
   Transform_Parallel_Block ( stmt_block );
 #ifdef KEY
-  Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
+  if (mpt == MPP_PARALLEL_REGION)
+    Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
 #endif
 
   if (reduction_count) {  /* Generate init/finish reduction code */
@@ -12179,11 +12244,17 @@ Process_MP_Region ( void )
     WN_INSERT_BlockLast ( parallel_func, firstprivate_block );
   if (mpt == MPP_TASK_REGION)
     WN_INSERT_BlockLast ( parallel_func, Gen_Task_Body_Start() );
+
+  if (mpt == MPP_TASK_REGION) {
+    Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
+  }
+
   if (reduction_init_block)
     WN_INSERT_BlockLast ( parallel_func, reduction_init_block );
   WN_INSERT_BlockLast ( parallel_func, stmt_block );
   if (reduction_store_block)
     WN_INSERT_BlockLast ( parallel_func, reduction_store_block );
+
 
   /* Generate return at end of parallel function */
 
@@ -12231,6 +12302,7 @@ Process_MP_Region ( void )
   Current_pu = &Current_PU_Info_pu();
   Current_Map_Tab = pmaptab;
   Pop_Some_Globals( );
+
 } // Process_MP_Region()
 
 // Localize variables in serialzed version of parallel region

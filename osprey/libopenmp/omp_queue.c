@@ -21,14 +21,28 @@
 
 void __ompc_task_q_init(omp_task_q_t *tq)
 {
+  /*
   tq->head = co_create(NULL, NULL, NULL, 4096);
-  if(tq->head == NULL)
-    printf("head = NULL\n");
+  Is_True(tq->head != NULL,
+	  ("Could not initialize tq->head with dummy coroutine"));
 
   tq->tail = co_create(NULL, NULL, NULL, 4096);
+  Is_True(tq->tail != NULL,
+	  ("Could not initialize tq->tail with dummy coroutine"));
+      */
 
-  if(tq->tail == NULL)
-    printf("tail = NULL\n");
+  tq->head = malloc(sizeof(omp_task_t));
+  Is_True(tq->head != NULL,
+	  ("Could not initialize tq->head"));
+  tq->head->coro = NULL;
+  tq->head->desc = NULL;
+
+  tq->tail = malloc(sizeof(omp_task_t));
+  Is_True(tq->tail != NULL,
+	  ("Could not initialize tq->tail"));
+  tq->tail->coro = NULL;
+  tq->tail->desc = NULL;
+
 
   tq->size = 0;
   tq->head->next = tq->tail;
@@ -88,7 +102,7 @@ void __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task)
 
   __ompc_lock(&tq->lock);
 #ifdef TASK_DEBUG
-  printf("%d: putting %X on quueue %lu\n", __omp_myid, task, tq);
+  printf("%d: putting %X on queue %X\n", __omp_myid, task, tq);
   printf("%d: tail = %X; tail->prev = %X;\n", __omp_myid, tq->tail, tq->tail->prev);
 #endif
   temp = tq->tail->prev;
@@ -100,6 +114,44 @@ void __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task)
   printf("%d: task->prev = %X; task->next = %X\n", __omp_myid, task->prev, task->next);
 #endif
   tq->size = tq->size + 1;
+  __ompc_unlock(&tq->lock);
+}
+
+
+/* dump routines */
+static char* __dump_task_state(omp_task_state_t state)
+{
+  switch(state) {
+    case OMP_TASK_DEFAULT: return "D";
+    case OMP_TASK_SUSPENDED: return "S";
+    case OMP_TASK_EXIT: return "X";
+  }
+
+  return "?";
+}
+
+void __dump_task_q(omp_task_q_t *tq)
+{
+  int i=1;
+  omp_task_t *tp;
+  Is_True( tq != NULL, ("__ompc_dump_task_q: tq is NULL"));
+  fprintf(stderr, "   \tTASKID\tIMP\tTIED\tSTARTED\t#CHILD\tSTATE\tPARENT\n");
+
+  __ompc_lock(&tq->lock);
+
+
+  tp = tq->head;
+  while (tp != NULL) {
+    if (tp->desc != NULL)
+      fprintf(stderr, "(%d)\t%x\t%d\t%d\t%d\t%d\t%s\t%x\n",
+          i++, tp->coro, tp->desc->is_parallel_task, tp->desc->is_tied,
+          tp->desc->started, tp->desc->num_children,
+          __dump_task_state(tp->desc->state), tp->creator->coro);
+    else
+      fprintf(stderr, "(%d)\n", i++);
+    tp = tp->next;
+  }
+
   __ompc_unlock(&tq->lock);
 }
 

@@ -208,17 +208,23 @@ inline omp_u_thread_t * __ompc_get_current_u_thread()
 	  ("RTL data structures haven't been initialized yet!"));
 
   current_uthread_id = pthread_self();
+
   uthread_temp = __omp_uthread_hash_table[HASH_IDX(current_uthread_id)];
   Is_True(uthread_temp != NULL, ("This pThread is not in hash table!"));
 
   if (uthread_temp->uthread_id == current_uthread_id)
     return uthread_temp;
+
   else {
     do {
+      /* is mutual exclusion necessary here? */
+      //pthread_mutex_lock(&__omp_hash_table_lock);
       uthread_temp = uthread_temp->hash_next;
+      //pthread_mutex_unlock(&__omp_hash_table_lock);
       Is_True(uthread_temp != NULL, 
 	      ("This pThread is not in hash table!"));
     } while (uthread_temp->uthread_id != current_uthread_id);
+
     return uthread_temp;
   }
 }
@@ -306,12 +312,17 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 
   __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
 
-  /* Besar:what if there is no task ? num_task will be negative after decrement */
+  /* Besar: what if there is no task ? num_task will be negative after
+   * decrement
+   *
+   * This busy wait loop is probably not a good idea ...
+   */
+
   /* while(__omp_level_1_team_manager.num_tasks != 0) { */
   while(__omp_level_1_team_manager.num_tasks > 0) {
     __ompc_task_schedule(&next);
     if(next != NULL) {
-      __ompc_task_switch(__omp_level_1_team_tasks[__omp_myid], next);
+      __ompc_task_switch(__omp_current_task, next);
     }
   }
 
@@ -323,14 +334,6 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     team->barrier_count = 0;
     team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
 
-    /* DE: what is this for? */
-    /*
-    for (i = 0; i < 300; i++)
-      if (team->barrier_count2 == team->team_size) {
-	goto barrier_exit;
-      }
-      */
-
     pthread_mutex_lock(&(team->barrier_lock));
     pthread_cond_broadcast(&(team->barrier_cond));
     pthread_mutex_unlock(&(team->barrier_lock));
@@ -341,7 +344,6 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     for (i = 0; i < __omp_spin_count; i++)
       if ((*barrier_flag_p) != barrier_flag) {
         return;
-        /* goto barrier_exit; */
       }
     pthread_mutex_lock(&(team->barrier_lock));
     while (team->barrier_flag == barrier_flag) {
@@ -349,11 +351,6 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     }
     pthread_mutex_unlock(&(team->barrier_lock));
   }
-
-  /*
- barrier_exit:
-  __ompc_atomic_inc(&__omp_level_1_team_manager.num_tasks);
-  */
 
 }
 
@@ -395,7 +392,7 @@ __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
 __ompc_set_state(THR_WORK_STATE);
 }
 
-inline void __ompc_ebarrier(void)
+void __ompc_ebarrier(void)
 {
     omp_v_thread_t *temp_v_thread;
    omp_v_thread_t *p_vthread = __ompc_get_v_thread_by_num( __omp_myid);

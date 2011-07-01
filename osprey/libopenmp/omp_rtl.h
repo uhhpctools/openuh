@@ -172,7 +172,7 @@ typedef enum {
 } omp_exe_mode_t;
 
 /* current execution mode*/
-extern volatile omp_exe_mode_t __omp_exe_mode;
+extern __thread omp_exe_mode_t __omp_exe_mode;
 
 typedef struct omp_u_thread omp_u_thread_t;
 typedef struct omp_v_thread omp_v_thread_t;
@@ -195,8 +195,67 @@ struct omp_loop_info {
   omp_uint64 next_index;
 };
 
+/* OpenMP Tasks */
+
+struct omp_task_desc {
+  volatile uint32_t num_children;
+  int is_parallel_task;
+  int is_tied;
+  int may_delay;
+  int started;
+  volatile omp_task_state_t state;
+  volatile int safe_to_enqueue;
+  int depth;
+  int pdepth;
+  volatile int context_flag;
+  int threadid;
+};
+
+typedef struct omp_task_desc omp_task_desc_t;
+
+struct omp_task {
+  coroutine_t coro;
+  struct omp_task *creator;
+  struct omp_task *next;
+  struct omp_task *prev;
+  omp_task_desc_t *desc;
+  pthread_mutex_t lock;
+};
+typedef struct omp_task omp_task_t;
+
+/*
+ * task queue represented as linked list
+ */
+struct omp_task_q {
+  omp_task_t *head;
+  omp_task_t *tail;
+  ompc_lock_t lock; /*global lock for the whole queue, very bad */
+  uint32_t size;
+}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+
+typedef struct omp_task_q   omp_task_q_t;
+
+/*
+ * task queue represented as circular queue
+ */
+/*
+struct omp_task_q {
+  omp_task_t **queue; //an array of pointers
+  ompc_lock_t lock;
+  uint32_t head;
+  uint32_t tail;
+  uint32_t size;
+}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+*/
+
+/*
+extern omp_task_q_t * __omp_private_task_q;
+extern omp_task_q_t * __omp_local_task_q;
+*/
+
+
 /* team*/
-struct omp_team{
+struct omp_team {
   volatile int barrier_flag; // To indicate all arrived
   //	int	team_id;
   int	team_size;
@@ -265,6 +324,8 @@ struct omp_team{
     execution in a barrier, would like to do something better if possible
   */
   volatile int  num_tasks;
+  omp_task_q_t  *private_task_q;
+  omp_task_q_t  *public_task_q;
 
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
@@ -293,6 +354,9 @@ struct omp_v_thread {
   int	loop_count;
   /* for 'lastprivate'? used ?*/
   //	int is_last;
+
+  omp_task_t *implicit_task;
+
   unsigned long thr_lkwt_state_id;
   unsigned long thr_ctwt_state_id;
   unsigned long thr_atwt_state_id;
@@ -392,42 +456,6 @@ extern void __ompc_serialized_parallel(int vthread_id);
 extern void __ompc_end_serialized_parallel(int vthread_id);
 
 
-/* Cody - Tasking Declarations */
-
-/*structure representing tasks is in pcl.h */
-
-typedef coroutine omp_task_t;
-/*Task Queues */
-typedef struct omp_task_q   omp_task_q_t;
-
-
-/* 
- * task queue represented as linked list
- */
-struct omp_task_q {
-  omp_task_t *head;
-  omp_task_t *tail;
-  ompc_lock_t lock; /*global lock for the whole queue, very bad */
-  uint32_t size;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
-
-/* 
- * task queue represented as circular queue
- */
-/*
-struct omp_task_q {
-  omp_task_t **queue; //an array of pointers
-  ompc_lock_t lock;
-  uint32_t head;
-  uint32_t tail;
-  uint32_t size;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
-*/
-
-
-
-extern omp_task_q_t * __omp_private_task_q;
-extern omp_task_q_t * __omp_local_task_q;
 
 extern void __ompc_task_q_init(omp_task_q_t *tq);
 extern void  __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task);
@@ -442,7 +470,7 @@ typedef int (*cond_func)();
 
 /*array of pointers to the implicit tasks created when a parallel region is 
   encountered */
-extern omp_task_t **      __omp_level_1_team_tasks;
+extern omp_task_t *      __omp_level_1_team_tasks;
 
 /*id of thread, could be used for other things other than tasks */
 extern __thread int __omp_myid; 
@@ -506,6 +534,7 @@ struct omp_task_stats {
   unsigned int tasks_skipped;
   unsigned int tasks_created;
   unsigned int tasks_stolen;
+  unsigned int tasks_deleted;
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
 
 
@@ -516,6 +545,7 @@ extern __thread unsigned int __omp_tasks_started;
 extern __thread unsigned int __omp_tasks_skipped;
 extern __thread unsigned int __omp_tasks_created;
 extern __thread unsigned int __omp_tasks_stolen;
+extern __thread unsigned int __omp_tasks_deleted;
 
 extern char *__omp_task_stats_filename;
 

@@ -62,22 +62,6 @@ typedef struct s_coroutine {
   struct s_coroutine *restarget;
   void (*func)(void *);
   void *data;
-
-  struct s_coroutine *next;
-  struct s_coroutine *prev;
-
-  struct s_coroutine *creator;
-  volatile uint32_t num_children;
-  int is_parallel_task;
-  int is_tied;
-  int started;
-  volatile omp_task_state_t state;
-  volatile int safe_to_enqueue;
-  int depth;
-  int pdepth;
-  volatile int context_flag;
-  int threadid;
-  pthread_mutex_t lock;
 } coroutine;
 
 typedef coroutine * coroutine_t;

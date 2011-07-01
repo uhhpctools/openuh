@@ -14,23 +14,29 @@ __thread unsigned int __omp_tasks_started;
 __thread unsigned int __omp_tasks_skipped;
 __thread unsigned int __omp_tasks_created;
 __thread unsigned int __omp_tasks_stolen;
+__thread unsigned int __omp_tasks_deleted;
 
 int __ompc_task_depth_cond()
 {
-  return (__omp_current_task->depth < __omp_task_level_limit);
+  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
+      ("__ompc_task_depth_cond: __omp_current_task is uninitialized"));
+  return (__omp_current_task->desc->depth < __omp_task_level_limit);
 }
 
 int __ompc_task_depthmod_cond()
 {
-  return __omp_current_task->pdepth % __omp_task_mod_level == 0;
+  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
+      ("__ompc_task_depthmod_cond: __omp_current_task is uninitialized"));
+  return __omp_current_task->desc->pdepth % __omp_task_mod_level == 0;
 }
 
 int __ompc_task_queue_cond()
 {
+  omp_team_t *team = __ompc_get_current_team();
 
-  if(breadth && __omp_local_task_q[__omp_myid].size > __omp_task_q_upper_limit)
+  if(breadth && team->public_task_q[__omp_myid].size > __omp_task_q_upper_limit)
     breadth = 0;
-  else if(!breadth && __omp_local_task_q[__omp_myid].size < __omp_task_q_lower_limit)
+  else if(!breadth && team->public_task_q[__omp_myid].size < __omp_task_q_lower_limit)
     breadth = 1;
 
   return breadth;
@@ -48,50 +54,63 @@ int __ompc_task_false_cond()
 
 int __ompc_task_numtasks_cond()
 {
-  return (__omp_level_1_team_manager.num_tasks < __omp_task_limit);
+  return (__ompc_get_current_team()->num_tasks < __omp_task_limit);
 }
 
 
 int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_tied)
 {
-
+  omp_team_t *team = __ompc_get_current_team();
   __omp_tasks_created++;
+
   omp_task_t *newtask = __ompc_task_get(taskfunc, fp, __omp_task_stack_size);
 
 #if defined(TASK_DEBUG)
-  fprintf(stdout,"%d: %lX created %lX\n", __omp_myid, __omp_current_task, newtask);
+  fprintf(stdout,"%d: __ompc_task_create: %lX created %lX\n", __omp_myid, __omp_current_task->coro,
+            newtask->coro);
 #endif
 
-  if(newtask == NULL) {
+  if(newtask == NULL || newtask->coro == NULL || newtask->desc == NULL ) {
     fprintf(stderr, "%d: not able to create new tasks\n", __omp_myid);
     exit(1);
   }
-  newtask->num_children = 0;
-  newtask->is_parallel_task = 0;
-  newtask->is_tied = is_tied;
-  newtask->started = 0;
+  newtask->desc->num_children = 0;
+  newtask->desc->is_parallel_task = 0;
+  newtask->desc->is_tied = is_tied;
+  newtask->desc->may_delay = may_delay;
+  newtask->desc->started = 0;
+  newtask->desc->safe_to_enqueue = 0;
+  newtask->desc->depth = __omp_current_task->desc->depth + 1;
+  newtask->desc->pdepth = newtask->desc->depth;
   newtask->creator = __omp_current_task;
-  newtask->safe_to_enqueue = 0;
-  newtask->depth = __omp_current_task->depth + 1;
-  newtask->pdepth = newtask->depth;
   pthread_mutex_init(&newtask->lock, NULL);
 
   /* update number of children - use atomic operation if possible */
   int x;
-  x = __ompc_atomic_inc(&__omp_current_task->num_children);
-  __ompc_atomic_inc(&__omp_level_1_team_manager.num_tasks);
+  x = __ompc_atomic_inc(&__omp_current_task->desc->num_children);
+  __ompc_atomic_inc(&(team->num_tasks));
 
-  __ompc_task_switch(__omp_current_task, newtask);
 
-  if (may_delay) {
+  if (may_delay & ! (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)) {
+    __ompc_task_switch(__omp_current_task, newtask);
 #ifdef SCHED1
-    newtask->threadid = friend;
+    newtask->desc->threadid = friend;
     __sync_bool_compare_and_swap(&__omp_empty_flags[friend], 1, 0);
-    __ompc_task_q_put_tail(&__omp_local_task_q[friend], newtask);
+    __ompc_task_q_put_tail(&(team->public_task_q[friend]), newtask);
 #else
-    __ompc_task_q_put_tail(&__omp_local_task_q[__omp_myid], newtask);
+    __ompc_task_q_put_tail(&(team->public_task_q[__omp_myid]), newtask);
 #endif
+  } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+    /* don't enqueue tasks in sequential mode */
+    __ompc_task_switch(__omp_current_task, newtask);
   } else {
+    if (__omp_current_task->desc->is_tied) {
+      __ompc_task_q_put_tail(&(team->private_task_q[__omp_myid]),
+          __omp_current_task);
+    } else {
+      __ompc_task_q_put_tail(&(team->public_task_q[__omp_myid]),
+          __omp_current_task);
+    }
     __ompc_task_switch(__omp_current_task, newtask);
   }
 
@@ -100,70 +119,104 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_t
 
 void __ompc_task_body_start()
 {
+  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
+      ("__ompc_task_body_start: __omp_current_task is uninitialized"));
+  if (__omp_current_task->desc->may_delay &&
+        !(__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL))
   __ompc_task_switch(__omp_current_task, __omp_current_task->creator);
+
+  Is_True(__omp_current_task->desc->started == 0,
+      ("already started task called __ompc_task_body_start"));
+  __omp_tasks_started++;
+  __omp_current_task->desc->started = 1;
+  __omp_current_task->desc->threadid = __omp_myid;
 }
 
 
 void __ompc_task_exit()
 {
-
+  omp_task_t *creator;
   omp_task_t *next;
+  omp_team_t *team = __ompc_get_current_team();
   next = NULL;
+  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
+      ("__ompc_task_exit: __omp_current_task is uninitialized"));
+  creator = __omp_current_task->creator;
+
   /* decrement num_children of parent*/
-  if(__omp_current_task->creator != NULL) {
+  if(creator != NULL) {
+    Is_True(creator->desc != NULL,
+    ("__ompc_task_exit: creator->desc is uninitialized"));
 
 #ifdef TASK_DEBUG
-    printf("%X: %X->num_children = %d\n", __omp_current_task, __omp_current_task->creator,__omp_current_task->creator->num_children);
+    printf("%d: task_exit: task = %X: %X->num_children = %d\n", __omp_myid,
+        __omp_current_task->coro, creator->coro, creator->desc->num_children);
 #endif 
-    pthread_mutex_lock(&__omp_current_task->creator->lock);
+    pthread_mutex_lock(&creator->lock);
 
-    int x;
+    int num_children;
 
-    x = __ompc_atomic_dec(&__omp_current_task->creator->num_children);
-
-#ifdef TASK_DEBUG
-    printf("parent = %X: task = %X: num_children_left = %d; state = %d\n", __omp_current_task->creator, __omp_current_task,x, __omp_current_task->creator->state);
-#endif
-
-    assert(x >= 0);
-    if((x) == 0 && !__omp_current_task->creator->is_parallel_task ) {
-      if(__omp_current_task->creator->state == OMP_TASK_SUSPENDED) {
-        __omp_current_task->creator->state = OMP_TASK_DEFAULT;
-        while(!__omp_current_task->creator->safe_to_enqueue){};
+    num_children = __ompc_atomic_dec(&creator->desc->num_children);
 
 #ifdef TASK_DEBUG
-        printf("%d: task_exit: %X placing %X on queue ", __omp_myid, __omp_current_task, __omp_current_task->creator);
+    printf("%d: task_exit: parent = %X: task = %X: num_children_left = %d; state = %d\n",
+        __omp_myid, creator->coro, __omp_current_task->coro, num_children,
+        creator->desc->state);
 #endif
-        int threadid;
-        omp_task_q_t *q;
+
+    assert(num_children >= 0);
+
+    if ( (num_children > 0) || creator->desc->is_parallel_task) {
+
+      pthread_mutex_unlock(&creator->lock);
+
+    } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+
+      pthread_mutex_unlock(&creator->lock);
+
+    } else if (creator->desc->state == OMP_TASK_SUSPENDED) {
+
+      int threadid;
+      omp_task_q_t *q;
+      creator->desc->state = OMP_TASK_DEFAULT;
+
+
+      while(!creator->desc->safe_to_enqueue) {};
+
+#ifdef TASK_DEBUG
+      printf("%d: task_exit: %X placing %X on queue ", __omp_myid,
+          __omp_current_task->coro, creator->coro);
+#endif
 #ifdef SCHED1
-        threadid = __omp_current_task->creator->threadid;
-        __sync_bool_compare_and_swap(&__omp_empty_flags[threadid], 1, 0);
+      threadid = creator->desc->threadid;
+      __sync_bool_compare_and_swap(&__omp_empty_flags[threadid], 1, 0);
 
 #else
-        if(__omp_current_task->creator->is_tied &&
-           __omp_current_task->creator->started) {
-          threadid = __omp_current_task->creator->threadid;
-          q = __omp_private_task_q;
-        } else {
-          threadid = __omp_myid;
-          q = __omp_local_task_q;
-        }
-#endif
-        __ompc_task_q_put_tail(&q[threadid], __omp_current_task->creator);
-
+      if(creator->desc->is_tied && creator->desc->started) {
+        threadid = creator->desc->threadid;
+        q = team->private_task_q;
+      } else {
+        threadid = __omp_myid;
+        q = team->public_task_q;
       }
-#ifdef TASK_DEBUG
-      else
-        printf("%d: taskexit: %X state = %d\n", __omp_myid, __omp_current_task->creator, __omp_current_task->creator->state);
 #endif
+      __ompc_task_q_put_tail(&q[threadid], creator);
 
+      pthread_mutex_unlock(&creator->lock);
+
+    } else if (creator->desc->state == OMP_TASK_EXIT) {
+      __ompc_task_delete(creator);
+    } else {
+#ifdef TASK_DEBUG
+        printf("%d: taskexit: %X state = %d\n", __omp_myid, creator,
+            creator->desc->state);
+#endif
+      pthread_mutex_unlock(&creator->lock);
     }
-    pthread_mutex_unlock(&__omp_current_task->creator->lock);
   }
 
-  __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
-  __omp_current_task->state = OMP_TASK_EXIT;
+  __ompc_atomic_dec(&(team->num_tasks));
+  __omp_current_task->desc->state = OMP_TASK_EXIT;
 
 
   /* before we delete anything we need to wait for all children to complete */
@@ -179,45 +232,54 @@ void __ompc_task_wait()
 
 void __ompc_task_wait2(omp_task_state_t state)
 {
-  /* tasks calling this function are not in a ready queue, set state to blocked and find another task to execute */
+  /* tasks calling this function are not in a ready queue, set state to
+   * blocked and find another task to execute
+   */
 
-  /* if task still has outstanding children, it must wait until its num_children value is zero, when this happens,
-     the last child to complete will either a) add it to the queue if state == OMP_TASK_SUSPENDED or b) reclaim/free the parent v_thread for later use
-  */
+  /* if task still has outstanding children, it must wait until its
+   * num_children value is zero, when this happens, the last child to complete
+   * will either a) add it to the queue if state == OMP_TASK_SUSPENDED or b)
+   * reclaim/free the parent v_thread for later use
+   */
 
+  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL
+          && __omp_current_task->coro != NULL,
+      ("__ompc_task_exit: __omp_current_task is uninitialized"));
   assert(state == OMP_TASK_SUSPENDED || state == OMP_TASK_EXIT);
 
   omp_task_t *next;
   omp_task_t *old, *new;
   omp_task_t *current_task = __omp_current_task;
+  omp_team_t *team = __ompc_get_current_team();
 
 
 #ifdef TASK_DEBUG
-  fprintf(stdout,"%d: taskwait: %X num_children = %d; state = %d\n", __omp_myid, __omp_current_task, __omp_current_task->num_children, state);
+  fprintf(stdout,"%d: taskwait2: %X num_children = %d; state = %d\n", __omp_myid,
+      __omp_current_task->coro, __omp_current_task->desc->num_children, state);
 #endif
 
 
   while(1) {
     pthread_mutex_lock(&current_task->lock);
 
-    if(current_task->num_children == 0) {
+    if(current_task->desc->num_children == 0) {
       /* all children have completed */
       /* if state == OMP_TASK_EXIT, we need to delete ourselves and schedule 
          the next task
       */
 #ifdef TASK_DEBUG
-      printf("%d: taskwait2: %X num_children = 0; state = %d\n", __omp_myid, current_task, state);
+      printf("%d: taskwait2: %X num_children = 0; state = %d\n", __omp_myid,
+          current_task->coro, state);
 #endif
 
       if(state == OMP_TASK_EXIT) {
 		    
         __ompc_task_schedule(&next);
 		    
-        current_task->state = OMP_TASK_EXIT;
-        if(next == NULL)
-          next = __omp_level_1_team_tasks[__omp_myid];
+        current_task->desc->state = OMP_TASK_EXIT;
 
-        old = NULL;
+        if (next == NULL)
+          next = __ompc_get_v_thread_by_num(__omp_myid)->implicit_task;
 
         pthread_mutex_unlock(&current_task->lock);
         __ompc_task_exit_to(current_task, next);
@@ -229,38 +291,48 @@ void __ompc_task_wait2(omp_task_state_t state)
     } else {
 
 #ifdef TASK_DEBUG
-      printf("%d: taskwait: %X num_children = %d\n", __omp_myid, current_task, current_task->num_children);
+      printf("%d: taskwait2: %X num_children = %d\n", __omp_myid,
+          current_task->coro, current_task->desc->num_children);
 #endif
-      current_task->state = state;
+      current_task->desc->state = state;
       __ompc_task_schedule(&next);
 	
-      if(next != NULL || !current_task->is_parallel_task) {
-        if(next == NULL)
-          next = __omp_level_1_team_tasks[__omp_myid];
+      if(next != NULL || !current_task->desc->is_parallel_task) {
+        if (next == NULL)
+          next = __ompc_get_v_thread_by_num(__omp_myid)->implicit_task;
 
-        if(state == OMP_TASK_EXIT) {
-          old = NULL;
-        } else if(state == OMP_TASK_SUSPENDED) {
-          old = current_task;
-        }
         pthread_mutex_unlock(&current_task->lock);
-        __ompc_task_switch(old, next);
+        __ompc_task_switch(current_task, next);
 
-      } else
+      } else {
         pthread_mutex_unlock(&current_task->lock);
-
+      }
     }
-
   }
-
 }
 
 void __ompc_task_schedule(omp_task_t **next)
 {
-  __ompc_task_q_get_tail(&__omp_private_task_q[__omp_myid], next);
+  omp_team_t *team = __ompc_get_current_team();
+
+
+  if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
+    *next = __omp_current_task->creator;
+    Is_True(*next != NULL,
+        ("__ompc_task_schedule: NULL creator in sequential region"));
+    return;
+  }
+
+
+  Is_True(team->private_task_q != NULL,
+      ("__ompc_task_schedule: private task queue is NULL"));
+  Is_True(team->public_task_q != NULL,
+      ("__ompc_task_schedule: public task queue is NULL"));
+
+  __ompc_task_q_get_tail(&(team->private_task_q[__omp_myid]), next);
      
   if(*next == NULL) {
-    __ompc_task_q_get_tail(&__omp_local_task_q[__omp_myid], next);
+    __ompc_task_q_get_tail(&(team->public_task_q[__omp_myid]), next);
   }
 
 #ifdef SCHED1
@@ -270,10 +342,12 @@ void __ompc_task_schedule(omp_task_t **next)
 #else
   if(*next == NULL) {
 
-    int victim = (rand_r(&__omp_seed) % __omp_level_1_team_size);
+    Is_True(team != NULL, ("_ompc_task_schedule: NULL team"));
+
+    int victim = (rand_r(&__omp_seed) % team->team_size);
 	  
     if(__omp_myid != victim) {
-      __ompc_task_q_get_head(&__omp_local_task_q[victim], next);
+      __ompc_task_q_get_head(&(team->public_task_q[victim]), next);
 
       if(*next != NULL)
         __omp_tasks_stolen++;
