@@ -159,6 +159,7 @@ extern "C" {
   extern void __ompc_task_wait();
   extern void __ompc_task_exit();
   extern omp_cond_func __ompc_task_create_cond;
+  extern int __ompc_task_is_deferred(int may_delay);
 
 
 #ifdef __cplusplus

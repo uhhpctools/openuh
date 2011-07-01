@@ -45,6 +45,8 @@
 #include <malloc.h>
 #include "omp_thread.h"
 #include "omp_sys.h"
+#include "omp_etask_scheduler.h"
+#include "omp_queue.h"
 
 #define SPIN_COUNT_DEFAULT 20000
 #include "pcl.h"
@@ -83,9 +85,9 @@ omp_sched_t  __omp_rt_sched_type = OMP_SCHED_DEFAULT;
 int  __omp_rt_sched_size = OMP_CHUNK_SIZE_DEFAULT;
 
 volatile unsigned long int __omp_stack_size = OMP_STACK_SIZE_DEFAULT;
+volatile unsigned long int __omp_task_stack_size = OMP_TASK_STACK_SIZE_DEFAULT;
 
 #ifdef USE_OLD_TASKS
-volatile unsigned long int __omp_task_stack_size = OMP_TASK_STACK_SIZE_DEFAULT;
 
 volatile int __omp_task_q_upper_limit = OMP_TASK_Q_UPPER_LIMIT_DEFAULT;
 volatile int __omp_task_q_lower_limit = OMP_TASK_Q_LOWER_LIMIT_DEFAULT;
@@ -386,12 +388,87 @@ __ompc_environment_variables()
       Not_Valid("Using _stacksize_[kKmMgG]");
       break;
     }
-#ifdef USE_OLD_TASKS
     __omp_task_stack_size = stack_size;
-#endif
-
-   
   }
+
+#ifndef USE_OLD_TASKS
+  {
+
+  int use_concurrent_queue = 0;
+  env_var_str = getenv("O64_OMP_TASK_QUEUE");
+  /* default settings same as for single lock */
+  __ompc_etask_q_init = &__ompc_etask_q_init_default;
+  __ompc_etask_q_pop_head = &__ompc_etask_q_pop_head_slock;
+  __ompc_etask_q_pop_tail = &__ompc_etask_q_pop_tail_slock;
+  __ompc_etask_q_push_head = &__ompc_etask_q_push_head_slock;
+  __ompc_etask_q_push_tail = &__ompc_etask_q_push_tail_slock;
+  if (env_var_str != NULL) {
+    if (strncasecmp(env_var_str, "HEAD_BIASED", 11) == 0) {
+      /* head lock and tail lock used for concurrent access. accesses to head
+       * acquires both locks
+       */
+      __ompc_etask_q_pop_head = &__ompc_etask_q_pop_head_thlock;
+      __ompc_etask_q_pop_tail = &__ompc_etask_q_pop_tail_tlock;
+      __ompc_etask_q_push_head = &__ompc_etask_q_push_head_thlock;
+      __ompc_etask_q_push_tail = &__ompc_etask_q_push_tail_tlock;
+    } else if (strncasecmp(env_var_str, "TAIL_BIASED", 11) == 0) {
+      /* head lock and tail lock used for concurrent access. accesses to tail
+       * acquires both locks
+       */
+      __ompc_etask_q_pop_head = &__ompc_etask_q_pop_head_hlock;
+      __ompc_etask_q_pop_tail = &__ompc_etask_q_pop_tail_htlock;
+      __ompc_etask_q_push_head = &__ompc_etask_q_push_head_hlock;
+      __ompc_etask_q_push_tail = &__ompc_etask_q_push_tail_htlock;
+    } else if (strncasecmp(env_var_str, "CONCURRENT", 10) == 0) {
+      /* concurrent FIFO queue implementation used (will always dequeue from
+       * tail) */
+      __ompc_etask_q_init = &__ompc_etask_q_init_con;
+      __ompc_etask_q_pop_head = &__ompc_etask_q_con_dequeue;
+      __ompc_etask_q_pop_tail = &__ompc_etask_q_con_dequeue;
+      __ompc_etask_q_push_head = &__ompc_etask_q_con_enqueue;
+      __ompc_etask_q_push_tail = &__ompc_etask_q_con_enqueue;
+      use_concurrent_queue = 1;
+    } else if (strncasecmp(env_var_str, "NONCONCURRENT", 13) != 0) {
+      Not_Valid("O64_OMP_TASK_QUEUE_LOCKING should be NONCONCURRENT|HEAD_BIASED|TAIL_BIASED|CONCURRENT or unset");
+    }
+  }
+
+  env_var_str = getenv("O64_OMP_TASK_SCHEDULE");
+  __ompc_etask_schedule = &__ompc_etask_schedule_default;
+  __ompc_etask_local_get = __ompc_etask_q_pop_tail;
+  __ompc_etask_victim_get = __ompc_etask_q_pop_head;
+  if (env_var_str != NULL) {
+    if (use_concurrent_queue && !(strncasecmp(env_var_str, "FIFO", 4) == 0)) {
+      Not_Valid("O64_OMP_TASK_SCHEDULE must be FIFO if O64_OMP_TASK_QUEUE=CONCURRENT");
+    }
+    if (strncasecmp(env_var_str, "INVERTED", 8) == 0) {
+      __ompc_etask_local_get = __ompc_etask_q_pop_head;
+      __ompc_etask_victim_get = __ompc_etask_q_pop_tail;
+    } else if (strncasecmp(env_var_str, "LIFO", 4) == 0) {
+      __ompc_etask_local_get = __ompc_etask_q_pop_tail;
+      __ompc_etask_victim_get = __ompc_etask_q_pop_tail;
+    } else if  (strncasecmp(env_var_str, "FIFO", 4) == 0) {
+      __ompc_etask_local_get = __ompc_etask_q_pop_head;
+      __ompc_etask_victim_get = __ompc_etask_q_pop_head;
+    } else if (strncasecmp(env_var_str, "DEFAULT", 7) != 0) {
+      Not_Valid("O64_OMP_TASK_SCHEDULE should be INVERTED|LIFO|FIFO|DEFAULT or unset");
+    }
+  }
+
+  env_var_str = getenv("O64_OMP_TASK_SKIP_COND");
+  __ompc_etask_skip_cond = &__ompc_etask_skip_cond_default;
+  if (env_var_str != NULL) {
+    if (strncasecmp(env_var_str, "CHILDREN", 8) == 0) {
+      __ompc_etask_skip_cond = &__ompc_etask_skip_cond_num_children;
+    } else if (strncasecmp(env_var_str, "QUEUE", 5) == 0) {
+      __ompc_etask_skip_cond = &__ompc_etask_skip_cond_queue_load;
+    } else if (strncasecmp(env_var_str, "DEFAULT", 7) != 0) {
+      Not_Valid("O64_OMP_TASK_SKIP_COND should be CHILDREN|QUEUE|DEFAULT or unset");
+    }
+  }
+
+  }
+#endif
 
 #ifdef USE_OLD_TASKS
   env_var_str = getenv("OMP_TASK_Q_UPPER_LIMIT");
@@ -471,6 +548,9 @@ __ompc_level_1_barrier(const int vthread_id)
   long int max_count;
 #ifndef USE_OLD_TASKS
   omp_etask_t *next;
+  omp_etask_q_node_t *free_node;
+  omp_etask_q_node_t **free_list =
+    &__omp_level_1_team_manager.etask_q[__omp_myid].free_list;
 #else
   omp_task_t *next;
 #endif
@@ -491,6 +571,14 @@ __ompc_level_1_barrier(const int vthread_id)
     next = __ompc_etask_schedule(!p_vthread->has_tied_tasks);
     if(next != NULL) {
       __ompc_etask_switch(next);
+    } else if (*free_list)  {
+      /* free unused entries in queue */
+      free_node = *free_list;
+      while (free_node->free) {
+        *free_list = free_node->next;
+        free(free_node);
+        free_node = *free_list;
+      }
     }
 #else
     __ompc_task_schedule(&next);
@@ -509,6 +597,17 @@ __ompc_level_1_barrier(const int vthread_id)
 #endif
 
   myrank = __ompc_atomic_inc(&__omp_level_1_exit_count);
+
+#ifndef USE_OLD_TASKS
+  /* free unused entries in queue */
+  if ((free_node = *free_list) != NULL) {
+    while (free_node->free) {
+      *free_list = free_node->next;
+      free(free_node);
+      free_node = *free_list;
+    }
+  }
+#endif
 
   if (vthread_id == 0) {
     if (myrank != team_size)
@@ -546,6 +645,9 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   int team_size = vthread->team->team_size;
 #ifndef USE_OLD_TASKS
   omp_etask_t *next;
+  omp_etask_q_node_t *free_node;
+  omp_etask_q_node_t **free_list =
+    vthread->team->etask_q[__omp_myid].free_list;
 #else
   omp_task_t *next;
 #endif
@@ -567,6 +669,14 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
     next = __ompc_etask_schedule(!vthread->has_tied_tasks);
     if(next != NULL) {
       __ompc_etask_switch(next);
+    } else if (*free_list)  {
+      /* free unused entries in queue */
+      free_node = *free_list;
+      while (free_node->free) {
+        *free_list = free_node->next;
+        free(free_node);
+        free_node = *free_list;
+      }
     }
 #else
     __ompc_task_schedule(&next);
@@ -581,12 +691,23 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   /* this stuff is unnecessary if waiting for the implicit tasks above */
   __ompc_atomic_inc(bar_count2);
 
+#ifndef USE_OLD_TASKS
+  /* free unused entries in queue */
+  if ((free_node = *free_list) != NULL) {
+    while (free_node->free) {
+      *free_list = free_node->next;
+      free(free_node);
+      free_node = *free_list;
+    }
+  }
+#endif
+
   // Master wait all slaves arrived
   if(vthread->vthread_id == 0) {
     OMPC_WAIT_WHILE(*bar_count2 != team_size);
   }
 
-   __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
+  __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
 }
 
 /* The thread function for level_1 slaves*/

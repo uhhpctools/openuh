@@ -74,9 +74,6 @@ ifeq ($(USE_OLD_TASKS), YES)
 CFLAGS += -DUSE_OLD_TASKS
 endif
 
-# to use alternate tasking implementation for non-pcl tied tasks
-#CFLAGS += -DUSE_NONPCL
-
 CFILES = \
 	omp_collector_validation.c \
 	omp_lib.c \
@@ -90,6 +87,7 @@ CFILES = \
 
 ifneq ($(USE_OLD_TASKS), YES)
 CFILES += omp_etask.c
+CFILES += omp_etask_scheduler.c
 else
 CFILES += omp_task.c
 endif

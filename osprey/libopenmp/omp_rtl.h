@@ -289,7 +289,6 @@ struct omp_etask {
   int final;
   int is_coroutine;
   int depth;  /* parent-child depth */
-  int sdepth; /* switching depth */
   int tied_ancestor;
   int blocks_parent;
   volatile int safe_to_enqueue;
@@ -312,13 +311,26 @@ struct omp_task_q {
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
 typedef struct omp_task_q   omp_task_q_t;
 #else
+
+struct omp_etask_q_node {
+  omp_etask_t *task;
+  struct omp_etask_q_node *next;
+  int free;
+}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+typedef struct omp_etask_q_node omp_etask_q_node_t;
+
 struct omp_etask_q {
+  omp_etask_q_node_t *headp;
+  omp_etask_q_node_t *tailp;
+  omp_etask_q_node_t *free_list;
   omp_etask_t *head;
   omp_etask_t *tail;
   ompc_lock_t head_lock;
   ompc_lock_t tail_lock;
-  uint32_t size;
-};
+  ompc_lock_t slock;
+  volatile uint32_t size;
+  volatile int reject;
+}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_etask_q  omp_etask_q_t;
 #endif
 
@@ -453,6 +465,8 @@ struct omp_v_thread {
 #else
   omp_etask_t *implicit_etask;
   int has_tied_tasks; /* not counting tied tasks in barrier! */
+  int sdepth;         /* current number of tasks thread switched from that it
+                         will switch back to */
 #endif
 
   unsigned long thr_lkwt_state_id;
@@ -562,11 +576,12 @@ extern void  __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task);
 extern void __ompc_task_q_get_head(omp_task_q_t *tq, omp_task_t **task);
 extern void __ompc_task_q_get_tail(omp_task_q_t *tq, omp_task_t **task);
 #else
-extern void __ompc_etask_q_init(omp_etask_q_t *tq);
-extern omp_etask_t * __ompc_etask_q_pop_head(omp_etask_q_t *tq);
-extern omp_etask_t* __ompc_etask_q_pop_tail(omp_etask_q_t *tq);
-extern void __ompc_etask_q_push_head(omp_etask_q_t *tq, omp_etask_t *head_task);
-extern void __ompc_etask_q_push_tail(omp_etask_q_t *tq, omp_etask_t *tail_task);
+/* these will point to appropriate implementation at runtime */
+extern void (*__ompc_etask_q_init)(omp_etask_q_t *);
+extern omp_etask_t *(*__ompc_etask_q_pop_head)(omp_etask_q_t *);
+extern omp_etask_t *(*__ompc_etask_q_pop_tail)(omp_etask_q_t *);
+extern void (*__ompc_etask_q_push_head)(omp_etask_q_t *, omp_etask_t *);
+extern void (*__ompc_etask_q_push_tail)(omp_etask_q_t *, omp_etask_t *);
 #endif
 
 
@@ -598,7 +613,7 @@ extern int __ompc_task_create(omp_task_func func, frame_pointer_t fp, void *args
                               int may_delay, int is_tied, int blocks_parent);
 extern void __ompc_task_wait();
 extern void __ompc_task_exit();
-extern cond_func __ompc_task_create_cond;
+extern int __ompc_task_deferred_cond(int may_delay);
 
 /*Interal tasking functions */
 #if 0
@@ -611,16 +626,22 @@ extern omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize
 #endif
 
 #ifdef USE_OLD_TASKS
+extern cond_func __ompc_task_create_cond;
 extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
 extern void __ompc_task_delete(omp_task_t *task);
 extern void __ompc_init_vp();
 #else
-extern omp_etask_t *__ompc_etask_schedule(int allow_stealing);
+extern cond_func __ompc_etask_skip_cond;
 extern void __ompc_etask_switch(omp_etask_t *new_task);
+extern omp_etask_t *(*__ompc_etask_schedule)(int);
+extern omp_etask_t *(*__ompc_etask_local_get)(omp_etask_q_t *);
+extern omp_etask_t *(*__ompc_etask_victim_get)(omp_etask_q_t *);
+extern void (*__ompc_etask_enqueue)(omp_etask_t *);
 #endif
 
-#ifdef USE_OLD_TASKS
 extern volatile unsigned long int __omp_task_stack_size;
+
+#ifdef USE_OLD_TASKS
 
 /* Task Create Condition Limits */
 extern volatile int __omp_task_q_upper_limit;
@@ -681,6 +702,7 @@ extern int collector_initialized;
 extern int collector_paused;
 
 #endif /* __omp_rtl_basic_included */
+
 
 
 

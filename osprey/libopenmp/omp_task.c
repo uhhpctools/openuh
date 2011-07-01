@@ -68,6 +68,11 @@ int __ompc_task_numtasks_cond()
   return (__ompc_get_current_team()->num_tasks < __omp_task_limit);
 }
 
+int __ompc_task_deferred_cond(int may_delay)
+{
+  return may_delay && __ompc_task_create_cond();
+}
+
 
 int __ompc_task_create(omp_task_func taskfunc, void* fp, void *args,
                       int may_delay, int is_tied, int blocks_parent)

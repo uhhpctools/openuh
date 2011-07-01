@@ -247,9 +247,6 @@ inline omp_v_thread_t * __ompc_get_v_thread_by_num( int vthread_id )
 {
   omp_v_thread_t *v_thread_temp;
 
-  return __omp_current_v_thread;
-
-#if 0
   /* maybe first we should make sure the vthread_id is right,
    * TODO: check the validity of vthread_id. csc
    */
@@ -262,9 +259,11 @@ inline omp_v_thread_t * __ompc_get_v_thread_by_num( int vthread_id )
   } else if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
     return &__omp_root_v_thread;
   } else {
-    return __ompc_get_current_v_thread();
+    /* use TLS variable here instead since current pthread id may not be in
+     * hash table */
+    return __omp_current_v_thread;
+    /* return __ompc_get_current_v_thread(); */
   }
-#endif
 }
 
 inline int __ompc_get_local_thread_num(void)
