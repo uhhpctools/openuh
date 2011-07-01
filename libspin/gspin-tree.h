@@ -2362,7 +2362,7 @@ typedef enum gs_omp_clause_code {
   GS_OMP_CLAUSE_ORDERED,
   GS_OMP_CLAUSE_DEFAULT,
   GS_OMP_CLAUSE_UNTIED,
-  GS_OMP_CLAUSE_COLLAPSE,
+  GS_OMP_CLAUSE_COLLAPSE
 } gs_omp_clause_code_t;
 
 typedef enum gs_omp_clause_schedule_kind {

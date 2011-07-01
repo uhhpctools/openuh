@@ -3328,7 +3328,7 @@ expand_omp_for_generic (struct omp_region *region,
       t = fold_convert (long_integer_type_node, fd->loop.n1);
       args = tree_cons (NULL, t, args);
       t = build_function_call_expr (built_in_decls[start_fn], args);
-      t = get_formal_tmp_var (t, &list);
+      //t = get_formal_tmp_var (t, &list);
       if (cont_bb)
 	{
 	  t = build3 (COND_EXPR, void_type_node, t, build_and_jump (&l0),
@@ -3824,6 +3824,7 @@ expand_omp_for (struct omp_region *region)
 
   if (fd.sched_kind == OMP_CLAUSE_SCHEDULE_STATIC
       && !fd.have_ordered
+      && fd.collapse == 1
       && region->cont
       && region->exit)
     {
@@ -4240,6 +4241,7 @@ build_omp_regions (void)
 static unsigned int
 execute_expand_omp (void)
 {
+#if 0
   build_omp_regions ();
 
   if (!root_omp_region)
@@ -4261,7 +4263,7 @@ execute_expand_omp (void)
   cleanup_tree_cfg ();
 
   free_omp_regions ();
-
+#endif
   return 0;
 }
 

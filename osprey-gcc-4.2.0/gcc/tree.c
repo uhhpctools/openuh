@@ -11946,6 +11946,7 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
                          gcc_omp_clause_default_kind2gs_ocdk(OMP_CLAUSE_DEFAULT_KIND(t)));
                   gs_set_operand((gs_t) GS_NODE(t), GS_OMP_CLAUSE_DEFAULT_KIND,
                                  default_kind);
+                  break;
                 }
                 case OMP_CLAUSE_COLLAPSE:
                   gs_set_operand((gs_t) GS_NODE(t),

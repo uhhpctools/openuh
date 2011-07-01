@@ -21,6 +21,7 @@ Coming soon:
 Merge History:
 --------------
 
+[8]   merged r3556:3663 of openmp3.0 branch. (7/1/11)
 [7]   merged r3610:3640 of Open64 main trunk. (6/4/11)
 [6]   merged r3590:3610 of Open64 main trunk. (5/19/11)
 [5]   merged r3579:3590 of Open64 main trunk. (5/8/11)
@@ -31,6 +32,9 @@ Merge History:
 
 
 Notes:
+
+For merge [8], still need to confirm that default(shared) works correctly on
+task constructs. 
 
 For merge [5], commit 3590 addresses the issue encountered in targ_const.cxx
 during merge [2] (see note below). I re-enabled the assertion check. See the

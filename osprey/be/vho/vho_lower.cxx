@@ -5840,6 +5840,19 @@ vho_lower_region ( WN * wn, WN * block )
   }
   else
     WN_region_body(wn) = vho_lower_block ( WN_region_body(wn) );
+
+  UINT last_sz = Scope_tab[CURRENT_SYMTAB].st_tab->Size();
+  UINT new_sz = Scope_tab[CURRENT_SYMTAB].st_tab->Size();
+  // Make temp variables generated inside OpenMP blocks to be private
+  if (new_sz > last_sz && WN_region_kind(wn) == REGION_KIND_MP) {
+    WN_PRAGMA_ID region_type = (WN_PRAGMA_ID) WN_pragma(WN_first(WN_region_pragmas(wn)));
+    if (region_type == WN_PRAGMA_PARALLEL_BEGIN || region_type == WN_PRAGMA_PDO_BEGIN || region_type == WN_PRAGMA_TASK_BEGIN) {
+      for (UINT i = last_sz; i < new_sz; i++) {
+        WN* local_wn = WN_CreatePragma(WN_PRAGMA_LOCAL, &Scope_tab[CURRENT_SYMTAB].st_tab->Entry(i), 0, 0);
+        WN_INSERT_BlockLast(WN_region_pragmas(wn), local_wn);
+      }
+    }
+  }
   
   INT region_id = WN_region_id(wn);
   if ((WN_region_kind(wn) == REGION_KIND_MP) &&

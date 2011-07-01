@@ -1446,13 +1446,13 @@ omp_int32 __ompc_collapse_next (omp_int32 global_tid, ...)
 
   va_start(ap, global_tid);
   if (schedule_full_loop) {
-    for (i = collapse_count - 1; i >= 0; i++) {
+    for (i = collapse_count - 1; i >= 0; i--) {
       if (loop_info[i].is_64bit) {
         *(va_arg(ap, omp_int64*)) = loop_info[i].lower_bound;
-        *(va_arg(ap, omp_int64*)) = (i == 0 ? (loop_info[i].lower_bound + loop_info[i].incr * (loop_lenv[i] + 1)) : (loop_info[i].lower_bound));
+        *(va_arg(ap, omp_int64*)) = (i == 0 ? (loop_info[i].lower_bound + loop_info[i].incr * loop_lenv[i]) : (loop_info[i].lower_bound));
       } else {
         *(va_arg(ap, omp_int32*)) = (omp_int32) loop_info[i].lower_bound;
-        *(va_arg(ap, omp_int32*)) = (i == 0 ? ((omp_int32) loop_info[i].lower_bound + (omp_int32)loop_info[i].incr * ((omp_int32) loop_lenv[i] + 1)) : ((omp_int32) loop_info[i].lower_bound));
+        *(va_arg(ap, omp_int32*)) = (omp_int32) (i == 0 ? (loop_info[i].lower_bound + loop_info[i].incr * loop_lenv[i]) : (loop_info[i].lower_bound));
       }
     }
     va_end(ap);

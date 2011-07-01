@@ -2064,7 +2064,9 @@ get_expr_operands (tree stmt, tree *expr_p, int flags)
     case LABEL_DECL:
     case CONST_DECL:
     case OMP_PARALLEL:
+    case OMP_TASK:
     case OMP_SECTIONS:
+    case OMP_SECTION:
     case OMP_FOR:
     case OMP_SINGLE:
     case OMP_MASTER:
@@ -2074,7 +2076,6 @@ get_expr_operands (tree stmt, tree *expr_p, int flags)
     case OMP_CONTINUE:
       /* Expressions that make no memory references.  */
       return;
-
     default:
       if (class == tcc_unary)
 	goto do_unary;

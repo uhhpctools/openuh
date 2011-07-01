@@ -1032,14 +1032,14 @@ void WGEN_expand_start_for (gs_t stmt)
        Set_FILE_INFO_has_mp (File_info);
        Set_PU_uplevel (Get_Current_PU ());
       
+  WGEN_process_omp_for_collapse(stmt, region);
+
   gs_t clauses = gs_omp_for_clauses (stmt);
 
   if (lang_cplus)
     region = enclosing_region;
   for (; clauses; clauses = gs_omp_clause_chain(clauses))
     WGEN_process_omp_clause(clauses, region);
-
-  WGEN_process_omp_for_collapse(stmt, region);
 
   WGEN_Stmt_Pop (wgen_stmk_region_pragmas);
 
