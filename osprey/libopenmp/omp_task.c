@@ -52,18 +52,32 @@ int __ompc_task_false_cond()
   return 0;
 }
 
+/* use libhoard instead? */
+void __ompc_task_alloc_args(void **args, int size)
+{
+  *args = aligned_malloc( size, CACHE_LINE_SIZE );
+}
+
+void __ompc_task_free_args(void *args)
+{
+  aligned_free( args );
+}
+
 int __ompc_task_numtasks_cond()
 {
   return (__ompc_get_current_team()->num_tasks < __omp_task_limit);
 }
 
 
-int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_tied)
+int __ompc_task_create(omp_task_func taskfunc, void* fp, void *args,
+                      int may_delay, int is_tied, int blocks_parent)
 {
-  omp_team_t *team = __ompc_get_current_team();
+  omp_team_t *team;
+  omp_task_t *newtask;
   __omp_tasks_created++;
 
-  omp_task_t *newtask = __ompc_task_get(taskfunc, fp, __omp_task_stack_size);
+  team = __ompc_get_current_team();
+  newtask = __ompc_task_get(taskfunc, fp, args, __omp_task_stack_size);
 
 #if defined(TASK_DEBUG)
   fprintf(stdout,"%d: __ompc_task_create: %lX created %lX\n", __omp_myid, __omp_current_task->coro,
@@ -82,6 +96,7 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_t
   newtask->desc->safe_to_enqueue = 0;
   newtask->desc->depth = __omp_current_task->desc->depth + 1;
   newtask->desc->pdepth = newtask->desc->depth;
+  newtask->desc->blocks_parent = blocks_parent;
   newtask->creator = __omp_current_task;
   pthread_mutex_init(&newtask->lock, NULL);
 
@@ -90,9 +105,16 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_t
   x = __ompc_atomic_inc(&__omp_current_task->desc->num_children);
   __ompc_atomic_inc(&(team->num_tasks));
 
+  if (blocks_parent)
+    __ompc_atomic_inc(&__omp_current_task->desc->num_blocking_children);
+
 
   if (may_delay & ! (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)) {
-    __ompc_task_switch(__omp_current_task, newtask);
+     /* only switch here if newtask will switch back upon initializing its
+      * firstprivates. in that case, when current task resumes it will enqueue
+      * the new task into public queue.
+      */
+    // __ompc_task_switch(__omp_current_task, newtask);
 #ifdef SCHED1
     newtask->desc->threadid = friend;
     __sync_bool_compare_and_swap(&__omp_empty_flags[friend], 1, 0);
@@ -119,17 +141,28 @@ int __ompc_task_create(omp_task_func taskfunc, void* fp, int may_delay, int is_t
 
 void __ompc_task_body_start()
 {
+
+  /* this part is only necessary if firstprivate wasn't captured in parent
+   * task and it was to be initialized before __ompc_task_body_start in the
+   * task. Otherwise, we can assume the task already "started" before
+   * __ompc_task_body_start. If this is enabled, also enable the immediate
+   * task switch in __ompc_task_create above.
+   */
+#if 0
   Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
-      ("__ompc_task_body_start: __omp_current_task is uninitialized"));
-  if (__omp_current_task->desc->may_delay &&
-        !(__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL))
+    ("__ompc_task_body_start: __omp_current_task is uninitialized")); if
+  (__omp_current_task->desc->may_delay && !(__omp_exe_mode &
+                                            OMP_EXE_MODE_SEQUENTIAL))
   __ompc_task_switch(__omp_current_task, __omp_current_task->creator);
 
   Is_True(__omp_current_task->desc->started == 0,
       ("already started task called __ompc_task_body_start"));
+
   __omp_tasks_started++;
   __omp_current_task->desc->started = 1;
   __omp_current_task->desc->threadid = __omp_myid;
+
+#endif
 }
 
 
@@ -137,7 +170,9 @@ void __ompc_task_exit()
 {
   omp_task_t *creator;
   omp_task_t *next;
-  omp_team_t *team = __ompc_get_current_team();
+  omp_team_t *team;
+
+  team = __ompc_get_current_team();
   next = NULL;
   Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
       ("__ompc_task_exit: __omp_current_task is uninitialized"));
@@ -215,14 +250,13 @@ void __ompc_task_exit()
     }
   }
 
-  __ompc_atomic_dec(&(team->num_tasks));
+  if (!__omp_current_task->desc->is_parallel_task)
+    __ompc_atomic_dec(&(team->num_tasks));
   __omp_current_task->desc->state = OMP_TASK_EXIT;
 
 
   /* before we delete anything we need to wait for all children to complete */
-
   __ompc_task_wait2(OMP_TASK_EXIT);
-  
 }
 
 void __ompc_task_wait()
@@ -245,6 +279,7 @@ void __ompc_task_wait2(omp_task_state_t state)
   Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL
           && __omp_current_task->coro != NULL,
       ("__ompc_task_exit: __omp_current_task is uninitialized"));
+
   assert(state == OMP_TASK_SUSPENDED || state == OMP_TASK_EXIT);
 
   omp_task_t *next;
@@ -258,11 +293,11 @@ void __ompc_task_wait2(omp_task_state_t state)
       __omp_current_task->coro, __omp_current_task->desc->num_children, state);
 #endif
 
-
   while(1) {
     pthread_mutex_lock(&current_task->lock);
 
-    if(current_task->desc->num_children == 0) {
+    if (current_task->desc->num_children == 0 ||
+        (state == OMP_TASK_EXIT && current_task->desc->num_blocking_children == 0)) {
       /* all children have completed */
       /* if state == OMP_TASK_EXIT, we need to delete ourselves and schedule 
          the next task
@@ -274,15 +309,28 @@ void __ompc_task_wait2(omp_task_state_t state)
 
       if(state == OMP_TASK_EXIT) {
 		    
-        __ompc_task_schedule(&next);
 		    
         current_task->desc->state = OMP_TASK_EXIT;
-
-        if (next == NULL)
-          next = __ompc_get_v_thread_by_num(__omp_myid)->implicit_task;
+        if (current_task->desc->blocks_parent)
+          __ompc_atomic_dec(&current_task->creator->desc->num_blocking_children);
 
         pthread_mutex_unlock(&current_task->lock);
+
+        current_task->desc->state = OMP_TASK_DONE;
+
+        if (current_task->desc->is_parallel_task)
+          return;
+
+        __ompc_task_schedule(&next);
+
+        Is_True(next == NULL || next->desc->state != OMP_TASK_EXIT,
+            ("received task in exit state from scheduler"));
+
+        if (next == NULL)
+          next =  __omp_current_v_thread->implicit_task;
+
         __ompc_task_exit_to(current_task, next);
+
       } else if(state == OMP_TASK_SUSPENDED) {
         pthread_mutex_unlock(&current_task->lock);
         return;
@@ -314,7 +362,6 @@ void __ompc_task_wait2(omp_task_state_t state)
 void __ompc_task_schedule(omp_task_t **next)
 {
   omp_team_t *team = __ompc_get_current_team();
-
 
   if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) {
     *next = __omp_current_task->creator;

@@ -45,6 +45,8 @@ LIBOPENMP_1.0 {
     __ompc_task_exit;
     __ompc_task_inc_depth;
     __ompc_task_dec_depth;
+    __ompc_task_alloc_args;
+    __ompc_task_free_args;
     omp_destroy_lock;
     omp_destroy_lock_;
     omp_destroy_nest_lock;

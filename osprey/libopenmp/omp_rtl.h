@@ -118,6 +118,16 @@ typedef enum {
  *  Maybe need to revise.
  */
 
+#ifndef USE_OLD_TASKS
+typedef enum {
+  OMP_TASK_UNSCHEDULED,
+  OMP_TASK_READY,
+  OMP_TASK_RUNNING,
+  OMP_TASK_WAITING,
+  OMP_TASK_EXITING,
+  OMP_TASK_FINISHED
+} omp_etask_state_t;
+#endif
 
 /*Cody - changed frame_pointer from char * to void *, seems to be OK
   Did it because the Portable Coroutine Library takes a void * as an argument
@@ -195,10 +205,15 @@ struct omp_loop_info {
   omp_uint64 next_index;
 };
 
-/* OpenMP Tasks */
+/* function pointer declarations*/
+typedef void (*omp_task_func)(void *, frame_pointer_t);
+typedef int (*cond_func)();
 
+/* OpenMP Tasks */
+#ifdef USE_OLD_TASKS
 struct omp_task_desc {
   volatile uint32_t num_children;
+  volatile uint32_t num_blocking_children;
   int is_parallel_task;
   int is_tied;
   int may_delay;
@@ -207,6 +222,7 @@ struct omp_task_desc {
   volatile int safe_to_enqueue;
   int depth;
   int pdepth;
+  int blocks_parent;
   volatile int context_flag;
   int threadid;
 };
@@ -222,18 +238,89 @@ struct omp_task {
   pthread_mutex_t lock;
 };
 typedef struct omp_task omp_task_t;
+#else
+
+/* openmp explicit task */
+struct omp_etask {
+  union {
+  omp_task_func   func;
+  coroutine_t coro;
+  } t;
+
+  frame_pointer_t fp;
+  void *args;
+
+  volatile omp_etask_state_t state;
+
+  /* parent executes children from left to right
+   * idle threads pick up children right to left
+   */
+  struct omp_etask *children;  /* list of children */
+  struct omp_etask *last_child;
+
+  volatile int num_children;   /* number of children that aren't done,
+                                  increment when creating child
+                                  decrement on child exit */
+
+  /* a blocking child is defined as:
+   *  a child which blocks the exit of the task because it or its descendants
+   *  uses the task's stack frame
+   */
+  volatile int num_blocking_children;
+
+
+  /* for parent's children list */
+  /*
+  pthread_mutex_t  sib_lock;
+  struct omp_etask *left_sib;
+  struct omp_etask *right_sib;
+  */
+
+  struct omp_etask *parent;
+
+  /* prev and next for task queue */
+  //pthread_mutex_t  queue_lock;
+  struct omp_etask *prev;
+  struct omp_etask *next;
+
+  /* misc. -- should pack this */
+  int is_tied;
+  int may_delay;
+  int final;
+  int is_coroutine;
+  int depth;  /* parent-child depth */
+  int sdepth; /* switching depth */
+  int tied_ancestor;
+  int blocks_parent;
+  volatile int safe_to_enqueue;
+  volatile int context_flag;
+  ompc_lock_t lock;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+typedef struct omp_etask omp_etask_t;
+#endif
+
 
 /*
  * task queue represented as linked list
  */
+#ifdef USE_OLD_TASKS
 struct omp_task_q {
   omp_task_t *head;
   omp_task_t *tail;
-  ompc_lock_t lock; /*global lock for the whole queue, very bad */
+  ompc_lock_t lock; /* global lock for the whole queue, very bad */
   uint32_t size;
 }; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
-
 typedef struct omp_task_q   omp_task_q_t;
+#else
+struct omp_etask_q {
+  omp_etask_t *head;
+  omp_etask_t *tail;
+  ompc_lock_t head_lock;
+  ompc_lock_t tail_lock;
+  uint32_t size;
+};
+typedef struct omp_etask_q  omp_etask_q_t;
+#endif
 
 /*
  * task queue represented as circular queue
@@ -310,6 +397,7 @@ struct omp_team {
   /* TODO: optimize the barrier implementation, test the performance */
   // offset = 320
   volatile int barrier_count;
+  volatile int barrier_count2;
 
   /* Still need a flag to indicate there are new tasks for level_1 team,
    * To avoid pthread allowed spurious wake up, and for nested teams,
@@ -324,8 +412,13 @@ struct omp_team {
     execution in a barrier, would like to do something better if possible
   */
   volatile int  num_tasks;
+#ifdef USE_OLD_TASKS
   omp_task_q_t  *private_task_q;
   omp_task_q_t  *public_task_q;
+#else
+  /* work stealing queue for etasks */
+  omp_etask_q_t *etask_q;
+#endif
 
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
@@ -355,7 +448,12 @@ struct omp_v_thread {
   /* for 'lastprivate'? used ?*/
   //	int is_last;
 
+#ifdef USE_OLD_TASKS
   omp_task_t *implicit_task;
+#else
+  omp_etask_t *implicit_etask;
+  int has_tied_tasks; /* not counting tied tasks in barrier! */
+#endif
 
   unsigned long thr_lkwt_state_id;
   unsigned long thr_ctwt_state_id;
@@ -457,20 +555,30 @@ extern void __ompc_end_serialized_parallel(int vthread_id);
 
 
 
+#ifdef USE_OLD_TASKS
 extern void __ompc_task_q_init(omp_task_q_t *tq);
 extern void  __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task);
 extern void  __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task);
 extern void __ompc_task_q_get_head(omp_task_q_t *tq, omp_task_t **task);
 extern void __ompc_task_q_get_tail(omp_task_q_t *tq, omp_task_t **task);
+#else
+extern void __ompc_etask_q_init(omp_etask_q_t *tq);
+extern omp_etask_t * __ompc_etask_q_pop_head(omp_etask_q_t *tq);
+extern omp_etask_t* __ompc_etask_q_pop_tail(omp_etask_q_t *tq);
+extern void __ompc_etask_q_push_head(omp_etask_q_t *tq, omp_etask_t *head_task);
+extern void __ompc_etask_q_push_tail(omp_etask_q_t *tq, omp_etask_t *tail_task);
+#endif
 
 
-/* function pointer declarations*/
-typedef void (*omp_task_func)(frame_pointer_t);
-typedef int (*cond_func)();
-
+#ifdef USE_OLD_TASKS
 /*array of pointers to the implicit tasks created when a parallel region is 
   encountered */
 extern omp_task_t *      __omp_level_1_team_tasks;
+/*each thread maintains a pointer to the current thread it is executing */
+extern __thread omp_task_t *__omp_current_task;
+#else
+extern __thread omp_etask_t *__omp_current_etask;
+#endif
 
 /*id of thread, could be used for other things other than tasks */
 extern __thread int __omp_myid; 
@@ -478,29 +586,41 @@ extern __thread int __omp_myid;
 /*seed used to get in rand_r for task stealing */
 extern __thread int __omp_seed;
 
-/*each thread maintains a pointer to the current thread it is executing */
-extern __thread omp_task_t *__omp_current_task;
+/*every thread has a local copy of its current v_thread */
+extern __thread omp_v_thread_t *__omp_current_v_thread;
+
 
 
 /*External tasking API*/
-extern int __ompc_task_create(omp_task_func func, void *args, int may_delay, int is_tied);
+extern void __ompc_task_alloc_args(void **args, int size);
+extern void __ompc_task_free_args(void *args);
+extern int __ompc_task_create(omp_task_func func, frame_pointer_t fp, void *args,
+                              int may_delay, int is_tied, int blocks_parent);
 extern void __ompc_task_wait();
 extern void __ompc_task_exit();
 extern cond_func __ompc_task_create_cond;
 
 /*Interal tasking functions */
+#if 0
 extern void __ompc_task_schedule(omp_task_t **next);
 extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
 extern void __ompc_task_wait2(omp_task_state_t state);
 
 /*API into underlying task representation library (PCL) */
 extern omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize);
-extern void __ompc_task_delete(omp_task_t *task);
+#endif
+
+#ifdef USE_OLD_TASKS
 extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
+extern void __ompc_task_delete(omp_task_t *task);
 extern void __ompc_init_vp();
+#else
+extern omp_etask_t *__ompc_etask_schedule(int allow_stealing);
+extern void __ompc_etask_switch(omp_etask_t *new_task);
+#endif
 
+#ifdef USE_OLD_TASKS
 extern volatile unsigned long int __omp_task_stack_size;
-
 
 /* Task Create Condition Limits */
 extern volatile int __omp_task_q_upper_limit;
@@ -516,7 +636,6 @@ extern int __ompc_task_queue_cond();
 extern int __ompc_task_true_cond();
 extern int __ompc_task_false_cond();
 extern int __ompc_task_numtasks_cond();
-
 
 /*
   Task Statistics
@@ -548,6 +667,8 @@ extern __thread unsigned int __omp_tasks_stolen;
 extern __thread unsigned int __omp_tasks_deleted;
 
 extern char *__omp_task_stats_filename;
+
+#endif /* USE_OLD_TASKS */
 
 extern volatile int __omp_empty_flags[OMP_MAX_NUM_THREADS];
 

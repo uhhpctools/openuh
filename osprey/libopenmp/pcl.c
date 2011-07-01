@@ -369,7 +369,11 @@ static void co_runner(void) {
   coroutine *co = co_curr;
 
   co->restarget = co->caller;
+#ifdef UH_PCL
+  co->func(co->data,co->slink);
+#else
   co->func(co->data);
+#endif
   co_exit();
 }
 
@@ -378,7 +382,11 @@ void co_vp_init()
   co_curr = &co_thread;
 }
 
+#ifdef UH_PCL
+coroutine_t co_create(void (*func)(void *, void *), void *data, void *slink, void *stack, int size) {
+#else
 coroutine_t co_create(void (*func)(void *), void *data, void *stack, int size) {
+#endif
   int alloc = 0, r = CO_STK_COROSIZE;
   coroutine *co;
 
@@ -396,6 +404,9 @@ coroutine_t co_create(void (*func)(void *), void *data, void *stack, int size) {
   co->alloc = alloc;
   co->func = func;
   co->data = data;
+#ifdef UH_PCL
+  co->slink = slink;
+#endif
   if (co_set_context(&co->ctx, co_runner, stack, size - CO_STK_COROSIZE) < 0) {
     if (alloc)
       free(co);
@@ -415,7 +426,9 @@ void co_delete(coroutine_t coro) {
     exit(1);
   }
 
-  //printf("[PCL] co_delete: deleting %x\n", co);
+#ifdef TASK_DEBUG
+  printf("[PCL] co_delete: deleting %x\n", co);
+#endif
   if (co->alloc) {
     bzero(co, co->alloc); /* for debugging purposes */
     free(co);
@@ -430,7 +443,9 @@ void co_call(coroutine_t coro) {
 
   co->caller = co_curr;
   co_curr = co;
-  //printf("[PCL] co_call: swapping context %lx->%lx\n", &oldco->ctx.cc, &co->ctx.cc);
+#ifdef TASK_DEBUG
+  printf("[PCL] co_call: swapping context %lx->%lx\n", &oldco->ctx.cc, &co->ctx.cc);
+#endif
   if (swapcontext(&oldco->ctx.cc, &co->ctx.cc) < 0) {
     fprintf(stderr, "[PCL] Context switch failed: curr=%p\n",
             co_curr);
@@ -446,7 +461,11 @@ void co_resume(void) {
 }
 
 
+#ifdef UH_PCL
+static void co_del_helper(void *data, void *slink) {
+#else
 static void co_del_helper(void *data) {
+#endif
   coroutine *cdh;
 
   for (;;) {
@@ -468,8 +487,13 @@ void co_exit_to(coroutine_t coro) {
   static __thread coroutine *dchelper = NULL;
   static __thread char stk[CO_MIN_SIZE];
 
+#ifdef UH_PCL
+  if (!dchelper &&
+      !(dchelper = co_create(co_del_helper, NULL, NULL, stk, sizeof(stk)))) {
+#else
   if (!dchelper &&
       !(dchelper = co_create(co_del_helper, NULL, stk, sizeof(stk)))) {
+#endif
     fprintf(stderr, "[PCL] Unable to create delete helper coroutine: curr=%p\n",
             co_curr);
     exit(1);

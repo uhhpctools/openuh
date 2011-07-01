@@ -67,6 +67,15 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 CXXFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
 #CFLAGS += -DTASK_DEBUG
+# enable UH modifications to PCL library
+CFLAGS += -DUH_PCL
+
+ifeq ($(USE_OLD_TASKS), YES)
+CFLAGS += -DUSE_OLD_TASKS
+endif
+
+# to use alternate tasking implementation for non-pcl tied tasks
+#CFLAGS += -DUSE_NONPCL
 
 CFILES = \
 	omp_collector_validation.c \
@@ -76,9 +85,14 @@ CFILES = \
 	omp_thread.c\
 	omp_util.c \
 	omp_queue.c \
-	omp_task.c \
 	pcl.c \
-	omp_collector_util.c \
+	omp_collector_util.c
+
+ifneq ($(USE_OLD_TASKS), YES)
+CFILES += omp_etask.c
+else
+CFILES += omp_task.c
+endif
 
 
 CXXFILES = \

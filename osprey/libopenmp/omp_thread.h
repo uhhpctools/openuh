@@ -42,6 +42,9 @@
 #include "omp_sys.h"
 #include "omp_util.h"
 #include "pcl.h"
+#ifndef USE_OLD_TASKS
+#include "omp_etask.h"
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -163,6 +166,7 @@ static inline void __ompc_insert_into_hash_table(omp_u_thread_t * new_u_thread)
   hash_index = HASH_IDX(uthread_id);
 	
   pthread_mutex_lock(&__omp_hash_table_lock);
+
   u_thread_temp = __omp_uthread_hash_table[hash_index];
   /* maybe NULL */
   __omp_uthread_hash_table[hash_index] = new_u_thread;
@@ -177,6 +181,7 @@ static inline void __ompc_remove_from_hash_table(pthread_t uthread_id)
 
   hash_index = HASH_IDX(uthread_id);
   pthread_mutex_lock(&__omp_hash_table_lock);
+
   uthread_temp = __omp_uthread_hash_table[hash_index];
   Is_True( uthread_temp != NULL, ("No such pthread in hash table"));
   if (uthread_temp->uthread_id == uthread_id)
@@ -210,6 +215,7 @@ inline omp_u_thread_t * __ompc_get_current_u_thread()
   current_uthread_id = pthread_self();
 
   uthread_temp = __omp_uthread_hash_table[HASH_IDX(current_uthread_id)];
+
   Is_True(uthread_temp != NULL, ("This pThread is not in hash table!"));
 
   if (uthread_temp->uthread_id == current_uthread_id)
@@ -218,9 +224,7 @@ inline omp_u_thread_t * __ompc_get_current_u_thread()
   else {
     do {
       /* is mutual exclusion necessary here? */
-      //pthread_mutex_lock(&__omp_hash_table_lock);
       uthread_temp = uthread_temp->hash_next;
-      //pthread_mutex_unlock(&__omp_hash_table_lock);
       Is_True(uthread_temp != NULL, 
 	      ("This pThread is not in hash table!"));
     } while (uthread_temp->uthread_id != current_uthread_id);
@@ -242,6 +246,10 @@ inline omp_v_thread_t * __ompc_get_current_v_thread()
 inline omp_v_thread_t * __ompc_get_v_thread_by_num( int vthread_id )
 {
   omp_v_thread_t *v_thread_temp;
+
+  return __omp_current_v_thread;
+
+#if 0
   /* maybe first we should make sure the vthread_id is right,
    * TODO: check the validity of vthread_id. csc
    */
@@ -256,6 +264,7 @@ inline omp_v_thread_t * __ompc_get_v_thread_by_num( int vthread_id )
   } else {
     return __ompc_get_current_v_thread();
   }
+#endif
 }
 
 inline int __ompc_get_local_thread_num(void)
@@ -302,41 +311,51 @@ inline void __ompc_barrier_wait(omp_team_t *team)
 {
   /*Warning: This implementation may cause cache problems*/
   int barrier_flag;
-  int reset_barrier = 0;
+  int reset_barrier;
   int new_count;
   int i;
-  volatile int *barrier_flag_p = &(team->barrier_flag);
+  volatile int *barrier_flag_p;
+#ifndef USE_OLD_TASKS
+  omp_etask_t *next;
+  int has_tied_tasks = __ompc_get_current_v_thread()->has_tied_tasks;
+#else
   omp_task_t *next;
+#endif
 
+  reset_barrier = 0;
+  barrier_flag_p = &(team->barrier_flag);
   barrier_flag = *barrier_flag_p;
 
-  __ompc_atomic_dec(&__omp_level_1_team_manager.num_tasks);
+  new_count = __ompc_atomic_inc(&team->barrier_count2);
 
-  /* Besar: what if there is no task ? num_task will be negative after
-   * decrement
-   *
-   * This busy wait loop is probably not a good idea ...
-   */
-
-  /* while(__omp_level_1_team_manager.num_tasks != 0) { */
-  while(__omp_level_1_team_manager.num_tasks > 0) {
+  /* why not use pthread_cond_wait instead of a busy wait? */
+  while(__omp_level_1_team_manager.num_tasks ||
+          team->barrier_count2 != team->team_size) {
+#ifndef USE_OLD_TASKS
+    next = __ompc_etask_schedule(!has_tied_tasks);
+    if(next != NULL) {
+      __ompc_etask_switch(next);
+    }
+#else
     __ompc_task_schedule(&next);
     if(next != NULL) {
       __ompc_task_switch(__omp_current_task, next);
     }
+#endif
   }
 
   new_count = __ompc_atomic_inc(&team->barrier_count);
 
   if (new_count == team->team_size) {
     /* The last one reset flags*/
-    __omp_level_1_team_manager.num_tasks += new_count;
-    team->barrier_count = 0;
     team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
+    team->barrier_count2 = 0;
+    team->barrier_count = 0;
 
     pthread_mutex_lock(&(team->barrier_lock));
     pthread_cond_broadcast(&(team->barrier_cond));
     pthread_mutex_unlock(&(team->barrier_lock));
+
   } else {
     /* Wait for the last to reset te barrier*/
     /* We must make sure that every waiting thread get this

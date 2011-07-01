@@ -4,6 +4,10 @@
 #include "omp_rtl.h"
 
 
+/* note: it is caller's responsibility to enqueue or dequeue tasks as
+ * appropriate. __ompc_task_switch will only enable switching from one task to
+ * another
+ */
 void inline __ompc_task_switch(omp_task_t *old_task, omp_task_t *new_task)
 {
   Is_True(new_task != NULL && new_task->coro != NULL && new_task->desc != NULL,
@@ -15,10 +19,22 @@ void inline __ompc_task_switch(omp_task_t *old_task, omp_task_t *new_task)
 #endif
 
   __omp_current_task = new_task;
+  /* if firstprivate was captured in parent task and passed in via struct, we
+   * can "start" the new task as soon as we switch to it. otherwise, it only
+   * "starts" in __ompc_task_body_start
+   */
+#if 1
+  if (__omp_current_task->desc->started == 0) {
+  __omp_tasks_started++;
+  __omp_current_task->desc->started = 1;
+  __omp_current_task->desc->threadid = __omp_myid;
+  }
+#endif
 
   new_task->desc->safe_to_enqueue = 0;
   new_task->desc->context_flag = 1;
   old_task->desc->safe_to_enqueue = 1;
+
   co_call(new_task->coro);
 }
 
@@ -36,6 +52,18 @@ inline __ompc_task_exit_to(omp_task_t *current, omp_task_t *new_task)
 #endif
 
   __omp_current_task = new_task;
+  /* if firstprivate was captured in parent task and passed in via struct, we
+   * can "start" the new task as soon as we switch to it. otherwise, it only
+   * starts in __ompc_task_body_start
+   */
+#if 1
+  if (__omp_current_task->desc->started == 0) {
+  __omp_tasks_started++;
+  __omp_current_task->desc->started = 1;
+  __omp_current_task->desc->threadid = __omp_myid;
+  }
+#endif
+
   new_task->desc->context_flag = 1;
   new_task->desc->safe_to_enqueue = 0;
   /*current->desc->safe_to_enqueue = 1;*/
@@ -58,7 +86,8 @@ void inline __ompc_task_dec_depth()
   __omp_current_task->desc->pdepth--;
 }
 
-inline omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize)
+static inline omp_task_t* __ompc_task_get(omp_task_func func, frame_pointer_t fp, 
+                        void *args, int stacksize)
 {
   omp_task_t *new_task = malloc(sizeof(omp_task_t));
   Is_True(new_task != NULL,
@@ -66,7 +95,11 @@ inline omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize
   new_task->desc = malloc(sizeof(omp_task_desc_t));
   Is_True(new_task->desc != NULL,
       ("__ompc_task_get: new_task->desc could not be allocated"));
-  new_task->coro = co_create(func, args, NULL, stacksize);
+#ifdef UH_PCL
+  new_task->coro = co_create(func, args, fp, NULL, stacksize);
+#else
+  new_task->coro = co_create(func, fp, NULL, stacksize);
+#endif
   Is_True(new_task->coro != NULL,
       ("__ompc_task_get: returned coroutine is NULL"));
 
@@ -85,9 +118,12 @@ inline void __ompc_task_delete(omp_task_t *task)
   co_delete(task->coro);
 }
 
+#ifdef USE_OLD_TASKS
 inline void __ompc_init_vp()
 {
   co_vp_init();
 }
+#endif
+
 #endif
 

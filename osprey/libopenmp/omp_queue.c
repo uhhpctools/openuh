@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "omp_rtl.h"
+#include "omp_sys.h"
 
 /* only used in array version */
 #define OMP_TASK_Q_SIZE (__omp_task_q_upper_limit * 4)
@@ -9,6 +10,156 @@
     if(*x == 0) *x = OMP_TASK_Q_SIZE - 1;       \
     else *x = *x - 1;                           \
   } while(0)
+
+
+#ifndef USE_OLD_TASKS
+
+/*
+ * etask queue stuff
+ */
+
+void
+__ompc_etask_q_init(omp_etask_q_t *tq)
+{
+  Is_True(tq != NULL, ("tq is NULL"));
+  bzero(tq, sizeof(omp_etask_q_t));
+}
+
+omp_etask_t *
+__ompc_etask_q_pop_head(omp_etask_q_t *tq)
+{
+  omp_etask_t *head_task;
+
+  __ompc_lock(&tq->head_lock);
+  if (tq->size == 0)  {
+    __ompc_unlock(&tq->head_lock);
+    return NULL;
+  }
+
+  if (tq->size > 2) {
+    head_task = tq->head;
+    tq->head = head_task->next;
+    tq->head->prev = NULL;
+    __ompc_atomic_dec(&tq->size);
+  } else {
+    __ompc_lock(&tq->tail_lock);
+    head_task = tq->head;
+    if (tq->size == 2) {
+      tq->head = tq->tail;
+      tq->head->prev = NULL;
+      __ompc_atomic_dec(&tq->size);
+    } else {
+      tq->head = tq->tail = NULL;
+      __ompc_atomic_dec(&tq->size);
+    }
+    Is_True(head_task != NULL, ("head_task is NULL, size was %d\n", tq->size));
+    __ompc_unlock(&tq->tail_lock);
+  }
+  __ompc_unlock(&tq->head_lock);
+
+  head_task->prev = head_task->next = NULL;
+  return head_task;
+}
+
+omp_etask_t*
+__ompc_etask_q_pop_tail(omp_etask_q_t *tq)
+{
+  omp_etask_t *tail_task;
+
+  __ompc_lock(&tq->head_lock);
+  __ompc_lock(&tq->tail_lock);
+  if (tq->size == 0) {
+    __ompc_unlock(&tq->head_lock);
+    __ompc_unlock(&tq->tail_lock);
+    return NULL;
+  }
+
+  if (tq->size > 2) {
+    __ompc_unlock(&tq->head_lock);
+    tail_task = tq->tail;
+    tq->tail = tail_task->prev;
+    tq->tail->next = NULL;
+    __ompc_atomic_dec(&tq->size);
+  } else {
+    tail_task = tq->tail;
+    if (tq->size == 2) {
+      tq->tail = tq->head;
+      tq->head->next = NULL;
+      __ompc_atomic_dec(&tq->size);
+    } else {
+      tq->tail = tq->head = NULL;
+      __ompc_atomic_dec(&tq->size);
+    }
+    Is_True(tail_task != NULL, ("tail_task is NULL, size was %d\n", tq->size));
+    __ompc_unlock(&tq->head_lock);
+  }
+  __ompc_unlock(&tq->tail_lock);
+
+  tail_task->prev = tail_task->next = NULL;
+  return tail_task;
+}
+
+void
+__ompc_etask_q_push_head(omp_etask_q_t *tq, omp_etask_t *head_task)
+{
+  Is_True(head_task != NULL, ("trying to push an empty task into queue head"));
+
+  if (head_task == NULL) return;
+
+  __ompc_lock(&tq->head_lock);
+  if (tq->size > 2) {
+    head_task->next = tq->head;
+    tq->head->prev = head_task;
+    tq->head = head_task;
+    __ompc_atomic_inc(&tq->size);
+  } else {
+    __ompc_lock(&tq->tail_lock);
+
+    if (tq->size != 0) {
+      head_task->next = tq->head;
+      tq->head->prev = head_task;
+      tq->head = head_task;
+    } else {
+      tq->head = tq->tail = head_task;
+    }
+
+    __ompc_atomic_inc(&tq->size);
+    __ompc_unlock(&tq->tail_lock);
+  }
+  __ompc_unlock(&tq->head_lock);
+}
+
+void
+__ompc_etask_q_push_tail(omp_etask_q_t *tq, omp_etask_t *tail_task)
+{
+  Is_True(tail_task != NULL, ("trying to push an empty task into queue tail"));
+
+  if (tail_task == NULL) return;
+
+  __ompc_lock(&tq->head_lock);
+  __ompc_lock(&tq->tail_lock);
+  if (tq->size > 2) {
+    __ompc_unlock(&tq->head_lock);
+    tail_task->prev = tq->tail;
+    tq->tail->next = tail_task;
+    tq->tail = tail_task;
+    __ompc_atomic_inc(&tq->size);
+  } else {
+    if (tq->size != 0) {
+      tail_task->prev = tq->tail;
+      tq->tail->next = tail_task;
+      tq->tail = tail_task;
+    } else {
+      tq->tail = tq->head = tail_task;
+    }
+
+    __ompc_atomic_inc(&tq->size);
+    __ompc_unlock(&tq->head_lock);
+  }
+  __ompc_unlock(&tq->tail_lock);
+}
+
+#else /* USE_OLD_TASKS */
 
 
 /*
@@ -63,6 +214,13 @@ void __ompc_task_q_get_head(omp_task_q_t *tq, omp_task_t **task)
     tq->size = tq->size - 1;
   }
   __ompc_unlock(&tq->lock);
+  Is_True(*task == NULL || (*task)->desc->state != OMP_TASK_EXIT, ("getting a task in exit state from head"));
+#ifdef TASK_DEBUG
+  if (*task != NULL) {
+  printf("%d: getting %X from head of queue %X\n",  *task, tq);
+  printf("%d: head = %X; head->next = %X;\n", __omp_myid, tq->head, tq->head->next);
+  }
+#endif
 }
 
 void __ompc_task_q_get_tail(omp_task_q_t *tq, omp_task_t **task)
@@ -78,11 +236,20 @@ void __ompc_task_q_get_tail(omp_task_q_t *tq, omp_task_t **task)
     tq->size = tq->size - 1;
   }
   __ompc_unlock(&tq->lock);
+  Is_True(*task == NULL || (*task)->desc->state != OMP_TASK_EXIT, ("getting a task in exit state from tail"));
+#ifdef TASK_DEBUG
+  if (*task != NULL) {
+  printf("%d: getting %X from tail of queue %X\n",  *task, tq);
+  printf("%d: tail = %X; tail->prev = %X;\n", __omp_myid, tq->tail, tq->tail->prev);
+  }
+#endif
 }
 
 void __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task)
 {
   omp_task_t *temp;
+
+  Is_True(task->desc->state != OMP_TASK_EXIT, ("putting a task in exit state to head"));
 
   __ompc_lock(&tq->lock);
 
@@ -99,6 +266,8 @@ void __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task)
 void __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task)
 {
   omp_task_t *temp;
+
+  Is_True(task->desc->state != OMP_TASK_EXIT, ("putting a task in exit state to tail"));
 
   __ompc_lock(&tq->lock);
 #ifdef TASK_DEBUG
@@ -139,7 +308,6 @@ void __dump_task_q(omp_task_q_t *tq)
 
   __ompc_lock(&tq->lock);
 
-
   tp = tq->head;
   while (tp != NULL) {
     if (tp->desc != NULL)
@@ -155,8 +323,10 @@ void __dump_task_q(omp_task_q_t *tq)
   __ompc_unlock(&tq->lock);
 }
 
+#endif /* USE_OLD_TASKS */
 
-/* old task queue implementation */
+
+/* older task queue implementation */
 
 /*
 void __ompc_task_q_init(omp_task_q_t *tq)

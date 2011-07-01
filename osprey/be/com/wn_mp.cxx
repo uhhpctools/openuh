@@ -347,7 +347,9 @@ typedef enum {
   MPR_OMP_COLLAPSE_INIT         = 80,
   MPR_OMP_COLLAPSE_NEXT	        = 81,
 
-  MPRUNTIME_LAST = MPR_OMP_COLLAPSE_NEXT
+  MPR_OMP_TASK_ALLOC_ARGS       = 82,
+  MPR_OMP_TASK_FREE_ARGS        = 83,
+  MPRUNTIME_LAST = MPR_OMP_TASK_FREE_ARGS
 } MPRUNTIME;
 
 
@@ -532,6 +534,8 @@ static vector<ST *> base_st;      /* Temp var to store do_base. can be preg. */
 static vector<WN_OFFSET> base_ofst;
 static ST *local_gtid;		/* Microtask local gtid */
 static ST *local_btid;		/* Microtask local btid */
+static ST *local_taskargs;  /* Microtask local task args */
+static ST *task_actualargs;  /* for packing firstprivate data */
 static vector<WN *> base_node;		  /* Parallel do base */
 static vector<WN *> limit_node;		/* Parallel do limit */
 static WN *ntrip_node;		/* Parallel do trip count */
@@ -616,6 +620,7 @@ static INT32 mpid_size = 0;	    /* Size of mpid_table */
 static TY_IDX mpdo32_ty = TY_IDX_ZERO;
 static TY_IDX mpdo64_ty = TY_IDX_ZERO;
 static TY_IDX mpregion_ty = TY_IDX_ZERO;
+static TY_IDX mptaskregion_ty = TY_IDX_ZERO;
   // Generic type for parallel runtime routines
 static TY_IDX mpruntime_ty = TY_IDX_ZERO;
 
@@ -755,6 +760,9 @@ static const char *mpr_names [MPRUNTIME_LAST + 1] = {
 #endif
   "__ompc_collapse_init",       /* MPR_OMP_COLLAPSE_INIT */
   "__ompc_collapse_next",       /* MPR_OMP_COLLAPSE_NEXT */
+
+  "__ompc_task_alloc_args",     /* MPR_OMP_TASK_ALLOC_ARGS */
+  "__ompc_task_free_args",      /* MPR_OMP_TASK_FREE_ARGS */
 };
 
 
@@ -845,6 +853,12 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_COPYIN_THDPRV */
   ST_IDX_ZERO,   /* MPR_OMP_COPYPRIVATE */
 #endif
+
+  ST_IDX_ZERO,   /* MPR_OMP_COLLAPSE_INIT */
+  ST_IDX_ZERO,   /* MPR_OMP_COLLAPSE_NEXT */
+
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_ALLOC_ARGS */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_FREE_ARGS */
 };
 
 #define MPSP_STATUS_PREG_NAME "mpsp_status"
@@ -1177,15 +1191,58 @@ Gen_Fork (ST *proc, WN *nThreads)
   return wn;
 }
 
+static WN *
+Gen_Task_Alloc_Args (ST *alloc_st)
+{
+  WN * wn;
+  WN * wnx;
+  Is_True( local_taskargs != NULL, ("local_taskargs should be non-NULL"));
+  wn = WN_Create(OPC_VCALL, 2 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_ALLOC_ARGS);
+
+  WN_Set_Call_Does_Mem_Alloc(wn);
+
+  WN_linenum(wn) = line_number;
+
+  wnx = WN_Lda( Pointer_type, 0, alloc_st);
+  WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx,
+                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+  wnx = WN_Intconst(Integer_type, TY_size(TY_pointed(ST_type(alloc_st))));
+  WN_kid(wn, 1) = WN_CreateParm(Integer_type, wnx,
+                    MTYPE_To_TY(Integer_type), WN_PARM_BY_VALUE);
+
+  return wn;
+}
+
+static WN *
+Gen_Task_Free_Args (ST *alloc_st)
+{
+  WN * wn;
+  WN * wnx;
+  Is_True( local_taskargs != NULL, ("local_taskargs should be non-NULL"));
+  wn = WN_Create(OPC_VCALL, 1 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_FREE_ARGS);
+
+  WN_Set_Call_Does_Mem_Free(wn);
+
+  WN_linenum(wn) = line_number;
+
+  wnx = WN_Ldid( Pointer_type, 0, alloc_st, ST_type(alloc_st));
+  WN_kid(wn, 0) = WN_CreateParm(Pointer_type, wnx,
+                       WN_ty(wnx), WN_PARM_BY_REFERENCE);
+
+  return wn;
+}
+
 /*
 Generate RT calls to create task.
 */
 static WN *
-Gen_Task_Create (ST *proc) 
+Gen_Task_Create (ST *proc, BOOL is_blocking = FALSE)
 {
   WN * wn;
   WN * wnx;
-  wn = WN_Create(OPC_VCALL, 4 );
+  wn = WN_Create(OPC_VCALL, 6 );
   WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_CREATE);
 
   WN_Set_Call_Non_Data_Mod(wn);
@@ -1201,15 +1258,28 @@ Gen_Task_Create (ST *proc)
   WN *link = WN_LdidPreg( Pointer_type, Frame_Pointer_Preg_Offset);
   WN_kid(wn, 1) = WN_CreateParm(Pointer_type, link, WN_ty(link),
                      WN_PARM_BY_REFERENCE);
+  WN *args;
+  if (task_actualargs) {
+    args = WN_Ldid(Pointer_type, 0, task_actualargs, ST_type(task_actualargs));
+    WN_kid(wn, 2) = WN_CreateParm(Pointer_type, args, WN_ty(args),
+                       WN_PARM_BY_REFERENCE);
+  } else  {
+    args = WN_Intconst(Pointer_type, 0);
+    WN_kid(wn, 2) = WN_CreateParm(Pointer_type, args, MTYPE_To_TY(Pointer_type),
+        WN_PARM_BY_REFERENCE);
+  }
 
   WN *may_delay_wn;
   if (if_node)
     may_delay_wn = WN_COPY_Tree(WN_kid0(if_node));
   else
     may_delay_wn = WN_Intconst(MTYPE_I4, 1);
-  WN_kid(wn, 2) = WN_CreateParm(MTYPE_I4, may_delay_wn, MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
+  WN_kid(wn, 3) = WN_CreateParm(MTYPE_I4, may_delay_wn, MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
 
-  WN_kid(wn, 3) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, untied ? 0 : 1), MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
+  WN_kid(wn, 4) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, untied ? 0 : 1), MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
+
+  WN_kid(wn, 5) = WN_CreateParm(MTYPE_I4, WN_Intconst(MTYPE_I4, is_blocking),
+      MTYPE_To_TY(MTYPE_I4), WN_PARM_BY_VALUE);
 
   return wn;
 }
@@ -1247,8 +1317,13 @@ Insert_Task_Exits (WN *node)
 {
   if (WN_operator(node) == OPR_BLOCK) {
     for (WN *stmt = WN_first(node); stmt; stmt = WN_next(stmt)) {
-      if (WN_operator(stmt) == OPR_RETURN)
+      if (WN_operator(stmt) == OPR_RETURN) {
         WN_INSERT_BlockBefore(node, stmt, Gen_Task_Exit());
+        /* turn this off if don't want to use taskargs struct */
+        //if (0)
+        if (local_taskargs)
+          WN_INSERT_BlockBefore(node, stmt, Gen_Task_Free_Args(local_taskargs));
+      }
       Insert_Task_Exits(stmt);
     }
   } else {
@@ -2648,6 +2723,46 @@ Process_PU_Exc_Info ( INITO_IDX old_inito, VAR_TABLE * vtab )
 }
 #endif
 
+// Return a TY_IDX for a struct with fields corresponding to firstprivate
+// and shared variables in firstprivate_nodes and shared_nodes, respectively. Also, 
+// for shared variables, skip over globals. 
+static TY_IDX
+Create_TaskArgs_Struct( const char *task_name )
+{
+  TY_IDX ty_idx;
+
+  TY& ty = New_TY(ty_idx);
+
+  FLD_HANDLE first_fld, fld;
+  INT ofst = 0;
+  WN *fp = firstprivate_nodes;
+  if (fp) {
+    first_fld = fld = New_FLD();
+    FLD_Init(first_fld, Save_Str(ST_name(WN_st_idx(fp))),
+        ST_type(WN_st_idx(fp)), ofst);
+
+    ofst += TY_size(ST_type(WN_st_idx(fp)));
+    fp = WN_next(fp);
+  }
+  while (fp) {
+    fld = New_FLD();
+    FLD_Init(fld, Save_Str(ST_name(WN_st_idx(fp))),
+        ST_type(WN_st_idx(fp)), ofst);
+
+    ofst += TY_size(ST_type(WN_st_idx(fp)));
+    fp = WN_next(fp);
+  }
+  TY_Init( ty, ofst, KIND_STRUCT, MTYPE_M,
+      Save_Str2(".task_args.", task_name));
+  Set_TY_align(ty_idx, MTYPE_align_req(MTYPE_I8));
+  if (firstprivate_nodes) {
+    Set_FLD_last_field(fld);
+    Set_TY_fld(ty, first_fld);
+  }
+
+  return ty_idx;
+}
+
 static WN * Gen_MP_Store ( ST * st, WN_OFFSET offset, WN * value, 
 			   BOOL scalar_only = FALSE );
 
@@ -2662,6 +2777,7 @@ parallel function's symtab becomes CURRENT_SYMTAB.
 static void 
 Create_MicroTask ( PAR_FUNC_TYPE func_type )
 {
+  BOOL is_task_region = FALSE;
   BOOL is_do32 = FALSE, is_do64 = FALSE, is_region = FALSE, has_gtid = FALSE;
   switch (func_type) {  // validate input, set type flag
   case PAR_FUNC_DO32:
@@ -2678,6 +2794,7 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
     break;
   case PAR_FUNC_TASK:
     is_region = TRUE;
+    is_task_region = TRUE;
     break;
   default:
     Fail_FmtAssertion("invalid parallel function type %d", (INT) func_type);
@@ -2687,41 +2804,6 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
     // should be merged up after done. Currently reserved for Debug
   const char *construct_type_str = is_region ? "omprg" : "ompdo";
   char temp_str[64];
-
-
-  // get function prototype
-
-  TY_IDX &func_ty_idx = mpregion_ty;
-
-  if  (func_ty_idx == TY_IDX_ZERO) {
-    // create new type for function, and type for pointer to function
-
-    TY& ty = New_TY(func_ty_idx);
-    sprintf(temp_str, ".%s", construct_type_str);
-    TY_Init(ty, 0, KIND_FUNCTION, MTYPE_UNKNOWN, Save_Str(temp_str));
-    Set_TY_align(func_ty_idx, 1);
-
-    TYLIST_IDX parm_idx;
-    TYLIST& parm_list = New_TYLIST(parm_idx);
-    Set_TY_tylist(ty, parm_idx);
-    Set_TYLIST_type(parm_list, Be_Type_Tbl(MTYPE_V));  // return type
-
-      // Two basic parameters
-    if (has_gtid)
-      Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // gtid
-    Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // btid
-
-    Set_TYLIST_type(New_TYLIST(parm_idx), TY_IDX_ZERO); // end of parm list
-
-      // now create a type for a pointer to this function
-    TY_IDX ptr_ty_idx;
-    TY &ptr_ty = New_TY(ptr_ty_idx);
-    sprintf(temp_str, ".%s_ptr", construct_type_str);
-    TY_Init(ptr_ty, Pointer_Size, KIND_POINTER, Pointer_Mtype,
-            Save_Str(temp_str));
-    Set_TY_pointed(ptr_ty, func_ty_idx);
-  }
-
 
   // generate new name for nested function
 
@@ -2743,6 +2825,50 @@ Create_MicroTask ( PAR_FUNC_TYPE func_type )
   else
     sprintf ( st_name, "__%s_%s_%d.%d", construct_type_str, old_st_name,
 	      mp_region_num, mp_construct_num );
+
+  // if task region, create struct for task arguments
+  TY_IDX task_args_ty = 0;
+  if (is_task_region)
+    task_args_ty = Make_Pointer_Type(Create_TaskArgs_Struct(st_name));
+
+  // get function prototype
+
+  TY_IDX &func_ty_idx = is_task_region ? mptaskregion_ty :  mpregion_ty;
+
+  if  (func_ty_idx == TY_IDX_ZERO) {
+    // create new type for function, and type for pointer to function
+
+    TY& ty = New_TY(func_ty_idx);
+    sprintf(temp_str, ".%s", construct_type_str);
+    TY_Init(ty, 0, KIND_FUNCTION, MTYPE_UNKNOWN, Save_Str(temp_str));
+    Set_TY_align(func_ty_idx, 1);
+
+    TYLIST_IDX parm_idx;
+    TYLIST& parm_list = New_TYLIST(parm_idx);
+    Set_TY_tylist(ty, parm_idx);
+    Set_TYLIST_type(parm_list, Be_Type_Tbl(MTYPE_V));  // return type
+
+      // Two basic parameters
+    if (has_gtid)
+      Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // gtid
+    /* turn this off if don't want to use taskargs struct */
+    //else if (0)
+    else if (is_task_region)
+      Set_TYLIST_type(New_TYLIST(parm_idx), task_args_ty);
+
+    Set_TYLIST_type(New_TYLIST(parm_idx), Be_Type_Tbl(Pointer_type)); // btid
+
+
+    Set_TYLIST_type(New_TYLIST(parm_idx), TY_IDX_ZERO); // end of parm list
+
+      // now create a type for a pointer to this function
+    TY_IDX ptr_ty_idx;
+    TY &ptr_ty = New_TY(ptr_ty_idx);
+    sprintf(temp_str, ".%s_ptr", construct_type_str);
+    TY_Init(ptr_ty, Pointer_Size, KIND_POINTER, Pointer_Mtype,
+            Save_Str(temp_str));
+    Set_TY_pointed(ptr_ty, func_ty_idx);
+  }
 
 
   // create new PU and ST for nested function
@@ -2766,6 +2892,8 @@ is inheriting pu_recursive OK?
   Set_PU_is_nested_func(pu);
   Set_PU_mp(pu);
   Set_PU_has_mp(pu);
+  if (is_task_region)
+    Set_PU_is_task(pu);
 #ifdef KEY
   Set_PU_mp_lower_generated(pu);
 #endif // KEY
@@ -2822,6 +2950,8 @@ is inheriting pu_recursive OK?
     // create ST's for parameters
 
   ST *arg_gtid = NULL;
+  ST *task_args = NULL;
+  local_taskargs = NULL;
   if (has_gtid) {
     arg_gtid = New_ST( CURRENT_SYMTAB );
     ST_Init (arg_gtid,
@@ -2831,15 +2961,25 @@ is inheriting pu_recursive OK?
              EXPORT_LOCAL,
              Be_Type_Tbl(MTYPE_I4));
     Set_ST_is_value_parm( arg_gtid );
+  } else if (is_task_region) {
+    task_args = New_ST( CURRENT_SYMTAB );
+    ST_Init( task_args,
+        Save_Str( "__ompv_taskargs" ),
+        CLASS_VAR,
+        SCLASS_FORMAL,
+        EXPORT_LOCAL,
+        task_args_ty);
+    Set_ST_is_value_parm( task_args );
+    local_taskargs = task_args;
   }
-
-  ST *arg_slink = New_ST( CURRENT_SYMTAB );
+  ST *arg_slink = NULL;
+  arg_slink = New_ST( CURRENT_SYMTAB );
   ST_Init( arg_slink,
-           Save_Str( "__ompv_slink_a" ),
-           CLASS_VAR,
-           SCLASS_FORMAL,
-           EXPORT_LOCAL,
-           Be_Type_Tbl( Pointer_type ));
+      Save_Str( "__ompv_slink_a" ),
+      CLASS_VAR,
+      SCLASS_FORMAL,
+      EXPORT_LOCAL,
+      Be_Type_Tbl( Pointer_type ));
   Set_ST_is_value_parm( arg_slink );
 
     // TODO: other procedure specific arguments should
@@ -2874,6 +3014,9 @@ is inheriting pu_recursive OK?
 #endif
   // Currently, don't pass data via arguments.
   UINT arg_cnt = (has_gtid ? 2 : 1);
+  /* turn this off if don't want to use taskargs struct */
+  if (is_task_region) arg_cnt = 2;
+
   UINT slink_arg_pos = arg_cnt - 1;
   WN *func_entry = WN_CreateEntry ( arg_cnt, parallel_proc,
                                     parallel_func, pragma_block,
@@ -2882,8 +3025,11 @@ is inheriting pu_recursive OK?
 
   if (has_gtid) {
     WN_kid0(func_entry) = WN_CreateIdname ( 0, arg_gtid );
+  } else if (is_task_region) {
+    WN_kid0(func_entry) = WN_CreateIdname ( 0, task_args );
   }
   WN_kid(func_entry, slink_arg_pos) = WN_CreateIdname ( 0, arg_slink );
+
      // TODO: variable arguments list should be added here.
 
   WN_linenum(func_entry) = line_number;
@@ -3013,6 +3159,8 @@ is inheriting pu_recursive OK?
   if (has_gtid)
     Add_DST_variable ( arg_gtid, nested_dst, line_number, DST_INVALID_IDX );
   Add_DST_variable ( arg_slink, nested_dst, line_number, DST_INVALID_IDX );
+  if (is_task_region)
+    Add_DST_variable ( task_args, nested_dst, line_number, DST_INVALID_IDX );
 
 }
 
@@ -3491,6 +3639,56 @@ Collect_Default_Variables (  WN * tree, WN *& node_list, WN_PRAGMA_ID pragma_id,
   }
 }
 
+/*  Walk tree to locate all variable references which are not private or
+ *  firstprivate
+ *
+ *  assumption: local_nodes and firsprivate_nodes are already set
+ *
+ *  (what about threadprivate?)
+ */
+static void
+Collect_Shared_Variables (  WN * tree,  WN * parent = NULL, WN * grandparent = NULL )
+{
+  WN *wn;
+  ST *st;
+  OPCODE op;
+  OPERATOR opr;
+  BOOL a_pointer;
+  WN_PRAGMA_ACCESSED_FLAGS flags;
+
+  if (tree) {
+
+    op = WN_opcode(tree);
+    opr = WN_operator(tree);
+
+    if (op == OPC_BLOCK)
+      for (WN* node = WN_first(tree); node; node = WN_next(node))
+	Collect_Shared_Variables(node, tree, parent);
+    else
+      for (INT32 i = 0; i < WN_kid_count(tree); i++)
+	Collect_Shared_Variables(WN_kid(tree, i), tree, parent);
+
+    if (OPCODE_has_sym(op) && (st = WN_st(tree)) != NULL &&
+        ST_class(st) == CLASS_VAR) {
+      if (!ST_is_thread_private(st) && !St_Is_In_List(shared_nodes, st) &&
+          !St_Is_In_List(local_nodes, st) && !St_Is_In_List(firstprivate_nodes, st)) {
+        flags = Get_Access_Flag(tree, parent, grandparent);
+        for (wn = shared_nodes; wn; wn = WN_next(wn))
+          if (WN_st_idx(wn) == ST_st_idx(st))
+            break;
+        if (wn) {
+          WN_pragma_flags(wn) |= flags;
+        } else {
+          wn = WN_CreatePragma(WN_PRAGMA_SHARED, st, 0, 0);
+          WN_pragma_flags(wn) = flags;
+          WN_next(wn) = shared_nodes;
+          shared_nodes = wn;
+        }
+      }
+    }
+  }
+}
+
 
 /*  Walk tree gathering information about all interesting preg usage.  */
 
@@ -3811,7 +4009,8 @@ static void
 Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
                     WN *vtree, ST *old_st, WN_OFFSET old_offset,
                     WN **firstprivate_blockp, WN **alloca_blockp,
-                    VAR_TABLE *prev_def )
+                    VAR_TABLE *prev_def, WN_OFFSET taskarg_offset = 0,
+                    UINT32 taskarg_field_id = 0)
 {
   ST   *sym;
   TY_IDX ty;
@@ -4185,10 +4384,44 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
       !v->is_non_pod) {   // fecc generates constructor calls
     if (*firstprivate_blockp == NULL)
       *firstprivate_blockp = WN_CreateBlock ( );
-    WN_INSERT_BlockLast(*firstprivate_blockp,
-      Gen_MP_Load_Store(v->orig_st, v->orig_offset,
-                        v->new_st, v->new_offset,
-                        v->is_dynamic_array));
+
+    /* turn this off if don't want to use taskargs struct */
+    //if (0) {
+    if (local_taskargs)  {
+      WN *fp_store;
+      TY_IDX ty  = ST_type(v->new_st);
+      if (((TY_kind(ty) != KIND_ARRAY) && (TY_kind(ty) != KIND_STRUCT)) ||
+           TY_kind(ty) == KIND_STRUCT && TY_size(ty) == 0) {
+        fp_store = WN_Stid(TY_mtype(ST_type(v->new_st)),
+            v->new_offset, v->new_st, ST_type(v->new_st),
+            WN_Iload( TY_mtype(ST_type(v->new_st)), taskarg_offset,
+              TY_pointed(ST_type(local_taskargs)),
+              WN_Ldid(Pointer_type, 0, local_taskargs, ST_type(local_taskargs)),
+              taskarg_field_id));
+      } else {
+        WN *bytes_wn;
+        if (TY_size(ty) > INT32_MAX)
+          bytes_wn = WN_Intconst ( MTYPE_I8, TY_size(ty) );
+        else if (TY_size(ty) > 0)
+          bytes_wn = WN_Intconst ( MTYPE_I4, TY_size(ty) );
+        else
+          bytes_wn = Calculate_Array_Size ( v->new_st, ty );
+
+        TY_IDX ty_p = Make_Pointer_Type(ty);
+        fp_store = WN_CreateMstore( 0, ty_p,
+            WN_CreateMload(taskarg_offset, ty_p,
+              WN_Ldid(Pointer_type, 0, local_taskargs, ty_p), bytes_wn),
+            WN_Lda(Pointer_type, 0, v->new_st), WN_COPY_Tree(bytes_wn));
+
+      }
+
+      WN_INSERT_BlockLast(*firstprivate_blockp, fp_store);
+
+    } else
+      WN_INSERT_BlockLast(*firstprivate_blockp,
+        Gen_MP_Load_Store(v->orig_st, v->orig_offset,
+                          v->new_st, v->new_offset,
+                          v->is_dynamic_array));
   }
 
     /* determine the opcode for reductions */
@@ -4769,6 +5002,8 @@ Create_Local_Variables ( VAR_TABLE * vtab, WN * reductions,
   }
 
   /* Do firstprivates */
+  INT taskarg_ofst = 0;
+  UINT32 field = 1;
   for (l = firstprivates; l; l = WN_next(l)) {
       // Search for LASTLOCAL entry for l in vtab.
     VAR_TABLE *llv = vtab;
@@ -4785,9 +5020,18 @@ Create_Local_Variables ( VAR_TABLE * vtab, WN * reductions,
     if (!llv->orig_st)
       llv = NULL;
 
-    Localize_Variable ( v, VAR_FIRSTPRIVATE, OPERATOR_UNKNOWN, NULL,
-                        WN_st(l), WN_offsetx(l), firstprivate_blockp,
-			alloca_blockp, llv );
+    /* turn this off if don't want to use taskargs struct */
+    //if (0)
+    if (local_taskargs)
+      Localize_Variable ( v, VAR_FIRSTPRIVATE, OPERATOR_UNKNOWN, NULL,
+                          WN_st(l), WN_offsetx(l), firstprivate_blockp,
+              alloca_blockp, llv, taskarg_ofst, field++ );
+    else
+      Localize_Variable ( v, VAR_FIRSTPRIVATE, OPERATOR_UNKNOWN, NULL,
+                          WN_st(l), WN_offsetx(l), firstprivate_blockp,
+              alloca_blockp, llv );
+
+    taskarg_ofst += TY_size(ST_type(WN_st(l)));
     if (lastthread && (v->orig_st == WN_st(lastthread)) &&
 	(v->orig_offset == WN_offsetx(lastthread))) {
       WN_st_idx(lastthread) = ST_st_idx(v->new_st);
@@ -6157,6 +6401,24 @@ Gen_MP_Load_Store ( ST * from_st, WN_OFFSET from_offset,
 
   ty = (is_from_ptr) ? TY_pointed(ST_type(from_st)) : ST_type(from_st);
 
+  TY_IDX from_fld_ty;
+  BOOL scalar_only = FALSE;
+  if (TY_kind(ST_type(from_st)) == KIND_STRUCT)  {
+      from_fld_ty = FLD_type(Get_FLD_From_Offset(ST_type(from_st), from_offset));
+      if (ST_type(to_st) == from_fld_ty) {
+        ty = from_fld_ty;
+        scalar_only = TRUE;
+      }
+  }
+  if (TY_kind(ST_type(from_st)) == KIND_POINTER &&
+      TY_kind(TY_pointed(ST_type(from_st)) == KIND_STRUCT))  {
+      from_fld_ty = FLD_type(Get_FLD_From_Offset(TY_pointed(ST_type(from_st)), from_offset));
+      if (ST_type(to_st) == from_fld_ty) {
+        ty = from_fld_ty;
+        scalar_only = TRUE;
+      }
+  }
+
 #ifndef KEY
   if ((TY_kind(ty) != KIND_ARRAY) && (TY_kind(ty) != KIND_STRUCT))
 #else
@@ -6165,7 +6427,7 @@ Gen_MP_Load_Store ( ST * from_st, WN_OFFSET from_offset,
 	TY_kind(ty) == KIND_STRUCT && TY_size(ty) == 0)
 #endif
     wn = Gen_MP_Store ( to_st, to_offset,
-			Gen_MP_Load ( from_st, from_offset ));
+			Gen_MP_Load ( from_st, from_offset, scalar_only ));
   else {
     if (TY_size(ty) > INT32_MAX)
       bytes_wn = WN_Intconst ( MTYPE_I8, TY_size(ty) );
@@ -12111,6 +12373,9 @@ Process_Parallel_Do ( void )
     WN_INSERT_BlockLast ( parallel_func, reduction_store_block );
   if (copyout_block)
     WN_INSERT_BlockLast ( parallel_func, copyout_block );
+
+
+  WN_INSERT_BlockLast ( parallel_func, Gen_Task_Exit() );
   
   /* Generate return at end of parallel function */
 
@@ -12242,8 +12507,12 @@ Process_MP_Region ( void )
 			                  0, 0 ));
   if (firstprivate_block)
     WN_INSERT_BlockLast ( parallel_func, firstprivate_block );
+
+  /* turn this on if don't want to use taskargs struct */
+  /*
   if (mpt == MPP_TASK_REGION)
     WN_INSERT_BlockLast ( parallel_func, Gen_Task_Body_Start() );
+    */
 
   if (mpt == MPP_TASK_REGION) {
     Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
@@ -12255,6 +12524,9 @@ Process_MP_Region ( void )
   if (reduction_store_block)
     WN_INSERT_BlockLast ( parallel_func, reduction_store_block );
 
+  if (mpt == MPP_PARALLEL_REGION) {
+    WN_INSERT_BlockLast ( parallel_func, Gen_Task_Exit() );
+  }
 
   /* Generate return at end of parallel function */
 
@@ -12355,6 +12627,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   PREG_NUM rreg1, rreg2;	/* Pregs with I4 return values */
   INT32 num_criticals;		/* Number of nested critical sections */
   BOOL  while_seen;		/* While seen where do should be */
+  WN   *task_fpsetup_blk; /* sets up firstprivate struct for task */
 
   /* Validate input arguments. */
 
@@ -13275,8 +13548,30 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     WN_Delete ( node );
 
   } else if (mpt == MPP_TASK_REGION) {
+    BOOL task_is_blocking = FALSE;
 
     Collect_Default_Variables(stmt_block, firstprivate_nodes, WN_PRAGMA_FIRSTPRIVATE);
+
+    /* if current PU is a nested MP function, then it may be a task that
+     * should be blocked by a descendant requiring access to its stack frame.
+     * Actually, may want to had a PU flag marking a PU as an explicit task,
+     * because we only care about explicit tasks that may need to be blocked
+     * (microtasks for parallel regions have an implicit barrier at the end
+     * anyway)
+     */
+    if (PU_is_nested_func(Get_Current_PU()) && PU_mp(Get_Current_PU())) {
+    /* if (PU_is_task(Get_Current_PU())) { */
+      SYMTAB_IDX current_level = PU_lexical_level(Get_Current_PU());
+      /* this collects any shared variables into shared_nodes.  */
+      Collect_Shared_Variables(stmt_block);
+      for ( WN *sh_p = shared_nodes; sh_p; sh_p = WN_next(sh_p)) {
+        if ((ST_sclass(WN_st_idx(sh_p)) == SCLASS_AUTO) &&
+            (ST_level(WN_st(sh_p)) <= current_level)) {
+          task_is_blocking = TRUE;
+          break;
+        }
+      }
+    }
 
     if (serial_stmt_block) {
       Is_True(inside_versioning_if,
@@ -13292,7 +13587,55 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     Process_MP_Region ( );
 
-    mp_call_wn = Gen_Task_Create ( parallel_proc );
+    task_fpsetup_blk = WN_CreateBlock();
+    /* turn this off if don't want to use taskargs struct */
+    //if (0) {
+    if (local_taskargs)  {
+      INT32 mp_region_num;
+      if (mpnum_node)
+        mp_region_num = WN_pragma_arg1(mpnum_node);
+      else
+        mp_region_num = region_id;
+      task_actualargs = New_ST(CURRENT_SYMTAB);
+      ST_Init( task_actualargs,
+          Save_Str2i("__ompv_taskarg","", mp_region_num),
+          CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL,
+          ST_type(local_taskargs));
+      WN_INSERT_BlockLast(task_fpsetup_blk, Gen_Task_Alloc_Args(task_actualargs));
+      /* first each threadprivate, initialize corresponding field in
+       * task_actualargs ST */
+      WN *fp = firstprivate_nodes;
+      INT ofst = 0;
+      for ( ; fp; fp=WN_next(fp)) {
+        ST *fp_st = WN_st(fp);
+        TY_IDX ty = ST_type(fp_st);
+        TY_IDX ty_p = Make_Pointer_Type(ty);
+        WN *fp_init;
+        if (((TY_kind(ty) != KIND_ARRAY) && (TY_kind(ty) != KIND_STRUCT)) ||
+            TY_kind(ty) == KIND_STRUCT && TY_size(ty) == 0) {
+          fp_init  = WN_Istore(TY_mtype(ty), ofst, ty_p,
+              WN_Ldid(Pointer_type, 0, task_actualargs, ST_type(task_actualargs)),
+              WN_Ldid(TY_mtype(ty), WN_offsetx(fp), fp_st, ty));
+        } else {
+          WN *bytes_wn;
+          if (TY_size(ty) > INT32_MAX)
+            bytes_wn = WN_Intconst ( MTYPE_I8, TY_size(ty) );
+          else if (TY_size(ty) > 0)
+            bytes_wn = WN_Intconst ( MTYPE_I4, TY_size(ty) );
+          else
+            bytes_wn = Calculate_Array_Size ( fp_st, ty );
+
+          fp_init = WN_CreateMstore(ofst, ty_p,
+              WN_CreateMload(0, ty_p, WN_Lda(Pointer_type, 0, fp_st), bytes_wn),
+              WN_Ldid(Pointer_type, 0, task_actualargs, ST_type(task_actualargs)),
+              WN_COPY_Tree(bytes_wn));
+        }
+        ofst += TY_size(ty);
+        WN_INSERT_BlockLast(task_fpsetup_blk, fp_init);
+      }
+    }
+
+    mp_call_wn = Gen_Task_Create ( parallel_proc, task_is_blocking );
 	
     RID_Delete ( Current_Map_Tab, node );
     WN_Delete ( node );
@@ -13461,7 +13804,13 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     WN_INSERT_BlockLast ( replace_block, stmt_block );
 
   } else if (mpt == MPP_TASK_REGION) {
+    WN *fpi_next;
+    for (WN *fpi = WN_first(task_fpsetup_blk); fpi ; fpi = fpi_next) {
+      fpi_next = WN_next(fpi);
+      WN_INSERT_BlockLast(replace_block, WN_EXTRACT_FromBlock(task_fpsetup_blk, fpi));
+    }
     WN_INSERT_BlockLast ( replace_block, mp_call_wn );
+    WN_Delete(task_fpsetup_blk);
   }
 
 

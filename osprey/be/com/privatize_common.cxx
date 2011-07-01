@@ -477,11 +477,12 @@ static ST *Create_Global_Threadprivate_Symbol(ST *old_st)
       return &*iter;
   }
 
-  ST *new_thdprv_st = New_ST(GLOBAL_SYMTAB); 
+  ST *new_thdprv_st = (ST_sclass (old_st) == SCLASS_PSTATIC) ?
+                        New_ST(CURRENT_SYMTAB) : New_ST(GLOBAL_SYMTAB);
 
-  ST_SCLASS sclass = ((ST_sclass (old_st) == SCLASS_FSTATIC
-		      || ST_sclass (old_st) == SCLASS_PSTATIC) ?
-		      SCLASS_FSTATIC : SCLASS_COMMON);
+  ST_SCLASS sclass = (ST_sclass(old_st) == SCLASS_FSTATIC) ?  SCLASS_FSTATIC :
+                     (ST_sclass(old_st) == SCLASS_PSTATIC) ?
+                     SCLASS_PSTATIC : SCLASS_COMMON;
 
   TY_IDX old_ty_idx, new_ty_idx;
 

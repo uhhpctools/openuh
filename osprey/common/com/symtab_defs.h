@@ -766,6 +766,8 @@ public:
 #define PU_HAS_APPLY_ARGS       0x0008000000000000LL // __builtin_apply_args
 #define PU_SIMPLE_EH_RANGE      0x0010000000000000LL // there is a single eh range in PU, no clean-up or catch
 
+#define PU_IS_TASK              0x0020000000000000LL // PU is outlined explicit task
+
 enum PU_SRC_LANG_FLAGS
 {
     PU_UNKNOWN_LANG	= 0x00,	// UNKNOWN 

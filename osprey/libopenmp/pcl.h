@@ -47,7 +47,8 @@ typedef jmp_buf co_core_ctx_t;
 typedef enum {
   OMP_TASK_DEFAULT,
   OMP_TASK_SUSPENDED,
-  OMP_TASK_EXIT
+  OMP_TASK_EXIT,
+  OMP_TASK_DONE
 } omp_task_state_t;
 
 
@@ -60,13 +61,22 @@ typedef struct s_coroutine {
   int alloc;
   struct s_coroutine *caller;
   struct s_coroutine *restarget;
+#ifdef UH_PCL
+  void (*func)(void *, void *);
+  void *slink;
+#else
   void (*func)(void *);
+#endif
   void *data;
 } coroutine;
 
 typedef coroutine * coroutine_t;
 
+#ifdef UH_PCL
+coroutine_t co_create(void (*func)(void *, void *), void *data, void *slink, void *stack, int size);
+#else
 coroutine_t co_create(void (*func)(void *), void *data, void *stack, int size);
+#endif
 void co_delete(coroutine_t coro);
 void co_call(coroutine_t coro);
 void co_resume(void);

@@ -932,6 +932,13 @@ inline void
 Clear_PU_mp (PU& pu)			{ pu.flags &= ~PU_MP; }
 
 inline BOOL
+PU_is_task (const PU& pu)	{ return (pu.flags & PU_IS_TASK) != 0; }
+inline void
+Set_PU_is_task (PU& pu)		{ pu.flags |= PU_IS_TASK; }
+inline void
+Clear_PU_is_task (PU& pu)	{ pu.flags &= ~PU_IS_TASK; }
+
+inline BOOL
 PU_has_namelist (const PU& pu)		{ return pu.flags & PU_HAS_NAMELIST; }
 inline void
 Set_PU_has_namelist (PU& pu)		{ pu.flags |= PU_HAS_NAMELIST; }
