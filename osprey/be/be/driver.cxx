@@ -1187,19 +1187,7 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
 	  Cur_PU_Feedback->Verify("after WOPT");
 	}
       }
-      /*by Liao, enable whirl2c right before cg*/
-   if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
-     if (W2C_Should_Before_CG()){
-	if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
-	    if (Cur_PU_Feedback)
-		W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
-      if (Run_wopt) 
-	    W2C_Outfile_Translate_Pu(rwn, TRUE/*emit_global_decls*/);
-       else
-	    W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
-	}
-      }
-    }
+
 
       /* we may still have to print the .O file:		   */
       /* (Olimit stops optimization for one PU but not all)	   */
@@ -1250,6 +1238,25 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
 #else
 	rwn = WN_Lower(rwn, LOWER_TO_CG, alias_mgr, "Lowering to CG");
 #endif
+
+    /* Note: this was initially placed just after WOPT. I am moving to this
+     * point so that we can view lower-level IR-to-Source that is closer to
+     * the representation seen by CG.
+     */
+    /* by Liao, enable whirl2c right before cg*/
+    if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
+        if (W2C_Should_Before_CG()){
+            if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
+                if (Cur_PU_Feedback)
+                    W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
+                if (Run_wopt)
+                    W2C_Outfile_Translate_Pu(rwn, TRUE/*emit_global_decls*/);
+                else
+                    W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+            }
+        }
+    }
+
 #ifdef TARG_IA64
 	if (Only_Unsigned_64_Bit_Ops &&
 	    (!Run_wopt || Query_Skiplist (WOPT_Skip_List, Current_PU_Count()))) 	  U64_lower_wn(rwn, FALSE);
