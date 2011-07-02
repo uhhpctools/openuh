@@ -328,8 +328,7 @@ inline void __ompc_barrier_wait(omp_team_t *team)
   new_count = __ompc_atomic_inc(&team->barrier_count2);
 
   /* why not use pthread_cond_wait instead of a busy wait? */
-  while(__omp_level_1_team_manager.num_tasks ||
-          team->barrier_count2 != team->team_size) {
+  while(team->num_tasks || team->barrier_count2 != team->team_size) {
 #ifndef USE_OLD_TASKS
     next = __ompc_etask_schedule(!has_tied_tasks);
     if(next != NULL) {

@@ -429,7 +429,7 @@ __ompc_environment_variables()
       __ompc_etask_q_push_tail = &__ompc_etask_q_con_enqueue;
       use_concurrent_queue = 1;
     } else if (strncasecmp(env_var_str, "NONCONCURRENT", 13) != 0) {
-      Not_Valid("O64_OMP_TASK_QUEUE_LOCKING should be NONCONCURRENT|HEAD_BIASED|TAIL_BIASED|CONCURRENT or unset");
+      Not_Valid("O64_OMP_TASK_QUEUE should be NONCONCURRENT|HEAD_BIASED|TAIL_BIASED|CONCURRENT or unset");
     }
   }
 
