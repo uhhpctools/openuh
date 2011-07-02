@@ -445,6 +445,24 @@ WN *WN_LOOP_InductionVariable(
 /* Obtain the high-level type of the item accessed */
 extern TY_IDX WN_object_ty(const WN *);
 
+inline BOOL WN_Is_Volatile_Mem(const WN *wn)
+{
+  OPCODE opc = WN_opcode(wn);
+  if (OPCODE_has_1ty(opc) || OPCODE_has_2ty(opc)) {
+    if (OPCODE_operator(opc) == OPR_ISTORE ||
+	OPCODE_operator(opc) == OPR_MSTORE) {
+      TY_IDX pointed = TY_pointed (Ty_Table[WN_ty (wn)]);
+      DevAssert(pointed, ("TY_pointed of ISTORE/MSTORE type is NULL"));
+      return TY_is_volatile(pointed);
+    } else {
+      return TY_is_volatile(WN_ty(wn)) ||
+        TY_is_volatile(WN_object_ty(wn)) ||
+	(OPCODE_has_2ty(opc) && TY_is_volatile(TY_pointed(WN_load_addr_ty(wn))));
+    }
+  }
+  return FALSE;
+}
+
 /* Obtain the higher level type of object being accessed. */
 extern void WN_hl_object_ty (const WN*, TY_IDX& ty, UINT32& fld_id);
 

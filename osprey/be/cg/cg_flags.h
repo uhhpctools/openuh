@@ -101,6 +101,9 @@
  *  BOOL CG_dispatch_schedule
  *     Enable dispatch scheduling for Orochi style architectures.
  *
+ *  BOOL CG_LOOP_unroll_best_fit
+ *     Toggle default state of unroll best fit behavior.
+ *
  *  BOOL CG_128bitstore
  *     Enable 128bit unaligned stores optimization which emits movup{s|d}
  *     instead of movhp{s|d} with movlp{s|d}.
@@ -530,11 +533,14 @@ extern BOOL CG_skip_local_swp;
 extern BOOL CG_cmp_load_exec;
 extern BOOL CG_fma4_load_exec;
 extern BOOL CG_dispatch_schedule;
+extern BOOL CG_LOOP_nounroll_best_fit_set;
 extern BOOL CG_128bitstore;
 extern BOOL CG_branch_fuse;
 extern BOOL CG_strcmp_expand;
 extern BOOL CG_merge_counters_x86;
+extern BOOL CG_merge_counters_x86_set;
 extern BOOL CG_interior_ptrs_x86;  // enable,disable interior pointer trans
+extern BOOL CG_NoClear_Avx_Simd;
 #endif
 extern INT CG_opt_level;
 extern BOOL CG_localize_tns;

@@ -953,6 +953,51 @@ CR_operator(CODEREP *cr)
    }
 }
 
+TY_IDX
+CODEREP::lod_addr_ty()
+{
+  switch (Kind()) {
+  case CK_IVAR:
+    return CR_ty(Ilod_base());
+  default:
+    return TY_IDX_ZERO;
+  }
+}
+
+TY_IDX
+CODEREP::object_ty()
+{
+  switch (Kind()) {
+    case CK_VAR:
+      if (Field_id() != 0) {
+          UINT cur_field_id = 0;
+          TY_IDX ty_idx = Lod_ty();
+          UINT field_id = Field_id();
+          FLD_HANDLE fld = FLD_get_to_field (ty_idx, field_id, cur_field_id);
+          Is_True (!fld.Is_Null(), ("Invalid field id %d for type 0x%x",
+                                     field_id, ty_idx));
+          return FLD_type(fld);
+      } else {
+        return Lod_ty();
+      }
+    case CK_IVAR:
+      if (I_field_id() != 0) {
+          UINT cur_field_id = 0;
+          TY_IDX ty_idx = Ilod_ty();
+          UINT field_id = I_field_id();
+          FLD_HANDLE fld = FLD_get_to_field (ty_idx, field_id, cur_field_id);
+          Is_True (!fld.Is_Null(), ("Invalid field id %d for type 0x%x",
+                                     field_id, ty_idx));
+          return FLD_type(fld);
+      } else {
+        return Ilod_ty();
+      }
+      
+    default:
+      return TY_IDX_ZERO;
+  }
+}
+
 static TY_IDX
 CR_ty(CODEREP *cr)
 {

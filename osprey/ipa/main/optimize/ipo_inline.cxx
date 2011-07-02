@@ -4643,7 +4643,8 @@ IPO_INLINE::Post_Process_Caller (IPO_INLINE_AUX& aux)
        WN_next (call) = NULL;
 
        // Check to see if "call" has a return value.
-       if (aux.rp.size () > 0 && WN_opcode (call) != OPC_VCALL) {
+       if (aux.rp.size () > 0 && WN_opcode (call) != OPC_VCALL &&
+           WN_opcode (call) != OPC_VICALL && WN_opcode (call) != OPC_VINTRINSIC_CALL) {
           // Place the call site in a block.
           LWN_Insert_Block_Before(aux.part_inl_leftover_call_site, NULL, call);
           WN_Set_Parent(call, aux.part_inl_leftover_call_site, Parent_Map, Current_Map_Tab);

@@ -2939,9 +2939,7 @@ DST_build(int num_copts, /* Number of options passed to fec(c) */
    comp_info = DST_get_command_line_options(num_copts, copts);
 #else
    comp_info = (char *)malloc(sizeof(char)*100);
-#ifdef PSC_TO_OPEN64
-   strcpy(comp_info, "openCC ");
-#endif
+   strcpy(comp_info, lang_cplus? "openCC ": "opencc ");
    if (INCLUDE_STAMP)
      strcat(comp_info, INCLUDE_STAMP);
 #endif

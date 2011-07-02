@@ -1646,9 +1646,51 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 	if (volt) 
 	  Set_TY_is_volatile(hi_ty_idx);
 #endif
-        wn = WN_Stid (desc, ST_ofst(st) + component_offset + lhs_preg_num, st,
-		      hi_ty_idx, rhs_wn, field_id);
-        WGEN_Stmt_Append(wn, Get_Srcpos());
+        // if return type is struct type, and the result is used in lhs,
+        // then the Mreturn temp variable is not needed, the address of lhs 
+        // should be passed as hidden parameter
+
+        // the same pattern match is used in different places
+        // to handle return struct value, init struct value and
+        // assign struct value from a function call, if anything
+        // changed in the pattern in future, we need to change all 
+        // these places, just look for return_val_transformed.
+        bool return_val_transformed =  false;
+        if (WN_operator(rhs_wn) == OPR_COMMA &&
+              WN_rtype(rhs_wn) == MTYPE_M) {
+           WN *block = WN_kid0(rhs_wn);
+           WN *ldidTemp = WN_kid1(rhs_wn);
+           if (WN_operator(ldidTemp) == OPR_LDID &&
+                 WN_operator(block) == OPR_BLOCK) {
+
+              // replace MSTID _temp_.Mreturn.1
+              // with    MSTID lhs
+              WN *stidTemp = WN_last(block);
+              if (WN_operator(stidTemp) == OPR_STID ) {
+                 // remove block from the rhs_wn
+                 WN_kid0(rhs_wn) = 0;
+                 WN_DELETE_Tree(rhs_wn);
+                 rhs_wn = block;
+
+                 WN *kid = WN_kid0(stidTemp);
+                 WN_kid0(stidTemp) = 0;
+                 WN_DELETE_FromBlock(block, stidTemp);
+
+                 WN *stid = WN_Stid (desc, 
+                       ST_ofst(st) + component_offset + lhs_preg_num,
+                       st, hi_ty_idx, kid, field_id);
+                 WN_INSERT_BlockLast(block, stid);
+                 WGEN_Stmt_Append(block, Get_Srcpos());
+                 wn = block;
+                 return_val_transformed = true;
+              }
+           }
+        }
+        if (!return_val_transformed) {
+           wn = WN_Stid (desc, ST_ofst(st) + component_offset + lhs_preg_num, st,
+		         hi_ty_idx, rhs_wn, field_id);
+           WGEN_Stmt_Append(wn, Get_Srcpos());
+        }
 #if defined(TARG_SL)
         if (need_append) {
           WN *ldid_wn;
@@ -1870,7 +1912,6 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         wn = NULL;
       }
       else {
-#ifdef KEY
 	// The store target could be an INDIRECT_REF that kg++fe added to make
 	// the store write to the area pointed to by the fake first param.  If
 	// so, check that copying the object does not involve a copy
@@ -1890,31 +1931,66 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         if (Current_Entry_WN() != NULL) {
             first_formal = WN_formal(Current_Entry_WN(), 0);
         }
-        if (TY_return_in_mem(hi_ty_idx) &&
-	    field_id == 0 &&
-	    // See if it is an indirect ref of the fake first parm.
-	    // bug fix for OSP_314
-	    //
-	    first_formal != NULL && (WN_operator(first_formal) != OPR_BLOCK) &&
-	    gs_tree_code(addr) == GS_VAR_DECL &&
-	    DECL_ST(addr) == WN_st(first_formal)) {
-	  FmtAssert(TY_mtype(hi_ty_idx) == MTYPE_M,
-		    ("WGEN_Lhs_Of_Modify_Expr: return_in_mem type not MTYPE_M"));
-	  gs_t ptr_type = gs_tree_type(gs_tree_operand(lhs, 0));
-	  gs_t type = gs_tree_type(ptr_type);
-	  FmtAssert(gs_tree_code(ptr_type) == GS_POINTER_TYPE,
-	    ("WGEN_Lhs_Of_Modify_Expr: INDIRECT_REF opnd0 is not POINTER_TYPE"));
-	  FmtAssert(component_offset == 0,
-		    ("WGEN_Lhs_Of_Modify_Expr: component_offset nonzero"));
-	  TY_IDX tidx = Get_TY(ptr_type);
-	  // Check object has no copy constructor.
-	  FmtAssert(!WGEN_has_copy_constructor(type),
-	      ("WGEN_Lhs_Of_Modify_Expr: object needs copy constructor"));
+        // if return type is struct type, and the result is used in lhs,
+        // then the Mreturn temp variable is not needed, the address of lhs 
+        // should be passed as hidden parameter
+        bool return_val_transformed = false;
+        if (WN_operator(rhs_wn) == OPR_COMMA &&
+              WN_rtype(rhs_wn) == MTYPE_M) {
+           WN *block = WN_kid0(rhs_wn);
+           WN *ldidTemp = WN_kid1(rhs_wn);
+           if (WN_operator(ldidTemp) == OPR_LDID &&
+                 WN_operator(block) == OPR_BLOCK) {
+
+              // replace MSTID _temp_.Mreturn.1
+              // with    MISTORE lhs
+              WN *stidTemp = WN_last(block);
+              if (WN_operator(stidTemp) == OPR_STID) {
+                 // remove block from the rhs_wn
+                 WN_kid0(rhs_wn) = 0;
+                 WN_DELETE_Tree(rhs_wn);
+                 rhs_wn = block;
+
+                 WN *kid = WN_kid0(stidTemp);
+                 WN_kid0(stidTemp) = 0;
+                 WN_DELETE_FromBlock(block, stidTemp);
+
+                 WN *istore = 
+                    WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
+			       Make_Pointer_Type (hi_ty_idx, FALSE),
+			       kid, addr_wn, field_id);
+                 WN_INSERT_BlockLast(block, istore);
+                 wn = block;
+                 return_val_transformed = true;
+              }
+           }
         }
-#endif
-        wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
-			     Make_Pointer_Type (hi_ty_idx, FALSE),
-			     rhs_wn, addr_wn, field_id);
+        if (!return_val_transformed) {
+          if (TY_return_in_mem(hi_ty_idx) &&
+	      field_id == 0 &&
+	      // See if it is an indirect ref of the fake first parm.
+	      // bug fix for OSP_314
+	      //
+	      first_formal != NULL && (WN_operator(first_formal) != OPR_BLOCK) &&
+	      gs_tree_code(addr) == GS_VAR_DECL &&
+	      DECL_ST(addr) == WN_st(first_formal)) {
+	    FmtAssert(TY_mtype(hi_ty_idx) == MTYPE_M,
+		      ("WGEN_Lhs_Of_Modify_Expr: return_in_mem type not MTYPE_M"));
+	    gs_t ptr_type = gs_tree_type(gs_tree_operand(lhs, 0));
+	    gs_t type = gs_tree_type(ptr_type);
+	    FmtAssert(gs_tree_code(ptr_type) == GS_POINTER_TYPE,
+	      ("WGEN_Lhs_Of_Modify_Expr: INDIRECT_REF opnd0 is not POINTER_TYPE"));
+	    FmtAssert(component_offset == 0,
+		      ("WGEN_Lhs_Of_Modify_Expr: component_offset nonzero"));
+	    TY_IDX tidx = Get_TY(ptr_type);
+	    // Check object has no copy constructor.
+	    FmtAssert(!WGEN_has_copy_constructor(type),
+	        ("WGEN_Lhs_Of_Modify_Expr: object needs copy constructor"));
+          }
+          wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
+			       Make_Pointer_Type (hi_ty_idx, FALSE),
+			       rhs_wn, addr_wn, field_id);
+        }
 #ifdef TARG_SL
         /* so far I only handle *p++=... cases, change this case to 
          *   *p = ... ;
@@ -10150,6 +10226,13 @@ WGEN_Expand_Expr (gs_t exp,
 	  else {
 	    enum X86_64_PARM_CLASS classes[MAX_CLASSES];
 	    INT n = Classify_Aggregate(ty_idx, classes);
+            // handle X87 X87UP and COMPLEX_X87 cases
+            if (n != 0 && (classes[0] == X86_64_X87_CLASS ||
+                           classes[0] == X86_64_X87UP_CLASS ||
+                           classes[0] == X86_64_COMPLEX_X87_CLASS)) {
+               // x87, x87up and complex_x87 are passed in memory
+               n = 0;
+            }
 	    if (n == 0) { /* can only pass in memory */
 	      /* increment overflow_arg_area pointer by 8 */
 	      INT delta = ((TY_size(ty_idx) + 7) / 8) * 8;

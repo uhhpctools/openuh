@@ -279,7 +279,4 @@ class COND_BOUNDS_INFO {
 extern BOOL Redundant_Condition(COND_BOUNDS_INFO* info, WN* wn_cond,
   WN* wn_if);
 
-#ifdef TARG_X8664
-extern BOOL Is_Vectorizable_Loop(WN* loop);
-#endif
 #endif

@@ -113,6 +113,8 @@ typedef WN * simpnode;
 #define SIMPNODE_st WN_st
 #define SIMPNODE_st_idx WN_st_idx
 #define SIMPNODE_ty WN_ty
+#define SIMPNODE_object_ty WN_object_ty
+#define SIMPNODE_load_addr_ty WN_load_addr_ty
 #define SIMPNODE_kid0 WN_kid0
 #define SIMPNODE_kid1 WN_kid1
 #define SIMPNODE_kid WN_kid
@@ -155,7 +157,7 @@ typedef WN * simpnode;
 #endif
 #define SIMPNODE_Simplify_Initialize WN_Simplify_Initialize
 #define SIMPNODE_Compare_Symbols WN_Compare_Symbols
-
+#define SIMPNODE_is_volatile WN_Is_Volatile_Mem
 /* externally visible routines. These three are defined in wn_simp_code.h. 
  * They need a name defined here and in whatever external interface file 
  * exists for the routine

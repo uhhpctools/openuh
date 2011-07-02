@@ -5630,12 +5630,19 @@ static void Expand_Complex_Multiply( OPCODE opcode, TN *result,
     TN* tmp5 = Build_TN_Like(src1);
     
     Build_OP(TOP_fmovsldup, tmp1, src2, ops);
-    Build_OP(TOP_fmul128v32, tmp2, tmp1, src1, ops);
-    Build_OP(TOP_fmovshdup,tmp3, src2, ops);
-    Build_OP(TOP_shufps, tmp4, src1, src1, Gen_Literal_TN(177, 1), ops);
-    Build_OP(TOP_fmul128v32, tmp5, tmp3, tmp4, ops);
-    Build_OP(TOP_faddsub128v32, result, tmp2, tmp5, ops);
-
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && Is_Target_FMA4()) {
+      Build_OP(TOP_fmovshdup,tmp3, src2, ops);
+      Build_OP(TOP_shufps, tmp4, src1, src1, Gen_Literal_TN(177, 1), ops);
+      Build_OP(TOP_fmul128v32, tmp5, tmp3, tmp4, ops);
+      Build_OP(TOP_vfmaddsubps, result, tmp1, src1, tmp5, ops);  
+    } else {
+      Build_OP(TOP_fmul128v32, tmp2, tmp1, src1, ops);
+      Build_OP(TOP_fmovshdup,tmp3, src2, ops);
+      Build_OP(TOP_shufps, tmp4, src1, src1, Gen_Literal_TN(177, 1), ops);
+      Build_OP(TOP_fmul128v32, tmp5, tmp3, tmp4, ops);
+      Build_OP(TOP_faddsub128v32, result, tmp2, tmp5, ops);
+    }
   } else if (TN_size(src1) != TN_size(src2)){
     TN* src1_t;
     TN* src2_t;
@@ -5669,12 +5676,21 @@ static void Expand_Complex_Multiply( OPCODE opcode, TN *result,
     TN* tmp6 = Build_TN_Like(src1);
     
     Build_OP(TOP_fmovddup, tmp1, src2_t, ops);
-    Build_OP(TOP_fmul128v64, tmp2, src1_t, tmp1, ops);
-    Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
-    Build_OP(TOP_shufpd, tmp4, src2_t, src2_t, Gen_Literal_TN(1, 1), ops);
-    Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
-    Build_OP(TOP_fmul128v64, tmp6, tmp3, tmp5, ops);
-    Build_OP(TOP_faddsub128v64, result, tmp2, tmp6, ops);
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && Is_Target_FMA4()) {
+      Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_shufpd, tmp4, src2_t, src2_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
+      Build_OP(TOP_fmul128v64, tmp6, tmp3, tmp5, ops);
+      Build_OP(TOP_vfmaddsubpd, result, src1_t, tmp1, tmp6, ops);  
+    } else {
+      Build_OP(TOP_fmul128v64, tmp2, src1_t, tmp1, ops);
+      Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_shufpd, tmp4, src2_t, src2_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
+      Build_OP(TOP_fmul128v64, tmp6, tmp3, tmp5, ops);
+      Build_OP(TOP_faddsub128v64, result, tmp2, tmp6, ops);
+    }
   }
   return;
 }
@@ -5720,12 +5736,21 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_addsd, tmp4, tmp3, tmp1, ops);
     Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
     Build_OP(TOP_fmovddup, tmp6, src2, ops);
-    Build_OP(TOP_fmul128v64, tmp8, tmp6, src1, ops);
-    Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
-    Expand_Neg(tmp12, tmp2, MTYPE_F8, ops);
-    Build_OP(TOP_fmovddup, tmp13, tmp12, ops);
-    Build_OP(TOP_fmul128v64, tmp10, tmp9, tmp13, ops);
-    Build_OP(TOP_faddsub128v64, tmp11, tmp8, tmp10, ops);
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && Is_Target_FMA4()) {
+      Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
+      Expand_Neg(tmp12, tmp2, MTYPE_F8, ops);
+      Build_OP(TOP_fmovddup, tmp13, tmp12, ops);
+      Build_OP(TOP_fmul128v64, tmp10, tmp9, tmp13, ops);
+      Build_OP(TOP_vfmaddsubpd, tmp11, tmp6, src1, tmp10, ops);  
+    } else {
+      Build_OP(TOP_fmul128v64, tmp8, tmp6, src1, ops);
+      Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
+      Expand_Neg(tmp12, tmp2, MTYPE_F8, ops);
+      Build_OP(TOP_fmovddup, tmp13, tmp12, ops);
+      Build_OP(TOP_fmul128v64, tmp10, tmp9, tmp13, ops);
+      Build_OP(TOP_faddsub128v64, tmp11, tmp8, tmp10, ops);
+    }
     Build_OP(TOP_fdiv128v64, result, tmp11, tmp5, ops);
 
   } else if (opcode == OPC_V16C8DIV) {
@@ -5792,11 +5817,19 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_unpckhpd, tmp5, tmp2, tmp2, ops);
     Build_OP(TOP_fmul128v64, tmp6, tmp5, tmp1, ops);
     Build_OP(TOP_shufpd, tmp7, tmp1, tmp1, Gen_Literal_TN(1, 1), ops);
-    Build_OP(TOP_fmul128v64, tmp8, tmp7, tmp4, ops);
-    Build_OP(TOP_fhadd128v64, tmp9, tmp3, tmp3, ops);
-    Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
-    Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
-    Build_OP(TOP_faddsub128v64, tmp12, tmp8, tmp6, ops);
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && Is_Target_FMA4()) {
+      Build_OP(TOP_fhadd128v64, tmp9, tmp3, tmp3, ops);
+      Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
+      Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
+      Build_OP(TOP_vfmaddsubpd, tmp12, tmp7, tmp4, tmp6, ops);
+    } else {
+      Build_OP(TOP_fmul128v64, tmp8, tmp7, tmp4, ops);
+      Build_OP(TOP_fhadd128v64, tmp9, tmp3, tmp3, ops);
+      Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
+      Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
+      Build_OP(TOP_faddsub128v64, tmp12, tmp8, tmp6, ops);
+    }
     Build_OP(TOP_shufpd, tmp13, tmp12, tmp12, Gen_Literal_TN(1, 1), ops);
     Build_OP(TOP_fdiv128v64, tmp14, tmp13, tmp9, ops);
     Build_OP(TOP_cvtpd2ps, tmp15, tmp14, ops);
@@ -5807,9 +5840,15 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_unpckhpd, tmp20, tmp17, tmp17, ops);
     Build_OP(TOP_fmul128v64, tmp21, tmp20, tmp11, ops);
     Build_OP(TOP_shufpd, tmp22, tmp11, tmp11, Gen_Literal_TN(1, 1), ops);
-    Build_OP(TOP_fmul128v64, tmp23, tmp22, tmp19, ops);
-    Build_OP(TOP_fhadd128v64, tmp24, tmp18, tmp18, ops);
-    Build_OP(TOP_faddsub128v64, tmp25, tmp23, tmp21, ops);
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && Is_Target_FMA4()) {
+      Build_OP(TOP_fhadd128v64, tmp24, tmp18, tmp18, ops);
+      Build_OP(TOP_vfmaddsubpd, tmp25, tmp22, tmp19, tmp21, ops);
+    } else {
+      Build_OP(TOP_fmul128v64, tmp23, tmp22, tmp19, ops);
+      Build_OP(TOP_fhadd128v64, tmp24, tmp18, tmp18, ops);
+      Build_OP(TOP_faddsub128v64, tmp25, tmp23, tmp21, ops);
+    }
     Build_OP(TOP_shufpd, tmp26, tmp25, tmp25, Gen_Literal_TN(1, 1), ops);
     Build_OP(TOP_fdiv128v64, tmp27, tmp26, tmp24, ops);
     Build_OP(TOP_cvtpd2ps, tmp28, tmp27, ops);
@@ -7245,9 +7284,15 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
       Build_OP(TOP_fmovddup, tmp1, op2, ops);
       Build_OP(TOP_shufpd, tmp2, op2, op2, Gen_Literal_TN(1, 1), ops);
       Build_OP(TOP_fmovddup, tmp3, tmp2, ops);
-      Build_OP(TOP_fmul128v64, tmp4, op0, tmp1, ops);
-      Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
-      Build_OP(TOP_faddsub128v64, result, tmp4, tmp5, ops);
+      if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+          Is_Target_AVX() && Is_Target_FMA4()) {
+        Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
+        Build_OP(TOP_vfmaddsubpd, result, op0, tmp1, tmp5, ops);
+      } else {
+        Build_OP(TOP_fmul128v64, tmp4, op0, tmp1, ops);
+        Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
+        Build_OP(TOP_faddsub128v64, result, tmp4, tmp5, ops);
+      }
       break;
     }
   case INTRN_V16C8CONJG:
@@ -7505,6 +7550,24 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     op1 = Gen_Literal_TN (3, 4);
     Build_OP( TOP_pextrw, result, op0, op1, ops );
     break;
+  case INTRN_PEXTRB:
+    Build_OP( TOP_extr128v8, result, op0, op1, ops);
+    break;
+  case INTRN_PEXTRW:
+    Build_OP( TOP_extr128v16, result, op0, op1, ops);
+    break;
+  case INTRN_PEXTRD:
+    Build_OP( TOP_extr128v32, result, op0, op1, ops);
+    break;
+  case INTRN_PEXTRQ:
+    Build_OP( TOP_extr128v64, result, op0, op1, ops);
+    break;
+  case INTRN_EXTRPS:
+    Build_OP( TOP_fextr128v32, result, op0, op1, ops);
+    break;
+  case INTRN_EXTRPD:
+    FmtAssert(FALSE, ("TODO: support fextr128v64"));
+    break;
   case INTRN_PINSRW0:
     Is_True (op2 == NULL, ("Imm operand should be null"));
     op2 = Gen_Literal_TN (0, 4);
@@ -7524,6 +7587,24 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Is_True (op2 == NULL, ("Imm operand should be null"));
     op2 = Gen_Literal_TN (3, 4);
     Build_OP( TOP_pinsrw, result, op1, op2, ops );
+    break;
+  case INTRN_PINSRB:
+    Build_OP( TOP_insr128v8, result, op0, op1, op2, ops);
+    break;
+  case INTRN_PINSRW:
+    Build_OP( TOP_insr128v16, result, op0, op1, op2, ops);
+    break;
+  case INTRN_PINSRD:
+    Build_OP( TOP_insr128v32, result, op0, op1, op2, ops);
+    break;
+  case INTRN_PINSRQ:
+    Build_OP( TOP_insr128v64, result, op0, op1, op2, ops);
+    break;
+  case INTRN_INSRPS:
+    Build_OP( TOP_finsr128v32, result, op0, op1, op2, ops);
+    break;
+  case INTRN_INSRPD:
+    FmtAssert(FALSE, ("TODO: support finsr128v64"));
     break;
   case INTRN_PMOVMSKB:
     Build_OP( TOP_pmovmskb, result, op0, ops );
@@ -7988,7 +8069,13 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP( TOP_ldsd, result, op1, Gen_Literal_TN (0,4), ops );
     break;
   case INTRN_LOADHPD:
-    Build_OP( TOP_ldhpd, result, op1, Gen_Literal_TN (0,4), ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()){
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_ldhpd, result, xzero, op1, Gen_Literal_TN (0,4), ops );
+    } else {
+      Build_OP( TOP_ldhpd, result, op1, Gen_Literal_TN (0,4), ops );
+    }
     break;
   case INTRN_UNPCKLPD:
     Build_OP( TOP_unpcklpd, result, op0, op1, ops );
@@ -8109,7 +8196,13 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
       Build_OP( TOP_movx2g, tmp0, op0, ops );
       op0 = tmp0;
     }
-    Build_OP( TOP_cvtsi2ss, result, op0, ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_cvtsi2ss, result, xzero, op0, ops );
+    } else {
+      Build_OP( TOP_cvtsi2ss, result, op0, ops );
+    }
     break;
   case INTRN_CVTSI642SS:
     if (TN_register_class(op0) != ISA_REGISTER_CLASS_integer) {
@@ -8117,7 +8210,13 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
       Build_OP( TOP_movx2g64, tmp0, op0, ops );
       op0 = tmp0;
     }
-    Build_OP( TOP_cvtsi2ssq, result, op0, ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_cvtsi2ssq, result, xzero, op0, ops );
+    } else {
+      Build_OP( TOP_cvtsi2ssq, result, op0, ops );
+    }
     break;
   case INTRN_CVTSS2SI:
     Build_OP( TOP_cvtss2si, result, op0, ops );
@@ -8196,10 +8295,22 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP( TOP_cvtps2pd, result, op0, ops );
     break;
   case INTRN_CVTSD2SS:
-    Build_OP( TOP_cvtsd2ss, result, op0, ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_cvtsd2ss, result, xzero, op0, ops );
+    } else {
+      Build_OP( TOP_cvtsd2ss, result, op0, ops );
+    }
     break;
   case INTRN_CVTSS2SD:
-    Build_OP( TOP_cvtss2sd, result, op0, ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_cvtss2sd, result, xzero, op0, ops );
+    } else {
+      Build_OP( TOP_cvtss2sd, result, op0, ops );
+    }
     break;
   case INTRN_LOADUPS:
     Build_OP( TOP_ldups, result, op0, Gen_Literal_TN (0,4), ops );
@@ -8208,10 +8319,22 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP( TOP_ldupd, result, op0, Gen_Literal_TN (0,4), ops );
     break;
   case INTRN_LOADHPS:
-    Build_OP( TOP_ldhps, result, op1, Gen_Literal_TN (0,4), ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()){
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_ldhps, result, xzero, op1, Gen_Literal_TN (0,4), ops );
+    } else {
+      Build_OP( TOP_ldhps, result, op1, Gen_Literal_TN (0,4), ops );
+    }
     break;
   case INTRN_LOADLPS:
-    Build_OP( TOP_ldlps, result, op1, Gen_Literal_TN (0,4), ops );
+    if (Is_Target_Orochi() && Is_Target_AVX()){
+      TN *xzero = Build_TN_Like(result);
+      Build_OP( TOP_xzero128v32, xzero, ops );
+      Build_OP( TOP_ldlps, result, xzero, op1, Gen_Literal_TN (0,4), ops );
+    } else {
+      Build_OP( TOP_ldlps, result, op1, Gen_Literal_TN (0,4), ops );
+    }
     break;
   case INTRN_MOVMSKPS:
     Build_OP( TOP_movmskps, result, op0, ops );
@@ -8491,10 +8614,10 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP(TOP_vfcmp128v32, result, op0, op1, op2, ops );
     break;
    case INTRN_CMPSD:
-    Build_OP(TOP_vfcmpsd, result, op0, op1, op2, ops );
+    Build_OP(TOP_vcmpsd, result, op0, op1, op2, ops );
     break;
    case INTRN_CMPSS:
-    Build_OP(TOP_vfcmpss, result, op0, op1, op2, ops );
+    Build_OP(TOP_vcmpss, result, op0, op1, op2, ops );
     break;
    case INTRN_CVTDQ2PD256:
     Build_OP(TOP_vcvtdq2pd, result, op0, ops );
@@ -9906,8 +10029,11 @@ void Exp_Simulated_Op(const OP *op, OPS *ops, INT pc_value)
       Build_OP(TOP_andi64, rax_tn, rax_tn, Gen_Literal_TN(0xff,4), ops);
       INT64 num_xmms = TN_value(OP_opnd(op, 1));
       TN *r11_tn = Build_Dedicated_TN(ISA_REGISTER_CLASS_integer, R11, 8);
-      if (Is_Target_Orochi() && Is_Target_AVX()) {
-        Build_OP(TOP_vzeroupper, ops );
+      if ( Is_Target_Orochi() && Is_Target_AVX() ) {
+        // guard the addition of this insn by flag
+        if (CG_NoClear_Avx_Simd == false)
+          Build_OP(TOP_vzeroupper, ops );
+
         Build_OP(TOP_leaxx64, r11_tn, rax_tn, Gen_Literal_TN(8, 4), 
 	         Gen_Literal_TN(4*(num_xmms-8), 4), ops);
       } else {

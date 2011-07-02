@@ -506,7 +506,6 @@ typedef struct ti_res_count TI_RES_COUNT;
 
 extern BOOL Is_Bad_Array(WN* wn_ref, INT nloops); 
 #ifdef TARG_X8664
-extern BOOL Is_Vectorizable_Loop(WN* loop);
 extern BOOL Is_Vectorization_Beneficial(WN* loop);
 
 // bug 5880
@@ -610,6 +609,11 @@ class LOOP_MODEL {
   enum MODEL_LIMIT {MODEL_LIMIT_UNSET, MODEL_LIMIT_IDEAL, MODEL_LIMIT_RES,
 			MODEL_LIMIT_LAT};
   MODEL_LIMIT _model_limit;
+
+  // Try to move the vectorizable outer loop into the innermost position
+  //
+  void Shift_Vectorizable_Innermost (void);
+
 public:
   friend class REGISTER_MODEL;
   INT Num_Fp_Regs() const {return _num_fp_regs;}

@@ -909,4 +909,9 @@ extern WN *Simple_Invariant_Stride_Access(WN *array, WN *loop, BOOL ck_induc_bas
                                   BOOL *inductive_use, BOOL *indirect_use);
 #endif
 
+#ifdef TARG_X8664
+extern BOOL Is_Vectorizable_Inner_Loop(WN* loop);
+extern BOOL Is_Vectorizable_Outer_Loop(WN* loop);
+#endif
+
 #endif // LNOUTILS_DECLARE

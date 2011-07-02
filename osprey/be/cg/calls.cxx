@@ -2069,6 +2069,9 @@ Init_Entry_Exit_Code (WN *pu_wn)
 
 void Generate_Entry_Merge_Clear(BOOL is_region)
 {
+  if (CG_NoClear_Avx_Simd) 
+    return;
+
   // If we have avx128 bit instructions, at the entry block, add a 
   // vzeroupper insn to clear the upper 128bits and
   // avoid merge dependencies on the machine.  Otherwise we would have

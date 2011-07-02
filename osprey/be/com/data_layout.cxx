@@ -2588,6 +2588,14 @@ INT64 Finalize_Stack_Frame (void)
   Set_Error_Phase("Data Layout");
   Clear_Vararg_Symbols();
 
+  if (Debug_Level > 0) {
+      FOREACH_SYMBOL (CURRENT_SYMTAB, st, i) {
+          if (ST_class(st) == CLASS_VAR) {
+              Allocate_Object(st);
+          }
+      }
+  }
+
   For_all (Inito_Table, CURRENT_SYMTAB, finalize_inito());
 
   /* if nested pu, then may not see reference in this pu, 
@@ -3370,7 +3378,7 @@ Allocate_Object ( ST *st )
       return;
   }
 
-  if (ST_is_not_used(st)) return;
+  if (ST_is_not_used(st)&& Debug_Level <= 0) return;
 
   if (ST_has_named_section(st)) {
     // bug fix for OSP_138

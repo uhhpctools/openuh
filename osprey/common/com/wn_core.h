@@ -1366,27 +1366,6 @@ inline INT64 WN_Get_Linenum(const WN *wn)
 
 
 /*REFERENCED*/
-inline BOOL WN_Is_Volatile_Mem(const WN *wn)
-{
-  OPCODE opc = WN_opcode(wn);
-  if (OPCODE_has_1ty(opc) || OPCODE_has_2ty(opc)) {
-    if (OPCODE_operator(opc) == OPR_ISTORE ||
-	OPCODE_operator(opc) == OPR_MSTORE) {
-      TY_IDX pointed = TY_pointed (Ty_Table[WN_ty (wn)]);
-      DevAssert(pointed, ("TY_pointed of ISTORE/MSTORE type is NULL"));
-      return TY_is_volatile(pointed);
-    } else {
-      return TY_is_volatile(WN_ty(wn)) ||
-#ifdef KEY	// bug 12404
-	OPCODE_has_2ty(opc) && TY_is_volatile(TY_pointed(WN_load_addr_ty(wn)));
-#else
-	OPCODE_has_2ty(opc) && TY_is_volatile(WN_load_addr_ty(wn));
-#endif
-    }
-  }
-  return FALSE;
-}
-
 
 #define WN_IF_IS_GUARD 0x1
 #define WN_Is_If_Guard(x)	(WN_if_flag(x) & WN_IF_IS_GUARD)	

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -3179,12 +3179,22 @@ run_ld (void)
 #ifdef KEY
 	// Pass "-m elf_i386" and "-m elf_x86_64" to linker.  Bug 8441.
 	if (option_was_seen(O_melf_i386)) {
-	    add_string(args, "-m elf_i386");
+	    add_string(args, "-m");
+	    add_string(args, "elf_i386");
 	}
 	if (option_was_seen(O_melf_x86_64)) {
-	    add_string(args, "-m elf_x86_64");
+	    add_string(args, "-m");
+	    add_string(args, "elf_x86_64");
 	}
 #endif
+
+#ifdef BUILD_SKIP_IPA
+        if (ipa == TRUE) {
+            error("IPA support is not enabled in this compiler.");
+            return;
+        }
+#endif
+
 	if (ipa == TRUE) {
 	    char *str;
 	    ldpath = get_phase_dir (ldphase);

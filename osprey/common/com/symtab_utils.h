@@ -201,6 +201,9 @@ TY_is_unique (TY_IDX);
 /* ty either is union or has union in one of its fields (called recursively) */
 BOOL TY_has_union (TY_IDX ty);
 
+/* ty is an aggregate type that has some member of volatile type */
+BOOL TY_has_volatile (TY_IDX ty);
+
 #ifdef TARG_NVISA
 /* base ty (field ty) of vector */
 inline TY_IDX

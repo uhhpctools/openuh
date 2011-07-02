@@ -268,6 +268,17 @@ Compute_Return_Regs (ST *call_st, TY_IDX call_ty, REGSET return_regs)
 	retpreg[i] = RETURN_INFO_preg (return_info, i);
 	Add_PREG_To_REGSET (retpreg[i], return_regs);
     }
+#ifdef TARG_X8664
+    // x86-64 ABI
+    // on return %rax will contain the address that has been
+    // passed in by the caller in %rdi
+    // for 32 bit, the return address is in %eax
+    if (RETURN_INFO_return_via_first_arg(return_info)) {
+       FmtAssert (RETURN_INFO_count(return_info) == 0,
+             ("Compute_Return_Regs:  more return registers than can handle"));
+       Add_PREG_To_REGSET (First_Int_Preg_Return_Offset, return_regs);
+    }
+#endif
 #if defined(TARG_SL)
     if (MTYPE_byte_size(TY_mtype(TY_ret_type(call_ty))) == 8) { //I8/U8/F8
       FmtAssert (RETURN_INFO_count(return_info) <= 1, 

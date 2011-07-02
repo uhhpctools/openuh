@@ -727,6 +727,8 @@ extern BOOL OP_use_return_value(OP*);
 #define OP_memory(o)		(OP_load(o) | OP_store(o) | OP_prefetch(o))
 #define OP_mcode(o)             (TOP_is_mcode(OP_code(o)))
 #define OP_is4(o)               (TOP_is_is4_reg(OP_code(o)))
+#define OP_vec_lo_ldst(o)       (TOP_is_vector_lo_loadstore(OP_code(o)))
+#define OP_vec_hi_ldst(o)       (TOP_is_vector_high_loadstore(OP_code(o)))
 #else
 #define OP_memory(o)		(OP_load(o) | OP_store(o) | OP_prefetch(o))
 #endif

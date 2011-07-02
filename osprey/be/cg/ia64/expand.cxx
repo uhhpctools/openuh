@@ -1419,6 +1419,14 @@ Expand_Binary_And (TN *dest, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops)
 }
 
 void
+Expand_Binary_Nand (TN *dest, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops)
+{
+  TN *tmp = Build_TN_Like(dest);
+  Expand_Binary_And_Or (TOP_and, tmp, src1, src2, mtype, ops);
+  Expand_Binary_And_Or (TOP_xor, dest, tmp, Gen_Literal_TN(1, 4), mtype, ops);
+}
+
+void
 Expand_Binary_Or (TN *dest, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops)
 {
         Expand_Binary_And_Or (TOP_or, dest, src1, src2, mtype, ops);
@@ -3395,6 +3403,7 @@ static TYPE_ID
 Get_Intrinsic_Size_Mtype (INTRINSIC id)
 {
   switch (id) {
+  case INTRN_BOOL_COMPARE_AND_SWAP_I4:
   case INTRN_COMPARE_AND_SWAP_I4:
   case INTRN_LOCK_TEST_AND_SET_I4:
   case INTRN_LOCK_RELEASE_I4:
@@ -3411,6 +3420,7 @@ Get_Intrinsic_Size_Mtype (INTRINSIC id)
   case INTRN_FETCH_AND_AND_I4:
   case INTRN_FETCH_AND_NAND_I4:
 	return MTYPE_I4;
+  case INTRN_BOOL_COMPARE_AND_SWAP_I8:
   case INTRN_COMPARE_AND_SWAP_I8:
   case INTRN_LOCK_TEST_AND_SET_I8:
   case INTRN_LOCK_RELEASE_I8:
@@ -3475,160 +3485,163 @@ Exp_Intrinsic_Call (INTRINSIC id, TN *op0, TN *op1, TN *op2, OPS *ops,
 
   // expand these at cgexp time to avoid bundling issues 
   // when handling simulated ops in cgemit.
-  switch (id) {
-  case INTRN_COMPARE_AND_SWAP_I4:
-  case INTRN_COMPARE_AND_SWAP_I8:
-	// 
-	// compare_and_swap (type* ptr, type oldvalue, type newvalue)
-	//	if (*ptr != oldvalue) return 0;
-	//	else {
-	//		*ptr = newvalue;
-	//		return 1;
-	//	}
-	// where op0 == ptr, op1 == oldvalue, op2 == newvalue
-  	result = Build_TN_Of_Mtype (MTYPE_I8);
-  	ar_ccv = Build_Dedicated_TN ( ISA_REGISTER_CLASS_application,
-				     (REGISTER)(REGISTER_MIN + 32),
-				     8);
-	Build_OP (TOP_mov_t_ar_r, ar_ccv, True_TN, op1, ops);
-    	Build_OP (TOP_mf, True_TN, ops);	// memory fence
-	if (size_mtype == MTYPE_I4)
-		top = TOP_cmpxchg4;
-	else
-		top = TOP_cmpxchg8;
-	Build_OP (top, result, True_TN, Gen_Enum_TN(ECV_sem_rel), 
-		  Gen_Enum_TN(ECV_ldhint_nta), op0, op2, ops);
-  	p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
-  	p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
-	Build_OP (TOP_cmp_eq, p1, p2, True_TN, result, op1, ops);
-	Build_OP (TOP_mov_i, result, p1, Gen_Literal_TN(1, 4), ops);
-  	Build_OP (TOP_mov, result, p2, Zero_TN, ops);
-	break;
 
-  case INTRN_LOCK_TEST_AND_SET_I4:
-  case INTRN_LOCK_TEST_AND_SET_I8:
-	// type __lock_test_and_set (type* ptr, type value, ...)
-	// atomically store the supplied value in *ptr 
-	// and return the old value of *ptr
-	// i.e. { tmp = *ptr; *ptr = value; return tmp; }
-	// op0 == ptr, op1 == value
-	if (size_mtype == MTYPE_I4)
-		top = TOP_xchg4;
-	else
-		top = TOP_xchg8;
-  	result = Build_TN_Of_Mtype (MTYPE_I8);
-	Build_OP (top, result, True_TN, Gen_Enum_TN(ECV_ldhint_nta),
-		  op0, op1, ops);
-	break;
-
-  case INTRN_LOCK_RELEASE_I4:
-  case INTRN_LOCK_RELEASE_I8:
-    	//  "void __lock_release (type* ptr, ...)"
-    	// Set *ptr to 0.  (i.e.) { *ptr = 0 }
-    	// op0 == ptr
-	if (size_mtype == MTYPE_I4)
-		top = TOP_st4;
-    	else
-		top = TOP_st8;
-    	Build_OP (top, True_TN,
-	      Gen_Enum_TN(ECV_sttype_rel), 
-	      Gen_Enum_TN(ECV_sthint_nta),
-	      op0, Zero_TN, ops);
-    	break;
-
-  case INTRN_SYNCHRONIZE:
-    Build_OP (TOP_mf, True_TN, ops);	// memory fence
-    break;
-
-  case INTRN_FETCH_AND_ADD_I4:
-  case INTRN_FETCH_AND_ADD_I8:
-	// fetch_and_add (type *ptr, type value, ...)
-	// tmp = *ptr; *ptr += value; return tmp;
-	// op0 = ptr, op1 = value
-	// fetchadd inst only takes +/- 1,4,8,16
-  	if (TN_is_constant(op1) && TN_has_value(op1)
-		&& ISA_LC_Value_In_Class ( TN_value(op1), LC_fetchadd) ) 
-	{
-		Build_OP (TOP_mf, True_TN, ops);	// memory fence
-		if (size_mtype == MTYPE_I4)
-			top = TOP_fetchadd4;
-		else
-			top = TOP_fetchadd8;
-  		result = Build_TN_Of_Mtype (MTYPE_I8);
-		Build_OP (top, result, True_TN,
-			Gen_Enum_TN(ECV_sem_rel), 
-			Gen_Enum_TN(ECV_ldhint), 
-			op0, op1, ops);
-		break;
-	}
-	/* fallthru */
-  case INTRN_ADD_AND_FETCH_I4:
-  case INTRN_ADD_AND_FETCH_I8:
-    {
-	// tmp == new *ptr, result == old *ptr
-  	TN *orig_value = Build_TN_Of_Mtype (size_mtype);
-  	TN *old_value = Build_TN_Of_Mtype (size_mtype);
-  	TN *new_value = Build_TN_Of_Mtype (size_mtype);
-	if (Intrinsic_Returns_New_Value(id))
-		result = new_value;
-	else 
-		result = old_value;
-	// immed doesn't fit, so do loop case
-        Expand_Load (
-                // load is of address, not of result type
-                OPCODE_make_op(OPR_LDID, Pointer_Mtype, Pointer_Mtype),
-                orig_value, op0, Gen_Literal_TN (0, 4), V_NONE, ops);
-
-	*label = Gen_Temp_Label();
-	Expand_Add (new_value, orig_value, op1, size_mtype, loop_ops);
-  	ar_ccv = Build_Dedicated_TN ( ISA_REGISTER_CLASS_application,
-				     (REGISTER)(REGISTER_MIN + 32),
-				     8);
-	Build_OP (TOP_mov_t_ar_r, ar_ccv, True_TN, orig_value, loop_ops);
-    	Build_OP (TOP_mf, True_TN, loop_ops);	// memory fence
-	if (size_mtype == MTYPE_I4)
-		top = TOP_cmpxchg4;
-	else
-		top = TOP_cmpxchg8;
-	Build_OP (top, old_value, True_TN, Gen_Enum_TN(ECV_sem_rel), 
-		  Gen_Enum_TN(ECV_ldhint), op0, new_value, loop_ops);
-  	p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
-  	p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
-	Build_OP (TOP_cmp_eq, p1, p2, True_TN, old_value, orig_value, loop_ops);
-	Build_OP (TOP_mov, orig_value, p2, old_value, loop_ops);
-        Build_OP (TOP_br_cond, p2, 
-                  Gen_Enum_TN(ECV_bwh_dptk),
-                  Gen_Enum_TN(ECV_ph_few),
-                  Gen_Enum_TN(ECV_dh),
-                  Gen_Label_TN(*label,0), loop_ops);
-	break;
-    }
-  case INTRN_FETCH_AND_SUB_I4:
-  case INTRN_FETCH_AND_SUB_I8:
-  case INTRN_SUB_AND_FETCH_I4:
-  case INTRN_OR_AND_FETCH_I4:
-  case INTRN_XOR_AND_FETCH_I4:
-  case INTRN_AND_AND_FETCH_I4:
-  case INTRN_NAND_AND_FETCH_I4:
-  case INTRN_FETCH_AND_OR_I4:
-  case INTRN_FETCH_AND_XOR_I4:
-  case INTRN_FETCH_AND_AND_I4:
-  case INTRN_FETCH_AND_NAND_I4:
-  case INTRN_SUB_AND_FETCH_I8:
-  case INTRN_OR_AND_FETCH_I8:
-  case INTRN_XOR_AND_FETCH_I8:
-  case INTRN_AND_AND_FETCH_I8:
-  case INTRN_NAND_AND_FETCH_I8:
-  case INTRN_FETCH_AND_OR_I8:
-  case INTRN_FETCH_AND_XOR_I8:
-  case INTRN_FETCH_AND_AND_I8:
-  case INTRN_FETCH_AND_NAND_I8:
-  default:
-    #pragma mips_frequency_hint NEVER
-    FmtAssert (FALSE, ("WHIRL_To_OPs: illegal intrinsic call"));
-    /*NOTREACHED*/
+  if (id == INTRN_BOOL_COMPARE_AND_SWAP_I4 || id == INTRN_BOOL_COMPARE_AND_SWAP_I8 ||
+      id == INTRN_COMPARE_AND_SWAP_I4      || id == INTRN_COMPARE_AND_SWAP_I8) {
+    //
+    // compare_and_swap (type* ptr, type oldvalue, type newvalue)
+    //      if (*ptr != oldvalue) return 0;
+    //      else {
+    //              *ptr = newvalue;
+    //              return 1;
+    //      }
+    // where op0 == ptr, op1 == oldvalue, op2 == newvalue
+    result = Build_TN_Of_Mtype (MTYPE_I8);
+    ar_ccv = Build_Dedicated_TN ( ISA_REGISTER_CLASS_application,
+                                 (REGISTER)(REGISTER_MIN + 32),
+                                 8);
+    Build_OP (TOP_mov_t_ar_r, ar_ccv, True_TN, op1, ops);
+    Build_OP (TOP_mf, True_TN, ops);        // memory fence
+    if (size_mtype == MTYPE_I4)
+      top = TOP_cmpxchg4;
+    else
+      top = TOP_cmpxchg8;
+    Build_OP (top, result, True_TN, Gen_Enum_TN(ECV_sem_rel),
+              Gen_Enum_TN(ECV_ldhint_nta), op0, op2, ops);
+    p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+    p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+    Build_OP (TOP_cmp_eq, p1, p2, True_TN, result, op1, ops);
+    Build_OP (TOP_mov_i, result, p1, Gen_Literal_TN(1, 4), ops);
+    Build_OP (TOP_mov, result, p2, Zero_TN, ops);  
+    return result;
   }
-  return result;
+
+  else if (id == INTRN_LOCK_TEST_AND_SET_I4 || id == INTRN_LOCK_TEST_AND_SET_I8) {
+    // type __lock_test_and_set (type* ptr, type value, ...)
+    // atomically store the supplied value in *ptr
+    // and return the old value of *ptr
+    // i.e. { tmp = *ptr; *ptr = value; return tmp; }
+    // op0 == ptr, op1 == value
+    if (size_mtype == MTYPE_I4)
+      top = TOP_xchg4;
+    else
+      top = TOP_xchg8;
+    result = Build_TN_Of_Mtype (MTYPE_I8);
+    Build_OP (top, result, True_TN, Gen_Enum_TN(ECV_ldhint_nta),
+              op0, op1, ops);
+    return result;
+  }
+
+  else if (id == INTRN_LOCK_RELEASE_I4 || id == INTRN_LOCK_RELEASE_I8) {
+    //  "void __lock_release (type* ptr, ...)"
+    // Set *ptr to 0.  (i.e.) { *ptr = 0 }
+    // op0 == ptr
+    if (size_mtype == MTYPE_I4)
+      top = TOP_st4;
+    else
+      top = TOP_st8;
+    Build_OP (top, True_TN,
+              Gen_Enum_TN(ECV_sttype_rel),
+              Gen_Enum_TN(ECV_sthint_nta),
+              op0, Zero_TN, ops);  
+    return result;
+  }
+
+  else if (id == INTRN_SYNCHRONIZE) {
+    Build_OP (TOP_mf, True_TN, ops);    // memory fence
+    return result;
+  }
+  
+  // fetch_and_add (type *ptr, type value, ...)
+  // tmp = *ptr; *ptr += value; return tmp;
+  // op0 = ptr, op1 = value
+  // fetchadd inst only takes +/- 1,4,8,16
+  else if((id == INTRN_FETCH_AND_ADD_I4 || id == INTRN_FETCH_AND_ADD_I8) &&
+          (TN_is_constant(op1) && (TN_value(op1) == 1 || TN_value(op1) == -1 ||
+           TN_value(op1) == 4 || TN_value(op1) == -4 || TN_value(op1) == 8 ||
+           TN_value(op1) == -8 || TN_value(op1) == 16 || TN_value(op1) == -16 ))){
+    Build_OP (TOP_mf, True_TN, ops);        // memory fence
+    if (size_mtype == MTYPE_I4)
+      top = TOP_fetchadd4;
+    else
+      top = TOP_fetchadd8;
+    result = Build_TN_Of_Mtype (MTYPE_I8);
+    Build_OP (top, result, True_TN,
+              Gen_Enum_TN(ECV_sem_rel),
+              Gen_Enum_TN(ECV_ldhint),
+              op0, op1, ops);
+    return result;
+  }
+
+  else {
+    // tmp == new *ptr, result == old *ptr
+    TN *orig_value = Build_TN_Of_Mtype (size_mtype);
+    TN *old_value = Build_TN_Of_Mtype (size_mtype);
+    TN *new_value = Build_TN_Of_Mtype (size_mtype); 
+    // immed doesn't fit, so do loop case
+    Expand_Load (
+            // load is of address, not of result type
+            OPCODE_make_op(OPR_LDID, Pointer_Mtype, Pointer_Mtype),
+            orig_value, op0, Gen_Literal_TN (0, 4), V_NONE, ops);
+
+    *label = Gen_Temp_Label();
+    if(id == INTRN_FETCH_AND_ADD_I4 || id == INTRN_FETCH_AND_ADD_I8 ||
+       id == INTRN_ADD_AND_FETCH_I4 || id == INTRN_ADD_AND_FETCH_I8){
+      Expand_Add (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else if(id == INTRN_FETCH_AND_SUB_I4 || id == INTRN_FETCH_AND_SUB_I8 ||
+            id == INTRN_SUB_AND_FETCH_I4 || id == INTRN_SUB_AND_FETCH_I8){
+      Expand_Sub (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else if(id == INTRN_FETCH_AND_OR_I4 || id == INTRN_FETCH_AND_OR_I8 ||
+            id == INTRN_OR_AND_FETCH_I4 || id == INTRN_OR_AND_FETCH_I8){
+      Expand_Binary_Or (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else if(id == INTRN_FETCH_AND_AND_I4 || id == INTRN_FETCH_AND_AND_I8 ||
+            id == INTRN_AND_AND_FETCH_I4 || id == INTRN_AND_AND_FETCH_I8){
+      Expand_Binary_And (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else if(id == INTRN_FETCH_AND_XOR_I4 || id == INTRN_FETCH_AND_XOR_I8 ||
+            id == INTRN_XOR_AND_FETCH_I4 || id == INTRN_XOR_AND_FETCH_I8){
+      Expand_Binary_Xor (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else if(id == INTRN_FETCH_AND_NAND_I4 || id == INTRN_FETCH_AND_NAND_I8 ||
+            id == INTRN_NAND_AND_FETCH_I4 || id == INTRN_NAND_AND_FETCH_I8){
+      Expand_Binary_Nand (new_value, orig_value, op1, size_mtype, loop_ops);
+    }
+    else{
+      #pragma mips_frequency_hint NEVER
+      FmtAssert (FALSE, ("WHIRL_To_OPs: illegal intrinsic call"));
+    }
+    ar_ccv = Build_Dedicated_TN ( ISA_REGISTER_CLASS_application,
+                                 (REGISTER)(REGISTER_MIN + 32),
+                                 8);
+    Build_OP (TOP_mov_t_ar_r, ar_ccv, True_TN, orig_value, loop_ops);
+    Build_OP (TOP_mf, True_TN, loop_ops);   // memory fence
+    if (size_mtype == MTYPE_I4)
+      top = TOP_cmpxchg4;
+    else
+      top = TOP_cmpxchg8;
+    Build_OP (top, old_value, True_TN, Gen_Enum_TN(ECV_sem_rel),
+              Gen_Enum_TN(ECV_ldhint), op0, new_value, loop_ops);
+    p1 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+    p2 = Build_RCLASS_TN (ISA_REGISTER_CLASS_predicate);
+    Build_OP (TOP_cmp_eq, p1, p2, True_TN, old_value, orig_value, loop_ops);
+    if (Intrinsic_Returns_New_Value(id)){
+      Build_OP (TOP_mov, orig_value, p2, new_value, loop_ops);
+      result = new_value;
+    }
+    else {
+      Build_OP (TOP_mov, orig_value, p2, old_value, loop_ops);
+      result = old_value;
+    }
+    Build_OP (TOP_br_cond, p2,
+              Gen_Enum_TN(ECV_bwh_dptk),
+              Gen_Enum_TN(ECV_ph_few),
+              Gen_Enum_TN(ECV_dh),
+              Gen_Label_TN(*label,0), loop_ops);
+    return result;
+  }
 }
 
 

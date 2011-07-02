@@ -1412,11 +1412,6 @@ int main()
                            TOP_fblend128v64,
                            TOP_fdp128v32,
                            TOP_fdp128v64,
-                           TOP_extr128v8,
-                           TOP_extr128v16,
-                           TOP_extr128v32,
-                           TOP_extr128v64,
-                           TOP_fextr128v32,
                            TOP_insr128v8,
                            TOP_insr128v16,
                            TOP_insr128v32,
@@ -1598,6 +1593,12 @@ int main()
   Operand(0);
   Result(0);
   Instruction_Print_Group( vropop,
+                           /* SSE 4.1 instruction */
+                           TOP_extr128v8,
+                           TOP_extr128v16,
+                           TOP_extr128v32,
+                           TOP_extr128v64,
+                           TOP_fextr128v32,
                            /* AES instruction */
                            TOP_aeskeygenassist,
                            /* XOP instruction */
@@ -1662,6 +1663,8 @@ int main()
                            TOP_vcvtsi2sdq,
                            TOP_vcvtsi2ss,
                            TOP_vcvtsi2ssq,
+                           TOP_vcvtsd2ss,
+                           TOP_vcvtss2sd,
                            TOP_vfdiv128v64,
                            TOP_vfdiv128v32,
                            TOP_vdivsd,
@@ -1796,6 +1799,38 @@ int main()
                            TOP_vaesdec,
                            TOP_vaesdeclast,
                            TOP_vaeskeygenassist,
+                           TOP_vcmpeqpd,
+                           TOP_vcmpltpd,
+                           TOP_vcmplepd,
+                           TOP_vcmpunordpd,
+                           TOP_vcmpneqpd,
+                           TOP_vcmpnltpd,
+                           TOP_vcmpnlepd,
+                           TOP_vcmpordpd,
+                           TOP_vcmpeqps,
+                           TOP_vcmpltps,
+                           TOP_vcmpleps,
+                           TOP_vcmpunordps,
+                           TOP_vcmpneqps,
+                           TOP_vcmpnltps,
+                           TOP_vcmpnleps,
+                           TOP_vcmpordps,
+                           TOP_vcmpeqss,
+                           TOP_vcmpltss,
+                           TOP_vcmpless,
+                           TOP_vcmpunordss,
+                           TOP_vcmpneqss,
+                           TOP_vcmpnltss,
+                           TOP_vcmpnless,
+                           TOP_vcmpordss,
+                           TOP_vcmpeqsd,
+                           TOP_vcmpltsd,
+                           TOP_vcmplesd,
+                           TOP_vcmpunordsd,
+                           TOP_vcmpneqsd,
+                           TOP_vcmpnltsd,
+                           TOP_vcmpnlesd,
+                           TOP_vcmpordsd,
                            TOP_UNDEFINED);
 
   /* dest=op(src1, memop), non-x86-style */
@@ -1982,6 +2017,10 @@ int main()
                            TOP_vaesdecx,
                            TOP_vaesdeclastx,
                            TOP_vaeskeygenassistx,
+                           TOP_vldhpd,
+                           TOP_vldlpd,
+                           TOP_vldhps,
+                           TOP_vldlps,
                            TOP_UNDEFINED);
 
   /* dest=op(memop, reg), non-x86-style */
@@ -1993,6 +2032,12 @@ int main()
   Operand(0);
   Result(0);
   Instruction_Print_Group( vrmemop,
+                           /* SSE 4.1 instruction */
+                           TOP_extrx128v8,
+                           TOP_extrx128v16,
+                           TOP_extrx128v32,
+                           TOP_extrx128v64,
+                           TOP_fextrx128v32,
                            /* XOP instruction */
                            TOP_vprotbx,
                            TOP_vprotdx,
@@ -2198,6 +2243,10 @@ int main()
                            TOP_vaesdecxx,
                            TOP_vaesdeclastxx,
                            TOP_vaeskeygenassistxx,
+                           TOP_vldhpdx,
+                           TOP_vldhpsx,
+                           TOP_vldlpdx,
+                           TOP_vldlpsx,
                            TOP_UNDEFINED);
 
   /* dest=op(memop with scaled index with base, reg), non-x86-style */
@@ -2211,6 +2260,12 @@ int main()
   Operand(2);
   Result(0);
   Instruction_Print_Group( vrmemindexop,
+                           /* SSE 4.1 instruction */
+                           TOP_extrxx128v8,
+                           TOP_extrxx128v16,
+                           TOP_extrxx128v32,
+                           TOP_extrxx128v64,
+                           TOP_fextrxx128v32,
                            /* XOP instruction */
                            TOP_vprotbxx,
                            TOP_vprotdxx,
@@ -2415,6 +2470,10 @@ int main()
                            TOP_vaesdecxxx,
                            TOP_vaesdeclastxxx,
                            TOP_vaeskeygenassistxxx,
+                           TOP_vldhpdxx,
+                           TOP_vldhpsxx,
+                           TOP_vldlpdxx,
+                           TOP_vldlpsxx,
                            TOP_UNDEFINED);
 
   /* dest=op(memop with scaled index without base, reg), non-x86-style */
@@ -2427,6 +2486,12 @@ int main()
   Operand(1);
   Result(0);
   Instruction_Print_Group( vropmemindex,
+                           /* SSE 4.1 instruction */
+                           TOP_extrxxx128v8,
+                           TOP_extrxxx128v16,
+                           TOP_extrxxx128v32,
+                           TOP_extrxxx128v64,
+                           TOP_fextrxxx128v32,
                            /* XOP instruction */
                            TOP_vprotbxxx,
                            TOP_vprotdxxx,
@@ -2492,8 +2557,8 @@ int main()
                            TOP_vfcmp128v32,
                            TOP_vcmppd,
                            TOP_vcmpps,
-                           TOP_vfcmpsd,
-                           TOP_vfcmpss,
+                           TOP_vcmpsd,
+                           TOP_vcmpss,
                            TOP_vfdp128v64,
                            TOP_vfdp128v32,
                            TOP_vinsr128v8,
@@ -2557,8 +2622,8 @@ int main()
                            TOP_vcmpistrmx,
                            TOP_vfcmpx128v64,
                            TOP_vfcmpx128v32,
-                           TOP_vfcmpxsd,
-                           TOP_vfcmpxss,
+                           TOP_vcmpxsd,
+                           TOP_vcmpxss,
                            TOP_vfdpx128v64,
                            TOP_vfdpx128v32,
                            TOP_vinsrx128v8,
@@ -2620,8 +2685,8 @@ int main()
                            TOP_vcmpistrmxx,
                            TOP_vfcmpxx128v64,
                            TOP_vfcmpxx128v32,
-                           TOP_vfcmpxxsd,
-                           TOP_vfcmpxxss,
+                           TOP_vcmpxxsd,
+                           TOP_vcmpxxss,
                            TOP_vfdpxx128v64,
                            TOP_vfdpxx128v32,
                            TOP_vinsrxx128v8,
@@ -2683,8 +2748,8 @@ int main()
                            TOP_vcmpistrmxxx,
                            TOP_vfcmpxxx128v64,
                            TOP_vfcmpxxx128v32,
-                           TOP_vfcmpxxxsd,
-                           TOP_vfcmpxxxss,
+                           TOP_vcmpxxxsd,
+                           TOP_vcmpxxxss,
                            TOP_vfdpxxx128v64,
                            TOP_vfdpxxx128v32,
                            TOP_vinsrxxx128v8,
@@ -3241,8 +3306,6 @@ int main()
 			   TOP_cvtpi2pd,
 			   TOP_cvtpd2pi,
 			   TOP_cvttpd2pi,
-                           TOP_vcvtsd2ss,
-                           TOP_vcvtss2sd,
 			   TOP_ldc32,
 			   TOP_ldc64,
 			   TOP_movabsq,
@@ -3422,12 +3485,8 @@ int main()
                            TOP_vlddqa_n32,
                            TOP_vldapd_n32,
                            TOP_vldaps_n32,
-                           TOP_vldlpd_n32,
                            TOP_vldupd_n32,
                            TOP_vldups_n32,
-                           TOP_vldhpd_n32,
-                           TOP_vldhps_n32,
-                           TOP_vldlps_n32,
                            TOP_vstdqa_n32,
                            TOP_vstdqu_n32,
                            TOP_vstapd_n32,
@@ -3439,6 +3498,19 @@ int main()
                            TOP_vsthps_n32,
                            TOP_vstlps_n32,
                            TOP_vaesimc,
+			   TOP_UNDEFINED );
+
+  /* One result / two operands */
+  ISA_PRINT_TYPE rop2 =  ISA_Print_Type_Create("rop2", "%s %s %s,%s");
+  Name();
+  Operand(1);
+  Operand(0);
+  Result(0);
+  Instruction_Print_Group( rop,
+                           TOP_vldhpd_n32,
+                           TOP_vldhps_n32,
+                           TOP_vldlpd_n32,
+                           TOP_vldlps_n32,
 			   TOP_UNDEFINED );
 
   /* One result / one mem opnd */
@@ -3459,6 +3531,7 @@ int main()
                            TOP_pmovzxbwx,
                            TOP_pmovsxbdx,
                            TOP_pmovzxbdx,
+                           TOP_vldlpd_n32,
                            TOP_pmovsxbqx,
                            TOP_pmovzxbqx,
                            TOP_pmovsxwdx,
@@ -3797,14 +3870,10 @@ int main()
                            TOP_vldntdqa,
                            TOP_vldapd,
                            TOP_vldaps,
-                           TOP_vldlpd,
                            TOP_vldss,
                            TOP_vldupd,
                            TOP_vldups,
-                           TOP_vldhpd,
-                           TOP_vldhps,
                            TOP_vldsd,
-                           TOP_vldlps,
                            TOP_vfbroadcastss,
                            TOP_vfbroadcastsd,
                            TOP_vfbroadcastf128,
@@ -3928,14 +3997,10 @@ int main()
                            TOP_vldntdqax,
                            TOP_vldapdx,
                            TOP_vldapsx,
-                           TOP_vldlpdx,
                            TOP_vldssx,
                            TOP_vldupdx,
                            TOP_vldupsx,
-                           TOP_vldhpdx,
-                           TOP_vldhpsx,
                            TOP_vldsdx,
-                           TOP_vldlpsx,
                            TOP_vfbroadcastxss,
                            TOP_vfbroadcastxsd,
                            TOP_vfbroadcastxf128,
@@ -3985,14 +4050,10 @@ int main()
                            TOP_vldntdqaxx,
                            TOP_vldapdxx,
                            TOP_vldapsxx,
-                           TOP_vldlpdxx,
                            TOP_vldssxx,
                            TOP_vldupdxx,
                            TOP_vldupsxx,
-                           TOP_vldhpdxx,
-                           TOP_vldhpsxx,
                            TOP_vldsdxx,
-                           TOP_vldlpsxx,
                            TOP_vfbroadcastxxss,
                            TOP_vfbroadcastxxsd,
                            TOP_vfbroadcastxxf128,

@@ -128,6 +128,9 @@
 #include "flags.h"
 #endif
 #include "cg_swp.h"
+#ifdef TARG_X8664
+#include "config_wopt.h"
+#endif
 
 extern void Set_File_In_Printsrc(char *);	/* defined in printsrc.c */
 
@@ -469,6 +472,8 @@ static OPTION_DESC Options_CG[] = {
     0, 0, 0,	&CG_fma4_load_exec, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "dsched", "",
     0, 0, 0,	&CG_dispatch_schedule, NULL },
+  { OVK_BOOL,   OV_VISIBLE, TRUE, "nobest_fit", "",
+    0, 0, 0,    &CG_LOOP_nounroll_best_fit_set, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "unalign_st", "",
     0, 0, 0,	&CG_128bitstore, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "brfuse", "",
@@ -476,9 +481,11 @@ static OPTION_DESC Options_CG[] = {
   { OVK_BOOL,   OV_VISIBLE, TRUE, "strcmp_expand", "",
     0, 0, 0,    &CG_strcmp_expand, NULL },
   { OVK_BOOL,   OV_VISIBLE, TRUE, "merge_counters_x86", "",
-    0, 0, 0,    &CG_merge_counters_x86, NULL },
+    0, 0, 0,    &CG_merge_counters_x86, &CG_merge_counters_x86_set },
   { OVK_BOOL,   OV_VISIBLE, TRUE, "interior_ptrs", "",
     0, 0, 0,    &CG_interior_ptrs_x86, NULL },
+  { OVK_BOOL,   OV_VISIBLE, TRUE, "noavx_clear", "",
+    0, 0, 0,    &CG_NoClear_Avx_Simd, NULL },
 #endif
   { OVK_BOOL,	OV_INTERNAL, TRUE, "skip_local_sched", "",
     0, 0, 0,	&CG_skip_local_sched, NULL },
@@ -2021,6 +2028,18 @@ Configure_CG_Options(void)
       OPT_unroll_size = 128;
 #endif
   
+#ifdef TARG_X8664
+  if (Is_Target_Orochi() || Is_Target_Barcelona()) {
+     // check if default to determine if we use best fit unrolling or not
+    if ((OPT_unroll_size == 128) && 
+        (OPT_unroll_times == 4) && 
+        (WOPT_Enable_WN_Unroll == 1)) {
+      if (CG_LOOP_nounroll_best_fit_set == false)
+        CG_LOOP_unroll_best_fit = TRUE;
+    }
+  }
+#endif
+
   if ( OPT_Unroll_Analysis_Set )
   {
     CG_LOOP_unroll_analysis = OPT_Unroll_Analysis;
@@ -2640,6 +2659,8 @@ CG_Init (void)
         // for unrolled loops.
         CG_merge_counters_x86 = TRUE;
         LOCS_PRE_Enable_Unroll_RegPressure_Sched = TRUE;
+      } else if (CG_opt_level == 3 && CG_merge_counters_x86_set == FALSE) {
+        CG_merge_counters_x86 = TRUE;
       }
     }
 #endif //TARG_X8664

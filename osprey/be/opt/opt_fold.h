@@ -116,6 +116,8 @@ typedef CODEREP * simpnode;
 #define SIMPNODE_st			CR_st
 #define SIMPNODE_st_idx(x)              ST_st_idx(CR_st(x))
 #define SIMPNODE_ty			CR_ty
+#define SIMPNODE_object_ty(x)           (x)->object_ty()
+#define SIMPNODE_load_addr_ty(x)        (x)->lod_addr_ty()
 #define SIMPNODE_kid0			CR_kid0
 // kid 1 means nothing to IVAR, only to OP
 #define SIMPNODE_kid1(x)		(((x)->Kind() == CK_OP) ? \
@@ -139,7 +141,7 @@ typedef CODEREP * simpnode;
 #define SIMPNODE_i_bit_offset(x)	(x)->I_bit_offset()
 #define SIMPNODE_op_bit_offset(x)	(x)->Op_bit_offset()
 #define SIMPNODE_op_bit_size(x)		(x)->Op_bit_size()
-
+#define SIMPNODE_is_volatile(x)         (x)->Is_var_volatile()
 /* on/off switch and trace file */
 #define SIMPNODE_enable			WOPT_Enable_CRSIMP
 #define TRACEFILE			TFile

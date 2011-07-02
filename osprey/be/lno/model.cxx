@@ -455,6 +455,80 @@ INT64 *SNL_Line_Numbers;
 
 extern INT Debug_Cache_Model; 
 
+
+#ifndef TARG_X8664
+void
+LOOP_MODEL::Shift_Vectorizable_Innermost (void) {
+}
+
+#else
+void
+LOOP_MODEL::Shift_Vectorizable_Innermost (void) {
+    
+  if (!LNO_Interchange)
+    return;
+
+  Is_True (_wn && _can_be_inner, ("Internal inconsistency"));
+
+  INT wndepth = Do_Loop_Depth (_wn);
+
+  // step 1: anchor the vectorizable innermost loop in the innermost position
+  //
+  
+  //bug 2456, bug 5724 and bug 9143
+  //if an inner loop is vectorizable and it is beneficial to do so, then
+  //we should keep this loop innermost (i.e. the innermost loop can not
+  //be changed
+  if (Is_Vectorizable_Inner_Loop(_wn) && 
+      Is_Vectorization_Beneficial(WN_do_body(_wn))) {
+
+    _required_permutation[_inner_loop] = _inner_loop; //set inner's position
+    for (INT i = 0; i <= wndepth; i++) {
+      //only inner can be inner - don't change out
+      _can_be_inner[i] = (i == _inner_loop); 
+    }
+    return;
+  }
+    
+  // step 2: shift vectrorizable outer loop into the innermost position
+  //
+
+  if (LNO_Loop_Model_Simd) {
+    DOLOOP_STACK stack (&Model_Local_Pool);
+    Build_Doloop_Stack (_wn, &stack);
+    
+    // Work from second innermost to outer, examing if the loop can be 
+    // vectorized.
+    //
+    #define MAX_TRY 3
+    for (INT i = 1; i < MIN (wndepth, MAX_TRY); i++) {
+      WN* loop = stack.Top_nth (i);
+      if (!_can_be_inner [wndepth - i])
+        break;
+
+      if (Is_Vectorizable_Outer_Loop(loop) && 
+          Is_Vectorization_Beneficial(WN_do_body(_wn))) {
+
+        const char* fmt = 
+        "Vectorizable outer loop at line:%d is moved to innermost position\n";
+
+        if (LNO_Simd_Verbose) {
+            printf (fmt, Srcpos_To_Line (WN_Get_Linenum (loop)));
+        } 
+    
+        if (Get_Trace(TP_LNOPT, TT_LNO_MODEL)) {
+            fprintf (TFile, fmt, Srcpos_To_Line (WN_Get_Linenum (loop)));
+        }
+
+        for (INT j = 0; j <= wndepth; j++) {
+          _can_be_inner[j] = (j == (wndepth - i)); 
+        }
+      }
+    }
+  }
+}
+#endif
+
 void 
 LOOP_MODEL::Model(WN* wn, 
                   BOOL* can_be_inner, 
@@ -536,18 +610,9 @@ LOOP_MODEL::Model(WN* wn,
   if (LNO_Interchange == FALSE) {
     for (INT j = 0; j <= wndepth; j++)
       _required_permutation[j] = j;
+  } else {
+    Shift_Vectorizable_Innermost ();
   }
-#ifdef TARG_X8664
-  //bug 2456, bug 5724 and bug 9143
-  //if an inner loop is vectorizable and it is beneficial to do so, then
-  //we should keep this loop innermost (i.e. the innermost loop can not
-  //be changed
- else  if(Is_Vectorizable_Loop(wn) && Is_Vectorization_Beneficial(WN_do_body(wn))){
-    _required_permutation[_inner_loop] = _inner_loop; //set inner's position
-   for (INT j = 0; j <= wndepth; j++)
-      _can_be_inner[j] = (j == _inner_loop); //only inner can be inner - don't change out
-  }
-#endif
 
   INT loop_count = 0; 
   while (tmp) {

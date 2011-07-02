@@ -1,7 +1,10 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
+#  Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+#
 #  Copyright (C) 2010 Hewlett Packard Company
+#
+#  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -137,6 +140,9 @@ ifndef BUILD_BOTH
 endif
 ifndef BUILD_GNU3
      BUILD_GNU3     = @BUILD_GNU3@
+endif
+ifndef BUILD_SKIP_IPA
+     BUILD_SKIP_IPA = @BUILD_SKIP_IPA@
 endif
 ifndef COMPILER_TARG_DIR
      COMPILER_TARG_DIR = @abs_top_builddir@/osprey/targdir

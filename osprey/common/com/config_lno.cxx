@@ -200,6 +200,7 @@ static LNO_FLAGS Default_LNO = {
   FALSE, FALSE,	/* Run_lego */
   TRUE,		/* Run_lego_localizer */
   TRUE,		/* Loop_finalization */
+  FALSE,	/* Loop_model_simd*/
   8,		/* Max_do_loop_depth_strict */
   FALSE,	/* Mem_sim */
   TRUE,		/* Minvar */
@@ -421,6 +422,7 @@ LNO_FLAGS Initial_LNO = {
   FALSE, FALSE,	/* Run_lego */
   TRUE,		/* Run_lego_localizer */
   TRUE,		/* Loop_finalization */
+  FALSE,	/* Loop_model_simd*/
   8,		/* Max_do_loop_depth_strict */
   FALSE,	/* Mem_sim */
   TRUE,		/* Minvar */
@@ -905,6 +907,7 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "ifminmax",              NULL,   IfMinMax ), 
   LNOPT_BOOL ( "call_info",             NULL,   Run_call_info ), 
   LNOPT_BOOL ( "loop_finalize", 	NULL,   Loop_finalization),
+  LNOPT_BOOL ( "loop_model_simd", 	NULL,   Loop_model_simd),
   LNOPT_BOOL ( "shackle", 		NULL,   Shackle),
   LNOPT_BOOL ( "cross_loop", 		NULL,   Cross_loop),
   LNOPT_BOOL ( "ipa",                   NULL,   IPA_Enabled),

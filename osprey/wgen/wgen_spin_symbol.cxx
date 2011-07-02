@@ -852,6 +852,7 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
 			Set_TY_is_union(idx);
 		}
 #ifdef KEY
+                // gs_aggregate_value_p is only set for c++
 		if (gs_aggregate_value_p(type_tree)) {
 			Set_TY_return_in_mem(idx);
 		}

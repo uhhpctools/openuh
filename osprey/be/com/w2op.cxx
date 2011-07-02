@@ -45,6 +45,7 @@
 #include "topcode.h"
 #include "targ_isa_properties.h"
 #include "wn.h"
+#include "wn_util.h"
 #include "opcode.h"
 #include "config_targ.h"
 #include "config.h"

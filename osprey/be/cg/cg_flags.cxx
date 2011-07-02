@@ -124,9 +124,12 @@ BOOL CG_fma4_load_exec = FALSE;
 BOOL CG_128bitstore = TRUE;
 BOOL CG_branch_fuse = TRUE;
 BOOL CG_dispatch_schedule = FALSE;
+BOOL CG_LOOP_nounroll_best_fit_set = FALSE;
 BOOL CG_strcmp_expand = TRUE;
 BOOL CG_merge_counters_x86 = FALSE;
+BOOL CG_merge_counters_x86_set = FALSE;
 BOOL CG_interior_ptrs_x86 = FALSE;
+BOOL CG_NoClear_Avx_Simd = FALSE;
 #endif
 BOOL CG_opt_level;
 BOOL CG_localize_tns = FALSE;

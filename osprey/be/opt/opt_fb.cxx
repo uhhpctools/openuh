@@ -908,11 +908,6 @@ OPT_FEEDBACK::OPT_FEEDBACK( CFG *cfg, MEM_POOL *pool )
 	  }
 	}
 
-	if( num_icalls > 1 ){
-	  //FmtAssert( false, ("more than one icall") );
-	  DevWarn( "OPT_FEEDBACK::OPT_FEEDBACK(ICALL) more than one icall in a bb" );
-	  node.orig_wn = NULL;
-	}
       }
 #endif
 

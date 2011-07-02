@@ -5186,6 +5186,7 @@ Compose_Mem_Base_Index_Mode ( OP* op, TN* index, TN* offset, TN* scale, TN* base
   OP* new_op = NULL;
   ADDR_MODE mode = BASE_INDEX_MODE;
   const TOP new_top = Get_Top_For_Addr_Mode(OP_code(op), mode);
+  const TOP old_top = OP_code(op);
   FmtAssert( new_top != TOP_UNDEFINED, ("Compose_Mem_Op: unknown top") );
   if( TOP_is_prefetch( new_top ) ){
       new_op = Mk_OP( new_top, OP_opnd( op, 0 ), base, offset, index, scale );
@@ -5198,7 +5199,16 @@ Compose_Mem_Base_Index_Mode ( OP* op, TN* index, TN* offset, TN* scale, TN* base
       storeval = OP_result( op, 0 );
     }
     if (OP_load(op) || OP_store(op) || OP_prefetch(op)) {
-        new_op = Mk_OP( new_top, storeval, base, offset, index, scale );
+        if (Is_Target_Orochi() && Is_Target_AVX() && OP_load(op) &&
+            (old_top != TOP_vldsd) &&
+            (old_top != TOP_vldsdx) &&
+            (old_top != TOP_vldsdxx) &&
+            (OP_vec_lo_ldst(op) || OP_vec_hi_ldst(op))) {
+            new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ), 
+                            base, index, scale, offset );
+        } else {
+            new_op = Mk_OP( new_top, storeval, base, offset, index, scale );
+        }
     } else if (OP_load_exe(op)) {
         if (OP_opnds(op) == 2) {
             FmtAssert ((storeval != NULL), 
@@ -5318,6 +5328,22 @@ static bool op_find(std::deque<OP*>& ops_visited, OP *op)
        ++visited_ops_it) {
     OP* cur_op = *visited_ops_it;
     if (cur_op == op) {
+      found = true;
+      break;
+    }
+  }
+  return found;
+}
+
+static bool tn_find(std::deque<TN*>& tn_queue, TN *tn)
+{
+  bool found = false;
+  std::deque<TN*>::iterator tn_queue_it;
+  for (tn_queue_it = tn_queue.begin();
+       tn_queue_it != tn_queue.end();
+       ++tn_queue_it) {
+    TN* cur_tn = *tn_queue_it;
+    if (cur_tn == tn) {
       found = true;
       break;
     }
@@ -6124,6 +6150,23 @@ static void build_addr_queues (
   TN_MAP_Delete(def_map);
 }
 
+static void prune_adds_from_live_range_analysis(
+            std::deque<TN*>& add_tns,
+            std::set<TN*>& counted_base_regs,
+            std::map<TN*,OP*>& add_map)
+{
+  std::set<TN*>::const_iterator counted_base_regs_it;
+  for (counted_base_regs_it = counted_base_regs.begin();
+       counted_base_regs_it != counted_base_regs.end();
+       ++counted_base_regs_it) {
+    TN *tn = *counted_base_regs_it;
+    if (tn_find(add_tns, tn) == false) {
+      OP* add_op = add_map[tn];
+      Truncate_LRs_For_OP(add_op);
+    }
+  }
+}
+
 // After building interior pointers candidates, remove
 // all the effected counted_base_regs from SIB processing so
 // that we do not translate them in SIB translation.
@@ -6133,7 +6176,8 @@ static bool remove_cands_from_sib_gen_and_correlate(
             std::map<INT,std::deque<ST*> >& correlated_addr_map,
             std::map<ST*,std::deque<TN*> >& symbol_addr_map,
             std::set<TN*>& counted_base_regs,
-            BB *lhead,
+            std::map<TN*,OP*>& add_map,
+            BB *bb,
             bool loop_vectorized,
             MEM_POOL *pool) {
   INT num_cands = 0;
@@ -6189,14 +6233,48 @@ static bool remove_cands_from_sib_gen_and_correlate(
     TN_MAP orig_conflict_map;
     TN_MAP new_conflict_map;
     mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
-    const INT len = BB_length(lhead);
+    const INT len = BB_length(bb);
     INT* regs_in_use = (INT *)alloca(sizeof(INT) * (len+1));
+    std::deque<TN*> add_tns;
 
     MEM_POOL_Push(pool);
 
     // Calculate the current live ranges
-    LRA_Estimate_Fat_Points(lhead, fatpoint, regs_in_use, pool);
-    orig_conflict_map = Calculate_All_Conflicts(ISA_REGISTER_CLASS_integer);
+    LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, pool);
+    // build a list of tns interior pointers will operate on
+    for (counted_addr_sts_it = counted_addr_sts.begin();
+         counted_addr_sts_it != counted_addr_sts.end();
+       ++counted_addr_sts_it) {
+      std::deque<TN*> st_tns;
+      st_tns = symbol_addr_map[*counted_addr_sts_it];
+
+      // Skip the non interior pointer cands
+      if (st_tns.empty()) continue;
+
+      INT cor_addr_index = st_tns.size();
+      if (cor_addr_index != max_pattern) continue;
+
+      if (!correlated_addr_map[cor_addr_index].empty()) {
+        std::deque<TN*>::iterator st_tns_iter;
+        for (st_tns_iter = st_tns.begin();
+             st_tns_iter != st_tns.end();
+             ++st_tns_iter) {
+          TN *tn1 = *st_tns_iter;
+          ++st_tns_iter;
+          TN *tn2 = *st_tns_iter;
+          add_tns.push_front(tn2);
+        }
+      }
+    }
+
+    // remove all the sib adds from our live range maps so that we get
+    // an accurate picture for analysis.
+    prune_adds_from_live_range_analysis(add_tns, counted_base_regs, add_map);
+    add_tns.clear();
+
+    // Do the initial live range analysis
+    orig_conflict_map = Calculate_All_Conflicts(bb, regs_in_use, 
+                                                ISA_REGISTER_CLASS_integer);
 
     // Merge all pairs live ranges on the minor basereg
     bool first_time = true;
@@ -6242,13 +6320,31 @@ static bool remove_cands_from_sib_gen_and_correlate(
     // If Query_Conflicts_Improved returns with a state that indicates
     // that introduction of interior pointers does not benefit live
     // range pressure, we do not proceed with the allowing the translation.
-    new_conflict_map = Calculate_All_Conflicts(ISA_REGISTER_CLASS_integer);
+    new_conflict_map = Calculate_All_Conflicts(bb, regs_in_use, 
+                                               ISA_REGISTER_CLASS_integer);
+    INT N_i = 0;
+    INT D_i = 0;
+    INT avg_conflicts = 0;
+    INT k_conflicts = 0;
     if (Query_Conflicts_Improved(orig_conflict_map, 
                                  new_conflict_map,
                                  3,
                                  &num_ranges_mitigated,
-                                 ISA_REGISTER_CLASS_integer) == false)
+                                 ISA_REGISTER_CLASS_integer) == false) {
       clear_all = true;
+    } else if (Find_Max_Conflicts(orig_conflict_map,
+                                  &avg_conflicts,
+                                  &k_conflicts,
+                                  &N_i,
+                                  &D_i,
+                                  ISA_REGISTER_CLASS_integer) == num_pr) {
+      // For vectorized loops we want more than k-conflicts as max in the
+      // original conflict map context.
+      if (loop_vectorized)
+        min_reclaimable = 4; 
+    }
+    TN_MAP_Delete(orig_conflict_map);
+    TN_MAP_Delete(new_conflict_map);
 
     MEM_POOL_Pop(pool);
   }
@@ -7006,6 +7102,7 @@ static void fix_base_instructions (char* Cur_PU_Name,
                                                        correlated_addr_map,
                                                        symbol_addr_map,
                                                        counted_base_regs,
+                                                       add_map,
                                                        lhead, 
                                                        loop_vectorized,
                                                        pool);
@@ -7423,7 +7520,7 @@ void Counter_Merge (char *Cur_PU_Name) {
         }
       }
       if (dontdoit) continue;
-
+    
       //
       // collect the LiveIn sets of pdoms of loop header
       // which are not part of the loop
@@ -7654,6 +7751,15 @@ BOOL EBO_Merge_Memory_Addr( OP* op,
   }
 
   if (Get_Top_For_Addr_Mode(OP_code(op), BASE_MODE) == TOP_UNDEFINED) {
+    return FALSE;
+  }
+
+  const TOP old_top = OP_code(op);
+  if (Is_Target_Orochi() && Is_Target_AVX() && 
+      (old_top != TOP_vldsd) &&
+      (old_top != TOP_vldsdx) &&
+      (old_top != TOP_vldsdxx) &&
+      (OP_vec_lo_ldst(op) || OP_vec_hi_ldst(op))) {
     return FALSE;
   }
 

@@ -85,13 +85,24 @@ extern void LRA_Estimate_Fat_Points (BB* bb, mINT8* fatpoint,
  * final result, and which comparisons of live range pressure
  * can be made.
  */
-extern TN_MAP Calculate_All_Conflicts(ISA_REGISTER_CLASS rclass);
+extern TN_MAP Calculate_All_Conflicts(BB *bb, 
+                                      INT *regs_in_use,
+                                      ISA_REGISTER_CLASS rclass);
 extern void Merge_Live_Ranges(TN *tn1, TN *tn2, bool make_tn1_span);
 extern bool Query_Conflicts_Improved(TN_MAP orig_map,
                                      TN_MAP new_map,
                                      INT num_reserved,
                                      INT *num_ranges_mitigated,
                                      ISA_REGISTER_CLASS rclass);
+extern void Print_Range_And_Conflict_Info(TN_MAP conflict_map,
+                                          ISA_REGISTER_CLASS rclass);
+extern INT Find_Max_Conflicts(TN_MAP conflict_map,
+                              INT *average_conflicts,
+                              INT *num_k_conflicts,
+                              INT *num_edges,
+                              INT *outgoing_conflicts,
+                              ISA_REGISTER_CLASS rclass);
+extern void Truncate_LRs_For_OP(OP *op);
 
 /* Returns the number of registers LRA is requesting from GRA for
  * the class <cl> in the basic block <bb>. If we run the scheduling

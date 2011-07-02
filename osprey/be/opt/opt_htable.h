@@ -1312,6 +1312,9 @@ public:
 
   BB_NODE*  Get_ISOP_def_before_use_cache () const
   { return (BB_NODE*) u2.isop.node_cache; }
+
+  TY_IDX lod_addr_ty(void);
+  TY_IDX object_ty(void);
 }; // end of class CODEREP
 
 // Functions to tell how much extra space should be allocated with a

@@ -468,6 +468,7 @@ extern BOOL CG_LOOP_unroll_fb_required;
 extern BOOL CG_LOOP_unroll_remainder_fully;
 extern UINT32 CG_LOOP_unroll_min_trip;
 extern BOOL CG_LOOP_unroll_analysis;
+extern BOOL CG_LOOP_unroll_best_fit;
 extern BOOL CG_LOOP_ooo_unroll_heuristics;
 extern BOOL CG_LOOP_ooo_unroll_heuristics_set;
 extern UINT32 CG_LOOP_reorder_buffer_size;
@@ -632,6 +633,7 @@ public:
 
   void Recompute_Liveness();
   bool Determine_Unroll_Fully(BOOL count_multi_bb);
+  void Determine_Best_Unit_Iteration_Interval(BOOL can_refit);
   void Determine_Unroll_Factor();
   void Determine_SWP_Unroll_Factor();
   void Build_CG_LOOP_Info(BOOL single_bb);
@@ -703,6 +705,8 @@ struct OP_VECTOR {
 
 
 extern CG_LOOP *Current_CG_LOOP;
+
+extern void Examine_Loop_Info(char *usage_str, BOOL after_presched);
 
 #if defined(TARG_IA64) || defined(TARG_SL)  || defined(TARG_MIPS)
 extern void Perform_Loop_Optimizations(void *rgn_loop_update=NULL);

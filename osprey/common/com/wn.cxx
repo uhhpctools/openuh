@@ -81,9 +81,7 @@
 #include "tracing.h"
 #endif /* BACK_END */
 
-#if (defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)) && !defined(FRONT_END_MFEF77)
 #include "wn_util.h"
-#endif /* (defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)) && !defined(FRONT_END_MFEF77) */
 #if !defined(FRONT_END_C) && !defined(IR_TOOLS) && defined(TARG_SL)
 #include "intrn_info.h"
 #endif
@@ -3349,7 +3347,8 @@ WN_has_side_effects (const WN* wn)
     case OPR_LDID:
     case OPR_LDBITS:
 
-      if (TY_is_volatile (WN_ty(wn)))
+      if (TY_is_volatile (WN_ty(wn)) ||
+          TY_is_volatile(WN_object_ty(wn)))
         return (TRUE);
 
       return FALSE;

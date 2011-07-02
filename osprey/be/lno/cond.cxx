@@ -2050,7 +2050,7 @@ static BOOL Loop_Unswitch_InnerDo (WN *wn)
   LWN_Set_Parent(loop_copy, LWN_Get_Parent(wn));
   LWN_Parentize(loop_copy);
 #ifdef TARG_X8664
-  BOOL Has_Dependencies = !Is_Vectorizable_Loop(loop_copy);
+  BOOL Has_Dependencies = !Is_Vectorizable_Inner_Loop(loop_copy);
 #else
   BOOL Has_Dependencies = TRUE;
 #endif

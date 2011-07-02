@@ -1,6 +1,6 @@
 #
 #
-#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -75,6 +75,7 @@ BUILD_TARGET        = @BUILD_TARGET@
 BUILD_MULTILIB      = @BUILD_MULTILIB@
 BUILD_GNU3          = @BUILD_GNU3@
 BUILD_FORTRAN       = @BUILD_FORTRAN@
+BUILD_SKIP_IPA      = @BUILD_SKIP_IPA@
 
 ifeq ($(MACHINE_TYPE), ia64)
 # ia64
@@ -104,13 +105,17 @@ BASIC_COMPONENTS = \
                 $(NATIVE_BUILD_DIR)/wopt/wopt.so \
                 $(NATIVE_BUILD_DIR)/lno/lno.so \
                 $(NATIVE_BUILD_DIR)/lw_inline/inline \
-                $(NATIVE_BUILD_DIR)/ipa/ipa.so \
-                $(NATIVE_BUILD_DIR)/ipl/ipl.so \
-                $(NATIVE_BUILD_DIR)/ipl/ipl \
                 $(NATIVE_BUILD_DIR)/whirl2c/whirl2c.so \
                 $(NATIVE_BUILD_DIR)/whirl2c/whirl2c \
-                $(NATIVE_BUILD_DIR)/ir_tools/ir_b2a \
-                $(NATIVE_BUILD_DIR_LD)/ld/ld-new 
+                $(NATIVE_BUILD_DIR)/ir_tools/ir_b2a
+
+ifneq ($(BUILD_SKIP_IPA), YES)
+BASIC_COMPONENTS += \
+		$(NATIVE_BUILD_DIR)/ipa/ipa.so \
+		$(NATIVE_BUILD_DIR)/ipl/ipl.so \
+		$(NATIVE_BUILD_DIR)/ipl/ipl \
+		$(NATIVE_BUILD_DIR_LD)/ld/ld-new 
+endif
 
 ifeq ($(BUILD_FORTRAN), YES)
 BASIC_COMPONENTS += \

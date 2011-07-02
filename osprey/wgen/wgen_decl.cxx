@@ -2825,14 +2825,61 @@ gs_t init, UINT offset, UINT array_elem_offset,
         Is_True( (WN_operator(target) == OPR_LDID ||
                   WN_operator(target) == OPR_LDA),
                  ("Invalid operator for target"));
-        if( WN_operator(target) == OPR_LDID ) {
+        // handle struct init by a return value of a call,
+        // remove redundant temp variable copy
+        
+        // if return type is struct type, and the result is used in lhs,
+        // then the Mreturn temp variable is not needed, the address of lhs 
+        // should be passed as hidden parameter
+        bool return_val_transformed = false;
+        WN *block = NULL;
+        if (WN_operator(init_wn) == OPR_COMMA &&
+              WN_rtype(init_wn) == MTYPE_M) {
+           WN *block = WN_kid0(init_wn);
+           WN *ldidTemp = WN_kid1(init_wn);
+           if (WN_operator(ldidTemp) == OPR_LDID &&
+                 WN_operator(block) == OPR_BLOCK) {
+
+              // replace MSTID _temp_.Mreturn.1
+              // with    MSTID lhs
+              WN *stidTemp = WN_last(block);
+              if (WN_operator(stidTemp) == OPR_STID) {
+                 // remove block from the init_wn
+                 WN_kid0(init_wn) = 0;
+                 WN_DELETE_Tree(init_wn);
+                 init_wn = block;
+                 
+                 WN *kid = WN_kid0(stidTemp);
+                 WN_kid0(stidTemp) = 0;
+                 WN_DELETE_FromBlock(block, stidTemp);
+
+                 if( WN_operator(target) == OPR_LDID ) {
+                   TY_IDX ptr_ty = Make_Pointer_Type(ty);
+                   wn = WN_Istore(mtype, offset, ptr_ty, target, kid, field_id);
+                 }
+                 else { // OPR_LDA
+                   ST *st = WN_st(target);
+                   wn = WN_Stid (mtype, WN_lda_offset(target) + offset, st,
+                                 ty, kid, field_id); 
+                 }
+                 WN_INSERT_BlockLast(block, wn);
+                 wn = block;
+                 return_val_transformed = true;
+              }
+           }
+           else
+              block = NULL; // not a block
+        }
+        if (!return_val_transformed) {
+          if( WN_operator(target) == OPR_LDID ) {
             TY_IDX ptr_ty = Make_Pointer_Type(ty);
             wn = WN_Istore(mtype, offset, ptr_ty, target, init_wn, field_id);
-        }
-        else { // OPR_LDA
+          }
+          else { // OPR_LDA
             ST *st = WN_st(target);
             wn = WN_Stid (mtype, WN_lda_offset(target) + offset, st,
                           ty, init_wn, field_id); 
+          }
         }
 #else
 	WN *wn = WN_Stid (mtype, ST_ofst(st) + offset, st,

@@ -810,38 +810,137 @@ Find_Max_End_Range(void)
 }
 
 
-static int
-Calculate_Conflicting_Live_Ranges(TN *tn)
+void
+Populate_Init_Degrees(BB *bb, INT *regs_in_use)
 {
-  LIVE_RANGE *cur_lr = LR_For_TN(tn);
-  int conflict_count = 0;
-  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
-    if (cur_lr == lr) continue;
-    if ((LR_first_def(lr) == 0) && (LR_last_use(lr) == 0)) continue;
-    if (LR_use_cnt(lr) == 0) continue;
-    TN *cur_tn = LR_tn(lr);
-    if (TN_register_class(tn) != TN_register_class(cur_tn)) continue;
-    if (LR_conflicts_with_reg_LR(lr, cur_lr)) conflict_count++;
+  for (INT opnum = 0; opnum < BB_length(bb); opnum++) {
+    regs_in_use[opnum] = 0;
   }
-  return conflict_count;
+}
+
+
+void
+Populate_Degrees_Over_LRs(INT *regs_in_use, LIVE_RANGE *lr)
+{
+  INT opnum;
+
+  // populate the live range, first def to last use,
+  // exposed uses will cause the live range to expand.
+  for (opnum = LR_first_def(lr); opnum < LR_last_use(lr); opnum++) {
+    INT32 degree = regs_in_use[opnum];
+    degree++;
+    regs_in_use[opnum] = degree;
+  }
+}
+
+
+INT
+Find_Max_Degree_For_LR(INT *regs_in_use, LIVE_RANGE *lr)
+{
+  INT opnum;
+  INT32 max_degree = 0;
+  for (opnum = LR_first_def(lr); opnum < LR_last_use(lr); opnum++) {
+    INT32 degree = regs_in_use[opnum];
+    max_degree = (degree > max_degree) ? degree : max_degree;
+  }
+  return max_degree;
 }
 
 
 TN_MAP
-Calculate_All_Conflicts(ISA_REGISTER_CLASS rclass)
+Calculate_All_Conflicts(BB *bb, INT *regs_in_use, ISA_REGISTER_CLASS rclass)
 {
   TN_MAP conflict_map = TN_MAP_Create();
+
+  // calculate degrees for live range intervals, op by op.
+  Populate_Init_Degrees(bb, regs_in_use);
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    TN *tn = LR_tn(lr);
+    if (TN_register_class(tn) != rclass) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    if (LR_last_use(lr) == 0) continue;
+    Populate_Degrees_Over_LRs(regs_in_use, lr);
+  }
 
   for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
     TN *tn = LR_tn(lr);
     INT num_conflicts;
     if (TN_register_class(tn) != rclass) continue;
     if (LR_use_cnt(lr) == 0) continue;
-    num_conflicts = Calculate_Conflicting_Live_Ranges(tn);
+    if (LR_last_use(lr) == 0) continue;
+    // true degree does not include the live range itself.
+    num_conflicts = Find_Max_Degree_For_LR(regs_in_use, lr) - 1;
     TN_MAP_Set(conflict_map, tn, (void*)num_conflicts);
   }
 
   return conflict_map;
+}
+
+
+void
+Print_Range_And_Conflict_Info(TN_MAP conflict_map, 
+                              ISA_REGISTER_CLASS rclass)
+{
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    TN *tn = LR_tn(lr);
+    INT num_conflicts;
+    if (TN_register_class(tn) != rclass) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    if (LR_last_use(lr) == 0) continue;
+    num_conflicts = (INTPTR)TN_MAP_Get(conflict_map, tn);
+    printf("lr conflicts(%d) :", num_conflicts);
+    Print_Live_Range (lr);  
+  }
+}
+
+
+INT
+Find_Max_Conflicts(TN_MAP conflict_map,
+                   INT *average_conflicts,
+                   INT *num_k_conflicts,
+                   INT *num_edges,
+                   INT *outgoing_edges,
+                   ISA_REGISTER_CLASS rclass)
+{
+  INT max_conflicts = 0;
+  INT sum_conflicts = 0;
+  INT n_ranges = 0;
+  INT n_edges = 0;
+  INT n_defs = 0;
+  INT total_def_degree = 0;
+  INT k_conflicts = 0;
+  INT num_pr = REGISTER_CLASS_register_count(rclass);
+  LIVE_RANGE *last_lr = NULL;
+
+  for (LIVE_RANGE *lr = Live_Range_List; lr != NULL; lr = LR_next(lr)) {
+    TN *tn = LR_tn(lr);
+    INT num_conflicts;
+    if (TN_register_class(tn) != rclass) continue;
+    if (LR_use_cnt(lr) == 0) continue;
+    if (LR_last_use(lr) == 0) continue;
+    num_conflicts = (INTPTR)TN_MAP_Get(conflict_map, tn);
+    if (num_conflicts > max_conflicts)
+      max_conflicts = num_conflicts;
+    if (num_conflicts > num_pr)
+      k_conflicts++;
+    n_edges += LR_use_cnt(lr);
+    n_ranges++;
+    sum_conflicts += num_conflicts;
+    last_lr = lr;
+    if (LR_first_def(lr) != 0) {
+      n_defs += LR_def_cnt(lr);
+      if (total_def_degree < num_conflicts)
+        total_def_degree = num_conflicts;
+    }
+  }
+  if (n_ranges) {
+    TN *tn = LR_tn(last_lr);
+    *average_conflicts = (sum_conflicts/n_ranges);
+    *num_k_conflicts = k_conflicts;
+    *num_edges = n_edges;
+    *outgoing_edges = total_def_degree;
+  }
+  return max_conflicts;
 }
 
 
@@ -877,8 +976,6 @@ Query_Conflicts_Improved(TN_MAP orig_map,
     }
   }
   *num_ranges_mitigated = num_ranges_moved_below_pr_pressure; 
-  TN_MAP_Delete(orig_map);
-  TN_MAP_Delete(new_map);
  
   return (num_improved > num_degraded);
 }
@@ -914,6 +1011,61 @@ void Merge_Live_Ranges(TN *tn1, TN *tn2, bool make_tn1_span)
   } else {
     LR_first_def(lr1) = 0;
     LR_last_use(lr1) = 0;
+  }
+}
+
+
+void
+Truncate_LRs_For_OP (OP *op)
+{
+  if (op == NULL) return;
+
+  BB *bb = OP_bb(op);
+  INT i;
+  INT cur_opnum;
+
+  // Find our current OP's opnum
+  for (cur_opnum = 1; cur_opnum < BB_length(bb); cur_opnum++) {
+    OP *cur_op = OP_VECTOR_element (Insts_Vector, cur_opnum);
+    if (op == cur_op)
+      break;
+  }
+  // did we find it?
+  if (cur_opnum == BB_length(bb))
+    return;
+
+  for (i = 0; i < OP_results(op); i++) {
+    TN *res = OP_result(op, i);  
+    if (TN_is_register(res)) {
+      LIVE_RANGE *lr = LR_For_TN(res);
+      if (LR_first_def(lr) == cur_opnum) {
+        LR_first_def(lr) = 0;
+        if (LR_upward_exposed_use(lr) == cur_opnum) {
+          if (LR_exposed_use(lr) == LR_upward_exposed_use(lr))
+            LR_exposed_use(lr) = 0;
+          LR_upward_exposed_use(lr) = 0;
+        } 
+      }
+      if (LR_def_cnt(lr) > 1)
+        LR_def_cnt(lr)--;
+    }
+  }
+  for (i = 0; i < OP_opnds(op); i++) {
+    TN *opnd_tn = OP_opnd(op,i);
+    if (TN_is_register(opnd_tn)) {
+      LIVE_RANGE *lr = LR_For_TN(opnd_tn);
+      LR_use_cnt(lr)--;
+      if (LR_last_use(lr) == cur_opnum) {
+        // walk up to the closest use, else the last use is 0
+        LR_last_use(lr) = 0;
+        for (INT opnum = cur_opnum; opnum > 0; opnum--) {
+          OP *cur_op = OP_VECTOR_element (Insts_Vector, opnum);
+          if (OP_Refs_TN(cur_op, opnd_tn)) {
+            LR_last_use(lr) = opnum;
+          }
+        }
+      }
+    }
   }
 }
 

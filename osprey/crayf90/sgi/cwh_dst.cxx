@@ -159,7 +159,7 @@ cwh_dst_init_file(char *src_path)
 #else
   // Bug 178 - AT_producer should be the name of the compiler and version info
   comp_info = (char *)malloc(sizeof(char)*100);
-  strcpy(comp_info, "pathf90 ");
+  strcpy(comp_info, "openf90 ");
   if (INCLUDE_STAMP)
     strcat(comp_info, INCLUDE_STAMP);
 

@@ -187,6 +187,8 @@
 #include "ebo.h"
 #include "hb.h"
 #include "gra_live.h"
+#include "lra.h"
+#include "calls.h"
 
 #if defined(TARG_SL)
 #include "tag.h"
@@ -256,6 +258,7 @@ BOOL CG_LOOP_optimize_non_innermost = TRUE;
 BOOL CG_LOOP_optimize_multi_targ = FALSE;
 BOOL CG_LOOP_optimize_lno_winddown_cache = TRUE;
 BOOL CG_LOOP_optimize_lno_winddown_reg = TRUE;
+BOOL CG_LOOP_unroll_best_fit = FALSE;
 
 /* Note: To set default unroll parameters, modify the initialization
  *	 of OPT_unroll_times/size in "config.c".
@@ -5335,6 +5338,275 @@ bool CG_LOOP::Determine_Unroll_Fully(BOOL count_multi_bb)
 }
 
 
+// This algorithm is based in part on a paper by ma and carr
+// for determining register pressure for unrolled loops and
+// the most profitable unroll factor, if any, to unroll by.
+void CG_LOOP::Determine_Best_Unit_Iteration_Interval(BOOL can_refit)
+{
+  BB *bb = LOOP_DESCR_loophead(loop);
+  INT init_II[5];
+  BOOL saved_state_sched_est;
+  BOOL toggle_sched_est = false;
+
+  // only single block loops
+  if (BB_SET_Size(LOOP_DESCR_bbset(loop)) != 1)
+    return;
+
+  // This is now the default single block unroll factor calculation
+  // algorithm, if the user specified any other unroll by or size
+  // other than the default, the heuristics below will not be use to 
+  // determine unroll factor.
+  if (CG_LOOP_unroll_best_fit == false)
+    return;
+
+  MEM_POOL_Push(&MEM_phase_nz_pool);
+
+  mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
+  const INT len = BB_length(bb);
+  INT *regs_in_use = (INT*)alloca(sizeof(INT) * (len+1));
+  INT max_conf = 0;
+  INT R_f = 0;
+  INT P_f = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_float);
+  INT N_f = 0;
+  INT D_f = 0;
+  INT R_i = 0;
+  INT P_i = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_integer);
+  INT N_i = 0;
+  INT D_i = 0;
+  INT avg_conflicts = 0;
+  INT k_conflicts = 0;
+  TN_MAP conflict_map_f;
+  TN_MAP conflict_map_i;
+  TN *tn;
+  LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, &MEM_phase_nz_pool);
+
+#ifdef TARG_X8664
+  // now adjust the number of gpr regs as per the ABI
+  P_i--;
+  if (Is_Target_32bit() && Gen_Frame_Pointer)
+    P_i--;
+#endif
+
+  // compute the number of fp Regs Predicted, func return degree so add 1 
+  conflict_map_f = Calculate_All_Conflicts(bb, regs_in_use, 
+                                           ISA_REGISTER_CLASS_float);
+  R_f = Find_Max_Conflicts(conflict_map_f,
+                           &avg_conflicts,
+                           &k_conflicts,
+                           &N_f,
+                           &D_f,
+                           ISA_REGISTER_CLASS_float) + 1;
+
+  // compute the number of gpr Regs Predicted, func return degree so add 1
+  conflict_map_i = Calculate_All_Conflicts(bb, regs_in_use, 
+                                           ISA_REGISTER_CLASS_integer);
+  R_i = Find_Max_Conflicts(conflict_map_i,
+                           &avg_conflicts,
+                           &k_conflicts,
+                           &N_i,
+                           &D_i,
+                           ISA_REGISTER_CLASS_integer) + 1;
+
+  TN_MAP_Delete(conflict_map_f);
+  TN_MAP_Delete(conflict_map_i);
+
+  // Now figure out E, the total number of cross iteration edges for
+  // both float and integer regs by counting the live out regs of each
+  // type for the loop
+  INT E_f = 0;
+  INT E_i = 0;
+
+  // Exposed uses which are updated are loop-carried dependences.
+  for (tn = GTN_SET_Choose(BB_live_use(bb));
+       tn != GTN_SET_CHOOSE_FAILURE;
+       tn = GTN_SET_Choose_Next(BB_live_use(bb),tn)) {
+    bool exposed_use_is_updated = false;
+    for( OP* op = BB_first_op(bb); op != NULL; op = OP_next(op) ){
+      if (OP_Defs_TN(op, tn)) {
+        exposed_use_is_updated = true;
+        break;
+      }
+    }
+    if (exposed_use_is_updated == false) continue;
+    if (TN_register_class(tn) == ISA_REGISTER_CLASS_float)
+      E_f++;
+    if (TN_register_class(tn) == ISA_REGISTER_CLASS_integer)
+      E_i++;
+  }
+
+  // Count the number of prefetch insns, as unrolled loop bodies
+  // will only recieve a single copy for the whole iteration for
+  // these kind of instructions, same is true for loop carried
+  // dependences(E_i and E_f).  This is not from ma and carr but
+  // is benefitial in that we miss upper bound opportunities otherwise.
+  INT num_prefetch = 0;
+  for (OP *op = BB_first_op(bb); op != NULL; op = OP_next(op))
+    if (OP_prefetch(op)) num_prefetch++;
+
+  // Try to refit the next unroll factor by 2 into the current
+  // size threshold if it will fit using the above data for the
+  // total loop size(it is more accurate than the prior calc).
+  if ((Unroll_fully() == false) &&
+      (can_refit) &&
+      is_power_of_two(unroll_factor) &&
+      ((unroll_factor * 2) < CG_LOOP_unroll_times_max)) {
+    INT loop_size = BB_length(bb);
+    INT next_factor = unroll_factor * 2;
+    INT max_size = (loop_size + (loop_size - (E_i + E_f + num_prefetch)) * 
+                                (next_factor - 1)); 
+    if (max_size < CG_LOOP_unrolled_size_max)
+      Set_unroll_factor(next_factor);
+  } else if ((Unroll_fully() == false) &&
+             (can_refit) &&
+             ((unroll_factor + 1) < CG_LOOP_unroll_times_max)) {
+    INT loop_size = BB_length(bb);
+    INT next_factor = unroll_factor + 1;
+    INT max_size = (loop_size + (loop_size - (E_i + E_f + num_prefetch)) * 
+                                (next_factor - 1)); 
+    if (max_size < CG_LOOP_unrolled_size_max)
+      Set_unroll_factor(next_factor);
+  }
+
+#ifdef TARG_X8664
+  // calculate each unroll factors init_II
+  INT A_spill_f = CGTARG_Latency(TOP_ldupd);
+  INT A_spill_i = CGTARG_Latency(TOP_ldx64);
+#else
+  INT A_spill_f = 1; // stubbed, todo - fill in correctly per target
+  INT A_spill_i = 1; // stubbed, todo - fill in correctly per target
+#endif
+
+  INT unit_II[5];
+  INT II_penalty_f;
+  INT II_penalty_i;
+  INT j, i;
+  INT iter_j = 0;
+  INT chose_j = 0;
+  INT min_unitII = INT_MAX;
+  INT ntimes = 1;
+  INT upper_bound = unroll_factor;
+
+  // Refitted unroll factors and already assigned unroll factors of power
+  // 2 only are utlized here.
+  if (is_power_of_two(unroll_factor)) {
+    CG_SCHED_EST *loop_se = CG_SCHED_EST_Create(bb, &MEM_local_nz_pool,
+                                                SCHED_EST_FOR_UNROLL);
+    CG_SCHED_EST *unroll_se = CG_SCHED_EST_Create(bb, &MEM_local_nz_pool,
+                                                  SCHED_EST_FOR_UNROLL |
+                                                  SCHED_EST_IGNORE_PREFETCH |
+                                                  SCHED_EST_IGNORE_BRANCH |
+                                                  SCHED_EST_IGNORE_LOH_OPS |
+                                                  SCHED_EST_IGNORE_INT_OPS);
+    init_II[0] = CG_SCHED_EST_Cycles(loop_se);
+    INT rolling_init_II;
+    for (j = 2; j <= upper_bound; j++) {
+      CG_SCHED_EST_Append_Scheds(loop_se, unroll_se);
+      rolling_init_II = CG_SCHED_EST_Cycles(loop_se);
+      switch (j) {
+      case 2:
+        init_II[1] = rolling_init_II;
+        break;
+      case 4:
+        init_II[2] = rolling_init_II;
+        break;
+      case 8:
+        init_II[3] = rolling_init_II;
+        break;
+      case 16:
+        init_II[4] = rolling_init_II;
+        break;
+      }
+    }
+
+    // Divergences from ma and carr: We have the degree and live
+    // range info for loop carried dependences, so E_i and E_f are
+    // not treated as additive components of the unit_II penalty calc,
+    // also we figure prefetch and E components into N components for 
+    // penalty calc.  This is more accurate than ma and carr.  And finally,
+    // we use the defaults as upper bounds for finding the best fit
+    // or minimal unit_II, where if we do not find a best fit that is other
+    // than unroll by 1, we defer to the original unroll factor.
+    int Tot_D_f = D_f;
+    int Tot_D_i = D_i;
+    for (i = 1, j = 0; i <= upper_bound; i = i * 2, j++) {
+      // calculate the II_penalty for float regs
+      II_penalty_f = 0;
+      if (N_f) {
+        int N_adj_f = ((N_f - E_f) * (i - 1)) + N_f;
+        if (i > 1)
+          Tot_D_f += (D_f - E_f)*(i-1);
+        II_penalty_f = ((R_f - P_f) * (Tot_D_f) * A_spill_f);
+        II_penalty_f = II_penalty_f / N_adj_f;
+      }
+  
+      // calculate the II_penalty for integer regs
+      II_penalty_i = 0;
+      if (N_i) {
+        int N_adj_i = ((N_i - (E_i + num_prefetch)) * (i - 1)) + N_i;
+        if (i > 1)
+          Tot_D_i += (D_i - E_i)*(i-1);
+        II_penalty_i = ((R_i - P_i) * (Tot_D_i) * A_spill_i);
+        II_penalty_i = II_penalty_i / N_adj_i;
+      }
+
+      // Now calculate the unified unit_II for both components
+      unit_II[j] = (init_II[j] + II_penalty_i + II_penalty_f) / i;
+      if (min_unitII >= unit_II[j]) {
+        min_unitII = unit_II[j];
+        ntimes = i;
+        iter_j = j;
+      } else if ((min_unitII < 0) && 
+                 (unit_II[j] <= 0) &&
+                 (min_unitII < unit_II[j])) {
+        min_unitII = unit_II[j];
+        ntimes = i;
+        iter_j = j;
+      }
+      if (unroll_factor == i)
+        chose_j = j;
+    }
+  }
+
+  // This is also new, and not from ma and carr, evict unrolls that
+  // fit a clear profile of bad register pressure.
+  if ((R_f > P_f) || (R_i > P_i)) {
+    if (R_i > P_i) {
+      INT pressure_calc_i = (R_i - P_i) * A_spill_i;
+      INT benefit_calc_i = (num_prefetch / 2) + E_i; 
+      if (E_i > P_i) {
+        // these regs will require a spill and a reload as they are updated
+        INT adjust_calc_i = (E_i - P_i) * (A_spill_i * 2);
+        pressure_calc_i += adjust_calc_i;
+      }
+      // prefetch insns are usually clumped and can issue 2 at a time
+      if (pressure_calc_i > benefit_calc_i) {
+        ntimes = 1;
+        Set_unroll_factor(ntimes);
+      }
+    } else if (R_f > P_f) {
+      INT pressure_calc_f = (R_f - P_f) * A_spill_f;
+      INT benefit_calc_f = E_f;
+      if (E_f > P_f) {
+        // these regs will require a spill and a reload as they are updated
+        INT adjust_calc_f = (E_f - P_f) * (A_spill_f * 2);
+        pressure_calc_f += adjust_calc_f;
+      }
+      if (pressure_calc_f > benefit_calc_f) {
+        ntimes = 1;
+        Set_unroll_factor(ntimes);
+      }
+    }
+  }
+
+  // If ntimes is 1, use what we have already, this means that if we
+  // retained the orig it was either the min value or we did not find one
+  // or we have a register pressure case.
+  if ((Unroll_fully() == false) && (ntimes != 1) && (unroll_factor != ntimes))
+    Set_unroll_factor(ntimes);
+  MEM_POOL_Pop(&MEM_phase_nz_pool);
+}
+
+
 void CG_LOOP::Determine_Unroll_Factor()
 { 
   LOOPINFO *info = LOOP_DESCR_loopinfo(Loop());
@@ -5385,6 +5657,9 @@ void CG_LOOP::Determine_Unroll_Factor()
       ntimes--;
     Set_unroll_factor(ntimes);
 
+#ifdef TARG_X8664
+    Determine_Best_Unit_Iteration_Interval(TRUE);
+#endif
   } else {
 
     BOOL const_trip = TN_is_constant(trip_count_tn);
@@ -5437,6 +5712,9 @@ void CG_LOOP::Determine_Unroll_Factor()
 	  ntimes /= 2;
       }
       Set_unroll_factor(ntimes);
+#ifdef TARG_X8664
+      Determine_Best_Unit_Iteration_Interval(!const_trip);
+#endif
     }
   }
 
@@ -8091,6 +8369,114 @@ void CG_LOOP_Zdl_Gen()
 }
 #endif
 
+void Report_Loop_Info(LOOP_DESCR *loop, 
+                      char *usage_str, 
+                      BOOL after_prescheduling,
+                      MEM_POOL *pool)
+{
+  // This func is a debug trace utility
+  if (Get_Trace(TP_CGLOOP, 1) == FALSE)
+    return;
+
+  BB *bb = LOOP_DESCR_loophead(loop);
+  if (BB_unrollings(bb) && 
+      (BB_SET_Size(LOOP_DESCR_bbset(loop)) == 1)) {
+    BOOL saved_state_sched_est;
+    BOOL toggle_sched_est = false; 
+
+    // calculate or obtain the init_II cycle time
+    // from either the locs scheduler if we have not yet
+    // prescheduled the code, or from the last ready time
+    // cycle of the scheduled code if we have.
+    INT init_II = 0;
+    if (after_prescheduling) {
+      init_II = OP_scycle(BB_last_op(bb));
+    } else {
+      SCHED_EST_TYPE type = (SCHED_EST_FOR_UNROLL);
+      init_II = (INT32)CG_SCHED_EST_BB_Cycles(bb, type);
+    }
+
+    mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
+    const INT len = BB_length(bb);
+    INT *regs_in_use = (INT*)alloca(sizeof(INT) * (len+1));
+    INT max_conf = 0;
+    INT R_f = 0;
+    INT P_f = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_float);
+    INT N_f = 0;
+    INT D_f = 0;
+    INT R_i = 0;
+    INT P_i = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_integer);
+    INT N_i = 0;
+    INT D_i = 0;
+    INT avg_conflicts_i = 0;
+    INT avg_conflicts_f = 0;
+    INT k_conflicts = 0;
+    TN_MAP conflict_map_f;
+    TN_MAP conflict_map_i;
+    TN *tn;
+    BOOL first_time = TRUE;
+    BOOL changed = TRUE;
+
+#ifdef TARG_X8664
+    // now adjust the number of gpr regs as per the ABI
+    P_i--;
+    if (Is_Target_32bit() && Gen_Frame_Pointer)
+      P_i--;
+#endif
+
+    MEM_POOL_Push(pool);
+    LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, pool);
+
+    // compute the number of fp Regs Predicted
+    conflict_map_f = Calculate_All_Conflicts(bb, regs_in_use, 
+                                             ISA_REGISTER_CLASS_float);
+    R_f = Find_Max_Conflicts(conflict_map_f,
+                             &avg_conflicts_f,
+                             &k_conflicts,
+                             &N_f,
+                             &D_f,
+                             ISA_REGISTER_CLASS_float) + 1;
+
+    // compute the number of gpr Regs Predicted
+    conflict_map_i = Calculate_All_Conflicts(bb, regs_in_use, 
+                                             ISA_REGISTER_CLASS_integer);
+    R_i = Find_Max_Conflicts(conflict_map_i,
+                             &avg_conflicts_i,
+                             &k_conflicts,
+                             &N_i,
+                             &D_i,
+                             ISA_REGISTER_CLASS_integer) + 1;
+
+    // Now print the details of this loop
+    printf("unrolled loop(%d):size = %d,  ntimes=%d\n", 
+           BB_id(bb), BB_length(bb), BB_unrollings(bb));
+    printf("%s bb = %d, init_II = %d\n", usage_str, BB_id(bb), init_II);
+    printf("R_f = %d, D_f = %d, N_f = %d, avg_degree_f = %d\n",
+             R_f, D_f, N_f, avg_conflicts_f);
+    printf("R_i = %d, D_i = %d, N_i = %d, avg_degree_i = %d\n",
+           R_i, D_i, N_i, avg_conflicts_i);
+
+    TN_MAP_Delete(conflict_map_f);
+    TN_MAP_Delete(conflict_map_i);
+    MEM_POOL_Pop(pool);
+  }
+}
+
+void Examine_Loop_Info(char *usage_str, BOOL after_presched)
+{
+  if (CG_opt_level > 0) {
+    MEM_POOL loop_descr_pool;
+    MEM_POOL_Initialize(&loop_descr_pool, "loop_descriptors", TRUE);
+
+    Calculate_Dominators();
+    for (LOOP_DESCR *loop = LOOP_DESCR_Detect_Loops(&loop_descr_pool);
+         loop;
+         loop = LOOP_DESCR_next(loop)) {
+      Report_Loop_Info(loop, usage_str, after_presched, &loop_descr_pool);
+    }
+    Free_Dominators_Memory();
+  }
+}
 
 // Perform loop optimizations for all inner loops
 // in the PU.

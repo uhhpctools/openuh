@@ -1229,6 +1229,28 @@ TY_has_union (TY_IDX ty)
   return FALSE;
 }
 
+/* ty has volatile flag in any of its members */
+BOOL
+TY_has_volatile (TY_IDX ty)
+{
+  if (TY_is_volatile(ty)) {
+    return TRUE;
+  }
+  if (TY_kind(ty) != KIND_STRUCT) {
+    return FALSE;
+  }
+  
+  FLD_HANDLE fld = TY_fld(ty);
+  do {
+    TY_IDX fty = FLD_type(fld);
+    if (TY_has_volatile(fty)) {
+      return TRUE;
+    }
+    fld = FLD_next (fld);
+  } while (!fld.Is_Null());
+  return FALSE;
+}
+
 #ifdef TARG_NVISA
 /* number of elements in the vector */
 UINT

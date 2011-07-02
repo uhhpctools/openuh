@@ -123,6 +123,8 @@ static Dwarf_P_Debug dw_dbg;
 static Dwarf_Error dw_error;
 static BOOL Disable_DST = FALSE;
 static DST_INFO_IDX cu_idx;
+static Dwarf_Unsigned cu_text_begin = 0;
+static Dwarf_Unsigned cu_text_end = 0;
 static Elf64_Word cur_text_index;
 static DST_language Dwarf_Language;
 //static INT Current_Tree_Level;
@@ -2430,6 +2432,8 @@ Cg_Dwarf_Process_PU (Elf64_Word	scn_index,
   Dwarf_Unsigned end_entry   = Cg_Dwarf_Symtab_Entry(CGD_LABIDX,
 						     end_label,
 						     scn_index);
+  if( !cu_text_begin ) cu_text_begin = begin_entry;
+  cu_text_end = end_entry;
 
 #ifndef TARG_X8664
   fde = Build_Fde_For_Proc (dw_dbg, REGION_First_BB,
@@ -2616,6 +2620,12 @@ Cg_Dwarf_Begin (BOOL is_64bit)
   CGD_Symtab.push_back(CGD_SYMTAB_ENTRY(CGD_ELFSYM, (Dwarf_Unsigned) -1));
 }
 
+void
+Mark_CU_begin_end(Dwarf_P_Die cu_die, Dwarf_Unsigned low_pc, Dwarf_Unsigned high_pc)
+{
+  put_pc_value_symbolic (DW_AT_low_pc, low_pc, (Dwarf_Addr) 0, cu_die);
+  put_pc_value_symbolic (DW_AT_high_pc, high_pc, (Dwarf_Addr) 0, cu_die);
+}
 
 /* go through any remaining DST entries after the last subprogram. This
    also handles the case of a file with no PUs.
@@ -2623,6 +2633,7 @@ Cg_Dwarf_Begin (BOOL is_64bit)
 void Cg_Dwarf_Finish (pSCNINFO text_scninfo)
 {
   if (Disable_DST) return;
+  Mark_CU_begin_end(CGD_enclosing_proc[GLOBAL_LEVEL], cu_text_begin, cu_text_end);
   Traverse_Extra_DST();	/* do final pass for any info not emitted yet */
 }
 

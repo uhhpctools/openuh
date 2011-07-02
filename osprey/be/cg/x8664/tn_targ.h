@@ -92,30 +92,3 @@ inline TN* Ebx_TN()
 {
   return Build_Dedicated_TN( ISA_REGISTER_CLASS_integer, RBX, 4 );
 }
-
-// what mtype best represents the given tn
-inline TYPE_ID
-Mtype_Of_TN (TN *tn)
-{
-  ISA_REGISTER_CLASS rc = TN_register_class(tn);
-  switch (rc) {
-  case ISA_REGISTER_CLASS_integer: 
-	// since regs are unsigned, use unsigned types
-	switch (TN_size(tn)) {
-           case 1: return MTYPE_U1;
-           case 2: return MTYPE_U2;
-           case 4: return MTYPE_U4;
-           case 8: return MTYPE_U8;
-        }
-        break;
-  case ISA_REGISTER_CLASS_float: return MTYPE_F4;
-	switch (TN_size(tn)) {
-           case 4: return MTYPE_F4;
-           case 8: return MTYPE_F8;
-           case 10: return MTYPE_F10;
-           case 16: return MTYPE_FQ;
-        }
-  default: FmtAssert(FALSE, ("unexpected rclass"));
-  	return MTYPE_UNKNOWN;
-  }
-}

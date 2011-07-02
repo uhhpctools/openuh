@@ -135,6 +135,14 @@ AS_IF([test "x$enable_fortran" != "xno"], [
   BUILD_FORTRAN=YES
 ])
 
+# Set whether to skip IPA support (default NO).
+AC_ARG_ENABLE([ipa],
+  AS_HELP_STRING([--disable-ipa], [Disable IPA compilation support (EXPERIMENTAL)]))
+
+AS_IF([test "x$enable_ipa" = "xno"], [
+  BUILD_SKIP_IPA=YES
+])
+
 # Specify the targ_info directory under osprey/common to use.  IA64 uses
 # ipfec_targ_info instead of targ_info.
 TARG_INFO_NAME=targ_info
@@ -329,6 +337,7 @@ AC_SUBST([COMPILER_TARG_DIR])
 AC_SUBST([TARG_INFO_NAME])
 AC_SUBST([BUILD_GNU3])
 AC_SUBST([BUILD_FORTRAN])
+AC_SUBST([BUILD_SKIP_IPA])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 

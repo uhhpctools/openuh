@@ -382,6 +382,16 @@ Expand_Load (OPCODE opcode, TN *result, TN *base, TN *ofst, OPS *ops)
       }
     }
   }
+  if (Is_Target_Orochi() && Is_Target_AVX() && 
+      ((top == TOP_ldlps) ||
+       (top == TOP_ldhps) ||
+       (top == TOP_ldlpd) || 
+       (top == TOP_ldhpd))){
+     TN *xzero = Build_TN_Like(result);
+     Build_OP( TOP_xzero128v32, xzero, ops );
+     Build_OP( top, result, xzero, base, ofst, ops );
+     return;
+  }
 
   Build_OP (top, result, base, ofst, ops);
 }
@@ -634,9 +644,33 @@ Expand_Misaligned_Load ( OPCODE op, TN *result, TN *base, TN *disp, VARIANT vari
   }
   else if (mtype == MTYPE_V8I1 || mtype == MTYPE_V8I2 ||
 	   mtype == MTYPE_V8I4 || mtype == MTYPE_V8I8) {
-    if (base != NULL)
-      Build_OP(!Is_Target_SSE2() ? TOP_ldlps : TOP_ld64_2sse, result, base, disp, ops);    
-    else Build_OP(!Is_Target_SSE2() ? TOP_ldlps_n32 : TOP_ld64_2sse_n32, result, disp, ops);    
+    if (Is_Target_Orochi() && Is_Target_AVX()){
+      TN *xzero = Build_TN_Like(result);
+      Build_OP(TOP_xzero128v32, xzero, ops);
+      if (base != NULL)
+        Build_OP(TOP_ldlps, result, xzero, base, disp, ops);
+      else 
+        Build_OP(TOP_ldlps_n32, result, xzero, disp, ops);
+    } else {
+      if (base != NULL)
+        Build_OP(!Is_Target_SSE2() ? TOP_ldlps : TOP_ld64_2sse, 
+                 result, base, disp, ops);    
+      else 
+        Build_OP(!Is_Target_SSE2() ? TOP_ldlps_n32 : TOP_ld64_2sse_n32, 
+                 result, disp, ops);    
+    }
+  }
+  else if (mtype == MTYPE_V8F4 ) {
+    if (Is_Target_Orochi() && Is_Target_AVX()){
+      TN *xzero = Build_TN_Like(result);
+      Build_OP(TOP_xzero128v32, xzero, ops);
+      if (base != NULL)
+        Build_OP(TOP_ldlps, result, xzero, base, disp, ops);
+      else 
+        Build_OP(TOP_ldlps_n32, result, xzero, disp, ops);
+    } else {
+      Expand_Composed_Load (op, result, base, disp, variant, ops);
+    }
   }
   else if (mtype == MTYPE_V16F8 || mtype == MTYPE_V16C8) {
     if(Is_Target_Barcelona() || Is_Target_Orochi()){

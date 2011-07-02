@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -707,7 +707,7 @@ finalize_maybe_linker_options (boolean is_linker)
 }
 
 
-#if defined(TARG_NVISA)
+#ifdef BUILD_SKIP_IPA
 // ignore ipa elf issues
 static int check_for_whirl (char *name) { return FALSE; }
 #else
@@ -784,4 +784,4 @@ check_for_whirl(char *name)
     return FALSE;
     
 }
-#endif //TARG_NVISA
+#endif // BUILD_SKIP_IPA

@@ -261,6 +261,7 @@ typedef struct lno_flags {
   BOOL	Run_lego_set;
   BOOL	Run_lego_localizer;
   BOOL	Loop_finalization;
+  BOOL  Loop_model_simd; 
   UINT32 Max_do_loop_depth_strict;
   BOOL	Mem_sim;
   BOOL	Minvar;
@@ -509,6 +510,7 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Run_Lego_Set		Current_LNO->Run_lego_set
 #define LNO_Run_Lego_Localizer		Current_LNO->Run_lego_localizer
 #define LNO_Loop_Finalization		Current_LNO->Loop_finalization
+#define LNO_Loop_Model_Simd		Current_LNO->Loop_model_simd
 #define LNO_Max_Do_Loop_Depth_Strict	Current_LNO->Max_do_loop_depth_strict
 #define LNO_Mem_Sim			Current_LNO->Mem_sim
 #define LNO_Minvar			Current_LNO->Minvar

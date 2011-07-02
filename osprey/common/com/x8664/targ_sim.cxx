@@ -178,9 +178,12 @@ static enum X86_64_PARM_CLASS Merge_Classes(enum X86_64_PARM_CLASS class1,
   if (class1 == X86_64_INTEGER_CLASS || class2 == X86_64_INTEGER_CLASS)
     return X86_64_INTEGER_CLASS;
 
-  /* rule 5: if one of the classes is X87 or X87UP, result is MEMORY */
+  /* rule 5: if one of the classes is X87, X87UP, or COMPLEX_X87 class,
+     result is MEMORY */
   if (class1 == X86_64_X87_CLASS || class2 == X86_64_X87_CLASS ||
-      class1 == X86_64_X87UP_CLASS || class2 == X86_64_X87UP_CLASS)
+      class1 == X86_64_X87UP_CLASS || class2 == X86_64_X87UP_CLASS ||
+      class1 == X86_64_COMPLEX_X87_CLASS ||
+      class2 == X86_64_COMPLEX_X87_CLASS)
     return X86_64_MEMORY_CLASS;
   
   /* rule 6: otherwise, SSE class */
@@ -258,10 +261,13 @@ INT Classify_Aggregate(const TY_IDX ty,
     case MTYPE_F8:
       classes[0] = X86_64_SSE_CLASS;
       return 1;
-    case MTYPE_C10:
     case MTYPE_F10:
       classes[0] = X86_64_X87_CLASS;
-      return 0;
+      classes[1] = X86_64_X87UP_CLASS;
+      return 2;
+    case MTYPE_C10:
+      classes[0] = X86_64_COMPLEX_X87_CLASS;
+      return 1;
     case MTYPE_C4:
       classes[0] = X86_64_SSE_CLASS;
       return 1;
@@ -577,9 +583,7 @@ Get_Return_Info(TY_IDX rtype, Mtype_Return_Level level, BOOL ff2c_abi)
         info.mtype [0] = mtype;
         info.preg  [0] = PR_first_reg(SIM_INFO.flt_results);
       }
-
       else {
-
         info.count     = 2;
         info.mtype [0] = Mtype_complex_to_real(mtype);
         info.mtype [1] = Mtype_complex_to_real(mtype);
@@ -600,9 +604,7 @@ Get_Return_Info(TY_IDX rtype, Mtype_Return_Level level, BOOL ff2c_abi)
         info.mtype [0] = mtype;
         info.preg  [0] = First_X87_Preg_Return_Offset;
       }
-
       else {
-
         info.count     = 2;
         info.mtype [0] = Mtype_complex_to_real(mtype);
         info.mtype [1] = Mtype_complex_to_real(mtype);
@@ -645,30 +647,56 @@ Get_Return_Info(TY_IDX rtype, Mtype_Return_Level level, BOOL ff2c_abi)
               info.return_via_first_arg = FALSE;
               info.count = n;
 
-	      if (classes[0] == X86_64_SSE_CLASS) {
-		info.mtype[0] = SIM_INFO.dbl_type;
-		info.preg[0] = PR_first_reg(SIM_INFO.dbl_results);
-		next_float_return_num = PR_last_reg(SIM_INFO.dbl_results);
-		next_int_return_num = PR_first_reg(SIM_INFO.int_results);
+	      if (classes[0] == X86_64_X87_CLASS) {
+                  info.count = 1;
+                  info.mtype[0] = MTYPE_F10;
+                  info.preg[0]  = First_X87_Preg_Return_Offset;
+              }
+              else if (classes[0] == X86_64_COMPLEX_X87_CLASS) {
+                  if (Is_Target_32bit()) {
+                    info.count = 0;
+                    info.return_via_first_arg = TRUE;
+                  }
+                  else if (level == Use_Simulated) {
+            
+                    info.count     = 1;
+                    info.mtype [0] = MTYPE_C10;
+                    info.preg  [0] = First_X87_Preg_Return_Offset;
+                  }
+                  else {
+                    info.count     = 2;
+                    info.mtype [0] = Mtype_complex_to_real(MTYPE_C10);
+                    info.mtype [1] = Mtype_complex_to_real(MTYPE_C10);
+                    info.preg  [0] = First_X87_Preg_Return_Offset;
+                    info.preg  [1] = Last_X87_Preg_Return_Offset;
+                  }
+              } 
+              else {
+                if (classes[0] == X86_64_SSE_CLASS) {
+		  info.mtype[0] = SIM_INFO.dbl_type;
+		  info.preg[0] = PR_first_reg(SIM_INFO.dbl_results);
+		  next_float_return_num = PR_last_reg(SIM_INFO.dbl_results);
+		  next_int_return_num = PR_first_reg(SIM_INFO.int_results);
+	        }
+	        else {
+		  info.mtype[0] = SIM_INFO.int_type;
+		  info.preg[0] = PR_first_reg(SIM_INFO.int_results);
+		  next_float_return_num = PR_first_reg(SIM_INFO.dbl_results);
+		  next_int_return_num = PR_last_reg(SIM_INFO.int_results);
+	        }
+  
+	        if (n > 1) {
+	          if (classes[1] == X86_64_SSE_CLASS) {
+		    info.mtype[1] = SIM_INFO.dbl_type;
+		    info.preg[1] = next_float_return_num;
+		  }
+		  else {
+		    info.mtype[1] = SIM_INFO.int_type;
+		    info.preg[1] = next_int_return_num;
+		  }
+	        }
 	      }
-	      else {
-		info.mtype[0] = SIM_INFO.int_type;
-		info.preg[0] = PR_first_reg(SIM_INFO.int_results);
-		next_float_return_num = PR_first_reg(SIM_INFO.dbl_results);
-		next_int_return_num = PR_last_reg(SIM_INFO.int_results);
-	      }
-
-	      if (n > 1) {
-	        if (classes[1] == X86_64_SSE_CLASS) {
-		  info.mtype[1] = SIM_INFO.dbl_type;
-		  info.preg[1] = next_float_return_num;
-		}
-		else {
-		  info.mtype[1] = SIM_INFO.int_type;
-		  info.preg[1] = next_int_return_num;
-		}
-	      }
-            }
+           }
         }
       }
       break;
@@ -941,6 +969,13 @@ Get_Parameter_Location (TY_IDX ty, BOOL is_output)
 	  INT Save_Current_Float_Param_Num = Current_Float_Param_Num;
           ploc.size = TY_size (ty);
 	  INT n = Classify_Aggregate(ty, classes);
+          // handle X87 X87UP and COMPLEX_X87 cases
+          if (n != 0 && (classes[0] == X86_64_X87_CLASS ||
+                         classes[0] == X86_64_X87UP_CLASS ||
+                         classes[0] == X86_64_COMPLEX_X87_CLASS)) {
+             // x87, x87up and complex_x87 are passed in memory
+             n = 0;
+          }
 	  if (n > 0) { // passed in registers
 	    if (classes[0] == X86_64_SSE_CLASS) {
 	      ++Current_Float_Param_Num;
