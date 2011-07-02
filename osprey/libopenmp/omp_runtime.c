@@ -29,6 +29,8 @@
   
 */
 
+/* Copyright (C) 2005, 2009 University of Houston. */
+
 /*
  * File: omp_runtime.c
  * Abstract: routines for loop scheduling etc.

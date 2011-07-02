@@ -19,6 +19,9 @@
  *  Davide Libenzi <davidel@xmailserver.org>
  *
  */
+
+/* Copyright (C) 2008-2011 University of Houston. */
+
 #include <stdint.h>
 
 #if !defined(PCL_H)

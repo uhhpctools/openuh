@@ -20,6 +20,8 @@
  *
  */
 
+/* Copyright (C) 2008-2011 University of Houston. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "pcl.h"

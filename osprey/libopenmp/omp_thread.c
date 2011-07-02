@@ -29,6 +29,9 @@
   
 */
 
+/* Copyright (C) 2006-2011 University of Houston. */
+
+
 /*
  * File: omp_thread.c
  * Abstract: routines for thread management

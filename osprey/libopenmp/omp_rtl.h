@@ -29,6 +29,8 @@
   
 */
 
+/* Copyright (C) 2006-2011 University of Houston. */
+
 /*
  * File: omp_rtl.h
  * Abstract: implementation of OpenMP run-time library subroutines
