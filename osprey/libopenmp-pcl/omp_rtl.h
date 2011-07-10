@@ -49,10 +49,20 @@
 #include <stdint.h>
 #include "omp_lock.h"
 #include "omp_collector_api.h"
-#include "omp_task.h"
-#include "omp_task_pool.h"
-#include "omp_sys.h"
 
+/* Cody - header files for tasks */
+#include "pcl.h"
+
+
+
+/* machine dependent values*/
+#define CACHE_LINE_SIZE		64	// L1D cache line size 
+
+#ifdef TARG_IA64
+#define CACHE_LINE_SIZE_L2L3    128     // L2L3 cache line size
+#else
+#define CACHE_LINE_SIZE_L2L3     64      // L2L3 cache line size
+#endif
 
 /* default setting values*/
 #define OMP_NESTED_DEFAULT	0	
@@ -66,6 +76,13 @@
 
 #define OMP_POINTER_SIZE	8
 
+#define OMP_TASK_STACK_SIZE_DEFAULT     0x010000L /* 1KB */
+#define OMP_TASK_Q_UPPER_LIMIT_DEFAULT 10
+#define OMP_TASK_Q_LOWER_LIMIT_DEFAULT 1
+#define OMP_TASK_LEVEL_LIMIT_DEFAULT 3
+#define OMP_TASK_LIMIT_DEFAULT 2*__omp_level_1_team_size
+#define OMP_TASK_MOD_LEVEL_DEFAULT 3
+#define OMP_TASK_CREATE_COND_DEFAULT &__ompc_task_true_cond
 
 /* Maybe the pthread_creation should be done in a unit way,
  * currently not implemented*/
@@ -103,7 +120,14 @@ typedef enum {
  *  Maybe need to revise.
  */
 
+#ifdef USE_PCL_TASKS
+/*Cody - changed frame_pointer from char * to void *, seems to be OK
+  Did it because the Portable Coroutine Library takes a void * as an argument
+*/
+typedef void* frame_pointer_t;
+#else
 typedef char* frame_pointer_t;
+#endif
 
 /* The entry function prototype is nolonger 
  * the seem as GUIDE*/
@@ -176,6 +200,71 @@ struct omp_loop_info {
   omp_uint64 next_index;
 };
 
+/* function pointer declarations*/
+typedef void (*omp_task_func)(void *, frame_pointer_t);
+typedef int (*cond_func)();
+
+/* OpenMP Tasks */
+#ifdef USE_PCL_TASKS
+struct omp_task_desc {
+  volatile uint32_t num_children;
+  volatile uint32_t num_blocking_children;
+  int is_parallel_task;
+  int is_tied;
+  int may_delay;
+  int started;
+  volatile omp_task_state_t state;
+  volatile int safe_to_enqueue;
+  int depth;
+  int pdepth;
+  int blocks_parent;
+  volatile int context_flag;
+  int threadid;
+};
+
+typedef struct omp_task_desc omp_task_desc_t;
+
+struct omp_task {
+  coroutine_t coro;
+  struct omp_task *creator;
+  struct omp_task *next;
+  struct omp_task *prev;
+  omp_task_desc_t *desc;
+  pthread_mutex_t lock;
+};
+typedef struct omp_task omp_task_t;
+
+/*
+ * task queue represented as linked list
+ */
+struct omp_task_q {
+  omp_task_t *head;
+  omp_task_t *tail;
+  ompc_lock_t lock; /* global lock for the whole queue, very bad */
+  uint32_t size;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+typedef struct omp_task_q   omp_task_q_t;
+
+/*
+ * task queue represented as circular queue
+ */
+/*
+struct omp_task_q {
+  omp_task_t **queue; //an array of pointers
+  ompc_lock_t lock;
+  uint32_t head;
+  uint32_t tail;
+  uint32_t size;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+*/
+
+/*
+extern omp_task_q_t * __omp_private_task_q;
+extern omp_task_q_t * __omp_local_task_q;
+*/
+
+#endif
+
 
 /* team*/
 struct omp_team {
@@ -234,7 +323,6 @@ struct omp_team {
   // offset = 320
   volatile int barrier_count;
   volatile int barrier_count2;
-  volatile int exit_count;
 
   /* Still need a flag to indicate there are new tasks for level_1 team,
    * To avoid pthread allowed spurious wake up, and for nested teams,
@@ -248,7 +336,11 @@ struct omp_team {
   /*Cody - used in task implementation to make sure all tasks have completed
     execution in a barrier, would like to do something better if possible
   */
-  omp_task_pool_t *task_pool;
+  volatile int  num_tasks;
+#ifdef USE_PCL_TASKS
+  omp_task_q_t  *private_task_q;
+  omp_task_q_t  *public_task_q;
+#endif
 
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
@@ -278,8 +370,9 @@ struct omp_v_thread {
   /* for 'lastprivate'? used ?*/
   //	int is_last;
 
+#ifdef USE_PCL_TASKS
   omp_task_t *implicit_task;
-  int num_suspended_tied_tasks; /* not counting tied tasks in barrier */
+#endif
 
   unsigned long thr_lkwt_state_id;
   unsigned long thr_ctwt_state_id;
@@ -362,6 +455,9 @@ extern void __ompc_end_critical(int gtid, volatile ompc_lock_t **lck);
 extern void __ompc_reduction(int gtid, volatile ompc_lock_t **lck);
 extern void __ompc_end_reduction(int gtid, volatile ompc_lock_t **lck);
 
+
+
+
 /* Other stuff fuctions*/
 
 /* Maybe we should use libhoard for Dynamic memory 
@@ -377,6 +473,24 @@ extern void __ompc_serialized_parallel(int vthread_id);
 extern void __ompc_end_serialized_parallel(int vthread_id);
 
 
+
+#ifdef USE_PCL_TASKS
+extern void __ompc_task_q_init(omp_task_q_t *tq);
+extern void  __ompc_task_q_put_head(omp_task_q_t *tq, omp_task_t *task);
+extern void  __ompc_task_q_put_tail(omp_task_q_t *tq, omp_task_t *task);
+extern void __ompc_task_q_get_head(omp_task_q_t *tq, omp_task_t **task);
+extern void __ompc_task_q_get_tail(omp_task_q_t *tq, omp_task_t **task);
+#endif
+
+
+#ifdef USE_PCL_TASKS
+/*array of pointers to the implicit tasks created when a parallel region is 
+  encountered */
+extern omp_task_t *      __omp_level_1_team_tasks;
+/*each thread maintains a pointer to the current thread it is executing */
+extern __thread omp_task_t *__omp_current_task;
+#endif
+
 /*id of thread, could be used for other things other than tasks */
 extern __thread int __omp_myid; 
 
@@ -386,9 +500,84 @@ extern __thread int __omp_seed;
 /*every thread has a local copy of its current v_thread */
 extern __thread omp_v_thread_t *__omp_current_v_thread;
 
+#ifdef USE_PCL_TASKS
+/*External tasking API*/
+extern int __ompc_task_will_defer(int may_delay);
+extern void __ompc_task_create(omp_task_func taskfunc, void *frame_pointer,
+              void *firstprivates, int may_delay, int is_tied, int blocks_parent);
+extern void __ompc_task_wait();
+extern void __ompc_task_exit();
+
+extern void __ompc_task_firstprivates_alloc(void **firstprivates, int size);
+extern void __ompc_task_firstprivates_free(void *firstprivates);
+
+/*Interal tasking functions */
+#if 0
+extern void __ompc_task_schedule(omp_task_t **next);
+extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
+extern void __ompc_task_wait2(omp_task_state_t state);
+
+/*API into underlying task representation library (PCL) */
+extern omp_task_t* __ompc_task_get(omp_task_func func, void *args, int stacksize);
+#endif
+
+extern cond_func __ompc_task_create_cond;
+extern void __ompc_task_switch(omp_task_t *old, omp_task_t *newt);
+extern void __ompc_task_delete(omp_task_t *task);
+extern void __ompc_init_vp();
+
 extern volatile unsigned long int __omp_task_stack_size;
 
+/* Task Create Condition Limits */
+extern volatile int __omp_task_q_upper_limit;
+extern volatile int __omp_task_q_lower_limit;
+extern volatile int __omp_task_level_limit;
+extern volatile int __omp_task_limit;
+extern volatile int __omp_task_mod_level;
+
+/*Task create conditions */
+extern int __ompc_task_depth_cond();
+extern int __ompc_task_depthmod_cond();
+extern int __ompc_task_queue_cond();
+extern int __ompc_task_true_cond();
+extern int __ompc_task_false_cond();
+extern int __ompc_task_numtasks_cond();
+
+/*
+  Task Statistics
+  Here we keep track of statistics that can be helpful in determining
+  tasks behavior.  We keep thread local copies of each variable and
+  update the array entry at barriers.  This is due to the fact that
+  when the structure is updated manually it degrades performance
+  severly.  externs are declared in __ompc_task.c
+*/
+
+typedef struct omp_task_stats omp_task_stats_t;
+
+struct omp_task_stats {
+  unsigned int tasks_started;
+  unsigned int tasks_skipped;
+  unsigned int tasks_created;
+  unsigned int tasks_stolen;
+  unsigned int tasks_deleted;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+
+
+
+extern omp_task_stats_t __omp_task_stats[OMP_MAX_NUM_THREADS];
+
+extern __thread unsigned int __omp_tasks_started;
+extern __thread unsigned int __omp_tasks_skipped;
+extern __thread unsigned int __omp_tasks_created;
+extern __thread unsigned int __omp_tasks_stolen;
+extern __thread unsigned int __omp_tasks_deleted;
+
+extern char *__omp_task_stats_filename;
+
+#endif /* USE_PCL_TASKS */
+
 extern volatile int __omp_empty_flags[OMP_MAX_NUM_THREADS];
+
 
 extern unsigned long current_region_id;
 extern unsigned long current_parent_id;

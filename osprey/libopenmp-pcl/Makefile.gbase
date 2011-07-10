@@ -27,13 +27,13 @@
 #
 #
 
-# Makefile for libopenmp library
+# Makefile for libopenmp-pcl library
 
 # What we're building, and where to find it.
-LIBRARY = libopenmp.a
-PROF_LIB = libopenmp_p.a
+LIBRARY = libopenmp-pcl.a
+PROF_LIB = libopenmp-pcl_p.a
 dso_version := 1
-DSO = libopenmp.so.$(dso_version)
+DSO = libopenmp-pcl.so.$(dso_version)
 
 ifeq ($(BUILD_TYPE), NONSHARED)
 TARGETS = $(LIBRARY)
@@ -67,6 +67,8 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 CXXFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
 
+CFLAGS += -DUSE_PCL_TASKS
+#CFLAGS += -DTASK_DEBUG
 # enable UH modifications to PCL library
 CFLAGS += -DUH_PCL
 
@@ -77,12 +79,12 @@ CFILES = \
 	omp_runtime.c\
 	omp_thread.c\
 	omp_util.c \
-	pcl.c \
-	omp_collector_util.c \
-	omp_queue.c \
-	omp_task.c \
-	omp_task_pool.c \
-	omp_task_pool_per_thread1.c
+	omp_collector_util.c
+
+CFILES += pcl.c
+CFILES += omp_task.c
+CFILES += omp_queue.c
+
 
 CXXFILES = \
 	omp_init.cxx \

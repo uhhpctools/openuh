@@ -46,6 +46,15 @@ typedef ucontext_t co_core_ctx_t;
 typedef jmp_buf co_core_ctx_t;
 #endif
 
+
+typedef enum {
+  OMP_TASK_DEFAULT,
+  OMP_TASK_SUSPENDED,
+  OMP_TASK_EXIT,
+  OMP_TASK_DONE
+} omp_task_state_t;
+
+
 typedef struct s_co_ctx {
   co_core_ctx_t cc;
 } co_ctx_t;

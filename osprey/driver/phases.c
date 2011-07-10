@@ -2133,7 +2133,13 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
 	    if (option_was_seen(O_mp) ||
 		option_was_seen(O_apo) ||	// bug 6334
 		option_was_seen(O_fopenmp)) {
-                add_string(args, "-lopenmp");
+                char *use_pcl_omp = getenv("USE_PCL_TASKS");
+                if (use_pcl_omp != NULL &&
+                    ((strcmp(use_pcl_omp, "yes") == 0) ||
+                    (strcmp(use_pcl_omp, "YES") == 0)))
+                  add_string(args, "-lopenmp-pcl");
+                else
+                  add_string(args, "-lopenmp");
                 add_string(args, "-lstdc++");
             }
 

@@ -43,7 +43,9 @@
 #include "omp_rtl.h"
 #include "omp_sys.h"
 #include "omp_util.h"
+#ifdef USE_PCL_TASKS
 #include "pcl.h"
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -313,36 +315,33 @@ inline void __ompc_barrier_wait(omp_team_t *team)
   int new_count;
   int i;
   volatile int *barrier_flag_p;
-  omp_task_t *next, *current_task;
-  omp_task_pool_t *pool;
+#ifdef USE_PCL_TASKS
+  omp_task_t *next;
+#endif
 
   reset_barrier = 0;
   barrier_flag_p = &(team->barrier_flag);
   barrier_flag = *barrier_flag_p;
 
-  pool = team->task_pool;
-  current_task = __omp_current_task;
-
-  __ompc_task_set_state(current_task, OMP_TASK_IN_BARRIER);
-
-  __ompc_atomic_inc(&team->barrier_count);
+#ifdef USE_PCL_TASKS
+  new_count = __ompc_atomic_inc(&team->barrier_count2);
 
   /* why not use pthread_cond_wait instead of a busy wait? */
-  while(__ompc_task_pool_num_pending_tasks(pool) ||
-        team->barrier_count != team->team_size) {
-    next = __ompc_remove_task_from_pool(pool);
+  while(team->num_tasks || team->barrier_count2 != team->team_size) {
+    __ompc_task_schedule(&next);
     if(next != NULL) {
-      __ompc_task_switch(next);
+      __ompc_task_switch(__omp_current_task, next);
     }
   }
+#endif
 
-  new_count = __ompc_atomic_inc(&team->barrier_count2);
+  new_count = __ompc_atomic_inc(&team->barrier_count);
 
   if (new_count == team->team_size) {
     /* The last one reset flags*/
     team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
-    team->barrier_count = 0;
     team->barrier_count2 = 0;
+    team->barrier_count = 0;
 
     pthread_mutex_lock(&(team->barrier_lock));
     pthread_cond_broadcast(&(team->barrier_cond));
@@ -362,8 +361,6 @@ inline void __ompc_barrier_wait(omp_team_t *team)
     }
     pthread_mutex_unlock(&(team->barrier_lock));
   }
-
-  __ompc_task_set_state(current_task, OMP_TASK_RUNNING);
 
 }
 

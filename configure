@@ -1722,12 +1722,12 @@ fi
 if test "${BUILD_TARGET}" = "SL"; then
   LIBLIST="include"
 elif test "${BUILD_TARGET}" = "IA64"; then
-  LIBLIST="include libopenmp libmv"
+  LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
   fi
 else
-  LIBLIST="include libopenmp libhugetlbfs libmv"
+  LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
   fi
@@ -1740,7 +1740,7 @@ if test "${BUILD_TARGET}" = "SL"; then
           ac_config_files="$ac_config_files osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in"
 
 else
-                              ac_config_files="$ac_config_files osprey/targdir_lib/libopenmp/Makefile osprey/targdir_lib/libhugetlbfs/Makefile osprey/targdir_lib/libmv/Makefile"
+                                        ac_config_files="$ac_config_files osprey/targdir_lib/libopenmp/Makefile osprey/targdir_lib/libopenmp-pcl/Makefile osprey/targdir_lib/libhugetlbfs/Makefile osprey/targdir_lib/libmv/Makefile"
 
 fi
 
@@ -1756,7 +1756,7 @@ if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
 fi
 
 if test $BUILD_MULTILIB = "YES"; then
-                                                    ac_config_files="$ac_config_files osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in"
+                                                              ac_config_files="$ac_config_files osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in"
 
   if test "${BUILD_FORTRAN}" = "YES"; then
                         ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in"
@@ -2374,6 +2374,7 @@ do
   "osprey/targdir_lib/include/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/include/Makefile" ;;
   "osprey/targdir_lib/libinstr/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in" ;;
   "osprey/targdir_lib/libopenmp/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libopenmp/Makefile" ;;
+  "osprey/targdir_lib/libopenmp-pcl/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libopenmp-pcl/Makefile" ;;
   "osprey/targdir_lib/libhugetlbfs/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libhugetlbfs/Makefile" ;;
   "osprey/targdir_lib/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libmv/Makefile" ;;
   "osprey/targdir_lib/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libfortran/Makefile" ;;
@@ -2384,6 +2385,7 @@ do
   "osprey/targdir_lib2/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in" ;;
   "osprey/targdir_lib2/include/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in" ;;
   "osprey/targdir_lib2/libopenmp/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in" ;;
+  "osprey/targdir_lib2/libopenmp-pcl/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in" ;;
   "osprey/targdir_lib2/libhugetlbfs/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in" ;;
   "osprey/targdir_lib2/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in" ;;
   "osprey/targdir_lib2/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in" ;;

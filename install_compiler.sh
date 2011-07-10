@@ -358,6 +358,7 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libm/libmsgi.a       ${PHASEPATH}/libmsgi.a
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
 	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+	    INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
         # 32bit libraries
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libfortran/libfortran.a ${PHASEPATH}/32/libfortran.a
         [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${LIB32AREA}/libu/libffio.a          ${PHASEPATH}/32/libffio.a
@@ -428,6 +429,7 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.a           ${PHASEPATH}/libmv.a
         INSTALL_DATA_SUB ${PREBUILT_LIB}/${TARG_HOST}-${TARG_OS}/gnu/libm.a ${PHASEPATH}/libm.a
 	INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
+	INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a ${PHASEPATH}/libopenmp-pcl.a
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
 	LIB32AREA="osprey/targdir_lib2"
@@ -449,6 +451,8 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIBAREA}/libmv/libmv.so.1           ${PHASEPATH}/libmv.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.a      ${PHASEPATH}/libopenmp.a
         INSTALL_DATA_SUB ${LIBAREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/libopenmp.so.1
+        INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/libopenmp-pcl.a
+        INSTALL_DATA_SUB ${LIBAREA}/libopenmp-pcl/libopenmp-pcl.so.1      ${PHASEPATH}/libopenmp-pcl.so.1
         INSTALL_DATA_SUB ${LIBAREA}/libacml_mv/libacml_mv.a ${PHASEPATH}/libacml_mv.a
         INSTALL_DATA_SUB ${LIBAREA}/libacml_mv/libacml_mv.so.1 ${PHASEPATH}/libacml_mv.so.1
         # 32bit libraries
@@ -464,12 +468,16 @@ INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
         INSTALL_DATA_SUB ${LIB32AREA}/libmv/libmv.so.1           ${PHASEPATH}/32/libmv.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.a      ${PHASEPATH}/32/libopenmp.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopenmp/libopenmp.so.1      ${PHASEPATH}/32/libopenmp.so.1
+        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.a      ${PHASEPATH}/32/libopenmp-pcl.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libopenmp-pcl/libopenmp-pcl.so.1      ${PHASEPATH}/32/libopenmp-pcl.so.1
         INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.a ${PHASEPATH}/32/libacml_mv.a
         INSTALL_DATA_SUB ${LIB32AREA}/libacml_mv/libacml_mv.so.1 ${PHASEPATH}/32/libacml_mv.so.1
 
         (cd ${PHASEPATH}; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}; ln -sf libopenmp-pcl.so.1 libopenmp-pcl.so)
         (cd ${PHASEPATH}; ln -sf libacml_mv.so.1 libacml_mv.so)
         (cd ${PHASEPATH}/32; ln -sf libmv.so.1 libmv.so; ln -sf libopenmp.so.1 libopenmp.so)
+        (cd ${PHASEPATH}/32; ln -sf libopenmp-pcl.so.1 libopenmp-pcl.so)
         (cd ${PHASEPATH}/32; ln -sf libacml_mv.so.1 libacml_mv.so)
     fi 
     return 0

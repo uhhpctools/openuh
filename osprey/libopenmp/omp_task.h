@@ -30,129 +30,259 @@
 #ifndef __OMP_TASK_H__
 #define __OMP_TASK_H__
 
-#include "omp_rtl.h"
+#include <string.h>
+#include "omp_sys.h"
+#include "omp_lock.h"
+#include "pcl.h"
 
+#define OMP_TASK_STACK_SIZE_DEFAULT     0x010000L /* 64 KB */
+#define OMP_TASK_Q_UPPER_LIMIT_DEFAULT 10
+#define OMP_TASK_Q_LOWER_LIMIT_DEFAULT 1
+#define OMP_TASK_LEVEL_LIMIT_DEFAULT 3
+#define OMP_TASK_LIMIT_DEFAULT 2*__omp_level_1_team_size
+#define OMP_TASK_MOD_LEVEL_DEFAULT 3
+#define OMP_TASK_CREATE_COND_DEFAULT &__ompc_task_true_cond
 
-/* note: it is caller's responsibility to enqueue or dequeue tasks as
- * appropriate. __ompc_task_switch will only enable switching from one task to
- * another
- */
-void inline __ompc_task_switch(omp_task_t *old_task, omp_task_t *new_task)
+typedef enum {
+  OMP_TASK_UNSCHEDULED,
+  OMP_TASK_READY,
+  OMP_TASK_RUNNING,
+  OMP_TASK_WAITING,
+  OMP_TASK_IN_BARRIER,
+  OMP_TASK_EXITING,
+  OMP_TASK_FINISHED
+} omp_task_state_t;
+
+typedef enum {
+  OMP_TASK_IS_TIED       = 0x0001,
+  OMP_TASK_IS_DEFERRED   = 0x0002,
+  OMP_TASK_IS_FINAL      = 0x0004,
+  OMP_TASK_IS_COROUTINE  = 0x0008,
+  OMP_TASK_BLOCKS_PARENT = 0x0010,
+  OMP_TASK_IS_IMPLICIT   = 0x0020
+} omp_task_flag_t;
+
+/* function pointer declarations*/
+typedef void (*omp_task_func)(void *, void *);
+typedef int (*cond_func)();
+
+/* openmp explicit task */
+struct omp_task {
+  union {
+  omp_task_func   func;
+  coroutine_t coro;
+  } t;
+
+  void *          frame_pointer;
+  void *          firstprivates;
+
+  volatile omp_task_state_t state;
+
+  /* number of children that aren't done */
+  volatile int num_children;
+
+  /* a child which blocks the exit of the task because it or its descendants
+   * uses the task's stack frame */
+  volatile int num_blocking_children;
+
+  int creating_thread_id;
+  struct omp_task *parent;
+
+  int depth;  /* parent-child depth */
+  int sdepth; /* switching depth: number of tasks for which there is an omp_task_t
+                 object that are on the thread's call stack */
+
+  /* prev and next for task queue */
+  struct omp_task *prev;
+  struct omp_task *next;
+
+  ompc_lock_t lock;
+
+  omp_task_flag_t flags;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+typedef struct omp_task omp_task_t;
+
+/* inline functions */
+
+static inline omp_task_state_t
+__ompc_task_get_state(omp_task_t *task)
 {
-  Is_True(new_task != NULL && new_task->coro != NULL && new_task->desc != NULL,
-      ("__ompc_task_switch: new_task is uninitialized"));
-
-#ifdef TASK_DEBUG
-  printf("%d: __ompc_task_switch: switching from %X to %X\n", __omp_myid, old_task->coro,
-      new_task->coro);
-#endif
-
-  __omp_current_task = new_task;
-  /* if firstprivate was captured in parent task and passed in via struct, we
-   * can "start" the new task as soon as we switch to it. otherwise, it only
-   * "starts" in __ompc_task_body_start
-   */
-#if 1
-  if (__omp_current_task->desc->started == 0) {
-  __omp_tasks_started++;
-  __omp_current_task->desc->started = 1;
-  __omp_current_task->desc->threadid = __omp_myid;
-  }
-#endif
-
-  new_task->desc->safe_to_enqueue = 0;
-  new_task->desc->context_flag = 1;
-  old_task->desc->safe_to_enqueue = 1;
-
-  co_call(new_task->coro);
+  return task->state;
 }
 
-static void
-inline __ompc_task_exit_to(omp_task_t *current, omp_task_t *new_task)
+static inline void
+__ompc_task_set_state(omp_task_t *task, omp_task_state_t state)
 {
-  Is_True(current != NULL && current->coro != NULL && current->desc != NULL,
-      ("__ompc_task_exit_to: current is uninitialized"));
-  Is_True(new_task != NULL && new_task->coro != NULL && new_task->desc != NULL,
-      ("__ompc_task_exit_to: new_task is uninitialized"));
-
-#ifdef TASK_DEBUG
-  printf("%d: __ompc_task_exit_to: switching from %X to %X\n", __omp_myid, current->coro,
-      new_task->coro);
-#endif
-
-  __omp_current_task = new_task;
-  /* if firstprivate was captured in parent task and passed in via struct, we
-   * can "start" the new task as soon as we switch to it. otherwise, it only
-   * starts in __ompc_task_body_start
-   */
-#if 1
-  if (__omp_current_task->desc->started == 0) {
-  __omp_tasks_started++;
-  __omp_current_task->desc->started = 1;
-  __omp_current_task->desc->threadid = __omp_myid;
-  }
-#endif
-
-  new_task->desc->context_flag = 1;
-  new_task->desc->safe_to_enqueue = 0;
-  /*current->desc->safe_to_enqueue = 1;*/
-  pthread_mutex_destroy(&current->lock);
-  co_exit_to(new_task->coro);
+  task->state = state;
 }
 
-void inline __ompc_task_inc_depth()
+static inline int
+__ompc_task_state_is_unscheduled(omp_task_t *task)
 {
-  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
-      ("__ompc_task_inc_depth: __omp_current_task is uninitialized"));
-  __omp_tasks_skipped++;
-  __omp_current_task->desc->pdepth++;
+  return __ompc_task_get_state(task) == OMP_TASK_UNSCHEDULED;
 }
 
-void inline __ompc_task_dec_depth()
+static inline int
+__ompc_task_state_is_ready(omp_task_t *task)
 {
-  Is_True(__omp_current_task != NULL && __omp_current_task->desc != NULL,
-      ("__ompc_task_dec_depth: __omp_current_task is uninitialized"));
-  __omp_current_task->desc->pdepth--;
+  return __ompc_task_get_state(task) == OMP_TASK_READY;
 }
 
-static inline omp_task_t* __ompc_task_get(omp_task_func func, frame_pointer_t fp, 
-                        void *args, int stacksize)
+static inline int
+__ompc_task_state_is_running(omp_task_t *task)
+{
+  return __ompc_task_get_state(task) == OMP_TASK_RUNNING;
+}
+
+static inline int
+__ompc_task_state_is_waiting(omp_task_t *task)
+{
+  return __ompc_task_get_state(task) == OMP_TASK_WAITING;
+}
+
+static inline int
+__ompc_task_state_is_in_barrier(omp_task_t *task)
+{
+  return __ompc_task_get_state(task) == OMP_TASK_IN_BARRIER;
+}
+
+static inline int
+__ompc_task_state_is_exiting(omp_task_t *task)
+{
+  return __ompc_task_get_state(task) == OMP_TASK_EXITING;
+}
+
+static inline int
+__ompc_task_state_is_finished(omp_task_t *task)
+{
+  return __ompc_task_get_state(task) == OMP_TASK_FINISHED;
+}
+
+static inline omp_task_flag_t
+__ompc_task_set_flags(omp_task_t *task, omp_task_flag_t flags)
+{
+  task->flags |= flags;
+  return task->flags;
+}
+
+static inline omp_task_flag_t
+__ompc_task_get_flags(omp_task_t *task, omp_task_flag_t flags)
+{
+  return (task->flags & flags);
+}
+
+static inline int
+__ompc_task_is_tied(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_IS_TIED) != 0;
+}
+
+static inline int
+__ompc_task_is_deferred(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_IS_DEFERRED) != 0;
+}
+
+static inline int
+__ompc_task_is_final(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_IS_FINAL) != 0;
+}
+
+static inline int
+__ompc_task_is_coroutine(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_IS_COROUTINE) != 0;
+}
+
+static inline int
+__ompc_task_blocks_parent(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_BLOCKS_PARENT) != 0;
+}
+
+static inline int
+__ompc_task_is_implicit(omp_task_t *task)
+{
+  return __ompc_task_get_flags(task, OMP_TASK_IS_IMPLICIT) != 0;
+}
+
+static inline omp_task_t *__ompc_task_new_implicit(void)
 {
   omp_task_t *new_task = malloc(sizeof(omp_task_t));
-  Is_True(new_task != NULL,
-      ("__ompc_task_get: new_task could not be allocated"));
-  new_task->desc = malloc(sizeof(omp_task_desc_t));
-  Is_True(new_task->desc != NULL,
-      ("__ompc_task_get: new_task->desc could not be allocated"));
-#ifdef UH_PCL
-  new_task->coro = co_create(func, args, fp, NULL, stacksize);
-#else
-  new_task->coro = co_create(func, fp, NULL, stacksize);
-#endif
-  Is_True(new_task->coro != NULL,
-      ("__ompc_task_get: returned coroutine is NULL"));
+
+  Is_True(new_task != NULL, ("couldn't create new task object"));
+  memset(new_task, 0, sizeof(omp_task_t));
+
+  __ompc_task_set_flags(new_task, OMP_TASK_IS_IMPLICIT);
+  __ompc_task_set_flags(new_task, OMP_TASK_IS_TIED);
+  new_task->state = OMP_TASK_RUNNING;
 
   return new_task;
 }
 
-inline void __ompc_task_delete(omp_task_t *task)
+static inline omp_task_t *__ompc_task_new(void)
 {
-  static long cnt = 0;
-  Is_True(task != NULL && task->coro != NULL,
-      ("__ompc_task_delete: task is uninitialized"));
-#ifdef TASK_DEBUG
-  printf("%d. %d: __ompc_task_delete: delete task %X\n", ++cnt, __omp_myid, task->coro );
-#endif
-  __omp_tasks_deleted++;
-  co_delete(task->coro);
+  omp_task_t *new_task = malloc(sizeof(omp_task_t));
+
+  Is_True(new_task != NULL, ("couldn't create new task object"));
+  memset(new_task, 0, sizeof(omp_task_t));
+
+  new_task->state = OMP_TASK_UNSCHEDULED;
+
+  return new_task;
 }
 
-#ifdef USE_OLD_TASKS
-inline void __ompc_init_vp()
+static inline void __ompc_task_delete(omp_task_t *task)
 {
-  co_vp_init();
+  Is_True(task != NULL, ("tried to delete a NULL task"));
+
+  free(task);
 }
-#endif
 
-#endif
+static inline void
+__ompc_task_set_function(omp_task_t *task, omp_task_func func)
+{
+  task->t.func = func;
+}
 
+static inline void
+__ompc_task_set_frame_pointer(omp_task_t *task, void *frame_pointer)
+{
+  task->frame_pointer = frame_pointer;
+}
+
+static inline void
+__ompc_task_set_firstprivates(omp_task_t *task, void *firstprivates)
+{
+  task->firstprivates = firstprivates;
+}
+
+
+/* global variables extern declarations */
+extern __thread omp_task_t *__omp_current_task;
+extern int (*__ompc_task_cutoff)( void );
+
+
+/* external API for compiler */
+extern int __ompc_task_will_defer(int may_delay);
+extern void __ompc_task_create(omp_task_func taskfunc, void *frame_pointer,
+              void *firstprivates, int may_delay, int is_tied, int blocks_parent);
+extern void __ompc_task_wait();
+extern void __ompc_task_exit();
+
+extern void __ompc_task_firstprivates_alloc(void **firstprivates, int size);
+extern void __ompc_task_firstprivates_free(void *firstprivates);
+
+/* internal APIs */
+extern int __ompc_task_cutoff_default();
+extern int __ompc_task_cutoff_num_children();
+extern int __ompc_task_cutoff_queue_load();
+extern int __ompc_task_cutoff_depth();
+extern int __ompc_task_cutoff_always();
+extern int __ompc_task_cutoff_never();
+
+extern void __ompc_task_switch(omp_task_t *new_task);
+
+
+#endif  /* __OMP_TASK_H */

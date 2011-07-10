@@ -108,6 +108,7 @@ contributions of PathScale Inc. and Sun Chan at SimpLight Nanoelectronics.
 #%{open64_lib_dir}/%{open64_version}/libmsgi.a
 %{open64_lib_dir}/%{open64_version}/libmv.a
 %{open64_lib_dir}/%{open64_version}/libopenmp.a
+%{open64_lib_dir}/%{open64_version}/libopenmp-pcl.a
 %endif
 
 %{open64_bin_dir}/hpe.pl
@@ -140,6 +141,7 @@ contributions of PathScale Inc. and Sun Chan at SimpLight Nanoelectronics.
 #%{open64_lib_dir}/%{open64_version}/32/libmsgi.a
 %{open64_lib_dir}/%{open64_version}/32/libmv.a
 %{open64_lib_dir}/%{open64_version}/32/libopenmp.a
+%{open64_lib_dir}/%{open64_version}/32/libopenmp-pcl.a
 %endif
 
 %prep

@@ -38,15 +38,6 @@
 #ifndef __omp_sys_included
 #define __omp_sys_included
 
-/* machine dependent values*/
-#define CACHE_LINE_SIZE		64	// L1D cache line size 
-
-#ifdef TARG_IA64
-#define CACHE_LINE_SIZE_L2L3    128     // L2L3 cache line size
-#else
-#define CACHE_LINE_SIZE_L2L3     64      // L2L3 cache line size
-#endif
-
 #if defined(TARG_X8664) || defined(TARG_IA32) || defined(TARG_LOONGSON)
 
 //TODO: should use __sync_add_and_fetch(), but it's

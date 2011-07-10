@@ -1,5 +1,5 @@
 /*
- Task Queue Implementation for Open64's OpenMP runtime library
+ OpenMP Queue Implementation for Open64's OpenMP runtime library
 
  Copyright (C) 2008-2011 University of Houston.
 
@@ -26,35 +26,96 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#ifndef __omp_queue_included
+#define __omp_queue_included
 
-#ifndef __omp_rtl_queue_included
-#define __omp_rtl_queue_included
+#include "omp_lock.h"
+#include "omp_sys.h"
 
-#ifndef USE_OLD_TASKS
+typedef void * omp_queue_item_t;
 
-void __ompc_etask_q_init_default(omp_etask_q_t *tq);
-void __ompc_etask_q_init_con(omp_etask_q_t *tq);
+struct omp_queue_slot {
+  omp_queue_item_t item;
 
-void __ompc_etask_q_con_enqueue(omp_etask_q_t *tq, omp_etask_t *tail_task);
-omp_etask_t * __ompc_etask_q_con_dequeue(omp_etask_q_t *tq);
+  /* for lists */
+  struct omp_queue_slot *next;
+  struct omp_queue_slot *prev;
+  int used;
+};
+typedef struct omp_queue_slot omp_queue_slot_t;
 
-omp_etask_t * __ompc_etask_q_pop_head_slock(omp_etask_q_t *tq);
-omp_etask_t * __ompc_etask_q_pop_head_thlock(omp_etask_q_t *tq);
-omp_etask_t * __ompc_etask_q_pop_head_hlock(omp_etask_q_t *tq);
+struct omp_queue {
+  omp_queue_slot_t *slots;
 
-omp_etask_t* __ompc_etask_q_pop_tail_slock(omp_etask_q_t *tq);
-omp_etask_t* __ompc_etask_q_pop_tail_htlock(omp_etask_q_t *tq);
-omp_etask_t* __ompc_etask_q_pop_tail_tlock(omp_etask_q_t *tq);
+  int num_slots;
+  volatile unsigned int head_index;
+  volatile unsigned int tail_index;
 
-void __ompc_etask_q_push_head_slock(omp_etask_q_t *tq, omp_etask_t *head_task);
-void __ompc_etask_q_push_head_thlock(omp_etask_q_t *tq, omp_etask_t *head_task);
-void __ompc_etask_q_push_head_hlock(omp_etask_q_t *tq, omp_etask_t *head_task);
+  /* for lists */
+  volatile omp_queue_slot_t *head;
+  volatile omp_queue_slot_t *tail;
 
-void __ompc_etask_q_push_tail_slock(omp_etask_q_t *tq, omp_etask_t *tail_task);
-void __ompc_etask_q_push_tail_htlock(omp_etask_q_t *tq, omp_etask_t *tail_task);
-void __ompc_etask_q_push_tail_tlock(omp_etask_q_t *tq, omp_etask_t *tail_task);
+  /* internal use only */
+  ompc_lock_t lock1; /* global or head lock */
+  ompc_lock_t lock2; /* tail lock */
+  volatile int reject;
+  volatile int is_empty;
+  volatile int used_slots;
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+typedef struct omp_queue omp_queue_t;
 
-#endif
+/* inline functions */
+/* note: array implementation is currently assumed */
+static inline int __ompc_queue_is_empty(omp_queue_t *q)
+{
+  return q->is_empty;
+}
 
-#endif /* __omp_rtl_queue_included */
+static inline int __ompc_queue_num_slots(omp_queue_t *q)
+{
+  return (q->num_slots);
+}
 
+/* external interface */
+
+/* function pointers */
+extern void
+(*__ompc_queue_init)(omp_queue_t *q, int num_slots);
+extern void
+(*__ompc_queue_free_slots)(omp_queue_t *q);
+extern int
+(*__ompc_queue_is_full)(omp_queue_t *q);
+extern int
+(*__ompc_queue_num_used_slots)(omp_queue_t *q);
+extern omp_queue_item_t
+(*__ompc_queue_get_head)(omp_queue_t *q);
+extern omp_queue_item_t
+(*__ompc_queue_get_tail)(omp_queue_t *q);
+extern int
+(*__ompc_queue_put_tail)(omp_queue_t *q, omp_queue_item_t item);
+extern int
+(*__ompc_queue_put_head)(omp_queue_t *q, omp_queue_item_t item);
+extern int
+(*__ompc_queue_cfifo_is_full)(omp_queue_t *q);
+extern int
+(*__ompc_queue_cfifo_num_used_slots)(omp_queue_t *q);
+extern int
+(*__ompc_queue_cfifo_put)(omp_queue_t *q, omp_queue_item_t item);
+extern omp_queue_item_t
+(*__ompc_queue_cfifo_get)(omp_queue_t *q);
+
+/* implementation */
+extern void __ompc_queue_array_init(omp_queue_t *q, int num_slots);
+extern void __ompc_queue_array_free_slots(omp_queue_t *q);
+extern int __ompc_queue_array_is_full(omp_queue_t *q);
+extern int __ompc_queue_array_num_used_slots(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_array_get_tail(omp_queue_t *q);
+extern int __ompc_queue_array_put_tail(omp_queue_t *q, omp_queue_item_t item);
+extern int __ompc_queue_array_put_head(omp_queue_t *q, omp_queue_item_t item);
+extern int __ompc_queue_cfifo_array_is_full(omp_queue_t *q);
+extern int __ompc_queue_cfifo_array_num_used_slots(omp_queue_t *q);
+extern int __ompc_queue_cfifo_array_put(omp_queue_t *q, omp_queue_item_t item);
+extern omp_queue_item_t __ompc_queue_cfifo_array_get(omp_queue_t *q);
+
+#endif /* __omp_queue_included */

@@ -432,6 +432,7 @@ void co_delete(coroutine_t coro) {
   printf("[PCL] co_delete: deleting %x\n", co);
 #endif
   if (co->alloc) {
+    bzero(co, co->alloc); /* for debugging purposes */
     free(co);
   }
 }

@@ -347,10 +347,10 @@ typedef enum {
   MPR_OMP_COLLAPSE_INIT         = 80,
   MPR_OMP_COLLAPSE_NEXT	        = 81,
 
-  MPR_OMP_TASK_ALLOC_ARGS       = 82,
-  MPR_OMP_TASK_FREE_ARGS        = 83,
-  MPR_OMP_TASK_DEFERRED_COND    = 84,
-  MPRUNTIME_LAST = MPR_OMP_TASK_DEFERRED_COND
+  MPR_OMP_TASK_FIRSTPRIVATES_ALLOC       = 82,
+  MPR_OMP_TASK_FIRSTPRIVATES_FREE        = 83,
+  MPR_OMP_TASK_WILL_DEFER       = 84,
+  MPRUNTIME_LAST = MPR_OMP_TASK_WILL_DEFER
 } MPRUNTIME;
 
 
@@ -768,9 +768,9 @@ static const char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_collapse_init",       /* MPR_OMP_COLLAPSE_INIT */
   "__ompc_collapse_next",       /* MPR_OMP_COLLAPSE_NEXT */
 
-  "__ompc_task_alloc_args",     /* MPR_OMP_TASK_ALLOC_ARGS */
-  "__ompc_task_free_args",      /* MPR_OMP_TASK_FREE_ARGS */
-  "__ompc_task_deferred_cond",    /* MPR_OMP_TASK_DEFERRED_COND */
+  "__ompc_task_firstprivates_alloc",     /* MPR_OMP_TASK_FIRSTPRIVATES_ALLOC */
+  "__ompc_task_firstprivates_free",      /* MPR_OMP_TASK_FIRSTPRIVATES_FREE */
+  "__ompc_task_will_defer",    /* MPR_OMP_TASK_WILL_DEFER */
 };
 
 
@@ -865,9 +865,9 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_COLLAPSE_INIT */
   ST_IDX_ZERO,   /* MPR_OMP_COLLAPSE_NEXT */
 
-  ST_IDX_ZERO,   /* MPR_OMP_TASK_ALLOC_ARGS */
-  ST_IDX_ZERO,   /* MPR_OMP_TASK_FREE_ARGS */
-  ST_IDX_ZERO,   /* MPR_OMP_TASK_DEFERRED_COND */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_FIRSTPRIVATES_ALLOC */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_FIRSTPRIVATES_FREE */
+  ST_IDX_ZERO,   /* MPR_OMP_TASK_WILL_DEFER */
 };
 
 #define MPSP_STATUS_PREG_NAME "mpsp_status"
@@ -1148,10 +1148,10 @@ Generate RT call to judge if creating a deferred task. If it is deferred, then
 need to set up the task args struct for marshalling firstprivate values into
 the task.
 */
-static WN * Gen_Task_Deferred_Cond(WN *may_delay)
+static WN * Gen_Task_Will_Defer(WN *may_delay)
 {
   WN *wn = WN_Create(OPC_I4CALL, 1);
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_DEFERRED_COND);
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_WILL_DEFER);
 
   WN_Set_Call_Non_Data_Mod(wn);
   WN_Set_Call_Non_Data_Ref(wn);
@@ -1234,13 +1234,13 @@ Gen_Fork (ST *proc, WN *nThreads)
 }
 
 static WN *
-Gen_Task_Alloc_Args (ST *alloc_st)
+Gen_Task_Firstprivates_Alloc (ST *alloc_st)
 {
   WN * wn;
   WN * wnx;
   Is_True( local_taskargs != NULL, ("local_taskargs should be non-NULL"));
   wn = WN_Create(OPC_VCALL, 2 );
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_ALLOC_ARGS);
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_FIRSTPRIVATES_ALLOC);
 
   WN_Set_Call_Does_Mem_Alloc(wn);
 
@@ -1257,13 +1257,13 @@ Gen_Task_Alloc_Args (ST *alloc_st)
 }
 
 static WN *
-Gen_Task_Free_Args (ST *alloc_st)
+Gen_Task_Firstprivates_Free (ST *alloc_st)
 {
   WN * wn;
   WN * wnx;
   Is_True( local_taskargs != NULL, ("local_taskargs should be non-NULL"));
   wn = WN_Create(OPC_VCALL, 1 );
-  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_FREE_ARGS);
+  WN_st_idx(wn) = GET_MPRUNTIME_ST(MPR_OMP_TASK_FIRSTPRIVATES_FREE);
 
   WN_Set_Call_Does_Mem_Free(wn);
 
@@ -1365,7 +1365,7 @@ Insert_Task_Exits (WN *node)
         //if (0)
         if (local_taskargs && firstprivate_nodes) {
           WN *if_block = WN_CreateBlock();
-          WN_INSERT_BlockLast( if_block, Gen_Task_Free_Args(local_taskargs));
+          WN_INSERT_BlockLast( if_block, Gen_Task_Firstprivates_Free(local_taskargs));
           WN* if_free_args = WN_CreateIf(Gen_MP_Load(local_taskargs, 0),
                                   if_block, WN_CreateBlock());
           WN_INSERT_BlockBefore(node, stmt, if_free_args);
@@ -13680,7 +13680,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
             CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL,
             ST_type(local_taskargs));
         task_fpsetup_blk = WN_CreateBlock();
-        WN_INSERT_BlockLast(task_fpsetup_blk, Gen_Task_Alloc_Args(task_actualargs));
+        WN_INSERT_BlockLast(task_fpsetup_blk, Gen_Task_Firstprivates_Alloc(task_actualargs));
       }
       for ( ; fp; fp=WN_next(fp)) {
         ST *fp_st = WN_st(fp);
@@ -13889,7 +13889,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       WN_OFFSET task_deferred_ofst;
       Create_Preg_or_Temp( MTYPE_I4, "__ompv_task_is_deferred",
                           &task_is_deferred_st, &task_deferred_ofst);
-      WN_INSERT_BlockLast(replace_block, Gen_Task_Deferred_Cond(if_node));
+      WN_INSERT_BlockLast(replace_block, Gen_Task_Will_Defer(if_node));
       GET_RETURN_PREGS(rreg1, rreg2, MTYPE_I4);
       WN *temp_node = Gen_MP_Store( task_is_deferred_st, task_deferred_ofst,
 		         WN_LdidPreg( MTYPE_I4, rreg1 ));

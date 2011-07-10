@@ -1,7 +1,7 @@
 /*
- Task Scheduler Implementation for Open64's OpenMP runtime library
+ Collector Support for Open64's OpenMP runtime library
 
- Copyright (C) 2011 University of Houston.
+ Copyright (C) 2009 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -26,13 +26,18 @@
  http://www.cs.uh.edu/~hpctools
 */
 
-#ifndef __omp_rtl_etask_scheduler_included
-#define __omp_rtl_etask_scheduler_included
 
-#ifndef USE_OLD_TASKS
+#ifndef	_OMP_COLLECTOR_VALIDATION_H
+#define	_OMP_COLLECTOR_VALIDATION_H
 
-omp_etask_t *__ompc_etask_schedule_default(int allow_stealing);
-
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#endif /* __omp_rtl_etask_scheduler_included */
+int init_collector(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _OMP_COLLECTOR_VALIDATION_H */
