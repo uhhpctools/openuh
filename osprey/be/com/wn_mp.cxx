@@ -12558,7 +12558,7 @@ Process_MP_Region ( void )
 		        WN_CreatePragma ( WN_PRAGMA_PREAMBLE_END, ST_IDX_ZERO,
 			                  0, 0 ));
 
-  if (mpt == MPP_TASK_REGION) {
+  if (mpt == MPP_TASK_REGION && taskarg_firstprivate_block) {
     WN *if_wn  = taskarg_firstprivate_block ?
                  taskarg_firstprivate_block : WN_CreateBlock();
     WN *else_wn  = firstprivate_block ?
@@ -13668,16 +13668,17 @@ lower_mp ( WN * block, WN * node, INT32 actions )
         mp_region_num = WN_pragma_arg1(mpnum_node);
       else
         mp_region_num = region_id;
-      task_actualargs = New_ST(CURRENT_SYMTAB);
+      task_actualargs = NULL;
       /* first each firstprivate, initialize corresponding field in
        * task_actualargs ST */
       WN *fp = firstprivate_nodes;
       INT ofst = 0;
-      ST_Init( task_actualargs,
-          Save_Str2i("__ompv_taskarg","", mp_region_num),
-          CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL,
-          ST_type(local_taskargs));
       if (fp) {
+        task_actualargs = New_ST(CURRENT_SYMTAB);
+        ST_Init( task_actualargs,
+            Save_Str2i("__ompv_taskarg","", mp_region_num),
+            CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL,
+            ST_type(local_taskargs));
         task_fpsetup_blk = WN_CreateBlock();
         WN_INSERT_BlockLast(task_fpsetup_blk, Gen_Task_Alloc_Args(task_actualargs));
       }

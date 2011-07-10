@@ -159,6 +159,7 @@ int __ompc_task_create(omp_task_func taskfunc, frame_pointer_t fp, void *args,
     //__ompc_atomic_inc(&team->num_tasks);
 
     /* execute the task */
+    __omp_current_etask->state = OMP_TASK_READY;
     if (__omp_current_etask->is_tied) {
       omp_etask_t *orig_task = __omp_current_etask;
       (*has_tied_tasks)++;
@@ -172,6 +173,7 @@ int __ompc_task_create(omp_task_func taskfunc, frame_pointer_t fp, void *args,
       taskfunc(args, fp);
       __omp_current_etask = orig_task;
     }
+    __omp_current_etask->state = OMP_TASK_RUNNING;
   }
 
 }
@@ -212,18 +214,14 @@ void __ompc_task_exit()
   /* only try to free parent or put it back on queue if it was a deferred task
    */
   if (current_task->parent && current_task->parent->may_delay) {
-    /* acquire lock on parent. decrement parent's num_children. if
-     * num_children is 0 and parent's state is TASK_FINISHED, then go ahead
-     * and deallocate the task for the parent. if num_children is 0 and parent
-     * is in a taskwait state and parent is a coroutine, then place it on to
-     * the queue in a TASK_READY state so that another thread could
-     * potentially pick it up. release the lock.
-     *
-     * would like to avoid using locks if possible, but not sure if possible */
-    __ompc_lock(&current_task->parent->lock);
+    /* decrement parent's num_children. if num_children is 0 and parent's
+     * state is TASK_FINISHED, then go ahead and deallocate the task for the
+     * parent. if num_children is 0 and parent is in a taskwait state and
+     * parent is a coroutine, then place it on to the queue in a TASK_READY
+     * state so that another thread could potentially pick it up.
+     */
     if (current_task->parent->num_children == 0 &&
         current_task->parent->state == OMP_TASK_FINISHED) {
-      __ompc_unlock(&current_task->parent->lock);
       free(current_task->parent);
     } else if ((current_task->parent->is_coroutine) &&
         (current_task->parent->num_children == 0) &&
@@ -234,9 +232,6 @@ void __ompc_task_exit()
        */
       current_task->parent->state = OMP_TASK_READY;
       __ompc_etask_q_push_tail(&team->etask_q[__omp_myid], current_task->parent);
-      __ompc_unlock(&current_task->parent->lock);
-    } else  {
-      __ompc_unlock(&current_task->parent->lock);
     }
   }
 

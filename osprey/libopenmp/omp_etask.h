@@ -68,14 +68,10 @@ __ompc_etask_switch(omp_etask_t *new_task)
   Is_True(__omp_current_etask->state == OMP_TASK_EXITING,
       ("__omp_current_etask returns but is not in EXITING state"));
 
-  /* would like to avoid using lock if possible */
-  __ompc_lock(&__omp_current_etask->lock);
   if (__omp_current_etask->num_children == 0) {
-    __ompc_unlock(&__omp_current_etask->lock);
     free(__omp_current_etask);
   } else {
     __omp_current_etask->state = OMP_TASK_FINISHED;
-    __ompc_unlock(&__omp_current_etask->lock);
   }
   __omp_current_etask = orig_task;
 }

@@ -1510,7 +1510,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       pthread_mutex_unlock(&__omp_level_1_mutex);
     }
 
+
     __omp_level_1_pthread[0].task = &(__omp_level_1_team[0]);
+    __omp_current_v_thread = &__omp_level_1_team[0];
 
 #ifndef USE_OLD_TASKS
     /* initialize implicit etask for master thread of level 1 team */
@@ -1564,6 +1566,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     __omp_exe_mode = OMP_EXE_MODE_SEQUENTIAL;
     __omp_level_1_pthread[0].task = &__omp_root_v_thread;
+    __omp_current_v_thread = &__omp_root_v_thread;
 
   } else if (__omp_nested == 1) {
     /* OMP_EXE_MODE_IN_PARALLEL, with nested enable */

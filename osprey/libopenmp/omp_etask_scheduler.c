@@ -73,6 +73,7 @@ omp_etask_t *__ompc_etask_schedule_default(int allow_stealing)
     while (1) {
       while (team->etask_q[victim].size == 0) {
         victim++;
+        if (victim == __omp_myid) victim++;
         if (victim == ts) victim = 0;
         if (victim == first_victim) return NULL;
       }

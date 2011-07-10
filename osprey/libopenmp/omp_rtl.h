@@ -294,7 +294,7 @@ struct omp_task_q {
   omp_task_t *tail;
   ompc_lock_t lock; /* global lock for the whole queue, very bad */
   uint32_t size;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_task_q   omp_task_q_t;
 #else
 
@@ -302,7 +302,7 @@ struct omp_etask_q_node {
   omp_etask_t *task;
   struct omp_etask_q_node *next;
   int free;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_etask_q_node omp_etask_q_node_t;
 
 struct omp_etask_q {
@@ -316,7 +316,7 @@ struct omp_etask_q {
   ompc_lock_t slock;
   volatile uint32_t size;
   volatile int reject;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_etask_q  omp_etask_q_t;
 #endif
 
@@ -330,7 +330,7 @@ struct omp_task_q {
   uint32_t head;
   uint32_t tail;
   uint32_t size;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 */
 
 /*
@@ -661,7 +661,7 @@ struct omp_task_stats {
   unsigned int tasks_created;
   unsigned int tasks_stolen;
   unsigned int tasks_deleted;
-}; __attribute__ ((__aligned__(CACHE_LINE_SIZE)))
+} __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 
 
 
