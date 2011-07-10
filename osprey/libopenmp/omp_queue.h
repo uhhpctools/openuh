@@ -1,7 +1,7 @@
 /*
  OpenMP Queue Implementation for Open64's OpenMP runtime library
 
- Copyright (C) 2008-2011 University of Houston.
+ Copyright (C) 2011 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -65,7 +65,6 @@ struct omp_queue {
 typedef struct omp_queue omp_queue_t;
 
 /* inline functions */
-/* note: array implementation is currently assumed */
 static inline int __ompc_queue_is_empty(omp_queue_t *q)
 {
   return q->is_empty;
@@ -95,6 +94,9 @@ extern int
 (*__ompc_queue_put_tail)(omp_queue_t *q, omp_queue_item_t item);
 extern int
 (*__ompc_queue_put_head)(omp_queue_t *q, omp_queue_item_t item);
+extern omp_queue_item_t
+(*__ompc_queue_transfer_chunk_from_head)(omp_queue_t *src, omp_queue_t *dst,
+                                         int chunk_size);
 extern int
 (*__ompc_queue_cfifo_is_full)(omp_queue_t *q);
 extern int
@@ -103,6 +105,9 @@ extern int
 (*__ompc_queue_cfifo_put)(omp_queue_t *q, omp_queue_item_t item);
 extern omp_queue_item_t
 (*__ompc_queue_cfifo_get)(omp_queue_t *q);
+extern omp_queue_item_t
+(*__ompc_queue_cfifo_transfer_chunk)(omp_queue_t *src, omp_queue_t *dst,
+                                     int chunk_size);
 
 /* implementation */
 extern void __ompc_queue_array_init(omp_queue_t *q, int num_slots);
@@ -113,9 +118,17 @@ extern omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q);
 extern omp_queue_item_t __ompc_queue_array_get_tail(omp_queue_t *q);
 extern int __ompc_queue_array_put_tail(omp_queue_t *q, omp_queue_item_t item);
 extern int __ompc_queue_array_put_head(omp_queue_t *q, omp_queue_item_t item);
+extern omp_queue_item_t
+__ompc_queue_array_transfer_chunk_from_head_to_empty(omp_queue_t *src,
+                                                     omp_queue_t *dst,
+                                                     int chunk_size);
 extern int __ompc_queue_cfifo_array_is_full(omp_queue_t *q);
 extern int __ompc_queue_cfifo_array_num_used_slots(omp_queue_t *q);
 extern int __ompc_queue_cfifo_array_put(omp_queue_t *q, omp_queue_item_t item);
 extern omp_queue_item_t __ompc_queue_cfifo_array_get(omp_queue_t *q);
+extern omp_queue_item_t
+__ompc_queue_cfifo_array_transfer_chunk_to_empty(omp_queue_t *src,
+                                                 omp_queue_t *dst,
+                                                 int chunk_size);
 
 #endif /* __omp_queue_included */

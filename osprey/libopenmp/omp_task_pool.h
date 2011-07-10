@@ -68,7 +68,8 @@ static inline void __ompc_task_pool_set_team_size(omp_task_pool_t *pool,
 
 
 /* external interface */
-extern int task_queue_num_slots;
+extern int __omp_task_queue_num_slots;
+extern int __omp_task_chunk_size;
 
 extern omp_task_pool_t *(*__ompc_create_task_pool)(int team_size);
 extern omp_task_pool_t *(*__ompc_expand_task_pool)(omp_task_pool_t *pool,
@@ -82,8 +83,14 @@ extern omp_queue_item_t (*__ompc_task_queue_get)(omp_queue_t *q);
 extern omp_queue_item_t (*__ompc_task_queue_steal)(omp_queue_t *q);
 extern int (*__ompc_task_queue_put)(omp_queue_t *q, omp_queue_item_t item);
 extern int (*__ompc_task_queue_donate)(omp_queue_t *q, omp_queue_item_t item);
+extern int (*__ompc_task_queue_is_full)(omp_queue_t *q);
+extern int (*__ompc_task_queue_num_used_slots)(omp_queue_t *q);
+extern omp_queue_item_t (*__ompc_task_queue_steal_chunk)(omp_queue_t *src,
+                                                         omp_queue_t *dst,
+                                                         int chunk_size);
 
 
+/* per_thread1 */
 extern omp_task_pool_t *
 __ompc_create_task_pool_per_thread1(int team_size);
 extern omp_task_pool_t *
@@ -94,6 +101,18 @@ extern omp_task_t *
 __ompc_remove_task_from_pool_per_thread1(omp_task_pool_t *pool);
 extern void
 __ompc_destroy_task_pool_per_thread1(omp_task_pool_t *pool);
+
+/* global */
+extern omp_task_pool_t *
+__ompc_create_task_pool_global(int team_size);
+extern omp_task_pool_t *
+__ompc_expand_task_pool_global( omp_task_pool_t *pool, int new_team_size);
+extern int
+__ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task);
+extern omp_task_t *
+__ompc_remove_task_from_pool_global(omp_task_pool_t *pool);
+extern void
+__ompc_destroy_task_pool_global(omp_task_pool_t *pool);
 
 
 #endif /* __omp_task_scheduler_included */

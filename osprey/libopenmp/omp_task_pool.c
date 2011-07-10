@@ -40,7 +40,8 @@
  */
 
 /* task pool size */
-int task_queue_num_slots = 0;
+int __omp_task_queue_num_slots = 0;
+int __omp_task_chunk_size = 1;
 
 /* these will point to appropriate implementation at runtime */
 omp_task_pool_t *(*__ompc_create_task_pool)(int team_size);
@@ -54,3 +55,8 @@ omp_queue_item_t (*__ompc_task_queue_get)(omp_queue_t *q);
 omp_queue_item_t (*__ompc_task_queue_steal)(omp_queue_t *q);
 int (*__ompc_task_queue_put)(omp_queue_t *q, omp_queue_item_t item);
 int (*__ompc_task_queue_donate)(omp_queue_t *q, omp_queue_item_t item);
+int (*__ompc_task_queue_is_full)(omp_queue_t *q);
+int (*__ompc_task_queue_num_used_slots)(omp_queue_t *q);
+omp_queue_item_t (*__ompc_task_queue_steal_chunk)(omp_queue_t *src,
+                                                  omp_queue_t *dst,
+                                                  int chunk_size);

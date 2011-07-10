@@ -1,7 +1,7 @@
 /*
  OpenMP Queue Implementation for Open64's OpenMP runtime library
 
- Copyright (C) 2008-2011 University of Houston.
+ Copyright (C) 2011 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -37,10 +37,16 @@ omp_queue_item_t (*__ompc_queue_get_head)(omp_queue_t *q);
 omp_queue_item_t (*__ompc_queue_get_tail)(omp_queue_t *q);
 int (*__ompc_queue_put_tail)(omp_queue_t *q, omp_queue_item_t item);
 int (*__ompc_queue_put_head)(omp_queue_t *q, omp_queue_item_t item);
+omp_queue_item_t (*__ompc_queue_transfer_chunk_from_head)(omp_queue_t *src,
+                                                          omp_queue_t *dst,
+                                                          int chunk_size);
 int (*__ompc_queue_cfifo_is_full)(omp_queue_t *q);
 int (*__ompc_queue_cfifo_num_used_slots)(omp_queue_t *q);
 int (*__ompc_queue_cfifo_put)(omp_queue_t *q, omp_queue_item_t item);
 omp_queue_item_t (*__ompc_queue_cfifo_get)(omp_queue_t *q);
+omp_queue_item_t (*__ompc_queue_cfifo_transfer_chunk)(omp_queue_t *src,
+                                                      omp_queue_t *dst,
+                                                      int chunk_size);
 
 /* dequeue implementation using array  */
 
@@ -79,6 +85,7 @@ inline int __ompc_queue_array_is_full(omp_queue_t *q)
 
 omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q)
 {
+  int new_head_index;
   omp_queue_item_t item;
   Is_True(q != NULL, ("tried to get head from NULL queue"));
 
@@ -93,8 +100,9 @@ omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q)
     return NULL;
   }
 
-  q->head_index = (q->head_index + 1) % q->num_slots;
-  item = q->slots[q->head_index].item;
+  new_head_index = (q->head_index + 1) % q->num_slots;
+  item = q->slots[new_head_index].item;
+  q->head_index = new_head_index;
 
   if (--q->used_slots == 0)
     q->is_empty = 1;
@@ -183,16 +191,111 @@ int __ompc_queue_array_put_head(omp_queue_t *q, omp_queue_item_t item)
   return 1;
 }
 
+/* implementation for transferring chunks of work */
+
+/* this assumes that the destination queue is empty, mainly to avoid having to
+ * acquire a lock for it (threads shouldn't try to update the head/tail
+ * indexes or ready the used_slots field while the queue has is_empty=1).
+ */
+omp_queue_item_t __ompc_queue_array_transfer_chunk_from_head_to_empty(
+                                                   omp_queue_t *src,
+                                                   omp_queue_t *dst,
+                                                   int chunk_size)
+{
+  Is_True(src != NULL, ("tried to get from  NULL src queue"));
+  Is_True(dst != NULL, ("tried to add to NULL dst queue"));
+  Is_True(dst->is_empty, ("dst should have been empty and wasn't"));
+
+  int num_slots;
+  int avail_slots;
+  int used_slots;
+  int start_head_index;
+  int new_head_index;
+  int actual_chunk_size;
+  omp_queue_item_t item;
+
+  if (__ompc_queue_is_empty(src) || chunk_size == 0) {
+    return NULL;
+  }
+
+  __ompc_lock(&src->lock1);
+
+  if (__ompc_queue_is_empty(src)) {
+    __ompc_unlock(&src->lock1);
+    return NULL;
+  }
+
+  used_slots = src->used_slots;
+
+  /* calculate number of items we can actually transfer */
+  if (chunk_size > used_slots)
+    actual_chunk_size = used_slots;
+  else
+    actual_chunk_size = chunk_size;
+
+  /* assuming that dst is currently empty */
+  avail_slots = dst->num_slots;
+  if (actual_chunk_size > avail_slots)
+    actual_chunk_size = avail_slots;
+
+  num_slots = src->num_slots;
+  start_head_index = (src->head_index + 1) % num_slots;
+  new_head_index = (start_head_index + actual_chunk_size - 1) % num_slots;
+
+  item = src->slots[start_head_index].item;
+
+  if (new_head_index >= start_head_index) {
+    int i;
+    for (i = 1; i <= (actual_chunk_size - 1); i++) {
+      dst->slots[i].item = src->slots[start_head_index+i].item;
+    }
+  } else {
+    int i,j;
+    i = 1;
+    for (j = start_head_index+1; j < num_slots; j++) {
+      dst->slots[i++].item = src->slots[j].item;
+    }
+    for (j = 0; j <= new_head_index; j++) {
+      dst->slots[i++].item = src->slots[j].item;
+    }
+  }
+
+  src->used_slots = used_slots - actual_chunk_size;
+
+  src->head_index = new_head_index;
+
+  /* update destination (reset is_empty after updated head/tail index)
+   * while is_empty is 1, the dst queue should not be read by other threads
+   */
+  dst->head_index = 0;
+  dst->tail_index = actual_chunk_size-1;
+  dst->used_slots = actual_chunk_size-1;
+  if (actual_chunk_size > 1)
+    dst->is_empty = 0;
+
+  if (src->used_slots == 0)
+    src->is_empty = 1;
+
+  __ompc_unlock(&src->lock1);
+
+  return item;
+
+}
+
+
 /* current fifo implementation using array  */
 
 inline int __ompc_queue_cfifo_array_num_used_slots(omp_queue_t *q)
 {
-  if (q->tail_index == q->head_index)
+  int head_index, tail_index;
+  head_index = q->head_index;
+  tail_index = q->tail_index;
+  if (tail_index == head_index)
     return 0;
-  else if (q->tail_index > q->head_index)
-    return (q->tail_index - q->head_index);
+  else if (tail_index > head_index)
+    return (tail_index - head_index);
   else
-    return (q->num_slots - (q->head_index - q->tail_index));
+    return (q->num_slots - (head_index - tail_index));
 }
 
 
@@ -233,7 +336,6 @@ omp_queue_item_t __ompc_queue_cfifo_array_get(omp_queue_t *q)
 
   __ompc_lock(&q->lock1);
 
-  tail_index = q->tail_index;
   if (__ompc_queue_is_empty(q)) {
     /* queue is empty */
     __ompc_unlock(&q->lock1);
@@ -244,10 +346,113 @@ omp_queue_item_t __ompc_queue_cfifo_array_get(omp_queue_t *q)
   q->head_index = new_head_index;
   item = q->slots[q->head_index].item;
 
-  if (new_head_index == tail_index)
-    q->is_empty = 1;
+  /* only acquire the lock for setting is_empty if it looks like the queue is
+   * actually empty
+   */
+  if (new_head_index == q->tail_index) {
+    __ompc_lock(&q->lock2);
+    if (new_head_index == q->tail_index) {
+      q->is_empty = 1;
+    }
+    __ompc_unlock(&q->lock2);
+  }
 
   __ompc_unlock(&q->lock1);
 
   return item;
 }
+
+/* implementation for transferring chunks of work
+ *   CFIFO version does not use used_slots field for performance reasons.
+ */
+omp_queue_item_t __ompc_queue_cfifo_array_transfer_chunk_to_empty(
+                                                   omp_queue_t *src,
+                                                   omp_queue_t *dst,
+                                                   int chunk_size)
+{
+  Is_True(src != NULL, ("tried to get from  NULL src queue"));
+  Is_True(dst != NULL, ("tried to add to NULL dst queue"));
+  Is_True(dst->is_empty, ("dst should have been empty and wasn't"));
+
+  int num_slots;
+  int avail_slots;
+  int used_slots;
+  int start_head_index;
+  int new_head_index, tail_index;
+  int actual_chunk_size;
+  omp_queue_item_t item;
+
+  if (__ompc_queue_is_empty(src) || chunk_size == 0) {
+    return NULL;
+  }
+
+  __ompc_lock(&src->lock1);
+
+  if (__ompc_queue_is_empty(src)) {
+    __ompc_unlock(&src->lock1);
+    return NULL;
+  }
+
+  used_slots = __ompc_queue_cfifo_array_num_used_slots(src);
+
+  /* calculate number of items we can actually transfer */
+  if (chunk_size > used_slots)
+    actual_chunk_size = used_slots;
+  else
+    actual_chunk_size = chunk_size;
+
+  /* assuming that dst is currently empty */
+  avail_slots = dst->num_slots;
+  if (actual_chunk_size > avail_slots)
+    actual_chunk_size = avail_slots;
+
+  num_slots = src->num_slots;
+  start_head_index = (src->head_index + 1) % num_slots;
+  new_head_index = (start_head_index + actual_chunk_size - 1) % num_slots;
+
+  item = src->slots[start_head_index].item;
+
+  if (new_head_index >= start_head_index) {
+    int i;
+    for (i = 1; i <= (actual_chunk_size - 1); i++) {
+      dst->slots[i].item = src->slots[start_head_index+i].item;
+    }
+  } else {
+    int i,j;
+    i = 1;
+    for (j = start_head_index+1; j < num_slots; j++) {
+      dst->slots[i++].item = src->slots[j].item;
+    }
+    for (j = 0; j <= new_head_index; j++) {
+      dst->slots[i++].item = src->slots[j].item;
+    }
+  }
+
+  src->head_index = new_head_index;
+
+  /* update destination (reset is_empty after updated head/tail index)
+   * while is_empty is 1, the dst queue should not be read by other threads
+   */
+  dst->head_index = 0;
+  dst->tail_index = actual_chunk_size-1;
+  if (actual_chunk_size > 1) {
+    dst->is_empty = 0;
+  }
+
+  /* only acquire the lock for setting is_empty if it looks like the queue is
+   * actually empty
+   */
+  if (new_head_index == src->tail_index) {
+    __ompc_lock(&src->lock2);
+    if (new_head_index == src->tail_index) {
+      src->is_empty = 1;
+    }
+    __ompc_unlock(&src->lock2);
+  }
+
+  __ompc_unlock(&src->lock1);
+
+  return item;
+
+}
+
