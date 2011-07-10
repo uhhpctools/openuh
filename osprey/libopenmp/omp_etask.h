@@ -36,6 +36,7 @@
 int __ompc_etask_skip_cond_default();
 int __ompc_etask_skip_cond_num_children();
 int __ompc_etask_skip_cond_queue_load();
+int __ompc_etask_skip_cond_depth();
 
 int __ompc_etask_create(omp_task_func taskfunc, frame_pointer_t fp, void *args,
                        int may_delay, int is_tied, int blocks_parent);

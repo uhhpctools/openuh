@@ -400,6 +400,12 @@ typedef enum {
   VAR_REDUCTION_ARRAY_OMP  = 6
 } VAR_TYPE;
 
+typedef enum {
+  DEFAULT_NULL        = 0,
+  DEFAULT_NONE        = 1,
+  DEFAULT_SHARED      = 2
+} DEFAULT_TYPE;
+
 typedef struct {
   VAR_TYPE   vtype;
   TYPE_ID    mtype;
@@ -12685,6 +12691,8 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   INT32 num_criticals;		/* Number of nested critical sections */
   BOOL  while_seen;		/* While seen where do should be */
   WN   *task_fpsetup_blk; /* sets up firstprivate struct for task */
+  DEFAULT_TYPE default_setting;
+
 
   /* Validate input arguments. */
 
@@ -12777,6 +12785,8 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 #ifdef KEY
   reference_block    = NULL;
 #endif
+
+  default_setting = DEFAULT_NULL;
 
   //Create_Loc_ST();
 
@@ -13234,6 +13244,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
           break;
         
 	case WN_PRAGMA_DEFAULT:
+          default_setting = (DEFAULT_TYPE) WN_pragma_arg1(cur_node);
+          Is_True(default_setting == DEFAULT_NONE ||
+                  default_setting == DEFAULT_SHARED,
+              ("DEFAULT pragma should have specified NONE or SHARED"));
 	  break;
 	  
         case WN_PRAGMA_UNTIED:
@@ -13607,7 +13621,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   } else if (mpt == MPP_TASK_REGION) {
     BOOL task_is_blocking = FALSE;
 
-    Collect_Default_Variables(stmt_block, firstprivate_nodes, WN_PRAGMA_FIRSTPRIVATE);
+    if (default_setting == DEFAULT_SHARED)
+      Collect_Default_Variables(stmt_block, shared_nodes, WN_PRAGMA_SHARED);
+    else
+      Collect_Default_Variables(stmt_block, firstprivate_nodes, WN_PRAGMA_FIRSTPRIVATE);
 
     /* if current PU is a nested MP function, then it may be a task that
      * should be blocked by a descendant requiring access to its stack frame.

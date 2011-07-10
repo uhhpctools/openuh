@@ -254,12 +254,6 @@ struct omp_etask {
 
   volatile omp_etask_state_t state;
 
-  /* parent executes children from left to right
-   * idle threads pick up children right to left
-   */
-  struct omp_etask *children;  /* list of children */
-  struct omp_etask *last_child;
-
   volatile int num_children;   /* number of children that aren't done,
                                   increment when creating child
                                   decrement on child exit */
@@ -270,14 +264,6 @@ struct omp_etask {
    */
   volatile int num_blocking_children;
 
-
-  /* for parent's children list */
-  /*
-  pthread_mutex_t  sib_lock;
-  struct omp_etask *left_sib;
-  struct omp_etask *right_sib;
-  */
-
   struct omp_etask *parent;
 
   /* prev and next for task queue */
@@ -285,17 +271,15 @@ struct omp_etask {
   struct omp_etask *prev;
   struct omp_etask *next;
 
+  ompc_lock_t lock;
+  int depth;  /* parent-child depth */
+
   /* misc. -- should pack this */
   int is_tied;
   int may_delay;
   int final;
   int is_coroutine;
-  int depth;  /* parent-child depth */
-  int tied_ancestor;
   int blocks_parent;
-  volatile int safe_to_enqueue;
-  volatile int context_flag;
-  ompc_lock_t lock;
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_etask omp_etask_t;
 #endif

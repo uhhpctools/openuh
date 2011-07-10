@@ -465,6 +465,8 @@ __ompc_environment_variables()
       __ompc_etask_skip_cond = &__ompc_etask_skip_cond_num_children;
     } else if (strncasecmp(env_var_str, "QUEUE", 5) == 0) {
       __ompc_etask_skip_cond = &__ompc_etask_skip_cond_queue_load;
+    } else if (strncasecmp(env_var_str, "DEPTH", 5) == 0) {
+      __ompc_etask_skip_cond = &__ompc_etask_skip_cond_depth;
     } else if (strncasecmp(env_var_str, "DEFAULT", 7) != 0) {
       Not_Valid("O64_OMP_TASK_SKIP_COND should be CHILDREN|QUEUE|DEFAULT or unset");
     }

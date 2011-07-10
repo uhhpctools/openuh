@@ -76,6 +76,15 @@ int __ompc_etask_skip_cond_queue_load()
           __ompc_get_current_team()->etask_q[__omp_myid].reject);
 }
 
+int __ompc_etask_skip_cond_depth()
+{
+  return ((__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL) ||
+          __ompc_get_num_threads() == 1              ||
+          __omp_current_v_thread->sdepth == MAX_SDEPTH  ||
+          __omp_current_etask == NULL ||
+          __omp_current_etask->depth == 2*__ompc_get_current_team()->team_size);
+}
+
 int __ompc_task_deferred_cond(int may_delay)
 {
   return may_delay && !__ompc_etask_skip_cond();

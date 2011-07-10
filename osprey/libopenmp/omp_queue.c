@@ -156,10 +156,10 @@ __ompc_etask_q_pop_head_slock(omp_etask_q_t *tq)
   if (tq->size != 1) {
     tq->head = new_head;
     new_head->prev = NULL;
-    __ompc_atomic_dec(&tq->size);
+    --tq->size;
   } else {
     tq->head = tq->tail = NULL;
-    __ompc_atomic_dec(&tq->size);
+    --tq->size;
   }
   Is_True(head_task != NULL, ("head_task is NULL"));
   __ompc_unlock(&tq->slock);
@@ -274,10 +274,10 @@ __ompc_etask_q_pop_tail_slock(omp_etask_q_t *tq)
   if (tq->size != 1) {
     tq->tail = new_tail;
     new_tail->next = NULL;
-    __ompc_atomic_dec(&tq->size);
+    --tq->size;
   } else {
     tq->tail = tq->head = NULL;
-    __ompc_atomic_dec(&tq->size);
+    --tq->size;
   }
   Is_True(tail_task != NULL, ("tail_task is NULL"));
   __ompc_unlock(&tq->slock);
@@ -390,7 +390,7 @@ __ompc_etask_q_push_head_slock(omp_etask_q_t *tq, omp_etask_t *head_task)
   } else {
     tq->head = tq->tail = head_task;
   }
-  __ompc_atomic_inc(&tq->size);
+  ++tq->size;
   __ompc_unlock(&tq->slock);
   if (!tq->reject && tq->size > OMP_TASK_Q_UPPER_LIMIT_DEFAULT)
     tq->reject = 1;
@@ -479,7 +479,7 @@ __ompc_etask_q_push_tail_slock(omp_etask_q_t *tq, omp_etask_t *tail_task)
   } else {
     tq->tail = tq->head = tail_task;
   }
-  __ompc_atomic_inc(&tq->size);
+  ++tq->size;
   __ompc_unlock(&tq->slock);
   if (!tq->reject && tq->size > OMP_TASK_Q_UPPER_LIMIT_DEFAULT)
     tq->reject = 1;

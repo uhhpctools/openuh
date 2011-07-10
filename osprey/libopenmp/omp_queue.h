@@ -30,6 +30,8 @@
 #ifndef __omp_rtl_queue_included
 #define __omp_rtl_queue_included
 
+#ifndef USE_OLD_TASKS
+
 void __ompc_etask_q_init_default(omp_etask_q_t *tq);
 void __ompc_etask_q_init_con(omp_etask_q_t *tq);
 
@@ -51,6 +53,8 @@ void __ompc_etask_q_push_head_hlock(omp_etask_q_t *tq, omp_etask_t *head_task);
 void __ompc_etask_q_push_tail_slock(omp_etask_q_t *tq, omp_etask_t *tail_task);
 void __ompc_etask_q_push_tail_htlock(omp_etask_q_t *tq, omp_etask_t *tail_task);
 void __ompc_etask_q_push_tail_tlock(omp_etask_q_t *tq, omp_etask_t *tail_task);
+
+#endif
 
 #endif /* __omp_rtl_queue_included */
 

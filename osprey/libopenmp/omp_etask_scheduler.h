@@ -29,6 +29,10 @@
 #ifndef __omp_rtl_etask_scheduler_included
 #define __omp_rtl_etask_scheduler_included
 
+#ifndef USE_OLD_TASKS
+
 omp_etask_t *__ompc_etask_schedule_default(int allow_stealing);
+
+#endif
 
 #endif /* __omp_rtl_etask_scheduler_included */
