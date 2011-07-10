@@ -220,7 +220,8 @@ void __ompc_task_exit()
   }
 
   /* only try to free parent or put it back on queue if it was a deferred
-   * task */
+   * task and it has no more children (since child tasks may attempt to update
+   * num_children field of parent when they exit) */
   if (current_task->parent && __ompc_task_is_deferred(current_task->parent) &&
       current_task->parent->num_children == 0 &&
       __ompc_task_state_is_finished(current_task->parent)) {
@@ -244,6 +245,16 @@ void __ompc_task_exit()
   flags = OMP_TASK_IS_DEFERRED | OMP_TASK_BLOCKS_PARENT;
   if (__ompc_task_get_flags(current_task, flags) == flags)
     __ompc_atomic_dec(&current_task->parent->num_blocking_children);
+}
+
+void __ompc_task_firstprivates_alloc(void **firstprivates, int size)
+{
+  *firstprivates = aligned_malloc(size, CACHE_LINE_SIZE);
+}
+
+void __ompc_task_firstprivates_free(void *firstprivates)
+{
+  aligned_free(firstprivates);
 }
 
 
@@ -279,17 +290,6 @@ void __ompc_task_switch(omp_task_t *new_task)
 
   __omp_current_task = orig_task;
 }
-
-void __ompc_task_firstprivates_alloc(void **firstprivates, int size)
-{
-  *firstprivates = aligned_malloc(size, CACHE_LINE_SIZE);
-}
-
-void __ompc_task_firstprivates_free(void *firstprivates)
-{
-  aligned_free(firstprivates);
-}
-
 
 int __ompc_task_cutoff_default()
 {

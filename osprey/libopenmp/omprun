@@ -1,0 +1,133 @@
+#!/usr/bin/perl
+
+#  Script for running OpenMP programs compiled by OpenUH.
+#
+#  Copyright (C) 2011 University of Houston.
+#
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of version 2 of the GNU General Public License as
+#  published by the Free Software Foundation.
+#
+#  This program is distributed in the hope that it would be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+#  Further, this software is distributed without any warranty that it is
+#  free of the rightful claim of any third person regarding infringement
+#  or the like.  Any license provided herein, whether implied or
+#  otherwise, applies only to this software file.  Patent licenses, if
+#  any, provided herein do not apply to combinations of this program with
+#  other software, or any other product whatsoever.
+#
+#  You should have received a copy of the GNU General Public License along
+#  with this program; if not, write the Free Software Foundation, Inc., 59
+#  Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+#  Contact information:
+#  http://www.cs.uh.edu/~hpctools
+
+
+# Wrapper for running OpenMP programs.
+
+use Switch;
+
+my $filename='';
+my $params="";
+my $cmd;
+my $show=0;
+my $out;
+my $env_settings;
+
+my $usage="Usage: omprun [options] ./a.out
+Options:
+--num-threads=<nt>            - sets nthreads-var ICV
+--stacksize=<ss>              - sets stacksize-var ICV
+--nested=<t>                  - values: true|false
+--task-cutoff=<cutoff>        - values: always|never|depth|children|queue_load|default
+--task-pool=<pool-type>       - values: per_thread1|per_thread2|global|multilevel
+--task-queue=<tq>             - values: deque|cfifo|lifo|fifo|deque_inv
+--task-queue-num-slots=<ns>   - sets initial size for each thread's task queue
+--task-chunk-size=<cs>        - values: 1 to task-queue-num-slots
+--queue-storage=<qs>          - values: array|list|dyn_array
+--help or -h
+\n";
+
+die "cafrun: no exe file\n$usage" if ($#ARGV==-1);
+
+foreach (@ARGV){
+	if(/^--(.*?)=(.*$)/){ # arg starts with --, and has =
+		switch (uc $1){
+			case "NUM-THREADS"
+            {
+                $ENV{'OMP_NUM_THREADS'}=$2;
+                $env_settings .= "OMP_NUM_THREADS=$2 ";
+
+			}
+            case "NESTED"
+            {
+                if ($2 == "") {
+                  $ENV{'OMP_NESTED'}="true";
+                } else {
+                  $ENV{'OMP_NESTED'}=$2;
+                }
+                $env_settings .= "OMP_NESTED=$2 ";
+            }
+            case "STACKSIZE"
+            {
+                $ENV{'OMP_STACKSIZE'}=$2;
+                $env_settings .= "OMP_STACKSIZE=$2 ";
+            }
+            case "TASK-CUTOFF"
+            {
+                $ENV{'O64_OMP_TASK_CUTOFF'}=$2;
+                $env_settings .= "O64_OMP_TASK_CUTOFF=$2 ";
+            }
+            case "TASK-POOL"
+            {
+                $ENV{'O64_OMP_TASK_POOL'}=$2;
+                $env_settings .= "O64_OMP_TASK_POOL=$2 ";
+            }
+            case "TASK-QUEUE"
+            {
+                $ENV{'O64_OMP_TASK_QUEUE'}=$2;
+                $env_settings .= "O64_OMP_TASK_QUEUE=$2 ";
+            }
+            case "TASK-QUEUE-NUM-SLOTS"
+            {
+                $ENV{'O64_OMP_TASK_QUEUE_NUM_SLOTS'}=$2;
+                $env_settings .= "O64_OMP_TASK_QUEUE_NUM_SLOTS=$2 ";
+            }
+            case "TASK-CHUNK-SIZE"
+            {
+                $ENV{'O64_OMP_TASK_CHUNK_SIZE'}=$2;
+                $env_settings .= "O64_OMP_TASK_CHUNK_SIZE=$2 ";
+            }
+            case "QUEUE-STORAGE"
+            {
+                $ENV{'O64_OMP_QUEUE_STORAGE'}=$2;
+                $env_settings .= "O64_OMP_QUEUE_STORAGE=$2 ";
+            }
+			else{ #add the flag anyway
+                print "unrecognized option: $_\n";
+                print "$usage";
+				exit 1;
+			}
+		}
+	}
+	elsif(/-help/ or $_ eq '-h'){
+		print "omprun is a wrapper for running OpenMP programs with OpenUH\n",$usage;
+        exit 0;
+	}
+    elsif(/-show/){
+        $show=1;
+    }
+	else{
+		$cmd.=$_." ";
+	}
+}
+
+if ($show) {
+  print "$env_settings $cmd\n";
+}
+$out = system("$cmd 2>&1");
+exit $out;

@@ -37,6 +37,11 @@
  *
  * per_thread1:  single-level, work-stealing task pool, 1 task queue per
  *               thread which holds both tied and untied tasks.
+ *
+ * global:       two-level, work-stealing task pool, 1 task queue per
+ *               thread, and 1 global queue for the team; each queue hols
+ *               both tied and untied tasks; work may  be "stolen" from the
+ *               global queue in chunks.
  */
 
 /* task pool size */

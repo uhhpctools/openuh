@@ -262,8 +262,7 @@ __ompc_environment_variables()
   }
 
   /* determine the stack size of slave threads. */
-
-  env_var_str = getenv("OMP_SLAVE_STACK_SIZE");
+  env_var_str = getenv("OMP_STACKSIZE");
   if (env_var_str != NULL) {
     char stack_size_unit;
     unsigned long int stack_size;
@@ -495,7 +494,7 @@ __ompc_environment_variables()
   if (env_var_str != NULL) {
     if (strncasecmp(env_var_str, "PER_THREAD2", 11) == 0) {
       Not_Valid("O64_OMP_TASK_POOL does not yet support PER_THREAD2, "
-                "try PER_THREAD1 instead");
+                "try PER_THREAD1|GLOBAL instead");
     } else if (strncasecmp(env_var_str, "GLOBAL", 6) == 0) {
       /* each thread gets a queue, plus a global "community" queue */
       __ompc_create_task_pool    = &__ompc_create_task_pool_global;
@@ -507,7 +506,7 @@ __ompc_environment_variables()
       __ompc_task_queue_donate = __ompc_task_queue_put;
     } else if  (strncasecmp(env_var_str, "MULTILEVEL", 10) == 0) {
       Not_Valid("O64_OMP_TASK_POOL does not yet support MULTILEVEL, "
-                "try PER_THREAD1 instead");
+                "try PER_THREAD1|GLOBAL instead");
     } else if (strncasecmp(env_var_str, "PER_THREAD1", 11) == 0) {
       __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread1;
       __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread1;
@@ -681,7 +680,6 @@ __ompc_level_1_slave(void * _uthread_index)
   uthread_index = (long) _uthread_index;
   __omp_myid = uthread_index;
 
-  __omp_current_v_thread = &__omp_level_1_team[uthread_index];
 
   __ompc_set_state(THR_IDLE_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
@@ -702,6 +700,10 @@ __ompc_level_1_slave(void * _uthread_index)
 
     task_expect = !task_expect;
     __omp_exe_mode = OMP_EXE_MODE_NORMAL;
+
+    /* in case level 1 team expanded and the user threads were allocated
+     * elsewhere */
+    __omp_current_v_thread = &__omp_level_1_team[uthread_index];
 
     /* The program should exit now? */
     /*		if (__omp_exit_now == true) 
@@ -1211,8 +1213,10 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __omp_level_1_team_manager.team_size = __omp_nthreads_var;
     } else {
       // expand the team when there is not enough threads
-      if (num_threads > __omp_level_1_team_alloc_size)
+      if (num_threads > __omp_level_1_team_alloc_size) {
         __ompc_expand_level_1_team(num_threads);
+        __omp_current_v_thread = &__omp_level_1_team[0];
+      }
       __omp_level_1_team_size = num_threads;
       __omp_level_1_team_manager.team_size = num_threads;
     }

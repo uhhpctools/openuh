@@ -328,7 +328,6 @@ INSTALL_WHIRL_STUFF () {
 }
 
 
-
 # Install those archieves that are deemed as part of compiler, so 
 # we put them where the orcc-phases reside.
 INSTALL_PHASE_SPECIFIC_ARCHIVES () {
@@ -628,6 +627,10 @@ INSTALL_MISC () {
     return 0
 }
 
+INSTALL_OMPRUN() {
+    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/libopenmp/omprun   ${BIN_DIR}/omprun
+}
+
 # Create the Fortran module files for the OpenMP interface
 INSTALL_MODULES () {
     if [ ! -e ${ROOT}/include/${VERSION}/OMP_LIB.mod ] ; then
@@ -656,6 +659,7 @@ INSTALL_CG
 INSTALL_WHIRL_STUFF 
 INSTALL_MISC
 INSTALL_NATIVE_HEADER
+INSTALL_OMPRUN
 
 #cat << _EOF_
 # ------------------------------------------------------------------------
