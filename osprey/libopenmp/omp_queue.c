@@ -85,7 +85,7 @@ inline int __ompc_queue_array_is_full(omp_queue_t *q)
 
 omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q)
 {
-  int new_head_index;
+  unsigned int new_head_index;
   omp_queue_item_t item;
   Is_True(q != NULL, ("tried to get head from NULL queue"));
 
@@ -118,6 +118,8 @@ omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q)
 
 omp_queue_item_t __ompc_queue_array_get_tail(omp_queue_t *q)
 {
+  unsigned int tail_index;
+  unsigned int num_slots;
   omp_queue_item_t item;
   Is_True(q != NULL, ("tried to get tail from NULL queue"));
 
@@ -132,9 +134,12 @@ omp_queue_item_t __ompc_queue_array_get_tail(omp_queue_t *q)
     return NULL;
   }
 
-  item = q->slots[q->tail_index].item;
+  tail_index = q->tail_index;
+  num_slots = q->num_slots;
 
-  q->tail_index = (q->tail_index - 1) % q->num_slots;
+  item = q->slots[tail_index].item;
+
+  q->tail_index = tail_index ?  (tail_index - 1) % num_slots : num_slots-1;
 
   if (--q->used_slots == 0)
     q->is_empty = 1;
@@ -171,6 +176,8 @@ int __ompc_queue_array_put_tail(omp_queue_t *q, omp_queue_item_t item)
 
 int __ompc_queue_array_put_head(omp_queue_t *q, omp_queue_item_t item)
 {
+  unsigned int head_index;
+  unsigned int num_slots;
   Is_True(q != NULL, ("tried to put to head on NULL queue"));
 
   __ompc_lock(&q->lock1);
@@ -180,9 +187,12 @@ int __ompc_queue_array_put_head(omp_queue_t *q, omp_queue_item_t item)
     return 0;
   }
 
-  q->slots[q->head_index].item = item;
+  head_index = q->head_index;
+  num_slots = q->num_slots;
 
-  q->head_index = (q->tail_index - 1) % q->num_slots;
+  q->slots[head_index].item = item;
+
+  q->head_index = head_index ? (head_index - 1) % num_slots : num_slots-1;
   ++q->used_slots;
   q->is_empty = 0;
 
@@ -287,7 +297,7 @@ omp_queue_item_t __ompc_queue_array_transfer_chunk_from_head_to_empty(
 
 inline int __ompc_queue_cfifo_array_num_used_slots(omp_queue_t *q)
 {
-  int head_index, tail_index;
+  unsigned int head_index, tail_index;
   head_index = q->head_index;
   tail_index = q->tail_index;
   if (tail_index == head_index)
@@ -306,7 +316,7 @@ inline int __ompc_queue_cfifo_array_is_full(omp_queue_t *q)
 
 int __ompc_queue_cfifo_array_put(omp_queue_t *q, omp_queue_item_t item)
 {
-  int new_tail_index;
+  unsigned int new_tail_index;
   Is_True(q != NULL, ("tried to put to tail on NULL queue"));
 
   __ompc_lock(&q->lock2);
@@ -330,7 +340,7 @@ int __ompc_queue_cfifo_array_put(omp_queue_t *q, omp_queue_item_t item)
 
 omp_queue_item_t __ompc_queue_cfifo_array_get(omp_queue_t *q)
 {
-  int new_head_index, tail_index;
+  unsigned int new_head_index, tail_index;
   omp_queue_item_t item;
   Is_True(q != NULL, ("tried to get head from NULL queue"));
 
@@ -377,8 +387,8 @@ omp_queue_item_t __ompc_queue_cfifo_array_transfer_chunk_to_empty(
   int num_slots;
   int avail_slots;
   int used_slots;
-  int start_head_index;
-  int new_head_index, tail_index;
+  unsigned int start_head_index;
+  unsigned int new_head_index, tail_index;
   int actual_chunk_size;
   omp_queue_item_t item;
 

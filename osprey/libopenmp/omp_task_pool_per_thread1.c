@@ -31,6 +31,9 @@
 #include "omp_rtl.h"
 #include "omp_sys.h"
 
+/* level ids */
+#define PER_THREAD 0
+
 /* __ompc_init_task_pool_per_thread1:
  * Initializes a task pool, for which tasks may be added and taken.  The task
  * pool will be single-level, with 1 task queue allotted per thread.
@@ -54,7 +57,7 @@ omp_task_pool_t * __ompc_create_task_pool_per_thread1(int team_size)
   Is_True(new_pool->level != NULL,
       ("__ompc_create_task_pool: couldn't malloc level"));
 
-  per_thread = &new_pool->level[0];
+  per_thread = &new_pool->level[PER_THREAD];
 
   per_thread->num_queues = team_size;
   per_thread->task_queue = aligned_malloc(sizeof(omp_queue_t) * team_size,
@@ -83,7 +86,7 @@ omp_task_pool_t * __ompc_expand_task_pool_per_thread1(omp_task_pool_t *pool,
   if (pool == NULL)
     return __ompc_create_task_pool(new_team_size);
 
-  per_thread = &pool->level[0];
+  per_thread = &pool->level[PER_THREAD];
 
   old_team_size = pool->team_size;
 
@@ -121,7 +124,8 @@ int __ompc_add_task_to_pool_per_thread1(omp_task_pool_t *pool, omp_task_t *task)
    */
   __ompc_atomic_inc(&pool->num_pending_tasks);
 
-  success = __ompc_task_queue_put(&pool->level[0].task_queue[myid], task);
+  success = __ompc_task_queue_put(&pool->level[PER_THREAD].task_queue[myid],
+                                  task);
 
   return success;
 }
@@ -152,7 +156,7 @@ omp_task_t *__ompc_remove_task_from_pool_per_thread1(omp_task_pool_t *pool)
 
   current_task = __omp_current_task;
   current_thread = __omp_current_v_thread;
-  per_thread = &pool->level[0];
+  per_thread = &pool->level[PER_THREAD];
 
   task = __ompc_task_queue_get(&per_thread->task_queue[myid]);
 
@@ -196,7 +200,7 @@ void __ompc_destroy_task_pool_per_thread1(omp_task_pool_t *pool)
 
   Is_True(pool != NULL, ("__ompc_destroy_task_pool; pool is NULL"));
 
-  per_thread = &pool->level[0];
+  per_thread = &pool->level[PER_THREAD];
 
   for (i = 0; i < pool->team_size; i++) {
     __ompc_queue_free_slots(&per_thread->task_queue[i]);

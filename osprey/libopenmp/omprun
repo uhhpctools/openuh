@@ -115,7 +115,7 @@ foreach (@ARGV){
 		}
 	}
 	elsif(/-help/ or $_ eq '-h'){
-		print "omprun is a wrapper for running OpenMP programs with OpenUH\n",$usage;
+		print "omprun is a wrapper for running OpenMP programs compiled with OpenUH\n",$usage;
         exit 0;
 	}
     elsif(/-show/){

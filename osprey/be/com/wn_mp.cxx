@@ -13634,7 +13634,6 @@ lower_mp ( WN * block, WN * node, INT32 actions )
      * anyway)
      */
     if (PU_is_nested_func(Get_Current_PU()) && PU_mp(Get_Current_PU())) {
-    /* if (PU_is_task(Get_Current_PU())) { */
       SYMTAB_IDX current_level = PU_lexical_level(Get_Current_PU());
       /* this collects any shared variables into shared_nodes.  */
       Collect_Shared_Variables(stmt_block);

@@ -493,8 +493,11 @@ __ompc_environment_variables()
   env_var_str = getenv("O64_OMP_TASK_POOL");
   if (env_var_str != NULL) {
     if (strncasecmp(env_var_str, "PER_THREAD2", 11) == 0) {
-      Not_Valid("O64_OMP_TASK_POOL does not yet support PER_THREAD2, "
-                "try PER_THREAD1|GLOBAL instead");
+      __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread2;
+      __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread2;
+      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_per_thread2;
+      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_per_thread2;
+      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_per_thread2;
     } else if (strncasecmp(env_var_str, "GLOBAL", 6) == 0) {
       /* each thread gets a queue, plus a global "community" queue */
       __ompc_create_task_pool    = &__ompc_create_task_pool_global;
@@ -506,7 +509,7 @@ __ompc_environment_variables()
       __ompc_task_queue_donate = __ompc_task_queue_put;
     } else if  (strncasecmp(env_var_str, "MULTILEVEL", 10) == 0) {
       Not_Valid("O64_OMP_TASK_POOL does not yet support MULTILEVEL, "
-                "try PER_THREAD1|GLOBAL instead");
+                "try PER_THREAD1|PER_THREAD2|GLOBAL instead");
     } else if (strncasecmp(env_var_str, "PER_THREAD1", 11) == 0) {
       __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread1;
       __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread1;

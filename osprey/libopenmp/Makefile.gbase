@@ -83,6 +83,7 @@ CFILES = \
 	omp_task.c \
 	omp_task_pool.c \
 	omp_task_pool_per_thread1.c \
+	omp_task_pool_per_thread2.c \
 	omp_task_pool_global.c
 
 CXXFILES = \

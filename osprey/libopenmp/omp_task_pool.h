@@ -102,6 +102,18 @@ __ompc_remove_task_from_pool_per_thread1(omp_task_pool_t *pool);
 extern void
 __ompc_destroy_task_pool_per_thread1(omp_task_pool_t *pool);
 
+/* per_thread2 */
+extern omp_task_pool_t *
+__ompc_create_task_pool_per_thread2(int team_size);
+extern omp_task_pool_t *
+__ompc_expand_task_pool_per_thread2( omp_task_pool_t *pool, int new_team_size);
+extern int
+__ompc_add_task_to_pool_per_thread2(omp_task_pool_t *pool, omp_task_t *task);
+extern omp_task_t *
+__ompc_remove_task_from_pool_per_thread2(omp_task_pool_t *pool);
+extern void
+__ompc_destroy_task_pool_per_thread2(omp_task_pool_t *pool);
+
 /* global */
 extern omp_task_pool_t *
 __ompc_create_task_pool_global(int team_size);
