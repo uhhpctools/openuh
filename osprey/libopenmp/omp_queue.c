@@ -48,6 +48,11 @@ omp_queue_item_t (*__ompc_queue_cfifo_transfer_chunk)(omp_queue_t *src,
                                                       omp_queue_t *dst,
                                                       int chunk_size);
 
+
+/*******************************************************************
+ *       OMP QUEUE ARRAY IMPLEMENTATION
+ *******************************************************************/
+
 /* dequeue implementation using array  */
 
 void __ompc_queue_array_init(omp_queue_t * q, int num_slots)
@@ -466,3 +471,106 @@ omp_queue_item_t __ompc_queue_cfifo_array_transfer_chunk_to_empty(
 
 }
 
+/*******************************************************************
+ *       OMP QUEUE DYN_ARRAY IMPLEMENTATION
+ *******************************************************************/
+
+static inline void
+__ompc_dyn_array_resize(omp_queue_t *q, int new_num_slots)
+{
+  unsigned int old_tail_index = q->tail_index;
+  unsigned int head_index = q->head_index;
+  int old_num_slots = q->num_slots;
+
+  q->slots = aligned_realloc((void *) q->slots,
+      sizeof(omp_queue_slot_t) * old_num_slots,
+      sizeof(omp_queue_slot_t) * new_num_slots,
+      CACHE_LINE_SIZE);
+  Is_True(q->slots != NULL, ("couldn't resize the queue"));
+
+  if (old_tail_index < head_index) {
+    memcpy(&q->slots[old_num_slots], &q->slots[0],
+           (old_tail_index+1)*sizeof(omp_queue_slot_t));
+    q->tail_index = old_tail_index + old_num_slots;
+  }
+
+  q->num_slots = new_num_slots;
+}
+
+int __ompc_queue_dyn_array_put_tail(omp_queue_t *q, omp_queue_item_t item)
+{
+  Is_True(q != NULL, ("tried to put to tail on NULL queue"));
+
+  __ompc_lock(&q->lock1);
+
+  if (__ompc_queue_array_is_full(q)) {
+    __ompc_dyn_array_resize(q, 2*q->num_slots);
+  }
+
+  q->tail_index = (q->tail_index + 1) % q->num_slots;
+
+  q->slots[q->tail_index].item = item;
+  ++q->used_slots;
+  q->is_empty = 0;
+
+  __ompc_unlock(&q->lock1);
+
+  return 1;
+}
+
+int __ompc_queue_dyn_array_put_head(omp_queue_t *q, omp_queue_item_t item)
+{
+  unsigned int head_index;
+  unsigned int num_slots;
+  Is_True(q != NULL, ("tried to put to head on NULL queue"));
+
+  __ompc_lock(&q->lock1);
+
+  if (__ompc_queue_array_is_full(q)) {
+    __ompc_dyn_array_resize(q, 2*q->num_slots);
+  }
+
+  head_index = q->head_index;
+  num_slots = q->num_slots;
+
+  q->slots[head_index].item = item;
+
+  q->head_index = head_index ? (head_index - 1) % num_slots : num_slots-1;
+  ++q->used_slots;
+  q->is_empty = 0;
+
+  __ompc_unlock(&q->lock1);
+
+  return 1;
+}
+
+int __ompc_queue_cfifo_dyn_array_put(omp_queue_t *q, omp_queue_item_t item)
+{
+  unsigned int new_tail_index;
+  unsigned int head_index;
+  Is_True(q != NULL, ("tried to put to tail on NULL queue"));
+
+  head_index = q->head_index;
+  __ompc_lock(&q->lock2);
+  new_tail_index = (q->tail_index + 1) % q->num_slots;
+
+  if (new_tail_index == head_index) {
+    /* lock 2 must be acquired after lock 1 to prevent potential deadlock with
+     * __ompc_queue_cfifo_array_transfer_chunk_to_empty routine */
+    __ompc_unlock(&q->lock2);
+    __ompc_lock(&q->lock1);
+    __ompc_lock(&q->lock2);
+    new_tail_index = (q->tail_index + 1) % q->num_slots;
+    if (new_tail_index == head_index)
+      __ompc_dyn_array_resize(q, 2*q->num_slots);
+    __ompc_unlock(&q->lock1);
+  }
+
+  q->slots[new_tail_index].item = item;
+  q->tail_index = new_tail_index;
+  q->is_empty = 0;
+
+  __ompc_unlock(&q->lock2);
+
+  return 1;
+}

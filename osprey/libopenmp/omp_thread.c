@@ -374,8 +374,25 @@ __ompc_environment_variables()
       Not_Valid("O64_OMP_TASK_POOL does not yet support LIST, "
                 "try ARRAY instead");
     } else if (strncasecmp(env_var_str, "DYN_ARRAY", 9) == 0) {
-      Not_Valid("O64_OMP_TASK_POOL does not yet support DYN_ARRAY, "
-                "try ARRAY instead");
+      /* mostly the same as ARRAY implementation, except for functions that
+       * add new items to the queue */
+      __ompc_queue_init = &__ompc_queue_array_init;
+      __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
+      __ompc_queue_is_full = &__ompc_queue_array_is_full;
+      __ompc_queue_num_used_slots = &__ompc_queue_array_num_used_slots;
+      __ompc_queue_get_head = &__ompc_queue_array_get_head;
+      __ompc_queue_get_tail= &__ompc_queue_array_get_tail;
+      __ompc_queue_put_tail = &__ompc_queue_dyn_array_put_tail;
+      __ompc_queue_put_head = &__ompc_queue_dyn_array_put_head;
+      __ompc_queue_transfer_chunk_from_head =
+                 &__ompc_queue_array_transfer_chunk_from_head_to_empty;
+      __ompc_queue_cfifo_is_full = &__ompc_queue_cfifo_array_is_full;
+      __ompc_queue_cfifo_num_used_slots =
+        &__ompc_queue_cfifo_array_num_used_slots;
+      __ompc_queue_cfifo_put = &__ompc_queue_cfifo_dyn_array_put;
+      __ompc_queue_cfifo_get = &__ompc_queue_cfifo_array_get;
+      __ompc_queue_cfifo_transfer_chunk =
+                 &__ompc_queue_cfifo_array_transfer_chunk_to_empty;
     } else if (strncasecmp(env_var_str, "ARRAY", 5) == 0) {
       __ompc_queue_init = &__ompc_queue_array_init;
       __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
@@ -797,6 +814,7 @@ __ompc_nested_slave(void * _v_thread)
 void
 __ompc_fini_rtl(void) 
 {
+  __ompc_destroy_task_pool(__omp_level_1_team_manager.task_pool);
   /* clean up job*/
   if (__omp_level_1_team != NULL)
     aligned_free(__omp_level_1_team);

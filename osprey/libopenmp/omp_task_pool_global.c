@@ -128,17 +128,27 @@ int __ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task)
 {
   int success;
   int myid = __omp_myid;
+  omp_task_queue_level_t *per_thread;
+  omp_task_queue_level_t *global;
 
   Is_True(pool != NULL, ("__ompc_add_task_to_pool: task pool is uninitialized"));
   Is_True(task != NULL,
       ("__ompc_add_task_to_pool: tried to add NULL task to pool"));
+
+  success = 0;
+  per_thread = &pool->level[PER_THREAD];
+  global = &pool->level[GLOBAL];
 
   /* num_pending_tasks track not just tasks entered into the task pool, but
    * also tasks marked as deferred that could not fit into the task pool
    */
   __ompc_atomic_inc(&pool->num_pending_tasks);
 
-  success = __ompc_task_queue_put(&pool->level[PER_THREAD].task_queue[myid], task);
+  /* don't try to place it in per-thread queue if it looks to be full, because
+   * we have the global queue to use instead   */
+  if (!__ompc_task_queue_is_full(&per_thread->task_queue[myid]))
+    success = __ompc_task_queue_put(&pool->level[PER_THREAD].task_queue[myid],
+                                    task);
 
   if (!success)
     success = __ompc_task_queue_donate(pool->level[GLOBAL].task_queue, task);
@@ -238,7 +248,6 @@ void __ompc_destroy_task_pool_global(omp_task_pool_t *pool)
   for (i = 0; i < pool->team_size; i++) {
     __ompc_queue_free_slots(&per_thread->task_queue[i]);
   }
-
   __ompc_queue_free_slots(global->task_queue);
 
   aligned_free(per_thread->task_queue); /* free queues in level 0 */

@@ -110,6 +110,8 @@ extern omp_queue_item_t
                                      int chunk_size);
 
 /* implementation */
+
+/* array implementation */
 extern void __ompc_queue_array_init(omp_queue_t *q, int num_slots);
 extern void __ompc_queue_array_free_slots(omp_queue_t *q);
 extern int __ompc_queue_array_is_full(omp_queue_t *q);
@@ -130,5 +132,17 @@ extern omp_queue_item_t
 __ompc_queue_cfifo_array_transfer_chunk_to_empty(omp_queue_t *src,
                                                  omp_queue_t *dst,
                                                  int chunk_size);
+
+/* dyn_array implementation */
+
+extern int
+__ompc_queue_dyn_array_put_tail(omp_queue_t *q, omp_queue_item_t item);
+
+extern int
+__ompc_queue_dyn_array_put_head(omp_queue_t *q, omp_queue_item_t item);
+
+extern int
+__ompc_queue_cfifo_dyn_array_put(omp_queue_t *q, omp_queue_item_t item);
+
 
 #endif /* __omp_queue_included */
