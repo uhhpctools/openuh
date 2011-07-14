@@ -4311,9 +4311,9 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
           Set_ST_addr_passed(sym);
      }
 #ifdef KEY
-     // Disabling the following code for now. Not sure when/why it is needed.
+     // Disabling the following threadprivate localization if PU is mp.
      // -Deepak
-#if 0
+     if (!PU_mp(PU_Info_pu(Current_PU_Info)))
      { // Assumption: The local pragma for a local thdprv ST must be present
        // in the function pragmas
        WN *prag = WN_first(WN_func_pragmas(PU_Info_tree_ptr(Current_PU_Info)));
@@ -4332,7 +4332,6 @@ Localize_Variable ( VAR_TABLE *v, VAR_TYPE vtype, OPERATOR opr,
          prag = WN_next (prag);
        }
      }
-#endif
      if (matched_pragma) 
 	WN_pragma_arg1(matched_pragma) = ST_st_idx(sym);
      if (matched_pragma2)
@@ -12784,6 +12783,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   ppuinfo            = NULL;
 #ifdef KEY
   reference_block    = NULL;
+  pragma_block       = NULL;
 #endif
 
   default_setting = DEFAULT_NULL;
