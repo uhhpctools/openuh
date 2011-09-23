@@ -4678,16 +4678,18 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
   RID *rid = BB_rid(bb);
 
 #ifdef TARG_SL
-  if (BB_zdl_body(bb)) {
-    FmtAssert(BB_has_tag(bb), ("zdl body has no tag"));
-    LABEL_IDX tag = Get_BB_Tag(bb);
-    FmtAssert(tag!=0, ("EMT_Assemble_BB: zdl body tag is 0"));
-    OP *last_op=BB_last_op(bb);
+  if (BB_length(bb) != 0 &&
+      OP_code(BB_last_op(bb)) == TOP_auxbr) {
+    OP *aux_br_op = BB_last_op(bb);
+    OP *last_op = OP_prev(aux_br_op);
     while(last_op && OP_dummy(last_op)) {
       last_op=OP_prev(last_op);
     }
-    FmtAssert(last_op, ("cannot find op to carry tag"));
-    Set_OP_Tag(last_op, tag);
+    if(!last_op){ //insert a pad NOP
+      last_op = Mk_OP(TOP_nop);
+      BB_Insert_Op_Before(bb , aux_br_op , last_op);
+    }
+    Set_OP_Tag(last_op, Get_OP_Tag(aux_br_op));
   }
 #endif
 
@@ -4827,9 +4829,11 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
  */      
       if(max_skip_bytes > 0)
       {
-        if(!Is_Target_Barcelona() && !Is_Target_Orochi() || CG_p2align != 2){
+        if(!Is_Target_Barcelona() || CG_p2align != 2){
           if (max_skip_bytes > 15)
 	    max_skip_bytes = 15;	
+          if(Is_Target_Orochi())
+            fprintf(Asm_File, "\t.p2align 3,,\n");
           fprintf(Asm_File, "\t.p2align 4,,%d\n", max_skip_bytes);
         }
         else 
@@ -8985,6 +8989,11 @@ EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn )
   }
 #endif
 
+#ifdef ZDL_TARG
+  /* Emit Phase validity check, now only used in ZDL target */
+  extern void Emit_Phase_Validity_Check(void);
+  Emit_Phase_Validity_Check();
+#endif
   /* Assemble each basic block in the PU */
   for (bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
 #ifdef TARG_IA64

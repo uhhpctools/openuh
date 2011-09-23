@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -64,6 +64,11 @@ ifdef LOCAL_BE_DIR
 TARG_BE_DIR = $(TARGDIR)/$(LOCAL_BE_DIR)
 else
 TARG_BE_DIR = $(TARGDIR)/be
+endif
+ifdef LOCAL_TARG_INFO_DIR
+TARG_TARG_INFO_DIR = $(TARGDIR)/$(LOCAL_TARG_INFO_DIR)
+else
+TARG_TARG_INFO_DIR = $(TARGDIR)/targ_info
 endif
 
 #----------------------------------------------------------------------
@@ -174,13 +179,14 @@ IPA_COMMON_CXX_SRCS = \
 BE_COM_CXX_SRCS = \
 	cxx_template.cxx \
 	clone.cxx	\
+	dep_graph.cxx	\
         ipl_lno_util.cxx \
 
 
 BE_LNO_CXX_SRCS = \
 	lwn_util.cxx \
 
-ifneq ($(BUILD_VARIANT), STATIC)
+ifeq ($(BUILD_TYPE), SHARED)
 COMMON_COM_CXX_SRCS = \
         dwarf_DST.cxx      \
         dwarf_DST_mem.cxx       \
@@ -228,7 +234,7 @@ TARGETS = lw_inline
 
 LDIRT = be.so ii_files ${TARGETS}
 
-ifneq ($(BUILD_VARIANT), STATIC)
+ifeq ($(BUILD_TYPE), SHARED)
 LLDOPTS = -Wl,--export-dynamic
 endif
 LLDLIBS = 
@@ -267,13 +273,13 @@ else
  endif
 endif
 
-ifneq ($(BUILD_VARIANT), STATIC)
+ifeq ($(BUILD_TYPE), SHARED)
 lw_inline: $(IPA_OBJS) $(IPA_CXX_OBJS)
 	if ! test -e be.so; then ln -sf $(TARG_BE_DIR)/be.so .; fi
 	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) be.so  $(LDFLAGS)
 else
-lw_inline: $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/libbe.a
-	$(link.c++f) -o $@ $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/libbe.a $(LDFLAGS)
+lw_inline: $(IPA_OBJS) $(IPA_CXX_OBJS) $(TARG_BE_DIR)/libbe.a $(TARG_TARG_INFO_DIR)/libtarginfo.a
+	$(link.c++f) -o $@ $^ $(LDFLAGS)
 endif
 
 #----------------------------------------------------------------------

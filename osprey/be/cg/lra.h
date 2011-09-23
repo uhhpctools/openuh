@@ -103,6 +103,9 @@ extern INT Find_Max_Conflicts(TN_MAP conflict_map,
                               INT *outgoing_conflicts,
                               ISA_REGISTER_CLASS rclass);
 extern void Truncate_LRs_For_OP(OP *op);
+extern INT Find_Degree_For_TN(TN *tn, INT *regs_in_use);
+extern OP *Find_UseOp_For_TN(TN *tn);
+extern bool Is_TN_Sdsu(TN *tn);
 
 /* Returns the number of registers LRA is requesting from GRA for
  * the class <cl> in the basic block <bb>. If we run the scheduling

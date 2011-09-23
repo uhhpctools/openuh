@@ -4427,12 +4427,6 @@ Init_CG_Expand (void)
   Trace_Exp2 = Get_Trace (TP_CGEXP, 4);
   Disable_Const_Mult_Opt = Get_Trace (TP_CGEXP, 32);
   
-  if (Is_Target_Sl5()) { 
-    // SL5 do not support zero-delay-loop
-    extern BOOL CG_enable_zero_delay_loop;
-    CG_enable_zero_delay_loop = FALSE;
-  }
-  
   if (Initialized) return;
   Initialized = TRUE;
   // once per file:
@@ -6698,6 +6692,8 @@ void Exp_Simulated_Op(const OP *op, OPS *ops, INT pc_value)
 
   switch (top)
   {
+  case TOP_auxbr:
+    break;
   default:
     FmtAssert(FALSE, ("simulated OP %s not handled", TOP_Name(top)));
   }
@@ -6766,7 +6762,8 @@ Simulated_Op_Real_Inst_Words(const OP *op)
     num_bytes = 3;
 #endif
     break;
-
+  case TOP_auxbr:
+    break;
   default:
     FmtAssert(FALSE, ("simulated OP %s not handled", TOP_Name(OP_code(op))));
   }

@@ -8,7 +8,7 @@
 
 /*
  *  Copyright (C) 2007 QLogic Corporation.  All Rights Reserved.
- */
+ /
 
 /*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
@@ -6404,6 +6404,9 @@ int main()
                      TOP_vfblendvx128v32,
                      TOP_vfblendvxx128v32,
                      TOP_vfblendvxxx128v32,
+                     TOP_vmovddupx,
+                     TOP_vmovddupxx,
+                     TOP_vmovddupxxx,
                      /* INTEL FMA instructions */
                      TOP_xfmadd132xpd,
                      TOP_xfmadd132xxpd,
@@ -9105,17 +9108,29 @@ int main()
 		     TOP_ldupsx,
 		     TOP_ldupsxx,
                      /* AVX instructions */
-                     TOP_vlddqu_n32,
+		     TOP_vldlps,
+		     TOP_vldlpsx,
+		     TOP_vldlpsxx,
+		     TOP_vldhps,
+		     TOP_vldhpsx,
+		     TOP_vldhpsxx,
+		     TOP_vldlpd,
+		     TOP_vldlpdx,
+		     TOP_vldlpdxx,
+		     TOP_vldhpd,
+		     TOP_vldhpdx,
+		     TOP_vldhpdxx,
                      TOP_vlddqu,
                      TOP_vlddqux,
                      TOP_vlddquxx,
+                     TOP_vlddqu_n32,
                      TOP_vldupd,
                      TOP_vldupdx,
                      TOP_vldupdxx,
+                     TOP_vldupd_n32,
                      TOP_vldups,
                      TOP_vldupsx,
                      TOP_vldupsxx,
-                     TOP_vldupd_n32,
                      TOP_vldups_n32,
                      TOP_UNDEFINED);
 
@@ -12731,14 +12746,6 @@ int main()
                      TOP_vpmovzxwqx,
                      TOP_vpmovzxwqxx,
                      TOP_vpmovzxwqxxx,
-                     TOP_vfrcpss,
-                     TOP_vfrcpxss,
-                     TOP_vfrcpxxss,
-                     TOP_vfrcpxxxss,
-                     TOP_vmovddup,
-                     TOP_vmovddupx,
-                     TOP_vmovddupxx,
-                     TOP_vmovddupxxx,
                      TOP_vmovshdup,
                      TOP_vmovshdupx,
                      TOP_vmovshdupxx,
@@ -12777,12 +12784,6 @@ int main()
                      TOP_vldhps,
                      TOP_vldhpsx,
                      TOP_vldhpsxx,
-                     TOP_vldsd,
-                     TOP_vldsdx,
-                     TOP_vldsdxx,
-                     TOP_vldss,
-                     TOP_vldssx,
-                     TOP_vldssxx,
                      TOP_vabs128v8,
                      TOP_vabsx128v8,
                      TOP_vabsxx128v8,
@@ -14146,6 +14147,8 @@ int main()
 		     TOP_lock_xchg16,
 		     TOP_lock_xchg32,
 		     TOP_lock_xchg64,
+                     TOP_movsd,
+                     TOP_movss,
 		     TOP_addsd,
 		     TOP_addss,
 		     TOP_addxsd,
@@ -15126,18 +15129,19 @@ int main()
 		     TOP_stlpsxx,
 		     TOP_storelpd,
                      /* AVX instructions */
-                     TOP_vldsd,
-                     TOP_vldsdx,
-                     TOP_vldsdxx,
-                     TOP_vldlps,
-                     TOP_vldlpsx,
-                     TOP_vldlpsxx,
-                     TOP_vstlps,
-                     TOP_vstlpsx,
-                     TOP_vstlpsxx,
-                     TOP_vldsd_n32,
-                     TOP_vldlps_n32,
-                     TOP_vstlps_n32,
+		     TOP_vldlps,
+		     TOP_vldlpsx,
+		     TOP_vldlpsxx,
+		     TOP_vldlpd,
+		     TOP_vldlpdx,
+		     TOP_vldlpdxx,
+		     TOP_vstlpd,
+		     TOP_vstlpdx,
+		     TOP_vstlpdxx,
+		     TOP_vstlps,
+		     TOP_vstlpsx,
+		     TOP_vstlpsxx,
+		     TOP_vstorelpd,
 		     TOP_UNDEFINED);
 
   /* ===== Instructions that load and store the higher 64-bits of a xmm register */
@@ -15169,10 +15173,7 @@ int main()
                      TOP_vsthps,
                      TOP_vsthpsx,
                      TOP_vsthpsxx,
-                     TOP_vldhpd_n32,
-                     TOP_vldhps_n32,
-                     TOP_vsthpd_n32,
-                     TOP_vsthps_n32,
+                     TOP_vmovlhps,
 		     TOP_UNDEFINED);
 
   vector_packed_single = ISA_Property_Create ("vector_packed_single");

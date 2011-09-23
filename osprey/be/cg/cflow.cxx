@@ -2157,7 +2157,11 @@ Is_Empty_BB(BB *bb)
     if (BBINFO_kind(bb) == BBKIND_GOTO
 	&& BBINFO_nsuccs(bb)
 	&& BBINFO_cold(BBINFO_succ_bb(bb, 0)) != BBINFO_cold(bb)) return FALSE;
+#ifdef TARG_SL
+    return (BB_branch_op(bb) != NULL && OP_code(BB_branch_op(bb)) != TOP_auxbr);
+#else
     return BB_branch_op(bb) != NULL;
+#endif
   case 0:
     return TRUE;
   }
@@ -2294,6 +2298,8 @@ Collapse_Empty_Goto(BB *bp, BB *targ, float in_freq)
 	 && !BB_Has_Exc_Label(new_targ)
 	 && BBINFO_nsuccs(new_targ)
 	 && BBINFO_succ_bb(new_targ, 0) != new_targ
+            && !ANNOT_Get(BB_annotations(new_targ), ANNOT_LOOPINFO)
+            && !ANNOT_Get(BB_annotations(BBINFO_succ_bb(new_targ,0)), ANNOT_LOOPINFO)
   ) {
     BB *last_targ;
     if (freqs_computed || BB_freq_fb_based(new_targ)) {
@@ -3546,6 +3552,30 @@ Optimize_Branches(void)
 #endif
 	}
 	break;
+#if defined(TARG_SL)
+      case BBKIND_ZDL_BODY:
+        if (freqs_computed) {
+          edge_freq = BBINFO_succ_prob(bp, 0) * BB_freq(bp);
+        }
+        old_tgt = BBINFO_succ_bb(bp, 0);
+        new_tgt = Collapse_Empty_Goto(bp, old_tgt, edge_freq);
+        if (new_tgt != old_tgt) {
+          changed = TRUE;
+          Cflow_Change_Succ(bp, 0, old_tgt, new_tgt);
+        }
+ 
+        if (freqs_computed) {
+	  edge_freq = BBINFO_succ_prob(bp, 1) * BB_freq(bp);
+	}
+	old_tgt = BBINFO_succ_bb(bp, 1);
+        new_tgt = Collapse_Empty_Goto(bp, old_tgt, edge_freq);
+	if (new_tgt != old_tgt) {
+	  changed = TRUE;
+	  Cflow_Change_Succ(bp, 1, old_tgt, new_tgt);
+	}
+        break;
+#endif
+
       case BBKIND_GOTO:
 	if (BBINFO_nsuccs(bp) == 0) break;
 
@@ -4165,6 +4195,21 @@ Can_Append_Succ(
   }
 
 #if defined(TARG_SL)
+  /* if <suc> is loop-prolog-bb, and <suc>'s last op is TOP_loop, 
+   * then <b> must fall through to <suc>;
+   * otherwise, after we merge <suc> into <b>, the new loop-prolog-bb is <b>,
+   * and <b> does not fall through to loop-head-bb, so, there will be a TOP_jp after TOP_loop.
+   */
+  if(BB_next(b) != suc && BB_last_op(suc) && OP_code(BB_last_op(suc)) == TOP_loop) {
+    #pragma mips_frequency_hint NEVER
+    if (trace) {
+      fprintf(TFile, "rejecting %s of BB:%d into BB:%d"
+         " (loop-head-BB:%d can NOT be %s into BB:%d which does NOT fall through to it)\n",
+         oper_name, BB_id(suc), BB_id(b), BB_id(suc), oper_name, BB_id(b));
+    }
+    return FALSE;
+  }
+
   if(BBINFO_kind(b) == BBKIND_ZDL_BODY) {
     if (trace) {
       #pragma mips_frequency_hint NEVER
@@ -5407,7 +5452,7 @@ Init_Chains(BBCHAIN *chains)
 #ifdef TARG_SL
     /* We do not intend to reorder bb inside a zero delay loop
      */
-    if (CG_enable_zero_delay_loop) {
+    {
       OP *op = BB_last_op(bb);
       if (op!=NULL && OP_code(op) == TOP_loop) {
         BB *zdl_tail=Get_Zdl_Loop_Tail(bb);

@@ -301,7 +301,8 @@ typedef enum gs_code {
  GS_VEC_DELETE_EXPR,
  GS_VEC_NEW_EXPR,
  GS_TEMPLATE_TEMPLATE_PARM, /* this is 233; should not be higher than 255 */
- GS_FREQ_HINT_STMT
+ GS_FREQ_HINT_STMT,
+ GS_ZDL_STMT
 
 } gs_code_t;
 

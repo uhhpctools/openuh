@@ -1238,8 +1238,6 @@ char		*operator_str[]		= {
 			"Nofusion_Star_Opr",
 			"Noblocking_Dir_Opr",
 			"Opaque_Star_Opr",
-			"Purpleconditional_Star_Opr",
-			"Purpleunconditional_Star_Opr",
 
 			"Redistribute_Dollar_Opr",
 			"Doacross_Dollar_Opr",
@@ -1825,8 +1823,6 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_SGI_Dir_Private",		/* PRIVATE		      */
 			"Tok_SGI_Dir_Psection",		/* PSECTION		      */
 			"Tok_SGI_Dir_Psections",		/* PSECTIONS		      */
-			"Tok_SGI_Dir_Purpleconditional",	/* PURPLECONDITIONAL	      */
-			"Tok_SGI_Dir_Purpleunconditional",/* PURPLEUNCONDITIONAL	      */
 			"Tok_SGI_Dir_Redistribute",	/* REDISTRIBUTE		      */
 			"Tok_SGI_Dir_Reduction",	/* REDUCTION		      */
 			"Tok_SGI_Dir_Regionbegin",	/* REGIONBEGIN		      */

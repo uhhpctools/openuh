@@ -919,7 +919,6 @@ Process_OPs_For_Stmt (void)
 
 }
 
-
 /* Create a new result TN for the WHIRL node wn. We pass in the opnd_tn
  * array that contains the TNs allocated for each operand. This could
  * used to do value numbering if desired.
@@ -931,32 +930,8 @@ TN *
 Allocate_Result_TN (WN *wn, TN **opnd_tn)
 {
 #ifdef TARG_SL
-
-#ifdef EMULATE_LONGLONG
-  TYPE_ID mtype = WN_rtype(wn);
-  if (MTYPE_is_longlong(mtype)) {
-    TYPE_ID new_mtype = (mtype == MTYPE_I8 ? MTYPE_I4 : MTYPE_U4);
-    TN *tn  = Build_TN_Of_Mtype (new_mtype);
-    TN *tn2 = Build_TN_Of_Mtype (new_mtype);
-    Add_TN_Pair (tn, tn2);
-    return tn;
-  }
-#endif
-
-#ifdef EMULATE_FLOAT_POINT
-  if (mtype == MTYPE_F8) {
-    TN *tn   = Build_TN_Of_Mtype(MTYPE_U4);
-    TN *pair = Build_TN_Of_Mtype(MTYPE_U4);
-    Add_TN_Pair (tn, pair);
-    return tn;
-  } else if (mtype = MTYPE_F4) {
-    return Build_TN_Of_Mtype(MTYPE_U4);
-  }
-#endif 
-
-  return Build_TN_Of_Mtype (mtype);
-
-#else // !defined(TARG_SL)
+  return Build_TN_Of_Mtype(WN_rtype(wn));
+#else
 
 #ifdef EMULATE_LONGLONG
 
@@ -1301,27 +1276,6 @@ PREG_To_TN (TY_IDX preg_ty, PREG_NUM preg_num)
       } else {
         tn = Build_TN_Of_Mtype (mtype);
       }
-#elif defined(TARG_SL)
-
-#ifdef EMULATE_LONGLONG
-      if (mtype == MTYPE_I8 || mtype == MTYPE_U8) {
-        mtype = (mtype == MTYPE_I8 ? MTYPE_I4 : MTYPE_U4);
-        tn = Build_TN_Of_Mtype(mtype);
-        Add_TN_Pair(tn, Build_TN_Of_Mtype(mtype));
-      } else 
-#endif      
-
-#ifdef EMULATE_FLOAT_POINT 
-      if (mtype == MTYPE_F8) {
-        TN* pair = Build_TN_Of_Mtype(MTYPE_U4);
-        tn = Build_TN_Of_Mtype(MTYPE_U4);
-        Add_TN_Pair(tn, pair);
-      } else if (mtype == MTYPE_F4) {
-        tn = Build_TN_Of_Mtype(MTYPE_U4);
-      } else       
-#endif
-    	tn = Build_TN_Of_Mtype (mtype);
-
 #else
 #ifdef TARG_X8664
       if( OP_NEED_PAIR(mtype) ){
@@ -1466,6 +1420,10 @@ TN_To_Assigned_PREG (TN *tn)
   // There's no ZERO register: eax has machine_id 0, but preg_id 1
   else {
     i += Int_Preg_Min_Offset;
+  }
+#elif defined(TARG_IA64)
+  else if (TN_register_class(tn) == ISA_REGISTER_CLASS_branch) {
+    i += Branch_Preg_Min_Offset;
   }
 #endif  
   return i;
@@ -2894,12 +2852,24 @@ Handle_STBITS (WN *stbits)
     result = field_tn;
   } else {
     variant = Memop_Variant(stbits);
-    field_tn = Allocate_Result_TN (kid, NULL);
+    //       U4CONSTANT 1
+    // for U8STBITS
+    // allocate a larger TN if bit deposit may run out of range
+    if(MTYPE_byte_size(rtype) > MTYPE_byte_size(WN_rtype(kid)))
+      field_tn = Build_TN_Of_Mtype(rtype);
+    else
+      field_tn = Allocate_Result_TN(kid, NULL);
     Last_Mem_OP = OPS_last(&New_OPs);
     Exp_Load(rtype, desc, field_tn, WN_st(stbits), WN_load_offset(stbits),
 	     &New_OPs, variant); // must do an unsigned load
     Set_OP_To_WN_Map(stbits);
-    result = Allocate_Result_TN (kid, NULL);
+    //       U4CONSTANT 1
+    // for U8STBITS
+    // allocate a larger TN if bit deposit may run out of range
+    if(MTYPE_byte_size(rtype) > MTYPE_byte_size(WN_rtype(kid)))
+      result = Build_TN_Of_Mtype(rtype);
+    else
+      result = Allocate_Result_TN(kid, NULL);
   }
 
 #ifdef TARG_PPC32
@@ -3105,10 +3075,21 @@ Handle_ISTBITS (WN *istbits)
   WN *kid0 = WN_kid0(istbits);
   WN *kid1 = WN_kid1(istbits);
   TN *bits_tn = Expand_Expr (kid0, istbits, NULL);
-  TN *field_tn = Allocate_Result_TN (kid0, NULL);
-  TN *result = Allocate_Result_TN (kid0, NULL);
+  TN *field_tn;
+  TN *result;
   TYPE_ID desc = Mtype_TransferSign(MTYPE_U4, WN_desc(istbits));
   TYPE_ID rtype = desc;
+  //       U4CONSTANT 1
+  //       Addr
+  // for U8ISTBITS
+  // allocate larger TNs if bit deposit may run out of range
+  if(MTYPE_byte_size(rtype) > MTYPE_byte_size(WN_rtype(kid0))) {
+    result = Build_TN_Of_Mtype(rtype);
+    field_tn = Build_TN_Of_Mtype(rtype);
+  }else{
+    result = Allocate_Result_TN(kid0, NULL);
+    field_tn = Allocate_Result_TN(kid0, NULL);
+  }
 
   // guard against U1MPY or U2MPY
   if (MTYPE_byte_size(rtype) < 4)
@@ -3166,8 +3147,19 @@ Handle_SELECT(WN *select, TN *result, OPCODE opcode)
   WN	*compare;
   VARIANT variant;
 
+#ifdef TARG_X8664
+  if (opcode == OPC_V16I1V16I1SELECT) {
+    TN* op1 = Expand_Expr(WN_kid0(select), select, NULL);
+    TN* op2 = Expand_Expr(WN_kid1(select), select, NULL);
+    TN* op3 = Expand_Expr(WN_kid2(select), select, NULL);
 
-
+    if (result == NULL) 
+      result = Allocate_Result_TN (select, NULL);
+  
+    Expand_Select(result, op1, op2, op3, MTYPE_V16I1, FALSE, &New_OPs); //FALSE passed as dummy arg
+    return result;
+  }
+#endif
 
  /*
   *  Expand the true/false before the condition
@@ -4723,6 +4715,61 @@ Handle_Fma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
 }
 
 static TN* 
+Handle_Fnma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
+{
+  
+  WN* add_wn = (mul_kid0) ? WN_kid1(expr) : WN_kid0(expr); 
+  TN* opnd0; 
+  TN* opnd1; 
+  TN* opnd2;
+  TOP opcode; 
+  TYPE_ID rtype = OPCODE_rtype(WN_opcode(expr));
+  BOOL is_vector = MTYPE_is_vector(rtype);
+
+  // now match a scalar or vector fma4 
+  switch (WN_opcode(mul_wn)) {
+  case OPC_F4MPY:
+    opcode = TOP_vfnmaddss;
+    break;
+  case OPC_F8MPY:
+    opcode = TOP_vfnmaddsd;
+    break;
+  case OPC_V16F4MPY:
+  case OPC_V16C4MPY:
+    FmtAssert(is_vector, ("unexpected fma vector form"));
+    opcode = TOP_vfnmaddps;
+    break;
+  case OPC_V16F8MPY:
+  case OPC_V16C8MPY:
+    FmtAssert(is_vector, ("unexpected fma vector form"));
+    opcode = TOP_vfnmaddpd;
+    break;
+  default:
+    FmtAssert(FALSE, ("unexpected fma form"));
+    break;
+  }
+
+  opnd2 = Expand_Expr(add_wn, expr,  NULL); 
+  opnd1 = Expand_Expr(WN_kid1(mul_wn), mul_wn, NULL);
+  opnd0 = Expand_Expr(WN_kid0(mul_wn), mul_wn, NULL);
+
+  if(result == NULL) 
+    result = Allocate_Result_TN(expr, NULL); 
+
+  // Position tn's from loads on operand 1's position if possible.
+  if (OPCODE_is_load(WN_opcode(WN_kid0(mul_wn))))
+    Build_OP(opcode,  result,  opnd1,  opnd0, opnd2, &New_OPs); 
+  else
+    Build_OP(opcode,  result,  opnd0,  opnd1, opnd2, &New_OPs); 
+
+  // TODO: add operand size check for 256-bit
+  if (PU_has_avx128 == FALSE)
+    PU_has_avx128 = TRUE;
+  
+  return result; 
+}
+
+static TN* 
 Handle_Fms_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
 {
   WN* sub_wn = (mul_kid0) ? WN_kid1(expr) : WN_kid0(expr); 
@@ -5393,7 +5440,11 @@ Expand_Expr (WN *expr, WN *parent, TN *result)
           if (MTYPE_is_float(rtype) || MTYPE_is_vector(rtype)) {
             if (WN_operator(expr) == OPR_ADD) {
               return Handle_Fma_Operation(expr, result, mul_wn, FALSE);
-            } 
+            } else if ((WN_operator(expr) == OPR_SUB) && 
+                       (WN_opcode(expr) != OPC_V16C4SUB) &&
+                       (WN_opcode(expr) != OPC_V16C8SUB)) {
+              return Handle_Fnma_Operation(expr, result, mul_wn, FALSE);
+            }
           }
         }
       }
@@ -5500,6 +5551,32 @@ Add_Label (LABEL_IDX label)
   Set_Label_BB (label,bb);
   return bb;
 }
+
+/* Add a label to a forced new basic block 
+ * This routine returns the bb that the label is attached to.
+ */
+
+BB *
+Add_Label_With_Forced_New_BB (LABEL_IDX label)
+{
+  BB *old_Cur_BB = Cur_BB;
+  BB *bb = Start_New_Basic_Block ();
+  if (bb == old_Cur_BB) {// does not gen a new BB
+    bb = Gen_And_Append_BB( bb );
+    total_bb_insts = 0;
+    Last_Processed_OP = NULL;
+    Last_Mem_OP = NULL;
+    Cur_BB = bb;
+    dedicated_seen = FALSE;
+  }
+
+  BB_Add_Annotation (bb, ANNOT_LABEL, (void *)(INTPTR)label);
+  FmtAssert (Get_Label_BB(label) == NULL,
+	("Add_Label: Label %s defined more than once", LABEL_name(label)));
+  Set_Label_BB (label,bb);
+  return bb;
+}
+
 
 static void
 Link_BBs (BB *bb, LABEL_IDX label)
@@ -5635,6 +5712,7 @@ BOOL Has_External_Branch_Target( BB *bb )
   case OPC_TRUEBR:
   case OPC_FALSEBR:
   case OPC_GOTO:
+  case OPC_ZDLBR:
     return label_is_external( &j, branch_wn, bb );
 #ifdef KEY
   case OPC_GOTO_OUTER_BLOCK:
@@ -5678,6 +5756,7 @@ BOOL Has_External_Fallthru( BB *bb )
 
   if ( ( branch_wn == NULL )
        || ( WN_opcode( branch_wn ) == OPC_TRUEBR ||
+            WN_opcode( branch_wn ) == OPC_ZDLBR  ||
 	    WN_opcode( branch_wn ) == OPC_FALSEBR ) ) {
     return ( BB_next( bb ) == NULL );
   }
@@ -5879,8 +5958,7 @@ static void Build_CFG(void)
 	  CGRIN_exit_i( cgrin, num ) = bb;
 	  label = Get_WN_Label( branch_wn );
 	  CGRIN_exit_label_i( cgrin, num ) = label;
-	  new_label = REGION_Exit_Whirl_Labels(
-		      CGRIN_exit_glue_i(cgrin, num), bb, label, rid);
+	  new_label = REGION_Exit_Whirl_Labels(CGRIN_exit_glue_i(cgrin, num), bb, label, rid);
 	  /* write this new label into an exit block that will
 	     eventually become the exit block for a new inner region */
 	  Is_True(new_label != (LABEL_IDX) 0,
@@ -5889,6 +5967,30 @@ static void Build_CFG(void)
 	  WN_INSERT_BlockLast(CGRIN_nested_exit(cgrin),new_exit);
 	}
 	break;
+
+      case OPC_ZDLBR:
+        if(BB_next(bb)) 
+          Link_Pred_Succ ( bb, BB_next( bb ) );	   	
+	if ( ! label_is_external( &num, branch_wn, bb ) ) { /*internal label*/
+	  Link_BBs(bb, Get_WN_Label(branch_wn));
+	} else if ( rid ) {
+	  WN *new_exit;
+	  LABEL_IDX new_label;
+	  CGRIN *cgrin = RID_Find_Cginfo(bb);
+	  Is_True(cgrin != NULL,("Build_CFG, null cginfo"));
+	  CGRIN_exit_i( cgrin, num ) = bb;
+	  label = Get_WN_Label( branch_wn );
+	  CGRIN_exit_label_i( cgrin, num ) = label;
+	  new_label = REGION_Exit_Whirl_Labels(CGRIN_exit_glue_i(cgrin, num), bb, label, rid);
+	  /* write this new label into an exit block that will
+	     eventually become the exit block for a new inner region */
+	  Is_True(new_label != (LABEL_IDX) 0,
+		  ("Build_CFG, new region exit label is NULL"));
+	  new_exit = WN_CreateRegionExit(new_label);
+	  WN_INSERT_BlockLast(CGRIN_nested_exit(cgrin),new_exit);
+	}
+	break;
+
 #ifdef TARG_SL   //fork_joint
       case OPC_SL2_FORK_MAJOR:
       case OPC_SL2_FORK_MINOR:	  	
@@ -6445,6 +6547,15 @@ Convert_Branch (WN *branch)
     target_tn =  Gen_Label_TN (Get_WN_Label (branch), 0);
     Exp_OP1 (OPC_GOTO, NULL, target_tn, &New_OPs);
     break;
+
+#ifdef ZDL_TARG
+  case OPC_ZDLBR:
+    target_tn = Gen_Label_TN (Get_WN_Label (branch), 0);
+    /* Target specific Expansion of OPR_ZDLBR */
+    extern void Target_Specific_ZDLBR_Expansion(TN* target_tn);
+    Target_Specific_ZDLBR_Expansion(target_tn);
+    break;
+#endif
 
 #ifdef TARG_SL //fork_joint
   case OPC_SL2_FORK_MAJOR:
@@ -7149,6 +7260,7 @@ static void Expand_Statement (WN *stmt)
   case OPC_SL2_FORK_MAJOR:
   case OPC_SL2_FORK_MINOR:
 #endif   	
+  case OPC_ZDLBR:
     Convert_Branch (stmt);
     break;
   case OPC_RETURN:
@@ -7236,7 +7348,14 @@ static void Expand_Statement (WN *stmt)
     	/* start of a new basic block */
 #ifdef KEY
 	BOOL is_non_local_label;
-    	bb = Add_Label(Get_WN_Label (stmt, &is_non_local_label));
+
+        if (info)
+          bb = Add_Label_With_Forced_New_BB(Get_WN_Label (stmt, &is_non_local_label));
+        else if (BB_length(Cur_BB) == 0 &&  ANNOT_Get (BB_annotations(Cur_BB), ANNOT_LOOPINFO))
+          bb = Add_Label_With_Forced_New_BB(Get_WN_Label (stmt, &is_non_local_label));
+        else
+          bb = Add_Label(Get_WN_Label (stmt, &is_non_local_label));
+
 	if (is_non_local_label)
 	  Set_BB_has_non_local_label(bb);
 #else
@@ -7654,6 +7773,7 @@ Convert_WHIRL_To_OPs (WN *tree)
 
   initialize_region_stack(tree);
   Cur_BB = NULL;
+  OPS_Init(&New_OPs);
   current_srcpos = 0;
 
   switch ( WN_opcode( tree ) ) {

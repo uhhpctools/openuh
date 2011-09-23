@@ -1448,12 +1448,22 @@ c_parser_declaration_or_fndef (c_parser *parser, bool fndef_ok, bool empty_ok,
      simple-asm-expr ;
 */
 
+#ifdef KEY
+extern void gspin_gxx_emits_asm (tree t);
+extern int flag_spin_file;
+#endif
+
 static void
 c_parser_asm_definition (c_parser *parser)
 {
   tree asm_str = c_parser_simple_asm_expr (parser);
-  if (asm_str)
+  if (asm_str) {
     cgraph_add_asm_node (asm_str);
+#ifdef KEY
+    if (flag_spin_file)
+      gspin_gxx_emits_asm (asm_str);
+#endif
+  }
   c_parser_skip_until_found (parser, CPP_SEMICOLON, "expected %<;%>");
 }
 

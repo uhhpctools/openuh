@@ -61,11 +61,6 @@
  *       should be called in an appropriate context (such as 
  *       ST2F_translate()).
  *
- *    TY2F_translate_purple_array:
- *       Inserts a place-holder for assumed sized or adjustable array bounds,
- *       while the action is simply dispatched to TY2F_translate() for other
- *       types.
- *
  *    TY2F_Translate_ArrayElt:
  *       Translates an array offset into a (multi-dimensional) array
  *       indexing operation, based on a given array-type.
@@ -127,7 +122,6 @@
  */
 
 extern void TY2F_translate(TOKEN_BUFFER tokens, TY_IDX ty);
-extern void TY2F_Translate_Purple_Array(TOKEN_BUFFER tokens, ST *st, TY_IDX ty);
 extern void TY2F_Translate_ArrayElt(TOKEN_BUFFER tokens,
 				    TY_IDX       arr_ty,
 				    STAB_OFFSET  arr_ofst);

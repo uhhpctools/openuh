@@ -502,8 +502,6 @@ enum	directive_stmt_values  {Case_Dir,
 				Regionend_Dir,
 				Opaque_Dir,
 				Optional_Dir,
-				PurpleConditional_Dir,
-				PurpleUnconditional_Dir,
                                 Atomic_Open_Mp_Dir,
                                 Barrier_Open_Mp_Dir,
                                 Critical_Open_Mp_Dir,
@@ -564,8 +562,6 @@ char	*(directive_stmt_str[Last_Dir]) =   {
 		"C*$* REGIONEND",		/* Regionend_Dir	*/
 		"C*$* OPAQUE",			/* Opaque_Dir		*/
 		"C*$* OPTIONAL",		/* Optional_Dir		*/
-		"C*$* PURPLECONDITIONAL",	/* PurpleConditional_Dir */
-		"C*$* PURPLEUNCONDITIONAL",	/* PurpleUnconditional_Dir */
                 "C$OMP ATOMIC",			/* Atomic_Open_Mp_Dir	*/
                 "C$OMP BARRIER",		/* Barrier_Open_Mp_Dir	*/
                 "C$OMP CRITICAL",		/* Critical_Open_Mp_Dir	*/
@@ -1380,62 +1376,6 @@ long directive_cant_be_in[Last_Dir] = {
 			 (0 << Open_Mp_Parallel_Workshare_Region) ),
 
                                 /* Optional_Dir                 */
-
-			((0 << Parallel_Region) |
-                         (0 << Doall_Region) |
-                         (0 << Do_Parallel_Region) |
-                         (0 << Guard_Region) |
-                         (0 << Case_Region) |
-                         (0 << Region_Region) |
-                         (0 << Sgi_Parallel_Region) |
-                         (0 << Doacross_Region) |
-                         (0 << Parallel_Do_Region) |
-                         (0 << Pdo_Region) |
-                         (0 << Parallel_Section_Region) |
-                         (0 << Critical_Section_Region) |
-                         (0 << Single_Process_Region) |
-                         (0 << Open_Mp_Parallel_Region) |
-                         (0 << Open_Mp_Do_Region) |
-                         (0 << Open_Mp_Parallel_Sections_Region) |
-                         (0 << Open_Mp_Sections_Region) |
-                         (0 << Open_Mp_Section_Region) |
-                         (0 << Open_Mp_Single_Region) |
-                         (0 << Open_Mp_Parallel_Do_Region) |
-                         (0 << Open_Mp_Master_Region) |
-                         (0 << Open_Mp_Critical_Region) |
-                         (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
-
-                                /* PurpleConditional_Dir	*/
-
-			((0 << Parallel_Region) |
-                         (0 << Doall_Region) |
-                         (0 << Do_Parallel_Region) |
-                         (0 << Guard_Region) |
-                         (0 << Case_Region) |
-                         (0 << Region_Region) |
-                         (0 << Sgi_Parallel_Region) |
-                         (0 << Doacross_Region) |
-                         (0 << Parallel_Do_Region) |
-                         (0 << Pdo_Region) |
-                         (0 << Parallel_Section_Region) |
-                         (0 << Critical_Section_Region) |
-                         (0 << Single_Process_Region) |
-                         (0 << Open_Mp_Parallel_Region) |
-                         (0 << Open_Mp_Do_Region) |
-                         (0 << Open_Mp_Parallel_Sections_Region) |
-                         (0 << Open_Mp_Sections_Region) |
-                         (0 << Open_Mp_Section_Region) |
-                         (0 << Open_Mp_Single_Region) |
-                         (0 << Open_Mp_Parallel_Do_Region) |
-                         (0 << Open_Mp_Master_Region) |
-                         (0 << Open_Mp_Critical_Region) |
-                         (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
-
-                                /* PurpleUnconditional_Dir	*/
 
 			((1 << Parallel_Region) |
                          (1 << Doall_Region) |
@@ -2951,63 +2891,6 @@ long directive_must_be_in[Last_Dir] = {
 			 (0 << Open_Mp_Parallel_Workshare_Region) ),
 
                                 /* Optional_Dir                 */
-
-
-			((0 << Parallel_Region) |
-                         (0 << Doall_Region) |
-                         (0 << Do_Parallel_Region) |
-                         (0 << Guard_Region) |
-                         (0 << Case_Region) |
-                         (1 << Region_Region) |
-                         (0 << Sgi_Parallel_Region) |
-                         (0 << Doacross_Region) |
-                         (0 << Parallel_Do_Region) |
-                         (0 << Pdo_Region) |
-                         (0 << Parallel_Section_Region) |
-                         (0 << Critical_Section_Region) |
-                         (0 << Single_Process_Region) |
-                         (0 << Open_Mp_Parallel_Region) |
-                         (0 << Open_Mp_Do_Region) |
-                         (0 << Open_Mp_Parallel_Sections_Region) |
-                         (0 << Open_Mp_Sections_Region) |
-                         (0 << Open_Mp_Section_Region) |
-                         (0 << Open_Mp_Single_Region) |
-                         (0 << Open_Mp_Parallel_Do_Region) |
-                         (0 << Open_Mp_Master_Region) |
-                         (0 << Open_Mp_Critical_Region) |
-                         (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
-
-                                /* PurpleConditional_Dir	*/
-
-			((0 << Parallel_Region) |
-                         (0 << Doall_Region) |
-                         (0 << Do_Parallel_Region) |
-                         (0 << Guard_Region) |
-                         (0 << Case_Region) |
-                         (1 << Region_Region) |
-                         (0 << Sgi_Parallel_Region) |
-                         (0 << Doacross_Region) |
-                         (0 << Parallel_Do_Region) |
-                         (0 << Pdo_Region) |
-                         (0 << Parallel_Section_Region) |
-                         (0 << Critical_Section_Region) |
-                         (0 << Single_Process_Region) |
-                         (0 << Open_Mp_Parallel_Region) |
-                         (0 << Open_Mp_Do_Region) |
-                         (0 << Open_Mp_Parallel_Sections_Region) |
-                         (0 << Open_Mp_Sections_Region) |
-                         (0 << Open_Mp_Section_Region) |
-                         (0 << Open_Mp_Single_Region) |
-                         (0 << Open_Mp_Parallel_Do_Region) |
-                         (0 << Open_Mp_Master_Region) |
-                         (0 << Open_Mp_Critical_Region) |
-                         (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
-
-                                /* PurpleUnconditional_Dir	*/
 
 			((0 << Parallel_Region) |
                          (0 << Doall_Region) |

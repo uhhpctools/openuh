@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -75,13 +79,12 @@
 #include "ipl_summarize.h"
 
 #ifdef SHARED_BUILD
-#pragma weak Aliased
-#endif
- 
 mINT32
 SYSTEM_OF_EQUATIONS::_work[SOE_MAX_WORK_ROWS][SOE_MAX_WORK_COLS];
 mINT64 
 SYSTEM_OF_EQUATIONS::_work_const[SOE_MAX_WORK_ROWS];
+#endif
+ 
 struct ALIAS_MANAGER *Ipl_Al_Mgr;
 struct DU_MANAGER *Ipl_Du_Mgr;
 
@@ -154,7 +157,11 @@ Opcode_Match(OPCODE op1, OPCODE op2)
 //------------------------------------------------------------------
 // stolen from lnoutils
 //------------------------------------------------------------------
-extern  
+#ifdef SHARED_BUILD
+extern
+#else
+static
+#endif
 WN* UBvar(WN* end)
 {
   WN* wn_index = NULL; 

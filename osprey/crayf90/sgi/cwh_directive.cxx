@@ -94,8 +94,6 @@
  *              fei_section_gp           
  *              fei_section_nongp        
  *              fei_blocking_size        
- *              fei_purple_conditional   
- *              fei_purple_unconditional 
  *              fei_opaque
  *
  * ====================================================================
@@ -1776,26 +1774,6 @@ fei_blocking_size         ( void )
 		      WN_const_val(wn1));
 
 } /* fei_blocking_size */
-
-void
-fei_purple_conditional    ( void )
-{
-  WN *save, *wn1;
-  save = cwh_block_set_region_pragmas();
-  wn1  = cwh_expr_operand(NULL);
-  cwh_stmt_add_xpragma(WN_PRAGMA_PURPLE_CONDITIONAL,FALSE,wn1);
-  cwh_block_set_current(save);
-
-} /* fei_purple_conditional */
-
-void
-fei_purple_unconditional  ( void )
-{
-  WN *save ;
-  save = cwh_block_set_region_pragmas();
-  cwh_stmt_add_pragma(WN_PRAGMA_PURPLE_UNCONDITIONAL);
-  cwh_block_set_current(save);
-} /* fei_purple_unconditional */
 
 void
 fei_opaque  ( void )

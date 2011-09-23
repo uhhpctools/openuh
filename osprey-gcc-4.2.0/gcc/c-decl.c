@@ -8063,10 +8063,6 @@ c_write_global_declarations (void)
 
 #ifdef KEY
   if (flag_spin_file) {
-    /* Bug 13913: above -O0, flag_unit_at_a_time causes a different
-       phase structure causing us to skip processing of global asm
-       statements. Output any such statements here. */
-    cgraph_output_pending_asms ();
     remove_asm_file ();
     if (!errorcount)
       exit (EXIT_SUCCESS);

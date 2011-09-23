@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /* -*- c++ -*-
@@ -88,6 +88,7 @@ extern "C" {
  void _ZN10DU_MANAGER13Get_last_stmtEj(void) __attribute__((weak));
 #endif
 
+#ifdef BUILD_SKIP_IPA
  void _ZN10DU_MANAGER14CD_is_br_takenEj(void) {}
  void _ZN10DU_MANAGER15CD_is_fall_thruEj(void) {}
  void _ZNK7CODEREP12Def_at_entryEv(void) {}
@@ -95,6 +96,7 @@ extern "C" {
  void _ZN10DU_MANAGER8DominateEjj(void) {}
  void _ZN10DU_MANAGER6Get_cdEj(void) {}
  void _ZN10DU_MANAGER13Get_last_stmtEj(void) {}
+#endif
 }
 
 extern BOOL CXX_Alias_Const;

@@ -99,11 +99,7 @@ extern void add_string (string_list_t *list, char *s);
 extern void add_after_string (string_list_t *list, string_item_t *item, char *s);
 
 /* add each blank-separated substring to end of list */
-#ifndef KEY
-extern void add_multi_strings (string_list_t *list, char *s);
-#else
 extern void add_multi_strings (string_list_t *list, char *s, boolean only_one);
-#endif
 
 /* add string to end of list if not already in list */
 extern void add_string_if_new (string_list_t *list, char *s);

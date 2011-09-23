@@ -429,6 +429,7 @@ main ()
         "asm",
         "intrncall",
         "spadjust",
+        "auxbr",
 
     // Dummy instructions
         "begin_pregtn",

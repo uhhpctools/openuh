@@ -554,35 +554,6 @@ void directive_stmt_semantics(void)
          cdir_switches.prefervector = TRUE;
          break;
 
-      case Purpleconditional_Star_Opr:
-         cdir_switches.purpleconditional = TRUE;
-
-         COPY_OPND(opnd, IR_OPND_L(ir_idx));
-         exp_desc.rank = 0;
-         xref_state = CIF_Symbol_Reference;
-         ok = expr_semantics(&opnd, &exp_desc);
-
-         find_opnd_line_and_column(&opnd, &line, &column);
-         if (exp_desc.type != Logical ||
-             exp_desc.rank != 0)      {
-            PRINTMSG(line, 803, Error, column);
-         }
-
-         idx = create_tmp_asg(&opnd,
-                              &exp_desc,
-                              &l_opnd,
-                              Intent_In,
-                              FALSE,
-                              FALSE);
-         IR_FLD_L(ir_idx) = AT_Tbl_Idx;
-         IR_IDX_L(ir_idx) = idx;
-         IR_LINE_NUM_L(ir_idx) = line;
-         IR_COL_NUM_L(ir_idx) = column;
-         break;
-
-      case Purpleunconditional_Star_Opr:
-         cdir_switches.purpleunconditional = TRUE;
-         break;
 
       case Recurrence_Cdir_Opr:
          cdir_switches.recurrence = TRUE;

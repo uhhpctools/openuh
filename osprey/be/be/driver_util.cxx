@@ -493,8 +493,6 @@ Process_Command_Line (INT argc, char **argv)
 	case 'p':
 	    if (strcmp (myname, "preopt") == 0)
 		Run_preopt = TRUE;
-	    else if (strcmp (myname, "purple") == 0)
-		Run_purple = TRUE;
 	    break;
 	case 'c':
 	    if (strcmp (myname, "cg") == 0)

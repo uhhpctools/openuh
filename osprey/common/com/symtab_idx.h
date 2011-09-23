@@ -219,13 +219,15 @@ struct TABLE_INDEXED_BY_LEVEL8_AND_INDEX24 {
 //     UINT _restrict : 1;
 //     UINT _volatile : 1;
 //     UINT _const : 1;
-//     UINT _align : 5;
+//     UINT _user_align : 1;
+//     UINT _align : 4;
 // };
 
 const UINT32 TY_RESTRICT	= 0x00000080; // restrict type qualifier
 const UINT32 TY_VOLATILE	= 0x00000040; // volatile type qualifier
 const UINT32 TY_CONST		= 0x00000020; // const type qualifier
-const UINT32 TY_ALIGN		= 0x0000001f; // bit mask for alignment field
+const UINT32 TY_USER_ALIGN	= 0x00000010; // user defined align flag
+const UINT32 TY_ALIGN		= 0x0000000f; // bit mask for alignment field
 
 inline UINT32 TY_IDX_index (TY_IDX ty_idx)	{ return ty_idx >> 8; }
 inline void Set_TY_IDX_index (TY_IDX &ty_idx, UINT32 index)
@@ -247,6 +249,10 @@ inline void Clear_TY_is_volatile (TY_IDX &ty_idx){ ty_idx &= ~TY_VOLATILE; }
 inline BOOL TY_is_restrict (TY_IDX ty_idx)       { return ty_idx & TY_RESTRICT;}
 inline void Set_TY_is_restrict (TY_IDX &ty_idx)  { ty_idx |= TY_RESTRICT; }
 inline void Clear_TY_is_restrict (TY_IDX &ty_idx){ ty_idx &= ~TY_RESTRICT; }
+
+inline BOOL TY_is_user_align (TY_IDX ty_idx)       { return ty_idx & TY_USER_ALIGN;}
+inline void Set_TY_is_user_align (TY_IDX &ty_idx)  { ty_idx |= TY_USER_ALIGN; }
+inline void Clear_TY_is_user_align (TY_IDX &ty_idx){ ty_idx &= ~TY_USER_ALIGN; }
 
 // TY_align_exp returns the exponent part of the alignment.  That is, the
 // true alignment in bytes is 2 to the power of TY_align_exp ()

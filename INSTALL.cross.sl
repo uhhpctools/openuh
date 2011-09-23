@@ -86,9 +86,9 @@ INSTALL_FE () {
     # GNU 4.2.0 based FE
     INSTALL_EXEC_SUB ${AREA}/wgen/wgen42 ${PHASEPATH}/wgen42
     INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/cc1 ${PHASEPATH}/cc142
-    ln -sf ${PHASEPATH}/cc142 ${ALT_BIN_DIR}/cc1
+    INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/cc1 ${ALT_BIN_DIR}/cc1
     INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/cc1plus ${PHASEPATH}/cc1plus42
-    ln -sf ${PHASEPATH}/cc1plus42 ${ALT_BIN_DIR}/cc1plus
+    INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/cc1plus ${ALT_BIN_DIR}/cc1plus
     INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/xgcc ${ALT_BIN_DIR}/gcc
     INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/g++ ${ALT_BIN_DIR}/g++
     INSTALL_EXEC_SUB ${GNUFE42_AREA}/gcc/cpp ${ALT_BIN_DIR}/cpp

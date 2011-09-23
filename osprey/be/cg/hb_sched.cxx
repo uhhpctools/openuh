@@ -2951,6 +2951,9 @@ HB_Schedule::Schedule_Block (BB *bb, BBSCH *bbsch, int scheduling_algorithm)
 #if defined (TARG_SL)
   LOCS_Fwd_Scheduling = org_LOCS_Fwd_Scheduling;
 #endif
+  // cycle_fn will be deleted when _hb_pool is freed, while priority_fn used malloc pool
+  // to initialize its memeber _curbb_list, explicitly delete it to aviod memory leak.
+  CXX_DELETE(priority_fn, &_hb_pool);
 }
 
 void

@@ -178,7 +178,6 @@ WN2C_is_pointer_diff(OPCODE op, const WN *kid0, const WN *kid1)
 /* The name of a temporary automatic variable used to hold function
  * return values.
  */
-static const char WN2C_Purple_Region_Name[] = "prp___region";
 static const char WN2C_Return_Value_Name[] = "_RetVal";
 static BOOL       WN2C_Used_Return_Value = FALSE;
 
@@ -205,8 +204,7 @@ WN2C_Skip_Stmt(const WN *stmt)
 {
    return ((W2C_No_Pragmas && \
             (WN_operator(stmt) == OPR_PRAGMA || 
-             WN_operator(stmt) == OPR_XPRAGMA) &&
-	    WN_pragma(stmt) != WN_PRAGMA_PREAMBLE_END) || /* For purple */\
+             WN_operator(stmt) == OPR_XPRAGMA)) ||
 
            WN2C_Skip_Pragma_Stmt(stmt) ||
 
@@ -4041,35 +4039,6 @@ WN2C_Translate_Comma_Sequence(TOKEN_BUFFER  tokens,
 } /* WN2C_Translate_Comma_Sequence */
 
 
-void
-WN2C_Append_Purple_Funcinfo(TOKEN_BUFFER tokens)
-{
-   const char *name   = W2C_Object_Name(PUINFO_FUNC_ST);
-   ST_IDX      id     = PUINFO_FUNC_ST_IDX;
-   ST_SCLASS   sclass = ST_sclass(PUINFO_FUNC_ST);
-   ST_EXPORT   export_class = (ST_EXPORT)ST_export(PUINFO_FUNC_ST);
-
-   Append_Token_String(tokens, name);
-   Append_Token_Special(tokens, ',');
-   if (strcmp(name, WN2C_Purple_Region_Name) == 0)
-   {
-      /* This must match the setting in PRP_TRACE_READER::_Read_Next()
-       * when a region is entered.
-       */
-      id = 0xffffffff;
-      sclass = SCLASS_TEXT;
-      export_class = EXPORT_INTERNAL;
-   }
-   Append_Token_String(tokens, Number_as_String(id, "%llu"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(sclass, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(export_class, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, "0"); /* Flags */
-} /* WN2C_Append_Purple_Funcinfo */
-
-
 static void
 Append_Cplus_Initialization(TOKEN_BUFFER tokens, CONTEXT context)
 {
@@ -4589,19 +4558,6 @@ WN2C_block(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
       if (!Is_Empty_Token_Buffer(PUinfo_pragmas))
          Append_Indented_Newline(PUinfo_pragmas, 1);
       Append_And_Reclaim_Token_List(tokens, &PUinfo_pragmas);
-      
-      /* If this is a purple code-extraction, insert a placeholder
-       * for purple-specific initialization.
-       */
-      if (W2C_Purple_Emission)
-      {
-	 /* <#PRP_XSYM:INIT_DECL name, id, sclass, export#>
-	  */
-	 Append_Indented_Newline(tokens, 1);
-	 Append_Token_String(tokens, "<#PRP_XSYM:INIT_DECL");
-	 WN2C_Append_Purple_Funcinfo(tokens);
-	 Append_Token_String(tokens, "#>");
-      }
        /*By Liao, for landmark of the beginning of a nested PU*/
       has_nested = PU_has_nested(Get_Current_PU());
       if (has_nested && W2C_Should_Emit_Nested_PUs()) {
@@ -4614,17 +4570,6 @@ WN2C_block(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    
    /* Append the statements to the tokens */
    Append_And_Reclaim_Token_List(tokens, &stmt_tokens);
-
-   if (new_func_scope && W2C_Purple_Emission &&
-       strcmp(W2C_Object_Name(PUINFO_FUNC_ST), WN2C_Purple_Region_Name) == 0)
-   {
-      /* <#PRP_XSYM:TEST name, id, sclass, export#>
-       */
-      Append_Indented_Newline(tokens, 1);
-      Append_Token_String(tokens, "<#PRP_XSYM:TEST");
-      WN2C_Append_Purple_Funcinfo(tokens);
-      Append_Token_String(tokens, "#>");
-   }
 
    /* The curly brackets for a scope are not indented, so recover
     * the previous indentation before emitting the '}' token.
@@ -5993,15 +5938,6 @@ WN2C_iload(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	    ST_sclass(WN_st(wn)) == SCLASS_FORMAL_REF),
 	   ("Invalid operator for WN2C_iload()"));
 
-   /* Special case for Purple */
-   if (W2C_Only_Mark_Loads && !TY_Is_Pointer(WN_ty(wn)))
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_STATUS;
-   }
-
    /* Get the type of data to be loaded from memory */
    expr_tokens = New_Token_Buffer();
    if (WN_operator(wn) == OPR_LDID)
@@ -6124,15 +6060,6 @@ WN2C_mload(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 	   ("Expected WN_ty to be a pointer in WN2C_mload()"));
    Is_True(WN_operator(WN_kid1(wn)) == OPR_INTCONST,
 	   ("Expected statically known size for WN2C_mload()"));
-
-   /* Special case for Purple (cannot be a ptr, so always do it) */
-   if (W2C_Only_Mark_Loads)
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_STATUS;
-   }
 
    /* Get the type of object being stored */
    base_ty = WN_Tree_Type(WN_kid0(wn));
@@ -6990,15 +6917,6 @@ WN2C_ldid(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
      }
    }
 #endif
-   /* Special case for Purple */
-   if (W2C_Only_Mark_Loads && !TY_Is_Pointer(WN_ty(wn)))
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_STATUS;
-   }
-
    if (WN_operator(wn) == OPR_LDID &&
        ST_sclass(WN_st(wn)) == SCLASS_FORMAL_REF)
       return WN2C_iload(tokens, wn, context); /* Treat LDID as indirect load */
@@ -7658,109 +7576,6 @@ WN2C_translate_file_scope_defs(CONTEXT context)
 
    return EMPTY_STATUS;
 } /* WN2C_translate_file_scope_defs */
-
-
-STATUS 
-WN2C_translate_purple_main(TOKEN_BUFFER tokens, 
-			   const WN    *pu, 
-			   const char  *region_name,
-			   CONTEXT      context)
-{
-   static const char prp_return_var_name[] = "prp___return";
-
-   TY_IDX    return_ty;
-   const ST *param_st;
-   INT       first_param, param;
-
-   Is_True(WN_operator(pu) == OPR_FUNC_ENTRY, 
-	   ("Invalid opcode for WN2C_translate_purple_main()"));
-
-   /* Write function header, and begin the body on a new line
-    */
-   CONTEXT_set_srcpos(context, WN_Get_Linenum(pu));
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   Append_Token_String(tokens, "int main()");
-
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   Append_Token_Special(tokens, '{');
-
-   /* Insert parameters as local variables
-    */
-   Increment_Indentation();
-   first_param = (PUINFO_RETURN_TO_PARAM? 1 : 0);
-   for (param = first_param; param < WN_num_formals(pu); param++)
-   {
-      param_st = WN_st(WN_formal(pu, param));
-      Append_Indented_Newline(tokens, 1);
-      ST2C_decl_translate(tokens, param_st, context);
-      Append_Token_Special(tokens, ';');
-   }
-
-   /* We do not really care what is returned from the purplized region,
-    * but for correctness we insert a declaration for any return variable
-    * here, with a default name.
-    */
-   return_ty = PUINFO_RETURN_TY;
-   if (return_ty != (TY_IDX) 0 && TY_kind(return_ty) != KIND_VOID)
-   {
-      TOKEN_BUFFER return_tokens = New_Token_Buffer();
-
-      Append_Token_String(return_tokens, prp_return_var_name);
-      TY2C_translate_unqualified(return_tokens, return_ty);
-      Append_Indented_Newline(tokens, 1);
-      Append_And_Reclaim_Token_List(tokens, &return_tokens);
-   }
-
-   /* Insert a placeholder for initialization of parameters
-    */
-   Append_Indented_Newline(tokens, 1);
-   Append_Token_String(tokens, "<#PRP_XSYM:INIT_PARAM ");
-   WN2C_Append_Purple_Funcinfo(tokens);
-   Append_Token_String(tokens, "#>");
-
-   /* Insert call to purple region routine
-    */
-   Append_Indented_Newline(tokens, 1);
-   Append_Token_String(tokens,
-		       "/***** Call to extracted purple region ****");
-   Append_Indented_Newline(tokens, 1);
-   Append_Token_String(tokens, "*/");
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   if (return_ty != (TY_IDX) 0 && TY_kind(return_ty) != KIND_VOID)
-   {
-      Append_Token_String(tokens, prp_return_var_name);
-      Append_Token_Special(tokens, '=');
-   }
-   Append_Token_String(tokens, region_name);
-   Append_Token_Special(tokens, '(');
-   for (param = 0; param < WN_num_formals(pu); param++)
-   {
-      if (param > 0)
-	 Append_Token_Special(tokens, ',');
-      param_st = WN_st(WN_formal(pu, param));
-      Append_Token_String(tokens, W2CF_Symtab_Nameof_St(param_st));
-   }
-   Append_Token_Special(tokens, ')');
-   Append_Token_Special(tokens, ';');
-
-   /* Insert a placeholder for final testing of parameters
-    */
-   Append_Indented_Newline(tokens, 1);
-   Append_Token_String(tokens, "<#PRP_XSYM:TEST_PARAM ");
-   WN2C_Append_Purple_Funcinfo(tokens);
-   Append_Token_String(tokens, "#>");
-
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   Append_Token_String(tokens, "return 0;");
-
-   Decrement_Indentation();
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   Append_Token_Special(tokens, '}');
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
-   
-   return EMPTY_STATUS;
-} /* WN2C_translate_purple_main */
 
 
 void

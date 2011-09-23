@@ -54,8 +54,6 @@ extern void (*W2F_Cleanup_p)(void);
 // extern void (*W2F_Def_ST_p)(FILE *outfile, ST *st);
 extern void (*W2F_Fini_p)(void);
 extern void (*W2F_Init_p)(void);
-extern void (*W2F_Mark_Loads_p)(void);
-extern void (*W2F_Nomark_Loads_p)(void);
 extern const char * (*W2F_Object_Name_p)(ST *func_st);
 extern void (*W2F_Outfile_Fini_p)(void);
 extern void (*W2F_Outfile_Init_p)(void);
@@ -67,13 +65,9 @@ extern void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 extern void (*W2F_Set_Prompf_Emission_p)(WN_MAP *construct_map);
 extern void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern const char * (*W2F_Get_Transformed_Src_Path_p)(void);
-extern void (*W2F_Reset_Purple_Emission_p)(void);
-extern void (*W2F_Set_Purple_Emission_p)(void);
 extern BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
 extern void (*W2F_Translate_Istore_Lhs_p)(char *strbuf, UINT bufsize,
   WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty, TYPE_ID istore_mtype);
-extern void (*W2F_Translate_Purple_Main_p)(FILE *outfile, WN *pu, 
-  const char *region_name);
 extern void (*W2F_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize, 
   ST *stid_st, mINT64 stid_ofst, TY_IDX stid_ty, TYPE_ID stid_mtype);
 extern void (*W2F_Translate_Wn_p)(FILE *outfile, WN *wn);
@@ -86,8 +80,6 @@ struct W2F_INIT
       // W2F_Def_ST_p = W2F_Def_ST;
       W2F_Fini_p = W2F_Fini;
       W2F_Init_p = W2F_Init;
-      W2F_Mark_Loads_p = W2F_Mark_Loads;
-      W2F_Nomark_Loads_p = W2F_Nomark_Loads;
       W2F_Object_Name_p = W2F_Object_Name;
       W2F_Outfile_Fini_p = W2F_Outfile_Fini;
       W2F_Outfile_Init_p = W2F_Outfile_Init;
@@ -98,11 +90,8 @@ struct W2F_INIT
       W2F_Set_Prompf_Emission_p = W2F_Set_Prompf_Emission;
       W2F_Set_Frequency_Map_p = W2F_Set_Frequency_Map;
       W2F_Get_Transformed_Src_Path_p = W2F_Get_Transformed_Src_Path;
-      W2F_Reset_Purple_Emission_p = W2F_Reset_Purple_Emission;
-      W2F_Set_Purple_Emission_p = W2F_Set_Purple_Emission;
       W2F_Should_Emit_Nested_PUs_p = W2F_Should_Emit_Nested_PUs;
       W2F_Translate_Istore_Lhs_p = W2F_Translate_Istore_Lhs;
-      W2F_Translate_Purple_Main_p = W2F_Translate_Purple_Main;
       W2F_Translate_Stid_Lhs_p = W2F_Translate_Stid_Lhs;
       W2F_Translate_Wn_p = W2F_Translate_Wn;
       W2F_Translate_Wn_Str_p = W2F_Translate_Wn_Str;

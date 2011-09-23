@@ -129,6 +129,11 @@ Adjusted_Alignment(ST *sym)
       return align;
     }
 
+    if (TY_is_user_align(ty_idx))
+    {
+      return align;
+    }
+
     switch(ST_sclass(sym))
     {
     case SCLASS_AUTO:
@@ -219,7 +224,8 @@ Adjusted_Alignment(ST *sym)
     /* Under -LANG:global_asm, the ASMs may have .section attributes,
      * so the compiler cannot be sure about offset/alignment of
      * compiler allocated objects, so use minimum alignment (bug 14506) */
-    if ( /* Optimize_Space==FALSE */ LANG_Enable_Global_Asm == FALSE )
+    if ( /* Optimize_Space==FALSE */ LANG_Enable_Global_Asm == FALSE ||
+         FILE_INFO_has_global_asm(File_info))
 #else
     if ( /* Optimize_Space==FALSE */ TRUE )
 #endif

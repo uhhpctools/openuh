@@ -68,8 +68,6 @@ extern void WN2F_Stmt_finalize(void);
  */
 extern BOOL WN2F_Skip_Stmt(WN *stmt);
 
-extern void WN2F_Append_Purple_Funcinfo(TOKEN_BUFFER tokens);
-
 extern WN2F_STATUS 
    WN2F_block(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context);
 

@@ -1356,8 +1356,6 @@ enum    operator_values      {  Null_Opr,
 				Nofusion_Star_Opr,
 				Noblocking_Dir_Opr,
 				Opaque_Star_Opr,
-				Purpleconditional_Star_Opr,
-				Purpleunconditional_Star_Opr,
 				Redistribute_Dollar_Opr,
 				Doacross_Dollar_Opr,
 				Pdo_Par_Opr,
@@ -2280,8 +2278,6 @@ struct	cdir_switch_entry	{
 				 boolean	nofusion		  : 1;
 				 boolean	nointerchange 		  : 1;
 				 boolean	opaque			  : 1;
-				 boolean	purpleconditional	  : 1;
-				 boolean	purpleunconditional	  : 1;
                                  boolean	inline_here_sgi		  : 1;
                                  boolean	noinline_here_sgi	  : 1;
 

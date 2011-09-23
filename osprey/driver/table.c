@@ -79,10 +79,8 @@ typedef enum {
 	needs_string,		/* option needs string arg */
 	needs_string_or_dash,	/* same as needs_string but also allow '-' */
 	needs_directory,	/* option needs directory arg */
-#ifdef KEY
 	needs_directory_or_null, /* option takes directory arg; if no dir arg
 				    is seen, ignore the option altogether */
-#endif
 	needs_decimal		/* option needs decimal arg */
 } syntax_t; 
 
@@ -156,9 +154,7 @@ find_name(char *s)
 		case needs_string_or_dash:
 		case needs_string:
 		case needs_directory:
-#ifdef KEY
 		case needs_directory_or_null:
-#endif
 			len = strlen(options[i].name);
 			if ((strncmp(s, options[i].name, len) == 0)
 			    /* isgraph includes underscore and % */
@@ -227,12 +223,10 @@ set_option_name(char *name, char *s, int *num_letters)
 				break;
 			case 'D':
 				f = needs_directory;
-#ifdef KEY
 				if (*(ps+2) == '?') {
 				  ps++;
 				  f = needs_directory_or_null;
 				}
-#endif
 				break;
 			}
 			ps++;
@@ -271,9 +265,7 @@ set_flag_name(option_info_t *opt)
 	case needs_directory:
 	case needs_decimal:
 	case complicated:
-#ifdef KEY
 	case needs_directory_or_null:
-#endif
 		/* add trailing __ to distinguish with no-arg case */
 		/* use two _ to distinguish from -I- case */
 		*pf = '_';
@@ -637,7 +629,6 @@ write_option_names (void)
 			fprintf(f, "#define %s %d\n", options[i].flag, i);
 		if (options[i].toggle) {
 			/* get var after "toggle(&" */
-#ifdef KEY
 			// Handle multiple toggles such as:
 			//   toggle(&var1,10);toggle(&var2,11)
 			char *p = options[i].action;
@@ -647,11 +638,6 @@ write_option_names (void)
 			  ivar = strtok(buffer,COMMA);
 			  add_implicit_var(ivar);
 			}
-#else
-			strcpy(buffer, ((char*)options[i].action)+8);
-			ivar = strtok(buffer,COMMA);
-			add_implicit_var(ivar);
-#endif
 		}
 	}
 	fprintf(f, "#define LAST_PREDEFINED_OPTION %d\n", num_options);
@@ -807,9 +793,7 @@ write_get_option (void)
 		    case needs_string:
 		    case needs_directory:
 		    case needs_decimal:
-#ifdef KEY
 		    case needs_directory_or_null:
-#endif
 			/* require this to be a separate arg */
 			fprintf(f, "\tif (!is_new_arg) break;\n");
 			/* for cases where base is > 1 letter,
@@ -823,9 +807,7 @@ write_get_option (void)
 			if (options[i].syntax == needs_decimal) {
 				fprintf(f, "\tif (is_decimal(next_string(argv,argi))) {\n");
 			} else if (options[i].syntax == needs_directory
-#ifdef KEY
 				   || options[i].syntax == needs_directory_or_null
-#endif
 				   ) {
 			  fprintf(f, "\tif (!is_directory(next_string(argv,argi)) && fullwarn)\n");
 			  fprintf(f, "\t\twarning(\"%%s is not a directory\", next_string(argv,argi));\n");
@@ -840,11 +822,9 @@ write_get_option (void)
 			if (options[i].syntax == needs_string_or_dash)
 			  fprintf(f, "\t\treturn add_string_option_or_dash(%s,optargs);\n", 
 				  options[i].flag);
-#ifdef KEY
 			else if (options[i].syntax == needs_directory)
 			  fprintf(f, "\t\treturn add_any_string_option(%s,optargs);\n", 
 				  options[i].flag);
-#endif
 			else
 			  fprintf(f, "\t\treturn add_string_option(%s,optargs);\n", 
 				  options[i].flag);

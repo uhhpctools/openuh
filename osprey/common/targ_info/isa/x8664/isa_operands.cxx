@@ -3868,8 +3868,6 @@ int main()
   Operand(1, rflags, opnd2);
 
   Instruction_Group("fp 2 fp",
-		    TOP_movsd,
-		    TOP_movss,
 		    TOP_cvtss2sd,
 		    TOP_cvtsd2ss,
 		    TOP_UNDEFINED);
@@ -4674,6 +4672,8 @@ int main()
 		    TOP_minss,
 		    TOP_mulsd,
 		    TOP_mulss,
+		    TOP_movsd,
+		    TOP_movss,
 		    TOP_UNDEFINED);
   Result(0, fp64);
   Operand(0, fp64, opnd1);

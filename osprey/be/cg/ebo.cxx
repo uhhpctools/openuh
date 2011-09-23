@@ -3006,12 +3006,20 @@ Find_BB_TNs (BB *bb)
       }
 
 #ifdef TARG_X8664
+      if ( !op_replaced &&
+           Is_Target_Orochi() && 
+           Is_Target_FMA4() &&
+           EBO_Is_FMA4(op) &&
+           !EBO_in_peep &&
+           !EBO_in_loop )
+        op_replaced = EBO_Disassociate_FMA( op );
+
       if( do_load_execute  &&
 	  !op_replaced     &&
 	  !OP_effectively_copy(op) ){
 	op_replaced = EBO_Load_Execution( op, opnd_tn, orig_tninfo, cmp_merge_idx );
       }
-
+ 
       if ( !op_replaced &&
             (CG_LOOP_unroll_level == 2) &&
             (OP_code(op) == TOP_leax32) &&
@@ -4637,10 +4645,14 @@ BOOL Is_Copy_Instruction(OP *op)
        (OP_code(op) == TOP_movapd) ||(OP_code(op) == TOP_movss)||
        (OP_code(op) == TOP_movsd) ||(OP_code(op) == TOP_movdq)||
        (OP_code(op) == TOP_mov64) ||(OP_code(op) == TOP_mov32)||
-       (OP_code(op) == TOP_vmovaps) ||(OP_code(op) == TOP_vmovsd)||
+       (OP_code(op) == TOP_vmovaps) ||(OP_code(op) == TOP_vmovss)||
        (OP_code(op) == TOP_vmovsd)  || (OP_code(op) == TOP_vmovapd))&&
        (CGTARG_Copy_Operand(op)>=0)){
 
+         if( ( (OP_code(op) == TOP_vmovss) || (OP_code(op) == TOP_vmovsd) ||
+               (OP_code(op) == TOP_movss)  || (OP_code(op) == TOP_movsd) ) && 
+             ( OP_opnd(op,0) == OP_opnd(op,1) ) )
+           return TRUE;
          if(Is_Target_Orochi() && OP_opnds(op)<=1) 
            return TRUE;
          if(!Is_Target_Orochi()) 

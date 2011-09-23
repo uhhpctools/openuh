@@ -82,12 +82,10 @@ static toggle_name toggled_names[MAX_TOGGLES];
 static int last_toggle_index = 0;
 static int inline_on_seen = FALSE;
 int inline_t = UNDEFINED;
-#ifdef KEY
 /* Before front-end: UNDEFINED.  After front-end: TRUE if inliner will be run.
    Bug 11325. */
 int run_inline;
 int malloc_algorithm = UNDEFINED;
-#endif
 boolean dashdash_flag = FALSE;
 boolean read_stdin = FALSE;
 boolean xpg_flag = FALSE;
@@ -131,10 +129,8 @@ static void add_hugepage_desc(HUGEPAGE_ALLOC, HUGEPAGE_SIZE, int);
 /* Run opencc from build directory (-run-build option)  */
 int run_build = 0;
 
-#ifdef KEY
 void set_memory_model(char *model);
 static int get_platform_abi();
-#endif
 
 #ifdef TARG_X8664
 static void Get_x86_ISA();
@@ -291,8 +287,7 @@ Bool_Group_Value ( char *val )
     return TRUE;
   }
 }
-#ifdef KEY /* Bug 4210 */
-
+
 /* ====================================================================
  *
  * Routine to process "-module dirname" and pass "-Jdirname" to Fortran
@@ -315,8 +310,7 @@ Process_module ( char *dirname )
       "-J"),
     dirname);
 }
-#endif /* KEY Bug 4210 */
-
+
 /* ====================================================================
  *
  * Routine to manage the implications of -Ofast.
@@ -402,14 +396,8 @@ Process_Opt_Group ( char *opt_args )
   /* Go look for -OPT:reorg_common: */
   optval = Get_Group_Option_Value ( opt_args, "reorg_common", "reorg");
   if ( optval != NULL && Bool_Group_Value(optval)) {
-#ifndef KEY
-    /* If we found it, set -Wl,-split_common,-ivpad: */
-    add_option_seen ( O_split_common );
-    add_option_seen ( O_ivpad );
-#endif
   }
 
-#ifdef KEY
   /* Go look for -OPT:malloc_algorithm */
   optval = Get_Group_Option_Value(opt_args, "malloc_algorithm", "malloc_alg");
   if (optval != NULL &&
@@ -421,7 +409,6 @@ Process_Opt_Group ( char *opt_args )
 	     " this architecture");
 #endif
   }
-#endif
 }
 
 void
@@ -627,12 +614,10 @@ Process_Targ_Group ( char *targ_args )
 	break;
 
       case 'p':
-#ifdef KEY
 	if (!strncasecmp(cp, "processor=", 10)) {
 	  char *target = cp + 10;
 	  set_cpu (target, M_ARCH);
 	}
-#endif
 #ifdef TARG_X8664
 	if (!strncasecmp(cp, "pclmul=on", 9)){
 	  add_option_seen(O_mpclmul);
@@ -1073,16 +1058,10 @@ Process_Inline ( void )
   char *args = option_name+7;
 
   if (strncmp (option_name, "-noinline", 9) == 0
-#ifdef KEY
-      || strncmp (option_name, "-fno-inline", 11) == 0
-#endif
-     )
+      || strncmp (option_name, "-fno-inline", 11) == 0)
       toggle_inline_off();
   else if (*args == '\0'
-#ifdef KEY
-           || strncmp (option_name, "-finline", 8) == 0
-#endif
-          )
+           || strncmp (option_name, "-finline", 8) == 0)
     /* Treat "-INLINE" like "-INLINE:=on" for error messages */
     toggle_inline_on();
   else do {
@@ -1152,13 +1131,11 @@ change_phase_path (char *arg)
 			parse_error(option_name, "bad phase for -Y option");
 		} else {
 			set_phase_dir(get_phase_mask(get_phase(*s)), dir);
-#ifdef KEY
 			// Special case wgen because it is affected by -Yf but
 			// is not considered a front-end (because it does not
 			// take C/C++ front-end flags in OPTIONS).
 			if (get_phase(*s) == P_any_fe)
 			  set_phase_dir(get_phase_mask(P_wgen), dir);
-#endif
 		}
 	}
 }
@@ -1285,7 +1262,6 @@ check_output_name (char *name)
 	}
 }
 
-#ifdef KEY /* bug 4260 */
 /* Disallow illegal name following "-convert" */
 void
 check_convert_name(char *name)
@@ -1306,7 +1282,6 @@ check_convert_name(char *name)
 	}
 	parse_error(option_name, "bad conversion name");
 }
-#endif /* KEY bug 4260 */
 
 void check_opt_tls_model(char* model)
 {
@@ -1322,13 +1297,10 @@ void check_opt_tls_model(char* model)
 void
 check_dashdash (void)
 {
-#ifndef KEY	// Silently ignore dashdash options in case pathcc is called as
-		// a linker.  Bug 4736.
 	if(xpg_flag)
 	   dashdash_flag = 1;
 	else
 	   error("%s not allowed in non XPG4 environment", option_name);
-#endif
 }
 
 static char *
@@ -1440,186 +1412,6 @@ Process_fb_cdir ( char *fname )
 {
   fb_cdir =  string_copy(fname);
 }
-
-#ifndef KEY	// -dsm no longer supported.  Bug 4406.
-typedef enum {
-  DSM_UNDEFINED,
-  DSM_OFF,
-  DSM_ON
-} DSM_OPTION;
-
-static DSM_OPTION dsm_option=DSM_UNDEFINED;
-static DSM_OPTION dsm_clone=DSM_UNDEFINED;
-static DSM_OPTION dsm_check=DSM_UNDEFINED;
-
-void
-set_dsm_default_options (void)
-{
-  if (dsm_option==DSM_UNDEFINED) dsm_option=DSM_ON;
-  if (dsm_clone==DSM_UNDEFINED && invoked_lang != L_CC) dsm_clone=DSM_ON;
-  if (dsm_check==DSM_UNDEFINED) dsm_check=DSM_OFF;
-}
-
-void
-reset_dsm_default_options (void)
-{
-  dsm_option=DSM_OFF;
-  dsm_clone=DSM_OFF;
-  dsm_check=DSM_OFF;
-}
-
-void
-set_dsm_options (void)
-{
-
-  if (dsm_option==DSM_ON) {
-    add_option_seen(O_dsm);
-  } else {
-    reset_dsm_default_options();
-    if (option_was_seen(O_dsm))
-      set_option_unseen(O_dsm); 
-  }
-
-  if (dsm_clone==DSM_ON) 
-    add_option_seen(O_dsm_clone);
-  else
-    if (option_was_seen(O_dsm_clone))
-      set_option_unseen(O_dsm_clone); 
-  if (dsm_check==DSM_ON) 
-    add_option_seen(O_dsm_check);
-  else
-    if (option_was_seen(O_dsm_check))
-      set_option_unseen(O_dsm_check); 
-}
-
-/* ====================================================================
- *
- * Process_Mp_Group
- *
- * We've found a -MP option group.  Inspect it for dsm request
- * and toggle the state appropriately.
- *
- * NOTE: We ignore anything that doesn't match what's expected --
- * the compiler will produce reasonable error messages for junk.
- *
- * ====================================================================
- */
-
-void
-Process_Mp_Group ( char *mp_args )
-{
-  char *cp = mp_args;	/* Skip -MP: */
-
-  if ( debug ) {
-    fprintf ( stderr, "Process_Mp_Group: %s\n", mp_args );
-  }
-
-  while ( *cp != 0 ) {
-    switch ( *cp ) {
-      case 'd':
-	if ( strncasecmp ( cp, "dsm", 3 ) == 0 &&
-             (*(cp+3)==':' || *(cp+3)=='\0'))
-            set_dsm_default_options();
-	else if ( strncasecmp ( cp, "dsm=on", 6 ) == 0 )
-            set_dsm_default_options();
-	else if ( strncasecmp ( cp, "dsm=off", 7 ) == 0 )
-            reset_dsm_default_options();
-	else if ( strncasecmp ( cp, "dsm=true", 8 ) == 0 )
-            set_dsm_default_options();
-	else if ( strncasecmp ( cp, "dsm=false", 9 ) == 0 )
-            reset_dsm_default_options();
-	else
-          parse_error(option_name, "Unknown -MP: option");
-	break;
-      case 'c':
-	if ( strncasecmp ( cp, "clone", 5 ) == 0) {
-          if ( *(cp+5) == '=' ) {
-	    if ( strncasecmp ( cp+6, "on", 2 ) == 0 )
-              dsm_clone=DSM_ON;
-	    else if ( strncasecmp ( cp+6, "off", 3 ) == 0 )
-              dsm_clone=DSM_OFF;
-          } else if ( *(cp+5) == ':' || *(cp+5) == '\0' ) {
-              dsm_clone=DSM_ON;
-          } else
-            parse_error(option_name, "Unknown -MP: option");
-	} else if ( strncasecmp ( cp, "check_reshape", 13 ) == 0) {
-          if ( *(cp+13) == '=' ) {
-	    if ( strncasecmp ( cp+14, "on", 2 ) == 0 ) {
-              dsm_check=DSM_ON;
-	    } else if ( strncasecmp ( cp+14, "off", 3 ) == 0 ) {
-              dsm_check=DSM_OFF;
-            }
-          } else if ( *(cp+13) == ':' || *(cp+13) == '\0' ) {
-              dsm_check=DSM_ON;
-          } else
-            parse_error(option_name, "Unknown -MP: option");
-	}
-	else
-          parse_error(option_name, "Unknown -MP: option");
-	break;
-    case 'm':
-      if (strncasecmp (cp, "manual=off", 10) == 0) {
-        set_option_unseen (O_mp);
-        reset_dsm_default_options ();
-      }
-      else
-        parse_error(option_name, "Unknown -MP: option");
-      break;
-    case 'o':
-      if (strncasecmp (cp, "open_mp=off", 11) == 0) {
-	 Disable_open_mp = TRUE;
-      } else if (strncasecmp (cp, "old_mp=off", 10) == 0) {
-	 Disable_old_mp = TRUE;
-      } else if ((strncasecmp (cp, "open_mp=on", 10) == 0) ||
-		 (strncasecmp (cp, "old_mp=on", 9) == 0)) {
-           /* No op; do nothing */
-      } else {
-	 parse_error(option_name, "Unknown -MP: option");
-      }
-      break;
-    default:
-          parse_error(option_name, "Unknown -MP: option");
-    }
-
-    /* Skip to the next group option: */
-    while ( *cp != 0 && *cp != ':' ) ++cp;
-    if ( *cp == ':' ) ++cp;
-  }
-
-  if ( debug ) {
-    fprintf ( stderr, "Process_Dsm_Group done\n" );
-  }
-}
-
-void
-Process_Mp ( void )
-{
-
-  if ( debug ) {
-    fprintf ( stderr, "Process_Mp\n" );
-  }
-
-  if (!option_was_seen (O_mp)) {
-    /* avoid duplicates */
-    add_option_seen (O_mp);
-  }
-  set_dsm_default_options();
-
-  if ( debug ) {
-    fprintf ( stderr, "Process_Mp done\n" );
-  }
-}
-
-void Process_Cray_Mp (void) {
-
-  if (invoked_lang == L_f90) {
-    /* this part is now empty (we do the processing differently)
-     * but left as a placeholder and error-checker.
-     */
-  }
-  else error ("-cray_mp applicable only to f90");
-}
-#endif
 
 void
 Process_Promp ( void )
@@ -2301,7 +2093,6 @@ Get_x86_ISA_extensions ()
 }
 #endif
 
-#ifdef KEY /* Bug 11265 */
 static void
 accumulate_isystem(char *optargs)
 {
@@ -2312,7 +2103,6 @@ accumulate_isystem(char *optargs)
   char *temp = malloc(strlen(optargs) + sizeof INCLUDE_EQ);
   add_string(isystem_dirs, strcat(strcpy(temp, INCLUDE_EQ), optargs));
 }
-#endif /* KEY Bug 11265 */
 
 static void add_hugepage_desc
 (

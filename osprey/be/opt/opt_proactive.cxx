@@ -716,7 +716,7 @@ SC_NODE::Then_end()
     if (sc_then->Contains(tmp))
       return tmp;
   }
-  return NULL;
+  return NULL; 
 }
 
 // Obtain the last block of a else-path.
@@ -846,20 +846,72 @@ SC_NODE::Is_sese()
   BB_LIST_ITER bb_list_iter;
   BB_NODE * bb_tmp;
   BB_NODE * bb_first;
+  BB_NODE * bb_last;
 
   switch (type) {
   case SC_BLOCK:
     ret_val = TRUE;
     bb_first = First_bb();
+    bb_last = Last_bb();
 
-    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(this->Get_bbs())) {
-      if ((bb_tmp != bb_first)
-	  && (!bb_first->Dominates(bb_tmp) || !bb_tmp->Postdominates(bb_first)
-	      || !bb_tmp->Pred()
-	      || (bb_tmp->Pred()->Len() != 1))) {
-	ret_val = FALSE;
-	break;
+    FOR_ALL_ELEM(bb_tmp, bb_list_iter, Init(Get_bbs())) {
+      BB_LIST_ITER iter;
+      BB_NODE * tmp;
+
+      if (bb_tmp != bb_last) {
+	// Do not allow exits except for the last block.
+	if (bb_tmp->Succ()) {
+	  FOR_ALL_ELEM(tmp, iter, Init(bb_tmp->Succ())) {
+	    if (!Contains(tmp)) {
+	      ret_val = FALSE;
+	      break;
+	    }
+	  }
+	}
       }
+      if (!ret_val)
+	break;
+
+      if (bb_tmp != bb_first) {
+	if (!bb_first->Dominates(bb_tmp) || !bb_tmp->Postdominates(bb_first)) {
+	  ret_val = FALSE;
+	  break;
+	}
+	else if (bb_tmp->Pred()) {
+	  // Do not allow entrances except for the first block.
+	  FOR_ALL_ELEM(tmp, iter, Init(bb_tmp->Pred())) {
+	    if (!Contains(tmp)) {
+	      ret_val = FALSE;
+	      break;
+	    }
+	  }
+	}
+      }
+      else {
+	// For the first block, do not allow more than 1 entrances from outside 
+	// unless it is a merge block of a SC_IF.
+	BB_LIST * pred = bb_tmp->Pred();
+	if (pred && (pred->Len() > 1)) {
+	  int count = 0;
+	  FOR_ALL_ELEM(tmp, iter, Init(pred)) {
+	    if (!Contains(tmp))
+	      count++;
+	  }
+	  if (count > 1) {
+	    // Check whether bb_tmp is a SC_IF's merge block.
+	    SC_NODE * sc_tmp = Prev_sibling();
+	    if (!sc_tmp || (sc_tmp->Type() != SC_IF)
+		|| (sc_tmp->Merge() != bb_tmp)
+		|| (count != 2)) {
+	      ret_val = FALSE;
+	      break;
+	    }
+	  }
+	}
+      }
+
+      if (!ret_val)
+	break;
     }
 
     break;
@@ -1300,6 +1352,8 @@ SC_NODE::Get_bounds(WN ** p_start, WN ** p_end, WN ** p_step)
   *p_start = wn_start;
   *p_end = wn_end;
   *p_step = wn_step;
+
+  return TRUE;
 }
 
 // Get upper bound of 'sc'.
@@ -3356,6 +3410,9 @@ IF_MERGE_TRANS::Is_candidate(SC_NODE * sc1, SC_NODE * sc2, BOOL do_query)
     if (has_non_sp && !Can_be_speculative(sc2))
       return FALSE;
     else if (_action == DO_IFFLIP)
+      return FALSE;
+    // Make sure sc1 and sc2 are control equivalent if they are not adjacent to each other.
+    else if ((count > 0) && !sc1->Is_ctrl_equiv(sc2))
       return FALSE;
     else
       return TRUE;

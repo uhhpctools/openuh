@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -179,11 +179,11 @@ static LNO_FLAGS Default_LNO = {
 #ifdef TARG_X8664
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
-  0,		/* Iter_threshold */
+  1,		/* Iter_threshold */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
-  0,		/* Iter_threshold */
+  1,		/* Iter_threshold */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -271,6 +271,7 @@ static LNO_FLAGS Default_LNO = {
   TRUE,         /* Simd_Reduction */
   TRUE,         /* Simd_Avoid_Fusion */
   FALSE,        /* Simd_Rm_Unity_Remainder */  
+  TRUE,         /* Simd_Vect_If */
   TRUE,         /* Run_hoistif */
   TRUE,		/* Ignore_Feedback */
   TRUE,         /* Run_unswitch */
@@ -333,7 +334,8 @@ static LNO_FLAGS Default_LNO = {
   UINT32_MAX,  /* IfMinMax_Limit */
   UINT32_MAX,  /* IfMinMax_Fix_Cond_Limit */
   0,           /* IfMinMax_Trace */
-  TRUE,        /* Struct_Array_Copy */
+  NULL,        /* Sac_Skip */
+  NULL,	       /* Sac_Skip_List */
   { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 }	/* buffer[16] */
 };
 
@@ -401,11 +403,11 @@ LNO_FLAGS Initial_LNO = {
 #ifdef TARG_X8664
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
-  0,		/* Iter_threshold */
+  1,		/* Iter_threshold */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
-  0,		/* Iter_threshold */
+  1,		/* Iter_threshold */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -492,7 +494,8 @@ LNO_FLAGS Initial_LNO = {
   FALSE,	/* Simd_Verbose */
   TRUE,         /* Simd_Reduction */
   TRUE,         /* Simd_Avoid_Fusion */
-  FALSE,         /* Simd_Rm_Unity_Remainder*/
+  FALSE,        /* Simd_Rm_Unity_Remainder*/
+  TRUE,         /* Simd_Vect_If */
   TRUE,         /* Run_hoistif */
   TRUE,	 	/* Ignore_Feedback */
   TRUE,         /* Run_unswitch */
@@ -555,7 +558,8 @@ LNO_FLAGS Initial_LNO = {
   1000000,     /* IfMinMax_Limit */
   1000000,     /* IfMinMax_Fix_Cond_Limit */
   0,           /* IfMinMax_Trace */
-  TRUE,        /* Struct_Array_Copy */
+  NULL,        /* Sac_Skip */
+  NULL,	       /* Sac_Skip_List */
   { 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0 }	/* buffer[16] */
 };
 
@@ -879,6 +883,7 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_BOOL ( "simd_reduction",	"simd_red",	Simd_Reduction ),
   LNOPT_BOOL ( "simd_avoid_fusion",	NULL,	Simd_Avoid_Fusion ),
   LNOPT_BOOL ( "simd_rm_unity_remainder", NULL,	Simd_Rm_Unity_Remainder),
+  LNOPT_BOOL ( "simd_vect_if",	        NULL,	Simd_Vect_If ),
   LNOPT_BOOL ( "hoistif",		NULL,	Run_hoistif ),
   LNOPT_BOOL ( "ignore_feedback",	NULL,	Ignore_Feedback ),
   LNOPT_BOOL ( "unswitch",		NULL,	Run_unswitch ),
@@ -942,7 +947,19 @@ static OPTION_DESC Options_LNO[] = {
 	       UINT32_MAX,0,UINT32_MAX, IfMinMax_Fix_Cond_Limit),
   LNOPT_U32  ( "ifmm_trace", 	NULL,   
 	       0,0,3, IfMinMax_Trace),
-  LNOPT_BOOL ( "struct_array_copy", NULL, Struct_Array_Copy),
+
+  { OVK_LIST,	OV_SHY,		FALSE, "sac_skip_equal",		"sac_skip_e",
+    0, 0, 4096,	&IL.Sac_Skip,	NULL,
+    "Skip optimization on the structure and field" },
+
+  { OVK_LIST,	OV_SHY,		FALSE, "sac_skip_before",		"sac_skip_b",
+    0, 0, 4096,	&IL.Sac_Skip,	NULL,
+    "Skip optimization on the structure and field" },
+
+  { OVK_LIST,	OV_SHY,		FALSE, "sac_skip_after",		"sac_skip_a",
+    0, 0, 4096,	&IL.Sac_Skip,	NULL,
+    "Skip optimization on the structure and field" },
+
   { OVK_COUNT }		    /* List terminator -- must be last */
 };
 

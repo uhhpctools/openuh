@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
 /* Build expressions with type checking for C compiler.
    Copyright (C) 1987, 1988, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
    1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
@@ -3032,6 +3036,7 @@ build_unary_op (enum tree_code code, tree xarg, int flag)
 	}
 
       /* For &x[y], return x+y */
+#ifndef OPEN64_SPIN
       if (TREE_CODE (arg) == ARRAY_REF)
 	{
 	  tree op0 = TREE_OPERAND (arg, 0);
@@ -3043,7 +3048,7 @@ build_unary_op (enum tree_code code, tree xarg, int flag)
 				   : op0),
 				  TREE_OPERAND (arg, 1), 1);
 	}
-
+#endif
       /* Anything not already handled and not a true memory reference
 	 or a non-lvalue array is an error.  */
       else if (typecode != FUNCTION_TYPE && !flag

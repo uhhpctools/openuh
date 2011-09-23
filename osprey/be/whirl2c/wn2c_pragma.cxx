@@ -1970,23 +1970,7 @@ WN2C_pragma(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(wn) == OPR_PRAGMA || WN_operator(wn) == OPR_XPRAGMA,
 	   ("Invalid operator for WN2C_pragma()"));
 
-   /* If this is a purple code-extraction, insert a placeholder
-    * for purple-specific initialization.
-    */
-   if (W2C_Purple_Emission && WN_pragma(wn) == WN_PRAGMA_PREAMBLE_END)
-   {
-      /* <#PRP_XSYM:INIT name, id, sclass, export#>
-       */
-      Append_Indented_Newline(tokens, 1);
-      Append_Token_String(tokens, "<#PRP_XSYM:INIT_STMT");
-      WN2C_Append_Purple_Funcinfo(tokens);
-      Append_Token_String(tokens, "#>");
-      next = WN_next(wn);
-   }
-   else
-   {
-      WN2C_process_pragma(tokens, &next, context);
-   }
+   WN2C_process_pragma(tokens, &next, context);
 
    Is_True(Pragmas_To_Skip.end == 0,
 	   ("Unexpected index for Pragmas_To_Skip in WN2C_pragma()"));

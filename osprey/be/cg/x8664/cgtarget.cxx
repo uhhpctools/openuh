@@ -266,6 +266,12 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vfnmsubxrss:
       case TOP_vfnmsubxxrss:
       case TOP_vfnmsubxxxrss:
+      case TOP_vfsqrtxss:
+      case TOP_vfsqrtxxss:
+      case TOP_vfsqrtxxxss:
+      case TOP_vfrsqrtxss:
+      case TOP_vfrsqrtxxss:
+      case TOP_vfrsqrtxxxss:
 	return 4;
 
       case TOP_ldsd:		// 64 bit
@@ -382,6 +388,12 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vfnmsubxrsd:
       case TOP_vfnmsubxxrsd:
       case TOP_vfnmsubxxxrsd:
+      case TOP_vfsqrtxsd:
+      case TOP_vfsqrtxxsd:
+      case TOP_vfsqrtxxxsd:
+      case TOP_vmovddupx:
+      case TOP_vmovddupxx:
+      case TOP_vmovddupxxx:
 	return 8;
 
       case TOP_lddqa:		// 128 bit
@@ -462,14 +474,11 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vldapdxx:
       case TOP_vldapsxx:
       case TOP_vmovsldupx:
-      case TOP_vmovshdupx:
-      case TOP_vmovddupx:
       case TOP_vmovsldupxx:
-      case TOP_vmovshdupxx:
-      case TOP_vmovddupxx:
       case TOP_vmovsldupxxx:
+      case TOP_vmovshdupx:
+      case TOP_vmovshdupxx:
       case TOP_vmovshdupxxx:
-      case TOP_vmovddupxxx:
       case TOP_vstdqa:
       case TOP_vstdqa_n32:
       case TOP_vstntpd:
@@ -838,6 +847,32 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   case TOP_lock_xor32:
   case TOP_lock_sub32:
   case TOP_lock_xadd32:
+  // AVX
+  case TOP_vldss:
+  case TOP_vldss_n32:
+  case TOP_vldssx:
+  case TOP_vldssxx:
+  case TOP_vfaddxss:
+  case TOP_vsubxss:
+  case TOP_vfaddxxss:
+  case TOP_vsubxxss:
+  case TOP_vfaddxxxss:
+  case TOP_vsubxxxss:
+  case TOP_vmulxss:
+  case TOP_vmulxxss:
+  case TOP_vmulxxxss:
+  case TOP_vdivxss:
+  case TOP_vdivxxss:
+  case TOP_vdivxxxss:
+  case TOP_vcomixss:
+  case TOP_vcomixxss:
+  case TOP_vcomixxxss:
+  case TOP_vcvtsd2ssx:
+  case TOP_vcvtsd2ssxx:
+  case TOP_vcvtsd2ssxxx:
+  case TOP_vcvtsi2ssx:
+  case TOP_vcvtsi2ssxx:
+  case TOP_vcvtsi2ssxxx:
     return 4;
 
   case TOP_addxr64:
@@ -982,6 +1017,44 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
   case TOP_fmovsldupxxx:
   case TOP_fmovshdupxxx:
   case TOP_fmovddupxxx:
+  // AVX
+  case TOP_vldsd_n32:
+  case TOP_vldsd:
+  case TOP_vldsdx:
+  case TOP_vldsdxx:
+  case TOP_vfaddxsd:
+  case TOP_vfaddxxsd:
+  case TOP_vfaddxxxsd:
+  case TOP_vsubxsd:
+  case TOP_vsubxxsd:
+  case TOP_vsubxxxsd:
+  case TOP_vmulxsd:
+  case TOP_vmulxxsd:
+  case TOP_vmulxxxsd:
+  case TOP_vdivxsd:
+  case TOP_vdivxxsd:
+  case TOP_vdivxxxsd:
+  case TOP_vcomixsd:
+  case TOP_vcomixxsd:
+  case TOP_vcomixxxsd:
+  case TOP_vmovsldupx:
+  case TOP_vmovsldupxx:
+  case TOP_vmovsldupxxx:
+  case TOP_vmovshdupx:
+  case TOP_vmovshdupxx:
+  case TOP_vmovshdupxxx:
+  case TOP_vmovddupx:
+  case TOP_vmovddupxx:
+  case TOP_vmovddupxxx:
+  case TOP_vcvtsi2sdx:
+  case TOP_vcvtsi2sdxx:
+  case TOP_vcvtsi2sdxxx:
+  case TOP_vcvtsi2sdqx:
+  case TOP_vcvtsi2sdqxx:
+  case TOP_vcvtsi2sdqxxx:
+  case TOP_vcvtsi2ssqx:
+  case TOP_vcvtsi2ssqxx:
+  case TOP_vcvtsi2ssqxxx:
     return 8;
 
   case TOP_fldt:
@@ -2357,6 +2430,8 @@ INT CGTARG_Copy_Operand(OP *op)
   case TOP_mov64:
   case TOP_movsd:
   case TOP_movss:
+  case TOP_vmovsd:
+  case TOP_vmovss:
   case TOP_movdq:
   case TOP_movapd:
   case TOP_movaps:

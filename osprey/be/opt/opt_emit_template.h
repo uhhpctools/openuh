@@ -1381,6 +1381,13 @@ Gen_stmt_wn(STMTREP *srep, STMT_CONTAINER *stmt_container, EMITTER *emitter)
   case OPR_COMMENT:
     return NULL;
 #endif
+
+  case OPR_ZDLBR:
+    {
+      rwn = WN_CreateZDLBr(srep->Label_number());
+    }
+    break;
+
   default:
     FmtAssert(FALSE, ("Gen_stmt_wn: opcode %s is not implemented yet",
 		      OPCODE_name(srep->Op())));

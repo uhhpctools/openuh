@@ -659,8 +659,6 @@ static  kwd_type	kwd_sgi_dir[] = {
 	"ONTO",		 		  Tok_SGI_Dir_Onto,
 
 	"PREFETCH_REF_DISABLE", 	  Tok_SGI_Dir_Prefetch_Ref_Disable,
-	"PURPLEUNCONDITIONAL",		  Tok_SGI_Dir_Purpleunconditional,
-	"PURPLECONDITIONAL",		  Tok_SGI_Dir_Purpleconditional,
 	"PREFETCH_MANUAL",		  Tok_SGI_Dir_Prefetch_Manual,
 	"PREFETCH_REF", 		  Tok_SGI_Dir_Prefetch_Ref,
 	"PERMUTATION",			  Tok_SGI_Dir_Permutation,

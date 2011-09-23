@@ -119,7 +119,6 @@ static INT32 Ignore_Int;
 #include "config_vho.cxx"
 #include "config_flist.cxx"
 #include "config_clist.cxx"
-#include "config_purple.cxx"
 #include "config_promp.cxx"
 
 #ifdef BACK_END
@@ -630,8 +629,6 @@ static OPTION_DESC Options_PHASE[] = {
       &Run_w2f,	NULL},
     { OVK_BOOL,	OV_INTERNAL,	FALSE, "mplist", NULL,	 0, 0, 0,
       &Run_w2fc_early,	NULL},
-    { OVK_BOOL,	OV_INTERNAL,	FALSE, "purple", "", 0, 0, 0,
-      &Run_purple,	NULL},
     { OVK_BOOL,	OV_INTERNAL,	FALSE, "ipl",    "i",	 0, 0, 0,
       &Run_ipl,	NULL},
     { OVK_BOOL,	OV_INTERNAL,	FALSE, "prompf", NULL,	 0, 0, 0,
@@ -646,8 +643,6 @@ static OPTION_DESC Options_PHASE[] = {
       &W2C_Path,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "w2fpath", "", 0, 0, 0,
       &W2F_Path,	NULL},
-    { OVK_NAME,	OV_INTERNAL,	FALSE, "purpath", "", 0, 0, 0,
-      &Purple_Path,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "ipath",   "", 0, 0, 0,
       &Ipl_Path,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "tpath",   "", 0, 0, 0,
@@ -874,8 +869,6 @@ OPTION_GROUP Common_Option_Groups[] = {
        "Options to control listing of transformed f77 source" },
   { "CLIST", ':', '=', Options_CLIST, NULL,
        "Options to control listing of transformed C source" },
-  { "PURPLE", ':', '=', Options_PURPLE, NULL,
-       "Options to control program region extraction process" },
   { "PROMP", ':', '=', Options_PROMP, NULL,
        "Options to control listing mp transformations" },
   { NULL },		/* List terminator -- must be last */
@@ -975,6 +968,12 @@ char *Library_Name = NULL;      /* -TENV:io_library=xxx */
 BOOL Omit_UE_DESTROY_FRAME = FALSE;  /* tmp close Epilogue overflow error */
 
 INT  target_io_library;
+
+/* generate zdl when do do-loop lowering */
+BOOL OPT_Lower_ZDL = FALSE;
+BOOL OPT_Lower_ZDL_Set = FALSE;
+
+
 #if defined (TARG_SL)
 BOOL Sl2_Inibuf=FALSE;
 char* Sl2_Ibuf_Name=NULL;
@@ -1008,7 +1007,6 @@ BOOL Run_cg = FALSE;		    /* run code generator */
 BOOL Run_w2c = FALSE;		    /* run whirl2c */
 BOOL Run_w2f = FALSE;		    /* run whirl2f */
 BOOL Run_w2fc_early = FALSE;	    /* run whirl2fc after LNO auto par*/
-BOOL Run_purple = FALSE;	    /* run purple code instrumenter */
 BOOL Run_prompf = FALSE;	    /* run to generate prompf analysis file */
 char *LNO_Path = 0;		    /* path to lno.so */
 char *WOPT_Path = 0;		    /* path to wopt.so */
@@ -1016,7 +1014,6 @@ char *CG_Path = 0;		    /* path to cg.so */
 char *Ipl_Path = 0;		    /* path to ipl.so */
 char *W2C_Path = 0;		    /* path to whirl2c.so */
 char *W2F_Path = 0;		    /* path to whirl2f.so */
-char *Purple_Path = 0;		    /* path to purple.so */
 char *Prompf_Anl_Path = 0;	    /* path to prompf_anl.so */
 WN_MAP Prompf_Id_Map = WN_MAP_UNDEFINED; 
 			/* Maps WN constructs to unique identifiers */
@@ -1488,6 +1485,11 @@ Configure_Source ( char	*filename )
 #ifdef KEY
   /* Are we skipping any PUs for goto conversion? */
   Goto_Skip_List = Build_Skiplist ( Goto_Skip );
+#endif
+
+#ifdef BACK_END
+  /* Are we skipping any field for struct split? */
+  Initial_LNO.Sac_Skip_List = Build_Skiplist ( Initial_LNO.Sac_Skip );
 #endif
 
 #if defined(TARG_SL)
@@ -2217,6 +2219,17 @@ Process_Trace_Option ( char *option )
 	}
 	break;
 #endif
+
+    case 'V':
+	if (strcmp(cp, "a") == 0) {
+	  Set_All_Trace( TKIND_VCG );
+	  cp++;
+	}
+	else {
+	  Set_Trace (TKIND_VCG,
+		     Get_Trace_Phase_Number ( &cp, option ) );
+	}
+	break;
 
     case 0:   
 	ErrMsg ( EC_Trace_Flag, '?', option );

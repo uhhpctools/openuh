@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -120,6 +124,8 @@ using namespace std;
 //  Modified: June, 9
 //  This source file is formated using 'indent' command.
 //-----------------------------------------------------------
+
+#include "../whirl2c/init.cxx"      /* force include of W2C_Initializer */
 
 
 // A class to store source files, move text blocks and write it back.
@@ -359,8 +365,6 @@ BOOL  W2C_Emit_Omp = FALSE;         /* Force OMP pragmas wherever possible */
 INT32 W2C_Line_Length = 0;   /* Max output line length; zero==default */
 
 /* External data set through the API or otherwise */
-BOOL          W2C_Only_Mark_Loads = FALSE; /* Only mark, do not xlate loads */
-BOOL          W2C_Purple_Emission = FALSE; /* Emitting purple extracted srcs */
 BOOL          W2C_Prompf_Emission = FALSE; /* Emitting prompf xformed sources */
 const WN_MAP *W2C_Construct_Map = NULL;    /* Construct id mapping for prompf */
 WN_MAP        W2C_Frequency_Map = WN_MAP_UNDEFINED; /* Frequency mapping */
@@ -995,20 +999,6 @@ W2C_Pop_PU(void)
 } /* W2C_Pop_PU */
 
 
-void
-W2C_Mark_Loads(void)
-{
-   W2C_Only_Mark_Loads = TRUE;
-} /* W2C_Mark_Loads */
-
-
-void
-W2C_Nomark_Loads(void)
-{
-   W2C_Only_Mark_Loads = FALSE;
-} /* W2C_Nomark_Loads */
-
-
 void 
 W2C_Set_Prompf_Emission(const WN_MAP *construct_map)
 {
@@ -1029,20 +1019,6 @@ W2C_Get_Transformed_Src_Path(void)
 {
    return W2C_File_Name[W2C_DOTC_FILE];
 } /* W2C_Get_Transformed_Src_Path */
-
-
-void
-W2C_Set_Purple_Emission(void)
-{
-   W2C_Purple_Emission = TRUE;
-} /* W2C_Set_Purple_Emission */
-
-
-void
-W2C_Reset_Purple_Emission(void)
-{
-   W2C_Purple_Emission = FALSE;
-} /* W2C_Reset_Purple_Emission */
 
 
 void
@@ -1205,36 +1181,6 @@ W2C_Translate_Wn_Str(char *strbuf, UINT bufsize, const WN *wn)
 } /* W2C_Translate_Wn_Str */
 
 
-void 
-W2C_Translate_Purple_Main(FILE *outfile, const WN *pu, const char *region_name)
-{
-   TOKEN_BUFFER tokens;
-   CONTEXT      context = INIT_CONTEXT;
-   const char * const caller_err_phase = Get_Error_Phase ();
-
-   if (!Check_Initialized("W2C_Translate_Purple_Main"))
-      return;
-
-   Is_True(WN_opcode(pu) == OPC_FUNC_ENTRY, 
-	   ("Invalid opcode for W2C_Translate_Purple_Main()"));
-
-   Start_Timer (T_W2C_CU);
-   Set_Error_Phase ("WHIRL To C");
-
-   /* Translate the function header as a purple main program
-    */
-   tokens = New_Token_Buffer();
-   W2C_Push_PU(pu, WN_func_body(pu));
-   (void)WN2C_translate_purple_main(tokens, pu, region_name, context);
-   W2C_Pop_PU();
-   W2C_Undo_Whirl_Side_Effects();
-   Write_And_Reclaim_Tokens(outfile, W2C_File[W2C_LOC_FILE], &tokens);
-
-   Stop_Timer (T_W2C_CU);
-   Set_Error_Phase (caller_err_phase);
-} /* W2C_Translate_Purple_Main */
-
-
 void
 W2C_Fini(void)
 {
@@ -1281,7 +1227,6 @@ W2C_Fini(void)
       W2C_Lower_Fortran = FALSE;    /* Lower Fortran intrinsics and io */
       W2C_Line_Length = 0;   /* Max output line length; zero==default */
 
-      W2C_Only_Mark_Loads = FALSE;
       W2C_Cplus_Initializer = FALSE;
 
       MEM_POOL_Pop(&W2C_Parent_Pool);

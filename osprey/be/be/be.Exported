@@ -28,12 +28,6 @@ Perform_Preopt_Optimization
 Perform_Procedure_Summary_Phase
 Pre_Optimizer
 Process_Command_Line
-Prp_Fini
-Prp_Init
-Prp_Instrument_And_EmitSrc
-Prp_Needs_Whirl2c
-Prp_Needs_Whirl2f
-Prp_Process_Command_Line
 Verify_alias
 W2C_Outfile_Fini
 W2C_Outfile_Init

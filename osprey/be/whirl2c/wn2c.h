@@ -79,12 +79,6 @@
  *           WN2C_translate, since we then have flagged all 
  *           referenced entities.
  *
- *   WN2C_translate_purple_main:  A rather special translation routine,
- *           which ignores the body of the given PU, and translates
- *           parameters to become local variables.  It inserts a call
- *           to a purple region PU, and inserts placeholders for items
- *           to be inserted by purple at a later processing stage.
- *
  *   WN2C_memref_lhs: Given the necessary attributes, translate
  *          the lft-hand-side of an ISTORE or the address of
  *          an ILOAD into C.
@@ -124,18 +118,12 @@ typedef mUINT32 STATUS;
 
     /* -------- Facilities to effect a WN to C translation --------- */
 
-extern void WN2C_Append_Purple_Funcinfo(TOKEN_BUFFER tokens);
 extern void WN2C_initialize(void);
 extern void WN2C_finalize(void);
 extern BOOL WN2C_new_symtab(void);
 extern STATUS WN2C_translate(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context);
 extern void WN2C_translate_structured_types(void);
 extern STATUS WN2C_translate_file_scope_defs(CONTEXT context);
-
-extern STATUS WN2C_translate_purple_main(TOKEN_BUFFER tokens, 
-					 const WN    *pu, 
-					 const char  *region_name,
-					 CONTEXT      context);
 
 extern void WN2C_memref_lhs(TOKEN_BUFFER tokens,
 			    TY_IDX      *memref_typ,

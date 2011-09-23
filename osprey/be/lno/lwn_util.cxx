@@ -79,6 +79,7 @@
 #include "region_util.h"
 #include "lego_opts.h"
 #include "prompf.h"
+#include "call_info.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1061,6 +1062,45 @@ void LWN_Delete_Tree(WN* wn)
 }
 
 #ifdef LNO
+
+// Look recursively inside wn_tree for OPR_CALL nodes and
+// remove any references therein to scalar_node
+void Remove_scalar_ref(WN* wn_tree, WN* scalar_node) {
+  if (WN_operator(wn_tree) == OPERATOR_UNKNOWN) 
+    // wn_tree has already been deleted.
+    return;
+
+  if (WN_operator(wn_tree) == OPR_CALL && Has_Call_Info(wn_tree)) {
+    ARA_LOOP_INFO* ali = Get_Call_Info(wn_tree)->Call_Ara_Info();
+    SCALAR_STACK scalar_uses = ali->SCALAR_USE();
+    scalar_uses.Remove_Scalar(scalar_node);
+  }
+
+  if (WN_operator(wn_tree) == OPR_BLOCK) { 
+    for (WN* wn = WN_first(wn_tree); wn != NULL; wn = WN_next(wn))
+      Remove_scalar_ref(wn, scalar_node);
+  } else { 
+    for (INT i = 0; i < WN_kid_count(wn_tree); i++)
+      Remove_scalar_ref((WN_kid(wn_tree, i)), scalar_node);
+  } 
+  return;
+}
+
+//Eliminate scalar references to a node
+void LWN_Delete_SR(WN *scalar_node) {
+  if (!scalar_node)
+    return;
+
+  if(!((WN_operator(scalar_node) == OPR_LDID) ||
+       (WN_operator(scalar_node) == OPR_STID)))
+    // Not a scalar.
+    return;
+
+  // Inspect the eclosing function for calls that
+  // reference the scalar_node.
+  Remove_scalar_ref(Current_Func_Node, scalar_node);
+  return;
+}
 
 // Eliminate the du chains connected to a node
 void LWN_Delete_DU(WN *wn)

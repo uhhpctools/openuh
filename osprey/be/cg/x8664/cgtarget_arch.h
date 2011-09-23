@@ -218,7 +218,13 @@ inline TOP
 CGTARG_Copy_Op(UINT8 size, BOOL is_float)
 {
   if (is_float) {
-    return size == 4 ? TOP_movss : TOP_movsd;
+    if( Is_Target_Barcelona() || Is_Target_EM64T() ||
+        Is_Target_Wolfdale()  || Is_Target_Core()  ||
+        Is_Target_Orochi() ){ 
+      return TOP_movaps;
+    } else {
+      return size == 4 ? TOP_movss : TOP_movsd;
+    }
   }
   return size == 4 ? TOP_mov32 : TOP_mov64;
 }

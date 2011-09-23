@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1166,7 +1166,7 @@ ALIAS_RESULT Aliased_with_region(const ALIAS_MANAGER *am, const WN *wn, const WN
     READ_WRITE how_aliased =
       am->Rule()->Aliased_with_Call(call_st, WN_call_flag(region_or_call), pt);
     if (how_aliased != NO_READ_NO_WRITE &&
-	(how == READ_AND_WRITE || how == how_aliased)) 
+	(how_aliased == READ_AND_WRITE || how == how_aliased)) 
       return POSSIBLY_ALIASED;
     
     // Test aliasing with call-by-ref parameters

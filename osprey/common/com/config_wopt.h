@@ -355,6 +355,12 @@ extern struct skiplist *WOPT_Unroll_Skip_List;  // Preprocessed unroll skip l
 extern BOOL WOPT_Enable_Loop_Multiver;
 extern BOOL WOPT_Enable_Loop_Multiver_Aggressive;
 extern BOOL WOPT_Enable_Useless_Store_Elimination;
+extern BOOL WOPT_Enable_ZDL;
+extern BOOL WOPT_Enable_ZDL_Set;
+extern BOOL WOPT_Enable_ZDL_Early_Exit;
+extern BOOL WOPT_ZDL_Innermost_Only;
+extern struct option_list *WOPT_ZDL_Skip;    // Skip ZDL list
+extern struct skiplist *WOPT_ZDL_Skip_List; // Preprocessed ZDL skip l
 #ifdef TARG_NVISA
 extern BOOL WOPT_Enable_Estr_Outer_Loop;  // strength reduce outer loops
 extern BOOL WOPT_Enable_Estr_Const_Opnds; // strength reduce ops with const kids

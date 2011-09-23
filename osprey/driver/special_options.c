@@ -158,7 +158,6 @@ set_defaults (void)
 		prepend_option_seen(O_automatic);
 	}
 
-#ifdef KEY
 	// Make -cpp the default for Fortran.  Bug 4243.
 	if (!is_toggled(use_ftpp)) {
 		toggle(&use_ftpp, 0);
@@ -186,7 +185,6 @@ set_defaults (void)
 	}
 #endif
 
-#endif
 #if defined(TARG_NVISA)
 	/* stop after assembly */
 	if (option_was_seen(O_multicore))
@@ -298,10 +296,8 @@ add_special_options (void)
 		/* pass -traditional to both gfe and cpp */
 		add_phase_for_option(O_traditional, P_c_gfe);
 		add_phase_for_option(O_traditional, P_cplus_gfe);
-#ifdef KEY
 		add_phase_for_option(O_traditional, P_spin_cc1);
 		add_phase_for_option(O_traditional, P_spin_cc1plus);
-#endif
 	}
 
 #if defined(TARG_IA32)
@@ -309,28 +305,7 @@ add_special_options (void)
 	prepend_option_seen (flag);
 #endif
 
-#ifndef KEY	// Bug 4406.
-	if (mpkind == CRAY_MP) {
-		Process_Cray_Mp();
-	}
-	else if (mpkind == NORMAL_MP || auto_parallelize) {
-		Process_Mp();
-	}
-#endif
-
-#ifndef KEY	// Bug 7263.
-        if (auto_parallelize && ipa) {
-                flag = add_new_option("-IPA:array_summary");
-                add_phase_for_option(flag, P_ipl);
-                prepend_option_seen (flag);
-        }
-#endif
-
-	if ((mpkind == NORMAL_MP 
-#ifndef KEY // bug 8107
-	     || auto_parallelize
-#endif
-	    ) && !Disable_open_mp) {
+	if ((mpkind == NORMAL_MP) && !Disable_open_mp) {
 		flag = add_string_option(O_D, "_OPENMP=199810");
 		prepend_option_seen (flag);
 	}
@@ -385,7 +360,6 @@ add_special_options (void)
 		turn_down_opt_level(0, "-g changes optimization to -O0 since no optimization level is specified");
 	}
 
-#ifdef KEY
 	/* Turn off inlining when compiling -O0.  We definitly want
 	 * this off when compiling with -g -O0, but we don't want
 	 * -g to change the generated code so we leave it off always.
@@ -393,9 +367,7 @@ add_special_options (void)
 	 */
 	if (olevel == 0 && inline_t == UNDEFINED)
 	  inline_t = FALSE;
-#endif
 
-#ifdef KEY /* Bug 5367 */
         /* In the SGI world, -g3 says to emit crippled debug info for use
 	 * with optimized code. In the GNU/Pathscale world, -g3 says to emit
 	 * additional debug info for C preprocessor macros, so changing -g to
@@ -408,15 +380,6 @@ add_special_options (void)
 	  glevel = 2;
 	  replace_option_seen (O_g3, O_g2);
 	}
-#else
-	if (olevel >= 2 && glevel == 2) {
-		glevel = 3;
-		if (option_was_seen (O_g))
-			replace_option_seen (O_g, O_g3);
-		if (option_was_seen (O_g2))
-			replace_option_seen (O_g2, O_g3);
-	}
-#endif /* KEY Bug 5367 */
 
 	if (option_was_seen(O_S) && ipa == TRUE) {
 		turn_off_ipa ("-IPA -S combination not allowed, replaced with -S");
@@ -438,12 +401,10 @@ add_special_options (void)
 		turn_off_ipa ("-IPA -fbgen combination not allowed, replaced with -fbgen");
 	}
 	if (ipa == TRUE) {
-#ifdef KEY // bug 8130
             if (option_was_seen (O_fprofile_arcs))
 	      error ("IPA not supported with -fprofile-arcs");
 	    if (option_was_seen (O_ftest_coverage))
 	      error ("IPA not supported with -ftest-coverage");
-#endif
 	    if (olevel <= 1)
 		flag = add_string_option (O_PHASE_, "i");
 	    else
@@ -473,12 +434,6 @@ add_special_options (void)
 #endif
 	}
 	prepend_option_seen (flag);
-
-	if (abi == ABI_N32 || abi == ABI_64) {
-#ifndef KEY
-        	set_dsm_options ();
-#endif
-	}
 
 	if (option_was_seen(O_ar) && outfile == NULL) {
 	   error("-ar option requires archive name to be specified with -o option");

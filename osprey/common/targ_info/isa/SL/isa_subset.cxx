@@ -384,6 +384,7 @@ main()
 
   Instruction_Group(sl1,
                     TOP_loop,
+                    TOP_auxbr,
                     TOP_c3_aadda,
                     TOP_c3_bitr,
                     TOP_c3_cs,

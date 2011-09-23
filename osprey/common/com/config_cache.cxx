@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -72,6 +76,7 @@ static const char source_file[] = __FILE__;
 #include "errors.h"
 #include "config_cache.h"
 #ifdef KEY
+#include "flags.h"
 #include "config_lno.h" // For EffectiveCacheSizePct
 #endif
 

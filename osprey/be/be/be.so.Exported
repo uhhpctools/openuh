@@ -917,8 +917,6 @@ Prompf_anl_loaded
 Prove_Redundant__19SYSTEM_OF_EQUATIONSGiT1
 Pu_Table
 Pure_ABI
-Purple_Path
-Purple_loaded
 Push_Current_Options__13OPTIONS_STACKGv
 Push_FP_On_Stack
 Pushback_Character__9WB_BUFFERGv
@@ -1019,7 +1017,6 @@ Run_ipl
 Run_lno
 Run_preopt
 Run_prompf
-Run_purple
 Run_w2c
 Run_w2f
 Run_w2fc_early

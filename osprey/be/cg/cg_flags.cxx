@@ -105,14 +105,14 @@ INT32 CG_LOOP_DCE_op_skip_before = -1;
 INT32 CG_LOOP_DCE_op_skip_after = -1;
 INT32 CG_LOOP_DCE_op_skip_equal = -1;
 
-BOOL CG_GCM_enable_critical_edge_motion = TRUE;
+BOOL CG_GCM_enable_critical_edge_motion = FALSE;
 BOOL CG_GCM_enable_mvtc_optimization = TRUE;
-BOOL CG_GCM_enable_reduce_loop_count = TRUE;
-BOOL CG_GCM_enable_licm = TRUE;
-BOOL CG_GCM_enable_dce = TRUE;
-BOOL CG_GCM_enable_rce = TRUE;
+BOOL CG_GCM_enable_reduce_loop_count = FALSE;
+BOOL CG_GCM_enable_licm = FALSE;
+BOOL CG_GCM_enable_dce = FALSE;
+BOOL CG_GCM_enable_rce = FALSE;
 BOOL CG_GCM_enable_break_dependence = FALSE;
-BOOL CG_GCM_enable_merge_small_bbs = TRUE;
+BOOL CG_GCM_enable_merge_small_bbs = FALSE;
 #endif 
 BOOL CG_skip_local_hbf = FALSE;
 BOOL CG_skip_local_loop = FALSE;
@@ -253,21 +253,8 @@ BOOL CG_SL2_enable_peephole = TRUE;
 BOOL CG_SL2_enable_v1buf_expansion = TRUE;
 BOOL CG_Enable_Macro_Instr_Combine = TRUE;
 
-/* CG_zdl_enabled_level : The enabled levels counting from inside to
- *                        outside.
- * CG_zdl_skip_e        : the sequential number of loops that wont be
- *                        zdl'ed. The sequential number is counted for
- *                        each compilation unit. 
- * CG_zdl_skip_a/b      : the loops whose sequential number bigger than
- *                        (or smaller than) this will be ignored, not 
- *                        including this number.
- * The sequentional number of loops beginnes from 1, not 0.
- */
-BOOL CG_enable_zero_delay_loop = TRUE;
-UINT32 CG_zdl_enabled_level = 2; // default value is 2
-UINT32 CG_zdl_skip_e = 0;  
-UINT32 CG_zdl_skip_a = INT32_MAX;
-UINT32 CG_zdl_skip_b = 0;
+INT32 CG_zdl_enabled_level = 2; // default value is 2
+INT32 CG_max_zdl_level = 4;
 BOOL CG_enable_opt_condmv = TRUE;
 BOOL CG_enable_CBUS_workaround = FALSE;
 BOOL CG_enable_LD_NOP_workaround = FALSE;

@@ -54,8 +54,6 @@ extern void (*W2C_Cleanup_p)(void);
 extern void (*W2C_Fini_p)(void);
 extern void (*W2C_Init_p)(void);
 extern const char * (*W2C_Object_Name_p)(const ST *func_st);
-extern void (*W2C_Mark_Loads_p)(void);
-extern void (*W2C_Nomark_Loads_p)(void);
 extern void (*W2C_Outfile_Fini_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Init_p)(BOOL emit_global_decls);
 extern void (*W2C_Outfile_Translate_Pu_p)(WN *pu, BOOL emit_global_decls);
@@ -65,8 +63,6 @@ extern void (*W2C_Push_PU_p)(const WN *pu, WN *body_part_of_interest);
 extern void (*W2C_Set_Prompf_Emission_p)(const WN_MAP *construct_map);
 extern void (*W2C_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern const char *(*W2C_Get_Transformed_Src_Path_p)(void);
-extern void (*W2C_Reset_Purple_Emission_p)(void);
-extern void (*W2C_Set_Purple_Emission_p)(void);
 extern BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
 extern BOOL (*W2C_Should_Before_CG_p)(void);
 extern void (*W2C_Translate_Global_Defs_p)(FILE *outfile);
@@ -74,8 +70,6 @@ extern void (*W2C_Translate_Global_Types_p)(FILE *outfile);
 extern void (*W2C_Translate_Istore_Lhs_p)(char *strbuf,
   UINT bufsize, const WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty,
   TYPE_ID istore_mtype);
-extern void (*W2C_Translate_Purple_Main_p)(FILE *outfile, const WN *pu, 
-  const char *region_name);
 extern void (*W2C_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize,
   const ST *stid_st, mINT64 stid_ofst, TY_IDX stid_ty, TYPE_ID stid_mtype);
 extern void (*W2C_Translate_Wn_p)(FILE *outfile, const WN *wn);
@@ -89,8 +83,6 @@ struct W2C_INIT
       W2C_Fini_p = W2C_Fini;
       W2C_Init_p = W2C_Init;
       W2C_Object_Name_p = W2C_Object_Name;
-      W2C_Mark_Loads_p = W2C_Mark_Loads;
-      W2C_Nomark_Loads_p = W2C_Nomark_Loads;
       W2C_Outfile_Fini_p = W2C_Outfile_Fini;
       W2C_Outfile_Init_p = W2C_Outfile_Init;
       W2C_Outfile_Translate_Pu_p = W2C_Outfile_Translate_Pu;
@@ -100,14 +92,11 @@ struct W2C_INIT
       W2C_Set_Prompf_Emission_p = W2C_Set_Prompf_Emission;
       W2C_Set_Frequency_Map_p = W2C_Set_Frequency_Map;
       W2C_Get_Transformed_Src_Path_p = W2C_Get_Transformed_Src_Path;
-      W2C_Reset_Purple_Emission_p = W2C_Reset_Purple_Emission;
-      W2C_Set_Purple_Emission_p = W2C_Set_Purple_Emission;
       W2C_Should_Emit_Nested_PUs_p = W2C_Should_Emit_Nested_PUs;
       W2C_Should_Before_CG_p = W2C_Should_Before_CG;
       W2C_Translate_Global_Defs_p = W2C_Translate_Global_Defs;
       W2C_Translate_Global_Types_p = W2C_Translate_Global_Types;
       W2C_Translate_Istore_Lhs_p = W2C_Translate_Istore_Lhs;
-      W2C_Translate_Purple_Main_p = W2C_Translate_Purple_Main;
       W2C_Translate_Stid_Lhs_p = W2C_Translate_Stid_Lhs;
       W2C_Translate_Wn_p = W2C_Translate_Wn;
       W2C_Translate_Wn_Str_p = W2C_Translate_Wn_Str;

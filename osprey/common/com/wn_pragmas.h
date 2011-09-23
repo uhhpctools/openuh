@@ -209,6 +209,7 @@ typedef enum {
   WN_PRAGMA_NUMTHREADS,
   WN_PRAGMA_NOWAIT,
   WN_PRAGMA_PAGE_PLACE,
+  WN_PRAGMA_NO_ZDL,
 #if defined(TARG_SL)
  WN_PRAGMA_SL2_MAJOR_PSECTION_BEGIN,  // begin of major section 
  WN_PRAGMA_SL2_MINOR_PSECTION_BEGIN,  // begin of minor section 
@@ -223,11 +224,6 @@ typedef enum {
 
   WN_PRAGMA_NORECURRENCE,
   WN_PRAGMA_NEXT_SCALAR,
-
-  /* purple pragmas */
-
-  WN_PRAGMA_PURPLE_CONDITIONAL,
-  WN_PRAGMA_PURPLE_UNCONDITIONAL,
 
   /* wopt pragmas */
   
@@ -431,7 +427,6 @@ typedef enum {
   PUSER_CG	= 0x8,
   PUSER_MP	= 0x10,
   PUSER_NONE	= 0x20,
-  PUSER_PURPLE  = 0x40,
   PUSER_W2C     = 0x80,
   PUSER_W2F     = 0x100,
   PUSER_REGION  = 0x200

@@ -6584,44 +6584,6 @@ static void parse_star_directives(void)
       break;
 #endif /* KEY Bug 2660 */
 
-   case Tok_SGI_Dir_Purpleconditional:
-      ir_idx = gen_directive_ir(Purpleconditional_Star_Opr);
-
-      if (directive_region_error(PurpleConditional_Dir,
-                                 IR_LINE_NUM(ir_idx),
-                                 IR_COL_NUM(ir_idx))) {
-      }
-
-      if (LA_CH_VALUE == LPAREN) {
-         NEXT_LA_CH;
-          parse_expr(&opnd);
-
-         COPY_OPND(IR_OPND_L(ir_idx), opnd);
-
-         if (LA_CH_VALUE == RPAREN) {
-            NEXT_LA_CH;
-         }
-         else {
-            parse_err_flush(Find_EOS, ")");
-            goto EXIT;
-         }
-      }
-      else {
-         parse_err_flush(Find_EOS, "(");
-         goto EXIT;
-      }
-      break;
-
-   case Tok_SGI_Dir_Purpleunconditional:
-      loop_dir	= TRUE;
-      opr	= Purpleunconditional_Star_Opr;
-
-      if (directive_region_error(PurpleUnconditional_Dir,
-                                 TOKEN_LINE(token),
-                                 TOKEN_COLUMN(token))) {
-      }
-      break;
-
    case Tok_SGI_Dir_Regionbegin:
       ir_idx = gen_directive_ir(Regionbegin_Star_Opr);
 

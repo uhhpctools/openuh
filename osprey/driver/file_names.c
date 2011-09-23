@@ -83,9 +83,7 @@ typedef struct file_item_rec {
 
 string_list_t *count_files = NULL;
 static file_item_t *temp_files = NULL;
-#ifdef KEY /* Bug 11265 */
 string_list_t *isystem_dirs = NULL;
-#endif /* KEY Bug 11265 */
 static char *tmpdir;
 static char *saved_object = NULL;
 
@@ -633,9 +631,8 @@ cleanup_temp_objects ()
   }
 }
 
-#ifdef KEY
 char *
-get_report_file_name() {
+get_report_file_name()
+{
   return report_file;
 }
-#endif

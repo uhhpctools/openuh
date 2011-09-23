@@ -87,13 +87,6 @@ extern "C" {
  *    table-section for the PU will be popped off the whirl2c 
  *    symbol table stack.
  *
- * W2C_Mark_Loads()
- *    Inserts positional placeholder for translated ILOAD/LDID.
- *
- * W2C_Nomark_Loads()
- *    Regular translation of loads (ILOAD/LDID).  This is the default
- *    mode.
- *
  * W2C_Set_Prompf_Emission()
  *    Pass in a mapping from WN nodes to construct identifiers, and
  *    notify whirl2c to emit its output in a form suitable for ProMPF.
@@ -108,12 +101,6 @@ extern "C" {
  * W2C_Get_Transformed_Src_Path()
  *    Returns the name of the .c file emitted by whirl2c.  Must be
  *    called after W2C_Init().
- *
- * W2C_Set_Purple_Emission()
- * W2C_Reset_Purple_Emission()
- *    Instruct the code-emitter to translate WHIRL in a manner
- *    specific to the needs of purple.  Actived by the "Set"
- *     routine; deactivated by the "Reset" routine.
  *
  * W2C_Translate_Global_Types()
  *    Translate all structured types declared at file-level, such
@@ -152,13 +139,6 @@ extern "C" {
  * W2C_Translate_Wn_Str()
  *    Same as W2C_Translate_Wn(), but the output is put into the
  *    given string buffer instead of being appended to a file.
- *
- * W2C_Translate_Purple_Main()
- *    Given an arbitrary FUNC_ENTRY node, we translate it into a
- *    purple main program, where the parameters are declared as
- *    local variables, placeholders are inserted for initialization
- *    and final checking, and a call is made to the purple region
- *    routine.
  *
  * W2C_Fini()
  *    Finalization of W2C.  This will terminate all translation 
@@ -242,8 +222,6 @@ extern BOOL W2F_Emit_Omp;        /* Force OMP pragmas wherever possible */
            /* External data set through the API or otherwise */
            /*------------------------------------------------*/
 
-extern BOOL          W2C_Only_Mark_Loads;  /* Only mark, do not xlate loads */
-extern BOOL          W2C_Purple_Emission;  /* Emitting purple extracted srcs */
 extern BOOL          W2C_Prompf_Emission;  /* Emitting prompf xformed sources */
 extern const WN_MAP *W2C_Construct_Map;    /* Construct id mapping for prompf */
 extern WN_MAP        W2C_Frequency_Map;    /* Frequency mapping */
@@ -280,16 +258,10 @@ extern void W2C_Fini(void);
 extern void W2C_Push_PU(const WN *pu, WN *body_part_of_interest);
 extern void W2C_Pop_PU(void);
 
-extern void W2C_Mark_Loads(void);
-extern void W2C_Nomark_Loads(void);
-
 extern void W2C_Set_Prompf_Emission(const WN_MAP *construct_map);
 extern void W2C_Set_Frequency_Map(WN_MAP frequency_map);
 
 extern const char *W2C_Get_Transformed_Src_Path(void);
-
-extern void W2C_Set_Purple_Emission(void);
-extern void W2C_Reset_Purple_Emission(void);
 
 extern void W2C_Translate_Global_Types(FILE *outfile);
 extern void W2C_Translate_Global_Defs(FILE *outfile);
@@ -311,9 +283,6 @@ extern void W2C_Translate_Istore_Lhs(char       *strbuf,
 
 extern void W2C_Translate_Wn(FILE *outfile, const WN *wn);
 extern void W2C_Translate_Wn_Str(char *strbuf, UINT bufsize, const WN *wn);
-
-extern void 
-W2C_Translate_Purple_Main(FILE *outfile, const WN *pu, const char *region_name);
 
 extern void W2C_Outfile_Init(BOOL emit_global_decls);
 extern void W2C_Outfile_Translate_Pu(WN *pu, BOOL emit_global_decls);

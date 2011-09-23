@@ -97,6 +97,7 @@
 #ifndef fb_freq_INCLUDED
 #define fb_freq_INCLUDED
 
+#include <math.h>
 #include "defs.h"
 #ifndef ERRORS_INCLUDED
 #include "errors.h"
@@ -310,6 +311,17 @@ public:
     return FB_FREQ_TYPE_BETTER( _type, freq._type );
   }
 
+  FB_FREQ sqrt() {
+    if ( Zero() && Exact() )
+      return FB_FREQ( FB_FREQ_TYPE_EXACT, 0.0 );
+    FB_FREQ_TYPE type = FB_FREQ_TYPE_COMBINE( _type, FB_FREQ_TYPE_GUESS );
+    if ( FB_FREQ_TYPE_NOT_KNOWN( type ) )
+      return FB_FREQ( type );
+    Is_True( _value >= 0, ( "FB_FREQ: negative value %ld", _value ) );
+    return FB_FREQ( type, ::sqrt((double)_value) );
+    return *this;
+  }
+  
   // Operators
 
   FB_FREQ operator+= ( const FB_FREQ freq ) {

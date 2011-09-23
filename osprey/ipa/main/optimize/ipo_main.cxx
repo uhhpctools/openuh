@@ -1,9 +1,5 @@
 /*
- * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
- */
-
-/*
- * Copyright (C) 2008-2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -142,6 +138,7 @@
 extern void IPO_WN_Update_For_Struct_Opt (IPA_NODE *);
 extern void IPO_WN_Update_For_Complete_Structure_Relayout_Legality(IPA_NODE *);
 extern void IPO_WN_Update_For_Array_Remapping_Legality(IPA_NODE *, int, int *);
+extern void IPO_Identify_Single_Define_To_HeapAlloced_GlobalVar(WN *wn);
 #endif  /* KEY */
 #include "ipa_reorder.h" //IPO_Modify_WN_for_field_reorder ()
 
@@ -703,6 +700,10 @@ IPO_Process_node (IPA_NODE* node, IPA_CALL_GRAPH* cg)
   if (IPA_Enable_Struct_Opt)
     IPO_WN_Update_For_Struct_Opt(node);
 #endif
+
+  if (OPT_Struct_Array_Copy >= 2)
+    IPO_Identify_Single_Define_To_HeapAlloced_GlobalVar(
+                                              WN_func_body(node->Whirl_Tree()));
 
   if(IPA_Enable_Reorder && reorder_candidate.size)
     IPO_Modify_WN_for_field_reorder(node) ;

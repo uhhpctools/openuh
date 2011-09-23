@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1176,6 +1176,8 @@ inline REGION_INFO* Get_Region_Info(const WN* wn)
 #define TT_SHACKLE_DEBUG            0x02000000
 #define TT_CROSS_LOOP               0x04000000
 #define TT_STRUCT_ARRAY_COPY        0x08000000
+#define TT_TRACE_STRUCT_SPLIT_TRANS 0x10000000
+#define TT_STRUCT_SPLIT_DUMP_IR     0x20000000
 
 #ifdef TARG_X8664
 extern BOOL Minvariant_Removal_For_Simd;

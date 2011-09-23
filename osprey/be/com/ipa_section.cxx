@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -98,12 +102,14 @@ IVAR_ARRAY *Ivar = NULL;
 LOOPINFO_TO_DLI_MAP*             IPL_Loopinfo_Map     = NULL;
 PROJ_REGION_TO_ACCESS_ARRAY_MAP* IPL_Access_Array_Map = NULL;
 
+#ifdef SHARED_BUILD
 mINT32
 SYSTEM_OF_EQUATIONS::_work_cols;
 mINT32
 SYSTEM_OF_EQUATIONS::_work_rows_eq;
 mINT32
 SYSTEM_OF_EQUATIONS::_work_rows;
+#endif
 
 //====================================================================
 // initialize ivar and ivar global arrays
@@ -895,7 +901,7 @@ PROJECTED_REGION::Set_region(SYSTEM_OF_EQUATIONS* soe,
 // It returns TRUE if the vector sum of them is a zero vector.
 //
 //========================================================================
-BOOL
+static BOOL
 is_equality(const SYSTEM_OF_EQUATIONS *soe, const INT i, const INT j)
 {
   for (INT k = 0; k < soe->Num_Vars(); ++k) 

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -49,7 +53,9 @@
 
 // Needed to make MAT package work
 
+#ifdef SHARED_BUILD
 template <> MEM_POOL* MAT<mINT32>::_default_pool = NULL;
+#endif
 
 
 //----------------------------------------------------------------------------------

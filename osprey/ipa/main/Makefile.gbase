@@ -160,7 +160,6 @@ IPA_COMMON_CXX_SRCS = \
 	ipc_symtab_merge.cxx 	\
 	ipc_type_merge.cxx	\
 	ipc_ty_hash.cxx		\
-	init.cxx		\
 #	ipc_preopt_ipl.cxx	\
 #	ipc_daVinci.cxx		\
 

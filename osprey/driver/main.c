@@ -144,9 +144,7 @@ main (int argc, char *argv[])
 	int base_flag;
 	string_item_t *p, *q;
 	int num_files = 0;
-#ifdef KEY
 	char *unrecognized_dashdash_option_name = NULL;
-#endif
         hugepage_desc = NULL;
 
 	init_error_list();
@@ -273,14 +271,12 @@ main (int argc, char *argv[])
 
 			drop_option = FALSE;
 
-#ifdef KEY
 			// Drop IPA options if IPA was turned off due to
 			// options conflict.  Bug 11571.
 			if (ipa == FALSE &&
 			    base_flag == O_IPA_) {
 			  drop_option = TRUE;
 			} else
-#endif
 			// Sets drop_option to TRUE if option should be ignored.
 			opt_action(base_flag);
 
@@ -398,11 +394,9 @@ main (int argc, char *argv[])
 		if (read_stdin) {
 			source_file = "-";
 			if (option_was_seen(O_E)) {
-#ifdef KEY
 				// Lang might already be set with "-x lang".
 				// Bug 4179.
 				if (source_lang == L_NONE)
-#endif
 				source_lang = L_cpp;
 			} else {
 				char *obj_name;
@@ -439,7 +433,6 @@ main (int argc, char *argv[])
 	     && mem_model == M_MEDIUM) {
 	  error("unimplemented: code model medium not supported in PIC mode");
 	}
-#ifdef KEY
 	// bug 10620
 	if (mem_model != M_SMALL &&
 	    abi == ABI_N32) {
@@ -457,7 +450,6 @@ main (int argc, char *argv[])
 		  "execution if a routine with static data is called from a "
 		  "parallel region.");
 	}
-#endif
 
 	if (debug) {
 		dump_args("user flags");
@@ -488,7 +480,6 @@ main (int argc, char *argv[])
 	/* add defaults if not already set */
 	set_defaults();
 
-#ifdef KEY
 	// Perform GNU4-related checks after set_defaults has run, since
 	// set_defaults can change the gnu version.  Bug 10250.
 	if (gnu_major_version == 4) {
@@ -518,7 +509,6 @@ main (int argc, char *argv[])
 
 	// Select the appropriate GNU version front-end.
 	init_frontend_phase_names(gnu_major_version, gnu_minor_version);
-#endif
 
 	// Display version after running set_defaults, which can change
 	// gnu_major_version.
@@ -551,11 +541,7 @@ main (int argc, char *argv[])
  * ??? why not just have ar and dsm prelink be set in determine_phase_order?
  */
 	if ((multiple_source_files || 
-	     option_was_seen(O_ar)
-#ifndef KEY	// -dsm no longer supported.  Bug 4406.
-             || option_was_seen(O_dsm)
-#endif
-	     ) && 
+	     option_was_seen(O_ar)) && 
 	     ((last_phase == P_any_ld) && (shared != RELOCATABLE)) || 
 	     (last_phase == P_pixie)) {
 		/* compile all files to object files, do ld later */
@@ -655,11 +641,9 @@ main (int argc, char *argv[])
 	for (p = files->head, q=file_suffixes->head; p != NULL; p = p->next, q=q->next) 
 	{
             source_file = p->name;
-#ifdef KEY
 		run_inline = UNDEFINED;	// bug 11325
 
 		if (show_flag == TRUE)	// bug 9096
-#endif
 		if (multiple_source_files) {
 			fprintf(stderr, "%s:\n", source_file);
 		}
@@ -691,16 +675,6 @@ main (int argc, char *argv[])
 		source_kind = S_o;
 		source_lang = get_source_lang(source_kind);
 
-#ifndef KEY	// -dsm_clone no longer supported.  Bug 4406.
-		if (option_was_seen(O_dsm_clone)) {
-          	    run_dsm_prelink();
-          	    if (has_errors()) {
-                      cleanup();
-		      cleanup_temp_objects();
-                      return error_status;
-                    }
-                }
-#endif
 		if (option_was_seen(O_ar)) {
 		   run_ar();
 		}
@@ -928,9 +902,7 @@ dump_args (char *msg)
  */
 void do_exit(int code)
 {
-#ifdef KEY	// Bug 6678.
 	unlink(get_report_file_name());
-#endif
 	if (code != 0) {
 		code = 1;
 	}

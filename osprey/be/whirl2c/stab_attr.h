@@ -345,7 +345,7 @@ inline BOOL TY_Is_Pointer_Or_Scalar(TY_IDX ty)
    return TY_Is_Scalar(ty) || TY_Is_Pointer(ty);
 } /* TY_Is_Pointer_Or_Scalar */
 
-#if (defined(BUILD_WHIRL2F) || defined(BUILD_PURPLE))
+#if defined(BUILD_WHIRL2F)
 inline BOOL TY_Is_Character_Reference(TY_IDX ty)
 {
    return TY_Is_Pointer(ty) &&
@@ -376,7 +376,7 @@ inline BOOL TY_Is_Chararray_Reference(TY_IDX ty)
    return TY_Is_Pointer(ty) && TY_Is_Chararray(TY_pointed(ty));
 } /* TY_Is_Chararray_Reference */
 
-#endif /*BUILD_WHIRL2F || BUILD_PURPLE*/
+#endif /*BUILD_WHIRL2F*/
 
 inline BOOL TY_Is_Array_Of_Chars(TY_IDX ty)
 {
@@ -484,7 +484,7 @@ inline BOOL Stab_Assign_Compatible_Pointer_Quals(TY_IDX t1, TY_IDX t2)
            (TY_is_const(t2)?    TY_is_const(t1) : TRUE));
 } /* Stab_Assign_Compatible_Pointer_Quals */
 
-#if (defined(BUILD_WHIRL2F) || defined(BUILD_PURPLE))
+#if defined(BUILD_WHIRL2F)
 /* A macro to test if a parameter is a character string, in which case
  * it needs an implicit length parameter.  Note that in the test on the
  * argument (caller) side we only need to consider reference types, since
@@ -511,7 +511,7 @@ inline BOOL STAB_IS_POINTER_REF_PARAM(const ST *st)
            ST_sclass(st)==SCLASS_FORMAL &&
            !ST_is_value_parm(st));
 }
-#endif /*BUILD_WHIRL2F || BUILD_PURPLE*/
+#endif /*BUILD_WHIRL2F*/
 
 
                   /*----- Reserved Names Information -----*/

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1415,6 +1415,81 @@ FEEDBACK::Annot( WN *wn, FB_EDGE_TYPE type, FB_FREQ freq )
     fprintf( TFile, "\n" );
     Print_with_wn( TFile, wn );
   }
+}
+
+// When transforming:
+// From:
+// if (a && b) {
+//   x = ...
+// }
+// else {
+//   <empty>
+// }
+// To:
+// if (a) {
+//   if (b) {
+//     x = ...
+//   }
+//   else {
+//      <empty>
+//   }
+// }
+// else {
+//   <empty>
+// }
+//
+// We adjust the frequency data as follows:
+// From:
+//                     if (a && b)
+//                  TK /         \ NT
+//                    /           \
+// To:
+// 
+//                     if (a)
+//               TKnew /     \ NTnew
+//                    /       \
+//                 if (b)
+//          TKinner /   \ NTinner
+//                 /     \
+// Where:
+// TOT = TK + NT
+// TK% = TK / TOT
+// TK%new = sqrt(TK%)
+// TKnew = TOT * TK%new
+// NTnew = TOT - TKnew
+// TKinner = TKnew * TK%new
+// NTinner = TKnew - TKinner
+// 
+void
+FEEDBACK::FB_split_cand_if( WN *wn_outer_if, WN *wn_inner_if )
+{
+  if ( _trace )
+    fprintf( TFile, "FEEDBACK::FB_split_cand(0x%p, 0x%p):\n",
+	     wn_outer_if, wn_inner_if );
+
+  Is_True( wn_outer_if != NULL && wn_inner_if != NULL,
+	   ( "FEEDBACK::FB_cplit_can expects non-NULL wn_outer_if and wn_inner_if" ) );
+
+  Is_True( WN_operator( wn_outer_if ) == OPR_IF &&
+	   WN_operator( wn_inner_if ) == OPR_IF,
+	   ( "FEEDBACK::FB_split_cand expects IF wn_outer_if and wn_inner_if" ) );
+
+  const FB_Info_Branch& info_branch = Query_branch( wn_outer_if );
+  FB_FREQ freq_tkn = info_branch.freq_taken;
+  FB_FREQ freq_not = info_branch.freq_not_taken;
+  FB_FREQ freq_total = freq_tkn + freq_not;
+  FB_FREQ freq_tkn_pct = freq_tkn / freq_total;
+  FB_FREQ freq_tkn_pct_new = freq_tkn_pct.sqrt();
+  FB_FREQ freq_tkn_new_outer = freq_total * freq_tkn_pct_new;
+  FB_FREQ freq_not_new_outer = freq_total - freq_tkn_new_outer;
+  Annot_branch( wn_outer_if, FB_Info_Branch( freq_tkn_new_outer,
+					     freq_not_new_outer,
+					     OPR_IF ) );
+  FB_FREQ freq_tkn_new_inner = freq_tkn_new_outer * freq_tkn_pct_new;
+  FB_FREQ freq_not_new_inner = freq_tkn_new_outer - freq_tkn_new_inner;
+  Annot_branch( wn_inner_if, FB_Info_Branch( freq_tkn_new_inner,
+					     freq_not_new_inner,
+					     OPR_IF ) );
 }
 
 // ====================================================================

@@ -87,13 +87,6 @@ extern "C" {
  *    table-section for the PU will be popped off the whirl2f
  *    symbol table stack.
  *
- * W2F_Mark_Loads()
- *    Inserts positional placeholder for translated ILOAD/LDID.
- *
- * W2F_Nomark_Loads()
- *    Regular translation of loads (ILOAD/LDID).  This is the default
- *    mode.
- *
  * W2F_Set_Prompf_Emission()
  *    Pass in a mapping from WN nodes to construct identifiers, and
  *    notify whirl2f to emit its output in a form suitable for ProMPF.
@@ -108,12 +101,6 @@ extern "C" {
  * W2F_Get_Transformed_Src_Path()
  *    Returns the name of the .f file emitted by whirl2f.  Must be
  *    called after W2F_Init().
- *
- * W2F_Set_Purple_Emission()
- * W2F_Reset_Purple_Emission()
- *    Instruct the code-emitter to translate WHIRL in a manner
- *    specific to the needs of purple.  Actived by the "Set"
- *     routine; deactivated by the "Reset" routine.
  *
  * W2F_Def_ST()
  *    Appends a definition for the given symbol to the given
@@ -144,13 +131,6 @@ extern "C" {
  * W2F_Translate_Wn_Str()
  *    Same as W2F_Translate_Wn(), but the output is put into the
  *    given string buffer instead of being appended to a file.
- *
- * W2F_Translate_Purple_Main()
- *    Given an arbitrary FUNC_ENTRY node, we translate it into a
- *    purple main program, where the parameters are declared as
- *    local variables, placeholders are inserted for initialization
- *    and final checking, and a call is made to the purple region
- *    routine.
  *
  * W2F_Fini()
  *    Finalization of W2F.  This will terminate all translation 
@@ -223,7 +203,6 @@ extern BOOL W2F_Emit_Prefetch;   /* Emit comments for prefetches */
 extern BOOL W2F_Emit_All_Regions;/* Emit cmplr-generated regions */
 extern BOOL W2F_Emit_Linedirs;   /* Emit preprocessing line-directives */
 extern BOOL W2F_Emit_Frequency;  /* Emit feedback frequency information */
-extern BOOL W2F_Purple_Emission; /* Emitting purple extracted sources */
 extern BOOL W2F_Emit_Pcf;        /* Emitting PCF spellings of pragmas */
 extern BOOL W2F_Emit_Omp;        /* Emitting OMP spellings of pragmas */
 
@@ -254,16 +233,10 @@ extern void W2F_Fini(void);
 extern void W2F_Push_PU(WN *pu, WN *body_part_of_interest);
 extern void W2F_Pop_PU(void);
 
-extern void W2F_Mark_Loads(void);
-extern void W2F_Nomark_Loads(void);
-
 extern void W2F_Set_Prompf_Emission(WN_MAP *construct_map);
 extern void W2F_Set_Frequency_Map(WN_MAP frequency_map);
 
 extern const char * W2F_Get_Transformed_Src_Path(void);
-
-extern void W2F_Set_Purple_Emission(void);
-extern void W2F_Reset_Purple_Emission(void);
 
 extern void W2F_Def_ST(FILE *outfile, ST *st);
 
@@ -284,9 +257,6 @@ extern void W2F_Translate_Istore_Lhs(char       *strbuf,
 
 extern void W2F_Translate_Wn(FILE *outfile, WN *wn);
 extern void W2F_Translate_Wn_Str(char *strbuf, UINT bufsize, WN *wn);
-
-extern void
-W2F_Translate_Purple_Main(FILE *outfile, WN *pu, const char *region_name);
 
 extern void W2F_Outfile_Init(void);
 extern void W2F_Outfile_Translate_Pu(WN *pu);

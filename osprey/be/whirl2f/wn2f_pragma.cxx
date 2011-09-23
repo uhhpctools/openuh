@@ -78,9 +78,6 @@ extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
 extern BOOL    W2F_Emit_Omp;        /* Emitting OMP spellings of pragmas */
 
 
-extern void WN2F_Append_Purple_Funcinfo(TOKEN_BUFFER tokens);
-                                                     /* from wn2f_stmt.c */
-
 #define WN_pragma_nest(wn) WN_pragma_arg1(wn)
 #define WN_max_nest_level(wn) WN_pragma_arg2(wn)
 #define WN_mp_schedtype(wn) (WN_PRAGMA_SCHEDTYPE_KIND)WN_pragma_arg1(wn)
@@ -1955,23 +1952,7 @@ WN2F_pragma(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
 		    WN_operator(wn) == OPR_XPRAGMA, 
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_pragma"));
 
-   /* If this is a purple code-extraction, insert a placeholder
-    * for purple-specific initialization.
-    */
-   if (W2F_Purple_Emission && WN_pragma(wn) == WN_PRAGMA_PREAMBLE_END)
-   {
-      /* <#PRP_XSYM:INIT name, id, sclass, export#>
-       */
-      Append_F77_Indented_Newline(tokens, 1, NULL/*label*/);
-      Append_Token_String(tokens, "<#PRP_XSYM:INIT_STMT");
-      WN2F_Append_Purple_Funcinfo(tokens);
-      Append_Token_String(tokens, "#>");
-      next = WN_next(wn);
-   }
-   else
-   {
-      WN2F_process_pragma(tokens, &next, context);
-   }
+   WN2F_process_pragma(tokens, &next, context);
 
    ASSERT_FATAL(Pragmas_To_Skip.end == 0,
 		(DIAG_W2F_BUFFER_ERROR,

@@ -96,8 +96,6 @@ extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
 extern BOOL    W2F_Emit_Cgtag;      /* Defined in w2f_driver.c */
 
 
-static const char WN2F_Purple_Region_Name[] = "prp___region";
-
 #define WN_pragma_nest(wn) WN_pragma_arg1(wn)
 
 
@@ -1287,7 +1285,7 @@ WN2F_Exit_PU_Block(TOKEN_BUFFER tokens, TOKEN_BUFFER *stmts)
 
   decl_tokens = New_Token_Buffer();
   WN2F_Append_Symtab_Consts(decl_tokens, CURRENT_SYMTAB, 1/*Newlines*/);
-  if (!W2F_Purple_Emission && !Is_Empty_Token_Buffer(decl_tokens))
+  if (!Is_Empty_Token_Buffer(decl_tokens))
     WHIRL2F_Append_Comment(tokens, "**** Constants ****", 1, 1);
   Append_And_Reclaim_Token_List(tokens, &decl_tokens);
 
@@ -1301,7 +1299,7 @@ WN2F_Exit_PU_Block(TOKEN_BUFFER tokens, TOKEN_BUFFER *stmts)
 
   WN2F_Append_Symtab_Vars(decl_tokens, GLOBAL_SYMTAB, 1); 
        
-  if (!W2F_Purple_Emission && !Is_Empty_Token_Buffer(decl_tokens))
+  if (!Is_Empty_Token_Buffer(decl_tokens))
     WHIRL2F_Append_Comment(tokens, 
 			   "**** Variables and functions ****", 1, 1);
   Append_And_Reclaim_Token_List(tokens, &decl_tokens);
@@ -1314,54 +1312,27 @@ WN2F_Exit_PU_Block(TOKEN_BUFFER tokens, TOKEN_BUFFER *stmts)
    * in initializers).
    */
 
-  if (!W2F_Purple_Emission && !Is_Empty_Token_Buffer(PUinfo_local_decls))
+  if (!Is_Empty_Token_Buffer(PUinfo_local_decls))
     WHIRL2F_Append_Comment(tokens, "**** Temporary variables ****",1,1);
   Append_And_Reclaim_Token_List(tokens, &PUinfo_local_decls);
 
 
   /* Emit DATA statements; i.e. initializers */
 
-  if (!W2F_Purple_Emission && !Is_Empty_Token_Buffer(Data_Stmt_Tokens))
+  if (!Is_Empty_Token_Buffer(Data_Stmt_Tokens))
     WHIRL2F_Append_Comment(tokens, 
 			   "**** Initializers ****", 1, 1);
   Append_And_Reclaim_Token_List(tokens, &Data_Stmt_Tokens);
 
-  if (!W2F_Purple_Emission && !Is_Empty_Token_Buffer(PUinfo_pragmas))
+  if (!Is_Empty_Token_Buffer(PUinfo_pragmas))
     WHIRL2F_Append_Comment(tokens, 
 			   "**** top level pragmas ****", 1, 1);
   Append_And_Reclaim_Token_List(tokens, &PUinfo_pragmas);
 
-
-  /* If this is a purple code-extraction, insert a placeholder
-   * for purple-specific initialization.
-   */
-
-  if (W2F_Purple_Emission)
-    {
-      /* <#PRP_XSYM:INIT_DECL name, id, sclass, export#>
-	*/
-      Append_F77_Indented_Newline(tokens, 1, NULL/*label*/);
-      Append_Token_String(tokens, "<#PRP_XSYM:INIT_DECL");
-      WN2F_Append_Purple_Funcinfo(tokens);
-      Append_Token_String(tokens, "#>");
-    }
-
   /* Append the statements to the tokens */
 
-  if (!W2F_Purple_Emission)
-    WHIRL2F_Append_Comment(tokens, "**** statements ****", 1, 1);
+  WHIRL2F_Append_Comment(tokens, "**** statements ****", 1, 1);
   Append_And_Reclaim_Token_List(tokens, stmts);
-
-  if (W2F_Purple_Emission && 
-      strcmp(W2F_Object_Name(PUINFO_FUNC_ST), WN2F_Purple_Region_Name) == 0)
-    {
-      /* <#PRP_XSYM:TEST name, id, sclass, export#>
-	*/
-      Append_F77_Indented_Newline(tokens, 1, NULL/*label*/);
-      Append_Token_String(tokens, "<#PRP_XSYM:TEST");
-      WN2F_Append_Purple_Funcinfo(tokens);
-      Append_Token_String(tokens, "#>");
-    }
 
   WN2F_Next_ReturnSite = NULL;
   WN2F_Prev_CallSite = NULL;
@@ -1389,8 +1360,7 @@ WN2F_Skip_Stmt(WN *stmt)
 {
    return ((W2F_No_Pragmas && \
             (WN_operator(stmt) == OPR_PRAGMA || 
-             WN_operator(stmt) == OPR_XPRAGMA) &&
-	    WN_pragma(stmt) != WN_PRAGMA_PREAMBLE_END) || /* For purple */\
+             WN_operator(stmt) == OPR_XPRAGMA)) ||
 
            WN2F_Skip_Pragma_Stmt(stmt) ||
 
@@ -1473,34 +1443,6 @@ WN2F_Append_Block_Data(TOKEN_BUFFER  tokens)
     }
 
 }
-
-void
-WN2F_Append_Purple_Funcinfo(TOKEN_BUFFER tokens)
-{
-   const char *name   = W2F_Object_Name(PUINFO_FUNC_ST);
-   mUINT32     id     = ST_st_idx(PUINFO_FUNC_ST);
-   ST_SCLASS   sclass = ST_sclass(PUINFO_FUNC_ST);
-   ST_EXPORT   export_class = (ST_EXPORT) ST_export(PUINFO_FUNC_ST);
-
-   Append_Token_String(tokens, name);
-   Append_Token_Special(tokens, ',');
-   if (strcmp(name, WN2F_Purple_Region_Name) == 0)
-   {
-      /* This must match the setting in PRP_TRACE_READER::_Read_Next()
-       * when a region is entered.
-       */
-      id = 0xffffffff;
-      sclass = SCLASS_TEXT;
-      export_class = EXPORT_INTERNAL;
-   }
-   Append_Token_String(tokens, Number_as_String(id, "%llu"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(sclass, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(export_class, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, "0"); /* Flags */
-} /* WN2F_Append_Purple_Funcinfo */
 
 
 WN2F_STATUS 

@@ -80,7 +80,6 @@
 
 
 BOOL Prompf_anl_loaded = FALSE;
-BOOL Purple_loaded = FALSE;
 BOOL Whirl2f_loaded = FALSE;
 BOOL Whirl2c_loaded = FALSE;
 

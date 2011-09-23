@@ -75,6 +75,7 @@ BUILD_TARGET        = @BUILD_TARGET@
 BUILD_MULTILIB      = @BUILD_MULTILIB@
 BUILD_GNU3          = @BUILD_GNU3@
 BUILD_FORTRAN       = @BUILD_FORTRAN@
+BUILD_TYPE          = @BUILD_TYPE@
 BUILD_SKIP_IPA      = @BUILD_SKIP_IPA@
 
 ifeq ($(MACHINE_TYPE), ia64)
@@ -100,14 +101,18 @@ CROSS_BUILD = false
 BASIC_COMPONENTS = \
 		$(NATIVE_BUILD_DIR)/driver/driver \
                 $(NATIVE_BUILD_DIR)/be/be \
+                $(NATIVE_BUILD_DIR)/lw_inline/inline \
+                $(NATIVE_BUILD_DIR)/whirl2c/whirl2c \
+                $(NATIVE_BUILD_DIR)/ir_tools/ir_b2a
+
+ifeq ($(BUILD_TYPE), SHARED)
+BASIC_COMPONENTS += \
                 $(NATIVE_BUILD_DIR)/be/be.so \
                 $(NATIVE_BUILD_DIR)/cg/cg.so \
                 $(NATIVE_BUILD_DIR)/wopt/wopt.so \
                 $(NATIVE_BUILD_DIR)/lno/lno.so \
-                $(NATIVE_BUILD_DIR)/lw_inline/inline \
-                $(NATIVE_BUILD_DIR)/whirl2c/whirl2c.so \
-                $(NATIVE_BUILD_DIR)/whirl2c/whirl2c \
-                $(NATIVE_BUILD_DIR)/ir_tools/ir_b2a
+                $(NATIVE_BUILD_DIR)/whirl2c/whirl2c.so
+endif
 
 ifneq ($(BUILD_SKIP_IPA), YES)
 BASIC_COMPONENTS += \
@@ -119,8 +124,13 @@ endif
 
 ifeq ($(BUILD_FORTRAN), YES)
 BASIC_COMPONENTS += \
-		$(NATIVE_BUILD_DIR)/whirl2f/whirl2f.so \
 		$(NATIVE_BUILD_DIR)/whirl2f/whirl2f 
+
+ifeq ($(BUILD_TYPE), SHARED)
+BASIC_COMPONENTS += \
+		$(NATIVE_BUILD_DIR)/whirl2f/whirl2f.so
+endif
+
 endif
 
 
@@ -233,6 +243,8 @@ $(NATIVE_BUILD_DIR)/g++fe/gfecc gfecc: libiberty libcomutil libcmplrs
 $(NATIVE_BUILD_DIR)/wgen/wgen42 wgen42: libiberty libcomutil libcmplrs $(NATIVE_BUILD_DIR)/libspin_4_2_0/libgspin42.a
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/wgen
 
+ifeq ($(BUILD_TYPE), SHARED)
+
 $(NATIVE_BUILD_DIR)/be/be be: be.so 
 $(NATIVE_BUILD_DIR)/be/be.so be.so: include libiberty targ_info
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/be
@@ -263,6 +275,41 @@ $(NATIVE_BUILD_DIR)/whirl2c/whirl2c.so whirl2c.so: be.so
 $(NATIVE_BUILD_DIR)/whirl2f/whirl2f whirl2f: whirl2f.so
 $(NATIVE_BUILD_DIR)/whirl2f/whirl2f.so whirl2f.so: be.so
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2f
+else
+
+$(NATIVE_BUILD_DIR)/be/be be: include libiberty targ_info libbe libipl liblno libwopt libwhirl2c libwhirl2f libdwarf libcg libelfutil libelf
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/be be
+
+$(NATIVE_BUILD_DIR)/be/libbe libbe: include libiberty targ_info
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/be
+
+$(NATIVE_BUILD_DIR)/cg/libcg libcg: libbe libelf libelfutil libdwarf libunwindP
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/cg
+
+$(NATIVE_BUILD_DIR)/wopt/libwopt libwopt: libbe
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/wopt
+
+$(NATIVE_BUILD_DIR)/lno/liblno liblno: libwopt libipl
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/lno
+
+$(NATIVE_BUILD_DIR)/ipa/libipa libipa: libipl
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/ipa
+
+$(NATIVE_BUILD_DIR)/ipl/ipl ipl: libipl
+$(NATIVE_BUILD_DIR)/ipl/libipl libipl: libbe
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/ipl
+
+$(NATIVE_BUILD_DIR)/lw_inline/inline inline: libbe
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/lw_inline
+
+$(NATIVE_BUILD_DIR)/whirl2c/whirl2c whirl2c: libwhirl2c
+$(NATIVE_BUILD_DIR)/whirl2c/libwhirl2c libwhirl2c: libbe
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2c
+
+$(NATIVE_BUILD_DIR)/whirl2c/whirl2f whirl2f: libwhirl2f
+$(NATIVE_BUILD_DIR)/whirl2c/libwhirl2f libwhirl2f: libbe
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2f
+endif
 
 ifeq ($(MACHINE_TYPE), ia64)
 $(NATIVE_BUILD_DIR)/orc_ict/orc_ict.so orc_ict.so: cg.so
@@ -354,8 +401,10 @@ install-cross:
 LIB_ARGS = BUILD_TARGET=$(LIB_BUILD_TARGET) BUILD_COMPILER=SELF BUILD_AREA=$(LIB_BUILD_AREA) MACHINE_TYPE=$(LIB_MACHINE_TYPE) BUILD_ABI=$(LIB_BUILD_ABI) BUILD_ARCH=$(LIB_BUILD_ARCH) BUILD_HOST=$(LIB_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@
 ifeq ($(LIB_BUILD_TARGET),IA64)
 LIB_ARGS += BUILD_TYPE=NONSHARED
+else
+LIB_ARGS += BUILD_TYPE=@BUILD_TYPE@
 endif
-LIB2_ARGS = BUILD_TARGET=$(LIB2_BUILD_TARGET) BUILD_COMPILER=SELF BUILD_AREA=$(LIB2_BUILD_AREA) MACHINE_TYPE=$(LIB2_MACHINE_TYPE) BUILD_ABI=$(LIB2_BUILD_ABI) BUILD_ARCH=$(LIB2_BUILD_ARCH) BUILD_HOST=$(LIB2_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@
+LIB2_ARGS = BUILD_TARGET=$(LIB2_BUILD_TARGET) BUILD_COMPILER=SELF BUILD_AREA=$(LIB2_BUILD_AREA) MACHINE_TYPE=$(LIB2_MACHINE_TYPE) BUILD_ABI=$(LIB2_BUILD_ABI) BUILD_ARCH=$(LIB2_BUILD_ARCH) BUILD_HOST=$(LIB2_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@ BUILD_TYPE=@BUILD_TYPE@
 
 .PHONY: library lib clean-library clean-lib
 .PHONY: library2 lib2 clean-library2 clean-lib2

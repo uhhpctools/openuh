@@ -100,9 +100,7 @@ typedef enum {
 	P_cplus_cpp,	/* cpp for C++ */
 	P_f_cpp,	/* cpp for F77 */
 	P_f90_cpp,	/* cpp for F90 */
-#ifdef KEY
 	P_f_coco,	/* coco preprocessor for Fortran	bug 9058 */
-#endif
 	P_any_cpp,	/* generic union of cpp's */
 
 	P_pfa,		/* power fortran optimizer */
@@ -116,11 +114,9 @@ typedef enum {
 	P_cppf90_fe,	/* cpp embedded in f90 fe */
 	P_c_gfe,	/* gcc c fe */
 	P_cplus_gfe,	/* gnu c++ fe */
-#ifdef KEY
 	P_spin_cc1,	/* gnu gcc4 C fe */
 	P_spin_cc1plus,	/* gnu gcc4 C++ fe */
 	P_wgen,		/* wgen */
-#endif
 	P_any_fe,	/* generic union of all fe's */
 	P_pseudo_f_fe,	/* not a real phase, just a placeholder 
 			 * for options for f_fe but not c_fe */
@@ -250,9 +246,7 @@ typedef enum {
 } mem_model_t;
 
 extern mem_model_t mem_model;
-#ifdef KEY
 extern char *mem_model_name;
-#endif
 
 #ifdef PATH_MAX
 #define PATH_BUF_LEN PATH_MAX

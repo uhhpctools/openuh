@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -82,6 +86,22 @@ static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/w2f_
 #include "wn2f.h"
 #include "wn2f_stmt.h"
 
+#include "../whirl2f/init.cxx"      /* force include of W2F_Initializer */
+
+#if !defined(SHARED_BUILD)
+/* no weak version, so need stub to compile (real version is in libwopt) */
+#include "opt_defs.h"
+AUX_ID WN_aux (const WN*) { return 0; }
+
+/* from whirl2c */
+extern "C" {
+void W2C_Cleanup(void) {}
+void W2C_Push_PU(const WN* a, WN* b) {}
+void W2C_Pop_PU(void) {}
+void W2C_Translate_Wn(FILE* a, const WN* b) {}
+}
+#endif
+
 /* Avoid errors due to uses of "int" in stdio.h macros.
  */
 #undef int
@@ -159,9 +179,7 @@ BOOL   W2F_Emit_Omp = FALSE;        /* Force OMP pragmas wherever possible */
 INT32  W2F_Line_Length = 0;         /* 'zero' means: use the default */
 
 /* External data set through the API or otherwise */
-BOOL    W2F_Only_Mark_Loads = FALSE; /* Only mark, do not translate loads */
 BOOL    WN2F_F90_pu = FALSE;        /* Global variable indicating F90 or F77 */
-BOOL    W2F_Purple_Emission = FALSE; /* Emitting purple extracted sources */
 BOOL    W2F_Prompf_Emission = FALSE; /* Emitting prompf transformed sources */
 WN_MAP *W2F_Construct_Map = NULL;    /* Construct id mapping for prompf */
 WN_MAP  W2F_Frequency_Map = WN_MAP_UNDEFINED; /* Frequency mapping */
@@ -801,20 +819,6 @@ W2F_Pop_PU(void)
 } /* W2F_Pop_PU */
 
 
-void
-W2F_Mark_Loads(void)
-{
-   W2F_Only_Mark_Loads = TRUE;
-} /* W2F_Mark_Loads */
-
-
-void
-W2F_Nomark_Loads(void)
-{
-   W2F_Only_Mark_Loads = FALSE;
-} /* W2F_Nomark_Loads */
-
-
 void 
 W2F_Set_Prompf_Emission(WN_MAP *construct_map)
 {
@@ -835,20 +839,6 @@ W2F_Get_Transformed_Src_Path(void)
 {
    return W2F_File_Name[W2F_FTN_FILE];
 } /* W2F_Get_Transformed_Src_Path */
-
-
-void
-W2F_Set_Purple_Emission(void)
-{
-   W2F_Purple_Emission = TRUE;
-} /* W2F_Set_Purple_Emission */
-
-
-void
-W2F_Reset_Purple_Emission(void)
-{
-   W2F_Purple_Emission = FALSE;
-} /* W2C_Reset_Purple_Emission */
 
 
 void
@@ -987,36 +977,6 @@ W2F_Translate_Wn_Str(char *strbuf, UINT bufsize, WN *wn)
 } /* W2F_Translate_Wn_Str */
 
 
-void 
-W2F_Translate_Purple_Main(FILE *outfile, WN *pu, const char *region_name)
-{
-   TOKEN_BUFFER       tokens;
-   WN2F_CONTEXT       context = INIT_WN2F_CONTEXT;
-   const char * const caller_err_phase = Get_Error_Phase ();
-
-   if (!Check_Initialized("W2F_Translate_Purple_Main"))
-      return;
-
-   Is_True(WN_opcode(pu) == OPC_FUNC_ENTRY, 
-	   ("Invalid opcode for W2F_Translate_Purple_Main()"));
-
-   Start_Timer (T_W2F_CU);
-   Set_Error_Phase ("WHIRL To F");
-
-   /* Translate the function header as a purple main program
-    */
-   tokens = New_Token_Buffer();
-   W2F_Push_PU(pu, WN_func_body(pu));
-   (void)WN2F_translate_purple_main(tokens, pu, region_name, context);
-   W2F_Pop_PU();
-   W2F_Undo_Whirl_Side_Effects();
-   Write_And_Reclaim_Tokens(outfile, W2F_File[W2F_LOC_FILE], &tokens);
-
-   Stop_Timer (T_W2F_CU);
-   Set_Error_Phase (caller_err_phase);
-} /* W2F_Translate_Purple_Main */
-
-
 void
 W2F_Fini(void)
 {
@@ -1063,8 +1023,6 @@ W2F_Fini(void)
       W2F_Emit_Nested_PUs = FALSE; /* Emit code for nested MP PUs */
       W2F_Emit_Frequency = FALSE;  /* Emit feedback frequency info */
       W2F_Line_Length = 0;         /* 'zero' means: use the default */
-
-      W2F_Only_Mark_Loads = FALSE;
 
       MEM_POOL_Pop(&W2F_Parent_Pool);
       MEM_POOL_Delete(&W2F_Parent_Pool);

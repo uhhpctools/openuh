@@ -8080,6 +8080,7 @@ gcc2gs (int code)
    case WITH_SIZE_EXPR: return GS_WITH_SIZE_EXPR;
    case TEMPLATE_TEMPLATE_PARM: return GS_TEMPLATE_TEMPLATE_PARM;
    case FREQ_HINT_STMT: return GS_FREQ_HINT_STMT;
+   case ZDL_STMT: return GS_ZDL_STMT;
  }
  gcc_assert(0);
  return (gs_code_t) 0;
@@ -9733,7 +9734,7 @@ int processing_global_namespace = 0;
 gs_t gs_x (tree node);
 gs_t gs_x_func_decl (tree node);
 void gspin_gxx_emits_decl (tree t);
-void gspin_gxx_emits_asm (char *str);
+void gspin_gxx_emits_asm (tree str);
 void gspin_write (void);
 void gspin_init (void);
 void gspin_init_global_trees_list (void);
@@ -10936,6 +10937,15 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
 	      /* bug 12598: Try to fold OBJ_TYPE_REF if it is present
 	         under the CALL_EXPR. Code adapted from fold_stmt() . */
 	      tree callee = get_callee_fndecl (t);
+              if (callee && TREE_CODE(callee) == FUNCTION_DECL)
+              {
+                 /* we need to emit the function be calleed, no matter 
+                    if the call is removed later by gcc cfg cleanup, so 
+                    the open64 backend wouldn't be surprised by missing
+                    function definition. */
+                 TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (callee)) = 1;
+                 mark_decl_referenced(callee);
+              }
 	      if (!(callee && DECL_BUILT_IN(callee)))
 	      {
 		callee = TREE_OPERAND(t,0);
@@ -12051,22 +12061,20 @@ gspin_gxx_emits_thunk_decl (tree t)
 
 /* Add T to list of asms emitted by g++. */
 void
-gspin_gxx_emits_asm (char *str)
+gspin_gxx_emits_asm (tree t)
 {
-  gs_t asm_string_node, asm_list;
+  gs_t decl, decl_list;
+  decl = gs_x(t);
 
-  asm_string_node = __gs(IB_STRING);
-  _gs_s(asm_string_node, (gs_string_t) str, strlen(str) + 1);
-
-  if (gs_code(gxx_emitted_asms_dot) == EMPTY) {
-    _gs_code(gxx_emitted_asms_dot, CONS);
-    gs_set_operand(gxx_emitted_asms_dot, 0, asm_string_node);
-    gs_set_operand(gxx_emitted_asms_dot, 1, __gs(EMPTY));
+  if (gs_code(program_decls_dot) == EMPTY) {
+    _gs_code(program_decls_dot, CONS);
+    gs_set_operand(program_decls_dot, 0, decl);
+    gs_set_operand(program_decls_dot, 1, __gs(EMPTY));
     return;
   }
-  asm_list = gs_cons(asm_string_node, gs_operand(gxx_emitted_asms_dot, 1));
-  gs_set_operand(gxx_emitted_asms_dot, 1, asm_list);
-  gxx_emitted_asms_dot = asm_list;
+  decl_list = gs_cons(decl, gs_operand(program_decls_dot, 1));
+  gs_set_operand(program_decls_dot, 1, decl_list);
+  program_decls_dot = decl_list;
 }
 
 void

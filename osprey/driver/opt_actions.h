@@ -111,11 +111,9 @@ extern char *help_pattern;	/* pattern string for help file */
 
 extern int inline_t;            /* toggle for inline options */
 
-#ifdef KEY
 /* Before front-end: UNDEFINED.  After front-end: TRUE if inliner will be run.
    Bug 11325. */
 extern int run_inline;
-#endif
 
 extern boolean dashdash_flag;   /* when you see -- set this flag to
 				   indicate the end of the options */
@@ -134,10 +132,8 @@ extern int selective_instrumentation_invoked;   /* Selective Instrument whirl */
 
 extern boolean ftz_crt;		/* add flush-to-zero crt */
 
-#ifdef KEY
 extern char *f90_module_dir;	/* value of -module option */	// bug 4210
 extern int malloc_algorithm;
-#endif
 
 /* return whether has been toggled yet */
 extern boolean is_toggled (int obj);
@@ -165,9 +161,7 @@ extern void opt_action (int optflag);
 /* return whether to mark this flag as unseen */
 extern boolean flag_is_superceded (int optflag);
 
-#ifdef KEY /* bug 4260 */
 extern void check_convert_name(char *name);
-#endif /* KEY bug 4260 */
 
 /* check the tls-model is acceptable */
 extern void check_opt_tls_model(char *model);

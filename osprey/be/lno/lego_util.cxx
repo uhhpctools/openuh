@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -213,7 +217,7 @@ VAR_KIND ST_Var_Kind (ST* array_st) {
  *
  ***********************************************************************/
 
-extern TY_IDX Get_Original_Type (ST* st) {
+extern TY_IDX Lego_Get_Original_Type (ST* st) {
 
   TY_IDX ty;
 
@@ -271,10 +275,10 @@ extern TY_IDX Get_Original_Type (ST* st) {
  * Given an array_st, return the appropriate type for the array.
  *
  ***********************************************************************/
-extern TY_IDX Get_Array_Type (ST* st) {
+extern TY_IDX Lego_Get_Array_Type (ST* st) {
   TY_IDX ty;
 
-  ty = Get_Original_Type(st);
+  ty = Lego_Get_Original_Type(st);
 
   if ((TY_kind(ty) == KIND_POINTER) && (ST_isFormal(st) || ST_isLocal(st))) {
     ty = TY_pointed(ty);
@@ -1126,7 +1130,7 @@ extern WN* Get_MP_Region (WN* wn) {
 *********************************************************************/
 extern BOOL Fixed_Size_Array_Is_Stride_One(ST* array_st)
 {
-  TY_IDX array_ty=Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
   INT ndims = TY_AR_ndims(array_ty);
   for (INT i=0; i<ndims; i++) {
     FmtAssert (TY_AR_const_lbnd(array_ty, i) &&

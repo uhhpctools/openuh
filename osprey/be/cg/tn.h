@@ -873,8 +873,39 @@ inline TN *Build_TN_Like(TN *tn)
 
 inline TN *Build_TN_Of_Mtype(TYPE_ID mtype)
 {
-  ISA_REGISTER_CLASS rc = Register_Class_For_Mtype(mtype);
-  return Gen_Register_TN (rc, MTYPE_RegisterSize(mtype) );
+  ISA_REGISTER_CLASS rc;  // register class
+  INT rs;                 // register size
+#ifdef TARG_SL
+  extern void Create_TN_Pair(TN* key, TN* pair);
+#ifdef EMULATE_LONGLONG
+  if (mtype == MTYPE_I8 || mtype == MTYPE_U8) {
+    TYPE_ID new_mtype = (mtype == MTYPE_I8 ? MTYPE_I4 : MTYPE_U4);
+    rc = Register_Class_For_Mtype(new_mtype);
+    rs = MTYPE_RegisterSize(new_mtype);
+    TN *tn1 = Gen_Register_TN (rc, rs);
+    TN *tn2 = Gen_Register_TN (rc, rs);
+    Create_TN_Pair (tn1, tn2);
+    return tn1;
+  }
+#endif
+#ifdef EMULATE_FLOAT_POINT
+  if (mtype == MTYPE_F8) {
+    rc = Register_Class_For_Mtype(MTYPE_U4);
+    rs = MTYPE_RegisterSize(MTYPE_U4);
+    TN *tn1 = Gen_Register_TN (rc, rs);
+    TN *tn2 = Gen_Register_TN (rc, rs);
+    Create_TN_Pair (tn1, tn2);
+    return tn1;
+  } else if (mtype = MTYPE_F4) {
+    rc = Register_Class_For_Mtype(MTYPE_U4);
+    rs = MTYPE_RegisterSize(MTYPE_U4);
+    return Gen_Register_TN (rc, rs);
+  }
+#endif
+#endif
+  rc = Register_Class_For_Mtype(mtype);
+  rs = MTYPE_RegisterSize(mtype);
+  return Gen_Register_TN (rc, rs);
 }
 
 extern	TN *Dup_TN ( TN *tn );	/* Duplicate an existing TN */

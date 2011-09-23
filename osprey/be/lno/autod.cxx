@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -199,7 +203,7 @@ void ARRAY_DESCRIPTOR::Distribute_Array(WN *insert_point)
     return;
   }
 
-  TY_IDX array_ty = Get_Array_Type(_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(_st);
   mINT16 ndims = TY_AR_ndims (array_ty);
 
   // Check that the bounds are all fine
@@ -477,7 +481,7 @@ void TRANSPOSE_DIRECTED_GRAPH16::Gather_Arrays(WN *wn,
     if (Local_Array(WN_st(wn))) {
       BOOL transposable = FALSE;
       WN *parent = LWN_Get_Parent(wn);
-      TY_IDX array_ty = Get_Array_Type(WN_st(wn));
+      TY_IDX array_ty = Lego_Get_Array_Type(WN_st(wn));
       if ((WN_operator(parent) == OPR_ARRAY) &&
 	  (wn == WN_array_base(parent)) &&
 	  (WN_element_size(parent) >= 1) && 

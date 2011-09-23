@@ -42,6 +42,7 @@
 #include "ipa_struct_opt.h"
 #include "tracing.h"
 #include "ipa_option.h" // Trace_IPA
+#include "lwn_util.h"
 
 // ======================================================================
 // Implements a form of structure splitting.
@@ -94,6 +95,8 @@ struct FLD_MAP
 };
 
 static FLD_MAP * field_map_info;
+
+__gnu_cxx::hash_map<ST_IDX, ST*> singleDefHeapAllocedGlbls;
 
 // expr is a size expression, return the WN for the constant
 // part of the expr that needs update.
@@ -2937,3 +2940,64 @@ void IPO_WN_Update_For_Array_Remapping_Legality(IPA_NODE *node, int pass,
       node, NULL);
   // continue_with_array_remapping is set to 0 if anything is wrong
 }
+
+void IPO_Identify_Single_Define_To_HeapAlloced_GlobalVar(WN *wn)
+{
+  if (WN_opcode(wn) == OPC_BLOCK) {
+    for (WN *wn2 = WN_first(wn); wn2 != NULL; wn2 = WN_next(wn2))
+      IPO_Identify_Single_Define_To_HeapAlloced_GlobalVar(wn2);
+    return;
+  }
+  else if (WN_operator(wn) == OPR_CALL) 
+  {
+    const ST *const st = WN_st(wn);
+    if (!strcmp(ST_name(WN_st(wn)), "calloc") &&
+        WN_operator(WN_kid0(WN_kid0(wn))) == OPR_LDID) 
+    {
+      ST_IDX orig_size = WN_st_idx(WN_kid0(WN_kid0(wn)));
+      WN *nextStmt = WN_next(wn);
+      WN *nextNextStmt = WN_next(nextStmt);
+      WN *rhs = WN_kid0(nextNextStmt);
+      ST_IDX g_st_idx;
+      if (WN_operator(nextStmt) == OPR_STID &&
+          WN_operator(nextNextStmt) == OPR_STID &&
+          WN_operator(rhs) == OPR_LDID &&
+          ST_sclass(WN_st(rhs)) == SCLASS_REG &&
+          ST_sclass(WN_st(nextStmt)) == SCLASS_REG &&
+          WN_offset(rhs) == WN_offset(nextStmt)) 
+      {
+        ST_IDX g_st_idx = WN_st_idx(nextNextStmt);
+        if (ST_IDX_level(g_st_idx) == GLOBAL_SYMTAB) 
+        {
+          if (singleDefHeapAllocedGlbls.find(g_st_idx) == 
+              singleDefHeapAllocedGlbls.end())
+          {
+
+	    ST *new_st = New_ST(GLOBAL_SYMTAB);
+	    ST_Init(new_st, Save_Str2("__temp_sac_size_", ST_name(g_st_idx)),
+		    CLASS_VAR, SCLASS_COMMON, EXPORT_INTERNAL,
+		    WN_ty(WN_kid0(WN_kid0(wn))));
+            
+            WN *ldid = WN_CreateLdid(OPR_LDID, WN_rtype(WN_kid0(WN_kid0(wn))), 
+                                     WN_desc(WN_kid0(WN_kid0(wn))), 0,
+                                     orig_size, WN_ty(WN_kid0(WN_kid0(wn))), 0);
+            WN *stid = WN_CreateStid(OPR_STID, MTYPE_V, WN_rtype(ldid), 0, 
+                                     new_st, WN_ty(ldid), ldid, 0);
+            LWN_Set_Parent(ldid, stid);
+            LWN_Insert_Block_Before(LWN_Get_Parent(wn), wn, stid);
+            LWN_Set_Parent(stid, LWN_Get_Parent(wn));
+            singleDefHeapAllocedGlbls[g_st_idx] = new_st;
+          }
+          else if(singleDefHeapAllocedGlbls[g_st_idx])
+	  {
+	    // Found duplicate, not a single def heap alloc st
+	    ST * st = singleDefHeapAllocedGlbls[g_st_idx]; 
+	    Set_ST_name(st, Save_Str2("_no_single_", ST_name(st)));
+	    singleDefHeapAllocedGlbls[g_st_idx] = NULL;
+          }
+        }
+      }
+    }
+  }
+}
+

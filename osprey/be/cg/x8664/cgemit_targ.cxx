@@ -1599,10 +1599,6 @@ static void Init_OP_Name()
   OP_Name[TOP_vpclmulqdqx] = "vpclmulqdq";
   OP_Name[TOP_vpclmulqdqxx] = "vpclmulqdq";
   OP_Name[TOP_vpclmulqdqxxx] = "vpclmulqdq";
-  OP_Name[TOP_vlddqu] = "vlddqu";
-  OP_Name[TOP_vlddqux] = "vlddqu";
-  OP_Name[TOP_vlddquxx] = "vlddqu";
-  OP_Name[TOP_vlddqu_n32] = "vlddqu";
   OP_Name[TOP_vfadd128v64] = "vaddpd";
   OP_Name[TOP_vfaddx128v64] = "vaddpd";
   OP_Name[TOP_vfaddxx128v64] = "vaddpd";
@@ -3708,6 +3704,8 @@ static void Init_OP_Name()
   if ( !Is_Target_SSE3() || ! CG_use_lddqu) {
     OP_Name[TOP_lddqu] = "movdqu";
     OP_Name[TOP_lddqu_n32] = "movdqu";
+    OP_Name[TOP_vlddqu] = "vmovdqu";
+    OP_Name[TOP_vlddqu_n32] = "vmovdqu";
   }
   else
     OP_Name[TOP_lddqu_n32] = "lddqu";
@@ -3741,9 +3739,10 @@ static void Init_OP_Name()
   OP_Name[TOP_stdqax] = "movdqa";
   OP_Name[TOP_stntpdx]= "movntpd";
   OP_Name[TOP_stntpsx]= "movntps";
-  if ( !Is_Target_SSE3() || ! CG_use_lddqu)
+  if ( !Is_Target_SSE3() || ! CG_use_lddqu) {
     OP_Name[TOP_lddqux] = "movdqu";
-  else
+    OP_Name[TOP_vlddqux] = "vmovdqu";
+  } else
     OP_Name[TOP_lddqux] = "lddqu";
   OP_Name[TOP_stdqux] = "movdqu";
   OP_Name[TOP_ldhpsx] = "movhps";
@@ -3754,9 +3753,10 @@ static void Init_OP_Name()
   OP_Name[TOP_stdqaxx] = "movdqa";
   OP_Name[TOP_stntpdxx]= "movntpd";
   OP_Name[TOP_stntpsxx]= "movntps";
-  if ( !Is_Target_SSE3() || ! CG_use_lddqu)
+  if ( !Is_Target_SSE3() || ! CG_use_lddqu) {
     OP_Name[TOP_lddquxx] = "movdqu";
-  else
+    OP_Name[TOP_vlddquxx] = "vmovdqu";
+  } else
     OP_Name[TOP_lddquxx] = "lddqu";
   OP_Name[TOP_stdquxx] = "movdqu";
   OP_Name[TOP_ldhpsxx] = "movhps";
@@ -3795,7 +3795,6 @@ static void Init_OP_Name()
   OP_Name[TOP_ldupsx] = "movups";
   OP_Name[TOP_ldupsxx] = "movups";
   OP_Name[TOP_ldups_n32] = "movups";
-  OP_Name[TOP_movss] = "movaps";
   OP_Name[TOP_movdq] = "movdqa";
   OP_Name[TOP_movg2x] = "movd";
   OP_Name[TOP_movg2x64] = "movd";
@@ -3879,7 +3878,6 @@ static void Init_OP_Name()
     OP_Name[TOP_ldsd_n32] = "movlpd";
     OP_Name[TOP_stsdx]  = "movsd";
     OP_Name[TOP_stsdxx] = "movsd";
-    OP_Name[TOP_movsd] = "movsd"; 
     OP_Name[TOP_ldsdx]  = "movlpd";
     OP_Name[TOP_ldsdxx] = "movlpd";
     OP_Name[TOP_stsd] = "movsd";
@@ -3898,15 +3896,7 @@ static void Init_OP_Name()
     OP_Name[TOP_storelpd] = "movsd";
     // Convert movapd reg reg moves with movaps
     OP_Name[TOP_movapd]  = "movaps";
-    if (Is_Target_Barcelona() ||
-	Is_Target_EM64T()     || // em64t
-        Is_Target_Wolfdale()  ||
-	Is_Target_Core()) {	 // use movapd for woodcrest for bug 11548
-      OP_Name[TOP_movsd] = "movaps"; 
-    } else if (Is_Target_Orochi()) {
-      OP_Name[TOP_movsd] = "movaps";  
-      OP_Name[TOP_vmovsd] = "vmovsd";  
-      OP_Name[TOP_vmovss] = "vmovss";  
+    if (Is_Target_Orochi()) {
       OP_Name[TOP_vldsd] = "vmovsd";
       OP_Name[TOP_vldsd_n32] = "vmovsd";
       OP_Name[TOP_vstsdx]  = "vmovsd";

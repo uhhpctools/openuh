@@ -904,6 +904,7 @@ _dwarf_pro_generate_debugline(Dwarf_P_Debug dbg, Dwarf_Error * error)
 	}
 	curline = curline->dpl_next;
     }
+    _dwarf_p_dealloc(dbg, prevline);
 
     /* write total length field */
     du = sum_bytes - uwordb_size - extension_size;	/* subtract
@@ -1400,6 +1401,7 @@ _dwarf_pro_generate_debugframe(Dwarf_P_Debug dbg, Dwarf_Error * error)
 	curfde = curfde->fde_next;
     }
 
+    _dwarf_p_dealloc(dbg, cie_offs);
 
     return (int) dbg->de_n_debug_sect;
 }

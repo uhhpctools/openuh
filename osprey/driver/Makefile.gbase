@@ -81,8 +81,6 @@ endif
 
 LCDEFS += -DOPEN64_PRODNAME='"Compiler"'
 
-LCDEFS += -DKEY 
-
 LCDEFS += -DGCC_CONFIGURE_TARG=\"${GCC_CONFIGURE_TARG}\" -DGCC_DIR=\"${GCC_DIR}\" -DBUILD_SRC=\"${BUILD_SRC}\"
 
 # Get the date of the build for perpetual licenses

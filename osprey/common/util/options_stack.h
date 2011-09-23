@@ -56,7 +56,7 @@
 
 // number of bytes needed to store all options
 // as we save them, we count them, but if we are over we need to recompile
-#define OPTIONS_SIZE	2720
+#define OPTIONS_SIZE	4080
 
 class OPTIONS_STACK {
  private:

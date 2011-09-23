@@ -4485,6 +4485,18 @@ WGEN_Expand_Pragma (gs_t exp)
       WGEN_Stmt_Append (wn, Get_Srcpos());
       break;
     }
+
+    case GS_ZDL_STMT:
+    {
+      Is_True (gs_tree_code (gs_tree_operand(exp, 0)) == GS_STRING_CST,
+               ("Expected string constant with zdl"));
+      const char * hint = gs_tree_string_pointer (gs_tree_operand(exp, 0));
+      if (!strcmp (hint, "off")) {
+        WN * wn = WN_CreatePragma (WN_PRAGMA_NO_ZDL, (ST*)NULL, 0, 0);
+        WGEN_Stmt_Append (wn, Get_Srcpos());
+      }
+      break;
+    }
     
     default:
     {

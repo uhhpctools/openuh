@@ -231,13 +231,13 @@ BE_OPT_CXX_SRCS = \
   opt_mtype_b.cxx	\
   opt_revise_ssa.cxx	\
   wodriver.cxx          \
-  init.cxx              \
   opt_lclsc.cxx         \
   opt_misc.cxx          \
   opt_lmv.cxx           \
   opt_lmv_helper.cxx   \
   wssa_emitter.cxx     \
-  opt_peel_unroll.cxx
+  opt_peel_unroll.cxx  \
+  opt_zdl.cxx
 
 ifeq ($(BUILD_PCH), USE_PCH)
 BACK_END_PCH_OBJS = $(BE_OPT_CXX_SRCS:.cxx=.o)

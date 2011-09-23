@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /* -*- c++ -*-
@@ -271,6 +271,7 @@ public:
 
   // Lower feedback info
 
+  void FB_split_cand_if ( WN *wn_outer_if, WN *wn_inner_if );
   void FB_lower_branch  ( WN *wn_br,   WN *wn_branch );
   void FB_lower_circuit ( WN *wn_cand, WN *wn_left_br, WN *wn_right_br );
   void FB_factor_circuit( WN *wn_left, WN *wn_right,

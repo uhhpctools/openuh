@@ -223,8 +223,6 @@ void (*W2C_Push_PU_p)(const WN *pu, WN *body_part_of_interest);
 void (*W2C_Set_Prompf_Emission_p)(const WN_MAP *construct_map);
 void (*W2C_Set_Frequency_Map_p)(WN_MAP frequency_map);
 const char *(*W2C_Get_Transformed_Src_Path_p)(void);
-void (*W2C_Set_Purple_Emission_p)(void);
-void (*W2C_Reset_Purple_Emission_p)(void);
 BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
 BOOL (*W2C_Should_Before_CG_p)(void);
 void (*W2C_Translate_Global_Defs_p)(FILE *outfile);
@@ -232,8 +230,6 @@ void (*W2C_Translate_Global_Types_p)(FILE *outfile);
 void (*W2C_Translate_Istore_Lhs_p)(char *strbuf,
   UINT bufsize, const WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty,
   TYPE_ID istore_mtype);
-void (*W2C_Translate_Purple_Main_p)(FILE *outfile, const WN *pu,
-  const char *region_name);
 void (*W2C_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize,
   const ST *stid_st, mINT64 stid_ofst, TY_IDX stid_ty, TYPE_ID stid_mtype);
 void (*W2C_Translate_Wn_p)(FILE *outfile, const WN *wn);
@@ -259,13 +255,9 @@ void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
 void (*W2F_Set_Prompf_Emission_p)(WN_MAP *construct_map);
 void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 const char * (*W2F_Get_Transformed_Src_Path_p)(void);
-void (*W2F_Reset_Purple_Emission_p)(void);
-void (*W2F_Set_Purple_Emission_p)(void);
 BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
 void (*W2F_Translate_Istore_Lhs_p)(char *strbuf, UINT bufsize,
   WN* lhs, mINT64 istore_ofst, TY_IDX istore_addr_ty, TYPE_ID istore_mtype);
-void (*W2F_Translate_Purple_Main_p)(FILE *outfile, WN *pu, 
-  const char *region_name);
 void (*W2F_Translate_Stid_Lhs_p)(char *strbuf, UINT bufsize, 
   ST *stid_st, mINT64 stid_ofst, TY_IDX stid_ty, TYPE_ID stid_mtype);
 void (*W2F_Translate_Wn_p)(FILE *outfile, WN *wn);

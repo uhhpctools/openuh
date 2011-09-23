@@ -1,6 +1,6 @@
 /*
 
-  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+  Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -103,5 +103,96 @@ WN* Generate_Copy_Code_For_Write(WN* wn, SAC_INFO* sac_info);
 
 void Walk_And_Replace_Refs(WN* wn, SAC_INFO* sac_info, WN* idx_expr,
                            WN* parent, int kidno);
+
+typedef std::vector<WN *>  WN_VECTOR_SAC;
+
+class SAC
+{
+private:
+   WN* func_node;
+public:
+  SAC(WN* f_node)
+  {
+    func_node=f_node;
+  }
+  struct ALIAS_CHECK
+  {
+    WN* alias_wn;
+    BOOL check_in_loop;
+  };
+  struct SAC_FLD_INFORM
+  {
+    bool is_read;
+    ST_IDX st_idx;
+    int inner_depth;
+    WN* inner_field_arr_ofs;  // for base[i].field[j], it's j
+    WN* wn_stid; // the new place that store the splited field 
+    WN_VECTOR_SAC  cands;
+    WN_VECTOR_SAC  ac_cands;
+  } ;
+
+  struct SAC_INFORM
+  {
+    WN* wn_loop; // wn corresponding to the DO_LOOP
+    WN* out_loop; // the first level loop
+    SAC_FLD_INFORM* fld_info;
+    std::vector<ALIAS_CHECK> acs;
+    TY_IDX orig_ty;
+    int orig_num_fields;
+    ST* sym;
+    ST* size_st;
+    char* size_stname;
+    inline BOOL operator() (UINT32 i, const ST* st) const
+    {
+      return !strcmp(size_stname, ST_name(st));
+    }
+
+    inline BOOL find_def_once()
+    {
+      size_stname = (char*) malloc( strlen(ST_name(sym))+20);
+      sprintf(size_stname, "__temp_sac_size_%s", ST_name(sym));
+      ST_IDX st_idx = For_all_until(St_Table, GLOBAL_SYMTAB, *this);
+      free(size_stname);
+      size_stname = NULL;
+      if ( st_idx == 0 )
+      {
+	size_st=NULL;
+	return FALSE;
+      }else
+      {
+	size_st = &St_Table[st_idx];
+	return TRUE;
+      }
+    }
+    void transform_candidate();
+    BOOL check_legality_and_collect_node(WN* , INT32);
+    BOOL collect_alias_wn(WN*, WN_VECTOR_SAC&);
+  private:
+    WN* get_real_field_offset(WN*);
+    void replace_splited_field(WN*, ST*, WN*);
+    void replace_splited_field(WN*, ST*, WN*, WN*);
+    BOOL check_addr_of_ldid(WN*, WN*);
+    BOOL check_base_st(WN*);
+    INT32 loop_depth(WN*);
+    INT32 loop_distant(WN*, WN*);
+    BOOL def_by_calloc_or_free(WN*);
+    BOOL select_alias_check(WN*, BOOL check_in_loop=FALSE);
+    BOOL split_array_element(INT32);
+    BOOL check_ty_recur(TY_IDX, TY_IDX);
+  };
+  std::vector<SAC_INFORM *> sac_vec;
+  void find_struct_split_candidate(WN*, WN*, INT32 );
+  void collect_splited_field(WN*, WN*);
+  static INT32 check_wn_for_field_refs(ST*&, WN*, INT32);
+  static WN* get_base_wn(WN*);
+  static INT32 get_base_and_offset(WN*, WN*&);
+  static void get_base_and_offset(WN*, WN*&, WN*&);
+  static BOOL get_base_and_offset(WN*, WN*&, WN*&, WN*&, WN*&);
+public:
+  void Perform_Structure_Split_Opt(void);
+};
+
+typedef std::vector<SAC::SAC_INFORM *> SAC_INFORM_VECTOR;
+typedef std::vector<SAC::ALIAS_CHECK> ALIAS_CHECK_VECTOR;
 
 #endif // array_Copy_INCLUDED

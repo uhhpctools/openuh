@@ -1055,11 +1055,30 @@ static UINT64 determine_pseudo_inverse (
    *     d         if maxbits_a  < BPUL (bits per unsigned long)
    *     d-2^BPUL  if maxbits_a == BPUL (i.e., all but top bit)
    */
+  BOOL m_overflow = FALSE;
   for(q=i=0; i<=maxbits_a; i++) {
     q <<= 1;
-    if(m >= b) {
+    if(m_overflow) {
+      // because ((m>>1) | 0x8000000000000000ULL) >= m
+      // if m>=b in this iteration, then in last iteration m also >= b. 
+      // This can't happen
+      Is_True(m < b, ("m bigger than b and m is overflow in last iteration\n"));
       m -= b;
       q |= 1;
+      m_overflow = FALSE;
+    }
+    else if(m >= b) {
+      m -= b;
+      q |= 1;
+    }
+    // After subtraction, m must be smaller than b. And m's 64 bit MSB must be zero.
+    // if m's 64bit MSB is 1, then subtraction not happen in this iteration.
+    // it means b>m, then b's 64 bit MSB is also 1.
+    // Mark m overflow and in next iteration, actually m is bigger than b.
+    // Need do subtraction in next itration.
+    if (m & 0x8000000000000000ULL) {
+      Is_True(b & 0x8000000000000000ULL, ("b's 64th bit must be 1\n"));
+      m_overflow = TRUE;
     }
     m = (m<<1) | 1;
   }

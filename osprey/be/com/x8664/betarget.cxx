@@ -135,6 +135,11 @@ OPCODE_To_TOP (OPCODE opcode)
   case OPR_TRAP:
     FmtAssert( FALSE, ("UNIMPLEMENTED") );
 
+  case OPR_EQ:
+    if(rtype == MTYPE_V16I8)
+      return TOP_cmpeq128v64;
+    else
+      return TOP_UNDEFINED;
   default:
     return TOP_UNDEFINED;
   }

@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -86,6 +86,16 @@ TARG_BE_DIR = $(TARGDIR)/$(LOCAL_BE_DIR)
 else
 TARG_BE_DIR = $(TARGDIR)/be
 endif
+ifdef LOCAL_IPL_DIR
+TARG_IPL_DIR = $(TARGDIR)/$(LOCAL_IPL_DIR)
+else
+TARG_IPL_DIR = $(TARGDIR)/ipl
+endif
+ifdef LOCAL_LNO_DIR
+TARG_LNO_DIR = $(TARGDIR)/$(LOCAL_LNO_DIR)
+else
+TARG_LNO_DIR = $(TARGDIR)/lno
+endif
 ifdef LOCAL_WOPT_DIR
 TARG_WOPT_DIR = $(TARGDIR)/$(LOCAL_WOPT_DIR)
 else
@@ -100,6 +110,16 @@ ifdef LOCAL_TARG_INFO_DIR
 TARG_TARG_INFO_DIR = $(TARGDIR)/$(LOCAL_TARG_INFO_DIR)
 else
 TARG_TARG_INFO_DIR = $(TARGDIR)/targ_info
+endif
+ifdef LOCAL_WHIRL2C_DIR
+TARG_WHIRL2C_DIR = $(TARGDIR)/$(LOCAL_WHIRL2C_DIR)
+else
+TARG_WHIRL2C_DIR = $(TARGDIR)/whirl2c
+endif
+ifdef LOCAL_WHIRL2F_DIR
+TARG_WHIRL2F_DIR = $(TARGDIR)/$(LOCAL_WHIRL2F_DIR)
+else
+TARG_WHIRL2F_DIR = $(TARGDIR)/whirl2f
 endif
 
 #----------------------------------------------------------------------
@@ -144,15 +164,6 @@ ifeq ($(BUILD_PCH), USE_PCH)
 HOSTDEFS += -DUSE_PCH 
 endif
 
-ifeq ($(BUILD_TARGET), NVISA)
-HOSTDEFS += -DBUILD_SKIP_LNO -DBUILD_SKIP_PURPLE -DBUILD_SKIP_PROMPF -DBUILD_SKIP_WHIRL2C -DBUILD_SKIP_WHIRL2F
-BUILD_SKIP_LNO = TRUE
-BUILD_SKIP_PURPLE = TRUE
-BUILD_SKIP_PROMPF = TRUE
-BUILD_SKIP_WHIRL2C = TRUE
-BUILD_SKIP_WHIRL2F = TRUE
-endif
-
 TARG_INFO_INC_DIR = $(TARG_TARG_INFO_DIR)
 TARG_INFO_LIB_DIR = $(TARGDIR)/targ_info
 
@@ -175,7 +186,6 @@ endif
 BE_LNO_DIR		= $(BE_DIR)/lno
 BE_WHIRL2C_DIR		= $(BE_DIR)/whirl2c
 BE_WHIRL2F_DIR		= $(BE_DIR)/whirl2f
-BE_PURPLE2_DIR		= $(BE_DIR)/purple2
 BE_PROMPF_ANL_DIR       = $(BE_DIR)/prompf_anl
 BE_VHO_DIR		= $(BE_DIR)/vho
 IPL_DIR			= $(BUILD_TOT)/ipa/local
@@ -225,7 +235,6 @@ HEADER_DIRS = \
   $(BE_REGION_DIR)	\
   $(BE_WHIRL2C_DIR)	\
   $(BE_WHIRL2F_DIR)	\
-  $(BE_PURPLE2_DIR)	\
   $(BE_PROMPF_ANL_DIR)	\
   $(BE_VHO_DIR)		\
   $(IPL_DIR)	 	\
@@ -818,7 +827,7 @@ wn_fio.o: wn_fio.cxx
         $(CXXF) -OPT:alias=no_typed -c $<
 endif
 
-LDIRT += be wopt.so be.so cg.so lno.so whirl2c.so whirl2f.so purple.so prompf_anl.so
+LDIRT += be wopt.so be.so cg.so lno.so whirl2c.so whirl2f.so prompf_anl.so
 LDIRT += ipl.so inline.so
 
 
@@ -828,15 +837,30 @@ be_com_pch_files: 	  $(BE_COM_PCH_OBJS) be_com_pch.pch
 endif
 
 ifeq ($(BUILD_TYPE), NONSHARED)
-LLDLIBS = $(TARG_WOPT_DIR)/libwopt.a $(TARG_CG_DIR)/libcg.a \
-	$(TARG_BE_DIR)/libbe.a $(TARGDIR)/libdwarf/libdwarf.a \
-	$(TARGDIR)/libelfutil/libelfutil.a $(TARGDIR)/libelf/libelf.a \
-	$(TARG_TARG_INFO_DIR)/libtarginfo.a $(LIBIBERTY_OBJS)
+
+ifneq ($(BUILD_SKIP_LNO), TRUE)
+LLDLIBS += $(TARG_LNO_DIR)/liblno.a $(TARG_IPL_DIR)/libipl.a
+endif
+
+LLDLIBS += $(TARG_WOPT_DIR)/libwopt.a $(TARG_CG_DIR)/libcg.a $(TARG_BE_DIR)/libbe.a
+
+ifneq ($(BUILD_SKIP_WHIRL2C), TRUE)
+LLDLIBS += $(TARG_WHIRL2C_DIR)/libwhirl2c.a
+endif
+
+ifneq ($(BUILD_SKIP_WHIRL2F), TRUE)
+LLDLIBS += $(TARG_WHIRL2F_DIR)/libwhirl2f.a
+endif
+
+LLDLIBS += $(TARGDIR)/libdwarf/libdwarf.a $(TARGDIR)/libelfutil/libelfutil.a \
+	$(TARGDIR)/libelf/libelf.a $(TARG_TARG_INFO_DIR)/libtarginfo.a \
+	$(LIBIBERTY_OBJS)
 
 be:  $(BE_DRIVER_OBJS) $(LLDLIBS)
 	$(link.c++f) -o be $(BE_DRIVER_OBJS) $(LDFLAGS) -lm
 
 else
+# not NONSHARED build
 be:  $(BE_DRIVER_OBJS) $(LINK_DSO) be.so
 	$(link.c++f) -o be $(BE_DRIVER_OBJS)	\
 		$(LDFLAGS) be.so  $(LINK_DSO_OPTS) $(LINK_DSO) -ldl

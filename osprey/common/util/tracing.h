@@ -151,7 +151,8 @@ extern char *Sharps;	/* Sharps w/NL, full page width */
 #define TKIND_XPHASE	-7	/* Specify final execution phase */
 #define TKIND_CTRL	-8	/* Specify a control option */
 #define TKIND_ALLOC	-9	/* Trace memory allocation */
-#define TKIND_MIN	-10	/* Smallest valid function number */
+#define TKIND_VCG	-10	/* Trace VCG for the given pass */
+#define TKIND_MIN	-11	/* Smallest valid function number */
 
 /* Several predefined masks for TKIND_INFO cases: */
 #define TINFO_TIME	1	/* Timing/resource information */
@@ -260,6 +261,9 @@ extern char *Sharps;	/* Sharps w/NL, full page width */
  */
 #define TP_LAST		76	/* Largest valid phase number */
 #define TP_COUNT	77	/* Number of valid phase numbers */
+
+/* Retrieve 3-character phase id, given a phase number */
+extern char *Get_Trace_Phase_Id(INT32 number);
 	
 /* Extract the phase number from a trace option: */
 extern INT32 Get_Trace_Phase_Number ( char **cp, char *arg );
@@ -297,6 +301,7 @@ extern void List_Phase_Numbers ( void );
  *  TKIND_INFO		flag mask	Enable masked traces
  *  TKIND_DEBUG		flag mask	Enable masked options
  *  TKIND_IR		phase number	Enable IR trace for phase
+ *  TKIND_VCG		phase number	Enable VCG dump for phase
  *  TKIND_SYMTAB	phase number	Enable SYMTAB trace for phase
  *  TKIND_TN		phase number	Enable TN trace for phase
  *  TKIND_BB		BB number	Restrict tracing to BB

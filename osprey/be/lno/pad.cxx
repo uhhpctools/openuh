@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -257,7 +261,7 @@ static void Check_Arrays(WN *wn,S_HTABLE *bad_behaved)
     }
   } else if (OPCODE_operator(opc) == OPR_LDA) {
     if (Local_Multid_Array(WN_st(wn))) {
-      TY_IDX array_ty = Get_Array_Type(WN_st(wn));
+      TY_IDX array_ty = Lego_Get_Array_Type(WN_st(wn));
       BOOL ok = FALSE;
       WN *parent = LWN_Get_Parent(wn);
       if ((WN_operator(parent) == OPR_ARRAY) &&

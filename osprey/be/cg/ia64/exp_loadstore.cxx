@@ -169,9 +169,14 @@ Expand_Load (OPCODE opcode, TN *result, TN *base, TN *ofst,
     Build_OP (top, result, True_TN, Gen_Enum_TN(ldhint), base, ops);
   } else {
     ISA_ENUM_CLASS_VALUE ldtype = Pick_Load_Type (variant, mtype);
-    Build_OP (top, result, True_TN, 
+    // can not load to branch register directly
+    TN* tmp_res = (TN_register_class(result) == ISA_REGISTER_CLASS_branch) ?
+                  Build_TN_Of_Mtype(mtype) : result;
+    Build_OP (top, tmp_res, True_TN, 
 	      Gen_Enum_TN(ldtype), Gen_Enum_TN(ldhint), 
 	      base, ops);
+    if (tmp_res != result)
+      Exp_COPY(result, tmp_res, ops);
   }
 }
 
@@ -260,8 +265,14 @@ Expand_Store (TYPE_ID mtype, TN *src, TN *base, TN *ofst,
     Build_OP (top, True_TN, Gen_Enum_TN(sthint), base, src, ops);
   } else {
     ISA_ENUM_CLASS_VALUE sttype = Pick_Store_Type (variant);
+    // can not store branch register to memory directly
+    TN* tmp_src = src;
+    if (TN_register_class(src) == ISA_REGISTER_CLASS_branch) {
+      tmp_src = Build_TN_Of_Mtype(mtype);
+      Exp_COPY(tmp_src, src, ops);
+    }
     Build_OP (top, True_TN, Gen_Enum_TN(sttype), Gen_Enum_TN(sthint),
-	      base, src, ops);
+	      base, tmp_src, ops);
   }
 }
 
@@ -491,8 +502,14 @@ Expand_Misaligned_Load ( OPCODE op, TN *result, TN *base, TN *disp, VARIANT vari
     }
     Reset_TN_is_fpu_int(result);
   }
-  else
-    Expand_Composed_Load(op, result, base, disp, variant, ops);
+  else {
+    // can not load to branch register directly
+    TN* tmp_res = (TN_register_class(result) == ISA_REGISTER_CLASS_branch) ?
+                  Build_TN_Of_Mtype(rtype) : result;
+    Expand_Composed_Load(op, tmp_res, base, disp, variant, ops);
+    if (tmp_res != result)
+      Exp_COPY(result, tmp_res, ops);
+  }
 }
 
 
@@ -608,8 +625,15 @@ Expand_Misaligned_Store (TYPE_ID mtype, TN *obj, TN *base, TN *disp, VARIANT var
       /*NOTREACHED*/
     }
   }
-  else
-    Expand_Composed_Store(mtype, obj, base, disp, variant, ops);
+  else {
+    // can not store branch register to memory directly
+    TN* tmp_obj = obj;
+    if (TN_register_class(obj) == ISA_REGISTER_CLASS_branch) {
+      tmp_obj = Build_TN_Of_Mtype(mtype);
+      Exp_COPY(tmp_obj, obj, ops);
+    }
+    Expand_Composed_Store(mtype, tmp_obj, base, disp, variant, ops);
+  }
 }
 
 static void

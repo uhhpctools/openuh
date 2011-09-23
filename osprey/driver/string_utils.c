@@ -199,11 +199,7 @@ add_string (string_list_t *list, char *s)
 
 /* add each blank-separated string to list */
 void
-add_multi_strings (string_list_t *list, char *s
-#ifdef KEY
-			, boolean only_one
-#endif
-		  )
+add_multi_strings (string_list_t *list, char *s, boolean only_one)
 {
 	/* first copy into new string area */
 	char *new = string_copy(s);
@@ -215,10 +211,8 @@ add_multi_strings (string_list_t *list, char *s
 				*t = NIL;
 				add_existing_string(list, new);
 				new = t+1;	/* set to next string */
-#ifdef KEY
 				if (only_one)
 				    break;
-#endif
 			}
 		}
 	}

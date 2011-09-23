@@ -4787,7 +4787,7 @@ extern gs_t gs_x (tree node);
 extern gs_t gs_x_func_decl (tree node);
 extern void gspin_gxx_emits_decl (tree t);
 extern void gspin_gxx_emits_thunk_decl (tree t);
-extern void gspin_gxx_emits_asm (char *str);
+extern void gspin_gxx_emits_asm (tree t);
 extern void gspin_init_global_trees_list (void);
 extern int gspin_invoked (tree t);
 extern void gs_set_flag_value (tree t, unsigned int flag, bool value);

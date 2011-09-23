@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1602,28 +1602,6 @@ BOOL CFG::If_convertible_cond(WN *wn)
   return FALSE;
 }
 
-BOOL CFG::wn_is_assign(WN *wn)
-{
-  WN *wn_first = WN_first(wn);
-  WN *wn_last  = WN_last(wn);
-  return ((wn_first && (wn_first == wn_last) && OPERATOR_is_store(WN_operator(wn_first)))
-    || WN_operator(wn) == OPR_SELECT);
-}
-
-BOOL CFG::wn_is_assign_return(WN *wn)
-{
-  WN *wn_first = WN_first(wn);
-  WN *wn_last  = WN_last(wn);
-
-  if (wn_last) {
-    WN *wn_last_prev = WN_prev(WN_last(wn));
-    return ((WN_operator(wn_last) == OPR_RETURN) 
-      && (wn_first == wn_last_prev) && OPERATOR_is_store(WN_operator(wn_first)));    
-  } else {
-    return FALSE;
-  }  
-}
-
 BOOL CFG::Cand_is_return_inside_select(WN *wn)
 {
   FmtAssert(WN_operator(wn) == OPR_IF, ("Extract_Return: Unexpected WN"));
@@ -1654,12 +1632,12 @@ BOOL CFG::Cand_is_return_inside_select(WN *wn)
     return FALSE;
 
   /* then is not empty and not assign-return, return FALSE */
-  if (then_wn_prev && !wn_is_assign_return(then_wn)) {
+  if (then_wn_prev && !WN_is_assign_return(then_wn)) {
     return FALSE; 
   }
 
   /* then is not empty and not assign-return, return FALSE */  
-  if (else_wn_prev && !wn_is_assign_return(else_wn)) {
+  if (else_wn_prev && !WN_is_assign_return(else_wn)) {
     return FALSE;
   }
 
@@ -1720,11 +1698,11 @@ BOOL CFG::Cand_is_select(WN* wn)
     return FALSE;
 
   // either the else-stmt is empty or has one  assignment
-  if (!empty_else && !(wn_is_assign(else_wn)))
+  if (!empty_else && !(WN_is_assign(else_wn)))
       return FALSE;
   
   // either the then-stmt is empty or has one assignment
-  if (!empty_then && !wn_is_assign(then_wn))
+  if (!empty_then && !WN_is_assign(then_wn))
     return FALSE;
   
   // both the then and else are empty or has one assignment with same lhs
@@ -1821,14 +1799,17 @@ CFG::if_convert(WN *wn)
     if (WN_prev(WN_last(else_wn)))
       WN_INSERT_BlockFirst(else_block, WN_prev(WN_last(else_wn)));
     else_wn     = else_block;
-    WN_then(wn) = else_block;
+    WN_else(wn) = else_wn;
   }
-
-  if (Screen_cand(wn))
-    return wn_bk;
 
   BOOL empty_then = !then_wn || !WN_first(then_wn);    
   BOOL empty_else = !else_wn || !WN_first(else_wn);
+  
+  FmtAssert(!(empty_then && empty_else), 
+       ("Screen_cand: Both then_stmt and else_stmt are NULL"));
+
+  if (Screen_cand(wn))
+    return wn_bk;
   
   // Get the store from either the first statement of the non-empty block
   WN *stmt = WN_first(empty_then ? else_wn : then_wn);
@@ -2698,7 +2679,7 @@ CFG::Add_one_region( WN *wn, END_BLOCK *ends_bb )
   }
 #endif
 
-  if (REGION_is_EH(wn)) 
+  if (OPT_Enable_EH_CFG_OPT && REGION_is_EH(wn)) 
   {
     if (_current_bb->Succ() ||
         _current_bb->Kind() == BB_EXIT)
@@ -3914,7 +3895,8 @@ CFG::Create(WN *func_wn, BOOL lower_fully, BOOL calls_break,
     opt_tail.Mutate();
   }
 
-  Ident_eh_regions();
+  if (OPT_Enable_EH_CFG_OPT)
+    Ident_eh_regions();
  
   Process_multi_entryexit( TRUE/*is_whirl*/ );
 

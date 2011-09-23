@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2007. PathScale, LLC. All Rights Reserved.
 #
@@ -144,8 +144,6 @@ COMMON_UTIL_TARG_DIR    = $(COMMON_UTIL_DIR)/$(BUILD_TARGET_DIR)
 INCLUDE_DIR             = $(ROOT)/usr/include
 
 # These are the directories in which to look for source files.
-# Order of IPA_LOCAL_DIR and IPA_COMMON_DIR is important, init.cxx is present
-# both in local and common. For ipl.so we want local/init.cxx
 
 SRC_DIRS = \
   $(IPA_LOCAL_DIR)    \
@@ -180,7 +178,6 @@ IPA_LOCAL_CXX_SRCS = \
 	ipl_array_bread_write.cxx \
 	ipl_tlog.cxx \
 	ipl_outline.cxx \
-	init.cxx \
 	ipl_elfsym.cxx \
 	ipl_reorder.cxx
 
@@ -198,11 +195,13 @@ BE_COM_CXX_SRCS = \
    wb_ipl_summary.cxx \
    ipa_cost_util.cxx \
 
+ifeq ($(BUILD_TYPE), SHARED)
 BE_LNO_CXX_SRCS = \
    lwn_util.cxx \
    access_vector.cxx \
    if_info.cxx \
    lno_bv.cxx 
+endif
 
 IPA_SRCS = \
    $(IPA_COMMON_SRCS) \
@@ -248,7 +247,11 @@ endif
 # File containing the list of symbols exported outside of ipl.so
 #----------------------------------------------------------------------
 
+ifeq ($(BUILD_TYPE), SHARED)
 TARGETS = ipl.so
+else
+TARGETS = libipl.a
+endif
 
 LDIRT = be.so wopt.so be ipl ii_files
 
@@ -323,6 +326,9 @@ ipl.so: $(IPA_OBJS) $(IPA_CXX_OBJS) $(LINK_DSOS) \
 	$(link.c++f) -o $@  $(STD_DSO_LOADOPTS) $(EXPORT_LIST)	\
 		$(IPA_OBJS) $(IPA_CXX_OBJS) $(LINK_DSOS) $(LLDLIBS)
 	if ! test -e ipl ; then ln -sf ../be/be ipl; fi
+
+libipl.a: $(IPA_OBJS) $(IPA_CXX_OBJS)
+	$(ar) cru $@ $^
 
 #----------------------------------------------------------------------
 #  Include the usual commonrules

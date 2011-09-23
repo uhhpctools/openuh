@@ -106,8 +106,6 @@ static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/st2f
  /* Defined in ty2f.c; signifies special translation of adjustable and
   * assumed sized arrays.
   */
-extern BOOL Use_Purple_Array_Bnds_Placeholder;
-
 /*------- Fwd refs for miscellaneous utilities ------------------------*/
 /*---------------------------------------------------------------------*/
 
@@ -279,10 +277,7 @@ ST2F_decl_var(TOKEN_BUFFER tokens, ST *st)
 	 {
 	    ty = TY_pointed(ty_rt);
 	 }
-	 if (Use_Purple_Array_Bnds_Placeholder && TY_Is_Array(ty))
-	    TY2F_Translate_Purple_Array(decl_tokens, st, ty);
-	 else
-	    TY2F_translate(decl_tokens, ty);
+	 TY2F_translate(decl_tokens, ty);
       }
    }
    else if (ST2F_Is_Dummy_Procedure(st))
@@ -310,10 +305,7 @@ ST2F_decl_var(TOKEN_BUFFER tokens, ST *st)
    {
       /* Declare as specified in the symbol table */
       Append_Token_String(decl_tokens, st_name);
-      if (Use_Purple_Array_Bnds_Placeholder && TY_Is_Array(ST_type(st)))
-	 TY2F_Translate_Purple_Array(decl_tokens, st, ST_type(st));
-      else
-	 TY2F_translate(decl_tokens, ST_type(st));
+      TY2F_translate(decl_tokens, ST_type(st));
    }
    TY2F_Prepend_Structures(decl_tokens);
    Append_And_Reclaim_Token_List(tokens, &decl_tokens);

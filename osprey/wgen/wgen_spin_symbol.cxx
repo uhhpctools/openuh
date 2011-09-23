@@ -1915,6 +1915,9 @@ Create_ST_For_Tree (gs_t decl_node)
 	if (gs_tree_this_volatile(decl_node))
 		Set_TY_is_volatile (ty_idx);
 	else Clear_TY_is_volatile (ty_idx);
+	if (gs_decl_user_align (decl_node))
+		Set_TY_is_user_align(ty_idx);
+	else Clear_TY_is_user_align(ty_idx);
 #ifdef KEY
         // Handle aligned attribute (bug 7331)
         if (gs_decl_user_align (decl_node))

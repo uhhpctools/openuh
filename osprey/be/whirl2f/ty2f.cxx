@@ -68,8 +68,6 @@
 #include "tcon2f.h"
 #include "wn2f_load_store.h"
 
-BOOL Use_Purple_Array_Bnds_Placeholder = FALSE;
-
 /* TY2F_Handler[] maps a TY_kind to a function that translates
  * a type of the given kind into Fortran.  Should the ordinal
  * numbering of the KIND change in "../common/com/stab.h", then
@@ -106,41 +104,13 @@ static const TY2F_HANDLER_FUNC
 /*---------------------------------------------------------------------*/
 
 	
-void
-WN2F_Append_Purple_Xsym(TOKEN_BUFFER tokens, ST *st)
-{
-   const char * const name   = W2F_Object_Name(st);
-   mUINT32      const id     = ST_st_idx(st);
-   ST_SCLASS    const sclass = ST_sclass(st);
-   ST_EXPORT    const export_class = (ST_EXPORT) ST_export(st);
-
-   Append_Token_String(tokens, name);
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(id, "%llu"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(sclass, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, Number_as_String(export_class, "%lld"));
-   Append_Token_Special(tokens, ',');
-   Append_Token_String(tokens, "0"); /* Flags */
-} /* WN2F_Append_Purple_Xsym */
-
-
 static void
 TY2F_Append_Array_Bnd_Ph(TOKEN_BUFFER decl_tokens, 
-			 ST_IDX       arbnd,
-			 BOOL         purple_assumed_size)
+			 ST_IDX       arbnd)
 {
    char ptr_string[128];
    const char * p = "%s";
 
-   if (purple_assumed_size)
-   {
-      /* We are already within a placeholder for an assumed-sized array */
-
-     p = "[%s]";
-   }
-   
    // Would prefer
    //   sprintf(ptr_string, p, W2CF_Symtab_Nameof_St(ST_ptr(arbnd)));
    // but mfef77 assigns auto varbls of same name in skip list. So 
@@ -157,7 +127,7 @@ TY2F_Append_Array_Bnd_Ph(TOKEN_BUFFER decl_tokens,
 } /* TY2F_Append_Array_Bnd_Ph */
 
 static void
-TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb, BOOL purple_assumed_size)
+TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb)
 {
    WN2F_CONTEXT context = INIT_WN2F_CONTEXT;
    
@@ -207,8 +177,7 @@ TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb, BOOL purple_assumed_si
          Append_Token_Special(decl_tokens, '(');
 	 set_WN2F_CONTEXT_no_parenthesis(context);
 	 TY2F_Append_Array_Bnd_Ph(decl_tokens, 
-				  ARB_lbnd_var(arb), 
-				  purple_assumed_size);
+				  ARB_lbnd_var(arb));
 	 Append_Token_Special(decl_tokens, ')');
       }
       else if (ARB_const_lbnd(arb))
@@ -221,8 +190,7 @@ TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb, BOOL purple_assumed_si
 	    set_WN2F_CONTEXT_no_parenthesis(context);
 	 }
 	 TY2F_Append_Array_Bnd_Ph(decl_tokens, 
-				  ARB_ubnd_var(arb), 
-				  purple_assumed_size);
+				  ARB_ubnd_var(arb));
          if (!zero_lbnd)
 	 {
 	    Append_Token_Special(decl_tokens, ')');
@@ -240,127 +208,16 @@ TY2F_Append_ARB(TOKEN_BUFFER decl_tokens, ARB_HANDLE arb, BOOL purple_assumed_si
          Append_Token_Special(decl_tokens, '+');
          Append_Token_Special(decl_tokens, '(');
 	 TY2F_Append_Array_Bnd_Ph(decl_tokens,
-				  ARB_ubnd_var(arb), 
-				  purple_assumed_size);
+				  ARB_ubnd_var(arb));
          Append_Token_Special(decl_tokens, ')');
          Append_Token_Special(decl_tokens, '-');
          Append_Token_Special(decl_tokens, '(');
 	 TY2F_Append_Array_Bnd_Ph(decl_tokens,
-				  ARB_lbnd_var(arb), 
-				  purple_assumed_size);
+				  ARB_lbnd_var(arb));
          Append_Token_Special(decl_tokens, ')');
       }
    } /* Constant bounds */
 } /* TY2F_Append_ARB */
-
-static void
-TY2F_Append_Assumed_Single_Dim(TOKEN_BUFFER decl_tokens,
-			       ST          *st,
-			       TY_IDX       element_ty)
-{
-   /* Insert a purple placeholder to represent a one-dimensional array:
-    *
-    *  <#PRP_XSYM:ASSUMED_ARRAY name, id, sclass, exports, flags, 
-    *                           1<>, element_size#>
-    */
-   Append_Token_String(decl_tokens, "<#PRP_XSYM:ASSUMED");
-   WN2F_Append_Purple_Xsym(decl_tokens, st);
-   Append_Token_Special(decl_tokens, ',');
-   Append_Token_String(decl_tokens, Number_as_String(1, "%llu"));
-   Append_Token_Special(decl_tokens, '<');
-   Append_Token_Special(decl_tokens, '>');
-   Append_Token_Special(decl_tokens, ',');
-   Append_Token_String(decl_tokens, 
-		       Number_as_String(TY_size(element_ty), "%llu"));
-   Append_Token_String(decl_tokens, "#>");
-} /* TY2F_Append_Assumed_Single_Dim */
-
-static void
-TY2F_Purple_Ptr_As_Array(TOKEN_BUFFER decl_tokens, ST *st, TY_IDX element_ty)
-{
-   if (TY_is_character(element_ty))
-   {
-      TOKEN_BUFFER tokens = New_Token_Buffer();
-
-      Append_Token_String(tokens, "CHARACTER*(");
-      TY2F_Append_Assumed_Single_Dim(tokens, st, element_ty);
-      Append_Token_Special(tokens, ')');
-      Prepend_And_Reclaim_Token_List(decl_tokens, &tokens);
-   }
-   else
-   {
-      Append_Token_Special(decl_tokens, '(');
-      TY2F_Append_Assumed_Single_Dim(decl_tokens, st, element_ty);
-      Append_Token_Special(decl_tokens, ')');
-   }
-} /* TY2F_Purple_Ptr_As_Array */
-
-
-static void
-TY2F_Purple_Assumed_Sized_Array(TOKEN_BUFFER decl_tokens, ST *st, TY_IDX ty)
-{
-   ASSERT_DBG_FATAL(TY_kind(ty) == KIND_ARRAY,
-		    (DIAG_W2F_UNEXPECTED_TYPE_KIND,
-		     TY_kind(ty), "TY2F_Purple_Assumed_Sized_Array"));
-
-   if (TY_is_character(ty))
-   {
-      TOKEN_BUFFER tokens = New_Token_Buffer();
-
-      Append_Token_String(tokens, "CHARACTER*(");
-      TY2F_Append_Assumed_Single_Dim(tokens, st, TY_AR_etype(ty));
-      Append_Token_Special(tokens, ')');
-      Prepend_And_Reclaim_Token_List(decl_tokens, &tokens);
-   }
-   else
-   {
-      /* A regular assumed sized array, so insert a purple placeholder:
-       *
-       *  <#PRP_XSYM:ASSUMED_ARRAY name, id, sclass, exports, flags, 
-       *                           num_bounds<bnds>, esize#>
-       *
-       * where "bnds" is a sequence of known bounds (B) or adjustable
-       * bounds ([id]) for dimensions 0 -> (TY_AR_ndims(ty) - 2). Hence,
-       * the number of comma-separated elements in bnds is one less than
-       * num_bounds.
-       */
-
-      ARB_HANDLE  arb_base  = TY_arb(ty);
-      INT32        dim  = ARB_dimension(arb_base) -1 ; 
-
-      /* Prepend the element-type.
-       */
-      TY2F_translate(decl_tokens, TY_AR_etype(ty));
-
-      /* Append a placeholder for the array bounds.
-       */
-      Append_Token_Special(decl_tokens, '(');
-      Append_Token_String(decl_tokens, "<#PRP_XSYM:ASSUMED");
-      WN2F_Append_Purple_Xsym(decl_tokens, st);
-      Append_Token_Special(decl_tokens, ',');
-      Append_Token_String(decl_tokens,
-			  Number_as_String(TY_AR_ndims(ty), "%llu"));
-      Append_Token_Special(decl_tokens, '<');
-      
-      while ( dim >= 0)
-      {
-	ARB_HANDLE arb = arb_base[dim];
-	
-	if (dim-- > 0) 
-	  Append_Token_Special(decl_tokens, ',');
-
-	TY2F_Append_ARB(decl_tokens,arb,TRUE);
-
-      } 
-
-      Append_Token_Special(decl_tokens, '>');
-      Append_Token_Special(decl_tokens, ',');
-      Append_Token_String(decl_tokens, 
-			  Number_as_String(TY_size(TY_AR_etype(ty)), "%llu"));
-      Append_Token_String(decl_tokens, "#>");
-      Append_Token_Special(decl_tokens, ')');
-   }
-} /* TY2F_Purple_Assumed_Sized_Array */
 
 static BOOL
 TY2F_is_character(TY_IDX ty)
@@ -1223,7 +1080,7 @@ TY2F_array(TOKEN_BUFFER decl_tokens, TY_IDX ty_idx)
       {
 	ARB_HANDLE arb = arb_base[dim];
 
-	TY2F_Append_ARB(decl_tokens, arb , FALSE);
+	TY2F_Append_ARB(decl_tokens, arb);
 
 	if (dim-- > 0) 
 	  Append_Token_Special(decl_tokens, ',');
@@ -1330,25 +1187,6 @@ TY2F_translate(TOKEN_BUFFER tokens, TY_IDX ty)
     */
    TY2F_Handler[TY_kind(Ty_Table[ty])](tokens, ty);
 } /* TY2F_translate */
-
-void 
-TY2F_Translate_Purple_Array(TOKEN_BUFFER tokens, ST *st, TY_IDX ty)
-{
-   if (TY_Is_Pointer(ty) && TY_ptr_as_array(Ty_Table[ty]))
-   {
-      TY2F_Purple_Ptr_As_Array(tokens, st, TY_pointed(ty));
-   }
-   else if (Stab_Is_Assumed_Sized_Array(ty))
-   {
-      TY2F_Purple_Assumed_Sized_Array(tokens, st, ty);
-   }
-   else
-   {
-      /* Our regular translator inserts placeholders for adjstable bounds.
-       */
-      TY2F_translate(tokens, ty);
-   }
-} /* TY2F_Translate_Purple_Array */
 
 void 
 TY2F_Translate_ArrayElt(TOKEN_BUFFER tokens, 

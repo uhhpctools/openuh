@@ -106,6 +106,7 @@ static char *TFile_Name = "stdout";	/* TFile name */
 static UINT TI_Mask;			/* Info mask */
 static UINT TD_Mask;			/* Debug option mask */
 static UINT TI_Phase[TP_COUNT];		/* IR trace flags */
+static UINT TV_Phase[TP_COUNT];		/* VCG trace flags */
 static UINT TS_Phase[TP_COUNT];		/* SYMTAB trace flags */
 static UINT TN_Phase[TP_COUNT];		/* TN trace flags */
 static UINT TA_Phase[TP_COUNT];		/* Memory Allocation Trace */
@@ -156,7 +157,7 @@ typedef struct {
  * not be used for the same phase, except that the listing routine
  * will then print them all...
  */
-static PDESC Phases[] = {
+PDESC Phases[] = {
   /* Miscellaneous "phases": */
   { TP_PTRACE1,		"PT1",	"Performance #1" },
   { TP_PTRACE2,		"PT2",	"Performance #2" },
@@ -230,6 +231,30 @@ static PDESC Phases[] = {
 
 /* ====================================================================
  *
+ * Get_Trace_Phase_Id
+ *
+ * Given a phase number, return the 3-character phase id (or NULL, if
+ * it does not exist).
+ *
+ * ====================================================================
+ */
+
+char *
+Get_Trace_Phase_Id(INT32 number)
+{
+  PDESC *phase = Phases;
+  
+  while ( PD_num(phase) != TP_COUNT ) {
+    if ( PD_num(phase) == number ) {
+      return PD_id(phase);
+    }
+    ++phase;
+  }
+  return NULL;
+}
+
+/* ====================================================================
+ *
  * Get_Trace_Phase_Number
  *
  * Extract the phase number from a trace option.  It is either numeric,
@@ -300,6 +325,7 @@ List_Phase_Numbers ( void )
  *  TKIND_INFO		flag mask	Enable masked traces
  *  TKIND_DEBUG		flag mask	Enable masked options
  *  TKIND_IR		phase number	Enable IR trace for phase
+ *  TKIND_VCG		phase number	Enable VCG dump for phase
  *  TKIND_SYMTAB	phase number	Enable SYMTAB trace for phase
  *  TKIND_TN		phase number	Enable TN trace for phase
  *  TKIND_BB		BB number	Restrict tracing to BB
@@ -340,6 +366,15 @@ Set_Trace ( INT func, INT arg )
 	ErrMsg ( EC_Trace_Phase, arg, TP_MIN, TP_LAST );
       } else {
 	TI_Phase[arg] = TRUE;
+      }
+      return;
+
+    /* VCG phase: */
+    case TKIND_VCG:
+      if ( arg != Check_Range (arg, TP_MIN, TP_LAST, 0) ) {
+	ErrMsg ( EC_Trace_Phase, arg, TP_MIN, TP_LAST );
+      } else {
+	TV_Phase[arg] = TRUE;
       }
       return;
 
@@ -561,6 +596,10 @@ Get_Trace ( INT func, INT arg )
     /* IR phase: */
     case TKIND_IR:
       result = TI_Phase[arg];
+      break;
+    /* VCG phase: */
+    case TKIND_VCG:
+      result = TV_Phase[arg];
       break;
     /* SYMTAB phase: */
     case TKIND_SYMTAB:

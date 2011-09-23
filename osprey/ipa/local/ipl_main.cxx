@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -105,6 +105,7 @@
 #include "wb_ipl.h" 
 #include "ipa_section_main.h" 	    // utilities
 #include "ipl_elfsym.h"		    // for IPL_Write_Elf_Symtab
+#include "../local/init.cxx"        // force include of Ipl_Initializer
 
 /* General progress trace: */
 BOOL Trace_IPA = FALSE;
@@ -166,11 +167,12 @@ OPTION_GROUP IPL_Option_Groups[] = {
 INT    ICALL_MAX_PROMOTE_PER_CALLSITE = 2;
 
 SUMMARY *Summary;			// class for all the summary work
+#ifdef SHARED_BUILD
 WN_MAP Parent_Map;
+#endif
 WN_MAP Summary_Map;
 WN_MAP Stmt_Map;
 
-FILE* STDOUT = stdout;
 DYN_ARRAY<char*>* Ipl_Symbol_Names = NULL; 
 DYN_ARRAY<char*>* Ipl_Function_Names = NULL; 
 

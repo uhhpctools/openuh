@@ -2123,6 +2123,8 @@ Targ_WhirlOp ( OPCODE op, TCON c0, TCON c1, BOOL *folded )
    printf(" 0x%llx (%s)\n",TCON_I8(c0),Mtype_Name(TCON_ty(c0)));
 #endif
 
+   if(TCON_ty(c0) == MTYPE_I4)
+     TCON_v1(c0)=(TCON_I4(c0)<0)?-1:0;
    return c0;
 } /* Targ_WhirlOp */
 
@@ -3250,15 +3252,6 @@ Host_To_Targ(TYPE_ID ty, INT64 v)
     case MTYPE_V16I4:
 #endif
     case MTYPE_B:
-    case MTYPE_I1:
-    case MTYPE_I2:
-    case MTYPE_I4:
-    case MTYPE_U1:
-    case MTYPE_U2:
-    case MTYPE_U4:
-      TCON_ty(c) = ty;
-      TCON_I8(c) = v; /* Don't change the upper bits */
-      return c;
 #ifdef TARG_SUPPORTS_VECTORS
     case MTYPE_V16I8:
 #endif
@@ -3267,6 +3260,20 @@ Host_To_Targ(TYPE_ID ty, INT64 v)
       TCON_ty(c) = ty;
       TCON_I8(c) = v;
       return c;
+    case MTYPE_I1:
+    case MTYPE_I2:
+    case MTYPE_I4:
+      TCON_ty(c) = ty;
+      TCON_I4(c) = v;
+      if (TCON_I4(c) < 0 )
+	TCON_v1(c) = -1;  // make sure TCON_v1 sign extension
+      return c;
+    case MTYPE_U1:
+    case MTYPE_U2:
+    case MTYPE_U4:
+      TCON_ty(c) = ty;
+      TCON_I4(c) = v;
+      return c;  
   }
 } /* Host_To_Targ */
 

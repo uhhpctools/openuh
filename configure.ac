@@ -143,6 +143,19 @@ AS_IF([test "x$enable_ipa" = "xno"], [
   BUILD_SKIP_IPA=YES
 ])
 
+# Set whether shared libraries will be built.  Implies --disable-ipa.
+BUILD_TYPE=NONSHARED
+AC_ARG_ENABLE([shared],
+  AS_HELP_STRING([--disable-shared], [Disable shared libraries (EXPERIMENTAL)]))
+
+AS_IF([test "x$enable_shared" != "xno"], [
+  BUILD_TYPE=SHARED
+])
+ 
+if test "${BUILD_TYPE}" = "NONSHARED"; then
+  BUILD_SKIP_IPA=YES
+fi
+
 # Specify the targ_info directory under osprey/common to use.  IA64 uses
 # ipfec_targ_info instead of targ_info.
 TARG_INFO_NAME=targ_info
@@ -338,6 +351,7 @@ AC_SUBST([TARG_INFO_NAME])
 AC_SUBST([BUILD_GNU3])
 AC_SUBST([BUILD_FORTRAN])
 AC_SUBST([BUILD_SKIP_IPA])
+AC_SUBST([BUILD_TYPE])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 
@@ -446,6 +460,12 @@ if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
     osprey/targdir_lib/libacml_mv/Makefile
   ])
 fi
+if test "${BUILD_TARGET}" = "IA64" ; then
+  LIBLIST="$LIBLIST init"
+  AC_CONFIG_FILES([
+    osprey/targdir_lib/init/Makefile:osprey/targdir_lib/init/Makefile.in
+  ])
+fi   
 
 if test $BUILD_MULTILIB = "YES"; then
   AC_CONFIG_FILES([

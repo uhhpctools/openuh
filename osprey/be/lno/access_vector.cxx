@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2874,7 +2874,7 @@ ACCESS_VECTOR::ACCESS_VECTOR(const SYSTEM_OF_EQUATIONS *soe,
 
 }
 
-#ifndef LNO
+#if !defined(LNO) || !defined(SHARED_BUILD)
 //-----------------------------------------------------------------
 // initialize static variables to be used by the access vector utils,
 // if invoked from outside of LNO

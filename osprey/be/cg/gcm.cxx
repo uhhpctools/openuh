@@ -5221,7 +5221,7 @@ void GCM_Schedule_Region (HBS_TYPE hbs_type)
 
 #if defined(TARG_SL)
   /* Do the mvtc.i optimization */
-  if( CG_enable_zero_delay_loop && CG_GCM_enable_mvtc_optimization ){
+  if( CG_GCM_enable_mvtc_optimization ){
     mvtc_targets.clear();
     MVTC_Optimization();
   }

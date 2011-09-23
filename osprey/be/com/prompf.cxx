@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -86,7 +90,6 @@ extern "C" const char* Anl_File_Path()
 
 PROMPF_INFO* Prompf_Info = NULL; 
 MEM_POOL PROMPF_pool;
-FILE* STDOUT = stdout;
 
 //-----------------------------------------------------------------------
 // NAME: prompf_chain 

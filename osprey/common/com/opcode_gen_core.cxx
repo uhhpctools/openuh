@@ -1082,6 +1082,16 @@ struct OPERATOR_info_struct OPERATOR_info[OPERATOR_LAST+1] = {
    OPERATOR_MAPCAT_OEXP /* mapcat */,
    OPERATOR_PROPERTY_expression},
 #endif /* TARG_X8664 */
+  {"OPR_ZDLBR",
+   0 /* nkids */,
+   OPERATOR_MAPCAT_OSTMT /* mapcat */,
+   OPERATOR_PROPERTY_stmt                 |
+   OPERATOR_PROPERTY_non_scf              |
+   OPERATOR_PROPERTY_leaf                 |
+   OPERATOR_PROPERTY_endsbb               |
+   OPERATOR_PROPERTY_next_prev            |
+   OPERATOR_PROPERTY_label
+  },
 };
 
 static BOOL
@@ -2932,6 +2942,7 @@ Is_Valid_Opcode_Parts (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
       case OPR_ASM_STMT:
       case OPR_ASM_INPUT:
       case OPR_GOTO_OUTER_BLOCK:
+      case OPR_ZDLBR:
         // [RTYPE] : V [DESC] : V
         valid = rtype == MTYPE_V && desc == MTYPE_V;
         break;
@@ -3270,9 +3281,13 @@ Is_Valid_Opcode_Parts (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
         break;
 
       case OPR_SELECT:
-        // [RTYPE] : b,f,i,p,z [DESC] : V,B
+        // [RTYPE] : b,f,i,p,z,V16 [DESC] : V,B,V16
         valid = Is_MTYPE_b_f_i_p_z [rtype] && 
 		(desc == MTYPE_V || desc == MTYPE_B);
+#ifdef TARG_X8664
+	// add more valid vector types later.
+	valid = valid || (rtype == MTYPE_V16I1 && desc == MTYPE_V16I1);
+#endif
         break;
 
       case OPR_TAS:
@@ -3427,6 +3442,7 @@ OPCODE_name (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
     case OPR_ASM_STMT:
     case OPR_ASM_INPUT:
     case OPR_GOTO_OUTER_BLOCK:
+    case OPR_ZDLBR:
       // [RTYPE] : V [DESC] : V
       sprintf (buffer, "OPC_%s", &OPERATOR_info [opr]._name [4]);
       break;
@@ -3631,7 +3647,7 @@ OPCODE_name (OPERATOR opr, TYPE_ID rtype, TYPE_ID desc)
       break;
 
     case OPR_SELECT:
-      // [RTYPE] : b,f,i,p,z [DESC] : V,b
+      // [RTYPE] : b,f,i,p,z,V16 [DESC] : V,b,V16
       sprintf (buffer, "OPC_%s%s%s", MTYPE_name(rtype), 
        desc == MTYPE_V ? "" : MTYPE_name(desc), &OPERATOR_info [opr]._name [4]);
       break;

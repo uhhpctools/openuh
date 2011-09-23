@@ -2024,6 +2024,12 @@ Set_FILE_INFO_has_mp (FILE_INFO& f)	{ f.flags |= FI_HAS_MP; }
 inline void
 Clear_FILE_INFO_has_mp (FILE_INFO& f){ f.flags &= ~FI_HAS_MP; }
 
+inline BOOL
+FILE_INFO_has_global_asm (const FILE_INFO& f)  { return f.flags & FI_HAS_GLOBAL_ASM; }
+inline void
+Set_FILE_INFO_has_global_asm (FILE_INFO& f)    { f.flags |= FI_HAS_GLOBAL_ASM; }
+inline void
+Clear_FILE_INFO_has_global_asm (FILE_INFO& f)  { f.flags &= ~FI_HAS_GLOBAL_ASM; }
 
 
 //----------------------------------------------------------------------

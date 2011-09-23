@@ -434,6 +434,7 @@ void Generate_SL1_PCore (void)
 		    TOP_asm,
 		    TOP_intrncall,
 		    TOP_spadjust,
+                   TOP_auxbr,
              	    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(1);

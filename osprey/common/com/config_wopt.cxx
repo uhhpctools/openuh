@@ -346,6 +346,13 @@ BOOL  WOPT_Enable_Reassociation_CSE = TRUE;  // Enables Reassociation based CSE
 
 BOOL  WOPT_Enable_Mem_Clear_Remove = TRUE;  // Enables removal of redundant mem clear after a calloc
 
+BOOL  WOPT_Enable_ZDL = FALSE; // Enable tranformation for ZDL
+BOOL  WOPT_Enable_ZDL_Set = FALSE; // Set for tranformation for ZDL
+BOOL  WOPT_Enable_ZDL_Early_Exit = FALSE; // Enable early exit loops transformed to ZDL
+BOOL  WOPT_ZDL_Innermost_Only = FALSE; // Only Innermost loops can be transformed to ZDL
+OPTION_LIST *WOPT_ZDL_Skip = NULL;	/* Skip ZDL option list */
+SKIPLIST *WOPT_ZDL_Skip_List = NULL;	/* Processed ZDL skiplist */
+
 #ifdef KEY
 BOOL  WOPT_Enable_Preserve_Mem_Opnds = FALSE; // if TRUE, suppress EPRE on 
 				// iloads that are operands of FP operations
@@ -554,6 +561,14 @@ static OPTION_DESC Options_WOPT[] = {
     1000, 0, INT32_MAX,	&WOPT_Enable_IVR_Expand_Limit, NULL },
   { OVK_BOOL,	OV_VISIBLE,	TRUE, "iv_outer_parallel",	"",
     0, 0, 0,	&WOPT_Enable_IVR_Outermost_Loop_Parallel_Region, NULL },
+  { OVK_BOOL,	OV_VISIBLE,	TRUE, "zdl",	"zdl",
+    0, 0, 0,	&WOPT_Enable_ZDL, &WOPT_Enable_ZDL_Set },
+  { OVK_LIST,   OV_VISIBLE,     TRUE, "zdl_skip_after", "zdl_skip_a",
+    0, 0, 0,    &WOPT_ZDL_Skip,      NULL },
+  { OVK_LIST,   OV_VISIBLE,     TRUE, "zdl_skip_before", "zdl_skip_b",
+    0, 0, 0,    &WOPT_ZDL_Skip,      NULL },
+  { OVK_LIST,   OV_VISIBLE,     TRUE, "zdl_skip_equal", "zdl_skip_e",
+    0, 0, 0,    &WOPT_ZDL_Skip,       NULL },
 #ifdef KEY
   { OVK_INT32,  OV_VISIBLE,    TRUE, "ivr_limit",              "",
     INT32_MAX, 0, INT32_MAX,    &WOPT_Enable_Ivr_Limit, NULL },

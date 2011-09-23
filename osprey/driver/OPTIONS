@@ -74,19 +74,17 @@
 % a * at the end of the argument means the syntax is too complicated and a
 % call to a hand-written routine called parse_<prefix>_option will be generated.
 % A ? at the end of %D means the option will be ignored if the directory
-% argument is missing (KEY).
+% argument is missing.
 
 % A special action is toggle(&<var>,<val>) which stores the value in the 
 % variable, and gives an error if the variable has already been set.
 % This is useful for catching conflicts like -mips1 -mips2.
-#ifdef KEY
 % Toggle is also used in support of options from compiler.defaults.  When the
 % driver starts, <var> is initially set to UNDEFINED.  <var> is toggled to
 % other values according to command line options.  When parsing
 % compiler.defaults, toggle will silently drop an option if its <var> is not
 % UNDEFINED, meaning it is already set by a command line option.  All options
 % in compiler.defaults must have a <var>.
-#endif
 
 % The implies field should include the option name if that name is to be 
 % passed to phases.  The special word "self" for the implies field means 
@@ -229,7 +227,7 @@
 
 I-include=%D  ;		FTN     ffe,PFA     "-include=%D"
 	""
-% KEY	Make -I to always mean an include search path.  -I without a
+% -I always means an include search path.  -I without a
 %	directory argument does nothing.
 %-I	;		ALL	NONE	"-nostdinc"
 %	""
@@ -290,7 +288,7 @@ I-include=%D  ;		FTN     ffe,PFA     "-include=%D"
 #define PIC_FLAGS_2    "-TENV:PIC -pic2 -shared"
 I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 	""
-% KEY	support only -fpic, -fno-pic, -static, -shared, -pic1
+% support only -fpic, -fno-pic, -static, -shared, -pic1
 -call_shared	toggle(&shared,CALL_SHARED);	ALL	NONE	PIC_FLAGS_1
 	"call-shared PIC code"
 %-shared 	toggle(&shared,DSO_SHARED);	ALL	l	PIC_FLAGS_2
@@ -417,10 +415,6 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 	"equivalent to -HP"
 -DRIVER:%s ;    ALL be "-DRIVER:%s"
     "options for internal use in driver"
-#ifndef KEY
--MP:%s		Process_Mp_Group(optargs);		ALL	NONE	""
-	""
-#endif
 -VHO:%s		;		ALL	ffe,be,ipl	"-VHO:%s"
 	"option group to control vho lowering"
 
@@ -435,8 +429,6 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 	""
 -mplist		;		FTN,cc	be	"-mplist"
 	""
--PURPLE:%s	;		f77	be	"-PHASE:purple -PURPLE:%s"
-	"option group to control problem isolation slicing tool"
 -PROMP:next_id=%d ;		FTN,Cc	be	"-PROMP:next_id=%d"
 	""
 -PROMP:%s	;		FTN,Cc	be	"-PHASE:prompf -PROMP:%s"
@@ -558,10 +550,8 @@ I-fini%s		;		CC	ld	"-fini %s"
 -n64    toggle(&abi,ABI_64);    ALL     be      "-TARG:abi=n64"
         "Compile for 64-bit ABI"
 #endif
-#ifdef KEY /* Bug 4210 */
 -module%s	Process_module(optargs);	F90	NONE	""
 	"Directory in which to create .mod file"
-#endif /* KEY Bug 4210 */
 
 % KRDEFS are used by K&R compiles; ONANSI by any non-strict-ansi compile
 #define KRDEFS "-Dunix -Dsgi -DLANGUAGE_C"
@@ -574,7 +564,7 @@ I-cpp_nonansi		;		ALL	NONE	"-D_LONGLONG"
 	""
 I-cpp_extensions	;		ALL	NONE	"-D__EXTENSIONS__ -D__MATH_HAS_NO_SIDE_EFFECTS"
 	""
-% KEY: Do not list FTN here because while FTN fe and FTN cpp take -ansi, gcc for
+% Do not list FTN here because while FTN fe and FTN cpp take -ansi, gcc for
 %      FTN preprocessing does not.  Handle FTN -ansi when calling individual
 %      phases.
 -ansi	toggle(&ansi,STRICT_ANSI);	cc	CPP,anyfe	self ANSI
@@ -792,12 +782,10 @@ I-cvs_nosrc,%D	;		FTN	F	"-cvs_nosrc,%D"
 -auto-use%s	;			F90	ffe	"-auto_use=%s"
 	"Act as if a USE statement is specified in every PU"
 
-#ifdef KEY	/* bug 9058 */
 -fcoco		toggle(&use_coco,TRUE);	FTN	NONE	""
 	"use coco Fortran preprocessor"
 -fcoco=%s	toggle(&use_coco,TRUE);save_name(&coco_setfile,optargs);	FTN	NONE	""
 	"use coco Fortran preprocessor"
-#endif
 -ftpp		toggle(&use_ftpp,1); 	F90	NONE	""
 	""
 -macro_expand	expand_ftpp_macros=TRUE; 	F90	N	""	
@@ -822,13 +810,11 @@ I-cvs_nosrc,%D	;		FTN	F	"-cvs_nosrc,%D"
 -backslash	first_phase=P_any_fe;		f77	ffe	self
 	"treat backslash as normal character rather than an escape"
 
-#ifdef KEY /* Bug 4260 */
 -byteswapio	toggle(&io_byteswap,1);		F90	ffe	self
  	"Swap bytes during file I/O"
  
 -convert%s	toggle(&io_byteswap,2);check_convert_name(optargs);	F90	ffe	"-convert %s"
 	"Convert files by swapping bytes during I/O"
-#endif /* KEY Bug 4260 */
 
 -noexpopt	;		FTN	be	"-OPT:fast_exp=no"
 	"Do not optimize exponentiation operations"
@@ -962,33 +948,12 @@ I-xall		;	FTN	ffe	self
 
 -craylibs      toggle(&use_craylibs,TRUE);toggle(&use_mipslibs,FALSE);         f77     NONE    ""
        ""
-#ifndef KEY
--cray_mp    toggle(&mpkind,CRAY_MP);	 FTN ffe self 
-    "enable Cray micro-tasking directives"
-
--dsm			;		FTN,Cc	GRP	self
-	""
-#endif
-
 -mp     toggle(&mpkind,NORMAL_MP);      FTN,Cc  ffe,cfe     self
         "enable the multiprocessing directives"
 -openmp			;		FTN,Cc	ffe	-mp
         "enable the multiprocessing directives (same as -mp)"
-#ifdef KEY
 -fopenmp			;		FTN,Cc	ffe	-mp
         "enable the multiprocessing directives (same as -mp)"
-#endif
-#ifndef KEY
--dsm_clone		;		ALL	ipl,be,d	self
-	""
-
--dsm_check		;		ALL	be	self
-	""
-
--dsm_recompile		;		ALL	ffe,cfe,be,ipl	self
-	""
-#endif
-
 -memsim			;		ALL	N	"-LNO:mem_sim=TRUE -lmemsim"
 	""
 
@@ -1232,7 +1197,7 @@ I-u%s		;		Cc	ld	"-u %s"
 
 -R*		;		ALL	NONE	""
 	"pass flags to RATFOR"
-% KEY Pass "-m elf_i386" and "-m elf_x86_64" to linker.  They are the only
+% Pass "-m elf_i386" and "-m elf_x86_64" to linker.  They are the only
 %     two valid linker emulation modes.  Bug 8441.
 -m*elf_i386	;	LINK	ld	""
 	"Pass -m args to linker"
@@ -1304,13 +1269,11 @@ I-u%s		;		Cc	ld	"-u %s"
 #endif
 -fcond-mismatch	;		Cc	f	self
 	""
-#ifdef KEY
 #ifndef TARG_SL
 -fcxx-openmp	toggle(&fcxx_openmp,1);		Cc	NONE	self -LANG:cxx_openmp=on
 	"Do OpenMP processing under C++"
 -fno-cxx-openmp	toggle(&fcxx_openmp,0);		Cc	NONE	self -LANG:cxx_openmp=off
 	"Do not handle OpenMP under C++"
-#endif
 #endif
 -fasm	;		Cc	f	self
 	""
@@ -1989,12 +1952,10 @@ I-u%s		;		Cc	ld	"-u %s"
 	"Enable optimization of EH regions formation"
 -fno-handle-exceptions	;	Cc	CPP,cfe	self
 	""
-#ifdef KEY     /* bug 11732 */
 -fgnu-exceptions	;	Cc	CPP,cfe	"-fexceptions"
 	""
 -fno-gnu-exceptions	;	Cc	CPP,cfe     "-fno-exceptions"
 	""
-#endif
 -ffixed-%s	;		Cc	NONE	"-TENV:registers_not_allocatable=%s"
 	""
 -mfixed-range=%s	;	Cc	NONE	"-TENV:registers_not_allocatable=%s"
@@ -2097,7 +2058,7 @@ I-u%s		;		Cc	ld	"-u %s"
 	""
 %-Xlinker%-	warn_no_longer_supported2(option_name,"-Wl,");		LINK	ld	"-Xlinker %s"
 %	""
-% KEY	Call dedicated code to handle -Xlinker since generic code does not
+% Call dedicated code to handle -Xlinker since generic code does not
 %	like the arg string to begin with -.
 -Xlinker*	;	LINK	ld	""
 	""
@@ -2124,6 +2085,8 @@ I-u%s		;		Cc	ld	"-u %s"
 	""
 -malign-functions=%d	warn_ignored(option_name); 	ALL	NONE	self
 	""
+-mregparm=%d   ;       Cc      cfe,be  	"-mregparm=%d  -TENV:mregparm=%d"
+	"Control the number registers used to pass integer arguments"
 %%% x86 extensions
 -mmmx	toggle(&mmx,TRUE);		ALL	ALL	""
 	"Enable MMX extensions"
@@ -2191,7 +2154,7 @@ I-u%s		;		Cc	ld	"-u %s"
 	""
 -mvolatile-asm-stop	;	ALL	NONE	"-CG:volatile_asm_stop=on"
 	""
-% KEY: Because of limitation on derived flags, we repeat the -mcmodel=%s in the 
+% Because of limitation on derived flags, we repeat the -mcmodel=%s in the 
 % implied list.  This is to find the parent flag so action is done.
 -mcmodel=%s	set_memory_model(optargs);	ALL	NONE	"-mcmodel=%s -TENV:mcmodel=%s"
 	"Set the memory model to use"
@@ -2344,8 +2307,7 @@ I-u%s		;		Cc	ld	"-u %s"
 	""
 -Bsymbolic      ;       LINK     ld        self
         "Let the linker to resolve as many symbols as possible at link time"
-% KEY	The driver ignores options by changing them into -dummy, which does
-%	nothing.
+% driver ignores options by changing them into -dummy, which does nothing.
 -dummy	;		ALL	NONE	""
 	""
 #ifdef TARG_NVISA

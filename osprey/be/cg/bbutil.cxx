@@ -101,6 +101,10 @@
 #include "lra.h"
 #include "bb_set.h"       // BB_SET_* routines 
 #include "DaVinci.h"
+#include "vcg.h"
+#include <sstream>
+#include <fstream>
+#include <cstdlib>
 #include "cg.h"
 #ifdef TARG_IA64
 #include "ipfec_options.h"
@@ -1227,14 +1231,39 @@ void Trace_BB ( BB *bp, char *msg )
 
 /* ================================================================= */
 
+/* ====================================================================
+ *
+ * Get_Procedure_Name
+ *
+ *   Helper rotuines to get the procedure name - separate from the rest
+ *   of the BB text.
+ *
+ * ====================================================================
+ */
+char *
+Get_Procedure_Name ( BB *bp )
+{
+  ANNOTATION *ant = ANNOT_Get (BB_annotations(bp), ANNOT_ENTRYINFO);
+  ENTRYINFO *ent = ANNOT_entryinfo (ant);
+  return ST_name(ENTRYINFO_name(ent));
+}
+
+char *
+Get_Procedure_Name ( void )
+{
+  for (BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+    if ( BB_entry(bb) ) {
+      return Get_Procedure_Name(bb);
+    }
+  }
+  return NULL;
+}
+
 void Print_BB ( BB *bp )
 {
-#if defined(VENDOR_OSP)
   BBLIST *bl;
   if ( BB_entry(bp) ) {
-    ANNOTATION *ant = ANNOT_Get (BB_annotations(bp), ANNOT_ENTRYINFO);
-    ENTRYINFO *ent = ANNOT_entryinfo (ant);
-    fprintf ( TFile, "\n\t.proc  %s#\n", ST_name(ENTRYINFO_name(ent)) );
+    fprintf ( TFile, "\n\t.proc  %s#\n", Get_Procedure_Name(bp) );
   }
   fprintf ( TFile, "%s", SBar);
   fprintf ( TFile, "// Block: %d", BB_id(bp) );
@@ -1248,9 +1277,6 @@ void Print_BB ( BB *bp )
   }
   fprintf ( TFile, "\n" );
   fprintf ( TFile, "%s", SBar );
-#else  
-  fprintf ( TFile, "%sBB:%d \n%s", SBar, BB_id(bp), SBar );
-#endif
   Print_BB_Header ( bp, FALSE, TRUE );
   Print_BB_Pragmas ( bp );
   fprintf ( TFile, "\n" );
@@ -3448,4 +3474,159 @@ verify_flow_graph(void)
   }
   MEM_POOL_Pop(&MEM_local_pool);
 }
- 
+
+/*========================================================================
+ *
+ * VCG support for CG
+ *
+ *========================================================================
+ */
+
+/*========================================================================
+ *
+ *  Get_BB_Labels
+ *
+ *    Excerpt labels for the BB and append them to the stringstream.
+ *
+ *========================================================================
+ */
+void
+Get_BB_Labels(BB* bb, std::stringstream &ss)
+{
+  if (BB_has_label(bb)) {
+    ANNOTATION *ant;
+    for (ant = ANNOT_First(BB_annotations(bb), ANNOT_LABEL);
+	 ant != NULL;
+	 ant = ANNOT_Next(ant, ANNOT_LABEL)) {
+      LABEL_IDX label = ANNOT_label(ant);
+      ss << LABEL_name(label);
+    }
+    ss << "\n";
+  }
+}
+
+/*========================================================================
+ *
+ *  get_vcg_node
+ *
+ *    Create a VCG node corresponding to a BB.  This routine reuses the
+ *    support to print a BB.  Basically we:
+ *    - save off TFile
+ *    - open a temp file
+ *    - point TFile to the temp file
+ *    - call the appropriate "print" command
+ *    - restore TFile
+ *    - close the temp file
+ *    - read the temp file into a string
+ *    - use that string as the VCG node info
+ *    While this process is a bit convoluted:
+ *    - we reuse the existing infrastructure to print BBs
+ *    - VCG dumps look like regular ASCII dumps
+ *    - we aovid duplicating code
+ *    Unfortunately, the existing BB print routines were not written in a
+ *    more modular way - i.e. the print statments are in the lowest level
+ *    routines.  This was the best way to reuse the code without overhauling
+ *    it.  While opening/clsong files can be innefficient, at the worst, it
+ *    only imapcts the performance of an internal tracing option.
+ *
+ *========================================================================
+ */
+VCGNode*
+get_vcg_node(MEM_POOL* mpool, VCGGraph& vcg, BB* bb)
+{
+  std::stringstream title_ss;
+  title_ss << "BB:";
+  title_ss << (INT32) BB_id(bb);
+  char* title = (char *) MEM_POOL_Alloc(mpool, title_ss.str().size()+1);
+  strcpy(title, title_ss.str().c_str());
+  VCGNode* bb_node =CXX_NEW(VCGNode(title, title), mpool);
+
+  FILE *save_f, *temp_f;
+  char ch;
+
+  save_f = TFile;
+  temp_f = fopen("/tmp/vcg", "w");
+  Set_Trace_File_internal(temp_f);
+  if (BB_first_op(bb))	Print_OPs (BB_first_op(bb));
+  Set_Trace_File_internal(save_f);
+  fclose(temp_f);
+  std::ifstream info1_from ("/tmp/vcg");
+  std::stringstream info1_to;
+  Get_BB_Labels(bb, info1_to);
+  while (info1_from.get(ch)) {
+    if (ch != '"') {
+      info1_to.put(ch);
+    }
+  }
+  char* info1_info = (char *) MEM_POOL_Alloc(mpool, info1_to.str().size()+1);
+  strcpy(info1_info, info1_to.str().c_str());
+  bb_node->info(1,info1_info);
+
+  save_f = TFile;
+  temp_f = fopen("/tmp/vcg", "w");
+  Set_Trace_File_internal(temp_f);
+  if (BB_first_op(bb))	Print_OPs_No_SrcLines (BB_first_op(bb));
+  Set_Trace_File_internal(save_f);
+  fclose(temp_f);
+  std::ifstream info2_from ("/tmp/vcg");
+  std::stringstream info2_to;
+  Get_BB_Labels(bb, info2_to);
+  while (info2_from.get(ch)) {
+    if (ch != '"') {
+      // Skip '"', since this deliniates the VCG string.
+      info2_to.put(ch);
+    }
+  }
+  char* info2_info = (char *) MEM_POOL_Alloc(mpool, info2_to.str().size()+1);
+  strcpy(info2_info, info2_to.str().c_str());
+  bb_node->info(2,info2_info);
+  system("rm -f /tmp/vcg");
+
+  vcg.addNode(*bb_node);
+  return bb_node;
+}
+
+/*========================================================================
+ *
+ *  draw_vcg_flow_graph
+ *
+ *    Create a VCG graph of the CG VCG
+ *
+ *========================================================================
+ */
+void
+draw_vcg_flow_graph(const char* fname)
+{
+  MEM_POOL vcg_pool;
+  MEM_POOL_Initialize(&vcg_pool, "CFG VCG pool", FALSE);
+  VCGGraph vcg("CFG VCG dump");
+  int max_id = 0;
+  for (BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+    if (BB_id(bb) > max_id) max_id = BB_id(bb);
+  }
+  VCGNode** vcg_nodes =
+    (VCGNode **) MEM_POOL_Alloc(&vcg_pool, sizeof(VCGNode*) * (max_id + 1));
+
+  for (BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+    VCGNode* vcg_node = get_vcg_node(&vcg_pool, vcg, bb);
+    vcg_nodes[BB_id(bb)] = vcg_node;
+  }
+  for (BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb)) {
+    BBLIST *bl;
+    BB *succ;
+    FOR_ALL_BB_SUCCS(bb,bl) {
+      succ = BBLIST_item(bl);
+      VCGEdge* edge =
+	CXX_NEW(VCGEdge(vcg_nodes[BB_id(bb)]->title(),
+			vcg_nodes[BB_id(succ)]->title()),
+		&vcg_pool);
+      edge->lineStyle(Continuous);
+      vcg.addEdge(*edge);
+    }
+  }
+  
+  vcg.infoName(1, "Insts with source");
+  vcg.infoName(2, "Insts without source");
+  vcg.emit(fname);
+  MEM_POOL_Delete(&vcg_pool);
+}

@@ -122,9 +122,7 @@ static phase_info_t phase_info[] = {
    {'p',  0x0000000000000100LL, "cpp",   PHASEPATH,     FALSE, FALSE}, /* cplus_cpp */
    {'p',  0x0000000000000200LL,	"mfef77",PHASEPATH,	FALSE, FALSE},	/* f_cpp */
    {'p',  0x0000000000000400LL,	"ftpp"   ,PHASEPATH,	FALSE, FALSE},	/* f90_cpp */
-#ifdef KEY	// bug 9058
    {'p',  0x0000000000000800LL,	"coco"   ,PHASEPATH,	FALSE, FALSE},	/* coco */
-#endif
    /* place-holder for generic cpp, whose mask unites all cpp's; */
    {'p',  0x0000000000000ff0LL,	"",	"",		FALSE, FALSE},	/* any_cpp */
 
@@ -152,11 +150,9 @@ static phase_info_t phase_info[] = {
    {'f',  0x0000000000080000LL,	"mfef95",PHASEPATH,	FALSE, FALSE},	/* cppf90_fe */
    {'f',  0x0000000000100000LL,	"gfec",PHASEPATH,	TRUE , FALSE}, /* c_gfe */
    {'f',  0x0000000000200000LL,	"gfecc",PHASEPATH,	TRUE , FALSE}, /* cplus_gfe */
-#ifdef KEY
    {'f',  0x0000000000400000LL, "cc1"   ,PHASEPATH, TRUE , FALSE}, /* spin_cc1  */
    {'f',  0x0000000000800000LL, "cc1plus",PHASEPATH,    TRUE , FALSE}, /* spin_cc1plus */
    {'w',  0x0000000001000000LL, "wgen",PHASEPATH,   TRUE , FALSE}, /* wgen      */
-#endif
    /* place-holder for generic fe, whose mask unites all fe's; */
    /* this is so -Wf will apply to whatever fe is being invoked. */
    {'f',  0x0000000000ff0000LL,	"",	"",		FALSE, FALSE},	/* any_fe */
@@ -177,7 +173,7 @@ static phase_info_t phase_info[] = {
    /* We use 'B' for options to be passed to be via ipacom. */
 
    {'a',  0x0000001000000000LL,	"asm",	PHASEPATH,	FALSE, FALSE},	/* as */
-#if defined(TARG_X8664) || ( defined(KEY) && !defined(CROSS_COMPILATION))
+#if defined(TARG_X8664) || !defined(CROSS_COMPILATION)
    /* on x8664, we alwayse use gcc as the assembler */
    {'a',  0x0000002000000000LL,	NAMEPREFIX "gcc", BINPATH, FALSE, TRUE}, /* gcc */
 #elif defined(TARG_SL)
@@ -200,7 +196,7 @@ static phase_info_t phase_info[] = {
 #else
    {'l',  0x0000020000000000LL,	"ld", BINPATH, TRUE, TRUE},	/* collect */
 #endif
-#if defined(TARG_X8664) || defined(TARG_LOONGSON) || ( defined(KEY) && !defined(CROSS_COMPILATION))
+#if defined(TARG_X8664) || defined(TARG_LOONGSON) || !defined(CROSS_COMPILATION)
    /* on x8664, we alwayse use gcc/g++ as the linker */
    {'l',  0x0000040000000000LL,	NAMEPREFIX "gcc", BINPATH, FALSE, TRUE}, /* ld */
    {'l',  0x0000080000000000LL,	NAMEPREFIX "g++", BINPATH, FALSE, TRUE}, /* ldplus */
@@ -239,11 +235,7 @@ typedef struct source_struct {
 } source_info_t;
 /* source_kind_t is index into source_info array */
 static source_info_t source_info[] = {
-#ifdef KEY  // If no suffix, treat as linker object.  Bug 9430.
     {},             /* NONE */
-#else
-    {""},               /* NONE */
-#endif
 	{"c"},				/* c */
 	{"C","CC","CPP","CXX","cc","cpp","cxx","c++"},	/* C */
 	{"f","for"},			/* f */

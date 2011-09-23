@@ -1984,3 +1984,99 @@ extern void Add_Pragma_To_MP_Regions (WN_VECTOR *wnv,
   }
 }
 
+/***********************************************************************
+ *
+ * This routine collects all the indirect loads in a whirl tree. 
+ *
+ ***********************************************************************/
+void 
+WN_collect_iloads(std::list<WN*>* wn_list, WN* wn)
+{ 
+  if (!wn_list || !wn) return;
+
+  if (WN_operator(wn) == OPR_ILOAD)
+    wn_list->push_back(wn);
+
+  for (int i = 0; i < WN_kid_count(wn); i++)
+  { 
+    WN *kid = WN_kid(wn, i);
+    WN_collect_iloads(wn_list, kid);
+  } 
+} 
+
+/***********************************************************************
+ *
+ * This function return true if the WN is multiple of size. 
+ *
+ ***********************************************************************/
+
+BOOL
+WN_is_multiple_of_size(const WN* wn, const INT64 size)
+{
+  if (size == 1) return TRUE;
+  if ( size < 1 ) return FALSE;
+  switch (WN_operator(wn)) {
+  case OPR_MPY:
+    return WN_is_multiple_of_size(WN_kid0(wn), size) || WN_is_multiple_of_size(WN_kid1(wn), size);
+  case OPR_ADD:
+  case OPR_SUB:
+    return WN_is_multiple_of_size(WN_kid0(wn), size) && WN_is_multiple_of_size(WN_kid1(wn), size);
+  case OPR_CVT:
+    return WN_is_multiple_of_size(WN_kid0(wn), size);
+  case OPR_INTCONST:
+    return WN_const_val(wn) % size == 0;
+  default:
+    return FALSE;
+  }
+}
+
+/***********************************************************************
+ *
+ * This function return true if the WN is a constant after ignore
+ * all the CVT
+ *
+ ***********************************************************************/
+BOOL
+WN_is_constant(const WN* wn)
+{
+  while(WN_operator(wn) == OPR_CVT) wn=WN_kid0(wn);
+  if (WN_operator(wn) == OPR_INTCONST)
+    return TRUE;
+  else
+    return FALSE;
+}
+
+/***********************************************************************
+ *
+ * This function return true if the WN is a constant of value val
+ * after ignore all the CVT
+ *
+ ***********************************************************************/
+
+BOOL 
+WN_is_constant_val(const WN* wn, const INT64 val) 
+{
+  while(WN_operator(wn) == OPR_CVT) wn=WN_kid0(wn);
+  if (WN_operator(wn) == OPR_INTCONST &&
+      WN_const_val(wn) == val )
+    return TRUE;
+  else
+    return FALSE;
+}
+
+
+/***********************************************************************
+ *
+ * This function return the constant value of const_wn after ignore all 
+ * the CVT, use WN_is_constant(const_wn) to make sure before using this
+ * function. 
+ *
+ ***********************************************************************/
+
+UINT64
+WN_get_constant_val(const WN* const_wn)
+{
+  while(WN_operator(const_wn) == OPR_CVT) const_wn=WN_kid0(const_wn);
+  Is_True( WN_is_constant(const_wn), ("Node for get_const_val should be a constant node"));
+  return WN_const_val(const_wn);
+}

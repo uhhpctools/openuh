@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -65,6 +65,8 @@
 
 #include "ipc_link.h"
 #include "config_ipa.h"
+
+#include "../common/init.cxx"           // force include of Ipa_Initializer
 
 /***************************************************************************/
 /* gets the ABI type from the linker                */

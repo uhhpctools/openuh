@@ -1,6 +1,6 @@
 /*
 
-  Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -26,6 +26,7 @@
 #include "symtab.h"
 #include "cxx_memory.h"
 #include "lnopt_main.h"
+#include "config_opt.h"
 #include "config_lno.h"
 #include "tracing.h"
 #include "array_copy.h"
@@ -75,7 +76,7 @@ void Delete_SAC_Info(SAC_INFO*& sac_info)
 void Perform_Structure_Array_Copy_Opt(WN* func_node)
 {
   // if disabled, don't do anything
-  if (!LNO_Struct_Array_Copy) return;
+  if (!OPT_Struct_Array_Copy) return;
 
   Trace_SAC = Get_Trace(TP_LNOPT2, TT_STRUCT_ARRAY_COPY /*0x08000000*/);
 

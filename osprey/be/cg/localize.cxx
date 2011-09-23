@@ -534,8 +534,11 @@ Check_If_Dedicated_TN_Is_Global (TN *tn, BB *current_bb, BOOL def)
 	{
 		if (def && BB_call(current_bb))
 			;	// okay
-		else if (def && BB_asm(current_bb))
+		else if (BB_asm(current_bb))
 			;	// okay
+		else if (BB_prev(current_bb) != NULL
+		         && BB_asm(BB_prev(current_bb)))
+                        ;       // okay
 		else if (def && !BB_call(current_bb)) {
 			Localize_Global_Param_Reg (current_bb, tn);
 		} 

@@ -88,24 +88,6 @@ Get_Power_Of_2 (INT64 val, TYPE_ID mtype)
   /* NOTREACHED */
 }
 
-extern void Add_TN_Pair(TN *key, TN *pair);
-
-TN *Build_TN_Of_Mtype_64(TYPE_ID mtype)
-{
-  TN *res;
-  TYPE_ID mtype_t;
-  BOOL is_double = MTYPE_is_size_double(mtype);
-  
-  if (is_double) {
-    mtype_t = (MTYPE_is_signed(mtype) ? MTYPE_I4 : MTYPE_U4);
-    res = Build_TN_Of_Mtype(mtype_t);
-    Add_TN_Pair(res, Build_TN_Of_Mtype(mtype_t));
-  } else {
-    res = Build_TN_Of_Mtype(mtype);
-  }
-  return res;
-}
-
 /* Expand the sequence for division by a power of two. It is the
  * caller's job to verify that divisor is a non-zero power of two.
  */
@@ -125,11 +107,11 @@ Expand_Power_Of_2_Divide (TN *result, TN *numer, INT64 dvsr, TYPE_ID mtype, OPS 
   else {
     INT64 absdvsr = dvsr < 0 ? -dvsr : dvsr;
     BOOL is_double = MTYPE_is_size_double(mtype);
-    TN *t1 = Build_TN_Of_Mtype_64(mtype);
-    TN *t2 = Build_TN_Of_Mtype_64(mtype);
-    TN *t3 = Build_TN_Of_Mtype_64(mtype);
-    TN *t4 = Build_TN_Of_Mtype_64(mtype);
-    TN *t5 = (dvsr < 0) ? Build_TN_Of_Mtype_64(mtype) : result;
+    TN *t1 = Build_TN_Of_Mtype(mtype);
+    TN *t2 = Build_TN_Of_Mtype(mtype);
+    TN *t3 = Build_TN_Of_Mtype(mtype);
+    TN *t4 = Build_TN_Of_Mtype(mtype);
+    TN *t5 = (dvsr < 0) ? Build_TN_Of_Mtype(mtype) : result;
 
     Expand_Shift(t1, numer, Gen_Literal_TN(is_double?63:31, 4), mtype, shift_aright, ops);
     Expand_Immediate (t2, Gen_Literal_TN (absdvsr - 1, is_double?8:4), mtype, ops);
@@ -455,7 +437,7 @@ Expand_Power_Of_2_Rem (TN *result, TN *src1, INT64 src2_val, TYPE_ID mtype, OPS 
 {
   BOOL is_double = MTYPE_is_size_double(mtype);
   INT n = Get_Power_Of_2(src2_val, mtype);
-  TN *con = Build_TN_Of_Mtype_64(mtype);
+  TN *con = Build_TN_Of_Mtype(mtype);
   Expand_Immediate(con, Gen_Literal_TN((1LL<<n)-1, is_double?8:4), mtype, ops);
 
   Is_True((MTYPE_is_integral(mtype)) ,
@@ -463,8 +445,8 @@ Expand_Power_Of_2_Rem (TN *result, TN *src1, INT64 src2_val, TYPE_ID mtype, OPS 
 
 
   if (MTYPE_is_signed(mtype)) {
-    TN *tmp1 = Build_TN_Of_Mtype_64(mtype);
-    TN *tmp2 = Build_TN_Of_Mtype_64(mtype);
+    TN *tmp1 = Build_TN_Of_Mtype(mtype);
+    TN *tmp2 = Build_TN_Of_Mtype(mtype);
 
     // tmp1 = src1 >= 0 ? src1 : -src1;
     Expand_Abs (tmp1, src1, mtype, ops);
@@ -476,8 +458,8 @@ Expand_Power_Of_2_Rem (TN *result, TN *src1, INT64 src2_val, TYPE_ID mtype, OPS 
     // result = (src1 >= 0) ? tmp2 : -tmp2;
     int unsignedflag = !MTYPE_is_signed(mtype);
     if (is_double) {
-       TN *cond_tn = Build_TN_Of_Mtype_64(MTYPE_I4);
-       TN *tmp3 = Build_TN_Of_Mtype_64(mtype);
+       TN *cond_tn = Build_TN_Of_Mtype(MTYPE_I4);
+       TN *tmp3 = Build_TN_Of_Mtype(mtype);
        
        extern void Expand_Int_Greater_Equal (TN *dest, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops);
        Expand_Int_Greater_Equal(cond_tn, src1, Zero_TN, mtype, ops);
@@ -513,16 +495,16 @@ Expand_Power_Of_2_Mod (TN *result, TN *src1, INT64 src2_val, TYPE_ID mtype, OPS 
   BOOL is_double = MTYPE_is_size_double(mtype);
   INT64 absval = src2_val < 0 ? -src2_val : src2_val;
   INT	n      = Get_Power_Of_2(absval, mtype);
-  TN *con = Build_TN_Of_Mtype_64(mtype);
+  TN *con = Build_TN_Of_Mtype(mtype);
   Expand_Immediate(con, Gen_Literal_TN((1LL<<n)-1, is_double?8:4), mtype, ops);
 
   if (MTYPE_is_signed(mtype) && src2_val < 0) {
     TN *tmp1, *tmp2;
 
-    tmp1 = Build_TN_Of_Mtype_64(mtype);
+    tmp1 = Build_TN_Of_Mtype(mtype);
     Expand_Neg(tmp1, src1, mtype, ops);
 
-    tmp2 = Build_TN_Of_Mtype_64(mtype);
+    tmp2 = Build_TN_Of_Mtype(mtype);
     Expand_Binary_And(tmp2, tmp1, con, mtype, ops);
 
     Expand_Neg(result, tmp2, mtype, ops);

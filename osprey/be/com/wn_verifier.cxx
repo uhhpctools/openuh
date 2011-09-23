@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -1054,9 +1058,11 @@ WN_Verifier::Field_id_valid (WN* wn)
 		     ("non-zero field id for memory op on scalar"));
 	} else if (WN_field_id(wn) == 0) {
 #if !defined(TARG_PPC32)	
+/* maybe this verify is not neccesary. 
 	    Is_True (WN_desc(wn) == MTYPE_M ||
-		     MTYPE_byte_size(WN_desc(wn)) == TY_size(*ty),
-		     ("field_id and descriptor type are inconsistent")); 
+	    	     MTYPE_byte_size(WN_desc(wn)) == TY_size(*ty),
+	    	     ("field_id and descriptor type are inconsistent")); 
+*/
 #endif
 	}
 	break;

@@ -188,7 +188,6 @@ add_string_option_or_dash (int flag, char *arg)
 	return add_derived_option(flag, arg);
 }
 
-#ifdef KEY
 /* Same as add_string_option but add '-' if arg consists of only '-', and
    also add strings that begin with '-'. */
 int 
@@ -202,7 +201,6 @@ add_any_string_option (int flag, char *arg)
 	}
 	return add_derived_option(flag, arg);
 }
-#endif
 
 /* do initial pass through args to check for options that affect driver */
 void
@@ -347,7 +345,6 @@ parse_R_option (char **argv, int *argi)
 	}
 }
 
-#ifdef KEY
 static int
 parse_e_option (char **argv, int *argi)
 {
@@ -367,10 +364,6 @@ parse_Xlinker_option (char **argv, int *argi)
 		/* -Xlinker */
 		int flag;
 		get_next_arg(argi);
-#ifndef KEY	// Support -Xlinker for bug 13641.
-		warning("%s is no longer supported, use %s instead",
-			option_name, "-Wl,");
-#endif
 		if (argv[*argi] == NULL) {
 		  parse_error(option_name, "no argument given for option");
 		  return add_new_option(option_name);
@@ -384,7 +377,6 @@ parse_Xlinker_option (char **argv, int *argi)
 		return O_Unrecognized;
 	}
 }
-#endif
 
 static boolean middle_of_multi_option = FALSE;
 

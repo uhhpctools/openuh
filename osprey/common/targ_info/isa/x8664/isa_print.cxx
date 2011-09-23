@@ -3238,6 +3238,16 @@ int main()
                            TOP_vxzero32,
 			   TOP_UNDEFINED );
 
+  /* One result / one operand, special form, uses opnd 1 */
+  ISA_PRINT_TYPE ropspec =  ISA_Print_Type_Create("ropspec", "%s %s,%s");
+  Name();
+  Operand(1);
+  Result(0);
+  Instruction_Print_Group( ropspec,
+			   TOP_movsd,
+			   TOP_movss,
+			   TOP_UNDEFINED );
+
   /* One result / one operand */
   ISA_PRINT_TYPE rop =  ISA_Print_Type_Create("rop", "%s %s,%s");
   Name();
@@ -3321,8 +3331,6 @@ int main()
 			   TOP_movzwq,
 			   TOP_movslq,
 			   TOP_movzlq,
-			   TOP_movsd,
-			   TOP_movss,
 			   TOP_movdq,
 			   TOP_movapd,
 			   TOP_movaps,
@@ -3610,6 +3618,7 @@ int main()
   /* One result / one mem opnd with scaled-index with base */
   ISA_PRINT_TYPE rmemindex =  ISA_Print_Type_Create("rmemindex", "%s %s%s(%s,%s,%s),%s");
   Name();
+  Segment(); 
   Operand(3);
   Operand(0);
   Operand(1);
@@ -3693,6 +3702,7 @@ int main()
   /* One result / one mem opnd with scaled-index w/o base */
   ISA_PRINT_TYPE rmemindexx =  ISA_Print_Type_Create("rmemindexx", "%s %s%s(,%s,%s),%s");
   Name();
+  Segment(); 
   Operand(2);
   Operand(0);
   Operand(1);

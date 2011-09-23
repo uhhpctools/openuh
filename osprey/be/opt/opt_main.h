@@ -164,6 +164,7 @@ public:
   void	       U64_lower_cr(BOOL leave_CVTL_at_leaf); // coderep U64 lowerer 
   void	       Lower_to_extract_compose(void); // lower {I,}{LD,ST}BITS
   void	       Fold_lda_iload_istore(void); // lda-iload/istore folding on cr
+  void         Do_zdl(RVI *);               // Do zdl transformation
   WN          *Emit_ML_WHIRL(RVI *);        // Emit the mid-low level whirl
   void         Find_iv(void);               // Find IVs for strength reduction
   void         Init_df_sets(void);          // Initialize all bitsets

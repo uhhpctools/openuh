@@ -621,6 +621,38 @@ handle_pragma_freq_hint (cpp_reader *dummy ATTRIBUTE_UNUSED)
   add_stmt (pragma_stmt);
 }
 
+/* #pragam no_zdl */
+static void
+handle_pragma_zdl (dummy)
+     cpp_reader *dummy ATTRIBUTE_UNUSED;
+{
+  tree hint, pragma_stmt, tmp;
+  const char* hint_name;
+  
+  /* it should be one of the "on", "off" */
+  if (pragma_lex (&hint) != CPP_NAME) 
+    GCC_BAD ("malformed #pragma zdl, ignored");
+  
+  if (pragma_lex (&tmp) != CPP_EOF) 
+    {
+      /* note: the trailing junk will be skipped in _cpp_handle_directive()*/
+      warning (OPT_Wpragmas, "junk at end of #pragma zdl");
+    }
+
+  hint_name = IDENTIFIER_POINTER(hint);
+  if (strcmp (hint_name, "on") && 
+      strcmp (hint_name, "off"))
+    {
+      GCC_BAD ("zdl should be one of \"on\",\"off\", ignored");
+      return;
+    }
+
+  pragma_stmt = build_stmt (ZDL_STMT, 
+          build_string (strlen (hint_name) + 1, hint_name));
+  add_stmt (pragma_stmt);
+}
+
+
 #ifdef HANDLE_PRAGMA_VISIBILITY
 static void handle_pragma_visibility (cpp_reader *);
 
@@ -861,6 +893,8 @@ init_pragma (void)
   c_register_pragma (0, "frequency_hint", handle_pragma_freq_hint);
   
   c_register_pragma (0, "mips_frequency_hint", handle_pragma_freq_hint);
+  
+  c_register_pragma (0, "zdl", handle_pragma_zdl);
 
   c_register_pragma ("GCC", "diagnostic", handle_pragma_diagnostic);
 

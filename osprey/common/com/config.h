@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -583,6 +583,7 @@ extern BOOL OPT_keep_extsyms;
 extern BOOL OPT_unroll_times_overridden;
 extern INT32 OPT_unroll_size;
 extern BOOL OPT_unroll_size_overridden;
+extern BOOL OPT_Lower_Splitsinglecand;
 extern BOOL OPT_Lower_Speculate;
 extern BOOL OPT_Lower_Treeheight;
 extern BOOL OPT_Inline_Divide;
@@ -741,7 +742,6 @@ extern BOOL Run_w2c;		    /* run whirl2c */
 extern BOOL Run_w2f;		    /* run whirl2f */
 extern BOOL Run_w2fc_early;	    /* run whirl2f after LNO parallelization */
 extern BOOL Run_prompf;		    /* create prompf analysis file */
-extern BOOL Run_purple;		    /* run purple instrumenter */
 extern BOOL Run_ipl;		    /* run summary phase of IPA */
 extern char *LNO_Path;		    /* path to lno.so */
 extern char *WOPT_Path;		    /* path to wopt.so */
@@ -749,7 +749,6 @@ extern char *CG_Path;		    /* path to cg.so */
 extern char *W2C_Path;		    /* path to whirl2c.so */
 extern char *W2F_Path;		    /* path to whirl2f.so */
 extern char *Prompf_Anl_Path;	    /* path to prompf_anl.so */
-extern char *Purple_Path;	    /* path to purple.so */
 extern char *Ipl_Path;		    /* path to ipl.so */
 #if defined(TARG_SL)
 extern BOOL Run_ipisr;  /* run ipisr register allocation */

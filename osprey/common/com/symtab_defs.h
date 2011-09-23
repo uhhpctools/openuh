@@ -874,7 +874,8 @@ enum FILE_INFO_FLAGS
     FI_IPA		= 0x1,		// IPA generated file
     FI_NEEDS_LNO	= 0x2,		// needs to run LNO
     FI_HAS_INLINES	= 0x4,		// some PUs have PU_HAS_INLINES set
-    FI_HAS_MP   	= 0x8		// need to process MP constructs
+    FI_HAS_MP   	= 0x8,		// need to process MP constructs
+    FI_HAS_GLOBAL_ASM	= 0x10		// contains global asm, do not emit .org
 };
 
 struct FILE_INFO

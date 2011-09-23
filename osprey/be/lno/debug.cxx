@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009, 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2641,7 +2641,7 @@ static void WB_ancestors()
 //   the value. 
 //-----------------------------------------------------------------------
 
-extern ST_IDX Compute_ST_IDX(UINT32 st_level, 
+static ST_IDX Compute_ST_IDX(UINT32 st_level, 
 			     UINT32 st_index)
 {
   UINT32 st_idx = st_level + (st_index << 8);

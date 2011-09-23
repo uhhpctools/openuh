@@ -8401,26 +8401,6 @@ CONTINUE:
 
 
 
-   case Purpleconditional_Star_Opr:
-        cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
-                        IR_FLD_L(ir_idx));
-
-        PDG_DBG_PRINT_START
-        PDG_DBG_PRINT_C("fei_purple_conditional");
-        PDG_DBG_PRINT_END
-
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
-# ifdef _ENABLE_FEI
-        fei_purple_conditional();
-# endif
-# endif
-        break;
-
-
-
-
-
-
    case Opaque_Star_Opr:
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
@@ -8438,21 +8418,6 @@ CONTINUE:
 
 
 
-
-
-
-
-   case Purpleunconditional_Star_Opr:
-        PDG_DBG_PRINT_START
-        PDG_DBG_PRINT_C("fei_purple_unconditional");
-        PDG_DBG_PRINT_END
-
-# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
-# ifdef _ENABLE_FEI
-        fei_purple_unconditional();
-# endif
-# endif
-        break;
 
 
 

@@ -143,6 +143,7 @@
 // Laks 06.29.06: include UH stuffs here
 #include "uh_lno.h"
 
+#ifndef BUILD_SKIP_PROMPF
 #pragma weak Prompf_Emit_Whirl_to_Source__GP7pu_infoP2WN
 #if ! defined(BUILD_OS_DARWIN)
 #pragma weak Anl_File_Path  
@@ -150,10 +151,10 @@
 #pragma weak Print_file__16PROJECTED_REGIONGP8__file_s
 #pragma weak Print_file__14PROJECTED_NODEGP8__file_s
  
-extern WN *Convert_Intrinsic_To_Alloca_Dealloca (WN *wn);
-extern void Prompf_Emit_Whirl_to_Source(PU_Info* current_pu,
-                                        WN* func_nd);
+extern void Prompf_Emit_Whirl_to_Source(PU_Info* current_pu, WN* func_nd);
+#endif
 
+extern WN *Convert_Intrinsic_To_Alloca_Dealloca (WN *wn);
 extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd, 
 		      BOOL do_fiz_fuse, BOOL do_phase25,
                       BOOL do_inner_fission);
@@ -237,6 +238,7 @@ void Outer_Unroll_For_Factorization(WN *func_nd, STACK_OF_WN *inner_do_stack);
 
 void Prompf_Init()
 {
+#ifndef BUILD_SKIP_PROMPF
   prompf_dumped = FALSE; 
   if (Run_prompf) {
     Prompf_Info->Enable(); 
@@ -245,6 +247,7 @@ void Prompf_Init()
     MEM_POOL_Initialize(&PROMPF_pool, "PROMPF_pool", FALSE); 
     MEM_POOL_Push(&PROMPF_pool);
   }  
+#endif
 }
  
 //-----------------------------------------------------------------------
@@ -254,6 +257,7 @@ void Prompf_Init()
 
 void Prompf_Finish()
 {
+#ifndef BUILD_SKIP_PROMPF
   if (Run_prompf) {
     Prompf_Info->Disable(); 
     MEM_POOL_Pop(&PROMPF_pool);
@@ -263,6 +267,7 @@ void Prompf_Finish()
     MEM_POOL_Pop(&PROMPF_pool);
     MEM_POOL_Delete(&PROMPF_pool);
   } 
+#endif
 }
 
 //-----------------------------------------------------------------------
@@ -275,6 +280,7 @@ void Prompf_Finish()
 static void Prompf_Dump(PU_Info* current_pu,
 			WN* func_nd) 
 {
+#ifndef BUILD_SKIP_PROMPF
   FILE *fp_anl = NULL; 
   prompf_dumped = TRUE; 
   if (Run_prompf) {
@@ -286,6 +292,7 @@ static void Prompf_Dump(PU_Info* current_pu,
   } else if (Run_w2fc_early) { 
     Prompf_Emit_Whirl_to_Source(current_pu, func_nd);
   } 
+#endif
 }
 
 //-----------------------------------------------------------------------
@@ -297,6 +304,7 @@ static void Prompf_Dump(PU_Info* current_pu,
 static void Prompf_Post_Dump(PU_Info* current_pu,
                              WN* func_nd)
 {
+#ifndef BUILD_SKIP_PROMPF
   if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {  
 #ifdef Is_True_On 
     Prompf_Info->Check(stdout, func_nd); 
@@ -306,6 +314,7 @@ static void Prompf_Post_Dump(PU_Info* current_pu,
     Print_Prompf_Parallel_Region_Log(current_pu, func_nd, TRUE);
     Print_Prompf_Nest_Log(func_nd, TRUE); 
   } 
+#endif
 }
 
 extern void
@@ -1208,6 +1217,8 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   ROUNDOFF Roundoff_Level_Save = Roundoff_Level;
 
   Du_Mgr = du_mgr;
+  if(Run_autopar)
+    WN_Register_Delete_Cleanup_Function(LWN_Delete_SR);
   WN_Register_Delete_Cleanup_Function(LWN_Delete_DU);
   VINDEX16 save_graph_capacity = GRAPH16_CAPACITY; 
   GRAPH16_CAPACITY = LNO_Graph_Capacity;
@@ -1348,6 +1359,8 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
       goto return_point;
     } 
 
+    SAC sac(func_nd); 
+    sac.Perform_Structure_Split_Opt();
 
     // mark do loops
     // doesn't affect access vectors
@@ -1781,6 +1794,8 @@ return_point:
   MEM_POOL_Pop(&SNL_local_pool);
   MEM_POOL_Pop_Unfreeze(&LNO_default_pool);
 
+  if(Run_autopar)
+    WN_Remove_Delete_Cleanup_Function(LWN_Delete_SR);
   WN_Remove_Delete_Cleanup_Function(LWN_Delete_DU);
   GRAPH16_CAPACITY = save_graph_capacity; 
 

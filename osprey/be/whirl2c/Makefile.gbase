@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -79,6 +79,11 @@ else
 CVERSION =
 TARG_BE_DIR = $(TARGDIR)/be
 endif
+ifdef LOCAL_TARG_INFO_DIR
+TARG_TARG_INFO_DIR = $(TARGDIR)/$(LOCAL_TARG_INFO_DIR)
+else
+TARG_TARG_INFO_DIR = $(TARGDIR)/targ_info
+endif
 
 #----------------------------------------------------------------------
 #  Compiler Options
@@ -116,7 +121,6 @@ COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 INCLUDE_DIR 		= $(ROOT)/usr/include
 IPA_COM_DIR 		= $(BUILD_TOT)/ipa/common/
 LIBCOMUTIL_DIR 		= $(BUILD_TOT)/libcomutil
-TARG_BE_DIR		= $(TARGDIR)/be
 
 COMMON_COM_TARGET_DIR 	= $(COMMON_COM_DIR)/$(BUILD_TARGET_DIR)
 COMMON_UTIL_TARGET_DIR 	= $(COMMON_UTIL_DIR)/$(BUILD_TARGET_DIR)
@@ -166,7 +170,6 @@ WHIRL2C_CXX_SRCS = \
   wn_attr.cxx		\
   wn2c.cxx		\
   wn2c_pragma.cxx	\
-  init.cxx		\
   diagnostics.cxx
 
 WHIRL2C_DRIVER_SRCS = \
@@ -231,7 +234,11 @@ endif
 #  Define target
 #----------------------------------------------------------------------
 
+ifeq ($(BUILD_TYPE), SHARED)
 TARGETS = whirl2c.so whirl2c_be whirl2c
+else
+TARGETS = libwhirl2c.a whirl2c
+endif
 
 #----------------------------------------------------------------------
 #  Variables describing additional sources, objects, and libraries
@@ -287,6 +294,9 @@ whirl2c.so:  $(WHIRL2C_CXX_OBJS) $(BE_WHIRL2C_DIR)/Exported \
 	$(cxx) -o $@ $(STD_DSO_LOADOPTS) $(EXPORT_LIST) $(LDFLAGS) \
 	$(WHIRL2C_CXX_OBJS) $(WHIRL2C_DSOS) $(LLDLIBS)
 
+libwhirl2c.a: $(WHIRL2C_CXX_OBJS)
+	$(ar) cru $@ $^
+
 # Make the back-end executable, then create a link to it named
 # "whirl2c_be".  Make a driver "whirl2c" which MUST reside in the 
 # same directory as whirl2c_be and whirl2c.so.  Need to set 
@@ -302,6 +312,7 @@ whirl2c_be: whirl2c.so
 		be)
 	if ! test -e whirl2c_be; then ln -sf $(TARGDIR)/be/be whirl2c_be ; fi
 
+ifeq ($(BUILD_TYPE), SHARED)
 whirl2c: whirl2c.so whirl2c_be $(WHIRL2C_MAIN_OBJS)
 	$(link.cxxf) -o whirl2c $(WHIRL2C_MAIN_OBJS) $(LDFLAGS)
 
@@ -310,6 +321,10 @@ be.so:
 
 be:
 	if ! test -e be; then ln -sf $(TARGDIR)/be/be .; fi  
+else
+whirl2c: $(WHIRL2C_MAIN_OBJS) libwhirl2c.a $(TARG_BE_DIR)/libbe.a $(TARG_TARG_INFO_DIR)/libtarginfo.a
+	$(link.cxxf) $(LDFLAGS) -o $@ $^
+endif
 
 
 # For debugging, set LD_LIBRARY_PATH manually and invoke whirl2c_dbg

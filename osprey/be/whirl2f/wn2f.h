@@ -91,12 +91,6 @@
  *   WN2F_translate:  Translates a WN subtree into a sequence of Fortran
  *           tokens, which are added to the given TOKEN_BUFFER.
  *
- *   WN2F_translate_purple_main:  A rather special translation routine,
- *           which ignores the body of the given PU, and translates
- *           parameters to become local variables.  It inserts a call
- *           to a purple region PU, and inserts placeholders for items
- *           to be inserted by purple at a later processing stage.
- *
  *   WN2F_Emit_End_Stmt: a utility to insert an END statement for
  *            an f90 program which contains nested PUs
  *
@@ -358,12 +352,6 @@ extern void WN2F_finalize(void);
 
 extern WN2F_STATUS
 WN2F_translate(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context);
-
-extern WN2F_STATUS 
-WN2F_translate_purple_main(TOKEN_BUFFER tokens, 
-			   WN          *pu, 
-			   const char  *region_name,
-			   WN2F_CONTEXT context);
 
 void  WN2F_dump_context( WN2F_CONTEXT c) ;
 

@@ -86,6 +86,9 @@
 #include "mtypes.h"
 #include "stab.h"
 #include "targ_sim.h"
+#ifdef BACK_END
+#include "config_lno.h"
+#endif
 
 #if defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS)
 typedef unsigned char an_integer_kind;
@@ -714,6 +717,13 @@ Configure_Target ( void )
 #define IS_POW2(n)              (((n) & ((n)-1))==0)
   FmtAssert (IS_POW2(Align_Instructions), 
 	("-OPT:align_instructions=<n> must equal power of two"));
+
+#ifdef BACK_END
+  /* Value of LNO_Iter_threshold is interpreted as default in which case 
+     the flag is set based on target. Otherwise use user-specified value.
+   */
+  LNO_Iter_threshold = (Is_Target_SSE41())? 8 : 0;
+#endif
 
   return;
 }

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -345,6 +349,7 @@ DST_get_block_list(DST_BLOCK_KIND block_kind)
 	} else {
 		idx.byte_idx  = 0;   /* First byte in block */
 		idx.block_idx = bidx;
+		current_DST->current_block_header = bidx;
 		current_DST->current_dst = &current_DST->dst_blocks[bidx];
 	}
 	return idx;

@@ -480,8 +480,6 @@ enum	token_values {
 		Tok_SGI_Dir_Private,		/* PRIVATE		      */
 		Tok_SGI_Dir_Psection,		/* PSECTION		      */
 		Tok_SGI_Dir_Psections,		/* PSECTIONS		      */
-		Tok_SGI_Dir_Purpleconditional,	/* PURPLECONDITIONAL	      */
-		Tok_SGI_Dir_Purpleunconditional,/* PURPLEUNCONDITIONAL	      */
 		Tok_SGI_Dir_Redistribute,	/* REDISTRIBUTE		      */
 		Tok_SGI_Dir_Reduction,		/* REDUCTION		      */
 		Tok_SGI_Dir_Regionbegin,	/* REGIONBEGIN		      */

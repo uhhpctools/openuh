@@ -217,7 +217,8 @@ struct FB_Info_Branch {
       freq_not_taken( opr != OPR_FALSEBR ? not_taken : taken ) {
     // if opr == OPR_FALSEBR, then reverse taken and not_taken
     Is_True( opr == OPR_TRUEBR || opr == OPR_FALSEBR
-	     || opr == OPR_IF || opr == OPR_CSELECT,
+	     || opr == OPR_IF || opr == OPR_CSELECT
+            || opr == OPR_ZDLBR,
 	     ( "FB_Info_Branch found unexpected operator" ) );
   }
 #endif // MONGOOSE_BE
@@ -719,6 +720,7 @@ inline bool FB_valid_opr_invoke(const WN *wn) {
 #define fb_opr_cases_branch \
   case OPR_TRUEBR:          \
   case OPR_FALSEBR:         \
+  case OPR_ZDLBR:           \
   case OPR_IF:              \
   case OPR_CSELECT
 

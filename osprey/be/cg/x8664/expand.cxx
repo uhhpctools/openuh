@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -1188,17 +1188,12 @@ Expand_Copy (TN *result, TN *src, TYPE_ID mtype, OPS *ops)
 
   } else if( MTYPE_is_float(mtype) ){
     if( Is_Target_SSE2() ) {
-      if (Is_Target_Orochi() && Is_Target_AVX()) {
-        if ( is_128bit ) {
-          Build_OP( TOP_movdq, result, src, ops );
-        } else {
-          Build_OP( (mtype == MTYPE_F8) ? TOP_movsd : TOP_movss, 
-                    result, src, src, ops );
-        }
+      if( Is_Target_Barcelona() || Is_Target_EM64T() || 
+          Is_Target_Wolfdale()  || Is_Target_Core()  ||
+          Is_Target_Orochi() ){
+        Build_OP( TOP_movaps, result, src, ops );
       } else {
-        Build_OP( is_128bit ? TOP_movdq: 
-		  (mtype == MTYPE_F8 ? TOP_movsd : TOP_movss), 
-                  result, src, ops );
+        Build_OP( TOP_movdq, result, src, ops );
       }
     } else
       Build_OP( TOP_fmov, result, src, ops );
@@ -1834,71 +1829,96 @@ Expand_Abs (TN *dest, TN *src, TYPE_ID mtype, OPS *ops)
 void
 Expand_Shift (TN *result, TN *src1, TN *src2, TYPE_ID mtype, SHIFT_DIRECTION kind, OPS *ops)
 {
+  const TOP shift_top[ 6 /* mtypes */ ][ 3 /* kind */ ] = {
+    { TOP_shl32, TOP_sar32, TOP_shr32 },           /* 32bit int */
+    { TOP_shl64, TOP_sar64, TOP_shr64 },           /* 64bit int */
+    { TOP_UNDEFINED, TOP_UNDEFINED, TOP_UNDEFINED },  /* V16I1 */
+    { TOP_psllw, TOP_psraw, TOP_psrlw },              /* V16I2 */
+    { TOP_pslld, TOP_psrad, TOP_psrld },              /* V16I4 */
+    { TOP_psllq, TOP_UNDEFINED, TOP_psrlq },          /* V16I8 */
+  };
+  const TOP shift_imm_top[ 6 /* mtypes */ ][ 3 /* kind */ ] = {
+    { TOP_shli32, TOP_sari32, TOP_shri32 },           /* 32bit int */
+    { TOP_shli64, TOP_sari64, TOP_shri64 },           /* 64bit int */
+    { TOP_UNDEFINED, TOP_UNDEFINED, TOP_UNDEFINED },  /* V16I1 */
+    { TOP_psllwi, TOP_psrawi, TOP_psrlwi },           /* V16I2 */
+    { TOP_pslldi, TOP_psradi, TOP_psrldi },           /* V16I4 */
+    { TOP_psllqi, TOP_UNDEFINED, TOP_psrlqi },        /* V16I8 */
+  };
+
   WN *tree;
   TOP top;  
+  const BOOL is_vector = MTYPE_is_vector(mtype);
   const BOOL is_64bit = MTYPE_is_size_double(mtype);
 
-  if (TN_is_constant(src1))
+  INT kind_index = 0;
+  switch (kind) {
+  case shift_left:
+    kind_index = 0;
+    break;
+  case shift_aright:
+    kind_index = 1;
+    break;
+  case shift_lright:
+    kind_index = 2;
+    break;
+  default:
+    FmtAssert(FALSE, ("invalid shift kind"));
+  }
+
+  INT type_index = 0;
+  UINT8 shift_amt = 0;
+  switch (mtype) {
+  case MTYPE_V16I1:
+    type_index = 2;
+    shift_amt = 7;
+    break;
+  case MTYPE_V16I2:
+    type_index = 3;
+    shift_amt = 15;
+    break;
+  case MTYPE_V16I4:
+    type_index = 4;
+    shift_amt = 31;
+    break;
+  case MTYPE_V16I8:
+    type_index = 5;
+    shift_amt = 63;
+    break;
+  default:
+    FmtAssert(is_vector == FALSE, ("NYI: support vector type other than V16I*"));
+    type_index = is_64bit ? 1 : 0;
+    shift_amt = is_64bit ? 63 : 31;
+  }
+
+  if (TN_is_constant(src1)) {
+    FmtAssert(is_vector == FALSE, ("TODO: handle vector immediate"));
     src1 = Expand_Immediate_Into_Register(src1, is_64bit, ops);
+  }
   if (TN_has_value(src2)) {
     // In mips, only the low log2(wordsize) bits of the shift count are used. 
     const UINT64 val = TN_value(src2);
-    const UINT8  shift_amt = is_64bit ? 63 : 31;
     FmtAssert( val <= shift_amt, ("Shift amount > %d", shift_amt) );
-
-    switch (kind) {
-    case shift_left:
-      if( val == 1 ){
-	Expand_Add( result, src1, src1, mtype, ops );
-	return;
-      }
-
-      top = is_64bit ? TOP_shli64 : TOP_shli32;
-      break;
-    case shift_aright:
-      top = is_64bit ? TOP_sari64 : TOP_sari32;
-      break;
-    case shift_lright:
-      top = is_64bit ? TOP_shri64 : TOP_shri32;
-      break;
+    if (kind == shift_left && val == 1) {
+      Expand_Add( result, src1, src1, mtype, ops );
+      return;
     }
 
+    top = shift_imm_top[type_index][kind_index];
     src2 = Gen_Literal_TN( val & shift_amt, 4 );
 
   } else {
-    switch (kind) {
-    case shift_left:
-      top = is_64bit ? TOP_shl64 : TOP_shl32;
-      break;
-    case shift_aright:
-      top = is_64bit ? TOP_sar64 : TOP_sar32;
-      break;
-    case shift_lright:
-      top = is_64bit ? TOP_shr64 : TOP_shr32;
-      break;
-    }
+    top = shift_top[type_index][kind_index];
   }
 
+  FmtAssert(top != TOP_UNDEFINED, ("NYI: Expand Shift: mtype=%d, kind=%d", mtype, kind));
 
-  switch(mtype) {
-  case MTYPE_V16I1: 
-    if (kind == shift_left)
-      Build_OP(TOP_psllw, result, src1, src2, ops); break;
-  case MTYPE_V16I2: 
-    if (kind == shift_left)
-      Build_OP(TOP_psllw, result, src1, src2, ops); break;
-  case MTYPE_V16I4: 
-    if (kind == shift_left)
-      Build_OP(TOP_pslld, result, src1, src2, ops); break;
-  case MTYPE_V16I8: 
-    if (kind == shift_left)
-      Build_OP(TOP_psllq, result, src1, src2, ops); break;
-  default:
-    if( OP_NEED_PAIR( mtype ) )
-      Expand_Split_Shift( kind, result, src1, src2, ops );
-    else
-      Build_OP(top, result, src1, src2, ops);
+  if( OP_NEED_PAIR( mtype ) ) {
+    Is_True(is_vector == FALSE, ("vector types do not need pair"));
+    Expand_Split_Shift( kind, result, src1, src2, ops );
   }
+  else
+    Build_OP(top, result, src1, src2, ops);
 }
 
 void
@@ -3690,11 +3710,12 @@ static void Expand_Unsigned_Int_To_Float_m32( TN* dest,
   }
 
   Cur_BB = bb_exit;
-  if (Is_Target_Orochi() && Is_Target_AVX()) {
-    Build_OP( is_double ? TOP_movsd : TOP_movss, 
-              dest, tmp_dest, tmp_dest, ops );
+  if( Is_Target_Barcelona() || Is_Target_EM64T() ||
+      Is_Target_Wolfdale()  || Is_Target_Core()  ||
+      Is_Target_Orochi() ){
+    Build_OP( TOP_movaps, dest, tmp_dest, ops );
   } else {
-    Build_OP( is_double ? TOP_movsd : TOP_movss, dest, tmp_dest, ops );
+    Build_OP( TOP_movdq, dest, tmp_dest, ops );
   }
 }
 
@@ -3798,12 +3819,12 @@ static void Expand_Unsigned_Long_To_Float( TN* dest, TN* src, TYPE_ID mtype, OPS
   }
 
   if( tmp_dest != dest ){
-    if (Is_Target_Orochi() && Is_Target_AVX()) {
-      Build_OP( mtype == MTYPE_F8 ? TOP_movsd : TOP_movss, 
-                dest, tmp_dest, tmp_dest, ops );
+    if( Is_Target_Barcelona() || Is_Target_EM64T() ||
+        Is_Target_Wolfdale()  || Is_Target_Core()  ||
+        Is_Target_Orochi() ){
+      Build_OP( TOP_movaps, dest, tmp_dest, ops );
     } else {
-      Build_OP( mtype == MTYPE_F8 ? TOP_movsd : TOP_movss, 
-                dest, tmp_dest, ops );
+      Build_OP( TOP_movdq, dest, tmp_dest, ops );
     }
   }
 
@@ -4208,6 +4229,11 @@ Expand_Select (
   BOOL float_cond,
   OPS *ops)
 {
+  if (mtype == MTYPE_V16I1) {
+    Expand_Select_To_Blend(mtype, dest_tn, cond_tn, true_tn, false_tn, ops);
+    return;
+  }
+
   Is_True( TN_register_class(cond_tn) == ISA_REGISTER_CLASS_integer,
 	   ("Handle this case in Expand_Select") );
   const BOOL non_sse2_fp = MTYPE_is_F10(mtype) ||
@@ -4289,6 +4315,53 @@ Expand_Select (
   }
 }
   
+//Vector type SELECT are expanded to *blend* operation.
+//For now we only handle vector type V16I1.
+void
+Expand_Select_To_Blend (TYPE_ID mtype, TN* result, TN* op0, TN* op1, TN* op2, OPS *ops)
+{
+  FmtAssert(mtype == MTYPE_V16I1, ("Non-vector type passed to Expand_Select_To_Blend"));
+  TN* xmm0;
+  if( Trace_Exp ) {
+    fprintf(TFile, "expand %s: ", mtype == MTYPE_V16I1? OPCODE_name(OPC_V16I1V16I1SELECT): "***Unsupported opcode***");
+    if (result) Print_TN(result,FALSE);
+    fprintf(TFile, " :- ");
+    if (op0) Print_TN(op0,FALSE);
+    fprintf(TFile, " ");
+    if (op1) Print_TN(op1,FALSE);
+    fprintf(TFile, " ");
+    if (op2) Print_TN(op2,FALSE);
+    fprintf(TFile, " ");
+    fprintf(TFile, "\n");
+  }
+
+  if (!Is_Target_AVX()) {
+    //pblendvb (non-AVX) uses the 'xmm0' register as an implicit argument containing the mask.
+    //To build a TN dedicated to reg xmm0, pass value "1" to Build_Dedicated_TN
+    //instead of "XMM0(enum value of 17)". This avoids a bug in out of bound access
+    //of the array 'v16_ded_tns' which is size 17. Need to file this bug.
+    xmm0 = Build_Dedicated_TN(ISA_REGISTER_CLASS_float,1,16);
+    Exp_COPY(xmm0, op2, ops);
+    Set_TN_is_global_reg(xmm0);
+  }
+  switch(mtype) {
+  case MTYPE_V16I1:
+    if (Is_Target_Orochi() && Is_Target_AVX())
+      Build_OP(TOP_blendv128v8, result, op0, op1, op2, ops);
+    else
+      Build_OP(TOP_blendv128v8, result, op0, xmm0, op1, ops);
+    break;
+  default:
+    FmtAssert(FALSE,
+              ("Expand_Select_To_Blend: Unsupported mtype (%d)", mtype));
+  }
+
+  if (Trace_Exp) {
+    //Print_OPS appears to be printing extra characters at end of string  "into  ||| ..."
+    fprintf(TFile, " into "); Print_OPS (ops);
+  }
+}
+
 void
 Expand_Min (TN *dest, TN *src1, TN *src2, TYPE_ID mtype, OPS *ops)
 {
@@ -5611,7 +5684,13 @@ void Expand_Complex( OPCODE opcode, TN *result,
 }
 void Expand_Firstpart( OPCODE opcode, TN *result, 
 		     TN *src1, OPS *ops ){
-    Build_OP(TOP_movsd, result, src1, ops);
+    if( Is_Target_Barcelona() || Is_Target_EM64T() ||
+        Is_Target_Wolfdale()  || Is_Target_Core()  ||
+        Is_Target_Orochi() ){
+      Build_OP( TOP_movaps, result, src1, ops );
+    } else {
+      Build_OP( TOP_movdq, result, src1, ops );
+    }
 }
 void Expand_Secondpart( OPCODE opcode, TN *result, 
 		     TN *src1, OPS *ops ){
@@ -5819,7 +5898,7 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_shufpd, tmp7, tmp1, tmp1, Gen_Literal_TN(1, 1), ops);
     if ((CG_opt_level > 1) && Is_Target_Orochi() &&
         Is_Target_AVX() && Is_Target_FMA4()) {
-      Build_OP(TOP_fhadd128v64, tmp9, tmp3, tmp3, ops);
+      Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp9, tmp3, ops);
       Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
       Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
       Build_OP(TOP_vfmaddsubpd, tmp12, tmp7, tmp4, tmp6, ops);
@@ -5842,7 +5921,7 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_shufpd, tmp22, tmp11, tmp11, Gen_Literal_TN(1, 1), ops);
     if ((CG_opt_level > 1) && Is_Target_Orochi() &&
         Is_Target_AVX() && Is_Target_FMA4()) {
-      Build_OP(TOP_fhadd128v64, tmp24, tmp18, tmp18, ops);
+      Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp25, tmp18, ops);
       Build_OP(TOP_vfmaddsubpd, tmp25, tmp22, tmp19, tmp21, ops);
     } else {
       Build_OP(TOP_fmul128v64, tmp23, tmp22, tmp19, ops);
@@ -6150,14 +6229,23 @@ Expand_Replicate (OPCODE op, TN *result, TN *op1, OPS *ops)
     ST* st = Gen_Temp_Symbol( ty, "movd" );
     Allocate_Temp_To_Memory( st );
     Exp_Store( MTYPE_I8, op1, st, 0, ops, 0);
-    Exp_Load( MTYPE_F8, MTYPE_F8, tmp, st, 0, ops, 0);
-    Expand_Copy(result, tmp, MTYPE_F8, ops);
-    Build_OP(TOP_unpcklpd, result, result, tmp, ops);
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      Exp_Load( MTYPE_F8, MTYPE_F8, tmp, st, 0, ops, 0);
+      Build_OP(TOP_fmovddup, result, tmp, tmp, ops);
+    } else {
+      Exp_Load( MTYPE_F8, MTYPE_F8, tmp, st, 0, ops, 0);
+      Expand_Copy(result, tmp, MTYPE_F8, ops);
+      Build_OP(TOP_unpcklpd, result, result, tmp, ops);
+    }
     break;
   }
   case OPC_V16F8F8REPLICA:
-    Expand_Copy(result, op1, MTYPE_F8, ops);
-    Build_OP(TOP_unpcklpd, result, result, op1, ops);
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      Build_OP(TOP_fmovddup, result, op1, op1, ops);
+    } else {
+      Expand_Copy(result, op1, MTYPE_F8, ops);
+      Build_OP(TOP_unpcklpd, result, result, op1, ops);
+    }
     break;
   case OPC_V16I4I4REPLICA:
   {
@@ -6165,16 +6253,27 @@ Expand_Replicate (OPCODE op, TN *result, TN *op1, OPS *ops)
     ST* st = Gen_Temp_Symbol( ty, "movd" );
     Allocate_Temp_To_Memory( st );
     Exp_Store( MTYPE_I4, op1, st, 0, ops, 0);
-    Exp_Load( MTYPE_F4, MTYPE_F4, tmp, st, 0, ops, 0);
-    Expand_Copy(result, tmp, MTYPE_F4, ops);
-    Build_OP(TOP_unpcklps, result, result, tmp, ops);
-    Build_OP(TOP_unpcklps, result, result, result, ops);
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      Exp_Load( MTYPE_F4, MTYPE_F4, tmp, st, 0, ops, 0);
+      Build_OP(TOP_unpcklps, result, tmp, tmp, ops);
+      Build_OP(TOP_unpcklps, result, result, result, ops);
+    } else {
+      Exp_Load( MTYPE_F4, MTYPE_F4, tmp, st, 0, ops, 0);
+      Expand_Copy(result, tmp, MTYPE_F4, ops);
+      Build_OP(TOP_unpcklps, result, result, tmp, ops);
+      Build_OP(TOP_unpcklps, result, result, result, ops);
+    }
     break;
   }
   case OPC_V16F4F4REPLICA:
-    Expand_Copy(result, op1, MTYPE_F4, ops);
-    Build_OP(TOP_unpcklps, result, result, op1, ops);
-    Build_OP(TOP_unpcklps, result, result, result, ops);
+    if (Is_Target_Orochi() && Is_Target_AVX()) {
+      Build_OP(TOP_unpcklps, result, op1, op1, ops);
+      Build_OP(TOP_unpcklps, result, result, result, ops);
+    } else {
+      Expand_Copy(result, op1, MTYPE_F4, ops);
+      Build_OP(TOP_unpcklps, result, result, op1, ops);
+      Build_OP(TOP_unpcklps, result, result, result, ops);
+    }
     break;
   case OPC_V16I2I2REPLICA:     
   {
@@ -6209,7 +6308,7 @@ Expand_Reduce_Add (OPCODE op, TN *result, TN *op1, OPS *ops)
   {
     TN* tmp = Build_TN_Like(op1);
     Build_OP(TOP_movapd, tmp, op1, ops);
-    if ( Is_Target_SSE3() ) {
+    if ( Is_Target_SSE3() && !Is_Target_Orochi() ) {
       Build_OP(TOP_fhadd128v64, result, tmp, tmp, ops);
     } else {
       TN* tmp_a = Build_TN_Like(op1);
@@ -6222,7 +6321,7 @@ Expand_Reduce_Add (OPCODE op, TN *result, TN *op1, OPS *ops)
   {
     TN* tmp = Build_TN_Like(op1);
     Build_OP(TOP_movaps, tmp, op1, ops);
-    if ( Is_Target_SSE3() ) {
+    if ( Is_Target_SSE3() && !Is_Target_Orochi() ) {
       Build_OP(TOP_fhadd128v32, tmp, op1, op1, ops);
       Build_OP(TOP_fhadd128v32, result, tmp, tmp, ops);
     } else {
@@ -6698,16 +6797,33 @@ Exp_COPY_Ext (TOP opcode, TN *tgt_tn, TN *src_tn, OPS *ops)
   case TOP_fmovsldupxxx:
     new_op = TOP_fmovsldup;
     break;
+  case TOP_vmovsldup:
+  case TOP_vmovsldupx:
+  case TOP_vmovsldupxx:
+  case TOP_vmovsldupxxx:
+    new_op = TOP_vmovsldup;
+    break;
   case TOP_fmovshdup:
   case TOP_fmovshdupx:
   case TOP_fmovshdupxx:
   case TOP_fmovshdupxxx:
     new_op = TOP_fmovshdup;
     break;
+  case TOP_vmovshdup:
+  case TOP_vmovshdupx:
+  case TOP_vmovshdupxx:
+  case TOP_vmovshdupxxx:
+    new_op = TOP_vmovshdup;
+    break;
   case TOP_fmovddupx:
   case TOP_fmovddupxx:
   case TOP_fmovddupxxx:
     new_op = TOP_fmovddup;
+    break;
+  case TOP_vmovddupx:
+  case TOP_vmovddupxx:
+  case TOP_vmovddupxxx:
+    new_op = TOP_vmovddup;
     break;
 
   default:
@@ -6779,16 +6895,12 @@ Exp_COPY (TN *tgt_tn, TN *src_tn, OPS *ops, BOOL copy_pair)
       }
     } else if (tgt_rc == src_rc && tgt_rc == ISA_REGISTER_CLASS_float) {
       /* dedicated TNs always have size 8, so need to check both TNs */
-      if (Is_Target_Orochi() && Is_Target_AVX()) {
-        if (is_128bit) {
-          Build_OP(TOP_movdq, tgt_tn, src_tn, ops);
-        } else {
-          Build_OP(is_64bit ? TOP_movsd : TOP_movss, 
-	           tgt_tn, src_tn, src_tn, ops);
-        }
+      if( Is_Target_Barcelona() || Is_Target_EM64T() ||
+          Is_Target_Wolfdale()  || Is_Target_Core()  ||
+          Is_Target_Orochi() ){
+        Build_OP(TOP_movaps, tgt_tn, src_tn, ops);
       } else {
-        Build_OP(is_128bit ? TOP_movdq: (is_64bit ? TOP_movsd : TOP_movss), 
-	         tgt_tn, src_tn, ops);
+        Build_OP( TOP_movdq, tgt_tn, src_tn, ops);
       }
       Set_OP_copy (OPS_last(ops));
 
@@ -7563,8 +7675,12 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP( TOP_extr128v64, result, op0, op1, ops);
     break;
   case INTRN_EXTRPS:
-    Build_OP( TOP_fextr128v32, result, op0, op1, ops);
-    break;
+    {
+      TN* res = Build_TN_Of_Mtype(MTYPE_I4);
+      Build_OP( TOP_fextr128v32, res, op0, op1, ops);
+      Build_OP(TOP_movg2x, result, res, ops);
+      break;
+    }
   case INTRN_EXTRPD:
     FmtAssert(FALSE, ("TODO: support fextr128v64"));
     break;
@@ -8740,8 +8856,8 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     Build_OP(TOP_vmovaps, result, op0, ops );
     break;
    case INTRN_I2POPCNT:
-    if ( Is_Target_SSE42() || Is_Target_SSE4a() ) {
-      // SSE4.2(Intel) and SSE4a(AMD) supports popcnt
+    if ( Is_Target_SSE42() || Is_Target_Barcelona()) {
+      // popcnt available since Barcelona and Nehalem
       Build_OP(TOP_popcnt16, result, op0, ops);
     }
     else {
@@ -8749,8 +8865,8 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     }
     break;
    case INTRN_I4POPCNT:
-    if ( Is_Target_SSE42() || Is_Target_SSE4a() ) {
-      // SSE4.2(Intel) and SSE4a(AMD) supports popcnt
+    if ( Is_Target_SSE42() || Is_Target_Barcelona()) {
+      // popcnt available since Barcelona and Nehalem
       Build_OP(TOP_popcnt32, result, op0, ops);
     }
     else {
@@ -8759,8 +8875,8 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     break;
    case INTRN_I8POPCNT:
     if ( Is_Target_64bit() && 
-         ( Is_Target_SSE42() || Is_Target_SSE4a() ) ) {
-      // SSE4.2(Intel) and SSE4a(AMD) supports popcnt
+         ( Is_Target_SSE42() || Is_Target_Barcelona()) ) {
+      // popcnt available since Barcelona and Nehalem
       Build_OP(TOP_popcnt64, result, op0, ops);
     }
     else {
@@ -10034,8 +10150,10 @@ void Exp_Simulated_Op(const OP *op, OPS *ops, INT pc_value)
         if (CG_NoClear_Avx_Simd == false)
           Build_OP(TOP_vzeroupper, ops );
 
-        Build_OP(TOP_leaxx64, r11_tn, rax_tn, Gen_Literal_TN(8, 4), 
-	         Gen_Literal_TN(4*(num_xmms-8), 4), ops);
+        // The insn size for vstaps is 5 bytes, note that
+        // leaq 0(%rax,%rax,4) is (5 * %rax)
+        Build_OP(TOP_leax64, r11_tn, rax_tn, rax_tn, Gen_Literal_TN(4, 4), 
+	         Gen_Literal_TN(5*(num_xmms-8), 4), ops);
       } else {
         Build_OP(TOP_leaxx64, r11_tn, rax_tn, Gen_Literal_TN(4, 4), 
 	         Gen_Literal_TN(4*(num_xmms-8), 4), ops);
@@ -10053,21 +10171,10 @@ void Exp_Simulated_Op(const OP *op, OPS *ops, INT pc_value)
       }
       Build_OP(TOP_lea64, rax_tn, OP_opnd(op, 2), OP_opnd(op, 3), ops);
       Build_OP(TOP_ijmp, r11_tn, ops);
-      if (Is_Target_Orochi() && Is_Target_AVX()) {
-        // The insn size for vstaps is 5 bytes, so we need the 3 byte nop
-        // below to pad for the scale of 8 in the jump table.
-        for (INT i = 1; i <= num_xmms; i++) {
-          Build_OP(TOP_staps, PREG_To_TN(Int_Preg, XMM0+(8-i)), 
-	           rax_tn, Gen_Literal_TN(16 * (num_xmms-i) + 1, 4), ops);
-          Build_OP( TOP_mov64, rax_tn, rax_tn, ops );
-        }
-      } else {
-        for (INT i = 1; i <= num_xmms; i++) {
-          Build_OP(TOP_staps, PREG_To_TN(Int_Preg, XMM0+(8-i)), 
-	           rax_tn, Gen_Literal_TN(16 * (num_xmms-i) + 1, 4), ops);
-        }
+      for (INT i = 1; i <= num_xmms; i++) {
+        Build_OP(TOP_staps, PREG_To_TN(Int_Preg, XMM0+(8-i)), 
+	         rax_tn, Gen_Literal_TN(16 * (num_xmms-i) + 1, 4), ops);
       }
-      
       break;
     }
   default:

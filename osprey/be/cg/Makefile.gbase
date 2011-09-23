@@ -113,6 +113,8 @@ TARGDEFS = -D__MIPS_AND_IA64_ELF_H
 endif
 ifeq ($(BUILD_TARGET), SL)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
+# SL is a ZDL target
+TARGDEFS += -DZDL_TARG
 endif
 ifeq ($(BUILD_TARGET), X8664)
 TARGDEFS = -D__MIPS_AND_IA64_ELF_H
@@ -353,6 +355,7 @@ ifeq ($(BUILD_TARGET), SL)
   BE_CG_TARG_CXX_SRCS += loop_rce.cxx
   BE_CG_TARG_CXX_SRCS += gcm_licm.cxx
   BE_CG_TARG_CXX_SRCS += cgtarget_special.cxx
+  BE_CG_TARG_CXX_SRCS += cg_zdl.cxx
 endif
 ifeq ($(BUILD_TARGET), LOONGSON)
   BE_CG_TARG_CXX_SRCS += db_dump.cxx
@@ -456,7 +459,6 @@ CG_CXX_SRCS = 		\
   hb_hazards.cxx        \
   iface_scn.cxx		\
   igls.cxx		\
-  init.cxx		\
   label_util.cxx	\
   localize.cxx		\
   note.cxx		\
@@ -521,7 +523,6 @@ CG_CXX_SRCS = 		\
   dominate.cxx		\
   findloops.cxx		\
   gtn_universe.cxx	\
-  init.cxx		\
   label_util.cxx	\
   note.cxx		\
   optimize_copies.cxx	\

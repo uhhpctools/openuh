@@ -453,7 +453,8 @@ inline BOOL WN_Is_Volatile_Mem(const WN *wn)
 	OPCODE_operator(opc) == OPR_MSTORE) {
       TY_IDX pointed = TY_pointed (Ty_Table[WN_ty (wn)]);
       DevAssert(pointed, ("TY_pointed of ISTORE/MSTORE type is NULL"));
-      return TY_is_volatile(pointed);
+      return TY_is_volatile(pointed) ||       
+             TY_is_volatile(WN_object_ty(wn));
     } else {
       return TY_is_volatile(WN_ty(wn)) ||
         TY_is_volatile(WN_object_ty(wn)) ||
@@ -481,6 +482,7 @@ inline BOOL WN_is_black_box(const WN *wn)
 /* Needed for the STL vector class used below
  */
 #include "vector"
+#include "list"
 #include "mempool_allocator.h"
 
 typedef mempool_allocator<WN*> VEC_POOL_ALLOCATOR;
@@ -493,6 +495,12 @@ extern "C" void Add_Pragma_To_MP_Regions (WN_VECTOR *wnv,
                                           ST *st, WN_OFFSET ofst,
                                           WN_MAP parent_map,
                                           BOOL make_compiler_generated);
+
+extern void WN_collect_iloads(std::list<WN*>*, WN*);
+extern BOOL WN_is_multiple_of_size(const WN*, const INT64);
+extern BOOL WN_is_constant(const WN*);
+extern BOOL WN_is_constant_val(const WN*, INT64);
+extern UINT64 WN_get_constant_val(const WN*);
 
 #endif /* __cplusplus */
 

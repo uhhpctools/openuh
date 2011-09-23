@@ -78,7 +78,6 @@ static char *rcs_id = "$Source: /scratch/mee/2.4-65/kpro64-pending/be/whirl2f/SC
 #include "tcon2f.h"
 #include "wn2f_load_store.h"
 
-extern BOOL W2F_Only_Mark_Loads; /* Defined in w2f_driver.c */
 static void WN2F_Block(TOKEN_BUFFER tokens, ST * st, STAB_OFFSET off,WN2F_CONTEXT context) ;
 
 static WN *WN2F_ZeroInt_Ptr = NULL;
@@ -842,17 +841,6 @@ WN2F_iload(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    ASSERT_DBG_FATAL(WN_opc_operator(wn) == OPR_ILOAD, 
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_iload"));
 
-   /* Special case for Purple (address values have no meaning, so emit
-    * symbolic values for them).
-    */
-   if (W2F_Only_Mark_Loads && !TY_Is_Pointer(WN_ty(wn)))
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_WN2F_STATUS;
-   }
-
    /* Get the type of the base from which we are loading */
    base_ty = WN_Tree_Type(WN_kid0(wn));
    if (!TY_Is_Pointer(base_ty))
@@ -904,15 +892,6 @@ WN2F_mload(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    ASSERT_DBG_FATAL(WN_opc_operator(wn) == OPR_MLOAD, 
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_mload"));
 
-   /* Special case for Purple (cannot be a pointer value) */
-   if (W2F_Only_Mark_Loads)
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_WN2F_STATUS;
-   }
-
    /* Get the type of the base from which we are loading */
    base_ty = WN_Tree_Type(WN_kid0(wn));
    if (!TY_Is_Pointer(base_ty))
@@ -959,17 +938,6 @@ WN2F_ldid(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
 	 WN2F_Translate_StringLEN(tokens, st_param);
 	 return EMPTY_WN2F_STATUS;
       }
-   }
-
-   /* Special case for Purple direct loads, except direct loads of
-    * addresses (address values have no meaning in the purple output).
-    */
-   if (W2F_Only_Mark_Loads && !TY_Is_Pointer(WN_ty(wn)))
-   {
-      char buf[64];
-      sprintf(buf, "#<%p>#", wn);
-      Append_Token_String(tokens, buf);
-      return EMPTY_WN2F_STATUS;
    }
 
    if (ST_class(WN_st(wn)) == CLASS_PREG)

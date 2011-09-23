@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -408,7 +412,7 @@ static void Lower_Pragma_Distribute (DISTR_ARRAY* dact) {
   ST* array_st = dinfo->Array_ST();
   WN* pwn = dact->Last_Pragma_WN ();
 
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
     printf ("Pragma Distribute on a non-array\n");
@@ -500,7 +504,7 @@ static void Lower_Pragma_Distribute_Reshape (DISTR_ARRAY* dact) {
   DISTR_INFO *dinfo = dact->Dinfo();
 
   ST* array_st = dinfo->Array_ST();
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
   WN* pwn = dact->Last_Pragma_WN ();
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
@@ -586,7 +590,7 @@ static void Lower_Pragma_Redistribute (DISTR_ARRAY* dact) {
   DISTR_INFO *dinfo = dact->Dinfo();
 
   ST* array_st = dinfo->Array_ST();
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
   WN* pwn = dact->Last_Pragma_WN ();
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
@@ -746,7 +750,7 @@ static WN* Process_Alt_Entries_Local (DISTR_ARRAY* dact, WN* prev_wn) {
   // come here only if alt entries
   DISTR_INFO* dinfo = dact->Dinfo();
   ST* array_st = dinfo->Array_ST();
-  TY_IDX array_ty = Get_Original_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Original_Type(array_st);
   Is_True (altentry_stack, ("Process_Alt_Entries: no alt entries\n"));
   Is_True (ST_Var_Kind(array_st) == var_local,
            ("Process_Alt_Entries_Local: ST %s is not local\n",
@@ -2024,7 +2028,7 @@ static void Process_Global_Distribute (DISTR_ARRAY* dact) {
   DISTR_INFO *dinfo = dact->Dinfo();
 
   ST* array_st = dinfo->Array_ST();
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
   INT ndims = TY_AR_ndims(array_ty);
   extern INT32 da_count;
   da_count++;
@@ -2053,7 +2057,8 @@ static void Process_Global_Distribute (DISTR_ARRAY* dact) {
   inv = Irb_Init_Symoff (ino, inv, 1, dart_st, 0);    // &dart
   inv = Irb_Init_Integer (4, (dinfo->IsReshaped() ? 1 : 0),
                           1, ino, inv);               // is_reshaped
-  inv = Irb_Init_Integer (4, TY_size(TY_AR_etype(Get_Array_Type(array_st))),
+  inv = Irb_Init_Integer (4,
+                          TY_size(TY_AR_etype(Lego_Get_Array_Type(array_st))),
                           1, ino, inv);               // element_size
 
   inv = Irb_Init_Integer (4, ndims, 1, ino, inv);     // ndims
@@ -2374,7 +2379,7 @@ static void Reshape_ST_Entry (DISTR_INFO* dinfo) {
               (ST_isFormal(array_st) || ST_isLocal(array_st))),
              ("Reshape_ST_Entry: ST (%s) not an array, and not formal/local",
               ST_name(array_st)));
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
 
   // The new type of the array: pointer-to-pointer to element-type
   //

@@ -2534,6 +2534,14 @@ CODEMAP::Add_idef(OPCODE opc, OCC_TAB_ENTRY *occ, STMTREP *stmt,
   CODEREP          *retv;
   OPERATOR         oper = OPCODE_operator(opc);
 
+  // make sure the dtyp for constant base is Pointer_type
+  if (lbase != NULL && lbase->Kind() == CK_CONST 
+      && lbase->Dtyp() != Pointer_type)
+    lbase->Set_dtyp_strictly(Pointer_type);
+  if (sbase != NULL && sbase->Kind() == CK_CONST 
+      && sbase->Dtyp() != Pointer_type)
+    sbase->Set_dtyp_strictly(Pointer_type);
+
   cr->Init_ivar(opc, dtyp, occ, dsctyp, lodty, lbase, sbase,
 		ofst, size, field_id);
   // all IVAR codereps have a mu_node
@@ -5229,6 +5237,7 @@ STMTREP::Print_node(FILE *fp) const
   case OPR_LABEL:
   case OPR_GOTO:
   case OPR_REGION_EXIT:
+  case OPR_ZDLBR:
     fprintf(fp, ">");	// mark line visually as htable dump
     fprintf(fp, "%s %d", OPERATOR_name(_opr), Label_number());
     break;

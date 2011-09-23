@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2009-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2009-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
@@ -79,6 +79,11 @@ else
 CVERSION =
 TARG_BE_DIR = $(TARGDIR)/be
 endif
+ifdef LOCAL_TARG_INFO_DIR
+TARG_TARG_INFO_DIR = $(TARGDIR)/$(LOCAL_TARG_INFO_DIR)
+else
+TARG_TARG_INFO_DIR = $(TARGDIR)/targ_info
+endif
 
 #----------------------------------------------------------------------
 #  Compiler Options
@@ -116,7 +121,6 @@ COMMON_UTIL_DIR 	= $(COMMON_DIR)/util
 INCLUDE_DIR 		= $(ROOT)/usr/include
 IPA_COM_DIR 		= $(BUILD_TOT)/ipa/common/
 LIBCOMUTIL_DIR 		= $(BUILD_TOT)/libcomutil
-TARG_BE_DIR             = $(TARGDIR)/be
 
 COMMON_COM_TARGET_DIR   = $(COMMON_COM_DIR)/$(BUILD_TARGET_DIR)
 COMMON_UTIL_TARGET_DIR  = $(COMMON_UTIL_DIR)/$(BUILD_TARGET_DIR)
@@ -181,8 +185,7 @@ BE_WHIRL2F_C_SRCS = \
   wn2f_load_store.cxx	\
   wn2f_stmt.cxx		\
   wn2f_pragma.cxx	\
-  w2f_driver.cxx	\
-  init.cxx		\
+  w2f_driver.cxx
 
 WHIRL2F_C_SRCS = \
   $(BE_WHIRL2C_C_SRCS)	\
@@ -250,7 +253,11 @@ endif
 #  Define target
 #----------------------------------------------------------------------
 
+ifeq ($(BUILD_TYPE), SHARED)
 TARGETS = whirl2f.so whirl2f_be whirl2f
+else
+TARGETS = libwhirl2f.a whirl2f
+endif
 
 # extra files to be removed with make clobber
 LDIRT += be be.so $(TARGETS)
@@ -302,6 +309,9 @@ whirl2f.so: $(WHIRL2F_C_OBJS)  $(BE_WHIRL2F_DIR)/Exported \
 	$(cxx) -o $@ $(STD_DSO_LOADOPTS) $(EXPORT_LIST) $(LDFLAGS) \
 	$(WHIRL2F_C_OBJS) $(WHIRL2F_DSOS) $(LLDLIBS)
 
+libwhirl2f.a: $(WHIRL2F_C_OBJS)
+	$(ar) cru $@ $^
+
 # Make the back-end executable, then create a link to it named
 # "whirl2f_be".  Make a driver "whirl2f" which MUST reside in the 
 # same directory as whirl2f_be and whirl2f.so.  Need to set 
@@ -316,6 +326,7 @@ whirl2f_be: whirl2f.so
                    be)
 	if ! test -e whirl2f_be; then ln -sf $(TARGDIR)/be/be whirl2f_be ; fi
 
+ifeq ($(BUILD_TYPE), SHARED)
 whirl2f: whirl2f.so whirl2f_be $(WHIRL2F_MAIN_OBJS)
 	$(link.c++f) -o whirl2f $(WHIRL2F_MAIN_OBJS) $(LDFLAGS)
 
@@ -324,6 +335,10 @@ be.so:
 
 be:
 	if ! test -e be; then ln -sf $(TARGDIR)/be/be .; fi
+else
+whirl2f: $(WHIRL2F_MAIN_OBJS) libwhirl2f.a $(TARG_BE_DIR)/libbe.a $(TARG_TARG_INFO_DIR)/libtarginfo.a
+	$(link.cxxf) $(LDFLAGS) -o $@ $^
+endif
 
 #For debugging, set LD_LIBRARY_PATH manually and invoke whirl2f_dbg
 # directly.

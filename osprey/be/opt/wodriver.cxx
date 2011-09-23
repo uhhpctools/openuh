@@ -120,6 +120,7 @@ wopt_main (INT wopt_argc, char **wopt_argv, INT be_argc, char **be_argv)
   /* Construct a skip list from the -WOPT:skip_* options: */
   WOPT_Skip_List = Build_Skiplist ( WOPT_Skip );
   WOPT_Unroll_Skip_List = Build_Skiplist ( WOPT_Unroll_Skip );
+  WOPT_ZDL_Skip_List = Build_Skiplist ( WOPT_ZDL_Skip);
 } /* wopt_main */
 
 

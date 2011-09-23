@@ -1546,7 +1546,11 @@ extern WN * WN_find_loop_by_index(WN *, ST *, WN_MAP);
 extern BOOL WN_has_const_diff(WN *, WN *, int *);
 extern BOOL WN_has_compatible_iter_space(WN *, WN *, int *, int *, BOOL);
 
+extern BOOL WN_is_assign(WN *);
+extern BOOL WN_is_assign_return(WN *);
 
+extern WN *WN_CreateZDLBr(INT32 label_number);
+ 
 #if defined(TARG_SL)
 extern WN* WN_CreateFork(INT32 label_number, BOOL major);
 extern BOOL WN_Intrinsic_OP_Slave(WN * wn);

@@ -289,10 +289,6 @@ void Generate_Orochi (void)
 		     TOP_andxxx8,
 		     TOP_andxxx16,
 		     TOP_andxxx32,
-		     TOP_addxxxss,
-		     TOP_addxxxsd,
-		     TOP_subxxxss,
-		     TOP_subxxxsd,
 		     TOP_andxxx64,
 		     TOP_cmpxxx8,
 		     TOP_cmpxxx16,
@@ -977,7 +973,7 @@ void Generate_Orochi (void)
                      TOP_vmovaps,
 		     TOP_UNDEFINED );
   Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(1);
+  Any_Result_Available_Time(2);
   Resource_Requirement(res_issue, 0);
   Resource_Requirement(res_fadd,  0);
 
@@ -1011,6 +1007,18 @@ void Generate_Orochi (void)
 		     TOP_lddqa_n32,
 		     TOP_lddqax,
 		     TOP_lddqaxx,
+                     TOP_vldss_n32,
+                     TOP_vldsd_n32,
+                     TOP_vldss,
+                     TOP_vldsd,
+                     TOP_vldssx,
+                     TOP_vldssxx,
+                     TOP_vldsdx,
+                     TOP_vldsdxx,
+                     TOP_vlddqa,
+                     TOP_vlddqa_n32,
+                     TOP_vlddqax,
+                     TOP_vlddqaxx,
 		     TOP_UNDEFINED );
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(4);
@@ -1563,6 +1571,10 @@ void Generate_Orochi (void)
 		    TOP_fisttpl,
 		    TOP_fisttpll,
 		    TOP_fldz,
+                    TOP_vfaddsd,
+                    TOP_vfaddss,
+                    TOP_vsubsd,
+                    TOP_vsubss,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(5);
@@ -1597,8 +1609,8 @@ void Generate_Orochi (void)
                     TOP_vfaddsub128v32,
                     TOP_vfadd128v64,
                     TOP_vfadd128v32,
-                    TOP_vfaddsd,
-                    TOP_vfaddss,
+                    TOP_vfsub128v64,
+                    TOP_vfsub128v32,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(5);
@@ -1648,12 +1660,12 @@ void Generate_Orochi (void)
                     TOP_vfaddx128v32,
                     TOP_vfaddxx128v32,
                     TOP_vfaddxxx128v32,
-                    TOP_vfaddxsd,
-                    TOP_vfaddxxsd,
-                    TOP_vfaddxxxsd,
-                    TOP_vfaddxss,
-                    TOP_vfaddxxss,
-                    TOP_vfaddxxxss,
+                    TOP_vfsubx128v64,
+                    TOP_vfsubxx128v64,
+                    TOP_vfsubxxx128v64,
+                    TOP_vfsubx128v32,
+                    TOP_vfsubxx128v32,
+                    TOP_vfsubxxx128v32,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(10);
@@ -2392,16 +2404,32 @@ void Generate_Orochi (void)
 
   Instruction_Group("float-alu w/ memory operand",
 		    TOP_addxss,
-		    TOP_addxsd,
 		    TOP_addxxss,
+		    TOP_addxxxss,
+		    TOP_addxsd,
 		    TOP_addxxsd,
-		    TOP_subxsd,
+		    TOP_addxxxsd,
 		    TOP_subxss,
-		    TOP_subxxsd,
 		    TOP_subxxss,
+		    TOP_subxxxss,
+		    TOP_subxsd,
+		    TOP_subxxsd,
+		    TOP_subxxxsd,
 		    TOP_filds,
 		    TOP_fildl,
 		    TOP_fildll,
+                    TOP_vfaddxsd,
+                    TOP_vfaddxxsd,
+                    TOP_vfaddxxxsd,
+                    TOP_vfaddxss,
+                    TOP_vfaddxxss,
+                    TOP_vfaddxxxss,
+                    TOP_vsubxsd,
+                    TOP_vsubxxsd,
+                    TOP_vsubxxxsd,
+                    TOP_vsubxss,
+                    TOP_vsubxxss,
+                    TOP_vsubxxxss,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(10);
@@ -2461,9 +2489,11 @@ void Generate_Orochi (void)
   Instruction_Group("float-mul",
 		    TOP_mulsd,
 		    TOP_mulss,
+                    TOP_vmulsd,
+                    TOP_vmulss,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(5);
+  Any_Result_Available_Time(6);
   Resource_Requirement(res_issue, 0);
   Resource_Requirement(res_fmul, 0);
 
@@ -2474,6 +2504,12 @@ void Generate_Orochi (void)
 		    TOP_mulxss,
 		    TOP_mulxxss,
 		    TOP_mulxxxss,
+                    TOP_vmulxsd,
+                    TOP_vmulxxsd,
+                    TOP_vmulxxxsd,
+                    TOP_vmulxss,
+                    TOP_vmulxxss,
+                    TOP_vmulxxxss,
 		    TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(10);
@@ -4627,10 +4663,6 @@ void Generate_Orochi (void)
                         TOP_vldx64_2sse,
                         TOP_vldxx64_2sse,
                         TOP_vld64_2sse_n32,
-                        TOP_vlddqa,
-                        TOP_vlddqax,
-                        TOP_vlddqaxx,
-                        TOP_vlddqa_n32,
                         TOP_vldhpd,
                         TOP_vldhpdx,
                         TOP_vldhpdxx,
@@ -4639,10 +4671,6 @@ void Generate_Orochi (void)
                         TOP_vldhpsx,
                         TOP_vldhpsxx,
                         TOP_vldhps_n32,
-                        TOP_vldsd,
-                        TOP_vldsdx,
-                        TOP_vldsdxx,
-                        TOP_vldsd_n32,
                         TOP_vldlps,
                         TOP_vldlpsx,
                         TOP_vldlpsxx,
@@ -4654,10 +4682,6 @@ void Generate_Orochi (void)
                         TOP_vldlpdx,
                         TOP_vldlpdxx,
                         TOP_vldlpd_n32,
-                        TOP_vldss,
-                        TOP_vldssx,
-                        TOP_vldssxx,
-                        TOP_vldss_n32,
                         TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(4);
@@ -4924,8 +4948,6 @@ void Generate_Orochi (void)
                         TOP_vfshuf128v64,
                         TOP_vshufps,
                         TOP_vfshuf128v32,
-                        TOP_vfsub128v64,
-                        TOP_vfsub128v32,
                         TOP_vunpckh128v64,
                         TOP_vunpckh128v32,
                         TOP_vunpckl128v64,
@@ -4946,8 +4968,6 @@ void Generate_Orochi (void)
   Instruction_Group( "avx fp arith reg opnd 2",
                         TOP_vfrcp128v32,
                         TOP_vfrcpss,
-                        TOP_vsubsd,
-                        TOP_vsubss,
                         TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(5);
@@ -5104,24 +5124,12 @@ void Generate_Orochi (void)
   Resource_Requirement(res_fstore, 0);
 
   Instruction_Group( "avx fp arith mem opnd 4",
-                        TOP_vfsubx128v64,
-                        TOP_vfsubxx128v64,
-                        TOP_vfsubxxx128v64,
-                        TOP_vfsubx128v32,
-                        TOP_vfsubxx128v32,
-                        TOP_vfsubxxx128v32,
                         TOP_vfrcpx128v32,
                         TOP_vfrcpxx128v32,
                         TOP_vfrcpxxx128v32,
                         TOP_vfrcpxss,
                         TOP_vfrcpxxss,
                         TOP_vfrcpxxxss,
-                        TOP_vsubxsd,
-                        TOP_vsubxxsd,
-                        TOP_vsubxxxsd,
-                        TOP_vsubxss,
-                        TOP_vsubxxss,
-                        TOP_vsubxxxss,
                         TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(10);
@@ -5264,6 +5272,8 @@ void Generate_Orochi (void)
   Any_Result_Available_Time(4);
   Resource_Requirement(res_issue, 0);
   Resource_Requirement(res_fstore, 0);
+  Resource_Requirement(res_loadstore, 0);
+  Store_Available_Time(4);
 
   Instruction_Group( "avx broadcast reg opnd",
                         TOP_vfbroadcastss,
@@ -5298,12 +5308,11 @@ void Generate_Orochi (void)
   Instruction_Group( "avx fp mul reg opnd",
                      TOP_vfmul128v64,
                      TOP_vfmul128v32,
-                     TOP_vmulsd,
-                     TOP_vmulss,
                      TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(6);
   Resource_Requirement(res_issue, 0);
+  Resource_Requirement(res_fmul, 0);
 
   Instruction_Group( "avx fp mul mem opnd",
                      TOP_vmpsadbwx,
@@ -5322,17 +5331,12 @@ void Generate_Orochi (void)
                      TOP_vfmulx128v32,
                      TOP_vfmulxx128v32,
                      TOP_vfmulxxx128v32,
-                     TOP_vmulxsd,
-                     TOP_vmulxxsd,
-                     TOP_vmulxxxsd,
-                     TOP_vmulxss,
-                     TOP_vmulxxss,
-                     TOP_vmulxxxss,
                      TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(10);
   Resource_Requirement(res_issue, 0);
   Resource_Requirement(res_fstore, 0);
+  Resource_Requirement(res_loadstore, 0);
 
   Instruction_Group( "avx ptest reg opnd",
                      TOP_vptest128,
@@ -5412,7 +5416,9 @@ void Generate_Orochi (void)
   Any_Operand_Access_Time(0);
   Any_Result_Available_Time(4);
   Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_fstore, 0);
+  Resource_Requirement(res_fadd, 0);
+  Resource_Requirement(res_loadstore, 0);
+  Load_Access_Time(4);
 
   Instruction_Group( "avx unalign reg opnd transfer",
                      TOP_vstupd,

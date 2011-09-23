@@ -801,6 +801,7 @@ main()
                       TOP_br16_nez,
                       TOP_jr16,
                       TOP_jr16_lnk,
+                      TOP_auxbr,
 #endif
 		      TOP_beq,
 		      TOP_bgez,
@@ -846,6 +847,7 @@ main()
 		      //TOP_ret,	
                       TOP_br16_eqz,
                       TOP_br16_nez,
+                      TOP_auxbr,
 #endif 
                      TOP_UNDEFINED);
 
@@ -1569,6 +1571,7 @@ main()
                      TOP_asm,
                      TOP_spadjust,
                      TOP_intrncall,
+                     TOP_auxbr,
                      TOP_UNDEFINED);
 
 /* ===== Predicated instructions ====== */

@@ -683,17 +683,6 @@ main()
   Result(0, creg);
   Operand(0,uimm10,opnd1);
  
- Instruction_Group("int mul shift",
-                    TOP_c3_muls,
-                    TOP_c3_mulus,
-                    TOP_UNDEFINED);
-  Result(0, spereg);
-  Result(1, int64);
-  Operand(0,int64,opnd1);
-  Operand(1, int64, opnd2);
-  Operand(2, uimm5, opnd3);
-
-
    /*16-bit instr*/
   Instruction_Group("beq/bne",
                     TOP_br16_eqz,
@@ -2904,6 +2893,12 @@ Operand(2, int64);
   Result(0, int64);
   Operand(0, int64, opnd1);
   Operand(1, simm16, opnd2);
+
+  Instruction_Group("auxbr",
+                    TOP_auxbr,
+                    TOP_UNDEFINED);
+  Operand(0, pc26, target);
+  
 
   Instruction_Group("intrncall",
 		    TOP_intrncall,

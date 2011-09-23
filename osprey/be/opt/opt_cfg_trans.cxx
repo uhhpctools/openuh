@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 //-*-c++-*-
@@ -1429,9 +1429,10 @@ CFG_transformation(COMP_UNIT *cu, bool do_butterfly, bool trace, bool display)
 				  insert_iterator<vector<vertex_id> >
 				  (entry, entry.begin()));
 
-  if (ok == CFG_other_regions) {
+  if (ok == CFG_other_regions ||
+      (ok == CFG_EH_regions && !OPT_Enable_EH_CFG_OPT)) {
     if (trace)
-      fprintf(TFile, ("skip CFG transformation because of non-EH REGION."));
+      fprintf(TFile, ("skip CFG transformation."));
     return;
   }
 
@@ -1449,7 +1450,7 @@ CFG_transformation(COMP_UNIT *cu, bool do_butterfly, bool trace, bool display)
   generate_zones(cu, g, zones, do_butterfly, trace, display);
   clone_zones(g, entry, zones.begin(), zones.end(), cfg, trace, display);
 
-  reconstruct_CFG(g, cfg, trace, ok == CFG_EH_regions);
+  reconstruct_CFG(g, cfg, trace, (ok == CFG_EH_regions && OPT_Enable_EH_CFG_OPT));
 
   cfg->Invalidate_loops();
   cfg->Analyze_loops();

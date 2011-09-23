@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -803,7 +807,7 @@ static ST* Create_Common_Block (ST* array_st, INT numdim) {
 
 
 
-  TY_IDX element_type  = TY_AR_etype(Get_Array_Type(array_st));
+  TY_IDX element_type  = TY_AR_etype(Lego_Get_Array_Type(array_st));
   TY_IDX array_type    =
     Make_Pointer_Type(Make_Pointer_Type(element_type));
   Set_TY_ptr_as_array(array_type);
@@ -906,7 +910,7 @@ static ST* Create_Common_Block (ST* array_st, INT numdim) {
   FLD_flags(field)  = 0;
 
   next = FLD_next(field);
-  TY_IDX element_type  = TY_AR_etype(Get_Array_Type(array_st));
+  TY_IDX element_type  = TY_AR_etype(Lego_Get_Array_Type(array_st));
   TY_IDX array_type    =
     Make_Pointer_Type(Make_Pointer_Type(element_type));
   Set_TY_ptr_as_array(array_type);
@@ -1071,7 +1075,7 @@ DISTR_INFO::DISTR_INFO (mBOOL isreshaped, INT numdim, SYMBOL* array) {
   _array_common_alias_wn = NULL;
 
   ST* array_st = array->St();
-  _orig_ty = Get_Array_Type(array_st);
+  _orig_ty = Lego_Get_Array_Type(array_st);
 
   _small_index = FALSE;
 
@@ -1155,7 +1159,7 @@ DISTR_INFO::DISTR_INFO (mBOOL isreshaped, INT numdim, SYMBOL* array) {
     Set_ST_pt_to_compiler_generated_mem(_dart_st);
 
     if (_isreshaped) {
-      TY_IDX element_type  = TY_AR_etype(Get_Array_Type(array_st));
+      TY_IDX element_type  = TY_AR_etype(Lego_Get_Array_Type(array_st));
       TY_IDX array_type    =
        Make_Pointer_Type(Make_Pointer_Type(element_type));
       Set_TY_ptr_as_array(array_type);
@@ -3385,7 +3389,7 @@ WN* Read_Pragma_Distribute (WN* pwn) {
                          */
   ST *array_st = WN_st(pwn);
 
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
     printf ("Pragma Distribute on a non-array\n");
@@ -3495,7 +3499,7 @@ static WN* Read_Pragma_Distribute_Reshape (WN* pwn) {
     return retval;
   }
 
-  TY_IDX array_ty = Get_Array_Type (array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type (array_st);
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
     FmtAssert (FALSE, ("Pragma Distribute-Reshape on a non-array (%s)\n",
@@ -3581,7 +3585,7 @@ extern WN* Read_Pragma_Redistribute (WN* pwn, BOOL gen_phase) {
   WN* first_pwn = pwn;
   ST* array_st = WN_st(pwn);
 
-  TY_IDX array_ty = Get_Array_Type(array_st);
+  TY_IDX array_ty = Lego_Get_Array_Type(array_st);
 
   if (TY_kind(array_ty) != KIND_ARRAY) {
     printf ("Pragma ReDistribute on a non-array\n");

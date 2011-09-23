@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 //-*-c++-*-
@@ -367,6 +367,8 @@
 
 #include "wssa_utils.h"   // WHIRL SSA
 
+#include "../opt/init.cxx"          // force include of Wopt_Initializer
+
 extern "C" void
 Perform_Procedure_Summary_Phase (WN* w, struct DU_MANAGER *du_mgr,
 				 struct ALIAS_MANAGER *alias_mgr,
@@ -546,6 +548,7 @@ private:
   BOOL _no_return;
   BOOL _nothrow;
   BOOL _simp_if_conv;
+  BOOL _eh_cfg_opt;
 
   WOPT_SWITCHES(const WOPT_SWITCHES&);
   WOPT_SWITCHES& operator = (const WOPT_SWITCHES&);
@@ -672,6 +675,8 @@ private:
           OPT_Enable_WHIRL_SSA)
 	WOPT_Enable_Zero_Version = FALSE;
 
+      if (!OPT_Enable_EH_CFG_OPT_Set)
+        OPT_Enable_EH_CFG_OPT = TRUE;
       break; // end MAINOPT_PHASE
 
 #ifdef TARG_NVISA
@@ -819,6 +824,7 @@ private:
       WOPT_Enable_Generate_Trip_Count = _trip;
       WOPT_Enable_LNO_Copy_Propagate  = _lno_copy;
       WOPT_Enable_Zero_Version   = _zero_version;
+      OPT_Enable_EH_CFG_OPT = _eh_cfg_opt;
       break;
 #ifdef TARG_NVISA
     case PREOPT_CMC_PHASE:
@@ -959,6 +965,7 @@ public:
     _no_return = WOPT_Enable_Noreturn_Attr_Opt;
     _nothrow = WOPT_Enable_Nothrow_Opt;
     _simp_if_conv = WOPT_Enable_Simple_If_Conv;
+    _eh_cfg_opt = OPT_Enable_EH_CFG_OPT;
 
     Adjust_Optimization();
   }
@@ -1983,6 +1990,11 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 
       if (Get_Trace(TP_GLOBOPT, ENABLE_STAT)) {
       	comp_unit->Collect_statistics();
+      }
+
+      if (WOPT_Enable_ZDL) {
+        SET_OPT_PHASE("ZDL transformation");
+        comp_unit->Do_zdl(&rvi);
       }
 
       SET_OPT_PHASE("MainOpt emitter");

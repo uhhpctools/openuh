@@ -378,8 +378,6 @@ private:
   INT	       Is_simple_expr(WN *wn);
   void         Lower_if_stmt(WN *wn, END_BLOCK *ends_bb );
   WN          *if_convert(WN *wn);
-  BOOL         wn_is_assign(WN *wn);
-  BOOL         wn_is_assign_return(WN *wn);
   BOOL         wn_is_return_convert(WN *wn);
   // add various high-level construct statements to CFG so they can
   // later be raised back up (mostly preopt phase)

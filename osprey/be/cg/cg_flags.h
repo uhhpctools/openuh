@@ -461,11 +461,8 @@
 extern BOOL CG_warn_bad_freqs;
 extern BOOL CG_enable_loop_optimizations;
 #ifdef TARG_SL
-extern BOOL CG_enable_zero_delay_loop;
-extern UINT32 CG_zdl_enabled_level;
-extern UINT32 CG_zdl_skip_e;
-extern UINT32 CG_zdl_skip_a;
-extern UINT32 CG_zdl_skip_b;
+extern INT32 CG_zdl_enabled_level;
+extern INT32 CG_max_zdl_level;    //hardware max supported zero delay loop level
 extern BOOL CG_enable_opt_condmv;
 extern BOOL CG_enable_CBUS_workaround;
 extern BOOL CG_enable_LD_NOP_workaround;

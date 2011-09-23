@@ -3650,6 +3650,13 @@ CGTARG_TN_For_Asm_Operand (const char* constraint,
     ret_tn = (pref_tn ? pref_tn : Build_TN_Of_Mtype(rtype));
   }
 
+  else if (*constraint == 'b') {
+    TYPE_ID rtype = (load != NULL ? WN_rtype(load) : Pointer_Mtype);
+    FmtAssert(rtype == Pointer_Mtype,
+              ("ASM operand does not satisfy its constraint"));
+    ret_tn = (pref_tn ? pref_tn : Build_TN_Of_Mtype(MTYPE_A8));
+  }
+
   else {
     FmtAssert(FALSE, ("ASM constraint <%s> not supported", constraint));
   }

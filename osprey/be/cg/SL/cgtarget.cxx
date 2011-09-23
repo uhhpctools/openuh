@@ -1240,7 +1240,7 @@ VARIANT CGTARG_Analyze_Branch(
     *tn1 = NULL;
     *tn2 = NULL;
 
-    Is_True( !OP_cond( br ), ("unexpected conditional branch %d\n", OP_code(br) ) );
+    Is_True( !OP_cond( br ) || (OP_code(br) == TOP_auxbr), ("unexpected conditional branch %d\n", OP_code(br) ) );
 
     break;
   }

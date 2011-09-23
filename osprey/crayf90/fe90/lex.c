@@ -2214,8 +2214,6 @@ boolean is_star_directive (int	start_idx)
                   case Tok_SGI_Dir_Prefetch_Manual:
                   case Tok_SGI_Dir_Prefetch_Ref:
                   case Tok_SGI_Dir_Prefetch_Ref_Disable:
-                  case Tok_SGI_Dir_Purpleconditional:
-                  case Tok_SGI_Dir_Purpleunconditional:
                   case Tok_SGI_Dir_Regionbegin:
                   case Tok_SGI_Dir_Regionend:
                   case Tok_SGI_Dir_Section_Gp:

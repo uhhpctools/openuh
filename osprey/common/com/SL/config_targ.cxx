@@ -636,6 +636,21 @@ Configure_Target ( void )
   FmtAssert (IS_POW2(Align_Instructions), 
 	("-OPT:align_instructions=<n> must equal power of two"));
 
+  extern BOOL WOPT_Enable_ZDL;
+  extern BOOL WOPT_Enable_ZDL_Set;
+  extern BOOL OPT_Lower_ZDL;
+  extern BOOL OPT_Lower_ZDL_Set;
+  extern BOOL WOPT_Enable_ZDL_Early_Exit;
+  extern BOOL WOPT_ZDL_Innermost_Only;
+  if ( (Target == TARGET_sl1_pcore || Target == TARGET_sl1_dsp) &&
+       Opt_Level > 1) 
+    {
+      if (!WOPT_Enable_ZDL_Set)
+        WOPT_Enable_ZDL = TRUE;
+      if (!OPT_Lower_ZDL_Set)
+        OPT_Lower_ZDL = TRUE;
+    }
+
   return;
 }
 

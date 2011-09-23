@@ -61,20 +61,3 @@ inline LABEL_IDX Get_OP_Tag (const OP *op)
 
 // call at end of PU
 extern void TAG_Finish (void);
-
-#ifdef TARG_SL
-extern BB_MAP BB_Tag_Map;
-inline void Set_BB_Tag (BB *bb, LABEL_IDX tag)
-{
-  if (BB_Tag_Map == NULL)
-    BB_Tag_Map = BB_MAP32_Create();
-  BB_MAP32_Set (BB_Tag_Map, bb, tag);
-}
-
-inline LABEL_IDX Get_BB_Tag (BB *bb)
-{
-  Is_True(BB_Tag_Map != NULL, ("BB_Tag_Map not created"));
-  return (LABEL_IDX) BB_MAP32_Get (BB_Tag_Map, bb);
-}
-#endif
-

@@ -1814,7 +1814,7 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
   OP *new_op = NULL;
   const BOOL is_64bit = (TN_size(tnr) == 8);
   const TYPE_ID mtype = is_64bit ? MTYPE_I8 : MTYPE_I4;
-  INT64 val = imm_val < 0 ? -imm_val : imm_val;
+  UINT64 val = imm_val < 0 ? -imm_val : imm_val;
   OPS ops = OPS_EMPTY;
 
   if( imm_val == 0 ){
@@ -1840,6 +1840,8 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
 
   bool need_an_add = false;
 
+  /* Check for an unsigned power of two + 1. */
+  
   if( val >= 2 &&
       ( (val-1) & (val-2) ) == 0 ){
     val--;
@@ -1847,7 +1849,7 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
   }
 
   /* Check whether it can carry an imm opnd. */
-
+  /* Check for unsigned power of two. */
   if( ( val & ( val - 1 ) ) != 0 ){
     const TOP new_top = TOP_with_Imm_Opnd( op, 1, imm_val );
 
@@ -1871,6 +1873,8 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
     tn = tmp;
   }
 
+  /* determine the power of val. */
+  
   int power = 0;
   while( val != 1 ){
     power++;
@@ -1883,7 +1887,7 @@ static BOOL Convert_Imm_Mul( OP *op, TN *tnr, TN *tn, INT64 imm_val, EBO_TN_INFO
     Expand_Add( tnr, tnr, tn, mtype, &ops );
   }
 
-  if( imm_val < 0 )
+  if( imm_val < 0 && imm_val != INT64_MIN )
     Expand_Neg( tnr, tnr, mtype, &ops );
 
   BB_Insert_Ops_After( OP_bb(op), op, &ops );
@@ -4574,6 +4578,7 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED, TOP_vldsd,	TOP_vldsdx,	TOP_vldsdxx,	TOP_vldsd_n32},
   {TOP_UNDEFINED, TOP_vlddqa,	TOP_vlddqax,	TOP_vlddqaxx,	TOP_UNDEFINED},
   {TOP_UNDEFINED, TOP_vldupd,	TOP_vldupdx,	TOP_vldupdxx,	TOP_vldupd_n32},
+  {TOP_UNDEFINED, TOP_vldups,	TOP_vldupsx,	TOP_vldupsxx,	TOP_vldups_n32},
   {TOP_UNDEFINED, TOP_vlddqu,	TOP_vlddqux,	TOP_vlddquxx,	TOP_vlddqu_n32},
   {TOP_UNDEFINED, TOP_vldlps,	TOP_vldlpsx,	TOP_vldlpsxx,	TOP_vldlps_n32},
   {TOP_UNDEFINED, TOP_vldlpd,	TOP_vldlpdx,	TOP_vldlpdxx,	TOP_vldlpd_n32},
@@ -4662,6 +4667,15 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_mulsd,	TOP_mulxsd,	TOP_mulxxsd,	TOP_mulxxxsd,	TOP_UNDEFINED},
   {TOP_vmulss,	TOP_vmulxss,	TOP_vmulxxss,	TOP_vmulxxxss,	TOP_UNDEFINED},
   {TOP_vmulsd,	TOP_vmulxsd,	TOP_vmulxxsd,	TOP_vmulxxxsd,	TOP_UNDEFINED},
+  {TOP_vfaddss,	TOP_vfaddxss,	TOP_vfaddxxss,	TOP_vfaddxxxss,	TOP_UNDEFINED},
+  {TOP_vfaddsd,	TOP_vfaddxsd,	TOP_vfaddxxsd,	TOP_vfaddxxxsd,	TOP_UNDEFINED},
+  {TOP_vfsqrtss, TOP_vfsqrtxss,	TOP_vfsqrtxxss,	TOP_vfsqrtxxxss, TOP_UNDEFINED},
+  {TOP_vfsqrtsd, TOP_vfsqrtxsd,	TOP_vfsqrtxxsd,	TOP_vfsqrtxxxsd, TOP_UNDEFINED},
+  {TOP_vfrsqrtss, TOP_vfrsqrtxss, TOP_vfrsqrtxxss, TOP_vfrsqrtxxxss, TOP_UNDEFINED},
+  {TOP_vfrsqrt128v32, TOP_vfrsqrtx128v32, TOP_vfrsqrtxx128v32, TOP_vfrsqrtxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfsqrt128v64, TOP_vfsqrtx128v64, TOP_vfsqrtxx128v64, TOP_vfsqrtxxx128v64,	TOP_UNDEFINED},
+  {TOP_vfsqrt128v32, TOP_vfsqrtx128v32, TOP_vfsqrtxx128v32, TOP_vfsqrtxxx128v32,	TOP_UNDEFINED},
+  {TOP_vfrcp128v32, TOP_vfrcpx128v32, TOP_vfrcpxx128v32, TOP_vfrcpxxx128v32,	TOP_UNDEFINED},
   {TOP_fmul128v32, TOP_fmulx128v32, TOP_fmulxx128v32, TOP_fmulxxx128v32,	TOP_UNDEFINED},
   {TOP_fmul128v64, TOP_fmulx128v64, TOP_fmulxx128v64, TOP_fmulxxx128v64,	TOP_UNDEFINED},
   {TOP_cmpgt128v8, TOP_cmpgtx128v8, TOP_cmpgtxx128v8, TOP_cmpgtxxx128v8,	TOP_UNDEFINED},
@@ -4797,26 +4811,42 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_vfmaddsd,       TOP_vfmaddxsd,	    TOP_vfmaddxxsd,	  TOP_vfmaddxxxsd,          TOP_UNDEFINED},
   {TOP_vfmaddps,       TOP_vfmaddxps,	    TOP_vfmaddxxps,	  TOP_vfmaddxxxps,          TOP_UNDEFINED},
   {TOP_vfmaddpd,       TOP_vfmaddxpd,  	    TOP_vfmaddxxpd,	  TOP_vfmaddxxxpd,          TOP_UNDEFINED},
-  {TOP_vfmaddsubps,    TOP_vfmaddsubxps,    TOP_vfmaddsubxxps,	  TOP_vfmaddsubxxxps,       TOP_UNDEFINED},
-  {TOP_vfmaddsubpd,    TOP_vfmaddsubxpd,    TOP_vfmaddsubxxpd,	  TOP_vfmaddsubxxxpd,       TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddxrss,      TOP_vfmaddxxrss,      TOP_vfmaddxxxrss,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddxrsd,      TOP_vfmaddxxrsd,      TOP_vfmaddxxxrsd,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddxrps,      TOP_vfmaddxxrps,      TOP_vfmaddxxxrps,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddxrpd,      TOP_vfmaddxxrpd,      TOP_vfmaddxxxrpd,         TOP_UNDEFINED},
+  {TOP_vfmaddsubps,    TOP_vfmaddsubxps,    TOP_vfmaddsubxxps,	  TOP_vfmaddsubxxxps,       TOP_UNDEFINED},
+  {TOP_vfmaddsubpd,    TOP_vfmaddsubxpd,    TOP_vfmaddsubxxpd,	  TOP_vfmaddsubxxxpd,       TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddsubxrps,   TOP_vfmaddsubxxrps,   TOP_vfmaddsubxxxrps,      TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmaddsubxrpd,   TOP_vfmaddsubxxrpd,   TOP_vfmaddsubxxxrpd,      TOP_UNDEFINED},
   {TOP_vfmsubss,       TOP_vfmsubxss,	    TOP_vfmsubxxss,	  TOP_vfmsubxxxss,          TOP_UNDEFINED},
   {TOP_vfmsubsd,       TOP_vfmsubxsd,	    TOP_vfmsubxxsd,	  TOP_vfmsubxxxsd,          TOP_UNDEFINED},
   {TOP_vfmsubps,       TOP_vfmsubxps,	    TOP_vfmsubxxps,	  TOP_vfmsubxxxps,          TOP_UNDEFINED},
   {TOP_vfmsubpd,       TOP_vfmsubxpd,  	    TOP_vfmsubxxpd, 	  TOP_vfmsubxxxpd,          TOP_UNDEFINED},
-  {TOP_vfmsubaddps,    TOP_vfmsubaddxps,    TOP_vfmsubaddxxps,	  TOP_vfmsubaddxxxps,       TOP_UNDEFINED},
-  {TOP_vfmsubaddpd,    TOP_vfmsubaddxpd,    TOP_vfmsubaddxxpd, 	  TOP_vfmsubaddxxxpd,       TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubxrss,      TOP_vfmsubxxrss,      TOP_vfmsubxxxrss,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubxrsd,      TOP_vfmsubxxrsd,      TOP_vfmsubxxxrsd,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubxrps,      TOP_vfmsubxxrps,      TOP_vfmsubxxxrps,         TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubxrpd,      TOP_vfmsubxxrpd,      TOP_vfmsubxxxrpd,         TOP_UNDEFINED},
+  {TOP_vfmsubaddps,    TOP_vfmsubaddxps,    TOP_vfmsubaddxxps,	  TOP_vfmsubaddxxxps,       TOP_UNDEFINED},
+  {TOP_vfmsubaddpd,    TOP_vfmsubaddxpd,    TOP_vfmsubaddxxpd, 	  TOP_vfmsubaddxxxpd,       TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubaddxrps,   TOP_vfmsubaddxxrps,   TOP_vfmsubaddxxxrps,      TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfmsubaddxrpd,   TOP_vfmsubaddxxrpd,   TOP_vfmsubaddxxxrpd,      TOP_UNDEFINED},
+  {TOP_vfnmaddss,      TOP_vfnmaddxss,	    TOP_vfnmaddxxss,	  TOP_vfnmaddxxxss,         TOP_UNDEFINED},
+  {TOP_vfnmaddsd,      TOP_vfnmaddxsd,	    TOP_vfnmaddxxsd,	  TOP_vfnmaddxxxsd,         TOP_UNDEFINED},
+  {TOP_vfnmaddps,      TOP_vfnmaddxps,	    TOP_vfnmaddxxps,	  TOP_vfnmaddxxxps,         TOP_UNDEFINED},
+  {TOP_vfnmaddpd,      TOP_vfnmaddxpd,      TOP_vfnmaddxxpd,	  TOP_vfnmaddxxxpd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmaddxrss,     TOP_vfnmaddxxrss,     TOP_vfnmaddxxxrss,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmaddxrsd,     TOP_vfnmaddxxrsd,     TOP_vfnmaddxxxrsd,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmaddxrps,     TOP_vfnmaddxxrps,     TOP_vfnmaddxxxrps,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmaddxrpd,     TOP_vfnmaddxxrpd,     TOP_vfnmaddxxxrpd,        TOP_UNDEFINED},
+  {TOP_vfnmsubss,      TOP_vfnmsubxss,	    TOP_vfnmsubxxss,	  TOP_vfnmsubxxxss,         TOP_UNDEFINED},
+  {TOP_vfnmsubsd,      TOP_vfnmsubxsd,	    TOP_vfnmsubxxsd,	  TOP_vfnmsubxxxsd,         TOP_UNDEFINED},
+  {TOP_vfnmsubps,      TOP_vfnmsubxps,	    TOP_vfnmsubxxps,	  TOP_vfnmsubxxxps,         TOP_UNDEFINED},
+  {TOP_vfnmsubpd,      TOP_vfnmsubxpd,      TOP_vfnmsubxxpd, 	  TOP_vfnmsubxxxpd,         TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmsubxrss,     TOP_vfnmsubxxrss,     TOP_vfnmsubxxxrss,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmsubxrsd,     TOP_vfnmsubxxrsd,     TOP_vfnmsubxxxrsd,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmsubxrps,     TOP_vfnmsubxxrps,     TOP_vfnmsubxxxrps,        TOP_UNDEFINED},
+  {TOP_UNDEFINED,      TOP_vfnmsubxrpd,     TOP_vfnmsubxxrpd,     TOP_vfnmsubxxxrpd,        TOP_UNDEFINED},
   {TOP_icall,	       TOP_icallx,	    TOP_icallxx,	  TOP_icallxxx,	            TOP_UNDEFINED},
   {TOP_ijmp,	       TOP_ijmpx,	    TOP_ijmpxx,	          TOP_ijmpxxx,	            TOP_UNDEFINED},
   {TOP_cvtsd2ss,       TOP_cvtsd2ss_x,	    TOP_cvtsd2ss_xx,	  TOP_cvtsd2ss_xxx,	    TOP_UNDEFINED},
@@ -5200,9 +5230,6 @@ Compose_Mem_Base_Index_Mode ( OP* op, TN* index, TN* offset, TN* scale, TN* base
     }
     if (OP_load(op) || OP_store(op) || OP_prefetch(op)) {
         if (Is_Target_Orochi() && Is_Target_AVX() && OP_load(op) &&
-            (old_top != TOP_vldsd) &&
-            (old_top != TOP_vldsdx) &&
-            (old_top != TOP_vldsdxx) &&
             (OP_vec_lo_ldst(op) || OP_vec_hi_ldst(op))) {
             new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ), 
                             base, index, scale, offset );
@@ -7623,12 +7650,27 @@ Compose_Mem_Op( OP* op, TN* index, TN* offset, TN* scale, TN* base )
       else
 	new_op = Mk_OP( new_top, storeval, base, index, scale, offset );
     } else {
-      if (mode == N32_MODE)
-	new_op = Mk_OP( new_top, storeval, offset );
-      else if (mode == INDEX_MODE)
-	new_op = Mk_OP( new_top, storeval, index, scale, offset );
-      else
-	new_op = Mk_OP( new_top, storeval, base, offset, index, scale );    
+      if (Is_Target_Orochi() && Is_Target_AVX() && OP_load(op) &&
+          (OP_vec_lo_ldst(op) || OP_vec_hi_ldst(op))) {
+        if (mode == N32_MODE)
+  	  new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ), offset );
+        else if (mode == INDEX_MODE)
+  	  new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ), 
+                          index, scale, offset );
+        else if (mode == BASE_INDEX_MODE)
+	  new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ),
+                          base, index, scale, offset );    
+        else
+	  new_op = Mk_OP( new_top, storeval, OP_opnd( op, 0 ),
+                          base, offset );    
+      } else {
+        if (mode == N32_MODE)
+  	  new_op = Mk_OP( new_top, storeval, offset );
+        else if (mode == INDEX_MODE)
+  	  new_op = Mk_OP( new_top, storeval, index, scale, offset );
+        else
+	  new_op = Mk_OP( new_top, storeval, base, offset, index, scale );    
+      }
     }
   }
 
@@ -7754,11 +7796,8 @@ BOOL EBO_Merge_Memory_Addr( OP* op,
     return FALSE;
   }
 
-  const TOP old_top = OP_code(op);
   if (Is_Target_Orochi() && Is_Target_AVX() && 
-      (old_top != TOP_vldsd) &&
-      (old_top != TOP_vldsdx) &&
-      (old_top != TOP_vldsdxx) &&
+      (CG_load_execute == 0) &&
       (OP_vec_lo_ldst(op) || OP_vec_hi_ldst(op))) {
     return FALSE;
   }
@@ -9199,6 +9238,42 @@ BOOL EBO_Is_FMA4( OP* alu_op)
   case TOP_vfmsubaddpd:
     ret_val = TRUE;
     break;
+  case TOP_vfnmaddss:
+  case TOP_vfnmaddsd:
+  case TOP_vfnmaddps:
+  case TOP_vfnmaddpd:
+  case TOP_vfnmsubss:
+  case TOP_vfnmsubsd:
+  case TOP_vfnmsubps:
+  case TOP_vfnmsubpd:
+    ret_val = TRUE;
+    break;
+
+  default:
+    ret_val = FALSE;
+    break;
+  }
+
+  return ret_val;
+}
+
+BOOL EBO_Is_FMA4_NEG( OP* alu_op)
+{
+  const TOP top = OP_code(alu_op);
+  BOOL ret_val;
+
+  switch (top) {
+  case TOP_vfnmaddss:
+  case TOP_vfnmaddsd:
+  case TOP_vfnmaddps:
+  case TOP_vfnmaddpd:
+  case TOP_vfnmsubss:
+  case TOP_vfnmsubsd:
+  case TOP_vfnmsubps:
+  case TOP_vfnmsubpd:
+    ret_val = TRUE;
+    break;
+
   default:
     ret_val = FALSE;
     break;
@@ -9248,6 +9323,225 @@ static BOOL Process_Side_Effects(TN** opnd_tn,
   return rval;
 }
 
+static void Get_Disassociated_FMA_TOP_Codes( OP *alu_op, 
+                                             TOP *mul_top, 
+                                             TOP *arith_top )
+{
+  const TOP top = OP_code(alu_op);
+  TOP new_mul_top;
+  TOP new_arith_top;
+
+  switch (top) {
+  // fused multiply-adds
+  case TOP_vfmaddss:
+    new_mul_top = TOP_vmulss; 
+    new_arith_top = TOP_vfaddss; 
+    break;
+  case TOP_vfmaddsd:
+    new_mul_top = TOP_vmulsd; 
+    new_arith_top = TOP_vfaddsd; 
+    break;
+  case TOP_vfmaddps:
+    new_mul_top = TOP_vfmul128v32; 
+    new_arith_top = TOP_vfadd128v32; 
+    break;
+  case TOP_vfmaddpd:
+    new_mul_top = TOP_vfmul128v64; 
+    new_arith_top = TOP_vfadd128v64; 
+    break;
+
+  // fused multiply-addsubs
+  case TOP_vfmaddsubps:
+    new_mul_top = TOP_vfmul128v32; 
+    new_arith_top = TOP_vfaddsub128v32; 
+    break;
+  case TOP_vfmaddsubpd:
+    new_mul_top = TOP_vfmul128v64; 
+    new_arith_top = TOP_vfaddsub128v64; 
+    break;
+
+  // fused multiply-subs
+  case TOP_vfnmaddss:
+  case TOP_vfmsubss:
+    new_mul_top = TOP_vmulss; 
+    new_arith_top = TOP_vsubss; 
+    break;
+  case TOP_vfnmaddsd:
+  case TOP_vfmsubsd:
+    new_mul_top = TOP_vmulsd; 
+    new_arith_top = TOP_vsubsd; 
+    break;
+  case TOP_vfnmaddps:
+  case TOP_vfmsubps:
+    new_mul_top = TOP_vfmul128v32; 
+    new_arith_top = TOP_vfsub128v32; 
+    break;
+  case TOP_vfnmaddpd:
+  case TOP_vfmsubpd:
+    new_mul_top = TOP_vfmul128v64; 
+    new_arith_top = TOP_vfsub128v64; 
+    break;
+
+  // everything else
+  default:
+    new_mul_top = TOP_UNDEFINED; 
+    new_arith_top = TOP_UNDEFINED; 
+    break;
+  }
+
+  *mul_top = new_mul_top;
+  *arith_top = new_arith_top;
+}
+
+static BOOL Is_Benefitial_To_Load_Exec_Float_OP( OP *ld_op, OP *alu_op )
+{
+  BOOL ret_val = TRUE;
+  TN *result = NULL;
+
+  // find an appropriate result tn
+  for (INT i = 0; i < OP_results(ld_op); i++){
+    result = OP_result(ld_op, i);
+    if( TN_is_register(result) ){
+      if( TN_register_class(result) == ISA_REGISTER_CLASS_float )
+        break;
+    }
+  }
+
+  // Bypass this process if register class is not float
+  if( ( result != NULL ) &&
+      ( TN_register_class(result) == ISA_REGISTER_CLASS_float ) ){
+    BB *bb = OP_bb(ld_op);
+
+    const INT len = BB_length(bb);
+    INT *regs_in_use = (INT*)alloca(sizeof(INT) * (len+1));
+    mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
+    TN_MAP conflict_map;
+
+    MEM_POOL load_exe_pool;
+    MEM_POOL_Initialize(&load_exe_pool, "live_range_info", TRUE);
+
+    MEM_POOL_Push(&load_exe_pool);
+    LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, &load_exe_pool);
+
+    conflict_map = Calculate_All_Conflicts(bb, regs_in_use,
+                                           TN_register_class(result)); 
+
+    INT P_x = REGISTER_CLASS_register_count(TN_register_class(result));
+    INT local_conflicts = Find_Degree_For_TN(result, regs_in_use);
+
+    TN_MAP_Delete(conflict_map);
+    MEM_POOL_Pop(&load_exe_pool);
+
+    // In the case where register pressure is manageable, defer this choice 
+    // until later(after register allocation)
+    if( local_conflicts < P_x )
+      ret_val = FALSE;
+
+    if( EBO_Trace_Data_Flow && ret_val ) {
+      fprintf(TFile, "load-exec(%d) on %s and %s\n",
+              EBO_in_peep, 
+              TOP_Name(OP_code(ld_op)), TOP_Name(OP_code(alu_op)));
+    }
+  }
+
+  return ret_val;
+}
+
+BOOL EBO_Disassociate_FMA( OP* alu_op )
+{
+  BOOL ret_val = FALSE;
+
+  if( CG_load_execute == 0 )
+    return ret_val;
+
+  // Look for situations where fma insns exist under register pressure.
+  // We lose opportunities in this scenario for eliminating
+  // live ranges as our default fma behavior is reg-reg only. It is
+  // also worth indicating here that load-executing the fma instructions
+  // themselves reduces througput, making this action desirable for both cases.
+  // This operation preceeds load_execution, so we can handle both scenarios
+  // here.  This functionalty is under control of CG_load_execute. We resolve 
+  // the register pressure dilemma by disassocation of the fma components 
+  // so that we can load execute two components or remove 2 live ranges via 
+  // the memory forms of the fma components.
+  if( TOP_is_load_exe(OP_code(alu_op)) == FALSE ) {
+    BB *bb = OP_bb(alu_op);
+    TN *mul_opnd1 = OP_opnd( alu_op, 0 );
+    TN *mul_opnd2 = OP_opnd( alu_op, 1 );
+    TN *arith_opnd = OP_opnd( alu_op, 2 );
+    TN *result = OP_result(alu_op, 0);
+    BOOL fma_chained = FALSE;
+    const INT len = BB_length(bb);
+    INT *regs_in_use = (INT*)alloca(sizeof(INT) * (len+1));
+    mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
+    TN_MAP conflict_map;
+    TOP mul_top;
+    TOP arith_top;
+
+    MEM_POOL fma_exe_pool;
+    MEM_POOL_Initialize(&fma_exe_pool, "live_range_info", TRUE);
+
+    MEM_POOL_Push(&fma_exe_pool);
+    LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, &fma_exe_pool);
+
+    conflict_map = Calculate_All_Conflicts(bb, regs_in_use,
+                                           ISA_REGISTER_CLASS_float);
+
+    INT P_x = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_float);
+    INT local_conflicts = Find_Degree_For_TN(result, regs_in_use);
+
+    TN_MAP_Delete(conflict_map);
+    MEM_POOL_Pop(&fma_exe_pool);
+
+    Get_Disassociated_FMA_TOP_Codes( alu_op, &mul_top, &arith_top );
+
+    // Chained single use fma instructions produce simple live ranges
+    // which are better left in this form.
+    if( Is_TN_Sdsu( result ) ){
+      OP *use_op = Find_UseOp_For_TN( result );
+      if( use_op && EBO_Is_FMA4( use_op ) )
+        fma_chained = TRUE;
+    }
+
+    // Now if we successfully mapped a translation, add the new code
+    // for scenarios where we have at least 2 live ranges greater
+    // than the number of fp registers, as we will be giving potentially
+    // two back from the load exec forms for the new insns.
+    if( ( local_conflicts > ( P_x + 2 ) ) && 
+        ( fma_chained == FALSE ) &&
+        ( mul_top != TOP_UNDEFINED ) &&
+        ( arith_top != TOP_UNDEFINED ) ){
+      TN *mul_result = Build_TN_Like(result);
+      OP *mul_op = Mk_OP( mul_top, mul_result, mul_opnd1, mul_opnd2 );
+      OP *arith_op;
+      if( EBO_Is_FMA4_NEG( alu_op ) )
+        arith_op = Mk_OP( arith_top, result, arith_opnd, mul_result );
+      else
+        arith_op = Mk_OP( arith_top, result, mul_result, arith_opnd );
+
+      // Add the mul component of the fma
+      Set_OP_unrolling( mul_op, OP_unrolling(alu_op) );
+      Set_OP_orig_idx( mul_op, OP_map_idx(alu_op) );
+      Set_OP_unroll_bb( mul_op, OP_unroll_bb(alu_op) );
+
+      OP_srcpos( mul_op ) = OP_srcpos( alu_op );
+      BB_Insert_Op_After( bb, alu_op, mul_op );
+
+      // Now add the arithmetic (add, sub, addsub or subadd part)
+      Set_OP_unrolling( arith_op, OP_unrolling(alu_op) );
+      Set_OP_orig_idx( arith_op, OP_map_idx(alu_op) );
+      Set_OP_unroll_bb( arith_op, OP_unroll_bb(alu_op) );
+
+      OP_srcpos( arith_op ) = OP_srcpos( alu_op );
+      BB_Insert_Op_After( bb, mul_op, arith_op );
+
+      ret_val = TRUE;
+    }
+  }
+
+  return ret_val;
+}
+
 BOOL EBO_Load_Execution( OP* alu_op, 
                          TN** opnd_tn,     
                          EBO_TN_INFO** actual_tninfo,
@@ -9259,6 +9553,7 @@ BOOL EBO_Load_Execution( OP* alu_op,
   const TOP top = OP_code(alu_op);
   BOOL opnds_swapped = FALSE;
   BOOL rval = FALSE;
+  BOOL pressure_check_bypass = FALSE;
 
   if( top == TOP_xor64 ||
       top == TOP_or64  ||
@@ -9409,6 +9704,29 @@ BOOL EBO_Load_Execution( OP* alu_op,
 	OP_code(ld_op) == TOP_ldhpsxx) &&
       OP_code(alu_op) == TOP_cvtps2pd)
     return FALSE;
+
+  // For AVX code, it is too attractive not to eliminate 3 ops for 1
+  // TODO: possibly confine to vectorized loops?  For now its a hueristic
+  if( Is_Target_Orochi() && Is_Target_AVX() && OP_vec_lo_ldst(ld_op) ) {
+    if( ( PU_src_lang(Get_Current_PU()) == PU_F77_LANG ) ||
+        ( PU_src_lang(Get_Current_PU()) == PU_F90_LANG ) ) {
+      if( ( OP_code(alu_op) == TOP_vcvtdq2pd ) ||
+          ( OP_code(alu_op) == TOP_vcvtps2pd ) ){
+        pressure_check_bypass = TRUE; 
+      }
+    } else {
+      pressure_check_bypass = TRUE; 
+    }
+  }
+
+  // Gate load execute before register allocation based on 
+  // localized register pressure
+  if( !EBO_in_peep ){
+    if( !Is_Benefitial_To_Load_Exec_Float_OP( ld_op, alu_op ) && 
+        !pressure_check_bypass ) {
+      return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+    }
+  }
 
   /* Check <index> and <base> will not be re-defined between
      <ld_op> and <alu_op>, inclusive.
@@ -10665,31 +10983,57 @@ EBO_Fold_Load_Duplicate( OP* op, TN** opnd_tn, EBO_TN_INFO** actual_tninfo )
       return FALSE;
     if (index_loc >= 0 && !Pred_Opnd_Avail(op, loaded_tn_info, index_loc))
       return FALSE;
+    // for this bb, obtain the dependence graph so that we can
+    // walk this op's expression tree to check dependencies.
+    // Make sure that load operand is not overwritten
+    // by a store operation before op using this dependency graph.
+
+    CG_DEP_Compute_Graph ( op->bb,
+                         NO_ASSIGNED_REG_DEPS,
+                         NON_CYCLIC,
+                         NO_MEMREAD_ARCS,
+                         INCLUDE_MEMIN_ARCS,
+                         NO_CONTROL_ARCS,
+                         NULL);
+
+
+    const INT hash_value = EBO_hash_op( load, NULL );
+    EBO_OP_INFO* opinfo = EBO_opinfo_table[hash_value];
+
+    while( opinfo != NULL ) {
+      OP* next_op = opinfo->in_op;
+      if( next_op == load ) break;
+      if( next_op && OP_store( next_op ) ) {
+        ARC_LIST  *arcs;
+        for (arcs = OP_succs(load); arcs != NULL; arcs = ARC_LIST_rest(arcs)) {
+           ARC *arc = ARC_LIST_first(arcs);
+           if (ARC_kind(arc) != CG_DEP_MEMANTI) continue;
+           OP *succ_op = ARC_succ(arc);
+           if ((succ_op == next_op)  && OP_Precedes(next_op, op))  {
+              CG_DEP_Delete_Graph (op->bb);
+              return FALSE;
+            }
+         }
+      }
+      opinfo = opinfo->same;
+    }
+    CG_DEP_Delete_Graph (op->bb);
 
     TOP topcode;
     if (base && offset && index && scale) {
-      topcode = TOP_fmovddupxx;
-      if (Is_Target_Orochi() && Is_Target_AVX())
-	topcode = TOP_vmovddupxx;
-      new_op = Mk_OP (topcode, 
+      new_op = Mk_OP (TOP_fmovddupxx, 
 	  OP_result(op, 0), 
 	  OP_opnd(load, 0), 
 		    OP_opnd(load, 1), 
 		    OP_opnd(load, 2), 
 		    OP_opnd(load, 3));
     } else if (base && offset) {
-      topcode = TOP_fmovddupx;
-      if (Is_Target_Orochi() && Is_Target_AVX())
-	topcode = TOP_vmovddupx;
-      new_op = Mk_OP (topcode, 
+      new_op = Mk_OP (TOP_fmovddupx, 
 	  OP_result(op, 0), 
 	  OP_opnd(load, 0), 
 	  OP_opnd(load, 1));
     } else if (index && scale && offset) {
-      topcode = TOP_fmovddupxxx;
-      if (Is_Target_Orochi() && Is_Target_AVX())
-	topcode = TOP_vmovddupxxx;
-      new_op = Mk_OP (topcode, 
+      new_op = Mk_OP (TOP_fmovddupxxx, 
 	  OP_result(op, 0), 
 	  OP_opnd(load, 0), 
 	  OP_opnd(load, 1), 

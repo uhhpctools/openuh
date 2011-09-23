@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -85,9 +85,7 @@
 #include "erglob.h"
 #include "erlib.h"
 #include "errors.h"
-#if !defined(TARG_NVISA)
-#include "erauxdesc.h"
-#endif
+#include "../cg/init.cxx"           /* force include of Cg_Initializer */
 #include "ercg.h"
 #include "file_util.h"
 #include "glob.h"
@@ -657,16 +655,8 @@ static OPTION_DESC Options_CG[] = {
     0, 0, 0,	&CG_LOOP_cloop, NULL },
 #endif
 #if defined(TARG_SL)
-  { OVK_BOOL,	OV_INTERNAL, FALSE, "zero_delay_loop", "zero_delay_loop",
-    0, 0, 0,	&CG_enable_zero_delay_loop, NULL },
   { OVK_INT32, OV_INTERNAL, TRUE, "zdl_enabled_level", "",
     INT32_MAX, 0, INT32_MAX, &CG_zdl_enabled_level, NULL },
-  { OVK_INT32, OV_INTERNAL, TRUE, "zdl_skip_e", "",
-    INT32_MAX, 0, INT32_MAX, &CG_zdl_skip_e, NULL },
-  { OVK_INT32, OV_INTERNAL, TRUE, "zdl_skip_a", "",
-    INT32_MAX, 0, INT32_MAX, &CG_zdl_skip_a, NULL },
-  { OVK_INT32, OV_INTERNAL, TRUE, "zdl_skip_b", "",
-    INT32_MAX, 0, INT32_MAX, &CG_zdl_skip_b, NULL },
   { OVK_BOOL,  OV_INTERNAL, TRUE, "opt_condmv", "",
     0, 0, 0,   &CG_enable_opt_condmv, NULL},
   { OVK_BOOL,  OV_INTERNAL, TRUE, "CBUS_workaround", "",
@@ -2566,11 +2556,6 @@ CG_Process_Command_Line (INT cg_argc, char **cg_argv, INT be_argc, char **be_arg
 	FmtAssert (!DEBUG_Ir_Version_Check,
 		   ("WHIRL revision mismatch between be.so (%s) and cg.so (%s)",
 		    Whirl_Revision, WHIRL_REVISION));
-
-#if !defined(TARG_NVISA) // also set by bedriver, so redundant?
-    Set_Error_Descriptor (EP_BE, EDESC_BE);
-    Set_Error_Descriptor (EP_CG, EDESC_CG);
-#endif
 
 #ifdef KEY
     be_command_line_args = be_argv;

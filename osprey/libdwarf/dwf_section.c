@@ -636,6 +636,7 @@ _dwf_pro_generate_ehframe(Dwarf_P_Debug dbg, Dwarf_Error *error)
 	curfde = curfde->fde_next;
     }
 
+    _dwarf_p_dealloc(dbg, cie_offs);
 
     return (int)dbg->de_n_debug_sect;
 }

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -289,8 +293,8 @@ extern VAR_KIND ST_Var_Kind (ST*);
 #define ST_isFormal(st) (ST_Var_Kind(st) == var_formal)
 #define ST_isCommon(st) (ST_Var_Kind(st) == var_common)
 
-extern TY_IDX Get_Original_Type(ST* st);
-extern TY_IDX Get_Array_Type(ST* st);
+extern TY_IDX Lego_Get_Original_Type(ST* st);
+extern TY_IDX Lego_Get_Array_Type(ST* st);
 
 /***********************************************************************
  *

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -196,7 +196,6 @@ extern WN* Get_Only_Loop_Inside(const WN* wn, BOOL regions_ok);
 #endif
 
 
-#ifndef LNO
 ARRAY_DIRECTED_GRAPH16 *Current_Dep_Graph = NULL;
 
 void *C_Dep_Graph(void)
@@ -286,8 +285,6 @@ VINDEX16 LNOGetVertex(WN *wn)
   return 0;
 }
 
-#endif /* LNO */
-
 // remove all the edges and vertices from the graph
 void ARRAY_DIRECTED_GRAPH16::Erase_Graph()
 {
@@ -341,7 +338,7 @@ void ARRAY_DIRECTED_GRAPH16::PruneMapsUsingParity(void)
   }
 }
 
-#ifndef LNO
+#if defined(SHARED_BUILD) && !defined(LNO)
 void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp)
 #else
 void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp, INT)
@@ -436,8 +433,6 @@ void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp, INT)
   }
 
 }
-
-#ifndef LNO
 
 extern "C" void
 Depgraph_Write (void *depgraph, Output_File *fl, WN_MAP off_map)
@@ -577,7 +572,6 @@ Depgraph_Read (char *cur_addr, char *end_addr, char *wn_base)
 
   return (void *)g;
 }
-#endif /* LNO */
 
 // All the remaining code is LNO specific and will not be linked in
 // by other phases
@@ -3433,6 +3427,28 @@ void SCALAR_STACK::Add_Scalar(WN *wn_call, SYMBOL* symbol, UINT snumber)
   }
   _stack->Push(SCALAR_NODE(_pool,*symbol));
   _stack->Top_nth(0)._scalar_ref_stack->Push(sref);
+}
+
+void SCALAR_STACK::Remove_Scalar(WN *wn)
+{
+  Is_True((WN_operator(wn) == OPR_LDID) ||
+          (WN_operator(wn) == OPR_STID), 
+	  ("Non scalar passed to SCALAR_STACK::Remove_Scalar"));
+
+  SYMBOL symbol(wn);
+
+  for (INT i=0; i<_stack->Elements(); i++) {
+    if (symbol == _stack->Top_nth(i)._scalar) {
+      //remove all scalar_references to this symbol
+      for (INT j = 0; j < _stack->Top_nth(i)._scalar_ref_stack->Elements(); j++)
+	_stack->Top_nth(i)._scalar_ref_stack->DeleteTop(j);
+
+      //remove the SCALAR_NODE since its _scalar_ref_stack is now empty.
+      if (_stack->Top_nth(i)._scalar_ref_stack->Elements() == 0)
+	_stack->DeleteTop(i);
+      return;
+    }
+  }
 }
 
 void SCALAR_STACK::Print(FILE *fp)

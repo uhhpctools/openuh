@@ -4561,8 +4561,6 @@ static void process_x_option (char *optargs)
          case Tok_SGI_Dir_Prefetch_Ref_Disable :
          case Tok_SGI_Dir_Psection :
          case Tok_SGI_Dir_Psections :
-         case Tok_SGI_Dir_Purpleconditional :
-         case Tok_SGI_Dir_Purpleunconditional :
          case Tok_SGI_Dir_Regionbegin :
          case Tok_SGI_Dir_Regionend :
          case Tok_SGI_Dir_Section_Gp :

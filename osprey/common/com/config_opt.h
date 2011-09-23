@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -123,6 +123,10 @@ extern BOOL Alias_Common_Scalar;        /* Distinguish scalar from other array
 extern BOOL  Alias_F90_Pointer_Unaliased;  /* Are F90 pointers unaliased? */
 extern BOOL Alias_Nystrom_Analyzer;     /* Are we using Nystrom alias analysis? */
 
+/** lower zdl stuff **/
+extern BOOL OPT_Lower_ZDL;
+extern BOOL OPT_Lower_ZDL_Set;
+
 /***** Expression folding options *****/
 extern BOOL Enable_Cfold_Float;		/* FP constant folding? */
 extern BOOL Enable_Cfold_Reassociate;	/* Re-association allowed? */
@@ -228,6 +232,10 @@ extern BOOL OPT_Enable_BUILD_WHIRL_SSA; // enable build WSSA driect from WHIRL
 extern UINT32 AA_force_tag_alias_before_dim1;
 extern UINT32 AA_force_tag_alias_before_dim2;
 
+extern BOOL OPT_Enable_EH_CFG_OPT;
+extern BOOL OPT_Enable_EH_CFG_OPT_Set;
+
+extern UINT32 OPT_Struct_Array_Copy; 
 #endif
 #ifdef __cplusplus
 }

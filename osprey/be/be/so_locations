@@ -16,9 +16,6 @@ whirl2c.so \
 whirl2f.so \
 		:st = $range 0x0da00000, 0x00200000:
 
-purple.so \
-		:st = $range 0x0d800000, 0x00200000:
-
 ipl.so \
 		:st = $range 0x0d600000, 0x00200000:
 

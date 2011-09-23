@@ -217,6 +217,9 @@
  * extern void LWN_Delete_Tree(WN *wn);
  *   Delete the node and all its descendants.
  *
+ * extern void LWN_Delete_SR(WN *wn);
+ *  Delete CALL_INFO nodes' scalar references associated with wn
+ *
  * extern void LWN_Delete_DU(WN *wn)
  *  Delete the DU chain associated with wn
  *
@@ -337,6 +340,12 @@ extern HASH_TABLE<WN*, BOOL> *Deleted_Loop_Map;
 
 #define LWN_Get_Parent(wn)	((WN*)WN_MAP_Get(Parent_Map, (WN*)wn))
 #define LWN_Set_Parent(wn, p)	(WN_MAP_Set(Parent_Map, wn, (void *)p))
+inline BOOL  LWN_Is_Ancestor(const WN* wn, WN* ancestor)
+{
+  while( wn && wn != ancestor)
+    wn = LWN_Get_Parent(wn);
+  return wn == ancestor;
+}
 
 inline void LWN_Copy_Linenumber(const WN* from, WN* to)
 {
@@ -455,6 +464,7 @@ extern void LWN_Copy_Map(WN *, WN *, WN_MAP);
 extern void LWN_Copy_Def_Use_Node(WN*, WN*, DU_MANAGER*);
 extern void LWN_Copy_Def_Use(WN*, WN*, DU_MANAGER*);
 extern void LWN_Delete_DU(WN *wn);
+extern void LWN_Delete_SR(WN *wn);
 extern void LWN_Delete_LNO_dep_graph(WN *wn);
 extern void LWN_Delete_CG_dep_graph(WN *wn);
 extern void LWN_Delete_Name_Manager(WN *wn);

@@ -70,7 +70,6 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
 #include "gspin-gcc-interface.h"
 #include "diagnostic.h"         /* errorcount, sorrycount */
 extern void gspin_gxx_emits_decl (tree);
-extern void gspin_gxx_emits_asm (char *);
 
 extern int flag_spin_file;
 #endif
@@ -1214,10 +1213,6 @@ assemble_asm (tree string)
   if (TREE_CODE (string) == ADDR_EXPR)
     string = TREE_OPERAND (string, 0);
 
-#ifdef KEY
-  if (flag_spin_file)
-    gspin_gxx_emits_asm ((char *)TREE_STRING_POINTER (string));
-#endif
 
   fprintf (asm_out_file, "\t%s\n", TREE_STRING_POINTER (string));
 }
