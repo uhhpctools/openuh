@@ -58,4 +58,3 @@ For merge [2], I turned off some assertion checks in
 common/com/x8664/targ_const.cxx, because they were causing the bootstrapped
 library build to fail with --with-build-optimize=DEBUG. The same problem was
 observed for Open64 main trunk, as of revision r3576. --Deepak
-
