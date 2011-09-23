@@ -116,6 +116,21 @@ __ompc_task_set_state(omp_task_t *task, omp_task_state_t state)
   task->state = state;
 }
 
+static inline const char*
+__ompc_task_get_state_string(omp_task_t *task)
+{
+  switch (task->state)
+  {
+    case OMP_TASK_UNSCHEDULED: return "UNSCHEDULED"; break;
+    case OMP_TASK_READY: return "READY"; break;
+    case OMP_TASK_RUNNING: return "RUNNING"; break;
+    case OMP_TASK_WAITING: return "WAITING"; break;
+    case OMP_TASK_IN_BARRIER: return "IN_BARRIER"; break;
+    case OMP_TASK_EXITING: return "EXITING"; break;
+    case OMP_TASK_FINISHED: return "FINISEHD"; break;
+  }
+}
+
 static inline int
 __ompc_task_state_is_unscheduled(omp_task_t *task)
 {
@@ -263,6 +278,17 @@ __ompc_task_set_firstprivates(omp_task_t *task, void *firstprivates)
 extern __thread omp_task_t *__omp_current_task;
 extern int (*__ompc_task_cutoff)( void );
 
+extern __thread unsigned long __omp_task_cutoffs;
+extern int __omp_task_cutoff_num_threads;
+extern int __omp_task_cutoff_switch;
+extern int __omp_task_cutoff_depth;
+extern int __omp_task_cutoff_num_children;
+
+/* default values when corresponding cutoffs are enabled */
+extern int __omp_task_cutoff_num_threads_min;
+extern int __omp_task_cutoff_switch_max;
+extern int __omp_task_cutoff_depth_max;
+extern int __omp_task_cutoff_num_children_max;
 
 /* external API for compiler */
 extern int __ompc_task_will_defer(int may_delay);
@@ -276,9 +302,6 @@ extern void __ompc_task_firstprivates_free(void *firstprivates);
 
 /* internal APIs */
 extern int __ompc_task_cutoff_default();
-extern int __ompc_task_cutoff_num_children();
-extern int __ompc_task_cutoff_queue_load();
-extern int __ompc_task_cutoff_depth();
 extern int __ompc_task_cutoff_always();
 extern int __ompc_task_cutoff_never();
 

@@ -41,7 +41,7 @@ else
 TARGETS = $(LIBRARY) $(PROF_LIB) $(DSO)
 endif
 
-SRC_DIRS    = $(BUILD_BASE)
+SRC_DIRS = $(BUILD_BASE) $(BUILD_BASE)/other_taskpools
 
 # Makefile setup
 include $(COMMONDEFS)
@@ -51,7 +51,7 @@ VPATH    =  $(SRC_DIRS)
 # Compiler options
 LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCDEFS = $(HOSTDEFS) $(TARGDEFS)
-LCINCS = -I$(SRC_DIRS) -I$(BUILD_BASE)  
+LCINCS += $(addprefix -I, $(SRC_DIRS))
 
 # HOSTDEFS += -DTAU_USE_C_API
 HOSTDEFS += -I$(TAU_ROOT)/include -I$(PAPI_ROOT)/include -DPROFILING_ON -DTAU_PAPI -DTAU_STDCXXLIB -DTAU_DOT_H_LESS_HEADERS -DTAU_OPEN64ORC  -DTAU_OPENMP -DTAU_MULTIPLE_COUNTERS   -DTAU_LINUX_TIMERS -DTAU_PAPI_WALLCLOCKTIME -DTAU_PAPI_VIRTUAL -DTAU_CALLPATH -DTAU_COMPENSATE -DTAU_LARGEFILE -D_LARGEFILE64_SOURCE -DSTD_COMPLEX  -DTAU_MPI -DTAU_MPI_THREADED -DTAU_MPIATTRFUNCTION
@@ -67,8 +67,10 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 CXXFLAGS += -DTARG_$(BUILD_TARGET)
 #CFLAGS += -fgnu89-inline
 
-# enable UH modifications to PCL library
-CFLAGS += -DUH_PCL
+OTHER_TASKPOOLS = \
+	omp_task_pool_simple.c \
+	omp_task_pool_simple_2level.c \
+	omp_task_pool_public_private.c
 
 CFILES = \
 	omp_collector_validation.c \
@@ -82,9 +84,7 @@ CFILES = \
 	omp_queue.c \
 	omp_task.c \
 	omp_task_pool.c \
-	omp_task_pool_per_thread1.c \
-	omp_task_pool_per_thread2.c \
-	omp_task_pool_global.c
+	$(OTHER_TASKPOOLS)
 
 CXXFILES = \
 	omp_init.cxx \

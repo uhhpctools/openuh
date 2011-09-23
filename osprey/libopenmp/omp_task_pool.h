@@ -70,6 +70,7 @@ static inline void __ompc_task_pool_set_team_size(omp_task_pool_t *pool,
 /* external interface */
 extern int __omp_task_queue_num_slots;
 extern int __omp_task_chunk_size;
+extern short __omp_task_pool_greedval;
 
 extern omp_task_pool_t *(*__ompc_create_task_pool)(int team_size);
 extern omp_task_pool_t *(*__ompc_expand_task_pool)(omp_task_pool_t *pool,
@@ -90,41 +91,54 @@ extern omp_queue_item_t (*__ompc_task_queue_steal_chunk)(omp_queue_t *src,
                                                          int chunk_size);
 
 
-/* per_thread1 */
+/* default */
 extern omp_task_pool_t *
-__ompc_create_task_pool_per_thread1(int team_size);
+__ompc_create_task_pool_default(int team_size);
 extern omp_task_pool_t *
-__ompc_expand_task_pool_per_thread1( omp_task_pool_t *pool, int new_team_size);
+__ompc_expand_task_pool_default( omp_task_pool_t *pool, int new_team_size);
 extern int
-__ompc_add_task_to_pool_per_thread1(omp_task_pool_t *pool, omp_task_t *task);
+__ompc_add_task_to_pool_default(omp_task_pool_t *pool, omp_task_t *task);
 extern omp_task_t *
-__ompc_remove_task_from_pool_per_thread1(omp_task_pool_t *pool);
+__ompc_remove_task_from_pool_default(omp_task_pool_t *pool);
 extern void
-__ompc_destroy_task_pool_per_thread1(omp_task_pool_t *pool);
+__ompc_destroy_task_pool_default(omp_task_pool_t *pool);
 
-/* per_thread2 */
+/* simple */
 extern omp_task_pool_t *
-__ompc_create_task_pool_per_thread2(int team_size);
+__ompc_create_task_pool_simple(int team_size);
 extern omp_task_pool_t *
-__ompc_expand_task_pool_per_thread2( omp_task_pool_t *pool, int new_team_size);
+__ompc_expand_task_pool_simple( omp_task_pool_t *pool, int new_team_size);
 extern int
-__ompc_add_task_to_pool_per_thread2(omp_task_pool_t *pool, omp_task_t *task);
+__ompc_add_task_to_pool_simple(omp_task_pool_t *pool, omp_task_t *task);
 extern omp_task_t *
-__ompc_remove_task_from_pool_per_thread2(omp_task_pool_t *pool);
+__ompc_remove_task_from_pool_simple(omp_task_pool_t *pool);
 extern void
-__ompc_destroy_task_pool_per_thread2(omp_task_pool_t *pool);
+__ompc_destroy_task_pool_simple(omp_task_pool_t *pool);
 
-/* global */
+
+/* simple_2level */
 extern omp_task_pool_t *
-__ompc_create_task_pool_global(int team_size);
+__ompc_create_task_pool_simple_2level(int team_size);
 extern omp_task_pool_t *
-__ompc_expand_task_pool_global( omp_task_pool_t *pool, int new_team_size);
+__ompc_expand_task_pool_simple_2level( omp_task_pool_t *pool, int new_team_size);
 extern int
-__ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task);
+__ompc_add_task_to_pool_simple_2level(omp_task_pool_t *pool, omp_task_t *task);
 extern omp_task_t *
-__ompc_remove_task_from_pool_global(omp_task_pool_t *pool);
+__ompc_remove_task_from_pool_simple_2level(omp_task_pool_t *pool);
 extern void
-__ompc_destroy_task_pool_global(omp_task_pool_t *pool);
+__ompc_destroy_task_pool_simple_2level(omp_task_pool_t *pool);
 
+
+/* public_private Jim LaGrone 7/28/2011 */
+extern omp_task_pool_t *
+__ompc_create_task_pool_public_private(int team_size);
+extern omp_task_pool_t *
+__ompc_expand_task_pool_public_private( omp_task_pool_t *pool, int new_team_size);
+extern int
+__ompc_add_task_to_pool_public_private(omp_task_pool_t *pool, omp_task_t *task);
+extern omp_task_t *
+__ompc_remove_task_from_pool_public_private(omp_task_pool_t *pool);
+extern void
+__ompc_destroy_task_pool_public_private(omp_task_pool_t *pool);
 
 #endif /* __omp_task_scheduler_included */

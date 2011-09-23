@@ -47,6 +47,34 @@
 #define CACHE_LINE_SIZE_L2L3     64      // L2L3 cache line size
 #endif
 
+#if defined(TARG_X8664)
+static inline void __ompc_mfence()
+{
+  __asm__ __volatile__("mfence":: : "memory");
+}
+
+#elif defined(TARG_IA32)
+static inline void __ompc_mfence()
+{
+  int x = 0, y;
+  __asm__ volatile ("xchgl %0,%1" : "=r" (x) : "m" (y), "0" (x) : "memory");
+}
+
+#else
+
+static inline void __ompc_mfence()
+{
+  __sync_synchronize();
+}
+
+#endif
+
+static inline int __ompc_cas(volatile int *ptr, int ag, int x)
+{
+  return __sync_bool_compare_and_swap(ptr, ag, x);
+}
+
+
 #if defined(TARG_X8664) || defined(TARG_IA32) || defined(TARG_LOONGSON)
 
 //TODO: should use __sync_add_and_fetch(), but it's

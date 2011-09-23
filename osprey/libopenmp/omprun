@@ -43,12 +43,14 @@ Options:
 --num-threads=<nt>            - sets nthreads-var ICV
 --stacksize=<ss>              - sets stacksize-var ICV
 --nested=<t>                  - values: true|false
---task-cutoff=<cutoff>        - values: always|never|depth|children|queue_load|default
---task-pool=<pool-type>       - values: per_thread1|per_thread2|global|multilevel
---task-queue=<tq>             - values: deque|cfifo|lifo|fifo|deque_inv
+--task-cutoff=<cutoff-string> - format: cutoff:val[,cutoff:val[,...]], where
+                                   cutoff in {always,never,num_threads,switch,depth,num_children}
+                                   val < 1 disables the cutoff, val > 0 specifies cutoff limit
+--task-pool=<pool-type>       - values: default|simple|2level|simple_2level|public_private|multilevel
+--task-queue=<tq>             - values: deque|cfifo|lifo|fifo|inv_deque
 --task-queue-num-slots=<ns>   - sets initial size for each thread's task queue
 --task-chunk-size=<cs>        - values: 1 to task-queue-num-slots
---queue-storage=<qs>          - values: array|list|dyn_array
+--queue-storage=<qs>          - values: array|dyn_array|list|lockless
 --help or -h
 \n";
 

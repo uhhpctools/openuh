@@ -68,6 +68,19 @@ __thread omp_task_t *__omp_current_task;
 
 cond_func __ompc_task_cutoff;
 
+__thread unsigned long __omp_task_cutoffs = 0;
+
+int __omp_task_cutoff_num_threads   = 1;
+int __omp_task_cutoff_switch        = 1;
+int __omp_task_cutoff_depth         = 0;
+int __omp_task_cutoff_num_children  = 0;
+
+/* default values when corresponding cutoffs are enabled */
+int __omp_task_cutoff_num_threads_min   = 2;
+int __omp_task_cutoff_switch_max        = 100;
+int __omp_task_cutoff_depth_max         = 100;
+int __omp_task_cutoff_num_children_max  = 100;
+
 /* implementation for external API */
 
 int __ompc_task_will_defer(int may_delay)
@@ -86,6 +99,7 @@ void __ompc_task_create(omp_task_func taskfunc, void *frame_pointer,
   current_task = __omp_current_task;
 
   if (__ompc_task_cutoff()) {
+    //__omp_task_cutoffs++;
     orig_task = current_task;
     __omp_current_task = NULL;
     taskfunc(firstprivates, frame_pointer);
@@ -291,27 +305,39 @@ void __ompc_task_switch(omp_task_t *new_task)
   __omp_current_task = orig_task;
 }
 
+static inline int __ompc_task_cutoff_num_threads()
+{
+  return (__ompc_get_num_threads() < __omp_task_cutoff_num_threads_min);
+}
+
+static inline int __ompc_task_cutoff_switch(omp_task_t *current_task)
+{
+  return (current_task->sdepth == __omp_task_cutoff_switch_max);
+}
+
+static inline int __ompc_task_cutoff_depth(omp_task_t *current_task)
+{
+  return (current_task->depth == __omp_task_cutoff_depth_max);
+}
+
+static inline int __ompc_task_cutoff_num_children(omp_task_t *current_task)
+{
+  return (current_task->num_children == __omp_task_cutoff_num_children_max);
+}
+
 int __ompc_task_cutoff_default()
 {
-  return ((__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)        ||
-          __ompc_get_num_threads() == 1                     ||
-          __omp_current_task == NULL                        ||
-          __omp_current_task->sdepth == MAX_SDEPTH);
-}
+  omp_task_t *current_task = __omp_current_task;
 
-int __ompc_task_cutoff_num_children()
-{
-  return 1;
-}
-
-int __ompc_task_cutoff_queue_load()
-{
-  return 1;
-}
-
-int __ompc_task_cutoff_depth()
-{
-  return 1;
+  return ( current_task == NULL ||
+           __omp_task_cutoff_num_threads &&
+           __ompc_task_cutoff_num_threads() ||
+           __omp_task_cutoff_switch &&
+           __ompc_task_cutoff_switch(current_task) ||
+           __omp_task_cutoff_depth &&
+           __ompc_task_cutoff_depth(current_task) ||
+           __omp_task_cutoff_num_children &&
+           __ompc_task_cutoff_num_children(current_task));
 }
 
 int __ompc_task_cutoff_always()
@@ -321,6 +347,8 @@ int __ompc_task_cutoff_always()
 
 int __ompc_task_cutoff_never()
 {
-  return 0;
+  omp_task_t *current_task = __omp_current_task;
+  /* never cut off a task, unless the current task is NULL (i.e. in sequential
+   * region) */
+  return current_task == NULL;
 }
-

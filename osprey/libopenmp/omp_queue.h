@@ -65,11 +65,6 @@ struct omp_queue {
 typedef struct omp_queue omp_queue_t;
 
 /* inline functions */
-static inline int __ompc_queue_is_empty(omp_queue_t *q)
-{
-  return q->is_empty;
-}
-
 static inline int __ompc_queue_num_slots(omp_queue_t *q)
 {
   return (q->num_slots);
@@ -86,6 +81,10 @@ extern int
 (*__ompc_queue_is_full)(omp_queue_t *q);
 extern int
 (*__ompc_queue_num_used_slots)(omp_queue_t *q);
+extern omp_queue_item_t
+(*__ompc_queue_steal_head)(omp_queue_t *q);
+extern omp_queue_item_t
+(*__ompc_queue_steal_tail)(omp_queue_t *q);
 extern omp_queue_item_t
 (*__ompc_queue_get_head)(omp_queue_t *q);
 extern omp_queue_item_t
@@ -109,13 +108,24 @@ extern omp_queue_item_t
 (*__ompc_queue_cfifo_transfer_chunk)(omp_queue_t *src, omp_queue_t *dst,
                                      int chunk_size);
 
+extern int
+(*__ompc_queue_is_empty)(omp_queue_t *q);
+
 /* implementation */
+
+/* used by array, dyn_array, and list implementations */
+extern int __ompc_queue_check_is_empty(omp_queue_t *q);
+
+/* used by lockless implementation */
+extern int __ompc_queue_lockless_is_empty(omp_queue_t *q);
 
 /* array implementation */
 extern void __ompc_queue_array_init(omp_queue_t *q, int num_slots);
 extern void __ompc_queue_array_free_slots(omp_queue_t *q);
 extern int __ompc_queue_array_is_full(omp_queue_t *q);
 extern int __ompc_queue_array_num_used_slots(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_array_steal_head(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_array_steal_tail(omp_queue_t *q);
 extern omp_queue_item_t __ompc_queue_array_get_head(omp_queue_t *q);
 extern omp_queue_item_t __ompc_queue_array_get_tail(omp_queue_t *q);
 extern int __ompc_queue_array_put_tail(omp_queue_t *q, omp_queue_item_t item);
@@ -143,6 +153,28 @@ __ompc_queue_dyn_array_put_head(omp_queue_t *q, omp_queue_item_t item);
 
 extern int
 __ompc_queue_cfifo_dyn_array_put(omp_queue_t *q, omp_queue_item_t item);
+
+/* list implementation */
+
+extern void __ompc_queue_list_init(omp_queue_t *q, int num_slots);
+extern void __ompc_queue_list_free_slots(omp_queue_t *q);
+extern int __ompc_queue_list_is_full(omp_queue_t *q);
+extern int __ompc_queue_list_num_used_slots(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_list_steal_head(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_list_steal_tail(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_list_get_head(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_list_get_tail(omp_queue_t *q);
+extern int __ompc_queue_list_put_tail(omp_queue_t *q, omp_queue_item_t item);
+extern int __ompc_queue_list_put_head(omp_queue_t *q, omp_queue_item_t item);
+
+/* lockless implementation */
+extern void __ompc_queue_lockless_init(omp_queue_t * q, int num_slots);
+extern void __ompc_queue_lockless_free_slots(omp_queue_t *q);
+extern int __ompc_queue_lockless_num_used_slots(omp_queue_t *q);
+extern int __ompc_queue_lockless_is_full(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_lockless_get_head(omp_queue_t *q);
+extern omp_queue_item_t __ompc_queue_lockless_get_tail(omp_queue_t *q);
+extern int __ompc_queue_lockless_put_tail(omp_queue_t *q, omp_queue_item_t item);
 
 
 #endif /* __omp_queue_included */

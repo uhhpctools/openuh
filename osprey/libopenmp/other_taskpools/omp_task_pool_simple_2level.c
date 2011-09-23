@@ -28,24 +28,23 @@
 
 #include <stdlib.h>
 #include <assert.h>
-#include "omp_rtl.h"
-#include "omp_sys.h"
+#include "../omp_rtl.h"
+#include "../omp_sys.h"
 
 /* level ids */
 #define PER_THREAD 0
-#define GLOBAL 1
+#define COMMUNITY 1
 
-#define STEAL_CHUNK
 
-/* __ompc_init_task_pool_global:
+/* __ompc_init_task_pool_simple_2level:
  * Initializes a task pool, for which tasks may be added and taken.
  */
-omp_task_pool_t * __ompc_create_task_pool_global(int team_size)
+omp_task_pool_t * __ompc_create_task_pool_simple_2level(int team_size)
 {
   int i;
   omp_task_pool_t *new_pool;
   omp_task_queue_level_t *per_thread;
-  omp_task_queue_level_t *global;
+  omp_task_queue_level_t *community;
 
   new_pool = (omp_task_pool_t *) aligned_malloc(sizeof(omp_task_pool_t),
                                                 CACHE_LINE_SIZE);
@@ -61,39 +60,39 @@ omp_task_pool_t * __ompc_create_task_pool_global(int team_size)
       ("__ompc_create_task_pool: couldn't malloc level"));
 
   per_thread = &new_pool->level[PER_THREAD];
-  global = &new_pool->level[GLOBAL];
+  community = &new_pool->level[COMMUNITY];
 
   per_thread->num_queues = team_size;
   per_thread->task_queue = aligned_malloc(sizeof(omp_queue_t) * team_size,
                                           CACHE_LINE_SIZE);
-  global->num_queues = 1;
-  global->task_queue = aligned_malloc(sizeof(omp_queue_t), CACHE_LINE_SIZE);
+  community->num_queues = 1;
+  community->task_queue = aligned_malloc(sizeof(omp_queue_t), CACHE_LINE_SIZE);
 
   Is_True(per_thread->task_queue != NULL,
       ("__ompc_create_task_pool: couldn't malloc per-thread task queues"));
-  Is_True(global->task_queue != NULL,
-      ("__ompc_create_task_pool: couldn't malloc global task queue"));
+  Is_True(community->task_queue != NULL,
+      ("__ompc_create_task_pool: couldn't malloc community task queue"));
 
   for (i = 0; i < team_size; i++)
     __ompc_queue_init(&per_thread->task_queue[i], __omp_task_queue_num_slots);
 
-  /* what's a good size for the global queue, as a function of the local queue
+  /* what's a good size for the community queue, as a function of the local queue
    * sizes and the team size? Just going to make it 2 * local queue size for
    * now.
    */
-  __ompc_queue_init(global->task_queue, __omp_task_queue_num_slots*2);
+  __ompc_queue_init(community->task_queue, __omp_task_queue_num_slots*2);
 
   return new_pool;
 }
 
-/* __ompc_expand_task_pool_global
+/* __ompc_expand_task_pool_simple_2level
  * Expand the task pool for a new team size. We add an extra task queue per
- * extra thread. 
+ * extra thread.
  *
- * Note: may consider resizing the global queue as well, but not doing that
+ * Note: may consider resizing the community queue as well, but not doing that
  * presently.
  */
-omp_task_pool_t * __ompc_expand_task_pool_global(omp_task_pool_t *pool, int
+omp_task_pool_t * __ompc_expand_task_pool_simple_2level(omp_task_pool_t *pool, int
     new_team_size) { int i; int old_team_size; omp_task_queue_level_t
   *per_thread;
 
@@ -120,16 +119,16 @@ omp_task_pool_t * __ompc_expand_task_pool_global(omp_task_pool_t *pool, int
   return pool;
 }
 
-/* __ompc_add_task_to_pool_global:
+/* __ompc_add_task_to_pool_simple_2level:
  * Adds a task to the task pool. The task will be added to the current
- * thread's queue. 
+ * thread's queue.
  */
-int __ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task)
+int __ompc_add_task_to_pool_simple_2level(omp_task_pool_t *pool, omp_task_t *task)
 {
   int success;
   int myid = __omp_myid;
   omp_task_queue_level_t *per_thread;
-  omp_task_queue_level_t *global;
+  omp_task_queue_level_t *community;
 
   Is_True(pool != NULL, ("__ompc_add_task_to_pool: task pool is uninitialized"));
   Is_True(task != NULL,
@@ -137,7 +136,7 @@ int __ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task)
 
   success = 0;
   per_thread = &pool->level[PER_THREAD];
-  global = &pool->level[GLOBAL];
+  community = &pool->level[COMMUNITY];
 
   /* num_pending_tasks track not just tasks entered into the task pool, but
    * also tasks marked as deferred that could not fit into the task pool
@@ -145,21 +144,21 @@ int __ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task)
   __ompc_atomic_inc(&pool->num_pending_tasks);
 
   /* don't try to place it in per-thread queue if it looks to be full, because
-   * we have the global queue to use instead   */
+   * we have the community queue to use instead   */
   if (!__ompc_task_queue_is_full(&per_thread->task_queue[myid]))
     success = __ompc_task_queue_put(&pool->level[PER_THREAD].task_queue[myid],
                                     task);
 
   if (!success)
-    success = __ompc_task_queue_donate(pool->level[GLOBAL].task_queue, task);
+    success = __ompc_task_queue_donate(pool->level[COMMUNITY].task_queue, task);
 
   return success;
 }
 
-/* __ompc_remove_task_from_pool_global:
+/* __ompc_remove_task_from_pool_simple_2level:
  * Takes a task from the task pool. First tries to get a task from the current
  * thread's task queue. If that doesn't work, then it will look for work in
- * the global queue. If that's also empty, then it will attempt to steal a
+ * the community queue. If that's also empty, then it will attempt to steal a
  * task from another task queue (so long as there are no other tasks, not in a
  * barrier, that are tied to the current thread).
  *
@@ -167,16 +166,16 @@ int __ompc_add_task_to_pool_global(omp_task_pool_t *pool, omp_task_t *task)
  * tasks tied to the current thread and not in a barrier ([*]), we should be
  * able to steal any untied tasks, or tied tasks that descend from all tasks
  * in [*]. But this implementation does not separate untied tasks from tied
- * tasks, and also does not track descendants in the task pool. 
+ * tasks, and also does not track descendants in the task pool.
  */
-omp_task_t *__ompc_remove_task_from_pool_global(omp_task_pool_t *pool)
+omp_task_t *__ompc_remove_task_from_pool_simple_2level(omp_task_pool_t *pool)
 {
   omp_task_t *task, *current_task;
   omp_team_t *team;
   omp_v_thread_t *current_thread;
   omp_queue_t *my_queue;
   omp_queue_t *victim_queue;
-  omp_task_queue_level_t *per_thread, *global;
+  omp_task_queue_level_t *per_thread, *community;
   int myid = __omp_myid;
 
   Is_True(pool != NULL, ("__ompc_remove_task_from_pool: task pool is uninitialized"));
@@ -184,7 +183,7 @@ omp_task_t *__ompc_remove_task_from_pool_global(omp_task_pool_t *pool)
   current_task = __omp_current_task;
   current_thread = __omp_current_v_thread;
   per_thread = &pool->level[PER_THREAD];
-  global = &pool->level[GLOBAL];
+  community = &pool->level[COMMUNITY];
 
   task = __ompc_task_queue_get(&per_thread->task_queue[myid]);
 
@@ -196,15 +195,16 @@ omp_task_t *__ompc_remove_task_from_pool_global(omp_task_pool_t *pool)
       (__ompc_task_state_is_in_barrier(current_task) ||
        !__ompc_task_is_tied(current_task))) {
 
-#ifdef STEAL_CHUNK
-    /* this will steal a chunk of tasks, instead of just 1, from the global
-     * queue */
-    task = __ompc_task_queue_steal_chunk(global->task_queue, 
-                                       &per_thread->task_queue[myid],
-                                       __omp_task_chunk_size);
-#else
-    task = __ompc_task_queue_steal(global->task_queue);
-#endif
+    if (__omp_task_chunk_size > 1) {
+      /* this will steal a chunk of tasks, instead of just 1, from the
+       * community
+       * queue */
+      task = __ompc_task_queue_steal_chunk(community->task_queue,
+          &per_thread->task_queue[myid],
+          __omp_task_chunk_size);
+    } else {
+      task = __ompc_task_queue_steal(community->task_queue);
+    }
 
     if (task == NULL) {
       int first_victim, victim = 0;
@@ -232,26 +232,26 @@ omp_task_t *__ompc_remove_task_from_pool_global(omp_task_pool_t *pool)
   return task;
 }
 
-/* __ompc_destroy_task_pool_global:
+/* __ompc_destroy_task_pool_simple_2level:
  */
-void __ompc_destroy_task_pool_global(omp_task_pool_t *pool)
+void __ompc_destroy_task_pool_simple_2level(omp_task_pool_t *pool)
 {
   int i;
   omp_task_queue_level_t *per_thread;
-  omp_task_queue_level_t *global;
+  omp_task_queue_level_t *community;
 
   Is_True(pool != NULL, ("__ompc_destroy_task_pool; pool is NULL"));
 
   per_thread = &pool->level[PER_THREAD];
-  global = &pool->level[GLOBAL];
+  community = &pool->level[COMMUNITY];
 
   for (i = 0; i < pool->team_size; i++) {
     __ompc_queue_free_slots(&per_thread->task_queue[i]);
   }
-  __ompc_queue_free_slots(global->task_queue);
+  __ompc_queue_free_slots(community->task_queue);
 
   aligned_free(per_thread->task_queue); /* free queues in level 0 */
-  aligned_free(global->task_queue); /* free queues in level 1 */
+  aligned_free(community->task_queue); /* free queues in level 1 */
   aligned_free(pool->level); /* free the level array */
   aligned_free(pool); /* free the pool itself */
 }

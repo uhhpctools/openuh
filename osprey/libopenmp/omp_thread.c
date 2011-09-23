@@ -148,6 +148,7 @@ int ompc_req_start = 0;
 
 /* prototype */
 void __ompc_environment_variables();
+void __ompc_task_configure();
 void __ompc_level_1_barrier(const int vthread_id);
 void __ompc_exit_barrier(omp_v_thread_t *_v_thread);
 void __ompc_fini_rtl();
@@ -335,6 +336,19 @@ __ompc_environment_variables()
     }
   }
 
+  __ompc_task_configure();
+}
+
+/* configuration for OpenMP Tasking implementation */
+void
+__ompc_task_configure()
+{
+  char *env_var_str;
+  int  env_var_val;
+  char *queue_storage_str, *task_queue_str;
+  int using_queue_list = 0;
+  int using_queue_lockless = 0;
+
   /* not currently used */
   /*
   env_var_str = getenv("OMP_TASK_STACK_SIZE");
@@ -368,18 +382,45 @@ __ompc_environment_variables()
   */
 
   /* control the implementation of the queue storage */
-  env_var_str = getenv("O64_OMP_QUEUE_STORAGE");
-  if (env_var_str != NULL) {
-    if (strncasecmp(env_var_str, "LIST", 4) == 0) {
-      Not_Valid("O64_OMP_TASK_POOL does not yet support LIST, "
-                "try ARRAY instead");
-    } else if (strncasecmp(env_var_str, "DYN_ARRAY", 9) == 0) {
+  queue_storage_str = getenv("O64_OMP_QUEUE_STORAGE");
+  if (queue_storage_str != NULL) {
+    if (strncasecmp(queue_storage_str, "LIST", 4) == 0) {
+      __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
+      __ompc_queue_init = &__ompc_queue_list_init;
+      __ompc_queue_free_slots = &__ompc_queue_list_free_slots;
+      __ompc_queue_is_full = &__ompc_queue_list_is_full;
+      __ompc_queue_num_used_slots = &__ompc_queue_list_num_used_slots;
+      __ompc_queue_steal_head = &__ompc_queue_list_steal_head;
+      __ompc_queue_steal_tail= &__ompc_queue_list_steal_tail;
+      __ompc_queue_get_head = &__ompc_queue_list_get_head;
+      __ompc_queue_get_tail= &__ompc_queue_list_get_tail;
+      __ompc_queue_put_tail = &__ompc_queue_list_put_tail;
+      __ompc_queue_put_head = &__ompc_queue_list_put_head;
+      /* not yet supported for LIST */
+      __ompc_queue_transfer_chunk_from_head = NULL;
+
+      /* CFIFO not yet supported for LIST, so using the standard LIST
+       * implementation */
+      __ompc_queue_cfifo_is_full = &__ompc_queue_list_is_full;
+      __ompc_queue_cfifo_num_used_slots =
+        &__ompc_queue_list_num_used_slots;
+      __ompc_queue_cfifo_put = &__ompc_queue_list_put_tail;
+      __ompc_queue_cfifo_get = &__ompc_queue_list_get_head;
+      /* not yet supported for LIST */
+      __ompc_queue_cfifo_transfer_chunk = NULL;
+
+      using_queue_list = 1;
+
+    } else if (strncasecmp(queue_storage_str, "DYN_ARRAY", 9) == 0) {
       /* mostly the same as ARRAY implementation, except for functions that
        * add new items to the queue */
+      __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
       __ompc_queue_init = &__ompc_queue_array_init;
       __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
       __ompc_queue_is_full = &__ompc_queue_array_is_full;
       __ompc_queue_num_used_slots = &__ompc_queue_array_num_used_slots;
+      __ompc_queue_steal_head = &__ompc_queue_array_steal_head;
+      __ompc_queue_steal_tail= &__ompc_queue_array_steal_tail;
       __ompc_queue_get_head = &__ompc_queue_array_get_head;
       __ompc_queue_get_tail= &__ompc_queue_array_get_tail;
       __ompc_queue_put_tail = &__ompc_queue_dyn_array_put_tail;
@@ -393,11 +434,14 @@ __ompc_environment_variables()
       __ompc_queue_cfifo_get = &__ompc_queue_cfifo_array_get;
       __ompc_queue_cfifo_transfer_chunk =
                  &__ompc_queue_cfifo_array_transfer_chunk_to_empty;
-    } else if (strncasecmp(env_var_str, "ARRAY", 5) == 0) {
+    } else if (strncasecmp(queue_storage_str, "ARRAY", 5) == 0) {
+      __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
       __ompc_queue_init = &__ompc_queue_array_init;
       __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
       __ompc_queue_is_full = &__ompc_queue_array_is_full;
       __ompc_queue_num_used_slots = &__ompc_queue_array_num_used_slots;
+      __ompc_queue_steal_head = &__ompc_queue_array_steal_head;
+      __ompc_queue_steal_tail= &__ompc_queue_array_steal_tail;
       __ompc_queue_get_head = &__ompc_queue_array_get_head;
       __ompc_queue_get_tail= &__ompc_queue_array_get_tail;
       __ompc_queue_put_tail = &__ompc_queue_array_put_tail;
@@ -411,16 +455,38 @@ __ompc_environment_variables()
       __ompc_queue_cfifo_get = &__ompc_queue_cfifo_array_get;
       __ompc_queue_cfifo_transfer_chunk =
                  &__ompc_queue_cfifo_array_transfer_chunk_to_empty;
+    } else if (strncasecmp(queue_storage_str, "LOCKLESS", 8) == 0) {
+      using_queue_lockless = 1;
+      __ompc_queue_is_empty = &__ompc_queue_lockless_is_empty;
+      __ompc_queue_init = &__ompc_queue_lockless_init;
+      __ompc_queue_free_slots = &__ompc_queue_lockless_free_slots;
+      __ompc_queue_is_full = &__ompc_queue_lockless_is_full;
+      __ompc_queue_num_used_slots = &__ompc_queue_lockless_num_used_slots;
+      __ompc_queue_steal_head = &__ompc_queue_lockless_get_head;
+      __ompc_queue_steal_tail= NULL;
+      __ompc_queue_get_head = &__ompc_queue_lockless_get_head;
+      __ompc_queue_get_tail= &__ompc_queue_lockless_get_tail;
+      __ompc_queue_put_tail = &__ompc_queue_lockless_put_tail;
+      __ompc_queue_put_head = NULL;
+      __ompc_queue_transfer_chunk_from_head = NULL;
+      __ompc_queue_cfifo_is_full = &__ompc_queue_lockless_is_full;
+      __ompc_queue_cfifo_num_used_slots = &__ompc_queue_lockless_num_used_slots;
+      __ompc_queue_cfifo_put = &__ompc_queue_lockless_put_tail;
+      __ompc_queue_cfifo_get = &__ompc_queue_lockless_get_head;
+      __ompc_queue_cfifo_transfer_chunk = NULL;
     }  else  {
       Not_Valid("O64_OMP_QUEUE_STORAGE should be "
                 "ARRAY|LIST|DYN_ARRAY or unset");
     }
   } else {
     /* ARRAY */
+      __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
     __ompc_queue_init = &__ompc_queue_array_init;
     __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
     __ompc_queue_is_full = &__ompc_queue_array_is_full;
     __ompc_queue_num_used_slots = &__ompc_queue_array_num_used_slots;
+    __ompc_queue_steal_head = &__ompc_queue_array_steal_head;
+    __ompc_queue_steal_tail= &__ompc_queue_array_steal_tail;
     __ompc_queue_get_head = &__ompc_queue_array_get_head;
     __ompc_queue_get_tail= &__ompc_queue_array_get_tail;
     __ompc_queue_put_tail = &__ompc_queue_array_put_tail;
@@ -437,48 +503,66 @@ __ompc_environment_variables()
   }
 
   /* control the implementation of the task queues */
-  env_var_str = getenv("O64_OMP_TASK_QUEUE");
+  task_queue_str = getenv("O64_OMP_TASK_QUEUE");
   __ompc_task_queue_is_full         = __ompc_queue_is_full;
   __ompc_task_queue_num_used_slots  = __ompc_queue_num_used_slots;
   __ompc_task_queue_steal_chunk     = __ompc_queue_transfer_chunk_from_head;
-  if (env_var_str != NULL) {
-    if (strncasecmp(env_var_str, "CFIFO", 5) == 0) {
-      __ompc_task_queue_get    = __ompc_queue_cfifo_get;
-      __ompc_task_queue_put    = __ompc_queue_cfifo_put;
-      __ompc_task_queue_steal  = __ompc_queue_cfifo_get;
-      __ompc_task_queue_donate = __ompc_queue_cfifo_put;
-      __ompc_task_queue_is_full = __ompc_queue_cfifo_is_full;
-      __ompc_task_queue_num_used_slots = __ompc_queue_cfifo_num_used_slots;
-      __ompc_task_queue_steal_chunk = __ompc_queue_cfifo_transfer_chunk;
-    } else if (strncasecmp(env_var_str, "FIFO", 4) == 0) {
+  if (task_queue_str != NULL) {
+    if (strncasecmp(task_queue_str, "CFIFO", 5) == 0) {
+      if (using_queue_list) {
+        Warning("O64_OMP_TASK_QUEUE=CFIFO not supported if "
+                "O64_OMP_QUEUE_STORAGE=LIST. Using FIFO instead.");
+        /* same as FIFO if queue storage is LIST */
+        __ompc_task_queue_get    = __ompc_queue_get_head;
+        __ompc_task_queue_put    = __ompc_queue_put_tail;
+        __ompc_task_queue_steal  = __ompc_queue_steal_head;
+        __ompc_task_queue_donate = __ompc_queue_put_tail;
+      }  else {
+        __ompc_task_queue_get    = __ompc_queue_cfifo_get;
+        __ompc_task_queue_put    = __ompc_queue_cfifo_put;
+        __ompc_task_queue_steal  = __ompc_queue_cfifo_get;
+        __ompc_task_queue_donate = __ompc_queue_cfifo_put;
+        __ompc_task_queue_is_full = __ompc_queue_cfifo_is_full;
+        __ompc_task_queue_num_used_slots = __ompc_queue_cfifo_num_used_slots;
+        __ompc_task_queue_steal_chunk = __ompc_queue_cfifo_transfer_chunk;
+      }
+    } else if (strncasecmp(task_queue_str, "FIFO", 4) == 0) {
       __ompc_task_queue_get    = __ompc_queue_get_head;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
-      __ompc_task_queue_steal  = __ompc_queue_get_head;
+      __ompc_task_queue_steal  = __ompc_queue_steal_head;
       __ompc_task_queue_donate = __ompc_queue_put_tail;
-    } else if (strncasecmp(env_var_str, "LIFO", 4) == 0) {
+    } else if (strncasecmp(task_queue_str, "LIFO", 4) == 0) {
+      if (using_queue_lockless) {
+        Not_Valid("O64_OMP_TASK_QUEUE=LIFO not supported if "
+            "O64_OMP_QUEUE_STORAGE=LOCKLESS.");
+      }
       __ompc_task_queue_get    = __ompc_queue_get_tail;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
-      __ompc_task_queue_steal  = __ompc_queue_get_tail;
+      __ompc_task_queue_steal  = __ompc_queue_steal_tail;
       __ompc_task_queue_donate = __ompc_queue_put_tail;
-    } else if (strncasecmp(env_var_str, "DEQUE_INV", 9) == 0) {
+    } else if (strncasecmp(task_queue_str, "INV_DEQUE", 9) == 0) {
+      if (using_queue_lockless) {
+        Not_Valid("O64_OMP_TASK_QUEUE=INV_DEQUE not supported if "
+            "O64_OMP_QUEUE_STORAGE=LOCKLESS.");
+      }
       __ompc_task_queue_get    = __ompc_queue_get_head;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
-      __ompc_task_queue_steal  = __ompc_queue_get_tail;
+      __ompc_task_queue_steal  = __ompc_queue_steal_tail;
       __ompc_task_queue_donate = __ompc_queue_put_head;
-    } else if (strncasecmp(env_var_str, "DEQUE", 5) == 0) {
+    } else if (strncasecmp(task_queue_str, "DEQUE", 5) == 0) {
       __ompc_task_queue_get    = __ompc_queue_get_tail;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
-      __ompc_task_queue_steal  = __ompc_queue_get_head;
+      __ompc_task_queue_steal  = __ompc_queue_steal_head;
       __ompc_task_queue_donate = __ompc_queue_put_head;
     } else {
       Not_Valid("O64_OMP_TASK_QUEUE should be "
-                "DEQUE|CFIFO|FIFO|LIFO|DEQUE_INV or unset");
+                "DEQUE|CFIFO|FIFO|LIFO|INV_DEQUE or unset");
     }
   } else {
     /* DEQUE */
     __ompc_task_queue_get    = __ompc_queue_get_tail;
     __ompc_task_queue_put    = __ompc_queue_put_tail;
-    __ompc_task_queue_steal  = __ompc_queue_get_head;
+    __ompc_task_queue_steal  = __ompc_queue_steal_head;
     __ompc_task_queue_donate = __ompc_queue_put_head;
   }
 
@@ -497,82 +581,212 @@ __ompc_environment_variables()
   env_var_str = getenv("O64_OMP_TASK_CHUNK_SIZE");
   __omp_task_chunk_size = 1;
   if (env_var_str != NULL) {
-    int chunk_size;
+    int chunk_size = 1;
     sscanf(env_var_str, "%d", &chunk_size);
     if (chunk_size < 1) {
       Warning("Value for O64_OMP_TASK_CHUNK_SIZE is invalid, "
               " so using default setting");
-    } else
+    } else if ((chunk_size > 1) && using_queue_lockless) {
+      Warning("O64_OMP_TASK_CHUNK_SIZE > 1 not allowed if "
+              "O64_OMP_QUEUE_STORAGE=LOCKLESS. Setting it to 1.");
+      __omp_task_chunk_size = 1;
+    } else {
       __omp_task_chunk_size = chunk_size;
+    }
+  }
+
+  /* value for alternator in O64_OMP_TASK_POOL=PUBLIC_PRIVATE  */
+  env_var_str = getenv("O64_OMP_TASK_POOL_GREEDVAL");
+  __omp_task_pool_greedval = 4;
+  if (env_var_str != NULL) {
+    int alt_val;
+    sscanf(env_var_str,"%d", &alt_val);
+    if (alt_val < 1) {
+      Warning("Value for O64_OMP_TASK_POOL_GREEDVAL is invalid, "
+          "default setting will be used.");
+    } else {
+      __omp_task_pool_greedval = alt_val;
+    }
   }
 
   /* control the task pool configuration */
   env_var_str = getenv("O64_OMP_TASK_POOL");
   if (env_var_str != NULL) {
-    if (strncasecmp(env_var_str, "PER_THREAD2", 11) == 0) {
-      __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread2;
-      __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread2;
-      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_per_thread2;
-      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_per_thread2;
-      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_per_thread2;
-    } else if (strncasecmp(env_var_str, "GLOBAL", 6) == 0) {
+    if (strncasecmp(env_var_str, "PUBLIC_PRIVATE", 14) == 0) {
+      /* added 7/28/2011 Jim LaGrone */
+      __ompc_create_task_pool    = &__ompc_create_task_pool_public_private;
+      __ompc_expand_task_pool    = &__ompc_expand_task_pool_public_private;
+      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_public_private;
+      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_public_private;
+      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_public_private;
+    } else if (strncasecmp(env_var_str, "DEFAULT", 7) == 0) {
+      __ompc_create_task_pool    = &__ompc_create_task_pool_default;
+      __ompc_expand_task_pool    = &__ompc_expand_task_pool_default;
+      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_default;
+      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_default;
+      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_default;
+    } else if (strncasecmp(env_var_str, "SIMPLE_2LEVEL", 13) == 0) {
+      if (__omp_task_chunk_size > 1) {
+        fprintf(stderr, "Warning: task_chunk_size (%d) > 1 with SIMPLE_2LEVEL"
+            "task pool may result in incorrect scheduling\n",
+            __omp_task_chunk_size);
+        fflush(stderr);
+      }
+      if (task_queue_str != NULL &&
+          strncasecmp(task_queue_str, "DEQUE", 5) &&
+          strncasecmp(task_queue_str, "LIFO", 4)) {
+        fprintf(stderr, "Warning: Value for O64_OMP_TASK_QUEUE (%s) "
+            "may result in incorrect scheduling when using SIMPLE_2LEVEL "
+            "task pool\n", task_queue_str);
+        fflush(stderr);
+      }
+      if (using_queue_list) {
+        Not_Valid("O64_OMP_TASK_POOL=SIMPLE_2LEVEL not supported if "
+                  "O64_OMP_QUEUE_STORAGE=LIST");
+        /* not reached */
+      }
       /* each thread gets a queue, plus a global "community" queue */
-      __ompc_create_task_pool    = &__ompc_create_task_pool_global;
-      __ompc_expand_task_pool    = &__ompc_expand_task_pool_global;
-      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_global;
-      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_global;
-      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_global;
-      /* for GLOBAL, a "donate" is the same as a put */
+      __ompc_create_task_pool    = &__ompc_create_task_pool_simple_2level;
+      __ompc_expand_task_pool    = &__ompc_expand_task_pool_simple_2level;
+      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_simple_2level;
+      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_simple_2level;
+      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_simple_2level;
+      /* for SIMPLE_2LEVEL, a "donate" is the same as a put */
       __ompc_task_queue_donate = __ompc_task_queue_put;
     } else if  (strncasecmp(env_var_str, "MULTILEVEL", 10) == 0) {
       Not_Valid("O64_OMP_TASK_POOL does not yet support MULTILEVEL, "
-                "try PER_THREAD1|PER_THREAD2|GLOBAL instead");
-    } else if (strncasecmp(env_var_str, "PER_THREAD1", 11) == 0) {
-      __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread1;
-      __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread1;
-      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_per_thread1;
-      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_per_thread1;
-      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_per_thread1;
+                "try DEFAULT|SIMPLE|SIMPLE_2LEVEL|PUBLIC_PRIVATE instead");
+    } else if  (strncasecmp(env_var_str, "2LEVEL", 6) == 0) {
+      Not_Valid("O64_OMP_TASK_POOL does not yet support 2LEVEL, "
+                "try DEFAULT|SIMPLE|SIMPLE_2LEVEL|PUBLIC_PRIVATE instead");
+    } else if (strncasecmp(env_var_str, "SIMPLE", 6) == 0) {
+      if (task_queue_str != NULL &&
+          strncasecmp(task_queue_str, "DEQUE", 5) &&
+          strncasecmp(task_queue_str, "LIFO", 4)) {
+        fprintf(stderr, "Warning: Value for O64_OMP_TASK_QUEUE (%s) "
+            "may result in incorrect scheduling when using SIMPLE "
+            "task pool\n", task_queue_str);
+        fflush(stderr);
+      }
+      __ompc_create_task_pool    = &__ompc_create_task_pool_simple;
+      __ompc_expand_task_pool    = &__ompc_expand_task_pool_simple;
+      __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_simple;
+      __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_simple;
+      __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_simple;
     } else {
-      Not_Valid("O64_OMP_TASK_SCHEDULE should be "
-                "PER_THREAD1|PER_THREAD2|GLOBAL|MULTILEVEL or unset");
-    }
-  } else {
-    /* PER_THREAD1 */
-    __ompc_create_task_pool    = &__ompc_create_task_pool_per_thread1;
-    __ompc_expand_task_pool    = &__ompc_expand_task_pool_per_thread1;
-    __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_per_thread1;
-    __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_per_thread1;
-    __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_per_thread1;
-  }
-
-  /* control the task cutoff */
-  env_var_str = getenv("O64_OMP_TASK_CUTOFF");
-  if (env_var_str != NULL) {
-    if (strncasecmp(env_var_str, "ALWAYS", 6) == 0) {
-      __ompc_task_cutoff = &__ompc_task_cutoff_always;
-    } else if (strncasecmp(env_var_str, "NEVER", 5) == 0) {
-      __ompc_task_cutoff = &__ompc_task_cutoff_never;
-    } else if (strncasecmp(env_var_str, "DEPTH", 5) == 0) {
-      Not_Valid("O64_OMP_TASK_CUTOFF does not yet support DEPTH, "
-                " try DEFAULT|ALWAYS|NEVER instead");
-    } else if (strncasecmp(env_var_str, "NUM_CHILDREN", 12) == 0) {
-      Not_Valid("O64_OMP_TASK_CUTOFF does not yet support NUM_CHILDREN, "
-                " try DEFAULT|ALWAYS|NEVER instead");
-    } else if (strncasecmp(env_var_str, "QUEUE_LOAD", 10) == 0) {
-      Not_Valid("O64_OMP_TASK_CUTOFF does not yet support QUEUE_LOAD, "
-                " try DEFAULT|ALWAYS|NEVER instead");
-    } else if (strncasecmp(env_var_str, "DEFAULT", 7) == 0) {
-      __ompc_task_cutoff = &__ompc_task_cutoff_default;
-    } else {
-      Not_Valid("O64_OMP_TASK_SKIP_COND should be "
-                "ALWAYS|NEVER|DEPTH|CHILDREN|QUEUE_LOAD|DEFAULT or unset");
+      Not_Valid("O64_OMP_TASK_POOL should be "
+                "DEFAULT|SIMPLE|SIMPLE_2LEVEL|PUBLIC_PRIVATE or unset");
     }
   } else {
     /* DEFAULT */
-    __ompc_task_cutoff = &__ompc_task_cutoff_default;
+    __ompc_create_task_pool    = &__ompc_create_task_pool_default;
+    __ompc_expand_task_pool    = &__ompc_expand_task_pool_default;
+    __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_default;
+    __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_default;
+    __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_default;
   }
 
+  /* control the task cutoff */
+  __ompc_task_cutoff = &__ompc_task_cutoff_default;
+  env_var_str = getenv("O64_OMP_TASK_CUTOFF");
+  if (env_var_str != NULL) {
+    int i, j;
+    char *saveptr1, *saveptr2;
+    char *str1, *str2;
+    for (i = 0, str1=env_var_str; ; i++, str1=NULL) {
+      char *tok, *subtok;
+      int val;
+      tok = strtok_r(str1, ",", &saveptr1);
+      if (tok == NULL)
+        break;
+
+      subtok = strtok_r(tok, ":", &saveptr2);
+      if (strncasecmp(subtok, "ALWAYS", 6) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = 1;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          __ompc_task_cutoff = &__ompc_task_cutoff_always;
+          /* if always encountered and val > 0, then ignore the rest */
+          break;
+        }
+      } else if (strncasecmp(subtok, "NEVER", 5) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = 1;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          __ompc_task_cutoff = &__ompc_task_cutoff_never;
+          /* if never encountered and val > 0, then ignore the rest */
+          break;
+        }
+      } else if (strncasecmp(subtok, "NUM_THREADS", 11) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = __omp_task_cutoff_num_threads_min;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          /* enable with new value */
+          __omp_task_cutoff_num_threads = 1;
+          __omp_task_cutoff_num_threads_min = val;
+        } else {
+          /* disable */
+          __omp_task_cutoff_num_threads = 0;
+        }
+      } else if (strncasecmp(subtok, "SWITCH", 6) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = __omp_task_cutoff_switch_max;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          /* enable with new value */
+          __omp_task_cutoff_switch = 1;
+          __omp_task_cutoff_switch_max = val;
+        } else {
+          /* disable */
+          __omp_task_cutoff_switch = 0;
+        }
+      } else if (strncasecmp(subtok, "DEPTH", 5) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = __omp_task_cutoff_depth_max;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          /* enable with new value */
+          __omp_task_cutoff_depth = 1;
+          __omp_task_cutoff_depth_max = val;
+        } else {
+          /* disable */
+          __omp_task_cutoff_depth = 0;
+        }
+      } else if (strncasecmp(subtok, "NUM_CHILDREN", 12) == 0) {
+        subtok = strtok_r(NULL, ":", &saveptr2);
+        val = __omp_task_cutoff_num_children_max;
+        if (subtok != NULL) {
+          sscanf(subtok, "%d", &val);
+        }
+        if (val > 0)  {
+          /* enable with new value */
+          __omp_task_cutoff_num_children = 1;
+          __omp_task_cutoff_num_children_max = val;
+        } else {
+          /* disable */
+          __omp_task_cutoff_num_children = 0;
+        }
+      } else {
+        Not_Valid("O64_OMP_TASK_CUTOFF should be "
+            "cutoff:val[,cutoff:val[,...]] where valid cutoffs are "
+            "ALWAYS|NEVER|SWITCH|DEPTH|NUM_CHILDREN and val = 0 disables "
+            "the cutoff");
+      }
+    }
+  }
 }
 
 
