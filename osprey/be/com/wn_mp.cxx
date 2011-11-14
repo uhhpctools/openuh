@@ -13209,12 +13209,18 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 	      if (Identical_Pragmas(cur_node, wn))
 		break;
 	    if (wn == NULL) {
-	      WN_next(cur_node) = reduction_nodes;
-	      reduction_nodes = cur_node;
-	      ++local_count;
-	      ++reduction_count;
-	      if (WN_opcode(cur_node) == OPC_PRAGMA)
-		shared_table[shared_count++] = WN_st(cur_node);
+              if (WN_opcode(cur_node) != OPC_PRAGMA &&
+                WN_operator(WN_kid0(cur_node)) == OPR_ARRAY &&
+                OPCODE_has_sym(WN_opcode(WN_kid0(WN_kid0(cur_node)))) == 0) {
+                WN_DELETE_Tree ( cur_node );
+              } else {
+                WN_next(cur_node) = reduction_nodes;
+                reduction_nodes = cur_node;
+	        ++local_count;
+	        ++reduction_count;
+	        if (WN_opcode(cur_node) == OPC_PRAGMA)
+		  shared_table[shared_count++] = WN_st(cur_node);
+              }
 	    } else
 	      WN_DELETE_Tree ( cur_node );
 	    break;

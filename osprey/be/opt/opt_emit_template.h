@@ -393,8 +393,12 @@ Gen_exp_wn(CODEREP *exp, EMITTER *emitter)
               else if (
 		       ! MTYPE_is_float(exp->Asm_input_rtype()) &&
 		       exp->Asm_input_rtype() != exp->Asm_input_dsctype()) {
-                WN_set_rtype(WN_kid(wn, i), exp->Asm_input_rtype());
-                WN_set_desc(WN_kid(wn, i), exp->Asm_input_dsctype());
+                   if(Is_Valid_Opcode_Parts(WN_operator(WN_kid(wn, i)),
+                      exp->Asm_input_rtype(),exp->Asm_input_dsctype()))
+                   {
+                     WN_set_rtype(WN_kid(wn, i), exp->Asm_input_rtype());
+                     WN_set_desc(WN_kid(wn, i), exp->Asm_input_dsctype());
+                   }
               }
             }
             else{

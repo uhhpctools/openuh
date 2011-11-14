@@ -417,12 +417,15 @@ ERROR_DESC EDESC_Globals[] = {
 #ifdef KEY
   { EC_Bad_Omp,		EM_User | ES_ERRABORT,		RAG_EN_NONE,
     "%s", 1, ET_STRING, 0, 0, 0, 0, 0 },
-  { EC_Ill_Alias,	EM_User | ES_ERRABORT,		RAG_EN_NONE,
+  { EC_Ill_Alias,	EM_User | ES_WARNING,		RAG_EN_NONE,
     "Declaration of alias \"%s\" does not match its target \"%s\".",
     2, ET_STRING, ET_STRING, 0, 0, 0, 0 },
   { EC_Misc_Asm,	EM_User | ES_ERRABORT,		RAG_EN_NONE,
     "%s", 1, ET_STRING, 0, 0, 0, 0, 0 },
 #endif /* KEY */
+  { EC_Sym_Sto_Cla,     EM_User | ES_WARNING , RAG_EN_NONE,
+    "Storage of alias \"%s\" should be identical as its target \"%s\".",
+    2, ET_STRING, ET_STRING, 0, 0, 0, 0 },
 
   { EC_Ill_Align,	EM_User | ES_WARNING ,	RAG_EN_NONE,
     "Illegal alignment (%d) in %s",

@@ -1190,10 +1190,15 @@ static BOOL MIR_Hoistable_Ref(WN* loop,
       for (WN* wn = wn_first; wn != NULL; wn = WN_next(wn)) {
         if (WN_opcode(wn) == OPC_XPRAGMA 
 	  && WN_pragma(wn) == WN_PRAGMA_REDUCTION
-	  && WN_operator(WN_kid0(wn)) == OPR_ARRAY 
-	  && SYMBOL(WN_array_base(WN_kid0(wn))) 
+         && WN_operator(WN_kid0(wn)) == OPR_ARRAY ) {
+          if (OPCODE_has_sym(WN_opcode(WN_array_base(WN_kid0(wn))))) {
+           if( SYMBOL(WN_array_base(WN_kid0(wn)))
 		== SYMBOL(WN_array_base(p->Array))) {
-	  return FALSE; 
+               return FALSE;
+            }
+          } else {
+              return FALSE;
+          }
         }
       }
     } 

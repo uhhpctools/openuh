@@ -3100,6 +3100,18 @@ CFG::Add_one_stmt( WN *wn, END_BLOCK *ends_bb )
       *ends_bb = END_BREAK;
     break;
 
+  case OPR_ZDLBR:
+    label_bb = Get_bb_from_label(WN_label_number(wn));
+    FmtAssert(label_bb != NULL, ("CFG::Add_one_stmt: ZDLBR does not have a label_bb"));
+
+    Connect_predsucc(_current_bb, label_bb);
+    Append_wn_in(_current_bb, wn); 
+    _current_bb->Set_kind(BB_LOGIF);
+
+    if (ends_bb)
+      *ends_bb = END_FALLTHRU;
+    break;
+
   case OPR_FALSEBR:
   case OPR_TRUEBR:
     label_bb = Get_bb_from_label( WN_label_number(wn) );
@@ -3177,6 +3189,19 @@ CFG::Add_one_stmt( WN *wn, END_BLOCK *ends_bb )
                 ("Non-empty block assigned to a label") );
         // if we're trying to add this label to a non-empty block, we
         // need to end the current block, and connect the new one to it
+
+        // fix bug869(open64.net), check to see whether last statement of _current_bb 
+        // is OPR_FALSEBR/OPR_TRUEBR, and the statment's label bb is label_bb.
+        // if so, add the null fall-through bb and set it be the current bb
+        WN* last_wn=_current_bb->Laststmt();
+        if (last_wn &&
+            (OPCODE_operator(WN_opcode(last_wn)) == OPR_FALSEBR ||
+             OPCODE_operator(WN_opcode(last_wn)) == OPR_TRUEBR) &&
+            Get_bb_from_label( WN_label_number(last_wn)) == label_bb) {
+          BB_NODE* fall_through_bb= Create_bb();
+          Connect_predsucc(_current_bb,fall_through_bb);
+          Append_bb(fall_through_bb);
+            }
         if ( ! _current_bb->Hasujp() )
           Connect_predsucc( _current_bb, label_bb );
         Append_bb( label_bb );

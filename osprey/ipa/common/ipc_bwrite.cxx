@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright (C) 2007. QLogic Corporation. All Rights Reserved.
  */
 
@@ -154,7 +158,7 @@ extern "C" void IP_write_global_symtab(void)
   PU_Info *pu_tree = NULL;
   if (! dummy_pu_list.empty ()) {
     pu_tree = Write_Dummy_PUs (symtab_file);
-    DST_TYPE merged_dst = IPC_merge_DSTs(pu_tree, Malloc_Mem_Pool);
+    DST_TYPE merged_dst = IPC_merge_DSTs(pu_tree, NULL, Malloc_Mem_Pool);
     // Write a the pu_info tree
     WN_write_PU_Infos (pu_tree, symtab_file);
     WN_write_dst(merged_dst, symtab_file);
@@ -479,6 +483,9 @@ private:
   UINT32 nfiles;
   UINT32 ProMP_next_idx;
 
+  DST_TYPE gbl_file_list;
+
+  BOOL pool_initd;
   MEM_POOL pool;
 
 public:
@@ -504,6 +511,12 @@ public:
   // it closes the output file (if any).
   void flush();
 
+#ifndef _LIGHTWEIGHT_INLINER
+  void build_global_filelists(IP_FILE_HDR& ip_fhdr,
+                              incl_name_map_t& incl_map,
+                              incl_name_map_t& fn_map);
+#endif
+
 private:
   // Helper function for flush().
   size_t pu_tree_add_comments(size_t index, size_t count, PU_Info* head);
@@ -518,11 +531,13 @@ private:
 // Definitions of output_queue member functions.
 
 output_queue::output_queue()
-  : head(0), tail(0), out_file(0), nfiles(0), ProMP_next_idx (1), pool()
+  : head(0), tail(0), out_file(0), nfiles(0), ProMP_next_idx (1), gbl_file_list(NULL),
+    pool_initd(FALSE),  pool()
 {}
 
 output_queue::~output_queue()
 {
+  if( pool_initd ) MEM_POOL_Pop_Unfreeze(&pool);   // pop global filelist
   Is_True(head == 0, ("IPA output queue has not been flushed"));
 }
 
@@ -608,6 +623,7 @@ void output_queue::push(PU_Info* pu) {
       MEM_POOL_Initialize(&pool, "IPA bwrite mempool", FALSE);
     this->open_output_file();
     MEM_POOL_Push_Freeze(&pool);
+    pool_initd = TRUE;
   }
 
   // Write pu to the file.
@@ -773,7 +789,7 @@ void output_queue::flush() {
 
     // Must call IPC_merge_DSTs before WN_write_PU_Infos, because some
     // indices in the pu tree are updated in the DST merge.
-    DST_TYPE merged_dst = IPC_merge_DSTs(head, &pool);
+    DST_TYPE merged_dst = IPC_merge_DSTs(head, gbl_file_list, &pool);
     WN_write_PU_Infos(head, out_file);
     WN_write_dst(merged_dst, out_file);
 
@@ -826,6 +842,32 @@ void output_queue::close_output_file() {
   free(out_file);
   out_file = 0;
 }
+
+#ifndef _LIGHTWEIGHT_INLINER
+void
+output_queue::build_global_filelists(IP_FILE_HDR& ip_fhdr,
+                                     incl_name_map_t& incl_map,
+                                     incl_name_map_t& fn_map)
+{
+  if (!pool_initd ) {
+    MEM_POOL_Initialize(&pool, "IPA bwrite mempool", FALSE);
+    pool_initd = TRUE;
+  }
+
+  if( gbl_file_list== NULL ) {
+    DST_Type* gbl_flist;
+    MEM_POOL_Push_Freeze(&pool);
+    gbl_file_list = DST_create(&pool);
+    gbl_flist = (DST_Type*)gbl_file_list;
+    gbl_flist->block_list[DST_include_dirs_block] = DST_include_dirs_block;
+    DST_new_block(gbl_file_list, &pool, DST_include_dirs_block, sizeof(block_header));
+    gbl_flist->block_list[DST_file_names_block] = DST_file_names_block;
+    DST_new_block(gbl_file_list, &pool, DST_file_names_block,sizeof(block_header));
+  }
+
+  Add_files_to_global_file_list(IP_FILE_HDR_dst(ip_fhdr), gbl_file_list, incl_map, fn_map, &pool);
+}
+#endif
 
 
 // The global IPA binary output queue.
@@ -944,3 +986,11 @@ extern "C" void IP_flush_output(void)
 {
   Output_Queue.flush();
 }
+
+#ifndef _LIGHTWEIGHT_INLINER
+void
+IP_build_global_filelists(IP_FILE_HDR& ip_fhdr, incl_name_map_t& incl_map, incl_name_map_t& fn_map)
+{
+  Output_Queue.build_global_filelists(ip_fhdr, incl_map, fn_map);
+}
+#endif

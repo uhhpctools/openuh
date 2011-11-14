@@ -598,6 +598,15 @@ main (int argc, char *argv[])
                              || desc->alloc == ALLOC_BDT)) {
                     BD_or_BDT_with_1GBP = TRUE;
                 }
+                if (option_was_seen(O_pg) &&
+                    (desc->alloc == ALLOC_BD || desc->alloc == ALLOC_BDT)) {
+                  /* See bug 744, libhugetlbfs doesn't detect that the
+                   * allocation of data structures by the profiling library
+                   * code, which causes a program fault after the data section
+                   * is copied and remapped using huge pages.
+                   */
+                  error("-pg and -HP:bdt or -HP:bd are currently incompatible");
+                }
             }
 
             /* With BD or BDT mappings using 1GB pages, the rest

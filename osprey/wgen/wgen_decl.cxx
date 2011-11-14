@@ -4723,7 +4723,6 @@ WGEN_Assemble_Alias (gs_t decl, gs_t target)
   else {
     Set_ST_base_idx (st, ST_st_idx (base_st));
     Set_ST_emit_symbol(st);	// for cg
-    Set_ST_sclass (st, ST_sclass (base_st));
     if (ST_is_initialized (base_st))
       Set_ST_is_initialized (st);
 #ifdef KEY
@@ -4734,9 +4733,12 @@ WGEN_Assemble_Alias (gs_t decl, gs_t target)
 #ifdef KEY
   if (!lang_cplus)
   {
-    // bug 4981: symbol class of ST must match that of the target
-    if (ST_sym_class (st) != ST_sym_class (base_st))
+    if (ST_sym_class (st) != ST_sym_class (base_st)) {
+      /* open64.net bug 878, change the aliased sym class and type to the base st */
       ErrMsg (EC_Ill_Alias, ST_name (st), ST_name (base_st));
+      Set_ST_class(st, ST_class(base_st));
+      Set_ST_type(st,ST_type(base_st));
+    }
 
     // bugs 5145, 11993
     if (ST_sym_class (base_st) == CLASS_FUNC)

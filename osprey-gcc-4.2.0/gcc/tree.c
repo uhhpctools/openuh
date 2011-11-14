@@ -10944,7 +10944,6 @@ gs_x_1 (tree t, HOST_WIDE_INT seq_num)
                     the open64 backend wouldn't be surprised by missing
                     function definition. */
                  TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (callee)) = 1;
-                 mark_decl_referenced(callee);
               }
 	      if (!(callee && DECL_BUILT_IN(callee)))
 	      {

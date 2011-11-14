@@ -59,6 +59,7 @@
 #endif
 
 #include "symtab_defs.h"
+#include "erglob.h"
 
 // ======================================================================
 // Auxiliary functions used by ST::Verify()
@@ -514,9 +515,13 @@ ST_Verify_Fields(const ST &s)
     if ( ST_storage_class (*sb) != SCLASS_UNKNOWN) {
 
       if ( !ST_is_weak_symbol (s) )
-        Is_True( ST_storage_class(s) == ST_storage_class(*sb),
-                 (msg,"storage class, should be identical as based blocks"));
-
+        {
+          /* open64.net bug878, aliased symbol storage class may not be equal 
+             to the base. */
+          if (ST_storage_class(s) != ST_storage_class(*sb)) {
+            ErrMsg(EC_Sym_Sto_Cla, ST_name(s), ST_name(sb));
+          }
+        }
     }
     else {
       // Property 1b For blocks such as bss, SCLASS== UNKNOWN and EXPORT==LOCAL

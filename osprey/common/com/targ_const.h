@@ -482,6 +482,7 @@ extern TCON Quad_Zero_Tcon;
 
 /* Is the given constant a zero? */
 extern BOOL Targ_Is_Zero ( TCON t );
+extern BOOL Targ_Is_Neg_Zero ( TCON t );
 
 /* Determine whether a TCON represents an integral value, and if so
  * return its value in *iv:

@@ -243,6 +243,11 @@ ST_vtable_ty_idx (const ST& s)			{ return s.vtable_ty_idx; }
 inline void
 Set_ST_vtable_ty_idx (ST& s, TY_IDX idx)	{ s.vtable_ty_idx = idx; }
 
+inline mUINT32
+ST_Line (const ST& s)    { return s.line; }
+inline void
+Set_ST_Line (ST& s, mUINT32 lineno)    { s.line = lineno; }
+
 inline ST*
 ST_ptr (ST_IDX idx)                     { return &(St_Table[idx]); }
 

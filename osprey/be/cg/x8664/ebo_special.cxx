@@ -1052,20 +1052,6 @@ Special_Store_Load_Sequence (OP *load_op,
       if (index_tninfo != NULL)
 	inc_ref_count(index_tninfo);
 
-      // Decrement the reference counts for load_op's base/index TNs.
-      INT idx;
-      idx = TOP_Find_Operand_Use(OP_code(load_op), OU_base);
-      if (idx >= 0 &&
-	  load_actual_tninfo[idx] != NULL) {
-	dec_ref_count(load_actual_tninfo[idx]);
-      }
-
-      idx = TOP_Find_Operand_Use(OP_code(load_op), OU_index);
-      if (idx >= 0 &&
-	  load_actual_tninfo[idx] != NULL) {
-	dec_ref_count(load_actual_tninfo[idx]);
-      }
-
       return TRUE;
     }
   }

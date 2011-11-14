@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2009 Advanced Micro Devices, Inc.  All Rights Reserved.
+ * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
 /*
@@ -2014,13 +2014,6 @@ void
 IPO_INLINE::Process_Op_Code (TREE_ITER& iter, IPO_INLINE_AUX& aux)
 {
     WN* wn = iter.Wn ();
-#if defined(KEY) && !defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER)
-    // bug 3060
-    // Give everything the linenum of the callsite
-    // bug 6170: for lw-inliner, maintain the callee's line# information
-    if (OPERATOR_has_next_prev(WN_operator(wn)))
-      WN_Set_Linenum (wn, WN_Get_Linenum (Call_Wn()));
-#endif // KEY && !_STANDALONE_INLINER && !_LIGHTWEIGHT_INLINER
     OPERATOR oper = WN_operator (wn);
     switch(oper) {
     case OPR_RETURN_VAL:

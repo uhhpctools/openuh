@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -85,6 +89,24 @@ DST_IDX DST_get_file_names(DST_TYPE dst_vptr)
     return make_DST_IDX(0, idx);
   else
     return DST_INVALID_IDX;
+}
+
+void
+copy_DST_Type(DST_TYPE src, DST_TYPE dest, MEM_POOL* p)
+{
+  DST_Type* s = static_cast<DST_Type*>(src);
+  DST_Type* d = static_cast<DST_Type*>(dest);
+  block_header* s_blkhdr;
+  block_header* d_blkhdr;
+  int i;
+
+  for( i = 0; i <= s->last_block_header; i++ ) {
+    s_blkhdr = &s->dst_blocks[i];
+    DST_new_block(dest, p, s_blkhdr->kind, s_blkhdr->allocsize);
+    d_blkhdr = &d->dst_blocks[d->current_block_header];
+    memcpy(d_blkhdr->offset, s_blkhdr->offset, s_blkhdr->size);
+    d_blkhdr->size = s_blkhdr->size;
+  }
 }
 
 //------------------------------------------------------------
@@ -305,12 +327,12 @@ DST_IDX DST_copy_filename(DST_TYPE src, DST_TYPE dest,
                           MEM_POOL* p,
                           DST_IDX prev, 
                           DST_IDX old_index,
-                          UINT16 offset)
+                          UINT16 incl_dir_nbr)
 {
   DST_FILE_NAME* f = DST_get_file_name(src, old_index);
   return DST_mk_filename(dest, p,
                          DST_IDX_to_string(src, DST_FILE_NAME_name(f)),
-                         DST_FILE_NAME_dir(f) + offset,
+                         incl_dir_nbr,
                          DST_FILE_NAME_size(f),
                          DST_FILE_NAME_modt(f),
                          prev);

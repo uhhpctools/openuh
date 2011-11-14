@@ -5304,7 +5304,6 @@ int main()
 		    TOP_cmpnltss,
 		    TOP_cmpnless,
 		    TOP_cmpordss,
-		    TOP_cmpordss,
 		    TOP_vcmpeqsd,
 		    TOP_vcmpltsd,
 		    TOP_vcmplesd,
@@ -5320,7 +5319,6 @@ int main()
 		    TOP_vcmpneqss,
 		    TOP_vcmpnltss,
 		    TOP_vcmpnless,
-		    TOP_vcmpordss,
 		    TOP_vcmpordss,
 		    TOP_UNDEFINED);
   Result(0, fp64);

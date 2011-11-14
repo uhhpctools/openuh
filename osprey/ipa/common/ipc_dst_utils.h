@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -154,6 +158,12 @@ DST_IDX DST_get_include_dirs(DST_TYPE);
 // Get the index of the DST's first file names node.  No such node need
 // exist; if none does, the return value is DST_INVALID_IDX.
 DST_IDX DST_get_file_names(DST_TYPE);
+
+// copy the source DST_Type to the dest DST+_Type
+void copy_DST_Type(DST_TYPE src, DST_TYPE dest, MEM_POOL* p);
+
+// build a new dest block and copy the contents of the src block to it
+void copy_block(DST_TYPE src, DST_TYPE dest, DST_BLOCK_KIND kind, MEM_POOL* p);
 
 // Converts a DST_IDX into a pointer to DST_INFO.  
 inline DST_INFO* DST_get_info(DST_TYPE dst, DST_IDX info_idx) {

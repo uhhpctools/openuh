@@ -350,6 +350,9 @@ static char *erglob_rcs_id = "$Source: common/com/SCCS/s.erglob.h $ $Revision: 1
 #define EC_Inv_Asm_Opnd EC_Undef_Code+340       /* none */
 #define EC_Misc_Asm EC_Undef_Code+341		/* str */
 #endif
+/* Symtab Alias Storage Verfication: */
+#define EC_Sym_Sto_Cla EC_Undef_Code+354        /* str,str */
+
 
 
 /* ====================================================================
@@ -476,6 +479,7 @@ static char *erglob_rcs_id = "$Source: common/com/SCCS/s.erglob.h $ $Revision: 1
 
 /* IPA dladd error codes: */
 #define EC_IP_Load_Dso  EC_BASE_FILE+120    /* str, str */
+
 
 #ifdef __cplusplus
 }

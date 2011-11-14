@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -49,6 +53,11 @@
 #define USE_DST_INTERNALS
 #include "dwarf_DST_mem.h"
 #endif
+
+#include <map>
+
+// used to map debug directory names and file names
+typedef std::map<INT32, INT32, std::less<INT32>, std::allocator<INT32> > incl_name_map_t;
 
 // forward declaration
 
@@ -125,6 +134,8 @@ struct IP_FILE_HDR
     // symbol table related
     FILE_INFO file_info;		// file scope symtab attributes
     DST_TYPE dst;                       // The debug symbol table.
+    incl_name_map_t *incl_map;		// map original file pathnames to new
+    incl_name_map_t *fn_map;		// map original filenames to new
     char *summary;			// section base of summary info
     SUMMARY_FILE_HEADER *file_header;	// header for the summary info
     const IPC_GLOBAL_IDX_MAP *idx_maps;	// maps for merged global symtab
@@ -139,6 +150,8 @@ struct IP_FILE_HDR
 	BZERO (this, sizeof(IP_FILE_HDR));
 	file_name = name;
 	input_map_addr = mmap_addr;
+        incl_map = new incl_name_map_t;
+        fn_map = new incl_name_map_t;
 	MEM_POOL_Initialize (&mem_pool, const_cast<char *> (file_name),
 			     FALSE /* non-zero mempool */);
 	MEM_POOL_Push (&mem_pool);
@@ -274,6 +287,15 @@ IP_FILE_HDR_file_info (IP_FILE_HDR& hdr) {
 inline void
 Set_IP_FILE_HDR_file_info (IP_FILE_HDR& hdr, FILE_INFO& file_info) {
     hdr.file_info = file_info;
+}
+
+inline incl_name_map_t& IP_FILE_HDR_incl_map( IP_FILE_HDR& h) {
+        return (*h.incl_map);
+}
+
+
+inline incl_name_map_t& IP_FILE_HDR_fn_map( IP_FILE_HDR& h) {
+  return (*h.fn_map);
 }
 
 inline DST_TYPE IP_FILE_HDR_dst(const IP_FILE_HDR& h) {

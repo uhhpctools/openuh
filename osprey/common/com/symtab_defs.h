@@ -259,6 +259,8 @@ public:
 
     TY_IDX vtable_ty_idx;
 
+    mUINT32 line;           // The line num where define the sym in the source file.
+
     // operations
     
     ST ()  {Fail_FmtAssertion("ST default constructor must not be called.");}

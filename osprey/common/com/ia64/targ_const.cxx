@@ -5152,6 +5152,26 @@ BOOL Targ_Is_Zero ( TCON t )
   }
   return FALSE;
 } /* Targ_Is_Zero */
+
+/*----------------------------------------------------------------------------
+ * return TRUE if the target representation of this TCON is negative zero
+ *--------------------------------------------------------------------------*/
+BOOL Targ_Is_Neg_Zero ( TCON t )
+{
+  switch (TCON_ty(t)) {
+    case MTYPE_F4:
+      return (TCON_R4(t) == 0.0 && TCON_v0(t) != 0);
+    case MTYPE_F8:
+      return (TCON_R8(t) == 0.0
+        && (TCON_v0(t)|TCON_v1(t)) != 0);
+    case MTYPE_F10:
+      return (TCON_R16(t) == 0.0 &&
+        (TCON_v0(t)|TCON_v1(t)|TCON_v2(t)|TCON_v3(t)) != 0);
+    default:
+      return FALSE;
+  }
+}
+
 
 /* ====================================================================
  *

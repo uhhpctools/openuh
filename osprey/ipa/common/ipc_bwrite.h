@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -55,6 +59,13 @@ extern void IP_WRITE_pu(IP_FILE_HDR *s, INT pindex);
 extern void IP_flush_output(void);
 extern char* IP_global_symtab_name(void);
 extern void IP_write_global_symtab(void);
+
+#ifndef _LIGHTWEIGHT_INLINER
+extern void IP_build_global_filelists(IP_FILE_HDR& ip_fhdr,
+                                      incl_name_map_t& incl_map,
+                                      incl_name_map_t& fn_map);
+
+#endif
 
 #ifdef __cplusplus
 }

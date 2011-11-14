@@ -903,7 +903,11 @@ CODEREP::Print_node(INT32 indent, FILE *fp) const
   case CK_RCONST:
     fprintf(fp, ">");	// mark line visually as htable dump
     for (i = 0; i < indent; i++) fprintf(fp, " ");
-    fprintf(fp, "LDRC %s 0x%p", MTYPE_name(Dtyp()), Const_id());
+    {
+      ST_IDX st_idx = ST_st_idx(Const_id());
+      fprintf(fp, "LDRC %s <%d,%d>", MTYPE_name(Dtyp()),
+              ST_IDX_level (st_idx), ST_IDX_index (st_idx));
+    }
     break;
   case CK_DELETED:
   default:
@@ -995,8 +999,10 @@ CODEREP::Print_str(BOOL name_format) const
       sprintf(buf,"LDC %lld",Const_val());
     break;
   case CK_RCONST:
-    if (name_format)
-      sprintf(buf,"LDRC 0x%p",Const_id());
+    if (name_format) {
+      ST_IDX st_idx = ST_st_idx(Const_id());
+      sprintf(buf,"LDRC <%d,%d>", ST_IDX_level (st_idx), ST_IDX_index (st_idx));
+    }
     break;
   default:
     Warn_todo("CODEREP::Print: CODEKIND is not implemented yet");

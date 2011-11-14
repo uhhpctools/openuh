@@ -1835,6 +1835,9 @@ ST::Print (FILE *f, BOOL verbose) const
 	    fprintf (f, "Alignment: %d bytes", TY_align (ty_idx));
 	}
 	fprintf (f, "\n");
+	extern char *Orig_Src_File_Name, *Src_File_Name;
+	fprintf (f, "\t\tlocation: file %s, line %d\n", 
+	         (Orig_Src_File_Name ? Orig_Src_File_Name : Src_File_Name), line);
 
 	fprintf (f, "\t\tFlags:\t0x%08x", flags);
 	if (flags) {

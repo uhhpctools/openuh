@@ -2149,7 +2149,7 @@ DCE::Required_stmt( const STMTREP *stmt ) const
 
   if (OPERATOR_is_scalar_store (opr) &&
       Enable_identity_removal() &&
-      stmt->Is_identity_assignment_removable())  // if COPYPROP assumes the stmt is deleted
+      stmt->Is_identity_assignment_removable()) // if COPYPROP assumes the stmt is deleted)
     return FALSE;
 
   // statements with zero-version chi nodes are required
@@ -5297,7 +5297,7 @@ COMP_UNIT::Find_uninit_locals_for_entry(BB_NODE *bb)
       }
     }
 
-    ErrMsg(EC_Uninitialized, output_var_name, Cur_PU_Name);
+    ErrMsgLine(EC_Uninitialized, ST_Line(*(sym->St())), output_var_name, output_pu_name);
     if (p != NULL && p != Cur_PU_Name)
       free(p);
     if (v != NULL && v != &Str_Table[sym->St()->u1.name_idx])

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -42,6 +46,8 @@
 #include <stdint.h>
 #include <dwarf.h>
 #include <vector>
+#include <map>
+#include <list>
 #include <algorithm>
 
 #include <ext/hash_map>
@@ -206,47 +212,43 @@ void construct_transitive_closure(dst_hash_map& M)
   }
 }
 
-// Merge the include dirs and file names in all of M's DSTs into
-// the output DST output.  This is slightly tricky because file name
-// nodes refer to include directories by ordinal number, and the ordinal
-// number changes in the merge.  We take care of that by copying the
-// directories in the same order as in the original DSTs.  All we need,
-// then, is a per-DST ordinal number offset.
-void merge_directories_and_files(dst_hash_map& M, MEM_POOL* p,
-                                 DST_TYPE output)
+static void global_file_index_update(mUINT64& srcpos, incl_name_map_t& fn_map)
 {
-  Is_True( DST_IS_NULL(DST_get_include_dirs(output)),
-          ("Output DST already has include dirs"));
-  Is_True( DST_IS_NULL(DST_get_file_names(output)),
-          ("Output DST already has file names"));
+  UINT32 mapped_fn = fn_map[SRCPOS_filenum(srcpos)];
+
+  FmtAssert(mapped_fn != 0,
+            ("mapped file number is zero, filenum=%u, linenum=%d",
+             SRCPOS_filenum(srcpos),  SRCPOS_linenum(srcpos)));
+  SRCPOS_filenum(srcpos) = mapped_fn;
+}
+
+// fix-up the file nbr part of the USRCPOS in DST nodes that contain USRCPOSs
+void
+fix_up_dst_srcpos(DST_TYPE dst, PU_Info *pu_tree)
+{
+  PU_Info* pu = pu_tree;
   
-  UINT16 prev_include_dirs = 0;
-  DST_IDX cur_include_dir = DST_INVALID_IDX;
-  DST_IDX cur_filename = DST_INVALID_IDX;
+  while (pu) {
+    if( !DST_IS_NULL(PU_Info_pu_dst(pu)) ) {
 
-  for (dst_hash_map::iterator i = M.begin(); i != M.end(); ++i) {
-    DST_TYPE src = i->first;
-    UINT16 include_dirs_this_dst = 0;
+      IP_FILE_HDR& ip_fhdr = Get_Node_From_PU(pu)->File_Header();
+      incl_name_map_t& fn_map = IP_FILE_HDR_fn_map(ip_fhdr);
+      DST_INFO* info = DST_get_info(dst, PU_Info_pu_dst(pu));
+      DST_SUBPROGRAM* subprog = DST_get_subprogram_attr(dst, info);
 
-    // Merge in this DST's include dirs.
-    DST_IDX old_dir = DST_get_include_dirs(src);
-    while( !DST_IS_NULL(old_dir) ) {
-      ++include_dirs_this_dst;
-      cur_include_dir =
-        DST_copy_include_dir(src, output, p, cur_include_dir, old_dir);
-      old_dir = DST_INCLUDE_DIR_next(DST_get_include_dir(src, old_dir));
-    }
-
-    // Merge in this DST's filenames.
-    DST_IDX old_file = DST_get_file_names(src);
-    while( !DST_IS_NULL(old_file) ) {
-      cur_filename = DST_copy_filename(src, output, p, cur_filename, old_file,
-                                       prev_include_dirs);
-      old_file = DST_INCLUDE_DIR_next(DST_get_file_name(src, old_file));
-    }
-
-    // Add the include dirs we've merged in to the offset
-    prev_include_dirs += include_dirs_this_dst;
+      // See comments on the typedef for DST_SUBPROGRAM, the logic
+      // below matches the comments associated with each union member.
+      if( DST_IS_memdef(DST_INFO_flag(info)) ) {
+        global_file_index_update(DST_SUBPROGRAM_memdef_decl(subprog).srcpos, fn_map);
+      }
+      else if( DST_IS_declaration(DST_INFO_flag(info)) ) {
+        global_file_index_update(DST_SUBPROGRAM_decl_decl(subprog).srcpos, fn_map);
+      }
+      else {
+        global_file_index_update(DST_SUBPROGRAM_def_decl(subprog).srcpos, fn_map);
+      }
+    }      
+    pu = pu->next;
   }
 }
 
@@ -368,8 +370,165 @@ void update_pu_dst_indices(dst_hash_map& M, pu_info* pu)
 
 } // Close the unnamed namespace.
 
+typedef std::vector<const char*> incl_dir_list_t;
+incl_dir_list_t dir_list;
+typedef std::pair<const char*,INT32> fn_dirNbr_t;
+typedef std::vector<fn_dirNbr_t> fn_list_t;
+fn_list_t fn_list;
+
+// NOTE that if the path string is found, we return the entry+1 because the returned
+// value will be used (via the maps) to update the DST structures and the DSTs begin
+// counting at 1
+static INT32
+find_dir_path_in_list(const char* str)
+{
+    incl_dir_list_t::iterator i;
+    INT32 cnt = 0;
+
+    for(i = dir_list.begin(); i != dir_list.end(); ++i ) {
+      if( strcmp(str, *i) == 0 ) return cnt+1;
+      cnt++;
+    }
+    return -1;
+}
+
+static INT32
+add_dir_to_list(const char* str)
+{
+    dir_list.push_back(str);
+    return dir_list.size();
+}
+
+// NOTE that if the fn_str is found, we return the entry+1 because the returned value
+// will be used (via the maps) to update the DST structures and the DSTs begin counting
+// at 1
+static INT32
+find_fn_in_list(const char* fn_str,  const char* orig_dir_str)
+{
+    fn_list_t::iterator i;
+    INT32 cnt = 0;
+
+    for(i = fn_list.begin(); i != fn_list.end(); ++i ) {
+      if( strcmp(fn_str, i->first) == 0 ) {
+        const char* new_dir_str = dir_list[i->second-1];
+        if( strcmp(orig_dir_str, new_dir_str) == 0 ) {
+          return cnt+1;
+        }
+      }
+      cnt++;
+    }
+    return -1;
+}
+
+static INT32
+add_fn_to_list(const char* fn, INT32 dir_nbr)
+{
+    fn_list.push_back(fn_dirNbr_t(fn, dir_nbr));
+    return fn_list.size();
+}
+
+void
+Add_files_to_global_file_list(DST_TYPE src, DST_TYPE dest,
+                              incl_name_map_t& incl_map,
+                              incl_name_map_t& fn_map,
+                              MEM_POOL* p)
+{
+  Is_True( src != NULL, ("Input DST is NULL"));
+  Is_True( dest != NULL, ("Output DST is NULL"));
+
+  DST_IDX wrk_idx = DST_INVALID_IDX;
+  DST_IDX cur_include_dir = DST_INVALID_IDX;
+  DST_IDX cur_filename = DST_INVALID_IDX;
+  INT32 old_fn_nbr = 1;
+  INT32 new_fn_nbr;
+  INT32 old_dir_nbr = 1;
+  INT32 new_dir_nbr;
+
+  // get the last entry in the incl dir list
+  for( wrk_idx = DST_get_include_dirs(dest);
+       !DST_IS_NULL(wrk_idx);
+       wrk_idx = DST_INCLUDE_DIR_next(DST_get_include_dir(dest,wrk_idx)) ){
+    cur_include_dir = wrk_idx;
+  }
+
+  // Add these include paths to the global include paths.
+  DST_IDX old_dir = DST_get_include_dirs(src);
+  if( DST_IS_NULL(DST_get_include_dirs(dest)) ) {
+    DST_set_current_block(dest, ((DST_Type*)dest)->block_list[DST_include_dirs_block]);
+  }
+  while( !DST_IS_NULL(old_dir) ) {
+    DST_INCLUDE_DIR* dir = DST_get_include_dir(src, old_dir);
+    const char* dir_str = DST_IDX_to_string(src, DST_INCLUDE_DIR_path(dir));
+
+    if( (new_dir_nbr = find_dir_path_in_list(dir_str)) == -1 ) {
+      cur_include_dir = DST_copy_include_dir(src, dest, p, cur_include_dir, old_dir);
+      new_dir_nbr = add_dir_to_list(dir_str);
+    }
+    old_dir = DST_INCLUDE_DIR_next(DST_get_include_dir(src, old_dir));
+    incl_map[old_dir_nbr] = new_dir_nbr;
+    old_dir_nbr++;
+  }
+
+  // get the last entry in the file list
+  for( wrk_idx = DST_get_file_names(dest);
+       !DST_IS_NULL(wrk_idx);
+       wrk_idx = DST_FILE_NAME_next(DST_get_file_name(dest, wrk_idx)) ) {
+    cur_filename = wrk_idx;
+  }
+
+  // Add these files to the global files
+  DST_IDX old_file = DST_get_file_names(src);
+  if( DST_IS_NULL(DST_get_file_names(dest)) ) {
+    DST_set_current_block(dest, ((DST_Type*)dest)->block_list[DST_file_names_block]);
+  }
+  while( !DST_IS_NULL(old_file) ) {
+    DST_FILE_NAME* fn = DST_get_file_name(src, old_file);
+    const char* fn_str = DST_IDX_to_string(src, DST_FILE_NAME_name(fn));
+    UINT16 new_dir_nbr = incl_map[DST_FILE_NAME_dir(fn)];
+    const char* src_dir_str = dir_list[new_dir_nbr-1];
+
+    if( (new_fn_nbr = find_fn_in_list(fn_str, src_dir_str)) == -1 ) {
+      cur_filename = DST_copy_filename(src, dest, p, cur_filename, old_file, new_dir_nbr);
+      new_fn_nbr = add_fn_to_list(fn_str, new_dir_nbr);
+    }
+    old_file = DST_FILE_NAME_next(DST_get_file_name(src, old_file));
+    fn_map[old_fn_nbr] = new_fn_nbr;
+    old_fn_nbr++;
+  }
+}
+
+void
+dump_path_file_lists(DST_TYPE dst)
+{
+  DST_IDX idx;
+  UINT64 file_size;
+  UINT64 fmod_time;
+  const char *dirname;
+  int i;
+
+  i= 1;
+  idx = DST_get_include_dirs(dst);
+  while( !DST_IS_NULL(idx) ) {
+    DST_INCLUDE_DIR *dir = DST_get_include_dir(dst, idx);
+    fprintf(stderr, "indir[%d]: %s\n", i,  DST_IDX_to_string(dst,
+                                                             DST_INCLUDE_DIR_path(dir)));
+    idx = DST_INCLUDE_DIR_next(dir);
+
+    i++;
+  }
+  i = 1;
+  idx = DST_get_file_names(dst);
+  while( !DST_IS_NULL(idx) ) {
+    DST_FILE_NAME *f = DST_get_file_name(dst, idx);
+    fprintf(stderr, "filename[%d]: %s\n", i, DST_IDX_to_string(dst,
+                                                               DST_FILE_NAME_name(f)));
+    idx = DST_FILE_NAME_next(f);
+    i++;
+  }
+}
+
 // Preconditions: pu_tree isn't null, output is empty.
-DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, MEM_POOL* p) 
+DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, DST_TYPE gbl_dst,  MEM_POOL* p) 
 
 {
   dst_hash_map M(100, DST_TYPE_hash(), std::equal_to<DST_TYPE>(),
@@ -383,8 +542,12 @@ DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, MEM_POOL* p)
   // Create the output DST.
   DST_TYPE output = DST_create(p);
 
-  // Merge the include directories and the file names.
-  merge_directories_and_files(M, p, output);
+  if (gbl_dst != NULL) {
+    // copy the global incl paths and filenames to the output file
+    DST_Type* g =  static_cast<DST_Type*>(gbl_dst);
+    DST_Type* o =  static_cast<DST_Type*>(output);
+    copy_DST_Type(g, o, p);
+  }
 
   // Merge the compile unit and subprogram nodes, updating the
   // entries in the DST map.
@@ -393,5 +556,16 @@ DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, MEM_POOL* p)
   // Update the DST indices in the pu tree.
   update_pu_dst_indices(M, pu_tree);
 
+  // Update the file component of all USRCPOSs in the DSTs
+  fix_up_dst_srcpos(output, pu_tree);
+
   return output;
+}
+
+void dump_incl_name_map_t(incl_name_map_t *ptm)
+{
+  printf("size=%lu\n", (unsigned long)ptm->size());
+  for (std::map<int, int, std::less<int>, std::allocator<int> >::iterator it = ptm->begin();
+      it != ptm->end(); ++it)
+    printf("%d/%d\n", it->first, it->second);
 }

@@ -324,35 +324,60 @@ Function_ST_For_String (const char * s)
 }
 
 // May be emit cleanup in I-th entry of stack depending on the statement
-// in the entry. FROM_HANDLER determines which stack to use. This function
+// in the entry. Called when we are emitting a handler. This function
 // is called when the decision whether to emit a cleanup and how to emit it
 // depends on the type of statement.
 // Wgen TODO: This function probably needs to be called from a few other
 // places also, they will be added as the need arises.
 static inline void
-Maybe_Emit_Cleanup(INT i, BOOL from_handler)
+Maybe_Emit_Handler_Cleanup(INT i)
 {
-  if (!from_handler)
-  {
-    gs_t stmt = scope_cleanup_stack [i].stmt;
-    if (gs_tree_code(stmt) == GS_CLEANUP_STMT &&
-        !scope_cleanup_stack[i].cleanup_eh_only)
-      WGEN_One_Stmt_Cleanup (gs_cleanup_expr(stmt));
-    else if (gs_tree_code(stmt) == GS_TRY_FINALLY_EXPR)
-      WGEN_One_Stmt_Cleanup (gs_tree_operand(stmt, 1));
-  }
-  else
-  {
-    HANDLER_INFO hi = handler_stack.top();
-    gs_t stmt = (*hi.scope) [i].stmt;
-
-    if (gs_tree_code(stmt) == GS_CLEANUP_STMT &&
-        !(*hi.scope) [i].cleanup_eh_only)
-      WGEN_One_Stmt_Cleanup (gs_cleanup_expr(stmt));
-    else if (gs_tree_code(stmt) == GS_TRY_FINALLY_EXPR)
-      WGEN_One_Stmt_Cleanup (gs_tree_operand(stmt, 1));
-  }
+  HANDLER_INFO hi = handler_stack.top();
+  gs_t stmt = (*hi.scope) [i].stmt;
+  
+  if (gs_tree_code(stmt) == GS_CLEANUP_STMT &&
+      !(*hi.scope) [i].cleanup_eh_only)
+    WGEN_One_Stmt_Cleanup (gs_cleanup_expr(stmt));
+  else if (gs_tree_code(stmt) == GS_TRY_FINALLY_EXPR)
+    WGEN_One_Stmt_Cleanup (gs_tree_operand(stmt, 1));
 }
+
+static INT32
+Maybe_Emit_Cleanups (gs_t sentinel)
+{
+  // Emit all the cleanups required at a transfer of control out of
+  // the current scope, e.g. a goto or return.   Note, after this function,
+  // we continue in the same scope, so we should not actually pop the
+  // cleanups, but for correct processing we must temporarily pop them as we
+  // emit them.
+  // Therefore, pop them to a temporary stack, then restore them again
+  // afterwards.
+  INT32 result;
+  std::stack<SCOPE_CLEANUP_INFO> saved_cleanups;
+
+  while (scope_cleanup_i >= 0 &&
+         scope_cleanup_stack[scope_cleanup_i].stmt != sentinel) {
+    SCOPE_CLEANUP_INFO scope_cleanup = scope_cleanup_stack [scope_cleanup_i];
+    --scope_cleanup_i;
+    saved_cleanups.push(scope_cleanup);
+    gs_t stmt = scope_cleanup.stmt;
+    if (gs_tree_code(stmt) == GS_CLEANUP_STMT &&
+        !scope_cleanup.cleanup_eh_only)
+      WGEN_One_Stmt_Cleanup (gs_cleanup_expr(stmt));
+    else if (gs_tree_code(stmt) == GS_TRY_FINALLY_EXPR)
+      WGEN_One_Stmt_Cleanup (gs_tree_operand(stmt, 1));
+  }
+
+  result = scope_cleanup_i;
+
+  while (! saved_cleanups.empty ()) {
+    scope_cleanup_stack[++scope_cleanup_i] = saved_cleanups.top ();
+    saved_cleanups.pop ();
+  }
+
+  return result;
+}
+
 
 static void
 Emit_Cleanup(gs_t cleanup)
@@ -2133,16 +2158,7 @@ WGEN_Expand_Goto (gs_t label)	// KEY VERSION
       	if (*li != *ci) break;
       if (ci!=Current_scope_nest.rend())
       {
-	int scope_cleanup_i_save = scope_cleanup_i;
-      	i = scope_cleanup_i;
-        Is_True(i != -1, ("WGEN_Expand_Goto: scope_cleanup_stack empty"));
-        while ((i >= 0) && (scope_cleanup_stack [i].stmt != *ci))
-        {
-	   scope_cleanup_i --;
-           Maybe_Emit_Cleanup (i, FALSE);
-    	   --i;
-        }
-        scope_cleanup_i = scope_cleanup_i_save;
+        i = Maybe_Emit_Cleanups (*ci);
         if (i == -1)
         {
 #ifdef FE_GNU_4_2_0
@@ -2167,7 +2183,7 @@ WGEN_Expand_Goto (gs_t label)	// KEY VERSION
     Is_True(i != -1, ("WGEN_Expand_Goto: scope_cleanup_stack empty inside handler"));
     while ((i >= 0) && ((*hi.scope) [i].stmt != *ci))
     {
-      Maybe_Emit_Cleanup (i, TRUE);
+      Maybe_Emit_Handler_Cleanup (i);
       --i;
     }
   }
@@ -2293,26 +2309,14 @@ WGEN_Expand_Return (gs_t stmt, gs_t retval)
     }
 #endif
 
-    int i = scope_cleanup_i;
-    int scope_cleanup_i_save = scope_cleanup_i;
-    while (i != -1) {
+    Maybe_Emit_Cleanups (NULL);
 #ifdef KEY
-      scope_cleanup_i--;
-      Maybe_Emit_Cleanup (i, FALSE);
-#else
-      if (gs_tree_code(scope_cleanup_stack [i].stmt) == GS_CLEANUP_STMT)
-        WGEN_One_Stmt_Cleanup (gs_cleanup_expr(scope_cleanup_stack [i].stmt));
-#endif
-      --i;
-    }
-#ifdef KEY
-    scope_cleanup_i = scope_cleanup_i_save;
     if (emit_exceptions && processing_handler) {
 	HANDLER_INFO hi = handler_stack.top();
 	FmtAssert (hi.scope, ("NULL scope"));
 	int j = hi.scope->size()-1;
 	while (j != -1) {
-	    Maybe_Emit_Cleanup (j, TRUE);
+	    Maybe_Emit_Handler_Cleanup (j);
 	    --j;
 	}
     }
@@ -2402,26 +2406,14 @@ WGEN_Expand_Return (gs_t stmt, gs_t retval)
     }
 #endif
 
-    int i = scope_cleanup_i;
-    int scope_cleanup_i_save = scope_cleanup_i;
-    while (i != -1) {
+    Maybe_Emit_Cleanups (NULL);
 #ifdef KEY
-      scope_cleanup_i--;
-      Maybe_Emit_Cleanup (i, FALSE);
-#else
-      if (gs_tree_code(scope_cleanup_stack [i].stmt) == GS_CLEANUP_STMT)
-        WGEN_One_Stmt_Cleanup (gs_cleanup_expr(scope_cleanup_stack [i].stmt));
-#endif
-      --i;
-    }
-#ifdef KEY
-    scope_cleanup_i = scope_cleanup_i_save;
     if (emit_exceptions && processing_handler) {
 	HANDLER_INFO hi = handler_stack.top();
 	FmtAssert (hi.scope, ("NULL scope"));
 	int j = hi.scope->size()-1;
 	while (j != -1) {
-	    Maybe_Emit_Cleanup (j, TRUE);
+	    Maybe_Emit_Handler_Cleanup (j);
 	    --j;
 	}
     }

@@ -1895,6 +1895,13 @@ Create_ST_For_Tree (gs_t decl_node)
 	if (st)
 	  return st;
         st = New_ST (level);
+
+        // Set line number where define sym in source file
+        if (gs_operand (decl_node, GS_DECL_SOURCE_LINE))
+          Set_ST_Line(*st, gs_decl_source_line(decl_node));
+        else
+          Set_ST_Line(*st, 0);
+
         if (TY_kind (ty_idx) == KIND_ARRAY &&
             gs_tree_static (decl_node) &&
             gs_decl_initial (decl_node) == FALSE &&

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010-2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -342,6 +346,10 @@ IP_READ_file_info (IP_FILE_HDR& s)
         ErrMsg ( EC_IR_Scn_Read, "dst", IP_FILE_HDR_file_name(s));
     }
     Set_IP_FILE_HDR_dst(s, Current_DST);
+
+#ifndef _LIGHTWEIGHT_INLINER
+    IP_build_global_filelists(s, IP_FILE_HDR_incl_map(s), IP_FILE_HDR_fn_map(s));
+#endif
     remap_dst(s);    
   }
 }
@@ -421,7 +429,7 @@ Count_WN (WN * wn, INT32& bbs, INT32& stmts, INT32& calls)
 
 INT
 IP_READ_fix_tree (PU_Info* pu, WN *node, char *base, Elf64_Word size,
-                  const IPC_GLOBAL_IDX_MAP* idx_map)
+                  const IPC_GLOBAL_IDX_MAP* idx_map, incl_name_map_t& fn_map)
 {
     OPCODE opcode = (OPCODE) WN_opcode (node);
     WN *wn;
@@ -483,7 +491,7 @@ IP_READ_fix_tree (PU_Info* pu, WN *node, char *base, Elf64_Word size,
             WN_last(node) = convert_offset(WN_last(node), base);
 
             do {
-                if (IP_READ_fix_tree (pu, wn, base, size, idx_map) == ERROR_VALUE)
+                if (IP_READ_fix_tree (pu, wn, base, size, idx_map, fn_map) == ERROR_VALUE)
                     return ERROR_VALUE;
                 wn = WN_next(wn);
             } while (wn);
@@ -500,13 +508,27 @@ IP_READ_fix_tree (PU_Info* pu, WN *node, char *base, Elf64_Word size,
             else {
                 wn = convert_offset(wn, base);
                 *wn_ptr = wn;
-                if (IP_READ_fix_tree (pu, wn, base, size, idx_map) == ERROR_VALUE)
+                if (IP_READ_fix_tree (pu, wn, base, size, idx_map, fn_map) == ERROR_VALUE)
                     return ERROR_VALUE;
             }
         }
     }
     
     if (OPCODE_has_next_prev(opcode)) {
+        // update STMT SRCPOS file nbr
+        mUINT64 isrcpos = WN_linenum(node);
+        if( SRCPOS_filenum(isrcpos) != 0 ) {
+           UINT32 mapped_fn = fn_map[SRCPOS_filenum(isrcpos)];
+           FmtAssert(mapped_fn != 0,
+                     ("mapped file number is zero, node=%p, filenum=%u, linenum=%d",
+                      node, SRCPOS_filenum(isrcpos),  SRCPOS_linenum(isrcpos)));
+           SRCPOS_filenum(isrcpos) = mapped_fn;
+           WN_Set_Linenum(node, isrcpos);
+        }
+        else {
+           DevWarn("original source position file nbr is zero, node=%p", node);
+        }
+
         wn = WN_prev(node);
         if (wn == (WN *) -1) {
             WN_prev(node) = NULL;
@@ -548,7 +570,8 @@ IP_READ_fix_tree (PU_Info* pu, WN *node, char *base, Elf64_Word size,
 
 WN *
 IP_READ_get_tree (void *handle, PU_Info *pu,
-                  const IPC_GLOBAL_IDX_MAP* idx_map)
+                  const IPC_GLOBAL_IDX_MAP* idx_map,
+                  incl_name_map_t& fn_map)
 {
     Subsect_State st = PU_Info_state(pu, WT_TREE);
     if (st == Subsect_InMem)
@@ -582,7 +605,7 @@ IP_READ_get_tree (void *handle, PU_Info *pu,
     // Fix up the pointers in the WNs, and remap symbol table indices.
 
     Current_Map_Tab = PU_Info_maptab(pu);
-    if (IP_READ_fix_tree (pu, wn, tree_base, size, idx_map) == ERROR_VALUE)
+    if (IP_READ_fix_tree (pu, wn, tree_base, size, idx_map, fn_map) == ERROR_VALUE)
       return reinterpret_cast<WN*>(ERROR_VALUE);
 
     WN_next(wn) = NULL;
@@ -789,7 +812,10 @@ IP_READ_pu (IPA_NODE* node, IP_FILE_HDR& s, INT p_index, MEM_POOL *pool)
     }
 #endif
 
-    if (IP_READ_get_tree (fhandle, pu, IP_FILE_HDR_idx_maps(s)) == (WN*) -1) {
+    if (IP_READ_get_tree (fhandle,
+                          pu,
+                          IP_FILE_HDR_idx_maps(s),
+                          IP_FILE_HDR_fn_map(s)) == (WN*) -1) {
       ErrMsg ( EC_IR_Scn_Read, "tree", IP_FILE_HDR_file_name(s));
     }
 

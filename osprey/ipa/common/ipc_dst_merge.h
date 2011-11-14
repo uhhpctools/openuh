@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2010 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
@@ -50,6 +54,11 @@
 #include "pu_info.h"
 #include "mempool.h"
 
-DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, MEM_POOL* p);
+void Add_files_to_global_file_list(DST_TYPE src, DST_TYPE dest,
+                                   incl_name_map_t& incl_map,
+                                   incl_name_map_t& fn_map,
+                                   MEM_POOL* p);
+DST_TYPE IPC_merge_DSTs(pu_info* pu_tree, DST_TYPE gbl_dst,  MEM_POOL* p);
+void dump_path_file_lists(DST_TYPE gbl_file_list);
 
 #endif /* IPC_DST_MERGE_included */

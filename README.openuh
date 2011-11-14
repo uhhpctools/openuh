@@ -21,6 +21,7 @@ Coming soon:
 Merge History:
 --------------
 
+[11]  merged r3741:3777 of Open64 main trunk. (11/14/11)
 [10]  merged r3669:3741 of Open64 main trunk. (9/23/11)
 [9]   merged r3640:3669 of Open64 main trunk. (7/1/11)
 [8]   merged r3556:3663 of openmp3.0 branch. (7/1/11)
@@ -34,6 +35,8 @@ Merge History:
 
 
 Notes:
+
+Merge [11] merges the rest of Open64 5.0 release into OpenUH.
 
 For merge [10], a number of fixes/enhancements over a 2 month period were
 integrated into OpenUH. Enhancements include IF-statement vectorization
