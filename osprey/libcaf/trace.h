@@ -29,9 +29,6 @@
 #ifndef _TRACE_H
 #define _TRACE_H 
 
-#include <stdarg.h>
-#include <stdio.h>
-
 #ifdef ENABLE_TRACES
 # define LIBCAF_TRACE_INIT __libcaf_tracers_init
 # define LIBCAF_TRACE __libcaf_trace

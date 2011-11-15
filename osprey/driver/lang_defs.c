@@ -55,6 +55,7 @@
 #endif
 
 extern int external_gcc;
+extern int link_gcpp;
 
 char *ldpath_for_pixie = NULL;
 

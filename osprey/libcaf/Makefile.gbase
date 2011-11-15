@@ -1,8 +1,8 @@
 # -*- Makefile -*-
 #
-#  Communication runtime library to be used with OpenUH  
+#  Runtime library for supporting Coarray Fortran
 #
-#  Copyright (C) 2010 University of Houston.
+#  Copyright (C) 2010-2011 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -31,25 +31,30 @@
 
 include $(COMMONDEFS)
 
-BUILD_SUBDIRS = armci gasnet
+ifdef GASNET_HOME
+GASNET_SUBDIRS := $(foreach conduit,$(GASNET_CONDUITS),gasnet-$(conduit))
+endif
+BUILD_SUBDIRS := armci $(GASNET_SUBDIRS)
 
 default: first 
 
 first: 
-	perl -p -i -e "s%/usr/bin/perl%`which perl`%g" $(BUILD_SRC)/osprey/libcaf/cafrun
 ifdef ARMCI_HOME
 	$(call submake,armci)
 else 
 	@echo "-------------------------------------------------------"
-	@echo "ARMCI_HOME is not set. Skipping build for libcomm-armci" 
+	@echo "ARMCI_HOME is not set. Skipping build for libcaf-armci"
 	@echo "-------------------------------------------------------"
 	@echo ""
 endif
 ifdef GASNET_HOME
-	$(call submake,gasnet)
+	@for conduit in $(GASNET_CONDUITS); do \
+	echo "Building gasnet-$$conduit:"; \
+	$(MAKE) -C gasnet-$$conduit GASNET_CONDUIT=$$conduit; \
+	done
 else 
 	@echo "--------------------------------------------------------"
-	@echo "GASNET_HOME is not set. Skipping build for libcomm-gasnet" 
+	@echo "GASNET_HOME is not set. Skipping build for libcaf-gasnet"
 	@echo "--------------------------------------------------------"
 	@echo ""
 endif

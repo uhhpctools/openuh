@@ -68,27 +68,29 @@ ENABLE_COARRAYS="NO")
 
 # enable GASNet for Coarrays
 AC_ARG_WITH(gasnet-root,
-[  --with-gasnet-root=gasnet path    Enables gasnet runtime for CAF],
+[  --with-gasnet-root=<gasnet path>   Builds GASNet-based libcaf runtime],
 GASNET_HOME="$with_gasnet_root",
-[])
-
-# enable GASNet Conduit
-AC_ARG_WITH(gasnet-conduit,
-[  --with-gasnet-conduit   Use gasnet on specific conduit like IB,SMP,etc. Default is MPI],
-GASNET_CONDUIT="$with_gasnet_conduit",
-GASNET_CONDUIT="MPI")
+GASNET_HOME="")
 
 # enable ARMCI for Coarrays
 AC_ARG_WITH(armci-root,
-[  --with-armci-root=armci path    Enables armci runtime for CAF],
+[  --with-armci-root=<armci path>     Builds ARMCI-based libcaf runtime],
 ARMCI_HOME="$with_armci_root",
-[])
+ARMCI_HOME="")
 
-# enable ARMCI Conduit
-AC_ARG_WITH(armci-conduit,
-[  --with-armci-conduit   Use armci on specific conduit like IB,MPI,etc. Default is MPI],
-ARMCI_CONDUIT="$with_armci_conduit",
-ARMCI_CONDUIT="MPI")
+# default comm library
+AC_ARG_WITH(default-comm,
+[  --with-default-comm=gasnet|armci   Default communication layer to use if GASNet and
+                                     ARMCI are supported.  Will be GASNet if unspecified. ],
+DEFAULT_COMM="$with_default_comm",
+DEFAULT_COMM="")
+
+# set perl path
+BASH_PATH=`which bash`
+
+if test -z "${BASH_PATH}"; then
+  AC_MSG_ERROR(["Could not find bash on system"])
+fi
 
 if test "${ENABLE_COARRAYS}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
     AC_MSG_ERROR(["Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays"])
@@ -98,13 +100,21 @@ if test "${ENABLE_COARRAYS}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCL
     AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI"])
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a "${GASNET_CONDUIT}" = "MPI"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
-    AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with GASNET on MPI
-                  conduit"])
+if test -n "${GASNET_HOME}"; then
+  GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
+                    | sed 's/-conduit//g')`
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a -n "${GASNET_CONDUIT}" -a "${GASNET_CONDUIT}" != "MPI" -a "${GASNET_CONDUIT}" != "SMP" -a "${GASNET_CONDUIT}" != "IB"; then
-    AC_MSG_ERROR(["GASNET_CONDUIT should be MPI, IB, or SMP"])
+if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
+  DEFAULT_COMM=gasnet
+elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
+  DEFAULT_COMM=armci
+elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
+    AC_MSG_ERROR(["--with-default-comm accepts gasnet or armci"])
+elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
+    AC_MSG_ERROR(["default comm (gasnet) requires --with-gasnet-root to be specified"])
+elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
+    AC_MSG_ERROR(["default comm (armci) requires --with-armci-root to be specified"])
 fi
 
 case "$BUILD_COMPILER" in
@@ -425,8 +435,9 @@ AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([GASNET_HOME])
 AC_SUBST([ARMCI_HOME])
-AC_SUBST([GASNET_CONDUIT])
-AC_SUBST([ARMCI_CONDUIT])
+AC_SUBST([GASNET_CONDUITS])
+AC_SUBST([DEFAULT_COMM])
+AC_SUBST([BASH_PATH])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
@@ -458,6 +469,10 @@ AC_CONFIG_FILES([
   osprey/targdir/libkapi/Makefile
 ])
 
+AC_CONFIG_FILES([
+  osprey/scripts/omprun
+])
+
 if test "${BUILD_FORTRAN}" = "YES"; then
  AC_CONFIG_FILES([
   osprey/targdir/whirl2f/Makefile      
@@ -465,6 +480,8 @@ if test "${BUILD_FORTRAN}" = "YES"; then
   osprey/targdir/crayf90/fe90/Makefile
   osprey/targdir/crayf90/libf90sgi/Makefile
   osprey/targdir/crayf90/sgi/Makefile
+  osprey/scripts/uhcaf
+  osprey/scripts/cafrun
  ])
 fi
 
@@ -535,8 +552,18 @@ if test "${BUILD_FORTRAN}" = "YES"; then
    osprey/targdir_lib/libu/Makefile
    osprey/targdir_lib/libcaf/Makefile
    osprey/targdir_lib/libcaf/armci/Makefile
-   osprey/targdir_lib/libcaf/gasnet/Makefile
 ])
+   if test -n "${GASNET_CONDUITS}"; then
+     for conduit in $GASNET_CONDUITS; do
+       AC_CONFIG_FILES([
+       osprey/targdir_lib/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in
+       ])
+     done
+   else
+       AC_CONFIG_FILES([
+       osprey/targdir_lib/libcaf/gasnet/Makefile
+       ])
+   fi
 fi
 
 if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
@@ -569,8 +596,18 @@ if test $BUILD_MULTILIB = "YES"; then
     osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in
     osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in
     osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in
-    osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in
   ])
+    if test -n "${GASNET_CONDUITS}"; then
+      for conduit in $GASNET_CONDUITS; do
+        AC_CONFIG_FILES([
+        osprey/targdir_lib2/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in
+        ])
+      done
+    else
+        AC_CONFIG_FILES([
+        osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in
+        ])
+    fi
   fi
   if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
     AC_CONFIG_FILES([

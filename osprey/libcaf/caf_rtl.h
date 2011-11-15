@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2009-2010 University of Houston.
+ Copyright (C) 2009-2011 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as

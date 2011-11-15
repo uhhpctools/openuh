@@ -151,6 +151,27 @@ LCINCS	= -I. -I$(BUILD_BASE) -I$(BUILD_TOT)/common/com
 # for configargs.h
 LCINCS += -I$(TOP_BUILDDIR)
 
+#  # for coarrays
+#  ifdef GASNET_HOME
+#  include $(GASNET_HOME)/include/$(GASNET_CONDUIT)-conduit/$(GASNET_CONDUIT)-par.mak
+#  LCDEFS += -D'GASNET_LIBS="$(GASNET_LIBS)"'
+#  ifneq ($(GASNET_CONDUIT),smp)
+#  LCDEFS += -D'GASNET_ADD_MSG'
+#  endif
+#  else
+#  LCDEFS += -D'GASNET_LIBS=""'
+#  endif
+#
+#  ifdef ARMCI_HOME
+#  ifeq ($(ARMCI_CONDUIT),ib)
+#  LCDEFS += -D'ARMCI_LIBS="-larmci -libverbs"'
+#  else
+#  LCDEFS += -D'ARMCI_LIBS="-larmci"'
+#  endif
+#  else
+#  LCDEFS += -D'ARMCI_LIBS=""'
+#  endif
+
 
 TARGETS	= driver
 

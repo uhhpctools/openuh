@@ -1,8 +1,8 @@
 # -*- Makefile -*-
 #
-#  Communication runtime library to be used with OpenUH  
+#  Runtime library for supporting Coarray Fortran
 #
-#  Copyright (C) 2010 University of Houston.
+#  Copyright (C) 2010-2011 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -32,14 +32,13 @@
 # and COMM_LAYER(= ARMCI or =GASNET).
 #
 # if no setup for those, force setup
-OPENUH_COMM_LAYER = GASNET
-OPENUH_GASNET_CONDUIT ?=MPI
+GASNET_CONDUIT ?=mpi
 
 ################################################################
 
 
 # What we're building, and where to find it.
-LIBRARY = libcaf-gasnet.a
+LIBRARY := libcaf-gasnet-$(GASNET_CONDUIT).a
 TARGETS = $(LIBRARY)
 SRC_DIRS    = $(BUILD_BASE)
 
@@ -66,34 +65,26 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 CFILES = \
 	caf_rtl.c \
 	gasnet_comm_layer.c  \
-	trace.c
+	trace.c \
+	util.c
 
 LCINCS += -I$(GASNET_HOME)/include 
+LCINCS += -I$(GASNET_HOME)/include/$(GASNET_CONDUIT)-conduit
 LCDEFS += -DGASNET # -DPERM_ANAL
 
-ifeq ($(OPENUH_GASNET_CONDUIT),MPI)
-LCINCS += -I$(MPI_INCLUDE)
-LCINCS += -I$(GASNET_HOME)/include/mpi-conduit
-LCDEFS += -UIB 
-else 
-ifeq ($(OPENUH_GASNET_CONDUIT),IB)
-LCINCS += -I$(GASNET_HOME)/include/ibv-conduit
+ifeq ($(GASNET_CONDUIT),ibv)
 LCDEFS += -DIB 
 else 
-ifeq ($(OPENUH_GASNET_CONDUIT),SMP)
-LCINCS += -I$(GASNET_HOME)/include/smp-conduit
-LCDEFS += -UIB 
+ifeq ($(GASNET_CONDUIT),mpi)
+LCINCS += -I$(MPI_INCLUDE)
 endif
-endif
+LCDEFS += -UIB
 endif
 
-default: first $(TARGETS) last
+default: first $(TARGETS)
 
 first : 
-	perl -p -i -e "s%/usr/bin/perl%`which perl`%g;s%gasnet_conduit=.*%gasnet_conduit='$(OPENUH_GASNET_CONDUIT)';%g;s%default_comm_layer=.*%default_comm_layer='GASNET';%g" $(BUILD_SRC)/osprey/driver/uhcaf
 	$(call submake,$(BUILD_AREA)/include)
-
-last : make_libdeps
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^

@@ -108,8 +108,7 @@ options="`getopt \
 		-l queue-storage: \
 		-l help \
 		-l show \
-		-o h \
-		-o s \
+		-o hs \
 		-- \
 		$*`"
 

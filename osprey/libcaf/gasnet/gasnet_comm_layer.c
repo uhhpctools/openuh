@@ -1,7 +1,7 @@
 /*
  GASNet Communication runtime library to be used with OpenUH
 
- Copyright (C) 2009-2010 University of Houston.
+ Copyright (C) 2009-2011 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -36,6 +36,7 @@
 #include "gasnet_comm_layer.h"
 #include "trace.h"
 #include "caf_rtl.h"
+#include "util.h"
 
 
 /*
@@ -117,6 +118,7 @@ static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
  * end of handlers
  */
 
+
 /*
  * INIT:
  * 1) Initialize GASNet
@@ -138,10 +140,9 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     unsigned long static_coarray_size;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
-    argv = (char **) malloc(argc * sizeof(*argv));
-    argv[0] = "caf";
-
+    farg_init(&argc, &argv);
     ret = gasnet_init(&argc, &argv);
+
     if (ret != GASNET_OK) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL, "GASNet init error");
     }
@@ -173,7 +174,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      * coarray_start_all_images */
     coarray_start_all_images = (gasnet_seginfo_t *)malloc
         (num_procs*sizeof(gasnet_seginfo_t));
-    caf_shared_memory_size_str = getenv("UHCAF_SHARED_MEMORY_SIZE");
+    caf_shared_memory_size_str = getenv("UHCAF_IMAGE_HEAP_SIZE");
     if(caf_shared_memory_size_str != NULL)
     {
         sscanf(caf_shared_memory_size_str, "%lu",
@@ -402,6 +403,8 @@ void comm_finalize()
         "gasnet_comm_layer.c:comm_finalize-> Before call to gasnet_exit"
         " with status 0.");
     gasnet_exit(0);
+
+    farg_free();
 }
 
 

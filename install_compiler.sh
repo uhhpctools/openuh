@@ -167,6 +167,8 @@ INSTALL_EXEC_SUB () {
     echo -e "$2 : $1 \n\t${INSTALL} $1 $2\n" | make -f - |\
     grep -v "Entering directory\|Leaving directory\|up to date"
 
+    chmod +x $2  # ensures target is executable
+
     return 0;
 }
 
@@ -435,13 +437,19 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
 # Install the CAF runtime library. If 
 INSTALL_CAF_LIB () {
     #install uhcaf perl wrapper
-    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/driver/uhcaf ${BIN_DIR}/uhcaf
+    INSTALL_EXEC_SUB osprey/scripts/uhcaf ${BIN_DIR}/uhcaf
     #install cafrun perl wrapper
-    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/libcaf/cafrun ${BIN_DIR}/cafrun
+    INSTALL_EXEC_SUB osprey/scripts/cafrun ${BIN_DIR}/cafrun
+    chmod +x ${BIN_DIR}/uhcaf ${BIN_DIR}/cafrun
     if [ "$TARG_HOST" = "ia64" ] ; then
 	LIBAREA="osprey/targdir_lib"
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a     ${PHASEPATH}/libcaf-armci.a
-        INSTALL_DATA_SUB ${LIBAREA}/libcaf/gasnet/libcaf-gasnet.a   ${PHASEPATH}/libcaf-gasnet.a
+        gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
+        for gb in $gasnet_builds; do
+          gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
+          lib_name=libcaf-gasnet-$gasnet_conduit.a
+          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/$lib_name
+        done
     elif [ "$TARG_HOST" = "ppc32" ] ; then
 	LIBAREA="osprey/targdir_lib"
 	LIB32AREA="osprey/targdir_lib2"
@@ -450,26 +458,21 @@ INSTALL_CAF_LIB () {
     LIB32AREA="osprey/targdir_lib"
         # 64bit libraries
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a    ${PHASEPATH}/libcaf-armci.a
-        INSTALL_DATA_SUB ${LIBAREA}/libcaf/gasnet/libcaf-gasnet.a  ${PHASEPATH}/libcaf-gasnet.a
+        gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
+        for gb in $gasnet_builds; do
+          gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
+          lib_name=libcaf-gasnet-$gasnet_conduit.a
+          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/$lib_name
+        done
 
         # 32bit libraries
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
-        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/gasnet/libcaf-gasnet.a ${PHASEPATH}/32/libcaf-gasnet.a
-
-        # install prebuilt GASNet and ARMCI libs for x86_64
-         if [ "$TARG_HOST" = "x8664" ]; then
-             [ ! -d ${PHASEPATH}/comm_libs ] && mkdir -p ${PHASEPATH}/comm_libs
-             if [ -n "$GASNET_HOME" ] ; then
-                 [ -d $GASNET_HOME ] && echo "installing GASNet Library from $GASNET_HOME/lib"
-                 [ -d $GASNET_HOME ] && rm -f ${PHASEPATH}/comm_libs/gasnet_libs &&  \
-                                       ln -s ${GASNET_HOME}/lib ${PHASEPATH}/comm_libs/gasnet_libs
-             fi
-             if [ -n "$ARMCI_HOME" ] ; then
-                 [ -d $ARMCI_HOME ] && echo "installing ARMCI Library from $ARMCI_HOME/lib"
-                 [ -d $ARMCI_HOME ] && rm -f ${PHASEPATH}/comm_libs/armci_libs &&  \
-                                       ln -s ${ARMCI_HOME}/lib ${PHASEPATH}/comm_libs/armci_libs
-             fi
-         fi
+        gasnet_builds=`ls -d ${LIB32AREA}/libcaf/gasnet-* 2> /dev/null`
+        for gb in $gasnet_builds; do
+          gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
+          lib_name=libcaf-gasnet-$gasnet_conduit.a
+          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/32/$lib_name
+        done
   fi 
 }
 
@@ -686,7 +689,7 @@ INSTALL_MISC () {
 }
 
 INSTALL_OMPRUN() {
-    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/libopenmp/omprun   ${BIN_DIR}/omprun
+    INSTALL_EXEC_SUB osprey/scripts/omprun   ${BIN_DIR}/omprun
 }
 
 # Create the Fortran module files for the OpenMP interface

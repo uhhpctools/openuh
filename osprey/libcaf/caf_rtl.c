@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2009-2010 University of Houston.
+ Copyright (C) 2009-2011 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -205,7 +205,7 @@ void* coarray_allocatable_allocate_(unsigned long var_size)
     if(empty_slot == 0)
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
         "No More Shared Memory Space available for allocatable coarray.\n"
-        "Set env variable UHCAF_SHARED_MEMORY_SIZE or cafrun option "
+        "Set env variable UHCAF_IMAGE_HEAP_SIZE or cafrun option "
         "for more space");
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,"caf_rtl.c:coarray_coarray_allocate"
@@ -234,7 +234,7 @@ void* coarray_asymmetric_allocate_(unsigned long var_size)
     if(empty_slot == 0)
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
         "No More Shared Memory Space available for asymmetric data.\n"
-        "Set env variable UHCAF_SHARED_MEMORY_SIZE or cafrun option "
+        "Set env variable UHCAF_IMAGE_HEAP_SIZE or cafrun option "
         "for more space");
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,"caf_rtl.c:coarray_asymmetric_allocate"
