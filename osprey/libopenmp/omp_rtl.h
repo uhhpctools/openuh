@@ -52,6 +52,7 @@
 #include "omp_task.h"
 #include "omp_task_pool.h"
 #include "omp_sys.h"
+#include "omp_xbarrier.h"
 
 
 /* default setting values*/
@@ -184,6 +185,7 @@ struct omp_team {
   int	team_size;
   int	team_level;	/* team_level is not currently used yet*/
   int	is_nested;	
+  int   log2_team_size;
 
   /* for loop schedule*/
 
@@ -250,7 +252,10 @@ struct omp_team {
   */
   omp_task_pool_t *task_pool;
 
+  omp_xbarrier_info_t  xbarrier_info;
+
   callback callbacks[OMP_EVENT_THR_END_ATWT+1];
+
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE_L2L3)));
 
 /* user thread*/
@@ -280,6 +285,8 @@ struct omp_v_thread {
 
   omp_task_t *implicit_task;
   int num_suspended_tied_tasks; /* not counting tied tasks in barrier */
+
+  omp_xbarrier_local_info_t xbarrier_local;
 
   unsigned long thr_lkwt_state_id;
   unsigned long thr_ctwt_state_id;
@@ -334,7 +341,8 @@ extern omp_v_thread_t * __ompc_get_v_thread_by_num(int vthread_id);
 extern int __ompc_get_local_thread_num(void);
 extern int __ompc_get_num_threads(void);
 extern omp_team_t * __ompc_get_current_team(void);
-extern void __ompc_barrier_wait(omp_team_t *team);
+
+
 extern void __ompc_barrier(void);
 extern void __ompc_pr_exit(void);
 extern void __ompc_flush(void *p);
@@ -375,6 +383,14 @@ extern int __ompc_cur_numthreads;
 /* TODO:Not implemented yet*/
 extern void __ompc_serialized_parallel(int vthread_id);
 extern void __ompc_end_serialized_parallel(int vthread_id);
+
+extern void __ompc_set_xbarrier_wait();
+extern void __ompc_xbarrier_info_init(omp_team_t *team);
+extern void __ompc_xbarrier_info_create(omp_team_t *team);
+extern void __ompc_xbarrier_info_destroy(omp_team_t *team);
+extern void
+__ompc_init_xbarrier_local_info( omp_xbarrier_local_info_t *local,
+                                 int vpid, omp_team_t *team);
 
 
 /*id of thread, could be used for other things other than tasks */

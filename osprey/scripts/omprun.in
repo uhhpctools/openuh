@@ -44,6 +44,9 @@ Where options are
                                   true | false
                                 Defaults to "true" if B not specified
 
+  --xbarrier-type=BT            BT is one of
+                                  linear|simple|tour|tree|dissem
+
   --task-cutoff=TC              TC is
                                   cutoff:val[,cutoff:val[,...]]
                                 where
@@ -100,6 +103,7 @@ options="`getopt \
 		-l num-threads: \
 		-l stacksize: \
 		-l nested:: \
+		-l xbarrier-type: \
 		-l task-cutoff: \
 		-l task-pool: \
 		-l task-queue: \
@@ -152,6 +156,10 @@ do
         nested="$1"
       fi
       set_env OMP_NESTED $nested
+      ;;
+    --xbarrier-type)
+      shift
+      set_env O64_OMP_XBARRIER_TYPE $1
       ;;
     --task-cutoff)
       shift

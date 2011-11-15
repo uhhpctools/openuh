@@ -37,12 +37,14 @@
  * History: 04/23/2003, built by Jiang Hongshan, Tsinghua Univ.
  * 
  */
+
 #ifndef __omp_rtl_thread_included
 #define __omp_rtl_thread_included
 
 #include "omp_rtl.h"
 #include "omp_sys.h"
 #include "omp_util.h"
+#include "omp_xbarrier.h"
 #include "pcl.h"
 #include <time.h>
 #include <unistd.h>
@@ -58,6 +60,9 @@ extern int __ompc_init_rtl(int num_threads);
 
 extern int __ompc_check_num_threads(const int _num_threads);
 extern void __ompc_expand_level_1_team(int new_num_threads);
+
+extern void (*__ompc_xbarrier_wait)(omp_team_t *team);
+
 
 static inline void __ompc_check_rtl_init()
 {
@@ -378,8 +383,9 @@ inline void __ompc_barrier(void)
   p_vthread->thr_ibar_state_id++;
   __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR); 
+
   if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
-    __ompc_barrier_wait(&__omp_level_1_team_manager);
+    __ompc_xbarrier_wait(&__omp_level_1_team_manager);
     __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
     __ompc_set_state(THR_WORK_STATE);
     return;
@@ -415,7 +421,7 @@ void __ompc_ebarrier(void)
   if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
     //          if (__omp_level_1_team_size != 1)
     //          {
-    __ompc_barrier_wait(&__omp_level_1_team_manager);
+    __ompc_xbarrier_wait(&__omp_level_1_team_manager);
     __ompc_event_callback(OMP_EVENT_THR_END_EBAR);
     __ompc_set_state(THR_WORK_STATE);
     return;

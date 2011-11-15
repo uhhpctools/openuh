@@ -81,6 +81,7 @@ CFILES = \
 	omp_util.c \
 	pcl.c \
 	omp_collector_util.c \
+        omp_xbarrier.c \
 	omp_queue.c \
 	omp_task.c \
 	omp_task_pool.c \

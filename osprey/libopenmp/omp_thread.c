@@ -40,6 +40,7 @@
  *          06/20/2007, updated by He Jiangzhou, Tsinghua Univ.
  * 
  */
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -48,6 +49,7 @@
 #include <malloc.h>
 #include "omp_thread.h"
 #include "omp_sys.h"
+#include "omp_xbarrier.h"
 
 #define SPIN_COUNT_DEFAULT 20000
 #include "pcl.h"
@@ -195,6 +197,7 @@ __ompc_environment_variables()
     __omp_nthreads_var = env_var_val;
   }
 
+
   env_var_str = getenv("OMP_DYNAMIC");
   if (env_var_str != NULL) {
     env_var_val = strncasecmp(env_var_str, "true", 4);
@@ -335,6 +338,35 @@ __ompc_environment_variables()
       }
     }
   }
+
+  env_var_str = getenv("O64_OMP_XBARRIER_TYPE");
+  if (env_var_str != NULL) {
+    if (strncasecmp(env_var_str, "dissem", 6) == 0) {
+      __omp_xbarrier_type = DISSEM_XBARRIER;
+      Warning("O64_OMP_XBARRIER_TYPE=dissem will not "
+              "work correctly with OpenMP 3.0 tasking model.");
+    } else if (strncasecmp(env_var_str, "tree", 4) == 0) {
+      __omp_xbarrier_type = TREE_XBARRIER;
+      Warning("O64_OMP_XBARRIER_TYPE=tree will not "
+              "work correctly with OpenMP 3.0 tasking model.");
+    } else if (strncasecmp(env_var_str, "tour", 4) == 0) {
+      __omp_xbarrier_type = TOUR_XBARRIER;
+      Warning("O64_OMP_XBARRIER_TYPE=tour will not "
+              "work correctly with OpenMP 3.0 tasking model.");
+    } else if (strncasecmp(env_var_str, "simple", 6) == 0) {
+      __omp_xbarrier_type = SIMPLE_XBARRIER;
+      Warning("O64_OMP_XBARRIER_TYPE=simple will not "
+              "work correctly with OpenMP 3.0 tasking model.");
+    } else if (strncasecmp(env_var_str, "linear", 6) == 0) {
+      __omp_xbarrier_type = LINEAR_XBARRIER;
+    } else  {
+        Not_Valid("O64_OMP_XBARRIER_TYPE should be "
+                  "dissem|tree|tour|simple|linear or unset");
+    }
+  } else {
+    __omp_xbarrier_type = LINEAR_XBARRIER;
+  }
+  __ompc_set_xbarrier_wait();
 
   __ompc_task_configure();
 }
@@ -804,7 +836,7 @@ __ompc_level_1_barrier(const int vthread_id)
   omp_task_t *next, *current_task;
   omp_task_pool_t *pool;
 
-  /*max_count = __omp_spin_count;*/
+  max_count = __omp_spin_count;
   p_vthread = __ompc_get_v_thread_by_num(__omp_myid);
   team_size = __omp_level_1_team_size;
   pool = __omp_level_1_team_manager.task_pool;
@@ -1029,6 +1061,8 @@ void
 __ompc_fini_rtl(void) 
 {
   __ompc_destroy_task_pool(__omp_level_1_team_manager.task_pool);
+  __ompc_xbarrier_info_destroy(&__omp_level_1_team_manager);
+
   /* clean up job*/
   if (__omp_level_1_team != NULL)
     aligned_free(__omp_level_1_team);
@@ -1045,11 +1079,11 @@ __ompc_fini_rtl(void)
 int 
 __ompc_init_rtl(int num_threads)
 {
-  int threads_to_create;
-  int i;
+  int threads_to_create, log2_threads_to_create;
+  int i, j, k, d; 
+
   int return_value;
   void *stack_pointer;
-
 
   Is_True(__omp_rtl_initialized == 0, 
 	  (" RTL has been initialized yet!"));
@@ -1083,6 +1117,9 @@ __ompc_init_rtl(int num_threads)
 
   /* determine number of threads to create*/
   threads_to_create = num_threads == 0 ? __omp_nthreads_var : num_threads;
+
+  log2_threads_to_create = 0;
+  for(k = 1; k < threads_to_create; log2_threads_to_create++, k <<= 1);
 
   /* keep it as nthreads-var suggested in spec. Liao */
   __omp_nthreads_var = threads_to_create;
@@ -1131,8 +1168,12 @@ __ompc_init_rtl(int num_threads)
   __omp_level_1_team_manager.loop_info_size = 0;
   __omp_level_1_team_manager.loop_info = NULL;
 
+  __omp_level_1_team_manager.log2_team_size = log2_threads_to_create;
+
   __omp_level_1_team_manager.task_pool = 
     __ompc_create_task_pool(threads_to_create);
+
+  __ompc_xbarrier_info_create(&__omp_level_1_team_manager);
 
   __ompc_init_spinlock(&(__omp_level_1_team_manager.schedule_lock));
   pthread_cond_init(&(__omp_level_1_team_manager.ordered_cond), NULL);
@@ -1158,6 +1199,9 @@ __ompc_init_rtl(int num_threads)
     __omp_level_1_team[i].implicit_task = NULL;
     __omp_level_1_team[i].num_suspended_tied_tasks = 0;
 
+    __ompc_init_xbarrier_local_info(&__omp_level_1_team[i].xbarrier_local,
+         i, &__omp_level_1_team_manager);
+
     /* the corresponding relationship is fixed*/
     __omp_level_1_team[i].executor = &(__omp_level_1_pthread[i]);
     __omp_level_1_pthread[i].task = &(__omp_level_1_team[i]);
@@ -1175,6 +1219,7 @@ __ompc_init_rtl(int num_threads)
   __omp_root_team.team_size = 1;
   __omp_root_team.team_level = 0;
   __omp_root_team.is_nested = 0;
+  __omp_root_team.log2_team_size = 1;
 
   __omp_root_v_thread.entry_func = NULL;
   __omp_root_v_thread.frame_pointer = NULL;
@@ -1277,10 +1322,14 @@ __ompc_expand_level_1_team(int new_num_threads)
 {
   int i;
   int return_value;
+  int k, new_log2_num_threads;
   omp_u_thread_t *new_u_team;
   omp_v_thread_t *new_v_team;
 
   void *stack_pointer;
+
+  new_log2_num_threads = 0;
+  for(k = 1; k < new_num_threads; new_log2_num_threads++, k <<= 1);
 
   new_u_team = (omp_u_thread_t *) aligned_realloc((void *) __omp_level_1_pthread,
                         sizeof(omp_u_thread_t) * __omp_level_1_team_alloc_size, 
@@ -1330,13 +1379,26 @@ __ompc_expand_level_1_team(int new_num_threads)
   memset(&(__omp_level_1_team[__omp_level_1_team_alloc_size]), 0,
 	 sizeof(omp_v_thread_t) * (new_num_threads - __omp_level_1_team_alloc_size));
 
+  /* destroy old xbarrier info */
+  __ompc_xbarrier_info_destroy(&__omp_level_1_team_manager);
+
   __omp_level_1_team_manager.team_size = new_num_threads;
+  __omp_level_1_team_manager.log2_team_size = new_log2_num_threads;
 
   __ompc_event_callback(OMP_EVENT_FORK);
 
   __omp_level_1_team_manager.task_pool = 
                     __ompc_expand_task_pool(__omp_level_1_team_manager.task_pool,
                                             new_num_threads);
+
+  /* init new xbarrier info with updated team_size */
+  __ompc_xbarrier_info_create(&__omp_level_1_team_manager);
+
+  /* need to reset per-thread xbarrier info for existing threads */
+  for (i=0; i<__omp_level_1_team_alloc_size; i++) {
+    __ompc_init_xbarrier_local_info(&__omp_level_1_team[i].xbarrier_local,
+                                    i, &__omp_level_1_team_manager);
+  }
 
   for (i=__omp_level_1_team_alloc_size; i<new_num_threads; i++) {
     /* for v_thread */
@@ -1356,6 +1418,9 @@ __ompc_expand_level_1_team(int new_num_threads)
 
     __omp_level_1_team[i].implicit_task = NULL;
     __omp_level_1_team[i].num_suspended_tied_tasks = 0;
+
+    __ompc_init_xbarrier_local_info(&__omp_level_1_team[i].xbarrier_local,
+                                    i, &__omp_level_1_team_manager);
 
     /* for u_thread */
     stack_pointer = malloc(__omp_stack_size);
@@ -1397,6 +1462,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 {
   int i;
   int return_value;
+  int k, log2_num_threads;
   int num_threads = _num_threads;
   omp_team_t temp_team;
   omp_v_thread_t temp_v_thread;
@@ -1452,10 +1518,36 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
         __ompc_expand_level_1_team(num_threads);
         __omp_current_v_thread = &__omp_level_1_team[0];
       }
-      __omp_level_1_team_size = num_threads;
-      __omp_level_1_team_manager.team_size = num_threads;
+
+      if (num_threads != __omp_level_1_team_size) {
+        /* change in team size means xbarrier info needs to be reconstructed
+         */
+        //__ompc_xbarrier_info_destroy(&__omp_level_1_team_manager);
+
+        __omp_level_1_team_size = num_threads;
+        __omp_level_1_team_manager.team_size = num_threads;
+        log2_num_threads = 0;
+        for(k = 1; k < num_threads; log2_num_threads++, k <<= 1);
+        __omp_level_1_team_manager.log2_team_size = log2_num_threads;
+
+        /* init new xbarrier info with updated team_size */
+        __ompc_xbarrier_info_init(&__omp_level_1_team_manager);
+
+        /* need to reset per-thread xbarrier info for existing threads */
+        for (i=0; i<__omp_level_1_team_size; i++) {
+          __ompc_init_xbarrier_local_info(&__omp_level_1_team[i].xbarrier_local,
+                                          i, &__omp_level_1_team_manager);
+        }
+
+      } else {
+        __omp_level_1_team_size = num_threads;
+        __omp_level_1_team_manager.team_size = num_threads;
+        log2_num_threads = 0;
+        for(k = 1; k < num_threads; log2_num_threads++, k <<= 1);
+        __omp_level_1_team_manager.log2_team_size = log2_num_threads;
+      }
     }
-    
+
     __ompc_task_pool_set_team_size( __omp_level_1_team_manager.task_pool,
                                     __omp_level_1_team_manager.team_size);
 
@@ -1519,6 +1611,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     /* nested fork */
     /* Maybe we should also ensure that teamsize != 1*/
 
+    int k, log2_num_threads;
     int orig_omp_myid = __omp_myid;
 
     __omp_exe_mode = OMP_EXE_MODE_NESTED;
@@ -1528,6 +1621,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     original_task = __omp_current_task;
 
     if (num_threads == 0) num_threads = __omp_nthreads_var;
+
+    log2_num_threads = 0;
+    for(k = 1; k < num_threads; log2_num_threads++, k <<= 1);
 
     temp_team.team_size = num_threads;
     temp_team.is_nested = 1;
@@ -1543,8 +1639,12 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     temp_team.loop_info = NULL;
     temp_team.single_count = 0;
 
+    temp_team.log2_team_size = log2_num_threads;
+
     /* create task pool for nested team */
     temp_team.task_pool = __ompc_create_task_pool(num_threads);
+
+    __ompc_xbarrier_info_create(&temp_team);
 
     __ompc_init_spinlock(&(temp_team.schedule_lock));
     pthread_cond_init(&(__omp_level_1_team_manager.ordered_cond), NULL);
@@ -1585,6 +1685,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       nest_v_thread_team[i].implicit_task = NULL;
       nest_v_thread_team[i].num_suspended_tied_tasks = 0;
 
+      __ompc_init_xbarrier_local_info(&nest_v_thread_team[i].xbarrier_local,
+                                     i, &temp_team);
+
       stack_pointer = malloc(__omp_stack_size);
       Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
       return_value = pthread_attr_setstack(&nested_pthread_attr, stack_pointer, __omp_stack_size);
@@ -1615,6 +1718,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     nest_v_thread_team[0].implicit_task = NULL;
     nest_v_thread_team[0].num_suspended_tied_tasks = 0;
+
+    __ompc_init_xbarrier_local_info(&nest_v_thread_team[0].xbarrier_local,
+                                   0, &temp_team);
 
     current_u_thread->task = &(nest_v_thread_team[0]);
 
@@ -1652,6 +1758,9 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     __ompc_destroy_task_pool(temp_team.task_pool);
 
+    /* destroy xbarrier info for team */
+    __ompc_xbarrier_info_destroy(&temp_team);
+
     aligned_free(nest_v_thread_team);
     aligned_free(nest_u_thread_team);
 
@@ -1672,6 +1781,11 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     original_v_thread = current_u_thread->task;
     original_task = __omp_current_task;
 
+    temp_team.team_size = 1;
+    temp_team.team_level = original_v_thread->team->team_level + 1;
+    temp_team.is_nested = 1;
+    temp_team.log2_team_size = 1;
+
     //bug 361, get_local_thread_num() return garbage value, Liao
     temp_v_thread.vthread_id = 0; 
     temp_v_thread.team_size = 1;
@@ -1685,9 +1799,8 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     temp_v_thread.implicit_task = NULL;
     temp_v_thread.num_suspended_tied_tasks = 0;
 
-    temp_team.team_size = 1;
-    temp_team.team_level = original_v_thread->team->team_level + 1;
-    temp_team.is_nested = 1;
+    __ompc_init_xbarrier_local_info(&temp_v_thread.xbarrier_local,
+                                   0, &temp_team);
 
     /* The lock can be eliminated, anyway */
     /* no need to use lock in this case*/
