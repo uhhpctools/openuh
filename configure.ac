@@ -151,10 +151,18 @@ AC_ARG_ENABLE([shared],
 AS_IF([test "x$enable_shared" != "xno"], [
   BUILD_TYPE=SHARED
 ])
- 
+
 if test "${BUILD_TYPE}" = "NONSHARED"; then
   BUILD_SKIP_IPA=YES
 fi
+
+# enable TAU instrumentation
+AC_ARG_ENABLE([tau-instrumentation],
+  AS_HELP_STRING([--enable-tau-instrumentation], [Enable TAU instrumentation (EXPERIMENTAL)]))
+
+AS_IF([test "x$enable_tau_instrumentation" = "xyes"], [
+  BUILD_TAU_INSTR=YES
+])
 
 # Specify the targ_info directory under osprey/common to use.  IA64 uses
 # ipfec_targ_info instead of targ_info.
@@ -354,6 +362,7 @@ AC_SUBST([BUILD_SKIP_IPA])
 AC_SUBST([BUILD_TYPE])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
+AC_SUBST([BUILD_TAU_INSTR])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([

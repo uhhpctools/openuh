@@ -502,7 +502,6 @@ BE_COM_CXX_SRCS = \
   weak.cxx		\
   output_func_start_profiler.cxx        \
   wn_cyg_instrument.cxx \
-  wn_instrument.cxx \
   wn_cfg.cxx            \
   tls.cxx               \
   be_memop_annot.cxx    \
@@ -516,6 +515,13 @@ BE_COM_CXX_SRCS = \
   wssa_wn.cxx           \
   wssa_io.cxx           \
   comp_driver.cxx
+
+ifeq ($(BUILD_TAU_INSTR), YES)
+BE_COM_CXX_SRCS += wn_instrument_tau.cxx
+HOSTDEFS += -DTAU_INSTRUMENT
+else
+BE_COM_CXX_SRCS += wn_instrument.cxx
+endif
 
 ifneq ($(BUILD_SKIP_LNO), TRUE)
 BE_COM_CXX_SRCS += \

@@ -1,15 +1,21 @@
+/*
+ *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
+ */
+
 //-*-c++-*-
 
-
 /*
- * Copyright 2003, 2004, 2005 PathScale, Inc.  All Rights Reserved.
+ * Copyright 2003, 2004, 2005, 2006 PathScale, Inc.  All Rights Reserved.
  */
 
 // ====================================================================
 // ====================================================================
 //
 // Module: wn_instrument.cxx
-// $Author: oscar $
+// $Revision: 1.1.1.1 $
+// $Date: 2005/10/21 19:00:00 $
+// $Author: marcel $
+// $Source: /proj/osprey/CVS/open64/osprey1.0/be/com/wn_instrument.cxx,v $
 //
 // ====================================================================
 //
@@ -106,34 +112,12 @@
 #include "glob.h"
 #include "errors.h"
 #include "be_symtab.h"
-#include "symtab_utils.h"
 #include "vho_lower.h"
 #include "fb_whirl.h"
 #include "wn_instrument.h"
-#include "opt_du.h"
-#include "opt_alias_mgr.h"
-#include "dep_graph.h"
-#include "cxx_template.h"
-#include "prompf.h"
-#include "ir_reader.h"
-#include "wb_util.h"
-#include "wb_buffer.h"
-#include "wb_carray.h"
-#include "const.h"
-/* #include "wb_browser.h"
-   #include "wb.h" */
-#include "wb_ipl.h"
-extern BOOL Epilog_Flag;
-//BOOL Epilog_Flag=TRUE;
-BOOL HasGotos;
-BOOL InitTypes=FALSE;
-TY_IDX profile_init_struct_ty_idx;
-TY_IDX profile_gen_struct_ty_idx;
-TY_IDX I4_ty;
-TY_IDX I1_ty;
-TY_IDX V_ty;
-TY_IDX Ptr_ty;
-TY_IDX VPtr_ty;
+#include "erglob.h"
+
+
 // Use this switch to turn on/off additional debugging messages
 
 #define Instrumenter_DEBUG 0
@@ -154,13 +138,11 @@ TY_IDX VPtr_ty;
 // WN_INSTRUMENT_WALKER class declaration
 //
 // ====================================================================
-#define Set_Parent(wn, p) (WN_MAP_Set(Inst_Parent_Map, wn, (void*)  p))
-#define Get_Parent(wn) ((WN*) WN_MAP_Get(Inst_Parent_Map, (WN*) wn))
-BOOL is_mpi_or_pomp(char *s);
 
 #ifdef KEY
 static WN* pu_wn = NULL;
 #endif
+
 
 #define TNV_N 10
 
@@ -175,7 +157,7 @@ private:
   // _mempool is the local memory pool
 
   MEM_POOL *         _mempool;
-  WN_MAP             Inst_Parent_Map;
+
   // Phase at which instrumentation/annotation is occuring
   //  (PROFILE_PHASE declared in common/com/profile_com.h)
 
@@ -193,9 +175,9 @@ private:
   BOOL               _instrumenting;
   BOOL               _vho_lower;
   BOOL               _in_preamble;
+
   // Counter for each type of instrumentation
 
-  UINT32             _count_return;
   UINT32             _count_invoke;
   UINT32             _count_branch;
   UINT32             _count_loop;
@@ -222,11 +204,7 @@ private:
   PU_PROFILE_HANDLES _fb_handle;
   //_fb_handle_merged is a handle only for merged icall feedback info for this PU.
   PU_PROFILE_HANDLE _fb_handle_merged;
-  ST               *_profile_init_struct_st;
-  ST               *_profile_gen_struct_st; 
-  ST               *_profile_gen_struct_st_invoke;
-  ST               *_profile_gen_struct_st_loop;
-  ST               *_profile_gen_struct_st_branch;
+
   // Instrumentation initialization code will be inserted just before
   // the WN_PRAGMA_PREAMBLE_END pragma that occurs after each entry's
   // preamble.  During the tree walk:
@@ -270,504 +248,6 @@ private:
   WN_INSTRUMENT_WALKER(const WN_INSTRUMENT_WALKER&);
   WN_INSTRUMENT_WALKER& operator=(const WN_INSTRUMENT_WALKER&);
 
-  void Create_Struct_Types()
- {
-     I4_ty = Be_Type_Tbl(MTYPE_I4);
-     I1_ty  = Be_Type_Tbl(MTYPE_I1);
-     V_ty = Be_Type_Tbl(MTYPE_V);
-     Ptr_ty = Make_Pointer_Type(I1_ty);
-     VPtr_ty = Make_Pointer_Type(V_ty);
-
-   // profile_init_struct declaration
-   {
-     FLD_HANDLE first_field = New_FLD ();
-     FLD_Init (first_field, Save_Str("output_filename"),
-               Ptr_ty , 0);
-   
-     FLD_HANDLE field = New_FLD ();
-     FLD_Init (field, Save_Str("phase_num"),I4_ty,8);
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("unique_name"),I4_ty,12);
-   
-     Set_FLD_last_field(field);
-
-
-   /* TY_IDX feedback_struct_ty_idx; */
-     TY& profile_init_struct_ty = New_TY(profile_init_struct_ty_idx);
-     TY_Init (profile_init_struct_ty, 2*TY_size(I4_ty)+TY_size(Ptr_ty),
-               KIND_STRUCT,MTYPE_M, Save_Str("PROFILE_INIT_STRUCT_TY"));
-
-     Set_TY_fld(profile_init_struct_ty, first_field);
-     Set_TY_align (profile_init_struct_ty_idx,8); 
-   }  
-   // profile_invoke_struct
-    {
-      int field_num =0;
-     FLD_HANDLE first_field = New_FLD ();
-     FLD_Init (first_field, Save_Str("pu_handle"),
-               VPtr_ty , field_num);
-     field_num+=8;
-   
-     FLD_HANDLE field = New_FLD ();
-     FLD_Init (field, Save_Str("file_name"),Ptr_ty,field_num);
-     field_num+=8;
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("pu_name"),Ptr_ty,field_num);
-     field_num+=8;   
- 
-    field = New_FLD ();
-     FLD_Init (field, Save_Str("id"),I4_ty,field_num);
-     field_num+=4;
-
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("linenum"),I4_ty,field_num);
-     field_num+=4;
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("endline"),I4_ty,field_num);
-     field_num+=4;
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("subtype"),I4_ty,field_num);
-     field_num+=4;
-
-      field = New_FLD ();
-     FLD_Init (field, Save_Str("taken"),I4_ty,field_num);
-     field_num+=4;
-
-      field = New_FLD ();
-     FLD_Init (field, Save_Str("callee"),Ptr_ty,field_num);
-     field_num+=8;
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("target"),I4_ty,field_num);
-     field_num+=4;
-
-     field = New_FLD ();
-     FLD_Init (field, Save_Str("num_target"),I4_ty,field_num);
-     field_num+=4;
-
-     field = New_FLD();
-     FLD_Init (field, Save_Str("called_fun_address"),VPtr_ty,field_num);
-     field_num+=8;
-
-     field = New_FLD();
-     FLD_Init (field, Save_Str("data"),VPtr_ty,field_num);
-     field_num+=8;
-
-     //field = New_FLD();
-     //FLD_Init (field, Save_Str("region_id"),I4_ty,field_num);
-     //field_num+=4;
-
-     Set_FLD_last_field(field);
-
-     TY& profile_gen_struct_ty = New_TY(profile_gen_struct_ty_idx);
-     TY_Init (profile_gen_struct_ty, 7*TY_size(I4_ty)+3*TY_size(Ptr_ty)
-              + 3*TY_size(VPtr_ty)/*+4 *alignment */, KIND_STRUCT,MTYPE_M, Save_Str("PROFILE_GEN_STRUCT_TY"));
-
-     Set_TY_fld(profile_gen_struct_ty, first_field);
-     Set_TY_align (profile_gen_struct_ty_idx,8); 
-   }
-
-   InitTypes=TRUE;
- }
-
- WN * Load_Struct(ST *feedback_struct_st)
-  {
-    TYPE_ID Struct_type = MTYPE_M;
-    WN *load_wn = WN_Lda( Pointer_type, 0, feedback_struct_st);
-    return load_wn; 
-  }
-
-WN * Init_Struct(ST *feedback_struct_st,  WN *field, TY_IDX type, int field_offset )
- {
-   WN *store_wn;  
-  
-     if (type == Ptr_ty || type == VPtr_ty ) {
-       OPCODE store_op = OPCODE_make_op(OPR_STID, MTYPE_M, MTYPE_U8);
-       store_wn = WN_CreateStid (store_op,
-                                     field_offset, /* field offset */
-			             feedback_struct_st,
-			             type,
-                                     field);
-     }
-       else if(type == I4_ty) {
-    
-      OPCODE store_op = OPCODE_make_op(OPR_STID, MTYPE_M, MTYPE_I4);
-      store_wn = WN_CreateStid (store_op,
-                                     field_offset, /* field offset */
-			             feedback_struct_st,
-			             type,
-                                     field);
-      
-   }
-    
-
-   return store_wn;
- }
- void Parentize (WN* wn)
-{
-  if (!OPCODE_is_leaf(WN_opcode(wn))) { 
-    if (WN_opcode(wn) == OPC_BLOCK) {
-      WN *kid = WN_first(wn);
-      while (kid) {
-        Set_Parent(kid, wn);
-        Parentize(kid);
-        kid = WN_next(kid);
-      }
-    } else {
-      INT kidno;
-      for (kidno = 0; kidno < WN_kid_count(wn); kidno++) {
-        WN *kid = WN_kid(wn, kidno);
-        if (kid) { 
-          Set_Parent(kid, wn);
-          Parentize(kid);
-        }
-      }
-    }
-  }
-}
-
-void find_endline (WN *wn, INT32 &endline)
-{
-
-  // sort line# of procedures
-  // check pos is the sanme as the procedure filename
-  // check that it is in range.
- 
-   endline = 0;
-   WN_ITER *wn_iter;
-   for (wn_iter = WN_WALK_TreeIter(wn);
-        wn_iter != NULL;
-        wn_iter = WN_WALK_TreeNext(wn_iter))
-   {
-           
-      SRCPOS srcpos = WN_Get_Linenum(WN_ITER_wn(wn_iter));
-      USRCPOS linepos;
-      USRCPOS_srcpos(linepos) = srcpos;
-      INT32 line = USRCPOS_linenum(linepos);
-      if (line>endline)
-        endline = line; 
-
-   }
-
-
-}
-
-BOOL meets_nesting_level(WN *wn2)
-{
-   BOOL meets;
-   unsigned int looplevel = 1;
-   
-   if( Instrumentation_Nesting_Level==-1) 
-       return TRUE; //Early exit when Nesting level is disabled.
-
-   while(Get_Parent(wn2)!=NULL)
-      {
-        wn2 = Get_Parent(wn2);
-        OPERATOR opr = WN_operator( wn2 );
-        if (opr==OPR_DO_LOOP || opr== OPR_WHILE_DO || opr == OPR_DO_WHILE)
-         looplevel++;
-      }
-
-   if(looplevel <= Instrumentation_Nesting_Level)
-       meets=TRUE;
-   else
-       meets=FALSE;
-     
-   return meets;  
-}
-BOOL selective_loops(int id, WN *wn2)
-{
-    BOOL select=meets_nesting_level(wn2);
-    switch (id)
-   {
-/*     case 133:
-     case 57:
-     case 94:
-     case 104:
-     case 48:
-     case 8:
-     case 14:
-     case 5:
-     case 2:
-     case 63:
-     case 20:
-     case 60:
-     case 66:
-     case 18:
-     case 101:
-     case 16: 
-     case 98:
-     select = TRUE;
-     break;
- */  
-   }
-    
-  return select;
-}
-
-void region_subtype(WN *wn, WN *&region_type, int &subtype)
-{
-
-   typedef enum 
-   { 
-     IF_THEN_SUBTYPE=1,
-     IF_THEN_ELSE_SUBTYPE=2,
-     IF_UNK_SUBTYPE=3,
-     TRUEBR_SUBTYPE=4,
-     FALSEBR_SUBTYPE=5,
-     CSELECT_SUBTYPE=6
-   } BranchSubType;
-
-  typedef enum
-  {   
-    DO_LOOP_SUBTYPE=1,
-    WHILE_DO_SUBTYPE=2,
-    DO_WHILE_SUBTYPE=3
-
-  } LoopSubType;
-
-  typedef enum
-  {
-    PICCALL_SUBTYPE=1,
-    CALL_SUBTYPE=2,
-    INTRINSIC_CALL_SUBTYPE=3,
-    IO_SUBTYPE=4
-
-  } CallSubType;
-
-  typedef enum
-  {
-    CAND_SUBTYPE=1,   
-    CIOR_SUBTYPE=2
-
-  } CircuiteSubType;
-
-  typedef enum
-  { 
-    COMPGOTO_SUBTYPE=1,
-    XGOTO_SUBTYPE=2
-  } GotoSubType; 
-
-      
-    OPERATOR op = WN_operator(wn);
-    subtype=-1;
-    BOOL assigned = FALSE;
-    switch (op)
-    {
-      case OPR_IF:
-	if (WN_else(wn))
-	{   
-          subtype = IF_THEN_ELSE_SUBTYPE;
-	   char name[]="IF_THEN_ELSE"; 
-	   // region_type = WN_LdaString(name, 0, strlen(name) + 1 );
-
-         }
-	  else if (WN_then(wn))
-	 {
-          
-
-           subtype = IF_THEN_SUBTYPE; 
-	  char name[]="IF_THEN";
-          //region_type = WN_LdaString(name, 0, strlen(name) + 1 );
-
-         }
-	else
-        {
-          subtype = IF_UNK_SUBTYPE;
-	  char name[]="IF_UNK"; 
-          // region_type = WN_LdaString(name, 0, strlen(name) + 1 );
-
-	}
-	assigned = TRUE;
-      break;
-     
-   
-    case OPR_TRUEBR: 
-    subtype = TRUEBR_SUBTYPE;
-    break;
-    case OPR_FALSEBR:
-      subtype = FALSEBR_SUBTYPE;
-    break;
-
-    case OPR_CSELECT:
-      subtype = CSELECT_SUBTYPE; 
-    break; 
-
-    case OPR_DO_LOOP:
-      subtype = DO_LOOP_SUBTYPE;
-    break;
-
-    case OPR_WHILE_DO:
-      subtype = WHILE_DO_SUBTYPE;
-    break; 
-
-    case OPR_DO_WHILE:
-      subtype = DO_WHILE_SUBTYPE; 
-    break;
-
-    case OPR_CAND:
-      subtype = CAND_SUBTYPE;
-    break;
-
-    case OPR_CIOR:
-      subtype = CIOR_SUBTYPE;
-    break;
-
-    case OPR_PICCALL:
-      subtype = PICCALL_SUBTYPE; 
-    break;
-
-    case OPR_CALL:
-      subtype = CALL_SUBTYPE;
-    break;
-
-    case OPR_INTRINSIC_CALL:
-      subtype = INTRINSIC_CALL_SUBTYPE; 
-    break;
-
-    case OPR_IO:
-      subtype = IO_SUBTYPE;
-    break;
-
-    case OPR_COMPGOTO:
-      subtype = COMPGOTO_SUBTYPE; 
-    break;
-
-    case OPR_XGOTO:
-      subtype = XGOTO_SUBTYPE;
-    break;
-    
-    default:
-    break;
-    }
-    /*
-    if(!assigned)
-      {  
-
-        char *val = NULL; 
-        char *name = NULL;   
-        val  = new char[strlen(OPERATOR_name(op))+1];
-        strcpy(val,OPERATOR_name(op));
-
-        if(strlen(val)>4)
-       { 
-         name = &val[4];
-       } 
-        else
-       {
-         name = val; 
-        }
-        region_type = WN_LdaString(name, 0, strlen(name) + 1 );
-        if(val != NULL)
-        delete [] val;
-     
-	} */
-
-
-} 
-
-INITV_IDX INITO_to_Integer(INITV_IDX next_inv, TYPE_ID mytype, INT64 value)
-{
-    INITV_IDX inv_temp = next_inv;   
-    next_inv = New_INITV();
-    //    INITV_Init_Pad(next_inv,TY_size(Be_Type_Tbl(mytype)));
-    INITV_Init_Integer(next_inv,mytype,value);   // id //
-   
-    Set_INITV_next(inv_temp,next_inv);
-    return next_inv;
-
-}
-
-INITV_IDX INITO_to_String(INITV_IDX next_inv, char *s)
-{
-    int size = strlen(s)+1;
-    INITV_IDX inv_temp = next_inv;
-    next_inv = New_INITV();
-    INITV_Init_Sym_String(next_inv,s,size);
-    Set_INITV_next(inv_temp,next_inv);
-    return next_inv;
-
-}
-
-  
-void INITV_Init_Sym_String(INITV_IDX next_inv, char *s, int size)
-{
-  TCON tc = Host_To_Targ_String (MTYPE_STR, s, size);
-  ST *st = New_Const_Sym(Enter_tcon(tc),MTYPE_To_TY(MTYPE_STR));
-
-  // ST *st = Gen_String_Sym (&tc, MTYPE_To_TY(MTYPE_STR), FALSE );
-  INITV_Init_Symoff(next_inv,st,0);
-
-}
-
-ST * create_struct_st(TY_IDX temp_ty_idx)
-{
-  ST *temp_st;
-  if (temp_ty_idx == profile_init_struct_ty_idx)
-  {
-    temp_st = Gen_Temp_Named_Symbol(profile_init_struct_ty_idx, "profile_init_struct", 
-                               CLASS_VAR,SCLASS_PSTATIC);
-
-  }
-  else if (temp_ty_idx == profile_gen_struct_ty_idx) {
- 
-    temp_st = Gen_Temp_Named_Symbol(profile_gen_struct_ty_idx, "profile_gen_struct",
-                                CLASS_VAR,SCLASS_PSTATIC);
-  }
-
-    Set_ST_is_temp_var(temp_st);
-  
-    return temp_st;
-
-}
-
-
-void location(WN *wn,WN *&source_file, INT32 &line, char *&fullpath, BOOL gen_wn=TRUE)
-{
-  /* this procedure needs to be cleaned badly... */
-  SRCPOS srcpos = WN_Get_Linenum(wn);
-  USRCPOS linepos;
-  USRCPOS_srcpos(linepos) = srcpos;
-  line = USRCPOS_linenum(linepos);
-   char *filename=NULL, *dirname=NULL;
-  IPA_IR_Filename_Dirname(srcpos,filename,dirname);
- 
-  if(filename !=NULL && dirname !=NULL)
-  {
-    if(gen_wn) {
-    fullpath = new char[strlen(filename)+strlen(dirname)+2];
-    strcpy(fullpath,dirname);
-    strcat(fullpath,"/");
-    strcat(fullpath,filename);
-    // fullpath = new char[strlen(filename)+1];
-    // strcpy(fullpath,filename);
-    }
-    //source_file = WN_LdaString(fullpath, 0, strlen(fullpath ) + 1 );
-    //delete [] fullpath;
-   }
-   else
-   {  
-     if(gen_wn) { 
-     char message[]="filename information not available";
-     fullpath = new char[strlen(message)+1];
-     strcpy(fullpath,message);
-     } 
-     
-     //  source_file = WN_LdaString(fullpath, 0, strlen(fullpath ) + 1 );
-
-    }
-   if(filename!=NULL)
-  delete [] filename;
-  if(dirname!=NULL)
-  delete [] dirname;
-
-
-}
   // ------------------------------------------------------------------
 
   // Get the PU handle.
@@ -909,20 +389,15 @@ private:
   // ------------------------------------------------------------------
   // Instrumentation and Annotation of each type of WHIRL node
   // ------------------------------------------------------------------
-  void Instrument_With_Gen_Struct( int initialized,int mode, WN *instr, WN *wn, WN *block, char *file_name, 
-                                  char *pu_name, int id, int linenum, int endline, int subtype, WN *taken, char *callee,
-                                  WN *target, int num_targets, WN *called_fun_address);
-  void Instrument_Special_Returns(WN *wn, WN *stmt, WN *block, INT32 id, INT32 enum_subtype, INT32 line, INT32 endline, WN *source_file, BOOL branch);
-  void IsGotos(WN *wn, WN *stmt, WN *block);
-  void Instrument_Invoke_Exit( WN *wn, INT32 id, WN *block, int after = 0 );
+
   void Instrument_Invoke( WN *wn, INT32 id, WN *block );
   void Initialize_Instrumenter_Invoke( INT32 count );
   void Annotate_Invoke( WN *wn, INT32 id );
-  void Instrument_Branch( WN *wn, INT32 id, WN *block, WN *stmt );
-  void Instrument_Cselect( WN *wn, INT32 id, WN *block );
+  void Instrument_Branch( WN *wn, INT32 id, WN *block );
+  void Instrument_Cselect( WN *wn, INT32 id );
   void Initialize_Instrumenter_Branch( INT32 count );
   void Annotate_Branch( WN *wn, INT32 id );
-  void Instrument_Loop( WN *wn, INT32 id, WN *block, WN *stmt );
+  void Instrument_Loop( WN *wn, INT32 id, WN *block );
   void Initialize_Instrumenter_Loop( INT32 count );
   void Annotate_Loop( WN *wn, INT32 id );
   void Instrument_Circuit( WN *wn, INT32 id );
@@ -1097,36 +572,6 @@ Gen_Call( const char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4,
   return call;
 }
 
-WN *
-Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4,
-	  WN *arg5, WN *arg6, WN *arg7, TYPE_ID rtype = MTYPE_V )
-{
-  WN *call = Gen_Call_Shell( name, rtype, 7 );
-  WN_actual( call, 0 ) = Gen_Param( arg1, WN_PARM_BY_VALUE );
-  WN_actual( call, 1 ) = Gen_Param( arg2, WN_PARM_BY_VALUE );
-  WN_actual( call, 2 ) = Gen_Param( arg3, WN_PARM_BY_VALUE );
-  WN_actual( call, 3 ) = Gen_Param( arg4, WN_PARM_BY_VALUE );
-  WN_actual( call, 4 ) = Gen_Param( arg5, WN_PARM_BY_VALUE );
-  WN_actual( call, 5 ) = Gen_Param( arg6, WN_PARM_BY_VALUE );
-  WN_actual( call, 6 ) = Gen_Param( arg7, WN_PARM_BY_VALUE );
-  return call;
-}
-
-WN *
-Gen_Call( char *name, WN *arg1, WN *arg2, WN *arg3, WN *arg4,
-	  WN *arg5, WN *arg6, WN *arg7, WN *arg8, TYPE_ID rtype = MTYPE_V )
-{
-  WN *call = Gen_Call_Shell( name, rtype, 8 );
-  WN_actual( call, 0 ) = Gen_Param( arg1, WN_PARM_BY_VALUE );
-  WN_actual( call, 1 ) = Gen_Param( arg2, WN_PARM_BY_VALUE );
-  WN_actual( call, 2 ) = Gen_Param( arg3, WN_PARM_BY_VALUE );
-  WN_actual( call, 3 ) = Gen_Param( arg4, WN_PARM_BY_VALUE );
-  WN_actual( call, 4 ) = Gen_Param( arg5, WN_PARM_BY_VALUE );
-  WN_actual( call, 5 ) = Gen_Param( arg6, WN_PARM_BY_VALUE );
-  WN_actual( call, 6 ) = Gen_Param( arg7, WN_PARM_BY_VALUE );
-  WN_actual( call, 7 ) = Gen_Param( arg8, WN_PARM_BY_VALUE );
-  return call;
-}
 
 // Some parameters are by reference, not by value
 
@@ -1169,7 +614,6 @@ WN_INSTRUMENT_WALKER::WN_INSTRUMENT_WALKER( BOOL instrumenting,
     _instrumenting( instrumenting ),
     _vho_lower( FALSE ),
     _in_preamble( FALSE ),
-    _count_return( 0 ),
     _count_invoke( 0 ),
     _count_branch( 0 ),
     _count_loop( 0 ),
@@ -1192,32 +636,10 @@ WN_INSTRUMENT_WALKER::WN_INSTRUMENT_WALKER( BOOL instrumenting,
     _instrumentation_nodes( local_mempool ),
     _switch_num_targets( local_mempool ),
     _switch_case_values( local_mempool ),
-    _compgoto_num_targets( local_mempool ),
-    _profile_init_struct_st( NULL),
-    _profile_gen_struct_st(NULL),
-    _profile_gen_struct_st_invoke(NULL),
-    _profile_gen_struct_st_loop(NULL),
-    _profile_gen_struct_st_branch(NULL),
-    Inst_Parent_Map(WN_MAP_UNDEFINED)
+    _compgoto_num_targets( local_mempool )
 {
-  if ( _instrumenting ) {
+  if ( _instrumenting )
     _pu_handle = Gen_Temp_Symbol(MTYPE_To_TY(Pointer_type), "pu_instrument_handle");
-    if (!InitTypes) 
-         Create_Struct_Types();
-   
-  }
-
-  /*
-    _pu_handle = Gen_Temp_Named_Symbol(MTYPE_To_TY(Pointer_type), "pu_instrument_handle", CLASS_VAR, SCLASS_PSTATIC);
-    Set_ST_is_temp_var(_pu_handle);
-    Set_ST_is_initialized(_pu_handle);
-    INITO_IDX inito = New_INITO(_pu_handle);
-    INITV_IDX inv = New_INITV();
-    INITV_Init_Integer(inv, MTYPE_To_TY(Pointer_type), 0);
-    Set_INITO_val(inito, inv);
-
-
-  */
 }
 
 
@@ -1363,7 +785,7 @@ WN_INSTRUMENT_WALKER::Create_Comma_Kid( WN *wn, INT kid_idx ) {
     WN_kid( wn_comma, 1 ) = wn_kid;
     WN_kid( wn, kid_idx ) = wn_comma;
   }
- /*  _vho_lower = TRUE; */
+  _vho_lower = TRUE;
   return wn_comma;
 }
 
@@ -1388,362 +810,23 @@ WN_INSTRUMENT_WALKER::Create_Comma_Kid( WN *wn, INT kid_idx ) {
 //
 // ====================================================================
 
-void WN_INSTRUMENT_WALKER::Instrument_With_Gen_Struct(int initialized,
-                                                      int mode,
-                                                      WN *instr,
-                                                      WN *wn,
-                                                      WN *block,            
-                                                      char *file_name,
-						      char *pu_name,
-						      int id,
-						      int linenum,
-						      int endline,
-						      int subtype,
-						      WN *taken,
-						      char *callee,
-                                                      WN *target,
-                                                      int num_targets,
-                                                      WN *called_fun_address )
 
-{
- 
-  if(!ST_is_initialized(_profile_gen_struct_st) && initialized)
-   
-    {
-    INITO_IDX inito = New_INITO(_profile_gen_struct_st);
-    INITV_IDX inv_temp;
-    INITV_IDX inv = New_INITV();
-    INITV_IDX next_inv= New_INITV();
-    INITV_Init_Block(inv, next_inv/*INITV_Next_Idx()*/);
-    
-    
-    INITV_Init_Integer(next_inv, MTYPE_I8/*MTYPE_To_TY(Pointer_type)*/, 0); //pu_handle// runtime/ let it be 0
-    
-  
-    if(file_name==NULL) {
-    next_inv = INITO_to_String(next_inv,""); //filename *fix*
-    } else {
-    
-    next_inv = INITO_to_String(next_inv,file_name);
-    }
-  
-    if(pu_name==NULL) {
-         next_inv = INITO_to_String(next_inv,""); //pu_name 
-    }
-    else {
-        next_inv = INITO_to_String(next_inv,pu_name); 
-    }
-    
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,id);  // id
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,linenum);  // linenum
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,endline);  // endline
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,subtype);  // subtype
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,0);  // taken  *fix* runtime
-
-    if(callee==NULL) {
-    next_inv = INITO_to_String(next_inv,""); //callee 
-    }
-    else {
-     next_inv = INITO_to_String(next_inv,callee);
-    }
-
-
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,0);  // target *fix* runtime
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,num_targets);  // num_target
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I8/*MTYPE_To_TY(Pointer_type)*/,0);  // fun_address *fix* runtime
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I8,0); // data
-   // next_inv = INITO_to_Integer(next_inv,MTYPE_I4,0); 
-   
-    Set_INITO_val(inito, inv);
-     Set_ST_is_initialized(_profile_gen_struct_st);
-    }
-
-
-
-  if (mode==1) {
-   
-    int field_num =0;
-  Instrument_After(instr,wn,block);
-    
-  if(!Epilog_Flag) {
-    Instrument_After(Init_Struct(_profile_gen_struct_st,
-                                PU_Handle(),VPtr_ty,field_num ),
-                    wn,block);
-  }
-    field_num+=8;
-      
-    field_num+=8; //file_name
-    field_num+=8; //pu_name 
-    field_num+=4; //id 
-    field_num+=4; // linenum 
-    field_num+=4; //endline
-    field_num+=4; //subtype
-    
-    if(taken!=NULL && !Epilog_Flag)
-      Instrument_After(Init_Struct(_profile_gen_struct_st,
-				   taken ,I4_ty,field_num ),
-                    wn,block);
-   
-    field_num+=4; // taken
-    
-   
-    field_num+=8; // callee
-   
-       if(target!=NULL && !Epilog_Flag)
-          Instrument_After(Init_Struct(_profile_gen_struct_st,
-                                target,I4_ty,field_num ),
-                    wn,block);
-    
-    field_num+=4; // target
-
-    
-       field_num+=4; //num_targets
-
-       
-       if(called_fun_address!=NULL && !Epilog_Flag)
-        Instrument_After(Init_Struct(_profile_gen_struct_st,
-                                called_fun_address,VPtr_ty,field_num ),
-                    wn,block);
-       
-       field_num+=8; //fun_address
-   }
-  else if (mode==0){
-    
-    int field_num=0;
-    if (!Epilog_Flag) {
-    Instrument_Before(Init_Struct(_profile_gen_struct_st,
-                                PU_Handle(),VPtr_ty,field_num ),
-                    wn,block);
-    }
-    field_num+=8;
-
-    
-    field_num+=8; // file_name
-    field_num+=8; //pu_name
-    field_num+=4; //id 
-    field_num+=4; // linenum
-    field_num+=4; //endline
-    field_num+=4; //subtype
-    
-    if(taken!=NULL && !Epilog_Flag)
-      Instrument_Before(Init_Struct(_profile_gen_struct_st,
-				    taken ,I4_ty,field_num ),
-                    wn,block);
-    field_num+=4; // taken
- 
-    field_num+=8; //callee
-    
-     if(target!=NULL && !Epilog_Flag)
-          Instrument_Before(Init_Struct(_profile_gen_struct_st,
-                                target,I4_ty,field_num ),
-			    wn,block); 
-
-
-    field_num+=4; // target
-
-    field_num+=4; //num_targets
-
-     if(called_fun_address!=NULL && !Epilog_Flag)
-        Instrument_Before(Init_Struct(_profile_gen_struct_st,
-                                called_fun_address,VPtr_ty,field_num ),
-                    wn,block);
-     field_num+=8; //fun_address
-    
-      Instrument_Before(instr,wn,block);
-
-  } else if (mode==2)
-  {
-       int field_num=0;
-       WN_INSERT_BlockFirst(block,instr);
-       Record_Instrument_Node( instr );
-     
-       WN *temp=NULL;
-       if (!Epilog_Flag) {
-       WN_INSERT_BlockFirst(block,temp=Init_Struct(_profile_gen_struct_st,
-                                PU_Handle(),VPtr_ty,field_num ));       
-       Record_Instrument_Node( temp ); 
-       }        
-       field_num+=8;
-
-        field_num+=8; // file_name
-        field_num+=8; //pu_name                
-	field_num+=4; // id  
-	field_num+=4; //linenum          
-	field_num+=4; //endline 
-	field_num+=4; //subtype         
-
-    if(taken!=NULL && !Epilog_Flag){
-      WN_INSERT_BlockFirst(block,temp=Init_Struct(_profile_gen_struct_st,
-				       taken ,I4_ty,field_num ));
-            Record_Instrument_Node( temp );         
-    }
-    field_num+=4; //taken
-
-  
-    field_num+=8; //callee               
-    
-    if(target!=NULL && !Epilog_Flag) {
-
-          WN_INSERT_BlockFirst(block,temp=Init_Struct(_profile_gen_struct_st,
-					   target,I4_ty,field_num ));
-         Record_Instrument_Node( temp );
-    } 
-    
-    field_num+=4; //target
-  
-     field_num+=4; //num_targets
-
-       if(called_fun_address!=NULL && !Epilog_Flag) {
-         WN_INSERT_BlockFirst(block,temp=Init_Struct(_profile_gen_struct_st,
-						     called_fun_address,VPtr_ty,field_num ));
-          Record_Instrument_Node( temp );          
-    }            
-       field_num+=8; // fun_address
-
-  } else if (mode==3)
-  {
-    
-    int field_num = 0;
-    if (!Epilog_Flag) {
-    WN_INSERT_BlockLast(wn, Init_Struct(_profile_gen_struct_st,
-				    PU_Handle(),VPtr_ty,field_num ));
-    }
-    field_num+=8; 
-               
-    field_num+=8; // file_name
-    field_num+=8; //pu_name;
-    field_num+=4; //id
-    field_num+=4; //linenum
-    field_num+=4; //endline                   
-    field_num+=4; //subtype
-                    
-    if(taken!=NULL && !Epilog_Flag)
-      WN_INSERT_BlockLast( wn,Init_Struct(_profile_gen_struct_st,
-				   taken ,I4_ty,field_num ));
-    field_num+=4; // taken                
-
-  
-    field_num+=8; //callee                
-   
-       if(target!=NULL && !Epilog_Flag)
-          WN_INSERT_BlockLast( wn,Init_Struct(_profile_gen_struct_st,
-                                  target,I4_ty,field_num ));
-     
-       field_num+=4; // target                
-       field_num+=4; //num_targets
-              
-       if(called_fun_address!=NULL && !Epilog_Flag) 
-          WN_INSERT_BlockLast(wn,Init_Struct(_profile_gen_struct_st,
-						     called_fun_address,VPtr_ty,field_num ));
-       field_num+=8; // fun_address                
-                 
-    WN_INSERT_BlockLast( wn,instr );
-  }
-  
-}
 void
-WN_INSTRUMENT_WALKER::Instrument_Invoke_Exit( WN *wn, INT32 id, WN *block, int mode)
+WN_INSTRUMENT_WALKER::Instrument_Invoke( WN *wn, INT32 id, WN *block )
 {
-  WN *wn2 = wn, *source_file=NULL, *subtype=NULL, *func_name;
-  char *name=NULL, *filename=NULL;
-  INT32 line = 0, endline=0;
-  
-    while(Get_Parent(wn2)!=NULL)
-      wn2 = Get_Parent(wn2);
-  
-
-   if ( WN_has_sym( wn2 ) ) {
-    name = ST_name( WN_st( wn2 ) );
-    //    func_name = WN_LdaString( name, 0, strlen( name ) + 1 );
-    // } else
-    //func_name = WN_Zerocon( Pointer_type );
-   }
-
-  location(wn,source_file,line,filename,FALSE); 
-   if(line==0) {
-   location(wn2,source_file,line,filename);
-   find_endline(wn2,line);
-   line =0;
-  } else {
-
-   location(wn,source_file,line,filename);
-  }
-  
-  // find_endline(wn2,endline);
-   
-  // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-   _profile_gen_struct_st = _profile_gen_struct_st_invoke;
-   WN *instr = Gen_Call( INVOKE_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-                      
-    Instrument_With_Gen_Struct(0,mode,
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     name,
-			     id,
-			     line,
-			     line,
-			     0,  
-			       NULL,
-			       NULL,
-                              NULL,
-                              0,
-                              NULL); 
-
-    if(filename!=NULL) delete [] filename;
- }
-
-void WN_INSTRUMENT_WALKER::Instrument_Invoke( WN *wn, INT32 id, WN *block )
-{
-
-  WN *wn2 = wn, *source_file=NULL, *subtype=NULL, *func_name;
-  char *name=NULL,*filename=NULL; 
- INT32 line = 0, endline=0;
-  
-  while(Get_Parent(wn2)!=NULL)
-    wn2 = Get_Parent(wn2);
-  
-
-   if ( WN_has_sym( wn2 ) ) {
-    name = ST_name( WN_st( wn2 ) );
-    //  func_name = WN_LdaString( name, 0, strlen( name ) + 1 );
-    // } else
-    //func_name = WN_Zerocon( Pointer_type );
-   }
-
-  location(wn2,source_file,line,filename); 
-  find_endline(wn2,endline);
-
-      _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-      _profile_gen_struct_st_invoke = _profile_gen_struct_st;
-      WN *instr = Gen_Call(INVOKE_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-  WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-  Instrument_With_Gen_Struct(1, 1, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     name,
-			     id,
-                             line,
-			     endline,
-			     0,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,
-                             NULL);  
-  if(filename!=NULL)
-  delete [] filename;
+  WN *instr = Gen_Call( INVOKE_INSTRUMENT_NAME,
+			PU_Handle(), WN_Intconst( MTYPE_I4, id ) );
+  Instrument_After( instr, wn, block );
 }
+
+
 void
 WN_INSTRUMENT_WALKER::Initialize_Instrumenter_Invoke( INT32 count )
 {
   if ( count == 0 ) return;
 
   WN *total_invokes = WN_Intconst( MTYPE_I4, count );
-  // __profile_gen_init( handle, total_invokes )
+  // __profile_invoke_init( handle, total_invokes )
   Instrument_Entry( Gen_Call( INVOKE_INIT_NAME,
 			      PU_Handle(), total_invokes ) );
 }
@@ -1768,248 +851,11 @@ WN_INSTRUMENT_WALKER::Annotate_Invoke( WN *wn, INT32 id )
 
 // ====================================================================
 
-void WN_INSTRUMENT_WALKER::IsGotos(WN *wn, WN *stmt, WN *block)
-{
-   
-   OPERATOR opr = WN_operator(wn);
-   if(opr == OPR_BLOCK)
-   {
-     WN *node;
-     for(node=WN_first(wn); node; node= WN_next(node))
-           IsGotos(node,node,wn);
-
-   }
-   else
-   {
-     for (INT32 i=0; i<WN_kid_count(wn);i++)
-           IsGotos(WN_kid(wn,i),stmt,block);
-   }
-
-   switch (opr)
-   {
-     case OPR_XGOTO:
-     case OPR_COMPGOTO:
-     case OPR_GOTO:
-     case OPR_TRUEBR:
-     case OPR_FALSEBR:
-     HasGotos = TRUE;
-     break;
-
-    }
-
-}
-void WN_INSTRUMENT_WALKER::Instrument_Special_Returns(WN *wn, WN *stmt, WN *block, INT32 id, INT32 enum_subtype, INT32 line, INT32 endline, WN *source_file, BOOL branch)
-{
-   OPERATOR opr = WN_operator(wn);
-   if(opr == OPR_BLOCK)
-   {
-     WN *node;
-     for(node=WN_first(wn); node; node= WN_next(node))
-        Instrument_Special_Returns(node,node,wn,id,enum_subtype, line, endline, source_file,branch);
-     
-   } 
-   else
-   {
-     for (INT32 i=0; i<WN_kid_count(wn);i++)
-	    Instrument_Special_Returns(WN_kid(wn,i),stmt,block,id,enum_subtype, line, endline, source_file,branch);          
-   }
-
-    switch(opr)
-        {
-           case OPR_RETURN:
-           case OPR_RETURN_VAL:
-           {
-	     char *filename=NULL;
-              location(wn,source_file,endline,filename); 
-
-	     if (branch) {
-	         //      _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                       WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
-                       WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
-
-                       Instrument_With_Gen_Struct(0,0, /*after? */
-                             instr3, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-			     0,
-			     NULL); 
-	
-
- 	     }
-	     else
-	     { 
-              // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-              WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
-              WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
-
-              Instrument_With_Gen_Struct(0,0, /*after? */
-                             instr4, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-			     0,
-			     NULL);  
-
-
-
-
-             } 
-             	if(filename!=NULL)
-		  delete [] filename;  
-           }
-           break;
-
-           case OPR_PICCALL:
-           case OPR_CALL:
-           case OPR_INTRINSIC_CALL:
-           case OPR_IO:
-            { 
-               
-              if ( WN_has_sym( wn ) ) {
-                   char *name = ST_name( WN_st( wn ) );
-                  if (strcmp(name,"_END")==0)
-	             {
-                       // do instrumentation
-                       char *filename = NULL; 
-                       location(wn,source_file,endline,filename); 
-		       if(branch) {
-                       // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                         WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
-                       WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
-
-                       Instrument_With_Gen_Struct(0,0, /*after? */
-                             instr3, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL); 
-        
-		       }
-                        else
-	               {    // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-		               
-                               WN *instr4 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
-                               WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
-
-                              Instrument_With_Gen_Struct(0,0, /*after? */
-                                                         instr4, 
-							 wn,
-							 block,            
-							 filename,
-							 NULL,
-							 id,
-							 line,
-							 endline,
-							 enum_subtype,
-							 NULL,
-							 NULL,
-							 NULL,
-							 0,NULL);  
-                              
-                       }
-                       if(filename!=NULL) delete [] filename;     
-		     }             
-              
-	      }
-
-              else if(opr == OPR_INTRINSIC_CALL)
-	      {
-	         switch (WN_intrinsic(wn))
-                  {
-	              case INTRN_STOP:
-	              case INTRN_STOP_F90:
-			char *filename=NULL;
-                      location(wn,source_file,endline,filename); 
-			if (branch) {
-			   // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-                           WN *instr3 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_branch));
-                       WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
-                       Instrument_With_Gen_Struct(0,0, /*after? */
-                             instr3, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL);
-			}
-                       else
-	                {  // _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-	                         WN *instr4 =  Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st_loop));
-                                 WN_Set_Linenum(instr4,WN_Get_Linenum(wn)); 
-
-                                 Instrument_With_Gen_Struct(0,0, /*after? */
-							    instr4, 
-							    wn,
-							    block,            
-							    filename,
-							    NULL,
-							    id,
-							    line,
-							    endline,
-							    enum_subtype,
-							    NULL,
-							    NULL,
-							    NULL,
-							    0,NULL);
-                             
-                        }
-                        if(filename!=NULL) delete [] filename;
-	              break;
-	          }
-	       }
-        
-	    }
-            break;
-	}// end switch
-}
 
 void
-WN_INSTRUMENT_WALKER::Instrument_Branch( WN *wn, INT32 id, WN *block, WN *stmt )
+WN_INSTRUMENT_WALKER::Instrument_Branch( WN *wn, INT32 id, WN *block )
 {
-
-  WN *source_file=NULL;
-  INT32 line=0, endline=0;
-  char *filename = NULL;
-  location(wn,source_file,line,filename);
-  find_endline(wn,endline);
-  WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
-
   // Compute condition once and save to preg.
-
   TYPE_ID cond_type = WN_rtype( WN_kid0( wn ) );
   PREG_NUM cond = Create_Preg( cond_type, "__branch_cond" );
   Instrument_Before( WN_StidIntoPreg( cond_type, cond,
@@ -2026,72 +872,15 @@ WN_INSTRUMENT_WALKER::Instrument_Branch( WN *wn, INT32 id, WN *block, WN *stmt )
   WN *taken = WN_Relational( ( opr == OPR_FALSEBR ) ? OPR_EQ : OPR_NE,
 			     MTYPE_I4, WN_LdidPreg( cond_type, cond ),
 			     WN_Intconst( MTYPE_I4, 0 ) );
-
-     _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-     _profile_gen_struct_st_branch = _profile_gen_struct_st;
-    WN *instr = Gen_Call(BRANCH_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-  WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-
-  Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     taken,
-			     NULL,
-                             NULL,
-                             0,NULL);  
-  
-
-
-  if (Epilog_Flag)
-  {
-    
-  WN *instr2 = Gen_Call(BRANCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-  WN_Set_Linenum(instr2,WN_Get_Linenum(wn)); 
-
-  Instrument_With_Gen_Struct(0,1,  //after
-                             instr2, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL); 
-  }
-
-  if(filename!=NULL) delete [] filename;
-
-  if (Epilog_Flag) {
-    for (INT32 i=0; i<WN_kid_count(wn); i++)
-    Instrument_Special_Returns(WN_kid(wn,i),stmt,block, id, enum_subtype, line, endline, source_file,TRUE); 
-  }
+  WN *instr = Gen_Call( BRANCH_INSTRUMENT_NAME, PU_Handle(),
+			WN_Intconst( MTYPE_I4, id ), taken );
+  Instrument_Before( instr, wn, block );
 }
 
 
 void
-WN_INSTRUMENT_WALKER::Instrument_Cselect( WN *wn, INT32 id, WN *block )
+WN_INSTRUMENT_WALKER::Instrument_Cselect( WN *wn, INT32 id )
 {
-  WN *source_file=NULL;
-  char *filename = NULL;
-  INT32 line=0, endline=0;
-  location(wn,source_file,line,filename);
-  find_endline(wn,endline);
-  WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
-
   // Create comma for kid0
   WN *comma = Create_Comma_Kid( wn, 0 );
 
@@ -2110,21 +899,8 @@ WN_INSTRUMENT_WALKER::Instrument_Cselect( WN *wn, INT32 id, WN *block )
 			     WN_LdidPreg( cond_type, cond ),
 			     WN_Intconst( MTYPE_I4, 0 ) );
   WN *instr = Gen_Call( BRANCH_INSTRUMENT_NAME, PU_Handle(),
-			WN_Intconst( MTYPE_I4, id ), taken, WN_Intconst(MTYPE_I4,enum_subtype) ,WN_Intconst(MTYPE_I4,line),WN_Intconst(MTYPE_I4,endline),source_file);
+			WN_Intconst( MTYPE_I4, id ), taken );
   WN_INSERT_BlockLast( WN_kid( comma, 0 ), instr );
-
- if (Epilog_Flag)
-  {
-    
-    WN *instr2 = Gen_Call( BRANCH_EXIT_INSTRUMENT_NAME, PU_Handle(),
-			WN_Intconst( MTYPE_I4, id ),  WN_Intconst(MTYPE_I4,enum_subtype) ,WN_Intconst(MTYPE_I4,line),WN_Intconst(MTYPE_I4,endline),
-     WN_COPY_Tree(source_file));
-    WN_Set_Linenum(instr2,WN_Get_Linenum(wn));
-    Instrument_After( instr2, wn, block );
-    
-  }
-  
- if(filename!=NULL) delete [] filename;
 }
 
 
@@ -2160,130 +936,24 @@ WN_INSTRUMENT_WALKER::Annotate_Branch(WN *wn, INT32 id)
 
 
 void
-WN_INSTRUMENT_WALKER::Instrument_Loop( WN *wn, INT32 id, WN *block, WN *stmt )
+WN_INSTRUMENT_WALKER::Instrument_Loop( WN *wn, INT32 id, WN *block )
 {
-   WN *source_file=NULL, *subtype=NULL;
-   char *filename = NULL;
-  INT32 line=0, endline=0;
-  INT omp_found = 0;
-  WN *pregion = Get_Parent(Get_Parent(wn));
-   if(WN_operator(pregion)==OPR_REGION)
-  {
-    WN *pregion_pragmas = WN_first(WN_region_pragmas(pregion)); 
-    switch(WN_pragma(pregion_pragmas))
-    {
-      case WN_PRAGMA_PARALLEL_BEGIN:
-      case WN_PRAGMA_PARALLEL_SECTIONS:
-      case WN_PRAGMA_PARALLEL_DO:
-      case WN_PRAGMA_DOACROSS:
-      case WN_PRAGMA_PDO_BEGIN:
-      omp_found = 1;
-      
-
-      break;
-    }
-  } 
-
- 
-  location(wn,source_file,line,filename);
-  find_endline(wn,endline);
-   WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
-  // region_subtype(wn,subtype);  
-
   OPERATOR opr = OPCODE_operator( WN_opcode( wn ) );
 
   // profile_loop( handle, id ) before loop.
- 
-   _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-   _profile_gen_struct_st_loop = _profile_gen_struct_st;
-    WN *instr2 = Gen_Call(LOOP_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-  WN_Set_Linenum(instr2,WN_Get_Linenum(wn)); 
-
-  Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr2, 
-                             omp_found? pregion : wn,
-                             omp_found? Get_Parent(pregion) : block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL);  
+  Instrument_Before( Gen_Call( LOOP_INSTRUMENT_NAME,
+			       PU_Handle(),
+			       WN_Intconst( MTYPE_I4, id ) ),
+		     wn, block );
   
-
-
-  if(Epilog_Flag) 
-    {  
- 
-        WN *instr3 = Gen_Call(LOOP_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-        WN_Set_Linenum(instr3,WN_Get_Linenum(wn)); 
-
-        Instrument_With_Gen_Struct(0,1, /*after? */
-                             instr3, 
-                             omp_found? pregion : wn,
-                             omp_found? Get_Parent(pregion) : block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL);  
-
-
-    } 
-  if(filename!=NULL)
-    delete [] filename;
- if (Epilog_Flag) {
-    for (INT32 i=0; i<WN_kid_count(wn); i++)
-     Instrument_Special_Returns(WN_kid(wn,i),stmt,block, id, enum_subtype, line, endline, source_file,FALSE); 
-  }
-
-
   // profile_loop_iter( handle, id ) at beginning of loop iter.
   WN *body = ( opr == OPR_DO_LOOP
 	       ? WN_do_body( wn ) : WN_while_body( wn ) );
-
-   WN *source_file2=NULL;
-   char *filename2=NULL;
-  INT32 line2=0, endline2=0;
-  location(body,source_file2,line2,filename2);
-  find_endline(body,endline2);
-    WN *str_subtype2=NULL;
-  INT32 enum_subtype2=-1;
-  region_subtype(wn,str_subtype2,enum_subtype2); //leave the original wn, for the loop type.
-
-
- /*
-        _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-       WN *iter_call = Gen_Call(LOOP_INST_ITER_NAME,Load_Struct(_profile_gen_struct_st));
-        WN_Set_Linenum(iter_call,WN_Get_Linenum(body)); 
-
-        Instrument_With_Gen_Struct(1,2, 
-                             iter_call, 
-                             wn,
-                             body,            
-                             filename2,
-			     NULL,
-			     id,
-                             line2,
-			     endline2,
-			     enum_subtype2,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,NULL);  */
-
-  if(filename2!=NULL) delete [] filename2;
+  WN *iter_call = Gen_Call( LOOP_INST_ITER_NAME,
+			    PU_Handle(),
+			    WN_Intconst( MTYPE_I4, id ) );
+  WN_INSERT_BlockFirst( body, iter_call );
+  Record_Instrument_Node( iter_call );
 }
 
 
@@ -2345,23 +1015,8 @@ void
 WN_INSTRUMENT_WALKER::Instrument_Circuit( WN *wn, INT32 id )
 {
   // No need to instrument left branch (kid 0)
-  char *filename = NULL;
-  WN *parent = wn;
-     WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
-
-  while(!OPCODE_is_scf(WN_opcode(parent)) && Get_Parent(parent)!=NULL)
-  {
-    parent = Get_Parent(parent);  
-  }
-
-  WN *source_file=NULL;
-  INT32 line=0;
-  location(parent,source_file,line,filename);
 
   // Create comma for right branch (kid 1)
-
   WN *comma = Create_Comma_Kid( wn, 1 );
 
   // Compute condition once and save to preg
@@ -2380,27 +1035,9 @@ WN_INSTRUMENT_WALKER::Instrument_Circuit( WN *wn, INT32 id )
   WN *taken = WN_Relational( opr == OPR_CAND ? OPR_EQ : OPR_NE,
 			     MTYPE_I4, WN_LdidPreg( cond_type, cond ),
 			     WN_Intconst( MTYPE_I4, 0 ) );
-     _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-    WN *instr = Gen_Call(SHORT_CIRCUIT_INST_NAME,Load_Struct(_profile_gen_struct_st));
-    WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-
-  Instrument_With_Gen_Struct(1,3, /*after? */
-                             instr, 
-                             WN_kid(comma,0),
-                             NULL,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     enum_subtype,
-			     taken,
-			     NULL,
-                             NULL,
-                             0,NULL); 
-
-
-  if(filename!=NULL) delete [] filename;
+  WN *instr = Gen_Call( SHORT_CIRCUIT_INST_NAME, PU_Handle(),
+			WN_Intconst( MTYPE_I4, id ), taken );
+  WN_INSERT_BlockLast( WN_kid( comma, 0 ), instr );
 }
 
 
@@ -2440,125 +1077,53 @@ WN_INSTRUMENT_WALKER::Instrument_Call( WN *wn, INT32 id, WN *block )
 {
   // Get the name of the called function.
   WN *called_func_name;
-  WN *source_file=NULL;
-  char *name=NULL, *filename=NULL;
-  
-  INT32 line=0;
-  location(wn,source_file,line,filename);
-    WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
-
-
   if ( WN_has_sym( wn ) ) {
-    name = ST_name( WN_st( wn ) );
+    char *name = ST_name( WN_st( wn ) );
     called_func_name = WN_LdaString( name, 0, strlen( name ) + 1 );
   } else
     called_func_name = WN_Zerocon( Pointer_type );
 
-  _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-  WN *instr = Gen_Call(CALL_INST_ENTRY_NAME,Load_Struct(_profile_gen_struct_st));
-  WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-  Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     enum_subtype,
-			     NULL,
-			     name,
-                             NULL,
-                             0,NULL);  
+  // profile_call_invoke( handle, call_id, called_func_name )
+  Instrument_Before( Gen_Call( CALL_INST_ENTRY_NAME,
+			       PU_Handle(),
+			       WN_Intconst( MTYPE_I4, id ),
+			       called_func_name ),
+		     wn, block );
 
-    
- 
-  if(Epilog_Flag) {
-
-      WN *instr = Gen_Call(CALL_INST_EXIT_NAME,Load_Struct(_profile_gen_struct_st));
-      WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-      Instrument_With_Gen_Struct(0,1, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     enum_subtype,
-			     NULL,
-			     name,
-                             NULL,
-                             0,NULL); 
-
-  }
-  if(filename!=NULL) delete [] filename;
+  // profile_call_exit( handle, call_id, called_func_name )
+  Instrument_After( Gen_Call( CALL_INST_EXIT_NAME,
+			      PU_Handle(),
+			      WN_Intconst( MTYPE_I4, id ),
+			      WN_COPY_Tree( called_func_name ) ),
+		    wn, block );
 }
-
 
 void
 WN_INSTRUMENT_WALKER::Instrument_Icall( WN *wn, INT32 id, WN *block )
 {
   // Get the address of the called function.
-  char *filename = NULL;
-  WN *called_func_address;
-   WN *source_file=NULL;
-  INT32 line=0;
-  location(wn,source_file,line,filename);
+  WN* orig_wn = WN_kid( wn, WN_kid_count(wn)-1 );
+  // If orig_wn has side-effects, remove the side-effects from 'wn',
+  // because they would be part of call to profile_icall()
+  if (WN_operator (orig_wn) == OPR_COMMA)
+    WN_kid( wn, WN_kid_count(wn)-1 ) = WN_kid1 (orig_wn);
+  WN* called_func_address = WN_COPY_Tree( orig_wn );
 
-  called_func_address = WN_COPY_Tree(WN_kid(wn,WN_kid_count(wn)-1));
-
-  
-  
-
-      _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-
-   WN *instr = Gen_Call(ICALL_ENTRY_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-   WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-   Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     0,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0, 
-			     called_func_address
-                             );  
-
-    if(Epilog_Flag)
-    {
-
-       WN *instr = Gen_Call(ICALL_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st));
-      WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-      Instrument_With_Gen_Struct(0,1, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     0,
-			     NULL,
-			     NULL,
-                             NULL,
-                             0,
-			     WN_COPY_Tree(called_func_address)); 
-
+  if( !WN_Rename_Duplicate_Labels( orig_wn,
+				   called_func_address,
+				   pu_wn,
+				   _mempool ) ){
+    FmtAssert( FALSE, ("external labels renamed") );
   }
-    if(filename!=NULL) delete [] filename;
+
+  // profile_icall( handle, call_id, called_func_address )
+  // Note: This profile cannot be done "after" due to instances
+  // like bug 7395.
+  Instrument_Before( Gen_Call( ICALL_INSTRUMENT_NAME,
+			       PU_Handle(),
+			       WN_Intconst( MTYPE_I4, id ),
+			       called_func_address ),
+		     wn, block );
 }
 
 void
@@ -2815,12 +1380,6 @@ WN_INSTRUMENT_WALKER::Annotate_Icall( WN *wn, INT32 id )
 void
 WN_INSTRUMENT_WALKER::Instrument_Switch( WN *wn, INT32 id, WN *block )
 {
-
-  WN *source_file=NULL;
-  INT32 line=0, endline=0;
-  char *filename=NULL;
-  location(wn,source_file,line,filename);
-  find_endline(wn,endline);
   // Record number of targets
   _switch_num_targets.push_back( WN_num_entries( wn ) );
 
@@ -2841,55 +1400,13 @@ WN_INSTRUMENT_WALKER::Instrument_Switch( WN *wn, INT32 id, WN *block )
 		     wn, block );
   WN_kid0( wn ) = WN_LdidPreg( cond_type, cond );
 
-
-  _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-  WN *instr = Gen_Call(SWITCH_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st)); 
-  WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-   Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     0,
-			     NULL,
-			     NULL,
-			     WN_LdidPreg( cond_type, cond ),
-			      WN_num_entries( wn ),
-                             NULL 
-                             ); 
-
- 
-  
-  if(Epilog_Flag) {
-
-
-    WN *instr = Gen_Call(SWITCH_EXIT_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st)); 
-    WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-    Instrument_With_Gen_Struct(0,1, //after? 
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     endline,
-			     0,
-			     NULL,
-			     NULL,
-			     NULL,
-                             0,
-                             NULL
-                             ); 
-
-
-  }
-
-   if(filename!=NULL) delete [] filename;
+  // profile_switch(handle, switch_id, target, num_targets)
+  WN *instr = Gen_Call( SWITCH_INSTRUMENT_NAME, PU_Handle(),
+			WN_Intconst( MTYPE_I4, id ),
+			WN_LdidPreg( cond_type, cond ),
+			WN_Intconst( MTYPE_I4,
+				     WN_num_entries( wn ) ) );
+  Instrument_Before( instr, wn, block );
 }
 
 
@@ -3001,13 +1518,6 @@ WN_INSTRUMENT_WALKER::Annotate_Switch( WN *wn, INT32 id )
 void
 WN_INSTRUMENT_WALKER::Instrument_Compgoto( WN *wn, INT32 id, WN *block )
 {
-   WN *source_file=NULL;
-   char *filename = NULL;
-  INT32 line=0;
-  location(wn,source_file,line,filename);
-     WN *str_subtype=NULL;
-  INT32 enum_subtype=-1;
-  region_subtype(wn,str_subtype,enum_subtype);
   _compgoto_num_targets.push_back( WN_num_entries( wn ) );
   
   // Compute target once and save to preg.
@@ -3020,28 +1530,13 @@ WN_INSTRUMENT_WALKER::Instrument_Compgoto( WN *wn, INT32 id, WN *block )
   Instrument_Before( target, wn, block );
   WN_kid0( wn ) = WN_LdidPreg( cond_type, cond );
 
-   _profile_gen_struct_st = create_struct_st(profile_gen_struct_ty_idx);
-
-  WN *instr = Gen_Call(COMPGOTO_INSTRUMENT_NAME,Load_Struct(_profile_gen_struct_st)); 
-  WN_Set_Linenum(instr,WN_Get_Linenum(wn)); 
-  Instrument_With_Gen_Struct(1,0, /*after? */
-                             instr, 
-                             wn,
-                             block,            
-                             filename,
-			     NULL,
-			     id,
-                             line,
-			     line,
-			     enum_subtype,
-			     NULL,
-			     NULL,
-			     WN_LdidPreg( cond_type, cond ),
-                             WN_num_entries( wn ),
-                             NULL
-                             ); 
-
-  if (filename!=NULL) delete [] filename;
+  // profile_compgoto( handle, compgoto_id, target, num_targets )
+  WN *instr = Gen_Call( COMPGOTO_INSTRUMENT_NAME, PU_Handle(),
+			WN_Intconst( MTYPE_I4, id ),
+			WN_LdidPreg( cond_type, cond ),
+			WN_Intconst( MTYPE_I4,
+				     WN_num_entries( wn ) ) );
+  Instrument_Before( instr, wn, block );
 }
 
 
@@ -3130,7 +1625,11 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
     Push_Entry_Pragma( wn, block );
   }
 
-  else if ( opr == OPR_REGION ) {
+  else if ( opr == OPR_REGION 
+#ifdef KEY // bug 8284
+    	    && _instrumenting
+#endif
+    	  ) {
 
     // temp for _pu_handle must be scoped SHARED within PARALLEL regions
     WN *regn_prag = WN_first( WN_region_pragmas( wn ) );
@@ -3233,28 +1732,15 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
   // Perform the instrumentation or annotation of the current node
   switch ( opr ) {
 
-  case OPR_RETURN:
-  case OPR_RETURN_VAL:
-    {
-            //  _instrument_count++;
-   if(Epilog_Flag && _instrumenting) {
-        if (Instrumentation_Procedures || Instrumentation_All)
-	{     INT32 id = _count_return++;
-              Instrument_Invoke_Exit(wn,id,block);
-        }
-      }
-     } 
-    
-  break;
-
 #ifdef KEY
-
   case OPR_MPY:
-    if( OPCODE_rtype(WN_opcode(wn)) == MTYPE_F8 && ( Instrumentation_All || Instrumentation_Multiplies) &&meets_nesting_level(wn)) {      _instrument_count++;
+    if (! OPT_FP_Value_Instr)
+      break;
+    if( OPCODE_rtype(WN_opcode(wn)) == MTYPE_F8 ) {
+      _instrument_count++;
       const INT32 id = _count_value_fp_bin++;
-      if( _instrumenting ) {	 
-             Instrument_Value_FP_Bin( wn, id, block, parent, stmt );
-      }
+      if( _instrumenting )
+        Instrument_Value_FP_Bin( wn, id, block, parent, stmt );
       else
         Annotate_Value_FP_Bin( wn, id );
     }   
@@ -3262,14 +1748,14 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
   case OPR_REM:
   case OPR_DIV:
   case OPR_MOD:
+    if (! OPT_Int_Value_Instr)
+      break;
     if( !WN_operator_is( WN_kid1(wn), OPR_INTCONST ) &&
-	MTYPE_is_integral( OPCODE_rtype(WN_opcode(wn) ) ) && ( Instrumentation_All 
-        || Instrumentation_Reminder_Division_Modulus) &&meets_nesting_level(wn) ){
+	MTYPE_is_integral( OPCODE_rtype(WN_opcode(wn) ) ) ){
       _instrument_count++;
       const INT32 id = _count_value++;
-      if( _instrumenting ) {
-	  Instrument_Value( wn, id, block );
-      }
+      if( _instrumenting )
+	Instrument_Value( wn, id, block );
       else
 	Annotate_Value( wn, id );
     }
@@ -3279,219 +1765,113 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
   case OPR_PRAGMA:
     if ( WN_pragma( wn ) != WN_PRAGMA_PREAMBLE_END )
       break;
-     if (Instrumentation_Procedures || Instrumentation_All)
     {
       _instrument_count++;
       INT32 id = _count_invoke++;
-      if ( _instrumenting) {         
-	 Instrument_Invoke( wn, id, block );
-      }
+      if ( _instrumenting )
+	Instrument_Invoke( wn, id, block );
       else
 	Annotate_Invoke( wn, id );
     }
     break;
-   
+
   case OPR_TRUEBR:
   case OPR_FALSEBR:
   case OPR_IF:
-  if((Instrumentation_Branches || Instrumentation_All) &&meets_nesting_level(wn))   
-    { HasGotos = FALSE;
-      IsGotos(wn,stmt,block);
-      if(Epilog_Flag) {
-       if(HasGotos==FALSE) {
-       _instrument_count++;
-      INT32 id = _count_branch++;
-      if ( _instrumenting ) {
-	  Instrument_Branch( wn, id,block,stmt );
-      }
-      else
-	Annotate_Branch( wn, id );
-      }
-     }
-     else {
-      _instrument_count++;
-      INT32 id = _count_branch++;
-      if ( _instrumenting ) {
-        Instrument_Branch( wn, id,block,stmt );
-      } 
-      else
-        Annotate_Branch( wn, id );
-
-     }
-    }
-    break; 
-
-    
-  case OPR_CSELECT:
-    if((Instrumentation_Cselects || Instrumentation_All) &&meets_nesting_level(wn)) 
     {
       _instrument_count++;
       INT32 id = _count_branch++;
-      if ( _instrumenting ) {
-	
-	     Instrument_Cselect( wn, id,block );
-      }
+      if ( _instrumenting )
+	Instrument_Branch( wn, id, block );
       else
 	Annotate_Branch( wn, id );
     }
     break;
-    
- 
+
+  case OPR_CSELECT:
+    {
+      _instrument_count++;
+      INT32 id = _count_branch++;
+      if ( _instrumenting )
+	Instrument_Cselect( wn, id );
+      else
+	Annotate_Branch( wn, id );
+    }
+    break;
+
   case OPR_DO_LOOP:
   case OPR_WHILE_DO:
   case OPR_DO_WHILE:
-    if((Instrumentation_All || Instrumentation_Loops) && meets_nesting_level(wn) ) 
-    { 
-      HasGotos=FALSE;
-      IsGotos(wn,stmt,block);
-      if (Epilog_Flag)
-      {
-       if (HasGotos==FALSE) {
+    {
       _instrument_count++;
       INT32 id = _count_loop++;
-     
-      if ( _instrumenting)
-      { 
- 	  Instrument_Loop( wn, id, block,stmt );
-	  
-      }
+      if ( _instrumenting )
+	Instrument_Loop( wn, id, block );
       else
 	Annotate_Loop( wn, id );
-       }
-      }
-      else
-      {
-       _instrument_count++;
-      INT32 id = _count_loop++;
-      if ( _instrumenting )
-      { 
-        Instrument_Loop( wn, id, block,stmt );
-      }
-      else
-        Annotate_Loop( wn, id );
-      }
     }
-    break; 
+    break;
 
-   
   case OPR_CAND:
   case OPR_CIOR:
-  if((Instrumentation_All || Instrumentation_Shortcircuits) &&meets_nesting_level(wn))
     {
       _instrument_count++;
       INT32 id = _count_circuit++;
       if ( _instrumenting )
-	   {
-	     Instrument_Circuit( wn, id );
-	  }
+	Instrument_Circuit( wn, id );
       else
 	Annotate_Circuit( wn, id );
     }
     break;
-  
- 
+
   case OPR_PICCALL:
   case OPR_CALL:
   case OPR_INTRINSIC_CALL:
   case OPR_IO:
-   { 
-     char mpistr[] = "mpi_";
-     char pompstr[] = "pomp_";
-     BOOL skip_func = FALSE;
-
-     if ( WN_has_sym( wn ) ) {
-         char *name = ST_name( WN_st( wn ) );
-         char *tmp_name = new char[strlen(name)+1];
-         strcpy(tmp_name,name);
-         for (int i=0; i<strlen(name);i++)
-             tmp_name[i] = tolower(tmp_name[i]); 
-          
-         if (is_mpi_or_pomp(tmp_name))
-           skip_func = TRUE;
-
-         if (strcmp(name,"_END")==0)
-	   {
-             skip_func = TRUE;
-             if(Epilog_Flag) {                     
-                        if(_instrumenting)
-			{  if (Instrumentation_Procedures || Instrumentation_All)
-			{    _count_return++;
-                            INT32 id = _count_return;
-                            Instrument_Invoke_Exit(wn,id,block);
-                        }
-                        }
-		     }             
-           } 
-        
-     
-        delete [] tmp_name;       
-     }
-
-     else if(opr == OPR_INTRINSIC_CALL)
-	   {
-	     switch (WN_intrinsic(wn))
-             {
-	        case INTRN_STOP:
-	        case INTRN_STOP_F90:
-		  skip_func = TRUE;
-                   if(Epilog_Flag) {
-                 
-		      if(_instrumenting) {
-			  if (Instrumentation_Procedures || Instrumentation_All) {
-                           _count_return++;
-                            INT32 id = _count_return;  
-                            Instrument_Invoke_Exit(wn,id,block);
-			  } 
-		      }
-		     } 
-	     
-	        break;
-
-	     }
-	   }
-        
-      
-     if (!skip_func && (Instrumentation_Callsites || Instrumentation_All) && meets_nesting_level(wn) ) {
+    {
       _instrument_count++;
       INT32 id = _count_call++;
-      if ( _instrumenting ) {
-	   Instrument_Call( wn, id, block );
-      }
+      if ( _instrumenting )
+	Instrument_Call( wn, id, block );
       else
 	Annotate_Call( wn, id );
-    } 
+    }
+    break;
+
+  case OPR_ICALL:
+    {
+      _instrument_count++;
+      INT32 idcall = _count_call++;
+      INT32 idicall;
+#ifdef KEY
+      if (OPT_Icall_Instr) 
+#endif
+	idicall = _count_icall++;
+      if (_instrumenting)
+	{
+	  Instrument_Call( wn, idcall, block);
+#ifdef KEY
+	  if (OPT_Icall_Instr) 
+#endif
+	    Instrument_Icall( wn, idicall, block);
+	}
+      else
+	{
+	  Annotate_Call( wn, idcall);
+#ifdef KEY
+	  if (OPT_Icall_Instr) 
+#endif
+	    Annotate_Icall( wn, idicall);
+	}
     }
     break;
  
-  case OPR_ICALL:
-   if((Instrumentation_Callsites || Instrumentation_All) &&meets_nesting_level(wn))
-    {
-      _instrument_count++;
-	  INT32 idcall = _count_call++;
-	  INT32 idicall = _count_icall++;
-	  if (_instrumenting)
-	  {
-	         
-		Instrument_Call( wn, idcall, block);
-		Instrument_Icall( wn, idicall, block);
-              
-	  }
-	  else
-	  {
-	    Annotate_Call( wn, idcall);
-	    Annotate_Icall( wn, idicall);
-	  }
-    }
-    break; 
-  
   case OPR_SWITCH:
-   if ((Instrumentation_Switches || Instrumentation_All) &&meets_nesting_level(wn)) 
     {
       _instrument_count++;
       INT32 id = _count_switch++;
-      if ( _instrumenting ) {	  
-	      Instrument_Switch( wn, id, block );
-      }
+      if ( _instrumenting )
+	Instrument_Switch( wn, id, block );
       else
 	Annotate_Switch( wn, id );
     }
@@ -3499,27 +1879,24 @@ WN_INSTRUMENT_WALKER::Tree_Walk_Node( WN *wn, WN *stmt, WN *block,
 
   case OPR_COMPGOTO:
   case OPR_XGOTO:
-   if ((Instrumentation_Gotos || Instrumentation_All) &&meets_nesting_level(wn)) 
     {
       _instrument_count++;
       INT32 id = _count_compgoto++;
-      if ( _instrumenting ) {              
-	Instrument_Compgoto( wn, id, block );       
-      }
+      if ( _instrumenting )
+	Instrument_Compgoto( wn, id, block );
       else
 	Annotate_Compgoto( wn, id );
     }
     break;
-    
   }
 
   // This shouldn't be necessary, but....
   if ( opr == OPR_REGION ) {
     if ( _vho_lower ) {
       WN_region_body( wn ) = VHO_Lower( WN_region_body( wn ) );
- // #ifndef KEY 
+#ifndef KEY
       _vho_lower = FALSE;
-// #endif
+#endif
     }
   }
 }
@@ -3685,13 +2062,11 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
 	   DevWarn("There is no Icall feedback data for current PU!");
     }
   }
+
 #ifdef KEY
   pu_wn = root;
 #endif
    
-  Inst_Parent_Map = WN_MAP_Create(_mempool);
-  Set_Parent(root,NULL);
-  Parentize(root);  
   // Instrument all statements after (and including) the preamble end;
   // Do not instrument statements in the preamble
   _in_preamble = TRUE;  // will be set FALSE at WN_PRAGMA_PREAMBLE_END
@@ -3700,16 +2075,6 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
   WN* stmt;
   for ( stmt = WN_first( body ); stmt; stmt = WN_next( stmt ) )
     Tree_Walk_Node( stmt, stmt, body );
-
-  if(_count_invoke>0 && _count_return==0 && Epilog_Flag)
-   { 
-     WN *last = WN_last(body); 
-      if (last) {
-     _count_return++;
-     Parentize(root);
-     Instrument_Invoke_Exit(last,_count_return,body, 1);
-     } 
-   }    
   Is_True( ! _in_preamble, ( "WN_INSTRUMENT_WALKER::Tree_Walk found"
 			     " no WN_PRAGMA_PREAMBLE_END pragma" ) );
 
@@ -3729,45 +2094,12 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
       WN *unique_output = WN_Intconst( MTYPE_I4,
 				       Instrumentation_Unique_Output );
 
-       _profile_init_struct_st = create_struct_st(profile_init_struct_ty_idx);
-     
-    {
-    INITO_IDX inito = New_INITO(_profile_init_struct_st);
-    INITV_IDX inv_temp;
-    INITV_IDX inv = New_INITV();
-    INITV_IDX next_inv= New_INITV();
-    INITV_Init_Block(inv, /*next_inv*/ INITV_Next_Idx());
-         
-    if(Instrumentation_File_Name==NULL) {
-    next_inv = INITO_to_String(next_inv,""); //filename *fix*
-    } else {
-    
-    next_inv = INITO_to_String(next_inv,Instrumentation_File_Name);
-    }
-    
-    // next_inv = INITO_to_Integer(next_inv,MTYPE_I8,0);
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,_phase);  // id
-    next_inv = INITO_to_Integer(next_inv,MTYPE_I4,Instrumentation_Unique_Output);  // linenum
-    Set_INITO_val(inito, inv);
-     Set_ST_is_initialized(_profile_init_struct_st);
-    }
-
-
-    /*
-      Instrument_Entry(Init_Struct(_profile_init_struct_st,
-                                   output_file_name,Ptr_ty,0 ));
-       Instrument_Entry(Init_Struct(_profile_init_struct_st,
-                                   phasenum,I4_ty,8 ));
-       Instrument_Entry(Init_Struct(_profile_init_struct_st,
-                                     unique_output,I4_ty,12 ));
-    */
-       
-      Instrument_Entry( Gen_Call( INST_INIT_NAME,
-                                  Load_Struct(_profile_init_struct_st) ) );
+      // __profile_init( outfile )
+      Instrument_Entry( Gen_Call( INST_INIT_NAME, output_file_name,
+				  phasenum, unique_output ) );
 	  
       // Initialize the PU instrumentation.
-     if (!Epilog_Flag) { 
-     WN *src_file_name = WN_LdaString ( Src_File_Name, 0,
+      WN *src_file_name = WN_LdaString ( Src_File_Name, 0,
 					 strlen( Src_File_Name ) + 1 );
       WN *pu_name = WN_LdaString ( Cur_PU_Name, 0, strlen( Cur_PU_Name ) + 1 );
       WN *pc = WN_Lda( Pointer_type, 0, WN_st( root ) );
@@ -3813,9 +2145,8 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
       Instrument_Entry( WN_Stid(Pointer_type, 0, _pu_handle, 
       				MTYPE_To_TY(Pointer_type),
 				WN_LdidPreg( Pointer_type, rreg1 ) ) );
+
       // Initialize specific instrumentation.
-      
-     
       Initialize_Instrumenter_Invoke(   _count_invoke   );
       Initialize_Instrumenter_Branch(   _count_branch   );
       Initialize_Instrumenter_Loop(     _count_loop     );
@@ -3830,7 +2161,6 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
       Initialize_Instrumenter_Value_FP_Bin( _count_value_fp_bin );
 #endif
 #endif
-    }
       Pop_Entry_Pragma();
     }
 
@@ -3848,22 +2178,23 @@ WN_INSTRUMENT_WALKER::Tree_Walk( WN *root )
 	  
       UINT32 checksum = Get_PU_Checksum( *i );
 	
-      // KEY
+#ifdef KEY
+      if (_instrument_count != checksum)
+	ErrMsg(EC_FB_File_Old, (*i)->fb_name);
+#else
       FmtAssert( _instrument_count == checksum,
-		 ( "Instrumenter Error: (Phase %d) Feedback file %s has "
+		 ( "Instrumenter Error: (Phase %d) Suspected obsolete feedback file %s has "
 		   "invalid checksum for program unit %s in file %s. "
 		   "Computed = %d, In file = %d.",
 		   _phase, (*i)->fb_name, Cur_PU_Name, Src_File_Name,
 		   _instrument_count, checksum ) );
+#endif
     }
   }
-  WN_MAP_Delete(Inst_Parent_Map);
+
 #if Instrumenter_DEBUG
   fdump_tree(TFile, root);
 #endif
-//  fdump_tree(TFile, root);
-//  Print_symtab(TFile,CURRENT_SYMTAB);
-//  Print_symtab(TFile,GLOBAL_SYMTAB);
 }
 
 
@@ -3902,7 +2233,6 @@ WN_Instrument( WN *wn, PROFILE_PHASE phase )
     WN_INSTRUMENT_WALKER wiw( TRUE, phase, &local_mempool, fb_handles );
     wiw.Tree_Walk( wn );
   }
-
   // Dispose of local memory pool
   MEM_POOL_Pop( &local_mempool );
   MEM_POOL_Delete( &local_mempool );
@@ -3987,6 +2317,7 @@ WN_Annotate( WN *wn, PROFILE_PHASE phase, MEM_POOL *MEM_pu_pool )
     }
   }
 #endif
+
   Cur_PU_Feedback->Verify("after annotation");
 }
 
@@ -4008,754 +2339,5 @@ Set_Instrumentation_File_Name( char *fname )
   }
 }
 
-void
-Set_Selective_Instrumentation_File_Name( char *fname ) 
-{
-  if ( fname ) {
-    Selective_Instrumentation_File_Name
-      = (char *) malloc( sizeof( char ) *
-			 ( strlen(fname)+ 1 ) );
-    sprintf( Selective_Instrumentation_File_Name, "%s", fname);
-    // Instrumentation_File_Name = fname;
-  } else {
-    DevWarn( "Instrumenter Warning: Invalid instrumentation file name." );
-    Selective_Instrumentation_File_Name = "";
-  }
-//  printf(Selective_Instrumentation_File_Name);
-}
-const int CALLS_LEN = 40;
-const int NUM_MPI_CALLS = 559;
-const int NUM_POMP_CALLS = 46;
-const int NUM_OMP_CALLS = 21;
-char mpi_calls[NUM_MPI_CALLS][CALLS_LEN] ={
-"mpi_send",
-"pmpi_send",
-"mpi_recv", 
-"pmpi_recv",
-"mpi_get_count",
-"pmpi_get_count",
-"mpi_bsend",
-"pmpi_bsend",
-"mpi_ssend",
-"pmpi_ssend",
-"mpi_rsend",
-"pmpi_rsend",
-"mpi_buffer_attach",
-"pmpi_buffer_attach",
-"mpi_buffer_detach",
-"pmpi_buffer_detach",
-"mpi_isend",
-"pmpi_isend",
-"mpi_ibsend",
-"pmpi_ibsend",
-"mpi_issend",
-"pmpi_issend",
-"mpi_irsend",
-"pmpi_irsend",
-"mpi_irecv",
-"pmpi_irecv",
-"mpi_wait",
-"pmpi_wait",
-"mpi_test",
-"pmpi_test",
-"mpi_request_free",
-"pmpi_request_free",
-"mpi_waitany",
-"pmpi_waitany",
-"mpi_testany",
-"pmpi_testany",
-"mpi_waitall",
-"pmpi_waitall",
-"mpi_testall",
-"pmpi_testall",
-"mpi_waitsome",
-"pmpi_waitsome",
-"mpi_testsome",
-"pmpi_testsome",
-"mpi_iprobe",
-"pmpi_iprobe",
-"mpi_probe",
-"pmpi_probe",
-"mpi_cancel",
-"pmpi_cancel",
-"mpi_test_cancelled",
-"pmpi_test_cancelled",
-"mpi_send_init",
-"pmpi_send_init",
-"mpi_bsend_init",
-"pmpi_bsend_init",
-"mpi_ssend_init",
-"pmpi_ssend_init",
-"mpi_rsend_init",
-"pmpi_rsend_init",
-"mpi_recv_init",
-"pmpi_recv_init",
-"mpi_start",
-"pmpi_start",
-"mpi_startall",
-"pmpi_startall",            
-"pmpi_irsend",
-"mpi_irecv",
-"pmpi_irecv",
-"mpi_wait",
-"pmpi_wait",
-"mpi_test",
-"pmpi_test",
-"mpi_request_free",
-"pmpi_request_free",
-"mpi_waitany",
-"pmpi_waitany",
-"mpi_testany",
-"pmpi_testany",
-"mpi_waitall",
-"pmpi_waitall",
-"mpi_testall",
-"pmpi_testall",
-"mpi_waitsome",
-"pmpi_waitsome",
-"mpi_testsome",
-"pmpi_testsome",
-"mpi_iprobe",
-"pmpi_iprobe",
-"mpi_sendrecv",
-"pmpi_sendrecv",
-"mpi_sendrecv_replace",
-"pmpi_sendrecv_replace",
-"mpi_type_contiguous",
-"pmpi_type_contiguous",
-"mpi_type_vector",
-"pmpi_type_vector",
-"mpi_type_hvector",
-"pmpi_type_hvector",
-"mpi_type_indexed",
-"pmpi_type_indexed",
-"mpi_type_hindexed",
-"pmpi_type_hindexed",
-"mpi_type_struct",
-"pmpi_type_struct",
-"mpi_address",
-"pmpi_address",
-"mpi_type_extent",
-"pmpi_type_extent",
-"mpi_type_size",
-"pmpi_type_size",
-"mpi_type_lb",
-"pmpi_type_lb",
-"mpi_type_ub",
-"pmpi_type_ub",
-"mpi_type_commit",
-"pmpi_type_commit",
-"mpi_type_free",
-"pmpi_type_free",
-"mpi_get_elements",
-"pmpi_get_elements",
-"mpi_pack",
-"pmpi_pack",
-"mpi_unpack",
-"pmpi_unpack",
-"mpi_pack_size",
-"pmpi_pack_size",
-"mpi_barrier",
-"pmpi_barrier",
-"mpi_bcast",
-"pmpi_bcast",
-"mpi_gather",
-"pmpi_gather",
-"mpi_gatherv",
-"pmpi_gatherv",
-"mpi_scatter",
-"pmpi_scatter",
-"mpi_scatterv",
-"pmpi_scatterv",
-"mpi_allgather",
-"pmpi_allgather",
-"mpi_allgatherv",
-"pmpi_allgatherv",
-"mpi_alltoall",
-"pmpi_alltoall",
-"mpi_alltoallv",
-"pmpi_alltoallv",
-"mpi_reduce",
-"pmpi_reduce",
-"mpi_op_create",
-"pmpi_op_create",
-"mpi_op_free",
-"pmpi_op_free",
-"mpi_allreduce",
-"pmpi_allreduce",
-"mpi_reduce_scatter",
-"pmpi_reduce_scatter",
-"mpi_scan",
-"pmpi_scan",
-"mpi_group_size",
-"pmpi_group_size",
-"mpi_group_rank",
-"pmpi_group_rank",
-"mpi_group_translate_ranks",
-"pmpi_group_translate_ranks",
-"mpi_group_compare",
-"pmpi_group_compare",
-"mpi_comm_group",
-"pmpi_comm_group",
-"mpi_group_union",
-"pmpi_group_union",
-"mpi_group_intersection",
-"pmpi_group_intersection",
-"mpi_group_difference",
-"pmpi_group_difference",
-"mpi_group_incl",
-"pmpi_group_incl",
-"mpi_group_excl",
-"pmpi_group_excl",
-"mpi_group_range_incl",
-"pmpi_group_range_incl",
-"mpi_group_range_excl",
-"pmpi_group_range_excl",
-"mpi_group_free",
-"pmpi_group_free",
-"mpi_comm_size",
-"pmpi_comm_size",
-"mpi_comm_rank",
-"pmpi_comm_rank",
-"mpi_comm_compare",
-"pmpi_comm_compare",
-"mpi_comm_dup",
-"pmpi_comm_dup",
-"mpi_comm_create",
-"pmpi_comm_create",
-"mpi_comm_split",
-"pmpi_comm_split",
-"mpi_comm_free",
-"pmpi_comm_free",
-"mpi_comm_test_inter",
-"pmpi_comm_test_inter",
-"mpi_comm_remote_size",
-"pmpi_comm_remote_size",
-"mpi_comm_remote_group",
-"pmpi_comm_remote_group",
-"mpi_intercomm_create",
-"pmpi_intercomm_create",
-"mpi_intercomm_merge",
-"pmpi_intercomm_merge",
-"mpi_keyval_create",
-"pmpi_keyval_create",
-"mpi_keyval_free",
-"pmpi_keyval_free",
-"mpi_attr_put",
-"pmpi_attr_put",
-"mpi_attr_get",
-"pmpi_attr_get",
-"mpi_attr_delete",
-"pmpi_attr_delete",
-"mpi_cart_create",
-"pmpi_cart_create",
-"mpi_dims_create",
-"pmpi_dims_create",
-"mpi_graph_create",
-"pmpi_graph_create",
-"mpi_topo_test",
-"pmpi_topo_test",
-"mpi_graphdims_get",
-"pmpi_graphdims_get",
-"mpi_graph_get",
-"pmpi_graph_get",
-"mpi_cartdim_get",
-"pmpi_cartdim_get",
-"mpi_cart_get",
-"pmpi_cart_get",
-"mpi_cart_rank",
-"pmpi_cart_rank",
-"mpi_cart_coords",
-"pmpi_cart_coords",
-"mpi_graph_neighbors_count",
-"pmpi_graph_neighbors_count",
-"mpi_graph_neighbors",
-"pmpi_graph_neighbors",
-"mpi_cart_shift",
-"pmpi_cart_shift",
-"mpi_cart_sub",
-"pmpi_cart_sub",
-"mpi_cart_map",
-"pmpi_cart_map",
-"mpi_graph_map",
-"pmpi_graph_map",
-"mpi_get_processor_name",
-"pmpi_get_processor_name",
-"mpi_errhandler_create",
-"pmpi_errhandler_create",
-"mpi_errhandler_set",
-"pmpi_errhandler_set",
-"mpi_errhandler_get",
-"pmpi_errhandler_get",
-"mpi_errhandler_free",
-"pmpi_errhandler_free",
-"mpi_error_string",
-"pmpi_error_string",
-"mpi_error_class",
-"pmpi_error_class",
-"mpi_wtime",
-"pmpi_wtime",
-"mpi_wtick",
-"pmpi_wtick",
-"mpi_init",
-"pmpi_init",
-"mpi_finalize",
-"pmpi_finalize",
-"mpi_initialized",
-"pmpi_initialized",
-"mpi_abort",
-"pmpi_abort",
-"mpi_pcontrol",
-"pmpi_pcontrol",
-"mpi_get_version",
-"pmpi_get_version",
-"mpi_request_get_status",
-"pmpi_request_get_status",
-"mpi_info_create",
-"pmpi_info_create",
-"mpi_info_delete",
-"pmpi_info_delete",
-"mpi_info_dup",
-"pmpi_info_dup",
-"mpi_info_free",
-"pmpi_info_free",
-"mpi_info_get",
-"pmpi_info_get",
-"mpi_info_get_nkeys",
-"pmpi_info_get_nkeys",
-"mpi_info_get_nthkey",
-"pmpi_info_get_nthkey",
-"mpi_info_get_valuelen",
-"pmpi_info_get_valuelen",
-"mpi_info_set",
-"pmpi_info_set",
-"mpi_alloc_mem",
-"pmpi_alloc_mem",
-"mpi_free_mem",
-"pmpi_free_mem",
-"mpi_info_c2f",
-"pmpi_info_c2f",
-"mpi_info_f2c",
-"pmpi_info_f2c",
-"mpi_comm_c2f",
-"pmpi_comm_c2f",
-"mpi_comm_f2c",
-"pmpi_comm_f2c",
-"mpi_type_c2f",
-"pmpi_type_c2f",
-"mpi_type_f2c",
-"pmpi_type_f2c",
-"mpi_group_c2f",
-"pmpi_group_c2f",
-"mpi_group_f2c",
-"pmpi_group_f2c",
-"mpi_request_c2f",
-"pmpi_request_c2f",
-"mpi_request_f2c",
-"pmpi_request_f2c",
-"mpi_op_c2f",
-"pmpi_op_c2f",
-"mpi_op_f2c",
-"pmpi_op_f2c",
-"mpi_type_create_hvector",
-"pmpi_type_create_hvector",
-"mpi_type_create_hindexed",
-"pmpi_type_create_hindexed",
-"mpi_type_create_struct",
-"pmpi_type_create_struct",
-"mpi_get_address",
-"pmpi_get_address",
-"mpi_comm_spawn",
-"pmpi_comm_spawn",
-"mpi_comm_spawn_multiple",
-"pmpi_comm_spawn_multiple",
-"mpi_comm_get_parent",
-"pmpi_comm_get_parent",
-"mpi_win_c2f",
-"pmpi_win_c2f",
-"mpi_win_f2c",
-"pmpi_win_f2c",
-"mpi_win_create",
-"pmpi_win_create",
-"mpi_win_fence",
-"pmpi_win_fence",
-"mpi_win_free",
-"pmpi_win_free",
-"mpi_win_lock",
-"pmpi_win_lock",
-"mpi_win_unlock",
-"pmpi_win_unlock",
-"mpi_put",
-"pmpi_put",
-"mpi_get",
-"pmpi_get",
-"mpi_accumulate",
-"pmpi_accumulate",
-"mpi_type_get_envelope",
-"pmpi_type_get_envelope",
-"mpi_type_get_contents",
-"pmpi_type_get_contents",
-"mpi_type_dup",
-"pmpi_type_dup",
-"mpi_grequest_complete",
-"pmpi_grequest_complete",
-"mpi_grequest_start",
-"pmpi_grequest_start",
-"mpi_status_set_cancelled",
-"pmpi_status_set_cancelled",
-"mpi_status_set_elements",
-"pmpi_status_set_elements",
-"mpi_init_thread",
-"pmpi_init_thread",
-"mpi_query_thread",
-"pmpi_query_thread",
-"mpi_is_thread_main",
-"pmpi_is_thread_main",
-"mpi_comm_create_keyval",
-"pmpi_comm_create_keyval",
-"mpi_comm_free_keyval",
-"pmpi_comm_free_keyval",
-"mpi_comm_set_attr",
-"pmpi_comm_set_attr",
-"mpi_comm_get_attr",
-"pmpi_comm_get_attr",
-"mpi_comm_delete_attr",
-"pmpi_comm_delete_attr",
-"mpi_win_create_keyval",
-"pmpi_win_create_keyval",
-"mpi_win_free_keyval",
-"pmpi_win_free_keyval",
-"mpi_win_set_attr",
-"pmpi_win_set_attr",
-"mpi_win_get_attr",
-"pmpi_win_get_attr",
-"mpi_win_delete_attr",
-"pmpi_win_delete_attr",
-"mpi_type_create_keyval",
-"pmpi_type_create_keyval",
-"mpi_type_free_keyval",
-"pmpi_type_free_keyval",
-"mpi_type_set_attr",
-"pmpi_type_set_attr",
-"mpi_type_get_attr",
-"pmpi_type_get_attr",
-"mpi_type_delete_attr",
-"pmpi_type_delete_attr",
-"mpi_finalized",
-"pmpi_finalized",
-"mpi_file_open",
-"mpi_file_close",
-"mpi_file_delete",
-"mpi_file_set_size",
-"mpi_file_preallocate",
-"mpi_file_get_size",
-"mpi_file_get_group",
-"mpi_file_get_amode",
-"mpi_file_set_info",
-"mpi_file_get_info",
-"mpi_file_set_view",
-"mpi_file_get_view",
-"mpi_file_read_at",
-"mpi_file_read_at_all",
-"mpi_file_write_at",
-"mpi_file_write_at_all",
-"mpi_file_iread_at",
-"mpi_file_iwrite_at",
-"mpi_file_read",
-"mpi_file_read_all",
-"mpi_file_write",
-"mpi_file_write_all",
-"mpi_file_iread",
-"mpi_file_iwrite",
-"mpi_file_seek",
-"mpi_file_get_position",
-"mpi_file_get_byte_offset",
-"mpi_file_read_shared",
-"mpi_file_write_shared",
-"mpi_file_iread_shared",
-"mpi_file_iwrite_shared",
-"mpi_file_read_ordered",
-"mpi_file_write_ordered",
-"mpi_file_seek_shared",
-"mpi_file_get_position_shared",
-"mpi_file_read_at_all_begin",
-"mpi_file_read_at_all_end",
-"mpi_file_write_at_all_begin",
-"mpi_file_write_at_all_end",
-"mpi_file_read_all_begin",
-"mpi_file_read_all_end",
-"mpi_file_write_all_begin",
-"mpi_file_write_all_end",
-"mpi_file_read_ordered_begin",
-"mpi_file_read_ordered_end",
-"mpi_file_write_ordered_begin",
-"mpi_file_write_ordered_end",
-"mpi_file_get_type_extent",
-"mpi_file_set_atomicity",
-"mpi_file_get_atomicity",
-"mpi_file_sync",
-"mpi_file_set_errhandler",
-"mpi_file_get_errhandler",
-"mpi_type_create_subarray",
-"mpi_type_create_darray",
-"mpi_file_f2c",
-"mpi_file_c2f",
-"mpio_test",
-"mpio_wait",
-"mpi_request_c2f",
-"mpi_request_f2c",
-"mpi_info_create",
-"mpi_info_set",
-"mpi_info_delete",
-"mpi_info_get",
-"mpi_info_get_valuelen",
-"mpi_info_get_nkeys",
-"mpi_info_get_nthkey",
-"mpi_info_dup",
-"mpi_info_free",
-"mpi_info_c2f",
-"mpi_info_f2c",
-"pmpi_file_open",
-"pmpi_file_close",
-"pmpi_file_delete",
-"pmpi_file_set_size",
-"pmpi_file_preallocate",
-"pmpi_file_get_size",
-"pmpi_file_get_group",
-"pmpi_file_get_amode",
-"pmpi_file_set_info",
-"pmpi_file_get_info",
-"pmpi_file_set_view",
-"pmpi_file_get_view",
-"pmpi_file_read_at",
-"pmpi_file_read_at_all",
-"pmpi_file_write_at",
-"pmpi_file_write_at_all",
-"pmpi_file_iread_at",
-"pmpi_file_iwrite_at",
-"pmpi_file_read",
-"pmpi_file_read_all",
-"pmpi_file_write",
-"pmpi_file_write_all",
-"pmpi_file_iread",
-"pmpi_file_iwrite",
-"pmpi_file_seek",
-"pmpi_file_get_position",
-"pmpi_file_get_byte_offset",
-"pmpi_file_read_shared",
-"pmpi_file_write_shared",
-"pmpi_file_iread_shared",
-"pmpi_file_iwrite_shared",
-"pmpi_file_read_ordered",
-"pmpi_file_write_ordered",
-"pmpi_file_seek_shared",
-"pmpi_file_get_position_shared",
-"pmpi_file_read_at_all_begin",
-"pmpi_file_read_at_all_end",
-"pmpi_file_write_at_all_begin",
-"pmpi_file_write_at_all_end",
-"pmpi_file_read_all_begin",
-"pmpi_file_read_all_end",
-"pmpi_file_write_all_begin",
-"pmpi_file_write_all_end",
-"pmpi_file_read_ordered_begin",
-"pmpi_file_read_ordered_end",
-"pmpi_file_write_ordered_begin",
-"pmpi_file_write_ordered_end",
-"pmpi_file_get_type_extent",
-"pmpi_file_set_atomicity",
-"pmpi_file_get_atomicity",
-"pmpi_file_sync",
-"pmpi_file_set_errhandler",
-"pmpi_file_get_errhandler",
-"pmpi_type_create_subarray",
-"pmpi_type_create_darray",
-"pmpi_file_f2c",
-"pmpi_file_c2f",
-"pmpio_test",
-"pmpio_wait",
-"pmpi_request_c2f",
-"pmpi_request_f2c",
-"pmpi_info_create",
-"pmpi_info_set",
-"pmpi_info_delete",
-"pmpi_info_get",
-"pmpi_info_get_valuelen",
-"pmpi_info_get_nkeys",
-"pmpi_info_get_nthkey",
-"pmpi_info_dup",
-"pmpi_info_free",
-"pmpi_info_c2f",
-"pmpi_info_f2c"
-};
-
-
-char omp_calls[NUM_OMP_CALLS][CALLS_LEN] = {
-"omp_set_num_threads",
-"omp_get_num_threads",
-"omp_get_max_threads",
-"omp_get_thread_num",
-"omp_in_parallel",
-"omp_set_dynamic",
-"omp_get_dynamic",
-"omp_set_nested",
-"omp_get_nested",
-"omp_init_lock",
-"omp_init_nest_lock",
-"omp_destroy_lock",
-"omp_destroy_next_lock",
-"omp_set_lock",
-"omp_set_nest_lock",
-"omp_unset_lock",
-"omp_unset_nest_lock",
-"omp_test_lock",
-"omp_test_nest_lock",
-"omp_get_wtick",
-"omp_get_wtime"
-};
-
-
-
-char pomp_calls[NUM_POMP_CALLS][CALLS_LEN]= {
-"pomp_finalize",
-"pomp_init",
-"pomp_off",
-"pomp_on",
-"pomp_begin",
-"pomp_end",
-"pomp_atomic_enter",
-"pomp_atomic_exit",
-"pomp_barrier_enter",
-"pomp_barrier_exit",
-"pomp_flush_enter",
-"pomp_flush_exit",
-"pomp_critical_begin",
-"pomp_critical_end",
-"pomp_critical_enter",
-"pomp_critical_exit",
-"pomp_for_enter",
-"pomp_for_exit",
-"pomp_do_enter",
-"pomp_do_exit",
-"pomp_master_begin",
-"pomp_master_end",
-"pomp_parallel_begin",
-"pomp_parallel_end",
-"pomp_parallel_fork",
-"pomp_parallel_join",
-"pomp_section_begin",
-"pomp_section_end",
-"pomp_sections_enter",
-"pomp_sections_exit",
-"pomp_single_begin",
-"pomp_single_end",
-"pomp_single_enter",
-"pomp_single_exit",
-"pomp_workshare_enter",
-"pomp_workshare_exit",
-"pomp_init_lock",
-"pomp_destroy_lock",
-"pomp_set_lock",
-"pomp_unset_lock",
-"pomp_test_lock",
-"pomp_init_nest_lock",
-"pomp_destroy_nest_lock",
-"pomp_set_nest_lock",
-"pomp_unset_nest_lock",
-"pomp_test_nest_lock"
-};
-
-
-BOOL debug_copper = FALSE;
-BOOL is_mpi_or_pomp(char *s)
-{
-
-   BOOL res = FALSE;
-   for(int i=0; i<NUM_MPI_CALLS;i++)
-    {
-      char *substring =  strstr(s,mpi_calls[i]);
-
-      if (substring !=NULL)
-       {
-
-         if(substring[0]==s[0])
-          {
-           if(debug_copper) {
-           printf("\nmhit: ");
-           printf(s);
-           printf(":");
-           printf(substring);
-           printf(":");
-           printf(mpi_calls[i]);
-           printf(":%d:",i);
-           printf(mpi_calls[NUM_MPI_CALLS-1]); }
-           res = TRUE;
-           break;
-          }
-         substring = NULL;  
-       }
-
-    }
-  if (!res) {
-   for(int i=0; i<NUM_POMP_CALLS;i++)
-    {
-      char *substring =  strstr(s,pomp_calls[i]);
-
-      if (substring !=NULL)
-       {
-
-         if(substring[0]==s[0])
-          {
-           if(debug_copper) {
-           printf("\nphit: ");
-           printf(s);
-           printf(":");
-           printf(substring);
-           printf(":");
-           printf(pomp_calls[i]);
-           printf(":%d",i); }
-
-           res = TRUE;
-           break;
-          }
-         substring = NULL;
-       }
-    
-
-    }
-  }
-
-   
-   if (!res) {
-   for(int i=0; i<NUM_OMP_CALLS;i++)
-    {
-      char *substring =  strstr(s,omp_calls[i]);
-
-      if (substring !=NULL)
-       {
-
-         if(substring[0]==s[0])
-          {
-           if(debug_copper) {
-           printf("\nphit: ");
-           printf(s);
-           printf(":");
-           printf(substring);
-           printf(":");
-           printf(pomp_calls[i]);
-           printf(":%d",i); }
-
-           res = TRUE;
-           break;
-          }
-         substring = NULL;
-       }
-    
-
-    }
-  }
-
-   return res;
-}
 
 // ====================================================================

@@ -156,6 +156,9 @@ endif
 ifndef GCC_DIR
      GCC_DIR = @GCC_DIR@
 endif
+ifndef BUILD_TAU_INSTR
+     BUILD_TAU_INSTR = @BUILD_TAU_INSTR@
+endif
 
 #  For cross compilers, there are really 3 separate variables:
 #  the build host (machine you are building on), 

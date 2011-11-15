@@ -2759,6 +2759,10 @@ add_instr_archive (string_list_t* args)
 	add_library (args,"cginstr");
       }
 
+      #ifndef TAU_INSTRUMENT
+        add_library(args, "instr");
+      #endif /*TAU_INSTRUMENT*/
+
            if (profile_type & WHIRL_PROFILE) {
               if (!Epilog_Flag) {
                add_library (args, "instr");

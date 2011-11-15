@@ -309,10 +309,11 @@ Process_Command_Line (INT argc, char **argv)
 		    case 'G':	    /* WHIRL file */
 			Global_File_Name = cp + 2;
 			break;
-
+#ifdef TAU_INSTRUMENT
                     case 'z':
                         Set_Selective_Instrumentation_File_Name(cp + 2);
                         break;
+#endif /*TAU_INSTRUMENT*/
 
 		    default:
 			ErrMsg ( EC_File_Flag, *cp, argv[i] );
