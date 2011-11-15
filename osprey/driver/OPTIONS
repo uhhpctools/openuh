@@ -146,6 +146,8 @@
 -help:%s	save_name(&help_pattern,optargs); 	ALL	NONE	""
 	"print list of possible options that contain given string"
 %
+-coarray toggle(&coarray,TRUE);     F90      be       self
+        "Process coarrays"
 -apocost                  ;   ALL     bij    self
         "Print the cost model of the parallelism in each parallelizable loops"
 -autoscope                  ;   ALL     bij    self

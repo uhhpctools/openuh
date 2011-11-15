@@ -292,6 +292,8 @@ int main (int	 argc,
          }
       }
 
+   /* exit_compiler ( RC_USER_ERROR); */
+
       insert_global_directives = TRUE;
 
       comp_phase = Pdg_Conversion;

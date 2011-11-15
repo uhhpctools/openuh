@@ -559,8 +559,23 @@ set_library_paths(string_list_t *args)
 	  add_string(args, concat_strings("-L", our_path));
 	  asprintf(&our_path, "%s/" LIBPATH, global_toolroot);
 	}
-	
+
 	add_string(args, concat_strings("-L", our_path));
+
+#ifdef _UH_COARRAYS
+    char *comm_layer = NULL;
+    comm_layer = getenv("OPENUH_COMM_LAYER"); /* = GASNET | ARMCI */
+    if (option_was_seen(O_coarray)) {
+      if(comm_layer!=NULL && strcmp(comm_layer, "ARMCI")==0) {
+        asprintf(&our_path, "%s/" LIBPATH "/comm_libs/armci_libs/LINUX64", 
+                  global_toolroot);
+      } else {
+        asprintf(&our_path, "%s/" LIBPATH "/comm_libs/gasnet_libs/", 
+                  global_toolroot);
+      }
+      add_string(args, concat_strings("-L", our_path));
+    }
+#endif
 
 	free(our_path);
 }
@@ -2037,7 +2052,7 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
 		add_library(args, "m");
 		add_library(args, "ffio");
 	//	add_library(args, "msgi");
-	    }
+        }
 	    if (option_was_seen(O_mp) ||
 		option_was_seen(O_apo) ||	// bug 6334
 		option_was_seen(O_fopenmp)) {
@@ -2059,7 +2074,47 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
 		option_was_seen(O_apo)) {	// bug 6334
 		add_string(args, "-lpthread");
 	    }
-	}
+    }
+
+#ifdef _UH_COARRAYS
+        char *comm_layer = NULL;
+        char *gasnet_conduit = NULL;
+        char *armci_conduit = NULL;
+        comm_layer = getenv("OPENUH_COMM_LAYER"); /* = GASNET | ARMCI */
+        gasnet_conduit = getenv("OPENUH_GASNET_CONDUIT"); /* = MPI | IB | SMP | ? */
+        armci_conduit = getenv("OPENUH_ARMCI_CONDUIT"); /* = MPI | IB | ? */
+
+        if (option_was_seen(O_coarray)) {
+            if(comm_layer!=NULL && strcmp(comm_layer, "ARMCI")==0) {
+                add_string(args, "-lcaf-armci");
+                add_string(args, "-larmci");
+                if (armci_conduit!=NULL && strcmp(armci_conduit, "IB")==0){
+                    add_string(args, "-libverbs");
+                }
+            }
+            else{
+                add_string(args, "-lcaf-gasnet");
+                if (gasnet_conduit!=NULL && strcmp(gasnet_conduit,"IB")==0) {
+                  add_string(args, "-libverbs");
+                  add_string(args, "-lgasnet-ibv-par");
+                  add_string(args, "-lrt");
+                } else if (gasnet_conduit!=NULL &&
+                    strcmp(gasnet_conduit,"SMP")==0) {
+                  add_string(args, "-lgasnet-smp-par");
+                  add_string(args, "-lpthread");
+                  add_string(args, "-lrt");
+                } /* Need to add other conduits */
+                else {
+                  add_string(args, "-lgasnet-mpi-par");
+                  add_string(args, "-lgasnet_tools-par");
+                  add_string(args, "-lammpi");
+                  add_string(args, "-lrt");
+                }
+            }
+        }
+#endif
+
+
 
 #ifdef TARG_X8664
 	// Put open64rt after all the libraries that are built with PathScale
@@ -3937,6 +3992,11 @@ set_f90_source_form(string_list_t *args,boolean set_line_length)
 static void
 do_f90_common_args(string_list_t *args)
 {
+#ifdef _UH_COARRAYS
+   /* add -Z flag to front-end if processing coarrays. -deepak  */
+   if (coarray == TRUE) add_string(args, "-Z"); 
+#endif
+
    /* Handle the source form options */
    set_f90_source_form(args,FALSE);
 

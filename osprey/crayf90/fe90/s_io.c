@@ -96,6 +96,10 @@ static void gen_array_element_init(int, long_type *, opnd_type *, int, int);
 
 static int	err_attr_idx;
 
+#ifdef _UH_COARRAYS
+static	boolean		check_arg_for_co_array(opnd_type *);
+#endif
+
 
 /******************************************************************************\
 |*                                                                            *|
@@ -3766,6 +3770,13 @@ static boolean io_list_semantics(opnd_type     *top_opnd,
 # endif
 
    while (list_idx != NULL_IDX) {
+      COPY_OPND(opnd, IL_OPND(list_idx));
+
+#ifdef _UH_COARRAYS
+      if (cmd_line_flags.co_array_fortran) {
+          check_arg_for_co_array(&opnd);
+      }
+#endif
 
       IL_HAS_FUNCTIONS(list_idx) = FALSE;
       IL_MUST_BE_LOOP(list_idx)  = FALSE;
@@ -8766,3 +8777,95 @@ static void gen_array_element_init(int		attr_idx,
    return;
 
 }  /* gen_array_element_init */
+
+#ifdef _UH_COARRAYS
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	Using this to check io list arguments for co-indexed objects. Not allowed
+|*  currently.                            
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NOTHING								      *|
+|*									      *|
+\******************************************************************************/
+
+static boolean check_arg_for_co_array(opnd_type	*top_opnd)
+
+{
+   int		col;
+   int		ir_idx;
+   int		line;
+   int		list_idx;
+   boolean	ok = TRUE;
+   opnd_type	opnd;
+
+   TRACE (Func_Entry, "check_arg_for_co_array", NULL);
+
+   if (OPND_FLD((*top_opnd)) == IR_Tbl_Idx) {
+      ir_idx = OPND_IDX((*top_opnd));
+
+      switch(IR_OPR(ir_idx)) {
+      case Struct_Opr:
+      case Dv_Deref_Opr:
+         COPY_OPND(opnd, IR_OPND_L(ir_idx));
+         ok &= check_arg_for_co_array(&opnd);
+         break;
+
+      case Subscript_Opr:
+      case Whole_Subscript_Opr:
+      case Section_Subscript_Opr:
+         list_idx = IR_IDX_R(ir_idx);
+         while (list_idx) {
+            if (IL_PE_SUBSCRIPT(list_idx)) {
+               find_opnd_line_and_column(&IL_OPND(list_idx), &line, &col);
+               PRINTMSG(line, 1366, Error, col);
+               ok = FALSE;
+               break;
+            }
+            list_idx = IL_NEXT_LIST_IDX(list_idx);
+         }
+
+         /* intentionally falls through */
+
+
+      case Substring_Opr:
+      case Whole_Substring_Opr:
+
+         COPY_OPND(opnd, IR_OPND_L(ir_idx));
+         ok &= check_arg_for_co_array(&opnd);
+
+         list_idx = IR_IDX_R(ir_idx);
+         while (list_idx) {
+            COPY_OPND(opnd, IL_OPND(list_idx));
+            ok &= check_arg_for_co_array(&opnd);
+            list_idx = IL_NEXT_LIST_IDX(list_idx);
+         }
+         break;
+
+      case Triplet_Opr:
+         list_idx = IR_IDX_L(ir_idx);
+         while (list_idx) {
+            COPY_OPND(opnd, IL_OPND(list_idx));
+            ok &= check_arg_for_co_array(&opnd);
+            list_idx = IL_NEXT_LIST_IDX(list_idx);
+         }
+         break;
+
+      }
+   }
+
+   TRACE (Func_Exit, "check_arg_for_co_array", NULL);
+
+   return(ok);
+
+}  /* check_arg_for_co_array */
+
+#endif

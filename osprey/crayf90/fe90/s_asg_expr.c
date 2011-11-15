@@ -2707,6 +2707,10 @@ static boolean expr_sem_d(opnd_type      *result_opnd,
             case Dv_Access_Ptr_Alloc:
             case Dv_Access_P_Or_A:
             case Dv_Access_A_Contig:
+#ifdef _UH_COARRAYS
+            case Dv_Access_Is_Coarray:
+            case Dv_Access_N_Codim:
+#endif
             case Dv_Access_N_Dim:
             case Dv_Access_Typ_Code:
             case Dv_Access_Orig_Base:
@@ -10033,7 +10037,8 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
    boolean		save_in_implied_do;
    cif_usage_code_type	save_xref_state;
 
-# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX)
+# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX) \
+  || defined(_UH_COARRAYS)
    int			save_pe_dv_list_idx = NULL_IDX;
 # endif
 
@@ -10062,6 +10067,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
       host_attr_idx = AT_ATTR_LINK(host_attr_idx);
    }
 
+#ifndef _UH_COARRAYS
    if (AT_OBJ_CLASS(host_attr_idx) == Data_Obj &&
        ATD_CLASS(host_attr_idx) == Variable &&
        host_attr_idx != attr_idx &&
@@ -10101,6 +10107,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          allocatable_pointee_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
       }
    }
+#endif
 # endif
 
    /* do not change in_call_list for array base (left side) */
@@ -10118,7 +10125,8 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
 
    exp_desc->has_constructor = exp_desc_l.has_constructor;
 
-# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX)
+# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX) \
+  || defined(_UH_COARRAYS)
    if (exp_desc_l.pe_dim_ref &&
        IR_FLD_L(ir_idx) == IR_Tbl_Idx &&
        IR_OPR(IR_IDX_L(ir_idx)) == Subscript_Opr &&
@@ -10249,6 +10257,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          }
       }
 
+#ifndef _UH_COARRAYS
       if (ok                           &&
           ATD_PE_ARRAY_IDX(attr_idx)   &&
           ATD_ALLOCATABLE(attr_idx)    &&
@@ -10272,6 +10281,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          exp_desc_l.dope_vector = FALSE;
          exp_desc->dope_vector = exp_desc_l.dope_vector;
       }
+#endif
 
       if (IR_OPR(ir_idx) == Whole_Subscript_Opr) {
          exp_desc->pointer = exp_desc_l.pointer;
@@ -10995,7 +11005,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          }
 
 # if defined(_F_MINUS_MINUS)
-# if defined(_TARGET_OS_MAX)
+# if defined(_TARGET_OS_MAX) || defined(_UH_COARRAYS)
          if (save_pe_dv_list_idx != NULL_IDX) {
 
             /* add the pe subscript to ir_idx */
@@ -11013,10 +11023,12 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          if (ok                           &&
              ATD_PE_ARRAY_IDX(attr_idx)) {
 
+#ifndef _UH_COARRAYS
             if (pe_dim_list_idx != NULL_IDX) {
 
                translate_distant_ref(result_opnd, exp_desc, pe_dim_list_idx);
             }
+#endif
 # if defined(_TARGET_OS_MAX)
             else if (! ATD_ALLOCATABLE(attr_idx)) {
                /* supply mype() as pe dim */

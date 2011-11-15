@@ -214,6 +214,9 @@ static	int			 blk_err_msgs[]		= {
 static stmt_type_type		token_to_stmt_type [] = {
 				Assignment_Stmt,      /* Tok_Label	      */
 				Assignment_Stmt,      /* Tok_Id		      */
+#ifdef _UH_COARRAYS
+				Assignment_Stmt,      /* Tok_Kwd_All      */
+#endif
 				Allocatable_Stmt,     /* Tok_Kwd_Allocatable  */
 				Allocate_Stmt,	      /* Tok_Kwd_Allocate     */
 				Assign_Stmt,	      /* Tok_Kwd_Assign	      */
@@ -230,6 +233,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Case_Stmt,	      /* Tok_Kwd_Case	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Character    */
 				Close_Stmt,	      /* Tok_Kwd_Close	      */
+#ifdef _UH_COARRAYS
+				Dimension_Stmt,	      /* Tok_Kwd_Codimension  */
+#endif
 				Common_Stmt,	      /* Tok_Kwd_Common	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Complex      */
 				Contains_Stmt,	      /* Tok_Kwd_Contains     */
@@ -261,6 +267,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Function_Stmt,	      /* Tok_Kwd_Function     */
 				Goto_Stmt,	      /* Tok_Kwd_Go	      */
 				If_Cstrct_Stmt,	      /* Tok_Kwd_If	      */
+#ifdef _UH_COARRAYS
+				Sync_Stmt,	      /* Tok_Kwd_Images   */
+#endif
 				Implicit_Stmt,	      /* Tok_Kwd_Implicit     */
 #ifdef KEY /* Bug 11741 */
 				Import_Stmt,	      /* Tok_Kwd_Import       */
@@ -274,6 +283,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Assignment_Stmt,      /* Tok_Kwd_Kind	      */
 				Assignment_Stmt,      /* Tok_Kwd_Len	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Logical      */
+#ifdef _UH_COARRAYS
+				Sync_Stmt,	      /* Tok_Kwd_Memory	      */
+#endif
 				Module_Stmt,	      /* Tok_Kwd_Module	      */
 #ifdef KEY /* Bug 10572 */
 				Assignment_Stmt,      /* Tok_Kwd_Name         */
@@ -313,6 +325,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Assignment_Stmt,      /* Tok_Kwd_Static	      */
 				Stop_Stmt,	      /* Tok_Kwd_Stop	      */
 				Subroutine_Stmt,      /* Tok_Kwd_Subroutine   */
+#ifdef _UH_COARRAYS
+				Sync_Stmt,            /* Tok_Kwd_Sync         */
+#endif
 				Target_Stmt,	      /* Tok_Kwd_Target	      */
                                 Task_Common_Stmt,     /* Tok_Kwd_Task         */
 				Assignment_Stmt,      /* Tok_Kwd_Then	      */
@@ -491,6 +506,9 @@ void		(*stmt_parsers[]) () = {
 					/* Open_MP_End_Parallel_Workshare_Stmt */
 				parse_directive_stmt,
 					/* Open_MP_End_Workshare_Stmt */
+#ifdef _UH_COARRAYS
+				parse_sync_stmt,		/* Sync_Stmt */
+#endif
 #ifdef KEY /* Bug 11741 */
 				parse_import_stmt,	/* Import_Stmt */
 #endif /* KEY Bug 11741 */
@@ -5293,6 +5311,26 @@ long long     stmt_in_blk [] = {
                                 (ONE << Derived_Type_Blk) |
 				(ONE << Enum_Blk)),
 
+#ifdef _UH_COARRAYS
+			/*****  Sync_Stmt  *****/
+
+			       ((ONE << Unknown_Blk) |
+				(ONE << Blockdata_Blk) |
+				(ONE << Module_Blk) |
+				(ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+				(ONE << If_Blk) |
+				(ONE << Where_Then_Blk) |
+				(ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+				(ONE << SGI_Psection_Blk) |
+				(ONE << Select_Blk) |
+				(ONE << Contains_Blk) |
+				(ONE << Interface_Blk) |
+				(ONE << Derived_Type_Blk) | 
+				(ONE << Enum_Blk)),
+#endif
+
 #ifdef KEY /* Bug 11741 */
 			/*****  Import_Stmt  *****/
 
@@ -5758,6 +5796,11 @@ stmt_category_type	stmt_top_cat [] = {
 						/* Open_MP_End_Parallel_Workshare_Stmt */
 				Executable_Stmt_Cat,
 						/* Open_MP_End_Workshare_Stmt */
+
+#ifdef _UH_COARRAYS
+				Executable_Stmt_Cat,    /* Sync_Stmt    */
+#endif
+
 #ifdef KEY /* Bug 11741 */
 				Import_Stmt_Cat,	/* Import_Stmt        */
 #endif /* KEY Bug 11741 */

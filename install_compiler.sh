@@ -56,6 +56,18 @@ else
     INSTALL_FORTRAN=$2
 fi
 
+if [ -z "$3" ]; then
+    INSTALL_GNU4="YES"
+else
+    INSTALL_GNU4=$3
+fi
+
+if [ -z "$4" ]; then
+  ENABLE_COARRAYS="NO"
+else
+  ENABLE_COARRAYS=$4
+fi 
+
 # set the build host
 case $ARCH in 
 ia64 )
@@ -266,10 +278,12 @@ INSTALL_FE () {
     fi
 
     # GNU 4.2.0 based FE
-    INSTALL_EXEC_SUB ${AREA}/wgen/wgen42 ${PHASEPATH}/wgen42
-    LIBEXEC=libexec/gcc/${PHASE_DIR_PREFIX}-redhat-linux/4.2.0
-    (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1 cc142)
-    (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1plus cc1plus42)
+    if [ "$INSTALL_GNU4" = "YES"  ]; then
+      INSTALL_EXEC_SUB ${AREA}/wgen/wgen42 ${PHASEPATH}/wgen42
+      LIBEXEC=libexec/gcc/${PHASE_DIR_PREFIX}-redhat-linux/4.2.0
+      (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1 cc142)
+      (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1plus cc1plus42)
+    fi
 
     if [ -f ${AREA}/crayf90/sgi/mfef95 ] ; then 
       INSTALL_EXEC_SUB ${AREA}/crayf90/sgi/mfef95   ${PHASEPATH}/mfef95
@@ -321,8 +335,10 @@ INSTALL_WHIRL_STUFF () {
     [ "$INSTALL_FORTRAN" = "YES" ] && (cd ${PHASEPATH}; ln -sf be whirl2f_be) 
 
     INSTALL_EXEC_SUB  ${AREA}/ir_tools/ir_b2a    ${BIN_DIR}/ir_b2a
-    INSTALL_EXEC_SUB  ${AREA}/libspin_4_2_0/gspin42 ${BIN_DIR}/gspin42
-    (cd ${BIN_DIR}; ln -sf gspin42 gspin)
+    if [ "$INSTALL_GNU4" = "YES"  ]; then
+      INSTALL_EXEC_SUB  ${AREA}/libspin_4_2_0/gspin42 ${BIN_DIR}/gspin42
+      (cd ${BIN_DIR}; ln -sf gspin42 gspin)
+    fi
 
     return 0
 }
@@ -415,6 +431,48 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
     fi
     return 0
 }
+
+# Install the CAF runtime library. If 
+INSTALL_CAF_LIB () {
+    #install uhcaf perl wrapper
+    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/driver/uhcaf ${BIN_DIR}/uhcaf
+    #install cafrun perl wrapper
+    INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/libcaf/cafrun ${BIN_DIR}/cafrun
+    if [ "$TARG_HOST" = "ia64" ] ; then
+	LIBAREA="osprey/targdir_lib"
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a     ${PHASEPATH}/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/gasnet/libcaf-gasnet.a   ${PHASEPATH}/libcaf-gasnet.a
+    elif [ "$TARG_HOST" = "ppc32" ] ; then
+	LIBAREA="osprey/targdir_lib"
+	LIB32AREA="osprey/targdir_lib2"
+    else
+	LIBAREA="osprey/targdir_lib2"
+    LIB32AREA="osprey/targdir_lib"
+        # 64bit libraries
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a    ${PHASEPATH}/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/gasnet/libcaf-gasnet.a  ${PHASEPATH}/libcaf-gasnet.a
+
+        # 32bit libraries
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/gasnet/libcaf-gasnet.a ${PHASEPATH}/32/libcaf-gasnet.a
+
+        # install prebuilt GASNet and ARMCI libs for x86_64
+         if [ "$TARG_HOST" = "x8664" ]; then
+             [ ! -d ${PHASEPATH}/comm_libs ] && mkdir -p ${PHASEPATH}/comm_libs
+             if [ -n "$GASNET_HOME" ] ; then
+                 [ -d $GASNET_HOME ] && echo "installing GASNet Library from $GASNET_HOME/lib"
+                 [ -d $GASNET_HOME ] && rm -f ${PHASEPATH}/comm_libs/gasnet_libs &&  \
+                                       ln -s ${GASNET_HOME}/lib ${PHASEPATH}/comm_libs/gasnet_libs
+             fi
+             if [ -n "$ARMCI_HOME" ] ; then
+                 [ -d $ARMCI_HOME ] && echo "installing ARMCI Library from $ARMCI_HOME/lib"
+                 [ -d $ARMCI_HOME ] && rm -f ${PHASEPATH}/comm_libs/armci_libs &&  \
+                                       ln -s ${ARMCI_HOME}/lib ${PHASEPATH}/comm_libs/armci_libs
+             fi
+         fi
+  fi 
+}
+
 
 # Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a, libm.a, libopenmp.a
 INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
@@ -649,7 +707,7 @@ if [ "$TARG_HOST" = "x8664" -a ! -d "${NATIVE_LIB_DIR}/32" ]; then
 fi
 
 INSTALL_DRIVER 
-if [ "$TARG_HOST" != "ppc32"  ]; then
+if [ "$TARG_HOST" != "ppc32"  ] && [ "$INSTALL_GNU4" == "YES" ]; then
 INSTALL_GCC
 fi
 INSTALL_FE 
@@ -685,5 +743,6 @@ INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP
 INSTALL_PREBUILD_PHASE 
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
 
+[ "$ENABLE_COARRAYS" = "YES" ] && INSTALL_CAF_LIB
 exit 0
 

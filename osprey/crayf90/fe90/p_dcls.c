@@ -730,6 +730,31 @@ static void parse_cpnt_dcl_stmt()
 # endif
 
                break;
+
+# ifdef _UH_COARRAYS
+            case Tok_Kwd_Codimension:
+
+               if (ATD_PE_ARRAY_IDX(AT_WORK_IDX) != NULL_IDX) { /* Duplicate err */
+                  PRINTMSG (TOKEN_LINE(token), 273, Error, 
+                            TOKEN_COLUMN(token), "CODIMENSION");
+               }
+
+               have_attr_list	= TRUE;
+
+               /* DIMENSION attribute must have an array spec */
+               if (!cmd_line_flags.co_array_fortran ||
+                        LA_CH_VALUE != LBRKT) {    
+                  parse_err_flush(Find_Comma, "("); 
+                  AT_DCL_ERR(AT_WORK_IDX) = TRUE;
+               }
+
+               if (LA_CH_VALUE == LBRKT && cmd_line_flags.co_array_fortran) {
+                  ATD_PE_ARRAY_IDX(AT_WORK_IDX) = 
+                                           parse_pe_array_spec(AT_WORK_IDX);
+               }
+
+               break;
+# endif
                           
             default: /* POINTER and/or DIMENSION must follow the first comma */
                PRINTMSG(TOKEN_LINE(token), 197, Error, TOKEN_COLUMN(token),
@@ -5319,6 +5344,34 @@ static long parse_attr_spec(int		*array_idx,
             }
 # endif
             break;
+
+# ifdef _UH_COARRAYS
+         case Tok_Kwd_Codimension:
+
+            /* Looking for array specifier */
+            if (!cmd_line_flags.co_array_fortran || LA_CH_VALUE != LBRKT) {                
+              parse_err_flush(Find_Comma, "( dimension-spec )");
+            }
+
+
+            if (LA_CH_VALUE == LBRKT && cmd_line_flags.co_array_fortran) {
+               err_in_list	= err_attrs[Co_Array_Attr] & attr_list;
+               attr_list	= attr_list | (1 << Co_Array_Attr);
+
+               if (err_in_list) {
+                  issue_attr_err(Co_Array_Attr, err_in_list);
+                  err_list = err_list | (1 << Co_Array_Attr);
+               }
+
+               pe_array_idx = parse_pe_array_spec(AT_WORK_IDX);
+
+               if (!err_in_list) {
+                  ATD_PE_ARRAY_IDX(AT_WORK_IDX) = pe_array_idx;
+               }
+            }
+
+            break;
+# endif
                        
 
          default:

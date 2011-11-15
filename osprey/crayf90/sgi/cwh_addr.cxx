@@ -157,6 +157,144 @@ static const char *source_file = __FILE__;
  *===============================================
  */ 
 
+#ifdef _UH_COARRAYS
+extern void
+fei_seq_subscr( TYPE result_type, INT32 kidsnum )
+{
+  WN *ex  ;
+  WN *lb  ;
+  WN *sb  ;
+  WN *ar  ;
+  WN *ad  ;
+  WN *wt  ;
+  ST *st  ;
+  TY_IDX ty  ;
+
+  WN *top_wn;
+
+  BOOL    array_val ;
+  BOOL    sect ;
+  BOOL    trip ;
+  TY_IDX  ta   ;
+
+  OPCODE  op   ;
+  FLD_det det  ;
+  WN * bounds_assertion;
+  char *field_name,*array_name;
+
+  (void) cwh_stk_pop_whatever(); /* stride mult*/
+  ex = cwh_expr_operand(NULL) ;
+  lb = cwh_expr_operand(NULL) ;
+  sb = cwh_expr_operand(NULL) ;
+  bounds_assertion = cwh_addr_do_bounds_check(sb, lb, ex);
+
+  trip = cwh_addr_is_triplet(sb); 
+  sb   = cwh_addr_zero_based(sb,lb);   
+  sb   = F90_Wrap_ARREXP(sb);
+  sect = WNOPR(sb) == OPR_ARRAYEXP;
+
+  array_val = sect || trip ;
+  op = array_val ? opc_section : opc_array ;
+
+  switch(cwh_stk_get_class()) {
+  case ADDR_item:
+  case WN_item:
+    ta = cwh_stk_get_TY();
+    ar = cwh_expr_address(f_NONE);    
+    /* ar had better be an ARRAY or ARRSECTION node */
+    if (array_val) 
+      if (cwh_addr_is_array(ar))
+	WN_set_opcode(ar, opc_section) ; 
+
+    cwh_addr_insert_bounds_check(bounds_assertion,ar);
+    ar = cwh_addr_add_bound(ar,ex,sb);
+    cwh_stk_push_typed(ar,WN_item,ta);
+    break  ;
+
+  case WN_item_whole_array:
+    ta = cwh_stk_get_TY();	/* TRAP HERE dlai DLAI */
+    ar = cwh_expr_address(f_NONE);    
+    if (array_val) 
+      if (cwh_addr_is_array(ar))
+	WN_set_opcode(ar, opc_section) ; 
+
+    cwh_addr_insert_bounds_check(bounds_assertion,ar);
+    ar = cwh_addr_add_bound(ar,ex,sb);
+    cwh_stk_push_typed(ar,WN_item_whole_array,ta);
+    break  ;
+
+  case ST_item:
+    st = cwh_stk_pop_ST();
+    ty = ST_type(st);
+    ad = cwh_addr_address_ST(st) ;
+    ar = cwh_addr_array(op,ad,ty,kidsnum);
+    SET_ARRAY_NAME_MAP(ar,ST_name(st));
+    cwh_addr_insert_bounds_check(bounds_assertion,ar);
+    ar = cwh_addr_add_bound(ar,ex,sb);
+    cwh_stk_push(ar,WN_item);
+    break ;
+
+  case ST_item_whole_array:
+    st = cwh_stk_pop_ST();
+    ty = ST_type(st);
+    ad = cwh_addr_address_ST(st) ;
+    ar = cwh_addr_array(op,ad,ty,kidsnum);
+    SET_ARRAY_NAME_MAP(ar,ST_name(st));
+    cwh_addr_insert_bounds_check(bounds_assertion,ar);
+    ar = cwh_addr_add_bound(ar,ex,sb);
+    cwh_stk_push(ar,WN_item_whole_array);
+    break ;
+
+  case FLD_item:
+    field_name = cwh_stk_fld_name();
+    det = cwh_addr_offset() ;
+    
+      /* Preserve TY info for the FLD        */
+      /* (OPC_ARRAY doesn't hold a type      */
+      /* a type and the fundemental address  */ 
+      /* TY is that of a parent object )     */
+
+    if (cwh_stk_get_class() == ST_item || 
+        cwh_stk_get_class() == ST_item_whole_array) {
+
+      st = cwh_stk_pop_ST();
+      ad = cwh_addr_address_ST(st,det.off,det.type);
+      array_name = ST_name(st);
+
+    } else { 
+
+      /* is array of array of derived type   */
+      /* or similar.                         */
+
+      ad = cwh_expr_address(f_NONE);
+      array_name = GET_ARRAY_NAME_MAP(ad);
+      wt = WN_CreateIntconst(opc_pint,det.off);
+      ad = cwh_expr_bincalc(OPR_ADD,ad,wt);
+      
+    }
+
+    ar = cwh_addr_array(op,ad,det.type,kidsnum) ;
+    if (strlen(field_name) > 0) {
+
+       if (array_name) {
+	  array_name = Index_To_Str(Save_Str2(array_name,field_name));
+       } else {
+	  array_name = Index_To_Str(Save_Str2("(unknown)",field_name));
+       }
+       free(field_name);
+       SET_ARRAY_NAME_MAP(ar,array_name);
+    }
+    cwh_addr_insert_bounds_check(bounds_assertion,ar);
+    ar = cwh_addr_add_bound(ar,ex,sb);
+    cwh_stk_push_typed(ar,WN_item,det.type);
+    break ;
+
+  default:
+    DevAssert((0),(" odd item in subscr"));
+  }
+}
+
+#else
 extern void
 fei_seq_subscr( TYPE result_type )
 {
@@ -290,6 +428,7 @@ fei_seq_subscr( TYPE result_type )
     DevAssert((0),(" odd item in subscr"));
   }
 }
+#endif
 
 /*===============================================
  *
@@ -412,6 +551,195 @@ static void cwh_addr_fixup_nseq(WN **ex, WN **sb, WN *sm)
  *
  *===============================================
  */ 
+
+#ifdef _UH_COARRAYS
+extern void
+fei_nseq_subscr( TYPE result_type, INT32 kidsnum )
+{
+   WN *ex  ;
+   WN *lb  ;
+   WN *sb  ;
+   WN *sm  ;
+   WN *ar  ;
+   WN *ad  ;
+   WN *wt  ;
+   ST *st  ;
+#ifdef KEY /* Bug 10177 */
+   TY_IDX ty  = 0;
+#else /* KEY Bug 10177 */
+   TY_IDX ty  ;
+#endif /* KEY Bug 10177 */
+   TY_IDX dope_ty  ;
+#ifdef KEY /* Bug 10177 */
+   WN_ESIZE  esize = 0;
+#else /* KEY Bug 10177 */
+   WN_ESIZE  esize;
+#endif /* KEY Bug 10177 */
+   
+   TY_IDX  ta ;
+   BOOL    array_val ;
+   BOOL    sect ;
+   BOOL    trip ;
+   
+   OPCODE  op   ;
+   FLD_det det  ;
+   WN * bounds_assertion;
+   char *field_name,*array_name;
+   
+   sm = cwh_expr_operand(NULL) ;	/* stride mult*/
+   ex = cwh_expr_operand(NULL) ;
+   lb = cwh_expr_operand(NULL) ;
+   sb = cwh_expr_operand(NULL) ;
+   bounds_assertion = cwh_addr_do_bounds_check(sb, lb, ex);
+   
+   trip = cwh_addr_is_triplet(sb); 
+   sb   = cwh_addr_zero_based(sb,lb);   
+   sb   = F90_Wrap_ARREXP(sb);
+   sect = WNOPR(sb) == OPR_ARRAYEXP;
+
+   array_val = sect || trip ;
+   op = array_val ? opc_section : opc_array ;
+   
+   switch(cwh_stk_get_class()) {
+    case ADDR_item:
+    case WN_item:
+    case WN_item_whole_array:
+      ta = cwh_stk_get_TY();
+      ar = cwh_expr_address(f_NONE);    
+      if (array_val) 
+	if (cwh_addr_is_array(ar))
+	  WN_set_opcode(ar, opc_section) ; 
+
+      if (WNOPR(ar)==OPR_ARRSECTION || WNOPR(ar)==OPR_ARRAY) {
+	 may_be_noncontig = (WN_element_size(ar) < 0 );
+      }      
+      cwh_addr_fixup_nseq(&ex,&sb,sm);
+      cwh_addr_insert_bounds_check(bounds_assertion,ar);
+      ar = cwh_addr_add_bound(ar,ex,sb);
+      cwh_stk_push_typed(ar,WN_item,ta);
+      break  ;
+
+    case DEREF_item:
+      may_be_noncontig = FALSE;
+      dope_ty = cwh_stk_get_TY();
+      if (dope_ty) {
+         TY& t = Ty_Table[dope_ty];
+         ty = FLD_type(TY_fld(t));
+	 may_be_noncontig = TY_is_f90_pointer(t);
+      }
+      ar = cwh_expr_address(f_NONE);
+      st = cwh_addr_WN_ST(ar);
+      if (!dope_ty) {
+	 ty = ST_type(st);
+	 ty = cwh_types_dope_basic_TY(ty);
+      }	 
+
+      if (ST_sclass(st) == SCLASS_FORMAL || 
+	  ST_auxst_is_non_contiguous(st) ||
+	  may_be_noncontig) {
+	 may_be_noncontig = TRUE;
+	 esize = cwh_addr_compute_stride_fudge_factor(ty);
+      }
+      array_name = GET_ARRAY_NAME_MAP(ar);
+      ar = cwh_addr_array(op,ar,ty,kidsnum);
+      if (array_name) {
+	 SET_ARRAY_NAME_MAP(ar,Index_To_Str(Save_Str2(ST_name(st),array_name)));
+      } else {
+	 SET_ARRAY_NAME_MAP(ar,ST_name(st));
+      }
+      if (may_be_noncontig) WN_element_size(ar) = esize;
+
+      if (array_val) 
+	if (cwh_addr_is_array(ar))
+	  WN_set_opcode(ar, opc_section) ; 
+      
+      cwh_addr_fixup_nseq(&ex,&sb,sm);
+      cwh_addr_insert_bounds_check(bounds_assertion,ar);
+      ar = cwh_addr_add_bound(ar,ex,sb);
+      cwh_stk_push(ar,WN_item);
+      break;
+  
+    case ST_item:
+    case ST_item_whole_array:
+      may_be_noncontig = FALSE;
+      st = cwh_stk_pop_ST();
+      ty = ST_type(st);
+
+      if (ST_sclass(st) == SCLASS_FORMAL || 
+	  ST_auxst_is_non_contiguous(st) ||
+	  TY_is_f90_pointer(Ty_Table[ty])) {
+
+	 may_be_noncontig = TRUE;
+	 esize = cwh_addr_compute_stride_fudge_factor(ty);
+      }
+      ad = cwh_addr_address_ST(st) ;
+      ar = cwh_addr_array(op,ad,ty,kidsnum);
+      SET_ARRAY_NAME_MAP(ar,ST_name(st));
+      if (may_be_noncontig) WN_element_size(ar) = esize;
+
+      cwh_addr_fixup_nseq(&ex,&sb,sm);
+      cwh_addr_insert_bounds_check(bounds_assertion,ar);
+      ar = cwh_addr_add_bound(ar,ex,sb);
+      cwh_stk_push(ar,WN_item);
+      break ;
+
+    case FLD_item:
+      may_be_noncontig = FALSE;
+      field_name = cwh_stk_fld_name();
+      det = cwh_addr_offset() ;
+
+      if (TY_is_f90_pointer(Ty_Table[det.type])) {
+
+	 may_be_noncontig = TRUE;
+	 esize = cwh_addr_compute_stride_fudge_factor(ty);
+      }
+
+      /* Preserve TY info for  the FLD       */
+      /* (OPC_ARRAY doesn't hold a type      */
+      /* a type and the fundemental address  */ 
+      /* TY is that of a parent object )     */
+
+      if (cwh_stk_get_class() == ST_item || cwh_stk_get_class() == ST_item_whole_array) {
+	 st = cwh_stk_pop_ST();
+	 ad = cwh_addr_address_ST(st,det.off,det.type) ;
+	 array_name = ST_name(st);
+
+      } else { 
+
+	 /* is array of array of derived type   */
+	 /* or similar.                         */
+
+	 ad = cwh_expr_address(f_NONE);
+	 array_name = GET_ARRAY_NAME_MAP(ad);
+	 wt = WN_CreateIntconst(opc_pint,det.off);
+	 ad = cwh_expr_bincalc(OPR_ADD,ad,wt);
+      }
+
+      ar = cwh_addr_array(op,ad,det.type,kidsnum) ;
+      if (strlen(field_name) > 0) {
+
+	 if (array_name) {
+	    array_name = Index_To_Str(Save_Str2(array_name,field_name));
+	 } else {
+	    array_name = Index_To_Str(Save_Str2("(unknown)",field_name));
+	 }
+	 free(field_name);
+	 SET_ARRAY_NAME_MAP(ar,array_name);
+      }
+
+      if (may_be_noncontig) WN_element_size(ar) = esize;
+      cwh_addr_fixup_nseq(&ex,&sb,sm);
+      cwh_addr_insert_bounds_check(bounds_assertion,ar);
+      ar = cwh_addr_add_bound(ar,ex,sb);
+      cwh_stk_push_typed(ar,WN_item,det.type);
+      break ;
+
+    default:
+      DevAssert((0),(" odd item in subscr"));
+   }
+}
+
+#else
 extern void
 fei_nseq_subscr( TYPE result_type )
 {
@@ -597,6 +925,8 @@ fei_nseq_subscr( TYPE result_type )
       DevAssert((0),(" odd item in subscr"));
    }
 }
+
+#endif
 
 /*===============================================
  *
@@ -800,6 +1130,37 @@ fei_as_ref( TYPE result_type )
  *
  *===============================================
  */ 
+
+#ifdef _UH_COARRAYS
+static WN *
+cwh_addr_array(OPCODE op, WN * addr, TY_IDX ty, INT32 kidsnum /* = -1 */)
+{
+  WN * wn   ;
+  TY_IDX aty  ;
+  INT16 nkids,i ;
+
+  aty = cwh_types_array_TY(ty);
+
+  TY& t = Ty_Table[aty];
+  /* coarray refs may exclude coarray subscripts, so 
+   * use kidsnum if  available. */
+  if (kidsnum != -1) 
+    nkids = 2 * kidsnum + 1;
+  else 
+    nkids = 2 * TY_AR_ndims(t) +1 ;
+
+  wn = WN_Create ( op, nkids );
+  WN_element_size(wn) = TY_size(TY_etype(t));
+
+  WN_kid(wn,0) = addr ;
+
+  FOREACH_AXIS(i,nkids) {
+    WN_kid(wn,i+SZ_OFF(nkids))  = NULL ;
+    WN_kid(wn,i+SUB_OFF(nkids)) = NULL ;
+  }
+  return wn ;
+}
+#else
 static WN *
 cwh_addr_array(OPCODE op, WN * addr, TY_IDX ty)
 {
@@ -822,6 +1183,7 @@ cwh_addr_array(OPCODE op, WN * addr, TY_IDX ty)
   }
   return wn ;
 }
+#endif
 
 
 #ifdef KEY /* Bug 5398 */
@@ -1400,6 +1762,11 @@ cwh_addr_load_ST(ST * st, OFFSET_64 off, TY_IDX dty)
   ty = ST_type(st);
   fg = ACCESSED_LOAD;
 
+#ifdef _UH_COARRAYS
+  if (TY_is_coarray(ty))
+    ty = Ty_Table[ty].u2.etype;
+#endif
+
   switch (ST_sclass(st)) {
   case SCLASS_FORMAL:
     if (dty)
@@ -1656,6 +2023,11 @@ cwh_addr_store_ST(ST * st, OFFSET_64 off, TY_IDX dty,  WN * rhs)
 
   ty = ST_type(st);
   fg = ACCESSED_STORE;
+
+#ifdef _UH_COARRAYS
+  if (TY_is_coarray(ty))
+    ty = Ty_Table[ty].u2.etype;
+#endif
 
   switch (ST_sclass(st)) {
 

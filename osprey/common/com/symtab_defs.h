@@ -206,13 +206,16 @@ enum ST_FLAGS_EXT
     ST_IS_ARRAY_REMAPPING_CANDIDATE_MALLOC = 0x200, // storage for the remapped
                                         // array is from malloc()
 #if defined(TARG_SL)
-    ST_IN_V1BUF = 0x400,                // ST is vector1 variable
+    ST_IN_V1BUF = 0x800,                // ST is vector1 variable
     ST_IN_V2BUF = 0x800,                // ST is vector2 variable 
     ST_IN_V4BUF = 0x1000,               // ST is vector4 variable 
     ST_IN_SDRAM = 0x2000,               // ST is sdram variable 
     ST_IN_SBUF =  0x4000,               // ST is explcitly declared sbuf so 
     ST_IS_VBUF_OFFSET = 0x8000,  // represent this symbol means offset instead of a absolute address
     ST_IS_SBUF_OFFSET = 0x10000, // same as above and will be deleted for we don't have sbuf in the future.
+#elif defined(_UH_COARRAYS)
+    ST_IS_ALLOCATABLE   = 0x400,   // used for allocatable coarrays. -DE
+    ST_IS_LCB_PTR       = 0x800,   // ST is an LCB ptr. -DE
 #endif     
     ST_IS_GLOBAL_AS_LOCAL = 0x20000, // Is a global variable that can be treated as a local variable.
     ST_IS_VTABLE = 0x40000,        //st is a vtalbe
@@ -335,13 +338,18 @@ enum ARB_FLAGS
     ARB_CONST_UBND	= 0x0002,	// constant upper bound
     ARB_CONST_STRIDE	= 0x0004,	// constant stride
     ARB_FIRST_DIMEN	= 0x0008,	// first dimension
-    ARB_LAST_DIMEN	= 0x0010	// last dimension
+    ARB_LAST_DIMEN	= 0x0010,	// last dimension
+      ARB_EMPTY_LBND = 0x0020,
+      ARB_EMPTY_UBND = 0x0040
 };
 
 struct ARB
 {
     mUINT16 flags;			// misc. attributes
     mUINT16 dimension;			// number of dimensions
+#ifdef _UH_COARRAYS
+    mUINT16 codimension;    // number of codimensions. -deepak
+#endif
 
     mUINT32 unused;			// must be zero'ed
 
@@ -579,6 +587,9 @@ enum TY_FLAGS
 #endif
     TY_COMPLETE_STRUCT_RELAYOUT_CANDIDATE = 0x0001, // it's OK to share this
       // with TY_IS_CHARACTER above for now, since this has to be a struct
+#ifdef _UH_COARRAYS
+    TY_IS_COARRAY      = 0x10000,  // identify as coarray type -deepak
+#endif
 };
 
 
@@ -605,7 +616,12 @@ public:
 
     TY_KIND kind : 8;			// kind of type
     mTYPE_ID mtype : 8;			// WHIRL data type
+#ifndef _UH_COARRAYS
     mUINT16 flags;			// misc. attributes
+#else
+    mUINT32 flags;			// misc. attributes
+    INT8    dope_rank;      // = 0 if not a dope, else stores the rank of the dope vector
+#endif
 
     union {
 	FLD_IDX fld;

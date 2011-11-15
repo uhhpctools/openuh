@@ -907,6 +907,8 @@ WN *craytype_wn)
   dp[3] = WN_Intconst(MTYPE_U4,0); /* allocated by pointer */
   dp[4] = WN_Intconst(MTYPE_U4,0); /* p_or_a */
   dp[5] = WN_Intconst(MTYPE_U4,0); /* contig */
+
+#ifndef _UH_COARRAYS
   dp[6] = WN_Intconst(MTYPE_U4,nd);
 
   if (craytype_wn == NULL) {
@@ -945,9 +947,58 @@ WN *craytype_wn)
 #else /* KEY Bug 6845 */
   cwh_dope_initialize(WN_st(wn),NULL,0,dp,bd,nd*BOUND_NM);  
 #endif /* KEY Bug 6845 */
+
+#else /* defined(_UH_COARRAYS) */
+  dp[6] = TY_is_coarray(tarray) ? WN_Intconst(MTYPE_U4, 1) :
+      WN_Intconst(MTYPE_U4, 0);
+  dp[7] = TY_is_coarray(tarray) ? WN_Intconst(MTYPE_U4, 1) : 
+      WN_Intconst(MTYPE_U4, 0);
+  dp[8] = WN_Intconst(MTYPE_U4,nd);
+
+  if (craytype_wn == NULL) {
+      /* type code  **FIX */
+      if (!char_len) {
+         craytype = cwh_cray_type_from_TY(tarray);
+      } else {
+         f90_type_t *f90_type_ptr;
+         f90_type_ptr = (f90_type_t *)&craytype;
+         craytype = 0;
+         f90_type_ptr->type = 6;
+         f90_type_ptr->int_len = 8;
+      }
+      craytype_wn = WN_Intconst(MTYPE_U8,craytype);
+  }
+
+  dp[9] = WN_COPY_Tree(craytype_wn);
+
+  /* original base and address - 0 unless allocatable */
+  dp[10] = WN_Intconst(Pointer_Mtype,0);
+  dp[11] = WN_Intconst(Pointer_Mtype,0);
+
+  /* Create the dope vector */
+  ty = cwh_types_dope_TY(nd,tarray,FALSE,FALSE,
+#ifdef KEY /* Bug6845 */
+    /* I hope this can't be an array of derived types having allocatable
+     * components. If that's ever possible, we need to figure out from the
+     * source type how many allocatable components there are. */
+    0
+#endif /* KEY Bug 6845 */
+    );
+  wn = cwh_expr_temp(ty,NULL,f_T_PASSED);
+#ifdef KEY /* Bug 6845 */
+  dp[12] = WN_Intconst(MTYPE_U4, 0);
+  cwh_dope_initialize(WN_st(wn),NULL,0,dp,bd,nd*BOUND_NM,0,0);  
+#else /* KEY Bug 6845 */
+  cwh_dope_initialize(WN_st(wn),NULL,0,dp,bd,nd*BOUND_NM);  
+#endif /* KEY Bug 6845 */
+
+#endif /* defined(_UH_COARRAYS) */
+
   return(wn);
 
 }
+
+#ifndef _UH_COARRAYS
 
 /*===============================================
  *
@@ -1087,7 +1138,7 @@ cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd, I
 # if (defined(linux) || defined(BUILD_OS_DARWIN))
      dope_header2_type dh2;
 
-     dh2.unused = 0;
+     dh2.unused  = 0;
      dh2.n_dim = WN_const_val(dp[6]);
      wr = WN_Intconst(MTYPE_U4,*(UINT32*)&dh2);
      cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),wr);
@@ -1153,6 +1204,240 @@ cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd, I
   }
 #endif /* KEY Bug 6845 */
 }
+
+#else /* defined(_UH_COARRAYS) */
+/**************************** _UH_COARRAYS *************************/
+/*===========================================================
+ *
+ * cwh_dope_initialize_body
+ *
+ * Given the ST of a dope vector, initialize
+ * all fields except the bounds. 
+ *
+ * supports extended dope vector format with coarray support
+ *
+ *===========================================================
+ */ 
+static void
+#ifdef KEY /* Bug 6845 */
+cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd,
+  INT16 num_bnds, WN **alloc_cpnt, INT16 n_alloc_cpnt)
+#else /* KEY Bug 6845 */
+cwh_dope_initialize(ST *st, WN *wa, TY_IDX dope_ty, WN *dp[DOPE_USED],WN **bd, INT16 num_bnds )
+#endif /* KEY Bug 6845 */
+{
+  INT16  i ;
+  INT16 sz ;
+
+  FLD_HANDLE  fli ;
+  FLD_HANDLE  fl ;
+  FLD_HANDLE  ft ;
+  TY_IDX ty ;
+  WN  * wr ;
+  WN  * wt ;
+
+#ifdef KEY /* Bug 10177 */
+  OFFSET_64 off = 0;
+#else /* KEY Bug 10177 */
+  OFFSET_64 off;
+#endif /* KEY Bug 10177 */
+  OFFSET_64 invar_off;
+  INT shift;
+
+  if (dope_ty == 0) {
+     if ( wa == NULL ) {
+	fli = TY_fld(Ty_Table[ST_type(st)]);
+     } else {
+	fli = TY_fld(Ty_Table[cwh_types_WN_TY(wa, FALSE)]);
+     }
+  } else {
+     fli = TY_fld(Ty_Table[dope_ty]);
+  }
+
+  /* address, element len */
+
+  if (dp[0] != NULL )
+      cwh_dope_store(st,wa,FLD_ofst(fli),FLD_type(fli),dp[0]) ;
+
+  fli = FLD_next(fli);
+  invar_off = FLD_ofst(fli);
+  fl = TY_fld(Ty_Table[FLD_type(fli)]);
+ 
+  if (dp[1] != NULL )
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl), dp[1]);
+
+  
+  /* assoc, ptr_alloc,ptr_or_a, a_contig */
+  
+  wr = NULL;
+  fl = FLD_next(fl);
+  sz = MTYPE_size_best(TY_mtype(FLD_type(fl)));
+  ft = fl ;
+  
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
+  {
+    dope_header1_type	dh1;
+ 
+  // assoc 
+    if (dp[2] != NULL)
+      dh1.assoc = WN_const_val(dp[2]);
+    else
+      dh1.assoc = 0;
+     ft = FLD_next(ft);
+
+  // ptr_alloc
+
+    if (dp[3] != NULL)
+      dh1.ptr_alloc = WN_const_val(dp[3]);
+    else
+      dh1.ptr_alloc = 0;
+     ft = FLD_next(ft);
+
+  // ptr_or_a
+
+    if (dp[4] != NULL)
+      dh1.p_or_a = WN_const_val(dp[4]);
+    else
+      dh1.p_or_a = 0;
+     ft = FLD_next(ft);
+
+  // a_contig
+    if (dp[5] != NULL)
+      dh1.a_contig = WN_const_val(dp[5]);
+    else
+      dh1.a_contig = 0;
+     ft = FLD_next(ft);
+
+
+#ifdef KEY /* Bug 6845 */
+  // alloc_cpnt
+    dh1.alloc_cpnt = WN_const_val(dp[12]);
+    ft = FLD_next(ft);
+#endif /* KEY Bug 6845 */
+
+
+    dh1.unused = 0;
+
+    wr = WN_Intconst(MTYPE_U4,*(UINT32*)&dh1);
+
+  }
+# else
+  for (i = 0 ; i < 5 ; i ++ ) {
+     if (dp[i+2] != NULL ) {
+	shift = sz - FLD_bofst(ft) - FLD_bsize(ft);
+	if (shift != 0) {
+	   wt = WN_Intconst(MTYPE_U4,shift);
+	   wt = cwh_expr_bincalc(OPR_SHL,dp[i+2],wt);
+	} else {
+	   wt = dp[i+2];
+	}
+	
+	if (wr == NULL) 
+	   wr = wt ;
+	else
+	   wr = cwh_expr_bincalc(OPR_BIOR,wr,wt);
+     }
+     ft = FLD_next(ft);
+  }
+# endif
+  
+  if (wr != NULL) 
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),wr);    
+  
+
+ /* ignore unused */
+ fl = FLD_next(ft);
+
+# if (defined(linux) || defined(BUILD_OS_DARWIN))
+  {
+     dope_header2_type dh2;
+     dh2.unused = 0;
+
+     // is_coarray
+     if (dp[6] != NULL)
+       dh2.is_coarray = WN_const_val(dp[6]);
+     else
+       dh2.is_coarray = 0;
+     fl = FLD_next(fl);
+
+     if (dp[7] != NULL ) 
+         dh2.n_codim = WN_const_val(dp[7]);
+     else 
+         dh2.n_codim = 0;
+
+     fl = FLD_next(fl);
+
+     if (dp[8] != NULL ) 
+         dh2.n_dim = WN_const_val(dp[8]);
+     else 
+         dh2.n_dim = 0;
+     wr = WN_Intconst(MTYPE_U4,*(UINT32*)&dh2);
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),wr);
+  }
+# else
+  /* FIXME: */
+#endif
+  
+  
+//  /* Initialize the first four unused bytes of the f90_type structure */
+//  fl = FLD_next(fl);
+//  cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),
+//		 WN_Intconst(MTYPE_U4,0));
+  
+  /* type code */
+  fl = FLD_next(fl);
+  
+  if (dp[9] != NULL) 
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),dp[9]);    
+  
+  /* original base and address */
+  
+  fl = FLD_next(fl);
+  if (dp[10] != NULL) 
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),dp[10]);    
+  
+  fl = FLD_next(fl);
+  if (dp[11] != NULL) 
+     cwh_dope_store(st,wa,invar_off + FLD_ofst(fl),FLD_type(fl),dp[11]);
+  
+  
+  /* add bounds - assumes all same size */
+  
+  if (num_bnds > 0 ) {
+     
+     fli  = FLD_next(fli) ;
+     off = FLD_ofst(fli) ;
+     ty  = DOPE_bound_ty     ;
+     sz  = bit_to_byte(MTYPE_size_best(TY_mtype(ty)));
+     
+     for (i = 0 ; i < num_bnds  ; i ++ ) {
+	if (bd[i] != NULL ) 
+	   cwh_dope_store(st,wa,off,ty,bd[i]);
+      off += sz ;
+     }
+  }
+
+#ifdef KEY /* Bug 6845 */
+  /* If this is an allocatable array whose element is a derived type having
+   * component(s) which are themselves allocatable, emit a list of byte offsets
+   * within the structure to each of the allocatable components, preceded by
+   * a count of the number of offsets.
+   */
+  if (n_alloc_cpnt) {
+
+     cwh_dope_store(st,wa,off,DOPE_bound_ty,
+       WN_Intconst(MTYPE_U4, n_alloc_cpnt));
+     off += DOPE_bound_sz;
+
+     for (i = 0; i < n_alloc_cpnt; i += 1) {
+       cwh_dope_store(st,wa,off,DOPE_bound_ty,alloc_cpnt[i]);
+       off += DOPE_bound_sz;
+     }
+  }
+#endif /* KEY Bug 6845 */
+}
+/**************************** _UH_COARRAYS *************************/
+#endif /* defined(_UH_COARRAYS) */
 
 /*===============================================
  *

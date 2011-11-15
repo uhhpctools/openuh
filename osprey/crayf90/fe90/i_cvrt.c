@@ -1427,6 +1427,9 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		int			constant_class;
    		int			count;
    		int			dim;
+#ifdef _UH_COARRAYS
+   		int			codim = 0;
+#endif
    		long64			end;
 		long64			flags 			= 0;
    		int      		j;
@@ -6317,7 +6320,8 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
      
         attr_idx = find_base_attr(&IR_OPND_L(ir_idx), &line, &col);
         bound_idx = ATD_ARRAY_IDX(attr_idx);
-# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX)
+# if defined(_F_MINUS_MINUS) && defined(_TARGET_OS_MAX) \
+  || defined(_UH_COARRAYS)
         pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
 # endif
         base_attr = find_left_attr(&(IR_OPND_L(ir_idx)));
@@ -6334,13 +6338,198 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
                         
         next_idx = IR_IDX_R(ir_idx);
         dim = IR_LIST_CNT_R(ir_idx);
+        /* does dim == 0 for coscalar? -DE */
         while (dim != 1) {
            next_idx = IL_NEXT_LIST_IDX(next_idx);
            dim = dim - 1;
         }
 
-        dim = IR_LIST_CNT_R(ir_idx);
+        /* use BD_RANK instead? -DE */
+        /* dim = IR_LIST_CNT_R(ir_idx); */
+        dim = BD_RANK(bound_idx);
         ss = 0;
+
+# if defined(_UH_COARRAYS)
+        /* added for UHCAF to handle cosubscripts. -DE */
+        codim = IR_LIST_CNT_R(ir_idx) - dim;
+        while (codim > 0) {
+              if (stack_data_object) { 
+                 COPY_OPND(l_opnd, IL_OPND(next_idx));
+                 /* l_opnd will always be a scalar expression here */
+                 vv = 1;
+                 cn_idx = get_next_array_expr_element(&l_opnd, &vv);  
+                 COPY_OPND(IL_OPND(next_idx), l_opnd);
+                 static_subscripts[ss] = CN_INT_TO_C(cn_idx);
+
+# if defined(_TARGET_OS_MAX) || defined(_HOST32)  /* JEFFL */
+                 if (TYP_LINEAR(CN_TYPE_IDX(cn_idx)) != Integer_8) {
+                    SIGN_EXTEND(static_subscripts[ss]);
+                 }
+# endif
+                 goto CONTINUE_CO;
+              }
+
+              cvrt_exp_to_pdg(IL_IDX(next_idx),
+                              IL_FLD(next_idx));
+
+              if (ATD_IM_A_DOPE(attr_idx)) {
+                 cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                                 IR_FLD_L(IR_IDX_L(ir_idx)));
+
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_get_dv_low_bnd");
+                 PDG_DBG_PRINT_D("(1) dim (codim)", dim+codim);
+                 PDG_DBG_PRINT_D("(2) expand immed", EXPAND);
+                 PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+                 fei_get_dv_low_bnd(dim+codim, EXPAND);
+# endif
+              }
+# if defined(_TARGET_OS_MAX)
+              else if (IL_PE_SUBSCRIPT(next_idx)) {
+                 cvrt_exp_to_pdg(CN_INTEGER_ONE_IDX,
+                                 CN_Tbl_Idx);
+              }
+# endif
+              else {
+                /* for deferred shape, use implicit bound. -DE */
+                if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
+                 cvrt_exp_to_pdg(BD_LB_IDX(pe_bd_idx, codim),
+                                 BD_LB_FLD(pe_bd_idx, codim));
+                //else fei_implicit_bnd();
+              }
+
+              if (ATD_IM_A_DOPE(attr_idx)) {
+                 cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                                 IR_FLD_L(IR_IDX_L(ir_idx)));
+
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_get_dv_extent");
+                 PDG_DBG_PRINT_D("(1) dim (codim)", dim+codim);
+                 PDG_DBG_PRINT_D("(2) expand immed", EXPAND);
+                 PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+                 fei_get_dv_extent(dim+codim, EXPAND);
+# endif
+              }
+# if defined(_TARGET_OS_MAX)
+              else if (IL_PE_SUBSCRIPT(next_idx)) {
+                 cvrt_exp_to_pdg(BD_LEN_IDX(pe_bd_idx),
+                                 BD_LEN_FLD(pe_bd_idx));
+              }
+# endif
+              else {
+                  /* for deferred shape, use implicit bound. -DE */
+                  if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
+                   cvrt_exp_to_pdg(BD_XT_IDX(pe_bd_idx, codim),
+                                   BD_XT_FLD(pe_bd_idx, codim));
+                  //else fei_implicit_bnd();
+              }
+
+              if (ATD_IM_A_DOPE(attr_idx)) {
+                 cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                                 IR_FLD_L(IR_IDX_L(ir_idx)));
+
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_get_dv_str_mult");
+                 PDG_DBG_PRINT_D("(1) dim (codim)", dim+codim);
+                 PDG_DBG_PRINT_D("(2) expand immed", EXPAND);
+                 PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+                 fei_get_dv_str_mult(dim+codim, EXPAND);
+# endif
+              }
+# if defined(_EXTENDED_CRI_CHAR_POINTER)
+              else if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+                       ATD_CLASS(attr_idx) == CRI_Pointee &&
+                       TYP_TYPE(ATD_TYPE_IDX(attr_idx)) == Character &&
+                       TYP_CHAR_CLASS(ATD_TYPE_IDX(attr_idx)) == 
+                                                           Assumed_Size_Char) {
+                 cvrt_exp_to_pdg(BD_SM_IDX(pe_bd_idx, codim),
+                                 BD_SM_FLD(pe_bd_idx, codim));
+
+                 cvrt_exp_to_pdg(attr_idx, AT_Tbl_Idx);
+
+                 basic = get_basic_type(ATD_TYPE_IDX(attr_idx), 
+                                        ATD_ALIGNMENT(attr_idx),
+                                        attr_idx);
+
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_len");
+                 PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+                 fei_len(basic);
+# endif
+
+                 basic = get_basic_type(INTEGER_DEFAULT_TYPE, 
+                                       type_alignment_tbl[INTEGER_DEFAULT_TYPE],
+                                       NULL_IDX);
+
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_mult");
+                 PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+                 fei_mult(basic);
+# endif
+              }
+# endif
+# if defined(_TARGET_OS_MAX)
+              else if (IL_PE_SUBSCRIPT(next_idx)) {
+                 cvrt_exp_to_pdg(CN_INTEGER_ONE_IDX,
+                                 CN_Tbl_Idx);
+              }
+# endif
+              else {
+                /* for deferred shape, use implicit bound. -DE */
+                if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
+                 cvrt_exp_to_pdg(BD_SM_IDX(pe_bd_idx, codim),
+                                 BD_SM_FLD(pe_bd_idx, codim));
+                //else fei_implicit_bnd();
+              }
+
+              if (BD_ARRAY_CLASS(bound_idx) == Assumed_Size) {
+                 if (BD_RANK(bound_idx) == IR_LIST_CNT_R(ir_idx) && ss == 0) {
+                    bound_chk = FALSE;
+                 } 
+              } 
+
+              PDG_DBG_PRINT_START
+              PDG_DBG_PRINT_C("fei_subscr_size");
+              PDG_DBG_PRINT_T("(1) type", pdg_type_void);
+              PDG_DBG_PRINT_D("(2) bound_chk", bound_chk);
+              PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+              fei_subscr_size(pdg_type_void, bound_chk);
+# endif
+
+              if (ATD_IM_A_DOPE(attr_idx)) {
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_nseq_subscr");
+                 PDG_DBG_PRINT_T("(1) type", null_type);
+                 PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+                 fei_nseq_subscr(null_type,IR_LIST_CNT_R(ir_idx));
+# endif
+              }
+              else {
+                 PDG_DBG_PRINT_START
+                 PDG_DBG_PRINT_C("fei_seq_subscr");
+                 PDG_DBG_PRINT_T("(1) type", null_type);
+                 PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+                 fei_seq_subscr(null_type,IR_LIST_CNT_R(ir_idx));
+# endif
+              }
+
+CONTINUE_CO:
+              next_idx = IL_PREV_LIST_IDX(next_idx);
+              codim = codim - 1;
+              ss = ss + 1;
+        }
+# endif
+
         while (dim > 0) {
               if (stack_data_object) { 
                  COPY_OPND(l_opnd, IL_OPND(next_idx));
@@ -6490,7 +6679,11 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
                  PDG_DBG_PRINT_T("(1) type", null_type);
                  PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
+# ifdef _UH_COARRAYS
+                 fei_nseq_subscr(null_type,IR_LIST_CNT_R(ir_idx));
+# else
                  fei_nseq_subscr(null_type);
+# endif
 # endif
               }
               else {
@@ -6499,7 +6692,12 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
                  PDG_DBG_PRINT_T("(1) type", null_type);
                  PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
+# ifdef _UH_COARRAYS
+                 fei_seq_subscr(null_type,IR_LIST_CNT_R(ir_idx));
+# else
                  fei_seq_subscr(null_type);
+# endif
+
 # endif
               }
 
@@ -6623,12 +6821,22 @@ CONTINUE:
         PDG_DBG_PRINT_D("dim", IR_DV_DIM(ir_idx));
         PDG_DBG_PRINT_END
 
+
 # ifdef _ENABLE_FEI
+#ifndef _UH_COARRAYS
 #ifdef KEY /* Bug 6845 */
         fei_dv_def(IR_DV_DIM(ir_idx), IR_DV_N_ALLOC_CPNT(ir_idx));
 #else /* KEY Bug 6845 */
         fei_dv_def(IR_DV_DIM(ir_idx));
 #endif /* KEY Bug 6845 */
+#else /* defined(_UH_COARRAYS) */
+#ifdef KEY /* Bug 6845 */
+        fei_dv_def(IR_DV_DIM(ir_idx)+IR_DV_CODIM(ir_idx), 
+                IR_DV_N_ALLOC_CPNT(ir_idx));
+#else /* KEY Bug 6845 */
+        fei_dv_def(IR_DV_DIM(ir_idx)+IR_DV_CODIM(ir_idx));
+#endif /* KEY Bug 6845 */
+#endif /* defined(_UH_COARRAYS) */
 # endif
         processing_call = processing_call - 1;
         break;
@@ -10951,8 +11159,9 @@ static TYPE get_type_desc(int	input_idx)
    int      		type_flag	= 0;
    TYPE			type_idx;
 
-# if defined(_TARGET_OS_MAX)
+# if defined(_TARGET_OS_MAX) || defined(_UH_COARRAYS)
    int			pe_bd_idx;
+   int			corank;
 # endif
 
 
@@ -11015,6 +11224,10 @@ static TYPE get_type_desc(int	input_idx)
    if (ATD_IM_A_DOPE(attr_idx)) { 
       rank = (ATD_ARRAY_IDX(attr_idx) == NULL_IDX) ? 0 :
                                          BD_RANK(ATD_ARRAY_IDX(attr_idx));
+#ifdef _UH_COARRAYS
+      corank = (ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) ? 0 :
+                                         BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+#endif
 
       if (ATD_STOR_BLK_IDX(attr_idx) != NULL_IDX &&
           SB_SCP_IDX(ATD_STOR_BLK_IDX(attr_idx)) != curr_scp_idx) {
@@ -11029,7 +11242,12 @@ static TYPE get_type_desc(int	input_idx)
       PDG_DBG_PRINT_D("(1) rank", rank);
       PDG_DBG_PRINT_T("(2) type", type_idx);
       PDG_DBG_PRINT_O("(3) flags", type_flag);
+#ifdef _UH_COARRAYS
+      PDG_DBG_PRINT_D("(4) corank", corank);
+#endif
       PDG_DBG_PRINT_END
+
+#ifndef _UH_COARRAYS
 
 # ifdef _ENABLE_FEI
       type_idx = fei_dope_vector(rank, type_idx, type_flag,
@@ -11039,6 +11257,20 @@ static TYPE get_type_desc(int	input_idx)
 #endif /* KEY Bug 6845 */
         );
 # endif
+
+#else /* defined(_UH_COARRAYS) */
+
+# ifdef _ENABLE_FEI
+      type_idx = fei_dope_vector(rank, type_idx, type_flag,
+#ifdef KEY /* Bug 6845 */
+      /* Sigh. We have to count them yet again. The joys of retrofitting. */
+        do_count_allocatable_cpnt(attr_idx, rank+corank),
+#endif /* KEY Bug 6845 */
+        corank
+        );
+# endif
+
+#endif /* defined(_UH_COARRAYS) */
    }
    else if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX) {
       bd_idx = ATD_ARRAY_IDX(attr_idx);
@@ -11107,6 +11339,10 @@ static TYPE get_type_desc(int	input_idx)
                   "resolved bounds entry",
                   "get_type_desc");
       }
+# endif
+
+# ifdef _UH_COARRAYS
+      pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
 # endif
 
       for (i = 1; i <= BD_RANK(bd_idx); i++) {
@@ -11293,6 +11529,209 @@ static TYPE get_type_desc(int	input_idx)
 # endif
       } 
    }
+
+# if defined(_UH_COARRAYS)
+   bd_idx = ATD_ARRAY_IDX(attr_idx);
+   pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+   /* initialize to handle co-scalar */
+   basic_type = pdg_basic_type[TYP_TYPE(ATD_TYPE_IDX(attr_idx))];
+
+   /* skip if dealing with an allocatable coarray */
+   if (! ATD_ALLOCATABLE(attr_idx) && 
+       BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape &&
+       BD_ARRAY_CLASS(pe_bd_idx) != Assumed_Shape) {
+
+   for (i = 1; i <= BD_RANK(pe_bd_idx); i++) {
+       if (BD_LB_FLD(pe_bd_idx, i) == CN_Tbl_Idx) {
+           lbound = CN_INT_TO_C(BD_LB_IDX(pe_bd_idx, i));
+           lb_vble = FALSE;
+       }
+       else {
+           lbound = BD_LB_IDX(pe_bd_idx, i);
+           lb_vble = TRUE;
+
+# ifdef _TARGET_OS_MAX
+           lb_symcon = ATD_SYMBOLIC_CONSTANT(lbound);
+           lb_vble = !ATD_SYMBOLIC_CONSTANT(lbound);
+# endif
+
+           if (PDG_AT_IDX(lbound) == NULL_IDX) {
+
+               if (template_tmp) {
+                   COPY_ATTR_NTRY(AT_WORK_IDX, lbound);
+                   AT_REFERENCED(lbound)	= Referenced;
+                   ATD_OFFSET_ASSIGNED(lbound) = FALSE;
+                   ATD_STOR_BLK_IDX(lbound) = SCP_SB_STACK_IDX(curr_scp_idx);
+                   send_attr_ntry(lbound);
+                   COPY_ATTR_NTRY(lbound, AT_WORK_IDX);
+               }
+               else {
+                   send_attr_ntry(lbound);
+               }
+           }
+           lbound = PDG_AT_IDX(lbound);
+       }
+
+       if (BD_UB_FLD(pe_bd_idx, i) == CN_Tbl_Idx) {
+           ubound = CN_INT_TO_C(BD_UB_IDX(pe_bd_idx, i));
+           ub_vble = FALSE;
+       }
+       else {
+           ubound = BD_UB_IDX(pe_bd_idx, i);
+           ub_vble = TRUE;
+
+# ifdef _TARGET_OS_MAX
+           ub_symcon = ATD_SYMBOLIC_CONSTANT(ubound);
+           ub_vble = !ATD_SYMBOLIC_CONSTANT(ubound);
+# endif
+
+           if (PDG_AT_IDX(ubound) == NULL_IDX) {
+
+               if (template_tmp) {
+                   COPY_ATTR_NTRY(AT_WORK_IDX, ubound);
+                   AT_REFERENCED(ubound) = Referenced;
+                   ATD_OFFSET_ASSIGNED(ubound) = FALSE;
+                   ATD_STOR_BLK_IDX(ubound) = SCP_SB_STACK_IDX(curr_scp_idx);
+                   send_attr_ntry(ubound);
+                   COPY_ATTR_NTRY(ubound, AT_WORK_IDX);
+               }
+               else {
+                   send_attr_ntry(ubound);
+               }
+           }
+           ubound = PDG_AT_IDX(ubound);
+       }
+
+       if (BD_XT_FLD(pe_bd_idx, i) == CN_Tbl_Idx) {
+           extent = CN_INT_TO_C(BD_XT_IDX(pe_bd_idx, i));
+           xt_vble = FALSE;
+           span = extent * span;
+       }
+       else {
+           extent = BD_XT_IDX(pe_bd_idx, i);
+           xt_vble = TRUE;
+
+# ifdef _TARGET_OS_MAX
+           xt_symcon = ATD_SYMBOLIC_CONSTANT(extent);
+           xt_vble = !ATD_SYMBOLIC_CONSTANT(extent);
+# endif
+
+           if (PDG_AT_IDX(extent) == NULL_IDX) {
+
+               if (template_tmp) {
+                   COPY_ATTR_NTRY(AT_WORK_IDX, extent);
+                   AT_REFERENCED(extent)	= Referenced;
+                   ATD_OFFSET_ASSIGNED(extent) = FALSE;
+                   ATD_STOR_BLK_IDX(extent) = SCP_SB_STACK_IDX(curr_scp_idx);
+                   send_attr_ntry(extent);
+                   COPY_ATTR_NTRY(extent, AT_WORK_IDX);
+               }
+               else {
+                   send_attr_ntry(extent);
+               }
+           }
+           extent = PDG_AT_IDX(extent);
+           span = (long64) 0;
+       }
+
+       flag = (lb_symcon << FEI_ARRAY_DIMEN_SCON_LB)|
+           (lb_vble   << FEI_ARRAY_DIMEN_VARY_LB)|
+           (ub_symcon << FEI_ARRAY_DIMEN_SCON_UB)|
+           (ub_vble   << FEI_ARRAY_DIMEN_VARY_UB)|
+           (xt_symcon << FEI_ARRAY_DIMEN_SCON_EXT)|
+           (xt_vble   << FEI_ARRAY_DIMEN_VARY_EXT);
+
+       flag |= (BD_FLOW_DEPENDENT(pe_bd_idx) << FEI_ARRAY_DIMEN_FLOW_DEPENDENT);
+
+       temp_attr_idx = attr_idx;
+       if (ATD_CLASS(attr_idx) == CRI__Pointee &&
+               ATD_PTR_IDX(attr_idx) != NULL_IDX) {
+           temp_attr_idx = ATD_PTR_IDX(attr_idx);
+       }
+
+       if (ATD_STOR_BLK_IDX(temp_attr_idx) != NULL_IDX &&
+               SB_SCP_IDX(ATD_STOR_BLK_IDX(temp_attr_idx)) != curr_scp_idx) {
+           flag = flag | (1 << FEI_ARRAY_DIMEN_HOSTED_TYPE);
+       }
+
+       /* these distributions don't apply for codimensions. -DE */
+#if 0
+       if (dist_idx != NULL_IDX) {
+           if (BD_CYCLIC_IDX(dist_idx, i) != NULL_IDX) { 
+               cvrt_exp_to_pdg(BD_CYCLIC_IDX(dist_idx, i),
+                       BD_CYCLIC_FLD(dist_idx, i));
+               flag = flag | (1 << FEI_ARRAY_DIMEN_DIST_EXPR);
+           }
+
+           if (BD_ONTO_IDX(dist_idx, i) != NULL_IDX) { 
+               cvrt_exp_to_pdg(BD_ONTO_IDX(dist_idx, i),
+                       BD_ONTO_FLD(dist_idx, i));
+               flag = flag | (1 << FEI_ARRAY_DIMEN_ONTO_EXPR);
+           }
+
+           distribution = BD_DISTRIBUTION(dist_idx, i);
+
+           flag = flag | (BD_DISTRIBUTE_RESHAPE(dist_idx) << 
+                   FEI_ARRAY_DIMEN_DIST_RESHAPE);
+       }
+#endif
+
+       PDG_DBG_PRINT_START
+       PDG_DBG_PRINT_C("fei_array_dimen");
+       PDG_DBG_PRINT_O("(1) flags", flag);
+       PDG_DBG_PRINT_LLD("(2) lbound", lbound);
+       PDG_DBG_PRINT_LLD("(3) extent", extent);
+       PDG_DBG_PRINT_D("(4) rank", i);
+       PDG_DBG_PRINT_T("(5) type", type_idx);
+       PDG_DBG_PRINT_LLD("(6) span", span);
+       PDG_DBG_PRINT_S("(7) distribution", p_distribution[distribution]);
+       PDG_DBG_PRINT_LLD("(8) ubound", ubound);
+       PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+           pdg_array_idx = fei_array_dimen(flag,
+                   lbound,
+                   extent,
+                   bd_idx ? BD_RANK(bd_idx)+i : i,
+                   type_idx,
+                   span,
+                   distribution,
+                   ubound);
+# endif
+
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
+       if (i == BD_RANK(pe_bd_idx)) {  
+# endif
+           PDG_DBG_PRINT_START
+           PDG_DBG_PRINT_C("fei_descriptor");
+           PDG_DBG_PRINT_O("(1) flags", type_flag);
+           PDG_DBG_PRINT_S("(2) table type", p_table_type[Array]);
+           PDG_DBG_PRINT_LD("(3) pdg_array_idx", pdg_array_idx);
+           PDG_DBG_PRINT_S("(4) basic type", p_basic_type[basic_type]);
+           PDG_DBG_PRINT_D("(5) aux info", kind_type);
+           PDG_DBG_PRINT_D("(6) alignment",pdg_align[ATD_ALIGNMENT(attr_idx)]);
+           PDG_DBG_PRINT_END
+# ifdef _ENABLE_FEI
+               type_idx = fei_coarray_descriptor(type_flag,
+                       Array,
+                       pdg_array_idx,
+                       basic_type,
+                       kind_type, 
+                       pdg_align[ATD_ALIGNMENT(attr_idx)],
+                       BD_RANK(pe_bd_idx) /* num_codims */);
+# endif
+           PDG_DBG_PRINT_START
+           PDG_DBG_PRINT_T("(r) type", type_idx);
+           PDG_DBG_PRINT_END
+
+# if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
+       }
+# endif
+   } 
+
+   }
+
+# endif
 
 # if defined(_F_MINUS_MINUS)
 # if defined(_TARGET_OS_MAX)
@@ -12571,6 +13010,7 @@ static  void    send_label_def(int	ir_idx)
                                            FEI_LABEL_DEF_NAMED_PSTREAM_NOCINV)|
 	((long64) ATL_SHORTLOOP(attr_idx)   << FEI_LABEL_DEF_NAMED_SHORTLOOP)|
 	((long64) ATL_NOVSEARCH(attr_idx)   << FEI_LABEL_DEF_NAMED_NOVSEARCH)|
+   
         ((long64) ATL_TOP_OF_LOOP(attr_idx) << FEI_LABEL_DEF_NAMED_LOOPCHK)|
         ((long64) ATL_INFORM_ONLY(attr_idx) << FEI_LABEL_DEF_NAMED_INFORM_ONLY)|
         ((long64) ATL_BL(attr_idx)          << FEI_LABEL_DEF_NAMED_DO_BL)|
@@ -12596,6 +13036,7 @@ static  void    send_label_def(int	ir_idx)
                             << FEI_LABEL_DEF_NAMED_CONSTRUCTOR_LOOP)|
         ((long64) ATL_CONCURRENT(attr_idx)  << FEI_LABEL_DEF_NAMED_CONCURRENT)|
         ((long64) ATL_CASE_LABEL(attr_idx)  << FEI_LABEL_DEF_NAMED_CASE);
+        
 
    /* List contains directives in this order           */
    /* safevl, Unroll, mark name, maxcpus, cache bypass */ 

@@ -229,6 +229,9 @@
 			  		/* Open_MP_End_Parallel_Workshare_Stmt */
 			  directive_stmt_semantics,
 				  	/* Open_MP_End_Workshare_Stmt */
+#if _UH_COARRAYS
+                          sync_stmt_semantics,        /* Sync_Stmt        */
+#endif
 #ifdef KEY /* Bug 11741 */
                           no_semantics_routine,        /* Import_Stmt        */
 #endif /* KEY Bug 11741 */

@@ -997,6 +997,10 @@ BOOL Enable_EBO_Post_Proc_Rgn = TRUE ;
 BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
 BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
 BOOL Epilog_Flag = FALSE;
+#ifdef _UH_COARRAYS
+BOOL Enable_Coarray = FALSE; /* -deepak */
+#endif
+
 #ifdef BACK_END
 /* back end phases options */
 BOOL Run_lno = FALSE;		    /* run loop-nest optimizer */

@@ -724,6 +724,23 @@ Set_ST_is_vtable (ST* s)    { s->flags_ext |= ST_IS_VTABLE; }
 inline void
 Reset_ST_is_vtable (ST* s)  { s->flags_ext &= ~ST_IS_VTABLE; }
 
+
+#ifdef _UH_COARRAYS
+inline BOOL
+ST_is_allocatable(const ST *s) { return s->flags_ext & ST_IS_ALLOCATABLE; }
+inline void
+Set_ST_is_allocatable(ST *s) { s->flags_ext |= ST_IS_ALLOCATABLE; }
+inline void
+Clear_ST_is_allocatable(ST *s) { s->flags_ext &= ~ST_IS_ALLOCATABLE; }
+
+inline BOOL
+ST_is_lcb_ptr(const ST *s) { return s->flags_ext & ST_IS_LCB_PTR; }
+inline void
+Set_ST_is_lcb_ptr(ST *s) { s->flags_ext |= ST_IS_LCB_PTR; }
+inline void
+Clear_ST_is_lcb_ptr(ST *s) { s->flags_ext &= ~ST_IS_LCB_PTR; }
+#endif
+
 #endif /* KEY */
 
 //----------------------------------------------------------------------
@@ -1322,9 +1339,43 @@ inline void
 Set_TY_vtable (TY_IDX tyi, ST_IDX idx) { Set_TY_vtable(Ty_Table[tyi],idx); }
 
 
+#ifdef _UH_COARRAYS
+/* using this to store the rank of a dope vector. We can't rely on the size of
+ * the dope to infer the rank, because we are tacking on a variable number of
+ * codimensions
+ */
+inline void
+Set_TY_dope_rank (TY& ty, INT8 rank) { ty.dope_rank = rank; };
+inline void
+Set_TY_dope_rank (TY_IDX tyi, INT8 rank) { Ty_Table[tyi].dope_rank = rank; };
+
+inline INT8
+TY_dope_rank(TY& ty) { return ty.dope_rank; }
+inline INT8
+TY_dope_rank(TY_IDX tyi) { return Ty_Table[tyi].dope_rank; }
+#endif
+
 //----------------------------------------------------------------------
 // TY flags
 //----------------------------------------------------------------------
+
+#ifdef _UH_COARRAYS
+/* setting/clearing is_coarray flag. -deepak */
+inline BOOL
+TY_is_coarray (const TY& ty)		{ return ty.flags & TY_IS_COARRAY; }
+inline void
+Set_TY_is_coarray (TY& ty)		{ ty.flags |= TY_IS_COARRAY; }
+inline void
+Clear_TY_is_coarray (TY& ty)		{ ty.flags &= ~TY_IS_COARRAY; }
+inline BOOL
+TY_is_coarray (const TY_IDX tyi)	{ return TY_is_coarray(Ty_Table[tyi]); }
+inline void
+Set_TY_is_coarray (TY_IDX tyi)    { Set_TY_is_coarray(Ty_Table[tyi]); }
+inline void
+Clear_TY_is_coarray (TY_IDX tyi)  { Clear_TY_is_coarray(Ty_Table[tyi]); }
+#endif
+
+
 
 inline BOOL
 TY_is_character (const TY& ty)		{ return ty.flags & TY_IS_CHARACTER; }
@@ -1827,6 +1878,14 @@ ARB_dimension (const ARB_HANDLE arb)		{ return arb.Entry()->dimension; }
 inline void
 Set_ARB_dimension (ARB_HANDLE arb, UINT16 dim){ arb.Entry()->dimension = dim; }
 
+#ifdef _UH_COARRAYS
+/* set number of codimensions for array. -deepak */
+inline UINT16
+ARB_codimension (const ARB_HANDLE arb)		{ return arb.Entry()->codimension; }
+inline void
+Set_ARB_codimension (ARB_HANDLE arb, UINT16 codim){ arb.Entry()->codimension = codim; }
+#endif
+
 inline INT64
 ARB_lbnd_val (const ARB_HANDLE arb)		{ return arb.Entry()->Lbnd_val (); }
 inline void
@@ -1895,6 +1954,22 @@ inline void
 Set_ARB_last_dimen (ARB_HANDLE arb)		{ arb.Entry()->flags |= ARB_LAST_DIMEN; }
 inline void
 Clear_ARB_last_dimen (ARB_HANDLE arb)		{ arb.Entry()->flags &= ~ARB_LAST_DIMEN; }
+
+// -DE 
+inline BOOL 
+ARB_empty_lbnd (const ARB_HANDLE arb)           { return arb.Entry()->flags & ARB_EMPTY_LBND; }
+inline void 
+Set_ARB_empty_lbnd (ARB_HANDLE arb)             { arb.Entry()->flags |= ARB_EMPTY_LBND; }
+inline void 
+Clear_ARB_empty_lbnd (ARB_HANDLE arb)           { arb.Entry()->flags &= ~ARB_EMPTY_LBND; }
+
+
+inline BOOL 
+ARB_empty_ubnd (const ARB_HANDLE arb)           { return arb.Entry()->flags & ARB_EMPTY_UBND; }
+inline void 
+Set_ARB_empty_ubnd (ARB_HANDLE arb)             { arb.Entry()->flags |= ARB_EMPTY_UBND; }
+inline void 
+Clear_ARB_empty_ubnd (ARB_HANDLE arb)           { arb.Entry()->flags &= ~ARB_EMPTY_UBND; }
 
 
 //----------------------------------------------------------------------

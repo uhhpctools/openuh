@@ -282,6 +282,9 @@ BE_BE_CXX_SRCS = 	\
   wb_omp.cxx		\
   wb_lwr.cxx		\
   wb_anl.cxx   
+ifeq ($(ENABLE_COARRAYS),YES)
+  BE_BE_CXX_SRCS += coarray_lower.cxx
+endif
 ifeq ($(BUILD_TARGET), MIPS)
   BE_BE_CXX_SRCS +=  isr.cxx
 endif

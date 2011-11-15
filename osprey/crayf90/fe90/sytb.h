@@ -996,7 +996,12 @@ struct	ir_opr_entry		{operator_type	the_operator	: 16;
                                  Uint		col_num		:  8;
                                  Uint		rank		:  8;
                                  Uint		dim		:  8;
+#ifndef _UH_COARRAYS
 				 Uint		UNUSED1		: 16;
+#else /* defined(_UH_COARRAYS) */
+                                 Uint		codim		: 8;
+                                 Uint		UNUSED1		: 8;
+#endif /* defined(_UH_COARRAYS) */
 #ifdef KEY /* Bug 6845 */
 				 Uint		n_alloc_cpnt	: 32;
 #else /* KEY Bug 6845 */

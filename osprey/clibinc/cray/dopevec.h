@@ -245,6 +245,9 @@ typedef struct DopeVector {
  *  unsigned long	          :8;
  *  unsigned long	n_dim	  :8;
  */
+
+#ifndef _UH_COARRAYS 
+
 #if defined(__mips) || defined(_LITTLE_ENDIAN)
 #  ifdef KEY /* Bug 6845 */
     unsigned int alloc_cpnt       :1;   /* this is an allocatable array whose
@@ -261,6 +264,30 @@ typedef struct DopeVector {
 #else
     unsigned long	unused1   :56;  /* unused */
 #endif
+
+#else /* defined(_UH_COARRAYS) */
+/**************************** _UH_COARRAYS *************************/
+#if defined(__mips) || defined(_LITTLE_ENDIAN)
+#  ifdef KEY /* Bug 6845 */
+    unsigned int alloc_cpnt       :1;   /* this is an allocatable array whose
+                                         * element type is a derived type
+					 * having component(s) which are
+					 * themselves allocatable       */
+    unsigned int	          :26;	/* pad for first 32 bits	*/
+#  else /* KEY Bug 6845 */
+    unsigned int	          :27;	/* pad for first 32 bits	*/
+#  endif /* KEY Bug 6845 */
+    unsigned int	          :25;	/* pad for second 32-bits	*/
+#elif defined( _WORD32)
+    unsigned long	unused1   :20;  /* unused */
+#else
+    unsigned long	unused1   :52;  /* unused */
+#endif
+    unsigned int is_coarray   :1;   /* is coarray or a component of a 
+                                       coarray derived type */
+    unsigned int    n_codim   :3;   /* number of codimensions */
+/**************************** _UH_COARRAYS *************************/
+#endif /* defined(_UH_COARRAYS) */
     unsigned int	n_dim     :3;	/* number of dimensions */
     f90_type_t		type_lens;	/* data type and lengths */
     void           	*orig_base;	/* original base address */
@@ -326,7 +353,12 @@ typedef struct DopeVector {
  	 * double complex, stride mult has a factor of 4 in it.
          */
         signed long 	stride_mult;    /* stride multiplier */
+#ifndef _UH_COARRAYS
     }dimension[MAXDIM];
+#else
+    /* allow 7 extra dimensions for supporting codimensions */
+    }dimension[2*MAXDIM];
+#endif
 #  ifdef KEY /* Bug 6845 */
    /* DopeAllocType alloc_info; appears following the last actual dimension
     * (which may be less than MAXDIM) */

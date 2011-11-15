@@ -820,8 +820,13 @@ extern void  fei_deref                    ( TYPE  type );
 extern void  fei_paren                    ( TYPE  type );
 extern void  fei_cvtop                    ( TYPE  type );
 extern void  fei_substr                   ( INT32 bound_chk );
+#ifdef _UH_COARRAYS
+extern void  fei_seq_subscr               ( TYPE  type, INT32 kidsnum );
+extern void  fei_nseq_subscr              ( TYPE  type, INT32 kidsnum );
+#else
 extern void  fei_seq_subscr               ( TYPE  type );
 extern void  fei_nseq_subscr              ( TYPE  type );
+#endif
 extern void  fei_subscr_size              ( TYPE  type, INT32 bounds_check );
 extern void  fei_subscr_triplet           ( TYPE  type );
 extern void  fei_dv_deref                 ( TYPE  type );
@@ -935,6 +940,15 @@ extern TYPE  fei_descriptor               ( INT32 flag_matrix,
                                             INT32 basic_type,
                                             INT32 aux_info,
                                             INT32 alignment);
+#ifdef _UH_COARRAYS
+extern TYPE  fei_coarray_descriptor       ( INT32 flag_matrix,
+                                            INT32 table_type,
+                                            INTPTR table_index,
+                                            INT32 basic_type,
+                                            INT32 aux_info,
+                                            INT32 alignment,
+                                            INT32 num_codims );
+#endif
 #ifdef KEY /* Bug 14110 */
 extern unsigned fei_set_volatile(unsigned);
 #endif /* KEY Bug 14110 */
@@ -1501,6 +1515,9 @@ extern TYPE  fei_dope_vector              ( INT32 num_dims,
 #ifdef KEY /* Bug 6845 */
                                      	    INT32 n_allocatable_cpnt
 #endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+                                     	    ,INT32 num_codims
+#endif
 					    );
 extern void  fei_dv_ptr_asg               ( void );
 #ifndef KEY /* Bug 6845 */

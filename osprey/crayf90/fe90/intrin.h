@@ -3643,6 +3643,33 @@ intrin_tbl_type         intrin_tbl[] =
    {"IMAG",4,1,1,0,0,0,0,0,0,0,Imag_Intrinsic,0,0},
       {"Z",1,0,0,0,0,0,0,0,0,0,0,COMPLEX_MASK,0},
 #endif /* KEY Bug 1683 */
+#ifdef _UH_COARRAYS
+{"IMAGE_INDEX",11,0,1,0,1,0,0,1,0,8,0,0,TRADITIONAL_FAMILY},
+   {"image_index_",12,0,1,0,1,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+   {"image_index_",12,0,1,0,0,0,0,0,1,0,Image_Index_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
+      {"SUB"  ,    3,0,0,0,0,0,1,0,0,1,0,                   INTEGER_MASK,0},
+#endif
 {"IMOD",4,1,1,1,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY|PGI_FAMILY},
    {"IMOD",4,1,1,0,0,0,0,0,0,0,Imod_Intrinsic,Integer_2,0},
       {"A",1,0,0,0,0,0,0,0,0,0,0,I2_MASK,0},
@@ -4016,6 +4043,49 @@ intrin_tbl_type         intrin_tbl[] =
       {"ARRAY",5,0,0,0,0,0,1,0,0,6,0,ALL_MASK,0},
    {"_LBOUND",7,0,1,0,1,0,1,0,0,1,Lbound_Intrinsic,Integer_4,0},
       {"ARRAY",5,0,0,0,0,0,1,0,0,7,0,ALL_MASK,0},
+#ifdef _UH_COARRAYS
+{"LCOBOUND",8,0,1,0,1,0,0,1,0,16,0,0,TRADITIONAL_FAMILY},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
+   {"lcobound_",9,0,1,0,1,0,1,0,1,1,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"lcobound2_",10,0,1,0,1,0,0,0,1,0,Lcobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+#endif
 {"LEADZ",5,1,1,0,0,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
    {"LEADZ",5,1,1,0,0,0,0,0,1,0,Leadz_Intrinsic,0,0},
       {"I",1,0,0,0,0,0,0,0,0,0,0,IRP_MASK,0},
@@ -9686,7 +9756,7 @@ intrin_tbl_type         intrin_tbl[] =
    {"NUMARG",6,1,1,0,0,0,0,0,1,0,Numarg_Intrinsic,0,0},
 # endif
 {"NUM_IMAGES",10,0,1,0,1,0,0,1,0,1,0,0,TRADITIONAL_FAMILY},
-   {"shmem_n_pes",11,0,1,0,1,0,0,0,1,0,Num_Images_Intrinsic,Integer_4,0},
+   {"num_images",10,0,1,0,1,0,0,0,1,0,Num_Images_Intrinsic,Integer_4,0},
 #ifdef KEY
 {"OMP_DESTROY_LOCK",16,0,0,0,1,0,0,1,0,1,0,0,OMP_FAMILY},
    {"omp_destroy_lock_",17,0,0,0,1,0,0,0,0,0,0,0,0},
@@ -13239,44 +13309,44 @@ intrin_tbl_type         intrin_tbl[] =
 # endif
 {"THIS_IMAGE",10,0,1,0,1,0,0,1,0,17,0,0,TRADITIONAL_FAMILY},
    {"_THIS_IMAGE0",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE2",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
+   {"this_image2_",12,0,1,0,1,0,1,0,1,1,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
-   {"_THIS_IMAGE3",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
+   {"this_image3_",12,0,1,0,1,0,0,0,1,0,This_Image_Intrinsic,0,0},
       {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
       {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
 #ifdef KEY /* Bug 4135 */
@@ -13838,6 +13908,49 @@ intrin_tbl_type         intrin_tbl[] =
       {"ARRAY",5,0,0,0,0,0,1,0,0,6,0,ALL_MASK,0},
    {"_UBOUND",7,0,1,0,1,0,1,0,0,1,Ubound_Intrinsic,Integer_4,0},
       {"ARRAY",5,0,0,0,0,0,1,0,0,7,0,ALL_MASK,0},
+#ifdef _UH_COARRAYS
+{"UCOBOUND",8,0,1,0,1,0,0,1,0,16,0,0,TRADITIONAL_FAMILY},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
+   {"ucobound_",9,0,1,0,1,0,1,0,1,1,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,0,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,1,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,2,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,3,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,4,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,5,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,6,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+   {"ucobound2_",10,0,1,0,1,0,0,0,1,0,Ucobound_Intrinsic,0,0},
+      {"ARRAY",    5,0,0,0,0,0,1,0,0,7,0,                   ALL_MASK,0},
+      {"DIM"  ,    3,0,0,0,0,0,0,0,0,0,0,                   INTEGER_MASK,0},
+#endif
 #ifdef KEY /* Bug 1683 */
 {"UMASK",5,0,1,0,1,0,0,1,0,1,0,0,G77_FAMILY},
    {"G77_umask_0",11,0,1,0,1,0,0,0,1,0,Pathf90_Intrinsic,Integer_4,0},
@@ -14205,6 +14318,9 @@ void	(*intrinsic_semantics[]) ()	= {
 	sign_intrinsic,        		/*  Iisign_Intrinsic         	     */
 	ilen_intrinsic,        		/*  Ilen_Intrinsic         	     */
 	aimag_intrinsic,        	/*  Imag_Intrinsic         	     */
+#ifdef _UH_COARRAYS
+        num_images_intrinsic,           /*  Image_Index_Intrinsic             */
+#endif
 	mod_intrinsic,          	/*  Imod_Intrinsic           	     */
 	mvbits_intrinsic,        	/*  Imvbits_Intrinsic         	     */
 	index_intrinsic,        	/*  Index_Intrinsic         	     */
@@ -14279,6 +14395,9 @@ void	(*intrinsic_semantics[]) ()	= {
 	nint_intrinsic,        		/*  Knint_Intrinsic         	     */
 	not_intrinsic,        		/*  Knot_Intrinsic         	     */
 	lbound_intrinsic,       	/*  Lbound_Intrinsic        	     */
+#ifdef _UH_COARRAYS
+	num_images_intrinsic,       /*  Lcobound_Intrinsic        	     */
+#endif
 	leadz_intrinsic,        	/*  Leadz_Intrinsic         	     */
 	len_intrinsic,          	/*  Len_Intrinsic           	     */
 	length_intrinsic,       	/*  Length_Intrinsic        	     */
@@ -14476,6 +14595,9 @@ void	(*intrinsic_semantics[]) ()	= {
 	transpose_intrinsic,    	/*  Transpose_Intrinsic     	     */
 	trim_intrinsic,         	/*  Trim_Intrinsic          	     */
 	ubound_intrinsic,		/*  Ubound_Intrinsic        	     */
+#ifdef _UH_COARRAYS
+	num_images_intrinsic,       /*  Ucobound_Intrinsic        	     */
+#endif
 	unit_intrinsic,         	/*  Unit_Intrinsic          	     */
 	unpack_intrinsic,	       	/*  Unpack_Intrinsic                 */
 	index_intrinsic,	       	/*  Verify_Intrinsic                 */

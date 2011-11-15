@@ -4850,7 +4850,7 @@ void	decl_semantics(void)
 
 # ifdef _F_MINUS_MINUS
 
-# if ! defined(_TARGET_OS_MAX)
+# if ! (defined(_TARGET_OS_MAX) || defined(_UH_COARRAYS))
 
    if (cmd_line_flags.co_array_fortran &&
        ATP_PGM_UNIT(pgm_attr_idx) == Program) {
@@ -5894,6 +5894,85 @@ static	void	attr_semantics(int	attr_idx,
                SH_IR_IDX(curr_stmt_sh_idx)    = ir_idx;
                SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
             }
+
+            /* Deepak: if attr_idx is a coarray and PE is assumed size.  */
+#ifdef _UH_COARRAYS
+            int pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+            if (BD_ARRAY_CLASS(pe_bd_idx) == Assumed_Size) {
+              BD_ARRAY_CLASS(pe_bd_idx) = Assumed_Shape;
+              for (i = 1; i <= BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)); i++) {
+
+                 NTR_IR_TBL(ir_idx);
+                 IR_OPR(ir_idx)      = Dv_Set_Low_Bound;
+                 IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+                 IR_LINE_NUM(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+                 IR_FLD_L(ir_idx)    = AT_Tbl_Idx;
+                 IR_IDX_L(ir_idx)    = attr_idx;
+                 IR_LINE_NUM_L(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_L(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_FLD_R(ir_idx) = BD_LB_FLD(pe_bd_idx, i);
+                 IR_IDX_R(ir_idx) = BD_LB_IDX(pe_bd_idx, i); 
+                 IR_LINE_NUM_R(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_R(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_DV_DIM(ir_idx) = BD_RANK(ATD_ARRAY_IDX(attr_idx))+i;
+
+                 gen_sh(After, Assignment_Stmt, SH_GLB_LINE(curr_stmt_sh_idx), 
+                        SH_COL_NUM(curr_stmt_sh_idx), FALSE, FALSE, TRUE);
+
+                 SH_IR_IDX(curr_stmt_sh_idx)    = ir_idx;
+                 SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+
+                 NTR_IR_TBL(ir_idx);
+                 IR_OPR(ir_idx)      = Dv_Set_Extent;
+                 IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+                 IR_LINE_NUM(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+                 IR_FLD_L(ir_idx)    = AT_Tbl_Idx;
+                 IR_IDX_L(ir_idx)    = attr_idx;
+                 IR_LINE_NUM_L(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_L(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_FLD_R(ir_idx) = BD_XT_FLD(pe_bd_idx, i);
+                 IR_IDX_R(ir_idx) = BD_XT_IDX(pe_bd_idx, i); 
+                 IR_LINE_NUM_R(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_R(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_DV_DIM(ir_idx) = BD_RANK(ATD_ARRAY_IDX(attr_idx))+i;
+
+                 gen_sh(After, Assignment_Stmt, SH_GLB_LINE(curr_stmt_sh_idx), 
+                        SH_COL_NUM(curr_stmt_sh_idx), FALSE, FALSE, TRUE);
+
+                 SH_IR_IDX(curr_stmt_sh_idx)    = ir_idx;
+                 SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+
+                 NTR_IR_TBL(ir_idx);
+                 IR_OPR(ir_idx)      = Dv_Set_Stride_Mult;
+                 IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+                 IR_LINE_NUM(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+                 IR_FLD_L(ir_idx)    = AT_Tbl_Idx;
+                 IR_IDX_L(ir_idx)    = attr_idx;
+                 IR_LINE_NUM_L(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_L(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_FLD_R(ir_idx) = BD_SM_FLD(pe_bd_idx, i);
+                 IR_IDX_R(ir_idx) = BD_SM_IDX(pe_bd_idx, i); 
+                 IR_LINE_NUM_R(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+                 IR_COL_NUM_R(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+                 IR_DV_DIM(ir_idx) = BD_RANK(ATD_ARRAY_IDX(attr_idx))+i;
+
+                 gen_sh(After, Assignment_Stmt, SH_GLB_LINE(curr_stmt_sh_idx), 
+                        SH_COL_NUM(curr_stmt_sh_idx), FALSE, FALSE, TRUE);
+
+                 SH_IR_IDX(curr_stmt_sh_idx)    = ir_idx;
+                 SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+              }
+            }
+#endif
 
 # if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 
@@ -7442,7 +7521,13 @@ static	void	attr_semantics(int	attr_idx,
 
 # ifdef _F_MINUS_MINUS
    if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
-       ATD_CLASS(attr_idx) == Variable &&
+#ifndef _UH_COARRAYS
+       ATD_CLASS(attr_idx) == Variable
+#else
+       ( ATD_CLASS(attr_idx) == Variable  ||
+       ATD_CLASS(attr_idx) == Dummy_Argument)
+#endif
+       &&
        ATD_ALLOCATABLE(attr_idx) &&
        ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
        ATD_VARIABLE_TMP_IDX(attr_idx) == NULL_IDX &&
@@ -12620,7 +12705,12 @@ static void gen_allocatable_ptr_ptee(int	attr_idx)
                "gen_allocatable_ptr_ptee");
    }
 # endif
-   ATD_STOR_BLK_IDX(ptr_idx) = ATD_STOR_BLK_IDX(attr_idx);
+#ifdef _UH_COARRAYS
+   if (ATD_CLASS(attr_idx) == Dummy_Argument)
+     ATD_STOR_BLK_IDX(ptr_idx) = SCP_SB_STACK_IDX(curr_scp_idx);
+   else
+#endif
+     ATD_STOR_BLK_IDX(ptr_idx) = ATD_STOR_BLK_IDX(attr_idx);
 
    ptee_idx = gen_compiler_tmp(line, col, Shared, TRUE);
    ATD_CLASS(ptee_idx) = CRI__Pointee;
@@ -12646,13 +12736,25 @@ static void gen_allocatable_ptr_ptee(int	attr_idx)
    ATD_ARRAY_IDX(ptee_idx) = set_up_bd_tmps(BD_RANK(ATD_ARRAY_IDX(attr_idx)),
                                             line, 
                                             col,
+#ifndef _UH_COARRAYS
                                             ATD_STOR_BLK_IDX(attr_idx),
+#else
+                            ATD_CLASS(attr_idx) == Dummy_Argument ?
+                                             SCP_SB_STACK_IDX(curr_scp_idx):
+                                             ATD_STOR_BLK_IDX(attr_idx),
+#endif
                                             FALSE);
    ATD_PE_ARRAY_IDX(ptee_idx) = 
                    set_up_bd_tmps(BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)),
                                             line, 
                                             col,
+#ifndef _UH_COARRAYS
                                             ATD_STOR_BLK_IDX(attr_idx),
+#else
+                            ATD_CLASS(attr_idx) == Dummy_Argument ?
+                                             SCP_SB_STACK_IDX(curr_scp_idx):
+                                             ATD_STOR_BLK_IDX(attr_idx),
+#endif
                                             TRUE);
 
    ATD_FLD(attr_idx) = AT_Tbl_Idx;

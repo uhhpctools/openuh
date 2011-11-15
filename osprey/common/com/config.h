@@ -730,6 +730,10 @@ extern BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
 extern BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
 extern BOOL Epilog_Flag;
 
+#ifdef _UH_COARRAYS
+extern BOOL Enable_Coarray; /* -deepak */
+#endif
+
 /* back end phases options */
 #ifdef BACK_END
 extern BOOL Run_lno;		    /* run loop-nest optimizer */

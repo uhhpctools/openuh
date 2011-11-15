@@ -240,7 +240,11 @@ static source_info_t source_info[] = {
 	{"C","CC","CPP","CXX","cc","cpp","cxx","c++"},	/* C */
 	{"f","for"},			/* f */
 	{"F","FOR"},			/* F */
+#ifndef _UH_COARRAYS
 	{"f90","f95"},			/* f90 */
+#else
+	{"f90","f95","caf"},	/* f90 */
+#endif
 	{"F90","F95"},			/* F90 */
 	{"r"},				/* r */
 	{"i"},				/* i */

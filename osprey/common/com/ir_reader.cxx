@@ -1480,7 +1480,7 @@ static void ir_put_expr(WN * wn, INT indent)
                 || (WN_operator(wn) == OPR_COMMA && i == 0)))
         ir_put_stmt(wn2, indent+1);
       else
-	fprintf(ir_ofile, "%*sopcode %d not an expression\n", indent+1, "", op);
+        fprintf(ir_ofile, "%*sopcode %d not an expression\n", indent+1, "", op);
     } else  
       fprintf(ir_ofile, "%*snull-expression\n", indent+1, "");
   }

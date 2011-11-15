@@ -230,7 +230,13 @@ cif_stmt_type	mapped_stmt_type[] =
 
 			CIF_Not_Exact,		/* Volatile_Stmt */
 			CIF_Not_Exact,		/* Open_MP_End_Parallel_Workshare_Stmt */
-			CIF_Not_Exact		/* Open_MP_End_Workshare_Stmt */
+#ifndef _UH_COARRAYS
+			CIF_Not_Exact 		/* Open_MP_End_Workshare_Stmt */
+#else
+			CIF_Not_Exact,		/* Open_MP_End_Workshare_Stmt */
+
+			CIF_Not_Exact		/* Sync_Stmt */
+#endif
                        };
 
 

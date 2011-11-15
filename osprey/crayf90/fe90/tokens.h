@@ -107,6 +107,9 @@ enum	token_values {
 		Tok_Id,			/*	     identifier,	      */
 					/*	     construct-name,	      */
 					/*	     kind-param-name	      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_All,	/* ALL   */
+#endif
 		Tok_Kwd_Allocatable,	/* ALLOCATABLE			      */
 		Tok_Kwd_Allocate,	/* ALLOCATE			      */
 		Tok_Kwd_Assign,		/* ASSIGN			      */
@@ -123,6 +126,9 @@ enum	token_values {
 		Tok_Kwd_Case,		/* CASE	     SELECTCASE		      */
 		Tok_Kwd_Character,	/* CHARACTER			      */
 		Tok_Kwd_Close,		/* CLOSE			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Codimension,	/* CODIMENSION			      */
+#endif
 		Tok_Kwd_Common,		/* COMMON			      */
 		Tok_Kwd_Complex,	/* COMPLEX			      */
 		Tok_Kwd_Contains,	/* CONTAINS			      */
@@ -161,6 +167,9 @@ enum	token_values {
 		Tok_Kwd_Function,	/* FUNCTION  ENDFUNCTION	      */
 		Tok_Kwd_Go,		/* GO	     GOTO		      */
 		Tok_Kwd_If,		/* IF	     ELSEIF, ENDIF	      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Images,		/* IMAGES			      */
+#endif
 		Tok_Kwd_Implicit,	/* IMPLICIT			      */
 #ifdef KEY /* Bug 11741 */
 		Tok_Kwd_Import,		/* IMPORT			      */
@@ -174,6 +183,9 @@ enum	token_values {
 		Tok_Kwd_Kind,		/* KIND				      */
 		Tok_Kwd_Len,		/* LEN				      */
 		Tok_Kwd_Logical,	/* LOGICAL			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Memory,		/* MEMORY                 */
+#endif
 		Tok_Kwd_Module,		/* MODULE    ENDMODULE,		      */
 					/*	     MODULEPROCEDURE	      */
 #ifdef KEY /* Bug 10572 */
@@ -214,6 +226,9 @@ enum	token_values {
 		Tok_Kwd_Static,		/* STATIC			      */
 		Tok_Kwd_Stop,		/* STOP				      */
 		Tok_Kwd_Subroutine,	/* SUBROUTINE ENDSUBROUTINE	      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Sync,	    /* SYNC                   */
+#endif
 		Tok_Kwd_Target,		/* TARGET			      */
                 Tok_Kwd_Task,           /* TASK                               */
 		Tok_Kwd_Then,		/* THEN				      */

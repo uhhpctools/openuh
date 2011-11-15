@@ -201,7 +201,12 @@ static BOOL check_bounds_this_access;
 /* forward references */
 
 static WN * cwh_addr_add_bound(WN * ar, WN * sz, WN *sub);
+#ifdef _UH_COARRAYS
+static WN * cwh_addr_array(OPCODE op, WN * ad,  TY_IDX  ty,
+                           INT32 kdsnum = -1) ;
+#else
 static WN * cwh_addr_array(OPCODE op, WN * ad,  TY_IDX  ty) ;
+#endif
 static WN * cwh_addr_triplet(WN *lb,WN *ub,WN *str) ;
 static WN * cwh_addr_zero_based(WN *sub, WN * lb);
 static WN * cwh_addr_do_bounds_check(WN *sb, WN *lb, WN *ex);

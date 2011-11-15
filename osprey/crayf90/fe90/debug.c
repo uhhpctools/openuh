@@ -4770,6 +4770,11 @@ static	void	print_expanded_ir(int	ir_idx)
       case Taskcommon_Cmic_Opr:
       case Wait_Cmic_Opr:
       case Send_Cmic_Opr:
+#ifdef _UH_COARRAYS
+      case Images_Opr:
+      case Imagestar_Opr:
+      case Memory_Opr:
+#endif
       case The_Last_Opr:
          fprintf(debug_file, "%s ", opr_str[IR_OPR(ir_idx)]);
          print_expanded_opnd(IR_OPND_L(ir_idx));
@@ -7275,8 +7280,15 @@ static void dump_ir_ntry(FILE 	*out_file,
       }
 
 #ifdef KEY /* Bug 6845 */
+
+#ifndef _UH_COARRAYS
       print_Dv_Whole_Def_Opr(out_file, IR_IDX_L(idx),
                             indent + 1, IR_LIST_CNT_L(idx), IR_DV_DIM(idx));
+#else /* defined(_UH_COARRAYS) */
+      print_Dv_Whole_Def_Opr(out_file, IR_IDX_L(idx),
+                            indent + 1, IR_LIST_CNT_L(idx), 
+                            IR_DV_DIM(idx)+IR_DV_CODIM(idx));
+#endif /* defined(_UH_COARRAYS) */
 #else /* KEY Bug 6845 */
       print_Dv_Whole_Def_Opr(out_file, IR_IDX_L(idx),
                             indent + 1, IR_LIST_CNT_L(idx));

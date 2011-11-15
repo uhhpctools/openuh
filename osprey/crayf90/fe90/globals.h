@@ -457,6 +457,9 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Iisign_Intrinsic,
 				Ilen_Intrinsic,
 				Imag_Intrinsic,
+#if _UH_COARRAYS
+				Image_Index_Intrinsic,
+#endif
 				Imod_Intrinsic,
 				Imvbits_Intrinsic,
 				Index_Intrinsic,
@@ -531,6 +534,9 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Knint_Intrinsic,
 				Knot_Intrinsic,
 				Lbound_Intrinsic,
+#ifdef _UH_COARRAYS
+				Lcobound_Intrinsic,
+#endif
 				Leadz_Intrinsic,
 				Len_Intrinsic,
 				Length_Intrinsic,
@@ -728,6 +734,9 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Transpose_Intrinsic,
 				Trim_Intrinsic,
 				Ubound_Intrinsic,
+#ifdef _UH_COARRAYS
+				Ucobound_Intrinsic,
+#endif
 				Unit_Intrinsic,
 				Unpack_Intrinsic,
 				Verify_Intrinsic,
@@ -1541,6 +1550,17 @@ enum    operator_values      {  Null_Opr,
 				Cselect_Opr,
 #endif /* KEY Bug 10410 */
 
+#ifdef _UH_COARRAYS
+                Sync_Opr,
+                Images_Opr,
+                Imagestar_Opr,
+                Memory_Opr,
+                Dv_Access_Is_Coarray,
+                Dv_Set_Is_Coarray,
+                Dv_Access_N_Codim,
+                Dv_Set_N_Codim,
+#endif
+
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
                                 /* DO NOT PUT ANY OPRS AFTER THIS ONE */
 				The_Last_Opr
@@ -1718,6 +1738,11 @@ enum stmt_type_values           {Null_Stmt,
 
 				 Open_MP_End_Parallel_Workshare_Stmt,
 				 Open_MP_End_Workshare_Stmt,
+
+#ifdef _UH_COARRAYS
+				 Sync_Stmt,
+#endif
+
 #ifdef KEY /* Bug 11741 */
 				 Import_Stmt,
 #endif /* KEY Bug 11741 */
@@ -3361,7 +3386,13 @@ union ext_dope_entry {
                         unsigned int    a_contig  :  1;
                         unsigned int    unused_1  : 27;
 
+#ifndef _UH_COARRAYS
                         unsigned int    unused_2  : 29;
+#else
+                        unsigned int    unused_2    : 25;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
                         unsigned int    num_dims  :  3;
 
 # ifdef _TYPE_CODE_64_BIT
@@ -3378,9 +3409,15 @@ union ext_dope_entry {
                                 int       low_bound;
                                 int       extent;
                                 int       stride_mult;
+#ifndef _UH_COARRAYS
                                 }       dim[7];
 
                         int	unused_fill[25];
+#else
+                                }       dim[14];
+
+                        int	unused_fill[46];
+#endif
 
            		} ptr32;
 		struct  {
@@ -3392,7 +3429,13 @@ union ext_dope_entry {
                         unsigned int    a_contig  :  1;
                         unsigned int    unused_1  : 27;
 
+#ifndef _UH_COARRAYS
                         unsigned int    unused_2  : 29;
+#else
+                        unsigned int    unused_2    : 25;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
                         unsigned int    num_dims  :  3;
 
 # ifdef _TYPE_CODE_64_BIT
@@ -3409,7 +3452,11 @@ union ext_dope_entry {
                                 long long       low_bound;
                                 long long       extent;
                                 long long       stride_mult;
+#ifndef _UH_COARRAYS
                                 }       dim[7];
+#else
+                                }       dim[14];
+#endif
            		} ptr64;
 		};
 
@@ -3424,10 +3471,15 @@ struct	ext_dope_entry	{
                 	unsigned int    assoc     :  1;
                 	unsigned int    ptr_alloc :  1;
                 	unsigned int    p_or_a    :  2;
-			unsigned int	a_contig  :  1;
-                        unsigned int    unused_1  : 27;
+                    unsigned int	a_contig  :  1;
+                    unsigned int    unused_1  : 27;
+#ifndef _UH_COARRAYS
                 	unsigned int    unused_2  : 29;
-
+#else
+                    unsigned int    unused_2    : 25;
+                    unsigned int    is_coarray  :  1;
+                    unsigned int    num_codims  :  3;
+#endif
                 	unsigned int    num_dims  :  3;
 
 # ifdef _TYPE_CODE_64_BIT
@@ -3440,8 +3492,14 @@ struct	ext_dope_entry	{
                         unsigned int    assoc     :  1;
                         unsigned int    ptr_alloc :  1;
                         unsigned int    p_or_a    :  2;
-			unsigned int	a_contig  :  1;
+                        unsigned int	a_contig  :  1;
+#ifndef _UH_COARRAYS
                         unsigned int    unused_1  : 24;
+#else
+                        unsigned int    unused_1    : 20;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
 
                         unsigned int    num_dims  :  3;
 
@@ -3455,12 +3513,17 @@ struct	ext_dope_entry	{
 				long_type	low_bound;
 				long_type	extent;
 				long_type	stride_mult;
+#ifndef _UH_COARRAYS
 				}	dim[7];
+#else
+				}	dim[14];
+#endif
            };
 
 typedef struct ext_dope_entry		ext_dope_type;
 
 # endif
+
 
 # if defined(_DOPE_VECTOR_32_OR_64)
 struct int_dope_entry {
@@ -3472,8 +3535,15 @@ struct int_dope_entry {
                         unsigned int    a_contig  :  1;
                         unsigned int    unused_1  : 27;
 
+#ifndef _UH_COARRAYS
                         unsigned int    unused_2  : 29;
+#else
+                        unsigned int    unused_2    : 25;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
                         unsigned int    num_dims  :  3;
+
 
 # ifdef _TYPE_CODE_64_BIT
                         f90_type_t      type_code;
@@ -3489,7 +3559,11 @@ struct int_dope_entry {
                                 int       low_bound;
                                 int       extent;
                                 int       stride_mult;
+#ifndef _UH_COARRAYS
                                 }       dim[7];
+#else
+                                }       dim[14];
+#endif
 
 			};
 
@@ -3504,7 +3578,13 @@ struct  int_dope_entry  {
                         unsigned int    p_or_a    :  2;
                         unsigned int    a_contig  :  1;
                         unsigned int    unused_1  : 27;
+#ifndef _UH_COARRAYS
                         unsigned int    unused_2  : 29;
+#else
+                        unsigned int    unused_2    : 25;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
 
                         unsigned int    num_dims  :  3;
 
@@ -3519,7 +3599,13 @@ struct  int_dope_entry  {
                         unsigned int    ptr_alloc :  1;
                         unsigned int    p_or_a    :  2;
                         unsigned int    a_contig  :  1;
+#ifndef _UH_COARRAYS
                         unsigned int    unused_1  : 24;
+#else
+                        unsigned int    unused_1    : 20;
+                        unsigned int    is_coarray  :  1;
+                        unsigned int    num_codims  :  3;
+#endif
 
                         unsigned int    num_dims  :  3;
 
@@ -3533,11 +3619,16 @@ struct  int_dope_entry  {
                                 long_type       low_bound;
                                 long_type       extent;
                                 long_type       stride_mult;
+#ifndef _UH_COARRAYS
                                 }       dim[7];
+#else
+                                }       dim[14];
+#endif
            };
 # endif
 
 typedef struct int_dope_entry           int_dope_type;
+
 
 /*  linear_type_type is enum type, in ia64 system, this type is 32 bit length.
 # ifdef _HOST64  

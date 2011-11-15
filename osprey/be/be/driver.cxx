@@ -166,6 +166,10 @@
 // added by Liao, for possible IR manipulation at driver level
 #include "symtab.h"
 
+#ifdef _UH_COARRAYS
+#include "coarray_lower.h"              /* for CAF lowering interface */
+#endif
+
 // 
 extern ERROR_DESC EDESC_BE[], EDESC_CG[];
 
@@ -1843,6 +1847,20 @@ Preprocess_PU (PU_Info *current_pu)
 
       FmtAssert(stmt!=NULL, ("Insert_Init_Buf failed\n")); 
     }
+  }
+#endif
+
+#if defined (_UH_COARRAYS)
+  if ( Enable_Coarray ) {
+      Set_Error_Phase( "Coarray Processing" );
+      WN_Lower_Checkdump("Before Coarray Prelowering", pu, 0);
+
+      pu = Coarray_Prelower( current_pu, pu);
+      WN_Lower_Checkdump("After Coarray Prelowering", pu, 0);
+
+      if ( Cur_PU_Feedback ) {
+        Cur_PU_Feedback->Verify("After Coarray Prelowering");
+      }
   }
 #endif
 

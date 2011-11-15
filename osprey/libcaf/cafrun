@@ -1,0 +1,109 @@
+#!/usr/bin/perl
+
+=COMMENT
+Wrapper for executing CAF programs.
+=cut
+use Switch;
+
+my $filename='';
+my $cmd='mpirun';
+my @params;
+my @final_cmd;
+my $show=0;
+my $env_settings='';
+my $use_smp="no";
+my $shared_memory_size = 0;
+my $shared_memory_size_gb;
+
+my $usage="Usage: cafrun [options] exe
+Options:
+-np <n>                       - Number of images to launch (not for smp)
+--use-smp                     - MUST be used for gasnet smp conduit only
+--num-pshm-nodes=<n>          - MUST be used only for gasnet smp conduit
+--log-levels=all/DEBUG:MEMORY:etc
+     -Available log levels:
+     FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:CACHE:BARRIER:REDUCE:SYMBOLS
+--trace-file=filename         -Default stderr
+--shared-memory-size=<n>      -Max size of coarrays per image in bytes. (default 30MB)
+--show-mpirun-options
+--help or -h
+All mpirun options also applicable.\n";
+
+die "cafrun: no exe file\n$usage" if ($#ARGV==-1);
+
+foreach (@ARGV){
+	if(/^--(.*?)=(.*$)/){ # arg starts with --, and has =
+		switch (uc $1){
+			case "LOG-LEVELS"
+            {
+                $ENV{'UHCAF_LOG_LEVELS'}=$2;
+                $env_settings .= "UHCAF_LOG_LEVELS=$2 ";
+			}
+            case "TRACE-FILE"
+            {
+                $ENV{'UHCAF_TRACE_FILE'}=$2;
+                $env_settings .= "UHCAF_TRACE_FILE=$2 ";
+            }
+            case "SHARED-MEMORY-SIZE"
+            {
+                $ENV{'UHCAF_SHARED_MEMORY_SIZE'}=$2;
+                $env_settings .= "UHCAF_SHARED_MEMORY_SIZE=$2 ";
+            }
+            case "NUM-PSHM-NODES"
+            {
+                $ENV{'GASNET_PSHM_NODES'}=$2;
+                $env_settings .= "GASNET_PSHM_NODES=$2 ";
+            }
+			else{ #add the flag anyway
+                push(@params,$_);
+			}
+		}
+	}
+    elsif(/use-smp/)
+    {
+        $use_smp = "yes";
+    }
+	elsif(/-help/ or $_ eq '-h'){
+		print "cafrun is a wrapper for running coarray fortran\n",$usage;
+        exit 0;
+	}
+    elsif(/-show-mpirun-options/){
+        push(@params,'--help');
+        @final_cmd = ($cmd, @params);
+        system(@final_cmd);
+        die "command failed: $!\n" if ($? == -1);
+        exit $?>>8;
+    }
+    elsif(/-show/){
+        $show=1;
+    }
+	else{
+        push(@params,$_);
+	}
+}
+
+$ENV{'GASNET_VIS_AMPIPE'}=1; #enable packing of non-contiguous put/get
+
+$shared_memory_size = $ENV{'UHCAF_SHARED_MEMORY_SIZE'};
+if ($shared_memory_size > 2000000000){
+    $shared_memory_size_gb = int($shared_memory_size/1000000000);
+    $shared_memory_size_gb .= 'G';
+    $ENV{'GASNET_MAX_SEGSIZE'} = $shared_memory_size_gb;
+}
+
+if ($use_smp eq "yes"){
+    @final_cmd=@params; #not using mpirun
+}
+else
+{
+    die "Environment Variable MPI_LIB is not set\n" unless($ENV{'MPI_LIB'});
+    $ENV{'LD_LIBRARY_PATH'}=$ENV{'MPI_LIB'}.":".$ENV{'LD_LIBRARY_PATH'};
+    $env_settings .= "LD_LIBRARY_PATH=$ENV{'LD_LIBRARY_PATH'} ";
+    @final_cmd = ($cmd, @params);
+}
+if ($show) {
+  print "$env_settings @final_cmd\n";
+}
+system(@final_cmd);
+die "command failed: $!\n" if ($? == -1);
+exit $?>>8;

@@ -143,6 +143,9 @@ static	kwd_type		kwd[] = {
 				"AUTOMATIC",	     Tok_Kwd_Automatic,
 				"ALLOCATE",	     Tok_Kwd_Allocate,
 				"ASSIGN",	     Tok_Kwd_Assign,
+#ifdef _UH_COARRAYS
+                "ALL",           Tok_Kwd_All,
+#endif
 
 				"BACKSPACE",	     Tok_Kwd_Backspace,
 				"BUFFER",	     Tok_Kwd_Buffer,
@@ -153,6 +156,9 @@ static	kwd_type		kwd[] = {
 				"BYTE",		     Tok_Kwd_Byte,
 
 				"CHARACTER",	     Tok_Kwd_Character,
+#ifdef _UH_COARRAYS
+				"CODIMENSION",	     Tok_Kwd_Codimension,
+#endif
 				"CONTAINS",	     Tok_Kwd_Contains,
 				"CONTINUE",	     Tok_Kwd_Continue,
 				"COMPLEX",	     Tok_Kwd_Complex,
@@ -197,6 +203,9 @@ static	kwd_type		kwd[] = {
 				"IMPLICIT",	     Tok_Kwd_Implicit,
 				"INQUIRE",	     Tok_Kwd_Inquire,
 				"INTEGER",	     Tok_Kwd_Integer,
+#ifdef _UH_COARRAYS
+				"IMAGES",	     Tok_Kwd_Images,
+#endif
 #ifdef KEY /* Bug 11741 */
 				"IMPORT",	     Tok_Kwd_Import,
 #endif /* KEY Bug 11741 */
@@ -209,6 +218,9 @@ static	kwd_type		kwd[] = {
 				"LOGICAL",	     Tok_Kwd_Logical,
 				"LEN",		     Tok_Kwd_Len,
 
+#ifdef _UH_COARRAYS
+				"MEMORY",	     Tok_Kwd_Memory,
+#endif
 				"MODULE",	     Tok_Kwd_Module,
 
 #ifdef KEY /* Bug 5089 */
@@ -247,6 +259,9 @@ static	kwd_type		kwd[] = {
 
 				"SUBROUTINE",	     Tok_Kwd_Subroutine,
 				"SEQUENCE",	     Tok_Kwd_Sequence,
+#ifdef _UH_COARRAYS
+				"SYNC",		     Tok_Kwd_Sync,
+#endif
 				"SELECT",	     Tok_Kwd_Select,
 				"STATIC",	     Tok_Kwd_Static,
 				"SAVE",		     Tok_Kwd_Save,

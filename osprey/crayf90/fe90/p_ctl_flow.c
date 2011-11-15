@@ -4875,6 +4875,115 @@ void parse_stop_pause_stmt (void)
 
 }  /* parse_stop_pause_stmt */
 
+#ifdef _UH_COARRAYS
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	Parsers synchronization statements (Fortran 2008)			      *|
+|*									      *|
+|* Input parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NONE								      *|
+|*									      *|
+\******************************************************************************/
+void parse_sync_stmt (void)
+{
+    boolean parsed_ok = TRUE;
+   int			col;
+   int			ir_idx;
+   int			line;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+
+
+   TRACE (Func_Entry, "parse_sync_stmt", NULL);
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+   IR_OPR(ir_idx) = Sync_Opr;
+   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+
+   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+       if (TOKEN_VALUE(token) == Tok_Kwd_All) {
+           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+           NTR_IR_TBL(IR_IDX_L(ir_idx));
+           IR_OPR(IR_IDX_L(ir_idx)) =  All_Opr;
+           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Images){
+
+# ifdef _DEBUG
+           if (LA_CH_VALUE != LPAREN) {
+              /* shouldn't be here */
+              PRINTMSG(TOKEN_LINE(token), 295, Internal, TOKEN_COLUMN(token),
+                       "parse_actual_arg_spec", "LPAREN");
+           } 
+# endif
+               NEXT_LA_CH;
+
+               OPND_FLD(opnd) = IR_Tbl_Idx;
+               OPND_IDX(opnd) = NULL_IDX;
+
+               if (LA_CH_VALUE != STAR) {
+                   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+                   NTR_IR_TBL(IR_IDX_L(ir_idx));
+                   IR_OPR(IR_IDX_L(ir_idx)) =  Images_Opr;
+                   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+                   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+                   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+                   parsed_ok = parse_expr(&opnd);
+               }
+               else {
+                   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+                   NTR_IR_TBL(IR_IDX_L(ir_idx));
+                   IR_OPR(IR_IDX_L(ir_idx)) =  Imagestar_Opr;
+                   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+                   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+                   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+                   NEXT_LA_CH;
+               } 
+               if (LA_CH_VALUE != RPAREN) {
+                   /* error */
+               }
+           NEXT_LA_CH;
+
+           COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+
+
+       }else if (TOKEN_VALUE(token) == Tok_Kwd_Memory){
+           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+           NTR_IR_TBL(IR_IDX_L(ir_idx));
+           IR_OPR(IR_IDX_L(ir_idx)) =  Memory_Opr;
+           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+       }
+        else          
+       { 
+           /* should have seen ALL, IMAGES, or MEMORY identifier */
+           PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
+                   TOKEN_STR(token));
+       }
+   } else {
+       /* should have seen ALL, IMAGES, or MEMORY identifier */
+       PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
+               TOKEN_STR(token));
+   }
+
+   NEXT_LA_CH;
+
+   return;
+} /* parse_sync_stmt */
+
+#endif /* defined(_UH_COARRAYS) */
+
 
 /******************************************************************************\
 |*									      *|

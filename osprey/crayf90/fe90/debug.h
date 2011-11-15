@@ -539,6 +539,9 @@ char		*intrin_str[]		= {
 				"Iisign_Intrinsic",
 				"Ilen_Intrinsic",
 				"Imag_Intrinsic",
+#ifdef _UH_COARRAYS
+				"Image_Index_Intrinsic",
+#endif
 				"Imod_Intrinsic",
 				"Imvbits_Intrinsic",
 				"Index_Intrinsic",
@@ -617,6 +620,9 @@ char		*intrin_str[]		= {
 				"Knint_Intrinsic",
 				"Knot_Intrinsic",
 				"Lbound_Intrinsic",
+#ifdef _UH_COARRAYS
+				"Lcobound_Intrinsic",
+#endif
 				"Leadz_Intrinsic",
 				"Len_Intrinsic",
 				"Length_Intrinsic",
@@ -817,6 +823,9 @@ char		*intrin_str[]		= {
 				"Transpose_Intrinsic",
 				"Trim_Intrinsic",
 				"Ubound_Intrinsic",
+#ifdef _UH_COARRAYS
+				"Ucobound_Intrinsic",
+#endif
 				"Unit_Intrinsic",
 				"Unpack_Intrinsic",
 				"Verify_Intrinsic",
@@ -1403,6 +1412,16 @@ char		*operator_str[]		= {
 #ifdef KEY /* Bug 10410 */
 		 	"Cselect_Opr",
 #endif /* KEY Bug 10410 */
+#ifdef _UH_COARRAYS
+            "Sync_Opr",
+            "Images_Opr",
+            "Imagestar_Opr",
+            "Memory_Opr",
+            "Dv_Access_Is_Coarray",
+            "Dv_Set_Is_Coarray",
+            "Dv_Access_N_Codim",
+            "Dv_Set_N_Codim",
+#endif
                         "The_Last_Opr"
 		};
 
@@ -1464,6 +1483,9 @@ char		*src_form_str[]		= {
 char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Label",		/* Tok_Label		*/
 			"Tok_Id",		/* Tok_Id		*/
+#ifdef _UH_COARRAYS
+			"Tok_Kwd_All",	/* Tok_Kwd_All   */
+#endif
 			"Tok_Kwd_Allocatable",	/* Tok_Kwd_Allocatable	*/
 			"Tok_Kwd_Allocate",	/* Tok_Kwd_Allocate	*/
 			"Tok_Kwd_Assign",	/* Tok_Kwd_Assign	*/
@@ -1480,6 +1502,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Case",		/* Tok_Kwd_Case		*/
 			"Tok_Kwd_Character",	/* Tok_Kwd_Character	*/
 			"Tok_Kwd_Close",	/* Tok_Kwd_Close	*/
+#ifdef _UH_COARRAYS
+			"Tok_Kwd_Codimension",	/* Tok_Kwd_Codimension	*/
+#endif
 			"Tok_Kwd_Common",	/* Tok_Kwd_Common	*/
 			"Tok_Kwd_Complex",	/* Tok_Kwd_Complex	*/
 			"Tok_Kwd_Contains",	/* Tok_Kwd_Contains	*/
@@ -1511,6 +1536,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Function",	/* Tok_Kwd_Function	*/
 			"Tok_Kwd_Go",		/* Tok_Kwd_Go		*/
 			"Tok_Kwd_If",		/* Tok_Kwd_If		*/
+#ifdef _UH_COARRAYS
+			"Tok_Kwd_Images",	/* Tok_Kwd_Images	*/
+#endif
 			"Tok_Kwd_Implicit",	/* Tok_Kwd_Implicit	*/
 #ifdef KEY /* Bug 11741 */
 			"Tok_Kwd_Import",	/* Tok_Kwd_Import	*/
@@ -1524,6 +1552,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Kind",		/* Tok_Kwd_Kind		*/
 			"Tok_Kwd_Len",		/* Tok_Kwd_Len		*/
 			"Tok_Kwd_Logical",	/* Tok_Kwd_Logical	*/
+#ifdef _UH_COARRAYS
+			"Tok_Kwd_Memory",	/* Tok_Kwd_Memory	*/
+#endif
 			"Tok_Kwd_Module",	/* Tok_Kwd_Module	*/
 #ifdef KEY /* Bug 10572 */
 			"Tok_Kwd_Name",		/* Tok_Kwd_Name    	*/
@@ -1563,6 +1594,9 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Static",	/* Tok_Kwd_Static	*/
 			"Tok_Kwd_Stop",		/* Tok_Kwd_Stop		*/
 			"Tok_Kwd_Subroutine",	/* Tok_Kwd_Subroutine	*/
+#ifdef _UH_COARRAYS
+			"Tok_Kwd_Sync",	    /* Tok_Kwd_Sync */
+#endif
 			"Tok_Kwd_Target",	/* Tok_Kwd_Target	*/
 			"Tok_Kwd_Task",		/* Tok_Kwd_Then		*/
 			"Tok_Kwd_Then",		/* Tok_Kwd_Then		*/
@@ -2319,9 +2353,17 @@ static char	*dv_whole_def_str[] = {
 			"PTR_ALLOC",
 			"P_OR_A",
 			"A_CONTIG",
+#ifdef _UH_COARRAYS
+            "IS_COARRAY",
+            "N_CODIM",
+#endif
 			"N_DIM",
 
+#ifdef _UH_COARRAYS
+# define DEBUG_STR_TYPE_CODE	9
+#else
 # define DEBUG_STR_TYPE_CODE	7
+#endif
 
 			"TYPE_CODE",
 			"ORIG_BASE",

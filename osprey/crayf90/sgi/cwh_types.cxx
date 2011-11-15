@@ -129,6 +129,32 @@ static char *rcs_id = "$Source: crayf90/sgi/SCCS/s.cwh_types.cxx $ $Revision: 1.
  ====================================================
 */
 
+#ifdef _UH_COARRAYS
+TYPE
+fei_coarray_descriptor (INT32        flag_matrix,
+		INT32        table_type,
+		INTPTR       size,
+		INT32        basic_type,
+		INT32        aux_info,
+		INT32        alignment,
+        INT32        num_codims)
+{
+  TYPE t;
+  Is_True(num_codims > 0, ("Bad coarray info"));
+  num_decl_cobounds = num_codims;
+
+  t = fei_descriptor(flag_matrix, table_type, size, basic_type, 
+                     aux_info, alignment);
+
+  /* set is_coarray flag on type. -deepak */
+  Set_TY_is_coarray((TY_IDX)t_TY(t));
+
+  num_decl_cobounds = 0; /* reset back to 0 */
+
+  return t;
+}
+#endif
+
 TYPE
 fei_descriptor (INT32        flag_matrix,
 		INT32        table_type,
@@ -606,6 +632,9 @@ fei_dope_vector(INT32  num_dims,TYPE base_type, INT32 flag,
 #ifdef KEY /* Bug 6845 */
   INT32 n_allocatable_cpnt
 #endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+  ,INT32 num_codims 
+#endif
 )
 {                                     
   TY_IDX ty_idx   ;
@@ -615,11 +644,26 @@ fei_dope_vector(INT32  num_dims,TYPE base_type, INT32 flag,
   
   ts_idx = cast_to_TY(t_TY(base_type));
   b  = test_flag(flag,FEI_DOPE_VECTOR_HOSTED_TYPE) || in_hosted_dtype;
+#ifndef _UH_COARRAYS
   ty_idx = cwh_types_dope_TY(num_dims,ts_idx,b,test_flag(flag,FEI_DOPE_VECTOR_POINTER),
 #ifdef KEY /* Bug 6845 */
     n_allocatable_cpnt
 #endif /* KEY Bug 6845 */
   ) ;
+#else /* defined(_UH_COARRAYS) */
+
+  ty_idx = cwh_types_dope_TY(num_dims+num_codims,ts_idx,b,test_flag(flag,FEI_DOPE_VECTOR_POINTER),
+#ifdef KEY /* Bug 6845 */
+    n_allocatable_cpnt,
+#endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+    num_codims
+#endif
+  ) ;
+
+  Set_TY_dope_rank(ty_idx,num_dims);
+
+#endif /* defined(_UH_COARRAYS) */
 
   t.table_type = Basic ;
   t.basic_type = S_tructure ;
@@ -1006,6 +1050,36 @@ cwh_types_mk_array_TY(ARB_HANDLE bounds,INT16 n,TY_IDX base_idx, INT64 size)
      Set_ARB_dimension(bounds[i],n-i);
      const_str = const_str && ARB_const_stride(bounds[i]);
   }
+
+#ifdef _UH_COARRAYS
+  /* identify codimensions in type here.  */
+  if (num_decl_cobounds != 0) {
+     for (i = 0; i < num_decl_cobounds ; i++) {
+        Clear_ARB_first_dimen(bounds[i]);
+        Clear_ARB_last_dimen(bounds[i]);
+        Set_ARB_dimension(bounds[i],n-i);
+        Set_ARB_codimension(bounds[i],num_decl_cobounds);
+        const_str = const_str && ARB_const_stride(bounds[i]);
+     }
+     for (i = num_decl_cobounds; i < n ; i++) {
+        Clear_ARB_first_dimen(bounds[i]);
+        Clear_ARB_last_dimen(bounds[i]);
+        Set_ARB_dimension(bounds[i],n-i);
+        Set_ARB_codimension(bounds[i],num_decl_cobounds);
+        const_str = const_str && ARB_const_stride(bounds[i]);
+     }
+   } else
+   {   for (i = 0; i < n ; i++) {
+          Clear_ARB_first_dimen(bounds[i]);
+          Clear_ARB_last_dimen(bounds[i]);
+          Set_ARB_dimension(bounds[i],n-i);
+          Set_ARB_codimension(bounds[i],0);
+          const_str = const_str && ARB_const_stride(bounds[i]);
+        }
+   }
+#endif
+
+
   Set_ARB_first_dimen(bounds[0]);
   Set_ARB_last_dimen(bounds[n-1]);
 
@@ -1019,6 +1093,9 @@ cwh_types_mk_array_TY(ARB_HANDLE bounds,INT16 n,TY_IDX base_idx, INT64 size)
 
   }
 
+#ifdef _UH_COARRAYS
+  if (num_decl_cobounds == 0)
+#endif
   ty_idx = cwh_types_unique_TY(ty_idx);
 
   return (ty_idx);
@@ -1527,7 +1604,11 @@ cwh_types_mk_struct(INT64 size, INT32 align, FLD_HANDLE list, const char *name)
  ====================================================
 */
 extern TY_IDX
-cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const char * name, BOOL alloc_arbs)
+cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const char * name, BOOL alloc_arbs
+#ifdef _UH_COARRAYS 
+     ,INT16 corank /* = 0*/
+#endif
+     )
 {
   TY_IDX  ty_idx ;
   INT16 i ;
@@ -1544,7 +1625,11 @@ cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const 
   Set_TY_etype(ty, ety_idx);
 
   if (alloc_arbs) {
+#ifndef _UH_COARRAYS
      for (i = 0 ; i < rank ; i++) {
+#else
+     for (i = 0 ; i < rank+corank ; i++) {
+#endif
 	
 	ARB_HANDLE arb = New_ARB();
 	ARB_Init (arb, 1, 1, 1);
@@ -1554,10 +1639,17 @@ cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const 
 	   Set_TY_arb (ty, arb);
 	}
 	
+#ifndef _UH_COARRAYS
 	Set_ARB_dimension (arb, rank - i );
-	
 	if (i == rank - 1)
 	   Set_ARB_last_dimen (arb);
+#else
+	Set_ARB_dimension (arb, rank+corank - i );
+    Set_ARB_codimension (arb,corank );
+	if (i == rank+corank - 1)
+	   Set_ARB_last_dimen (arb);
+#endif
+	
 	
 	Set_ARB_const_lbnd (arb);
 	Set_ARB_lbnd_val (arb, 0);
@@ -1571,6 +1663,9 @@ cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const 
      }
   }
 
+#ifdef _UH_COARRAYS
+  if (corank > 0) Set_TY_is_coarray(ty_idx);
+#endif
   return (ty_idx);
 }
 
@@ -1665,6 +1760,9 @@ cwh_types_dim_TY(INT32 num_dims)
  * isn't yet. We use the name '.dope.' to recognize
  * a dope vector. See cwh_types_is_dope.
  *
+ * NOTE: num_dims is total number of dimensions in the
+ *       dope vector (rank+corank). num_codims is 
+ *       specifically the codimensions. 
  ====================================================
 */
 extern TY_IDX
@@ -1672,6 +1770,9 @@ cwh_types_dope_TY(INT32 num_dims,TY_IDX base_idx, BOOL host, BOOL ptr,
 #ifdef KEY /* Bug 6845 */
   INT32 n_allocatable_cpnt
 #endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+  ,INT32 num_codims /* = 0 */
+#endif
   )
 {
   TY_IDX ty_idx   ;
@@ -1722,12 +1823,23 @@ cwh_types_dope_TY(INT32 num_dims,TY_IDX base_idx, BOOL host, BOOL ptr,
   
   Set_FLD_last_field(fld);
   
+#ifndef _UH_COARRAYS
   ta_idx = cwh_types_array_util(num_dims,base_idx,Pointer_Size,0,".base.",TRUE);
-  
-  if (ta_idx != 0) 
+  if (ta_idx != 0)
     ta_idx = cwh_types_unique_TY(ta_idx);
   else
     ta_idx = base_idx ;
+#else
+  /* TODO: what if num_dims-num_codims = 0? */
+  ta_idx = cwh_types_array_util(num_dims-num_codims,base_idx,Pointer_Size,0,".base.",TRUE,num_codims);
+    if (ta_idx != 0)  {
+      if (!TY_is_coarray(ta_idx))
+        ta_idx = cwh_types_unique_TY(ta_idx);
+    } else {
+      ta_idx = base_idx ;
+    }
+#endif
+  
 
   /* If a pointer within a derived type, then the dope  */
   /* is created before the TY FLDs are complete. Ensure */
@@ -1855,7 +1967,12 @@ cwh_types_shared_dope(FLD_HANDLE fld, int ndims, BOOL is_ptr,
     else
       p = &intrn_dope[ndims][bt];
     
-    if (*p == 0) {
+    if ((*p == 0)
+#ifdef _UH_COARRAYS
+    /* don't reuse old dope if its a coarray */
+        || TY_is_coarray(tp_idx)
+#endif
+       ) {
 
       sz = DOPE_sz + ndims * DIM_SZ ;
       al = Pointer_Size;
@@ -1942,6 +2059,10 @@ extern INT32
 cwh_types_dope_rank(TY_IDX ty_idx)
 {
   INT32 nd ;
+
+#ifdef _UH_COARRAYS
+  return TY_dope_rank(ty_idx);
+#endif
 
   nd = 0 ;
 

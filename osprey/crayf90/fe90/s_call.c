@@ -4038,6 +4038,17 @@ boolean final_arg_work(opnd_type	*list_opnd,
          }
       }
 
+#ifdef _UH_COARRAYS
+      /*
+       * This is a hack to keep the first argument for sync_images a dope
+       * vector in case the actual arg does not have explicit shape 
+       */
+     
+      if (strcmp(AT_OBJ_NAME_PTR(spec_idx),"sync_images_")==0)
+          d_type = Intrin_Dope_Dummy;
+          
+#endif
+
       association = arg_assoc_tbl[a_type][d_type];
 
       if (association == PASS_ADDRESS_FROM_DV           &&
@@ -5016,6 +5027,9 @@ boolean final_arg_work(opnd_type	*list_opnd,
                /* Positions 1-7 are deferred shape entries in bd table. */
 
                   ATD_ARRAY_IDX(tmp_idx) = arg_info_list[info_idx].ed.rank;
+#ifdef _UH_COARRAYS
+                  ATD_PE_ARRAY_IDX(tmp_idx) = BD_RANK(ATD_PE_ARRAY_IDX(dummy));
+#endif
                }
                ATD_IM_A_DOPE(tmp_idx)    = TRUE;
 
@@ -5104,6 +5118,11 @@ boolean final_arg_work(opnd_type	*list_opnd,
                /* Positions 1-7 are deferred shape entries in bd table. */
 
                   ATD_ARRAY_IDX(tmp_idx) = arg_info_list[info_idx].ed.rank;
+#ifdef _UH_COARRAYS
+                  ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
+                                          BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
+                                          BD_RANK(ATD_PE_ARRAY_IDX(dummy));
+#endif
                }
                ATD_IM_A_DOPE(tmp_idx)    = TRUE;
 
@@ -5236,6 +5255,11 @@ boolean final_arg_work(opnd_type	*list_opnd,
             /* Positions 1-7 are deferred shape entries in the bd table. */
 
                ATD_ARRAY_IDX(tmp_dv_idx) = arg_info_list[info_idx].ed.rank;
+#ifdef _UH_COARRAYS
+              ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
+                                      BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
+                                      BD_RANK(ATD_PE_ARRAY_IDX(dummy));
+#endif
             }
             ATD_IM_A_DOPE(tmp_dv_idx)    = TRUE;
 

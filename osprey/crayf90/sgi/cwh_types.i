@@ -175,6 +175,10 @@ static INT32  top_of_decl_bounds = ANULL ;
 static TY_IDX ty_dim1 ;
 static INT64  last_bitsize; 
 
+#ifdef _UH_COARRAYS
+    static INT32 num_decl_cobounds = 0; /* track # codims */
+#endif
+
 /* structure used to hold distribution info for DISTRIBUTED arrays */
 /*   decl_distribution	- the distribution kind (BLOCK, STAR, etc...)
      decl_cyclic_val	- args for CYCLIC
@@ -222,12 +226,24 @@ static const char * dope_name [DOPE_NM] = {
 #ifdef KEY /* Bug 6845 */
         "alloccpnt",
 #endif /* KEY Bug 6845 */
+#ifndef _UH_COARRAYS
         "unused_1",
         "num_dims",
         "type_code",
         "orig_base",
         "orig_size",
+#else
+        "unused_1",
+        "is_coarray",
+        "num_codims",
+        "num_dims",
+        "type_code",
+        "orig_base",
+        "orig_size",
+#endif
 };
+
+#ifndef _UH_COARRAYS
 
 static const int dope_bofst[DOPE_NM] = { 
 #ifdef KEY /* Bug 6845 */
@@ -287,6 +303,67 @@ ADDR_OFFSET,4,8,8,8,8,8,8,12,16,24,28
 ADDR_OFFSET,4,8,8,8,8,8,12,16,24,28
 #endif /* KEY Bug 6845 */
 };
+
+#else /* defined(_UH_COARRAYS) */
+/**************************** _UH_COARRAYS *************************/
+static const int dope_bofst[DOPE_NM] = { 
+#ifdef KEY /* Bug 6845 */
+ 0,0,0,1,2,4,5,6,25,26,29,0,0,0
+#else /* KEY Bug 6845 */
+ 0,0,0,1,2,4,5,25,26,29,0,0,0
+#endif /* KEY Bug 6845 */
+};
+
+static const int dope_bsize[DOPE_NM] = { 
+#ifdef KEY /* Bug 6845 */
+ 0,0,1,1,2,1,1,51,1,3,3,64,0,0
+#else /* KEY Bug 6845 */
+ 0,0,1,1,2,1,52,1,3,3,64,0,0
+#endif /* KEY Bug 6845 */
+};
+
+static TYPE_ID *dope_btype;
+static INT *dope_offset;
+
+static TYPE_ID dope_btype_64[DOPE_NM] = {
+MTYPE_U8,MTYPE_I8,MTYPE_U4,
+MTYPE_U4,MTYPE_U4,MTYPE_U4,
+#ifdef KEY /* Bug 6845 */
+MTYPE_U4,
+#endif /* KEY Bug 6845 */
+MTYPE_U8,MTYPE_U4,MTYPE_U4,MTYPE_U4,
+MTYPE_U8,MTYPE_U8,
+MTYPE_I8
+};
+
+static int dope_offset_64 [DOPE_NM] = { 
+#ifdef KEY /* Bug 6845 */
+ADDR_OFFSET,8,16,16,16,16,16,16,20,20,20,24,32,40
+#else /* KEY Bug 6845 */
+ADDR_OFFSET,8,16,16,16,16,16,20,20,20,24,32,40
+#endif /* KEY Bug 6845 */
+};
+
+static TYPE_ID dope_btype_32[DOPE_NM] = {
+MTYPE_U4,MTYPE_I4,MTYPE_U4,
+MTYPE_U4,MTYPE_U4,MTYPE_U4,
+#ifdef KEY /* Bug 6845 */
+MTYPE_U4,
+#endif /* KEY Bug 6845 */
+MTYPE_U8,MTYPE_U4,MTYPE_U4,MTYPE_U4,
+MTYPE_U8,MTYPE_U4,
+MTYPE_I4
+};
+
+static int dope_offset_32 [DOPE_NM] = { 
+#ifdef KEY /* Bug 6845 */
+ADDR_OFFSET,4,8,8,8,8,8,8,12,12,12,16,24,28
+#else /* KEY Bug 6845 */
+ADDR_OFFSET,4,8,8,8,8,8,12,12,12,16,24,28
+#endif /* KEY Bug 6845 */
+};
+/**************************** _UH_COARRAYS *************************/
+#endif /* defined(_UH_COARRAYS) */
 
 static const char * bound_name [BOUND_NM] = { 
  "lb",

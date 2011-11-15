@@ -2430,6 +2430,71 @@ void gen_common_dv_init(opnd_type            *dv_opnd,
    }
    }
 
+#ifdef _UH_COARRAYS
+   /**************\
+   |* IS_COARRAY *|
+   \**************/
+   NTR_IR_TBL(ir_idx);
+   IR_OPR(ir_idx) = Dv_Set_Is_Coarray;
+   IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+   IR_LINE_NUM(ir_idx) = line;
+   IR_COL_NUM(ir_idx) = col;
+
+   COPY_OPND(IR_OPND_L(ir_idx), (*dv_opnd));
+
+   IR_FLD_R(ir_idx) = CN_Tbl_Idx;
+
+   if (ATD_PE_ARRAY_IDX(dv_attr_idx)) {
+      IR_IDX_R(ir_idx) = CN_INTEGER_ONE_IDX;
+   }
+   else {
+      IR_IDX_R(ir_idx) = CN_INTEGER_ZERO_IDX;
+   }
+   IR_LINE_NUM_R(ir_idx) = line;
+   IR_COL_NUM_R(ir_idx)  = col;
+
+   gen_sh(position, Assignment_Stmt, line, col, FALSE, FALSE, TRUE);
+
+   if (position == After) {
+      SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+      SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+   }
+   else {
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = ir_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+   }
+
+   /*************\
+   |* N_CODIM   *|
+   \*************/
+
+   NTR_IR_TBL(ir_idx);
+   IR_OPR(ir_idx) =Dv_Set_N_Codim ;
+   IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+   IR_LINE_NUM(ir_idx) = line;
+   IR_COL_NUM(ir_idx) = col;
+
+   COPY_OPND(IR_OPND_L(ir_idx), (*dv_opnd));
+
+   IR_FLD_R(ir_idx) = CN_Tbl_Idx;
+   IR_IDX_R(ir_idx) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
+                                  (ATD_PE_ARRAY_IDX(dv_attr_idx) ? 
+                                   BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx)) : 0));
+   IR_LINE_NUM_R(ir_idx) = line;
+   IR_COL_NUM_R(ir_idx)  = col;
+
+   gen_sh(position, Assignment_Stmt, line, col, FALSE, FALSE, TRUE);
+
+   if (position == After) {
+      SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+      SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+   }
+   else {
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = ir_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+   }
+
+#endif
 
    /*************\
    |* N_DIM     *|
@@ -2541,6 +2606,9 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
    int			num_words;
    long_type         	rank;  /* BRIANJ */
    int                  type_idx;
+#ifdef _UH_COARRAYS
+   long_type    corank;
+#endif
 
 
    TRACE (Func_Entry, "gen_static_dv_whole_def", NULL);
@@ -2548,6 +2616,11 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
    find_opnd_line_and_column(dv_opnd, &line, &col);
 
    rank	= (ATD_ARRAY_IDX(attr_idx) ? (long)BD_RANK(ATD_ARRAY_IDX(attr_idx)) :0);
+
+#ifdef _UH_COARRAYS
+   corank = ATD_PE_ARRAY_IDX(attr_idx) ? 
+                (long) BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) : 0;
+#endif
 
    num_words	= DV_HD_WORD_SIZE + (rank * DV_DIM_WORD_SIZE);
 
@@ -2700,6 +2773,21 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
       DV_SET_P_OR_A(*dv_ptr, 1);
    }
 
+#ifdef _UH_COARRAYS
+   /***************\
+   |* IS_COARRAY  *|
+   \***************/
+
+   if (ATD_PE_ARRAY_IDX(attr_idx)) {
+       DV_SET_IS_COARRAY(*dv_ptr, 1);
+   }
+
+   /*************\
+   |* N_CODIM   *|
+   \*************/
+   DV_SET_NUM_CODIMS(*dv_ptr, corank);
+#endif
+
    /*************\
    |* N_DIM     *|
    \*************/
@@ -2720,7 +2808,11 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
    if (cmd_line_flags.runtime_bounds &&
        ATD_ARRAY_IDX(attr_idx) != NULL_IDX) {
 
+#ifndef _UH_COARRAYS
       for (i = 0; i < BD_RANK(ATD_ARRAY_IDX(attr_idx)); i++) {
+#else
+      for (i = 0; i < BD_RANK(ATD_ARRAY_IDX(attr_idx))+corank; i++) {
+#endif
 
          /************************************\
          |* set LOW_BOUND for each dimension *|
@@ -3790,6 +3882,10 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 #endif /* KEY Bug 10177 */
    int          type_idx;
    boolean      whole_array;
+#ifdef _UH_COARRAYS
+   long     corank;
+   long     corank_orig;
+#endif
 
 
    TRACE (Func_Entry, "gen_dv_whole_def", NULL);
@@ -3818,6 +3914,8 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 
    rank = (ATD_ARRAY_IDX(dv_attr_idx) ? 
                          (long) BD_RANK(ATD_ARRAY_IDX(dv_attr_idx)) : 0);
+
+#ifndef _UH_COARRAYS
 #ifdef KEY /* Bug 6845 */
    int n_allocatable_cpnt = IR_DV_N_ALLOC_CPNT(ir_idx) =
      do_count_allocatable_cpnt(dv_attr_idx, rank);
@@ -3826,6 +3924,23 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
    IR_LIST_CNT_L(ir_idx) = 10 + (3 * rank);
 #endif /* KEY Bug 6845 */
    IR_DV_DIM(ir_idx) = rank;
+
+#else /* defined(_UH_COARRAYS) */
+
+   corank = ATD_PE_ARRAY_IDX(dv_attr_idx) ?
+                        (long) BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx)) : 0;
+
+#ifdef KEY /* Bug 6845 */
+   int n_allocatable_cpnt = IR_DV_N_ALLOC_CPNT(ir_idx) =
+     do_count_allocatable_cpnt(dv_attr_idx, rank);
+   IR_LIST_CNT_L(ir_idx) = 13 + (3 * (rank+corank)) + n_allocatable_cpnt;
+#else /* KEY Bug 6845 */
+   IR_LIST_CNT_L(ir_idx) = 12 + (3 * (rank+corank));
+#endif /* KEY Bug 6845 */
+   IR_DV_DIM(ir_idx) = rank;
+   IR_DV_CODIM(ir_idx) = corank;
+
+#endif  /* defined(_UH_COARRAYS) */
 
    /*************\
    |* BASE ADDR *|
@@ -4043,6 +4158,40 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
       IL_COL_NUM(list_idx)  = col;
    }
 
+#ifdef _UH_COARRAYS
+   /**************\
+   |* IS_COARRAY *|
+   \**************/
+
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   if (ATD_PE_ARRAY_IDX(dv_attr_idx)) {
+       IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
+   } else {
+       IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+   }
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+
+   /*************\
+   |* N_CODIM   *|
+   \*************/
+
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, corank);
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+#endif
+
 
    /*************\
    |* N_DIM     *|
@@ -4128,7 +4277,13 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
    list_idx = do_alloc_cpnt(line, col, list_idx, n_allocatable_cpnt);
 #endif /* KEY Bug 6845 */
 
+#ifndef _UH_COARRAYS
    for (i = 1; i <= rank; i++) {
+#else
+   corank_orig = ATD_PE_ARRAY_IDX(attr_idx) ?
+                        (long) BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) : 0;
+   for (i = 1; i <= rank+corank; i++) {
+#endif
 
       /*************\
       |* DIM i LB  *|
@@ -4152,6 +4307,23 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
             IL_FLD(list_idx)   = IR_Tbl_Idx;
             IL_IDX(list_idx)   = dv2_idx;
          }
+#ifdef _UH_COARRAYS
+         else if ((i > rank) && exp_desc->rank == rank) {
+           if (i <= (rank+corank_orig)) {
+             IL_FLD(list_idx) = BD_LB_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+             IL_IDX(list_idx) = BD_LB_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+           } else {
+             IL_FLD(list_idx) = CN_Tbl_Idx;
+             IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
+           }
+           IL_LINE_NUM(list_idx) = line;
+           IL_COL_NUM(list_idx)  = col;
+
+           if (IL_FLD(list_idx) == AT_Tbl_Idx) {
+             ADD_TMP_TO_SHARED_LIST(IL_IDX(list_idx));
+           }
+         }
+#endif
          else {
             IL_FLD(list_idx) = BD_LB_FLD(ATD_ARRAY_IDX(attr_idx), i);
             IL_IDX(list_idx) = BD_LB_IDX(ATD_ARRAY_IDX(attr_idx), i);
@@ -4200,7 +4372,19 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
       IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list2_idx)) = list2_idx;
       list2_idx = IL_NEXT_LIST_IDX(list2_idx);
 
-      COPY_OPND(IL_OPND(list2_idx), exp_desc->shape[i-1]);
+#ifdef _UH_COARRAYS
+      if ((i > rank) && exp_desc->rank == rank) {
+        if (i <= (rank+corank_orig)) {
+          IL_FLD(list2_idx) = BD_XT_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+          IL_IDX(list2_idx) = BD_XT_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+        } else {
+          IL_FLD(list2_idx) = CN_Tbl_Idx;
+          IL_IDX(list2_idx) = CN_INTEGER_ZERO_IDX;
+        }
+      } else
+#endif
+        COPY_OPND(IL_OPND(list2_idx), exp_desc->shape[i-1]);
+
       IL_LINE_NUM(list2_idx) = line;
       IL_COL_NUM(list2_idx) = col;
 
@@ -4214,6 +4398,22 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
       IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
       list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+#ifdef _UH_COARRAYS
+      if ((i > rank) && exp_desc->rank == rank) {
+        if (i <= (rank+corank_orig)) {
+          IL_FLD(list_idx) = BD_SM_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+          IL_IDX(list_idx) = BD_SM_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+          IL_LINE_NUM(list_idx) = line;
+          IL_COL_NUM(list_idx) = col;
+        } else {
+          IL_FLD(list_idx) = CN_Tbl_Idx;
+          IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+          IL_LINE_NUM(list_idx) = line;
+          IL_COL_NUM(list_idx) = col;
+        }
+      } else {
+#endif
 
       if (whole_array) {
 
@@ -4256,6 +4456,9 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
          subscript_idx = IL_NEXT_LIST_IDX(subscript_idx);
          dim++;
       }
+#ifdef _UH_COARRAYS
+      }
+#endif
    }
 
 #ifdef KEY /* Bug 6845 */
@@ -4684,6 +4887,9 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
    long			rank;
    size_offset_type	result;
    int			type_idx;
+#ifdef _UH_COARRAYS
+   long			corank;
+#endif
 
 
    TRACE (Func_Entry, "gen_dv_whole_def_init", NULL);
@@ -4712,6 +4918,8 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
 
    rank = ATD_ARRAY_IDX(dv_attr_idx) ?
                         (long) BD_RANK(ATD_ARRAY_IDX(dv_attr_idx)) : 0;
+
+#ifndef _UH_COARRAYS
 #ifdef KEY /* Bug 6845 */
    int n_allocatable_cpnt = IR_DV_N_ALLOC_CPNT(ir_idx) =
      do_count_allocatable_cpnt(dv_attr_idx, rank);
@@ -4720,6 +4928,24 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
    IR_LIST_CNT_L(ir_idx) = 10 + (3 * rank);
 #endif /* KEY Bug 6845 */
    IR_DV_DIM(ir_idx) = rank;
+
+#else /* defined(_UH_COARRAYS) */
+
+   corank = ATD_PE_ARRAY_IDX(dv_attr_idx) ?
+                        (long) BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx)) : 0;
+
+#ifdef KEY /* Bug 6845 */
+   int n_allocatable_cpnt = IR_DV_N_ALLOC_CPNT(ir_idx) =
+     do_count_allocatable_cpnt(dv_attr_idx, rank);
+   IR_LIST_CNT_L(ir_idx) = 13 + (3 * (rank+corank)) + n_allocatable_cpnt;
+#else /* KEY Bug 6845 */
+   IR_LIST_CNT_L(ir_idx) = 12 + (3 * (rank+corank));
+#endif /* KEY Bug 6845 */
+   IR_DV_DIM(ir_idx) = rank;
+   IR_DV_CODIM(ir_idx) = corank;
+
+#endif  /* defined(_UH_COARRAYS) */
+
 
    /*************\
    |* BASE ADDR *|
@@ -4917,6 +5143,41 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
    IL_LINE_NUM(list_idx) = line;
    IL_COL_NUM(list_idx)  = col;
 
+#ifdef _UH_COARRAYS
+   /**************\
+   |* IS_COARRAY *|
+   \**************/
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = ATD_PE_ARRAY_IDX(dv_attr_idx)? 
+                         CN_INTEGER_ONE_IDX :
+                         CN_INTEGER_ZERO_IDX;
+
+   int left_attr = find_left_attr(dv_opnd);
+   if (ATD_PE_ARRAY_IDX(dv_attr_idx) || ATD_PE_ARRAY_IDX(left_attr))
+     IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
+   else
+     IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+
+   int attr_idx2 = find_base_attr(dv_opnd, &line, &col);
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+   /*************\
+   |* N_CODIM   *|
+   \*************/
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, corank);
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+#endif
 
    /*************\
    |* N_DIM     *|
@@ -4975,7 +5236,11 @@ void gen_dv_whole_def_init(opnd_type		*dv_opnd,
    list_idx = do_alloc_cpnt(line, col, list_idx, n_allocatable_cpnt);
 #endif /* KEY Bug 6845 */
 
+#ifndef _UH_COARRAYS
    for (i = 1; i <= rank; i++) {
+#else
+   for (i = 1; i <= rank+corank; i++) {
+#endif
 
       /*************\
       |* DIM i LB  *|
@@ -7120,6 +7385,7 @@ boolean	gen_internal_dope_vector(int_dope_type		*dope_vec,
 
    dope_vec->a_contig = 0;
 
+
    /*************\
    |* UNUSED 1  *|
    \*************/
@@ -7133,6 +7399,18 @@ boolean	gen_internal_dope_vector(int_dope_type		*dope_vec,
 
    dope_vec->unused_2 = 0;
 # endif
+
+#ifdef _UH_COARRAYS
+   /***************\
+   |* IS_COARRAY  *|
+   \***************/
+   dope_vec->is_coarray = 0;
+
+   /************\
+   |* N_CODIM  *|
+   \************/
+   dope_vec->num_codims = 0;
+#endif
 
 
    /*************\
@@ -7630,6 +7908,9 @@ int gen_sf_dv_whole_def(opnd_type         *r_opnd,
    long	    		rank;
    int          	rank_idx	= NULL_IDX;
    size_offset_type	result;
+#ifdef _UH_COARRAYS
+   long             corank;
+#endif
 
 
    TRACE (Func_Entry, "gen_sf_dv_whole_def", NULL);
@@ -7673,8 +7954,18 @@ int gen_sf_dv_whole_def(opnd_type         *r_opnd,
 
    rank = (long) BD_RANK(bd_idx);
 
+#ifndef _UH_COARRAYS
    IR_LIST_CNT_L(ir_idx) = 10 + (3 * rank);
    IR_DV_DIM(ir_idx) = rank;
+
+#else
+   /* TODO: need to pass in pe_bd_idx? */
+   corank = 0;
+   IR_LIST_CNT_L(ir_idx) = 12 + (3 * rank+corank);
+   IR_DV_DIM(ir_idx) = rank;
+
+   IR_DV_CODIM(ir_idx) = corank;
+#endif
 
    /*************\
    |* BASE ADDR *|
@@ -7883,6 +8174,35 @@ int gen_sf_dv_whole_def(opnd_type         *r_opnd,
    IL_LINE_NUM(list_idx) = line;
    IL_COL_NUM(list_idx)  = col;
 
+#ifdef _UH_COARRAYS
+   /***************\
+   |* IS_COARRAY  *|
+   \***************/
+
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+   /*************\
+   |* N_CODIM   *|
+   \*************/
+
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, corank);
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+#endif
+
    /*************\
    |* N_DIM     *|
    \*************/
@@ -7943,7 +8263,11 @@ int gen_sf_dv_whole_def(opnd_type         *r_opnd,
    list_idx = do_alloc_cpnt(line, col, list_idx, 0);
 #endif /* KEY Bug 6845 */
 
+#ifndef _UH_COARRAYS
    for (i = 1; i <= rank; i++) {
+#else
+   for (i = 1; i <= rank+corank; i++) {
+#endif
 
       /*************\
       |* DIM i LB  *|

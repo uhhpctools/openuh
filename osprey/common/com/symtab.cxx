@@ -1883,6 +1883,10 @@ ST::Print (FILE *f, BOOL verbose) const
                 fprintf (f, " st_used_as_initialization");
             if (flags_ext & ST_IS_THREAD_LOCAL)
                 fprintf (f, " thread_local");
+#ifdef _UH_COARRAYS
+            if (flags_ext & ST_IS_ALLOCATABLE)
+                fprintf (f, " is_allocatable");
+#endif
 	    if (flags_ext & ST_IS_GLOBAL_AS_LOCAL)
 	        fprintf (f, " global_as_local");
             if (flags_ext & ST_IS_VTABLE)
@@ -2361,6 +2365,9 @@ TY::Print (FILE *f) const
 	if (flags & TY_NOT_IN_UNION)	fprintf (f, " not_in_union");
 	if (flags & TY_NO_ANSI_ALIAS)	fprintf (f, " no_ansi_alias");
 	if (flags & TY_IS_NON_POD)	fprintf (f, " non_pod");
+#ifdef _UH_COARRAYS
+	if (flags & TY_IS_COARRAY)	fprintf (f, " coarray");
+#endif
 #ifdef KEY
 	if (flags & TY_RETURN_IN_MEM)	fprintf (f, " return_in_mem");
 	if (flags & TY_CONTENT_SEEN)	fprintf (f, " content_seen");
@@ -2387,9 +2394,18 @@ TY::Print (FILE *f) const
 	Print_TY_IDX_verbose (f, Etype ());
 	if (Arb () != 0) {
 	   ARB_HANDLE arb(Arb());
-	   INT i,ndim;
+       INT i,ndim;
 	   
 	   ndim = ARB_dimension(arb);
+
+#ifdef _UH_COARRAYS
+       /* print # local dims and codims. -deepak */
+       INT n_codim = ARB_codimension(arb);
+       INT n_locdim = ndim - n_codim;
+       fprintf (f, "\n\t\t dimension(%d), codimension(%d) ",
+           n_locdim, n_codim);
+#endif
+
 	   for (i = 0; i < ndim; i++) {
 	      fputs (" (", f);
 	      (*arb[i].Entry()).Print (f);

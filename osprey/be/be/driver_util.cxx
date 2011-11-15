@@ -112,6 +112,10 @@ static BOOL Dsm_Recompile = FALSE;
 
 extern BOOL Epilog_Flag;
 
+#ifdef _UH_COARRAYS
+extern BOOL Enable_Coarray;
+#endif
+
 /*
  * Handle_Phase_Specific_Options
  */
@@ -237,6 +241,10 @@ Process_Command_Line (INT argc, char **argv)
 			add_phase_args (PHASE_IPL, argv[i]);
 			i++;
 		    }
+#ifdef _UH_COARRAYS
+        } else if (strcmp (cp, "oarray") == 0 ) {
+            Enable_Coarray = TRUE;
+#endif
 		} else
 		    ErrMsg (EC_Unknown_Flag, *(cp-1), argv[i]);
 		break;

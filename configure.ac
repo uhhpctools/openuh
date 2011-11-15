@@ -59,6 +59,54 @@ AC_ARG_WITH(build-compiler,
 BUILD_COMPILER="$with_build_compiler",
 BUILD_COMPILER=GNU)
 
+# enable Coarrays
+AC_ARG_ENABLE(coarrays,
+[  --enable-coarrays	  Enables UH Coarray Fortran Implementation],
+ENABLE_COARRAYS="YES",
+ENABLE_COARRAYS="NO")
+
+
+# enable GASNet for Coarrays
+AC_ARG_WITH(gasnet-root,
+[  --with-gasnet-root=gasnet path    Enables gasnet runtime for CAF],
+GASNET_HOME="$with_gasnet_root",
+[])
+
+# enable GASNet Conduit
+AC_ARG_WITH(gasnet-conduit,
+[  --with-gasnet-conduit   Use gasnet on specific conduit like IB,SMP,etc. Default is MPI],
+GASNET_CONDUIT="$with_gasnet_conduit",
+GASNET_CONDUIT="MPI")
+
+# enable ARMCI for Coarrays
+AC_ARG_WITH(armci-root,
+[  --with-armci-root=armci path    Enables armci runtime for CAF],
+ARMCI_HOME="$with_armci_root",
+[])
+
+# enable ARMCI Conduit
+AC_ARG_WITH(armci-conduit,
+[  --with-armci-conduit   Use armci on specific conduit like IB,MPI,etc. Default is MPI],
+ARMCI_CONDUIT="$with_armci_conduit",
+ARMCI_CONDUIT="MPI")
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+    AC_MSG_ERROR(["Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays"])
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+    AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI"])
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a "${GASNET_CONDUIT}" = "MPI"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+    AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with GASNET on MPI
+                  conduit"])
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a -n "${GASNET_CONDUIT}" -a "${GASNET_CONDUIT}" != "MPI" -a "${GASNET_CONDUIT}" != "SMP" -a "${GASNET_CONDUIT}" != "IB"; then
+    AC_MSG_ERROR(["GASNET_CONDUIT should be MPI, IB, or SMP"])
+fi
+
 case "$BUILD_COMPILER" in
   GNU|gnu|gcc)
     BUILD_COMPILER=GNU
@@ -162,6 +210,14 @@ AC_ARG_ENABLE([tau-instrumentation],
 
 AS_IF([test "x$enable_tau_instrumentation" = "xyes"], [
   BUILD_TAU_INSTR=YES
+])
+
+# Set whether GNU front-end will be built
+AC_ARG_ENABLE([gnu4],
+  AS_HELP_STRING([--disable-gnu4], [Disable GNU4-based C/C++ frontend]))
+
+AS_IF([test "x$enable_gnu4" != "xno"], [
+  BUILD_GNU4=YES
 ])
 
 # Specify the targ_info directory under osprey/common to use.  IA64 uses
@@ -363,13 +419,19 @@ AC_SUBST([BUILD_TYPE])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([BUILD_TAU_INSTR])
+AC_SUBST([BUILD_GNU4])
+AC_SUBST([ENABLE_COARRAYS])
+AC_SUBST([GCC_CONFIGURE_TARG])
+AC_SUBST([GCC_DIR])
+AC_SUBST([GASNET_HOME])
+AC_SUBST([ARMCI_HOME])
+AC_SUBST([GASNET_CONDUIT])
+AC_SUBST([ARMCI_CONDUIT])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
   Makefile
   osprey/Makefile.gsetup
-  osprey/targdir/libspin/Makefile
-  osprey/targdir/libspin_4_2_0/Makefile
   osprey/targdir/include/Makefile
   osprey/targdir/driver/Makefile
   osprey/targdir/libiberty/Makefile
@@ -389,7 +451,6 @@ AC_CONFIG_FILES([
   osprey/targdir/libcomutil/Makefile
   osprey/targdir/ir_tools/Makefile
   osprey/targdir/libcmplrs/Makefile
-  osprey/targdir/wgen/Makefile
   osprey/targdir/libcif/Makefile
   osprey/targdir/arith/Makefile
   osprey/targdir/orc_ict/Makefile
@@ -416,6 +477,14 @@ if test "${BUILD_GNU3}" = "YES"; then
   ])
 fi
 
+if test "${BUILD_GNU4}" = "YES"; then
+  AC_CONFIG_FILES([
+    osprey/targdir/libspin/Makefile
+    osprey/targdir/libspin_4_2_0/Makefile
+    osprey/targdir/wgen/Makefile
+  ])
+fi
+
 # The directories created under targdir_lib (and targdir_lib2) also
 # need to be listed in LIBLIST.  This list is used in targdir_lib/Makefile.in
 # to control the order of the library builds.  When adding a directory
@@ -428,11 +497,17 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf"
+     fi
   fi
 else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf"
+     fi
   fi
 fi
 
@@ -458,6 +533,9 @@ if test "${BUILD_FORTRAN}" = "YES"; then
    AC_CONFIG_FILES([
    osprey/targdir_lib/libfortran/Makefile
    osprey/targdir_lib/libu/Makefile
+   osprey/targdir_lib/libcaf/Makefile
+   osprey/targdir_lib/libcaf/armci/Makefile
+   osprey/targdir_lib/libcaf/gasnet/Makefile
 ])
 fi
 
@@ -489,6 +567,9 @@ if test $BUILD_MULTILIB = "YES"; then
     AC_CONFIG_FILES([
     osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in
     osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in
+    osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in
+    osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in
+    osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in
   ])
   fi
   if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
@@ -504,9 +585,12 @@ AC_SUBST([LIBLIST])
 
 # Configure cygnus and GCC subdirectories.
 AC_CONFIG_SUBDIRS(osprey/cygnus)
+
+if test "${BUILD_GNU4}" = "YES"; then
 # We do not use $GCC_DIR because using AC_CONFIG_SUBDIRS with variables
 # breaks "configure --help=recursive".  See autoconf documentation.
 AC_CONFIG_SUBDIRS(osprey-gcc-4.2.0)
+fi
 
 AC_OUTPUT
 
@@ -526,6 +610,9 @@ if test -f configargs.h ; then
 else
     uh_config_arguments="--with-build-compiler=$BUILD_COMPILER "
     uh_config_arguments+="--with-build-optimize=$BUILD_OPTIMIZE "
+    if test "${ENABLE_COARRAYS}" = "YES";  then
+      uh_config_arguments+="--enable-coarrays "
+    fi 
 fi
 
 # Double all backslashes and backslash all quotes to turn

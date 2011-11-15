@@ -78,6 +78,13 @@ BUILD_FORTRAN       = @BUILD_FORTRAN@
 BUILD_TYPE          = @BUILD_TYPE@
 BUILD_SKIP_IPA      = @BUILD_SKIP_IPA@
 BUILD_TAU_INSTR     = @BUILD_TAU_INSTR@
+BUILD_GNU4          = @BUILD_GNU4@
+
+ENABLE_COARRAYS     = @ENABLE_COARRAYS@
+GASNET_HOME			= @GASNET_HOME@
+ARMCI_HOME			= @ARMCI_HOME@
+OPENUH_GASNET_CONDUIT	= @GASNET_CONDUIT@
+OPENUH_ARMCI_CONDUIT	= @ARMCI_CONDUIT@
 
 ifeq ($(MACHINE_TYPE), ia64)
 # ia64
@@ -135,10 +142,12 @@ endif
 endif
 
 
+ifeq ($(BUILD_GNU4), YES)
 GNU4_FE_COMPONENTS = \
                 $(NATIVE_BUILD_DIR)/wgen/wgen42 \
                 $(GNUFE_BUILD_DIR)/gcc/cc1 \
                 $(GNUFE_BUILD_DIR)/gcc/cc1plus
+endif
 
 GNU3_FE_COMPONENTS = \
                 $(NATIVE_BUILD_DIR)/gccfe/gfec \
@@ -169,7 +178,6 @@ NATIVE_COMPONENTS = $(BASIC_COMPONENTS) $(TARGET_EXTRA_OBJ)  \
 ifeq ($(BUILD_GNU3), YES)
 NATIVE_COMPONENTS += $(GNU3_FE_COMPONENTS)
 endif
-
 
 
 CROSS_COMPONENTS =  $(BASIC_COMPONENTS) $(TARGET_EXTRA_OBJ) \
@@ -365,6 +373,7 @@ else
 install: install_fe install_compiler
 
 install_fe:
+ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
 	    install-common $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
@@ -377,14 +386,18 @@ install_fe:
 	    install-driver $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
 	    install $(GNUFE_PREFIX_OVERRIDE)
+endif
 
 install_compiler:
 	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
-		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO")
+	export GASNET_HOME=$(GASNET_HOME); \
+	export ARMCI_HOME=$(ARMCI_HOME); \
+		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS)
 endif
 install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
+ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
 	    install-common
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
@@ -397,15 +410,17 @@ install-cross:
 	    install-driver
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
 	    install
+endif
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
 
-LIB_ARGS = BUILD_TARGET=$(LIB_BUILD_TARGET) BUILD_COMPILER=SELF BUILD_AREA=$(LIB_BUILD_AREA) MACHINE_TYPE=$(LIB_MACHINE_TYPE) BUILD_ABI=$(LIB_BUILD_ABI) BUILD_ARCH=$(LIB_BUILD_ARCH) BUILD_HOST=$(LIB_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@
+LIB_ARGS = BUILD_TARGET=$(LIB_BUILD_TARGET) BUILD_COMPILER=$(if $(BUILD_GNU4),SELF,OSP) BUILD_AREA=$(LIB_BUILD_AREA) MACHINE_TYPE=$(LIB_MACHINE_TYPE) BUILD_ABI=$(LIB_BUILD_ABI) BUILD_ARCH=$(LIB_BUILD_ARCH) BUILD_HOST=$(LIB_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@
 ifeq ($(LIB_BUILD_TARGET),IA64)
 LIB_ARGS += BUILD_TYPE=NONSHARED
 else
 LIB_ARGS += BUILD_TYPE=@BUILD_TYPE@
 endif
 LIB2_ARGS = BUILD_TARGET=$(LIB2_BUILD_TARGET) BUILD_COMPILER=SELF BUILD_AREA=$(LIB2_BUILD_AREA) MACHINE_TYPE=$(LIB2_MACHINE_TYPE) BUILD_ABI=$(LIB2_BUILD_ABI) BUILD_ARCH=$(LIB2_BUILD_ARCH) BUILD_HOST=$(LIB2_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@ BUILD_TYPE=@BUILD_TYPE@
+LIB2_ARGS = BUILD_TARGET=$(LIB2_BUILD_TARGET) BUILD_COMPILER=$(if $(BUILD_GNU4),SELF,OSP) BUILD_AREA=$(LIB2_BUILD_AREA) MACHINE_TYPE=$(LIB2_MACHINE_TYPE) BUILD_ABI=$(LIB2_BUILD_ABI) BUILD_ARCH=$(LIB2_BUILD_ARCH) BUILD_HOST=$(LIB2_BUILD_HOST) BUILD_OPTIMIZE=@BUILD_LIB_OPTIMIZE@ BUILD_TYPE=@BUILD_TYPE@
 
 .PHONY: library lib clean-library clean-lib
 .PHONY: library2 lib2 clean-library2 clean-lib2
@@ -429,7 +444,9 @@ clobber: clean
 
 clean: $(CLEAN_LIB)
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/driver clobber 
+ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/wgen clobber 
+endif
 ifeq ($(BUILD_GNU3), YES)
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/gccfe clobber 
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/g++fe clobber
@@ -457,7 +474,9 @@ ifeq ($(MACHINE_TYPE), ia64)
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/orc_intel clobber
 endif
 	$(MAKE) -C $(NATIVE_BUILD_DIR_LD) clean
+ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(GNUFE_BUILD_DIR) clean
+endif
 	@for i in libcif libcmplrs libcomutil libcsup libdwarf libelf libelfutil \
 		libiberty libunwindP; do  \
 		$(MAKE) -C "$(NATIVE_BUILD_DIR)/$${i}" clobber; \

@@ -17858,9 +17858,9 @@ COMMON block objects.
 .ME
 $
 $ Error : 1366
-$msg  1366 References with PE dimensions are not allowed as actual arguments.
+$msg  1366 References with PE dimensions are not currently allowed as actual arguments.
 $nexp 1366
-Error : References with PE dimensions are not allowed as actual arguments.
+Error : References with PE dimensions are not currently allowed as actual arguments.
 .PP
 The F-- prototype does not support PE dimension references as arguments
 to user or intrinsic calls.
@@ -21833,5 +21833,13 @@ outside the module which declares the entity. If the entity has the POINTER or
 ALLOCATABLE attribute, it cannot be allocated, deallocated, or nullified outside
 the module either.
 .ME
-$ LAST NUMBER USED : 1702
+$
+$ Error : 1703
+$msg  1703 SYNC must be followed by ALL, IMAGES, or MEMORY. Not "%s".
+$nexp 1703
+Error :  SYNC must be followed by ALL, IMAGES, or MEMORY. Not "%s".
+.PP
+SYNC should be followed by ALL, IMAGES, or MEMORY keyword.
+.ME
+$ LAST NUMBER USED : 1703
 	

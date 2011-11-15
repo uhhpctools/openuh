@@ -4840,6 +4840,10 @@ static void set_prog_file_names (char *argv[])
                      EQUAL_STRS(stp, ".f95") ||
                      EQUAL_STRS(stp, ".F95") ||
 #endif /* KEY Bug 5064 */
+#ifdef _UH_COARRAYS
+                     EQUAL_STRS(stp, ".caf") ||
+                     EQUAL_STRS(stp, ".CAF") ||
+#endif
                      EQUAL_STRS(stp, ".F90")) {
                cmd_line_flags.src_form	= Free_Form;
                source_form		= Free_Form;
@@ -4858,6 +4862,10 @@ static void set_prog_file_names (char *argv[])
 #ifdef KEY /* Bug 5064 */
 		EQUAL_STRS(stp, ".F95") ||
 #endif /* KEY Bug 5064 */
+#ifdef _UH_COARRAYS
+        EQUAL_STRS(stp, ".caf") ||
+        EQUAL_STRS(stp, ".CAF") ||
+#endif
                 EQUAL_STRS(stp, ".F90")) {
 
                on_off_flags.preprocess = TRUE;

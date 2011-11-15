@@ -517,6 +517,11 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
                                                    "VOLATILE",
                                                    "OPEN MP END PARALLEL WORKSHARE",
                                                    "OPEN MP END WORKSHARE",
+
+#ifdef _UH_COARRAYS
+						   "SYNC Statement",
+#endif
+
 #ifdef KEY /* Bug 11741 */
 						   "IMPORT",
 #endif /* KEY Bug 11741 */

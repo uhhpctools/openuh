@@ -1,0 +1,5 @@
+See doc/USING_CAF_SUPPORT for more build/install instructions.
+
+UHCAF libcaf runtime requires either a GASNet or ARMCI installation. Also, if
+using ARMCI or GASNet with the MPI conduit, an MPI installation is also
+required. 

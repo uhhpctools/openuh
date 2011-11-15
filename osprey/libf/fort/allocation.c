@@ -86,6 +86,15 @@ extern void _sma_fortran_deallocate_global(void *p);
 #pragma weak _sma_fortran_deallocate_global
 #endif		/* end MIPS */
 
+#ifdef _UH_COARRAYS
+extern void *coarray_allocatable_allocate_(unsigned long var_size);
+#pragma weak coarray_allocatable_allocate_
+extern void *coarray_nonsymmetric_allocate_(unsigned long var_size);
+#pragma weak coarray_nonsymmetric_allocate_
+extern void coarray_deallocate_(void *var_address);
+#pragma weak coarray_deallocate_
+#endif
+
 #ifndef ALLOC_VERSION
 #define ALLOC_VERSION  1                /* alloc version number */
 #endif
@@ -248,6 +257,15 @@ _ALLOCATE(AllocHeadType *aloclist,
 		/* Allocate size in bytes if not zero.  Zero size is */
 		/* legal and should not cause an error. */
 		if (nbytes != 0) {
+#ifdef _UH_COARRAYS
+		if(dva->is_coarray){
+            if(dva->n_codim)
+                base = coarray_allocatable_allocate_(nbytes);
+            else
+                base = coarray_nonsymmetric_allocate_(nbytes);
+		}
+		else{
+#endif
 #if	defined(_CRAYT3E)
 			/* allocate from symmetric or private heap? */
 			if (imalocflg != 0 ) {
@@ -255,6 +273,9 @@ _ALLOCATE(AllocHeadType *aloclist,
 			} else
 #endif
 				base	= (void *) malloc (nbytes);
+#ifdef _UH_COARRAYS
+		}
+#endif
 			/* if no memory assigned, error */
 			if (base == NULL) {
 				if(lstat) {
@@ -630,6 +651,13 @@ _DEALLOCATE(AllocHeadType *aloclist,
 		}
 #endif /* KEY Bug 4933 */
 
+#ifdef _UH_COARRAYS
+        if(dva->is_coarray){
+			coarray_deallocate_((void *)base);
+        }
+		else{
+#endif
+
 #ifdef KEY /* Bug 6845 */
                 if (dva->alloc_cpnt) {
 		  recursive_dealloc(dva, aloclist->version, aloclist->imalloc);
@@ -660,6 +688,9 @@ _DEALLOCATE(AllocHeadType *aloclist,
 				_sma_fortran_deallocate_global(base);
 		}
 #endif		/* endif of NOT mips */
+#ifdef _UH_COARRAYS
+	}
+#endif
 
 		/* clear fields to indicate unallocated/unassociated */
 		dva->assoc	= 0;
@@ -714,6 +745,7 @@ _DEALLOC(AllocHeadType *aloclist)
 	while(loopcount--) {
 		dva	= aloclist->dv[iarray];
 
+
 		/* return if not associated */
 		if (!dva->assoc)
 			return;
@@ -725,6 +757,13 @@ _DEALLOC(AllocHeadType *aloclist)
 			fcdleng	= _fcdlen(dva->base_addr.charptr);
 		} else
 			base	= (void*) dva->base_addr.a.ptr;
+
+#ifdef _UH_COARRAYS
+        if(dva->is_coarray){
+			coarray_deallocate_((void*)base);
+        }
+		else {
+#endif
 
 #ifdef KEY /* Bug 6845 */
                 if (dva->alloc_cpnt) {
@@ -752,6 +791,10 @@ _DEALLOC(AllocHeadType *aloclist)
 #endif
 				free (base);
 		}
+
+#ifdef _UH_COARRAYS
+		}
+#endif
 
 		/* clear fields to indicate unallocated/unassociated */
 		dva->assoc	= 0;

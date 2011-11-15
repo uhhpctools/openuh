@@ -40,6 +40,11 @@
 |* MISCELLANEOUS *|
 \*****************/
 
+#ifdef _UH_COARRAYS
+#define _ALLOCATE_IS_CALL
+#endif
+
+
 /* LCV_CONST_IDX is used by SET_LCV_CONST.				      */
 
 # if _HOST64

@@ -229,6 +229,17 @@
 # define DV_SET_A_CONTIG(DOPE,RHS)                                             \
                      { if (SET_POINTER_SIZE)(DOPE).ptr64.a_contig = (RHS);     \
                        else (DOPE).ptr32.a_contig = (RHS); }
+#ifdef _UH_COARRAYS
+# define DV_SET_IS_COARRAY(DOPE,RHS)                                             \
+                     { if (SET_POINTER_SIZE)(DOPE).ptr64.is_coarray = (RHS);     \
+                       else (DOPE).ptr32.is_coarray = (RHS); }
+# define DV_SET_UNUSED_4(DOPE,RHS)                                             \
+                     { if (SET_POINTER_SIZE)(DOPE).ptr64.unused_4 = (RHS);     \
+                       else (DOPE).ptr32.unused_4 = (RHS); }
+# define DV_SET_NUM_CODIMS(DOPE,RHS)                                             \
+                     { if (SET_POINTER_SIZE)(DOPE).ptr64.num_codims = (RHS);     \
+                       else (DOPE).ptr32.num_codims = (RHS); }
+#endif
 # define DV_SET_NUM_DIMS(DOPE,RHS)                                             \
                      { if (SET_POINTER_SIZE)(DOPE).ptr64.num_dims = (RHS);     \
                        else (DOPE).ptr32.num_dims = (RHS); }
@@ -1438,11 +1449,20 @@
 # endif
 
 # ifdef _DEBUG
+#ifndef _UH_COARRAYS
 # define ATD_VARIABLE_TMP_IDX(IDX)				 	       \
 	((AT_OBJ_CLASS(IDX) == Data_Obj	&&				       \
 	  attr_tbl[IDX].fld.secondary_info == Variable) ?		       \
 		attr_tbl : sytb_var_error("ATD_VARIABLE_TMP_IDX", IDX))	       \
 		[IDX].fld.field4
+#else  /* defined(_UH_COARRAYS) */
+# define ATD_VARIABLE_TMP_IDX(IDX)				 	       \
+	((AT_OBJ_CLASS(IDX) == Data_Obj	&&				       \
+	  (attr_tbl[IDX].fld.secondary_info == Variable ||    \
+       attr_tbl[IDX].fld.secondary_info == Dummy_Argument)) ?	\
+		attr_tbl : sytb_var_error("ATD_VARIABLE_TMP_IDX", IDX))	       \
+		[IDX].fld.field4
+#endif /* defined(_UH_COARRAYS) */
 # else
 # define ATD_VARIABLE_TMP_IDX(IDX)	attr_tbl[IDX].fld.field4
 # endif
@@ -3864,6 +3884,11 @@
 
 # define IR_RANK(IDX)                   ir_tbl[IDX].opr.rank
 # define IR_DV_DIM(IDX)			ir_tbl[IDX].opr.dim
+
+#ifdef _UH_COARRAYS
+# define IR_DV_CODIM(IDX)			ir_tbl[IDX].opr.codim
+#endif
+
 #ifdef KEY /* Bug6845 */
 /* When dope vector represents allocatable array whose element type is a
  * derived type having component(s) which are themselves allocatable, this

@@ -74,11 +74,21 @@ typedef enum {
   DV_P_OR_A_IDX		= 4,
   DV_A_CONTIG_IDX	= 5,
   DV_ALLOCCPNT_IDX	= 6,
+#ifndef _UH_COARRAYS
   DV_UNUSED_1_IDX	= 7,
   DV_NUM_DIMS_IDX	= 8,
   DV_TYPE_CODE_IDX	= 9,
   DV_ORIG_BASE_IDX	= 10,
   DV_ORIG_SIZE_IDX	= 11
+#else
+  DV_UNUSED_1_IDX	= 7,
+  DV_IS_COARRAYS	= 8,
+  DV_NUM_CODIMS_IDX	= 9,
+  DV_NUM_DIMS_IDX	= 10,
+  DV_TYPE_CODE_IDX	= 11,
+  DV_ORIG_BASE_IDX	= 12,
+  DV_ORIG_SIZE_IDX	= 13
+#endif
   } dv_idx_type;
 # ifdef __cplusplus
 extern "C" {
@@ -113,6 +123,9 @@ extern TY_IDX  cwh_types_dope_TY(INT32 num_dims,TY_IDX base, BOOL host, BOOL ptr
 #ifdef KEY /* Bug 6845 */
   INT32 num_allocatable_cpnt
 #endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+  ,INT32 num_codims=0
+#endif
 );
 
 extern TY_IDX  cwh_types_ch_parm_TY(WN *ln) ;
@@ -147,7 +160,11 @@ extern FLD_HANDLE cwh_types_dope_dims_FLD(TY_IDX ty);
 
 extern char * cwh_types_mk_anon_name (const char * p) ;
 extern TY_IDX cwh_types_array_util(INT16 rank, TY_IDX ta, INT32 align, INT64 size, const char *name, 
-				   BOOL alloc_arbs);
+				   BOOL alloc_arbs
+#ifdef _UH_COARRAYS
+                   ,INT16 corank=0
+#endif
+                   );
 
 extern void  cwh_types_init_target(void);
 extern TY_IDX  cwh_types_mk_pointer_TY(TY_IDX ty, BOOL host) ;
@@ -175,12 +192,26 @@ extern INT32 DOPE_bound_sz;
 extern INT32 DOPE_dim_offset;
 extern INT32 DOPE_sz;
 
+#ifndef _UH_COARRAYS
+
 #ifdef KEY /* Bug 6845 */
 #define DOPE_NM  12
 #else /* KEY Bug 6845 */
 #define DOPE_NM  11
 #endif /* KEY Bug 6845 */
 #define DOPE_USED  DOPE_NM-1
+
+#else /* defined(_UH_COARRAYS) */
+
+#ifdef KEY /* Bug 6845 */
+#define DOPE_NM  14
+#else /* KEY Bug 6845 */
+#define DOPE_NM  13
+#endif /* KEY Bug 6845 */
+#define DOPE_USED  DOPE_NM-1
+
+#endif /* defined(_UH_COARRAYS) */
+
 #define BOUND_NM 3
 #define DIM_SZ BOUND_NM*DOPE_bound_sz
 #define ADDR_OFFSET 0
@@ -217,9 +248,16 @@ typedef struct dope_header1 {
 } dope_header1_type;
 
 typedef struct dope_header2 {
+#ifndef _UH_COARRAYS
     unsigned int        unused    :29;  /* pad for second 32-bits       */
+#else
+    unsigned int        unused      :25;  /* pad for second 32-bits       */
+    unsigned int        is_coarray  :1;   /* number of dimensions */
+    unsigned int        n_codim     :3;   /* number of dimensions */
+#endif
     unsigned int        n_dim     :3;   /* number of dimensions */
 } dope_header2_type;
+
 
 typedef struct f90_type {
 

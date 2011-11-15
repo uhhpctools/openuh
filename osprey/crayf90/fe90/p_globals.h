@@ -493,6 +493,9 @@ extern	void parse_sequence_stmt (void);
 extern	void parse_stmt_func_stmt (int, int);
 extern	void parse_stop_pause_stmt (void);
 extern	void parse_subroutine_stmt (void);
+#ifdef _UH_COARRAYS
+extern	void parse_sync_stmt (void);
+#endif
 extern	void parse_target_stmt (void);
 extern  void parse_task_common_stmt (void);
 extern	void parse_type_dcl_stmt (void);

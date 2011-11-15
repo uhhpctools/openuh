@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS GASNET_HOME ARMCI_HOME GASNET_CONDUIT ARMCI_CONDUIT LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -791,17 +791,23 @@ if test -n "$ac_init_help"; then
 Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --enable-coarrays	  Enables UH Coarray Fortran Implementation
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
   --disable-ipa           Disable IPA compilation support (EXPERIMENTAL)
   --disable-shared        Disable shared libraries (EXPERIMENTAL)
   --enable-tau-instrumentation
                           Enable TAU instrumentation (EXPERIMENTAL)
+  --disable-gnu4          Disable GNU4-based C/C++ frontend
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-build-compiler=GNU|OSP	Use GNU or OSP compilers in build
+  --with-gasnet-root=gasnet path    Enables gasnet runtime for CAF
+  --with-gasnet-conduit   Use gasnet on specific conduit like IB,SMP,etc. Default is MPI
+  --with-armci-root=armci path    Enables armci runtime for CAF
+  --with-armci-conduit   Use armci on specific conduit like IB,MPI,etc. Default is MPI
   --with-build-optimize=DEFAULT|DEBUG	Use DEFAULT or DEBUG flags in compiler build
   --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
     Note that --with-build-lib-optimize=DEBUG is currently not well tested.
@@ -1385,6 +1391,78 @@ else
   BUILD_COMPILER=GNU
 fi;
 
+# enable Coarrays
+# Check whether --enable-coarrays or --disable-coarrays was given.
+if test "${enable_coarrays+set}" = set; then
+  enableval="$enable_coarrays"
+  ENABLE_COARRAYS="YES"
+else
+  ENABLE_COARRAYS="NO"
+fi;
+
+
+# enable GASNet for Coarrays
+
+# Check whether --with-gasnet-root or --without-gasnet-root was given.
+if test "${with_gasnet_root+set}" = set; then
+  withval="$with_gasnet_root"
+  GASNET_HOME="$with_gasnet_root"
+fi;
+
+# enable GASNet Conduit
+
+# Check whether --with-gasnet-conduit or --without-gasnet-conduit was given.
+if test "${with_gasnet_conduit+set}" = set; then
+  withval="$with_gasnet_conduit"
+  GASNET_CONDUIT="$with_gasnet_conduit"
+else
+  GASNET_CONDUIT="MPI"
+fi;
+
+# enable ARMCI for Coarrays
+
+# Check whether --with-armci-root or --without-armci-root was given.
+if test "${with_armci_root+set}" = set; then
+  withval="$with_armci_root"
+  ARMCI_HOME="$with_armci_root"
+fi;
+
+# enable ARMCI Conduit
+
+# Check whether --with-armci-conduit or --without-armci-conduit was given.
+if test "${with_armci_conduit+set}" = set; then
+  withval="$with_armci_conduit"
+  ARMCI_CONDUIT="$with_armci_conduit"
+else
+  ARMCI_CONDUIT="MPI"
+fi;
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+    { { echo "$as_me:$LINENO: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&5
+echo "$as_me: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+    { { echo "$as_me:$LINENO: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&5
+echo "$as_me: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a "${GASNET_CONDUIT}" = "MPI"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+    { { echo "$as_me:$LINENO: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with GASNET on MPI
+                  conduit\"" >&5
+echo "$as_me: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with GASNET on MPI
+                  conduit\"" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
+if test "${ENABLE_COARRAYS}" = "YES" -a -n "${GASNET_HOME}" -a -n "${GASNET_CONDUIT}" -a "${GASNET_CONDUIT}" != "MPI" -a "${GASNET_CONDUIT}" != "SMP" -a "${GASNET_CONDUIT}" != "IB"; then
+    { { echo "$as_me:$LINENO: error: \"GASNET_CONDUIT should be MPI, IB, or SMP\"" >&5
+echo "$as_me: error: \"GASNET_CONDUIT should be MPI, IB, or SMP\"" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
 case "$BUILD_COMPILER" in
   GNU|gnu|gcc)
     BUILD_COMPILER=GNU
@@ -1529,6 +1607,20 @@ fi;
 if test "x$enable_tau_instrumentation" = "xyes"; then
 
   BUILD_TAU_INSTR=YES
+
+fi
+
+
+# Set whether GNU front-end will be built
+# Check whether --enable-gnu4 or --disable-gnu4 was given.
+if test "${enable_gnu4+set}" = set; then
+  enableval="$enable_gnu4"
+
+fi;
+
+if test "x$enable_gnu4" != "xno"; then
+
+  BUILD_GNU4=YES
 
 fi
 
@@ -1737,8 +1829,16 @@ export GCC_CONFIGURE_CFLAGS
 
 
 
+
+
+
+
+
+
+
+
 # List of configurable files to create in object directory.
-                                                                                                                                                                                                                                                                                                  ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/libspin/Makefile osprey/targdir/libspin_4_2_0/Makefile osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/wgen/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
+                                                                                                                                                                                                                                                                    ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
 
 
 if test "${BUILD_FORTRAN}" = "YES"; then
@@ -1748,6 +1848,11 @@ fi
 
 if test "${BUILD_GNU3}" = "YES"; then
                                           ac_config_files="$ac_config_files osprey/targdir/gccfe/Makefile osprey/targdir/gccfe/gnu/Makefile osprey/targdir/g++fe/Makefile osprey/targdir/g++fe/gnu/Makefile"
+
+fi
+
+if test "${BUILD_GNU4}" = "YES"; then
+                                ac_config_files="$ac_config_files osprey/targdir/libspin/Makefile osprey/targdir/libspin_4_2_0/Makefile osprey/targdir/wgen/Makefile"
 
 fi
 
@@ -1763,11 +1868,17 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf"
+     fi
   fi
 else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf"
+     fi
   fi
 fi
 
@@ -1783,7 +1894,7 @@ else
 fi
 
 if test "${BUILD_FORTRAN}" = "YES"; then
-                       ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile"
+                                                     ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile osprey/targdir_lib/libcaf/Makefile osprey/targdir_lib/libcaf/armci/Makefile osprey/targdir_lib/libcaf/gasnet/Makefile"
 
 fi
 
@@ -1802,7 +1913,7 @@ if test $BUILD_MULTILIB = "YES"; then
                                                               ac_config_files="$ac_config_files osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in"
 
   if test "${BUILD_FORTRAN}" = "YES"; then
-                        ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in"
+                                                      ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in"
 
   fi
   if test "${BUILD_TARGET}" = "X8664" || test "${BUILD_TARGET}" = "IA32"; then
@@ -1818,12 +1929,15 @@ fi
 
 subdirs="$subdirs osprey/cygnus"
 
+
+if test "${BUILD_GNU4}" = "YES"; then
 # We do not use $GCC_DIR because using AC_CONFIG_SUBDIRS with variables
 # breaks "configure --help=recursive".  See autoconf documentation.
 
 
 subdirs="$subdirs osprey-gcc-4.2.0"
 
+fi
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -2377,8 +2491,6 @@ do
   # Handling of arguments.
   "Makefile" ) CONFIG_FILES="$CONFIG_FILES Makefile" ;;
   "osprey/Makefile.gsetup" ) CONFIG_FILES="$CONFIG_FILES osprey/Makefile.gsetup" ;;
-  "osprey/targdir/libspin/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libspin/Makefile" ;;
-  "osprey/targdir/libspin_4_2_0/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libspin_4_2_0/Makefile" ;;
   "osprey/targdir/include/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/include/Makefile" ;;
   "osprey/targdir/driver/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/driver/Makefile" ;;
   "osprey/targdir/libiberty/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libiberty/Makefile" ;;
@@ -2398,7 +2510,6 @@ do
   "osprey/targdir/libcomutil/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libcomutil/Makefile" ;;
   "osprey/targdir/ir_tools/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/ir_tools/Makefile" ;;
   "osprey/targdir/libcmplrs/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libcmplrs/Makefile" ;;
-  "osprey/targdir/wgen/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/wgen/Makefile" ;;
   "osprey/targdir/libcif/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libcif/Makefile" ;;
   "osprey/targdir/arith/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/arith/Makefile" ;;
   "osprey/targdir/orc_ict/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/orc_ict/Makefile" ;;
@@ -2413,6 +2524,9 @@ do
   "osprey/targdir/gccfe/gnu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/gccfe/gnu/Makefile" ;;
   "osprey/targdir/g++fe/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/g++fe/Makefile" ;;
   "osprey/targdir/g++fe/gnu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/g++fe/gnu/Makefile" ;;
+  "osprey/targdir/libspin/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libspin/Makefile" ;;
+  "osprey/targdir/libspin_4_2_0/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/libspin_4_2_0/Makefile" ;;
+  "osprey/targdir/wgen/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir/wgen/Makefile" ;;
   "osprey/targdir_lib/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/Makefile" ;;
   "osprey/targdir_lib/include/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/include/Makefile" ;;
   "osprey/targdir_lib/libinstr/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libinstr/Makefile:osprey/targdir_lib/libinstr2/Makefile.in" ;;
@@ -2422,6 +2536,9 @@ do
   "osprey/targdir_lib/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libmv/Makefile" ;;
   "osprey/targdir_lib/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libfortran/Makefile" ;;
   "osprey/targdir_lib/libu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libu/Makefile" ;;
+  "osprey/targdir_lib/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/Makefile" ;;
+  "osprey/targdir_lib/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/armci/Makefile" ;;
+  "osprey/targdir_lib/libcaf/gasnet/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/gasnet/Makefile" ;;
   "osprey/targdir_lib/libopen64rt/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libopen64rt/Makefile" ;;
   "osprey/targdir_lib/libinstr2/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libinstr2/Makefile" ;;
   "osprey/targdir_lib/libacml_mv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libacml_mv/Makefile" ;;
@@ -2434,6 +2551,9 @@ do
   "osprey/targdir_lib2/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in" ;;
   "osprey/targdir_lib2/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in" ;;
   "osprey/targdir_lib2/libu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in" ;;
+  "osprey/targdir_lib2/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in" ;;
+  "osprey/targdir_lib2/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in" ;;
+  "osprey/targdir_lib2/libcaf/gasnet/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/gasnet/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;
   "osprey/targdir_lib2/libopen64rt/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libopen64rt/Makefile:osprey/targdir_lib/libopen64rt/Makefile.in" ;;
   "osprey/targdir_lib2/libinstr2/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libinstr2/Makefile:osprey/targdir_lib/libinstr2/Makefile.in" ;;
   "osprey/targdir_lib2/libacml_mv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libacml_mv/Makefile:osprey/targdir_lib/libacml_mv/Makefile.in" ;;
@@ -2562,6 +2682,12 @@ s,@BUILD_TYPE@,$BUILD_TYPE,;t t
 s,@GCC_CONFIGURE_TARG@,$GCC_CONFIGURE_TARG,;t t
 s,@GCC_DIR@,$GCC_DIR,;t t
 s,@BUILD_TAU_INSTR@,$BUILD_TAU_INSTR,;t t
+s,@BUILD_GNU4@,$BUILD_GNU4,;t t
+s,@ENABLE_COARRAYS@,$ENABLE_COARRAYS,;t t
+s,@GASNET_HOME@,$GASNET_HOME,;t t
+s,@ARMCI_HOME@,$ARMCI_HOME,;t t
+s,@GASNET_CONDUIT@,$GASNET_CONDUIT,;t t
+s,@ARMCI_CONDUIT@,$ARMCI_CONDUIT,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t
@@ -3022,6 +3148,9 @@ if test -f configargs.h ; then
 else
     uh_config_arguments="--with-build-compiler=$BUILD_COMPILER "
     uh_config_arguments+="--with-build-optimize=$BUILD_OPTIMIZE "
+    if test "${ENABLE_COARRAYS}" = "YES";  then
+      uh_config_arguments+="--enable-coarrays "
+    fi
 fi
 
 # Double all backslashes and backslash all quotes to turn
