@@ -40,9 +40,9 @@ Where options are
 
   --stacksize=SS                SS is OpenMP stack size
 
-  --nested[=T]                  T is one of
+  --nested[=B]                  B is one of
                                   true | false
-                                Defaults to "true" if T not specified
+                                Defaults to "true" if B not specified
 
   --task-cutoff=TC              TC is
                                   cutoff:val[,cutoff:val[,...]]
@@ -83,19 +83,19 @@ set_env()
   shift
   val="$*"
 
-  cmd="$var=\"$val\"; export $var"
+  cmd="$var=$val; export $var"
   eval $cmd
 }
 
 
 # -------------------------------------------------------------------
 
-if [ $# -eq 0 ]; then
+if [ $# -eq 0 ]
+then
       do_help_and_bail
 fi
 
 options="`getopt \
-		-u \
 		-n "$progname" \
 		-l num-threads: \
 		-l stacksize: \
@@ -145,8 +145,12 @@ do
     --nested)
       shift
       # optional arg, trap here
-      nested=false
-      [ -z "$1" ] && nested=true
+      if [ "$1" = "''" ]
+      then
+        nested=true
+      else
+        nested="$1"
+      fi
       set_env OMP_NESTED $nested
       ;;
     --task-cutoff)
@@ -181,21 +185,23 @@ do
   shift
 done
 
-# now gobble option end marker
+# gobble option end marker
 shift
+
+# remaining args are command, undo the getopt quotes
+cmd=`echo $* | sed -e "s/^'//" -e "s/'$//"`
 
 case $do_show in
   y)
     echo "$progname environment:"
-    env | egrep '(^OMP_|^O64_)'
+    env | egrep '^O(MP|64)_' | sed -e 's/^/  /'
     echo
     echo "$progname:"
-    echo "  $*"
+    echo "  $cmd"
     echo
     ;;
   *)
     ;;
 esac
 
-# remaining args are command
-eval $*
+eval $cmd

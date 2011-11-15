@@ -63,9 +63,9 @@ else
 fi
 
 if [ -z "$4" ]; then
-  ENABLE_COARRAYS="NO"
+  BUILD_CAF_RUNTIME="NO"
 else
-  ENABLE_COARRAYS=$4
+  BUILD_CAF_RUNTIME=$4
 fi 
 
 # set the build host
@@ -435,15 +435,16 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
     return 0
 }
 
-# Install the CAF runtime library. If 
+# Install the CAF runtime library
 INSTALL_CAF_LIB () {
     #install uhcaf perl wrapper
     INSTALL_EXEC_SUB osprey/scripts/uhcaf ${BIN_DIR}/uhcaf
     #install cafrun perl wrapper
     INSTALL_EXEC_SUB osprey/scripts/cafrun ${BIN_DIR}/cafrun
     chmod +x ${BIN_DIR}/uhcaf ${BIN_DIR}/cafrun
+  
     if [ "$TARG_HOST" = "ia64" ] ; then
-	LIBAREA="osprey/targdir_lib"
+    LIBAREA="osprey/targdir_lib"
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a     ${PHASEPATH}/libcaf-armci.a
         gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
@@ -452,10 +453,10 @@ INSTALL_CAF_LIB () {
           INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/$lib_name
         done
     elif [ "$TARG_HOST" = "ppc32" ] ; then
-	LIBAREA="osprey/targdir_lib"
-	LIB32AREA="osprey/targdir_lib2"
+    LIBAREA="osprey/targdir_lib"
+    LIB32AREA="osprey/targdir_lib2"
     else
-	LIBAREA="osprey/targdir_lib2"
+    LIBAREA="osprey/targdir_lib2"
     LIB32AREA="osprey/targdir_lib"
         # 64bit libraries
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a    ${PHASEPATH}/libcaf-armci.a
@@ -474,7 +475,7 @@ INSTALL_CAF_LIB () {
           lib_name=libcaf-gasnet-$gasnet_conduit.a
           INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/32/$lib_name
         done
-  fi 
+    fi 
 }
 
 
@@ -747,6 +748,6 @@ INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP
 INSTALL_PREBUILD_PHASE 
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
 
-[ "$ENABLE_COARRAYS" = "YES" ] && INSTALL_CAF_LIB
+[ "$BUILD_CAF_RUNTIME" = "YES" ] && INSTALL_CAF_LIB
 exit 0
 

@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -791,7 +791,8 @@ if test -n "$ac_init_help"; then
 Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
-  --enable-coarrays	  Enables UH Coarray Fortran Implementation
+  --enable-coarrays       Enables UH Coarray Fortran (CAF) Implementation
+  --disable-caf-runtime   Disable CAF Runtime
   --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
@@ -805,10 +806,13 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-build-compiler=GNU|OSP	Use GNU or OSP compilers in build
-  --with-gasnet-root=<gasnet path>   Builds GASNet-based libcaf runtime
-  --with-armci-root=<armci path>     Builds ARMCI-based libcaf runtime
-  --with-default-comm=gasnet|armci   Default communication layer to use if GASNet and
-                                     ARMCI are supported.  Will be GASNet if unspecified.
+  --with-gasnet-root=<gasnet path>
+                          Builds GASNet-based libcaf runtime
+  --with-armci-root=<armci path>
+                          Builds ARMCI-based libcaf runtime
+  --with-default-comm=gasnet|armci
+                          Default communication layer to use if GASNet and
+                          ARMCI are supported. Will be GASNet if unspecified.
   --with-build-optimize=DEFAULT|DEBUG	Use DEFAULT or DEBUG flags in compiler build
   --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
     Note that --with-build-lib-optimize=DEBUG is currently not well tested.
@@ -1401,6 +1405,23 @@ else
   ENABLE_COARRAYS="NO"
 fi;
 
+# Set whether CAF runtime will be built
+# Check whether --enable-caf-runtime or --disable-caf-runtime was given.
+if test "${enable_caf_runtime+set}" = set; then
+  enableval="$enable_caf_runtime"
+
+fi;
+
+if test "x$enable_caf_runtime" != "xno"; then
+
+  BUILD_CAF_RUNTIME="YES"
+
+fi
+
+
+if test "$ENABLE_COARRAYS" = "NO"; then
+  BUILD_CAF_RUNTIME="NO"
+fi
 
 # enable GASNet for Coarrays
 
@@ -1422,6 +1443,7 @@ else
   ARMCI_HOME=""
 fi;
 
+
 # default comm library
 
 # Check whether --with-default-comm or --without-default-comm was given.
@@ -1432,7 +1454,7 @@ else
   DEFAULT_COMM=""
 fi;
 
-# set perl path
+# set bash path
 BASH_PATH=`which bash`
 
 if test -z "${BASH_PATH}"; then
@@ -1441,13 +1463,14 @@ echo "$as_me: error: \"Could not find bash on system\"" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
     { { echo "$as_me:$LINENO: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&5
 echo "$as_me: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
     { { echo "$as_me:$LINENO: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&5
 echo "$as_me: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&2;}
    { (exit 1); exit 1; }; }
@@ -1866,6 +1889,8 @@ export GCC_CONFIGURE_CFLAGS
 
 
 
+
+
 # List of configurable files to create in object directory.
                                                                                                                                                                                                                                                                     ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
 
@@ -1900,7 +1925,7 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
-     if test "${ENABLE_COARRAYS}" = "YES"; then
+     if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
   fi
@@ -1908,7 +1933,7 @@ else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
-     if test "${ENABLE_COARRAYS}" = "YES"; then
+     if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
   fi
@@ -2740,11 +2765,13 @@ s,@GCC_DIR@,$GCC_DIR,;t t
 s,@BUILD_TAU_INSTR@,$BUILD_TAU_INSTR,;t t
 s,@BUILD_GNU4@,$BUILD_GNU4,;t t
 s,@ENABLE_COARRAYS@,$ENABLE_COARRAYS,;t t
+s,@BUILD_CAF_RUNTIME@,$BUILD_CAF_RUNTIME,;t t
 s,@GASNET_HOME@,$GASNET_HOME,;t t
 s,@ARMCI_HOME@,$ARMCI_HOME,;t t
 s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
 s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
 s,@BASH_PATH@,$BASH_PATH,;t t
+s,@MPI_INCLUDE@,$MPI_INCLUDE,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t

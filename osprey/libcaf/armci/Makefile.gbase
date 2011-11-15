@@ -27,9 +27,6 @@
 #  http://www.cs.uh.edu/~hpctools
 #
 #
-# setup MPI_SRC, ARMCI_SRC, GASNET_SRC, NETWORK(=IB or =MPI) 
-# and COMM_LAYER(= ARMCI or =GASNET).
-
 ################################################################
 
 
@@ -50,10 +47,7 @@ LCDEFS = $(HOSTDEFS) $(TARGDEFS)
 LCDEFS += -D_LITTLE_ENDIAN -D_WORD32 -D_LIB_INTERNAL -D_GNU_SOURCE -U__mips -DKEY -DPATHSCALE_MERGE -DNDEBUG
 LCDEFS += -DENABLE_TRACES
 LCINCS = -I$(BUILD_BASE)/../../clibinc
-LCINCS += -I$(BUILD_BASE)/../../libu
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
-LCINCS += -I$(BUILD_BASE)/../../include
-LCINCS += -I$(BUILD_BASE)/../../libfi/include
 
 LCINCS += -I$(MPI_INCLUDE)
 
@@ -67,10 +61,7 @@ CFILES = \
 LCINCS += -I$(ARMCI_HOME)/src 
 LCDEFS += -DARMCI 
 
-default: first $(TARGETS)
-
-first : 
-	$(call submake,$(BUILD_AREA)/include)
+default: $(TARGETS)
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^

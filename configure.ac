@@ -61,42 +61,59 @@ BUILD_COMPILER=GNU)
 
 # enable Coarrays
 AC_ARG_ENABLE(coarrays,
-[  --enable-coarrays	  Enables UH Coarray Fortran Implementation],
+AS_HELP_STRING([--enable-coarrays],
+[Enables UH Coarray Fortran (CAF) Implementation]),
 ENABLE_COARRAYS="YES",
 ENABLE_COARRAYS="NO")
 
+# Set whether CAF runtime will be built
+AC_ARG_ENABLE([caf-runtime],
+  AS_HELP_STRING([--disable-caf-runtime], [Disable CAF Runtime]))
+
+AS_IF([test "x$enable_caf_runtime" != "xno"], [
+  BUILD_CAF_RUNTIME="YES"
+])
+
+if test "$ENABLE_COARRAYS" = "NO"; then
+  BUILD_CAF_RUNTIME="NO"
+fi
 
 # enable GASNet for Coarrays
 AC_ARG_WITH(gasnet-root,
-[  --with-gasnet-root=<gasnet path>   Builds GASNet-based libcaf runtime],
+AS_HELP_STRING([--with-gasnet-root=<gasnet path>],
+[Builds GASNet-based libcaf runtime]),
 GASNET_HOME="$with_gasnet_root",
 GASNET_HOME="")
 
 # enable ARMCI for Coarrays
 AC_ARG_WITH(armci-root,
-[  --with-armci-root=<armci path>     Builds ARMCI-based libcaf runtime],
+AS_HELP_STRING([--with-armci-root=<armci path>],
+[Builds ARMCI-based libcaf runtime]),
 ARMCI_HOME="$with_armci_root",
 ARMCI_HOME="")
 
+
 # default comm library
 AC_ARG_WITH(default-comm,
-[  --with-default-comm=gasnet|armci   Default communication layer to use if GASNet and
-                                     ARMCI are supported.  Will be GASNet if unspecified. ],
+AS_HELP_STRING([--with-default-comm=gasnet|armci],
+[Default communication layer to use if GASNet and ARMCI are supported.
+ Will be GASNet if unspecified.]),
 DEFAULT_COMM="$with_default_comm",
 DEFAULT_COMM="")
 
-# set perl path
+# set bash path
 BASH_PATH=`which bash`
 
 if test -z "${BASH_PATH}"; then
   AC_MSG_ERROR(["Could not find bash on system"])
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
     AC_MSG_ERROR(["Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays"])
 fi
 
-if test "${ENABLE_COARRAYS}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
     AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI"])
 fi
 
@@ -440,6 +457,7 @@ AC_SUBST([GCC_DIR])
 AC_SUBST([BUILD_TAU_INSTR])
 AC_SUBST([BUILD_GNU4])
 AC_SUBST([ENABLE_COARRAYS])
+AC_SUBST([BUILD_CAF_RUNTIME])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([GASNET_HOME])
@@ -447,6 +465,7 @@ AC_SUBST([ARMCI_HOME])
 AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
+AC_SUBST([MPI_INCLUDE])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
@@ -523,7 +542,7 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
-     if test "${ENABLE_COARRAYS}" = "YES"; then
+     if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
   fi
@@ -531,7 +550,7 @@ else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
-     if test "${ENABLE_COARRAYS}" = "YES"; then
+     if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
   fi

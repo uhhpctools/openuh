@@ -211,6 +211,12 @@ do
   shift
 done
 
+if [ -z "$COMM_LAYER" ]; then
+  print_error "No communication layer specified"
+elif [ "$COMM_LAYER" != "gasnet" -a "$COMM_LAYER" != "armci" ]; then
+  print_error "Invalid comm layer specified: $COMM_LAYER"
+fi
+
 if [ $COMM_LAYER == gasnet -a -z "$GASNET_HOME" ]; then
   print_error "gasnet layer is not available"
 elif [ $COMM_LAYER == armci -a -z "$ARMCI_HOME" ]; then
@@ -237,7 +243,9 @@ if [ $COMM_LAYER == gasnet ]; then
     # need to link in MPI libs as well. If LIBMPI isn't defined, then
     # just use -L${MPI_LIB} -lmpi
     if [ -z "$LIBMPI" ] ; then
-      if [ ! -d "$MPI_LIB" ]; then
+      if [ -z "$MPI_LIB" ]; then
+        print_error "MPI_LIB needs to be set"
+      elif [ ! -d "$MPI_LIB" ]; then
         print_error "MPI_LIB needs to be set to valid path. Currently: $MPI_LIB"
       fi
       LIBMPI="-L${MPI_LIB} -lmpi"

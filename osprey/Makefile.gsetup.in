@@ -176,12 +176,12 @@ ifndef GASNET_CONDUITS
 	GASNET_CONDUITS=@GASNET_CONDUITS@
 endif
 
-ifndef ARMCI_CONDUIT
-	ARMCI_CONDUIT=@ARMCI_CONDUIT@
-endif
-
 ifndef DRAGON_SUPPORT
 	DRAGON_SUPPORT = @DRAGON_SUPPORT@
+endif
+
+ifndef MPI_INCLUDE
+	MPI_INCLUDE = @MPI_INCLUDE@
 endif
 
 #  For cross compilers, there are really 3 separate variables:

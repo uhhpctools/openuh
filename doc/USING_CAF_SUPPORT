@@ -12,9 +12,7 @@ $ cd openuh-build
 [openuh-build]$ ../source/configure --prefix=<openuh-install-path> \
                 --enable-coarrays \
                 --with-gasnet-root=<gasnet-install-path>    \
-                --with-gasnet-conduit=<MPI,IB or SMP>       \
                 --with-armci-root=<armci-install-path>
-                --with-armci-conduit=<MPI,IB >       \
 You can use either gasnet or armci or both.
 [openuh-build]$ make all 
 [openuh-build]$ make install
@@ -51,70 +49,133 @@ without 32-bit compatible libraries:
 
 [openuh-build]$ make ALL_TARGETS="build lib2" 
 [openuh-build]$ make install
+
+Known Limitations
+------------------
+
+* CAF support in OpenUH is currenty limited to use of allocatable coarrays
+unless a GASNet installation built with EVERYTHING shared segment
+configuration is used. 
+
+* Fortran 2008 locks and critical sections are not yet supported.
+
+* Allocatable "coscalars" are not supported. Instead use coarray with rank 1, 
+  E.g.:
+       integer :: max(:)[:]  
+       ...
+       allocate( max(1)[*] )
+
+* Accessing a pointer component of a remote coarray of derived type is not yet
+  supported. E.g. this won't work:
+       t(2:5) = a[3]%p(1:4)
+
+* Strided coarray accesses will not work, e.g.:
+       t(:) = a(1:N:2)[p]
                     
 
 Using OpenUH CAF compiler
 ------------------------
-Compile:
-$ uhcaf prog.f90 -o prog
-or
-$ uhcaf prog.caf -o prog
-or
-$ uhcaf prog.f95 -o prog
 
-uhcaf is a wrapper on uhf90 for coarray fortran
+uhcaf is a compiler wrapper for coarray fortran
 
-Usage: uhcaf [options] file.caf
-Options:
---layer=GASNET/ARMCI    default GASNET
---show-uhf90-options
---help
-All uhf90 options also applicable.
+Usage: uhcaf  [OPTION]... [SOURCE]... [-- [OPENUH_OPTIONS]]
+
+Where options are
+
+  --layer=L         L represents a specified runtime layer to support remote
+                    accesses. Available layers are:
+                        gasnet-<conduit>
+                        armci
+
+  --gasnet-path=G   G is the path to a specified GASNet installation
+
+  --armci-path=A    A is the path to a specified ARMCI installation
+
+  --help, -h        Displays this menu
+
+  --help2, -H       Displays available options for OpenUH compiler
+
+  --verbose, -v     Output the command to be run
+
+Environment Variables:
+
+   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI
+                    documentation.
+
+   MSG_COMMS        Messaging library used by ARMCI. Default is MPI.
+
+   TARGET           Target for the ARMCI installation. Defaults to LINUX64.
+
+   ARMCI_LIB        Path containing ARMCI lib (e.g. libarmci.a), if necessary.
+                        Typically: $ARMCI_HOME/lib/$TARGET
+
+   MPI_LIB          Path to MPI lib, if necessary.
+
+   LIBMPI           Explicitly specify MPI libs to link in.
+                         Default is: -L$MPI_LIB -lmpi
+
+Example:
+
+$ uhcaf --layer=gasnet-smp  program.caf --  -O3 -g -o program
 
 
 Launching a CAF Program
 -----------------------
 
-cafrun -np 8 prog
+cafrun is a launcher for ror running CAF programs compiled with OpenUH.
 
-cafrun is a wrapper around mpirun
+Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
 
-Usage: cafrun [options] exe
-Options:
--np <n>                       - Number of images to launch (not for smp)
---num-pshm-nodes=<n>          - MUST be used only for gasnet smp conduit
---log-levels=all/DEBUG:MEMORY:etc
-     -Available log levels:
-     FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:CACHE:BARRIER:REDUCE:SYMBOLS
---trace-file=filename         -Default stderr
---shared-memory-size=<n>      -Total size of coarrays in bytes. (default 30MB)
---show-mpirun-options
---help or -h
-All mpirun options also applicable.
+Where options are
 
+  -n, --num-images=N  N is number of images to use
 
-Environment Variables
----------------------
+  --log-info=L        Sets additional info for runtime to log.
+                      L=all or info list delimited by ':'.
+                        Available information to log:
+                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
+                        CACHE:BARRIER:REDUCE:SYMBOLS
 
-All the below environment variables are a substitute for the cafrun options.
+  --log-file=F        F is name of file to store log
 
-UHCAF_LOG_LEVELS
-Prints trace information. By default log level is set to FATAL, i.e.  only
-fatal errors are printed. The following levels can be set: :FATAL, DEBUG,
-TIME, NOTICE, TIME_SUMMARY, INIT, MEMORY, CACHE, BARRIER, REDUCE, SYMBOLS.
-To set more than one, use a colon seperated list.
-e.g export UHCAF_LOG_LEVELS=DEBUG:INFO. To set all: export UHCAF_LOG_LEVELS=all
+  --image-heap=I      I is heap size per image for storing coarray data. It
+                      may be an integer which indicates size in bytes, or it
+                      may have the suffixes K, M, G which indicates size in
+                      kilobytes, megabytes, and gigabytes, respectively.
 
-UHCAF_TRACE_FILE
-Prints trace information in a file. By default it prints to stdout.
-e.g.  export UHCAF_TRACE_FILE=<filename>
+  --help, -h          Displays this menu
 
-UHCAF_SHARED_MEMORY_SIZE
-Size of entire PGAS shared memory, default 30MB, max 4GB
-e.g. export UHCAF_SHARED_MEMORY_SIZE=3000000000 #for 3GB
+  --help2, -H         Displays more options for underlying launcher (mpirun)
 
-GASNET_PSHM_NODES         
-Number of images (SMP conduit only)
-e.g. export GASNET_PSHM_NODES=4
+  --verbose, -v       Verbose
 
+Environment Variables:
+
+   LAUNCHER           Underlying program to use for launching CAF images.
+                         Defaults to mpirun
+
+   LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
+                      from number of processes to spawn.
+
+   UHCAF_LOG_INFO     Specifies information for runtime to log.
+                         Can be set with --log-info
+
+   UHCAF_LOG_FILE     Specifies file to store runtime log
+                         Can be set with --log-file
+
+   UHCAF_IMAGE_NUM_IMAGES
+                      Specifies number of images to launch.
+                         Can be set/overridden with --num-images
+
+   UHCAF_IMAGE_HEAP_SIZE
+                      Specifies heap size per image for storing coarray data.
+                         Can be set with --image-heap
+
+   GASNET_PSHM_NODES  Set number of POSIX shared memory nodes for when
+                      gasnet-smp layer is used.
+                         Can be set with --num-images
+
+Example:
+
+$ cafrun --num-images=16 --log-info=TIME_SUMMARY program
 
