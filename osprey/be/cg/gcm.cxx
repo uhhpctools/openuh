@@ -56,6 +56,7 @@
  * =======================================================================
  */
 
+#undef DRAGON
 #include <stdint.h>
 #include <alloca.h>
 #include "defs.h"

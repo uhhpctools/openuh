@@ -45,6 +45,11 @@
 #ifndef cxx_ipa_cg_INCLUDED
 #define cxx_ipa_cg_INCLUDED
 
+#ifdef DRAGON
+#include <fstream>
+using namespace std;
+#endif
+
 #include <vector>
 
 #ifndef mempool_allocator_INCLUDED
@@ -1205,6 +1210,9 @@ public:
   // Print all node indices in the specified order
   void Print (FILE*, TRAVERSAL_ORDER);
 
+#ifdef DRAGON
+ void Dragon_Print(ofstream &);
+#endif
 
   void Print_vobose (FILE*);
   void Print_vobose (FILE*, TRAVERSAL_ORDER, BOOL);

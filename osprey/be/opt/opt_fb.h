@@ -251,7 +251,11 @@ public:
   FB_FREQ Get_node_freq_out( IDTYPE nx ) const {
     return _fb_opt_nodes[nx].freq_total_out;
   }
-  
+
+#ifdef DRAGON
+    IDTYPE        Get_edge_id (IDTYPE nx_src, IDTYPE nx_dst) const;
+#endif
+
   bool    Edge_has_freq( IDTYPE nx_src, IDTYPE nx_dst ) const;
   FB_FREQ Get_edge_freq( IDTYPE nx_src, IDTYPE nx_dst ) const;
   IDTYPE  Get_edge(IDTYPE nx_src, IDTYPE nx_dst) const;

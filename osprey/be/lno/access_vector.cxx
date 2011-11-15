@@ -336,6 +336,31 @@ INT64 INDX_RANGE::Maxsize() const
   return ans <= 0 ? -1 : ans;
 }
 
+#ifdef DRAGON
+//dragon merge
+void ACCESS_ARRAY::Dragon_Print(ofstream &outfile,BOOL is_bound) const
+{
+  int numvec=0;
+
+   if (Too_Messy) {
+     numvec = 1;
+     outfile.write((char *) &numvec, sizeof(int));
+     char messy[]="[EXPR]";
+     int name_len = strlen(messy)+1;
+     outfile.write((char *) &name_len, sizeof(int));
+     outfile.write((char *) messy, name_len);
+    return;
+  }
+
+   numvec = _num_vec;
+   outfile.write((char *) &numvec, sizeof(int));
+
+  for (INT32 i=0; i<_num_vec; i++) {
+    Dim(i)->Dragon_Print(outfile,is_bound);
+  }
+
+}
+#endif
 
 
 void ACCESS_ARRAY::Print(FILE *fp, BOOL is_bound) const
@@ -515,6 +540,18 @@ BOOL ACCESS_ARRAY::operator ==(const ACCESS_ARRAY& a) const
   }
   return(TRUE);
 }
+
+#ifdef DRAGON
+void ACCESS_VECTOR::Dragon_Print(ofstream &outfile, BOOL is_bound, BOOL
+print_brackets) const
+{
+  char bf[MAX_TLOG_CHARS];
+  Print(bf, 0, is_bound, print_brackets);
+  int name_len = strlen(bf)+1;
+  outfile.write((char *) &name_len, sizeof(int));
+  outfile.write((char *) bf, name_len);
+}
+#endif
 
 void ACCESS_VECTOR::Print(FILE *fp, BOOL is_bound, BOOL print_brackets) const
 {

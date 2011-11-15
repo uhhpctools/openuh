@@ -36,7 +36,7 @@
 
 */
 
-
+#undef DRAGON
 //-*-c++-*-
 //                     Systems of Equations
 //                     --------------

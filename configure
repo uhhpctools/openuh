@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -792,6 +792,7 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-coarrays	  Enables UH Coarray Fortran Implementation
+  --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
   --disable-ipa           Disable IPA compilation support (EXPERIMENTAL)
@@ -1475,6 +1476,20 @@ echo "$as_me: error: \"default comm (armci) requires --with-armci-root to be spe
    { (exit 1); exit 1; }; }
 fi
 
+# enable Dragon support
+# Check whether --enable-dragon-support or --disable-dragon-support was given.
+if test "${enable_dragon_support+set}" = set; then
+  enableval="$enable_dragon_support"
+
+fi;
+
+if test "x$enable_dragon_support" = "xyes"; then
+
+  DRAGON_SUPPORT=YES
+
+fi
+
+
 case "$BUILD_COMPILER" in
   GNU|gnu|gcc)
     BUILD_COMPILER=GNU
@@ -1810,6 +1825,7 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
+
 
 
 
@@ -2718,6 +2734,7 @@ s,@BUILD_GNU3@,$BUILD_GNU3,;t t
 s,@BUILD_FORTRAN@,$BUILD_FORTRAN,;t t
 s,@BUILD_SKIP_IPA@,$BUILD_SKIP_IPA,;t t
 s,@BUILD_TYPE@,$BUILD_TYPE,;t t
+s,@DRAGON_SUPPORT@,$DRAGON_SUPPORT,;t t
 s,@GCC_CONFIGURE_TARG@,$GCC_CONFIGURE_TARG,;t t
 s,@GCC_DIR@,$GCC_DIR,;t t
 s,@BUILD_TAU_INSTR@,$BUILD_TAU_INSTR,;t t

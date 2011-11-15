@@ -155,7 +155,9 @@ WOPT_HEADER_DIRS = \
 BE_COM_CXX_SRCS = \
   cxx_template.cxx
 
+# DRAGON added FGnode.cxx
 BE_OPT_CXX_SRCS = \
+  FGnode.cxx          \
   opt_alias_class.cxx	\
   opt_base.cxx		\
   opt_bb.cxx		\

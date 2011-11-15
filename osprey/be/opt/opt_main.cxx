@@ -355,6 +355,11 @@
 #ifndef __MINGW32__
 #include "regex.h"                      // For regcomp and regexec
 #endif /* __MINGW32__ */
+
+#ifdef DRAGON
+#include "FGnode.h"
+#endif
+
 #include "xstats.h"                     // For PU_WN_BB_Cnt
 #include "opt_wovp.h"     // for write once variable promotion
 #include "opt_misc.h"
@@ -368,6 +373,12 @@
 #include "wssa_utils.h"   // WHIRL SSA
 
 #include "../opt/init.cxx"          // force include of Wopt_Initializer
+
+#ifdef DRAGON
+extern  BOOL  Dragon_CFG_Phase;   // HL ++
+FGRAPH Curr_CFG;                 /* Lei Huang 09/18/02 current CFG */
+extern ofstream cfg_file;
+#endif
 
 extern "C" void
 Perform_Procedure_Summary_Phase (WN* w, struct DU_MANAGER *du_mgr,
@@ -1511,6 +1522,14 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
   // tail recursion
   BOOL do_tail_rec = ((! IS_FORTRAN) && WOPT_Enable_Tail_Recur);
 
+#ifdef DRAGON
+  if (Dragon_CFG_Phase){       // clear all CFG Nodes
+        Curr_CFG.FG_Nodes.clear();
+        Curr_CFG.Set_pu_name(proc_name);
+        Curr_CFG.Set_Finished(FALSE);
+  }
+#endif
+
   comp_unit->Cfg()->Create(comp_unit->Input_tree(), lower_fully,
 			   WOPT_Enable_Calls_Break_BB,
 			   rgn_level/*context*/, 
@@ -1529,6 +1548,16 @@ Pre_Optimizer(INT32 phase, WN *wn_tree, DU_MANAGER *du_mgr,
 					  "after CFG Annotation" );
     // TODO: Perhaps clear out Cur_PU_Feedback now?
   }
+
+#ifdef DRAGON
+ if (Dragon_CFG_Phase)        // dump CFG into cfg_file
+   {
+     comp_unit->Cfg()->Dump_CFG(TFile); // update Curr_CFG
+     Curr_CFG.Print(cfg_file); // Dump it
+     //Debug
+     //Curr_CFG.Print();
+   }
+#endif
 
   SET_OPT_PHASE("Control Flow Analysis");
   comp_unit->Cfg()->Compute_dom_tree(TRUE); // create dominator tree

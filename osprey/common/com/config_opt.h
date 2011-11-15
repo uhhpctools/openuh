@@ -87,6 +87,12 @@
 #include "flags.h"
 #endif
 
+#ifdef DRAGON
+#include <fstream>
+using namespace std;
+extern ofstream cfg_file;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

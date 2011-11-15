@@ -71,6 +71,11 @@
  * ====================================================================
  */
 
+#ifdef DRAGON
+  #include <fstream>
+  using namespace std;
+#endif
+
 #ifdef _KEEP_RCS_ID
 /*REFERENCED*/
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/common/com/config.cxx,v $ $Revision: 1.1.1.1 $";
@@ -992,6 +997,12 @@ BOOL Fill_Delay_Slots = FALSE;  /* Attempt to fill branch delay slots */
 BOOL Enable_GDSE = FALSE;       /* Allow global dead store elimination */
 BOOL Enable_CG_Peephole =FALSE;	/* Enable peephole optimization in cgprep */
 BOOL Enable_EBO_Post_Proc_Rgn = TRUE ;
+
+#ifdef DRAGON
+BOOL Dragon_Flag = FALSE;  /* HL 11/12/03 */
+BOOL Dragon_CFG_Phase = FALSE;  /* HL 11/12/03 */
+ofstream cfg_file;
+#endif
 
 /* UH additional flags */
 BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */

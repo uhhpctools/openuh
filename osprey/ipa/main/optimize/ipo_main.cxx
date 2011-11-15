@@ -68,7 +68,7 @@
 // just enough so that we can build and run ipa.  The else clause contains
 // the full (old symtab) version of the file.
 
-
+#undef DRAGON
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>

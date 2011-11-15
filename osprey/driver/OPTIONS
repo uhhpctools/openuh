@@ -148,6 +148,10 @@
 %
 -coarray toggle(&coarray,TRUE);     F90      be       self
         "Process coarrays"
+%ifdef DRAGON
+-dragon ;   ALL    ipap,b,i    self
+        "dragon flag used in the dragon tools"
+%endif
 -apocost                  ;   ALL     bij    self
         "Print the cost model of the parallelism in each parallelizable loops"
 -autoscope                  ;   ALL     bij    self

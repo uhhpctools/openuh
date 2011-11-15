@@ -75,6 +75,13 @@
 
 #include <sys/types.h>
 
+#ifdef DRAGON
+#include <string>
+#include <vector>
+#include <fstream>
+using namespace std;
+#endif
+
 #include "defs.h"
 #include "erglob.h"			// error message strings
 #include "mempool.h"			// memory pools
@@ -101,9 +108,19 @@
 #include "ipaa.h"			// IPAA_NODE_INFO
 #include "ipa_be_summary.h"             // SUMMARY_CONSTRAINT_GRAPH_*
 
+
+#ifdef DRAGON
+#include "ipa_section_prop.h"
+#endif
+
 #include "ipa_nested_pu.h"
 #include "ipa_cg.h"
 #include "ipa_inline.h"
+
+#ifdef DRAGON
+#include "printsrc.h"
+#include "ir_reader.h"
+#endif
 
 #include "symtab_idx.h"         //for make_TY_IDX()-- in reorder
 #include "ipa_reorder.h"        //for merged_access --reorder
@@ -3956,6 +3973,171 @@ fprintf(fp, SBar);
        }
   }
 }//Print-vobose()
+
+#ifdef DRAGON
+void IPA_CALL_GRAPH::Dragon_Print(ofstream &outfile)
+{
+
+  char *filename=NULL;
+  char *dirname=NULL;
+  int GraphSize = IPA_Call_Graph->Node_Size();
+  outfile.write((char *) &GraphSize, sizeof(int));
+  IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
+//added by Yi Wen on 06/30/2003
+//tell dragon if newcg flag is used"
+ // outfile.write((char *) &New_CG, sizeof(bool));
+
+// added by C.H Liao on 3/1/2004
+  // for edge frequency information from feedback
+  // BOOL fb_flag1=FALSE, fb_wrote=FALSE;
+  //if(node->Has_frequency ()) fb_flag1=TRUE;
+  //outfile.write((char*) & fb_flag1, sizeof(bool));
+
+   float callee_freq,edge_freq,callee_cycle_count;
+   SUMMARY_FEEDBACK *fb;
+   INT32 callsite_linenum;
+   WN* call_wn;
+   USRCPOS callsite_srcpos;
+
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next()) {
+
+    IPA_NODE* node = cg_iter.Current();
+    if(node){
+      int index =node->Array_Index();
+      outfile.write((char *) &index, sizeof(int));
+      // By Liao, for callsite information
+      IPA_NODE_CONTEXT context (node);
+      IPA_Call_Graph-> Map_Callsites(node);
+/* Check for OpenMP */
+      bool has_mp = PU_has_mp(node->Get_PU());
+      outfile.write((char *) &has_mp, sizeof(bool));
+
+      WN *WnTree =  node->Whirl_Tree();
+      // IPA_NODE_CONTEXT context(node);
+      SRCPOS srcpos = WN_Get_Linenum(WnTree);
+      USRCPOS linepos;
+      USRCPOS_srcpos(linepos) = srcpos;
+
+      int line = USRCPOS_linenum(linepos);
+      IPA_IR_Filename_Dirname(srcpos,filename,dirname);
+
+      int len=0;
+      len = strlen(IPA_Node_Name(node))+1;
+      outfile.write((char *) &len, sizeof(int));
+      outfile.write((char*)IPA_Node_Name(node),strlen(IPA_Node_Name(node))+1);
+
+      len = strlen(dirname)+strlen(filename)+2;
+      outfile.write((char *) &len, sizeof(int));
+      outfile.write((char*)dirname,strlen(dirname));
+      char slash = '/';
+      outfile.write((char*)&slash, sizeof (char));
+      outfile.write((char*)filename,strlen(filename)+1);
+
+      if(filename!=NULL)
+      delete [] filename;
+      if(dirname!=NULL)
+      delete [] dirname;
+
+      outfile.write((char *) &line, sizeof(int));
+
+      // By Liao, adding feedback information for
+          float caller_freq=-1.0;
+          float cycle = -1.0;
+          unsigned int n_wt;
+          UINT16 wn_count = 0;
+          if(node->Has_frequency ()) {
+            caller_freq = (node->Get_frequency())._value;
+            cycle = node->Get_cycle_count_2()._value;
+            wn_count=node->Get_wn_count();
+          }
+          n_wt=node->Weight();
+          //Debug
+  // printf("PU   %-40s Weight=%-5d Freq=%-10.1f WNs=%-7d Cc=%-15.1f\n",
+  // IPA_Node_Name(node), node->Weight(), caller_freq, wn_count, cycle);
+          outfile.write((char*)&n_wt,sizeof(unsigned int));
+          outfile.write((char*)&caller_freq, sizeof(float));
+          // Do we need show wn count? not likely
+          outfile.write((char*)&cycle, sizeof(float));
+
+
+      //- end of node feedback
+      int totalsuccs = 0;
+      IPA_SUCC_ITER iter(node);
+            //printf("b4 iter callee\n");
+      for (iter.First(); !iter.Is_Empty(); iter.Next()) {
+
+        IPA_EDGE* ed_=iter.Current_Edge();
+        //printf("totalsuccs=%d, idx==%d\n",totalsuccs,idx);
+        if(ed_){
+          IPA_NODE* callee = Callee(iter.Current_Edge());
+          if (callee) {
+            totalsuccs++;
+          }
+        }
+      }
+                //printf("totalsuccs: %d\n",totalsuccs);
+      outfile.write((char *) &totalsuccs, sizeof(int));
+      BOOL seen_callee = FALSE;
+
+      IPA_SUCC_ITER succ_iter(node);
+      for (succ_iter.First(); !succ_iter.Is_Empty(); succ_iter.Next())
+{
+        IPA_EDGE* ed=succ_iter.Current_Edge();
+        if(ed){
+          if (IPA_NODE* callee = Callee(ed)) {
+            if (!seen_callee) {
+              //fprintf(fp, "CALLS");
+              seen_callee = TRUE;
+            }
+            int succ_index =callee->Array_Index();
+                //      printf("succ_index: %d\n",succ_index);
+
+                        //printf("succ_index: %d\n",succ_index);
+            outfile.write((char *) &succ_index, sizeof(int));
+  //Added by C.H. Liao, 3/1/2004. for edge freqency from feedback
+          fb=callee->Get_feedback();
+
+          if(callee->Has_frequency()){
+             callee_freq=(callee->Get_frequency())._value;
+             callee_cycle_count=callee->Get_cycle_count()._value;
+           }else{
+             callee_freq =-1.0;
+             callee_cycle_count =-1.0;
+           }
+
+           if(ed->Has_frequency()){
+             edge_freq=(ed->Get_frequency())._value;
+           }else{
+             edge_freq=-1.0;
+           }
+           //By Liao, for callsite information
+           // Be sure to call Map_Callsites(node) at the first level of loop!!
+              call_wn = ed->Whirl_Node();
+
+              if (call_wn == NULL) {
+                  callsite_linenum = 0;
+              }else{
+                  USRCPOS_srcpos(callsite_srcpos) = WN_Get_Linenum (call_wn);
+                  callsite_linenum = USRCPOS_linenum(callsite_srcpos);
+              } // END call_wn ==null
+              unsigned int ed_id= ed->Edge_Index();
+ //write out edge frequency information here in addition to successor id
+  //     printf("linenum: %-5d, edge no: %-5d,freq:%-10.1f,succ_index: %d\n",
+   //      callsite_linenum, ed->Edge_Index(),edge_freq, succ_index);
+
+           outfile.write((char *) &callsite_linenum, sizeof(unsigned int));
+           outfile.write((char *) &ed_id, sizeof(unsigned int));
+            outfile.write((char *) &edge_freq, sizeof(float));
+          }
+
+
+        }//if(ed)
+      }//for
+    }// if
+  }// for
+
+}
+#endif
 
 void
 IPA_NODE::Print(FILE *fp, IPA_CALL_GRAPH *cg)

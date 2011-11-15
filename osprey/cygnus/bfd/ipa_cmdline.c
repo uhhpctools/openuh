@@ -20,7 +20,7 @@
  * with this program; if not, write the Free Software Foundation, Inc., 59
  * Temple Place - Suite 330, Boston MA 02111-1307, USA.
  */
-
+#define DRAGON
 #if defined(__GNUC__)
 #include <stdio.h>		/* for sys_errlist */
 #endif
@@ -70,6 +70,10 @@ extern int UH_Autoscope_Flag;
 extern int UH_Apocost_Flag; /* Laks 09.13.06 Apocost flag */
 
 extern void ipa_insert_whirl_obj_marker(void);
+
+#ifdef DRAGON
+extern int Dragon_Flag;
+#endif
 
 /* 
     I took the following out of /usr/include/elf.h because
@@ -672,6 +676,14 @@ ipa_search_command_line(int argc,
                 blank_arg(argv,i);
                 continue;
             }
+#ifdef DRAGON
+           else if ((strcmp(string,"-dragon")) == 0) {
+                Dragon_Flag = TRUE;
+                    /* Blank out argument */
+                blank_arg(argv,i);
+                continue;
+            }
+#endif
                 /* ------------------  laks 09.13.06: add apocost */
             else if ((strcmp(string,"-apocost")) == 0) {
                 UH_Apocost_Flag = TRUE;

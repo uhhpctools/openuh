@@ -850,6 +850,13 @@ Ipl_Processing (PU_Info *current_pu, WN *pu)
     if (Run_preopt) {
 	du_mgr = Create_Du_Manager(MEM_pu_nz_pool_ptr);
 	al_mgr = Create_Alias_Manager(MEM_pu_nz_pool_ptr, pu);
+
+#ifdef DRAGON
+     if (Dragon_CFG_Phase){
+      strcpy(proc_name, ST_name(PU_Info_proc_sym(current_pu)));
+     }
+#endif
+
 	Check_for_IR_Dump_Before_Phase(TP_IPL, pu, "Pre_Optimizer");
 	pu = Pre_Optimizer(PREOPT_IPA0_PHASE, pu, du_mgr, al_mgr);
 	Check_for_IR_Dump(TP_IPL, pu, "Pre_Optimizer");
@@ -2344,6 +2351,27 @@ main (INT argc, char **argv)
   if (Tlog_File)
     Print_Tlog_Header(argc, argv);
 
+#ifdef DRAGON
+  /* Lei Huang 09/18/02 Create a *.cfg file to save CFG */
+  if (Dragon_CFG_Phase) {
+      char filename[50];
+      strcpy(filename, Src_File_Name);
+      int n;
+      for(n=strlen(Src_File_Name)-1; n>0; n--)
+          if(filename[n]!='.')
+              filename[n]='\0';
+          else
+              break;
+      if(n>0)         // change *.f/*.c/*.cpp to *.cfg
+          strcat(filename,"cfg");
+      else{
+          strcpy(filename,Src_File_Name);
+          strcat(filename,".cfg");
+      }
+      cfg_file.open(filename,ios::out|ios::binary);
+  }
+#endif
+
   if (Run_ipl)
     Preprocess_struct_access();// for field reorder
 #ifdef KEY
@@ -2377,6 +2405,12 @@ main (INT argc, char **argv)
        current_pu != NULL;
        current_pu = PU_Info_next(current_pu)) {
     Preorder_Process_PUs(current_pu);
+  }
+#endif
+
+#ifdef DRAGON
+  if (Dragon_CFG_Phase){
+        cfg_file.close();
   }
 #endif
 

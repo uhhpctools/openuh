@@ -458,6 +458,12 @@ public:
   void         PrintLoopVis(BB_LOOP * loop, int & id);
   void         PrintVis(BOOL draw_loops);
   void         PrintCDVis(void);
+#ifdef DRAGON
+ //dragon merge
+ // Lei Huang 08/08/02  dump CFG to a .cfg file
+  void         Dump_CFG(FILE *fp=stderr,
+                     BOOL dfs_order = TRUE, IDTYPE bb_id = (IDTYPE) -1);
+#endif
   void         Validate(FILE *fp=stderr);
 
   // create the control-flow graph

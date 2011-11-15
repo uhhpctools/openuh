@@ -1776,3 +1776,14 @@ WN* LWN_Simplify_Tree(WN* wn)
   LWN_Parentize(wn_new); 
   return wn_new; 
 } 
+
+#ifdef DRAGON
+WN * LWN_Get_Expression(WN *wn) {
+
+  WN *tmp_wn = wn;
+  while (OPCODE_is_expression(WN_opcode(tmp_wn))) {
+    tmp_wn = LWN_Get_Parent(tmp_wn);
+  }
+  return tmp_wn;
+}
+#endif

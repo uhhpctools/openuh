@@ -113,6 +113,9 @@ bfd_boolean add_needed = TRUE;
 /* TRUE if we should demangle symbol names.  */
 bfd_boolean demangling;
 
+#ifdef DRAGON
+int Dragon_Flag;
+#endif
 int Epilog_Flag;
 int UH_Autoscope_Flag; /* Laks 08/11/06 */
 int UH_Apocost_Flag; /* Laks 08/11/06 */

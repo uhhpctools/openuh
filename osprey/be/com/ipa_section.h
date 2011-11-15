@@ -1089,6 +1089,10 @@ public:
   PROJECTED_REGION*
     Get_Projected_Region(INT i);
 
+#ifdef DRAGON
+  void Dragon_Print(ofstream &fp, INT region_index, char* name, char* func_name);
+  void Dragon_Print(ofstream &fp, INT proj_region_index, INT proj_node_index, INT dim_no);
+#endif
 
   void Print(FILE *fp = stderr);
   void Print_file(FILE* fp = stderr);

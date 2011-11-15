@@ -120,6 +120,10 @@ FILE *Call_graph_file = NULL; 	      /* Call graph file */
 char * pu_string[1000]; 
 char * bb_string[1000]; 
 
+#ifdef DRAGON
+char proc_name[256];  /* HL 11/13/03 save a procedure name */
+#endif
+
 /* Current file	names: */
 char *Src_File_Name = NULL;	/* Source file */
 char *Orig_Src_File_Name = NULL; /* Original source file */

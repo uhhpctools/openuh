@@ -103,6 +103,8 @@ static char *rcs_id = "$Source: be/com/SCCS/s.dep_graph.cxx $ $Revision: 1.7 $";
 #include "stab.h"
 
 #ifdef LNO
+
+
 #include "call_info.h"
 #include "config.h"
 #include "config_cache.h"
@@ -115,6 +117,13 @@ static char *rcs_id = "$Source: be/com/SCCS/s.dep_graph.cxx $ $Revision: 1.7 $";
 #include "opt_alias_interface.h"
 #include "lego_util.h"
 #include "opt_du.h"
+
+#ifdef DRAGON
+#include <fstream>
+#include <iostream>
+#include <string>
+using namespace std;
+#endif
 
 // return TRUE if any erased vertices.
 static BOOL LNO_Erase_Dg_From_Here_In_X(WN* wn, ARRAY_DIRECTED_GRAPH16* dg)
@@ -337,6 +346,215 @@ void ARRAY_DIRECTED_GRAPH16::PruneMapsUsingParity(void)
     }
   }
 }
+
+#ifdef LNO
+#ifdef DRAGON
+void ARRAY_DIRECTED_GRAPH16::Dragon_Print(char dumpfilename[], WN *func)
+{
+  bool debug =false;
+  VINDEX16 i;
+  EINDEX16 e;
+  EINDEX16 e_temp;
+  const char *filename;
+  const char *dirname;
+  char *symbol_name;
+  int count = 0;
+  int line;
+ // add here filename of graph.
+  ifstream check(dumpfilename, ios::in);
+  ofstream outfile;
+  if (!check) {
+
+       outfile.open(dumpfilename,ios::out |ios::binary);
+    }
+  else
+    {
+       outfile.open(dumpfilename,ios::out |ios::binary |ios::app);
+    }
+  check.close();
+
+     char *func_name=NULL;
+     func_name = ST_name(WN_st(func));
+     int name_len_temp = strlen(func_name)+1;
+     outfile.write((char *) &name_len_temp, sizeof(int));
+     outfile.write((char *) func_name, name_len_temp);
+     if (debug) cout << "\nFunction name="<<func_name<<endl;
+
+
+   for (i=1; i<_v.Lastidx()+1; i++)
+     if (!_v[i].Is_Free()) count ++;
+   if (debug) cout <<"total nodes="<<count<<endl;
+
+   outfile.write((char *) &count, sizeof(int));
+  for (i=1; i<_v.Lastidx()+1; i++) {
+   if (!_v[i].Is_Free()) {
+
+      BOOL is_load = FALSE;
+      BOOL is_call = FALSE;
+      WN *wn = _v[i].Wn;
+
+      WN* temp = LWN_Get_Expression(_v[i].Wn);
+      line =0;
+      SRCPOS srcpos = WN_Get_Linenum(temp);
+      USRCPOS linepos;
+      USRCPOS_srcpos(linepos) = srcpos;
+      line = USRCPOS_linenum(linepos);
+      //IR_Srcpos_Filename(srcpos,&filename,&dirname);
+
+
+
+
+      if (OPCODE_is_load(WN_opcode(wn))) {
+        is_load = TRUE;
+        if (WN_kid_count(wn) >= 1) {
+          wn = WN_kid0(wn); // not an ldid
+        }
+      } else if (OPCODE_is_store(WN_opcode(wn))) {
+        if (WN_kid_count(wn) >= 2) {
+          wn = WN_kid1(wn); // not an stid
+        }
+      } else {
+        is_call = TRUE;
+      } //end of else
+      int array = 0;
+       int name_len=0;
+       int tempi= (int) i;
+      outfile.write((char *) &tempi, sizeof(int));
+      outfile.write((char *) &line, sizeof(int));
+      if(debug) cout << "Node ID="<<i<<" line="<<line;
+
+     if (WN_operator(wn) == OPR_ARRAY) {
+        array =1;
+        outfile.write((char *) &array, sizeof(int));
+        WN *base = WN_array_base(wn);
+        if (OPCODE_has_sym(WN_opcode(base)) && WN_st(base)) {
+        if (is_load) {
+            int load =0;
+            if (debug) cout << " is load";
+             outfile.write((char *) &load, sizeof(int));
+
+
+          } else {
+
+            int load =1;
+             outfile.write((char *) &load, sizeof(int));
+             if (debug) cout << " is store";
+
+          }
+
+            symbol_name = ST_name(WN_st(WN_array_base(wn)));
+            name_len = strlen(symbol_name)+1;
+            outfile.write((char *) &name_len, sizeof(int));
+            outfile.write((char *) symbol_name, name_len);
+            if (debug) cout << " name="<<symbol_name;
+       } else {
+          if (is_load) {
+
+             int load =0;
+            if (debug) cout << " is load";
+             outfile.write((char *) &load, sizeof(int));
+
+          } else
+           {
+              int load =1;
+             outfile.write((char *) &load, sizeof(int));
+              if (debug) cout << " is store";
+
+          }
+          char nosymbol[]="NO SYMBOL";
+          name_len = strlen(nosymbol)+1;
+          outfile.write((char *) &name_len, sizeof(int));
+          outfile.write((char *) nosymbol, name_len);
+          if (debug) cout << " name="<<nosymbol;
+        }
+      ACCESS_ARRAY *array = (ACCESS_ARRAY *)
+WN_MAP_Get(LNO_Info_Map,wn);
+      array->Dragon_Print(outfile);
+
+
+     }else {
+         array =0;
+         outfile.write((char *) &array, sizeof(int));
+        if (is_load) {
+          int load =0;
+            if (debug) cout << " is load";
+             outfile.write((char *) &load, sizeof(int));
+          //fprintf(fp,"Vertex %d for load from Wn = ",i);
+
+        } else if (is_call) {
+
+              int load =2;
+             outfile.write((char *) &load, sizeof(int));
+              if (debug) cout << " is call";
+          //fprintf(fp,"Vertex %d for call into Wn = ",i);
+        } else {
+             int load =1;
+             outfile.write((char *) &load, sizeof(int));
+              if (debug) cout << " is store";
+
+          //fprintf(fp,"Vertex %d for store into Wn = ",i);
+        }
+          char *temp=NULL;
+          temp = ST_name(WN_st(wn));
+          if(temp==NULL)
+            {
+              char nosymbol[]="NO SYMBOL";
+              name_len = strlen(nosymbol)+1;
+              outfile.write((char *) &name_len, sizeof(int));
+              outfile.write((char *) nosymbol, name_len);
+              if (debug) cout << " name="<<nosymbol;
+
+            }
+          else
+            {
+
+              name_len = strlen(temp)+1;
+              outfile.write((char *) &name_len, sizeof(int));
+              outfile.write((char *) temp, name_len);
+              if (debug) cout << " name="<<temp;
+
+
+            }
+        // Dump_WN(wn,fp,TRUE,0,0);
+
+     }
+   if (debug) cout <<endl;
+
+    e = _v[i].Get_Out_Edge();
+    e_temp =  _v[i].Get_Out_Edge();
+    int e_count = 0;
+    while (e_temp)
+      {
+        e_temp = _e[e_temp].Get_Next_Out_Edge();
+        e_count++;
+      }
+     outfile.write((char *) &e_count, sizeof(int));
+     if (debug) cout << "# of edges" << e_count<<" edges=";
+
+    while (e) {
+      if (debug) {
+
+
+        // fprintf(stdout,"Edge %d to vertex %d ",e,_e[e].Get_Sink());
+        //fprintf(stdout," has DEPV_ARRAY = ");
+        // _e[e].Depv_Array->Print(stdout);
+      }
+
+      int edgenum =  _e[e].Get_Sink();
+      outfile.write((char *) &edgenum, sizeof(int));
+      e = _e[e].Get_Next_Out_Edge();
+      if (debug)
+        cout <<edgenum<<",";
+    }
+    if (debug)
+      cout << endl;
+   } // end of v if its free.
+  }//end of vertex traversal
+  outfile.close();
+  cout <<".";
+}
+#endif
+#endif
 
 #if defined(SHARED_BUILD) && !defined(LNO)
 void ARRAY_DIRECTED_GRAPH16::Print(FILE *fp)

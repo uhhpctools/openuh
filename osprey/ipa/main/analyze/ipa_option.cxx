@@ -57,6 +57,7 @@
  * ====================================================================
  */
 
+#undef DRAGON
 #ifdef _KEEP_RCS_ID
 static char *rcs_id = "$Source: /proj/osprey/CVS/open64/osprey1.0/ipa/main/analyze/ipa_option.cxx,v $ $Revision: 1.1.1.1 $";
 #endif /* _KEEP_RCS_ID */

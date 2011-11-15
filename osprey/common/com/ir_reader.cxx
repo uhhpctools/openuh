@@ -68,6 +68,10 @@
       IR_output
 
  *************************************************************************/
+#ifdef DRAGON
+#include <string>
+using namespace std;
+#endif
 #ifdef USE_PCH
 #include "common_com_pch.h"
 #endif /* USE_PCH */
@@ -707,6 +711,7 @@ extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
 
 }
 
+#ifdef DRAGON
 extern void IPA_IR_Srcpos_Filename(SRCPOS srcpos,        /* in */
                                const char **fname,   /* out */
                                const char **dirname) /* out */
@@ -738,6 +743,8 @@ extern void IPA_IR_Srcpos_Filename(SRCPOS srcpos,        /* in */
       *dirname = incl_table[cur_file->incl_index];
    }
 } /* IR_Srcpos_Filename */
+#endif
+
 /*========================================================================
 
    Print source lines (taken from cgdwarf.c)

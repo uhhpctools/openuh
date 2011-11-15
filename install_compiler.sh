@@ -310,7 +310,8 @@ INSTALL_IPA () {
 
     INSTALL_EXEC_SUB ${LD_NEW_DIR}/ld-new  ${PHASEPATH}/ipa_link
 
-    (cd ${PHASEPATH}; ln -sf be ipl)
+    # DRAGON: adding cfg_ipl
+    (cd ${PHASEPATH}; ln -sf be ipl; ln -sf be cfg_ipl)
 
     return 0
 }

@@ -12713,7 +12713,7 @@ s/^[^=]*=[	 ]*$//;
 }'
 fi
 
-DEFS="-DHAVE_CONFIG_H -DIPA_LINK -DKEY -DOSP_OPT"
+DEFS="-DHAVE_CONFIG_H -DIPA_LINK -DDRAGON -DKEY -DOSP_OPT"
 
 ac_libobjs=
 ac_ltlibobjs=

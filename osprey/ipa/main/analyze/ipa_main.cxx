@@ -53,6 +53,12 @@
 #include <elf.h>
 #endif /* defined(BUILD_OS_DARWIN) */
 
+#ifdef DRAGON
+#include <fstream>
+#include <string>
+#include <vector>
+#endif
+
 #include "defs.h"
 #include "errors.h"
 #include "mempool.h"
@@ -83,11 +89,122 @@
 extern void (*Preprocess_struct_access_p)(void);
 #define Preprocess_struct_access (*Preprocess_struct_access_p)
 #endif /* KEY */
+
+#ifdef DRAGON
+#include "ipc_symtab_merge.h"
+extern "C" void cleanup_all_files (void);
+extern const char* output_filename;
+extern BOOL Dragon_Flag;
+BOOL Dragon_Flag = FALSE;
+/*************************************
+        Lei Huang 11/23/02
+   The Dragon_CFG_Phase is used in f90_lower() in cfg_ipl phase. however,
+   the f90_lower() is also used in ipa_linker phase, so, set the
+   Dragon_CFG_Phase as FALSE when it appears in ipa_linker.
+******************************/
+BOOL Dragon_CFG_Phase=FALSE;
+#endif
+
 #include "ipa_reorder.h"
 
 #include "ipa_nystrom_alias_analyzer.h"
 
 FILE* STDOUT = stdout; 
+
+#ifdef DRAGON
+char* Dragon_Symbol_Name(INT i,char** function_name, IPA_NODE *ipan)
+{
+  SUMMARY_SYMBOL* symbol_array = IPA_get_symbol_array(ipan);
+  SUMMARY_SYMBOL* ss = &symbol_array[i];
+  if (ST_IDX_level(ss->St_idx()) > 1) {
+    ST_IDX func_st_idx = ss->Get_st_idx_func();
+    PU_IDX pu_idx = ST_pu(ST_ptr(func_st_idx));
+    NODE_INDEX node_index = AUX_PU_node(Aux_Pu_Table[pu_idx]);
+    IPA_NODE* cnode = IPA_Call_Graph->Graph()->Node_User(node_index);
+    IPA_NODE_CONTEXT context(cnode);
+    if (function_name != NULL)
+      *function_name = ST_name(func_st_idx);
+    return ST_name(ss->St_idx());
+  } else {
+    IPA_NODE_CONTEXT context(ipan);
+    if (function_name != NULL)
+      *function_name = NULL;
+    return ST_name(ss->St_idx());
+  }
+}
+void Dragon_Dump_Regions(IPA_NODE *ipan, int fileid, ofstream
+&outputfile)
+{
+
+ static unsigned int region_counter = 0;
+ SUMMARY_FILE_HEADER* file_header =
+IP_FILE_HDR_file_header(ipan->File_Header());
+ INT regions_size = file_header->Get_regions_array_size();
+ INT lb_index, lb_count,ub_index,ub_count,step_index,step_count;
+ REGION_ARRAYS* region_array = IPA_get_region_array(ipan);
+ PROJECTED_REGION* proj_region_array = IPA_get_proj_region_array(ipan);
+ TERM * term_array;
+ TERM * tm;
+ char *func_name=NULL;
+ char *name=NULL;
+
+ char defuse[20]="",pj_defuse[20]="",term_info[100]="";
+
+  for (INT i = 0; i < regions_size; i++)
+    {
+      REGION_ARRAYS* ra = &region_array[i];
+      name = Dragon_Symbol_Name(ra->Get_sym_id(), &func_name,ipan);
+      outputfile<<fileid<<", ";
+      ra->Dragon_Print(outputfile, i, name, func_name);
+      PROJECTED_REGION* pr = &proj_region_array[ra->Get_idx()];
+      outputfile <<(int) pr->Get_num_dims()<<endl;
+      region_counter++;
+    }
+
+}
+void  Dragon_Dump_Array_Regions(char *outname)
+{
+
+  ofstream outputfile(outname,ios::out);
+  vector<string> filenames;
+    IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
+
+for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next())
+   {
+     IPA_NODE* ipan = cg_iter.Current();
+     if (ipan)
+     {
+       bool dump_regions = true;
+       string tempfile = ipan->Input_File_Name();
+       if (filenames.size()>0)
+      {
+       for(int i=0; i<filenames.size(); i++)
+       {
+         if(filenames[i]==tempfile)
+           dump_regions=false;
+
+       }
+      }
+
+       // printf("\n*****entering :%s\n",ipan->Name());
+     if(dump_regions)
+      {
+        filenames.push_back(tempfile);
+        IPA_NODE_CONTEXT context(ipan);
+        Dragon_Dump_Regions(ipan,filenames.size(),outputfile);
+
+      }
+     // printf("\n*****exiting :%s\n",ipan->Name());
+
+     }
+
+
+   }
+    outputfile.close();
+    //printf("\n Exited Dragon_Dump_Array_Regions\n");
+}
+
+#endif
 
 //-----------------------------------------------------------------------
 // NAME: Print_Array_Sections
@@ -455,6 +572,36 @@ Perform_Interprocedural_Analysis ()
 	       DBar, DBar, DBar, DBar );
       MEM_Trace ();
     }
+
+#ifdef DRAGON
+    if(Dragon_Flag)
+    {
+        int len = strlen (output_filename);
+        char *cg_filename = new char[len+3];
+        strcpy(cg_filename,output_filename);
+        strcat(cg_filename,".d");
+
+        char *rg_filename = new char[len+7];
+        strcpy(rg_filename,output_filename);
+        strcat(rg_filename,".rgn");
+        Dragon_Dump_Array_Regions(rg_filename);
+
+
+        ofstream fout(cg_filename,ios::out | ios::binary);
+        IPA_Call_Graph->Dragon_Print(fout);
+        //Debug ,Liao
+        // FILE *myFp= fopen("cfg.dump","w");
+        //IPA_Call_Graph->Print_vobose(myFp);
+        //fclose(myFp);
+        fout.close();
+        delete [] cg_filename;
+        delete [] rg_filename;
+        cleanup_all_files();
+        //     Signal_Cleanup(1);
+        exit(0);
+
+    }
+#endif
 
     // This is where we do the partitioning and looping through the
     // different partition to do the analysis

@@ -207,6 +207,9 @@ static PU *current_pu;
 /* Useful macros */
 #define ARREXP_SIZES(x) &WN_kid1(x)
 
+#ifdef DRAGON
+extern  BOOL  Dragon_CFG_Phase;   // HL ++
+#endif
 //-----------------------------------------------------------------------
 // NAME: OMP_Prompf_Init
 // FUNCTION: Initialize PROMPF processing for current function.
@@ -4238,6 +4241,10 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
       dim = 0;
    }
    
+#ifdef DRAGON
+   if(Dragon_CFG_Phase)
+        dim = 0; // Lei Huang 11/23/02
+#endif
    if (!kids[2] || (WN_operator(kids[2]) == OPR_INTCONST && 
 		    WN_const_val(kids[2]) == 1)) {
       Mask_Present = FALSE;
@@ -4264,11 +4271,23 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
 
    /* Determine the sizes of reduction argument */
    (void) F90_Size_Walk(kids[0],&rank,sizes);
+
+#ifdef DRAGON
+   if(Dragon_CFG_Phase){
+     rank=1;
+     Mask_Present = FALSE;
+   }
+#endif
+
    loopnest = WN_CreateBlock();
    stlist = loopnest;
 
    /* Case 1, DIM not present */
    if (dim == 0 || (dim == 1 && rank == 1)) {
+#ifdef DRAGON
+    if(!Dragon_CFG_Phase){ /* Lei Huang 11/04/02 */
+#endif
+
       WN_INSERT_BlockBefore(F90_Current_Block,F90_Current_Loopnest,idty_store);
       adata = GET_F90_MAP(F90_Current_Loopnest);
       if (adata) {
@@ -4338,7 +4357,9 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
 	 SET_DEALLOC_POSTLIST(adata,dealloc_post);
 	 SET_F90_MAP(loopnest,adata);
       }
-
+#ifdef DRAGON
+     }
+#endif
       /* Lower the mask and array argument */
       accum_expr = F90_Lower_Walk(kids[0],new_indices,rank,stlist,NULL);
       accum_store = WN_Stid(ty,0,accum_st,MTYPE_To_TY(ty),WN_CreateExp2(reduction_op,
@@ -4459,6 +4480,10 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
    } else {
       dim = 0;
    }
+#ifdef DRAGON
+    if(Dragon_CFG_Phase)
+        dim = 0;
+#endif
 
    if (!kids[2] || (WN_operator(kids[2]) == OPR_INTCONST && 
 		    WN_const_val(kids[2]) == 1)) {
@@ -4491,9 +4516,17 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
       
       /* Determine the sizes of reduction argument */
       (void) F90_Size_Walk(kids[0],&rank,sizes);
+#ifdef DRAGON
+     if(Dragon_CFG_Phase){
+        rank=1;
+        Mask_Present = FALSE;
+      }
+#endif
       loopnest = WN_CreateBlock();
       stlist = loopnest;
-      
+#ifdef DRAGON
+    if(!Dragon_CFG_Phase){ /* Lei Huang 11/04/02 */
+#endif
       WN_INSERT_BlockBefore(F90_Current_Block,F90_Current_Loopnest,idty_store);
       
       /* Create a full-size loopnest */
@@ -4511,6 +4544,9 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
       /* Update the Current_Loopnest, to point at the identity store
 	 so that all lower-level insertions happen there */
       F90_Current_Loopnest = idty_store;
+#ifdef DRAGON
+   }
+#endif
       
       /* Create a temp to hold the result. We will allocate this temp on the stack, 
        * but not dynamically 
@@ -4542,6 +4578,10 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
       accum_store = WN_StidPreg(expr_ty,accum,WN_LdidPreg(expr_ty,cur_val));
       WN_INSERT_BlockLast(accum_block,accum_store);
 
+#ifdef DRAGON
+     if(!Dragon_CFG_Phase){  /* Lei Huang 11/04/02 */
+#endif
+
       for (i = 0; i < rank; i++) {
 	 /* Create an ARRAY node for the return value */
       
@@ -4561,6 +4601,9 @@ static WN * lower_maxminloc(OPERATOR reduction_opr,
       }
       accum_store = WN_CreateIf(mask_expr,accum_block,WN_CreateBlock());
       WN_INSERT_BlockLast(stlist,accum_store);
+#ifdef DRAGON
+     }
+#endif
             result = WN_Create(OPCODE_make_op(OPR_ARRAY,Pointer_Mtype,MTYPE_V),3);
       WN_element_size(result) = Pointer_Size;
       WN_kid1(result) = WN_Intconst(MTYPE_I4,rank);
@@ -4865,6 +4908,19 @@ static WN *lower_eoshift(WN *kids[],PREG_NUM indices[],INT ndim,WN *block, WN *i
    dim = ndim - F90_Get_Dim(kids[3]);
    WN_DELETE_Tree(kids[3]);
 
+#ifdef DRAGON
+ /***************************************************
+   if the dimention is 0 (because of the dummy array I changed in oder
+   to preventing the lowering down array statements), then only lower
+   kids[0], just to avoid errors
+   Lei Huang 11/23/02
+***************************************************/
+      if(ndim <=0 ){
+         result = F90_Lower_Walk(kids[0],indices,ndim,block,insert_point);
+         return (result);
+   }
+#endif
+
    /* Get shift */
    for (i=0, j=0; i < ndim; i++) {
       if (i != dim) {
@@ -5117,6 +5173,20 @@ static WN *lower_cshift(WN *kids[],PREG_NUM indices[],INT ndim,WN *block, WN *in
 
    dim = ndim - F90_Get_Dim(kids[2]);
    WN_DELETE_Tree(kids[2]);
+
+#ifdef DRAGON
+/***************************************************
+   if the dimention is 0 (because of the dummy array I changed in oder
+to preventing the lowering down
+   array statements), then only lower kids[0], just to avoid errors
+   Lei Huang 11/23/02
+***************************************************/
+   if(ndim <=0 ){
+         result = F90_Lower_Walk(kids[0],indices,ndim,block,insert_point);
+         return (result);
+   }
+#endif
+
 
    /* Get shift */
    for (i=0, j=0; i < ndim; i++) {
@@ -5671,6 +5741,16 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
       ndim = 0;
    }
 
+#ifdef DRAGON
+/********************************************
+   make a dummy array by setting the dimention as 0, so this array
+   statement will not lower down to F77(a loop)
+   Lei Huang 11/23/02
+*********************************************/
+   if(Dragon_CFG_Phase)
+        ndim = 0; // Lei Huang 11/23/02
+#endif
+
    if (ndim > 0) {
       /* Create the DO loop nest */
       loopnest = WN_CreateBlock();
@@ -5921,6 +6001,14 @@ WN * F90_Lower (PU_Info* pu_info, WN *pu) {
    F90_Analyze_Dependencies(pu);
 
    if (array_statement_seen) {
+
+#ifdef DRAGON
+/******************************
+    remove other array statements translation from F90 to F77
+    Lei Huang 10/23/02
+*******************************/
+    if(!Dragon_CFG_Phase){
+#endif
       TRACE_AFTER(TRACE_DEPENDENCE,"Dependence Analysis");
       
       /* Do temp copies needed for dependence removal */
@@ -5939,6 +6027,9 @@ WN * F90_Lower (PU_Info* pu_info, WN *pu) {
 	 F90_Walk_All_Statements(pu, F90_Insert_Temp_Allocations);
 	 temp_allocations_inserted = FALSE;
       }
+#ifdef DRAGON
+    }
+#endif
 
       /* Generate the loops and do the inlining of intrinsics which need it */
       F90_Walk_Statements(pu,F90_Generate_Loops);

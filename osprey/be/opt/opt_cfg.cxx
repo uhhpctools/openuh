@@ -101,6 +101,11 @@ static char *rcs_id = 	opt_cfg_CXX"$Revision: 1.30 $";
 #include "w2op.h"
 #include "wn_tree_util.h"
 
+#ifdef DRAGON
+#include "FGnode.h"     // HL ++
+#include "ir_reader.h"
+#endif
+
 CFG::CFG(MEM_POOL *pool, MEM_POOL *lpool)
      : _bb_vec(pool),
        _entry_vec(pool),
@@ -6842,6 +6847,118 @@ void CFG::Clone_bb(IDTYPE src, IDTYPE dst, BOOL clone_wn)
     }
   }
 }
+
+#ifdef DRAGON
+void
+CFG::Dump_CFG(FILE *fp, BOOL rpo, IDTYPE bb_id)   // HL ++
+{
+  // Should we instead always print in source order (i.e. in order of
+  // basic block numbers)?
+  //
+  if (!WOPT_Enable_Source_Order && rpo && Entry_bb() != NULL)
+  {
+     RPOBB_ITER rpo_iter(this);
+     BB_NODE   *tmp;
+     FOR_ALL_ELEM(tmp, rpo_iter, Init()) {
+       // print if bb_id is not set or just print a particular BB
+       if (bb_id == -1 || bb_id == tmp->Id()){
+//       tmp->Print(fp);
+
+
+         if(!Curr_CFG.If_Finished()){
+//               FGNODE *fnode = new FGNODE();  // HL ++
+                 FGNODE fnode;
+                 fnode=tmp;
+                 BB_LIST *pred = tmp->Pred();
+                 BB_LIST_ITER bb_list_iter(pred);
+                 BB_NODE *tmp1;
+                 FGEDGE* ed; //Liao ++
+                 FB_FREQ freq;
+                 FB_EDGE_TYPE typ;
+                 IDTYPE ed_id;
+
+                 FOR_ALL_ELEM(tmp1, bb_list_iter, Init()) {
+                   if (tmp1)
+                        {
+
+                          if (_feedback) {
+   typ= _feedback->Get_edge_type(tmp1->Id(),fnode.GetId());
+    freq=_feedback->Get_edge_freq(tmp1->Id(),fnode.GetId());
+    ed_id=_feedback->Get_edge_id(tmp1->Id(),fnode.GetId());
+    ed= new FGEDGE(ed_id,tmp1->Id(),fnode.GetId(),typ,freq);
+
+                            }else{
+                              ed=new FGEDGE(tmp1->Id(),fnode.GetId());
+                            }    //     fnode.Insert_pred(tmp1->Id());
+                        fnode.Insert_pred(ed);
+                        fnode.Insert_pred(tmp1->Id());
+// write both old and new information , for backward compatibility
+
+
+
+                          }
+                 }
+                 BB_LIST *succ = tmp->Succ();
+                 BB_LIST_ITER bb_list_iter1(succ);
+
+                 FOR_ALL_ELEM(tmp1, bb_list_iter1, Init()) {
+                        if (tmp1)
+                           if (_feedback) {
+    typ= _feedback->Get_edge_type(fnode.GetId(),tmp1->Id());
+    freq=_feedback->Get_edge_freq(fnode.GetId(),tmp1->Id());
+     ed_id=_feedback->Get_edge_id(fnode.GetId(),tmp1->Id());
+      ed=new FGEDGE(ed_id,fnode.GetId(),tmp1->Id(),typ,freq);
+
+                            }else{
+                              ed=new FGEDGE(fnode.GetId(),tmp1->Id());
+                            }
+                         fnode.Insert_succ(tmp1->Id());
+                          fnode.Insert_succ(ed);
+                }
+
+                STMT_ITER wn_iter(tmp->Firststmt(), tmp->Laststmt());
+                for (wn_iter.First(); !wn_iter.Is_Empty(); wn_iter.Next()) {
+                        WN* wn=wn_iter.Cur();
+                        if (wn) {
+                                USRCPOS srcpos, last_srcpos;
+                                OPCODE opc = WN_opcode(wn);
+                                BOOL already_dumped_wn = FALSE;
+                                USRCPOS_srcpos(srcpos) = WN_Get_Linenum(wn);
+                                if (USRCPOS_srcpos(srcpos) != 0 &&
+                                USRCPOS_srcpos(srcpos) != USRCPOS_srcpos(last_srcpos)) {
+                                        last_srcpos = srcpos;
+//              fprintf(ir_ofile, "%*sLOC %d %d\n", indent, "",
+//              USRCPOS_filenum(srcpos), USRCPOS_linenum(srcpos));
+
+       fnode.Insert_line_num(USRCPOS_linenum(srcpos));
+                                }
+                        }
+                }
+                int found=0;
+//              INT32 line=0;
+                int line = Srcpos_To_Line(tmp->Linenum());
+//              cout<<"line===="<<line<<"\n";
+                if(line!=0 && fnode.line_nums.size()==0){
+                                fnode.Insert_line_num(line);
+                }
+                Curr_CFG.Insert_FNode(fnode);
+          }
+        }
+     }
+  }
+  else
+  {
+    CFG_ITER cfg_iter(this);
+    BB_NODE *tmp;
+    FOR_ALL_NODE(tmp, cfg_iter, Init()) {
+      // print if bb_id is not set or just print a particular BB
+      if (bb_id == -1 || bb_id == tmp->Id())
+        tmp->Print(fp);
+    }
+  }
+        Curr_CFG.Set_Finished(TRUE);
+}
+#endif
 
 // Clone all BB_NODEs that are linked by Next fields starting from bb_first and ending 
 // in bb_last. Pred/Succ are set up for internal nodes.  bb_first and bb_last's cloned

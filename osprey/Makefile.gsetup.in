@@ -180,6 +180,10 @@ ifndef ARMCI_CONDUIT
 	ARMCI_CONDUIT=@ARMCI_CONDUIT@
 endif
 
+ifndef DRAGON_SUPPORT
+	DRAGON_SUPPORT = @DRAGON_SUPPORT@
+endif
+
 #  For cross compilers, there are really 3 separate variables:
 #  the build host (machine you are building on), 
 #  the run host (machine you will run on), 
@@ -684,8 +688,13 @@ ERROR_ON_WARNINGS = #-Werror
 # Many files use INTn_MAX/INTn_MIN
 STD_COMPILE_OPTS += -D__STDC_LIMIT_MACROS
 STD_COMPILE_OPTS += -DKEY -DOSP_OPT -DPATHSCALE_MERGE -DPSC_TO_OPEN64 $(LOCAL_CFLAGS) $(ERROR_ON_WARNINGS)
+
 ifeq ($(BUILD_TYPE), SHARED)
 STD_COMPILE_OPTS += -DSHARED_BUILD
+endif
+
+ifeq ($(DRAGON_SUPPORT), YES)
+STD_COMPILE_OPTS += -DDRAGON
 endif
 
 ifeq ($(ENABLE_COARRAYS), YES)

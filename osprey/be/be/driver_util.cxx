@@ -110,6 +110,11 @@ extern BOOL Run_autopar;
 extern BOOL Run_MemCtr;
 static BOOL Dsm_Recompile = FALSE;
 
+#ifdef DRAGON
+extern BOOL Dragon_Flag;        /* Lei Huang 09/16/02 */
+extern BOOL Dragon_CFG_Phase;   /* Lei Huang 10/23/02 */
+#endif
+
 extern BOOL Epilog_Flag;
 
 #ifdef _UH_COARRAYS
@@ -257,6 +262,10 @@ Process_Command_Line (INT argc, char **argv)
                     Run_Dsm_Check = TRUE;
 		else if (strcmp (cp, "sm_recompile") == 0 )
                     Dsm_Recompile = TRUE;
+#ifdef DRAGON
+        else if (strcmp (cp, "ragon") == 0 ) /* Lei Huang 09/16/02 */
+            Dragon_Flag = TRUE;
+#endif
 		else
 		    ErrMsg (EC_Unknown_Flag, *(cp-1), argv[i]);
 		break;
@@ -478,11 +487,20 @@ Process_Command_Line (INT argc, char **argv)
     myname = Last_Pathname_Component (argv[0]);
 
     if (Run_ipl /* set via -PHASE:i */ ||
-            myname[0] == 'i' && strcmp (myname, "ipl") == 0) {
+            myname[0] == 'i' && strcmp (myname, "ipl") == 0
+#ifdef DRAGON
+         || strcmp(myname,"cfg_ipl")==0
+#endif
+            ) {
 	Run_ipl = TRUE;
 	/* We don't support olimit region for ipl (yet).  So if we overflow
 	   the olimit, we don't want to run preopt, but still run ipl. */
 	Olimit_opt = FALSE;
+#ifdef DRAGON
+       if(strcmp(myname,"cfg_ipl")==0){
+                Dragon_CFG_Phase=TRUE;
+        }
+#endif
     } else {
 	Run_ipl = FALSE;
 

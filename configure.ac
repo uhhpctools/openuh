@@ -117,6 +117,14 @@ elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
     AC_MSG_ERROR(["default comm (armci) requires --with-armci-root to be specified"])
 fi
 
+# enable Dragon support
+AC_ARG_ENABLE([dragon-support],
+  AC_HELP_STRING([--enable-dragon-support], [Supports UH Dragon Analysis Tool]))
+
+AS_IF([test "x$enable_dragon_support" = "xyes"], [
+  DRAGON_SUPPORT=YES
+])
+
 case "$BUILD_COMPILER" in
   GNU|gnu|gcc)
     BUILD_COMPILER=GNU
@@ -426,6 +434,7 @@ AC_SUBST([BUILD_GNU3])
 AC_SUBST([BUILD_FORTRAN])
 AC_SUBST([BUILD_SKIP_IPA])
 AC_SUBST([BUILD_TYPE])
+AC_SUBST([DRAGON_SUPPORT])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([BUILD_TAU_INSTR])

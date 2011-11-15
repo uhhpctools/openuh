@@ -562,6 +562,49 @@ void SCALAR_INFO::WB_Print(FILE* fp,
   fprintf(fp, "\n");
 }
 
+#ifdef DRAGON
+void REGION_ARRAYS::Dragon_Print(ofstream& fp,
+                             INT region_index,
+                             char* name,
+                             char* func_name)
+{
+  if (func_name == NULL || func_name[0] == '\0')
+    fp <<region_index<<", @, "<<name<<", ";
+  else
+    fp <<region_index<<", "<<func_name<<", "<<name<<", ";
+
+  if (Is_use())
+    fp<< "USE, ";
+  else if (Is_def())
+    fp<< "DEF, ";
+  else if (Is_passed())
+    fp<< "PASSED, ";
+  else if (Is_may_def())
+    fp<< "MAY_DEF, ";
+  else if (Is_may_use())
+    fp<< "MAY_USE, ";
+  else if (Is_formal())
+    fp<< "FORMAL, ";
+
+
+  fp <<Get_idx()<<", "<<Get_idx()+Get_count()-1<<", ";
+
+
+}
+
+//radhika-inserted on May 11 04
+
+void REGION_ARRAYS::Dragon_Print(ofstream& fp,
+                                 INT proj_region_index,
+                                 INT proj_node_index,
+                                 INT dim_no)
+{
+       fp <<proj_region_index<<", "<<proj_node_index<<", "<<dim_no;
+
+}
+
+#endif
+
 //-----------------------------------------------------------------------
 // NAME: REGION_ARRAYS::WB_Print
 // FUNCTION: Print REGION_ARRAYS in whirl browser format 

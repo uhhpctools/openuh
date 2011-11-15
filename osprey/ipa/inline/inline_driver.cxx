@@ -227,6 +227,9 @@ Process_Command_Line (INT argc, char **argv)
 
 	    case 'd':		    /* accept and ignore the -dsm flags */
 		if (strncmp (argv[i]+1, "dsm", 3) != 0)
+        #ifdef DRAGON
+		if (strncmp (argv[i]+1, "dragon", 6) != 0)
+        #endif
                   ErrMsg ( EC_Unknown_Flag, argv[i][0], argv[i] );
 		break;
 

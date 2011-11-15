@@ -603,4 +603,7 @@ extern BOOL Inside_Loop_With_Goto(WN *wn);
 
 extern WN* LWN_Simplify_Tree(WN* wn); 
 
+#ifdef DRAGON
+extern WN* LWN_Get_Expression(WN *wn);
+#endif
 #endif

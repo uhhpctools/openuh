@@ -622,7 +622,10 @@
 *** $Author: bos@eng-25.internal.keyresearch.com $
 *** $Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.access_vector.h $
 **/
-
+#ifdef DRAGON
+#include <fstream>
+using namespace std;
+#endif
 #ifndef access_vector_INCLUDED
 #define access_vector_INCLUDED "access_vector.h"
 
@@ -996,6 +999,11 @@ public:
   BOOL Has_Loop_Coeff() const { return(_lcoeff != NULL); }
   void Set_Loop_Coeff(UINT16 i, INT32 val);
   void Print(FILE *fp, BOOL is_bound=FALSE, BOOL print_brackets=TRUE) const;
+
+#ifdef DRAGON
+  void Dragon_Print(ofstream &out, BOOL is_bound=FALSE, BOOL print_brackets=TRUE) const;
+#endif
+
   INT Print(char* bf, INT ccount, BOOL is_bound=FALSE, 
     BOOL print_brackets=TRUE) const;
   void Print_Analysis_Info(FILE *fp, DOLOOP_STACK &do_stack, 
@@ -1069,6 +1077,11 @@ public:
   ACCESS_ARRAY(UINT16 num_vec,UINT16 nest_depth,MEM_POOL *mem_pool); 
   ACCESS_ARRAY(UINT16 num_vec,ACCESS_VECTOR* dim[],MEM_POOL *mem_pool); 
   void Print(FILE *fp, BOOL is_bound=FALSE) const;
+
+#ifdef DRAGON
+  void Dragon_Print(ofstream &out, BOOL is_bound=FALSE) const;
+#endif
+
   ACCESS_ARRAY() { Too_Messy = TRUE; _dim = NULL; _num_vec=0;}
   ACCESS_ARRAY(const ACCESS_ARRAY *a, MEM_POOL *pool); 
   mUINT16 Non_Const_Loops() const;

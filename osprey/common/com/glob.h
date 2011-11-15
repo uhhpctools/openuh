@@ -123,6 +123,9 @@ extern FILE *Output_h_File;           /* Cycle counting output.h file */
 extern FILE *Call_graph_file;	      /* Call graph file */
 extern char * pu_string[1000]; 
 extern char * bb_string[1000]; 
+#ifdef DRAGON
+extern char proc_name[256];
+#endif
 
 /* Current file names: */
 extern char *Src_File_Name;	/* Source file */

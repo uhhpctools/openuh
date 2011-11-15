@@ -461,6 +461,13 @@ class  ARRAY_DIRECTED_GRAPH16 :
   MEM_POOL *_pool;
 public:
 
+
+#ifdef LNO
+#ifdef DRAGON
+  void Dragon_Print(char dumpfilename[], WN *wn);
+#endif
+#endif
+
 #if defined(SHARED_BUILD) && !defined(LNO)
   void Print(FILE *fp);
 #else

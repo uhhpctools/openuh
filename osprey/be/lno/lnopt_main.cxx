@@ -67,6 +67,10 @@
 
 #include <sys/types.h>
 #include <limits.h>
+#ifdef DRAGON
+#include <fstream>
+using namespace std;
+#endif
 #include "pu_info.h"
 #include "defs.h"
 #include "config_cache.h"
@@ -218,6 +222,9 @@ typedef STACK<WN *> STACK_OF_WN;
   extern BOOL Build_Array_Dependence_Graph (WN* func_nd);
   extern void Build_CG_Dependence_Graph (WN* func_nd);
   extern void Build_CG_Dependence_Graph (ARRAY_DIRECTED_GRAPH16*);
+#ifdef DRAGON
+  extern void write_dependence_graph(WN* func_nd);
+#endif
 
   WN* Current_Func_Node = NULL; 
   BOOL  LNO_Allow_Delinearize = TRUE; // this is true for lno but not
@@ -1811,6 +1818,46 @@ return_point:
   return func_nd;
 }
 
+#ifdef DRAGON
+void  write_dependence_graph(WN *func_nd)
+{
+   static bool firsttime = true;
+   const char *filename;
+   const char *dirname;
+   char *dumpfilename;
+   int i;
+
+
+   SRCPOS srcpos = WN_Get_Linenum(func_nd);
+   USRCPOS linepos;
+   USRCPOS_srcpos(linepos) = srcpos;
+   IR_Srcpos_Filename(srcpos,&filename,&dirname);
+
+   dumpfilename = new char[strlen(filename)+10];
+   strcpy(dumpfilename, filename);
+
+   for (i=0; i <strlen(filename); i++)
+        {
+          if (dumpfilename[i]=='.')
+            {
+              dumpfilename[i+1]='\0';
+              strcat(dumpfilename,"dep");
+              break;
+            }
+        }
+      if (i==strlen(dumpfilename))
+        strcat(dumpfilename,".dep");
+      if (firsttime)
+        {
+              ofstream out(dumpfilename, ios::out | ios::binary);
+              out.close();
+              firsttime=false;
+        }
+      Array_Dependence_Graph->Dragon_Print(dumpfilename,func_nd);
+
+      delete [] dumpfilename;
+}
+#endif
 
 /***********************************************************************
  *
@@ -1835,6 +1882,12 @@ extern BOOL Build_Array_Dependence_Graph (WN* func_nd) {
             DBar, DBar);
     Array_Dependence_Graph->Print(TFile);
   }
+
+#ifdef DRAGON
+  if (Dragon_Flag)
+     write_dependence_graph(func_nd);
+#endif
+
   return TRUE;
 }
 

@@ -136,6 +136,10 @@ static void no_args(void)
 	do_exit(RC_USER_ERROR);
 }
 
+#ifdef DRAGON
+boolean Dragon_Flag;
+#endif
+
 int 
 main (int argc, char *argv[])
 {
@@ -229,8 +233,16 @@ main (int argc, char *argv[])
 
 		set_current_arg_pos(i);
 		if (argv[i][0] == '-' && !dashdash_flag) {
-                       if(strcasecmp(argv[i],"-epilog") == 0)
-                                 Epilog_Flag = TRUE;
+#ifdef DRAGON
+               //start dragon merge
+            if(strcasecmp(argv[i],"-dragon") == 0)  /* Lei Huang 10/24/02 */
+                Dragon_Flag = TRUE;
+#else
+            if(strcasecmp(argv[i],"-dragon") == 0)
+                warning("-dragon option is not supported. Configure using --with-dragon-support");
+#endif
+            if(strcasecmp(argv[i],"-epilog") == 0)
+                Epilog_Flag = TRUE;
 			flag = get_option(&i, argv);
 			if (flag == O_Unrecognized) { 
 				if (print_warnings) {

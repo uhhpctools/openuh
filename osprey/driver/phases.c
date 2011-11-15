@@ -112,7 +112,9 @@ int     fortran_line_length = 72; /* Fortran line length */
 char roundoff=0;
 extern boolean Epilog_Flag;
 boolean nocpp_flag = FALSE;
-
+#ifdef DRAGON
+extern boolean Dragon_Flag;     /* Lei Huang 10/24/02 */
+#endif
 char *global_toolroot = NULL;
 char *ld_library_path = NULL;
 char *ld_libraryn32_path = NULL;
@@ -3301,6 +3303,9 @@ run_compiler (int argc, char *argv[])
 	boolean cmd_line_updated = FALSE;
         buffer_t rii_file_name;
         buffer_t ii_file_name;
+#ifdef DRAGON
+       char *phase_name;       // HL ++
+#endif
 
 	clear_current_errors();
 	determine_phase_order();
@@ -3346,6 +3351,20 @@ run_compiler (int argc, char *argv[])
 			}
 			add_file_args (args, phase_order[i]);
 			if (has_current_errors()) break;
+#ifdef DRAGON
+            /********************************
+              Lei Huang 10/23/02 run ipl phase twice, the first doesn't
+              lower down F90 array statements to F77
+             *********************************/
+            if(phase_order[i] == P_ipl && Dragon_Flag){
+                phase_name = malloc(strlen(get_full_phase_name(phase_order[i]))+5);
+                strncpy(phase_name, get_full_phase_name(phase_order[i]), strlen(get_full_phase_name(phase_order[i]))-3);
+                strcat(phase_name, "cfg_ipl"); // new phase name: cfg_ipl
+                run_phase (phase_order[i],
+                        phase_name, args);
+                free(phase_name);
+            }
+#endif
 			run_phase (phase_order[i],
 				   get_full_phase_name(phase_order[i]), args);
                         /* undefine the environment variable
