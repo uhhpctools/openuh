@@ -522,6 +522,7 @@ static WN *copyin_block;	/* Copyin code for mp call */
 static WN *copyout_block;	/* Copyout code for mp call */
 static WN *firstprivate_block;  /* FIRSTPRIVATE code for mp call */
 static WN *liveout_block;	/* Liveout code for mp call */
+static WN *threadprivate_copyin_block;	/* Threadprivate copyin code for mp call */
 static WN *do_prefix;		/* Prefix code for do loop */
 static WN *do_suffix;   /* Suffix code for do loop */
 static WN *if_preamble_block;	/* MP if preamble block */
@@ -566,6 +567,7 @@ static WN *affinity_d_nodes;	/* Points to (optional) affinity data nodes */
 static WN *affinity_t_nodes;	/* Points to (optional) affinity thread nodes */
 static WN *chunk_node;		/* Points to (optional) chunk node */
 static WN *copyin_nodes;	/* Points to (optional) copyin nodes */
+static vector <ST *> copyin_sources;  /* STs for temps that hold the copyin values */
 static WN *copyin_nodes_end;	/* Points to (optional) copyin nodes end */
 static WN *if_node;		/* Points to (optional) if node */
 static BOOL untied;             /* untied flag */
@@ -6718,6 +6720,49 @@ Post_MP_Processing (WN * pu)
 /*  Generate a copyin call.  */
 // TODO: should be replaced when implementing TLS
 
+static WN *
+Gen_MP_Copyin ( BOOL is_omp )
+{
+  WN *block = WN_CreateBlock();
+
+  WN *copyin_node = copyin_nodes;
+  for (INT i = 0; i != copyin_sources.size(); ++i) {
+    ST *copyin_st = WN_st(copyin_node);
+    ST *tmp_st = copyin_sources[i];
+    TY_IDX tmp_ty = ST_type(tmp_st);
+    TY_IDX ty = TY_pointed(tmp_ty);
+    WN *copy_stmt;
+    if (((TY_kind(ty) != KIND_ARRAY) && (TY_kind(ty) != KIND_STRUCT)) ||
+        TY_kind(ty) == KIND_STRUCT && TY_size(ty) == 0) {
+
+      copy_stmt = WN_Stid(TY_mtype(ty), 0, copyin_st, ty,
+          WN_Iload( TY_mtype(ty), 0, ty,
+            WN_Ldid(Pointer_type, 0, tmp_st, tmp_ty)));
+    } else {
+      WN *bytes_wn;
+      if (TY_size(ty) > INT32_MAX)
+        bytes_wn = WN_Intconst ( MTYPE_I8, TY_size(ty) );
+      else if (TY_size(ty) > 0)
+        bytes_wn = WN_Intconst ( MTYPE_I4, TY_size(ty) );
+      else
+        bytes_wn = Calculate_Array_Size ( copyin_st, ty );
+
+      copy_stmt = WN_CreateMstore(0, tmp_ty,
+          WN_CreateMload(0, tmp_ty, WN_Ldid(Pointer_type, 0, tmp_st, tmp_ty),
+            bytes_wn),
+          WN_Lda(Pointer_type, 0, copyin_st),
+          WN_COPY_Tree(bytes_wn));
+    }
+    WN_INSERT_BlockLast(block, copy_stmt);
+    copyin_node = WN_next(copyin_nodes);
+  }
+
+  WN_INSERT_BlockLast( block, Gen_Barrier(NULL) );
+
+  return (block);
+}
+
+#if 0
 static WN * 
 Gen_MP_Copyin ( BOOL is_omp )
 {
@@ -6966,6 +7011,7 @@ Gen_MP_Copyin ( BOOL is_omp )
 
   return (block);
 }
+#endif
 
 #define MAX_NDIM 7
 /***********************************************
@@ -12785,6 +12831,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   reference_block    = NULL;
   pragma_block       = NULL;
 #endif
+  threadprivate_copyin_block  = NULL;
 
   default_setting = DEFAULT_NULL;
 
@@ -13302,6 +13349,18 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     Fail_FmtAssertion (
 		     "missing pragma (CRITICAL_SECTION_END) in MP processing" );
 
+  /* create temps for any copyin nodes */
+  WN *copyin_node = copyin_nodes;
+  for (INT i = 0; i < copyin_count; i++) {
+    ST *copyin_st = WN_st(copyin_node);
+    ST *temp_copyin = New_ST(CURRENT_SYMTAB);
+    ST_Init(temp_copyin,
+            Save_Str2(ST_name(copyin_st), "_copyin_ptr"),
+            CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL,
+            Make_Pointer_Type(ST_type(copyin_st)));
+    copyin_sources.push_back(temp_copyin);
+    copyin_node = WN_next(copyin_node);
+  }
 
   /* Process all parallel constructs and generate replacement code. */
 
@@ -13478,6 +13537,21 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
     Process_Parallel_Do ( );
 
+    if (copyin_nodes)
+      threadprivate_copyin_block = WN_CreateBlock();
+    WN *copyin_node = copyin_nodes;
+    for (i = 0; i != copyin_sources.size(); ++i) {
+      ST *copyin_st = WN_st(copyin_node);
+      ST *tmp_st = copyin_sources[i];
+      TY_IDX tmp_ty = ST_type(tmp_st);
+      TY_IDX ty = TY_pointed(tmp_ty);
+      WN *copy_stmt;
+      copy_stmt = WN_Stid(TY_mtype(tmp_ty), 0, tmp_st, tmp_ty,
+          WN_Lda( TY_mtype(tmp_ty), 0, copyin_st));
+      WN_INSERT_BlockLast(threadprivate_copyin_block, copy_stmt);
+      copyin_node = WN_next(copyin_nodes);
+    }
+
     /* do this always -- serial portion may have had a begin/end ordered */
     Cleanup_Ordered (serial_stmt_block, serial_stmt_block);
 
@@ -13581,6 +13655,21 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
 
     Process_MP_Region ( );
+
+    if (copyin_nodes)
+      threadprivate_copyin_block = WN_CreateBlock();
+    WN *copyin_node = copyin_nodes;
+    for (i = 0; i != copyin_sources.size(); ++i) {
+      ST *copyin_st = WN_st(copyin_node);
+      ST *tmp_st = copyin_sources[i];
+      TY_IDX tmp_ty = ST_type(tmp_st);
+      TY_IDX ty = TY_pointed(tmp_ty);
+      WN *copy_stmt;
+      copy_stmt = WN_Stid(TY_mtype(tmp_ty), 0, tmp_st, tmp_ty,
+          WN_Lda( TY_mtype(tmp_ty), 0, copyin_st));
+      WN_INSERT_BlockLast(threadprivate_copyin_block, copy_stmt);
+      copyin_node = WN_next(copyin_nodes);
+    }
 
 #ifndef KEY // bug 7281
     if (is_omp) {
@@ -13749,6 +13838,9 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     }
 */
 
+    if (threadprivate_copyin_block)
+      WN_INSERT_BlockLast ( stmt1_block, threadprivate_copyin_block );
+
     WN_INSERT_BlockLast( stmt1_block, mp_call_wn );
 	
     if (liveout_block) {
@@ -13915,6 +14007,9 @@ lower_mp ( WN * block, WN * node, INT32 actions )
   /* Free up all saved nodes. */
 
 finish_processing:
+  if (copyin_nodes) {
+    copyin_sources.clear();
+  }
 
   while (affinity_nodes) {
     next_node = WN_next(affinity_nodes);

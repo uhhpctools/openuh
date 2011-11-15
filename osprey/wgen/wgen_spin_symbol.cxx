@@ -1746,6 +1746,8 @@ Create_ST_For_Tree (gs_t decl_node)
 #ifdef KEY
 // bugs 340, 3717
 		if (flag_no_common || !gs_decl_common (decl_node) ||
+	    ((!lang_cplus && gs_c_decl_threadprivate_p (decl_node)) ||
+	     (lang_cplus && gs_cp_decl_threadprivate_p (decl_node))) ||
 		    (!lang_cplus /* bug 14187 */ &&
 		     gs_decl_section_name (decl_node) /* bug 14181 */))
 #else
@@ -1956,8 +1958,10 @@ Create_ST_For_Tree (gs_t decl_node)
 	    // gs_decl_lang_flag_3.
 	    gs_decl_thread_local (decl_node) &&
 	    ((!lang_cplus && gs_c_decl_threadprivate_p (decl_node)) ||
-	     (lang_cplus && gs_cp_decl_threadprivate_p (decl_node))))
+	     (lang_cplus && gs_cp_decl_threadprivate_p (decl_node)))) {
 	  Set_ST_is_thread_private (st);
+	  Set_ST_is_thread_local (st);
+    }
 
 	if (gs_tree_code (decl_node) == GS_VAR_DECL && sclass == SCLASS_AUTO)
 	  WGEN_add_pragma_to_enclosing_regions (WN_PRAGMA_LOCAL, st);

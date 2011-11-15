@@ -3413,21 +3413,22 @@ Allocate_Object ( ST *st )
     break;
   case SCLASS_PSTATIC :
   case SCLASS_FSTATIC :
-    if (ST_is_thread_private(st)) {
+    if ((Language == LANG_F77 || Language == LANG_F90) &&
+        ST_is_thread_private(st)) {
       if (ST_is_initialized(st) && !ST_init_value_zero (st))
 #if defined(KEY) && !defined(TARG_SL) && !defined(TARG_PPC32)
-        sec = _SEC_LDATA_MIPS_LOCAL;	// bug 12619
+        sec = _SEC_LDATA_MIPS_LOCAL;   // bug 12619
 #else
         sec = _SEC_LDATA;
 #endif
-#ifdef TARG_SL 
-      else if(ST_in_v1buf(st)) 
+#ifdef TARG_SL
+      else if(ST_in_v1buf(st))
         sec = _SEC_VS1DATA;
-      else if(ST_in_v2buf(st)) 
+      else if(ST_in_v2buf(st))
         sec = _SEC_VS2DATA;
-      else if(ST_in_v4buf(st)) 
+      else if(ST_in_v4buf(st))
         sec = _SEC_VS4DATA;
-#endif      	  
+#endif
 
       else
 #ifdef KEY
@@ -3526,13 +3527,14 @@ Allocate_Object ( ST *st )
     }
     break;
   case SCLASS_UGLOBAL :
-    if (ST_is_thread_private(st)) {
+    if ((Language == LANG_F77 || Language == LANG_F90) &&
+        ST_is_thread_private(st)) {
 #ifdef KEY
       sec = _SEC_BSS;
 #else
       sec = _SEC_LBSS;
 #endif // KEY
-    } 
+    }
 #ifdef KEY
     else if (ST_is_thread_local(st)) {
       sec = _SEC_LBSS;
@@ -3543,9 +3545,10 @@ Allocate_Object ( ST *st )
     Allocate_Object_To_Section ( base_st, sec, Adjusted_Alignment(base_st));
     break;
   case SCLASS_DGLOBAL :
-    if (ST_is_thread_private(st))
+    if ((Language == LANG_F77 || Language == LANG_F90) &&
+        ST_is_thread_private(st))
 #if defined(KEY) && !defined(TARG_SL) && !defined(TARG_PPC32)
-      sec = _SEC_LDATA_MIPS_LOCAL;	// bug 12619
+      sec = _SEC_LDATA_MIPS_LOCAL;  // bug 12619
 #else
       sec = _SEC_LDATA;
 #endif

@@ -320,10 +320,13 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
   RENAMING_STACK rename_scope_stack(&omp_pool);
   rename_scope_stack.Push(CXX_NEW(RENAMING_SCOPE(NULL, &omp_pool),
                                    &omp_pool));
-  Rename_Threadprivate_COMMON(pu, pu, pu, 
-                             &rename_scope_stack, 
-                             &rename_common,
-                             rename_common_blk);
+
+  if (PU_ftn_lang(Get_Current_PU()))
+    Rename_Threadprivate_COMMON(pu, pu, pu,
+                                &rename_scope_stack,
+                                &rename_common,
+                                rename_common_blk);
+
 
   }
 
