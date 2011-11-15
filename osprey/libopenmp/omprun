@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/bin/sh
 
 #  Script for running OpenMP programs compiled by OpenUH.
 #
@@ -27,109 +27,176 @@
 #  http://www.cs.uh.edu/~hpctools
 
 
-# Wrapper for running OpenMP programs.
+progname="`basename $0`"
 
-use Switch;
+do_help_and_bail()
+{
+  cat <<_EOT_
+Usage: $progname [options...] program
 
-my $filename='';
-my $params="";
-my $cmd;
-my $show=0;
-my $out;
-my $env_settings;
+Where options are
 
-my $usage="Usage: omprun [options] ./a.out
-Options:
---num-threads=<nt>            - sets nthreads-var ICV
---stacksize=<ss>              - sets stacksize-var ICV
---nested=<t>                  - values: true|false
---task-cutoff=<cutoff-string> - format: cutoff:val[,cutoff:val[,...]], where
-                                   cutoff in {always,never,num_threads,switch,depth,num_children}
-                                   val < 1 disables the cutoff, val > 0 specifies cutoff limit
---task-pool=<pool-type>       - values: default|simple|2level|simple_2level|public_private|multilevel
---task-queue=<tq>             - values: deque|cfifo|lifo|fifo|inv_deque
---task-queue-num-slots=<ns>   - sets initial size for each thread's task queue
---task-chunk-size=<cs>        - values: 1 to task-queue-num-slots
---queue-storage=<qs>          - values: array|dyn_array|list|lockless
---help or -h
-\n";
+  --num-threads=NT              NT is number of OpenMP threads
 
-die "cafrun: no exe file\n$usage" if ($#ARGV==-1);
+  --stacksize=SS                SS is OpenMP stack size
 
-foreach (@ARGV){
-	if(/^--(.*?)=(.*$)/){ # arg starts with --, and has =
-		switch (uc $1){
-			case "NUM-THREADS"
-            {
-                $ENV{'OMP_NUM_THREADS'}=$2;
-                $env_settings .= "OMP_NUM_THREADS=$2 ";
+  --nested[=T]                  T is one of
+                                  true | false
+                                Defaults to "true" if T not specified
 
-			}
-            case "NESTED"
-            {
-                if ($2 == "") {
-                  $ENV{'OMP_NESTED'}="true";
-                } else {
-                  $ENV{'OMP_NESTED'}=$2;
-                }
-                $env_settings .= "OMP_NESTED=$2 ";
-            }
-            case "STACKSIZE"
-            {
-                $ENV{'OMP_STACKSIZE'}=$2;
-                $env_settings .= "OMP_STACKSIZE=$2 ";
-            }
-            case "TASK-CUTOFF"
-            {
-                $ENV{'O64_OMP_TASK_CUTOFF'}=$2;
-                $env_settings .= "O64_OMP_TASK_CUTOFF=$2 ";
-            }
-            case "TASK-POOL"
-            {
-                $ENV{'O64_OMP_TASK_POOL'}=$2;
-                $env_settings .= "O64_OMP_TASK_POOL=$2 ";
-            }
-            case "TASK-QUEUE"
-            {
-                $ENV{'O64_OMP_TASK_QUEUE'}=$2;
-                $env_settings .= "O64_OMP_TASK_QUEUE=$2 ";
-            }
-            case "TASK-QUEUE-NUM-SLOTS"
-            {
-                $ENV{'O64_OMP_TASK_QUEUE_NUM_SLOTS'}=$2;
-                $env_settings .= "O64_OMP_TASK_QUEUE_NUM_SLOTS=$2 ";
-            }
-            case "TASK-CHUNK-SIZE"
-            {
-                $ENV{'O64_OMP_TASK_CHUNK_SIZE'}=$2;
-                $env_settings .= "O64_OMP_TASK_CHUNK_SIZE=$2 ";
-            }
-            case "QUEUE-STORAGE"
-            {
-                $ENV{'O64_OMP_QUEUE_STORAGE'}=$2;
-                $env_settings .= "O64_OMP_QUEUE_STORAGE=$2 ";
-            }
-			else{ #add the flag anyway
-                print "unrecognized option: $_\n";
-                print "$usage";
-				exit 1;
-			}
-		}
-	}
-	elsif(/-help/ or $_ eq '-h'){
-		print "omprun is a wrapper for running OpenMP programs compiled with OpenUH\n",$usage;
-        exit 0;
-	}
-    elsif(/-show/){
-        $show=1;
-    }
-	else{
-		$cmd.=$_." ";
-	}
+  --task-cutoff=TC              TC is
+                                  cutoff:val[,cutoff:val[,...]]
+                                where
+                                  cutoff is one of
+                                    always | never | num_threads | switch |
+                                      depth | num_children
+
+                                  val < 1 disables the cutoff,
+                                  val > 0 specifies cutoff limit
+
+  --task-pool=TP               TP is one of
+                                 default | simple | 2level |
+                                   simple_2level | public_private | multilevel
+
+  --task-queue=TQ              TQ is one of
+                                 deque | cfifo | lifo | fifo | inv_deque
+
+  --task-queue-num-slots=NS    NS is initial size for each thread's task queue
+
+  --task-chunk-size=CS         CS is 1 - task-queue-num-slots
+
+  --queue-storage=QS           QS is one of
+                                 array | dyn_array | list | lockless
+
+  --help, -h                   This message
+
+  --show, -s                   Output the command to be run
+
+_EOT_
+
+  exit 1
 }
 
-if ($show) {
-  print "$env_settings $cmd\n";
+set_env()
+{
+  var=$1
+  shift
+  val="$*"
+
+  cmd="$var=\"$val\"; export $var"
+  eval $cmd
 }
-$out = system("$cmd 2>&1");
-exit $out;
+
+
+# -------------------------------------------------------------------
+
+if [ $# -eq 0 ]; then
+      do_help_and_bail
+fi
+
+options="`getopt \
+		-u \
+		-n "$progname" \
+		-l num-threads: \
+		-l stacksize: \
+		-l nested:: \
+		-l task-cutoff: \
+		-l task-pool: \
+		-l task-queue: \
+		-l task-queue-num-slots: \
+		-l task-chunk-size: \
+		-l queue-storage: \
+		-l help \
+		-l show \
+		-o h \
+		-o s \
+		-- \
+		$*`"
+
+# check ret status
+case $? in
+  0)
+    ;;
+  *)
+    do_help_and_bail
+    ;;
+esac
+
+set -- $options
+
+do_show='n'
+
+while [ $1 != "--" ]
+do
+  case $1 in
+    -s | --show)
+      do_show='y'
+      ;;
+    -h | --help)
+      do_help_and_bail
+      ;;
+    --num-threads)
+      shift
+      set_env OMP_NUM_THREADS $1
+      ;;
+    --stacksize)
+      shift
+      set_env OMP_STACKSIZE $1
+      ;;
+    --nested)
+      shift
+      # optional arg, trap here
+      nested=false
+      [ -z "$1" ] && nested=true
+      set_env OMP_NESTED $nested
+      ;;
+    --task-cutoff)
+      shift
+      set_env O64_OMP_TASK_CUTOFF $1
+      ;;
+    --task-pool)
+      shift
+      set_env O64_OMP_TASK_POOL $1
+      ;;
+    --task-queue)
+      shift
+      set_env O64_OMP_TASK_QUEUE $1
+      ;;
+    --task-queue-num-slots)
+      shift
+      set_env O64_OMP_TASK_QUEUE_NUM_SLOTS $1
+      ;;
+    --task-chunk-size)
+      shift
+      set_env O64_OMP_TASK_CHUNK_SIZE $1
+      ;;
+    --task-chunk-size)
+      shift
+      set_env O64_OMP_TASK_CHUNK_SIZE $1
+      ;;
+    --queue-storage)
+      shift
+      set_env O64_OMP_QUEUE_STORAGE $1
+      ;;
+  esac
+  shift
+done
+
+# now gobble option end marker
+shift
+
+case $do_show in
+  y)
+    echo "$progname environment:"
+    env | egrep '(^OMP_|^O64_)'
+    echo
+    echo "$progname:"
+    echo "  $*"
+    echo
+    ;;
+  *)
+    ;;
+esac
+
+# remaining args are command
+eval $*
