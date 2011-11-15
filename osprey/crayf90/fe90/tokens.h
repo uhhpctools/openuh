@@ -552,6 +552,7 @@ enum	token_values {
                 Tok_Open_Mp_Dir_Endsections,    /* END SECTIONS               */
                 Tok_Open_Mp_Dir_Endsingle,      /* END SINGLE                 */
                 Tok_Open_Mp_Dir_Endworkshare, /* END WORKSHARE */ /* by jhs, 02/7/5 */
+                Tok_Open_Mp_Dir_Endtask,        /* END TASK */
                 Tok_Open_Mp_Dir_Firstprivate,   /* FIRSTPRIVATE               */
                 Tok_Open_Mp_Dir_Flush,          /* FLUSH                      */
                 Tok_Open_Mp_Dir_Guided,         /* GUIDED                     */
@@ -581,7 +582,9 @@ enum	token_values {
                 Tok_Open_Mp_Dir_Static,         /* STATIC                     */
                 Tok_Open_Mp_Dir_Thread,         /* THREAD                     */
                 Tok_Open_Mp_Dir_Threadprivate,  /* THREADPRIVATE              */
+                Tok_Open_Mp_Dir_Untied,         /* UNTIED  */
                 Tok_Open_Mp_Dir_Workshare, /* WORKSHARE */ /* by jhs, 02/7/5 */
+                Tok_Open_Mp_Dir_Task,           /* TASK */
                 Tok_Open_Mp_Dir_End,            /* End of Open Mp directives  */
 
 		Tok_Dbg_Sytb,			/* Symbol table               */

@@ -2153,6 +2153,39 @@ fei_parallel_open_mp(INTPTR task_if_idx,
 }
 /*===============================================
  *
+ * fei_task_open_mp
+ *
+ *===============================================
+*/
+void
+fei_task_open_mp(INTPTR task_if_idx, int defaultt, int untied)
+{
+  WN *body;
+
+  task_nest_count = 0;
+  body = cwh_mp_region(WN_PRAGMA_TASK_BEGIN,0,0,0,0,0,TRUE);
+
+  /* now attach all applicable pragmas */
+
+  cwh_directive_load_value_pragma(task_if_idx,WN_PRAGMA_IF, TRUE);
+
+  if (defaultt) {     /* there is a DEFAULT clause */
+
+    DevAssert((defaultt > 0 && defaultt < MAX_PRAGMA_DEFAULT),("Odd defaultt"));
+    cwh_stmt_add_pragma(WN_PRAGMA_DEFAULT,FALSE,(ST_IDX) NULL,defaultt);
+  }
+
+  if (untied) {
+    cwh_stmt_add_pragma(WN_PRAGMA_UNTIED, TRUE);
+  }
+
+  /* append statements to region body */
+  cwh_block_set_current(body);
+
+  cwh_directive_set_PU_flags(FALSE);
+}
+/*===============================================
+ *
  * cwh_create_str_st
  *
  * generate a ST to represent a character string
@@ -2409,6 +2442,19 @@ fei_endordered_open_mp      ( void )
 */ 
 extern void 
 fei_endparalleldo_open_mp   ( void )
+{
+  (void) cwh_block_pop_region();
+}
+
+/*===============================================
+ *
+ * fei_endtask_open_mp
+ *
+ *
+ *===============================================
+*/
+extern void
+fei_endtask_open_mp   ( void )
 {
   (void) cwh_block_pop_region();
 }

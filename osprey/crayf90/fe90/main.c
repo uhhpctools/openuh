@@ -1714,12 +1714,12 @@ static void check_enums_for_change(void)
        Set_Ieee_Exception_Opr != 300 ||
        Local_Pe_Dim_Opr != 325 ||
        Fissionable_Star_Opr != 350 ||
-       End_Singleprocess_Par_Opr != 375 ||
-       Fetch_And_Nand_Opr != 400 ||
-       Endparallel_Open_Mp_Opr != 425 ||
-       Omp_In_Parallel_Opr != 454 ||
-       Io_Item_Type_Code_Opr != 479 ||
-       Copyin_Bound_Opr != 484) { /* modified by jhs, 02.8.31 */
+       End_Singleprocess_Par_Opr != 373 ||
+       Fetch_And_Nand_Opr != 398 ||
+       Endparallel_Open_Mp_Opr != 423 ||
+       Omp_In_Parallel_Opr != 452 ||
+       Io_Item_Type_Code_Opr != 477 ||
+       Copyin_Bound_Opr != 482) { /* modified by jhs, 02.8.31 */
 
       PRINTMSG(1, 1643, Internal, 0, "Operator");
    }

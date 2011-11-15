@@ -10637,6 +10637,22 @@ static void parse_open_mp_directives(void)
          end_open_mp_single_blk(FALSE);
          break;
 
+      case Tok_Open_Mp_Dir_Endtask:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Endtask_Open_Mp_Opr);
+
+         if (directive_region_error(Endtask_Open_Mp_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         CLEAR_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Task_Stmt;
+         stmt_type = Open_MP_End_Task_Stmt;
+         end_open_mp_task_blk(FALSE);
+         break;
+
       case Tok_Open_Mp_Dir_Master:
          ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
          ir_idx = gen_directive_ir(Master_Open_Mp_Opr);
@@ -10688,6 +10704,24 @@ static void parse_open_mp_directives(void)
          SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
          PUSH_BLK_STK (Open_Mp_Parallel_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
+         CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
+         LINK_TO_PARENT_BLK;
+         break;
+
+      case Tok_Open_Mp_Dir_Task:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Task_Open_Mp_Opr);
+
+         parse_open_mp_clauses(Task_Omp);
+
+         if (directive_region_error(Task_Open_Mp_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         PUSH_BLK_STK (Open_Mp_Task_Blk);
          CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
          LINK_TO_PARENT_BLK;
          break;
@@ -11173,6 +11207,7 @@ EXIT:
 |*                      |- THREAD/DATA list                                   *|
 |*                      |- ONTO list                                          *|
 |*                      |- NEST list                                          *|
+|*                      |- UNTIED                                             *|
 |*                                                                            *|
 |* Input parameters:                                                          *|
 |*      NONE                                                                  *|
@@ -12143,6 +12178,34 @@ static void parse_open_mp_clauses(open_mp_directive_type directive)
 
                break;
 # endif
+
+            case Tok_Open_Mp_Dir_Untied:
+
+               if (! open_mp_clause_allowed[directive][Untied_Omp_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1370, Error, TOKEN_COLUMN(token),
+                           "UNTIED", open_mp_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one UNTIED clause allowed */
+
+               if (IL_IDX(list_array[OPEN_MP_UNTIED_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "UNTIED", open_mp_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               IL_LINE_NUM(list_array[OPEN_MP_UNTIED_IDX]) =
+                                                       TOKEN_LINE(token);
+               IL_COL_NUM(list_array[OPEN_MP_UNTIED_IDX]) =
+                                                       TOKEN_COLUMN(token);
+               IL_FLD(list_array[OPEN_MP_UNTIED_IDX]) = CN_Tbl_Idx;
+
+               IL_IDX(list_array[OPEN_MP_UNTIED_IDX]) = CN_INTEGER_ONE_IDX;
+
+               break;
 
             default:
                PRINTMSG(TOKEN_LINE(token), 1517, Error, TOKEN_COLUMN(token),

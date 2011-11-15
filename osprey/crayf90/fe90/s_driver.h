@@ -242,8 +242,9 @@
 #endif /* KEY Bug 10572 */
 #ifdef KEY /* Bug 14150 */
                           no_semantics_routine,         /* Bind_Stmt          */
-                          no_semantics_routine          /* Value_Stmt         */
+                          no_semantics_routine,         /* Value_Stmt         */
 #endif /* KEY Bug 14150 */
+                          directive_stmt_semantics      /* Open_MP_End_Task_Stmt */
 			};
 
 /*********************************************************\

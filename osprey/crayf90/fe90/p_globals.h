@@ -104,6 +104,7 @@ enum    blk_cntxt_values       {Unknown_Blk,
                                 Open_Mp_Ordered_Blk,
                                 Open_Mp_Workshare_Blk, /* by jhs, 02/7/18 */
                                 Open_Mp_Parallel_Workshare_Blk, /* by jhs, 02/7/18 */
+                                Open_Mp_Task_Blk,
                                 Contains_Blk,
                                 Interface_Blk,
 				Derived_Type_Blk,
@@ -150,6 +151,7 @@ enum    directive_region_values {Parallel_Region,
 				 Open_Mp_Ordered_Region,
 				 Open_Mp_Workshare_Region, /* by jhs, 02/7/18 */
 				 Open_Mp_Parallel_Workshare_Region, /* by jhs, 02/7/18 */
+				 Open_Mp_Task_Region,
                                  Last_Region};
 
 
@@ -345,6 +347,7 @@ extern	void	end_open_mp_sections_blk (boolean);
 extern	void	end_open_mp_single_blk (boolean);
 extern	void	end_open_mp_parallel_workshare_blk(boolean);
 extern	void	end_open_mp_workshare_blk(boolean);
+extern	void	end_open_mp_task_blk(boolean);
 extern	void	end_parallel_blk (boolean);
 extern	void	end_parallel_case_blk (boolean);
 extern	void	end_pdo_blk (boolean);

@@ -4067,6 +4067,10 @@ static char *blk_desc_str(int	 blk_idx)
          blk_stmt_str = "!$OMP ORDERED";
          break;
 
+      case Open_Mp_Task_Blk:
+         blk_stmt_str = "!$OMP TASK";
+         break;
+
       case Contains_Blk:
          for (idx = blk_idx;
               idx > NULL_IDX && (BLK_TYPE(idx) > Blockdata_Blk);
@@ -5918,6 +5922,48 @@ void end_open_mp_workshare_blk(boolean  err_call)
    return;
 } /* end_open_mp_workshare_blk */
 
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void end_open_mp_task_blk(boolean  err_call)
+
+{
+   TRACE (Func_Entry, "end_open_mp_task_blk", NULL);
+
+   if (! err_call) {
+      if (STMT_CANT_BE_IN_BLK(Open_MP_End_Task_Stmt, CURR_BLK)) {
+	 blk_match_err(Open_Mp_Task_Blk, FALSE, FALSE);
+      }
+
+      if (CURR_BLK == Open_Mp_Task_Blk) {
+	 IR_FLD_R(SH_IR_IDX(curr_stmt_sh_idx)) = SH_Tbl_Idx;
+	 IR_IDX_R(SH_IR_IDX(curr_stmt_sh_idx)) = CURR_BLK_FIRST_SH_IDX;
+
+	 POP_BLK_STK;
+      }
+   }
+   else{
+      POP_BLK_STK;
+   }
+
+   TRACE(Func_Exit, "end_open_mp_task_blk", NULL);
+
+   return;
+} /* end_open_mp_workshare_blk */
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|

@@ -188,7 +188,8 @@ char    *(open_mp_dir_str[Num_Omp_Values]) = {
                                 "WORKSHARE", /* by jhs, 02/7/18 */
                                 "PARALLEL DO",
                                 "PARALLEL SECTIONS",
-                                "PARALLEL WORKSHARE" /* by jhs, 02/7/18 */
+                                "PARALLEL WORKSHARE", /* by jhs, 02/7/18 */
+                                "TASK"
                                         };
 
 
@@ -315,6 +316,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Do_Omp			*/
 						{
@@ -333,6 +335,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	TRUE,
 	/* Onto_Omp_Clause    		*/	TRUE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Sections_Omp			*/
 						{
@@ -351,6 +354,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Single_Omp			*/
 						{
@@ -369,6 +373,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Workshare_Omp */  /* by jhs, 02/7/18 */
 						{
@@ -387,6 +392,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Parallel_Do_Omp		*/
 						{
@@ -405,6 +411,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	TRUE,
 	/* Onto_Omp_Clause    		*/	TRUE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Parallel_Sections_Omp	*/
 						{
@@ -423,6 +430,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
                                                 },
 /* Parallel_Workshare_Omp */ /* by jhs, 02/7/18 */
 						{
@@ -441,6 +449,27 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Nest_Omp_Clause    		*/	FALSE,
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	FALSE,
+                                                },
+
+/* Task_Omp			*/
+						{
+	/* If_Omp_Clause		*/	TRUE,
+       /* Num_Threads_Omp_Clause */ FALSE,
+	/* Private_Omp_Clause		*/	TRUE,
+	/* Shared_Omp_Clause		*/	TRUE,
+	/* Firstprivate_Omp_Clause	*/	TRUE,
+	/* Default_Omp_Clause		*/	TRUE,
+	/* Copyin_Omp_Clause		*/	FALSE,
+	/* Reduction_Omp_Clause		*/	FALSE,
+	/* Lastprivate_Omp_Clause	*/	FALSE,
+	/* Ordered_Omp_Clause		*/	FALSE,
+	/* Schedule_Omp_Clause		*/	FALSE,
+	/* Affinity_Omp_Clause		*/	FALSE,
+	/* Nest_Omp_Clause    		*/	FALSE,
+	/* Onto_Omp_Clause    		*/	FALSE,
+        /* Copyprivate_Omp_Clause       */      FALSE,
+	/* Untied_Omp_Clause    	*/	TRUE,
                                                 },
 				};
 
@@ -472,6 +501,7 @@ char	*(directive_region_str[Last_Region]) = {
                  "C$OMP ORDERED region",	/* Open_Mp_Ordered_Region */
                  "C$OMP WORKSHARE region", /* Open_Mp_Workshare_Region */ /* by jhs, 02/7/18 */
                  "C$OMP PARALLEL WORKSHARE region", /* Open_Mp_Parallel_Workshare_Region */ /* by jhs, 02/7/18 */
+                 "C$OMP TASK region", /* Open_Mp_Task_Region */
 				};
 
 enum	directive_stmt_values  {Case_Dir,
@@ -517,6 +547,7 @@ enum	directive_stmt_values  {Case_Dir,
                                 Endsections_Open_Mp_Dir,
                                 Endsingle_Open_Mp_Dir,
                                 Endworkshare_Open_Mp_Dir, /* by jhs, 02/7/18 */
+                                Endtask_Open_Mp_Dir,
                                 Flush_Open_Mp_Dir,
                                 Master_Open_Mp_Dir,
                                 Ordered_Open_Mp_Dir,
@@ -528,6 +559,7 @@ enum	directive_stmt_values  {Case_Dir,
                                 Sections_Open_Mp_Dir,
                                 Single_Open_Mp_Dir,
                                 Workshare_Open_Mp_Dir, /* by jhs, 02/7/18 */
+                                Task_Open_Mp_Dir,
 
 				Last_Dir};
 
@@ -578,6 +610,7 @@ char	*(directive_stmt_str[Last_Dir]) =   {
                 "C$OMP END SECTIONS",		/* Endsections_Open_Mp_Dir */
                 "C$OMP END SINGLE",		/* Endsingle_Open_Mp_Dir */
                 "C$OMP END WORKSHARE", /* Endworkshare_Open_Mp_Dir */ /* by jhs, 02/7/18 */
+                "C$OMP END TASK", /* Endtask_Open_Mp_Dir */
                 "C$OMP FLUSH",			/* Flush_Open_Mp_Dir	*/
                 "C$OMP MASTER",			/* Master_Open_Mp_Dir	*/
                 "C$OMP ORDERED",		/* Ordered_Open_Mp_Dir	*/
@@ -589,6 +622,7 @@ char	*(directive_stmt_str[Last_Dir]) =   {
                 "C$OMP SECTIONS",		/* Sections_Open_Mp_Dir	*/
                 "C$OMP SINGLE",			/* Single_Open_Mp_Dir	*/
                 "C$OMP WORKSHARE" /* Workshare_Open_Mp_Dir */ /* by jhs, 02/7/18 */
+                "C$OMP TASK" /* Task_Open_Mp_Dir */
 				};
 
 long directive_cant_be_in[Last_Dir] = {
@@ -617,7 +651,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
 				/* Case_Dir			*/
 
@@ -645,7 +680,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Case_Dir			*/
 
@@ -673,7 +709,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Doall_Dir			*/
 
@@ -701,7 +738,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Do_Parallel_Dir		*/
 
@@ -729,7 +767,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Do_Dir			*/
 
@@ -757,7 +796,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Guard_Dir			*/
 
@@ -785,7 +825,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Guard_Dir		*/
 
@@ -813,7 +854,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Dir			*/
 
@@ -841,7 +883,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Parallel_Dir		*/
 
@@ -869,7 +912,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Doacross_Dir			*/
 
@@ -897,7 +941,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Sgi_Parallel_Dir		*/
 
@@ -925,7 +970,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Sgi_End_Parallel_Dir		*/
 
@@ -953,7 +999,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Psection_Dir			*/
 
@@ -981,7 +1028,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Section_Dir			*/
 
@@ -1009,7 +1057,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Psection_Dir		*/
 
@@ -1037,7 +1086,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Pdo_Dir			*/
 
@@ -1065,7 +1115,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Pdo_Dir			*/
 
@@ -1093,7 +1144,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Do_Dir		*/
 
@@ -1121,7 +1173,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Barrier_Dir			*/
 
@@ -1149,7 +1202,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Critical_Section_Dir		*/
 
@@ -1177,7 +1231,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Critical_Section_Dir	*/
 
@@ -1205,7 +1260,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Single_Process_Dir		*/
 
@@ -1233,7 +1289,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* End_Single_Process_Dir	*/
 
@@ -1261,7 +1318,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Copyin_Dir			*/
 
@@ -1289,7 +1347,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Regionbegin_Dir		*/
 
@@ -1317,7 +1376,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Regionend_Dir		*/
 
@@ -1345,7 +1405,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Opaque_Dir			*/
 
@@ -1373,7 +1434,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Optional_Dir                 */
 
@@ -1401,7 +1463,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Atomic_Open_Mp_Dir	*/
 
@@ -1429,7 +1492,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Barrier_Open_Mp_Dir	*/
 
@@ -1457,7 +1521,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Critical_Open_Mp_Dir	*/
 
@@ -1485,7 +1550,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Do_Open_Mp_Dir	*/
 
@@ -1513,7 +1579,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endcritical_Open_Mp_Dir	*/
 
@@ -1541,7 +1608,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Enddo_Open_Mp_Dir	*/
 
@@ -1569,7 +1637,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallel_Open_Mp_Dir	*/
 
@@ -1597,7 +1666,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparalleldo_Open_Mp_Dir	*/
 
@@ -1625,7 +1695,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallelsections_Open_Mp_Dir	*/
 
@@ -1653,7 +1724,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallelworkshare_Open_Mp_Dir	*/
 
@@ -1681,7 +1753,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endmaster_Open_Mp_Dir	*/
 
@@ -1709,7 +1782,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endordered_Open_Mp_Dir	*/
 
@@ -1737,7 +1811,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endsections_Open_Mp_Dir	*/
 
@@ -1765,7 +1840,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endsingle_Open_Mp_Dir	*/
 
@@ -1793,7 +1869,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endworkshare_Open_Mp_Dir	*/
 
@@ -1820,8 +1897,38 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Master_Region) |
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
+
+                                /* Endtask_Open_Mp_Dir	*/
+
+			((1 << Parallel_Region) |
+                         (1 << Doall_Region) |
+                         (1 << Do_Parallel_Region) |
+                         (1 << Guard_Region) |
+                         (1 << Case_Region) |
+                         (0 << Region_Region) |
+                         (1 << Sgi_Parallel_Region) |
+                         (1 << Doacross_Region) |
+                         (1 << Parallel_Do_Region) |
+                         (1 << Pdo_Region) |
+                         (1 << Parallel_Section_Region) |
+                         (1 << Critical_Section_Region) |
+                         (1 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Flush_Open_Mp_Dir	*/
 
@@ -1849,7 +1956,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Master_Open_Mp_Dir	*/
 
@@ -1877,7 +1985,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Ordered_Open_Mp_Dir	*/
 
@@ -1905,7 +2014,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Open_Mp_Dir	*/
 
@@ -1933,7 +2043,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Paralleldo_Open_Mp_Dir	*/
 
@@ -1961,7 +2072,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallelsections_Open_Mp_Dir       */
 
@@ -1989,7 +2101,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallelworkshare_Open_Mp_Dir       */
 
@@ -2017,7 +2130,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Section_Open_Mp_Dir	*/
 
@@ -2045,7 +2159,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Sections_Open_Mp_Dir	*/
 
@@ -2073,7 +2188,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Single_Open_Mp_Dir	*/
 
@@ -2101,9 +2217,39 @@ long directive_cant_be_in[Last_Dir] = {
                          (1 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Workshare_Open_Mp_Dir	*/
+
+			((1 << Parallel_Region) |
+                         (1 << Doall_Region) |
+                         (1 << Do_Parallel_Region) |
+                         (1 << Guard_Region) |
+                         (1 << Case_Region) |
+                         (0 << Region_Region) |
+                         (1 << Sgi_Parallel_Region) |
+                         (1 << Doacross_Region) |
+                         (1 << Parallel_Do_Region) |
+                         (1 << Pdo_Region) |
+                         (1 << Parallel_Section_Region) |
+                         (1 << Critical_Section_Region) |
+                         (1 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
+
+                                /* Task_Open_Mp_Dir	*/
 
 			};
 
@@ -2132,7 +2278,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
 				/* Case_Dir			*/
 
@@ -2160,7 +2307,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Case_Dir			*/
 
@@ -2188,7 +2336,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Doall_Dir			*/
 
@@ -2216,7 +2365,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Do_Parallel_Dir		*/
 
@@ -2244,7 +2394,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Do_Dir			*/
 
@@ -2272,7 +2423,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Guard_Dir			*/
 
@@ -2300,7 +2452,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Guard_Dir		*/
 
@@ -2328,7 +2481,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Dir			*/
 
@@ -2356,7 +2510,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Parallel_Dir		*/
 
@@ -2384,7 +2539,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Doacross_Dir			*/
 
@@ -2412,7 +2568,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Sgi_Parallel_Dir		*/
 
@@ -2440,7 +2597,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Sgi_End_Parallel_Dir		*/
 
@@ -2468,7 +2626,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Psection_Dir			*/
 
@@ -2496,7 +2655,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Section_Dir			*/
 
@@ -2524,7 +2684,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Psection_Dir		*/
 
@@ -2552,7 +2713,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Pdo_Dir			*/
 
@@ -2580,7 +2742,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Pdo_Dir			*/
 
@@ -2608,7 +2771,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Do_Dir		*/
 
@@ -2636,7 +2800,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Barrier_Dir			*/
 
@@ -2664,7 +2829,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Critical_Section_Dir		*/
 
@@ -2692,7 +2858,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Critical_Section_Dir	*/
 
@@ -2720,7 +2887,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Single_Process_Dir		*/
 
@@ -2748,7 +2916,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* End_Single_Process_Dir	*/
 
@@ -2776,7 +2945,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Copyin_Dir			*/
 
@@ -2804,7 +2974,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Regionbegin_Dir		*/
 
@@ -2832,7 +3003,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Regionend_Dir		*/
 
@@ -2860,7 +3032,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Opaque_Dir			*/
 
@@ -2888,7 +3061,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Optional_Dir                 */
 
@@ -2916,7 +3090,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Atomic_Open_Mp_Dir	*/
 
@@ -2944,7 +3119,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Barrier_Open_Mp_Dir	*/
 
@@ -2972,7 +3148,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Critical_Open_Mp_Dir	*/
 
@@ -3000,7 +3177,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Do_Open_Mp_Dir	*/
 
@@ -3028,7 +3206,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endcritical_Open_Mp_Dir	*/
 
@@ -3056,7 +3235,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Enddo_Open_Mp_Dir	*/
 
@@ -3084,7 +3264,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallel_Open_Mp_Dir	*/
 
@@ -3112,7 +3293,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparalleldo_Open_Mp_Dir	*/
 
@@ -3140,7 +3322,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallelsections_Open_Mp_Dir	*/
 
@@ -3168,7 +3351,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (1 << Open_Mp_Parallel_Workshare_Region) ),
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endparallelworkshare_Open_Mp_Dir	*/
 
@@ -3197,7 +3381,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endmaster_Open_Mp_Dir	*/
 
@@ -3225,7 +3410,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (1 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endordered_Open_Mp_Dir	*/
 
@@ -3253,7 +3439,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endsections_Open_Mp_Dir	*/
 
@@ -3281,7 +3468,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endsingle_Open_Mp_Dir	*/
 
@@ -3309,7 +3497,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endworkshare_Open_Mp_Dir	*/
 
@@ -3337,7 +3526,37 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Task_Region) ),
+
+                                /* Endtask_Open_Mp_Dir	*/
+
+			((0 << Parallel_Region) |
+                         (0 << Doall_Region) |
+                         (0 << Do_Parallel_Region) |
+                         (0 << Guard_Region) |
+                         (0 << Case_Region) |
+                         (0 << Region_Region) |
+                         (0 << Sgi_Parallel_Region) |
+                         (0 << Doacross_Region) |
+                         (0 << Parallel_Do_Region) |
+                         (0 << Pdo_Region) |
+                         (0 << Parallel_Section_Region) |
+                         (0 << Critical_Section_Region) |
+                         (0 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Flush_Open_Mp_Dir	*/
 
@@ -3365,7 +3584,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Master_Open_Mp_Dir	*/
 
@@ -3393,7 +3613,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Ordered_Open_Mp_Dir	*/
 
@@ -3421,7 +3642,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallel_Open_Mp_Dir	*/
 
@@ -3449,7 +3671,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Paralleldo_Open_Mp_Dir	*/
 
@@ -3477,7 +3700,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallelsections_Open_Mp_Dir       */
 
@@ -3506,7 +3730,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Parallelworkshare_Open_Mp_Dir       */
 
@@ -3534,7 +3759,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Section_Open_Mp_Dir	*/
 
@@ -3562,7 +3788,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Sections_Open_Mp_Dir	*/
 
@@ -3590,7 +3817,8 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Single_Open_Mp_Dir	*/
 
@@ -3618,9 +3846,39 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) ),
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Workshare_Open_Mp_Dir	*/
+
+			((0 << Parallel_Region) |
+                         (0 << Doall_Region) |
+                         (0 << Do_Parallel_Region) |
+                         (0 << Guard_Region) |
+                         (0 << Case_Region) |
+                         (0 << Region_Region) |
+                         (0 << Sgi_Parallel_Region) |
+                         (0 << Doacross_Region) |
+                         (0 << Parallel_Do_Region) |
+                         (0 << Pdo_Region) |
+                         (0 << Parallel_Section_Region) |
+                         (0 << Critical_Section_Region) |
+                         (0 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
+
+                                /* Task_Open_Mp_Dir	*/
 
 			};
 

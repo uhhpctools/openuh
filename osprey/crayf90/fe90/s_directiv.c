@@ -2074,6 +2074,7 @@ void directive_stmt_semantics(void)
 #endif /* KEY Bug 10441 */
          break;
 
+
       case Flush_Open_Mp_Opr:
          list_idx = IR_IDX_L(ir_idx);
 
@@ -2144,6 +2145,12 @@ void directive_stmt_semantics(void)
       case Endparallelworkshare_Open_Mp_Opr:
         end_blk_mp_semantics(TRUE);
         break;
+
+      case Endtask_Open_Mp_Opr:
+         break;
+
+      case Task_Open_Mp_Opr:
+         break;
 
    }
 
@@ -5022,6 +5029,7 @@ static boolean assert_semantics(void)
 |*                      |- THREAD/DATA list                                   *|
 |*                      |- ONTO list                                          *|
 |*                      |- NEST list                                          *|
+|*                      |- UNTIED                                             *|
 |*									      *|
 |*	Not all clauses are valid for all directives.                         *|
 |*									      *|
@@ -6571,6 +6579,10 @@ static void set_open_mp_task_flags(int		ir_idx,
 
    case Single_Open_Mp_Opr:
       directive = Single_Omp;
+      break;
+
+   case Task_Open_Mp_Opr:
+      directive = Task_Omp;
       break;
 
    }

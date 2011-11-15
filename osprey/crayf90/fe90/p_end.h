@@ -129,6 +129,7 @@ void		(*end_blocks[]) () = {
 		/* Open_Mp_Workshare_Blk */	end_open_mp_workshare_blk,
 		/* Open_Mp_Parallel_Workshare_Blk */
 						end_open_mp_parallel_workshare_blk,
+		/* Open_Mp_Task_Blk */	end_open_mp_task_blk,
 		/* Contains_Blk		*/	end_contains,
 		/* Interface_Blk	*/	end_interface_blk,
 		/* Derived_Type_Blk	*/	end_type_blk,

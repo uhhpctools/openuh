@@ -1211,6 +1211,8 @@ extern void  fei_endordered_open_mp       ( void );
 extern void  fei_endparalleldo_open_mp    ( void );
 extern void  fei_endparallel_open_mp      ( void );
 extern void  fei_atomic_open_mp           ( void );
+extern void  fei_task_open_mp             ( INTPTR task_if_idx, INT32 defaultt, INT32 untied );
+extern void  fei_endtask_open_mp          ( void );
 extern void  fei_endparallelsections_open_mp( void );
 extern void  fei_fetch_and_add            ( TYPE type );
 extern void  fei_fetch_and_sub            ( TYPE type );

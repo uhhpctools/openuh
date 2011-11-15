@@ -150,7 +150,7 @@
 |* open mp directive argument index macros *|
 \*******************************************/
 
-# define OPEN_MP_LIST_CNT               19 /* by jhs, 02/7/20 */
+# define OPEN_MP_LIST_CNT               20 /* by jhs, 02/7/20 */
 
 # define OPEN_MP_IF_IDX                  0
 # define OPEN_MP_NUM_THREADS			 1 /* by jhs, 02/7/20 */
@@ -171,6 +171,7 @@
 # define OPEN_MP_ONTO_IDX               16
 # define OPEN_MP_NEST_IDX               17
 # define OPEN_MP_COPYPRIVATE_IDX        18
+# define OPEN_MP_UNTIED_IDX             19
 
 /***************************************\
 |* sgi directive argument index macros *|

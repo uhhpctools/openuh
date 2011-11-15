@@ -1483,6 +1483,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		long			ordered  		= 0;
    		long			defaultt  		= 0;
    		long			nowait   		= 0;
+   		long			untied   		= 0;
    		long			varcount  		= 0;
    		long			C_value  		= 0;
    		long			prefetch_manual 	= 0;
@@ -9791,6 +9792,7 @@ CONTINUE:
    case Paralleldo_Open_Mp_Opr:
    case Parallelsections_Open_Mp_Opr:
    case Parallelworkshare_Open_Mp_Opr:
+   case Task_Open_Mp_Opr:
         list_idx1 = IR_IDX_L(ir_idx);
 
         for (i = 0; i < OPEN_MP_LIST_CNT; i++) {
@@ -10056,6 +10058,11 @@ CONTINUE:
            ordered = (long)CN_INT_TO_C(IL_IDX(list_array[OPEN_MP_ORDERED_IDX]));
         }
 
+        /* process UNTIED clause */
+        if (IL_FLD(list_array[OPEN_MP_UNTIED_IDX]) == CN_Tbl_Idx) {
+           untied = (long)CN_INT_TO_C(IL_IDX(list_array[OPEN_MP_UNTIED_IDX]));
+        }
+
 
 
         /* process SCHEDULE (type) clause */
@@ -10299,6 +10306,20 @@ CONTINUE:
                                         defaultt);
 # endif
            break;
+
+        case Task_Open_Mp_Opr:
+           PDG_DBG_PRINT_START
+           PDG_DBG_PRINT_C("fei_task_open_mp");
+           PDG_DBG_PRINT_D("(1) if idx", task_if_idx);
+           PDG_DBG_PRINT_LD("(2) defaultt", defaultt);
+           PDG_DBG_PRINT_LD("(3) untied", untied);
+           PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+           fei_task_open_mp(task_if_idx, defaultt, untied);
+
+# endif
+           break;
         }
         break;
 
@@ -10485,6 +10506,7 @@ CONTINUE:
      	/* the following is added and modified by jhs, 02/7/22 */
         list_idx1 = IR_IDX_L(ir_idx);
 
+
 	 if(IL_FLD(list_idx1) == CN_Tbl_Idx){ /* NOWAIT clause */
            nowait = (long) CN_INT_TO_C(IL_IDX(list_idx1));
 	 }
@@ -10525,6 +10547,17 @@ CONTINUE:
 # endif
         break;
 
+
+     case Endtask_Open_Mp_Opr:
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_endtask_open_mp");
+        PDG_DBG_PRINT_END
+
+
+# ifdef _ENABLE_FEI
+        fei_endtask_open_mp();
+# endif
+        break;
 
 
 

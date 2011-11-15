@@ -1422,6 +1422,9 @@ char		*operator_str[]		= {
             "Dv_Access_N_Codim",
             "Dv_Set_N_Codim",
 #endif
+            "Endtask_Open_Mp_Opr",
+            "Task_Open_Mp_Opr",
+
                         "The_Last_Opr"
 		};
 
@@ -2423,7 +2426,8 @@ static char *open_mp_dir_opr_str[] = {
 			 "THREAD_DATA clause",
 			 "ONTO clause",
 			 "NEST clause",
-                         "COPYPRIVATE clause"
+                         "COPYPRIVATE clause",
+                         "UNTIED clause",
 		};
 
 static char *mp_dir_opr_str[] = {

@@ -7326,6 +7326,7 @@ static void dump_ir_ntry(FILE 	*out_file,
             IR_OPR(idx) == Paralleldo_Open_Mp_Opr ||
             IR_OPR(idx) == Parallelsections_Open_Mp_Opr ||
             IR_OPR(idx) == Sections_Open_Mp_Opr ||
+            IR_OPR(idx) == Task_Open_Mp_Opr ||
             IR_OPR(idx) == Single_Open_Mp_Opr) {
 
 

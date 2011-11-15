@@ -230,13 +230,26 @@ cif_stmt_type	mapped_stmt_type[] =
 
 			CIF_Not_Exact,		/* Volatile_Stmt */
 			CIF_Not_Exact,		/* Open_MP_End_Parallel_Workshare_Stmt */
-#ifndef _UH_COARRAYS
-			CIF_Not_Exact 		/* Open_MP_End_Workshare_Stmt */
-#else
-			CIF_Not_Exact,		/* Open_MP_End_Workshare_Stmt */
+			CIF_Not_Exact, 		/* Open_MP_End_Workshare_Stmt */
 
-			CIF_Not_Exact		/* Sync_Stmt */
+#ifdef _UH_COARRAYS
+			CIF_Not_Exact,		/* Sync_Stmt */
 #endif
+
+#ifdef KEY /* Bug 11741 */
+			CIF_Not_Exact,		/* Import_Stmt */
+#endif /* KEY Bug 11741 */
+#ifdef KEY /* Bug 10572 */
+			CIF_Not_Exact,		/* Enum_Stmt */
+			CIF_Not_Exact,		/* End_Enum_Stmt */
+			CIF_Not_Exact,		/* Enumerator_Stmt */
+#endif /* KEY Bug 10572 */
+#ifdef KEY /* Bug 14150 */
+			CIF_Not_Exact,		/* Bind_Stmt */
+			CIF_Not_Exact,		/* Value_Stmt */
+#endif /* KEY Bug 10572 */
+
+			CIF_Not_Exact 		/* Open_MP_End_Task_Stmt */
                        };
 
 

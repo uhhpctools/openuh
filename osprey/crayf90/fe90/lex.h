@@ -769,6 +769,7 @@ static  kwd_type        kwd_open_mp_dir[] = {
 	"ENDORDERED",			Tok_Open_Mp_Dir_Endordered,
 	"ENDMASTER",			Tok_Open_Mp_Dir_Endmaster,
 	"ENDSINGLE",			Tok_Open_Mp_Dir_Endsingle,
+	"ENDTASK",			Tok_Open_Mp_Dir_Endtask,
 	"ENDDO",			Tok_Open_Mp_Dir_Enddo,
 
 	"FIRSTPRIVATE",			Tok_Open_Mp_Dir_Firstprivate,
@@ -810,6 +811,9 @@ static  kwd_type        kwd_open_mp_dir[] = {
 
 	"THREADPRIVATE",		Tok_Open_Mp_Dir_Threadprivate,
 	"THREAD",			Tok_Open_Mp_Dir_Thread,
+	"TASK",			Tok_Open_Mp_Dir_Task,
+
+	"UNTIED",			Tok_Open_Mp_Dir_Untied,
 
 	"WORKSHARE",		Tok_Open_Mp_Dir_Workshare, /* by jhs, 02/7/5 */
 	"",				Tok_LAST };

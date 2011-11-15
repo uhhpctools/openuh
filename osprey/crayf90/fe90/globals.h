@@ -1560,6 +1560,8 @@ enum    operator_values      {  Null_Opr,
                 Dv_Access_N_Codim,
                 Dv_Set_N_Codim,
 #endif
+				Endtask_Open_Mp_Opr,
+				Task_Open_Mp_Opr,
 
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
                                 /* DO NOT PUT ANY OPRS AFTER THIS ONE */
@@ -1753,8 +1755,10 @@ enum stmt_type_values           {Null_Stmt,
 #endif /* KEY Bug 10572 */
 #ifdef KEY /* Bug 14150 */
 				 Bind_Stmt,
-				 Value_Stmt
+				 Value_Stmt,
 #endif /* KEY Bug 10572 */
+
+				 Open_MP_End_Task_Stmt
 
                                  /* When you add a stmt, make sure you change */
                                  /* stmt_type_str in main.h.                  */
@@ -1850,6 +1854,7 @@ enum    open_mp_directive_values     {
                                 Parallel_Do_Omp,
                                 Parallel_Sections_Omp,
                                 Parallel_Workshare_Omp, /* by jhs, 02/7/18 */
+                                Task_Omp,
                                 Num_Omp_Values   /* must be last */
                                 };
 
@@ -1871,6 +1876,7 @@ enum    open_mp_clause_values        {
 				Nest_Omp_Clause,
 				Onto_Omp_Clause,
                                 Copyprivate_Omp_Clause,
+                                Untied_Omp_Clause,
                                 Last_Omp_Clause     /* must be last */
                                 };
 typedef enum open_mp_clause_values open_mp_clause_type;
