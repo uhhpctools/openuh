@@ -88,6 +88,16 @@ Environment Variables:
                       layer is used.
                          Can be set with --num-images
 
+   UHCAF_NBPUT
+                      Set to 1 to enable Nonblocking put runtime optimization.
+
+   UHCAF_GETCACHE
+                      Set to 1 to enable getcache runtime optimization.
+
+   UHCAF_GETCACHE_LINE_SIZE
+                      Spefies the size (in bytes) of the cache line used by
+                      getcache optimizer. By default it is 64KB.
+
 _EOT_
 
   exit 1

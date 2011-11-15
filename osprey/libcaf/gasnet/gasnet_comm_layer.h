@@ -26,6 +26,9 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#ifndef GASNET_COMM_LAYER_H
+#define GASNET_COMM_LAYER_H
+
 #define GASNET_PAR 1
 #ifdef IB
 #define GASNET_CONDUIT_IBV 1
@@ -38,13 +41,9 @@
 
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
-//#define ENABLE_NONBLOCKING_PUT
-
 #define GASNET_HANDLER_SYNC_REQUEST 128
-#define DEFAULT_SHARED_MEMORY_SIZE 30000000L
-
-#ifndef GASNET_COMM_LAYER_H
-#define GASNET_COMM_LAYER_H
+#define DEFAULT_SHARED_MEMORY_SIZE 31457280L
+#define DEFAULT_GETCACHE_LINE_SIZE 65536L
 
 #include "gasnet.h"
 #include "gasnet_tools.h"
@@ -72,8 +71,9 @@ void comm_write(void *dest, void *src, unsigned long xfer_size, unsigned long pr
 void comm_read_src_str(void *src, void *dest, unsigned int ndim,
                     unsigned long *src_strides, unsigned long *src_extents,
                     unsigned long proc);
-void comm_write_src_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_strides, unsigned long *dest_extents,
+void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_strides,
+                    unsigned long *dest_extents,
                     unsigned long proc);
 void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         unsigned long *src_strides, unsigned long *src_extents, 
@@ -89,17 +89,48 @@ void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
 static void *get_remote_address(void *src, unsigned long img);
 unsigned long allocate_static_coarrays(); /* TBD */
 
-#if defined (ENABLE_NONBLOCKING_PUT)
-/* non-blocking put */
+/* NON-BLOCKING PUT OPTIMIZATION */
 struct write_handle_list
 {
     gasnet_handle_t handle;
+    void *address;
+    unsigned long size;
+    struct write_handle_list *prev;
     struct write_handle_list *next;
 };
-static struct write_handle_list* get_next_handle(unsigned long proc);
-static void put_sync(unsigned long proc);
-#endif
+struct local_buffer
+{
+    void *addr;
+    struct local_buffer *next;
+};
+static int address_in_nbwrite_address_block(void *remote_addr,
+        unsigned long proc, unsigned long size);
+static void update_nbwrite_address_block(void *remote_addr,
+        unsigned long proc, unsigned long size);
+static struct write_handle_list* get_next_handle(unsigned long proc,
+        void* remote_address, unsigned long size);
+static void reset_min_nbwrite_address(unsigned long proc);
+static void reset_max_nbwrite_address(unsigned long proc);
+static void delete_node(unsigned long proc, struct write_handle_list *node);
+static int address_in_handle(struct write_handle_list *handle_node,
+                                void *address, unsigned long size);
+static void wait_on_pending_puts(unsigned long proc, void* remote_address,
+                                unsigned long size);
+static void wait_on_all_pending_puts(unsigned long proc);
 
+/* GET CACHE OPTIMIZATION */
+struct cache
+{
+    void *remote_address;
+    void *cache_line_address;
+    gasnet_handle_t handle;
+};
+static void clear_all_cache();
+static void clear_cache(unsigned long node);
+static void cache_check_and_get(unsigned long node, void *remote_address,
+                            unsigned long xfer_size, void *local_address);
+static void update_cache(unsigned long node,void *remote_address,
+                    unsigned long xfer_size, void *local_address);
 
 /* active msg handler for sync images */
 void handler_sync_request(gasnet_token_t token, int imageIndex);
@@ -108,6 +139,7 @@ void handler_sync_request(gasnet_token_t token, int imageIndex);
 /* interrupt safe malloc and free */
 void* comm_malloc(size_t size);
 void comm_free(void *ptr);
+void comm_free_lcb(void *ptr);
 
 
 /* Barriers */

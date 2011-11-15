@@ -28,6 +28,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
+#include <string.h>
 #include <assert.h>
 
 #include "dopevec.h"
@@ -434,7 +436,7 @@ void acquire_lcb_(unsigned long buf_size, void **ptr)
 
 void release_lcb_(void **ptr)
 {
-    comm_free(*ptr);
+    comm_free_lcb(*ptr);
     LIBCAF_TRACE( LIBCAF_LOG_DEBUG, "caf_rtl.c:release_lcb_->"
             "freed lcb %p", *ptr);
 }
@@ -901,4 +903,116 @@ void coarray_write_full_str_(void * dest, void *src,
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "caf_rtl.c:coarray_write_full_str->Finished write(strided) to %p"
         " on Img %lu from %p using dim %d ", dest, img, src, dest_ndim);
+}
+
+
+/* COLLECTIVES */
+
+/* supplemental functions for collective subroutines
+ * Borrowed from Joon's code */
+
+static int my_pow2(int exp)
+{
+    int result=1;
+    result <<= exp ;
+    return result ;
+}
+
+static int is_even()
+{
+    return (_num_images % 2) ? 0:1 ;
+}
+
+static double mylog2(double exp)
+{
+    return log10(exp)/log10(2);
+}
+
+static double myceillog2(double exp)
+{
+    return ceil(log10(exp)/log10(2));
+}
+
+/* Add the value in buf to dope vector dst_dv */
+static void dope_add( void *buf, DopeVectorType *dst_dv,
+                        int total_bytes )
+{
+    int el_type  = dst_dv->type_lens.type;
+    void *dst_ptr = dst_dv->base_addr.a.ptr;
+    int i;
+    unsigned int el_len;
+    el_len = dst_dv->base_addr.a.el_len >>3; // convert bits to bytes
+
+    switch (el_type)
+    {
+        case  DVTYPE_INTEGER: 
+        {
+            for(i=0; i< total_bytes/el_len;i++)
+            {
+                *((int*)dst_ptr + i) += *((int*)buf + i);
+            }
+            break;
+        }
+        case  DVTYPE_REAL:
+        {
+            for(i=0; i< total_bytes/el_len;i++)
+            {
+                *((float*)dst_ptr + i) += *((float*)buf + i);
+            } 
+            break;
+        }
+        default :
+        { break; }
+    }
+} 
+
+/* COSUM  (modified Joon's armci_comaxval function) */
+/* Accumulates the value of src_dv on all images and stores it into sum_dv
+ * of root */
+void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root)
+{    
+    int i,iter;
+    int total_iter = (int) myceillog2(_num_images) ;
+    unsigned int el_len;
+    unsigned int target;
+    void *local_buf;
+    int total_bytes =1;
+
+    // initialization
+    el_len = src_dv->base_addr.a.el_len >>3; // convert bits to bytes
+    for(i=0; i<src_dv->n_dim ; i++)
+      total_bytes *= src_dv->dimension[i].extent;
+    local_buf = malloc(total_bytes);
+    memset(local_buf, 0 , total_bytes);
+    total_bytes *=el_len; 
+    // copy content of dopevector from src to sum locally
+    memcpy(sum_dv->base_addr.a.ptr, src_dv->base_addr.a.ptr, total_bytes);
+
+    // swap processed ID between 0 and root (non zero process ID)
+    int vPID = (_this_image == root ) ? 
+      0 : (_this_image == 0) ? root : _this_image;
+
+    // do reduction                                                       
+    for(iter=0; iter<total_iter; iter++)
+    {
+      if( (vPID % my_pow2(iter+1)) == 0 )
+      {
+        if( (vPID + my_pow2(iter)) < _num_images)
+        {
+          // compute target process IDs for data transfer
+          target = vPID + my_pow2(iter);
+
+          //swap back for process Id 0 and root process(non-zero) 
+          if(target == root) target=0;
+
+          comm_read(src_dv->base_addr.a.ptr, local_buf, total_bytes, target);
+
+          dope_add(local_buf, sum_dv, total_bytes);
+        }
+      }
+      comm_barrier_all();
+    }    
+
+    free(local_buf);
+    //Broadcast for all to all
 }

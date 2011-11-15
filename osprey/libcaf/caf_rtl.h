@@ -86,6 +86,9 @@ void coarray_write_full_str_(void * dest, void *src,
         unsigned long *src_strides, unsigned long *src_extents,
         unsigned long img);
 
+/* Collectives */
+void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root);
+
 void caf_exit_(int status);
 void caf_finalize_();
 
