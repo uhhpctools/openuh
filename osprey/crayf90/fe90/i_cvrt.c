@@ -1484,6 +1484,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		long			defaultt  		= 0;
    		long			nowait   		= 0;
    		long			untied   		= 0;
+   		long			collapse   		= 1;
    		long			varcount  		= 0;
    		long			C_value  		= 0;
    		long			prefetch_manual 	= 0;
@@ -10063,7 +10064,10 @@ CONTINUE:
            untied = (long)CN_INT_TO_C(IL_IDX(list_array[OPEN_MP_UNTIED_IDX]));
         }
 
-
+        /* process COLLAPSE clause */
+        if (IL_FLD(list_array[OPEN_MP_COLLAPSE_IDX]) == CN_Tbl_Idx) {
+           collapse = (long)CN_INT_TO_C(IL_IDX(list_array[OPEN_MP_COLLAPSE_IDX]));
+        }
 
         /* process SCHEDULE (type) clause */
         if (IL_FLD(list_array[OPEN_MP_SCHEDULE_TYPE_IDX]) == CN_Tbl_Idx) {
@@ -10198,6 +10202,7 @@ CONTINUE:
            PDG_DBG_PRINT_LD("(4) threadcount", threadcount);
            PDG_DBG_PRINT_LD("(5) datacount", datacount);
            PDG_DBG_PRINT_LD("(6) ontocount", ontocount);
+           PDG_DBG_PRINT_LD("(7) collapse", collapse);
            PDG_DBG_PRINT_END
 
 # ifdef _ENABLE_FEI
@@ -10206,7 +10211,8 @@ CONTINUE:
                           schedulechunk,
 			  threadcount,
                           datacount,
-                          ontocount);
+                          ontocount,
+                          collapse);
 # endif
            break;
 
@@ -10275,6 +10281,7 @@ CONTINUE:
            PDG_DBG_PRINT_LD("(7) threadcount", threadcount);
            PDG_DBG_PRINT_LD("(8) datacount", datacount);
            PDG_DBG_PRINT_LD("(9) ontocount", ontocount);
+           PDG_DBG_PRINT_LD("(10) collapse", collapse);
            PDG_DBG_PRINT_END
 
 
@@ -10287,7 +10294,8 @@ CONTINUE:
                                   schedulechunk,
                                   threadcount,
                                   datacount,
-                                  ontocount);
+                                  ontocount,
+                                  collapse);
 # endif
            break;
 
@@ -10357,6 +10365,17 @@ CONTINUE:
 
 # ifdef _ENABLE_FEI
         fei_barrier_open_mp();
+# endif
+        break;
+
+     case Taskwait_Open_Mp_Opr:
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_taskwait_open_mp");
+        PDG_DBG_PRINT_END
+
+
+# ifdef _ENABLE_FEI
+        fei_taskwait_open_mp();
 # endif
         break;
 

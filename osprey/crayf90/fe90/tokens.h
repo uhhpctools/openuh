@@ -532,6 +532,7 @@ enum	token_values {
                 Tok_Open_Mp_Dir_Affinity,       /* AFFINITY                   */
                 Tok_Open_Mp_Dir_Atomic,         /* ATOMIC                     */
                 Tok_Open_Mp_Dir_Barrier,        /* BARRIER                    */
+                Tok_Open_Mp_Dir_Collapse,       /* COLLAPSE                   */
                 Tok_Open_Mp_Dir_Copyin,         /* COPYIN                     */
                 Tok_Open_Mp_Dir_Copyprivate, /* COPYPRIVATE          */ /* by jhs, 02/7/5 */
                 Tok_Open_Mp_Dir_Critical,       /* CRITICAL                   */
@@ -585,6 +586,7 @@ enum	token_values {
                 Tok_Open_Mp_Dir_Untied,         /* UNTIED  */
                 Tok_Open_Mp_Dir_Workshare, /* WORKSHARE */ /* by jhs, 02/7/5 */
                 Tok_Open_Mp_Dir_Task,           /* TASK */
+                Tok_Open_Mp_Dir_Taskwait,       /* TASKWAIT */
                 Tok_Open_Mp_Dir_End,            /* End of Open Mp directives  */
 
 		Tok_Dbg_Sytb,			/* Symbol table               */

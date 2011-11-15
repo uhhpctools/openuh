@@ -1424,6 +1424,7 @@ char		*operator_str[]		= {
 #endif
             "Endtask_Open_Mp_Opr",
             "Task_Open_Mp_Opr",
+            "Taskwait_Open_Mp_Opr",
 
                         "The_Last_Opr"
 		};
@@ -2428,6 +2429,7 @@ static char *open_mp_dir_opr_str[] = {
 			 "NEST clause",
                          "COPYPRIVATE clause",
                          "UNTIED clause",
+                         "COLLAPSE clause",
 		};
 
 static char *mp_dir_opr_str[] = {

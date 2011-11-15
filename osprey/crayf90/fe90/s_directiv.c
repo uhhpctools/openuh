@@ -2018,6 +2018,9 @@ void directive_stmt_semantics(void)
       case Barrier_Open_Mp_Opr:
          break;
 
+      case Taskwait_Open_Mp_Opr:
+         break;
+
       case Critical_Open_Mp_Opr:
          break;
 
@@ -5030,6 +5033,7 @@ static boolean assert_semantics(void)
 |*                      |- ONTO list                                          *|
 |*                      |- NEST list                                          *|
 |*                      |- UNTIED                                             *|
+|*                      |- COLLAPSE constant (CN_Tbl_Idx)                     *|
 |*									      *|
 |*	Not all clauses are valid for all directives.                         *|
 |*									      *|

@@ -5739,9 +5739,16 @@ Walk_and_Localize (WN * tree, VAR_TABLE * vtab, Localize_Parent_Stack * lps,
 static void
 Extract_Index_Info ( WN* pdo_node )
 {
+  WN *prev_pdo = NULL;
   do_index_st.clear();
   do_index_type.clear();
   for (UINT32 i = 0; i < collapse_count; i++) {
+    if (WN_operator(pdo_node) != OPR_DO_LOOP) {
+      /* in case collapse count exceeds number of do loops */
+      collapse_count = i;
+      pdo_node = prev_pdo;
+      break;
+    }
     ST * tmp_do_index_st = WN_st(WN_index(pdo_node));
     TYPE_ID tmp_do_index_type = TY_mtype(ST_type(tmp_do_index_st));
     if (tmp_do_index_type == MTYPE_I1 || tmp_do_index_type == MTYPE_I2)
@@ -5750,6 +5757,7 @@ Extract_Index_Info ( WN* pdo_node )
       tmp_do_index_type = MTYPE_U4;
     do_index_st.push_back(tmp_do_index_st);
     do_index_type.push_back(tmp_do_index_type);
+    prev_pdo = pdo_node;
     pdo_node = WN_first(WN_do_body(pdo_node));
   }
 }
@@ -9877,9 +9885,10 @@ Rewrite_Do_New ( WN * do_tree,
 } // Rewrite_Do_New()
 
 static void
-Rewrite_Collapsed_Do ( WN * block, WN * do_tree, vector<BOOL>& is_LE )
+Rewrite_Collapsed_Do ( WN * block, WN * do_tree, vector<BOOL>& is_LE, WN ** lastthread_cond )
 {
   WN * start_block = WN_CreateBlock();
+  WN * lastcond = NULL;
   WN * cond = NULL;
   WN * incr_block = NULL;
   
@@ -9906,10 +9915,28 @@ Rewrite_Collapsed_Do ( WN * block, WN * do_tree, vector<BOOL>& is_LE )
     WN * upper_wn = WN_Integer_Cast(wn_local_end, ST_mtype(do_id_st), WN_rtype(wn_local_end));
     WN * index_wn = WN_Ldid(ST_mtype(do_id_st), do_id_ofst, do_id_st, ST_type(do_id_st), do_id_field_id);
     WN * cond_wn = WN_NE(ST_mtype(do_id_st), index_wn, upper_wn);
+    WN * lastcond_wn = WN_GE(ST_mtype(do_id_st), index_wn, upper_wn);
+    WN * limit_wn = WN_Integer_Cast(WN_Ldid(ST_mtype(limit_st[i]), limit_ofst[i],
+                     limit_st[i], ST_type(limit_st[i]), 0),
+                     ST_mtype(do_id_st), ST_mtype(limit_st[i]));
+    WN * base_wn = WN_Integer_Cast(WN_Ldid(ST_mtype(base_st[i]), base_ofst[i],
+                     base_st[i], ST_type(base_st[i]), 0),
+                     ST_mtype(do_id_st), ST_mtype(base_st[i]));
+    if (i == 0) {
+      if (is_LE[i]) {
+        lastcond_wn = WN_GT(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), limit_wn);
+      } else {
+        lastcond_wn = WN_LT(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), limit_wn);
+      }
+    } else {
+      lastcond_wn = WN_EQ(ST_mtype(do_id_st), WN_COPY_Tree(index_wn), base_wn);
+    }
     if (cond == NULL) {
       cond = cond_wn;
+      lastcond = lastcond_wn;
     } else {
       cond = WN_LIOR(cond_wn, cond);
+      lastcond = WN_LAND(lastcond_wn, lastcond);
     }
 
     WN * current_incr_block = WN_CreateBlock();
@@ -9943,6 +9970,8 @@ Rewrite_Collapsed_Do ( WN * block, WN * do_tree, vector<BOOL>& is_LE )
   WN * while_loop = WN_CreateWhileDo(cond, loop_body);
   WN_INSERT_BlockLast(loop_body, incr_block);
   WN_INSERT_BlockLast(block, while_loop);
+
+  *lastthread_cond = lastcond;
 }
 
 /*
@@ -9969,6 +9998,8 @@ Transform_Do( WN * do_tree,
   WN        *call_wn;
   
   PREG_NUM rreg1, rreg2;
+
+  WN        *lastthread_cond;
 
   WN        *loop_info;
   ST        *return_st;
@@ -10291,7 +10322,7 @@ Transform_Do( WN * do_tree,
     // while body
     while_body = WN_CreateBlock( );
     // insert do
-    Rewrite_Collapsed_Do ( while_body, do_tree, is_LE );
+    Rewrite_Collapsed_Do ( while_body, do_tree, is_LE, &lastthread_cond );
     WN_INSERT_BlockLast( while_body, WN_COPY_Tree( call_wn ));
     WN_INSERT_BlockLast( while_body, WN_COPY_Tree( wn )); 
       // increase lower and upper.
@@ -10339,19 +10370,7 @@ Transform_Do( WN * do_tree,
       WN * old_do_tree = do_tree;
       // generate an if-stmt to check if this is the last iteration, and then
       // set last_iter, which will be checked to set lastprivate variables
-      if( is_LE[0] )
-      {
-        test_wn = WN_GT (do_index_type[0],
-                         Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
-                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
-
-      }
-      else
-      {
-        test_wn = WN_LT (do_index_type[0],
-                         Gen_MP_Load( WN_st(WN_kid0(old_do_tree)), WN_offsetx(WN_kid0(old_do_tree)) ),
-                         Gen_MP_Load( limit_st[0], limit_ofst[0] ));
-      }
+      test_wn = lastthread_cond; // from Rewrite_Collapsed_Do
       then_wn =  WN_CreateBlock( );
       wn_tmp = WN_Stid ( MTYPE_I4 , 0, 
         last_iter, ST_type( last_iter ), 

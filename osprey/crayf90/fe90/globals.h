@@ -1562,6 +1562,7 @@ enum    operator_values      {  Null_Opr,
 #endif
 				Endtask_Open_Mp_Opr,
 				Task_Open_Mp_Opr,
+				Taskwait_Open_Mp_Opr,
 
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
                                 /* DO NOT PUT ANY OPRS AFTER THIS ONE */
@@ -1877,6 +1878,7 @@ enum    open_mp_clause_values        {
 				Onto_Omp_Clause,
                                 Copyprivate_Omp_Clause,
                                 Untied_Omp_Clause,
+                                Collapse_Omp_Clause,
                                 Last_Omp_Clause     /* must be last */
                                 };
 typedef enum open_mp_clause_values open_mp_clause_type;

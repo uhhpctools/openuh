@@ -749,6 +749,7 @@ static  kwd_type        kwd_open_mp_dir[] = {
 	"BARRIER",			Tok_Open_Mp_Dir_Barrier,
 
 	"COPYPRIVATE",		Tok_Open_Mp_Dir_Copyprivate, /* by jhs, 02/7/5 */
+	"COLLAPSE",			Tok_Open_Mp_Dir_Collapse,
 	"CRITICAL",			Tok_Open_Mp_Dir_Critical,
 	"COPYIN",			Tok_Open_Mp_Dir_Copyin,
 
@@ -810,6 +811,7 @@ static  kwd_type        kwd_open_mp_dir[] = {
 	"STATIC",			Tok_Open_Mp_Dir_Static,
 
 	"THREADPRIVATE",		Tok_Open_Mp_Dir_Threadprivate,
+	"TASKWAIT",		Tok_Open_Mp_Dir_Taskwait,
 	"THREAD",			Tok_Open_Mp_Dir_Thread,
 	"TASK",			Tok_Open_Mp_Dir_Task,
 

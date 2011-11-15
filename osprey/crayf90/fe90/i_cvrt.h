@@ -1181,7 +1181,8 @@ extern void  fei_paralleldo_open_mp       ( INTPTR task_if_idx,
                                   	    INTPTR schedulechunck,
                                             INT32 threadcount,
                                             INT32 datacount,
-                                            INT32 ontocount );
+                                            INT32 ontocount,
+                                            INT32 collapse );
 extern void  fei_parallelworkshare_open_mp( INTPTR task_if_idx,
                                             INTPTR task_num_threads_idx,
                                             INT32 defaultt );
@@ -1196,9 +1197,11 @@ extern void  fei_do_open_mp               ( INT32 ordered,
                                   	    INTPTR schedulechunck,
                                             INT32 threadcount,
                                             INT32 datacount,
-                                            INT32 ontocount );
+                                            INT32 ontocount,
+                                            INT32 collapse );
 extern void  fei_parallel_open_mp         ( INTPTR task_if_idx, INTPTR task_num_threads_idx, INT32 defaultt );
 extern void  fei_barrier_open_mp          ( void );
+extern void  fei_taskwait_open_mp         ( void );
 extern void  fei_section_open_mp          ( void );
 extern void  fei_master_open_mp           ( void );
 extern void  fei_endmaster_open_mp        ( void );

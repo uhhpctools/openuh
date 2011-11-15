@@ -1901,7 +1901,8 @@ fei_paralleldo_open_mp (INTPTR task_if_idx,
 			INTPTR schedulechunk,
 			int threadcount,
 			int datacount,
-			int ontocount)
+			int ontocount,
+			int collapse)
 {
   WN *body;
 
@@ -1934,6 +1935,13 @@ fei_paralleldo_open_mp (INTPTR task_if_idx,
 
   if (ordered) {
     cwh_stmt_add_pragma(WN_PRAGMA_ORDERED,TRUE);
+  }
+
+  /* collapse */
+
+  if (collapse != 1) {
+    DevAssert((collapse > 1),("Collapse value should be positive integer"));
+    cwh_stmt_add_pragma(WN_PRAGMA_COLLAPSE, TRUE, (ST_IDX) NULL, collapse);
   }
 
   /* append statements to region body */
@@ -2004,7 +2012,8 @@ fei_do_open_mp (int ordered,
 		INTPTR schedulechunk,
 		int threadcount,
 		int datacount,
-		int ontocount)
+		int ontocount,
+		int collapse)
 {
   WN *body;
 
@@ -2024,6 +2033,11 @@ fei_do_open_mp (int ordered,
 
   if (ordered) {
     cwh_stmt_add_pragma(WN_PRAGMA_ORDERED, TRUE);
+  }
+
+  if (collapse != 1) {
+    DevAssert((collapse > 1),("Collapse value should be positive integer"));
+    cwh_stmt_add_pragma(WN_PRAGMA_COLLAPSE, TRUE, (ST_IDX) NULL, collapse);
   }
 
   /* append statements to region body */
@@ -2268,6 +2282,22 @@ fei_barrier_open_mp         ( void )
   WN *wn;
 
   wn = WN_CreatePragma(WN_PRAGMA_BARRIER,(ST_IDX) NULL,0,0);
+  WN_set_pragma_omp(wn);
+  cwh_directive_barrier_insert(wn, 0);
+}
+
+/*===============================================
+ *
+ * fei_taskwait_open_mp
+ *
+ *===============================================
+*/
+extern void
+fei_taskwait_open_mp         ( void )
+{
+  WN *wn;
+
+  wn = WN_CreatePragma(WN_PRAGMA_TASKWAIT,(ST_IDX) NULL,0,0);
   WN_set_pragma_omp(wn);
   cwh_directive_barrier_insert(wn, 0);
 }

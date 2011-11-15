@@ -10959,6 +10959,18 @@ static void parse_open_mp_directives(void)
 
          break;
 
+      case Tok_Open_Mp_Dir_Taskwait:
+         ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
+         ir_idx = gen_directive_ir(Taskwait_Open_Mp_Opr);
+
+         if (directive_region_error(Taskwait_Open_Mp_Dir,
+                                    IR_LINE_NUM(ir_idx),
+                                    IR_COL_NUM(ir_idx))) {
+            break;
+         }
+
+         break;
+
       case Tok_Open_Mp_Dir_Flush:
          ATP_HAS_TASK_DIRS(SCP_ATTR_IDX(curr_scp_idx)) = TRUE;
          ir_idx = gen_directive_ir(Flush_Open_Mp_Opr);
@@ -11208,6 +11220,7 @@ EXIT:
 |*                      |- ONTO list                                          *|
 |*                      |- NEST list                                          *|
 |*                      |- UNTIED                                             *|
+|*                      |- COLLAPSE constant (CN_Tbl_Idx)                     *|
 |*                                                                            *|
 |* Input parameters:                                                          *|
 |*      NONE                                                                  *|
@@ -11545,6 +11558,7 @@ static void parse_open_mp_clauses(open_mp_directive_type directive)
                   else {
                      parse_err_flush(Find_EOS, "PRIVATE, SHARED, or NONE");
                   }
+
                }
                else {
                   parse_err_flush(Find_EOS, "(");
@@ -12204,6 +12218,67 @@ static void parse_open_mp_clauses(open_mp_directive_type directive)
                IL_FLD(list_array[OPEN_MP_UNTIED_IDX]) = CN_Tbl_Idx;
 
                IL_IDX(list_array[OPEN_MP_UNTIED_IDX]) = CN_INTEGER_ONE_IDX;
+
+               break;
+
+            case Tok_Open_Mp_Dir_Collapse:
+
+               if (! open_mp_clause_allowed[directive][Collapse_Omp_Clause]) {
+                  PRINTMSG(TOKEN_LINE(token), 1370, Error, TOKEN_COLUMN(token),
+                           "COLLAPSE", open_mp_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               /* only one COLLAPSE clause allowed */
+
+               if (IL_IDX(list_array[OPEN_MP_COLLAPSE_IDX]) != NULL_IDX) {
+                  PRINTMSG(TOKEN_LINE(token), 1360, Error, TOKEN_COLUMN(token),
+                           "COLLAPSE", open_mp_dir_str[directive]);
+                  parse_err_flush(Find_EOS, NULL);
+                  goto EXIT;
+               }
+
+               if (LA_CH_VALUE == LPAREN) {
+                  long depth_idx;
+                  fld_type field_type;
+
+                  NEXT_LA_CH;
+
+                  /* if (MATCHED_TOKEN_CLASS(Tok_Class_Int_Spec)) { */
+                  if (parse_int_spec_expr(&depth_idx, &field_type, TRUE, FALSE) ) {
+
+                    /* the_constant should be whatever is the integer constant
+                     * in the collapse parentheses */
+                     the_constant = (long) CN_INT_TO_C(depth_idx);
+
+                     IL_FLD(list_array[OPEN_MP_COLLAPSE_IDX]) = CN_Tbl_Idx;
+                     IL_IDX(list_array[OPEN_MP_COLLAPSE_IDX]) =
+                                           C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
+                                                       the_constant);
+
+                     IL_LINE_NUM(list_array[OPEN_MP_COLLAPSE_IDX]) =
+                                                         TOKEN_LINE(token);
+                     IL_COL_NUM(list_array[OPEN_MP_COLLAPSE_IDX]) =
+                                                         TOKEN_COLUMN(token);
+
+                     if (LA_CH_VALUE == RPAREN) {
+                        NEXT_LA_CH;
+                     }
+                     else {
+                        parse_err_flush(Find_EOS, ")");
+                        goto EXIT;
+                     }
+                  }
+                  else {
+                     parse_err_flush(Find_EOS, "integer constant");
+                  }
+
+               }
+               else {
+                  parse_err_flush(Find_EOS, "(");
+                  goto EXIT;
+               }
 
                break;
 

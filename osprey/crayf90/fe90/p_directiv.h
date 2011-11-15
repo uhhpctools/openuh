@@ -317,6 +317,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 /* Do_Omp			*/
 						{
@@ -336,6 +337,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	TRUE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	TRUE,
                                                 },
 /* Sections_Omp			*/
 						{
@@ -355,6 +357,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 /* Single_Omp			*/
 						{
@@ -374,6 +377,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 /* Workshare_Omp */  /* by jhs, 02/7/18 */
 						{
@@ -393,6 +397,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 /* Parallel_Do_Omp		*/
 						{
@@ -412,6 +417,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	TRUE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	TRUE,
                                                 },
 /* Parallel_Sections_Omp	*/
 						{
@@ -431,6 +437,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 /* Parallel_Workshare_Omp */ /* by jhs, 02/7/18 */
 						{
@@ -450,6 +457,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	FALSE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 
 /* Task_Omp			*/
@@ -470,6 +478,7 @@ boolean open_mp_clause_allowed[Num_Omp_Values][Last_Omp_Clause] = {
 	/* Onto_Omp_Clause    		*/	FALSE,
         /* Copyprivate_Omp_Clause       */      FALSE,
 	/* Untied_Omp_Clause    	*/	TRUE,
+	/* Collapse_Omp_Clause    	*/	FALSE,
                                                 },
 				};
 
@@ -560,6 +569,7 @@ enum	directive_stmt_values  {Case_Dir,
                                 Single_Open_Mp_Dir,
                                 Workshare_Open_Mp_Dir, /* by jhs, 02/7/18 */
                                 Task_Open_Mp_Dir,
+                                Taskwait_Open_Mp_Dir,
 
 				Last_Dir};
 
@@ -623,6 +633,7 @@ char	*(directive_stmt_str[Last_Dir]) =   {
                 "C$OMP SINGLE",			/* Single_Open_Mp_Dir	*/
                 "C$OMP WORKSHARE" /* Workshare_Open_Mp_Dir */ /* by jhs, 02/7/18 */
                 "C$OMP TASK" /* Task_Open_Mp_Dir */
+                "C$OMP TASKWAIT" /* Taskwait_Open_Mp_Dir */
 				};
 
 long directive_cant_be_in[Last_Dir] = {
@@ -2250,6 +2261,35 @@ long directive_cant_be_in[Last_Dir] = {
 			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Task_Open_Mp_Dir	*/
+
+			((1 << Parallel_Region) |
+                         (1 << Doall_Region) |
+                         (1 << Do_Parallel_Region) |
+                         (1 << Guard_Region) |
+                         (1 << Case_Region) |
+                         (0 << Region_Region) |
+                         (1 << Sgi_Parallel_Region) |
+                         (1 << Doacross_Region) |
+                         (1 << Parallel_Do_Region) |
+                         (1 << Pdo_Region) |
+                         (1 << Parallel_Section_Region) |
+                         (1 << Critical_Section_Region) |
+                         (1 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
+
+                                /* Taskwait_Open_Mp_Dir	*/
 
 			};
 
@@ -3879,6 +3919,35 @@ long directive_must_be_in[Last_Dir] = {
 			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Task_Open_Mp_Dir	*/
+
+			((0 << Parallel_Region) |
+                         (0 << Doall_Region) |
+                         (0 << Do_Parallel_Region) |
+                         (0 << Guard_Region) |
+                         (0 << Case_Region) |
+                         (0 << Region_Region) |
+                         (0 << Sgi_Parallel_Region) |
+                         (0 << Doacross_Region) |
+                         (0 << Parallel_Do_Region) |
+                         (0 << Pdo_Region) |
+                         (0 << Parallel_Section_Region) |
+                         (0 << Critical_Section_Region) |
+                         (0 << Single_Process_Region) |
+                         (0 << Open_Mp_Parallel_Region) |
+                         (0 << Open_Mp_Do_Region) |
+                         (0 << Open_Mp_Parallel_Sections_Region) |
+                         (0 << Open_Mp_Sections_Region) |
+                         (0 << Open_Mp_Section_Region) |
+                         (0 << Open_Mp_Single_Region) |
+                         (0 << Open_Mp_Parallel_Do_Region) |
+                         (0 << Open_Mp_Master_Region) |
+                         (0 << Open_Mp_Critical_Region) |
+                         (0 << Open_Mp_Ordered_Region) |
+			 (0 << Open_Mp_Workshare_Region) |
+			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (0 << Open_Mp_Task_Region) ),
+
+                                /* Taskwait_Open_Mp_Dir	*/
 
 			};
 
