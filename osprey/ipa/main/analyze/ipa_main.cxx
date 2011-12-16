@@ -47,6 +47,11 @@
 
 
 #include <stdint.h>
+
+#include <stdlib.h>
+#include <iomanip>
+#include <stdio.h>
+
 #if defined(BUILD_OS_DARWIN)
 #include <darwin_elf.h>
 #else /* defined(BUILD_OS_DARWIN) */
@@ -77,6 +82,8 @@
 #include "ipa_section_prop.h"           // IPA_ARRAY_DF_FLOW
 #include "ipa_nested_pu.h"              // Build_Nested_Pu_Relations
 #include "ipo_tlog_utils.h"		// Ipa_tlog
+
+#include "wn_tree_util.h"
 
 #include "ipa_chg.h"                    // Class hierarchy graph
 #include "ipa_devirtual.h"              // Devirtualization
@@ -134,76 +141,513 @@ char* Dragon_Symbol_Name(INT i,char** function_name, IPA_NODE *ipan)
     return ST_name(ss->St_idx());
   }
 }
+
 void Dragon_Dump_Regions(IPA_NODE *ipan, int fileid, ofstream
-&outputfile)
+    &outputfile, WN *node)
 {
+    static unsigned int region_counter = 0;
+    SUMMARY_FILE_HEADER* file_header =
+        IP_FILE_HDR_file_header(ipan->File_Header());
 
- static unsigned int region_counter = 0;
- SUMMARY_FILE_HEADER* file_header =
-IP_FILE_HDR_file_header(ipan->File_Header());
- INT regions_size = file_header->Get_regions_array_size();
- INT lb_index, lb_count,ub_index,ub_count,step_index,step_count;
- REGION_ARRAYS* region_array = IPA_get_region_array(ipan);
- PROJECTED_REGION* proj_region_array = IPA_get_proj_region_array(ipan);
- TERM * term_array;
- TERM * tm;
- char *func_name=NULL;
- char *name=NULL;
+    INT regions_size = file_header->Get_regions_array_size();
+    INT lb_index, lb_count,ub_index,ub_count,step_index,step_count;
+    REGION_ARRAYS* region_array = IPA_get_region_array(ipan);
+    PROJECTED_REGION* proj_region_array = IPA_get_proj_region_array(ipan);
+    PROJECTED_NODE* proj_node_array = IPA_get_projected_node_array(ipan);
+    LOOPINFO* loopinfo_array = IPA_get_loopinfo_array(ipan);
+    TERM* term_array = IPA_get_term_array(ipan);
 
- char defuse[20]="",pj_defuse[20]="",term_info[100]="";
+    TERM * tm;
+    char *func_name=NULL;
+    char *name=NULL;
 
-  for (INT i = 0; i < regions_size; i++)
+    char defuse[20]="",pj_defuse[20]="",term_info[100]="";
+
+    WN_TREE_CONTAINER<PRE_ORDER> wcpre(node);
+    WN_TREE_CONTAINER<PRE_ORDER>::iterator wipre;
+
+    for (INT i = 0; i < regions_size; i++)
     {
-      REGION_ARRAYS* ra = &region_array[i];
-      name = Dragon_Symbol_Name(ra->Get_sym_id(), &func_name,ipan);
-      outputfile<<fileid<<", ";
-      ra->Dragon_Print(outputfile, i, name, func_name);
-      PROJECTED_REGION* pr = &proj_region_array[ra->Get_idx()];
-      outputfile <<(int) pr->Get_num_dims()<<endl;
-      region_counter++;
-    }
 
+        REGION_ARRAYS* ra = &region_array[i];
+        name = Dragon_Symbol_Name(ra->Get_sym_id(), &func_name,ipan);
+
+        PROJECTED_REGION* pr = &proj_region_array[ra->Get_idx()];
+
+        int proj_reg=(int) pr->Get_id();
+        int regarr=(int) ra->Get_sym_id();
+        for (INT j=0; j<ra->Get_count(); j++)
+        {
+            outputfile<<fileid<<", ";
+
+            if (func_name == NULL || func_name[0] == '\0')
+                outputfile <<i<<j<<", @, "<<name<<", ";
+            else
+                outputfile <<i<<j<<", "<<func_name<<", "<<name<<", ";
+
+            outputfile<<ipan->Input_File_Name()<<", ";
+            if (ra->Is_use())
+                outputfile<< "USE, ";
+            else if (ra->Is_def())
+                outputfile<< "DEF, ";
+            else if (ra->Is_passed())
+                outputfile<< "PASSED, ";
+            else if (ra->Is_may_def())
+                outputfile<< "MAY_DEF, ";
+            else if (ra->Is_may_use())
+                outputfile<< "MAY_USE, ";
+            else if (ra->Is_formal())
+                outputfile<< "FORMAL, ";
+            outputfile<<ra->Get_count()<<", ";
+            outputfile <<(int) pr->Get_num_dims()<<", ";
+
+            PROJECTED_NODE* pn = &proj_node_array[proj_reg];
+
+            if ((int) pr->Get_id()!= -1) {
+
+                if (pn->Is_unprojected()) {
+                    outputfile<<"unprojected, , , ";
+
+                    int check=0;
+                    for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+                        WN* temp;
+                        temp = wipre.Wn();
+
+                        if (WN_operator(temp) == OPR_ARRAY) {
+                            //get the array name
+                            WN* base_node = WN_array_base(temp);
+                            char* base_name = ST_name(WN_st_idx(base_node));
+
+                            if (name==base_name) {
+
+                                if (check==0) {
+                                    //get the #dimensions in the array
+                                    int num_dim = WN_num_dim(temp);
+
+                                    //get the #kids in the tree.
+                                    int kid_count = WN_kid_count(temp);
+
+                                    //get the line number
+                                    // int line_number=WN_linenum_fixed(temp);
+                                    // int lin= (int) WN_linenum(temp);
+
+                                    // SRCPOS srcpos = WN_Get_Linenum(node);
+                                    // USRCPOS linepos;
+                                    // USRCPOS_srcpos(linepos) = srcpos;
+                                    // int line = USRCPOS_linenum(linepos);
+                                    // outputfile<<line<<", ";
+
+                                    //get the elemnt size and data type
+                                    int data_type_size = WN_element_size(temp);
+                                    outputfile<<data_type_size<<", ";
+                                    if(data_type_size==1)
+                                        outputfile<<"char, ";
+                                    else if(data_type_size==2)
+                                        outputfile<<"shortint, ";
+                                    else if(data_type_size==4)
+                                        outputfile<<"int, ";
+                                    else if(data_type_size==8)
+                                        outputfile<<"double, ";
+                                    else {
+                                        outputfile<<"othertype, ";
+                                    }
+
+                                    //get each dimension size and the total size and capacity
+                                    int total_size=1;
+                                    int total_size_bytes;
+                                    int dimen[num_dim];
+                                    int ind;
+                                    int hexad;
+                                    char buffer [33];
+                                    for(int i=0; i<num_dim; i++) {
+                                        WN *dim = WN_array_dim(temp,i);
+                                        WN *index=WN_array_index(temp,i);
+                                        dimen[i]= WN_const_val(dim);
+                                        outputfile<<dimen[i];
+                                        if(num_dim > 1) {
+                                            outputfile<<"|";
+                                        }
+                                        if(dimen[i]==0)
+                                            dimen[i]=1;
+                                        total_size*=dimen[i];
+
+
+                                    }
+                                    outputfile<<", ";
+                                    outputfile<<total_size<<", ";
+                                    total_size_bytes=total_size*data_type_size;
+                                    outputfile<<total_size_bytes<<", ";
+
+                                    WN *index=WN_array_index(temp,0);
+                                    ind= WN_const_val(index);
+                                    hexad=ind*data_type_size;
+                                    stringstream oss;
+                                    string mystr;
+                                    oss <<hex<<hexad;
+                                    mystr=oss.str();
+                                    outputfile<<mystr<<", ";
+
+                                    int acc_dens=ra->Get_count()*100/total_size_bytes;
+                                    outputfile<<acc_dens;
+                                    outputfile<<" ";
+                                    check+=1;
+                                }
+                            }
+                        }
+                    }
+
+                    if(check==0) {
+                        outputfile<<", , , , , , , , ";
+                    }
+
+                } else {
+
+                    if (pn->Is_messy_lb()) {
+                        outputfile<<"messy, ";
+                    } else {
+                        // for (INT k=0; k<pn->Get_lb_term_count(); k++)
+                        // {
+                        TERM* tm = &term_array[pn->Get_lb_term_index()];
+                        switch (tm->Get_type()) {
+
+                            case LTKIND_NONE:
+                                outputfile<<"none, ";
+                                break;
+
+                            case LTKIND_CONST:
+                                // outputfile<<"constant ";
+                                outputfile<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_LINDEX:
+                                outputfile<<"lindex";
+                                outputfile<<"loop_index("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_SUBSCR:
+                                outputfile<<"subscr";
+                                outputfile<<"dim("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_IV:
+                                outputfile<<"IVAR";
+                                outputfile<<"IVAR["<<(int) tm->Get_desc()<<"]*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+                        }
+                        // }
+                        // outputfile <<(int) pn->Get_lb_term_index()<<", ";
+                        // outputfile <<(int) pn->Get_lb_term_count()<<", ";
+                    }
+
+                    if (pn->Is_messy_ub()) {
+                        outputfile<<"messy, ";
+                    } else {
+                        TERM* tm = &term_array[pn->Get_ub_term_index()];
+                        switch (tm->Get_type()) {
+
+                            case LTKIND_NONE:
+                                outputfile<<"none, ";
+                                break;
+
+                            case LTKIND_CONST:
+                                // outputfile<<"constant ";
+                                outputfile<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_LINDEX:
+                                outputfile<<"lindex";
+                                outputfile<<"loop_index("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_SUBSCR:
+                                outputfile<<"subscr";
+                                outputfile<<"dim("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_IV:
+                                outputfile<<"IVAR";
+                                outputfile<<"IVAR["<<(int) tm->Get_desc()<<"]*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+                        }
+
+                        // outputfile <<(int) pn->Get_ub_term_index()<<", ";
+                        // outputfile <<(int) pn->Get_ub_term_count()<<", ";
+                    }
+
+                    if (pn->Is_messy_step()) {
+                        outputfile<<"smessy, ";
+                    } else {
+                        TERM* tm = &term_array[pn->Get_step_term_index()];
+                        switch (tm->Get_type()) {
+
+                            case LTKIND_NONE:
+                                outputfile<<"none, ";
+                                break;
+
+                            case LTKIND_CONST:
+                                // outputfile<<"constant ";
+                                outputfile<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_LINDEX:
+                                outputfile<<"lindex";
+                                outputfile<<"loop_index("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_SUBSCR:
+                                outputfile<<"subscr";
+                                outputfile<<"dim("<<(int) tm->Get_desc()<<")*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+
+                            case LTKIND_IV:
+                                outputfile<<"IVAR";
+                                outputfile<<"IVAR["<<(int) tm->Get_desc()<<"]*"<<(int) tm->Get_coeff()<<", ";
+                                break;
+                        }
+
+                    }
+
+                    int check=0;
+                    for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+                        WN* temp;
+                        temp = wipre.Wn();
+
+                        if (WN_operator(temp) == OPR_ARRAY) {
+                            //get the array name
+                            WN* base_node = WN_array_base(temp);
+                            char* base_name = ST_name(WN_st_idx(base_node));
+                            if(name==base_name) {
+                                if(check==0) {
+                                    //get the #dimensions in the array
+                                    int num_dim = WN_num_dim(temp);
+
+                                    //get the #kids in the tree.
+                                    int kid_count = WN_kid_count(temp);
+
+                                    //get the line number
+                                    // int line_number=WN_linenum_fixed(temp);
+                                    // int lin= (int) WN_linenum(temp);
+
+                                    // SRCPOS srcpos = WN_Get_Linenum(node);
+                                    // USRCPOS linepos;
+                                    // USRCPOS_srcpos(linepos) = srcpos;
+                                    // int line = USRCPOS_linenum(linepos);
+                                    // outputfile<<line<<", ";
+
+                                    //get the elemnt size and data type
+                                    int data_type_size = WN_element_size(temp);
+                                    outputfile<<data_type_size<<", ";
+                                    if(data_type_size==1)
+                                        outputfile<<"char, ";
+                                    else if(data_type_size==2)
+                                        outputfile<<"shortint, ";
+                                    else if(data_type_size==4)
+                                        outputfile<<"int, ";
+                                    else if(data_type_size==8)
+                                        outputfile<<"double, ";
+                                    else {
+                                        outputfile<<"othertype, ";
+                                    }
+
+                                    //get each dimension size and the total size and capacity
+                                    int total_size=1;
+                                    int total_size_bytes;
+                                    int dimen[num_dim];
+                                    int ind;
+                                    int hexad;
+                                    for(int i=0; i<num_dim; i++) {
+                                        WN *dim = WN_array_dim(temp,i);
+                                        WN *index=WN_array_index(temp,i);
+                                        dimen[i]= WN_const_val(dim);
+                                        outputfile<<dimen[i];
+                                        if(num_dim > 1) {
+                                            outputfile<<"|";
+                                        }
+                                        if(dimen[i]==0)
+                                            dimen[i]=1;
+                                        total_size*=dimen[i];
+
+
+                                    }
+                                    outputfile<<", ";
+                                    outputfile<<total_size<<", ";
+                                    total_size_bytes=total_size*data_type_size;
+                                    outputfile<<total_size_bytes<<", ";
+
+                                    WN *index=WN_array_index(temp,0);
+                                    ind= WN_const_val(index);
+                                    hexad=ind*data_type_size;
+                                    stringstream oss;
+                                    string mystr;
+                                    oss <<hex<<hexad;
+                                    mystr=oss.str();
+                                    outputfile<<mystr<<", ";
+                                    int acc_dens=ra->Get_count()*100/total_size_bytes;
+                                    outputfile<<acc_dens;
+                                    outputfile<<" ";
+                                    check+=1;
+                                }
+                            }
+                        }
+                    }
+
+                    if(check==0) {
+                        outputfile<<", , , , , , , , ";
+                    }
+                }
+
+                outputfile<<endl;
+
+            } else {
+
+                outputfile<<"nodeismessy, , , ";
+                int check=0;
+
+                for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+                    WN* temp;
+                    temp = wipre.Wn();
+
+                    if (WN_operator(temp) == OPR_ARRAY) {
+                        //get the array name
+                        WN* base_node = WN_array_base(temp);
+                        char* base_name = ST_name(WN_st_idx(base_node));
+
+                        if(name==base_name) {
+
+                            if(check==0) {
+                                //get the #dimensions in the array
+                                int num_dim = WN_num_dim(temp);
+
+                                //get the #kids in the tree.
+                                int kid_count = WN_kid_count(temp);
+
+                                //get the line number
+                                // int line_number=WN_linenum_fixed(temp);
+                                // int lin= (int) WN_linenum(temp);
+
+                                // SRCPOS srcpos = WN_Get_Linenum(node);
+                                // USRCPOS linepos;
+                                // USRCPOS_srcpos(linepos) = srcpos;
+                                // int line = USRCPOS_linenum(linepos);
+                                // outputfile<<line<<", ";
+
+                                //get the elemnt size and data type
+                                int data_type_size = WN_element_size(temp);
+                                outputfile<<data_type_size<<", ";
+                                if(data_type_size==1)
+                                    outputfile<<"char, ";
+                                else if(data_type_size==2)
+                                    outputfile<<"shortint, ";
+                                else if(data_type_size==4)
+                                    outputfile<<"int, ";
+                                else if(data_type_size==8)
+                                    outputfile<<"double, ";
+                                else {
+                                    outputfile<<"othertype, ";
+                                }
+
+                                //get each dimension size and the total size and capacity
+                                int total_size=1;
+                                int total_size_bytes;
+                                int dimen[num_dim];
+                                int ind;
+                                int hexad;
+                                char buffer [33];
+                                for(int i=0; i<num_dim; i++) {
+                                    WN *dim = WN_array_dim(temp,i);
+                                    WN *index=WN_array_index(temp,i);
+                                    dimen[i]= WN_const_val(dim);
+                                    outputfile<<dimen[i];
+
+                                    if(num_dim > 1) {
+                                        outputfile<<"|";
+                                    }
+
+                                    if(dimen[i]==0)
+                                        dimen[i]=1;
+
+                                    total_size*=dimen[i];
+                                }
+
+                                outputfile<<", ";
+                                outputfile<<total_size<<", ";
+                                total_size_bytes=total_size*data_type_size;
+                                outputfile<<total_size_bytes<<", ";
+
+                                WN *index=WN_array_index(temp,0);
+                                ind= WN_const_val(index);
+                                hexad=ind*data_type_size;
+                                stringstream oss;
+                                string mystr;
+                                oss <<hex<<hexad;
+                                mystr=oss.str();
+                                outputfile<<mystr<<", ";
+
+                                int acc_dens=ra->Get_count()*100/total_size_bytes;
+                                outputfile<<acc_dens;
+                                outputfile<<" ";
+                                check+=1;
+                            }
+                        }
+                    }
+                }
+
+                if(check==0) {
+                    outputfile<<", , , , , , , , ";
+                }
+                outputfile<<endl;
+            }
+
+            proj_reg++;
+
+        } // need to change
+
+        region_counter++;
+    }
 }
+
+
 void  Dragon_Dump_Array_Regions(char *outname)
 {
 
   ofstream outputfile(outname,ios::out);
   vector<string> filenames;
-    IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
+  IPA_NODE_ITER cg_iter(IPA_Call_Graph, PREORDER);
 
-for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next())
-   {
-     IPA_NODE* ipan = cg_iter.Current();
-     if (ipan)
-     {
-       bool dump_regions = true;
-       string tempfile = ipan->Input_File_Name();
-       if (filenames.size()>0)
+  for (cg_iter.First(); !cg_iter.Is_Empty(); cg_iter.Next())
+  {
+    IPA_NODE* ipan = cg_iter.Current();
+    if (ipan)
+    {
+      bool dump_regions = true;
+      string tempfile = ipan->Input_File_Name();
+      if (filenames.size()>0)
       {
-       for(int i=0; i<filenames.size(); i++)
-       {
-         if(filenames[i]==tempfile)
-           dump_regions=false;
+        for(int i=0; i<filenames.size(); i++)
+        {
+          //outputfile << filenames[i]<<"\n";
+          if(filenames[i]==tempfile)
+            dump_regions=false;
 
-       }
+        }
       }
 
-       // printf("\n*****entering :%s\n",ipan->Name());
-     if(dump_regions)
+      // printf("\n*****entering :%s\n",ipan->Name());
+      if(dump_regions)
       {
         filenames.push_back(tempfile);
         IPA_NODE_CONTEXT context(ipan);
-        Dragon_Dump_Regions(ipan,filenames.size(),outputfile);
+        WN* node = ipan->Whirl_Tree();
+        Dragon_Dump_Regions(ipan,filenames.size(),outputfile,node);
 
       }
-     // printf("\n*****exiting :%s\n",ipan->Name());
+      // printf("\n*****exiting :%s\n",ipan->Name());
 
-     }
+    }
 
-
-   }
-    outputfile.close();
-    //printf("\n Exited Dragon_Dump_Array_Regions\n");
+  }
+  outputfile.close();
+  //printf("\n Exited Dragon_Dump_Array_Regions\n");
 }
 
 #endif
@@ -586,8 +1030,8 @@ Perform_Interprocedural_Analysis ()
         char *rg_filename = new char[len+7];
         strcpy(rg_filename,output_filename);
         strcat(rg_filename,".rgn");
-        Dragon_Dump_Array_Regions(rg_filename);
 
+        Dragon_Dump_Array_Regions(rg_filename);
 
         ofstream fout(cg_filename,ios::out | ios::binary);
         IPA_Call_Graph->Dragon_Print(fout);

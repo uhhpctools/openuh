@@ -586,10 +586,11 @@ void REGION_ARRAYS::Dragon_Print(ofstream& fp,
   else if (Is_formal())
     fp<< "FORMAL, ";
 
+  // Removing the projected regions start and end indexes from the .rgn file.
+  // fp <<Get_idx()<<", "<<Get_idx()+Get_count()-1<<", ";
 
-  fp <<Get_idx()<<", "<<Get_idx()+Get_count()-1<<", ";
-
-
+  // Get_count() indicates the number of references for the particular array.
+  fp << Get_count() << ", ";
 }
 
 //radhika-inserted on May 11 04
