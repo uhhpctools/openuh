@@ -78,6 +78,10 @@ extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
                                      char *&fname,   /* out */
                                     char *&dirname);
 #ifdef DRAGON
+extern void Dragon_IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
+                                     char *&fname,   /* out */
+                                    char *&dirname);
+
 extern void IPA_IR_Srcpos_Filename (SRCPOS srcpos,         /* in */
                                 const char **fname,    /* out */
                                 const char **dirname); /* out */

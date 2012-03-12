@@ -642,8 +642,6 @@ extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
                                      char *&fname,   /* out */
                                      char *&dirname) /* out */
 {
-
-
   vector<string>incl_table_v;
   vector<file_dir>file_table_v;
 
@@ -695,8 +693,8 @@ extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
       file_table_v.push_back(file_d);
     }
 
-
       int fileidx = USRCPOS_filenum(usrcpos) - 1 ;
+
       int len = strlen(file_table_v[fileidx].name.c_str());
       fname = new char[len+1];
       strcpy(fname,file_table_v[fileidx].name.c_str());
@@ -705,13 +703,86 @@ extern void IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
       len = strlen(incl_table_v[diridx].c_str());
       dirname = new char[len+1];
       strcpy(dirname,incl_table_v[diridx].c_str());
-
    }
-
-
 }
 
 #ifdef DRAGON
+// Wei modified on 1211/2011
+extern void Dragon_IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
+                                     char *&fname,   /* out */
+                                     char *&dirname) /* out */
+{
+  vector<string>incl_table_v;
+  vector<file_dir>file_table_v;
+
+  USRCPOS usrcpos;
+
+   USRCPOS_srcpos(usrcpos) = srcpos;
+   if (USRCPOS_filenum(usrcpos) == 0)
+   {
+      fname = NULL;
+      dirname = NULL;
+   }
+   else
+   {
+
+  DST_IDX idx;
+  DST_INCLUDE_DIR *incl;
+  DST_FILE_NAME *file;
+  char *name;
+
+  for (idx = DST_get_include_dirs ();
+       !DST_IS_NULL(idx);
+       idx = DST_INCLUDE_DIR_next(incl))
+    {
+      incl = DST_DIR_IDX_TO_PTR (idx);
+      name = DST_STR_IDX_TO_PTR (DST_INCLUDE_DIR_path(incl));
+      string name_s = name;
+      incl_table_v.push_back(name_s);
+
+    }
+
+  for (idx = DST_get_file_names ();
+       !DST_IS_NULL(idx);
+       idx = DST_FILE_NAME_next(file))
+    {
+      file = DST_FILE_IDX_TO_PTR (idx);
+      if (DST_IS_NULL(DST_FILE_NAME_name(file))) {
+        name = "NULLNAME";
+      }
+      else {
+        name = DST_STR_IDX_TO_PTR (DST_FILE_NAME_name(file));
+      }
+      file_dir file_d;
+      file_d.name  = name;
+      file_d.incl_index = DST_FILE_NAME_dir(file);
+      file_table_v.push_back(file_d);
+    }
+
+
+      int fileidx = USRCPOS_filenum(usrcpos) - 1 ;
+      printf("fileidx = %d\n", fileidx);
+
+      //int len = strlen(file_table_v[fileidx].name.c_str());
+      // wei added
+      int len = strlen(file_table_v[0].name.c_str());
+      fname = new char[len+1];
+      strcpy(fname,file_table_v[0].name.c_str());
+
+      printf("fname = %s\n", fname);
+
+      //int diridx = file_table_v[fileidx].incl_index - 1;
+      //len = strlen(incl_table_v[diridx].c_str());
+      int diridx = file_table_v[0].incl_index - 1;
+      len = strlen(incl_table_v[diridx].c_str());
+
+      dirname = new char[len+1];
+      //strcpy(dirname,incl_table_v[diridx].c_str());
+      strcpy(dirname,incl_table_v[diridx].c_str());
+      printf("dirname = %s\n", dirname);
+   }
+}
+
 extern void IPA_IR_Srcpos_Filename(SRCPOS srcpos,        /* in */
                                const char **fname,   /* out */
                                const char **dirname) /* out */

@@ -720,8 +720,6 @@ ST * create_struct_st(TY_IDX temp_ty_idx)
                                 CLASS_VAR,SCLASS_PSTATIC);
   }
 
-    Set_ST_is_temp_var(temp_st);
-
     return temp_st;
 
 }
@@ -1207,17 +1205,16 @@ WN_INSTRUMENT_WALKER::WN_INSTRUMENT_WALKER( BOOL instrumenting,
 
   }
 
-  /*
+
     _pu_handle = Gen_Temp_Named_Symbol(MTYPE_To_TY(Pointer_type), "pu_instrument_handle", CLASS_VAR, SCLASS_PSTATIC);
-    Set_ST_is_temp_var(_pu_handle);
     Set_ST_is_initialized(_pu_handle);
     INITO_IDX inito = New_INITO(_pu_handle);
     INITV_IDX inv = New_INITV();
-    INITV_Init_Integer(inv, MTYPE_To_TY(Pointer_type), 0);
+    INITV_Init_Integer(inv, Pointer_type, 0);
     Set_INITO_val(inito, inv);
 
 
-  */
+
 }
 
 

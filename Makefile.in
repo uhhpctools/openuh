@@ -483,6 +483,22 @@ endif
 		$(MAKE) -C "$(NATIVE_BUILD_DIR)/$${i}" clobber; \
 	done
 
+.PHONY: clean-be
+
+clean-be:
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/be clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/cg clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/wopt clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/lno clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/ipa clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/ipl clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/lw_inline clobber
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2c clobber
+ifeq ($(BUILD_FORTRAN), YES)
+	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2f clobber
+endif
+
+
 help:
 	@echo "Help of the Makefile for Open64 compiler source"
 	@echo "Note: It is strongly recommended that you unset TOOLROOT variable"
@@ -506,7 +522,8 @@ help:
 	@echo "  - clean"
 	@echo "  - clobber"
 	@echo "    Remove all intermediate files"
-	@echo ""
+	@echo "  - clean-be"
+	@echo "    Remove all intermediate files generated in build compiler back-end"
 	@echo "Available options (former is default):" 
 	@echo "  - BUILD_OPTIMIZE={NODEBUG|DEBUG}"
 	@echo "    Enable debug the compiler or not"

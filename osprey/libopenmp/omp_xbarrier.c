@@ -33,7 +33,7 @@
 omp_xbarrier_t __omp_xbarrier_type;
 void (*__ompc_xbarrier_wait)(omp_team_t *team);
 
-extern inline void __ompc_barrier_wait(omp_team_t *team);
+extern void __ompc_barrier_wait(omp_team_t *team);
 
 void __ompc_xbarrier_linear_wait(omp_team_t *team);
 void __ompc_xbarrier_simple_wait(omp_team_t *team);

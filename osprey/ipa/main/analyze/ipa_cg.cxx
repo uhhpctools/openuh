@@ -4019,7 +4019,7 @@ void IPA_CALL_GRAPH::Dragon_Print(ofstream &outfile)
       USRCPOS_srcpos(linepos) = srcpos;
 
       int line = USRCPOS_linenum(linepos);
-      IPA_IR_Filename_Dirname(srcpos,filename,dirname);
+      Dragon_IPA_IR_Filename_Dirname(srcpos,filename,dirname);
 
       int len=0;
       len = strlen(IPA_Node_Name(node))+1;

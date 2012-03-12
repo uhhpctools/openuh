@@ -245,6 +245,12 @@ default: pathscale_defs.h
 pathscale_defs.h: $(BUILD_TOT)/../defs.mk 
 	echo '#ifndef __pathscale_defs_h' > $@
 	echo '#define __pathscale_defs_h' >> $@
+	echo '#define OPENUH_NAME_PREFIX "${OPENUH_NAME_PREFIX}"' >> $@
+	echo '#define OPENUH_MAJOR_VERSION_NUM ${OPENUH_MAJOR_VERSION}' >> $@
+	echo '#define OPENUH_MINOR_VERSION_NUM ${OPENUH_MINOR_VERSION}' >> $@
+	echo '#define OPENUH_MAJOR_VERSION "${OPENUH_MAJOR_VERSION}"' >> $@
+	echo '#define OPENUH_MINOR_VERSION "${OPENUH_MINOR_VERSION}"' >> $@
+	echo '#define OPENUH_FULL_VERSION "${OPENUH_FULL_VERSION}"' >> $@
 	echo '#define OPEN64_NAME_PREFIX "${OPEN64_NAME_PREFIX}"' >> $@
 	echo '#define OPEN64_MAJOR_VERSION_NUM ${OPEN64_MAJOR_VERSION}' >> $@
 	echo '#define OPEN64_MINOR_VERSION_NUM ${OPEN64_MINOR_VERSION}' >> $@

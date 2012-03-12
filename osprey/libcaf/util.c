@@ -26,6 +26,9 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#include <stdlib.h>
+#include <string.h>
+
 
 /* for fortran command argument passing */
 

@@ -1507,14 +1507,16 @@ display_version(boolean dump_version_only)
 #include "configargs.h"
 
 #if defined(TARG_SL)
-  fprintf(stderr, "OpenUH/Open64 version: %s.\n",OPEN64_FULL_VERSION);
+  fprintf(stderr, "OpenUH version: %s.\n", OPENUH_FULL_VERSION);
+  fprintf(stderr, "Open64 version: %s.\n",OPEN64_FULL_VERSION);
   fprintf(stderr, "GNU gcc version %s.\n", open64_gcc_version);
   fprintf(stderr, "Simplnano internal release version %03x.%02x.%03x\n", (SL_version>>20), (SL_version>>12)&0xFF , SL_version&0xFFF);
 
   fprintf(stderr, "Built on :%s \n", build_date);
   fprintf(stderr, "Portions Copyright (c) 2006-2009 Simplnano Corporation\n");
 #else
-  fprintf(stderr, "OpenUH/Open64 Compiler Suite: Version %s\n",
+  fprintf(stderr, "OpenUH %s ", OPENUH_FULL_VERSION);
+  fprintf(stderr, "(based on Open64 Compiler Suite: Version %s)\n",
 	  compiler_version);
   if (show_version > 1) {
     fprintf(stderr, "Changeset: %s\n", cset_id);

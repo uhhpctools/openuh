@@ -62,6 +62,8 @@ typedef enum {
   OMP_TASK_IS_IMPLICIT   = 0x0020
 } omp_task_flag_t;
 
+typedef unsigned int omp_task_flags_t;
+
 /* function pointer declarations*/
 typedef void (*omp_task_func)(void *, void *);
 typedef int (*cond_func)();
@@ -98,7 +100,7 @@ struct omp_task {
 
   ompc_lock_t lock;
 
-  omp_task_flag_t flags;
+  omp_task_flags_t flags;
 } __attribute__ ((__aligned__(CACHE_LINE_SIZE)));
 typedef struct omp_task omp_task_t;
 
@@ -173,15 +175,15 @@ __ompc_task_state_is_finished(omp_task_t *task)
   return __ompc_task_get_state(task) == OMP_TASK_FINISHED;
 }
 
-static inline omp_task_flag_t
-__ompc_task_set_flags(omp_task_t *task, omp_task_flag_t flags)
+static inline omp_task_flags_t
+__ompc_task_set_flags(omp_task_t *task, omp_task_flags_t flags)
 {
   task->flags |= flags;
   return task->flags;
 }
 
-static inline omp_task_flag_t
-__ompc_task_get_flags(omp_task_t *task, omp_task_flag_t flags)
+static inline omp_task_flags_t
+__ompc_task_get_flags(omp_task_t *task, omp_task_flags_t flags)
 {
   return (task->flags & flags);
 }
@@ -224,7 +226,7 @@ __ompc_task_is_implicit(omp_task_t *task)
 
 static inline omp_task_t *__ompc_task_new_implicit(void)
 {
-  omp_task_t *new_task = malloc(sizeof(omp_task_t));
+  omp_task_t *new_task = (omp_task_t*)malloc(sizeof(omp_task_t));
 
   Is_True(new_task != NULL, ("couldn't create new task object"));
   memset(new_task, 0, sizeof(omp_task_t));
@@ -238,7 +240,7 @@ static inline omp_task_t *__ompc_task_new_implicit(void)
 
 static inline omp_task_t *__ompc_task_new(void)
 {
-  omp_task_t *new_task = malloc(sizeof(omp_task_t));
+  omp_task_t *new_task = (omp_task_t*)malloc(sizeof(omp_task_t));
 
   Is_True(new_task != NULL, ("couldn't create new task object"));
   memset(new_task, 0, sizeof(omp_task_t));

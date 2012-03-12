@@ -671,13 +671,9 @@ changequote(,)dnl
 if test -f configargs.h ; then
 	# Being re-configured.
 	uh_config_arguments=`grep configuration_arguments configargs.h | sed -e 's/.*"\([^"]*\)".*/\1/'`
-	uh_config_arguments="$uh_config_arguments : (reconfigured) $TOPLEVEL_CONFIGURE_ARGUMENTS"
+	uh_config_arguments="$uh_config_arguments : (reconfigured) $@"
 else
-    uh_config_arguments="--with-build-compiler=$BUILD_COMPILER "
-    uh_config_arguments+="--with-build-optimize=$BUILD_OPTIMIZE "
-    if test "${ENABLE_COARRAYS}" = "YES";  then
-      uh_config_arguments+="--enable-coarrays "
-    fi 
+   uh_config_arguments=$@
 fi
 
 # Double all backslashes and backslash all quotes to turn

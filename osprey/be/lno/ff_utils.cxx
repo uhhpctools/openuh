@@ -131,6 +131,29 @@ static BOOL Is_Shared_Or_Reduction_In_Prallel_Region(WN* scalar_ref)
   return FALSE;
 }
 #endif
+
+static BOOL Is_Firstprivate_In_Parallel_Region(WN* scalar_ref)
+{
+  WN* wn=scalar_ref;
+  while (wn) {
+    WN* mp_region=Get_MP_Region(wn);
+    if (!mp_region)
+      return FALSE;
+    WN* pragmas=WN_region_pragmas(mp_region);
+    WN* next_wn=WN_first(pragmas);
+    while (next_wn) {
+      if (WN_opcode(next_wn)==OPC_PRAGMA)
+        if ((WN_PRAGMA_ID)WN_pragma(next_wn)==WN_PRAGMA_FIRSTPRIVATE) {
+	  if (WN_st(scalar_ref)==WN_st(next_wn))
+	    return TRUE;
+        }
+      next_wn=WN_next(next_wn);
+    }
+    wn=LWN_Get_Parent(mp_region);
+  }
+  return FALSE;
+}
+
 extern BOOL Edge_Is_Reduction_Dependence(
 EINDEX16 edge,
 ARRAY_DIRECTED_GRAPH16 *dg,
@@ -648,6 +671,10 @@ extern BOOL scalar_rename(WN* ref, HASH_TABLE<WN*,INT>* checked) {
       else if (Contains_MP && 
 	       Is_Shared_Or_Reduction_In_Prallel_Region(scalar_ref))
 	can_rename = FALSE;
+      // Should not rename firstprivate scalars, since the original variable
+      // (not a PREG) needs to be accessed from the MP region.
+      else if (Contains_MP && Is_Firstprivate_In_Parallel_Region(scalar_ref))
+        can_rename = FALSE;
       // Can not create CVT/CVTL for bit-field later on. 
       else if ((opr == OPR_STID) && WN_desc(scalar_ref) == MTYPE_BS)
 	can_rename = FALSE;

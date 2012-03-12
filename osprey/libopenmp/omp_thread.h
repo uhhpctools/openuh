@@ -310,7 +310,7 @@ extern long int __omp_spin_count; // defined in omp_thread.c
 extern __thread int total_tasks;
 
 /* Should not be called directly, use __ompc_barrier instead*/
-inline void __ompc_barrier_wait(omp_team_t *team)
+void __ompc_barrier_wait(omp_team_t *team)
 {
   /*Warning: This implementation may cause cache problems*/
   int barrier_flag;

@@ -3380,6 +3380,10 @@ Allocate_Object ( ST *st )
 
   if (ST_is_not_used(st)&& Debug_Level <= 0) return;
 
+  // don't allocate if sclass is SCLASS_COMMENT
+  // (possible if Debug_Level > 0)
+  if (ST_sclass(st) == SCLASS_COMMENT) return;
+
   if (ST_has_named_section(st)) {
     // bug fix for OSP_138
     if (ST_has_Predefined_Named_Section(st, sec))

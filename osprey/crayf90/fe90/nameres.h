@@ -328,7 +328,7 @@ long	obj_to_attr[Obj_Done]	=	{
 	((0 << Attr_Assumed_Type_Ch) |	(1 << Attr_Parameter) |
 	 (0 << Attr_Explicit_Shp_Arr) |	(0 << Attr_Dimension) |
 	 (0 << Attr_Assumed_Size_Arr) |	(0 << Attr_Deferred_Shp_Arr) |
-	 (1 << Attr_Assumed_Shp_Arr) |	(0 << Attr_Allocatable) |
+	 (0 << Attr_Assumed_Shp_Arr) |	(0 << Attr_Allocatable) |
 	 (0 << Attr_Intent) |
 	 (0 << Attr_Optional) |		(0 << Attr_Public) |
 	 (0 << Attr_Private) |		(0 << Attr_Target) |
@@ -1679,7 +1679,7 @@ long	obj_to_dir[Obj_Done]	=	{
 
 	((1 << Dir_Auxiliary) |		(1 << Dir_Vfunction) |
 	 (1 << Dir_No_Side_Effects) |	(1 << Dir_Inline) |
-	 (1 << Dir_Symmetric) |		(1 << Dir_Copy_Assumed_Shape) |
+	 (1 << Dir_Symmetric) |		(0 << Dir_Copy_Assumed_Shape) |
 	 (1 << Dir_Align_Symbol) |	(1 << Dir_Fill_Symbol) |
 	 (1 << Dir_Section_Gp) |	(1 << Dir_Section_Non_Gp) |
 	 (1 << Dir_Optional) |		(0 << Dir_Ignore_TKR) |
@@ -4905,7 +4905,7 @@ long	attr_msg_num[Obj_Done] [Attr_Done]	= {
 	    0,	/* Obj_Co_Array		Attr_Explicit_Shp_Arr	*/
 	    0,	/* Obj_Co_Array		Attr_Assumed_Size_Arr	*/
 	    0,	/* Obj_Co_Array		Attr_Deferred_Shp_Arr	*/
-	  550,	/* Obj_Co_Array		Attr_Assumed_Shp_Arr	*/
+	    0,	/* Obj_Co_Array		Attr_Assumed_Shp_Arr	*/
 	    0,	/* Obj_Co_Array		Attr_Allocatable	*/
 	  550,	/* Obj_Co_Array		Attr_Parameter		*/
 	    0,	/* Obj_Co_Array		Attr_Intent		*/
@@ -8005,7 +8005,7 @@ long	dir_msg_num[Obj_Done] [Dir_Done]	= {
 	 1459,	/* Obj_Co_Array		Dir_No_Side_Effects	*/
 	 1459,	/* Obj_Co_Array		Dir_Inline		*/
 	 1459,	/* Obj_Co_Array		Dir_Symmetric		*/
-	 1459,	/* Obj_Co_Array		Dir_Copy_Assumed_Shape	*/
+	    0,	/* Obj_Co_Array		Dir_Copy_Assumed_Shape	*/
 	 1459,	/* Obj_Co_Array		Dir_Align_Symbol	*/
 	 1459,	/* Obj_Co_Array		Dir_Fill_Symbol		*/
 	 1459,	/* Obj_Co_Array		Dir_Section_Gp		*/
