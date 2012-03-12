@@ -109,6 +109,10 @@ extern  void then_stmt_semantics (void);
 extern  void where_stmt_semantics (void);
 extern  void write_stmt_semantics (void);
 extern  void type_init_semantics (void);
+#ifdef _UH_COARRAYS
+extern  void critical_stmt_semantics (void);
+extern  void end_critical_stmt_semantics (void); 
+#endif
 
 
 /*************************************\

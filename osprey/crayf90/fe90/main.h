@@ -534,7 +534,12 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 						   "BIND",
 						   "VALUE"
 #endif /* KEY Bug 10572 */
-						  };
+#ifdef _UH_COARRAYS                             
+                           , 
+                           "CRITICAL Statement",
+                           "END_CRITICAL Statement"  
+#endif
+    };
 
 	target_machine_type	target_machine;
 	boolean			target_ieee		= FALSE;

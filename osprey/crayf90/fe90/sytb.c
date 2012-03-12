@@ -4012,14 +4012,22 @@ size_offset_type	stor_bit_size_of(int		 attr_idx,
    if (AT_OBJ_CLASS(attr_idx) == Data_Obj) {
 
       if (ATD_IM_A_DOPE(attr_idx)) {
+
 #ifdef KEY /* Bug 6845 */
 	 boolean is_array = (ATD_ARRAY_IDX(attr_idx) != NULL_IDX);
 	 num = DV_HD_WORD_SIZE;
          if (is_array) {
+      long rank = ATD_ARRAY_IDX(attr_idx) ?
+                  (long) BD_RANK(ATD_ARRAY_IDX(attr_idx)) : 0;
+      long corank = 0;
+#ifdef _UH_COARRAYS
+      corank = ATD_PE_ARRAY_IDX(attr_idx) ?
+                    (long) BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) : 0;
+#endif
 	   int n_allocatable_cpnt = do_count_allocatable_cpnt(attr_idx,
 	     is_array);
 	   num +=
-	     (DV_DIM_WORD_SIZE * (long) BD_RANK(ATD_ARRAY_IDX(attr_idx))) +
+	     (DV_DIM_WORD_SIZE * (rank + corank)) +
 	     (n_allocatable_cpnt ?
 	       ((n_allocatable_cpnt + 1) * DV_ALLOC_CPNT_OFFSET_WORD_SIZE) :
 	       0);

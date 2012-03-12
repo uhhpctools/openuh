@@ -1284,6 +1284,12 @@ fei_object(char * name_string,
       original_st->st_idx = save_st_idx;
     }
 #endif /* KEY Bug 11574 */
+
+  /* Hack! */
+  if (ST_sclass(st) == SCLASS_DGLOBAL) {
+	 Set_ST_is_initialized(st);
+  }
+
   return(cast_to_long(o));
 }
 

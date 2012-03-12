@@ -229,7 +229,7 @@
 			  		/* Open_MP_End_Parallel_Workshare_Stmt */
 			  directive_stmt_semantics,
 				  	/* Open_MP_End_Workshare_Stmt */
-#if _UH_COARRAYS
+#ifdef _UH_COARRAYS
                           sync_stmt_semantics,        /* Sync_Stmt        */
 #endif
 #ifdef KEY /* Bug 11741 */
@@ -245,7 +245,13 @@
                           no_semantics_routine,         /* Value_Stmt         */
 #endif /* KEY Bug 14150 */
                           directive_stmt_semantics      /* Open_MP_End_Task_Stmt */
-			};
+#ifdef _UH_COARRAYS
+                          ,
+                          critical_stmt_semantics,        /* Critical_Stmt        */
+                          end_critical_stmt_semantics    /* End_Critical_Stmt */  
+#endif
+
+           };
 
 /*********************************************************\
 |* stmt_tmp_tbl points to lists of tmps that are reused. *|

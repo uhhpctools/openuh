@@ -4899,7 +4899,7 @@ void parse_sync_stmt (void)
    int			line;
    opnd_type		opnd;
    int			save_curr_stmt_sh_idx;
-
+   int      blk_idx;  
 
    TRACE (Func_Entry, "parse_sync_stmt", NULL);
 
@@ -4976,11 +4976,127 @@ void parse_sync_stmt (void)
        PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
                TOKEN_STR(token));
    }
+    
+
+  /* Check whether Sync_Stmt lies inside a CRITICAL block
+   * (which will be wrong !)
+   */
+  for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
+         if (BLK_TYPE(blk_idx) == Critical_Blk) {
+            PRINTMSG(TOKEN_LINE(token), 1705, Error, TOKEN_COLUMN(token),
+               TOKEN_STR(token));
+           break;
+         }
+   }
+  
 
    NEXT_LA_CH;
 
    return;
 } /* parse_sync_stmt */
+
+/*parse_critical_stmt*/
+void parse_critical_stmt(void)
+{
+   boolean parsed_ok = TRUE;
+   int			col;
+   int			ir_idx;
+   int			line;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+   int  blk_idx;
+
+   TRACE (Func_Entry, "parse_critical_stmt", NULL);
+
+  // if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+   if(LA_CH_VALUE != EOS){
+      /* should not have seen any constructs  */
+      PRINTMSG(TOKEN_LINE(token), 1704, Error, TOKEN_COLUMN(token),
+      TOKEN_STR(token));
+   }
+    if ( ! SH_ERR_FLG(curr_stmt_sh_idx) ) { 
+    
+     NTR_IR_TBL(ir_idx);
+     SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+     IR_OPR(ir_idx) = Critical_Opr;
+     IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+     IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+    
+    } 
+
+  /* Check whether Critical_Stmt lies inside a another CRITICAL block
+   * (which will be wrong !)
+   */
+  for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
+         if (BLK_TYPE(blk_idx) == Critical_Blk) {
+            PRINTMSG(TOKEN_LINE(token), 1706, Error, TOKEN_COLUMN(token),
+               TOKEN_STR(token));
+           break;
+         }
+   }
+
+    /* Generate a block stack entry. */
+
+    // gen_sh(After, Then_Stmt, TOKEN_LINE(token), TOKEN_COLUMN(token),
+    //SH_ERR_FLG(curr_stmt_sh_idx), FALSE, FALSE);
+ 
+    PUSH_BLK_STK(Critical_Blk);
+    //blk_stk[blk_stk_idx]	      = blk_stk[blk_stk_idx - 1];
+    CURR_BLK			      = Critical_Blk;
+    CURR_BLK_FIRST_SH_IDX             = curr_stmt_sh_idx;
+    LINK_TO_PARENT_BLK;
+  
+    NEXT_LA_CH;
+
+   return;
+
+  
+}  /*parse_critical_stmt*/
+
+/*parse_end_critical_stmt*/
+void parse_end_critical_stmt(void)
+{
+    boolean parsed_ok = TRUE;
+   int			col;
+   int			ir_idx;
+   int			line;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+
+
+   TRACE (Func_Entry, "parse_end_critical_stmt", NULL);
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+   IR_OPR(ir_idx) = Sync_Opr;
+   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+
+   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+       if (TOKEN_VALUE(token) == Tok_Kwd_Critical) {
+           IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+           NTR_IR_TBL(IR_IDX_L(ir_idx));
+           IR_OPR(IR_IDX_L(ir_idx)) =  Critical_Opr;
+           IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+           IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+           IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+       
+       }  else {         
+           /* should have seen CRITICAL */
+           PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
+                   TOKEN_STR(token));
+       }
+   } else {
+       /* should have seen ALL, IMAGES, or MEMORY identifier */
+       PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
+               TOKEN_STR(token));
+   }
+
+   NEXT_LA_CH;
+
+   return;
+} /* parse_end_critical_stmt */
+
 
 #endif /* defined(_UH_COARRAYS) */
 

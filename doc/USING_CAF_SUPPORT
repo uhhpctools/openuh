@@ -57,21 +57,12 @@ Known Limitations
 unless a GASNet installation built with EVERYTHING shared segment
 configuration is used. 
 
-* Fortran 2008 locks and critical sections are not yet supported.
-
-* Allocatable "coscalars" are not supported. Instead use coarray with rank 1, 
-  E.g.:
-       integer :: max(:)[:]  
-       ...
-       allocate( max(1)[*] )
+* Fortran 2008 locks are not yet supported.
 
 * Accessing a pointer component of a remote coarray of derived type is not yet
   supported. E.g. this won't work:
        t(2:5) = a[3]%p(1:4)
 
-* Strided coarray accesses will not work, e.g.:
-       t(:) = a(1:N:2)[p]
-                    
 
 Using OpenUH CAF compiler
 ------------------------

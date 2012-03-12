@@ -118,6 +118,7 @@ link.cxxf =	$(CXXF)
 ranlib =	$(RANLIB)
 run =	
 submake =	$(MAKE) -C $(1) $(2)
+uhcaf =     $(UHCAF)
 
 else
 ar =		$(if $V,,@echo 'AR     $(CWD)/$@';) $(AR)
@@ -139,6 +140,7 @@ link.f90f =	$(if $V,,@echo 'LD     $(CWD)/$@';) $(F90F)
 ranlib =	$(if $V,,@echo 'RANLIB $(CWD)/$@';) $(RANLIB)
 run =		$(if $V,,@echo 'RUN    $(CWD)/$<';)
 submake =	+$(if $V,,@echo 'MAKE   $(if $(2),$(2) in )$(CWD)/$(1)';) $(MAKE) -C $(1) $(if $V,,--no-print-directory) $(2)
+uhcaf =		$(if $V,,@echo 'UHCAF    $(CWD)/$<';) $(UHCAF)
 endif # TARG_NVISA
 
 %.o : %.cxx
@@ -161,6 +163,9 @@ endif # TARG_NVISA
 
 %.o : %.F90
 	$(fc) -c $(FFLAGS_NOLANG) $(F90FLAGS) $<
+
+%.o : %.caf
+	$(uhcaf) -c $(FFLAGS_NOLANG) $(F90FLAGS) $<
 
 pic_flag := -fpic
 

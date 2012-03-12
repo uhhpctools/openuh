@@ -1,7 +1,7 @@
 /*
  ARMCI Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2010 University of Houston.
+ Copyright (C) 2009-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -44,6 +44,14 @@
 /* init */
 void comm_init();
 
+
+/* critical support */
+void comm_get_signal(int** signal);
+void comm_critical();
+void comm_end_critical();
+
+
+
 /* inline functions */
 unsigned long comm_get_proc_id();
 unsigned long comm_get_num_procs();
@@ -51,16 +59,41 @@ unsigned long comm_get_num_procs();
 /* coarray read/write */
 void comm_read(void *src, void *dest, unsigned long xfer_size, unsigned long proc);
 void comm_write(void *dest, void *src, unsigned long xfer_size, unsigned long proc);
-void comm_read_src_str(void *src, void *dest, unsigned int ndim, unsigned long *src_strides, unsigned long *src_extents, unsigned long proc);
-void comm_write_dest_str(void *dest, void *src, unsigned int ndim, unsigned long *dest_strides, unsigned long *dest_extents, unsigned long proc);
+void comm_read_src_str(void *src, void *dest, unsigned int ndim,
+                    unsigned long *src_strides, unsigned long *src_extents,
+                    unsigned long proc);
+void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
+                    unsigned long *src_str_mults, unsigned long *src_extents,
+                    unsigned long *src_strides,
+                    unsigned long proc);
+void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_strides, unsigned long *dest_extents,
+                    unsigned long proc);
+void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_str_mults,
+                    unsigned long *dest_extents,
+                    unsigned long *dest_strides,
+                    unsigned long proc);
 void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         unsigned long *src_strides, unsigned long *src_extents, 
         unsigned int dest_ndim, unsigned long *dest_strides,
         unsigned long *dest_extents, unsigned long proc);
+void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
+        unsigned long *src_str_mults, unsigned long *src_extents, 
+        unsigned long *src_strides,
+        unsigned int dest_ndim, unsigned long *dest_str_mults,
+        unsigned long *dest_extents, unsigned long *dest_strides,
+        unsigned long proc);
 void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
         unsigned long *dest_strides, unsigned long *dest_extents, 
         unsigned int src_ndim, unsigned long *src_strides,
         unsigned long *src_extents, unsigned long proc);
+void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
+        unsigned long *dest_str_mults, unsigned long *dest_extents, 
+        unsigned long *dest_strides,
+        unsigned int src_ndim, unsigned long *src_str_mults,
+        unsigned long *src_extents, unsigned long *src_strides,
+        unsigned long proc);
 
 /* shared memory management */
 unsigned long allocate_static_coarrays(); /*TBD */

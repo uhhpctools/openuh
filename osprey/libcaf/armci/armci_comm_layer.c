@@ -1,7 +1,7 @@
 /*
  ARMCI Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2011 University of Houston.
+ Copyright (C) 2009-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -34,6 +34,7 @@
 #include <math.h>
 
 #include "armci_comm_layer.h"
+#include "util.h"
 
 /*
  * Static Variable declarations
@@ -69,6 +70,9 @@ static unsigned long getCache_line_size; /* set by env var. */
 static struct cache **cache_all_images;
 static unsigned long shared_memory_size;
 
+/* Mutexes */
+static int critical_mutex;
+
 
 /*
  * Inline functions
@@ -83,6 +87,21 @@ inline unsigned long comm_get_proc_id()
 inline unsigned long comm_get_num_procs()
 {
     return num_procs;
+}
+
+
+/* TODO: Right now, for every critical section we simply acquire a mutex on
+ * process 0. Instead, we should define a mutex for each critical section in
+ * order to allow execution of different critical sections at the same time.
+ */
+void comm_critical()
+{
+    ARMCI_Lock(critical_mutex, 0);
+}
+
+void comm_end_critical()
+{
+    ARMCI_Unlock(critical_mutex, 0);
 }
 
 /*
@@ -149,12 +168,21 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         enable_nbput = 0;
     }
 
-    /* Create flags and mutex for sync_images */
-    ARMCI_Create_mutexes(num_procs);
+    /* Create flags and mutex for sync_images and critical regions
+     * For every image, we create num_procs mutexes and one additional
+     * mutex for the critical region. This needs to be changed to
+     * multiple mutexes based depending on the number of critical regions.
+     * The important point to note here is that ARMCI_Create_mutexes can be
+     * called only once per image
+     */
+
+    ARMCI_Create_mutexes(num_procs+1);
     syncptr = malloc (num_procs*sizeof(void *));
     ARMCI_Malloc ((void**)syncptr, num_procs*sizeof(int));
     for ( i=0; i<num_procs; i++ )
         ((int*)(syncptr[my_proc]))[i]=0;
+
+    critical_mutex = num_procs; /* last mutex reserved for critical sections */
 
     /* Create pinned/registered memory (Shared Memory) */
     coarray_start_all_images = malloc (num_procs*sizeof(void *));
@@ -1130,6 +1158,48 @@ void comm_read_src_str(void *src, void *dest, unsigned int ndim,
     }
 }
 
+void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
+                    unsigned long *src_str_mults, unsigned long *src_extents,
+                    unsigned long *src_strides,
+                    unsigned long proc)
+{
+    int i,j,k;
+    unsigned long elem_size = src_str_mults[0];
+    void *remote_src;
+
+    remote_src = get_remote_address(src,proc);
+
+    int dst_stride_ar[MAX_DIMS];
+    int src_stride_ar[MAX_DIMS];
+    int count[MAX_DIMS];
+
+    j = k = 0;
+    for (i = 0; i < ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k++] = src_str_mults[i];
+      }
+
+      if (src_strides[i] > 1) {
+        src_stride_ar[k++] = src_str_mults[i]*src_strides[i];
+        count[j++] = 1;
+      }   
+      count[j++] = src_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+    dst_stride_ar[0] = count[0];
+    for (i = 1; i < j-1; i++) {
+      dst_stride_ar[i] = dst_stride_ar[i-1]*count[i];
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "armci_comm_layer.c:comm_read_src_str->Before ARMCI_GetS"
+        " from %p on image %lu to %p ndim %lu",
+        remote_src, proc+1, dest, ndim-1);
+
+    ARMCI_GetS(remote_src, src_stride_ar, dest, dst_stride_ar,
+                     count,  j-1, proc);
+}
+
 void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         unsigned long *src_strides, unsigned long *src_extents, 
         unsigned int dest_ndim, unsigned long *dest_strides,
@@ -1196,6 +1266,76 @@ void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         ARMCI_GetS(remote_src, src_stride_ar, dest, dest_stride_ar,
                          count,  src_ndim-1, proc );
     }
+}
+
+void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
+        unsigned long *src_str_mults, unsigned long *src_extents, 
+        unsigned long *src_strides,
+        unsigned int dest_ndim, unsigned long *dest_str_mults,
+        unsigned long *dest_extents, unsigned long *dest_strides,
+        unsigned long proc)
+{
+    int i,j,k1,k2;
+    unsigned long elem_size = src_str_mults[0];
+    void *remote_src;
+    int src_stride_ar[MAX_DIMS];
+    int dest_stride_ar[MAX_DIMS];
+    int count[MAX_DIMS];
+
+    if(src_ndim!=dest_ndim)
+    {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+        "armci_comm_layer.c:comm_read_full_str->src and dest dim must"
+        " be same. src_ndim=%d, dest_ndim=%d",
+        src_ndim, dest_ndim);
+    }
+    remote_src = get_remote_address(src,proc);
+
+    j = k1 = k2 = 0;
+    for (i = 0; i < src_ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k1++] = src_str_mults[i];
+        dest_stride_ar[k2++] = dest_str_mults[i];
+      }
+
+      if ((src_strides && src_strides[i]>1) &&
+          (dest_strides == NULL || dest_strides[i]==1)) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        if (k2 == 0)
+          dest_stride_ar[k2++] = dest_str_mults[0];
+        else
+          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
+        count[j++] = 1;
+      } else if ((dest_strides && dest_strides[i]>1) &&
+          (src_strides == NULL || src_strides[i]==1)) {
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        if (k1 == 0)
+          src_stride_ar[k1++] = src_str_mults[0];
+        else
+          src_stride_ar[k1++] = src_stride_ar[k1-1];
+        count[j++] = 1;
+      } else if (dest_strides && src_strides &&
+          dest_strides[i]>1 && src_strides[i]>1) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }  
+      count[j++] = src_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+
+    debug_print_array_int("src_stride_ar", src_stride_ar, k1);
+    debug_print_array_int("dest_stride_ar", dest_stride_ar, k2);
+    debug_print_array_int("count", count, j);
+
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "armci_comm_layer.c:comm_read_full_str->Before ARMCI_GetS"
+        " from %p on image %lu to %p ndim %lu",
+        remote_src, proc+1, dest, src_ndim-1);
+
+    ARMCI_GetS(remote_src, src_stride_ar, dest, dest_stride_ar,
+                     count,  j-1, proc );
 }
 
 void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
@@ -1302,6 +1442,50 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
     }
 }
 
+void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_str_mults,
+                    unsigned long *dest_extents,
+                    unsigned long *dest_strides,
+                    unsigned long proc)
+{
+    int i,j,k;
+    unsigned long elem_size = dest_str_mults[0];
+    void *remote_dest;
+
+    int src_stride_ar[MAX_DIMS];
+    int dest_stride_ar[MAX_DIMS];
+    int count[MAX_DIMS];
+
+    j = k = 0;
+    for (i = 0; i < ndim; i++) {
+      if (i > 0) {
+        dest_stride_ar[k++] = dest_str_mults[i];
+      }
+
+      if (dest_strides[i] > 1) {
+        dest_stride_ar[k++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }   
+      count[j++] = dest_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+    src_stride_ar[0] = count[0];
+    for (i = 1; i < j-1; i++) {
+      src_stride_ar[i] = src_stride_ar[i-1]*count[i];
+    }
+
+
+    remote_dest = get_remote_address(dest,proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+    "armci_comm_layer.c:comm_write_dest_str->Before ARMCI_PutS"
+    " to %p on image %lu from %p ndim %lu",
+    remote_dest, proc+1, src, ndim-1);
+    ARMCI_PutS(src, src_stride_ar, remote_dest, dest_stride_ar,
+                 count,  j-1, proc );
+}
+
+
 void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
         unsigned long *dest_strides, unsigned long *dest_extents, 
         unsigned int src_ndim, unsigned long *src_strides,
@@ -1371,4 +1555,70 @@ void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
                 dest_strides, dest_extents, src_ndim, src_strides,
                 src_extents, proc);
     }
+}
+
+void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
+        unsigned long *dest_str_mults, unsigned long *dest_extents, 
+        unsigned long *dest_strides,
+        unsigned int src_ndim, unsigned long *src_str_mults,
+        unsigned long *src_extents, unsigned long *src_strides,
+        unsigned long proc)
+{
+    int i,j,k1,k2;
+    unsigned long elem_size = dest_str_mults[0];
+    void *remote_dest;
+    int src_stride_ar[MAX_DIMS];
+    int dest_stride_ar[MAX_DIMS];
+    int count[MAX_DIMS];
+
+    if(src_ndim!=dest_ndim)
+    {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+        "armci_comm_layer.c:comm_write_full_str->src and dest dim must"
+        " be same. src_ndim=%d, dest_ndim=%d",
+        src_ndim, dest_ndim);
+    }
+
+    j = k1 = k2 = 0;
+    for (i = 0; i < dest_ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k1++] = src_str_mults[i];
+        dest_stride_ar[k2++] = dest_str_mults[i];
+      }
+
+      if ((src_strides && src_strides[i]>1) &&
+          (dest_strides == NULL || dest_strides[i]==1)) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        if (k2 == 0)
+          dest_stride_ar[k2++] = dest_str_mults[0];
+        else
+          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
+        count[j++] = 1;
+      } else if ((dest_strides && dest_strides[i]>1) &&
+          (src_strides == NULL || src_strides[i]==1)) {
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        if (k1 == 0)
+          src_stride_ar[k1++] = src_str_mults[0];
+        else
+          src_stride_ar[k1++] = src_stride_ar[k1-1];
+        count[j++] = 1;
+      } else if (dest_strides && src_strides &&
+          dest_strides[i]>1 && src_strides[i]>1) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }  
+      count[j++] = dest_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+
+
+    remote_dest = get_remote_address(dest,proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+    "armci_comm_layer.c:comm_write_full_str->Before ARMCI_PutS"
+    " to %p on image %lu from %p ndim %lu",
+    remote_dest, proc+1, src, dest_ndim-1);
+    ARMCI_PutS(src, src_stride_ar, remote_dest, dest_stride_ar,
+                 count,  j-1, proc );
 }

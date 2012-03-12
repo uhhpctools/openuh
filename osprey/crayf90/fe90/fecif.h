@@ -250,7 +250,12 @@ cif_stmt_type	mapped_stmt_type[] =
 #endif /* KEY Bug 10572 */
 
 			CIF_Not_Exact 		/* Open_MP_End_Task_Stmt */
-                       };
+#ifdef _UH_COARRAYS
+            ,
+            CIF_Not_Exact,       /* Critical_Stmt */
+            CIF_Not_Exact       /* End_Critical_Stmt */
+#endif
+               };
 
 
 /******************************************************************************\

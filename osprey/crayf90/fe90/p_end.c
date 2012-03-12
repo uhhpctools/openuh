@@ -765,6 +765,7 @@ void parse_end_stmt (void)
                blk_idx = blk_match_err(Forall_Blk, found_name, TRUE);
             }
 
+
 	    break;
 
 	 case Tok_Kwd_Where:
@@ -785,6 +786,28 @@ void parse_end_stmt (void)
             }
 
 	    break;
+#ifdef _UH_COARRAYS
+     case Tok_Kwd_Critical:
+
+            stmt_type				= End_Critical_Stmt;
+            SH_STMT_TYPE(curr_stmt_sh_idx)	= End_Critical_Stmt;
+
+            /* The FORTRAN 2008 standard does not explicitly mention whether
+             * the CRITICAL construct can have a construct name or not.
+             * As of now, it is assumed that the CRITICAL construct cant be named. 
+             * */
+
+            if (CURR_BLK_NAME != NULL_IDX  &&  ! found_name) {
+               match_name = FALSE;
+            }
+
+            if (STMT_CANT_BE_IN_BLK(End_Critical_Stmt, CURR_BLK) || !match_name) {
+               blk_idx = blk_match_err(Critical_Blk, found_name, TRUE);
+            }
+
+	    break;
+
+#endif
 
 
 	 default:
@@ -5922,6 +5945,121 @@ void end_open_mp_workshare_blk(boolean  err_call)
    return;
 } /* end_open_mp_workshare_blk */
 
+
+
+/******************************************************************************\
+|*									      *|
+|* Description:								      *|
+|*	Complete the processing of the END CRITICAL statement for a CRITICAL construct.  *|
+|*									      *|
+|* Input parameters:							      *|
+|*	err_call => Boolean - TRUE if this is called from an error situation. *|
+|*	            This means the compiler is trying to clean up the block   *|
+|*	            stack and do error recovery.                              *|
+|*									      *|
+|* Output parameters:							      *|
+|*	NONE								      *|
+|*									      *|
+|* Returns:								      *|
+|*	NONE								      *|
+|*									      *|
+\******************************************************************************/
+
+static void end_critical_blk(boolean	err_call)
+
+{
+   int		blk_idx;
+   boolean	error;
+   int		name_idx;
+
+# ifdef _HIGH_LEVEL_IF_FORM
+# ifdef KEY /* Bug 10177 */
+   int		curr_sh = 0;
+# else /* KEY Bug 10177 */
+   int		curr_sh;
+# endif /* KEY Bug 10177 */
+   int		ir_idx;
+# endif
+
+
+
+   TRACE (Func_Entry, "end_critical_blk", NULL);
+
+   if (err_call) {  /* This is an error situation */
+      gen_sh(Before, End_Critical_Stmt, stmt_start_line, stmt_start_col,
+             TRUE, FALSE, FALSE);
+      curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+   }
+   else {
+
+
+      SH_P2_SKIP_ME(curr_stmt_sh_idx) = FALSE;
+      curr_sh = curr_stmt_sh_idx;
+
+      NTR_IR_TBL(ir_idx);
+      //TODO uncomment: IR_OPR(ir_idx)      = Endcritical_Opr;
+      IR_TYPE_IDX(ir_idx) = TYPELESS_DEFAULT_TYPE;
+      IR_LINE_NUM(ir_idx) = stmt_start_line;
+      IR_COL_NUM(ir_idx)  = stmt_start_col;
+
+      SH_IR_IDX(curr_sh) = ir_idx;
+
+      if (cmd_line_flags.debug_lvl <= Debug_Lvl_1) {  /* -ez -ed -G0 -G1 */
+         gen_debug_lbl_stmt(curr_stmt_sh_idx, Ldbg_Stmt_Lbl, NULL_IDX);
+      }
+   }
+
+   error = err_call || CURR_BLK_ERR || SH_ERR_FLG(CURR_BLK_FIRST_SH_IDX);
+
+   if (cif_flags & MISC_RECS) {
+    //TODO  cif_stmt_type_rec(TRUE, CIF_End_Critical_Stmt, statement_number);
+   }
+
+   
+   if (CURR_BLK != Critical_Blk) {
+
+      /* Error blocks got in the way - try to find the Critical_Blk.		      */
+
+      name_idx = BLK_NAME(blk_stk_idx + 1);
+
+      for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
+
+         if (BLK_TYPE(blk_idx) == Critical_Blk  &&  BLK_NAME(blk_idx) == name_idx) {
+            blk_idx = move_blk_to_end(blk_idx);
+            break;
+         }
+      }
+   }
+
+
+   /* Before popping the Critical_Blk, make sure that if the CRITICAL stmt is        */
+   /* marked in error, the END CRITICAL is too. 				      */
+
+   SH_ERR_FLG(curr_stmt_sh_idx) = error;
+
+
+
+   /* Check before popping it because the program could be really messed up   */
+   /* which would cause the Block Stack to be equally messed up.	      */
+
+   if (CURR_BLK == Critical_Blk) {
+
+      if (SH_PARENT_BLK_IDX(curr_stmt_sh_idx) == NULL_IDX) {
+         SH_PARENT_BLK_IDX(curr_stmt_sh_idx) = CURR_BLK_FIRST_SH_IDX;
+      }
+     
+      if (! error) { 
+        POP_BLK_STK;
+      }
+   }
+   TRACE (Func_Exit, "end_critical_blk", NULL);
+
+   return;
+
+}  /* end_critical_blk */
+
+
+
 
 /******************************************************************************\
 |*                                                                            *|

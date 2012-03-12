@@ -11844,8 +11844,12 @@ static boolean dealloc_obj_opr_handler(opnd_type	*result_opnd,
       IR_TYPE_IDX(ir_idx)   = exp_desc->type_idx;
       IR_RANK(ir_idx)       = exp_desc->rank;
 
+#ifndef _UH_COARRAYS
       if (ATD_ARRAY_IDX(attr_idx) == NULL_IDX) {
-
+#else
+      if (ATD_ARRAY_IDX(attr_idx) == NULL_IDX &&
+          ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+#endif
          if (! ATD_POINTER(attr_idx)) {
             /* error .. scalar must be pointer*/
             ok = FALSE;
@@ -11960,7 +11964,11 @@ static boolean alloc_obj_opr_handler(opnd_type		*result_opnd,
       bd_idx = ATD_ARRAY_IDX(attr_idx);
       pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
 
+#ifndef _UH_COARRAYS
       if (bd_idx == NULL_IDX) {
+#else
+      if ((bd_idx == NULL_IDX) && (pe_bd_idx == NULL_IDX)) {
+#endif
 
          if (! ATD_POINTER(attr_idx)) {
             /* error .. scalar must be pointer*/

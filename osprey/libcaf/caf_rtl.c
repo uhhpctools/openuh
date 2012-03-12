@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2009-2011 University of Houston.
+ Copyright (C) 2009-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -452,6 +452,23 @@ void sync_all_()
 
 }
 
+/*************CRITICAL SUPPORT **************/
+
+void caf_critical_()
+{ 
+ comm_critical();
+}
+
+void caf_end_critical_()
+{
+  comm_end_critical();
+}
+
+
+
+/*************END CRITICAL SUPPORT **************/
+
+
 void sync_memory_()
 {
    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:sync_memory->"
@@ -701,14 +718,16 @@ void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo)
 }
 
 void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_strides, unsigned long *src_extents,
-        unsigned int dest_ndim, unsigned long *dest_strides,
-        unsigned long *dest_extents, unsigned long img)
+        unsigned long *src_str_mults, unsigned long *src_extents,
+        unsigned long *src_strides,
+        unsigned int dest_ndim, unsigned long *dest_str_mults,
+        unsigned long *dest_extents, unsigned long *dest_strides,
+        unsigned long img)
 {
     int i, is_contig = 1;
 
     for (i = 1; i < src_ndim; i++) {
-      if (src_strides[i] != (src_strides[i-1]*src_extents[i-1])) {
+      if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
         is_contig = 0;
         break;
       }
@@ -716,20 +735,23 @@ void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
 
     if (is_contig) {
       for (i = 1; i < dest_ndim; i++) {
-        if (dest_strides[i] != (dest_strides[i-1]*dest_extents[i-1])) {
+        if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
           is_contig = 0;
           break;
         }
       }
     }
 
+    if (src_strides || dest_strides)
+      is_contig = 0;
+
     if (is_contig) {
-      unsigned long xfer_size = src_strides[0]*src_extents[0];
+      unsigned long xfer_size = src_str_mults[0]*src_extents[0];
       for (i = 1; i < src_ndim; i++) {
         xfer_size *= src_extents[i];
       }
       if (DEBUG) {
-        unsigned long dest_xfer_size = dest_strides[0]*dest_extents[0];
+        unsigned long dest_xfer_size = dest_str_mults[0]*dest_extents[0];
         for (i = 1; i < dest_ndim; i++) {
           dest_xfer_size *= dest_extents[i];
         }
@@ -746,8 +768,15 @@ void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
     }
 
    START_TIMER();
-   comm_read_full_str(src, dest, src_ndim, src_strides, src_extents,
-                   dest_ndim, dest_strides, dest_extents, img-1);
+   if (src_strides != NULL || dest_strides != NULL) {
+     comm_read_full_str2(src, dest, src_ndim, src_str_mults, src_extents,
+                     src_strides,
+                     dest_ndim, dest_str_mults, dest_extents,
+                     dest_strides,  img-1);
+   } else {
+     comm_read_full_str(src, dest, src_ndim, src_str_mults, src_extents,
+                     dest_ndim, dest_str_mults, dest_extents, img-1);
+   }
    STOP_TIMER(READ);
    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
 
@@ -759,19 +788,25 @@ void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
 
 
 void coarray_read_src_str_(void * src, void *dest, unsigned int ndim,
-        unsigned long *src_strides, unsigned long *src_extents,
+        unsigned long *src_str_mults, unsigned long *src_extents,
+        unsigned long *src_strides,
         unsigned long img)
 {
     int i, is_contig = 1;
+
+    /* runtime check if it is contiguous transfer */
     for (i = 1; i < ndim; i++) {
-      if (src_strides[i] != (src_strides[i-1]*src_extents[i-1])) {
+      if (src_str_mults[i] != (src_strides[i-1]*src_extents[i-1])) {
         is_contig = 0;
         break;
       }
     }
 
+    if (src_strides)
+      is_contig = 0;
+
     if (is_contig) {
-      unsigned long xfer_size = src_strides[0]*src_extents[0];
+      unsigned long xfer_size = src_str_mults[0]*src_extents[0];
       for (i = 1; i < ndim; i++) {
         xfer_size *= src_extents[i];
       }
@@ -781,7 +816,12 @@ void coarray_read_src_str_(void * src, void *dest, unsigned int ndim,
     }
 
    START_TIMER();
-   comm_read_src_str(src, dest, ndim, src_strides, src_extents, img-1);
+   if (src_strides != NULL) {
+     comm_read_src_str2(src, dest, ndim, src_str_mults, src_extents,
+                       src_strides, img-1);
+   } else {
+     comm_read_src_str(src, dest, ndim, src_str_mults, src_extents, img-1);
+   }
    STOP_TIMER(READ);
    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
 
@@ -805,18 +845,25 @@ void coarray_read_(void * src, void * dest, unsigned long xfer_size,
 }
 
 void coarray_write_dest_str_(void * dest, void *src, unsigned int ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents,
+        unsigned long *dest_str_mults, unsigned long *dest_extents,
+        unsigned long *dest_strides,
         unsigned long img)
 {
     int i, is_contig = 1;
+
+    /* runtime check if it is contiguous transfer */
     for (i = 1; i < ndim; i++) {
-      if (dest_strides[i] != (dest_strides[i-1]*dest_extents[i-1])) {
+      if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
         is_contig = 0;
         break;
       }
     }
+
+    if (dest_strides)
+      is_contig = 0;
+
     if (is_contig) {
-      unsigned long xfer_size = dest_strides[0]*dest_extents[0];
+      unsigned long xfer_size = dest_str_mults[0]*dest_extents[0];
       for (i = 1; i < ndim; i++) {
         xfer_size *= dest_extents[i];
       }
@@ -826,7 +873,13 @@ void coarray_write_dest_str_(void * dest, void *src, unsigned int ndim,
     }
 
     START_TIMER();
-    comm_write_dest_str(dest, src, ndim,dest_strides,dest_extents, img-1);
+    if (dest_strides != NULL) {
+      comm_write_dest_str2(dest, src, ndim,dest_str_mults,dest_extents,
+                          dest_strides, img-1);
+    } else  {
+      comm_write_dest_str(dest, src, ndim,dest_str_mults,dest_extents,
+                          img-1);
+    }
     STOP_TIMER(WRITE);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
 
@@ -849,15 +902,17 @@ void coarray_write_(void * dest, void * src, unsigned long xfer_size, unsigned l
 
 void coarray_write_full_str_(void * dest, void *src,
         unsigned int dest_ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents,
+        unsigned long *dest_str_mults, unsigned long *dest_extents,
+        unsigned long *dest_strides,
         unsigned int src_ndim,
-        unsigned long *src_strides, unsigned long *src_extents,
+        unsigned long *src_str_mults, unsigned long *src_extents,
+        unsigned long *src_strides,
         unsigned long img)
 {
     int i, is_contig = 1;
 
     for (i = 1; i < dest_ndim; i++) {
-      if (dest_strides[i] != (dest_strides[i-1]*dest_extents[i-1])) {
+      if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
         is_contig = 0;
         break;
       }
@@ -865,20 +920,23 @@ void coarray_write_full_str_(void * dest, void *src,
 
     if (is_contig) {
       for (i = 1; i < src_ndim; i++) {
-        if (src_strides[i] != (src_strides[i-1]*src_extents[i-1])) {
+        if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
           is_contig = 0;
           break;
         }
       }
     }
 
+    if (src_strides || dest_strides)
+      is_contig = 0;
+
     if (is_contig) {
-      unsigned long xfer_size = dest_strides[0]*dest_extents[0];
+      unsigned long xfer_size = dest_str_mults[0]*dest_extents[0];
       for (i = 1; i < dest_ndim; i++) {
         xfer_size *= dest_extents[i];
       }
       if (DEBUG) {
-        unsigned long src_xfer_size = src_strides[0]*src_extents[0];
+        unsigned long src_xfer_size = src_str_mults[0]*src_extents[0];
         for (i = 1; i < src_ndim; i++) {
           src_xfer_size *= src_extents[i];
         }
@@ -895,8 +953,15 @@ void coarray_write_full_str_(void * dest, void *src,
     }
 
     START_TIMER();
-    comm_write_full_str(dest, src, dest_ndim, dest_strides, dest_extents,
-                    src_ndim, src_strides, src_extents, img-1);
+    if (src_strides != NULL || dest_strides != NULL) {
+      comm_write_full_str2(dest, src, dest_ndim, dest_str_mults, dest_extents,
+                           dest_strides,
+                           src_ndim, src_str_mults, src_extents,
+                           src_strides, img-1);
+    } else {
+      comm_write_full_str(dest, src, dest_ndim, dest_str_mults, dest_extents,
+          src_ndim, src_str_mults, src_extents, img-1);
+    }
     STOP_TIMER(WRITE);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
 

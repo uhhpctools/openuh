@@ -133,7 +133,10 @@ enum	token_values {
 		Tok_Kwd_Complex,	/* COMPLEX			      */
 		Tok_Kwd_Contains,	/* CONTAINS			      */
 		Tok_Kwd_Continue,	/* CONTINUE			      */
-		Tok_Kwd_Cycle,		/* CYCLE			      */
+#ifdef _UH_COARRAYS
+        Tok_Kwd_Critical,    /* CRITICAL              */
+#endif
+        Tok_Kwd_Cycle,		/* CYCLE			      */
 		Tok_Kwd_Data,		/* DATA	     BLOCKDATA, ENDBLOCKDATA  */
 		Tok_Kwd_Deallocate,	/* DEALLOCATE			      */
 		Tok_Kwd_Decode,		/* DECODE			      */
@@ -153,6 +156,7 @@ enum	token_values {
 					/*	     ENDMODULE, ENDPROGRAM,   */
 					/*	     ENDSELECT, ENDSUBROUTINE,*/
 					/*	     ENDTYPE, ENDWHERE	      */
+                    /*       ENDCRITICAL              */
 		Tok_Kwd_Entry,		/* ENTRY			      */
 #ifdef KEY /* Bug 10572 */
 		Tok_Kwd_Enum,		/* ENUM 			      */

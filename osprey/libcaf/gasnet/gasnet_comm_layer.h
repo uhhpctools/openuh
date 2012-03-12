@@ -1,7 +1,7 @@
 /*
  GASNet Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2011 University of Houston.
+ Copyright (C) 2009-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -41,9 +41,36 @@
 
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
-#define GASNET_HANDLER_SYNC_REQUEST 128
 #define DEFAULT_SHARED_MEMORY_SIZE 31457280L
 #define DEFAULT_GETCACHE_LINE_SIZE 65536L
+
+
+/* GASNET handler IDs */
+enum {
+  GASNET_HANDLER_SYNC_REQUEST = 128,
+  GASNET_HANDLER_CRITICAL_REQUEST = 129,
+  GASNET_HANDLER_CRITICAL_REPLY = 130,
+  GASNET_HANDLER_END_CRITICAL_REQUEST = 131
+};
+
+#define GASNET_Safe(fncall) do {                                      \
+    int _retval;                                                        \
+    if ((_retval = fncall) != GASNET_OK) {                              \
+          fprintf(stderr, "ERROR calling: %s\n"                              \
+                                  " at: %s:%i\n"                                    \
+                                  " error: %s (%s)\n",                              \
+                             #fncall, __FILE__, __LINE__,                           \
+                             gasnet_ErrorName(_retval), gasnet_ErrorDesc(_retval));  \
+           fflush(stderr);                                                  \
+           gasnet_exit(_retval);                                            \
+         }                                                                  \
+   } while(0)
+
+#define BARRIER() do {                                              \
+    gasnet_barrier_notify(0,GASNET_BARRIERFLAG_ANONYMOUS);            \
+    GASNET_Safe(gasnet_barrier_wait(0,GASNET_BARRIERFLAG_ANONYMOUS)); \
+} while (0) 
+
 
 #include "gasnet.h"
 #include "gasnet_tools.h"
@@ -55,6 +82,21 @@ typedef enum {
     allocatable_coarray,
     nonsymmetric_coarray,
 } memory_segment_type;
+
+typedef struct {
+  unsigned long remote_proc;
+  unsigned int remote_ndim;
+  void *remote_addr;
+  unsigned long *remote_str_mults;
+  unsigned long *remote_extents;
+  unsigned long *remote_strides;
+  unsigned long local_proc;
+  unsigned int local_ndim;
+  void *local_addr;
+  unsigned long *local_str_mults;
+  unsigned long *local_extents;
+  unsigned long *local_strides;
+} array_section_t;
 
 /*init*/
 void comm_init();
@@ -71,18 +113,39 @@ void comm_write(void *dest, void *src, unsigned long xfer_size, unsigned long pr
 void comm_read_src_str(void *src, void *dest, unsigned int ndim,
                     unsigned long *src_strides, unsigned long *src_extents,
                     unsigned long proc);
+void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
+                    unsigned long *src_str_mults, unsigned long *src_extents,
+                    unsigned long *src_strides,
+                    unsigned long proc);
 void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_strides,
+                    unsigned long *dest_str_mults,
                     unsigned long *dest_extents,
+                    unsigned long proc);
+void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_str_mults,
+                    unsigned long *dest_extents,
+                    unsigned long *dest_strides,
                     unsigned long proc);
 void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         unsigned long *src_strides, unsigned long *src_extents, 
         unsigned int dest_ndim, unsigned long *dest_strides,
         unsigned long *dest_extents, unsigned long proc);
+void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
+        unsigned long *src_str_mults, unsigned long *src_extents, 
+        unsigned long *src_strides,
+        unsigned int dest_ndim, unsigned long *dest_str_mults,
+        unsigned long *dest_extents, unsigned long *dest_strides,
+        unsigned long proc);
 void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
         unsigned long *dest_strides, unsigned long *dest_extents, 
         unsigned int src_ndim, unsigned long *src_strides,
         unsigned long *src_extents, unsigned long proc);
+void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
+        unsigned long *dest_str_mults, unsigned long *dest_extents, 
+        unsigned long *dest_strides,
+        unsigned int src_ndim, unsigned long *src_str_mults,
+        unsigned long *src_extents, unsigned long *src_strides,
+        unsigned long proc);
 
 
 /* shared memory management */
@@ -132,9 +195,6 @@ static void cache_check_and_get(unsigned long node, void *remote_address,
 static void update_cache(unsigned long node,void *remote_address,
                     unsigned long xfer_size, void *local_address);
 
-/* active msg handler for sync images */
-void handler_sync_request(gasnet_token_t token, int imageIndex);
-
 
 /* interrupt safe malloc and free */
 void* comm_malloc(size_t size);
@@ -145,6 +205,9 @@ void comm_free_lcb(void *ptr);
 /* Barriers */
 void comm_barrier_all();
 void comm_sync_images(int *image_list, int image_count);
+
+void comm_critical();
+void comm_end_critical();
 
 
 /* exit */

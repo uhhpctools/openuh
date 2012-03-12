@@ -192,6 +192,10 @@ char		*blk_struct_str[]	= {
 #ifdef KEY /* Bug 10572 */
 	"Enum_Blk"			/* Enum_Blk			*/
 #endif /* KEY Bug 10572 */
+#ifdef _UH_COARRAYS
+      ,
+    "Critical_Blk"    /* Critical_Blk */
+#endif
 	};
 
 char		*boolean_str[]		= {
@@ -1012,7 +1016,7 @@ char		*operator_str[]		= {
                         "Case_Opr",
 			"Allocate_Opr",
                         "Deallocate_Opr",
-                        "End_Opr",
+                        "End_Opr",   /* reuse for 'critical' keyword support in CAF  */
                         "Entry_Opr",
                         "Nullify_Opr",
                         "Pause_Opr",
@@ -1413,6 +1417,8 @@ char		*operator_str[]		= {
 		 	"Cselect_Opr",
 #endif /* KEY Bug 10410 */
 #ifdef _UH_COARRAYS
+            "Endcritical_Opr",
+            "Critical_Opr",
             "Sync_Opr",
             "Images_Opr",
             "Imagestar_Opr",
@@ -1513,7 +1519,10 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Complex",	/* Tok_Kwd_Complex	*/
 			"Tok_Kwd_Contains",	/* Tok_Kwd_Contains	*/
 			"Tok_Kwd_Continue",	/* Tok_Kwd_Continue	*/
-			"Tok_Kwd_Cycle",	/* Tok_Kwd_Cycle	*/
+#ifdef _UH_COARRAYS
+            "Tok_Kwd_Critical", /*  Tok_Kwd_Critical */
+#endif
+            "Tok_Kwd_Cycle",	/* Tok_Kwd_Cycle	*/
 			"Tok_Kwd_Data",		/* Tok_Kwd_Data		*/
 			"Tok_Kwd_Deallocate",	/* Tok_Kwd_Deallocate	*/
 			"Tok_Kwd_Decode",	/* Tok_Kwd_Decode	*/
@@ -1525,7 +1534,7 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Elemental",	/* Tok_Kwd_Elemental	*/
 			"Tok_Kwd_Else",		/* Tok_Kwd_Else		*/
 			"Tok_Kwd_Encode",	/* Tok_Kwd_Encode	*/
-			"Tok_Kwd_End",		/* Tok_Kwd_End		*/
+			"Tok_Kwd_End",		/* Tok_Kwd_End		*/ /* reuse for coarrays 'critical' keyword support */
 			"Tok_Kwd_Entry",	/* Tok_Kwd_Entry	*/
 #ifdef KEY /* Bug 10572 */
 			"Tok_Kwd_Enum",		/* Tok_Kwd_Enum    	*/

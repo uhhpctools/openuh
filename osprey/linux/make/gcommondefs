@@ -102,6 +102,9 @@ else
 ENDIAN = -D_MIPSEB
 endif
 
+# setting UHCAF to point to built F90 compiler
+UHCAF = $(COMPILER_TARG_DIR)/driver/openf90 -coarray
+UHCAF += -run-build=$(TOP_BUILDDIR)
 
 ifeq ($(BUILD_COMPILER), GNU)
   ASNAME = gcc 
@@ -667,7 +670,7 @@ _FORCE=$(COMMONPREF)_force
 #
 # CXXFILES=$(C++FILES)
 SOURCES=$(HFILES) $(ASFILES) $(CXXFILES) $(CFILES) $(EFILES) $(FFILES) \
-	$(LFILES) $(PFILES) $(RFILES) $(SHFILES) $(YFILES)
+	$(LFILES) $(PFILES) $(RFILES) $(SHFILES) $(YFILES) $(CAFFILES)
 
 ASO1=$(ASFILES:.s=.o)
 ASO2=$(ASO1:.S=.o)
@@ -686,7 +689,7 @@ LO3=$(LO2:.L=.o)
 LOALL=$(LO3)
 OBJECTS=$(ASOALL) $(CXXOALL) $(CFILES:.c=.o) $(EFILES:.e=.o) \
 	$(FFILES:.f=.o) $(LOALL) $(PFILES:.p=.o) $(RFILES:.r=.o) \
-	$(YOALL) 
+	$(YOALL) $(CAFFILES:.caf=.o)
 
 #
 # Makefiles should set LDIRT only 

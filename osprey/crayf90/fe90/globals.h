@@ -1551,6 +1551,8 @@ enum    operator_values      {  Null_Opr,
 #endif /* KEY Bug 10410 */
 
 #ifdef _UH_COARRAYS
+                Endcritical_Opr,
+                Critical_Opr,
                 Sync_Opr,
                 Images_Opr,
                 Imagestar_Opr,
@@ -1768,6 +1770,11 @@ enum stmt_type_values           {Null_Stmt,
 				 /* To determine that a stmt is executable,   */
                                  /* see code that sets ATL_EXECUTABLE in      */
                                  /* p_driver.c .			      */
+#ifdef _UH_COARRAYS
+                 ,
+                 Critical_Stmt,
+                 End_Critical_Stmt
+#endif
 
 				};
 

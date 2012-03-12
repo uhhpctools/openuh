@@ -1925,6 +1925,9 @@ elif test "${BUILD_TARGET}" = "IA64"; then
   LIBLIST="include libopenmp libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf-extra"
+     fi
      if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
@@ -1933,6 +1936,9 @@ else
   LIBLIST="include libopenmp libhugetlbfs libmv libopenmp-pcl"
   if test "${BUILD_FORTRAN}" = "YES"; then
      LIBLIST="$LIBLIST libfortran libu"
+     if test "${ENABLE_COARRAYS}" = "YES"; then
+       LIBLIST="$LIBLIST libcaf-extra"
+     fi
      if test "${BUILD_CAF_RUNTIME}" = "YES"; then
        LIBLIST="$LIBLIST libcaf"
      fi
@@ -1951,7 +1957,7 @@ else
 fi
 
 if test "${BUILD_FORTRAN}" = "YES"; then
-                                           ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile osprey/targdir_lib/libcaf/Makefile osprey/targdir_lib/libcaf/armci/Makefile"
+                                                     ac_config_files="$ac_config_files osprey/targdir_lib/libfortran/Makefile osprey/targdir_lib/libu/Makefile osprey/targdir_lib/libcaf-extra/Makefile osprey/targdir_lib/libcaf/Makefile osprey/targdir_lib/libcaf/armci/Makefile"
 
    if test -n "${GASNET_CONDUITS}"; then
      for conduit in $GASNET_CONDUITS; do
@@ -1979,7 +1985,7 @@ if test $BUILD_MULTILIB = "YES"; then
                                                               ac_config_files="$ac_config_files osprey/targdir_lib2/Makefile:osprey/targdir_lib/Makefile.in osprey/targdir_lib2/include/Makefile:osprey/targdir_lib/include/Makefile.in osprey/targdir_lib2/libopenmp/Makefile:osprey/targdir_lib/libopenmp/Makefile.in osprey/targdir_lib2/libopenmp-pcl/Makefile:osprey/targdir_lib/libopenmp-pcl/Makefile.in osprey/targdir_lib2/libhugetlbfs/Makefile:osprey/targdir_lib/libhugetlbfs/Makefile.in osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in"
 
   if test "${BUILD_FORTRAN}" = "YES"; then
-                                            ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in"
+                                                      ac_config_files="$ac_config_files osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in"
 
     if test -n "${GASNET_CONDUITS}"; then
       for conduit in $GASNET_CONDUITS; do
@@ -2614,6 +2620,7 @@ do
   "osprey/targdir_lib/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libmv/Makefile" ;;
   "osprey/targdir_lib/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libfortran/Makefile" ;;
   "osprey/targdir_lib/libu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libu/Makefile" ;;
+  "osprey/targdir_lib/libcaf-extra/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf-extra/Makefile" ;;
   "osprey/targdir_lib/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/Makefile" ;;
   "osprey/targdir_lib/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/armci/Makefile" ;;
   "osprey/targdir_lib/libcaf/gasnet-${conduit}/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;
@@ -2630,6 +2637,7 @@ do
   "osprey/targdir_lib2/libmv/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libmv/Makefile:osprey/targdir_lib/libmv/Makefile.in" ;;
   "osprey/targdir_lib2/libfortran/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libfortran/Makefile:osprey/targdir_lib/libfortran/Makefile.in" ;;
   "osprey/targdir_lib2/libu/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libu/Makefile:osprey/targdir_lib/libu/Makefile.in" ;;
+  "osprey/targdir_lib2/libcaf-extra/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf-extra/Makefile:osprey/targdir_lib/libcaf-extra/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/Makefile:osprey/targdir_lib/libcaf/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/armci/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/armci/Makefile:osprey/targdir_lib/libcaf/armci/Makefile.in" ;;
   "osprey/targdir_lib2/libcaf/gasnet-${conduit}/Makefile" ) CONFIG_FILES="$CONFIG_FILES osprey/targdir_lib2/libcaf/gasnet-${conduit}/Makefile:osprey/targdir_lib/libcaf/gasnet/Makefile.in" ;;

@@ -152,7 +152,7 @@ NATIVE_LIB_DIR=${PHASEPATH}
 BIN_DIR=${ROOT}/${INTERPOSE}/bin
 ALT_BIN_DIR=${ROOT}/${INTERPOSE}/altbin
 # for omp.h etc. 
-INC_DIR=${ROOT}/include
+INC_DIR=${ROOT}/include/${VERSION}
 
 # install commands
 INSTALL="/usr/bin/install -D"
@@ -478,6 +478,30 @@ INSTALL_CAF_LIB () {
     fi 
 }
 
+# Install the CAF Extra library
+INSTALL_CAF_EXTRA_LIB () {
+    if [ "$TARG_HOST" = "ia64" ] ; then
+    LIBAREA="osprey/targdir_lib"
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf-extra/libcaf-extra.a ${PHASEPATH}/libcaf-extra.a
+    elif [ "$TARG_HOST" = "ppc32" ] ; then
+    LIBAREA="osprey/targdir_lib"
+    LIB32AREA="osprey/targdir_lib2"
+    else
+    LIBAREA="osprey/targdir_lib2"
+    LIB32AREA="osprey/targdir_lib"
+        # 64bit libraries
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf-extra/libcaf-extra.a ${PHASEPATH}/libcaf-extra.a
+
+        # 32bit libraries
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf-extra/libcaf-extra.a ${PHASEPATH}/32/libcaf-extra.a
+    fi 
+
+    # Create the Fortran module files for the CAF Extra Library interface
+    if [ ! -e ${ROOT}/include/${VERSION}/CAF_REDUCTIONS.mod ] ; then
+        (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray caf-extra.caf)
+    fi
+}
+
 
 # Install the general propose libraries, libfortran.a, libffio.a, libmsgi.a, libmv.a, libm.a, libopenmp.a
 INSTALL_GENERAL_PURPOSE_NATIVE_ARCHIVES () {
@@ -655,6 +679,7 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
     [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.f  ${ROOT}/include/${VERSION}/omp_lib.f
 
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/caf/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
     return 0
 }
 
@@ -747,7 +772,7 @@ INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP
 [ "$INSTALL_TYPE" = "ia64-cross" ] && INSTALL_CROSS_UTIL
 INSTALL_PREBUILD_PHASE 
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
-
+[ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_CAF_EXTRA_LIB
 [ "$BUILD_CAF_RUNTIME" = "YES" ] && INSTALL_CAF_LIB
 exit 0
 

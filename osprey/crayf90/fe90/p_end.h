@@ -66,7 +66,9 @@ static void end_select_blk (boolean);
 static void end_subroutine (boolean);
 static void end_type_blk (boolean);
 static void end_where_blk (boolean);
-
+#ifdef _UH_COARRAYS 
+static void end_critical_blk (boolean);
+#endif
 
 /******************************************************************************/
 /*			end_blocks TABLE				      */
@@ -136,4 +138,8 @@ void		(*end_blocks[]) () = {
 #ifdef KEY /* Bug 10572 */
 		/* Enum_Blk		*/	end_enum_blk
 #endif /* KEY Bug 10572 */
+#ifdef _UH_COARRAYS 
+          ,
+        /* End_Critical_Blk */  end_critical_blk
+#endif 
 		};

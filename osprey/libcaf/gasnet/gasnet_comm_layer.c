@@ -1,7 +1,7 @@
 /*
  GASNet Communication runtime library to be used with OpenUH
 
- Copyright (C) 2009-2011 University of Houston.
+ Copyright (C) 2009-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -91,6 +91,22 @@ static unsigned long getCache_line_size; /* set by env var. */
 static struct cache **cache_all_images;
 static unsigned long shared_memory_size;
 
+/* mutex for critical sections */
+gasnet_hsl_t cs_mutex = GASNET_HSL_INITIALIZER;
+static int cs_done=0;
+
+/* forward declarations */
+
+static void handler_sync_request(gasnet_token_t token, int imageIndex);
+
+static void handler_critical_request(gasnet_token_t token,
+                         gasnet_handlerarg_t src_proc);
+
+static void handler_critical_reply(gasnet_token_t token,
+                         gasnet_handlerarg_t mutex_id);
+
+static void handler_end_critical_request(gasnet_token_t token,
+                           gasnet_handlerarg_t src_proc);
 
 /*
  * Inline functions
@@ -108,28 +124,69 @@ inline unsigned long comm_get_num_procs()
 }
 
 
-/*
- * start of handlers
- */
+/*************************************************************/
+/* start of handlers */
+
+static gasnet_handlerentry_t handlers[] =
+  {
+    { GASNET_HANDLER_SYNC_REQUEST, handler_sync_request },
+    { GASNET_HANDLER_CRITICAL_REQUEST, handler_critical_request },
+    { GASNET_HANDLER_CRITICAL_REPLY, handler_critical_reply },
+    { GASNET_HANDLER_END_CRITICAL_REQUEST, handler_end_critical_request }
+  };
+
+static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
 
 /* handler funtion for  sync images */
-void handler_sync_request(gasnet_token_t token, int imageIndex)
+static void handler_sync_request(gasnet_token_t token, int imageIndex)
 {
     gasnet_hsl_lock( &sync_lock );
     sync_images_flag[imageIndex]++;
     gasnet_hsl_unlock( &sync_lock );
 }
 
-static gasnet_handlerentry_t handlers[] =
-  {
-    { GASNET_HANDLER_SYNC_REQUEST, handler_sync_request }
-  };
-static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
 
-/*
- * end of handlers
- */
+/* handlers for critical section access */
+static void handler_critical_request(gasnet_token_t token,
+                         gasnet_handlerarg_t src_proc)
+{
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_critical_request (%d,%d)\n", my_proc, (int)src_proc);
 
+  GASNET_BLOCKUNTIL(gasnet_hsl_trylock(&cs_mutex) == GASNET_OK);
+  //gasnet_hsl_lock(&cs_mutex);
+
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_critical_request (%d,%d) ... done\n", my_proc, (int)src_proc);
+
+  GASNET_Safe(gasnet_AMReplyShort0(token,GASNET_HANDLER_CRITICAL_REPLY));
+}
+
+static void handler_critical_reply(gasnet_token_t token, gasnet_handlerarg_t mutex_id)
+{
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_critical_reply (%d)\n", my_proc);
+
+  cs_done = 1;
+
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_critical_reply (%d) ... done\n", my_proc);
+}
+
+static void handler_end_critical_request(gasnet_token_t token,
+                           gasnet_handlerarg_t src_proc)
+{
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_end_critical_request (%d,%d)\n", my_proc, (int)src_proc);
+
+  gasnet_hsl_unlock(&cs_mutex);
+
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+      "inside handler_end_critical_request (%d) ... done\n", my_proc);
+}
+
+/* end of handlers */
+/*************************************************************/
 
 /*
  * INIT:
@@ -216,6 +273,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         cache_all_images =
             (struct cache **)malloc(num_procs* sizeof(struct cache *));
     }
+
 
     /* initialize data structures to 0 */
     for(i=0; i<num_procs; i++){
@@ -1119,6 +1177,23 @@ static void *get_remote_address(void *src, unsigned long img)
  * End Shared Memory Management
  */
 
+void comm_critical()
+{
+  GASNET_Safe(gasnet_AMRequestShort1(0,
+              GASNET_HANDLER_CRITICAL_REQUEST,
+              my_proc));
+  GASNET_BLOCKUNTIL(cs_done == 1);
+  cs_done = 0;
+}
+
+void comm_end_critical()
+{
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "in comm_end_critical ...");
+  GASNET_Safe(gasnet_AMRequestShort1(0,
+              GASNET_HANDLER_END_CRITICAL_REQUEST,
+              my_proc));
+}
+
 
 void comm_memory_free()
 {
@@ -1420,6 +1495,48 @@ void comm_read_src_str(void *src, void *dest, unsigned int ndim,
 }
 
 
+void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
+                    unsigned long *src_str_mults, unsigned long *src_extents,
+                    unsigned long *src_strides,
+                    unsigned long proc)
+{
+    int i,j,k;
+    unsigned long elem_size = src_str_mults[0];
+    void *remote_src;
+
+    remote_src = get_remote_address(src,proc);
+
+    size_t dst_stride_ar[MAX_DIMS];
+    size_t src_stride_ar[MAX_DIMS];
+    size_t count[MAX_DIMS];
+
+    j = k = 0;
+    for (i = 0; i < ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k++] = src_str_mults[i];
+      }
+
+      if (src_strides[i] > 1) {
+        src_stride_ar[k++] = src_str_mults[i]*src_strides[i];
+        count[j++] = 1;
+      }   
+      count[j++] = src_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+    dst_stride_ar[0] = count[0];
+    for (i = 1; i < j-1; i++) {
+      dst_stride_ar[i] = dst_stride_ar[i-1]*count[i];
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "gasnet_comm_layer.c:comm_read_src_str->gasnet_gets_bulk from"
+        " %p on image %lu to %p ndim %u",
+        remote_src, proc+1, dest, j-1);
+    gasnet_gets_bulk (dest, dst_stride_ar, proc, remote_src,
+            src_stride_ar, count,  j-1);
+}
+
+
 void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
         unsigned long *src_strides, unsigned long *src_extents, 
         unsigned int dest_ndim, unsigned long *dest_strides,
@@ -1484,14 +1601,82 @@ void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
     }
 }
 
+void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
+        unsigned long *src_str_mults, unsigned long *src_extents, 
+        unsigned long *src_strides,
+        unsigned int dest_ndim, unsigned long *dest_str_mults,
+        unsigned long *dest_extents, unsigned long *dest_strides,
+        unsigned long proc)
+{
+    int i,j,k1,k2;
+    unsigned long elem_size = src_str_mults[0];
+    void *remote_src=get_remote_address(src,proc);
+    size_t src_stride_ar[MAX_DIMS];
+    size_t dest_stride_ar[MAX_DIMS];
+    size_t count[MAX_DIMS];
+
+    if(src_ndim!=dest_ndim)
+    {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+        "gasnet_comm_layer.c:comm_read_full_str->src and dest dim must"
+        " be same. src_ndim=%d, dest_ndim=%d",
+        src_ndim, dest_ndim);
+    }
+
+    j = k1 = k2 = 0;
+    for (i = 0; i < src_ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k1++] = src_str_mults[i];
+        dest_stride_ar[k2++] = dest_str_mults[i];
+      }
+
+      if ((src_strides && src_strides[i]>1) &&
+          (dest_strides == NULL || dest_strides[i]==1)) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        if (k2 == 0)
+          dest_stride_ar[k2++] = dest_str_mults[0];
+        else
+          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
+        count[j++] = 1;
+      } else if ((dest_strides && dest_strides[i]>1) &&
+          (src_strides == NULL || src_strides[i]==1)) {
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        if (k1 == 0)
+          src_stride_ar[k1++] = src_str_mults[0];
+        else
+          src_stride_ar[k1++] = src_stride_ar[k1-1];
+        count[j++] = 1;
+      } else if (dest_strides && src_strides &&
+          dest_strides[i]>1 && src_strides[i]>1) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }  
+      count[j++] = src_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+
+    debug_print_array_long("src_stride_ar", src_stride_ar, k1);
+    debug_print_array_long("dest_stride_ar", dest_stride_ar, k2);
+    debug_print_array_long("count", count, j);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "gasnet_comm_layer.c:comm_read_full_str->Before gasnet_gets"
+        " from %p on image %lu to %p ndim %lu",
+        remote_src, proc+1, dest, src_ndim-1);
+
+    gasnet_gets_bulk (dest, dest_stride_ar, proc, remote_src,
+            src_stride_ar, count,  j-1);
+} /* comm_read_full_str2 */
+
 
 void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_strides,
+                    unsigned long *dest_str_mults,
                     unsigned long *dest_extents,
                     unsigned long proc)
 {
     int i,j;
-    unsigned long elem_size = dest_strides[0];
+    unsigned long elem_size = dest_str_mults[0];
     void *remote_dest;
 
 #if defined(ENABLE_LOCAL_MEMCPY)
@@ -1514,10 +1699,10 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
         num_blks = 1;
         cnt_strides[0] = 1;
         for (i = 1; i < ndim; i++) {
-            if (dest_strides[i]/dest_strides[i-1] == dest_extents[i-1])  {
+            if (dest_str_mults[i]/dest_str_mults[i-1] == dest_extents[i-1])  {
                 cnt_strides[i] = 1;
                 contig_rank++;
-                blk_size = dest_strides[i];
+                blk_size = dest_str_mults[i];
             } else  {
                 cnt_strides[i] = cnt_strides[i-1] * dest_extents[i];
                 num_blks *= dest_extents[i];
@@ -1538,7 +1723,7 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
             for (j = contig_rank; j < ndim; j++) {
                 if (i % cnt_strides[j]) break;
             }
-            blk += dest_strides[j];
+            blk += dest_str_mults[j];
         }
     } else
 #endif
@@ -1548,10 +1733,10 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
         size_t count[MAX_DIMS];
 
         src_stride_ar[0] = dest_extents[0]*elem_size;
-        dest_stride_ar[0] = dest_strides[1];
+        dest_stride_ar[0] = dest_str_mults[1];
         for (i = 1; i < ndim-1; i++) {
             src_stride_ar[i] = src_stride_ar[i-1]*dest_extents[i];
-            dest_stride_ar[i] = dest_strides[i+1];
+            dest_stride_ar[i] = dest_str_mults[i+1];
             count[i] = dest_extents[i];
         }
         count[ndim-1] = dest_extents[ndim-1];
@@ -1563,7 +1748,7 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
         {
             unsigned long size;
             //calculate max size.. stride of last dim* extent of last dim
-            size = (dest_strides[ndim-1]*(dest_extents[ndim-1]-1))
+            size = (dest_str_mults[ndim-1]*(dest_extents[ndim-1]-1))
                 +elem_size;
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                 "gasnet_comm_layer.c:comm_write_dest_str->Before"
@@ -1589,10 +1774,56 @@ void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
         if(enable_get_cache)
         {
             update_cache_dest_strided(remote_dest, src, ndim,
-                    dest_strides, dest_extents, proc);
+                    dest_str_mults, dest_extents, proc);
         }
     }
-}
+} /* comm_write_dest_str */
+
+
+
+void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
+                    unsigned long *dest_str_mults,
+                    unsigned long *dest_extents,
+                    unsigned long *dest_strides,
+                    unsigned long proc)
+{
+    int i,j,k;
+    unsigned long elem_size = dest_str_mults[0];
+    void *remote_dest;
+
+    size_t src_stride_ar[MAX_DIMS];
+    size_t dest_stride_ar[MAX_DIMS];
+    size_t count[MAX_DIMS];
+
+    j = k = 0;
+    for (i = 0; i < ndim; i++) {
+      if (i > 0) {
+        dest_stride_ar[k++] = dest_str_mults[i];
+      }
+
+      if (dest_strides[i] > 1) {
+        dest_stride_ar[k++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }   
+      count[j++] = dest_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+    src_stride_ar[0] = count[0];
+    for (i = 1; i < j-1; i++) {
+      src_stride_ar[i] = src_stride_ar[i-1]*count[i];
+    }
+
+
+    remote_dest = get_remote_address(dest,proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+    "gasnet_comm_layer.c:comm_write_dest_str->gasnet_put_bulk"
+    " to %p on image %lu from %p ndim %u",
+    remote_dest, proc+1, src, ndim-1);
+
+    gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
+            src_stride_ar, count,  j-1);
+} /* comm_write_dest_str2 */
 
 
 void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
@@ -1664,5 +1895,71 @@ void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
                 dest_strides, dest_extents, src_ndim, src_strides,
                 src_extents, proc);
     }
+
+}
+
+void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
+        unsigned long *dest_str_mults, unsigned long *dest_extents, 
+        unsigned long *dest_strides,
+        unsigned int src_ndim, unsigned long *src_str_mults,
+        unsigned long *src_extents, unsigned long *src_strides,
+        unsigned long proc)
+{
+    int i,j,k1,k2;
+    unsigned long elem_size = dest_strides[0];
+    void *remote_dest;
+    size_t src_stride_ar[MAX_DIMS];
+    size_t dest_stride_ar[MAX_DIMS];
+    size_t count[MAX_DIMS];
+
+    if(src_ndim!=dest_ndim)
+    {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+        "gasnet_comm_layer.c:comm_write_full_str->src and dest dim must"
+        " be same. src_ndim=%d, dest_ndim=%d",
+        src_ndim, dest_ndim);
+    }
+
+    j = k1 = k2 = 0;
+    for (i = 0; i < dest_ndim; i++) {
+      if (i > 0) {
+        src_stride_ar[k1++] = src_str_mults[i];
+        dest_stride_ar[k2++] = dest_str_mults[i];
+      }
+
+      if ((src_strides && src_strides[i]>1) &&
+          (dest_strides == NULL || dest_strides[i]==1)) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        if (k2 == 0)
+          dest_stride_ar[k2++] = dest_str_mults[0];
+        else
+          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
+        count[j++] = 1;
+      } else if ((dest_strides && dest_strides[i]>1) &&
+          (src_strides == NULL || src_strides[i]==1)) {
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        if (k1 == 0)
+          src_stride_ar[k1++] = src_str_mults[0];
+        else
+          src_stride_ar[k1++] = src_stride_ar[k1-1];
+        count[j++] = 1;
+      } else if (dest_strides && src_strides &&
+          dest_strides[i]>1 && src_strides[i]>1) {
+        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
+        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
+        count[j++] = 1;
+      }  
+      count[j++] = dest_extents[i];
+    }
+    count[0] = count[0] * elem_size;
+
+    remote_dest = get_remote_address(dest,proc);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "gasnet_comm_layer.c:comm_write_full_str->gasnet_put_bulk"
+        " to %p on image %lu from %p ndim %u",
+        remote_dest, proc+1, src, dest_ndim-1);
+    gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
+            src_stride_ar, count,  j-1);
 
 }

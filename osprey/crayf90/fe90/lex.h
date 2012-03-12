@@ -161,7 +161,10 @@ static	kwd_type		kwd[] = {
 #endif
 				"CONTAINS",	     Tok_Kwd_Contains,
 				"CONTINUE",	     Tok_Kwd_Continue,
-				"COMPLEX",	     Tok_Kwd_Complex,
+#ifdef _UH_COARRAYS
+				"CRITICAL",      Tok_Kwd_Critical,
+#endif                
+                "COMPLEX",	     Tok_Kwd_Complex,
 				"COMMON",	     Tok_Kwd_Common,
 				"CLOSE",	     Tok_Kwd_Close,
 				"CYCLE",	     Tok_Kwd_Cycle,

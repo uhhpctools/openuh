@@ -111,6 +111,11 @@ enum    blk_cntxt_values       {Unknown_Blk,
 #ifdef KEY /* Bug 10572 */
 				Enum_Blk
 #endif /* KEY Bug 10572 */
+#ifdef _UH_COARRAYS
+                  ,
+                  Critical_Blk
+#endif
+
 				};
 
 enum	do_loop_values		{Unknown_Loop,
@@ -506,6 +511,10 @@ extern	void parse_use_stmt (void);
 extern	void parse_volatile_stmt (void);
 extern	void parse_where_stmt (void);
 extern	void parse_write_stmt (void);
+#ifdef _UH_COARRAYS
+extern  void parse_critical_stmt (void);
+extern  void parse_end_critical_stmt (void);
+#endif
 
 
 /*************************\

@@ -2624,6 +2624,10 @@ void gen_static_dv_whole_def(opnd_type         *dv_opnd,
 
    num_words	= DV_HD_WORD_SIZE + (rank * DV_DIM_WORD_SIZE);
 
+#ifdef _UH_COARRAYS
+   num_words    += corank * DV_DIM_WORD_SIZE;
+#endif
+
    CLEAR_TBL_NTRY(type_tbl, TYP_WORK_IDX);
    TYP_TYPE(TYP_WORK_IDX)	= Typeless;
 #if defined (TARG_X8664) && defined (_HOST64)

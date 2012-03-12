@@ -5899,7 +5899,146 @@ void sync_stmt_semantics (void)
    TRACE (Func_Exit, "sync_stmt_semantics", NULL);
 
    return;
-} /* sync_stmt_semantics */
+} /* sync_stmt_semantics */ 
+
+/* critical_stmt_semantics */
+void critical_stmt_semantics (void)
+{
+   int          attr_idx;
+   expr_arg_type    exp_desc;
+   int          ir_idx;
+   boolean      is_call;
+   int          list_idx;
+   opnd_type        opnd;
+   int          save_arg_info_list_base;
+   boolean      semantically_correct = TRUE;
+   char         str[16];
+   int          type_idx;
+   int lib_idx;
+   int call_idx;
+   TRACE (Func_Entry, "critical_stmt_semantics", NULL);
+
+   if (max_call_list_size >= arg_list_size) {
+      enlarge_call_list_tables();
+   }
+   save_arg_info_list_base = arg_info_list_base;
+   arg_info_list_base      = arg_info_list_top;
+   arg_info_list_top       = arg_info_list_base + 1;
+   if (arg_info_list_top >= arg_info_list_size) {
+      enlarge_info_list_table();
+   }
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   OPND_FLD(opnd) = NO_Tbl_Idx;
+
+ 
+   
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   OPND_FLD(opnd) = NO_Tbl_Idx;
+    lib_idx = create_lib_entry_attr("caf_critical_",
+		   strlen("caf_critical_"),
+		   stmt_start_line,
+		   stmt_start_col);
+
+    ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+
+    NTR_IR_TBL(call_idx); //create new list index in call_idx
+    IR_OPR(call_idx) = Call_Opr;
+    IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+    IR_LINE_NUM(call_idx) = stmt_start_line;
+    IR_COL_NUM(call_idx) = stmt_start_col;
+    IR_FLD_L(call_idx) = AT_Tbl_Idx;
+    IR_IDX_L(call_idx) = lib_idx;
+    IR_LINE_NUM_L(call_idx) = stmt_start_line;
+    IR_COL_NUM_L(call_idx) = stmt_start_col;
+
+    NTR_IR_LIST_TBL(list_idx); 
+    IR_FLD_R(call_idx) = IL_Tbl_Idx;
+    IR_IDX_R(call_idx) = list_idx;
+    IR_LIST_CNT_R(call_idx) = 0;
+
+    gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
+		   FALSE, FALSE, TRUE);
+
+    SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+    SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE; //skip this new stmt during pass 2 semantics
+       
+    curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+    SH_NEXT_IDX(curr_stmt_sh_idx) =
+ 	   SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
+    SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
+	   curr_stmt_sh_idx;
+}  /* critical_stmt_semantics */
+
+/* end_critical_stmt_semantics */
+void end_critical_stmt_semantics (void)
+{
+   int          attr_idx;
+   expr_arg_type    exp_desc;
+   int          ir_idx;
+   boolean      is_call;
+   int          list_idx;
+   opnd_type        opnd;
+   int          save_arg_info_list_base;
+   boolean      semantically_correct = TRUE;
+   char         str[16];
+   int          type_idx;
+   int lib_idx;
+   int call_idx;
+   TRACE (Func_Entry, "end_critical_stmt_semantics", NULL);
+
+   if (max_call_list_size >= arg_list_size) {
+      enlarge_call_list_tables();
+   }
+   save_arg_info_list_base = arg_info_list_base;
+   arg_info_list_base      = arg_info_list_top;
+   arg_info_list_top       = arg_info_list_base + 1;
+   if (arg_info_list_top >= arg_info_list_size) {
+      enlarge_info_list_table();
+   }
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   OPND_FLD(opnd) = NO_Tbl_Idx;
+
+ 
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   OPND_FLD(opnd) = NO_Tbl_Idx;
+    lib_idx = create_lib_entry_attr("caf_end_critical_",
+		   strlen("caf_end_critical_"),
+		   stmt_start_line,
+		   stmt_start_col);
+
+    ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+
+    NTR_IR_TBL(call_idx); //create new list index in call_idx
+    IR_OPR(call_idx) = Call_Opr;
+    IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+    IR_LINE_NUM(call_idx) = stmt_start_line;
+    IR_COL_NUM(call_idx) = stmt_start_col;
+    IR_FLD_L(call_idx) = AT_Tbl_Idx;
+    IR_IDX_L(call_idx) = lib_idx;
+    IR_LINE_NUM_L(call_idx) = stmt_start_line;
+    IR_COL_NUM_L(call_idx) = stmt_start_col;
+
+    NTR_IR_LIST_TBL(list_idx); 
+    IR_FLD_R(call_idx) = IL_Tbl_Idx;
+    IR_IDX_R(call_idx) = list_idx;
+    IR_LIST_CNT_R(call_idx) = 0;
+
+    gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
+		   FALSE, FALSE, TRUE);
+
+    SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+    SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE; //skip this new stmt during pass 2 semantics
+       
+    curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+    SH_NEXT_IDX(curr_stmt_sh_idx) =
+ 	   SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
+    SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
+	   curr_stmt_sh_idx;
+}  /* end_critical_stmt_semantics */
+
+
+
+
 #endif /* _UH_COARRAYS */
 
 

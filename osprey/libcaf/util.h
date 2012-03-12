@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran 
 
- Copyright (C) 2011 University of Houston.
+ Copyright (C) 2011-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -33,4 +33,8 @@ extern void farg_init(int *argc, char ***argv);
 
 extern void farg_free();
 
+/* debug utility functions */
+
+extern void debug_print_array_int(char *name, int *arr, int n);
+extern void debug_print_array_long(char *name, long *arr, int n);
 #endif /* _UTIL_H */

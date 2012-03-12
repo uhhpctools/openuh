@@ -2,7 +2,7 @@
 #
 #  Runtime library for supporting Coarray Fortran
 #
-#  Copyright (C) 2010-2012 University of Houston.
+#  Copyright (C) 2010-2011 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -27,12 +27,10 @@
 #  http://www.cs.uh.edu/~hpctools
 #
 #
-################################################################
-
 
 
 # What we're building, and where to find it.
-LIBRARY = libcaf-armci.a
+LIBRARY := libcaf-extra.a
 TARGETS = $(LIBRARY)
 SRC_DIRS    = $(BUILD_BASE)
 
@@ -42,25 +40,14 @@ include $(COMMONDEFS)
 VPATH    =  $(SRC_DIRS)
 
 # Compiler options
-LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
-LCDEFS = $(HOSTDEFS) $(TARGDEFS)
-LCDEFS += -D_LITTLE_ENDIAN -D_WORD32 -D_LIB_INTERNAL -D_GNU_SOURCE -U__mips -DKEY -DPATHSCALE_MERGE -DNDEBUG
-LCDEFS += -DENABLE_TRACES
-LCINCS = -I$(BUILD_BASE)/../../clibinc
-LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
+# LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 
-LCINCS += -I$(MPI_INCLUDE)
+#CFLAGS += -DTARG_$(BUILD_TARGET)
 
-CFLAGS += -DTARG_$(BUILD_TARGET)
 
-CFILES = \
-   caf_rtl.c \
-   armci_comm_layer.c \
-   trace.c \
-   util.c
-
-LCINCS += -I$(ARMCI_HOME)/src 
-LCDEFS += -DARMCI 
+OBJECTS = \
+	caf_reductions.o \
+	caf_broadcasts.o
 
 default: $(TARGETS)
 

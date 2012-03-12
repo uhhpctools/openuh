@@ -21841,5 +21841,30 @@ Error :  SYNC must be followed by ALL, IMAGES, or MEMORY. Not "%s".
 .PP
 SYNC should be followed by ALL, IMAGES, or MEMORY keyword.
 .ME
-$ LAST NUMBER USED : 1703
-	
+$
+$ Error : 1704
+$msg  1704 CRITICAL must not be followed by any constructs/strings
+$nexp 1704
+Error : CRITICAL must not be followed by any constructs/strings
+.PP
+CRITICAL must not be followed by any constructs/strings
+.ME
+$
+$ Error : 1705
+$msg  1705  SYNC should not be nested within a CRITICAL section
+$nexp 1705
+Error : SYNC should not be nested within a CRITICAL section
+.PP
+SYNC should not be nested within a CRITICAL section
+.ME
+$
+$ Error : 1706
+$msg  1706  CRITICAL should not be nested within another CRITICAL section
+$nexp 1706
+Error : CRITICAL should not be nested within another CRITICAL section
+.PP
+CRITICAL should not be nested within another CRITICAL section
+.ME
+$ LAST NUMBER USED : 1706
+
+

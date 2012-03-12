@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran 
 
- Copyright (C) 2011 University of Houston.
+ Copyright (C) 2011-2012 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -26,8 +26,11 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "trace.h"
 
 
 /* for fortran command argument passing */
@@ -76,3 +79,50 @@ void farg_free()
     free(fargv);
   }
 }
+
+/* debug utility functions */
+
+void debug_print_array_int(char *name, int *arr, int n)
+{
+  char str[100];
+  int i;
+
+  memset(str, 0, 100);
+
+  sprintf(str,"*** %s = {", name);
+  if (n < 1) {
+    sprintf(&str[strlen(str)],"}\n");
+    return;
+  }
+  sprintf(&str[strlen(str)],"%d",arr[0]);
+  for (i = 1; i < n; i++) {
+    sprintf(&str[strlen(str)],",%d", arr[i]);
+  }
+  sprintf(&str[strlen(str)],"}");
+
+  //fprintf(stderr, "%s\n", str);
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
+}
+
+void debug_print_array_long(char *name, long *arr, int n)
+{
+  char str[100];
+  int i;
+
+  memset(str, 0, 100);
+
+  sprintf(str,"*** %s = {", name);
+  if (n < 1) {
+    sprintf(&str[strlen(str)],"}\n");
+    return;
+  }
+  sprintf(&str[strlen(str)],"%ld",arr[0]);
+  for (i = 1; i < n; i++) {
+    sprintf(&str[strlen(str)],",%ld", arr[i]);
+  }
+  sprintf(&str[strlen(str)],"}");
+
+  //fprintf(stderr, "%s\n", str);
+  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
+}
+

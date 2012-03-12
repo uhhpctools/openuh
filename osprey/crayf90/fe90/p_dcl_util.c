@@ -4109,6 +4109,13 @@ int     parse_pe_array_spec(int    attr_idx)
          }
       }
 
+      /* error if no star is seen */
+      if (BD_ARRAY_CLASS(bd_idx) == Explicit_Shape) {
+        BD_DCL_ERR(bd_idx)       = TRUE;
+        PRINTMSG(line, 116, Error, column);
+        parse_err_flush(Find_Rparen, NULL);
+      }
+
       BD_LB_IDX(bd_idx, rank)   = lb_len_idx;
       BD_LB_FLD(bd_idx, rank)   = lb_fld;
       BD_UB_IDX(bd_idx, rank)   = ub_len_idx;

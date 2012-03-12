@@ -5589,8 +5589,17 @@ static	void	attr_semantics(int	attr_idx,
       if (ATD_ALLOCATABLE(attr_idx)) {
          ATD_IM_A_DOPE(attr_idx) = TRUE;
 
+#ifndef _UH_COARRAYS
          if (ATD_ARRAY_IDX(attr_idx) == NULL_IDX ||
              BD_ARRAY_CLASS(ATD_ARRAY_IDX(attr_idx)) != Deferred_Shape) {
+#else
+         /* only check for NULL ATD_ARRAY_IDX or a non-deferred shape
+          * BD_ARRAY_CLASS if no codimensions
+          */
+         if (ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX &&
+             (ATD_ARRAY_IDX(attr_idx) == NULL_IDX ||
+             BD_ARRAY_CLASS(ATD_ARRAY_IDX(attr_idx)) != Deferred_Shape)) {
+#endif
             AT_DCL_ERR(attr_idx) = TRUE;
             PRINTMSG(AT_DEF_LINE(attr_idx), 570, Error,
                      AT_DEF_COLUMN(attr_idx),

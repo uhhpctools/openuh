@@ -109,6 +109,7 @@ contributions of PathScale Inc. and Sun Chan at SimpLight Nanoelectronics.
 %{open64_lib_dir}/%{open64_version}/libmv.a
 %{open64_lib_dir}/%{open64_version}/libopenmp.a
 %{open64_lib_dir}/%{open64_version}/libopenmp-pcl.a
+%{open64_lib_dir}/%{open64_version}/libcaf-extra.a
 %{open64_lib_dir}/%{open64_version}/libcaf-armci.a
 %{open64_lib_dir}/%{open64_version}/libcaf-gasnet.a
 %endif
@@ -144,6 +145,7 @@ contributions of PathScale Inc. and Sun Chan at SimpLight Nanoelectronics.
 %{open64_lib_dir}/%{open64_version}/32/libmv.a
 %{open64_lib_dir}/%{open64_version}/32/libopenmp.a
 %{open64_lib_dir}/%{open64_version}/32/libopenmp-pcl.a
+%{open64_lib_dir}/%{open64_version}/32/libcaf-extra.a
 %{open64_lib_dir}/%{open64_version}/32/libcaf-armci.a
 %{open64_lib_dir}/%{open64_version}/32/libcaf-gasnet.a
 %endif

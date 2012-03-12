@@ -1613,7 +1613,11 @@ cwh_types_array_util(INT16 rank, TY_IDX ety_idx, INT32 align, INT64 size, const 
   TY_IDX  ty_idx ;
   INT16 i ;
 
+#ifndef _UH_COARRAYS
   if (rank == 0)
+#else
+  if ((rank == 0) && (corank == 0) )
+#endif
     return (0);
 
   BUMP_TY_COUNTER(c_TY_ARRAY);
