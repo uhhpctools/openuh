@@ -5,18 +5,18 @@ OpenUH is a branch of the Open64 repository, focusing on compiler
 implementation for parallel programming models and support for parallel
 program analysis tools.
 
-OpenUH2011 is the latest release of the OpenUH compiler from the HPCTools
+OpenUH 3.0 is the latest release of the OpenUH compiler from the HPCTools
 Group at the University of Houston. It is based on the Open64 5.0 compiler
 infrastructure, and provides a number of features to facilitate parallel
-programming for HPC application development. The OpenUH2011 source code may be
+programming for HPC application development. The OpenUH 3.0 source code may be
 downloaded on the web, or retrieved from the Open64.net public subversion
-repository. Prebuilt installations of OpenUH2011 are also available online. 
+repository. Prebuilt installations of OpenUH 3.0 are also available online. 
 
 OpenMP
 --------
 OpenUH2011 extends the Open64 OpenMP implementation by adding support for
 nested parallelism, OpenMP 3.0, and other OpenMP bug fixes. The OpenMP runtime
-library that comes with OpenUH2011 supports several task scheduling
+library that comes with OpenUH 3.0 supports several task scheduling
 strategies, enables selection of more scalable barrier algorithms, and
 provides an implementation of the OpenMP Collector API for interaction with
 performance collection tools. 
@@ -26,13 +26,13 @@ OpenMP programs.
 
 Coarray Fortran
 ----------------
-OpenUH2011 provides support for Coarray Fortran (CAF), an extension that has
+OpenUH 3.0 provides support for Coarray Fortran (CAF), an extension that has
 been adopted in the Fortran 2008 standard. With the use of coarrays, a
 programmer can easily write parallel Fortran programs for distributed systems.
 CAF provides an array extension for carrying out 1-sided communication
 between executing "images", as well as a number of intrinsic functions for
 synchronization between all or a specified subset of the images. The
-OpenUH2011 CAF implementation can work in conjunction with either the GASNet
+OpenUH 3.0 CAF implementation can work in conjunction with either the GASNet
 or ARMCI runtime libraries, open-source projects which are freely downloadable
 online.
 
@@ -42,15 +42,15 @@ respectively.
 Dragon
 ----------
 Dragon is a compiler tool for visualizing call graph, control-flow graph,
-array region accesses, and more. OpenUH2011 can generate analysis files that
+array region accesses, and more. OpenUH 3.0 can generate analysis files that
 Dragon can load and present to the user.
 
 To use with Dragon, compile with -dragon. The Dragon tool will be available at
 the HPCTools group website for download. 
 
 
-Merge History:
---------------
+Open64 Merge History:
+---------------------
 
 [11]  merged r3741:3777 of Open64 main trunk. (11/14/11)
 [10]  merged r3669:3741 of Open64 main trunk. (9/23/11)
