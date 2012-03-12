@@ -239,7 +239,7 @@ main (int argc, char *argv[])
                 Dragon_Flag = TRUE;
 #else
             if(strcasecmp(argv[i],"-dragon") == 0)
-                warning("-dragon option is not supported. Configure using --with-dragon-support");
+                warning("-dragon option is not supported. Configure using --enable-dragon-support");
 #endif
             if(strcasecmp(argv[i],"-epilog") == 0)
                 Epilog_Flag = TRUE;

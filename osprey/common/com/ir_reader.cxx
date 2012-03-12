@@ -759,27 +759,18 @@ extern void Dragon_IPA_IR_Filename_Dirname(SRCPOS srcpos,        /* in */
       file_table_v.push_back(file_d);
     }
 
-
       int fileidx = USRCPOS_filenum(usrcpos) - 1 ;
-      printf("fileidx = %d\n", fileidx);
 
-      //int len = strlen(file_table_v[fileidx].name.c_str());
       // wei added
       int len = strlen(file_table_v[0].name.c_str());
       fname = new char[len+1];
       strcpy(fname,file_table_v[0].name.c_str());
 
-      printf("fname = %s\n", fname);
-
-      //int diridx = file_table_v[fileidx].incl_index - 1;
-      //len = strlen(incl_table_v[diridx].c_str());
       int diridx = file_table_v[0].incl_index - 1;
       len = strlen(incl_table_v[diridx].c_str());
 
       dirname = new char[len+1];
-      //strcpy(dirname,incl_table_v[diridx].c_str());
       strcpy(dirname,incl_table_v[diridx].c_str());
-      printf("dirname = %s\n", dirname);
    }
 }
 

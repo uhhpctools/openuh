@@ -54,3 +54,9 @@ G77_srand_1 (const long long * seed)
   return 0;
 }
 #endif /* KEY Bug 1683, 5019 */
+
+int
+srand_ (const integer * seed)
+{
+  return G77_srand_0(seed);
+}

@@ -579,7 +579,7 @@ Perform_Interprocedural_Analysis ()
         int len = strlen (output_filename);
         char *cg_filename = new char[len+3];
         strcpy(cg_filename,output_filename);
-        strcat(cg_filename,".d");
+        strcat(cg_filename,".dgn");
 
         char *rg_filename = new char[len+7];
         strcpy(rg_filename,output_filename);
@@ -598,8 +598,14 @@ Perform_Interprocedural_Analysis ()
         delete [] rg_filename;
         cleanup_all_files();
         //     Signal_Cleanup(1);
-        exit(0);
 
+        if (Verbose) {
+          fprintf (stderr, "\n");
+        }
+
+        fprintf (stderr, "Dragon call graph created. Exiting. \n");
+        fflush (stderr);
+        exit(0);
     }
 #endif
 
@@ -1001,4 +1007,9 @@ Perform_Interprocedural_Analysis() { // ipa/main/analyze/ipa_main.cxx
 #endif
 
    IPA_identify_no_return_procs();
+
+   if (Verbose) {
+     fprintf (stderr, "\n");
+     fflush (stderr);
+   }
 }

@@ -6170,7 +6170,7 @@ LRA_Allocate_Registers (BOOL lra_for_pu)
      TODO:
      Look for an accurate way to get the global register info.
    */
-  memset( (void*)float_reg_could_be_128bit, sizeof(float_reg_could_be_128bit), 0 );
+  memset( (void*)float_reg_could_be_128bit, 0, sizeof(float_reg_could_be_128bit) );
 
   if( Is_Target_SSE2() &&
       !CG_localize_tns &&

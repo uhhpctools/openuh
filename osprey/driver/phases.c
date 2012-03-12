@@ -2042,6 +2042,7 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
         }
 	    if (option_was_seen(O_mp) ||
 		option_was_seen(O_apo) ||	// bug 6334
+        option_was_seen(O_pfa) ||
 		option_was_seen(O_fopenmp)) {
                 char *use_pcl_omp = getenv("USE_PCL_TASKS");
                 if (use_pcl_omp != NULL &&

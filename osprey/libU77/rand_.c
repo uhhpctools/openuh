@@ -76,3 +76,9 @@ G77_rand_0 (integer * flag)
   return (float) rand () / RAND_MAX;
 #endif /* KEY Bug 1683 */
 }
+
+double
+rand_ (integer * flag)
+{
+  return G77_rand_0(flag);
+}
