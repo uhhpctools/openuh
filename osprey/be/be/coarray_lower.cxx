@@ -519,6 +519,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 temp_wipre = wipre;
                 wipre = curr_wipre;
                 
+#if 0
                /*generic coarray syntax check for ints and chars*/ 
                 array_st = WN_st(WN_kid0(wn));
                 ty1 = get_array_type(array_st);
@@ -545,6 +546,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 /* break if not cosubscripted */
                 if (WN_kid_count(wn) == (1+2*rank))
                     break;
+#endif
+
+                if (!array_ref_is_coindexed(wn))
+                  break;
 
                 if (WN_operator(parent) == OPR_ILOAD) {
                     /* this is a coarray read */
@@ -1632,6 +1637,10 @@ static BOOL array_ref_is_coindexed(WN *arr)
   if ((WN_operator(arr) != OPR_ARRAY) &&
       (WN_operator(arr) != OPR_ARRSECTION))
     return 0;
+
+  /* assume for now that any cosubscripted access will have offset 0 */
+  if ( WN_offset(WN_kid0(arr)) != 0)
+   return 0;
 
   array_st = WN_st(WN_kid0(arr));
   ty = get_array_type(array_st);

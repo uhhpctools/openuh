@@ -1101,7 +1101,15 @@ static void parse_cpnt_dcl_stmt()
          }
       }
 
+#ifndef _UH_COARRAYS
       if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+#else
+      /* in Fortran 2008 standard, coarray components are allowed so long as
+       * they are allocatable
+       */
+      if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+          !ATD_ALLOCATABLE(attr_idx)) {
+#endif
          PRINTMSG(BD_LINE_NUM(ATD_PE_ARRAY_IDX(attr_idx)), 1579, Error,
                   BD_COLUMN_NUM(ATD_PE_ARRAY_IDX(attr_idx)),
                   AT_OBJ_NAME_PTR(attr_idx),

@@ -63,9 +63,15 @@ else
 fi
 
 if [ -z "$4" ]; then
+  ENABLED_CAF="NO"
+else
+  ENABLED_CAF=$4
+fi
+
+if [ -z "$5" ]; then
   BUILD_CAF_RUNTIME="NO"
 else
-  BUILD_CAF_RUNTIME=$4
+  BUILD_CAF_RUNTIME=$5
 fi 
 
 # set the build host
@@ -679,7 +685,7 @@ INSTALL_NATIVE_HEADER () {
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
     [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.f  ${ROOT}/include/${VERSION}/omp_lib.f
 
-    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/caf/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
+    [ "$ENABLED_CAF" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/caf/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
     return 0
 }
 
@@ -772,7 +778,7 @@ INSTALL_PREBUILD_GNU_NATIVE_CRT_STARTUP
 [ "$INSTALL_TYPE" = "ia64-cross" ] && INSTALL_CROSS_UTIL
 INSTALL_PREBUILD_PHASE 
 [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_MODULES
-[ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_CAF_EXTRA_LIB
+[ "$ENABLED_CAF" = "YES" ] && INSTALL_CAF_EXTRA_LIB
 [ "$BUILD_CAF_RUNTIME" = "YES" ] && INSTALL_CAF_LIB
 exit 0
 

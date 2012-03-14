@@ -1016,7 +1016,7 @@ char		*operator_str[]		= {
                         "Case_Opr",
 			"Allocate_Opr",
                         "Deallocate_Opr",
-                        "End_Opr",   /* reuse for 'critical' keyword support in CAF  */
+                        "End_Opr",
                         "Entry_Opr",
                         "Nullify_Opr",
                         "Pause_Opr",
@@ -1534,7 +1534,7 @@ char		*token_value_str[Tok_LAST+1]	= {
 			"Tok_Kwd_Elemental",	/* Tok_Kwd_Elemental	*/
 			"Tok_Kwd_Else",		/* Tok_Kwd_Else		*/
 			"Tok_Kwd_Encode",	/* Tok_Kwd_Encode	*/
-			"Tok_Kwd_End",		/* Tok_Kwd_End		*/ /* reuse for coarrays 'critical' keyword support */
+			"Tok_Kwd_End",		/* Tok_Kwd_End		*/
 			"Tok_Kwd_Entry",	/* Tok_Kwd_Entry	*/
 #ifdef KEY /* Bug 10572 */
 			"Tok_Kwd_Enum",		/* Tok_Kwd_Enum    	*/

@@ -395,7 +395,7 @@ install_compiler:
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
 	export GASNET_HOME=$(GASNET_HOME); \
 	export ARMCI_HOME=$(ARMCI_HOME); \
-		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(BUILD_CAF_RUNTIME)
+		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME)
 endif
 install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")

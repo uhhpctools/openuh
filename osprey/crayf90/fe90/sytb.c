@@ -4012,7 +4012,6 @@ size_offset_type	stor_bit_size_of(int		 attr_idx,
    if (AT_OBJ_CLASS(attr_idx) == Data_Obj) {
 
       if (ATD_IM_A_DOPE(attr_idx)) {
-
 #ifdef KEY /* Bug 6845 */
 	 boolean is_array = (ATD_ARRAY_IDX(attr_idx) != NULL_IDX);
 	 num = DV_HD_WORD_SIZE;

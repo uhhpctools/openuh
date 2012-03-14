@@ -1285,10 +1285,13 @@ fei_object(char * name_string,
     }
 #endif /* KEY Bug 11574 */
 
-  /* Hack! */
+#ifdef _UH_COARRAYS
+  /* Hack to handle coarrays declared in modules. TODO: come up with a more
+   * elegant solution than this. */
   if (ST_sclass(st) == SCLASS_DGLOBAL) {
 	 Set_ST_is_initialized(st);
   }
+#endif
 
   return(cast_to_long(o));
 }

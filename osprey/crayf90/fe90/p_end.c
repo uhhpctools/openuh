@@ -765,7 +765,6 @@ void parse_end_stmt (void)
                blk_idx = blk_match_err(Forall_Blk, found_name, TRUE);
             }
 
-
 	    break;
 
 	 case Tok_Kwd_Where:
@@ -5947,6 +5946,7 @@ void end_open_mp_workshare_blk(boolean  err_call)
 
 
 
+#ifdef _UH_COARRAYS
 /******************************************************************************\
 |*									      *|
 |* Description:								      *|
@@ -6058,6 +6058,7 @@ static void end_critical_blk(boolean	err_call)
 
 }  /* end_critical_blk */
 
+#endif /* _UH_COARRAYS */
 
 
 
