@@ -519,37 +519,17 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 temp_wipre = wipre;
                 wipre = curr_wipre;
                 
-#if 0
-               /*generic coarray syntax check for ints and chars*/ 
-                array_st = WN_st(WN_kid0(wn));
-                ty1 = get_array_type(array_st);
-                if ( is_dope(ty1) ) { /*check if allocatable type*/
-                    ty1 = TY_pointed(FLD_type(TY_fld(ty1)));
-                    /*
-                    if (TY_kind(ty2) == KIND_POINTER)
-                        ty2 = TY_pointed(ty2);
-                        */
-                    if (!is_coarray_type(ty1))
-                        break;
-                    rank = get_coarray_rank(ty1);
-                    corank = get_coarray_corank(ty1);
-                } else  {             /*check if save type*/
-                    /* break if not coarray */
-                    ty1 = get_array_type(array_st);
-                    if (!is_coarray_type(ty1))  /* break if not coarray */
-                        break;
-
-                    rank = get_coarray_rank(ty1);
-                    corank = get_coarray_corank(ty1);
-                }
-
-                /* break if not cosubscripted */
-                if (WN_kid_count(wn) == (1+2*rank))
-                    break;
-#endif
-
                 if (!array_ref_is_coindexed(wn))
                   break;
+
+                /* find type for the coarray (into ty1) */
+                array_st = WN_st(WN_kid0(wn));
+                ty1 = get_array_type(array_st);
+                if ( is_dope(ty1) ) {
+                    ty1 = TY_pointed(FLD_type(TY_fld(ty1)));
+                } else {
+                    ty1 = get_array_type(array_st);
+                }
 
                 if (WN_operator(parent) == OPR_ILOAD) {
                     /* this is a coarray read */

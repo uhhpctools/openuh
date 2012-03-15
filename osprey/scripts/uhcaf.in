@@ -236,7 +236,7 @@ if [ $COMM_LAYER == gasnet ]; then
 
   get_libs="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LIBS)\"  \
       | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-      | make uhcaf-rule -f -"
+      | make uhcaf-rule --no-print-directory -sf -"
   COMM_LIBS=`eval $get_libs`
 
   if [ $GASNET_CONDUIT != smp ]; then
@@ -282,7 +282,7 @@ elif [ $COMM_LAYER == armci ]; then
 
   get_libs="echo -e \"uhcaf-rule:\n\t@echo -larmci \\\$(MP_LIBS) \\\$(COMM_LIBS)\" \
         | cat  ${ARMCI_HOME}/config/makemp.h ${ARMCI_HOME}/config/makecoms.h - \
-        | make uhcaf-rule -f -"
+        | make uhcaf-rule --no-print-directory -sf -"
 
   COMM_LIBS=`eval $get_libs`
   if [ $MSG_COMMS = MPI ]; then
