@@ -796,7 +796,7 @@ void coarray_read_src_str_(void * src, void *dest, unsigned int ndim,
 
     /* runtime check if it is contiguous transfer */
     for (i = 1; i < ndim; i++) {
-      if (src_str_mults[i] != (src_strides[i-1]*src_extents[i-1])) {
+      if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
         is_contig = 0;
         break;
       }
