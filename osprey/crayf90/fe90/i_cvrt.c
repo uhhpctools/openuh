@@ -11324,7 +11324,12 @@ static TYPE get_type_desc(int	input_idx)
 
 #endif /* defined(_UH_COARRAYS) */
    }
+#ifndef _UH_COARRAYS
    else if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX) {
+#else
+   else if (ATD_ARRAY_IDX(attr_idx) != NULL_IDX ||
+            ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+#endif
       bd_idx = ATD_ARRAY_IDX(attr_idx);
       dist_idx = ATD_DISTRIBUTION_IDX(attr_idx);
       basic_type = pdg_basic_type[TYP_TYPE(ATD_TYPE_IDX(attr_idx))];
@@ -11386,7 +11391,7 @@ static TYPE get_type_desc(int	input_idx)
       }
 
 # ifdef _DEBUG
-      if (! BD_RESOLVED(bd_idx)) {
+      if (bd_idx && ! BD_RESOLVED(bd_idx)) {
          PRINTMSG(1, 626, Internal, 1,
                   "resolved bounds entry",
                   "get_type_desc");

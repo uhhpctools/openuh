@@ -89,8 +89,8 @@ extern void _sma_fortran_deallocate_global(void *p);
 #ifdef _UH_COARRAYS
 extern void *coarray_allocatable_allocate_(unsigned long var_size);
 #pragma weak coarray_allocatable_allocate_
-extern void *coarray_nonsymmetric_allocate_(unsigned long var_size);
-#pragma weak coarray_nonsymmetric_allocate_
+extern void *coarray_asymmetric_allocate_(unsigned long var_size);
+#pragma weak coarray_asymmetric_allocate_
 extern void coarray_deallocate_(void *var_address);
 #pragma weak coarray_deallocate_
 #endif
@@ -262,7 +262,7 @@ _ALLOCATE(AllocHeadType *aloclist,
             if(dva->n_codim)
                 base = coarray_allocatable_allocate_(nbytes);
             else
-                base = coarray_nonsymmetric_allocate_(nbytes);
+                base = coarray_asymmetric_allocate_(nbytes);
 		}
 		else{
 #endif

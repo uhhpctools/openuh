@@ -1222,6 +1222,10 @@ TY2F_Translate_ArrayElt(TOKEN_BUFFER tokens,
       ARB_HANDLE arb_base = TY_arb(arr_ty_idx);
       dim = ARB_dimension(arb_base) - 1 ; 
 
+#ifdef _UH_COARRAYS
+      dim = dim - ARB_codimension(arb_base);
+#endif
+
       while ( dim >= 0)
       {
 	ARB_HANDLE arb = arb_base[dim];

@@ -2233,6 +2233,29 @@ cwh_addr_address_ST(ST * st, OFFSET_64 off, TY_IDX ty)
   switch (ST_sclass(st)){
   case SCLASS_FORMAL:
 
+#ifdef _UH_COARRAYS
+    /* this could happen for a formal arg that is a scalar coarray of derived
+     * type, where the address should be at an offset at which there is a
+     * pointer/allocatable component (which would be a dope vector or
+     * KIND_STRUCT, NOT a KIND_POINTER)
+     */
+    if ( TY_kind(ty) != KIND_POINTER) {
+      if (ST_is_value_parm(st) && !ST_auxst_is_rslt_tmp(st) &&
+         !BY_VALUE(ty)) {
+         wn = cwh_addr_lda(st,off,ty);
+         return wn;
+      }
+
+      wn = cwh_addr_ldid(st,0,ST_type(st));
+      if (off != 0)
+        wn = cwh_expr_bincalc(OPR_ADD,wn,WN_Intconst(Pointer_Mtype,off));
+
+      fg = ACCESSED_LOAD|ACCESSED_ILOAD|ACCESSED_ISTORE ;
+      cwh_addr_access_flags(st,fg);
+      break;
+    }
+#endif
+
     DevAssert((TY_kind(ty) == KIND_POINTER),("formal & non-pointer"));
 
     if (ST_is_value_parm(st) && !ST_auxst_is_rslt_tmp(st) &&
