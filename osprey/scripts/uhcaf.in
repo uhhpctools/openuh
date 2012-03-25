@@ -65,6 +65,8 @@ Where options are
 
   --verbose, -v     Output the command to be run
 
+  --keep, -k        Keep any temporary files in current directory
+
 Environment Variables:
 
    ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI documentation.
@@ -138,7 +140,8 @@ options="`getopt \
 		-l help \
 		-l help2 \
 		-l verbose \
-        -o vhH \
+        -l keep \
+        -o vhHk \
 		-- \
 		$*`"
 
@@ -156,6 +159,8 @@ set -- $options
 
 verbose='n'
 
+keep='n'
+
 while [ $1 != "--" ]
 do
   case $1 in
@@ -168,6 +173,9 @@ do
       ;;
     -H | --help2)
       uhf90_usage
+      ;;
+    -k | --keep)
+      keep='y'
       ;;
     --gasnet-path)
       shift
@@ -191,7 +199,7 @@ do
       elif [[ $layer == gasnet-* ]]; then
         GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
         valid=0
-        for gc in @GASNET_CONDUITS@; do
+        for gc in @GASNET CONDUITS@; do
           if [ $GASNET_CONDUIT == $gc ]; then
             valid=1
           fi
@@ -210,6 +218,16 @@ do
   esac
   shift
 done
+
+# command for creating temporary files
+if [ "$keep" == "y" ]; then
+  if [ ! -d uhcaf.keep ]; then
+    mkdir uhcaf.keep
+  fi
+  mktemp_cmd="mktemp -p uhcaf.keep"
+else
+  mktemp_cmd="mktemp"
+fi
 
 if [ -z "$COMM_LAYER" ]; then
   print_error "No communication layer specified"
@@ -234,10 +252,19 @@ if [ $COMM_LAYER == gasnet ]; then
      print_error "No gasnet conduit set."
   fi
 
-  get_libs="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LIBS)\"  \
-      | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-      | make uhcaf-rule --no-print-directory -sf -"
-  COMM_LIBS=`eval $get_libs`
+  if [ "$keep" == "y" ]; then
+    temp_name=`$mktemp_cmd`
+    mv $temp_name $temp_name.mak
+    echo -e "uhcaf-rule:\n\t@echo \$(GASNET_LIBS)"  \
+     | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak - \
+     > $temp_name.mak
+    COMM_LIBS=`make uhcaf-rule --no-print-directory -sf $temp_name.mak`
+  else
+    get_libs="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LIBS)\"  \
+        | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+        | make uhcaf-rule --no-print-directory -sf -"
+    COMM_LIBS=`eval $get_libs`
+  fi
 
   if [ $GASNET_CONDUIT != smp ]; then
     # need to link in MPI libs as well. If LIBMPI isn't defined, then
@@ -309,27 +336,37 @@ set_env OPENUH_COMM_LIBS $COMM_LIBS
 set_env OPENUH_COMM_LAYER $COMM_LAYER
 
 ENVIRONMENT+="-----------------------\n"
+
+# add some symbols into executable for cafrun script to check
+#
+temp_name=`$mktemp_cmd`
+symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
+            int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT;"
+
+rm -f $temp_name
+echo $symbol_defs | $CC -c -x c -o $temp_name.o -
+
+if [ "$keep" == "y" ]; then
+  keep_opt="-keep"
+else
+  keep_opt=""
+fi
+
 case $verbose in
   y)
     echo "$progname environment:"
     echo -e $ENVIRONMENT
     echo
     echo "$progname:"
-    echo "  $FC $FFLAGS $*"
+    echo "  $FC $FFLAGS $keep_opt $* $temp_name.o"
     echo
     ;;
   *)
     ;;
 esac
 
-# add some symbols into executable for cafrun script to check
-#
-temp_name=`mktemp`
-symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
-            int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT;"
+$FC $FFLAGS $keep_opt $* $temp_name.o
 
-echo $symbol_defs | $CC -c -x c -o $temp_name.o -
-
-$FC $FFLAGS $* $temp_name.o
-
-rm -f $temp_name $temp_name.o
+if [ "$keep" == "n" ]; then
+  rm -f $temp_name.o
+fi

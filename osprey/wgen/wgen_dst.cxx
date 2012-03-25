@@ -2948,7 +2948,7 @@ DST_build(int num_copts, /* Number of options passed to fec(c) */
       // bug 12576: If available, use the original source file name.
       char * dump_base_name = Orig_Src_File_Name ? Orig_Src_File_Name :
                                                    Src_File_Name;
-      comp_unit_idx = DST_mk_compile_unit(Last_Pathname_Component(dump_base_name),
+      comp_unit_idx = DST_mk_compile_unit(dump_base_name,
 					  current_host_dir,
 					  comp_info, 
 				lang_cplus ? DW_LANG_C_plus_plus : DW_LANG_C89,
@@ -3002,7 +3002,7 @@ WGEN_Set_Line_And_File (UINT line, const char* f, bool check)
 	}
 
 	current_dir = Get_Dir_Dst_Info (dir);
-	current_file = Get_File_Dst_Info (file_name, current_dir);
+	current_file = Get_File_Dst_Info (file, current_dir);
 }
 
 #ifdef KEY
