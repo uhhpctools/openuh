@@ -21865,6 +21865,17 @@ Error : CRITICAL should not be nested within another CRITICAL section
 .PP
 CRITICAL should not be nested within another CRITICAL section
 .ME
-$ LAST NUMBER USED : 1706
+$
+$ Error : 1707
+$msg  1707 A coarray-spec must be explicit shape or deferred shape
+$nexp 1707
+Error : A coarray-spec must be explicit shape or deferred shape
+.PP
+Coarray specifiers must either be explicit shape or deferred shape. In case it
+is for a dummy coarray argument, this means that the dummy should either be
+declared with allocatable attribute or its codimenensions should be defined
+afresh.
+.ME
+$ LAST NUMBER USED : 1707
 
 

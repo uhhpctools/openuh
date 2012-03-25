@@ -247,6 +247,10 @@ void allocate_stmt_semantics (void)
       ATD_PTR_ASSIGNED(attr_idx)	= TRUE;
       bd_idx				= ATD_ARRAY_IDX(attr_idx);
 
+
+      /* UH coarrays implementation does not use variable_tmp_idx for ptr/ptee
+       * on allocables. */
+#ifndef _UH_COARRAYS
 # ifdef _F_MINUS_MINUS
       if (ATD_ALLOCATABLE(attr_idx) &&
           ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
@@ -260,6 +264,7 @@ void allocate_stmt_semantics (void)
          ptee_bd_idx = NULL_IDX;
       }
 # endif
+#endif
 
       /* fill in bound info for each dimension */
 
@@ -373,9 +378,18 @@ void allocate_stmt_semantics (void)
                if (IL_PE_SUBSCRIPT(bd_list_idx)) {
                   tmp_idx = BD_LB_IDX(pe_bd_idx, i - BD_RANK(bd_idx));
                }
+#ifndef _UH_COARRAYS
                else {
                   tmp_idx = BD_LB_IDX(ptee_bd_idx, i);
                }
+#elif defined (_DEBUG)
+               else {
+               /* shouldn't reach: ptee_bd_idx is NULL_IDX */
+                 PRINTMSG(line, 626, Internal, col,
+                          "IL_PE_SUBCRIPT != NULL",
+                          "allocate_stmt_semantics");
+               }
+#endif
 
                if (lb_list_idx == NULL_IDX) {
                   OPND_FLD(opnd2) = CN_Tbl_Idx;
@@ -392,9 +406,18 @@ void allocate_stmt_semantics (void)
                if (IL_PE_SUBSCRIPT(bd_list_idx)) {
                   tmp_idx = BD_UB_IDX(pe_bd_idx, i - BD_RANK(bd_idx));
                }
+#ifndef _UH_COARRAYS
                else {
                   tmp_idx = BD_UB_IDX(ptee_bd_idx, i);
                }
+#elif defined (_DEBUG)
+               else {
+                   /* shouldn't reach: ptee_bd_idx is NULL_IDX */
+                 PRINTMSG(line, 626, Internal, col,
+                          "IL_PE_SUBCRIPT != NULL",
+                          "allocate_stmt_semantics");
+               }
+#endif
 
                if (ub_list_idx != NULL_IDX) {
                   asg_opnd_to_tmp(tmp_idx, &IL_OPND(ub_list_idx),
@@ -496,9 +519,18 @@ void allocate_stmt_semantics (void)
                if (IL_PE_SUBSCRIPT(bd_list_idx)) {
                   tmp_idx = BD_XT_IDX(pe_bd_idx, i - BD_RANK(bd_idx));
                }
+#ifndef _UH_COARRAYS
                else {
                   tmp_idx = BD_XT_IDX(ptee_bd_idx, i);
                }
+#elif defined (_DEBUG)
+               else {
+                   /* shouldn't reach: ptee_bd_idx is NULL_IDX */
+                 PRINTMSG(line, 626, Internal, col,
+                          "IL_PE_SUBCRIPT != NULL",
+                          "allocate_stmt_semantics");
+               }
+#endif
 
                if (ub_list_idx == NULL_IDX) {
                   OPND_FLD(xt_opnd) = CN_Tbl_Idx;
@@ -530,9 +562,18 @@ void allocate_stmt_semantics (void)
                   if (IL_PE_SUBSCRIPT(bd_list_idx)) {
                      tmp_idx = BD_LEN_IDX(pe_bd_idx);
                   }
+#ifndef _UH_COARRAYS
                   else {
                      tmp_idx = BD_LEN_IDX(ptee_bd_idx);
                   }
+#elif defined (_DEBUG)
+                  else {
+                   /* shouldn't reach: ptee_bd_idx is NULL_IDX */
+                     PRINTMSG(line, 626, Internal, col,
+                              "IL_PE_SUBCRIPT != NULL",
+                              "allocate_stmt_semantics");
+                  }
+#endif
                   exp_desc.rank            = 0;
                   xref_state               = CIF_No_Usage_Rec;
                   semantically_correct = expr_semantics(&len_opnd, &exp_desc) &&
@@ -589,9 +630,18 @@ void allocate_stmt_semantics (void)
                if (IL_PE_SUBSCRIPT(bd_list_idx)) {
                   tmp_idx = BD_SM_IDX(pe_bd_idx, i - BD_RANK(bd_idx));
                }
+#ifndef UH_COARRAYS
                else {
                   tmp_idx = BD_SM_IDX(ptee_bd_idx, i);
                }
+#elif defined (_DEBUG)
+               else {
+                   /* shouldn't reach: ptee_bd_idx is NULL_IDX */
+                 PRINTMSG(line, 626, Internal, col,
+                          "IL_PE_SUBCRIPT != NULL",
+                          "allocate_stmt_semantics");
+               }
+#endif
 
                asg_opnd_to_tmp(tmp_idx, &stride_opnd, line, col, Before);
             }
@@ -602,6 +652,8 @@ void allocate_stmt_semantics (void)
          }
       }
 
+      /* I think UH coarrays does not need to do this */
+#ifndef _UH_COARRAYS
       if (pe_bd_idx) {
          /* set the ptr to BASE dope vector */
 
@@ -620,6 +672,7 @@ void allocate_stmt_semantics (void)
 
          curr_stmt_sh_idx = save_curr_stmt_sh_idx;
       }
+#endif
 
       /* fill in new dope vectors */
 

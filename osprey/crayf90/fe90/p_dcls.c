@@ -828,7 +828,8 @@ static void parse_cpnt_dcl_stmt()
 
    alignment = WORD_ALIGN;
 
-   if (ATD_POINTER(AT_WORK_IDX)) {
+   if (ATD_POINTER(AT_WORK_IDX) ||
+       ATD_ALLOCATABLE(AT_WORK_IDX)) {
 
       if (cmd_line_flags.s_pointer8) {
          alignment = Align_64;
@@ -977,7 +978,12 @@ static void parse_cpnt_dcl_stmt()
 
 #ifdef KEY /* Bug 6845 */
       if (ATD_ALLOCATABLE(attr_idx)) {
+#ifndef _UH_COARRAYS
 	if (bd_idx == NULL_IDX || BD_ARRAY_CLASS(bd_idx) != Deferred_Shape) {
+#else
+	if (ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX &&
+        (bd_idx == NULL_IDX || BD_ARRAY_CLASS(bd_idx) != Deferred_Shape)) {
+#endif
 	   PRINTMSG(save_line, 570, Error, save_column,
 	      AT_OBJ_NAME_PTR(attr_idx));
 	   AT_DCL_ERR(attr_idx)	= TRUE;

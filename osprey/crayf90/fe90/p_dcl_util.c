@@ -4095,7 +4095,16 @@ int     parse_pe_array_spec(int    attr_idx)
          column = LA_CH_COLUMN;
          NEXT_LA_CH;                            /* Skip STAR */
 
-         BD_ARRAY_CLASS(bd_idx)      = Assumed_Size;
+         if (BD_ARRAY_CLASS(bd_idx) == Deferred_Shape) {
+             /* we encountered a star, and yet we were tracking this to be a
+              * deferred-shape spec */
+             BD_ARRAY_CLASS(bd_idx) = Assumed_Shape;
+             PRINTMSG(line, 1707, Error, column);
+             BD_DCL_ERR(bd_idx)       = TRUE;
+         } else {
+             /* should we call it Assumed_Size or Explicit_Shape? */
+             BD_ARRAY_CLASS(bd_idx)   = Assumed_Size;
+         }
          ub_len_idx                  = lb_len_idx;
          ub_fld                      = lb_fld;
 
@@ -4108,15 +4117,6 @@ int     parse_pe_array_spec(int    attr_idx)
             parse_err_flush(Find_Rparen, NULL);
          }
       }
-
-#ifdef _UH_COARRAYS
-      /* error if no star is seen */
-      if (BD_ARRAY_CLASS(bd_idx) == Explicit_Shape) {
-        BD_DCL_ERR(bd_idx)       = TRUE;
-        PRINTMSG(line, 116, Error, column);
-        parse_err_flush(Find_Rparen, NULL);
-      }
-#endif
 
       BD_LB_IDX(bd_idx, rank)   = lb_len_idx;
       BD_LB_FLD(bd_idx, rank)   = lb_fld;
@@ -4147,6 +4147,11 @@ int     parse_pe_array_spec(int    attr_idx)
        parse_err_flush(Find_EOS, (found_error) ? NULL : ", or )")) {
 
       NEXT_LA_CH;               /* Skip RBRKT */
+   }
+
+   if (BD_ARRAY_CLASS(bd_idx) == Explicit_Shape) {
+       PRINTMSG(line, 1576, Error, column);
+       BD_DCL_ERR(bd_idx)       = TRUE;
    }
 
    if (!non_constant_size) {

@@ -1868,10 +1868,17 @@ boolean parse_deref (opnd_type *result_opnd,
    } /* if (LA_CH_VALUE == LPAREN) */
 
 # ifdef _F_MINUS_MINUS
+#ifndef _UH_COARRAYS
    if (LA_CH_VALUE == LBRKT &&
        cmd_line_flags.co_array_fortran &&
        struct_type_idx == NULL_IDX &&
        AT_OBJ_CLASS(amb_attr_idx) == Data_Obj) {
+#else
+   /* Fortran 2008 allows allocatable coarrays as struct components */
+   if (LA_CH_VALUE == LBRKT &&
+       cmd_line_flags.co_array_fortran &&
+       AT_OBJ_CLASS(amb_attr_idx) == Data_Obj) {
+#endif
 
       if (ATD_PE_ARRAY_IDX(amb_attr_idx) == NULL_IDX) {
          /* not declared with pe dimensions */
@@ -1908,6 +1915,16 @@ boolean parse_deref (opnd_type *result_opnd,
             OPND_FLD((*result_opnd))      = IR_Tbl_Idx;
             OPND_IDX((*result_opnd))      = subs_idx;
          }
+#ifdef _UH_COARRAYS
+         else if (OPND_FLD((*result_opnd)) == IR_Tbl_Idx &&
+                  IR_OPR(OPND_IDX((*result_opnd))) == Struct_Opr) {
+            COPY_OPND(IR_OPND_L(subs_idx), (*result_opnd));
+
+            /* put subs_idx into result opnd for now */
+            OPND_FLD((*result_opnd))      = IR_Tbl_Idx;
+            OPND_IDX((*result_opnd))      = subs_idx;
+         }
+#endif
          else if (OPND_FLD((*result_opnd)) == IR_Tbl_Idx &&
                   IR_OPR(OPND_IDX((*result_opnd))) == Substring_Opr) {
 

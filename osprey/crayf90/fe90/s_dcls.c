@@ -7528,15 +7528,12 @@ static	void	attr_semantics(int	attr_idx,
 
    }  /* End switch */
 
+      /* I think UH coarrays does not need to set up ptr/ptee for allocatable
+       * coarrays */
+#ifndef _UH_COARRAYS
 # ifdef _F_MINUS_MINUS
    if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
-#ifndef _UH_COARRAYS
-       ATD_CLASS(attr_idx) == Variable
-#else
-       ( ATD_CLASS(attr_idx) == Variable  ||
-       ATD_CLASS(attr_idx) == Dummy_Argument)
-#endif
-       &&
+       ATD_CLASS(attr_idx) == Variable &&
        ATD_ALLOCATABLE(attr_idx) &&
        ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
        ATD_VARIABLE_TMP_IDX(attr_idx) == NULL_IDX &&
@@ -7547,6 +7544,8 @@ static	void	attr_semantics(int	attr_idx,
       gen_allocatable_ptr_ptee(attr_idx);
    }
 # endif
+#endif
+
 #ifdef KEY /* Bug 14150 */
    check_interoperable_constraints(attr_idx);
 #endif /* KEY Bug 14150 */

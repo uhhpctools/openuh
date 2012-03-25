@@ -2829,7 +2829,7 @@ cwh_io_conv_arrsection_to_dope(WN *tree, IMPDO_INFO *impdo_set, WN *old_item,
 	
   if (indflag == 0) {
       arr = cwh_addr_find_section(tree, p_RETURN_SECTION);
-      ad = cwh_addr_find_address(arr);
+      ad = WN_COPY_Tree(cwh_addr_find_address(arr));
       wn = cwh_dope_from_expression(tree, NULL, char_len, ty, craytype);
       wn = WN_CreateIoItem2(IOL_DOPE, wn, ad, NIL);
       return wn;
