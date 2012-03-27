@@ -1656,10 +1656,6 @@ void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
     }
     count[0] = count[0] * elem_size;
 
-    debug_print_array_long("src_stride_ar", src_stride_ar, k1);
-    debug_print_array_long("dest_stride_ar", dest_stride_ar, k2);
-    debug_print_array_long("count", count, j);
-
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "gasnet_comm_layer.c:comm_read_full_str->Before gasnet_gets"
         " from %p on image %lu to %p ndim %lu",

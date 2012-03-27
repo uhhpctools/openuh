@@ -29,7 +29,7 @@
 #ifndef _TRACE_H
 #define _TRACE_H 
 
-#ifdef ENABLE_TRACES
+#ifdef ENABLE_LIBCAF_TRACES
 # define LIBCAF_TRACE_INIT __libcaf_tracers_init
 # define LIBCAF_TRACE __libcaf_trace
 # define START_TIMER  __start_timer
