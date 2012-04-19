@@ -247,15 +247,19 @@ void allocate_stmt_semantics (void)
       ATD_PTR_ASSIGNED(attr_idx)	= TRUE;
       bd_idx				= ATD_ARRAY_IDX(attr_idx);
 
-
-      /* UH coarrays implementation does not use variable_tmp_idx for ptr/ptee
-       * on allocables. */
-#ifndef _UH_COARRAYS
 # ifdef _F_MINUS_MINUS
       if (ATD_ALLOCATABLE(attr_idx) &&
           ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+      /* UH coarrays implementation does not use variable_tmp_idx for ptr/ptee
+       * on allocables. We treat pe_bd_idx as NULL for the purpose of
+       * initializing this dope vector, but mark has_pe_ref as TRUE. */
+#ifndef _UH_COARRAYS
          pe_bd_idx = ATD_PE_ARRAY_IDX(ATD_VARIABLE_TMP_IDX(attr_idx));
          ptee_bd_idx = ATD_ARRAY_IDX(ATD_VARIABLE_TMP_IDX(attr_idx));
+#else
+         pe_bd_idx = NULL_IDX;
+         ptee_bd_idx = NULL_IDX;
+#endif
          has_pe_ref = TRUE;
       }
       else {
@@ -264,7 +268,6 @@ void allocate_stmt_semantics (void)
          ptee_bd_idx = NULL_IDX;
       }
 # endif
-#endif
 
       /* fill in bound info for each dimension */
 
@@ -301,7 +304,7 @@ void allocate_stmt_semantics (void)
 
       find_opnd_line_and_column(&dope_opnd, &line, &col);
 
-      if (bd_idx || pe_bd_idx) {
+      if (bd_idx || has_pe_ref) {
 
          /* set the a_contig flag to TRUE */
 
@@ -597,7 +600,7 @@ void allocate_stmt_semantics (void)
 
                gen_opnd(&stride_opnd, stride.idx, stride.fld, line, col);
             }
-            else if (pe_bd_idx &&
+            else if (has_pe_ref &&
                      i == BD_RANK(bd_idx) + 1) {
               gen_opnd(&stride_opnd, CN_INTEGER_ONE_IDX, CN_Tbl_Idx, line, col);
             }

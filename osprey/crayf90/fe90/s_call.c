@@ -4051,6 +4051,16 @@ boolean final_arg_work(opnd_type	*list_opnd,
 
       association = arg_assoc_tbl[a_type][d_type];
 
+#ifdef _UH_COARRAYS
+      /*  This is a hack to make association PASS_DV if its a coscalar
+       *  and d_type is Intrin_Dope_Dummy */
+
+      if (a_type == Scalar_Var && ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX
+          && d_type == Intrin_Dope_Dummy)
+          association = PASS_DV;
+#endif
+
+
       if (association == PASS_ADDRESS_FROM_DV           &&
 # ifdef _TRANSFORM_CHAR_SEQUENCE
           (arg_info_list[info_idx].ed.type == Character  ||

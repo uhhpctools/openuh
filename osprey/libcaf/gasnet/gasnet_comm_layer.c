@@ -39,6 +39,12 @@
 #include "util.h"
 
 
+/* common_slot is a node in the shared memory link-list that keeps track
+ * of available memory that can used for both allocatable coarrays and
+ * asymmetric data. It is the only handle to access the link-list.*/
+extern struct shared_memory_slot *common_slot;
+
+
 /*
  * Static variable declarations
  */
@@ -97,6 +103,8 @@ static int cs_done=0;
 
 /* forward declarations */
 
+static inline int address_on_heap(void *addr);
+
 static void handler_sync_request(gasnet_token_t token, int imageIndex);
 
 static void handler_critical_request(gasnet_token_t token,
@@ -121,6 +129,20 @@ inline unsigned long comm_get_proc_id()
 inline unsigned long comm_get_num_procs()
 {
     return num_procs;
+}
+
+static inline int address_on_heap(void *addr)
+{
+    void *start_heap;
+    void *end_heap;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_heap = coarray_start_all_images[my_proc].addr;
+    end_heap = common_slot->addr;
+
+    return (addr >= start_heap && addr <= end_heap);
 }
 
 
@@ -1143,7 +1165,7 @@ static void *get_remote_address(void *src, unsigned long img)
 {
     unsigned long offset;
     void * remote_start_address;
-    if (img == my_proc)
+    if ( (img == my_proc) || !address_on_heap(src) )
         return src;
     if (gasnet_everything)
     {
