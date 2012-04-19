@@ -784,6 +784,7 @@ add_file_args_first (string_list_t *args, phases_t index)
 	add_string(args, "-D__OPENCC_PATCHLEVEL__=" OPEN64_PATCH_LEVEL);
       }
       #endif
+	add_string(args, "-D__OPENUH__=\"" OPENUH_FULL_VERSION "\"");
   }
 }
 
