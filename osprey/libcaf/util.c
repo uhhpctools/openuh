@@ -61,7 +61,7 @@ void farg_init(int *argc, char ***argv)
     while (*cptr != ' ') cptr++; 
     *cptr = '\0';
 
-    fargv[i] = malloc(sizeof(char) * strlen(arg));
+    fargv[i] = malloc(sizeof(char) * (strlen(arg)+1));
     strcpy(fargv[i], arg);
   }
 
