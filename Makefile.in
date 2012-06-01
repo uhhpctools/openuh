@@ -372,6 +372,12 @@ install:
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
 		$(TOP_SRCDIR)/INSTALL.cross.sl @abs_top_builddir@
 else
+ifeq ($(BUILD_TARGET), PPC32)
+install:
+	export TOOLROOT=@prefix@; \
+	export TOP_SRCDIR=$(TOP_SRCDIR); \
+		$(TOP_SRCDIR)/INSTALL.cross.ppc @abs_top_builddir@ @abs_top_srcdir@
+else
 install: install_fe install_compiler
 
 install_fe:
@@ -396,6 +402,7 @@ install_compiler:
 	export GASNET_HOME=$(GASNET_HOME); \
 	export ARMCI_HOME=$(ARMCI_HOME); \
 		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME)
+endif
 endif
 install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
@@ -436,9 +443,11 @@ library2 lib2 clean-library2 clean-lib2 : LOCAL_LIB_ARGS = $(LIB2_ARGS)
 
 library lib library2 lib2 : build
 
+ifneq ($(BUILD_TARGET), PPC32)
 library lib clean-library clean-lib library2 lib2 clean-library2 clean-lib2:
 	@echo "$(MAKE) -C $(LOCAL_LIB_BUILD_DIR) $(LOCAL_LIB_ACTION) $(LOCAL_LIB_ARGS)"; \
 	$(MAKE) -C $(LOCAL_LIB_BUILD_DIR) $(LOCAL_LIB_ACTION) $(LOCAL_LIB_ARGS)
+endif
 
 clobber: clean 
 	rm -rf $(CROSSDIR) $(BOOTDIR)

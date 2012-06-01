@@ -227,7 +227,8 @@ static void Push_Current_Function_Decl(gs_t decl){
   func_decl_stack_top++;
   if (func_decl_stack_top == func_decl_stack_size) {
     func_decl_stack_size++;
-    func_decl_stack = (gs_t *)realloc(func_decl_stack, func_decl_stack_size);
+    func_decl_stack = (gs_t *)realloc(func_decl_stack, 
+			              func_decl_stack_size * sizeof(gs_t));
   }
   func_decl_stack[func_decl_stack_top] = decl;
 }
@@ -3443,6 +3444,16 @@ AGGINIT::Traverse_Aggregate_Struct (
 #endif
                                 is_bit_field, field_id, fld, emitted_bytes);
         // emitted_bytes updated by the call as reference parameter
+
+        // bug908 open64.net. update field_id for the case of field is struct type.                        
+        if (TY_kind(fld_ty) == KIND_STRUCT) {
+          FLD_HANDLE field;
+          field = TY_fld(fld_ty); // get first field
+          while (!field.Is_Null()) {
+            field_id=Advance_Field_Id(field,field_id);
+            field=FLD_next(field);
+          }
+        }        
       }
     }
 
@@ -4723,12 +4734,28 @@ WGEN_Assemble_Alias (gs_t decl, gs_t target)
   else {
     Set_ST_base_idx (st, ST_st_idx (base_st));
     Set_ST_emit_symbol(st);	// for cg
-    if (ST_is_initialized (base_st))
+    if (ST_is_initialized (base_st)) {
       Set_ST_is_initialized (st);
+      // bug924 open64.net. global alias symbol with base initialized
+      // should set storage class SCLASS_DGLOBAL.
+      if (ST_sclass(st) == SCLASS_COMMON || ST_sclass(st) == SCLASS_UGLOBAL) 
+        Set_ST_sclass (st, SCLASS_DGLOBAL);
+    }
 #ifdef KEY
-    if (ST_init_value_zero (base_st))
+    if (ST_init_value_zero (base_st)) {
       Set_ST_init_value_zero (st);
+      // bug924 open64.net. Those base initialized zero
+      // symbols should restore to SCLASS_UGLOBAL.
+      if (ST_sclass(st) == SCLASS_DGLOBAL)
+        Set_ST_sclass (st, SCLASS_UGLOBAL);
+    }
 #endif
+    // bug924 open64.net aliased symbols in COMMON section should be 
+    // set to be uninitialized. Since aliased symbols themselves 
+    // should never be allocated.
+    if (ST_sclass(st) == SCLASS_COMMON) {
+      Set_ST_sclass (st, SCLASS_UGLOBAL);
+    }
   }
 #ifdef KEY
   if (!lang_cplus)

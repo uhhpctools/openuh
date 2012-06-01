@@ -159,7 +159,7 @@ typedef hash_map<const TCON*, TCON_IDX, tcon_hash, eq_tcon,
 struct eq_const_st
 {
     bool operator() (const ST* st1, const ST* st2) const {
-	return memcmp (st1, st2, sizeof(ST) - sizeof(ST_IDX) * 2 - sizeof(TY_IDX)) == 0;
+      return memcmp (st1, st2, sizeof(ST) - sizeof(ST_IDX) * 2 - sizeof(TY_IDX) - sizeof(mUINT32)) == 0;
     }
 };
 

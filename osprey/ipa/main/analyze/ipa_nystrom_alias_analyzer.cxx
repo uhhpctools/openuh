@@ -256,6 +256,19 @@ ConstraintGraph::findUniqueCallSite(CallSiteId csid)
 }
 
 void 
+ConstraintGraph::setUniqueMapped(void)
+{
+  Is_True(_uniqueMapped == false, ("unique map already tranformed\n"));
+  _uniqueMapped = true;
+}
+
+bool 
+ConstraintGraph::uniqueMapped(void)
+{
+  return _uniqueMapped;
+}
+
+void 
 ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
 {
   INT32 size;
@@ -274,6 +287,7 @@ ConstraintGraph::buildCGipa(IPA_NODE *ipaNode)
   // during summary to constraint graph construction, map them to their 
   // globally unique ids so that lookups don't fail
   _uniqueCGNodeIdMap[notAPointer()->id()] = notAPointer();
+  _uniqueMapped = false;
 
   // Add the StInfos.
   UINT32 stInfoIdx = proc->Get_constraint_graph_stinfos_idx();
@@ -1989,6 +2003,8 @@ IPA_NystromAliasAnalyzer::mapWNToUniqCallSiteCGNodeId(IPA_NODE *node)
   FmtAssert(entryWN != NULL, ("Null WN tree!\n"));
 
   ConstraintGraph *cg = this->cg(node->Node_Index());
+  if (cg->uniqueMapped())
+    return;
 
   // fprintf(stderr, "mapWNToUniqCGNodeId: %s\n", cg->name());
 
@@ -2016,6 +2032,7 @@ IPA_NystromAliasAnalyzer::mapWNToUniqCallSiteCGNodeId(IPA_NODE *node)
       WN_MAP_CGNodeId_Set(wn, newId);
     }
   }
+  cg->setUniqueMapped();
 }
 
 void

@@ -83,6 +83,7 @@
 #include "optimizer.h"                  // Pre_Optimizer
 #include "region_main.h"                // REGION_Initialize
 #include "ipa_main.h"
+#include "ipa_nystrom_alias_analyzer.h"
 
 // --- from wopt.so
 #pragma weak Create_Du_Manager
@@ -686,7 +687,6 @@ IPA_Preoptimize (IPA_NODE* node)
     fdump_tree (TFile, wn);
   }
 
-
   REGION_Initialize (wn, PU_has_region(node->Get_PU()));
 
   MEM_POOL_Push (&MEM_local_pool);
@@ -714,6 +714,20 @@ IPA_Preoptimize (IPA_NODE* node)
   PU_adjust_addr_flags(Get_Current_PU_ST(), wn);
 
   DU_MANAGER* du_mgr = Create_Du_Manager (MEM_pu_nz_pool_ptr);
+
+  // tell alias analyzer, current nystrom alias analyzer
+  // is crated for IPA
+  if (Alias_Nystrom_Analyzer) {
+    Alias_Analyzer_in_IPA = TRUE;
+    UINT16 fileIdx = (UINT16)(node->File_Index());
+    UINT16 puIdx   = (UINT16)(node->Proc_Info_Index());
+    Current_IPANode_File_PU_Idx = (fileIdx << 16) | puIdx;
+
+    IPA_NystromAliasAnalyzer *ipan = IPA_NystromAliasAnalyzer::aliasAnalyzer();
+    ConstraintGraph::IPANodeCG(ipan->cg(node->Node_Index()));
+
+    IPA_NystromAliasAnalyzer::aliasAnalyzer()->mapWNToUniqCallSiteCGNodeId(node);
+  }
   ALIAS_MANAGER* alias_mgr = Create_Alias_Manager (MEM_pu_nz_pool_ptr, wn);
 
   // call the preopt, which then calls Perform_Procedure_Summary_Phase

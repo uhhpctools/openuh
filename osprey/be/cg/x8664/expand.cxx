@@ -5709,12 +5709,20 @@ static void Expand_Complex_Multiply( OPCODE opcode, TN *result,
     TN* tmp5 = Build_TN_Like(src1);
     
     Build_OP(TOP_fmovsldup, tmp1, src2, ops);
-    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && 
+        Is_Target_AVX() && 
+        Is_Target_FMA4()) {
       Build_OP(TOP_fmovshdup,tmp3, src2, ops);
       Build_OP(TOP_shufps, tmp4, src1, src1, Gen_Literal_TN(177, 1), ops);
       Build_OP(TOP_fmul128v32, tmp5, tmp3, tmp4, ops);
       Build_OP(TOP_vfmaddsubps, result, tmp1, src1, tmp5, ops);  
+    } else if ((CG_opt_level > 1) && 
+              Is_Target_AVX() && 
+              Is_Target_FMA()) {
+      Build_OP(TOP_fmovshdup,tmp3, src2, ops);
+      Build_OP(TOP_shufps, tmp4, src1, src1, Gen_Literal_TN(177, 1), ops);
+      Build_OP(TOP_fmul128v32, tmp5, tmp3, tmp4, ops);
+      Build_OP(TOP_xfmaddsub213ps, result, tmp1, src1, tmp5, ops);  
     } else {
       Build_OP(TOP_fmul128v32, tmp2, tmp1, src1, ops);
       Build_OP(TOP_fmovshdup,tmp3, src2, ops);
@@ -5755,13 +5763,22 @@ static void Expand_Complex_Multiply( OPCODE opcode, TN *result,
     TN* tmp6 = Build_TN_Like(src1);
     
     Build_OP(TOP_fmovddup, tmp1, src2_t, ops);
-    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && 
+        Is_Target_AVX() && 
+        Is_Target_FMA4()) {
       Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
       Build_OP(TOP_shufpd, tmp4, src2_t, src2_t, Gen_Literal_TN(1, 1), ops);
       Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
       Build_OP(TOP_fmul128v64, tmp6, tmp3, tmp5, ops);
       Build_OP(TOP_vfmaddsubpd, result, src1_t, tmp1, tmp6, ops);  
+    } else if ((CG_opt_level > 1) && 
+                Is_Target_AVX() && 
+                Is_Target_FMA()) {
+      Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_shufpd, tmp4, src2_t, src2_t, Gen_Literal_TN(1, 1), ops);
+      Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
+      Build_OP(TOP_fmul128v64, tmp6, tmp3, tmp5, ops);
+      Build_OP(TOP_xfmaddsub213pd, result, src1_t, tmp1, tmp6, ops);  
     } else {
       Build_OP(TOP_fmul128v64, tmp2, src1_t, tmp1, ops);
       Build_OP(TOP_shufpd, tmp3, src1_t, src1_t, Gen_Literal_TN(1, 1), ops);
@@ -5815,13 +5832,22 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_addsd, tmp4, tmp3, tmp1, ops);
     Build_OP(TOP_fmovddup, tmp5, tmp4, ops);
     Build_OP(TOP_fmovddup, tmp6, src2, ops);
-    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && 
+        Is_Target_AVX() && 
+        Is_Target_FMA4()) {
       Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
       Expand_Neg(tmp12, tmp2, MTYPE_F8, ops);
       Build_OP(TOP_fmovddup, tmp13, tmp12, ops);
       Build_OP(TOP_fmul128v64, tmp10, tmp9, tmp13, ops);
       Build_OP(TOP_vfmaddsubpd, tmp11, tmp6, src1, tmp10, ops);  
+    } else if ((CG_opt_level > 1) && 
+               Is_Target_AVX() &&
+               Is_Target_FMA()) {
+      Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
+      Expand_Neg(tmp12, tmp2, MTYPE_F8, ops);
+      Build_OP(TOP_fmovddup, tmp13, tmp12, ops);
+      Build_OP(TOP_fmul128v64, tmp10, tmp9, tmp13, ops);
+      Build_OP(TOP_xfmaddsub213pd, tmp11, tmp6, src1, tmp10, ops);  
     } else {
       Build_OP(TOP_fmul128v64, tmp8, tmp6, src1, ops);
       Build_OP(TOP_shufpd, tmp9, src1, src1, Gen_Literal_TN(1, 1), ops);
@@ -5896,12 +5922,20 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_unpckhpd, tmp5, tmp2, tmp2, ops);
     Build_OP(TOP_fmul128v64, tmp6, tmp5, tmp1, ops);
     Build_OP(TOP_shufpd, tmp7, tmp1, tmp1, Gen_Literal_TN(1, 1), ops);
-    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && 
+        Is_Target_AVX() && 
+        Is_Target_FMA4()) {
       Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp9, tmp3, ops);
       Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
       Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
       Build_OP(TOP_vfmaddsubpd, tmp12, tmp7, tmp4, tmp6, ops);
+    } else if ((CG_opt_level > 1) &&
+               Is_Target_AVX() && 
+               Is_Target_FMA()) {
+      Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp9, tmp3, ops);
+      Build_OP(TOP_shufps, tmp10, src1, src1, Gen_Literal_TN(238, 1), ops);
+      Build_OP(TOP_cvtps2pd, tmp11, tmp10, ops);
+      Build_OP(TOP_xfmaddsub213pd, tmp12, tmp7, tmp4, tmp6, ops);
     } else {
       Build_OP(TOP_fmul128v64, tmp8, tmp7, tmp4, ops);
       Build_OP(TOP_fhadd128v64, tmp9, tmp3, tmp3, ops);
@@ -5919,10 +5953,16 @@ static void Expand_Complex_Divide( OPCODE opcode, TN *result,
     Build_OP(TOP_unpckhpd, tmp20, tmp17, tmp17, ops);
     Build_OP(TOP_fmul128v64, tmp21, tmp20, tmp11, ops);
     Build_OP(TOP_shufpd, tmp22, tmp11, tmp11, Gen_Literal_TN(1, 1), ops);
-    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && 
+        Is_Target_AVX() && 
+        Is_Target_FMA4()) {
       Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp25, tmp18, ops);
       Build_OP(TOP_vfmaddsubpd, tmp25, tmp22, tmp19, tmp21, ops);
+    } else if ((CG_opt_level > 1) &&
+               Is_Target_AVX() && 
+               Is_Target_FMA()) {
+      Expand_Reduce_Add(OPC_F8V16F8REDUCE_ADD, tmp25, tmp18, ops);
+      Build_OP(TOP_xfmaddsub213pd, tmp25, tmp22, tmp19, tmp21, ops);
     } else {
       Build_OP(TOP_fmul128v64, tmp23, tmp22, tmp19, ops);
       Build_OP(TOP_fhadd128v64, tmp24, tmp18, tmp18, ops);
@@ -7396,10 +7436,16 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
       Build_OP(TOP_fmovddup, tmp1, op2, ops);
       Build_OP(TOP_shufpd, tmp2, op2, op2, Gen_Literal_TN(1, 1), ops);
       Build_OP(TOP_fmovddup, tmp3, tmp2, ops);
-      if ((CG_opt_level > 1) && Is_Target_Orochi() &&
-          Is_Target_AVX() && Is_Target_FMA4()) {
+      if ((CG_opt_level > 1) && 
+          Is_Target_AVX() && 
+          Is_Target_FMA4()) {
         Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
         Build_OP(TOP_vfmaddsubpd, result, op0, tmp1, tmp5, ops);
+      } else if ((CG_opt_level > 1) &&
+                 Is_Target_AVX() && 
+                 Is_Target_FMA()) {
+        Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
+        Build_OP(TOP_xfmaddsub213pd, result, op0, tmp1, tmp5, ops);
       } else {
         Build_OP(TOP_fmul128v64, tmp4, op0, tmp1, ops);
         Build_OP(TOP_fmul128v64, tmp5, op1, tmp3, ops);
@@ -9052,6 +9098,225 @@ Exp_Intrinsic_Op (INTRINSIC id, TN *result, TN *op0, TN *op1, TN *op2, TN *op3, 
     break;
    case INTRN_XORPS256:
     Build_OP(TOP_vfxor128v32, result, op0, op1, ops );
+    break;
+   /* FMA3 intrinsics: form1 */
+   case INTRN_VFMADDPD_132:
+   case INTRN_VFMADDPD256_132:
+    Build_OP(TOP_xfmadd132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDPS_132:
+   case INTRN_VFMADDPS256_132:
+    Build_OP(TOP_xfmadd132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSD_132:
+    Build_OP(TOP_xfmadd132sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSS_132:
+    Build_OP(TOP_xfmadd132ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPD_132:
+   case INTRN_VFMADDSUBPD256_132:
+    Build_OP(TOP_xfmaddsub132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPS_132:
+   case INTRN_VFMADDSUBPS256_132:
+    Build_OP(TOP_xfmaddsub132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPD_132:
+   case INTRN_VFMSUBADDPD256_132:
+    Build_OP(TOP_xfmsubadd132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPS_132:
+   case INTRN_VFMSUBADDPS256_132:
+    Build_OP(TOP_xfmsubadd132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPD_132:
+   case INTRN_VFMSUBPD256_132:
+    Build_OP(TOP_xfmsub132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPS_132:
+   case INTRN_VFMSUBPS256_132:
+    Build_OP(TOP_xfmsub132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSD_132:
+    Build_OP(TOP_xfmsub132sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSS_132:
+    Build_OP(TOP_xfmsub132ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPD_132:
+   case INTRN_VFNMADDPD256_132:
+    Build_OP(TOP_xfnmadd132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPS_132:
+   case INTRN_VFNMADDPS256_132:
+    Build_OP(TOP_xfnmadd132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSD_132:
+    Build_OP(TOP_xfnmadd132sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSS_132:
+    Build_OP(TOP_xfnmadd132ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPD_132:
+   case INTRN_VFNMSUBPD256_132:
+    Build_OP(TOP_xfnmsub132pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPS_132:
+   case INTRN_VFNMSUBPS256_132:
+    Build_OP(TOP_xfnmsub132ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSD_132:
+    Build_OP(TOP_xfnmsub132sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSS_132:
+    Build_OP(TOP_xfnmsub132ss, result, op0, op1, op2, ops );
+    break;
+   /* FMA3 intrinsics: form2 */
+   case INTRN_VFMADDPD_213:
+   case INTRN_VFMADDPD256_213:
+    Build_OP(TOP_xfmadd213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDPS_213:
+   case INTRN_VFMADDPS256_213:
+    Build_OP(TOP_xfmadd213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSD_213:
+    Build_OP(TOP_xfmadd213sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSS_213:
+    Build_OP(TOP_xfmadd213ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPD_213:
+   case INTRN_VFMADDSUBPD256_213:
+    Build_OP(TOP_xfmaddsub213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPS_213:
+   case INTRN_VFMADDSUBPS256_213:
+    Build_OP(TOP_xfmaddsub213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPD_213:
+   case INTRN_VFMSUBADDPD256_213:
+    Build_OP(TOP_xfmsubadd213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPS_213:
+   case INTRN_VFMSUBADDPS256_213:
+    Build_OP(TOP_xfmsubadd213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPD_213:
+   case INTRN_VFMSUBPD256_213:
+    Build_OP(TOP_xfmsub213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPS_213:
+   case INTRN_VFMSUBPS256_213:
+    Build_OP(TOP_xfmsub213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSD_213:
+    Build_OP(TOP_xfmsub213sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSS_213:
+    Build_OP(TOP_xfmsub213ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPD_213:
+   case INTRN_VFNMADDPD256_213:
+    Build_OP(TOP_xfnmadd213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPS_213:
+   case INTRN_VFNMADDPS256_213:
+    Build_OP(TOP_xfnmadd213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSD_213:
+    Build_OP(TOP_xfnmadd213sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSS_213:
+    Build_OP(TOP_xfnmadd213ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPD_213:
+   case INTRN_VFNMSUBPD256_213:
+    Build_OP(TOP_xfnmsub213pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPS_213:
+   case INTRN_VFNMSUBPS256_213:
+    Build_OP(TOP_xfnmsub213ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSD_213:
+    Build_OP(TOP_xfnmsub213sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSS_213:
+    Build_OP(TOP_xfnmsub213ss, result, op0, op1, op2, ops );
+    break;
+   /* FMA3 intrinsics: form3 */
+   case INTRN_VFMADDPD_231:
+   case INTRN_VFMADDPD256_231:
+    Build_OP(TOP_xfmadd231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDPS_231:
+   case INTRN_VFMADDPS256_231:
+    Build_OP(TOP_xfmadd231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSD_231:
+    Build_OP(TOP_xfmadd231sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSS_231:
+    Build_OP(TOP_xfmadd231ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPD_231:
+   case INTRN_VFMADDSUBPD256_231:
+    Build_OP(TOP_xfmaddsub231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMADDSUBPS_231:
+   case INTRN_VFMADDSUBPS256_231:
+    Build_OP(TOP_xfmaddsub231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPD_231:
+   case INTRN_VFMSUBADDPD256_231:
+    Build_OP(TOP_xfmsubadd231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBADDPS_231:
+   case INTRN_VFMSUBADDPS256_231:
+    Build_OP(TOP_xfmsubadd231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPD_231:
+   case INTRN_VFMSUBPD256_231:
+    Build_OP(TOP_xfmsub231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBPS_231:
+   case INTRN_VFMSUBPS256_231:
+    Build_OP(TOP_xfmsub231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSD_231:
+    Build_OP(TOP_xfmsub231sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFMSUBSS_231:
+    Build_OP(TOP_xfmsub231ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPD_231:
+   case INTRN_VFNMADDPD256_231:
+    Build_OP(TOP_xfnmadd231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDPS_231:
+   case INTRN_VFNMADDPS256_231:
+    Build_OP(TOP_xfnmadd231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSD_231:
+    Build_OP(TOP_xfnmadd231sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMADDSS_231:
+    Build_OP(TOP_xfnmadd231ss, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPD_231:
+   case INTRN_VFNMSUBPD256_231:
+    Build_OP(TOP_xfnmsub231pd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBPS_231:
+   case INTRN_VFNMSUBPS256_231:
+    Build_OP(TOP_xfnmsub231ps, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSD_231:
+    Build_OP(TOP_xfnmsub231sd, result, op0, op1, op2, ops );
+    break;
+   case INTRN_VFNMSUBSS_231:
+    Build_OP(TOP_xfnmsub231ss, result, op0, op1, op2, ops );
     break;
    /* FMA4 intrinsics */
    case INTRN_VFMADDPD:

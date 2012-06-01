@@ -1680,6 +1680,7 @@ public:
 
   // remove a single occurrence from one of the worklsts
   BOOL            Remove_real_occurrence(STMTREP *stmt);
+  BOOL            Remove_phi_pred_occurrence(STMTREP *stmt);
 
   // 'this' is the same as 'cr'
   BOOL            Is_the_same_as(const CODEREP *cr);

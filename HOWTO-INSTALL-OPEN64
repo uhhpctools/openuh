@@ -19,7 +19,8 @@ We encourage you to pay attention to the Prerequisites in order to avoid un-
 necessary problems later in the build process. Should you ever encounter any
 problems with one of the steps, please take a look in the FAQ, the forum or
 leave a comment on our web site http://www.open64.net.
-
+If you want to compile and install Open64 X86-PPC cross compiler, there is a few
+differences you should notice, see doc/HOWTO-INSTALL-OPEN64-PPC-CROSS
 
 Prerequisites
 -------------

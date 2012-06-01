@@ -129,6 +129,9 @@ BOOL Target_AVX_Set = FALSE;
 BOOL Target_XOP = FALSE;         // -TARG:xop=on/off
 BOOL Target_XOP_Set = FALSE;
 
+BOOL Target_FMA = FALSE;         // -TARG:fma=on/off
+BOOL Target_FMA_Set = FALSE;
+
 BOOL Target_FMA4 = FALSE;        // -TARG:fma4=on/off
 BOOL Target_FMA4_Set = FALSE;
 
@@ -204,6 +207,9 @@ static OPTION_DESC Options_TARG[] = {
   { OVK_BOOL,   OV_VISIBLE,     FALSE, "xop",           "xop",
     0, 0, 0,    &Target_XOP,    &Target_XOP_Set,
     "Enable XOP extensions" },
+  { OVK_BOOL,   OV_VISIBLE,     FALSE, "fma",           "fma",
+    0, 0, 0,    &Target_FMA,    &Target_FMA_Set,
+    "Enable FMA3 extensions" },
   { OVK_BOOL,   OV_VISIBLE,     FALSE, "fma4",          "fma4",
     0, 0, 0,    &Target_FMA4,   &Target_FMA4_Set,
     "Enable FMA4 extensions" },

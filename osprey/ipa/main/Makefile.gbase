@@ -206,7 +206,8 @@ IPA_ANALYZE_CXX_SRCS = \
 	ipa_builtins.cxx \
 	ipa_struct_opt.cxx \
 	ipa_nystrom_alias_analyzer.cxx \
-	ipa_be_write.cxx
+	ipa_be_write.cxx \
+	ipa_pcg.cxx 
 
 IPA_OPTIMIZE_SRCS = \
 #	ipo_parent.c \

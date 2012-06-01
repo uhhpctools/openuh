@@ -3008,8 +3008,8 @@ Find_BB_TNs (BB *bb)
 #ifdef TARG_X8664
       if ( !op_replaced &&
            Is_Target_Orochi() && 
-           Is_Target_FMA4() &&
-           EBO_Is_FMA4(op) &&
+           ((Is_Target_FMA() && EBO_Is_FMA3(op)) ||
+            (Is_Target_FMA4() && EBO_Is_FMA4(op))) &&
            !EBO_in_peep &&
            !EBO_in_loop )
         op_replaced = EBO_Disassociate_FMA( op );

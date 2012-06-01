@@ -915,6 +915,19 @@ Verify_version_CR(CODEREP *cr, OPT_STAB *opt_stab, BB_NODE *bb, INT32 linenum)
     return;
   }
 
+  // open64.net bug889. The Chi/Phis to return_vsym are marked live only 
+  // when the return stmt in the exit BB is marked live and 
+  // then propagated back to references in other BBs. However, in the case of
+  // return stmt is deleted by DCE or (unreachable from the first BB), 
+  // remaining stmts with Chi to return_vsym will get a reference error
+  // we allow this corner case since we don't want change the main DCE algorithm
+  // and allow this still do right compiling.
+
+  if (cr->Aux_id() == opt_stab->Return_vsym() &&
+      !(opt_stab->Cfg()->Exit_bb()->Reached() ||
+        opt_stab->Cfg()->Fake_exit_bb()->Reached()))
+    return;
+
   FmtAssert(FALSE, ("sym%dv%d(cr%d) live range overlapped with cur_version sym%dv%d(cr%d) in bb%d line %d",
 		    cr->Aux_id(), cr->Version(), cr->Coderep_id(), 
 		    cur_ver->Aux_id(), cur_ver->Version(), cur_ver->Coderep_id(),

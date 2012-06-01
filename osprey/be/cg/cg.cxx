@@ -156,6 +156,11 @@
 #include "edge_profile.h"
 #include "config_opt.h"
 #endif
+#include "cg_cfg.h"
+#include "cgssa_core.h"
+#include "gpo.h"
+
+using namespace CGSSA_NAME;
 
 MEM_POOL MEM_local_region_pool; /* allocations local to processing a region */
 MEM_POOL MEM_local_region_nz_pool;
@@ -1017,6 +1022,11 @@ extern void Generate_Return_Address(void);
     Stop_Timer ( T_GLRA_CU );
     Check_for_Dump ( TP_FIND_GLOB, NULL );
   }
+
+  CFLOW_Optimize(CFLOW_UNREACHABLE, "CFLOW (GPO pass)");
+  CG_PerformGPO(CG_GPO::GPO_Before_RA);
+  GRA_LIVE_Recalc_Liveness(region ? REGION_get_rid( rwn) : NULL);	
+  GRA_LIVE_Rename_TNs();
 
   if (Enable_CG_Peephole) {
     Set_Error_Phase("Extended Block Optimizer");

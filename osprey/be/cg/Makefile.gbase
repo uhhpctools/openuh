@@ -325,7 +325,7 @@ BE_CG_TARG_CXX_SRCS =	\
   expand.cxx		\
   pqs_cg.cxx            \
   pqs.cxx		\
-  register_targ.cxx
+  register_targ.cxx	
 ifeq ($(OLIVE_AUTO_CG), TRUE)
   BE_CG_TARG_CXX_SRCS += olive_gen_expr.cxx
   BE_CG_TARG_CXX_SRCS += olive_convert_longlong.cxx
@@ -477,6 +477,11 @@ CG_CXX_SRCS = 		\
   hb_cflow.cxx          \
   cxx_memory.cxx	\
   cg_gcov.cxx		\
+  cg_cfg.cxx		\
+  cgssa_core.cxx		\
+  cgssa_build.cxx		\
+  cgssa_update.cxx		\
+  gpo.cxx       	\
   $(DERIVED_SRCS)
 
 ifeq ($(BUILD_TARGET), SL)

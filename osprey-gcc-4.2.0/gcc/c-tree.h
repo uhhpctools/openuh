@@ -34,7 +34,7 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
    know how big it is.  This is sanity-checked in c-decl.c.  */
 /* Bug 12755: On mips native, there is a extra four bytes (of alignment
  * padding?) somewhere */
-#ifdef ARCH_MIPS
+#ifdef ARCH_MIPS || defined(ARCH_PPC) 
 #define C_SIZEOF_STRUCT_LANG_IDENTIFIER \
   (sizeof (struct c_common_identifier) + 3 * sizeof (void *) + 4)
 #else

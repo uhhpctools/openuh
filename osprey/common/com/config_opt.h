@@ -128,6 +128,8 @@ extern BOOL Alias_Common_Scalar;        /* Distinguish scalar from other array
                                            in a common block */
 extern BOOL  Alias_F90_Pointer_Unaliased;  /* Are F90 pointers unaliased? */
 extern BOOL Alias_Nystrom_Analyzer;     /* Are we using Nystrom alias analysis? */
+extern BOOL Alias_Analyzer_in_IPA; /* Are we create Nystrom alias analyzer in IPA? */ 
+extern UINT32 Current_IPANode_File_PU_Idx; /* current processing IPA node's file pu index */ 
 
 /** lower zdl stuff **/
 extern BOOL OPT_Lower_ZDL;

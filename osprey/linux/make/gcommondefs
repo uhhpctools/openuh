@@ -169,16 +169,6 @@ ifeq ($(BUILD_COMPILER), PSC)
   CCNAME = pathcc
   C++NAME = pathCC
   F90 = pathf90  
-  ifeq ($(BUILD_TARGET), X8664)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
-  ifeq ($(BUILD_TARGET), IA32)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
   F77 = $(F90)
   AR      = ar
 endif
@@ -189,23 +179,6 @@ ifeq ($(BUILD_COMPILER), OSP)
   C++NAME = openCC
   F90 = openf90
   F90_RTLIBS = -Wl,-Bstatic -lfortran -Wl,-Bdynamic
-
-  ifeq ($(BUILD_TARGET), X8664)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
-  ifeq ($(BUILD_TARGET), IA32)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
-  ifeq ($(BUILD_TARGET), IA64)
-    # only 64bit libraries set the BUILD_ARCH to X8664 
-    CCNAME  += 
-    C++NAME +=  
-    F90 += 
-  endif
   F77 = $(F90)
   AR      = ar
 endif
@@ -221,32 +194,15 @@ ifeq ($(BUILD_COMPILER), SELF)
   CCNAME += -run-build=$(TOP_BUILDDIR) -L$(BUILD_AREA)/libopen64rt -L$(BUILD_AREA)/libacml_mv
   C++NAME += -run-build=$(TOP_BUILDDIR)
   F90 += -run-build=$(TOP_BUILDDIR)
-
-  ifeq ($(BUILD_TARGET), X8664)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
-  ifeq ($(BUILD_TARGET), IA32)
-    CCNAME  += -march=anyx86
-    C++NAME += -march=anyx86
-    F90 += -march=anyx86
-  endif
-  ifeq ($(BUILD_TARGET), IA64)
-    # only 64bit libraries set the BUILD_ARCH to X8664 
-    CCNAME  += 
-    C++NAME +=  
-    F90 += 
-  endif
   F77 = $(F90)
   AR      = ar
 endif
 
 ifeq ($(BUILD_ARCH), IA32)
 # only 32bit libraries set the BUILD_TARGET to IA32
-  CCNAME  += -m32 -mno-sse2 
-  C++NAME += -m32 -mno-sse2
-  F90 += -m32 -mno-sse2
+  CCNAME  += -m32
+  C++NAME += -m32
+  F90 += -m32
 endif
 
 ifeq ($(BUILD_ARCH), X8664)

@@ -121,6 +121,8 @@ static BOOL Alias_Not_In_Union_Set  = FALSE;	/* alias=nounion set? */
 BOOL  Alias_F90_Pointer_Unaliased = FALSE;  /* Are F90 pointers unaliased? */
 
 BOOL  Alias_Nystrom_Analyzer = FALSE;  /* Using Nystrom-based alias analysis? */
+BOOL  Alias_Analyzer_in_IPA = FALSE;  /* Create nystrom alias in IPA */
+UINT32 Current_IPANode_File_PU_Idx = 0; /* current processing IPA node's file pu index */ 
 
 /***** Alignment control *****/
 BOOL Align_Object = TRUE;	/* Try to improve alignment of objects */

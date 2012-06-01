@@ -5495,9 +5495,9 @@ void Generate_Orochi (void)
                         TOP_xfnmsub231ss,
                         TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(6); 
-  Resource_Requirement(res_fmul, 0);
+  Any_Result_Available_Time(5); 
   Resource_Requirement(res_issue, 0);
+  Resource_Requirement(res_fadd, 0);
 
   Instruction_Group( "intel avx fma mem opnd",
                         TOP_xfmadd132xpd,
@@ -5682,10 +5682,9 @@ void Generate_Orochi (void)
                         TOP_xfnmsub231xxxss,
                         TOP_UNDEFINED);
   Any_Operand_Access_Time(0);
-  Any_Result_Available_Time(10); 
-  Resource_Requirement(res_fmul, 0);
+  Any_Result_Available_Time(10);
   Resource_Requirement(res_issue, 0);
-  Resource_Requirement(res_fstore, 0);
+  Resource_Requirement(res_fadd, 0);
 
   Instruction_Group("dummy",
 		    TOP_asm,

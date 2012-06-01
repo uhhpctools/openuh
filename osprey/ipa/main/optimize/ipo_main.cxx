@@ -1633,7 +1633,6 @@ Perform_Alias_Class_Annotation(void)
     {
       IPA_write_alias_summary(pu_info_tree, output_file);
     }
-    
 
 #if defined(TARG_SL)
     if (ld_ipa_opt[LD_IPA_IPISR].flag)

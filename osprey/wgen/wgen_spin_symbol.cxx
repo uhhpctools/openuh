@@ -434,22 +434,21 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
 	}
 	else {
 		if (gs_tree_code(type_size) != GS_INTEGER_CST) {
-			if (gs_tree_code(type_tree) == GS_ARRAY_TYPE)
+			if (gs_tree_code(type_tree) == GS_ARRAY_TYPE) {
 				DevWarn ("Encountered VLA at line %d", lineno);
-			else
-#ifndef KEY
-				Fail_FmtAssertion ("VLA at line %d not currently implemented", lineno);
-#else
+				tsize = 0;
+			}
+			else {
 			// bugs 943, 11277, 10506
 #if defined(TARG_SL)
 				ErrMsg(EC_Unimplemented_Feature, "variable-length structure",
 				  Orig_Src_File_Name?Orig_Src_File_Name:Src_File_Name, lineno);
 #else
-				ErrMsg(EC_Unimplemented_Feature, "variable-length structure");
+				DevWarn ("Encountered variable-length structure at line %d", lineno);
+				tsize = -1;
 #endif
-#endif
+			}
 			variable_size = TRUE;
-			tsize = 0;
 		}
 		else
 #ifdef KEY		// bug 3045
@@ -633,6 +632,21 @@ Create_TY_For_Tree (gs_t type_tree, TY_IDX idx)
                     Set_TY_anonymous(ty);
 		Set_TY_etype (ty, Get_TY (gs_tree_type(type_tree)));
 		Set_TY_align (idx, TY_align(TY_etype(ty)));
+
+		// For GNU VLS (Variable length array in struct),
+		// the size and upper boundary is expression.
+		// If the TYPE_TY_IDX(type_tree) is not set, when
+		// expanding the TY's size, it will fall into a infinite
+		// recursion if the type_tree is referenced in the
+		// size expression. So we set the TYPE_TY_IDX here.
+		if (gs_type_readonly(type_tree))
+                    Set_TY_is_const (idx);
+		if (gs_type_volatile(type_tree))
+                    Set_TY_is_volatile (idx);
+		if (gs_type_restrict(type_tree))
+                    Set_TY_is_restrict (idx);
+	        TYPE_TY_IDX(type_tree) = idx;
+
 		// assumes 1 dimension
 		// nested arrays are treated as arrays of arrays
 		ARB_HANDLE arb = New_ARB ();

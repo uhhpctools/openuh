@@ -168,21 +168,9 @@ CGTARG_Is_Bad_Shift_Op (OP *op)
 }
 
 inline BOOL
-CGTARG_Is_Right_Shift_Op (OP *op)
+CGTARG_Is_Shift_Redundant (OP *op)
 {
-  switch (OP_code(op)) {
-  case TOP_sra:
-  case TOP_srav:
-  case TOP_srl:
-  case TOP_srlv:
-  case TOP_dsra:
-  case TOP_dsra32:
-  case TOP_dsrav:
-  case TOP_dsrl:
-  case TOP_dsrl32:
-  case TOP_dsrlv:
-    return TRUE;
-  }
+  // Check unneeded since there is no zero register.
   return FALSE;
 }
     

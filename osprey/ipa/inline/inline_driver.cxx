@@ -215,6 +215,10 @@ Process_Command_Line (INT argc, char **argv)
 			Opt_Level = 2;
 			INLINE_Enable_Split_Common = FALSE;
 			break;
+                    case '0': /* setup O0 for lw_inline for gcc compatible*/
+                        Opt_Level = 0;
+                        INLINE_Enable_Split_Common = FALSE;
+			break;
 		    default:
 			Opt_Level = 1;
 			INLINE_Enable_Split_Common = FALSE;

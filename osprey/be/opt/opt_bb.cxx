@@ -733,7 +733,6 @@ BB_NODE::Remove_stmtrep( STMTREP *stmt )
   }
 
   _stmtlist.Remove(stmt);
-  stmt->Reset_live_stmt();  // WHIRL SSA: mark stmt dead
 }
 
 void
@@ -1641,6 +1640,9 @@ BB_NODE::Compare_Trees(BB_NODE * bb)
   WN * stmt1 = Firststmt();
   WN * stmt2 = bb->Firststmt();
 
+  if (!stmt1 || !stmt2)
+    return FALSE;
+
   while (stmt1 && stmt2) {
     OPERATOR opr = WN_operator(stmt1);
 
@@ -1651,10 +1653,15 @@ BB_NODE::Compare_Trees(BB_NODE * bb)
       if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
 	return FALSE;
     }
-    else if ((opr != OPR_LABEL) && (opr != OPR_PRAGMA)
-	     && WN_Simp_Compare_Trees(stmt1, stmt2) != 0)
-      return FALSE;      
-
+    else if ((opr != OPR_LABEL) && (opr != OPR_PRAGMA)) {
+      if (OPERATOR_is_store(opr)) {
+	if (!Identical_stmt(stmt1, stmt2)) 
+	  return FALSE;
+      }
+      else if (WN_Simp_Compare_Trees(stmt1, stmt2) != 0)
+	return FALSE;      
+    }
+    
     stmt1 = WN_next(stmt1);
     stmt2 = WN_next(stmt2);
   }

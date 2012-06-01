@@ -113,11 +113,12 @@ static boolean target_supports_sse4a = FALSE;
 static boolean target_supports_ssse3 = FALSE;
 static boolean target_supports_sse41 = FALSE;
 static boolean target_supports_sse42 = FALSE;
-static boolean target_supports_aes   = FALSE;
+static boolean target_supports_aes = FALSE;
 static boolean target_supports_pclmul = FALSE;
-static boolean target_supports_avx   = FALSE;
-static boolean target_supports_xop   = FALSE;
-static boolean target_supports_fma4  = FALSE;
+static boolean target_supports_avx = FALSE;
+static boolean target_supports_xop = FALSE;
+static boolean target_supports_fma4 = FALSE;
+static boolean target_supports_fma = FALSE;
 #endif
 
 extern boolean parsing_default_options;
@@ -558,6 +559,13 @@ Process_Targ_Group ( char *targ_args )
 
       case 'f':
 #ifdef TARG_X8664
+	if (!strncasecmp(cp, "fma=on", 7)){
+	  add_option_seen(O_mfma);
+	  toggle(&fma, TRUE);
+	}else if (!strncasecmp(cp, "fma=off", 8)){
+	  add_option_seen(O_mfma);
+	  toggle(&fma, FALSE);
+        }
 	if (!strncasecmp(cp, "fma4=on", 7)){
 	  add_option_seen(O_mfma4);
 	  toggle(&fma4, TRUE);
@@ -1617,53 +1625,56 @@ static struct
   boolean supports_avx;         // TRUE if support AVX
   boolean supports_xop;         // TRUE if support XOP
   boolean supports_fma4;        // TRUE if support FMA4
+  boolean supports_fma;         // TRUE if support FMA3
 } supported_cpu_types[] = {
   { "any_64bit_x86",	"anyx86",	ABI_64,		TRUE,	FALSE, FALSE, 
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "any_32bit_x86",	"anyx86",	ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "i386",	"anyx86",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "i486",	"anyx86",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "i586",	"anyx86",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "athlon",	"athlon",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "athlon-mp", "athlon",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "athlon-xp", "athlon",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "athlon64",	"athlon64",		ABI_64,		TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "athlon64fx", "opteron",		ABI_64,		TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "turion",	"athlon64",		ABI_64,		TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "i686",	"pentium4",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "ia32",	"pentium4",		ABI_N32,	TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "k7",	"athlon",		ABI_N32,	FALSE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "k8",	"opteron",		ABI_64,		TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "opteron",	"opteron",		ABI_64,		TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "pentium4",	"pentium4",		ABI_N32,	TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "xeon",	"xeon",			ABI_N32,	TRUE,	FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "em64t",	"em64t",		ABI_64,		TRUE,	TRUE,  FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "core",	"core",			ABI_64,		TRUE,	TRUE,  FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "wolfdale", "wolfdale",		ABI_64,		TRUE,	TRUE,  FALSE,
-    TRUE,  FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    TRUE,  FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { "bdver1",   "bdver1",		ABI_64,		TRUE,	TRUE,  TRUE,
-    TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE  },
+    TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE, FALSE  },
+  { "bdver2",   "bdver2",		ABI_64,		TRUE,	TRUE,  TRUE,
+    TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE, TRUE  },
   { "barcelona","barcelona",		ABI_64,		TRUE,	TRUE,  TRUE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE },
   { NULL,	NULL, },
 };
   
@@ -1932,11 +1943,12 @@ Get_x86_ISA ()
       target_supports_ssse3 = supported_cpu_types[i].supports_ssse3;
       target_supports_sse41 = supported_cpu_types[i].supports_sse41;
       target_supports_sse42 = supported_cpu_types[i].supports_sse42;
-      target_supports_aes   = supported_cpu_types[i].supports_aes;
+      target_supports_aes = supported_cpu_types[i].supports_aes;
       target_supports_pclmul = supported_cpu_types[i].supports_pclmul;
-      target_supports_avx   = supported_cpu_types[i].supports_avx;
-      target_supports_xop   = supported_cpu_types[i].supports_xop;
-      target_supports_fma4  = supported_cpu_types[i].supports_fma4;
+      target_supports_avx = supported_cpu_types[i].supports_avx;
+      target_supports_xop = supported_cpu_types[i].supports_xop;
+      target_supports_fma4 = supported_cpu_types[i].supports_fma4;
+      target_supports_fma = supported_cpu_types[i].supports_fma;
       break;
     }
   }
@@ -2003,6 +2015,12 @@ Get_x86_ISA_extensions ()
   if (xop == TRUE &&
       !target_supports_xop) {
     error("Target processor does not support XOP.");
+    return FALSE;
+  }
+
+  if (fma == TRUE &&
+      !target_supports_fma) {
+    error("Target processor does not support FMA3.");
     return FALSE;
   }
 
@@ -2080,6 +2098,12 @@ Get_x86_ISA_extensions ()
       xop != FALSE){//not explicitly turned off
     sse2 = TRUE;
     xop = TRUE;
+  }
+  if (target_supports_fma &&
+      sse2 != FALSE &&  
+      fma != FALSE){//not explicitly turned off
+    sse2 = TRUE;
+    fma = TRUE;
   }
   if (target_supports_fma4 &&
       sse2 != FALSE &&  

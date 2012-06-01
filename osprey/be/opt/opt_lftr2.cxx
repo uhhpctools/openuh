@@ -733,6 +733,88 @@ LFTR::Can_only_increase(CODEREP *x, AUX_ID aux_id)
   return FALSE;
 }
 
+// Given a CODEREP 'cr_iter', walk its operands, replace the use of 'cr_old' with 'cr_new'.
+// The replacement is done without rehashing.
+void
+LFTR::Replace_use(CODEREP * cr_iter, CODEREP * cr_old, CODEREP * cr_new)
+{
+  CODEKIND kind = cr_iter->Kind();
+  CODEREP * cr_copy = NULL;
+  CODEREP * cr_orig = cr_iter;
+
+  if (kind == CK_IVAR) {
+    CODEREP * cr_base = NULL;
+    BOOL is_ilod = FALSE;
+
+    cr_base = cr_iter->Ilod_base();
+    if (cr_base) {
+      if (cr_base == cr_old) {
+	cr_iter->Set_ilod_base(cr_new);
+      }
+      else {
+	Replace_use(cr_base, cr_old, cr_new);
+      }
+    }
+
+    cr_base = cr_iter->Istr_base();
+    if (cr_base) {
+      if (cr_base == cr_old) {
+	cr_iter->Set_istr_base(cr_new);
+      }
+      else {
+	Replace_use(cr_base, cr_old, cr_new);
+      }
+    }
+  }
+  else if (kind == CK_OP) {
+    cr_copy = NULL;
+
+    for (int i = 0; i < cr_iter->Kid_count(); i++) {
+      CODEREP * cr_tmp = cr_iter->Opnd(i);
+      if (cr_tmp->Kind() == CK_VAR) {
+	if (cr_tmp == cr_old) {
+	  cr_iter->Set_opnd(i, cr_new);
+	}
+      }
+      else {
+	Replace_use(cr_tmp, cr_old, cr_new);
+      }
+    }
+  }
+}
+
+// Given a loop, iterate all statements, replace the use of 'cr_old' with 'cr_new'.
+// Skip the definition statement of 'cr_new'.
+void
+LFTR::Replace_use(const BB_LOOP * loop, CODEREP * cr_old, CODEREP * cr_new)
+{
+  BB_NODE * bb;
+  BB_NODE_SET_ITER bb_iter;
+  FOR_ALL_ELEM(bb, bb_iter, Init(loop->True_body_set())) {
+    STMTREP_ITER stmt_iter(bb->Stmtlist());
+    STMTREP *stmt;
+    FOR_ALL_NODE(stmt, stmt_iter, Init()) {
+      if (stmt == cr_new->Defstmt())
+	continue;
+
+      CODEREP * rhs = stmt->Rhs();
+      if (rhs) {
+	if (rhs == cr_old) {
+	  stmt->Set_rhs(cr_new);
+	  cr_new->IncUsecnt();
+	}
+	else {
+	  Replace_use(rhs, cr_old, cr_new);
+	}
+      }
+      CODEREP * lhs = stmt->Lhs();
+      if (lhs) {
+	Replace_use(lhs, cr_old, cr_new);
+      }
+    }
+  }
+}
+
 // ======================================================================
 // Perform the replacement of the comparison
 //   replace lhs with tempcr
@@ -937,7 +1019,7 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
   CODEREP *tos_lftr_var = Find_lftr_var(tos->Occurrence(), comp_lftr_var);
 
   if (comp_lftr_var == NULL || tos_lftr_var == NULL) {
-    Is_Trace(Trace(), (TFile, "LFTR return 3 - could not find a lftr_var, "
+    Is_Trace(Trace(), (TFile, "LFTR return 3 - could not find Xa lftr_var, "
 		       "comp=0x%p, tos=0x%p\n", comp_lftr_var,
 		       tos_lftr_var));
     return;
@@ -962,6 +1044,9 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
 
   // tempcr is the preg load that we want to use for the comparison lhs
   CODEREP *tempcr = tos->Temp_cr();
+  STMTREP * iv_init = NULL;
+  STMTREP * temp_init = NULL;
+  CODEREP * iv_incr = NULL;
   // comp is dominated by a phi, find dominating temp (due to SR injury fix)
   if (tos->Occ_kind() == EXP_OCCURS::OCC_PHI_OCCUR) {
     STMTREP *iv_defstmt = comp_lftr_var->Defstmt();
@@ -986,7 +1071,110 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
 #endif
 	// 3
 	Is_True(tempcr != cr, ("LFTR::Replace_comparison, tempcr is same"));
-	tempcr = cr;
+#if defined(TARG_IA32) || defined(TARG_X8664)
+	// Bug 778.  overflow problem for 32-bit architectures.
+	if (Is_Target_32bit()) {
+	  CODEREP * sym4 = tempcr;
+	  CODEREP * sym5 = cr;
+	  tempcr = cr;
+	  // Attempt pre-increment transformation for the following pattern to avoid overflow.
+	  // sym7v3 = const1                 // sym7 corresponds to IV.
+	  // sym11v3 = sym7v3 + sym3         // sym11 corresponds to tempcr.
+	  // sym11v4 = phi(sym11v3, sym11v5)
+	  // LABEL:
+	  //    *sym11v4 = ...
+	  //    sym11v5 = sym11v4 + const2
+	  //    if (sym11v5 <= end)
+	  //       goto LABEL
+	  //
+	  // After the transformation:
+	  // sym7v3 = const1
+	  // sym11v3 = const1 - const2 + sym3 // The result of 'const1 - const2' should use signed type.
+	  // sym11v4 = phi(sym11v3, sym11v5)
+	  // LABEL:
+	  // sym11v5 = sym11v4 + const2           
+	  //   *sym11v5  = ...
+	  //   if (sym11v5 <= end - const2)
+	  //      goto LABEL
+	  PHI_NODE * phi = (sym4->Is_flag_set(CF_DEF_BY_PHI)) ? sym4->Defphi() : NULL;
+	  OPT_STAB * ops = Etable()->Opt_stab();
+	  if ((phi != NULL) && (phi->Size() == 2)
+	      && (ST_class(ops->St(tempcr->Aux_id())) == CLASS_PREG)
+	      && (iv_defstmt->Bb() == comp->Bb())
+	      && (tempcr->Usecnt() == 0)
+	      && (Find_comp_list(comp_lftr_var_id)->Size() == 1)) {
+	    STMTREP * stmt_tmp = tempcr->Defstmt();
+	    CODEREP * cr_tmp = stmt_tmp->Rhs();
+	    EXP_WORKLST * worklst = Etable()->Get_worklst(cr_tmp, FALSE, TRUE);
+	    
+	    // Avoid the case that the RHS of 'stmt_tmp' is a CSE since we are going to 
+	    // replace the use operands without rehashing.
+	    if (worklst 
+		&& (worklst->Real_occurs().Head() != worklst->Real_occurs().Tail()))
+	      cr_tmp = NULL;
+	    else if (cr_tmp->Usecnt() > 1) {
+	      // Additional check to preclude the cases that the RHS of 'stmt_tmp' is a CSE.
+	      cr_tmp = NULL;
+	    }
+
+	    if (cr_tmp
+		&& (cr_tmp->Kind() == CK_OP) 
+		&& (cr_tmp->Opr() == OPR_ADD)
+		&& (cr_tmp->Opnd(1)->Kind() == CK_CONST)
+		&& (cr_tmp->Opnd(1)->Const_val() > 0)) {
+	      iv_incr = cr_tmp->Opnd(1);
+	      CODEREP * opnd1 = phi->OPND(0);
+	      CODEREP * opnd2 = phi->OPND(1);
+	      if (opnd1->Defstmt() == stmt_tmp)
+		stmt_tmp = opnd2->Defstmt();
+	      else if (opnd2->Defstmt() == stmt_tmp)
+		stmt_tmp = opnd1->Defstmt();	
+	      else
+		stmt_tmp = NULL;
+	      if (stmt_tmp){
+		temp_init = stmt_tmp;
+		cr_tmp = stmt_tmp->Rhs();
+		if ((cr_tmp->Kind() == CK_OP)
+		    && (cr_tmp->Opr() == OPR_ADD)) {
+		  // Find initial IV definition.
+		  opnd1 = cr_tmp->Opnd(0);
+		  opnd2 = cr_tmp->Opnd(1);
+		  stmt_tmp = NULL;
+		  if (opnd1->Kind() == CK_VAR) 
+		    stmt_tmp = opnd1->Defstmt();
+		  else if (opnd2->Kind() == CK_VAR)
+		    stmt_tmp = opnd2->Defstmt();
+		  if (stmt_tmp) {
+		    cr_tmp = stmt_tmp->Lhs();
+		    if (cr_tmp
+			&& (cr_tmp->Kind() == CK_VAR)
+			&& (cr_tmp->Aux_id() == iv_defstmt->Lhs()->Aux_id())) {
+		      cr_tmp = stmt_tmp->Rhs();
+		      if ((cr_tmp->Kind() == CK_CONST)) {
+			CODEREP * cr_cmp = comp->Occurrence();
+			CODEREP * cr_cons = cr_cmp->Opnd(1);
+			OPERATOR opr = cr_cmp->Opr();
+			// Limit to the case that loop trip count is at least 2
+			// to avoid underflow of "end - const2".
+			if ((cr_cons->Kind() == CK_CONST)
+			    && ((opr == OPR_LE) || (opr == OPR_LT))) {
+			  int trip_cnt = (cr_cons->Const_val() - cr_tmp->Const_val())
+			    / iv_incr->Const_val();
+			  if (opr == OPR_LE)
+			    trip_cnt++;
+			  if (trip_cnt >= 2) {
+			    iv_init = stmt_tmp;
+			  }
+			}
+		      }
+		    }
+		  }
+		}
+	      }
+	    }
+	  }
+	}
+#endif
       }
     }
   } else { // dominated by real occurrence, easy case
@@ -1016,6 +1204,7 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
 			 "not current at temp def\n"));
       return;
     }
+    iv_init = NULL;
   }
   else {
     // The temp is defined by a statement -- either a save to
@@ -1062,6 +1251,7 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
     else {
       Is_Trace(Trace(), (TFile, "LFTR::Replace_comparison: "
 			 "lftr var in rhs of save to temp\n"));
+      iv_init = NULL;
     }
     // If the current version of the lftr var at the temp's definition
     // is different from that in the comparison, we can't replace the
@@ -1131,6 +1321,11 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
   Is_True(head != NULL,
 	  ("LFTR::Replace_comparison: loop head must not be NULL"));
 
+  // This allows hoisting the definition statement of 'tempcr' to loop header.
+  if (iv_init && !tempcr->Defstmt()->Bb()->Postdominates(head)) {
+    iv_init = NULL;
+  }
+
   // In spite of the Find_one_variant() call above, there may not be a
   // phi for the temp at the top of the loop, since the loop-variant
   // operand of the comparison may be defined by a killing
@@ -1199,8 +1394,8 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
 			 // exprs but we do not delete them from the work list
     if (fold_cr == NULL) {
       new_cr->Set_coderep_id(0);
-      fold_cr = Htable()->Rehash(new_cr);
-    }
+      fold_cr = Htable()->Rehash(new_cr); 
+   }
 
     // ---- from this point on we are committed to doing the substitution ----
 
@@ -1222,11 +1417,14 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
     new_compare_type = Mtype_TransferSign(comparison_cr->Dsctyp(), 
 					  new_compare_type);
     if (Is_Target_32bit()
-	&& (addressable == ADDRESSABILITY_IS_ADDRESS) 
+	&& (addressable == ADDRESSABILITY_IS_ADDRESS)
 	&& MTYPE_is_signed(new_compare_type)) {
       // For 32-bit targets, force comparison of address expressions to be unsigned.
       new_compare_type = Mtype_from_mtype_class_and_size(MTYPE_CLASS_UNSIGNED,
 							 MTYPE_size_min(new_compare_type)/8);
+    }
+    else {
+      iv_init = NULL;
     }
 #else
     MTYPE new_compare_type = comparison_cr->Dsctyp();
@@ -1253,6 +1451,60 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
         break;
       }
     }
+
+    if ((new_compare_opr != OPR_LT) && (new_compare_opr != OPR_LE))
+      iv_init = NULL;
+
+    if (fold_cr->Kind() != CK_OP)
+      iv_init = NULL;
+
+    if (iv_init) {
+      opr = fold_cr->Opr();
+      EXP_WORKLST * worklst = Etable()->Get_worklst(fold_cr, FALSE, TRUE); 
+
+      if (opr != OPR_ADD)
+	iv_init = NULL;
+      else if (worklst && (worklst->Real_occurs().Head())) {
+	// avoid the situation that 'fold_cr' has PRE/CSE occurrences so that
+	// the CODEREP * at other occurrences won't be changed unintentionally.
+	iv_init = NULL;
+      }
+      else {
+	CODEREP * opnd1 = fold_cr->Opnd(0);
+	CODEREP * opnd2 = fold_cr->Opnd(1);
+	CODEREP * opnd = NULL;
+
+	// reduce loop upper bound by IV increment.
+	if (opnd1->Kind() == CK_CONST) 
+	  opnd = opnd1;
+	else if (opnd2->Kind() == CK_CONST) 
+	  opnd = opnd2;
+	
+	if (opnd) {
+	  CODEMAP * codemap = Etable()->Htable();	  
+	  INT64 const_val = opnd->Const_val() - iv_incr->Const_val();
+	  MTYPE type = opnd->Dtyp();
+	  if (const_val < 0)
+	    type = (MTYPE_byte_size(type) == 4) ? MTYPE_I4 : MTYPE_I8;
+
+	  CODEREP * cr_const = codemap->Add_const(type, const_val);
+	  CODEREP * cr_new = Alloc_stack_cr(fold_cr->Extra_ptrs_used());
+	  cr_new->Copy(*fold_cr);
+	
+	  if (opnd == opnd1)
+	    cr_new->Set_opnd(0,cr_const);
+	  else
+	    cr_new->Set_opnd(1,cr_const);
+
+	  fold_cr = cr_new;
+	  fold_cr->Set_coderep_id(0);
+	  fold_cr = Htable()->Rehash(fold_cr);
+	}
+	else
+	  iv_init = NULL;
+      }
+    }
+
     comparison_cr->Set_opr(new_compare_opr);
     comparison_cr->Set_dsctyp(new_compare_type);
 
@@ -1308,6 +1560,74 @@ LFTR::Replace_comparison(EXP_OCCURS *comp, BOOL cur_expr_is_sr_candidate)
                              comparison_cr, FALSE, ETABLE::NOT_URGENT_INS, 0,
 			     OPCODE_UNKNOWN, FALSE);
     }
+
+    if (iv_init != NULL) {
+      // reduce initial value of 'temp_init'.
+      INT64 const_val = iv_init->Rhs()->Const_val() - iv_incr->Const_val();
+      CODEMAP * codemap = Etable()->Htable();
+      CODEREP * cr_old = temp_init->Rhs();
+      MTYPE type = cr_old->Dtyp();
+
+      if (const_val < 0) 
+	type = (MTYPE_byte_size(type) == 4) ? MTYPE_I4 : MTYPE_I8;
+
+      CODEREP * cr_const = codemap->Add_const(type, const_val);
+      CODEREP * cr_new = Alloc_stack_cr(cr_old->Extra_ptrs_used());
+      cr_new->Copy(*cr_old);
+
+      AUX_ID id  = iv_init->Lhs()->Aux_id();
+      CODEREP * opnd1 = cr_new->Opnd(0);
+      CODEREP * opnd2 = cr_new->Opnd(1);
+
+      if ((opnd1->Kind() == CK_VAR)
+	  && (opnd1->Aux_id() == id))
+	cr_new->Set_opnd(0, cr_const);
+      else if ((opnd2->Kind() == CK_VAR)
+	       && (opnd2->Aux_id() == id))
+	cr_new->Set_opnd(1, cr_const);
+
+      cr_new = Htable()->Rehash(cr_new);
+      temp_init->Set_rhs(cr_new);
+
+      Etable()->Remove_real_occurrence(cr_old, temp_init);
+      EXP_WORKLST * worklst = Etable()->Get_worklst(cr_old, FALSE, TRUE);
+      if (worklst) {
+	worklst->Remove_phi_pred_occurrence(temp_init);
+      }
+      
+      STACK<EXP_OCCURS *> * stk = Etable()->Deferred_ocopy_occurs();
+      for (int i = 0; i < stk->Elements(); i ++) {
+	EXP_OCCURS * occ = stk->Top_nth(i);
+	if (occ->Stmt() == temp_init) {
+	  stk->DeleteTop(i);
+	  break;
+	}
+      }
+
+      STMTREP * def_stmt = tempcr->Defstmt();
+      def_stmt->Bb()->Stmtlist()->Remove(def_stmt);
+      BB_NODE * bb_head = loop->Header();
+      STMTREP * stmt_ins = NULL;
+      STMTREP_ITER stmt_iter(bb_head->Stmtlist());
+      STMTREP * stmt;
+      FOR_ALL_NODE(stmt, stmt_iter, Init()) {
+	if (stmt->Opr() != OPR_LABEL) {
+	  stmt_ins = stmt;
+	  break;
+	}
+      }
+      if (stmt_ins) {
+	bb_head->Insert_stmtrep_before(def_stmt, stmt_ins);
+      }
+      else {
+	bb_head->Append_stmtrep(def_stmt);
+      }
+
+      Replace_use(loop, def_stmt->Rhs()->Opnd(0), tempcr);
+      FmtAssert(def_stmt->Rhs()->Opnd(0)->Version() != def_stmt->Lhs()->Version(),
+		("Wrong version for iv."));
+    }
+
 
     Is_Trace(Trace(),(TFile,"LFTR::Replace_comparison, new comparison:\n"));
     Is_Trace_cmd(Trace(),comparison_cr->Print(0,TFile));

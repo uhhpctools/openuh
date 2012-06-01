@@ -466,6 +466,8 @@ static OPTION_DESC Options_CG[] = {
 #ifdef TARG_X8664
   { OVK_BOOL,	OV_VISIBLE, TRUE, "cmp_peep", "",
     0, 0, 0,	&CG_cmp_load_exec, NULL },
+  { OVK_BOOL,	OV_VISIBLE, TRUE, "fma3_peep", "",
+    0, 0, 0,	&CG_fma3_load_exec, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "fma4_peep", "",
     0, 0, 0,	&CG_fma4_load_exec, NULL },
   { OVK_BOOL,	OV_VISIBLE, TRUE, "dsched", "",

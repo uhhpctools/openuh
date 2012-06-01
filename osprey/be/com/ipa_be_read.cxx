@@ -48,12 +48,13 @@ IPA_read_alias_summary(void* fhandle, PU_Info* pu_info, MEM_POOL* mem_pool)
 
   if (Get_Trace(TP_ALIAS,NYSTROM_SUMMARY_FLAG))
     fprintf(stderr, "BE: cg_nodes = %d, cg_stinfos = %d, cg_callsites = %d,"
-            " cg_nodeids = %d cg_modranges = %d\n", 
+            " cg_nodeids = %d, cg_modranges = %d, siloed_refereces = %d\n",
             header->GetCGNodesSize(), 
             header->GetCGStInfosSize(),
             header->GetCGCallsitesSize(),
             header->GetCGNodeIdsSize(),
-            header->GetCGModRangesSize());
+            header->GetCGModRangesSize(),
+            header->GetSiloedReferencesSize());
 
 
   CURRENT_BE_SUMMARY.SetCGNodesCount(header->GetCGNodesSize());
@@ -76,4 +77,7 @@ IPA_read_alias_summary(void* fhandle, PU_Info* pu_info, MEM_POOL* mem_pool)
     ((SUMMARY_CONSTRAINT_GRAPH_MODRANGE*) (base + 
                                            header->GetCGModRangesOffset()));
   
+  CURRENT_BE_SUMMARY.SetSiloedReferenceArray
+    ((SUMMARY_SILOED_REFERENCE*) (base + header->GetSiloedReferencesOffset()));
+
 }
