@@ -526,7 +526,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 Set_Visited(coindexed_arr_ref);
 
-                //elem_type = Ty_Table[coarray_type].u2.etype;
                 elem_type = get_assign_stmt_datatype(stmt_node);
 
                 if ( array_ref_on_LHS(wn) ) {
@@ -576,7 +575,20 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     /* handle indirection ... */
                 } else if ( array_ref_on_RHS(wn) ) {
                     WN *RHS_wn = WN_kid0(stmt_node);
-                    if ( !is_lvalue(RHS_wn)
+                    WN *LHS_img;
+                    TY_IDX LHS_coarray_type;
+                    BOOL LHS_is_coindexed  = FALSE;
+
+                    if (WN_operator(stmt_node) == OPR_ISTORE ||
+                        WN_operator(stmt_node) == OPR_MSTORE) {
+                        WN *LHS_wn = WN_kid1(stmt_node);
+                        if (expr_is_coindexed(LHS_wn, &LHS_img,
+                            &LHS_coarray_type)) {
+                            LHS_is_coindexed = TRUE;
+                        }
+                    }
+
+                    if ( !is_lvalue(RHS_wn) || LHS_is_coindexed
                          /* for now, use LCB for LDID, ILOAD, MLOAD as well */
                          || WN_operator(RHS_wn) == OPR_LDID
                          || WN_operator(RHS_wn) == OPR_ILOAD
@@ -1148,6 +1160,7 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
     /* compute base address for local ref */
 
     local_strided_first_subscript = FALSE;
+    ST *local_array_st;
     if (access == READ_TO_LCB || access == WRITE_FROM_LCB) {
         /* local_ref == NULL */
         local_base_address = WN_Ldid(Pointer_type, 0, LCB_st,
@@ -1164,21 +1177,24 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
          ("operator for local_ref is not ARRSECTION for DIRECT access type"));
 
         TY_IDX etype;
-        ST *local_array_st = WN_st(WN_kid0(local_ref));
+        local_array_st = WN_st(WN_kid0(local_ref));
         TY_IDX arr_type = get_array_type(local_array_st);
         if (is_dope(arr_type) || TY_kind(arr_type) == KIND_POINTER)
             arr_type = TY_pointed(FLD_type(TY_fld(arr_type)));
 
-        Is_True(TY_kind(arr_type) == KIND_ARRAY,
-         ("arr_type for local_ref is not KIND_ARRAY for DIRECT access type"));
 
-        etype  = Ty_Table[arr_type].u2.etype;
-        if (is_coarray_type(arr_type))
-            local_rank = get_coarray_rank(arr_type);
-        else
-            local_rank = get_array_rank(arr_type);
+        if (TY_kind(arr_type) == KIND_ARRAY) {
+            etype  = Ty_Table[arr_type].u2.etype;
+            if (is_coarray_type(arr_type))
+                local_rank = get_coarray_rank(arr_type);
+            else
+                local_rank = get_array_rank(arr_type);
+        } else {
+            local_rank = WN_num_dim(local_ref);
+        }
+
         local_dim_sm.resize(local_rank);
-        local_dim_sm[0] = WN_Intconst(Integer_type, TY_size(etype));
+        local_dim_sm[0] = WN_Intconst(Integer_type, TY_size(elem_type));
 
         BOOL local_ref_noncontig = (WN_element_size(local_ref) < 0);
 
@@ -1244,6 +1260,7 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
     BOOL coarray_ref_is_contig = is_contiguous_access(coarray_ref);
     BOOL local_ref_is_contig = access == READ_TO_LCB ||
                                access == WRITE_FROM_LCB ||
+                               ST_is_lcb_ptr(local_array_st) ||
                                is_contiguous_access(local_ref);
 
     if (coarray_ref_is_contig &&
@@ -2030,124 +2047,6 @@ static WN * Generate_Call_coarray_strided_write(WN *image, WN *dest,
 
     return call;
 }
-
-#if 0
-static WN *
-Generate_Call_coarray_read_src_str(WN *coarray, WN *lcb_ptr, WN *ndim,
-                                    WN *str_mults, WN *extents, WN *strides,
-                                    WN *image)
-{
-    WN *call = Generate_Call_Shell( COARRAY_READ_SRC_STR, MTYPE_V, 7);
-    WN_actual( call, 0 ) =
-        Generate_Param( coarray, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 1 ) =
-        Generate_Param( lcb_ptr, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 2 ) =
-        Generate_Param( ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 3 ) =
-        Generate_Param( str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 4 ) =
-        Generate_Param( extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 5 ) =
-        Generate_Param( strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 6 ) =
-        Generate_Param( image, WN_PARM_BY_VALUE);
-
-    return call;
-}
-
-static WN * Generate_Call_coarray_read_full_str(WN *coarray, WN *local,
-                                    WN *src_ndim, WN *src_str_mults,
-                                    WN *src_extents, WN *src_strides,
-                                    WN *dest_ndim, WN *dest_str_mults,
-                                    WN *dest_extents, WN *dest_strides,
-                                    WN *image)
-{
-    WN *call = Generate_Call_Shell( COARRAY_READ_FULL_STR, MTYPE_V, 11);
-    WN_actual( call, 0 ) =
-        Generate_Param( coarray, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 1 ) =
-        Generate_Param( local, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 2 ) =
-        Generate_Param( src_ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 3 ) =
-        Generate_Param( src_str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 4 ) =
-        Generate_Param( src_extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 5 ) =
-        Generate_Param( src_strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 6 ) =
-        Generate_Param( dest_ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 7 ) =
-        Generate_Param( dest_str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 8 ) =
-        Generate_Param( dest_extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 9 ) =
-        Generate_Param( dest_strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 10 ) =
-        Generate_Param( image, WN_PARM_BY_VALUE);
-
-    return call;
-}
-
-static WN *
-Generate_Call_coarray_write_dest_str(WN *coarray, WN *lcb_ptr, WN *ndim,
-                                    WN *str_mults, WN *extents, WN *strides,
-                                    WN *image)
-{
-    WN *call = Generate_Call_Shell( COARRAY_WRITE_DEST_STR, MTYPE_V, 7);
-    WN_actual( call, 0 ) =
-        Generate_Param( coarray, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 1 ) =
-        Generate_Param( lcb_ptr, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 2 ) =
-        Generate_Param( ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 3 ) =
-        Generate_Param( str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 4 ) =
-        Generate_Param( extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 5 ) =
-        Generate_Param( strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 6 ) =
-        Generate_Param( image, WN_PARM_BY_VALUE);
-
-    return call;
-}
-
-static WN * Generate_Call_coarray_write_full_str(WN *coarray, WN *local,
-                                    WN *dest_ndim, WN *dest_str_mults,
-                                    WN *dest_extents, WN *dest_strides,
-                                    WN *src_ndim, WN *src_str_mults,
-                                    WN *src_extents, WN *src_strides,
-                                    WN *image)
-{
-    WN *call = Generate_Call_Shell( COARRAY_WRITE_FULL_STR, MTYPE_V, 11);
-    WN_actual( call, 0 ) =
-        Generate_Param( coarray, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 1 ) =
-        Generate_Param( local, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 2 ) =
-        Generate_Param( dest_ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 3 ) =
-        Generate_Param( dest_str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 4 ) =
-        Generate_Param( dest_extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 5 ) =
-        Generate_Param( dest_strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 6 ) =
-        Generate_Param( src_ndim, WN_PARM_BY_VALUE);
-    WN_actual( call, 7 ) =
-        Generate_Param( src_str_mults, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 8 ) =
-        Generate_Param( src_extents, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 9 ) =
-        Generate_Param( src_strides, WN_PARM_BY_REFERENCE);
-    WN_actual( call, 10 ) =
-        Generate_Param( image, WN_PARM_BY_VALUE);
-
-    return call;
-}
-#endif
 
 /*
  * init_caf_extern_symbols

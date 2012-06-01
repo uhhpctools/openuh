@@ -59,10 +59,6 @@ extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 #define COARRAY_WRITE               "coarray_write_"
 #define COARRAY_STRIDED_READ        "coarray_strided_read_"
 #define COARRAY_STRIDED_WRITE       "coarray_strided_write_"
-#define COARRAY_READ_SRC_STR        "coarray_read_src_str_"
-#define COARRAY_READ_FULL_STR       "coarray_read_full_str_"
-#define COARRAY_WRITE_DEST_STR      "coarray_write_dest_str_"
-#define COARRAY_WRITE_FULL_STR      "coarray_write_full_str_"
 
 #endif /* caf_lower_h_included */
 
