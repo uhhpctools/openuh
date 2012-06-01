@@ -1379,6 +1379,16 @@ opr_to_dv_hdr_fld(int ir_idx)
     case Dv_Access_Orig_Size :
 	 return DV_ORIG_SIZE_IDX;
 	 break;
+#ifdef _UH_COARRAYS
+    case Dv_Set_N_Codim :
+    case Dv_Access_N_Codim :
+	 return DV_NUM_CODIMS_IDX;
+	 break;
+    case Dv_Set_Is_Coarray :
+    case Dv_Access_Is_Coarray :
+     return DV_IS_COARRAY_IDX;
+     break;
+#endif
     default:
          PRINTMSG(IR_LINE_NUM(ir_idx), 1044, Internal, IR_COL_NUM(ir_idx),
 	   "opr_to_dv_hdr_fld");
@@ -6957,6 +6967,10 @@ CONTINUE:
    case Dv_Set_Typ_Code :
    case Dv_Set_Orig_Base :
    case Dv_Set_Orig_Size :
+#ifdef _UH_COARRAYS
+   case Dv_Set_Is_Coarray :
+   case Dv_Set_N_Codim :
+#endif
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
 
@@ -7027,6 +7041,10 @@ CONTINUE:
    case Dv_Access_Typ_Code :
    case Dv_Access_Orig_Base :
    case Dv_Access_Orig_Size :
+#ifdef _UH_COARRAYS
+   case Dv_Access_Is_Coarray :
+   case Dv_Access_N_Codim :
+#endif
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
 

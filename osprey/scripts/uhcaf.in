@@ -277,7 +277,7 @@ if [ $COMM_LAYER == gasnet ]; then
       fi
       LIBMPI="-L${MPI_LIB} -lmpi"
     fi
-    COMM_LIBS="-Wl,-rpath,$MPI_LIB $LIBMPI $COMM_LIBS"
+    COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $LIBMPI"
 
     add_to_env_list "MPI_LIB"
     add_to_env_list "LIBMPI"

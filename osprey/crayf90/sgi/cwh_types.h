@@ -82,7 +82,7 @@ typedef enum {
   DV_ORIG_SIZE_IDX	= 11
 #else
   DV_UNUSED_1_IDX	= 7,
-  DV_IS_COARRAYS	= 8,
+  DV_IS_COARRAY_IDX	= 8,
   DV_NUM_CODIMS_IDX	= 9,
   DV_NUM_DIMS_IDX	= 10,
   DV_TYPE_CODE_IDX	= 11,

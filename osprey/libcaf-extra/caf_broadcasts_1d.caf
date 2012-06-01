@@ -30,65 +30,70 @@
       !   Naive Broadcasts
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-      subroutine caf_broadcast_logical(dest, src, root)
+      subroutine caf_broadcast_logical(dest, src, nelems, root)
+          integer :: nelems
           integer :: root
-          logical :: dest[*], src
+          logical :: dest(nelems)[*], src(nelems)
 
           if (this_image() == root) then
             do i=1,num_images()
-            dest[i] = src
+            dest(1:nelems)[i] = src(1:nelems)
             end do
           end if
           
           sync all
       end subroutine
 
-      subroutine caf_broadcast_int4(dest, src, root)
+      subroutine caf_broadcast_int4(dest, src, nelems, root)
+          integer :: nelems
           integer :: root
-          integer :: dest[*], src
+          integer :: dest(nelems)[*], src(nelems)
 
           if (this_image() == root) then
             do i=1,num_images()
-            dest[i] = src
+            dest(1:nelems)[i] = src(1:nelems)
             end do
           end if
           
           sync all
       end subroutine
 
-      subroutine caf_broadcast_int8(dest, src, root)
+      subroutine caf_broadcast_int8(dest, src, nelems, root)
+          integer :: nelems
           integer :: root
-          integer*8 :: dest[*], src
+          integer*8 :: dest(nelems)[*], src(nelems)
 
           if (this_image() == root) then
             do i=1,num_images()
-              dest[i] = src
+              dest(1:nelems)[i] = src(1:nelems)
             end do
           end if
 
           sync all
       end subroutine
 
-      subroutine caf_broadcast_real4(dest, src, root)
+      subroutine caf_broadcast_real4(dest, src, nelems, root)
+          integer :: nelems
           integer :: root
-          real :: dest[*], src
+          real :: dest(nelems)[*], src(nelems)
 
           if (this_image() == root) then
             do i=1,num_images()
-              dest[i] = src
+              dest(1:nelems)[i] = src(1:nelems)
             end do
           end if
 
           sync all
       end subroutine
 
-      subroutine caf_broadcast_real8(dest, src, root)
+      subroutine caf_broadcast_real8(dest, src, nelems, root)
+          integer :: nelems
           integer :: root
-          double precision :: dest[*], src
+          double precision :: dest(nelems)[*], src(nelems)
 
           if (this_image() == root) then
             do i=1,num_images()
-              dest[i] = src
+              dest(1:nelems)[i] = src(1:nelems)
             end do
           end if
 

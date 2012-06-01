@@ -5908,8 +5908,35 @@ static	void	attr_semantics(int	attr_idx,
 #ifdef _UH_COARRAYS
             int pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
             if (BD_ARRAY_CLASS(pe_bd_idx) == Assumed_Size) {
+              int corank = BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+
+              /* set corank */
+              NTR_IR_TBL(ir_idx);
+              IR_OPR(ir_idx)      = Dv_Set_N_Codim;
+              IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+              IR_LINE_NUM(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+              IR_COL_NUM(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+              IR_FLD_L(ir_idx)    = AT_Tbl_Idx;
+              IR_IDX_L(ir_idx)    = attr_idx;
+              IR_LINE_NUM_L(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+              IR_COL_NUM_L(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+              IR_FLD_R(ir_idx) = CN_Tbl_Idx;
+              IR_IDX_R(ir_idx) = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE,
+                      corank);
+              IR_LINE_NUM_R(ir_idx) = SH_GLB_LINE(curr_stmt_sh_idx);
+              IR_COL_NUM_R(ir_idx)  = SH_COL_NUM(curr_stmt_sh_idx);
+
+              gen_sh(After, Assignment_Stmt, SH_GLB_LINE(curr_stmt_sh_idx),
+                      SH_COL_NUM(curr_stmt_sh_idx), FALSE, FALSE, TRUE);
+
+              SH_IR_IDX(curr_stmt_sh_idx)    = ir_idx;
+              SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+
+
               BD_ARRAY_CLASS(pe_bd_idx) = Assumed_Shape;
-              for (i = 1; i <= BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)); i++) {
+
+              for (i = 1; i <= corank; i++) {
 
                  NTR_IR_TBL(ir_idx);
                  IR_OPR(ir_idx)      = Dv_Set_Low_Bound;

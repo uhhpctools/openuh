@@ -47,7 +47,9 @@ VPATH    =  $(SRC_DIRS)
 
 OBJECTS = \
 	caf_reductions.o \
-	caf_broadcasts.o
+	caf_reductions_1d.o \
+	caf_broadcasts.o \
+	caf_broadcasts_1d.o
 
 default: $(TARGETS)
 

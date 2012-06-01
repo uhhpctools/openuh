@@ -503,9 +503,7 @@ INSTALL_CAF_EXTRA_LIB () {
     fi 
 
     # Create the Fortran module files for the CAF Extra Library interface
-    if [ ! -e ${ROOT}/include/${VERSION}/CAF_REDUCTIONS.mod ] ; then
-        (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray caf-extra.caf)
-    fi
+    (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray caf-extra.caf)
 }
 
 
