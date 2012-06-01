@@ -133,9 +133,6 @@ extern BOOL IPA_Enable_Reshape;         /* reshape analysis for arrays  */
 extern BOOL IPA_Enable_Preopt;		/* call preopt during IPA */
 extern BOOL IPA_Enable_Preopt_Set;
 
-extern BOOL IPA_Enable_Siloed_Ref;	/* perform siloed reference analysis */
-extern BOOL IPA_Enable_Siloed_Ref_Set;
-
 #ifdef KEY
 extern BOOL IPA_Enable_Icall_Opt;	// allow ipa change icall to call
 extern BOOL IPA_Enable_EH_Region_Removal; // remove useless exception regions

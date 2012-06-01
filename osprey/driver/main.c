@@ -1072,10 +1072,9 @@ print_defaults(int argc, char *argv[])
   // AES, PCLMUL
   fprintf(stderr, " %s", aes == TRUE ? "-maes" : "-mno-aes");
   fprintf(stderr, " %s", pclmul == TRUE ? "-mpclmul" : "-mno-pclmul");
-  // AVX, XOP, FMA3, FMA4
+  // AVX, XOP, FMA4
   fprintf(stderr, " %s", avx == TRUE ? "-mavx" : "-mno-avx");
   fprintf(stderr, " %s", xop == TRUE ? "-mxop" : "-mno-xop");
-  fprintf(stderr, " %s", fma == TRUE ? "-mfma" : "-mno-fma");
   fprintf(stderr, " %s", fma4 == TRUE ? "-mfma4" : "-mno-fma4");
 #endif
 

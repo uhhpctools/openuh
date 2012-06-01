@@ -4966,12 +4966,12 @@ int main()
                            TOP_xfnmsub231ss,
                            TOP_UNDEFINED );
   
-  ISA_PRINT_TYPE ifma_ropopmem = ISA_Print_Type_Create("ifma_ropopmem", "%s %s%s(%s),%s,%s");
+  ISA_PRINT_TYPE ifma_ropopmem = ISA_Print_Type_Create("ifma_ropopmem", "%s %s,%s%s(%s),%s");
   Name();
+  Operand(1);
   Segment();
   Operand(3);
   Operand(2);
-  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmem,
@@ -5037,14 +5037,14 @@ int main()
                            TOP_xfnmsub231xss,
                            TOP_UNDEFINED );
 
-  ISA_PRINT_TYPE ifma_ropopmemindex = ISA_Print_Type_Create("ifma_ropopmemindex", "%s %s%s(%s,%s,%s),%s,%s");
+  ISA_PRINT_TYPE ifma_ropopmemindex = ISA_Print_Type_Create("ifma_ropopmemindex", "%s %s,%s%s(%s,%s,%s),%s");
   Name();
+  Operand(1);
   Segment();
   Operand(5);
   Operand(2);
   Operand(3);
   Operand(4);
-  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmemindex,
@@ -5110,13 +5110,13 @@ int main()
                            TOP_xfnmsub231xxss,
                            TOP_UNDEFINED );
 
-  ISA_PRINT_TYPE ifma_ropopmemindexx = ISA_Print_Type_Create("ifma_ropopmemindexx", "%s %s%s(,%s,%s),%s,%s");
+  ISA_PRINT_TYPE ifma_ropopmemindexx = ISA_Print_Type_Create("ifma_ropopmemindexx", "%s %s,%s%s(,%s,%s),%s");
   Name();
+  Operand(1);
   Segment();
   Operand(4);
   Operand(2);
   Operand(3);
-  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmemindexx,

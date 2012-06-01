@@ -29,7 +29,6 @@
 #include "ipa_be_summary.h"
 #include "ipa_nystrom_alias_analyzer.h"
 #include "be_ipa_util.h"
-#include "ipa_pcg.h"
 
 void
 IPA_Summary_ProcessPointsToSet(DYN_ARRAY<UINT32>* cg_nodeids,
@@ -170,8 +169,6 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
   DYN_ARRAY<UINT32> cg_nodeids(Malloc_Mem_Pool);
   DYN_ARRAY<SUMMARY_CONSTRAINT_GRAPH_MODRANGE> cg_modranges(Malloc_Mem_Pool);
   
-  DYN_ARRAY<SUMMARY_SILOED_REFERENCE> siloed_references(Malloc_Mem_Pool);
-
   // flatten the hierachy put_info_tree then, we can use the loop to iterate.
   // otherwise we need pass all DYN_Arrays.
   DYN_ARRAY<PU_Info*> pu_infos(Malloc_Mem_Pool);
@@ -191,8 +188,6 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
     mUINT32 num_stinfos = 0;
     mUINT32 num_callsites = 0;
     mUINT32 num_nodeids = 0;
-
-    mUINT32 num_siloedrefs = 0;
   
     INT hdr_idx = cg_headers.Newidx();
     cg_headers[hdr_idx].Init();
@@ -382,25 +377,6 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
     cur_hdr->cgNodeIdsIdx(cg_nodeids.Lastidx() - num_nodeids + 1);
     cur_hdr->cgNodeIdsCount(num_nodeids);
 
-    // Siloed refrences
-    const ALIAS_TAG_SET &siloed_tag_set =
-  		  IPA_Concurrency_Graph->Get_siloed_references(ipa_node);
-
-    for(ALIAS_TAG_SET::iterator it = siloed_tag_set.begin();
-  		  it != siloed_tag_set.end(); it++) {
-  	  AliasTag tag = *it;
-  	  num_siloedrefs++;
-
-  	  INT new_idx = siloed_references.Newidx();
-  	  siloed_references[new_idx].Init();
-  	  SUMMARY_SILOED_REFERENCE *summSiloedRef = &(siloed_references[new_idx]);
-
-  	  summSiloedRef->aliasTag(tag);
-    }
-
-    cur_hdr->siloedReferenceIdx(siloed_references.Lastidx() - num_siloedrefs + 1);
-    cur_hdr->siloedReferenceCount(num_siloedrefs);
-
     if (Get_Trace(TP_ALIAS,NYSTROM_SUMMARY_FLAG))
       fprintf(stderr,"xxx nodes = %d, stinfos = %d, callsites = %d, nodeids = %d\n",
               cur_hdr->cgNodesCount(), cur_hdr->cgStInfosCount(),
@@ -417,8 +393,6 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
   INT offset_cg_nodeids = 0;
   INT offset_cg_modranges = 0;
   
-  INT offset_siloed_references = 0;
-
   Elf64_Word temp;
   
   INT cur_sec_disp = fl->file_size;
@@ -468,13 +442,6 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
     (INT) ir_b_save_buf(&(cg_modranges[0]), size, sizeof(INT64), 0, fl);
   offset_cg_modranges = offset_cg_modranges - cur_sec_disp;
 
-  // write the siloed references
-  size =
-    (siloed_references.Lastidx() + 1) * sizeof(SUMMARY_SILOED_REFERENCE);
-  offset_siloed_references =
-    (INT) ir_b_save_buf(&(siloed_references[0]), size, sizeof(INT64), 0, fl);
-  offset_siloed_references = offset_siloed_references - cur_sec_disp;
-
   // now update the pointer to the header and the actual header
   NEW_BE_SUMMARY_HEADER header;
   offset = (INT) ir_b_save_buf(&header, sizeof(NEW_BE_SUMMARY_HEADER),
@@ -489,16 +456,12 @@ IPA_irb_write_nystrom_alias_info(PU_Info* pu_info_tree, Output_File *fl)
   header_addr->SetCGCallsitesOffset(offset_cg_callsites);
   header_addr->SetCGModRangesOffset(offset_cg_modranges);
 
-  header_addr->SetSiloedReferencesOffset(offset_siloed_references);
-
   header_addr->SetProcHeadersSize(cg_headers.Lastidx() + 1);
   header_addr->SetCGNodesSize(cg_nodes.Lastidx() + 1);
   header_addr->SetCGStInfosSize(cg_stinfos.Lastidx() + 1);
   header_addr->SetCGCallsitesSize(cg_callsites.Lastidx() + 1);
   header_addr->SetCGNodeIdsSize(cg_nodeids.Lastidx() + 1);
   header_addr->SetCGModRangesSize(cg_modranges.Lastidx() + 1);
-
-  header_addr->SetSiloedReferencesSize(siloed_references.Lastidx() + 1);
 
   if (Get_Trace(TP_ALIAS,NYSTROM_SUMMARY_FLAG))
     fprintf(stderr, "cg_nodes = %d, cg_stinfos = %d, cg_callsites = %d,"

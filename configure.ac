@@ -34,7 +34,6 @@ along with this file; ; see the file osprey/COPYING.  If not, see
 
 AC_PREREQ([2.59])
 AC_INIT([opencc],[4.2])
-AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 #AC_PROG_CC
@@ -45,12 +44,12 @@ AC_CANONICAL_TARGET
 # unless the user specifies otherwise, we default to 32 bit mode as the
 # default on x86 64 bit platforms.
 
-if test "$build_alias" = "" && test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
+if test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
   host_cpu=i686
   host=$host_cpu-$host_vendor-$host_os
 fi
 
-if test "$build_alias" = "" && test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
+if test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
   target_cpu=i686
   target=$target_cpu-$target_vendor-$target_os
 fi
@@ -355,21 +354,6 @@ case "$target" in
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_IA64"
 		TARG_INFO_NAME=ipfec_targ_info
 		;;
-	powerpc-*-linux*)
-		MACHINE_TYPE=PPC32
-		BUILD_ABI=I32BIT
-		BUILD_ARCH=IA32
-		BUILD_HOST=IA32
-		BUILD_TARGET=PPC32
-		BUILD_MULTILIB=NO
-		BUILD_VENDOR=OSP
-		GCC_CONFIGURE_TARG=powerpc-redhat-linux
-		GCC_CONFIGURE_HOST=powerpc-redhat-linux
-		GCC_CONFIGURE_BUILD=powerpc-redhat-linux
-		CYGNUS_CONFIGURE_TARG=mipsel-elf-linux
-		GCC_CONFIGURE_CFLAGS+=" -DTARG_PPC32"
-		GCC_CONFIGURE_COMPILER+=" -m32"
-		;;
 	sl*-*-linux*)
 		MACHINE_TYPE=SL
 		BUILD_TARGET=SL
@@ -392,12 +376,6 @@ esac
 if test "${BUILD_TARGET}" = "SL"; then
    BUILD_GNU3="YES"
    BUILD_FORTRAN="NO"
-fi
-
-if test "${BUILD_TARGET}" = "PPC32"; then
-   BUILD_GNU3="NO"
-   BUILD_FORTRAN="NO"
-   BUILD_SKIP_IPA="NO"
 fi
 
 UNAME_MACHINE=`uname -m`

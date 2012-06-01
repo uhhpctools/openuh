@@ -67,7 +67,7 @@ protected:
     bool                _invalidSSA; /* SSA needs to be invalidated after this opt */
 
     void                StartEndMessage_(bool);
-    virtual void        ProcessDumpOptions_(DUMP_KIND);
+    void                ProcessDumpOptions_(DUMP_KIND);
     
     bool                LookupDisableable_(INT32 comp);
     bool                ComponentDisableable_(O64_COMPONENT comp);  
@@ -82,6 +82,6 @@ public:
 };
 
 // Declare the public interface for each component
-extern INT32 Current_PU_Count();
+// extern void OPT_Perform();
 
 #endif /* comp_decl_INCLUDED */

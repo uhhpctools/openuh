@@ -311,10 +311,6 @@ BOOL IPA_Enable_Reorder=FALSE; /*enable field reordering*/
 BOOL IPA_Enable_Preopt = FALSE;          
 BOOL IPA_Enable_Preopt_Set = FALSE;
 
-// perform siloed reference analysis during IPA
-BOOL IPA_Enable_Siloed_Ref = FALSE;
-BOOL IPA_Enable_Siloed_Ref_Set = FALSE;
-
 // maximum number of clones for a call graph node
 UINT32 IPA_Max_Node_Clones = 0;
 BOOL   IPA_Max_Node_Clones_Set = FALSE;
@@ -568,10 +564,6 @@ static OPTION_DESC Options_IPA[] = {
     { OVK_BOOL, OV_INTERNAL,    FALSE, "preopt",             "",
           0, 0, 0,              &IPA_Enable_Preopt, &IPA_Enable_Preopt_Set,
           "Enable calling the preopt" },
-    // option -IPA:siloed=on requires -IPA:preopt=on and -OPT:alias=field_sensitive
-    { OVK_BOOL, OV_INTERNAL,    FALSE, "siloed",             "",
-          0, 0, 0,              &IPA_Enable_Siloed_Ref, &IPA_Enable_Siloed_Ref_Set,
-          "Enable siloed reference analysis" },
     { OVK_BOOL, OV_INTERNAL,    FALSE, "struct",             "",
           0, 0, 0,              &IPA_Enable_Inline_Struct,   NULL,
           "Enable inlining of PU with F90 structures " },

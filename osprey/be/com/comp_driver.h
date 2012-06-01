@@ -61,8 +61,8 @@ struct O64_OptionDescriptor
         OptionId(id), OptionDesc(desc),
         OptionName(name), OptionAbbrev(abbrev), OptionKind(kind),
         OptionVisibility(visibility), OptionPragma(pragma),
-        DefaultVal(def), MinVal(min), MaxVal(max)
-        { Is_True(kind != OVK_ENUM, ("kind should not be OVK_ENUM")); };
+        DefaultVal(def), MinVal(min), MaxVal(max),
+        OptionSet(false) { Is_True(kind != OVK_ENUM, ("kind should not be OVK_ENUM")); };
 
     template <typename enum_type>
     O64_OptionDescriptor(INT32 id, const char * desc,
@@ -74,8 +74,8 @@ struct O64_OptionDescriptor
         OptionName(name), OptionAbbrev(abbrev), OptionKind(OVK_ENUM),
         OptionVisibility(visibility), OptionPragma(pragma),
         DefaultVal(def), MinVal(min), MaxVal(max),
-        DefaultSetVal(defset), ValueNames(valuenames)
-        {};
+        DefaultSetVal(defset), ValueNames(valuenames),
+        OptionSet(false) {};
 
     INT32               OptionId;
     OPTION_KIND         OptionKind;
@@ -85,6 +85,7 @@ struct O64_OptionDescriptor
     const char *        OptionName;
     const char *        OptionAbbrev;
     const char *        OptionDesc;
+    BOOL                OptionSet;  /* the value is set from command line */
 
     INT64               DefaultVal;
     INT64               MinVal;
@@ -110,45 +111,10 @@ struct O64_ComponentDescriptor
 
 #define O64_COMPONENT_DESC(desc, name, opt_desc) desc, name, opt_desc
 
-class O64_ComponentDescriptorList
+struct O64_ComponentDescriptorList
 {
-private:
-    INT32                       _NumOfComponents;
-    INT32                       _NumOfRegisteredComponents;
-    O64_ComponentDescriptor **  _ComponentDescriptors;
-    BOOL                    *   _ComponentRegistered;
-
-public:
-    O64_ComponentDescriptorList() {};
-    ~O64_ComponentDescriptorList() {};
-
-    void InitCompDescList(MEM_POOL * mem_pool) {
-        _NumOfComponents = COMPONENT_last;
-        _NumOfRegisteredComponents = COMPONENT_first;
-        _ComponentDescriptors = (O64_ComponentDescriptor **)
-            MEM_POOL_Alloc(mem_pool, 
-            sizeof(O64_ComponentDescriptor*)*COMPONENT_last); 
-        _ComponentRegistered = (BOOL *) 
-            MEM_POOL_Alloc(mem_pool, sizeof(BOOL)*COMPONENT_last);
-        memset(_ComponentRegistered, 0, sizeof(BOOL)*COMPONENT_last);    
-    }
-
-    // the num of components is the total number of static components
-    // it could be different from the number registered components
-    // since ome of components may not be registered (the module 
-    // could be not loaded)
-    INT32 GetNumOfComponents()           {return _NumOfComponents; }
-    INT32 GetNumOfRegisteredComponents() { return _NumOfRegisteredComponents; }
-    void  SetNumOfRegisteredComponents(INT32 num) 
-        { _NumOfRegisteredComponents = num; }
-    BOOL  SetComponentRegistered(INT32 comp) { _ComponentRegistered[comp] = TRUE; }
-    BOOL  IsComponentRegistered(INT32 comp) { return _ComponentRegistered[comp]; }
-    O64_ComponentDescriptor * GetComponentDescriptor(INT32 comp) {
-        return _ComponentDescriptors[comp]; 
-    }
-    void SetComponentDescriptor(INT32 comp, const O64_ComponentDescriptor* desc) {
-        _ComponentDescriptors[comp] = const_cast <O64_ComponentDescriptor*>(desc);
-    }    
+    INT32                       NumOfComponents;
+    O64_ComponentDescriptor **  ComponentDescriptors;
 };
 
 class O64_ComponentInitializer
@@ -158,8 +124,6 @@ public:
 };
 
 class O64_Option;               /* forward declaration */
-
-#define MaxOptionNum    100
 
 class O64_Driver
 {
@@ -187,8 +151,7 @@ public:
     MEM_POOL *          GetLocalMemPool()   { return &_LocalPool; };
     WN*                 GetCurrentWN()      { return _CurrentWN; };
     void                SetCurrentWN(WN* wn){ _CurrentWN = wn; };
-    bool                SaveComponentOption(const char * argv);
-    void                ProcessComponentOption();
+    bool                ProcessComponentOption(char *argv);
     TRACE_OPTION_KIND   GetTraceKind();
     BOOL                TimeStats();
     BOOL                MemStats();
@@ -207,8 +170,6 @@ private:
 
     O64_Option*                 _CurrentOption;
     WN*                         _CurrentWN;
-    INT                         _CompOptionArgc;
-    char**                      _CompOptionArgv;
 
     O64_Driver();
     ~O64_Driver();
@@ -260,7 +221,6 @@ public:
     OPTION_LIST *   GetListOption(INT32 component, INT32 option);
     template <typename enum_ret>
     enum_ret        GetEnumOption(INT32 component, INT32 option);
-    BOOL            GetOptionSet(INT32 component, INT32 option);
 
 private:
 
@@ -275,7 +235,6 @@ private:
      };
 
     INT32                           GetNumOfComponents_() const;
-    INT32                           GetNumOfRegisteredComponents_() const;
     const O64_ComponentDescriptor*  GetComponentDescriptor_(INT32 component);
     const O64_OptionDescriptor *    GetOptionDescriptor_(INT32 component, INT32 option);
     
@@ -302,11 +261,10 @@ private:
 private:
 
     _Value **           _Options; /* store value for each option for each component */
-    BOOL   **           _OptionsSet;
     MEM_POOL *          _MemPool; /* point to O64_Driver's _DriverPool */
     
     const O64_OptionDescriptor*         _CommonOptionDescriptors;
-    O64_ComponentDescriptorList *       _ComponentDescriptorList; 
+    const O64_ComponentDescriptorList * _ComponentDescriptorList; /* to component descriptor list */
 
     friend class    O64_Driver;
     friend class    O64_Component;
@@ -320,7 +278,7 @@ private:
 inline const O64_ComponentDescriptor*
 O64_Option::GetComponentDescriptor_(INT32 component)
 {
-    return _ComponentDescriptorList->GetComponentDescriptor(component); 
+    return _ComponentDescriptorList->ComponentDescriptors[component]; 
 }
 
 inline const char *
@@ -385,12 +343,6 @@ O64_Option::GetListOption(INT32 component, INT32 option)
     return _Options[component][option]._ListVal;
 }
 
-inline BOOL
-O64_Option::GetOptionSet(INT32 component, INT32 option)
-{
-  return _OptionsSet[component][option];
-}
-
 inline const OPTION_KIND
 O64_Option::GetOptionKind_(INT32 component, INT32 option)
 {
@@ -412,14 +364,8 @@ O64_Option::GetOptionDescriptor_(INT32 component, INT32 option)
 inline INT32 
 O64_Option::GetNumOfComponents_() const
 {
-    return _ComponentDescriptorList->GetNumOfComponents();
+    return _ComponentDescriptorList->NumOfComponents;
 }
-
-inline INT32
-O64_Option::GetNumOfRegisteredComponents_() const
-{
-    return _ComponentDescriptorList->GetNumOfRegisteredComponents();
-}    
 
 inline void
 O64_Option::SetDefaultOption_(INT32 component, INT32 option)
@@ -468,9 +414,6 @@ O64_Option::SetDefaultOption_(INT32 component, INT32 option)
             Is_True(false, ("Unimplemented option kind"));
             break;
     } 
-
-    // unset the _OptionSet (i.e., the value is from default value)
-    _OptionsSet[component][option]= FALSE;
 };
 
 inline INT64
@@ -483,6 +426,12 @@ inline const char *
 O64_Option::GetOptionName_ (INT32 component, INT32 option)
 {
     return GetOptionDescriptor_(component, option)->OptionName;
+}
+
+inline BOOL
+O64_Option::GetOptionSet_(INT32 component, INT32 option)
+{
+    return GetOptionDescriptor_(component, option)->OptionSet;
 }
 
 inline INT64 

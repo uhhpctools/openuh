@@ -1856,6 +1856,56 @@ WN_get_val(WN * wn, const WN_MAP& wn_map)
   return std::pair<bool,int>(FALSE,0);
 }
 
+// Walk nodes in the given WHIRL tree, collect operands for ADD operators.
+//
+// For example, given the following tree,
+//   I4I4LDID  0 <st 2> 
+//   I4I4LDID 49 <st 80>
+//  I4SUB
+//  I4INTCONST -1 (0xffffffffffffffff)
+// I4ADD
+//
+// We will collect two nodes:
+//   I4I4LDID  0 <st 2> 
+//   I4I4LDID 49 <st 80>
+//  I4SUB
+//
+//  I4INTCONST -1 (0xffffffffffffffff)
+
+static STACK<WN *> * 
+Collect_operands(WN * wn, MEM_POOL * pool)
+{
+  STACK<WN *> * stack1 = NULL;
+  STACK<WN *> * stack2 = NULL;
+  OPERATOR opr = WN_operator(wn);
+
+  if ((opr == OPR_ADD) || (OPERATOR_is_load(opr))) {
+    stack1 = CXX_NEW(STACK<WN *>(pool), pool);
+    stack1->Push(wn);
+  }
+
+  while (stack1 && !stack1->Is_Empty()) {
+    WN * wn_iter = stack1->Pop();
+    OPERATOR opr_iter = WN_operator(wn_iter);
+
+    if (opr_iter == OPR_ADD) {
+      stack1->Push(WN_kid(wn_iter, 0));
+      stack1->Push(WN_kid(wn_iter, 1));
+    }
+    else {
+      if (stack2 == NULL)
+	stack2 = CXX_NEW(STACK<WN *>(pool), pool);
+
+      stack2->Push(wn_iter);
+    }
+  }
+
+  if (stack1)
+    CXX_DELETE(stack1, pool);
+
+  return stack2;
+}
+
 // Query whether two integral WHIRLs have disjointed value ranges.
 // Return FALSE if this is not the case or if we can't tell.
 // lo_map and hi_map are maps from "WN *" to "UNSIGNED long long" that
@@ -1917,58 +1967,17 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
   }
   else {
     MEM_POOL * pool = Malloc_Mem_Pool;
-    STACK<WN *> * add_stk = CXX_NEW(STACK<WN *> (pool), pool);
-    STACK<WN *> * sub_stk = CXX_NEW(STACK<WN *> (pool), pool);
-    STACK<WN *> * stack1 = NULL;
-    STACK<WN *> * stack2 = NULL;
-    WN * wn_iter;
-    
-    Collect_operands(wn1, add_stk, sub_stk);
-    while (!add_stk->Is_Empty()) {
-      wn_iter = add_stk->Pop();
-      if (!stack1) 
-	stack1 = CXX_NEW(STACK<WN *>(pool), pool);
-
-      stack1->Push(wn_iter);
-    }
-
-    while (!sub_stk->Is_Empty()) {
-      wn_iter = sub_stk->Pop();
-      if (!stack2) 
-	stack2 = CXX_NEW(STACK<WN *>(pool), pool);
-      
-      stack2->Push(wn_iter);
-    }
-
-    Collect_operands(wn2, add_stk, sub_stk);
-    while (!add_stk->Is_Empty()) {
-      wn_iter = add_stk->Pop();
-      if (!stack2) 
-	stack2 = CXX_NEW(STACK<WN *>(pool), pool);
-
-      stack2->Push(wn_iter);
-    }
-
-    while (!sub_stk->Is_Empty()) {
-      wn_iter = sub_stk->Pop();
-      if (!stack1) 
-	stack1 = CXX_NEW(STACK<WN *>(pool), pool);
-
-      stack1->Push(wn_iter);
-    }
-
-    CXX_DELETE(add_stk, pool);
-    CXX_DELETE(sub_stk, pool);
-
-    STACK<WN *> * stack_tmp1 = NULL;
+    STACK<WN *> * stack1 = Collect_operands(wn1, pool);
+    STACK<WN *> * stack2 = Collect_operands(wn2, pool);
+    STACK<WN *> * stack_tmp = NULL;
 
     // Shuffle stack1 and stack2 so that stack1 contains more elements.
     if ((!stack1 && stack2)
 	|| ((stack1 && stack2) 
 	    && (stack1->Elements() < stack2->Elements()))) {
-      stack_tmp1 = stack1;
+      stack_tmp = stack1;
       stack1 = stack2;
-      stack2 = stack_tmp1;
+      stack2 = stack_tmp;
     }
 
     // Evaluate diff of stack1 and stack2.
@@ -1994,7 +2003,6 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
     int delta_lo = delta;
     int delta_hi = delta;
     std::pair<bool, int> p_val;
-    stack_tmp1 = CXX_NEW(STACK<WN *>(pool), pool);
 
     if (stack2) {
       for (int i = 0; i < stack2->Elements(); i++) {
@@ -2003,51 +2011,15 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 	if (WN_operator(wn2_iter) == OPR_INTCONST)
 	  continue;
 
-	WN * wn_mul = NULL;
 	BOOL found = FALSE;
-	  
-	if ((WN_operator(wn2_iter) == OPR_MPY)
-	    && (WN_operator(WN_kid1(wn2_iter)) == OPR_INTCONST))
-	  wn_mul = WN_kid0(wn2_iter);
 
 	for (int j = 0; j < stack1->Elements(); j++) {
 	  WN * wn1_iter = stack1->Top_nth(j);
 
-	  if (WN_Simp_Compare_Trees(wn1_iter, wn2_iter) == 0) {
+	  if (wn1_iter && (WN_Simp_Compare_Trees(wn1_iter, wn2_iter) == 0)) {
 	    stack1->DeleteTop(j);
 	    found = TRUE;
 	    break;
-	  }
-	  else if (wn_mul
-		   && (WN_Simp_Compare_Trees(wn1_iter, wn_mul) == 0)) {
-	    // Identify expressions like 'x+x' is equal to '2*x'.
-	    int cnt = 0;
-	    WN * wn_tmp;
-	    
-	    while (!stack_tmp1->Is_Empty())
-	      stack_tmp1->Pop();
-
-	    for (int k = 0; k < stack1->Elements(); k++) {
-	      wn_tmp = stack1->Top_nth(k);
-	      if (WN_Simp_Compare_Trees(wn_mul, wn_tmp) == 0)
-		cnt++;
-	      else 
-		stack_tmp1->Push(wn_tmp);
-	    }
-
-	    if (cnt == WN_const_val(WN_kid1(wn2_iter))) {
-	      // Remove matched elements from 'stack1'.
-	      while (!stack1->Is_Empty())
-		stack1->Pop();
-	      
-	      while (!stack_tmp1->Is_Empty()) {
-		wn_tmp = stack_tmp1->Pop();
-		stack1->Push(wn_tmp);
-	      }
-
-	      found = TRUE;
-	      break;
-	    }
 	  }
 	}
 
@@ -2066,7 +2038,6 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 	    else {
 	      CXX_DELETE(stack1, pool);
 	      CXX_DELETE(stack2, pool);
-	      CXX_DELETE(stack_tmp1, pool);
 	      return FALSE;
 	    }
 	  }
@@ -2095,7 +2066,6 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 	    CXX_DELETE(stack1, pool);
 	    if (stack2)
 	      CXX_DELETE(stack2, pool);
-	    CXX_DELETE(stack_tmp1, pool);
 	    return FALSE;
 	  }
 	}
@@ -2107,8 +2077,6 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
 
     if (stack2)
       CXX_DELETE(stack2, pool);
-
-    CXX_DELETE(stack_tmp1, pool);
 
     if ((delta_lo > 0) || (delta_hi < 0))
       return TRUE;

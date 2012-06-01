@@ -44,7 +44,6 @@ private:
   SUMMARY_CONSTRAINT_GRAPH_CALLSITE* _cg_callsites_array;
   UINT32* _cg_nodeids_array;
   SUMMARY_CONSTRAINT_GRAPH_MODRANGE* _cg_modranges_array;
-  SUMMARY_SILOED_REFERENCE *_siloed_references_array;
 
   mINT32 _pu_hdrs_count;
   mINT32 _cg_nodes_count;
@@ -71,9 +70,6 @@ public:
   SUMMARY_CONSTRAINT_GRAPH_MODRANGE* GetCGModRangesArray()
   { return _cg_modranges_array; }
 
-  SUMMARY_SILOED_REFERENCE* GetSiloedReferenceArray()
-  { return _siloed_references_array; }
-
   mINT32 GetPUHdrsCount()      { return _pu_hdrs_count; }
   mINT32 GetCGNodesCount()     { return _cg_nodes_count; }
   mINT32 GetCGStInfosCount()   { return _cg_stinfos_count; }
@@ -94,9 +90,6 @@ public:
   { _cg_nodeids_array = p; }
   void SetCGModRangesArray(SUMMARY_CONSTRAINT_GRAPH_MODRANGE* p)
   { _cg_modranges_array = p; }
-
-  void SetSiloedReferenceArray(SUMMARY_SILOED_REFERENCE* p)
-  { _siloed_references_array = p; }
  
   void SetPUHdrsCount(mINT32 c)
   { _pu_hdrs_count = c; }
@@ -137,9 +130,6 @@ private:
   Elf64_Word _constraint_graph_nodeids_offset;
   Elf64_Word _constraint_graph_modranges_offset;
 
-  // be_summary for siloed references
-  Elf64_Word _siloed_references_offset;
-
   // Constraint graph summary for Nystrom Alias Analyzer
   //   mUINT64 mod_ref_info_size;
   mINT32 _procedure_headers_size;
@@ -148,9 +138,6 @@ private:
   mINT32 _constraint_graph_callsites_size;
   mINT32 _constraint_graph_nodeids_size;
   mINT32 _constraint_graph_modranges_size;
-
-  // be_summary for siloed references
-  mINT32 _siloed_references_size;
 
 public:
   NEW_BE_SUMMARY_HEADER() {
@@ -170,9 +157,6 @@ public:
   void SetCGModRangesOffset(Elf64_Word s) 
   { _constraint_graph_modranges_offset = s; }
 
-  void SetSiloedReferencesOffset(Elf64_Word s)
-  { _siloed_references_offset = s; }
-
   void SetProcHeadersSize(mINT32 s) 
   { _procedure_headers_size = s; }
   void SetCGNodesSize(mINT32 s) 
@@ -185,9 +169,6 @@ public:
   { _constraint_graph_nodeids_size = s; }
   void SetCGModRangesSize(mINT32 s) 
   { _constraint_graph_modranges_size = s; }
-
-  void SetSiloedReferencesSize(mINT32 s)
-  { _siloed_references_size = s; }
 
   Elf64_Word GetProcHeadersOffset()
   { return _procedure_headers_offset; }
@@ -202,9 +183,6 @@ public:
   Elf64_Word GetCGModRangesOffset() 
   { return _constraint_graph_modranges_offset; }
 
-  Elf64_Word GetSiloedReferencesOffset()
-  { return _siloed_references_offset; }
-
   mINT32 GetProcHeadersSize()
   { return _procedure_headers_size; }
   mINT32 GetCGNodesSize() 
@@ -217,9 +195,6 @@ public:
   { return _constraint_graph_nodeids_size; }
   mINT32 GetCGModRangesSize() 
   { return _constraint_graph_modranges_size; }
-
-  mINT32 GetSiloedReferencesSize()
-  { return _siloed_references_size; }
 };
 
 struct pu_mod_ref_info

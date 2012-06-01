@@ -616,7 +616,7 @@ private:
       WOPT_Enable_Call_Zero_Version = FALSE;
       WOPT_Enable_Combine_Operations = FALSE;
       WOPT_Enable_Goto = FALSE;
-//      OPT_Enable_WHIRL_SSA = FALSE;
+      OPT_Enable_WHIRL_SSA = FALSE;
       WOPT_Enable_WOVP = FALSE;
       WOPT_Enable_Tail_Recur = FALSE;
       break;

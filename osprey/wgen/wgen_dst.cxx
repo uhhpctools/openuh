@@ -836,12 +836,12 @@ UINT align = gs_type_align(ftype)/BITSPERBYTE;
     }
     else {
           if (gs_tree_code(type_size) != GS_INTEGER_CST) {
-            if (gs_tree_code(type_size) == GS_ARRAY_TYPE) {
-              tsize = 0;
-            }
-            else {
-              tsize = -1;
-            }
+            if (gs_tree_code(type_size) == GS_ARRAY_TYPE)
+              Fail_FmtAssertion ("Encountered VLA at line %d", lineno);
+            else
+              Fail_FmtAssertion ("VLA at line %d not currently implemented", 
+		lineno);
+            tsize = 0;
           }
           else
             tsize = gs_get_integer_value(type_size) / BITSPERBYTE;
@@ -1737,13 +1737,12 @@ Create_DST_type_For_Tree (gs_t type_tree, TY_IDX ttidx  , TY_IDX idx, bool ignor
    }
    else {
 		if (gs_tree_code(type_size) != GS_INTEGER_CST) {
-			if (gs_tree_code(type_tree) == GS_ARRAY_TYPE) {
-				tsize = 0;
-			}
-			else {
-				tsize = -1;
-			}
+			if (gs_tree_code(type_tree) == GS_ARRAY_TYPE)
+				DevWarn ("Encountered VLA at line %d", lineno);
+			else
+				Fail_FmtAssertion ("VLA at line %d not currently implemented", lineno);
 			variable_size = TRUE;
+			tsize = 0;
 		}
 		else
 			tsize = gs_get_integer_value(type_size) / BITSPERBYTE;

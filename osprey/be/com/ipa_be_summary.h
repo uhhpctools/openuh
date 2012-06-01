@@ -44,9 +44,6 @@ public:
   mUINT32 cgReturnsIdx() { return _constraint_graph_formal_ret_idx; }
   mUINT32 cgReturnsCount() { return _constraint_graph_formal_ret_count; }
   
-  mUINT32 siloedReferenceIdx() { return _siloed_reference_idx; }
-  mUINT32 siloedReferenceCount() { return _siloed_reference_count; }
-
   void stIdx(ST_IDX s) { _st_idx = s; }
   void cgNodesIdx(UINT32 s) {  _constraint_graph_nodes_idx = s; }
   void cgNodesCount(UINT32 s) {  _constraint_graph_nodes_count = s; }
@@ -61,9 +58,6 @@ public:
   void cgReturnsIdx(UINT32 s) {  _constraint_graph_formal_ret_idx = s; }
   void cgReturnsCount(UINT32 s) {  _constraint_graph_formal_ret_count = s; }
   
-  void siloedReferenceIdx(UINT32 s) {  _siloed_reference_idx = s; }
-  void siloedReferenceCount(UINT32 s) {  _siloed_reference_count = s; }
-
 private:
   ST_IDX _st_idx;
   mUINT32 _constraint_graph_nodes_idx;
@@ -81,8 +75,6 @@ private:
   mUINT32 _constraint_graph_formal_ret_idx;
   mUINT32 _constraint_graph_formal_ret_count;
   
-  mUINT32 _siloed_reference_idx;
-  mUINT32 _siloed_reference_count;
 };
 
 // Constraint graph node summary for Nystrom Alias Analyzer
@@ -324,29 +316,6 @@ private:
   UINT32 _childIdx;
   UINT32 _nextIdx;
   TY_IDX _ty_idx;
-};
-
-class SUMMARY_SILOED_REFERENCE
-{
-public:
-	SUMMARY_SILOED_REFERENCE() {}
-
-	void aliasTag(UINT32 tag)	{ _aliasTag = tag; }
-	UINT32 aliasTag() const		{ return _aliasTag; }
-
-	void Init()
-	{
-		BZERO(this, sizeof(SUMMARY_SILOED_REFERENCE));
-	}
-
-	// TODO unimplmented yet
-	void Print_array(FILE *fp, INT32 size) const;
-	void Trace_array(INT32 size) const ;
-	void Print(FILE *f) const;
-	void Trace(void) const;
-
-private:
-	UINT32 _aliasTag;
 };
 
 #endif // ipa_be_summary_INCLUDED

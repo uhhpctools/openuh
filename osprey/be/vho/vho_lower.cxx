@@ -8249,6 +8249,84 @@ vho_lower_if ( WN * wn, WN *block )
   return wn;
 } /* vho_lower_if */
 
+#ifdef KEY // bug 8581
+// determine if two WHIRL statements are identical; only handle store statements
+// for now
+static BOOL
+Identical_stmt(WN *stmt1, WN *stmt2)
+{
+  if (stmt1 == NULL || stmt2 == NULL)
+    return FALSE;
+  if (WN_opcode(stmt1) != WN_opcode(stmt2))
+    return FALSE;
+  switch(WN_operator(stmt1)) {
+  case OPR_STID:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_desc(stmt1) != WN_desc(stmt2))
+      return FALSE;
+    if (WN_st_idx(stmt1) != WN_st_idx(stmt2))
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) == 0;
+  case OPR_STBITS:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_bit_offset(stmt1) != WN_bit_offset(stmt2))
+      return FALSE;
+    if (WN_bit_size(stmt1) != WN_bit_size(stmt2))
+      return FALSE;
+    if (WN_st_idx(stmt1) != WN_st_idx(stmt2))
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) == 0;
+  case OPR_ISTORE:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_desc(stmt1) != WN_desc(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) == 0;
+  case OPR_ISTBITS:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_bit_offset(stmt1) != WN_bit_offset(stmt2))
+      return FALSE;
+    if (WN_bit_size(stmt1) != WN_bit_size(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) == 0;
+  case OPR_MSTORE:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid2(stmt1), WN_kid2(stmt2)) == 0;
+  case OPR_BLOCK: {
+      WN *s1 = WN_first(stmt1);
+      WN *s2 = WN_first(stmt2);
+      for ( ; ; ) {
+	if (s1 == NULL && s2 == NULL)
+	  return TRUE;
+	if (! Identical_stmt(s1, s2))
+	  return FALSE;
+	s1 = WN_next(s1);
+	s2 = WN_next(s2);
+      }
+    }
+  default: ;
+  }
+  return FALSE;
+}
+
 // If the given IF has a nested IF in the ELSE part with identical THEN stmt:
 //
 //   IF (A) THEN S1; ELSE { if (B) THEN S1; ELSE S2; }
@@ -8368,6 +8446,7 @@ Merge_identical_else_parts(WN *wn)
   WN_DELETE_Tree(then_wn);
   return wn;
 }
+#endif
 
 static WN *
 vho_lower_block ( WN * old_block )

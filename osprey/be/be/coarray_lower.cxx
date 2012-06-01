@@ -191,13 +191,13 @@ static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
  ***********************************************************************/
 
 #define Set_LCB_Stmt(wn) (WN_MAP_Set(Caf_LCB_Map, wn, (void*)  1))
-static inline int Is_LCB_Stmt(WN *wn) { (int) WN_MAP_Get(Caf_LCB_Map, wn); }
+#define Is_LCB_Stmt(wn) ((WN*) WN_MAP_Get(Caf_LCB_Map, (WN*) wn))
 
 #define Set_Parent(wn, p) (WN_MAP_Set(Caf_Parent_Map, wn, (void*)  p))
-static inline WN* Get_Parent(WN *wn) { (WN*) WN_MAP_Get(Caf_Parent_Map, wn); }
+#define Get_Parent(wn) ((WN*) WN_MAP_Get(Caf_Parent_Map, (WN*) wn))
 
 #define Set_Visited(wn) (WN_MAP_Set(Caf_Visited_Map, wn, (void*)  1))
-static inline int Was_Visited(WN *wn) { (int) WN_MAP_Get(Caf_Visited_Map, wn); }
+#define Was_Visited(wn) ((WN*) WN_MAP_Get(Caf_Visited_Map, (WN*) wn))
 
 #define NAME_IS( st, name ) \
         strlen( &Str_Table[(st)->u1.name_idx]) == strlen(name) \

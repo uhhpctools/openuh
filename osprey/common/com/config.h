@@ -985,16 +985,6 @@ extern void List_Compile_Options (
 #ifndef STRCHR
 #define STRCHR(a,b)     strchr(a,b)
 #endif
-#ifndef STRNCMP
-#define STRNCMP(a,b,c)  strncmp(a,b,c)
-#endif
-#ifndef STRCAT
-#define STRCAT(a,b)     strcat(a,b)
-#endif
-#ifndef STRCPY
-#define STRCPY(a,b)     strcpy(a,b)
-#endif
-
 #ifdef __cplusplus
 }
 #endif

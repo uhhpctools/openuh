@@ -161,9 +161,6 @@ extern BOOL Target_AVX_Set;
 extern BOOL Target_XOP;         // Generate XOP instructions?
 extern BOOL Target_XOP_Set;
 
-extern BOOL Target_FMA;         // Generate FMA3 instructions?
-extern BOOL Target_FMA_Set;
-
 extern BOOL Target_FMA4;        // Generate FMA4 instructions?
 extern BOOL Target_FMA4_Set;
 

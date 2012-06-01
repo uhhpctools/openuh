@@ -1018,7 +1018,6 @@ static void Print_Dynsym (FILE *pfile, ST *st)
     }
   }
   else {
-#if !defined(TARG_PPC32)
     const char *eclass_label = NULL;
     switch (ST_export(st)) {
       case EXPORT_INTERNAL:
@@ -1038,7 +1037,6 @@ static void Print_Dynsym (FILE *pfile, ST *st)
       EMT_Write_Qualified_Name(pfile, st);
       putc ('\n', pfile);
     }
-#endif
   }
 }
 
@@ -2552,12 +2550,14 @@ Perform_Sanity_Checks_For_OP (OP *op, BOOL check_def)
       }
     }
 
-    if (CGTARG_Is_Shift_Redundant (op)) {
-      DevWarn ("Redundant shift instruction in %sBB:%d (PC=0x%x)",
-	       BB_rotating_kernel(OP_bb(op)) ? "SWPd " : "",
-	       BB_id(OP_bb(op)), PC);
-      if (TFile != stdout) {	/* only print to .t file */
-         Print_OP_No_SrcLine (op);
+    if (CGTARG_Is_Right_Shift_Op (op)) {
+      if (TN_register(OP_opnd(op,0+predicated)) == REGISTER_zero) {
+        DevWarn ("Redundant shift instruction in %sBB:%d (PC=0x%x)",
+	         BB_rotating_kernel(OP_bb(op)) ? "SWPd " : "",
+	         BB_id(OP_bb(op)), PC);
+        if (TFile != stdout) {	/* only print to .t file */
+          Print_OP_No_SrcLine (op);
+	}
       }
     }
   }
@@ -3548,19 +3548,13 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
       asm_string = Replace_Substring(asm_string, replace, name);
       *name = tmp;
     }
-  }
-
-  /* fix open64.net bug 920 */
-  if (strstr(asm_string, "%P")) {
-    char replace[5];
-    sprintf(replace, "%%P%d", position);
-    // OSP_323, with "%P", we ignore the first character '$'
-    if (*name == '$')
+    if (strstr(asm_string, "%P")) {
+      char replace[5];
+      sprintf(replace, "%%P%d", position);
+      // OSP_323, with "%P", we ignore the first character '$'
       asm_string = Replace_Substring(asm_string, replace, name+1);
-    else
-      asm_string = Replace_Substring(asm_string, replace, name);
+    }
   }
-  
   // Follow the zero dialect_number implementation as in 
   // gcc/final.c:output_asm_insn and handle {, } and | operators
   if (strchr(asm_string, '{')) {
@@ -3659,46 +3653,6 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
       asm_string =  Replace_Substring(asm_string, x86pattern, suffix);
     }
   }
-
-  // open64.net bug950. Handle any template modifers 
-  // %L,%W,%B,%Q,%S,%T. Referrence i386.c(gcc) print_operand.
-  {
-    char L_suffix[8] = {0};
-    char W_suffix[8] = {0};
-    char B_suffix[8] = {0};
-    char Q_suffix[8] = {0};
-    char S_suffix[8] = {0};
-    char T_suffix[8] = {0};
-    int rL,rW,rB,rQ,rS,rT;
-    rL = snprintf(L_suffix, sizeof(L_suffix), "%%L%d", position);
-    rW = snprintf(W_suffix, sizeof(W_suffix), "%%W%d", position);
-    rB = snprintf(B_suffix, sizeof(B_suffix), "%%B%d", position);
-    rQ = snprintf(Q_suffix, sizeof(Q_suffix), "%%Q%d", position);
-    rS = snprintf(S_suffix, sizeof(S_suffix), "%%S%d", position);
-    rT = snprintf(T_suffix, sizeof(T_suffix), "%%T%d", position);
-    FmtAssert(( rL >= 0 && rL < sizeof(L_suffix)) &&
-              ( rW >= 0 && rW < sizeof(W_suffix)) &&
-              ( rB >= 0 && rB < sizeof(B_suffix)) &&
-              ( rQ >= 0 && rQ < sizeof(Q_suffix)) &&
-              ( rS >= 0 && rS < sizeof(S_suffix)) &&
-              ( rT >= 0 && rT < sizeof(T_suffix)), 
-              ("Error, Unable to generate format string in Modify_Asm_String!\n"));
-    if (strstr(asm_string, L_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, L_suffix, "l");
-    } else if (strstr(asm_string, W_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, W_suffix, "w");
-    } else if (strstr(asm_string, B_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, B_suffix, "b");
-    } else if (strstr(asm_string, Q_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, Q_suffix, "l");
-    } else if (strstr(asm_string, S_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, S_suffix, "s");
-    } else if (strstr(asm_string, T_suffix) != NULL) {
-      asm_string =  Replace_Substring(asm_string, T_suffix, "t");
-    }
-  }
-
-
 #endif // TARG_X8664
   
   return asm_string;
@@ -8329,9 +8283,7 @@ Process_Bss_Data (SYMTAB_IDX stab)
 		    ST_base_idx(sym) != ST_st_idx(sym) &&
 		    !ST_is_equivalenced(sym) &&
 		    ST_class(ST_base(sym)) != CLASS_BLOCK &&
-                    // originally bug 13585. bug 924 open64.net.
-                    // no pu case should also be considered.
-                    ((!pu) || !PU_ftn_lang (*pu)))
+                    pu != NULL && ! PU_ftn_lang(*pu) /* bug 13585 */)
 		  goto skip_definition;
 #endif
 		size = TY_size(ST_type(sym));
@@ -9724,9 +9676,6 @@ Emit_Options (void)
 
     if (Is_Target_XOP()) fputs ("-mxop ", Asm_File);
     else fputs ("-mno-xop ", Asm_File);
-
-    if (Is_Target_FMA()) fputs ("-mfma ", Asm_File);
-    else fputs ("-mno-fma ", Asm_File);
 
     if (Is_Target_FMA4()) fputs ("-mfma4 ", Asm_File);
     else fputs ("-mno-fma4 ", Asm_File);

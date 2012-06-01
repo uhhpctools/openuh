@@ -777,8 +777,8 @@ WHIRL_SSA_MANAGER::Update_ver(VER_IDX idx, WN* def_wn, WSSA_NODE_KIND def_type) 
           ("bad wn and def type"));
   WST_Version_Entry& ver = _ver_table[idx];
   WST_Symbol_Entry& wst = _sym_table[ver.Get_wst()];
-  Is_True(ver.Get_ver() == 0 || ver.Is_zero() || ver.Get_def_wn() == NULL, ("ver already has a def wn"));
-  Is_True(ver.Get_ver() == 0 || ver.Is_zero() || ver.Get_def_type() == WSSA_UNKNOWN, ("ver already has a def type"));
+  Is_True(ver.Is_zero() || ver.Get_def_wn() == NULL, ("ver already has a def wn"));
+  Is_True(ver.Is_zero() || ver.Get_def_type() == WSSA_UNKNOWN, ("ver already has a def type"));
   // update version
   ver.Set_def_wn(def_wn);
   ver.Set_def_type(def_type);

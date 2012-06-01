@@ -101,7 +101,8 @@ enum truth_val {
 
 //================================================================
 
-template<> void PQS_TN_SET::Print(FILE *f,BOOL newline) 
+
+void PQS_TN_SET::Print(FILE *f,BOOL newline)
 {
   PQS_TN_SET_TYPE::iterator p;
 
@@ -115,7 +116,7 @@ template<> void PQS_TN_SET::Print(FILE *f,BOOL newline)
   if (newline) fprintf(f,"\n");
 }
 
-template<> void PQS_TNI_SET::Print(FILE *f, BOOL newline) 
+void PQS_TNI_SET::Print(FILE *f, BOOL newline)
 {
   PQS_TNI_SET::set_iterator_type p;
   

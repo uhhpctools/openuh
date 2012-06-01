@@ -138,7 +138,6 @@ extern BOOL Target_AES;
 extern BOOL Target_PCLMUL;
 extern BOOL Target_AVX;
 extern BOOL Target_XOP;
-extern BOOL Target_FMA;
 extern BOOL Target_FMA4;
 extern int Target_x86_Precision;
 
@@ -182,12 +181,11 @@ extern const char *Targ_Name (TARGET_PROCESSOR target);
 #define Is_Target_SSSE3()       (Target_SSSE3 == TRUE)
 #define Is_Target_SSE41()       (Target_SSE41 == TRUE)
 #define Is_Target_SSE42()       (Target_SSE42 == TRUE)
-#define Is_Target_AES()         (Target_AES == TRUE)
+#define Is_Target_AES()         (Target_AES   == TRUE)
 #define Is_Target_PCLMUL()      (Target_PCLMUL == TRUE)
-#define Is_Target_AVX()         (Target_AVX == TRUE)
-#define Is_Target_XOP()         (Target_XOP == TRUE)
-#define Is_Target_FMA()         (Target_FMA == TRUE)
-#define Is_Target_FMA4()        (Target_FMA4 == TRUE)
+#define Is_Target_AVX()         (Target_AVX   == TRUE)
+#define Is_Target_XOP()         (Target_XOP   == TRUE)
+#define Is_Target_FMA4()        (Target_FMA4  == TRUE)
 #define Is_Target_Pentium4()    (Target == TARGET_pentium4)
 #define Is_Target_EM64T()	(Target == TARGET_em64t)
 #define Is_Target_Core()	(Target == TARGET_core)

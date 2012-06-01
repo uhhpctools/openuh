@@ -1504,23 +1504,9 @@ COPYPROP::Copy_propagate_cr(CODEREP *x, BB_NODE *curbb,
 	  expr = Copy_propagate_cr(x->Opnd(i), curbb, inside_cse, in_array);
         else {
 	  // OSP_384
-	  if(opr == OPR_ASM_INPUT) {
-            // open64.net bug787. Try propagate for VAR first, if the propagated expr is the same
-            // kind to the original one,i.e, also a VAR. we allow this propagation. otherwise, disable it.
-            if ( x->Opnd(i)->Kind() == CK_VAR ) {
-              CODEREP *possible_prop = Copy_propagate_cr(x->Opnd(i), curbb, inside_cse, in_array);
-              if (possible_prop && possible_prop->Kind() == x->Opnd(i)->Kind()) 
-                expr = possible_prop;
-              else {
-                x->Opnd(i)->Set_flag(CF_DONT_PROP);
-                expr = NULL;
-              }
-            }
-            else {
-              x->Opnd(i)->Set_flag(CF_DONT_PROP);
-              expr = NULL;
-            }
-          }
+	  if(opr == OPR_ASM_INPUT)
+	    x->Opnd(i)->Set_flag(CF_DONT_PROP);
+          expr = NULL;
 	}
 #else
 	// for NVISA, the usage of asm is an array of const val,

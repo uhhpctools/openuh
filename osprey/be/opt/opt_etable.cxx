@@ -1896,29 +1896,6 @@ EXP_WORKLST::Remove_real_occurrence( STMTREP *stmt)
   return FALSE;
 }
 
-BOOL
-EXP_WORKLST::Remove_phi_pred_occurrence( STMTREP *stmt)
-{
-  EXP_OCCURS *exp_occ, *prev_occ = NULL, *next_occ;
-  EXP_OCCURS_ITER exp_occ_iter;
-  exp_occ_iter.Init(Phi_pred_occurs().Head());
-  for (exp_occ = exp_occ_iter.First();
-       ! exp_occ_iter.Is_Empty();
-       exp_occ = next_occ) {
-    next_occ = exp_occ_iter.Next();
-
-    if (exp_occ->Encl_stmt_set()
-	&& (exp_occ->Stmt() == stmt)) { // found it, remove from list
-      Phi_pred_occurs().Remove(prev_occ, exp_occ);
-      return TRUE;
-    }
-    else
-      prev_occ = exp_occ;
-  }
-  return FALSE;
-}
-
-
 // compare this with w in terms of weight.
 BOOL
 EXP_WORKLST::Weight_less_than(EXP_WORKLST *w)
@@ -3844,7 +3821,7 @@ ETABLE::Replace_occurs(EXP_OCCURS *occur, OCCUR_REPLACEMENT *repl)
 			   NULL, NULL, NULL, NULL); /* only real occurrences */
 	  EXP_OCCURS *oc;
 	  FOR_ALL_NODE(oc, exp_occ_iter, Init()) {
-	    if (oc == occur) 
+	    if (oc == occur)
 	      FmtAssert(FALSE,("ETABLE::Replace_occurs: RHS must need rehash"));
 	    if (oc->Stmt() == occur->Stmt() && 
 		oc->Stmt_kid_num() == occur->Stmt_kid_num())
@@ -4597,8 +4574,6 @@ ETABLE::Perform_PRE_optimization(void)
   INT total_dense_ssa_count = 0;
   INT orig_coderep_id_cnt = Htable()->Coderep_id_cnt();
   FOR_ALL_NODE(cur_worklst, worklst_iter, Init()) {
-    if (cur_worklst->Real_occurs().Head() == NULL)
-      continue;
 
     ++cur_worklst_idx;
     if (WOPT_Enable_Exp_PRE_Limit != -1 &&

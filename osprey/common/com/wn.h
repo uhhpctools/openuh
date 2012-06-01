@@ -1545,7 +1545,7 @@ extern WN * WN_get_bit_reduction(WN *);
 extern WN * WN_find_loop_by_index(WN *, ST *, WN_MAP);
 extern BOOL WN_has_const_diff(WN *, WN *, int *);
 extern BOOL WN_has_compatible_iter_space(WN *, WN *, int *, int *, BOOL);
-extern BOOL Identical_stmt(WN *, WN *);
+
 extern BOOL WN_is_assign(WN *);
 extern BOOL WN_is_assign_return(WN *);
 

@@ -285,15 +285,13 @@ CGTARG_Is_Bad_Shift_Op (OP *op)
 }
 
 inline BOOL
-CGTARG_Is_Shift_Redundant (OP *op)
+CGTARG_Is_Right_Shift_Op (OP *op)
 {
-  BOOL predicated = OP_has_predicate(op) != 0;
-
   switch (OP_code(op)) {
   case TOP_shr:
   case TOP_shr_u:
   case TOP_shrp:
-    return TN_register(OP_opnd(op,0+predicated)) == REGISTER_zero;
+    return TRUE;
   }
   return FALSE;
 }

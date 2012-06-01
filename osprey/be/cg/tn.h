@@ -697,7 +697,6 @@ inline BOOL TN_is_const_reg(const TN *r)
  * range First_Regular_TN..Last_TN.
  */
 extern TN_NUM Last_Dedicated_TN;/* The last dedicated TN number */
-extern TN_NUM Last_Distinct_Dedicated_TN;
 extern TN_NUM First_Regular_TN;	/* after all the preallocated TNs */
 extern TN_NUM Last_TN;		/* The last allocated TN number */
 extern TN_NUM First_REGION_TN;	/* The first non-dedicated TN in the current REGION */

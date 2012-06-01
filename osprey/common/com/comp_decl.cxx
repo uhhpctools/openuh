@@ -41,23 +41,8 @@ O64_Component::O64_Component(O64_COMPONENT component)
     _CurrentComponent = component;
     _canBeDisabled = ComponentDisableable_(_CurrentComponent);
     _Driver = O64_Driver::GetInstance();
-    if (!_Driver->GetComponentDescriptorList()->IsComponentRegistered(component)) {
-        _enable = false;
-        _disable = true;
-        return;
-    }    
-
     _CurrentOption = _Driver->GetCurrentOption();
-
-
-    if (Current_PU_Count() < _CurrentOption->GetUIntOption(_CurrentComponent, OPT_skip_b) ||
-        Current_PU_Count() > _CurrentOption->GetUIntOption(_CurrentComponent, OPT_skip_a))
-    {
-        _enable = false;
-        _disable = true;
-        return;
-    }    
-        
+    
     _enable = _CurrentOption->GetBoolOption(_CurrentComponent, OPT_enable);
     _disable = _CurrentOption->GetBoolOption(_CurrentComponent, OPT_disable);
 
@@ -79,10 +64,6 @@ O64_Component::O64_Component(O64_COMPONENT component)
 
 O64_Component::~O64_Component()
 {
-    if (Current_PU_Count() < _CurrentOption->GetUIntOption(_CurrentComponent, OPT_skip_b) ||
-        Current_PU_Count() > _CurrentOption->GetUIntOption(_CurrentComponent, OPT_skip_a))
-        return;
-
     if (_disable) return;
 
     ProcessDumpOptions_(
@@ -100,7 +81,7 @@ O64_Component::~O64_Component()
 void
 O64_Component::StartEndMessage_(bool isStart)
 {
-    if (_Driver->GetTraceKind() != TRACE_info) return;
+    if (_Driver->GetTraceKind() != TRACE_maximal) return;
 
     fprintf(TFile, "[DRIVER]%s %-10s",
             isStart ? "starting" : "finished",
@@ -115,22 +96,28 @@ O64_Component::StartEndMessage_(bool isStart)
 void
 O64_Component::ProcessDumpOptions_(DUMP_KIND dumpKind)
 {
+    bool dump_ir = false, dump_cfg = false;
+    
     switch(dumpKind) {
     case DUMP_none:
         return;
     case DUMP_ir:
-        if (_Driver->GetCurrentWN())
-          fdump_tree(TFile, _Driver->GetCurrentWN());
+        dump_ir = true;
         break;
     case DUMP_cfg:
-        break;
-    case DUMP_ssa:
+        dump_cfg = true;
         break;
     case DUMP_maximal:
+        dump_ir = true;
+        dump_cfg = true;
         break;
     default:
         break;
     }    
+
+    if (dump_ir) {
+        fdump_tree(TFile, _Driver->GetCurrentWN());
+    }
 }
 
 static O64_COMPONENT NonDisableAbles[] = 

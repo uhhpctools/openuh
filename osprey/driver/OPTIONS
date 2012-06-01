@@ -371,6 +371,8 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 
 % Basic option groups:
 % See opt_actions.c::Process_Ofast if you change the -OPT: item.
+-OPTIONS    ;       ALL be  "-OPTIONS"
+    "print out all be option usage"
 -OPT:%s		Process_Opt_Group(optargs); 	ALL	CMP,ipap "-OPT:%s"
 	"option group to control optimization"
 -OPT:unroll_level=n ;		ALL	be	""
@@ -419,8 +421,8 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 	"equivalent to -HP:"
 -HUGEPAGE	Process_Hugepage_Default();		ALL	be	""
 	"equivalent to -HP"
--COMP-%s   ;   All be "-COMP-%s"
-    "options for internal use in each component"
+-DRIVER:%s ;    ALL be "-DRIVER:%s"
+    "options for internal use in driver"
 -VHO:%s		;		ALL	ffe,be,ipl	"-VHO:%s"
 	"option group to control vho lowering"
 
@@ -2146,10 +2148,6 @@ I-u%s		;		Cc	ld	"-u %s"
 	"Enable XOP extensions"
 -mno-xop	toggle(&xop,FALSE);	ALL	CPP,cfe		self
 	"Disable XOP extensions"
--mfma	toggle(&sse2,TRUE);toggle(&fma,TRUE);	ALL	CPP,cfe		self
-	"Enable FMA3 extensions"
--mno-fma	toggle(&fma,FALSE);	ALL	CPP,cfe		self
-	"Disable FMA3 extensions"
 -mfma4	toggle(&sse2,TRUE);toggle(&fma4,TRUE);	ALL	CPP,cfe		self
 	"Enable FMA4 extensions"
 -mno-fma4	toggle(&fma4,FALSE);	ALL	CPP,cfe		self

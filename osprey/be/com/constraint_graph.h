@@ -186,7 +186,6 @@ enum PtsType {
 // where we assume the file and pu num is zero and the ST_IDX will be able
 // to uniquely identify the ST
 #define CG_ST_st_idx(s) (ST_st_idx((s)) & 0x00000000ffffffffLL)
-#define IPA_CG_ST_st_idx(filePUIdx, s) (((filePUIdx) << 32) | ST_st_idx((s)) & 0x00000000ffffffffLL)
   
 using namespace std;
 using namespace __gnu_cxx;
@@ -1148,8 +1147,6 @@ public:
     _u._modulus = m;
   }
 
-  static bool isGlobalStInfo(ST* st);
-
   TY_IDX ty_idx() const { return _ty_idx; }
   void ty_idx(TY_IDX idx) { _ty_idx = idx; }
 
@@ -1294,10 +1291,6 @@ public:
   static void globalCG(ConstraintGraph *cg) { globalConstraintGraph = cg; }
 
   static CG_ST_IDX adjustCGstIdx(IPA_NODE *ipaNode, CG_ST_IDX cg_st_idx);
-
-  static ConstraintGraph *IPANodeCG()        { return currentIPANodeConstraintGraph; }
-
-  static void IPANodeCG(ConstraintGraph* cg)        { currentIPANodeConstraintGraph = cg; }
 
   // Map from unique call site id to CallSite in ipa
   static CallSite *uniqueCallSite(CallSiteId uniqueCallSiteId)
@@ -1547,10 +1540,6 @@ public:
 
   CallSite *findUniqueCallSite(CallSiteId id);
 
-  void setUniqueMapped(void);
-
-  bool uniqueMapped(void);
-
   void updateSummaryCallSiteId(SUMMARY_CALLSITE &summCallSite);
 
   void updateCallSiteForBE(CallSite *cs);
@@ -1614,9 +1603,6 @@ private:
 
   // The global constraint graph for IPA
   static ConstraintGraph *globalConstraintGraph;
-
-  // info used for CG for one IPA_NODE in IPA
-  static ConstraintGraph *currentIPANodeConstraintGraph;
 
   // Pool to hold all edges, since edges span multiple ConstraintGraphs
   static MEM_POOL *edgeMemPool;
@@ -1733,7 +1719,6 @@ private:
   CGIdToNodeMap _uniqueCGNodeIdMap;
   CallSiteMap   _uniqueCallSiteIdMap;
   CGStInfoMap   _ipaCGStIdxToStInfoMap;
-  bool          _uniqueMapped; // indicate if uniqueMap is performed.
 
   // IPA call graph node corresponding to this CG
   IPA_NODE *_ipaNode;

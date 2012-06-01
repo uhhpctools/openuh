@@ -504,13 +504,21 @@ public:
 class BE_PREG {
 private:
   WN *home_location;
+#ifdef TARG_NVISA
   WN *lda;
+#endif
 public:
+#ifdef TARG_NVISA
   BE_PREG(void) : home_location(NULL), lda(NULL)  { }
+#else
+  BE_PREG(void) : home_location(NULL)   { }
+#endif
   void  Set_home_location(WN *wn)       { home_location = wn; }
   WN   *Home_location(void) const       { return home_location; }
+#ifdef TARG_NVISA
   void  Set_lda(WN *wn)    { lda = wn; }
   WN   *Lda(void) const    { return lda; }
+#endif
 };
 
 typedef RELATED_SEGMENTED_ARRAY<BE_PREG> BE_PREG_TAB;
@@ -535,7 +543,7 @@ Preg_Home(PREG_NUM preg)
   return (idx < Be_preg_tab.Size()) ? Be_preg_tab[idx].Home_location() : NULL;
 }
 
-
+#ifdef TARG_NVISA
 static inline WN*
 Preg_Lda(PREG_NUM preg)
 {
@@ -553,7 +561,7 @@ Set_Preg_Lda(PREG_NUM preg, WN *wn)
 // Will search through preg homes to find LDA.
 // Can also return LDID if is LDID of parameter pointer.
 extern WN* Find_Lda (WN *tree);
-
+#endif
 
 extern void BE_symtab_initialize_be_scopes(void);
 extern void BE_symtab_free_be_scopes(void);

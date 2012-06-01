@@ -137,22 +137,12 @@ static const char * sc_type_name[] =
   {"NONE", "IF", "THEN", "ELSE", "LOOP", "BLOCK", "FUNC",
    "LP_START", "LP_COND", "LP_STEP", "LP_BACKEDGE", "LP_BODY", "COMPGOTO", "OTHER"};
 
-static const char * sc_type_name_abbr[] =
-  {"", "^", "", "", "o", "-", "",
-   "", "", "", "", "", "", ""};
-
 // bit mask.
 enum SC_NODE_FLAG
 {
   HAS_SYMM_LOOP = 0x1
 };
 
-// bit mask for transformations at the extended transformation (EXT) phase.
-enum EXT_TRANS_KIND {
-    EXT_TRANS_NONE = 0,    // Do not do EXT.
-    EXT_TRANS_FUSION = 1,  // Do loop fusions at the EXT phase.
-    EXT_TRANS_TRAVERSE = 2     // Do traversal transformations at the EXT phase.
-};
 
 // Structure component nodes.
 class SC_NODE {
@@ -192,7 +182,6 @@ public:
   SC_TYPE      Type(void)        const { return type; }
   void         Set_type(SC_TYPE i)     { type = i; }
   const char * Type_name(void) const   { return sc_type_name[type]; }
-  const char * Type_name_abbr(void)  const   { return sc_type_name_abbr[type]; }
   BB_NODE *    Get_bb_rep()    const   { return (SC_type_has_rep(type) ? u1.bb_rep : NULL); }
   void         Set_bb_rep(BB_NODE * i) 
   { 
@@ -248,16 +237,13 @@ public:
   void Insert_after(SC_NODE * sc);
   SC_NODE * Last_kid();
   SC_NODE * First_kid();
-  SC_NODE * First_executable_kid();
   SC_NODE * Next_sibling();
   SC_NODE * Prev_sibling();
   SC_NODE * Next_sibling_of_type(SC_TYPE);
   SC_NODE * Next_in_tree();
-  SC_NODE * Next_executable_sibling();
   SC_NODE * Get_nesting_if(SC_NODE *);
   std::pair<SC_NODE *, bool> Get_nesting_if();
   std::pair<SC_NODE *, int> Get_outermost_nesting_if();
-  std::pair<SC_NODE *, int> Get_outermost_nesting_loop();
   SC_NODE * First_kid_of_type(SC_TYPE);
   BOOL Contains(BB_NODE *);
   BB_NODE * Then();
@@ -283,8 +269,6 @@ public:
   BB_NODE * Last_bb();
   // Find first executable statement in this SC_NODE.
   WN * First_executable_stmt();
-  // Find first executable statement's containing block in this SC_NODE.
-  BB_NODE * First_executable_blk();
   BOOL Is_pred_in_tree(SC_NODE *);
   int Num_of_loops(SC_NODE *, BOOL, BOOL);
   int Executable_stmt_count();
@@ -295,7 +279,6 @@ public:
   WN * Get_cond();
   BOOL Is_ctrl_equiv(SC_NODE *);
   BOOL Get_bounds(WN **, WN **, WN **);
-  BOOL Compare_Trees(SC_NODE *);
 };
 
 class SC_LIST : public SLIST_NODE {
@@ -372,8 +355,8 @@ private:
   MAP * _def_map; //  Map symbol auxiliary Id to definition WN *.
   MAP * _const_wn_map; // map an integer constant to WHIRL.
   MAP * _def_cnt_map; // hash aux id to def count
-  int _ext_trans;  // do extended transformations.
-  
+  BOOL _ext_trans;  // do extended transformations.
+
 protected:
   COMP_UNIT * _cu;
   BOOL _trace;
@@ -486,19 +469,14 @@ protected:
   BOOL Hoist_succ_blocks(SC_NODE *);
   SC_NODE * Merge_block(SC_NODE *, SC_NODE *);
   BOOL Have_same_trip_count(SC_NODE *, SC_NODE *);
+  BOOL Get_ext_trans() { return _ext_trans; }
   void Replace_wn(SC_NODE *, WN *, WN *);
   void Replace_wn(BB_NODE *, WN *, WN *);
   BOOL Replace_wn(WN *, WN *, WN *);
   WN * Simplify_wn(WN *);
   BOOL Do_flip_tail_merge(SC_NODE *, WN *);
   void Do_flip(SC_NODE *);
-  // Whether to do EXT.
-  BOOL Do_ext_trans() { return (_ext_trans != EXT_TRANS_NONE); }
-  // Whether to do traverse transformations at the EXT phase.
-  BOOL Do_ext_traverse() { return ((_ext_trans & EXT_TRANS_TRAVERSE) != 0); }
-  // Whether to do loop fusions at the EXT phase.
-  BOOL Do_ext_fusion() { return ((_ext_trans & EXT_TRANS_FUSION) != 0); }
-  
+
 public:
   void Set_trace(BOOL i) { _trace = i; }
   void Set_dump(BOOL i)  { _dump = i; }
@@ -509,7 +487,7 @@ public:
   void Do_tail_duplication(SC_NODE *, SC_NODE *);
   void Hash_def_cnt_map(SC_NODE *);
   void Init();
-  void Set_ext_trans(int in) { _ext_trans = in; }
+  void Set_ext_trans(BOOL in) { _ext_trans = in; }
 };
 
 // bit mask for if-merging actions.
@@ -541,7 +519,7 @@ private:
   void Merge_CFG(SC_NODE *, SC_NODE *);
   void Merge_SC(SC_NODE *, SC_NODE *);
   BOOL Is_if_collapse_cand(SC_NODE * sc1, SC_NODE * sc2);
-  void Prune_block(SC_NODE *);
+  void Remove_redundant_bitops(SC_NODE *);
 
 protected:
   void Set_region_id(int i) { _region_id = i; }
@@ -549,7 +527,7 @@ protected:
   BOOL      Is_candidate(SC_NODE *, SC_NODE *, BOOL);
   void Clear(void);
   BOOL Do_reverse_loop_unswitching(SC_NODE *, SC_NODE *, SC_NODE *);
-  BOOL Bottom_up_prune(SC_NODE *);
+  void Bottom_up_prune(SC_NODE *);
 
 public:
   void Top_down_trans(SC_NODE * sc);

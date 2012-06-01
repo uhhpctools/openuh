@@ -144,6 +144,7 @@ libgcj="target-libffi \
 target_libraries="target-libiberty \
 		target-libgloss \
 		target-newlib \
+		target-libstdc++-v3 \
 		target-libmudflap \
 		target-libssp \
 		target-libgfortran \
@@ -153,9 +154,6 @@ target_libraries="target-libiberty \
 		target-libada \
 		target-libgomp"
 
-if test ${target} != powerpc-redhat-linux-gnu ; then
-  target_libraries="$target_libraries target-libstdc++-v3"
-fi
 # these tools are built using the target libraries, and are intended to
 # run only in the target environment
 #
@@ -352,7 +350,6 @@ if test x$enable_libgomp = x ; then
     # Enable libgomp by default on hosted POSIX systems.
     case "${target}" in
     *-*-linux* | *-*-gnu* | *-*-k*bsd*-gnu)
-	noconfigdirs="$noconfigdirs target-libgomp"
 	;;
     *-*-netbsd* | *-*-freebsd* | *-*-openbsd*)
 	;;
@@ -2084,10 +2081,7 @@ fi
 # for target_alias and gcc doesn't manage it consistently.
 target_configargs="--cache-file=./config.cache --build=${build_alias} --host=${target_alias} --target=${target_alias} ${target_configargs}"
 
-if [ "`uname -m | sed -e s/i.86/i386/`" != "i386" ]
-then
 FLAGS_FOR_TARGET=
-fi
 case " $target_configdirs " in
  *" newlib "*)
   case " $target_configargs " in

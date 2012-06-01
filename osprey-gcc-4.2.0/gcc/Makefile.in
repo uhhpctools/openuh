@@ -1294,36 +1294,22 @@ config.status: $(srcdir)/configure $(srcdir)/config.gcc
 ifneq (, $(filter mips%, $(target)))
 all.internal: start.encap
 else
-    ifneq (, $(filter powerpc%, $(target)))
-    all.internal: start.encap
-    else
-    all.internal: start.encap rest.encap
-    endif
+all.internal: start.encap rest.encap
 endif
 
 # This is what to compile if making a cross-compiler.
 all.cross: native gcc-cross$(exeext) cpp$(exeext) specs \
 	$(LIBGCC) $(EXTRA_PARTS) lang.all.cross doc @GENINSRC@ srcextra
 # This is what must be made before installing GCC and converting libraries.
-ifneq (, $(filter powerpc%, $(target)))
-start.encap: native
-else
 start.encap: native xgcc$(exeext) cpp$(exeext) specs \
 	xlimits.h lang.start.encap @GENINSRC@ srcextra
-endif
-# KEY: disable build of libraries.
 # These can't be made until after GCC can run.
 rest.encap: $(STMP_FIXPROTO) $(LIBGCC) $(EXTRA_PARTS) lang.rest.encap
 # This is what is made with the host's compiler
 # whether making a cross compiler or not.
 
-ifneq (, $(filter powerpc%, $(target)))
-native: config.status auto-host.h build-@POSUB@ $(LANGUAGES) \
-	$(EXTRA_PASSES) $(EXTRA_PROGRAMS)
-else
 native: config.status auto-host.h build-@POSUB@ $(LANGUAGES) \
 	$(EXTRA_PASSES) $(EXTRA_PROGRAMS) $(COLLECT2)
-endif
 
 # Define the names for selecting languages in LANGUAGES.
 c: cc1$(exeext)

@@ -327,7 +327,7 @@ ST_is_const_and_has_initv(const ST *st)
 }
 
 
-
+#ifdef TARG_NVISA
 // Search tree for a LDA, returning NULL if not found.
 // Will search through preg homes to find LDA.
 // Can also return LDID if is LDID of parameter pointer.
@@ -348,7 +348,6 @@ Find_Lda (WN *tree)
 	  if (lda) return lda;
 	  return Find_Lda (Preg_Home(WN_offset(tree)));
 	}
-#ifdef TARG_NVISA
         else if (ST_sclass(WN_st(tree)) == SCLASS_FORMAL
 	  && ST_in_shared_mem(WN_st(tree)))
 	{
@@ -383,7 +382,6 @@ Find_Lda (WN *tree)
 	    return tree;
 	  }
         }
-#endif
 	return NULL;
   case OPR_ADD:
   case OPR_SUB:
@@ -402,4 +400,4 @@ Find_Lda (WN *tree)
 	return NULL;
   }
 }
-
+#endif

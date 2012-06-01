@@ -119,13 +119,8 @@ private:
 };
 
 class NystromAliasAnalyzer : public AliasAnalyzer {
-
-   friend class AliasAnalyzer;
    
 public:
-   // Invoked in ipa mode, alias analyzer shared by all PUs.
-   NystromAliasAnalyzer(ALIAS_CONTEXT&);
-   
    // Invoked in non-ipa mode when WN to CGNodeId map is not available
    NystromAliasAnalyzer(ALIAS_CONTEXT &,WN *);
 
@@ -168,8 +163,6 @@ public:
    void transferAliasTag(WN *dstWN, const WN *srcWN);
 
    ConstraintGraph *constraintGraph() const { return _constraintGraph; }
-
-   void constraintGraph(ConstraintGraph *cg) { _constraintGraph=cg; }
 
    CGNodeId cgNodeId(AliasTag tag) 
    {
