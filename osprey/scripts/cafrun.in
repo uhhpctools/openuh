@@ -235,7 +235,7 @@ shift
 if [ -n "$image_heap" ]; then
   set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
 elif [ -n "$UHCAF_IMAGE_HEAP_SIZE" ]; then
-  add_env_to_list UHCAF_IMAGE_HEAP_SIZE
+  add_to_env_list UHCAF_IMAGE_HEAP_SIZE
 else
   set_env UHCAF_IMAGE_HEAP_SIZE $((30*1024*1024))
 fi
@@ -244,7 +244,7 @@ fi
 if [ -n "$num_images" ]; then
   set_env UHCAF_NUM_IMAGES $num_images
 elif [ -n "$UHCAF_NUM_IMAGES" ]; then
-  add_env_to_list UHCAF_NUM_IMAGES
+  add_to_env_list UHCAF_NUM_IMAGES
   num_images=$UHCAF_NUM_IMAGES
 else
   set_env UHCAF_NUM_IMAGES 1

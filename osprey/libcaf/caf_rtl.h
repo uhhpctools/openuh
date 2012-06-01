@@ -66,35 +66,26 @@ void lcobound_(DopeVectorType *ret, DopeVectorType *diminfo);
 int ucobound2_(DopeVectorType *diminfo, int *sub);
 void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo);
 
-/* remote read/write */
+/* management of local communication buffers */
 void acquire_lcb_(unsigned long buf_size, void **ptr);
 void release_lcb_(void **ptr);
-void coarray_read_src_str_(void * src, void *dest, unsigned int ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned long img);
-void coarray_read_(void * src, void * dest, unsigned long xfer_size,
-        unsigned long img);
-void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned int dest_ndim, unsigned long *dest_str_mults,
-        unsigned long *dest_extents, unsigned long *dest_strides,
-        unsigned long img);
-void coarray_write_dest_str_(void * dest, void *src, unsigned int ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents,
-        unsigned long *dest_strides,
-        unsigned long img);
-void coarray_write_(void * dest, void * src, unsigned long xfer_size,
-        unsigned long img);
-void coarray_write_full_str_(void * dest, void *src,
-        unsigned int dest_ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents,
-        unsigned long *dest_strides,
-        unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned long img);
+
+/* non-strided (contiguous) read and write operations */
+void coarray_read_( size_t image, void *src, void *dest, size_t nbytes);
+void coarray_write_( size_t image, void *dest, void *src, size_t nbytes);
+
+/* strided, non-contiguous read and write operations */
+void coarray_strided_read_ ( size_t image,
+        void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], int stride_levels);
+
+void coarray_strided_write_ ( size_t image,
+        void *dest, const size_t dest_strides[],
+        void *src, const size_t src_strides[],
+        const size_t count[], int stride_levels);
+
+/* TODO: vector, non-contiguous read and write operations  */
 
 /* Collectives */
 void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root);

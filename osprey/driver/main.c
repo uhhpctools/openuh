@@ -1499,7 +1499,7 @@ display_version(boolean dump_version_only)
 		   gnu_major_version);
 
   if (dump_version_only == TRUE) {
-    puts(OPEN64_FULL_VERSION);
+    puts(OPENUH_FULL_VERSION);
     return;
   }
 

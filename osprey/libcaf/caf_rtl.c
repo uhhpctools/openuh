@@ -717,257 +717,216 @@ void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo)
     }
 }
 
-void coarray_read_full_str_(void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned int dest_ndim, unsigned long *dest_str_mults,
-        unsigned long *dest_extents, unsigned long *dest_strides,
-        unsigned long img)
-{
-    int i, is_contig = 1;
-
-    for (i = 1; i < src_ndim; i++) {
-      if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
-        is_contig = 0;
-        break;
-      }
-    }
-
-    if (is_contig) {
-      for (i = 1; i < dest_ndim; i++) {
-        if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
-          is_contig = 0;
-          break;
-        }
-      }
-    }
-
-    if (src_strides || dest_strides)
-      is_contig = 0;
-
-    if (is_contig) {
-      unsigned long xfer_size = src_str_mults[0]*src_extents[0];
-      for (i = 1; i < src_ndim; i++) {
-        xfer_size *= src_extents[i];
-      }
-      if (DEBUG) {
-        unsigned long dest_xfer_size = dest_str_mults[0]*dest_extents[0];
-        for (i = 1; i < dest_ndim; i++) {
-          dest_xfer_size *= dest_extents[i];
-        }
-        if (dest_xfer_size != xfer_size) {
-          LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-              "caf_rtl.c:coarray_read_full_str->dest and src xfer_size must"
-              " be same. xfer_size=%d, dest_xfer_size=%d",
-              xfer_size, dest_xfer_size);
-        }
-      }
-      coarray_read_(src, dest, xfer_size, img);
-      return;
-      /* not reached */
-    }
-
-   START_TIMER();
-   if (src_strides != NULL || dest_strides != NULL) {
-     comm_read_full_str2(src, dest, src_ndim, src_str_mults, src_extents,
-                     src_strides,
-                     dest_ndim, dest_str_mults, dest_extents,
-                     dest_strides,  img-1);
-   } else {
-     comm_read_full_str(src, dest, src_ndim, src_str_mults, src_extents,
-                     dest_ndim, dest_str_mults, dest_extents, img-1);
-   }
-   STOP_TIMER(READ);
-   LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:coarray_read_full_str->Finished read(strided) "
-            "from %p on Img %lu to %p using dim %d ",
-            src, img, dest, src_ndim);
-}
-
-
-void coarray_read_src_str_(void * src, void *dest, unsigned int ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned long img)
-{
-    int i, is_contig = 1;
-
-    /* runtime check if it is contiguous transfer */
-    for (i = 1; i < ndim; i++) {
-      if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
-        is_contig = 0;
-        break;
-      }
-    }
-
-    if (src_strides)
-      is_contig = 0;
-
-    if (is_contig) {
-      unsigned long xfer_size = src_str_mults[0]*src_extents[0];
-      for (i = 1; i < ndim; i++) {
-        xfer_size *= src_extents[i];
-      }
-      coarray_read_(src, dest, xfer_size, img);
-      return;
-      /* not reached */
-    }
-
-   START_TIMER();
-   if (src_strides != NULL) {
-     comm_read_src_str2(src, dest, ndim, src_str_mults, src_extents,
-                       src_strides, img-1);
-   } else {
-     comm_read_src_str(src, dest, ndim, src_str_mults, src_extents, img-1);
-   }
-   STOP_TIMER(READ);
-   LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:coarray_read_src_str->Finished read(strided) "
-            "from %p on Img %lu to %p using dim %d ",
-            src, img, dest, ndim);
-}
-
-void coarray_read_(void * src, void * dest, unsigned long xfer_size,
-        unsigned long img)
+void coarray_read_( size_t image, void *src, void *dest, size_t nbytes)
 {
     START_TIMER();
-    comm_read(src, dest, xfer_size, img-1);//reads from src on img to dest
+    /* reads nbytes from src on proc 'image-1' into local dest */
+    comm_read(image-1, src, dest, nbytes);
     STOP_TIMER(READ);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read ");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "caf_rtl.c:coarray_read->Finished read from %p on Img %lu to %p"
-        " data of size %lu ", src, img, dest, xfer_size);
+        " data of size %lu ", src, image, dest, nbytes);
 }
 
-void coarray_write_dest_str_(void * dest, void *src, unsigned int ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents,
-        unsigned long *dest_strides,
-        unsigned long img)
-{
-    int i, is_contig = 1;
-
-    /* runtime check if it is contiguous transfer */
-    for (i = 1; i < ndim; i++) {
-      if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
-        is_contig = 0;
-        break;
-      }
-    }
-
-    if (dest_strides)
-      is_contig = 0;
-
-    if (is_contig) {
-      unsigned long xfer_size = dest_str_mults[0]*dest_extents[0];
-      for (i = 1; i < ndim; i++) {
-        xfer_size *= dest_extents[i];
-      }
-      coarray_write_(dest, src, xfer_size, img);
-      return;
-      /* not reached */
-    }
-
-    START_TIMER();
-    if (dest_strides != NULL) {
-      comm_write_dest_str2(dest, src, ndim,dest_str_mults,dest_extents,
-                          dest_strides, img-1);
-    } else  {
-      comm_write_dest_str(dest, src, ndim,dest_str_mults,dest_extents,
-                          img-1);
-    }
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:coarray_write_dest_str->Finished write(strided) to %p"
-        " on Img %lu from %p using dim %d ", dest, img, src, ndim);
-}
-
-void coarray_write_(void * dest, void * src, unsigned long xfer_size, unsigned long img)
+void coarray_write_( size_t image, void *dest, void *src, size_t nbytes)
 {
     START_TIMER();
-    comm_write(dest, src, xfer_size, img-1);//write to dest in img
+    comm_write(image-1, dest, src, nbytes);
     STOP_TIMER(WRITE);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write ");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "caf_rtl.c:coarray_write->Wrote to %p on Img %lu from %p data of"
-        " size %lu ", dest, img, src, xfer_size);
+        " size %lu ", dest, image, src, nbytes);
 }
 
-void coarray_write_full_str_(void * dest, void *src,
-        unsigned int dest_ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents,
-        unsigned long *dest_strides,
-        unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents,
-        unsigned long *src_strides,
-        unsigned long img)
+int is_contiguous_access(const size_t strides[], const size_t count[],
+                         size_t stride_levels)
 {
-    int i, is_contig = 1;
+    int block_size = 1;
+    int is_contig = 1;
+    int i;
 
-    for (i = 1; i < dest_ndim; i++) {
-      if (dest_str_mults[i] != (dest_str_mults[i-1]*dest_extents[i-1])) {
-        is_contig = 0;
-        break;
-      }
+    block_size = count[0];
+    for (int i = 1; i <= stride_levels; i++) {
+        if (count[i] == 1)
+            continue;
+        else if (block_size == strides[i-1])
+            block_size = block_size * count[i];
+        else
+            return 0;
+    }
+    return 1;
+}
+
+void local_src_strided_copy(void *src, const size_t src_strides[],
+        void *dest, const size_t count[], size_t stride_levels)
+{
+    int i,j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels+1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++)
+    {
+        cnt_strides[i] = cnt_strides[i-1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        if (src_strides[i] == blockdim_size[i])
+            blk_size = src_strides[i];
+        else 
+            num_blks *= count[i];
     }
 
-    if (is_contig) {
-      for (i = 1; i < src_ndim; i++) {
-        if (src_str_mults[i] != (src_str_mults[i-1]*src_extents[i-1])) {
-          is_contig = 0;
-          break;
+    for (i = 1; i <= num_blks; i++)
+    {
+        memcpy(dest_ptr, src_ptr, blk_size);
+        dest_ptr += blk_size;
+        for (j=1; j<=stride_levels; j++) {
+            if (i%cnt_strides[j]) break;
+            src_ptr -= (count[j]-1) * src_strides[j-1];
         }
-      }
+        src_ptr += src_strides[j-1];
+    }
+}
+
+void local_dest_strided_copy(void *src, void *dest,
+        const size_t dest_strides[], const size_t count[],
+        size_t stride_levels)
+{
+    int i,j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels+1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++)
+    {
+        cnt_strides[i] = cnt_strides[i-1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        if (dest_strides[i] == blockdim_size[i])
+            blk_size = dest_strides[i];
+        else 
+            num_blks *= count[i];
     }
 
-    if (src_strides || dest_strides)
-      is_contig = 0;
+    for (i = 1; i <= num_blks; i++)
+    {
+        memcpy(dest_ptr, src_ptr, blk_size);
+        src_ptr += blk_size;
+        for (j=1; j<=stride_levels; j++) {
+            if (i%cnt_strides[j]) break;
+            dest_ptr -= (count[j]-1) * dest_strides[j-1];
+        }
+        dest_ptr += dest_strides[j-1];
+    }
+}
 
-    if (is_contig) {
-      unsigned long xfer_size = dest_str_mults[0]*dest_extents[0];
-      for (i = 1; i < dest_ndim; i++) {
-        xfer_size *= dest_extents[i];
-      }
-      if (DEBUG) {
-        unsigned long src_xfer_size = src_str_mults[0]*src_extents[0];
-        for (i = 1; i < src_ndim; i++) {
-          src_xfer_size *= src_extents[i];
+
+void coarray_strided_read_ ( size_t image,
+        void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], int stride_levels)
+{
+    int remote_is_contig = 0;
+    int local_is_contig = 0;
+    int i;
+
+    /* runtime check if it is contiguous transfer */
+    remote_is_contig = is_contiguous_access(src_strides, count, stride_levels);
+    if (remote_is_contig) {
+        local_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
+        size_t nbytes = 1;
+        for (i = 0; i <= stride_levels; i++) 
+            nbytes = nbytes * count[i];
+
+        if (local_is_contig) {
+            coarray_read_(image, src, dest, nbytes);
+        } else {
+            void *buf;
+            acquire_lcb_( nbytes, &buf);
+            coarray_read_(image, src, buf, nbytes);
+            local_dest_strided_copy(buf, dest, dest_strides, count,
+                    stride_levels);
+            release_lcb_( &buf );
         }
-        if (src_xfer_size != xfer_size) {
-          LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-              "caf_rtl.c:coarray_write_full_str->dest and src xfer_size must"
-              " be same. xfer_size=%d, src_xfer_size=%d",
-              xfer_size, src_xfer_size);
-        }
-      }
-      coarray_write_(dest, src, xfer_size, img);
-      return;
-      /* not reached */
+
+        return;
+        /* not reached */
     }
 
     START_TIMER();
-    if (src_strides != NULL || dest_strides != NULL) {
-      comm_write_full_str2(dest, src, dest_ndim, dest_str_mults, dest_extents,
-                           dest_strides,
-                           src_ndim, src_str_mults, src_extents,
-                           src_strides, img-1);
-    } else {
-      comm_write_full_str(dest, src, dest_ndim, dest_str_mults, dest_extents,
-          src_ndim, src_str_mults, src_extents, img-1);
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:coarray_strided_read->Starting read(strided) "
+            "from %p on Img %lu to %p using %d stride_levels ",
+            src, image, dest, stride_levels);
+    comm_strided_read(image-1, src, src_strides, dest, dest_strides,
+            count, stride_levels);
+    STOP_TIMER(READ);
+    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:coarray_strided_read->Finished read(strided) "
+            "from %p on Img %lu to %p using %d stride_levels ",
+            src, image, dest, stride_levels);
+}
+
+void coarray_strided_write_ ( size_t image,
+        void *dest, const size_t dest_strides[],
+        void *src, const size_t src_strides[],
+        const size_t count[], int stride_levels)
+{
+    int remote_is_contig = 0;
+    int local_is_contig = 0;
+    int i;
+
+    /* runtime check if it is contiguous transfer */
+    remote_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
+    if (remote_is_contig) {
+        local_is_contig = is_contiguous_access(src_strides, count, stride_levels);
+        size_t nbytes = 1;
+        for (i = 0; i <= stride_levels; i++) 
+            nbytes = nbytes * count[i];
+
+        if (local_is_contig) {
+            coarray_write_(image, dest, src, nbytes);
+        } else {
+            void *buf;
+            acquire_lcb_( nbytes, &buf);
+            local_src_strided_copy(src, src_strides, buf, count,
+                    stride_levels);
+            coarray_write_(image, dest, buf, nbytes);
+            release_lcb_( &buf );
+        }
+
+        return;
+        /* not reached */
     }
+
+    START_TIMER();
+    comm_strided_write(image-1, dest, dest_strides, src, src_strides,
+            count, stride_levels);
     STOP_TIMER(WRITE);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:coarray_write_full_str->Finished write(strided) to %p"
-        " on Img %lu from %p using dim %d ", dest, img, src, dest_ndim);
+        "caf_rtl.c:coarray_write_dest_str->Finished write(strided) to %p"
+        " on Img %lu from %p using stride_levels %d ", dest, image, src,
+         stride_levels);
 }
 
 
@@ -1070,7 +1029,7 @@ void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root)
           //swap back for process Id 0 and root process(non-zero) 
           if(target == root) target=0;
 
-          comm_read(src_dv->base_addr.a.ptr, local_buf, total_bytes, target);
+          comm_read(target, src_dv->base_addr.a.ptr, local_buf, total_bytes);
 
           dope_add(local_buf, sum_dv, total_bytes);
         }

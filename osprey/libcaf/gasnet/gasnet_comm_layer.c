@@ -116,6 +116,35 @@ static void handler_critical_reply(gasnet_token_t token,
 static void handler_end_critical_request(gasnet_token_t token,
                            gasnet_handlerarg_t src_proc);
 
+
+static void *get_remote_address(void *src, size_t img);
+static int address_in_nbwrite_address_block(void *remote_addr,
+        size_t proc, size_t size);
+static void update_nbwrite_address_block(void *remote_addr,
+        size_t proc, size_t size);
+static struct write_handle_list* get_next_handle(unsigned long proc,
+        void* remote_address, unsigned long size);
+static void reset_min_nbwrite_address(unsigned long proc);
+static void reset_max_nbwrite_address(unsigned long proc);
+static void delete_node(unsigned long proc, struct write_handle_list *node);
+static int address_in_handle(struct write_handle_list *handle_node,
+                                void *address, unsigned long size);
+static void wait_on_pending_puts(unsigned long proc, void* remote_address,
+                                unsigned long size);
+static void wait_on_all_pending_puts(unsigned long proc);
+
+static void clear_all_cache();
+static void clear_cache(unsigned long node);
+static void cache_check_and_get(size_t node, void *remote_address,
+                            size_t nbytes, void *local_address);
+static void update_cache(size_t node, void *remote_address,
+                        size_t nbytes, void *local_address);
+
+static void local_strided_copy(void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], size_t stride_levels);
+
+
 /*
  * Inline functions
  */
@@ -415,139 +444,45 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
  * Static Functions for GET CACHE
  */
 
-/* strided copy from src to dest */
-void local_copy_full_strided(void *src, void *dest, unsigned int ndim,
-        unsigned long *src_strides, unsigned long *dest_strides,
-        unsigned long *extents)
+/* naive implementation of strided copy
+ * TODO: improve by finding maximal blocksize
+ */
+static void local_strided_copy(void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], size_t stride_levels)
 {
     int i,j;
-    int num_blks=1;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels+1];
+    size_t blockdim_size[stride_levels];
     void *dest_ptr = dest;
     void *src_ptr = src;
-    unsigned long cnt_strides[ndim];
-    cnt_strides[0]=1;
-    //assuming src_elem_size=dst_elem_size
-    unsigned long blk_size = src_strides[0]*extents[0];
-    for (i=1; i<ndim; i++)
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++)
     {
-        cnt_strides[i]=cnt_strides[i-1]*extents[i];
-        num_blks *= extents[i];
+        cnt_strides[i] = cnt_strides[i-1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
     }
-    for (i=1; i<=num_blks; i++)
+
+    for (i = 1; i <= num_blks; i++)
     {
         memcpy(dest_ptr, src_ptr, blk_size);
-        for (j=1; j<ndim; j++)
-            if(i%cnt_strides[j]) break;
-        dest_ptr += dest_strides[j];
-        src_ptr += src_strides[j];
+        for (j=1; j<=stride_levels; j++) {
+            if (i%cnt_strides[j]) break;
+            src_ptr -= (count[j]-1) * src_strides[j-1];
+            dest_ptr -= (count[j]-1) * dest_strides[j-1];
+        }
+        src_ptr += src_strides[j-1];
+        dest_ptr += dest_strides[j-1];
     }
 }
 
-/* copy from src to dest, where src is strided */
-void local_copy_src_str(void *src, void *dest, unsigned int ndim,
-                unsigned long *src_strides, unsigned long *src_extents)
-{
-    int i,j;
-    unsigned long elem_size = src_strides[0];
-
-    void *dest_ptr;
-    unsigned long blk_size;
-    unsigned long num_blks;
-    unsigned long cnt_strides[MAX_DIMS];
-    unsigned int contig_rank;
-
-    /*
-     * (1) find the largest contiguous block that we can read from. Given by
-     *     contig_rank
-     * (2) calculate offset from one contiguous block to the next, along each
-     *     of the  dimensions.
-     */
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-        "gasnet_comm_layer.c:local_copy_src_str-> Local Strided "
-        "MemCopy from %p to %p",
-        src, dest);
-
-    i = 0;
-    contig_rank = 1;
-    blk_size = elem_size;
-    num_blks = 1;
-    cnt_strides[0] = 1;
-    for (i = 1; i < ndim; i++) {
-        if (src_strides[i]/src_strides[i-1] == src_extents[i-1])  {
-            cnt_strides[i] = 1;
-            contig_rank++;
-            blk_size = src_strides[i];
-        } else  {
-            cnt_strides[i] = cnt_strides[i-1] * src_extents[i];
-            num_blks *= src_extents[i];
-        }
-    }
-    if (blk_size == elem_size)
-        blk_size *= src_extents[0];
-
-    void *blk = src;
-    dest_ptr = dest;
-    for (i = 1; i <= num_blks; i++) {
-        memcpy(dest_ptr, blk, blk_size);
-
-        dest_ptr += blk_size;
-        for (j = contig_rank; j < ndim; j++) {
-            if (i % cnt_strides[j]) break;
-        }
-        blk += src_strides[j];
-    }
-}
-
-/* copy from src to dest where dest is strided */
-void local_copy_dest_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_strides,
-                    unsigned long *dest_extents)
-{
-    int i,j;
-    unsigned long elem_size = dest_strides[0];
-    void *src_ptr;
-    unsigned long blk_size;
-    unsigned long num_blks;
-    unsigned long cnt_strides[MAX_DIMS];
-    unsigned int contig_rank;
-
-
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-        "gasnet_comm_layer.c:local_copy_dest_str-> Local Strided "
-        "MemCopy from %p to %p",
-        src, dest);
-
-    i = 0;
-    contig_rank = 1;
-    blk_size = elem_size;
-    num_blks = 1;
-    cnt_strides[0] = 1;
-    for (i = 1; i < ndim; i++) {
-        if (dest_strides[i]/dest_strides[i-1] == dest_extents[i-1])  {
-            cnt_strides[i] = 1;
-            contig_rank++;
-            blk_size = dest_strides[i];
-        } else  {
-            cnt_strides[i] = cnt_strides[i-1] * dest_extents[i];
-            num_blks *= dest_extents[i];
-        }
-    }
-    if (blk_size == elem_size)
-        blk_size *= dest_extents[0];
-
-    void *blk = dest;
-    src_ptr = src;
-    for (i = 1; i <= num_blks; i++) {
-        memcpy(blk, src_ptr, blk_size);
-
-        src_ptr += blk_size;
-        for (j = contig_rank; j < ndim; j++) {
-            if (i % cnt_strides[j]) break;
-        }
-        blk += dest_strides[j];
-    }
-}
 
 static void refetch_all_cache()
 {
@@ -565,7 +500,7 @@ static void refetch_all_cache()
             "gasnet_comm_layer.c:refetch_all_cache-> Finished nb get");
 }
 
-static void refetch_cache(unsigned long node)
+static void refetch_cache(size_t node)
 {
     if(cache_all_images[node]->remote_address)
     {
@@ -578,15 +513,15 @@ static void refetch_cache(unsigned long node)
             node+1);
 }
 
-static void cache_check_and_get(unsigned long node, void *remote_address,
-                            unsigned long xfer_size, void *local_address)
+static void cache_check_and_get(size_t node, void *remote_address,
+                            size_t nbytes, void *local_address)
 {
     void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
+    size_t start_offset;
     void *cache_line_address =cache_all_images[node]->cache_line_address;
     /* data in cache */
     if(cache_address>0 && remote_address >= cache_address &&
-           remote_address+xfer_size <= cache_address+getCache_line_size)
+           remote_address+nbytes <= cache_address+getCache_line_size)
     {
         start_offset=remote_address-cache_address;
         if(cache_all_images[node]->handle)
@@ -594,7 +529,7 @@ static void cache_check_and_get(unsigned long node, void *remote_address,
             gasnet_wait_syncnb(cache_all_images[node]->handle);
             cache_all_images[node]->handle = 0;
         }
-        memcpy(local_address,cache_line_address+start_offset, xfer_size);
+        memcpy(local_address,cache_line_address+start_offset, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
             "gasnet_comm_layer.c:cache_check_and_get-> Address %p on"
             " image %lu found in cache.", remote_address, node+1);
@@ -604,16 +539,16 @@ static void cache_check_and_get(unsigned long node, void *remote_address,
         /* data NOT from end of shared segment OR bigger than cacheline*/
         if(((remote_address+getCache_line_size) <=
                 (coarray_start_all_images[node].addr+shared_memory_size))
-            && (xfer_size <= getCache_line_size))
+            && (nbytes <= getCache_line_size))
         {
             gasnet_get(cache_line_address, node, remote_address,
                         getCache_line_size);
             cache_all_images[node]->remote_address=remote_address;
             cache_all_images[node]->handle = 0;
-            memcpy(local_address, cache_line_address, xfer_size);
+            memcpy(local_address, cache_line_address, nbytes);
         }
         else{
-            gasnet_get( local_address, node, remote_address, xfer_size);
+            gasnet_get( local_address, node, remote_address, nbytes);
         }
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
             "gasnet_comm_layer.c:cache_check_and_get-> Address %p on"
@@ -623,102 +558,26 @@ static void cache_check_and_get(unsigned long node, void *remote_address,
 
 
 
-static void cache_check_and_get_src_strided(
-                        void *remote_src, void *local_dest,
-                        unsigned int ndim, unsigned long *src_strides,
-                        unsigned long *src_extents, unsigned long node)
+static void cache_check_and_get_strided(
+        void *remote_src, const size_t src_strides[],
+        void *local_dest, const size_t dest_strides[],
+        const size_t count[], size_t stride_levels, size_t node)
 {
     void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
+    size_t start_offset;
     void *cache_line_address =cache_all_images[node]->cache_line_address;
-    unsigned long size;
+    size_t size;
     int i,j;
-    unsigned long elem_size = src_strides[0];
-    //calculate max size-> stride of last dim* extent of last dim
-    size = (src_strides[ndim-1]*(src_extents[ndim-1]-1))
-                    +elem_size;
-    /* data in cache */
-    if(cache_address>0 && remote_src >= cache_address &&
-           remote_src+size <= cache_address+getCache_line_size)
-    {
-        start_offset=remote_src-cache_address;
-        if(cache_all_images[node]->handle)
-        {
-            gasnet_wait_syncnb(cache_all_images[node]->handle);
-            cache_all_images[node]->handle = 0;
-        }
-        local_copy_src_str(cache_line_address+start_offset,
-                local_dest, ndim, src_strides, src_extents);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                "gasnet_comm_layer.c:cache_check_and_get_src_strided->"
-                "Address %p on image %lu found in cache.",
-                remote_src, node+1);
-    }
-    else /*data not in cache*/
-    {
-        /* data NOT from end of shared segment OR bigger than cacheline*/
-        if(((remote_src+getCache_line_size) <=
-                (coarray_start_all_images[node].addr+shared_memory_size))
-            && (size <= getCache_line_size))
-        {
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-            "gasnet_comm_layer.c:cache_check_and_get_src_strided->"
-            " Data for Address %p on image %lu NOT found in cache.",
-            remote_src, node+1);
 
-            gasnet_get(cache_line_address, node, remote_src,
-                        getCache_line_size);
-            cache_all_images[node]->remote_address=remote_src;
-            cache_all_images[node]->handle = 0;
-            local_copy_src_str(cache_line_address, local_dest,
-                    ndim, src_strides, src_extents);
-        }
-        else{
-            size_t dst_stride_ar[MAX_DIMS];
-            size_t src_stride_ar[MAX_DIMS];
-            size_t count[MAX_DIMS];
-
-            dst_stride_ar[0] = src_extents[0]*elem_size;
-            src_stride_ar[0] = src_strides[1];
-            for (i = 1; i < ndim-1; i++) {
-                dst_stride_ar[i] = dst_stride_ar[i-1]*src_extents[i];
-                src_stride_ar[i] = src_strides[i+1];
-                count[i] = src_extents[i];
-            }
-            count[ndim-1] = src_extents[ndim-1];
-            count[0] = src_extents[0]*elem_size;
-
-            LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                "gasnet_comm_layer.c:cache_check_and_get_src_strided->"
-                "Too big for cache");
-            gasnet_gets_bulk (local_dest, dst_stride_ar, node,
-                    remote_src, src_stride_ar, count,  ndim-1);
-        }
-    }
-}
-
-static void cache_check_and_get_full_strided(
-            void *remote_src, void *local_dest, unsigned int src_ndim,
-            unsigned long *src_strides, unsigned long *src_extents,
-            unsigned int dest_ndim, unsigned long *dest_strides,
-            unsigned long *dest_extents, unsigned long node)
-{
-    void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
-    void *cache_line_address =cache_all_images[node]->cache_line_address;
-    unsigned long size;
-    int i,j;
-    unsigned long elem_size = src_strides[0];
-    //calculate max size-> stride of last dim* extent of last dim
-    size = (src_strides[src_ndim-1]*(src_extents[src_ndim-1]-1))
-                    +elem_size;
+    size = src_strides[stride_levels-1] * (count[stride_levels]-1)
+           + count[0];
 
     /* data in cache */
     if(cache_address>0 && remote_src >= cache_address &&
            remote_src+size <= cache_address+getCache_line_size)
     {
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                "gasnet_comm_layer.c:cache_check_and_get_full_strided->"
+                "gasnet_comm_layer.c:cache_check_and_get_strided->"
                 "Address %p on image %lu found in cache.",
                 remote_src, node+1);
         start_offset=remote_src-cache_address;
@@ -728,9 +587,10 @@ static void cache_check_and_get_full_strided(
             cache_all_images[node]->handle = 0;
         }
 
-        local_copy_full_strided(cache_line_address+start_offset,
-                local_dest, src_ndim, src_strides, dest_strides,
-                src_extents);
+        local_strided_copy(cache_line_address+start_offset,
+                src_strides, local_dest, dest_strides,
+                count, stride_levels);
+
 
     }
     else /*data not in cache*/
@@ -741,7 +601,7 @@ static void cache_check_and_get_full_strided(
             && (size <= getCache_line_size))
         {
             LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-            "gasnet_comm_layer.c:cache_check_and_get_src_strided->"
+            "gasnet_comm_layer.c:cache_check_and_get_strided->"
             " Data for Address %p on image %lu NOT found in cache.",
             remote_src, node+1);
 
@@ -750,49 +610,35 @@ static void cache_check_and_get_full_strided(
             cache_all_images[node]->remote_address=remote_src;
             cache_all_images[node]->handle = 0;
 
-            local_copy_full_strided(cache_line_address,
-                local_dest, src_ndim, src_strides, dest_strides,
-                src_extents);
+            local_strided_copy(cache_line_address,
+                    src_strides, local_dest, dest_strides,
+                    count, stride_levels);
         }
         else{
-            size_t src_stride_ar[MAX_DIMS];
-            size_t dest_stride_ar[MAX_DIMS];
-            size_t count[MAX_DIMS];
-            for (i = 0; i < dest_ndim-1; i++) {
-                src_stride_ar[i] = src_strides[i+1];
-                dest_stride_ar[i] = dest_strides[i+1];
-                count[i] = dest_extents[i];
-                if(dest_extents[i]!=src_extents[i])
-                {
-                    LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                    "gasnet_comm_layer.c:comm_read_full_str->src and dst"
-                    " extent must be same. src_extents[%d]=%d,"
-                    " dest_extents[%d]=%d", i, src_extents[i],i,
-                    dest_extents[i]);
-                }
-            }
-            count[src_ndim-1] = src_extents[src_ndim-1];
-            count[0] = src_extents[0]*elem_size;
+            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                "gasnet_comm_layer.c:cache_check_and_get_strided>gasnet_gets_bulk from"
+                " %p on image %lu to %p (stride_levels= %u)",
+                remote_src, node+1, local_dest, stride_levels);
 
-            gasnet_gets_bulk(local_dest,dest_stride_ar, node, remote_src,
-                    src_stride_ar, count,  src_ndim-1);
+            gasnet_gets_bulk (local_dest, dest_strides, node, remote_src,
+                    src_strides, count,  stride_levels);
         }
     }
 }
 
 
 /* Update cache if remote write overlap -- like writethrough cache */
-static void update_cache(unsigned long node, void *remote_address,
-                        unsigned long xfer_size, void *local_address)
+static void update_cache(size_t node, void *remote_address,
+                        size_t nbytes, void *local_address)
 {
     void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
+    size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
     if(cache_address>0 && remote_address >= cache_address &&
-           remote_address+xfer_size <= cache_address+getCache_line_size)
+           remote_address+nbytes <= cache_address+getCache_line_size)
     {
         start_offset = remote_address - cache_address;
-        memcpy(cache_line_address+start_offset,local_address, xfer_size);
+        memcpy(cache_line_address+start_offset,local_address, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
             "gasnet_comm_layer.c:update_cache-> Value of address %p on"
             " image %lu updated in cache due to write conflict.",
@@ -803,20 +649,20 @@ static void update_cache(unsigned long node, void *remote_address,
              remote_address <= cache_address + getCache_line_size)
     {
         start_offset = remote_address - cache_address;
-        xfer_size = getCache_line_size - start_offset;
-        memcpy(cache_line_address+start_offset,local_address, xfer_size);
+        nbytes = getCache_line_size - start_offset;
+        memcpy(cache_line_address+start_offset,local_address, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
             "gasnet_comm_layer.c:update_cache-> Value of address %p on"
             " image %lu partially updated in cache (write conflict).",
             remote_address, node+1);
     }
     else if (cache_address>0 &&
-             remote_address+xfer_size >= cache_address &&
-             remote_address+xfer_size<=cache_address+getCache_line_size)
+             remote_address+nbytes >= cache_address &&
+             remote_address+nbytes<=cache_address+getCache_line_size)
     {
         start_offset = cache_address-remote_address;
-        xfer_size = xfer_size - start_offset;
-        memcpy(cache_line_address,local_address+start_offset,xfer_size);
+        nbytes = nbytes - start_offset;
+        memcpy(cache_line_address,local_address+start_offset,nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
             "gasnet_comm_layer.c:update_cache-> Value of address %p on"
             " image %lu partially updated in cache (write conflict).",
@@ -824,82 +670,38 @@ static void update_cache(unsigned long node, void *remote_address,
     }
 }
 
-static void update_cache_full_strided(void * remote_dest_address,
-        void *local_src_address, unsigned int dest_ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents, 
-        unsigned int src_ndim, unsigned long *src_strides,
-        unsigned long *src_extents, unsigned long node)
+static void update_cache_strided(
+        void* remote_dest_address, const size_t dest_strides[],
+        void* local_src_address, const size_t src_strides[],
+        const size_t count[], unsigned int stride_levels,
+        size_t node)
 {
     void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
+    size_t start_offset;
     void *cache_line_address =cache_all_images[node]->cache_line_address;
-    unsigned long size;
+    size_t size;
 
-    //calculate max size.. stride of last dim* extent of last dim
-    size = (dest_strides[dest_ndim-1]*(dest_extents[dest_ndim-1]-1))
-            +dest_strides[0];
+    /* calculate max size (very conservative!) */
+    size = (dest_strides[stride_levels-1]*(count[stride_levels]-1))
+            + count[0];
     
-    //New data completely fit into cache
+    /* New data completely fit into cache */
     if(cache_address>0 && remote_dest_address >= cache_address &&
            remote_dest_address+size <= cache_address+getCache_line_size)
     {
         start_offset = remote_dest_address - cache_address;
 
-        local_copy_full_strided(local_src_address,
-                cache_line_address+start_offset, dest_ndim,
-                src_strides, dest_strides, src_extents);
+        local_strided_copy( local_src_address, src_strides,
+                cache_line_address+start_offset, dest_strides,
+                count, stride_levels);
 
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
         "gasnet_comm_layer.c:update_cache_full_strided->"
         " Value of address %p on"
         " image %lu updated in cache due to write conflict.",
-        remote_dest_address, node+1);
+            remote_dest_address, node+1);
     }
-    //Some memory overlap
-    else if (cache_address>0 && 
-            ((remote_dest_address+size > cache_address &&
-             remote_dest_address+size < cache_address+getCache_line_size)
-             ||
-             ( remote_dest_address > cache_address &&
-               remote_dest_address < cache_address+getCache_line_size)
-            ))
-    {
-        //make it invalid
-        cache_all_images[node]->remote_address=0;
-    }
-}
-
-static void update_cache_dest_strided(void * remote_dest_address,
-        void *local_src_address, unsigned int dest_ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents, 
-        unsigned long node)
-{
-    void *cache_address = cache_all_images[node]->remote_address;
-    unsigned long start_offset;
-    void *cache_line_address =cache_all_images[node]->cache_line_address;
-    unsigned long size;
-
-    //calculate max size.. stride of last dim* extent of last dim
-    size = (dest_strides[dest_ndim-1]*(dest_extents[dest_ndim-1]-1))
-            +dest_strides[0];
-    
-    //New data completely fit into cache
-    if(cache_address>0 && remote_dest_address >= cache_address &&
-           remote_dest_address+size <= cache_address+getCache_line_size)
-    {
-        start_offset = remote_dest_address - cache_address;
-
-        local_copy_dest_str( cache_line_address+start_offset,
-                local_src_address, dest_ndim,
-                dest_strides, dest_extents);
-
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-        "gasnet_comm_layer.c:update_cache_dest_strided->"
-        " Value of address %p on"
-        " image %lu updated in cache due to write conflict.",
-        remote_dest_address, node+1);
-    }
-    //Some memory overlap
+    /* Some memory overlap */
     else if (cache_address>0 && 
             ((remote_dest_address+size > cache_address &&
              remote_dest_address+size < cache_address+getCache_line_size)
@@ -918,7 +720,7 @@ static void update_cache_dest_strided(void * remote_dest_address,
  * static functions for non-blocking put
  */
 static int address_in_nbwrite_address_block(void *remote_addr,
-        unsigned long proc, unsigned long size)
+        size_t proc, size_t size)
 {
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,"gasnet_comm_layer.c:"
         "address_in_nbwrite_address_block-> Img%lu "
@@ -935,7 +737,7 @@ static int address_in_nbwrite_address_block(void *remote_addr,
 }
 
 static void update_nbwrite_address_block(void *remote_addr,
-        unsigned long proc, unsigned long size)
+        size_t proc, size_t size)
 {
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,"gasnet_comm_layer.c:"
         "update_nbwrite_address_block-> Img%lu "
@@ -1161,9 +963,9 @@ unsigned long allocate_static_coarrays()
  * 1) Static coarrays have same address on all images
  * 2) coarray_start_all_images is not populated at init. It needs to be
  *    populated when accessing an image for 1st time (lazy init)*/
-static void *get_remote_address(void *src, unsigned long img)
+static void *get_remote_address(void *src, size_t img)
 {
-    unsigned long offset;
+    size_t offset;
     void * remote_start_address;
     if ( (img == my_proc) || !address_on_heap(src) )
         return src;
@@ -1366,27 +1168,25 @@ void comm_free_lcb (void *ptr)
     }
 }
 
-void comm_read(void *src, void *dest, unsigned long xfer_size,
-                unsigned long proc)
+void comm_read( size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
     remote_src = get_remote_address(src,proc);
     if(enable_nbput)
-        wait_on_pending_puts(proc, remote_src, xfer_size);
+        wait_on_pending_puts(proc, remote_src, nbytes);
 
-    if(enable_get_cache)
-        cache_check_and_get(proc, remote_src, xfer_size, dest);
-    else{
+    if(enable_get_cache) {
+        cache_check_and_get(proc, remote_src, nbytes, dest);
+    } else {
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
             "gasnet_comm_layer.c:comm_read->gasnet_get from %p on image %lu"
-            " to %p size %lu", remote_src, proc+1, dest, xfer_size);
-        gasnet_get( dest, proc, remote_src, xfer_size);
+            " to %p size %lu", remote_src, proc+1, dest, nbytes);
+        gasnet_get( dest, proc, remote_src, nbytes);
     }
 }
 
 
-void comm_write(void *dest, void *src, unsigned long xfer_size,
-                unsigned long proc)
+void comm_write( size_t proc, void *dest, void *src, size_t nbytes)
 {
     void *remote_dest;
     remote_dest = get_remote_address(dest,proc);
@@ -1395,589 +1195,120 @@ void comm_write(void *dest, void *src, unsigned long xfer_size,
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
             "gasnet_comm_layer.c:comm_write->Before gasnet_put_nb to %p on "
             "image %lu from %p size %lu",
-            remote_dest, proc+1, src, xfer_size);
-        wait_on_pending_puts(proc, remote_dest, xfer_size);
+            remote_dest, proc+1, src, nbytes);
+        wait_on_pending_puts(proc, remote_dest, nbytes);
         struct write_handle_list* handle_node =
-            get_next_handle(proc, remote_dest, xfer_size);
+            get_next_handle(proc, remote_dest, nbytes);
         handle_node->handle =
-            gasnet_put_nb ( proc, remote_dest, src, xfer_size);
+            gasnet_put_nb ( proc, remote_dest, src, nbytes);
         handle_node->next = 0;
-        update_nbwrite_address_block(remote_dest, proc, xfer_size);
+        update_nbwrite_address_block(remote_dest, proc, nbytes);
     }
     else
     {
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "gasnet_comm_layer.c:comm_read->gasnet_put to %p on image %lu"
-            " from %p size %lu", remote_dest, proc+1, src, xfer_size);
-        gasnet_put( proc, remote_dest, src, xfer_size);
+            "gasnet_comm_layer.c:comm_write->gasnet_put to %p on image %lu"
+            " from %p size %lu", remote_dest, proc+1, src, nbytes);
+        gasnet_put( proc, remote_dest, src, nbytes);
     }
+
     if(enable_get_cache)
-        update_cache(proc, remote_dest, xfer_size, src);
+        update_cache(proc, remote_dest, nbytes, src);
 }
 
 
-void comm_read_src_str(void *src, void *dest, unsigned int ndim,
-                    unsigned long *src_strides,
-                    unsigned long *src_extents,
-                    unsigned long proc)
+void comm_strided_read ( size_t proc,
+        void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], size_t stride_levels)
 {
-    int i,j;
-    unsigned long elem_size = src_strides[0];
     void *remote_src;
 
 #if defined(ENABLE_LOCAL_MEMCPY)
-    if (  my_proc == proc  ) { /* local read */
-        void *dest_ptr;
-        unsigned long blk_size;
-        unsigned long num_blks;
-        unsigned long cnt_strides[MAX_DIMS];
-        unsigned int contig_rank;
-
-        /*
-         * (1) find the largest contiguous block that we can read from. Given by
-         *     contig_rank
-         * (2) calculate offset from one contiguous block to the next, along each
-         *     of the  dimensions.
-         */
-
-        i = 0;
-        contig_rank = 1;
-        blk_size = elem_size;
-        num_blks = 1;
-        cnt_strides[0] = 1;
-        for (i = 1; i < ndim; i++) {
-            if (src_strides[i]/src_strides[i-1] == src_extents[i-1])  {
-                cnt_strides[i] = 1;
-                contig_rank++;
-                blk_size = src_strides[i];
-            } else  {
-                cnt_strides[i] = cnt_strides[i-1] * src_extents[i];
-                num_blks *= src_extents[i];
-            }
-        }
-        if (blk_size == elem_size)
-            blk_size *= src_extents[0];
-
-        void *blk = src;
-        dest_ptr = dest;
-        for (i = 1; i <= num_blks; i++) {
-            if (dest_ptr < blk || dest_ptr > (blk+blk_size))
-                memcpy(dest_ptr, blk, blk_size);
-            else /* use memmove for overlapping sections */
-                memmove(dest_ptr, blk, blk_size);
-
-            dest_ptr += blk_size;
-            for (j = contig_rank; j < ndim; j++) {
-                if (i % cnt_strides[j]) break;
-            }
-            blk += src_strides[j];
-        }
+    if (  my_proc == proc  ) {
+        /* local copy */
+        local_strided_copy( src, src_strides, dest, dest_strides,
+                            count, stride_levels );
     } else
 #endif
     {
         remote_src = get_remote_address(src,proc);
-        if(enable_nbput)
-        {
-            unsigned long size;
-            //calculate max size-> stride of last dim* extent of last dim
-            size = (src_strides[ndim-1]*(src_extents[ndim-1]-1))
-                    +elem_size;
+        if(enable_nbput) {
+            size_t size;
+            /* calculate max size (very conservative!) */
+            size = src_strides[stride_levels-1] * (count[stride_levels]-1)
+                   + count[0];
             wait_on_pending_puts(proc, remote_src, size);
         }
 
-        if(enable_get_cache)
-        {
-            cache_check_and_get_src_strided(remote_src, dest,
-                    ndim, src_strides, src_extents, proc);
-        }
-        else
-        {
-            size_t dst_stride_ar[MAX_DIMS];
-            size_t src_stride_ar[MAX_DIMS];
-            size_t count[MAX_DIMS];
+        if(enable_get_cache) {
 
-            dst_stride_ar[0] = src_extents[0]*elem_size;
-            src_stride_ar[0] = src_strides[1];
-            for (i = 1; i < ndim-1; i++) {
-                dst_stride_ar[i] = dst_stride_ar[i-1]*src_extents[i];
-                src_stride_ar[i] = src_strides[i+1];
-                count[i] = src_extents[i];
-            }
-            count[ndim-1] = src_extents[ndim-1];
-            count[0] = src_extents[0]*elem_size;
+            cache_check_and_get_strided(remote_src, src_strides,
+                   dest, dest_strides, count, stride_levels, proc);
+
+        } else {
 
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                "gasnet_comm_layer.c:comm_read_src_str->gasnet_gets_bulk from"
-                " %p on image %lu to %p ndim %u",
-                remote_src, proc+1, dest, ndim-1);
-            gasnet_gets_bulk (dest, dst_stride_ar, proc, remote_src,
-                    src_stride_ar, count,  ndim-1);
+                "gasnet_comm_layer.c:comm_strided_read->gasnet_gets_bulk from"
+                " %p on image %lu to %p (stride_levels= %u)",
+                remote_src, proc+1, dest, stride_levels);
+            gasnet_gets_bulk (dest, dest_strides, proc, remote_src,
+                    src_strides, count,  stride_levels);
         }
     }
 }
 
 
-void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
-                    unsigned long *src_str_mults, unsigned long *src_extents,
-                    unsigned long *src_strides,
-                    unsigned long proc)
+void comm_strided_write ( size_t proc,
+        void *dest, const size_t dest_strides[],
+        void *src, const size_t src_strides[],
+        const size_t count[], size_t stride_levels)
 {
-    int i,j,k;
-    unsigned long elem_size = src_str_mults[0];
-    void *remote_src;
-
-    remote_src = get_remote_address(src,proc);
-
-    size_t dst_stride_ar[MAX_DIMS];
-    size_t src_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    j = k = 0;
-    for (i = 0; i < ndim; i++) {
-      if (i > 0) {
-        src_stride_ar[k++] = src_str_mults[i];
-      }
-
-      if (src_strides[i] > 1) {
-        src_stride_ar[k++] = src_str_mults[i]*src_strides[i];
-        count[j++] = 1;
-      }   
-      count[j++] = src_extents[i];
-    }
-    count[0] = count[0] * elem_size;
-    dst_stride_ar[0] = count[0];
-    for (i = 1; i < j-1; i++) {
-      dst_stride_ar[i] = dst_stride_ar[i-1]*count[i];
-    }
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "gasnet_comm_layer.c:comm_read_src_str->gasnet_gets_bulk from"
-        " %p on image %lu to %p ndim %u",
-        remote_src, proc+1, dest, j-1);
-    gasnet_gets_bulk (dest, dst_stride_ar, proc, remote_src,
-            src_stride_ar, count,  j-1);
-}
-
-
-void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_strides, unsigned long *src_extents, 
-        unsigned int dest_ndim, unsigned long *dest_strides,
-        unsigned long *dest_extents, unsigned long proc)
-{
-    int i,j;
-    unsigned long elem_size = src_strides[0];
-    void *remote_src=get_remote_address(src,proc);
-    size_t src_stride_ar[MAX_DIMS];
-    size_t dest_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    if(src_ndim!=dest_ndim)
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "gasnet_comm_layer.c:comm_read_full_str->src and dest dim must"
-        " be same. src_ndim=%d, dest_ndim=%d",
-        src_ndim, dest_ndim);
-    }
-
-    if(enable_nbput)
-    {
-        unsigned long size;
-        //calculate max size.. stride of last dim* extent of last dim
-        size = (src_strides[src_ndim-1]*(src_extents[src_ndim-1]-1))
-                +elem_size;
-        wait_on_pending_puts(proc, remote_src, size);
-    }
-
-    if(enable_get_cache)
-    {
-        cache_check_and_get_full_strided(remote_src, dest,
-                src_ndim, src_strides, src_extents,
-                dest_ndim, dest_strides, dest_extents,
-                proc);
-    }
-    else
-    {
-        for (i = 0; i < dest_ndim-1; i++) {
-            src_stride_ar[i] = src_strides[i+1];
-            dest_stride_ar[i] = dest_strides[i+1];
-            count[i] = dest_extents[i];
-            if(dest_extents[i]!=src_extents[i])
-            {
-                LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                "gasnet_comm_layer.c:comm_read_full_str->src and dest"
-                " extent must be same. src_extents[%d]=%d,"
-                " dest_extents[%d]=%d", i, src_extents[i],i,
-                dest_extents[i]);
-            }
-        }
-        count[src_ndim-1] = src_extents[src_ndim-1];
-        count[0] = src_extents[0]*elem_size;
-
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "gasnet_comm_layer.c:comm_read_full_str->Before gasnet_gets"
-            " from %p on image %lu to %p ndim %lu",
-            remote_src, proc+1, dest, src_ndim-1);
-
-        gasnet_gets_bulk (dest, dest_stride_ar, proc, remote_src,
-                src_stride_ar, count,  src_ndim-1);
-    }
-}
-
-void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents, 
-        unsigned long *src_strides,
-        unsigned int dest_ndim, unsigned long *dest_str_mults,
-        unsigned long *dest_extents, unsigned long *dest_strides,
-        unsigned long proc)
-{
-    int i,j,k1,k2;
-    unsigned long elem_size = src_str_mults[0];
-    void *remote_src=get_remote_address(src,proc);
-    size_t src_stride_ar[MAX_DIMS];
-    size_t dest_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    if(src_ndim!=dest_ndim)
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "gasnet_comm_layer.c:comm_read_full_str->src and dest dim must"
-        " be same. src_ndim=%d, dest_ndim=%d",
-        src_ndim, dest_ndim);
-    }
-
-    j = k1 = k2 = 0;
-    for (i = 0; i < src_ndim; i++) {
-      if (i > 0) {
-        src_stride_ar[k1++] = src_str_mults[i];
-        dest_stride_ar[k2++] = dest_str_mults[i];
-      }
-
-      if ((src_strides && src_strides[i]>1) &&
-          (dest_strides == NULL || dest_strides[i]==1)) {
-        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
-        if (k2 == 0)
-          dest_stride_ar[k2++] = dest_str_mults[0];
-        else
-          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
-        count[j++] = 1;
-      } else if ((dest_strides && dest_strides[i]>1) &&
-          (src_strides == NULL || src_strides[i]==1)) {
-        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
-        if (k1 == 0)
-          src_stride_ar[k1++] = src_str_mults[0];
-        else
-          src_stride_ar[k1++] = src_stride_ar[k1-1];
-        count[j++] = 1;
-      } else if (dest_strides && src_strides &&
-          dest_strides[i]>1 && src_strides[i]>1) {
-        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
-        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
-        count[j++] = 1;
-      }  
-      count[j++] = src_extents[i];
-    }
-    count[0] = count[0] * elem_size;
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "gasnet_comm_layer.c:comm_read_full_str->Before gasnet_gets"
-        " from %p on image %lu to %p ndim %lu",
-        remote_src, proc+1, dest, src_ndim-1);
-
-    gasnet_gets_bulk (dest, dest_stride_ar, proc, remote_src,
-            src_stride_ar, count,  j-1);
-} /* comm_read_full_str2 */
-
-
-void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_str_mults,
-                    unsigned long *dest_extents,
-                    unsigned long proc)
-{
-    int i,j;
-    unsigned long elem_size = dest_str_mults[0];
     void *remote_dest;
 
 #if defined(ENABLE_LOCAL_MEMCPY)
-    if (  my_proc == proc  ) { /* local write */
-        void *src_ptr;
-        unsigned long blk_size;
-        unsigned long num_blks;
-        unsigned long cnt_strides[MAX_DIMS];
-        unsigned int contig_rank;
-
-
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "gasnet_comm_layer.c:comm_write_dest_str-> Local Strided "
-            "MemCopy from %p to %p",
-            src, dest);
-
-        i = 0;
-        contig_rank = 1;
-        blk_size = elem_size;
-        num_blks = 1;
-        cnt_strides[0] = 1;
-        for (i = 1; i < ndim; i++) {
-            if (dest_str_mults[i]/dest_str_mults[i-1] == dest_extents[i-1])  {
-                cnt_strides[i] = 1;
-                contig_rank++;
-                blk_size = dest_str_mults[i];
-            } else  {
-                cnt_strides[i] = cnt_strides[i-1] * dest_extents[i];
-                num_blks *= dest_extents[i];
-            }
-        }
-        if (blk_size == elem_size)
-            blk_size *= dest_extents[0];
-
-        void *blk = dest;
-        src_ptr = src;
-        for (i = 1; i <= num_blks; i++) {
-            if (src_ptr < blk || src_ptr > (blk+blk_size))
-                memcpy(blk, src_ptr, blk_size);
-            else /* use memmove for overlapping sections */
-                memmove(blk, src_ptr, blk_size);
-
-            src_ptr += blk_size;
-            for (j = contig_rank; j < ndim; j++) {
-                if (i % cnt_strides[j]) break;
-            }
-            blk += dest_str_mults[j];
-        }
+    if (  my_proc == proc  ) {
+        /* local copy */
+        local_strided_copy( src, src_strides, dest, dest_strides,
+                            count, stride_levels );
     } else
 #endif
     {
-        size_t src_stride_ar[MAX_DIMS];
-        size_t dest_stride_ar[MAX_DIMS];
-        size_t count[MAX_DIMS];
-
-        src_stride_ar[0] = dest_extents[0]*elem_size;
-        dest_stride_ar[0] = dest_str_mults[1];
-        for (i = 1; i < ndim-1; i++) {
-            src_stride_ar[i] = src_stride_ar[i-1]*dest_extents[i];
-            dest_stride_ar[i] = dest_str_mults[i+1];
-            count[i] = dest_extents[i];
-        }
-        count[ndim-1] = dest_extents[ndim-1];
-        count[0] = dest_extents[0]*elem_size;
-
         remote_dest = get_remote_address(dest,proc);
 
-        if(enable_nbput)
-        {
-            unsigned long size;
-            //calculate max size.. stride of last dim* extent of last dim
-            size = (dest_str_mults[ndim-1]*(dest_extents[ndim-1]-1))
-                +elem_size;
+        if(enable_nbput) {
+            size_t size;
+            /* calculate max size (very conservative!) */
+            size = (src_strides[stride_levels-1] * count[stride_levels])
+                    + count[0];
+
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                 "gasnet_comm_layer.c:comm_write_dest_str->Before"
                 " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
                 remote_dest, proc+1, src, size);
             wait_on_pending_puts(proc, remote_dest, size);
+
             struct write_handle_list* handle_node =
                 get_next_handle(proc, remote_dest, size);
+
             handle_node->handle = gasnet_puts_nb_bulk(proc, remote_dest,
-                    dest_stride_ar, src, src_stride_ar, count,  ndim-1);
+                    dest_strides, src, src_strides, count,  stride_levels);
             handle_node->next = 0;
+
             update_nbwrite_address_block(remote_dest, proc, size);
-        }
-        else
-        {
+        } else {
+
             LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "gasnet_comm_layer.c:comm_write_dest_str->gasnet_put_bulk"
-            " to %p on image %lu from %p ndim %u",
-            remote_dest, proc+1, src, ndim-1);
-            gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
-                    src_stride_ar, count,  ndim-1);
+                "gasnet_comm_layer.c:comm_write_dest_str->gasnet_put_bulk"
+                " to %p on image %lu from %p (stride_levels= %u)",
+                remote_dest, proc+1, src, stride_levels);
+            gasnet_puts_bulk(proc, remote_dest, dest_strides, src,
+                    src_strides, count,  stride_levels);
         }
-        if(enable_get_cache)
-        {
-            update_cache_dest_strided(remote_dest, src, ndim,
-                    dest_str_mults, dest_extents, proc);
-        }
-    }
-} /* comm_write_dest_str */
 
-
-
-void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_str_mults,
-                    unsigned long *dest_extents,
-                    unsigned long *dest_strides,
-                    unsigned long proc)
-{
-    int i,j,k;
-    unsigned long elem_size = dest_str_mults[0];
-    void *remote_dest;
-
-    size_t src_stride_ar[MAX_DIMS];
-    size_t dest_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    j = k = 0;
-    for (i = 0; i < ndim; i++) {
-      if (i > 0) {
-        dest_stride_ar[k++] = dest_str_mults[i];
-      }
-
-      if (dest_strides[i] > 1) {
-        dest_stride_ar[k++] = dest_str_mults[i]*dest_strides[i];
-        count[j++] = 1;
-      }   
-      count[j++] = dest_extents[i];
-    }
-    count[0] = count[0] * elem_size;
-    src_stride_ar[0] = count[0];
-    for (i = 1; i < j-1; i++) {
-      src_stride_ar[i] = src_stride_ar[i-1]*count[i];
-    }
-
-
-    remote_dest = get_remote_address(dest,proc);
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-    "gasnet_comm_layer.c:comm_write_dest_str->gasnet_put_bulk"
-    " to %p on image %lu from %p ndim %u",
-    remote_dest, proc+1, src, ndim-1);
-
-    gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
-            src_stride_ar, count,  j-1);
-} /* comm_write_dest_str2 */
-
-
-void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents, 
-        unsigned int src_ndim, unsigned long *src_strides,
-        unsigned long *src_extents, unsigned long proc)
-{
-    int i,j;
-    unsigned long elem_size = dest_strides[0];
-    void *remote_dest;
-    size_t src_stride_ar[MAX_DIMS];
-    size_t dest_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    if(src_ndim!=dest_ndim)
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "gasnet_comm_layer.c:comm_write_full_str->src and dest dim must"
-        " be same. src_ndim=%d, dest_ndim=%d",
-        src_ndim, dest_ndim);
-    }
-
-    src_stride_ar[0] = dest_extents[0]*elem_size;
-    dest_stride_ar[0] = dest_strides[1];
-    for (i = 0; i < dest_ndim-1; i++) {
-        src_stride_ar[i] = src_strides[i+1];
-        dest_stride_ar[i] = dest_strides[i+1];
-        count[i] = dest_extents[i];
-        if(dest_extents[i]!=src_extents[i])
-        {
-            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-            "gasnet_comm_layer.c:comm_write_full_str->src and dest extent"
-            " must be same. src_extents[%d]=%d, dest_extents[%d]=%d",
-            i, src_extents[i],i, dest_extents[i]);
+        if(enable_get_cache) {
+            update_cache_strided(remote_dest, dest_strides,
+                   src, src_strides, count, stride_levels, proc);
         }
     }
-    count[dest_ndim-1] = dest_extents[dest_ndim-1];
-    count[0] = dest_extents[0]*elem_size; //as it must be in bytes
-
-    remote_dest = get_remote_address(dest,proc);
-
-    if(enable_nbput)
-    {
-        unsigned long size;
-        //calculate max size.. stride of last dim* extent of last dim
-        size = (dest_strides[dest_ndim-1]*(dest_extents[dest_ndim-1]-1))
-            +elem_size;
-        wait_on_pending_puts(proc, remote_dest, size);
-        struct write_handle_list* handle_node =
-            get_next_handle(proc, remote_dest, size);
-        handle_node->handle = gasnet_puts_nb_bulk(proc, remote_dest,
-                dest_stride_ar, src, src_stride_ar, count,  dest_ndim-1);
-        handle_node->next = 0;
-        update_nbwrite_address_block(remote_dest, proc, size);
-    }
-    else
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "gasnet_comm_layer.c:comm_write_full_str->gasnet_put_bulk"
-            " to %p on image %lu from %p ndim %u",
-            remote_dest, proc+1, src, dest_ndim-1);
-        gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
-                src_stride_ar, count,  dest_ndim-1);
-    }
-
-    if(enable_get_cache)
-    {
-        update_cache_full_strided(remote_dest, src, dest_ndim,
-                dest_strides, dest_extents, src_ndim, src_strides,
-                src_extents, proc);
-    }
-
-}
-
-void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents, 
-        unsigned long *dest_strides,
-        unsigned int src_ndim, unsigned long *src_str_mults,
-        unsigned long *src_extents, unsigned long *src_strides,
-        unsigned long proc)
-{
-    int i,j,k1,k2;
-    unsigned long elem_size = dest_strides[0];
-    void *remote_dest;
-    size_t src_stride_ar[MAX_DIMS];
-    size_t dest_stride_ar[MAX_DIMS];
-    size_t count[MAX_DIMS];
-
-    if(src_ndim!=dest_ndim)
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "gasnet_comm_layer.c:comm_write_full_str->src and dest dim must"
-        " be same. src_ndim=%d, dest_ndim=%d",
-        src_ndim, dest_ndim);
-    }
-
-    j = k1 = k2 = 0;
-    for (i = 0; i < dest_ndim; i++) {
-      if (i > 0) {
-        src_stride_ar[k1++] = src_str_mults[i];
-        dest_stride_ar[k2++] = dest_str_mults[i];
-      }
-
-      if ((src_strides && src_strides[i]>1) &&
-          (dest_strides == NULL || dest_strides[i]==1)) {
-        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
-        if (k2 == 0)
-          dest_stride_ar[k2++] = dest_str_mults[0];
-        else
-          dest_stride_ar[k2++] = dest_stride_ar[k2-1];
-        count[j++] = 1;
-      } else if ((dest_strides && dest_strides[i]>1) &&
-          (src_strides == NULL || src_strides[i]==1)) {
-        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
-        if (k1 == 0)
-          src_stride_ar[k1++] = src_str_mults[0];
-        else
-          src_stride_ar[k1++] = src_stride_ar[k1-1];
-        count[j++] = 1;
-      } else if (dest_strides && src_strides &&
-          dest_strides[i]>1 && src_strides[i]>1) {
-        src_stride_ar[k1++] = src_str_mults[i]*src_strides[i];
-        dest_stride_ar[k2++] = dest_str_mults[i]*dest_strides[i];
-        count[j++] = 1;
-      }  
-      count[j++] = dest_extents[i];
-    }
-    count[0] = count[0] * elem_size;
-
-    remote_dest = get_remote_address(dest,proc);
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "gasnet_comm_layer.c:comm_write_full_str->gasnet_put_bulk"
-        " to %p on image %lu from %p ndim %u",
-        remote_dest, proc+1, src, dest_ndim-1);
-    gasnet_puts_bulk(proc, remote_dest, dest_stride_ar, src,
-            src_stride_ar, count,  j-1);
-
 }

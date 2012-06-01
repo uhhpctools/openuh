@@ -106,50 +106,25 @@ void comm_init();
 unsigned long comm_get_proc_id();
 unsigned long comm_get_num_procs();
 
+/* non-strided (contiguous) read and write operations */
+void comm_read( size_t proc, void *src, void *dest, size_t nbytes);
+void comm_write( size_t proc, void *dest, void *src, size_t nbytes);
 
-/* Coarray read/write */
-void comm_read(void * src, void *dest, unsigned long xfer_size, unsigned long proc);
-void comm_write(void *dest, void *src, unsigned long xfer_size, unsigned long proc);
-void comm_read_src_str(void *src, void *dest, unsigned int ndim,
-                    unsigned long *src_strides, unsigned long *src_extents,
-                    unsigned long proc);
-void comm_read_src_str2(void *src, void *dest, unsigned int ndim,
-                    unsigned long *src_str_mults, unsigned long *src_extents,
-                    unsigned long *src_strides,
-                    unsigned long proc);
-void comm_write_dest_str(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_str_mults,
-                    unsigned long *dest_extents,
-                    unsigned long proc);
-void comm_write_dest_str2(void *dest, void *src, unsigned int ndim,
-                    unsigned long *dest_str_mults,
-                    unsigned long *dest_extents,
-                    unsigned long *dest_strides,
-                    unsigned long proc);
-void comm_read_full_str (void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_strides, unsigned long *src_extents, 
-        unsigned int dest_ndim, unsigned long *dest_strides,
-        unsigned long *dest_extents, unsigned long proc);
-void comm_read_full_str2 (void * src, void *dest, unsigned int src_ndim,
-        unsigned long *src_str_mults, unsigned long *src_extents, 
-        unsigned long *src_strides,
-        unsigned int dest_ndim, unsigned long *dest_str_mults,
-        unsigned long *dest_extents, unsigned long *dest_strides,
-        unsigned long proc);
-void comm_write_full_str (void * dest, void *src, unsigned int dest_ndim,
-        unsigned long *dest_strides, unsigned long *dest_extents, 
-        unsigned int src_ndim, unsigned long *src_strides,
-        unsigned long *src_extents, unsigned long proc);
-void comm_write_full_str2 (void * dest, void *src, unsigned int dest_ndim,
-        unsigned long *dest_str_mults, unsigned long *dest_extents, 
-        unsigned long *dest_strides,
-        unsigned int src_ndim, unsigned long *src_str_mults,
-        unsigned long *src_extents, unsigned long *src_strides,
-        unsigned long proc);
+/* strided, non-contiguous read and write operations */
+void comm_strided_read ( size_t proc,
+        void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], size_t stride_levels);
+
+void comm_strided_write ( size_t proc,
+        void *dest, const size_t dest_strides[],
+        void *src, const size_t src_strides[],
+        const size_t count[], size_t stride_levels);
+
+/* TODO: vector, non-contiguous read and write operations  */
 
 
 /* shared memory management */
-static void *get_remote_address(void *src, unsigned long img);
 unsigned long allocate_static_coarrays(); /* TBD */
 
 /* NON-BLOCKING PUT OPTIMIZATION */
@@ -166,20 +141,6 @@ struct local_buffer
     void *addr;
     struct local_buffer *next;
 };
-static int address_in_nbwrite_address_block(void *remote_addr,
-        unsigned long proc, unsigned long size);
-static void update_nbwrite_address_block(void *remote_addr,
-        unsigned long proc, unsigned long size);
-static struct write_handle_list* get_next_handle(unsigned long proc,
-        void* remote_address, unsigned long size);
-static void reset_min_nbwrite_address(unsigned long proc);
-static void reset_max_nbwrite_address(unsigned long proc);
-static void delete_node(unsigned long proc, struct write_handle_list *node);
-static int address_in_handle(struct write_handle_list *handle_node,
-                                void *address, unsigned long size);
-static void wait_on_pending_puts(unsigned long proc, void* remote_address,
-                                unsigned long size);
-static void wait_on_all_pending_puts(unsigned long proc);
 
 /* GET CACHE OPTIMIZATION */
 struct cache
@@ -188,13 +149,6 @@ struct cache
     void *cache_line_address;
     gasnet_handle_t handle;
 };
-static void clear_all_cache();
-static void clear_cache(unsigned long node);
-static void cache_check_and_get(unsigned long node, void *remote_address,
-                            unsigned long xfer_size, void *local_address);
-static void update_cache(unsigned long node,void *remote_address,
-                    unsigned long xfer_size, void *local_address);
-
 
 /* interrupt safe malloc and free */
 void* comm_malloc(size_t size);

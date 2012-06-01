@@ -69,29 +69,39 @@ Using OpenUH CAF compiler
 
 uhcaf is a compiler wrapper for coarray fortran
 
-Usage: uhcaf  [OPTION]... [SOURCE]... [-- [OPENUH_OPTIONS]]
+Usage: uhcaf  [OPTION]... [OPENUH_OPTION]... [SOURCE]...
 
 Where options are
 
   --layer=L         L represents a specified runtime layer to support remote
                     accesses. Available layers are:
-                        gasnet-<conduit>
+                        gasnet-<conduit>, where <conduit> may be one of: mpi
+smp udp
                         armci
 
   --gasnet-path=G   G is the path to a specified GASNet installation
+                        Currently set to:
+/opt/berkeley/gasnet/gnu/1.18.0/everything
 
   --armci-path=A    A is the path to a specified ARMCI installation
+                        Currently set to: /home/dreachem/runtimes/armci-1-4
 
   --help, -h        Displays this menu
 
   --help2, -H       Displays available options for OpenUH compiler
 
-  --verbose, -v     Output the command to be run
+  --verbose         Displays UHCAF environment variables, and invocation
+                    commands used by script and underlying compiler
+
+  --show-info       Displays compiler defaults and linker settings for UHCAF
+                    compiler and exits
+
+  --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
 
    ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI
-                    documentation.
+documentation.
 
    MSG_COMMS        Messaging library used by ARMCI. Default is MPI.
 
@@ -105,9 +115,10 @@ Environment Variables:
    LIBMPI           Explicitly specify MPI libs to link in.
                          Default is: -L$MPI_LIB -lmpi
 
+
 Example:
 
-$ uhcaf --layer=gasnet-smp  program.caf --  -O3 -g -o program
+$ uhcaf --layer=gasnet-smp  -O3 program.caf -o program
 
 
 Launching a CAF Program

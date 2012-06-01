@@ -120,6 +120,9 @@ fi
 if test -n "${GASNET_HOME}"; then
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
+  if test  "${GASNET_CONDUITS}" = "*"; then
+      AC_MSG_ERROR(["Specified --with-gasnet-root=<path> doesn't look right. Check path."])
+  fi
 fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then

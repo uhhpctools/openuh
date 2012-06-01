@@ -1479,6 +1479,11 @@ fi
 if test -n "${GASNET_HOME}"; then
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
+  if test  "${GASNET_CONDUITS}" = "*"; then
+      { { echo "$as_me:$LINENO: error: \"Specified --with-gasnet-root=<path> doesn't look right. Check path.\"" >&5
+echo "$as_me: error: \"Specified --with-gasnet-root=<path> doesn't look right. Check path.\"" >&2;}
+   { (exit 1); exit 1; }; }
+  fi
 fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then

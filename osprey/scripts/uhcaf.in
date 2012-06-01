@@ -37,14 +37,14 @@ GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 COMM_LAYER=@DEFAULT_COMM@
 CC=uhcc
 FC=uhf90
-FFLAGS="-coarray -fno-second-underscore"
+CAF_FLAGS="-coarray -fno-second-underscore"
 ENVIRONMENT="-----------------------\n"
 
 uhcaf_usage()
 {
   cat <<_EOT_
 
-Usage: $progname  [OPTION]... [SOURCE]... [-- [OPENUH_OPTIONS]]
+Usage: $progname  [OPTION]... [OPENUH_OPTION]... [SOURCE]...
 
 Where options are
 
@@ -63,7 +63,11 @@ Where options are
 
   --help2, -H       Displays available options for OpenUH compiler
 
-  --verbose, -v     Output the command to be run
+  --verbose         Displays UHCAF environment variables, and invocation
+                    commands used by script and underlying compiler
+
+  --show-info       Displays compiler defaults and linker settings for UHCAF
+                    compiler and exits
 
   --keep, -k        Keep any temporary files in current directory
 
@@ -124,6 +128,58 @@ print_warning()
   echo "Warning: $1" >&2
 }
 
+print_compile_link_info()
+{
+  LAYER_INSTALLATION_PATH="unknown"
+  UHCAF_NETWORK="unknown"
+  MSG_LAYER="N/A"
+  #LIB_LIST=`echo $COMM_LIBS | sed -e 's/ -/\n\t\t\t -/g'`
+  LIB_LIST=`echo "$COMM_LIBS" | fmt -w 50  | awk '{print (NR==1?$0:"\t\t\t " $0)}'`
+  if [ "$COMM_LAYER" == "gasnet" ]; then
+      LAYER_INSTALLATION_PATH=$GASNET_HOME
+      UHCAF_NETWORK=$GASNET_CONDUIT
+      if [ "$GASNET_CONDUIT" == "mpi" ]; then
+          MSG_LAYER=$MPI_LIB
+      fi
+  elif [ "$COMM_LAYER" == "armci" ]; then
+      LAYER_INSTALLATION_PATH=$ARMCI_HOME
+      UHCAF_NETWORK=$ARMCI_NETWORK
+      MSG_LAYER=$MSG_COMMS
+  fi
+
+  if [ -n "`$FC -V 2>&1 | grep -i \" --with-build-optimize=debug\"`" ]; then
+      OPENUH_IS_DEBUG=yes
+  else
+      OPENUH_IS_DEBUG=no
+  fi
+
+  OPENUH_DEFAULT_OPTIONS="$CAF_FLAGS "
+  OPENUH_DEFAULT_OPTIONS+="`$FC -show-defaults 2>&1 | sed -e 's/^[ \t]*//' | sed -n 2p`"
+  OPENUH_DEFAULT_OPTIONS=`echo "$OPENUH_DEFAULT_OPTIONS" | fmt -w 50 | \
+                          awk '{print (NR==1?$0:"\t\t\t " $0)}'`
+  cat <<_EOT_
+
+  ---------------------------------------------------------------------------
+                                UHCAF SETTINGS
+  ---------------------------------------------------------------------------
+  Compiler:
+        version:         $(eval "$FC -dumpversion")
+        debug build:     $OPENUH_IS_DEBUG
+        default options: $OPENUH_DEFAULT_OPTIONS
+  ---------------------------------------------------------------------------
+  Linker:
+        libraries:       $LIB_LIST
+  ---------------------------------------------------------------------------
+  Communication Layer:
+        layer:           $COMM_LAYER ($LAYER_INSTALLATION_PATH)
+        network:         $UHCAF_NETWORK
+        messaging:       $MSG_LAYER
+  ---------------------------------------------------------------------------
+_EOT_
+
+  exit 1
+
+}
 
 # -------------------------------------------------------------------
 
@@ -131,93 +187,88 @@ if [ $# -eq 0 ]; then
   uhcaf_usage
 fi
 
-options="`getopt \
-		-u \
-		-n "$progname" \
-        -l gasnet-path: \
-        -l armci-path: \
-		-l layer: \
-		-l help \
-		-l help2 \
-		-l verbose \
-        -l keep \
-        -o vhHk \
-		-- \
-		$*`"
-
-# check ret status
-case $? in
-  0)
-    ;;
-  *)
-    uhcaf_usage
-    ;;
-esac
-
-
-set -- $options
-
+show_info='n'
 verbose='n'
-
 keep='n'
-
-while [ $1 != "--" ]
-do
-  case $1 in
-    -v | --verbose)
-      verbose='y'
-      FFLAGS+=" -show"
-      ;;
-    -h | --help)
-      uhcaf_usage
-      ;;
-    -H | --help2)
-      uhf90_usage
-      ;;
-    -k | --keep)
-      keep='y'
-      ;;
-    --gasnet-path)
-      shift
-      if [ ! -d "$1" ]; then
-        print_error "$1 does not exist"
-      fi
-      GASNET_HOME=$1
-      ;;
-    --armci-path)
-      shift
-      if [ ! -d "$1" ]; then
-        print_error "$1 does not exist"
-      fi
-      ARMCI_HOME=$1
-      ;;
-    --layer)
-      shift
-      layer=`echo $1 | tr '[:upper:]' '[:lower:]'`
-      if [ $layer == armci ]; then
-        COMM_LAYER=armci
-      elif [[ $layer == gasnet-* ]]; then
-        GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
-        valid=0
-        for gc in @GASNET_CONDUITS@; do
-          if [ $GASNET_CONDUIT == $gc ]; then
-            valid=1
+all_args=("$@")
+arg_num=0
+for arg in "$@" ;  do
+    pass_arg=yes
+    case "$arg" in
+        --verbose)
+          verbose='y'
+          CAF_FLAGS+=" -show"
+          pass_arg=no
+          ;;
+        -h|--help)
+          uhcaf_usage
+          pass_arg=no
+          ;;
+        -H|--help2)
+          uhf90_usage
+          pass_arg=no
+          ;;
+        -k|--keep)
+          keep='y'
+          pass_arg=no
+          ;;
+        --gasnet-path=*)
+          val=`echo UhCaf$arg | sed -e 's/UhCaf--gasnet-path=//g'`
+          if [ ! -d "$val" ]; then
+            print_error "$val does not exist"
           fi
-        done
-        if [ $valid == 0 ]; then
-          print_error "$layer is not available"
-        fi
-        COMM_LAYER=gasnet
-      elif [ $layer == gasnet ]; then
-        COMM_LAYER=gasnet
-      else
-        print_error "$1 layer is not supported"
-      fi
+          GASNET_HOME=$val
+          pass_arg=no
+          ;;
+        --armci-path=*)
+          val=`echo UhCaf$arg | sed -e 's/UhCaf--armci-path=//g'`
+          if [ ! -d "$val" ]; then
+            print_error "$val does not exist"
+          fi
+          ARMCI_HOME=$val
+          pass_arg=no
+          ;;
+        --layer=*)
+          val=`echo UhCaf$arg | sed -e 's/UhCaf--layer=//g'`
+          layer=`echo $val | tr '[:upper:]' '[:lower:]'`
+          if [ $layer == armci ]; then
+            COMM_LAYER=armci
+          elif [[ $layer == gasnet-* ]]; then
+            GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
+            valid=0
+            for gc in mpi smp udp; do
+              if [ $GASNET_CONDUIT == $gc ]; then
+                valid=1
+              fi
+            done
+            if [ $valid == 0 ]; then
+              print_error "$layer is not available"
+            fi
+            COMM_LAYER=gasnet
+          elif [ $layer == gasnet ]; then
+            COMM_LAYER=gasnet
+          else
+            print_error "$val layer is not supported"
+          fi
+          pass_arg=no
+          ;;
+        --show-info)
+          show_info='y'
+          pass_arg=no
+          ;;
+        -show|-show-defaults|-show0|-v)
+          verbose='y'
+          ;;
+        *)
+          ;;
+    esac
 
-      ;;
-  esac
-  shift
+    if [ $pass_arg = no ]; then
+        unset all_args[$arg_num]
+    fi
+    arg_num=`expr $arg_num + 1`
 done
+
 
 # command for creating temporary files
 if [ "$keep" == "y" ]; then
@@ -283,7 +334,7 @@ if [ $COMM_LAYER == gasnet ]; then
     add_to_env_list "LIBMPI"
 
     if [ $GASNET_CONDUIT == udp ]; then
-      FFLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp 
+      CAF_FLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
     fi
   fi
 
@@ -295,6 +346,14 @@ elif [ $COMM_LAYER == armci ]; then
     set_env MSG_COMMS "MPI"
   else
     add_to_env_list "MSG_COMMS"
+  fi
+
+  if [ -z "$ARMCI_NETWORK" ]; then
+    print_warning \
+      "ARMCI_NETWORK is unset. Using SOCKETS by default for network communication."
+    set_env ARMCI_NETWORK "SOCKETS"
+  else
+    add_to_env_list "ARMCI_NETWORK"
   fi
 
   if [ -z "$TARGET" ]; then
@@ -327,10 +386,16 @@ elif [ $COMM_LAYER == armci ]; then
   COMM_LIBS="-lcaf-armci -L$ARMCI_LIB $COMM_LIBS"
 
   add_to_env_list "MPI_LIB"
-  add_to_env_list "ARMCI_NETWORK"
   add_to_env_list "ARMCI_LIB"
 
 fi
+
+# display information for uhcaf
+if [ "$show_info" == "y" ]; then
+  print_compile_link_info
+fi
+
+# Now we invoke the compiler.
 
 set_env OPENUH_COMM_LIBS $COMM_LIBS
 set_env OPENUH_COMM_LAYER $COMM_LAYER
@@ -347,25 +412,27 @@ rm -f $temp_name
 echo $symbol_defs | $CC -c -x c -o $temp_name.o -
 
 if [ "$keep" == "y" ]; then
-  keep_opt="-keep"
+  keep_option="-keep"
 else
-  keep_opt=""
+  keep_option=""
 fi
 
+compiler_args="${all_args[@]}"
+compiler_args="$compiler_args $temp_name.o"
 case $verbose in
   y)
     echo "$progname environment:"
     echo -e $ENVIRONMENT
     echo
     echo "$progname:"
-    echo "  $FC $FFLAGS $keep_opt $* $temp_name.o"
+    echo "  $FC $CAF_FLAGS $keep_option $compiler_args"
     echo
     ;;
   *)
     ;;
 esac
 
-$FC $FFLAGS $keep_opt $* $temp_name.o
+$FC $CAF_FLAGS $keep_option $compiler_args
 
 if [ "$keep" == "n" ]; then
   rm -f $temp_name.o
