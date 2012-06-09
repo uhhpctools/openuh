@@ -4504,6 +4504,14 @@ boolean final_arg_work(opnd_type	*list_opnd,
 
                tmp_dv_idx = create_tmp_DV_asg(list_idx, info_idx);
 
+#ifdef _UH_COARRAYS
+               /* need to set the number of PE dimensions for this temp DV to
+                * match the corank of the associated dummy argument
+                */
+               ATD_PE_ARRAY_IDX(tmp_dv_idx) = BD_RANK(ATD_PE_ARRAY_IDX(dummy));
+#endif
+
+
 # if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))
 #ifdef KEY /* Bug 10157 */
  /* Original dope vector is used only in caller, and copy of dope vector is
@@ -4577,6 +4585,13 @@ boolean final_arg_work(opnd_type	*list_opnd,
             else {
 
                tmp_dv_idx = create_tmp_DV_asg(list_idx, info_idx);
+
+#ifdef _UH_COARRAYS
+               /* need to set the number of PE dimensions for this temp DV to
+                * match the corank of the associated dummy argument
+                */
+               ATD_PE_ARRAY_IDX(tmp_dv_idx) = BD_RANK(ATD_PE_ARRAY_IDX(dummy));
+#endif
 
 
 # if (defined(_TARGET_OS_IRIX) || defined(_TARGET_OS_LINUX) || defined(_TARGET_OS_DARWIN))

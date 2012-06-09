@@ -3,7 +3,7 @@
 #
 #  CAF compiler wrapper for OpenUH
 #
-#  Copyright (C) 2010-2011 University of Houston.
+#  Copyright (C) 2010-2012 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -181,6 +181,42 @@ _EOT_
 
 }
 
+write_set_save_coarrays()
+{
+  args=( "$@" )
+  echo "" > $set_save_coarrays.c
+  for i in `seq 0 $((${#args[@]}-1))`; do
+      coarray_name=${args[i]}
+      echo "void *$coarray_name;" >> $set_save_coarrays.c
+  done
+  echo "unsigned long set_save_coarrays ( void *base_address)" >> $set_save_coarrays.c
+  echo "{" >> $set_save_coarrays.c
+  echo "  unsigned long offset = 0;" >> $set_save_coarrays.c
+  for i in `seq 0 $((${#args[@]}-1))`; do
+      coarray_name=${args[i]}
+      size=${coarray_name##*_}
+      echo "   $coarray_name  = base_address + offset;" >> $set_save_coarrays.c
+      echo "   offset += $size;" >> $set_save_coarrays.c
+  done
+  echo "   return offset;" >> $set_save_coarrays.c
+  echo "}" >> $set_save_coarrays.c
+}
+
+execute()
+{
+    command=$@
+    if [ "$verbose" == 'y' ]; then
+        echo
+        echo "============================================================================="
+        echo "   $command" | fold -w 80 --spaces | awk '{print (NR==1?$0:"\t   " $0)}'
+        echo "============================================================================="
+        echo
+        eval $command
+    else
+        eval $command
+    fi
+}
+
 # -------------------------------------------------------------------
 
 if [ $# -eq 0 ]; then
@@ -192,6 +228,7 @@ verbose='n'
 keep='n'
 all_args=("$@")
 arg_num=0
+link='y'
 for arg in "$@" ;  do
     pass_arg=yes
     case "$arg" in
@@ -203,14 +240,23 @@ for arg in "$@" ;  do
         -h|--help)
           uhcaf_usage
           pass_arg=no
+          link='n'
           ;;
         -H|--help2)
           uhf90_usage
           pass_arg=no
+          link='n'
+          ;;
+        -help|-help:*)
+          link='n'
           ;;
         -k|--keep)
           keep='y'
           pass_arg=no
+          ;;
+        -c|-S)
+          link='n'
+          pass_arg=yes
           ;;
         --gasnet-path=*)
           val=`echo UhCaf$arg | sed -e 's/UhCaf--gasnet-path=//g'`
@@ -266,16 +312,18 @@ for arg in "$@" ;  do
     if [ $pass_arg = no ]; then
         unset all_args[$arg_num]
     fi
-    arg_num=`expr $arg_num + 1`
+    arg_num=$((arg_num+1))
 done
+
+all_args=("${all_args[@]}")
 
 
 # command for creating temporary files
 if [ "$keep" == "y" ]; then
+  mktemp_cmd="mktemp -p uhcaf.keep"
   if [ ! -d uhcaf.keep ]; then
     mkdir uhcaf.keep
   fi
-  mktemp_cmd="mktemp -p uhcaf.keep"
 else
   mktemp_cmd="mktemp"
 fi
@@ -291,10 +339,6 @@ if [ $COMM_LAYER == gasnet -a -z "$GASNET_HOME" ]; then
 elif [ $COMM_LAYER == armci -a -z "$ARMCI_HOME" ]; then
   print_error "armci layer is not available"
 fi
-
-
-# now gobble option end marker
-shift
 
 
 if [ $COMM_LAYER == gasnet ]; then
@@ -402,14 +446,6 @@ set_env OPENUH_COMM_LAYER $COMM_LAYER
 
 ENVIRONMENT+="-----------------------\n"
 
-# add some symbols into executable for cafrun script to check
-#
-temp_name=`$mktemp_cmd`
-symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
-            int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT;"
-
-rm -f $temp_name
-echo $symbol_defs | $CC -c -x c -o $temp_name.o -
 
 if [ "$keep" == "y" ]; then
   keep_option="-keep"
@@ -418,22 +454,122 @@ else
 fi
 
 compiler_args="${all_args[@]}"
-compiler_args="$compiler_args $temp_name.o"
-case $verbose in
-  y)
-    echo "$progname environment:"
-    echo -e $ENVIRONMENT
-    echo
-    echo "$progname:"
-    echo "  $FC $CAF_FLAGS $keep_option $compiler_args"
-    echo
-    ;;
-  *)
-    ;;
-esac
 
-$FC $CAF_FLAGS $keep_option $compiler_args
+if [ "$link" == "n" ]; then
+  case $verbose in
+    y)
+      echo "$progname environment:"
+      echo -e $ENVIRONMENT
+      echo
+      echo "$progname:"
+      echo
+      ;;
+    *)
+      ;;
+  esac
 
-if [ "$keep" == "n" ]; then
-  rm -f $temp_name.o
+  execute $FC $CAF_FLAGS $keep_option $compiler_args
+  stat=$?
+
+else
+  case $verbose in
+    y)
+      echo "UHCAF ENVIRONMENT:"
+      echo -e $ENVIRONMENT
+      echo
+      ;;
+    *)
+      ;;
+  esac
+
+
+  # remove any switch for output file from the compile command
+  arg_num=0
+  output_file=""
+  get_output=0
+  for arg in $compiler_args; do
+      if [ $get_output -eq 1 ]; then
+          output_file="-o $arg"
+          unset all_args[$arg_num]
+          get_output=0
+      else
+          case $arg in
+              -o)
+              get_output=1
+              unset all_args[$arg_num]
+              ;;
+          esac
+      fi
+      arg_num=$((arg_num+1))
+  done
+  all_args=("${all_args[@]}")
+  compiler_args="${all_args[@]}"
+
+  execute $FC $CAF_FLAGS $keep_option -c $compiler_args
+  stat=$?
+
+  if [ "$stat" == "0" ]; then
+
+      # add some symbols into executable for cafrun script to check
+      link_instructions=`$mktemp_cmd`
+      symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
+                  int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT;"
+
+      rm -f $link_instructions
+      echo $symbol_defs | $CC -c -x c -o $link_instructions.o -
+
+      set_save_coarrays="uhcaf.init_save_coarrays"
+
+      # get the save coarray refs first
+      OBJECTS1=""
+      OBJECTS2=""
+      arg_num=0
+      for arg in $compiler_args; do
+          case $arg in
+              *.f90|*.caf)
+                sourcefile=$(basename "$arg")
+                sourcename=${sourcefile%.*}
+                OBJECTS1+="$sourcename.o "
+                unset all_args[$arg_num]
+                ;;
+              *.o)
+                OBJECTS2+="$arg "
+                ;;
+          esac
+          arg_num=$((arg_num+1))
+      done
+      all_args=("${all_args[@]}")
+      compiler_args="${all_args[@]}"
+
+      # collect save coarrayy info from object files
+      i=0
+      for s in \
+        `readelf -sW $OBJECTS1 $OBJECTS2 | grep " __SAVE_COARRAY_" |  awk '{print $8}'`; do
+        coarray_name[i]=$s
+        i=$((i+1))
+      done
+
+      if [ $i -gt 0 ]; then
+          write_set_save_coarrays "${coarray_name[@]}"
+          $CC -c $set_save_coarrays.c
+
+          # link command
+          execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
+    $OBJECTS2 $link_instructions.o $set_save_coarrays.o $output_file
+          stat=$?
+      else
+          # link command
+          execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
+    $OBJECTS2 $link_instructions.o $output_file
+          stat=$?
+      fi
+  else
+      link=-'n'
+  fi
 fi
+
+if [ "$keep" == "n" -a "$link" == "y" ]; then
+   rm -f $link_instructions.o $OBJECTS1 $set_save_coarrays.o
+fi
+
+exit $stat

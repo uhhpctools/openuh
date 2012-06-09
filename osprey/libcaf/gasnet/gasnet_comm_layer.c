@@ -399,22 +399,25 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
 
     /* Do a simple malloc for EVERYTHING, as attach did not do it */
-    if (gasnet_everything)
-    {
+    if (gasnet_everything) {
         coarray_start_all_images[my_proc].addr =
             malloc (caf_shared_memory_pages*GASNET_PAGESIZE);
         coarray_start_all_images[my_proc].size =
             caf_shared_memory_pages*GASNET_PAGESIZE;
     }
 
-    if(gasnet_everything)
-    {
+    /*
+    if(gasnet_everything) {
         static_coarray_size = 0;
         everything_allocatable_start =
             coarray_start_all_images[my_proc].addr;
+    } else {
+        static_coarray_size = allocate_static_coarrays(
+                        coarray_start_all_images[my_proc].addr);
     }
-    else
-        static_coarray_size = allocate_static_coarrays();
+    */
+    static_coarray_size = allocate_static_coarrays(
+            coarray_start_all_images[my_proc].addr);
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr =
@@ -945,14 +948,19 @@ static void free_lcb()
  * Shared Memory Management
  */
 
-/* TO BE DONE: (not required for EVERYTHING config)
- * It should allocate memory to all static coarrays from the pinned-down
+
+/* It should allocate memory to all static coarrays from the pinned-down
  * memory created during init */
-unsigned long allocate_static_coarrays()
+unsigned long set_save_coarrays_(void *base_address)
 {
-    unsigned long static_coarray_size;
-    static_coarray_size = 0L;
-    return static_coarray_size;
+    return 0;
+}
+#pragma weak set_save_coarrays = set_save_coarrays_
+unsigned long set_save_coarrays(void *base_address);
+
+unsigned long allocate_static_coarrays(void *base_address)
+{
+    return set_save_coarrays(base_address);
 }
 
 /* Calculate the address on another image corresponding to a local address

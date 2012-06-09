@@ -53,10 +53,6 @@ without 32-bit compatible libraries:
 Known Limitations
 ------------------
 
-* CAF support in OpenUH is currenty limited to use of allocatable coarrays
-unless a GASNet installation built with EVERYTHING shared segment
-configuration is used. 
-
 * Fortran 2008 locks are not yet supported.
 
 * Accessing a pointer component of a remote coarray of derived type is not yet

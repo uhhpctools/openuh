@@ -251,7 +251,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         ,caf_shared_memory_size, caf_shared_memory_size/1000000L );
     }
 
-    static_coarray_size = allocate_static_coarrays();
+    static_coarray_size =
+        allocate_static_coarrays(coarray_start_all_images[my_proc]);
 
     if(enable_nbput)
     {
@@ -651,14 +652,18 @@ static void wait_on_all_pending_puts()
  * Shared Memory Management
  */
 
-/* TO BE DONE:
- * It should allocate memory to all static coarrays from the pinned-down
+/* It should allocate memory to all static coarrays from the pinned-down
  * memory created during init */
-unsigned long allocate_static_coarrays()
+unsigned long set_save_coarrays_(void *base_address)
 {
-    unsigned long static_coarray_size;
-    static_coarray_size = 0L;
-    return static_coarray_size;
+    return 0;
+}
+#pragma weak set_save_coarrays = set_save_coarrays_
+unsigned long set_save_coarrays(void *base_address);
+
+unsigned long allocate_static_coarrays(void *base_address)
+{
+    return set_save_coarrays(base_address);
 }
 
 /* Calculate the address on another image corresponding to a local address
