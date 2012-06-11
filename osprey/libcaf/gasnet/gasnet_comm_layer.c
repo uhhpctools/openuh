@@ -72,9 +72,9 @@ static gasnet_seginfo_t *coarray_start_all_images;
  * by remote gets. But we can not pass the address of
  * coarray_start_all_images[img]->addr to gasnet_get as it is on heap.
  * Only static variables have same address across images. So we use a
- * static variable everything_allocatable_start to store
+ * static variable everything_heap_start to store
  * coarray_start_all_images[my_proc]->addr */
-static void * everything_allocatable_start;
+static void * everything_heap_start;
 
 /*sync images*/
 static unsigned short *sync_images_flag;
@@ -406,18 +406,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
             caf_shared_memory_pages*GASNET_PAGESIZE;
     }
 
-    /*
-    if(gasnet_everything) {
-        static_coarray_size = 0;
-        everything_allocatable_start =
-            coarray_start_all_images[my_proc].addr;
-    } else {
-        static_coarray_size = allocate_static_coarrays(
-                        coarray_start_all_images[my_proc].addr);
-    }
-    */
     static_coarray_size = allocate_static_coarrays(
             coarray_start_all_images[my_proc].addr);
+
+    if (gasnet_everything) {
+        everything_heap_start = coarray_start_all_images[my_proc].addr;
+    }
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr =
@@ -988,7 +982,7 @@ static void *get_remote_address(void *src, size_t img)
             /* lazy fetch as gasnet_getSegmentInfo initialzed it to 0 */
             if(remote_start_address==(void*)0){
                 gasnet_get(&remote_start_address,img,
-                        &everything_allocatable_start,
+                        &everything_heap_start,
                         sizeof(void *) );
                 LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                     "gasnet_comm_layer.c:get_remote_address->"

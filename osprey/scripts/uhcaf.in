@@ -207,9 +207,10 @@ execute()
     command=$@
     if [ "$verbose" == 'y' ]; then
         echo
-        echo "============================================================================="
-        echo "   $command" | fold -w 80 --spaces | awk '{print (NR==1?$0:"\t   " $0)}'
-        echo "============================================================================="
+        echo "====================================================================================="
+        echo "   $command" | fold -w 80 --spaces | awk '{print (NR==1?$0 "  \\":"\t   " $0 " \\")}'
+        echo ""
+        echo "====================================================================================="
         echo
         eval $command
     else
@@ -250,7 +251,7 @@ for arg in "$@" ;  do
         -help|-help:*)
           link='n'
           ;;
-        -k|--keep)
+        -k|--keep|-keep)
           keep='y'
           pass_arg=no
           ;;
@@ -455,6 +456,35 @@ fi
 
 compiler_args="${all_args[@]}"
 
+# if no source files specified, then we link
+source_seen=no
+for arg in $compiler_args; do
+    case $arg in
+        *.c)
+          # C source
+          source_seen=yes
+          ;;
+        *.f|*.for|*.F|*.FOR|*.f90|*.f95|*.caf|*.F90|*.F95)
+          # Fortran source
+          source_seen=yes
+          ;;
+        *.s|*.S)
+          # assembler
+          source_seen=yes
+          ;;
+        *.B|*.P|*.N|*.I|*.W|*.O|*.i|*.ii|*.r)
+          # IR
+          source_seen=yes
+          ;;
+        *.C|*.CC|*.CPP|*.cc|*.cpp|*.cxx|*.c++)
+          print_error "uhcaf does not allow C++ source files ($arg)"
+          ;;
+    esac
+done
+if [ $source_seen = no -a "$link" == "n" ]; then
+    link="y"
+fi
+
 if [ "$link" == "n" ]; then
   case $verbose in
     y)
@@ -505,8 +535,11 @@ else
   all_args=("${all_args[@]}")
   compiler_args="${all_args[@]}"
 
-  execute $FC $CAF_FLAGS $keep_option -c $compiler_args
-  stat=$?
+  stat=0
+  if [ $source_seen = yes ]; then
+      execute $FC $CAF_FLAGS $keep_option -c $compiler_args
+      stat=$?
+  fi
 
   if [ "$stat" == "0" ]; then
 
@@ -526,7 +559,7 @@ else
       arg_num=0
       for arg in $compiler_args; do
           case $arg in
-              *.f90|*.caf)
+              *.f|*.F|*.for|*.FOR|*.f90|*.f95|*.F90|*.F95|*.caf)
                 sourcefile=$(basename "$arg")
                 sourcename=${sourcefile%.*}
                 OBJECTS1+="$sourcename.o "
@@ -555,12 +588,12 @@ else
 
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
-    $OBJECTS2 $link_instructions.o $set_save_coarrays.o $output_file
+                $link_instructions.o $set_save_coarrays.o $output_file
           stat=$?
       else
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
-    $OBJECTS2 $link_instructions.o $output_file
+                $link_instructions.o $output_file
           stat=$?
       fi
   else
@@ -569,7 +602,7 @@ else
 fi
 
 if [ "$keep" == "n" -a "$link" == "y" ]; then
-   rm -f $link_instructions.o $OBJECTS1 $set_save_coarrays.o
+   rm -f $link_instructions.o $OBJECTS1 $set_save_coarrays.o $set_save_coarrays.c
 fi
 
 exit $stat
