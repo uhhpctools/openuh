@@ -20305,11 +20305,11 @@ MOLD must have the pointer attribute.
 .ME
 $
 $ Error : 1575
-$msg  1575 This argument to the THIS_IMAGE intrinsic must be a co-array. 
+$msg  1575 This argument to the THIS_IMAGE intrinsic must be a coarray.
 $nexp 1575
-Error : This argument to the THIS_IMAGE intrinsic must be a co-array. 
+Error : This argument to the THIS_IMAGE intrinsic must be a coarray.
 .PP
-Only a co-array may be specified to the THIS_IMAGE intrinsic
+Only a coarray may be specified to the THIS_IMAGE intrinsic
 as the optional argument ARRAY.
 .ME
 $
@@ -21876,6 +21876,22 @@ is for a dummy coarray argument, this means that the dummy should either be
 declared with allocatable attribute or its codimenensions should be defined
 afresh.
 .ME
-$ LAST NUMBER USED : 1707
+$
+$ Error : 1708
+$msg  1708 This argument to the %s intrinsic must be a coarray
+$nexp 1708
+Error : This argument to the %s intrinsic must be a coarray
+.PP
+The first argument for the %s intrinsic must be a coarray.
+.ME
+$
+$ Error : 1709
+$msg  1709 This argument to the %s intrinsic must be an integer array of size equal to the corank of the coarray
+$nexp 1709
+Error : This argument to the %s intrinsic must be an integer array of size equal to the corank of the coarray
+.PP
+The SUB argument of this intrinsic needs to be an integer array of size equal to the corank of the coarray corank.
+.ME
+$ LAST NUMBER USED : 1709
 
 

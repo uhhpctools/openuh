@@ -3375,7 +3375,45 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                   arg_info_list[arg_info_list_top].line = line;
                   arg_info_list[arg_info_list_top].col = column;
                }
+            } else if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+                ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+                IR_LIST_CNT_R(ir_idx) == 2) {
+                /* check that extent of array expression in second argument
+                 * matches the corank of the coarray */
+                int corank = BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+                int arg2_idx = IL_IDX(list_idx2);
+
+                if ( (IR_OPR(arg2_idx) == Whole_Subscript_Opr ||
+                     IR_OPR(arg2_idx) == Section_Subscript_Opr) &&
+                     IR_FLD_R(arg2_idx) == IL_Tbl_Idx &&
+                     IR_OPR(IL_IDX(IR_IDX_R(arg2_idx))) == Triplet_Opr ) {
+                    int triplet_idx = IL_IDX(IR_IDX_R(arg2_idx));
+                    int triplet_bounds_idx = IR_IDX_L(triplet_idx);
+                    /* if lb, ub, and strided are constant, we can do a
+                     * compile-time check
+                     */
+                    int first_idx = triplet_bounds_idx;
+                    int second_idx = IL_NEXT_LIST_IDX(first_idx);
+                    int third_idx = IL_NEXT_LIST_IDX(second_idx);
+
+                    if (IL_FLD(first_idx) == CN_Tbl_Idx &&
+                        IL_FLD(second_idx) == CN_Tbl_Idx &&
+                        IL_FLD(third_idx) == CN_Tbl_Idx) {
+                        int lb = CN_CONST(IL_IDX(first_idx));
+                        int ub = CN_CONST(IL_IDX(second_idx));
+                        int str = CN_CONST(IL_IDX(third_idx));
+
+                        if ( ((ub-lb)/str+1) != corank ) {
+                            find_opnd_line_and_column(&IL_OPND(list_idx1),
+                                                      &opnd_line, &opnd_col);
+                            PRINTMSG(opnd_line, 1709, Error, IR_COL_NUM(arg2_idx),
+                                    "THIS_IMAGE");
+                        }
+                    }
+                }
+
             }
+
          }
 
          if (! arg_info_list[info_idx1].ed.reference) {
@@ -3474,16 +3512,17 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                                                     CG_INTEGER_DEFAULT_TYPE;
                   arg_info_list[arg_info_list_top].ed.linear_type =
                                                     CG_INTEGER_DEFAULT_TYPE;
- arg_info_list[arg_info_list_top].line = line;
+                  arg_info_list[arg_info_list_top].line = line;
                   arg_info_list[arg_info_list_top].col = column;
                }
             }
+
          }
 
          if (! arg_info_list[info_idx1].ed.reference) {
             find_opnd_line_and_column(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
-            PRINTMSG(opnd_line, 1683, Error, opnd_col);
+            PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
          }
          else {
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
@@ -3491,7 +3530,7 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
 
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
   ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
-               PRINTMSG(opnd_line, 1683, Error, opnd_col);
+                PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
             }
 #ifndef _UH_COARRAYS
             else {
@@ -3590,7 +3629,9 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
             /* error, not a co-array */
             find_opnd_line_and_column(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
-            PRINTMSG(opnd_line, 1575, Error, opnd_col);
+            PRINTMSG(opnd_line, 1708, Error, opnd_col,
+                   ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic ?
+                   "LCOBOUND" : "UCOBOUND" );
          }
          else {
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
@@ -3599,7 +3640,9 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
                /* error, not a co-array */
-               PRINTMSG(opnd_line, 1575, Error, opnd_col);
+                PRINTMSG(opnd_line, 1708, Error, opnd_col,
+                       ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic ?
+                       "LCOBOUND" : "UCOBOUND" );
             }
 #ifndef _UH_COARRAYS
             else {
