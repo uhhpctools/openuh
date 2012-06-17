@@ -184,6 +184,10 @@ ifndef MPI_INCLUDE
 	MPI_INCLUDE = @MPI_INCLUDE@
 endif
 
+ifndef CAFRT_ENABLE_TRACES
+	CAFRT_ENABLE_TRACES = @CAFRT_ENABLE_TRACES@
+endif
+
 #  For cross compilers, there are really 3 separate variables:
 #  the build host (machine you are building on), 
 #  the run host (machine you will run on), 

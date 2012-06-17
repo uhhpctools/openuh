@@ -70,6 +70,13 @@ ENABLE_COARRAYS="NO")
 AC_ARG_ENABLE([caf-runtime],
   AS_HELP_STRING([--disable-caf-runtime], [Disable CAF Runtime]))
 
+# Set whether CAF runtime will be built
+AC_ARG_ENABLE([cafrt-traces],
+  AS_HELP_STRING([--disable-cafrt-traces],
+                 [Disable CAF Runtime Tracing Functionality]),
+                  CAFRT_ENABLE_TRACES="NOTRACES",
+                  CAFRT_ENABLE_TRACES="TRACES")
+
 AS_IF([test "x$enable_caf_runtime" != "xno"], [
   BUILD_CAF_RUNTIME="YES"
 ])
@@ -469,6 +476,7 @@ AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
 AC_SUBST([MPI_INCLUDE])
+AC_SUBST([CAFRT_ENABLE_TRACES])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([
