@@ -51,14 +51,14 @@ extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 #include "symtab.h"
 #endif
 
-#define CAF_INIT                    "caf_init_"
-#define CAF_FINALIZE                "caf_finalize_"
-#define ACQUIRE_LCB                 "acquire_lcb_"
-#define RELEASE_LCB                 "release_lcb_"
-#define COARRAY_READ                "coarray_read_"
-#define COARRAY_WRITE               "coarray_write_"
-#define COARRAY_STRIDED_READ        "coarray_strided_read_"
-#define COARRAY_STRIDED_WRITE       "coarray_strided_write_"
+#define CAF_INIT                    "__caf_init"
+#define CAF_FINALIZE                "__caf_finalize"
+#define ACQUIRE_LCB                 "__acquire_lcb"
+#define RELEASE_LCB                 "__release_lcb"
+#define COARRAY_READ                "__coarray_read"
+#define COARRAY_WRITE               "__coarray_write"
+#define COARRAY_STRIDED_READ        "__coarray_strided_read"
+#define COARRAY_STRIDED_WRITE       "__coarray_strided_write"
 
 #endif /* caf_lower_h_included */
 

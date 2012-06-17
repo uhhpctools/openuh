@@ -2198,8 +2198,8 @@ void init_caf_extern_symbols()
  * in back-end. This includes, currently:
  *
  *    _THIS_IMAGE0: replace with global symbol _this_image
- *    num_images: replace with global symbol _num_images
- *    sync_images_: replace arguments with (array-list, #array-list)
+ *    _NUM_IMAGES: replace with global symbol _num_images
+ *    _SYNC_IMAGES: replace arguments with (array-list, #array-list)
  *
  */
 static void handle_caf_call_stmts(
@@ -2230,7 +2230,7 @@ static void handle_caf_call_stmts(
         WN_Delete( WN_kid0(wn_next) );
         WN_kid0(wn_next) = WN_Ldid(MTYPE_U8, 0,
                 this_image_st, ST_type(this_image_st));
-    } else if ( NAME_IS(func_st, "num_images") ) {
+    } else if ( NAME_IS(func_st, "_NUM_IMAGES") ) {
         wn_next = WN_next(wn);
         wipre.Delete();
         Is_True( WN_operator(wn_next) == OPR_STID,
@@ -2238,7 +2238,7 @@ static void handle_caf_call_stmts(
         WN_Delete( WN_kid0(wn_next) );
         WN_kid0(wn_next) = WN_Ldid(MTYPE_U8, 0,
                 num_images_st, ST_type(num_images_st));
-    } else if ( NAME_IS(func_st, "sync_images_") ) {
+    } else if ( NAME_IS(func_st, "_SYNC_IMAGES") ) {
         wn_next = WN_next(wn);
 
         Is_True( WN_num_actuals(wn) == 2,

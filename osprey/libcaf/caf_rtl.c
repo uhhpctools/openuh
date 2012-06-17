@@ -34,13 +34,14 @@
 
 #include "dopevec.h"
 
+#include "caf_rtl.h"
+
 #if defined(ARMCI)
 #include "armci_comm_layer.h"
 #elif defined(GASNET)
 #include "gasnet_comm_layer.h"
 #endif
 
-#include "caf_rtl.h"
 #include "trace.h"
 
 const int DEBUG = 1;
@@ -54,7 +55,49 @@ unsigned long _num_images;
  * asymmetric data. It is the only handle to access the link-list.*/
 struct shared_memory_slot *common_slot;
 
-void caf_init_()
+/* LOCAL FUNCTION DECLARATIONIS */
+static struct shared_memory_slot* find_empty_shared_memory_slot_above
+             (struct shared_memory_slot *slot, unsigned long var_size);
+static struct shared_memory_slot* find_empty_shared_memory_slot_below
+             (struct shared_memory_slot *slot, unsigned long var_size);
+static void* split_empty_shared_memory_slot_from_top
+    (struct shared_memory_slot *slot, unsigned long var_size);
+static void* split_empty_shared_memory_slot_from_bottom
+    (struct shared_memory_slot *slot, unsigned long var_size);
+
+static struct shared_memory_slot* find_shared_memory_slot_above
+                    (struct shared_memory_slot *slot, void *address);
+static struct shared_memory_slot* find_shared_memory_slot_below
+                    (struct shared_memory_slot *slot, void *address);
+
+static void join_3_shared_memory_slots(struct shared_memory_slot *slot);
+static void join_with_prev_shared_memory_slot
+                (struct shared_memory_slot *slot);
+static void join_with_next_shared_memory_slot
+                (struct shared_memory_slot *slot);
+
+static void empty_shared_memory_slot(struct shared_memory_slot *slot);
+static void free_prev_slots_recursively( struct shared_memory_slot *slot );
+static void free_next_slots_recursively( struct shared_memory_slot *slot );
+
+
+static int is_contiguous_access(const size_t strides[], const size_t count[],
+                                size_t stride_levels);
+static void local_src_strided_copy(void *src, const size_t src_strides[],
+        void *dest, const size_t count[], size_t stride_levels);
+
+static void local_dest_strided_copy(void *src, void *dest,
+        const size_t dest_strides[], const size_t count[],
+        size_t stride_levels);
+
+
+
+
+
+
+/* COMPILER BACK-END INTERFACE */
+
+void __caf_init()
 {
     LIBCAF_TRACE_INIT();
 
@@ -70,6 +113,146 @@ void caf_init_()
     LIBCAF_TRACE( LIBCAF_LOG_INIT, "caf_rtl.c:caf_init_->initialized,"
             " num_images = %lu", _num_images);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_init ");
+}
+
+void __caf_finalize()
+{
+    LIBCAF_TRACE( LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:caf_finalize_->Before call to comm_finalize");
+    comm_finalize();
+}
+
+
+void __acquire_lcb(unsigned long buf_size, void **ptr)
+{
+    *ptr = comm_malloc(buf_size);
+    LIBCAF_TRACE( LIBCAF_LOG_DEBUG, "caf_rtl.c:acquire_lcb->"
+            " acquired lcb %p of size %lu", *ptr, buf_size);
+}
+
+void __release_lcb(void **ptr)
+{
+    comm_free_lcb(*ptr);
+    LIBCAF_TRACE( LIBCAF_LOG_DEBUG, "caf_rtl.c:release_lcb_->"
+            "freed lcb %p", *ptr);
+}
+
+void __coarray_read( size_t image, void *src, void *dest, size_t nbytes)
+{
+    START_TIMER();
+    /* reads nbytes from src on proc 'image-1' into local dest */
+    comm_read(image-1, src, dest, nbytes);
+    STOP_TIMER(READ);
+    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "caf_rtl.c:coarray_read->Finished read from %p on Img %lu to %p"
+        " data of size %lu ", src, image, dest, nbytes);
+}
+
+void __coarray_write( size_t image, void *dest, void *src, size_t nbytes)
+{
+    START_TIMER();
+    comm_write(image-1, dest, src, nbytes);
+    STOP_TIMER(WRITE);
+    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "caf_rtl.c:coarray_write->Wrote to %p on Img %lu from %p data of"
+        " size %lu ", dest, image, src, nbytes);
+}
+
+void __coarray_strided_read ( size_t image,
+        void *src, const size_t src_strides[],
+        void *dest, const size_t dest_strides[],
+        const size_t count[], int stride_levels)
+{
+    int remote_is_contig = 0;
+    int local_is_contig = 0;
+    int i;
+
+    /* runtime check if it is contiguous transfer */
+    remote_is_contig = is_contiguous_access(src_strides, count, stride_levels);
+    if (remote_is_contig) {
+        local_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
+        size_t nbytes = 1;
+        for (i = 0; i <= stride_levels; i++) 
+            nbytes = nbytes * count[i];
+
+        if (local_is_contig) {
+            __coarray_read(image, src, dest, nbytes);
+        } else {
+            void *buf;
+            __acquire_lcb( nbytes, &buf);
+            __coarray_read(image, src, buf, nbytes);
+            local_dest_strided_copy(buf, dest, dest_strides, count,
+                    stride_levels);
+            __release_lcb( &buf );
+        }
+
+        return;
+        /* not reached */
+    }
+
+    START_TIMER();
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:coarray_strided_read->Starting read(strided) "
+            "from %p on Img %lu to %p using %d stride_levels ",
+            src, image, dest, stride_levels);
+    comm_strided_read(image-1, src, src_strides, dest, dest_strides,
+            count, stride_levels);
+    STOP_TIMER(READ);
+    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:coarray_strided_read->Finished read(strided) "
+            "from %p on Img %lu to %p using %d stride_levels ",
+            src, image, dest, stride_levels);
+}
+
+void __coarray_strided_write ( size_t image,
+        void *dest, const size_t dest_strides[],
+        void *src, const size_t src_strides[],
+        const size_t count[], int stride_levels)
+{
+    int remote_is_contig = 0;
+    int local_is_contig = 0;
+    int i;
+
+    /* runtime check if it is contiguous transfer */
+    remote_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
+    if (remote_is_contig) {
+        local_is_contig = is_contiguous_access(src_strides, count, stride_levels);
+        size_t nbytes = 1;
+        for (i = 0; i <= stride_levels; i++) 
+            nbytes = nbytes * count[i];
+
+        if (local_is_contig) {
+            __coarray_write(image, dest, src, nbytes);
+        } else {
+            void *buf;
+            __acquire_lcb( nbytes, &buf);
+            local_src_strided_copy(src, src_strides, buf, count,
+                    stride_levels);
+            __coarray_write(image, dest, buf, nbytes);
+            __release_lcb( &buf );
+        }
+
+        return;
+        /* not reached */
+    }
+
+    START_TIMER();
+    comm_strided_write(image-1, dest, dest_strides, src, src_strides,
+            count, stride_levels);
+    STOP_TIMER(WRITE);
+    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "caf_rtl.c:coarray_write_dest_str->Finished write(strided) to %p"
+        " on Img %lu from %p using stride_levels %d ", dest, image, src,
+         stride_levels);
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -419,31 +602,10 @@ void caf_exit_(int status)
     comm_exit(status);
 }
 
-void caf_finalize_()
-{
-    LIBCAF_TRACE( LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:caf_finalize_->Before call to comm_finalize");
-    comm_finalize();
-}
 
-void acquire_lcb_(unsigned long buf_size, void **ptr)
+void _SYNC_ALL()
 {
-    *ptr = comm_malloc(buf_size);
-    LIBCAF_TRACE( LIBCAF_LOG_DEBUG, "caf_rtl.c:acquire_lcb->"
-            " acquired lcb %p of size %lu", *ptr, buf_size);
-}
-
-void release_lcb_(void **ptr)
-{
-    comm_free_lcb(*ptr);
-    LIBCAF_TRACE( LIBCAF_LOG_DEBUG, "caf_rtl.c:release_lcb_->"
-            "freed lcb %p", *ptr);
-}
-
-void sync_all_()
-{
-   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:sync_all_->"
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_SYNC_ALL->"
            "before call to comm_barrier_all");
    START_TIMER();
    comm_barrier_all();
@@ -469,18 +631,18 @@ void caf_end_critical_()
 /*************END CRITICAL SUPPORT **************/
 
 
-void sync_memory_()
+void _SYNC_MEMORY()
 {
-   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:sync_memory->"
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_SYNC_MEMORY->"
            "in sync memory");
 }
 
-void sync_images_( int *imageList, int imageCount)
+void _SYNC_IMAGES( int *imageList, int imageCount)
 {
     int i;
     for ( i=0; i<imageCount ; i++)
     {
-        LIBCAF_TRACE( LIBCAF_LOG_BARRIER,"caf_rtl.c:sync_images_->Before"
+        LIBCAF_TRACE( LIBCAF_LOG_BARRIER,"caf_rtl.c:_SYNC_IMAGES->Before"
         " call to comm_syncimages for sync with img%d",imageList[i]);
         imageList[i]--;
     }
@@ -490,12 +652,12 @@ void sync_images_( int *imageList, int imageCount)
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_sync_images ");
 }
 
-void sync_images_all_()
+void _SYNC_IMAGES_ALL()
 {
     int i;
     int imageCount=_num_images;
     int *imageList;
-    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:sync_images_all_->"
+    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_SYNC_IMAGES_ALL->"
         "before call to comm_sync_images for sync with all images");
     imageList = (int *)comm_malloc(_num_images*sizeof(int));
     for (i=0; i<imageCount ; i++)
@@ -508,12 +670,12 @@ void sync_images_all_()
     comm_free(imageList);
 }
 
-int image_index_(DopeVectorType *diminfo, DopeVectorType *sub)
+int _IMAGE_INDEX(DopeVectorType *diminfo, DopeVectorType *sub)
 {
     if ( diminfo == NULL || sub == NULL )
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-           "caf_rtl.c:image_index_-> image_index failed for "
+           "caf_rtl.c:_IMAGE_INDEX-> image_index failed for "
            "&diminfo=%p, &codim=%p", diminfo,sub);
     }
 
@@ -527,7 +689,7 @@ int image_index_(DopeVectorType *diminfo, DopeVectorType *sub)
 
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:image_index_->rank: %d, corank %d", rank, corank);
+        "caf_rtl.c:_IMAGE_INDEX->rank: %d, corank %d", rank, corank);
     if (sub->dimension[0].extent != corank)
         return 0;
 
@@ -555,7 +717,29 @@ int image_index_(DopeVectorType *diminfo, DopeVectorType *sub)
         return 0;
 }
 
-int this_image3_(DopeVectorType *diminfo, int* sub)
+void _THIS_IMAGE1(DopeVectorType *ret, DopeVectorType *diminfo)
+{
+    int i;
+    int corank = diminfo->n_codim;
+    int *ret_int;
+    if ( diminfo == NULL || ret==NULL)
+    {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+           "caf_rtl.c:_THIS_IMAGE1 ->this_image failed for "
+           "&diminfo:%p and &ret:%p",diminfo, ret);
+    }
+    ret->base_addr.a.ptr = comm_malloc(sizeof(int)*corank);
+    ret->dimension[0].low_bound = 1;
+    ret->dimension[0].extent = corank;
+    ret->dimension[0].stride_mult = 1;
+    ret_int = (int*)ret->base_addr.a.ptr;
+    for (i=1; i<=corank; i++)
+    {
+        ret_int[i-1] = _THIS_IMAGE2(diminfo, &i);
+    }
+}
+
+int _THIS_IMAGE2(DopeVectorType *diminfo, int* sub)
 {
     int img = _this_image-1;
     int rank = diminfo->n_dim;
@@ -569,13 +753,13 @@ int this_image3_(DopeVectorType *diminfo, int* sub)
     if ( diminfo == NULL )
     {
        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-       "caf_rtl.c:this_image3_ ->this_image failed for &diminfo=%p",
+       "caf_rtl.c:_THIS_IMAGE2 ->this_image failed for &diminfo=%p",
        diminfo);
     }
     if(dim < 1 || dim > corank)
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-           "caf_rtl.c:this_image3_->this_image failed as %d dim"
+           "caf_rtl.c:_THIS_IMAGE2->this_image failed as %d dim"
            " is not present", dim);
     }
 
@@ -594,29 +778,7 @@ int this_image3_(DopeVectorType *diminfo, int* sub)
     }
 }
 
-void this_image2_(DopeVectorType *ret, DopeVectorType *diminfo)
-{
-    int i;
-    int corank = diminfo->n_codim;
-    int *ret_int;
-    if ( diminfo == NULL || ret==NULL)
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-           "caf_rtl.c:this_image2_ ->this_image failed for "
-           "&diminfo:%p and &ret:%p",diminfo, ret);
-    }
-    ret->base_addr.a.ptr = comm_malloc(sizeof(int)*corank);
-    ret->dimension[0].low_bound = 1;
-    ret->dimension[0].extent = corank;
-    ret->dimension[0].stride_mult = 1;
-    ret_int = (int*)ret->base_addr.a.ptr;
-    for (i=1; i<=corank; i++)
-    {
-        ret_int[i-1] = this_image3_(diminfo, &i);
-    }
-}
-
-int lcobound2_(DopeVectorType *diminfo, int *sub)
+int _LCOBOUND_2(DopeVectorType *diminfo, int *sub)
 {
     int rank   = diminfo->n_dim;
     int corank = diminfo->n_codim;
@@ -624,19 +786,19 @@ int lcobound2_(DopeVectorType *diminfo, int *sub)
     if ( diminfo == NULL )
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-           "caf_rtl.c:lcobound2 ->lcobound failed for &diminfo:%p",
+           "caf_rtl.c:_LCOBOUND_2 ->lcobound failed for &diminfo:%p",
            diminfo);
     }
     if(dim < 1 || dim > corank)
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-           "caf_rtl.c:lcobound2 ->lcobound failed as dim %d not present",
+           "caf_rtl.c:_LCOBOUND2 ->lcobound failed as dim %d not present",
             dim);
     }
     return diminfo->dimension[rank+dim-1].low_bound;
 }
 
-void lcobound_(DopeVectorType *ret, DopeVectorType *diminfo)
+void _LCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo)
 {
     int i;
     int rank   = diminfo->n_dim;
@@ -645,7 +807,7 @@ void lcobound_(DopeVectorType *ret, DopeVectorType *diminfo)
     if ( diminfo == NULL || ret==NULL)
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-       "caf_rtl.c:lcobound ->lcobound failed for diminfo:%p and ret:%p",
+       "caf_rtl.c:_LCOBOUND_1 ->lcobound failed for diminfo:%p and ret:%p",
         diminfo, ret);
     }
     ret->base_addr.a.ptr = comm_malloc(sizeof(int)*corank);
@@ -659,7 +821,7 @@ void lcobound_(DopeVectorType *ret, DopeVectorType *diminfo)
     }
 }
 
-int ucobound2_(DopeVectorType *diminfo, int *sub)
+int _UCOBOUND_2(DopeVectorType *diminfo, int *sub)
 {
     int rank   = diminfo->n_dim;
     int corank = diminfo->n_codim;
@@ -668,12 +830,12 @@ int ucobound2_(DopeVectorType *diminfo, int *sub)
     if ( diminfo == NULL )
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-       "caf_rtl.c:ucobound2 ->ucobound failed for &diminfo:%p",diminfo);
+       "caf_rtl.c:_UCOBOUND_2 ->ucobound failed for &diminfo:%p",diminfo);
     }
     if(dim < 1 || dim > corank)
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-       "caf_rtl.c:ucobound2 ->ucobound failed as dim %d not present",dim);
+       "caf_rtl.c:_UCOBOUND_2 ->ucobound failed as dim %d not present",dim);
     }
 
     if (dim == corank)
@@ -686,7 +848,7 @@ int ucobound2_(DopeVectorType *diminfo, int *sub)
                 extent - 1);
 }
 
-void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo)
+void _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo)
 {
     int i;
     int rank   = diminfo->n_dim;
@@ -696,7 +858,7 @@ void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo)
     if ( diminfo == NULL || ret==NULL)
     {
       LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-      "caf_rtl.c:ucobound ->ucobound failed for diminfo:%p and ret:%p",
+      "caf_rtl.c:_UCOBOUND_1 ->ucobound failed for diminfo:%p and ret:%p",
        diminfo, ret);
     }
     ret->base_addr.a.ptr = comm_malloc(sizeof(int)*corank);
@@ -717,33 +879,9 @@ void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo)
     }
 }
 
-void coarray_read_( size_t image, void *src, void *dest, size_t nbytes)
-{
-    START_TIMER();
-    /* reads nbytes from src on proc 'image-1' into local dest */
-    comm_read(image-1, src, dest, nbytes);
-    STOP_TIMER(READ);
-    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read ");
 
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:coarray_read->Finished read from %p on Img %lu to %p"
-        " data of size %lu ", src, image, dest, nbytes);
-}
-
-void coarray_write_( size_t image, void *dest, void *src, size_t nbytes)
-{
-    START_TIMER();
-    comm_write(image-1, dest, src, nbytes);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:coarray_write->Wrote to %p on Img %lu from %p data of"
-        " size %lu ", dest, image, src, nbytes);
-}
-
-int is_contiguous_access(const size_t strides[], const size_t count[],
-                         size_t stride_levels)
+static int is_contiguous_access(const size_t strides[], const size_t count[],
+                                size_t stride_levels)
 {
     int block_size = 1;
     int is_contig = 1;
@@ -761,7 +899,7 @@ int is_contiguous_access(const size_t strides[], const size_t count[],
     return 1;
 }
 
-void local_src_strided_copy(void *src, const size_t src_strides[],
+static void local_src_strided_copy(void *src, const size_t src_strides[],
         void *dest, const size_t count[], size_t stride_levels)
 {
     int i,j;
@@ -798,7 +936,7 @@ void local_src_strided_copy(void *src, const size_t src_strides[],
     }
 }
 
-void local_dest_strided_copy(void *src, void *dest,
+static void local_dest_strided_copy(void *src, void *dest,
         const size_t dest_strides[], const size_t count[],
         size_t stride_levels)
 {
@@ -836,98 +974,6 @@ void local_dest_strided_copy(void *src, void *dest,
     }
 }
 
-
-void coarray_strided_read_ ( size_t image,
-        void *src, const size_t src_strides[],
-        void *dest, const size_t dest_strides[],
-        const size_t count[], int stride_levels)
-{
-    int remote_is_contig = 0;
-    int local_is_contig = 0;
-    int i;
-
-    /* runtime check if it is contiguous transfer */
-    remote_is_contig = is_contiguous_access(src_strides, count, stride_levels);
-    if (remote_is_contig) {
-        local_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
-        size_t nbytes = 1;
-        for (i = 0; i <= stride_levels; i++) 
-            nbytes = nbytes * count[i];
-
-        if (local_is_contig) {
-            coarray_read_(image, src, dest, nbytes);
-        } else {
-            void *buf;
-            acquire_lcb_( nbytes, &buf);
-            coarray_read_(image, src, buf, nbytes);
-            local_dest_strided_copy(buf, dest, dest_strides, count,
-                    stride_levels);
-            release_lcb_( &buf );
-        }
-
-        return;
-        /* not reached */
-    }
-
-    START_TIMER();
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:coarray_strided_read->Starting read(strided) "
-            "from %p on Img %lu to %p using %d stride_levels ",
-            src, image, dest, stride_levels);
-    comm_strided_read(image-1, src, src_strides, dest, dest_strides,
-            count, stride_levels);
-    STOP_TIMER(READ);
-    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_read_strided ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:coarray_strided_read->Finished read(strided) "
-            "from %p on Img %lu to %p using %d stride_levels ",
-            src, image, dest, stride_levels);
-}
-
-void coarray_strided_write_ ( size_t image,
-        void *dest, const size_t dest_strides[],
-        void *src, const size_t src_strides[],
-        const size_t count[], int stride_levels)
-{
-    int remote_is_contig = 0;
-    int local_is_contig = 0;
-    int i;
-
-    /* runtime check if it is contiguous transfer */
-    remote_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
-    if (remote_is_contig) {
-        local_is_contig = is_contiguous_access(src_strides, count, stride_levels);
-        size_t nbytes = 1;
-        for (i = 0; i <= stride_levels; i++) 
-            nbytes = nbytes * count[i];
-
-        if (local_is_contig) {
-            coarray_write_(image, dest, src, nbytes);
-        } else {
-            void *buf;
-            acquire_lcb_( nbytes, &buf);
-            local_src_strided_copy(src, src_strides, buf, count,
-                    stride_levels);
-            coarray_write_(image, dest, buf, nbytes);
-            release_lcb_( &buf );
-        }
-
-        return;
-        /* not reached */
-    }
-
-    START_TIMER();
-    comm_strided_write(image-1, dest, dest_strides, src, src_strides,
-            count, stride_levels);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_write_strided ");
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "caf_rtl.c:coarray_write_dest_str->Finished write(strided) to %p"
-        " on Img %lu from %p using stride_levels %d ", dest, image, src,
-         stride_levels);
-}
 
 
 /* COLLECTIVES */
@@ -990,53 +1036,3 @@ static void dope_add( void *buf, DopeVectorType *dst_dv,
     }
 } 
 
-/* COSUM  (modified Joon's armci_comaxval function) */
-/* Accumulates the value of src_dv on all images and stores it into sum_dv
- * of root */
-void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root)
-{    
-    int i,iter;
-    int total_iter = (int) myceillog2(_num_images) ;
-    unsigned int el_len;
-    unsigned int target;
-    void *local_buf;
-    int total_bytes =1;
-
-    // initialization
-    el_len = src_dv->base_addr.a.el_len >>3; // convert bits to bytes
-    for(i=0; i<src_dv->n_dim ; i++)
-      total_bytes *= src_dv->dimension[i].extent;
-    local_buf = malloc(total_bytes);
-    memset(local_buf, 0 , total_bytes);
-    total_bytes *=el_len; 
-    // copy content of dopevector from src to sum locally
-    memcpy(sum_dv->base_addr.a.ptr, src_dv->base_addr.a.ptr, total_bytes);
-
-    // swap processed ID between 0 and root (non zero process ID)
-    int vPID = (_this_image == root ) ? 
-      0 : (_this_image == 0) ? root : _this_image;
-
-    // do reduction                                                       
-    for(iter=0; iter<total_iter; iter++)
-    {
-      if( (vPID % my_pow2(iter+1)) == 0 )
-      {
-        if( (vPID + my_pow2(iter)) < _num_images)
-        {
-          // compute target process IDs for data transfer
-          target = vPID + my_pow2(iter);
-
-          //swap back for process Id 0 and root process(non-zero) 
-          if(target == root) target=0;
-
-          comm_read(target, src_dv->base_addr.a.ptr, local_buf, total_bytes);
-
-          dope_add(local_buf, sum_dv, total_bytes);
-        }
-      }
-      comm_barrier_all();
-    }    
-
-    free(local_buf);
-    //Broadcast for all to all
-}

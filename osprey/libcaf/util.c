@@ -42,6 +42,13 @@ extern void getarg_(int *n, char *s, int slen);
 static char **fargv;
 static int   fargc;
 
+void Warning (char *warning_message)
+{
+  fprintf(stderr, "Warning: %s\n", warning_message);
+  fflush(stderr);
+}
+
+
 /*
  * runtime operation for fortran command passing process 
  */

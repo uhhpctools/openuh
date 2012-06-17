@@ -268,13 +268,25 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Clock_Intrinsic,
 				Clog_Intrinsic,
 				Cmplx_Intrinsic,
+#ifdef _UH_COARRAYS
+				Co_all_Intrinsic,
+				Co_any_Intrinsic,
+				Co_count_Intrinsic,
+				Co_findloc_Intrinsic,
+				Co_maxloc_Intrinsic,
+				Co_maxval_Intrinsic,
+				Co_minloc_Intrinsic,
+				Co_minval_Intrinsic,
+				Co_product_Intrinsic,
+				Co_sum_Intrinsic,
+#endif
 				Compare_And_Swap_Intrinsic,
 				Compl_Intrinsic,
 				Conjg_Intrinsic,
 				Cos_Intrinsic,
 				Cosd_Intrinsic,
 				Cosh_Intrinsic,
-				Cot_Intrinsic,
+                Cot_Intrinsic,
 				Count_Intrinsic,
 				Cputime_Intrinsic,
 				Cqabs_Intrinsic,
@@ -2847,6 +2859,10 @@ extern  void  remote_write_barrier_intrinsic
 			(opnd_type *, expr_arg_type *, int *);
 extern  void  write_memory_barrier_intrinsic
 			(opnd_type *, expr_arg_type *, int *);
+#ifdef _UH_COARRAYS
+extern void co_sum_intrinsic
+            (opnd_type *, expr_arg_type *, int *);
+#endif
 
 extern	void	 	check_dependence(boolean    *dependant,
                                          opnd_type  item, 

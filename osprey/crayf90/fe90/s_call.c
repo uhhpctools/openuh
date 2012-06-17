@@ -4044,7 +4044,7 @@ boolean final_arg_work(opnd_type	*list_opnd,
        * vector in case the actual arg does not have explicit shape 
        */
      
-      if (strcmp(AT_OBJ_NAME_PTR(spec_idx),"sync_images_")==0)
+      if (strcmp(AT_OBJ_NAME_PTR(spec_idx),"_SYNC_IMAGES")==0)
           d_type = Intrin_Dope_Dummy;
           
 #endif
@@ -4056,8 +4056,12 @@ boolean final_arg_work(opnd_type	*list_opnd,
        *  and d_type is Intrin_Dope_Dummy */
 
       if (a_type == Scalar_Var && ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX
-          && d_type == Intrin_Dope_Dummy)
-          association = PASS_DV;
+          && d_type == Intrin_Dope_Dummy) {
+          if (ATD_IM_A_DOPE(attr_idx))
+              association = PASS_DV;
+          else
+              association = MAKE_DV;
+      }
 #endif
 
 
@@ -5143,12 +5147,12 @@ boolean final_arg_work(opnd_type	*list_opnd,
                /* Positions 1-7 are deferred shape entries in bd table. */
 
                   ATD_ARRAY_IDX(tmp_idx) = arg_info_list[info_idx].ed.rank;
+               }
 #ifdef _UH_COARRAYS
                   ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
                                           BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
                                           BD_RANK(ATD_PE_ARRAY_IDX(dummy));
 #endif
-               }
                ATD_IM_A_DOPE(tmp_idx)    = TRUE;
 
                COPY_OPND(r_opnd, IL_OPND(list_idx));
@@ -5280,12 +5284,12 @@ boolean final_arg_work(opnd_type	*list_opnd,
             /* Positions 1-7 are deferred shape entries in the bd table. */
 
                ATD_ARRAY_IDX(tmp_dv_idx) = arg_info_list[info_idx].ed.rank;
+            }
 #ifdef _UH_COARRAYS
               ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
                                       BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
                                       BD_RANK(ATD_PE_ARRAY_IDX(dummy));
 #endif
-            }
             ATD_IM_A_DOPE(tmp_dv_idx)    = TRUE;
 
             OPND_FLD(r_opnd) = AT_Tbl_Idx;

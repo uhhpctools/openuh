@@ -32,8 +32,6 @@
 
 #include "mpi.h"
 #include "armci.h"
-#include "trace.h"
-#include "caf_rtl.h"
 
 #define ENABLE_LOCAL_MEMCPY
 #define MAX_DIMS 15
@@ -42,7 +40,7 @@
 #define DEFAULT_GETCACHE_LINE_SIZE 65536L
 
 /* init */
-void comm_init();
+void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 
 
 /* critical support */
@@ -53,8 +51,8 @@ void comm_end_critical();
 
 
 /* inline functions */
-unsigned long comm_get_proc_id();
-unsigned long comm_get_num_procs();
+inline size_t comm_get_proc_id();
+inline size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
 void comm_read( size_t proc, void *src, void *dest, size_t nbytes);

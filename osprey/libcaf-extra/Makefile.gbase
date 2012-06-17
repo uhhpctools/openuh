@@ -49,7 +49,11 @@ OBJECTS = \
 	caf_reductions.o \
 	caf_reductions_1d.o \
 	caf_broadcasts.o \
-	caf_broadcasts_1d.o
+	caf_broadcasts_1d.o \
+	co_maxval.o \
+	co_minval.o \
+	co_sum.o \
+	co_product.o
 
 default: $(TARGETS)
 

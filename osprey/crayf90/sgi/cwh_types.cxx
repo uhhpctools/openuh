@@ -1973,8 +1973,9 @@ cwh_types_shared_dope(FLD_HANDLE fld, int ndims, BOOL is_ptr,
     
     if ((*p == 0)
 #ifdef _UH_COARRAYS
-    /* don't reuse old dope if its a coarray */
+    /* don't reuse old dope unless neither is a coarray */
         || TY_is_coarray(tp_idx)
+        || TY_is_coarray(TY_pointed(Ty_Table[FLD_type(TY_fld(*p))]))
 #endif
        ) {
 

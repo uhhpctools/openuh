@@ -5789,8 +5789,8 @@ void sync_stmt_semantics (void)
    OPND_FLD(opnd) = NO_Tbl_Idx;
 
    if (IR_OPR(IR_IDX_L((ir_idx))) == All_Opr) {
-       lib_idx = create_lib_entry_attr("sync_all_",
-               strlen("sync_all_"),
+       lib_idx = create_lib_entry_attr("_SYNC_ALL",
+               strlen("_SYNC_ALL"),
                stmt_start_line,
                stmt_start_col);
 
@@ -5824,8 +5824,8 @@ void sync_stmt_semantics (void)
            curr_stmt_sh_idx;
    }
     else if ((IR_OPR(IR_IDX_L(ir_idx))) == Images_Opr){
-        lib_idx = create_lib_entry_attr("sync_images_",
-               strlen("sync_images_"),
+        lib_idx = create_lib_entry_attr("_SYNC_IMAGES",
+               strlen("_SYNC_IMAGES"),
                stmt_start_line,
                stmt_start_col);
 
@@ -5879,8 +5879,8 @@ void sync_stmt_semantics (void)
          
    }
    else if ((IR_OPR(IR_IDX_L(ir_idx))) == Memory_Opr){
-        lib_idx = create_lib_entry_attr("sync_memory_",
-               strlen("sync_memory_"),
+        lib_idx = create_lib_entry_attr("_SYNC_MEMORY",
+               strlen("_SYNC_MEMORY"),
                stmt_start_line,
                stmt_start_col);
 
@@ -5914,8 +5914,8 @@ void sync_stmt_semantics (void)
            curr_stmt_sh_idx;
          
    } else if ((IR_OPR(IR_IDX_L(ir_idx))) == Imagestar_Opr){
-        lib_idx = create_lib_entry_attr("sync_images_all_",
-               strlen("sync_images_all_"),
+        lib_idx = create_lib_entry_attr("_SYNC_IMAGES_ALL",
+               strlen("_SYNC_IMAGES_ALL"),
                stmt_start_line,
                stmt_start_col);
 

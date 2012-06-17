@@ -37,7 +37,7 @@ GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 COMM_LAYER=@DEFAULT_COMM@
 CC=uhcc
 FC=uhf90
-CAF_FLAGS="-coarray -fno-second-underscore"
+CAF_FLAGS="-coarray"
 ENVIRONMENT="-----------------------\n"
 
 uhcaf_usage()

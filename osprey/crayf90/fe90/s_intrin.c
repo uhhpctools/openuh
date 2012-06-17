@@ -3142,6 +3142,142 @@ void    shift_intrinsic(opnd_type     *result_opnd,
 
 }  /* shift_intrinsic */
 
+
+
+
+#ifdef _UH_COARRAYS
+/*co_sum_intrinsic*/
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      Function  CO_MAXLOC(SOURCE, RESULT) intrinsic                         *|
+|*      Function  CO_MAXVAL(SOURCE, RESULT) intrinsic                         *|
+|*      Function  CO_MINLOC(SOURCE, RESULT) intrinsic                         *|
+|*      Function  CO_MINVAL(SOURCE, RESULT) intrinsic                         *|
+|*      Function  CO_SUM(SOURCE, RESULT) intrinsic                            *|
+|*      Function  CO_PRODUCT(SOURCE, RESULT) intrinsic                        *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+void    co_sum_intrinsic(opnd_type     *result_opnd,
+                         expr_arg_type *res_exp_desc,
+                         int           *spec_idx)
+{
+
+   int            line;
+   int            column;
+   int            ir_idx;
+   int            cn_idx;
+   int            plus_idx;
+   int            power_idx;
+   int            div_idx;
+   int            info_idx1;
+   int            info_idx2;
+   int            int_idx;
+   int            mod_idx;
+   int            list_idx1;
+   int            list_idx2;
+   opnd_type      opnd;
+   int            opnd_line;
+   int            opnd_col;
+   int            l_log10_idx;
+   int            r_log10_idx;
+   float          point_five;
+   float          f_two;
+   int            sn_idx;
+   int            attr_idx;
+   expr_arg_type  loc_exp_desc;
+   enum intrinsic_values first_intrin = Co_maxloc_Intrinsic;
+   char*          intrin_names[3] =
+   { "CO_MAXLOC", "CO_MAXVAL", "CO_MINLOC", "CO_MINVAL",
+     "CO_SUM", "CO_PRODUCT" };
+
+
+   TRACE (Func_Entry, "co_sum_intrinsic", NULL);
+
+   ir_idx = OPND_IDX((*result_opnd));
+   line = IR_LINE_NUM(ir_idx);
+   column = IR_COL_NUM(ir_idx);
+
+   IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(ATP_RSLT_IDX(*spec_idx));
+   ATP_EXTERNAL_INTRIN(*spec_idx) = TRUE;
+
+
+   IR_RANK(ir_idx) = res_exp_desc->rank;
+
+
+   if (ATP_INTRIN_ENUM(*spec_idx) == Co_maxloc_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_maxval_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_minloc_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_minval_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_sum_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_product_Intrinsic) {
+      if (IR_LIST_CNT_R(ir_idx) >= 2) {
+         int rank = 0;
+
+         list_idx1 = IR_IDX_R(ir_idx);
+         info_idx1 = IL_ARG_DESC_IDX(list_idx1);
+
+         list_idx2 = IL_NEXT_LIST_IDX(list_idx1);
+         info_idx2 = IL_ARG_DESC_IDX(list_idx2);
+
+         if (arg_info_list[info_idx1].ed.reference) {
+            attr_idx = find_base_attr(&IL_OPND(list_idx1),
+                                      &opnd_line, &opnd_col);
+
+            if (AT_DCL_ERR(attr_idx)) {
+               goto EXIT;
+            }
+
+         }
+
+         if (! arg_info_list[info_idx1].ed.reference) {
+            find_opnd_line_and_column(&IL_OPND(list_idx1),
+                                      &opnd_line, &opnd_col);
+            PRINTMSG(opnd_line, 1708, Error, opnd_col,
+             intrin_names[ATP_INTRIN_ENUM(*spec_idx)-first_intrin]);
+         }
+         else {
+            attr_idx = find_base_attr(&IL_OPND(list_idx1),
+                                      &opnd_line, &opnd_col);
+
+            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+                PRINTMSG(opnd_line, 1708, Error, opnd_col,
+                 intrin_names[ATP_INTRIN_ENUM(*spec_idx)-first_intrin]);
+            }
+            arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
+        }
+
+      } else {
+          /* not enough arguments -- should not reach */
+      }
+   }
+
+EXIT:
+   /* must reset foldable and will_fold_later because there is no */
+   /* folder for this intrinsic in constructors.                  */
+
+   res_exp_desc->foldable = FALSE;
+   res_exp_desc->will_fold_later = FALSE;
+
+   TRACE (Func_Exit, "co_sum_intrinsic", NULL);
+
+
+}
+/*end of co_sum_intrinsic*/
+#endif
+
+
+
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
@@ -3375,43 +3511,6 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                   arg_info_list[arg_info_list_top].line = line;
                   arg_info_list[arg_info_list_top].col = column;
                }
-            } else if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
-                ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
-                IR_LIST_CNT_R(ir_idx) == 2) {
-                /* check that extent of array expression in second argument
-                 * matches the corank of the coarray */
-                int corank = BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
-                int arg2_idx = IL_IDX(list_idx2);
-
-                if ( (IR_OPR(arg2_idx) == Whole_Subscript_Opr ||
-                     IR_OPR(arg2_idx) == Section_Subscript_Opr) &&
-                     IR_FLD_R(arg2_idx) == IL_Tbl_Idx &&
-                     IR_OPR(IL_IDX(IR_IDX_R(arg2_idx))) == Triplet_Opr ) {
-                    int triplet_idx = IL_IDX(IR_IDX_R(arg2_idx));
-                    int triplet_bounds_idx = IR_IDX_L(triplet_idx);
-                    /* if lb, ub, and strided are constant, we can do a
-                     * compile-time check
-                     */
-                    int first_idx = triplet_bounds_idx;
-                    int second_idx = IL_NEXT_LIST_IDX(first_idx);
-                    int third_idx = IL_NEXT_LIST_IDX(second_idx);
-
-                    if (IL_FLD(first_idx) == CN_Tbl_Idx &&
-                        IL_FLD(second_idx) == CN_Tbl_Idx &&
-                        IL_FLD(third_idx) == CN_Tbl_Idx) {
-                        int lb = CN_CONST(IL_IDX(first_idx));
-                        int ub = CN_CONST(IL_IDX(second_idx));
-                        int str = CN_CONST(IL_IDX(third_idx));
-
-                        if ( ((ub-lb)/str+1) != corank ) {
-                            find_opnd_line_and_column(&IL_OPND(list_idx1),
-                                                      &opnd_line, &opnd_col);
-                            PRINTMSG(opnd_line, 1709, Error, IR_COL_NUM(arg2_idx),
-                                    "THIS_IMAGE");
-                        }
-                    }
-                }
-
             }
 
          }
@@ -3432,6 +3531,7 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                PRINTMSG(opnd_line, 1575, Error, opnd_col);
             }
             else {
+               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
 #ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
@@ -3515,6 +3615,43 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                   arg_info_list[arg_info_list_top].line = line;
                   arg_info_list[arg_info_list_top].col = column;
                }
+            } else if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+                ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+                IR_LIST_CNT_R(ir_idx) == 2) {
+                /* check that extent of array expression in second argument
+                 * matches the corank of the coarray */
+                int corank = BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+                int arg2_idx = IL_IDX(list_idx2);
+
+                if ( (IR_OPR(arg2_idx) == Whole_Subscript_Opr ||
+                     IR_OPR(arg2_idx) == Section_Subscript_Opr) &&
+                     IR_FLD_R(arg2_idx) == IL_Tbl_Idx &&
+                     IR_OPR(IL_IDX(IR_IDX_R(arg2_idx))) == Triplet_Opr ) {
+                    int triplet_idx = IL_IDX(IR_IDX_R(arg2_idx));
+                    int triplet_bounds_idx = IR_IDX_L(triplet_idx);
+                    /* if lb, ub, and strided are constant, we can do a
+                     * compile-time check
+                     */
+                    int first_idx = triplet_bounds_idx;
+                    int second_idx = IL_NEXT_LIST_IDX(first_idx);
+                    int third_idx = IL_NEXT_LIST_IDX(second_idx);
+
+                    if (IL_FLD(first_idx) == CN_Tbl_Idx &&
+                        IL_FLD(second_idx) == CN_Tbl_Idx &&
+                        IL_FLD(third_idx) == CN_Tbl_Idx) {
+                        int lb = CN_CONST(IL_IDX(first_idx));
+                        int ub = CN_CONST(IL_IDX(second_idx));
+                        int str = CN_CONST(IL_IDX(third_idx));
+
+                        if ( ((ub-lb)/str+1) != corank ) {
+                            find_opnd_line_and_column(&IL_OPND(list_idx1),
+                                                      &opnd_line, &opnd_col);
+                            PRINTMSG(opnd_line, 1709, Error, IR_COL_NUM(arg2_idx),
+                                    "IMAGE_INDEX");
+                        }
+                    }
+                }
+
             }
 
          }
@@ -3529,12 +3666,12 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                                       &opnd_line, &opnd_col);
 
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-  ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
                 PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
             }
-#ifndef _UH_COARRAYS
             else {
-
+               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
+#ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
                }
@@ -3544,8 +3681,8 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                                     &loc_exp_desc);
                COPY_OPND(IL_OPND(list_idx1), opnd);
                arg_info_list[info_idx1].ed = loc_exp_desc;
-            }
 #endif
+            }
          }
       }
    }
@@ -3644,9 +3781,9 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
                        ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic ?
                        "LCOBOUND" : "UCOBOUND" );
             }
-#ifndef _UH_COARRAYS
             else {
-
+               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
+#ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
                }
@@ -3657,9 +3794,8 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
                                     &loc_exp_desc);
                COPY_OPND(IL_OPND(list_idx1), opnd);
                arg_info_list[info_idx1].ed = loc_exp_desc;
-
-            }
 #endif
+            }
          }
        }
     }

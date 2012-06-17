@@ -4007,6 +4007,15 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
          COPY_OPND(r_dv_opnd, IR_OPND_L(OPND_IDX((*r_opnd))));
       }
    }
+#ifdef _UH_COARRAYS
+   else if (exp_desc->pe_dim_ref) {
+      attr_idx    = find_base_attr(r_opnd, &line, &col);
+
+      if (ATD_IM_A_DOPE(attr_idx)) {
+         COPY_OPND(r_dv_opnd, IR_OPND_L(OPND_IDX((*r_opnd))));
+      }
+   }
+#endif
    else {
       find_opnd_line_and_column(r_opnd, &line, &col);
    }

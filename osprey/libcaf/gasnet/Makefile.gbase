@@ -49,7 +49,7 @@ LCOPTS = $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCDEFS = $(HOSTDEFS) $(TARGDEFS)
 LCDEFS += -D_LITTLE_ENDIAN -D_WORD32 -D_LIB_INTERNAL -D_GNU_SOURCE -U__mips -DKEY -DPATHSCALE_MERGE -DNDEBUG
 LCDEFS += -DGASNET_ALLOW_OPTIMIZED_DEBUG
-LCDEFS += -D$(CAFRT_ENABLE_TRACES)
+LCDEFS += -DTRACE
 LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
 
@@ -57,6 +57,7 @@ CFLAGS += -DTARG_$(BUILD_TARGET)
 
 CFILES = \
 	caf_rtl.c \
+	caf_collectives.c \
 	gasnet_comm_layer.c  \
 	trace.c \
 	util.c

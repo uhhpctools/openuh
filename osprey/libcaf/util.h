@@ -33,6 +33,8 @@ extern void farg_init(int *argc, char ***argv);
 
 extern void farg_free();
 
+void Warning (char *warning_message);
+
 /* debug utility functions */
 
 extern void debug_print_array_int(char *name, int *arr, int n);

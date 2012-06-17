@@ -33,9 +33,9 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include "caf_rtl.h"
 #include "gasnet_comm_layer.h"
 #include "trace.h"
-#include "caf_rtl.h"
 #include "util.h"
 
 
@@ -149,13 +149,13 @@ static void local_strided_copy(void *src, const size_t src_strides[],
  * Inline functions
  */
 /* must call comm_init() first */
-inline unsigned long comm_get_proc_id()
+inline size_t comm_get_proc_id()
 {
     return my_proc;
 }
 
 /* must call comm_init() first */
-inline unsigned long comm_get_num_procs()
+inline size_t comm_get_num_procs()
 {
     return num_procs;
 }
@@ -1049,14 +1049,6 @@ void comm_memory_free()
             "gasnet_comm_layer.c:comm_memory_free-> Finished.");
 }
 
-void comm_exit(int status)
-{
-    comm_memory_free();
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-        "gasnet_comm_layer.c:comm_exit-> Before call to gasnet_exit"
-        " with status %d." ,status);
-    gasnet_exit(status);
-}
 
 void comm_finalize()
 {
@@ -1068,6 +1060,15 @@ void comm_finalize()
     gasnet_exit(0);
 
     farg_free();
+}
+
+void comm_exit(int status)
+{
+    comm_memory_free();
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+        "gasnet_comm_layer.c:comm_exit-> Before call to gasnet_exit"
+        " with status %d." ,status);
+    gasnet_exit(status);
 }
 
 

@@ -2080,8 +2080,8 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
             error("OPENUH_COMM_LIBS needs to be set");
             exit(1);
           }
-          add_string( args, "-lcaf-extra");
           add_multi_strings(args, comm_libs, FALSE);
+          add_string( args, "-lcaf-extra");
         }
 #endif
 

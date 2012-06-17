@@ -32,8 +32,9 @@
 #include <assert.h>
 #include <unistd.h>
 #include <math.h>
-
+#include "caf_rtl.h"
 #include "armci_comm_layer.h"
+#include "trace.h"
 #include "util.h"
 
 /* common_slot is a node in the shared memory link-list that keeps track
@@ -108,13 +109,13 @@ static void wait_on_all_pending_puts();
  * Inline functions
  */
 /* must call comm_init() first */
-inline unsigned long comm_get_proc_id()
+inline size_t comm_get_proc_id()
 {
     return my_proc;
 }
 
 /* must call comm_init() first */
-inline unsigned long comm_get_num_procs()
+inline size_t comm_get_num_procs()
 {
     return num_procs;
 }

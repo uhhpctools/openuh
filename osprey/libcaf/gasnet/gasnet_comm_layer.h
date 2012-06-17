@@ -71,7 +71,6 @@ enum {
     GASNET_Safe(gasnet_barrier_wait(0,GASNET_BARRIERFLAG_ANONYMOUS)); \
 } while (0) 
 
-
 #include "gasnet.h"
 #include "gasnet_tools.h"
 #include "gasnet_vis.h"
@@ -99,12 +98,11 @@ typedef struct {
 } array_section_t;
 
 /*init*/
-void comm_init();
-
+void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 
 /* inline functions */
-unsigned long comm_get_proc_id();
-unsigned long comm_get_num_procs();
+inline size_t comm_get_proc_id();
+inline size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
 void comm_read( size_t proc, void *src, void *dest, size_t nbytes);

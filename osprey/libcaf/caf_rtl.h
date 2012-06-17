@@ -32,9 +32,7 @@
 
 #include "dopevec.h"
 
-void caf_init_();
-
-/* shared memory management */
+/* SHARED MEMORY MANAGEMENT */
 struct shared_memory_slot{
     void *addr;
     unsigned long size;
@@ -42,55 +40,60 @@ struct shared_memory_slot{
     struct shared_memory_slot *next;
     struct shared_memory_slot *prev;
 };
-void* coarray_allocatable_allocate_(unsigned long var_size);
-void* coarray_asymmetric_allocate_(unsigned long var_size);
-void coarray_deallocate_(void *var_address);
-void coarray_free_all_shared_memory_slots();
 
-/* synchronization */
-void sync_all_();
-void sync_memory_();
-void sync_images_( int *imageList, int imageCount);
-void sync_images_all_();
+/* COMPILER BACK-END INTERFACE */
 
-/* critical construct support */
-void caf_critical_();
-void caf_end_critical_();
+void __caf_init();
 
-/* image inquiry */
-int image_index_(DopeVectorType *diminfo, DopeVectorType *sub);
-int this_image3_(DopeVectorType *diminfo, int* sub);
-void this_image2_(DopeVectorType *ret, DopeVectorType *diminfo);
-int lcobound2_(DopeVectorType *diminfo, int *sub);
-void lcobound_(DopeVectorType *ret, DopeVectorType *diminfo);
-int ucobound2_(DopeVectorType *diminfo, int *sub);
-void ucobound_(DopeVectorType *ret, DopeVectorType *diminfo);
+void __caf_finalize();
 
 /* management of local communication buffers */
-void acquire_lcb_(unsigned long buf_size, void **ptr);
-void release_lcb_(void **ptr);
+void __acquire_lcb(unsigned long buf_size, void **ptr);
+void __release_lcb(void **ptr);
 
 /* non-strided (contiguous) read and write operations */
-void coarray_read_( size_t image, void *src, void *dest, size_t nbytes);
-void coarray_write_( size_t image, void *dest, void *src, size_t nbytes);
+void __coarray_read( size_t image, void *src, void *dest, size_t nbytes);
+void __coarray_write( size_t image, void *dest, void *src, size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
-void coarray_strided_read_ ( size_t image,
+void __coarray_strided_read ( size_t image,
         void *src, const size_t src_strides[],
         void *dest, const size_t dest_strides[],
         const size_t count[], int stride_levels);
 
-void coarray_strided_write_ ( size_t image,
+void __coarray_strided_write ( size_t image,
         void *dest, const size_t dest_strides[],
         void *src, const size_t src_strides[],
         const size_t count[], int stride_levels);
 
 /* TODO: vector, non-contiguous read and write operations  */
 
-/* Collectives */
-void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root);
+
+/* SYNCHRONIZATION INTRINSICS */
+void _SYNC_ALL();
+void _SYNC_MEMORY();
+void _SYNC_IMAGES( int *imageList, int imageCount);
+void _SYNC_IMAGES_ALL();
+
+/* IMAGE INQUIRY INTRINSICS */
+int   _IMAGE_INDEX(DopeVectorType *diminfo, DopeVectorType *sub);
+void  _THIS_IMAGE1(DopeVectorType *ret, DopeVectorType *diminfo);
+int   _THIS_IMAGE2(DopeVectorType *diminfo, int* sub);
+
+void  _LCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
+int   _LCOBOUND_2(DopeVectorType *diminfo, int *sub);
+void  _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
+int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
+
+/* critical construct support */
+void caf_critical_();
+void caf_end_critical_();
+
+void* coarray_allocatable_allocate_(unsigned long var_size);
+void* coarray_asymmetric_allocate_(unsigned long var_size);
+void coarray_deallocate_(void *var_address);
+void coarray_free_all_shared_memory_slots();
 
 void caf_exit_(int status);
-void caf_finalize_();
 
 #endif
