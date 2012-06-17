@@ -432,13 +432,11 @@ void expand_start_do_loop (gs_t init_expr, gs_t logical_expr, gs_t incr_expr)
         lcv_t = TY_mtype(ST_type(WN_st(lcv)));
 
         if (lcv_t != MTYPE_I4 && lcv_t != MTYPE_I8 &&
-            lcv_t != MTYPE_I2 && lcv_t != MTYPE_I1)
+            lcv_t != MTYPE_I2 && lcv_t != MTYPE_I1 &&
+            lcv_t != MTYPE_U4 && lcv_t != MTYPE_U8 &&
+            lcv_t != MTYPE_U2 && lcv_t != MTYPE_U1)
         {
-          if (lcv_t == MTYPE_U4 || lcv_t == MTYPE_U8 ||
-              lcv_t == MTYPE_U2 || lcv_t == MTYPE_U1)
-            detail = ("unsigned induction variable is supported by OpenMP 3.0 and we support version 2.5");
-          else
-            detail = ("invalid induction variable type");
+          detail = ("invalid induction variable type");
           valid_for_expr = false;		
         }
         else
