@@ -2550,14 +2550,12 @@ Perform_Sanity_Checks_For_OP (OP *op, BOOL check_def)
       }
     }
 
-    if (CGTARG_Is_Right_Shift_Op (op)) {
-      if (TN_register(OP_opnd(op,0+predicated)) == REGISTER_zero) {
-        DevWarn ("Redundant shift instruction in %sBB:%d (PC=0x%x)",
-	         BB_rotating_kernel(OP_bb(op)) ? "SWPd " : "",
-	         BB_id(OP_bb(op)), PC);
-        if (TFile != stdout) {	/* only print to .t file */
-          Print_OP_No_SrcLine (op);
-	}
+    if (CGTARG_Is_Shift_Redundant (op)) {
+      DevWarn ("Redundant shift instruction in %sBB:%d (PC=0x%x)",
+	       BB_rotating_kernel(OP_bb(op)) ? "SWPd " : "",
+	       BB_id(OP_bb(op)), PC);
+      if (TFile != stdout) {	/* only print to .t file */
+         Print_OP_No_SrcLine (op);
       }
     }
   }
@@ -3548,13 +3546,19 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
       asm_string = Replace_Substring(asm_string, replace, name);
       *name = tmp;
     }
-    if (strstr(asm_string, "%P")) {
-      char replace[5];
-      sprintf(replace, "%%P%d", position);
-      // OSP_323, with "%P", we ignore the first character '$'
-      asm_string = Replace_Substring(asm_string, replace, name+1);
-    }
   }
+
+  /* fix open64.net bug 920 */
+  if (strstr(asm_string, "%P")) {
+    char replace[5];
+    sprintf(replace, "%%P%d", position);
+    // OSP_323, with "%P", we ignore the first character '$'
+    if (*name == '$')
+      asm_string = Replace_Substring(asm_string, replace, name+1);
+    else
+      asm_string = Replace_Substring(asm_string, replace, name);
+  }
+  
   // Follow the zero dialect_number implementation as in 
   // gcc/final.c:output_asm_insn and handle {, } and | operators
   if (strchr(asm_string, '{')) {

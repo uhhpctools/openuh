@@ -952,8 +952,12 @@ INT32 SIMPNODE_Simp_Compare_Trees(simpnode t1, simpnode t2)
 
           ty_is_volatile = TY_is_volatile(SIMPNODE_ty(t1)) 
               || TY_is_volatile(SIMPNODE_ty(t2));
-          lod_addr_volatile = TY_is_volatile(TY_pointed(SIMPNODE_load_addr_ty(t1))) 
-              || TY_is_volatile(TY_pointed(SIMPNODE_load_addr_ty(t2)));
+          /* open64.net bug906, guarded type check before TY_pointed */
+          lod_addr_volatile = 
+            (TY_kind(SIMPNODE_load_addr_ty(t1)) == KIND_POINTER 
+             && TY_is_volatile(TY_pointed(SIMPNODE_load_addr_ty(t1)))) ||
+            (TY_kind(SIMPNODE_load_addr_ty(t2)) == KIND_POINTER 
+             && TY_is_volatile(TY_pointed(SIMPNODE_load_addr_ty(t2)))) ;
           item_is_volatile = TY_is_volatile(SIMPNODE_object_ty(t1)) 
             || TY_is_volatile(SIMPNODE_object_ty(t2));
 

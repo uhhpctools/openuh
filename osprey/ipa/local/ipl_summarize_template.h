@@ -1922,8 +1922,8 @@ SUMMARIZE<program>::Process_procedure (WN* w)
 	// label definition
 	case OPR_LABEL:
 	    {
-	      Is_True (Do_Altentry || !WN_Label_Is_Not_Used (w2),
-	               ("Label should not be marked yet"));
+//	      Is_True (Do_Altentry || !WN_Label_Is_Not_Used (w2),
+//	               ("Label should not be marked yet"));
 	      label_wn &label = label_use_map [WN_label_number (w2)];
 	      Is_True (label.wn == NULL, ("Process_procedure: Duplicate labels?"));
 	      label.wn = w2;

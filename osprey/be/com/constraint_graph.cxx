@@ -39,6 +39,7 @@ CGNodeId ConstraintGraph::nextCGNodeId = 1;
 CallSiteId ConstraintGraph::nextCallSiteId = 1;
 bool ConstraintGraph::isIPA = false;
 ConstraintGraph *ConstraintGraph::globalConstraintGraph = NULL;
+ConstraintGraph *ConstraintGraph::currentIPANodeConstraintGraph = NULL;
 ConstraintGraphNode *ConstraintGraph::notAPointerCGNode = NULL;
 ConstraintGraphNode *ConstraintGraph::blackHoleCGNode = NULL;
 CGIdToNodeMap ConstraintGraph::cgIdToNodeMap(8192);
@@ -502,15 +503,7 @@ StInfo::StInfo(ST_IDX st_idx, MEM_POOL *memPool)
 
   // Set the flags
   ST_SCLASS storage_class = ST_sclass(st);
-  if (storage_class == SCLASS_FSTATIC ||
-      (storage_class == SCLASS_PSTATIC &&
-       ST_IDX_level(st_idx) == GLOBAL_SYMTAB) ||
-      storage_class == SCLASS_COMMON ||
-      storage_class == SCLASS_UGLOBAL ||
-      storage_class == SCLASS_DGLOBAL ||
-      storage_class == SCLASS_UNKNOWN ||
-      storage_class == SCLASS_TEXT ||
-      storage_class == SCLASS_EXTERN)
+  if (isGlobalStInfo(st))
     addFlags(CG_ST_FLAGS_GLOBAL);
 
   if (ST_class(st) == CLASS_FUNC)
@@ -528,6 +521,25 @@ StInfo::StInfo(ST_IDX st_idx, MEM_POOL *memPool)
   // Mark PSTATICs as context-insensitive
   if (storage_class == SCLASS_PSTATIC)
     addFlags(CG_ST_FLAGS_NOCNTXT);
+}
+
+bool 
+StInfo::isGlobalStInfo(ST* st)
+{
+  ST_SCLASS storage_class = ST_sclass(st);
+  ST_IDX st_idx = ST_st_idx(st);
+  if (storage_class == SCLASS_FSTATIC ||
+      (storage_class == SCLASS_PSTATIC &&
+       ST_IDX_level(st_idx) == GLOBAL_SYMTAB) ||
+      storage_class == SCLASS_COMMON ||
+      storage_class == SCLASS_UGLOBAL ||
+      storage_class == SCLASS_DGLOBAL ||
+      storage_class == SCLASS_UNKNOWN ||
+      storage_class == SCLASS_TEXT ||
+      storage_class == SCLASS_EXTERN) {
+    return true;
+  }
+  return false;
 }
 
 bool

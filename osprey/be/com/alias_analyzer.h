@@ -27,7 +27,9 @@
 #include "opt_alias_interface.h"
 #include "opt_alias_rule.h"
 #include "wn_map.h"
+#include "config_opt.h"
 
+#define IPA_WN_MAP_ID(filePUIdx, wn_map_id) ((((UINT64)filePUIdx)<<32) | ((wn_map_id)&0xffffffff))
 struct WN;
 struct ST;
 
@@ -76,6 +78,13 @@ typedef struct
 typedef hash_map<QueryFileKey,bool,
                  hashQueryFileKey,equalQueryFileKey> QueryFileMap;
 
+template <class _Key> struct IPAIndexhash { };
+template <> struct IPAIndexhash<UINT64> {
+  size_t operator()(const UINT64 x)const{return (size_t)x;}
+};
+
+typedef hash_map<UINT64, UINT32, IPAIndexhash<UINT64> > IPAWNAliasTagMap;
+
 class AliasAnalyzer {
 
 private:
@@ -85,11 +94,18 @@ private:
    UINT32 _aliasedCount;      // Used for debugging
    QueryFileMap *_queryFileMap;
 
+   // Map WN to AliasTags in IPA:preopt mode
+   // It maps all PUs's alias tag in one map.
+   // key is [file_idx_16bit][pu_idx_16bit][wn_map_id_32_bit]
+   IPAWNAliasTagMap _IPAAliasTageMap;
+   bool _ipaMode;
+   UINT32 _curFilePUIdx;   // current process IPA node's file and PU index
+
 protected:
    MEM_POOL _memPool;
 
 public:
-   AliasAnalyzer();
+   AliasAnalyzer(bool ipaMode=false);
 
    virtual ~AliasAnalyzer();
 
@@ -134,19 +150,60 @@ public:
 
    virtual AliasTag meet(AliasTag destTag, AliasTag srcTag);
 
-   void setAliasTag(WN *wn, AliasTag tag)
+   void setAliasTag(WN *wn, AliasTag tag, UINT32 filePUIdx=UINT32_MAX)
    {
-     IPA_WN_MAP32_Set(Current_Map_Tab, _aliasTagMap, wn, (INT32)tag);
+     if (!_ipaMode) {
+       IPA_WN_MAP32_Set(Current_Map_Tab, _aliasTagMap, wn, (INT32)tag);
+     }
+     else {
+       INT32 wn_map_id = WN_map_id(wn);
+       if (wn_map_id == -1) {
+         WN_MAP_Set_ID(Current_Map_Tab, wn);
+         wn_map_id = WN_map_id(wn);
+       }
+       Is_True(wn_map_id != -1, ("invalid WN map id\n"));
+       if (filePUIdx == UINT32_MAX) {
+         filePUIdx = curFilePUIdx();
+       }
+       UINT64 ipa_map_id = IPA_WN_MAP_ID(filePUIdx, wn_map_id);
+       _IPAAliasTageMap[ipa_map_id] = (UINT32)tag;
+     }
    }
 
-   AliasTag getAliasTag(const WN *wn) const
+   AliasTag getAliasTag(const WN *wn, UINT32 filePUIdx=UINT32_MAX) const
    {
-     return (AliasTag)IPA_WN_MAP32_Get(Current_Map_Tab, _aliasTagMap, wn);
+     if (!_ipaMode) { 
+       return (AliasTag)IPA_WN_MAP32_Get(Current_Map_Tab, _aliasTagMap, wn);
+     }
+     else {
+       // get WN map id and compose IPA_WN_MAP_id
+       INT32 wn_map_id = WN_map_id(wn);
+       if (wn_map_id == -1) {
+         return InvalidAliasTag;
+       }
+       if (filePUIdx == UINT32_MAX) {
+         filePUIdx = curFilePUIdx();
+       }
+       UINT64 ipa_map_id = IPA_WN_MAP_ID(filePUIdx, wn_map_id);
+
+       // search in _IPAAliasTageMap map.
+       IPAWNAliasTagMap::const_iterator iter = _IPAAliasTageMap.find(ipa_map_id);
+       if (iter != _IPAAliasTageMap.end())
+        return (AliasTag)iter->second;
+
+       return InvalidAliasTag;
+     }
    }
 
    UINT32 aliasQueryCount(void)      { return _aliasQueryCount; }
    UINT32 incrAliasQueryCount(void)  { return _aliasQueryCount++; }
    UINT32 incrAliasedCount(void)     { return _aliasedCount++; }
+
+   // IPA preopt related
+   bool ipaMode() const { return _ipaMode; }
+   void ipaMode(bool ipaMode) { _ipaMode = ipaMode; } 
+   UINT32 curFilePUIdx() const {return _curFilePUIdx; }
+   void curFilePUIdx(UINT32 filePUIdx) { _curFilePUIdx = filePUIdx; }
 
    bool checkQueryFile(UINT32 pu, AliasTag tag1, AliasTag tag2, bool &result);
 

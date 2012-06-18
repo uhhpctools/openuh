@@ -226,6 +226,8 @@ enum ST_FLAGS_EXT
 class ST
 {
 public:
+    // after add new member, Make sure to update function eq_const_st::operator() 
+    // in file ipc_symtab_merge.cxx 
     union {
 	STR_IDX name_idx;		// index to the name string
 	TCON_IDX tcon;			// constant value

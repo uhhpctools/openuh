@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2011 Hewlett Packard, Company.  All Rights Reserved.
+ */
+/*
  * Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
  */
 
@@ -106,6 +109,8 @@
 #include "cg_loop.h"
 #include "config_lno.h"  // for LNO_Prefetch_Ahead
 #include "erbe.h"
+#include "stblock.h" //for Base_Symbol_And_Offset_For_Addressing
+#include "be_symtab.h" //Preg_Lda
 
 UINT32 CGTARG_branch_taken_penalty;
 BOOL CGTARG_branch_taken_penalty_overridden = FALSE;
@@ -3407,7 +3412,7 @@ CGTARG_Init_Asm_Constraints (void)
    : (C) == 'L' ? (VALUE) == 0xff || (VALUE) == 0xffff          \
    : (C) == 'M' ? (VALUE) >= 0 && (VALUE) <= 3                  \
    : (C) == 'N' ? (VALUE) >= 0 && (VALUE) <= 255                \
-   : (C) == 'i' ? ((VALUE) >> 32) == 0 || ((VALUE) >> 32) == -1 \
+   : (C) == 'i' ? 1 \
    : (C) == 'n' ? 1                                             \
    : 0)
 
@@ -3493,11 +3498,22 @@ CGTARG_TN_For_Asm_Operand (const char* constraint,
     if (load && WN_operator(load)==OPR_LDID && WN_class(load)==CLASS_PREG)
     {
       // immediate could have been put in preg by wopt
-      load = Preg_Is_Rematerializable(WN_load_offset(load), NULL);
+      if (Preg_Is_Rematerializable(WN_load_offset(load), NULL)) {
+        load = Preg_Is_Rematerializable(WN_load_offset(load), NULL);
+      }
+      // shared load(lda) has been lifted to preg
+      else if (Preg_Lda(WN_load_offset(load))) {
+        load = Preg_Lda(WN_load_offset(load));
+      }
+      else {
+        load = NULL;
+      }
     }
     if (!(load && (WN_operator(load) == OPR_INTCONST ||
                        (WN_operator(load) == OPR_LDA &&
-                        ST_sym_class(WN_st(load)) == CLASS_CONST)))) {
+                        // &var.field is also allowed, bug916 open64.net
+                        (ST_sym_class(WN_st(load)) == CLASS_VAR || 
+                         ST_sym_class(WN_st(load)) == CLASS_CONST))))) {
       ErrMsgSrcpos(EC_Invalid_Asm_Constrain, WN_Get_Linenum(asm_wn),
                     ": Cannot find immediate operand for ASM");
     }
@@ -3510,6 +3526,18 @@ CGTARG_TN_For_Asm_Operand (const char* constraint,
         ErrMsgSrcpos(EC_Invalid_Asm_Constrain, WN_Get_Linenum(asm_wn),
                 ": The value of immediate operand supplied is not within expected range.");
       }
+      if (Is_Target_32bit() && (WN_const_val(load) > INT32_MAX || WN_const_val(load) < INT32_MIN)) {
+        char c[200];
+        sprintf(c,"%lld", WN_const_val(load));
+        ErrMsgSrcpos(EC_Ill_Int_Oflow, WN_Get_Linenum(asm_wn),
+                     INT32_MIN,c,INT32_MAX);
+      }
+    }
+    else if (ST_sym_class(WN_st(load)) == CLASS_VAR) {
+      ST *base;
+      INT64 ofst;
+      Base_Symbol_And_Offset_For_Addressing (WN_st(load), WN_lda_offset(load), &base, &ofst);
+      ret_tn = Gen_Symbol_TN(base,ofst,0);
     }
     else
     {
@@ -3648,6 +3676,59 @@ CGTARG_TN_For_Asm_Operand (const char* constraint,
       ret_tn = (pref_tn ? pref_tn : Build_RCLASS_TN(ISA_REGISTER_CLASS_mmx));
     else
       ret_tn = (pref_tn ? pref_tn : Build_RCLASS_TN(ISA_REGISTER_CLASS_float));
+  }
+  else if (*constraint == 'p') 
+  {
+    FmtAssert(load, (" there must be load expression for constraint p\n"));
+    if (load && WN_operator(load)==OPR_LDID && WN_class(load)==CLASS_PREG)
+    {
+      // immediate could have been put in preg by wopt
+      if (Preg_Is_Rematerializable(WN_load_offset(load), NULL)) {
+        load = Preg_Is_Rematerializable(WN_load_offset(load), NULL);
+      }
+      // shared load(lda) has been lifted to preg
+      else if (Preg_Lda(WN_load_offset(load))) {
+        load = Preg_Lda(WN_load_offset(load));
+      }
+      else {
+        load = NULL;
+      }
+    }
+    if (WN_operator(load) == OPR_INTCONST)
+    {
+      if (Is_Target_32bit() && (WN_const_val(load) > INT32_MAX || WN_const_val(load) < INT32_MIN)) {
+        char c[200];
+        sprintf(c,"%lld", WN_const_val(load));
+        ErrMsgSrcpos(EC_Ill_Int_Oflow, WN_Get_Linenum(asm_wn),
+                     INT32_MIN,c,INT32_MAX);
+      }
+      ret_tn = Gen_Literal_TN(WN_const_val(load), 
+                              MTYPE_bit_size(WN_rtype(load))/8);
+    }
+    else if ( WN_operator(load) == OPR_LDA && ST_sym_class(WN_st(load)) == CLASS_CONST) 
+    {
+      ST * base;
+      INT64 ofst;
+      // Allocate the string to the rodata section
+      Allocate_Object (WN_st(load));
+      Base_Symbol_And_Offset (WN_st(load), &base, &ofst);
+      ret_tn = Gen_Symbol_TN(base, ofst, 0);
+    }
+    else if ( WN_operator(load) == OPR_LDA && ST_sym_class(WN_st(load)) == CLASS_VAR)
+    {
+      ST * base;
+      INT64 ofst;
+      Base_Symbol_And_Offset_For_Addressing (WN_st(load), WN_lda_offset(load), &base, &ofst);
+      if (ofst == 0) { //no offset, using a symbol TN
+        ret_tn = Gen_Symbol_TN(base, ofst, 0);
+      } else { //has a offset, using a new TN to express the address
+        ret_tn = (pref_tn ? pref_tn : Build_TN_Of_Mtype(WN_rtype(load)));
+      }
+    } 
+    else //other cases
+    { 
+      ret_tn = (pref_tn ? pref_tn : Build_TN_Of_Mtype(WN_rtype(load)));
+    }
   }
   else
   {
@@ -4040,6 +4121,15 @@ CGTARG_Check_OP_For_HB_Suitability(OP *op)
 
 TN* CGTARG_Gen_Dedicated_Subclass_TN( OP* op, int idx, BOOL is_result )
 {
+  // If idx is out of fixed number of operands or results, there is no 
+  // register set info in the targ_info for the op. In this case, return 
+  // tn if it is dedicated.
+  int opnd_result_cnt = is_result ? OP_fixed_results(op) : OP_fixed_opnds(op);
+  if (idx >= opnd_result_cnt) {
+    TN* tn = is_result ? OP_result( op, idx ) : OP_opnd( op, idx );
+    return TN_is_dedicated(tn) ? tn : NULL;
+  }
+
   const ISA_REGISTER_SUBCLASS subclass = is_result ?
     OP_result_reg_subclass( op, idx ) : OP_opnd_reg_subclass( op, idx );
   const REGISTER_SET subclass_regs = REGISTER_SUBCLASS_members(subclass);

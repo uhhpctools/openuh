@@ -14,12 +14,12 @@ repository. Prebuilt installations of OpenUH 3.0 are also available online.
 
 OpenMP
 --------
-OpenUH2011 extends the Open64 OpenMP implementation by adding support for
-nested parallelism, OpenMP 3.0, and other OpenMP bug fixes. The OpenMP runtime
-library that comes with OpenUH 3.0 supports several task scheduling
-strategies, enables selection of more scalable barrier algorithms, and
-provides an implementation of the OpenMP Collector API for interaction with
-performance collection tools. 
+OpenUH extends the Open64 OpenMP implementation by adding support for nested
+parallelism, OpenMP 3.0 explicit tasking, and other OpenMP bug fixes. The
+OpenMP runtime library that comes with OpenUH 3.0 supports several task
+scheduling strategies, enables selection of more scalable barrier algorithms,
+and provides an implementation of the OpenMP Collector API for interaction
+with performance collection tools. 
 
 Use the omprun script to control varoius parameters for the execution of your
 OpenMP programs. 
@@ -52,6 +52,7 @@ the HPCTools group website for download.
 Open64 Merge History:
 ---------------------
 
+[12]  merged r3777:3826 of Open64 main trunk. (6/17/12)
 [11]  merged r3741:3777 of Open64 main trunk. (11/14/11)
 [10]  merged r3669:3741 of Open64 main trunk. (9/23/11)
 [9]   merged r3640:3669 of Open64 main trunk. (7/1/11)
@@ -66,6 +67,10 @@ Open64 Merge History:
 
 
 Notes:
+
+Merge [12] merges some early features added to Open64 5.0 from the open64 main
+trunk. This includes improvements for GNU compatibility, Nystrom alias
+analyzer in IPA phase, and a new siloed reference analysis pass in IPA.
 
 Merge [11] merges the rest of Open64 5.0 release into OpenUH.
 

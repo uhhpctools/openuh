@@ -37,6 +37,23 @@ AliasAnalyzer *AliasAnalyzer::_alias_analyzer = NULL;
 AliasAnalyzer *
 AliasAnalyzer::Create_Alias_Analyzer(ALIAS_CONTEXT &ac, WN *tree)
 {
+  // if create nystrom alias analyzer in IPA phase.
+  // only creat one instance for all PUs.
+  if (Alias_Nystrom_Analyzer && Alias_Analyzer_in_IPA) {
+    if (_alias_analyzer == NULL) {
+      _alias_analyzer = new NystromAliasAnalyzer(ac);
+    }
+
+    // this alias analyzer is for IPA:preopt
+    Is_True(Current_IPANode_File_PU_Idx != UINT32_MAX, ("invlaid IPANode PUFileIdx\n"));
+    _alias_analyzer->curFilePUIdx(Current_IPANode_File_PU_Idx);
+
+    FmtAssert(ConstraintGraph::IPANodeCG() != NULL, ("Create Alias anlyzer IPA node cg is NULL")); 
+    ((NystromAliasAnalyzer*)_alias_analyzer)->constraintGraph(ConstraintGraph::IPANodeCG());
+    ((NystromAliasAnalyzer*)_alias_analyzer)->createAliasTags(tree);
+    return _alias_analyzer;
+  }
+  
   if (_alias_analyzer != NULL) {
     // Activate the use of the Nystrom points-to analysis by the
     // ALIAS_RULE harness and disable alias classification rules.
@@ -72,13 +89,20 @@ AliasAnalyzer::Delete_Alias_Analyzer()
   }
 }
   
-AliasAnalyzer::AliasAnalyzer() 
+AliasAnalyzer::AliasAnalyzer(bool ipaMode) 
   : _aliasQueryCount(0),
     _aliasedCount(0),
-    _queryFileMap(NULL)
+    _aliasTagMap(WN_MAP_UNDEFINED),
+    _queryFileMap(NULL),
+    _ipaMode(ipaMode),
+    _curFilePUIdx(0)
 {
   MEM_POOL_Initialize(&_memPool, "AliasAnalyzer_pool", FALSE);
-  _aliasTagMap = IPA_WN_MAP32_Create(Current_Map_Tab, &_memPool);
+  // if in IPA:preopt mode, use the inter-procedure _IPAAliasTageMap
+  // to record WN->alias tag map.
+  if (!_ipaMode) {
+    _aliasTagMap = IPA_WN_MAP32_Create(Current_Map_Tab, &_memPool);
+  }
 
   if (Alias_Query_File) {
     loadQueryFile(Alias_Query_File);
@@ -94,9 +118,11 @@ AliasAnalyzer::~AliasAnalyzer()
             ST_name(Current_PU_Info->proc_sym), Current_PU_Count(),
             _aliasQueryCount, _aliasedCount, 
             (float)_aliasedCount/(float)_aliasQueryCount * 100.0);
-  
+
+  if (!_ipaMode) {
+    IPA_WN_MAP_Delete(Current_Map_Tab, _aliasTagMap);
+  }
   MEM_POOL_Delete(&_memPool);
-  IPA_WN_MAP_Delete(Current_Map_Tab, _aliasTagMap);
 }
 
 ALIAS_RESULT

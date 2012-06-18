@@ -1439,13 +1439,13 @@ static PREG_NUM AssignPregExprPos(WN *block, WN *tree, TY_IDX ty,
 
   type = TY_mtype(Ty_Table[ty]);
   pregNo = Create_Preg(type, current_preg_name);
-#ifdef TARG_NVISA
+
   // we need to track what memory is being accessed when storing
   // an lda into a preg.  So if tree has an lda, or indirects to lda
   // through another preg, put that in preg table.
   WN *lda = Find_Lda (tree);
   if (lda) Set_Preg_Lda (pregNo, lda);
-#endif
+
 
   {
     WN	*stBlock, *stid;
@@ -8041,7 +8041,6 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
       }
     }
 
-#ifdef TARG_NVISA
     if ( Action (LOWER_TO_CG)
     &&   (WN_class(tree) == CLASS_PREG)
     &&   (! Preg_Is_Dedicated (WN_store_offset (tree))))
@@ -8051,7 +8050,7 @@ static WN *lower_store(WN *block, WN *tree, LOWER_ACTIONS actions)
       WN *lda = Find_Lda (WN_kid0(tree));
       if (lda) Set_Preg_Lda (WN_store_offset(tree), lda);
     }
-#endif
+
 
     if (WN_StoreIsUnused(tree))
     {

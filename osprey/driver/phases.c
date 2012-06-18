@@ -3338,6 +3338,16 @@ run_compiler (int argc, char *argv[])
 		} else {
 			args = init_string_list();
 			add_file_args_first (args, phase_order[i]);  // bug 6874
+			if (phase_order[i] == P_inline &&
+			    run_inline == TRUE &&
+			    olevel == 0 &&
+			    !(option_was_seen(O_INLINE_) || 
+			    option_was_seen(O_INLINE) || 
+			    option_was_seen(O_inline) || 
+			    option_was_seen(O_finline) || 
+			    option_was_seen(O_finline_functions))) {
+				prepend_option_seen (add_string_option(O_INLINE_, "none"));
+			}
 			copy_phase_options (args, phase_order[i]);
                         
 			if (!cmd_line_updated &&

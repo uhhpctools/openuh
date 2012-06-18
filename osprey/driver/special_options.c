@@ -365,8 +365,9 @@ add_special_options (void)
 	 * -g to change the generated code so we leave it off always.
 	 * See bugs 1917 and 7595.
 	 */
-	if (olevel == 0 && inline_t == UNDEFINED)
-	  inline_t = FALSE;
+        /*
+          open64.net bug838, to get gnu compatibility, we open inline for O0.
+        */
 
         /* In the SGI world, -g3 says to emit crippled debug info for use
 	 * with optimized code. In the GNU/Pathscale world, -g3 says to emit

@@ -34,6 +34,19 @@ extern BOOL Write_ALIAS_CGNODE_Map;
 
 PointsTo NystromAliasAnalyzer::emptyPointsToSet;
 
+// post IPA is true, because it has the post IPAA alias info.
+NystromAliasAnalyzer::NystromAliasAnalyzer(ALIAS_CONTEXT &ac)
+  : AliasAnalyzer(true),
+    _nextAliasTag(InitialAliasTag),
+    _isPostIPA(true)
+{
+  // Activate the use of the Nystrom points-to analysis by the
+  // ALIAS_RULE harness and disable alias classification rules.
+  ac |= ALIAS_ANALYZER_RULE;
+  ac &= ~(CLAS_RULE|IP_CLAS_RULE); 
+}
+
+
 NystromAliasAnalyzer::NystromAliasAnalyzer(ALIAS_CONTEXT &ac, WN* entryWN,
                                            bool backend)
   : AliasAnalyzer(),
@@ -204,8 +217,23 @@ NystromAliasAnalyzer::genAliasTag(ST *st, INT64 offset, INT64 size, bool direct)
 
   // First we adjust the requested offset by any modulus that
   // is being model by the constraint graph for this symbol.
-  ConstraintGraph *cg = _constraintGraph;
-  StInfo *stInfo = cg->stInfo(CG_ST_st_idx(st));
+  ConstraintGraph *cg;
+  CG_ST_IDX cg_st_idx;
+  // in IPA:preopt mode, check if st is global. Find st info in global CG.
+  if (ipaMode() && StInfo::isGlobalStInfo(st)) {
+    cg = ConstraintGraph::globalCG();
+    cg_st_idx = CG_ST_st_idx(st);
+  }
+  else {
+    cg = _constraintGraph;
+    if (ipaMode()) {
+      cg_st_idx = IPA_CG_ST_st_idx(curFilePUIdx(), st);
+    }
+    else {
+      cg_st_idx = CG_ST_st_idx(st);
+    }
+  }
+  StInfo *stInfo = cg->stInfo(cg_st_idx);
   if (!stInfo) {
     if(isPostIPA() && ST_class(st) == CLASS_BLOCK) {
       INT64 new_offset;
@@ -222,7 +250,7 @@ NystromAliasAnalyzer::genAliasTag(ST *st, INT64 offset, INT64 size, bool direct)
     offset = stInfo->applyModulus(offset);
   }
   // First we check to see if we have been asked this question before...
-  StToAliasTagKey atKey(CG_ST_st_idx(st),offset,size);
+  StToAliasTagKey atKey(cg_st_idx,offset,size);
   StToAliasTagMapIterator atIter = _stToAliasTagMap.find(atKey);
   if (atIter != _stToAliasTagMap.end())
     aliasTag = atIter->second;
@@ -231,7 +259,7 @@ NystromAliasAnalyzer::genAliasTag(ST *st, INT64 offset, INT64 size, bool direct)
     // (a) find <ST,offset> exactly when size == 0
     // (b) find <ST,offset> ... <ST,offset+size-1> when size >= zero
     if (size == 0) {
-      ConstraintGraphNode *node = cg->checkCGNode(CG_ST_st_idx(st),offset);
+      ConstraintGraphNode *node = cg->checkCGNode(cg_st_idx,offset);
       if (node) {
         node = cg->aliasedSym(node);
         aliasTag = newAliasTag();
