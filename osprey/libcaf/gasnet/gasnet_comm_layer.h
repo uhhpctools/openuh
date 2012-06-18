@@ -100,9 +100,9 @@ typedef struct {
 /*init*/
 void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 
-/* inline functions */
-inline size_t comm_get_proc_id();
-inline size_t comm_get_num_procs();
+/* proc query functions */
+size_t comm_get_proc_id();
+size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
 void comm_read( size_t proc, void *src, void *dest, size_t nbytes);

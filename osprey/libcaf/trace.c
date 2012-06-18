@@ -323,21 +323,21 @@ __libcaf_trace(libcaf_trace_t msg_type, char*fmt, ...)
         vsnprintf(tmp2, BUF_SIZE, fmt, ap);
         va_end(ap);
 
-        strncat(tmp1, tmp2, BUF_SIZE);
+        strncat(tmp1, tmp2, BUF_SIZE-strlen(tmp1)-1);
 
         if (msg_type == LIBCAF_LOG_TIME) {
             char time_str[BUF_SIZE];
             __trace_time(PRINT, DUMMY, time_str);
-            strncat(tmp1, time_str, BUF_SIZE);
+            strncat(tmp1, time_str, BUF_SIZE-strlen(tmp1)-1);
         }
 
         if (msg_type==LIBCAF_LOG_TIME_SUMMARY) {
             char time_str[BUF_SIZE];
             __trace_time(PRINT_ROLLUP, DUMMY, time_str);
-            strncat(tmp1, time_str, BUF_SIZE);
+            strncat(tmp1, time_str, BUF_SIZE-strlen(tmp1)-1);
         }
 
-        strncat(tmp1, "\n", BUF_SIZE);
+        strncat(tmp1, "\n", BUF_SIZE-strlen(tmp1)-1);
 
         fputs(tmp1, trace_log_stream);
         fflush(trace_log_stream);
