@@ -37,7 +37,7 @@ GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 COMM_LAYER=@DEFAULT_COMM@
 CC=uhcc
 FC=uhf90
-CAF_FLAGS="-coarray"
+CAF_FLAGS="-coarray -fno-second-underscore"
 ENVIRONMENT="-----------------------\n"
 
 uhcaf_usage()
@@ -66,7 +66,7 @@ Where options are
   --verbose         Displays UHCAF environment variables, and invocation
                     commands used by script and underlying compiler
 
-  --show-info       Displays compiler defaults and linker settings for UHCAF
+  --show            Displays compiler defaults and linker settings for UHCAF
                     compiler and exits
 
   --keep, -k        Keep any temporary files in current directory
@@ -302,7 +302,7 @@ for arg in "$@" ;  do
           fi
           pass_arg=no
           ;;
-        --show-info)
+        --show|show-info)
           show_info='y'
           pass_arg=no
           ;;

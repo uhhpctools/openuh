@@ -62,8 +62,7 @@ Known Limitations
 
 Using OpenUH CAF compiler
 ------------------------
-
-uhcaf is a compiler wrapper for coarray fortran
+uhcaf is a compiler wrapper for Coarray Fortran.
 
 Usage: uhcaf  [OPTION]... [OPENUH_OPTION]... [SOURCE]...
 
@@ -71,16 +70,14 @@ Where options are
 
   --layer=L         L represents a specified runtime layer to support remote
                     accesses. Available layers are:
-                        gasnet-<conduit>, where <conduit> may be one of: mpi
-smp udp
+                        gasnet-<conduit>, where <conduit> may be one of: mpi smp udp
                         armci
 
   --gasnet-path=G   G is the path to a specified GASNet installation
-                        Currently set to:
-/opt/berkeley/gasnet/gnu/1.18.0/everything
+                        Currently set to: /opt/berkeley/gasnet/gnu/1.18.2/fast/
 
   --armci-path=A    A is the path to a specified ARMCI installation
-                        Currently set to: /home/dreachem/runtimes/armci-1-4
+                        Currently set to: /home/dreachem/runtimes/armci-1-4/
 
   --help, -h        Displays this menu
 
@@ -89,15 +86,14 @@ smp udp
   --verbose         Displays UHCAF environment variables, and invocation
                     commands used by script and underlying compiler
 
-  --show-info       Displays compiler defaults and linker settings for UHCAF
+  --show            Displays compiler defaults and linker settings for UHCAF
                     compiler and exits
 
   --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
 
-   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI
-documentation.
+   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI documentation.
 
    MSG_COMMS        Messaging library used by ARMCI. Default is MPI.
 
@@ -124,17 +120,15 @@ cafrun is a launcher for ror running CAF programs compiled with OpenUH.
 
 Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
 
-Where options are
-
   -n, --num-images=N  N is number of images to use
 
-  --log-info=L        Sets additional info for runtime to log.
-                      L=all or info list delimited by ':'.
-                        Available information to log:
+  --trace=L           Sets trace levels for runtime.
+                      L=all or trace levels delimited by ':'.
+                        Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
                         CACHE:BARRIER:REDUCE:SYMBOLS
 
-  --log-file=F        F is name of file to store log
+  --trace-file=F      F is name of file to store trace
 
   --image-heap=I      I is heap size per image for storing coarray data. It
                       may be an integer which indicates size in bytes, or it
@@ -155,11 +149,11 @@ Environment Variables:
    LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
                       from number of processes to spawn.
 
-   UHCAF_LOG_INFO     Specifies information for runtime to log.
-                         Can be set with --log-info
+   UHCAF_TRACE        Specifies trace levels for runtime.
+                         Can be set with --trace
 
-   UHCAF_LOG_FILE     Specifies file to store runtime log
-                         Can be set with --log-file
+   UHCAF_TRACE_FILE   Specifies file to store runtime trace
+                         Can be set with --trace-file
 
    UHCAF_IMAGE_NUM_IMAGES
                       Specifies number of images to launch.
@@ -169,11 +163,21 @@ Environment Variables:
                       Specifies heap size per image for storing coarray data.
                          Can be set with --image-heap
 
-   GASNET_PSHM_NODES  Set number of POSIX shared memory nodes for when
-                      gasnet-smp layer is used.
+   GASNET_PSHM_NODES  Set number of POSIX shared memory nodes for when gasnet-smp
+                      layer is used.
                          Can be set with --num-images
+
+   UHCAF_NBPUT
+                      Set to 1 to enable Nonblocking put runtime optimization.
+
+   UHCAF_GETCACHE
+                      Set to 1 to enable getcache runtime optimization.
+
+   UHCAF_GETCACHE_LINE_SIZE
+                      Spefies the size (in bytes) of the cache line used by
+                      getcache optimizer. By default it is 64KB.
 
 Example:
 
-$ cafrun --num-images=16 --log-info=TIME_SUMMARY program
+$ cafrun --num-images=16 --trace=TIME_SUMMARY program
 

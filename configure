@@ -1417,9 +1417,9 @@ fi;
 # Check whether --enable-cafrt-traces or --disable-cafrt-traces was given.
 if test "${enable_cafrt_traces+set}" = set; then
   enableval="$enable_cafrt_traces"
-  CAFRT_ENABLE_TRACES="NOTRACES"
+  CAFRT_ENABLE_TRACES="NOTRACE"
 else
-  CAFRT_ENABLE_TRACES="TRACES"
+  CAFRT_ENABLE_TRACES="TRACE"
 fi;
 
 if test "x$enable_caf_runtime" != "xno"; then
@@ -1468,21 +1468,51 @@ fi;
 BASH_PATH=`which bash`
 
 if test -z "${BASH_PATH}"; then
-  { { echo "$as_me:$LINENO: error: \"Could not find bash on system\"" >&5
-echo "$as_me: error: \"Could not find bash on system\"" >&2;}
+  { { echo "$as_me:$LINENO: error: Could not find bash on system" >&5
+echo "$as_me: error: Could not find bash on system" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
+# check CAF configuration options ...
+
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${GASNET_HOME}"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --with-gasnet-root
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected with --with-gasnet-root
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_HOME}"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --with-armci-root
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected with --with-armci-root
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_caf_runtime" = "xno"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --disable-caf-runtime
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected with --disable-caf-runtime
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --disable-cafrt-traces
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected with --disable-cafrt-traces
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
-    { { echo "$as_me:$LINENO: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&5
-echo "$as_me: error: \"Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays\"" >&2;}
+    { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&5
+echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
-    { { echo "$as_me:$LINENO: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&5
-echo "$as_me: error: \"Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI\"" >&2;}
+    { { echo "$as_me:$LINENO: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&5
+echo "$as_me: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
@@ -1490,8 +1520,8 @@ if test -n "${GASNET_HOME}"; then
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
   if test  "${GASNET_CONDUITS}" = "*"; then
-      { { echo "$as_me:$LINENO: error: \"Specified --with-gasnet-root=<path> doesn't look right. Check path.\"" >&5
-echo "$as_me: error: \"Specified --with-gasnet-root=<path> doesn't look right. Check path.\"" >&2;}
+      { { echo "$as_me:$LINENO: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&5
+echo "$as_me: error: Specified --with-gasnet-root=<path> doesn't look right. Check path." >&2;}
    { (exit 1); exit 1; }; }
   fi
 fi
@@ -1501,16 +1531,16 @@ if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
 elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
-    { { echo "$as_me:$LINENO: error: \"--with-default-comm accepts gasnet or armci\"" >&5
-echo "$as_me: error: \"--with-default-comm accepts gasnet or armci\"" >&2;}
+    { { echo "$as_me:$LINENO: error: --with-default-comm accepts gasnet or armci" >&5
+echo "$as_me: error: --with-default-comm accepts gasnet or armci" >&2;}
    { (exit 1); exit 1; }; }
 elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
-    { { echo "$as_me:$LINENO: error: \"default comm (gasnet) requires --with-gasnet-root to be specified\"" >&5
-echo "$as_me: error: \"default comm (gasnet) requires --with-gasnet-root to be specified\"" >&2;}
+    { { echo "$as_me:$LINENO: error: default comm (gasnet) requires --with-gasnet-root to be specified" >&5
+echo "$as_me: error: default comm (gasnet) requires --with-gasnet-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
 elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
-    { { echo "$as_me:$LINENO: error: \"default comm (armci) requires --with-armci-root to be specified\"" >&5
-echo "$as_me: error: \"default comm (armci) requires --with-armci-root to be specified\"" >&2;}
+    { { echo "$as_me:$LINENO: error: default comm (armci) requires --with-armci-root to be specified" >&5
+echo "$as_me: error: default comm (armci) requires --with-armci-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
 fi
 

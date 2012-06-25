@@ -74,8 +74,8 @@ AC_ARG_ENABLE([caf-runtime],
 AC_ARG_ENABLE([cafrt-traces],
   AS_HELP_STRING([--disable-cafrt-traces],
                  [Disable CAF Runtime Tracing Functionality]),
-                  CAFRT_ENABLE_TRACES="NOTRACES",
-                  CAFRT_ENABLE_TRACES="TRACES")
+                  CAFRT_ENABLE_TRACES="NOTRACE",
+                  CAFRT_ENABLE_TRACES="TRACE")
 
 AS_IF([test "x$enable_caf_runtime" != "xno"], [
   BUILD_CAF_RUNTIME="YES"
@@ -112,23 +112,45 @@ DEFAULT_COMM="")
 BASH_PATH=`which bash`
 
 if test -z "${BASH_PATH}"; then
-  AC_MSG_ERROR(["Could not find bash on system"])
+  AC_MSG_ERROR([Could not find bash on system])
 fi
 
+# check CAF configuration options ...
+
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${GASNET_HOME}"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected with --with-gasnet-root]
+   )
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_HOME}"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected with --with-armci-root]
+   )
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_caf_runtime" = "xno"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected with --disable-caf-runtime]
+   )
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected with --disable-cafrt-traces]
+   )
+fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
-    AC_MSG_ERROR(["Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays"])
+    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays])
 fi
 
 if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
-    AC_MSG_ERROR(["Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI"])
+    AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
 fi
 
 if test -n "${GASNET_HOME}"; then
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
   if test  "${GASNET_CONDUITS}" = "*"; then
-      AC_MSG_ERROR(["Specified --with-gasnet-root=<path> doesn't look right. Check path."])
+      AC_MSG_ERROR([Specified --with-gasnet-root=<path> doesn't look right. Check path.])
   fi
 fi
 
@@ -137,11 +159,11 @@ if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
 elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
-    AC_MSG_ERROR(["--with-default-comm accepts gasnet or armci"])
+    AC_MSG_ERROR([--with-default-comm accepts gasnet or armci])
 elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
-    AC_MSG_ERROR(["default comm (gasnet) requires --with-gasnet-root to be specified"])
+    AC_MSG_ERROR([default comm (gasnet) requires --with-gasnet-root to be specified])
 elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
-    AC_MSG_ERROR(["default comm (armci) requires --with-armci-root to be specified"])
+    AC_MSG_ERROR([default comm (armci) requires --with-armci-root to be specified])
 fi
 
 # enable Dragon support

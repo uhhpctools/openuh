@@ -3196,9 +3196,9 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
    enum intrinsic_values first_intrin = Co_maxloc_Intrinsic;
-   char*          intrin_names[3] =
+   char*          intrin_names[6] =
    { "CO_MAXLOC", "CO_MAXVAL", "CO_MINLOC", "CO_MINVAL",
-     "CO_SUM", "CO_PRODUCT" };
+     "CO_PRODUCT", "CO_SUM" };
 
 
    TRACE (Func_Entry, "co_sum_intrinsic", NULL);

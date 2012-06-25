@@ -156,7 +156,7 @@ logging_filestream_init(void)
 
     trace_log_stream = stderr;
 
-    logfile = getenv("UHCAF_LOG_FILE");
+    logfile = getenv("UHCAF_TRACE_FILE");
     if (logfile == (char *) NULL)  return;
 
     fp = fopen(logfile, "a");
@@ -168,11 +168,11 @@ logging_filestream_init(void)
 void
 __libcaf_tracers_init(void)
 {
-    char *caf_loglevels = getenv("UHCAF_LOG_INFO");
+    char *caf_tracelevels = getenv("UHCAF_TRACE");
     logging_filestream_init();
 
-    if (caf_loglevels != (char *) NULL) {
-        char *opt = strtok(caf_loglevels, ",:;");
+    if (caf_tracelevels != (char *) NULL) {
+        char *opt = strtok(caf_tracelevels, ",:;");
 
         while (opt != (char *) NULL) {
             if (strcasecmp(opt, "all") == 0) {

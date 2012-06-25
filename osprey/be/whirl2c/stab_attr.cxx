@@ -460,6 +460,14 @@ Stab_Compare_Types(TY_IDX t1,
      case KIND_SCALAR:
 	if (TY_Is_String(t1) && TY_Is_Array_Of_Chars(t2))
 	   return TRUE;
+#ifdef _UH_COARRAYS
+    else if (TY_is_coarray(t2)) {
+        ARB_HANDLE bounds(Ty_Table[t2].Arb());
+        INT rank = ARB_dimension(bounds) - ARB_codimension(bounds);
+        if (rank == 0 && TY_mtype(t1) == TY_mtype(TY_etype(t2)))
+            return TRUE;
+    }
+#endif
 	else if (ptrs_as_scalars)
 	   return (TY_Is_Pointer_Or_Scalar(t2) &&
 		   (!check_scalars || TY_mtype(t1) == TY_mtype(t2)));
@@ -512,6 +520,15 @@ Stab_Compare_Types(TY_IDX t1,
      case KIND_ARRAY:
 	if (TY_Is_String(t2) && TY_Is_Array_Of_Chars(t1))
 	   return TRUE;
+#ifdef _UH_COARRAYS
+    else if (TY_is_coarray(t1)) {
+        ARB_HANDLE bounds(Ty_Table[t1].Arb());
+        INT rank = ARB_dimension(bounds) - ARB_codimension(bounds);
+        if (rank == 0
+            && TY_mtype(t2) == TY_mtype(TY_etype(t1)))
+            return TRUE;
+    }
+#endif
 	else if (!TY_Is_Array(t2) ||
 		 TY_AR_ndims(t1) != TY_AR_ndims(t2))
 	   return FALSE;

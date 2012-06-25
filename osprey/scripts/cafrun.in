@@ -29,6 +29,11 @@
 #
 
 this="`basename $0`"
+if [ "@CAFRT_ENABLE_TRACES@" = "TRACE" ]; then
+  traces_enabled=yes
+else
+  traces_enabled=no
+fi
 
 ENVIRONMENT="-----------------------\n"
 
@@ -43,13 +48,13 @@ Where options are
 
   -n, --num-images=N  N is number of images to use
 
-  --log-info=L        Sets additional info for runtime to log.
-                      L=all or info list delimited by ':'.
-                        Available information to log:
+  --trace=L           Sets trace levels for runtime.
+                      L=all or trace levels delimited by ':'.
+                        Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
                         CACHE:BARRIER:REDUCE:SYMBOLS
 
-  --log-file=F        F is name of file to store log
+  --trace-file=F      F is name of file to store trace
 
   --image-heap=I      I is heap size per image for storing coarray data. It
                       may be an integer which indicates size in bytes, or it
@@ -70,11 +75,11 @@ Environment Variables:
    LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
                       from number of processes to spawn.
 
-   UHCAF_LOG_INFO     Specifies information for runtime to log.
-                         Can be set with --log-info
+   UHCAF_TRACE        Specifies trace levels for runtime.
+                         Can be set with --trace
 
-   UHCAF_LOG_FILE     Specifies file to store runtime log
-                         Can be set with --log-file
+   UHCAF_TRACE_FILE   Specifies file to store runtime trace
+                         Can be set with --trace-file
 
    UHCAF_IMAGE_NUM_IMAGES
                       Specifies number of images to launch.
@@ -154,8 +159,8 @@ options="`getopt \
 		-u \
 		-n "$this" \
         -l num-images: \
-        -l log-info: \
-        -l log-file: \
+        -l trace: \
+        -l trace-file: \
         -l image-heap: \
         -l help \
         -l help2 \
@@ -198,14 +203,20 @@ do
       fi
       num_images=$1
       ;;
-    --log-info)
+    --trace)
       shift
-      info=`echo $1 | tr '[:lower:]' '[:upper:]'`
-      set_env UHCAF_LOG_INFO $info
+      levels=`echo $1 | tr '[:lower:]' '[:upper:]'`
+      set_env UHCAF_TRACE $levels
+      if [ "${traces_enabled}" = "no" ]; then
+        print_warning "Traces disabled in CAF runtime"
+      fi
       ;;
-    --log-file)
+    --trace-file)
       shift
-      set_env UHCAF_LOG_FILE $1
+      set_env UHCAF_TRACE_FILE $1
+      if [ "${traces_enabled}" = "no" ]; then
+        print_warning "Traces disabled in CAF runtime"
+      fi
       ;;
     --image-heap)
       shift
