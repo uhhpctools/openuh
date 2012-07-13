@@ -104,6 +104,7 @@ extern  void stop_pause_stmt_semantics (void);
 extern  void subroutine_stmt_semantics (void);
 #ifdef _UH_COARRAYS
 extern  void sync_stmt_semantics (void);
+extern  void lock_stmt_semantics (void);
 #endif
 extern  void then_stmt_semantics (void);
 extern  void where_stmt_semantics (void);
@@ -330,6 +331,10 @@ enum            act_arg_values {
                                 Vector_Subscript_Section,
                                 Contig_Section,
                                 Dv_Contig_Section
+#ifdef _UH_COARRAYS
+                                ,Coindexed_Array_Elt,
+                                Coindexed_Array_Section
+#endif
                                };
 
 typedef enum    act_arg_values  act_arg_type;

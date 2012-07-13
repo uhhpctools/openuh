@@ -97,10 +97,14 @@ static unsigned long getCache_line_size; /* set by env var. */
  * to add more cache lines in the future by making it 2D array */
 static struct cache **cache_all_images;
 static unsigned long shared_memory_size;
+static unsigned long static_heap_size;
 
 /* mutex for critical sections */
 gasnet_hsl_t cs_mutex = GASNET_HSL_INITIALIZER;
 static int cs_done=0;
+
+/* mutex for atomic ops  -- using a single one for now. */
+gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 
 /* forward declarations */
 
@@ -117,6 +121,28 @@ static void handler_critical_reply(gasnet_token_t token,
 static void handler_end_critical_request(gasnet_token_t token,
                            gasnet_handlerarg_t src_proc);
 
+static void
+handler_swap_request (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_swap_reply (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void handler_cswap_request (gasnet_token_t token,
+		   void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_cswap_reply (gasnet_token_t token,
+		   void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_fadd_request (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void
+handler_fadd_reply (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused);
 
 static void *get_remote_address(void *src, size_t img);
 static int address_in_nbwrite_address_block(void *remote_addr,
@@ -184,7 +210,13 @@ static gasnet_handlerentry_t handlers[] =
     { GASNET_HANDLER_SYNC_REQUEST, handler_sync_request },
     { GASNET_HANDLER_CRITICAL_REQUEST, handler_critical_request },
     { GASNET_HANDLER_CRITICAL_REPLY, handler_critical_reply },
-    { GASNET_HANDLER_END_CRITICAL_REQUEST, handler_end_critical_request }
+    { GASNET_HANDLER_END_CRITICAL_REQUEST, handler_end_critical_request },
+    { GASNET_HANDLER_SWAP_REQUEST, handler_swap_request },
+    { GASNET_HANDLER_SWAP_REPLY, handler_swap_reply },
+    { GASNET_HANDLER_CSWAP_REQUEST, handler_cswap_request },
+    { GASNET_HANDLER_CSWAP_REPLY, handler_cswap_reply },
+    { GASNET_HANDLER_FADD_REQUEST, handler_fadd_request },
+    { GASNET_HANDLER_FADD_REPLY, handler_fadd_reply }
   };
 
 static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
@@ -237,8 +269,380 @@ static void handler_end_critical_request(gasnet_token_t token,
       "inside handler_end_critical_request (%d) ... done\n", my_proc);
 }
 
+
+/* the following handlers for atomic operations come mostly from the OpenSHMEM
+ * implementation. Also, a single mutex is used, per image, for any atomic
+ * operations instead of a separate mutex per address. This could perhaps be
+ * optimized at a later time.
+ */
+
+typedef struct
+{
+  void *local_store;		/* sender saves here */
+  void *r_symm_addr;		/* recipient symmetric var */
+  volatile int completed;	/* transaction end marker */
+  volatile int *completed_addr;	/* addr of marker */
+  size_t nbytes;		/* how big the value is */
+  long long value;		/* value to be swapped */
+} swap_payload_t;
+
+/*
+ * called by remote PE to do the swap.  Store new value, send back old value
+ */
+static void
+handler_swap_request (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  long long old;
+  swap_payload_t *pp = (swap_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  /* save and update */
+  (void) memmove (&old, pp->r_symm_addr, pp->nbytes);
+  (void) memmove (pp->r_symm_addr, &(pp->value), pp->nbytes);
+  pp->value = old;
+
+  LOAD_STORE_FENCE ();
+
+  gasnet_hsl_unlock (lk);
+
+  /* return updated payload */
+  gasnet_AMReplyMedium1 (token, GASNET_HANDLER_SWAP_REPLY, buf, bufsiz, unused);
+}
+
+/*
+ * called by swap invoker when old value returned by remote PE
+ */
+static void
+handler_swap_reply (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  swap_payload_t *pp = (swap_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  /* save returned value */
+  (void) memmove (pp->local_store, &(pp->value), pp->nbytes);
+
+  LOAD_STORE_FENCE ();
+
+  /* done it */
+  *(pp->completed_addr) = 1;
+
+  gasnet_hsl_unlock (lk);
+}
+
+/*
+ * perform the swap
+ */
+void
+comm_swap_request (void *target, void *value, size_t nbytes,
+			    int proc, void *retval)
+{
+  check_remote_address(proc+1, target);
+
+  if (proc == my_proc) {
+      gasnet_hsl_t *lk = &atomics_mutex;
+      GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
+
+      (void) memmove(retval, target, nbytes);
+      (void) memmove(target, value, nbytes);
+      gasnet_hsl_unlock(lk);
+
+      return;
+  }
+
+  swap_payload_t *p = (swap_payload_t *) malloc (sizeof (*p));
+  if (p == (swap_payload_t *) NULL)
+    {
+      LIBCAF_TRACE (LIBCAF_LOG_FATAL,
+		     "unable to allocate swap payload memory");
+    }
+  /* build payload to send */
+  p->local_store = value;
+  p->r_symm_addr = get_remote_address (target, proc);
+  p->nbytes = nbytes;
+  /* p->value = *(long long *) value; */
+  memmove( &(p->value), value, nbytes);
+  p->completed = 0;
+  p->completed_addr = &(p->completed);
+
+  /* send and wait for ack */
+  gasnet_AMRequestMedium1 (proc, GASNET_HANDLER_SWAP_REQUEST, p, sizeof (*p), 0);
+
+  GASNET_BLOCKUNTIL (p->completed);
+  memmove( retval, value, nbytes);
+
+  free (p);
+}
+
+
+typedef struct
+{
+  void *local_store;		/* sender saves here */
+  void *r_symm_addr;		/* recipient symmetric var */
+  volatile int completed;	/* transaction end marker */
+  volatile int *completed_addr;	/* addr of marker */
+  size_t nbytes;		/* how big the value is */
+  long long value;		/* value to be swapped */
+  long long cond;		/* conditional value */
+} cswap_payload_t;
+
+
+/*
+ * called by remote PE to do the swap.  Store new value if cond
+ * matches, send back old value in either case
+ */
+static void handler_cswap_request (gasnet_token_t token,
+		   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  void *old;
+  cswap_payload_t *pp = (cswap_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  old = malloc (pp->nbytes);
+  if (old == NULL) {
+      LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+              "unable to allocatable cswap save space");
+  }
+
+  /* save current target */
+  memmove (old, pp->r_symm_addr, pp->nbytes);
+
+  /* update value if cond matches */
+  if (memcmp (&(pp->cond), pp->r_symm_addr, pp->nbytes) == 0) {
+      memmove (pp->r_symm_addr, &(pp->value), pp->nbytes);
+  }
+
+  /* return value */
+  memmove (&(pp->value), old, pp->nbytes);
+
+  LOAD_STORE_FENCE ();
+
+  free (old);
+
+  gasnet_hsl_unlock (lk);
+
+  /* return updated payload */
+  gasnet_AMReplyMedium1 (token, GASNET_HANDLER_CSWAP_REPLY, buf, bufsiz,
+			 unused);
+}
+
+/*
+ * called by swap invoker when old value returned by remote PE
+ * (same as swap_bak for now)
+ */
+static void
+handler_cswap_reply (gasnet_token_t token,
+		   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  cswap_payload_t *pp = (cswap_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  /* save returned value */
+  (void) memmove (pp->local_store, &(pp->value), pp->nbytes);
+
+  LOAD_STORE_FENCE ();
+
+  /* done it */
+  *(pp->completed_addr) = 1;
+
+  gasnet_hsl_unlock (lk);
+}
+
+/*
+ * perform the conditional swap
+ */
+void
+comm_cswap_request (void *target, void *cond, void *value,
+			     size_t nbytes, int proc, void *retval)
+{
+  check_remote_address(proc+1, target);
+
+  if (proc == my_proc) {
+      gasnet_hsl_t *lk = &atomics_mutex;
+      GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
+
+      (void) memmove(retval, target, nbytes);
+
+      if (memcmp ( cond, target, nbytes ) == 0) {
+          (void) memmove(target, value, nbytes);
+      }
+
+      gasnet_hsl_unlock(lk);
+
+      return;
+  }
+
+  cswap_payload_t *cp = (cswap_payload_t *) malloc (sizeof (*cp));
+
+  if (cp == (cswap_payload_t *) NULL) {
+      LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+              "unable to allocate conditional swap payload memory");
+  }
+
+  /* build payload to send */
+  cp->local_store = retval;
+  cp->r_symm_addr = get_remote_address (target, proc);
+  cp->nbytes = nbytes;
+  cp->value = cp->cond = 0LL;
+  memmove (&(cp->value), value, nbytes);
+  memmove (&(cp->cond), cond, nbytes);
+  cp->completed = 0;
+  cp->completed_addr = &(cp->completed);
+
+  LOAD_STORE_FENCE ();
+
+  /* send and wait for ack */
+  gasnet_AMRequestMedium1 (proc, GASNET_HANDLER_CSWAP_REQUEST, cp, sizeof (*cp), 0);
+
+  GASNET_BLOCKUNTIL (cp->completed);
+
+  free (cp);
+}
+
+/*
+ * fetch/add
+ */
+
+typedef struct
+{
+  void *local_store;		/* sender saves here */
+  void *r_symm_addr;		/* recipient symmetric var */
+  volatile int completed;	/* transaction end marker */
+  volatile int *completed_addr;	/* addr of marker */
+  size_t nbytes;		/* how big the value is */
+  long long value;		/* value to be added & then return old */
+} fadd_payload_t;
+
+/*
+ * called by remote PE to do the fetch and add.  Store new value, send
+ * back old value
+ */
+static void
+handler_fadd_request (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  long long old = 0;
+  long long plus = 0;
+  fadd_payload_t *pp = (fadd_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  /* save and update */
+  (void) memmove (&old, pp->r_symm_addr, pp->nbytes);
+  plus = old + pp->value;
+  (void) memmove (pp->r_symm_addr, &plus, pp->nbytes);
+  pp->value = old;
+
+  LOAD_STORE_FENCE ();
+
+  gasnet_hsl_unlock (lk);
+
+  /* return updated payload */
+  gasnet_AMReplyMedium1 (token, GASNET_HANDLER_FADD_REPLY, buf, bufsiz, unused);
+}
+
+/*
+ * called by fadd invoker when old value returned by remote PE
+ */
+static void
+handler_fadd_reply (gasnet_token_t token,
+		  void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+  fadd_payload_t *pp = (fadd_payload_t *) buf;
+  gasnet_hsl_t *lk = &atomics_mutex;
+
+  gasnet_hsl_lock (lk);
+
+  /* save returned value */
+  (void) memmove (pp->local_store, &(pp->value), pp->nbytes);
+
+  LOAD_STORE_FENCE ();
+
+  /* done it */
+  *(pp->completed_addr) = 1;
+
+  gasnet_hsl_unlock (lk);
+}
+
+/*
+ * perform the fetch-and-add
+ */
+void
+comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval)
+{
+  check_remote_address(proc+1, target);
+
+  if (proc == my_proc) {
+      long long old = 0;
+      long long val = 0;
+      long long plus = 0;
+      gasnet_hsl_t *lk = &atomics_mutex;
+      GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
+
+      (void) memmove (&old, target, nbytes);
+      (void) memmove (retval, target, nbytes);
+      (void) memmove (&val, value, nbytes);
+      plus = old + val;
+      (void) memmove (target, &plus, nbytes);
+
+      gasnet_hsl_unlock(lk);
+
+      return;
+  }
+
+  fadd_payload_t *p = (fadd_payload_t *) malloc (sizeof (*p));
+
+  if (p == (fadd_payload_t *) NULL) {
+      LIBCAF_TRACE (LIBCAF_LOG_FATAL,
+              "unable to allocate fetch-and-add payload memory");
+  }
+
+  /* build payload to send */
+  p->local_store = retval;
+  p->r_symm_addr = get_remote_address(target, proc);
+  p->nbytes = nbytes;
+  p->value = *(long long *) value;
+  p->completed = 0;
+  p->completed_addr = &(p->completed);
+
+  /* send and wait for ack */
+  gasnet_AMRequestMedium1 (proc, GASNET_HANDLER_FADD_REQUEST, p, sizeof (*p), 0);
+
+  GASNET_BLOCKUNTIL (p->completed);
+
+  free (p);
+}
+
+void
+comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval)
+{
+    long long old;
+
+    memmove(&old,value,nbytes);
+    comm_swap_request(target, value, nbytes, proc, retval);
+    memmove(value,&old,nbytes);
+}
+
+
 /* end of handlers */
 /*************************************************************/
+
+void comm_service()
+{
+    GASNET_Safe(gasnet_AMPoll());
+}
 
 /*
  * INIT:
@@ -260,7 +664,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     char *enable_nbput_str;
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
-    unsigned long static_coarray_size;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
     farg_init(&argc, &argv);
@@ -411,7 +814,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
             caf_shared_memory_pages*GASNET_PAGESIZE;
     }
 
-    static_coarray_size = allocate_static_coarrays(
+    static_heap_size = allocate_static_coarrays(
             coarray_start_all_images[my_proc].addr);
 
     if (gasnet_everything) {
@@ -420,9 +823,9 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr =
-        coarray_start_all_images[my_proc].addr + static_coarray_size;
+        coarray_start_all_images[my_proc].addr + static_heap_size;
     common_shared_memory_slot->size =
-        caf_shared_memory_size - static_coarray_size;
+        caf_shared_memory_size - static_heap_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next =0;
     common_shared_memory_slot->prev =0;
@@ -962,6 +1365,71 @@ unsigned long allocate_static_coarrays(void *base_address)
     return set_save_coarrays(base_address);
 }
 
+/* returns addresses ranges for shared heap */
+
+inline void* comm_remote_address(void *addr, size_t proc)
+{
+    return get_remote_address(addr, proc);
+}
+
+inline void* comm_start_heap(size_t proc)
+{
+    return get_remote_address(coarray_start_all_images[my_proc].addr,
+            proc);
+}
+
+inline void* comm_end_heap(size_t proc)
+{
+    return get_remote_address(
+            (char *)coarray_start_all_images[my_proc].addr + shared_memory_size,
+            proc);
+}
+
+inline void* comm_start_symmetric_heap(size_t proc)
+{
+    return comm_start_heap(proc);
+}
+
+inline void *comm_end_symmetric_heap(size_t proc)
+{
+    return get_remote_address(common_slot->addr,proc);
+}
+
+inline void *comm_start_asymmetric_heap(size_t proc)
+{
+    if (proc != my_proc) {
+        return comm_end_symmetric_heap(proc);
+    } else {
+        return (char *)common_slot->addr + common_slot->size;
+    }
+}
+
+inline void *comm_end_asymmetric_heap(size_t proc)
+{
+    return get_remote_address(comm_end_heap(proc), proc);
+}
+
+inline void *comm_start_static_heap(size_t proc)
+{
+    return get_remote_address(comm_start_heap(proc), proc);
+}
+
+inline void *comm_end_static_heap(size_t proc)
+{
+    return (char *)comm_start_heap(proc) + static_heap_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_static_heap(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_heap(proc);
+}
+
+
 /* Calculate the address on another image corresponding to a local address
  * This is possible as all images must have the same coarrays, i.e the
  * memory is symmetric. Since we know the start address of all images
@@ -970,11 +1438,11 @@ unsigned long allocate_static_coarrays(void *base_address)
  * 1) Static coarrays have same address on all images
  * 2) coarray_start_all_images is not populated at init. It needs to be
  *    populated when accessing an image for 1st time (lazy init)*/
-static void *get_remote_address(void *src, size_t img)
+static void *get_remote_address(void *src, size_t proc)
 {
     size_t offset;
     void * remote_start_address;
-    if ( (img == my_proc) || !address_on_heap(src) )
+    if ( (proc == my_proc) || !address_on_heap(src) )
         return src;
     if (gasnet_everything)
     {
@@ -983,17 +1451,17 @@ static void *get_remote_address(void *src, size_t img)
              coarray_start_all_images[my_proc].size) )
         {
             offset = src-coarray_start_all_images[my_proc].addr;
-            remote_start_address = coarray_start_all_images[img].addr;
+            remote_start_address = coarray_start_all_images[proc].addr;
             /* lazy fetch as gasnet_getSegmentInfo initialzed it to 0 */
             if(remote_start_address==(void*)0){
-                gasnet_get(&remote_start_address,img,
+                gasnet_get(&remote_start_address,proc,
                         &everything_heap_start,
                         sizeof(void *) );
                 LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                     "gasnet_comm_layer.c:get_remote_address->"
                     "Read image%lu allocatable base address%p",
-                        img+1,remote_start_address);
-                coarray_start_all_images[img].addr = remote_start_address;
+                        proc+1,remote_start_address);
+                coarray_start_all_images[proc].addr = remote_start_address;
             }
             return remote_start_address+offset;
         }
@@ -1001,7 +1469,7 @@ static void *get_remote_address(void *src, size_t img)
             return src;
     }
     offset = src - coarray_start_all_images[my_proc].addr;
-    return coarray_start_all_images[img].addr+offset;
+    return coarray_start_all_images[proc].addr+offset;
 }
 
 /*
@@ -1125,7 +1593,6 @@ void comm_sync_images(int *image_list, int image_count)
             refetch_cache(image_list[i]);
     }
 }
-
 
 void* comm_malloc(size_t size)
 {

@@ -21892,6 +21892,15 @@ Error : This argument to the %s intrinsic must be an integer array of size equal
 .PP
 The SUB argument of this intrinsic needs to be an integer array of size equal to the corank of the coarray corank.
 .ME
-$ LAST NUMBER USED : 1709
+$
+$ Error : 1710
+$msg  1710 This argument to the %s statement must be a scalar coarray of type LOCK_TYPE
+$nexp 1710
+Error : This argument to the %s statements must be a scalar coarray of type LOCK_TYPE
+.PP
+The first argument for the LOCK and UNLOCK statements is a scalar coarray of
+type LOCK_TYPE, defined in the intrinsic module ISO_FORTRAN_ENV.
+.ME
+$ LAST NUMBER USED : 1710
 
 

@@ -290,6 +290,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Intrinsic_Stmt,	      /* Tok_Kwd_Intrinsic    */
 				Assignment_Stmt,      /* Tok_Kwd_Kind	      */
 				Assignment_Stmt,      /* Tok_Kwd_Len	      */
+#ifdef _UH_COARRAYS
+                Lock_Stmt,            /* Tok_Kwd_Lock         */
+#endif
 				Type_Decl_Stmt,	      /* Tok_Kwd_Logical      */
 #ifdef _UH_COARRAYS
 				Sync_Stmt,	      /* Tok_Kwd_Memory	      */
@@ -343,6 +346,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Type_Decl_Stmt,	      /* Tok_Kwd_Type	      */
 				Use_Stmt,	      /* Tok_Kwd_Use	      */
 				Assignment_Stmt,      /* Tok_Kwd_Undefined    */
+#ifdef _UH_COARRAYS
+                Unlock_Stmt,          /* Tok_Kwd_Unlock       */
+#endif
 #ifdef KEY /* Bug 14150 */
 				Value_Stmt,           /* Tok_Kwd_Value        */
 #endif /* KEY Bug 14150 */
@@ -535,7 +541,9 @@ void		(*stmt_parsers[]) () = {
 #ifdef _UH_COARRAYS
                 ,
                 parse_critical_stmt,        /* Critical_Stmt */
-                parse_end_critical_stmt     /* End_Critical_Stmt */
+                parse_end_critical_stmt, /* End_Critical_Stmt */
+                parse_lock_stmt,           /* Lock_Stmt */
+                parse_lock_stmt            /* Unlock_Stmt */
 #endif
 
 };
@@ -5772,9 +5780,45 @@ long long     stmt_in_blk [] = {
                 (ONE << Contains_Blk) |
                 (ONE << Interface_Blk) |
                 (ONE << Derived_Type_Blk) |
+                (ONE << Enum_Blk)),
+
+            /*****  Lock_Stmt  *****/
+
+                   ((ONE << Unknown_Blk) |
+                (ONE << Blockdata_Blk) |
+                (ONE << Module_Blk) |
+                (ONE << Interface_Body_Blk) |
+                (ONE << Forall_Blk) |
+                (ONE << If_Blk) |
+                (ONE << Where_Then_Blk) |
+                (ONE << Where_Else_Blk) |
+                (ONE << Where_Else_Mask_Blk) |
+                (ONE << SGI_Psection_Blk) |
+                (ONE << Select_Blk) |
+                (ONE << Contains_Blk) |
+                (ONE << Interface_Blk) |
+                (ONE << Derived_Type_Blk) |
+                (ONE << Enum_Blk)),
+
+
+            /*****  Unlock_Stmt  *****/
+
+                   ((ONE << Unknown_Blk) |
+                (ONE << Blockdata_Blk) |
+                (ONE << Module_Blk) |
+                (ONE << Interface_Body_Blk) |
+                (ONE << Forall_Blk) |
+                (ONE << If_Blk) |
+                (ONE << Where_Then_Blk) |
+                (ONE << Where_Else_Blk) |
+                (ONE << Where_Else_Mask_Blk) |
+                (ONE << SGI_Psection_Blk) |
+                (ONE << Select_Blk) |
+                (ONE << Contains_Blk) |
+                (ONE << Interface_Blk) |
+                (ONE << Derived_Type_Blk) |
                 (ONE << Enum_Blk))
 #endif
-
 
 				};
 # undef ONE
@@ -5959,9 +6003,10 @@ stmt_category_type	stmt_top_cat [] = {
 #ifdef _UH_COARRAYS
                 ,
                 Executable_Stmt_Cat,    /* Critical_Stmt    */
-                Executable_Stmt_Cat     /* End_Critical_Stmt    */  
+                Executable_Stmt_Cat,    /* End_Critical_Stmt    */  
+                Executable_Stmt_Cat,    /* Lock_Stmt    */
+                Executable_Stmt_Cat     /* Unlock_Stmt   */  
 #endif
-
 
 				};
 

@@ -78,6 +78,7 @@ static unsigned long getCache_line_size; /* set by env var. */
  * to add more cache lines in the future by making it 2D array */
 static struct cache **cache_all_images;
 static unsigned long shared_memory_size;
+static unsigned long static_heap_size;
 
 /* Mutexes */
 static int critical_mutex;
@@ -149,6 +150,11 @@ void comm_end_critical()
     ARMCI_Unlock(critical_mutex, 0);
 }
 
+void comm_service()
+{
+    /* TODO */
+}
+
 /*
  * INIT:
  * 1) Initialize ARMCI
@@ -165,7 +171,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     char *caf_shared_memory_size_str, *enable_nbput_str;
     char *enable_get_cache_str, *getCache_line_size_str;
     unsigned long caf_shared_memory_size;
-    unsigned long static_coarray_size;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
     argv = (char **) malloc(argc * sizeof(*argv));
@@ -259,7 +264,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         ,caf_shared_memory_size, caf_shared_memory_size/1000000L );
     }
 
-    static_coarray_size =
+    static_heap_size =
         allocate_static_coarrays(coarray_start_all_images[my_proc]);
 
     if(enable_nbput)
@@ -287,9 +292,9 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr = coarray_start_all_images[my_proc]
-                                                + static_coarray_size;
+                                                + static_heap_size;
     common_shared_memory_slot->size = caf_shared_memory_size
-                                                - static_coarray_size;
+                                                - static_heap_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next =0;
     common_shared_memory_slot->prev =0;
@@ -674,6 +679,71 @@ unsigned long allocate_static_coarrays(void *base_address)
     return set_save_coarrays(base_address);
 }
 
+/* returns addresses ranges for shared heap */
+
+inline void* comm_remote_address(void *addr, size_t proc)
+{
+    return get_remote_address(addr, proc);
+}
+
+inline void* comm_start_heap(size_t proc)
+{
+    return get_remote_address(coarray_start_all_images[my_proc],
+            proc);
+}
+
+inline void* comm_end_heap(size_t proc)
+{
+    return get_remote_address(
+            (char *)coarray_start_all_images[my_proc]+ shared_memory_size,
+            proc);
+}
+
+inline void* comm_start_symmetric_heap(size_t proc)
+{
+    return comm_start_heap(proc);
+}
+
+inline void *comm_end_symmetric_heap(size_t proc)
+{
+    return get_remote_address(common_slot->addr,proc);
+}
+
+inline void *comm_start_asymmetric_heap(size_t proc)
+{
+    if (proc != my_proc) {
+        return comm_end_symmetric_heap(proc);
+    } else {
+        return (char *)common_slot->addr + common_slot->size;
+    }
+}
+
+inline void *comm_end_asymmetric_heap(size_t proc)
+{
+    return get_remote_address(comm_end_heap(proc), proc);
+}
+
+inline void *comm_start_static_heap(size_t proc)
+{
+    return get_remote_address(comm_start_heap(proc), proc);
+}
+
+inline void *comm_end_static_heap(size_t proc)
+{
+    return (char *)comm_start_heap(proc) + static_heap_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_static_heap(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_heap(proc);
+}
+
+
 /* Calculate the address on another image corresponding to a local address
  * This is possible as all images must have the same coarrays, i.e the
  * memory is symmetric. Since we know the start address of all images
@@ -828,6 +898,73 @@ void comm_sync_images(int *image_list, int image_count)
             "armci_comm_layer.c:comm_sync_images-> Sync image over");
     }
 
+}
+
+/* atomics */
+void comm_swap_request (void *target, void *value, size_t nbytes,
+			    int proc, void *retval)
+{
+    check_remote_address(proc+1, target);
+    if (nbytes == sizeof(int) ) {
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw( ARMCI_SWAP, value, remote_address, 0, proc);
+        (void) ARMCI_Rmw( ARMCI_SWAP, value, remote_address, 0, proc);
+        memmove( retval, value, nbytes);
+    } else if (nbytes == sizeof(long) ) {
+        void *remote_address = get_remote_address(target, proc);
+        (void) ARMCI_Rmw( ARMCI_SWAP_LONG, value, remote_address, 0, proc);
+        memmove( retval, value, nbytes);
+    }
+}
+
+void
+comm_cswap_request (void *target, void *cond, void *value,
+			     size_t nbytes, int proc, void *retval)
+{
+    check_remote_address(proc+1, target);
+    /* TODO */
+    Error( "comm_cswap_request not implemented for ARMCI conduit" );
+}
+
+void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval)
+{
+    long long old;
+    check_remote_address(proc+1, target);
+    memmove(&old,value,nbytes);
+    if (nbytes == sizeof(int) ) {
+        void *remote_address = get_remote_address(target, proc);
+        *(int*)retval =
+            ARMCI_Rmw( ARMCI_FETCH_AND_ADD, 0, remote_address,*(int*)value,
+                    proc);
+        memmove(value, &old, nbytes);
+    } else if (nbytes == sizeof(long) ) {
+        void *remote_address = get_remote_address(target, proc);
+        *(long*)retval =
+            ARMCI_Rmw( ARMCI_FETCH_AND_ADD_LONG, 0, remote_address,*(int*)value,
+                    proc);
+        memmove(value, &old, nbytes);
+    }
+}
+
+void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval)
+{
+    long long old;
+    check_remote_address(proc+1, target);
+    memmove(&old,value,nbytes);
+    if (nbytes == sizeof(int) ) {
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw( ARMCI_SWAP, value, remote_address, 0, proc);
+        memmove(retval, value, nbytes);
+        memmove(value, &old, nbytes);
+    } else if (nbytes == sizeof(long) ) {
+        void *remote_address = get_remote_address(target, proc);
+        ARMCI_Rmw( ARMCI_SWAP_LONG, value, remote_address, 0,
+                   proc);
+        memmove(retval, value, nbytes);
+        memmove(value, &old, nbytes);
+    }
 }
 
 void* comm_malloc(size_t size) //To make it sync with gasnet

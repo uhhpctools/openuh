@@ -4877,19 +4877,19 @@ void parse_stop_pause_stmt (void)
 
 #ifdef _UH_COARRAYS
 /******************************************************************************\
-|*									      *|
-|* Description:								      *|
-|*	Parsers synchronization statements (Fortran 2008)			      *|
-|*									      *|
-|* Input parameters:							      *|
-|*	NONE								      *|
-|*									      *|
-|* Output parameters:							      *|
-|*	NONE								      *|
-|*									      *|
-|* Returns:								      *|
-|*	NONE								      *|
-|*									      *|
+|*                                                                            *|
+|* Description:                                                               *|
+|*    Parses synchronization statements (Fortran 2008)                        *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*    NONE                                                                    *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*    NONE                                                                    *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*    NONE                                                                    *|
+|*                                                                            *|
 \******************************************************************************/
 void parse_sync_stmt (void)
 {
@@ -4994,6 +4994,81 @@ void parse_sync_stmt (void)
 
    return;
 } /* parse_sync_stmt */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*   Parses LOCK and  statements (Fortran 2008)                               *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+\******************************************************************************/
+void parse_lock_stmt (void)
+{
+    boolean parsed_ok = TRUE;
+   int			col;
+   int			ir_idx;
+   int			line;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+   int      blk_idx;
+
+   TRACE (Func_Entry, "parse_lock_stmt", NULL);
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+   if (TOKEN_VALUE(token) == Tok_Kwd_Lock) {
+       IR_OPR(ir_idx) = Lock_Opr;
+   } else if (TOKEN_VALUE(token) == Tok_Kwd_Unlock) {
+       IR_OPR(ir_idx) = Unlock_Opr;
+   }
+   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+
+   if (LA_CH_VALUE != LPAREN) {
+      parse_err_flush(Find_EOS, "(");
+      goto EXIT;
+   }
+   NEXT_LA_CH;
+
+   OPND_FLD(opnd) = IR_Tbl_Idx;
+   OPND_IDX(opnd) = NULL_IDX;
+
+   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+   NTR_IR_TBL(IR_IDX_L(ir_idx));
+   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+   parsed_ok = parse_expr(&opnd);
+
+   COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+   if (LA_CH_VALUE != RPAREN) {
+       /* error */
+      parse_err_flush(Find_EOS, ")");
+      goto EXIT;
+   }
+
+   NEXT_LA_CH;
+
+EXIT:
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_lock_stmt", NULL);
+
+   return;
+} /* parse_lock_stmt */
 
 /*parse_critical_stmt*/
 void parse_critical_stmt(void)

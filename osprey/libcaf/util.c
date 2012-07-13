@@ -39,6 +39,8 @@
 extern int iargc_(void);
 extern void getarg_(int *n, char *s, int slen);
 
+void __caf_exit(int status);
+
 static char **fargv;
 static int   fargc;
 
@@ -47,6 +49,14 @@ void Warning (char *warning_message)
   fprintf(stderr, "Warning: %s\n", warning_message);
   fflush(stderr);
 }
+
+void Error (char *error_message)
+{
+  fprintf(stderr, "Error: %s\n", error_message);
+  fflush(stderr);
+  __caf_exit(1);
+}
+
 
 
 /*

@@ -52,6 +52,7 @@ LCDEFS += -DGASNET_ALLOW_OPTIMIZED_DEBUG
 LCDEFS += -D$(CAFRT_ENABLE_TRACES)
 LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
+LCINCS += -I$(BUILD_BASE)/../uthash
 
 CFLAGS += -DTARG_$(BUILD_TARGET)
 
@@ -60,6 +61,7 @@ CFILES = \
 	caf_collectives.c \
 	gasnet_comm_layer.c  \
 	trace.c \
+	lock.c \
 	util.c
 
 LCINCS += -I$(GASNET_HOME)/include 

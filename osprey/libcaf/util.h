@@ -34,6 +34,7 @@ extern void farg_init(int *argc, char ***argv);
 extern void farg_free();
 
 void Warning (char *warning_message);
+void Error (char *error_message);
 
 /* debug utility functions */
 

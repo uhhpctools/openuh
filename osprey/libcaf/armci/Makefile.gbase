@@ -48,6 +48,7 @@ LCDEFS += -D_LITTLE_ENDIAN -D_WORD32 -D_LIB_INTERNAL -D_GNU_SOURCE -U__mips -DKE
 LCDEFS += -D$(CAFRT_ENABLE_TRACES)
 LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
+LCINCS += -I$(BUILD_BASE)/../uthash
 
 LCINCS += -I$(MPI_INCLUDE)
 
@@ -58,6 +59,7 @@ CFILES = \
    caf_collectives.c \
    armci_comm_layer.c \
    trace.c \
+   lock.c \
    util.c
 
 LCINCS += -I$(ARMCI_HOME)/src 

@@ -71,8 +71,22 @@ void comm_strided_write ( size_t proc,
 
 /* TODO: vector, non-contiguous read and write operations  */
 
+
 /* shared memory management */
-unsigned long allocate_static_coarrays(); /*TBD */
+unsigned long allocate_static_coarrays();
+
+/* returns addresses ranges for shared heap */
+extern inline void* comm_remote_address(void *addr, size_t proc);
+extern inline void* comm_start_heap(size_t proc);
+extern inline void* comm_end_heap(size_t proc);
+extern inline void* comm_start_symmetric_heap(size_t proc);
+extern inline void *comm_end_symmetric_heap(size_t proc);
+extern inline void *comm_start_asymmetric_heap(size_t proc);
+extern inline void *comm_end_asymmetric_heap(size_t proc);
+extern inline void *comm_start_static_heap(size_t proc);
+extern inline void *comm_end_static_heap(size_t proc);
+extern inline void *comm_start_allocatable_heap(size_t proc);
+extern inline void *comm_end_allocatable_heap(size_t proc);
 
 /* GET CACHE OPTIMIZATION */
 struct cache
@@ -90,6 +104,24 @@ void comm_free_lcb(void* ptr);
 /* barriers */
 void comm_barrier_all();
 void comm_sync_images(int *image_list, int image_count);
+
+/* locks */
+void comm_lock(lock_t *lock, int image);
+void comm_unlock(lock_t *lock, int image);
+void comm_unlock2(lock_t *lock, int image);
+
+/* atomics */
+void comm_swap_request (void *target, void *value, size_t nbytes,
+			    int proc, void *retval);
+void comm_cswap_request (void *target, void *cond, void *value,
+			     size_t nbytes, int proc, void *retval);
+void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval);
+void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
+			    void *retval);
+
+/* progress */
+void comm_service ();
 
 /* exit */
 void comm_memory_free();

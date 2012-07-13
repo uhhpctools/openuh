@@ -41,6 +41,20 @@ struct shared_memory_slot{
     struct shared_memory_slot *prev;
 };
 
+#define LOAD_STORE_FENCE() __sync_synchronize()
+#define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_Add(t,v)
+
+/* lock structure */
+/* Note: This limits us to 1M images, and 64 GB heap size per
+ * image. */
+struct coarray_lock {
+    volatile unsigned char locked :8;
+    volatile unsigned int image  :20;
+    volatile unsigned long long ofst  :36;
+};
+typedef struct coarray_lock lock_t;
+
+
 /* COMPILER BACK-END INTERFACE */
 
 void __caf_init();
@@ -87,6 +101,10 @@ int   _LCOBOUND_2(DopeVectorType *diminfo, int *sub);
 void  _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
 int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
 
+/* LOCK INTRINICS */
+void _COARRAY_LOCK(lock_t *lock, int* image);
+void _COARRAY_UNLOCK(lock_t *lock, int* image);
+
 /* critical construct support */
 void caf_critical_();
 void caf_end_critical_();
@@ -95,5 +113,12 @@ void* coarray_allocatable_allocate_(unsigned long var_size);
 void* coarray_asymmetric_allocate_(unsigned long var_size);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
+
+/* runtime checks */
+int check_remote_address(size_t, void *);
+int check_remote_image(size_t);
+
+/* UHCAF library routines */
+void uhcaf_print_heap_map(char *str);
 
 #endif

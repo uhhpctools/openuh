@@ -1440,6 +1440,8 @@ char		*operator_str[]		= {
             "Dv_Set_Is_Coarray",
             "Dv_Access_N_Codim",
             "Dv_Set_N_Codim",
+            "Lock_Opr",
+            "Unlock_Opr",
 #endif
             "Endtask_Open_Mp_Opr",
             "Task_Open_Mp_Opr",

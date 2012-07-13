@@ -219,6 +219,9 @@ static	kwd_type		kwd[] = {
 				"KIND",		     Tok_Kwd_Kind,
 
 				"LOGICAL",	     Tok_Kwd_Logical,
+#ifdef _UH_COARRAYS
+				"LOCK",		     Tok_Kwd_Lock,
+#endif
 				"LEN",		     Tok_Kwd_Len,
 
 #ifdef _UH_COARRAYS
@@ -279,6 +282,9 @@ static	kwd_type		kwd[] = {
 				"TO",		     Tok_Kwd_To,
 
 				"UNDEFINED",	     Tok_Kwd_Undefined,
+#ifdef _UH_COARRAYS
+				"UNLOCK",	     Tok_Kwd_Unlock,
+#endif
 				"USE",		     Tok_Kwd_Use,
 
 				"VOLATILE",	     Tok_Kwd_Volatile,

@@ -519,7 +519,7 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
                                                    "OPEN MP END WORKSHARE",
 
 #ifdef _UH_COARRAYS
-						   "SYNC Statement",
+						   "SYNC",
 #endif
 
 #ifdef KEY /* Bug 11741 */
@@ -534,10 +534,12 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 						   "BIND",
 						   "VALUE"
 #endif /* KEY Bug 10572 */
-#ifdef _UH_COARRAYS                             
-                           , 
-                           "CRITICAL Statement",
-                           "END_CRITICAL Statement"  
+#ifdef _UH_COARRAYS
+                           ,
+                           "CRITICAL",
+                           "END CRITICAL",
+                           "LOCK",
+                           "UNLOCK"
 #endif
     };
 

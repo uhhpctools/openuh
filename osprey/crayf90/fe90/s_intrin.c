@@ -3256,7 +3256,6 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
                 PRINTMSG(opnd_line, 1708, Error, opnd_col,
                  intrin_names[ATP_INTRIN_ENUM(*spec_idx)-first_intrin]);
             }
-            arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
         }
 
       } else {
@@ -3533,7 +3532,6 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                PRINTMSG(opnd_line, 1575, Error, opnd_col);
             }
             else {
-               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
 #ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
@@ -3672,7 +3670,6 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                 PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
             }
             else {
-               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
 #ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
@@ -3784,7 +3781,6 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
                        "LCOBOUND" : "UCOBOUND" );
             }
             else {
-               arg_info_list[info_idx1].ed.pe_dim_ref = TRUE;
 #ifndef _UH_COARRAYS
                if (ATD_ALLOCATABLE(attr_idx)) {
                   attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);

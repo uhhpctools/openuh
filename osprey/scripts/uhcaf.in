@@ -265,7 +265,7 @@ for arg in "$@" ;  do
           keep='y'
           pass_arg=no
           ;;
-        -c|-S)
+        -c|-S|-fe)
           link='n'
           pass_arg=yes
           ;;
@@ -587,7 +587,7 @@ else
       # collect save coarrayy info from object files
       i=0
       for s in \
-        `readelf -sW $OBJECTS1 $OBJECTS2 | grep " __SAVE_COARRAY_" |  awk '{print $8}'`; do
+        `readelf -sW $OBJECTS1 $OBJECTS2 2>&1 | grep " __SAVE_COARRAY_" |  awk '{print $8}'`; do
         coarray_name[i]=$s
         i=$((i+1))
       done

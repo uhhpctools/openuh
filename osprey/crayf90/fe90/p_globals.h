@@ -503,6 +503,7 @@ extern	void parse_stop_pause_stmt (void);
 extern	void parse_subroutine_stmt (void);
 #ifdef _UH_COARRAYS
 extern	void parse_sync_stmt (void);
+extern  void parse_lock_stmt (void);
 #endif
 extern	void parse_target_stmt (void);
 extern  void parse_task_common_stmt (void);

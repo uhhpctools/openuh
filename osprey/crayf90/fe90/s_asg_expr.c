@@ -11023,12 +11023,14 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
          if (ok                           &&
              ATD_PE_ARRAY_IDX(attr_idx)) {
 
-#ifndef _UH_COARRAYS
             if (pe_dim_list_idx != NULL_IDX) {
+#ifndef _UH_COARRAYS
 
                translate_distant_ref(result_opnd, exp_desc, pe_dim_list_idx);
-            }
+#else
+               exp_desc->pe_dim_ref = TRUE;
 #endif
+            }
 # if defined(_TARGET_OS_MAX)
             else if (! ATD_ALLOCATABLE(attr_idx)) {
                /* supply mype() as pe dim */

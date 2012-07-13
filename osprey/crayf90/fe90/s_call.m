@@ -41,7 +41,12 @@
 \*****************/
 
 
+#ifndef _UH_COARRAYS
 # define MAX_NUM_ACT_TYPES		23
+#else
+# define MAX_NUM_ACT_TYPES		25
+#endif
+
 # define MAX_NUM_DUMMY_TYPES		9
 
 # define ERROR_ASSOC			0

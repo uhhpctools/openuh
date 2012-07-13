@@ -248,7 +248,9 @@
 #ifdef _UH_COARRAYS
                           ,
                           critical_stmt_semantics,        /* Critical_Stmt        */
-                          end_critical_stmt_semantics    /* End_Critical_Stmt */  
+                          end_critical_stmt_semantics,    /* End_Critical_Stmt */  
+                          lock_stmt_semantics,    /* Lock_Stmt */  
+                          lock_stmt_semantics     /* Unlock_Stmt */  
 #endif
 
            };

@@ -4062,6 +4062,15 @@ boolean final_arg_work(opnd_type	*list_opnd,
           else
               association = MAKE_DV;
       }
+
+      /* if dummy is intent(in), don't do copy out for coindexed actuals */
+      if ( ATD_INTENT(dummy) && (a_type == Coindexed_Array_Elt ||
+          a_type == Coindexed_Array_Section) ) {
+          if (association == COPY_IN_COPY_OUT)
+              association = COPY_IN;
+          else if (association == COPY_INOUT_MAKE_DV)
+              association = COPY_IN_MAKE_DV;
+      }
 #endif
 
 
@@ -4145,6 +4154,11 @@ boolean final_arg_work(opnd_type	*list_opnd,
           AT_OBJ_CLASS(dummy) == Data_Obj &&
           ATD_PE_ARRAY_IDX(dummy) != NULL_IDX) {
 
+#ifdef _UH_COARRAYS
+         if (arg_info_list[info_idx].ed.pe_dim_ref) {
+            PRINTMSG(line, 1584, Error, col);
+         } else
+#endif
          if (arg_info_list[info_idx].ed.reference) {
             attr_idx = find_left_attr(&IL_OPND(list_idx));
 
@@ -5789,6 +5803,11 @@ act_arg_type	get_act_arg_type(expr_arg_type	*exp_desc)
       else if (exp_desc->reference) {
          
          if (exp_desc->array_elt) {
+#ifdef _UH_COARRAYS
+            if (exp_desc->pe_dim_ref) {
+                a_type = Coindexed_Array_Elt;
+            } else
+#endif
             if (exp_desc->tmp_reference) {
                a_type = Array_Tmp_Elt;
             }
@@ -5847,7 +5866,11 @@ act_arg_type	get_act_arg_type(expr_arg_type	*exp_desc)
             a_type = Vector_Subscript_Section;
          }
          else if (exp_desc->section) {
-
+#ifdef _UH_COARRAYS
+             if (exp_desc->pe_dim_ref) {
+                 a_type = Coindexed_Array_Section;
+             } else
+#endif
             if (exp_desc->contig_array) {
                if (exp_desc->dope_vector) {
                   a_type = Dv_Contig_Section;
@@ -13809,6 +13832,7 @@ static boolean check_arg_for_co_array(opnd_type	*top_opnd)
       case Subscript_Opr:
       case Whole_Subscript_Opr:
       case Section_Subscript_Opr:
+#ifndef _UH_COARRAYS
          list_idx = IR_IDX_R(ir_idx);
          while (list_idx) {
             if (IL_PE_SUBSCRIPT(list_idx)) {
@@ -13819,6 +13843,7 @@ static boolean check_arg_for_co_array(opnd_type	*top_opnd)
             }
             list_idx = IL_NEXT_LIST_IDX(list_idx);
          }
+#endif
 
          /* intentionally falls through */
 

@@ -102,7 +102,8 @@ static int	put_c_str_in_cn(char *);
 static void	gen_dv_def_loops(opnd_type *);
 static void	gen_init_stmt(opnd_type *, int, sh_position_type);
 static void	reshape_reference_subscripts(opnd_type *);
-static void	gen_dv_stride_mult(opnd_type *, int, opnd_type *,
+
+void	gen_dv_stride_mult(opnd_type *, int, opnd_type *,
                                    expr_arg_type *, int, int, int);
 
 
@@ -4008,17 +4009,21 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
       }
    }
 #ifdef _UH_COARRAYS
-   else if (exp_desc->pe_dim_ref) {
+   else {
       attr_idx    = find_base_attr(r_opnd, &line, &col);
-
-      if (ATD_IM_A_DOPE(attr_idx)) {
-         COPY_OPND(r_dv_opnd, IR_OPND_L(OPND_IDX((*r_opnd))));
+      if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+          if (ATD_IM_A_DOPE(attr_idx)) {
+              COPY_OPND(r_dv_opnd, IR_OPND_L(OPND_IDX((*r_opnd))));
+          }
+      } else {
+          find_opnd_line_and_column(r_opnd, &line, &col);
       }
    }
-#endif
+#else
    else {
       find_opnd_line_and_column(r_opnd, &line, &col);
    }
+#endif
 
    if (exp_desc->rank > 0 &&
        ! exp_desc->section) {
@@ -4506,7 +4511,7 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 |*									      *|
 \******************************************************************************/
 
-static void gen_dv_stride_mult(opnd_type	*stride_opnd,
+void gen_dv_stride_mult(opnd_type	*stride_opnd,
                                int		 attr_idx,
                                opnd_type	*r_dv_opnd,
                                expr_arg_type	*exp_desc,

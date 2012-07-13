@@ -444,6 +444,32 @@ int	arg_assoc_tbl[MAX_NUM_ACT_TYPES][MAX_NUM_DUMMY_TYPES] = {
                         /* Scalar_Target_Dummy  */      ERROR_ASSOC,
                         /* Array_Target_Dummy   */      MAKE_DV
                                                         },
+
+#ifdef _UH_COARRAYS
+        /* Coindexed_Array_Elt */                            {
+                        /* Unknown_Dummy        */      COPY_IN_COPY_OUT,
+                        /* Scalar_Dummy         */      COPY_IN_COPY_OUT,
+                        /* Sequence_Array_Dummy */      COPY_IN_COPY_OUT,
+                        /* Scalar_Ptr_Dummy     */      ERROR_ASSOC,
+                        /* Array_Ptr_Dummy      */      ERROR_ASSOC,
+                        /* Assumed_Shape_Dummy  */      ERROR_ASSOC,
+                        /* Intrin_Dope_Dummy    */      COPY_INOUT_MAKE_DV,
+                        /* Scalar_Target_Dummy  */      COPY_INOUT_MAKE_DV,
+                        /* Array_Target_Dummy   */      ERROR_ASSOC
+                                                        },
+
+        /* Coindexed_Array_Section */                            {
+                        /* Unknown_Dummy        */      COPY_IN_COPY_OUT,
+                        /* Scalar_Dummy         */      ERROR_ASSOC,
+                        /* Sequence_Array_Dummy */      COPY_IN_COPY_OUT,
+                        /* Scalar_Ptr_Dummy     */      ERROR_ASSOC,
+                        /* Array_Ptr_Dummy      */      ERROR_ASSOC,
+                        /* Assumed_Shape_Dummy  */      COPY_INOUT_MAKE_DV,
+                        /* Intrin_Dope_Dummy    */      COPY_INOUT_MAKE_DV,
+                        /* Scalar_Target_Dummy  */      ERROR_ASSOC,
+                        /* Array_Target_Dummy   */      COPY_INOUT_MAKE_DV
+                                                        },
+#endif
 			};
 
 

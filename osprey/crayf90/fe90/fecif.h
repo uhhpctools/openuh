@@ -253,7 +253,9 @@ cif_stmt_type	mapped_stmt_type[] =
 #ifdef _UH_COARRAYS
             ,
             CIF_Not_Exact,       /* Critical_Stmt */
-            CIF_Not_Exact       /* End_Critical_Stmt */
+            CIF_Not_Exact,       /* End_Critical_Stmt */
+            CIF_Not_Exact,       /* Lock_Stmt */
+            CIF_Not_Exact        /* Unlock_Stmt */
 #endif
                };
 

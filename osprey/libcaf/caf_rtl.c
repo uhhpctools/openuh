@@ -33,8 +33,8 @@
 #include <assert.h>
 
 #include "dopevec.h"
-
 #include "caf_rtl.h"
+#include "util.h"
 
 #if defined(ARMCI)
 #include "armci_comm_layer.h"
@@ -137,6 +137,8 @@ void __release_lcb(void **ptr)
 
 void __coarray_read( size_t image, void *src, void *dest, size_t nbytes)
 {
+    check_remote_address(image, src);
+
     START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
     comm_read(image-1, src, dest, nbytes);
@@ -150,6 +152,8 @@ void __coarray_read( size_t image, void *src, void *dest, size_t nbytes)
 
 void __coarray_write( size_t image, void *dest, void *src, size_t nbytes)
 {
+    check_remote_address(image, dest);
+
     START_TIMER();
     comm_write(image-1, dest, src, nbytes);
     STOP_TIMER(WRITE);
@@ -168,6 +172,8 @@ void __coarray_strided_read ( size_t image,
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    check_remote_address(image, src);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig = is_contiguous_access(src_strides, count, stride_levels);
@@ -216,6 +222,8 @@ void __coarray_strided_write ( size_t image,
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    check_remote_address(image, dest);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig = is_contiguous_access(dest_strides, count, stride_levels);
@@ -590,6 +598,106 @@ void coarray_free_all_shared_memory_slots()
     free_next_slots_recursively(common_slot);
 }
 
+
+/* print map of shared memory heap */
+static void print_mem_slot(char *mem_str, char *start_address, char *end_address)
+{
+    const int width = 70;
+    int i,j;
+    char label[width];
+
+    memset(label, 0, width);
+
+    printf("|");
+    for (i = 0; i < width; i++) printf("=");
+    printf("|\n");
+
+    sprintf(label, "%s", mem_str);
+    j = (width - strlen(label))/2;
+    printf("|");
+    for (i = 0; i < j; i++) printf(" ");
+    printf("%s", label);
+    for (i = 0; i < width - (j+strlen(label)); i++) printf(" ");
+    printf("|\n");
+
+    printf("|");
+    for (i = 0; i < width; i++) printf("-");
+    printf("|\n");
+
+    sprintf(label, "%p ... %p", start_address, end_address);
+    j = (width - strlen(label))/2;
+    printf("|");
+    for (i = 0; i < j; i++) printf(" ");
+    printf("%s", label);
+    for (i = 0; i < width - (j+strlen(label)); i++) printf(" ");
+    printf("|\n");
+
+    printf("|");
+    for (i = 0; i < width; i++) printf("-");
+    printf("|\n");
+
+    sprintf(label, "SIZE: %lu", (unsigned long) (end_address - start_address));
+    j = (width - strlen(label))/2;
+    printf("|");
+    for (i = 0; i < j; i++) printf(" ");
+    printf("%s", label);
+    for (i = 0; i < width - (j+strlen(label)); i++) printf(" ");
+    printf("|\n");
+}
+
+#pragma weak uhcaf_print_heap_map_ = uhcaf_print_heap_map
+void uhcaf_print_heap_map(char *str)
+{
+    const int width = 70;
+    int i,j;
+    char label[width];
+
+    memset(label, 0, width);
+
+    /* print header */
+    printf("|");
+    for (i = 0; i < width; i++) printf("=");
+    printf("|\n");
+    sprintf(label, "CAF RUNTIME SHARED MEMORY HEAP");
+    j = (width - strlen(label))/2;
+    printf("|");
+    for (i = 0; i < j; i++) printf(" ");
+    printf("%s", label);
+    for (i = 0; i < width - (j+strlen(label)); i++) printf(" ");
+    printf("|\n");
+    if (str != NULL) {
+        sprintf(label, "(%s)", str);
+        j = (width - strlen(label))/2;
+        printf("|");
+        for (i = 0; i < j; i++) printf(" ");
+        printf("%s", label);
+        for (i = 0; i < width - (j+strlen(label)); i++) printf(" ");
+        printf("|\n");
+    }
+
+    /* print memory slots */
+    print_mem_slot("save coarrays",
+            comm_start_static_heap(_this_image-1),
+            comm_end_static_heap(_this_image-1));
+
+    print_mem_slot("allocatable coarrays",
+            comm_start_allocatable_heap(_this_image-1),
+            comm_end_allocatable_heap(_this_image-1));
+
+    print_mem_slot("unused",
+            comm_end_allocatable_heap(_this_image-1),
+            comm_start_asymmetric_heap(_this_image-1));
+
+    print_mem_slot("asymmetric data",
+            comm_start_asymmetric_heap(_this_image-1),
+            comm_end_asymmetric_heap(_this_image-1));
+
+    printf("|");
+    for (i = 0; i < width; i++) printf("=");
+    printf("|\n\n");
+}
+
+
 /* end shared memory management functions*/
 
 void __caf_exit(int status)
@@ -623,9 +731,37 @@ void caf_end_critical_()
   comm_end_critical();
 }
 
-
-
 /*************END CRITICAL SUPPORT **************/
+
+
+void _COARRAY_LOCK(lock_t *lock, int* image)
+{
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"
+           "before call to comm_lock");
+   START_TIMER();
+   comm_lock(lock, *image);
+   STOP_TIMER(SYNC);
+   LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_lock ");
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"
+           "after call to comm_lock");
+}
+
+void _COARRAY_UNLOCK(lock_t *lock, int* image)
+{
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_UNLOCK->"
+           "before call to comm_unlock");
+   START_TIMER();
+#if defined(GASNET)
+   comm_unlock(lock, *image);
+#elif defined(ARMCI)
+   /* the version uses multiple swaps instead of compare-and-swap */
+   comm_unlock2(lock, *image);
+#endif
+   STOP_TIMER(SYNC);
+   LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_unlock ");
+   LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"
+           "after call to comm_lock");
+}
 
 
 void _SYNC_MEMORY()
@@ -641,6 +777,7 @@ void _SYNC_IMAGES( int *imageList, int imageCount)
     {
         LIBCAF_TRACE( LIBCAF_LOG_BARRIER,"caf_rtl.c:_SYNC_IMAGES->Before"
         " call to comm_syncimages for sync with img%d",imageList[i]);
+        check_remote_image(imageList[i]);
         imageList[i]--;
     }
     START_TIMER();
@@ -971,65 +1108,42 @@ static void local_dest_strided_copy(void *src, void *dest,
     }
 }
 
-
-
-/* COLLECTIVES */
-
-/* supplemental functions for collective subroutines
- * Borrowed from Joon's code */
-
-static int my_pow2(int exp)
+/*
+ * image should be between 1 .. NUM_IMAGES
+ */
+int check_remote_image(size_t image)
 {
-    int result=1;
-    result <<= exp ;
-    return result ;
-}
-
-static int is_even()
-{
-    return (_num_images % 2) ? 0:1 ;
-}
-
-static double mylog2(double exp)
-{
-    return log10(exp)/log10(2);
-}
-
-static double myceillog2(double exp)
-{
-    return ceil(log10(exp)/log10(2));
-}
-
-/* Add the value in buf to dope vector dst_dv */
-static void dope_add( void *buf, DopeVectorType *dst_dv,
-                        int total_bytes )
-{
-    int el_type  = dst_dv->type_lens.type;
-    void *dst_ptr = dst_dv->base_addr.a.ptr;
-    int i;
-    unsigned int el_len;
-    el_len = dst_dv->base_addr.a.el_len >>3; // convert bits to bytes
-
-    switch (el_type)
-    {
-        case  DVTYPE_INTEGER: 
-        {
-            for(i=0; i< total_bytes/el_len;i++)
-            {
-                *((int*)dst_ptr + i) += *((int*)buf + i);
-            }
-            break;
-        }
-        case  DVTYPE_REAL:
-        {
-            for(i=0; i< total_bytes/el_len;i++)
-            {
-                *((float*)dst_ptr + i) += *((float*)buf + i);
-            } 
-            break;
-        }
-        default :
-        { break; }
+    const int error_len=255;
+    char error_msg[error_len];
+    memset(error_msg, 0, error_len);
+    if (image < 1 || image > _num_images) {
+        sprintf(error_msg, "Image %lu is out of range. Should be in [ %u ... %lu ].",
+                (unsigned long)image, 1, (unsigned long)_num_images);
+        Error(error_msg);
+        /* should not reach */
     }
-} 
+}
 
+/*
+ * address is either the address of the local symmetric variable that must be
+ * translated to the remote image, or it is a remote address on the remote
+ * image
+ */
+int check_remote_address(size_t image, void *address)
+{
+    const int error_len=255;
+    char error_msg[error_len];
+    memset(error_msg, 0, error_len);
+
+    check_remote_image(image);
+
+    if ( (address < comm_start_symmetric_heap(_this_image-1) ||
+        address > comm_end_symmetric_heap(_this_image-1)) &&
+        (address < comm_start_asymmetric_heap(image-1) ||
+         address > comm_end_asymmetric_heap(image-1))  ) {
+        sprintf(error_msg, "Address %p is out of range. Should be in [ %p ... %p ].",
+                address, comm_start_heap(image-1), comm_end_heap(image-1));
+        Error(error_msg);
+        /* should not reach */
+    }
+}

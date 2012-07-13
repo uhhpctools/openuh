@@ -186,6 +186,9 @@ enum	token_values {
 		Tok_Kwd_Intrinsic,	/* INTRINSIC			      */
 		Tok_Kwd_Kind,		/* KIND				      */
 		Tok_Kwd_Len,		/* LEN				      */
+#ifdef _UH_COARRAYS
+        Tok_Kwd_Lock,       /* LOCK                   */
+#endif
 		Tok_Kwd_Logical,	/* LOGICAL			      */
 #ifdef _UH_COARRAYS
 		Tok_Kwd_Memory,		/* MEMORY                 */
@@ -240,6 +243,7 @@ enum	token_values {
 		Tok_Kwd_Type,		/* TYPE	     ENDTYPE		      */
 		Tok_Kwd_Use,		/* USE				      */
 		Tok_Kwd_Undefined,	/* UNDEFINED			      */
+        Tok_Kwd_Unlock,     /* UNLOCK                 */
 #ifdef KEY /* Bug 14150 */
 		Tok_Kwd_Value,	        /* VALUE   			      */
 #endif /* KEY Bug 14150 */
