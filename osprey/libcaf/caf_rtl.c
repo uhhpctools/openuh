@@ -754,7 +754,7 @@ void _COARRAY_UNLOCK(lock_t *lock, int* image)
 #if defined(GASNET)
    comm_unlock(lock, *image);
 #elif defined(ARMCI)
-   /* the version uses multiple swaps instead of compare-and-swap */
+   /* the version uses fetch-and-store instead of compare-and-swap */
    comm_unlock2(lock, *image);
 #endif
    STOP_TIMER(SYNC);

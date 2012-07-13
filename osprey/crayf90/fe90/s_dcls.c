@@ -122,6 +122,10 @@ static	void	verify_interface (int);
 static	void	gen_allocatable_ptr_ptee(int);
 static	int	set_up_bd_tmps(int, int, int, int, boolean);
 
+#ifdef _UH_COARRAYS
+static int has_allocatable_coarray_structure_components(int attr_idx);
+#endif
+
 # if defined(_TARGET_WORD_ADDRESS) ||  \
      (defined(_HEAP_REQUEST_IN_WORDS) && defined(_TARGET_BYTE_ADDRESS))
 static	void	gen_word_align_byte_length_ir(opnd_type *);
@@ -5055,6 +5059,35 @@ help_dealloc_components(int line, int col, fld_type fld, int idx,
       }
    }
 }
+
+#ifdef _UH_COARRAYS
+static int has_allocatable_coarray_structure_components(int attr_idx)
+{
+    int struct_idx;
+
+    if (! allocatable_structure_component(attr_idx)) return 0;
+
+    struct_idx = ATD_TYPE_IDX(attr_idx);
+
+    for (int sn_idx = ATT_FIRST_CPNT_IDX(TYP_IDX(struct_idx));
+          sn_idx != NULL_IDX;
+          sn_idx = SN_SIBLING_LINK(sn_idx)) {
+      int cpnt_attr_idx = SN_ATTR_IDX(sn_idx);
+      int type_idx = ATD_TYPE_IDX(cpnt_attr_idx);
+
+      if (ATD_ALLOCATABLE(cpnt_attr_idx) && ATD_PE_ARRAY_IDX(cpnt_attr_idx))  {
+          return  1;
+      }
+      if (has_allocatable_coarray_structure_components(cpnt_attr_idx) ) {
+          return 1;
+      }
+    }
+
+    return 0;
+}
+#endif
+
+
 /*
  * Recursively deallocate allocatables associated with a variable or component
  *
@@ -5806,6 +5839,15 @@ static	void	attr_semantics(int	attr_idx,
 	}
       }
 #endif /* KEY Bug 6845 */
+
+#ifdef _UH_COARRAYS
+      if (ATD_CLASS(attr_idx) == Dummy_Argument &&
+          ATD_INTENT(attr_idx) == Intent_Out &&
+          ( (ATD_ALLOCATABLE(attr_idx) && ATD_PE_ARRAY_IDX(attr_idx))  ||
+            has_allocatable_coarray_structure_components(attr_idx))) {
+          PRINTMSG(AT_DEF_LINE(attr_idx), 1711, Error, AT_DEF_COLUMN(attr_idx));
+      }
+#endif
 
 
 #   ifdef KEY /* Bug 431, (1046, 1289, 8717) */

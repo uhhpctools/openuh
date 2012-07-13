@@ -35,6 +35,7 @@
 #include <math.h>
 #include "caf_rtl.h"
 #include "gasnet_comm_layer.h"
+#include "service.h"
 #include "trace.h"
 #include "util.h"
 
@@ -100,8 +101,7 @@ static unsigned long shared_memory_size;
 static unsigned long static_heap_size;
 
 /* mutex for critical sections */
-gasnet_hsl_t cs_mutex = GASNET_HSL_INITIALIZER;
-static int cs_done=0;
+lock_t *critical_lock;
 
 /* mutex for atomic ops  -- using a single one for now. */
 gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
@@ -111,15 +111,6 @@ gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 static inline int address_on_heap(void *addr);
 
 static void handler_sync_request(gasnet_token_t token, int imageIndex);
-
-static void handler_critical_request(gasnet_token_t token,
-                         gasnet_handlerarg_t src_proc);
-
-static void handler_critical_reply(gasnet_token_t token,
-                         gasnet_handlerarg_t mutex_id);
-
-static void handler_end_critical_request(gasnet_token_t token,
-                           gasnet_handlerarg_t src_proc);
 
 static void
 handler_swap_request (gasnet_token_t token,
@@ -208,9 +199,6 @@ static inline int address_on_heap(void *addr)
 static gasnet_handlerentry_t handlers[] =
   {
     { GASNET_HANDLER_SYNC_REQUEST, handler_sync_request },
-    { GASNET_HANDLER_CRITICAL_REQUEST, handler_critical_request },
-    { GASNET_HANDLER_CRITICAL_REPLY, handler_critical_reply },
-    { GASNET_HANDLER_END_CRITICAL_REQUEST, handler_end_critical_request },
     { GASNET_HANDLER_SWAP_REQUEST, handler_swap_request },
     { GASNET_HANDLER_SWAP_REPLY, handler_swap_reply },
     { GASNET_HANDLER_CSWAP_REQUEST, handler_cswap_request },
@@ -227,46 +215,6 @@ static void handler_sync_request(gasnet_token_t token, int imageIndex)
     gasnet_hsl_lock( &sync_lock );
     sync_images_flag[imageIndex]++;
     gasnet_hsl_unlock( &sync_lock );
-}
-
-
-/* handlers for critical section access */
-static void handler_critical_request(gasnet_token_t token,
-                         gasnet_handlerarg_t src_proc)
-{
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_critical_request (%d,%d)\n", my_proc, (int)src_proc);
-
-  GASNET_BLOCKUNTIL(gasnet_hsl_trylock(&cs_mutex) == GASNET_OK);
-  //gasnet_hsl_lock(&cs_mutex);
-
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_critical_request (%d,%d) ... done\n", my_proc, (int)src_proc);
-
-  GASNET_Safe(gasnet_AMReplyShort0(token,GASNET_HANDLER_CRITICAL_REPLY));
-}
-
-static void handler_critical_reply(gasnet_token_t token, gasnet_handlerarg_t mutex_id)
-{
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_critical_reply (%d)\n", my_proc);
-
-  cs_done = 1;
-
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_critical_reply (%d) ... done\n", my_proc);
-}
-
-static void handler_end_critical_request(gasnet_token_t token,
-                           gasnet_handlerarg_t src_proc)
-{
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_end_critical_request (%d,%d)\n", my_proc, (int)src_proc);
-
-  gasnet_hsl_unlock(&cs_mutex);
-
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-      "inside handler_end_critical_request (%d) ... done\n", my_proc);
 }
 
 
@@ -832,6 +780,15 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     shared_memory_size = caf_shared_memory_size;
 
+    /* create a symmetric lock variable for guarding critical sections.
+     * What's really needed is a distinct lock variable created for each
+     * critical section in the program, but for now we'll keep this simple.
+     */
+    critical_lock = (lock_t *)coarray_allocatable_allocate_(sizeof(lock_t));
+
+    /* start progress thread */
+    comm_service_init();
+
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,"gasnet_comm_layer.c:comm_init-> Img%lu"
         "Finished. Waiting for global barrier. Gasnet_Everything is %d. "
         "common_slot->addr=%p, common_slot->size=%lu",
@@ -1381,8 +1338,8 @@ inline void* comm_start_heap(size_t proc)
 inline void* comm_end_heap(size_t proc)
 {
     return get_remote_address(
-            (char *)coarray_start_all_images[my_proc].addr + shared_memory_size,
-            proc);
+            coarray_start_all_images[my_proc].addr,proc )
+           + shared_memory_size;
 }
 
 inline void* comm_start_symmetric_heap(size_t proc)
@@ -1478,19 +1435,12 @@ static void *get_remote_address(void *src, size_t proc)
 
 void comm_critical()
 {
-  GASNET_Safe(gasnet_AMRequestShort1(0,
-              GASNET_HANDLER_CRITICAL_REQUEST,
-              my_proc));
-  GASNET_BLOCKUNTIL(cs_done == 1);
-  cs_done = 0;
+  comm_lock( critical_lock, 1 );
 }
 
 void comm_end_critical()
 {
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "in comm_end_critical ...");
-  GASNET_Safe(gasnet_AMRequestShort1(0,
-              GASNET_HANDLER_END_CRITICAL_REQUEST,
-              my_proc));
+  comm_unlock( critical_lock, 1 );
 }
 
 
@@ -1530,6 +1480,8 @@ void comm_finalize()
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "gasnet_comm_layer.c:comm_finalize-> Before call to gasnet_exit"
         " with status 0.");
+
+    comm_service_finalize();
     gasnet_exit(0);
 
     farg_free();
@@ -1541,6 +1493,8 @@ void comm_exit(int status)
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "gasnet_comm_layer.c:comm_exit-> Before call to gasnet_exit"
         " with status %d." ,status);
+
+    comm_service_finalize();
     gasnet_exit(status);
 }
 

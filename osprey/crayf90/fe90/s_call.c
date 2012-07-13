@@ -4064,13 +4064,14 @@ boolean final_arg_work(opnd_type	*list_opnd,
       }
 
       /* if dummy is intent(in), don't do copy out for coindexed actuals */
-      if ( ATD_INTENT(dummy) && (a_type == Coindexed_Array_Elt ||
+      if ( ATD_INTENT(dummy) == Intent_In && (a_type == Coindexed_Array_Elt ||
           a_type == Coindexed_Array_Section) ) {
           if (association == COPY_IN_COPY_OUT)
               association = COPY_IN;
           else if (association == COPY_INOUT_MAKE_DV)
               association = COPY_IN_MAKE_DV;
       }
+
 #endif
 
 

@@ -60,9 +60,10 @@ CFILES = \
 	caf_rtl.c \
 	caf_collectives.c \
 	gasnet_comm_layer.c  \
+	service.c \
 	trace.c \
 	lock.c \
-	util.c
+	util.c \
 
 LCINCS += -I$(GASNET_HOME)/include 
 LCINCS += -I$(GASNET_HOME)/include/$(GASNET_CONDUIT)-conduit

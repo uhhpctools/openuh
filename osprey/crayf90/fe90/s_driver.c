@@ -6099,6 +6099,9 @@ void	global_name_semantics(int	def_ga_idx,
 #ifdef KEY /* Bug 14110 */
                 ATD_VOLATILE(arg_attr_idx) ||
 #endif /* KEY Bug 14110 */
+                ATD_ALLOCATABLE(arg_attr_idx) ||
+                ATD_VALUE_ATTR(arg_attr_idx) ||
+                AT_OPTIONAL(arg_attr_idx) ||
                 (ATD_ARRAY_IDX(arg_attr_idx) != NULL_IDX &&
                  BD_ARRAY_CLASS(ATD_ARRAY_IDX(arg_attr_idx)) == Assumed_Shape)){
                need_expl_itrfc	= TRUE;

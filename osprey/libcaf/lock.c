@@ -46,7 +46,14 @@
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 
-typedef lock_t lock_request_t;
+struct lock_request {
+    volatile int locked;
+    volatile long long image :20;
+    volatile long long ofst  :36;
+    volatile long long done  :1;
+};
+
+typedef struct lock_request lock_request_t;
 
 struct lock_req_tbl_item {
     lock_t l;               /* key */
@@ -81,7 +88,7 @@ void comm_lock(lock_t *lock, int image)
      *       predecessor->next on image predecessor->locked
      */
     lock_req_tbl_item_t check, *new_item;
-    lock_request_t p,q;
+    lock_t p,q;
     lock_request_t *lock_req;
     size_t lock_ofst = get_offset_from_heap_address(lock);
 
@@ -110,6 +117,7 @@ void comm_lock(lock_t *lock, int image)
     lock_req->locked = 0;
     lock_req->image = 0;
     lock_req->ofst = 0;
+    lock_req->done = 0;
 
     q.locked = 1;
     q.image =_this_image;
@@ -121,10 +129,16 @@ void comm_lock(lock_t *lock, int image)
     comm_fstore_request( lock, &q, sizeof(q), image-1, &p);
 
     if ( p.locked != 0 ) {
+        lock_request_t r;
+        r.image = _this_image;
+        r.ofst = q.ofst;
+        r.done = 1;
+
         lock_req->locked = 1;
         /* p->address now points to predecessor's request descriptor */
-        comm_write( p.image-1, get_heap_address_from_offset(p.ofst,p.image), &q,
-                sizeof(q) );
+        comm_write( p.image-1,
+                ((int*)get_heap_address_from_offset(p.ofst,p.image))+1,
+                ((int*)&r)+1, sizeof(r)-sizeof(int) );
 
         LOAD_STORE_FENCE();
 
@@ -132,7 +146,8 @@ void comm_lock(lock_t *lock, int image)
             /* do something useful here! */
             comm_service();
         } while (lock_req->locked);
-    }
+
+    } 
 }
 
 void comm_unlock(lock_t *lock, int image)
@@ -143,7 +158,9 @@ void comm_unlock(lock_t *lock, int image)
      *
      */
     lock_t key;
-    lock_request_t *req, *s, q;
+    lock_t q;
+    lock_request_t *req;
+    lock_request_t *s;
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_heap_address(lock);
@@ -161,9 +178,9 @@ void comm_unlock(lock_t *lock, int image)
     }
 
     req = request_item->req;
-    if (req->image == 0) {
+    if (req->done == 0) {
         /* there doesn't appear to be a successor (yet) */
-        lock_request_t reset;
+        lock_t reset;
         q.locked = 1;
         q.image = _this_image;
         q.ofst = get_offset_from_heap_address(req);
@@ -183,7 +200,7 @@ void comm_unlock(lock_t *lock, int image)
 
         /* there was a successor, so wait for them to set next in our request
          * descriptor */
-        while (req->image == 0) {
+        while (req->done == 0) {
             /* do something useful here! */
             comm_service();
         }
@@ -191,12 +208,12 @@ void comm_unlock(lock_t *lock, int image)
         /* next should now point to the successor */
     }
 
+    LOAD_STORE_FENCE();
+
     /* reset locked on successor */
     s = get_heap_address_from_offset(req->ofst, req->image);
-    // comm_read(req->image-1, s, &i, sizeof(int) );
-    // i &= ~ 0x1; /* unset the last bit */
     i = 0;
-    comm_write(req->image-1, s, &i, 1 );
+    comm_write(req->image-1, s, &i, sizeof(i) );
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
@@ -212,7 +229,8 @@ void comm_unlock2(lock_t *lock, int image)
      *
      */
     lock_t key;
-    lock_request_t *req, *s, q;
+    lock_t q;
+    lock_request_t *req, *s;
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_heap_address(lock);
@@ -230,9 +248,9 @@ void comm_unlock2(lock_t *lock, int image)
     }
 
     req = request_item->req;
-    if (req->image == 0) {
+    if (req->done == 0) {
         /* there doesn't appear to be a successor (yet) */
-        lock_request_t u, v;
+        lock_t u, v;
         u.locked = 0;
         u.image = 0;
         u.ofst = 0;
@@ -252,29 +270,29 @@ void comm_unlock2(lock_t *lock, int image)
          */
         comm_fstore_request(lock, &v, sizeof(v), image-1, &u);
 
-        while (req->image == 0) {
+        while (req->done == 0) {
             /* do something useful here! */
             comm_service();
         }
 
         if (u.image != 0) {
             /* link victim(s) to the usurper(s) */
+            lock_request_t r;
             comm_write(u.image-1,
-                       get_heap_address_from_offset(u.ofst,u.image),
-                       req, sizeof(*req) );
+                ((int*)get_heap_address_from_offset(u.ofst,u.image))+1,
+                 ((int*)req)+1, sizeof(*req)-sizeof(int) );
         } else {
             /* reset locked on successor */
             s = get_heap_address_from_offset(req->ofst, req->image);
             i = 0; 
-            comm_write(req->image-1, s, &i, 1 );
+            comm_write(req->image-1, s, &i, sizeof(i) );
         }
 
     } else {
-
         /* reset locked on successor */
         s = get_heap_address_from_offset(req->ofst, req->image);
         i = 0; 
-        comm_write(req->image-1, s, &i, 1 );
+        comm_write(req->image-1, s, &i, sizeof(i) );
     }
 
     /* delete request item from request table */

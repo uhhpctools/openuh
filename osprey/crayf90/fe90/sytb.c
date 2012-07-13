@@ -6651,6 +6651,8 @@ void	fill_in_global_attr_ntry(int	ga_idx,
          GAD_INTENT(ga_idx)	= ATD_INTENT(attr_idx);
          new_idx		= ntr_global_type_tbl(ATD_TYPE_IDX(attr_idx));
          GAD_TYPE_IDX(ga_idx)	= new_idx;
+         GAD_VALUE_ATTR(ga_idx)  = ATD_VALUE_ATTR(attr_idx);
+         GAD_ALLOCATABLE(ga_idx) = ATD_ALLOCATABLE(attr_idx);
 
          if (GAD_ASSUMED_SHAPE_ARRAY(ga_idx) ||
              GA_OPTIONAL(ga_idx) ||
@@ -6658,6 +6660,8 @@ void	fill_in_global_attr_ntry(int	ga_idx,
 #ifdef KEY /* Bug 14110 */
              GAD_VOLATILE(ga_idx) ||
 #endif /* KEY Bug 14110 */
+             GAD_VALUE_ATTR(ga_idx) ||
+             GAD_ALLOCATABLE(ga_idx) ||
              GAD_TARGET(ga_idx)) {
             GAP_NEEDS_EXPL_ITRFC(ga_pgm_idx) = TRUE;
          }

@@ -70,7 +70,8 @@ __trace_table_t tracers[] =
     INIT_LEVEL(CACHE,       OFF),
     INIT_LEVEL(BARRIER,     OFF),
     INIT_LEVEL(REDUCE,      OFF),
-    INIT_LEVEL(SYMBOLS,     OFF)
+    INIT_LEVEL(SYMBOLS,     OFF),
+    INIT_LEVEL(SERVICE,     OFF)
 };
 
 static int

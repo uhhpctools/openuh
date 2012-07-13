@@ -3398,6 +3398,24 @@
 # endif
 
 # ifdef _DEBUG
+# define GAD_ALLOCATABLE(IDX)						       \
+	((GA_OBJ_CLASS(IDX) == Data_Obj) ?				       \
+		global_attr_tbl : ga_var_error("GAD_ALLOCATABLE", IDX))	       \
+		[IDX].fld.flag11
+# else
+# define GAD_ALLOCATABLE(IDX)		global_attr_tbl[IDX].fld.flag11
+# endif
+
+# ifdef _DEBUG
+# define GAD_VALUE_ATTR(IDX)						       \
+	((GA_OBJ_CLASS(IDX) == Data_Obj) ?				       \
+		global_attr_tbl : ga_var_error("GAD_VALUE_ATTR", IDX))	       \
+		[IDX].fld.flag12
+# else
+# define GAD_VALUE_ATTR(IDX)		global_attr_tbl[IDX].fld.flag12
+# endif
+
+# ifdef _DEBUG
 # define GAD_RANK(IDX)							       \
 	((GA_OBJ_CLASS(IDX) == Data_Obj) ?				       \
 		global_attr_tbl : ga_var_error("GAD_RANK", IDX))	       \

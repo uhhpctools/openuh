@@ -21901,6 +21901,15 @@ Error : This argument to the %s statements must be a scalar coarray of type LOCK
 The first argument for the LOCK and UNLOCK statements is a scalar coarray of
 type LOCK_TYPE, defined in the intrinsic module ISO_FORTRAN_ENV.
 .ME
-$ LAST NUMBER USED : 1710
+$
+$ Error : 1711
+$msg  1711 An entity with the INTENT(OUT) attribute shall not be an allocatable coarray or have a subobject that is an allocatable coarray.
+$nexp 1711
+Error : An entity with the INTENT(OUT) attribute shall not be an allocatable coarrays or have a subobject that is an allocatable coarray.
+.PP
+An entity with the INTENT(OUT) attribute shall not be an allocatable coarrays
+or have a subobject that is an allocatable coarray.
+.ME
+$ LAST NUMBER USED : 1711
 
 
