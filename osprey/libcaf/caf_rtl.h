@@ -47,6 +47,8 @@ void __caf_init();
 
 void __caf_finalize();
 
+void __caf_exit(int status);
+
 /* management of local communication buffers */
 void __acquire_lcb(unsigned long buf_size, void **ptr);
 void __release_lcb(void **ptr);
@@ -93,7 +95,5 @@ void* coarray_allocatable_allocate_(unsigned long var_size);
 void* coarray_asymmetric_allocate_(unsigned long var_size);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
-
-void caf_exit_(int status);
 
 #endif

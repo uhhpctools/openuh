@@ -271,6 +271,7 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 #ifdef _UH_COARRAYS
 				Co_all_Intrinsic,
 				Co_any_Intrinsic,
+				Co_bcast_Intrinsic,
 				Co_count_Intrinsic,
 				Co_findloc_Intrinsic,
 				Co_maxloc_Intrinsic,

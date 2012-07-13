@@ -32,8 +32,19 @@
 
 #include "dopevec.h"
 
+typedef char    INTEGER1;
+typedef short   INTEGER2;
+typedef int     INTEGER4;
+typedef size_t  INTEGER8;
+
 /* Collectives */
 //void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root);
+
+/* CO_BCAST */
+void _CO_BCAST_I1(DopeVectorType *source, INTEGER1* src_img_p);
+void _CO_BCAST_I2(DopeVectorType *source, INTEGER2* src_img_p);
+void _CO_BCAST_I4(DopeVectorType *source, INTEGER4* src_img_p);
+void _CO_BCAST_I8(DopeVectorType *source, INTEGER8* src_img_p);
 
 /* CO_MAXVAL */
 
@@ -137,7 +148,30 @@ void _CO_PRODUCT_C16(DopeVectorType *source, DopeVectorType *result);
 
 /* INTERFACES FOR EXTERNAL CAF IMPLEMENTATION */
 
-#define FORTRAN_CO_(op, type) \
+#define FORTRAN_CO_BCAST_(type) \
+    extern void co_bcast_##type##_0__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_1__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_2__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_3__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_4__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_5__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_6__(DopeVectorType *source,  \
+                size_t source_image, size_t size); \
+    extern void co_bcast_##type##_7__(DopeVectorType *source,  \
+                size_t source_image, size_t size);
+
+FORTRAN_CO_BCAST_(int1)
+FORTRAN_CO_BCAST_(int2)
+FORTRAN_CO_BCAST_(int4)
+FORTRAN_CO_BCAST_(int8)
+
+#define FORTRAN_CO_REDUCE_(op, type) \
     extern void co_##op##_##type##_0__(DopeVectorType *source,  \
                 DopeVectorType *result); \
     extern void co_##op##_##type##_1__(DopeVectorType *source,  \
@@ -155,48 +189,49 @@ void _CO_PRODUCT_C16(DopeVectorType *source, DopeVectorType *result);
     extern void co_##op##_##type##_7__(DopeVectorType *source,  \
                 DopeVectorType *result);
 
-FORTRAN_CO_(maxval, int1)
-FORTRAN_CO_(maxval, int2)
-FORTRAN_CO_(maxval, int4)
-FORTRAN_CO_(maxval, int8)
-FORTRAN_CO_(maxval, real4)
-FORTRAN_CO_(maxval, real8)
-// FORTRAN_CO_(maxval, real16)
-// FORTRAN_CO_(maxval, c4)
-// FORTRAN_CO_(maxval, c8)
-// FORTRAN_CO_(maxval, c16)
 
-FORTRAN_CO_(minval, int1)
-FORTRAN_CO_(minval, int2)
-FORTRAN_CO_(minval, int4)
-FORTRAN_CO_(minval, int8)
-FORTRAN_CO_(minval, real4)
-FORTRAN_CO_(minval, real8)
-// FORTRAN_CO_(minval, real16)
-// FORTRAN_CO_(minval, c4)
-// FORTRAN_CO_(minval, c8)
-// FORTRAN_CO_(minval, c16)
+FORTRAN_CO_REDUCE_(maxval, int1)
+FORTRAN_CO_REDUCE_(maxval, int2)
+FORTRAN_CO_REDUCE_(maxval, int4)
+FORTRAN_CO_REDUCE_(maxval, int8)
+FORTRAN_CO_REDUCE_(maxval, real4)
+FORTRAN_CO_REDUCE_(maxval, real8)
+// FORTRAN_CO_REDUCE_(maxval, real16)
+// FORTRAN_CO_REDUCE_(maxval, c4)
+// FORTRAN_CO_REDUCE_(maxval, c8)
+// FORTRAN_CO_REDUCE_(maxval, c16)
 
-FORTRAN_CO_(sum, int1)
-FORTRAN_CO_(sum, int2)
-FORTRAN_CO_(sum, int4)
-FORTRAN_CO_(sum, int8)
-FORTRAN_CO_(sum, real4)
-FORTRAN_CO_(sum, real8)
-// FORTRAN_CO_(sum, real16)
-FORTRAN_CO_(sum, c4)
-FORTRAN_CO_(sum, c8)
-// FORTRAN_CO_(sum, c16)
+FORTRAN_CO_REDUCE_(minval, int1)
+FORTRAN_CO_REDUCE_(minval, int2)
+FORTRAN_CO_REDUCE_(minval, int4)
+FORTRAN_CO_REDUCE_(minval, int8)
+FORTRAN_CO_REDUCE_(minval, real4)
+FORTRAN_CO_REDUCE_(minval, real8)
+// FORTRAN_CO_REDUCE_(minval, real16)
+// FORTRAN_CO_REDUCE_(minval, c4)
+// FORTRAN_CO_REDUCE_(minval, c8)
+// FORTRAN_CO_REDUCE_(minval, c16)
 
-FORTRAN_CO_(product, int1)
-FORTRAN_CO_(product, int2)
-FORTRAN_CO_(product, int4)
-FORTRAN_CO_(product, int8)
-FORTRAN_CO_(product, real4)
-FORTRAN_CO_(product, real8)
-// FORTRAN_CO_(product, real16)
-FORTRAN_CO_(product, c4)
-FORTRAN_CO_(product, c8)
-// FORTRAN_CO_(product, c16)
+FORTRAN_CO_REDUCE_(sum, int1)
+FORTRAN_CO_REDUCE_(sum, int2)
+FORTRAN_CO_REDUCE_(sum, int4)
+FORTRAN_CO_REDUCE_(sum, int8)
+FORTRAN_CO_REDUCE_(sum, real4)
+FORTRAN_CO_REDUCE_(sum, real8)
+// FORTRAN_CO_REDUCE_(sum, real16)
+FORTRAN_CO_REDUCE_(sum, c4)
+FORTRAN_CO_REDUCE_(sum, c8)
+// FORTRAN_CO_REDUCE_(sum, c16)
+
+FORTRAN_CO_REDUCE_(product, int1)
+FORTRAN_CO_REDUCE_(product, int2)
+FORTRAN_CO_REDUCE_(product, int4)
+FORTRAN_CO_REDUCE_(product, int8)
+FORTRAN_CO_REDUCE_(product, real4)
+FORTRAN_CO_REDUCE_(product, real8)
+// FORTRAN_CO_REDUCE_(product, real16)
+FORTRAN_CO_REDUCE_(product, c4)
+FORTRAN_CO_REDUCE_(product, c8)
+// FORTRAN_CO_REDUCE_(product, c16)
 
 #endif /* CAF_COLLECTIVES_H */

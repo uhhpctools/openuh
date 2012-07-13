@@ -3195,9 +3195,10 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
    int            sn_idx;
    int            attr_idx;
    expr_arg_type  loc_exp_desc;
-   enum intrinsic_values first_intrin = Co_maxloc_Intrinsic;
-   char*          intrin_names[6] =
-   { "CO_MAXLOC", "CO_MAXVAL", "CO_MINLOC", "CO_MINVAL",
+   enum intrinsic_values first_intrin = Co_all_Intrinsic;
+   char*          intrin_names[11] =
+   { "CO_ALL", "CO_ANY", "CO_BCAST", "CO_COUNT", "CO_FINDLOC",
+     "CO_MAXLOC", "CO_MAXVAL", "CO_MINLOC", "CO_MINVAL",
      "CO_PRODUCT", "CO_SUM" };
 
 
@@ -3214,7 +3215,8 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
    IR_RANK(ir_idx) = res_exp_desc->rank;
 
 
-   if (ATP_INTRIN_ENUM(*spec_idx) == Co_maxloc_Intrinsic ||
+   if (ATP_INTRIN_ENUM(*spec_idx) == Co_bcast_Intrinsic ||
+       ATP_INTRIN_ENUM(*spec_idx) == Co_maxloc_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_maxval_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_minloc_Intrinsic ||
        ATP_INTRIN_ENUM(*spec_idx) == Co_minval_Intrinsic ||

@@ -352,7 +352,7 @@ __libcaf_trace(libcaf_trace_t msg_type, char*fmt, ...)
     if (msg_type == LIBCAF_LOG_FATAL) {
         /* TODO: need to abort running image and send signal to other images
          * to exit ASAP */
-        caf_exit_(1);
+        __caf_exit(1);
     }
 
 }

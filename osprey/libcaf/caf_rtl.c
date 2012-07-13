@@ -107,9 +107,6 @@ void __caf_init()
     comm_init(common_slot); /* common slot is initialized in comm_init */
     STOP_TIMER(INIT);
 
-    _this_image = comm_get_proc_id() + 1;
-    _num_images = comm_get_num_procs();
-
     LIBCAF_TRACE( LIBCAF_LOG_INIT, "caf_rtl.c:caf_init_->initialized,"
             " num_images = %lu", _num_images);
     LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_init ");
@@ -595,10 +592,10 @@ void coarray_free_all_shared_memory_slots()
 
 /* end shared memory management functions*/
 
-void caf_exit_(int status)
+void __caf_exit(int status)
 {
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "caf_rtl.c:caf_exit_->Exiting with error code %d",status);
+            "caf_rtl.c:__caf_exit->Exiting with error code %d",status);
     comm_exit(status);
 }
 

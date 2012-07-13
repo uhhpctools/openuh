@@ -47,8 +47,13 @@
 
 #include "trace.h"
 
-#define USE_CAF_IMPLEMENTATION
+/* initialized in comm_init() */
+extern unsigned long _this_image;
+extern unsigned long _num_images;
 
+#define WORD_SIZE 4
+
+#define USE_CAF_IMPLEMENTATION
 
 #define CAF_CO_(op, type, ndim) \
     switch (ndim) { \
@@ -62,6 +67,111 @@
         case 7: co_##op##_##type##_##7__(source,result);break;\
         default: LIBCAF_TRACE(LIBCAF_LOG_FATAL,"rank > 7 not suopported");\
     }
+
+/* CO_BCAST */
+
+void _CO_BCAST_I1(DopeVectorType *source, INTEGER1* src_img_p)
+{
+    INTEGER8 s_image = *src_img_p;
+    INTEGER8* s_image_p = &s_image;
+    _CO_BCAST_I8(source, s_image_p);
+}
+
+void _CO_BCAST_I2(DopeVectorType *source, INTEGER2* src_img_p)
+{
+    INTEGER8 s_image = *src_img_p;
+    INTEGER8* s_image_p = &s_image;
+    _CO_BCAST_I8(source, s_image_p);
+}
+
+void _CO_BCAST_I4(DopeVectorType *source, INTEGER4* src_img_p)
+{
+    INTEGER8 s_image = *src_img_p;
+    INTEGER8* s_image_p = &s_image;
+    _CO_BCAST_I8(source, s_image_p);
+}
+
+/* currently using a naive linear broadcast algorithm */
+void _CO_BCAST_I8(DopeVectorType *source, INTEGER8* src_img_p)
+{
+    void *dest, *src;
+    size_t dest_strides[7], src_strides[7], count[8];
+    int stride_levels;
+    long int n_dim = source->n_dim;
+    long int elem_size;
+    INTEGER8 source_image = *src_img_p;
+
+    if (source->type_lens.type == DVTYPE_ASCII) {
+        elem_size = source->base_addr.charptr.byte_len;
+    } else {
+        elem_size = source->base_addr.a.el_len>>3;
+    }
+
+    if (_this_image == source_image) {
+        int i;
+        int k = 0;
+        /* is source */
+        dest = src = source->base_addr.a.ptr;
+
+        /* check if first dimension is strided */
+        if (n_dim > 0) {
+            int first_stride = 1;
+            if (source->type_lens.type == DVTYPE_ASCII ||
+                    source->type_lens.type == DVTYPE_DERIVEDBYTE) {
+                /* first dim is strided if the first stride multipler /
+                 * elem_size is greater than 1 */
+                first_stride = source->dimension[0].stride_mult / elem_size;
+            } else if (elem_size > WORD_SIZE) {
+                first_stride = source->dimension[0].stride_mult /
+                               (elem_size/WORD_SIZE);
+            } else {
+                first_stride = source->dimension[0].stride_mult;
+            }
+
+            if (first_stride > 1) {
+                k = 1;
+                count[0] = elem_size;
+                count[1] = source->dimension[0].extent;
+                src_strides[0] = elem_size * first_stride;
+                dest_strides[0] = elem_size * first_stride;
+            } else {
+                k = 0;
+                count[0] = elem_size * source->dimension[0].extent;
+            }
+        } else {
+            count[0] = elem_size;
+        }
+
+        stride_levels = n_dim-1+k;
+        for (i = 0; i < stride_levels; i++) {
+            count[i+1+k] = source->dimension[i+1].extent;
+            src_strides[i+k] = source->dimension[i+k].stride_mult;
+            dest_strides[i+k] = source->dimension[i+k].stride_mult;
+        }
+        for (i = 1;  i <= _num_images; i++) {
+            if (_this_image != i) {
+                /* non-blocking would make sense here */
+                if (stride_levels > 0) {
+                    __coarray_strided_write(i, dest, dest_strides,
+                            src, src_strides, count, stride_levels);
+                } else {
+                    __coarray_write(i, dest, src, count[0]);
+                }
+
+            }
+        }
+        _SYNC_IMAGES_ALL();
+    } else {
+        /* is destination */
+
+        if (source_image < 1 || source_image > _num_images) {
+            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+            "CO_BCAST called with invalid source_image.");
+        }
+
+        _SYNC_IMAGES( (int *)&source_image, 1);
+    }
+}
 
 
 /* CO_MAXVAL */
@@ -773,7 +883,7 @@ void _CO_PRODUCT_C16(DopeVectorType *source, DopeVectorType *result)
 /* Accumulates the value of src_dv on all images and stores it into sum_dv
  * of root */
 void comm_cosum(DopeVectorType *src_dv, DopeVectorType *sum_dv,int root)
-{    
+{
     int i,iter;
     int total_iter = (int) myceillog2(_num_images) ;
     unsigned int el_len;

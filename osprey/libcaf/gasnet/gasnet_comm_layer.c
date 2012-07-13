@@ -38,12 +38,13 @@
 #include "trace.h"
 #include "util.h"
 
+extern unsigned long _this_image;
+extern unsigned long _num_images;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
  * asymmetric data. It is the only handle to access the link-list.*/
 extern struct shared_memory_slot *common_slot;
-
 
 /*
  * Static variable declarations
@@ -275,6 +276,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     my_proc = gasnet_mynode();
     num_procs = gasnet_nodes();
+
+    /* set extern symbols used for THIS_IMAGE and NUM_IMAGES intrinsics */
+    _this_image = my_proc+1;
+    _num_images = num_procs;
 
     /* Check if optimizations are enabled */
     enable_get_cache_str = getenv("UHCAF_GETCACHE");

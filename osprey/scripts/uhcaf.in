@@ -31,6 +31,12 @@
 
 progname="`basename $0`"
 
+if [ "@CAFRT_ENABLE_TRACES@" = "TRACE" ]; then
+  traces_enabled=yes
+else
+  traces_enabled=no
+fi
+
 ARMCI_HOME=@ARMCI_HOME@
 GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
@@ -172,6 +178,7 @@ print_compile_link_info()
   ---------------------------------------------------------------------------
   Communication Layer:
         layer:           $COMM_LAYER ($LAYER_INSTALLATION_PATH)
+        tracing:         $tracing_enabled
         network:         $UHCAF_NETWORK
         messaging:       $MSG_LAYER
   ---------------------------------------------------------------------------
