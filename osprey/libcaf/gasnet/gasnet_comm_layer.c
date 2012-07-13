@@ -35,6 +35,7 @@
 #include <math.h>
 #include "caf_rtl.h"
 #include "gasnet_comm_layer.h"
+#include "lock.h"
 #include "service.h"
 #include "trace.h"
 #include "util.h"
@@ -1435,7 +1436,7 @@ static void *get_remote_address(void *src, size_t proc)
 
 void comm_critical()
 {
-  comm_lock( critical_lock, 1 );
+  comm_lock( critical_lock, 1, NULL, 0 );
 }
 
 void comm_end_critical()

@@ -21910,6 +21910,14 @@ Error : An entity with the INTENT(OUT) attribute shall not be an allocatable coa
 An entity with the INTENT(OUT) attribute shall not be an allocatable coarrays
 or have a subobject that is an allocatable coarray.
 .ME
-$ LAST NUMBER USED : 1711
+$
+$ Error : 1712
+$msg  1712 The ACQUIRED_LOCK= variable must be a scalar logical variable.
+$nexp 1712
+Error : The ACQUIRED_LOCK= variable must be a scalar logical variable.
+.PP
+The ACQUIRED_LOCK= variable must be a scalar logical variable.
+.ME
+$ LAST NUMBER USED : 1712
 
 

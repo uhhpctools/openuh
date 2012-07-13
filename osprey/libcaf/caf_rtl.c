@@ -42,6 +42,7 @@
 #include "gasnet_comm_layer.h"
 #endif
 
+#include "lock.h"
 #include "trace.h"
 
 const int DEBUG = 1;
@@ -734,12 +735,12 @@ void caf_end_critical_()
 /*************END CRITICAL SUPPORT **************/
 
 
-void _COARRAY_LOCK(lock_t *lock, int* image)
+void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len)
 {
    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"
            "before call to comm_lock");
    START_TIMER();
-   comm_lock(lock, *image);
+   comm_lock(lock, *image, success, success_len);
    STOP_TIMER(SYNC);
    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_lock ");
    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"

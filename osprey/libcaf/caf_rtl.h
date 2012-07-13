@@ -30,6 +30,7 @@
 #ifndef CAF_RTL_H
 #define CAF_RTL_H
 
+#include "lock.h"
 #include "dopevec.h"
 
 /* SHARED MEMORY MANAGEMENT */
@@ -44,15 +45,6 @@ struct shared_memory_slot{
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_Add(t,v)
 
-/* lock structure */
-/* Note: This limits us to 1M images, and 64 GB heap size per
- * image. */
-struct coarray_lock {
-    volatile unsigned char locked :8;
-    volatile unsigned int image  :20;
-    volatile unsigned long long ofst  :36;
-};
-typedef struct coarray_lock lock_t;
 
 
 /* COMPILER BACK-END INTERFACE */
@@ -102,7 +94,7 @@ void  _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
 int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
 
 /* LOCK INTRINICS */
-void _COARRAY_LOCK(lock_t *lock, int* image);
+void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len);
 void _COARRAY_UNLOCK(lock_t *lock, int* image);
 
 /* critical construct support */

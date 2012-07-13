@@ -93,6 +93,8 @@ static int	calculate_iteration_count (int, int, int, int, int);
 static int	convert_to_do_var_type (int, int); 
 # endif
 
+extern void	gen_dv_stride_mult(opnd_type *, int, opnd_type *,
+                                   expr_arg_type *, int, int, int);
 static void	linearize_pe_dims(int, int, int, int,
                               opnd_type *, int, expr_arg_type *);
 
@@ -5981,6 +5983,7 @@ void lock_stmt_semantics (void)
    expr_arg_type	exp_desc;
    int			ir_idx;
    boolean		is_call;
+   boolean      is_lock_stmt = FALSE;
    int			list_idx, pe_dim_list_idx, dim_list_idx;
    opnd_type	opnd, pe_opnd;
    int			save_arg_info_list_base;
@@ -6017,6 +6020,7 @@ void lock_stmt_semantics (void)
            lib_idx = create_lib_entry_attr("_COARRAY_LOCK",
                    strlen("_COARRAY_LOCK"),
                    line, col);
+           is_lock_stmt = TRUE;
        } else {
            lib_idx = create_lib_entry_attr("_COARRAY_UNLOCK",
                    strlen("_COARRAY_UNLOCK"),
@@ -6039,7 +6043,11 @@ void lock_stmt_semantics (void)
        IL_ARG_DESC_IDX(list_idx) = list_idx;
        IR_FLD_R(call_idx) = IL_Tbl_Idx;
        IR_IDX_R(call_idx) = list_idx;
-       IR_LIST_CNT_R(call_idx) = 0;
+
+       if (is_lock_stmt)
+           IR_LIST_CNT_R(call_idx) = 4;
+       else
+           IR_LIST_CNT_R(call_idx) = 2;
 
        gen_sh(Before, Call_Stmt, line, col,
                FALSE, FALSE, TRUE);
@@ -6117,7 +6125,68 @@ void lock_stmt_semantics (void)
        IL_LINE_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_LINE_NUM(call_idx);
        IL_COL_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_COL_NUM(call_idx);
 
-       IR_LIST_CNT_R(call_idx) = 2;
+       if (is_lock_stmt) {
+           /* add ACQUIRED_LOCK parameter */
+           int logical_len = 0;
+           int attr_idx;
+           opnd_type op;
+           int list2_idx = IL_NEXT_LIST_IDX(list_idx);
+           int list3_idx, list4_idx;
+           int cn_idx, val_idx;
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
+           list3_idx = IL_NEXT_LIST_IDX(list2_idx);
+           IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+
+           if (IR_IDX_R(ir_idx) != NO_Tbl_Idx) {
+               opnd_type op = IR_OPND_R(ir_idx);
+               act_arg_type arg_type;
+               attr_idx = find_base_attr(&op, &line, &col);
+
+               /* do semantics for argument and get the actual arg type */
+               expr_semantics(&op, &exp_desc);
+               arg_type = get_act_arg_type(&exp_desc);
+
+               if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                    TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Logical) {
+                   PRINTMSG(line, 1712 , Error, col);
+               }
+
+               IL_FLD(list3_idx) = OPND_FLD(op);
+               IL_IDX(list3_idx) = OPND_IDX(op);
+
+               /* calculate size of type in bytes */
+               logical_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
+
+           } else {
+               cn_idx = C_INT_TO_CN(Integer_8, 0);
+               val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                                    Percent_Val_Opr, Long_Typeless, line, col,
+                                    NO_Tbl_Idx, NULL_IDX);
+               IL_FLD(list3_idx) = IR_Tbl_Idx;
+               IL_IDX(list3_idx) = val_idx;
+               IL_LINE_NUM(list3_idx) = IR_LINE_NUM(call_idx);
+               IL_COL_NUM(list3_idx) = IR_COL_NUM(call_idx);
+           }
+
+           IL_LINE_NUM(list3_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list3_idx) = IR_COL_NUM(call_idx);
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list3_idx));
+           list4_idx = IL_NEXT_LIST_IDX(list3_idx);
+           IL_PREV_LIST_IDX(list4_idx) = list3_idx;
+
+           cn_idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, logical_len);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                       Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, line, col,
+                       NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list4_idx) = IR_Tbl_Idx;
+           IL_IDX(list4_idx) = val_idx;
+           IL_LINE_NUM(list4_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list4_idx) = IR_COL_NUM(call_idx);
+       }
+
 
        curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
        SH_NEXT_IDX(curr_stmt_sh_idx) =

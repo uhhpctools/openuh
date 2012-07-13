@@ -174,11 +174,6 @@ void comm_free_lcb(void *ptr);
 void comm_barrier_all();
 void comm_sync_images(int *image_list, int image_count);
 
-/* locks */
-void comm_lock(lock_t *lock, int image);
-void comm_unlock(lock_t *lock, int image);
-void comm_unlock2(lock_t *lock, int image);
-
 void comm_critical();
 void comm_end_critical();
 

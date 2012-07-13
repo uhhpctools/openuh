@@ -5012,10 +5012,13 @@ void parse_sync_stmt (void)
 \******************************************************************************/
 void parse_lock_stmt (void)
 {
-    boolean parsed_ok = TRUE;
    int			col;
    int			ir_idx;
    int			line;
+   boolean      had_acquired_lock = FALSE;
+   boolean      parsed_ok  = TRUE;
+   token_type   acquired_lock_token;
+   boolean      is_lock_stmt = FALSE;
    opnd_type		opnd;
    int			save_curr_stmt_sh_idx;
    int      blk_idx;
@@ -5026,6 +5029,7 @@ void parse_lock_stmt (void)
    SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
    if (TOKEN_VALUE(token) == Tok_Kwd_Lock) {
        IR_OPR(ir_idx) = Lock_Opr;
+       is_lock_stmt = TRUE;
    } else if (TOKEN_VALUE(token) == Tok_Kwd_Unlock) {
        IR_OPR(ir_idx) = Unlock_Opr;
    }
@@ -5049,6 +5053,47 @@ void parse_lock_stmt (void)
    parsed_ok = parse_expr(&opnd);
 
    COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+   if (is_lock_stmt) {
+       if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
+           /* error */
+           parse_err_flush(Find_EOS, ", or )");
+           goto EXIT;
+       }
+
+       if (LA_CH_VALUE == COMMA) {
+           NEXT_LA_CH;
+           /* process the acquired_lock specifier */
+           if (MATCHED_TOKEN_CLASS(Tok_Class_Id) &&
+                   strcmp(TOKEN_STR(token), "ACQUIRED_LOCK") == 0) {
+               acquired_lock_token = token;
+               if (LA_CH_VALUE == EQUAL) {
+                   NEXT_LA_CH;
+                   had_acquired_lock = TRUE;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have stat var */
+                       /* do that stat stuff */
+
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) && parsed_ok;
+                       COPY_OPND(IR_OPND_R(ir_idx), opnd);
+
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar logical ACQUIRED_LOCK variable");
+                       goto EXIT;
+                   }
+               } else {
+                   parse_err_flush(Find_EOS, "=");
+                   goto EXIT;
+               }
+           }
+           else {
+               parse_err_flush(Find_Expr_End, "ACQUIRED_LOCK = ");
+           }
+       }
+   }
 
    if (LA_CH_VALUE != RPAREN) {
        /* error */
@@ -5089,7 +5134,7 @@ void parse_critical_stmt(void)
       PRINTMSG(TOKEN_LINE(token), 1704, Error, TOKEN_COLUMN(token),
       TOKEN_STR(token));
    }
-    if ( ! SH_ERR_FLG(curr_stmt_sh_idx) ) { 
+    if ( ! SH_ERR_FLG(curr_stmt_sh_idx) ) {
     
      NTR_IR_TBL(ir_idx);
      SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
