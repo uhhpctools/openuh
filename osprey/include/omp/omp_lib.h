@@ -21,16 +21,16 @@
 !
 !  http://hpc.cs.tsinghua.edu.cn
 
-C the "C" of this comment starts in column 1
+!C the "C" of this comment starts in column 1
 	integer omp_lock_kind
 	parameter ( omp_lock_kind = 8 )
 
 	integer omp_nest_lock_kind
 	parameter ( omp_nest_lock_kind = 8 )
 
-C default integer type assumed below
-C default logical type assumed below
-C OpenMP Fortran API v1.1
+!C default integer type assumed below
+!C default logical type assumed below
+!C OpenMP Fortran API v1.1
 	integer openmp_version
 	parameter ( openmp_version = 200011 )
 

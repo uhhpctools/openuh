@@ -35,6 +35,8 @@ else
   traces_enabled=no
 fi
 
+default_heap_size=@DEFAULT_CAF_HEAP_SIZE@
+
 ENVIRONMENT="-----------------------\n"
 
 
@@ -246,9 +248,35 @@ shift
 if [ -n "$image_heap" ]; then
   set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
 elif [ -n "$UHCAF_IMAGE_HEAP_SIZE" ]; then
-  add_to_env_list UHCAF_IMAGE_HEAP_SIZE
+  image_heap=$UHCAF_IMAGE_HEAP_SIZE
+  if [[ ! $image_heap =~ ^[0-9]+$ ]]; then
+    if [[  $image_heap =~ ^[0-9]+[kK]$ ]]; then
+      image_heap=$((${image_heap%?}*1024))
+    elif [[ $image_heap =~ ^[0-9]+[mM]$ ]]; then
+      image_heap=$((${image_heap%?}*1024*1024))
+    elif [[ $image_heap =~ ^[0-9]+[gG]$ ]]; then
+      image_heap=$((${image_heap%?}*1024*1024*1024))
+      echo "image heap = $image_heap"
+    else
+      print_error "Invalid per-image heap size: $image_heap"
+    fi
+  fi
+  set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
 else
-  set_env UHCAF_IMAGE_HEAP_SIZE $((30*1024*1024))
+  image_heap=$default_heap_size
+  if [[ ! $image_heap =~ ^[0-9]+$ ]]; then
+    if [[  $image_heap =~ ^[0-9]+[kK]$ ]]; then
+      image_heap=$((${image_heap%?}*1024))
+    elif [[ $image_heap =~ ^[0-9]+[mM]$ ]]; then
+      image_heap=$((${image_heap%?}*1024*1024))
+    elif [[ $image_heap =~ ^[0-9]+[gG]$ ]]; then
+      image_heap=$((${image_heap%?}*1024*1024*1024))
+      echo "image heap = $image_heap"
+    else
+      print_error "Invalid per-image heap size: $image_heap"
+    fi
+  fi
+  set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
 fi
 
 # set number of images in environment

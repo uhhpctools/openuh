@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -814,6 +814,11 @@ Optional Packages:
   --with-default-comm=gasnet|armci
                           Default communication layer to use if GASNet and
                           ARMCI are supported. Will be GASNet if unspecified.
+  --with-default-caf-heap-size=<heap size>
+                          Default per-image heap size to use for coarray
+                          fortran programs. Can use suffixes K,M,G for
+                          kilobytes,megabytes,gigabytes respecitvely. Will be
+                          30M if unspecified.
   --with-build-optimize=DEFAULT|DEBUG	Use DEFAULT or DEBUG flags in compiler build
   --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
     Note that --with-build-lib-optimize=DEBUG is currently not well tested.
@@ -1464,6 +1469,16 @@ else
   DEFAULT_COMM=""
 fi;
 
+# default CAF heap size
+
+# Check whether --with-default-caf-heap-size or --without-default-caf-heap-size was given.
+if test "${with_default_caf_heap_size+set}" = set; then
+  withval="$with_default_caf_heap_size"
+  DEFAULT_CAF_HEAP_SIZE="$with_default_caf_heap_size"
+else
+  DEFAULT_CAF_HEAP_SIZE="30M"
+fi;
+
 # set bash path
 BASH_PATH=`which bash`
 
@@ -1500,6 +1515,13 @@ if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
   { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --disable-cafrt-traces
    " >&5
 echo "$as_me: error: --enable-coarrays option is expected with --disable-cafrt-traces
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected when using --with-caf-heap-size option
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected when using --with-caf-heap-size option
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -1543,6 +1565,22 @@ elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
 echo "$as_me: error: default comm (armci) requires --with-armci-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
 fi
+
+if test -z "${DEFAULT_CAF_HEAP_SIZE}"; then
+    { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-heap-size. Should be an
+                 integer, optionally followed by k, K, m, M, g, or G." >&5
+echo "$as_me: error: Invalid value for --with-default-caf-heap-size. Should be an
+                 integer, optionally followed by k, K, m, M, g, or G." >&2;}
+   { (exit 1); exit 1; }; }
+elif test `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^[0-9][0-9]*$ | wc -l` = 0  -a \
+       `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^[0-9][0-9]*[kKmMgG]$ | wc -l` = 0; then
+      { { echo "$as_me:$LINENO: error: Invalid value for --with-default-caf-heap-size. Should be
+                   an integer, optionally followed by k, K, m, M, g, or G." >&5
+echo "$as_me: error: Invalid value for --with-default-caf-heap-size. Should be
+                   an integer, optionally followed by k, K, m, M, g, or G." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
 
 # enable Dragon support
 # Check whether --enable-dragon-support or --disable-dragon-support was given.
@@ -1893,6 +1931,7 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
+
 
 
 
@@ -2827,6 +2866,7 @@ s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
 s,@BASH_PATH@,$BASH_PATH,;t t
 s,@MPI_INCLUDE@,$MPI_INCLUDE,;t t
 s,@CAFRT_ENABLE_TRACES@,$CAFRT_ENABLE_TRACES,;t t
+s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t

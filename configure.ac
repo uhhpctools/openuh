@@ -108,6 +108,15 @@ AS_HELP_STRING([--with-default-comm=gasnet|armci],
 DEFAULT_COMM="$with_default_comm",
 DEFAULT_COMM="")
 
+# default CAF heap size
+AC_ARG_WITH(default-caf-heap-size,
+AS_HELP_STRING([--with-default-caf-heap-size=<heap size>],
+[Default per-image heap size to use for coarray fortran programs. Can use 
+ suffixes K,M,G for kilobytes,megabytes,gigabytes respecitvely. 
+ Will be 30M if unspecified.]),
+DEFAULT_CAF_HEAP_SIZE="$with_default_caf_heap_size",
+DEFAULT_CAF_HEAP_SIZE="30M")
+
 # set bash path
 BASH_PATH=`which bash`
 
@@ -135,6 +144,11 @@ fi
 if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
   AC_MSG_ERROR(
    [--enable-coarrays option is expected with --disable-cafrt-traces]
+   )
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected when using --with-caf-heap-size option]
    )
 fi
 
@@ -165,6 +179,16 @@ elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
 elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
     AC_MSG_ERROR([default comm (armci) requires --with-armci-root to be specified])
 fi
+
+if test -z "${DEFAULT_CAF_HEAP_SIZE}"; then
+    AC_MSG_ERROR([Invalid value for --with-default-caf-heap-size. Should be an
+                 integer, optionally followed by k, K, m, M, g, or G.])
+elif test `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*$ | wc -l` = 0  -a \
+       `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*@<:@kKmMgG@:>@$ | wc -l` = 0; then
+      AC_MSG_ERROR([Invalid value for --with-default-caf-heap-size. Should be
+                   an integer, optionally followed by k, K, m, M, g, or G.])
+fi
+
 
 # enable Dragon support
 AC_ARG_ENABLE([dragon-support],
@@ -499,6 +523,7 @@ AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
 AC_SUBST([MPI_INCLUDE])
 AC_SUBST([CAFRT_ENABLE_TRACES])
+AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([

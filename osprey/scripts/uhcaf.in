@@ -302,7 +302,7 @@ for arg in "$@" ;  do
           fi
           pass_arg=no
           ;;
-        --show|show-info)
+        --show|--show-info)
           show_info='y'
           pass_arg=no
           ;;

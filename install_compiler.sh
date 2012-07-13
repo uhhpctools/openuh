@@ -443,9 +443,9 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
 
 # Install the CAF runtime library
 INSTALL_CAF_LIB () {
-    #install uhcaf perl wrapper
+    #install uhcaf script
     INSTALL_EXEC_SUB osprey/scripts/uhcaf ${BIN_DIR}/uhcaf
-    #install cafrun perl wrapper
+    #install cafrun script
     INSTALL_EXEC_SUB osprey/scripts/cafrun ${BIN_DIR}/cafrun
     chmod +x ${BIN_DIR}/uhcaf ${BIN_DIR}/cafrun
   
@@ -503,7 +503,7 @@ INSTALL_CAF_EXTRA_LIB () {
     fi 
 
     # Create the Fortran module files for the CAF Extra Library interface
-    (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray caf-extra.caf)
+    (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray -fe caf-extra.caf)
 }
 
 
@@ -681,7 +681,6 @@ INSTALL_NATIVE_HEADER () {
 
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp.h  ${ROOT}/include/${VERSION}/omp.h
     INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.h  ${ROOT}/include/${VERSION}/omp_lib.h
-    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.f  ${ROOT}/include/${VERSION}/omp_lib.f
 
     [ "$ENABLED_CAF" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/caf/caf-extra.caf ${ROOT}/include/${VERSION}/caf-extra.caf
     return 0
@@ -725,9 +724,22 @@ INSTALL_OMPRUN() {
 
 # Create the Fortran module files for the OpenMP interface
 INSTALL_MODULES () {
-    if [ ! -e ${ROOT}/include/${VERSION}/OMP_LIB.mod ] ; then
-        (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/openf90 -c omp_lib.f)
-    fi
+
+    [ "$INSTALL_FORTRAN" = "YES" ] && INSTALL_DATA_SUB ${TOP_SRCDIR}/osprey/include/omp/omp_lib.f  ${ROOT}/include/${VERSION}/omp_lib.f
+
+    echo -e "${ROOT}/include/${VERSION}/OMP_LIB.mod : " \
+            "${ROOT}/include/${VERSION}/omp_lib.f \n\t" \
+            "${ROOT}/bin/openf90 -c -fno-second-underscore -fe \$<" |  \
+            make -f -
+
+#     if [ ! -e ${ROOT}/include/${VERSION}/OMP_LIB.mod ] ; then
+#         (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/openf90 -c -fno-second-underscore -fe omp_lib.f)
+#     else
+#         echo -e "${ROOT}/include/${VERSION}/OMP_LIB.mod : " \
+#                 "${ROOT}/include/${VERSION}/omp_lib.f \n\t" \
+#                 "${ROOT}/bin/openf90 -c -fno-second-underscore -fe \$<" |  \
+#                 make -f -
+#     fi
 
     return 0
 }
