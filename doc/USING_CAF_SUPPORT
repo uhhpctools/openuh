@@ -53,7 +53,7 @@ without 32-bit compatible libraries:
 Known Limitations
 ------------------
 
-* Fortran 2008 locks are not yet supported.
+* Fortran 2008 atomic update statements are not supported.
 
 * Accessing a pointer component of a remote coarray of derived type is not yet
   supported. E.g. this won't work:
