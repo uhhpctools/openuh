@@ -1370,11 +1370,6 @@ unsigned long allocate_static_coarrays(void *base_address)
 
 /* returns addresses ranges for shared heap */
 
-inline void* comm_remote_address(void *addr, size_t proc)
-{
-    return get_remote_address(addr, proc);
-}
-
 inline void* comm_start_heap(size_t proc)
 {
     return get_remote_address(coarray_start_all_images[my_proc].addr,

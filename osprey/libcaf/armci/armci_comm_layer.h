@@ -76,17 +76,16 @@ void comm_strided_write ( size_t proc,
 unsigned long allocate_static_coarrays();
 
 /* returns addresses ranges for shared heap */
-extern inline void* comm_remote_address(void *addr, size_t proc);
-extern inline void* comm_start_heap(size_t proc);
-extern inline void* comm_end_heap(size_t proc);
-extern inline void* comm_start_symmetric_heap(size_t proc);
-extern inline void *comm_end_symmetric_heap(size_t proc);
-extern inline void *comm_start_asymmetric_heap(size_t proc);
-extern inline void *comm_end_asymmetric_heap(size_t proc);
-extern inline void *comm_start_static_heap(size_t proc);
-extern inline void *comm_end_static_heap(size_t proc);
-extern inline void *comm_start_allocatable_heap(size_t proc);
-extern inline void *comm_end_allocatable_heap(size_t proc);
+void *comm_start_heap(size_t proc);
+void *comm_end_heap(size_t proc);
+void *comm_start_symmetric_heap(size_t proc);
+void *comm_end_symmetric_heap(size_t proc);
+void *comm_start_asymmetric_heap(size_t proc);
+void *comm_end_asymmetric_heap(size_t proc);
+void *comm_start_static_heap(size_t proc);
+void *comm_end_static_heap(size_t proc);
+void *comm_start_allocatable_heap(size_t proc);
+void *comm_end_allocatable_heap(size_t proc);
 
 /* GET CACHE OPTIMIZATION */
 struct cache
