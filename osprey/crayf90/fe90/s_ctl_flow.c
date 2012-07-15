@@ -6067,6 +6067,11 @@ void lock_stmt_semantics (void)
            int attr_idx = find_base_attr(&IL_OPND(list_idx),
                           &line, &col);
 
+           while (AT_ATTR_LINK(attr_idx) &&
+                  !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
            /* do semantics for argument and get the actual arg type */
            expr_semantics(&op, &exp_desc);
            arg_type = get_act_arg_type(&exp_desc);
@@ -6142,6 +6147,11 @@ void lock_stmt_semantics (void)
                opnd_type op = IR_OPND_R(ir_idx);
                act_arg_type arg_type;
                attr_idx = find_base_attr(&op, &line, &col);
+
+               while (AT_ATTR_LINK(attr_idx) &&
+                       !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                   attr_idx = AT_ATTR_LINK(attr_idx);
+               }
 
                /* do semantics for argument and get the actual arg type */
                expr_semantics(&op, &exp_desc);

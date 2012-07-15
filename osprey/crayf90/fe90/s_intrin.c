@@ -3251,6 +3251,11 @@ void    co_sum_intrinsic(opnd_type     *result_opnd,
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
 
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
+
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
               ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
                 PRINTMSG(opnd_line, 1708, Error, opnd_col,
@@ -3460,6 +3465,11 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                goto EXIT;
             }
 
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
+
             if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
                 ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
                 IR_LIST_CNT_R(ir_idx) == 1 &&
@@ -3526,6 +3536,11 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
 
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
+
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
                /* error, not a co-array */
@@ -3565,6 +3580,11 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
 
             if (AT_DCL_ERR(attr_idx)) {
                goto EXIT;
+            }
+
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
             if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
@@ -3665,6 +3685,11 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
 
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
+
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
               ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
                 PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
@@ -3704,6 +3729,11 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
 
             if (AT_DCL_ERR(attr_idx)) {
                goto EXIT;
+            }
+
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
             if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
@@ -3772,6 +3802,11 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
          else {
             attr_idx = find_base_attr(&IL_OPND(list_idx1),
                                       &opnd_line, &opnd_col);
+
+            while (AT_ATTR_LINK(attr_idx) &&
+                    !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+                attr_idx = AT_ATTR_LINK(attr_idx);
+            }
 
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {

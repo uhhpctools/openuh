@@ -217,7 +217,7 @@ static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
 static BOOL is_load_operation(WN *node);
 static BOOL is_convert_operation(WN *node);
 static void gen_save_coarray_symbol(ST *sym);
-static void gen_common_save_coarray_symbol(ST *sym);
+static void gen_global_save_coarray_symbol(ST *sym);
 static WN* gen_array1_ref( OPCODE op_array, TY_IDX array_type,
                                ST *array_st, INT8 index, INT8 dim);
 static ST *get_lcb_sym(WN *access);
@@ -464,8 +464,9 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
         FOREACH_SYMBOL(GLOBAL_SYMTAB, sym, i) {
             if (is_coarray_type(ST_type(sym))) {
                 set_coarray_tsize(ST_type(sym));
-                if (ST_sclass(sym) == SCLASS_COMMON) {
-                    gen_common_save_coarray_symbol(sym);
+                if (ST_sclass(sym) == SCLASS_COMMON ||
+                    ST_sclass(sym) == SCLASS_DGLOBAL) {
+                    gen_global_save_coarray_symbol(sym);
                     /* don't allot space for this symbol in global memory */
                     Set_TY_size(ST_type(sym), 0);
                 }
@@ -768,7 +769,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_st(wn);
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -793,7 +795,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_st(wn);
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -817,7 +820,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_st(wn);
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -845,7 +849,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_st(wn);
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -864,7 +869,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_st(wn);
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -883,7 +889,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                   st1 = WN_has_sym(wn) ? WN_st(wn) :  NULL;
                   if (st1 && is_coarray_type(ST_type(st1))) {
                       ST *save_coarray_replace;
-                      if (ST_sclass(st1) == SCLASS_COMMON) {
+                      if (ST_sclass(st1) == SCLASS_COMMON ||
+                          ST_sclass(st1) == SCLASS_DGLOBAL) {
                           save_coarray_replace =
                               common_save_coarray_symbol_map[st1];
                       } else if (ST_sclass(st1) == SCLASS_PSTATIC) {
@@ -3334,10 +3341,11 @@ static void gen_save_coarray_symbol(ST *sym)
     save_coarray_symbol_map[sym] = new_sym;
 }
 
-static void gen_common_save_coarray_symbol(ST *sym)
+static void gen_global_save_coarray_symbol(ST *sym)
 {
-    Is_True( ST_sclass(sym) == SCLASS_COMMON,
-            ("sym storage class should be SCLASS_COMMON"));
+    Is_True( ST_sclass(sym) == SCLASS_COMMON ||
+             ST_sclass(sym) == SCLASS_DGLOBAL,
+            ("sym storage class should be SCLASS_COMMON or SCLASS_DGLOBAL"));
 
     char *new_sym_str = (char *) alloca(strlen("__SAVE_COARRAY_") +
             strlen(ST_name(sym)) + strlen(ST_name(ST_base(sym)))
