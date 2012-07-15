@@ -32,9 +32,9 @@
 progname="`basename $0`"
 
 if [ "@CAFRT_ENABLE_TRACES@" = "TRACE" ]; then
-  traces_enabled=yes
+  tracing_enabled=yes
 else
-  traces_enabled=no
+  tracing_enabled=no
 fi
 
 ARMCI_HOME=@ARMCI_HOME@
