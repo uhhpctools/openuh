@@ -42,6 +42,7 @@
 
 /* #defines are in the header file */
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <error.h>
@@ -67,6 +68,8 @@ static struct timespec delayspec;
 static pthread_t thr;
 
 static volatile int done = 0;
+
+static int disable_progress_thread = 0;
 
 extern void comm_service();
 
@@ -94,6 +97,16 @@ void
 comm_service_init (void)
 {
   int s;
+  char *disable_progress_thread_str;
+
+  disable_progress_thread_str = getenv("UHCAF_DISABLE_PROGRESS_THREAD");
+  if (disable_progress_thread_str != NULL &&
+      strcasecmp(disable_progress_thread_str, "1") == 0) {
+      disable_progress_thread = 1;
+      return;
+  } else {
+      disable_progress_thread = 0;
+  }
 
   delayspec.tv_sec = (time_t) 0;
   delayspec.tv_nsec = delay;
@@ -117,6 +130,8 @@ void
 comm_service_finalize (void)
 {
   int s;
+
+  if (disable_progress_thread == 1) return;
 
   done = 1;
 

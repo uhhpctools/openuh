@@ -243,7 +243,9 @@ enum	token_values {
 		Tok_Kwd_Type,		/* TYPE	     ENDTYPE		      */
 		Tok_Kwd_Use,		/* USE				      */
 		Tok_Kwd_Undefined,	/* UNDEFINED			      */
-        Tok_Kwd_Unlock,     /* UNLOCK                 */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Unlock,		/* UNLOCK			      */
+#endif
 #ifdef KEY /* Bug 14150 */
 		Tok_Kwd_Value,	        /* VALUE   			      */
 #endif /* KEY Bug 14150 */

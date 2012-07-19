@@ -167,6 +167,9 @@ Environment Variables:
                       layer is used.
                          Can be set with --num-images
 
+   UHCAF_DISABLE_PROGRESS_THREAD
+                      Set to 1 to disable progress thread in CAF runtime
+
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.
 

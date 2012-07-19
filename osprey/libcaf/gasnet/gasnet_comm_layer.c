@@ -339,11 +339,13 @@ comm_swap_request (void *target, void *value, size_t nbytes,
   check_remote_address(proc+1, target);
 
   if (proc == my_proc) {
+      long long old;
       gasnet_hsl_t *lk = &atomics_mutex;
       GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
 
-      (void) memmove(retval, target, nbytes);
+      (void) memmove(&old, target, nbytes);
       (void) memmove(target, value, nbytes);
+      (void) memmove(retval, &old, nbytes);
       gasnet_hsl_unlock(lk);
 
       return;
@@ -460,15 +462,18 @@ comm_cswap_request (void *target, void *cond, void *value,
 {
   check_remote_address(proc+1, target);
 
+
   if (proc == my_proc) {
+      long long old;
       gasnet_hsl_t *lk = &atomics_mutex;
       GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
 
-      (void) memmove(retval, target, nbytes);
-
+      (void) memmove(&old, target, nbytes);
       if (memcmp ( cond, target, nbytes ) == 0) {
           (void) memmove(target, value, nbytes);
       }
+
+      (void) memmove(retval, &old, nbytes);
 
       gasnet_hsl_unlock(lk);
 
