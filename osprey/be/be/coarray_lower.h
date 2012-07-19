@@ -41,6 +41,7 @@ extern "C" {
 #include "pu_info.h"
 #endif
 
+extern WN* Coarray_Lower(PU_Info *current_pu, WN* pu);
 extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 
 #ifdef __cplusplus

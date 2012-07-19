@@ -1859,7 +1859,7 @@ Preprocess_PU (PU_Info *current_pu)
 
 #if defined (_UH_COARRAYS)
   if ( Enable_Coarray ) {
-      Set_Error_Phase( "Coarray Processing" );
+      Set_Error_Phase( "Coarray Prelowering" );
       WN_Lower_Checkdump("Before Coarray Prelowering", pu, 0);
 
       pu = Coarray_Prelower( current_pu, pu);
@@ -1904,6 +1904,26 @@ Preprocess_PU (PU_Info *current_pu)
   if ( Cur_PU_Feedback ) {
     Cur_PU_Feedback->Verify("after VHO lower");
   }
+
+  /*
+   * The coarray lowering phase will translate coindexed array references to
+   * CAF runtime calls. This phase will eventually be pushed down to WOPT,
+   * after appropriate analysis/optimization for vectorization and
+   * latency-hiding.
+   */
+#if defined (_UH_COARRAYS)
+  if ( Enable_Coarray ) {
+      Set_Error_Phase( "Coarray Lowering" );
+      WN_Lower_Checkdump("Before Coarray Lowering", pu, 0);
+
+      pu = Coarray_Lower( current_pu, pu);
+      WN_Lower_Checkdump("After Coarray Lowering", pu, 0);
+
+      if ( Cur_PU_Feedback ) {
+        Cur_PU_Feedback->Verify("After Coarray Lowering");
+      }
+  }
+#endif
 
   pu = Adjust_Opt_Level (current_pu, pu, ST_name(PU_Info_proc_sym(current_pu)));
 
