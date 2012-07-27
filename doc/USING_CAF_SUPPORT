@@ -126,7 +126,7 @@ Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
                       L=all or trace levels delimited by ':'.
                         Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
-                        CACHE:BARRIER:REDUCE:SYMBOLS
+                        CACHE:BARRIER:REDUCE:SYMBOLS:SERVICE
 
   --trace-file=F      F is name of file to store trace
 
@@ -144,10 +144,12 @@ Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
 Environment Variables:
 
    LAUNCHER           Underlying program to use for launching CAF images.
-                         Defaults to mpirun
+                         Can be set with --launcher
+                         Set to: mpirun
 
    LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
                       from number of processes to spawn.
+                         Set to: 
 
    UHCAF_TRACE        Specifies trace levels for runtime.
                          Can be set with --trace
@@ -167,8 +169,12 @@ Environment Variables:
                       layer is used.
                          Can be set with --num-images
 
-   UHCAF_DISABLE_PROGRESS_THREAD
-                      Set to 1 to disable progress thread in CAF runtime
+   UHCAF_PROGRESS_THREAD
+                      Set to 1 to enable progress thread in CAF runtime
+
+   UHCAF_PROGRESS_THREAD_INTERVAL
+                      Set the time interval (ns) between AM serving by progress
+                      thread (valid when not using IBV or VAPI conduit)
 
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.

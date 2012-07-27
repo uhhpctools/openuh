@@ -54,7 +54,7 @@ typedef enum {
     LIBCAF_LOG_REDUCE,     /* reduction ops */
     LIBCAF_LOG_SYMBOLS,    /* dump global symbol table */
     LIBCAF_LOG_SERVICE,    /* show progress service */
-    NUM_TRACERS=LIBCAF_LOG_SYMBOLS
+    NUM_TRACERS=LIBCAF_LOG_SERVICE
 } libcaf_trace_t;
 
 typedef enum {

@@ -293,7 +293,7 @@ for arg in "$@" ;  do
           elif [[ $layer == gasnet-* ]]; then
             GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
             valid=0
-            for gc in mpi smp udp; do
+            for gc in @GASNET_CONDUITS@; do
               if [ $GASNET_CONDUIT == $gc ]; then
                 valid=1
               fi

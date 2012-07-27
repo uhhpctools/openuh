@@ -103,7 +103,13 @@ comm_service_init (void)
   enable_progress_thread = get_env_flag(ENV_PROGRESS_THREAD,
                             DEFAULT_ENABLE_PROGRESS_THREAD);
 
-  if (enable_progress_thread == 0) return;
+  /* don't spawn a progress thread here if the conduit is ibv or vapi, since
+   * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
+   */
+#if !defined(GASNET_CONDUIT_IBV) && !defined(GASNET_CONDUIT_VAPI)
+  if (enable_progress_thread == 0)
+#endif
+      return;
 
   progress_thread_interval = get_env_size(ENV_PROGRESS_THREAD_INTERVAL,
                             DEFAULT_PROGRESS_THREAD_INTERVAL);
@@ -131,7 +137,13 @@ comm_service_finalize (void)
 {
   int s;
 
-  if (enable_progress_thread == 0) return;
+  /* don't spawn a progress thread here if the conduit is ibv or vapi, since
+   * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
+   */
+#if !defined(GASNET_CONDUIT_IBV) && !defined(GASNET_CONDUIT_VAPI)
+  if (enable_progress_thread == 0)
+#endif
+      return;
 
   done = 1;
 

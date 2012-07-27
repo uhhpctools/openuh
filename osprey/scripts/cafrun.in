@@ -54,7 +54,7 @@ Where options are
                       L=all or trace levels delimited by ':'.
                         Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
-                        CACHE:BARRIER:REDUCE:SYMBOLS
+                        CACHE:BARRIER:REDUCE:SYMBOLS:SERVICE
 
   --trace-file=F      F is name of file to store trace
 
@@ -101,7 +101,7 @@ Environment Variables:
 
    UHCAF_PROGRESS_THREAD_INTERVAL
                       Set the time interval (ns) between AM serving by progress
-                      thread.
+                      thread (valid when not using IBV or VAPI conduit)
 
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.
