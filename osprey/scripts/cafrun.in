@@ -388,7 +388,7 @@ fi
 
 ###########################################
 # set launcher information
-LAUNCHER_OPTS+=$all_args
+LAUNCHER_OPTS+=" $all_args"
 
 ###########################################
 # Set environment for GASNET if used
