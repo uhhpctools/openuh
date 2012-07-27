@@ -1456,6 +1456,78 @@ intrin_tbl_type         intrin_tbl[] =
 {"ATAND",5,1,1,1,0,0,1,1,0,1,0,0,TRADITIONAL_FAMILY|PGI_FAMILY},
    {"ATAND",5,1,1,0,0,0,0,0,1,0,Atand_Intrinsic,Real_4,0},
       {"X",1,0,0,0,0,0,0,0,0,0,0,REAL_MASK,0},
+#ifdef _UH_COARRAYS
+{"ATOMIC_DEFINE",13,0,0,0,0,0,0,1,0,8,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_DEFINE_1", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_2", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_4", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_8", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    /* LOGICAL */
+    {"_ATOMIC_DEFINE_1", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L1_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_2", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L2_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_3", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_DEFINE_4", 16, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Define_Intrinsic, 0, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+{"ATOMIC_REF",10,0,0,0,0,0,0,1,0,8,0,0,ANSI_FAMILY|TRADITIONAL_FAMILY},
+    /* INT */
+    {"_ATOMIC_REF_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I1_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_2", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I2_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_4", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I8_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, I4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    /* LOGICAL */
+    {"_ATOMIC_REF_1", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L1_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_2", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L2_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_4", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+    {"_ATOMIC_REF_8", 13, 0, 0, 0, 1, 0, 0, 0, 0, 0, Atomic_Ref_Intrinsic, 0, 0},
+      {"VALUE", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L8_MASK, 0},
+      {"ATOM", 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, L4_MASK, 0},
+      {"IMAGE_IDX", 9, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, I4_MASK, 0},
+#endif
 #ifdef KEY /* Bug 1683 */
 {"BESJ0",5,0,1,0,1,0,0,1,0,2,0,0,PGI_FAMILY|G77_FAMILY},
   {"G77_besj0_0",11,0,1,0,1,0,0,0,1,0,Pathf90_Intrinsic,Real_4,0},
@@ -16202,6 +16274,10 @@ void	(*intrinsic_semantics[]) ()	= {
 	atan2_intrinsic,        	/*  Atan2_Intrinsic          	     */
 	atan2_intrinsic,        	/*  Atan2d_Intrinsic          	     */
 	sin_intrinsic,	         	/*  Atand_Intrinsic          	     */
+#ifdef _UH_COARRAYS
+	atomic_intrinsic,        	/*  Atomic_Define_Intrinsic     	 */
+	atomic_intrinsic,	       	/*  Atomic_Ref_Intrinsic       	     */
+#endif
 	btest_intrinsic,     		/*  Bitest_Intrinsic      	     */
 	bit_size_intrinsic,     	/*  Bit_Size_Intrinsic      	     */
 	btest_intrinsic,     		/*  Bjtest_Intrinsic      	     */

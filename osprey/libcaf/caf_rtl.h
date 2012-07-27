@@ -30,6 +30,7 @@
 #ifndef CAF_RTL_H
 #define CAF_RTL_H
 
+#include <ctype.h>
 #include "lock.h"
 #include "dopevec.h"
 
@@ -45,6 +46,10 @@ struct shared_memory_slot{
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
 
+typedef int8_t    INT1;
+typedef int16_t   INT2;
+typedef int32_t   INT4;
+typedef int64_t   INT8;
 
 
 /* COMPILER BACK-END INTERFACE */
@@ -96,6 +101,16 @@ int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
 /* LOCK INTRINICS */
 void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len);
 void _COARRAY_UNLOCK(lock_t *lock, int* image);
+
+/* ATOMIC INTRINSICS */
+void _ATOMIC_DEFINE_1(INT4 *atom, INT1 *value, int *image);
+void _ATOMIC_DEFINE_2(INT4 *atom, INT2 *value, int *image);
+void _ATOMIC_DEFINE_4(INT4 *atom, INT4 *value, int *image);
+void _ATOMIC_DEFINE_8(INT4 *atom, INT8 *value, int *image);
+void _ATOMIC_REF_1(INT1 *value, INT4 *atom, int *image);
+void _ATOMIC_REF_2(INT2 *value, INT4 *atom, int *image);
+void _ATOMIC_REF_4(INT4 *value, INT4 *atom, int *image);
+void _ATOMIC_REF_8(INT8 *value, INT4 *atom, int *image);
 
 /* critical construct support */
 void _CRITICAL();

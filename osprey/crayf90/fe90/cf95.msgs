@@ -21918,6 +21918,16 @@ Error : The ACQUIRED_LOCK= variable must be a scalar logical variable.
 .PP
 The ACQUIRED_LOCK= variable must be a scalar logical variable.
 .ME
-$ LAST NUMBER USED : 1712
+$
+$ Error : 1713
+$msg  1713 The %s subroutine only accepts 2 arguments.
+$nexp 1713
+Error : The %s subroutine only accepts 2 arguments.
+.PP
+The ATOMIC_DEFINE subroutine has arguments ATOM and VALUE, while the
+ATOMIC_REF subroutine has arguments VALUE and ATOM. And third argument should
+not be accepted.
+.ME
+$ LAST NUMBER USED : 1713
 
 

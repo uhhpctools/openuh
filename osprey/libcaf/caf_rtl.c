@@ -88,10 +88,6 @@ static void local_dest_strided_copy(void *src, void *dest,
         size_t stride_levels);
 
 
-
-
-
-
 /* COMPILER BACK-END INTERFACE */
 
 void __caf_init()
@@ -762,6 +758,186 @@ void _COARRAY_UNLOCK(lock_t *lock, int* image)
    LIBCAF_TRACE( LIBCAF_LOG_TIME, "comm_unlock ");
    LIBCAF_TRACE( LIBCAF_LOG_BARRIER, "caf_rtl.c:_COARRAY_LOCK->"
            "after call to comm_lock");
+}
+
+void _ATOMIC_DEFINE_1(INT4 *atom, INT1 *value, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_1->  before call to comm_write, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *atom = (INT4) *value;
+    } else  {
+        INT4 t = (INT4) *value;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_write will block until the variable is defined on the
+         * remote image. */
+        comm_write( *image-1, atom, &t, 4);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_1->  after call to comm_write");
+}
+
+void _ATOMIC_DEFINE_2(INT4 *atom, INT2 *value, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_2->  before call to comm_write, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *atom = (INT4) *value;
+    } else  {
+        INT4 t = (INT4) *value;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_write will block until the variable is defined on the
+         * remote image. */
+        comm_write( *image-1, atom, &t, 4);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_2->  after call to comm_write");
+}
+
+void _ATOMIC_DEFINE_4(INT4 *atom, INT4 *value, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_4->  before call to comm_write, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *atom = (INT4) *value;
+    } else  {
+        INT4 t = (INT4) *value;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_write will block until the variable is defined on the
+         * remote image. */
+        comm_write( *image-1, atom, &t, 4);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_4->  after call to comm_write");
+}
+
+void _ATOMIC_DEFINE_8(INT4 *atom, INT8 *value, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_8->  before call to comm_write, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *atom = (INT4) *value;
+    } else  {
+        INT4 t = (INT4) *value;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_write will block until the variable is defined on the
+         * remote image. */
+        comm_write( *image-1, atom, &t, 4);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_DEFINE_8->  after call to comm_write");
+}
+
+void _ATOMIC_REF_1(INT1 *value, INT4 *atom, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_1->  before call to comm_read, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *value = (INT1) *atom;
+    } else  {
+        INT4 t;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_read will block until the variable is defined on the
+         * remote image. */
+        comm_read( *image-1, atom, &t, 4);
+        *value = (INT1) t;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_1->  after call to comm_read");
+}
+
+void _ATOMIC_REF_2(INT2 *value, INT4 *atom, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_2->  before call to comm_read, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *value = (INT2) *atom;
+    } else  {
+        INT4 t;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_read will block until the variable is defined on the
+         * remote image. */
+        comm_read( *image-1, atom, &t, 4);
+        *value = (INT2) t;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_2->  after call to comm_read");
+}
+
+void _ATOMIC_REF_4(INT4 *value, INT4 *atom, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_4->  before call to comm_read, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *value = (INT4) *atom;
+    } else  {
+        INT4 t;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_read will block until the variable is defined on the
+         * remote image. */
+        comm_read( *image-1, atom, &t, 4);
+        *value = (INT4) t;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_4->  after call to comm_read");
+}
+
+void _ATOMIC_REF_8(INT8 *value, INT4 *atom, int *image)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_8->  before call to comm_read, "
+            "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+
+    if (*image == 0) {
+        /* local reference */
+        *value = (INT8) *atom;
+    } else  {
+        INT4 t;
+        check_remote_address(*image, atom);
+        /* atomic variables are always of size 4 bytes.
+         * Call to comm_read will block until the variable is defined on the
+         * remote image. */
+        comm_read( *image-1, atom, &t, 4);
+        *value = (INT8) t;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "caf_rtl.c:_ATOMIC_REF_8->  after call to comm_read");
 }
 
 
