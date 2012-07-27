@@ -44,7 +44,7 @@ this_usage()
 {
   cat <<_EOT_
 
-Usage: $this  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
+Usage: $this  [OPTIONS]... [PROGRAM]...
 
 Where options are
 
@@ -63,6 +63,9 @@ Where options are
                       may have the suffixes K, M, G which indicates size in
                       kilobytes, megabytes, and gigabytes, respectively.
 
+  --launcher=L        L is the launcher program used to launch images on the
+                      system.
+
   --help, -h          Displays this menu
 
   --help2, -H         Displays more options for underlying launcher ($LAUNCHER)
@@ -72,10 +75,12 @@ Where options are
 Environment Variables:
 
    LAUNCHER           Underlying program to use for launching CAF images.
-                         Defaults to $LAUNCHER
+                         Can be set with --launcher
+                         Set to: $LAUNCHER
 
    LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
                       from number of processes to spawn.
+                         Set to: $LAUNCHER_OPTS
 
    UHCAF_TRACE        Specifies trace levels for runtime.
                          Can be set with --trace
@@ -91,12 +96,12 @@ Environment Variables:
                       Specifies heap size per image for storing coarray data.
                          Can be set with --image-heap
 
-   GASNET_PSHM_NODES  Set number of POSIX shared memory nodes for when gasnet-smp
-                      layer is used.
-                         Can be set with --num-images
+   UHCAF_PROGRESS_THREAD
+                      Set to 1 to enable progress thread in CAF runtime
 
-   UHCAF_DISABLE_PROGRESS_THREAD
-                      Set to 1 to disable progress thread in CAF runtime
+   UHCAF_PROGRESS_THREAD_INTERVAL
+                      Set the time interval (ns) between AM serving by progress
+                      thread.
 
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.
@@ -167,6 +172,7 @@ options="`getopt \
         -l trace: \
         -l trace-file: \
         -l image-heap: \
+        -l launcher: \
         -l help \
         -l help2 \
 		-l verbose \
@@ -215,6 +221,10 @@ do
       if [ "${traces_enabled}" = "no" ]; then
         print_warning "Traces disabled in CAF runtime"
       fi
+      ;;
+    --launcher)
+      shift
+      launcher=$1
       ;;
     --trace-file)
       shift
@@ -293,6 +303,11 @@ else
   num_images=1
 fi
 
+# set launcher information
+if [ -n "$launcher" ]; then
+  LAUNCHER=$launcher
+fi
+
 progname=$1
 
 COMM_LAYER=`nm -a $progname | grep OPENUH_COMM_LAYER_IS | cut -d" " -f3 \
@@ -337,8 +352,12 @@ else
 
   launcher_name=`basename $LAUNCHER`
 
-  if [ $num_images -gt 1 -a \( $launcher_name = mpirun -o $launcher_name = mpiexec \) ]; then
-    launcher_opts=" -n $num_images $LAUNCHER_OPTS"
+  if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec \) ]; then
+    if [ $num_images -gt 1 ]; then
+      launcher_opts=" -n $num_images $LAUNCHER_OPTS"
+    else
+      launcher_opts="$LAUNCHER_OPTS"
+    fi
   fi
 
   add_to_env_list "LAUNCHER_OPTS"

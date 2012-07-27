@@ -163,6 +163,9 @@ enum	token_values {
 		Tok_Kwd_Enumerator,	/* ENUMERATOR 			      */
 #endif /* KEY Bug 10572 */
 		Tok_Kwd_Equivalence,	/* EQUIVALENCE			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Error,		/* ERROR			      */
+#endif
 		Tok_Kwd_Exit,		/* EXIT				      */
 		Tok_Kwd_External,	/* EXTERNAL			      */
 		Tok_Kwd_File,		/* FILE	     ENDFILE		      */

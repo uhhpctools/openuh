@@ -4808,6 +4808,19 @@ void parse_stop_pause_stmt (void)
    if (stmt_type == Stop_Stmt) {
       IR_OPR(ir_idx) = Stop_Opr;
    }
+#ifdef _UH_COARRAYS
+   else if (stmt_type == Error_Stop_Stmt) {
+       if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+           if (TOKEN_VALUE(token) == Tok_Kwd_Stop) {
+               IR_OPR(ir_idx) = Errorstop_Opr;
+           } else {
+               parse_err_flush(Find_EOS, "STOP");
+           }
+       } else {
+           parse_err_flush(Find_EOS, "STOP");
+       }
+   }
+#endif
    else {
       IR_OPR(ir_idx) = Pause_Opr;
 

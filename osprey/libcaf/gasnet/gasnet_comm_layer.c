@@ -79,8 +79,10 @@
 #include <assert.h>
 #include <math.h>
 #include "caf_rtl.h"
+#include "comm.h"
 #include "gasnet_comm_layer.h"
 #include "lock.h"
+#include "env.h"
 #include "service.h"
 #include "trace.h"
 #include "util.h"
@@ -138,13 +140,13 @@ static struct local_buffer *lcb_tail;
 
 /* get cache */
 static int enable_get_cache; /* set by env variable */
-static unsigned long getCache_line_size; /* set by env var. */
+static size_t getCache_line_size; /* set by env var. */
 /* Instead of making the cache_all_image an array of struct cache, I
  * make it an array of pointer to struct cache. This will make it easy
  * to add more cache lines in the future by making it 2D array */
 static struct cache **cache_all_images;
-static unsigned long shared_memory_size;
-static unsigned long static_heap_size;
+static size_t shared_memory_size;
+static size_t static_heap_size;
 
 /* mutex for critical sections */
 lock_t *critical_lock;
@@ -590,8 +592,8 @@ comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
       GASNET_BLOCKUNTIL(gasnet_hsl_trylock(lk) == GASNET_OK);
 
       (void) memmove (&old, target, nbytes);
-      (void) memmove (retval, target, nbytes);
       (void) memmove (&val, value, nbytes);
+      (void) memmove (retval, target, nbytes);
       plus = old + val;
       (void) memmove (target, &plus, nbytes);
 
@@ -658,9 +660,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     int ret,i;
     int   argc = 1;
     char  **argv;
-    char *caf_shared_memory_size_str;
-    char *enable_get_cache_str, *getCache_line_size_str;
-    char *enable_nbput_str;
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
@@ -684,36 +683,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _num_images = num_procs;
 
     /* Check if optimizations are enabled */
-    enable_get_cache_str = getenv("UHCAF_GETCACHE");
-    if(enable_get_cache_str != NULL)
-    {
-        sscanf(enable_get_cache_str, "%d",
-                &enable_get_cache);
-    }
-    else
-    {
-        enable_get_cache = 0;
-    }
-    getCache_line_size_str = getenv("UHCAF_GETCACHE_LINE_SIZE");
-    if(getCache_line_size_str != NULL)
-    {
-        sscanf(getCache_line_size_str, "%lu",
-                &getCache_line_size);
-    }
-    else
-    {
-        getCache_line_size = DEFAULT_GETCACHE_LINE_SIZE;
-    }
-    enable_nbput_str = getenv("UHCAF_NBPUT");
-    if(enable_nbput_str != NULL)
-    {
-        sscanf(enable_nbput_str, "%d",
-                &enable_nbput);
-    }
-    else
-    {
-        enable_nbput = 0;
-    }
+    enable_get_cache = get_env_flag(ENV_GETCACHE,
+                                    DEFAULT_ENABLE_GETCACHE);
+    getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
+                                      DEFAULT_GETCACHE_LINE_SIZE);
+    enable_nbput = get_env_flag(ENV_NBPUT,
+                                DEFAULT_ENABLE_NBPUT);
 
     /* malloc dataStructures for sync_images, nb-put, get-cache */
     sync_images_flag = (unsigned short *)malloc
@@ -758,20 +733,13 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      * coarray_start_all_images */
     coarray_start_all_images = (gasnet_seginfo_t *)malloc
         (num_procs*sizeof(gasnet_seginfo_t));
-    caf_shared_memory_size_str = getenv("UHCAF_IMAGE_HEAP_SIZE");
-    if(caf_shared_memory_size_str != NULL)
+
+    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
+                              DEFAULT_SHARED_MEMORY_SIZE);
+    if (caf_shared_memory_size>=max_size) /*overflow check*/
     {
-        sscanf(caf_shared_memory_size_str, "%lu",
-                &caf_shared_memory_size);
-        if (caf_shared_memory_size>=max_size) /*overflow check*/
-        {
-            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-            "Shared memory size must be less than %lu bytes",max_size);
-        }
-    }
-    else
-    {
-        caf_shared_memory_size = DEFAULT_SHARED_MEMORY_SIZE;
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "Shared memory size must be less than %lu bytes",max_size);
     }
 
     /* pinned-down memory must be PAGESIZE alligned */
@@ -1528,9 +1496,11 @@ void comm_finalize()
         " with status 0.");
 
     comm_service_finalize();
+    farg_free();
+
     gasnet_exit(0);
 
-    farg_free();
+    /* does not reach */
 }
 
 void comm_exit(int status)

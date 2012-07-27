@@ -47,6 +47,11 @@
 #include <pthread.h>
 #include <error.h>
 #include <string.h>
+#include "caf_rtl.h"
+#include "env.h"
+#include "comm.h"
+#include "trace.h"
+
 
 /*
  * for hi-res timer
@@ -56,20 +61,17 @@
 # define _POSIX_C_SOURCE 199309
 #endif /* _POSIX_C_SOURCE */
 
-#include "caf_rtl.h"
-#include "trace.h"
-
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 
-static long delay = 1000L; /* ns */
 static struct timespec delayspec;
 
 static pthread_t thr;
 
 static volatile int done = 0;
 
-static int disable_progress_thread = 0;
+static int enable_progress_thread;
+static size_t progress_thread_interval; /* ns */
 
 extern void comm_service();
 
@@ -97,19 +99,17 @@ void
 comm_service_init (void)
 {
   int s;
-  char *disable_progress_thread_str;
 
-  disable_progress_thread_str = getenv("UHCAF_DISABLE_PROGRESS_THREAD");
-  if (disable_progress_thread_str != NULL &&
-      strcasecmp(disable_progress_thread_str, "1") == 0) {
-      disable_progress_thread = 1;
-      return;
-  } else {
-      disable_progress_thread = 0;
-  }
+  enable_progress_thread = get_env_flag(ENV_PROGRESS_THREAD,
+                            DEFAULT_ENABLE_PROGRESS_THREAD);
+
+  if (enable_progress_thread == 0) return;
+
+  progress_thread_interval = get_env_size(ENV_PROGRESS_THREAD_INTERVAL,
+                            DEFAULT_PROGRESS_THREAD_INTERVAL);
 
   delayspec.tv_sec = (time_t) 0;
-  delayspec.tv_nsec = delay;
+  delayspec.tv_nsec = progress_thread_interval;
 
   s = pthread_create (&thr, NULL, start_service, (void *) 0);
   if (s != 0) {
@@ -131,7 +131,7 @@ comm_service_finalize (void)
 {
   int s;
 
-  if (disable_progress_thread == 1) return;
+  if (enable_progress_thread == 0) return;
 
   done = 1;
 

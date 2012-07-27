@@ -250,7 +250,8 @@
                           critical_stmt_semantics,        /* Critical_Stmt        */
                           end_critical_stmt_semantics,    /* End_Critical_Stmt */  
                           lock_stmt_semantics,    /* Lock_Stmt */  
-                          lock_stmt_semantics     /* Unlock_Stmt */  
+                          lock_stmt_semantics,     /* Unlock_Stmt */  
+                          stop_pause_stmt_semantics    /* Error_Stop_Stmt          */
 #endif
 
            };

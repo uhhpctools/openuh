@@ -60,6 +60,7 @@ CFILES = \
    armci_comm_layer.c \
    trace.c \
    lock.c \
+   env.c \
    util.c
 
 LCINCS += -I$(ARMCI_HOME)/src 

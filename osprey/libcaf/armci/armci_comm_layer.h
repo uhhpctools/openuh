@@ -33,60 +33,6 @@
 #include "mpi.h"
 #include "armci.h"
 
-#define ENABLE_LOCAL_MEMCPY
-#define MAX_DIMS 15
-
-#define DEFAULT_SHARED_MEMORY_SIZE 31457280L
-#define DEFAULT_GETCACHE_LINE_SIZE 65536L
-
-/* init */
-void comm_init(struct shared_memory_slot *common_shared_memory_slot);
-
-
-/* critical support */
-void comm_get_signal(int** signal);
-void comm_critical();
-void comm_end_critical();
-
-
-
-/* proc query functions */
-size_t comm_get_proc_id();
-size_t comm_get_num_procs();
-
-/* non-strided (contiguous) read and write operations */
-void comm_read( size_t proc, void *src, void *dest, size_t nbytes);
-void comm_write( size_t proc, void *dest, void *src, size_t nbytes);
-
-/* strided, non-contiguous read and write operations */
-void comm_strided_read ( size_t proc,
-        void *src, const size_t src_strides[],
-        void *dest, const size_t dest_strides[],
-        const size_t count[], size_t stride_levels);
-
-void comm_strided_write ( size_t proc,
-        void *dest, const size_t dest_strides[],
-        void *src, const size_t src_strides[],
-        const size_t count[], size_t stride_levels);
-
-/* TODO: vector, non-contiguous read and write operations  */
-
-
-/* shared memory management */
-unsigned long allocate_static_coarrays();
-
-/* returns addresses ranges for shared heap */
-void *comm_start_heap(size_t proc);
-void *comm_end_heap(size_t proc);
-void *comm_start_symmetric_heap(size_t proc);
-void *comm_end_symmetric_heap(size_t proc);
-void *comm_start_asymmetric_heap(size_t proc);
-void *comm_end_asymmetric_heap(size_t proc);
-void *comm_start_static_heap(size_t proc);
-void *comm_end_static_heap(size_t proc);
-void *comm_start_allocatable_heap(size_t proc);
-void *comm_end_allocatable_heap(size_t proc);
-
 /* GET CACHE OPTIMIZATION */
 struct cache
 {
@@ -95,31 +41,5 @@ struct cache
     armci_hdl_t *handle;
 };
 
-/* malloc & free */
-void* comm_malloc(size_t size);
-void comm_free(void* ptr);
-void comm_free_lcb(void* ptr);
-
-/* barriers */
-void comm_barrier_all();
-void comm_sync_images(int *image_list, int image_count);
-
-/* atomics */
-void comm_swap_request (void *target, void *value, size_t nbytes,
-			    int proc, void *retval);
-void comm_cswap_request (void *target, void *cond, void *value,
-			     size_t nbytes, int proc, void *retval);
-void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
-			    void *retval);
-void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
-			    void *retval);
-
-/* progress */
-void comm_service ();
-
-/* exit */
-void comm_memory_free();
-void comm_exit(int status);
-void comm_finalize();
 
 #endif

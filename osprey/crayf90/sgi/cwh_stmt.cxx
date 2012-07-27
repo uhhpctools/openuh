@@ -2524,7 +2524,7 @@ fei_where(INT32 defined_asg,
  *
  * fei_stop
  * 
- * Generate a INTRIN_F90_STOP
+ * Generate a INTRIN_STOP_F90
  *
  * A scalar character stop code is on the stack.
  *
@@ -2570,6 +2570,59 @@ fei_stop( void )
 
   cwh_block_append(wn);
 }
+
+#ifdef _UH_COARRAYS
+/*===============================================
+ *
+ * fei_error_stop
+ * 
+ * Generate a INTRIN_ERROR_STOP_F08
+ *
+ * A scalar character error stop code is on the stack.
+ *
+ *===============================================
+ */
+
+extern void
+fei_error_stop( void )
+{
+  WN	*wa;
+  WN	*wc;
+  WN	*wn;
+#ifdef KEY /* Bug 10177 */
+  WN	*stop_code = 0;
+  WN	*stop_code_len = 0;
+#else /* KEY Bug 10177 */
+  WN	*stop_code;
+  WN	*stop_code_len;
+#endif /* KEY Bug 10177 */
+
+  if (cwh_stk_get_class() == STR_item) {
+    cwh_stk_pop_STR();
+    wa = cwh_stk_pop_WN();
+    wc = WN_COPY_Tree(wa);
+    stop_code_len = cwh_intrin_wrap_value_parm(wa);
+    wa = cwh_stk_pop_ADDR();
+    stop_code = cwh_intrin_wrap_char_parm(wa,wc);
+  }
+  else {
+    DevAssert((0),("expected character stop code"));
+  }
+
+  wn = WN_Create ( OPC_VINTRINSIC_CALL, 2);
+  WN_Set_Call_Default_Flags(wn);
+
+  if (FE_Call_Never_Return)
+    WN_Set_Call_Never_Return (wn);
+
+  WN_kid0(wn) = stop_code;
+  WN_kid1(wn) = stop_code_len;
+
+  WN_intrinsic(wn) = INTRN_ERROR_STOP_F08;
+
+  cwh_block_append(wn);
+}
+#endif
 
 /*===============================================
  *

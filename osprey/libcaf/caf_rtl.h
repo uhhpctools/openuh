@@ -43,7 +43,7 @@ struct shared_memory_slot{
 };
 
 #define LOAD_STORE_FENCE() __sync_synchronize()
-#define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_Add(t,v)
+#define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
 
 
 
@@ -98,8 +98,8 @@ void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len);
 void _COARRAY_UNLOCK(lock_t *lock, int* image);
 
 /* critical construct support */
-void caf_critical_();
-void caf_end_critical_();
+void _CRITICAL();
+void _END_CRITICAL();
 
 void* coarray_allocatable_allocate_(unsigned long var_size);
 void* coarray_asymmetric_allocate_(unsigned long var_size);

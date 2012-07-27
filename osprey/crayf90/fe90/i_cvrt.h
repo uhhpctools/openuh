@@ -837,7 +837,10 @@ extern void  fei_store                    ( TYPE  type );
 extern void  fei_non_conform_store        ( TYPE  type );
 extern void  fei_as_ref                   ( TYPE  type );
 extern void  fei_return                   ( INT32 return_class, TYPE type );
-extern void  fei_stop			  ( void );
+extern void  fei_stop                     ( void );
+#ifdef _UH_COARRAYS
+extern void  fei_error_stop               ( void );
+#endif
 extern void  fei_case                     ( INT32 case_follows );
 extern void  fei_switch                   ( INT32 num_cases, 
  					    INTPTR default_lbl_idx );

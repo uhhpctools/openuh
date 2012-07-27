@@ -187,6 +187,9 @@ static	kwd_type		kwd[] = {
 				"EXTERNAL",	     Tok_Kwd_External,
 				"ENCODE",	     Tok_Kwd_Encode,
 				"ENTRY",	     Tok_Kwd_Entry,
+#ifdef _UH_COARRAYS
+				"ERROR",	     Tok_Kwd_Error,
+#endif
 				"ELSE",		     Tok_Kwd_Else,
 #ifdef KEY /* Bug 10572 */
 				"ENUM",		     Tok_Kwd_Enum,

@@ -532,14 +532,16 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 #endif /* KEY Bug 10572 */
 #ifdef KEY /* Bug 14150 */
 						   "BIND",
-						   "VALUE"
+						   "VALUE",
 #endif /* KEY Bug 10572 */
+						   "OPEN MP END TASK"
 #ifdef _UH_COARRAYS
                            ,
                            "CRITICAL",
                            "END CRITICAL",
                            "LOCK",
-                           "UNLOCK"
+                           "UNLOCK",
+                           "ERROR STOP"
 #endif
     };
 

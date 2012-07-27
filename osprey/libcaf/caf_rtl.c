@@ -36,11 +36,7 @@
 #include "caf_rtl.h"
 #include "util.h"
 
-#if defined(ARMCI)
-#include "armci_comm_layer.h"
-#elif defined(GASNET)
-#include "gasnet_comm_layer.h"
-#endif
+#include "comm.h"
 
 #include "lock.h"
 #include "trace.h"
@@ -119,6 +115,8 @@ void __caf_finalize()
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
             "caf_rtl.c:caf_finalize_->Before call to comm_finalize");
     comm_finalize();
+
+    /* does not reach */
 }
 
 
@@ -706,6 +704,8 @@ void __caf_exit(int status)
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
             "caf_rtl.c:__caf_exit->Exiting with error code %d",status);
     comm_exit(status);
+
+    /* does not reach */
 }
 
 
@@ -722,12 +722,12 @@ void _SYNC_ALL()
 
 /*************CRITICAL SUPPORT **************/
 
-void caf_critical_()
+void _CRITICAL()
 { 
  comm_critical();
 }
 
-void caf_end_critical_()
+void _END_CRITICAL()
 {
   comm_end_critical();
 }

@@ -33,12 +33,7 @@
 
 #include "caf_rtl.h"
 
-#if defined(ARMCI)
-#include "armci_comm_layer.h"
-#elif defined(GASNET)
-#include "gasnet_comm_layer.h"
-#endif
-
+#include "comm.h"
 #include "uthash.h"
 #include "trace.h"
 #include "util.h"
@@ -172,12 +167,13 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
         r.done = 1;
 
         lock_req->locked = 1;
+
+        LOAD_STORE_FENCE();
+
         /* p->address now points to predecessor's request descriptor */
         comm_write( p.image-1,
                 ((int*)get_heap_address_from_offset(p.ofst,p.image))+1,
                 ((int*)&r)+1, sizeof(r)-sizeof(int) );
-
-        LOAD_STORE_FENCE();
 
         do {
             /* do something useful here! */

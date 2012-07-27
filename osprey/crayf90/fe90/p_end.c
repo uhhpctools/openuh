@@ -2470,6 +2470,9 @@ FOUND_DO_BLK:
       case Exit_Stmt:
       case Return_Stmt:
       case Stop_Stmt:
+#ifdef _UH_COARRAYS
+      case Error_Stop_Stmt:
+#endif
          PRINTMSG(stmt_start_line, 244, Error, stmt_start_col,
                   stmt_type_str[stmt_type]);
          break;

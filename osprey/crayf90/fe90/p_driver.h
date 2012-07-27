@@ -267,6 +267,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Enumerator_Stmt,      /* Tok_Kwd_Enumerator   */
 #endif /* KEY Bug 10572 */
 				Equivalence_Stmt,     /* Tok_Kwd_Equivalence  */
+#ifdef _UH_COARRAYS
+				Error_Stop_Stmt,     /* Tok_Kwd_Error  */
+#endif
 				Exit_Stmt,	      /* Tok_Kwd_Exit	      */
 				External_Stmt,	      /* Tok_Kwd_External     */
 				Assignment_Stmt,      /* Tok_Kwd_File	      */
@@ -543,7 +546,8 @@ void		(*stmt_parsers[]) () = {
                 parse_critical_stmt,        /* Critical_Stmt */
                 parse_end_critical_stmt, /* End_Critical_Stmt */
                 parse_lock_stmt,           /* Lock_Stmt */
-                parse_lock_stmt            /* Unlock_Stmt */
+                parse_lock_stmt,            /* Unlock_Stmt */
+				parse_stop_pause_stmt,	/* Error_Stop_Stmt	      */
 #endif
 
 };
@@ -5744,7 +5748,62 @@ long long     stmt_in_blk [] = {
 
 #endif /* KEY Bug 14150 */
 
+			/*****  Open_MP_End_Task_Stmt  *****/
+
+                               ((ONE << Unknown_Blk) |
+                                (ONE << Blockdata_Blk) |
+                                (ONE << Module_Blk) |
+                                (ONE << Program_Blk) |
+                                (ONE << Function_Blk) |
+                                (ONE << Subroutine_Blk) |
+                                (ONE << Internal_Blk) |
+                                (ONE << Module_Proc_Blk) |
+                                (ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+                                (ONE << If_Blk) |
+                                (ONE << If_Then_Blk) |
+                                (ONE << If_Else_If_Blk) |
+                                (ONE << If_Else_Blk) |
+                                (ONE << Do_Blk) |
+                                (ONE << Select_Blk) |
+                                (ONE << Case_Blk) |
+                                (ONE << Where_Then_Blk) |
+                                (ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+                                (ONE << Parallel_Blk) |
+                                (ONE << SGI_Parallel_Blk) |
+                                (ONE << Doall_Blk) |
+				(ONE << Wait_Blk) |
+                                (ONE << SGI_Doacross_Blk) |
+                                (ONE << SGI_Parallel_Do_Blk) |
+                                (ONE << Do_Parallel_Blk) |
+                                (ONE << SGI_Pdo_Blk) |
+                                (ONE << Guard_Blk) |
+                                (ONE << SGI_Critical_Section_Blk) |
+                                (ONE << Parallel_Case_Blk) |
+                                (ONE << SGI_Psection_Blk) |
+                                (ONE << SGI_Section_Blk) |
+                                (ONE << SGI_Single_Process_Blk) |
+                                (ONE << SGI_Region_Blk) |
+                                (ONE << Open_Mp_Parallel_Blk) |
+                                (ONE << Open_Mp_Do_Blk) |
+                                (ONE << Open_Mp_Parallel_Sections_Blk) |
+                                (ONE << Open_Mp_Sections_Blk) |
+                                (ONE << Open_Mp_Section_Blk) |
+                                (ONE << Open_Mp_Parallel_Do_Blk) |
+                                (ONE << Open_Mp_Master_Blk) |
+                                (ONE << Open_Mp_Critical_Blk) |
+                                (ONE << Open_Mp_Ordered_Blk) |
+                                (ONE << Open_Mp_Workshare_Blk) | /* by jhs, 02/7/18 */
+                                (ONE << Open_Mp_Parallel_Workshare_Blk) | /* by jhs, 02/7/18 */
+                                (ONE << Open_Mp_Task_Blk) |
+                                (ONE << Contains_Blk) |
+                                (ONE << Interface_Blk) |
+                                (ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk))
+
 #ifdef _UH_COARRAYS
+                ,
             /*****  Critical_Stmt  *****/
 
                    ((ONE << Unknown_Blk) |
@@ -5817,7 +5876,25 @@ long long     stmt_in_blk [] = {
                 (ONE << Contains_Blk) |
                 (ONE << Interface_Blk) |
                 (ONE << Derived_Type_Blk) |
-                (ONE << Enum_Blk))
+                (ONE << Enum_Blk)),
+
+			/*****  Error_Stop_Stmt  *****/
+
+			       ((ONE << Unknown_Blk) |
+				(ONE << Blockdata_Blk) |
+				(ONE << Module_Blk) |
+				(ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+				(ONE << If_Blk) |
+				(ONE << Where_Then_Blk) |
+				(ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+				(ONE << SGI_Psection_Blk) |
+				(ONE << Select_Blk) |
+				(ONE << Contains_Blk) |
+				(ONE << Interface_Blk) |
+				(ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk))
 #endif
 
 				};
@@ -5998,14 +6075,17 @@ stmt_category_type	stmt_top_cat [] = {
 #endif /* KEY Bug 10572 */
 #ifdef KEY /* Bug 14150 */
 				Declaration_Stmt_Cat,	/* Bind_Stmt	      */
-				Declaration_Stmt_Cat	/* Value_Stmt	      */
+				Declaration_Stmt_Cat,	/* Value_Stmt	      */
 #endif /* KEY Bug 14150 */
+                Executable_Stmt_Cat
+                /* Open_MP_End_Task_Stmt */
 #ifdef _UH_COARRAYS
                 ,
                 Executable_Stmt_Cat,    /* Critical_Stmt    */
                 Executable_Stmt_Cat,    /* End_Critical_Stmt    */  
                 Executable_Stmt_Cat,    /* Lock_Stmt    */
-                Executable_Stmt_Cat     /* Unlock_Stmt   */  
+                Executable_Stmt_Cat,    /* Unlock_Stmt   */
+                Executable_Stmt_Cat     /* Error_Stop_Stmt   */
 #endif
 
 				};

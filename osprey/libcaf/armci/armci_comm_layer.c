@@ -33,6 +33,8 @@
 #include <unistd.h>
 #include <math.h>
 #include "caf_rtl.h"
+#include "comm.h"
+#include "env.h"
 #include "armci_comm_layer.h"
 #include "trace.h"
 #include "util.h"
@@ -168,8 +170,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     int ret,i;
     int   argc = 1;
     char  **argv;
-    char *caf_shared_memory_size_str, *enable_nbput_str;
-    char *enable_get_cache_str, *getCache_line_size_str;
     unsigned long caf_shared_memory_size;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
@@ -191,36 +191,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _num_images = num_procs;
 
     /* Check if optimizations are enabled */
-    enable_get_cache_str = getenv("UHCAF_GETCACHE");
-    if(enable_get_cache_str != NULL)
-    {
-        sscanf(enable_get_cache_str, "%d",
-                &enable_get_cache);
-    }
-    else
-    {
-        enable_get_cache = 0;
-    }
-    getCache_line_size_str = getenv("UHCAF_GETCACHE_LINE_SIZE");
-    if(getCache_line_size_str != NULL)
-    {
-        sscanf(getCache_line_size_str, "%lu",
-                &getCache_line_size);
-    }
-    else
-    {
-        getCache_line_size = DEFAULT_GETCACHE_LINE_SIZE;
-    }
-    enable_nbput_str = getenv("UHCAF_NBPUT");
-    if(enable_nbput_str != NULL)
-    {
-        sscanf(enable_nbput_str, "%d",
-                &enable_nbput);
-    }
-    else
-    {
-        enable_nbput = 0;
-    }
+    enable_get_cache = get_env_flag(ENV_GETCACHE,
+                                    DEFAULT_ENABLE_GETCACHE);
+    getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
+                                      DEFAULT_GETCACHE_LINE_SIZE);
+    enable_nbput = get_env_flag(ENV_NBPUT,
+                                DEFAULT_ENABLE_NBPUT);
 
     /* Create flags and mutex for sync_images and critical regions
      * For every image, we create num_procs mutexes and one additional
@@ -240,21 +216,16 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* Create pinned/registered memory (Shared Memory) */
     coarray_start_all_images = malloc (num_procs*sizeof(void *));
-    caf_shared_memory_size_str = getenv("UHCAF_IMAGE_HEAP_SIZE");
-    if(caf_shared_memory_size_str != NULL)
+
+    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
+                              DEFAULT_SHARED_MEMORY_SIZE);
+    if (caf_shared_memory_size>=max_size) /*overflow check*/
     {
-        sscanf(caf_shared_memory_size_str, "%lu",
-                &caf_shared_memory_size);
-        if (caf_shared_memory_size>=max_size) /*overflow check*/
-        {
-            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-            "Shared memory size must be less than %lu bytes",max_size);
-        }
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                "Shared memory size must be less than %lu bytes",max_size);
     }
-    else
-    {
-        caf_shared_memory_size = DEFAULT_SHARED_MEMORY_SIZE;
-    }
+
+
     ret = ARMCI_Malloc ((void**)coarray_start_all_images,
             caf_shared_memory_size);
     if(ret != 0)
@@ -786,7 +757,13 @@ void comm_exit(int status)
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "armci_comm_layer.c:comm_exit-> Before call to ARMCI_Error"
         " with status %d." ,status);
-    ARMCI_Error("ARMCI error",status);
+
+    //ARMCI_Error("ARMCI error",status);
+
+    MPI_Finalize();
+    exit (status);
+
+    /* does not reach */
 }
 
 void comm_finalize()
@@ -800,6 +777,9 @@ void comm_finalize()
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
             "armci_comm_layer.c:comm_exit-> Before call to MPI_Finalize");
     MPI_Finalize();
+    exit(0);
+
+    /* does not reach */
 }
 
 void comm_barrier_all()

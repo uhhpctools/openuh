@@ -5133,9 +5133,22 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
 # endif
         break;
 
+#ifdef _UH_COARRAYS
+   case Errorstop_Opr:
+        /* error stop code is in list item on right */
+        cvrt_exp_to_pdg(IR_IDX_R(ir_idx),
+                        IR_FLD_R(ir_idx));
 
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_error_stop");
+        PDG_DBG_PRINT_END
 
+# ifdef _ENABLE_FEI
+        fei_error_stop();
+# endif
 
+        break;
+#endif
 
 
    case Matmul_Opr :

@@ -54,3 +54,19 @@ void _F90_STOP( char *str1,
 
     _STOP( fcd1 );
 }
+
+#ifdef _UH_COARRAYS
+/* For supporting Fortran 2008 ERROR STOP statement */
+extern void	_ERROR_STOP( fcd_t str1);
+
+void _F08_ERROR_STOP( char *str1,
+	        int  len1 )
+{
+    fcd_t  fcd1;
+
+    fcd1.ptr = str1;
+    fcd1.len = len1;
+
+    _ERROR_STOP( fcd1 );
+}
+#endif

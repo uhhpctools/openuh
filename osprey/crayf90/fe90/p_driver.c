@@ -1299,6 +1299,9 @@ void parse_prog_unit (void)
                   case Rewind_Stmt:
                   case Select_Stmt:
                   case Stop_Stmt:
+#ifdef _UH_COARRAYS
+                  case Error_Stop_Stmt:
+#endif
                   case Then_Stmt:
                   case Where_Cstrct_Stmt:
                   case Where_Stmt:
@@ -3259,6 +3262,9 @@ static void stmt_level_semantics(void)
          case Rewind_Stmt:
          case Select_Stmt:
          case Stop_Stmt:
+#ifdef _UH_COARRAYS
+         case Error_Stop_Stmt:
+#endif
          case Then_Stmt:
          case Where_Cstrct_Stmt:
          case Where_Stmt:

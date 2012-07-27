@@ -66,9 +66,21 @@
 #define STOPMSG "STOP"
 #endif
 
+#define ERROR_STOP_MSG "ERROR STOP"
+
 extern	long	_cptimes;
 extern	int	_who_called_me();
 extern	int	_print_statistics;
+
+#ifdef _UH_COARRAYS
+extern void __caf_finalize();
+#pragma weak __caf_finalize =  _CAF_FINALIZE
+
+void _CAF_FINALIZE()
+{
+    exit(0);
+}
+#endif
 
 /*
  *	$STOP	CF77 entry point to process Fortran STOP statement
@@ -210,6 +222,67 @@ _fcd	s;
 	/* doesn't get executed (pv 479334). */
 	/*  So call _fcleanup here for safety. */
 	_fcleanup();
+#ifndef _UH_COARRAYS
 	exit(0);
+#else
+    __caf_finalize();
+#endif
 }
 #endif	/* Not __mips */
+
+#ifdef _UH_COARRAYS
+extern void __caf_exit(int status);
+#pragma weak __caf_exit = _CAF_EXIT
+
+void _CAF_EXIT(int status)
+{
+    exit(status);
+}
+
+void
+_ERROR_STOP(s)
+_fcd	s;
+{
+	int	len, lineno;
+	char	*buff, *msg;
+	char	name[MAX_ENT_LEN];
+	char	buffer[MAX_STP_LEN + MAX_ENT_LEN + 100];
+
+	/* Close files first so CPU and elapsed times are more accurate */
+
+	{
+		msg	= _fcdtocp(s);
+		len	= _fcdlen (s);
+
+		if (len > MAX_STP_LEN)
+			len	= MAX_STP_LEN;
+	}
+
+	/*
+	 * Print a one- or two-line message based on the length of the
+	 * optional user string.  We (somewhat) arbitrarily go to two
+	 * lines if the optional user string is longer than 5 characters
+	 * (the Fortran 77 standard allows only 1-5 digits on the STOP
+	 * statement).  Note that the routine name can be up to 31
+	 * characters long.
+	 */
+
+	buff	= buffer + sprintf(buffer, " %s", ERROR_STOP_MSG);
+
+	if (len > 0) {
+
+		buff	= buff + sprintf(buff, " %.*s", len, msg);
+
+		if (len > 5)
+			buff	= buff + sprintf(buff, "\n %s", ERROR_STOP_MSG);
+	}
+
+	buff	= buff + sprintf(buff, "\n");
+	fflush(NULL);	/* it's nice if STOP output follows all user output */
+
+	(void) write(fileno(errfile), buffer, buff - buffer);
+
+	/* Do error termination */
+	__caf_exit(1);
+}
+#endif

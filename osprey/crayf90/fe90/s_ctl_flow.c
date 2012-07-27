@@ -5494,7 +5494,39 @@ void stop_pause_stmt_semantics (void)
 
       is_call = TRUE;
    }
-   else {
+#ifdef _UH_COARRAYS
+   else if (IR_OPR(ir_idx) == Errorstop_Opr) {
+      if (glb_tbl_idx[Error_Stop_Attr_Idx] == NULL_IDX) {
+         glb_tbl_idx[Error_Stop_Attr_Idx] = create_lib_entry_attr(ERROR_STOP_LIB_ENTRY,
+                                                            ERROR_STOP_NAME_LEN,
+                                                        IR_LINE_NUM(ir_idx),
+                                                        IR_COL_NUM(ir_idx));
+         ATP_NOSIDE_EFFECTS(glb_tbl_idx[Error_Stop_Attr_Idx])     = TRUE;
+         ATP_DOES_NOT_RETURN(glb_tbl_idx[Error_Stop_Attr_Idx])     = TRUE;
+      }
+
+      attr_idx	= glb_tbl_idx[Error_Stop_Attr_Idx];
+
+# ifdef _STOP_IS_OPR
+      is_call = FALSE;
+# else
+      ADD_ATTR_TO_LOCAL_LIST(attr_idx);
+      is_call = TRUE;
+# endif
+
+      NTR_IR_LIST_TBL(list_idx);
+      IL_ARG_DESC_VARIANT(list_idx)= TRUE;
+      IL_FLD(list_idx)		= IR_FLD_L(ir_idx);
+      IL_IDX(list_idx)		= IR_IDX_L(ir_idx);
+      IL_COL_NUM(list_idx)	= IR_COL_NUM(ir_idx);
+      IL_LINE_NUM(list_idx) 	= IR_LINE_NUM(ir_idx);
+
+      IR_FLD_R(ir_idx)		= IL_Tbl_Idx;
+      IR_IDX_R(ir_idx)		= list_idx;
+      IR_LIST_CNT_R(ir_idx)	= 1;
+   }
+#endif
+   else { /* Stop_Opr */
 
       if (glb_tbl_idx[Stop_Attr_Idx] == NULL_IDX) {
 # ifdef _TARGET_OS_MAX
@@ -5793,10 +5825,13 @@ void sync_stmt_semantics (void)
    OPND_FLD(opnd) = NO_Tbl_Idx;
 
    if (IR_OPR(IR_IDX_L((ir_idx))) == All_Opr) {
-       lib_idx = create_lib_entry_attr("_SYNC_ALL",
-               strlen("_SYNC_ALL"),
-               stmt_start_line,
-               stmt_start_col);
+        if (glb_tbl_idx[Sync_All_Attr_Idx] == NULL_IDX) {
+            glb_tbl_idx[Sync_All_Attr_Idx] =
+                create_lib_entry_attr(SYNC_ALL_LIB_ENTRY,
+                        SYNC_ALL_NAME_LEN,
+                        stmt_start_line, stmt_start_col);
+        }
+        lib_idx = glb_tbl_idx[Sync_All_Attr_Idx];
 
        ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -5828,10 +5863,13 @@ void sync_stmt_semantics (void)
            curr_stmt_sh_idx;
    }
     else if ((IR_OPR(IR_IDX_L(ir_idx))) == Images_Opr){
-        lib_idx = create_lib_entry_attr("_SYNC_IMAGES",
-               strlen("_SYNC_IMAGES"),
-               stmt_start_line,
-               stmt_start_col);
+        if (glb_tbl_idx[Sync_Images_Attr_Idx] == NULL_IDX) {
+            glb_tbl_idx[Sync_Images_Attr_Idx] =
+                create_lib_entry_attr(SYNC_IMAGES_LIB_ENTRY,
+                        SYNC_IMAGES_NAME_LEN,
+                        stmt_start_line, stmt_start_col);
+        }
+        lib_idx = glb_tbl_idx[Sync_Images_Attr_Idx];
 
        ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -5883,10 +5921,13 @@ void sync_stmt_semantics (void)
          
    }
    else if ((IR_OPR(IR_IDX_L(ir_idx))) == Memory_Opr){
-        lib_idx = create_lib_entry_attr("_SYNC_MEMORY",
-               strlen("_SYNC_MEMORY"),
-               stmt_start_line,
-               stmt_start_col);
+        if (glb_tbl_idx[Sync_Memory_Attr_Idx] == NULL_IDX) {
+            glb_tbl_idx[Sync_Memory_Attr_Idx] =
+                create_lib_entry_attr(SYNC_MEMORY_LIB_ENTRY,
+                        SYNC_MEMORY_NAME_LEN,
+                        stmt_start_line, stmt_start_col);
+        }
+        lib_idx = glb_tbl_idx[Sync_Memory_Attr_Idx];
 
        ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -5918,10 +5959,13 @@ void sync_stmt_semantics (void)
            curr_stmt_sh_idx;
          
    } else if ((IR_OPR(IR_IDX_L(ir_idx))) == Imagestar_Opr){
-        lib_idx = create_lib_entry_attr("_SYNC_IMAGES_ALL",
-               strlen("_SYNC_IMAGES_ALL"),
-               stmt_start_line,
-               stmt_start_col);
+           if (glb_tbl_idx[Sync_Images_All_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Sync_Images_All_Attr_Idx] =
+                   create_lib_entry_attr(SYNC_IMAGES_ALL_LIB_ENTRY,
+                           SYNC_IMAGES_ALL_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Sync_Images_All_Attr_Idx];
 
        ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -6017,14 +6061,22 @@ void lock_stmt_semantics (void)
 
    if (IR_OPR(ir_idx) == Lock_Opr || IR_OPR(ir_idx) == Unlock_Opr) {
        if (IR_OPR(ir_idx) == Lock_Opr) {
-           lib_idx = create_lib_entry_attr("_COARRAY_LOCK",
-                   strlen("_COARRAY_LOCK"),
-                   line, col);
+           if (glb_tbl_idx[Coarray_Lock_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Coarray_Lock_Attr_Idx] =
+                   create_lib_entry_attr(COARRAY_LOCK_LIB_ENTRY,
+                           COARRAY_LOCK_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Coarray_Lock_Attr_Idx];
            is_lock_stmt = TRUE;
        } else {
-           lib_idx = create_lib_entry_attr("_COARRAY_UNLOCK",
-                   strlen("_COARRAY_UNLOCK"),
-                   line, col);
+           if (glb_tbl_idx[Coarray_Unlock_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Coarray_Unlock_Attr_Idx] =
+                   create_lib_entry_attr(COARRAY_UNLOCK_LIB_ENTRY,
+                           COARRAY_UNLOCK_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Coarray_Unlock_Attr_Idx];
        }
        ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -6248,10 +6300,13 @@ void critical_stmt_semantics (void)
    
    ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
    OPND_FLD(opnd) = NO_Tbl_Idx;
-    lib_idx = create_lib_entry_attr("caf_critical_",
-		   strlen("caf_critical_"),
-		   stmt_start_line,
-		   stmt_start_col);
+
+    if (glb_tbl_idx[Critical_Attr_Idx] == NULL_IDX) {
+        glb_tbl_idx[Critical_Attr_Idx] =
+            create_lib_entry_attr(CRITICAL_LIB_ENTRY, CRITICAL_NAME_LEN,
+                    stmt_start_line, stmt_start_col);
+    }
+    lib_idx = glb_tbl_idx[Critical_Attr_Idx];
 
     ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
@@ -6315,10 +6370,13 @@ void end_critical_stmt_semantics (void)
  
    ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
    OPND_FLD(opnd) = NO_Tbl_Idx;
-    lib_idx = create_lib_entry_attr("caf_end_critical_",
-		   strlen("caf_end_critical_"),
-		   stmt_start_line,
-		   stmt_start_col);
+
+    if (glb_tbl_idx[EndCritical_Attr_Idx] == NULL_IDX) {
+        glb_tbl_idx[EndCritical_Attr_Idx] =
+            create_lib_entry_attr(END_CRITICAL_LIB_ENTRY, END_CRITICAL_NAME_LEN,
+                    stmt_start_line, stmt_start_col);
+    }
+    lib_idx = glb_tbl_idx[EndCritical_Attr_Idx];
 
     ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 

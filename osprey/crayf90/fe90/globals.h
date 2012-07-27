@@ -172,6 +172,17 @@ enum	glb_tbl_idx_values	{Allocate_Attr_Idx,
 #ifdef KEY /* Bug 6845 */
                                  Assign_Allocatable_Idx,
 #endif /* KEY Bug 6845 */
+#ifdef _UH_COARRAYS
+				 Sync_All_Attr_Idx,
+				 Sync_Images_Attr_Idx,
+				 Sync_Memory_Attr_Idx,
+				 Sync_Images_All_Attr_Idx,
+				 Coarray_Lock_Attr_Idx,
+				 Coarray_Unlock_Attr_Idx,
+				 Critical_Attr_Idx,
+				 EndCritical_Attr_Idx,
+				 Error_Stop_Attr_Idx,
+#endif
 				 Num_Glb_Tbl_Idxs
 				};
 
@@ -1576,6 +1587,7 @@ enum    operator_values      {  Null_Opr,
                 Dv_Set_N_Codim,
                 Lock_Opr,
                 Unlock_Opr,
+                Errorstop_Opr,
 #endif
 				Endtask_Open_Mp_Opr,
 				Task_Open_Mp_Opr,
@@ -1777,6 +1789,14 @@ enum stmt_type_values           {Null_Stmt,
 #endif /* KEY Bug 10572 */
 
 				 Open_MP_End_Task_Stmt
+#ifdef _UH_COARRAYS
+                 ,
+                 Critical_Stmt,
+                 End_Critical_Stmt,
+                 Lock_Stmt,
+                 Unlock_Stmt,
+                 Error_Stop_Stmt
+#endif
 
                                  /* When you add a stmt, make sure you change */
                                  /* stmt_type_str in main.h.                  */
@@ -1785,13 +1805,6 @@ enum stmt_type_values           {Null_Stmt,
 				 /* To determine that a stmt is executable,   */
                                  /* see code that sets ATL_EXECUTABLE in      */
                                  /* p_driver.c .			      */
-#ifdef _UH_COARRAYS
-                 ,
-                 Critical_Stmt,
-                 End_Critical_Stmt,
-                 Lock_Stmt,
-                 Unlock_Stmt
-#endif
 
 				};
 

@@ -542,11 +542,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                 break;
             case OPR_INTRINSIC_CALL:
                 if (WN_opcode(wn) == OPC_VINTRINSIC_CALL) {
-                  if (WN_intrinsic(wn) == INTRN_STOP_F90) {
-                    insert_wnx = Generate_Call( CAF_FINALIZE );
-                    WN_INSERT_BlockBefore(blk_node, wn, insert_wnx);
-
-                  } else if (WN_intrinsic(wn) == INTRN_CASSIGNSTMT) {
+                   if (WN_intrinsic(wn) == INTRN_CASSIGNSTMT) {
                     /*for character coarrays support*/
                     lhs_ref_param_wn = WN_kid0(wn);
                     rhs_ref_param_wn = WN_kid1(wn);

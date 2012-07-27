@@ -63,6 +63,7 @@ CFILES = \
 	service.c \
 	trace.c \
 	lock.c \
+	env.c \
 	util.c \
 
 LCINCS += -I$(GASNET_HOME)/include 
