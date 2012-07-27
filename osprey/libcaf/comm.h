@@ -86,6 +86,7 @@ void comm_strided_write ( size_t proc,
 unsigned long allocate_static_coarrays();
 
 /* returns addresses ranges for shared heap */
+ssize_t comm_address_translation_offset(size_t proc);
 void *comm_start_heap(size_t proc);
 void *comm_end_heap(size_t proc);
 void *comm_start_symmetric_heap(size_t proc);

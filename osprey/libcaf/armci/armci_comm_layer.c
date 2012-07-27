@@ -126,7 +126,7 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
-static inline int address_on_heap(void *addr)
+static inline int address_on_symmetric_heap(void *addr)
 {
     void *start_heap;
     void *end_heap;
@@ -652,6 +652,12 @@ unsigned long allocate_static_coarrays(void *base_address)
 
 /* returns addresses ranges for shared heap */
 
+inline ssize_t comm_address_translation_offset(size_t proc)
+{
+    char *remote_base_address = coarray_start_all_images[proc];
+    return remote_base_address - (char *)coarray_start_all_images[my_proc];
+}
+
 inline void* comm_start_heap(size_t proc)
 {
     return get_remote_address(coarray_start_all_images[my_proc],
@@ -720,7 +726,7 @@ static void *get_remote_address(void *src, size_t img)
 {
     size_t offset;
     void *remote_address;
-    if ( (img == my_proc) || !address_on_heap(src) )
+    if ( (img == my_proc) || !address_on_symmetric_heap(src) )
         return src;
     offset = src - coarray_start_all_images[my_proc];
     remote_address = coarray_start_all_images[img]+offset;

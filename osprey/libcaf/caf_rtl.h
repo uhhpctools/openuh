@@ -45,6 +45,8 @@ struct shared_memory_slot{
 
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
+#define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)
+#define SYNC_CSWAP(t,u,v) __sync_val_compare_and_swap(t,u,v)
 
 typedef int8_t    INT1;
 typedef int16_t   INT2;
