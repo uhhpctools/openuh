@@ -33,16 +33,11 @@
 #include "trace.h"
 
 
-/* for fortran command argument passing */
-
-#define MAX_ARGLEN 255
-extern int iargc_(void);
-extern void getarg_(int *n, char *s, int slen);
-
 void __caf_exit(int status);
 
 static char **fargv;
 static int   fargc;
+
 
 void Warning (char *warning_message)
 {
@@ -55,46 +50,6 @@ void Error (char *error_message)
   fprintf(stderr, "Error: %s\n", error_message);
   fflush(stderr);
   __caf_exit(1);
-}
-
-
-
-/*
- * runtime operation for fortran command passing process 
- */
-void farg_init(int *argc, char ***argv)
-{
-  int i;
-  char arg[MAX_ARGLEN];
-  char *cptr;
-  fargc=iargc_() + 1;
-  fargv = malloc( sizeof(char*)*fargc);
-
-  for(i=0;i<fargc;i++)
-  {
-    getarg_(&i,arg,MAX_ARGLEN);
-    cptr = arg;
-
-    while (*cptr != ' ') cptr++; 
-    *cptr = '\0';
-
-    fargv[i] = malloc(sizeof(char) * (strlen(arg)+1));
-    strcpy(fargv[i], arg);
-  }
-
-  *argc = fargc;
-  *argv = fargv;
-}
-
-void farg_free()
-{
-  int i;
-  if (fargv) {
-    for(i=0;i<fargc;i++) {
-      if (fargv[i]) free(fargv[i]);
-    }
-    free(fargv);
-  }
 }
 
 /* debug utility functions */
@@ -117,7 +72,6 @@ void debug_print_array_int(char *name, int *arr, int n)
   }
   sprintf(&str[strlen(str)],"}");
 
-  //fprintf(stderr, "%s\n", str);
   LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 
@@ -139,7 +93,6 @@ void debug_print_array_long(char *name, long *arr, int n)
   }
   sprintf(&str[strlen(str)],"}");
 
-  //fprintf(stderr, "%s\n", str);
   LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 

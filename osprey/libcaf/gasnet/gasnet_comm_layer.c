@@ -861,12 +861,14 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     unsigned long caf_shared_memory_pages;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
-    farg_init(&argc, &argv);
+    argc = ARGC;
+    argv = ARGV;
     ret = gasnet_init(&argc, &argv);
-
     if (ret != GASNET_OK) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL, "GASNet init error");
     }
+    __f90_set_args(argc, argv);
+
 
     uintptr_t max_local = gasnet_getMaxLocalSegmentSize();
     if(max_local == -1)
@@ -1719,7 +1721,6 @@ void comm_finalize()
         " with status 0.");
 
     comm_service_finalize();
-    farg_free();
 
     gasnet_exit(0);
 

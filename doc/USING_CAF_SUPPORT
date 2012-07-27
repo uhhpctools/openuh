@@ -118,9 +118,12 @@ Launching a CAF Program
 
 cafrun is a launcher for ror running CAF programs compiled with OpenUH.
 
-Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
+Usage: cafrun  [OPTIONS]... PROGRAM... -- [LAUNCHER OPTIONS]...
 
-  -n, --num-images=N  N is number of images to use
+Where options are
+
+  --num-images=N      N is number of images to use
+  -n N                N is number of images to use
 
   --trace=L           Sets trace levels for runtime.
                       L=all or trace levels delimited by ':'.
@@ -135,21 +138,22 @@ Usage: cafrun  [OPTIONS]... [PROGRAM] [-- [LAUNCHER_OPTIONS]]
                       may have the suffixes K, M, G which indicates size in
                       kilobytes, megabytes, and gigabytes, respectively.
 
-  --help, -h          Displays this menu
+  --help              Displays this menu
 
-  --help2, -H         Displays more options for underlying launcher (mpirun)
+  --help2             Displays more options for underlying launcher
 
-  --verbose, -v       Verbose
+  --verbose           Verbose output
+
+  --show              Display launch settings and exit
 
 Environment Variables:
 
-   LAUNCHER           Underlying program to use for launching CAF images.
-                         Can be set with --launcher
-                         Set to: mpirun
+   LAUNCHER           Underlying launcher to use for launching CAF images 
+                      for the specified program.
+                         By default, set to: mpirun
 
    LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
                       from number of processes to spawn.
-                         Set to: 
 
    UHCAF_TRACE        Specifies trace levels for runtime.
                          Can be set with --trace
@@ -165,16 +169,12 @@ Environment Variables:
                       Specifies heap size per image for storing coarray data.
                          Can be set with --image-heap
 
-   GASNET_PSHM_NODES  Set number of POSIX shared memory nodes for when gasnet-smp
-                      layer is used.
-                         Can be set with --num-images
-
    UHCAF_PROGRESS_THREAD
                       Set to 1 to enable progress thread in CAF runtime
 
    UHCAF_PROGRESS_THREAD_INTERVAL
                       Set the time interval (ns) between AM serving by progress
-                      thread (valid when not using IBV or VAPI conduit)
+                      thread.
 
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.

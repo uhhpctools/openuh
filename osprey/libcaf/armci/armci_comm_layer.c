@@ -173,10 +173,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     unsigned long caf_shared_memory_size;
     unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
-    argv = (char **) malloc(argc * sizeof(*argv));
-    argv[0] = "caf";
-
+    argc = ARGC;
+    argv = ARGV;
     MPI_Init(&argc, &argv);
+    __f90_set_args(argc, argv);
 
     ret = ARMCI_Init();
     if (ret != 0) {
@@ -763,8 +763,6 @@ void comm_exit(int status)
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
         "armci_comm_layer.c:comm_exit-> Before call to ARMCI_Error"
         " with status %d." ,status);
-
-    //ARMCI_Error("ARMCI error",status);
 
     MPI_Finalize();
     exit (status);

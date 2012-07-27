@@ -2,7 +2,7 @@
 
 #  CAF launcher wrapper for OpenUH compiler
 #
-#  Copyright (C) 2010-2011 University of Houston.
+#  Copyright (C) 2010-2012 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -39,16 +39,32 @@ default_heap_size=@DEFAULT_CAF_HEAP_SIZE@
 
 ENVIRONMENT="-----------------------\n"
 
+this_usage_short()
+{
+  cat <<_EOT_
+
+Usage: $this  [OPTIONS]... PROGRAM... -- [LAUNCHER OPTIONS]...
+
+For cafrun options, do:
+   cafrun --help
+
+For options specific to underlying launcher, do:
+   cafrun --help2
+
+_EOT_
+
+}
 
 this_usage()
 {
   cat <<_EOT_
 
-Usage: $this  [OPTIONS]... [PROGRAM]...
+Usage: $this  [OPTIONS]... PROGRAM... -- [LAUNCHER OPTIONS]...
 
 Where options are
 
-  -n, --num-images=N  N is number of images to use
+  --num-images=N      N is number of images to use
+  -n N                N is number of images to use
 
   --trace=L           Sets trace levels for runtime.
                       L=all or trace levels delimited by ':'.
@@ -63,24 +79,21 @@ Where options are
                       may have the suffixes K, M, G which indicates size in
                       kilobytes, megabytes, and gigabytes, respectively.
 
-  --launcher=L        L is the launcher program used to launch images on the
-                      system.
+  --help              Displays this menu
 
-  --help, -h          Displays this menu
+  --help2             Displays more options for underlying launcher
 
-  --help2, -H         Displays more options for underlying launcher ($LAUNCHER)
+  --verbose           Verbose output
 
-  --verbose, -v       Verbose
+  --show              Display launch settings and exit
 
 Environment Variables:
 
-   LAUNCHER           Underlying program to use for launching CAF images.
-                         Can be set with --launcher
-                         Set to: $LAUNCHER
+   LAUNCHER           Underlying launcher to use for launching CAF images
+                      for the specified program.
+                         By default, set to: $LAUNCHER
 
-   LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
-                      from number of processes to spawn.
-                         Set to: $LAUNCHER_OPTS
+   LAUNCHER_OPTS      Additional options to pass to underlying launcher
 
    UHCAF_TRACE        Specifies trace levels for runtime.
                          Can be set with --trace
@@ -101,7 +114,7 @@ Environment Variables:
 
    UHCAF_PROGRESS_THREAD_INTERVAL
                       Set the time interval (ns) between AM serving by progress
-                      thread (valid when not using IBV or VAPI conduit)
+                      thread.
 
    UHCAF_NBPUT
                       Set to 1 to enable Nonblocking put runtime optimization.
@@ -115,19 +128,21 @@ Environment Variables:
 
 _EOT_
 
-  exit 1
 }
 
 launcher_usage()
 {
-  eval "$LAUNCHER --help"
-  exit 1
+  if [ -n "$LAUNCHER" ]; then
+      eval "$LAUNCHER --help"
+  else
+      echo "No separate launcher program is used for the executable $prog_name"
+  fi
 }
 
 add_to_env_list()
 {
   var=$1
-  val=$(eval "echo \$$1")
+  val=$(eval "echo \"\$$1\"")
   ENVIRONMENT+="  $var: $val\n"
 }
 
@@ -162,80 +177,80 @@ if [ -z "$LAUNCHER" ]; then
 fi
 
 if [ $# -eq 0 ]; then
-  this_usage
+  this_usage_short
+  exit 1
 fi
 
-options="`getopt \
-		-u \
-		-n "$this" \
-        -l num-images: \
-        -l trace: \
-        -l trace-file: \
-        -l image-heap: \
-        -l launcher: \
-        -l help \
-        -l help2 \
-		-l verbose \
-		-o n:hHv \
-		-- \
-		$*`"
-
-# check ret status
-case $? in
-  0)
-    ;;
-  *)
-    this_usage
-    ;;
-esac
-
-set -- $options
-
-verbose='n'
-shared='n'
+verbose=no
+show=no
+shared=no
 num_images=
+all_args=("$@")
+arg_num=0
+option_parse=yes
+display_help=no
+display_help2=no
 
-while [ $1 != "--" ]
-do
-  case $1 in
-    -v | --verbose)
-      verbose='y'
-      ;;
-    -h | --help)
-      this_usage
-      ;;
-    -H | --help2)
-      launcher_usage
-      ;;
-    -n | --num-images)
-      shift
-      if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+process_num_images=no
+for arg in "$@" ; do
+  pass_arg=no
+  if [ $option_parse = no ]; then
+      pass_arg=yes
+  fi
+
+  if [ $process_num_images = yes ]; then
+      if ! [[ "$arg" =~ ^[0-9]+$ ]]; then
         print_error "num-images specified is not valid"
       fi
-      num_images=$1
+      num_images=$arg
+      unset all_args[$arg_num]
+      arg_num=$((arg_num+1))
+      process_num_images=no
+      continue
+  fi
+
+  case "$arg" in
+    -v|--verbose)
+      verbose=yes
       ;;
-    --trace)
-      shift
-      levels=`echo $1 | tr '[:lower:]' '[:upper:]'`
+    --show)
+      verbose=yes
+      show=yes
+      ;;
+    --help)
+      this_usage
+      display_help=yes
+      ;;
+    --help2)
+      display_help2=yes
+      ;;
+    --num-images=*)
+      num_images=`echo UhCaf$arg | sed -e 's/UhCaf--num-images=//g'`
+      if ! [[ "$num_images" =~ ^[0-9]+$ ]]; then
+        print_error "num-images specified is not valid"
+      fi
+      ;;
+    -n)
+      # next arg should be number of images
+      process_num_images=yes
+      ;;
+    --trace=*)
+      levels=`echo UhCaf$arg | sed -e 's/UhCaf--trace=//g'`
+      levels=`echo $levels | tr '[:lower:]' '[:upper:]'`
       set_env UHCAF_TRACE $levels
       if [ "${traces_enabled}" = "no" ]; then
         print_warning "Traces disabled in CAF runtime"
       fi
       ;;
-    --launcher)
-      shift
-      launcher=$1
-      ;;
-    --trace-file)
-      shift
-      set_env UHCAF_TRACE_FILE $1
+    --trace-file=*)
+      trace_file=`echo UhCaf$arg | sed -e 's/UhCaf--trace-file=//g'`
+      set_env UHCAF_TRACE_FILE $trace_file
       if [ "${traces_enabled}" = "no" ]; then
         print_warning "Traces disabled in CAF runtime"
       fi
       ;;
-    --image-heap)
-      shift
-      image_heap=$1
+    --image-heap=*)
+      image_heap=`echo UhCaf$arg | sed -e 's/UhCaf--image-heap=//g'`
 
       if [[ ! $image_heap =~ ^[0-9]+$ ]]; then
         if [[  $image_heap =~ ^[0-9]+[kK]$ ]]; then
@@ -248,15 +263,84 @@ do
           print_error "Invalid per-image heap size: $image_heap"
         fi
       fi
-
+      ;;
+    --)
+      option_parse=no
+      ;;
+    *)
+      if [ $option_parse = yes ]; then
+          program_cmd+="$arg "
+      fi
       ;;
   esac
-  shift
+
+  if [ $pass_arg = no ]; then
+      unset all_args[$arg_num]
+  fi
+  arg_num=$((arg_num+1))
+
 done
 
-# now gobble option end marker
-shift
+all_args=${all_args[@]}
 
+prog_name=`echo ${program_cmd%% *}`
+prog_args=`echo ${program_cmd#$prog_name}`
+if [ -z "$prog_name" ]; then
+    if [ $display_help = yes -o $display_help2 = yes ]; then
+        if [ $display_help = yes  ]; then
+            this_usage
+        fi
+        if [ $display_help2 = yes ]; then
+            launcher_usage
+        fi
+        exit 0
+    fi
+fi
+
+###########################################
+# determine which communication layer to use
+
+if [ -z "$prog_name" ]; then
+    echo "Need to specify the program you want to run."
+    this_usage_short
+    exit 1
+fi
+
+COMM_LAYER=`nm $prog_name 2> /dev/null | grep OPENUH_COMM_LAYER_IS | cut -d" " -f3 \
+  | sed 's/OPENUH_COMM_LAYER_IS_//'`
+
+if [ -z "$COMM_LAYER" ]; then
+    print_error "Error inspecting executable $prog_name for launch information"
+fi
+
+GASNET_CONDUIT=""
+if [ $COMM_LAYER == gasnet ]; then
+  GASNET_CONDUIT=`nm -a $prog_name | grep OPENUH_GASNET_CONDUIT_IS | cut -d" " -f3 \
+    | sed 's/OPENUH_GASNET_CONDUIT_IS_//'`
+
+  if [ -z "$GASNET_CONDUIT" ]; then
+    print_error "Cannot determine which GASNet conduit to use"
+  fi
+fi
+
+###########################################
+# display help menu and exit, if necessary
+if [ $display_help = yes -o $display_help2 = yes ]; then
+    if [ $display_help = yes  ]; then
+        this_usage
+    fi
+    if [ $display_help2 = yes ]; then
+        if [ "$GASNET_CONDUIT" = "smp" ]; then
+            # no launcher used for GASNet's SMP conduit
+            unset LAUNCHER
+        fi
+        launcher_usage
+    fi
+
+    exit 0
+fi
+
+###########################################
 # set heap size in environment
 if [ -n "$image_heap" ]; then
   set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
@@ -269,7 +353,6 @@ elif [ -n "$UHCAF_IMAGE_HEAP_SIZE" ]; then
       image_heap=$((${image_heap%?}*1024*1024))
     elif [[ $image_heap =~ ^[0-9]+[gG]$ ]]; then
       image_heap=$((${image_heap%?}*1024*1024*1024))
-      echo "image heap = $image_heap"
     else
       print_error "Invalid per-image heap size: $image_heap"
     fi
@@ -284,7 +367,6 @@ else
       image_heap=$((${image_heap%?}*1024*1024))
     elif [[ $image_heap =~ ^[0-9]+[gG]$ ]]; then
       image_heap=$((${image_heap%?}*1024*1024*1024))
-      echo "image heap = $image_heap"
     else
       print_error "Invalid per-image heap size: $image_heap"
     fi
@@ -292,6 +374,7 @@ else
   set_env UHCAF_IMAGE_HEAP_SIZE $image_heap
 fi
 
+###########################################
 # set number of images in environment
 if [ -n "$num_images" ]; then
   set_env UHCAF_NUM_IMAGES $num_images
@@ -303,29 +386,11 @@ else
   num_images=1
 fi
 
+###########################################
 # set launcher information
-if [ -n "$launcher" ]; then
-  LAUNCHER=$launcher
-fi
+LAUNCHER_OPTS+=$all_args
 
-progname=$1
-
-COMM_LAYER=`nm -a $progname | grep OPENUH_COMM_LAYER_IS | cut -d" " -f3 \
-  | sed 's/OPENUH_COMM_LAYER_IS_//'`
-
-if [ -z "$COMM_LAYER" ]; then
-  print_error "Cannot determine which communication layer to use"
-fi
-
-if [ $COMM_LAYER == gasnet ]; then
-  GASNET_CONDUIT=`nm -a $progname | grep OPENUH_GASNET_CONDUIT_IS | cut -d" " -f3 \
-    | sed 's/OPENUH_GASNET_CONDUIT_IS_//'`
-
-  if [ -z "$GASNET_CONDUIT" ]; then
-    print_error "Cannot determine which GASNet conduit ot use"
-  fi
-fi
-
+###########################################
 # Set environment for GASNET if used
 if [ $COMM_LAYER == gasnet ]; then
   # enable packing of non-contiguous put/get
@@ -341,7 +406,7 @@ fi
 
 if [ "$GASNET_CONDUIT" = "smp" ]; then
   set_env GASNET_PSHM_NODES $num_images
-  command="$*"
+  command="$program_cmd"  # just throw away $all_args?
 else
 
   if [ ! -f `which $LAUNCHER` ]; then
@@ -354,9 +419,7 @@ else
 
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec \) ]; then
     if [ $num_images -gt 1 ]; then
-      launcher_opts=" -n $num_images $LAUNCHER_OPTS"
-    else
-      launcher_opts="$LAUNCHER_OPTS"
+      LAUNCHER_OPTS+=" -n $num_images"
     fi
   fi
 
@@ -365,12 +428,10 @@ else
   if [ "$GASNET_CONDUIT" = "udp" ]; then
     set_env GASNET_SPAWNFN "C"
     set_env GASNET_CSPAWN_CMD "$LAUNCHER $LAUNCHER_OPTS -n %N %C"
-    shift
-    command="$progname $num_images $*"
+    command="$prog_name $num_images $prog_args"
   else
     # rest of gasnet conduits and armci layer
-
-    command="$LAUNCHER $launcher_opts $*"
+    command="$LAUNCHER $LAUNCHER_OPTS $program_cmd"
   fi
 
 fi
@@ -378,7 +439,7 @@ fi
 
 ENVIRONMENT+="-----------------------\n"
 case $verbose in
-  y)
+  yes)
     echo "$this environment:"
     echo -e $ENVIRONMENT
     echo
@@ -390,5 +451,8 @@ case $verbose in
     ;;
 esac
 
-eval $command
-
+###########################################
+# exeute command to launch program
+if [ $show = no ]; then
+    eval $command
+fi

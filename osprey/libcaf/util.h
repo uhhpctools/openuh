@@ -29,9 +29,14 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
-extern void farg_init(int *argc, char ***argv);
+/* declared in osprey/libf/fio/xarg.c */
+extern int f__xargc;
+extern char **f__xargv;
+extern void __f90_set_args(int argc, char **argv);
 
-extern void farg_free();
+/* from osprey/libU77, assumes platform is __linux */
+#define ARGC f__xargc
+#define ARGV f__xargv
 
 void Warning (char *warning_message);
 void Error (char *error_message);
