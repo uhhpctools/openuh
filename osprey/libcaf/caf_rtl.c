@@ -940,6 +940,89 @@ void _ATOMIC_REF_8(INT8 *value, INT4 *atom, int *image)
             "caf_rtl.c:_ATOMIC_REF_8->  after call to comm_read");
 }
 
+void _EVENT_POST(event_t *event, int* image)
+{
+    if (*image == 0) {
+        /* local reference */
+        INT4 result, inc = 1;
+        comm_fadd_request( event, &inc, sizeof(event_t), _this_image-1, &result);
+    } else {
+        INT4 result, inc = 1;
+        check_remote_address(*image, event);
+        comm_fadd_request( event, &inc, sizeof(event_t), *image-1, &result);
+    }
+}
+
+void _EVENT_QUERY(event_t *event, int* image, char *state, int state_len)
+{
+    memset( state, 0, state_len );
+    if (*image == 0) {
+        *state = (int)(*event) != 0;
+    } else {
+        check_remote_address(*image, event);
+        switch (state_len) {
+            case 1:
+                _ATOMIC_REF_1((INT1*)&state, event, image);
+                break;
+            case 2:
+                _ATOMIC_REF_2((INT2*)&state, event, image);
+                break;
+            case 4:
+                _ATOMIC_REF_4((INT4*)&state, event, image);
+                break;
+            case 8:
+                _ATOMIC_REF_8((INT8*)&state, event, image);
+                break;
+            default:
+                LIBCAF_TRACE(LIBCAF_LOG_FATAL, "_EVENT_QUERY called "
+                "using state variable with invalid length %d",
+                state_len);
+        }
+    }
+}
+
+void _EVENT_WAIT(event_t *event, int* image)
+{
+    event_t state;
+    if (*image == 0) {
+        int done = 0;
+        do {
+            state = *event;
+            if (state > 0) {
+                state = SYNC_FETCH_AND_ADD(event, -1);
+                if (state > 0) {
+                    /* event variable successfully modified */
+                    return;
+                } else {
+                    /* shouldn't have decremented, so add 1 back */
+                    state = SYNC_FETCH_AND_ADD(event, 1);
+                }
+            }
+            comm_service();
+        } while (1);
+    } else {
+        check_remote_address(*image, event);
+        do {
+            comm_read(*image-1, event, &state, sizeof(event_t));
+            if (state > 0) {
+                INT4 dec = -1;
+                INT4 inc = 1;
+                comm_fadd_request( event, &dec, sizeof(event_t), *image-1,
+                                   &state);
+                if (state > 0) {
+                    /* event variable successfully modified */
+                    return;
+                } else {
+                    /* shouldn't have decremented, so add 1 back */
+                    comm_fadd_request( event, &inc, sizeof(event_t), *image-1,
+                            &state);
+                }
+            }
+            comm_service();
+        } while (1);
+    }
+}
+
 
 void _SYNC_MEMORY()
 {

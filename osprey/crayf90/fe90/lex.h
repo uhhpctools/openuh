@@ -189,6 +189,7 @@ static	kwd_type		kwd[] = {
 				"ENTRY",	     Tok_Kwd_Entry,
 #ifdef _UH_COARRAYS
 				"ERROR",	     Tok_Kwd_Error,
+				"EVENT",	     Tok_Kwd_Event,
 #endif
 				"ELSE",		     Tok_Kwd_Else,
 #ifdef KEY /* Bug 10572 */
@@ -257,7 +258,15 @@ static	kwd_type		kwd[] = {
 				"PUBLIC",	     Tok_Kwd_Public,
 				"PAUSE",	     Tok_Kwd_Pause,
 				"PRINT",	     Tok_Kwd_Print,
+#ifdef _UH_COARRAYS
+				"POST",		     Tok_Kwd_Post,
+#endif
 				"PURE",		     Tok_Kwd_Pure,
+
+#ifdef _UH_COARRAYS
+				"QUERY",	     Tok_Kwd_Query,
+#endif
+
 
 				"RECURSIVE",	     Tok_Kwd_Recursive,
 				"RESULT",	     Tok_Kwd_Result,
@@ -279,7 +288,7 @@ static	kwd_type		kwd[] = {
 				"SPAN",		     Tok_Kwd_Span,
  
 				"TARGET",	     Tok_Kwd_Target,
-                                "TASK",              Tok_Kwd_Task,
+				"TASK",		     Tok_Kwd_Task,
 				"THEN",		     Tok_Kwd_Then,
 				"TYPE",		     Tok_Kwd_Type,
 				"TO",		     Tok_Kwd_To,
@@ -298,6 +307,9 @@ static	kwd_type		kwd[] = {
 				"WHERE",	     Tok_Kwd_Where,
 				"WHILE",	     Tok_Kwd_While,
 				"WRITE",	     Tok_Kwd_Write,
+#ifdef _UH_COARRAYS
+				"WAIT",		     Tok_Kwd_Wait,
+#endif
 
 				"",		     Tok_LAST };
 

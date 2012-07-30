@@ -269,6 +269,7 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Equivalence_Stmt,     /* Tok_Kwd_Equivalence  */
 #ifdef _UH_COARRAYS
 				Error_Stop_Stmt,     /* Tok_Kwd_Error  */
+				Event_Stmt,          /* Tok_Kwd_Event  */
 #endif
 				Exit_Stmt,	      /* Tok_Kwd_Exit	      */
 				External_Stmt,	      /* Tok_Kwd_External     */
@@ -318,6 +319,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Parameter_Stmt,	      /* Tok_Kwd_Parameter    */
 				Pause_Stmt,	      /* Tok_Kwd_Pause	      */
 				Pointer_Stmt,	      /* Tok_Kwd_Pointer      */
+#ifdef _UH_COARRAYS
+				Event_Stmt,          /* Tok_Kwd_Post  */
+#endif
 				Assignment_Stmt,      /* Tok_Kwd_Precision    */
 				Print_Stmt,	      /* Tok_Kwd_Print	      */
 				Private_Stmt,	      /* Tok_Kwd_Private      */
@@ -325,6 +329,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Program_Stmt,	      /* Tok_Kwd_Program      */
 				Public_Stmt,	      /* Tok_Kwd_Public	      */
 				Pure_Stmt,	      /* Tok_Kwd_Pure	      */
+#ifdef _UH_COARRAYS
+				Event_Stmt,          /* Tok_Kwd_Query  */
+#endif
 				Read_Stmt,	      /* Tok_Kwd_Read	      */
 				Type_Decl_Stmt,	      /* Tok_Kwd_Real	      */
 				Recursive_Stmt,	      /* Tok_Kwd_Recursive    */
@@ -356,6 +363,9 @@ static stmt_type_type		token_to_stmt_type [] = {
 				Value_Stmt,           /* Tok_Kwd_Value        */
 #endif /* KEY Bug 14150 */
 				Volatile_Stmt,        /* Tok_Kwd_Volatile     */
+#ifdef _UH_COARRAYS
+				Event_Stmt,          /* Tok_Kwd_Wait  */
+#endif
 				Where_Cstrct_Stmt,    /* Tok_Kwd_Where	      */
 				Assignment_Stmt,      /* Tok_Kwd_While	      */
 				Write_Stmt };	      /* Tok_Kwd_Write	      */
@@ -548,6 +558,7 @@ void		(*stmt_parsers[]) () = {
                 parse_lock_stmt,           /* Lock_Stmt */
                 parse_lock_stmt,            /* Unlock_Stmt */
 				parse_stop_pause_stmt,	/* Error_Stop_Stmt	      */
+				parse_event_stmt 	/* Event_Stmt	      */
 #endif
 
 };
@@ -5894,6 +5905,24 @@ long long     stmt_in_blk [] = {
 				(ONE << Contains_Blk) |
 				(ONE << Interface_Blk) |
 				(ONE << Derived_Type_Blk) |
+				(ONE << Enum_Blk)),
+
+			/*****  Event_Stmt  *****/
+
+			       ((ONE << Unknown_Blk) |
+				(ONE << Blockdata_Blk) |
+				(ONE << Module_Blk) |
+				(ONE << Interface_Body_Blk) |
+				(ONE << Forall_Blk) |
+				(ONE << If_Blk) |
+				(ONE << Where_Then_Blk) |
+				(ONE << Where_Else_Blk) |
+				(ONE << Where_Else_Mask_Blk) |
+				(ONE << SGI_Psection_Blk) |
+				(ONE << Select_Blk) |
+				(ONE << Contains_Blk) |
+				(ONE << Interface_Blk) |
+				(ONE << Derived_Type_Blk) |
 				(ONE << Enum_Blk))
 #endif
 
@@ -6085,7 +6114,8 @@ stmt_category_type	stmt_top_cat [] = {
                 Executable_Stmt_Cat,    /* End_Critical_Stmt    */  
                 Executable_Stmt_Cat,    /* Lock_Stmt    */
                 Executable_Stmt_Cat,    /* Unlock_Stmt   */
-                Executable_Stmt_Cat     /* Error_Stop_Stmt   */
+                Executable_Stmt_Cat,    /* Error_Stop_Stmt   */
+                Executable_Stmt_Cat     /* Event_Stmt   */
 #endif
 
 				};

@@ -53,6 +53,8 @@ typedef int16_t   INT2;
 typedef int32_t   INT4;
 typedef int64_t   INT8;
 
+typedef INT4      event_t;
+
 
 /* COMPILER BACK-END INTERFACE */
 
@@ -100,7 +102,7 @@ int   _LCOBOUND_2(DopeVectorType *diminfo, int *sub);
 void  _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
 int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
 
-/* LOCK INTRINICS */
+/* LOCKS SUPPORT */
 void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len);
 void _COARRAY_UNLOCK(lock_t *lock, int* image);
 
@@ -113,6 +115,11 @@ void _ATOMIC_REF_1(INT1 *value, INT4 *atom, int *image);
 void _ATOMIC_REF_2(INT2 *value, INT4 *atom, int *image);
 void _ATOMIC_REF_4(INT4 *value, INT4 *atom, int *image);
 void _ATOMIC_REF_8(INT8 *value, INT4 *atom, int *image);
+
+/* EVENTS SUPPORT */
+void _EVENT_POST(event_t *event, int* image);
+void _EVENT_QUERY(event_t *event, int* image, char *state, int state_len);
+void _EVENT_WAIT(event_t *event, int* image);
 
 /* critical construct support */
 void _CRITICAL();

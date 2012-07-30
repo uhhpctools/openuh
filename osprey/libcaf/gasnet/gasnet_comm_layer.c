@@ -382,7 +382,7 @@ comm_swap_request (void *target, void *value, size_t nbytes,
 
       return;
   }
-#ifdef GASNET_PSHM
+#if GASNET_PSHM
   else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
       /* target resides in the same compute node */
       void *new_target;
@@ -579,7 +579,7 @@ comm_cswap_request (void *target, void *cond, void *value,
 
       return;
   }
-#ifdef GASNET_PSHM
+#if GASNET_PSHM
   else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
       long long old;
       void *new_target;
@@ -762,7 +762,7 @@ comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
 
       return;
   }
-#ifdef GASNET_PSHM
+#if GASNET_PSHM
   else if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
       void *new_target;
 

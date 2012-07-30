@@ -541,7 +541,10 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
                            "END CRITICAL",
                            "LOCK",
                            "UNLOCK",
-                           "ERROR STOP"
+                           "ERROR STOP",
+                           "EVENT POST",
+                           "EVENT QUERY",
+                           "EVENT WAIT"
 #endif
     };
 

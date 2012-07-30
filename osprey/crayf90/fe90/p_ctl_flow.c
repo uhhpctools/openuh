@@ -5011,7 +5011,7 @@ void parse_sync_stmt (void)
 /******************************************************************************\
 |*                                                                            *|
 |* Description:                                                               *|
-|*   Parses LOCK and  statements (Fortran 2008)                               *|
+|*   Parses LOCK and UNLOCK statements (Fortran 2008)                         *|
 |*                                                                            *|
 |* Input parameters:                                                          *|
 |*   NONE                                                                     *|
@@ -5085,8 +5085,7 @@ void parse_lock_stmt (void)
                    had_acquired_lock = TRUE;
 
                    if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
-                       /* have stat var */
-                       /* do that stat stuff */
+                       /* have acquired_lock var */
 
                        parsed_ok = parse_deref(&opnd, NULL_IDX) && parsed_ok;
                        COPY_OPND(IR_OPND_R(ir_idx), opnd);
@@ -5127,6 +5126,119 @@ EXIT:
 
    return;
 } /* parse_lock_stmt */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*   Parses EVENT POST, EVENT QUERY, and EVENT WAIT statements (Fortran 2008) *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*   NONE                                                                     *|
+|*                                                                            *|
+\******************************************************************************/
+void parse_event_stmt (void)
+{
+   int			col;
+   int			ir_idx;
+   int			line;
+   boolean      parsed_ok  = TRUE;
+   boolean      is_query_stmt = FALSE;
+   opnd_type		opnd;
+   int			save_curr_stmt_sh_idx;
+   int      blk_idx;
+
+   TRACE (Func_Entry, "parse_event_stmt", NULL);
+
+   NTR_IR_TBL(ir_idx);
+   SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
+   IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+
+   if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+       if (TOKEN_VALUE(token) == Tok_Kwd_Post) {
+           IR_OPR(ir_idx) = Eventpost_Opr;
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Query) {
+           IR_OPR(ir_idx) = Eventquery_Opr;
+           is_query_stmt = TRUE;
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Wait) {
+           IR_OPR(ir_idx) = Eventwait_Opr;
+       } else {
+           /* should have seen POST, QUERY, or WAIT keyword */
+           parse_err_flush(Find_Lparen,
+                   "POST, QUERY, or WAIT keyword");
+       }
+   }
+
+   if (LA_CH_VALUE != LPAREN) {
+      parse_err_flush(Find_EOS, "(");
+      goto EXIT;
+   }
+   NEXT_LA_CH;
+
+   OPND_FLD(opnd) = IR_Tbl_Idx;
+   OPND_IDX(opnd) = NULL_IDX;
+
+   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+   NTR_IR_TBL(IR_IDX_L(ir_idx));
+   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+   parsed_ok = parse_expr(&opnd);
+
+   COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+   if (is_query_stmt) {
+       if (LA_CH_VALUE != COMMA) {
+           /* error */
+           parse_err_flush(Find_EOS, ", STATE)");
+           goto EXIT;
+       }
+       NEXT_LA_CH;
+       if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+           /* have state var */
+
+           parsed_ok = parse_deref(&opnd, NULL_IDX) && parsed_ok;
+           COPY_OPND(IR_OPND_R(ir_idx), opnd);
+
+           mark_attr_defined(&opnd);
+       } else {
+           parse_err_flush(Find_Comma_Rparen,
+                   "scalar logical STATE variable");
+           goto EXIT;
+       }
+   }
+
+   if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
+       /* error */
+       parse_err_flush(Find_EOS, ", or )");
+       goto EXIT;
+   }
+
+   if (LA_CH_VALUE != RPAREN) {
+       /* error */
+      parse_err_flush(Find_EOS, ")");
+      goto EXIT;
+   }
+
+   NEXT_LA_CH;
+
+EXIT:
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_event_stmt", NULL);
+
+   return;
+} /* parse_event_stmt */
 
 /*parse_critical_stmt*/
 void parse_critical_stmt(void)

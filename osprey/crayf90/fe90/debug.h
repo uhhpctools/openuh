@@ -1443,6 +1443,9 @@ char		*operator_str[]		= {
             "Lock_Opr",
             "Unlock_Opr",
             "Errorstop_Opr",
+            "Eventpost_Opr",
+            "Eventquery_Opr",
+            "Eventwait_Opr",
 #endif
             "Endtask_Open_Mp_Opr",
             "Task_Open_Mp_Opr",

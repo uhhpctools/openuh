@@ -6267,6 +6267,273 @@ void lock_stmt_semantics (void)
    return;
 } /* lock_stmt_semantics */
 
+
+/******************************************************************************\
+|*									                                          *|
+|* Description:                                                               *|
+|*	Do all semantic processing for EVENT POST, EVENT QUERY, and EVENT WAIT.	  *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Returns:	                                                                  *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+\******************************************************************************/
+
+void event_stmt_semantics (void)
+{
+   int			attr_idx;
+   expr_arg_type	exp_desc;
+   int			ir_idx;
+   boolean		is_call;
+   boolean      is_query_stmt = FALSE;
+   int			list_idx, pe_dim_list_idx, dim_list_idx;
+   opnd_type	opnd, pe_opnd;
+   int			save_arg_info_list_base;
+   boolean		semantically_correct		= TRUE;
+   char			str[16];
+   int			type_idx;
+   int          line, col;
+   int lib_idx;
+   int call_idx;
+
+
+   TRACE (Func_Entry, "event_stmt_semantics", NULL);
+
+   if (max_call_list_size >= arg_list_size) {
+      enlarge_call_list_tables();
+   }
+
+   save_arg_info_list_base = arg_info_list_base;
+   arg_info_list_base      = arg_info_list_top;
+   arg_info_list_top       = arg_info_list_base + 1;
+
+   if (arg_info_list_top >= arg_info_list_size) {
+      enlarge_info_list_table();
+   }
+
+   ir_idx = SH_IR_IDX(curr_stmt_sh_idx);
+   OPND_FLD(opnd) = NO_Tbl_Idx;
+
+   line = IR_LINE_NUM(ir_idx);
+   col  = IR_COL_NUM(ir_idx);
+
+   if (IR_OPR(ir_idx) == Eventpost_Opr || IR_OPR(ir_idx) == Eventquery_Opr ||
+	   IR_OPR(ir_idx) == Eventwait_Opr) {
+
+       if (IR_OPR(ir_idx) == Eventpost_Opr) {
+
+           if (glb_tbl_idx[Event_Post_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Event_Post_Attr_Idx] =
+                   create_lib_entry_attr(EVENT_POST_LIB_ENTRY,
+                           EVENT_POST_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Event_Post_Attr_Idx];
+
+       } else if (IR_OPR(ir_idx) == Eventquery_Opr) {
+
+           if (glb_tbl_idx[Event_Query_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Event_Query_Attr_Idx] =
+                   create_lib_entry_attr(EVENT_QUERY_LIB_ENTRY,
+                           EVENT_QUERY_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Event_Query_Attr_Idx];
+           is_query_stmt = TRUE;
+
+       } else if (IR_OPR(ir_idx) == Eventwait_Opr) {
+
+           if (glb_tbl_idx[Event_Wait_Attr_Idx] == NULL_IDX) {
+               glb_tbl_idx[Event_Wait_Attr_Idx] =
+                   create_lib_entry_attr(EVENT_WAIT_LIB_ENTRY,
+                           EVENT_WAIT_NAME_LEN,
+                           stmt_start_line, stmt_start_col);
+           }
+           lib_idx = glb_tbl_idx[Event_Wait_Attr_Idx];
+
+       }
+       ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+
+       NTR_IR_TBL(call_idx);
+       IR_OPR(call_idx) = Call_Opr;
+       IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+       IR_LINE_NUM(call_idx) = line;
+       IR_COL_NUM(call_idx) = col;
+       IR_FLD_L(call_idx) = AT_Tbl_Idx;
+       IR_IDX_L(call_idx) = lib_idx;
+       IR_LINE_NUM_L(call_idx) = line;
+       IR_COL_NUM_L(call_idx) = col;
+
+       NTR_IR_LIST_TBL(list_idx);
+       IL_ARG_DESC_VARIANT(list_idx) = TRUE;
+       IL_ARG_DESC_IDX(list_idx) = list_idx;
+       IR_FLD_R(call_idx) = IL_Tbl_Idx;
+       IR_IDX_R(call_idx) = list_idx;
+
+       if (is_query_stmt)
+           IR_LIST_CNT_R(call_idx) = 4;
+       else
+           IR_LIST_CNT_R(call_idx) = 2;
+
+       gen_sh(Before, Call_Stmt, line, col,
+               FALSE, FALSE, TRUE);
+
+       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+
+       exp_desc = init_exp_desc;
+       COPY_OPND(IL_OPND(list_idx), IR_OPND_L((ir_idx)));
+
+       /* check that operand is a scalar coarray variable */
+       {
+           int pe_bd_idx;
+           act_arg_type arg_type;
+           opnd_type op = IL_OPND(list_idx);
+           int attr_idx = find_base_attr(&IL_OPND(list_idx),
+                          &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                  !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX ||
+              (arg_type != Array_Elt && arg_type != Scalar_Var &&
+               arg_type != Coindexed_Array_Elt) ||
+              strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
+                                     "EVENT_TYPE") ) {
+               PRINTMSG(line, 1710, Error, col,
+                 IR_OPR(ir_idx)==Eventpost_Opr? "EVENT POST":
+				 IR_OPR(ir_idx)==Eventquery_Opr? "EVENT TEST": "EVENT WAIT");
+           }
+
+           /* if arg is coindexed, return cosubscripts into
+            * pe_dim_list_idx */
+
+           pe_dim_list_idx = NULL_IDX;
+           if (arg_type == Coindexed_Array_Elt) {
+               int num_dims = 0;
+               dim_list_idx = IR_IDX_R(IL_IDX(list_idx));
+               while (dim_list_idx != NULL_IDX) {
+                   if (IL_PE_SUBSCRIPT(dim_list_idx)) {
+                       int prev_list_idx = IL_PREV_LIST_IDX(dim_list_idx);
+                       pe_dim_list_idx = dim_list_idx;
+                       if (prev_list_idx != NULL_IDX)
+                           IL_NEXT_LIST_IDX(prev_list_idx) = NULL_IDX;
+                       break;
+                   }
+                   dim_list_idx = IL_NEXT_LIST_IDX(dim_list_idx);
+                   num_dims++;
+               }
+               if (num_dims == 0) {
+                   /* now its just a scalar variable reference */
+                   IL_FLD(list_idx) = AT_Tbl_Idx;
+                   IL_IDX(list_idx) = attr_idx;
+               } else {
+                   IR_LIST_CNT_R(IL_IDX(list_idx)) = num_dims;
+               }
+               pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+               linearize_pe_dims(pe_dim_list_idx, pe_bd_idx,
+                                 line, col, &pe_opnd,
+                                 attr_idx, &exp_desc);
+           } else {
+               OPND_FLD(pe_opnd) = CN_Tbl_Idx;
+               OPND_IDX(pe_opnd) = CN_INTEGER_ZERO_IDX;
+               OPND_LINE_NUM(pe_opnd) = line;
+               OPND_COL_NUM(pe_opnd) = col;
+           }
+       }
+
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+       IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+       IL_FLD(IL_NEXT_LIST_IDX(list_idx)) = OPND_FLD(pe_opnd);
+       IL_IDX(IL_NEXT_LIST_IDX(list_idx)) = OPND_IDX(pe_opnd);
+       IL_LINE_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_LINE_NUM(call_idx);
+       IL_COL_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_COL_NUM(call_idx);
+
+       if (is_query_stmt) {
+           /* add STATE parameter */
+           int logical_len = 0;
+           int attr_idx;
+           opnd_type op;
+           int list2_idx = IL_NEXT_LIST_IDX(list_idx);
+           int list3_idx, list4_idx;
+           int cn_idx, val_idx;
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
+           list3_idx = IL_NEXT_LIST_IDX(list2_idx);
+           IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+
+           op = IR_OPND_R(ir_idx);
+           act_arg_type arg_type;
+           attr_idx = find_base_attr(&op, &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                   !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                   TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Logical) {
+               PRINTMSG(line, 1712 , Error, col);
+           }
+
+           IL_FLD(list3_idx) = OPND_FLD(op);
+           IL_IDX(list3_idx) = OPND_IDX(op);
+
+           /* calculate size of type in bytes */
+           logical_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
+
+           IL_LINE_NUM(list3_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list3_idx) = IR_COL_NUM(call_idx);
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list3_idx));
+           list4_idx = IL_NEXT_LIST_IDX(list3_idx);
+           IL_PREV_LIST_IDX(list4_idx) = list3_idx;
+
+           cn_idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, logical_len);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                       Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, line, col,
+                       NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list4_idx) = IR_Tbl_Idx;
+           IL_IDX(list4_idx) = val_idx;
+           IL_LINE_NUM(list4_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list4_idx) = IR_COL_NUM(call_idx);
+       }
+
+       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+       SH_NEXT_IDX(curr_stmt_sh_idx) =
+           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
+       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
+           curr_stmt_sh_idx;
+
+       OPND_FLD(opnd) = IR_Tbl_Idx;
+       OPND_IDX(opnd) = SH_IR_IDX(curr_stmt_sh_idx);
+       call_list_semantics(&opnd, &exp_desc, FALSE);
+
+   }
+
+   TRACE (Func_Exit, "event_stmt_semantics", NULL);
+
+   return;
+} /* event_stmt_semantics */
+
 /* critical_stmt_semantics */
 void critical_stmt_semantics (void)
 {

@@ -165,6 +165,7 @@ enum	token_values {
 		Tok_Kwd_Equivalence,	/* EQUIVALENCE			      */
 #ifdef _UH_COARRAYS
 		Tok_Kwd_Error,		/* ERROR			      */
+		Tok_Kwd_Event,		/* EVENT			      */
 #endif
 		Tok_Kwd_Exit,		/* EXIT				      */
 		Tok_Kwd_External,	/* EXTERNAL			      */
@@ -215,6 +216,9 @@ enum	token_values {
 		Tok_Kwd_Parameter,	/* PARAMETER			      */
 		Tok_Kwd_Pause,		/* PAUSE			      */
 		Tok_Kwd_Pointer,	/* POINTER			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Post,		/* POST				      */
+#endif
 		Tok_Kwd_Precision,	/* PRECISION DOUBLEPRECISION	      */
 		Tok_Kwd_Print,		/* PRINT			      */
 		Tok_Kwd_Private,	/* PRIVATE			      */
@@ -222,6 +226,9 @@ enum	token_values {
 		Tok_Kwd_Program,	/* PROGRAM   ENDPROGRAM		      */
 		Tok_Kwd_Public,		/* PUBLIC			      */
 		Tok_Kwd_Pure,		/* PURE  			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Query,		/* QUERY				      */
+#endif
 		Tok_Kwd_Read,		/* READ				      */
 		Tok_Kwd_Real,		/* REAL				      */
 		Tok_Kwd_Recursive,	/* RECURSIVE			      */
@@ -240,7 +247,7 @@ enum	token_values {
 		Tok_Kwd_Sync,	    /* SYNC                   */
 #endif
 		Tok_Kwd_Target,		/* TARGET			      */
-                Tok_Kwd_Task,           /* TASK                               */
+		Tok_Kwd_Task,		/* TASK				      */
 		Tok_Kwd_Then,		/* THEN				      */
 		Tok_Kwd_To,		/* TO	     GOTO		      */
 		Tok_Kwd_Type,		/* TYPE	     ENDTYPE		      */
@@ -253,6 +260,9 @@ enum	token_values {
 		Tok_Kwd_Value,	        /* VALUE   			      */
 #endif /* KEY Bug 14150 */
 		Tok_Kwd_Volatile,	/* VOLATILE			      */
+#ifdef _UH_COARRAYS
+		Tok_Kwd_Wait,		/* WAIT				      */
+#endif
 		Tok_Kwd_Where,		/* WHERE     ELSEWHERE, ENDWHERE      */
 		Tok_Kwd_While,		/* WHILE			      */
 		Tok_Kwd_Write,		/* WRITE			      */

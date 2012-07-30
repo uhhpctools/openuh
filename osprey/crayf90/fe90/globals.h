@@ -182,6 +182,9 @@ enum	glb_tbl_idx_values	{Allocate_Attr_Idx,
 				 Critical_Attr_Idx,
 				 EndCritical_Attr_Idx,
 				 Error_Stop_Attr_Idx,
+                 Event_Post_Attr_Idx,
+                 Event_Query_Attr_Idx,
+                 Event_Wait_Attr_Idx,
 #endif
 				 Num_Glb_Tbl_Idxs
 				};
@@ -1592,6 +1595,9 @@ enum    operator_values      {  Null_Opr,
                 Lock_Opr,
                 Unlock_Opr,
                 Errorstop_Opr,
+                Eventpost_Opr,
+                Eventquery_Opr,
+                Eventwait_Opr,
 #endif
 				Endtask_Open_Mp_Opr,
 				Task_Open_Mp_Opr,
@@ -1799,7 +1805,8 @@ enum stmt_type_values           {Null_Stmt,
                  End_Critical_Stmt,
                  Lock_Stmt,
                  Unlock_Stmt,
-                 Error_Stop_Stmt
+                 Error_Stop_Stmt,
+                 Event_Stmt,
 #endif
 
                                  /* When you add a stmt, make sure you change */

@@ -74,4 +74,9 @@ module iso_fortran_env
       integer(kind=int64) :: l = 0
   end type LOCK_TYPE  
 
+  type :: EVENT_TYPE
+      private
+      integer(kind=int32) :: e = 0
+  end type EVENT_TYPE
+
 end module iso_fortran_env

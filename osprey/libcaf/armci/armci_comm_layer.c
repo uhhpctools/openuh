@@ -893,6 +893,10 @@ void comm_swap_request (void *target, void *value, size_t nbytes,
         void *remote_address = get_remote_address(target, proc);
         (void) ARMCI_Rmw( ARMCI_SWAP_LONG, value, remote_address, 0, proc);
         memmove( retval, value, nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%d) in comm_swap_request", nbytes);
+        Error(msg);
     }
 }
 
@@ -902,7 +906,7 @@ comm_cswap_request (void *target, void *cond, void *value,
 {
     check_remote_address(proc+1, target);
     /* TODO */
-    Error( "comm_cswap_request not implemented for ARMCI conduit" );
+    Error( "comm_cswap_request not implemented for ARMCI comm layer" );
 }
 
 void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
@@ -912,17 +916,21 @@ void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
     check_remote_address(proc+1, target);
     memmove(&old,value,nbytes);
     if (nbytes == sizeof(int) ) {
+        int ret;
         void *remote_address = get_remote_address(target, proc);
-        *(int*)retval =
-            ARMCI_Rmw( ARMCI_FETCH_AND_ADD, 0, remote_address,*(int*)value,
-                    proc);
+        ret = ARMCI_Rmw( ARMCI_FETCH_AND_ADD, retval,
+                remote_address,*(int*)value, proc);
         memmove(value, &old, nbytes);
     } else if (nbytes == sizeof(long) ) {
+        long ret;
         void *remote_address = get_remote_address(target, proc);
-        *(long*)retval =
-            ARMCI_Rmw( ARMCI_FETCH_AND_ADD_LONG, 0, remote_address,*(int*)value,
-                    proc);
-        memmove(value, &old, nbytes);
+        ret = ARMCI_Rmw( ARMCI_FETCH_AND_ADD_LONG, retval,
+                remote_address,*(int*)value, proc); memmove(value, &old,
+                nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%d) in comm_fadd_request", nbytes);
+        Error(msg);
     }
 }
 
@@ -943,6 +951,10 @@ void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
                    proc);
         memmove(retval, value, nbytes);
         memmove(value, &old, nbytes);
+    } else {
+        char msg[100];
+        sprintf(msg, "unsupported nbytes (%d) in comm_fstore_request", nbytes);
+        Error(msg);
     }
 }
 

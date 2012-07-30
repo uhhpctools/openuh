@@ -105,6 +105,7 @@ extern  void subroutine_stmt_semantics (void);
 #ifdef _UH_COARRAYS
 extern  void sync_stmt_semantics (void);
 extern  void lock_stmt_semantics (void);
+extern  void event_stmt_semantics (void);
 #endif
 extern  void then_stmt_semantics (void);
 extern  void where_stmt_semantics (void);
