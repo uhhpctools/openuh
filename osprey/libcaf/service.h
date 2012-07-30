@@ -28,7 +28,7 @@
 
 #ifndef _SERVICE_H
 
-extern void comm_service_init (void);
-extern void comm_service_finalize (void);
+extern void comm_service_init(void);
+extern void comm_service_finalize(void);
 
-#endif /* _SERVICE_H */
+#endif                          /* _SERVICE_H */

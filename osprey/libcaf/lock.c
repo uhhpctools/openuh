@@ -43,17 +43,17 @@ extern unsigned long _num_images;
 
 struct lock_request {
     volatile int locked;
-    volatile long long image :20;
-    volatile long long ofst  :36;
-    volatile long long done  :1;
+    volatile long long image:20;
+    volatile long long ofst:36;
+    volatile long long done:1;
 };
 
 typedef struct lock_request lock_request_t;
 
 struct lock_req_tbl_item {
-    lock_t l;               /* key */
+    lock_t l;                   /* key */
     lock_request_t *req;
-    UT_hash_handle hh;       /* make structure hashable */
+    UT_hash_handle hh;          /* make structure hashable */
 };
 
 typedef struct lock_req_tbl_item lock_req_tbl_item_t;
@@ -63,15 +63,15 @@ lock_req_tbl_item_t *req_table = NULL;
 static inline void *get_heap_address_from_offset(unsigned long ofst,
                                                  size_t image)
 {
-    return comm_start_heap(image-1) + ofst;
+    return comm_start_heap(image - 1) + ofst;
 }
 
-static inline unsigned long get_offset_from_heap_address(void * addr)
+static inline unsigned long get_offset_from_heap_address(void *addr)
 {
-    return addr - comm_start_heap(_this_image-1);
+    return addr - comm_start_heap(_this_image - 1);
 }
 
-void comm_lock(lock_t *lock, int image, char *success, int success_len)
+void comm_lock(lock_t * lock, int image, char *success, int success_len)
 {
     /*
      *  Check that lock isn't already being held. If so, just return.
@@ -83,7 +83,7 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
      *       predecessor->next on image predecessor->locked
      */
     lock_req_tbl_item_t check, *new_item;
-    lock_t p,q;
+    lock_t p, q;
     lock_request_t *lock_req;
     size_t lock_ofst = get_offset_from_heap_address(lock);
 
@@ -101,12 +101,12 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
 
     if (success != NULL) {
         /* clear success flag */
-        memset( success, 0, (size_t)success_len);
+        memset(success, 0, (size_t) success_len);
     }
 
     /* add hash item for lock request */
     lock_req =
-      (lock_request_t *) coarray_asymmetric_allocate_(sizeof(*lock_req));
+        (lock_request_t *) coarray_asymmetric_allocate_(sizeof(*lock_req));
     new_item = (lock_req_tbl_item_t *) malloc(sizeof(*new_item));
     new_item->l.locked = 0;
     new_item->l.image = image;
@@ -120,7 +120,7 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
     lock_req->done = 0;
 
     q.locked = 1;
-    q.image =_this_image;
+    q.image = _this_image;
     q.ofst = get_offset_from_heap_address(lock_req);
 
     LOAD_STORE_FENCE();
@@ -130,37 +130,37 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
         /* ARMCI doesn't support compare-and-swap. So, for now we do an
          * initial check and if it isn't locked then we try to acquire the
          * lock as normal */
-        comm_read( image-1, lock, &p, sizeof(p) );
+        comm_read(image - 1, lock, &p, sizeof(p));
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
-            coarray_deallocate_( new_item->req );
-            free( new_item );
+            coarray_deallocate_(new_item->req);
+            free(new_item);
             return;
         }
 
         /* doesn't appear to be locked, so now try to acquire it */
-        comm_fstore_request( lock, &q, sizeof(q), image-1, &p);
-#else /* defined(GASNET) */
+        comm_fstore_request(lock, &q, sizeof(q), image - 1, &p);
+#else                           /* defined(GASNET) */
         lock_t unset;
         unset.locked = 0;
         unset.image = 0;
         unset.ofst = 0;
-        comm_cswap_request(lock, &unset, &q, sizeof(q), image-1, &p);
+        comm_cswap_request(lock, &unset, &q, sizeof(q), image - 1, &p);
 
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
-            coarray_deallocate_( new_item->req );
-            free( new_item );
+            coarray_deallocate_(new_item->req);
+            free(new_item);
             return;
         }
 #endif
     } else {
-        comm_fstore_request( lock, &q, sizeof(q), image-1, &p);
+        comm_fstore_request(lock, &q, sizeof(q), image - 1, &p);
     }
 
-    if ( p.locked != 0 ) {
+    if (p.locked != 0) {
         lock_request_t r;
         r.image = _this_image;
         r.ofst = q.ofst;
@@ -171,9 +171,9 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
         LOAD_STORE_FENCE();
 
         /* p->address now points to predecessor's request descriptor */
-        comm_write( p.image-1,
-                ((int*)get_heap_address_from_offset(p.ofst,p.image))+1,
-                ((int*)&r)+1, sizeof(r)-sizeof(int) );
+        comm_write(p.image - 1,
+                   ((int *) get_heap_address_from_offset(p.ofst, p.image))
+                   + 1, ((int *) &r) + 1, sizeof(r) - sizeof(int));
 
         do {
             /* do something useful here! */
@@ -182,10 +182,11 @@ void comm_lock(lock_t *lock, int image, char *success, int success_len)
 
     }
 
-    if (success != NULL)  *success = 1;
+    if (success != NULL)
+        *success = 1;
 }
 
-void comm_unlock(lock_t *lock, int image)
+void comm_unlock(lock_t * lock, int image)
 {
     /*
      * check if lock has actually been acquired first. If not, its an error.
@@ -223,13 +224,13 @@ void comm_unlock(lock_t *lock, int image)
         reset.image = 0;
         reset.ofst = 0;
 
-        comm_cswap_request(lock, &q, &reset, sizeof(reset), image-1, &q);
+        comm_cswap_request(lock, &q, &reset, sizeof(reset), image - 1, &q);
 
         if (q.image == _this_image) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
-            coarray_deallocate_( request_item->req );
-            free( request_item);
+            coarray_deallocate_(request_item->req);
+            free(request_item);
             return;
         }
 
@@ -248,15 +249,15 @@ void comm_unlock(lock_t *lock, int image)
     /* reset locked on successor */
     s = get_heap_address_from_offset(req->ofst, req->image);
     i = 0;
-    comm_write(req->image-1, s, &i, sizeof(i) );
+    comm_write(req->image - 1, s, &i, sizeof(i));
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
-    coarray_deallocate_( request_item->req );
-    free( request_item);
+    coarray_deallocate_(request_item->req);
+    free(request_item);
 }
 
-void comm_unlock2(lock_t *lock, int image)
+void comm_unlock2(lock_t * lock, int image)
 {
     /*
      * check if lock has actually been acquired first. If not, its an error.
@@ -290,20 +291,20 @@ void comm_unlock2(lock_t *lock, int image)
         u.image = 0;
         u.ofst = 0;
 
-        comm_fstore_request(lock, &u, sizeof(u), image-1, &v);
+        comm_fstore_request(lock, &u, sizeof(u), image - 1, &v);
 
         if (v.image == _this_image) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
-            coarray_deallocate_( request_item->req );
-            free( request_item);
+            coarray_deallocate_(request_item->req);
+            free(request_item);
             return;
         }
 
         /* there was at least one successor, but they were removed from the
          * queue
          */
-        comm_fstore_request(lock, &v, sizeof(v), image-1, &u);
+        comm_fstore_request(lock, &v, sizeof(v), image - 1, &u);
 
         while (req->done == 0) {
             /* do something useful here! */
@@ -313,25 +314,27 @@ void comm_unlock2(lock_t *lock, int image)
         if (u.image != 0) {
             /* link victim(s) to the usurper(s) */
             lock_request_t r;
-            comm_write(u.image-1,
-                ((int*)get_heap_address_from_offset(u.ofst,u.image))+1,
-                 ((int*)req)+1, sizeof(*req)-sizeof(int) );
+            comm_write(u.image - 1, ((int *)
+                                     get_heap_address_from_offset(u.ofst,
+                                                                  u.
+                                                                  image)) +
+                       1, ((int *) req) + 1, sizeof(*req) - sizeof(int));
         } else {
             /* reset locked on successor */
             s = get_heap_address_from_offset(req->ofst, req->image);
             i = 0;
-            comm_write(req->image-1, s, &i, sizeof(i) );
+            comm_write(req->image - 1, s, &i, sizeof(i));
         }
 
     } else {
         /* reset locked on successor */
         s = get_heap_address_from_offset(req->ofst, req->image);
         i = 0;
-        comm_write(req->image-1, s, &i, sizeof(i) );
+        comm_write(req->image - 1, s, &i, sizeof(i));
     }
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
-    coarray_deallocate_( request_item->req );
-    free( request_item);
+    coarray_deallocate_(request_item->req);
+    free(request_item);
 }

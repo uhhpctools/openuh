@@ -47,13 +47,13 @@
 
 /* GASNET handler IDs */
 enum {
-  GASNET_HANDLER_SYNC_REQUEST = 128,
-  GASNET_HANDLER_SWAP_REQUEST = 129,
-  GASNET_HANDLER_SWAP_REPLY = 130,
-  GASNET_HANDLER_CSWAP_REQUEST = 131,
-  GASNET_HANDLER_CSWAP_REPLY = 132,
-  GASNET_HANDLER_FADD_REQUEST = 133,
-  GASNET_HANDLER_FADD_REPLY = 134
+    GASNET_HANDLER_SYNC_REQUEST = 128,
+    GASNET_HANDLER_SWAP_REQUEST = 129,
+    GASNET_HANDLER_SWAP_REPLY = 130,
+    GASNET_HANDLER_CSWAP_REQUEST = 131,
+    GASNET_HANDLER_CSWAP_REPLY = 132,
+    GASNET_HANDLER_FADD_REQUEST = 133,
+    GASNET_HANDLER_FADD_REPLY = 134
 };
 
 #define GASNET_Safe(fncall) do {                                      \
@@ -72,7 +72,7 @@ enum {
 #define BARRIER() do {                                              \
     gasnet_barrier_notify(0,GASNET_BARRIERFLAG_ANONYMOUS);            \
     GASNET_Safe(gasnet_barrier_wait(0,GASNET_BARRIERFLAG_ANONYMOUS)); \
-} while (0) 
+} while (0)
 
 typedef enum {
     static_coarray,
@@ -82,23 +82,20 @@ typedef enum {
 
 
 /* NON-BLOCKING PUT OPTIMIZATION */
-struct write_handle_list
-{
+struct write_handle_list {
     gasnet_handle_t handle;
     void *address;
     unsigned long size;
     struct write_handle_list *prev;
     struct write_handle_list *next;
 };
-struct local_buffer
-{
+struct local_buffer {
     void *addr;
     struct local_buffer *next;
 };
 
 /* GET CACHE OPTIMIZATION */
-struct cache
-{
+struct cache {
     void *remote_address;
     void *cache_line_address;
     gasnet_handle_t handle;

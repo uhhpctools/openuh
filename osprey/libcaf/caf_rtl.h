@@ -35,10 +35,10 @@
 #include "dopevec.h"
 
 /* SHARED MEMORY MANAGEMENT */
-struct shared_memory_slot{
+struct shared_memory_slot {
     void *addr;
     unsigned long size;
-    unsigned short feb; //full empty bit. 1=full
+    unsigned short feb;         //full empty bit. 1=full
     struct shared_memory_slot *next;
     struct shared_memory_slot *prev;
 };
@@ -48,12 +48,12 @@ struct shared_memory_slot{
 #define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)
 #define SYNC_CSWAP(t,u,v) __sync_val_compare_and_swap(t,u,v)
 
-typedef int8_t    INT1;
-typedef int16_t   INT2;
-typedef int32_t   INT4;
-typedef int64_t   INT8;
+typedef int8_t INT1;
+typedef int16_t INT2;
+typedef int32_t INT4;
+typedef int64_t INT8;
 
-typedef INT4      event_t;
+typedef INT4 event_t;
 
 
 /* COMPILER BACK-END INTERFACE */
@@ -69,19 +69,19 @@ void __acquire_lcb(unsigned long buf_size, void **ptr);
 void __release_lcb(void **ptr);
 
 /* non-strided (contiguous) read and write operations */
-void __coarray_read( size_t image, void *src, void *dest, size_t nbytes);
-void __coarray_write( size_t image, void *dest, void *src, size_t nbytes);
+void __coarray_read(size_t image, void *src, void *dest, size_t nbytes);
+void __coarray_write(size_t image, void *dest, void *src, size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
-void __coarray_strided_read ( size_t image,
-        void *src, const size_t src_strides[],
-        void *dest, const size_t dest_strides[],
-        const size_t count[], int stride_levels);
+void __coarray_strided_read(size_t image,
+                            void *src, const size_t src_strides[],
+                            void *dest, const size_t dest_strides[],
+                            const size_t count[], int stride_levels);
 
-void __coarray_strided_write ( size_t image,
-        void *dest, const size_t dest_strides[],
-        void *src, const size_t src_strides[],
-        const size_t count[], int stride_levels);
+void __coarray_strided_write(size_t image,
+                             void *dest, const size_t dest_strides[],
+                             void *src, const size_t src_strides[],
+                             const size_t count[], int stride_levels);
 
 /* TODO: vector, non-contiguous read and write operations  */
 
@@ -89,44 +89,45 @@ void __coarray_strided_write ( size_t image,
 /* SYNCHRONIZATION INTRINSICS */
 void _SYNC_ALL();
 void _SYNC_MEMORY();
-void _SYNC_IMAGES( int *imageList, int imageCount);
+void _SYNC_IMAGES(int *imageList, int imageCount);
 void _SYNC_IMAGES_ALL();
 
 /* IMAGE INQUIRY INTRINSICS */
-int   _IMAGE_INDEX(DopeVectorType *diminfo, DopeVectorType *sub);
-void  _THIS_IMAGE1(DopeVectorType *ret, DopeVectorType *diminfo);
-int   _THIS_IMAGE2(DopeVectorType *diminfo, int* sub);
+int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub);
+void _THIS_IMAGE1(DopeVectorType * ret, DopeVectorType * diminfo);
+int _THIS_IMAGE2(DopeVectorType * diminfo, int *sub);
 
-void  _LCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
-int   _LCOBOUND_2(DopeVectorType *diminfo, int *sub);
-void  _UCOBOUND_1(DopeVectorType *ret, DopeVectorType *diminfo);
-int   _UCOBOUND_2(DopeVectorType *diminfo, int *sub);
+void _LCOBOUND_1(DopeVectorType * ret, DopeVectorType * diminfo);
+int _LCOBOUND_2(DopeVectorType * diminfo, int *sub);
+void _UCOBOUND_1(DopeVectorType * ret, DopeVectorType * diminfo);
+int _UCOBOUND_2(DopeVectorType * diminfo, int *sub);
 
 /* LOCKS SUPPORT */
-void _COARRAY_LOCK(lock_t *lock, int* image, char *success, int success_len);
-void _COARRAY_UNLOCK(lock_t *lock, int* image);
+void _COARRAY_LOCK(lock_t * lock, int *image, char *success,
+                   int success_len);
+void _COARRAY_UNLOCK(lock_t * lock, int *image);
 
 /* ATOMIC INTRINSICS */
-void _ATOMIC_DEFINE_1(INT4 *atom, INT1 *value, int *image);
-void _ATOMIC_DEFINE_2(INT4 *atom, INT2 *value, int *image);
-void _ATOMIC_DEFINE_4(INT4 *atom, INT4 *value, int *image);
-void _ATOMIC_DEFINE_8(INT4 *atom, INT8 *value, int *image);
-void _ATOMIC_REF_1(INT1 *value, INT4 *atom, int *image);
-void _ATOMIC_REF_2(INT2 *value, INT4 *atom, int *image);
-void _ATOMIC_REF_4(INT4 *value, INT4 *atom, int *image);
-void _ATOMIC_REF_8(INT8 *value, INT4 *atom, int *image);
+void _ATOMIC_DEFINE_1(INT4 * atom, INT1 * value, int *image);
+void _ATOMIC_DEFINE_2(INT4 * atom, INT2 * value, int *image);
+void _ATOMIC_DEFINE_4(INT4 * atom, INT4 * value, int *image);
+void _ATOMIC_DEFINE_8(INT4 * atom, INT8 * value, int *image);
+void _ATOMIC_REF_1(INT1 * value, INT4 * atom, int *image);
+void _ATOMIC_REF_2(INT2 * value, INT4 * atom, int *image);
+void _ATOMIC_REF_4(INT4 * value, INT4 * atom, int *image);
+void _ATOMIC_REF_8(INT8 * value, INT4 * atom, int *image);
 
 /* EVENTS SUPPORT */
-void _EVENT_POST(event_t *event, int* image);
-void _EVENT_QUERY(event_t *event, int* image, char *state, int state_len);
-void _EVENT_WAIT(event_t *event, int* image);
+void _EVENT_POST(event_t * event, int *image);
+void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len);
+void _EVENT_WAIT(event_t * event, int *image);
 
 /* critical construct support */
 void _CRITICAL();
 void _END_CRITICAL();
 
-void* coarray_allocatable_allocate_(unsigned long var_size);
-void* coarray_asymmetric_allocate_(unsigned long var_size);
+void *coarray_allocatable_allocate_(unsigned long var_size);
+void *coarray_asymmetric_allocate_(unsigned long var_size);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
 

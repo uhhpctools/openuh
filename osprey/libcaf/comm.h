@@ -58,7 +58,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 
 
 /* critical support */
-void comm_get_signal(int** signal);
+void comm_get_signal(int **signal);
 void comm_critical();
 void comm_end_critical();
 
@@ -68,19 +68,19 @@ size_t comm_get_proc_id();
 size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
-void comm_read( size_t proc, void *src, void *dest, size_t nbytes);
-void comm_write( size_t proc, void *dest, void *src, size_t nbytes);
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes);
+void comm_write(size_t proc, void *dest, void *src, size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
-void comm_strided_read ( size_t proc,
-        void *src, const size_t src_strides[],
-        void *dest, const size_t dest_strides[],
-        const size_t count[], size_t stride_levels);
+void comm_strided_read(size_t proc,
+                       void *src, const size_t src_strides[],
+                       void *dest, const size_t dest_strides[],
+                       const size_t count[], size_t stride_levels);
 
-void comm_strided_write ( size_t proc,
-        void *dest, const size_t dest_strides[],
-        void *src, const size_t src_strides[],
-        const size_t count[], size_t stride_levels);
+void comm_strided_write(size_t proc,
+                        void *dest, const size_t dest_strides[],
+                        void *src, const size_t src_strides[],
+                        const size_t count[], size_t stride_levels);
 
 /* TODO: vector, non-contiguous read and write operations  */
 
@@ -102,30 +102,30 @@ void *comm_start_allocatable_heap(size_t proc);
 void *comm_end_allocatable_heap(size_t proc);
 
 /* malloc & free */
-void* comm_malloc(size_t size);
-void comm_free(void* ptr);
-void comm_free_lcb(void* ptr);
+void *comm_malloc(size_t size);
+void comm_free(void *ptr);
+void comm_free_lcb(void *ptr);
 
 /* barriers */
 void comm_barrier_all();
 void comm_sync_images(int *image_list, int image_count);
 
 /* atomics */
-void comm_swap_request (void *target, void *value, size_t nbytes,
-			    int proc, void *retval);
-void comm_cswap_request (void *target, void *cond, void *value,
-			     size_t nbytes, int proc, void *retval);
-void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
-			    void *retval);
-void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
-			    void *retval);
+void comm_swap_request(void *target, void *value, size_t nbytes,
+                       int proc, void *retval);
+void comm_cswap_request(void *target, void *cond, void *value,
+                        size_t nbytes, int proc, void *retval);
+void comm_fstore_request(void *target, void *value, size_t nbytes,
+                         int proc, void *retval);
+void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
+                       void *retval);
 
 /* progress */
-void comm_service ();
+void comm_service();
 
 /* exit */
 void comm_memory_free();
 void comm_exit(int status);
 void comm_finalize();
 
-#endif /* _COMM_H */
+#endif                          /* _COMM_H */

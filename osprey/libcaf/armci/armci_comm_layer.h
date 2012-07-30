@@ -34,8 +34,7 @@
 #include "armci.h"
 
 /* GET CACHE OPTIMIZATION */
-struct cache
-{
+struct cache {
     void *remote_address;
     void *cache_line_address;
     armci_hdl_t *handle;

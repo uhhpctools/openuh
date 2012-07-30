@@ -33,25 +33,25 @@
 int get_env_flag(const char *var_name, int default_val)
 {
     char *val;
-    if (var_name == NULL) return 0;
+    if (var_name == NULL)
+        return 0;
 
     val = getenv(var_name);
 
-    if (val == NULL) return default_val;
+    if (val == NULL)
+        return default_val;
 
     if (strcasecmp(val, "1") == 0 ||
         strcasecmp(val, "y") == 0 ||
-        strcasecmp(val, "on") == 0 ||
-        strcasecmp(val, "yes") == 0) {
+        strcasecmp(val, "on") == 0 || strcasecmp(val, "yes") == 0) {
         return 1;
     } else if (strcasecmp(val, "0") == 0 ||
-        strcasecmp(val, "n") == 0 ||
-        strcasecmp(val, "off") == 0 ||
-        strcasecmp(val, "no") == 0) {
+               strcasecmp(val, "n") == 0 ||
+               strcasecmp(val, "off") == 0 || strcasecmp(val, "no") == 0) {
         return 0;
     } else {
-        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, 
-                "Bad val for %s: %s", var_name, val);
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                     "Bad val for %s: %s", var_name, val);
         return default_val;
     }
 }
@@ -60,19 +60,21 @@ size_t get_env_size(const char *var_name, size_t default_size)
 {
     char *p;
     char *val;
-    if (var_name == NULL) return default_size;
+    if (var_name == NULL)
+        return default_size;
 
     val = getenv(var_name);
 
-    if (val == NULL) return default_size;
+    if (val == NULL)
+        return default_size;
 
     strtod(val, &p);
-    
+
     if (*p != '\0') {
-        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, 
-                "Bad val for %s: %s", var_name, val);
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                     "Bad val for %s: %s", var_name, val);
         return default_size;
-    } 
+    }
 
     return (size_t) atoll(val);
 }

@@ -37,7 +37,7 @@
 
 void __caf_exit(int status);
 
-void __libcaf_warning (char *warning_msg, ...)
+void __libcaf_warning(char *warning_msg, ...)
 {
     char tmp[MSG_BUF_SIZE];
     va_list ap;
@@ -45,12 +45,12 @@ void __libcaf_warning (char *warning_msg, ...)
     va_start(ap, warning_msg);
     vsnprintf(tmp, MSG_BUF_SIZE, warning_msg, ap);
     va_end(ap);
-    fprintf(stderr, "-- LIBCAF WARNING: %s -- \n\n",tmp);
+    fprintf(stderr, "-- LIBCAF WARNING: %s \n\n", tmp);
     fflush(stderr);
 }
 
 
-void __libcaf_error (char *error_msg, ...)
+void __libcaf_error(char *error_msg, ...)
 {
     char tmp[MSG_BUF_SIZE];
     va_list ap;
@@ -58,7 +58,7 @@ void __libcaf_error (char *error_msg, ...)
     va_start(ap, error_msg);
     vsnprintf(tmp, MSG_BUF_SIZE, error_msg, ap);
     va_end(ap);
-    fprintf(stderr, "** LIBCAF ERROR: %s ** \n\n",tmp);
+    fprintf(stderr, "** LIBCAF ERROR: %s \n\n", tmp);
     fflush(stderr);
     __caf_exit(1);
 }
@@ -69,44 +69,44 @@ void __libcaf_error (char *error_msg, ...)
 
 void __libcaf_debug_print_array_int(char *name, int *arr, int n)
 {
-  char str[100];
-  int i;
+    char str[100];
+    int i;
 
-  memset(str, 0, 100);
+    memset(str, 0, 100);
 
-  sprintf(str,"*** %s = {", name);
-  if (n < 1) {
-    sprintf(&str[strlen(str)],"}\n");
-    return;
-  }
-  sprintf(&str[strlen(str)],"%d",arr[0]);
-  for (i = 1; i < n; i++) {
-    sprintf(&str[strlen(str)],",%d", arr[i]);
-  }
-  sprintf(&str[strlen(str)],"}");
+    sprintf(str, "*** %s = {", name);
+    if (n < 1) {
+        sprintf(&str[strlen(str)], "}\n");
+        return;
+    }
+    sprintf(&str[strlen(str)], "%d", arr[0]);
+    for (i = 1; i < n; i++) {
+        sprintf(&str[strlen(str)], ",%d", arr[i]);
+    }
+    sprintf(&str[strlen(str)], "}");
 
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 
 void __libcaf_debug_print_array_long(char *name, long *arr, int n)
 {
-  char str[100];
-  int i;
+    char str[100];
+    int i;
 
-  memset(str, 0, 100);
+    memset(str, 0, 100);
 
-  sprintf(str,"*** %s = {", name);
-  if (n < 1) {
-    sprintf(&str[strlen(str)],"}\n");
-    return;
-  }
-  sprintf(&str[strlen(str)],"%ld",arr[0]);
-  for (i = 1; i < n; i++) {
-    sprintf(&str[strlen(str)],",%ld", arr[i]);
-  }
-  sprintf(&str[strlen(str)],"}");
+    sprintf(str, "*** %s = {", name);
+    if (n < 1) {
+        sprintf(&str[strlen(str)], "}\n");
+        return;
+    }
+    sprintf(&str[strlen(str)], "%ld", arr[0]);
+    for (i = 1; i < n; i++) {
+        sprintf(&str[strlen(str)], ",%ld", arr[i]);
+    }
+    sprintf(&str[strlen(str)], "}");
 
-  LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 
-#endif /* DEBUG */
+#endif                          /* DEBUG */

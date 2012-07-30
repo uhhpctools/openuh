@@ -51,8 +51,8 @@ extern void __f90_set_args(int argc, char **argv);
 #define DEBUG_PRINT_ARR_LONG() ((void) 1)
 #endif
 
-void __libcaf_warning (char *warning_msg, ...);
-void __libcaf_error (char *error_msg, ...);
+void __libcaf_warning(char *warning_msg, ...);
+void __libcaf_error(char *error_msg, ...);
 
 /* debug utility functions */
 
@@ -61,4 +61,4 @@ extern void __libcaf_debug_print_array_int(char *name, int *arr, int n);
 extern void __libcaf_debug_print_array_long(char *name, long *arr, int n);
 #endif
 
-#endif /* _UTIL_H */
+#endif                          /* _UTIL_H */

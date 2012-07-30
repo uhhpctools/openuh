@@ -59,7 +59,7 @@
 
 #ifndef _POSIX_C_SOURCE
 # define _POSIX_C_SOURCE 199309
-#endif /* _POSIX_C_SOURCE */
+#endif                          /* _POSIX_C_SOURCE */
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
@@ -79,81 +79,76 @@ extern void comm_service();
  * does comms. service until told not to
  */
 
-static void *
-start_service (void *unused)
+static void *start_service(void *unused)
 {
-  do
-    {
-      comm_service();
-      pthread_yield ();
-      nanosleep (&delayspec, NULL); /* back off */
+    do {
+        comm_service();
+        pthread_yield();
+        nanosleep(&delayspec, NULL);    /* back off */
     }
-  while (! done);
+    while (!done);
 }
 
 /*
  * start the servicer
  */
 
-void
-comm_service_init (void)
+void comm_service_init(void)
 {
-  int s;
+    int s;
 
-  enable_progress_thread = get_env_flag(ENV_PROGRESS_THREAD,
-                            DEFAULT_ENABLE_PROGRESS_THREAD);
+    enable_progress_thread = get_env_flag(ENV_PROGRESS_THREAD,
+                                          DEFAULT_ENABLE_PROGRESS_THREAD);
 
-  /* don't spawn a progress thread here if the conduit is ibv or vapi, since
-   * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
-   */
+    /* don't spawn a progress thread here if the conduit is ibv or vapi, since
+     * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
+     */
 #if !defined(GASNET_CONDUIT_IBV) && !defined(GASNET_CONDUIT_VAPI)
-  if (enable_progress_thread == 0)
+    if (enable_progress_thread == 0)
 #endif
-      return;
+        return;
 
-  progress_thread_interval = get_env_size(ENV_PROGRESS_THREAD_INTERVAL,
-                            DEFAULT_PROGRESS_THREAD_INTERVAL);
+    progress_thread_interval = get_env_size(ENV_PROGRESS_THREAD_INTERVAL,
+                                            DEFAULT_PROGRESS_THREAD_INTERVAL);
 
-  delayspec.tv_sec = (time_t) 0;
-  delayspec.tv_nsec = progress_thread_interval;
+    delayspec.tv_sec = (time_t) 0;
+    delayspec.tv_nsec = progress_thread_interval;
 
-  s = pthread_create (&thr, NULL, start_service, (void *) 0);
-  if (s != 0) {
-      LIBCAF_TRACE( LIBCAF_LOG_FATAL,
-              "service thread creation failed (%s)", 
-              strerror(s) );
-      /* NOT REACHED */
-  }
+    s = pthread_create(&thr, NULL, start_service, (void *) 0);
+    if (s != 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "service thread creation failed (%s)", strerror(s));
+        /* NOT REACHED */
+    }
 
-  LIBCAF_TRACE( LIBCAF_LOG_SERVICE, "started progress thread");
+    LIBCAF_TRACE(LIBCAF_LOG_SERVICE, "started progress thread");
 }
 
 /*
  * stop the servicer
  */
 
-void
-comm_service_finalize (void)
+void comm_service_finalize(void)
 {
-  int s;
+    int s;
 
-  /* don't spawn a progress thread here if the conduit is ibv or vapi, since
-   * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
-   */
+    /* don't spawn a progress thread here if the conduit is ibv or vapi, since
+     * GASNet's receive thread (GASNET_RCV_THREAD) will be enabled.
+     */
 #if !defined(GASNET_CONDUIT_IBV) && !defined(GASNET_CONDUIT_VAPI)
-  if (enable_progress_thread == 0)
+    if (enable_progress_thread == 0)
 #endif
-      return;
+        return;
 
-  done = 1;
+    done = 1;
 
-  s = pthread_join (thr, NULL);
-  if (s != 0) {
-      LIBCAF_TRACE( LIBCAF_LOG_FATAL,
-              "service thread termination failed (%s)", 
-              strerror(s) );
-      /* NOT REACHED */
-  }
+    s = pthread_join(thr, NULL);
+    if (s != 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "service thread termination failed (%s)",
+                     strerror(s));
+        /* NOT REACHED */
+    }
 
-  LIBCAF_TRACE( LIBCAF_LOG_SERVICE, "stopped progress thread");
+    LIBCAF_TRACE(LIBCAF_LOG_SERVICE, "stopped progress thread");
 }

@@ -33,15 +33,15 @@
 /* Note: This limits us to 1M images, and 64 GB heap size per
  * image. */
 struct coarray_lock {
-    volatile unsigned char locked :8;
-    volatile unsigned int image  :20;
-    volatile unsigned long long ofst  :36;
+    volatile unsigned char locked:8;
+    volatile unsigned int image:20;
+    volatile unsigned long long ofst:36;
 };
 typedef struct coarray_lock lock_t;
 
 
-void comm_lock(lock_t *lock, int image, char *success, int success_len);
-void comm_unlock(lock_t *lock, int image);
-void comm_unlock2(lock_t *lock, int image);
+void comm_lock(lock_t * lock, int image, char *success, int success_len);
+void comm_unlock(lock_t * lock, int image);
+void comm_unlock2(lock_t * lock, int image);
 
 #endif

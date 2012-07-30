@@ -27,7 +27,7 @@
 */
 
 #ifndef _TRACE_H
-#define _TRACE_H 
+#define _TRACE_H
 
 #ifdef TRACE
 # define LIBCAF_TRACE_INIT __libcaf_tracers_init
@@ -42,19 +42,19 @@
 #endif
 
 typedef enum {
-    LIBCAF_LOG_FATAL=0,    /* unrecoverable problem */
-    LIBCAF_LOG_DEBUG,      /* debugging information */
-    LIBCAF_LOG_TIME,       /* timing information */
-    LIBCAF_LOG_NOTICE,     /* serious, but non-fatal */
+    LIBCAF_LOG_FATAL = 0,       /* unrecoverable problem */
+    LIBCAF_LOG_DEBUG,           /* debugging information */
+    LIBCAF_LOG_TIME,            /* timing information */
+    LIBCAF_LOG_NOTICE,          /* serious, but non-fatal */
     LIBCAF_LOG_TIME_SUMMARY,    /* print accumulated time */
-    LIBCAF_LOG_INIT,       /* during LIBCAF initialization */
-    LIBCAF_LOG_MEMORY,     /* symmetric memory operations */
-    LIBCAF_LOG_CACHE,      /* cache flushing ops */
-    LIBCAF_LOG_BARRIER,    /* barrier ops */
-    LIBCAF_LOG_REDUCE,     /* reduction ops */
-    LIBCAF_LOG_SYMBOLS,    /* dump global symbol table */
-    LIBCAF_LOG_SERVICE,    /* show progress service */
-    NUM_TRACERS=LIBCAF_LOG_SERVICE
+    LIBCAF_LOG_INIT,            /* during LIBCAF initialization */
+    LIBCAF_LOG_MEMORY,          /* symmetric memory operations */
+    LIBCAF_LOG_CACHE,           /* cache flushing ops */
+    LIBCAF_LOG_BARRIER,         /* barrier ops */
+    LIBCAF_LOG_REDUCE,          /* reduction ops */
+    LIBCAF_LOG_SYMBOLS,         /* dump global symbol table */
+    LIBCAF_LOG_SERVICE,         /* show progress service */
+    NUM_TRACERS = LIBCAF_LOG_SERVICE
 } libcaf_trace_t;
 
 typedef enum {
@@ -62,7 +62,7 @@ typedef enum {
     STOP,
     PRINT,
     PRINT_ROLLUP
-} __timer_start_stop_t; /* time recording start or stop */
+} __timer_start_stop_t;         /* time recording start or stop */
 
 typedef enum {
     INIT,
@@ -70,13 +70,13 @@ typedef enum {
     WRITE,
     SYNC,
     DUMMY
-} __timer_type_t; /* type of timer */
+} __timer_type_t;               /* type of timer */
 
 extern void __libcaf_tracers_init(void);
 extern void __libcaf_trace(libcaf_trace_t msg_type, char *fmt, ...);
-extern int  __trace_is_enabled(libcaf_trace_t level);
+extern int __trace_is_enabled(libcaf_trace_t level);
 void __start_timer();
 void __stop_timer(__timer_type_t type);
 
 
-#endif /* _TRACE_H */
+#endif                          /* _TRACE_H */
