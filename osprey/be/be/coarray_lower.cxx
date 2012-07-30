@@ -1128,6 +1128,17 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
           wn_arrayexp = wn;
 
         switch (WN_operator(wn)) {
+            case OPR_INTRINSIC_CALL:
+                if (WN_opcode(wn) == OPC_VINTRINSIC_CALL) {
+                   if (WN_intrinsic(wn) == INTRN_CASSIGNSTMT) {
+                    /*for character coarrays support*/
+                    lhs_ref_param_wn = WN_kid0(wn);
+                    rhs_ref_param_wn = WN_kid1(wn);
+                  }
+                }
+
+                break;
+
             case OPR_ARRAY:
 
                 coindexed_arr_ref = expr_is_coindexed(wn, &image, &coarray_type,
