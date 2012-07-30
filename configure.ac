@@ -156,8 +156,13 @@ if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOM
     AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays])
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
-    AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
+    if test ! -f "${MPI_INCLUDE}/mpi.h" -a -n "`which mpicc 2>/dev/null`"; then
+        d=`which mpicc 2>/dev/null`
+        MPI_INCLUDE=`dirname $d`/../include
+    else
+        AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
+    fi
 fi
 
 if test -n "${GASNET_HOME}"; then
@@ -188,6 +193,10 @@ elif test `echo ${DEFAULT_CAF_HEAP_SIZE} | grep ^@<:@0-9@:>@@<:@0-9@:>@*$ | wc -
       AC_MSG_ERROR([Invalid value for --with-default-caf-heap-size. Should be
                    an integer, optionally followed by k, K, m, M, g, or G.])
 fi
+
+base_path=`case $0 in /*) echo "$0";; *) echo "$PWD/$0";; esac`
+base_path=`dirname $base_path`
+OPENUH_VERSION=`echo "echo \\\$OPENUH_FULL_VERSION" | cat $base_path/defs.mk - | sh -`
 
 
 # enable Dragon support
@@ -524,6 +533,7 @@ AC_SUBST([BASH_PATH])
 AC_SUBST([MPI_INCLUDE])
 AC_SUBST([CAFRT_ENABLE_TRACES])
 AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
+AC_SUBST([OPENUH_VERSION])
 
 # List of configurable files to create in object directory.
 AC_CONFIG_FILES([

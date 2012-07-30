@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -1532,10 +1532,15 @@ echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path
    { (exit 1); exit 1; }; }
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"  -a  ! -f "${MPI_INCLUDE}/mpi.h"; then
-    { { echo "$as_me:$LINENO: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&5
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
+    if test ! -f "${MPI_INCLUDE}/mpi.h" -a -n "`which mpicc 2>/dev/null`"; then
+        d=`which mpicc 2>/dev/null`
+        MPI_INCLUDE=`dirname $d`/../include
+    else
+        { { echo "$as_me:$LINENO: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&5
 echo "$as_me: error: Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI" >&2;}
    { (exit 1); exit 1; }; }
+    fi
 fi
 
 if test -n "${GASNET_HOME}"; then
@@ -1580,6 +1585,10 @@ echo "$as_me: error: Invalid value for --with-default-caf-heap-size. Should be
                    an integer, optionally followed by k, K, m, M, g, or G." >&2;}
    { (exit 1); exit 1; }; }
 fi
+
+base_path=`case $0 in /*) echo "$0";; *) echo "$PWD/$0";; esac`
+base_path=`dirname $base_path`
+OPENUH_VERSION=`echo "echo \\\$OPENUH_FULL_VERSION" | cat $base_path/defs.mk - | sh -`
 
 
 # enable Dragon support
@@ -1931,6 +1940,7 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
+
 
 
 
@@ -2867,6 +2877,7 @@ s,@BASH_PATH@,$BASH_PATH,;t t
 s,@MPI_INCLUDE@,$MPI_INCLUDE,;t t
 s,@CAFRT_ENABLE_TRACES@,$CAFRT_ENABLE_TRACES,;t t
 s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
+s,@OPENUH_VERSION@,$OPENUH_VERSION,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t

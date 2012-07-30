@@ -41,8 +41,6 @@
 #include "lock.h"
 #include "trace.h"
 
-const int DEBUG = 1;
-
 /* initialized in comm_init() */
 unsigned long _this_image;
 unsigned long _num_images;
@@ -389,9 +387,9 @@ void* coarray_allocatable_allocate_(unsigned long var_size)
                                                       var_size);
     if(empty_slot == 0)
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "No More Shared Memory Space available for allocatable coarray.\n"
-        "Set env variable UHCAF_IMAGE_HEAP_SIZE or cafrun option "
-        "for more space");
+        "No more shared Memory Space available for allocatable coarray. "
+        "Set environment variable %s or cafrun option for more space.",
+        ENV_SHARED_MEMORY_SIZE);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,"caf_rtl.c:coarray_coarray_allocate"
         "-> Found empty slot %p. About to split it from top."
@@ -418,9 +416,9 @@ void* coarray_asymmetric_allocate_(unsigned long var_size)
                                                         var_size);
     if(empty_slot == 0)
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "No More Shared Memory Space available for asymmetric data.\n"
-        "Set env variable UHCAF_IMAGE_HEAP_SIZE or cafrun option "
-        "for more space");
+        "No more shared memory space available for asymmetric data. "
+        "Set environment variable %s or cafrun option for more space.",
+        ENV_SHARED_MEMORY_SIZE);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,"caf_rtl.c:coarray_asymmetric_allocate"
         "-> Found empty slot %p. About to split it from bottom. "

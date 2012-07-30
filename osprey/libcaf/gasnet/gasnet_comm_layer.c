@@ -118,7 +118,7 @@ static unsigned int barflag = 0; // GASNET_BARRIERFLAG_ANONYMOUS
  *      uintptr_t size;
  * }gasnet_seginfo_t
  */
-static gasnet_seginfo_t *coarray_start_all_images;
+static gasnet_seginfo_t *coarray_start_all_images = NULL;
 /* For everything config, coarray_start_all_images has to be populated
  * by remote gets. But we can not pass the address of
  * coarray_start_all_images[img]->addr to gasnet_get as it is on heap.
@@ -130,7 +130,7 @@ static void * everything_heap_start;
 static gasnet_nodeinfo_t *nodeinfo_table;
 
 /*sync images*/
-static unsigned short *sync_images_flag;
+static unsigned short *sync_images_flag = NULL;
 static gasnet_hsl_t sync_lock = GASNET_HSL_INITIALIZER;
 
 /*non-blocking put*/
@@ -857,15 +857,15 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     int ret,i;
     int   argc = 1;
     char  **argv;
+    const int gasnet_pagesize = GASNET_PAGESIZE;
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
-    unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
     argc = ARGC;
     argv = ARGV;
     ret = gasnet_init(&argc, &argv);
     if (ret != GASNET_OK) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL, "GASNet init error");
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL, "GASNet initialization error");
     }
     __f90_set_args(argc, argv);
 
@@ -877,9 +877,18 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     my_proc = gasnet_mynode();
     num_procs = gasnet_nodes();
 
+
     /* set extern symbols used for THIS_IMAGE and NUM_IMAGES intrinsics */
     _this_image = my_proc+1;
     _num_images = num_procs;
+
+    if (_num_images >= MAX_NUM_IMAGES)
+    {
+        if (my_proc == 0) {
+            Error("Number of images must not exceed %lu",
+                   MAX_NUM_IMAGES);
+        }
+    }
 
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE,
@@ -938,26 +947,36 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
                               DEFAULT_SHARED_MEMORY_SIZE);
-    if (caf_shared_memory_size>=max_size) /*overflow check*/
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                "Shared memory size must be less than %lu bytes",max_size);
+
+
+    if (caf_shared_memory_size/1024 >= MAX_IMAGE_HEAP_SIZE/1024) {
+        if (my_proc == 0) {
+            Error("Image heap size must not exceed %lu GB",
+                   MAX_IMAGE_HEAP_SIZE/(1024*1024*1024));
+        }
     }
 
-    /* pinned-down memory must be PAGESIZE alligned */
+
+    /* caf_shared_memory_size = MIN ( caf_shared_memory_size, max_local ) */
+    if ( max_local < caf_shared_memory_size ) {
+        char warning_msg[255];
+        /* let the first process issue a warning to the user */
+        if (my_proc == 0) {
+            sprintf(warning_msg,
+                    "Requested image heap size (%lu bytes) exceeds system's",
+                    (unsigned long) caf_shared_memory_size);
+            sprintf(warning_msg, "%s resources. Setting to %lu bytes instead.\n\n",
+                    warning_msg,
+                    (unsigned long) max_local);
+            Warning(warning_msg);
+        }
+        caf_shared_memory_size = max_local;
+    }
+
+    /* pinned-down memory must be PAGESIZE aligned */
     caf_shared_memory_pages = caf_shared_memory_size/GASNET_PAGESIZE;
     if ( caf_shared_memory_size%GASNET_PAGESIZE )
         caf_shared_memory_pages++;
-
-    if (!gasnet_everything)
-    {
-        /* check if so much memory can be pinned */
-        if ( max_local < (caf_shared_memory_pages*GASNET_PAGESIZE))
-            LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-            "GASNET cannot attach %lubytes. Maximum memory that can be "
-            "attached on this image(%lu) = %lu", caf_shared_memory_size,
-            my_proc+1, (unsigned long)max_local);
-    }
 
     /* gasnet everything ignores the last 2 params
      * note that attach is a collective operation */
@@ -1685,11 +1704,17 @@ void comm_end_critical()
 
 void comm_memory_free()
 {
-    coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
     if (gasnet_everything)
         comm_free(coarray_start_all_images[my_proc].addr);
-    comm_free(coarray_start_all_images);
-    comm_free(sync_images_flag);
+
+    if (sync_images_flag)
+        comm_free(sync_images_flag);
+
+    if (coarray_start_all_images) {
+        coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
+        comm_free(coarray_start_all_images);
+    }
+
     if(enable_nbput)
     {
         comm_free(write_handles);

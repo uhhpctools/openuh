@@ -54,12 +54,12 @@ static unsigned long my_proc;
 static unsigned long num_procs;
 
 /* sync images */
-static void **syncptr; /* sync flags */
+static void **syncptr = NULL; /* sync flags */
 
 /* Shared memory management:
  * coarray_start_all_images stores the shared memory start address of all
  * images */
-static void **coarray_start_all_images;
+static void **coarray_start_all_images = NULL;
 
 /* NON-BLOCKING PUT: ARMCI non-blocking operations does not ensure local
  * completion on its return. ARMCI_Wait(handle) provides local completion,
@@ -171,12 +171,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     int   argc = 1;
     char  **argv;
     unsigned long caf_shared_memory_size;
-    unsigned long max_size=powl(2,(sizeof(unsigned long)*8))-1;
 
     argc = ARGC;
     argv = ARGV;
     MPI_Init(&argc, &argv);
     __f90_set_args(argc, argv);
+
 
     ret = ARMCI_Init();
     if (ret != 0) {
@@ -189,6 +189,14 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     /* set extern symbols used for THIS_IMAGE and NUM_IMAGES intrinsics */
     _this_image = my_proc+1;
     _num_images = num_procs;
+
+    if (_num_images >= MAX_NUM_IMAGES)
+    {
+        if (my_proc == 0) {
+            Error("Number of images may not exceed %lu",
+                   MAX_NUM_IMAGES);
+        }
+    }
 
     /* Check if optimizations are enabled */
     enable_get_cache = get_env_flag(ENV_GETCACHE,
@@ -205,7 +213,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      * The important point to note here is that ARMCI_Create_mutexes can be
      * called only once per image
      */
-
     ARMCI_Create_mutexes(num_procs+1);
     syncptr = malloc (num_procs*sizeof(void *));
     ARMCI_Malloc ((void**)syncptr, num_procs*sizeof(int));
@@ -214,25 +221,27 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     critical_mutex = num_procs; /* last mutex reserved for critical sections */
 
+    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
+                              DEFAULT_SHARED_MEMORY_SIZE);
+
+    if (caf_shared_memory_size/1024 >= MAX_IMAGE_HEAP_SIZE/1024) {
+        if (my_proc == 0) {
+            Error( "Image heap size must not exceed %lu GB",
+                   MAX_IMAGE_HEAP_SIZE/(1024*1024*1024));
+        }
+    }
+
     /* Create pinned/registered memory (Shared Memory) */
     coarray_start_all_images = malloc (num_procs*sizeof(void *));
 
-    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
-                              DEFAULT_SHARED_MEMORY_SIZE);
-    if (caf_shared_memory_size>=max_size) /*overflow check*/
-    {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                "Shared memory size must be less than %lu bytes",max_size);
-    }
-
-
     ret = ARMCI_Malloc ((void**)coarray_start_all_images,
             caf_shared_memory_size);
-    if(ret != 0)
+
+    if (ret != 0)
     {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-        "ARMCI_Malloc failed when allocating %lu (%luMB)"
-        ,caf_shared_memory_size, caf_shared_memory_size/1000000L );
+            "ARMCI_Malloc failed when allocating %lu bytes.",
+            caf_shared_memory_size );
     }
 
     static_heap_size =
@@ -739,10 +748,15 @@ static void *get_remote_address(void *src, size_t img)
 
 void comm_memory_free()
 {
-    coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
-    comm_free(syncptr);
-    ARMCI_Free(coarray_start_all_images[my_proc]);
-    comm_free(coarray_start_all_images);
+    if (syncptr != NULL)
+        comm_free(syncptr);
+
+    if (coarray_start_all_images) {
+        coarray_free_all_shared_memory_slots(); /* in caf_rtl.c */
+        ARMCI_Free(coarray_start_all_images[my_proc]);
+        comm_free(coarray_start_all_images);
+    }
+
     if(enable_get_cache)
     {
         int i;
@@ -764,6 +778,7 @@ void comm_exit(int status)
         "armci_comm_layer.c:comm_exit-> Before call to ARMCI_Error"
         " with status %d." ,status);
 
+    ARMCI_Cleanup();
     MPI_Finalize();
     exit (status);
 
@@ -895,7 +910,8 @@ void comm_swap_request (void *target, void *value, size_t nbytes,
         memmove( retval, value, nbytes);
     } else {
         char msg[100];
-        sprintf(msg, "unsupported nbytes (%d) in comm_swap_request", nbytes);
+        sprintf(msg, "unsupported nbytes (%lu) in comm_swap_request",
+               (unsigned long) nbytes);
         Error(msg);
     }
 }
@@ -929,7 +945,8 @@ void comm_fadd_request (void *target, void *value, size_t nbytes, int proc,
                 nbytes);
     } else {
         char msg[100];
-        sprintf(msg, "unsupported nbytes (%d) in comm_fadd_request", nbytes);
+        sprintf(msg, "unsupported nbytes (%lu) in comm_fadd_request",
+               (unsigned long) nbytes);
         Error(msg);
     }
 }
@@ -953,7 +970,8 @@ void comm_fstore_request (void *target, void *value, size_t nbytes, int proc,
         memmove(value, &old, nbytes);
     } else {
         char msg[100];
-        sprintf(msg, "unsupported nbytes (%d) in comm_fstore_request", nbytes);
+        sprintf(msg, "unsupported nbytes (%lu) in comm_fstore_request",
+               (unsigned long) nbytes);
         Error(msg);
     }
 }

@@ -37,9 +37,9 @@ else
   tracing_enabled=no
 fi
 
-ARMCI_HOME=@ARMCI_HOME@
 GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
+ARMCI_HOME=@ARMCI_HOME@
 COMM_LAYER=@DEFAULT_COMM@
 CC=uhcc
 FC=uhf90
@@ -78,20 +78,25 @@ Where options are
   --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
+   MPI_LIB          Path to MPI libs is generally required. Should be
+                    compatible with GASNet or ARMCI installation being used.
+                        Currently: $MPI_LIB
 
-   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI documentation.
+   MPI_LD_LIBS      Explicitly specify MPI libs to link in.
+                        Currently: $MPI_LD_LIBS
 
-   MSG_COMMS        Messaging library used by ARMCI. Default is MPI.
-
-   TARGET           Target for the ARMCI installation. Defaults to LINUX64.
+   ARMCI specific environment variables:
 
    ARMCI_LIB        Path containing ARMCI lib (e.g. libarmci.a), if necessary.
-                        Typically: \$ARMCI_HOME/lib/\$TARGET
+                        Currently: $ARMCI_LIB
 
-   MPI_LIB          Path to MPI lib, if necessary.
+   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI
+                    documentation.
+                        Currently: $ARMCI_NETWORK
 
-   LIBMPI           Explicitly specify MPI libs to link in.
-                         Default is: -L\$MPI_LIB -lmpi
+   TARGET           Target for the ARMCI installation. Defaults to LINUX64.
+                        Currently: $TARGET
+
 
 _EOT_
 
@@ -125,13 +130,13 @@ set_env()
 
 print_error()
 {
-  echo "Error: $1" >&2
+  echo -e "Error: $*" >&2
   exit 1
 }
 
 print_warning()
 {
-  echo "Warning: $1" >&2
+  echo -e "Warning: $*" >&2
 }
 
 print_compile_link_info()
@@ -144,13 +149,13 @@ print_compile_link_info()
   if [ "$COMM_LAYER" == "gasnet" ]; then
       LAYER_INSTALLATION_PATH=$GASNET_HOME
       UHCAF_NETWORK=$GASNET_CONDUIT
-      if [ "$GASNET_CONDUIT" == "mpi" ]; then
+      if [ "$GASNET_CONDUIT" != "smp" ]; then
           MSG_LAYER=$MPI_LIB
       fi
   elif [ "$COMM_LAYER" == "armci" ]; then
       LAYER_INSTALLATION_PATH=$ARMCI_HOME
       UHCAF_NETWORK=$ARMCI_NETWORK
-      MSG_LAYER=$MSG_COMMS
+      MSG_LAYER=$MPI_LIB
   fi
 
   if [ -n "`$FC -V 2>&1 | grep -i \" --with-build-optimize=debug\"`" ]; then
@@ -180,7 +185,7 @@ print_compile_link_info()
         layer:           $COMM_LAYER ($LAYER_INSTALLATION_PATH)
         tracing:         $tracing_enabled
         network:         $UHCAF_NETWORK
-        messaging:       $MSG_LAYER
+        2-sided msg:     $MSG_LAYER
   ---------------------------------------------------------------------------
 _EOT_
 
@@ -250,13 +255,9 @@ for arg in "$@" ;  do
           ;;
         -h|--help)
           uhcaf_usage
-          pass_arg=no
-          link='n'
           ;;
         -H|--help2)
           uhf90_usage
-          pass_arg=no
-          link='n'
           ;;
         -help|-help:*)
           link='n'
@@ -288,7 +289,9 @@ for arg in "$@" ;  do
         --layer=*)
           val=`echo UhCaf$arg | sed -e 's/UhCaf--layer=//g'`
           layer=`echo $val | tr '[:upper:]' '[:lower:]'`
-          if [ $layer == armci ]; then
+          if [ -z "$layer" ]; then
+            print_error "layer needs to be specified with --layer"
+          elif [ $layer == armci ]; then
             COMM_LAYER=armci
           elif [[ $layer == gasnet-* ]]; then
             GASNET_CONDUIT=`echo $layer | sed 's/gasnet-//'`
@@ -352,6 +355,7 @@ elif [ $COMM_LAYER == armci -a -z "$ARMCI_HOME" ]; then
 fi
 
 
+
 if [ $COMM_LAYER == gasnet ]; then
 
   if [ -z "$GASNET_CONDUIT" ]; then
@@ -359,34 +363,77 @@ if [ $COMM_LAYER == gasnet ]; then
   fi
 
   if [ "$keep" == "y" ]; then
-    temp_name=`$mktemp_cmd`
-    mv $temp_name $temp_name.mak
-    echo -e "uhcaf-rule:\n\t@echo \$(GASNET_LIBS)"  \
-     | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak - \
-     > $temp_name.mak
-    COMM_LIBS=`make uhcaf-rule --no-print-directory -sf $temp_name.mak`
-  else
-    get_libs="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LIBS)\"  \
-        | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-        | make uhcaf-rule --no-print-directory -sf -"
-    COMM_LIBS=`eval $get_libs`
+      temp_name=`$mktemp_cmd`
+      mv $temp_name $temp_name.mak
+      echo -e "uhcaf-rule-mpi-linker:\n\t@echo \$(GASNET_LD)\n\n"  \
+      | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak - \
+      > $temp_name.mak
+      echo -e "uhcaf-rule-gasnet-libs:\n\t@echo \$(GASNET_LIBS)" >> $temp_name.mak
   fi
 
+  get_libs="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LIBS)\"  \
+  | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+  | make uhcaf-rule --no-print-directory -sf -"
+  COMM_LIBS=`eval $get_libs`
+
+
   if [ $GASNET_CONDUIT != smp ]; then
-    # need to link in MPI libs as well. If LIBMPI isn't defined, then
-    # just use -L${MPI_LIB} -lmpi
-    if [ -z "$LIBMPI" ] ; then
-      if [ -z "$MPI_LIB" ]; then
-        print_error "MPI_LIB needs to be set"
-      elif [ ! -d "$MPI_LIB" ]; then
-        print_error "MPI_LIB needs to be set to valid path. Currently: $MPI_LIB"
-      fi
-      LIBMPI="-L${MPI_LIB} -lmpi"
+
+    ##############################################################
+    # Try to figure out appropriate MPI_LIB and MPI_LD_LIBS from
+    # GASNet makefiles.
+    get_ld="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LD)\"  \
+    | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+    | make uhcaf-rule --no-print-directory -sf -"
+    mpi_ld=`eval $get_ld`
+    gasnet_mpi_lib=${mpi_ld%/bin*}/lib
+    if [ -z "$MPI_LIB" ]; then
+        MPI_LIB=$gasnet_mpi_lib
+        if [ ! -d "$MPI_LIB" ]; then
+            print_error "MPI_LIB needs to be set"
+        fi
+    elif [ -d "$gasnet_mpi_lib" -a -d "$MPI_LIB" ]; then
+        # check if they aren't the same
+        n1=`stat -c "%d%i" $gasnet_mpi_lib`
+        n2=`stat -c "%d%i" $MPI_LIB`
+        if [ "$n1" != "$n2" ]; then
+            warning_msg="It is recommended that MPI_LIB not point to a different"
+            warning_msg+=" installation than what GASNet was \nbuilt with."
+            warning_msg+=" Consider setting MPI_LIB=$gasnet_mpi_lib instead."
+            print_warning $warning_msg
+        fi
+    elif [ ! -d "$MPI_LIB" ]; then
+        print_warning "MPI_LIB not set to valid path. Using $gasnet_mpi_lib instead"
+        MPI_LIB=$gasnet_mpi_lib
     fi
-    COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $LIBMPI"
+
+    if [ -z "$MPI_LD_LIBS" ]; then
+        # MPI lib path was given, but can we figure out the necessary linker
+        # args?
+        if [ ! -f $MPI_LIB/../bin/mpicc ]; then
+            print_error "Can't determine what to link in from $MPI_LIB"
+        fi
+
+        mpi_ld=$MPI_LIB/../bin/mpicc
+
+        # does -showme:link work ?
+        MPI_LD_LIBS=`eval $mpi_ld -showme:link 2> /dev/null`
+        if [ "$?" != "0" ]; then
+            # does -link-info work?
+            ld_opt=`eval $mpi_ld -link-info 2> /dev/null`
+            if [ "$?" != "0" ]; then
+                print_error "MPI_LD_LIBS needs to be set"
+            fi
+            MPI_LD_LIBS=${ld_opt#*-L* }
+        fi
+        MPI_LD_LIBS="-L$MPI_LIB $MPI_LD_LIBS"
+    fi
+
+    # need to link in MPI libs as well.
+    COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
 
     add_to_env_list "MPI_LIB"
-    add_to_env_list "LIBMPI"
+    add_to_env_list "MPI_LD_LIBS"
 
     if [ $GASNET_CONDUIT == udp ]; then
       CAF_FLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
@@ -397,11 +444,7 @@ if [ $COMM_LAYER == gasnet ]; then
 
 elif [ $COMM_LAYER == armci ]; then
 
-  if [ -z "$MSG_COMMS" -o "$MSG_COMMS" = "mpi" ]; then
-    set_env MSG_COMMS "MPI"
-  else
-    add_to_env_list "MSG_COMMS"
-  fi
+  set_env MSG_COMMS "MPI"
 
   if [ -z "$ARMCI_NETWORK" ]; then
     print_warning \
@@ -417,8 +460,16 @@ elif [ $COMM_LAYER == armci ]; then
     add_to_env_list "TARGET"
   fi
 
-  if [ $MSG_COMMS = MPI -a ! -d "$MPI_LIB" ]; then
-    print_error "MPI_LIB needs to be set to valid path. Currently: $MPI_LIB"
+  if [ ! -d "$MPI_LIB" ]; then
+    # check if mpicc exists in the path. If so, set MPI_LIB accordingly.
+    mpi_ld_path=`which mpicc 2> /dev/null`
+    if [ -f "$mpi_ld_path" ]; then
+        set_env MPI_LIB `dirname $mpi_ld_path`/../lib
+    else
+        print_error "MPI_LIB needs to be set to valid path."
+    fi
+  else
+    add_to_env_list "MPI_LIB"
   fi
 
   get_libs="echo -e \"uhcaf-rule:\n\t@echo -larmci \\\$(MP_LIBS) \\\$(COMM_LIBS)\" \
@@ -426,9 +477,7 @@ elif [ $COMM_LAYER == armci ]; then
         | make uhcaf-rule --no-print-directory -sf -"
 
   COMM_LIBS=`eval $get_libs`
-  if [ $MSG_COMMS = MPI ]; then
-    COMM_LIBS+=" -Wl,-rpath,$MPI_LIB "
-  fi
+  COMM_LIBS+=" -Wl,-rpath,$MPI_LIB "
 
   # find location of libarmci.a
   if [ -z "$ARMCI_LIB" ] ; then
@@ -440,7 +489,6 @@ elif [ $COMM_LAYER == armci ]; then
 
   COMM_LIBS="-lcaf-armci -L$ARMCI_LIB $COMM_LIBS"
 
-  add_to_env_list "MPI_LIB"
   add_to_env_list "ARMCI_LIB"
 
 fi
@@ -556,7 +604,8 @@ else
       # add some symbols into executable for cafrun script to check
       link_instructions=`$mktemp_cmd`
       symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
-                  int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT;"
+                  int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT; \
+                  int OPENUH_ARMCI_NETWORK_IS_$ARMCI_NETWORK;"
 
       rm -f $link_instructions
       echo $symbol_defs | $CC -c -x c -o $link_instructions.o -

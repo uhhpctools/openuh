@@ -29,32 +29,45 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "trace.h"
 
+#define MSG_BUF_SIZE 256
 
 void __caf_exit(int status);
 
-static char **fargv;
-static int   fargc;
-
-
-void Warning (char *warning_message)
+void __libcaf_warning (char *warning_msg, ...)
 {
-  fprintf(stderr, "Warning: %s\n", warning_message);
-  fflush(stderr);
+    char tmp[MSG_BUF_SIZE];
+    va_list ap;
+
+    va_start(ap, warning_msg);
+    vsnprintf(tmp, MSG_BUF_SIZE, warning_msg, ap);
+    va_end(ap);
+    fprintf(stderr, "-- LIBCAF WARNING: %s -- \n\n",tmp);
+    fflush(stderr);
 }
 
-void Error (char *error_message)
+
+void __libcaf_error (char *error_msg, ...)
 {
-  fprintf(stderr, "Error: %s\n", error_message);
-  fflush(stderr);
-  __caf_exit(1);
+    char tmp[MSG_BUF_SIZE];
+    va_list ap;
+
+    va_start(ap, error_msg);
+    vsnprintf(tmp, MSG_BUF_SIZE, error_msg, ap);
+    va_end(ap);
+    fprintf(stderr, "** LIBCAF ERROR: %s ** \n\n",tmp);
+    fflush(stderr);
+    __caf_exit(1);
 }
 
 /* debug utility functions */
 
-void debug_print_array_int(char *name, int *arr, int n)
+#if DEBUG
+
+void __libcaf_debug_print_array_int(char *name, int *arr, int n)
 {
   char str[100];
   int i;
@@ -75,7 +88,7 @@ void debug_print_array_int(char *name, int *arr, int n)
   LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 
-void debug_print_array_long(char *name, long *arr, int n)
+void __libcaf_debug_print_array_long(char *name, long *arr, int n)
 {
   char str[100];
   int i;
@@ -96,3 +109,4 @@ void debug_print_array_long(char *name, long *arr, int n)
   LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
 }
 
+#endif /* DEBUG */

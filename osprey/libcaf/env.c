@@ -74,5 +74,5 @@ size_t get_env_size(const char *var_name, size_t default_size)
         return default_size;
     } 
 
-    return (size_t) atoi(val);
+    return (size_t) atoll(val);
 }

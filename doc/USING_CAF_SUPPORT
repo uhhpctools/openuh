@@ -120,10 +120,10 @@ cafrun is a launcher for ror running CAF programs compiled with OpenUH.
 
 Usage: cafrun  [OPTIONS]... PROGRAM... -- [LAUNCHER OPTIONS]...
 
-Where options are
+Where OPTIONS are:
 
-  --num-images=N      N is number of images to use
-  -n N                N is number of images to use
+  --num-images=N
+  -n,-np N            N is number of images to use
 
   --trace=L           Sets trace levels for runtime.
                       L=all or trace levels delimited by ':'.
@@ -138,53 +138,20 @@ Where options are
                       may have the suffixes K, M, G which indicates size in
                       kilobytes, megabytes, and gigabytes, respectively.
 
-  --help              Displays this menu
+  --verbose,-v        Verbose output
 
-  --help2             Displays more options for underlying launcher
+  --show              Display launch settings and command, but does not run
+                      program
 
-  --verbose           Verbose output
+  --help              Prints this menu and exits
 
-  --show              Display launch settings and exit
+  --help2             Prints underlying LAUNCHER OPTIONS and exits
 
-Environment Variables:
+  --help-env          Prints available environment variables for controlling
+                      runtime environment and exits
 
-   LAUNCHER           Underlying launcher to use for launching CAF images 
-                      for the specified program.
-                         By default, set to: mpirun
+  --version,-V        Print version of cafrun and exits
 
-   LAUNCHER_OPTS      Additional options to pass to underlying launcher apart
-                      from number of processes to spawn.
-
-   UHCAF_TRACE        Specifies trace levels for runtime.
-                         Can be set with --trace
-
-   UHCAF_TRACE_FILE   Specifies file to store runtime trace
-                         Can be set with --trace-file
-
-   UHCAF_IMAGE_NUM_IMAGES
-                      Specifies number of images to launch.
-                         Can be set/overridden with --num-images
-
-   UHCAF_IMAGE_HEAP_SIZE
-                      Specifies heap size per image for storing coarray data.
-                         Can be set with --image-heap
-
-   UHCAF_PROGRESS_THREAD
-                      Set to 1 to enable progress thread in CAF runtime
-
-   UHCAF_PROGRESS_THREAD_INTERVAL
-                      Set the time interval (ns) between AM serving by progress
-                      thread.
-
-   UHCAF_NBPUT
-                      Set to 1 to enable Nonblocking put runtime optimization.
-
-   UHCAF_GETCACHE
-                      Set to 1 to enable getcache runtime optimization.
-
-   UHCAF_GETCACHE_LINE_SIZE
-                      Spefies the size (in bytes) of the cache line used by
-                      getcache optimizer. By default it is 64KB.
 
 Example:
 

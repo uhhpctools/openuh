@@ -50,6 +50,9 @@
 #define DEFAULT_GETCACHE_LINE_SIZE        65536L
 #define DEFAULT_SHARED_MEMORY_SIZE        31457280L
 
+#define MAX_NUM_IMAGES                    0x100000
+#define MAX_IMAGE_HEAP_SIZE               0x1000000000
+
 /* init */
 void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 

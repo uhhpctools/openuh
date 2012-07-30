@@ -29,6 +29,8 @@
 #ifndef _UTIL_H
 #define _UTIL_H
 
+#define DEBUG 1
+
 /* declared in osprey/libf/fio/xarg.c */
 extern int f__xargc;
 extern char **f__xargv;
@@ -38,11 +40,25 @@ extern void __f90_set_args(int argc, char **argv);
 #define ARGC f__xargc
 #define ARGV f__xargv
 
-void Warning (char *warning_message);
-void Error (char *error_message);
+#define Warning   __libcaf_warning
+#define Error     __libcaf_error
+
+#if DEBUG
+#define DEBUG_PRINT_ARR_INT  __libcaf_debug_print_array_int
+#define DEBUG_PRINT_ARR_LONG __libcaf_debug_print_array_long
+#else
+#define DEBUG_PRINT_ARR_INT()  ((void) 1)
+#define DEBUG_PRINT_ARR_LONG() ((void) 1)
+#endif
+
+void __libcaf_warning (char *warning_msg, ...);
+void __libcaf_error (char *error_msg, ...);
 
 /* debug utility functions */
 
-extern void debug_print_array_int(char *name, int *arr, int n);
-extern void debug_print_array_long(char *name, long *arr, int n);
+#if DEBUG
+extern void __libcaf_debug_print_array_int(char *name, int *arr, int n);
+extern void __libcaf_debug_print_array_long(char *name, long *arr, int n);
+#endif
+
 #endif /* _UTIL_H */
