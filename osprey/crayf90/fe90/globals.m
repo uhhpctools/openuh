@@ -436,6 +436,9 @@
 # define STOP_NAME_LEN			5
 # endif
 
+# define COARRAY_ADDR_TRANS_LIB_ENTRY "coarray_translate_remote_addr"
+# define COARRAY_ADDR_TRANS_NAME_LEN  strlen(COARRAY_ADDR_TRANS_LIB_ENTRY)
+
 # define SYNC_ALL_LIB_ENTRY			"_SYNC_ALL"
 # define SYNC_ALL_NAME_LEN			strlen(SYNC_ALL_LIB_ENTRY)
 

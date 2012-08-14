@@ -1439,6 +1439,7 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		int			dim;
 #ifdef _UH_COARRAYS
    		int			codim = 0;
+        int         actual_dim;
 #endif
    		long64			end;
 		long64			flags 			= 0;
@@ -6417,11 +6418,13 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
               }
 # endif
               else {
-                /* for deferred shape, use implicit bound. -DE */
                 if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
                  cvrt_exp_to_pdg(BD_LB_IDX(pe_bd_idx, codim),
                                  BD_LB_FLD(pe_bd_idx, codim));
-                //else fei_implicit_bnd();
+                else
+                 cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                                 IR_FLD_L(IR_IDX_L(ir_idx)));
+
               }
 
               if (ATD_IM_A_DOPE(attr_idx)) {
@@ -6444,11 +6447,12 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
               }
 # endif
               else {
-                  /* for deferred shape, use implicit bound. -DE */
                   if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
                    cvrt_exp_to_pdg(BD_XT_IDX(pe_bd_idx, codim),
                                    BD_XT_FLD(pe_bd_idx, codim));
-                  //else fei_implicit_bnd();
+                  else
+                   cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                              IR_FLD_L(IR_IDX_L(ir_idx)));
               }
 
               if (ATD_IM_A_DOPE(attr_idx)) {
@@ -6507,11 +6511,12 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
               }
 # endif
               else {
-                /* for deferred shape, use implicit bound. -DE */
                 if (BD_ARRAY_CLASS(pe_bd_idx) != Deferred_Shape)
                  cvrt_exp_to_pdg(BD_SM_IDX(pe_bd_idx, codim),
                                  BD_SM_FLD(pe_bd_idx, codim));
-                //else fei_implicit_bnd();
+                else
+                 cvrt_exp_to_pdg(IR_IDX_L(IR_IDX_L(ir_idx)),
+                                 IR_FLD_L(IR_IDX_L(ir_idx)));
               }
 
               if (BD_ARRAY_CLASS(bound_idx) == Assumed_Size) {
@@ -6879,37 +6884,43 @@ CONTINUE:
         cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
                         IR_FLD_L(ir_idx));
 
+#ifdef _UH_COARRAYS
+            actual_dim = IR_DV_DIM(ir_idx) + IR_DV_CODIM(ir_idx);
+#else
+            actual_dim = IR_DV_DIM(ir_idx);
+#endif
+
         switch (IR_OPR(ir_idx)) {
         case Dv_Access_Stride_Mult :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_get_dv_str_mult");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_D("(2) expand", EXPAND);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_get_dv_str_mult(IR_DV_DIM(ir_idx), EXPAND);
+             fei_get_dv_str_mult(actual_dim, EXPAND);
 # endif
              break;
 
         case Dv_Access_Extent :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_get_dv_extent");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_D("(2) expand", EXPAND);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_get_dv_extent(IR_DV_DIM(ir_idx), EXPAND);
+             fei_get_dv_extent(actual_dim, EXPAND);
 # endif
              break;
 
         case Dv_Access_Low_Bound :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_get_dv_low_bnd");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_D("(2) expand", EXPAND);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_get_dv_low_bnd(IR_DV_DIM(ir_idx), EXPAND);
+             fei_get_dv_low_bnd(actual_dim, EXPAND);
 # endif
              break;
         }
@@ -6930,35 +6941,40 @@ CONTINUE:
 
         cvrt_exp_to_pdg(IR_IDX_R(ir_idx),
                         IR_FLD_R(ir_idx));
+#ifdef _UH_COARRAYS
+            actual_dim = IR_DV_DIM(ir_idx) + IR_DV_CODIM(ir_idx);
+#else
+            actual_dim = IR_DV_DIM(ir_idx);
+#endif
 
         switch (IR_OPR(ir_idx)) {
         case Dv_Set_Stride_Mult :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_set_dv_str_mult");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_set_dv_str_mult(IR_DV_DIM(ir_idx)); 
+             fei_set_dv_str_mult(actual_dim);
 # endif
              break;
 
         case Dv_Set_Extent :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_set_dv_extent");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_set_dv_extent(IR_DV_DIM(ir_idx)); 
+             fei_set_dv_extent(actual_dim);
 # endif
              break;
 
         case Dv_Set_Low_Bound :
              PDG_DBG_PRINT_START
              PDG_DBG_PRINT_C("fei_set_dv_low_bnd");
-             PDG_DBG_PRINT_D("(1) dim", IR_DV_DIM(ir_idx));
+             PDG_DBG_PRINT_D("(1) dim", actual_dim);
              PDG_DBG_PRINT_END
 # ifdef _ENABLE_FEI
-             fei_set_dv_low_bnd(IR_DV_DIM(ir_idx)); 
+             fei_set_dv_low_bnd(actual_dim);
 # endif
              break;
         }

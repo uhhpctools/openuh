@@ -122,8 +122,16 @@ static void	translate_distant_ref1(opnd_type *, expr_arg_type *, int);
 # if defined(_TARGET_OS_MAX)
 static void	translate_t3e_distant_ref(opnd_type *, expr_arg_type *, int);
 static void	translate_t3e_dv_component(opnd_type *, expr_arg_type *);
-static int      capture_bounds_from_dv(int, int, int);
 # endif
+
+#if defined(_TARGET_OS_MAX) || defined(_UH_COARRAYS)
+static int      capture_bounds_from_dv(int, int, int);
+static int      capture_pe_bounds_from_dv(int, opnd_type *, int, int);
+#endif
+
+#ifdef _UH_COARRAYS
+static void	translate_uh_dv_component(opnd_type *, expr_arg_type *);
+#endif
 
 static void	translate_distant_dv_ref(opnd_type *, expr_arg_type *, int);
 static void	translate_distant_ref2(opnd_type *, expr_arg_type *, int);
@@ -933,7 +941,7 @@ CK_WHERE:
          ATD_PTR_ASSIGNED(attr_idx) = TRUE;
       }
 
-# ifdef _F_MINUS_MINUS
+# if defined(_F_MINUS_MINUS) && !defined(_UH_COARRAYS)
       /* prevent ptr asg to pointer component of co-array */
 
       if (ok &&
@@ -3169,6 +3177,42 @@ boolean  gen_whole_subscript (opnd_type *opnd, expr_arg_type *exp_desc)
    }
 # endif
 # endif
+
+#ifdef _UH_COARRAYS
+   /* Check if left opnd is a Subscript_Opr with only PE_subscripts. If so, fold
+    * into current whole_subscript node */
+   if (IR_FLD_L(sub_idx) == IR_Tbl_Idx &&
+       IR_OPR(IR_IDX_L(sub_idx)) == Subscript_Opr) {
+       int i;
+       int fold_pe_subscripts = 1;
+       int ir_idx_l = IR_IDX_L(sub_idx);
+       int num_subscripts = IR_LIST_CNT_R(ir_idx_l);
+       int subscripts_list = IR_IDX_R(ir_idx_l);
+       for (i = 0; i < num_subscripts; i++) {
+           if (IL_PE_SUBSCRIPT(subscripts_list) == FALSE) {
+               fold_pe_subscripts = 0;
+               break;
+           }
+           subscripts_list = IL_NEXT_LIST_IDX(subscripts_list);
+       }
+
+       if (fold_pe_subscripts) {
+           int pe_subscripts_list = IR_IDX_R(ir_idx_l);
+           subscripts_list = IR_IDX_R(sub_idx);
+           while (IL_NEXT_LIST_IDX(subscripts_list) != NULL_IDX) {
+               subscripts_list = IL_NEXT_LIST_IDX(subscripts_list);
+           }
+
+           /* append pe_subscripts to subscripts list */
+           IL_NEXT_LIST_IDX(subscripts_list) = pe_subscripts_list;
+           IL_PREV_LIST_IDX(pe_subscripts_list) = subscripts_list;
+           IR_LIST_CNT_R(sub_idx) = num_subscripts + IR_LIST_CNT_R(sub_idx);
+
+           IR_FLD_L(sub_idx) = IR_FLD_L(ir_idx_l);
+           IR_IDX_L(sub_idx) = IR_IDX_L(ir_idx_l);
+       }
+   }
+#endif
 
    if (ok && 
        TYP_TYPE(ATD_TYPE_IDX(attr_idx)) == Character) {
@@ -8943,6 +8987,8 @@ static boolean struct_opr_handler(opnd_type		*result_opnd,
 
 # ifdef _TARGET_OS_MAX
          translate_t3e_dv_component(result_opnd, exp_desc);
+# elif _UH_COARRAYS
+         translate_uh_dv_component(result_opnd, exp_desc);
 # else
          translate_dv_component(result_opnd, exp_desc);
 # endif
@@ -10119,7 +10165,49 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
    ok = expr_sem(&opnd, &exp_desc_l);
    insert_subs_ok = TRUE;
    pgm_unit_illegal = TRUE;
+
+
+#ifdef _UH_COARRAYS
+   /* Check if opnd is a Subscript_Opr with only PE_subscripts. If so, fold
+    * into current subscript node */
+   if (OPND_FLD(opnd) == IR_Tbl_Idx &&
+       IR_OPR(OPND_IDX(opnd)) == Subscript_Opr) {
+       int i;
+       int fold_pe_subscripts = 1;
+       int num_subscripts = IR_LIST_CNT_R(OPND_IDX(opnd));
+       int subscripts_list = IR_IDX_R(OPND_IDX(opnd));
+       for (i = 0; i < num_subscripts; i++) {
+           if (IL_PE_SUBSCRIPT(subscripts_list) == FALSE) {
+               fold_pe_subscripts = 0;
+               break;
+           }
+           subscripts_list = IL_NEXT_LIST_IDX(subscripts_list);
+       }
+
+       if (fold_pe_subscripts) {
+           int pe_subscripts_list = IR_IDX_R(OPND_IDX(opnd));
+           subscripts_list = IR_IDX_R(ir_idx);
+           while (IL_NEXT_LIST_IDX(subscripts_list) != NULL_IDX) {
+               subscripts_list = IL_NEXT_LIST_IDX(subscripts_list);
+           }
+
+           /* append pe_subscripts to subscripts list */
+           IL_NEXT_LIST_IDX(subscripts_list) = pe_subscripts_list;
+           IL_PREV_LIST_IDX(pe_subscripts_list) = subscripts_list;
+           IR_LIST_CNT_R(ir_idx) = num_subscripts + IR_LIST_CNT_R(ir_idx);
+
+           IR_FLD_L(ir_idx) = IR_FLD_L(OPND_IDX(opnd));
+           IR_IDX_L(ir_idx) = IR_IDX_L(OPND_IDX(opnd));
+       }
+   } else {
+       COPY_OPND(IR_OPND_L(ir_idx), opnd);
+   }
+
+#else
+
    COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+#endif
 
    in_implied_do = save_in_implied_do;
 
@@ -11018,7 +11106,7 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
             IL_NEXT_LIST_IDX(list_idx) = save_pe_dv_list_idx;
             IL_PREV_LIST_IDX(save_pe_dv_list_idx) = list_idx;
             IR_LIST_CNT_R(ir_idx) += 1;
-         } else 
+         } else
 # endif
          if (ok                           &&
              ATD_PE_ARRAY_IDX(attr_idx)) {
@@ -11029,6 +11117,10 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
                translate_distant_ref(result_opnd, exp_desc, pe_dim_list_idx);
 #else
                exp_desc->pe_dim_ref = TRUE;
+               linearize_pe_dims(pe_dim_list_idx, ATD_PE_ARRAY_IDX(attr_idx),
+                                 line, col, &exp_desc->bias_opnd);
+               OPND_FLD(exp_desc->bias_opnd) = IL_Tbl_Idx;
+               OPND_IDX(exp_desc->bias_opnd) = pe_dim_list_idx;
 #endif
             }
 # if defined(_TARGET_OS_MAX)
@@ -14415,6 +14507,309 @@ static void translate_t3e_dv_component(opnd_type           *result_opnd,
 
 }  /* translate_t3e_dv_component */
 # endif
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      <description>                                                         *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+
+# ifdef _UH_COARRAYS
+static void translate_uh_dv_component(opnd_type           *result_opnd,
+                                       expr_arg_type       *exp_desc)
+
+{
+   /* the allocatable flag means use a ptr/pointee pair.  */
+   /* It is on right now for all dv's. They must point to */
+   /* contiguous storage. Eventually, it will only be on  */
+   /* for ALLOCATABLE arrays.                             */
+
+   boolean      allocatable = TRUE;
+   int          asg_idx;
+   int          pe_dim_ref_attr;
+   int          col;
+   int          dv_idx;
+   int          ir_idx;
+   int          line;
+   int          list_idx;
+   opnd_type    opnd;
+   int          ptr_idx;
+   int          ptee_idx;
+   boolean      save_defer_stmt_expansion;
+   int          tmp_dv_idx;
+   int          tmp_pe_dv_idx;
+   int          pe_bd_list_idx;
+   int          pe_bd_list_cnt = 0;
+   int          lib_idx;
+   int          loc_idx;
+   int          call_idx;
+   opnd_type    opnd2;
+   opnd_type    linearized_pe_opnd;
+
+
+   TRACE (Func_Entry, "translate_uh_dv_component", NULL);
+
+   stmt_expansion_control_start();
+   save_defer_stmt_expansion = defer_stmt_expansion;
+   defer_stmt_expansion = FALSE;
+
+   /* get the cosubscripts */
+   pe_bd_list_idx = OPND_IDX(exp_desc->bias_opnd);
+   COPY_OPND(opnd, (*result_opnd));
+
+   io_item_must_flatten = TRUE;
+
+   if (OPND_FLD(opnd) == IR_Tbl_Idx &&
+       IR_OPR(OPND_IDX(opnd)) == Dv_Deref_Opr) {
+
+      COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+   }
+
+
+   dv_idx = find_base_attr(&opnd, &line, &col);
+   find_opnd_line_and_column(result_opnd, &line, &col);
+
+   pe_dim_ref_attr = find_pe_dim_ref_attr(&opnd);
+   COPY_OPND(opnd2, (*result_opnd));
+   find_pe_dim_ref_opnd(&opnd2);
+
+   tmp_dv_idx = gen_compiler_tmp(line, col, Priv, TRUE);
+   ATD_TYPE_IDX(tmp_dv_idx)      = ATD_TYPE_IDX(dv_idx);
+   ATD_STOR_BLK_IDX(tmp_dv_idx)  = SCP_SB_STACK_IDX(curr_scp_idx);
+   AT_SEMANTICS_DONE(tmp_dv_idx) = TRUE;
+   ATD_ARRAY_IDX(tmp_dv_idx)     = ATD_ARRAY_IDX(dv_idx);
+   ATD_POINTER(tmp_dv_idx)       = ATD_POINTER(dv_idx);
+   ATD_IM_A_DOPE(tmp_dv_idx)     = TRUE;
+
+
+   NTR_IR_TBL(ir_idx);
+   IR_OPR(ir_idx) = Dv_Whole_Copy_Opr;
+   IR_TYPE_IDX(ir_idx) = TYPELESS_DEFAULT_TYPE;
+   IR_LINE_NUM(ir_idx) = line;
+   IR_COL_NUM(ir_idx)  = col;
+
+   IR_FLD_L(ir_idx) = AT_Tbl_Idx;
+   IR_IDX_L(ir_idx) = tmp_dv_idx;
+   IR_LINE_NUM_L(ir_idx) = line;
+   IR_COL_NUM_L(ir_idx)  = col;
+
+   COPY_OPND(IR_OPND_R(ir_idx), opnd);
+
+   ATD_FLD(tmp_dv_idx) = OPND_FLD(opnd);
+   ATD_TMP_IDX(tmp_dv_idx) = OPND_IDX(opnd);
+
+   gen_sh(Before, Assignment_Stmt, SH_GLB_LINE(curr_stmt_sh_idx),
+          SH_COL_NUM(curr_stmt_sh_idx), FALSE, FALSE, TRUE);
+
+   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = ir_idx;
+   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+   if (allocatable) {
+      /* generate the ptr/pointee pair */
+
+      ptr_idx  = gen_compiler_tmp(line, col, Shared, TRUE);
+      ATD_TYPE_IDX(ptr_idx) = CRI_Ptr_8;
+      AT_SEMANTICS_DONE(ptr_idx) = TRUE;
+      ATD_STOR_BLK_IDX(ptr_idx) = SCP_SB_STACK_IDX(curr_scp_idx);
+
+      ptee_idx = gen_compiler_tmp(line, col, Shared, TRUE);
+      ATD_CLASS(ptee_idx) = CRI__Pointee;
+      AT_SEMANTICS_DONE(ptee_idx) = TRUE;
+      ATD_STOR_BLK_IDX(ptee_idx) = SCP_SB_BASED_IDX(curr_scp_idx);
+      ATD_TYPE_IDX(ptee_idx) = ATD_TYPE_IDX(dv_idx);
+      ATD_PTR_IDX(ptee_idx) = ptr_idx;
+
+      if (ATD_ARRAY_IDX(tmp_dv_idx) != NULL_IDX) {
+         ATD_ARRAY_IDX(ptee_idx) = capture_bounds_from_dv(tmp_dv_idx,
+                                                          line,
+                                                          col);
+      }
+
+      if (ATD_IM_A_DOPE(pe_dim_ref_attr)) {
+          ATD_PE_ARRAY_IDX(ptee_idx) = capture_pe_bounds_from_dv(
+                                                          pe_dim_ref_attr,
+                                                          &opnd2,
+                                                          line,
+                                                          col);
+      } else {
+          ATD_PE_ARRAY_IDX(ptee_idx) = ATD_PE_ARRAY_IDX(pe_dim_ref_attr);
+      }
+
+      /* set ptr to BASE_ADDRESS(tmp_dv_idx) */
+
+      NTR_IR_TBL(asg_idx);
+      IR_OPR(asg_idx) = Asg_Opr;
+      IR_TYPE_IDX(asg_idx) = CRI_Ptr_8;
+      IR_LINE_NUM(asg_idx) = line;
+      IR_COL_NUM(asg_idx) = col;
+
+      IR_FLD_L(asg_idx) = AT_Tbl_Idx;
+      IR_IDX_L(asg_idx) = ptr_idx;
+      IR_LINE_NUM_L(asg_idx) = line;
+      IR_COL_NUM_L(asg_idx) = col;
+
+      NTR_IR_TBL(ir_idx);
+      IR_OPR(ir_idx) = Dv_Access_Base_Addr;
+      IR_TYPE_IDX(ir_idx) = CRI_Ptr_8;
+      IR_LINE_NUM(ir_idx) = line;
+      IR_COL_NUM(ir_idx)  = col;
+
+      IR_FLD_L(ir_idx) = AT_Tbl_Idx;
+      IR_IDX_L(ir_idx) = tmp_dv_idx;
+      IR_LINE_NUM_L(ir_idx) = line;
+      IR_COL_NUM_L(ir_idx) = col;
+
+      IR_FLD_R(asg_idx) = IR_Tbl_Idx;
+      IR_IDX_R(asg_idx) = ir_idx;
+
+      gen_sh(Before, Assignment_Stmt, line, col, FALSE, FALSE, TRUE);
+
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+      /* do coarray address translation for ptr */
+
+      if (glb_tbl_idx[Coarray_Addr_Trans_Attr_Idx] == NULL_IDX) {
+          glb_tbl_idx[Coarray_Addr_Trans_Attr_Idx] =
+              create_lib_entry_attr(COARRAY_ADDR_TRANS_LIB_ENTRY,
+                      COARRAY_ADDR_TRANS_NAME_LEN, line, col);
+      }
+      lib_idx = glb_tbl_idx[Coarray_Addr_Trans_Attr_Idx];
+      ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+
+      NTR_IR_TBL(call_idx);
+      IR_OPR(call_idx) = Call_Opr;
+      IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+      IR_LINE_NUM(call_idx) = line;
+      IR_COL_NUM(call_idx) = col;
+      IR_FLD_L(call_idx) = AT_Tbl_Idx;
+      IR_IDX_L(call_idx) = lib_idx;
+      IR_LINE_NUM_L(call_idx) = line;
+      IR_COL_NUM_L(call_idx) = col;
+
+      NTR_IR_LIST_TBL(list_idx);
+      IR_FLD_R(call_idx) = IL_Tbl_Idx;
+      IR_IDX_R(call_idx) = list_idx;
+      IR_LIST_CNT_R(call_idx) = 2;
+
+      /* 1st argument is address of ptr_idx */
+      NTR_IR_TBL(loc_idx);
+      IR_OPR(loc_idx) = Aloc_Opr;
+      IR_TYPE_IDX(loc_idx) = CRI_Ptr_8;
+      IR_LINE_NUM(loc_idx) = line;
+      IR_COL_NUM(loc_idx) = col;
+      IR_FLD_L(loc_idx) = AT_Tbl_Idx;
+      IR_IDX_L(loc_idx) = ptr_idx;
+      IR_LINE_NUM_L(loc_idx) = line;
+      IR_COL_NUM_L(loc_idx) = col;
+      IL_FLD(list_idx) = IR_Tbl_Idx;
+      IL_IDX(list_idx) = loc_idx;
+      IL_LINE_NUM(list_idx) = IR_LINE_NUM(call_idx);
+      IL_COL_NUM(list_idx) = IR_COL_NUM(call_idx);
+
+      /* 2nd argument is linearized image index */
+      linearize_pe_dims(pe_bd_list_idx, ATD_PE_ARRAY_IDX(ptee_idx),
+              line, col, &linearized_pe_opnd);
+
+      NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+      IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+      list_idx = IL_NEXT_LIST_IDX(list_idx);
+      COPY_OPND( IL_OPND(list_idx), linearized_pe_opnd );
+      IL_LINE_NUM(list_idx) = IR_LINE_NUM(call_idx);
+      IL_COL_NUM(list_idx) = IR_COL_NUM(call_idx);
+
+      gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
+              FALSE, FALSE, TRUE);
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+      OPND_FLD((*result_opnd)) = AT_Tbl_Idx;
+      OPND_IDX((*result_opnd)) = ptee_idx;
+
+      exp_desc->dope_vector = FALSE;
+   }
+   else {
+
+      if (OPND_FLD((*result_opnd)) == IR_Tbl_Idx &&
+          IR_OPR(OPND_IDX((*result_opnd))) == Dv_Deref_Opr) {
+
+         OPND_FLD(IR_OPND_L(OPND_IDX((*result_opnd)))) = AT_Tbl_Idx;
+         OPND_IDX(IR_OPND_L(OPND_IDX((*result_opnd)))) = tmp_dv_idx;
+      }
+      else {
+         OPND_FLD((*result_opnd)) = AT_Tbl_Idx;
+         OPND_IDX((*result_opnd)) = tmp_dv_idx;
+      }
+
+      if (ATD_IM_A_DOPE(pe_dim_ref_attr)) {
+          ATD_PE_ARRAY_IDX(tmp_dv_idx) = capture_pe_bounds_from_dv(
+                                                          pe_dim_ref_attr,
+                                                          &opnd2,
+                                                          line,
+                                                          col);
+      } else {
+          ATD_PE_ARRAY_IDX(tmp_dv_idx) = ATD_PE_ARRAY_IDX(pe_dim_ref_attr);
+      }
+   }
+
+
+   defer_stmt_expansion = save_defer_stmt_expansion;
+   stmt_expansion_control_end(result_opnd);
+
+
+   NTR_IR_TBL(ir_idx);
+   IR_OPR(ir_idx) = Subscript_Opr;
+   IR_LINE_NUM(ir_idx) = line;
+   IR_COL_NUM(ir_idx) = col;
+   IR_TYPE_IDX(ir_idx) = ATD_TYPE_IDX(tmp_dv_idx);
+
+   COPY_OPND(IR_OPND_L(ir_idx), (*result_opnd));
+
+   if (pe_bd_list_idx != NULL_IDX) {
+       NTR_IR_LIST_TBL(list_idx);
+       IR_FLD_R(ir_idx) = IL_Tbl_Idx;
+       IR_IDX_R(ir_idx) = list_idx;
+       IL_PE_SUBSCRIPT(list_idx) = TRUE;
+       pe_bd_list_cnt = 1;
+       COPY_OPND(IL_OPND(list_idx), IL_OPND(pe_bd_list_idx));
+
+       pe_bd_list_idx = IL_NEXT_LIST_IDX(pe_bd_list_idx);
+       while (pe_bd_list_idx != NULL_IDX) {
+           int next_list_idx;
+           pe_bd_list_cnt++;
+           NTR_IR_LIST_TBL(next_list_idx);
+           IL_PREV_LIST_IDX(next_list_idx) = list_idx;
+           IL_NEXT_LIST_IDX(list_idx) = next_list_idx;
+           list_idx = next_list_idx;
+           COPY_OPND(IL_OPND(list_idx), IL_OPND(pe_bd_list_idx));
+           IL_PE_SUBSCRIPT(list_idx) = TRUE;
+
+           pe_bd_list_idx = IL_NEXT_LIST_IDX(pe_bd_list_idx);
+       }
+   }
+   IR_LIST_CNT_R(ir_idx) = pe_bd_list_cnt;
+
+   OPND_FLD((*result_opnd)) = IR_Tbl_Idx;
+   OPND_IDX((*result_opnd)) = ir_idx;
+
+   TRACE (Func_Exit, "translate_uh_dv_component", NULL);
+
+   return;
+
+}  /* translate_uh_dv_component */
+# endif
+
+
 
 /******************************************************************************\
 |*                                                                            *|
@@ -14432,7 +14827,7 @@ static void translate_t3e_dv_component(opnd_type           *result_opnd,
 |*                                                                            *|
 \******************************************************************************/
 
-# if defined(_TARGET_OS_MAX)
+# if defined(_TARGET_OS_MAX) || defined(_UH_COARRAYS)
 static int capture_bounds_from_dv(int   dv_attr_idx,
                                   int   line,
                                   int   col)
@@ -14668,6 +15063,243 @@ static int capture_bounds_from_dv(int   dv_attr_idx,
    return(bd_idx);
 
 }  /* capture_bounds_from_dv */
+
+
+static int capture_pe_bounds_from_dv(int   dv_attr_idx,
+                                     opnd_type *dv_opnd,
+                                     int   line,
+                                     int   col)
+
+{
+   int          asg_idx;
+   int          bd_idx;
+   int          i;
+   int          ir_idx;
+   opnd_type	len_opnd;
+   int		minus_idx;
+   opnd_type	opnd;
+   int		plus_idx;
+   int          tmp_idx;
+   int        bd_rank;
+   int        bd_pe_rank;
+
+   TRACE (Func_Entry, "capture_pe_bounds_from_dv", NULL);
+
+   bd_idx = reserve_array_ntry(BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx)));
+   BD_RANK(bd_idx)        = BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx));
+   BD_LINE_NUM(bd_idx)    = line;
+   BD_COLUMN_NUM(bd_idx)  = col;
+   BD_ARRAY_SIZE(bd_idx)  = Var_Len_Array;
+   BD_ARRAY_CLASS(bd_idx) = Explicit_Shape;
+   BD_RESOLVED(bd_idx)    = TRUE;
+
+
+   bd_rank = BD_RANK(ATD_ARRAY_IDX(dv_attr_idx));
+   bd_pe_rank = BD_RANK(ATD_PE_ARRAY_IDX(dv_attr_idx));
+
+   for (i = 1; i <= bd_pe_rank; i++) {
+
+      /* capture LB */
+
+      gen_dv_access_low_bound(&opnd, dv_opnd, i+bd_rank);
+
+      if (OPND_FLD(opnd) == CN_Tbl_Idx ||
+          (OPND_FLD(opnd) == AT_Tbl_Idx &&
+           ATD_CLASS(OPND_IDX(opnd)) == Compiler_Tmp)) {
+
+         BD_LB_FLD(bd_idx,i) = OPND_FLD(opnd);
+         BD_LB_IDX(bd_idx,i) = OPND_IDX(opnd);
+      }
+      else {
+         GEN_COMPILER_TMP_ASG(asg_idx,
+                              tmp_idx,
+                              TRUE,  /* Semantics done*/
+                              line,
+                              col,
+                              SA_INTEGER_DEFAULT_TYPE,
+                              Priv);
+
+         COPY_OPND(IR_OPND_R(asg_idx), opnd);
+
+         gen_sh(Before, Assignment_Stmt, line, col,
+                FALSE, FALSE, TRUE);
+         SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+         SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+         gen_copyin_bounds_stmt(tmp_idx);
+
+         BD_LB_FLD(bd_idx,i) = AT_Tbl_Idx;
+         BD_LB_IDX(bd_idx,i) = tmp_idx;
+      }
+
+      /* capture XT */
+
+      GEN_COMPILER_TMP_ASG(asg_idx,
+                           tmp_idx,
+                           TRUE,  /* Semantics done*/
+                           line,
+                           col,
+                           SA_INTEGER_DEFAULT_TYPE,
+                           Priv);
+
+      NTR_IR_TBL(ir_idx);
+      IR_OPR(ir_idx) = Dv_Access_Extent;
+      IR_DV_DIM(ir_idx) = i + bd_rank;
+      IR_TYPE_IDX(ir_idx) = SA_INTEGER_DEFAULT_TYPE;
+      IR_LINE_NUM(ir_idx) = line;
+      IR_COL_NUM(ir_idx) = col;
+
+      COPY_OPND(IR_OPND_L(ir_idx), (*dv_opnd));
+
+      IR_FLD_R(asg_idx) = IR_Tbl_Idx;
+      IR_IDX_R(asg_idx) = ir_idx;
+
+      gen_sh(Before, Assignment_Stmt, line, col,
+             FALSE, FALSE, TRUE);
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+      gen_copyin_bounds_stmt(tmp_idx);
+
+      BD_XT_FLD(bd_idx,i) = AT_Tbl_Idx;
+      BD_XT_IDX(bd_idx,i) = tmp_idx;
+
+      if (i == 1) {
+         OPND_FLD(len_opnd) = AT_Tbl_Idx;
+         OPND_IDX(len_opnd) = tmp_idx;
+         OPND_LINE_NUM(len_opnd) = line;
+         OPND_COL_NUM(len_opnd) = col;
+      }
+      else {
+         NTR_IR_TBL(ir_idx);
+         IR_OPR(ir_idx) = Mult_Opr;
+         IR_TYPE_IDX(ir_idx) = CG_INTEGER_DEFAULT_TYPE;
+         IR_LINE_NUM(ir_idx) = line;
+         IR_COL_NUM(ir_idx) = col;
+
+         COPY_OPND(IR_OPND_L(ir_idx), len_opnd);
+         IR_FLD_R(ir_idx) = AT_Tbl_Idx;
+         IR_IDX_R(ir_idx) = tmp_idx;
+         IR_LINE_NUM_R(ir_idx) = line;
+         IR_COL_NUM_R(ir_idx) = col;
+
+         OPND_FLD(len_opnd) = IR_Tbl_Idx;
+         OPND_IDX(len_opnd) = ir_idx;
+      }
+
+      /* capture SM */
+
+      GEN_COMPILER_TMP_ASG(asg_idx,
+                           tmp_idx,
+                           TRUE,  /* Semantics done*/
+                           line,
+                           col,
+                           SA_INTEGER_DEFAULT_TYPE,
+                           Priv);
+
+      NTR_IR_TBL(ir_idx);
+      IR_OPR(ir_idx) = Dv_Access_Stride_Mult;
+      IR_DV_DIM(ir_idx) = i + bd_rank;
+      IR_TYPE_IDX(ir_idx) = SA_INTEGER_DEFAULT_TYPE;
+      IR_LINE_NUM(ir_idx) = line;
+      IR_COL_NUM(ir_idx) = col;
+
+      COPY_OPND(IR_OPND_L(ir_idx), (*dv_opnd));
+
+      IR_FLD_R(asg_idx) = IR_Tbl_Idx;
+      IR_IDX_R(asg_idx) = ir_idx;
+
+      gen_sh(Before, Assignment_Stmt, line, col,
+             FALSE, FALSE, TRUE);
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+      BD_SM_FLD(bd_idx,i) = AT_Tbl_Idx;
+      BD_SM_IDX(bd_idx,i) = tmp_idx;
+
+      /* generate UB = (LB + XT) - 1 */
+
+      GEN_COMPILER_TMP_ASG(asg_idx,
+                           tmp_idx,
+                           TRUE,  /* Semantics done*/
+                           line,
+                           col,
+                           SA_INTEGER_DEFAULT_TYPE,
+                           Priv);
+
+      NTR_IR_TBL(plus_idx);
+      IR_OPR(plus_idx) = Plus_Opr;
+      IR_TYPE_IDX(plus_idx) = CG_INTEGER_DEFAULT_TYPE;
+      IR_LINE_NUM(plus_idx) = line;
+      IR_COL_NUM(plus_idx) = col;
+
+      IR_FLD_L(plus_idx) = AT_Tbl_Idx;
+      IR_IDX_L(plus_idx) = BD_LB_IDX(bd_idx,i);
+      IR_LINE_NUM_L(plus_idx) = line;
+      IR_COL_NUM_L(plus_idx) = col;
+
+      IR_FLD_R(plus_idx) = AT_Tbl_Idx;
+      IR_IDX_R(plus_idx) = BD_XT_IDX(bd_idx,i);
+      IR_LINE_NUM_R(plus_idx) = line;
+      IR_COL_NUM_R(plus_idx) = col;
+
+      NTR_IR_TBL(minus_idx);
+      IR_OPR(minus_idx) = Minus_Opr;
+      IR_TYPE_IDX(minus_idx) = CG_INTEGER_DEFAULT_TYPE;
+      IR_LINE_NUM(minus_idx) = line;
+      IR_COL_NUM(minus_idx) = col;
+
+      IR_FLD_L(minus_idx) = IR_Tbl_Idx;
+      IR_IDX_L(minus_idx) = plus_idx;
+
+      IR_FLD_R(minus_idx) = CN_Tbl_Idx;
+      IR_IDX_R(minus_idx) = CN_INTEGER_ONE_IDX;
+      IR_LINE_NUM_R(minus_idx) = line;
+      IR_COL_NUM_R(minus_idx) = col;
+
+      IR_FLD_R(asg_idx) = IR_Tbl_Idx;
+      IR_IDX_R(asg_idx) = minus_idx;
+
+      gen_sh(Before, Assignment_Stmt, line, col,
+             FALSE, FALSE, TRUE);
+      SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+      SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+      gen_copyin_bounds_stmt(tmp_idx);
+
+      BD_UB_FLD(bd_idx,i) = AT_Tbl_Idx;
+      BD_UB_IDX(bd_idx,i) = tmp_idx;
+   }
+
+   GEN_COMPILER_TMP_ASG(asg_idx,
+                        tmp_idx,
+                        TRUE,  /* Semantics done*/
+                        line,
+                        col,
+                        SA_INTEGER_DEFAULT_TYPE,
+                        Priv);
+
+   COPY_OPND(IR_OPND_R(asg_idx), len_opnd);
+
+   gen_sh(Before, Assignment_Stmt, line, col,
+          FALSE, FALSE, TRUE);
+   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+   BD_LEN_FLD(bd_idx) = AT_Tbl_Idx;
+   BD_LEN_IDX(bd_idx) = tmp_idx;
+
+   BD_FLOW_DEPENDENT(bd_idx) = TRUE;
+
+   bd_idx =  ntr_array_in_bd_tbl(bd_idx);
+
+   TRACE (Func_Exit, "capture_pe_bounds_from_dv", NULL);
+
+   return(bd_idx);
+
+}  /* capture_pe_bounds_from_dv */
+
+
 # endif
 
 /******************************************************************************\

@@ -590,6 +590,31 @@ void coarray_free_all_shared_memory_slots()
     free_next_slots_recursively(common_slot);
 }
 
+/* Translate a remote address from a given image to the local address space
+ */
+void coarray_translate_remote_addr(void **remote_addr, int image)
+{
+    void *start_symm_heap, *end_symm_heap;
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "coarray_translate_remote_addr (start) - "
+            "remote_addr: %p, image: %d ", remote_addr, image);
+
+    start_symm_heap = comm_start_symmetric_heap(image-1);
+    end_symm_heap = comm_end_symmetric_heap(image-1);
+
+    /* subtract the offset if remote address falls within the symmetric heap
+     * of the remote image
+     */
+    if (*remote_addr >= start_symm_heap && *remote_addr <= end_symm_heap) {
+        *remote_addr = (char*)(*remote_addr) -
+                        comm_address_translation_offset(image-1);
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "coarray_translate_remote_addr (end) - "
+            "remote_addr: %p, image: %d ", remote_addr, image);
+}
+
 
 /* print map of shared memory heap */
 static void print_mem_slot(char *mem_str, char *start_address,
@@ -1402,14 +1427,27 @@ int check_remote_address(size_t image, void *address)
 
     check_remote_image(image);
 
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+            "address: %p , comm_start_symmetric_heap : %p, "
+            "comm_end_symmetric_heap : %p, "
+            "comm_start_asymmetric_heap : %p, "
+            "comm_end_asymmetric_heap : %p ",
+            address, comm_start_symmetric_heap(_this_image-1),
+            comm_end_symmetric_heap(_this_image-1),
+            comm_start_asymmetric_heap(image-1),
+            comm_end_asymmetric_heap(image-1));
     if ((address < comm_start_symmetric_heap(_this_image - 1) ||
          address > comm_end_symmetric_heap(_this_image - 1)) &&
         (address < comm_start_asymmetric_heap(image - 1) ||
          address > comm_end_asymmetric_heap(image - 1))) {
         sprintf(error_msg,
-                "Address %p is out of range. Should be in [ %p ... %p ].",
-                address, comm_start_heap(image - 1),
-                comm_end_heap(image - 1));
+                "Address %p (translates to %p) is out of range. "
+                "Should fall within [ %p ... %p ] "
+                "on remote image %lu.",
+                address,
+                (char*)address+comm_address_translation_offset(image-1),
+                comm_start_heap(image - 1),
+                comm_end_heap(image - 1), (unsigned long)image);
         Error(error_msg);
         /* should not reach */
     }

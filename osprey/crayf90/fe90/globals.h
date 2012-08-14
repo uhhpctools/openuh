@@ -185,6 +185,7 @@ enum	glb_tbl_idx_values	{Allocate_Attr_Idx,
                  Event_Post_Attr_Idx,
                  Event_Query_Attr_Idx,
                  Event_Wait_Attr_Idx,
+                 Coarray_Addr_Trans_Attr_Idx,
 #endif
 				 Num_Glb_Tbl_Idxs
 				};

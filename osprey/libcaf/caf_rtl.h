@@ -85,6 +85,7 @@ void __coarray_strided_write(size_t image,
 
 /* TODO: vector, non-contiguous read and write operations  */
 
+/* COMPILER FRONT-END INTERFACE */
 
 /* SYNCHRONIZATION INTRINSICS */
 void _SYNC_ALL();
@@ -126,10 +127,14 @@ void _EVENT_WAIT(event_t * event, int *image);
 void _CRITICAL();
 void _END_CRITICAL();
 
+/* OTHER PUBLIC INTERFACES */
+
+/* shared memory management */
 void *coarray_allocatable_allocate_(unsigned long var_size);
 void *coarray_asymmetric_allocate_(unsigned long var_size);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
+void coarray_translate_remote_addr(void **remote_addr, int image);
 
 /* runtime checks */
 int check_remote_address(size_t, void *);

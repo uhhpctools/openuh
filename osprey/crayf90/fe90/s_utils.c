@@ -1131,6 +1131,173 @@ static int  opr_to_str(operator_type	opr,
    return(len);
 
 }  /* opr_to_str */
+
+#ifdef _UH_COARRAYS
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*	finds the image-selecting part-name in reference tree                     *|
+|*	The difference between find_pe_dim_ref_attr and find_left_attr is:        *|
+|*                                                                            *|
+|*       a%b[1]%c(1:10)(1:3)                                                  *|
+|*                                                                            *|
+|*       find_pe_dim_ref_ir_idx finds 'b'                                     *|
+|*       find_left_attr finds 'a'                                             *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*	NOTHING                                                                   *|
+|*                                                                            *|
+\******************************************************************************/
+
+int	find_pe_dim_ref_attr(opnd_type       *root_opnd)
+
+{
+   int		attr_idx = NULL_IDX;
+   int pe_dim_ref_found = 0;
+   opnd_type	opnd;
+
+   TRACE (Func_Entry, "find_pe_dim_ref_attr", NULL);
+
+   COPY_OPND(opnd, (*root_opnd));
+
+   while (attr_idx == NULL_IDX) {
+      switch (OPND_FLD(opnd)) {
+         case AT_Tbl_Idx :
+            attr_idx = OPND_IDX(opnd);
+            goto EXIT;
+
+         case IR_Tbl_Idx :
+            if (IR_OPR(OPND_IDX(opnd)) == Subscript_Opr ||
+                IR_OPR(OPND_IDX(opnd)) == Section_Subscript_Opr ||
+                IR_OPR(OPND_IDX(opnd)) == Whole_Subscript_Opr) {
+                /* is there a pe dim ref? */
+                int i;
+                int subscript_list = IR_IDX_R(OPND_IDX(opnd));
+                int num_subscripts = IR_LIST_CNT_R(OPND_IDX(opnd));
+                for (i = 0; i < num_subscripts; i++) {
+                  if (IL_PE_SUBSCRIPT(subscript_list) == TRUE) {
+                      pe_dim_ref_found = 1;
+                      break;
+                  }
+                  subscript_list = IL_NEXT_LIST_IDX(subscript_list);
+                }
+
+                COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+            } else if (IR_OPR(OPND_IDX(opnd)) == Struct_Opr) {
+               if (pe_dim_ref_found) {
+                   COPY_OPND(opnd, IR_OPND_R(OPND_IDX(opnd)));
+               } else {
+                   COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+               }
+            }
+            else {
+               COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+            }
+            break;
+
+         default         :
+            goto EXIT;
+      }
+   }
+
+EXIT:
+
+   TRACE (Func_Exit, "find_pe_dim_ref_attr", ((attr_idx == NULL_IDX) ? NULL :
+                                        AT_OBJ_NAME_PTR(attr_idx)));
+
+   return(attr_idx);
+
+}  /* find_pe_dim_ref_attr */
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*	finds the image-selecting part-name in reference tree, and returns the    *|
+|*  corresponding opnd                                                        *|
+|*	The difference between find_pe_dim_ref_attr and find_left_attr is:        *|
+|*                                                                            *|
+|*       a%b[1]%c(1:10)(1:3)                                                  *|
+|*                                                                            *|
+|*       find_pe_dim_ref_ir_idx finds 'a%b'                                   *|
+|*       find_left_attr finds 'a'                                             *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*	NONE                                                                      *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*	NOTHING                                                                   *|
+|*                                                                            *|
+\******************************************************************************/
+
+void find_pe_dim_ref_opnd(opnd_type       *result_opnd)
+
+{
+   int pe_dim_ref_found = 0;
+   opnd_type	opnd;
+
+   TRACE (Func_Entry, "find_pe_dim_ref_opnd", NULL);
+
+   COPY_OPND(opnd, (*result_opnd));
+
+   while (1) {
+      switch (OPND_FLD(opnd)) {
+         case AT_Tbl_Idx :
+            COPY_OPND((*result_opnd), opnd);
+            goto EXIT;
+
+         case IR_Tbl_Idx :
+            if (IR_OPR(OPND_IDX(opnd)) == Subscript_Opr ||
+                IR_OPR(OPND_IDX(opnd)) == Section_Subscript_Opr ||
+                IR_OPR(OPND_IDX(opnd)) == Whole_Subscript_Opr) {
+                /* is there a pe dim ref? */
+                int i;
+                int subscript_list = IR_IDX_R(OPND_IDX(opnd));
+                int num_subscripts = IR_LIST_CNT_R(OPND_IDX(opnd));
+                for (i = 0; i < num_subscripts; i++) {
+                  if (IL_PE_SUBSCRIPT(subscript_list) == TRUE) {
+                      pe_dim_ref_found = 1;
+                      break;
+                  }
+                  subscript_list = IL_NEXT_LIST_IDX(subscript_list);
+                }
+
+                COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+            } else if (IR_OPR(OPND_IDX(opnd)) == Struct_Opr) {
+               if (pe_dim_ref_found) {
+                   COPY_OPND((*result_opnd), opnd);
+                   goto EXIT;
+               } else {
+                   COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+               }
+            }
+            else {
+               COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
+            }
+            break;
+
+         default         :
+            goto EXIT;
+      }
+   }
+
+EXIT:
+
+   TRACE (Func_Exit, "find_pe_dim_ref_opnd", NULL);
+
+}  /* find_pe_dim_ref_opnd */
+
+#endif
+
+
 
 /******************************************************************************\
 |*									      *|
@@ -12144,6 +12311,7 @@ void gen_dv_access_low_bound(opnd_type	*result_opnd,
    int			ir_idx;
    int			line;
    cif_usage_code_type	save_xref_state;
+   int          is_pe_dim = 0;
 
 
    TRACE (Func_Entry, "gen_dv_access_low_bound", NULL);
@@ -12157,7 +12325,17 @@ void gen_dv_access_low_bound(opnd_type	*result_opnd,
    }
 # endif
 
+#ifndef _UH_COARRAYS
    bd_idx = ATD_ARRAY_IDX(attr_idx);
+#else
+   if (dim <= BD_RANK(ATD_ARRAY_IDX(attr_idx))) {
+       bd_idx = ATD_ARRAY_IDX(attr_idx);
+   } else {
+       bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+       dim = dim - BD_RANK(ATD_ARRAY_IDX(attr_idx));
+       is_pe_dim = 1;
+   }
+#endif
 
    if (bd_idx &&
        BD_ARRAY_CLASS(bd_idx) == Assumed_Shape) {
@@ -12192,7 +12370,15 @@ void gen_dv_access_low_bound(opnd_type	*result_opnd,
       ir_idx = gen_ir(OPND_FLD((*dv_opnd)), OPND_IDX((*dv_opnd)),
                   Dv_Access_Low_Bound, SA_INTEGER_DEFAULT_TYPE, line, col,
                       NO_Tbl_Idx, NULL_IDX);
+
+#ifndef _UH_COARRAYS
       IR_DV_DIM(ir_idx) = dim;
+#else
+      if (is_pe_dim)
+          IR_DV_DIM(ir_idx) = dim + BD_RANK(ATD_ARRAY_IDX(attr_idx));
+      else
+          IR_DV_DIM(ir_idx) = dim;
+#endif
 
       gen_opnd(result_opnd, ir_idx, IR_Tbl_Idx, line, col);
    }
