@@ -2891,7 +2891,7 @@ static WN *expr_is_coindexed(WN *expr, WN **image, TY_IDX *coarray_type,
 
             case OPR_LDA:
             case OPR_LDID:
-                type = WN_ty(wn);
+                type = WN_type(wn);
                 while (TY_kind(type) == KIND_POINTER)
                     type = TY_pointed(type);
                 ofst += WN_offset(wn);
@@ -2967,12 +2967,17 @@ static TY_IDX get_type_at_offset (TY_IDX ty, WN_OFFSET offset, BOOL stop_at_arra
           FLD_HANDLE fld(fld_iter);
           if (Is_Composite_Type(FLD_type(fld))
               && offset > FLD_ofst(fld)
-              && offset < FLD_ofst(fld) + TY_size(FLD_type(fld)))
-          {
+              && offset < FLD_ofst(fld) + TY_size(FLD_type(fld))) {
             return get_type_at_offset (FLD_type(fld), offset - FLD_ofst(fld));
           }
-          if (FLD_ofst(fld) == offset)
-            return FLD_type(fld);
+          if (FLD_ofst(fld) == offset) {
+              if (stop_at_coarray && is_coarray_type(FLD_type(fld))) {
+                  return FLD_type(fld);
+              } else {
+                  return get_type_at_offset(FLD_type(fld),
+                                            offset - FLD_ofst(fld));
+              }
+          }
         } while (!FLD_last_field(fld_iter++));
         FmtAssert(FALSE, ("couldn't find matching field"));
       }
