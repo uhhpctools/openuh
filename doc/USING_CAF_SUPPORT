@@ -14,7 +14,7 @@ $ cd openuh-build
                 --with-gasnet-root=<gasnet-install-path>    \
                 --with-armci-root=<armci-install-path>
 You can use either gasnet or armci or both.
-[openuh-build]$ make all 
+[openuh-build]$ make all
 [openuh-build]$ make install
 
 Note that the above three commands should be run from a build directory that
@@ -29,7 +29,7 @@ or display verbose build progress with various options specified on the make
 command. Type 'make help' and look at the Makefile for further details. In full,
 building the entire compiler + libraries may take up to an hour or more,
 depending on your system and whether or not you did a parallel make (with the -j
-option). 
+option).
 
 After you have finished building the compiler, the make install command will
 install the GNU front-end files and the actual compiler and runtime libraries
@@ -45,19 +45,19 @@ without 32-bit compatible libraries:
 [openuh-build]$ ../source/configure <prev-options>    \
                  --build=x86_64-unknown-linux-gnu     \
                  --target=x86_64-unknown-linux-gnu    \
-                 --host=x86_64-unknown-linux-gnu 
+                 --host=x86_64-unknown-linux-gnu
 
-[openuh-build]$ make ALL_TARGETS="build lib2" 
+[openuh-build]$ make ALL_TARGETS="build lib2"
 [openuh-build]$ make install
 
 Known Limitations
 ------------------
 
-* Fortran 2008 atomic update statements are not supported.
+* Accessing a pointer component of a remote coarray of derived type is not
+  supported when using the ARMCI communication layer.
 
-* Accessing a pointer component of a remote coarray of derived type is not yet
-  supported. E.g. this won't work:
-       t(2:5) = a[3]%p(1:4)
+* The stat= and errmsg= specifers for synchronization statements are not yet
+  spuported.
 
 
 Using OpenUH CAF compiler

@@ -864,10 +864,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         ("New symbol for save coarray was not created yet"));
                       wipost.Replace(
                               WN_Istore(WN_rtype(WN_kid0(wn)),
-                                  offset, ST_type(save_coarray_replace),
+                                  offset, Make_Pointer_Type(ty),
                                   WN_Ldid(TY_mtype(ST_type(save_coarray_replace)),
                                       0, save_coarray_replace,
-                                      ty /*ST_type(save_coarray_replace)*/),
+                                      ST_type(save_coarray_replace)),
                                   WN_COPY_Tree(WN_kid0(wn)), 0)
                               );
                       WN_Delete(wn);

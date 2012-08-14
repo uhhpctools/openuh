@@ -377,7 +377,7 @@ if [ $COMM_LAYER == gasnet ]; then
   COMM_LIBS=`eval $get_libs`
 
 
-  if [ $GASNET_CONDUIT != smp ]; then
+  if [ $GASNET_CONDUIT != smp -a $GASNET_CONDUIT != udp ]; then
 
     ##############################################################
     # Try to figure out appropriate MPI_LIB and MPI_LD_LIBS from
@@ -435,9 +435,10 @@ if [ $COMM_LAYER == gasnet ]; then
     add_to_env_list "MPI_LIB"
     add_to_env_list "MPI_LD_LIBS"
 
-    if [ $GASNET_CONDUIT == udp ]; then
+  fi
+
+  if [ $GASNET_CONDUIT == udp ]; then
       CAF_FLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
-    fi
   fi
 
   COMM_LIBS="-lcaf-gasnet-$GASNET_CONDUIT $COMM_LIBS"

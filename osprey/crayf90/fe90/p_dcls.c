@@ -1123,6 +1123,17 @@ static void parse_cpnt_dcl_stmt()
          AT_DCL_ERR(attr_idx)		= TRUE;
          ATD_PE_ARRAY_IDX(attr_idx)	= NULL_IDX;
       }
+#ifdef _UH_COARRAYS
+      else if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+               (BD_ARRAY_CLASS(ATD_PE_ARRAY_IDX(attr_idx)) !=
+                  Deferred_Shape ||
+              (bd_idx != NULL_IDX && BD_ARRAY_CLASS(bd_idx)
+               != Deferred_Shape)) ) {
+          PRINTMSG(save_line, 1552, Error, save_column,
+                  AT_OBJ_NAME_PTR(attr_idx));
+          AT_DCL_ERR(attr_idx)	= TRUE;
+      }
+#endif
 
       if (LA_CH_VALUE == EQUAL) {
          NEXT_LA_CH;

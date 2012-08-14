@@ -4217,6 +4217,23 @@ boolean final_arg_work(opnd_type	*list_opnd,
 	}
       }
 #endif /* KEY Bug 572 */
+
+#ifdef _UH_COARRAYS
+      switch (association) {
+          case COPY_IN:
+          case COPY_IN_COPY_OUT:
+          case COPY_IN_MAKE_DV:
+          case COPY_INOUT_MAKE_DV:
+              if (ATD_PE_ARRAY_IDX(dummy) != 0 &&
+                  BD_ARRAY_CLASS(ATD_ARRAY_IDX(dummy)) != Assumed_Shape) {
+                  int line_tmp, col_tmp;
+                  find_opnd_line_and_column(&IL_OPND(list_idx), &line_tmp,
+                                            &col_tmp);
+                  PRINTMSG(line_tmp, 1714, Error, col_tmp);
+              }
+      }
+#endif
+
       switch (association) {
          case ERROR_ASSOC          :
             break;

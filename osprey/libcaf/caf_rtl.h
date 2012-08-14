@@ -142,5 +142,6 @@ int check_remote_image(size_t);
 
 /* UHCAF library routines */
 void uhcaf_print_heap_map(char *str);
+void uhcaf_check_comms(void);
 
 #endif

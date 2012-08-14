@@ -941,11 +941,22 @@ CK_WHERE:
          ATD_PTR_ASSIGNED(attr_idx) = TRUE;
       }
 
-# if defined(_F_MINUS_MINUS) && !defined(_UH_COARRAYS)
+# if defined(_F_MINUS_MINUS)
       /* prevent ptr asg to pointer component of co-array */
-
+      {
+          char *comm_layer = NULL;
+          int restrict_coarray_pointer_cmpt = 1;
+#ifdef _UH_COARRAYS
+          /* if compiling with GASNet communication layer, allow pointer
+           * assignment statement for coarray pointer components */
+          comm_layer = getenv("OPENUH_COMM_LAYER");
+          if (strcmp(comm_layer, "gasnet") == 0) {
+              restrict_coarray_pointer_cmpt = 0;
+          }
+#endif
       if (ok &&
           dump_flags.f_minus_minus &&
+          restrict_coarray_pointer_cmpt &&
           AT_OBJ_CLASS(attr_idx) == Data_Obj &&
           ATD_CLASS(attr_idx) == Struct_Component) {
 
@@ -955,6 +966,8 @@ CK_WHERE:
 
             PRINTMSG(line, 1572, Error, col);
          }
+      }
+
       }
 # endif
 

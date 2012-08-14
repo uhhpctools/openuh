@@ -21928,6 +21928,16 @@ The ATOMIC_DEFINE subroutine has arguments ATOM and VALUE, while the
 ATOMIC_REF subroutine has arguments VALUE and ATOM. And third argument should
 not be accepted.
 .ME
-$ LAST NUMBER USED : 1713
-
+$
+$ Error : 1714
+$msg  1714 Actual argument should be contiguous because dummy coarray argument is not assumed shape
+$nexp 1714
+Error : Actual argument should be contiguous because dummy coarray argument is not
+assumed shape
+.PP
+If the dummy argument is an array coarray that has the CONTIGUOUS attribute or
+is not of assumed shape, the corresponding actual argument shall be simply
+contiguous.
+.ME
+$ LAST NUMBER USED : 1714
 

@@ -161,6 +161,18 @@ gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 
 static inline int address_on_symmetric_heap(void *addr);
 
+static void handler_put_request(gasnet_token_t token, void *buf,
+                                size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void handler_put_reply(gasnet_token_t token, void *buf,
+                              size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void handler_get_request(gasnet_token_t token, void *buf,
+                                size_t bufsiz, gasnet_handlerarg_t unused);
+
+static void handler_get_reply(gasnet_token_t token, void *buf,
+                              size_t bufsiz, gasnet_handlerarg_t unused);
+
 static void handler_sync_request(gasnet_token_t token, int imageIndex);
 
 static void
@@ -246,6 +258,31 @@ static inline int address_on_symmetric_heap(void *addr)
     return (addr >= start_heap && addr <= end_heap);
 }
 
+static inline void allocate_transfer_buf(void **buf, size_t siz)
+{
+    int r = posix_memalign(buf, GASNET_PAGESIZE, siz);
+    switch (r) {
+    case 0:
+        break;
+    case EINVAL:
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "outside-shared-mem payload not aligned correctly");
+        /* not reached */
+        break;
+    case ENOMEM:
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "no memory to allocate outside-shared-mem payload");
+        /* not reached */
+        break;
+    default:
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "unknown error with outside-shared-mem-payload"
+                     " (posix_memalign returned %d)", r);
+        /* not reached */
+        break;
+    }
+}
+
 
 /*************************************************************/
 /* start of handlers */
@@ -257,10 +294,76 @@ static gasnet_handlerentry_t handlers[] = {
     {GASNET_HANDLER_CSWAP_REQUEST, handler_cswap_request},
     {GASNET_HANDLER_CSWAP_REPLY, handler_cswap_reply},
     {GASNET_HANDLER_FADD_REQUEST, handler_fadd_request},
-    {GASNET_HANDLER_FADD_REPLY, handler_fadd_reply}
+    {GASNET_HANDLER_FADD_REPLY, handler_fadd_reply},
+    {GASNET_HANDLER_PUT_REQUEST, handler_put_request},
+    {GASNET_HANDLER_PUT_REPLY, handler_put_reply},
+    {GASNET_HANDLER_GET_REQUEST, handler_get_request},
+    {GASNET_HANDLER_GET_REPLY, handler_get_reply}
 };
 
 static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
+
+
+typedef struct {
+    size_t nbytes;              /* size of read/write */
+    void *target;               /* where to read/write */
+    void *source;
+    volatile int completed;
+    volatile int *completed_addr;
+} outside_shared_mem_payload_t;
+
+static void handler_put_request(gasnet_token_t token, void *buf,
+                                size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    outside_shared_mem_payload_t *pp =
+        (outside_shared_mem_payload_t *) buf;
+    void *data = buf + sizeof(*pp);
+
+    memmove(pp->target, data, pp->nbytes);
+    LOAD_STORE_FENCE();
+
+    /* return ack, just need the control structure */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_PUT_REPLY, buf,
+                          sizeof(*pp), unused);
+}
+
+static void handler_put_reply(gasnet_token_t token, void *buf,
+                              size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    outside_shared_mem_payload_t *pp =
+        (outside_shared_mem_payload_t *) buf;
+    *(pp->completed_addr) = 1;
+}
+
+
+static void handler_get_request(gasnet_token_t token, void *buf,
+                                size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    outside_shared_mem_payload_t *pp =
+        (outside_shared_mem_payload_t *) buf;
+    outside_shared_mem_payload_t *datap = buf + sizeof(*pp);
+
+    memmove(datap, pp->source, pp->nbytes);
+    LOAD_STORE_FENCE();
+
+    /* return ack, copied data is returned */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_GET_REPLY, buf,
+                          bufsiz, unused);
+}
+
+static void handler_get_reply(gasnet_token_t token, void *buf,
+                              size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    outside_shared_mem_payload_t *pp =
+        (outside_shared_mem_payload_t *) buf;
+
+    /* write back payload data here */
+    memmove(pp->target, buf + sizeof(*pp), pp->nbytes);
+    LOAD_STORE_FENCE();
+
+    *(pp->completed_addr) = 1;
+}
+
 
 /* handler funtion for  sync images */
 static void handler_sync_request(gasnet_token_t token, int imageIndex)
@@ -296,21 +399,6 @@ handler_swap_request(gasnet_token_t token,
     long long old;
     swap_payload_t *pp = (swap_payload_t *) buf;
 
-#if 0
-    gasnet_hsl_t *lk = &atomics_mutex;
-
-    gasnet_hsl_lock(lk);
-
-    /* save and update */
-    (void) memmove(&old, pp->r_symm_addr, pp->nbytes);
-    (void) memmove(pp->r_symm_addr, &(pp->value), pp->nbytes);
-    pp->value = old;
-
-    LOAD_STORE_FENCE();
-
-    gasnet_hsl_unlock(lk);
-#else
-
     if (pp->nbytes == sizeof(INT4)) {
         pp->value = SYNC_SWAP((INT4 *) pp->r_symm_addr, (INT4) pp->value);
     } else if (pp->nbytes == sizeof(INT8)) {
@@ -324,7 +412,6 @@ handler_swap_request(gasnet_token_t token,
                      "comm_swap_request doesn't allow nbytes = %d",
                      pp->nbytes);
     }
-#endif
 
     /* return updated payload */
     gasnet_AMReplyMedium1(token, GASNET_HANDLER_SWAP_REPLY, buf, bufsiz,
@@ -465,35 +552,6 @@ static void handler_cswap_request(gasnet_token_t token,
 {
     void *old;
     cswap_payload_t *pp = (cswap_payload_t *) buf;
-#if 0
-    gasnet_hsl_t *lk = &atomics_mutex;
-
-    gasnet_hsl_lock(lk);
-
-    old = malloc(pp->nbytes);
-    if (old == NULL) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "unable to allocatable cswap save space");
-    }
-
-    /* save current target */
-    memmove(old, pp->r_symm_addr, pp->nbytes);
-
-    /* update value if cond matches */
-    if (memcmp(&(pp->cond), pp->r_symm_addr, pp->nbytes) == 0) {
-        memmove(pp->r_symm_addr, &(pp->value), pp->nbytes);
-    }
-
-    /* return value */
-    memmove(&(pp->value), old, pp->nbytes);
-
-    LOAD_STORE_FENCE();
-
-    free(old);
-
-    gasnet_hsl_unlock(lk);
-
-#else
 
     if (pp->nbytes == sizeof(INT4)) {
         pp->value = SYNC_CSWAP((INT4 *) pp->r_symm_addr,
@@ -512,8 +570,6 @@ static void handler_cswap_request(gasnet_token_t token,
                      "comm_cswap_request doesn't allow nbytes = %d",
                      pp->nbytes);
     }
-#endif
-
 
     /* return updated payload */
     gasnet_AMReplyMedium1(token, GASNET_HANDLER_CSWAP_REPLY, buf, bufsiz,
@@ -666,21 +722,7 @@ handler_fadd_request(gasnet_token_t token,
     long long old = 0;
     long long plus = 0;
     fadd_payload_t *pp = (fadd_payload_t *) buf;
-#if 0
-    gasnet_hsl_t *lk = &atomics_mutex;
 
-    gasnet_hsl_lock(lk);
-
-    /* save and update */
-    (void) memmove(&old, pp->r_symm_addr, pp->nbytes);
-    plus = old + pp->value;
-    (void) memmove(pp->r_symm_addr, &plus, pp->nbytes);
-    pp->value = old;
-
-    LOAD_STORE_FENCE();
-
-    gasnet_hsl_unlock(lk);
-#else
     if (pp->nbytes == sizeof(INT4)) {
         pp->value = SYNC_FETCH_AND_ADD((INT4 *) pp->r_symm_addr,
                                        (INT4) pp->value);
@@ -698,8 +740,6 @@ handler_fadd_request(gasnet_token_t token,
                      "comm_fadd_request doesn't allow nbytes = %d",
                      pp->nbytes);
     }
-#endif
-
 
     /* return updated payload */
     gasnet_AMReplyMedium1(token, GASNET_HANDLER_FADD_REPLY, buf, bufsiz,
@@ -1607,6 +1647,13 @@ inline void *comm_end_allocatable_heap(size_t proc)
     return comm_end_symmetric_heap(proc);
 }
 
+static inline int remote_address_in_shared_mem(size_t proc, void *address)
+{
+    return !((address < comm_start_symmetric_heap(my_proc) ||
+              address > comm_end_symmetric_heap(my_proc)) &&
+             (address < comm_start_asymmetric_heap(proc) ||
+              address > comm_end_asymmetric_heap(proc)));
+}
 
 /* Calculate the address on another image corresponding to a local address
  * This is possible as all images must have the same coarrays, i.e the
@@ -1810,9 +1857,83 @@ void comm_free_lcb(void *ptr)
     }
 }
 
+
+/* 1-sided GET/PUT implementation */
+
+static void
+comm_read_chunk_outside_shared_mem(outside_shared_mem_payload_t * p,
+                                   size_t bufsize, void *target,
+                                   void *source, size_t offset,
+                                   size_t bytes_to_send, size_t proc)
+{
+    /* build payload to send */
+    p->nbytes = bytes_to_send;
+    p->source = source + offset;
+    p->target = target + offset;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_GET_REQUEST, p, bufsize,
+                            0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+}
+
+static void
+comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
+                             size_t nbytes)
+{
+    /* get the buffer size and chop off control structure */
+    const size_t max_req = gasnet_AMMaxMedium();
+    const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
+    /* how to split up transfers */
+    const size_t nchunks = nbytes / max_data;
+    const size_t rem_size = nbytes % max_data;
+    /* track size and progress of transfers */
+    size_t payload_size;
+    size_t alloc_size;
+    size_t offset = 0;
+    void *get_buf;
+
+    alloc_size = max_req;
+
+    allocate_transfer_buf(&get_buf, alloc_size);
+
+    if (nchunks > 0) {
+        size_t t;
+        int i;
+
+        payload_size = max_data;
+
+        for (i = 0; i < nchunks; i++) {
+            comm_read_chunk_outside_shared_mem(get_buf, alloc_size, dest,
+                                               src, offset, payload_size,
+                                               proc);
+            offset += payload_size;
+        }
+    }
+
+    if (rem_size > 0) {
+        payload_size = rem_size;
+        comm_read_chunk_outside_shared_mem(get_buf, alloc_size, src,
+                                           dest, offset, payload_size,
+                                           proc);
+    }
+
+    free(get_buf);
+}
+
+
 void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
+
+    if (!remote_address_in_shared_mem(proc, src)) {
+        comm_read_outside_shared_mem(proc, src, dest, nbytes);
+        return;
+        /* does not reach */
+    }
+
     remote_src = get_remote_address(src, proc);
     if (enable_nbput)
         wait_on_pending_puts(proc, remote_src, nbytes);
@@ -1828,10 +1949,85 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     }
 }
 
+static void
+comm_write_chunk_outside_shared_mem(void *buf, size_t bufsize,
+                                    void *target, void *source,
+                                    size_t offset, size_t bytes_to_send,
+                                    size_t proc)
+{
+    outside_shared_mem_payload_t *p = buf;
+    void *data = buf + sizeof(*p);
+
+    /* build payload to send */
+    p->nbytes = bytes_to_send;
+    p->source = NULL;
+    p->target = target + offset;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    /* data added after control structure */
+    memmove(data, source + offset, bytes_to_send);
+    LOAD_STORE_FENCE();
+
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_PUT_REQUEST, p,
+                            bufsize, 0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+}
+
+static void
+comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
+                              size_t nbytes)
+{
+    /* get the buffer size and chop off control structure */
+    const size_t max_req = gasnet_AMMaxMedium();
+    const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
+    /* how to split up transfers */
+    const size_t nchunks = nbytes / max_data;
+    const size_t rem_size = nbytes % max_data;
+    /* track size and progress of transfers */
+    size_t payload_size;
+    size_t alloc_size;
+    size_t offset = 0;
+    void *put_buf;
+
+    alloc_size = max_req;
+    payload_size = max_data;
+
+    allocate_transfer_buf(&put_buf, alloc_size);
+
+    if (nchunks > 0) {
+        size_t t;
+        int i;
+
+        for (i = 0; i < nchunks; i++) {
+            comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest,
+                                                src, offset, payload_size,
+                                                proc);
+            offset += payload_size;
+        }
+    }
+
+    if (rem_size > 0) {
+        payload_size = rem_size;
+        comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest, src,
+                                            offset, payload_size, proc);
+    }
+
+    free(put_buf);
+}
+
 
 void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
 {
     void *remote_dest;
+
+    if (!remote_address_in_shared_mem(proc, dest)) {
+        comm_write_outside_shared_mem(proc, dest, src, nbytes);
+        return;
+        /* does not reach */
+    }
+
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG,

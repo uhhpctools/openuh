@@ -111,7 +111,8 @@ void __caf_init()
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_init ");
 
     /* initialize the openmp runtime library, if it exists */
-    if (__ompc_init_rtl) __ompc_init_rtl(0);
+    if (__ompc_init_rtl)
+        __ompc_init_rtl(0);
 }
 
 void __caf_finalize()
@@ -141,7 +142,7 @@ void __release_lcb(void **ptr)
 
 void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 {
-    check_remote_address(image, src);
+    check_remote_image(image);
 
     START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
@@ -156,7 +157,7 @@ void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 
 void __coarray_write(size_t image, void *dest, void *src, size_t nbytes)
 {
-    check_remote_address(image, dest);
+    check_remote_image(image);
 
     START_TIMER();
     comm_write(image - 1, dest, src, nbytes);
@@ -177,7 +178,7 @@ void __coarray_strided_read(size_t image,
     int local_is_contig = 0;
     int i;
 
-    check_remote_address(image, src);
+    check_remote_image(image);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig =
@@ -229,7 +230,7 @@ void __coarray_strided_write(size_t image,
     int local_is_contig = 0;
     int i;
 
-    check_remote_address(image, dest);
+    check_remote_image(image);
 
     /* runtime check if it is contiguous transfer */
     remote_is_contig =
@@ -596,23 +597,23 @@ void coarray_translate_remote_addr(void **remote_addr, int image)
 {
     void *start_symm_heap, *end_symm_heap;
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "coarray_translate_remote_addr (start) - "
-            "remote_addr: %p, image: %d ", remote_addr, image);
+                 "coarray_translate_remote_addr (start) - "
+                 "remote_addr: %p, image: %d ", remote_addr, image);
 
-    start_symm_heap = comm_start_symmetric_heap(image-1);
-    end_symm_heap = comm_end_symmetric_heap(image-1);
+    start_symm_heap = comm_start_symmetric_heap(image - 1);
+    end_symm_heap = comm_end_symmetric_heap(image - 1);
 
     /* subtract the offset if remote address falls within the symmetric heap
      * of the remote image
      */
     if (*remote_addr >= start_symm_heap && *remote_addr <= end_symm_heap) {
-        *remote_addr = (char*)(*remote_addr) -
-                        comm_address_translation_offset(image-1);
+        *remote_addr = (char *) (*remote_addr) -
+            comm_address_translation_offset(image - 1);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "coarray_translate_remote_addr (end) - "
-            "remote_addr: %p, image: %d ", remote_addr, image);
+                 "coarray_translate_remote_addr (end) - "
+                 "remote_addr: %p, image: %d ", remote_addr, image);
 }
 
 
@@ -731,6 +732,11 @@ void uhcaf_print_heap_map(char *str)
     printf("|\n\n");
 }
 
+#pragma weak uhcaf_check_comms_ = uhcaf_check_comms
+void uhcaf_check_comms(void)
+{
+    comm_service();
+}
 
 /* end shared memory management functions*/
 
@@ -812,6 +818,7 @@ void _ATOMIC_DEFINE_1(INT4 * atom, INT1 * value, int *image)
         *atom = (INT4) * value;
     } else {
         INT4 t = (INT4) * value;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_write will block until the variable is defined on the
@@ -834,6 +841,7 @@ void _ATOMIC_DEFINE_2(INT4 * atom, INT2 * value, int *image)
         *atom = (INT4) * value;
     } else {
         INT4 t = (INT4) * value;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_write will block until the variable is defined on the
@@ -856,6 +864,7 @@ void _ATOMIC_DEFINE_4(INT4 * atom, INT4 * value, int *image)
         *atom = (INT4) * value;
     } else {
         INT4 t = (INT4) * value;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_write will block until the variable is defined on the
@@ -878,6 +887,7 @@ void _ATOMIC_DEFINE_8(INT4 * atom, INT8 * value, int *image)
         *atom = (INT4) * value;
     } else {
         INT4 t = (INT4) * value;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_write will block until the variable is defined on the
@@ -900,6 +910,7 @@ void _ATOMIC_REF_1(INT1 * value, INT4 * atom, int *image)
         *value = (INT1) * atom;
     } else {
         INT4 t;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_read will block until the variable is defined on the
@@ -923,6 +934,7 @@ void _ATOMIC_REF_2(INT2 * value, INT4 * atom, int *image)
         *value = (INT2) * atom;
     } else {
         INT4 t;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_read will block until the variable is defined on the
@@ -946,6 +958,7 @@ void _ATOMIC_REF_4(INT4 * value, INT4 * atom, int *image)
         *value = (INT4) * atom;
     } else {
         INT4 t;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_read will block until the variable is defined on the
@@ -969,6 +982,7 @@ void _ATOMIC_REF_8(INT8 * value, INT4 * atom, int *image)
         *value = (INT8) * atom;
     } else {
         INT4 t;
+        check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size 4 bytes.
          * Call to comm_read will block until the variable is defined on the
@@ -990,6 +1004,7 @@ void _EVENT_POST(event_t * event, int *image)
                           &result);
     } else {
         INT4 result, inc = 1;
+        check_remote_image(*image);
         check_remote_address(*image, event);
         comm_fadd_request(event, &inc, sizeof(event_t), *image - 1,
                           &result);
@@ -1002,6 +1017,7 @@ void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
     if (*image == 0) {
         *state = (int) (*event) != 0;
     } else {
+        check_remote_image(*image);
         check_remote_address(*image, event);
         switch (state_len) {
         case 1:
@@ -1044,6 +1060,7 @@ void _EVENT_WAIT(event_t * event, int *image)
             comm_service();
         } while (1);
     } else {
+        check_remote_image(*image);
         check_remote_address(*image, event);
         do {
             comm_read(*image - 1, event, &state, sizeof(event_t));
@@ -1425,17 +1442,15 @@ int check_remote_address(size_t image, void *address)
     char error_msg[error_len];
     memset(error_msg, 0, error_len);
 
-    check_remote_image(image);
-
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-            "address: %p , comm_start_symmetric_heap : %p, "
-            "comm_end_symmetric_heap : %p, "
-            "comm_start_asymmetric_heap : %p, "
-            "comm_end_asymmetric_heap : %p ",
-            address, comm_start_symmetric_heap(_this_image-1),
-            comm_end_symmetric_heap(_this_image-1),
-            comm_start_asymmetric_heap(image-1),
-            comm_end_asymmetric_heap(image-1));
+                 "address: %p , comm_start_symmetric_heap : %p, "
+                 "comm_end_symmetric_heap : %p, "
+                 "comm_start_asymmetric_heap : %p, "
+                 "comm_end_asymmetric_heap : %p ",
+                 address, comm_start_symmetric_heap(_this_image - 1),
+                 comm_end_symmetric_heap(_this_image - 1),
+                 comm_start_asymmetric_heap(image - 1),
+                 comm_end_asymmetric_heap(image - 1));
     if ((address < comm_start_symmetric_heap(_this_image - 1) ||
          address > comm_end_symmetric_heap(_this_image - 1)) &&
         (address < comm_start_asymmetric_heap(image - 1) ||
@@ -1445,9 +1460,10 @@ int check_remote_address(size_t image, void *address)
                 "Should fall within [ %p ... %p ] "
                 "on remote image %lu.",
                 address,
-                (char*)address+comm_address_translation_offset(image-1),
-                comm_start_heap(image - 1),
-                comm_end_heap(image - 1), (unsigned long)image);
+                (char *) address + comm_address_translation_offset(image -
+                                                                   1),
+                comm_start_heap(image - 1), comm_end_heap(image - 1),
+                (unsigned long) image);
         Error(error_msg);
         /* should not reach */
     }
