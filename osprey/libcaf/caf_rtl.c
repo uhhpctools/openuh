@@ -41,6 +41,11 @@
 #include "lock.h"
 #include "trace.h"
 
+
+extern int __ompc_init_rtl(int num_threads);
+
+#pragma weak __ompc_init_rtl
+
 /* initialized in comm_init() */
 unsigned long _this_image;
 unsigned long _num_images;
@@ -104,6 +109,9 @@ void __caf_init()
     LIBCAF_TRACE(LIBCAF_LOG_INIT, "caf_rtl.c:caf_init_->initialized,"
                  " num_images = %lu", _num_images);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_init ");
+
+    /* initialize the openmp runtime library, if it exists */
+    if (__ompc_init_rtl) __ompc_init_rtl(0);
 }
 
 void __caf_finalize()

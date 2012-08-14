@@ -1475,7 +1475,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   unsigned int region_used = 0; // TODO: make it one-bit.
   pthread_attr_t nested_pthread_attr = __omp_pthread_attr;
 
-#ifndef TARG_LOONGSON
+#if  !(defined TARG_LOONGSON || defined _UH_COARRAYS)
   Is_True(__omp_rtl_initialized != 0,
           (" RTL should have been initialized!"));
 #else

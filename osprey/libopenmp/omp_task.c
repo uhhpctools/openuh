@@ -164,6 +164,7 @@ void __ompc_task_create(omp_task_func taskfunc, void *frame_pointer,
       ++(current_thread->num_suspended_tied_tasks);
       __omp_current_task = new_task;
       taskfunc(NULL, frame_pointer);
+      __omp_current_task = orig_task;
       --(current_thread->num_suspended_tied_tasks);
     } else {
       /* if current task is untied, it can go back into task pool, but this

@@ -44,6 +44,10 @@ int __ompc_cur_numthreads = 0;
 
 extern "C" int  __ompc_init_rtl(int num_threads);
 
+extern "C" void __caf_init ();
+
+#pragma weak __caf_init
+
 /*
  * class __ompc_rtl_initializer
  * initialize the libopenmp by a static instance.
@@ -51,8 +55,10 @@ extern "C" int  __ompc_init_rtl(int num_threads);
 class __ompc_rtl_initializer {
 private:
     __ompc_rtl_initializer() {
+        if (! __caf_init ) {
         // initialize the openmp rtl
-	__ompc_init_rtl(0);
+        __ompc_init_rtl(0);
+        }
     }
     ~__ompc_rtl_initializer() {
         // Do nothing since __ompc_fini_rtl is added to atexit.
