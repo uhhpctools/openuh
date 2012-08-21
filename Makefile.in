@@ -84,6 +84,7 @@ ENABLE_COARRAYS     = @ENABLE_COARRAYS@
 BUILD_CAF_RUNTIME   = @BUILD_CAF_RUNTIME@
 GASNET_HOME			= @GASNET_HOME@
 ARMCI_HOME			= @ARMCI_HOME@
+ARMCI_INCLUDE_DIR	= @ARMCI_INCLUDE_DIR@
 GASNET_CONDUITS	    = @GASNET_CONDUITS@
 DRAGON_SUPPORT      = @DRAGON_SUPPORT@
 MPI_INCLUDE         = @MPI_INCLUDE@
@@ -92,7 +93,7 @@ CAFRT_ENABLE_TRACES = @CAFRT_ENABLE_TRACES@
 ifeq ($(MACHINE_TYPE), ia64)
 # ia64
   GNUFE_BUILD_HOST    = ia64-redhat-linux
-  TARGET_EXTRA_OBJ    = $(NATIVE_BUILD_DIR)/targ_info/itanium.so 
+  TARGET_EXTRA_OBJ    = $(NATIVE_BUILD_DIR)/targ_info/itanium.so
   TARGET_EXTRA_OBJ   += $(NATIVE_BUILD_DIR)/orc_ict/orc_ict.so
   TARGET_EXTRA_OBJ   += $(NATIVE_BUILD_DIR)/orc_intel/orc_intel.so
 endif
@@ -394,8 +395,6 @@ endif
 install_compiler:
 	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
-	export GASNET_HOME=$(GASNET_HOME); \
-	export ARMCI_HOME=$(ARMCI_HOME); \
 		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME)
 endif
 install-cross:

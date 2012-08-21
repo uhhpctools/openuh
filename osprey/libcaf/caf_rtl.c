@@ -600,16 +600,7 @@ void coarray_translate_remote_addr(void **remote_addr, int image)
                  "coarray_translate_remote_addr (start) - "
                  "remote_addr: %p, image: %d ", remote_addr, image);
 
-    start_symm_heap = comm_start_symmetric_heap(image - 1);
-    end_symm_heap = comm_end_symmetric_heap(image - 1);
-
-    /* subtract the offset if remote address falls within the symmetric heap
-     * of the remote image
-     */
-    if (*remote_addr >= start_symm_heap && *remote_addr <= end_symm_heap) {
-        *remote_addr = (char *) (*remote_addr) -
-            comm_address_translation_offset(image - 1);
-    }
+    comm_translate_remote_addr(remote_addr, image - 1);
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                  "coarray_translate_remote_addr (end) - "

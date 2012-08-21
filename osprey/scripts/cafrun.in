@@ -29,11 +29,8 @@
 #
 
 this="`basename $0`"
-if [ "@CAFRT_ENABLE_TRACES@" = "TRACE" ]; then
-  traces_enabled=yes
-else
-  traces_enabled=no
-fi
+
+tracing_enabled=@CAFRT_ENABLE_TRACES@
 
 default_heap_size=@DEFAULT_CAF_HEAP_SIZE@
 
@@ -293,15 +290,15 @@ for arg in "$@" ; do
         levels=`echo UhCaf$arg | sed -e 's/UhCaf--trace=//g'`
         levels=`echo $levels | tr '[:lower:]' '[:upper:]'`
         set_env UHCAF_TRACE $levels
-        if [ "${traces_enabled}" = "no" ]; then
-          print_warning "Traces disabled in CAF runtime"
+        if [ "${tracing_enabled}" = "NO" ]; then
+          print_warning "Tracing disabled in CAF runtime"
         fi
         ;;
       --trace-file=*)
         trace_file=`echo UhCaf$arg | sed -e 's/UhCaf--trace-file=//g'`
         set_env UHCAF_TRACE_FILE $trace_file
-        if [ "${traces_enabled}" = "no" ]; then
-          print_warning "Traces disabled in CAF runtime"
+        if [ "${tracing_enabled}" = "NO" ]; then
+          print_warning "Tracing disabled in CAF runtime"
         fi
         ;;
       --image-heap=*)
@@ -401,12 +398,15 @@ if [ $COMM_LAYER == gasnet ]; then
 fi
 
 if [ $COMM_LAYER == armci ]; then
-  ARMCI_NETWORK=`nm -a $prog_name | grep OPENUH_ARMCI_NETWORK_IS | cut -d" " -f3 \
-    | sed 's/OPENUH_ARMCI_NETWORK_IS_//'`
+# ARMCI_NETWORK variable is obsolete in latest ARMCI version
 
-  if [ -z "$ARMCI_NETWORK" ]; then
-    print_error "Cannot determine which ARMCI network to use"
-  fi
+#   ARMCI_NETWORK=`nm -a $prog_name | grep OPENUH_ARMCI_NETWORK_IS | cut -d" " -f3 \
+#     | sed 's/OPENUH_ARMCI_NETWORK_IS_//'`
+#
+#   if [ -z "$ARMCI_NETWORK" ]; then
+#     print_error "Cannot determine which ARMCI network to use"
+#   fi
+  ARMCI_NETWORK=unknown
 fi
 
 ###########################################

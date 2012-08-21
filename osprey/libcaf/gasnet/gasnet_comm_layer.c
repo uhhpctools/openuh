@@ -258,6 +258,91 @@ static inline int address_on_symmetric_heap(void *addr)
     return (addr >= start_heap && addr <= end_heap);
 }
 
+
+/* returns addresses ranges for shared heap */
+
+inline ssize_t comm_address_translation_offset(size_t proc)
+{
+    char *remote_base_address = coarray_start_all_images[proc].addr;
+    if (gasnet_everything && remote_base_address == 0) {
+        gasnet_get(&remote_base_address, proc,
+                   &everything_heap_start, sizeof(void *));
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                     "gasnet_comm_layer.c:comm_address_translation_offset->"
+                     "Read image%lu allocatable base address%p",
+                     proc + 1, remote_base_address);
+        coarray_start_all_images[proc].addr = remote_base_address;
+    }
+
+    return remote_base_address -
+        (char *) coarray_start_all_images[my_proc].addr;
+}
+
+inline void *comm_start_heap(size_t proc)
+{
+    return get_remote_address(coarray_start_all_images[my_proc].addr,
+                              proc);
+}
+
+inline void *comm_end_heap(size_t proc)
+{
+    return get_remote_address(coarray_start_all_images[my_proc].addr, proc)
+        + shared_memory_size;
+}
+
+inline void *comm_start_symmetric_heap(size_t proc)
+{
+    return comm_start_heap(proc);
+}
+
+inline void *comm_end_symmetric_heap(size_t proc)
+{
+    return get_remote_address(common_slot->addr, proc);
+}
+
+inline void *comm_start_asymmetric_heap(size_t proc)
+{
+    if (proc != my_proc) {
+        return comm_end_symmetric_heap(proc);
+    } else {
+        return (char *) common_slot->addr + common_slot->size;
+    }
+}
+
+inline void *comm_end_asymmetric_heap(size_t proc)
+{
+    return get_remote_address(comm_end_heap(proc), proc);
+}
+
+inline void *comm_start_static_heap(size_t proc)
+{
+    return get_remote_address(comm_start_heap(proc), proc);
+}
+
+inline void *comm_end_static_heap(size_t proc)
+{
+    return (char *) comm_start_heap(proc) + static_heap_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_static_heap(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_heap(proc);
+}
+
+static inline int remote_address_in_shared_mem(size_t proc, void *address)
+{
+    return !((address < comm_start_symmetric_heap(my_proc) ||
+              address > comm_end_symmetric_heap(my_proc)) &&
+             (address < comm_start_asymmetric_heap(proc) ||
+              address > comm_end_asymmetric_heap(proc)));
+}
+
+
 static inline void allocate_transfer_buf(void **buf, size_t siz)
 {
     int r = posix_memalign(buf, GASNET_PAGESIZE, siz);
@@ -1572,88 +1657,22 @@ unsigned long allocate_static_coarrays(void *base_address)
     return set_save_coarrays(base_address);
 }
 
-/* returns addresses ranges for shared heap */
 
-inline ssize_t comm_address_translation_offset(size_t proc)
+void comm_translate_remote_addr(void **remote_addr, int proc)
 {
-    char *remote_base_address = coarray_start_all_images[proc].addr;
-    if (gasnet_everything && remote_base_address == 0) {
-        gasnet_get(&remote_base_address, proc,
-                   &everything_heap_start, sizeof(void *));
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "gasnet_comm_layer.c:comm_address_translation_offset->"
-                     "Read image%lu allocatable base address%p",
-                     proc + 1, remote_base_address);
-        coarray_start_all_images[proc].addr = remote_base_address;
-    }
+    void *start_symm_heap, *end_symm_heap;
+    start_symm_heap = comm_start_symmetric_heap(proc);
+    end_symm_heap = comm_end_symmetric_heap(proc);
 
-    return remote_base_address -
-        (char *) coarray_start_all_images[my_proc].addr;
-}
-
-inline void *comm_start_heap(size_t proc)
-{
-    return get_remote_address(coarray_start_all_images[my_proc].addr,
-                              proc);
-}
-
-inline void *comm_end_heap(size_t proc)
-{
-    return get_remote_address(coarray_start_all_images[my_proc].addr, proc)
-        + shared_memory_size;
-}
-
-inline void *comm_start_symmetric_heap(size_t proc)
-{
-    return comm_start_heap(proc);
-}
-
-inline void *comm_end_symmetric_heap(size_t proc)
-{
-    return get_remote_address(common_slot->addr, proc);
-}
-
-inline void *comm_start_asymmetric_heap(size_t proc)
-{
-    if (proc != my_proc) {
-        return comm_end_symmetric_heap(proc);
-    } else {
-        return (char *) common_slot->addr + common_slot->size;
+    /* subtract the offset if remote address falls within the symmetric heap
+     * of the remote image
+     */
+    if (*remote_addr >= start_symm_heap && *remote_addr <= end_symm_heap) {
+        *remote_addr = (char *) (*remote_addr) -
+            comm_address_translation_offset(proc);
     }
 }
 
-inline void *comm_end_asymmetric_heap(size_t proc)
-{
-    return get_remote_address(comm_end_heap(proc), proc);
-}
-
-inline void *comm_start_static_heap(size_t proc)
-{
-    return get_remote_address(comm_start_heap(proc), proc);
-}
-
-inline void *comm_end_static_heap(size_t proc)
-{
-    return (char *) comm_start_heap(proc) + static_heap_size;
-}
-
-inline void *comm_start_allocatable_heap(size_t proc)
-{
-    return comm_end_static_heap(proc);
-}
-
-inline void *comm_end_allocatable_heap(size_t proc)
-{
-    return comm_end_symmetric_heap(proc);
-}
-
-static inline int remote_address_in_shared_mem(size_t proc, void *address)
-{
-    return !((address < comm_start_symmetric_heap(my_proc) ||
-              address > comm_end_symmetric_heap(my_proc)) &&
-             (address < comm_start_asymmetric_heap(proc) ||
-              address > comm_end_asymmetric_heap(proc)));
-}
 
 /* Calculate the address on another image corresponding to a local address
  * This is possible as all images must have the same coarrays, i.e the

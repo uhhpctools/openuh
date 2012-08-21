@@ -74,11 +74,14 @@ AC_ARG_ENABLE([caf-runtime],
 AC_ARG_ENABLE([cafrt-traces],
   AS_HELP_STRING([--disable-cafrt-traces],
                  [Disable CAF Runtime Tracing Functionality]),
-                  CAFRT_ENABLE_TRACES="NOTRACE",
-                  CAFRT_ENABLE_TRACES="TRACE")
+                  CAFRT_ENABLE_TRACES="NO",
+                  CAFRT_ENABLE_TRACES="YES")
 
 AS_IF([test "x$enable_caf_runtime" != "xno"], [
   BUILD_CAF_RUNTIME="YES"
+])
+AS_IF([test "x$enable_caf_runtime" = "xno"], [
+  BUILD_CAF_RUNTIME="NO"
 ])
 
 if test "$ENABLE_COARRAYS" = "NO"; then
@@ -93,11 +96,11 @@ GASNET_HOME="$with_gasnet_root",
 GASNET_HOME="")
 
 # enable ARMCI for Coarrays
-AC_ARG_WITH(armci-root,
-AS_HELP_STRING([--with-armci-root=<armci path>],
+AC_ARG_WITH(armci-src-root,
+AS_HELP_STRING([--with-armci-src-root=<armci path>],
 [Builds ARMCI-based libcaf runtime]),
-ARMCI_HOME="$with_armci_root",
-ARMCI_HOME="")
+ARMCI_SRC_HOME="$with_armci_src_root",
+ARMCI_SRC_HOME="")
 
 
 # default comm library
@@ -131,9 +134,9 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "${GASNET_HOME}"; then
    [--enable-coarrays option is expected with --with-gasnet-root]
    )
 fi
-if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_HOME}"; then
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_SRC_HOME}"; then
   AC_MSG_ERROR(
-   [--enable-coarrays option is expected with --with-armci-root]
+   [--enable-coarrays option is expected with --with-armci-src-root]
    )
 fi
 if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_caf_runtime" = "xno"; then
@@ -152,20 +155,36 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
    )
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
-    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays])
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_SRC_HOME}"; then
+    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-src-root=<path> must be passed for coarrays])
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
-    if test ! -f "${MPI_INCLUDE}/mpi.h" -a -n "`which mpicc 2>/dev/null`"; then
-        d=`which mpicc 2>/dev/null`
-        MPI_INCLUDE=`dirname $d`/../include
-    else
-        AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_SRC_HOME}"; then
+    if test ! -f "${MPI_INCLUDE}/mpi.h"; then
+        if test -n "`which mpicc 2>/dev/null`"; then
+            d=`which mpicc 2>/dev/null`
+            MPI_INCLUDE=`dirname $d`/../include
+        else
+            AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
+        fi
+    fi
+    if test ! -d "${ARMCI_SRC_HOME}"; then
+        AC_MSG_ERROR([Specified --with-armci-src-root=<path> doesn't look right. Check path.])
+    fi
+    armci_flag_info=`(cd $ARMCI_SRC_HOME; make flags 2> /dev/null)`
+    ARMCI_INCLUDE_DIR=`echo "${armci_flag_info}" | grep "ARMCI headers" | sed 's/^.* //' 2> /dev/null`
+    ARMCI_HOME=`dirname ${ARMCI_INCLUDE_DIR}`
+    ARMCI_LIBS=`echo "${armci_flag_info}" | grep "LIBS=" | sed 's/ LIBS=//'`
+    ARMCI_LIBS=`eval echo ${ARMCI_LIBS}`
+    if test -z "${ARMCI_INCLUDE_DIR}"; then
+        AC_MSG_ERROR([Couldn't find configured ARMCI source directory. Check specified --with-armci-src-root=<path>.])
     fi
 fi
 
 if test -n "${GASNET_HOME}"; then
+  if test ! -d "${GASNET_HOME}"; then
+      AC_MSG_ERROR([Specified --with-gasnet-root=<path> doesn't look right. Check path.])
+  fi
   GASNET_CONDUITS=`(cd ${GASNET_HOME}/include; echo *-conduit \
                     | sed 's/-conduit//g')`
   if test  "${GASNET_CONDUITS}" = "*"; then
@@ -175,14 +194,14 @@ fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
   DEFAULT_COMM=gasnet
-elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
+elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_SRC_HOME}" ; then
   DEFAULT_COMM=armci
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
     AC_MSG_ERROR([--with-default-comm accepts gasnet or armci])
 elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
     AC_MSG_ERROR([default comm (gasnet) requires --with-gasnet-root to be specified])
-elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
-    AC_MSG_ERROR([default comm (armci) requires --with-armci-root to be specified])
+elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_SRC_HOME}" ; then
+    AC_MSG_ERROR([default comm (armci) requires --with-armci-src-root to be specified])
 fi
 
 if test -z "${DEFAULT_CAF_HEAP_SIZE}"; then
@@ -205,6 +224,9 @@ AC_ARG_ENABLE([dragon-support],
 
 AS_IF([test "x$enable_dragon_support" = "xyes"], [
   DRAGON_SUPPORT=YES
+])
+AS_IF([test "x$enable_dragon_support" != "xyes"], [
+  DRAGON_SUPPORT=NO
 ])
 
 case "$BUILD_COMPILER" in
@@ -527,6 +549,8 @@ AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([GASNET_HOME])
 AC_SUBST([ARMCI_HOME])
+AC_SUBST([ARMCI_INCLUDE_DIR])
+AC_SUBST([ARMCI_LIBS])
 AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
@@ -766,4 +790,43 @@ static const char configuration_arguments[] = "$uh_config_arguments_str";
 EOF
 changequote([,])dnl
 
+#"####################
 
+# -----------------------
+# Final Configure Report
+# -----------------------
+AC_MSG_NOTICE([])
+AC_MSG_NOTICE([********************************************************************])
+AC_MSG_NOTICE([                       OPENUH CONFIGURATION])
+AC_MSG_NOTICE([********************************************************************])
+AC_MSG_NOTICE([])
+AC_MSG_NOTICE([   OPENUH_VERSION                 = $OPENUH_VERSION])
+AC_MSG_NOTICE([   INSTALLATION PATH              = $prefix])
+AC_MSG_NOTICE([   HOST                           = $host])
+AC_MSG_NOTICE([   TARGET                         = $target])
+AC_MSG_NOTICE([   BUILD_COMPILER                 = $BUILD_COMPILER])
+AC_MSG_NOTICE([   BUILD_OPTIMIZE                 = $BUILD_OPTIMIZE])
+AC_MSG_NOTICE([   BUILD_LIB_OPTIMIZE             = $BUILD_LIB_OPTIMIZE])
+AC_MSG_NOTICE([   BUILD_GNU4 (front-end)         = $BUILD_GNU4])
+AC_MSG_NOTICE([   BUILD_GNU3 (front-end)         = $BUILD_GNU3])
+AC_MSG_NOTICE([   BUILD_FORTRAN                  = $BUILD_FORTRAN])
+AC_MSG_NOTICE([   DRAGON_SUPPORT                 = $DRAGON_SUPPORT])
+AC_MSG_NOTICE([   ENABLE_COARRAYS                = $ENABLE_COARRAYS])
+AS_IF([test "${ENABLE_COARRAYS}" = "YES"], [
+AC_MSG_NOTICE([   BUILD_CAF_RUNTIME              = $BUILD_CAF_RUNTIME])
+])
+AS_IF([test "${BUILD_CAF_RUNTIME}" = "YES"], [
+AC_MSG_NOTICE([   CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES])
+AC_MSG_NOTICE([   DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE])
+AC_MSG_NOTICE([   DEFAULT_COMM                   = $DEFAULT_COMM])
+AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])
+AC_MSG_NOTICE([   GASNET_CONDUITS                = $GASNET_CONDUITS])
+AC_MSG_NOTICE([   ARMCI_HOME                     = $ARMCI_HOME])
+AC_MSG_NOTICE([   ARMCI_INCLUDE_DIR              = $ARMCI_INCLUDE_DIR])
+AC_MSG_NOTICE([   ARMCI_LIBS                     = $ARMCI_LIBS])
+AC_MSG_NOTICE([   MPI_INCLUDE                    = $MPI_INCLUDE])
+])
+AC_MSG_NOTICE([   BUILD_TAU_INSTR (experimental) = $BUILD_TAU_INSTR])
+AC_MSG_NOTICE([])
+AC_MSG_NOTICE([********************************************************************])
+AC_MSG_NOTICE([])

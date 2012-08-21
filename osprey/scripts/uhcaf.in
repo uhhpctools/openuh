@@ -31,16 +31,12 @@
 
 progname="`basename $0`"
 
-if [ "@CAFRT_ENABLE_TRACES@" = "TRACE" ]; then
-  tracing_enabled=yes
-else
-  tracing_enabled=no
-fi
-
+tracing_enabled=@CAFRT_ENABLE_TRACES@
 GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 ARMCI_HOME=@ARMCI_HOME@
 COMM_LAYER=@DEFAULT_COMM@
+ARMCI_LIBS="@ARMCI_LIBS@"
 CC=uhcc
 FC=uhf90
 CAF_FLAGS="-coarray -fno-second-underscore"
@@ -60,10 +56,10 @@ Where options are
                         armci
 
   --gasnet-path=G   G is the path to a specified GASNet installation
-                        Currently set to: $GASNET_HOME
+                          Currently set to: $GASNET_HOME
 
-  --armci-path=A    A is the path to a specified ARMCI installation
-                        Currently set to: $ARMCI_HOME
+  --armci-path=A    A is the path to a specified ARMCI source directory
+                          Currently set to: $ARMCI_HOME
 
   --help, -h        Displays this menu
 
@@ -84,19 +80,6 @@ Environment Variables:
 
    MPI_LD_LIBS      Explicitly specify MPI libs to link in.
                         Currently: $MPI_LD_LIBS
-
-   ARMCI specific environment variables:
-
-   ARMCI_LIB        Path containing ARMCI lib (e.g. libarmci.a), if necessary.
-                        Currently: $ARMCI_LIB
-
-   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI
-                    documentation.
-                        Currently: $ARMCI_NETWORK
-
-   TARGET           Target for the ARMCI installation. Defaults to LINUX64.
-                        Currently: $TARGET
-
 
 _EOT_
 
@@ -354,8 +337,6 @@ elif [ $COMM_LAYER == armci -a -z "$ARMCI_HOME" ]; then
   print_error "armci layer is not available"
 fi
 
-
-
 if [ $COMM_LAYER == gasnet ]; then
 
   if [ -z "$GASNET_CONDUIT" ]; then
@@ -445,53 +426,44 @@ if [ $COMM_LAYER == gasnet ]; then
 
 elif [ $COMM_LAYER == armci ]; then
 
-  set_env MSG_COMMS "MPI"
-
-  if [ -z "$ARMCI_NETWORK" ]; then
-    print_warning \
-      "ARMCI_NETWORK is unset. Using SOCKETS by default for network communication."
-    set_env ARMCI_NETWORK "SOCKETS"
-  else
-    add_to_env_list "ARMCI_NETWORK"
-  fi
-
-  if [ -z "$TARGET" ]; then
-    set_env TARGET "LINUX64"
-  else
-    add_to_env_list "TARGET"
-  fi
-
   if [ ! -d "$MPI_LIB" ]; then
     # check if mpicc exists in the path. If so, set MPI_LIB accordingly.
     mpi_ld_path=`which mpicc 2> /dev/null`
     if [ -f "$mpi_ld_path" ]; then
-        set_env MPI_LIB `dirname $mpi_ld_path`/../lib
+        MPI_LIB=`dirname $mpi_ld_path`/../lib
     else
         print_error "MPI_LIB needs to be set to valid path."
     fi
-  else
-    add_to_env_list "MPI_LIB"
   fi
 
-  get_libs="echo -e \"uhcaf-rule:\n\t@echo -larmci \\\$(MP_LIBS) \\\$(COMM_LIBS)\" \
-        | cat  ${ARMCI_HOME}/config/makemp.h ${ARMCI_HOME}/config/makecoms.h - \
-        | make uhcaf-rule --no-print-directory -sf -"
+  if [ -z "$MPI_LD_LIBS" ]; then
+      # MPI lib path was given, but can we figure out the necessary linker
+      # args?
+      if [ ! -f $MPI_LIB/../bin/mpicc ]; then
+          print_error "Can't determine what to link in from $MPI_LIB"
+      fi
 
-  COMM_LIBS=`eval $get_libs`
-  COMM_LIBS+=" -Wl,-rpath,$MPI_LIB "
+      mpi_ld=$MPI_LIB/../bin/mpicc
 
-  # find location of libarmci.a
-  if [ -z "$ARMCI_LIB" ] ; then
-    ARMCI_LIB=$ARMCI_HOME/lib/$TARGET
+      # does -showme:link work ?
+      MPI_LD_LIBS=`eval $mpi_ld -showme:link 2> /dev/null`
+      if [ "$?" != "0" ]; then
+          # does -link-info work?
+          ld_opt=`eval $mpi_ld -link-info 2> /dev/null`
+          if [ "$?" != "0" ]; then
+              print_error "MPI_LD_LIBS needs to be set"
+          fi
+          MPI_LD_LIBS=${ld_opt#*-L* }
+      fi
+      MPI_LD_LIBS="-L$MPI_LIB $MPI_LD_LIBS"
   fi
-  if [ ! -f $ARMCI_LIB/libarmci.a ]; then
-    print_error "Could not find libarmci.a. Check TARGET or specify location using ARMCI_LIB."
-  fi
 
-  COMM_LIBS="-lcaf-armci -L$ARMCI_LIB $COMM_LIBS"
+  # need to link in MPI libs as well.
+  COMM_LIBS="-Wl,-rpath,$ARMCI_HOME/lib -L$ARMCI_HOME/lib $ARMCI_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
+  COMM_LIBS="-lcaf-armci $COMM_LIBS"
 
-  add_to_env_list "ARMCI_LIB"
-
+  add_to_env_list "MPI_LIB"
+  add_to_env_list "MPI_LD_LIBS"
 fi
 
 # display information for uhcaf

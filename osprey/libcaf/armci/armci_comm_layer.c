@@ -59,7 +59,8 @@ static void **syncptr = NULL;   /* sync flags */
 /* Shared memory management:
  * coarray_start_all_images stores the shared memory start address of all
  * images */
-static void **coarray_start_all_images = NULL;
+static void **coarray_start_all_images = NULL;  /* local address space */
+static void **start_heap_address = NULL;        /* different address spaces */
 
 /* NON-BLOCKING PUT: ARMCI non-blocking operations does not ensure local
  * completion on its return. ARMCI_Wait(handle) provides local completion,
@@ -136,6 +137,69 @@ static inline int address_on_symmetric_heap(void *addr)
     end_heap = common_slot->addr;
 
     return (addr >= start_heap && addr <= end_heap);
+}
+
+/* returns addresses ranges for shared heap */
+inline ssize_t comm_address_translation_offset(size_t proc)
+{
+    char *remote_base_address = coarray_start_all_images[proc];
+    return remote_base_address -
+        (char *) coarray_start_all_images[my_proc];
+}
+
+inline void *comm_start_heap(size_t proc)
+{
+    return get_remote_address(coarray_start_all_images[my_proc], proc);
+}
+
+inline void *comm_end_heap(size_t proc)
+{
+    return get_remote_address((char *) coarray_start_all_images[my_proc] +
+                              shared_memory_size, proc);
+}
+
+inline void *comm_start_symmetric_heap(size_t proc)
+{
+    return comm_start_heap(proc);
+}
+
+inline void *comm_end_symmetric_heap(size_t proc)
+{
+    return get_remote_address(common_slot->addr, proc);
+}
+
+inline void *comm_start_asymmetric_heap(size_t proc)
+{
+    if (proc != my_proc) {
+        return comm_end_symmetric_heap(proc);
+    } else {
+        return (char *) common_slot->addr + common_slot->size;
+    }
+}
+
+inline void *comm_end_asymmetric_heap(size_t proc)
+{
+    return get_remote_address(comm_end_heap(proc), proc);
+}
+
+inline void *comm_start_static_heap(size_t proc)
+{
+    return get_remote_address(comm_start_heap(proc), proc);
+}
+
+inline void *comm_end_static_heap(size_t proc)
+{
+    return (char *) comm_start_heap(proc) + static_heap_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_static_heap(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_heap(proc);
 }
 
 
@@ -230,9 +294,40 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* Create pinned/registered memory (Shared Memory) */
     coarray_start_all_images = malloc(num_procs * sizeof(void *));
+    start_heap_address = malloc(num_procs * sizeof(void *));
 
     ret = ARMCI_Malloc((void **) coarray_start_all_images,
                        caf_shared_memory_size);
+
+    start_heap_address[my_proc] = coarray_start_all_images[my_proc];
+
+    /* write start heap address to beginning of heap */
+    *((void **) start_heap_address[my_proc]) = start_heap_address[my_proc];
+    ARMCI_Barrier();
+
+    for (i = 0; i < num_procs; i++) {
+        int domain_id = armci_domain_id(ARMCI_DOMAIN_SMP, i);
+        if (armci_domain_same_id(ARMCI_DOMAIN_SMP, i)) {
+            start_heap_address[i] =
+                *((void **) coarray_start_all_images[i]);
+        } else if (i ==
+                   armci_domain_glob_proc_id(ARMCI_DOMAIN_SMP, domain_id,
+                                             0)) {
+            start_heap_address[i] = coarray_start_all_images[i];
+        } else {
+            /* will be updated on demand */
+            start_heap_address[i] = NULL;
+        }
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                 "coarray_start_all_images[0]: %p, "
+                 "coarray_start_all_images[1]: %p",
+                 coarray_start_all_images[0], coarray_start_all_images[1]);
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                 "start_heap_address[0]: %p, "
+                 "start_heap_address[1]: %p",
+                 start_heap_address[0], start_heap_address[1]);
 
     if (ret != 0) {
         LIBCAF_TRACE(LIBCAF_LOG_FATAL,
@@ -241,7 +336,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     }
 
     static_heap_size =
-        allocate_static_coarrays(coarray_start_all_images[my_proc]);
+        allocate_static_coarrays((char *) coarray_start_all_images[my_proc]
+                                 + sizeof(void *)) + sizeof(void *);
 
     if (enable_nbput) {
         min_nbwrite_address = malloc(num_procs * sizeof(void *));
@@ -282,6 +378,11 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                  "common_slot->addr=%p, common_slot->size=%lu",
                  my_proc + 1, common_shared_memory_slot->addr,
                  common_shared_memory_slot->size);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "armci_comm_layer.c:comm_init"
+                 "start heap: %p, comm_start_heap: %p",
+                 coarray_start_all_images[my_proc],
+                 comm_start_heap(my_proc));
 
     ARMCI_Barrier();
 }
@@ -640,69 +741,27 @@ unsigned long allocate_static_coarrays(void *base_address)
     return set_save_coarrays(base_address);
 }
 
-/* returns addresses ranges for shared heap */
 
-inline ssize_t comm_address_translation_offset(size_t proc)
+void comm_translate_remote_addr(void **remote_addr, int proc)
 {
-    char *remote_base_address = coarray_start_all_images[proc];
-    return remote_base_address -
-        (char *) coarray_start_all_images[my_proc];
-}
+    ssize_t offset;
+    void *local_address;
 
-inline void *comm_start_heap(size_t proc)
-{
-    return get_remote_address(coarray_start_all_images[my_proc], proc);
-}
-
-inline void *comm_end_heap(size_t proc)
-{
-    return get_remote_address((char *) coarray_start_all_images[my_proc] +
-                              shared_memory_size, proc);
-}
-
-inline void *comm_start_symmetric_heap(size_t proc)
-{
-    return comm_start_heap(proc);
-}
-
-inline void *comm_end_symmetric_heap(size_t proc)
-{
-    return get_remote_address(common_slot->addr, proc);
-}
-
-inline void *comm_start_asymmetric_heap(size_t proc)
-{
-    if (proc != my_proc) {
-        return comm_end_symmetric_heap(proc);
-    } else {
-        return (char *) common_slot->addr + common_slot->size;
+    if (start_heap_address[proc] == NULL) {
+        ARMCI_Get(coarray_start_all_images[proc],
+                  &start_heap_address[proc], sizeof(void *), proc);
     }
+
+    offset = start_heap_address[my_proc] - start_heap_address[proc];
+    local_address = *remote_addr + offset;
+
+    if (!address_on_symmetric_heap(local_address)) {
+        local_address = (char *) local_address +
+            comm_address_translation_offset(proc);
+    }
+    *remote_addr = local_address;
 }
 
-inline void *comm_end_asymmetric_heap(size_t proc)
-{
-    return get_remote_address(comm_end_heap(proc), proc);
-}
-
-inline void *comm_start_static_heap(size_t proc)
-{
-    return get_remote_address(comm_start_heap(proc), proc);
-}
-
-inline void *comm_end_static_heap(size_t proc)
-{
-    return (char *) comm_start_heap(proc) + static_heap_size;
-}
-
-inline void *comm_start_allocatable_heap(size_t proc)
-{
-    return comm_end_static_heap(proc);
-}
-
-inline void *comm_end_allocatable_heap(size_t proc)
-{
-    return comm_end_symmetric_heap(proc);
-}
 
 
 /* Calculate the address on another image corresponding to a local address
@@ -972,6 +1031,13 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
     remote_src = get_remote_address(src, proc);
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                 "armci_comm_layer.c:comm_read  "
+                 "src: %p, remote_src: %p, offset: %p "
+                 "start_all_images[proc]: %p, start_all_images[my_proc]: %p",
+                 src, remote_src, comm_address_translation_offset(proc),
+                 coarray_start_all_images[proc],
+                 coarray_start_all_images[my_proc]);
     if (enable_nbput) {
         check_wait_on_pending_puts(proc, remote_src, nbytes);
         LIBCAF_TRACE(LIBCAF_LOG_DEBUG,

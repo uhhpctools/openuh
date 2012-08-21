@@ -36,15 +36,15 @@ GASNET_SUBDIRS := $(foreach conduit,$(GASNET_CONDUITS),gasnet-$(conduit))
 endif
 BUILD_SUBDIRS := armci $(GASNET_SUBDIRS)
 
-default: first 
+default: first
 
-first: 
+first:
 ifdef ARMCI_HOME
 	$(call submake,armci)
 else 
-	@echo "-------------------------------------------------------"
+	@echo "----------------------------------------------------------"
 	@echo "ARMCI_HOME is not set. Skipping build for libcaf-armci"
-	@echo "-------------------------------------------------------"
+	@echo "----------------------------------------------------------"
 	@echo ""
 endif
 ifdef GASNET_HOME
