@@ -62,31 +62,32 @@ BUILD_COMPILER=GNU)
 # enable Coarrays
 AC_ARG_ENABLE(coarrays,
 AS_HELP_STRING([--enable-coarrays],
-[Enables UH Coarray Fortran (CAF) Implementation]),
-ENABLE_COARRAYS="YES",
-ENABLE_COARRAYS="NO")
+               [Enables UH Coarray Fortran (CAF) Implementation]),
+                ENABLE_COARRAYS="YES")
+
+AS_IF([test "x$enable_coarrays" != "xyes"], [ ENABLE_COARRAYS="NO" ])
 
 # Set whether CAF runtime will be built
 AC_ARG_ENABLE([caf-runtime],
-  AS_HELP_STRING([--disable-caf-runtime], [Disable CAF Runtime]))
-
-# Set whether CAF runtime will be built
-AC_ARG_ENABLE([cafrt-traces],
-  AS_HELP_STRING([--disable-cafrt-traces],
-                 [Disable CAF Runtime Tracing Functionality]),
-                  CAFRT_ENABLE_TRACES="NO",
-                  CAFRT_ENABLE_TRACES="YES")
+  AS_HELP_STRING([--disable-caf-runtime],
+                 [Disable CAF Runtime]),
+                  BUILD_CAF_RUNTIME="NO")
 
 AS_IF([test "x$enable_caf_runtime" != "xno"], [
   BUILD_CAF_RUNTIME="YES"
-])
-AS_IF([test "x$enable_caf_runtime" = "xno"], [
-  BUILD_CAF_RUNTIME="NO"
 ])
 
 if test "$ENABLE_COARRAYS" = "NO"; then
   BUILD_CAF_RUNTIME="NO"
 fi
+
+# Set whether CAF runtime will be built
+AC_ARG_ENABLE([cafrt-traces],
+  AS_HELP_STRING([--enable-cafrt-traces],
+                 [Enable CAF Runtime Tracing Functionality]),
+                  CAFRT_ENABLE_TRACES="YES")
+
+AS_IF([test "x$enable_cafrt_traces" != "xyes"], [ CAFRT_ENABLE_TRACES="NO" ])
 
 # enable GASNet for Coarrays
 AC_ARG_WITH(gasnet-root,
@@ -144,9 +145,9 @@ if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_caf_runtime" = "xno"; then
    [--enable-coarrays option is expected with --disable-caf-runtime]
    )
 fi
-if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xyes"; then
   AC_MSG_ERROR(
-   [--enable-coarrays option is expected with --disable-cafrt-traces]
+   [--enable-coarrays option is expected with --enable-cafrt-traces]
    )
 fi
 if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then

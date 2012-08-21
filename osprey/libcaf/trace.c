@@ -65,11 +65,12 @@ __trace_table_t tracers[] = {
     INIT_LEVEL(NOTICE, OFF),
     INIT_LEVEL(TIME_SUMMARY, OFF),
     INIT_LEVEL(INIT, OFF),
+    INIT_LEVEL(EXIT, OFF),
+    INIT_LEVEL(COMM, OFF),
     INIT_LEVEL(MEMORY, OFF),
     INIT_LEVEL(CACHE, OFF),
-    INIT_LEVEL(BARRIER, OFF),
-    INIT_LEVEL(REDUCE, OFF),
-    INIT_LEVEL(SYMBOLS, OFF),
+    INIT_LEVEL(SYNC, OFF),
+    INIT_LEVEL(COLLECTIVE, OFF),
     INIT_LEVEL(SERVICE, OFF)
 };
 
@@ -126,7 +127,7 @@ static void show_trace_levels(void)
         }
     }
 
-    __libcaf_trace(LIBCAF_LOG_INIT, buf);
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, buf);
 }
 
 int __trace_is_enabled(libcaf_trace_t level)
@@ -287,7 +288,8 @@ static void __print_shared_memory_slots()
     fflush(trace_log_stream);
 }
 
-void __libcaf_trace(libcaf_trace_t msg_type, char *fmt, ...)
+void __libcaf_trace(const char *file, const char *func, int line,
+                    libcaf_trace_t msg_type, char *fmt, ...)
 {
     if (!__trace_is_enabled(msg_type)) {
         return;
@@ -298,8 +300,9 @@ void __libcaf_trace(libcaf_trace_t msg_type, char *fmt, ...)
         char tmp2[BUF_SIZE];
         va_list ap;
 
-        snprintf(tmp1, BUF_SIZE, "LIBCAF(IMG %lu)[%s]:", _this_image,
-                 __level_to_string(msg_type));
+        snprintf(tmp1, BUF_SIZE, "LIBCAF(IMG %lu)[%s] (%s:%d::%s):",
+                 _this_image, __level_to_string(msg_type), file, line,
+                 func);
 
         va_start(ap, fmt);
         vsnprintf(tmp2, BUF_SIZE, fmt, ap);

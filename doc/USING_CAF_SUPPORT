@@ -74,10 +74,10 @@ Where options are
                         armci
 
   --gasnet-path=G   G is the path to a specified GASNet installation
-                        Currently set to: /opt/berkeley/gasnet/gnu/1.18.2/fast/
+                          Currently set to: $GASNET_HOME
 
   --armci-path=A    A is the path to a specified ARMCI installation
-                        Currently set to: /home/dreachem/runtimes/armci-1-4/
+                          Currently set to: $ARMCI_HOME
 
   --help, -h        Displays this menu
 
@@ -93,20 +93,12 @@ Where options are
 
 Environment Variables:
 
-   ARMCI_NETWORK    Specifies network layer for ARMCI installation. See ARMCI documentation.
+   MPI_LIB          Path to MPI libs may be required. Should be compatible
+                    with GASNet or ARMCI installation being used.
+                        Currently: $MPI_LIB
 
-   MSG_COMMS        Messaging library used by ARMCI. Default is MPI.
-
-   TARGET           Target for the ARMCI installation. Defaults to LINUX64.
-
-   ARMCI_LIB        Path containing ARMCI lib (e.g. libarmci.a), if necessary.
-                        Typically: $ARMCI_HOME/lib/$TARGET
-
-   MPI_LIB          Path to MPI lib, if necessary.
-
-   LIBMPI           Explicitly specify MPI libs to link in.
-                         Default is: -L$MPI_LIB -lmpi
-
+   MPI_LD_LIBS      Explicitly specify MPI libs to link in.
+                        Currently: $MPI_LD_LIBS
 
 Example:
 
@@ -125,18 +117,18 @@ Where OPTIONS are:
   --num-images=N
   -n,-np N            N is number of images to use
 
-  --trace=L           Sets trace levels for runtime.
-                      L=all or trace levels delimited by ':'.
-                        Available trace levels:
-                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:MEMORY:
-                        CACHE:BARRIER:REDUCE:SYMBOLS:SERVICE
-
-  --trace-file=F      F is name of file to store trace
-
   --image-heap=I      I is heap size per image for storing coarray data. It
                       may be an integer which indicates size in bytes, or it
                       may have the suffixes K, M, G which indicates size in
                       kilobytes, megabytes, and gigabytes, respectively.
+
+  --trace=L           Sets trace levels for runtime.
+                      L=all or trace levels delimited by ':'.
+                        Available trace levels:
+                        FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
+                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE
+
+  --trace-file=F      F is name of file to store trace
 
   --verbose,-v        Verbose output
 

@@ -245,7 +245,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     ret = ARMCI_Init();
     if (ret != 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL, "ARMCI init error");
+        Error("ARMCI init error");
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, (int *) &my_proc);
@@ -320,19 +320,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         }
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "coarray_start_all_images[0]: %p, "
-                 "coarray_start_all_images[1]: %p",
-                 coarray_start_all_images[0], coarray_start_all_images[1]);
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "start_heap_address[0]: %p, "
-                 "start_heap_address[1]: %p",
-                 start_heap_address[0], start_heap_address[1]);
 
     if (ret != 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "ARMCI_Malloc failed when allocating %lu bytes.",
-                     caf_shared_memory_size);
+        Error("ARMCI_Malloc failed when allocating %lu bytes.",
+              caf_shared_memory_size);
     }
 
     static_heap_size =
@@ -373,16 +364,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     shared_memory_size = caf_shared_memory_size;
 
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "armci_comm_layer.c:comm_init-> Img%lu"
-                 "Finished. Waiting for global barrier."
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
-                 my_proc + 1, common_shared_memory_slot->addr,
+                 common_shared_memory_slot->addr,
                  common_shared_memory_slot->size);
-
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "armci_comm_layer.c:comm_init"
-                 "start heap: %p, comm_start_heap: %p",
-                 coarray_start_all_images[my_proc],
-                 comm_start_heap(my_proc));
 
     ARMCI_Barrier();
 }
@@ -441,8 +426,7 @@ static void refetch_all_cache()
                         cache_all_images[i]->handle);
         }
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                 "armci_comm_layer.c:refetch_all_cache-> Finished nb get");
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get");
 }
 
 static void refetch_cache(unsigned long node)
@@ -453,8 +437,7 @@ static void refetch_cache(unsigned long node)
                     getCache_line_size, node,
                     cache_all_images[node]->handle);
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                 "armci_comm_layer.c:refetch_cache-> Finished nb get from image %lu",
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get from image %lu",
                  node + 1);
 }
 
@@ -473,8 +456,7 @@ static void cache_check_and_get(size_t node, void *remote_address,
             cache_all_images[node]->handle = 0;
         }
         memcpy(local_address, cache_line_address + start_offset, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:cache_check_and_get-> Address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Address %p on"
                      " image %lu found in cache.", remote_address,
                      node + 1);
     } else {                    /*data not in cache */
@@ -491,8 +473,7 @@ static void cache_check_and_get(size_t node, void *remote_address,
         } else {
             ARMCI_Get(remote_address, local_address, nbytes, node);
         }
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:cache_check_and_get-> Address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Address %p on"
                      " image %lu NOT found in cache.", remote_address,
                      node + 1);
     }
@@ -519,9 +500,8 @@ static void cache_check_and_get_strided(void *remote_src,
     if (cache_address > 0 && remote_src >= cache_address &&
         remote_src + size <= cache_address + getCache_line_size) {
         LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:cache_check_and_get_strided->"
-                     "Address %p on image %lu found in cache.",
-                     remote_src, node + 1);
+                     "Address %p on image %lu found in cache.", remote_src,
+                     node + 1);
         start_offset = remote_src - cache_address;
         if (cache_all_images[node]->handle) {
             ARMCI_Wait(cache_all_images[node]->handle);
@@ -540,8 +520,7 @@ static void cache_check_and_get_strided(void *remote_src,
              (coarray_start_all_images[node] + shared_memory_size))
             && (size <= getCache_line_size)) {
             LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                         "armci_comm_layer.c:cache_check_and_get_strided->"
-                         " Data for Address %p on image %lu NOT found in cache.",
+                         "Data for Address %p on image %lu NOT found in cache.",
                          remote_src, node + 1);
 
             ARMCI_Get(remote_src, cache_line_address, getCache_line_size,
@@ -553,8 +532,7 @@ static void cache_check_and_get_strided(void *remote_src,
                                src_strides, local_dest, dest_strides,
                                count, stride_levels);
         } else {
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "armci_comm_layer.c:cache_check_and_get_strided>gasnet_gets_bulk from"
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, node + 1, local_dest, stride_levels);
 
@@ -577,8 +555,7 @@ static void update_cache(size_t node, void *remote_address,
         remote_address + nbytes <= cache_address + getCache_line_size) {
         start_offset = remote_address - cache_address;
         memcpy(cache_line_address + start_offset, local_address, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:update_cache-> Value of address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
                      " image %lu updated in cache due to write conflict.",
                      remote_address, node + 1);
     } else if (cache_address > 0 &&
@@ -587,8 +564,7 @@ static void update_cache(size_t node, void *remote_address,
         start_offset = remote_address - cache_address;
         nbytes = getCache_line_size - start_offset;
         memcpy(cache_line_address + start_offset, local_address, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:update_cache-> Value of address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
                      " image %lu partially updated in cache (write conflict).",
                      remote_address, node + 1);
     } else if (cache_address > 0 &&
@@ -598,8 +574,7 @@ static void update_cache(size_t node, void *remote_address,
         start_offset = cache_address - remote_address;
         nbytes = nbytes - start_offset;
         memcpy(cache_line_address, local_address + start_offset, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:update_cache-> Value of address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Value of address %p on"
                      " image %lu partially updated in cache (write conflict).",
                      remote_address, node + 1);
     }
@@ -631,9 +606,7 @@ static void update_cache_strided(void *remote_dest_address,
                            cache_line_address + start_offset, dest_strides,
                            count, stride_levels);
 
-        LIBCAF_TRACE(LIBCAF_LOG_CACHE,
-                     "armci_comm_layer.c:update_cache_full_strided->"
-                     " Value of address %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_CACHE, " Value of address %p on"
                      " image %lu updated in cache due to write conflict.",
                      remote_dest_address, node + 1);
     }
@@ -658,10 +631,9 @@ static void update_cache_strided(void *remote_dest_address,
 static int address_in_nbwrite_address_block(void *remote_addr,
                                             size_t proc, size_t size)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "armci_comm_layer.c:"
-                 "address_in_nbwrite_address_block-> Img%lu "
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
-                 proc + 1, remote_addr, min_nbwrite_address[proc],
+                 remote_addr, min_nbwrite_address[proc],
                  max_nbwrite_address[proc], remote_addr + size);
     if (min_nbwrite_address[proc] == 0)
         return 0;
@@ -675,10 +647,9 @@ static int address_in_nbwrite_address_block(void *remote_addr,
 static void update_nbwrite_address_block(void *remote_addr,
                                          size_t proc, size_t size)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "armci_comm_layer.c:"
-                 "update_nbwrite_address_block-> Img%lu "
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
-                 proc + 1, remote_addr, min_nbwrite_address[proc],
+                 remote_addr, min_nbwrite_address[proc],
                  max_nbwrite_address[proc], remote_addr + size);
     if (min_nbwrite_address[proc] == 0) {
         min_nbwrite_address[proc] = remote_addr;
@@ -804,15 +775,13 @@ void comm_memory_free()
         }
         comm_free(cache_all_images);
     }
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "armci_comm_layer.c:comm_memory_free-> Finished.");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished.");
 }
 
 void comm_exit(int status)
 {
     comm_memory_free();
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "armci_comm_layer.c:comm_exit-> Before call to ARMCI_Error"
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Error"
                  " with status %d.", status);
 
     if (status == 0) {
@@ -830,11 +799,9 @@ void comm_finalize()
 {
     comm_barrier_all();
     comm_memory_free();
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "armci_comm_layer.c:comm_exit-> Before call to ARMCI_Finalize");
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Finalize");
     ARMCI_Finalize();
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "armci_comm_layer.c:comm_exit-> Before call to MPI_Finalize");
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to MPI_Finalize");
     MPI_Finalize();
     exit(0);
 
@@ -858,8 +825,7 @@ void comm_sync_images(int *image_list, int image_count)
     volatile int *check_flag;   /* flag to wait on locally */
     int whatever;               /* to store remote value for ARMCI_Rmw */
 
-    LIBCAF_TRACE(LIBCAF_LOG_BARRIER,
-                 "armci_comm_layer.c:comm_sync_images-> Syncing with"
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Syncing with"
                  " %d images", image_count);
     for (i = 0; i < image_count; i++) {
         if (my_proc == image_list[i]) {
@@ -869,15 +835,14 @@ void comm_sync_images(int *image_list, int image_count)
 
         if (enable_nbput) {
             wait_on_pending_puts(remote_img);
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "armci_comm_layer.c:comm_sync_images->Finished waiting for"
+            LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Finished waiting for"
                          " all pending puts on image %lu. Min:%p, Max:%p",
                          remote_img, min_nbwrite_address[remote_img],
                          max_nbwrite_address[remote_img]);
         }
 
         if (remote_img < 0 || remote_img >= num_procs) {
-            LIBCAF_TRACE(LIBCAF_LOG_FATAL, "sync_images called with "
+            LIBCAF_TRACE(LIBCAF_LOG_SYNC, "sync_images called with "
                          "invalid remote image %d\n", remote_img);
         }
 
@@ -901,17 +866,15 @@ void comm_sync_images(int *image_list, int image_count)
 
         check_flag = ((int *) syncptr[my_proc]) + remote_img;
 
-        LIBCAF_TRACE(LIBCAF_LOG_BARRIER,
-                     "armci_comm_layer.c:comm_sync_images-> Waiting on"
-                     " image %lu.", remote_img + 1);
+        LIBCAF_TRACE(LIBCAF_LOG_SYNC,
+                     "Waiting on image %lu.", remote_img + 1);
 
         /* user usleep to wait at least 1 OS time slice before checking
          * flag again  */
         while (!(*check_flag))
             usleep(50);
 
-        LIBCAF_TRACE(LIBCAF_LOG_BARRIER,
-                     "armci_comm_layer.c:comm_sync_images-> Waiting over on"
+        LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Waiting over on"
                      " image %lu. About to decrement %d",
                      remote_img + 1, *check_flag);
 
@@ -925,8 +888,7 @@ void comm_sync_images(int *image_list, int image_count)
         if (enable_get_cache)
             refetch_cache(image_list[i]);
 
-        LIBCAF_TRACE(LIBCAF_LOG_BARRIER,
-                     "armci_comm_layer.c:comm_sync_images-> Sync image over");
+        LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Sync image over");
     }
 
 }
@@ -1031,8 +993,7 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
     remote_src = get_remote_address(src, proc);
-    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                 "armci_comm_layer.c:comm_read  "
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "src: %p, remote_src: %p, offset: %p "
                  "start_all_images[proc]: %p, start_all_images[my_proc]: %p",
                  src, remote_src, comm_address_translation_offset(proc),
@@ -1040,8 +1001,8 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
                  coarray_start_all_images[my_proc]);
     if (enable_nbput) {
         check_wait_on_pending_puts(proc, remote_src, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "armci_comm_layer.c:comm_read->Finished waiting for"
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Finished waiting for"
                      " pending puts on %p on image %lu. Min:%p, Max:%p",
                      remote_src, proc + 1, min_nbwrite_address[proc],
                      max_nbwrite_address[proc]);
@@ -1049,8 +1010,8 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     if (enable_get_cache)
         cache_check_and_get(proc, remote_src, nbytes, dest);
     else {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "armci_comm_layer.c:comm_read->Before ARMCI_Get from %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Before ARMCI_Get from %p on"
                      " image %lu to %p size %lu",
                      remote_src, proc + 1, dest, nbytes);
         ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
@@ -1068,14 +1029,14 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
         ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle);
         ARMCI_Wait(&handle);    // This ensures local completion only
         update_nbwrite_address_block(remote_dest, proc, nbytes);
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "armci_comm_layer.c:comm_write->After ARMCI_NbPut"
-                     " to %p on image %lu. Min:%p, Max:%p", remote_dest,
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "After ARMCI_NbPut to %p on image %lu. Min:%p, Max:%p",
+                     remote_dest,
                      proc + 1, min_nbwrite_address[proc],
                      max_nbwrite_address[proc]);
     } else {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "armci_comm_layer.c:comm_write->Before ARMCI_Put to %p on"
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Before ARMCI_Put to %p on"
                      " image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
         ARMCI_Put(src, remote_dest, (int) nbytes, (int) proc);
@@ -1120,8 +1081,7 @@ void comm_strided_read(size_t proc,
                 src_strides[stride_levels - 1] * (count[stride_levels] - 1)
                 + count[0];
             check_wait_on_pending_puts(proc, remote_src, size);
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "armci_comm_layer.c:comm_strided_read->Finished waiting for"
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
                          " pending puts on %p on image %lu. Min:%p,Max:%p",
                          remote_src, proc + 1, min_nbwrite_address[proc],
                          max_nbwrite_address[proc]);
@@ -1135,8 +1095,7 @@ void comm_strided_read(size_t proc,
 
         } else {
 
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "gasnet_comm_layer.c:comm_strided_read->gasnet_gets_bulk from"
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
@@ -1188,15 +1147,13 @@ void comm_strided_write(size_t proc,
                          count, stride_levels, proc, &handle);
             ARMCI_Wait(&handle);        // This ensures local completion only
             update_nbwrite_address_block(remote_dest, proc, size);
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "armci_comm_layer.c:comm_strided_write->After ARMCI_NbPutS"
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu. Min:%p, Max:%p",
                          remote_dest, proc + 1, min_nbwrite_address[proc],
                          max_nbwrite_address[proc]);
         } else {
 
-            LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                         "armci_comm_layer.c:comm_strided_write->before ARMCI_PutS"
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "before ARMCI_PutS"
                          " to %p on image %lu from %p (stride_levels= %u)",
                          remote_dest, proc + 1, src, stride_levels);
             ARMCI_PutS(src, src_strides, remote_dest, dest_strides,

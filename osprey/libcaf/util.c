@@ -37,7 +37,8 @@
 
 void __caf_exit(int status);
 
-void __libcaf_warning(char *warning_msg, ...)
+void __libcaf_warning(const char *file, const char *func, int line,
+                      char *warning_msg, ...)
 {
     char tmp[MSG_BUF_SIZE];
     va_list ap;
@@ -45,12 +46,14 @@ void __libcaf_warning(char *warning_msg, ...)
     va_start(ap, warning_msg);
     vsnprintf(tmp, MSG_BUF_SIZE, warning_msg, ap);
     va_end(ap);
-    fprintf(stderr, "-- LIBCAF WARNING: %s \n\n", tmp);
+    fprintf(stderr, "-- LIBCAF WARNING (%s:%d::%s): %s \n\n",
+            file, line, func, tmp);
     fflush(stderr);
 }
 
 
-void __libcaf_error(char *error_msg, ...)
+void __libcaf_error(const char *file, const char *func, int line,
+                    char *error_msg, ...)
 {
     char tmp[MSG_BUF_SIZE];
     va_list ap;
@@ -58,14 +61,35 @@ void __libcaf_error(char *error_msg, ...)
     va_start(ap, error_msg);
     vsnprintf(tmp, MSG_BUF_SIZE, error_msg, ap);
     va_end(ap);
-    fprintf(stderr, "** LIBCAF ERROR: %s \n\n", tmp);
+    fprintf(stderr, "** LIBCAF ERROR (%s:%d::%s): %s \n\n",
+            file, line, func, tmp);
     fflush(stderr);
     __caf_exit(1);
 }
 
+/* file utils */
+
+/* drops path prefix in string */
+char *drop_path(char *s)
+{
+    char *tail = NULL;
+    char *t;
+    for (t = s; *t; t++) {
+        if (*t == '/')
+            tail = t;
+    }
+
+    if (tail == NULL) {
+        return s;               /* no path prefix */
+    } else {
+        tail++;                 /* skip the slash */
+        return tail;            /* points inside s, not new string! */
+    }
+}
+
 /* debug utility functions */
 
-#if DEBUG
+#if defined(CAFRT_DEBUG)
 
 void __libcaf_debug_print_array_int(char *name, int *arr, int n)
 {

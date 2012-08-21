@@ -793,7 +793,7 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-coarrays       Enables UH Coarray Fortran (CAF) Implementation
   --disable-caf-runtime   Disable CAF Runtime
-  --disable-cafrt-traces  Disable CAF Runtime Tracing Functionality
+  --enable-cafrt-traces   Enable CAF Runtime Tracing Functionality
   --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
@@ -1407,24 +1407,18 @@ fi;
 if test "${enable_coarrays+set}" = set; then
   enableval="$enable_coarrays"
   ENABLE_COARRAYS="YES"
-else
-  ENABLE_COARRAYS="NO"
 fi;
+
+if test "x$enable_coarrays" != "xyes"; then
+   ENABLE_COARRAYS="NO"
+fi
+
 
 # Set whether CAF runtime will be built
 # Check whether --enable-caf-runtime or --disable-caf-runtime was given.
 if test "${enable_caf_runtime+set}" = set; then
   enableval="$enable_caf_runtime"
-
-fi;
-
-# Set whether CAF runtime will be built
-# Check whether --enable-cafrt-traces or --disable-cafrt-traces was given.
-if test "${enable_cafrt_traces+set}" = set; then
-  enableval="$enable_cafrt_traces"
-  CAFRT_ENABLE_TRACES="NO"
-else
-  CAFRT_ENABLE_TRACES="YES"
+  BUILD_CAF_RUNTIME="NO"
 fi;
 
 if test "x$enable_caf_runtime" != "xno"; then
@@ -1433,16 +1427,22 @@ if test "x$enable_caf_runtime" != "xno"; then
 
 fi
 
-if test "x$enable_caf_runtime" = "xno"; then
-
-  BUILD_CAF_RUNTIME="NO"
-
-fi
-
 
 if test "$ENABLE_COARRAYS" = "NO"; then
   BUILD_CAF_RUNTIME="NO"
 fi
+
+# Set whether CAF runtime will be built
+# Check whether --enable-cafrt-traces or --disable-cafrt-traces was given.
+if test "${enable_cafrt_traces+set}" = set; then
+  enableval="$enable_cafrt_traces"
+  CAFRT_ENABLE_TRACES="YES"
+fi;
+
+if test "x$enable_cafrt_traces" != "xyes"; then
+   CAFRT_ENABLE_TRACES="NO"
+fi
+
 
 # enable GASNet for Coarrays
 
@@ -1517,10 +1517,10 @@ echo "$as_me: error: --enable-coarrays option is expected with --disable-caf-run
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
-if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xno"; then
-  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --disable-cafrt-traces
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xyes"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --enable-cafrt-traces
    " >&5
-echo "$as_me: error: --enable-coarrays option is expected with --disable-cafrt-traces
+echo "$as_me: error: --enable-coarrays option is expected with --enable-cafrt-traces
    " >&2;}
    { (exit 1); exit 1; }; }
 fi

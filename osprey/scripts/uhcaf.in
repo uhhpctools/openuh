@@ -74,8 +74,8 @@ Where options are
   --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
-   MPI_LIB          Path to MPI libs is generally required. Should be
-                    compatible with GASNet or ARMCI installation being used.
+   MPI_LIB          Path to MPI libs may be required. Should be compatible
+                    with GASNet or ARMCI installation being used.
                         Currently: $MPI_LIB
 
    MPI_LD_LIBS      Explicitly specify MPI libs to link in.

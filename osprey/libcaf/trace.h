@@ -31,7 +31,7 @@
 
 #ifdef TRACE
 # define LIBCAF_TRACE_INIT __libcaf_tracers_init
-# define LIBCAF_TRACE __libcaf_trace
+# define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
 # define START_TIMER  __start_timer
 # define STOP_TIMER  __stop_timer
 #else
@@ -48,11 +48,12 @@ typedef enum {
     LIBCAF_LOG_NOTICE,          /* serious, but non-fatal */
     LIBCAF_LOG_TIME_SUMMARY,    /* print accumulated time */
     LIBCAF_LOG_INIT,            /* during LIBCAF initialization */
-    LIBCAF_LOG_MEMORY,          /* symmetric memory operations */
-    LIBCAF_LOG_CACHE,           /* cache flushing ops */
-    LIBCAF_LOG_BARRIER,         /* barrier ops */
-    LIBCAF_LOG_REDUCE,          /* reduction ops */
-    LIBCAF_LOG_SYMBOLS,         /* dump global symbol table */
+    LIBCAF_LOG_EXIT,            /* during LIBCAF exit */
+    LIBCAF_LOG_COMM,            /* communication operations */
+    LIBCAF_LOG_MEMORY,          /* memory allocation/deallocation operations */
+    LIBCAF_LOG_CACHE,           /* cache operationss */
+    LIBCAF_LOG_SYNC,            /* synchronization */
+    LIBCAF_LOG_COLLECTIVE,      /* collective operations */
     LIBCAF_LOG_SERVICE,         /* show progress service */
     NUM_TRACERS = LIBCAF_LOG_SERVICE
 } libcaf_trace_t;
@@ -72,11 +73,13 @@ typedef enum {
     DUMMY
 } __timer_type_t;               /* type of timer */
 
+extern char *drop_path(char *s);        /* from util.h */
+
 extern void __libcaf_tracers_init(void);
-extern void __libcaf_trace(libcaf_trace_t msg_type, char *fmt, ...);
+extern void __libcaf_trace(const char *file, const char *func, int line,
+                           libcaf_trace_t msg_type, char *fmt, ...);
 extern int __trace_is_enabled(libcaf_trace_t level);
 void __start_timer();
 void __stop_timer(__timer_type_t type);
-
 
 #endif                          /* _TRACE_H */
