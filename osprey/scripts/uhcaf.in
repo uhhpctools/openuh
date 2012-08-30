@@ -74,12 +74,17 @@ Where options are
   --keep, -k        Keep any temporary files in current directory
 
 Environment Variables:
-   MPI_LIB          Path to MPI libs may be required. Should be compatible
-                    with GASNet or ARMCI installation being used.
+   MPI_LIB          Specify path to MPI libs, if uhcaf can't figure it out on
+                    its own. Should be compatible with GASNet or ARMCI
+                    installation being used.
                         Currently: $MPI_LIB
 
-   MPI_LD_LIBS      Explicitly specify MPI libs to link in.
+   MPI_LD_LIBS      Explicitly specify MPI libs to link in. E.g. -L$MPI_LIB -lmpi
                         Currently: $MPI_LD_LIBS
+
+   AUX_LD_LIBS      Optionally specify additional libraries that should be linked
+                    in.
+                        Currently: $AUX_LD_LIBS
 
 _EOT_
 
@@ -459,11 +464,15 @@ elif [ $COMM_LAYER == armci ]; then
   fi
 
   # need to link in MPI libs as well.
-  COMM_LIBS="-Wl,-rpath,$ARMCI_HOME/lib -L$ARMCI_HOME/lib $ARMCI_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
+  COMM_LIBS="-Wl,-rpath,$ARMCI_HOME/lib $ARMCI_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
   COMM_LIBS="-lcaf-armci $COMM_LIBS"
 
   add_to_env_list "MPI_LIB"
   add_to_env_list "MPI_LD_LIBS"
+fi
+
+if [ -n "$AUX_LD_LIBS" ]; then
+  add_to_env_list "AUX_LD_LIBS"
 fi
 
 # display information for uhcaf
@@ -620,12 +629,14 @@ else
 
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
-                $link_instructions.o $set_save_coarrays.o $output_file
+                $link_instructions.o $set_save_coarrays.o $output_file \
+                $OPENUH_COMM_LIBS -lcaf-extra $AUX_LD_LIBS
           stat=$?
       else
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
-                $link_instructions.o $output_file
+                $link_instructions.o $output_file $OPENUH_COMM_LIBS    \
+                -lcaf-extra $AUX_LD_LIBS
           stat=$?
       fi
   else

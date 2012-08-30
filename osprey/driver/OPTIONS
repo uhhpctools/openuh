@@ -146,7 +146,7 @@
 -help:%s	save_name(&help_pattern,optargs); 	ALL	NONE	""
 	"print list of possible options that contain given string"
 %
--coarray toggle(&coarray,TRUE);     F90      be       self
+-coarray toggle(&coarray,TRUE);     F90      be,ipl      self
         "Process coarrays"
 %ifdef DRAGON
 -dragon ;   ALL    ipap,b,i    self

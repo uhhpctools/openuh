@@ -98,6 +98,12 @@ static void local_dest_strided_copy(void *src, void *dest,
 
 void __caf_init()
 {
+    static int libcaf_initialized = 0;
+    if (libcaf_initialized == 0)
+        libcaf_initialized = 1;
+    else
+        return;
+
     LIBCAF_TRACE_INIT();
 
     common_slot = (struct shared_memory_slot *)

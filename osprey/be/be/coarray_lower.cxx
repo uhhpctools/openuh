@@ -3053,8 +3053,15 @@ static void handle_caf_call_stmts(
         TY_IDX ty1 = ST_type(st1);
         if (TY_kind(ty1) == KIND_POINTER)
             ty1 = TY_pointed(ty1);
+
+        /* type of first argument may not be a dope vector if
+         * Coarray_Prelower phase is run a second time on this PU
+         * (e.g. after ipa-link) */
+        /*
         Is_True( is_dope(ty1),
                 ("Expected sync_images arg 1 to be a dope from FE"));
+                */
+        if (!is_dope(ty1)) return;
 
         /* args: DV, 1 -> array_list, #array_list */
         WN_Delete(WN_kid0(WN_actual(wn,0)));

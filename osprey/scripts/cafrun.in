@@ -508,7 +508,8 @@ else
 
   launcher_name=`basename $LAUNCHER`
 
-  if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec \) ]; then
+  if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
+          $launcher_name = aprun \) ]; then
     if [ $num_images -gt 1 ]; then
       LAUNCHER_OPTS=" -n $num_images $LAUNCHER_OPTS"
     else

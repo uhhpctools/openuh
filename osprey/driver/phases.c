@@ -2065,27 +2065,6 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
 	    }
     }
 
-#ifdef _UH_COARRAYS
-        if (option_was_seen(O_coarray)) {
-          char *comm_layer = NULL;
-          char *comm_libs = NULL;
-          comm_layer = getenv("OPENUH_COMM_LAYER"); /* = GASNET | ARMCI */
-          comm_libs = getenv("OPENUH_COMM_LIBS");
-          if (comm_layer == NULL || strcmp(comm_layer, "armci") &&
-              strcmp(comm_layer, "gasnet")) {
-            error("OPENUH_COMM_LAYER should be set to gasnet or armci");
-            exit(1);
-          }
-          if (comm_libs == NULL) {
-            error("OPENUH_COMM_LIBS needs to be set");
-            exit(1);
-          }
-          add_multi_strings(args, comm_libs, FALSE);
-          add_string( args, "-lcaf-extra");
-        }
-#endif
-
-
 
 #ifdef TARG_X8664
 	// Put open64rt after all the libraries that are built with PathScale

@@ -144,6 +144,10 @@ Process_Command_Line (INT argc, char **argv)
             switch (argv[i][1]) {
 
 	    case 'c':
+#ifdef _UH_COARRAYS
+        /* accept coarray flag without stopping */
+        if (strcmp (argv[i]+1, "coarray") != 0)
+#endif
 		i = argc;	    /* stop processing */
 		break;
  

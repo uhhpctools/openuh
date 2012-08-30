@@ -175,8 +175,11 @@ if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_SRC_HOME}"; then
     armci_flag_info=`(cd $ARMCI_SRC_HOME; make flags 2> /dev/null)`
     ARMCI_INCLUDE_DIR=`echo "${armci_flag_info}" | grep "ARMCI headers" | sed 's/^.* //' 2> /dev/null`
     ARMCI_HOME=`dirname ${ARMCI_INCLUDE_DIR}`
+    armci_ld_flags=`echo "${armci_flag_info}" | grep "LDFLAGS=" | sed 's/ LDFLAGS=//'`
+    armci_ld_flags=`eval echo ${armci_ld_flags}`
     ARMCI_LIBS=`echo "${armci_flag_info}" | grep "LIBS=" | sed 's/ LIBS=//'`
     ARMCI_LIBS=`eval echo ${ARMCI_LIBS}`
+    ARMCI_LIBS="${armci_ld_flags} ${ARMCI_LIBS}"
     if test -z "${ARMCI_INCLUDE_DIR}"; then
         AC_MSG_ERROR([Couldn't find configured ARMCI source directory. Check specified --with-armci-src-root=<path>.])
     fi
