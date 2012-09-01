@@ -479,14 +479,17 @@ if [ $COMM_LAYER == gasnet ]; then
   # enable packing of non-contiguous put/get
   set_env GASNET_VIS_AMPIPE 1
 
+  # set collectives scratch space to 2MB (the usual default)
+  set_env GASNET_COLL_SCRATCH_SIZE $((2*1024*1024))
+
   image_heap=$UHCAF_IMAGE_HEAP_SIZE
   # The default MAX_SEGSIZE in GASNet is 2GB. So, if user is requesting
   # thereabouts, increase GASNET_MAX_SEGSIZE
   if [ $image_heap -gt 2000000000 ]; then
     # Assume the GASNET segment should be in page-size (4K) multiples. Also,
-    # GASNet looks to reserve 1MB per image for something, so reserve space
-    # for that as well.
-    gasnet_max_size=$((($image_heap/4096+1)*4096 + $num_images*1024*1024))
+    # GASNet will reserve at least GASNET_COLL_SCRATCH_SIZE per node for
+    # scratch space
+    gasnet_max_size=$((($image_heap/4096+1)*4096 + $GASNET_COLL_SCRATCH_SIZE*8))
     set_env GASNET_MAX_SEGSIZE $gasnet_max_size
   fi
   COMM_NETWORK=$GASNET_CONDUIT

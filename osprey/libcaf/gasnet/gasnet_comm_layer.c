@@ -985,8 +985,11 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     }
     __f90_set_args(argc, argv);
 
+    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
+                                          DEFAULT_SHARED_MEMORY_SIZE);
 
     uintptr_t max_local = gasnet_getMaxLocalSegmentSize();
+
     if (max_local == -1)
         gasnet_everything = 1;
 
@@ -1055,8 +1058,6 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     nodeinfo_table = (gasnet_nodeinfo_t *) malloc
         (num_procs * sizeof(gasnet_nodeinfo_t));
 
-    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
-                                          DEFAULT_SHARED_MEMORY_SIZE);
 
 
     if (caf_shared_memory_size / 1024 >= MAX_IMAGE_HEAP_SIZE / 1024) {
@@ -1073,9 +1074,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         /* let the first process issue a warning to the user */
         if (my_proc == 0) {
             Warning("Requested image heap size (%lu bytes) "
-                    "exceeds system's resources. Setting to %lu "
+                    "exceeds system's resources by %lu bytes. Setting to %lu "
                     "bytes intead.",
                     (unsigned long) caf_shared_memory_size,
+                    (unsigned long) caf_shared_memory_size-max_local,
                     (unsigned long) max_local);
         }
         caf_shared_memory_size = max_local;
@@ -1777,11 +1779,13 @@ void comm_barrier_all()
 void comm_sync_images(int *image_list, int image_count)
 {
     int i, ret;
+    int this_image;
     gasnet_wait_syncnbi_all();
     for (i = 0; i < image_count; i++) {
-        if (my_proc != image_list[i]) {
+        int q = image_list[i]-1;
+        if (my_proc != q) {
             ret = gasnet_AMRequestShort1
-                (image_list[i], GASNET_HANDLER_SYNC_REQUEST, my_proc);
+                (q, GASNET_HANDLER_SYNC_REQUEST, my_proc);
             if (ret != GASNET_OK) {
                 Error("GASNet AM request error");
             }
@@ -1789,15 +1793,16 @@ void comm_sync_images(int *image_list, int image_count)
             sync_images_flag[my_proc] = 1;
         }
         if (enable_nbput)
-            wait_on_all_pending_puts(image_list[i]);
+            wait_on_all_pending_puts(q);
     }
     for (i = 0; i < image_count; i++) {
-        GASNET_BLOCKUNTIL(sync_images_flag[image_list[i]]);
+        int q = image_list[i]-1;
+        GASNET_BLOCKUNTIL(sync_images_flag[q]);
         gasnet_hsl_lock(&sync_lock);
-        sync_images_flag[image_list[i]]--;
+        sync_images_flag[q]--;
         gasnet_hsl_unlock(&sync_lock);
         if (enable_get_cache)
-            refetch_cache(image_list[i]);
+            refetch_cache(q);
     }
 }
 

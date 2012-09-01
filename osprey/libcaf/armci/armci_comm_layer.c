@@ -828,10 +828,11 @@ void comm_sync_images(int *image_list, int image_count)
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Syncing with"
                  " %d images", image_count);
     for (i = 0; i < image_count; i++) {
-        if (my_proc == image_list[i]) {
+        int q = image_list[i] - 1;
+        if (my_proc == q) {
             continue;
         }
-        remote_img = image_list[i];
+        remote_img = q;
 
         if (enable_nbput) {
             wait_on_pending_puts(remote_img);
@@ -859,10 +860,11 @@ void comm_sync_images(int *image_list, int image_count)
     }
 
     for (i = 0; i < image_count; i++) {
-        if (my_proc == image_list[i]) {
+        int q = image_list[i] - 1;
+        if (my_proc == q) {
             continue;
         }
-        remote_img = image_list[i];
+        remote_img = q;
 
         check_flag = ((int *) syncptr[my_proc]) + remote_img;
 

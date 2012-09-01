@@ -1070,7 +1070,7 @@ void _SYNC_IMAGES(int *imageList, int imageCount)
                      "call to comm_syncimages for sync with img%d",
                      imageList[i]);
         check_remote_image(imageList[i]);
-        imageList[i]--;
+        imageList[i];
     }
     START_TIMER();
     comm_sync_images(imageList, imageCount);
@@ -1087,7 +1087,7 @@ void _SYNC_IMAGES_ALL()
                  "before call to comm_sync_images for sync with all images");
     imageList = (int *) comm_malloc(_num_images * sizeof(int));
     for (i = 0; i < imageCount; i++)
-        imageList[i] = i;
+        imageList[i] = i+1;
     START_TIMER();
     comm_sync_images(imageList, imageCount);
     STOP_TIMER(SYNC);
