@@ -10317,17 +10317,21 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
       num_dims = 0;
 
       while (list_idx != NULL_IDX) {
+#ifdef _F_MINUS_MINUS
          if (IL_PE_SUBSCRIPT(list_idx)) {
             pe_dim_list_idx = list_idx;
             break;
          }
+#endif
          num_dims++;
          list_idx = IL_NEXT_LIST_IDX(list_idx);
       }
 
+#ifdef _F_MINUS_MINUS
       if (pe_dim_list_idx != NULL_IDX &&
           num_dims == 0 &&
           bd_idx != NULL_IDX) {
+#ifndef _UH_COARRAYS
          /* have a whole array reference with pe dimensions. */
          /* must generate a whole subscript opr */
 
@@ -10356,7 +10360,12 @@ static boolean subscript_opr_handler(opnd_type		*result_opnd,
             COPY_OPND((*result_opnd), opnd);
             ir_idx = OPND_IDX(opnd);
          }
+#else
+         find_opnd_line_and_column(&opnd, &opnd_line, &opnd_col);
+         PRINTMSG(opnd_line, 1715, Error, opnd_col);
+#endif
       }
+#endif
 
 #ifndef _UH_COARRAYS
       if (ok                           &&

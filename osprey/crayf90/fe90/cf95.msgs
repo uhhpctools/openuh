@@ -21939,5 +21939,16 @@ If the dummy argument is an array coarray that has the CONTIGUOUS attribute or
 is not of assumed shape, the corresponding actual argument shall be simply
 contiguous.
 .ME
-$ LAST NUMBER USED : 1714
+$
+$ Error : 1715
+$msg  1715 Array subscripts in parentheses must be used for a coindexed object where the coarray has nonzero rank
+$nexp 1715
+Error : Array subscripts in parentheses must be used for a coindexed object where the coarray has nonzero rank
+.PP
+The compiler should not generate a whole array expression for a coindexed
+coarray unless the array subscripts (in parentheses) is explicitly specifed by
+the user. If the array subscripts are not given, then it is a syntax error.
+For example, a[2,3] should not be used as a short-hand for a(:)[2,3].
+.ME
+$ LAST NUMBER USED : 1715
 
