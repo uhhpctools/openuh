@@ -3046,8 +3046,8 @@ static void handle_caf_call_stmts(
     } else if ( NAME_IS(func_st, "_SYNC_IMAGES") ) {
         wn_next = WN_next(wn);
 
-        Is_True( WN_num_actuals(wn) == 2,
-                ("Expected 2 args for sync_images from FE"));
+        Is_True( WN_num_actuals(wn) == 6,
+                ("Expected 6 args for sync_images from FE"));
 
         ST *st1 = WN_st(WN_kid0(WN_actual(wn,0)));
         TY_IDX ty1 = ST_type(st1);

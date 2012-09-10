@@ -88,10 +88,12 @@ void __coarray_strided_write(size_t image,
 /* COMPILER FRONT-END INTERFACE */
 
 /* SYNCHRONIZATION INTRINSICS */
-void _SYNC_ALL();
-void _SYNC_MEMORY();
-void _SYNC_IMAGES(int *imageList, int imageCount);
-void _SYNC_IMAGES_ALL();
+void _SYNC_ALL(int *status, int stat_len, char *errmsg, int errmsg_len);
+void _SYNC_MEMORY(int *status, int stat_len, char *errmsg, int errmsg_len);
+void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
+                  char *errmsg, int errmsg_len);
+void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
+                      int errmsg_len);
 
 /* IMAGE INQUIRY INTRINSICS */
 int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub);
@@ -105,8 +107,10 @@ int _UCOBOUND_2(DopeVectorType * diminfo, int *sub);
 
 /* LOCKS SUPPORT */
 void _COARRAY_LOCK(lock_t * lock, int *image, char *success,
-                   int success_len);
-void _COARRAY_UNLOCK(lock_t * lock, int *image);
+                   int success_len, int *status, int stat_len,
+                   char *errmsg, int errmsg_len);
+void _COARRAY_UNLOCK(lock_t * lock, int *image, int *status,
+                     int stat_len, char *errmsg, int errmsg_len);
 
 /* ATOMIC INTRINSICS */
 void _ATOMIC_DEFINE_1(INT4 * atom, INT1 * value, int *image);

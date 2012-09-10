@@ -50,8 +50,7 @@ void __libcaf_warning(const char *file, const char *func, int line,
     fprintf(stderr, "-- LIBCAF WARNING (%s:%d::%s): %s \n\n",
             file, line, func, tmp);
 #else
-    fprintf(stderr, "-- LIBCAF WARNING: %s \n\n",
-            tmp);
+    fprintf(stderr, "-- LIBCAF WARNING: %s \n\n", tmp);
 #endif
     fflush(stderr);
 }
@@ -70,8 +69,7 @@ void __libcaf_error(const char *file, const char *func, int line,
     fprintf(stderr, "-- LIBCAF WARNING (%s:%d::%s): %s \n\n",
             file, line, func, tmp);
 #else
-    fprintf(stderr, "** LIBCAF ERROR: %s \n\n",
-            tmp);
+    fprintf(stderr, "** LIBCAF ERROR: %s \n\n", tmp);
     fflush(stderr);
 #endif
     __caf_exit(1);

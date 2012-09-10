@@ -5794,13 +5794,14 @@ void stop_pause_stmt_semantics (void)
 void sync_stmt_semantics (void)
 {
    int			attr_idx;
+   int          num_args = 0;
    expr_arg_type	exp_desc;
    int			ir_idx;
    boolean		is_call;
    int			list_idx;
    opnd_type		opnd;
    int			save_arg_info_list_base;
-   boolean		semantically_correct		= TRUE; 
+   boolean		semantically_correct = TRUE;
    char			str[16];
    int			type_idx;
    int lib_idx;
@@ -5845,24 +5846,16 @@ void sync_stmt_semantics (void)
        IR_LINE_NUM_L(call_idx) = stmt_start_line;
        IR_COL_NUM_L(call_idx) = stmt_start_col;
 
-       NTR_IR_LIST_TBL(list_idx);
-       IR_FLD_R(call_idx) = IL_Tbl_Idx;
-       IR_IDX_R(call_idx) = list_idx;
-       IR_LIST_CNT_R(call_idx) = 0;
-
        gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
                FALSE, FALSE, TRUE);
 
        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
-       SH_NEXT_IDX(curr_stmt_sh_idx) = 
-           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
-       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) = 
-           curr_stmt_sh_idx;
+       num_args = 3;
+
    }
-    else if ((IR_OPR(IR_IDX_L(ir_idx))) == Images_Opr){
+    else if ((IR_OPR(IR_IDX_L(ir_idx))) == Images_Opr) {
         if (glb_tbl_idx[Sync_Images_Attr_Idx] == NULL_IDX) {
             glb_tbl_idx[Sync_Images_Attr_Idx] =
                 create_lib_entry_attr(SYNC_IMAGES_LIB_ENTRY,
@@ -5888,7 +5881,6 @@ void sync_stmt_semantics (void)
        IL_ARG_DESC_IDX(list_idx) = list_idx;
        IR_FLD_R(call_idx) = IL_Tbl_Idx;
        IR_IDX_R(call_idx) = list_idx;
-       IR_LIST_CNT_R(call_idx) = 0;
 
        gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
                FALSE, FALSE, TRUE);
@@ -5896,31 +5888,20 @@ void sync_stmt_semantics (void)
        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-       exp_desc = init_exp_desc;
-       COPY_OPND(IL_OPND(list_idx), IR_OPND_L(IR_IDX_L((ir_idx))));
-     
+       COPY_OPND(IL_OPND(list_idx), IR_OPND_L(IR_IDX_L(ir_idx)));
+
        NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
        IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
-       IL_FLD(IL_NEXT_LIST_IDX(list_idx)) = CN_Tbl_Idx;
-       IL_IDX(IL_NEXT_LIST_IDX(list_idx)) = CN_INTEGER_ONE_IDX;
-       IL_LINE_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_LINE_NUM(call_idx);
-       IL_COL_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_COL_NUM(call_idx);
-       
-       IR_LIST_CNT_R(call_idx) = 2;
-      
 
-       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
-       SH_NEXT_IDX(curr_stmt_sh_idx) = 
-           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
-       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) = 
-           curr_stmt_sh_idx;
+       COPY_OPND(IL_OPND(IL_NEXT_LIST_IDX(list_idx)),
+                 IR_OPND_R(IR_IDX_L(ir_idx)));
 
-       OPND_FLD(opnd) = IR_Tbl_Idx;
-       OPND_IDX(opnd) = SH_IR_IDX(curr_stmt_sh_idx);
-       call_list_semantics(&opnd, &exp_desc, FALSE);
-         
+       list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+       num_args = 5;
+
    }
-   else if ((IR_OPR(IR_IDX_L(ir_idx))) == Memory_Opr){
+   else if ((IR_OPR(IR_IDX_L(ir_idx))) == Memory_Opr) {
         if (glb_tbl_idx[Sync_Memory_Attr_Idx] == NULL_IDX) {
             glb_tbl_idx[Sync_Memory_Attr_Idx] =
                 create_lib_entry_attr(SYNC_MEMORY_LIB_ENTRY,
@@ -5941,24 +5922,15 @@ void sync_stmt_semantics (void)
        IR_LINE_NUM_L(call_idx) = stmt_start_line;
        IR_COL_NUM_L(call_idx) = stmt_start_col;
 
-       NTR_IR_LIST_TBL(list_idx);
-       IR_FLD_R(call_idx) = IL_Tbl_Idx;
-       IR_IDX_R(call_idx) = list_idx;
-       IR_LIST_CNT_R(call_idx) = 0;
-
        gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
                FALSE, FALSE, TRUE);
 
        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
-       SH_NEXT_IDX(curr_stmt_sh_idx) = 
-           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
-       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) = 
-           curr_stmt_sh_idx;
-         
-   } else if ((IR_OPR(IR_IDX_L(ir_idx))) == Imagestar_Opr){
+       num_args = 3;
+
+   } else if ((IR_OPR(IR_IDX_L(ir_idx))) == Imagestar_Opr) {
            if (glb_tbl_idx[Sync_Images_All_Attr_Idx] == NULL_IDX) {
                glb_tbl_idx[Sync_Images_All_Attr_Idx] =
                    create_lib_entry_attr(SYNC_IMAGES_ALL_LIB_ENTRY,
@@ -5979,31 +5951,192 @@ void sync_stmt_semantics (void)
        IR_LINE_NUM_L(call_idx) = stmt_start_line;
        IR_COL_NUM_L(call_idx) = stmt_start_col;
 
-       NTR_IR_LIST_TBL(list_idx);
-       IR_FLD_R(call_idx) = IL_Tbl_Idx;
-       IR_IDX_R(call_idx) = list_idx;
-       IR_LIST_CNT_R(call_idx) = 0;
-
        gen_sh(Before, Call_Stmt, stmt_start_line, stmt_start_col,
                FALSE, FALSE, TRUE);
 
        SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
        SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
-       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
-       SH_NEXT_IDX(curr_stmt_sh_idx) = 
-           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
-       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) = 
-           curr_stmt_sh_idx;
-   }
-   else {
+       num_args = 3;
+
    }
 
+   IR_LIST_CNT_R(call_idx) = num_args;
+
+   /* add parameters for STAT= and ERRMSG= specifiers */
+   {
+       int attr_idx = 0;
+       int integer_len = 0;
+       int char_len = 0;
+       opnd_type op;
+       int list2_idx;
+       int list3_idx, list4_idx, list5_idx;
+       int cn_idx, val_idx;
+       int line, col;
+       int call_line_num, call_col_num;
+       int stat_errmsg_ir_idx;
+
+       call_line_num = IR_LINE_NUM(call_idx);
+       call_col_num = IR_COL_NUM(call_idx);
+
+       if (num_args == 3) {
+           NTR_IR_LIST_TBL(list2_idx);
+           IR_FLD_R(call_idx) = IL_Tbl_Idx;
+           IR_IDX_R(call_idx) = list2_idx;
+       } else if (num_args == 5) {
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+           list2_idx = IL_NEXT_LIST_IDX(list_idx);
+           IL_PREV_LIST_IDX(list2_idx) = list_idx;
+       }
+
+       stat_errmsg_ir_idx = IR_IDX_R(ir_idx);
+
+
+       /* handle stat variable */
+       if (IR_IDX_L(stat_errmsg_ir_idx) != NO_Tbl_Idx) {
+           opnd_type op = IR_OPND_L(stat_errmsg_ir_idx);
+           act_arg_type arg_type;
+           attr_idx = find_base_attr(&op, &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                   !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           exp_desc = init_exp_desc;
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                   TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Integer) {
+               PRINTMSG(line, 1716 , Error, col);
+           }
+
+           IL_FLD(list2_idx) = OPND_FLD(op);
+           IL_IDX(list2_idx) = OPND_IDX(op);
+
+           /* calculate size of type in bytes */
+           integer_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
+           if (integer_len < 2) {
+               PRINTMSG(line, 1718 , Warning, col);
+           }
+
+
+       } else {
+           cn_idx = C_INT_TO_CN(Integer_8, 0);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, Long_Typeless,
+                   call_line_num, call_col_num,
+                   NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list2_idx) = IR_Tbl_Idx;
+           IL_IDX(list2_idx) = val_idx;
+           IL_LINE_NUM(list2_idx) = call_line_num;
+           IL_COL_NUM(list2_idx) = call_col_num;
+       }
+
+       IL_LINE_NUM(list2_idx) = call_line_num;
+       IL_COL_NUM(list2_idx) = call_col_num;
+
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
+       list3_idx = IL_NEXT_LIST_IDX(list2_idx);
+       IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+
+       if (attr_idx != 0) {
+           cn_idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, integer_len);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                       Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, line, col,
+                       NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list3_idx) = IR_Tbl_Idx;
+           IL_IDX(list3_idx) = val_idx;
+
+       } else  {
+           cn_idx = CN_INTEGER_ZERO_IDX;
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list3_idx) = IR_Tbl_Idx;
+           IL_IDX(list3_idx) = val_idx;
+       }
+
+       IL_LINE_NUM(list3_idx) = call_line_num;
+       IL_COL_NUM(list3_idx) = call_col_num;
+
+       /* handle errmsg variable */
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list3_idx));
+       list4_idx = IL_NEXT_LIST_IDX(list3_idx);
+       IL_PREV_LIST_IDX(list4_idx) = list3_idx;
+
+       if (IR_IDX_R(stat_errmsg_ir_idx) != NO_Tbl_Idx) {
+           opnd_type op = IR_OPND_R(stat_errmsg_ir_idx);
+           act_arg_type arg_type;
+           attr_idx = find_base_attr(&op, &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                   !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           exp_desc = init_exp_desc;
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                   TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Character) {
+               PRINTMSG(line, 1717 , Error, col);
+           }
+
+           IL_FLD(list4_idx) = OPND_FLD(op);
+           IL_IDX(list4_idx) = OPND_IDX(op);
+
+       } else {
+           IR_LIST_CNT_R(call_idx) = num_args+1;
+           cn_idx = C_INT_TO_CN(Integer_8, 0);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, Long_Typeless, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list4_idx) = IR_Tbl_Idx;
+           IL_IDX(list4_idx) = val_idx;
+           IL_LINE_NUM(list4_idx) = call_line_num;
+           IL_COL_NUM(list4_idx) = call_col_num;
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list4_idx));
+           list5_idx = IL_NEXT_LIST_IDX(list4_idx);
+           IL_PREV_LIST_IDX(list5_idx) = list4_idx;
+
+           cn_idx = CN_INTEGER_ZERO_IDX;
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list5_idx) = IR_Tbl_Idx;
+           IL_IDX(list5_idx) = val_idx;
+
+           IL_LINE_NUM(list5_idx) = call_line_num;
+           IL_COL_NUM(list5_idx) = call_col_num;
+       }
+
+       IL_LINE_NUM(list4_idx) = call_line_num;
+       IL_COL_NUM(list4_idx) = call_col_num;
+
+   }
+
+   curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+   SH_NEXT_IDX(curr_stmt_sh_idx) =
+       SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
+   SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
+       curr_stmt_sh_idx;
+
+   OPND_FLD(opnd) = IR_Tbl_Idx;
+   OPND_IDX(opnd) = SH_IR_IDX(curr_stmt_sh_idx);
+   call_list_semantics(&opnd, &exp_desc, FALSE);
 
    TRACE (Func_Exit, "sync_stmt_semantics", NULL);
 
    return;
-} /* sync_stmt_semantics */ 
+} /* sync_stmt_semantics */
 
 /******************************************************************************\
 |*									                                          *|
@@ -6059,144 +6192,165 @@ void lock_stmt_semantics (void)
    line = IR_LINE_NUM(ir_idx);
    col  = IR_COL_NUM(ir_idx);
 
-   if (IR_OPR(ir_idx) == Lock_Opr || IR_OPR(ir_idx) == Unlock_Opr) {
-       if (IR_OPR(ir_idx) == Lock_Opr) {
-           if (glb_tbl_idx[Coarray_Lock_Attr_Idx] == NULL_IDX) {
-               glb_tbl_idx[Coarray_Lock_Attr_Idx] =
-                   create_lib_entry_attr(COARRAY_LOCK_LIB_ENTRY,
-                           COARRAY_LOCK_NAME_LEN,
-                           stmt_start_line, stmt_start_col);
-           }
-           lib_idx = glb_tbl_idx[Coarray_Lock_Attr_Idx];
-           is_lock_stmt = TRUE;
-       } else {
-           if (glb_tbl_idx[Coarray_Unlock_Attr_Idx] == NULL_IDX) {
-               glb_tbl_idx[Coarray_Unlock_Attr_Idx] =
-                   create_lib_entry_attr(COARRAY_UNLOCK_LIB_ENTRY,
-                           COARRAY_UNLOCK_NAME_LEN,
-                           stmt_start_line, stmt_start_col);
-           }
-           lib_idx = glb_tbl_idx[Coarray_Unlock_Attr_Idx];
+   if (IR_OPR(ir_idx) != Lock_Opr && IR_OPR(ir_idx) != Unlock_Opr) {
+       PRINTMSG(line, 626, Internal, col,
+               "Lock_Opr or Unlock_Opr", "lock_stmt_semantics");
+   }
+
+
+   if (IR_OPR(ir_idx) == Lock_Opr) {
+       if (glb_tbl_idx[Coarray_Lock_Attr_Idx] == NULL_IDX) {
+           glb_tbl_idx[Coarray_Lock_Attr_Idx] =
+               create_lib_entry_attr(COARRAY_LOCK_LIB_ENTRY,
+                       COARRAY_LOCK_NAME_LEN,
+                       stmt_start_line, stmt_start_col);
        }
-       ADD_ATTR_TO_LOCAL_LIST(lib_idx);
+       lib_idx = glb_tbl_idx[Coarray_Lock_Attr_Idx];
+       is_lock_stmt = TRUE;
+   } else {
+       if (glb_tbl_idx[Coarray_Unlock_Attr_Idx] == NULL_IDX) {
+           glb_tbl_idx[Coarray_Unlock_Attr_Idx] =
+               create_lib_entry_attr(COARRAY_UNLOCK_LIB_ENTRY,
+                       COARRAY_UNLOCK_NAME_LEN,
+                       stmt_start_line, stmt_start_col);
+       }
+       lib_idx = glb_tbl_idx[Coarray_Unlock_Attr_Idx];
+   }
+   ADD_ATTR_TO_LOCAL_LIST(lib_idx);
 
-       NTR_IR_TBL(call_idx);
-       IR_OPR(call_idx) = Call_Opr;
-       IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
-       IR_LINE_NUM(call_idx) = line;
-       IR_COL_NUM(call_idx) = col;
-       IR_FLD_L(call_idx) = AT_Tbl_Idx;
-       IR_IDX_L(call_idx) = lib_idx;
-       IR_LINE_NUM_L(call_idx) = line;
-       IR_COL_NUM_L(call_idx) = col;
+   NTR_IR_TBL(call_idx);
+   IR_OPR(call_idx) = Call_Opr;
+   IR_TYPE_IDX(call_idx) = TYPELESS_DEFAULT_TYPE;
+   IR_LINE_NUM(call_idx) = line;
+   IR_COL_NUM(call_idx) = col;
+   IR_FLD_L(call_idx) = AT_Tbl_Idx;
+   IR_IDX_L(call_idx) = lib_idx;
+   IR_LINE_NUM_L(call_idx) = line;
+   IR_COL_NUM_L(call_idx) = col;
 
-       NTR_IR_LIST_TBL(list_idx);
-       IL_ARG_DESC_VARIANT(list_idx) = TRUE;
-       IL_ARG_DESC_IDX(list_idx) = list_idx;
-       IR_FLD_R(call_idx) = IL_Tbl_Idx;
-       IR_IDX_R(call_idx) = list_idx;
+   NTR_IR_LIST_TBL(list_idx);
+   IL_ARG_DESC_VARIANT(list_idx) = TRUE;
+   IL_ARG_DESC_IDX(list_idx) = list_idx;
+   IR_FLD_R(call_idx) = IL_Tbl_Idx;
+   IR_IDX_R(call_idx) = list_idx;
 
-       if (is_lock_stmt)
-           IR_LIST_CNT_R(call_idx) = 4;
-       else
-           IR_LIST_CNT_R(call_idx) = 2;
+   if (is_lock_stmt)
+       IR_LIST_CNT_R(call_idx) = 7;
+   else
+       IR_LIST_CNT_R(call_idx) = 5;
 
-       gen_sh(Before, Call_Stmt, line, col,
-               FALSE, FALSE, TRUE);
+   gen_sh(Before, Call_Stmt, line, col,
+           FALSE, FALSE, TRUE);
 
-       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
-       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx))     = call_idx;
+   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
 
 
-       exp_desc = init_exp_desc;
-       COPY_OPND(IL_OPND(list_idx), IR_OPND_L((ir_idx)));
+   exp_desc = init_exp_desc;
+   COPY_OPND(IL_OPND(list_idx), IR_OPND_L((ir_idx)));
 
-       /* check that operand is a scalar coarray variable */
-       {
-           int pe_bd_idx;
-           act_arg_type arg_type;
-           opnd_type op = IL_OPND(list_idx);
-           int attr_idx = find_base_attr(&IL_OPND(list_idx),
-                          &line, &col);
+   /* check that operand is a scalar coarray variable */
+   {
+       int pe_bd_idx;
+       act_arg_type arg_type;
+       opnd_type op = IL_OPND(list_idx);
+       int attr_idx = find_base_attr(&IL_OPND(list_idx),
+               &line, &col);
 
-           while (AT_ATTR_LINK(attr_idx) &&
-                  !AT_IGNORE_ATTR_LINK(attr_idx) ) {
-               attr_idx = AT_ATTR_LINK(attr_idx);
-           }
+       while (AT_ATTR_LINK(attr_idx) &&
+               !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+           attr_idx = AT_ATTR_LINK(attr_idx);
+       }
 
-           /* do semantics for argument and get the actual arg type */
-           expr_semantics(&op, &exp_desc);
-           arg_type = get_act_arg_type(&exp_desc);
+       /* do semantics for argument and get the actual arg type */
+       expr_semantics(&op, &exp_desc);
+       arg_type = get_act_arg_type(&exp_desc);
 
-           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX ||
-              (arg_type != Array_Elt && arg_type != Scalar_Var &&
-               arg_type != Coindexed_Array_Elt) ||
-              strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
-                                     "LOCK_TYPE") ) {
-               PRINTMSG(line, 1710, Error, col,
-                 IR_OPR(ir_idx)==Lock_Opr? "LOCK":"UNLOCK");
-           }
+       if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+               ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX ||
+               (arg_type != Array_Elt && arg_type != Scalar_Var &&
+                arg_type != Coindexed_Array_Elt) ||
+               strcmp(AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(attr_idx))),
+                   "LOCK_TYPE") ) {
+           PRINTMSG(line, 1710, Error, col,
+                   IR_OPR(ir_idx)==Lock_Opr? "LOCK":"UNLOCK");
+       }
 
-           /* if arg is coindexed, return cosubscripts into
-            * pe_dim_list_idx */
+       /* if arg is coindexed, return cosubscripts into
+        * pe_dim_list_idx */
 
-           pe_dim_list_idx = NULL_IDX;
-           if (arg_type == Coindexed_Array_Elt) {
-               int num_dims = 0;
-               dim_list_idx = IR_IDX_R(IL_IDX(list_idx));
-               while (dim_list_idx != NULL_IDX) {
-                   if (IL_PE_SUBSCRIPT(dim_list_idx)) {
-                       int prev_list_idx = IL_PREV_LIST_IDX(dim_list_idx);
-                       pe_dim_list_idx = dim_list_idx;
-                       if (prev_list_idx != NULL_IDX)
-                           IL_NEXT_LIST_IDX(prev_list_idx) = NULL_IDX;
-                       break;
-                   }
-                   dim_list_idx = IL_NEXT_LIST_IDX(dim_list_idx);
-                   num_dims++;
+       pe_dim_list_idx = NULL_IDX;
+       if (arg_type == Coindexed_Array_Elt) {
+           int num_dims = 0;
+           dim_list_idx = IR_IDX_R(IL_IDX(list_idx));
+           while (dim_list_idx != NULL_IDX) {
+               if (IL_PE_SUBSCRIPT(dim_list_idx)) {
+                   int prev_list_idx = IL_PREV_LIST_IDX(dim_list_idx);
+                   pe_dim_list_idx = dim_list_idx;
+                   if (prev_list_idx != NULL_IDX)
+                       IL_NEXT_LIST_IDX(prev_list_idx) = NULL_IDX;
+                   break;
                }
-               if (num_dims == 0) {
-                   /* now its just a scalar variable reference */
-                   IL_FLD(list_idx) = AT_Tbl_Idx;
-                   IL_IDX(list_idx) = attr_idx;
-               } else {
-                   IR_LIST_CNT_R(IL_IDX(list_idx)) = num_dims;
-               }
-               pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
-               linearize_pe_dims(pe_dim_list_idx, pe_bd_idx,
-                                 line, col, &pe_opnd,
-                                 attr_idx, &exp_desc);
+               dim_list_idx = IL_NEXT_LIST_IDX(dim_list_idx);
+               num_dims++;
+           }
+           if (num_dims == 0) {
+               /* now its just a scalar variable reference */
+               IL_FLD(list_idx) = AT_Tbl_Idx;
+               IL_IDX(list_idx) = attr_idx;
            } else {
-               OPND_FLD(pe_opnd) = CN_Tbl_Idx;
-               OPND_IDX(pe_opnd) = CN_INTEGER_ZERO_IDX;
-               OPND_LINE_NUM(pe_opnd) = line;
-               OPND_COL_NUM(pe_opnd) = col;
+               IR_LIST_CNT_R(IL_IDX(list_idx)) = num_dims;
            }
+           pe_bd_idx = ATD_PE_ARRAY_IDX(attr_idx);
+           linearize_pe_dims(pe_dim_list_idx, pe_bd_idx,
+                   line, col, &pe_opnd,
+                   attr_idx, &exp_desc);
+       } else {
+           OPND_FLD(pe_opnd) = CN_Tbl_Idx;
+           OPND_IDX(pe_opnd) = CN_INTEGER_ZERO_IDX;
+           OPND_LINE_NUM(pe_opnd) = line;
+           OPND_COL_NUM(pe_opnd) = col;
        }
+   }
 
-       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
-       IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
-       IL_FLD(IL_NEXT_LIST_IDX(list_idx)) = OPND_FLD(pe_opnd);
-       IL_IDX(IL_NEXT_LIST_IDX(list_idx)) = OPND_IDX(pe_opnd);
-       IL_LINE_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_LINE_NUM(call_idx);
-       IL_COL_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_COL_NUM(call_idx);
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   IL_FLD(IL_NEXT_LIST_IDX(list_idx)) = OPND_FLD(pe_opnd);
+   IL_IDX(IL_NEXT_LIST_IDX(list_idx)) = OPND_IDX(pe_opnd);
+   IL_LINE_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_LINE_NUM(call_idx);
+   IL_COL_NUM(IL_NEXT_LIST_IDX(list_idx)) = IR_COL_NUM(call_idx);
 
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   /* add parameters for ACQUIRED_LOCK=, STAT=, ERRMSG= specifiers */
+   {
+       int attr_idx = 0;
+       int logical_len = 0;
+       int integer_len = 0;
+       int char_len = 0;
+       opnd_type op;
+       int list2_idx, list3_idx, list4_idx;
+       int list5_idx, list6_idx, list7_idx;
+       int cn_idx, val_idx;
+       int line, col;
+       int call_line_num, call_col_num;
+       int lock_stat_ir_idx;
+       int stat_errmsg_ir_idx;
+
+       call_line_num = IR_LINE_NUM(call_idx);
+       call_col_num = IR_COL_NUM(call_idx);
+
+       /* add ACQUIRED_LOCK parameter */
        if (is_lock_stmt) {
-           /* add ACQUIRED_LOCK parameter */
-           int logical_len = 0;
-           int attr_idx;
-           opnd_type op;
-           int list2_idx = IL_NEXT_LIST_IDX(list_idx);
-           int list3_idx, list4_idx;
-           int cn_idx, val_idx;
 
-           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
-           list3_idx = IL_NEXT_LIST_IDX(list2_idx);
-           IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+           list2_idx = IL_NEXT_LIST_IDX(list_idx);
+           IL_PREV_LIST_IDX(list2_idx) = list_idx;
 
-           if (IR_IDX_R(ir_idx) != NO_Tbl_Idx) {
-               opnd_type op = IR_OPND_R(ir_idx);
+           lock_stat_ir_idx = IR_IDX_R(ir_idx);
+
+           if (IR_IDX_L(lock_stat_ir_idx) != NO_Tbl_Idx) {
+               opnd_type op = IR_OPND_L(lock_stat_ir_idx);
                act_arg_type arg_type;
                attr_idx = find_base_attr(&op, &line, &col);
 
@@ -6206,61 +6360,205 @@ void lock_stmt_semantics (void)
                }
 
                /* do semantics for argument and get the actual arg type */
+               exp_desc = init_exp_desc;
                expr_semantics(&op, &exp_desc);
                arg_type = get_act_arg_type(&exp_desc);
 
                if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
-                    TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Logical) {
+                       (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                       TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Logical) {
                    PRINTMSG(line, 1712 , Error, col);
                }
 
-               IL_FLD(list3_idx) = OPND_FLD(op);
-               IL_IDX(list3_idx) = OPND_IDX(op);
+               IL_FLD(list2_idx) = OPND_FLD(op);
+               IL_IDX(list2_idx) = OPND_IDX(op);
 
                /* calculate size of type in bytes */
-               logical_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
+               logical_len =
+                   bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
 
            } else {
                cn_idx = C_INT_TO_CN(Integer_8, 0);
                val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
-                                    Percent_Val_Opr, Long_Typeless, line, col,
-                                    NO_Tbl_Idx, NULL_IDX);
-               IL_FLD(list3_idx) = IR_Tbl_Idx;
-               IL_IDX(list3_idx) = val_idx;
-               IL_LINE_NUM(list3_idx) = IR_LINE_NUM(call_idx);
-               IL_COL_NUM(list3_idx) = IR_COL_NUM(call_idx);
+                       Percent_Val_Opr, Long_Typeless,
+                       call_line_num, call_col_num,
+                       NO_Tbl_Idx, NULL_IDX);
+               IL_FLD(list2_idx) = IR_Tbl_Idx;
+               IL_IDX(list2_idx) = val_idx;
+               IL_LINE_NUM(list2_idx) = call_line_num;
+               IL_COL_NUM(list2_idx) = call_col_num;
            }
 
-           IL_LINE_NUM(list3_idx) = IR_LINE_NUM(call_idx);
-           IL_COL_NUM(list3_idx) = IR_COL_NUM(call_idx);
+           IL_LINE_NUM(list2_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list2_idx) = IR_COL_NUM(call_idx);
 
-           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list3_idx));
-           list4_idx = IL_NEXT_LIST_IDX(list3_idx);
-           IL_PREV_LIST_IDX(list4_idx) = list3_idx;
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
+           list3_idx = IL_NEXT_LIST_IDX(list2_idx);
+           IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+           list2_idx = list3_idx;
 
            cn_idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, logical_len);
            val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
-                       Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, line, col,
-                       NO_Tbl_Idx, NULL_IDX);
-           IL_FLD(list4_idx) = IR_Tbl_Idx;
-           IL_IDX(list4_idx) = val_idx;
-           IL_LINE_NUM(list4_idx) = IR_LINE_NUM(call_idx);
-           IL_COL_NUM(list4_idx) = IR_COL_NUM(call_idx);
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE,
+                   call_line_num, call_col_num,
+                   NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list2_idx) = IR_Tbl_Idx;
+           IL_IDX(list2_idx) = val_idx;
+           IL_LINE_NUM(list2_idx) = IR_LINE_NUM(call_idx);
+           IL_COL_NUM(list2_idx) = IR_COL_NUM(call_idx);
+
+           list_idx = list2_idx;
+           stat_errmsg_ir_idx = IR_IDX_R(lock_stat_ir_idx);
+       } else {
+           stat_errmsg_ir_idx = IR_IDX_R(ir_idx);
        }
 
 
-       curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
-       SH_NEXT_IDX(curr_stmt_sh_idx) =
-           SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
-       SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
-           curr_stmt_sh_idx;
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+       list2_idx = IL_NEXT_LIST_IDX(list_idx);
+       IL_PREV_LIST_IDX(list2_idx) = list_idx;
 
-       OPND_FLD(opnd) = IR_Tbl_Idx;
-       OPND_IDX(opnd) = SH_IR_IDX(curr_stmt_sh_idx);
-       call_list_semantics(&opnd, &exp_desc, FALSE);
+       /* handle stat variable */
+       if (IR_IDX_L(stat_errmsg_ir_idx) != NO_Tbl_Idx) {
+           opnd_type op = IR_OPND_L(stat_errmsg_ir_idx);
+           act_arg_type arg_type;
+           attr_idx = find_base_attr(&op, &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                   !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           exp_desc = init_exp_desc;
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                   TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Integer) {
+               PRINTMSG(line, 1716 , Error, col);
+           }
+
+           IL_FLD(list2_idx) = OPND_FLD(op);
+           IL_IDX(list2_idx) = OPND_IDX(op);
+
+           /* calculate size of type in bytes */
+           integer_len = bit_size_tbl[TYP_LINEAR(ATD_TYPE_IDX(attr_idx))] >> 3;
+           if (integer_len < 2) {
+               PRINTMSG(line, 1718 , Warning, col);
+           }
+
+
+       } else {
+           cn_idx = C_INT_TO_CN(Integer_8, 0);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, Long_Typeless,
+                   call_line_num, call_col_num,
+                   NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list2_idx) = IR_Tbl_Idx;
+           IL_IDX(list2_idx) = val_idx;
+           IL_LINE_NUM(list2_idx) = call_line_num;
+           IL_COL_NUM(list2_idx) = call_col_num;
+       }
+
+       IL_LINE_NUM(list2_idx) = call_line_num;
+       IL_COL_NUM(list2_idx) = call_col_num;
+
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list2_idx));
+       list3_idx = IL_NEXT_LIST_IDX(list2_idx);
+       IL_PREV_LIST_IDX(list3_idx) = list2_idx;
+
+       if (attr_idx != 0) {
+           cn_idx = C_INT_TO_CN(CG_INTEGER_DEFAULT_TYPE, integer_len);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, line, col,
+                   NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list3_idx) = IR_Tbl_Idx;
+           IL_IDX(list3_idx) = val_idx;
+
+       } else  {
+           cn_idx = CN_INTEGER_ZERO_IDX;
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list3_idx) = IR_Tbl_Idx;
+           IL_IDX(list3_idx) = val_idx;
+       }
+
+       IL_LINE_NUM(list3_idx) = call_line_num;
+       IL_COL_NUM(list3_idx) = call_col_num;
+
+       /* handle errmsg variable */
+       NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list3_idx));
+       list4_idx = IL_NEXT_LIST_IDX(list3_idx);
+       IL_PREV_LIST_IDX(list4_idx) = list3_idx;
+
+       if (IR_IDX_R(stat_errmsg_ir_idx) != NO_Tbl_Idx) {
+           opnd_type op = IR_OPND_R(stat_errmsg_ir_idx);
+           act_arg_type arg_type;
+           attr_idx = find_base_attr(&op, &line, &col);
+
+           while (AT_ATTR_LINK(attr_idx) &&
+                   !AT_IGNORE_ATTR_LINK(attr_idx) ) {
+               attr_idx = AT_ATTR_LINK(attr_idx);
+           }
+
+           /* do semantics for argument and get the actual arg type */
+           exp_desc = init_exp_desc;
+           expr_semantics(&op, &exp_desc);
+           arg_type = get_act_arg_type(&exp_desc);
+
+           if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                   (arg_type != Array_Elt && arg_type != Scalar_Var) ||
+                   TYP_TYPE(ATD_TYPE_IDX(attr_idx)) != Character) {
+               PRINTMSG(line, 1717 , Error, col);
+           }
+
+           IL_FLD(list4_idx) = OPND_FLD(op);
+           IL_IDX(list4_idx) = OPND_IDX(op);
+
+       } else {
+           IR_LIST_CNT_R(call_idx) = IR_LIST_CNT_R(call_idx)+1;
+           cn_idx = C_INT_TO_CN(Integer_8, 0);
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, Long_Typeless, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list4_idx) = IR_Tbl_Idx;
+           IL_IDX(list4_idx) = val_idx;
+           IL_LINE_NUM(list4_idx) = call_line_num;
+           IL_COL_NUM(list4_idx) = call_col_num;
+
+           NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list4_idx));
+           list5_idx = IL_NEXT_LIST_IDX(list4_idx);
+           IL_PREV_LIST_IDX(list5_idx) = list4_idx;
+
+           cn_idx = CN_INTEGER_ZERO_IDX;
+           val_idx = gen_ir(CN_Tbl_Idx, cn_idx,
+                   Percent_Val_Opr, SA_INTEGER_DEFAULT_TYPE, call_line_num,
+                   call_col_num, NO_Tbl_Idx, NULL_IDX);
+           IL_FLD(list5_idx) = IR_Tbl_Idx;
+           IL_IDX(list5_idx) = val_idx;
+
+           IL_LINE_NUM(list5_idx) = call_line_num;
+           IL_COL_NUM(list5_idx) = call_col_num;
+       }
+
+       IL_LINE_NUM(list4_idx) = call_line_num;
+       IL_COL_NUM(list4_idx) = call_col_num;
 
    }
+
+   curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+   SH_NEXT_IDX(curr_stmt_sh_idx) =
+       SH_NEXT_IDX(SH_NEXT_IDX(curr_stmt_sh_idx));
+   SH_PREV_IDX(SH_NEXT_IDX(curr_stmt_sh_idx)) =
+       curr_stmt_sh_idx;
+
+   OPND_FLD(opnd) = IR_Tbl_Idx;
+   OPND_IDX(opnd) = SH_IR_IDX(curr_stmt_sh_idx);
+   call_list_semantics(&opnd, &exp_desc, FALSE);
+
 
    TRACE (Func_Exit, "lock_stmt_semantics", NULL);
 

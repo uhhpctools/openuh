@@ -53,6 +53,19 @@
 #define MAX_NUM_IMAGES                    0x100000
 #define MAX_IMAGE_HEAP_SIZE               0x1000000000
 
+
+/* status codes for synchronization statements */
+
+enum {
+    STAT_SUCCESS = 0,
+    /* these should correspond to the same values define in
+     * ../libfi/mathlb/iso_fortran_env.F90 */
+    STAT_LOCKED = 775,
+    STAT_UNLOCKED = 776,
+    STAT_LOCKED_OTHER_IMAGE = 777,
+    STAT_STOPPED_IMAGE = 778
+} status_codes;
+
 /* init */
 void comm_init(struct shared_memory_slot *common_shared_memory_slot);
 
@@ -108,8 +121,14 @@ void comm_free(void *ptr);
 void comm_free_lcb(void *ptr);
 
 /* barriers */
+void comm_sync_all(int *status, int stat_len, char *errmsg,
+                   int errmsg_len);
+void comm_sync_images(int *image_list, int image_count, int *status,
+                      int stat_len, char *errmsg, int errmsg_len);
+void comm_sync_memory(int *status, int stat_len, char *errmsg,
+                      int errmsg_len);
+/* like comm_sync_all, but without the status return */
 void comm_barrier_all();
-void comm_sync_images(int *image_list, int image_count);
 
 /* atomics */
 void comm_swap_request(void *target, void *value, size_t nbytes,

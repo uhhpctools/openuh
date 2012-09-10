@@ -129,6 +129,10 @@ static void *everything_heap_start;
 
 static gasnet_nodeinfo_t *nodeinfo_table;
 
+/* image stoppage info */
+static unsigned short *stopped_image_exists = NULL;
+static unsigned short *this_image_stopped = NULL;
+
 /*sync images*/
 static unsigned short *sync_images_flag = NULL;
 static gasnet_hsl_t sync_lock = GASNET_HSL_INITIALIZER;
@@ -1077,7 +1081,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                     "exceeds system's resources by %lu bytes. Setting to %lu "
                     "bytes intead.",
                     (unsigned long) caf_shared_memory_size,
-                    (unsigned long) caf_shared_memory_size-max_local,
+                    (unsigned long) caf_shared_memory_size - max_local,
                     (unsigned long) max_local);
         }
         caf_shared_memory_size = max_local;
@@ -1144,6 +1148,15 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      */
     critical_lock =
         (lock_t *) coarray_allocatable_allocate_(sizeof(lock_t));
+
+    /* allocate space for recording image termination */
+    stopped_image_exists =
+        (short *) coarray_allocatable_allocate_(sizeof(short));
+    this_image_stopped =
+        (short *) coarray_allocatable_allocate_(sizeof(short));
+
+    *stopped_image_exists = 0;
+    *this_image_stopped = 0;
 
     /* start progress thread */
     comm_service_init();
@@ -1692,12 +1705,12 @@ static void *get_remote_address(void *src, size_t proc)
 
 void comm_critical()
 {
-    comm_lock(critical_lock, 1, NULL, 0);
+    comm_lock(critical_lock, 1, NULL, 0, NULL, 0, NULL, 0);
 }
 
 void comm_end_critical()
 {
-    comm_unlock(critical_lock, 1);
+    comm_unlock(critical_lock, 1, NULL, 0, NULL, 0);
 }
 
 
@@ -1734,6 +1747,23 @@ void comm_memory_free()
 
 void comm_finalize()
 {
+    int p;
+
+    comm_service();
+
+    *this_image_stopped = 1;
+    *stopped_image_exists = 1;
+
+    /* broadcast to every image that this image has stopped.
+     * TODO: Other images should be able to detect this image has stopped when
+     * they try to synchronize with it. Requires custom implementation of
+     * barriers.
+     */
+    for (p = 0; p < num_procs; p++) {
+        comm_write(p, stopped_image_exists, stopped_image_exists,
+                   sizeof(*stopped_image_exists));
+    }
+
     comm_barrier_all();
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to gasnet_exit"
@@ -1748,6 +1778,24 @@ void comm_finalize()
 
 void comm_exit(int status)
 {
+    int p;
+
+    comm_service();
+
+    *this_image_stopped = 1;
+    *stopped_image_exists = 1;
+
+    /* broadcast to every image that this image has stopped.
+     * TODO: Other images should be able to detect this image has stopped when
+     * they try to synchronize with it. Requires custom implementation of
+     * barriers.
+     */
+    for (p = 0; p < num_procs; p++) {
+        comm_write(p, stopped_image_exists, stopped_image_exists,
+                   sizeof(*stopped_image_exists));
+    }
+
+    LOAD_STORE_FENCE();
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to gasnet_exit"
                  " with status %d.", status);
@@ -1775,14 +1823,86 @@ void comm_barrier_all()
     barcount += 1;
 }
 
+void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    unsigned long i;
 
-void comm_sync_images(int *image_list, int image_count)
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    if (enable_nbput) {
+        for (i = 0; i < num_procs; i++)
+            wait_on_all_pending_puts(i);
+        free_lcb();
+    }
+
+    gasnet_wait_syncnbi_all();
+    LOAD_STORE_FENCE();
+    if (status != NULL && *stopped_image_exists == 1) {
+        *((INT2 *) status) = STAT_STOPPED_IMAGE;
+        /* no barrier */
+    } else {
+        gasnet_barrier_notify(barcount, barflag);
+        gasnet_barrier_wait(barcount, barflag);
+    }
+
+    if (enable_get_cache)
+        refetch_all_cache();
+
+    barcount += 1;
+}
+
+void comm_sync_memory(int *status, int stat_len, char *errmsg,
+                      int errmsg_len)
+{
+    unsigned long i;
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    if (enable_nbput) {
+        for (i = 0; i < num_procs; i++)
+            wait_on_all_pending_puts(i);
+        free_lcb();
+    }
+
+    gasnet_wait_syncnbi_all();
+
+    if (enable_get_cache)
+        refetch_all_cache();
+
+    LOAD_STORE_FENCE();
+
+}
+
+
+void comm_sync_images(int *image_list, int image_count, int *status,
+                      int stat_len, char *errmsg, int errmsg_len)
 {
     int i, ret;
     int this_image;
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
     gasnet_wait_syncnbi_all();
     for (i = 0; i < image_count; i++) {
-        int q = image_list[i]-1;
+        int q = image_list[i] - 1;
         if (my_proc != q) {
             ret = gasnet_AMRequestShort1
                 (q, GASNET_HANDLER_SYNC_REQUEST, my_proc);
@@ -1796,8 +1916,23 @@ void comm_sync_images(int *image_list, int image_count)
             wait_on_all_pending_puts(q);
     }
     for (i = 0; i < image_count; i++) {
-        int q = image_list[i]-1;
+        short image_has_stopped;
+        int q = image_list[i] - 1;
+
+        if (status != NULL) {
+            image_has_stopped = 0;
+            comm_read(q, this_image_stopped, &image_has_stopped,
+                    sizeof(image_has_stopped));
+            LOAD_STORE_FENCE();
+            if (image_has_stopped && !sync_images_flag[q]) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                LOAD_STORE_FENCE();
+                return;
+            }
+        }
+
         GASNET_BLOCKUNTIL(sync_images_flag[q]);
+
         gasnet_hsl_lock(&sync_lock);
         sync_images_flag[q]--;
         gasnet_hsl_unlock(&sync_lock);

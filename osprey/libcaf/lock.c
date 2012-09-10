@@ -71,7 +71,9 @@ static inline unsigned long get_offset_from_heap_address(void *addr)
     return addr - comm_start_heap(_this_image - 1);
 }
 
-void comm_lock(lock_t * lock, int image, char *success, int success_len)
+void comm_lock(lock_t * lock, int image, char *success,
+               int success_len, int *status, int stat_len,
+               char *errmsg, int errmsg_len)
 {
     /*
      *  Check that lock isn't already being held. If so, just return.
@@ -87,6 +89,14 @@ void comm_lock(lock_t * lock, int image, char *success, int success_len)
     lock_request_t *lock_req;
     size_t lock_ofst = get_offset_from_heap_address(lock);
 
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
     check.l.locked = 0;
     check.l.image = image;
     check.l.ofst = lock_ofst;
@@ -95,7 +105,9 @@ void comm_lock(lock_t * lock, int image, char *success, int success_len)
     if (new_item) {
         /* request item already is in the request table, which means the lock
          * must already be held by this image */
-        Warning("LOCK request on a lock that is already held.");
+        if (status != NULL) {
+            *((INT2 *) status) = STAT_LOCKED;
+        }
         return;
     }
 
@@ -186,7 +198,8 @@ void comm_lock(lock_t * lock, int image, char *success, int success_len)
         *success = 1;
 }
 
-void comm_unlock(lock_t * lock, int image)
+void comm_unlock(lock_t * lock, int image, int *status,
+                 int stat_len, char *errmsg, int errmsg_len)
 {
     /*
      * check if lock has actually been acquired first. If not, its an error.
@@ -200,16 +213,32 @@ void comm_unlock(lock_t * lock, int image)
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_heap_address(lock);
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
     key.locked = 0;
     key.image = image;
     key.ofst = lock_ofst;
     HASH_FIND(hh, req_table, &key, sizeof(key), request_item);
 
-
     if (request_item == NULL) {
-        /* request item already is in the request table, which means the lock
-         * must already be held by this image */
-        Warning("UNLOCK request on a lock that is not already held.");
+        /* request item already is not the request table, which means the lock
+         * isn't being held by this image */
+        if (status != NULL) {
+            lock_t p;
+            comm_read(image - 1, lock, &p, sizeof(p));
+            if (p.locked != 0) {
+                *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
+            } else {
+                *((INT2 *) status) = STAT_UNLOCKED;
+            }
+        }
         return;
     }
 
@@ -257,7 +286,8 @@ void comm_unlock(lock_t * lock, int image)
     free(request_item);
 }
 
-void comm_unlock2(lock_t * lock, int image)
+void comm_unlock2(lock_t * lock, int image, int *status,
+                  int stat_len, char *errmsg, int errmsg_len)
 {
     /*
      * check if lock has actually been acquired first. If not, its an error.
@@ -270,16 +300,32 @@ void comm_unlock2(lock_t * lock, int image)
     lock_req_tbl_item_t *request_item;
     int i = 0;
     size_t lock_ofst = get_offset_from_heap_address(lock);
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
     key.locked = 0;
     key.image = image;
     key.ofst = lock_ofst;
     HASH_FIND(hh, req_table, &key, sizeof(key), request_item);
 
-
     if (request_item == NULL) {
-        /* request item already is in the request table, which means the lock
-         * must already be held by this image */
-        Warning("UNLOCK request on a lock that is not already held.");
+        /* request item already is not the request table, which means the lock
+         * isn't being held by this image */
+        if (status != NULL) {
+            lock_t p;
+            comm_read(image - 1, lock, &p, sizeof(p));
+            if (p.locked != 0) {
+                *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
+            } else {
+                *((INT2 *) status) = STAT_UNLOCKED;
+            }
+        }
         return;
     }
 

@@ -744,11 +744,11 @@ void __caf_exit(int status)
 }
 
 
-void _SYNC_ALL()
+void _SYNC_ALL(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_barrier_all");
     START_TIMER();
-    comm_barrier_all();
+    comm_sync_all(status, stat_len, errmsg, errmsg_len);
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_all ");
 
@@ -770,25 +770,28 @@ void _END_CRITICAL()
 
 
 void _COARRAY_LOCK(lock_t * lock, int *image, char *success,
-                   int success_len)
+                   int success_len, int *status, int stat_len,
+                   char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_lock");
     START_TIMER();
-    comm_lock(lock, *image, success, success_len);
+    comm_lock(lock, *image, success, success_len, status, stat_len,
+              errmsg, errmsg_len);
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_lock ");
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_lock");
 }
 
-void _COARRAY_UNLOCK(lock_t * lock, int *image)
+void _COARRAY_UNLOCK(lock_t * lock, int *image, int *status,
+                     int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_unlock");
     START_TIMER();
 #if defined(GASNET)
-    comm_unlock(lock, *image);
+    comm_unlock(lock, *image, status, stat_len, errmsg, errmsg_len);
 #elif defined(ARMCI)
     /* the version uses fetch-and-store instead of compare-and-swap */
-    comm_unlock2(lock, *image);
+    comm_unlock2(lock, *image, status, stat_len, errmsg, errmsg_len);
 #endif
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_unlock ");
@@ -1057,43 +1060,51 @@ void _EVENT_WAIT(event_t * event, int *image)
 }
 
 
-void _SYNC_MEMORY()
+void _SYNC_MEMORY(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "in sync memory");
+    START_TIMER();
+    comm_sync_memory(status, stat_len, errmsg, errmsg_len);
+    STOP_TIMER(SYNC);
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_memory");
 }
 
-void _SYNC_IMAGES(int *imageList, int imageCount)
+void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
+                  char *errmsg, int errmsg_len)
 {
     int i;
-    for (i = 0; i < imageCount; i++) {
+    for (i = 0; i < image_count; i++) {
         LIBCAF_TRACE(LIBCAF_LOG_SYNC,
-                     "call to comm_syncimages for sync with img%d",
-                     imageList[i]);
-        check_remote_image(imageList[i]);
-        imageList[i];
+                     "call to comm_sync_images for sync with img%d",
+                     images[i]);
+        check_remote_image(images[i]);
+        images[i];
     }
     START_TIMER();
-    comm_sync_images(imageList, imageCount);
+    comm_sync_images(images, image_count, status, stat_len, errmsg,
+                     errmsg_len);
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_images");
 }
 
-void _SYNC_IMAGES_ALL()
+void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
+                      int errmsg_len)
 {
     int i;
-    int imageCount = _num_images;
-    int *imageList;
+    int image_count = _num_images;
+    int *images;
     LIBCAF_TRACE(LIBCAF_LOG_SYNC,
                  "before call to comm_sync_images for sync with all images");
-    imageList = (int *) comm_malloc(_num_images * sizeof(int));
-    for (i = 0; i < imageCount; i++)
-        imageList[i] = i+1;
+    images = (int *) comm_malloc(_num_images * sizeof(int));
+    for (i = 0; i < image_count; i++)
+        images[i] = i + 1;
     START_TIMER();
-    comm_sync_images(imageList, imageCount);
+    comm_sync_images(images, image_count, status, stat_len, errmsg,
+                     errmsg_len);
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_image_all");
 
-    comm_free(imageList);
+    comm_free(images);
 }
 
 int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub)

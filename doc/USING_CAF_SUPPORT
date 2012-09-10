@@ -69,9 +69,6 @@ Known Limitations
 * Accessing a pointer component of a remote coarray of derived type is not
   supported when using the ARMCI communication layer.
 
-* The stat= and errmsg= specifers for synchronization statements are not yet
-  spuported.
-
 
 Using OpenUH CAF compiler
 ------------------------

@@ -170,7 +170,7 @@ void _CO_BCAST_I8(DopeVectorType * source, INTEGER8 * src_img_p)
 
             }
         }
-        _SYNC_IMAGES_ALL();
+        _SYNC_IMAGES_ALL(NULL, 0, NULL, 0);
     } else {
         /* is destination */
 
@@ -179,7 +179,7 @@ void _CO_BCAST_I8(DopeVectorType * source, INTEGER8 * src_img_p)
                          "CO_BCAST called with invalid source_image.");
         }
 
-        _SYNC_IMAGES((int *) &source_image, 1);
+        _SYNC_IMAGES((int *) &source_image, 1, NULL, 0, NULL, 0);
     }
     LIBCAF_TRACE(LIBCAF_LOG_COLLECTIVE, "end");
 }

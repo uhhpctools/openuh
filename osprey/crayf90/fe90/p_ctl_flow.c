@@ -4909,10 +4909,16 @@ void parse_sync_stmt (void)
     boolean parsed_ok = TRUE;
    int			col;
    int			ir_idx;
+   int          ir_idx2;
    int			line;
    opnd_type		opnd;
+   opnd_type    stat_opnd;
+   opnd_type    errmsg_opnd;
    int			save_curr_stmt_sh_idx;
-   int      blk_idx;  
+   int      blk_idx;
+   boolean      has_paren = FALSE;
+   boolean      has_stat = FALSE;
+   boolean      has_errmsg = FALSE;
 
    TRACE (Func_Entry, "parse_sync_stmt", NULL);
 
@@ -4930,56 +4936,81 @@ void parse_sync_stmt (void)
            IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
            IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
            IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-       } else if (TOKEN_VALUE(token) == Tok_Kwd_Images){
 
-# ifdef _DEBUG
-           if (LA_CH_VALUE != LPAREN) {
-              /* shouldn't be here */
-              PRINTMSG(TOKEN_LINE(token), 295, Internal, TOKEN_COLUMN(token),
-                       "parse_actual_arg_spec", "LPAREN");
-           } 
-# endif
+           if (LA_CH_VALUE == LPAREN) {
+               /* contains STAT= or ERRMSG= or nothing ... handle below */
+               has_paren = TRUE;
                NEXT_LA_CH;
+           }
 
-               OPND_FLD(opnd) = IR_Tbl_Idx;
-               OPND_IDX(opnd) = NULL_IDX;
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Images) {
 
-               if (LA_CH_VALUE != STAR) {
-                   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-                   NTR_IR_TBL(IR_IDX_L(ir_idx));
-                   IR_OPR(IR_IDX_L(ir_idx)) =  Images_Opr;
-                   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-                   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-                   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-                   parsed_ok = parse_expr(&opnd);
-               }
-               else {
-                   IR_FLD_L(ir_idx) = IR_Tbl_Idx;
-                   NTR_IR_TBL(IR_IDX_L(ir_idx));
-                   IR_OPR(IR_IDX_L(ir_idx)) =  Imagestar_Opr;
-                   IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
-                   IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
-                   IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-                   NEXT_LA_CH;
-               } 
-               if (LA_CH_VALUE != RPAREN) {
-                   /* error */
-               }
+           if (LA_CH_VALUE != LPAREN) {
+               parse_err_flush(Find_EOS, "(");
+               goto EXIT;
+           }
+
+           has_paren = TRUE;
+
            NEXT_LA_CH;
 
-           COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+           OPND_FLD(opnd) = IR_Tbl_Idx;
+           OPND_IDX(opnd) = NULL_IDX;
+
+           if (LA_CH_VALUE != STAR) {
+               IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+               NTR_IR_TBL(IR_IDX_L(ir_idx));
+               IR_OPR(IR_IDX_L(ir_idx)) =  Images_Opr;
+               IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
+               IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
+               IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+               IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+               IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+               parsed_ok = parse_expr(&opnd);
+               COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+
+               IR_FLD_R(IR_IDX_L(ir_idx)) = CN_Tbl_Idx;
+               IR_IDX_R(IR_IDX_L(ir_idx)) = CN_INTEGER_ZERO_IDX;
+               IR_LINE_NUM_R(IR_IDX_L(ir_idx)) = TOKEN_LINE(token);
+               IR_COL_NUM_R(IR_IDX_L(ir_idx)) = TOKEN_COLUMN(token);
+           }
+           else {
+               IR_FLD_L(ir_idx) = IR_Tbl_Idx;
+               NTR_IR_TBL(IR_IDX_L(ir_idx));
+               IR_OPR(IR_IDX_L(ir_idx)) =  Imagestar_Opr;
+               IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
+               IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
+               IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
+               COPY_OPND(IR_OPND_L(IR_IDX_L(ir_idx)), opnd);
+
+               NEXT_LA_CH;
+           }
 
 
-       }else if (TOKEN_VALUE(token) == Tok_Kwd_Memory){
+           if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
+               parse_err_flush(Find_EOS, ", or )");
+               goto EXIT;
+           }
+
+           if (LA_CH_VALUE == COMMA) NEXT_LA_CH;
+
+           /* handle the reset (e.g. STAT= or ERRMSG=) below */
+
+       } else if (TOKEN_VALUE(token) == Tok_Kwd_Memory) {
            IR_FLD_L(ir_idx) = IR_Tbl_Idx;
            NTR_IR_TBL(IR_IDX_L(ir_idx));
            IR_OPR(IR_IDX_L(ir_idx)) =  Memory_Opr;
            IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
            IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
            IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-       }
-        else          
-       { 
+
+           if (LA_CH_VALUE == LPAREN) {
+               /* contains STAT= or ERRMSG= or nothing ... handle below */
+               has_paren = TRUE;
+               NEXT_LA_CH;
+           }
+
+       } else {
            /* should have seen ALL, IMAGES, or MEMORY identifier */
            PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
                    TOKEN_STR(token));
@@ -4989,21 +5020,138 @@ void parse_sync_stmt (void)
        PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
                TOKEN_STR(token));
    }
-    
 
-  /* Check whether Sync_Stmt lies inside a CRITICAL block
-   * (which will be wrong !)
-   */
-  for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
-         if (BLK_TYPE(blk_idx) == Critical_Blk) {
-            PRINTMSG(TOKEN_LINE(token), 1705, Error, TOKEN_COLUMN(token),
-               TOKEN_STR(token));
-           break;
-         }
+   NTR_IR_TBL(ir_idx2);
+   IR_OPR(ir_idx2) = Stat_Errmsg_Opr;
+   IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+   IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+   /* process contents within parentheses, if present */
+   if (has_paren) {
+       boolean matched_tok = FALSE;
+
+       matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+
+       while (matched_tok) {
+
+           if (LA_CH_VALUE == EQUAL) {
+               if (strcmp(TOKEN_STR(token), "STAT") == 0) {
+
+                   if (has_stat) {
+                       PRINTMSG(TOKEN_LINE(token), 1719, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                   } else {
+                       has_stat = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have stat var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(stat_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar integer STAT variable");
+                       goto EXIT;
+                   }
+
+               } else if (strcmp(TOKEN_STR(token), "ERRMSG") == 0) {
+
+                   if (has_errmsg) {
+                       PRINTMSG(TOKEN_LINE(token), 1719, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                   } else {
+                       has_errmsg = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have errmsg var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(errmsg_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar character string ERRMSG variable");
+                       goto EXIT;
+                   }
+
+               } else {
+                   parse_err_flush(Find_Expr_End, "STAT= | ERRMSG=");
+               }
+           } else {
+               parse_err_flush(Find_EOS, "=");
+               goto EXIT;
+           }
+
+           if (LA_CH_VALUE == COMMA) {
+               NEXT_LA_CH;
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               if (!matched_tok) {
+                   /* error */
+                   parse_err_flush(Find_EOS,
+                           "STAT= | ERRMSG=");
+                   goto EXIT;
+               }
+           } else {
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+           }
+       }
+
+       if (LA_CH_VALUE != RPAREN) {
+           /* error */
+           parse_err_flush(Find_EOS, ")");
+           goto EXIT;
+       }
+
+       NEXT_LA_CH;
+
    }
-  
 
-   NEXT_LA_CH;
+   if (has_stat) {
+       COPY_OPND(IR_OPND_L(ir_idx2), stat_opnd);
+   } else {
+       IR_FLD_L(ir_idx2)  = NO_Tbl_Idx;
+       IR_IDX_L(ir_idx2) = NULL_IDX;
+   }
+   if (has_errmsg) {
+       COPY_OPND(IR_OPND_R(ir_idx2), errmsg_opnd);
+   } else {
+       IR_FLD_R(ir_idx2)  = NO_Tbl_Idx;
+       IR_IDX_R(ir_idx2) = NULL_IDX;
+   }
+
+   IR_IDX_R(ir_idx) = ir_idx2;
+   IR_FLD_R(ir_idx) = IR_Tbl_Idx;
+   IR_COL_NUM_R(ir_idx) = IR_COL_NUM(ir_idx2);
+   IR_LINE_NUM_R(ir_idx) = IR_LINE_NUM(ir_idx2);
+
+
+   /* Check whether Sync_Stmt lies inside a CRITICAL block
+    * (which will be wrong !)
+    */
+   for (blk_idx = blk_stk_idx;  blk_idx > 0;  --blk_idx) {
+       if (BLK_TYPE(blk_idx) == Critical_Blk) {
+           PRINTMSG(TOKEN_LINE(token), 1705, Error, TOKEN_COLUMN(token),
+                   TOKEN_STR(token));
+           break;
+       }
+   }
+
+
+EXIT:
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_sync_stmt", NULL);
 
    return;
 } /* parse_sync_stmt */
@@ -5026,13 +5174,18 @@ void parse_sync_stmt (void)
 void parse_lock_stmt (void)
 {
    int			col;
-   int			ir_idx;
+   int			ir_idx, ir_idx2, ir_idx3;
    int			line;
-   boolean      had_acquired_lock = FALSE;
+   boolean      has_acquired_lock = FALSE;
+   boolean      has_stat = FALSE;
+   boolean      has_errmsg = FALSE;
    boolean      parsed_ok  = TRUE;
    token_type   acquired_lock_token;
    boolean      is_lock_stmt = FALSE;
    opnd_type		opnd;
+   opnd_type    acquired_lock_opnd;
+   opnd_type    stat_opnd;
+   opnd_type    errmsg_opnd;
    int			save_curr_stmt_sh_idx;
    int      blk_idx;
 
@@ -5067,28 +5220,31 @@ void parse_lock_stmt (void)
 
    COPY_OPND(IR_OPND_L(ir_idx), opnd);
 
-   if (is_lock_stmt) {
-       if (LA_CH_VALUE != COMMA && LA_CH_VALUE != RPAREN) {
-           /* error */
-           parse_err_flush(Find_EOS, ", or )");
-           goto EXIT;
-       }
+   if (LA_CH_VALUE == COMMA) {
+       boolean matched_tok;
+       NEXT_LA_CH;
 
-       if (LA_CH_VALUE == COMMA) {
-           NEXT_LA_CH;
-           /* process the acquired_lock specifier */
-           if (MATCHED_TOKEN_CLASS(Tok_Class_Id) &&
-                   strcmp(TOKEN_STR(token), "ACQUIRED_LOCK") == 0) {
-               acquired_lock_token = token;
-               if (LA_CH_VALUE == EQUAL) {
+       matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+       while (matched_tok) {
+
+           if (LA_CH_VALUE == EQUAL) {
+               /* process the acquired_lock specifier */
+               if (is_lock_stmt && strcmp(TOKEN_STR(token), "ACQUIRED_LOCK") == 0) {
+
+                   if (has_acquired_lock) {
+                       PRINTMSG(TOKEN_LINE(token), 1719, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                   } else {
+                       has_acquired_lock = TRUE;
+                   }
+
                    NEXT_LA_CH;
-                   had_acquired_lock = TRUE;
 
                    if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
                        /* have acquired_lock var */
 
                        parsed_ok = parse_deref(&opnd, NULL_IDX) && parsed_ok;
-                       COPY_OPND(IR_OPND_R(ir_idx), opnd);
+                       COPY_OPND(acquired_lock_opnd, opnd);
 
                        mark_attr_defined(&opnd);
                    } else {
@@ -5096,24 +5252,158 @@ void parse_lock_stmt (void)
                                "scalar logical ACQUIRED_LOCK variable");
                        goto EXIT;
                    }
+               } else if (strcmp(TOKEN_STR(token), "STAT") == 0) {
+
+                   if (has_stat) {
+                       PRINTMSG(TOKEN_LINE(token), 1719, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                   } else {
+                       has_stat = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have stat var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(stat_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar integer STAT variable");
+                       goto EXIT;
+                   }
+
+               } else if (strcmp(TOKEN_STR(token), "ERRMSG") == 0) {
+
+                   if (has_errmsg) {
+                       PRINTMSG(TOKEN_LINE(token), 1719, Error,
+                               TOKEN_COLUMN(token), TOKEN_STR(token));
+                       goto EXIT;
+                   } else {
+                       has_errmsg = TRUE;
+                   }
+
+                   NEXT_LA_CH;
+
+                   if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                       /* have errmsg var */
+                       parsed_ok = parse_deref(&opnd, NULL_IDX) &&
+                           parsed_ok;
+                       COPY_OPND(errmsg_opnd, opnd);
+                       mark_attr_defined(&opnd);
+                   } else {
+                       parse_err_flush(Find_Comma_Rparen,
+                               "scalar character string ERRMSG variable");
+                       goto EXIT;
+                   }
+
                } else {
-                   parse_err_flush(Find_EOS, "=");
+                   if (is_lock_stmt) {
+                       parse_err_flush(Find_Expr_End,
+                               "STAT= | ERRMSG= | ACQUIRED_LOCK=");
+                   } else {
+                       parse_err_flush(Find_Expr_End,
+                               "STAT= | ERRMSG=");
+                   }
+               }
+           } else {
+               parse_err_flush(Find_EOS, "=");
+               goto EXIT;
+           }
+
+           if (LA_CH_VALUE == COMMA) {
+               NEXT_LA_CH;
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
+               if (!matched_tok) {
+                   /* error */
+                   if (is_lock_stmt) {
+                       parse_err_flush(Find_EOS,
+                               "STAT= | ERRMSG= | ACQUIRED_LOCK=");
+                   } else {
+                       parse_err_flush(Find_EOS,
+                               "STAT= | ERRMSG=");
+                   }
                    goto EXIT;
                }
+           } else {
+               matched_tok = MATCHED_TOKEN_CLASS(Tok_Class_Id);
            }
-           else {
-               parse_err_flush(Find_Expr_End, "ACQUIRED_LOCK = ");
-           }
+       }
+
+       if (LA_CH_VALUE != RPAREN) {
+           /* error */
+           parse_err_flush(Find_EOS, ")");
+           goto EXIT;
        }
    }
 
-   if (LA_CH_VALUE != RPAREN) {
-       /* error */
-      parse_err_flush(Find_EOS, ")");
-      goto EXIT;
+   NEXT_LA_CH;
+
+   if (is_lock_stmt) {
+       /* LOCK */
+
+       NTR_IR_TBL(ir_idx2);
+       IR_OPR(ir_idx2) = Lock_Status_Opr;
+       IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+       if (has_acquired_lock) {
+           COPY_OPND(IR_OPND_L(ir_idx2), acquired_lock_opnd);
+       } else {
+           IR_FLD_L(ir_idx2)  = NO_Tbl_Idx;
+           IR_IDX_L(ir_idx2) = NULL_IDX;
+       }
+
+       NTR_IR_TBL(ir_idx3);
+       IR_FLD_R(ir_idx2) = IR_Tbl_Idx;
+       IR_IDX_R(ir_idx2) = ir_idx3;
+       IR_COL_NUM_R(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM_R(ir_idx2) = TOKEN_LINE(token);
+       IR_OPR(ir_idx3) = Stat_Errmsg_Opr;
+       IR_COL_NUM(ir_idx3) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx3) = TOKEN_LINE(token);
+
+       if (has_stat) {
+           COPY_OPND(IR_OPND_L(ir_idx3), stat_opnd);
+       } else {
+           IR_FLD_L(ir_idx3)  = NO_Tbl_Idx;
+           IR_IDX_L(ir_idx3) = NULL_IDX;
+       }
+       if (has_errmsg) {
+           COPY_OPND(IR_OPND_R(ir_idx3), errmsg_opnd);
+       } else {
+           IR_FLD_R(ir_idx3)  = NO_Tbl_Idx;
+           IR_IDX_R(ir_idx3) = NULL_IDX;
+       }
+   } else {
+       /* UNLOCK */
+
+       NTR_IR_TBL(ir_idx2);
+       IR_OPR(ir_idx2) = Stat_Errmsg_Opr;
+       IR_COL_NUM(ir_idx2) = TOKEN_COLUMN(token);
+       IR_LINE_NUM(ir_idx2) = TOKEN_LINE(token);
+
+       if (has_stat) {
+           COPY_OPND(IR_OPND_L(ir_idx2), stat_opnd);
+       } else {
+           IR_FLD_L(ir_idx2)  = NO_Tbl_Idx;
+           IR_IDX_L(ir_idx2) = NULL_IDX;
+       }
+       if (has_errmsg) {
+           COPY_OPND(IR_OPND_R(ir_idx2), errmsg_opnd);
+       } else {
+           IR_FLD_R(ir_idx2)  = NO_Tbl_Idx;
+           IR_IDX_R(ir_idx2) = NULL_IDX;
+       }
    }
 
-   NEXT_LA_CH;
+   IR_IDX_R(ir_idx) = ir_idx2;
+   IR_FLD_R(ir_idx) = IR_Tbl_Idx;
+   IR_COL_NUM_R(ir_idx) = IR_COL_NUM(ir_idx2);
+   IR_LINE_NUM_R(ir_idx) = IR_LINE_NUM(ir_idx2);
+
 
 EXIT:
    if (LA_CH_VALUE != EOS) {

@@ -62,6 +62,10 @@ static void **syncptr = NULL;   /* sync flags */
 static void **coarray_start_all_images = NULL;  /* local address space */
 static void **start_heap_address = NULL;        /* different address spaces */
 
+/* image stoppage info */
+static unsigned short *stopped_image_exists = NULL;
+static unsigned short *this_image_stopped = NULL;
+
 /* NON-BLOCKING PUT: ARMCI non-blocking operations does not ensure local
  * completion on its return. ARMCI_Wait(handle) provides local completion,
  * as opposed to GASNET where it means remote completion. For remote
@@ -363,6 +367,16 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     common_shared_memory_slot->prev = 0;
 
     shared_memory_size = caf_shared_memory_size;
+
+    /* allocate space for recording image termination */
+    stopped_image_exists =
+        (short *) coarray_allocatable_allocate_(sizeof(short));
+    this_image_stopped =
+        (short *) coarray_allocatable_allocate_(sizeof(short));
+
+    *stopped_image_exists = 0;
+    *this_image_stopped = 0;
+
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
@@ -780,6 +794,26 @@ void comm_memory_free()
 
 void comm_exit(int status)
 {
+    int p;
+
+    comm_service();
+
+    *this_image_stopped = 1;
+    *stopped_image_exists = 1;
+
+    /* broadcast to every image that this image has stopped.
+     *
+     * TODO: Other images should be able to detect this image has stopped when
+     * they try to synchronize with it. Requires custom implementation of
+     * barriers.
+     */
+
+    for (p = 0; p < num_procs; p++) {
+        comm_write(p, stopped_image_exists, stopped_image_exists,
+                   sizeof(*stopped_image_exists));
+    }
+
+
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Error"
                  " with status %d.", status);
@@ -797,6 +831,23 @@ void comm_exit(int status)
 
 void comm_finalize()
 {
+    int p;
+
+    comm_service();
+
+    *this_image_stopped = 1;
+    *stopped_image_exists = 1;
+
+    /* broadcast to every image that this image has stopped.
+     * TODO: Other images should be able to detect this image has stopped when
+     * they try to synchronize with it. Requires custom implementation of
+     * barriers.
+     */
+    for (p = 0; p < num_procs; p++) {
+        comm_write(p, stopped_image_exists, stopped_image_exists,
+                   sizeof(*stopped_image_exists));
+    }
+
     comm_barrier_all();
     comm_memory_free();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to ARMCI_Finalize");
@@ -818,15 +869,81 @@ void comm_barrier_all()
         refetch_all_cache();
 }
 
-void comm_sync_images(int *image_list, int image_count)
+void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
+{
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    if (enable_nbput)
+        wait_on_all_pending_puts();
+
+    ARMCI_WaitAll();
+    LOAD_STORE_FENCE();
+    if (status != NULL && *stopped_image_exists == 1) {
+        *((INT2 *) status) = STAT_STOPPED_IMAGE;
+        /* no barrier */
+    } else {
+        ARMCI_Barrier();
+    }
+
+    if (enable_get_cache)
+        refetch_all_cache();
+}
+
+void comm_sync_memory(int *status, int stat_len, char *errmsg,
+                      int errmsg_len)
+{
+    unsigned long i;
+
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
+    if (enable_nbput)
+        wait_on_all_pending_puts();
+
+    ARMCI_WaitAll();
+
+    if (enable_get_cache)
+        refetch_all_cache();
+
+    LOAD_STORE_FENCE();
+
+}
+
+void comm_sync_images(int *image_list, int image_count, int *status,
+                      int stat_len, char *errmsg, int errmsg_len)
 {
     int i, remote_img;
     int *dest_flag;             /* remote flag to set */
     volatile int *check_flag;   /* flag to wait on locally */
     int whatever;               /* to store remote value for ARMCI_Rmw */
 
+    if (status != NULL) {
+        memset(status, 0, (size_t) stat_len);
+        *((INT2 *) status) = STAT_SUCCESS;
+    }
+    if (errmsg != NULL && errmsg_len) {
+        memset(errmsg, 0, (size_t) errmsg_len);
+    }
+
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Syncing with"
                  " %d images", image_count);
+
+    if (enable_nbput)
+        wait_on_all_pending_puts();
+
+    ARMCI_WaitAll();
+
     for (i = 0; i < image_count; i++) {
         int q = image_list[i] - 1;
         if (my_proc == q) {
@@ -860,6 +977,7 @@ void comm_sync_images(int *image_list, int image_count)
     }
 
     for (i = 0; i < image_count; i++) {
+        short image_has_stopped;
         int q = image_list[i] - 1;
         if (my_proc == q) {
             continue;
@@ -871,10 +989,26 @@ void comm_sync_images(int *image_list, int image_count)
         LIBCAF_TRACE(LIBCAF_LOG_SYNC,
                      "Waiting on image %lu.", remote_img + 1);
 
+        if (status != NULL) {
+            image_has_stopped = 0;
+            comm_read(q, this_image_stopped, &image_has_stopped,
+                    sizeof(image_has_stopped));
+            LOAD_STORE_FENCE();
+            if (image_has_stopped && !(*check_flag)) {
+                *((INT2 *) status) = STAT_STOPPED_IMAGE;
+                LOAD_STORE_FENCE();
+                LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Sync image over");
+                return;
+            }
+        }
+
         /* user usleep to wait at least 1 OS time slice before checking
          * flag again  */
-        while (!(*check_flag))
+        while (!(*check_flag)) {
             usleep(50);
+            LOAD_STORE_FENCE();
+        }
+
 
         LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Waiting over on"
                      " image %lu. About to decrement %d",

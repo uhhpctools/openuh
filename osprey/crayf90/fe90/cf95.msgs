@@ -21950,5 +21950,40 @@ coarray unless the array subscripts (in parentheses) is explicitly specifed by
 the user. If the array subscripts are not given, then it is a syntax error.
 For example, a[2,3] should not be used as a short-hand for a(:)[2,3].
 .ME
-$ LAST NUMBER USED : 1715
+$
+$ Error : 1716
+$msg  1716 The STAT= variable must be a scalar integer variable
+$nexp 1716
+Error : The STAT= variable must be a scalar integer variable
+2 bytes).
+.PP
+The STAT= variable must be a scalar integer variable.
+.ME
+$
+$ Error : 1717
+$msg  1717 The ERRMSG= variable must be a scalar character string variable.
+$nexp 1717
+Error : The ERRMSG= variable must be a scalar character string variable.
+.PP
+The ERRMSG= variable must be a scalar character string variable.
+.ME
+$
+$ Error : 1718
+$msg  1718 The STAT= variable should be at least 2 bytes in this implementation
+$nexp 1718
+Error : The STAT= variable should be at least 2 bytes in this implementation
+2 bytes).
+.PP
+The STAT= variable must be a scalar integer variable and it should be at least
+2 bytes. Some of the status codes will not fit into a 1 byte integer.
+.ME
+$
+$ Error : 1719
+$msg  1719 The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no more than once
+$nexp 1719
+Error : The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no  more than once
+.PP
+The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no more than once.
+.ME
+$ LAST NUMBER USED : 1719
 

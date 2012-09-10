@@ -72,7 +72,7 @@ module iso_fortran_env
   type :: LOCK_TYPE
       private
       integer(kind=int64) :: l = 0
-  end type LOCK_TYPE  
+  end type LOCK_TYPE
 
   type :: EVENT_TYPE
       private

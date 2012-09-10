@@ -478,6 +478,9 @@
 # define STOP_ALL_LIB_ENTRY             "STOP_ALL"
 # define STOP_ALL_NAME_LEN              8
 
+# define SIZE_INTRIN_ENTRY		"SIZE"
+# define SIZE_NAME_LEN  		4
+
 # define CONFORM_LIB_ENTRY		"_CONFORM_ERROR"
 # define CONFORM_NAME_LEN		14
 

@@ -4043,10 +4043,10 @@ boolean final_arg_work(opnd_type	*list_opnd,
        * This is a hack to keep the first argument for sync_images a dope
        * vector in case the actual arg does not have explicit shape 
        */
-     
-      if (strcmp(AT_OBJ_NAME_PTR(spec_idx),"_SYNC_IMAGES")==0)
+
+      if (i==1 && strcmp(AT_OBJ_NAME_PTR(spec_idx),"_SYNC_IMAGES")==0)
           d_type = Intrin_Dope_Dummy;
-          
+
 #endif
 
       association = arg_assoc_tbl[a_type][d_type];
@@ -4224,7 +4224,8 @@ boolean final_arg_work(opnd_type	*list_opnd,
           case COPY_IN_COPY_OUT:
           case COPY_IN_MAKE_DV:
           case COPY_INOUT_MAKE_DV:
-              if (ATD_PE_ARRAY_IDX(dummy) != 0 &&
+              if (dummy != NULL_IDX &&
+                  ATD_PE_ARRAY_IDX(dummy) != 0 &&
                   BD_ARRAY_CLASS(ATD_ARRAY_IDX(dummy)) != Assumed_Shape) {
                   int line_tmp, col_tmp;
                   find_opnd_line_and_column(&IL_OPND(list_idx), &line_tmp,

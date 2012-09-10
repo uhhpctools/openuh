@@ -40,8 +40,14 @@ struct coarray_lock {
 typedef struct coarray_lock lock_t;
 
 
-void comm_lock(lock_t * lock, int image, char *success, int success_len);
-void comm_unlock(lock_t * lock, int image);
-void comm_unlock2(lock_t * lock, int image);
+void comm_lock(lock_t * lock, int image, char *success,
+               int success_len, int *status, int stat_len,
+               char *errmsg, int errmsg_len);
+
+void comm_unlock(lock_t * lock, int image, int *status,
+                 int stat_len, char *errmsg, int errmsg_len);
+
+void comm_unlock2(lock_t * lock, int image, int *status,
+                  int stat_len, char *errmsg, int errmsg_len);
 
 #endif

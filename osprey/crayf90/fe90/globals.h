@@ -187,6 +187,7 @@ enum	glb_tbl_idx_values	{Allocate_Attr_Idx,
                  Event_Wait_Attr_Idx,
                  Coarray_Addr_Trans_Attr_Idx,
 #endif
+                 Size_Attr_Idx,
 				 Num_Glb_Tbl_Idxs
 				};
 
@@ -1594,7 +1595,9 @@ enum    operator_values      {  Null_Opr,
                 Dv_Access_N_Codim,
                 Dv_Set_N_Codim,
                 Lock_Opr,
+                Lock_Status_Opr,
                 Unlock_Opr,
+                Stat_Errmsg_Opr,
                 Errorstop_Opr,
                 Eventpost_Opr,
                 Eventquery_Opr,
