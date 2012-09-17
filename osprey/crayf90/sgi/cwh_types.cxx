@@ -1058,14 +1058,14 @@ cwh_types_mk_array_TY(ARB_HANDLE bounds,INT16 n,TY_IDX base_idx, INT64 size)
         Clear_ARB_first_dimen(bounds[i]);
         Clear_ARB_last_dimen(bounds[i]);
         Set_ARB_dimension(bounds[i],n-i);
-        Set_ARB_codimension(bounds[i],num_decl_cobounds);
+        Set_ARB_codimension(bounds[i],num_decl_cobounds-i);
         const_str = const_str && ARB_const_stride(bounds[i]);
      }
      for (i = num_decl_cobounds; i < n ; i++) {
         Clear_ARB_first_dimen(bounds[i]);
         Clear_ARB_last_dimen(bounds[i]);
         Set_ARB_dimension(bounds[i],n-i);
-        Set_ARB_codimension(bounds[i],num_decl_cobounds);
+        Set_ARB_codimension(bounds[i],0);
         const_str = const_str && ARB_const_stride(bounds[i]);
      }
    } else

@@ -519,9 +519,8 @@ DST_mk_array_type(USRCPOS      decl,      /* Source location */
 		  DST_INFO_IDX type,      /* Element type */
 		  DST_size_t   byte_size, /* Size of array, if known */
 		  DST_INFO_IDX abstract_origin, /* In scope of inlined */
-		  BOOL         is_incomplete); /* Incomplete array */
-
-
+		  BOOL         is_incomplete, /* Incomplete array */
+          BOOL         is_shared_type=FALSE);
 
 /* Creates a DW_TAG_subrange_type entry.
 */
@@ -529,8 +528,8 @@ extern DST_INFO_IDX
 DST_mk_subrange_type(DST_flag is_lb_cval,
 		     DST_cval_ref low, 		/* lower bound */
 		     DST_flag is_ub_cval,
-		     DST_cval_ref high); 	/* upper bound */
-
+		     DST_cval_ref high,     /* upper bound */
+             BOOL is_co_shape=FALSE);
 
 
 /* Creates a DW_TAG_string_type entry.

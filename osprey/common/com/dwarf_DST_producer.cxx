@@ -1772,7 +1772,8 @@ DST_mk_array_type(USRCPOS      decl,      /* Source location */
 		  DST_INFO_IDX type,      /* Element type */
 		  DST_size_t   byte_size, /* Size of array, if known */
 		  DST_INFO_IDX abstract_origin, /* In scope of inlined proc */
-		  BOOL         is_incomplete)   /* Incomplete array */
+		  BOOL         is_incomplete,   /* Incomplete array */
+          BOOL         is_shared_type)
 {
    DST_INFO_IDX    info_idx;
    DST_ATTR_IDX    attr_idx;
@@ -1795,6 +1796,8 @@ DST_mk_array_type(USRCPOS      decl,      /* Source location */
    DST_ARRAY_TYPE_last_child(attr) = DST_INVALID_IDX;
    if (is_incomplete)
       DST_SET_declaration(flag); /* incomplete array */
+   if (is_shared_type)
+      DST_SET_shared_type(flag);
    return DST_init_info(info_idx, DW_TAG_array_type, flag, attr_idx);
 }
 
@@ -1805,7 +1808,8 @@ DST_INFO_IDX
 DST_mk_subrange_type(DST_flag is_lb_cval,
 		     DST_cval_ref low, 		/* lower bound */
 		     DST_flag is_ub_cval,
-		     DST_cval_ref high) 	/* upper bound */
+		     DST_cval_ref high, /* upper bound */
+             BOOL is_co_shape)
 {
    DST_INFO_IDX       info_idx;
    DST_ATTR_IDX       attr_idx;
@@ -1830,6 +1834,10 @@ DST_mk_subrange_type(DST_flag is_lb_cval,
 	DST_SET_ub_cval(flag);
    } else {
    	DST_SUBRANGE_TYPE_upper_ref(attr) = high.ref;
+   }
+
+   if (is_co_shape) {
+    DST_SET_co_shape(flag);
    }
 
    DST_SUBRANGE_TYPE_stride_ref(attr) = DST_INVALID_IDX ; /* F90 dope, only */

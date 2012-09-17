@@ -464,7 +464,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     ST *sym;
     UINT32 i;
     FOREACH_SYMBOL(CURRENT_SYMTAB, sym, i) {
-        if (is_coarray_type(ST_type(sym))) {
+        if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
             set_coarray_tsize(ST_type(sym));
             if (ST_sclass(sym) == SCLASS_PSTATIC) {
                 gen_save_coarray_symbol(sym);
@@ -476,7 +476,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
     if (global_coarrays_processed == FALSE) {
         FOREACH_SYMBOL(GLOBAL_SYMTAB, sym, i) {
-            if (is_coarray_type(ST_type(sym))) {
+            if (sym->sym_class == CLASS_VAR &&
+                is_coarray_type(ST_type(sym))) {
                 set_coarray_tsize(ST_type(sym));
                 if (ST_sclass(sym) == SCLASS_COMMON ||
                     ST_sclass(sym) == SCLASS_DGLOBAL) {

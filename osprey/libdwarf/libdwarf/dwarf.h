@@ -252,6 +252,7 @@ extern "C" {
 #define DW_AT_call_file				0x58 /* DWARF3 */
 #define DW_AT_call_line				0x59 /* DWARF3 */
 #define DW_AT_description			0x5a /* DWARF3 */
+
 /* HP extensions. */
 #define DW_AT_HP_block_index                    0x2000  /* HP */
 
@@ -287,6 +288,10 @@ extern "C" {
 #define DW_AT_HP_linkage_name                   0x201a /* HP */
 #define DW_AT_HP_prof_flags                     0x201b /* HP */
 
+/* CAF proposed extension */
+#define DW_AT_is_co_shape                       0x2029 /* CAF */
+#define DW_AT_is_shared_type                    0x202a /* CAF */
+
 
 /* GNU extensions. */
 #define DW_AT_sf_names                          0x2101 /* GNU */
@@ -308,6 +313,7 @@ extern "C" {
 
 /* UPC extension */
 #define DW_AT_upc_threads_scaled                0x3210 /* UPC */
+
 
 
 #define DW_AT_hi_user				0x3fff

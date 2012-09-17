@@ -108,6 +108,10 @@ extern "C" {
 #ifdef TARG_X8664
 #define DST_flag_GNU_vector        0x200000000LL /* GNU vector extension */
 #endif
+
+#define DST_flag_co_shape       0x400000000LL
+#define DST_flag_shared_type    0x800000000LL
+
 #define DST_flag_mask              0xffffffff
 
 #define DST_SET_external(flag) (flag |= DST_flag_external)
@@ -143,6 +147,8 @@ extern "C" {
 #ifdef TARG_X8664
 #define DST_SET_GNU_vector(flag) (flag |= DST_flag_GNU_vector)
 #endif
+#define DST_SET_co_shape(flag) (flag |= DST_flag_co_shape)
+#define DST_SET_shared_type(flag) (flag |= DST_flag_shared_type)
 
 #define DST_RESET_all(flag) (flag &= ~DST_flag_mask)
 #define DST_RESET_external(flag) (flag &= ~DST_flag_external)
@@ -178,6 +184,8 @@ extern "C" {
 #ifdef TARG_X8664
 #define DST_RESET_GNU_vector(flag) (flag &= ~DST_flag_GNU_vector)
 #endif
+#define DST_RESET_co_shape(flag) (flag &= ~DST_flag_co_shape)
+#define DST_RESET_shared_type(flag) (flag &= ~DST_flag_shared_type)
 
 #define DST_IS_external(flag) (flag & DST_flag_external)
 #define DST_IS_declaration(flag) (flag & DST_flag_declaration)
@@ -212,6 +220,8 @@ extern "C" {
 #ifdef TARG_X8664
 #define DST_IS_GNU_vector(flag) (flag & DST_flag_GNU_vector)
 #endif
+#define DST_IS_co_shape(flag) (flag & DST_flag_co_shape)
+#define DST_IS_shared_type(flag) (flag & DST_flag_shared_type)
 
 
 /* Attribute types, used to hold the values defined in "dwarf.h"

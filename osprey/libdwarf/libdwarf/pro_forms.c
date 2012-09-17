@@ -608,6 +608,8 @@ dwarf_add_AT_flag(Dwarf_P_Debug dbg,
 #ifdef TARG_X8664
     case DW_AT_GNU_vector:
 #endif
+    case DW_AT_is_co_shape:
+    case DW_AT_is_shared_type:
 	break;
 
     default:{

@@ -12,7 +12,8 @@ $ cd openuh-build
 [openuh-build]$ ../source/configure --prefix=<openuh-install-path> \
                 --enable-coarrays \
                 --with-gasnet-root=<gasnet-install-path>    \
-                --with-armci-src-root=<armci-src-path>
+                --with-armci-root=<armci-install-path> \
+                --with-armci-network-libs=<additional linker args>
 [openuh-build]$ make all
 [openuh-build]$ make install
 
@@ -22,7 +23,9 @@ When configuring, you may specify location of GASNet and/or ARMCI installation
 (these are the currently supported runtimes that provide 1-sided communication
 plus other features). The UH CAF runtime is compatible with GASNet version >=
 1.18.2 and ARMCI version >= 5.0. Both these libraries also require MPI to be
-installed on the system.
+installed on the system. If using ARMCI, additional arguments for the network
+libraries to be linked in may be specified. For example, for Infiniband
+network one may need to add --with-armci-network-libs="-libverbs".
 
 GASNet source download:
     http://gasnet.cs.berkeley.edu/#download

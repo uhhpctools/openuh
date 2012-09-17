@@ -1645,7 +1645,11 @@ cwh_dst_array_type(TY_IDX ty)
 			  t,
 			  0,
 			  DST_INVALID_IDX,
-			  TRUE);
+			  TRUE
+#ifdef _UH_COARRAYS
+              ,TY_is_coarray(ty)
+#endif
+              );
     
     TY& tt = Ty_Table[ty];
     ARB_HANDLE arb = TY_arb(ty);
@@ -1835,7 +1839,12 @@ cwh_dst_dope_type(TY_IDX  td , ST * st, mINT64 off, DST_INFO_IDX parent, BOOL co
     ty = TY_AR_etype(ty);
 
     t  = cwh_dst_mk_type(ty);
+#ifndef _UH_COARRAYS
     i  = DST_mk_array_type(s,n,t,0,DST_INVALID_IDX,TRUE);
+#else
+    i  = DST_mk_array_type(s,n,t,0,DST_INVALID_IDX,TRUE,
+                           TY_is_coarray(ty));
+#endif
 
     cwh_dst_dope_bounds(td,st,off,i,parent, comp);
     DST_append_child(parent,i);
@@ -2270,12 +2279,12 @@ cwh_dst_inner_read_DSTs(DST_INFO_IDX parent)
  *
  * cwh_dst_subrange
  *
- * Given an ARB make a subrange type. 
+ * Given an ARB make a subrange type.
  *
  *===================================================
 */
 static DST_INFO_IDX
-cwh_dst_subrange(ARB_HANDLE ar) 
+cwh_dst_subrange(ARB_HANDLE ar)
 {
   DST_INFO_IDX i ;
   DST_cval_ref lb,ub;
@@ -2289,7 +2298,7 @@ cwh_dst_subrange(ARB_HANDLE ar)
   else {
     lb.ref = cwh_dst_mk_variable(&St_Table[ARB_lbnd_var(ar)]);
     DST_append_child(current_scope_idx,lb.ref);
-  } 
+  }
 
   if (const_ub)
     ub.cval = ARB_ubnd_val(ar) ;
@@ -2299,11 +2308,15 @@ cwh_dst_subrange(ARB_HANDLE ar)
   }
 
   i = DST_mk_subrange_type(const_lb,
-			   lb, 
+			   lb,
 			   const_ub,
-			   ub);
+			   ub
+#ifdef _UH_COARRAYS
+               ,ARB_codimension(ar)
+#endif
+               );
 
-  if (extent) 
+  if (extent)
     DST_SET_count(DST_INFO_flag(DST_INFO_IDX_TO_PTR(i))) ;
 
   return i;

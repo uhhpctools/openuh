@@ -1448,6 +1448,7 @@ put_array_type(DST_flag flag, DST_ARRAY_TYPE *attr, Dwarf_P_Die die)
     dwarf_add_AT_unsigned_const (dw_dbg, die, DW_AT_byte_size,
 		        DST_ARRAY_TYPE_byte_size(attr), &dw_error);
   if (DST_IS_declaration(flag)) put_flag (DW_AT_declaration, die);
+  if (DST_IS_shared_type(flag)) put_flag (DW_AT_is_shared_type, die);
 #ifdef TARG_X8664
   if (DST_IS_GNU_vector(flag)) put_flag (DW_AT_GNU_vector, die);
 #endif
@@ -1498,6 +1499,10 @@ put_subrange_type(DST_flag flag, DST_SUBRANGE_TYPE *attr, Dwarf_P_Die die)
 {
 
   Dwarf_Half att ;
+
+  if (DST_IS_co_shape(flag)) {
+      put_flag (DW_AT_is_co_shape, die);
+  }
 
   put_lower_bound (flag, attr, die);
 
