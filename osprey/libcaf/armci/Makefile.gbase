@@ -68,7 +68,7 @@ CFILES = \
    env.c \
    util.c
 
-LCINCS += -I$(ARMCI_INCLUDE_DIR)
+LCINCS += -I$(ARMCI_HOME)/include
 LCDEFS += -DARMCI
 
 default: $(TARGETS)

@@ -97,12 +97,18 @@ GASNET_HOME="$with_gasnet_root",
 GASNET_HOME="")
 
 # enable ARMCI for Coarrays
-AC_ARG_WITH(armci-src-root,
-AS_HELP_STRING([--with-armci-src-root=<armci path>],
+AC_ARG_WITH(armci-root,
+AS_HELP_STRING([--with-armci-root=<armci path>],
 [Builds ARMCI-based libcaf runtime]),
-ARMCI_SRC_HOME="$with_armci_src_root",
-ARMCI_SRC_HOME="")
+ARMCI_HOME="$with_armci_root",
+ARMCI_HOME="")
 
+# specify ARMCI network libs
+AC_ARG_WITH(armci-network-libs,
+AS_HELP_STRING([--with-armci-network-libs=<armci libs>],
+[Specify additional network libraries for linker when using ARMCI]),
+ARMCI_NETWORK_LIBS="$with_armci_network_libs",
+ARMCI_NETWORK_LIBS="")
 
 # default comm library
 AC_ARG_WITH(default-comm,
@@ -135,9 +141,9 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "${GASNET_HOME}"; then
    [--enable-coarrays option is expected with --with-gasnet-root]
    )
 fi
-if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_SRC_HOME}"; then
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_HOME}"; then
   AC_MSG_ERROR(
-   [--enable-coarrays option is expected with --with-armci-src-root]
+   [--enable-coarrays option is expected with --with-armci-root]
    )
 fi
 if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_caf_runtime" = "xno"; then
@@ -156,11 +162,11 @@ if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
    )
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_SRC_HOME}"; then
-    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-src-root=<path> must be passed for coarrays])
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+    AC_MSG_ERROR([Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays])
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_SRC_HOME}"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
     if test ! -f "${MPI_INCLUDE}/mpi.h"; then
         if test -n "`which mpicc 2>/dev/null`"; then
             d=`which mpicc 2>/dev/null`
@@ -169,21 +175,15 @@ if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_SRC_HOME}"; then
             AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
         fi
     fi
-    if test ! -d "${ARMCI_SRC_HOME}"; then
-        AC_MSG_ERROR([Specified --with-armci-src-root=<path> doesn't look right. Check path.])
-    fi
-    armci_flag_info=`(cd $ARMCI_SRC_HOME; make flags 2> /dev/null)`
-    ARMCI_INCLUDE_DIR=`echo "${armci_flag_info}" | grep "ARMCI headers" | sed 's/^.* //' 2> /dev/null`
-    ARMCI_HOME=`dirname ${ARMCI_INCLUDE_DIR}`
-    armci_ld_flags=`echo "${armci_flag_info}" | grep "LDFLAGS=" | sed 's/ LDFLAGS=//'`
-    armci_ld_flags=`eval echo ${armci_ld_flags}`
-    ARMCI_LIBS=`echo "${armci_flag_info}" | grep "LIBS=" | sed 's/ LIBS=//'`
-    ARMCI_LIBS=`eval echo ${ARMCI_LIBS}`
-    ARMCI_LIBS="${armci_ld_flags} ${ARMCI_LIBS}"
-    if test -z "${ARMCI_INCLUDE_DIR}"; then
-        AC_MSG_ERROR([Couldn't find configured ARMCI source directory. Check specified --with-armci-src-root=<path>.])
+    if test ! -d "${ARMCI_HOME}"; then
+        AC_MSG_ERROR([Specified --with-armci-root=<path> doesn't look right. Check path.])
     fi
 fi
+
+if test -n "${ARMCI_NETWORK_LIBS}" -a -z "${ARMCI_HOME}"; then
+    AC_MSG_ERROR([--with-armci-root=<path> must be specified if you want to use ARMCI])
+fi
+
 
 if test -n "${GASNET_HOME}"; then
   if test ! -d "${GASNET_HOME}"; then
@@ -198,14 +198,14 @@ fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
   DEFAULT_COMM=gasnet
-elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_SRC_HOME}" ; then
+elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
     AC_MSG_ERROR([--with-default-comm accepts gasnet or armci])
 elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
     AC_MSG_ERROR([default comm (gasnet) requires --with-gasnet-root to be specified])
-elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_SRC_HOME}" ; then
-    AC_MSG_ERROR([default comm (armci) requires --with-armci-src-root to be specified])
+elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
+    AC_MSG_ERROR([default comm (armci) requires --with-armci-root to be specified])
 fi
 
 if test -z "${DEFAULT_CAF_HEAP_SIZE}"; then
@@ -553,8 +553,7 @@ AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
 AC_SUBST([GASNET_HOME])
 AC_SUBST([ARMCI_HOME])
-AC_SUBST([ARMCI_INCLUDE_DIR])
-AC_SUBST([ARMCI_LIBS])
+AC_SUBST([ARMCI_NETWORK_LIBS])
 AC_SUBST([GASNET_CONDUITS])
 AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
@@ -826,8 +825,7 @@ AC_MSG_NOTICE([   DEFAULT_COMM                   = $DEFAULT_COMM])
 AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])
 AC_MSG_NOTICE([   GASNET_CONDUITS                = $GASNET_CONDUITS])
 AC_MSG_NOTICE([   ARMCI_HOME                     = $ARMCI_HOME])
-AC_MSG_NOTICE([   ARMCI_INCLUDE_DIR              = $ARMCI_INCLUDE_DIR])
-AC_MSG_NOTICE([   ARMCI_LIBS                     = $ARMCI_LIBS])
+AC_MSG_NOTICE([   ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS])
 AC_MSG_NOTICE([   MPI_INCLUDE                    = $MPI_INCLUDE])
 ])
 AC_MSG_NOTICE([   BUILD_TAU_INSTR (experimental) = $BUILD_TAU_INSTR])

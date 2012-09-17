@@ -36,7 +36,7 @@ GASNET_HOME=@GASNET_HOME@
 GASNET_CONDUIT=`echo "@GASNET_CONDUITS@" | cut -d" " -f1`
 ARMCI_HOME=@ARMCI_HOME@
 COMM_LAYER=@DEFAULT_COMM@
-ARMCI_LIBS="@ARMCI_LIBS@"
+ARMCI_NETWORK_LIBS="@ARMCI_NETWORK_LIBS@"
 CC=uhcc
 FC=uhf90
 CAF_FLAGS="-coarray -fno-second-underscore"
@@ -463,8 +463,9 @@ elif [ $COMM_LAYER == armci ]; then
       MPI_LD_LIBS="-L$MPI_LIB $MPI_LD_LIBS"
   fi
 
-  # need to link in MPI libs as well.
-  COMM_LIBS="-Wl,-rpath,$ARMCI_HOME/lib $ARMCI_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
+  # need to link in ARMCI and MPI libs as well.
+  COMM_LIBS="-L$ARMCI_HOME/lib -Wl,-rpath,$ARMCI_HOME/lib -larmci $ARMCI_NETWORK_LIBS"
+  COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
   COMM_LIBS="-lcaf-armci $COMM_LIBS"
 
   add_to_env_list "MPI_LIB"
@@ -481,9 +482,6 @@ if [ "$show_info" == "y" ]; then
 fi
 
 # Now we invoke the compiler.
-
-set_env OPENUH_COMM_LIBS $COMM_LIBS
-set_env OPENUH_COMM_LAYER $COMM_LAYER
 
 ENVIRONMENT+="-----------------------\n"
 
@@ -585,7 +583,7 @@ else
 
       # add some symbols into executable for cafrun script to check
       link_instructions=`$mktemp_cmd`
-      symbol_defs="int OPENUH_COMM_LAYER_IS_$OPENUH_COMM_LAYER; \
+      symbol_defs="int OPENUH_COMM_LAYER_IS_$COMM_LAYER; \
                   int OPENUH_GASNET_CONDUIT_IS_$GASNET_CONDUIT; \
                   int OPENUH_ARMCI_NETWORK_IS_$ARMCI_NETWORK;"
 
@@ -630,13 +628,13 @@ else
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
                 $link_instructions.o $set_save_coarrays.o $output_file \
-                $OPENUH_COMM_LIBS -lcaf-extra $AUX_LD_LIBS
+                $COMM_LIBS -lcaf-extra $AUX_LD_LIBS
           stat=$?
       else
           # link command
           execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
-                $link_instructions.o $output_file $OPENUH_COMM_LIBS    \
-                -lcaf-extra $AUX_LD_LIBS
+                $link_instructions.o $output_file $COMM_LIBS -lcaf-extra \
+                $AUX_LD_LIBS
           stat=$?
       fi
   else

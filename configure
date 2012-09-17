@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_INCLUDE_DIR ARMCI_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -809,8 +809,11 @@ Optional Packages:
   --with-build-compiler=GNU|OSP	Use GNU or OSP compilers in build
   --with-gasnet-root=<gasnet path>
                           Builds GASNet-based libcaf runtime
-  --with-armci-src-root=<armci path>
+  --with-armci-root=<armci path>
                           Builds ARMCI-based libcaf runtime
+  --with-armci-network-libs=<armci libs>
+                          Specify additional network libraries for linker when
+                          using ARMCI
   --with-default-comm=gasnet|armci
                           Default communication layer to use if GASNet and
                           ARMCI are supported. Will be GASNet if unspecified.
@@ -1456,14 +1459,23 @@ fi;
 
 # enable ARMCI for Coarrays
 
-# Check whether --with-armci-src-root or --without-armci-src-root was given.
-if test "${with_armci_src_root+set}" = set; then
-  withval="$with_armci_src_root"
-  ARMCI_SRC_HOME="$with_armci_src_root"
+# Check whether --with-armci-root or --without-armci-root was given.
+if test "${with_armci_root+set}" = set; then
+  withval="$with_armci_root"
+  ARMCI_HOME="$with_armci_root"
 else
-  ARMCI_SRC_HOME=""
+  ARMCI_HOME=""
 fi;
 
+# specify ARMCI network libs
+
+# Check whether --with-armci-network-libs or --without-armci-network-libs was given.
+if test "${with_armci_network_libs+set}" = set; then
+  withval="$with_armci_network_libs"
+  ARMCI_NETWORK_LIBS="$with_armci_network_libs"
+else
+  ARMCI_NETWORK_LIBS=""
+fi;
 
 # default comm library
 
@@ -1503,10 +1515,10 @@ echo "$as_me: error: --enable-coarrays option is expected with --with-gasnet-roo
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
-if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_SRC_HOME}"; then
-  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --with-armci-src-root
+if test "${ENABLE_COARRAYS}" = "NO" -a -n "${ARMCI_HOME}"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --with-armci-root
    " >&5
-echo "$as_me: error: --enable-coarrays option is expected with --with-armci-src-root
+echo "$as_me: error: --enable-coarrays option is expected with --with-armci-root
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -1532,13 +1544,13 @@ echo "$as_me: error: --enable-coarrays option is expected when using --with-caf-
    { (exit 1); exit 1; }; }
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_SRC_HOME}"; then
-    { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-src-root=<path> must be passed for coarrays" >&5
-echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-src-root=<path> must be passed for coarrays" >&2;}
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -z "${GASNET_HOME}" -a -z "${ARMCI_HOME}"; then
+    { { echo "$as_me:$LINENO: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&5
+echo "$as_me: error: Either --with-gasnet-root=<path> or --with-armci-root=<path> must be passed for coarrays" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
-if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_SRC_HOME}"; then
+if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
     if test ! -f "${MPI_INCLUDE}/mpi.h"; then
         if test -n "`which mpicc 2>/dev/null`"; then
             d=`which mpicc 2>/dev/null`
@@ -1549,25 +1561,19 @@ echo "$as_me: error: Environment variable MPI_INCLUDE must be set to valid MPI i
    { (exit 1); exit 1; }; }
         fi
     fi
-    if test ! -d "${ARMCI_SRC_HOME}"; then
-        { { echo "$as_me:$LINENO: error: Specified --with-armci-src-root=<path> doesn't look right. Check path." >&5
-echo "$as_me: error: Specified --with-armci-src-root=<path> doesn't look right. Check path." >&2;}
-   { (exit 1); exit 1; }; }
-    fi
-    armci_flag_info=`(cd $ARMCI_SRC_HOME; make flags 2> /dev/null)`
-    ARMCI_INCLUDE_DIR=`echo "${armci_flag_info}" | grep "ARMCI headers" | sed 's/^.* //' 2> /dev/null`
-    ARMCI_HOME=`dirname ${ARMCI_INCLUDE_DIR}`
-    armci_ld_flags=`echo "${armci_flag_info}" | grep "LDFLAGS=" | sed 's/ LDFLAGS=//'`
-    armci_ld_flags=`eval echo ${armci_ld_flags}`
-    ARMCI_LIBS=`echo "${armci_flag_info}" | grep "LIBS=" | sed 's/ LIBS=//'`
-    ARMCI_LIBS=`eval echo ${ARMCI_LIBS}`
-    ARMCI_LIBS="${armci_ld_flags} ${ARMCI_LIBS}"
-    if test -z "${ARMCI_INCLUDE_DIR}"; then
-        { { echo "$as_me:$LINENO: error: Couldn't find configured ARMCI source directory. Check specified --with-armci-src-root=<path>." >&5
-echo "$as_me: error: Couldn't find configured ARMCI source directory. Check specified --with-armci-src-root=<path>." >&2;}
+    if test ! -d "${ARMCI_HOME}"; then
+        { { echo "$as_me:$LINENO: error: Specified --with-armci-root=<path> doesn't look right. Check path." >&5
+echo "$as_me: error: Specified --with-armci-root=<path> doesn't look right. Check path." >&2;}
    { (exit 1); exit 1; }; }
     fi
 fi
+
+if test -n "${ARMCI_NETWORK_LIBS}" -a -z "${ARMCI_HOME}"; then
+    { { echo "$as_me:$LINENO: error: --with-armci-root=<path> must be specified if you want to use ARMCI" >&5
+echo "$as_me: error: --with-armci-root=<path> must be specified if you want to use ARMCI" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
 
 if test -n "${GASNET_HOME}"; then
   if test ! -d "${GASNET_HOME}"; then
@@ -1586,7 +1592,7 @@ fi
 
 if test -z "${DEFAULT_COMM}" -a -n "${GASNET_HOME}"; then
   DEFAULT_COMM=gasnet
-elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_SRC_HOME}" ; then
+elif test -z "${DEFAULT_COMM}" -a -n "${ARMCI_HOME}" ; then
   DEFAULT_COMM=armci
 elif test -n "${DEFAULT_COMM}" -a "${DEFAULT_COMM}" != "gasnet"  -a "${DEFAULT_COMM}" != "armci" ; then
     { { echo "$as_me:$LINENO: error: --with-default-comm accepts gasnet or armci" >&5
@@ -1596,9 +1602,9 @@ elif test "${DEFAULT_COMM}" = "gasnet" -a -z "${GASNET_HOME}" ; then
     { { echo "$as_me:$LINENO: error: default comm (gasnet) requires --with-gasnet-root to be specified" >&5
 echo "$as_me: error: default comm (gasnet) requires --with-gasnet-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
-elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_SRC_HOME}" ; then
-    { { echo "$as_me:$LINENO: error: default comm (armci) requires --with-armci-src-root to be specified" >&5
-echo "$as_me: error: default comm (armci) requires --with-armci-src-root to be specified" >&2;}
+elif test "${DEFAULT_COMM}" = "armci" -a -z "${ARMCI_HOME}" ; then
+    { { echo "$as_me:$LINENO: error: default comm (armci) requires --with-armci-root to be specified" >&5
+echo "$as_me: error: default comm (armci) requires --with-armci-root to be specified" >&2;}
    { (exit 1); exit 1; }; }
 fi
 
@@ -1977,7 +1983,6 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
-
 
 
 
@@ -2910,8 +2915,7 @@ s,@ENABLE_COARRAYS@,$ENABLE_COARRAYS,;t t
 s,@BUILD_CAF_RUNTIME@,$BUILD_CAF_RUNTIME,;t t
 s,@GASNET_HOME@,$GASNET_HOME,;t t
 s,@ARMCI_HOME@,$ARMCI_HOME,;t t
-s,@ARMCI_INCLUDE_DIR@,$ARMCI_INCLUDE_DIR,;t t
-s,@ARMCI_LIBS@,$ARMCI_LIBS,;t t
+s,@ARMCI_NETWORK_LIBS@,$ARMCI_NETWORK_LIBS,;t t
 s,@GASNET_CONDUITS@,$GASNET_CONDUITS,;t t
 s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
 s,@BASH_PATH@,$BASH_PATH,;t t
@@ -3453,10 +3457,8 @@ echo "$as_me:    GASNET_HOME                    = $GASNET_HOME" >&6;}
 echo "$as_me:    GASNET_CONDUITS                = $GASNET_CONDUITS" >&6;}
 { echo "$as_me:$LINENO:    ARMCI_HOME                     = $ARMCI_HOME" >&5
 echo "$as_me:    ARMCI_HOME                     = $ARMCI_HOME" >&6;}
-{ echo "$as_me:$LINENO:    ARMCI_INCLUDE_DIR              = $ARMCI_INCLUDE_DIR" >&5
-echo "$as_me:    ARMCI_INCLUDE_DIR              = $ARMCI_INCLUDE_DIR" >&6;}
-{ echo "$as_me:$LINENO:    ARMCI_LIBS                     = $ARMCI_LIBS" >&5
-echo "$as_me:    ARMCI_LIBS                     = $ARMCI_LIBS" >&6;}
+{ echo "$as_me:$LINENO:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&5
+echo "$as_me:    ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS" >&6;}
 { echo "$as_me:$LINENO:    MPI_INCLUDE                    = $MPI_INCLUDE" >&5
 echo "$as_me:    MPI_INCLUDE                    = $MPI_INCLUDE" >&6;}
 
