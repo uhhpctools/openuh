@@ -212,6 +212,7 @@ void __ompc_task_exit()
 {
   omp_task_flag_t flags;
   int myid;
+  int num_siblings = 0;
   omp_team_t *team;
   omp_task_t *current_task, *next_task;
   omp_v_thread_t *current_thread;
@@ -231,14 +232,14 @@ void __ompc_task_exit()
     Is_True(current_task->parent != NULL,
             ("deferred task should has a NULL parent"));
     __ompc_atomic_dec(&team->task_pool->num_pending_tasks);
-    __ompc_atomic_dec(&current_task->parent->num_children);
+    num_siblings = __ompc_atomic_dec(&current_task->parent->num_children);
   }
 
   /* only try to free parent or put it back on queue if it was a deferred
    * task and it has no more children (since child tasks may attempt to update
    * num_children field of parent when they exit) */
-  if (current_task->parent && __ompc_task_is_deferred(current_task->parent) &&
-      current_task->parent->num_children == 0 &&
+  if (current_task->parent &&
+      __ompc_task_is_deferred(current_task->parent) && num_siblings == 0 &&
       __ompc_task_state_is_finished(current_task->parent)) {
       __ompc_task_delete(current_task->parent);
   }

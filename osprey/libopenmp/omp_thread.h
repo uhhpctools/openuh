@@ -314,14 +314,12 @@ void __ompc_barrier_wait(omp_team_t *team)
 {
   /*Warning: This implementation may cause cache problems*/
   int barrier_flag;
-  int reset_barrier;
   int new_count;
   int i;
   volatile int *barrier_flag_p;
   omp_task_t *next, *current_task;
   omp_task_pool_t *pool;
 
-  reset_barrier = 0;
   barrier_flag_p = &(team->barrier_flag);
   barrier_flag = *barrier_flag_p;
 
@@ -345,9 +343,9 @@ void __ompc_barrier_wait(omp_team_t *team)
 
   if (new_count == team->team_size) {
     /* The last one reset flags*/
-    team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
     team->barrier_count = 0;
     team->barrier_count2 = 0;
+    team->barrier_flag = barrier_flag ^ 1; /* Xor: toggle*/
 
     pthread_mutex_lock(&(team->barrier_lock));
     pthread_cond_broadcast(&(team->barrier_cond));
