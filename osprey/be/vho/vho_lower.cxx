@@ -5837,6 +5837,9 @@ static WN *
 vho_lower_region ( WN * wn, WN * block )
 {
   BOOL is_simple_eh = FALSE;
+
+  UINT last_sz = Scope_tab[CURRENT_SYMTAB].st_tab->Size();
+
   if (WN_region_kind(wn) == REGION_KIND_EH && is_simple_eh_region(wn)) {
     is_simple_eh = TRUE;
     Enclosing_Simple_EH++;
@@ -5846,7 +5849,6 @@ vho_lower_region ( WN * wn, WN * block )
   else
     WN_region_body(wn) = vho_lower_block ( WN_region_body(wn) );
 
-  UINT last_sz = Scope_tab[CURRENT_SYMTAB].st_tab->Size();
   UINT new_sz = Scope_tab[CURRENT_SYMTAB].st_tab->Size();
   // Make temp variables generated inside OpenMP blocks to be private
   if (new_sz > last_sz && WN_region_kind(wn) == REGION_KIND_MP) {
