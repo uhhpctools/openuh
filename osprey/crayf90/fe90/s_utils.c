@@ -3900,6 +3900,9 @@ do_count_allocatable_cpnt(int attr_idx, int is_array) {
     if (ATD_ALLOCATABLE(cpnt_attr_idx)) {
       count += 1;
     }
+    else if ( ATD_POINTER(cpnt_attr_idx)) {
+      count += 1;
+    }
     /* Child structure contains components which are allocatable arrays */
     else if (TYP_TYPE(ATD_TYPE_IDX(cpnt_attr_idx)) == Structure) {
       count += do_count_allocatable_cpnt(cpnt_attr_idx, 1);
@@ -3985,6 +3988,10 @@ do_alloc_cpnt_offset(int line, int col, int list_idx, int attr_idx,
     sn_idx = SN_SIBLING_LINK(sn_idx)) {
     int cpnt_attr_idx = SN_ATTR_IDX(sn_idx);
     if (ATD_ALLOCATABLE(cpnt_attr_idx)) {
+      list_idx = do_one_operand(line, col, list_idx,
+	ATD_OFFSET_FLD(cpnt_attr_idx), ATD_CPNT_OFFSET_IDX(cpnt_attr_idx));
+    }
+    else if (ATD_POINTER(cpnt_attr_idx)) {
       list_idx = do_one_operand(line, col, list_idx,
 	ATD_OFFSET_FLD(cpnt_attr_idx), ATD_CPNT_OFFSET_IDX(cpnt_attr_idx));
     }
