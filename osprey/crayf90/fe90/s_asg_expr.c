@@ -943,23 +943,22 @@ CK_WHERE:
 
 # if defined(_F_MINUS_MINUS)
       /* prevent ptr asg to pointer component of co-array */
-      {
+      if (ok &&
+          dump_flags.f_minus_minus &&
+          AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+          ATD_CLASS(attr_idx) == Struct_Component) {
+
           char *comm_layer = NULL;
           int restrict_coarray_pointer_cmpt = 1;
 #ifdef _UH_COARRAYS
           /* if compiling with GASNet communication layer, allow pointer
            * assignment statement for coarray pointer components */
           comm_layer = getenv("OPENUH_COMM_LAYER");
-          if (strcmp(comm_layer, "gasnet") == 0) {
+          if (comm_layer != NULL && strcmp(comm_layer, "gasnet") == 0) {
               restrict_coarray_pointer_cmpt = 0;
           }
 #endif
-      if (ok &&
-          dump_flags.f_minus_minus &&
-          restrict_coarray_pointer_cmpt &&
-          AT_OBJ_CLASS(attr_idx) == Data_Obj &&
-          ATD_CLASS(attr_idx) == Struct_Component) {
-
+      if (restrict_coarray_pointer_cmpt) {
          attr_idx = find_left_attr(&l_opnd);
 
          if (ATD_PE_ARRAY_IDX(attr_idx)) {

@@ -481,6 +481,8 @@ if [ "$show_info" == "y" ]; then
   print_compile_link_info
 fi
 
+set_env OPENUH_COMM_LAYER $COMM_LAYER
+
 # Now we invoke the compiler.
 
 ENVIRONMENT+="-----------------------\n"
