@@ -1439,8 +1439,8 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
    		int			dim;
 #ifdef _UH_COARRAYS
    		int			codim = 0;
-        int         actual_dim;
 #endif
+        int         actual_dim;
    		long64			end;
 		long64			flags 			= 0;
    		int      		j;
