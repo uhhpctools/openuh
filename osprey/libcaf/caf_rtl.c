@@ -988,11 +988,11 @@ void _EVENT_POST(event_t * event, int *image)
 {
     if (*image == 0) {
         /* local reference */
-        INT4 result, inc = 1;
+        event_t result, inc = 1;
         comm_fadd_request(event, &inc, sizeof(event_t), _this_image - 1,
                           &result);
     } else {
-        INT4 result, inc = 1;
+        event_t result, inc = 1;
         check_remote_image(*image);
         check_remote_address(*image, event);
         comm_fadd_request(event, &inc, sizeof(event_t), *image - 1,
