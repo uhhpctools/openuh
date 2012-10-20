@@ -1745,7 +1745,7 @@ void comm_memory_free()
 }
 
 
-void comm_finalize()
+void comm_finalize(int exit_code)
 {
     int p;
 
@@ -1771,7 +1771,7 @@ void comm_finalize()
 
     comm_service_finalize();
 
-    gasnet_exit(0);
+    gasnet_exit(exit_code);
 
     /* does not reach */
 }

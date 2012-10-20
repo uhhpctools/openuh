@@ -146,6 +146,6 @@ void comm_service();
 /* exit */
 void comm_memory_free();
 void comm_exit(int status);
-void comm_finalize();
+void comm_finalize(int exit_code);
 
 #endif                          /* _COMM_H */

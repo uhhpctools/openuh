@@ -111,6 +111,8 @@ void
 _STOP(s)
 _fcd	s;
 {
+    char *p;
+    int stop_code;
 	int	len, lineno;
 	char	*buff, *msg;
 	char	name[MAX_ENT_LEN];
@@ -143,6 +145,14 @@ _fcd	s;
 		if (len > MAX_STP_LEN)
 			len	= MAX_STP_LEN;
 	}
+
+    /* get the stop code from msg */
+    strtod(msg, &p);
+    if (*p == '\0') {
+        stop_code = (int) atoi(msg);
+    } else {
+        stop_code = 0;
+    }
 
 	/*
 	 * Print a one- or two-line message based on the length of the
@@ -203,7 +213,7 @@ _fcd	s;
 #endif
 	}
 #endif
-	exit(0);
+	exit(stop_code);
 }
 #else	/* Not __mips */
 	/* PRINT output only if literal present */
@@ -223,10 +233,11 @@ _fcd	s;
 	/*  So call _fcleanup here for safety. */
 	_fcleanup();
 #ifndef _UH_COARRAYS
-	exit(0);
+	exit(stop_code);
 #else
-    __caf_finalize();
+    __caf_finalize(stop_code);
 #endif
+
 }
 #endif	/* Not __mips */
 
@@ -243,6 +254,8 @@ void
 _ERROR_STOP(s)
 _fcd	s;
 {
+    char *p;
+    int stop_code;
 	int	len, lineno;
 	char	*buff, *msg;
 	char	name[MAX_ENT_LEN];
@@ -257,6 +270,14 @@ _fcd	s;
 		if (len > MAX_STP_LEN)
 			len	= MAX_STP_LEN;
 	}
+
+    /* get the stop code from msg */
+    strtod(msg, &p);
+    if (*p == '\0') {
+        stop_code = (int) atoi(msg);
+    } else {
+        stop_code = 128; /* non-zero for error termination */
+    }
 
 	/*
 	 * Print a one- or two-line message based on the length of the
@@ -283,6 +304,6 @@ _fcd	s;
 	(void) write(fileno(errfile), buffer, buff - buffer);
 
 	/* Do error termination */
-	__caf_exit(1);
+	__caf_exit(stop_code);
 }
 #endif

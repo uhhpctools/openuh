@@ -53,14 +53,15 @@ typedef int16_t INT2;
 typedef int32_t INT4;
 typedef int64_t INT8;
 
-typedef INT4 event_t;
+typedef INT8 event_t;
+typedef INT8 atomic_t;
 
 
 /* COMPILER BACK-END INTERFACE */
 
 void __caf_init();
 
-void __caf_finalize();
+void __caf_finalize(int exit_code);
 
 void __caf_exit(int status);
 
@@ -106,21 +107,21 @@ void _UCOBOUND_1(DopeVectorType * ret, DopeVectorType * diminfo);
 int _UCOBOUND_2(DopeVectorType * diminfo, int *sub);
 
 /* LOCKS SUPPORT */
-void _COARRAY_LOCK(lock_t * lock, int *image, char *success,
+void _COARRAY_LOCK(lock_t * lock, const int *image, char *success,
                    int success_len, int *status, int stat_len,
                    char *errmsg, int errmsg_len);
-void _COARRAY_UNLOCK(lock_t * lock, int *image, int *status,
+void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
                      int stat_len, char *errmsg, int errmsg_len);
 
 /* ATOMIC INTRINSICS */
-void _ATOMIC_DEFINE_1(INT4 * atom, INT1 * value, int *image);
-void _ATOMIC_DEFINE_2(INT4 * atom, INT2 * value, int *image);
-void _ATOMIC_DEFINE_4(INT4 * atom, INT4 * value, int *image);
-void _ATOMIC_DEFINE_8(INT4 * atom, INT8 * value, int *image);
-void _ATOMIC_REF_1(INT1 * value, INT4 * atom, int *image);
-void _ATOMIC_REF_2(INT2 * value, INT4 * atom, int *image);
-void _ATOMIC_REF_4(INT4 * value, INT4 * atom, int *image);
-void _ATOMIC_REF_8(INT8 * value, INT4 * atom, int *image);
+void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image);
+void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image);
+void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image);
+void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image);
+void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image);
+void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image);
+void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image);
+void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image);
 
 /* EVENTS SUPPORT */
 void _EVENT_POST(event_t * event, int *image);

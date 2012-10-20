@@ -829,7 +829,7 @@ void comm_exit(int status)
     /* does not reach */
 }
 
-void comm_finalize()
+void comm_finalize(int exit_code)
 {
     int p;
 
@@ -854,7 +854,7 @@ void comm_finalize()
     ARMCI_Finalize();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to MPI_Finalize");
     MPI_Finalize();
-    exit(0);
+    exit(exit_code);
 
     /* does not reach */
 }

@@ -309,6 +309,7 @@ static WN * Generate_Call_coarray_strided_write(WN *image, WN *dest,
                                     WN *stride_levels);
 
 
+
 // ====================================================================
 //
 // Utility functions to generate function calls
@@ -550,7 +551,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 /* check for call to _END */
                 if ( NAME_IS(WN_st(wn), "_END") ) {
-                    insert_wnx = Generate_Call( CAF_FINALIZE );
+                    insert_wnx = Generate_Call_Shell(CAF_FINALIZE, MTYPE_V, 1);
+                    WN_actual(insert_wnx,0) =
+                        Generate_Param( WN_Intconst(Integer_type, 0),
+                                        WN_PARM_BY_VALUE);
                     WN_INSERT_BlockBefore(blk_node, wn, insert_wnx);
                 }
                 break;
@@ -1700,8 +1704,9 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
             BOOL noncontig = (WN_element_size(wp) < 0);
             if (noncontig) {
                 for (int j = 1; j < rank; j++) {
-                    stride_mult =
-                        WN_COPY_Tree(WN_kid(wp, totalrank-j));
+                    stride_mult = WN_Mpy( MTYPE_U8,
+                                    WN_Intconst(Integer_type, elem_size),
+                                    WN_COPY_Tree(WN_kid(wp, totalrank-j)) );
                     remote_access[i].stride_mult[j] = stride_mult;
                 }
             } else {
@@ -1881,8 +1886,9 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
                 BOOL noncontig = (WN_element_size(wp) < 0);
                 if (noncontig) {
                     for (int j = 1; j < rank; j++) {
-                        stride_mult =
-                            WN_COPY_Tree(WN_kid(wp, rank-j));
+                        stride_mult = WN_Mpy( MTYPE_U8,
+                                WN_Intconst(Integer_type, elem_size),
+                                WN_COPY_Tree(WN_kid(wp, rank-j)) );
                         local_access[i].stride_mult[j] = stride_mult;
                     }
                 } else {
