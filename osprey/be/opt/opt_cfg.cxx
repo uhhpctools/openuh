@@ -1486,6 +1486,7 @@ BOOL CFG::Screen_cand(WN* wn)
   WN *else_wn = WN_else(wn);
   BOOL empty_then = !then_wn || !WN_first(then_wn);
   BOOL empty_else = !else_wn || !WN_first(else_wn);
+  SYMTAB_IDX current_level = PU_lexical_level(Get_Current_PU());
 
   WN *if_test = WN_if_test(wn);
   WN *stmt = WN_first(empty_then ? else_wn : then_wn);
@@ -1526,6 +1527,26 @@ BOOL CFG::Screen_cand(WN* wn)
   if ((WN_operator(stmt) == OPR_STBITS || WN_operator(stmt) == OPR_ISTBITS) &&
       (empty_then || empty_else)) 
     return TRUE;
+
+  if (empty_then || empty_else) {
+      // if-conversion can result in a data race if storing to a variable that
+      // is shared in a parallel context. And we have to consider that any
+      // variable who's scope falls outside the current PU (it is assumed that
+      // MP regions have already been outlined) may be shared.
+      if (WN_operator(stmt) == OPR_STID) {
+        ST *st = _opt_stab->St(WN_aux(stmt));
+        if (ST_level(st) < current_level)
+            return TRUE;
+      } else if (WN_operator(stmt) == OPR_ISTORE) {
+          // NOTE: The above doesn't catch indirect stores to memory that is
+          // "shared". We can add a catch-all case that any ISTORE stmt where
+          // there is an empty then or empty else block should be screened,
+          // but this is perhaps overly conservative. Incorporating
+          // information from a points-to analysis is probably necessary.
+
+          // return TRUE;
+      }
+  }
 
   if (!OPCODE_Can_Be_Speculative(OPC_I4I4ILOAD)) {
     if (WN_operator(stmt) == OPR_STID || WN_operator(stmt) == OPR_STBITS) {
