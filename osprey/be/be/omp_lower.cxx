@@ -652,6 +652,9 @@ static BOOL Pragmas_For_Par_Region(WN *pragma_blk, BOOL *is_worksharing)
     *is_worksharing = TRUE;
     break;
 
+  case WN_PRAGMA_TASK_BEGIN:
+    return TRUE;
+
   default:
     break;
   }
@@ -3355,7 +3358,7 @@ Privatize_Index_Vars_And_Check_Final_Scopes(
 
       if (prag_id == WN_PRAGMA_REDUCTION &&
           pragma_block_list->Elements() == 0 && !is_par_region &&
-          ST_sclass(st) == SCLASS_AUTO) {
+          is_orphaned_pdo && ST_sclass(st) == SCLASS_AUTO) {
           // PV 646575: reduction variables of an orphaned construct can't
           // be auto variables in the containing PU
         ErrMsgLine(EC_MPLOWER_red_of_private, WN_Find_Linenum(wn), st);

@@ -1775,8 +1775,6 @@ __ompc_single (omp_int32 global_tid)
   __ompc_unlock(&(p_team->single_lock));
   if (is_first) __ompc_set_state(THR_WORK_STATE);
 
-  if (is_first) __ompc_set_state(THR_WORK_STATE);
-
   return is_first;
 }
 
@@ -1785,6 +1783,52 @@ void
 __ompc_end_single (omp_int32 global_tid) 
 {
   __ompc_event_callback(OMP_EVENT_THR_END_SINGLE);
+  __ompc_set_state(THR_WORK_STATE);
+  /* The single flags should be reset here*/
+}
+
+omp_int32
+__ompc_workshare (omp_int32 global_tid)
+{
+  __ompc_set_state(THR_OVHD_STATE);
+
+  omp_team_t *p_team;
+  omp_v_thread_t *p_vthread;
+  int	is_first = 0;
+
+  if (__omp_exe_mode & OMP_EXE_MODE_SEQUENTIAL)
+    return 1;
+  if (__omp_exe_mode & OMP_EXE_MODE_NORMAL) {
+    p_team = &__omp_level_1_team_manager;
+    p_vthread = &__omp_level_1_team[global_tid];
+  } else {
+    p_vthread = __ompc_get_v_thread_by_num(global_tid);
+    p_team = p_vthread->team;
+  }
+
+  if (p_team->team_size == 1) {
+    /* Single member team*/
+    return 1;
+  }
+
+  /* used to select which thread will execute non-shared work units in the
+   * workshare region */
+  p_vthread->single_count++;
+  __ompc_lock(&(p_team->single_lock));
+  if (p_team->single_count < p_vthread->single_count) {
+    p_team->single_count++;
+    is_first = 1;
+  }
+  __ompc_unlock(&(p_team->single_lock));
+
+  if (is_first) __ompc_set_state(THR_WORK_STATE);
+
+  return is_first;
+}
+
+void
+__ompc_end_workshare (omp_int32 global_tid)
+{
   __ompc_set_state(THR_WORK_STATE);
   /* The single flags should be reset here*/
 }

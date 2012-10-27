@@ -631,8 +631,8 @@ char	*(directive_stmt_str[Last_Dir]) =   {
                 "C$OMP SECTION",		/* Section_Open_Mp_Dir	*/
                 "C$OMP SECTIONS",		/* Sections_Open_Mp_Dir	*/
                 "C$OMP SINGLE",			/* Single_Open_Mp_Dir	*/
-                "C$OMP WORKSHARE" /* Workshare_Open_Mp_Dir */ /* by jhs, 02/7/18 */
-                "C$OMP TASK" /* Task_Open_Mp_Dir */
+                "C$OMP WORKSHARE", /* Workshare_Open_Mp_Dir */ /* by jhs, 02/7/18 */
+                "C$OMP TASK", /* Task_Open_Mp_Dir */
                 "C$OMP TASKWAIT" /* Taskwait_Open_Mp_Dir */
 				};
 
@@ -1907,9 +1907,9 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Parallel_Do_Region) |
                          (0 << Open_Mp_Master_Region) |
                          (0 << Open_Mp_Critical_Region) |
-                         (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) |
+                         (1 << Open_Mp_Ordered_Region) |
+			 (1 << Open_Mp_Workshare_Region) |
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
 			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endtask_Open_Mp_Dir	*/
@@ -2256,7 +2256,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Master_Region) |
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
+			 (1 << Open_Mp_Workshare_Region) |
 			 (0 << Open_Mp_Parallel_Workshare_Region) |
 			 (0 << Open_Mp_Task_Region) ),
 
@@ -2285,8 +2285,8 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Master_Region) |
                          (0 << Open_Mp_Critical_Region) |
                          (0 << Open_Mp_Ordered_Region) |
-			 (0 << Open_Mp_Workshare_Region) |
-			 (0 << Open_Mp_Parallel_Workshare_Region) |
+			 (1 << Open_Mp_Workshare_Region) |
+			 (1 << Open_Mp_Parallel_Workshare_Region) |
 			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Taskwait_Open_Mp_Dir	*/
@@ -3567,7 +3567,7 @@ long directive_must_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
 			 (0 << Open_Mp_Parallel_Workshare_Region) |
-			 (1 << Open_Mp_Task_Region) ),
+			 (0 << Open_Mp_Task_Region) ),
 
                                 /* Endtask_Open_Mp_Dir	*/
 

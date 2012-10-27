@@ -350,7 +350,10 @@ typedef enum {
   MPR_OMP_TASK_FIRSTPRIVATES_ALLOC       = 82,
   MPR_OMP_TASK_FIRSTPRIVATES_FREE        = 83,
   MPR_OMP_TASK_WILL_DEFER       = 84,
-  MPRUNTIME_LAST = MPR_OMP_TASK_WILL_DEFER
+
+  MPR_OMP_WORKSHARE             = 85,
+  MPR_OMP_END_WORKSHARE         = 86,
+  MPRUNTIME_LAST = MPR_OMP_END_WORKSHARE
 } MPRUNTIME;
 
 
@@ -773,6 +776,8 @@ static const char *mpr_names [MPRUNTIME_LAST + 1] = {
   "__ompc_task_firstprivates_alloc",     /* MPR_OMP_TASK_FIRSTPRIVATES_ALLOC */
   "__ompc_task_firstprivates_free",      /* MPR_OMP_TASK_FIRSTPRIVATES_FREE */
   "__ompc_task_will_defer",    /* MPR_OMP_TASK_WILL_DEFER */
+  "__ompc_workshare",           /* MPR_OMP_WORKSHARE */
+  "__ompc_end_workshare",       /* MPR_OMP_END_WORKSHARE */
 };
 
 
@@ -870,6 +875,9 @@ static ST_IDX mpr_sts [MPRUNTIME_LAST + 1] = {
   ST_IDX_ZERO,   /* MPR_OMP_TASK_FIRSTPRIVATES_ALLOC */
   ST_IDX_ZERO,   /* MPR_OMP_TASK_FIRSTPRIVATES_FREE */
   ST_IDX_ZERO,   /* MPR_OMP_TASK_WILL_DEFER */
+
+  ST_IDX_ZERO,   /* MPR_OMP_WORKSHARE */
+  ST_IDX_ZERO,   /* MPR_OMP_END_WORKSHARE */
 };
 
 #define MPSP_STATUS_PREG_NAME "mpsp_status"
@@ -1928,6 +1936,65 @@ Gen_End_Single (WN * constructnum,
 }
 
 /*
+* Generate a begin workshare RTL call.
+* */
+static WN *
+Gen_Workshare (ST * gtid)
+{
+  WN *wn;
+
+  wn = WN_Create ( OPC_I4CALL, 1 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST ( MPR_OMP_WORKSHARE );
+
+  WN_kid(wn, 0) = WN_CreateParm(MTYPE_I4, Get_Gtid( gtid ),
+          Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+
+  WN_Set_Call_Non_Data_Mod ( wn );
+  WN_Set_Call_Non_Data_Ref ( wn );
+  WN_Set_Call_Non_Parm_Mod ( wn );
+  WN_Set_Call_Non_Parm_Ref ( wn );
+  WN_Set_Call_Parm_Ref ( wn );
+  WN_linenum(wn) = line_number;
+
+  return ( wn );
+}
+
+
+/*
+* End_Workshare.
+*/
+
+static WN *
+Gen_End_Workshare ( ST * gtid, BOOL nowait)
+{
+
+  WN *return_wn = WN_CreateBlock( );
+  WN *wn;
+
+  wn = WN_Create ( OPC_VCALL, 1 );
+  WN_st_idx(wn) = GET_MPRUNTIME_ST ( MPR_OMP_END_WORKSHARE );
+
+  WN_kid(wn, 0) = WN_CreateParm(MTYPE_I4, Get_Gtid( gtid ),
+          Be_Type_Tbl(MTYPE_I4), WN_PARM_BY_VALUE);
+
+  WN_Set_Call_Non_Data_Mod ( wn );
+  WN_Set_Call_Non_Data_Ref ( wn );
+  WN_Set_Call_Non_Parm_Mod ( wn );
+  WN_Set_Call_Non_Parm_Ref ( wn );
+  WN_Set_Call_Parm_Ref ( wn );
+  WN_linenum(wn) = line_number;
+
+  WN_INSERT_BlockLast( return_wn, wn );
+
+  if( !nowait )
+  {
+    WN_INSERT_BlockLast( return_wn, Gen_Barrier( gtid ));
+  }
+
+  return ( return_wn );
+}
+
+/*
 * Flush thread modified data. envision it to the global scope.
 * Currently, the f90fe and cfe translate FLUSH directives directly
 * into VINTRINSIC_CALL<SYNCHRONIZE>, and the cg smooth this call
@@ -1954,12 +2021,19 @@ Gen_Flush( ST *flush_var, WN_OFFSET flush_offset)
   WN_Set_Call_Parm_Ref(wn);
   WN_linenum(wn) = line_number;
   
+  if (flush_var != NULL)
   WN_kid(wn, 0) = WN_CreateParm( Pointer_type, 
                      WN_Lda( Pointer_type, flush_offset, flush_var ),
                      Be_Type_Tbl( Pointer_type ), WN_PARM_BY_REFERENCE );
+  else
+  WN_kid(wn, 0) = WN_CreateParm( Pointer_type,
+                     WN_Intconst( Pointer_type, 0 ),
+                     Be_Type_Tbl( Pointer_type ), WN_PARM_BY_VALUE );
+
 	// TODO: finish the flush call.
   return wn;
 }
+
 #ifdef KEY
 static WN* 
 Get_First_Stmt_in_Block(WN *block)
@@ -4942,6 +5016,7 @@ Create_Local_Variables ( VAR_TABLE * vtab, WN * reductions,
     is_non_combined_worksharing = TRUE;
     break;
   case MPP_PARALLEL_DO:
+  case MPP_PARALLEL_WORKSHARE:
   case MPP_PARALLEL_REGION:
   case MPP_TASK_REGION:
 #ifdef KEY
@@ -5234,6 +5309,7 @@ Process_Exception_Region ( WN * node, VAR_TABLE * vtab )
   case MPP_SINGLE:
   case MPP_PDO:
   case MPP_PARALLEL_DO:
+  case MPP_PARALLEL_WORKSHARE:
   case MPP_PARALLEL_REGION:
   case MPP_TASK_REGION:
   case MPP_ORPHAN:
@@ -6729,7 +6805,7 @@ Post_MP_Processing (WN * pu)
 // TODO: should be replaced when implementing TLS
 
 static WN *
-Gen_MP_Copyin ( BOOL is_omp )
+Gen_MP_Copyin_TLS ( BOOL is_omp )
 {
   WN *block = WN_CreateBlock();
 
@@ -6770,7 +6846,6 @@ Gen_MP_Copyin ( BOOL is_omp )
   return (block);
 }
 
-#if 0
 static WN * 
 Gen_MP_Copyin ( BOOL is_omp )
 {
@@ -7019,7 +7094,6 @@ Gen_MP_Copyin ( BOOL is_omp )
 
   return (block);
 }
-#endif
 
 #define MAX_NDIM 7
 /***********************************************
@@ -7903,10 +7977,10 @@ Gen_MP_SingleProcess_Block(WN *single_block, BOOL nowait,
 
 #ifdef KEY /* Bug 4828 */
 static WN *
-Gen_MP_Workshare_Block(WN *workshare_block, BOOL nowait, 
-                           BOOL is_omp, BOOL is_orphaned)
+Gen_MP_Workshare_Block(WN *workshare_block, BOOL nowait,
+                       BOOL is_orphaned)
 {
-  WN *mp_workshare_block = WN_CreateBlock(), *return_stid;
+  WN *mp_workshare_block = WN_CreateBlock(), *return_stid, *single_test;
   WN *sp_block = WN_CreateBlock();
   ST *return_st;
   WN_OFFSET return_ofst;
@@ -7917,10 +7991,70 @@ Gen_MP_Workshare_Block(WN *workshare_block, BOOL nowait,
     // insert code to get gtid.
     WN_INSERT_BlockLast( mp_workshare_block, Gen_Store_Gtid());
   }
-  WN_INSERT_BlockLast( mp_workshare_block, workshare_block);
 
-  if (is_omp || !nowait)
-    WN_INSERT_BlockLast(mp_workshare_block, Gen_Barrier( local_gtid ));
+  /* we implement the WORKSHARE block as a SINGLE block, for correctness.
+   *
+   * TODO: More work needs to be done, probably in OMP Prelower phase and/or
+   * Fortran front-end, to implement the WORKSHARE construct using
+   * true worksharing. */
+
+  WN_INSERT_BlockLast(mp_workshare_block,
+    Gen_Workshare( local_gtid));
+
+  Create_Preg_or_Temp(MTYPE_I4, MPSP_STATUS_PREG_NAME, &return_st,
+                      &return_ofst);
+  GET_RETURN_PREGS(rreg1, rreg2, MTYPE_I4);
+  return_stid = WN_Stid(MTYPE_I4, return_ofst, return_st, ST_type(return_st),
+			WN_LdidPreg(MTYPE_I4, rreg1));
+  WN_linenum(return_stid) = line_number;
+  WN_INSERT_BlockLast(mp_workshare_block, return_stid);
+
+  WN *test = WN_EQ(MTYPE_I4,
+                   Gen_MP_Load( return_st, return_ofst ),
+                   WN_CreateIntconst ( OPC_I4INTCONST, 1));
+
+
+  /* Walk through statements in workshare_block and add the single_test mask
+   * so long as it is not a work-sharing region like PDO.*/
+  WN *cur_node, *prev_node, *next_node;
+  BOOL is_region = FALSE;
+  WN *current_masked_blk = WN_CreateBlock();
+  single_test = WN_CreateIf( test, current_masked_blk, WN_CreateBlock());
+  WN_linenum(single_test) = line_number;
+  WN_INSERT_BlockLast(mp_workshare_block, single_test);
+  for (cur_node = WN_first(workshare_block); cur_node; cur_node = next_node) {
+      prev_node = WN_prev(cur_node);
+      next_node = WN_next(cur_node);
+
+      if ((is_region = (WN_opcode(cur_node) == OPC_REGION &&
+                      WN_first(WN_region_pragmas(cur_node)) &&
+                      WN_opcode(WN_first(
+                              WN_region_pragmas(cur_node))) ==
+                      OPC_PRAGMA) ) &&
+              WN_pragma(WN_first(WN_region_pragmas(cur_node))) ==
+              WN_PRAGMA_PDO_BEGIN) {
+
+          single_test = NULL;
+          WN_INSERT_BlockLast(mp_workshare_block, cur_node);
+
+      } else {
+
+          if (single_test == NULL) {
+              current_masked_blk = WN_CreateBlock();
+              test = WN_COPY_Tree(test);
+              single_test = WN_CreateIf( test, current_masked_blk,
+                      WN_CreateBlock());
+              WN_linenum(single_test) = line_number;
+              WN_INSERT_BlockLast(mp_workshare_block, single_test);
+          }
+
+          WN_INSERT_BlockLast(current_masked_blk, cur_node);
+      }
+  }
+
+  if (!nowait)
+    WN_INSERT_BlockLast(mp_workshare_block,
+                        Gen_End_Workshare( local_gtid, nowait));
 
   return mp_workshare_block;
 }
@@ -8037,8 +8171,7 @@ static WN *Gen_MP_Workshare_Region(WN *workshare_region)
   } // if (vt_size)
 
   WN_INSERT_BlockLast(mp_workshare_block,
-    Gen_MP_Workshare_Block(workshare_block, nowait,
-      WN_pragma_omp(workshare_prag), is_orphaned ));
+    Gen_MP_Workshare_Block(workshare_block, nowait, is_orphaned ));
 
   if (do_dealloca) {
     WN_INSERT_BlockLast(mp_workshare_block,
@@ -12388,7 +12521,10 @@ Process_Parallel_Do ( void )
 //  }
 
   if (copyin_nodes) {
-    WN_INSERT_BlockFirst (stmt_block, Gen_MP_Copyin(TRUE));
+    UINT64 lang = PU_src_lang(Get_Current_PU());
+    WN_INSERT_BlockFirst (stmt_block,
+            (lang != PU_F77_LANG && lang != PU_F90_LANG) ?
+            Gen_MP_Copyin_TLS(TRUE) : Gen_MP_Copyin(TRUE));
   }
 #ifdef KEY
   Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
@@ -12536,7 +12672,8 @@ Process_MP_Region ( void )
   WN *taskarg_firstprivate_block = NULL;
   WN *wn, *reduction_init_block = NULL, *reduction_store_block = NULL;
 
-  Is_True(mpt == MPP_PARALLEL_REGION || mpt == MPP_TASK_REGION, ("not in a PARALLEL region or TASK region"));
+  Is_True(mpt == MPP_PARALLEL_REGION || mpt == MPP_PARALLEL_WORKSHARE ||
+          mpt == MPP_TASK_REGION, ("not in a PARALLEL region or TASK region"));
 
   /* Initialization. */
 
@@ -12558,7 +12695,9 @@ Process_MP_Region ( void )
 
 
   Push_Some_Globals( );
-  Create_MicroTask( mpt == MPP_PARALLEL_REGION ? PAR_FUNC_REGION : PAR_FUNC_TASK );
+  Create_MicroTask( (mpt == MPP_PARALLEL_REGION ||
+                     mpt == MPP_PARALLEL_WORKSHARE) ? PAR_FUNC_REGION :
+                     PAR_FUNC_TASK );
   Delayed_MP_Translation( stmt_block );
 
   /* Create any needed local temps. */
@@ -12599,10 +12738,21 @@ Process_MP_Region ( void )
   /* Transform contents of parallel region */
 
   if (copyin_nodes) {
-    WN_INSERT_BlockFirst (stmt_block, Gen_MP_Copyin(TRUE));
+    UINT64 lang = PU_src_lang(Get_Current_PU());
+    WN_INSERT_BlockFirst (stmt_block,
+            (lang != PU_F77_LANG && lang != PU_F90_LANG) ?
+            Gen_MP_Copyin_TLS(TRUE) : Gen_MP_Copyin(TRUE));
+  }
+
+  if (mpt == MPP_PARALLEL_WORKSHARE) {
+      /* generate a 'nowait' workshare block here. It's no wait, because the
+       * parallel region already has an implicit barrier, so no need to add an
+       * extra one */
+      stmt_block = Gen_MP_Workshare_Block(stmt_block, TRUE, FALSE);
   }
 
   Transform_Parallel_Block ( stmt_block );
+
 #ifdef KEY
   if (mpt == MPP_PARALLEL_REGION)
     Gen_Threadpriv_Func(reference_block, parallel_func, FALSE);
@@ -13035,11 +13185,25 @@ lower_mp ( WN * block, WN * node, INT32 actions )
       break;
 
     case WN_PRAGMA_PARALLEL_BEGIN:
-#ifdef KEY
-    case WN_PRAGMA_PARALLEL_WORKSHARE:
-#endif
       mpt = MPP_PARALLEL_REGION;
       break;
+
+    case WN_PRAGMA_PARALLEL_WORKSHARE:
+      mpt = MPP_PARALLEL_WORKSHARE;
+      break;
+
+    case WN_PRAGMA_PWORKSHARE_BEGIN:
+      ++num_constructs;
+      mpt = MPP_ORPHANED_WORKSHARE;
+      Strip_Nested_MP(WN_region_body(node), TRUE);
+      wn = Gen_MP_Workshare_Region(node);
+      if ((WN_next(wn) = WN_next(node)) != NULL)
+        WN_prev(WN_next(wn)) = wn;
+      WN_DELETE_Tree(WN_region_pragmas(node));
+      WN_DELETE_Tree(WN_region_exits(node));
+      RID_Delete(Current_Map_Tab, node);
+      WN_Delete(node);
+      return wn;
 
     case WN_PRAGMA_TASK_BEGIN:
       mpt = MPP_TASK_REGION;
@@ -13356,6 +13520,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
       /* just accumulate nodes */
 #endif
+    } else if (mpt == MPP_PARALLEL_WORKSHARE) {
+
+      /* just accumulate nodes */
+
     } else
 
       Fail_FmtAssertion (
@@ -13393,7 +13561,10 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     line_number = WN_linenum(node);
     Set_Error_Line(line_number);
 
-    WN_INSERT_BlockLast ( replace_block, Gen_MP_Copyin ( FALSE ) );
+    UINT64 lang = PU_src_lang(Get_Current_PU());
+    WN_INSERT_BlockLast (replace_block,
+            (lang != PU_F77_LANG && lang != PU_F90_LANG) ?
+            Gen_MP_Copyin_TLS(TRUE) : Gen_MP_Copyin(TRUE));
 
   } else if (mpt == MPP_CRITICAL_SECTION) {
 
@@ -13651,7 +13822,7 @@ lower_mp ( WN * block, WN * node, INT32 actions )
     RID_Delete ( Current_Map_Tab, node );
     WN_Delete ( node );
 
-  } else if (mpt == MPP_PARALLEL_REGION) {
+  } else if (mpt == MPP_PARALLEL_REGION || mpt == MPP_PARALLEL_WORKSHARE) {
 
     BOOL is_omp = WN_pragma_omp(WN_first(WN_region_pragmas(node)));
 
@@ -13833,7 +14004,8 @@ lower_mp ( WN * block, WN * node, INT32 actions )
 
   /* Build final code for parallel loops and regions. */
 
-  if ((mpt == MPP_PARALLEL_DO) || (mpt == MPP_PARALLEL_REGION)) {
+  if ((mpt == MPP_PARALLEL_DO) || (mpt == MPP_PARALLEL_REGION) ||
+      (mpt == MPP_PARALLEL_WORKSHARE)) {
 
     // note that now stmt1_block is merely parallel block
     stmt1_block = WN_CreateBlock ( );

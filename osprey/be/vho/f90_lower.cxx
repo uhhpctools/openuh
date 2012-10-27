@@ -4228,6 +4228,7 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
    WN *dealloc_post,*post;
    TYPE_ID ty;
    WN* region;
+   BOOL in_workshare_region = FALSE;
 
 #ifdef KEY // bug14194
    for (i=0; i<MAX_NDIM; i++)
@@ -4258,8 +4259,7 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
    accum_st = New_ST(CURRENT_SYMTAB);
    ST_Init(accum_st, Save_Str(create_tempname("@f90acc")),
                    CLASS_VAR, SCLASS_AUTO, EXPORT_LOCAL, MTYPE_To_TY(ty));
-   Add_Pragma_To_MP_Regions (&F90_MP_Region,WN_PRAGMA_LOCAL,
-			     accum_st,0,WN_MAP_UNDEFINED,FALSE);
+
 #ifdef DEBUG
    printf("%s:%d -- accum_st = 0x%x, ST_type(accum_st) = %d\n",
 		   __FILE__, __LINE__, (unsigned)accum_st, (int)ST_type(accum_st) );
@@ -4305,8 +4305,42 @@ static WN * lower_reduction(TYPE_ID rty, OPERATOR reduction_opr,
 	 new_indices[i] = index;
       }
       BOOL_VECTOR::iterator bi = F90_MP_Region_Isworkshare.begin();
-      if( (bi != F90_MP_Region_Isworkshare.end()) && *bi ){
-	/* if locate in a WORKSHARE region */
+
+      /* check if inside a parallel region */
+      BOOL inside_parallel_region = FALSE;
+      WN *outer_parallel_region = NULL;
+      WN_VECTOR::iterator wi = F90_MP_Region.begin();
+      while (wi != F90_MP_Region.end() && *wi) {
+        WN_PRAGMA_ID pragma;
+        if ( WN_region_kind(*wi) == REGION_KIND_MP &&
+             WN_opcode(*wi) == OPC_REGION &&
+             WN_first(WN_region_pragmas(*wi)) &&
+       (pragma = (WN_PRAGMA_ID)WN_pragma(WN_first(WN_region_pragmas(*wi)))) &&
+       (pragma == WN_PRAGMA_PARALLEL_BEGIN ||
+        pragma == WN_PRAGMA_PARALLEL_WORKSHARE) ) {
+            inside_parallel_region = TRUE;
+            outer_parallel_region = *wi;
+            break;
+        }
+        wi++;
+      }
+
+      in_workshare_region = inside_parallel_region &&
+          (bi != F90_MP_Region_Isworkshare.end()) &&
+          *bi;
+      if (! in_workshare_region) {
+          Add_Pragma_To_MP_Regions (&F90_MP_Region,WN_PRAGMA_LOCAL,
+                  accum_st,0,WN_MAP_UNDEFINED,FALSE);
+      } else {
+          Add_Pragma_To_MP_Regions (&F90_MP_Region,WN_PRAGMA_SHARED,
+                  accum_st,0,WN_MAP_UNDEFINED,FALSE);
+      }
+
+
+      if( in_workshare_region ) {
+
+	/* if located in a WORKSHARE region */
+
 	region = WN_CreateRegion(REGION_KIND_MP,
 			WN_CreateBlock(),
 			WN_CreateBlock(),

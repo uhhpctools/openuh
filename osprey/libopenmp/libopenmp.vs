@@ -10,6 +10,7 @@ LIBOPENMP_1.0 {
     __ompc_end_ordered;
     __ompc_end_serialized_parallel;
     __ompc_end_single;
+    __ompc_end_workshare;
     __ompc_fini_rtl;
     __ompc_flush;
     __ompc_fork;
@@ -43,6 +44,7 @@ LIBOPENMP_1.0 {
     __ompc_task_firstprivates_alloc;
     __ompc_task_firstprivates_free;
     __ompc_task_will_defer;
+    __ompc_workshare;
     omp_destroy_lock;
     omp_destroy_lock_;
     omp_destroy_nest_lock;

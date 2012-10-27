@@ -128,6 +128,9 @@ extern "C" {
   extern omp_int32 __ompc_single(omp_int32 global_tid);
   extern void __ompc_end_single(omp_int32 global_tid);
 
+  extern omp_int32 __ompc_workshare(omp_int32 global_tid);
+  extern void __ompc_end_workshare(omp_int32 global_tid);
+
   extern omp_int32 __ompc_master(omp_int32 global_tid);
   extern void __ompc_end_master(omp_int32 global_tid);
 
