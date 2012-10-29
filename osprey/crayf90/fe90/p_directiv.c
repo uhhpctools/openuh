@@ -10176,6 +10176,19 @@ static void parse_open_mp_directives(void)
    opnd_type		opnd;
    int			sh_idx;
    int			type_idx;
+   static  int  par_nest_depth  = 0;
+   static  int  pardo_nest_depth = 0;
+   static  int  parsections_nest_depth = 0;
+   static  int  parworkshare_nest_depth = 0;
+   static  int  critical_nest_depth = 0;
+   static  int  do_nest_depth = 0;
+   static  int  master_nest_depth = 0;
+   static  int  ordered_nest_depth = 0;
+   static  int  sections_nest_depth = 0;
+   static  int  section_nest_depth = 0;
+   static  int  single_nest_depth = 0;
+   static  int  task_nest_depth = 0;
+   static  int  workshare_nest_depth = 0;
 
 
    TRACE (Func_Entry, "parse_open_mp_directives", NULL);
@@ -10237,6 +10250,7 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         critical_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Critical_Region);
          PUSH_BLK_STK (Open_Mp_Critical_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10294,7 +10308,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+         if (--critical_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Critical_Stmt;
          stmt_type = Open_MP_End_Critical_Stmt;
 
@@ -10330,6 +10346,7 @@ static void parse_open_mp_directives(void)
 
          check_do_open_mp_nesting();
 
+         do_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Do_Region);
          /* blk is pushed in p_ctl_flow.c */
          break;
@@ -10377,7 +10394,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Do_Region);
+         if (--do_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Do_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Do_Stmt;
          stmt_type = Open_MP_End_Do_Stmt;
          end_open_mp_do_blk(FALSE);
@@ -10393,10 +10412,44 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+         if (--par_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Parallel_Stmt;
          stmt_type = Open_MP_End_Parallel_Stmt;
          end_open_mp_parallel_blk(FALSE);
+
+         /* restore directive state */
+         if (par_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+         if (pardo_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+         if (parsections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+         if (parworkshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+         if (critical_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+         if (do_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Do_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+         if (ordered_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+         if (sections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+         if (section_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
+         if (single_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Single_Region);
+         if (task_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         if (workshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+
+
          break;
 
       case Tok_Open_Mp_Dir_Endparalleldo:
@@ -10428,10 +10481,42 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+         if (--pardo_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Parallel_Do_Stmt;
          stmt_type = Open_MP_End_Parallel_Do_Stmt;
          end_open_mp_parallel_do_blk(FALSE);
+
+         /* restore directive state */
+         if (par_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+         if (pardo_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+         if (parsections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+         if (parworkshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+         if (critical_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+         if (do_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Do_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+         if (ordered_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+         if (sections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+         if (section_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
+         if (single_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Single_Region);
+         if (task_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         if (workshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
          break;
 
       case Tok_Open_Mp_Dir_Endparallelsections:
@@ -10446,13 +10531,47 @@ static void parse_open_mp_directives(void)
 
          if (CURR_BLK == Open_Mp_Section_Blk) {
             end_open_mp_section_blk(FALSE);
-            CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
+
+            if (--section_nest_depth == 0)
+                CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+         if (--parsections_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Parallel_Sections_Stmt;
          stmt_type = Open_MP_End_Parallel_Sections_Stmt;
          end_open_mp_parallel_sections_blk(FALSE);
+
+         /* restore directive state */
+         if (par_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+         if (pardo_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+         if (parsections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+         if (parworkshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+         if (critical_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+         if (do_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Do_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+         if (ordered_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+         if (sections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+         if (section_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
+         if (single_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Single_Region);
+         if (task_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         if (workshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
          break;
 
       case Tok_Open_Mp_Dir_Endmaster:
@@ -10465,7 +10584,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Master_Region);
+         if (--master_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Master_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Master_Stmt;
          stmt_type = Open_MP_End_Master_Stmt;
          end_open_mp_master_blk(FALSE);
@@ -10481,7 +10602,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+         if (--ordered_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Ordered_Stmt;
          stmt_type = Open_MP_End_Ordered_Stmt;
          end_open_mp_ordered_blk(FALSE);
@@ -10513,10 +10636,14 @@ static void parse_open_mp_directives(void)
 
          if (CURR_BLK == Open_Mp_Section_Blk) {
             end_open_mp_section_blk(FALSE);
-            CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
+
+            if (--section_nest_depth == 0)
+                CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+         if (--sections_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Sections_Stmt;
          stmt_type = Open_MP_End_Sections_Stmt;
          end_open_mp_sections_blk(FALSE);
@@ -10631,7 +10758,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Single_Region);
+         if (--single_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Single_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Single_Stmt;
          stmt_type = Open_MP_End_Single_Stmt;
          end_open_mp_single_blk(FALSE);
@@ -10647,7 +10776,9 @@ static void parse_open_mp_directives(void)
             break;
          }
 
-         CLEAR_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         if (--task_nest_depth == 0)
+             CLEAR_DIRECTIVE_STATE(Open_Mp_Task_Region);
+
          SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Task_Stmt;
          stmt_type = Open_MP_End_Task_Stmt;
          end_open_mp_task_blk(FALSE);
@@ -10663,6 +10794,7 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         master_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
          PUSH_BLK_STK (Open_Mp_Master_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10682,6 +10814,7 @@ static void parse_open_mp_directives(void)
 
          check_ordered_open_mp_nesting();
 
+         ordered_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
          PUSH_BLK_STK (Open_Mp_Ordered_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10701,6 +10834,10 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         /* clear directive state */
+         directive_state &= (long) 0;
+
+         par_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
          PUSH_BLK_STK (Open_Mp_Parallel_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
@@ -10720,6 +10857,7 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         task_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
          PUSH_BLK_STK (Open_Mp_Task_Blk);
          CURR_BLK_FIRST_SH_IDX     = curr_stmt_sh_idx;
@@ -10740,6 +10878,10 @@ static void parse_open_mp_directives(void)
 
          cdir_switches.paralleldo_omp_sh_idx = curr_stmt_sh_idx;
 
+         /* clear directive state */
+         directive_state &= (long) 0;
+
+         pardo_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
          /* blk is pushed in p_ctl_flow.c */
          break;
@@ -10756,6 +10898,10 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         /* clear directive state */
+         directive_state &= (long) 0;
+
+         parsections_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
          PUSH_BLK_STK (Open_Mp_Parallel_Sections_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10763,6 +10909,7 @@ static void parse_open_mp_directives(void)
          LINK_TO_PARENT_BLK;
 
          /* push on a Section block */
+         section_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
          PUSH_BLK_STK (Open_Mp_Section_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10787,9 +10934,11 @@ static void parse_open_mp_directives(void)
 
          if (CURR_BLK == Open_Mp_Section_Blk) {
             end_open_mp_section_blk(FALSE);
-            CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
+            if (--section_nest_depth == 0)
+                CLEAR_DIRECTIVE_STATE(Open_Mp_Section_Region);
          }
 
+         section_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
          PUSH_BLK_STK (Open_Mp_Section_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10809,6 +10958,7 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         sections_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Sections_Region);
 
          check_do_open_mp_nesting();
@@ -10819,6 +10969,7 @@ static void parse_open_mp_directives(void)
          LINK_TO_PARENT_BLK;
 
          /* push on a Section block */
+         section_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
          PUSH_BLK_STK (Open_Mp_Section_Blk);
          BLK_IS_PARALLEL_REGION(blk_stk_idx)	= TRUE;
@@ -10838,6 +10989,7 @@ static void parse_open_mp_directives(void)
             break;
          }
 
+         single_nest_depth++;
          SET_DIRECTIVE_STATE(Open_Mp_Single_Region);
 
          check_do_open_mp_nesting();
@@ -10860,6 +11012,7 @@ static void parse_open_mp_directives(void)
 	    break;
 	 }
 
+     workshare_nest_depth++;
 	 SET_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
 
 	 check_do_open_mp_nesting();
@@ -10882,6 +11035,10 @@ static void parse_open_mp_directives(void)
 	    break;
 	 }
 
+     /* clear directive state */
+     directive_state &= (long) 0;
+
+     parworkshare_nest_depth++;
 	 SET_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
 	 PUSH_BLK_STK(Open_Mp_Parallel_Workshare_Blk);
 	 BLK_IS_PARALLEL_REGION(blk_stk_idx) = TRUE;
@@ -10913,7 +11070,9 @@ static void parse_open_mp_directives(void)
 	    break;
 	 }
 
-	 CLEAR_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+     if (--workshare_nest_depth == 0)
+         CLEAR_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+
 	 SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Workshare_Stmt;
 	 stmt_type = Open_MP_End_Workshare_Stmt;
 	 end_open_mp_workshare_blk(FALSE);
@@ -10929,10 +11088,43 @@ static void parse_open_mp_directives(void)
 	    break;
 	 }
 
-	 CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+     if (--parworkshare_nest_depth == 0)
+         CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+
 	 SH_STMT_TYPE(curr_stmt_sh_idx) = Open_MP_End_Parallel_Workshare_Stmt;
 	 stmt_type = Open_MP_End_Parallel_Workshare_Stmt;
 	 end_open_mp_parallel_workshare_blk(FALSE);
+
+         /* restore directive state */
+         if (par_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Region);
+         if (pardo_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+         if (parsections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Sections_Region);
+         if (parworkshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Parallel_Workshare_Region);
+         if (critical_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Critical_Region);
+         if (do_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Do_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+         if (ordered_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Ordered_Region);
+         if (sections_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Sections_Region);
+         if (section_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Section_Region);
+         if (single_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Single_Region);
+         if (task_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Task_Region);
+         if (workshare_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Workshare_Region);
+         if (master_nest_depth)
+             SET_DIRECTIVE_STATE(Open_Mp_Master_Region);
+
 	 break;
 
       case Tok_Open_Mp_Dir_Atomic:
@@ -12361,10 +12553,10 @@ static void check_do_open_mp_nesting(void)
          else {
             /* this is a block that should have been closed */
             if (BLK_TYPE(blk_idx) == Open_Mp_Do_Blk) {
-               CLEAR_DIRECTIVE_STATE(Open_Mp_Do_Region);
+                CLEAR_DIRECTIVE_STATE(Open_Mp_Do_Region);
             }
             else {
-               CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
+                CLEAR_DIRECTIVE_STATE(Open_Mp_Parallel_Do_Region);
             }
             move_blk_to_end(blk_idx);
             POP_BLK_STK;

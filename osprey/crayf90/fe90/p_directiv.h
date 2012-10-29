@@ -1562,7 +1562,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Do_Open_Mp_Dir	*/
 
@@ -1620,7 +1620,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
 			 (0 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Enddo_Open_Mp_Dir	*/
 
@@ -1765,7 +1765,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Endmaster_Open_Mp_Dir	*/
 
@@ -1823,7 +1823,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Endsections_Open_Mp_Dir	*/
 
@@ -1852,7 +1852,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Endsingle_Open_Mp_Dir	*/
 
@@ -1881,7 +1881,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (0 << Open_Mp_Workshare_Region) |
 			 (0 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Endworkshare_Open_Mp_Dir	*/
 
@@ -2142,7 +2142,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Section_Open_Mp_Dir	*/
 
@@ -2171,7 +2171,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Sections_Open_Mp_Dir	*/
 
@@ -2200,7 +2200,7 @@ long directive_cant_be_in[Last_Dir] = {
                          (0 << Open_Mp_Ordered_Region) |
 			 (1 << Open_Mp_Workshare_Region) |
 			 (1 << Open_Mp_Parallel_Workshare_Region) |
-			 (0 << Open_Mp_Task_Region) ),
+			 (1 << Open_Mp_Task_Region) ),
 
                                 /* Single_Open_Mp_Dir	*/
 

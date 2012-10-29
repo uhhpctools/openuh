@@ -3379,16 +3379,31 @@ the "if" to be the result of calling omp_begin_single_process() or
 mp_begin_single_process().
 */
 
-static BOOL 
+static BOOL
 Is_Single_Test(WN *tree)
 {
-  if (WN_operator(tree) != OPR_LDID ||
-#ifdef KEY // bug 5118
-      WN_class(tree) != CLASS_PREG ||
-#endif
-      Preg_Is_Dedicated(WN_offset(tree)) ||
-      strcmp(MPSP_STATUS_PREG_NAME, Preg_Name(WN_offset(tree))) != 0)
+  if (WN_operator(tree) != OPR_EQ)
+    return FALSE;
 
+  WN *wn_ldid;
+
+  if (WN_operator(WN_kid(tree, 0)) == OPR_LDID)
+    wn_ldid = WN_kid(tree, 0);
+  else if (WN_operator(WN_kid(tree, 1)) == OPR_LDID)
+    wn_ldid = WN_kid(tree, 1);
+  else
+    return FALSE;
+
+  WN *wn_intconst = (wn_ldid == WN_kid(tree, 0)) ? WN_kid(tree, 1) :
+    WN_kid(tree, 0);
+
+  if (WN_operator(wn_intconst) != OPR_INTCONST)
+    return FALSE;
+
+  if (WN_const_val(wn_intconst) != 1 ||
+      WN_class(wn_ldid) != CLASS_PREG ||
+      Preg_Is_Dedicated(WN_offset(wn_ldid)) ||
+      strcmp(MPSP_STATUS_PREG_NAME, Preg_Name(WN_offset(wn_ldid))) != 0)
     return FALSE;
 
   return TRUE;
@@ -3505,14 +3520,18 @@ The lowered WHIRL for the guarding MP constructs is as follows:
     // can't find the matching CRITICAL END
   DYN_ARRAY<WN *> nodes_in_critsect(Malloc_Mem_Pool);
 
+  /*
   for (WN *guarded_wn = WN_next(tree); guarded_wn;
        guarded_wn = WN_next(guarded_wn)) {
+       */
+  for (WN *guarded_wn = tree; guarded_wn;
+       guarded_wn = WN_next(guarded_wn)) {
+    nodes_in_critsect.AddElement(guarded_wn);
     if (WN_opcode(guarded_wn) == OPC_VCALL &&
         WN_st_idx(guarded_wn) == end_st &&
         (!end_name_st || WN_st_idx(WN_kid0(WN_kid0(guarded_wn))) ==
 	                           end_name_st) )
       break;  // found matching CRITICAL END
-    nodes_in_critsect.AddElement(guarded_wn);
   }
 //  if (!guarded_wn)
 //    DevWarn("Enter_Guarded_WNs() did not find matching CRITICAL END");
@@ -3645,8 +3664,12 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
       }
 
       if ((flags & ACCESSED_STORE) && (TY_kind(ST_type(st)) == KIND_SCALAR)) {
+
 	for (i = 0; (i < shared_count) && (st != shared_table[i]); i++) { }
-	if (i == shared_count) {
+
+    {
+      if (mpt != MPP_TASK_REGION) {
+
 	  ST *split_blk, *common_blk = ST_Source_COMMON_Block(st, &split_blk);
 	  BOOL is_threadprivate_common =
 	    (ST_is_thread_private(st)) ||
@@ -3667,6 +3690,10 @@ Gather_Uplevel_References ( WN * block, INT32 level, WN * parent,
 #endif
             ErrMsg ( EC_MPLOWER_shared_store, st );
           }
+
+      }
+
+	if (i == shared_count)
 	  shared_table[shared_count++] = st;
 	}
       }
