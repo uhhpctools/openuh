@@ -226,7 +226,8 @@ __ompc_task_is_implicit(omp_task_t *task)
 
 static inline omp_task_t *__ompc_task_new_implicit(void)
 {
-  omp_task_t *new_task = (omp_task_t*)malloc(sizeof(omp_task_t));
+  omp_task_t *new_task =
+      (omp_task_t*)aligned_malloc(sizeof(omp_task_t),CACHE_LINE_SIZE);
 
   Is_True(new_task != NULL, ("couldn't create new task object"));
   memset(new_task, 0, sizeof(omp_task_t));
@@ -240,7 +241,8 @@ static inline omp_task_t *__ompc_task_new_implicit(void)
 
 static inline omp_task_t *__ompc_task_new(void)
 {
-  omp_task_t *new_task = (omp_task_t*)malloc(sizeof(omp_task_t));
+  omp_task_t *new_task =
+      (omp_task_t*)aligned_malloc(sizeof(omp_task_t),CACHE_LINE_SIZE);
 
   Is_True(new_task != NULL, ("couldn't create new task object"));
   memset(new_task, 0, sizeof(omp_task_t));
@@ -254,7 +256,7 @@ static inline void __ompc_task_delete(omp_task_t *task)
 {
   Is_True(task != NULL, ("tried to delete a NULL task"));
 
-  free(task);
+  aligned_free(task);
 }
 
 static inline void

@@ -851,12 +851,31 @@ __ompc_level_1_barrier(const int vthread_id)
   bar_count = &__omp_level_1_team_manager.barrier_count;
   __ompc_atomic_inc(bar_count);
 
-  /* why not use pthread_cond_wait instead of a busy wait? */
-  while (__ompc_task_pool_num_pending_tasks(pool) || *bar_count < team_size) {
-    next = __ompc_remove_task_from_pool(pool);
-    if (next != NULL)
-      __ompc_task_switch(next);
+  pthread_mutex_lock(&pool->pool_lock);
+  pthread_cond_broadcast(&pool->pool_cond);
+  pthread_mutex_unlock(&pool->pool_lock);
+
+  for (counter = 0; (*bar_count < team_size) ||
+          __ompc_task_pool_num_pending_tasks(pool); counter++) {
+      if (counter > max_count) {
+          pthread_mutex_lock(&pool->pool_lock);
+          if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
+                  *bar_count < team_size) {
+              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+          }
+          pthread_mutex_unlock(&pool->pool_lock);
+      }
+      while (__ompc_task_pool_num_pending_tasks(pool)) {
+          next = __ompc_remove_task_from_pool(pool);
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
   }
+
+  /* delete implicit task and reset task state for level-1 user thread */
+  __ompc_task_delete(__omp_level_1_team[vthread_id].implicit_task);
+  __omp_level_1_team[vthread_id].implicit_task = NULL;
+  __omp_level_1_team[vthread_id].num_suspended_tied_tasks = 0;
 
   myrank = __ompc_atomic_inc(&__omp_level_1_exit_count);
 
@@ -866,8 +885,9 @@ __ompc_level_1_barrier(const int vthread_id)
       for( counter = 0; __omp_level_1_exit_count != team_size; counter++) {
         if (counter > max_count) {
           pthread_mutex_lock(&__omp_level_1_barrier_mutex);
-          while (__omp_level_1_exit_count != team_size)
+          while (__omp_level_1_exit_count != team_size) {
             pthread_cond_wait(&__omp_level_1_barrier_cond, &__omp_level_1_barrier_mutex);
+          }
           pthread_mutex_unlock(&__omp_level_1_barrier_mutex);
         }
       }
@@ -891,8 +911,11 @@ __ompc_level_1_barrier(const int vthread_id)
 void
 __ompc_exit_barrier(omp_v_thread_t * vthread)
 {
+  long int counter;
   int *bar_count;
   int *exit_count;
+  int myrank;
+  long int max_count;
   omp_task_pool_t *pool;
   omp_task_t *next, *current_task;
   int team_size = vthread->team->team_size;
@@ -901,6 +924,7 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
   Is_True((vthread != NULL) && (vthread->team != NULL),
 	  ("bad vthread or vthread->team in nested groups"));
 
+  max_count = __omp_spin_count;
   vthread->thr_ibar_state_id++;
   __ompc_set_state(THR_IBAR_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IBAR);
@@ -912,23 +936,52 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
 
   bar_count = &vthread->team->barrier_count;
   __ompc_atomic_inc(bar_count);
+  pthread_mutex_lock(&pool->pool_lock);
+  pthread_cond_broadcast(&pool->pool_cond);
+  pthread_mutex_unlock(&pool->pool_lock);
 
-  /* why not use pthread_cond_wait instead of a busy wait? */
-  while(__ompc_task_pool_num_pending_tasks(pool) ||  *bar_count != team_size ) {
-    next = __ompc_remove_task_from_pool(pool);
-    if(next != NULL) {
-      __ompc_task_switch(next);
-    }
+  for (counter = 0; (*bar_count < team_size) ||
+          __ompc_task_pool_num_pending_tasks(pool); counter++) {
+      if (counter > max_count) {
+          pthread_mutex_lock(&pool->pool_lock);
+          if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
+                  *bar_count < team_size) {
+              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+          }
+          pthread_mutex_unlock(&pool->pool_lock);
+      }
+      while (__ompc_task_pool_num_pending_tasks(pool)) {
+          next = __ompc_remove_task_from_pool(pool);
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
   }
 
+
+  __ompc_task_delete(vthread->implicit_task);
+
   exit_count = &vthread->team->exit_count;
+  myrank = __ompc_atomic_inc(exit_count);
 
-  /* this stuff is unnecessary if waiting for the implicit tasks above */
-  __ompc_atomic_inc(exit_count);
-
-  // Master wait all slaves arrived
-  if(vthread->vthread_id == 0) {
-    OMPC_WAIT_WHILE(*exit_count != team_size);
+  if (__omp_myid == 0) {
+    if (myrank != team_size)
+    {
+      for( counter = 0; *exit_count != team_size; counter++) {
+        if (counter > max_count) {
+          pthread_mutex_lock(&vthread->team->barrier_lock);
+          while (*exit_count != team_size)
+            pthread_cond_wait(&vthread->team->barrier_cond,
+                              &vthread->team->barrier_lock);
+          pthread_mutex_unlock(&vthread->team->barrier_lock);
+        }
+      }
+    }
+  } else if (myrank == team_size ) {
+    // here we do need the mutex lock! otherwise,
+    // Otherwise, it's possible that cond_signal may fail to wake up the master thread.
+    pthread_mutex_lock(&vthread->team->barrier_lock);
+    pthread_cond_signal(&vthread->team->barrier_cond);
+    pthread_mutex_unlock(&vthread->team->barrier_lock);
   }
 
   __ompc_event_callback(OMP_EVENT_THR_END_IBAR);
@@ -1003,10 +1056,6 @@ __ompc_level_1_slave(void * _uthread_index)
       __omp_level_1_team[uthread_index].entry_func = NULL;
       __ompc_level_1_barrier(uthread_index);
 
-      /* delete implicit task and reset task state for level-1 user thread */
-      __ompc_task_delete(__omp_level_1_team[uthread_index].implicit_task);
-      __omp_level_1_team[uthread_index].implicit_task = NULL;
-      __omp_level_1_team[uthread_index].num_suspended_tied_tasks = 0;
 
       __ompc_set_state(THR_IDLE_STATE);
       __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
@@ -1021,6 +1070,7 @@ __ompc_level_1_slave(void * _uthread_index)
 void*
 __ompc_nested_slave(void * _v_thread)
 {
+  int counter;
   omp_v_thread_t * my_vthread = (omp_v_thread_t *) _v_thread;
   /* need to wait for others ready? */
 
@@ -1034,12 +1084,25 @@ __ompc_nested_slave(void * _v_thread)
   if (my_vthread->implicit_task == NULL) {
     my_vthread->implicit_task = __ompc_task_new_implicit();
   }
+
   __omp_current_task = my_vthread->implicit_task;
 
   __ompc_set_state(THR_IDLE_STATE);
   /* printf("IDLE called from nested\n"); */
 
-  OMPC_WAIT_WHILE(my_vthread->team->new_task != 1);
+  counter = 0;
+  for (counter = 0; my_vthread->team->new_task != 1; counter++) {
+      if (counter > __omp_spin_count) {
+
+          pthread_mutex_lock(&my_vthread->team->barrier_lock);
+          while (my_vthread->team->new_task != 1) {
+              pthread_cond_wait(&my_vthread->team->barrier_cond,
+                      &my_vthread->team->barrier_lock);
+          }
+          pthread_mutex_unlock(&my_vthread->team->barrier_lock);
+      }
+  }
+
   /* The relationship between vthread, uthread, and team should be OK here*/
 
   __ompc_event_callback(OMP_EVENT_THR_END_IDLE);
@@ -1051,7 +1114,6 @@ __ompc_nested_slave(void * _v_thread)
   /*TODO: fix the barrier call for nested threads*/
   __ompc_exit_barrier(my_vthread);
 
-  __ompc_task_delete(my_vthread->implicit_task);
   __omp_exe_mode = OMP_EXE_MODE_NORMAL;
 
   pthread_exit(NULL);
@@ -1273,20 +1335,17 @@ __ompc_init_rtl(int num_threads)
 #endif
 
   for (i=1; i< threads_to_create; i++) {
-    stack_pointer = malloc(__omp_stack_size);
-    Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
-
 
 #ifndef TARG_LOONGSON
-    return_value = pthread_attr_setstack(&__omp_pthread_attr, stack_pointer, __omp_stack_size); 
-    Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
+    return_value = pthread_attr_setstacksize(&__omp_pthread_attr, __omp_stack_size);
+    Is_True(return_value == 0, ("Cannot set stack size for thread"));
 #endif //TARG_LOONGSON
     return_value = pthread_create( &(__omp_level_1_pthread[i].uthread_id),
 				   &__omp_pthread_attr, (pthread_entry) __ompc_level_1_slave, 
 				   (void *)((unsigned long int)i));
     Is_True(return_value == 0, ("Cannot create more pthreads"));
 
-    __omp_level_1_pthread[i].stack_pointer = stack_pointer;
+    __omp_level_1_pthread[i].stack_pointer = (char *)0;
 
 #ifndef TARG_LOONGSON
     if (__omp_set_affinity) {
@@ -1423,16 +1482,14 @@ __ompc_expand_level_1_team(int new_num_threads)
                                     i, &__omp_level_1_team_manager);
 
     /* for u_thread */
-    stack_pointer = malloc(__omp_stack_size);
-    Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
-    return_value = pthread_attr_setstack(&__omp_pthread_attr, stack_pointer, __omp_stack_size);
-    Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
+    return_value = pthread_attr_setstacksize(&__omp_pthread_attr, __omp_stack_size);
+    Is_True(return_value == 0, ("Cannot set stack size for thread"));
     return_value = pthread_create( &(__omp_level_1_pthread[i].uthread_id),
 				   &__omp_pthread_attr, (pthread_entry) __ompc_level_1_slave, 
 				   (void *)((unsigned long int)i));
     Is_True(return_value == 0, ("Cannot create more pthreads"));
 
-    __omp_level_1_pthread[i].stack_pointer = stack_pointer;
+    __omp_level_1_pthread[i].stack_pointer = (char *)0;
 
 #ifndef TARG_LOONGSON
     if (__omp_set_affinity) {
@@ -1473,7 +1530,7 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
   omp_task_t *original_task;
   void * stack_pointer;
   unsigned int region_used = 0; // TODO: make it one-bit.
-  pthread_attr_t nested_pthread_attr = __omp_pthread_attr;
+  pthread_attr_t nested_pthread_attr;
 
 #if  !(defined TARG_LOONGSON || defined _UH_COARRAYS)
   Is_True(__omp_rtl_initialized != 0,
@@ -1585,11 +1642,6 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     __ompc_level_1_barrier(0);
 
-      /* delete implicit task and reset task state for level-1 user thread */
-    __ompc_task_delete(__omp_level_1_team[0].implicit_task);
-    __omp_level_1_team[0].implicit_task = NULL;
-    __omp_level_1_team[0].num_suspended_tied_tasks = 0;
-
     /* the reason for the overhead state  is so that the collector 
        can query for a region id at join without returning 0 when the threads goes to 
        a serial state according to the white paper. 
@@ -1668,6 +1720,11 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     __ompc_set_state(THR_OVHD_STATE);
     __ompc_event_callback(OMP_EVENT_FORK);
 
+    pthread_attr_init(&nested_pthread_attr);
+    pthread_attr_setscope(&nested_pthread_attr, PTHREAD_SCOPE_SYSTEM);
+    return_value = pthread_attr_setstacksize(&nested_pthread_attr,
+            __omp_stack_size);
+    Is_True(return_value == 0, ("Cannot set stack size for thread"));
     for (i=1; i<num_threads; i++) {
       nest_v_thread_team[i].vthread_id = i;
       nest_v_thread_team[i].single_count = 0;
@@ -1688,23 +1745,25 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
       __ompc_init_xbarrier_local_info(&nest_v_thread_team[i].xbarrier_local,
                                      i, &temp_team);
 
-      stack_pointer = malloc(__omp_stack_size);
-      Is_True(stack_pointer != NULL, ("Cannot allocate stack for slave"));
-      return_value = pthread_attr_setstack(&nested_pthread_attr, stack_pointer, __omp_stack_size);
-      Is_True(return_value == 0, ("Cannot set stack pointer for thread"));
-
-
       return_value = pthread_create(&(nest_u_thread_team[i].uthread_id),
 				    &nested_pthread_attr, (pthread_entry) __ompc_nested_slave,
 				    (void *)(&(nest_v_thread_team[i])));
       Is_True(return_value == 0, ("Cannot create more pthreads"));
 
+      nest_u_thread_team[i].stack_pointer = (char *)0;
+
       // TODO: may need to bind pthread to a specific cpu for nested threads
-      __ompc_insert_into_hash_table(&(nest_u_thread_team[i]));
+
+      /* hash table isn't really necessary if storing current v_thread in
+       * __omp_current_v_thread.  */
+      //__ompc_insert_into_hash_table(&(nest_u_thread_team[i]));
 
     }
 
+    pthread_mutex_lock(&temp_team.barrier_lock);
     temp_team.new_task = 1;
+    pthread_cond_broadcast(&temp_team.barrier_cond);
+    pthread_mutex_unlock(&temp_team.barrier_lock);
 
     nest_v_thread_team[0].vthread_id = 0;
     nest_v_thread_team[0].single_count = 0;
@@ -1744,8 +1803,6 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
     __ompc_exit_barrier(&(nest_v_thread_team[0]));
 
-    __ompc_task_delete(nest_v_thread_team[0].implicit_task);
-
     /* restore original thread id */
     __omp_myid = orig_omp_myid;
 
@@ -1753,7 +1810,11 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
 
 
     for (i=1; i<num_threads; i++) {
-      __ompc_remove_from_hash_table(nest_u_thread_team[i].uthread_id);
+      /* hash table isn't really necessary if storing current v_thread in
+       * __omp_current_v_thread.  */
+      //__ompc_remove_from_hash_table(nest_u_thread_team[i].uthread_id);
+      return_value = pthread_detach(nest_u_thread_team[i].uthread_id);
+      Is_True(return_value == 0, ("Could not detach pthread"));
     }
 
     __ompc_destroy_task_pool(temp_team.task_pool);
@@ -1764,18 +1825,14 @@ __ompc_fork(const int _num_threads, omp_micro micro_task,
     aligned_free(nest_v_thread_team);
     aligned_free(nest_u_thread_team);
 
-	/* Besar: do we need to destroy the just created threads? */
+    current_u_thread->task = original_v_thread;
+    __omp_current_v_thread  = original_v_thread;
+    __omp_current_task = original_task;
+
 	__ompc_event_callback(OMP_EVENT_JOIN);
 	__ompc_set_state(THR_WORK_STATE);
     __omp_exe_mode = OMP_EXE_MODE_NORMAL;
 
-    current_u_thread->task = original_v_thread;
-
-    __omp_current_v_thread  = original_v_thread;
-
-    __omp_current_task = original_task;
-			
-    /* TODO: __omp_exe_mode switch here*/
   } else { /* OMP_EXE_MODE_IN_PARALLEL and nested disabled*/
     current_u_thread = __ompc_get_current_u_thread();
     original_v_thread = current_u_thread->task;

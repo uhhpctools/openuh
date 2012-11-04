@@ -106,6 +106,8 @@ omp_task_pool_t * __ompc_create_task_pool_default(int team_size)
   new_pool->num_pending_tasks = 0;
   new_pool->level = aligned_malloc(sizeof(omp_task_queue_level_t),
                                    CACHE_LINE_SIZE);
+  pthread_mutex_init(&(new_pool->pool_lock), NULL);
+  pthread_cond_init(&(new_pool->pool_cond), NULL);
 
   Is_True(new_pool->level != NULL,
       ("__ompc_create_task_pool: couldn't malloc level"));
@@ -183,7 +185,11 @@ int __ompc_add_task_to_pool_default(omp_task_pool_t *pool, omp_task_t *task)
   /* num_pending_tasks track not just tasks entered into the task pool, but
    * also tasks marked as deferred that could not fit into the task pool
    */
-  __ompc_atomic_inc(&pool->num_pending_tasks);
+  if (__ompc_atomic_inc(&pool->num_pending_tasks) == 1) {
+    pthread_mutex_lock(&pool->pool_lock);
+    pthread_cond_broadcast(&pool->pool_cond);
+    pthread_mutex_unlock(&pool->pool_lock);
+  }
 
   per_thread = &pool->level[PER_THREAD];
 
@@ -350,6 +356,8 @@ void __ompc_destroy_task_pool_default(omp_task_pool_t *pool)
     __ompc_queue_free_slots(&per_thread->task_queue[TIED_IDX(i)]);
     __ompc_queue_free_slots(&per_thread->task_queue[UNTIED_IDX(i)]);
   }
+
+  pthread_mutex_destroy(&pool->pool_lock);
 
   aligned_free(per_thread->task_queue); /* free queues in level 0 */
   aligned_free(pool->level); /* free the level array */

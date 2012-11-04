@@ -212,7 +212,14 @@ inline omp_u_thread_t * __ompc_get_current_u_thread()
 {
   omp_u_thread_t *uthread_temp;
   pthread_t current_uthread_id;
-	
+
+  return __omp_current_v_thread->executor;
+
+  /* don't think this hash table is really necessary, if we're saving the
+   * current v_thread in __omp_current_v_thread and the current u_thread is
+   * given by * __omp_current_v_thread->executor.
+   */
+#if 0
   Is_True(__omp_uthread_hash_table != NULL, 
 	  ("RTL data structures haven't been initialized yet!"));
 
@@ -235,6 +242,7 @@ inline omp_u_thread_t * __ompc_get_current_u_thread()
 
     return uthread_temp;
   }
+#endif
 }
 
 inline omp_v_thread_t * __ompc_get_current_v_thread()
@@ -313,6 +321,8 @@ extern __thread int total_tasks;
 void __ompc_barrier_wait(omp_team_t *team)
 {
   /*Warning: This implementation may cause cache problems*/
+  long int counter;
+  int *bar_count;
   int barrier_flag;
   int new_count;
   int i;
@@ -328,15 +338,27 @@ void __ompc_barrier_wait(omp_team_t *team)
 
   __ompc_task_set_state(current_task, OMP_TASK_IN_BARRIER);
 
-  __ompc_atomic_inc(&team->barrier_count);
+  bar_count = &team->barrier_count;
+  __ompc_atomic_inc(bar_count);
+  pthread_mutex_lock(&pool->pool_lock);
+  pthread_cond_broadcast(&pool->pool_cond);
+  pthread_mutex_unlock(&pool->pool_lock);
 
-  /* why not use pthread_cond_wait instead of a busy wait? */
-  while(__ompc_task_pool_num_pending_tasks(pool) ||
-        team->barrier_count != team->team_size) {
-    next = __ompc_remove_task_from_pool(pool);
-    if(next != NULL) {
-      __ompc_task_switch(next);
-    }
+  for (counter = 0; (*bar_count < team->team_size) ||
+          __ompc_task_pool_num_pending_tasks(pool); counter++ ) {
+      if (counter > __omp_spin_count) {
+          pthread_mutex_lock(&pool->pool_lock);
+          if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
+                  *bar_count < team->team_size) {
+              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+          }
+          pthread_mutex_unlock(&pool->pool_lock);
+      }
+      while (__ompc_task_pool_num_pending_tasks(pool)) {
+          next = __ompc_remove_task_from_pool(pool);
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
   }
 
   new_count = __ompc_atomic_inc(&team->barrier_count2);

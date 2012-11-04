@@ -47,6 +47,8 @@ struct omp_task_pool {
 
   /* Number of deferred tasks that are pending (i.e. have not yet exited) */
   volatile int num_pending_tasks;
+  pthread_mutex_t pool_lock;
+  pthread_cond_t pool_cond;
 
   int num_levels;
   int team_size;
