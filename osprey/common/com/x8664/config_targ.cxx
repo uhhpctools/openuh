@@ -509,6 +509,29 @@ Prepare_Target ( void )
         Target_FMA4 = TRUE;
       targ = TARGET_orochi;
     }
+    else if ( strcasecmp ( Processor_Name, "bdver2" ) == 0 ) {
+      if (!Target_SSE2_Set && !Target_SSE3_Set)
+        Target_SSE3 = TRUE;
+      if (!Target_SSE2_Set && !Target_SSSE3_Set)
+        Target_SSSE3 = TRUE;
+      if (!Target_SSE2_Set && !Target_SSE41_Set)
+        Target_SSE41 = TRUE;
+      if (!Target_SSE2_Set && !Target_SSE42_Set)
+        Target_SSE42 = TRUE;
+      if (!Target_SSE2_Set && !Target_AES_Set)
+        Target_AES = TRUE;
+      if (!Target_SSE2_Set && !Target_PCLMUL_Set)
+        Target_PCLMUL = TRUE;
+      if (!Target_SSE2_Set && !Target_AVX_Set)
+        Target_AVX = TRUE;
+      if (!Target_SSE2_Set && !Target_XOP_Set)
+        Target_XOP = TRUE;
+      if (!Target_SSE2_Set && !Target_FMA_Set)
+        Target_FMA = TRUE;
+      if (!Target_SSE2_Set && !Target_FMA4_Set)
+        Target_FMA4 = TRUE;
+      targ = TARGET_orochi;
+    }
     else if ( strcasecmp ( Processor_Name, "athlon64fx" ) == 0 ) {
       targ = TARGET_opteron;
     }

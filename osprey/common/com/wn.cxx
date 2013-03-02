@@ -545,7 +545,7 @@ void Check_Traced_Wn_Node(WN *n)
 {
    if (n && (n == trace_wn_node 
              || trace_wn_mapid != -1 && WN_map_id(n) == trace_wn_mapid
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
              || trace_wn_id != 0 && trace_wn_id == WN_id(n)
 #endif
              ) ) {
@@ -557,7 +557,7 @@ static set<UINT32> copied_ids;
 
 void Set_Trace_Wn_id(UINT32 wn_id) 
 { 
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
    trace_wn_id = wn_id; 
    copied_ids.insert(wn_id);
 #endif
@@ -565,7 +565,7 @@ void Set_Trace_Wn_id(UINT32 wn_id)
 
 void Trace_Wn_Copy(const WN *wn, const WN *src_wn)
 {
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
    set<UINT32>::iterator itr = copied_ids.find(WN_id(src_wn));
    if (itr != copied_ids.end()) {
       // found src_wn's wn_id in copied list
@@ -3763,6 +3763,84 @@ WN_find_loop_by_index(WN * wn, ST * index, WN_MAP parent_map)
   }
 
   return NULL;
+}
+
+// bug 8581
+// determine if two WHIRL statements are identical; only handle store statements
+// for now
+BOOL
+Identical_stmt(WN *stmt1, WN *stmt2)
+{
+  if (stmt1 == NULL || stmt2 == NULL)
+    return FALSE;
+  if (WN_opcode(stmt1) != WN_opcode(stmt2))
+    return FALSE;
+  switch(WN_operator(stmt1)) {
+  case OPR_STID:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_desc(stmt1) != WN_desc(stmt2))
+      return FALSE;
+    if (WN_st_idx(stmt1) != WN_st_idx(stmt2))
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) == 0;
+  case OPR_STBITS:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_bit_offset(stmt1) != WN_bit_offset(stmt2))
+      return FALSE;
+    if (WN_bit_size(stmt1) != WN_bit_size(stmt2))
+      return FALSE;
+    if (WN_st_idx(stmt1) != WN_st_idx(stmt2))
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) == 0;
+  case OPR_ISTORE:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_desc(stmt1) != WN_desc(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) == 0;
+  case OPR_ISTBITS:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_bit_offset(stmt1) != WN_bit_offset(stmt2))
+      return FALSE;
+    if (WN_bit_size(stmt1) != WN_bit_size(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) == 0;
+  case OPR_MSTORE:
+    if (WN_store_offset(stmt1) != WN_store_offset(stmt2))
+      return FALSE;
+    if (WN_field_id(stmt1) != WN_field_id(stmt2))
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid0(stmt1), WN_kid0(stmt2)) != 0)
+      return FALSE;
+    if (WN_Simp_Compare_Trees(WN_kid1(stmt1), WN_kid1(stmt2)) != 0)
+      return FALSE;
+    return WN_Simp_Compare_Trees(WN_kid2(stmt1), WN_kid2(stmt2)) == 0;
+  case OPR_BLOCK: {
+      WN *s1 = WN_first(stmt1);
+      WN *s2 = WN_first(stmt2);
+      for ( ; ; ) {
+	if (s1 == NULL && s2 == NULL)
+	  return TRUE;
+	if (! Identical_stmt(s1, s2))
+	  return FALSE;
+	s1 = WN_next(s1);
+	s2 = WN_next(s2);
+      }
+    }
+  default: ;
+  }
+  return FALSE;
 }
 
 BOOL

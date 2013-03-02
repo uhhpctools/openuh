@@ -79,7 +79,6 @@
 #include "wn.h"
 #include "dvector.h"				/* for LNO dep graph */
 #include "dep_graph.h"				/* for LNO dep graph */
-#include "import.h"
 #include "opt_alias_interface.h"		/* for WOPT alias mgr */
 #include "opt_points_to.h"
 

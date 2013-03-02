@@ -126,13 +126,8 @@ typedef struct Local_Preg
 } LOCAL_PREG;
 
 
-static const WN *WN2C_Prompf_Subsection = NULL;
-
-
-/* ======================= Prompf utilities ======================= */
+/* ======================= Omp utilities ======================= */
 /* ================================================================ */
-
-static void WN2C_Stmt_Newline(TOKEN_BUFFER tokens, SRCPOS srcpos);
 
 inline BOOL
 WN2C_is_omp(const WN *pragma)
@@ -140,43 +135,6 @@ WN2C_is_omp(const WN *pragma)
    return (WN_pragma_omp(pragma) ||
 	   (W2C_Emit_Omp && WN_pragma_compiler_generated(pragma)));
 }
-
-
-static void
-WN2C_Append_Prompf_Flag_Newline(TOKEN_BUFFER tokens)
-{
-   UINT current_indent = Current_Indentation();
-
-   Set_Current_Indentation(0);
-   Append_Indented_Newline(tokens, 1);
-   Set_Current_Indentation(current_indent);
-} /* WN2C_Append_Prompf_Flag_Newline */
-
-
-static void 
-WN2C_Start_Prompf_Construct(TOKEN_BUFFER tokens, const WN *pragma)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2C_Construct_Map, pragma);
-
-   WN2C_Append_Prompf_Flag_Newline(tokens);
-   Append_Token_String(tokens, "/*$SGI");
-   Append_Token_String(tokens, "start");
-   Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-   Append_Token_String(tokens, "*/");
-} /* WN2C_Start_Prompf_Construct */
-
-
-static void 
-WN2C_End_Prompf_Construct(TOKEN_BUFFER tokens, const WN *pragma)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2C_Construct_Map, pragma);
-
-   WN2C_Append_Prompf_Flag_Newline(tokens);
-   Append_Token_String(tokens, "/*$SGI");
-   Append_Token_String(tokens, "end");
-   Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-   Append_Token_String(tokens, "*/");
-} /* WN2C_End_Prompf_Construct */
 
 
 /* ======================= Static Functions ======================= */
@@ -1597,15 +1555,11 @@ WN2C_process_pragma(TOKEN_BUFFER tokens, const WN **next, CONTEXT context)
       break;
 
    case WN_PRAGMA_BARRIER:
-      if (W2C_Prompf_Emission)
-	 WN2C_Start_Prompf_Construct(tokens, apragma);
       WN2C_Append_Pragma_Newline(tokens, CONTEXT_srcpos(context));
       if (CONTEXT_omp(context))
 	 Append_Token_String(tokens, "omp barrier");
       else
 	 Append_Token_String(tokens, "synchronize");
-      if (W2C_Prompf_Emission)
-	 WN2C_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_COPYIN:
@@ -1625,8 +1579,6 @@ WN2C_process_pragma(TOKEN_BUFFER tokens, const WN **next, CONTEXT context)
       break;
 
    case WN_PRAGMA_CRITICAL_SECTION_BEGIN:
-      if (W2C_Prompf_Emission)
-	 WN2C_Start_Prompf_Construct(tokens, apragma);
       WN2C_Append_Pragma_Newline(tokens, CONTEXT_srcpos(context));
       if (CONTEXT_omp(context))
 	 Append_Token_String(tokens, "omp critical");
@@ -1645,13 +1597,9 @@ WN2C_process_pragma(TOKEN_BUFFER tokens, const WN **next, CONTEXT context)
       Decrement_Indentation();
       WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
       Append_Token_Special(tokens, '}');
-      if (W2C_Prompf_Emission)
-	 WN2C_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_ORDERED_BEGIN:
-      if (W2C_Prompf_Emission)
-	 WN2C_Start_Prompf_Construct(tokens, apragma);
       WN2C_Append_Pragma_Newline(tokens, CONTEXT_srcpos(context));
       Append_Token_String(tokens, "omp ordered");
       if (WN_operator(apragma) == OPR_XPRAGMA)
@@ -1667,21 +1615,15 @@ WN2C_process_pragma(TOKEN_BUFFER tokens, const WN **next, CONTEXT context)
       Decrement_Indentation();
       WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
       Append_Token_Special(tokens, '}');
-      if (W2C_Prompf_Emission)
-	 WN2C_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_ATOMIC:
-      if (W2C_Prompf_Emission)
-	 WN2C_Start_Prompf_Construct(tokens, apragma);
       WN2C_Append_Pragma_Newline(tokens, CONTEXT_srcpos(context));
       Append_Token_String(tokens, "omp atomic");
       if (WN_operator(apragma) == OPR_XPRAGMA)
          Append_Clause_Expressions(tokens,
 				   (WN_PRAGMA_ID)WN_pragma(apragma),
                                    &apragma);
-      if (W2C_Prompf_Emission)
-	 WN2C_End_Prompf_Construct(tokens, this_pragma);
       break;
 
    case WN_PRAGMA_PARALLEL_BEGIN:
@@ -1838,17 +1780,6 @@ WN2C_process_pragma(TOKEN_BUFFER tokens, const WN **next, CONTEXT context)
       break;
 
    case WN_PRAGMA_SECTION:
-      if (W2C_Prompf_Emission)
-      {
-	 if (WN2C_Prompf_Subsection != NULL)
-	 {
-	    // End a the previous SECTION directive seen!
-	    //
-	    WN2C_End_Prompf_Construct(tokens, WN2C_Prompf_Subsection);
-	 }
-	 WN2C_Prompf_Subsection = apragma;
-	 WN2C_Start_Prompf_Construct(tokens, apragma);
-      }
       WN2C_Append_Pragma_Newline(tokens, CONTEXT_srcpos(context));
       if (CONTEXT_omp(context)) 
 	 Append_Token_String(tokens, "omp section");
@@ -2058,16 +1989,6 @@ WN2C_pragma_list_end(TOKEN_BUFFER tokens,
 	 Decrement_Indentation();
 	 WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
 	 Append_Token_Special(tokens, '}');
-	 if (WN2C_is_omp(first_pragma))
-	 {
-	    if (WN2C_Prompf_Subsection != NULL)
-	    {
-	       // End a the last SECTION pragma seen!
-	       //
-	       WN2C_End_Prompf_Construct(tokens, WN2C_Prompf_Subsection);
-	       WN2C_Prompf_Subsection = NULL;
-	    }
-	 }
 	 break;
 
       case WN_PRAGMA_SINGLE_PROCESS_BEGIN:
@@ -2093,7 +2014,7 @@ Ignore_Synchronized_Construct(const WN *construct_pragma,
 {
    /* This can be TRUE for DOACROSS, PARALLEL, and any paralellization
     * related construct that may occur within a parallel region.
-    * It only applies for prompf/mplist (i.e. when Run_w2fc_early).
+    * It only applies for mplist (i.e. when Run_w2fc_early).
     */
    BOOL ignore_construct;
 

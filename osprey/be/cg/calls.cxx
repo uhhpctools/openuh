@@ -2069,6 +2069,15 @@ Init_Entry_Exit_Code (WN *pu_wn)
 
 void Generate_Entry_Merge_Clear(BOOL is_region)
 {
+  OP *op;
+
+  // Do some cleanup before we get to emit or CG_sched
+  for( BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb) ){
+    for (op = BB_first_op(bb); op != NULL; op = OP_next(op)) {
+      OP_Change_Aux_Opcode( op, 0, 0 );
+    }
+  }
+
   if (CG_NoClear_Avx_Simd) 
     return;
 

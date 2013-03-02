@@ -104,11 +104,7 @@
 #include "xstats.h"
 #include "tracing.h"
 #include "cgir.h"
-#if defined(SHARED_BUILD)
-#include "import.h"
-#endif
 #include "opt_alias_interface.h"	/* for Print_alias_info */
-#include "anl_driver.h"			/* for Anl_File_Path */
 #include "ti_asm.h"
 #include "ti_errors.h"
 #include "targ_proc_properties.h"
@@ -1018,6 +1014,7 @@ static void Print_Dynsym (FILE *pfile, ST *st)
     }
   }
   else {
+#if !defined(TARG_PPC32)
     const char *eclass_label = NULL;
     switch (ST_export(st)) {
       case EXPORT_INTERNAL:
@@ -1037,6 +1034,7 @@ static void Print_Dynsym (FILE *pfile, ST *st)
       EMT_Write_Qualified_Name(pfile, st);
       putc ('\n', pfile);
     }
+#endif
   }
 }
 
@@ -1820,12 +1818,42 @@ static void r_assemble_list (
           fputs ("\t.p2align 3,,\n", Asm_File);
           break;
         case 2:
-          fputs ("\t.p2align 5,,\n", Asm_File);
+          fputs ("\t.p2align 4,,\n", Asm_File);
           break;
         default:
           break;
       }
       return;
+    } else if (OP_dpadd(op)) {
+      TOP top = OP_code(op);
+      INT num_bytes_to_padd = OP_dpadd(op);
+      if (num_bytes_to_padd > 3)
+        num_bytes_to_padd = 0;
+      if ((OP_x86_style(op)     || 
+           OP_memory(op)        || 
+           OP_cond_move(op)     || 
+           TOP_is_move_ext(top) ||
+           OP_icmp(op)) && 
+          (TOP_is_avx(top) == false)) {
+        if ((OP_memory(op) == false) && (OP_load_exe(op) == false)) {
+          for (i = 0; i < num_bytes_to_padd; i++)
+	    fprintf(Asm_File, "\t%s %s\n", AS_BYTE, AS_PD2);
+        } else {
+          for (i = 0; i < num_bytes_to_padd; i++)
+	    fprintf(Asm_File, "\t%s %s\n", AS_BYTE, AS_PD1);
+        }
+      } else if (top == TOP_lea32   || top == TOP_lea64  ||
+                 top == TOP_leax32  || top == TOP_leax64 ||
+                 top == TOP_leaxx32 || top == TOP_leaxx64 ) {
+        for (i = 0; i < num_bytes_to_padd; i++)
+	  fprintf(Asm_File, "\t%s %s\n", AS_BYTE, AS_PD1);
+      } else if (top == TOP_mov32   || top == TOP_mov64 ) {
+        for (i = 0; i < num_bytes_to_padd; i++)
+	  fprintf(Asm_File, "\t%s %s\n", AS_BYTE, AS_PD2);
+      } else if (TOP_is_avx(top)) {
+        for (i = 0; i < num_bytes_to_padd; i++)
+	  fprintf(Asm_File, "\t%s %s\n", AS_BYTE, AS_PD1);
+      }
     }
   }
 #endif
@@ -3370,8 +3398,20 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
 #endif
       if( base_ofst == 0 ){
 #if defined(TARG_X8664)
-	if( Is_Target_32bit() )
-	  sprintf( buf, "%s", name );
+        // open64.net bug951. 
+        // Format IA32 GOT symbol in Asm_String.
+	if( Is_Target_32bit() ) {
+          switch (TN_relocs(tn)) {
+          case TN_RELOC_IA32_GOT:
+            sprintf( buf, 
+                     "%s@GOT(%s)", 
+                     name, 
+                     int_reg_names[3][TN_register(Ebx_TN())- REGISTER_MIN]);
+            break;
+          default:
+            sprintf( buf, "%s", name);
+          }
+        }
 	else
 	  sprintf( buf, "%s(%%rip)", name );
 #else
@@ -3379,8 +3419,21 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
 #endif
       } else
 #if defined(TARG_X8664)
-	if( Is_Target_32bit() )
-	  sprintf( buf, "%s+%d", name, (int)base_ofst );
+        // open64.net bug951.
+        // Format IA32 GOTOFF symbol in Asm_String.
+	if( Is_Target_32bit() ) {
+          switch (TN_relocs(tn)) {
+          case TN_RELOC_IA32_GOTOFF:
+            sprintf( buf, 
+                     "%s@GOTOFF+%d(%s)",
+                     name, 
+                     (int)base_ofst,
+                     int_reg_names[3][TN_register(Ebx_TN())- REGISTER_MIN]);
+            break;
+          default:
+            sprintf( buf, "%s+%d", name, (int)base_ofst );
+          }
+        }
 	else
 	  sprintf( buf, "%s+%d(%%rip)", name, (int)base_ofst );
 #else
@@ -3657,6 +3710,46 @@ Modify_Asm_String (char* asm_string, UINT32 position, bool memory,
       asm_string =  Replace_Substring(asm_string, x86pattern, suffix);
     }
   }
+
+  // open64.net bug950. Handle any template modifers 
+  // %L,%W,%B,%Q,%S,%T. Referrence i386.c(gcc) print_operand.
+  {
+    char L_suffix[8] = {0};
+    char W_suffix[8] = {0};
+    char B_suffix[8] = {0};
+    char Q_suffix[8] = {0};
+    char S_suffix[8] = {0};
+    char T_suffix[8] = {0};
+    int rL,rW,rB,rQ,rS,rT;
+    rL = snprintf(L_suffix, sizeof(L_suffix), "%%L%d", position);
+    rW = snprintf(W_suffix, sizeof(W_suffix), "%%W%d", position);
+    rB = snprintf(B_suffix, sizeof(B_suffix), "%%B%d", position);
+    rQ = snprintf(Q_suffix, sizeof(Q_suffix), "%%Q%d", position);
+    rS = snprintf(S_suffix, sizeof(S_suffix), "%%S%d", position);
+    rT = snprintf(T_suffix, sizeof(T_suffix), "%%T%d", position);
+    FmtAssert(( rL >= 0 && rL < sizeof(L_suffix)) &&
+              ( rW >= 0 && rW < sizeof(W_suffix)) &&
+              ( rB >= 0 && rB < sizeof(B_suffix)) &&
+              ( rQ >= 0 && rQ < sizeof(Q_suffix)) &&
+              ( rS >= 0 && rS < sizeof(S_suffix)) &&
+              ( rT >= 0 && rT < sizeof(T_suffix)), 
+              ("Error, Unable to generate format string in Modify_Asm_String!\n"));
+    if (strstr(asm_string, L_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, L_suffix, "l");
+    } else if (strstr(asm_string, W_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, W_suffix, "w");
+    } else if (strstr(asm_string, B_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, B_suffix, "b");
+    } else if (strstr(asm_string, Q_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, Q_suffix, "l");
+    } else if (strstr(asm_string, S_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, S_suffix, "s");
+    } else if (strstr(asm_string, T_suffix) != NULL) {
+      asm_string =  Replace_Substring(asm_string, T_suffix, "t");
+    }
+  }
+
+
 #endif // TARG_X8664
   
   return asm_string;
@@ -4628,6 +4721,14 @@ Emit_Loop_Note(BB *bb, FILE *file)
 	: ", nesting depth: %d, %siterations: %lld";
 
       fprintf (file, fmt, depth, estimated, trip_count);
+
+      if (LOOPINFO_vectorized(info)) {
+        fprintf (file, "\n #<loop> vectorized");
+        if (LOOPINFO_align_peeled(info))
+          fprintf (file, "\n #<loop> vector loop : peeled for alignment");
+      } else if (LOOPINFO_align_peeled(info)) {
+        fprintf (file, "\n #<loop> scalar loop : peeled iter to align");
+      }
     }
 
     fputc ('\n', file);
@@ -4694,6 +4795,16 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
       BB_Insert_Op_Before(bb , aux_br_op , last_op);
     }
     Set_OP_Tag(last_op, Get_OP_Tag(aux_br_op));
+  }
+#endif
+
+#if defined(TARG_X8664)
+  if (BB_dispatch(bb)){
+    if (CG_p2align == 2){
+      fprintf(Asm_File, "\t.p2align 5,,\n");
+    } else {
+      fprintf(Asm_File, "\t.p2align 4,,\n");
+    }
   }
 #endif
 
@@ -4796,14 +4907,18 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
     }
     if (!(Is_Target_Barcelona() || Is_Target_Orochi() || Is_Target_Wolfdale()) || !CG_p2align)
     {
-    // bug 2191
-    if (branch_in_freq > 100000000.0 &&
-       branch_in_ratio > 50.0) 
-          fprintf(Asm_File, "\t.p2align 4,,\n");
+      // bug 2191
+      if (branch_in_freq > 100000000.0 &&
+         !BB_dispatch(bb) &&
+         branch_in_ratio > 50.0) {
+        if (Is_Target_Orochi() && CG_p2align_split)
+          fprintf(Asm_File, "\t.p2align 3,,\n");
+        fprintf(Asm_File, "\t.p2align 4,,\n");
+      }
     }
-    else if (branch_in_ratio > 0.0)
+    else if ((branch_in_ratio > 0.0) && !BB_dispatch(bb))
     {
-      int max_skip_bytes;
+      int max_skip_bytes = 0;
    
       if (CG_p2align == 2){ 
       if (branch_in_ratio > 50.0)
@@ -4831,12 +4946,11 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
  *     when there is none biased jump on condition instructions inside. If so, 
  *     it is not desirable to align the loop head. 
  */      
-      if(max_skip_bytes > 0)
-      {
-        if(!Is_Target_Barcelona() || CG_p2align != 2){
+      if (max_skip_bytes > 0) {
+        if (!Is_Target_Barcelona() || CG_p2align != 2){
           if (max_skip_bytes > 15)
 	    max_skip_bytes = 15;	
-          if(Is_Target_Orochi())
+          if (Is_Target_Orochi() && CG_p2align_split)
             fprintf(Asm_File, "\t.p2align 3,,\n");
           fprintf(Asm_File, "\t.p2align 4,,%d\n", max_skip_bytes);
         }
@@ -5086,17 +5200,6 @@ EMT_Assemble_BB ( BB *bb, WN *rwn )
     }
 
     FREQ_Print_BB_Note(bb, Asm_File);
-#endif
-  }
-  if (Run_prompf) {
-#ifndef TARG_NVISA
-    if (BB_loop_head_bb(bb)) {
-      Emit_Loop_Note(bb, anl_file);
-    }
-
-    if (BB_has_note(bb)) {
-      NOTE_BB_Act (bb, NOTE_PRINT_TO_ANL_FILE, anl_file);
-    }
 #endif
   }
 
@@ -8287,7 +8390,9 @@ Process_Bss_Data (SYMTAB_IDX stab)
 		    ST_base_idx(sym) != ST_st_idx(sym) &&
 		    !ST_is_equivalenced(sym) &&
 		    ST_class(ST_base(sym)) != CLASS_BLOCK &&
-                    pu != NULL && ! PU_ftn_lang(*pu) /* bug 13585 */)
+                    // originally bug 13585. bug 924 open64.net.
+                    // no pu case should also be considered.
+                    ((!pu) || !PU_ftn_lang (*pu)))
 		  goto skip_definition;
 #endif
 		size = TY_size(ST_type(sym));
@@ -8766,12 +8871,6 @@ EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn )
    */
   STACK_FP_Fixup_PU();
 
-  if ( Run_prompf ) {
-    const char *path = Anl_File_Path();
-    anl_file = fopen(path, "a");
-    fputc ('\n', anl_file);
-  }
-
   Init_ST_elf_index(CURRENT_SYMTAB);
 
   cur_section = NULL;
@@ -9150,10 +9249,6 @@ EMT_Emit_PU ( ST *pu, DST_IDX pu_dst, WN *rwn )
 		Initial_Pu_PC, PC);
 #endif // TARG_X8664
 #endif // TARG_LOONGSON
-  }
-  if (Run_prompf) {
-    fputc ('\n', anl_file);
-    fclose(anl_file);
   }
 
   PU_Size = PC - Initial_Pu_PC;
@@ -9680,6 +9775,9 @@ Emit_Options (void)
 
     if (Is_Target_XOP()) fputs ("-mxop ", Asm_File);
     else fputs ("-mno-xop ", Asm_File);
+
+    if (Is_Target_FMA()) fputs ("-mfma ", Asm_File);
+    else fputs ("-mno-fma ", Asm_File);
 
     if (Is_Target_FMA4()) fputs ("-mfma4 ", Asm_File);
     else fputs ("-mno-fma4 ", Asm_File);

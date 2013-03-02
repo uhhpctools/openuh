@@ -70,30 +70,20 @@
 #include "wn.h"			    /* for ir_bread.h */
 #include "pu_info.h"		    /* for ir_bread.h */
 #include "ir_bread.h"		    /* Free_Input_Info () */
-#ifndef BUILD_SKIP_PROMPF
-#include "anl_driver.h"		    /* Prompf related */
-#endif
 #include "w2c_driver.h"		    /* Whirl2c related */
 #include "w2f_driver.h"		    /* Whirl2f related */
 #include "instr_reader.h"
 #include "be_symtab.h"
 
 
-BOOL Prompf_anl_loaded = FALSE;
 BOOL Whirl2f_loaded = FALSE;
 BOOL Whirl2c_loaded = FALSE;
 
-/* The subroutines we use from Prompf, Whirl2c, and Whirl2f
+/* The subroutines we use from Whirl2c, and Whirl2f
  */
 
 #include "w2c_weak.h"
 #include "w2f_weak.h"
-
-#if !(defined(__linux__) || defined(BUILD_OS_DARWIN))
-#ifndef BUILD_SKIP_PROMPF
-#pragma weak Anl_Cleanup
-#endif
-#endif
 
 
 /* ====================================================================
@@ -159,12 +149,6 @@ Cleanup_Files (BOOL report,         /* Report errors during cleanup? */
        W2C_Cleanup();
     if (Whirl2f_loaded)
        W2F_Cleanup();
-#if !(defined( __linux__) || defined(BUILD_OS_DARWIN))
-#ifndef BUILD_SKIP_PROMPF
-    if (Prompf_anl_loaded)
-       Anl_Cleanup();
-#endif
-#endif
 
     /* Close trace file: */
     Set_Trace_File ( NULL );

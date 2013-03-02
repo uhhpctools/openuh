@@ -845,10 +845,8 @@ endif
 # win against random include files in /usr/include.
 ALL_CPPFLAGS = $(INCLUDES) $(CPPFLAGS) $(X_CPPFLAGS) $(T_CPPFLAGS)
 
-#LIBGSPIN = ../../../libspin/libgspin42.a
-#This is a symbol link, create by the CONFIGURE script
-#LIBGSPIN = ../../../libspin/libgspin42.a
-LIBGSPIN = ../../osprey/targdir/libspin_4_2_0/libgspin42.a
+# Open64: Location of libgspin42.a, which must already be built.
+LIBGSPIN = $(build_objdir)/../../osprey/targdir/libspin_4_2_0/libgspin42.a
 
 # Build and host support libraries.
 LIBIBERTY = ../libiberty/libiberty.a
@@ -1294,15 +1292,20 @@ config.status: $(srcdir)/configure $(srcdir)/config.gcc
 ifneq (, $(filter mips%, $(target)))
 all.internal: start.encap
 else
-all.internal: start.encap rest.encap
+    ifneq (, $(filter powerpc%, $(target)))
+    all.internal: start.encap
+    else
+    all.internal: start.encap rest.encap
+    endif
 endif
 
 # This is what to compile if making a cross-compiler.
 all.cross: native gcc-cross$(exeext) cpp$(exeext) specs \
 	$(LIBGCC) $(EXTRA_PARTS) lang.all.cross doc @GENINSRC@ srcextra
 # This is what must be made before installing GCC and converting libraries.
-start.encap: native xgcc$(exeext) cpp$(exeext) specs \
+start.encap: native xgcc$(exeext) cpp$(exeext) specs\
 	xlimits.h lang.start.encap @GENINSRC@ srcextra
+# KEY: disable build of libraries.
 # These can't be made until after GCC can run.
 rest.encap: $(STMP_FIXPROTO) $(LIBGCC) $(EXTRA_PARTS) lang.rest.encap
 # This is what is made with the host's compiler
@@ -3708,6 +3711,7 @@ installdirs:
 	$(mkinstalldirs) $(DESTDIR)$(man7dir)
 
 # Install the compiler executables built during cross compilation.
+ifeq (, $(filter powerpc%, $(target))) 
 install-common: native $(EXTRA_PARTS) lang.install-common installdirs
 	for file in $(COMPILERS); do \
 	  if [ -f $$file ] ; then \
@@ -3751,7 +3755,44 @@ install-common: native $(EXTRA_PARTS) lang.install-common installdirs
 	    $(INSTALL_PROGRAM) gcov$(exeext) $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
 	fi
 	$(INSTALL_SCRIPT) gccbug $(DESTDIR)$(bindir)/$(GCCBUG_INSTALL_NAME)
-
+else
+install-common: native lang.install-common installdirs
+	for file in $(COMPILERS); do \
+	  if [ -f $$file ] ; then \
+	    rm -f $(DESTDIR)$(libexecsubdir)/$$file; \
+	    $(INSTALL_PROGRAM) $$file $(DESTDIR)$(libexecsubdir)/$$file; \
+	  else true; \
+	  fi; \
+	done
+	for file in $(EXTRA_PASSES) $(EXTRA_PROGRAMS) $(COLLECT2) ..; do \
+	  if [ x"$$file" != x.. ]; then \
+	    rm -f $(DESTDIR)$(libexecsubdir)/$$file; \
+	    $(INSTALL_PROGRAM) $$file $(DESTDIR)$(libexecsubdir)/$$file; \
+	  else true; fi; \
+	done
+# We no longer install the specs file because its presence makes the
+# driver slower, and because people who need it can recreate it by
+# using -dumpspecs.  We remove any old version because it would
+# otherwise override the specs built into the driver.
+	rm -f $(DESTDIR)$(libsubdir)/specs
+# Install protoize if it was compiled.
+	-if [ -f protoize$(exeext) ]; then \
+	  rm -f $(DESTDIR)$(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
+	  $(INSTALL_PROGRAM) protoize$(exeext) $(DESTDIR)$(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
+	  rm -f $(DESTDIR)$(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
+	  $(INSTALL_PROGRAM) unprotoize$(exeext) $(DESTDIR)$(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
+	  rm -f $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
+	  $(INSTALL_DATA) SYSCALLS.c.X $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
+	  chmod a-x $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
+	fi
+# Install gcov if it was compiled.
+	-if [ -f gcov$(exeext) ]; \
+	then \
+	    rm -f $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
+	    $(INSTALL_PROGRAM) gcov$(exeext) $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
+	fi
+	$(INSTALL_SCRIPT) gccbug $(DESTDIR)$(bindir)/$(GCCBUG_INSTALL_NAME)
+endif
 # Install the driver program as $(target_noncanonical)-gcc,
 # $(target_noncanonical)-gcc-$(version)
 # and also as either gcc (if native) or $(gcc_tooldir)/bin/gcc.
@@ -4793,7 +4834,3 @@ po/gcc.pot: force
 	AWK=$(AWK) $(SHELL) $(srcdir)/po/exgettext \
 		$(XGETTEXT) gcc $(srcdir)
 
-# KEY: rule for making libgspin.a
-# Do not build libspin.a here, it's created by targXXXX_XXXX/CONFIGURE
-#$(LIBGSPIN):
-#	make -C ../../../libspin FE=GNU_4_2_0

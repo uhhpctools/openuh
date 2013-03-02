@@ -36,6 +36,7 @@
 #include "errors.h"
 #include "mempool.h"
 #include "cxx_memory.h"
+#include "erglob.h"
 
 O64_Driver * O64_Driver::_theInstance = NULL;
 
@@ -71,18 +72,16 @@ static O64_ComponentInitializer driver_init(
 // =======================================================================
 
 O64_Driver::O64_Driver()
-    :_NumRegisteredComponents(COMPONENT_first),
-     _CurrentWN(NULL)
+    :_CurrentWN(NULL), _CompOptionArgc(0)
 {
     MEM_POOL_Initialize(&_DriverPool, "DriverPool", FALSE);
     MEM_POOL_Initialize(&_LocalPool, "LocalMemPool", FALSE);
 
     MEM_POOL_Push(&_DriverPool);
 
-    _ComponentDescriptorList.NumOfComponents = COMPONENT_last;
-    _ComponentDescriptorList.ComponentDescriptors = (O64_ComponentDescriptor **)
-        MEM_POOL_Alloc(&_DriverPool, sizeof(O64_ComponentDescriptor*)*COMPONENT_last);
-
+    _CompOptionArgv = (char **)
+        MEM_POOL_Alloc(&_DriverPool, sizeof(char*)*MaxOptionNum); 
+    _ComponentDescriptorList.InitCompDescList(&_DriverPool);    
 }
 
 O64_Driver::~O64_Driver()
@@ -115,22 +114,44 @@ O64_Driver::Destroy()
 void
 O64_Driver::RegisterComponent(O64_COMPONENT component, const O64_ComponentDescriptor* desc)
 {
-    Is_True((COMPONENT_first <= component) &&
-            (component < COMPONENT_last) && desc, ("RegisterComponent: invalid component"));
+    Is_True((COMPONENT_first <= component) && 
+            (component < COMPONENT_last) && desc, 
+            ("RegisterComponent: invalid component"));
 
-    _ComponentDescriptorList.ComponentDescriptors[component]= 
-        const_cast<O64_ComponentDescriptor*>(desc);
+    _ComponentDescriptorList.SetComponentDescriptor(component, desc); 
+    _ComponentDescriptorList.SetComponentRegistered(component);   
+    _ComponentDescriptorList.SetNumOfRegisteredComponents(
+        _ComponentDescriptorList.GetNumOfRegisteredComponents() + 1);
 
-    _NumRegisteredComponents++;
 }
 
-// Process O64_Option class to store option values from the command line.
-// The new option handling mechnisam co-exists with the old option handling
-// mechnisam.
+// Save the componentization related commands into a string list 
+// in O64_Driver. The commands will be processed once all the modules are
+// loaded and thus all the components are registered.
 bool
-O64_Driver::ProcessComponentOption(char * argv)
+O64_Driver::SaveComponentOption(const char * argv)
 {
-    FmtAssert(_NumRegisteredComponents == COMPONENT_last,
+    char * temp_str;
+    if (!STRNCMP(argv, "-COMP-", STRLEN("-COMP-"))) {
+        temp_str = STRDUP(argv);
+        temp_str = temp_str + STRLEN("-COMP-");
+        _CompOptionArgv[_CompOptionArgc] = (char *) 
+            MEM_POOL_Alloc(&_DriverPool, sizeof(char)*(STRLEN(temp_str)+1));
+        STRCPY(_CompOptionArgv[_CompOptionArgc], temp_str);
+        _CompOptionArgc++;
+        FmtAssert(_CompOptionArgc <= MaxOptionNum, 
+            ("too large option string"));
+        return true; 
+    }
+    return false;
+}
+
+// Create O64_Option object to store all registed components' option (if not exist)
+// Process the component-based command option 
+void
+O64_Driver::ProcessComponentOption()
+{
+    FmtAssert(_NumRegisteredComponents <= COMPONENT_last,
         ("[O64_Driver] Component Registration Error"));
 
     if (_CurrentOption == NULL) {
@@ -138,7 +159,10 @@ O64_Driver::ProcessComponentOption(char * argv)
         Is_True(_CurrentOption, ("[O64_Driver] Null CurrentOption"));
     }
 
-    return (_CurrentOption->ProcessComponentOption_(argv));
+    for (INT i = 0; i < _CompOptionArgc; i++) {
+        if (!_CurrentOption->ProcessComponentOption_(_CompOptionArgv[i])) 
+            ErrMsg (EC_Unknown_Flag, _CompOptionArgv[i][0], _CompOptionArgv[i]);
+    }
 }
 
 TRACE_OPTION_KIND
@@ -181,6 +205,8 @@ const char * DumpOptionNames[] =
     "none",
     "ir",
     "cfg",
+    "ssa",
+    "vcg",
     "max"
 };
 
@@ -205,10 +231,10 @@ CommonOptionDescriptors[OPT_common_last+1] =
     // if -COMP:db=ir is specified, this option is DUMP_ir; 
     // if -COMP:db=cfg is specified, this option is DUMP_cfg;
     
-    O64_ENUM_OPTION_DESC(OPT_dump_before, "dump [ir|cfg|max] before the component",
+    O64_ENUM_OPTION_DESC(OPT_dump_before, "dump [ir|cfg|ssa|vcg|max] before the component",
                 "dump_before", "db",OV_INTERNAL, false, DUMP_none, DUMP_none, DUMP_maximal,
                 DUMP_ir, DumpOptionNames),
-    O64_ENUM_OPTION_DESC(OPT_dump_after, "dump [ir|cfg|max] after the component",
+    O64_ENUM_OPTION_DESC(OPT_dump_after, "dump [ir|cfg|ssa|vcg|max] after the component",
                 "dump_after", "da",  OV_INTERNAL, false, DUMP_none, DUMP_none, DUMP_maximal,
                 DUMP_ir, DumpOptionNames),
     O64_ENUM_OPTION_DESC(OPT_trace, "dump out trace information [info|min|med|max]", 
@@ -216,6 +242,10 @@ CommonOptionDescriptors[OPT_common_last+1] =
                  TRACE_maximal, TraceOptionNames),
     O64_OPTION_DESC(OPT_stats, "gather and print component statistics",
                 "STATS", "stats", OVK_NONE, OV_INTERNAL, false, false, 0, 0),
+    O64_OPTION_DESC(OPT_skip_b, "skip the function unit before",
+                "skip_b", "skip_b", OVK_UINT32, OV_INTERNAL, false, 0, 0, UINT32_MAX),
+    O64_OPTION_DESC(OPT_skip_a, "skip the function unit after",
+                "skip_a", "skip_a", OVK_UINT32, OV_INTERNAL, false, UINT32_MAX, 0, UINT32_MAX),
     O64_OPTION_DESC(OPT_common_last, "end marker", 0, 0, OVK_INVALID, OV_INTERNAL, false, 0, 0, 0)
 };
 
@@ -226,15 +256,26 @@ O64_Option::O64_Option()
     _ComponentDescriptorList = O64_Driver::GetInstance()->GetComponentDescriptorList();
     _MemPool = O64_Driver::GetInstance()->GetDriverMemPool();
 
-    _Options = (_Value **) MEM_POOL_Alloc(_MemPool, sizeof(_Value*) *GetNumOfComponents_());
+    _Options = (_Value **) MEM_POOL_Alloc(_MemPool, 
+      sizeof(_Value*) *GetNumOfComponents_());
+    _OptionsSet = (BOOL **) MEM_POOL_Alloc(_MemPool, 
+      sizeof(BOOL*) *GetNumOfComponents_());    
 
     for (UINT32 component = 0; component < GetNumOfComponents_(); ++component)
     {
+        // if the component not registered, we could not find its option
+        // descriptors
+        if (!_ComponentDescriptorList->IsComponentRegistered(component))
+            continue;
+
         UINT32 option;
         for (option = 0; GetOptionName_(component, option); ++option);
 
         
-        _Options[component] = (_Value *) MEM_POOL_Alloc(_MemPool, sizeof(_Value) * option);
+        _Options[component] = (_Value *) MEM_POOL_Alloc(_MemPool, 
+          sizeof(_Value) * option);
+        _OptionsSet[component] = (BOOL*) MEM_POOL_Alloc(_MemPool, 
+          sizeof(BOOL) * option);      
 
         for (option = 0; GetOptionName_(component, option); ++option)
         {
@@ -250,6 +291,9 @@ O64_Option::~O64_Option()
 {
     for (INT32 component = 0; component < GetNumOfComponents_(); ++component)
     {
+        if (!_ComponentDescriptorList->IsComponentRegistered(component))
+            continue;
+
         for (INT32 option = 0; GetOptionName_(component, option); ++option)
         {
             // free the strings that are generated by STRDUP
@@ -260,9 +304,11 @@ O64_Option::~O64_Option()
          }           
 
         MEM_POOL_FREE(_MemPool, _Options[component]);
+        MEM_POOL_FREE(_MemPool, _OptionsSet[component]);
     }
 
     MEM_POOL_FREE(_MemPool, _Options);
+    MEM_POOL_FREE(_MemPool, _OptionsSet);
 }
 
 //
@@ -276,16 +322,10 @@ O64_Option::ProcessComponentOption_(char * component_options)
 
     char * option_dup, * option_start;
 
-    // the first char should be '-'
     option_start = component_options;
-    if (*option_start != '-') return false;
-
-    option_start++;
-    if (*option_start == '\0') return false;
-
     option_dup = STRDUP(option_start);
 
-    if (!STRCMP("OPTIONS", option_dup)) {
+    if (!STRCASECMP("OPTIONS", option_dup)) {
         PrintOptionsUsage_();
         return true;
     }
@@ -294,13 +334,15 @@ O64_Option::ProcessComponentOption_(char * component_options)
     if (option_start == NULL) return false;
 
     for (INT32 component = 0; component <= GetNumOfComponents_(); ++component) {
+        if (!_ComponentDescriptorList->IsComponentRegistered(component)) {
+            continue;
+        }    
         if (!STRCASECMP(GetComponentName_(component), option_start)) {
             option_start = STRTOK(NULL, ":");
             if (ProcessOptionList_(component, option_start))
                 return true;
         }
     }
-
     return false;
 };
 
@@ -363,10 +405,8 @@ O64_Option::ProcessOption_(INT32 component, char *option_str)
         }       
     }       
     if (!option_found) {
-        FmtAssert(false, ("invalid option"));
         return false;
     }
-
     return true;
 }
 
@@ -375,8 +415,6 @@ O64_Option::ProcessOption_(INT32 component, char *option_str)
 bool
 O64_Option::SetOptionValue_(INT32 component, INT32 option, char * option_value)
 {
-    bool return_value = false;
-
     INT32 int32_value;
     INT64 int64_value;
     UINT32 uint32_value;
@@ -463,8 +501,12 @@ O64_Option::SetOptionValue_(INT32 component, INT32 option, char * option_value)
         break;
     default:  
         Is_True(false, ("Unimplemented option kind"));
-        break;
-    }    
+        return false;
+    }
+    
+    //set the _OptionSet (i.e., the value is from command line)
+    _OptionsSet[component][option] = TRUE;
+    return true;
 }
 
 // the print name for each option kind

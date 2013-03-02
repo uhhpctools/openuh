@@ -2271,7 +2271,11 @@ CODEMAP::Canon_cvt(WN       *wn,
 #endif
   if ((Get_mtype_class(OPCODE_rtype(op)) & 
        Get_mtype_class(OPCODE_desc(op))) != 0 &&
-      MTYPE_size_min(OPCODE_rtype(op)) == MTYPE_size_min(OPCODE_desc(op))) 
+      MTYPE_size_min(OPCODE_rtype(op)) == MTYPE_size_min(OPCODE_desc(op)) &&
+      // bug912 open64.net. Do not delete U4I4CVT if his kid is a constant
+      (!(OPCODE_rtype(op) == MTYPE_U4 && 
+         OPCODE_desc(op) == MTYPE_I4 &&
+         ccr->Tree() == NULL))) 
     return propagated;
 
   if ( WOPT_Enable_Cvt_Folding && 
@@ -2540,13 +2544,18 @@ CODEMAP::Add_idef(OPCODE opc, OCC_TAB_ENTRY *occ, STMTREP *stmt,
   CODEREP          *retv;
   OPERATOR         oper = OPCODE_operator(opc);
 
-  // make sure the dtyp for constant base is Pointer_type
-  if (lbase != NULL && lbase->Kind() == CK_CONST 
+#if defined(TARG_X8664)
+  // make sure the dtyp for constant base is Pointer_type if the address
+  // is negative because movl on x86_64 does zero-ext.
+  if (lbase != NULL && lbase->Kind() == CK_CONST
+      && lbase->Const_val() + (INT64)ofst < 0
       && lbase->Dtyp() != Pointer_type)
     lbase->Set_dtyp_strictly(Pointer_type);
-  if (sbase != NULL && sbase->Kind() == CK_CONST 
+  if (sbase != NULL && sbase->Kind() == CK_CONST
+      && sbase->Const_val() + (INT64)ofst < 0
       && sbase->Dtyp() != Pointer_type)
     sbase->Set_dtyp_strictly(Pointer_type);
+#endif
 
   cr->Init_ivar(opc, dtyp, occ, dsctyp, lodty, lbase, sbase,
 		ofst, size, field_id);
@@ -3728,6 +3737,21 @@ CODEMAP::Add_expr(WN *wn, OPT_STAB *opt_stab, STMTREP *stmt, CANON_CR *ccr,
 	cr->Set_call_op_aux_id (WN_st_idx(wn));
         break;
 #endif
+     // Fix bug966: for SELECT, both Kid 1 and Kid 2 must have res as the result type
+      case OPR_SELECT:
+        if (cr->Get_opnd(1)->Dtyp() != cr->Get_opnd(2)->Dtyp())
+          for ( INT index = 1; index < cr->Kid_count(); index++) {
+            CODEREP *opnd = cr->Opnd(index);
+           if (cr->Dtyp() != opnd->Dtyp()) {
+              OPCODE   opc = OPCODE_make_op(OPR_CVT, cr->Dtyp(), opnd->Dtyp());
+              CODEREP *cvt_cr = Add_unary_node(opc, opnd);
+              cr->Set_opnd(index, cvt_cr);
+            }
+          }
+        else {
+          cr->Set_dtyp(cr->Get_opnd(1)->Dtyp());
+        }
+        break;
     }
 
     BOOL do_canonicalization = TRUE;
@@ -4176,7 +4200,8 @@ STMTREP::Enter_lhs(CODEMAP *htable, OPT_STAB *opt_stab, COPYPROP *copyprop)
 	      opt_stab->Aux_stab_entry(vaux)->Byte_size() * 8 ==
 	            MTYPE_size_min(_desc) &&
 	      (opr == OPR_ISTORE && 
-	       (opt_stab->Aux_stab_entry(vaux)->Bit_size() == 0 ||
+               // bug362 open64.net, Bit_size == 0 is essential for istorefolds
+	       (opt_stab->Aux_stab_entry(vaux)->Bit_size() == 0 && 
 		opt_stab->Aux_stab_entry(vaux)->Field_id() == WN_field_id(Wn())) ||
 	       opr == OPR_ISTBITS &&
 	       opt_stab->Aux_stab_entry(vaux)->Bit_ofst() == WN_bit_offset(Wn()) &&

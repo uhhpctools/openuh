@@ -1204,16 +1204,16 @@ static SNL_REGION Do_Automatic_Transformation(WN* wn,
       if (uup == NULL || ti == NULL || nloops == ti->Nloops())
 	ctregion = SNL_GEN_U_Ctiling(ni->Dostack().Bottom_nth(firstin), nloops, 
           uup, ti, ni->Bi(), &(ni->Privatizability_Info().Plist), reg_usage, 
-          TRUE, FALSE);
+          TRUE);
       else {
 	// in case you want to do a permutation, and then tile only some
 	// of the inner loops.
 	ctregion = SNL_GEN_U_Ctiling(ni->Dostack().Bottom_nth(firstin), nloops, 
           uup, NULL, ni->Bi(), &(ni->Privatizability_Info().Plist), reg_usage,
-          TRUE, FALSE);
+          TRUE);
 	(void) SNL_GEN_U_Ctiling(ni->Dostack().Bottom_nth(firstin), nloops, 
 	  NULL, ti, ni->Bi(), &(ni->Privatizability_Info().Plist), 
-          EST_REGISTER_USAGE(), TRUE, FALSE);
+          EST_REGISTER_USAGE(), TRUE);
       }
       if (region.First == stack->Bottom_nth(firstin))
 	region.First = ctregion.First;

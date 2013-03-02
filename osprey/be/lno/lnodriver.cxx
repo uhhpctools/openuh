@@ -92,7 +92,6 @@
 #include "debug.h"
 #include "cxx_template.h" 
 #include "parids.h" 
-#include "prompf.h" 
 #include "cxx_memory.h"
 #include "ipa_lno_file.h"
 #include "lnodriver.h"
@@ -270,21 +269,10 @@ Perform_Loop_Nest_Optimization (PU_Info* current_pu, WN *pu_wn,
     STACK<INT> st_before_id(&MEM_local_pool); 
     STACK<WN*> st_after_wn(&MEM_local_pool); 
     STACK<INT> st_after_id(&MEM_local_pool); 
-    if (Run_prompf) {
-      Prompf_Collect_Ids(region_wn, &st_before_wn, &st_before_id);
-    }
 
     region_wn =
       Pre_Optimizer(PREOPT_LNO_PHASE, region_wn, du_mgr, alias_mgr);
     Check_for_IR_Dump(TP_LNOPT3, region_wn, "LNO PREOPT");
-
-    if (Run_prompf) {
-      Prompf_Info->Mark_Preopt();
-      Prompf_Assign_New_Ids(region_wn);
-      Prompf_Collect_Ids(region_wn, &st_after_wn, &st_after_id);
-      Print_Prompf_Preopt_Transaction_Log(Prompf_Info, &st_before_id, 
-					  &st_after_wn, &MEM_local_pool); 
-    }
 
     RID_level(REGION_get_rid(region_wn)) = RL_LNO_PREOPT;
     Is_True(REGION_consistency_check(region_wn),(""));

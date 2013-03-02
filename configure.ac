@@ -1,4 +1,5 @@
 Copyright 2010 Hewlett Packard Company
+Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
 
 This file is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,6 +35,7 @@ along with this file; ; see the file osprey/COPYING.  If not, see
 
 AC_PREREQ([2.59])
 AC_INIT([opencc],[4.2])
+AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 #AC_PROG_CC
@@ -44,12 +46,12 @@ AC_CANONICAL_TARGET
 # unless the user specifies otherwise, we default to 32 bit mode as the
 # default on x86 64 bit platforms.
 
-if test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
+if test "$build_alias" = "" && test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
   host_cpu=i686
   host=$host_cpu-$host_vendor-$host_os
 fi
 
-if test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
+if test "$build_alias" = "" && test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
   target_cpu=i686
   target=$target_cpu-$target_vendor-$target_os
 fi
@@ -268,6 +270,13 @@ case "$BUILD_OPTIMIZE" in
     ;;
 esac
 
+# TODO cleanup Fortran Front-End (FFE) so that extra debugging checks
+# can be enabled when BUILD_OPTIMIZE is set to DEBUG.
+AC_ARG_WITH(build-ffe-optimize,
+[  --with-build-ffe-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in FFE build],
+BUILD_FFE_OPTIMIZE="$with_build_ffe_optimize",
+BUILD_FFE_OPTIMIZE=DEFAULT)
+
 AC_ARG_WITH(build-lib-optimize,
 [  --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
     Note that --with-build-lib-optimize=DEBUG is currently not well tested.],
@@ -307,6 +316,16 @@ AC_ARG_ENABLE([fortran],
 
 AS_IF([test "x$enable_fortran" != "xno"], [
   BUILD_FORTRAN=YES
+])
+
+# Set whether WHIRL a node contains a debugging ID
+AC_ARG_ENABLE([whirl_id],
+  AS_HELP_STRING([--enable-whirl-id], [Enable debugging ID in WHIRL node]))
+
+AS_IF([test "x$enable_whirl_id" = "xyes"], [
+  WHIRL_HAS_ID_FIELD=YES
+], [
+  WHIRL_HAS_ID_FIELD=NO
 ])
 
 # Set whether to skip IPA support (default NO).
@@ -367,6 +386,8 @@ LIB2_BUILD_ABI=
 LIB2_BUILD_ARCH=
 LIB2_BUILD_HOST=
 
+CYGNUS_CONFIGURE_CFLAGS=
+
 # Set variables based on the host machine that the compiler will run on.
 case "$host" in
 	x86_64*-*-linux*)
@@ -375,6 +396,7 @@ case "$host" in
 		BUILD_HOST=X8664
 		CYGNUS_CONFIGURE_HOST=i686-open64-linux
 		GCC_CONFIGURE_HOST=x86_64-redhat-linux
+		GCC_CONFIGURE_COMPILER+=" -m64"
 		;;
 	i*86*-*-linux*)
 		BUILD_ABI=I32BIT
@@ -382,6 +404,8 @@ case "$host" in
 		BUILD_HOST=IA32
 		CYGNUS_CONFIGURE_HOST=i686-open64-linux
 		GCC_CONFIGURE_HOST=x86_64-redhat-linux
+		GCC_CONFIGURE_COMPILER+=" -m32"
+		CYGNUS_CONFIGURE_CFLAGS="-m32"
 		;;
 	ia64*-*-linux*)
 		BUILD_ABI=I64BIT
@@ -390,12 +414,13 @@ case "$host" in
 		CYGNUS_CONFIGURE_HOST=ia64-linux-gnu
 		GCC_CONFIGURE_HOST=ia64-redhat-linux
 		;;
+	powerpc-*-linux*)
+		;;
 	*)
 		AC_MSG_ERROR(["open64 is not supported on $target"])
 		;;
 esac
 
-CYGNUS_CONFIGURE_CFLAGS=
 BUILD_VENDOR=
 
 # Set variables based on the target machine that the compiler will generate
@@ -414,7 +439,6 @@ case "$target" in
 		LIB2_BUILD_ARCH=X8664
 		CYGNUS_CONFIGURE_TARG=x86_64-open64-linux
 		GCC_CONFIGURE_TARG=x86_64-redhat-linux
-		GCC_CONFIGURE_COMPILER+=" -m64"
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_X8664"
 		;;
 	i*86*-*-linux*)
@@ -430,9 +454,7 @@ case "$target" in
 		LIB2_BUILD_ARCH=X8664
 		CYGNUS_CONFIGURE_TARG=x86_64-open64-linux
 		GCC_CONFIGURE_TARG=x86_64-redhat-linux
-		GCC_CONFIGURE_COMPILER+=" -m32"
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_X8664"
-		CYGNUS_CONFIGURE_CFLAGS="-m32"
 		;;
 	ia64*-*-linux*)
 		MACHINE_TYPE=ia64
@@ -442,6 +464,32 @@ case "$target" in
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_IA64"
 		TARG_INFO_NAME=ipfec_targ_info
 		;;
+	powerpc-*-linux*)
+		MACHINE_TYPE=PPC32
+		BUILD_ABI=I32BIT
+		BUILD_TARGET=PPC32
+		BUILD_MULTILIB=NO
+		BUILD_VENDOR=OSP
+		GCC_CONFIGURE_TARG=powerpc-redhat-linux
+		GCC_CONFIGURE_HOST=powerpc-redhat-linux
+		GCC_CONFIGURE_BUILD=powerpc-redhat-linux
+		CYGNUS_CONFIGURE_TARG=mipsel-elf-linux
+		GCC_CONFIGURE_COMPILER+=" -m32"
+		GCC_CONFIGURE_CFLAGS+=" -DTARG_PPC32"
+		case "$host" in
+			powerpc-*-linux*)
+				BUILD_ARCH=PPC32
+				BUILD_HOST=PPC32
+				BUILD_SKIP_IPA=YES
+				GCC_CONFIGURE_CFLAGS+=" -DTARG_PPC"
+			;;
+			*)
+				BUILD_SKIP_IPA=NO
+				BUILD_ARCH=IA32
+				BUILD_HOST=IA32
+				CROSS_TARGET="$target"
+			;;
+		esac ;;
 	sl*-*-linux*)
 		MACHINE_TYPE=SL
 		BUILD_TARGET=SL
@@ -463,6 +511,11 @@ esac
 
 if test "${BUILD_TARGET}" = "SL"; then
    BUILD_GNU3="YES"
+   BUILD_FORTRAN="NO"
+fi
+
+if test "${BUILD_TARGET}" = "PPC32"; then
+   BUILD_GNU3="NO"
    BUILD_FORTRAN="NO"
 fi
 
@@ -516,12 +569,14 @@ export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
 AC_SUBST([MACHINE_TYPE])
+AC_SUBST([CROSS_TARGET])
 AC_SUBST([BUILD_ABI])
 AC_SUBST([BUILD_ARCH])
 AC_SUBST([BUILD_HOST])
 AC_SUBST([BUILD_TARGET])
 AC_SUBST([BUILD_VENDOR])
 AC_SUBST([BUILD_OPTIMIZE])
+AC_SUBST([BUILD_FFE_OPTIMIZE])
 AC_SUBST([BUILD_LIB_OPTIMIZE])
 AC_SUBST([BUILD_COMPILER])
 AC_SUBST([BUILD_BOTH])
@@ -540,6 +595,7 @@ AC_SUBST([COMPILER_TARG_DIR])
 AC_SUBST([TARG_INFO_NAME])
 AC_SUBST([BUILD_GNU3])
 AC_SUBST([BUILD_FORTRAN])
+AC_SUBST([WHIRL_HAS_ID_FIELD])
 AC_SUBST([BUILD_SKIP_IPA])
 AC_SUBST([BUILD_TYPE])
 AC_SUBST([DRAGON_SUPPORT])

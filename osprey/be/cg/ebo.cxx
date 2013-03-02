@@ -3008,8 +3008,8 @@ Find_BB_TNs (BB *bb)
 #ifdef TARG_X8664
       if ( !op_replaced &&
            Is_Target_Orochi() && 
-           Is_Target_FMA4() &&
-           EBO_Is_FMA4(op) &&
+           ((Is_Target_FMA() && EBO_Is_FMA3(OP_code(op))) ||
+            (Is_Target_FMA4() && EBO_Is_FMA4(OP_code(op)))) &&
            !EBO_in_peep &&
            !EBO_in_loop )
         op_replaced = EBO_Disassociate_FMA( op );
@@ -3020,6 +3020,12 @@ Find_BB_TNs (BB *bb)
 	op_replaced = EBO_Load_Execution( op, opnd_tn, orig_tninfo, cmp_merge_idx );
       }
  
+      if ( !op_replaced &&
+           Is_Target_Orochi() &&
+           (Is_Target_FMA() || Is_Target_FMA4() ) &&
+           EBO_in_peep )
+        op_replaced = EBO_Associate_FMA( op, opnd_tninfo );
+
       if ( !op_replaced &&
             (CG_LOOP_unroll_level == 2) &&
             (OP_code(op) == TOP_leax32) &&

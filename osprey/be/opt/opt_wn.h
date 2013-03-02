@@ -70,6 +70,7 @@ static char *opt_wnrcs_id = 	opt_wn_INCLUDED"$Revision: 1.5 $";
 #include "opt_alias_interface.h"   // for READ_WRITE
 #include "region_util.h" // for REGION_LEVEL
 #include "opt_base.h"
+#include <map>
 
 // Forward declaration
 class ALIAS_MANAGER;
@@ -349,9 +350,11 @@ extern BOOL OPERATOR_is_fake(OPERATOR oper);
 extern BOOL OPCODE_is_fake(OPCODE opc);
 extern BOOL OPERATOR_is_volatile(OPERATOR oper);
 extern BOOL OPCODE_is_volatile(OPCODE opc);
-extern std::pair<bool, int> WN_get_val(WN *, const WN_MAP&);
-extern BOOL WN_has_disjoint_val_range(WN *, WN *, const WN_MAP&, const WN_MAP&);
+extern std::pair<bool, int> WN_get_val(WN *, std::map<WN *, WN *> &);
+extern BOOL WN_has_disjoint_val_range(WN *, WN *, std::map<WN *, WN *> &, std::map<WN *, WN *> &, std::map<AUX_ID, WN *> &);
+extern BOOL WN_has_indir_load(WN *);
 extern void Collect_operands(WN *, STACK<WN *> *, STACK<WN *> *);
+extern WN * WN_get_deriv(WN *, std::map<AUX_ID, WN *> &map);
 
   WN * WN_copy(WN *wn);  // copy a WN node
   WN * WN_copy_with_map (WN *wn);

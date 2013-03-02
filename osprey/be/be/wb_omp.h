@@ -36,11 +36,9 @@
 #ifndef wb_omp_INCLUDED
 #define wb_omp_INCLUDED
 
-extern void WB_OMP_Initialize(WN* wn_global, WN_MAP Prompf_Id_Map);
+extern void WB_OMP_Initialize(WN* wn_global);
 
 extern void WB_OMP_Set_Parent_Map(WN_MAP Parent_Map); 
-
-extern void WB_OMP_Set_Prompf_Info(PROMPF_INFO* prompf_info); 
 
 extern void WB_OMP_Terminate();
 

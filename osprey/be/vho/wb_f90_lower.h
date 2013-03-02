@@ -36,11 +36,9 @@
 #ifndef wb_f90_lower_INCLUDED
 #define wb_f90_lower_INCLUDED
 
-extern void WB_F90_Lower_Initialize(WN* wn_global, WN_MAP Prompf_Id_Map);
+extern void WB_F90_Lower_Initialize(WN* wn_global);
 
 extern void WB_F90_Lower_Set_Parent_Map(WN_MAP Parent_Map); 
-
-extern void WB_F90_Lower_Set_Prompf_Info(PROMPF_INFO* prompf_info); 
 
 extern void WB_F90_Lower_Terminate();
 

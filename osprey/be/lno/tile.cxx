@@ -82,16 +82,12 @@
 #include "soe.h"
 #include "cond.h"
 #include "parmodel.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "doacross.h"
 #include "ff_utils.h"
 #include "parallel.h"
 #include "split_tiles.h"
 #include "wn_mp.h"
 #include "fb_whirl.h"
-
-#pragma weak New_Construct_Id
 
 #define LEGO_BOGUS_VALUE 100
 #define LEGO_NAME_LENGTH 256
@@ -1679,11 +1675,6 @@ static void Mp_Extract_Parallel_Directives(WN* wn_tree,
         if (Mp_Retained_Pragma(wn, auto_parallel)) {
 	  has_retained_pragma = TRUE; 
 	} else { 
-	  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-	    INT old_id = WN_MAP32_Get(Prompf_Id_Map, wn);
-	    if (old_id != 0)
-              Prompf_Info->Elimination(old_id);
-          } 	
 	  LWN_Extract_From_Block(wn); 
 	  LWN_Delete_Tree(wn); 
 	} 
@@ -1707,11 +1698,6 @@ static void Mp_Extract_Parallel_Directives(WN* wn_tree,
   if ((WN_opcode(wn_tree) == OPC_PRAGMA || WN_opcode(wn_tree) == OPC_XPRAGMA)
       && (WN_pragmas[WN_pragma(wn_tree)].users & PUSER_MP)
       && !Mp_Retained_Pragma(wn_tree, auto_parallel)) {
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, wn_tree); 
-      if (old_id != 0)
-        Prompf_Info->Elimination(old_id); 
-    }
     LWN_Extract_From_Block(wn_tree); 
     LWN_Delete_Tree(wn_tree);
     return;
@@ -1754,74 +1740,6 @@ static BOOL Mp_Retained_Region(WN* wn_region,
   }
   return TRUE; 
 } 
-
-//-----------------------------------------------------------------------
-// NAME: Prompf_Mp_Version 
-// FUNCTION: Generate PROMPF ids and transactions for the code in 'wn_copy'
-//   which will be a serial version of the code in 'wn_orig'.  The boolean 
-//   'auto_parallel' is TRUE if the original was parallelized by auto-par-
-//   allelization, FALSE otherwise. 
-//-----------------------------------------------------------------------
-      
-static void Prompf_Mp_Version(WN* wn_orig, 
-			      WN* wn_copy, 
-			      BOOL auto_parallel)
-{
-  LWN_ITER* itr1 = LWN_WALK_TreeIter(wn_orig);  
-  LWN_ITER* itr2 = LWN_WALK_TreeIter(wn_copy);  
-  STACK<INT> stack1(&LNO_local_pool); 
-  STACK<INT> stack2(&LNO_local_pool); 
-  STACK<PROMPF_ID_TYPE> stack3(&LNO_local_pool);
-  for (; itr1 != NULL; itr1 = LWN_WALK_TreeNext(itr1)) { 
-    WN* wn1 = itr1->wn; 
-    WN* wn2 = itr2->wn; 
-    FmtAssert(WN_opcode(wn1) == WN_opcode(wn2), 
-      ("Prompf_Mp_Version: Corresponding nodes do not match")); 
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, wn1); 
-    if (old_id != 0 && (WN_opcode(wn1) == OPC_DO_LOOP 
-        || WN_opcode(wn1) == OPC_REGION 
-        && Mp_Retained_Region(wn1, auto_parallel)
-	|| (WN_opcode(wn1) == OPC_PRAGMA || WN_opcode(wn1) == OPC_XPRAGMA)
-	&& Mp_Retained_Pragma(wn1, auto_parallel))) { 
-      BOOL is_first = FALSE; 
-      WN* wn_region = NULL; 
-      for (WN* wn = wn1; wn != NULL; wn = LWN_Get_Parent(wn)) {
-        if (WN_opcode(wn) == OPC_REGION) { 
-	  wn_region = wn; 
-	  break; 
-        } 
-      }  
-      PROMPF_ID_TYPE id_type = Prompf_Id_Type(wn1, wn_region, &is_first);
-      INT new_id = 0; 
-      INT i;
-      for (i = 0; i < stack1.Elements(); i++) 
-	if (stack1.Bottom_nth(i) == old_id)
-	  break;
-      new_id = i < stack1.Elements() ? stack2.Bottom_nth(i) : 
-	New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, wn2, new_id); 
-      if (i == stack1.Elements()) { 
-	stack1.Push(old_id); 
-	stack2.Push(new_id); 
-	stack3.Push(id_type); 
-      } 
-    } 
-    itr2 = LWN_WALK_TreeNext(itr2); 
-  }
-  INT nloops = stack1.Elements(); 
-  if (nloops > 0) { 
-    INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);  
-    INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);  
-    PROMPF_ID_TYPE* id_types = CXX_NEW_ARRAY(PROMPF_ID_TYPE, nloops, 
-      &LNO_local_pool);  
-    for (INT i = 0; i < nloops; i++) { 
-      old_ids[i] = stack1.Bottom_nth(i); 
-      new_ids[i] = stack2.Bottom_nth(i); 
-      id_types[i] = stack3.Bottom_nth(i); 
-    } 
-    Prompf_Info->Mp_Version(old_ids, new_ids, id_types, nloops); 
-  } 
-}
 
 //-----------------------------------------------------------------------
 // NAME: Mp_Trip_Count 
@@ -1932,9 +1850,6 @@ static WN* Mp_Version_Loop(WN* wn_loop)
   BOOL all_internal = WN_Rename_Duplicate_Labels(wn_block, wn_copy,
                         Current_Func_Node, &LNO_local_pool);
   Is_True(all_internal, ("external labels renamed"));
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Mp_Version(wn_block, wn_copy, is_auto_parallel); 
 
   // Clone the dependences for the scalar copy. 
   WN* wn_array[2]; 
@@ -2164,9 +2079,6 @@ static WN* Mp_Version_Parallel_Region(WN* wn_region)
                         Current_Func_Node, &LNO_local_pool);
   Is_True(all_internal, ("external labels renamed"));
 
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Mp_Version(wn_block, wn_copy, is_auto_parallel); 
-
   // Clone the dependences for the scalar copy. 
   WN* wn_array[2]; 
   wn_array[0] = wn_block; 
@@ -2293,96 +2205,6 @@ static WN* Innermost_Doacross_Nest_Loop(WN* wn_outer)
   return wn_inner;
 }
 
-//-----------------------------------------------------------------------
-// NAME: Prompf_Tile
-// FUNCTION: Indicate that a loop 'wn_outer' has been tiled into 'nloops'
-//   loops.  If 'is_mp', the tiling is done for MP otherwise LEGO.  
-//-----------------------------------------------------------------------
-
-static void Prompf_Tile(WN* wn_outer, 
-			BOOL is_mp)
-{
-  INT new_ids[SNL_MAX_LOOPS]; 
-  WN* wn_loops[SNL_MAX_LOOPS];
-  DO_LOOP_INFO* dli_outer = Get_Do_Loop_Info(wn_outer); 
-  if (dli_outer->Lego_Mp_Key_Lower == 0) 
-    return; 
-  WN* wn_inner = Innermost_Doacross_Nest_Loop(wn_outer); 
-  wn_loops[0] = wn_inner; 
-  INT old_id = WN_MAP32_Get(Prompf_Id_Map, wn_inner); 
-  INT i = 0; 
-  for (WN* wn = LWN_Get_Parent(wn_inner); wn != NULL; wn = LWN_Get_Parent(wn)) {
-    if (WN_opcode(wn) == OPC_DO_LOOP) {
-      wn_loops[i + 1] = wn; 
-      new_ids[i++] = New_Construct_Id(); 
-      DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn); 
-      if (dli->Lego_Mp_Key_Depth == 0)
-        break; 
-    }
-  }
-  INT nloops = i + 1;
-  WN_MAP32_Set(Prompf_Id_Map, wn_loops[nloops - 1], old_id); 
-  for (i = 0; i < nloops - 1; i++)
-    WN_MAP32_Set(Prompf_Id_Map, wn_loops[i], new_ids[nloops - 2 - i]); 
-  if (is_mp) 
-    if (dli_outer->Is_Doacross)
-      Prompf_Info->Doacross_Outer_Tile(old_id, new_ids[0]); 
-    else 
-      Prompf_Info->Mp_Tile(old_id, new_ids, nloops - 1); 
-  else 
-    Prompf_Info->Dsm_Tile(old_id, new_ids, nloops - 1); 
-}
- 
-//-----------------------------------------------------------------------
-// NAME: Prompf_Nested_Tile
-// FUNCTION: Indicate that a nested doacross loop 'wn_outer' has been 
-//   lowered into a single doacross loop. 
-//-----------------------------------------------------------------------
-
-static void Prompf_Nested_Tile(WN* wn_outer) 
-{
-  WN* wn_inner = Innermost_Doacross_Nest_Loop(wn_outer); 
-  DOLOOP_STACK stack(&PROMPF_pool);
-  Build_Doloop_Stack(wn_inner, &stack);
-  INT outer_depth = Do_Loop_Depth(wn_outer);  
-  DO_LOOP_INFO* dli_outer = Get_Do_Loop_Info(wn_outer); 
-  INT lower_key = dli_outer->Lego_Mp_Key_Lower;  
-  INT upper_key = dli_outer->Lego_Mp_Key_Upper;  
-  INT nloops = upper_key - lower_key + 1; 
-  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);  
-  for (INT i = lower_key; i <= upper_key; i++) { 
-    INT old_id = 0; 
-    for (WN* wn = wn_inner; wn != wn_outer; wn = LWN_Get_Parent(wn)) {
-      if (WN_opcode(wn) == OPC_DO_LOOP) {
-        DO_LOOP_INFO* dli = Get_Do_Loop_Info(wn); 
-	if (dli->Lego_Mp_Key_Lower == i) { 
-          if (old_id == 0) {  
-            old_id = WN_MAP32_Get(Prompf_Id_Map, wn); 
-	    old_ids[i - lower_key] = old_id; 
-	    FmtAssert(old_id != 0, 
-	      ("Prompf_Nested_Tile: Need a real id on original inner loop"));
-          } else { 
-            FmtAssert(WN_MAP32_Get(Prompf_Id_Map, wn) == 0, 
-	      ("Prompf_Nested_Tile: Middle tile loop already assigned id"));
-	    INT new_id = New_Construct_Id(); 
-	    WN_MAP32_Set(Prompf_Id_Map, wn, new_id); 
-	    Prompf_Info->Donest_Middle_Tile(old_id, new_id); 
-          }
- 	}	
-      } 
-    }
-  } 
-
-  // Get this from the region eventually. 
-  INT new_id = New_Construct_Id(); 
-  WN_MAP32_Set(Prompf_Id_Map, wn_outer, new_id); 
-  WN* wn_region = LWN_Get_Parent(LWN_Get_Parent(wn_outer)); 
-  WN_MAP32_Set(Prompf_Id_Map, wn_region, new_id);
-  WN* wn_first = WN_first(WN_region_pragmas(wn_region)); 
-  WN_MAP32_Set(Prompf_Id_Map, wn_first, new_id);
-  Prompf_Info->Donest_Outer_Tile(old_ids, new_id, nloops); 
-}
- 
 //-----------------------------------------------------------------------
 // NAME: Mp_Tile_Single_Loop
 // FUNCTION:  Processor tile (pseudo-lower) the 'loop' according to the
@@ -3665,8 +3487,6 @@ static WN* Lego_Tile_Loop(WN* wn_loop,
     return wn_loop;
   } 
   WN* wn_return = Lego_Tile_Single_Loop(wn_loop, pool);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Tile(wn_return, FALSE); 
   return wn_return; 
 }
 
@@ -3851,8 +3671,6 @@ extern WN* Mp_Tile_Loop(WN* wn_loop,
     if (want_freeze_cur_threads)
       Freeze_Cur_Numthreads_Func(wn_loop);
     wn_return = Mp_Tile_Nested_Loop(wn_loop, pool);
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-      Prompf_Nested_Tile(wn_return); 
   } else {
     WN* wn_scalar_loop = Mp_Version_Loop(wn_loop);
     if (wn_scalar_loop != NULL) {
@@ -3873,8 +3691,6 @@ extern WN* Mp_Tile_Loop(WN* wn_loop,
     if (want_freeze_cur_threads)
       Freeze_Cur_Numthreads_Func(wn_loop); 
     wn_return = Mp_Tile_Single_Loop(wn_loop, LNO_Ozero, pool); 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-      Prompf_Tile(wn_loop, TRUE); 
   }
   Mp_Optimize_Interleaved_Loops(wn_return); 
   return wn_return;  

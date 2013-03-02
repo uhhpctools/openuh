@@ -949,7 +949,7 @@ private:
   OPT_STAB(const OPT_STAB&);
   OPT_STAB& operator = (const OPT_STAB&);
 
-  void     Count_syms(WN *);	// count the number of symbols in the PU
+
   void	   Convert_ST_to_AUX(WN *, WN *);	// convert ST into AUX_ID
   void     Convert_black_box(WN *);		// convert black box
   void     Convert_IO_statement(WN *,WN *,INT);	// convert opr_io
@@ -1133,6 +1133,7 @@ public:
 #ifdef KEY
   AUX_ID   Allocate_vsym(WN *, POINTS_TO *);
 #endif
+  void     Count_syms(WN *);	// count the number of symbols in the PU
 
   //  Enter into VER_STAB
   void     Enter_du(AUX_ID du, WN *wn, BB_NODE *bb)

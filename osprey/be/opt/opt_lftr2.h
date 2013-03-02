@@ -221,6 +221,9 @@ private:
 
   BOOL Can_only_increase(CODEREP *, AUX_ID);
 
+  void Replace_use(const BB_LOOP * loop, CODEREP * cr_old, CODEREP * cr_new);
+  void Replace_use(CODEREP*, CODEREP *, CODEREP *);
+
   // print an occurrence and a string
   void Print_occ(FILE *fp, const char *str, EXP_OCCURS *occ)
     { fprintf(fp,"%s\n",str);

@@ -83,8 +83,6 @@ const static char *rcs_id =   snl_CXX "$Revision: 1.5 $";
 #include "debug.h"
 #include "permute.h"
 #include "tile.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "cond.h"
 #include "wind_down.h"
 #include "ff_utils.h"
@@ -231,8 +229,6 @@ static WN* Distribute_Traverse(WN* wn_dst,
     Reduced_Permutation(permutation, nloops, reduced_permutation,
       perfect_depth);
     if (!Identity_Permutation(reduced_permutation, perfect_depth)) {
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) 
-        Prompf_Interchanges(wn_dst, reduced_permutation, perfect_depth); 
       wn_outer = SNL_INV_Permute_Loops(wn_dst, reduced_permutation, 
         perfect_depth, TRUE);
     } 
@@ -647,8 +643,7 @@ extern WN* SNL_INV_Cache_Block(SNL_NEST_INFO* ni,
                                SNL_REGION* region,
                                SNL_INV_CACHE_BLOCK_REASON reason, 
 			       SYMBOL* outersym, 
-			       MEM_POOL* pool, 
-			       BOOL report_prompf)
+                               MEM_POOL* pool)
 {
   ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph; 
   DU_MANAGER* du = Du_Mgr; 
@@ -745,12 +740,6 @@ extern WN* SNL_INV_Cache_Block(SNL_NEST_INFO* ni,
     WN* stripdo = LWN_CreateDO(stripindex, stripbegin, stripend,
 			       stripstep, stripbody);
     LWN_Copy_Linenumber(olddo, stripdo);
-    if (report_prompf && Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, olddo); 
-      INT new_id = New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, stripdo, new_id); 
-      Prompf_Info->Cache_Tile(old_id, new_id); 
-    } 
     if (Cur_PU_Feedback) {
       LWN_Copy_Frequency(stripstep, WN_step(olddo));
       LWN_Scale_Frequency(stripstep, 1.0/newstripsz);
@@ -1108,9 +1097,6 @@ extern SNL_REGION SNL_INV_Transforms(WN* wn_outer,
 
     WN* permloop[SNL_MAX_LOOPS];
     SX_PLIST* plist = &(ni->Privatizability_Info().Plist);  
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) 
-      Prompf_Interchanges(stack->Bottom_nth(first_in_stack), 
-	permutation, nloops); 
     if (Cur_PU_Feedback)
       LNO_FB_Inv_Interchange(stack->Bottom_nth(first_in_stack),
         permutation, nloops);
@@ -1138,7 +1124,7 @@ extern SNL_REGION SNL_INV_Transforms(WN* wn_outer,
     // Updating DU information is easy when there is no wind-down.
 
     WN* outer_cache_loop = SNL_INV_Cache_Block(ni, t, permloop, 
-      loop_ls, &region, SNL_INV_TILE_ONLY, NULL, &SNL_local_pool, TRUE);
+      loop_ls, &region, SNL_INV_TILE_ONLY, NULL, &SNL_local_pool);
     if (outer_cache_loop != NULL && the_newest_outer_loop != NULL
         && Do_Loop_Depth(outer_cache_loop) 
 	< Do_Loop_Depth(the_newest_outer_loop)) {

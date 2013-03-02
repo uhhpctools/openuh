@@ -122,10 +122,6 @@ extern void Remove_Useless_Loops(SNL_REGION* region);
 extern void Print_Interchange(FILE* file, WN* outer_loop, INT permutation[],
   INT nloops);
 
-extern void Prompf_Interchange(WN* wn_outer, INT permutation[], INT nloops);
-
-extern void Prompf_Interchanges(WN* wn_outer, INT permutation[], INT nloops);
-
 extern void
 LNO_FB_Inv_Interchange(WN* wn_outer, INT permutation[], INT nloops);
 

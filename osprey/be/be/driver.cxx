@@ -116,9 +116,6 @@
 #ifndef BUILD_SKIP_WHIRL2F
 #include "w2f_driver.h"		    /* for W2F_Process_Command_Line, etc. */
 #endif
-#ifndef BUILD_SKIP_PROMPF
-#include "anl_driver.h"		    /* for Anl_Process_Command_Line, etc. */
-#endif
 #include "region_util.h"	    /* for Regions_Around_Inner_Loops */
 #include "region_main.h"	    /* for REGION_* driver specific routines */
 #include "cg/cg.h"	            /* for CG PU-level routines */
@@ -137,10 +134,8 @@
 #include "cxx_memory.h"		    /* CXX_NEW */
 #include "options_stack.h"	    /* for Options_Stack */
 #include "be_symtab.h"		    /* for Be_preg_tab */
-#include "prompf.h" 		    /* Prompf support */ 
 #include "wb_omp.h"		    /* whirl browser for omp prelowerer */
 #include "wb_lwr.h"		    /* whirl browser for lowerer */ 
-#include "wb_anl.h"		    /* whirl browser for prompf static anal */ 
 #include "wn_instrument.h"          /* whirl instrumenter */
 #include "mem_ctr.h"
 #ifndef ipl_reorder_INCLUDED // for Preprocess_struct_access()
@@ -361,20 +356,6 @@ extern void (*Preprocess_struct_access_p)(void);
 #include "w2c_weak.h"
 #include "w2f_weak.h"
 
-#if ! defined(BUILD_OS_DARWIN)
-
-#ifndef BUILD_SKIP_PROMPF
-#pragma weak Anl_Cleanup
-#pragma weak Anl_Process_Command_Line
-#pragma weak Anl_Needs_Whirl2c
-#pragma weak Anl_Needs_Whirl2f
-#pragma weak Anl_Init
-#pragma weak Anl_Init_Map
-#pragma weak Anl_Static_Analysis
-#pragma weak Anl_Fini
-#endif // !BUILD_SKIP_PROMPF
-#endif /* ! defined(BUILD_OS_DARWIN) */
-
 #ifdef BUILD_SKIP_LNO
 #define Lno_Init() Fail_FmtAssertion("lno not built")
 #define Lno_Fini() Fail_FmtAssertion("lno not built")
@@ -387,28 +368,6 @@ extern void (*Preprocess_struct_access_p)(void);
 #define Preprocess_struct_access() Fail_FmtAssertion("lno not built")
 #define Ipl_Extra_Output(a) Fail_FmtAssertion("lno not built")
 #endif // BUILD_SKIP_LNO
-
-#ifdef BUILD_SKIP_PROMPF
-#define Anl_Process_Command_Line(a,b,c,d) Fail_FmtAssertion("prompf not built")
-#define Anl_Needs_Whirl2c() FALSE
-#define Anl_Needs_Whirl2f() FALSE
-#define Anl_Init() Fail_FmtAssertion("prompf not built")
-#define Anl_Fini() Fail_FmtAssertion("prompf not built")
-#define Anl_Init_Map(a) WN_MAP_UNDEFINED
-#define Anl_Static_Analysis(a,b) Fail_FmtAssertion("prompf not built")
-#define Prompf_Emit_Whirl_to_Source(a,b) Fail_FmtAssertion("prompf not built")
-
-#else
-#ifndef __GNUC__
-#pragma weak Prompf_Emit_Whirl_to_Source__GP7pu_infoP2WN
-#elif (__GNUC__ == 2)
-#pragma weak Prompf_Emit_Whirl_to_Source__FP7pu_infoP2WN
-#else
-#pragma weak _Z27Prompf_Emit_Whirl_to_SourceP7pu_infoP2WN	// gcc 3.2
-#endif
-
-extern void Prompf_Emit_Whirl_to_Source(PU_Info* current_pu, WN* func_nd);
-#endif // BUILD_SKIP_PROMPF
 
 static INT ecount = 0;
 static BOOL need_wopt_output = FALSE;
@@ -425,18 +384,10 @@ static struct ALIAS_MANAGER *alias_mgr = NULL;
 static BOOL Run_Distr_Array = FALSE;
 BOOL Run_MemCtr = FALSE;
 
-static BOOL Saved_run_prompf = FALSE; /* TODO: Remove when uses are removed */
-static BOOL Saved_run_w2c = FALSE;        /* TODO: Remove */
-static BOOL Saved_run_w2f = FALSE;        /* TODO: Remove */
-static BOOL Saved_run_w2fc_early = FALSE; /* TODO: Remove */
-
-extern WN_MAP Prompf_Id_Map; /* Maps WN constructs to unique identifiers */
-
 /* Keep track of which optional components are loaded, where we need
  * to do so.
  */
 static BOOL   wopt_loaded = FALSE;
-extern BOOL   Prompf_anl_loaded; /* Defined in cleanup.c */
 extern BOOL   Whirl2f_loaded;    /* Defined in cleanup.c */
 extern BOOL   Whirl2c_loaded;    /* Defined in cleanup.c */
 
@@ -449,8 +400,7 @@ load_components (INT argc, char **argv)
     INT phase_argc;
     char **phase_argv;
 
-    if (!(Run_lno || Run_wopt || Run_preopt || Run_cg || 
-	  Run_prompf || Run_w2c || Run_w2f 
+    if (!(Run_lno || Run_wopt || Run_preopt || Run_cg || Run_w2c || Run_w2f
           || Run_w2fc_early || Run_ipl))
       Run_cg = TRUE;		    /* if nothing is set, run CG */
 
@@ -461,7 +411,7 @@ load_components (INT argc, char **argv)
 
     if (Run_ipl) {
       Run_lno = Run_wopt = Run_cg = Run_w2fc_early
-	= Run_prompf = Run_w2c = Run_w2f = FALSE;
+	= Run_w2c = Run_w2f = FALSE;
     }
 
     if (Run_cg) {
@@ -504,32 +454,19 @@ load_components (INT argc, char **argv)
       }
   }
 
-    if (Run_prompf || Run_w2fc_early) {
-      Get_Phase_Args (PHASE_PROMPF, &phase_argc, &phase_argv);
-      load_so("prompf_anl.so", Prompf_Anl_Path, Show_Progress);
-      Prompf_anl_loaded = TRUE;
-      Anl_Process_Command_Line(phase_argc, phase_argv, argc, argv);
-    }
-
-    if (Run_w2c || 
-	(Run_prompf && Anl_Needs_Whirl2c()))
+    if (Run_w2c)
     {
       Get_Phase_Args (PHASE_W2C, &phase_argc, &phase_argv);
       load_so("whirl2c.so", W2C_Path, Show_Progress);
       Whirl2c_loaded = TRUE;
-      if (Run_prompf)
-	W2C_Set_Prompf_Emission(&Prompf_Id_Map);
       W2C_Process_Command_Line(phase_argc, phase_argv, argc, argv);
     }
 
-    if (Run_w2f || 
-	(Run_prompf && Anl_Needs_Whirl2f()))
+    if (Run_w2f)
     {
       Get_Phase_Args (PHASE_W2F, &phase_argc, &phase_argv);
       load_so("whirl2f.so", W2F_Path, Show_Progress);
       Whirl2f_loaded = TRUE;
-      if (Run_prompf)
-	W2F_Set_Prompf_Emission(&Prompf_Id_Map);
       W2F_Process_Command_Line(phase_argc, (const char**)phase_argv, argc, (const char**)argv);
     }
 } /* load_components */
@@ -569,13 +506,10 @@ Phase_Init (void)
 	Lno_Init ();
     if ( Opt_Level > 0 ) /* run VHO at -O1 and above */
         Vho_Init ();
-    if (Run_w2c || (Run_prompf && Anl_Needs_Whirl2c()))
+    if (Run_w2c)
 	W2C_Outfile_Init (TRUE/*emit_global_decls*/);
-    if (Run_w2f || (Run_prompf && Anl_Needs_Whirl2f()))
+    if (Run_w2f)
 	W2F_Outfile_Init ();
-    if (Run_prompf) 
-	Anl_Init (); 
-	/* Must be done after w2c and w2f */
     if ((Run_lno || Run_preopt) && !Run_cg && !Run_wopt)
 	need_lno_output = TRUE;
     if (Run_wopt && !Run_cg)
@@ -638,12 +572,10 @@ Phase_Fini (void)
 {
     CURRENT_SYMTAB = GLOBAL_SYMTAB;
 
-    /* Always finish prompf analysis file, w2c and w2f first */
-    if (Run_prompf)
-	Anl_Fini();
-    if (Run_w2c || (Run_prompf && Anl_Needs_Whirl2c()))
+    /* Always finish w2c and w2f first */
+    if (Run_w2c)
 	W2C_Outfile_Fini (TRUE/*emit_global_decls*/);
-    if (Run_w2f || (Run_prompf && Anl_Needs_Whirl2f()))
+    if (Run_w2f)
 	W2F_Outfile_Fini ();
 
     if (Run_Dsm_Cloner || Run_Dsm_Common_Check)
@@ -792,8 +724,6 @@ Adjust_Opt_Level (PU_Info* current_pu, WN *pu, char *pu_name)
 	Run_lno = Run_preopt = Run_wopt = Run_autopar = FALSE;
 	alias_mgr = NULL;
 	Olimit_opt = FALSE;
-        if (Run_prompf) 
-	  Prompf_Emit_Whirl_to_Source(current_pu, pu);
     }
 #ifdef KEY
 #define OLIMIT_WARN_THRESHOLD 50000
@@ -996,18 +926,18 @@ Post_LNO_Processing (PU_Info *current_pu, WN *pu)
     
     /* Only run w2c and w2f on top-level PUs, unless otherwise requested.
      */
-// Liao, add -CLIST:before_cg to control whirl2c before CG after wopt
-    if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
-      if (!W2C_Should_Before_CG()){// the order of two IF matters here!
+    if (Run_w2c && !Run_w2fc_early) {
+      // Liao, add -CLIST:before_cg to control whirl2c before CG after wopt
+      if (!W2C_Should_Before_CG()) { // the order of two IF matters here!
         if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
-	    if (Cur_PU_Feedback)
-		W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
-	    W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
-	}
+          if (Cur_PU_Feedback)
+            W2C_Set_Frequency_Map(WN_MAP_FEEDBACK);
+          W2C_Outfile_Translate_Pu(pu, TRUE/*emit_global_decls*/);
+        }
       }
     }
 
-    if (Run_w2f && !Run_w2fc_early && !Run_prompf) {
+    if (Run_w2f && !Run_w2fc_early) {
 	if (W2F_Should_Emit_Nested_PUs() || is_user_visible_pu) {
 	    if (Cur_PU_Feedback)
 		W2F_Set_Frequency_Map(WN_MAP_FEEDBACK);
@@ -1220,7 +1150,7 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
      * the representation seen by CG.
      */
     /* by Liao, enable whirl2c right before cg*/
-    if (Run_w2c && !Run_w2fc_early && !Run_prompf) {
+    if (Run_w2c && !Run_w2fc_early) {
         if (W2C_Should_Before_CG()){
             if (W2C_Should_Emit_Nested_PUs() || is_user_visible_pu) {
                 if (Cur_PU_Feedback)
@@ -1752,29 +1682,6 @@ Preprocess_PU (PU_Info *current_pu)
    */
   pu = PU_Info_tree_ptr(current_pu);
 
-  /* Disable all prompf processing for PUs generated by the compiler,
-   * such as cloned subroutines, with exception of mp routines which
-   * we do want to process (we just don't want to do the static
-   * analysis part for them).  
-   *
-   * TODO:  Disable Anl_Static_Analysis() when this condition holds,
-   * but generate the subroutines in the .m file and have the cloner
-   * assign an ID map for the subroutine with unique ID numbers.
-   */
-  if (!Saved_run_prompf                                          &&
-      Run_prompf                                                 &&
-      Is_Set_PU_Info_flags(current_pu, PU_IS_COMPILER_GENERATED) &&
-      !PU_mp (Get_Current_PU ())) {
-    Saved_run_prompf = Run_prompf;
-    Saved_run_w2c = Run_w2c;
-    Saved_run_w2f = Run_w2f;
-    Saved_run_w2fc_early = Run_w2fc_early;
-    Run_prompf = FALSE;
-    Run_w2c = FALSE;
-    Run_w2f = FALSE;
-    Run_w2fc_early = FALSE;
-  }
-
   /* store original pu name */
   Orig_PU_Name = Get_Orig_PU_Name(current_pu);
   Save_Cur_PU_Name(ST_name(PU_Info_proc_sym(current_pu)), 0);
@@ -1820,14 +1727,6 @@ Preprocess_PU (PU_Info *current_pu)
 
   if (Run_wopt || Run_cg) {	    /* PU level initialization for lowerer */
     Lowering_Initialize();
-  }
-
-  if (Run_prompf && 
-      !Is_Set_PU_Info_flags(current_pu, PU_IS_COMPILER_GENERATED)) {
-    Prompf_Id_Map = Anl_Init_Map(MEM_pu_pool_ptr); 
-    WB_ANL_Initialize(pu, Prompf_Id_Map); 
-    Anl_Static_Analysis(pu, Prompf_Id_Map);
-    WB_ANL_Terminate(); 
   }
 
 #ifdef KEY
@@ -1978,22 +1877,6 @@ Postprocess_PU (PU_Info *current_pu)
   MEM_POOL_Pop(MEM_pu_nz_pool_ptr);
   MEM_POOL_Pop(MEM_pu_pool_ptr);
 
-  /* Re-enable prompf processing if relevant.  
-   *
-   * TODO:  Disable Anl_Static_Analysis() when this condition holds,
-   * but generate the subroutines in the .m file and have the cloner
-   * assign an ID map for the subroutine with unique ID numbers.
-   */
-  if (Saved_run_prompf) {
-    Run_prompf = Saved_run_prompf;
-    Run_w2c = Saved_run_w2c;
-    Run_w2f = Saved_run_w2f;
-    Run_w2fc_early = Saved_run_w2fc_early;
-    Saved_run_prompf = FALSE;
-    Saved_run_w2c = FALSE;
-    Saved_run_w2f = FALSE;
-    Saved_run_w2fc_early = FALSE;
-  }
 } /* Postprocess_PU */
 
 /* compile each PU through all phases before going to the next PU */
@@ -2048,7 +1931,7 @@ Preorder_Process_PUs (PU_Info *current_pu)
    */
   if (PU_has_mp (Get_Current_PU ()) && !FILE_INFO_ipa (File_info)) {
     Set_Error_Phase("OMP Pre-lowering");
-    WB_OMP_Initialize(pu, Prompf_Id_Map);
+    WB_OMP_Initialize(pu);
     pu = OMP_Prelower(current_pu, pu);
     WB_OMP_Terminate(); 
   }
@@ -2248,6 +2131,9 @@ main (INT argc, char **argv)
   load_components (argc, argv);
   be_debug();
 
+  // process the component internal options
+  O64_Driver::GetInstance()->ProcessComponentOption();
+  
   MEM_POOL_Push (&MEM_src_pool);
   MEM_POOL_Push (&MEM_src_nz_pool);
   if ( Show_Progress ) {

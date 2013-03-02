@@ -65,7 +65,6 @@
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "access_vector.h"
 #include "if_info.h"
@@ -244,11 +243,9 @@ WB_BROWSER::WB_BROWSER()
    _is_subcommand = FALSE; 
    _dg = NULL; 
    _parent_map = WN_MAP_UNDEFINED; 
-   _prompf_id_map = WN_MAP_UNDEFINED; 
    _access_array_map = WN_MAP_UNDEFINED;
    _reduction_map = WN_MAP_UNDEFINED;
    _pu = NULL; 
-   _prompf_info = NULL; 
    _scalar_summary = NULL; 
    _array_summary = NULL; 
    _cnode = NULL; 
@@ -289,20 +286,18 @@ BOOL WB_BROWSER::Unmappable_Character(char ch)
 WB_BROWSER::WB_BROWSER(WN* global_fd, 
  		       DU_MANAGER* du, 
  		       ALIAS_MANAGER* alias_mgr,
-		       WN_MAP prompf_id_map, 
 		       WN_MAP access_array_map, 
 		       WN_MAP reduction_map, 
 		       PU* pu, 
 		       WB_COMMAND* command_list) : 
    _global_fd(global_fd), _du(du), _alias_mgr(alias_mgr),
-   _prompf_id_map(prompf_id_map), _access_array_map(access_array_map),
-   _reduction_map(reduction_map), _pu(pu), _command_list(command_list)
+   _access_array_map(access_array_map), _reduction_map(reduction_map), _pu(pu),
+   _command_list(command_list)
 {
    _old_command_list = NULL; 
    _is_subcommand = FALSE; 
    _dg = NULL; 
    _parent_map = WN_MAP_UNDEFINED; 
-   _prompf_info = NULL; 
    _scalar_summary = NULL; 
    _array_summary = NULL; 
    _cnode = global_fd; 
@@ -337,8 +332,6 @@ void WB_BROWSER::This_Node(WN* wn,
   if (Fancy_Level() >= 3)
     if (OPCODE_has_next_prev(WN_opcode(wn)))
       fprintf(stdout, "(%d) ", Srcpos_To_Line(WN_linenum(wn)));
-  if (Fancy_Level() >= 3 && Prompf_Id_Map() == -1) 
-    fprintf(stdout, "<%d> ", WN_MAP32_Get(Prompf_Id_Map(), wn));
   if (WN_operator(wn) == OPR_INTCONST) {
     fprintf(stdout, "%lld ", WN_const_val(wn));
   } else {
@@ -1116,46 +1109,6 @@ void WB_BROWSER::Ancestors()
 }
 
 //-----------------------------------------------------------------------
-// NAME: WB_BROWSER::Promp_Map
-// WHIRL BROWSER COMMAND: 'i'
-// FUNCTION: Print the PROMPF ids for tree at this node
-//-----------------------------------------------------------------------
-
-void WB_BROWSER::Promp_Map()
-{
-  if (Prompf_Id_Map() == -1) {
-    Error_Cleanup();
-    return;
-  }
-  Carray().Reset_Index();
-  WN_ITER* itr = WN_WALK_TreeIter(Cnode());
-  for (INT i = 0; itr != NULL; itr = WN_WALK_TreeNext(itr)) {
-    WN* wn = itr->wn;
-    INT32 map_id = WN_MAP32_Get(Prompf_Id_Map(), wn);
-    if (map_id != 0) {
-      fprintf(stdout, "[%d] %3d ", i++, map_id);
-      Print_This_Node(wn); 
-      Carray().Enter_This_Node(wn);
-    }
-  }
-}
-
-//-----------------------------------------------------------------------
-// NAME: WB_BROWSER::Promp_Info
-// WHIRL BROWSER COMMAND: 'I'
-// FUNCTION: Print the PROMPF_INFO
-//-----------------------------------------------------------------------
-
-void WB_BROWSER::Promp_Info()
-{
-  if (!(Prompf_Info() != NULL)) {
-    Error_Cleanup();
-    return;
-  }
-  Prompf_Info()->Print(stdout);
-}
-
-//-----------------------------------------------------------------------
 // NAME: WB_BROWSER::Whirl2fc()
 // WHIRL BROWSER COMMAND: 'W'
 // FUNCTION: Print tree in whirl2[fc] format at current node
@@ -1468,25 +1421,15 @@ void WB_BROWSER::Loops_Walk(WN* wn,
   case OPC_DO_LOOP:
     Dump_Spaces(fp, spaces);
     name = WB_Whirl_Symbol(wn);
-    if (Prompf_Id_Map() != -1) {
-      fprintf(fp, "[%d] 0x%p DOLOOP (%d) <%d> %s\n", Carray().Next_Index(), wn,
-	Srcpos_To_Line(WN_linenum(wn)), WN_MAP32_Get(Prompf_Id_Map(), wn), name);
-    } else {
-      fprintf(fp, "[%d] 0x%p DOLOOP (%d) %s\n", Carray().Next_Index(), wn,
-	Srcpos_To_Line(WN_linenum(wn)), name);
-    }
+    fprintf(fp, "[%d] 0x%p DOLOOP (%d) %s\n", Carray().Next_Index(), wn,
+      Srcpos_To_Line(WN_linenum(wn)), name);
     Carray().Enter_This_Node(wn); 
     Loops_Walk(WN_do_body(wn), fp, spaces + increment, increment);
     break;
   case OPC_FUNC_ENTRY:
     Dump_Spaces(fp, spaces);
-    if (Prompf_Id_Map() != -1) {
-      fprintf(fp, "[%d] 0x%p FUNC_ENTRY <%d> %s\n", Carray().Next_Index(), wn,
-        WN_MAP32_Get(Prompf_Id_Map(), wn), WB_Whirl_Symbol(wn));
-    } else {
-      fprintf(fp, "[%d] 0x%p FUNC_ENTRY %s\n", Carray().Next_Index(), wn,
-        WB_Whirl_Symbol(wn));
-    }
+    fprintf(fp, "[%d] 0x%p FUNC_ENTRY %s\n", Carray().Next_Index(), wn,
+      WB_Whirl_Symbol(wn));
     Carray().Enter_This_Node(wn);
     Loops_Walk(WN_func_body(wn), fp, spaces + increment, increment);
     break;
@@ -1529,12 +1472,7 @@ void WB_BROWSER::Loops_Walk(WN* wn,
   case OPC_REGION:
     if (Fancy_Level() >= 3) {
       Dump_Spaces(fp, spaces);
-      if (Prompf_Id_Map() != -1) {
-        fprintf(fp, "[%d] 0x%p REGION <%d>\n", Carray().Next_Index(), wn,
-          WN_MAP32_Get(Prompf_Id_Map(), wn));
-      } else {
-        fprintf(fp, "[%d] 0x%p REGION \n", Carray().Next_Index(), wn);
-      }
+      fprintf(fp, "[%d] 0x%p REGION \n", Carray().Next_Index(), wn);
       Carray().Enter_This_Node(wn);
       for (INT i = 0; i < WN_kid_count(wn); i++)
         Loops_Walk(WN_kid(wn, i), fp, spaces + increment, increment);
@@ -1646,10 +1584,6 @@ BOOL WB_BROWSER::Required_Fields_Present(INT num)
   if ((Required_Fields(num) & WBR_ALIAS) && Alias_Mgr() == NULL)
     return FALSE; 
   if ((Required_Fields(num) & WBR_PARENT) && Parent_Map() == WN_MAP_UNDEFINED)
-    return FALSE; 
-  if ((Required_Fields(num) & WBR_MPFMAP) && Prompf_Id_Map() == WN_MAP_UNDEFINED) 
-    return FALSE; 
-  if ((Required_Fields(num) & WBR_MPFINFO) && Prompf_Info() == NULL) 
     return FALSE; 
   if ((Required_Fields(num) & WBR_AAMAP) && Access_Array_Map() == WN_MAP_UNDEFINED) 
     return FALSE; 
@@ -1766,12 +1700,6 @@ void WB_BROWSER::Invoke_Command(char ch)
     break; 
   case 'e': 
     Ancestors(); 
-    break; 
-  case 'i': 
-    Promp_Map(); 
-    break; 
-  case 'I':
-    Promp_Info();
     break; 
   case 'W':
     Whirl2fc(); 

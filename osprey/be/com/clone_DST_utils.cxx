@@ -228,7 +228,53 @@ get_abstract_origin(DST_IDX concrete_instance)
     return concrete_instance;
 }
 
+typedef std::pair<DST_TYPE, DST_IDX> DST_PAIR;
 
+DST_PAIR
+get_abstract_origin_and_dst_for_subroutine(DST_IDX concrete_instance,
+                                           DST_TYPE file_dst)
+{
+    DST_TYPE abstract_dst;
+    DST_IDX  idx;
+    DST_PAIR pair;
+    DST_TYPE old_dst = Current_DST;
+    Current_DST = file_dst;
+
+    DST_INFO *dst = DST_INFO_IDX_TO_PTR(concrete_instance);
+
+    if (DST_IS_FOREIGN_OBJ(concrete_instance))
+        return std::make_pair(file_dst, concrete_instance);
+
+    DST_INLINED_SUBROUTINE *attr;
+
+    switch (DST_INFO_tag(dst)) {
+        case DW_TAG_subprogram: 
+        {
+            pair = std::make_pair(file_dst, concrete_instance);
+            break;
+        }
+        case DW_TAG_inlined_subroutine:
+        {
+            attr = DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(dst), DST_INLINED_SUBROUTINE);
+            if (DST_IS_NULL(DST_INLINED_SUBROUTINE_abstract_origin(attr))) {
+                pair = std::make_pair(file_dst, concrete_instance);
+            }
+            else {
+                pair = get_abstract_origin_and_dst_for_subroutine(
+                        DST_INLINED_SUBROUTINE_abstract_origin(attr), 
+                        DST_INLINED_SUBROUTINE_abstract_dst(attr));
+            }
+            break;
+        }
+        default:
+        {
+            Fail_FmtAssertion("get_abstract_origin_and_dst_for_subroutine: Unexpected dst info tag");
+            break;
+        }
+    }
+    Current_DST = old_dst;
+    return pair;
+}
 
 static void
 DST_enter_cloned_childs(DST_IDX parent, 
@@ -690,6 +736,46 @@ DST_enter_cloned_childs(DST_IDX parent,
 
 #if (!defined(_LEGO_CLONER))
 mUINT16
+DST_Enter_Callee_File_Dst(DST_TYPE caller_file_dst,
+                          DST_TYPE callee_file_dst)
+{
+    DST_TYPE old_Current_DST = Current_DST;
+    char *filename = 0;
+    char *dirname = 0;
+    UINT64   file_size;
+    UINT64   fmod_time;
+    Current_DST = callee_file_dst;
+
+    DST_FILE_IDX callee_idx = DST_get_file_names();
+    DST_FILE_NAME *file;
+    mUINT16 index = 1;
+
+    while (!DST_IS_NULL(callee_idx)) {
+        Current_DST = callee_file_dst;
+        file = DST_FILE_IDX_TO_PTR(callee_idx);
+        file_size = DST_FILE_NAME_size(file);
+        fmod_time = DST_FILE_NAME_modt(file);
+
+        dirname = DST_get_dirname(DST_FILE_NAME_dir(file));
+        filename =  DST_STR_IDX_TO_PTR(DST_FILE_NAME_name(file));
+
+        if (filename) {
+            Current_DST = caller_file_dst;
+            /* Get file id in caller file dst; if no, create a new entry */
+            DST_get_cross_inlined_file_id (filename,
+                                           dirname,
+                                           file_size,
+                                           fmod_time); 
+        }
+
+        Current_DST = callee_file_dst;
+        callee_idx = DST_FILE_NAME_next(file);
+        index++;
+    }
+    Current_DST = old_Current_DST;
+}
+
+mUINT16
 DST_get_cross_file_id(DST_IDX parent,
 		       DST_IDX inl_routine, 
 		       DST_TYPE caller_file_dst,
@@ -757,7 +843,10 @@ DST_enter_inlined_subroutine(DST_IDX parent,
     DST_TYPE old_Current_DST = Current_DST;
     Current_DST = callee_file_dst;
 #endif
-    DST_INFO_IDX abstract_origin = get_abstract_origin(inl_routine);
+    DST_PAIR pair = get_abstract_origin_and_dst_for_subroutine(inl_routine,
+                                                               callee_file_dst);
+    DST_TYPE abstract_file_dst = pair.first;
+    DST_INFO_IDX abstract_origin = pair.second;
     mUINT16 file_index = cross_file_id;
 
 #if !defined(_LEGO_CLONER)
@@ -775,14 +864,14 @@ DST_enter_inlined_subroutine(DST_IDX parent,
 
     if (caller_file_dst == callee_file_dst) {
         idx = DST_mk_inlined_subroutine (low_pc, high_pc,
-					     abstract_origin); 
-
-        DST_append_child(parent, idx);
+					     abstract_origin, abstract_file_dst); 
 
         DST_enter_cloned_childs (idx, inl_routine, symtab,
 				     caller_file_dst, callee_file_dst,
 				     file_index, TRUE, caller_file_m,
 				     callee_file_m); 
+
+        DST_append_child(parent, idx);
     }
 #if (!defined(_LEGO_CLONER))
     else {
@@ -796,7 +885,7 @@ DST_enter_inlined_subroutine(DST_IDX parent,
 	UINT64   file_size;
 	UINT64   fmod_time;
 	    
-    	Current_DST = callee_file_dst;
+    	Current_DST = abstract_file_dst;
 	    
         DST_SUBPROGRAM *inl_attr = DST_ATTR_IDX_TO_PTR(DST_INFO_attributes(DST_INFO_IDX_TO_PTR(abstract_origin)),
 							   DST_SUBPROGRAM); 
@@ -817,7 +906,9 @@ DST_enter_inlined_subroutine(DST_IDX parent,
 						      fmod_time,
 						      DST_SUBPROGRAM_decl_decl(attr),
 						      filename,
-						      dirname);
+						      dirname, 
+						      abstract_origin,
+						      abstract_file_dst);
 
             DST_append_child(parent, idx);
 

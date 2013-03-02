@@ -224,6 +224,8 @@ PDESC Phases[] = {
   { TP_IPISR,		"ISR",	"Interprocedural ISR register allocation" },
 
   { TP_WSSA,		"WSA",	"WHIRL SSA" },
+  { TP_CMOVE,           "CMV",  "CMOVE CONVERSION"},
+  { TP_DSCHED,          "DSP",  "Dispatch Scheduling" },
 
   /* This one must be last: */
   { TP_COUNT,		NULL,  NULL }

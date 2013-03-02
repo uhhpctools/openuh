@@ -512,8 +512,10 @@ FAVOR_DELAY_HEUR :: Compute_FanOut (OP* op) {
 
         ARC * arc = ARC_LIST_first (list) ;
         switch (ARC_kind (arc)) {
-        CG_DEP_PRECHK :
-        CG_DEP_PREBR : 
+#ifdef TARG_IA64
+        case CG_DEP_PRECHK :
+#endif
+        case CG_DEP_PREBR : 
             break ;
         default :
             ++ fanout ;

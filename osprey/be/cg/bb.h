@@ -580,6 +580,7 @@ inline void Set_BB_loop_head_bb(BB *bb, BB *head) {
 
 #if defined(TARG_X8664)
 #define BBM_AFTER_PIC_ENTRY     0x00800000 /* BB is the original entry after PIC entry on IA-32 with -fPIC */
+#define BBM_DISPATCH            0x01000000 /* BB has been dispatch scheduled */
 #endif
 
 #if defined(TARG_IA64) || defined(TARG_SL) || defined(TARG_MIPS) || defined(TARG_LOONGSON)
@@ -674,6 +675,7 @@ inline void Set_BB_loop_head_bb(BB *bb, BB *head) {
 #endif
 #if defined(TARG_X8664)
 #define BB_after_pic_entry(x)   (BB_flag(x) & BBM_AFTER_PIC_ENTRY)
+#define BB_dispatch(x)          (BB_flag(x) & BBM_DISPATCH)
 #endif
 
 #define	Set_BB_entry(x)		(BB_flag(x) |= BBM_ENTRY)
@@ -715,6 +717,7 @@ inline void Set_BB_loop_head_bb(BB *bb, BB *head) {
 #endif
 #if defined(TARG_X8664)
 #define Set_BB_after_pic_entry(x)   (BB_flag(x) |= BBM_AFTER_PIC_ENTRY)
+#define Set_BB_dispatch(x)          (BB_flag(x) |= BBM_DISPATCH)
 #endif
 
 #define	Reset_BB_entry(x)	(BB_flag(x) &= ~BBM_ENTRY)
@@ -753,6 +756,7 @@ inline void Set_BB_loop_head_bb(BB *bb, BB *head) {
 #endif
 #if defined(TARG_X8664)
 #define Reset_BB_after_pic_entry(x)  (BB_flag(x) &= ~BBM_AFTER_PIC_ENTRY)
+#define Reset_BB_dispatch(x)          (BB_flag(x) &= ~BBM_DISPATCH)
 #endif
 
 #ifdef KEY

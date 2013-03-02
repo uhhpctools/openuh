@@ -142,6 +142,8 @@ typedef enum {
 	T_Emit_Comp,	
 	T_Region_Finalize_CU,	/* Region Finalize */
 	T_Region_Finalize_Comp,
+        T_Dispatch_Sched_CU,    /* Dispatch Scheduling */
+        T_Dispatch_Sched_Comp,
 	T_CalcDom_CU,		/* Calculate_Dominators 
 				 * (this time is included in callers time) */
 	T_CalcDom_Comp,

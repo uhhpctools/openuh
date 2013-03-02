@@ -39,6 +39,10 @@ CG infrastructure  	Mike Murphy		mmurphy(AT)nvidia.com
 IPA, WOPT 		Tianwei Sheng		tianwei.sheng(AT)gmail.com
 WOPT, LNO		Mei Ye			mei.ye(AT)amd.com
 IPA, WOPT		Min Zhao		min.zhao(AT)hp.com
+IPA/WOPT/CG             Ramshankar Ram          ramshankar.ramanarayanan@amd.com
+Fortran                 Shivarama Rao		shivarama.rao(AT)amd.com
+Libraries               Shivarama Rao		shivarama.rao(AT)amd.com
+LNO                     Shivarama Rao		shivarama.rao(AT)amd.com
 
 
 Maintainers (in alphabetical order by last name - please keep it this way)
@@ -62,7 +66,7 @@ Yuan Dong			dongyuan(AT)tsinghua.edu.cn
 Deepak Eachempati		dreachem(AT)gmail.com
 Steve Ellcey			sje(AT)cup.hp.com
 Ge Gan				george.gan(AT)gmail.com
-Doug Gilmore			doug.gilmore(AT)amd.com
+Doug Gilmore			dougjgilmore(AT)gmail.com
 Rick Hank	                rick.hank(AT)hp.com
 Matthew Hausknecht		mhauskn(AT)emory.edu
 Jiangzhou He			hejiangzhou(AT)gmail.com
@@ -84,6 +88,7 @@ Lin Ma				lin.ma(AT)simplnano.com
 Mike Murphy			mmurphy(AT)nvidia.com
 Prashantha Naduthota		prashanth.nr(AT)gmail.com
 Ram Ramanarayanan               ramshankar.ramanarayanan@amd.com
+Shivarama Rao                   shivarama.rao@amd.com
 Jürgen Ributzka			ributzka(AT)gmail.com
 Akella V.S. Sastry              akella.sastry(AT)hp.com
 Robert Scollard			robert.scollard(AT)amd.com

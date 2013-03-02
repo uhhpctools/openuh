@@ -1381,8 +1381,25 @@ BITWISE_DCE::Delete_cvtls(CODEREP *cr, STMTREP *use_stmt)
       }
       else new_cr->Set_opnd(i, cr->Opnd(i));
     }
-    // check if current node can be deleted
+    // Fix bug966: for SELECT, both Kid 1 and Kid 2 must have res as the result type
     opr = cr->Opr();
+    if (opr == OPR_SELECT) {
+      if (new_cr->Get_opnd(1)->Dtyp() != new_cr->Get_opnd(2)->Dtyp()) {
+        for (INT index = 1; index < new_cr->Kid_count(); index++) {
+          CODEREP *opnd = new_cr->Opnd(index);
+          if (new_cr->Dtyp() != opnd->Dtyp()) {
+            OPCODE   opc = OPCODE_make_op(OPR_CVT, new_cr->Dtyp(), opnd->Dtyp());
+            CODEREP *cvt_cr = Htable()->Add_unary_node(opc, opnd);
+            new_cr->Set_opnd(index, cvt_cr);
+            need_rehash = TRUE;
+          }
+        }
+      }
+      else {
+        new_cr->Set_dtyp(new_cr->Get_opnd(1)->Dtyp());
+      }
+    }
+    // check if current node can be deleted
     if (opr == OPR_CVTL) {
       if (((Livebits(cr) & ~Bitmask_of_size(cr->Offset())) == 0) ||
 	  Redundant_cvtl(MTYPE_is_signed(cr->Dtyp()), 

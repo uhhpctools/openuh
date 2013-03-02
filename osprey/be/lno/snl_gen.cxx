@@ -84,8 +84,6 @@ const static char *rcs_id =   snl_CXX "$Revision: 1.9 $";
 #include "debug.h"
 #include "permute.h"
 #include "tile.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "cond.h"
 #include "wind_down.h"
 #include "ff_utils.h"
@@ -241,27 +239,6 @@ extern void SNL_Peel_Iteration(WN* wn,
   WN* tmp_unrolls[2];
   tmp_unrolls[0] = WN_do_body(wn);
   tmp_unrolls[1] = newblock;
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    STACK<WN*> st_old(&PROMPF_pool);
-    STACK<WN*> st_new(&PROMPF_pool);
-    Prompf_Assign_Ids(WN_do_body(wn), newblock, &st_old, &st_new, FALSE); 
-    INT nloops = st_old.Elements();
-    if (nloops >= 0) {
-      INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-      INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-      for (INT i = 0; i < nloops; i++) {
-        old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-        new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-      }
-      if (first_iter)
-	Prompf_Info->Pre_Peel(old_ids, new_ids, nloops); 
-      else  
-	Prompf_Info->Post_Peel(old_ids, new_ids, nloops); 
-      CXX_DELETE_ARRAY(old_ids, &LNO_local_pool);
-      CXX_DELETE_ARRAY(new_ids, &LNO_local_pool);
-    }
-  } 
 
   if (red_manager != NULL) red_manager->Unroll_Update(tmp_unrolls, 2);
   // dli->Depth is the loop further out, so don't need to subtract 1
@@ -877,20 +854,6 @@ extern SNL_REGION SNL_GEN_Protect_Nest_With_Conditionals(const SNL_NEST_INFO*
     return SNL_REGION(outerloop, outerloop);
 
   WN* untransformable_nest = LWN_Copy_Tree(outerloop, TRUE, LNO_Info_Map);
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    STACK<WN*> st_old(&PROMPF_pool);
-    STACK<WN*> st_new(&PROMPF_pool);
-    Prompf_Assign_Ids(outerloop, untransformable_nest, &st_old, &st_new, FALSE);
-    INT nloops = st_old.Elements();
-    INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-    INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-    for (INT i = 0; i < nloops; i++) {
-      old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i)); 
-      new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i)); 
-    } 
-    Prompf_Info->General_Version(old_ids, new_ids, nloops);
-  }
 
   WN* tmp_unrolls[2];
   tmp_unrolls[0] = outerloop;
@@ -1787,9 +1750,7 @@ static void UT_Body_Imperfect(WN* body,
 //   expanded variables is summarized in 'plist'.  Estimated register 
 //   usage for the loops is set to 'est_register_usage'.  If 'warn_lexneg' 
 //   is TRUE, print a warning if the transformation generates lexicograph-
-//   ically negative dependences.  If 'from_genperm', this routine was 
-//   called from 'SNL_GEN_Permute_Loops()', and we do not generate infor-
-//   mation for PROMPF, because it was already generated in that routine.  
+//   ically negative dependences.
 //   It returns the SNL_REGION of the transformed code. 
 // MICHAEL'S NOTE: Actually, might as well do ut followed by tiling.  They 
 //   are included in the same routine in case one day I figure out how to 
@@ -1808,8 +1769,7 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
 			            SNL_BOUNDS_INFO* bi, 
 			            SX_PLIST* plist,
                                     EST_REGISTER_USAGE est_register_usage,
-			            BOOL warn_lexneg,
-			            BOOL from_genperm)
+			            BOOL warn_lexneg)
 {
   ARRAY_DIRECTED_GRAPH16*	dg = Array_Dependence_Graph;
   DU_MANAGER*			du = Du_Mgr;
@@ -1848,29 +1808,6 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
   // transform bounds and body: unimodular transformation
 
   if (u) {
-
-    // Emit annotations for prompf. 
-    if (!from_genperm && Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-      WN* wn_loop = SNL_Get_Inner_Snl_Loop(wn_outer, 
-	SNL_Loop_Count(wn_outer) - u->Rows() + 1);  
-      INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool); 
-      INT i = 0; 
-      for (WN* wn = wn_loop; wn != NULL; wn = Next_SNL_Loop(wn))
-	old_ids[i++] = WN_MAP32_Get(Prompf_Id_Map, wn); 
-      FmtAssert(i == u->Rows() && u->Rows() == u->Cols(), 
-	("SNL_GEN_U_Ctiling: Wrong number of loops in SNL")); 
-      INT* permutation = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-      permutation = Unimodular_To_Permutation(u); 
-      if (permutation != NULL) { 
-        INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool); 
-	for (i = 0; i < nloops; i++) 
-	  new_ids[i] = old_ids[permutation[i]]; 
-        Prompf_Info->Interchange(old_ids, new_ids, nloops); 
-      } else { 
-        FmtAssert(TRUE, 
-	  ("SNL_GEN_U_Ctiling: Could not find permutation for U matrix")); 
-      } 
-    } 
 
     // Apply the interchange transformation. 
     const IMAT uinvold(*uinv, &LNO_local_pool);
@@ -2113,11 +2050,6 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
     INT j;
 
     i = 0; 
-    INT* old_ids = CXX_NEW_ARRAY(INT, lrows, &LNO_local_pool); 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      for (WN* wn = wn_outer; wn != NULL; wn = Next_SNL_Loop(wn))  
-        old_ids[i++] = WN_MAP32_Get(Prompf_Id_Map, wn);  
-    } 
 
     // these will be placed in the tiled do loops.
 
@@ -2359,16 +2291,6 @@ extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer,
     //   the number of loops we are transforming by tiling, while 
     //   the number of columns, lcols, is the number of strip loops 
     //   we are creating. 
-
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      FmtAssert(t->Rectangular(), 
-	("SNL_GEN_U_Ctiling: Should not be handling non-rectangular case")); 
-      for (INT i = 0; i < lcols; i++) { 
-        INT new_id = New_Construct_Id();
-        WN_MAP32_Set(Prompf_Id_Map, d[i], new_id);
-        Prompf_Info->Cache_Tile(old_ids[t->Iloop(i)], new_id); 
-      }
-    }            
 
     for (i = 0; i < lcols; i++) {
       for (INT j = 0; j <= i; j++) {
@@ -2692,7 +2614,7 @@ extern WN* SNL_GEN_Permute_Loops(WN* wn_outer,
     bi->Conditionals().Num_Vars());
   bi->Canonicize(nloops, &stack, Do_Loop_Depth(wn_outer));
   SNL_GEN_U_Ctiling(wn_outer, nloops, unimodular, NULL, bi, NULL, 
-    EST_REGISTER_USAGE(), warn_lexneg, TRUE); 
+    EST_REGISTER_USAGE(), warn_lexneg); 
   return wn_outer; 
 }
 
@@ -2873,20 +2795,6 @@ extern SNL_REGION SNL_GEN_2D_Regtile(SNL_NEST_INFO* ni,
     // bounds with DO i' = i, i+B-1, and replace all the i's inside by i'.
 
     WN* nest_copy = LWN_Copy_Tree(loop0, TRUE, LNO_Info_Map);
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      STACK<WN*> st_old(&PROMPF_pool);
-      STACK<WN*> st_new(&PROMPF_pool);
-      Prompf_Assign_Ids(loop0, nest_copy, &st_old, &st_new, FALSE);
-      INT nloops = st_old.Elements();
-      INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-      INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-      for (INT i = 0; i < nloops; i++) {
-	old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-	new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-      }
-      Prompf_Info->Register_SStrip(old_ids, new_ids, nloops);
-    } 
-
     WN* wn_holder[2];
     wn_holder[0] = loop0;
     wn_holder[1] = nest_copy;
@@ -3071,19 +2979,6 @@ extern SNL_REGION SNL_GEN_2D_Regtile(SNL_NEST_INFO* ni,
       // enddo
 
       WN* lpcopy = LWN_Copy_Tree(nest_copy, TRUE, LNO_Info_Map);
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-	STACK<WN*> st_old(&PROMPF_pool); 
-	STACK<WN*> st_new(&PROMPF_pool); 
-	Prompf_Assign_Ids(nest_copy, lpcopy, &st_old, &st_new, FALSE); 
-	INT nloops = st_old.Elements(); 
-	INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);  
-	INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);  
-	for (INT i = 0; i < nloops; i++) {
-	  old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i)); 
-	  new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i)); 
-	} 
-	Prompf_Info->Register_Startup(old_ids, new_ids, nloops); 
-      } 
       wn_holder[0] = nest_copy;
       wn_holder[1] = lpcopy;
       if (red_manager) red_manager->Unroll_Update(wn_holder, 2);
@@ -3158,19 +3053,6 @@ extern SNL_REGION SNL_GEN_2D_Regtile(SNL_NEST_INFO* ni,
       // enddo
 
       WN* lpcopy = LWN_Copy_Tree(nest_copy, TRUE, LNO_Info_Map);
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-	STACK<WN*> st_old(&PROMPF_pool); 
-	STACK<WN*> st_new(&PROMPF_pool); 
-	Prompf_Assign_Ids(nest_copy, lpcopy, &st_old, &st_new, FALSE); 
-	INT nloops = st_old.Elements(); 
-	INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);  
-	INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);  
-	for (INT i = 0; i < nloops; i++) {
-	  old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i)); 
-	  new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i)); 
-	} 
-	Prompf_Info->Register_Shutdown(old_ids, new_ids, nloops); 
-      }
       wn_holder[0] = nest_copy;
       wn_holder[1] = lpcopy;
       if (red_manager) red_manager->Unroll_Update(wn_holder, 2);

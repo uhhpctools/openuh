@@ -52,6 +52,7 @@ LIB2_BUILD_AREA     = @abs_top_builddir@/osprey/targdir_lib2
 NATIVE_BUILD_DIR    = osprey/targdir
 NATIVE_BUILD_DIR_LD = osprey/cygnus
 GNUFE_BUILD_DIR     = osprey-gcc-4.2.0
+GNUFE_BUILD_SUBDIR  = osprey-gcc-4.2.0/host-unknown
 
 LIB_MACHINE_TYPE    = @LIB_MACHINE_TYPE@
 LIB_BUILD_TARGET    = @LIB_BUILD_TARGET@
@@ -148,8 +149,8 @@ endif
 ifeq ($(BUILD_GNU4), YES)
 GNU4_FE_COMPONENTS = \
                 $(NATIVE_BUILD_DIR)/wgen/wgen42 \
-                $(GNUFE_BUILD_DIR)/gcc/cc1 \
-                $(GNUFE_BUILD_DIR)/gcc/cc1plus
+                $(GNUFE_BUILD_SUBDIR)/gcc/cc1 \
+                $(GNUFE_BUILD_SUBDIR)/gcc/cc1plus
 endif
 
 GNU3_FE_COMPONENTS = \
@@ -171,8 +172,7 @@ FIRST_COMPONENTS = \
 		$(NATIVE_BUILD_DIR)/libelfutil \
 		$(NATIVE_BUILD_DIR)/libdwarf \
 		$(NATIVE_BUILD_DIR)/libunwindP \
-		$(NATIVE_BUILD_DIR)/libcif \
-		$(NATIVE_BUILD_DIR)/arith
+		$(NATIVE_BUILD_DIR)/libcif
 
 NATIVE_COMPONENTS = $(BASIC_COMPONENTS) $(TARGET_EXTRA_OBJ)  \
                     $(GNU4_FE_COMPONENTS) $(FORT_FE_COMPONENTS) \
@@ -347,11 +347,11 @@ $(NATIVE_BUILD_DIR)/libspin_4_2_0/libgspin42.a libspin42:
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/libspin_4_2_0
 
 # GNU 4.2.0 based FE
-cc1plus: $(GNUFE_BUILD_DIR)/gcc/cc1plus
-cc1: $(GNUFE_BUILD_DIR)/gcc/cc1
+cc1plus: $(GNUFE_BUILD_SUBDIR)/gcc/cc1plus
+cc1: $(GNUFE_BUILD_SUBDIR)/gcc/cc1
 cc1plus: cc1
-$(GNUFE_BUILD_DIR)/gcc/cc1plus cc1plus: $(GNUFE_BUILD_DIR)/gcc/cc1
-$(GNUFE_BUILD_DIR)/gcc/cc1 cc1: $(NATIVE_BUILD_DIR)/libspin_4_2_0/libgspin42.a
+$(GNUFE_BUILD_SUBDIR)/gcc/cc1plus cc1plus: $(GNUFE_BUILD_SUBDIR)/gcc/cc1
+$(GNUFE_BUILD_SUBDIR)/gcc/cc1 cc1: $(NATIVE_BUILD_DIR)/libspin_4_2_0/libgspin42.a
 	$(MAKE) -C $(GNUFE_BUILD_DIR)
 
 build:
@@ -375,41 +375,53 @@ install:
 else
 install: install_fe install_compiler
 
+ifeq ($(BUILD_TARGET), PPC32)
+install_fe:
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-common $(GNUFE_PREFIX_OVERRIDE)
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-headers $(GNUFE_PREFIX_OVERRIDE)
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-cpp
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-driver	    
+else
 install_fe:
 ifeq ($(BUILD_GNU4), YES)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-common $(GNUFE_PREFIX_OVERRIDE)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
-	    install-headers $(GNUFE_PREFIX_OVERRIDE)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-common
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
+	    install-headers
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-libgcc $(GNUFE_PREFIX_OVERRIDE)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-cpp $(GNUFE_PREFIX_OVERRIDE)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-driver $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_DIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
 	    install $(GNUFE_PREFIX_OVERRIDE)
+endif
 endif
 
 install_compiler:
 	export TOOLROOT=$(PREFIX); \
 	export TOP_SRCDIR=$(TOP_SRCDIR); \
-		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME)
+		$(TOP_SRCDIR)/install_compiler.sh $(MACHINE_TYPE) $(if $(BUILD_FORTRAN),"YES","NO") $(if $(BUILD_GNU4),"YES","NO") $(ENABLE_COARRAYS) $(BUILD_CAF_RUNTIME) @CROSS_TARGET@ 
 endif
 install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
 ifeq ($(BUILD_GNU4), YES)
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-common
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-headers
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-libgcc
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-cpp
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/gcc \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-driver
-	$(MAKE) -C $(GNUFE_BUILD_DIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
+	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
 	    install
 endif
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
@@ -435,9 +447,11 @@ library2 lib2 clean-library2 clean-lib2 : LOCAL_LIB_ARGS = $(LIB2_ARGS)
 
 library lib library2 lib2 : build
 
+ifneq ($(BUILD_TARGET), PPC32)
 library lib clean-library clean-lib library2 lib2 clean-library2 clean-lib2:
 	@echo "$(MAKE) -C $(LOCAL_LIB_BUILD_DIR) $(LOCAL_LIB_ACTION) $(LOCAL_LIB_ARGS)"; \
 	$(MAKE) -C $(LOCAL_LIB_BUILD_DIR) $(LOCAL_LIB_ACTION) $(LOCAL_LIB_ARGS)
+endif
 
 clobber: clean 
 	rm -rf $(CROSSDIR) $(BOOTDIR)
@@ -465,8 +479,8 @@ endif
 ifeq ($(BUILD_FORTRAN), YES)
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/crayf90 clobber	
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/whirl2f clobber 
-endif
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/arith clobber
+endif
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/include clobber
 	$(MAKE) -C $(NATIVE_BUILD_DIR)/libspin_4_2_0 clobber
 ifeq ($(MACHINE_TYPE), ia64)

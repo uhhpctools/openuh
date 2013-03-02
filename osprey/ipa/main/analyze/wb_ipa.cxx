@@ -52,7 +52,6 @@
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"
@@ -66,7 +65,7 @@ WB_BROWSER wb_ipa;
 extern void WB_IPA_Initialize(WN* wn_global,
 			      PU* pu)
 { 
-  WB_Initialize(&wb_ipa, wn_global, pu, NULL, NULL, -1); 
+  WB_Initialize(&wb_ipa, wn_global, pu, NULL, NULL);
 } 
 
 extern void WB_IPA_Terminate()

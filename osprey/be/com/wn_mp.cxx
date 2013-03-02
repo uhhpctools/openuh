@@ -7125,34 +7125,17 @@ Gen_MP_Copyin ( BOOL is_omp )
 #define MAX_NDIM 7
 /***********************************************
  * 
- *  Helper routine, creates a DO loop and add 
- *  the appropriate PROMPF information.
- *  adopted for be/vho/f90_lower.cxx, csc.
+ *  Helper routine: creates a DO loop node
  */
 static WN * 
 create_doloop_node(WN *index_id, WN *start, WN *end,
-		               WN *step, WN *body, BOOL add_prompf=FALSE)
+		               WN *step, WN *body)
 {
   WN *temp;
   WN_Set_Linenum(start,line_number);
   WN_Set_Linenum(step,line_number);
   temp = WN_CreateDO(index_id, start, end, step, body, NULL);
   WN_Set_Linenum(temp,line_number);
-	// For prompf
-/*
-  if (add_prompf && Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-     INT new_id = New_Construct_Id();
-     WN_MAP32_Set(Prompf_Id_Map, temp, new_id);
-     PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(temp, &PROMPF_pool),
-                              &PROMPF_pool);
-     WN* wn_symbol = WN_index(temp);
-     const char* name = ST_class(WN_st(wn_symbol)) != CLASS_PREG
-		        ? ST_name(WN_st(wn_symbol)) :
-		          WN_offset(wn_symbol) > Last_Dedicated_Preg_Offset
-			  ? Preg_Name(WN_offset(wn_symbol)) : "DEDICATED PREG";
-			    Prompf_Info->F90_Array_Stmt(new_id, pl, (char*) name);
-  }
-*/
   return (temp);
 }
 

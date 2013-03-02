@@ -12915,7 +12915,8 @@ configure-ld:
 .PHONY: all-ld maybe-all-ld
 maybe-all-ld:
 @if ld
-TARGET-ld=all
+# Open64: build only "ld-new" as we do not use anything else.
+TARGET-ld=ld-new
 maybe-all-ld: all-ld
 all-ld: configure-ld
 	@test -f stage_last && exit 0; \

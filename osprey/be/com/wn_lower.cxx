@@ -3542,7 +3542,7 @@ static WN *lower_cvt(WN *block, WN *tree, LOWER_ACTIONS actions)
       WN_INSERT_BlockLast(elseblock, iwn);
 
       WN* ifstmt = WN_CreateIf(test, thenblock, elseblock);
-      WN_INSERT_BlockLast(block, lower_if(block, ifstmt, actions));
+      WN_INSERT_BlockLast(block, lower_if(block, ifstmt, actions, NULL));
 
       iwn = WN_LdidPreg(dst, cvt_result);
     }
@@ -6957,7 +6957,7 @@ static WN *lower_expr(WN *block, WN *tree, LOWER_ACTIONS actions)
         stid = WN_StidPreg(rtype, result, kid1);
         WN_INSERT_BlockLast(else_block, stid);
         if_stmt = WN_CreateIf(test, then_block, else_block);
-        WN_INSERT_BlockLast(block, lower_if(block, if_stmt, actions));
+        WN_INSERT_BlockLast(block, lower_if(block, if_stmt, actions, NULL));
         WN_Delete(tree);
         return WN_LdidPreg(rtype, result);
       case OPR_MIN:
@@ -6976,7 +6976,7 @@ static WN *lower_expr(WN *block, WN *tree, LOWER_ACTIONS actions)
           stid = WN_StidPreg(rtype, result, Load_Leaf(kid1_leaf));
           WN_INSERT_BlockLast(else_block, stid);
           if_stmt = WN_CreateIf(test, then_block, else_block);
-          WN_INSERT_BlockLast(block, lower_if(block, if_stmt, actions));
+          WN_INSERT_BlockLast(block, lower_if(block, if_stmt, actions, NULL));
           WN_Delete(tree);
           return WN_LdidPreg(rtype, result);
         }
@@ -7250,6 +7250,30 @@ static WN *add_fake_parm(WN *o_call, WN *fake_actual, TY_IDX ty_idx)
 
 /* ====================================================================
  *
+ * TYPE_ID adjust_type_for_return_info(TYPE_ID& rtype, INT32 size)
+ *
+ * adjust the desc and ret type for return info according to the size.
+ * ==================================================================== */
+static TYPE_ID adjust_type_for_return_info(TYPE_ID& rtype, INT32 size)
+{
+  if (MTYPE_byte_size(rtype) <= size)
+    return rtype;
+
+  INT align = MTYPE_is_integral(rtype) ? 1 : 4;
+  TYPE_ID desc = Mtype_AlignmentClass(align, MTYPE_type_class(rtype));
+  Is_True(desc != MTYPE_UNKNOWN,
+          ("Unable to find the type %s with align %d", Mtype_Name(rtype), align));
+  while (MTYPE_byte_size(desc) < size) {
+    desc = Mtype_next_alignment(desc);
+  }
+  // there is no CVT for non-integer type, change the rtype to desc
+  if (!MTYPE_is_integral(rtype) && rtype != desc)
+    rtype = desc;
+  return desc;
+}
+
+/* ====================================================================
+ *
  * WN *lower_return_mstid(WN *block, WN *tree, LOWER_ACTIONS actions)
  *
  * "tree" must be an MSTID whose kid is MLDID of Return_Val_Preg (-1).
@@ -7299,43 +7323,25 @@ static WN *lower_return_mstid(WN *block, WN *tree, LOWER_ACTIONS actions)
   }
   else { // return via 1 or more return registers
     TYPE_ID mtype, desc;
+    UINT copied = 0;
     for (INT32 i = 0; i < RETURN_INFO_count(return_info); i++) {
       if (i != 0)
         WN_INSERT_BlockLast (block, wn); // insert the last STID created 
       mtype = RETURN_INFO_mtype(return_info, i);
-      desc = mtype;
-#ifdef KEY
-      if (MTYPE_byte_size(mtype) > TY_size(ty_idx) && !MTYPE_float(mtype)){
-	desc = Mtype_AlignmentClass(1, MTYPE_type_class(mtype));
-	while (MTYPE_byte_size(desc) < TY_size(ty_idx))
-	  desc = Mtype_next_alignment(desc);
-      }
-#endif
+      desc = adjust_type_for_return_info(mtype, TY_size(ty_idx) - copied);
       preg_st = Standard_Preg_For_Mtype(mtype);
-
-#if defined(TARG_PPC32)
-      if (preg_st == Int_Preg) {
-        UINT rem = TY_size(ty_idx) - i * 4;
-        if (1 == rem) desc = MTYPE_I1;
-        if (2 == rem) desc = MTYPE_I2;
-      }
       n_rhs = WN_CreateLdid(OPR_LDID, mtype, desc, 
 			    RETURN_INFO_preg(return_info, i), preg_st,
 			    Be_Type_Tbl(mtype));
-#else
-      n_rhs = WN_CreateLdid(OPR_LDID, mtype,mtype, 
-			    RETURN_INFO_preg(return_info, i), preg_st,
-			    Be_Type_Tbl(mtype));
-#endif
-      
 #ifndef KEY
       if (TY_align(ST_type(WN_st(tree))) < MTYPE_alignment(mtype)) {
 	DevWarn("return_info struct alignment is smaller than register size, may produce wrong results");
       }
 #endif
       wn = WN_CreateStid(OPR_STID, MTYPE_V, desc, 
-		         WN_store_offset(tree)+i*MTYPE_byte_size(mtype),
+		         WN_store_offset(tree) + copied,
 			 WN_st_idx(tree), Be_Type_Tbl(desc), n_rhs);
+      copied += MTYPE_byte_size(desc);
       wn  = lower_store (block, wn, actions);
       WN_Set_Linenum(wn, current_srcpos);
     }
@@ -7359,7 +7365,8 @@ static WN *lower_return_mistore(WN *block, WN *tree, LOWER_ACTIONS actions)
   ST *preg_st;
   WN *n_rhs;
   WN *wn = NULL;	// init to prevent upward-exposed use
-  RETURN_INFO return_info = Get_Return_Info(WN_ty(WN_kid0(tree)), 
+  TY_IDX ty_idx = WN_ty(WN_kid0(tree));
+  RETURN_INFO return_info = Get_Return_Info(ty_idx, 
                                             Complex_Not_Simulated
 #ifdef TARG_X8664
 					    , last_call_ff2c_abi
@@ -7394,20 +7401,23 @@ static WN *lower_return_mistore(WN *block, WN *tree, LOWER_ACTIONS actions)
   }
   else { // return via 1 or more return registers
     WN *base_expr;
+    UINT copied = 0;
     for (INT32 i = 0; i < RETURN_INFO_count(return_info); i++) {
       if (i != 0)
         WN_INSERT_BlockLast (block, wn); // insert the last STID created 
       mtype = RETURN_INFO_mtype(return_info, i);
+      TYPE_ID desc = adjust_type_for_return_info(mtype, TY_size(ty_idx) - copied);
       preg_st = Standard_Preg_For_Mtype(mtype);
-      n_rhs = WN_CreateLdid(OPR_LDID, mtype, mtype, 
+      n_rhs = WN_CreateLdid(OPR_LDID, mtype, desc, 
 			    RETURN_INFO_preg(return_info, i), preg_st,
 			    Be_Type_Tbl(mtype));
       base_expr = WN_COPY_Tree(WN_kid1(tree));
 // OSP-438: The type of Istore node should be a pointer to mtype.
 // (Previously, we just use Be_Type_Tbl(mtype) as the type of Istore).
-      wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, mtype, 
-		           WN_store_offset(tree)+i*MTYPE_byte_size(mtype),
+      wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, 
+		           WN_store_offset(tree) + copied,
 			   Make_Pointer_Type(Be_Type_Tbl(mtype), FALSE), n_rhs, base_expr);
+      copied += MTYPE_byte_size(desc);
       WN_Set_Linenum(wn, WN_Get_Linenum(tree));
       wn  = lower_store (block, wn, actions);
       WN_Set_Linenum (wn, WN_Get_Linenum(tree));
@@ -12285,42 +12295,24 @@ static WN *lower_return_val(WN *block, WN *tree, LOWER_ACTIONS actions)
 		("expected RETURN_VAL kid not type M"));
 
 	algn = TY_align(ty_idx);
+        UINT copied = 0;
 	for (i = 0; i < RETURN_INFO_count(return_info); i++) {
 	  mtype = RETURN_INFO_mtype(return_info, i);
 	  ty_idx_used = Be_Type_Tbl(mtype);
 	  Set_TY_align(ty_idx_used, algn);
           preg    = RETURN_INFO_preg (return_info, i);
           preg_st = Standard_Preg_For_Mtype(mtype);
-#if defined(TARG_PPC32)
-    TYPE_ID desc = mtype;  
-    if (preg_st == Int_Preg) {
-      UINT rem = TY_size(ty_idx) - i * 4;
-      if (1 == rem) desc = MTYPE_I1;
-      if (2 == rem) desc = MTYPE_I2;
-    }
-#endif
-#ifdef KEY // bug 12812
+          TYPE_ID desc = adjust_type_for_return_info(mtype, TY_size(ty_idx) - copied);  
+
   	  if (WN_opcode(o_rhs) == OPC_MMLDID && WN_st(o_rhs) == Return_Val_Preg)
-#if defined(TARG_PPC32)
-           n_rhs = WN_CreateLdid(OPR_LDID, mtype, desc, preg, preg_st, 
+            n_rhs = WN_CreateLdid(OPR_LDID, mtype, desc, preg, preg_st, 
 			          Be_Type_Tbl(mtype));
-#else
-	    n_rhs = WN_CreateLdid(OPR_LDID, mtype, mtype, preg, preg_st, 
-			          Be_Type_Tbl(mtype));
-#endif
 	  else
-#endif
-#if defined(TARG_PPC32)
-           n_rhs = WN_CreateLdid (OPR_LDID, mtype, desc, 
-				   WN_load_offset(o_rhs)
-				   + i * MTYPE_byte_size(mtype),
+            n_rhs = WN_CreateLdid (OPR_LDID, mtype, desc, 
+				   WN_load_offset(o_rhs) + copied,
 				   WN_st_idx(o_rhs), ty_idx_used);
-#else
-	    n_rhs = WN_CreateLdid (OPR_LDID, mtype, mtype, 
-				   WN_load_offset(o_rhs)
-				   + i * MTYPE_byte_size(mtype),
-				   WN_st_idx(o_rhs), ty_idx_used);
-#endif
+
+          copied += MTYPE_byte_size(desc);
 	  wn = WN_CreateStid(OPR_STID, MTYPE_V, mtype, preg, preg_st, 
 			     Be_Type_Tbl(mtype), n_rhs);
 	  WN_Set_Linenum(wn, current_srcpos);  // Bug 1268
@@ -12332,18 +12324,20 @@ static WN *lower_return_val(WN *block, WN *tree, LOWER_ACTIONS actions)
 		("expected RETURN_VAL kid not type M"));
 
 	algn = TY_align(ty_idx);
+        UINT copied = 0;
 	for (i = 0; i < RETURN_INFO_count(return_info); i++) {
           mtype = RETURN_INFO_mtype(return_info, i);
+          TYPE_ID desc = adjust_type_for_return_info(mtype, TY_size(ty_idx) - copied);
 	  ty_idx_used = Be_Type_Tbl(mtype);
 	  Set_TY_align(ty_idx_used, algn);
 	  if (i == 0)
 	    n_rhs = WN_kid0(o_rhs);
 	  else n_rhs = WN_COPY_Tree(WN_kid0(o_rhs));
-	  n_rhs = WN_CreateIload(OPR_ILOAD, mtype, mtype,
-				 WN_load_offset(o_rhs)
-				   + i * MTYPE_byte_size(mtype),
+	  n_rhs = WN_CreateIload(OPR_ILOAD, mtype, desc,
+				 WN_load_offset(o_rhs) + copied,
 				 ty_idx_used,
 				 Make_Pointer_Type(ty_idx_used), n_rhs);
+          copied += MTYPE_byte_size(desc);
 	  n_rhs = lower_expr(block, n_rhs, actions);
 	  preg    = RETURN_INFO_preg (return_info, i);
           preg_st = Standard_Preg_For_Mtype(mtype);
@@ -12357,18 +12351,20 @@ static WN *lower_return_val(WN *block, WN *tree, LOWER_ACTIONS actions)
 	Is_True(WN_operator(WN_kid1(o_rhs)) == OPR_INTCONST,
 		("expected RETURN_VAL's MLOAD kid to be of constant size"));
 	algn = TY_align(TY_pointed(WN_load_addr_ty(o_rhs)));
+        UINT copied = 0;
 	for (i = 0; i < RETURN_INFO_count(return_info); i++) {
           mtype = RETURN_INFO_mtype(return_info, i);
+          TYPE_ID desc = adjust_type_for_return_info(mtype, TY_size(ty_idx) - copied);
 	  ty_idx_used = Be_Type_Tbl(mtype);
 	  Set_TY_align(ty_idx_used, algn);
 	  if (i == 0)
 	    n_rhs = WN_kid0(o_rhs);
 	  else n_rhs = WN_COPY_Tree(WN_kid0(o_rhs));
-	  n_rhs = WN_CreateIload(OPR_ILOAD, mtype, mtype,
-				 WN_load_offset(o_rhs)
-				   + i * MTYPE_byte_size(mtype),
+	  n_rhs = WN_CreateIload(OPR_ILOAD, mtype, desc,
+				 WN_load_offset(o_rhs) + copied,
 				 ty_idx_used,
 				 Make_Pointer_Type(ty_idx_used), n_rhs);
+          copied += MTYPE_byte_size(desc);
 	  n_rhs = lower_expr(block, n_rhs, actions);
 	  preg    = RETURN_INFO_preg (return_info, i);
           preg_st = Standard_Preg_For_Mtype(mtype);

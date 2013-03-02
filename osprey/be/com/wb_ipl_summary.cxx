@@ -56,7 +56,6 @@
 #include "opt_du.h" 
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "wb_browser.h"
 #include "ipa_section_annot.h"
 #include "ipc_symtab_merge.h" 

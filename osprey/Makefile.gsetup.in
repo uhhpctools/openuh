@@ -1,6 +1,6 @@
 # -*- Makefile -*-
 #
-#  Copyright (C) 2011 Advanced Micro Devices, Inc.  All Rights Reserved.
+#  Copyright (C) 2011-2012 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2010 Hewlett Packard Company
 #
@@ -111,6 +111,9 @@ endif
 ifndef BUILD_OPTIMIZE
      BUILD_OPTIMIZE = @BUILD_OPTIMIZE@
 endif
+ifndef BUILD__FFE_OPTIMIZE
+     BUILD_FFE_OPTIMIZE = @BUILD_FFE_OPTIMIZE@
+endif
 ifndef BUILD_PCH
      BUILD_PCH      = DEFAULT
 endif
@@ -158,6 +161,9 @@ ifndef GCC_DIR
 endif
 ifndef BUILD_TAU_INSTR
      BUILD_TAU_INSTR = @BUILD_TAU_INSTR@
+endif
+ifndef WHIRL_HAS_ID_FIELD
+     WHIRL_HAS_ID_FIELD = @WHIRL_HAS_ID_FIELD@
 endif
 
 ifndef ENABLE_COARRAYS
@@ -681,10 +687,6 @@ BUILD_SKIP_WHIRL2C = TRUE
 BUILD_SKIP_WHIRL2F = TRUE
 endif
 
-# Always skip obsolete backend components.
-BUILD_SKIP_PROMPF = TRUE
-STD_COMPILE_OPTS += -DBUILD_SKIP_PROMPF
-
 include ${BUILD_TOT}/../defs.mk
 
 STD_C_OPTS = -std=gnu99 -D_GNU_SOURCE
@@ -695,6 +697,9 @@ STD_COMPILE_OPTS += -DKEY -DOSP_OPT -DPATHSCALE_MERGE -DPSC_TO_OPEN64 $(LOCAL_CF
 
 ifeq ($(BUILD_TYPE), SHARED)
 STD_COMPILE_OPTS += -DSHARED_BUILD
+endif
+ifeq ($(WHIRL_HAS_ID_FIELD), YES)
+STD_COMPILE_OPTS += -DWHIRL_USE_UNIQUE_ID_FOR_DEBUG
 endif
 
 ifeq ($(DRAGON_SUPPORT), YES)

@@ -80,8 +80,6 @@
 #include "ff_utils.h"
 #include "move.h"
 #include "w2op.h" 
-#include "prompf.h" 
-#include "anl_driver.h"
 #include "ipa_lno_util.h"
 #include "debug.h" 
 #include "wutil.h"
@@ -296,17 +294,6 @@ extern void Create_Single_Region(WN* wn_parent, WN* wn_single,
   LWN_Insert_Block_Before(wn_parent, NULL, wn_prag_after);
   Add_Barrier_Vertex(wn_prag_before);
   Add_Barrier_Vertex(wn_prag_after);
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT new_id = New_Construct_Id();
-    WN_MAP32_Set(Prompf_Id_Map, wn_prag_sp, new_id);
-    WN_MAP32_Set(Prompf_Id_Map, wn_region, new_id);
-    PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(&PROMPF_pool),
-      &PROMPF_pool);
-    for (WN* wn = WN_first(wn_block); wn != NULL; wn = WN_next(wn))
-      pl->Add_Lines(wn);
-    Prompf_Info->Single_Process(new_id, pl);
-  }
 }
 
 //-----------------------------------------------------------------------

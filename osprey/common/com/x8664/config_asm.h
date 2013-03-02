@@ -207,6 +207,8 @@ static char *config_asm_rcs_id = "$Source$ $Revision$";
 #define AS_HIDDEN	".hidden"
 #define AS_INTERNAL     ".internal"
 #define AS_PROTECTED    ".protected"
+#define AS_PD1      	"0x3e"
+#define AS_PD2		"0x67"
 
 extern BOOL CG_emit_non_gas_syntax;
 

@@ -1850,8 +1850,16 @@ layout_type (tree type)
 	finish_record_layout (rli, /*free_p=*/true);
 
 #ifdef KEY
-	if (flag_spin_file && gspin_invoked(type))
+	if (flag_spin_file && gspin_invoked(type)) {
+          /* bug929 open64.net. Don't miss the type align field update
+             after the layout is re-calulated. */
+          gs_t align_node;
+          align_node = __gs (IB_INT);
+          _gs_n (align_node, TYPE_ALIGN (type));
+          gs_set_operand ((gs_t) GS_NODE (type), GS_TYPE_ALIGN, align_node);
+
 	  gs_x (type);
+        }
 #endif
       }
       break;

@@ -2247,17 +2247,31 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
 #endif
     {
       vp_idx = Identify_vsym(wn);
-      occ = Enter_occ_tab(wn, vp_idx);
-      Analyze_Base_Flow_Free(occ->Points_to(), wn);
-      vp_idx = Adjust_vsym(vp_idx, occ);
-      if (occ->Points_to()->Pointer () != NULL) {
-	// TODO: We need adjust the offset and access size for MTYPE_BS.
-	//   give up for the time being.
-	if (WN_desc (wn) != MTYPE_BS) {
-	  occ->Points_to()->Set_byte_size (WN_object_size(wn));
-	} else {
-	  occ->Points_to()->Invalidate_ptr_info ();
+      BOOL is_compiler_temp = FALSE;
+      if (vp_idx) {
+	ST * st = aux_stab[vp_idx].St();
+	if (st && ST_pt_to_compiler_generated_mem(st))
+	  is_compiler_temp = TRUE;
+      }
+	
+      if (!vp_idx || !aux_stab[vp_idx].Points_to()->No_alias()
+	  || !is_compiler_temp) {
+	occ = Enter_occ_tab(wn, vp_idx);
+	Analyze_Base_Flow_Free(occ->Points_to(), wn);
+	vp_idx = Adjust_vsym(vp_idx, occ);
+	if (occ->Points_to()->Pointer () != NULL) {
+	  // TODO: We need adjust the offset and access size for MTYPE_BS.
+	  //   give up for the time being.
+	  if (WN_desc (wn) != MTYPE_BS) {
+	    occ->Points_to()->Set_byte_size (WN_object_size(wn));
+	  } else {
+	    occ->Points_to()->Invalidate_ptr_info ();
+	  }
 	}
+      }
+      else {
+	occ = Enter_occ_tab(wn, vp_idx);
+	occ->Points_to()->Copy_fully(aux_stab[vp_idx].Points_to());
       }
     }
     break;
@@ -2285,17 +2299,31 @@ void OPT_STAB::Allocate_mu_chi_and_virtual_var(WN *wn, BB_NODE *bb)
 #endif
     {
       vp_idx = Identify_vsym(wn);
-      occ = Enter_occ_tab(wn, vp_idx);
-      Analyze_Base_Flow_Free(occ->Points_to(), wn);
-      vp_idx = Adjust_vsym(vp_idx, occ);
-      if (occ->Points_to()->Pointer () != NULL) {
-        // TODO: We need adjust the offset and access size for MTYPE_BS. 
-        //   give up for the time being.
-        if (WN_desc (wn) != MTYPE_BS) {
-          occ->Points_to()->Set_byte_size (WN_object_size(wn));
-        } else {
-          occ->Points_to()->Invalidate_ptr_info ();
-        }
+      BOOL is_compiler_temp = FALSE;
+      if (vp_idx) {
+	ST * st = aux_stab[vp_idx].St();
+	if (st && ST_pt_to_compiler_generated_mem(st))
+	  is_compiler_temp = TRUE;
+      }
+      
+      if (!vp_idx || !aux_stab[vp_idx].Points_to()->No_alias() 
+	  || !is_compiler_temp) {
+	occ = Enter_occ_tab(wn, vp_idx);
+	Analyze_Base_Flow_Free(occ->Points_to(), wn);
+	vp_idx = Adjust_vsym(vp_idx, occ);
+	if (occ->Points_to()->Pointer () != NULL) {
+	  // TODO: We need adjust the offset and access size for MTYPE_BS. 
+	  //   give up for the time being.
+	  if (WN_desc (wn) != MTYPE_BS) {
+	    occ->Points_to()->Set_byte_size (WN_object_size(wn));
+	  } else {
+	    occ->Points_to()->Invalidate_ptr_info ();
+	  }
+	}
+      }
+      else {
+	occ = Enter_occ_tab(wn, vp_idx);
+	occ->Points_to()->Copy_fully(aux_stab[vp_idx].Points_to());
       }
     }
     break;
@@ -3095,15 +3123,17 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
   case OPR_MLOAD:
   case OPR_ILOADX:
     occ = Get_occ(wn);
-    Is_True(!WOPT_Enable_Alias_Classification ||
-	    REGION_has_black_regions(g_comp_unit->Rid()) ||
-	    occ->Points_to()->Alias_class() != OPTIMISTIC_AC_ID,
-	    ("indirect load has OPTIMISTIC_AC_ID"));
-    Is_True(!WOPT_Enable_Alias_Classification ||
-	    (WOPT_Alias_Class_Limit != UINT32_MAX) ||
-	    REGION_has_black_regions(g_comp_unit->Rid()) ||
-	    occ->Points_to()->Alias_class() != PESSIMISTIC_AC_ID,
-	    ("indirect load has PESSIMISTIC_AC_ID"));
+    if (!occ->Points_to()->No_alias()) {
+      Is_True(!WOPT_Enable_Alias_Classification ||
+	      REGION_has_black_regions(g_comp_unit->Rid()) ||
+	      occ->Points_to()->Alias_class() != OPTIMISTIC_AC_ID,
+	      ("indirect load has OPTIMISTIC_AC_ID"));
+      Is_True(!WOPT_Enable_Alias_Classification ||
+	      (WOPT_Alias_Class_Limit != UINT32_MAX) ||
+	      REGION_has_black_regions(g_comp_unit->Rid()) ||
+	      occ->Points_to()->Alias_class() != PESSIMISTIC_AC_ID,
+	      ("indirect load has PESSIMISTIC_AC_ID"));
+    }
     vp_idx = occ->Aux_id();
     occ->New_mem_mu_node(vp_idx, Occ_pool());
 
@@ -3118,15 +3148,17 @@ OPT_STAB::Generate_mu_and_chi_list(WN *wn, BB_NODE *bb)
   case OPR_MSTORE:
   case OPR_ISTOREX:
     occ = Get_occ(wn);
-    Is_True(!WOPT_Enable_Alias_Classification ||
-	    REGION_has_black_regions(g_comp_unit->Rid()) ||
-	    occ->Points_to()->Alias_class() != OPTIMISTIC_AC_ID,
-	    ("indirect store has OPTIMISTIC_AC_ID"));
-    Is_True(!WOPT_Enable_Alias_Classification ||
-	    (WOPT_Alias_Class_Limit != UINT32_MAX) ||
-	    REGION_has_black_regions(g_comp_unit->Rid()) ||
-	    occ->Points_to()->Alias_class() != PESSIMISTIC_AC_ID,
-	    ("indirect store has PESSIMISTIC_AC_ID"));
+    if (!occ->Points_to()->No_alias()) {
+      Is_True(!WOPT_Enable_Alias_Classification ||
+	      REGION_has_black_regions(g_comp_unit->Rid()) ||
+	      occ->Points_to()->Alias_class() != OPTIMISTIC_AC_ID,
+	      ("indirect store has OPTIMISTIC_AC_ID"));
+      Is_True(!WOPT_Enable_Alias_Classification ||
+	      (WOPT_Alias_Class_Limit != UINT32_MAX) ||
+	      REGION_has_black_regions(g_comp_unit->Rid()) ||
+	      occ->Points_to()->Alias_class() != PESSIMISTIC_AC_ID,
+	      ("indirect store has PESSIMISTIC_AC_ID"));
+    }
     vp_idx = occ->Aux_id();
     chi = occ->Mem_chi_list();
 

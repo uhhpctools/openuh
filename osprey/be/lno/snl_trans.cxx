@@ -83,8 +83,6 @@ const static char *rcs_id =   snl_CXX "$Revision: 1.8 $";
 #include "debug.h" 
 #include "permute.h"
 #include "tile.h" 
-#include "prompf.h"
-#include "anl_driver.h"
 #include "cond.h"
 #include "wind_down.h"
 #include "ff_utils.h"
@@ -562,65 +560,6 @@ extern void Print_Interchange(FILE* file,
 }
 
 //-----------------------------------------------------------------------
-// NAME: Prompf_Interchange 
-// FUNCTION: For the SNL with outermost loop 'wn_outer' record that the 
-//   'permutation' of length 'nloops' has been performed in the Prompf_Info. 
-//-----------------------------------------------------------------------
-
-extern void Prompf_Interchange(WN* wn_outer, 
-			       INT permutation[], 
-			       INT nloops) 
-{
-  if (nloops == 0 || Identity_Permutation(permutation, nloops))
-    return;
-  WN* wn_inner = SNL_Get_Inner_Snl_Loop(wn_outer, nloops); 
-  INT outer_depth = Do_Loop_Depth(wn_outer); 
-  DOLOOP_STACK stack(&LNO_local_pool); 
-  Build_Doloop_Stack(wn_inner, &stack); 
-  INT* old_id = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool); 
-  INT* new_id = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool); 
-  INT i;
-  for (i = 0; i < nloops; i++) { 
-    WN* wn_loop = stack.Bottom_nth(outer_depth + i); 
-    old_id[i] = WN_MAP32_Get(Prompf_Id_Map, wn_loop); 
-  } 
-  for (i = 0; i < nloops; i++) 
-    new_id[i] = old_id[permutation[i]];
-  Prompf_Info->Interchange(old_id, new_id, nloops);
-}
-
-//-----------------------------------------------------------------------
-// NAME: Prompf_Interchanges 
-// FUNCTION: For the SNL with outermost loop 'wn_outer' record that the 
-//   'permutation' of length 'nloops' has been performed in the Prompf_Info. 
-// NOTE: Prompf_Interchanges() differs from Prompf_Interchange() in that 
-//   it breaks up a single large permutation into a series of smaller 
-//   permutations. 
-//-----------------------------------------------------------------------
-
-extern void Prompf_Interchanges(WN* wn_outer, 
-				INT permutation[], 
-				INT nloops)
-{ 
-  if (permutation == NULL) 
-    return; 
-  INT outer_depth = Do_Loop_Depth(wn_outer);
-  DOLOOP_STACK stack(&PROMPF_pool); 
-  WN* wn_inner = SNL_Get_Inner_Snl_Loop(wn_outer, nloops); 
-  Build_Doloop_Stack(wn_inner, &stack); 
-  INT last = -1;
-  INT* spermutation = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-  for (INT first = 0; first < nloops; first = last + 1) {
-    last = Permutation_Last(first, permutation, nloops);
-    for (INT i = first; i <= last; i++)
-      spermutation[i - first] = permutation[i] - first;
-    INT snloops = last - first + 1;
-    WN* wn_souter = stack.Bottom_nth(outer_depth + first);
-    Prompf_Interchange(wn_souter, spermutation, snloops);
-  }
-}
-
-//-----------------------------------------------------------------------
 // NAME: Scale_FB_Info_Loop
 // FUNCTION: Multiply FB frequency of all fields of *filp by scale
 //-----------------------------------------------------------------------
@@ -807,8 +746,6 @@ extern WN* SNL_Permute_Loops(WN* wn_outer,
       spermutation[i - first] = permutation[i] - first; 
     INT snloops = last - first + 1; 
     WN* wn_souter = stack.Bottom_nth(outer_depth + first);  
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) 
-      Prompf_Interchange(wn_souter, spermutation, snloops); 
     if (invariant) 
       wn_new_outer = SNL_INV_Permute_Loops(wn_souter, spermutation, snloops,
 	warn_lexneg);
@@ -1045,7 +982,7 @@ extern WN* Tile_Loop(WN* wn_loop,
   if (Bound_Is_Too_Messy(dli->UB))
     Hoist_Upper_Bound(wn_loop, &stack, &LNO_default_pool); 
   WN* outer_tile = SNL_INV_Cache_Block(NULL, &ti, permloop, loop_ls, 
-    &region, reason, outersym, pool, FALSE);
+    &region, reason, outersym, pool);
   if (Cur_PU_Feedback) {
     INT32 orig_count = WN_MAP32_Get(WN_MAP_FEEDBACK, WN_start(wn_loop));
     if (orig_count > 0) {
@@ -1136,11 +1073,6 @@ extern SNL_REGION SNL_Regtile_Loop(WN* outerloop,
 
   SYMBOL	indexsym(WN_index(outerloop));
   indexsym.Type = wtype;
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT loop_id = WN_MAP32_Get(Prompf_Id_Map, outerloop); 
-    Prompf_Info->Register_Tile(loop_id);
-  } 
 
   WN*                       wdloop = NULL;
   SX_INFO*                  wdpinfo = NULL;

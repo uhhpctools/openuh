@@ -52,6 +52,7 @@ the HPCTools group website for download.
 Open64 Merge History:
 ---------------------
 
+[13]  merged r3826:4037 of Open64 main trunk. (2/28/13)
 [12]  merged r3777:3826 of Open64 main trunk. (6/17/12)
 [11]  merged r3741:3777 of Open64 main trunk. (11/14/11)
 [10]  merged r3669:3741 of Open64 main trunk. (9/23/11)
@@ -67,6 +68,24 @@ Open64 Merge History:
 
 
 Notes:
+
+Merge [13] merges several months worth of commits from Open64 5.x main trunk
+into OpenUH. This spans numerous bug fixes in LNO, WOPT, and CG, as well as
+several new features. Included is a patch for x6-ppc32 cross compiling
+support, CGSSA implementation, auto-detection of CPU on the host system for a
+more accurate target architecture, correction of ipa-link arguments (for
+debugging),  allowing debugging of sources compiled from different directory,
+supporting variable length arrays in structs, removing some unused PROMPF
+implementation code, updates to CG scheduler, removal of unused GCC 4.0 C/C++
+front-end, a new perl version of kopencc script, some misc.  transformations
+to enable various loop optimizations, fixing build errors when compiling with
+gcc 4.7, and a configure-based build system for PPC native compiler. The
+removal of PROMPF is something we may try to reverse in the future, because
+some analyses implemented in OpenUH several years ago used it.  Open64 bugs
+fixed by this merge are: 362, 778-779, 783, 785, 787, 798, 830, 889, 891, 897,
+903, 908, 910-912, 924, 929, 933-934, 938-941, 943-944, 947-952, 954-955,
+962-963, 966-967, 969, 970-972, 978, 999, 1003-1004, 1800 (from Open64
+bugzilla).
 
 Merge [12] merges some early features added to Open64 5.0 from the open64 main
 trunk. This includes improvements for GNU compatibility, Nystrom alias

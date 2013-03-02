@@ -1,4 +1,6 @@
-#!/bin/sh
+#! /usr/bin/perl -w
+#
+#  Copyright (C) 2012 Hewlett Packard, Company.  All Rights Reserved.
 # 
 #  Copyright (C) 2006-2009 Tsinghua University.  All Rights Reserved.
 #
@@ -25,78 +27,103 @@
 # ia32 native, Linux kernel build, tested version: 2.6.27
 # Useage:
 #	make CC=kopencc 
+# We updated it to build Linux 2.6.32.6 on x86_64 target
+# with the same usage.
 
-ARGS=$@
+use strict;
 
-#optimize -O2
-OPENCC_OPTS=" -O2 "
-#Use gcc 4 front end for x86 machine
-OPENCC_OPTS=" $OPENCC_OPTS -m32 -gnu4 "
-#speculation off for kernel compilation
-#It's only for IA64. If you are compileing kernel for IA64, uncomment next line
-#OPENCC_OPTS=" $OPENCC_OPTS -Wb,-IPFEC:spec=off -IPFEC:spec=off "
-#swp off for kernel
-OPENCC_OPTS=" $OPENCC_OPTS -OPT:swp=off -OPT:Olimit=0 "
-#for debug, can use these options to show compilation process and keep inter-files
-# OPENCC_OPTS=" $OPENCC_OPTS -show -keep"
-#for kernel
-OPENCC_OPTS=" $OPENCC_OPTS -D__KERNEL__ "
+my @newargs;
+my $opt_level="";
 
-NEWARGS="$OPENCC_OPTS "
+## adjust the gcc special options
+foreach my $arg (@ARGV) {
+  SWITCH: {
+      if ($arg eq "-fno-delete-null-pointer-checks") { last SWITCH; }
+      if ($arg eq "-mno-red-zone") { last SWITCH; }
+      if ($arg eq "-mno-sse") { last SWITCH; }
+      if ($arg eq "-mno-sse2") { last SWITCH; }
+      if ($arg eq "-mno-3dnow") { last SWITCH; }
+      if ($arg eq "-mno-mmx") { last SWITCH; }
+      if ($arg eq "-funit-at-a-time") { last SWITCH; }
+      if ($arg eq "-maccumulate-outgoing-args") { last SWITCH; }
+      if ($arg eq "-fno-asynchronous-unwind-tables") { last SWITCH; }
+      if ($arg eq "-fno-stack-protector") { last SWITCH; }
+      if ($arg eq "-fno-optimize-sibling-calls") { last SWITCH; }
+      if ($arg eq "-fno-strict-overflow") { last SWITCH; }
+      if ($arg eq "-fno-dwarf2-cfi-asm") { last SWITCH; }
+      if ($arg eq "-fconserve-stack") { last SWITCH; }
+      if ($arg eq "-Wno-unused-but-set-variable") { last SWITCH; }
+      if ($arg eq "-Wuninitialized") { last SWITCH; }
+      if ($arg eq "-Wall") { last SWITCH; }
+      if ($arg eq "-mtune=generic") { last SWITCH; }
+      if ($arg eq "-fasynchronous-unwind-tables") { last SWITCH; }
+      if ($arg eq "-fno-toplevel-reorder") { last SWITCH; }
+      if ($arg =~ "^-O([0-9]|s)") { if ($opt_level eq "") {$opt_level = $arg; } else {last SWITCH; }}
+      if ($arg =~ "^-Wframe-larger-than=") { last SWITCH; }
+      if ($arg =~ "^-mpreferred-stack-boundary=") { last SWITCH; }
+      
+      if ($arg eq "-v") { 
+          print "Wrapper functionality for opencc kernel build ver 2.0\n"; 
+          exit exec("opencc","-v"); 
+      }
+      if ($arg eq "-help") {
+          print "kopencc for linux kernel builing\n";
+          print "cd /path/to/kernel/source\n";
+          print "make V=1 CC=\"kopencc\"\n";
+          exit 0;
+      }
 
-if [ -z "$GCC" ] 
-then
-	GCC=/usr/bin/gcc
-fi
+## change special characters to fit for command line
+## ( => \(
+## ) => \)
+## ".*" -> '".*"'
+## < => \<
+## > => \>
+## | => \| 
+      $arg =~ s /\(/\\(/g; 
+      $arg =~ s /\)/\\)/g;
+      $arg =~ s /"(.*)"$/'"$1"'/g;
+      $arg =~ s /\</\\</g;
+      $arg =~ s /\|/\\|/g;
+      $arg =~ s /\>/\\>/g;
 
-for ARG in $@  
-do
+      push @newargs , $arg;
+    }
+}
 
-case $ARG in
--D__KERNEL__ )
-	NEWARGS="$NEWARGS $KERNEL_OPTS $ARG"
-	;;
+## tuning options
+push @newargs, "-Wno-unused";
+push @newargs, "-LANG:global_asm=1";
 
--O1 | -O2 | -O3 )
-	;;
+## miscellaneous
+if ( $opt_level eq "-O0" ) {
+    push @newargs, "-finline";
+} 
 
--v )
-	opencc -v
-	exit 0
-	;;
+if ( $opt_level eq "-O2" || 
+     $opt_level eq "-Os" ||
+     $opt_level eq "" ) {
+## codesize tuning
+    push @newargs, "-OPT:unroll_times=0";
+    push @newargs, "-WOPT:pro_loop_limit=0";
+    push @newargs, "-WOPT:tail_dup_max_clone=0";
+    push @newargs, "-CG:hb_tail_duplication=0";
+    push @newargs, "-CG:p2align=0";
+## opencc special options 
+    push @newargs, "-OPT:swp=off";
+    push @newargs, "-OPT:Olimit=0";
+    push @newargs, "-WOPT:warn_uninit=0";
+}
 
--help )
-	opencc -help
-	echo
-	echo kopencc: Wrapper around opencc for gcc compatibility
-	exit  $?
-	;;
+## the system command
+my $cmd="opencc";
+foreach my $i (@newargs) {
+    $cmd .= " " . $i;
+}
 
-# ignore these gcc options
--Wstrict-prototypes | -Wwrite-strings | -Winline | -Wno-uninitialized 	\
-| -Wno-format | -Wno-trigraphs | -Wno-unused | -nostdinc | -Wall	\
-| -fno-inline-functions | -finhibit-size-directive | -fno-exceptions 	\
-| -fno-inline | -ffloat-store | -fno-builtin | -fexceptions | -pipe 	\
-| -fomit-frame-pointer | --param | max-inline-insns=* 			\
-| -frename-registers | -falign-functions=* | -fno-strict-aliasing 	\
-| -fno-common | -ffixed-r13 | -mb-step            			\
-| -mpreferred-stack-boundary=2 | -march=* | -malign-functions=* 	\
-| -malign-jumps=* | -malign-loops=* | -gstabs				\
-| -fno-optimize-sibling-calls \
-| -mconstant-gp | -mno-mmx | -fno-asynchronous-unwind-tables \
-| -mtune=* \
-| -msoft-float | -mregparm=3 | -maccumulate-outgoing-args \
-| -dynamic-linker | -fno-delete-null-pointer-checks )
-	;;
-
-* )
-	NEWARGS="$NEWARGS $ARG"
-	;;
-esac
-
-done
-
-opencc $NEWARGS 
-
-exit $?
+## print the command for debug
+## and execute the command.
+print STDERR "# ",$cmd;
+print STDERR "\n";
+exec($cmd);
 

@@ -8,7 +8,6 @@ W2C_Outfile_Translate_Pu
 W2C_Pop_PU
 W2C_Process_Command_Line
 W2C_Push_PU
-W2C_Set_Prompf_Emission
 W2C_Set_Frequency_Map
 W2C_Get_Transformed_Src_Path
 W2C_Should_Emit_Nested_PUs

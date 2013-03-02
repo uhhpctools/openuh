@@ -3615,7 +3615,7 @@ Targ_Print ( const char *fmt, TCON c )
 
     case MTYPE_C10:
       if (fmt == NULL)
-	fmt = "%#21.20, %#21.20";
+	fmt = "%#21.20Lg, %#21.20Lg";
       sprintf(r, fmt, TCON_R10(c), TCON_IR10(c));
 #if !(defined(FRONT_END_C) || defined(FRONT_END_CPLUSPLUS))
       if (re = strchr(r, 'e'))

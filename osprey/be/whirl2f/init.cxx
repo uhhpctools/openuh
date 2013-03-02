@@ -62,7 +62,6 @@ extern void (*W2F_Pop_PU_p)(void);
 extern void (*W2F_Process_Command_Line_p)(INT phase_argc, const char *phase_argv[], 
   INT argc, const char *argv[]);
 extern void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
-extern void (*W2F_Set_Prompf_Emission_p)(WN_MAP *construct_map);
 extern void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 extern const char * (*W2F_Get_Transformed_Src_Path_p)(void);
 extern BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);
@@ -87,7 +86,6 @@ struct W2F_INIT
       W2F_Pop_PU_p = W2F_Pop_PU;
       W2F_Process_Command_Line_p = W2F_Process_Command_Line;
       W2F_Push_PU_p = W2F_Push_PU;
-      W2F_Set_Prompf_Emission_p = W2F_Set_Prompf_Emission;
       W2F_Set_Frequency_Map_p = W2F_Set_Frequency_Map;
       W2F_Get_Transformed_Src_Path_p = W2F_Get_Transformed_Src_Path;
       W2F_Should_Emit_Nested_PUs_p = W2F_Should_Emit_Nested_PUs;

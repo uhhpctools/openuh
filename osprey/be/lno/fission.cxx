@@ -71,8 +71,6 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.fissio
 #include "opt_du.h"
 #include "glob.h"
 #include "tlog.h"
-#include "prompf.h"
-#include "anl_driver.h"
 
 #pragma weak New_Construct_Id
 
@@ -1717,47 +1715,6 @@ WN_MAP loop_map, UINT32 total_loops, FF_STMT_LIST *stl_1, FF_STMT_LIST *stl_2)
   INT clone_count = loop.Elements() - 1; 
   Separate_And_Update(in_loop, loop, fission_level);
   
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    WN** wn_clone = CXX_NEW_ARRAY(WN*, clone_count, &PROMPF_pool); 
-    INT loop_count = 0; 
-    WN* wn = 0;
-    for (wn = in_loop; wn != NULL; wn = LWN_Get_Parent(wn))
-      if (WN_opcode(wn) == OPC_DO_LOOP && ++loop_count == fission_level)
-        break; 
-    WN* wn_outer = wn;  
-    INT i = 0; 
-    for (wn = WN_next(wn_outer); i < clone_count; wn = WN_next(wn))  
-      wn_clone[i++] = wn;  
-    STACK<WN*> st_old(&PROMPF_pool);
-    STACK<WN*> st_new(&PROMPF_pool);
-    for (i = 0; i < clone_count; i++) {
-      st_old.Clear();
-      st_new.Clear();
-      Prompf_Assign_Ids(wn_outer, wn_clone[i], &st_old, &st_new, 
-        FALSE, fission_level);
-      INT nloops = st_old.Elements();
-      if (nloops > 0) {
-	INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	PROMPF_LINES** old_lines = CXX_NEW_ARRAY(PROMPF_LINES*, nloops, 
-          &PROMPF_pool);
-        PROMPF_LINES** new_lines = CXX_NEW_ARRAY(PROMPF_LINES*, nloops, 
-          &PROMPF_pool);
-	for (INT i = 0; i < nloops; i++) {
-	  old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-	  new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-          old_lines[i] = CXX_NEW(PROMPF_LINES(st_old.Bottom_nth(i), 
-	    &PROMPF_pool), &PROMPF_pool); 
-          new_lines[i] = CXX_NEW(PROMPF_LINES(st_new.Bottom_nth(i), 
-	    &PROMPF_pool), &PROMPF_pool); 
-	}
-	Prompf_Info->Fission(old_ids, old_lines, new_ids, new_lines, nloops);
-	CXX_DELETE_ARRAY(old_ids, &LNO_local_pool);
-	CXX_DELETE_ARRAY(new_ids, &LNO_local_pool);
-      } 
-    }
-  }
-
   if (LNO_Test_Dump) sdg->Print(stdout);
   if (LNO_Test_Dump) adg->Print(stdout);
 

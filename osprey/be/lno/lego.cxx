@@ -390,13 +390,13 @@ static void Delete_Distr_Pragmas (DISTR_ARRAY* dact) {
 static void Delete_All_Distr_Pragmas () {
   for (INT i=0; i<da_stack->Elements(); i++) {
     DISTR_INFO* dinfo = da_stack->Bottom_nth(i);
-    INT i;
-    for (i=0; i<dinfo->Num_Dact(); i++) {
-      DISTR_ARRAY* dact = dinfo->Get_Dact(i);
+    INT j;
+    for (j=0; j<dinfo->Num_Dact(); j++) {
+      DISTR_ARRAY* dact = dinfo->Get_Dact(j);
       Delete_Distr_Pragmas (dact);
     }
-    for (i=0; i<dinfo->Num_Gen_Redistr(); i++) {
-      DISTR_ARRAY* dact = dinfo->Get_Gen_Redistr(i);
+    for (j=0; j<dinfo->Num_Gen_Redistr(); j++) {
+      DISTR_ARRAY* dact = dinfo->Get_Gen_Redistr(j);
       Delete_Distr_Pragmas (dact);
     }
   }

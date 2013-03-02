@@ -26,7 +26,7 @@
  */
 
 /* 
- * A local instruction scheduler dedicated to opteron.
+ * A local instruction scheduler dedicated to family 15h amd processors.
  * May 29, 2003, Augmented by AMD in January 2010.
  */
 
@@ -69,7 +69,6 @@ static uint8_t  sched_group_imm_size = 0;
 static uint8_t  sched_group_64bit_imm_count = 0;
 static bool     BB_contains_x87 = false;
 static bool     BB_fails_rid = false;
-static bool     BB_calc_off = false;
 static bool     sched_trace;
 
 typedef struct {
@@ -109,7 +108,7 @@ typedef struct {
   uint16_t size;
   long     offset_start;
   long     offset_end;
-  int      members[4];
+  long     members[4];
 } GROUP_INFO;
 
 typedef struct {
@@ -122,7 +121,7 @@ typedef struct {
 
 static DECODE_INFO window_data;
 
-#define ASSERT(c)   FmtAssert( c, ("KEY_SCH error") );
+#define ASSERT(c)   FmtAssert( c, ("DSP_SCH error") );
 
 #define Get_OPR(op)               (&opr_array[OP_map_idx(op)])
 #define OPR_release_time(o)       ((o)->release_time)
@@ -159,9 +158,9 @@ static const int num_fu[] = {
 
 class MRT {
 private:
-  BOOL trace;
+  bool trace;
   BB  *bb;
-  KEY_SCH *sched;
+  DSP_SCH *sched;
 
   REGISTER_SET live_in[ISA_REGISTER_CLASS_MAX+1];
   REGISTER_SET live_out[ISA_REGISTER_CLASS_MAX+1];
@@ -218,12 +217,12 @@ public:
   static const int issue_rate = 4;
   ICU cur_res;
 
-  void Init( BB*, KEY_SCH *sched, int, BOOL, MEM_POOL* );
+  void Init( BB*, DSP_SCH *sched, int, bool, MEM_POOL* );
   void Reserve_Resources( OP*, int );
   void Set_Completion_Time( OP* );
   void Compute_Issue_Time( OP*, int );
   BB  *Get_Cur_BB( void ) { return bb; }
-  KEY_SCH *Get_Cur_Sched( void ) { return sched; }
+  DSP_SCH *Get_Cur_Sched( void ) { return sched; }
 
   bool TOP_is_push( const TOP top )
   {
@@ -360,16 +359,27 @@ public:
         ( window_data.window_pair[1].opr_count ) ){
       long window_start = window_data.window_pair[0].offset_start;
       long window_end = window_data.cur_offset;
-      window_start = (window_start / 16) * 16;
-      window_end += OPR_insn_size(opr);
-      window_end = (window_end / 16) * 16;
+      int total_pf_bytes = window_data.window_pair[1].total_pf_bytes;
+      bool pf_bytes_enough = true;
+      window_end = 16 + ( ( window_data.cur_offset - 1) & ~ 15 );
+
+      int padding = window_end - window_data.cur_offset;
+      if( TOP_is_fastpath_db(top) )
+        total_ops += 2;
+      else
+        total_ops++;
+
+      // if this is true, we need to see if the current instruction can fit
       if( ( (window_end - window_start) & 0x30 ) == 0x30 ){
-        window_data.term_pair_for_fit = true;
-        return false;
+        int new_offset = window_data.cur_offset + OPR_insn_size(opr);
+        if( new_offset > window_end ){
+          window_data.term_pair_for_fit = true;
+          return false;
+        }
       }
     }
 
-    return Resource_Table[c]->resources[cur_res][dispatch_unit];
+    return Resource_Table[clock]->resources[cur_res][dispatch_unit];
   }
 
   int  Dispatched_Ops( int c ) { return Resource_Table[c]->dispatched_ops; }
@@ -406,6 +416,24 @@ ICU MRT::Lookup_Property_By_Pipeinfo( OP *op,
 }
 
 
+static void Add_Nop_To_Schedule( BB *bb, OP *target, OP *nop, DSP_SCH *sched )
+{
+  BB_Insert_Op_After( bb, target, nop );
+  OPR *opr = Get_OPR(nop);
+  OPR_insn_size(opr) = OP_dpadd(nop);
+  OPR_sched_order(opr) = sched_order++;
+  VECTOR_Add_Element( sched->_sched_vector, nop );
+  if( sched_trace ) {
+    fprintf(TFile,
+            "window[%d] : op(sched=%d) = %s, with size = %d\n",
+            window_data.index, 
+            OPR_sched_order(opr),
+            TOP_Name(OP_code(nop)),
+            OPR_insn_size(opr));
+  }
+}
+
+
 static void Init_Window_Data( void )
 {
   int i;
@@ -429,7 +457,7 @@ static void Init_Window_Data( void )
 }
 
 
-static void Add_OPR_To_Current_Window( OPR *opr, int op_map_idx )
+static void Add_OPR_To_Current_Window( OPR *opr, OP *op )
 {
   uint16_t window_idx = window_data.index;
   uint16_t opr_idx = window_data.window_pair[window_idx].opr_count;
@@ -437,7 +465,7 @@ static void Add_OPR_To_Current_Window( OPR *opr, int op_map_idx )
     window_data.window_pair[window_idx].offset_start = window_data.cur_offset;
   }
   window_data.window_pair[window_idx].sched_group = OPR_sched_group(opr);
-  window_data.window_pair[window_idx].members[opr_idx] = op_map_idx;
+  window_data.window_pair[window_idx].members[opr_idx] = (long)op;
   window_data.window_pair[window_idx].opr_count++;
   window_data.window_pair[window_idx].total_pf_bytes += OPR_num_pf_bytes(opr);
   window_data.window_pair[window_idx].size += OPR_insn_size(opr);
@@ -447,77 +475,143 @@ static void Add_OPR_To_Current_Window( OPR *opr, int op_map_idx )
 }
 
 
-static void Pad_Windows( int padding )
+int Calculate_Imm_Range(long val);
+
+
+int Update_Branch_Insn_Size( int padding, OPR *opr )
+{
+  int branch_distance = window_data.cur_offset; 
+  uint16_t imm_size = Calculate_Imm_Range( branch_distance ); 
+  uint16_t size_change = 0;
+
+  switch( imm_size ) {
+  case 2:
+  case 4:
+    // 3 extra bytes for the imm, 1 for the opcode
+    // because the encoded imm is either 1 or 4 for branches
+    size_change = 4;
+    break;
+  default:
+    break;
+  }
+
+  OPR_insn_size(opr) += size_change;
+  padding = ( padding > size_change ) ? ( padding - size_change ) : 0;
+
+  return padding;
+}
+
+
+int Pad_Windows( int padding, int total_insns )
 {
   uint16_t window_idx = window_data.index;
-  uint16_t pad_left = padding;
-  int i, j;
+  uint16_t pad_left;
+  int i, j, k, n;
+  int pf_iter = 0;
+  int bb_len = 0;
+  bool has_branch = false;
+  OP *br_op = NULL;
 
-  if( padding == 0 ) return;
+  if( padding == 0 ) return padding;
 
   for( i = 0; i <= window_idx; i++ ){
-    int n = window_data.window_pair[i].opr_count;
+    n = window_data.window_pair[i].opr_count;
     BB* bb = mrt.Get_Cur_BB();
+
+    if( bb_len == 0 )
+      bb_len = BB_length(bb);
+
     for( j = 0; j < n; j++ ){
-      OP* op;
-      int op_map_idx = window_data.window_pair[i].members[j];
-      op = OP_MAP_Idx_Op( bb, op_map_idx );
+      OP* op = (OP*)window_data.window_pair[i].members[j];
       if( op != NULL ){
         OPR* opr = Get_OPR(op);
         int opr_pad = OPR_num_pf_bytes(opr);
-        if( pad_left ){
-          if( opr_pad >= pad_left ){
-            OP_dpadd(op) = opr_pad - pad_left;
-            pad_left = 0;
-            break;
-          } else {
-            OP_dpadd(op) = opr_pad;
-            pad_left -= opr_pad;
-          }
+        if( opr_pad > pf_iter ) pf_iter = opr_pad;
+        if( OP_br(op) ){
+          has_branch = true;
+          padding = Update_Branch_Insn_Size( padding, opr );
         }
       }
+    }
+  }
+
+  if( padding == 0 ) return padding;
+
+  pad_left = padding;
+
+  // Iteratively add padding to all insns which can take padding until
+  // we either run out of required padding or cannot pad any more insns. 
+  for( k = 0; k < pf_iter; k++ ){
+    for( i = 0; i <= window_idx; i++ ){
+      n = window_data.window_pair[i].opr_count;
+      for( j = 0; j < n; j++ ){
+        OP* op = (OP*)window_data.window_pair[i].members[j];
+        if( OP_br(op) ) continue;
+        if( op != NULL ){
+          OPR* opr = Get_OPR(op);
+          int opr_pad = OPR_num_pf_bytes(opr);
+          if( ( pad_left > 0 ) && ( opr_pad >= ( k + 1 ) ) ){
+            OP_dpadd(op) = k + 1 ;
+            pad_left--;
+          }
+        }
+        if( pad_left == 0 ) break;
+      }
+      if( pad_left == 0 ) break;
     }
     if( pad_left == 0 ) break;
   }
 
   // Add nops if pad_left is non zero
-  if( pad_left != 0 ){
+  if( ( pad_left != 0 ) && ( has_branch == false ) ){
     int k = window_data.window_pair[window_idx].opr_count - 1;
-    int op_map_idx = window_data.window_pair[window_idx].members[k];
+    OP *op = (OP*)window_data.window_pair[window_idx].members[k];
     BB* bb = mrt.Get_Cur_BB();
-    OP* op = OP_MAP_Idx_Op( bb, op_map_idx );
+
+    // return if we have no place to put a nop
+    if( ( window_idx == 1 ) && ( total_insns == 8 ) )
+      return padding;
+
+    // nothing to do if this is a ret insn
+    TOP top = OP_code(op);
+    if (OP_xfer(op) && ((top == TOP_ret) || top == TOP_reti))
+      return padding;
+
     OP* nop = Mk_OP(TOP_nop);
-    KEY_SCH *sched = mrt.Get_Cur_Sched();
+    DSP_SCH *sched = mrt.Get_Cur_Sched();
  
-    printf("creating nop(s) programed to emit %d bytes\n", pad_left);
+    if( sched_trace )
+      fprintf(TFile, "creating nop(s) programed to emit %d bytes\n", pad_left);
 
     // Insert nop(s) and preprogram them to be of size pad_left.
     // Keep in mind that nops of size 1..12 should be the limit, if
-    // we need 13 bytes, we need 2 nops.
+    // we need 13 bytes or more, we emit a 2nd nop.
     OP_dgroup(nop) = sched_group;
-    if( pad_left <= 8 ){
+    if( ( pad_left > 8 ) && ( pad_left < 13 ) ){
       OP_dpadd(nop) = 2;
       pad_left = 0;
-    } else {
+    } else if( pad_left >= 13 ){
       OP_dpadd(nop) = 1;
       pad_left -= 8;
+    } else {
+      OP_dpadd(nop) = 1;
+      pad_left = 0;
     }
+    INT op_map_idx = OP_map_idx(op);
     Set_OP_unrolling( nop, OP_unrolling(op) );
-    Set_OP_orig_idx( nop, op_map_idx );
     Set_OP_unroll_bb( nop, OP_unroll_bb(op) ); 
-    BB_Insert_Op_After( bb, op, nop );
-    VECTOR_Add_Element( sched->_sched_vector, nop );
+    Add_Nop_To_Schedule( bb, op, nop, sched );
     if( pad_left > 0 ){
       OP *prev = nop;
-      nop = Dup_OP(nop);
+      nop = Mk_OP(TOP_nop);
       OP_dpadd(nop) = 2;
       Set_OP_unrolling( nop, OP_unrolling(op) );
-      Set_OP_orig_idx( nop, op_map_idx );
       Set_OP_unroll_bb( nop, OP_unroll_bb(op) ); 
-      BB_Insert_Op_After( bb, prev, nop );
-      VECTOR_Add_Element( sched->_sched_vector, nop );
+      Add_Nop_To_Schedule( bb, op, nop, sched );
     }
   }
+
+  return padding;
 }
 
 
@@ -526,6 +620,7 @@ static void Trace_Close_Current_Window( int pair_len,
                                         int total_insns )
 {
   if( sched_trace ) {
+    int i, j;
     uint16_t window_idx = window_data.index;
     fprintf( TFile, 
              "terminating dispatch pair(bb=%d, num windows=%d): info...\n", 
@@ -542,6 +637,19 @@ static void Trace_Close_Current_Window( int pair_len,
              (void*)window_data.window_pair[0].offset_start,
              (void*)window_data.window_pair[window_idx].offset_end,
              (void*)window_data.cur_offset ); 
+    for (i = 0; i <= window_idx; i++) {
+      for (j = 0; j < window_data.window_pair[i].opr_count; j++) {
+        OP *op = (OP*)window_data.window_pair[i].members[j];
+        OPR *opr = Get_OPR(op);
+        fprintf(TFile,
+                "window[%d] : op(sched=%d,group=%d) = %s, with size = %d\n",
+                i, 
+                OPR_sched_order(opr),
+                OPR_sched_group(opr),
+                TOP_Name(OP_code(op)),
+                OPR_insn_size(opr));
+      }
+    }
   }
 }
 
@@ -555,19 +663,10 @@ static void Close_Current_Window( bool full_close )
     // Now calculate the amount of padding bytes and configure the new offset
     int pair_len = window_data.window_pair[window_idx].offset_end -
                      window_data.window_pair[window_idx].offset_start;
-    long new_offset = 16 + ( ( window_data.cur_offset - 1) & ~ 15 );
-    int padding = new_offset - window_data.cur_offset;
     int total_insns = window_data.window_pair[window_idx].opr_count;
 
-    // can we stop here?
-    if( padding <= total_pf_bytes ){
-      window_data.cur_offset = new_offset;
-      Pad_Windows( padding );
-      Trace_Close_Current_Window( pair_len, padding, total_insns );
-      Init_Window_Data();
-    } else {
-      window_data.index++;
-    }
+    // defer padding until close
+    window_data.index++;
   } else if( ( window_idx == 1 ) || ( full_close  == true ) ){
     // Now calculate the amount of padding bytes and configure the new offset
     int pair_len = window_data.window_pair[window_idx].offset_end -
@@ -579,7 +678,7 @@ static void Close_Current_Window( bool full_close )
 
     // Now update to the next 16B aligned addr
     window_data.cur_offset = new_offset;
-    Pad_Windows( padding );
+    padding = Pad_Windows( padding, total_insns );
     Trace_Close_Current_Window( pair_len, padding, total_insns );
     Init_Window_Data();
   }
@@ -606,8 +705,8 @@ static void Print_Register_Set( const char* name,
 }
 
 
-void MRT::Init( BB* cur_bb, KEY_SCH *cur_sched, int size, 
-                BOOL trace, MEM_POOL* mem_pool )
+void MRT::Init( BB* cur_bb, DSP_SCH *cur_sched, int size, 
+                bool trace, MEM_POOL* mem_pool )
 {
   static bool TOP_2_Res_is_valid = false;
 
@@ -736,8 +835,7 @@ bool MRT::Probe_Resources( int cycle, OP* op, int dispatch_unit, bool take_it )
   const TOP top = OP_code(op);
   Resource_Table_Entry* entry = Resource_Table[cycle];
 
-  const ICU res = (take_it) ? cur_res : 
-                    Lookup_Property_By_Pipeinfo( op, cycle, true );
+  const ICU res = Lookup_Property_By_Pipeinfo( op, cycle, true );
 
   if( !entry->resources[res][dispatch_unit] )
     return false;
@@ -758,7 +856,7 @@ void MRT::Reserve_Resources( OP* op, int cycle )
   OPR* opr = Get_OPR( op );
   const int dispatch_unit = Get_Dispatch_Unit( op, cycle, false );
 
-  if( !Probe_Resources( OPR_issue_time(opr), op, dispatch_unit, true ) ){
+  if( !Probe_Resources( cycle, op, dispatch_unit, true ) ){
     ASSERT( false );
   }
 
@@ -798,11 +896,11 @@ void MRT::Reserve_Resources( OP* op, int cycle )
 
   OP_dgroup(op) = OPR_sched_group(opr);
   OPR_bb_id(opr) = BB_id(OP_bb(op));
-  Add_OPR_To_Current_Window( opr, OP_map_idx(op) );
+  Add_OPR_To_Current_Window( opr, op );
 }
 
 
-void KEY_SCH::Build_Ready_Vector()
+void DSP_SCH::Build_Ready_Vector()
 {
   OP* op;
 
@@ -815,7 +913,7 @@ void KEY_SCH::Build_Ready_Vector()
 }
 
 
-void KEY_SCH::Init( BOOL calc_off )
+void DSP_SCH::Init()
 {
   OP* op = NULL;
   RID* rid = BB_rid(bb);
@@ -824,15 +922,15 @@ void KEY_SCH::Init( BOOL calc_off )
   _ready_vector = VECTOR_Init( BB_length(bb), mem_pool );
   _sched_vector = VECTOR_Init( BB_length(bb)*2, mem_pool );
 
+  can_sched = true;
+  sched_order = 0;
   BB_contains_x87 = false;
   BB_fails_rid = false;
-  BB_calc_off = calc_off;
   sched_group_64bit_imm_count = 0;
 
   Init_Window_Data();
 
-  if( BB_calc_off )
-    BB_offset(bb) = window_data.cur_offset;
+  BB_offset(bb) = 0;
 
   int max_indx = 0;
   FOR_ALL_BB_OPs(bb, op){
@@ -846,7 +944,11 @@ void KEY_SCH::Init( BOOL calc_off )
     BB_fails_rid = true;
   }
 
-  max_indx++;
+  if( BB_contains_x87 || BB_call(bb) || BB_fails_rid )
+    can_sched = false; 
+
+  // make some room for nops
+  max_indx += (max_indx / 2);
 
   opr_array = (OPR*) MEM_POOL_Alloc( mem_pool,
 				     sizeof(opr_array[0]) * max_indx );
@@ -881,12 +983,8 @@ void KEY_SCH::Init( BOOL calc_off )
 }
 
 
-void KEY_SCH::Reorder_BB()
+void DSP_SCH::Reorder_BB()
 {
-  // Nothing to do there, the order stays the same.
-  if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off )
-    return;
-
   ASSERT( VECTOR_count(_sched_vector) == BB_length(bb) );
   BB_Remove_All( bb );
 
@@ -907,8 +1005,26 @@ int Find_Imm_Specific( const TOP top )
   case TOP_cmpxxxi8:
   case TOP_rori8:
   case TOP_roli8:
+  case TOP_addi8:
+  case TOP_subi8:
+  case TOP_andi8:
+  case TOP_ori8:
+  case TOP_xori8:
+  case TOP_sari32:
+  case TOP_sari64:
+  case TOP_shli32:
+  case TOP_shri32:
+  case TOP_shli64:
+  case TOP_shri64:
+  case TOP_rori32:
+  case TOP_roli32:
+  case TOP_rori64:
+  case TOP_roli64:
+  case TOP_shldi32:
+  case TOP_shrdi32:
     specific_imm_size = 1;
     break;
+
   case TOP_cmpi16:
   case TOP_cmpxi16:
   case TOP_cmpxxi16:
@@ -917,24 +1033,16 @@ int Find_Imm_Specific( const TOP top )
   case TOP_roli16:
     specific_imm_size = 2;
     break;
+
   case TOP_adci32:
   case TOP_cmpi32:
   case TOP_cmpxi32:
   case TOP_cmpxxi32:
   case TOP_cmpxxxi32:
   case TOP_imuli32:
-  case TOP_ori32:
-  case TOP_rori32:
-  case TOP_roli32:
   case TOP_storenti32:
-  case TOP_shldi32:
-  case TOP_shrdi32:
-  case TOP_shli32:
-  case TOP_shri32:
-  case TOP_subi32:
   case TOP_sbbi32:
   case TOP_testi32:
-  case TOP_xori32:
   case TOP_movi32_2m:
   case TOP_movm_2i32:
   case TOP_cmpi64:
@@ -942,20 +1050,13 @@ int Find_Imm_Specific( const TOP top )
   case TOP_cmpxxi64:
   case TOP_cmpxxxi64:
   case TOP_imuli64:
-  case TOP_ori64:
-  case TOP_rori64:
-  case TOP_roli64:
   case TOP_storenti64:
-  case TOP_sari64:
-  case TOP_shli64:
-  case TOP_shri64:
-  case TOP_subi64:
   case TOP_testi64:
-  case TOP_xori64:
   case TOP_movi64_2m:
   case TOP_movm_2i64:
     specific_imm_size = 4;
     break;
+
   default:
     break;
   }
@@ -967,7 +1068,11 @@ int Find_Imm_Specific( const TOP top )
 int Calculate_Imm_Range(long val)
 {
   int cur_imm_size = 0;
-  if( val != 0 ){
+  if( ( val >= -128 ) && ( val <= 127 ) ){
+    cur_imm_size = 1;
+  } else if( ( val >= -256 ) && ( val <= 255 ) ){
+    cur_imm_size = 2;
+  } else if( val != 0 ){
     val = (val < 0) ? (val * -1) : val;
     for( int j = 0; j < 8; j++ ){
       if( val > 0 ) 
@@ -1016,6 +1121,8 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
       if( TN_is_register(tn) ){
         if( tn == Rip_TN() )
           has_rip_addr = true;
+        else if( TN_register(tn) == RBP )
+          requires_disp = true;
         else if( TN_register(tn) == R13 )
           requires_disp = true;
       }
@@ -1028,15 +1135,19 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
     if( i == offset_idx ){
       if( has_rip_addr == false ) {
         val = (long)OPR_mem_ofst(opr);
-        if( ( val == 0 ) && ( requires_disp == true ) )
+        if( ( val == 0 ) && ( requires_disp == true ) ){
           cur_imm_size = 1;
+        } else if( ( val >= -128 ) && ( val <= 127 ) ){
+          if( ( requires_disp == false ) && ( val != 0 ) )
+            cur_imm_size = 1;
+        }
       } else {
         cur_imm_size = 4;
       }
     } else {
       TN *tn = OP_opnd(op, i);
       if( TN_has_value(tn) ) {
-        if( ( OP_code(op) == TOP_ldc64 ) || ( OP_code(op) == TOP_ldc32 ) ) {
+        if( ( OP_code(op) == TOP_ldc64 ) || ( OP_code(op) == TOP_ldc32 ) ){
           int range_val = TN_value(tn);
           cur_imm_size = ( Calculate_Imm_Range( range_val ) > 4 ) ? 8 : 4;
         } else {
@@ -1092,38 +1203,10 @@ uint8_t Size_Of_Immediates( OP *op, bool is_memory_op )
 
   // Labels will fail the value test for a const value
   if( OP_br(op) && !OP_ijump(op) ) {
-    if( BB_calc_off ) {
-      imm_size += 4;
-    } else {
-      // All branch targets are 32 byte aligned on the target
-      // that support this algorithm, making jcc/jmp 4 byte imm offset
-      // for reloff
-      INT opnd;
-      INT opnd_count;
-      CGTARG_Branch_Info(op, &opnd, &opnd_count);
-      if (opnd_count > 0) {
-        BB *bb = op->bb;
-        bool found_target = false;
-        TN *br_targ = OP_opnd(op, opnd);
-        LABEL_IDX label = TN_label(br_targ);
-        if( BB_succs(bb) != NULL ) {
-          BBLIST *slist;  
-          BB *succ;
-          for ( slist = BB_succs( bb ); 
-                slist; slist = BBLIST_next( slist ) ) {
-            succ = BBLIST_item( slist );
-            if( Is_Label_For_BB( label, succ ) ){
-              found_target = true;
-              break;
-            } 
-          }
-          if( found_target ){
-            if ( BB_offset( succ ) < 256 )
-              imm_size += 1;
-          }
-        }
-      }
-    }
+    // we will be pessimistic and assume 1 byte, then adjust when
+    // we know how big the block is.  We are only doing single
+    // nested innermost loops for this, to the offset if the loop size.
+    imm_size += 1;
   }
 
   // instructions of this form with the is4 byte need to be counted too
@@ -1630,6 +1713,14 @@ bool Uses_AVX_W_bit( const TOP top )
   case TOP_vfbroadcastf128:
   case TOP_vfbroadcastxf128:
   case TOP_vfbroadcastxxf128:
+  case TOP_vcmpeq128v64:
+  case TOP_vcmpeqx128v64:
+  case TOP_vcmpeqxx128v64:
+  case TOP_vcmpeqxxx128v64:
+  case TOP_vcmpgt128v64:
+  case TOP_vcmpgtx128v64:
+  case TOP_vcmpgtxx128v64:
+  case TOP_vcmpgtxxx128v64:
     uses_w_bit = true;
     break;
   default:
@@ -1651,6 +1742,22 @@ bool Instruction_Uses_VEX( const TOP top )
   return uses_avx;
 }
 
+bool Vex_B_Needed( TOP top )
+{
+  bool vex_b_needed = false;
+
+  switch ( top ) {
+  case TOP_vmovdqa:
+  case TOP_vmovaps:
+  case TOP_vmovapd:
+    vex_b_needed = true;
+    break;
+  default:
+    break;
+  }
+
+  return vex_b_needed;
+}
 
 bool Vex_W_Needed( TOP top )
 {
@@ -1697,7 +1804,8 @@ bool Vex_W_Needed( TOP top )
 }
 
 
-bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, bool uses_avx, TOP top )
+bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, 
+                   bool uses_avx, TOP top, int opnd_idx, bool is_src_opnd )
 {
   bool uses_rex = false;
 
@@ -1734,7 +1842,8 @@ bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, bool uses_avx, TOP top )
       break;
     }
   } else if( TN_register_class(opnd) == ISA_REGISTER_CLASS_float ) {
-    switch( TN_register(opnd) ) {
+    int reg_num = TN_register(opnd) + Float_Preg_Min_Offset - 1;
+    switch( reg_num ) {
     case XMM8:
     case XMM9:
     case XMM10:
@@ -1743,8 +1852,18 @@ bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, bool uses_avx, TOP top )
     case XMM13:
     case XMM14:
     case XMM15:
-      uses_rex = true;
+    {
+      if( uses_avx ){
+        // look for REX.X or REX.W, else REX.R or vvvv handles this for AVX
+        if( is_src_opnd && ( opnd_idx != 0 ) )
+          uses_rex = true;
+        else if ( is_src_opnd && Vex_B_Needed( top ) )
+          uses_rex = true;
+      } else {
+        uses_rex = true;
+      }
       break; 
+    }
     default:
       break;
     }
@@ -1753,6 +1872,24 @@ bool Reg_Uses_REX( TN* opnd, bool constrain_to_upper, bool uses_avx, TOP top )
   return uses_rex;
 }
 
+
+bool OP_has_multi_result( const TOP top )
+{
+  bool has_multi_res = false;
+
+  if( Is_Target_32bit() )
+    return has_multi_res;
+
+  switch( top ){
+  case TOP_vmovlhps:
+    has_multi_res = true; 
+    break;
+  default:
+    break;
+  }
+
+  return has_multi_res;
+}
 
 bool OP_has_implicit_REX( const TOP top )
 {
@@ -1790,7 +1927,7 @@ bool OP_has_implicit_REX( const TOP top )
 }
 
 
-void KEY_SCH::Compute_Insn_Size( OP *op )
+void DSP_SCH::Compute_Insn_Size( OP *op )
 {
   OPR* opr = Get_OPR(op);
   const TOP top = OP_code(op);
@@ -1823,11 +1960,40 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
     for (int i = 0; i < OP_opnds(op) ; i++) {
       TN* opnd = OP_opnd(op, i);
       if( TN_is_register(opnd) ){
-        if( has_modrm == false ){
-          has_modrm = true;
-          insn_size++;
-          break;
-        }
+        if( ( TN_register_class(opnd) == ISA_REGISTER_CLASS_integer ) || 
+            ( TN_register_class(opnd) == ISA_REGISTER_CLASS_float ) ) {
+          bool need_modrm = true;
+          // TOP_adci64 TOP_sbbi64 are not valid TOPs. Should they be?
+          if (TN_register(opnd) == RAX) {
+            switch(top) {
+            case TOP_adci32:
+            case TOP_addi32:
+            case TOP_addi64:
+            case TOP_andi32:
+            case TOP_andi64:
+            case TOP_cmpi32:
+            case TOP_cmpi64:
+            case TOP_ori32:
+            case TOP_ori64:
+            case TOP_sbbi32:
+            case TOP_subi32:
+            case TOP_subi64:
+            case TOP_testi32:
+            case TOP_testi64:
+            case TOP_xori32:
+            case TOP_xori64:
+              need_modrm = false;
+              break;
+            default:
+              ;
+            }
+          }
+          if( need_modrm && has_modrm == false ){
+            has_modrm = true;
+            insn_size++;
+            break;
+          }
+        } 
       }
     }
     // xor insns are recorded as result only, but really do have modrm form
@@ -1848,15 +2014,19 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
     WN *mem_wn = Get_WN_From_Memory_OP( op );
     if( mem_wn ){
       TYPE_ID rtype = WN_rtype(mem_wn);
-      // this is the REX.X case
-      constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
-      rex_seen = Reg_Uses_REX( opnd, constrain_to_upper, uses_avx, top );
-      has_sib = true;
+      if ( uses_avx == false )
+        constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
+      else
+        constrain_to_upper = true;
+
+      // now configure usage REX.X or not based on rtype
+      rex_seen = Reg_Uses_REX( opnd, constrain_to_upper, 
+                               uses_avx, top, index_op, true );
     } else {
-      // this is the REX.X case
-      rex_seen = Reg_Uses_REX( opnd, false, uses_avx, top );
-      has_sib = true;
+      // no mem op rtype info, rely on operand size for REX.X case
+      rex_seen = Reg_Uses_REX( opnd, false, uses_avx, top, index_op, true );
     }
+    has_sib = true;
   } 
 
   // Count all bytes used for immediates
@@ -1875,40 +2045,42 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
       if( TN_is_register(opnd) ){
         // First check memory load/store size
         if( i == TOP_Find_Operand_Use( top, OU_base ) ){
-          // first check for REX.X case in base reg
+          // first check for REX.X case in base reg(special SIB case)
           if ( TN_register_class(opnd) == ISA_REGISTER_CLASS_integer ) {
             if( TN_register(opnd) == R12 ) {
               has_sib = true;
-            } else if( ( TN_register(opnd) == RSP ) && 
-                     ( uses_avx == true) ) {
+            } else if(  TN_register(opnd) == RSP ) {
               has_sib = true;
               break;
             }
           }
 
+          if( rex_seen ) continue;
+
           // Now do a general check
           WN *mem_wn = Get_WN_From_Memory_OP( op );
           if( mem_wn ){
             TYPE_ID rtype = WN_rtype(mem_wn);
-            // This is the REX.B or REX.W case
-            constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
-            if( Reg_Uses_REX( opnd, constrain_to_upper, uses_avx, top ) )
+            // This is the REX.B case
+            // constrain_to_upper = ( MTYPE_byte_size(rtype) < 8 );
+            if( Reg_Uses_REX( opnd, true, 
+                              uses_avx, top, i, true ) )
               rex_seen = true;
           } else {
-            // This is the REX.B or REX.W case
-            if( Reg_Uses_REX( opnd, false, uses_avx, top ) )
+            // This is the REX.B case
+            if( Reg_Uses_REX( opnd, true, uses_avx, top, i, true ) )
               rex_seen = true;
           }
         } else {
           // This is the REX.B or REX.W case
-          if( Reg_Uses_REX( opnd, false, uses_avx, top ) )
+          if( Reg_Uses_REX( opnd, false, uses_avx, top, i, true ) )
             rex_seen = true;
         }
       }
     }
 
-    // Now check the result for REX regs 
-    if( rex_seen == false ){
+    // Now check the result for REX.R modrm regs 
+    if( ( rex_seen == false ) && ( uses_avx == false ) ){
       int results = OP_results(op);
       for( int i = 0; i < results; i++) {
         TN *opnd = OP_result(op, i);
@@ -1919,22 +2091,58 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
           int num_bits = ISA_OPERAND_VALTYP_Size(otype);
 
           // If this insn was defined to have a result that is larger
-          // than 32bits, test it for REX bit usage.
-          if( num_bits > 32 ) {
-            // This is the REX.B or REX.W case
-            if( Reg_Uses_REX( opnd, false, uses_avx, top ) ){
+          // than 32bits, test it for REX bit usage via REX.R
+          if(( num_bits > 32 ) && ( uses_avx == false ) ){
+            if( Reg_Uses_REX( opnd, false, uses_avx, top, i, false ) ){
+              rex_seen = true;
+              break;
+            }
+          } else if ( TN_register_class(opnd) == ISA_REGISTER_CLASS_integer ){
+            if( Reg_Uses_REX( opnd, true, uses_avx, top, i, false ) ){
+              rex_seen = true;
+              break;
+            }
+          } else if ( TN_register_class(opnd) == ISA_REGISTER_CLASS_float ){
+            if( Reg_Uses_REX( opnd, true, uses_avx, top, i, false ) ){
               rex_seen = true;
               break;
             }
           }
         }
       }
+    } else if( ( rex_seen == false ) && 
+               ( uses_avx ) && 
+               ( OP_has_multi_result(top) ) ){
+      // The result operand is used in multiple locations, one as a source
+      // operand.
+      TN *opnd = OP_result(op, 0);
+      if( TN_is_register(opnd) ){
+        if( Reg_Uses_REX( opnd, true, uses_avx, top, 1, true ) )
+          rex_seen = true;
+      }
+    } else if( ( rex_seen ) && 
+               ( uses_avx ) && 
+               ( Vex_B_Needed( top ) ) ) {
+      TN *opnd = OP_result(op, 0);
+      if( TN_is_register(opnd) ){
+        // A special case of VEX.B encoding test: For cases like say
+        // vmovdqa, if the source operand requires rex, it is not sufficient
+        // that a rex encoding via the VEX 3rd byte is needed.  If both
+        // a source operand and the dest are seen in the upper bank, VEX.B 
+        // encoding via the 3rd VEX byte is required.
+        // Reason: opcode encoding of these instructions map
+        //         reg and r/m differently as one is a store and the other a
+        //         load, even though both are reg-reg transfers.
+        // In this case, if the result is not in the upper bank, we toggle
+        // rex_seen to map the store form.
+        rex_seen = Reg_Uses_REX( opnd, true, uses_avx, top, 1, true );
+      }
     }
   } else if( mrt.TOP_is_push( top ) ) {
     for( int i = 0; i < OP_opnds(op); i++ ){
       TN* opnd = OP_opnd(op, i);
       if( TN_is_register(opnd) ){
-        if( Reg_Uses_REX( opnd, true, uses_avx, top ) ){
+        if( Reg_Uses_REX( opnd, true, uses_avx, top, i, true ) ){
           rex_seen = true;
           break;
         }
@@ -1945,7 +2153,7 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
     for( int i = 0; i < results; i++) {
       TN *opnd = OP_result(op, i);
       if( TN_is_register(opnd) ){
-        if( Reg_Uses_REX( opnd, true, uses_avx, top ) ){
+        if( Reg_Uses_REX( opnd, true, uses_avx, top, i, false ) ){
           rex_seen = true;
           break;
         }
@@ -1995,11 +2203,14 @@ void KEY_SCH::Compute_Insn_Size( OP *op )
   }
 
   OPR_insn_size(opr) = insn_size;
-  OPR_num_pf_bytes(opr) = (vex_encoding_size) ? 2 : 3;
+  if( uses_avx )
+    OPR_num_pf_bytes(opr) = (vex_encoding_size) ? 2 : 3;
+  else
+    OPR_num_pf_bytes(opr) = (rex_seen) ? 2 : 3;
 }
 
 
-void KEY_SCH::Build_OPR()
+void DSP_SCH::Build_OPR()
 {
   OP* op;
 
@@ -2172,7 +2383,7 @@ void KEY_SCH::Build_OPR()
 }
 
 
-void KEY_SCH::Summary_BB()
+void DSP_SCH::Summary_BB()
 {
   if( trace == false )
     return;
@@ -2186,15 +2397,11 @@ void KEY_SCH::Summary_BB()
     fprintf( TFile, "%c%s[%d] ops:%d cycles:%d cp:%d true_cp:%d\n",
 	     BB_innermost(bb) ? '*' : ' ', Cur_PU_Name, BB_id(bb),
 	     BB_length(bb), cycles, _cp, _true_cp );
-
-    if( BB_innermost(bb) ){
-      //Print_BB( bb );
-    }
   }
 }
 
 
-void KEY_SCH::Tighten_Release_Time( OP* op )
+void DSP_SCH::Tighten_Release_Time( OP* op )
 {
   OPR* opr = Get_OPR(op);
   ASSERT( OPR_release_time(opr) <= OPR_deadline(opr) );
@@ -2215,7 +2422,7 @@ void KEY_SCH::Tighten_Release_Time( OP* op )
 }
 
 
-int KEY_SCH::Addr_Generation( OP* op )
+int DSP_SCH::Addr_Generation( OP* op )
 {
   int time = -1;
   OPR* opr = Get_OPR(op);
@@ -2248,7 +2455,7 @@ int KEY_SCH::Addr_Generation( OP* op )
 }
 
 
-OP* KEY_SCH::Winner( OP* op_a, OP* op_b, int cycle )
+OP* DSP_SCH::Winner( OP* op_a, OP* op_b, int cycle )
 {
   OPR* opr_a = Get_OPR(op_a);
   OPR* opr_b = Get_OPR(op_b);
@@ -2277,6 +2484,16 @@ OP* KEY_SCH::Winner( OP* op_a, OP* op_b, int cycle )
       return op_a;
     if( can_reserve_b && !can_reserve_a )
       return op_b;
+  }
+
+  // Pick earlier unrolls if present in the loop
+  if( OP_unrolling(op_a) > OP_unrolling(op_b) ){
+    return op_b;
+  }
+
+  // Pick earlier unrolls if present in the loop
+  if( OP_unrolling(op_b) > OP_unrolling(op_a) ){
+    return op_a;
   }
 
   // Pick the one with the earliest completion time.
@@ -2348,7 +2565,7 @@ OP* KEY_SCH::Winner( OP* op_a, OP* op_b, int cycle )
 }
 
 
-OP* KEY_SCH::Select_Variable( int cycle )
+OP* DSP_SCH::Select_Variable( int cycle )
 {
   const int num = VECTOR_count( _ready_vector );
   OP* best = NULL;
@@ -2367,14 +2584,11 @@ OP* KEY_SCH::Select_Variable( int cycle )
     OP* op = (OP*)VECTOR_element( _ready_vector, i );
     OPR* opr = Get_OPR(op);
 
-    // For x87/call blocks defer to full compare where we will take the
-    // orderd op by lowest index. Also true is we fail rid test.
-    if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off ){
-      break;
-    }
-
     if( OPR_release_time(opr) == cycle ){
       best = ( best == NULL ) ? op : Winner( best, op, cycle );
+    } else if( ( best != NULL ) && 
+               ( OP_unrolling(op) != OP_unrolling(best) ) ){
+      best = Winner( best, op, cycle );
     }
   }
 
@@ -2391,12 +2605,8 @@ OP* KEY_SCH::Select_Variable( int cycle )
 
     for( int i = 1; i < num; i++ ){
       OP* op = (OP*)VECTOR_element( _ready_vector, i );
-      if( BB_contains_x87 || BB_call(bb) || BB_fails_rid || BB_calc_off ){
-        best = OP_map_idx(best) < OP_map_idx(op) ? best : op;
-      } else {
-        OPR* opr = Get_OPR(op);
-        best = Winner( best, op, cycle );
-      }
+      OPR* opr = Get_OPR(op);
+      best = Winner( best, op, cycle );
     }
   }
 
@@ -2411,7 +2621,7 @@ OP* KEY_SCH::Select_Variable( int cycle )
 }
 
 
-void KEY_SCH::Schedule_BB()
+void DSP_SCH::Schedule_BB()
 {
   Build_OPR();
   Build_Ready_Vector();
@@ -2525,7 +2735,7 @@ void KEY_SCH::Schedule_BB()
 }
 
 
-KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace, BOOL calc_off )
+DSP_SCH::DSP_SCH( BB* bb, MEM_POOL* pool, bool trace )
   : bb( bb ), mem_pool( pool ), trace( trace )
 {
   if( CG_skip_local_sched ){
@@ -2533,11 +2743,25 @@ KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace, BOOL calc_off )
     if( BBs_Processed < CG_local_skip_before ||
 	BBs_Processed > CG_local_skip_after  ||
 	BBs_Processed == CG_local_skip_equal ){
-      fprintf( TFile, "[%d] BB:%d processed in KEY_SCH\n", 
+      fprintf( TFile, "[%d] BB:%d processed in DSP_SCH\n", 
 	       BBs_Processed, BB_id( bb ) );
       return;
     }
   }
+
+  // only innermost loops
+  if( (BB_innermost(bb) == false ) || ( BB_loop_head_bb(bb) == NULL ) )
+    return;
+
+  // only single block loops
+  bool bb_has_same_backedge = false;
+  for( BBLIST *lst = BB_succs(bb); lst != NULL; lst = BBLIST_next(lst) ) {
+    BB *cur_bb = BBLIST_item(lst);
+    if( cur_bb == bb )
+      bb_has_same_backedge = true; 
+  }
+  if( !bb_has_same_backedge )
+    return;
 
   if( BB_length(bb) > 2 ){
     CG_DEP_Compute_Graph( bb, 
@@ -2552,15 +2776,21 @@ KEY_SCH::KEY_SCH( BB* bb, MEM_POOL* pool, BOOL trace, BOOL calc_off )
       CG_DEP_Trace_Graph( bb );
     }
 
-    Init( calc_off );
-    Schedule_BB();
-    Reorder_BB();
-    Summary_BB();
+    Init();
+
+    if( can_sched ) {
+      Schedule_BB();
+
+      if( window_data.window_pair[0].opr_count > 0 ){
+        Close_Current_Window( true );
+      }
+
+      Reorder_BB();
+      Summary_BB();
+      Set_BB_dispatch(bb);
+    }
 
     CG_DEP_Delete_Graph( bb );
-    if( window_data.window_pair[0].opr_count > 0 ){
-      Close_Current_Window( true );
-    }
   }
 
   Set_BB_scheduled( bb );
@@ -2584,20 +2814,14 @@ void CG_Sched( MEM_POOL* pool, BOOL trace )
 
   // compute live-in sets for registers.
   sched_trace = trace;
-  window_data.cur_offset = 0;
   REG_LIVE_Analyze_Region();
 
   // The rid test is now incorperated so that we do not reorder
   // when we fail, but we still need to derive all other info.
   // This is done so that we exactly mimic code layout in emit.
-  // The first iteration is a non reorder pass which calculates
-  // the offset each BB, where a correctness factor will be measured
-  // in with respect to a branch target offset it is within 255 byte of the
-  // the start of the func in pass 2, which is a reording pass.
-  for( i = 0; i < 2; i++ ){
-    for( BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb) ){
-      KEY_SCH sched( bb, pool, trace, i == 0 );
-    }
+  for( BB* bb = REGION_First_BB; bb != NULL; bb = BB_next(bb) ){
+    window_data.cur_offset = 0;
+    DSP_SCH sched( bb, pool, trace );
   }
 
   // Finish with reg_live after cflow so that it can benefit from the info.

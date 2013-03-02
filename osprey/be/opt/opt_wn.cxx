@@ -1793,10 +1793,10 @@ BOOL OPCODE_is_volatile(OPCODE opc)
 }
 
 // Given an integral WHIRL, query whether it is evaluatable and get the evaluated value.
-// 'wn_map' gives a WHIRL-to-WHIRL  map that maps a WHIRL to another WHIRL containing the same value.
+// 'map' gives a WHIRL-to-WHIRL  map that maps a WHIRL to another WHIRL containing the same value.
 // (TODO: Implementation is incomplete for all operators)
 std::pair<bool,int>
-WN_get_val(WN * wn, const WN_MAP& wn_map)
+WN_get_val(WN * wn, std::map<WN *, WN*> & map)
 {
   int val1, val2, val;
   OPERATOR opr = WN_operator(wn);
@@ -1807,18 +1807,18 @@ WN_get_val(WN * wn, const WN_MAP& wn_map)
     val = WN_const_val(wn);
     return std::pair<bool, int>(TRUE, val);
   }
-  else if (wn_map) {
-    WN * wn_val = (WN *) WN_MAP_Get(wn_map, wn);
+  else {
+    WN * wn_val = map[wn];
     if (wn_val)
-      return WN_get_val(wn_val, wn_map);
+      return WN_get_val(wn_val, map);
   }
 
   std::pair<bool,int> pair1;
   std::pair<bool,int> pair2;
   switch (opr) {
   case OPR_ADD:
-    pair1 = WN_get_val(WN_kid(wn, 0), wn_map);
-    pair2 = WN_get_val(WN_kid(wn, 1), wn_map);
+    pair1 = WN_get_val(WN_kid(wn, 0), map);
+    pair2 = WN_get_val(WN_kid(wn, 1), map);
     val1 = pair1.second;
     val2 = pair2.second;
     if (pair1.first
@@ -1830,8 +1830,8 @@ WN_get_val(WN * wn, const WN_MAP& wn_map)
   case OPR_MPY:
     op1 = WN_kid(wn, 0);
     op2 = WN_kid(wn, 1);
-    pair1 = WN_get_val(op1, wn_map);
-    pair2 = WN_get_val(op2, wn_map);
+    pair1 = WN_get_val(op1, map);
+    pair2 = WN_get_val(op2, map);
     val1 = pair1.second;
     val2 = pair2.second;
 
@@ -1856,62 +1856,133 @@ WN_get_val(WN * wn, const WN_MAP& wn_map)
   return std::pair<bool,int>(FALSE,0);
 }
 
-// Walk nodes in the given WHIRL tree, collect operands for ADD operators.
-//
-// For example, given the following tree,
-//   I4I4LDID  0 <st 2> 
-//   I4I4LDID 49 <st 80>
-//  I4SUB
-//  I4INTCONST -1 (0xffffffffffffffff)
-// I4ADD
-//
-// We will collect two nodes:
-//   I4I4LDID  0 <st 2> 
-//   I4I4LDID 49 <st 80>
-//  I4SUB
-//
-//  I4INTCONST -1 (0xffffffffffffffff)
-
-static STACK<WN *> * 
-Collect_operands(WN * wn, MEM_POOL * pool)
+// Add all integer constant elements in 'stk'.
+static INT64 Add_const_in_stack(STACK<WN *> * stk)
 {
-  STACK<WN *> * stack1 = NULL;
-  STACK<WN *> * stack2 = NULL;
-  OPERATOR opr = WN_operator(wn);
+  INT64 sum = 0;
+  for (int i = 0; i < stk->Elements(); i++) {
+    WN * wn_iter = stk->Top_nth(i);
+    if (WN_operator(wn_iter) == OPR_INTCONST)
+      sum += WN_const_val(wn_iter);
+  }
+  return sum;
+}
 
-  if ((opr == OPR_ADD) || (OPERATOR_is_load(opr))) {
-    stack1 = CXX_NEW(STACK<WN *>(pool), pool);
+// Collect addition and substraction operands in 'wn',
+// save addition operands in 'stack1', save substraction operands in 'stack2'.
+static void Collect_wn_stack(WN * wn, STACK<WN *> * stack1, STACK<WN *> * stack2, MEM_POOL * pool)
+{
+  STACK<WN *> * add_stk = CXX_NEW(STACK<WN *> (pool), pool);
+  STACK<WN *> * sub_stk = CXX_NEW(STACK<WN *> (pool), pool);
+
+  Collect_operands(wn, add_stk, sub_stk);
+
+  if (add_stk->Is_Empty() && sub_stk->Is_Empty()) 
     stack1->Push(wn);
+
+  while (!add_stk->Is_Empty()) {
+    WN * wn_iter = add_stk->Pop();
+    stack1->Push(wn_iter);
   }
 
-  while (stack1 && !stack1->Is_Empty()) {
-    WN * wn_iter = stack1->Pop();
-    OPERATOR opr_iter = WN_operator(wn_iter);
-
-    if (opr_iter == OPR_ADD) {
-      stack1->Push(WN_kid(wn_iter, 0));
-      stack1->Push(WN_kid(wn_iter, 1));
-    }
-    else {
-      if (stack2 == NULL)
-	stack2 = CXX_NEW(STACK<WN *>(pool), pool);
-
-      stack2->Push(wn_iter);
-    }
+  while (!sub_stk->Is_Empty()) {
+    WN * wn_iter = sub_stk->Pop();
+    stack2->Push(wn_iter);
   }
 
-  if (stack1)
-    CXX_DELETE(stack1, pool);
+  CXX_DELETE(add_stk, pool);
+  CXX_DELETE(sub_stk, pool);
+}
 
-  return stack2;
+// Find elements in 'stack' that matches 'wn_match' and remove such elements 
+// from 'stack'.  Return TRUE if found.  Expression "x" is considered to match
+// expression "c * x", where c is an integer constant. In this case, also return 
+// the diff "(c - 1) * x".
+static std::pair<WN *, BOOL>
+Get_diff(WN * wn_match, STACK<WN *> * stack, MEM_POOL * pool)
+{
+  WN * wn_mul = NULL;
+  WN * wn_diff = NULL;
+
+  if ((WN_operator(wn_match) == OPR_MPY)
+      && (WN_operator(WN_kid1(wn_match)) == OPR_INTCONST))
+    wn_mul = WN_kid0(wn_match);
+
+  BOOL found = FALSE;
+  STACK<WN *> * stack_tmp = CXX_NEW(STACK<WN *>(pool), pool);
+  for (int j = 0; j < stack->Elements(); j++) {
+    WN * wn1_iter = stack->Top_nth(j);
+    if (WN_Simp_Compare_Trees(wn1_iter, wn_match) == 0) {
+      stack->DeleteTop(j);
+      found = TRUE;
+      break;
+    }
+    else if (wn_mul
+	     && (WN_Simp_Compare_Trees(wn1_iter, wn_mul) == 0)) {
+      // expressions like 'x+x' is equal to '2*x'.
+      int cnt = 0;
+      WN * wn_tmp;
+      while (!stack_tmp->Is_Empty())
+	stack_tmp->Pop();
+
+      for (int k = 0; k < stack->Elements(); k++) {
+	wn_tmp = stack->Top_nth(k);
+	if (WN_Simp_Compare_Trees(wn_mul, wn_tmp) == 0)
+	  cnt++;
+	else 
+	  stack_tmp->Push(wn_tmp);
+      }
+      
+      INT64 val = WN_const_val(WN_kid1(wn_match));
+      if (cnt == val) {
+	// Remove matched elements from 'stack'.
+	while (!stack->Is_Empty())
+	  stack->Pop();
+	      
+	while (!stack_tmp->Is_Empty()) {
+	  wn_tmp = stack_tmp->Pop();
+	  stack->Push(wn_tmp);
+	}
+	found = TRUE;
+	break;
+      }
+      else if (cnt + 1 == val) {
+	found = TRUE;
+	wn_diff = wn_mul;
+	break;
+      }
+    }
+  }
+  CXX_DELETE(stack_tmp, pool);
+  return std::pair<WN *, bool>(wn_diff, found);
+}
+
+// Obtain the hashed value in 'map' for 'wn',
+// where map is a hash from 'AUX_ID' to 'WN *'.
+WN * WN_get_deriv(WN * wn, std::map<AUX_ID, WN *> &map)
+{
+  WN * wn_deriv = NULL;
+  if (OPERATOR_is_scalar_load(WN_operator(wn))) 
+    wn_deriv = map[WN_aux(wn)];
+  
+  return wn_deriv;
 }
 
 // Query whether two integral WHIRLs have disjointed value ranges.
 // Return FALSE if this is not the case or if we can't tell.
-// lo_map and hi_map are maps from "WN *" to "UNSIGNED long long" that
-// give low/high boundaries.
+// 'lo_map' and 'hi_map' are maps from "WN *" to "UNSIGNED long long" that
+// give low/high boundaries that are evaluated to be integer constants.
+// 'deriv_map' hashes the AUX_ID of a comparison expression's LHS to 
+// the expression itself like the example below.
+//   I4I4LDID 49 <st 5>  -- hash key
+//    I4I4LDID 0 <st 3>
+//    I4INTCONST -1
+//   I4ADD
+//  I4I4LT
+//
+// These maps are used to derive value ranges of expressions.
 BOOL
-WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP& hi_map)
+WN_has_disjoint_val_range(WN * wn1, WN * wn2, std::map<WN *, WN *> & lo_map, std::map<WN *, WN *> & hi_map, std::map<AUX_ID, WN *> & deriv_map)
 {
   FmtAssert((MTYPE_is_integral(WN_rtype(wn1)) && MTYPE_is_integral(WN_rtype(wn2))),
 	    ("Expect integral values"));
@@ -1926,7 +1997,7 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
   }
   else if (opr1 == OPR_INTCONST) {
     // Swap parameters so that the second one is a constant.
-    return WN_has_disjoint_val_range(wn2, wn1, lo_map, hi_map);
+    return WN_has_disjoint_val_range(wn2, wn1, lo_map, hi_map, deriv_map);
   }
   else if (WN_is_power_of_2(wn1) && WN_is_power_of_2(wn2)) {
     // Only need to compare position of TRUE bits for power-of-2 values.
@@ -1948,7 +2019,7 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
     else {
       WN * bit2 = WN_get_bit_from_expr(wn2);
 
-      if (WN_has_disjoint_val_range(bit1, bit2, lo_map, hi_map))
+      if (WN_has_disjoint_val_range(bit1, bit2, lo_map, hi_map, deriv_map))
 	return TRUE;
     }
   }
@@ -1967,121 +2038,195 @@ WN_has_disjoint_val_range(WN * wn1, WN * wn2, const WN_MAP& lo_map, const WN_MAP
   }
   else {
     MEM_POOL * pool = Malloc_Mem_Pool;
-    STACK<WN *> * stack1 = Collect_operands(wn1, pool);
-    STACK<WN *> * stack2 = Collect_operands(wn2, pool);
-    STACK<WN *> * stack_tmp = NULL;
+    STACK<WN *> * stack1 = CXX_NEW(STACK<WN *> (pool), pool);
+    STACK<WN *> * stack2 = CXX_NEW(STACK<WN *> (pool), pool);
 
-    // Shuffle stack1 and stack2 so that stack1 contains more elements.
-    if ((!stack1 && stack2)
-	|| ((stack1 && stack2) 
-	    && (stack1->Elements() < stack2->Elements()))) {
-      stack_tmp = stack1;
-      stack1 = stack2;
-      stack2 = stack_tmp;
+    Collect_wn_stack(wn1, stack1, stack2, pool);
+    Collect_wn_stack(wn2, stack2, stack1, pool);
+    STACK<WN *> * stack_tmp1 = NULL;
+    STACK<WN *> * stack_tmp2 = NULL;
+    BOOL do_swap = FALSE;
+
+    // Check whether stack2 contains elements whose AUX_ID is hashed to 
+    // a "x < y" expression in the "deriv_map". If so, swap stack1 and stack2.
+    for (int i = 0; i < stack2->Elements(); i++) {
+      WN * wn_iter = stack2->Top_nth(i);
+      WN * wn_deriv = WN_get_deriv(wn_iter, deriv_map);
+      if (wn_deriv) {
+	if (WN_operator(wn_deriv) == OPR_LT)
+	  do_swap = TRUE;
+	else {
+	  do_swap = FALSE;
+	  break;
+	}
+      }
     }
 
-    // Evaluate diff of stack1 and stack2.
+    if (do_swap) {
+      stack_tmp1 = stack1;
+      stack1 = stack2;
+      stack2 = stack_tmp1;
+    }
+    
+    // Mirror "stack1" and "stack2" in "stack_tmp1" and "stack_tmp2" so that we can replace
+    // elements by their hashed values.
+    stack_tmp1 = CXX_NEW(STACK<WN *>(pool), pool);
+    stack_tmp2 = CXX_NEW(STACK<WN *>(pool), pool);
+    for (int i = 0; i < stack1->Elements(); i++) { 
+      WN * wn_iter = stack1->Bottom_nth(i);
+      WN * wn_deriv = WN_get_deriv(wn_iter, deriv_map);
+      if (wn_deriv && (WN_operator(wn_deriv) == OPR_LT)) {
+	wn_deriv = WN_kid1(wn_deriv);
+	Collect_wn_stack(wn_deriv, stack_tmp1, stack_tmp2, pool);
+      }
+      else 
+	stack_tmp1->Push(wn_iter);
+    }
+
+    for (int i = 0; i < stack2->Elements(); i++) { 
+      WN * wn_iter = stack2->Bottom_nth(i);
+      stack_tmp2->Push(wn_iter);
+    }
+    
+    // Check whether the summation of all elements in "stack_tmp1" is 
+    // less than the summation of all elements in "stack_tmp2". If yes,
+    // 
 
     int delta = 0;
+    if (stack_tmp1) 
+      delta -= Add_const_in_stack(stack_tmp1);
 
-    if (stack1) {
-      for (int i = 0; i < stack1->Elements(); i++) {
-	WN * wn_iter = stack1->Top_nth(i);
-	if (WN_operator(wn_iter) == OPR_INTCONST) 
-	  delta += WN_const_val(wn_iter);
+    if (stack_tmp2) 
+      delta += Add_const_in_stack(stack_tmp2);
+
+    // Evalute diff of stack_tmp1 and stack_tmp2 using deriv_map.
+    BOOL is_disjoint = TRUE;
+    for (int i = 0; i < stack_tmp2->Elements(); i++) {
+      WN * wn2_iter = stack_tmp2->Top_nth(i);
+
+      if (WN_operator(wn2_iter) == OPR_INTCONST)
+	continue;
+
+      std::pair<WN *, BOOL> p_ret = Get_diff(wn2_iter, stack_tmp1, pool);
+      WN * wn_diff = p_ret.first;
+      if (p_ret.second) {
+	if (wn_diff) {
+	  std::pair<bool, int> p_val = WN_get_val(wn_diff, lo_map);
+	  if (!p_val.first || (p_val.second < 0)) {
+	    is_disjoint = FALSE;
+	    break;
+	  }
+	}
+      }
+      else {
+	is_disjoint = FALSE;
+	break;
       }
     }
+    
+    CXX_DELETE(stack_tmp1, pool);
+    CXX_DELETE(stack_tmp2, pool);
 
-    if (stack2) {
-      for (int i = 0; i < stack2->Elements(); i++) {
-	WN * wn_iter = stack2->Top_nth(i);
-	if (WN_operator(wn_iter) == OPR_INTCONST) 
-	  delta -= WN_const_val(wn_iter);
-      }
+    if (is_disjoint && (delta > 0)) {
+      CXX_DELETE(stack1, pool);
+      CXX_DELETE(stack2, pool);
+      return TRUE;
     }
 
+    // Shuffle stack1 and stack2 so that stack1 contains more elements.
+    if (stack1->Elements() < stack2->Elements()) {
+      stack_tmp1 = stack1;
+      stack1 = stack2;
+      stack2 = stack_tmp1;
+    }
+
+    // Evaluate diff of stack1 and stack2 using lo_map and hi_map.
+    delta = Add_const_in_stack(stack1);
+    delta -= Add_const_in_stack(stack2);
     int delta_lo = delta;
     int delta_hi = delta;
     std::pair<bool, int> p_val;
 
-    if (stack2) {
-      for (int i = 0; i < stack2->Elements(); i++) {
-	WN * wn2_iter = stack2->Top_nth(i);
+    for (int i = 0; i < stack2->Elements(); i++) {
+      WN * wn2_iter = stack2->Top_nth(i);
 	
-	if (WN_operator(wn2_iter) == OPR_INTCONST)
-	  continue;
+      if (WN_operator(wn2_iter) == OPR_INTCONST)
+	continue;
 
-	BOOL found = FALSE;
+      std::pair<WN *, BOOL> p_ret = Get_diff(wn2_iter, stack1, pool);
+      WN * wn_diff = p_ret.first;
+      BOOL found = p_ret.second;
 
-	for (int j = 0; j < stack1->Elements(); j++) {
-	  WN * wn1_iter = stack1->Top_nth(j);
-
-	  if (wn1_iter && (WN_Simp_Compare_Trees(wn1_iter, wn2_iter) == 0)) {
-	    stack1->DeleteTop(j);
-	    found = TRUE;
-	    break;
-	  }
-	}
-
-	if (!found) {
-	  int val;
-	  p_val = WN_get_val(wn2_iter, lo_map);
-	  val = p_val.second;
-
-	  if (p_val.first)
-	    delta_hi -= val;
-	  else {
-	    p_val = WN_get_val(wn2_iter, hi_map);
-	    val = p_val.second;
-	    if (p_val.first)
-	      delta_lo -= val;
-	    else {
-	      CXX_DELETE(stack1, pool);
-	      CXX_DELETE(stack2, pool);
-	      return FALSE;
-	    }
-	  }
-	}
-      }
-    }
-
-    if (stack1) {
-      for (int i = 0; i < stack1->Elements(); i++) {
-	WN * wn_iter = stack1->Top_nth(i);
+      if (!found || (wn_diff != NULL)) {
 	int val;
-
-	if (WN_operator(wn_iter) == OPR_INTCONST)
-	  continue;
-
-	p_val = WN_get_val(wn_iter, lo_map);
+	p_val = WN_get_val(wn2_iter, lo_map);
 	val = p_val.second;
+
 	if (p_val.first)
-	  delta_lo += val;
+	  delta_hi -= val;
 	else {
-	  p_val = WN_get_val(wn_iter, hi_map);
+	  p_val = WN_get_val(wn2_iter, hi_map);
 	  val = p_val.second;
 	  if (p_val.first)
-	    delta_hi += val;
+	    delta_lo -= val;
 	  else {
 	    CXX_DELETE(stack1, pool);
-	    if (stack2)
-	      CXX_DELETE(stack2, pool);
+	    CXX_DELETE(stack2, pool);
 	    return FALSE;
 	  }
 	}
       }
     }
 
-    if (stack1)
-      CXX_DELETE(stack1, pool);
+    for (int i = 0; i < stack1->Elements(); i++) {
+      WN * wn_iter = stack1->Top_nth(i);
+      int val;
 
-    if (stack2)
-      CXX_DELETE(stack2, pool);
+      if (WN_operator(wn_iter) == OPR_INTCONST)
+	continue;
+
+      p_val = WN_get_val(wn_iter, lo_map);
+      val = p_val.second;
+      if (p_val.first)
+	delta_lo += val;
+      else {
+	p_val = WN_get_val(wn_iter, hi_map);
+	val = p_val.second;
+	if (p_val.first)
+	  delta_hi += val;
+	else {
+	  CXX_DELETE(stack1, pool);
+	  CXX_DELETE(stack2, pool);
+	  return FALSE;
+	}
+      }
+    }
+
+    CXX_DELETE(stack1, pool);
+    CXX_DELETE(stack2, pool);
 
     if ((delta_lo > 0) || (delta_hi < 0))
       return TRUE;
   }
 
+  return FALSE;
+}
+
+// Query whether the WHIRL tree rooted at 'wn' contains any indirect loads.
+BOOL
+WN_has_indir_load(WN * wn)
+{
+  OPERATOR opr = WN_operator(wn);
+  FmtAssert(opr != OPR_BLOCK, ("Illegal input WHILR"));
+  
+  if (OPERATOR_is_load(opr) && !OPERATOR_is_scalar_load(opr))
+    return TRUE;
+
+  for (int i = 0; i < WN_kid_count(wn); i++) {
+    if (WN_has_indir_load(WN_kid(wn,i)))
+      return TRUE;
+  }
+  
   return FALSE;
 }
 
@@ -2107,7 +2252,7 @@ Collect_operands(WN * wn, STACK<WN *> * l_stk, STACK<WN *> * r_stk)
 	break;
       default:
 	if ((p_opr == OPR_ADD) || (i == 0)) {
-	  if (l_stk)
+	  if (l_stk) 
 	    l_stk->Push(operand);
 	}
 	else {

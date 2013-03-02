@@ -110,7 +110,6 @@ static char *rcs_id = 	opt_emit_CXX"$Revision: 1.13 $";
 #include "wssa_emitter.h"  // WSSA emitter
 #include "pu_info.h"
 
-extern WN_MAP Prompf_Id_Map;
 #if defined(TARG_NVISA)
 // To get better loop depth comments in the ptx file
 // Require better implement because opt is not supposed
@@ -845,7 +844,11 @@ Raise_doloop_stmt(EMITTER *emitter, BB_NODE **bb)
 		    step,
 		    block_body, 
 		    loop_info_wn);
-  WN_COPY_All_Maps(rwn, bb_end->Loop()->Orig_wn());
+  WN * orig_wn = bb_end->Loop()->Orig_wn();
+  if (orig_wn)
+    WN_COPY_All_Maps(rwn, orig_wn);
+  else
+    bb_end->Loop()->Set_orig_wn(rwn);
 
   WN_Set_Linenum(rwn, bb_start->Linenum());
   if (emitter->Cfg()->Feedback()) {  // NOTE: Use Orig_wn()?
@@ -1162,12 +1165,6 @@ Raise_whiledo_stmt(EMITTER *emitter, BB_NODE *bb, BB_NODE *prev_bb, BB_NODE **ne
   else 
     rwn = Raise_whiledo_stmt_to_whileloop(emitter, bb, next_bb);
 
-  if (Run_prompf && 
-      bb->Loop()->Orig_wn() != NULL &&
-      WN_MAP32_Get(Prompf_Id_Map, bb->Loop()->Orig_wn()) != 0)
-  {
-     WN_CopyMap(rwn, Prompf_Id_Map, bb->Loop()->Orig_wn());
-  }
 #ifdef KEY
   if (bb->Loop()->Orig_wn() != NULL &&
       WN_MAP32_Get(WN_MAP_FEEDBACK, bb->Loop()->Orig_wn()) != 0)
@@ -1238,13 +1235,6 @@ Raise_dowhile_stmt(EMITTER *emitter, BB_NODE **bb)
     WN_last(block_body) = stmtcon.Tail();
   }
 
-  if (Run_prompf && 
-      bb_end->Loop()->Orig_wn() != NULL &&
-      WN_MAP32_Get(Prompf_Id_Map, bb_end->Loop()->Orig_wn()) != 0)
-  {
-     WN_CopyMap(rwn, Prompf_Id_Map, bb_end->Loop()->Orig_wn());
-  }
-  
   return rwn;
 }
 

@@ -679,12 +679,13 @@ Allocate_Space(ST *base, ST *blk, INT32 lpad, INT32 rpad, INT64 maxsize)
   if (!STB_decrement(base)) {
     old_offset = STB_size(base);
     Set_ST_ofst(blk, ROUNDUP(old_offset + lpad, align));
-    Set_STB_size(base, ROUNDUP(ST_ofst(blk) + size + rpad, align));
+    Set_STB_size(base, ST_ofst(blk) + size + rpad);
   }
   else {
     old_offset = STB_size(base);
     /* align object end */
-    Set_ST_ofst(blk, ROUNDUP(old_offset + lpad, align));	
+    /* open64.net bug[968]: here need not align object end */
+    Set_ST_ofst(blk, old_offset + lpad);	
     Set_ST_ofst(blk,
 	-(INT64) ROUNDUP(ST_ofst(blk) + size + rpad, align)); /* start */
     Set_STB_size(base, -ST_ofst(blk));

@@ -87,11 +87,6 @@ extern "C" {
  *    table-section for the PU will be popped off the whirl2f
  *    symbol table stack.
  *
- * W2F_Set_Prompf_Emission()
- *    Pass in a mapping from WN nodes to construct identifiers, and
- *    notify whirl2f to emit its output in a form suitable for ProMPF.
- *    Call this one time only, before any translation takes place!
- *
  * W2F_Set_Frequency_Map()
  *    Pass in a mapping from WN nodes to feedback frequency information.
  *    Call this for each PU that has such a map.  The actual emission
@@ -233,7 +228,6 @@ extern void W2F_Fini(void);
 extern void W2F_Push_PU(WN *pu, WN *body_part_of_interest);
 extern void W2F_Pop_PU(void);
 
-extern void W2F_Set_Prompf_Emission(WN_MAP *construct_map);
 extern void W2F_Set_Frequency_Map(WN_MAP frequency_map);
 
 extern const char * W2F_Get_Transformed_Src_Path(void);

@@ -68,10 +68,8 @@ static char USMID[] = "\n@(#)5.0_pl/sources/cmd_line.c	5.16	10/20/99 17:17:46\n"
 # include "tokens.h"
 # include "sytb.h"
 # include "cmd_line.h"
-#ifdef KEY /* F2003 */
 # include "defs.h"
-# include "config_targ.h"
-#endif /* KEY F2003 */
+# include "../sgi/cwh_targ_info.h"
 
 /*****************************************************************\
 |* function prototypes of static functions declared in this file *|
@@ -6984,7 +6982,7 @@ boolean
 c_ptr_abi_trouble(int dt_attr_idx) {
 #if defined(TARG_X8664)
   /* No problem unless we're Intel -m32 and it's a derived type */
-  if (!(Target_ABI == ABI_n32 && AT_OBJ_CLASS(dt_attr_idx) == Derived_Type)) {
+  if (!(is_Target_ABI_n32() && AT_OBJ_CLASS(dt_attr_idx) == Derived_Type)) {
     return FALSE;
   }
   /* When C_PTR or C_FUNPTR has arrived from an intrinsic module, p_driver.c
@@ -7008,7 +7006,7 @@ c_ptr_abi_trouble(int dt_attr_idx) {
 boolean
 is_x8664_n32() {
 #if defined(TARG_X8664)
-  return Target_ABI == ABI_n32;
+  return is_Target_ABI_n32();
 #else /* defined(TARG_X8664) */
   return FALSE;
 #endif /* defined(TARG_X8664) */

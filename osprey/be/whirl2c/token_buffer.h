@@ -137,8 +137,7 @@ typedef enum Format_Kind
    NUM_FORMAT_KINDS = F77_ANSI_FORMAT
 } FORMAT_KIND;
 
-extern void Initialize_Token_Buffer(FORMAT_KIND output_format,
-				    BOOL        prompf_srcmap_format);
+extern void Initialize_Token_Buffer(FORMAT_KIND output_format);
 extern void Terminate_Token_Buffer(FILE *srcpos_map_file);
 
 extern void Set_Maximum_Linelength(UINT32 max_linelength);

@@ -67,14 +67,10 @@
 #include "whirl2src.h"
 #include "scalar_expand.h"
 #include "shackle.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "debug.h" 
 #ifdef KEY
 #include "wn_simp.h"            // for WN_Simp_Compare_Trees
 #endif
-
-#pragma weak New_Construct_Id
 
 #define SHACKLE_CHAIN_VISITED               1
 #define SHACKLE_CHAIN_NOT_VISITED           0
@@ -97,7 +93,6 @@ extern MEM_POOL         LNO_default_pool;
 
 MEM_POOL         shackle_default_pool;
 MEM_POOL         shackle_map_pool;
-WN_MAP           shackle_prompf_id_map;
 WN_MAP           shackle_ref_map;
 WN_MAP           shackle_chain_map;
 WN_MAP           shackle_chain_id_map;
@@ -149,20 +144,6 @@ Shackle_Info_For_Shackled_Arrays(WN *main_snl,
     }
   }
   return result;
-}
-
-static void
-Shackle_Prompf_Map_Initialize (WN *wn)
-{
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT32 id = WN_MAP32_Get (Prompf_Id_Map, wn);
-    if (0 != id) 
-      WN_MAP32_Set (shackle_prompf_id_map, wn, id);
-    FOR_CHILDREN (wn, child, ignCount) {
-      Shackle_Prompf_Map_Initialize (child);
-    }
-    END_CHILDREN;
-  }
 }
 
 static BOOL
@@ -1189,13 +1170,7 @@ Create_Simple_Shackle_Loops(WN                    *main_body,
   DEF_LIST      *dl;
   INT32          added_loop_count = 0;
   WN            *outermost_do;
-  PROMPF_LINES  *pl;
   INT64          linenum = WN_Get_Linenum (main_body);
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    pl = CXX_NEW (PROMPF_LINES (main_body, &PROMPF_pool),
-		  &PROMPF_pool);
-  }
 
   another_do = Find_Do_Loop (main_body);
   assert (NULL != another_do);
@@ -1312,15 +1287,6 @@ Create_Simple_Shackle_Loops(WN                    *main_body,
 	Set_Do_Loop_Info (current_do, dli);
 	sh->Set_Loop_Stmt (i, current_do);
 	WN_Set_Linenum (current_do, linenum);
-	// Set prompf info for the new loop created
-	if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-	  INT32 new_id = New_Construct_Id();
-	  WN_MAP32_Set (Prompf_Id_Map, current_do, new_id);
-	  WN_MAP32_Set (shackle_prompf_id_map, current_do,
-			new_id);
-	  Prompf_Info->Outer_Shackle(new_id, pl, 
-	    (char*) WB_Whirl_Symbol(current_do));
-	}
 
 	WN *fake_unroll[2];
 	WN *if_cond_lhs = LWN_Copy_Tree (start_exp);
@@ -2926,7 +2892,6 @@ Per_SNL_Shackle_Phase(WN *main_snl,
     return FALSE;
 
   s = gather_stmts_in_func (main_snl);
-  Shackle_Prompf_Map_Initialize (main_snl);
   shackle_chain_id_map_cnt = 0;
   if (shackle_debug_level > 0) 
     printf("The number of statements is %d\n", s->Queue_Length());
@@ -3084,7 +3049,6 @@ SHACKLE_Phase (WN *func_nd)
   Shackle_Mem_Initialize (&shackle_default_pool);
   shackle_ref_map = WN_MAP_Create (&shackle_map_pool);
   shackle_shackle_map = WN_MAP_Create (&shackle_map_pool);
-  shackle_prompf_id_map = WN_MAP32_Create (&shackle_map_pool);
   shackle_chain_map = WN_MAP32_Create (&shackle_map_pool);
   shackle_chain_id_map = WN_MAP32_Create (&shackle_map_pool);
   FIZ_FUSE_INFO *ffi = 
@@ -3112,7 +3076,6 @@ SHACKLE_Phase (WN *func_nd)
   }
   WN_MAP_Delete (shackle_ref_map);
   WN_MAP_Delete (shackle_shackle_map);
-  WN_MAP_Delete (shackle_prompf_id_map);
   WN_MAP_Delete (shackle_chain_map);
   WN_MAP_Delete (shackle_chain_id_map);
   MEM_POOL_Pop (&shackle_default_pool);

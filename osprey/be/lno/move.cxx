@@ -87,8 +87,6 @@ static char *rcs_id = "$Source: be/lno/SCCS/s.move.cxx $ $Revision: 1.9 $";
 #include "ff_utils.h"
 #include "move.h"
 #include "w2op.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "ipa_lno_util.h"
 #include "call_info.h"
 #include "debug.h"

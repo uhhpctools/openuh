@@ -57,7 +57,6 @@
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"
@@ -86,7 +85,7 @@ extern void WB_IPL_Initialize(WN* wn_global,
 			      ALIAS_MANAGER* am)
 { 
   WB_Set_Phase(WBP_IPL); 
-  WB_Initialize(&wb_ipl, wn_global, &Get_Current_PU(), du, am, -1); 
+  WB_Initialize(&wb_ipl, wn_global, &Get_Current_PU(), du, am);
 } 
 
 extern void WB_IPL_Set_Access_Array_Map(WN_MAP access_array_map)

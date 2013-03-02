@@ -145,6 +145,7 @@ extern void Expand_Shuffle (OPCODE opcode, TN* result, TN* src1,
 TN* Get_TN_Pair( TN* );
 TN* Create_TN_Pair( TN*, TYPE_ID );
 void Create_TN_Pair( TN*, TN* );
+void Delete_TN_Pair( TN* );
 #endif /* TARG_X8664 */
 
 #if defined(TARG_IA64) || defined(TARG_LOONGSON)

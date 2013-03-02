@@ -114,7 +114,6 @@
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
 #include "cxx_template.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"

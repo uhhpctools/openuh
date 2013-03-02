@@ -97,6 +97,8 @@ if ( test $srcdir = . && test -d gcc ) \
 else
   host_subdir=.
 fi
+# Open64: override the host_subdir to always be the same.
+host_subdir="host-unknown"
 # No prefix.
 target_subdir=${target_noncanonical}
 AC_SUBST([build_libsubdir]) []dnl

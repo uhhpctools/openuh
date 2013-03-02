@@ -94,6 +94,10 @@
  *     Enable cmp load exec EBO optimization which folds loads onto
  *      cmp operations for X8664.
  *
+ *  BOOL CG_fma3_load_exec
+ *     Enable fma3 load exec EBO optimization which folds loads onto
+ *      fma3 operations for X8664.
+ *
  *  BOOL CG_fma4_load_exec
  *     Enable fma4 load exec EBO optimization which folds loads onto
  *      fma4 operations for X8664.
@@ -528,6 +532,7 @@ extern BOOL CG_skip_local_sched;
 extern BOOL CG_skip_local_swp;
 #ifdef TARG_X8664
 extern BOOL CG_cmp_load_exec;
+extern BOOL CG_fma3_load_exec;
 extern BOOL CG_fma4_load_exec;
 extern BOOL CG_dispatch_schedule;
 extern BOOL CG_LOOP_nounroll_best_fit_set;
@@ -864,6 +869,7 @@ extern BOOL LOCS_Reduce_Prefetch;
 extern BOOL LOCS_Reduce_Prefetch_set;
 #endif
 extern INT32 CG_p2align;
+extern BOOL CG_p2align_split;
 #if defined(TARG_X8664) || defined(TARG_LOONGSON)
 extern INT32 CG_sse_load_execute;
 extern INT32 CG_load_execute;
@@ -876,7 +882,7 @@ extern BOOL CG_loop32;
 extern BOOL CG_compute_to;
 extern UINT64 CG_p2align_freq;
 extern UINT32 CG_p2align_max_skip_bytes;
-extern UINT32 CG_movnti;
+extern INT32 CG_movnti;
 extern BOOL CG_use_xortozero;
 extern BOOL CG_use_xortozero_Set;
 extern BOOL CG_use_incdec;

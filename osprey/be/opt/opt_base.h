@@ -141,6 +141,7 @@ public:
   mUINT32     Hash(POINTER k);
   MAP_LIST   *Find_map_list(POINTER k);
   void        Add_map(POINTER k, POINTER v);
+  void        Override_add_map(POINTER k, POINTER v);
   POINTER     Get_val(POINTER k);
   mUINT32     Size() { return size; };
   MAP_LIST *  Get_bucket(UINT32 i) { return hash_vec[i]; };

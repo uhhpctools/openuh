@@ -132,7 +132,6 @@ extern void W2C_Process_Command_Line(INT phase_argc,
                                      const char * const argv[]);
 extern void W2C_Push_PU(const WN *pu, WN *body_part_of_interest);
 extern void W2C_Set_Frequency_Map(WN_MAP frequency_map);
-extern void W2C_Set_Prompf_Emission(const WN_MAP *construct_map);
 extern BOOL W2C_Should_Emit_Nested_PUs(void);
 extern BOOL W2C_Should_Before_CG(void);
 extern void W2C_Translate_Istore_Lhs(char *strbuf,
@@ -157,7 +156,6 @@ extern void W2F_Process_Command_Line(INT phase_argc,
                                      const char *argv[]);
 extern void W2F_Push_PU(WN *pu, WN *body_part_of_interest);
 extern void W2F_Set_Frequency_Map(WN_MAP frequency_map);
-extern void W2F_Set_Prompf_Emission(WN_MAP *construct_map);
 extern BOOL W2F_Should_Emit_Nested_PUs(void);
 extern void W2F_Translate_Istore_Lhs(char *strbuf, 
                                      UINT bufsize,

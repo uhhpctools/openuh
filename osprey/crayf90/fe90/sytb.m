@@ -158,6 +158,10 @@
 
 # define SET_POINTER_SIZE	(cmd_line_flags.s_pointer8)
 /* OSP_456 */
+/* To avoid compiler warnings don't include "config_targ.h", which
+ * contains versions of Is_Target_32bit and Is_Target_64bit that are
+ * BE specific.
+ */
 # define Is_Target_32bit()      (cmd_line_flags.s_pointer8 == 0)
 # define Is_Target_64bit()      (cmd_line_flags.s_pointer8 == 1)
 

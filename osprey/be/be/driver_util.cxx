@@ -216,11 +216,14 @@ Process_Command_Line (INT argc, char **argv)
 	    if (Process_Command_Line_Group (cp, Common_Option_Groups))
 		continue;
 
-        /* process a command-line option group using componentization-based
-        new approach */
-        if (O64_Driver::GetInstance()->ProcessComponentOption(argv[i]))
+        /* Save the component internal options in the format of 
+           -COMP-name:option_list. The reason that we only save here
+           instead of process is that some component are not registered
+           yet. Only after load_components, all the needed so are 
+           and component are registered. */
+        if (O64_Driver::GetInstance()->SaveComponentOption(argv[i]))
         continue;
-
+            
 	    switch ( *cp++ ) {
               
 #ifdef TARG_IA64         

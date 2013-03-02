@@ -1525,68 +1525,6 @@ int main()
 			   TOP_UNDEFINED );
 
   /* dest=op(src1, src2), non-x86-style */
-  ISA_PRINT_TYPE vropspec = ISA_Print_Type_Create("vropspec", "%s %s,%s,%s");
-  Name();
-  Operand(0);
-  Result(0);
-  Result(0);
-  Instruction_Print_Group( vropspec,
-                           TOP_vmovlhps,
-                           TOP_vfsqrtsd,
-                           TOP_vfsqrtss,
-                           TOP_vfrsqrtss,
-                           TOP_vfrcpss,
-			   TOP_UNDEFINED );
-
-  /* dest=op(src1, memop), non-x86-style */
-  ISA_PRINT_TYPE vropspecmem = ISA_Print_Type_Create("vropspecmem", "%s %s%s(%s),%s,%s");
-  Name();
-  Segment();
-  Operand(1);
-  Operand(0);
-  Result(0);
-  Result(0);
-  Instruction_Print_Group( vropspecmem,
-                           TOP_vfsqrtxsd,
-                           TOP_vfsqrtxss,
-                           TOP_vfrsqrtxss,
-                           TOP_vfrcpxss,
-			   TOP_UNDEFINED );
-
-  /* dest=op(src1, memop with scaled index with base), non-x86-style */
-  ISA_PRINT_TYPE vropspecmemindex = ISA_Print_Type_Create("vropspecmemindex", "%s %s%s(%s,%s,%s),%s,%s");
-  Name();
-  Segment();
-  Operand(3);
-  Operand(0);
-  Operand(1);
-  Operand(2);
-  Result(0);
-  Result(0);
-  Instruction_Print_Group( vropspecmemindex,
-                           TOP_vfsqrtxxss,
-                           TOP_vfsqrtxxsd,
-                           TOP_vfrsqrtxxss,
-                           TOP_vfrcpxxss,
-			   TOP_UNDEFINED );
-
-  /* dest=op(src1, memop with scaled index without base), non-x86-style */
-  ISA_PRINT_TYPE vropspecmemindexx = ISA_Print_Type_Create("vropspecmemindexx", "%s %s%s(,%s,%s),%s,%s");
-  Name();
-  Segment();
-  Operand(2);
-  Operand(0);
-  Operand(1);
-  Result(0);
-  Result(0);
-  Instruction_Print_Group( vropspecmemindex,
-                           TOP_vfsqrtxxxsd,
-                           TOP_vfsqrtxxxss,
-                           TOP_vfrsqrtxxxss,
-                           TOP_vfrcpxxxss,
-			   TOP_UNDEFINED );
-
-  /* dest=op(src1, src2), non-x86-style */
   ISA_PRINT_TYPE vropop = ISA_Print_Type_Create("vropop", "%s %s,%s,%s");
   Name();
   Operand(1);
@@ -1631,6 +1569,10 @@ int main()
                            TOP_vfadd128v32,
                            TOP_vfaddsd,
                            TOP_vfaddss,
+                           TOP_vfsqrtsd,
+                           TOP_vfsqrtss,
+                           TOP_vfrsqrtss,
+                           TOP_vfrcpss,
                            TOP_vfaddsub128v64,
                            TOP_vfaddsub128v32,
                            TOP_vand128v8,
@@ -1688,6 +1630,7 @@ int main()
                            TOP_vpmaddwd,
                            TOP_vpmaddubsw128,
                            TOP_vmovhlps,
+                           TOP_vmovlhps,
                            TOP_vmovsd,
                            TOP_vmovss,
                            TOP_vmaxs128v8,
@@ -1870,6 +1813,10 @@ int main()
                            TOP_vfaddx128v32,
                            TOP_vfaddxsd,
                            TOP_vfaddxss,
+                           TOP_vfsqrtxsd,
+                           TOP_vfsqrtxss,
+                           TOP_vfrsqrtxss,
+                           TOP_vfrcpxss,
                            TOP_vfaddsubx128v64,
                            TOP_vfaddsubx128v32,
                            TOP_vandx128v8,
@@ -2096,6 +2043,10 @@ int main()
                            TOP_vfaddxx128v32,
                            TOP_vfaddxxsd,
                            TOP_vfaddxxss,
+                           TOP_vfsqrtxxss,
+                           TOP_vfsqrtxxsd,
+                           TOP_vfrsqrtxxss,
+                           TOP_vfrcpxxss,
                            TOP_vfaddsubxx128v64,
                            TOP_vfaddsubxx128v32,
                            TOP_vfandxx128v32,
@@ -2323,6 +2274,10 @@ int main()
                            TOP_vfaddxxx128v32,
                            TOP_vfaddxxxsd,
                            TOP_vfaddxxxss,
+                           TOP_vfsqrtxxxsd,
+                           TOP_vfsqrtxxxss,
+                           TOP_vfrsqrtxxxss,
+                           TOP_vfrcpxxxss,
                            TOP_vfaddsubxxx128v64,
                            TOP_vfaddsubxxx128v32,
                            TOP_vfandxxx128v32,
@@ -4966,12 +4921,12 @@ int main()
                            TOP_xfnmsub231ss,
                            TOP_UNDEFINED );
   
-  ISA_PRINT_TYPE ifma_ropopmem = ISA_Print_Type_Create("ifma_ropopmem", "%s %s,%s%s(%s),%s");
+  ISA_PRINT_TYPE ifma_ropopmem = ISA_Print_Type_Create("ifma_ropopmem", "%s %s%s(%s),%s,%s");
   Name();
-  Operand(1);
   Segment();
   Operand(3);
   Operand(2);
+  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmem,
@@ -5037,14 +4992,14 @@ int main()
                            TOP_xfnmsub231xss,
                            TOP_UNDEFINED );
 
-  ISA_PRINT_TYPE ifma_ropopmemindex = ISA_Print_Type_Create("ifma_ropopmemindex", "%s %s,%s%s(%s,%s,%s),%s");
+  ISA_PRINT_TYPE ifma_ropopmemindex = ISA_Print_Type_Create("ifma_ropopmemindex", "%s %s%s(%s,%s,%s),%s,%s");
   Name();
-  Operand(1);
   Segment();
   Operand(5);
   Operand(2);
   Operand(3);
   Operand(4);
+  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmemindex,
@@ -5110,13 +5065,13 @@ int main()
                            TOP_xfnmsub231xxss,
                            TOP_UNDEFINED );
 
-  ISA_PRINT_TYPE ifma_ropopmemindexx = ISA_Print_Type_Create("ifma_ropopmemindexx", "%s %s,%s%s(,%s,%s),%s");
+  ISA_PRINT_TYPE ifma_ropopmemindexx = ISA_Print_Type_Create("ifma_ropopmemindexx", "%s %s%s(,%s,%s),%s,%s");
   Name();
-  Operand(1);
   Segment();
   Operand(4);
   Operand(2);
   Operand(3);
+  Operand(1);
   Result(0);
   Operand(0);
   Instruction_Print_Group( ifma_ropopmemindexx,

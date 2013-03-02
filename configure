@@ -273,7 +273,11 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
+<<<<<<< .mine
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+=======
 ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_TAU_INSTR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+>>>>>>> .r4043
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -797,6 +801,7 @@ Optional Features:
   --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
+  --enable-whirl-id       Enable debugging ID in WHIRL node
   --disable-ipa           Disable IPA compilation support (EXPERIMENTAL)
   --disable-shared        Disable shared libraries (EXPERIMENTAL)
   --enable-tau-instrumentation
@@ -823,6 +828,7 @@ Optional Packages:
                           kilobytes,megabytes,gigabytes respecitvely. Will be
                           30M if unspecified.
   --with-build-optimize=DEFAULT|DEBUG	Use DEFAULT or DEBUG flags in compiler build
+  --with-build-ffe-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in FFE build
   --with-build-lib-optimize=DEFAULT|DEBUG Use DEFAULT or DEBUG flags in library build.
     Note that --with-build-lib-optimize=DEBUG is currently not well tested.
 
@@ -1386,12 +1392,12 @@ test -n "$target_alias" &&
 # unless the user specifies otherwise, we default to 32 bit mode as the
 # default on x86 64 bit platforms.
 
-if test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
+if test "$build_alias" = "" && test "$host_alias" = "" && test "$host_cpu" = "x86_64"; then
   host_cpu=i686
   host=$host_cpu-$host_vendor-$host_os
 fi
 
-if test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
+if test "$build_alias" = "" && test "$target_alias" = "" && test "$target_cpu" = "x86_64"; then
   target_cpu=i686
   target=$target_cpu-$target_vendor-$target_os
 fi
@@ -1691,6 +1697,17 @@ echo "$as_me: error: \"BUILD_OPTIMIZE=$BUILD_OPTIMIZE is not supported\"" >&2;}
     ;;
 esac
 
+# TODO cleanup Fortran Front-End (FFE) so that extra debugging checks
+# can be enabled when BUILD_OPTIMIZE is set to DEBUG.
+
+# Check whether --with-build-ffe-optimize or --without-build-ffe-optimize was given.
+if test "${with_build_ffe_optimize+set}" = set; then
+  withval="$with_build_ffe_optimize"
+  BUILD_FFE_OPTIMIZE="$with_build_ffe_optimize"
+else
+  BUILD_FFE_OPTIMIZE=DEFAULT
+fi;
+
 
 # Check whether --with-build-lib-optimize or --without-build-lib-optimize was given.
 if test "${with_build_lib_optimize+set}" = set; then
@@ -1745,6 +1762,24 @@ fi;
 if test "x$enable_fortran" != "xno"; then
 
   BUILD_FORTRAN=YES
+
+fi
+
+
+# Set whether WHIRL a node contains a debugging ID
+# Check whether --enable-whirl_id or --disable-whirl_id was given.
+if test "${enable_whirl_id+set}" = set; then
+  enableval="$enable_whirl_id"
+
+fi;
+
+if test "x$enable_whirl_id" = "xyes"; then
+
+  WHIRL_HAS_ID_FIELD=YES
+
+else
+
+  WHIRL_HAS_ID_FIELD=NO
 
 fi
 
@@ -1831,6 +1866,8 @@ LIB2_BUILD_ABI=
 LIB2_BUILD_ARCH=
 LIB2_BUILD_HOST=
 
+CYGNUS_CONFIGURE_CFLAGS=
+
 # Set variables based on the host machine that the compiler will run on.
 case "$host" in
 	x86_64*-*-linux*)
@@ -1839,6 +1876,7 @@ case "$host" in
 		BUILD_HOST=X8664
 		CYGNUS_CONFIGURE_HOST=i686-open64-linux
 		GCC_CONFIGURE_HOST=x86_64-redhat-linux
+		GCC_CONFIGURE_COMPILER+=" -m64"
 		;;
 	i*86*-*-linux*)
 		BUILD_ABI=I32BIT
@@ -1846,6 +1884,8 @@ case "$host" in
 		BUILD_HOST=IA32
 		CYGNUS_CONFIGURE_HOST=i686-open64-linux
 		GCC_CONFIGURE_HOST=x86_64-redhat-linux
+		GCC_CONFIGURE_COMPILER+=" -m32"
+		CYGNUS_CONFIGURE_CFLAGS="-m32"
 		;;
 	ia64*-*-linux*)
 		BUILD_ABI=I64BIT
@@ -1854,6 +1894,8 @@ case "$host" in
 		CYGNUS_CONFIGURE_HOST=ia64-linux-gnu
 		GCC_CONFIGURE_HOST=ia64-redhat-linux
 		;;
+	powerpc-*-linux*)
+		;;
 	*)
 		{ { echo "$as_me:$LINENO: error: \"open64 is not supported on $target\"" >&5
 echo "$as_me: error: \"open64 is not supported on $target\"" >&2;}
@@ -1861,7 +1903,6 @@ echo "$as_me: error: \"open64 is not supported on $target\"" >&2;}
 		;;
 esac
 
-CYGNUS_CONFIGURE_CFLAGS=
 BUILD_VENDOR=
 
 # Set variables based on the target machine that the compiler will generate
@@ -1880,7 +1921,6 @@ case "$target" in
 		LIB2_BUILD_ARCH=X8664
 		CYGNUS_CONFIGURE_TARG=x86_64-open64-linux
 		GCC_CONFIGURE_TARG=x86_64-redhat-linux
-		GCC_CONFIGURE_COMPILER+=" -m64"
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_X8664"
 		;;
 	i*86*-*-linux*)
@@ -1896,9 +1936,7 @@ case "$target" in
 		LIB2_BUILD_ARCH=X8664
 		CYGNUS_CONFIGURE_TARG=x86_64-open64-linux
 		GCC_CONFIGURE_TARG=x86_64-redhat-linux
-		GCC_CONFIGURE_COMPILER+=" -m32"
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_X8664"
-		CYGNUS_CONFIGURE_CFLAGS="-m32"
 		;;
 	ia64*-*-linux*)
 		MACHINE_TYPE=ia64
@@ -1908,6 +1946,32 @@ case "$target" in
 		GCC_CONFIGURE_CFLAGS+=" -DTARG_IA64"
 		TARG_INFO_NAME=ipfec_targ_info
 		;;
+	powerpc-*-linux*)
+		MACHINE_TYPE=PPC32
+		BUILD_ABI=I32BIT
+		BUILD_TARGET=PPC32
+		BUILD_MULTILIB=NO
+		BUILD_VENDOR=OSP
+		GCC_CONFIGURE_TARG=powerpc-redhat-linux
+		GCC_CONFIGURE_HOST=powerpc-redhat-linux
+		GCC_CONFIGURE_BUILD=powerpc-redhat-linux
+		CYGNUS_CONFIGURE_TARG=mipsel-elf-linux
+		GCC_CONFIGURE_COMPILER+=" -m32"
+		GCC_CONFIGURE_CFLAGS+=" -DTARG_PPC32"
+		case "$host" in
+			powerpc-*-linux*)
+				BUILD_ARCH=PPC32
+				BUILD_HOST=PPC32
+				BUILD_SKIP_IPA=YES
+				GCC_CONFIGURE_CFLAGS+=" -DTARG_PPC"
+			;;
+			*)
+				BUILD_SKIP_IPA=NO
+				BUILD_ARCH=IA32
+				BUILD_HOST=IA32
+				CROSS_TARGET="$target"
+			;;
+		esac ;;
 	sl*-*-linux*)
 		MACHINE_TYPE=SL
 		BUILD_TARGET=SL
@@ -1931,6 +1995,11 @@ esac
 
 if test "${BUILD_TARGET}" = "SL"; then
    BUILD_GNU3="YES"
+   BUILD_FORTRAN="NO"
+fi
+
+if test "${BUILD_TARGET}" = "PPC32"; then
+   BUILD_GNU3="NO"
    BUILD_FORTRAN="NO"
 fi
 
@@ -2027,9 +2096,18 @@ export GCC_CONFIGURE_CFLAGS
 
 
 
+<<<<<<< .mine
 
 
 
+
+
+
+=======
+
+
+
+>>>>>>> .r4043
 # List of configurable files to create in object directory.
                                                                                                                                                                                                                                                                     ac_config_files="$ac_config_files Makefile osprey/Makefile.gsetup osprey/targdir/include/Makefile osprey/targdir/driver/Makefile osprey/targdir/libiberty/Makefile osprey/targdir/targ_info/Makefile osprey/targdir/be/Makefile osprey/targdir/libelf/Makefile osprey/targdir/libelfutil/Makefile osprey/targdir/libdwarf/Makefile osprey/targdir/libunwindP/Makefile osprey/targdir/cg/Makefile osprey/targdir/wopt/Makefile osprey/targdir/ipl/Makefile osprey/targdir/lno/Makefile osprey/targdir/lw_inline/Makefile osprey/targdir/ipa/Makefile osprey/targdir/whirl2c/Makefile osprey/targdir/libcomutil/Makefile osprey/targdir/ir_tools/Makefile osprey/targdir/libcmplrs/Makefile osprey/targdir/libcif/Makefile osprey/targdir/arith/Makefile osprey/targdir/orc_ict/Makefile osprey/targdir/orc_intel/Makefile osprey/targdir/libkapi/Makefile"
 
@@ -2880,12 +2958,14 @@ s,@target_cpu@,$target_cpu,;t t
 s,@target_vendor@,$target_vendor,;t t
 s,@target_os@,$target_os,;t t
 s,@MACHINE_TYPE@,$MACHINE_TYPE,;t t
+s,@CROSS_TARGET@,$CROSS_TARGET,;t t
 s,@BUILD_ABI@,$BUILD_ABI,;t t
 s,@BUILD_ARCH@,$BUILD_ARCH,;t t
 s,@BUILD_HOST@,$BUILD_HOST,;t t
 s,@BUILD_TARGET@,$BUILD_TARGET,;t t
 s,@BUILD_VENDOR@,$BUILD_VENDOR,;t t
 s,@BUILD_OPTIMIZE@,$BUILD_OPTIMIZE,;t t
+s,@BUILD_FFE_OPTIMIZE@,$BUILD_FFE_OPTIMIZE,;t t
 s,@BUILD_LIB_OPTIMIZE@,$BUILD_LIB_OPTIMIZE,;t t
 s,@BUILD_COMPILER@,$BUILD_COMPILER,;t t
 s,@BUILD_BOTH@,$BUILD_BOTH,;t t
@@ -2904,6 +2984,7 @@ s,@COMPILER_TARG_DIR@,$COMPILER_TARG_DIR,;t t
 s,@TARG_INFO_NAME@,$TARG_INFO_NAME,;t t
 s,@BUILD_GNU3@,$BUILD_GNU3,;t t
 s,@BUILD_FORTRAN@,$BUILD_FORTRAN,;t t
+s,@WHIRL_HAS_ID_FIELD@,$WHIRL_HAS_ID_FIELD,;t t
 s,@BUILD_SKIP_IPA@,$BUILD_SKIP_IPA,;t t
 s,@BUILD_TYPE@,$BUILD_TYPE,;t t
 s,@DRAGON_SUPPORT@,$DRAGON_SUPPORT,;t t

@@ -64,14 +64,10 @@
 #include "fiz_fuse.h"
 #include "snl_utils.h"
 #include "forward.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "minvariant.h"
 #include "cond.h"
 #include "move.h" 
 #include "ipl_lno_util.h" 
-
-#pragma weak New_Construct_Id
 
 #define MAX_NAME_SIZE 75 
 #define HMB_ABS_CODE_EXPANSION 	1000 
@@ -743,55 +739,6 @@ static BOOL Has_Code_At_Depth(WN* wn_snl,
 } 
 
 //-----------------------------------------------------------------------
-// NAME: Prompf_Hoist_Messy_Bounds 
-// FUNCTION: For the innermost SNL 'wn_snl' consisting of 'inner_depth 
-//   - outer_depth + 1' loops, which is transformed into the series of 
-//   SNLs in 'wn_version[outer_depth..inner_depth-1]' each of which exists
-//   if 'need_version[i]' is TRUE, update prompf information to show the
-//   existence of the new SNLs. 
-//-----------------------------------------------------------------------
-
-static void Prompf_Hoist_Messy_Bounds(WN* wn_snl,
-				      WN* wn_version[],
-				      INT version_count,
-				      INT outer_depth, 
-				      INT inner_depth)
-{
-  INT nloops = inner_depth - outer_depth + 1; 
-  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool); 
-  INT old_count = 0; 
-  WN* wn = 0;
-  for (wn = wn_snl; wn != NULL; wn = Next_SNL_Loop(wn))  
-    if (WN_opcode(wn) == OPC_DO_LOOP) 
-      old_ids[old_count++] = WN_MAP32_Get(Prompf_Id_Map, wn);
-  INT i = 0; 
-  for (wn = wn_version[0]; wn != NULL; wn = Next_SNL_Loop(wn))
-    if (WN_opcode(wn) == OPC_DO_LOOP)
-      WN_MAP32_Set(Prompf_Id_Map, wn, old_ids[i++]); 
-  for (i = 1; i < version_count; i++) {
-    INT new_count = 0; 
-    for (wn = wn_version[i]; wn != NULL; wn = Next_SNL_Loop(wn))
-      if (WN_opcode(wn) == OPC_DO_LOOP)
-	 new_count++;  
-    if (new_count == 0) 
-      continue; 
-    INT* new_ids = CXX_NEW_ARRAY(INT, new_count, &LNO_local_pool); 
-    INT j = 0; 
-    for (wn = wn_version[i]; wn != NULL; wn = Next_SNL_Loop(wn)) {
-      if (WN_opcode(wn) == OPC_DO_LOOP) { 
-	INT new_id = New_Construct_Id(); 
-	WN_MAP32_Set(Prompf_Id_Map, wn, new_id);
-	new_ids[j++] = new_id; 
-      }
-    }
-    Prompf_Info->Hoist_Messy_Bounds(old_ids, new_ids, new_count); 
-  }
-  for (wn = wn_snl; wn != NULL; wn = Next_SNL_Loop(wn))
-    if (WN_opcode(wn) == OPC_DO_LOOP)
-      WN_MAP32_Set(Prompf_Id_Map, wn, 0); 
-}
-
-//-----------------------------------------------------------------------
 // NAME: Contains_Index_Variable
 // FUNCTION: Returns TRUE if 'wn_tree' contains an index variable, 
 //   FALSE otherwise. 
@@ -1458,11 +1405,6 @@ static void HMB_Hoist_Messy_Bounds(WN* wn_snl,
     } 
     wn_insert = wn_version[i]; 
   }
-
-  // Assign ids for prompf
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Hoist_Messy_Bounds(wn_snl, wn_version, version_count,
-      outer_depth, inner_depth);  
 
   if (version_count > 1 || Get_Trace(TP_LNOPT2, TT_HMB_FORCE_VERSIONS)) 
     HMB_Compound_Guard_And_Hoist(wn_version, guard_mask, version_count, 

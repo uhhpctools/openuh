@@ -98,12 +98,8 @@ const static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.
 #include "scalar_expand.h"
 #include "lego_affinity.h"
 #include "config.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "region_util.h"
 #include "debug.h"
-
-#pragma weak New_Construct_Id
 
 typedef struct {
   WN*		pragma;
@@ -607,13 +603,6 @@ Copy_Array(DISTR_INFO* di, ST *local_st, WN *mp_region, WN *tmp_array_def,
     LWN_Copy_Linenumber(mp_region,step);
     loop_steps[i] = start;
     do_loop = LWN_CreateDO(index,start,end,step,WN_CreateBlock());
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT new_id = New_Construct_Id();
-      WN_MAP32_Set(Prompf_Id_Map, do_loop, new_id);
-      PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(mp_region, &PROMPF_pool), 
-	&PROMPF_pool);
-      Prompf_Info->Dsm_Local(new_id, pl, (char*) WB_Whirl_Symbol(do_loop));
-    }
     loops[i] = do_loop;
     LWN_Copy_Linenumber(mp_region,do_loop);
     LWN_Copy_Linenumber(mp_region,WN_do_body(do_loop));

@@ -87,11 +87,6 @@ extern "C" {
  *    table-section for the PU will be popped off the whirl2c 
  *    symbol table stack.
  *
- * W2C_Set_Prompf_Emission()
- *    Pass in a mapping from WN nodes to construct identifiers, and
- *    notify whirl2c to emit its output in a form suitable for ProMPF.
- *    Call this one time only, before any translation takes place!
- *
  * W2C_Set_Frequency_Map()
  *    Pass in a mapping from WN nodes to feedback frequency information.
  *    Call this for each PU that has such a map.  The actual emission
@@ -222,8 +217,6 @@ extern BOOL W2F_Emit_Omp;        /* Force OMP pragmas wherever possible */
            /* External data set through the API or otherwise */
            /*------------------------------------------------*/
 
-extern BOOL          W2C_Prompf_Emission;  /* Emitting prompf xformed sources */
-extern const WN_MAP *W2C_Construct_Map;    /* Construct id mapping for prompf */
 extern WN_MAP        W2C_Frequency_Map;    /* Frequency mapping */
 extern BOOL          W2C_Cplus_Initializer;/* Whether to call C++ init */
 
@@ -258,7 +251,6 @@ extern void W2C_Fini(void);
 extern void W2C_Push_PU(const WN *pu, WN *body_part_of_interest);
 extern void W2C_Pop_PU(void);
 
-extern void W2C_Set_Prompf_Emission(const WN_MAP *construct_map);
 extern void W2C_Set_Frequency_Map(WN_MAP frequency_map);
 
 extern const char *W2C_Get_Transformed_Src_Path(void);

@@ -70,7 +70,6 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.fiz_fu
 #include "tlog.h"
 #include "whirl2src.h"
 #include "parallel.h"
-#include "prompf.h" 
 
 typedef HASH_TABLE<WN*,INT> WN2INT;
 typedef enum { INFO, FAIL, SUCCEED } INFO_TYPE;
@@ -537,11 +536,6 @@ static WN* Version_Loop(WN* wn_loop)
   REDUCTION_MANAGER* rm = red_manager;
   WN_MAP version_map = WN_MAP_Create(&LNO_local_pool);
   WN* wn_copy = LWN_Copy_Tree(wn_loop, TRUE, LNO_Info_Map, TRUE, version_map);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    STACK<WN*> st_old(&LNO_local_pool);
-    STACK<WN*> st_new(&LNO_local_pool);
-    Prompf_Assign_Ids(wn_loop, wn_copy, &st_old, &st_new, TRUE);
-  } 
   BOOL all_internal = WN_Rename_Duplicate_Labels(wn_loop, wn_copy,
     Current_Func_Node, &LNO_local_pool);
   Is_True(all_internal, ("external labels renamed"));
@@ -615,49 +609,19 @@ static WN* Version_Loop_Pair(WN* wn_loop1,
 } 
 
 //-----------------------------------------------------------------------
-// NAME: Prompf_Zero_Ids
-// FUNCTION: Reset to 0 all of the PROMPF ids in the tree rooted at 
-//   'wn_tree'. 
-//-----------------------------------------------------------------------
-
-static void Prompf_Zero_Ids(WN* wn_tree)
-{ 
-  INT map_id = WN_MAP32_Get(Prompf_Id_Map, wn_tree);
-  if (map_id != 0)
-    WN_MAP32_Set(Prompf_Id_Map, wn_tree, 0);
-  if (WN_operator(wn_tree) == OPR_BLOCK) { 
-    for (WN* wn = WN_first(wn_tree); wn != NULL; wn = WN_next(wn))  
-      Prompf_Zero_Ids(wn);
-  } else { 
-    for (INT i = 0; i < WN_kid_count(wn_tree); i++) 
-      Prompf_Zero_Ids(WN_kid(wn_tree, i));
-  } 
-} 
-
-//-----------------------------------------------------------------------
 // NAME: Extract_Branch
 // FUNCTION: Extract the IF or ELSE branch 'wn_start' of the IF test 'wn_if',
-//   throwing away the other branch. If 'backout_count > 0', back out that
-//   many instances of fusion from the PROMPF log, if we are indeed running
-//   PROMPF. 
+//   throwing away the other branch.
 //-----------------------------------------------------------------------
 
 static void Extract_Branch(WN* wn_if,
-			   WN* wn_start,
-			   BOOL need_backout)
+                           WN* wn_start)
 { 
   WN* wnn = NULL; 
   for (WN* wn = WN_first(wn_start); wn != NULL; wn = wnn) { 
     wnn = WN_next(wn);
     LWN_Extract_From_Block(wn);
     LWN_Insert_Block_Before(LWN_Get_Parent(wn_if), wn_if, wn);
-  } 
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    Prompf_Zero_Ids(wn_if);
-    if (need_backout)
-      Prompf_Info->Restore();
-    else 
-      Prompf_Info->Clear();
   } 
   LWN_Delete_Tree(wn_if);
 } 
@@ -741,8 +705,6 @@ extern FISSION_FUSION_STATUS
 
   WN* wn_if = Version_Loop_Pair(loop1, loop2);
   Save_Corresponding_Loops(wn_if, &loop_list_one, &loop_list_two);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Info->Save();
 
   for (INT j=0; j< fusion_level; j++) {
 
@@ -780,27 +742,27 @@ extern FISSION_FUSION_STATUS
   if (fused_level==fusion_level) {
     // fuse successfully with level-by-level fusion
     *fusion_level_io=fused_level;
-    Extract_Branch(wn_if, WN_then(wn_if), FALSE);
+    Extract_Branch(wn_if, WN_then(wn_if));
     return fusion_status;
   } else if (fusion_status==Succeeded_and_Inner_Loop_Removed) {
     *fusion_level_io=fused_level;
-    Extract_Branch(wn_if, WN_then(wn_if), FALSE);
+    Extract_Branch(wn_if, WN_then(wn_if));
     return fusion_status;
   } else if (fused_level>0 && allow_partial_fusion) {
     *fusion_level_io=fused_level;
-    Extract_Branch(wn_if, WN_then(wn_if), FALSE);
+    Extract_Branch(wn_if, WN_then(wn_if));
     return Partially_fused;
   } else if (fused_level>0 && !allow_partial_fusion) {
     // otherwise, restore the loop back to before fusion
     *fusion_level_io = 0;
     Replace_Corresponding_Loops(ffi, &loop_list_one, &loop_list_two);
-    Extract_Branch(wn_if, WN_else(wn_if), TRUE);
+    Extract_Branch(wn_if, WN_else(wn_if));
     return Failed; 
   } 
 
   *fusion_level_io = 0;
   Replace_Corresponding_Loops(ffi, &loop_list_one, &loop_list_two);
-  Extract_Branch(wn_if, WN_else(wn_if), TRUE);
+  Extract_Branch(wn_if, WN_else(wn_if));
   return Failed;
 }      
 

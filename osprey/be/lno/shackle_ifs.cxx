@@ -61,19 +61,12 @@
 #include "access_main.h"
 #include "shackle.h"
 #include "shackle_ifs.h"
-#include "prompf.h"
-#include "anl_driver.h"
-
-#pragma weak New_Construct_Id
 
 static INT32     shackle_if_debug_level;
-static QUEUE<INT32> 
-                *Prompf_Elimination_Queue;
 extern MEM_POOL  LNO_default_pool;
 extern MEM_POOL  LNO_local_pool;
 static MEM_POOL* shackle_if_pool;
 extern MEM_POOL  shackle_map_pool;
-extern WN_MAP    shackle_prompf_id_map;
 static WN_MAP    shackle_if_copy_map1;
 static WN_MAP    shackle_if_if_map;
 static BOOL      hoist_mins_from_loop_bounds = TRUE;
@@ -84,7 +77,6 @@ static void      Maybe_Handle_Sink_Promotion_Case (WN *,
 						   WN *,
 						   INT32, 
 						   ACCESS_VECTOR *);
-static void      Deferred_Shackle_Prompf_Eliminate(INT32);
 
 #define SHACKLE_IF_HAS_BEEN_SEEN 1
 #define SHACKLE_IF_YET_UNSEEN    0
@@ -98,75 +90,6 @@ static void      Deferred_Shackle_Prompf_Eliminate(INT32);
 #define Shackle_If_Unseen_Set(wn) \
   (WN_MAP32_Set (shackle_if_if_map, (wn), SHACKLE_IF_YET_UNSEEN))
 
-
-static void
-Delete_Shackle_Prompf_Info(WN *wn)
-{
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT32 map_id = WN_MAP32_Get (Prompf_Id_Map, wn);
-    if (0 != map_id)
-      Deferred_Shackle_Prompf_Eliminate (map_id);
-    FOR_CHILDREN (wn, child, ignCount) {
-      Delete_Shackle_Prompf_Info (child);
-    }
-    END_CHILDREN;
-  }
-}
-
-static void
-Shackle_LWN_Delete_Tree (WN *wn)
-{
-  Delete_Shackle_Prompf_Info(wn);
-  PROMPF_INFO *old_prompf_info = Prompf_Info;
-  Prompf_Info = NULL;
-  LWN_Delete_Tree (wn);
-  Prompf_Info = old_prompf_info;
-}
-
-extern void sm(WN* wn)
-{
-  INT32 id = WN_MAP32_Get(shackle_prompf_id_map, wn);
-  fprintf(stdout, "0x%p %d\n", wn, id);
-} 
-
-static void
-Shackle_Copy_Prompf_Id_Map_Info (WN *old_wn, WN *new_wn)
-{
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    FmtAssert (WN_opcode (old_wn) == WN_opcode (new_wn),
-	       ("Can only be called on identical whirl trees!"));
-    INT32 old_id = WN_MAP32_Get (Prompf_Id_Map, old_wn);
-    INT32 base_id = WN_MAP32_Get (shackle_prompf_id_map, old_wn);
-    if (0 != old_id) {
-      INT32 new_id = WN_MAP32_Get (Prompf_Id_Map, new_wn);
-      WN_MAP32_Set (shackle_prompf_id_map, new_wn, base_id);
-      Prompf_Info->Inner_Shackle (base_id, new_id);
-    }
-    if (OPC_BLOCK == WN_opcode (old_wn)) {
-      WN *wn2 = WN_first (new_wn);
-      for (WN *wn1 = WN_first (old_wn); NULL != wn1;
-	   wn1 = WN_next (wn1)) {
-	Shackle_Copy_Prompf_Id_Map_Info (wn1, wn2);
-	wn2 = WN_next (wn2);
-      }
-    }
-    else 
-      for (INT i = 0; i < WN_kid_count (old_wn); i++) 
-	Shackle_Copy_Prompf_Id_Map_Info (WN_kid (old_wn, i),
-					 WN_kid (new_wn, i));
-  }
-}
-
-static void
-Copy_Shackle_Prompf_Info (WN *old_wn, WN *new_wn)
-{
-  STACK<WN *> st_old (shackle_if_pool);
-  STACK<WN *> st_new (shackle_if_pool);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    Prompf_Assign_Ids (old_wn, new_wn, &st_old, &st_new, FALSE);
-    Shackle_Copy_Prompf_Id_Map_Info (old_wn, new_wn);
-  }
-}
 
 static void
 Recursively_Add_Bound_Lin_Symbols(QUEUE<ST *> *lin_sym_q, 
@@ -432,7 +355,7 @@ Simplify_Cond_With_Div_Floor(WN *inp)
 			    (INT64) 0);
     Replace_WN (kid00, d1);
     Replace_WN (kid0, kid00);
-    Shackle_LWN_Delete_Tree (kid0);
+    LWN_Delete_Tree (kid0);
     return;
   default:
     return;
@@ -647,7 +570,7 @@ Remove_Floor_From_One_Sided_Cond(WN *wn)
     LWN_Parentize (result);
     if (NULL != LWN_Get_Parent (wn))
       Replace_WN (wn, result);
-    Shackle_LWN_Delete_Tree (wn);
+    LWN_Delete_Tree (wn);
   }
   else
     result = wn;
@@ -685,7 +608,7 @@ Remove_Floor_From_One_Sided_Cond(WN *wn)
 				    add_wn, kid1);
     if (NULL != LWN_Get_Parent (result))
       Replace_WN (result, replace_wn);
-    Shackle_LWN_Delete_Tree (result);
+    LWN_Delete_Tree (result);
     result = replace_wn;
     LWN_Parentize (result);
     kid0 = WN_kid0 (result);
@@ -727,10 +650,10 @@ Remove_Floor_From_One_Sided_Cond(WN *wn)
 		     kid0_repl, const_val_nm1);
   }
   Replace_WN (dummy1, kid0_repl);
-  Shackle_LWN_Delete_Tree (dummy1);
+  LWN_Delete_Tree (dummy1);
   Replace_WN (kid10, dummy2);
   Replace_WN (kid1, kid10);
-  Shackle_LWN_Delete_Tree (kid1);
+  LWN_Delete_Tree (kid1);
   return result;
 }
 
@@ -789,7 +712,7 @@ Convert_Le_With_Floor_2Lt(WN *wn)
     WN_CreateExp2 (OPCODE_make_op (OPR_ADD, rtype, MTYPE_V),
 		   kid10, wn_const_val);
   Replace_WN (dummy1, add_expr);
-  Shackle_LWN_Delete_Tree (dummy1);
+  LWN_Delete_Tree (dummy1);
   rtype = WN_rtype (wn);
   index_type = WN_desc (wn);
   WN_set_opcode (wn, OPCODE_make_op (OPR_LT,
@@ -850,8 +773,8 @@ Simplify_Cond_With_Floor (WN *wn)
   Replace_WN (kid10, dummy2);
   Replace_WN (kid0, kid00);
   Replace_WN (kid1, kid10);
-  Shackle_LWN_Delete_Tree (kid0);
-  Shackle_LWN_Delete_Tree (kid1);
+  LWN_Delete_Tree (kid0);
+  LWN_Delete_Tree (kid1);
   return WN_Simplify_Tree (wn);
 }
 
@@ -1010,7 +933,7 @@ Sh_LWN_CreateDivceil (TYPE_ID type,
       WN_const_val (rlhs) = const_val2 / const_val + 1;
     else 
       WN_const_val (rlhs) = - (-const_val2 / const_val);
-    Shackle_LWN_Delete_Tree (rhs);
+    LWN_Delete_Tree (rhs);
     return WN_Simplify_Tree (lhs);
   }
   if ((OPR_MPY != WN_operator (lhs)) || 
@@ -1025,8 +948,8 @@ Sh_LWN_CreateDivceil (TYPE_ID type,
       (OPR_INTCONST == WN_operator (r_lhs))) {
     INT64 result = 
       1 + (((WN_const_val (l_lhs)*WN_const_val (r_lhs))-1)/const_val);
-    Shackle_LWN_Delete_Tree (lhs);
-    Shackle_LWN_Delete_Tree (rhs);
+    LWN_Delete_Tree (lhs);
+    LWN_Delete_Tree (rhs);
     return 
       WN_CreateIntconst (OPCODE_make_op (OPR_INTCONST, 
 					 type, MTYPE_V),
@@ -1036,7 +959,7 @@ Sh_LWN_CreateDivceil (TYPE_ID type,
     BOOL divides = 
       (0 == (WN_const_val (r_lhs) % const_val));
     if (divides) {
-      Shackle_LWN_Delete_Tree (rhs);
+      LWN_Delete_Tree (rhs);
       WN_const_val (r_lhs) = WN_const_val (r_lhs) / const_val;
       return WN_Simplify_Tree (lhs);
     }
@@ -1045,7 +968,7 @@ Sh_LWN_CreateDivceil (TYPE_ID type,
   } else {
     BOOL divides = (0 == (WN_const_val (l_lhs) % const_val));
     if (divides) {
-      Shackle_LWN_Delete_Tree (rhs);
+      LWN_Delete_Tree (rhs);
       WN_const_val (l_lhs) = WN_const_val (l_lhs) / const_val;
       return WN_Simplify_Tree (lhs);
     }
@@ -1090,8 +1013,8 @@ Sh_LWN_CreateDivfloor (TYPE_ID type,
       (OPR_INTCONST == WN_operator (r_lhs))) {
     INT64 result = 
       (WN_const_val (l_lhs) * WN_const_val (r_lhs)) / const_val;
-    Shackle_LWN_Delete_Tree (lhs);
-    Shackle_LWN_Delete_Tree (rhs);
+    LWN_Delete_Tree (lhs);
+    LWN_Delete_Tree (rhs);
     return 
       WN_CreateIntconst (OPCODE_make_op (OPR_INTCONST, 
 					 type, MTYPE_V),
@@ -1101,7 +1024,7 @@ Sh_LWN_CreateDivfloor (TYPE_ID type,
     BOOL divides = 
       (0 == (WN_const_val (r_lhs) % const_val));
     if (divides) {
-      Shackle_LWN_Delete_Tree (rhs);
+      LWN_Delete_Tree (rhs);
       WN_const_val (r_lhs) = WN_const_val (r_lhs) / const_val;
       return WN_Simplify_Tree (lhs);
     }
@@ -1110,7 +1033,7 @@ Sh_LWN_CreateDivfloor (TYPE_ID type,
   } else {
     BOOL divides = (0 == (WN_const_val (l_lhs) % const_val));
     if (divides) {
-      Shackle_LWN_Delete_Tree (rhs);
+      LWN_Delete_Tree (rhs);
       WN_const_val (l_lhs) = WN_const_val (l_lhs) / const_val;
       return WN_Simplify_Tree (lhs);
     }
@@ -1534,7 +1457,7 @@ return_upper_boundplus1(WN *upper_bound, INT32 depth)
 			   MTYPE_V),
 	   dup, incr);
 	Replace_WN (replace, replace_by);
-	Shackle_LWN_Delete_Tree (replace);
+	LWN_Delete_Tree (replace);
 	return upper_bound;
       }
     } else if ((intr == INTRN_I4DIVCEIL)  || (intr == INTRN_I8DIVCEIL) ||
@@ -1560,7 +1483,7 @@ return_upper_boundplus1(WN *upper_bound, INT32 depth)
 	  (OPCODE_make_op (OPR_INTCONST, Promote_Type (index_type),
 			   MTYPE_V),
 	   (INT64) WN_const_val (const_kid));
-	Shackle_LWN_Delete_Tree (upper_bound);
+	LWN_Delete_Tree (upper_bound);
 	return Sh_LWN_CreateDivfloor (Promote_Type (index_type),
 				      new_num, new_denom);
       }
@@ -1595,7 +1518,7 @@ return_upper_bound(WN    *canonical_inp,
   if (OPR_LDID == WN_operator (canonical_inp)) {
     if (symbol_to_remove == SYMBOL (canonical_inp)) {
       index_type = WN_rtype (canonical_inp);
-      Shackle_LWN_Delete_Tree (canonical_inp);
+      LWN_Delete_Tree (canonical_inp);
       return WN_CreateIntconst
 	(OPCODE_make_op (OPR_INTCONST, Promote_Type (index_type),
 			 MTYPE_V),
@@ -1763,7 +1686,7 @@ Largest_Empty_Subtree(WN *wn)
       // If there is actually something to delete
       if (wn_kid) {
 	delete_stmt = LWN_Extract_From_Block (wn_kid);
-	Shackle_LWN_Delete_Tree (delete_stmt);
+	LWN_Delete_Tree (delete_stmt);
       }
     }
     END_CHILDREN;
@@ -1775,7 +1698,7 @@ Largest_Empty_Subtree(WN *wn)
     wn_kid = Largest_Empty_Subtree (WN_func_body (wn));
     if (wn_kid) {
       delete_stmt = LWN_Extract_From_Block (wn_kid);
-      Shackle_LWN_Delete_Tree (delete_stmt);
+      LWN_Delete_Tree (delete_stmt);
     }
     return NULL;
   default:
@@ -1789,7 +1712,7 @@ Handle_Sink_Inconsistent_Case (WN *if_stmt)
   // the if_stmt is always false..
 
   WN *delete_stmt = LWN_Extract_From_Block (if_stmt);
-  Shackle_LWN_Delete_Tree (delete_stmt);
+  LWN_Delete_Tree (delete_stmt);
   return;
 }
 
@@ -1806,7 +1729,7 @@ Handle_Sink_Redundant_Case (WN *if_stmt)
   }
   END_CHILDREN;
   delete_stmt = LWN_Extract_From_Block (if_stmt);
-  Shackle_LWN_Delete_Tree (delete_stmt);
+  LWN_Delete_Tree (delete_stmt);
   return;
 }
 
@@ -1817,7 +1740,6 @@ Handle_Sink_General_Case(WN *if_stmt, WN *do_loop,
   assert (cond->Loop_Coeff (loop_depth) != 0);
   WN *dup_loop = LWN_Copy_Tree (do_loop, TRUE, LNO_Info_Map,
 				TRUE, shackle_if_copy_map1, TRUE);
-  Copy_Shackle_Prompf_Info (do_loop, dup_loop);
   LWN_Insert_Block_After (NULL, do_loop, dup_loop);
   BOOL true_branch_first = (cond->Loop_Coeff (loop_depth) > 0);
   ARRAY_DIRECTED_GRAPH16 *dg = Array_Dependence_Graph;
@@ -1848,7 +1770,7 @@ Handle_Sink_General_Case(WN *if_stmt, WN *do_loop,
   assert(index_type == WN_desc (WN_start (dup_loop)));
   WN *delete_node = WN_kid0 (WN_start (dup_loop));
   Replace_WN (delete_node, lbnd);
-  Shackle_LWN_Delete_Tree (delete_node);
+  LWN_Delete_Tree (delete_node);
   // Next, upper bound..
   canonical_cond = canonicalize_if_condition (WN_if_test (if_stmt),
 					      loop_depth);
@@ -1872,10 +1794,10 @@ Handle_Sink_General_Case(WN *if_stmt, WN *do_loop,
 				 Promote_Type (index_type)));
   delete_node = WN_kid0 (WN_end (do_loop));
   Replace_WN (delete_node, end_lhs);
-  Shackle_LWN_Delete_Tree (delete_node);
+  LWN_Delete_Tree (delete_node);
   delete_node = WN_kid1 (WN_end (do_loop));
   Replace_WN (delete_node, ubnd);
-  Shackle_LWN_Delete_Tree (delete_node);
+  LWN_Delete_Tree (delete_node);
   // Now, attend to the statements under the conditionals..
   WN *true_branch, *false_branch;
 
@@ -1883,7 +1805,7 @@ Handle_Sink_General_Case(WN *if_stmt, WN *do_loop,
   false_branch = (true_branch_first) ? dup_if_stmt : if_stmt;
   // False branch - easier one..
   WN *delete_stmt = LWN_Extract_From_Block (false_branch);
-  Shackle_LWN_Delete_Tree (delete_stmt);
+  LWN_Delete_Tree (delete_stmt);
   // Next, the true branch - just remove the conditional
   FOR_CHILDREN (WN_then (true_branch), child, ignCount) {
     delete_stmt = LWN_Extract_From_Block (child);
@@ -1891,7 +1813,7 @@ Handle_Sink_General_Case(WN *if_stmt, WN *do_loop,
   }
   END_CHILDREN;
   delete_stmt = LWN_Extract_From_Block (true_branch);
-  Shackle_LWN_Delete_Tree (delete_stmt);
+  LWN_Delete_Tree (delete_stmt);
 }
 
 static BOOL
@@ -2082,7 +2004,7 @@ Handle_Sink_Symbolic_Non_Promotion_Case (WN            *if_stmt,
 				     MTYPE_V),
 		     ubnd, do_end_rhs);
     Replace_WN (dummy_one, new_do_end_rhs);
-    Shackle_LWN_Delete_Tree (dummy_one);
+    LWN_Delete_Tree (dummy_one);
   }
   else { // Lower bound
     assert (cond->Loop_Coeff (loop_depth) < 0);
@@ -2103,7 +2025,7 @@ Handle_Sink_Symbolic_Non_Promotion_Case (WN            *if_stmt,
 				     MTYPE_V),
 		     lbnd, do_begin_rhs);
     Replace_WN (dummy_one, new_do_begin_rhs);
-    Shackle_LWN_Delete_Tree (dummy_one);
+    LWN_Delete_Tree (dummy_one);
   }
   // get rid of the if_stmt
   WN *delete_stmt;
@@ -2113,7 +2035,7 @@ Handle_Sink_Symbolic_Non_Promotion_Case (WN            *if_stmt,
   }
   END_CHILDREN;
   delete_stmt = LWN_Extract_From_Block (if_stmt);
-  Shackle_LWN_Delete_Tree (delete_stmt);
+  LWN_Delete_Tree (delete_stmt);
   return;
 }
 
@@ -2262,7 +2184,6 @@ Handle_Sink_Promotion_Case (WN *if_stmt, WN *do_loop,
   WN *dup_loop = LWN_Copy_Tree (do_loop, TRUE, LNO_Info_Map,
 				TRUE, shackle_if_copy_map1,
 				TRUE);
-  Copy_Shackle_Prompf_Info (do_loop, dup_loop);
   LWN_Insert_Block_After (NULL, do_loop, dup_loop);
   ARRAY_DIRECTED_GRAPH16 *dg = Array_Dependence_Graph;
   dg->Versioned_Dependences_Update (do_loop, dup_loop,
@@ -2740,7 +2661,7 @@ analyze_stmts_in_func_for_if (WN *func_nd)
       empty = Largest_Empty_Subtree (func_nd);
       if (empty) {
 	delete_stmt = LWN_Extract_From_Block (empty);
-	Shackle_LWN_Delete_Tree (delete_stmt);
+	LWN_Delete_Tree (delete_stmt);
       }
       new_stmts = gather_stmts_in_func (func_nd);
     }
@@ -3041,8 +2962,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
       assert (LWN_Get_Parent (wn2) == parent);
       Replace_WN (wn2, dummy_one);
       Replace_WN (parent, wn2);
-      Shackle_LWN_Delete_Tree (parent);
-      Shackle_LWN_Delete_Tree (dummy_two);
+      LWN_Delete_Tree (parent);
+      LWN_Delete_Tree (dummy_two);
     }
     else if (OPR_MIN == WN_operator (sib_wn1)) {
       WN *sib_wn1_kid0 = WN_kid0 (sib_wn1);
@@ -3051,8 +2972,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
       Replace_WN (sib_wn1_kid1, dummy_two);
       Replace_WN (wn1, sib_wn1_kid0);
       Replace_WN (sib_wn1, sib_wn1_kid1);
-      Shackle_LWN_Delete_Tree (wn1);
-      Shackle_LWN_Delete_Tree (sib_wn1);
+      LWN_Delete_Tree (wn1);
+      LWN_Delete_Tree (sib_wn1);
     } else {
       WN *grand_parent = LWN_Get_Parent (LWN_Get_Parent (wn1));
       FmtAssert (NULL != grand_parent, ("Grand parent cannot be 0"));
@@ -3061,8 +2982,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
 		 ("Grand parent must have OPR_MIN as operator"));
       Replace_WN (sib_wn1, dummy_one);
       Replace_WN (LWN_Get_Parent (wn1), sib_wn1);
-      Shackle_LWN_Delete_Tree (dummy_two);
-      Shackle_LWN_Delete_Tree (LWN_Get_Parent (wn1));
+      LWN_Delete_Tree (dummy_two);
+      LWN_Delete_Tree (LWN_Get_Parent (wn1));
     }
     dummy_one = WN_CreateIntconst 
       (OPCODE_make_op (OPR_INTCONST, Promote_Type (index_type),
@@ -3081,8 +3002,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
 		 ("Parents of siblings must be identical"));
       Replace_WN (dup_wn1, dummy_one);
       Replace_WN (parent, dup_wn1);
-      Shackle_LWN_Delete_Tree (parent);
-      Shackle_LWN_Delete_Tree (dummy_two);
+      LWN_Delete_Tree (parent);
+      LWN_Delete_Tree (dummy_two);
     }
     else if (OPR_MIN == WN_operator (sib_dup_wn2)) {
       WN *sib_dup_wn2_kid0 = WN_kid0 (sib_dup_wn2);
@@ -3091,8 +3012,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
       Replace_WN (sib_dup_wn2_kid1, dummy_two);
       Replace_WN (dup_wn2, sib_dup_wn2_kid0);
       Replace_WN (sib_dup_wn2, sib_dup_wn2_kid1);
-      Shackle_LWN_Delete_Tree (dup_wn2);
-      Shackle_LWN_Delete_Tree (sib_dup_wn2);
+      LWN_Delete_Tree (dup_wn2);
+      LWN_Delete_Tree (sib_dup_wn2);
     } else {
       WN *grand_parent = LWN_Get_Parent (LWN_Get_Parent (dup_wn2));
       FmtAssert (NULL != grand_parent, ("Grand parent cannot be 0"));
@@ -3101,8 +3022,8 @@ Convert_Do_Loops_Conditionals(WN *func_nd)
 		 ("Grand parent must have OPR_MIN as operator"));
       Replace_WN (sib_dup_wn2, dummy_one);
       Replace_WN (LWN_Get_Parent (dup_wn2), sib_dup_wn2);
-      Shackle_LWN_Delete_Tree (LWN_Get_Parent (dup_wn2));
-      Shackle_LWN_Delete_Tree (dummy_two);
+      LWN_Delete_Tree (LWN_Get_Parent (dup_wn2));
+      LWN_Delete_Tree (dummy_two);
     }
     QUEUE<WN *> *new_stmts = gather_stmts_in_func (func_nd);
     analyze_stmts_in_func_for_if (func_nd);
@@ -3146,7 +3067,7 @@ Invert_Conditional (WN *wn)
 						  index_type),
 				  wn1, wn2);
     Replace_WN (wn, new_cond);
-    Shackle_LWN_Delete_Tree (wn);
+    LWN_Delete_Tree (wn);
   }
 }
 
@@ -3256,7 +3177,6 @@ Maybe_Handle_Sink_Promotion_Case (WN *if_stmt,
   assert (cond->Loop_Coeff (loop_depth) != 0);
   WN *dup_loop = LWN_Copy_Tree (do_loop, TRUE, LNO_Info_Map,
 				TRUE, shackle_if_copy_map1, TRUE);
-  Copy_Shackle_Prompf_Info (do_loop, dup_loop);
   LWN_Insert_Block_After (NULL, do_loop, dup_loop);
   ARRAY_DIRECTED_GRAPH16 *dg = Array_Dependence_Graph;
   dg->Versioned_Dependences_Update (do_loop, dup_loop, loop_depth,
@@ -3443,7 +3363,6 @@ Maybe_Handle_Sink_Promotion_Case (WN *if_stmt,
     TYPE_ID index_type, rtype;
     WN *dup_if = LWN_Copy_Tree (new_if, TRUE, LNO_Info_Map,
 				TRUE, shackle_if_copy_map1);
-    Copy_Shackle_Prompf_Info (new_if, dup_if);
     LWN_Insert_Block_After (NULL, new_if, dup_if);
     ARRAY_DIRECTED_GRAPH16 *dg = Array_Dependence_Graph;
     dg->Versioned_Dependences_Update (new_if, dup_if, 
@@ -3566,34 +3485,11 @@ shackle_if_init(MEM_POOL *pool)
     shackle_if_debug_level = 1;
   else
     shackle_if_debug_level = 0;
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Prompf_Elimination_Queue = 
-      CXX_NEW (QUEUE<INT32> (&LNO_local_pool), 
-	       &LNO_local_pool);
-}
-
-static void
-Deferred_Shackle_Prompf_Eliminate(INT32 map_id)
-{
-  // fprintf(stdout, "%d\n", map_id);
-  Prompf_Elimination_Queue->Add_Tail_Q (map_id);
-}
-static void
-Finalize_Shackle_Prompf_Elimination(void)
-{
-  QUEUE_ITER<INT32>   iter(Prompf_Elimination_Queue);
-  INT32               map_id;
-
-  while (iter.Step (&map_id)) {
-    Prompf_Info->Elimination (map_id);
-  }
 }
 
 void
 shackle_if_finalize()
 {
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    Finalize_Shackle_Prompf_Elimination();
   WN_MAP_Delete (shackle_if_if_map);
   WN_MAP_Delete (shackle_if_copy_map1);
   MEM_POOL_Pop (shackle_if_pool);

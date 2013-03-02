@@ -638,7 +638,7 @@ static bool WGEN_Call_Returns_Ptr_To_Member_Func (gs_t exp);
 
 static WN *WGEN_Expand_Ptr_To_Member_Func_Call_Expr (gs_t exp,
 	     TY_IDX nop_ty_idx, TYPE_ID rtype, TYPE_ID desc,
-	     WN_OFFSET offset = 0, UINT field_id = 0);
+	     WN* offset = NULL, UINT field_id = 0);
 
 // The words in 'buf' are in target order. Convert them to host order
 // in place. 'buf' is a two word array.
@@ -888,6 +888,146 @@ WGEN_Set_ST_Addr_Saved (WN *wn)
 } /* WGEN_Set_ST_Addr_Saved */
 
 
+/* to support VLA in structure in which the field offset isn't
+ * constant, a WN is generated to represent the offset.
+ * for normal structs, the WN is INTCONST and value if the offset.
+ * for VLA in structs, the WN is an INT expression.
+ */
+static WN*
+WGEN_Expand_Field_Offset(gs_t arg1) {
+  Is_True(gs_tree_code(arg1) == GS_FIELD_DECL,
+          ("WGEN_Expand_Field_Offset: arg1 is not field decl"));
+  WN* ofst = WGEN_Expand_Expr(gs_decl_field_offset(arg1));
+  WN* bit_ofst = WGEN_Expand_Expr(gs_decl_field_bit_offset(arg1));
+  TYPE_ID rtype = WN_rtype(ofst);
+  if (WN_operator(ofst) == OPR_INTCONST &&
+      WN_operator(bit_ofst) == OPR_INTCONST) {
+    INT64 ofst_value = (BITSPERBYTE * WN_const_val(ofst) + WN_const_val(bit_ofst))
+                       / BITSPERBYTE;
+    ofst = (ofst_value == 0) ? NULL : WN_Intconst(rtype, ofst_value);
+  }
+  else {
+    ofst = WN_Div(rtype,
+                  WN_Add(rtype,
+                         WN_Mpy(rtype, 
+                                ofst,
+                                WN_Intconst(rtype, BITSPERBYTE)),
+                         bit_ofst),
+                  WN_Intconst(rtype, BITSPERBYTE));
+  }
+  return ofst;
+}
+
+/* create a new address expression for given ST and offset
+ * if ofst is NULL or intconst, return LDA.
+ * otherwise, generate a add expression for the address.
+ */
+static WN*
+WGEN_Compose_Address(ST* st, WN* ofst, TY_IDX hl_ty, UINT32 field_id) {
+  if (ofst == NULL || WN_operator(ofst) == OPR_INTCONST) {
+    INT64 ofst_value = (ofst == NULL) ? 0 : WN_const_val(ofst);
+    return WN_CreateLda(OPR_LDA, Pointer_Mtype, MTYPE_V,
+                        ST_ofst(st) + ofst_value, Make_Pointer_Type(hl_ty), st, field_id);
+  }
+  else {
+    WN* lda = WN_CreateLda(OPR_LDA, Pointer_Mtype, MTYPE_V,
+                           ST_ofst(st), Make_Pointer_Type(hl_ty), st, field_id);
+    return WN_Binary(OPR_ADD, Pointer_Mtype, lda, ofst);  // TODO: use ILDA instrad
+  }
+}
+
+/* compose a new offset expression
+ * if given ofst1 and ofst2 are constants, generate a new INTCONST WN
+ * otherwise, generate a ADD expression
+ */
+static WN*
+WGEN_Compose_Offset(WN* ofst1, WN* ofst2) {
+  if (ofst1 == NULL)
+    return ofst2;
+  if (ofst2 == NULL)
+    return ofst1;
+  TYPE_ID rtype = WN_rtype(ofst1);
+  if (WN_operator(ofst1) == OPR_INTCONST && WN_operator(ofst2) == OPR_INTCONST)
+    return WN_Intconst(rtype, WN_const_val(ofst1) + WN_const_val(ofst2));
+  else
+    return WN_Add(rtype, ofst1, ofst2);
+}
+
+/* crate a Iload/Istore with constant or variable offset
+ * if given offset is constant, the value is on the Iload/Istore node.
+ * other, a new address is generated using OPR_ADD and used in Iload/Istore.
+ */
+static WN*
+WGEN_CreateIload(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
+                   WN* offset, TY_IDX ty,
+                   TY_IDX load_addr_ty, WN *addr, UINT field_id) {
+  INT64 ofst_value = 0;
+  if (offset == NULL || WN_operator(offset) == OPR_INTCONST) {
+    ofst_value = (offset == NULL) ? 0 : WN_const_val(offset);
+  }
+  else {
+    addr = WN_Binary(OPR_ADD, Pointer_Mtype, addr, offset);  // TODO: use ILDA instrad
+  }
+  return WN_CreateIload(opr, rtype, desc,
+                        ofst_value, ty,
+                        load_addr_ty, addr, field_id);
+}
+
+static WN*
+WGEN_CreateIstore(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
+                    WN* offset, TY_IDX ty, WN *value, WN *addr,
+                    UINT field_id) {
+  INT64 ofst_value = 0;
+  if (offset == NULL || WN_operator(offset) == OPR_INTCONST) {
+    ofst_value = (offset == NULL) ? 0 : WN_const_val(offset);
+    FmtAssert(desc != MTYPE_M || TY_size(TY_pointed(ty)) != -1,
+              ("WGEN_CreateIstore: TODO: store variable length object"));
+  }
+  else {
+    addr = WN_Binary(OPR_ADD, Pointer_Mtype, addr, offset);  // TODO: use ILDA instrad
+  }
+  return WN_CreateIstore(opr, rtype, desc,
+                         ofst_value, ty, value, addr,
+                         field_id);
+}
+
+/* create a LDID/STID with constant or variable offset
+ * if given offset is constant, the LDID/STID with constant offset is generated
+ * other, a new address is generated using OPR_LDA and OPR_ADD and the final returned
+ * WN is Iload/Istore
+ */
+static WN*
+WGEN_CreateLdid(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
+                  WN* offset, ST* st, TY_IDX ty, UINT field_id) {
+  if (offset == NULL || WN_operator(offset) == OPR_INTCONST) {
+    INT64 ofst_value = (offset == NULL) ? 0 : WN_const_val(offset);
+    return WN_CreateLdid(opr, rtype, desc,
+                         ST_ofst(st) + ofst_value, st, ty, field_id);
+  }
+  else {
+    // variable offset should only appear in VLA/VLS but we never generate
+    // LDID for VLA/VLS
+    Is_True(FALSE, ("WGEN_CreateLdid: offset is not constant for LDID."));
+    return NULL;
+  }
+}
+
+static WN*
+WGEN_CreateStid(OPERATOR opr, TYPE_ID rtype, TYPE_ID desc,
+                  WN* offset, ST* st, TY_IDX ty, WN *value, UINT field_id) {
+  if (offset == NULL || WN_operator(offset) == OPR_INTCONST) {
+    INT64 ofst_value = (offset == NULL) ? 0 : WN_const_val(offset);
+    return WN_CreateStid(opr, rtype, desc,
+                         ST_ofst(st) + ofst_value, st, ty, value, field_id);
+  }
+  else {
+    // variable offset should only appear in VLA/VLS but we never generate
+    // STID for VLA/VLS
+    Is_True(FALSE, ("WGEN_CreateStid: offset is not constant for STID."));
+    return NULL;
+  }
+}
+
 typedef struct wgen_save_expr_t {
   gs_t  exp;
   ST   *st;
@@ -910,7 +1050,7 @@ WGEN_Save_Expr (gs_t save_exp,
                bool need_result,
                TY_IDX nop_ty_idx,
                TY_IDX component_ty_idx,
-               INT64 component_offset,
+               WN* component_offset,
                UINT16 field_id)
 {
   INT32     i;
@@ -988,7 +1128,7 @@ WGEN_Save_Expr (gs_t save_exp,
   else {
     TYPE_ID desc  = TY_mtype(component_ty_idx);
     TYPE_ID rtype = Widen_Mtype(desc);
-    wn = WN_CreateLdid(OPR_LDID, rtype, desc, component_offset, st,
+    wn = WGEN_CreateLdid(OPR_LDID, rtype, desc, component_offset, st,
 		     field_id? ty_idx : component_ty_idx, field_id);  
   }
   return wn;
@@ -1050,7 +1190,6 @@ WGEN_Expand_Math_Errno_Sqrt(gs_t exp, TY_IDX ty_idx, TYPE_ID ret_mtype)
   return WN_Ldid(ret_mtype, 0, res_st, ty_idx);
 }
 
-
 /* process the tree doing array indicing and return the WN that performs
  * the address computation; ty_idx returns the high-level array type if it
  * is a DECL node, and the element type if it is an ARRAY_REF node.
@@ -1059,7 +1198,7 @@ static WN *
 WGEN_Array_Expr(gs_t exp, 
 	       TY_IDX *ty_idx, 
 	       TY_IDX component_ty_idx,
-	       INT64 component_offset,
+	       WN* component_offset,
 	       UINT32 field_id)
 {
   WN *wn;
@@ -1077,9 +1216,7 @@ WGEN_Array_Expr(gs_t exp,
 #endif
     Is_True(! gs_decl_bit_field(arg1),
 	    ("WGEN_Array_Expr: address arithmetic cannot use bitfield addresses"));
-    INT64 ofst = (BITSPERBYTE * gs_get_integer_value(gs_decl_field_offset(arg1)) +
-				gs_get_integer_value(gs_decl_field_bit_offset(arg1)))
-			      / BITSPERBYTE;
+    WN* ofst = WGEN_Expand_Field_Offset(arg1);
 #ifdef KEY
     // Refer GCC 4.0.2: gcc.c-torture/compile/struct-non-lval-3.c
     // We only handle this case so far:
@@ -1093,13 +1230,15 @@ WGEN_Array_Expr(gs_t exp,
       arg0 = lhs;
     }
 #endif
-    
+
+    ofst = WGEN_Compose_Offset(ofst, component_offset);    
+
 #ifdef KEY // bug 9725: If the field is an array of struct, it is considered
            // a single field.
-    return WGEN_Array_Expr(arg0, ty_idx, ty_idx0, ofst + component_offset,
+    return WGEN_Array_Expr(arg0, ty_idx, ty_idx0, ofst,
 			  DECL_FIELD_ID(arg1));
 #else
-    return WGEN_Array_Expr(arg0, ty_idx, ty_idx0, ofst + component_offset,
+    return WGEN_Array_Expr(arg0, ty_idx, ty_idx0, ofst,
 			  field_id + DECL_FIELD_ID(arg1));
 #endif
   }
@@ -1117,15 +1256,6 @@ WGEN_Array_Expr(gs_t exp,
           ) {
     ST *st = Get_ST (exp);
     ST *base_st = ST_base (st);
-    // for VLAs the instead of using the ST use its base st
-    // also for the time being do not support VLAs within structs
-    if (st != base_st) {
-      FmtAssert (component_ty_idx == 0,
-                 ("Variable Length Arrays within struct not currently implemented"));
-      wn = WN_Ldid (Pointer_Mtype, 0, base_st, ST_type (base_st));
-    }
-    else
-      wn = WN_Lda (Pointer_Mtype, ST_ofst(st)+component_offset, st, field_id);
     if (component_ty_idx == 0)
       *ty_idx = ST_type(st);
     else {
@@ -1135,16 +1265,29 @@ WGEN_Array_Expr(gs_t exp,
     }
     Is_True(TY_kind(*ty_idx) == KIND_ARRAY,
 	    ("WGEN_Array_Expr: ARRAY_REF base not of type KIND_ARRAY"));
+    // for VLAs the instead of using the ST use its base st
+    // also for the time being do not support VLAs within structs
+    if (st != base_st) {
+      DevWarn ("Encountered VLA at line %d", lineno);
+      Is_True(ST_ofst(st) == 0, ("TODO: ST_ofst is not 0"));
+      wn = WN_Ldid (Pointer_Mtype, 0, base_st, Make_Pointer_Type(*ty_idx));
+      if (component_offset != NULL) { // TODO: use ILDA instead
+        wn = WN_Binary(OPR_ADD, Pointer_Mtype, wn, component_offset);
+      }
+    }
+    else {
+      wn = WGEN_Compose_Address(st, component_offset, ST_type(st), field_id);
+    }
     return wn;
   }
   else if (code == GS_CONSTRUCTOR) {
     ST *st = WGEN_Generate_Temp_For_Initialized_Aggregate (exp, "");
-    wn = WN_Lda (Pointer_Mtype, ST_ofst(st)+component_offset, st, field_id);
     if (component_ty_idx == 0)
       *ty_idx = ST_type(st);
     else *ty_idx = component_ty_idx;
     Is_True(TY_kind(*ty_idx) == KIND_ARRAY,
 	    ("WGEN_Array_Expr: ARRAY_REF base not of type KIND_ARRAY"));
+    wn = WGEN_Compose_Address(st, component_offset, ST_type(st), field_id);
     return wn;
   }
   else if (code == GS_STRING_CST) {
@@ -1162,9 +1305,8 @@ WGEN_Array_Expr(gs_t exp,
       if (node_align < TY_align(component_ty_idx))
 	Set_TY_align(*ty_idx, node_align);//pick more stringent align
     }
-    if (component_offset != 0) { // TODO: use ILDA instead
-      WN *wn0 = WN_Intconst(MTYPE_I4, component_offset);
-      wn = WN_Binary(OPR_ADD, Pointer_Mtype, wn, wn0);
+    if (component_offset != NULL) { // TODO: use ILDA instead
+      wn = WN_Binary(OPR_ADD, Pointer_Mtype, wn, component_offset);
     }
     return wn;
   }
@@ -1176,7 +1318,6 @@ WGEN_Array_Expr(gs_t exp,
     ST *st = WN_st (WN_kid1 (wn));
     WN_Delete (WN_kid1 (wn));
     WN_Delete (wn);
-    wn = WN_Lda (Pointer_Mtype, ST_ofst(st)+component_offset, st, field_id);
     if (component_ty_idx == 0)
       *ty_idx = ST_type(st);
     else {
@@ -1186,6 +1327,7 @@ WGEN_Array_Expr(gs_t exp,
     }
     Is_True(TY_kind(*ty_idx) == KIND_ARRAY,
 	    ("WGEN_Array_Expr: ARRAY_REF base not of type KIND_ARRAY"));
+    wn = WGEN_Compose_Address(st, component_offset, ST_type(st), field_id);
     return wn;
   }
   else if (code == GS_ARRAY_REF) { // recursive call
@@ -1277,7 +1419,6 @@ WGEN_Array_Expr(gs_t exp,
     Is_True(WN_operator(wn) == OPR_LDID,
 	    ("WGEN_Array_Expr: OPR_LDID not found"));
     ST *st = WN_st(wn);
-    wn = WN_Lda (Pointer_Mtype, ST_ofst(st)+component_offset, st, field_id);
     if (component_ty_idx == 0)
       *ty_idx = ST_type(st);
     else {
@@ -1287,6 +1428,7 @@ WGEN_Array_Expr(gs_t exp,
     }
     Is_True(TY_kind(*ty_idx) == KIND_ARRAY,
 	    ("WGEN_Array_Expr: ARRAY_REF base not of type KIND_ARRAY"));
+    wn = WGEN_Compose_Address(st, component_offset, ST_type(st), field_id);
     return wn;
   }
 #endif /* KEY */
@@ -1375,7 +1517,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 		       WN* lhs_retval,
 		       bool need_result,
 		       TY_IDX component_ty_idx, 
-		       INT64 component_offset,
+		       WN* component_offset,
 		       UINT32 field_id,
 		       bool is_bit_field,
 		       WN *rhs_wn,
@@ -1406,7 +1548,6 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
   switch (code) {
   case GS_COMPONENT_REF:
     {
-      INT64 ofst;
       TY_IDX ty_idx0;
 
       gs_t arg0 = gs_tree_operand(lhs, 0);
@@ -1421,11 +1562,14 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
       else ty_idx0 = component_ty_idx;
       if (gs_decl_bit_field(arg1)) 
         is_bit_field = TRUE;
-      if (! is_bit_field)
-        ofst = (BITSPERBYTE * gs_get_integer_value(gs_decl_field_offset(arg1)) +
-			      gs_get_integer_value(gs_decl_field_bit_offset(arg1)))
-			    / BITSPERBYTE;
-      else ofst = 0;
+      WN* ofst;
+      if (! is_bit_field) {
+        ofst = WGEN_Expand_Field_Offset(arg1);
+        ofst = WGEN_Compose_Offset(ofst, component_offset);
+      }
+      else {
+        ofst = component_offset;
+      }
 #ifdef KEY    // bug 10422: check if the field is volatile, arg1 is FIELD_DECL
       if (gs_tree_this_volatile(arg1)) {
 	Set_TY_is_volatile(ty_idx0);
@@ -1441,7 +1585,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
                  ("WGEN_Lhs_Of_Modify_Expr: DECL_FIELD_ID used but not set"));
 #endif
       wn = WGEN_Lhs_Of_Modify_Expr(assign_code, arg0, NULL, need_result, ty_idx0, 
-				  ofst+component_offset,
+				  ofst,
 			          field_id + DECL_FIELD_ID(arg1), is_bit_field, 
 				  rhs_wn, rhs_preg_num, is_realpart,
 				  is_imagpart);
@@ -1569,16 +1713,16 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 			       rhs_wn,
 			       WN_Unary(OPR_IMAGPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateLdid(OPR_LDID, rtype, desc,
-						      ST_ofst(st) + component_offset,
+				        WGEN_CreateLdid(OPR_LDID, rtype, desc,
+						      component_offset,
 						      st, hi_ty_idx, field_id)));
 	  else
 	  if (is_imagpart)
 	    rhs_wn = WN_Binary(OPR_COMPLEX, rtype,
 			       WN_Unary(OPR_REALPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateLdid(OPR_LDID, rtype, desc,
-						      ST_ofst(st) + component_offset,
+				        WGEN_CreateLdid(OPR_LDID, rtype, desc,
+						      component_offset,
 						      st, hi_ty_idx, field_id)),
 			       rhs_wn);
         }
@@ -1596,8 +1740,8 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 
         if (assign_code == GS_PREINCREMENT_EXPR ||
 	    assign_code == GS_PREDECREMENT_EXPR) {
-          wn = WN_CreateLdid (OPR_LDID, rtype, desc, 
-			      ST_ofst(st) + component_offset,
+          wn = WGEN_CreateLdid (OPR_LDID, rtype, desc, 
+			      component_offset,
 			      st, hi_ty_idx, field_id);
           rhs_wn = WN_Binary(Operator_From_Tree [assign_code].opr,
 		             rtype, wn, rhs_wn);
@@ -1605,8 +1749,8 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         }
         else if (assign_code == GS_POSTINCREMENT_EXPR ||
 	         assign_code == GS_POSTDECREMENT_EXPR) {
-          result_wn = WN_CreateLdid (OPR_LDID, rtype, desc, 
-				     ST_ofst(st) + component_offset,
+          result_wn = WGEN_CreateLdid (OPR_LDID, rtype, desc, 
+				     component_offset,
 				     st, hi_ty_idx, field_id);
         }
         else result_wn = rhs_wn;
@@ -1647,15 +1791,24 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 	if (volt) 
 	  Set_TY_is_volatile(hi_ty_idx);
 #endif
-        wn = WN_Stid (desc, ST_ofst(st) + component_offset + lhs_preg_num, st,
-		      hi_ty_idx, rhs_wn, field_id);
+        if (ST_base(st) != st) {
+          ST* base_st = ST_base(st);
+          Is_True(ST_ofst(st) == 0, ("TODO: ST_ofst is not 0"));
+          WN* addr = WN_Ldid(Pointer_Mtype, 0, base_st, ST_type(base_st));
+          wn = WGEN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset,
+                                   ST_type(base_st), rhs_wn, addr, field_id);
+        }
+        else {
+          wn = WGEN_CreateStid (OPR_STID, MTYPE_V, desc, component_offset, st,
+		        hi_ty_idx, rhs_wn, field_id);
+        }
         WGEN_Stmt_Append(wn, Get_Srcpos());
 #if defined(TARG_SL)
         if (need_append) {
           WN *ldid_wn;
           if (! result_in_temp)
-            ldid_wn =  WN_CreateLdid(OPR_LDID, rtype, desc,
-                                     ST_ofst(st) + component_offset, st, hi_ty_idx,
+            ldid_wn =  WGEN_CreateLdid(OPR_LDID, rtype, desc,
+                                     component_offset, st, hi_ty_idx,
                                      field_id);
           else
             ldid_wn =  WN_Ldid(rtype, result_preg, result_preg_st, desc_ty_idx, 0);
@@ -1666,8 +1819,8 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
       }
       if (need_result) {
         if (! result_in_temp)
-          wn = WN_CreateLdid(OPR_LDID, rtype, desc, 
-			     ST_ofst(st) + component_offset, st, hi_ty_idx,
+          wn = WGEN_CreateLdid(OPR_LDID, rtype, desc, 
+			     component_offset, st, hi_ty_idx,
 			     field_id);
         else wn = WN_Ldid(rtype, result_preg, result_preg_st, desc_ty_idx, 0);
         if (is_realpart)
@@ -1782,7 +1935,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 			       rhs_wn,
 			       WN_Unary(OPR_IMAGPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateIload(OPR_ILOAD, rtype, desc,
+				        WGEN_CreateIload(OPR_ILOAD, rtype, desc,
 						       component_offset,
 						       field_id != 0 ? hi_ty_idx : desc_ty_idx,
 						       Make_Pointer_Type(hi_ty_idx, FALSE),
@@ -1793,7 +1946,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 	    rhs_wn = WN_Binary(OPR_COMPLEX, rtype,
 			       WN_Unary(OPR_REALPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateIload(OPR_ILOAD, rtype, desc,
+				        WGEN_CreateIload(OPR_ILOAD, rtype, desc,
 						       component_offset,
 						       field_id != 0 ? hi_ty_idx : desc_ty_idx,
 						       Make_Pointer_Type(hi_ty_idx, FALSE),
@@ -1815,7 +1968,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 
         if (assign_code == GS_PREINCREMENT_EXPR ||
 	    assign_code == GS_PREDECREMENT_EXPR) {
-          wn = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+          wn = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
 			       field_id != 0 ? hi_ty_idx : desc_ty_idx,
 			       Make_Pointer_Type(hi_ty_idx, FALSE),
 			       WN_COPY_Tree (addr_wn),
@@ -1826,7 +1979,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         }
         else if (assign_code == GS_POSTINCREMENT_EXPR ||
 	         assign_code == GS_POSTDECREMENT_EXPR) {
-	  result_wn = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+	  result_wn = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
 				      field_id != 0 ? hi_ty_idx : desc_ty_idx,
 				      Make_Pointer_Type(hi_ty_idx, FALSE),
 				      WN_COPY_Tree (addr_wn),
@@ -1904,14 +2057,16 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 	  gs_t type = gs_tree_type(ptr_type);
 	  FmtAssert(gs_tree_code(ptr_type) == GS_POINTER_TYPE,
 	    ("WGEN_Lhs_Of_Modify_Expr: INDIRECT_REF opnd0 is not POINTER_TYPE"));
-	  FmtAssert(component_offset == 0,
+	  FmtAssert(component_offset == NULL ||
+                    (WN_operator(component_offset) == OPR_INTCONST && 
+                     WN_const_val(component_offset) == 0),
 		    ("WGEN_Lhs_Of_Modify_Expr: component_offset nonzero"));
 	  TY_IDX tidx = Get_TY(ptr_type);
 	  // Check object has no copy constructor.
 	  FmtAssert(!WGEN_has_copy_constructor(type),
 	      ("WGEN_Lhs_Of_Modify_Expr: object needs copy constructor"));
         }
-        wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
+        wn = WGEN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
 			     Make_Pointer_Type (hi_ty_idx, FALSE),
 			     rhs_wn, addr_wn, field_id);
 #ifdef TARG_SL
@@ -1932,7 +2087,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         if (need_append) {
           WN *ldid_wn;
           if (! result_in_temp)
-            ldid_wn = WN_CreateIload(OPR_ILOAD, rtype, desc, component_offset,
+            ldid_wn = WGEN_CreateIload(OPR_ILOAD, rtype, desc, component_offset,
                                      field_id != 0 ? hi_ty_idx : desc_ty_idx,
                                      Make_Pointer_Type (hi_ty_idx, FALSE),
                                      WN_COPY_Tree (addr_wn),
@@ -1945,7 +2100,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 #endif
         if (need_result) {
 	  if (! result_in_temp)
-            wn = WN_CreateIload(OPR_ILOAD, rtype, desc, component_offset,
+            wn = WGEN_CreateIload(OPR_ILOAD, rtype, desc, component_offset,
 			        field_id != 0 ? hi_ty_idx : desc_ty_idx,
 			        Make_Pointer_Type (hi_ty_idx, FALSE),
 			        WN_COPY_Tree (addr_wn),
@@ -1966,7 +2121,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
     {
       TY_IDX elem_ty_idx;
       // generate the WHIRL array node
-      WN *addr_wn = WGEN_Array_Expr(lhs, &elem_ty_idx, 0, 0, 0);
+      WN *addr_wn = WGEN_Array_Expr(lhs, &elem_ty_idx, 0, NULL, 0);
       if (TY_is_volatile(elem_ty_idx))
         volt = TRUE;
       TY_IDX desc_ty_idx = component_ty_idx;
@@ -2018,7 +2173,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 			       rhs_wn,
 			       WN_Unary(OPR_IMAGPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateIload(OPR_ILOAD, rtype, desc,
+				        WGEN_CreateIload(OPR_ILOAD, rtype, desc,
 						       component_offset,
 						       field_id != 0 ? elem_ty_idx : desc_ty_idx,
 						       Make_Pointer_Type(elem_ty_idx, FALSE),
@@ -2029,7 +2184,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 	    rhs_wn = WN_Binary(OPR_COMPLEX, rtype,
 			       WN_Unary(OPR_REALPART,
 				        Mtype_complex_to_real (rtype),
-				        WN_CreateIload(OPR_ILOAD, rtype, desc,
+				        WGEN_CreateIload(OPR_ILOAD, rtype, desc,
 						       component_offset,
 						       field_id != 0 ? elem_ty_idx : desc_ty_idx,
 						       Make_Pointer_Type(elem_ty_idx, FALSE),
@@ -2051,7 +2206,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 
         if (assign_code == GS_PREINCREMENT_EXPR ||
             assign_code == GS_PREDECREMENT_EXPR) {
-          wn = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+          wn = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
                                field_id != 0 ? elem_ty_idx : desc_ty_idx,
                                Make_Pointer_Type(elem_ty_idx, FALSE),
                                WN_COPY_Tree (addr_wn),
@@ -2062,7 +2217,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         }
         else if (assign_code == GS_POSTINCREMENT_EXPR ||
 	         assign_code == GS_POSTDECREMENT_EXPR) {
-          result_wn = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+          result_wn = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
 				      field_id != 0 ? elem_ty_idx : desc_ty_idx,
 				      Make_Pointer_Type(elem_ty_idx, FALSE),
 				      WN_COPY_Tree (addr_wn),
@@ -2107,7 +2262,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         wn = NULL;
       }
       else {
-        wn = WN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
+        wn = WGEN_CreateIstore(OPR_ISTORE, MTYPE_V, desc, component_offset, 
 			     Make_Pointer_Type(elem_ty_idx, FALSE), rhs_wn,
 			     addr_wn, field_id);
         WGEN_Stmt_Append(wn, Get_Srcpos());
@@ -2115,7 +2270,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
         if (need_append) {
           WN *iload;
           if (!result_in_temp)
-            iload = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+            iload = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
                                       field_id != 0 ? elem_ty_idx : desc_ty_idx,
                                       Make_Pointer_Type (elem_ty_idx, FALSE),
                                       WN_COPY_Tree (addr_wn),
@@ -2127,7 +2282,7 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
 #endif
         if (need_result) {
           if (! result_in_temp)
-	    wn = WN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
+	    wn = WGEN_CreateIload (OPR_ILOAD, rtype, desc, component_offset,
 			         field_id != 0 ? elem_ty_idx : desc_ty_idx,
                                  Make_Pointer_Type (elem_ty_idx, FALSE),
 			         WN_COPY_Tree (addr_wn),
@@ -2203,20 +2358,25 @@ WGEN_Lhs_Of_Modify_Expr(gs_code_t assign_code,
       TYPE_ID desc = is_bit_field ? MTYPE_BS : TY_mtype(desc_ty_idx);
       if (desc == MTYPE_UNKNOWN)
 	desc = WN_rtype(rhs_wn); // is a scalar
+
+      Is_True(component_offset == NULL || WN_operator(component_offset) == OPR_INTCONST,
+              ("WGEN_Lhs_Of_Modify_Expr: GS_COMPOUND_LITERAL_EXPR: offset is not constant"));
+      INT64 ofst_value = (component_offset == NULL) ? 0 : WN_const_val(component_offset);
+
 #ifdef KEY // bug 14372
-      wn = WN_Stid (desc, ST_ofst(copy) + component_offset, copy,
+      wn = WN_Stid (desc, ST_ofst(copy) + ofst_value, copy,
 		    hi_ty_idx, rhs_wn, field_id);
 #else
       if (desc_ty_idx == 0)
         desc_ty_idx = MTYPE_TO_TY_array[desc];
 
-      wn = WN_Stid (desc, ST_ofst(copy) + component_offset, copy,
+      wn = WN_Stid (desc, ST_ofst(copy) + ofst_value, copy,
 		    desc_ty_idx, rhs_wn, field_id);
 #endif
       WGEN_Stmt_Append(wn, Get_Srcpos());
       if (need_result) // bug 10548
         wn = WN_CreateLdid(OPR_LDID, desc, desc,
-                           ST_ofst(copy) + component_offset, copy,
+                           ST_ofst(copy) + ofst_value, copy,
                            ST_type(copy));
       else
         wn = NULL;
@@ -4985,6 +5145,298 @@ WGEN_target_builtins (gs_t exp, INTRINSIC * iopc, BOOL * intrinsic_op)
       *iopc = INTRN_XORPS256;
       break;
 
+    // FMA3 intrinsics: form1
+    case GSBI_IX86_BUILTIN_VFMADDPD_132:
+      *iopc = INTRN_VFMADDPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPD256_132:
+      *iopc = INTRN_VFMADDPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS_132:
+      *iopc = INTRN_VFMADDPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS256_132:
+      *iopc = INTRN_VFMADDPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSD_132:
+      *iopc = INTRN_VFMADDSD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSS_132:
+      *iopc = INTRN_VFMADDSS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD_132:
+      *iopc = INTRN_VFMADDSUBPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD256_132:
+      *iopc = INTRN_VFMADDSUBPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS_132:
+      *iopc = INTRN_VFMADDSUBPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS256_132:
+      *iopc = INTRN_VFMADDSUBPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD_132:
+      *iopc = INTRN_VFMSUBADDPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD256_132:
+      *iopc = INTRN_VFMSUBADDPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS_132:
+      *iopc = INTRN_VFMSUBADDPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS256_132:
+      *iopc = INTRN_VFMSUBADDPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD_132:
+      *iopc = INTRN_VFMSUBPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD256_132:
+      *iopc = INTRN_VFMSUBPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS_132:
+      *iopc = INTRN_VFMSUBPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS256_132:
+      *iopc = INTRN_VFMSUBPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSD_132:
+      *iopc = INTRN_VFMSUBSD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSS_132:
+      *iopc = INTRN_VFMSUBSS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD_132:
+      *iopc = INTRN_VFNMADDPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD256_132:
+      *iopc = INTRN_VFNMADDPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS_132:
+      *iopc = INTRN_VFNMADDPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS256_132:
+      *iopc = INTRN_VFNMADDPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSD_132:
+      *iopc = INTRN_VFNMADDSD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSS_132:
+      *iopc = INTRN_VFNMADDSS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD_132:
+      *iopc = INTRN_VFNMSUBPD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD256_132:
+      *iopc = INTRN_VFNMSUBPD256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS_132:
+      *iopc = INTRN_VFNMSUBPS_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS256_132:
+      *iopc = INTRN_VFNMSUBPS256_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSD_132:
+      *iopc = INTRN_VFNMSUBSD_132;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSS_132:
+      *iopc = INTRN_VFNMSUBSS_132;
+      break;
+    // FMA3 intrinsics: form2
+    case GSBI_IX86_BUILTIN_VFMADDPD_213:
+      *iopc = INTRN_VFMADDPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPD256_213:
+      *iopc = INTRN_VFMADDPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS_213:
+      *iopc = INTRN_VFMADDPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS256_213:
+      *iopc = INTRN_VFMADDPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSD_213:
+      *iopc = INTRN_VFMADDSD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSS_213:
+      *iopc = INTRN_VFMADDSS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD_213:
+      *iopc = INTRN_VFMADDSUBPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD256_213:
+      *iopc = INTRN_VFMADDSUBPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS_213:
+      *iopc = INTRN_VFMADDSUBPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS256_213:
+      *iopc = INTRN_VFMADDSUBPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD_213:
+      *iopc = INTRN_VFMSUBADDPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD256_213:
+      *iopc = INTRN_VFMSUBADDPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS_213:
+      *iopc = INTRN_VFMSUBADDPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS256_213:
+      *iopc = INTRN_VFMSUBADDPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD_213:
+      *iopc = INTRN_VFMSUBPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD256_213:
+      *iopc = INTRN_VFMSUBPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS_213:
+      *iopc = INTRN_VFMSUBPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS256_213:
+      *iopc = INTRN_VFMSUBPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSD_213:
+      *iopc = INTRN_VFMSUBSD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSS_213:
+      *iopc = INTRN_VFMSUBSS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD_213:
+      *iopc = INTRN_VFNMADDPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD256_213:
+      *iopc = INTRN_VFNMADDPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS_213:
+      *iopc = INTRN_VFNMADDPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS256_213:
+      *iopc = INTRN_VFNMADDPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSD_213:
+      *iopc = INTRN_VFNMADDSD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSS_213:
+      *iopc = INTRN_VFNMADDSS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD_213:
+      *iopc = INTRN_VFNMSUBPD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD256_213:
+      *iopc = INTRN_VFNMSUBPD256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS_213:
+      *iopc = INTRN_VFNMSUBPS_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS256_213:
+      *iopc = INTRN_VFNMSUBPS256_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSD_213:
+      *iopc = INTRN_VFNMSUBSD_213;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSS_213:
+      *iopc = INTRN_VFNMSUBSS_213;
+      break;
+    // FMA3 intrinsics: form3
+    case GSBI_IX86_BUILTIN_VFMADDPD_231:
+      *iopc = INTRN_VFMADDPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPD256_231:
+      *iopc = INTRN_VFMADDPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS_231:
+      *iopc = INTRN_VFMADDPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDPS256_231:
+      *iopc = INTRN_VFMADDPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSD_231:
+      *iopc = INTRN_VFMADDSD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSS_231:
+      *iopc = INTRN_VFMADDSS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD_231:
+      *iopc = INTRN_VFMADDSUBPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPD256_231:
+      *iopc = INTRN_VFMADDSUBPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS_231:
+      *iopc = INTRN_VFMADDSUBPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMADDSUBPS256_231:
+      *iopc = INTRN_VFMADDSUBPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD_231:
+      *iopc = INTRN_VFMSUBADDPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPD256_231:
+      *iopc = INTRN_VFMSUBADDPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS_231:
+      *iopc = INTRN_VFMSUBADDPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBADDPS256_231:
+      *iopc = INTRN_VFMSUBADDPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD_231:
+      *iopc = INTRN_VFMSUBPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPD256_231:
+      *iopc = INTRN_VFMSUBPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS_231:
+      *iopc = INTRN_VFMSUBPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBPS256_231:
+      *iopc = INTRN_VFMSUBPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSD_231:
+      *iopc = INTRN_VFMSUBSD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFMSUBSS_231:
+      *iopc = INTRN_VFMSUBSS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD_231:
+      *iopc = INTRN_VFNMADDPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPD256_231:
+      *iopc = INTRN_VFNMADDPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS_231:
+      *iopc = INTRN_VFNMADDPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDPS256_231:
+      *iopc = INTRN_VFNMADDPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSD_231:
+      *iopc = INTRN_VFNMADDSD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMADDSS_231:
+      *iopc = INTRN_VFNMADDSS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD_231:
+      *iopc = INTRN_VFNMSUBPD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPD256_231:
+      *iopc = INTRN_VFNMSUBPD256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS_231:
+      *iopc = INTRN_VFNMSUBPS_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBPS256_231:
+      *iopc = INTRN_VFNMSUBPS256_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSD_231:
+      *iopc = INTRN_VFNMSUBSD_231;
+      break;
+    case GSBI_IX86_BUILTIN_VFNMSUBSS_231:
+      *iopc = INTRN_VFNMSUBSS_231;
+      break;
+
     // FMA4 intrinsics
     case GSBI_IX86_BUILTIN_VFMADDPD:
       *iopc = INTRN_VFMADDPD;
@@ -5768,7 +6220,7 @@ WGEN_Expand_Expr (gs_t exp,
 		  bool need_result,
 		  TY_IDX nop_ty_idx,
 		  TY_IDX component_ty_idx,
-		  INT64 component_offset,
+		  WN* component_offset,
 		  UINT32 field_id ,
 		  bool is_bit_field,
 		  bool is_aggr_init_via_ctor,
@@ -6057,8 +6509,10 @@ WGEN_Expand_Expr (gs_t exp,
               WN *target_wn = WGEN_Address_Of(opnd0);
               WN *result_wn = WGEN_Expand_Expr (t, TRUE /* for return_in_mem*/,
                                                 0, 0, 0, 0, FALSE, FALSE, target_wn);
-              wn = result_wn;
-              WN_set_rtype(wn, MTYPE_V);
+              if (result_wn != NULL) {
+                wn = result_wn;
+                WN_set_rtype(wn, MTYPE_V);
+              }
               break;
             }
           }
@@ -6242,10 +6696,31 @@ WGEN_Expand_Expr (gs_t exp,
 
 	Is_True(! is_bit_field || field_id <= MAX_FIELD_ID,
 		("WGEN_Expand_Expr: field id for bit-field exceeds limit"));
-	wn = WN_CreateLdid (OPR_LDID, rtype,
-			    is_bit_field ? MTYPE_BS : desc,
-			    ST_ofst(st)+component_offset+xtra_BE_ofst+preg_num, st,
-			    field_id != 0 ? hi_ty_idx : ty_idx, field_id);
+        WN* load_ofst = NULL;
+        if (xtra_BE_ofst + preg_num != 0)
+          load_ofst = WGEN_Compose_Offset(component_offset,
+                                          WN_Intconst(Pointer_Mtype, xtra_BE_ofst));
+        else
+          load_ofst = component_offset;
+        if (ST_base(st) != st) {
+          ST* base_st = ST_base(st);
+          Is_True(ST_ofst(st) == 0, ("TODO: ST_ofst is not 0"));
+          WN* load_addr = WN_Ldid(Pointer_Mtype, 0, base_st, ST_type(base_st));
+          TY_IDX load_ty = field_id != 0 ? hi_ty_idx : ty_idx;
+          wn = WGEN_CreateIload(OPR_ILOAD, rtype,
+                              is_bit_field ? MTYPE_BS : desc,
+                              load_ofst,
+                              load_ty,
+                              ST_type(base_st),
+                              load_addr,
+                              field_id);
+        }
+        else {
+	  wn = WGEN_CreateLdid (OPR_LDID, rtype,
+			      is_bit_field ? MTYPE_BS : desc,
+			      load_ofst, st,
+			      field_id != 0 ? hi_ty_idx : ty_idx, field_id);
+        }
 	if (cvtl_size != 0)
 	  wn = WN_CreateCvtl(OPR_CVTL, rtype, MTYPE_V, cvtl_size, wn);
       }
@@ -6306,9 +6781,9 @@ WGEN_Expand_Expr (gs_t exp,
 	  if (ST_assigned_to_dedicated_preg (st))
 	    Set_TY_is_volatile (ty_idx);
 	}
-	wn = WN_CreateLdid (OPR_LDID, rtype,
+	wn = WGEN_CreateLdid (OPR_LDID, rtype,
 			    is_bit_field ? MTYPE_BS : desc, 
-			    ST_ofst(st)+component_offset, st,
+			    component_offset, st,
 			    field_id != 0 ? hi_ty_idx : ty_idx, field_id);
 	if (cvtl_size != 0)
 	  wn = WN_CreateCvtl(OPR_CVTL, rtype, MTYPE_V, cvtl_size, wn);
@@ -6583,7 +7058,6 @@ WGEN_Expand_Expr (gs_t exp,
 
     case GS_COMPONENT_REF:
       {
-	INT64 ofst;
 	arg0 = gs_tree_operand (exp, 0);
 	arg1 = gs_tree_operand (exp, 1);
 	// If this is an indirect of a nop_expr, we may need to fix the
@@ -6616,11 +7090,14 @@ WGEN_Expand_Expr (gs_t exp,
 	  }
         }
 
-	if (! is_bit_field)
-	  ofst = (BITSPERBYTE * gs_get_integer_value(gs_decl_field_offset(arg1)) +
-			        gs_get_integer_value(gs_decl_field_bit_offset(arg1)))
-			      / BITSPERBYTE;
-	else ofst = 0;
+        WN* ofst = NULL;
+	if (! is_bit_field) {
+          ofst = WGEN_Expand_Field_Offset(arg1);
+          ofst = WGEN_Compose_Offset(ofst, component_offset);
+        }
+	else {
+          ofst = component_offset;
+        }
 #ifdef KEY
 	FmtAssert (DECL_FIELD_ID(arg1) != 0,
                    ("WGEN_Expand_Expr: DECL_FIELD_ID used but not set"));
@@ -6635,11 +7112,11 @@ WGEN_Expand_Expr (gs_t exp,
 	  // WGEN_Call_Returns_Ptr_To_Member_Func(arg0)) is TRUE.  Bug 6022.
 	  TYPE_ID desc = TY_mtype(Get_TY(gs_tree_type(field0)));
 	  wn = WGEN_Expand_Ptr_To_Member_Func_Call_Expr (arg0, nop_ty_idx,
-		  Pointer_Mtype, desc, component_offset,
+		  Pointer_Mtype, desc, ofst,
 		  field_id + DECL_FIELD_ID(arg1));
 	} else
 #endif
-        wn = WGEN_Expand_Expr (arg0, TRUE, nop_ty_idx, ty_idx, ofst+component_offset,
+        wn = WGEN_Expand_Expr (arg0, TRUE, nop_ty_idx, ty_idx, ofst,
 			      field_id + DECL_FIELD_ID(arg1), is_bit_field);
 
 #ifdef KEY
@@ -6656,15 +7133,26 @@ WGEN_Expand_Expr (gs_t exp,
 	  TYPE_ID rtype = Widen_Mtype(TY_mtype(ty_idx));
 	  TYPE_ID desc = TY_mtype(ty_idx);
 	  if (WN_operator(wn) == OPR_ILOAD) {
-            wn = WN_CreateIload(OPR_ILOAD, rtype, desc,
-			        WN_offset(wn) + ofst + component_offset, ty_idx,
+            WN* iload_ofst = NULL;
+            if (WN_offset(wn) != 0) {
+              iload_ofst = WGEN_Compose_Offset(ofst,
+                                               WN_Intconst(Pointer_Mtype, WN_offset(wn)));
+            }
+            else {
+              iload_ofst = ofst;
+            }
+            wn = WGEN_CreateIload(OPR_ILOAD, rtype, desc,
+			        iload_ofst, ty_idx,
 			        WN_load_addr_ty(wn), WN_kid0(wn),
 			        WN_field_id(wn)+field_id + DECL_FIELD_ID(arg1));
 	  } 
 	  else if (WN_operator(wn) == OPR_LDID) {
 	    WN_set_rtype(wn, rtype);
 	    WN_set_desc(wn, desc);
-	    WN_offset(wn) = WN_offset(wn)+ofst+component_offset;
+            Is_True(ofst == NULL || WN_operator(ofst) == OPR_INTCONST,
+                    ("WGEN_Expand_Expr: ofst is not constant for LDID"));
+            INT64 ofst_value = (ofst == NULL) ? 0 : WN_const_val(ofst);
+	    WN_offset(wn) = WN_offset(wn) + ofst_value;
 	    WN_set_field_id(wn, WN_field_id(wn)+field_id + DECL_FIELD_ID(arg1));
 	  } 
 	} 
@@ -6687,7 +7175,8 @@ WGEN_Expand_Expr (gs_t exp,
 	  wn = WN_Stid (MTYPE_M, 0, temp, temp_ty_idx, wn);
 	  WGEN_Stmt_Append (wn, Get_Srcpos());
 	  // Load correct field from temp symbol
-	  wn = WN_Ldid (TY_mtype (ty_idx), ofst + component_offset,
+          TYPE_ID rtype= Mtype_comparison(TY_mtype (ty_idx));
+	  wn = WGEN_CreateLdid (OPR_LDID, rtype, TY_mtype (ty_idx), ofst,
 	                temp, temp_ty_idx, field_id + DECL_FIELD_ID(arg1));
 	}
 #endif
@@ -6770,7 +7259,10 @@ WGEN_Expand_Expr (gs_t exp,
 	    if (TCON_ty (tcon) == MTYPE_STRING &&
                 TY_size (Be_Type_Tbl (desc)) == 1) {
 	      mUINT32 len = Targ_String_Length (tcon);
-	      mUINT64 offset = component_offset + xtra_BE_ofst + WN_offset (wn0);
+              Is_True(component_offset == NULL || WN_operator(component_offset) == OPR_INTCONST,
+                      ("WGEN_Expand_Expr: component_offset is not constant"));
+              INT64 offset_value = (component_offset == NULL) ? 0 : WN_const_val(component_offset);
+	      mUINT64 offset = offset_value + xtra_BE_ofst + WN_offset (wn0);
 	      if (offset <= len    &&
 		  desc == MTYPE_U1 &&
 		  (rtype == MTYPE_U4 || rtype == MTYPE_U8)) {
@@ -6791,13 +7283,20 @@ WGEN_Expand_Expr (gs_t exp,
 	    }
 	  }
 	  // NOTE: In GNU4, this may be a REFERENCE_REF_P.
-	  if (need_result)
-	    wn = WN_CreateIload(OPR_ILOAD, rtype,
+	  if (need_result) {
+            WN* iload_ofst = NULL;
+            if (xtra_BE_ofst != 0)
+              iload_ofst = WGEN_Compose_Offset(component_offset,
+                                               WN_Intconst(Pointer_Mtype, xtra_BE_ofst));
+            else
+              iload_ofst = component_offset;
+	    wn = WGEN_CreateIload(OPR_ILOAD, rtype,
 				is_bit_field ? MTYPE_BS : desc, 
-				component_offset+xtra_BE_ofst,
+				iload_ofst,
 				field_id != 0 ? hi_ty_idx : ty_idx, 
 				Make_Pointer_Type (hi_ty_idx, FALSE),
 				wn0, field_id);
+          }
 	  else
 	  if (WN_has_side_effects (wn0))
 	    wn = wn0;
@@ -7741,7 +8240,7 @@ WGEN_Expand_Expr (gs_t exp,
 	  break;
 #endif
 	wn  = WGEN_Lhs_Of_Modify_Expr(code, gs_tree_operand (exp, 0), call_return_val, need_result, 
-				     0, 0, 0, FALSE, wn1, 0, FALSE, FALSE);
+				     0, NULL, 0, FALSE, wn1, 0, FALSE, FALSE);
       }
       break;
 
@@ -7840,7 +8339,7 @@ WGEN_Expand_Expr (gs_t exp,
 	UINT xtra_BE_ofst = 0; 	// only needed for big-endian target
 	TY_IDX elem_ty_idx;
 	// generate the WHIRL array node
-        wn0 = WGEN_Array_Expr(exp, &elem_ty_idx, 0, 0, 0);
+        wn0 = WGEN_Array_Expr(exp, &elem_ty_idx, 0, NULL, 0);
 
 	// generate the iload node
 	TY_IDX hi_ty_idx = Get_TY (gs_tree_type(exp));
@@ -7884,9 +8383,15 @@ WGEN_Expand_Expr (gs_t exp,
 
 	Is_True(! is_bit_field || field_id <= MAX_FIELD_ID,
 		("WGEN_Expand_Expr: field id for bit-field exceeds limit"));
-	wn = WN_CreateIload(OPR_ILOAD, rtype,
+        WN* iload_ofst = NULL;
+        if (xtra_BE_ofst != 0)
+          iload_ofst = WGEN_Compose_Offset(component_offset,
+                                           WN_Intconst(Pointer_Mtype, xtra_BE_ofst));
+        else
+          iload_ofst = component_offset;
+	wn = WGEN_CreateIload(OPR_ILOAD, rtype,
 			    is_bit_field ? MTYPE_BS : desc, 
-			    component_offset+xtra_BE_ofst,
+			    iload_ofst,
 			    field_id != 0 ? hi_ty_idx : ty_idx,
 			    Make_Pointer_Type(elem_ty_idx, FALSE),
 			    wn0, field_id);
@@ -9792,6 +10297,8 @@ WGEN_Expand_Expr (gs_t exp,
 	  if (arg_mtype == MTYPE_M) {
 	    arg_mtype = WN_rtype(arg_wn);
 	  }
+          FmtAssert(arg_mtype != MTYPE_M || TY_size(WN_ty(arg_wn)) != -1,
+                    ("WGEN_Expand_Expr: TODO: pass variable length object"));
           arg_wn = WN_CreateParm (Mtype_comparison (arg_mtype), arg_wn,
 		    		  arg_ty_idx, WN_PARM_BY_VALUE);
           WN_kid (call_wn, i++) = arg_wn;
@@ -9956,9 +10463,15 @@ WGEN_Expand_Expr (gs_t exp,
             Is_True(! is_bit_field || field_id <= MAX_FIELD_ID,
                     ("WGEN_Expand_Expr: field id for bit-field exceeds limit"));
  
-	    wn1 = WN_CreateLdid(OPR_LDID, rtype,
+            WN* ldid_ofst = NULL;
+            if (xtra_BE_ofst != 0)
+              ldid_ofst = WGEN_Compose_Offset(component_offset,
+                                               WN_Intconst(Pointer_Mtype, xtra_BE_ofst));
+            else
+              ldid_ofst = component_offset;
+	    wn1 = WGEN_CreateLdid(OPR_LDID, rtype,
 			        is_bit_field ? MTYPE_BS : desc,
-			        ST_ofst(ret_st)+component_offset+xtra_BE_ofst, 
+			        ldid_ofst, 
 				ret_st,
 				(field_id != 0 && component_ty_idx != 0) ?
 				Get_TY (gs_tree_type(exp)) : ty_idx,
@@ -9975,6 +10488,8 @@ WGEN_Expand_Expr (gs_t exp,
             // such that I4I1LDID will be sign extended and
             // U4U2 will be zero extended
             if (MTYPE_is_integral(rtype) && MTYPE_is_integral(desc) &&
+                // bug911 open64.net. Add Safe guard for CVTL.
+                (desc != MTYPE_BS) &&
                  MTYPE_byte_size( rtype ) > MTYPE_byte_size( desc )) {
                wn = WN_CreateCvtl(OPR_CVTL, Widen_Mtype(desc), MTYPE_V,
 			     MTYPE_size_min(desc), wn);
@@ -10671,7 +11186,7 @@ WGEN_Call_Returns_Ptr_To_Member_Func (gs_t exp)
 static WN*
 WGEN_Expand_Ptr_To_Member_Func_Call_Expr (gs_t exp, TY_IDX nop_ty_idx,
 					 TYPE_ID rtype, TYPE_ID desc,
-					 WN_OFFSET offset, UINT field_id)
+					 WN* offset, UINT field_id)
 {
   TY_IDX exp_ty_idx = Get_TY(gs_tree_type(exp));
   WN *wn;
@@ -10682,7 +11197,7 @@ WGEN_Expand_Ptr_To_Member_Func_Call_Expr (gs_t exp, TY_IDX nop_ty_idx,
   WN *target_wn = WN_Lda(Pointer_Mtype, ST_ofst(st), st);
   WGEN_Expand_Expr(exp, TRUE, nop_ty_idx, exp_ty_idx, 0, 0, FALSE, FALSE,
 		  target_wn);
-  wn = WN_CreateLdid(OPR_LDID, rtype, desc, ST_ofst(st) + offset,
+  wn = WGEN_CreateLdid(OPR_LDID, rtype, desc, offset,
 		     st, exp_ty_idx, field_id);
   return wn;
 }

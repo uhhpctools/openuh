@@ -51,8 +51,7 @@ extern WN* SNL_INV_Permute_Loops(WN* outer_loop, INT permutation[],
 
 extern WN* SNL_INV_Cache_Block(SNL_NEST_INFO* ni, const SNL_TILE_INFO* t,
   WN* permloop[], LS_IN_LOOP& loop_ls, SNL_REGION* region, 
-  SNL_INV_CACHE_BLOCK_REASON reason, SYMBOL* outersym, 
-  MEM_POOL* pool, BOOL report_prompf);
+  SNL_INV_CACHE_BLOCK_REASON reason, SYMBOL* outersym, MEM_POOL* pool);
 
 extern SNL_REGION SNL_INV_Transforms(WN* wn_outer, INT permutation[],
   SNL_NEST_INFO* ni, INT  nloops, SNL_TILE_INFO* t, INT regstripsz[],

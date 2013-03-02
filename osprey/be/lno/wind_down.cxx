@@ -45,7 +45,6 @@
 #include "pu_info.h"
 #include "lwn_util.h"
 #include "lnoutils.h"
-#include "prompf.h"
 #include "config.h"
 #include "debug.h"
 #include "glob.h"
@@ -383,19 +382,6 @@ extern WN* Wind_Down(WN* loop,
   ARRAY_DIRECTED_GRAPH16* dg = Array_Dependence_Graph;
 
   WN* newloop = LWN_Copy_Tree(loop, TRUE, LNO_Info_Map);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    STACK<WN*> st_old(&PROMPF_pool);
-    STACK<WN*> st_new(&PROMPF_pool);
-    Prompf_Assign_Ids(loop, newloop, &st_old, &st_new, FALSE);
-    INT nloops = st_old.Elements();
-    INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-    INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-    for (INT i = 0; i < nloops; i++) {
-      old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-      new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-    }
-    Prompf_Info->Register_Winddown(old_ids, new_ids, nloops);
-  }
   WN* fake_unroll_bodies[2];
   fake_unroll_bodies[0] = loop;
   fake_unroll_bodies[1] = newloop;

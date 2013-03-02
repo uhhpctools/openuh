@@ -154,7 +154,6 @@
 #include "targ_sim.h"
 #include "opt_du.h"
 #include "lnoutils.h"
-#include "prompf.h"
 #include "wn_tree_util.h"               // for tree iterators
 
 extern WN* Find_SCF_Inside(WN* parent_wn, OPCODE opc); // in ff_utils.cxx
@@ -1000,6 +999,9 @@ void PF_LOOPNODE::Process_Loop () {
 	  LNO_Num_Iters < 100)))
       single_small_trip_loop = TRUE;
   }
+  if (dli->Loop_Align_Peeled && !dli->Loop_Vectorized)
+    single_small_trip_loop = TRUE;
+
   if ((LNO_Run_Prefetch > SOME_PREFETCH || 
        (LNO_Run_Prefetch == SOME_PREFETCH && !Is_Multi_BB (w))) &&
 //      !simple_copy_loop && // bug 8560 disable this
@@ -1478,21 +1480,6 @@ void PF_LOOPNODE::Split_Loops (PF_SPLIT_VECTOR *split_vec) {
       // split this loop...
       WN* body = WN_do_body(_code);
       WN* newbody = LWN_Copy_Tree (body,TRUE,LNO_Info_Map,TRUE,version_map);
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-        STACK<WN*> st_old(&PROMPF_pool);
-	STACK<WN*> st_new(&PROMPF_pool);
-	Prompf_Assign_Ids(body, newbody, &st_old, &st_new, FALSE);
-	INT nloops = st_old.Elements();
-        if (nloops > 0) { 
-	  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-	  INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &PROMPF_pool);
-	  for (INT i = 0; i < nloops; i++) {
-	    old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-	    new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-	  }
-	  Prompf_Info->Prefetch_Version(old_ids, new_ids, nloops);
-        } 
-      }
       LWN_Copy_Frequency_Tree(newbody, WN_step(_code));
       Is_True (Check_Version_Map (body, newbody),
                ("Check_Version_Map failed"));

@@ -129,8 +129,6 @@ using namespace std;
 #include "ara.h"
 #include "doacross.h"
 #include "autod.h"
-#include "prompf.h" 
-#include "anl_driver.h"
 #include "parids.h"
 #include "call_info.h"
 #include "ifminmax.h"
@@ -147,16 +145,6 @@ using namespace std;
 // Laks 06.29.06: include UH stuffs here
 #include "uh_lno.h"
 
-#ifndef BUILD_SKIP_PROMPF
-#pragma weak Prompf_Emit_Whirl_to_Source__GP7pu_infoP2WN
-#if ! defined(BUILD_OS_DARWIN)
-#pragma weak Anl_File_Path  
-#endif /* ! defined(BUILD_OS_DARWIN) */
-#pragma weak Print_file__16PROJECTED_REGIONGP8__file_s
-#pragma weak Print_file__14PROJECTED_NODEGP8__file_s
- 
-extern void Prompf_Emit_Whirl_to_Source(PU_Info* current_pu, WN* func_nd);
-#endif
 
 extern WN *Convert_Intrinsic_To_Alloca_Dealloca (WN *wn);
 extern BOOL Phase_123(PU_Info* current_pu, WN* func_nd, 
@@ -230,99 +218,11 @@ typedef STACK<WN *> STACK_OF_WN;
   BOOL  LNO_Allow_Delinearize = TRUE; // this is true for lno but not
 				      // ipl
 
-static INT prompf_dumped = FALSE; 
-
 static BOOL
 Unroll_before_Factorize(WN *wn);
 
 static 
 void Outer_Unroll_For_Factorization(WN *func_nd, STACK_OF_WN *inner_do_stack);
-
-//-----------------------------------------------------------------------
-// NAME: Prompf_Init 
-// FUNCTION: Initialize PROMPF processing for function 'func_nd'. 
-//-----------------------------------------------------------------------
-
-void Prompf_Init()
-{
-#ifndef BUILD_SKIP_PROMPF
-  prompf_dumped = FALSE; 
-  if (Run_prompf) {
-    Prompf_Info->Enable(); 
-    Prompf_Info->Mark_Prelno(); 
-  } else if (LNO_Prompl) { 
-    MEM_POOL_Initialize(&PROMPF_pool, "PROMPF_pool", FALSE); 
-    MEM_POOL_Push(&PROMPF_pool);
-  }  
-#endif
-}
- 
-//-----------------------------------------------------------------------
-// NAME: Prompf_Finish 
-// FUNCTION: Finish off PROMPF processing for current function. 
-//-----------------------------------------------------------------------
-
-void Prompf_Finish()
-{
-#ifndef BUILD_SKIP_PROMPF
-  if (Run_prompf) {
-    Prompf_Info->Disable(); 
-    MEM_POOL_Pop(&PROMPF_pool);
-    MEM_POOL_Delete(&PROMPF_pool);
-    Prompf_Info = NULL;  
-  } else if (LNO_Prompl) { 
-    MEM_POOL_Pop(&PROMPF_pool);
-    MEM_POOL_Delete(&PROMPF_pool);
-  } 
-#endif
-}
-
-//-----------------------------------------------------------------------
-// NAME: Prompf_Dump
-// FUNCTION: Dump information related to -PROMP:=ON or -mplist flags
-//   for the 'current_pu' after parallelization is complete. 
-//-----------------------------------------------------------------------
-
-
-static void Prompf_Dump(PU_Info* current_pu,
-			WN* func_nd) 
-{
-#ifndef BUILD_SKIP_PROMPF
-  FILE *fp_anl = NULL; 
-  prompf_dumped = TRUE; 
-  if (Run_prompf) {
-#ifdef Is_True_On 
-    Prompf_Info->Check(stdout, func_nd); 
-#endif 
-    Prompf_Info->Mark_Postlno(); 
-    Prompf_Emit_Whirl_to_Source(current_pu, func_nd); 
-  } else if (Run_w2fc_early) { 
-    Prompf_Emit_Whirl_to_Source(current_pu, func_nd);
-  } 
-#endif
-}
-
-//-----------------------------------------------------------------------
-// NAME: Prompf_Post_Dump 
-// FUNCTION: Dump information related to -PROMP:=ON for the 'current_pu' 
-//   after LNO is run. 
-//-----------------------------------------------------------------------
-
-static void Prompf_Post_Dump(PU_Info* current_pu,
-                             WN* func_nd)
-{
-#ifndef BUILD_SKIP_PROMPF
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {  
-#ifdef Is_True_On 
-    Prompf_Info->Check(stdout, func_nd); 
-#endif 
-    Print_Prompf_Transaction_Log(TRUE); 
-    Print_Prompf_Doacross_Log(current_pu, func_nd, TRUE); 
-    Print_Prompf_Parallel_Region_Log(current_pu, func_nd, TRUE);
-    Print_Prompf_Nest_Log(func_nd, TRUE); 
-  } 
-#endif
-}
 
 extern void
 Unroll_Loop_By_Trip_Count(WN* outerloop, INT u);
@@ -1102,7 +1002,6 @@ extern void Parallel_And_Padding_Phase(PU_Info* current_pu,
   if (LNO_Autodist) {
     Automatic_Data_Distribute(func_nd);
   }
-  Prompf_Dump(current_pu, func_nd); 
   Mp_Tile(func_nd); 
 
   Doacross_Finish();
@@ -1183,14 +1082,9 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   if ( !Du_Built(du_mgr) ) {
 
     // need to possibly dump the function
-    Prompf_Init(); 
-    if (Run_prompf) 
-      Print_Prompf_Transaction_Log(FALSE); 
-    Prompf_Dump(current_pu, func_nd); 
     if (LNO_Prompl) {
       Print_Prompl_Msgs(current_pu, func_nd); 
     } 
-    Prompf_Finish(); 
 
 #ifdef KEY //just cheat the list_option, don't worry
            // about the compilation time if the uer
@@ -1313,7 +1207,6 @@ extern WN * Lnoptimizer(PU_Info* current_pu,
   Start_Timer ( T_LNOParentize_CU );
   LWN_Parentize (func_nd);
   Stop_Timer ( T_LNOParentize_CU );
-  Prompf_Init(); 
   WB_Set_Sanity_Check_Level(WBC_DU_ONLY); 
 
 
@@ -1751,9 +1644,6 @@ return_point:
     Convert_Intrinsic_To_Alloca_Dealloca (func_nd);
   }
 
-  if (!prompf_dumped)
-    Prompf_Dump(current_pu, func_nd); 
-  Prompf_Post_Dump(current_pu, func_nd);
 #ifndef _NEW_SYMTAB
   if (LNO_Mem_Sim) {
     void Instrument_Mem_Sim (WN *wn);
@@ -1810,7 +1700,6 @@ return_point:
     fprintf(stdout, "Lno DONE processing procedure: %s\n", Cur_PU_Name);
     fprintf(TFile, "Lno DONE processing procedure: %s\n", Cur_PU_Name);
   }
-  Prompf_Finish(); 
   // fclose(LNO_Analysis); 
   MEM_POOL_Pop(&ARA_memory_pool);
   MEM_POOL_Delete(&ARA_memory_pool);
@@ -2407,6 +2296,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(MEM_POOL *pool, ACCESS_ARRAY *lb, ACCESS_ARRAY *ub,
     Has_Barriers = FALSE;
     Multiversion_Alias = FALSE;
     Loop_Vectorized = FALSE;
+    Loop_Align_Peeled = FALSE;
     Is_Ivdep = FALSE;
     Is_Concurrent_Call = FALSE;
     Concurrent_Directive = FALSE;
@@ -2516,6 +2406,7 @@ DO_LOOP_INFO::DO_LOOP_INFO(DO_LOOP_INFO *dli, MEM_POOL *pool)
     Has_Barriers = dli->Has_Barriers;
     Multiversion_Alias = dli->Multiversion_Alias;
     Loop_Vectorized = dli->Loop_Vectorized;
+    Loop_Align_Peeled = dli->Loop_Align_Peeled;
     Is_Ivdep = dli->Is_Ivdep;
     Is_Concurrent_Call = dli->Is_Concurrent_Call;
     Concurrent_Directive = dli->Concurrent_Directive;

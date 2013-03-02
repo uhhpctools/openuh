@@ -124,7 +124,6 @@ static INT32 Ignore_Int;
 #include "config_vho.cxx"
 #include "config_flist.cxx"
 #include "config_clist.cxx"
-#include "config_promp.cxx"
 
 #ifdef BACK_END
 # include "config_lno.cxx"
@@ -636,8 +635,6 @@ static OPTION_DESC Options_PHASE[] = {
       &Run_w2fc_early,	NULL},
     { OVK_BOOL,	OV_INTERNAL,	FALSE, "ipl",    "i",	 0, 0, 0,
       &Run_ipl,	NULL},
-    { OVK_BOOL,	OV_INTERNAL,	FALSE, "prompf", NULL,	 0, 0, 0,
-      &Run_prompf,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "lpath",  "",	 0, 0, 0,
       &LNO_Path,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "wpath",  "",	 0, 0, 0,
@@ -652,8 +649,6 @@ static OPTION_DESC Options_PHASE[] = {
       &Ipl_Path,	NULL},
     { OVK_NAME,	OV_INTERNAL,	FALSE, "tpath",   "", 0, 0, 0,
       &Targ_Path,	NULL},
-    { OVK_NAME,	OV_INTERNAL,	FALSE, "prompf_anl_path", "", 0, 0, 0,
-      &Prompf_Anl_Path, NULL},
     { OVK_COUNT}
 };
 #elif defined(QIKKI_BE)
@@ -874,8 +869,6 @@ OPTION_GROUP Common_Option_Groups[] = {
        "Options to control listing of transformed f77 source" },
   { "CLIST", ':', '=', Options_CLIST, NULL,
        "Options to control listing of transformed C source" },
-  { "PROMP", ':', '=', Options_PROMP, NULL,
-       "Options to control listing mp transformations" },
   { NULL },		/* List terminator -- must be last */
 };
 
@@ -1022,16 +1015,12 @@ BOOL Run_cg = FALSE;		    /* run code generator */
 BOOL Run_w2c = FALSE;		    /* run whirl2c */
 BOOL Run_w2f = FALSE;		    /* run whirl2f */
 BOOL Run_w2fc_early = FALSE;	    /* run whirl2fc after LNO auto par*/
-BOOL Run_prompf = FALSE;	    /* run to generate prompf analysis file */
 char *LNO_Path = 0;		    /* path to lno.so */
 char *WOPT_Path = 0;		    /* path to wopt.so */
 char *CG_Path = 0;		    /* path to cg.so */
 char *Ipl_Path = 0;		    /* path to ipl.so */
 char *W2C_Path = 0;		    /* path to whirl2c.so */
 char *W2F_Path = 0;		    /* path to whirl2f.so */
-char *Prompf_Anl_Path = 0;	    /* path to prompf_anl.so */
-WN_MAP Prompf_Id_Map = WN_MAP_UNDEFINED; 
-			/* Maps WN constructs to unique identifiers */
 #if defined(TARG_SL)
 BOOL Run_ipisr = FALSE;         /* run ipisr register allocation */
 #endif

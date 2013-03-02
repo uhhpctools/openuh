@@ -80,7 +80,6 @@
 #include "data_layout.h"
 #include "const.h"
 #include "wn.h"
-#include "import.h"
 #include "opt_alias_interface.h"
 #include "opt_alias_mgr.h"
 #include "cgir.h"
@@ -111,6 +110,8 @@
 #include "erbe.h"
 #include "stblock.h" //for Base_Symbol_And_Offset_For_Addressing
 #include "be_symtab.h" //Preg_Lda
+
+#define UNCONDITIONAL_MOVNTI -1
 
 UINT32 CGTARG_branch_taken_penalty;
 BOOL CGTARG_branch_taken_penalty_overridden = FALSE;
@@ -247,6 +248,7 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vcvtsi2ssx:
       case TOP_vcvtsi2ssxx:
       case TOP_vcvtsi2ssxxx:
+      // FMA4
       case TOP_vfmaddxss:
       case TOP_vfmaddxxss:
       case TOP_vfmaddxxxss:
@@ -271,6 +273,45 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vfnmsubxrss:
       case TOP_vfnmsubxxrss:
       case TOP_vfnmsubxxxrss:
+      // FMA3: form1
+      case TOP_xfmadd132xss:
+      case TOP_xfmadd132xxss:
+      case TOP_xfmadd132xxxss:
+      case TOP_xfnmadd132xss:
+      case TOP_xfnmadd132xxss:
+      case TOP_xfnmadd132xxxss:
+      case TOP_xfmsub132xss:
+      case TOP_xfmsub132xxss:
+      case TOP_xfmsub132xxxss:
+      case TOP_xfnmsub132xss:
+      case TOP_xfnmsub132xxss:
+      case TOP_xfnmsub132xxxss:
+      // FMA3: form2
+      case TOP_xfmadd213xss:
+      case TOP_xfmadd213xxss:
+      case TOP_xfmadd213xxxss:
+      case TOP_xfnmadd213xss:
+      case TOP_xfnmadd213xxss:
+      case TOP_xfnmadd213xxxss:
+      case TOP_xfmsub213xss:
+      case TOP_xfmsub213xxss:
+      case TOP_xfmsub213xxxss:
+      case TOP_xfnmsub213xss:
+      case TOP_xfnmsub213xxss:
+      case TOP_xfnmsub213xxxss:
+      // FMA3: form3
+      case TOP_xfmadd231xss:
+      case TOP_xfmadd231xxss:
+      case TOP_xfmadd231xxxss:
+      case TOP_xfnmadd231xss:
+      case TOP_xfnmadd231xxss:
+      case TOP_xfnmadd231xxxss:
+      case TOP_xfmsub231xss:
+      case TOP_xfmsub231xxss:
+      case TOP_xfmsub231xxxss:
+      case TOP_xfnmsub231xss:
+      case TOP_xfnmsub231xxss:
+      case TOP_xfnmsub231xxxss:
       case TOP_vfsqrtxss:
       case TOP_vfsqrtxxss:
       case TOP_vfsqrtxxxss:
@@ -338,9 +379,6 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vstsd:
       case TOP_vstsd_n32:
       case TOP_vstsdx:
-      case TOP_vstntsd:
-      case TOP_vstntsdx:
-      case TOP_vstntsdxx:
       case TOP_vstorelpd:
       case TOP_vdivxxxsd:
       case TOP_vfaddxxxsd:
@@ -369,6 +407,7 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vcvtsi2ssqx:
       case TOP_vcvtsi2ssqxx:
       case TOP_vcvtsi2ssqxxx:
+      // FMA4
       case TOP_vfmaddxsd:
       case TOP_vfmaddxxsd:
       case TOP_vfmaddxxxsd:
@@ -393,6 +432,45 @@ UINT32 CGTARG_Mem_Ref_Bytes(const OP *memop)
       case TOP_vfnmsubxrsd:
       case TOP_vfnmsubxxrsd:
       case TOP_vfnmsubxxxrsd:
+      // FMA3: form1
+      case TOP_xfmadd132xsd:
+      case TOP_xfmadd132xxsd:
+      case TOP_xfmadd132xxxsd:
+      case TOP_xfnmadd132xsd:
+      case TOP_xfnmadd132xxsd:
+      case TOP_xfnmadd132xxxsd:
+      case TOP_xfmsub132xsd:
+      case TOP_xfmsub132xxsd:
+      case TOP_xfmsub132xxxsd:
+      case TOP_xfnmsub132xsd:
+      case TOP_xfnmsub132xxsd:
+      case TOP_xfnmsub132xxxsd:
+      // FMA3: form2
+      case TOP_xfmadd213xsd:
+      case TOP_xfmadd213xxsd:
+      case TOP_xfmadd213xxxsd:
+      case TOP_xfnmadd213xsd:
+      case TOP_xfnmadd213xxsd:
+      case TOP_xfnmadd213xxxsd:
+      case TOP_xfmsub213xsd:
+      case TOP_xfmsub213xxsd:
+      case TOP_xfmsub213xxxsd:
+      case TOP_xfnmsub213xsd:
+      case TOP_xfnmsub213xxsd:
+      case TOP_xfnmsub213xxxsd:
+      // FMA3: form3
+      case TOP_xfmadd231xsd:
+      case TOP_xfmadd231xxsd:
+      case TOP_xfmadd231xxxsd:
+      case TOP_xfnmadd231xsd:
+      case TOP_xfnmadd231xxsd:
+      case TOP_xfnmadd231xxxsd:
+      case TOP_xfmsub231xsd:
+      case TOP_xfmsub231xxsd:
+      case TOP_xfmsub231xxxsd:
+      case TOP_xfnmsub231xsd:
+      case TOP_xfnmsub231xxsd:
+      case TOP_xfnmsub231xxxsd:
       case TOP_vfsqrtxsd:
       case TOP_vfsqrtxxsd:
       case TOP_vfsqrtxxxsd:
@@ -3153,12 +3231,20 @@ static TOP Movnti_Top(TOP old_top)
     case TOP_stsd:      return TOP_stntsd; break;
     case TOP_stsdx:     return TOP_stntsdx; break;
     case TOP_stsdxx:    return TOP_stntsdxx; break;
-    case TOP_vstss:      return TOP_vstntss; break;
-    case TOP_vstssx:     return TOP_vstntssx; break;
-    case TOP_vstssxx:    return TOP_vstntssxx; break;
-    case TOP_vstsd:      return TOP_vstntsd; break;
-    case TOP_vstsdx:     return TOP_vstntsdx; break;
-    case TOP_vstsdxx:    return TOP_vstntsdxx; break;
+
+    /* following cases asserted by CG_movnti == UNCONDITIONAL_MOVNTI */
+    case TOP_stups:     return TOP_stntps; break;
+    case TOP_stupsx:    return TOP_stntpsx; break;
+    case TOP_stupsxx:   return TOP_stntpsxx; break;
+    case TOP_vstups:    return TOP_vstntps; break;
+    case TOP_vstupsx:   return TOP_vstntpsx; break;
+    case TOP_vstupsxx:  return TOP_vstntpsxx; break;
+    case TOP_stupd:     return TOP_stntpd; break;
+    case TOP_stupdx:    return TOP_stntpdx; break;
+    case TOP_stupdxx:   return TOP_stntpdxx; break;
+    case TOP_vstupd:    return TOP_vstntpd; break;
+    case TOP_vstupdx:   return TOP_vstntpdx; break;
+    case TOP_vstupdxx:  return TOP_vstntpdxx; break;
     }
    FmtAssert(FALSE,("Non-Temporal Store: not supported!"));
    return TOP_UNDEFINED;
@@ -3215,43 +3301,52 @@ void CGTARG_LOOP_Optimize( LOOP_DESCR* loop )
 {
   if(CG_movnti==0) return;
 
-  UINT32 trip_count = 0;
-  TN* trip_count_tn = CG_LOOP_Trip_Count(loop);
   BB* body = LOOP_DESCR_loophead(loop);
-
-  if( trip_count_tn != NULL &&
-      TN_is_constant(trip_count_tn) ){
-    trip_count = TN_value( trip_count_tn );
-
-  } else {
-    const ANNOTATION* annot = ANNOT_Get(BB_annotations(body), ANNOT_LOOPINFO);
-    const LOOPINFO* info = ANNOT_loopinfo(annot);
-
-    trip_count = WN_loop_trip_est(LOOPINFO_wn(info));
-  }
-
   OP* op = NULL;
-  INT64 size = 0;
 
-  Working_Set.Clear();
+  if (CG_movnti != UNCONDITIONAL_MOVNTI)
+  {
+    UINT32 trip_count = 0;
+    TN* trip_count_tn = CG_LOOP_Trip_Count(loop);
 
-  /* First, estimate the totol size (in bytes) that this loop will
-     bring to the cache.
-  */
-  FOR_ALL_BB_OPs_FWD( body, op ){
-    if(((OP_store( op ) && !TOP_is_nt_store(OP_code(op))) || //stores
-	  OP_load(op) ) && //loads
-      !Op_In_Working_Set(op)){ //that were not in the working set
-      size += CGTARG_Mem_Ref_Bytes(op);
+    if( trip_count_tn != NULL &&
+        TN_is_constant(trip_count_tn) ){
+      trip_count = TN_value( trip_count_tn );
+
+    } else {
+      const ANNOTATION* annot = ANNOT_Get(BB_annotations(body), ANNOT_LOOPINFO);
+      const LOOPINFO* info = NULL;
+      if (annot != NULL)
+        info = ANNOT_loopinfo(annot);
+      if (info != NULL)
+        trip_count = WN_loop_trip_est(LOOPINFO_wn(info));
     }
+
+    INT64 size = 0;
+
+    Working_Set.Clear();
+
+    /* First, estimate the totol size (in bytes) that this loop will
+       bring to the cache.
+    */
+    FOR_ALL_BB_OPs_FWD( body, op ){
+      if(((OP_store( op ) && !TOP_is_nt_store(OP_code(op))) || //stores
+  	  OP_load(op) ) && //loads
+        !Op_In_Working_Set(op)){ //that were not in the working set
+        size += CGTARG_Mem_Ref_Bytes(op);
+      }
+    }
+
+    size *= trip_count;
+
+    const INT64 cache_size = CG_movnti * 1024;
+
+    if( size < cache_size )
+      return;
   }
+  // if CG_movnti == UNCONDITIONAL_MOVNTI:  generate non-temporal stores
+  // unconditionally
 
-  size *= trip_count;
-
-  const INT64 cache_size = CG_movnti * 1024;
-
-  if( size < cache_size )
-    return;
   FOR_ALL_BB_OPs_FWD( body, op ){
     if( OP_prefetch( op ) ){
       /* Get rid of any prefetchw operation, because it "loads the prefetched
@@ -3316,6 +3411,17 @@ void CGTARG_LOOP_Optimize( LOOP_DESCR* loop )
          new_top = Movnti_Top(OP_code(op));
          break;
        }
+    case TOP_stups:
+    case TOP_stupsx:
+    case TOP_stupsxx:
+    case TOP_vstups:
+    case TOP_vstupsx:
+    case TOP_vstupsxx:
+       {
+         if (CG_movnti == UNCONDITIONAL_MOVNTI)
+           new_top = Movnti_Top(OP_code(op));
+         break;
+       }
     //SSE2 support
     case TOP_stapd:
     case TOP_stapdx:
@@ -3340,22 +3446,28 @@ void CGTARG_LOOP_Optimize( LOOP_DESCR* loop )
 	  new_top = Movnti_Top(OP_code(op));
          break;
        }
-    //SSE4a support
+    //SSE4a/SSE41 support
     case TOP_stss:
     case TOP_stssx:
     case TOP_stssxx:
     case TOP_stsd:
     case TOP_stsdx:
     case TOP_stsdxx:
-    case TOP_vstss:
-    case TOP_vstssx:
-    case TOP_vstssxx:
-    case TOP_vstsd:
-    case TOP_vstsdx:
-    case TOP_vstsdxx:
        { 
-         if(Is_Target_SSE4a())
+         if(Is_Target_SSE4a() || Is_Target_SSE41())
             new_top = Movnti_Top(OP_code(op));
+         break;
+       }
+    case TOP_stupd:
+    case TOP_stupdx:
+    case TOP_stupdxx:
+    case TOP_vstupd:
+    case TOP_vstupdx:
+    case TOP_vstupdxx:
+       {
+         if (CG_movnti == UNCONDITIONAL_MOVNTI &&
+             (Is_Target_SSE4a() || Is_Target_SSE41()))
+           new_top = Movnti_Top(OP_code(op));
          break;
        }
     }//end switch
@@ -3509,11 +3621,15 @@ CGTARG_TN_For_Asm_Operand (const char* constraint,
         load = NULL;
       }
     }
+
+    // bug916 open64.net, &var.field is allowed as "i"
+    // bug962 open64.net, function symbol is allowed as "i"
     if (!(load && (WN_operator(load) == OPR_INTCONST ||
                        (WN_operator(load) == OPR_LDA &&
-                        // &var.field is also allowed, bug916 open64.net
                         (ST_sym_class(WN_st(load)) == CLASS_VAR || 
-                         ST_sym_class(WN_st(load)) == CLASS_CONST))))) {
+                         ST_sym_class(WN_st(load)) == CLASS_CONST ||
+                         ST_sym_class(WN_st(load)) == CLASS_FUNC
+                         ))))) {
       ErrMsgSrcpos(EC_Invalid_Asm_Constrain, WN_Get_Linenum(asm_wn),
                     ": Cannot find immediate operand for ASM");
     }
@@ -3908,7 +4024,37 @@ TN* CGTARG_Process_Asm_m_constraint( WN* load, void** offset, OPS* ops )
 
   if( WN_operator(load) == OPR_LDA ){
     OP* lda_op = OPS_last( ops );
-    asm_opnd = OP_iadd(lda_op) ? OP_opnd( lda_op, 1 ) : OP_opnd( lda_op, 0 );
+    // open64.net bug951. On finding the symbol TN, don't miss the cases of:
+    //  TN :- ld32 GTN2(%rbx) (sym:base_sym +0)
+    // and 
+    //  TN_tmp :- ld32 GTN2(%rbx) (sym:base_sym +0)
+    //  TN :- lea32 TN_tmp ofst_TN
+    // result_sym of the first case is
+    // (sym:base_sym + 0), reloc: TN_RELOC_IA32_GOT
+    // result_sym of the latter case is
+    // (sym:base_sym + base_ofst), reloc: TN_RELOC_IA32_GOTOFF
+
+    if (Is_Target_32bit() && Gen_PIC_Shared) {
+      OP * prev_lda = OP_prev(lda_op);
+      if (OP_code(lda_op) == TOP_lea32 &&
+          prev_lda && 
+          OP_code(prev_lda) == TOP_ld32 &&
+          TN_is_constant(OP_opnd(lda_op, 1)) &&
+          TN_register(OP_opnd(lda_op, 0)) == TN_register(OP_result(prev_lda, 0)) &&
+          TN_is_symbol(OP_opnd(prev_lda, 1)) &&
+          TN_relocs(OP_opnd(prev_lda, 1)) == TN_RELOC_IA32_GOT) {
+        asm_opnd = Gen_Symbol_TN( TN_var(OP_opnd(prev_lda, 1)), 
+                                  TN_value(OP_opnd(lda_op, 1)), 
+                                  TN_RELOC_IA32_GOTOFF );
+        OPS_Remove_Op (ops, prev_lda);
+      } 
+      else if (OP_code(lda_op) == TOP_ldc32) 
+        asm_opnd = OP_opnd( lda_op, 0);
+      else
+        asm_opnd = OP_opnd( lda_op, 1 );
+    } else {
+      asm_opnd = OP_iadd(lda_op) ? OP_opnd( lda_op, 1 ) : OP_opnd( lda_op, 0 );
+    }
     OPS_Remove_Op( ops, lda_op );
 
   } else if( WN_operator(load) == OPR_ADD ){

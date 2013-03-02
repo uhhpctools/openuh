@@ -248,6 +248,7 @@ typedef struct lno_flags {
   UINT32 Fission;
   BOOL  Serial_distribute;
   UINT32  Iter_threshold;
+  BOOL  Simd_peel_align;
   UINT32 Fission_inner_register_limit;
   BOOL	Forward_substitution;
   UINT32 Fusion;
@@ -498,6 +499,7 @@ extern LNO_FLAGS Initial_LNO;
 #define LNO_Fission			Current_LNO->Fission
 #define LNO_Serial_Distribute		Current_LNO->Serial_distribute
 #define LNO_Iter_threshold		Current_LNO->Iter_threshold
+#define LNO_Simd_peel_align		Current_LNO->Simd_peel_align
 #define LNO_Fission_Inner_Register_Limit	\
 	Current_LNO->Fission_inner_register_limit
 #define LNO_Forward_Substitution	Current_LNO->Forward_substitution

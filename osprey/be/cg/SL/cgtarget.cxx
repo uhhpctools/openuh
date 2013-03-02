@@ -38,7 +38,6 @@
 #include "data_layout.h"
 #include "const.h"
 #include "wn.h"
-#include "import.h"
 #include "opt_alias_interface.h"
 #include "opt_alias_mgr.h"
 #include "cgir.h"

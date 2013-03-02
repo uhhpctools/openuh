@@ -107,10 +107,6 @@ static char *rcs_id = "$Source: be/lno/SCCS/s.doacross.cxx $";
 #include "dvector.h"
 #include "ara_loop.h"
 #include "wn_pragmas.h"
-#include "prompf.h"
-#include "anl_driver.h"
-
-#pragma weak New_Construct_Id 
 
 // in parallel.cxx
 extern BOOL Is_Privatizable_With_Context(WN* loop, WN* wn, BOOL defnitely);
@@ -245,23 +241,10 @@ extern WN* Parallelize_Doacross_Loop(
     outer_doacross= Tile_Loop(loop1, Doacross_Tile_Size, 0,
 		     SNL_INV_DOACROSS_TILE,
                      NULL, &LNO_default_pool);
-    if (Prompf_Info != NULL &&  Prompf_Info->Is_Enabled()) { 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, loop1);
-      INT new_id = New_Construct_Id();
-      WN_MAP32_Set(Prompf_Id_Map, outer_doacross, old_id); 
-      WN_MAP32_Set(Prompf_Id_Map, loop1, new_id); 
-      Prompf_Info->Doacross_Inner_Tile(old_id, new_id); 
-    } 
   } 
 
   // initialize needed portion of sync arrays
   WN* init_loop=Create_Initialize_Loop (processor_loop,dg,du,Is_Pdo_Region);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, processor_loop); 
-    INT new_id = New_Construct_Id();
-    WN_MAP32_Set(Prompf_Id_Map, init_loop, new_id); 
-    Prompf_Info->Doacross_Sync(old_id, new_id);
-  }
 
   OPCODE op_stid = OPCODE_make_op(OPR_STID, MTYPE_V, index_type);
   OPCODE op_ldid = OPCODE_make_op(OPR_LDID, index_type, index_type);

@@ -52,6 +52,10 @@ typedef struct mem_pool MEM_POOL;
 class  IPO_SYMTAB;
 
 extern mUINT16
+DST_Enter_Callee_File_Dst(DST_TYPE caller_file_dst,
+                          DST_TYPE callee_file_dst);
+
+extern mUINT16
 DST_get_cross_file_id(DST_IDX parent,
                       DST_IDX inl_routine, 
                       DST_TYPE caller_file_dst,

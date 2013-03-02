@@ -1,5 +1,6 @@
 # -*- Makefile -*-
 #
+#  Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
 #  Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 #
 #  This program is free software; you can redistribute it and/or modify it
@@ -79,7 +80,7 @@ HOSTDEFS += -Dlonglong
 # need to define _LONGLONG and _SVR4_SOURCE to allow compilation with -ansi.
 HOSTDEFS += -D_LONGLONG -D_SVR4_SOURCE
 
-ifeq ($(BUILD_VARIANT), DEBUG)
+ifeq ($(BUILD_FFE_OPTIMIZE), DEBUG)
 HOSTDEFS += -DIs_True_On
 HOSTDEFS += -DInsist_On 
 endif
@@ -191,7 +192,7 @@ endif
 LCOPTS += $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCINCS = $(addprefix -I, $(HEADER_DIRS))
 
-ifeq ($(BUILD_VARIANT), DEBUG)
+ifeq ($(BUILD_FFE_OPTIMIZE), DEBUG)
 LCDEFS += -D_DEBUG
 endif
 

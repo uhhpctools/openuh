@@ -3828,7 +3828,6 @@ Read_Feedback_Info (FEEDBACK* fb, WN* tree, const Pu_Hdr& pu_hdr)
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"
@@ -3842,7 +3841,7 @@ wb_gwe(WN *wn_root)
   WB_BROWSER   wb;
 
   WB_Set_Phase( WBP_LOWER );
-  WB_Initialize( &wb, wn_root, &Get_Current_PU(), NULL, NULL, -1 );
+  WB_Initialize( &wb, wn_root, &Get_Current_PU(), NULL, NULL );
   wb.Sdebug( "" );
   WB_Set_Phase( WBP_NONE ); 
   WB_Terminate( &wb ); 

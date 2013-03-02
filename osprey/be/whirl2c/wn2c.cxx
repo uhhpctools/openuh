@@ -4088,152 +4088,6 @@ WN2C_Prefetch_Map(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
 } /* WN2C_Prefetch_Map */
 
 
-/*--------------------- prompf processing utilities -------------------*/
-/*---------------------------------------------------------------------*/
-
-static void
-WN2C_Append_Prompf_Flag_Newline(TOKEN_BUFFER tokens)
-{
-   UINT current_indent = Current_Indentation();
-
-   Set_Current_Indentation(0);
-   Append_Indented_Newline(tokens, 1);
-   Set_Current_Indentation(current_indent);
-} /* WN2C_Append_Prompf_Flag_Newline */
-
-
-static BOOL
-WN2C_Is_Loop_Region(const WN *region, CONTEXT context)
-{
-   /* Return TRUE if the given region is either a DOACROSS,
-    * PARALLEL_DO, or a PDO region; otherwise, return FALSE.
-    */
-   BOOL predicate = (WN_operator(region) == OPR_REGION);
-
-   if (predicate)
-   {
-      const WN *pragma = WN_first(WN_region_pragmas(region));
-
-      predicate = (pragma != NULL &&
-		   (WN_pragma(pragma) == WN_PRAGMA_DOACROSS    ||
-		    WN_pragma(pragma) == WN_PRAGMA_PARALLEL_DO ||
-		    WN_pragma(pragma) == WN_PRAGMA_PDO_BEGIN) &&
-		   WN_pragma_nest(pragma) <= 0 &&
-		   !Ignore_Synchronized_Construct(pragma, context));
-   }
-   return predicate;
-} /* WN2C_Is_Loop_Region */
-
-
-static BOOL
-WN2C_Is_Parallel_Region(const WN *region, CONTEXT context)
-{
-   BOOL predicate = (region != NULL && WN_operator(region) == OPR_REGION);
-
-   if (predicate)
-   {
-      const WN *pragma = WN_first(WN_region_pragmas(region));
-
-      predicate = (pragma != NULL && 
-		   (WN_pragma(pragma) == WN_PRAGMA_PARALLEL_BEGIN || 
-		    WN_pragma(pragma) == WN_PRAGMA_MASTER_BEGIN || 
-		    WN_pragma(pragma) == WN_PRAGMA_SINGLE_PROCESS_BEGIN ||
-		    WN_pragma(pragma) == WN_PRAGMA_PSECTION_BEGIN ||
-		    WN_pragma(pragma) == WN_PRAGMA_PARALLEL_SECTIONS) &&
-		   !Ignore_Synchronized_Construct(pragma, context));
-   }   
-   return predicate;
-} /* WN2C_Is_Parallel_Region */
-
-
-static void
-WN2C_Prompf_Construct_Start(TOKEN_BUFFER tokens, const WN *construct)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2C_Construct_Map, construct);
-
-   if (construct_id != 0)
-   {
-      WN2C_Append_Prompf_Flag_Newline(tokens);
-      Append_Token_String(tokens, "/*$SGI");
-      Append_Token_String(tokens, "start");
-      Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-      Append_Token_String(tokens, "*/");
-   }
-} /* WN2C_Prompf_Construct_Start */
-
-
-static void
-WN2C_Prompf_Construct_End(TOKEN_BUFFER tokens, const WN *construct)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2C_Construct_Map, construct);
-
-   if (construct_id != 0)
-   {
-      WN2C_Append_Prompf_Flag_Newline(tokens);
-      Append_Token_String(tokens, "/*$SGI");
-      Append_Token_String(tokens, "end");
-      Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-      Append_Token_String(tokens, "*/");
-   }
-} /* WN2C_Prompf_Construct_End */
-
-
-static void
-WN2C_Start_Prompf_Transformed_Loop(TOKEN_BUFFER tokens,
-				   const WN    *loop,
-				   CONTEXT      context)
-{
-   /* We if this is a DOACROSS, PDO or PARALLEL DO loop, then it will
-    * already have been handled by the sourrounding region, so we need
-    * not emit anything here.  Otherwise, emit the prompf flags.
-    */
-   if (!WN2C_Is_Loop_Region(W2CF_Get_Parent(W2CF_Get_Parent(loop)), context))
-      WN2C_Prompf_Construct_Start(tokens, loop);
-} /* WN2C_Start_Prompf_Transformed_Loop */
-
-
-static void
-WN2C_End_Prompf_Transformed_Loop(TOKEN_BUFFER tokens,
-				 const WN    *loop,
-				 CONTEXT      context)
-{
-   /* We if this is a DOACROSS, PDO or PARALLEL DO loop, then it will
-    * already have been handled by the sourrounding region, so we need
-    * not emit anything here.  Otherwise, emit the prompf flags.
-    */
-   if (!WN2C_Is_Loop_Region(W2CF_Get_Parent(W2CF_Get_Parent(loop)), context))
-      WN2C_Prompf_Construct_End(tokens, loop);
-} /* WN2C_End_Prompf_Transformed_Loop */
-
-
-static void
-WN2C_Start_Prompf_Transformed_Region(TOKEN_BUFFER tokens, 
-				     const WN    *region,
-				     CONTEXT      context)
-{
-   /* Handle a PARALLEL region, or a DOACROSS, PDO or PARALLEL DO 
-    * loop enclosed in a region.
-    */
-   if (WN2C_Is_Loop_Region(region, context) || 
-       WN2C_Is_Parallel_Region(region, context))
-      WN2C_Prompf_Construct_Start(tokens, region);
-} /* WN2C_Start_Prompf_Transformed_Region */
-
-
-static void
-WN2C_End_Prompf_Transformed_Region(TOKEN_BUFFER tokens, 
-				   const WN    *region,
-				   CONTEXT      context)
-{
-   /* Handle a PARALLEL region, or a DOACROSS, PDO or PARALLEL DO 
-    * loop enclosed in a region.
-    */
-   if (WN2C_Is_Loop_Region(region, context) ||
-       WN2C_Is_Parallel_Region(region, context))
-      WN2C_Prompf_Construct_End(tokens, region);
-} /* WN2C_End_Prompf_Transformed_Region */
-
-
 /*--------- hidden routines to handle each kind of operator -----------*/
 /*---------------------------------------------------------------------*/
 
@@ -4382,10 +4236,6 @@ WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    }
    param_st[WN_num_formals(wn)] = NULL; /* Terminates list of param STs */
 
-   /* Write prompf information */
-   if (W2C_Prompf_Emission)
-      WN2C_Prompf_Construct_Start(tokens, wn);
-
    /* Write function header, and begin the body on a new line */
    CONTEXT_set_srcpos(context, WN_Get_Linenum(wn));
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
@@ -4426,9 +4276,6 @@ WN2C_func_entry(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Append_Token_String(tokens, "/*");
    ST2C_use_translate(tokens, &St_Table[WN_entry_name(wn)], context);
    Append_Token_String(tokens, "*/");
-
-   if (W2C_Prompf_Emission)
-      WN2C_Prompf_Construct_End(tokens, wn);
 
    /* Separate functions by two empty lines */
    Append_Indented_Newline(tokens, 2);
@@ -4602,9 +4449,6 @@ WN2C_region(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(WN_region_body(wn)) == OPR_BLOCK, 
 	   ("Expected OPR_BLOCK as body of OPR_REGION in WN2C_region()"));
 
-   if (W2C_Prompf_Emission)
-      WN2C_Start_Prompf_Transformed_Region(tokens, wn, context);
-
    good_rid = RID_map >= 0; 
    if (good_rid) 
      rid = (RID *)WN_MAP_Get(RID_map, wn);
@@ -4661,9 +4505,6 @@ WN2C_region(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
                               WN_first(WN_region_pragmas(wn)),
                               context);
    } /* if emit pragma */
-
-   if (W2C_Prompf_Emission)
-      WN2C_End_Prompf_Transformed_Region(tokens, wn, context);
 
    return EMPTY_STATUS;
 } /* WN2C_region */
@@ -4848,10 +4689,6 @@ WN2C_do_loop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(wn) == OPR_DO_LOOP,
 	   ("Invalid operator for WN2C_do_loop()"));
 
-   if (W2C_Prompf_Emission)
-   {
-      WN2C_Start_Prompf_Transformed_Loop(tokens, wn, context);
-   }
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
    
    loop_info = WN_do_loop_info(wn);
@@ -4880,9 +4717,6 @@ WN2C_do_loop(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    status = WN2C_translate(tokens, WN_do_body(wn), context);
    WN2C_decr_indentation_for_stmt_body(WN_do_body(wn));
 
-   if (W2C_Prompf_Emission)
-      WN2C_End_Prompf_Transformed_Loop(tokens, wn, context);
-
    return status;
 } /* WN2C_do_loop */
 
@@ -4895,9 +4729,6 @@ WN2C_do_while(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(wn) == OPR_DO_WHILE,
 	   ("Invalid operator for WN2C_do_while()"));
    
-   if (W2C_Prompf_Emission)
-      WN2C_Start_Prompf_Transformed_Loop(tokens, wn, context);
-
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
 
    /* Emit the header of the do-loop */
@@ -4917,9 +4748,6 @@ WN2C_do_while(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    (void)WN2C_translate(tokens, WN_while_test(wn), context);
    Append_Token_Special(tokens, ')');
 
-   if (W2C_Prompf_Emission)
-      WN2C_End_Prompf_Transformed_Loop(tokens, wn, context);
-
    return EMPTY_STATUS;
 } /* WN2C_do_while */
 
@@ -4933,10 +4761,6 @@ WN2C_while_do(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    Is_True(WN_operator(wn) == OPR_WHILE_DO,
 	   ("Invalid operator for WN2C_while_do()"));
    
-   if (W2C_Prompf_Emission)
-   {
-      WN2C_Start_Prompf_Transformed_Loop(tokens, wn, context);
-   }
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
 
    /* Emit the loop header as a while-loop */
@@ -4951,9 +4775,6 @@ WN2C_while_do(TOKEN_BUFFER tokens, const WN *wn, CONTEXT context)
    WN2C_Stmt_Newline(tokens, CONTEXT_srcpos(context));
    status = WN2C_translate(tokens, WN_while_body(wn), context);
    WN2C_decr_indentation_for_stmt_body(WN_while_body(wn));
-
-   if (W2C_Prompf_Emission)
-      WN2C_End_Prompf_Transformed_Loop(tokens, wn, context);
 
    return status;
 } /* WN2C_while_do */

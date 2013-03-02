@@ -68,7 +68,6 @@
 #endif
 
 #include "dep_graph.h"
-#include "prompf.h"
 
 class ARRAY_SUMMARY; 
 const INT WB_MAX_STRING_LENGTH = 1000;
@@ -86,10 +85,8 @@ enum WB_REQUIRED_PIECES {
   WBR_DG = 2, 
   WBR_ALIAS = 4, 
   WBR_PARENT = 8, 
-  WBR_MPFMAP = 16, 
-  WBR_MPFINFO = 32, 
-  WBR_AAMAP = 64,
-  WBR_REDMAP = 128,
+  WBR_AAMAP = 16,
+  WBR_REDMAP = 32,
 }; 
 
 struct WB_COMMAND { 
@@ -108,10 +105,8 @@ private:
   WB_COMMAND* _old_command_list; 
   ARRAY_DIRECTED_GRAPH16* _dg; 
   WN_MAP _parent_map; 
-  WN_MAP _prompf_id_map; 
   WN_MAP _access_array_map;
   WN_MAP _reduction_map;
-  PROMPF_INFO* _prompf_info; 
   SUMMARIZE<IPL>* _scalar_summary;
   ARRAY_SUMMARY* _array_summary; 
   WB_SOURCE_LANGUAGE _source_language; 
@@ -132,7 +127,6 @@ protected:
     {_old_command_list = old_command_list;};
   ARRAY_DIRECTED_GRAPH16* Dg() { return _dg; }
   WN_MAP Parent_Map() { return _parent_map; }
-  WN_MAP Prompf_Id_Map() { return _prompf_id_map; }
   WN_MAP Access_Array_Map() { return _access_array_map; }
   WN_MAP Reduction_Map() { return _reduction_map; }
   char Command(INT i) { return (_command_list)[i]._command; }
@@ -144,7 +138,6 @@ protected:
   void Reset_Subcommand();
   BOOL Is_Subcommand() {return _is_subcommand;};
   BOOL Required_Fields_Present(INT i); 
-  PROMPF_INFO* Prompf_Info() { return _prompf_info; }
   SUMMARIZE<IPL>* Scalar_Summary() { return _scalar_summary; }
   ARRAY_SUMMARY* Array_Summary() { return _array_summary; }
   WB_SOURCE_LANGUAGE Source_Language() { return _source_language; } 
@@ -200,8 +193,6 @@ protected:
   void Alias(); 
   void Parent(); 
   void Ancestors(); 
-  void Promp_Map(); 
-  void Promp_Info(); 
   void Whirl2fc(); 
   void Whirl2fset(); 
   void Whirl2cset(); 
@@ -247,8 +238,8 @@ protected:
 public: 
   WB_BROWSER(); 
   WB_BROWSER(WN* global_fd, DU_MANAGER* du, ALIAS_MANAGER* alias_mgr,
-    WN_MAP prompf_id_map, WN_MAP access_arrray_map, WN_MAP reduction_map, 
-    PU* pu, WB_COMMAND* command_list); 
+    WN_MAP access_arrray_map, WN_MAP reduction_map, PU* pu,
+    WB_COMMAND* command_list);
   void Summary(FILE* fp) __attribute__((weak));
   PU* Pu() { return _pu; }
   void Set_Pu(PU* pu) { _pu = pu; }
@@ -263,14 +254,10 @@ public:
     { _command_list = command_list; } 
   void Set_Dg(ARRAY_DIRECTED_GRAPH16* dg) { _dg = dg; }
   void Set_Parent_Map(WN_MAP parent_map) { _parent_map = parent_map; }
-  void Set_Prompf_Id_Map(WN_MAP prompf_id_map) 
-    { _prompf_id_map = prompf_id_map; }
   void Set_Access_Array_Map(WN_MAP access_array_map) 
     { _access_array_map = access_array_map; }
   void Set_Reduction_Map(WN_MAP reduction_map) 
     { _reduction_map = reduction_map; }
-  void Set_Prompf_Info(PROMPF_INFO* prompf_info) 
-    { _prompf_info = prompf_info; }
   void Set_Scalar_Summary(SUMMARIZE<IPL>* scalar_summary) 
     { _scalar_summary = scalar_summary; }
   void Set_Array_Summary(ARRAY_SUMMARY* array_summary) 

@@ -307,7 +307,7 @@ extern BOOL Atoi_KMG (	/* Returns whether string was valid */
 
 /* Define the option kinds: */
 typedef enum {
-  OVK_INVALID,
+  OVK_INVALID = 0,
   OVK_NONE,	/* Option never takes a value */
   OVK_BOOL,	/* boolean value */
   OVK_INT32,	/* 32-bit integer value */
@@ -451,6 +451,8 @@ typedef enum
     OPT_dump_after,
     OPT_trace,
     OPT_stats,
+    OPT_skip_b,
+    OPT_skip_a,
     OPT_common_last,
     OPT_component_first = OPT_common_last
 
@@ -470,6 +472,8 @@ typedef enum
     DUMP_none =0,
     DUMP_ir,
     DUMP_cfg,
+    DUMP_ssa,
+    DUMP_vcg,
     DUMP_maximal
 } DUMP_KIND;
 
@@ -478,6 +482,7 @@ typedef enum
     COMPONENT_invalid = -1,
     COMPONENT_first   =  0,
     COMPONENT_driver  = COMPONENT_first,
+    COMPONENT_cg_gpo,
     COMPONENT_last
 
 } O64_COMPONENT;

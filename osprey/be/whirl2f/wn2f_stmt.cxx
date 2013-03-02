@@ -91,8 +91,6 @@ static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f
 
 
 extern WN_MAP  W2F_Frequency_Map;   /* Defined in w2f_driver.c */
-extern WN_MAP *W2F_Construct_Map;   /* Defined in w2f_driver.c */
-extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
 extern BOOL    W2F_Emit_Cgtag;      /* Defined in w2f_driver.c */
 
 
@@ -1030,149 +1028,6 @@ WN2F_Translate_DoLoop_Bound(TOKEN_BUFFER   tokens,
 } /* WN2F_Translate_DoLoop_Bound */
 
 
-/*--------------------- prompf processing utilities -------------------*/
-/*---------------------------------------------------------------------*/
-
-static BOOL
-WN2F_Is_Loop_Region(const WN *region, WN2F_CONTEXT context)
-{
-   /* Return TRUE if the given region is either a DOACROSS,
-    * PARALLEL_DO, or a PDO region; otherwise, return FALSE.
-    */
-   BOOL predicate = (WN_operator(region) == OPR_REGION);
-
-   if (predicate)
-   {
-      WN *pragma = WN_first(WN_region_pragmas(region));
-
-      predicate = (pragma != NULL &&
-		   (WN_pragma(pragma) == WN_PRAGMA_DOACROSS    ||
-		    WN_pragma(pragma) == WN_PRAGMA_PARALLEL_DO ||
-		    WN_pragma(pragma) == WN_PRAGMA_PDO_BEGIN) &&
-		   WN_pragma_nest(pragma) <= 0 &&
-		   !Ignore_Synchronized_Construct(pragma, context));
-   }
-   return predicate;
-} /* WN2F_Is_Loop_Region */
-
-
-/*
- *  See if this is a region construct. ie: a pragma in the list
- *  below. The end of the region is the implicit end of the construct.
-*/
-
-static BOOL
-WN2F_Is_Parallel_Region(WN *region, WN2F_CONTEXT context)
-{
-   BOOL predicate = (region != NULL && WN_operator(region) == OPR_REGION);
-
-   if (predicate)
-     {
-       WN *pragma = WN_first(WN_region_pragmas(region));
-
-       predicate = (pragma != NULL) &&
-	 (WN_pragma(pragma) == WN_PRAGMA_PARALLEL_BEGIN || 
-	  WN_pragma(pragma) == WN_PRAGMA_MASTER_BEGIN || 
-	  WN_pragma(pragma) == WN_PRAGMA_SINGLE_PROCESS_BEGIN ||
-	  WN_pragma(pragma) == WN_PRAGMA_PSECTION_BEGIN ||
-	  WN_pragma(pragma) == WN_PRAGMA_PARALLEL_SECTIONS) &&
-	    !Ignore_Synchronized_Construct(pragma, context);
- }
-   return predicate;
-
-} /* WN2F_Is_Parallel_Region */
-
-
-static void
-WN2F_Prompf_Construct_Start(TOKEN_BUFFER tokens, WN *construct)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2F_Construct_Map, construct);
-
-   if (construct_id != 0)
-   {
-      Append_F77_Directive_Newline(tokens,sgi_comment_str);
-      Append_Token_String(tokens, "start");
-      Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-   }
-} /* WN2F_Prompf_Construct_Start */
-
-
-static void
-WN2F_Prompf_Construct_End(TOKEN_BUFFER tokens, WN *construct)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2F_Construct_Map, construct);
-
-   if (construct_id != 0)
-   {
-      Append_F77_Directive_Newline(tokens, sgi_comment_str);
-      Append_Token_String(tokens, "end");
-      Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-   }
-} /* WN2F_Prompf_Construct_End */
-
-
-static void
-WN2F_Start_Prompf_Transformed_Loop(TOKEN_BUFFER tokens, 
-				   WN          *loop, 
-				   WN2F_CONTEXT context)
-{
-   /* We if this is a DOACROSS, PDO or PARALLEL DO loop, then it will
-    * already have been handled by the surrounding region, so we need
-    * not emit anything here.  Otherwise, emit the prompf flags.
-    */
-   if (!WN2F_Is_Loop_Region(W2CF_Get_Parent(W2CF_Get_Parent(loop)), context))
-      WN2F_Prompf_Construct_Start(tokens, loop);
-} /* WN2F_Start_Prompf_Transformed_Loop */
-
-
-static void
-WN2F_End_Prompf_Transformed_Loop(TOKEN_BUFFER tokens, 
-				 WN          *loop, 
-				 WN2F_CONTEXT context)
-{
-   /* We if this is a DOACROSS, PDO or PARALLEL DO loop, then it will
-    * already have been handled by the surrounding region, so we need
-    * not emit anything here.  Otherwise, emit the prompf flags.
-    */
-   if (!WN2F_Is_Loop_Region(W2CF_Get_Parent(W2CF_Get_Parent(loop)), context))
-      WN2F_Prompf_Construct_End(tokens, loop);
-} /* WN2F_End_Prompf_Transformed_Loop */
-
-
-static void
-WN2F_Start_Prompf_Transformed_Region(TOKEN_BUFFER tokens,
-				     WN          *region, 
-				     WN2F_CONTEXT context)
-{
-   /* Handle a PARALLEL, PSECTION, SINGLE MASTER region, 
-    * or a DOACROSS, PDO or PARALLEL DO loop enclosed in a region.
-    * ie: print - "start" <n> 
-    */
-
-   if (WN2F_Is_Loop_Region(region, context) || 
-       WN2F_Is_Parallel_Region(region, context))
-      WN2F_Prompf_Construct_Start(tokens, region);
-
-} /* WN2F_Begin_Prompf_Transformed_Region */
-
-
-static void
-WN2F_End_Prompf_Transformed_Region(TOKEN_BUFFER tokens,
-				   WN          *region, 
-				   WN2F_CONTEXT context)
-{
-   /* Finish up  a PARALLEL, PSECTION, SINGLE MASTER region, 
-    * or a DOACROSS, PDO or PARALLEL DO loop enclosed in a region.
-    * ie: print - "end" <n> 
-    */
-
-   if (WN2F_Is_Loop_Region(region, context) || 
-       WN2F_Is_Parallel_Region(region, context))
-      WN2F_Prompf_Construct_End(tokens, region);
-
-} /* WN2F_End_Prompf_Transformed_Region */
-
-
 /*--------------------- block processing utilities --------------------*/
 /*---------------------------------------------------------------------*/
 
@@ -1535,9 +1390,6 @@ WN2F_region(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    Is_True(WN_operator(WN_region_body(wn)) == OPR_BLOCK, 
 	   ("Expected OPR_BLOCK as body of OPR_REGION in WN2F_region()"));
 
-   if (W2F_Prompf_Emission)
-      WN2F_Start_Prompf_Transformed_Region(tokens, wn, context);
-
    good_rid = RID_map >= 0;
    if (good_rid) 
      rid = (RID *)WN_MAP_Get(RID_map, wn);
@@ -1604,9 +1456,6 @@ WN2F_region(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
                               context);
    } /* if emit pragma */
 
-   if (W2F_Prompf_Emission)
-      WN2F_End_Prompf_Transformed_Region(tokens, wn, context);
-   
    return EMPTY_WN2F_STATUS;
 } /* WN2F_region */
 
@@ -1684,9 +1533,6 @@ WN2F_do_loop(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    ASSERT_DBG_FATAL(WN_operator(WN_do_body(wn)) == OPR_BLOCK,
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN_do_body"));
 
-   if (W2F_Prompf_Emission)
-      WN2F_Start_Prompf_Transformed_Loop(tokens, wn, context);
-
    loop_info = WN_do_loop_info(wn);
    if (W2F_Emit_Cgtag && loop_info != NULL)
       WHIRL2F_Append_Comment(
@@ -1755,9 +1601,6 @@ WN2F_do_loop(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
       WN2F_Stmt_Newline(tokens, NULL/*label*/, WN_Get_Linenum(wn), context);
       Append_Token_String(tokens, "END DO");
    }
-
-   if (W2F_Prompf_Emission)
-      WN2F_End_Prompf_Transformed_Loop(tokens, wn, context);
 
    return EMPTY_WN2F_STATUS;
 } /* WN2F_do_loop */
@@ -1832,9 +1675,6 @@ WN2F_do_while(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
     */
    logical_ty = WN_Tree_Type(WN_while_test(wn));
    
-   if (W2F_Prompf_Emission)
-      WN2F_Start_Prompf_Transformed_Loop(tokens, wn, context);
-
    WN2F_Stmt_Newline(tokens, NULL/*label*/, WN_Get_Linenum(wn), context);
    WHIRL2F_Append_Comment(tokens, 
       "whirl2f:: DO loop with termination test after first iteration", 1, 1);
@@ -1871,9 +1711,6 @@ WN2F_do_while(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    Append_Token_String(tokens, "END DO");
    Stab_Unlock_Tmpvar(tmpvar_idx);
 
-   if (W2F_Prompf_Emission)
-      WN2F_End_Prompf_Transformed_Loop(tokens, wn, context);
-
    return EMPTY_WN2F_STATUS;
 } /* WN2F_do_while */
 
@@ -1883,9 +1720,6 @@ WN2F_while_do(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
 {
    ASSERT_DBG_FATAL(WN_operator(wn) == OPR_WHILE_DO,
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_while_do"));
-
-   if (W2F_Prompf_Emission)
-      WN2F_Start_Prompf_Transformed_Loop(tokens, wn, context);
 
    /* Termination test */
    WN2F_Stmt_Newline(tokens, NULL/*label*/, WN_Get_Linenum(wn), context);
@@ -1906,9 +1740,6 @@ WN2F_while_do(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    /* close the loop */
    WN2F_Stmt_Newline(tokens, NULL/*label*/, WN_Get_Linenum(wn), context);
    Append_Token_String(tokens, "END DO");
-
-   if (W2F_Prompf_Emission)
-      WN2F_End_Prompf_Transformed_Loop(tokens, wn, context);
 
    return EMPTY_WN2F_STATUS;
 } /* WN2F_while_do */

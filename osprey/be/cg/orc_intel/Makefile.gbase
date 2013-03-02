@@ -149,7 +149,6 @@ BE_CG_DIR 		= $(BE_DIR)/cg
 BE_CG_GRA_DIR		= $(BE_CG_DIR)/gra_mon
 BE_COM_DIR 		= $(BE_DIR)/com
 BE_REGION_DIR		= $(BE_DIR)/region
-BE_PROMPF_DIR		= $(BE_DIR)/prompf_anl
 ifndef BE_OPT_DIR
 BE_OPT_DIR 		= $(BE_DIR)/opt
 endif
@@ -200,7 +199,6 @@ HEADER_DIRS = \
   $(TARG_ORC_INTEL)	\
   $(TARG_ORC_ICT)	\
   $(TARG_TARG_INFO)	\
-  $(BE_PROMPF_DIR)	\
   $(TARG_CG)		\
 
 #----------------------------------------------------------------------

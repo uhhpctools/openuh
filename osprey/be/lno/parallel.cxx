@@ -84,8 +84,6 @@
 #include "parmodel.h"
 #include "sdlist.h"
 #include "doacross.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "parids.h"
 #include "cond.h"
 #include "move.h"
@@ -2316,13 +2314,6 @@ extern void Auto_Parallelization(PU_Info* current_pu,
   if (!(Run_autopar && LNO_Run_AP > 0) 
       || Get_Trace(TP_LNOPT2, TT_LNO_NO_AUTO_PARALLEL)) {
     Annotate_For_Mp_Lowering(current_pu, func_nd);
-    if (Run_prompf) {
-      Print_Prompf_Transaction_Log(FALSE);
-      Print_Prompf_Parallelization_Log(func_nd); 
-      Print_Prompf_Doacross_Log(current_pu, func_nd, FALSE);
-      Print_Prompf_Parallel_Region_Log(current_pu, func_nd, FALSE);
-      Print_Prompf_Nest_Log(func_nd, FALSE); 
-    } 
     if (LNO_Prompl)
       Print_Prompl_Msgs(current_pu, func_nd);
     return;

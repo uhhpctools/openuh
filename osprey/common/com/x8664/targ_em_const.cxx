@@ -395,11 +395,13 @@ Targ_Emit_Const (FILE *fl,	    /* File to which to write */
       case MTYPE_C10: {
 	INT i;
         char *p = (char *) & TCON_R16(tc);
-	emit_bytes( fl, p, sizeof(TCON_R16(tc)) );
+        // Force the size of MTYPE_F10 to 16 for 64bit code and 12 for 32bit code
+	emit_bytes( fl, p, Is_Target_64bit() ? 16 : 12 /* sizeof(TCON_R16(tc)) */ );
 	fprintf(fl, "\t%s complex long double real part %#Lg\n", ASM_CMNT, TCON_R16(tc) );
 
         p = (char *) & TCON_IR16(tc);
-	emit_bytes( fl, p, sizeof(TCON_IR16(tc)) );
+        // Force the size of MTYPE_F10 to 16 for 64bit code and 12 for 32bit code
+	emit_bytes( fl, p, Is_Target_64bit() ? 16 : 12 /* sizeof(TCON_R16(tc)) */ );
 	fprintf(fl, "\t%s complex long double imag part %#Lg\n", ASM_CMNT, TCON_IR16(tc) );
 	--rc;
 	break;

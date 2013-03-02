@@ -43,7 +43,6 @@
 enum WB_PHASE {
   WBP_NONE, 
   WBP_F90_LOWER, 
-  WBP_PROMPF_SA, 
   WBP_OMP_PRELOWER, 
   WBP_LNO, 
   WBP_LOWER,
@@ -56,7 +55,7 @@ extern WB_PHASE WB_Phase();
 extern void WB_Set_Phase(WB_PHASE WB_Phase); 
 
 extern void WB_Initialize(WB_BROWSER* wb, WN* wn_global, PU* pu, 
-  DU_MANAGER* du, ALIAS_MANAGER* alias_mgr, WN_MAP Prompf_Id_Map);
+  DU_MANAGER* du, ALIAS_MANAGER* alias_mgr);
 
 extern void WB_Terminate(WB_BROWSER* wb);
 

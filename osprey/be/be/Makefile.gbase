@@ -186,7 +186,6 @@ endif
 BE_LNO_DIR		= $(BE_DIR)/lno
 BE_WHIRL2C_DIR		= $(BE_DIR)/whirl2c
 BE_WHIRL2F_DIR		= $(BE_DIR)/whirl2f
-BE_PROMPF_ANL_DIR       = $(BE_DIR)/prompf_anl
 BE_VHO_DIR		= $(BE_DIR)/vho
 IPL_DIR			= $(BUILD_TOT)/ipa/local
 IPA_DIR			= $(BUILD_TOT)/ipa/main/analyze
@@ -235,7 +234,6 @@ HEADER_DIRS = \
   $(BE_REGION_DIR)	\
   $(BE_WHIRL2C_DIR)	\
   $(BE_WHIRL2F_DIR)	\
-  $(BE_PROMPF_ANL_DIR)	\
   $(BE_VHO_DIR)		\
   $(IPL_DIR)	 	\
   $(IPA_DIR)		\
@@ -280,8 +278,8 @@ BE_BE_CXX_SRCS = 	\
   privatize_common.cxx	\
   rewrite_pragmas.cxx	\
   wb_omp.cxx		\
-  wb_lwr.cxx		\
-  wb_anl.cxx   
+  wb_lwr.cxx
+
 ifeq ($(ENABLE_COARRAYS),YES)
   BE_BE_CXX_SRCS += coarray_lower.cxx
 endif
@@ -554,7 +552,6 @@ BE_COM_PCH_CXX_SRCS = \
   opt_ipaa_io.cxx	\
   opt_points_to_non_template.cxx	\
   opt_points_to_summary.cxx \
-  prompf.cxx		\
   standardize.cxx	\
   stblock.cxx		\
   w2op.cxx		\
@@ -836,8 +833,7 @@ wn_fio.o: wn_fio.cxx
         $(CXXF) -OPT:alias=no_typed -c $<
 endif
 
-LDIRT += be wopt.so be.so cg.so lno.so whirl2c.so whirl2f.so prompf_anl.so
-LDIRT += ipl.so inline.so
+LDIRT += be wopt.so be.so cg.so lno.so whirl2c.so whirl2f.so ipl.so inline.so
 
 
 ifeq ($(BUILD_PCH), USE_PCH)

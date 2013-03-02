@@ -2722,10 +2722,18 @@ WGEN_Expand_Start_Case (gs_t selector)
   // The switch index may be needed more than once if it contains case
   // range. As it may have side-effects like a function call, save the
   // index into a temporary, and used the saved value.
-  ST *save_expr_st = Gen_Temp_Symbol (MTYPE_TO_TY_array[index_mtype], "_switch_index");
-  WN *stid = WN_Stid (index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype], index);
-  WGEN_Stmt_Append(stid, Get_Srcpos());
-  index = WN_Ldid(index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype]);
+
+  // open64.net bug798. when the switch index is a constant,
+  // we don't generate the index var, instead, we use constant the as switch 
+  // expression directly. This helps compiler eliminates the unreachable
+  // branch code even at O0 phase.
+
+  if ( WN_operator(index) != OPR_INTCONST) {
+    ST *save_expr_st = Gen_Temp_Symbol (MTYPE_TO_TY_array[index_mtype], "_switch_index");
+    WN *stid = WN_Stid (index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype], index);
+    WGEN_Stmt_Append(stid, Get_Srcpos());
+    index = WN_Ldid(index_mtype, 0, save_expr_st, MTYPE_TO_TY_array[index_mtype]);
+  }
 #endif
 
   WGEN_Stmt_Push (switch_block, wgen_stmk_switch, Get_Srcpos());

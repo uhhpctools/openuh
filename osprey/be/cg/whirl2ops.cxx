@@ -114,6 +114,7 @@
 #include "be_symtab.h"
 #include "be_util.h"
 #include "config_asm.h"
+#include "wn_tree_util.h"
 
 #if defined(TARG_X8664) || defined(TARG_NVISA) || defined(TARG_SL) || defined(TARG_PPC32)
 #include "cgexp_internals.h"
@@ -2026,8 +2027,8 @@ Handle_LDID (WN *ldid, TN *result, OPCODE opcode)
         }
       }
 #elif  defined(TARG_X8664)
-      if( OP_NEED_PAIR( ST_mtype(WN_st(ldid) ) ) ){
-        Expand_Copy( result, ldid_result, ST_mtype(WN_st(ldid)), &New_OPs );
+      if( OP_NEED_PAIR( WN_rtype(ldid) ) ){
+        Expand_Copy( result, ldid_result,  WN_rtype(ldid), &New_OPs );
       } else {
         Exp_COPY (result, ldid_result, &New_OPs);
       }
@@ -2774,6 +2775,19 @@ Handle_STID (WN *stid, OPCODE opcode)
 	TN* result_hi = Get_TN_Pair( result );
 	Expand_Immediate( result_hi, Gen_Literal_TN(0,4), FALSE, &New_OPs );
       }
+      
+      // open64.net bug952. 
+      // When the kid is 64bit result with paired TN but the stid_type
+      // is 4byte size or less, We delete the useless higher 32bit tn 
+      // by unpair the result. this will help pass the pair check in the 
+      // later expansion routines.
+
+      if (OP_NEED_PAIR(kid0_type) &&
+          Get_TN_Pair(result) != NULL &&
+          MTYPE_byte_size(stid_type) < MTYPE_byte_size(kid0_type)) {
+        Delete_TN_Pair(result);
+      }
+
 #endif // TARG_X8664
 
 #endif // IA_32
@@ -4660,7 +4674,11 @@ Handle_Replicate (WN* expr, WN* parent, TN* result) {
 }
 
 static TN* 
-Handle_Fma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
+Handle_Fma_Operation(WN* expr, 
+                     TN* result, 
+                     WN *mul_wn, 
+                     BOOL mul_kid0,
+                     BOOL fma4) 
 {
   
   WN* add_wn = (mul_kid0) ? WN_kid1(expr) : WN_kid0(expr); 
@@ -4670,24 +4688,31 @@ Handle_Fma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   TOP opcode; 
   TYPE_ID rtype = OPCODE_rtype(WN_opcode(expr));
   BOOL is_vector = MTYPE_is_vector(rtype);
+  BOOL PU_has_avx256 = FALSE;
 
   // now match a scalar or vector fma4 
   switch (WN_opcode(mul_wn)) {
   case OPC_F4MPY:
-    opcode = TOP_vfmaddss;
+    opcode = (fma4) ? TOP_vfmaddss : TOP_xfmadd213ss;
     break;
   case OPC_F8MPY:
-    opcode = TOP_vfmaddsd;
+    opcode = (fma4) ? TOP_vfmaddsd : TOP_xfmadd213sd;
     break;
+  case OPC_V32F4MPY:
+  case OPC_V32C4MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F4MPY:
   case OPC_V16C4MPY:
     FmtAssert(is_vector, ("unexpected fma vector form"));
-    opcode = TOP_vfmaddps;
+    opcode = (fma4) ? TOP_vfmaddps : TOP_xfmadd213ps;
     break;
+  case OPC_V32F8MPY:
+  case OPC_V32C8MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F8MPY:
   case OPC_V16C8MPY:
     FmtAssert(is_vector, ("unexpected fma vector form"));
-    opcode = TOP_vfmaddpd;
+    opcode = (fma4) ? TOP_vfmaddpd : TOP_xfmadd213pd;
     break;
   default:
     FmtAssert(FALSE, ("unexpected fma form"));
@@ -4707,15 +4732,18 @@ Handle_Fma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   else
     Build_OP(opcode,  result,  opnd0,  opnd1, opnd2, &New_OPs); 
 
-  // TODO: add operand size check for 256-bit
-  if (PU_has_avx128 == FALSE)
+  if ((PU_has_avx128 == FALSE) && (PU_has_avx256 == FALSE))
     PU_has_avx128 = TRUE;
   
   return result; 
 }
 
 static TN* 
-Handle_Fnma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
+Handle_Fnma_Operation(WN* expr, 
+                      TN* result, 
+                      WN *mul_wn, 
+                      BOOL mul_kid0, 
+                      BOOL fma4) 
 {
   
   WN* add_wn = (mul_kid0) ? WN_kid1(expr) : WN_kid0(expr); 
@@ -4725,24 +4753,31 @@ Handle_Fnma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   TOP opcode; 
   TYPE_ID rtype = OPCODE_rtype(WN_opcode(expr));
   BOOL is_vector = MTYPE_is_vector(rtype);
+  BOOL PU_has_avx256 = FALSE;
 
   // now match a scalar or vector fma4 
   switch (WN_opcode(mul_wn)) {
   case OPC_F4MPY:
-    opcode = TOP_vfnmaddss;
+    opcode = (fma4) ? TOP_vfnmaddss : TOP_xfnmadd213ss;
     break;
   case OPC_F8MPY:
-    opcode = TOP_vfnmaddsd;
+    opcode = (fma4) ? TOP_vfnmaddsd : TOP_xfnmadd213sd;
     break;
+  case OPC_V32F4MPY:
+  case OPC_V32C4MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F4MPY:
   case OPC_V16C4MPY:
     FmtAssert(is_vector, ("unexpected fma vector form"));
-    opcode = TOP_vfnmaddps;
+    opcode = (fma4) ? TOP_vfnmaddps : TOP_xfnmadd213ps;
     break;
+  case OPC_V32F8MPY:
+  case OPC_V32C8MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F8MPY:
   case OPC_V16C8MPY:
     FmtAssert(is_vector, ("unexpected fma vector form"));
-    opcode = TOP_vfnmaddpd;
+    opcode = (fma4) ? TOP_vfnmaddpd : TOP_xfnmadd213pd;
     break;
   default:
     FmtAssert(FALSE, ("unexpected fma form"));
@@ -4762,15 +4797,18 @@ Handle_Fnma_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   else
     Build_OP(opcode,  result,  opnd0,  opnd1, opnd2, &New_OPs); 
 
-  // TODO: add operand size check for 256-bit
-  if (PU_has_avx128 == FALSE)
+  if ((PU_has_avx128 == FALSE) && (PU_has_avx256 == FALSE))
     PU_has_avx128 = TRUE;
   
   return result; 
 }
 
 static TN* 
-Handle_Fms_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0) 
+Handle_Fms_Operation(WN* expr, 
+                     TN* result, 
+                     WN *mul_wn, 
+                     BOOL mul_kid0,
+                     BOOL fma4) 
 {
   WN* sub_wn = (mul_kid0) ? WN_kid1(expr) : WN_kid0(expr); 
   TN* opnd0; 
@@ -4779,24 +4817,31 @@ Handle_Fms_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   TOP opcode; 
   TYPE_ID rtype = OPCODE_rtype(WN_opcode(expr));
   BOOL is_vector = MTYPE_is_vector(rtype);
+  BOOL PU_has_avx256 = FALSE;
 
   // now match a scalar or vector fma4 
   switch (WN_opcode(mul_wn)) {
   case OPC_F4MPY:
-    opcode = TOP_vfmsubss;
+    opcode = (fma4) ? TOP_vfmsubss : TOP_xfmsub213ss;
     break;
   case OPC_F8MPY:
-    opcode = TOP_vfmsubsd;
+    opcode = (fma4) ? TOP_vfmsubsd : TOP_xfmsub213sd;
     break;
+  case OPC_V32F4MPY:
+  case OPC_V32C4MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F4MPY:
   case OPC_V16C4MPY:
     FmtAssert(is_vector, ("unexpected fms vector form"));
-    opcode = TOP_vfmsubps;
+    opcode = (fma4) ? TOP_vfmsubps : TOP_xfmsub213ps;
     break;
+  case OPC_V32F8MPY:
+  case OPC_V32C8MPY:
+    PU_has_avx256 = TRUE;
   case OPC_V16F8MPY:
   case OPC_V16C8MPY:
     FmtAssert(is_vector, ("unexpected fms vector form"));
-    opcode = TOP_vfmsubpd;
+    opcode = (fma4) ? TOP_vfmsubpd : TOP_xfmsub213pd;
     break;
   default:
     FmtAssert(FALSE, ("unexpected fms form"));
@@ -4816,8 +4861,7 @@ Handle_Fms_Operation(WN* expr, TN* result, WN *mul_wn, BOOL mul_kid0)
   else
     Build_OP(opcode,  result,  opnd0,  opnd1, opnd2, &New_OPs); 
 
-  // TODO: add operand size check for 256-bit
-  if (PU_has_avx128 == FALSE)
+  if ((PU_has_avx128 == FALSE) && (PU_has_avx256 == FALSE))
     PU_has_avx128 = TRUE;
   
   return result; 
@@ -5405,45 +5449,55 @@ Expand_Expr (WN *expr, WN *parent, TN *result)
 
   case OPR_SUB:
   case OPR_ADD:
-    if ((CG_opt_level > 1) && Is_Target_Orochi() && 
-        Is_Target_AVX() && Is_Target_FMA4()) {
+    if ((CG_opt_level > 1) && Is_Target_Orochi() &&
+        Is_Target_AVX() && 
+        (Is_Target_FMA4() || Is_Target_FMA()) ) {
+      BOOL fma4 = Is_Target_FMA4();
       BOOL expr_is_complex = FALSE;
       TYPE_ID rtype = OPCODE_rtype(opcode);
       WN *mul_wn = NULL;
       if ((rtype == MTYPE_V16C4) ||
-          (rtype == MTYPE_V16C8)) {
+          (rtype == MTYPE_V16C8) ||
+          (rtype == MTYPE_V32C4) ||
+          (rtype == MTYPE_V32C8)) {
         expr_is_complex = TRUE;
       }
-      
+
       // Looking for a fm{a/s} candidate via FMA4 insns
       if ( (MTYPE_is_float(rtype) || MTYPE_is_vector(rtype)) &&
            (expr_is_complex == FALSE) ) {
         if ((WN_operator(mul_wn = WN_kid(expr, 0)) == OPR_MPY) &&
+            (WN_opcode(mul_wn) != OPC_V32C8MPY) &&
             (WN_opcode(mul_wn) != OPC_V16C8MPY) &&
+            (WN_opcode(mul_wn) != OPC_V32C4MPY) &&
             (WN_opcode(mul_wn) != OPC_V16C4MPY) &&
-            (WN_opcode(mul_wn) != OPC_FQMPY) && 
+            (WN_opcode(mul_wn) != OPC_FQMPY) &&
             (WN_opcode(mul_wn) != OPC_F10MPY) ) {
           rtype = OPCODE_rtype(WN_opcode (mul_wn));
           if (MTYPE_is_float(rtype) || MTYPE_is_vector(rtype)) {
             if (WN_operator(expr) == OPR_ADD) {
-              return Handle_Fma_Operation(expr, result, mul_wn, TRUE);
+              return Handle_Fma_Operation(expr, result, mul_wn, TRUE, fma4);
             } else if (WN_operator(expr) == OPR_SUB) {
-              return Handle_Fms_Operation(expr, result, mul_wn, TRUE);
+              return Handle_Fms_Operation(expr, result, mul_wn, TRUE, fma4);
             }
           }
         } else if ((WN_operator(mul_wn = WN_kid(expr, 1)) == OPR_MPY) &&
+                   (WN_opcode(mul_wn) != OPC_V32C8MPY) &&
                    (WN_opcode(mul_wn) != OPC_V16C8MPY) &&
+                   (WN_opcode(mul_wn) != OPC_V32C4MPY) &&
                    (WN_opcode(mul_wn) != OPC_V16C4MPY) &&
-                   (WN_opcode(mul_wn) != OPC_FQMPY) && 
+                   (WN_opcode(mul_wn) != OPC_FQMPY) &&
                    (WN_opcode(mul_wn) != OPC_F10MPY)) {
           rtype = OPCODE_rtype(WN_opcode (mul_wn));
           if (MTYPE_is_float(rtype) || MTYPE_is_vector(rtype)) {
             if (WN_operator(expr) == OPR_ADD) {
-              return Handle_Fma_Operation(expr, result, mul_wn, FALSE);
-            } else if ((WN_operator(expr) == OPR_SUB) && 
+              return Handle_Fma_Operation(expr, result, mul_wn, FALSE, fma4);
+            } else if ((WN_operator(expr) == OPR_SUB) &&
+                       (WN_opcode(expr) != OPC_V32C4SUB) &&
                        (WN_opcode(expr) != OPC_V16C4SUB) &&
+                       (WN_opcode(expr) != OPC_V32C8SUB) &&
                        (WN_opcode(expr) != OPC_V16C8SUB)) {
-              return Handle_Fnma_Operation(expr, result, mul_wn, FALSE);
+              return Handle_Fnma_Operation(expr, result, mul_wn, FALSE, fma4);
             }
           }
         }
@@ -6691,20 +6745,40 @@ Find_Asm_Out_Parameter_Load (const WN* stmt, PREG_NUM preg_num, ST** ded_st)
 #endif
     if (OPERATOR_is_store(WN_operator(stmt))) {
       WN* load = WN_kid0(stmt);
-      OPERATOR opr = WN_operator(load);
-      if (opr == OPR_CVT || opr == OPR_CVTL) {
-        load = WN_kid0(load);
-        opr = WN_operator(load);
-      }
-      if (OPERATOR_is_load(opr) || opr == OPR_LDA) {
-        if (WN_has_sym(load) &&
-            WN_class(load) == CLASS_PREG && 
-            WN_offset(load) == preg_num) {
-          ret_load = load;
-          break;
+      // open64.net bug948. Since we allow copy progration into the 
+      // ASM_INPUT. More aggressive optimizations could be made.
+      // Now, we could not always assume the "LDID preg_num" for ASM_STMTS output
+      // appears in 
+      // ...
+      //  LDID preg_num
+      // STID
+      // ...
+      // or 
+      // ...
+      //   LDID preg_num
+      //  CVT(CVTL)
+      // STID
+      // ...
+      // forms in the succeeding stmts.
+      // Instead, we now iterate on the store kid to find the "LDID preg_num"
+      // expressions.
+      WN_TREE_CONTAINER<PRE_ORDER> lpre(load);
+      WN_TREE_CONTAINER<PRE_ORDER> :: iterator lipre;
+      for ( lipre = lpre.begin() ; lipre != lpre.end() ; ++ lipre) {
+        WN* load_expr= lipre.Wn();
+        OPERATOR opr = WN_operator(load_expr);
+        if (OPERATOR_is_load(opr) || opr == OPR_LDA) {
+          if (WN_has_sym(load_expr) &&
+              WN_class(load_expr) == CLASS_PREG && 
+              WN_offset(load_expr) == preg_num) {
+            ret_load = load_expr;
+            break;
+          }
         }
       }
     }
+    if (ret_load)
+      break;
   }
   if (ret_load) {
     if (OPERATOR_has_sym(WN_operator(stmt)) &&
@@ -7329,6 +7403,7 @@ static void Expand_Statement (WN *stmt)
       LOOPINFO_trip_count_tn(info) = trip_tn;
       LOOPINFO_multiversion(info) = WN_Loop_Multiversion_Alias(loop_info);
       LOOPINFO_vectorized(info) = WN_Loop_Vectorized(loop_info);
+      LOOPINFO_align_peeled(info) = WN_Loop_Align_Peeled(loop_info);
 
 #ifndef TARG_NVISA
       if (!CG_PU_Has_Feedback && WN_loop_trip_est(loop_info) == 0)

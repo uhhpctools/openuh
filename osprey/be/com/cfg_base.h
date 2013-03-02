@@ -397,6 +397,7 @@ private:
   template<typename _Tcfg> friend class DOM_BUILDER;
   template<typename _Tcfg> friend class DF_BUILDER;
   template<typename _Tcfg, BOOL _Fwd> friend class DFS_ITERATOR;
+  template<typename _Tcfg, BOOL _Fwd> friend class PO_ITERATOR;
   template<typename _Tsc, typename _Tsm, typename _Tnc> friend class CFG_BASE;
   template<typename _Tcfg, typename _Twalker, BOOL _Dom> friend class DOM_WALKER_HELPER;
 
@@ -720,6 +721,119 @@ public:
 };
 
 
+
+//===================================================================
+// PO_ITERATOR
+//   iterators to traverse the CFG in postorder
+//   template parameter
+//     _Tcfg: type of cfg
+//     _Fwd: BOOL, traverse the CFG(TRUE) or RCFG(FALSE)
+//       CFG: traverse from entry to exit by the succs list
+//       RCFG: traverse from exit to entry by the preds list
+//===================================================================
+template<typename _Tcfg, BOOL _Fwd>
+class PO_ITERATOR {
+
+public:
+  typedef typename _Tcfg::BB_NODE BB_NODE;
+  typedef typename _Tcfg::BB_LIST BB_LIST;
+
+private:
+  BB_NODE* _current_node;        // current node to be processed
+  std::list<BB_NODE*> _ancestors;  // _ancestors of _current_node
+  std::list<typename BB_LIST::iterator> _iter_list; // _ancestors' iterators pointing to the next kid
+  std::vector<bool> _visited;
+
+  void goto_next_node() {
+    if (_ancestors.empty()) {
+      _current_node = NULL;
+      return;
+    }
+
+    BB_NODE* parent = _ancestors.front();
+    typename BB_LIST::iterator iter = _iter_list.front();
+
+    while (iter != parent->bb_end(_Fwd)) {
+      if (_visited[(*iter)->Get_id()]) {
+	iter++;
+	continue;
+      }
+
+      Push_node(*iter); // push this kid onto the stack
+      parent = _ancestors.front();
+      iter = _iter_list.front();
+    }
+
+    _current_node = Pop_node();
+  }
+
+  // add a node to _ancestors. The node must not have been visited.
+  void Push_node(BB_NODE* node) {
+    Is_True(_visited[node->Get_id()] == false, ("node has been visited"));
+    _visited[node->Get_id()] = true;
+
+    _ancestors.push_front(node);
+    _iter_list.push_front(node->bb_begin(_Fwd));
+  }
+
+  BB_NODE* Pop_node() {
+    BB_NODE* node = _ancestors.front();
+    _ancestors.pop_front();
+    _iter_list.pop_front();
+
+    return node;
+  }
+
+public:
+  PO_ITERATOR() : _current_node(NULL) { }
+  PO_ITERATOR(BB_NODE* node, int max_size) : _current_node(node) {
+    _visited.resize(max_size, false);
+    if (node == NULL) return;
+
+    Push_node(node);
+    goto_next_node();
+  }
+  PO_ITERATOR(const PO_ITERATOR<_Tcfg, _Fwd>& rhs)
+    : _current_node(rhs._current_node),
+      _ancestors(rhs._ancestors),
+      _iter_list(rhs._iter_list),
+      _visited(rhs._visited) { }
+
+public:
+  BB_NODE* operator->() { 
+    Is_True(_current_node != NULL, ("current node is NULL"));
+    return _current_node;
+  }
+  BB_NODE& operator* () {
+    Is_True(_current_node != NULL, ("current node is NULL"));
+    return *_current_node;
+  }
+
+  PO_ITERATOR<_Tcfg, _Fwd>& operator++() {
+    Is_True(_current_node != NULL, ("current node is NULL"));
+    goto_next_node();
+    return *this;
+  }
+
+  bool operator==(const PO_ITERATOR<_Tcfg, _Fwd>& rit) {
+    // since each node can be only visited once, ignore the _iter_list;
+    return (_current_node == rit._current_node);
+  }
+
+  bool operator!=(const PO_ITERATOR<_Tcfg, _Fwd>& rit) {
+    return !(operator==(rit));
+  }
+
+  PO_ITERATOR<_Tcfg, _Fwd>& operator=(const PO_ITERATOR<_Tcfg, _Fwd>& rit) {
+    _current_node = rit._current_node;
+    _ancestors = rit._ancestors;
+    _iter_list = rit._iter_list;
+    _visited = rit._visited;
+  }
+};
+
+
+
 //===================================================================
 // DOM_WALKER_HELPER
 //   take a walker to traverse the DOM tree in deep-first order
@@ -798,6 +912,8 @@ public:
 
   typedef DFS_ITERATOR<BB_NODE, TRUE> dfs_fwd_iterator;
   typedef DFS_ITERATOR<BB_NODE, FALSE> dfs_bwd_iterator;
+  typedef PO_ITERATOR<BB_NODE, TRUE> po_dfs_iterator;
+  typedef PO_ITERATOR<BB_NODE, FALSE> rpo_dfs_iterator;
 
   typedef typename _Tnodecontainer::iterator bb_iterator;
   typedef typename _Tnodecontainer::const_iterator const_bb_iterator;
@@ -896,6 +1012,12 @@ public:
   dfs_fwd_iterator Dfs_fwd_end()   { dfs_fwd_iterator it(NULL, 0); return it; }
   dfs_bwd_iterator Dfs_bwd_begin() { dfs_bwd_iterator it(Get_dummy_exit(), Get_max_id()); return it; }
   dfs_bwd_iterator Dfs_bwd_end()   { dfs_bwd_iterator it(NULL, 0); return it; }
+
+  // Postorder iterators
+  po_dfs_iterator Po_dfs_begin() { po_dfs_iterator it(Get_dummy_entry(), Get_max_id()); return it; }
+  po_dfs_iterator Po_dfs_end()   { po_dfs_iterator it(NULL, 0); return it; }
+  rpo_dfs_iterator Rpo_dfs_begin() { rpo_dfs_iterator it(Get_dummy_exit(), Get_max_id()); return it; }
+  rpo_dfs_iterator Rpo_dfs_end()   { rpo_dfs_iterator it(NULL, 0); return it; }
 
   // BB iterators
   bb_iterator BB_begin() { return _node_container.begin(); }

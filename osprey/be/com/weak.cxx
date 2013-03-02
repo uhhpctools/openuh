@@ -220,7 +220,6 @@ void (*W2C_Pop_PU_p)(void);
 void (*W2C_Process_Command_Line_p)(INT phase_argc, char * const
   phase_argv[], INT argc, char * const argv[]);
 void (*W2C_Push_PU_p)(const WN *pu, WN *body_part_of_interest);
-void (*W2C_Set_Prompf_Emission_p)(const WN_MAP *construct_map);
 void (*W2C_Set_Frequency_Map_p)(WN_MAP frequency_map);
 const char *(*W2C_Get_Transformed_Src_Path_p)(void);
 BOOL (*W2C_Should_Emit_Nested_PUs_p)(void);
@@ -252,7 +251,6 @@ void (*W2F_Pop_PU_p)(void);
 void (*W2F_Process_Command_Line_p)(INT phase_argc, char *phase_argv[], 
   INT argc, char *argv[]);
 void (*W2F_Push_PU_p)(WN *pu, WN *body_part_of_interest);
-void (*W2F_Set_Prompf_Emission_p)(WN_MAP *construct_map);
 void (*W2F_Set_Frequency_Map_p)(WN_MAP frequency_map);
 const char * (*W2F_Get_Transformed_Src_Path_p)(void);
 BOOL (*W2F_Should_Emit_Nested_PUs_p)(void);

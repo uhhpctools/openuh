@@ -75,10 +75,6 @@ const static char *rcs_id =   snl_dist_CXX "$Revision: 1.5 $";
 #include "permute.h"
 #include "snl_dist.h"
 #include "debug.h" 
-#include "anl_driver.h"
-#include "prompf.h"
-
-#pragma weak New_Construct_Id
 
 //-----------------------------------------------------------------------
 // NAME: SNL_GEN_Distribute
@@ -590,15 +586,6 @@ WN* SNL_Distribute(DOLOOP_STACK* stack, INT inner, INT loopd, BOOL above)
   WN*    newdos[SNL_MAX_LOOPS];
   SYMBOL newsyms[SNL_MAX_LOOPS];
 
-  // Declarations for PROMPF
-  INT new_loop_count = 0; 
-  INT old_ids[SNL_MAX_LOOPS]; 
-  INT new_ids[SNL_MAX_LOOPS]; 
-  STACK<WN*> old_loops(&LNO_local_pool); 
-  STACK<WN*> new_loops(&LNO_local_pool); 
-  PROMPF_LINES* old_lines[SNL_MAX_LOOPS]; 
-  PROMPF_LINES* new_lines[SNL_MAX_LOOPS]; 
-
   for (i = imperfect; i > loopd; i--) {
     WN*	loop = stack->Bottom_nth(i);
     WN*	loopp = LWN_Get_Parent(loop);
@@ -628,16 +615,6 @@ WN* SNL_Distribute(DOLOOP_STACK* stack, INT inner, INT loopd, BOOL above)
 			 LWN_Copy_Tree(WN_end(olddo)),
 			 LWN_Copy_Tree(WN_step(olddo)),
 			 newblk);
-
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, olddo);  
-      INT new_id = New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, newdo, new_id); 
-      old_ids[new_loop_count] = old_id; 
-      new_ids[new_loop_count++] = new_id;     
-      old_loops.Push(olddo); 
-      new_loops.Push(newdo); 
-    } 
 
     LWN_Copy_Linenumber(olddo, newdo);
     LWN_Copy_Def_Use(WN_kid0(WN_start(olddo)), WN_kid0(WN_start(newdo)), du);
@@ -685,24 +662,6 @@ WN* SNL_Distribute(DOLOOP_STACK* stack, INT inner, INT loopd, BOOL above)
     LWN_Insert_Block_Before(LWN_Get_Parent(wn_outer), wn_outer, newdo);
   else
     LWN_Insert_Block_After(LWN_Get_Parent(wn_outer), wn_outer, newdo);
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT i;
-    for (i = 0; i < old_loops.Elements(); i++) {
-      WN* wn_loop = old_loops.Bottom_nth(i); 
-      PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(wn_loop, &PROMPF_pool), 
-        &PROMPF_pool); 
-      old_lines[i] = pl; 
-    } 
-    for (i = 0; i < new_loops.Elements(); i++) {
-      WN* wn_loop = new_loops.Bottom_nth(i); 
-      PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(wn_loop, &PROMPF_pool), 
-        &PROMPF_pool); 
-      new_lines[i] = pl; 
-    } 
-    Prompf_Info->Distribution(old_ids, old_lines, new_ids, new_lines, 
-      new_loop_count); 
-  } 
 
   // rebuild access vectors
 

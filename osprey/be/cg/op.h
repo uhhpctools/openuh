@@ -345,8 +345,16 @@ typedef struct op {
 #endif
   mINT16	scycle;		/* Start cycle */
 #ifdef TARG_X8664
-  mINT16	d_group;	/* Dispatch group */
-  mUINT8        p_size;         /* padding size, if any */
+  union {			/* share some data - keep OP struct size down */
+    struct {
+      mINT16	d_group;	/* Dispatch group */
+      mUINT8    p_size;         /* padding size, if any */
+    } ds_info; 
+    struct {
+      mUINT16	aux_opr;	/* Tokenized top for special funcionality */
+      mUINT8	aux_idx;	/* Token for index of opnd */
+    } aux_data;
+  } aux_info;
 #endif
   mTOP		opr;		/* Opcode. topcode.h */
   mUINT8	unrolling;	/* which unrolled replication (if any) */
@@ -403,8 +411,10 @@ typedef struct op {
 #endif
 #define OP_scycle(o)	((o)->scycle)
 #ifdef TARG_X8664
-#define OP_dgroup(o)	((o)->d_group)
-#define OP_dpadd(o)	((o)->p_size)
+#define OP_dgroup(o)	((o)->aux_info.ds_info.d_group)
+#define OP_dpadd(o)	((o)->aux_info.ds_info.p_size)
+#define OP_auxcode(o)	((o)->aux_info.aux_data.aux_opr)
+#define OP_auxidx(o)	((o)->aux_info.aux_data.aux_idx)
 #endif
 #define OP_flags(o)	((o)->flags)
 #ifdef TARG_IA64
@@ -1309,6 +1319,14 @@ extern BOOL OP_Refs_TN(const OP *op, const struct tn *opnd);
 /* Determine if the op defines/references the given register. */
 extern BOOL OP_Defs_Reg(const OP *op, ISA_REGISTER_CLASS rclass, REGISTER reg);
 extern BOOL OP_Refs_Reg(const OP *op, ISA_REGISTER_CLASS rclass, REGISTER reg);
+
+#ifdef TARG_X8664
+inline void OP_Change_Aux_Opcode(OP *op, mUINT16 aux_opc, mUINT8 idx)
+{
+  op->aux_info.aux_data.aux_opr = aux_opc;
+  op->aux_info.aux_data.aux_idx = idx;
+}
+#endif
 
 inline void OP_Change_Opcode(OP *op, TOP opc)
 {

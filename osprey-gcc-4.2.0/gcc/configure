@@ -1553,6 +1553,8 @@ if ( test $srcdir = . && test -d gcc ) \
 else
   host_subdir=.
 fi
+# Open64: override the host_subdir to always be the same.
+host_subdir="host-unknown"
 # No prefix.
 target_subdir=${target_noncanonical}
 
@@ -7651,7 +7653,7 @@ if test "${gcc_cv_prog_makeinfo_modern+set}" = set; then
 else
     ac_prog_version=`$MAKEINFO --version 2>&1 |
                    sed -n 's/^.*GNU texinfo.* \([0-9][0-9.]*\).*$/\1/p'`
-  echo "configure:7654: version of makeinfo is $ac_prog_version" >&5
+  echo "configure:7656: version of makeinfo is $ac_prog_version" >&5
   case $ac_prog_version in
     '')     gcc_cv_prog_makeinfo_modern=no;;
     4.[4-9]*)
@@ -13923,6 +13925,7 @@ echo "$as_me:$LINENO: result: $gcc_cv_as_hidden" >&5
 echo "${ECHO_T}$gcc_cv_as_hidden" >&6
 
 
+ld_ver_gold=
 echo "$as_me:$LINENO: checking linker for .hidden support" >&5
 echo $ECHO_N "checking linker for .hidden support... $ECHO_C" >&6
 if test "${gcc_cv_ld_hidden+set}" = set; then
@@ -13950,7 +13953,12 @@ else
     ld_vers_major=`expr "$ld_vers" : '\([0-9]*\)'`
     ld_vers_minor=`expr "$ld_vers" : '[0-9]*\.\([0-9]*\)'`
     ld_vers_patch=`expr "$ld_vers" : '[0-9]*\.[0-9]*\.\([0-9]*\)'`
-    if test 0"$ld_date" -lt 20020404; then
+    ld_ver_gold=`expr "$ld_ver" : '.* \(gold\) '`
+    if test "$ld_ver_gold" = gold; then
+	# The above patterns do not correctly parse the version string of the Gold linker.
+	# We assume that Gold linker supports the .hidden attribute.
+	gcc_cv_ld_hidden=yes
+    elif test 0"$ld_date" -lt 20020404; then
       if test -n "$ld_date"; then
 	# If there was date string, but was earlier than 2002-04-04, fail
 	gcc_cv_ld_hidden=no
@@ -13982,6 +13990,10 @@ fi
 fi
 echo "$as_me:$LINENO: result: $gcc_cv_ld_hidden" >&5
 echo "${ECHO_T}$gcc_cv_ld_hidden" >&6
+if test "$ld_ver_gold" = gold; then
+  { echo "$as_me:$LINENO: WARNING: assuming gold linker supports hidden attribute" >&5
+echo "$as_me: WARNING: assuming gold linker supports hidden attribute" >&2;}
+fi
 libgcc_visibility=no
 
 

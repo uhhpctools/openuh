@@ -239,7 +239,17 @@ ipa_flag := -ipa
 make_deps:
 	-@cat *.d > $(MKDEPFILE)
 
+# Note that the default make_libdeps rule appears to be broken.  The
+# maintainers of architectures besides NVISA and X8664 should check to
+# see if the default rule is actually desirable.
 ifeq ($(BUILD_TARGET), NVISA)
+NO_LIB_MEMBER_DEPS=1
+endif
+ifeq ($(BUILD_TARGET), X8664)
+NO_LIB_MEMBER_DEPS=1
+endif
+
+ifdef NO_LIB_MEMBER_DEPS
 make_libdeps :
 	-@cat *.d > $(MKDEPFILE)
 else

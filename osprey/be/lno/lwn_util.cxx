@@ -78,7 +78,6 @@
 #include "name.h"
 #include "region_util.h"
 #include "lego_opts.h"
-#include "prompf.h"
 #include "call_info.h"
 #ifdef __cplusplus
 extern "C" {
@@ -539,16 +538,6 @@ extern void LWN_Delete_From_Block(WN *block, WN* wn) {
   WN *node;
   WN* parent_wn;
 
-#ifdef LNO
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT map_id = WN_MAP32_Get(Prompf_Id_Map, wn); 
-    if (WN_opcode(wn) == OPC_DO_LOOP && map_id != 0) {
-      Prompf_Info->Elimination(map_id); 
-      WN_MAP32_Set(Prompf_Id_Map, wn, 0); 
-    }
-  } 
-#endif
-
   Is_True (wn, ("LWN_DeleteFromBlock: deleting a NULL node"));
   Is_True (((!block) || (WN_opcode(block) == OPC_BLOCK)),
            ("LWN_DeleteFromBlock: Expecting a BLOCK node"));
@@ -1005,14 +994,6 @@ void LWN_Delete_Tree(WN* wn)
     return;
 
 #ifdef LNO
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT map_id = WN_MAP32_Get(Prompf_Id_Map, wn); 
-    if (WN_opcode(wn) == OPC_DO_LOOP && map_id != 0) {
-      Prompf_Info->Elimination(map_id); 
-      WN_MAP32_Set(Prompf_Id_Map, wn, 0); 
-    }
-  } 
-
   // keep track of deleted loop
   if (WN_opcode(wn) == OPC_DO_LOOP) {
     Deleted_Loop_Map->Enter(wn, TRUE);

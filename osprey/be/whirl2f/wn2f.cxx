@@ -83,9 +83,6 @@ static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f
 #include "tcon2f.h"
 
 
-extern WN_MAP *W2F_Construct_Map;   /* Defined in w2f_driver.c */
-extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
-
 const char * sgi_comment_str = "CSGI$ " ;
 
 static BOOL  PU_Need_End_Contains = FALSE;  // f90 needs CONTAINS/END around nested procs.
@@ -274,27 +271,6 @@ WN2F_Stmt_Newline(TOKEN_BUFFER tokens,
 	 Append_Srcpos_Map(tokens, srcpos);
    }
 } /* WN2F_Stmt_Newline */
-
-
-/*--------------------------- Prompf processing ------------------------*/
-/*----------------------------------------------------------------------*/
-
-
-static void
-WN2F_Begin_Prompf_Transformed_Func(TOKEN_BUFFER tokens, INT32 func_id)
-{
-   Append_F77_Directive_Newline(tokens, sgi_comment_str) ;
-   Append_Token_String(tokens, "start");
-   Append_Token_String(tokens, Number_as_String(func_id, "%llu"));
-}
-
-static void
-WN2F_End_Prompf_Transformed_Func(TOKEN_BUFFER tokens, INT32 func_id)
-{
-   Append_F77_Directive_Newline(tokens, sgi_comment_str) ;
-   Append_Token_String(tokens, "end");
-   Append_Token_String(tokens, Number_as_String(func_id, "%llu"));
-} 
 
 
 /*------------ Translation of addressing and dereferencing -------------*/
@@ -889,13 +865,6 @@ WN2F_func_entry(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
    ASSERT_DBG_FATAL(WN_opcode(wn) == OPC_FUNC_ENTRY, 
 		    (DIAG_W2F_UNEXPECTED_OPC, "WN2F_func_entry"));
    
-   /* Write prompf information */
-
-   if (W2F_Prompf_Emission) {
-      func_id = WN_MAP32_Get(*W2F_Construct_Map, wn);
-      WN2F_Begin_Prompf_Transformed_Func(tokens, func_id);
-   }
-
    /* For local declarations, set the indentation to the current
     * indentation */
 
@@ -1085,8 +1054,6 @@ WN2F_Emit_End_Stmt(TOKEN_BUFFER tokens, BOOL start)
       {
 	PU_Dangling_Contains = FALSE;
 	Append_Token_String(tokens,"CONTAINS");
-	if (W2F_Prompf_Emission) 
-	  WN2F_End_Prompf_Transformed_Func(tokens, PU_Host_Func_Id);
 	Append_Token_Special(tokens, '\n');
       }
     }
@@ -1096,12 +1063,6 @@ WN2F_Emit_End_Stmt(TOKEN_BUFFER tokens, BOOL start)
       if (Is_Empty_Token_Buffer(tokens))
 	Append_F77_Indented_Newline(tokens,0,NULL);
       Append_Token_String(tokens,"END");
-
-      /* if wasn't really a host, but just had nested parallel routines */
-      /* emit id now, because it wasn't emitted on the CONTAINS         */
-
-      if (W2F_Prompf_Emission && PU_Dangling_Contains)
-	WN2F_End_Prompf_Transformed_Func(tokens, PU_Host_Func_Id);
       Append_Token_Special(tokens,'\n');
     }
   }
@@ -1141,10 +1102,6 @@ WN2F_End_Routine_Strings(TOKEN_BUFFER tokens, INT32 func_id)
       	  p = "END FUNCTION";
       }
       Append_Token_String(tokens,p);
-
-      if (W2F_Prompf_Emission) 
-        WN2F_End_Prompf_Transformed_Func(tokens,func_id);
-
       Append_Token_Special(tokens, '\n');
     }                                             
 
@@ -1153,10 +1110,6 @@ WN2F_End_Routine_Strings(TOKEN_BUFFER tokens, INT32 func_id)
     Append_Token_String(tokens, "END");
     Append_Token_String(tokens, "!");
     Append_Token_String(tokens, PUINFO_FUNC_NAME) ;
-    
-    if (W2F_Prompf_Emission) 
-      WN2F_End_Prompf_Transformed_Func(tokens,func_id);
-
     Append_Token_Special(tokens, '\n');
     Append_Token_Special(tokens, '\n');
   }

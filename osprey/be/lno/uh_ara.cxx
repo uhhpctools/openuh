@@ -63,7 +63,7 @@
 #include "config.h" 
 #include "config_lno.h"
 //#include "anl_driver.h"
-#include "prompf.h"
+//#include "prompf.h"
 #include "glob.h"
 #include "parids.h"
 #include "cond.h"

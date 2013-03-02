@@ -230,7 +230,8 @@ extern void DST_end_PU(void);
 extern DST_INFO_IDX 
 DST_mk_inlined_subroutine(ST_IDX low_pc,
 			  ST_IDX high_pc,
-			  DST_INFO_IDX abstract_origin);
+			  DST_INFO_IDX abstract_origin,
+			  DST_TYPE abstract_dst);
 
 
 /* Creates a DW_TAG_subprogram entry and returns its idx.
@@ -700,6 +701,9 @@ DST_lexical_block_add_name(DST_LEXICAL_BLOCK *, char *);
 extern char *
 DST_get_file(mUINT16 , UINT64 *, UINT64 *, char **);
 
+extern char *
+DST_get_dirname(mUINT16);
+
 extern void
 DST_subprogram_concrete_to_abstract(DST_INFO_IDX);
 
@@ -719,7 +723,9 @@ DST_mk_cross_inlined_subroutine(
                  UINT64        ,        
                  USRCPOS       ,        
                  char          *,      
-                 char          *);     
+                 char          *,
+                 DST_INFO_IDX  ,
+                 DST_TYPE);     
 #endif
 
 #if defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER) || defined(_LEGO_CLONER)

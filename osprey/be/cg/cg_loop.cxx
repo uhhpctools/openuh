@@ -2809,6 +2809,7 @@ static BB *Copy_Replicate_Body(LOOP_DESCR *loop)
   LOOPINFO_wn(copied_info) = wn;
   LOOPINFO_srcpos(copied_info) = LOOPINFO_srcpos(info);
   LOOPINFO_vectorized(copied_info) = LOOPINFO_vectorized(info);
+  LOOPINFO_align_peeled(copied_info) = LOOPINFO_align_peeled(info);
   if (TN_is_constant(trip_count))
     LOOPINFO_trip_count_tn(copied_info) =
       Gen_Literal_TN(new_trip_count_val, TN_size(trip_count));
@@ -2917,6 +2918,7 @@ static BB *Unroll_Replicate_Body(LOOP_DESCR *loop, INT32 ntimes, BOOL unroll_ful
   LOOPINFO_wn(unrolled_info) = wn;
   LOOPINFO_srcpos(unrolled_info) = LOOPINFO_srcpos(info);
   LOOPINFO_vectorized(unrolled_info) = LOOPINFO_vectorized(info);
+  LOOPINFO_align_peeled(unrolled_info) = LOOPINFO_align_peeled(info);
   if (TN_is_constant(trip_count))
     LOOPINFO_trip_count_tn(unrolled_info) =
       Gen_Literal_TN(new_trip_count_val, TN_size(trip_count));
@@ -7442,6 +7444,9 @@ extern void *Record_And_Del_Loop_Region(LOOP_DESCR *loop, void *tmp);
 	CG_LOOP_Trace_Loop(loop, "*** Before SINGLE_BB_WHILELOOP_UNROLL ***");
 
       cg_loop.Build_CG_LOOP_Info(TRUE);
+#ifdef TARG_X8664
+      CGTARG_LOOP_Optimize(loop);
+#endif
       cg_loop.Determine_Unroll_Factor();
       Unroll_Dowhile_Loop(loop, cg_loop.Unroll_factor());
       cg_loop.Recompute_Liveness();

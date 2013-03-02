@@ -750,14 +750,12 @@ extern BOOL Run_cg;		    /* run code generator */
 extern BOOL Run_w2c;		    /* run whirl2c */
 extern BOOL Run_w2f;		    /* run whirl2f */
 extern BOOL Run_w2fc_early;	    /* run whirl2f after LNO parallelization */
-extern BOOL Run_prompf;		    /* create prompf analysis file */
 extern BOOL Run_ipl;		    /* run summary phase of IPA */
 extern char *LNO_Path;		    /* path to lno.so */
 extern char *WOPT_Path;		    /* path to wopt.so */
 extern char *CG_Path;		    /* path to cg.so */
 extern char *W2C_Path;		    /* path to whirl2c.so */
 extern char *W2F_Path;		    /* path to whirl2f.so */
-extern char *Prompf_Anl_Path;	    /* path to prompf_anl.so */
 extern char *Ipl_Path;		    /* path to ipl.so */
 #if defined(TARG_SL)
 extern BOOL Run_ipisr;  /* run ipisr register allocation */
@@ -985,6 +983,16 @@ extern void List_Compile_Options (
 #ifndef STRCHR
 #define STRCHR(a,b)     strchr(a,b)
 #endif
+#ifndef STRNCMP
+#define STRNCMP(a,b,c)  strncmp(a,b,c)
+#endif
+#ifndef STRCAT
+#define STRCAT(a,b)     strcat(a,b)
+#endif
+#ifndef STRCPY
+#define STRCPY(a,b)     strcpy(a,b)
+#endif
+
 #ifdef __cplusplus
 }
 #endif

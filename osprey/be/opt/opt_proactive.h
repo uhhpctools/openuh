@@ -20,343 +20,29 @@
 // along with this program; if not, write the Free Software Foundation,
 // Inc., 59 Temple Place - Suite 330, Boston MA 02111-1307, USA.
 
-// ===============================================================================================
-//
-// Description:
-//
-//                   Structured  Component Nodes
-//                   --------------------------
-//      This is the structured component node data structure that represents if-region, loop-region
-//      and other structured control flow components in the source program. 
-//
-// Reserved prefix:
-// ----------------
-//
-//     SC         for structured component node
-//
-// Exported types:
-// ---------------
-//     SC_NODE
-//
-//          A structured component node.  Every structured component node contains the
-//          following fields.
-//
-//              IDTYPE     _id
-//                    A unique identifier for a structured component node.
-//
-//              SC_TYPE    type
-//                    The type of a SC_NODE.  See SC_TYPE.
-//
-//              MEM_POOL * pool
-//                    Allocation memory pool.
-//
-//
-//              BB_NODE * bb_rep
-//                    A pointer to representing BB_NODE.  
-//
-//              BB_LIST * bbs
-//                    A list of BB_NODEs contained in this SC_NODE.
-//
-//              SC_NODE * parent
-//                    A pointer to the parent node.
-//
-//              SC_LIST * kids
-//                    A pointer to the list of child nodes.  The list is ordered
-//                    according to order of occurrence in the procedure.      
-//
-//              IDTYPE _class_id
-//                    ID of the loop class this SC_NODE belongs.  Scratch field. 
-//                    Loops are classified according to their path symmetricities in the SC tree.
-//
-//              int _depth
-//                    Depth of this SC_NODE in the SC tree. Scratch field.
-//
-//              int flag
-//                    Flag of this SC_NODE.  see SC_NODE_FLAG.
-//
-//              SC_NODE * next
-//                    A pointer to the next node in a lost.  Scratch field.
-//
-//
-//     SC_LIST :SLIST_NODE
-//
-//          A singly linked list of SC_NODEs.  We use this class to build the children node list.
-//
-//     SC_LIST_CONTAINER : SLIST
-//     SC_LIST_ITER : SLIST_ITER
-//
-//          The standard container and iterator for singly linked list.
-//     
-//
-// ==============================================================================================
-
 #ifndef opt_proactive_INCLUDED
 #define opt_proactive_INCLUDED "opt_proactive.h"
-#include <iterator>
 #include <set>
 #include <map>
 
-
-#ifndef opt_bb_INCLUDED
-#include "opt_bb.h"
+#ifndef opt_sc_INCLUDED
+#include "opt_sc.h"
 #endif
-#ifndef opt_base_INCLUDED
-#include "opt_base.h"
-#endif
-#ifndef opt_main_INCLUDED
-#include "opt_main.h"
-#endif
-
-extern "C" {
-#include "bitset.h"
-}
-
-// Type of SC nodes
-enum SC_TYPE {
-  SC_NONE = 0,
-  SC_IF,     // if-region
-  SC_THEN,   // then-path of a if-region
-  SC_ELSE,   // else-path of a if-region
-  SC_LOOP,   // loop region
-  SC_BLOCK,  // blocks of straight-line codes
-  SC_FUNC,   // func entry
-  SC_LP_START, // H-WHIRL loop start
-  SC_LP_COND,  // H-WHIRL loop cond
-  SC_LP_STEP,  // H-WHIRL loop step
-  SC_LP_BACKEDGE,  // H-WHIRL loop backedge
-  SC_LP_BODY,  // loop body
-  SC_COMPGOTO, // COMPGOTO
-  SC_OTHER   // other structured control flows
-};
-
-extern BOOL SC_type_has_rep(SC_TYPE type);
-extern BOOL SC_type_has_bbs(SC_TYPE type);
-extern BOOL SC_type_is_marker(SC_TYPE type);
-
-static const char * sc_type_name[] =
-  {"NONE", "IF", "THEN", "ELSE", "LOOP", "BLOCK", "FUNC",
-   "LP_START", "LP_COND", "LP_STEP", "LP_BACKEDGE", "LP_BODY", "COMPGOTO", "OTHER"};
-
-// bit mask.
-enum SC_NODE_FLAG
-{
-  HAS_SYMM_LOOP = 0x1
-};
-
-
-// Structure component nodes.
-class SC_NODE {
-private:
-  SC_TYPE type;
-  IDTYPE _id;
-  MEM_POOL * pool;
-  union {
-    BB_NODE * bb_rep;  // Pointer to this SC_NODE's representing BB_NODE. Valid for SC_IF.
-    BB_LIST * bbs;     // A list of BB_NODEs. Valid for SC_BLOCK only.
-  } u1;
-  SC_NODE * parent;
-  SC_LIST * kids;
-  IDTYPE _class_id;
-  int _depth;
-  int _flag;
-  SC_NODE * next;
-
-private:
-  BOOL Is_member(BB_NODE *);
-
-public:
-  IDTYPE       Id(void)          const  { return _id; }
-  void         Set_id(IDTYPE i )        { _id = i; }
-  IDTYPE       Class_id(void)    const  { return _class_id; }
-  void         Set_class_id(IDTYPE i)   { _class_id = i; }
-  int          Depth(void)       const  { return _depth; }
-  void         Set_depth(int i)         { _depth = i; }
-  int          Flag()            const  { return _flag; }
-  void         Set_flag(int i)          { _flag = i; }
-  SC_NODE *    Next()            const { return next; }
-  SC_NODE *    Last();
-  void         Set_next(SC_NODE * node) { next = node; }
-  void         Remove_flag(int i);
-  BOOL         Has_flag(int i)          { return ((_flag & i) != 0); }
-  void         Add_flag(int i)          { if (!Has_flag(i)) {_flag += i; } }
-  SC_TYPE      Type(void)        const { return type; }
-  void         Set_type(SC_TYPE i)     { type = i; }
-  const char * Type_name(void) const   { return sc_type_name[type]; }
-  BB_NODE *    Get_bb_rep()    const   { return (SC_type_has_rep(type) ? u1.bb_rep : NULL); }
-  void         Set_bb_rep(BB_NODE * i) 
-  { 
-    FmtAssert(SC_type_has_rep(type), ("Unexpected SC_NODE"));
-    u1.bb_rep = i; 
-  }
-
-  BB_LIST *       Get_bbs()   const { return (SC_type_has_bbs(type) ? u1.bbs : NULL); }
-  void            Append_bbs(BB_NODE *i)
-  {
-    FmtAssert(SC_type_has_bbs(type), ("Unexpected SC_NODE"));
-    if (u1.bbs == NULL)
-      u1.bbs = CXX_NEW(BB_LIST(i), pool);
-    else
-      u1.bbs = u1.bbs->Append(i, pool);
-  }
-
-  void            Prepend_bbs(BB_NODE *i)
-  {
-    FmtAssert(SC_type_has_bbs(type), ("Unexpected SC_NODE"));
-    if (u1.bbs == NULL)
-      u1.bbs = CXX_NEW(BB_LIST(i), pool);
-    else
-      u1.bbs = u1.bbs->Prepend(i, pool);
-  }
-
-  void           Set_bbs(BB_LIST * i)
-  { 
-    FmtAssert(SC_type_has_bbs(type), ("Unexpected SC_NODE"));
-    u1.bbs = i; 
-  }
-
-  MEM_POOL * Get_pool()                { return pool; }
-  void       Set_pool(MEM_POOL * i)    { pool = i; }
-
-  SC_NODE *  Parent(void)      const   { return parent; }
-  void       Set_parent(SC_NODE * i)   { parent = i; }
-  void       Set_kids(SC_LIST * i)     { kids = i; }
-  SC_LIST *  Kids(void)        const   { return kids; }
-  void       Clear(void);
-  BOOL       Is_empty_block();
-  BOOL       Is_empty();
-  SC_NODE(void)          { Clear(); }
-  SC_NODE(const SC_NODE&);
-  ~SC_NODE(void)         {}
-
-  void Print(FILE *fp=stderr, BOOL = TRUE) const;
-
-  void Append_kid(SC_NODE * sc);
-  void Prepend_kid(SC_NODE * sc);
-  void Remove_kid(SC_NODE * sc);
-  void Insert_before(SC_NODE * sc);
-  void Insert_after(SC_NODE * sc);
-  SC_NODE * Last_kid();
-  SC_NODE * First_kid();
-  SC_NODE * Next_sibling();
-  SC_NODE * Prev_sibling();
-  SC_NODE * Next_sibling_of_type(SC_TYPE);
-  SC_NODE * Next_in_tree();
-  SC_NODE * Get_nesting_if(SC_NODE *);
-  std::pair<SC_NODE *, bool> Get_nesting_if();
-  std::pair<SC_NODE *, int> Get_outermost_nesting_if();
-  SC_NODE * First_kid_of_type(SC_TYPE);
-  BOOL Contains(BB_NODE *);
-  BB_NODE * Then();
-  BB_NODE * Else();
-  BB_NODE * Merge();
-  void      Set_merge(BB_NODE *);
-  BB_NODE * Head();
-  BB_NODE * Then_end();
-  BB_NODE * Else_end();
-  BB_NODE * Exit();
-  BB_LOOP * Loopinfo();
-  WN *      Index();
-  SC_NODE * Find_kid_of_type(SC_TYPE);
-  void Unlink();
-  void Convert(SC_TYPE);
-  void Delete();
-  BOOL Is_well_behaved();
-  BOOL Is_sese();
-  BOOL Has_same_loop_struct(SC_NODE *);
-  BOOL Has_symmetric_path(SC_NODE *, BOOL);
-  SC_NODE * Find_lcp(SC_NODE *);
-  BB_NODE * First_bb();
-  BB_NODE * Last_bb();
-  // Find first executable statement in this SC_NODE.
-  WN * First_executable_stmt();
-  BOOL Is_pred_in_tree(SC_NODE *);
-  int Num_of_loops(SC_NODE *, BOOL, BOOL);
-  int Executable_stmt_count();
-  BOOL Has_loop();
-  SC_NODE * Get_real_parent();
-  SC_NODE * Get_real_parent(int);
-  SC_NODE * Get_node_at_dist(SC_NODE *, int dist);
-  WN * Get_cond();
-  BOOL Is_ctrl_equiv(SC_NODE *);
-  BOOL Get_bounds(WN **, WN **, WN **);
-};
-
-class SC_LIST : public SLIST_NODE {
-private:
-  SC_NODE * node;
-  SC_LIST(const SC_LIST &);
-  SC_LIST &operator = (const SC_LIST&);
-
-public:
-  SC_LIST(void)         { Clear(); }
-  SC_LIST(SC_NODE * nd) { Clear(); node = nd;}
-  ~SC_LIST(void)        {};
-  
-  DECLARE_SLIST_NODE_CLASS( SC_LIST )
-  SC_LIST *Append (SC_NODE *bb, MEM_POOL *pool);  
-
-  SC_LIST *Prepend(SC_NODE *bb, MEM_POOL *pool)
-  {
-    SC_LIST * new_sclst = (SC_LIST*) CXX_NEW(SC_LIST(bb), pool);
-    new_sclst->Set_Next(this);
-    return new_sclst;
-  }
-
-  SC_LIST *Remove(SC_NODE *sc, MEM_POOL *pool);
-  BOOL Contains(SC_NODE *sc) const;
-  void Print (FILE *fp = stderr) const;
-  SC_NODE * Last_elem();
-  SC_NODE * First_elem();
-  
-  void Init(SC_NODE *nd)      { node = nd; }
-  void Clear(void)            { node = NULL; }
-
-  SC_NODE *Node(void)  const { return node;}
-  void Set_node(SC_NODE *sc)  { node = sc; }
-};
-
-class SC_LIST_CONTAINER : public SLIST {
-private:
-  DECLARE_SLIST_CLASS( SC_LIST_CONTAINER, SC_LIST )  
-
-  SC_LIST_CONTAINER(const SC_LIST_CONTAINER&);
-  SC_LIST_CONTAINER& operator = (const SC_LIST_CONTAINER&);
-
-public:
-  ~SC_LIST_CONTAINER(void) {};
-
-  void Append (SC_NODE *sc, MEM_POOL *pool);
-  void Prepend (SC_NODE *sc, MEM_POOL *pool);
-  void Remove(SC_NODE *sc, MEM_POOL *pool);
-  SC_NODE *Remove_head(MEM_POOL *pool);
-  BOOL Contains(SC_NODE *sc) const;
-};
-
-class SC_LIST_ITER : public SLIST_ITER {
-  DECLARE_SLIST_CONST_ITER_CLASS( SC_LIST_ITER, SC_LIST, SC_LIST_CONTAINER )
-public:
-  void     Init(void)       {}
-  void Validate_unique(FILE *fp=stderr);
-  SC_NODE *First_sc(void)   { return (First()) ? Cur()->Node():NULL; }
-  SC_NODE *Next_sc(void)    { return (Next())  ? Cur()->Node():NULL; }
-  SC_NODE *Cur_sc(void)     { return (Cur())   ? Cur()->Node():NULL; }
-  SC_NODE *First_elem(void) { return (First()) ? Cur()->Node():NULL; }
-  SC_NODE *Next_elem(void)  { return (Next())  ? Cur()->Node():NULL; }
-};
 
 // Generic CFG transformations.
 class CFG_TRANS {
 private:
   BS * _true_val;   // a bit set of TRUE values, scratch field.
-  MAP * _val_map;   // map from an interger to a value number.
-  WN_MAP _low_map;  // map from WN * to a constant that gives value's low boundary.
-  WN_MAP _high_map; // map from WN * to a constant that gives value's high boundary.
-  MAP * _def_wn_map;   // map AUX_ID to definition WN *.
-  MAP * _def_map; //  Map symbol auxiliary Id to definition WN *.
-  MAP * _const_wn_map; // map an integer constant to WHIRL.
-  MAP * _def_cnt_map; // hash aux id to def count
-  BOOL _ext_trans;  // do extended transformations.
-
+  std::map<AUX_ID, AUX_ID>  _val_map;   // map from an interger to a value number.
+  std::map<WN *, WN *> _low_map;  // map from WN * to a WN * that gives value's low boundary.
+  std::map<WN *, WN *> _high_map; // map from WN * to a WN * that gives value's high boundary.
+  std::map<AUX_ID, WN *> _def_wn_map;   // map AUX_ID to definition WN *.
+  std::map<AUX_ID, WN *> _def_map; //  Map symbol auxiliary Id to definition WN *.
+  std::map<INT64, WN *> _const_wn_map; // map an integer constant to WHIRL.
+  std::map<AUX_ID, WN *> _deriv_wn_map; // map AUX_ID to derivation WN *.
+  std::map<AUX_ID, unsigned long> _def_cnt_map; // hash aux id to def count
+  int _ext_trans;  // do extended transformations.
+  
 protected:
   COMP_UNIT * _cu;
   BOOL _trace;
@@ -364,35 +50,34 @@ protected:
   int _transform_count;
   MEM_POOL * _pool;
   INT32 _code_bloat_count;
-  MAP * _invar_map;  // hash BB_NODE Id to SC_NODE *
+  std::map<IDTYPE, SC_NODE * > _invar_map;  // hash BB_NODE Id to SC_NODE *
   STACK<SC_NODE *> * _unlink_sc; // scratch field.
   STACK<SC_NODE *> * _tmp_stack; // scratch field.
   SC_NODE * _current_scope; // scratch field, point to current nesting SC_NODE.
 
 private:
-  void Infer_val_range(WN *, BOOL, BOOL);
-  void Match_def(WN *);
-  void Set_map(WN_MAP &, WN *, WN *);
-  void Set_lo(WN_MAP &, WN *, int);
+  void Set_map(std::map<WN *, WN *> &, WN *, WN *);
   SC_NODE * Split(SC_NODE *, SC_NODE *);
   SC_NODE * Do_partition(SC_NODE *);
-  void Add_def_map(AUX_ID, WN *);
   void Copy_prop(SC_NODE * sc);
   void Copy_prop(BB_NODE * bb);
   void Copy_prop(WN *);
   unsigned long Get_def_cnt(AUX_ID i) 
-      { return (unsigned long) _def_cnt_map->Get_val((POINTER) i); }
+      { return (unsigned long) _def_cnt_map[i];}
   BOOL Val_mod(SC_NODE *, WN *, BOOL, BOOL);
   BOOL Val_match(WN *);
   void Infer_non_zero(WN *, BOOL);
   void Init_val_map(WN *);
-  void Infer_shift_count_val(WN *, SC_NODE *);
   void Infer_lp_bound_val(SC_NODE *);
+  void Add_def_map(AUX_ID, WN *);
+  void Add_def_wn_map(WN *, WN *);
+  void Match_def(WN *);
     
 protected:
   void Inc_transform_count() { _transform_count++; }
   void Delete_val_map();
   void Infer_val_range(SC_NODE *, SC_NODE *);
+  void Infer_val_range(WN *, BOOL, BOOL);
   void Delete_val_range_maps();
   void Delete_unlink_sc();
   BOOL Val_mod(SC_NODE *, WN *, BOOL);
@@ -407,6 +92,9 @@ protected:
   void Insert_region(BB_NODE *, BB_NODE *, BB_NODE *, BB_NODE *, MEM_POOL *);
   BOOL Has_side_effect(WN *);
   BOOL Is_aliased(WN *, WN *);
+  BOOL Is_kill(SC_NODE *, STACK<SC_NODE *> *, SC_NODE *);
+  BOOL Get_def_vals(BB_NODE *, WN *, std::set<INT64> &);
+  BOOL Get_def_vals(SC_NODE *, WN *, std::set<INT64> &);
   BOOL Maybe_assigned_expr(WN *, WN *);
   BOOL Maybe_assigned_expr(SC_NODE *, WN *, BOOL);
   BOOL Maybe_assigned_expr(BB_NODE *, WN *);
@@ -429,12 +117,9 @@ protected:
   BOOL Can_be_speculative(WN *);
   ST * Get_st(WN *);
   void Delete_branch(BB_NODE *);
-  MAP * Get_invar_map() { return _invar_map ; }
-  void New_invar_map();
-  void Delete_invar_map();
+  std::map<IDTYPE, SC_NODE *> & Get_invar_map() { return _invar_map ; }
   void Hash_invar(BB_NODE *, SC_NODE *);
   void Clear();
-  void Delete();
   void Set_cu(COMP_UNIT * i) { _cu = i; }
   COMP_UNIT * Get_cu();
   WN * Get_const_wn(INT64);
@@ -442,10 +127,13 @@ protected:
   WN * Merge_cond(WN *, WN *, OPERATOR);
   BOOL Can_reorder_cond(WN *, WN *);
   BOOL Do_if_cond_tree_height_reduction(SC_NODE *, SC_NODE *);
-  BOOL Do_if_cond_dist(SC_NODE *);
-  void Do_canon(SC_NODE *, SC_NODE *, int);
+  BOOL Do_if_cond_dist(SC_NODE *, BOOL);
+  SC_NODE * Do_tail_merge(SC_NODE * );
+  SC_NODE * Do_head_merge(SC_NODE *);
+  BOOL Do_sink_node(SC_NODE *, SC_NODE *, BOOL);
+  BOOL Do_canon(SC_NODE *, SC_NODE *, int);
   void Remove_block(SC_NODE *);
-  void Remove_loop(SC_NODE *);
+  void Remove_node(SC_NODE *);
   void Remove_block(BB_NODE *);
   void Remove_peel(SC_NODE * sc1, SC_NODE * sc2);
   void Do_split_if_head(SC_NODE *);
@@ -454,12 +142,14 @@ protected:
   BOOL Get_unique_ref(SC_NODE *, SC_NODE *, WN **);
   BOOL Get_unique_ref(BB_NODE *, SC_NODE *, WN **, SC_NODE *);
   BOOL Get_unique_ref(WN *, SC_NODE *, WN **, SC_NODE *);
+  BOOL Can_mod_iv(SC_NODE *, SC_NODE *);
   BOOL Check_index(SC_NODE *);
   BOOL Check_iteration(SC_NODE *, SC_TYPE, SC_NODE *);
   BOOL Can_fuse(SC_NODE *);
   SC_NODE * Do_loop_fusion(SC_NODE *, int);
   WN * Get_index_load(SC_NODE *);
   WN * Get_index_load(WN *, ST *);
+  WN * Get_var_load(WN *, ST *);
   WN * Get_upper_bound(SC_NODE *, WN*);
   WN * Get_upper_bound(SC_NODE *);
   void Hash_def_cnt_map(BB_NODE *);  
@@ -469,13 +159,33 @@ protected:
   BOOL Hoist_succ_blocks(SC_NODE *);
   SC_NODE * Merge_block(SC_NODE *, SC_NODE *);
   BOOL Have_same_trip_count(SC_NODE *, SC_NODE *);
-  BOOL Get_ext_trans() { return _ext_trans; }
   void Replace_wn(SC_NODE *, WN *, WN *);
   void Replace_wn(BB_NODE *, WN *, WN *);
   BOOL Replace_wn(WN *, WN *, WN *);
   WN * Simplify_wn(WN *);
   BOOL Do_flip_tail_merge(SC_NODE *, WN *);
   void Do_flip(SC_NODE *);
+  // Whether to do EXT.
+  BOOL Do_ext_trans() { return (_ext_trans != EXT_TRANS_NONE); }
+  // Whether to do traverse transformations at the EXT phase.
+  BOOL Do_ext_traverse() { return ((_ext_trans & EXT_TRANS_TRAVERSE) != 0); }
+  // Whether to do loop fusions at the EXT phase.
+  BOOL Do_ext_fusion() { return ((_ext_trans & EXT_TRANS_FUSION) != 0); }
+  BOOL Prune_if(SC_NODE *);
+  void Prune_block(SC_NODE *);
+  void Top_down_do_rev_head_merge(SC_NODE *);
+  BOOL Bottom_up_prune(SC_NODE *);
+  std::map<AUX_ID, WN *> & Get_deriv_map() { return _deriv_wn_map; }
+  std::map<WN *, WN *> & Get_high_map() { return _high_map; }
+  std::map<WN *, WN *> & Get_low_map() { return _low_map; }
+  void Infer_shift_count_val(WN *, SC_NODE *);
+  void Set_lo(std::map<WN *, WN *> &, WN *, int);
+  void Set_hi(std::map<WN *, WN *> &, WN *, int);
+  std::pair<bool,int> Clone_val(WN *, WN *, std::map<WN *, WN *> &);
+  WN * Get_wn_by_aux_id(AUX_ID, WN *);
+  ST * Tmp_array_st(MTYPE mtype, int);
+  WN * Create_array_store(ST *, WN *, WN *);
+  WN * Create_array_load(ST *, WN *);
 
 public:
   void Set_trace(BOOL i) { _trace = i; }
@@ -487,7 +197,10 @@ public:
   void Do_tail_duplication(SC_NODE *, SC_NODE *);
   void Hash_def_cnt_map(SC_NODE *);
   void Init();
-  void Set_ext_trans(BOOL in) { _ext_trans = in; }
+  SC_NODE * Do_loop_unswitching(SC_NODE *, SC_NODE *, BOOL do_partial = FALSE);
+  void Invalidate_invar(BB_NODE * bb);
+   void Invalidate_invar(SC_NODE * sc);
+  void Set_ext_trans(int in) { _ext_trans = in; }
 };
 
 // bit mask for if-merging actions.
@@ -519,7 +232,6 @@ private:
   void Merge_CFG(SC_NODE *, SC_NODE *);
   void Merge_SC(SC_NODE *, SC_NODE *);
   BOOL Is_if_collapse_cand(SC_NODE * sc1, SC_NODE * sc2);
-  void Remove_redundant_bitops(SC_NODE *);
 
 protected:
   void Set_region_id(int i) { _region_id = i; }
@@ -527,7 +239,7 @@ protected:
   BOOL      Is_candidate(SC_NODE *, SC_NODE *, BOOL);
   void Clear(void);
   BOOL Do_reverse_loop_unswitching(SC_NODE *, SC_NODE *, SC_NODE *);
-  void Bottom_up_prune(SC_NODE *);
+  void Do_negate(SC_NODE *);
 
 public:
   void Top_down_trans(SC_NODE * sc);
@@ -544,7 +256,7 @@ public:
 // Proactive loop fusion transformation.
 class PRO_LOOP_FUSION_TRANS : virtual public IF_MERGE_TRANS {
 private:
-  MAP  *_loop_depth_to_loop_map;  // map from SC tree depth to a list of SC_LOOPs, scratch field
+  std::map<int, SC_LIST *> _loop_depth_to_loop_map;  // map from SC tree depth to a list of SC_LOOPs, scratch field
   SC_LIST * _loop_list;          // a list of SC_LOOPs, scratch field
   int _last_class_id;
   BOOL _edit_loop_class;
@@ -587,7 +299,9 @@ typedef enum CANON_ACTION {
     CANON_NONE = 0x0,
     SPLIT_IF_HEAD = 0x1, // Split head of SC_IF so that it only contains one statement.
     HEAD_DUP = 0x2, // Head duplicate preceding siblings of SC_IF's head.
-    TAIL_DUP = 0x4  // Tail duplicate SC_IF's merge.
+    TAIL_DUP = 0x4,  // Tail duplicate SC_IF's merge.
+    CHK_LEGAL = 0x8, // Do legality Check
+    REV_HEAD_MERGE = 0x10  // Do reversed head merge.
 };
 
 // Proactive loop interchange transformation.
@@ -603,9 +317,7 @@ private:
 private:
     int Nonrecursive_trans(SC_NODE *, SC_NODE *);
     BOOL Is_candidate(SC_NODE *, SC_NODE *);
-    BOOL Do_loop_unswitching(SC_NODE *, SC_NODE *);
-    SC_NODE * Do_loop_dist(SC_NODE *, BOOL);
-    void Do_hoist(SC_NODE * sc1, SC_NODE * sc2);
+    SC_NODE * Do_loop_dist(SC_NODE *, BOOL, SC_NODE *);
     BOOL Check_sibling(SC_NODE *, SC_NODE *);
     void Invalidate_invar(SC_NODE *);
     void Invalidate_invar(BB_NODE *);
@@ -615,6 +327,25 @@ private:
     BOOL Is_perfect_loop_nest(SC_NODE *);
     SC_NODE * Find_dist_cand(SC_NODE *);
     BOOL Can_interchange(SC_NODE *, SC_NODE *);
+    BOOL Do_misc_trans(STACK<SC_NODE *> *, SC_NODE *);
+    std::pair<BOOL,UINT32> Can_do_misc_trans(STACK<SC_NODE *> *, SC_NODE *);
+    BOOL Process_non_identical_nodes(STACK<SC_NODE *> *, SC_NODE *, UINT32);
+    BOOL Process_identical_nodes(SC_NODE *, SC_NODE *);
+    std::pair<SC_NODE *, BOOL> Do_misc_fusion(STACK<SC_NODE *> *, SC_NODE *);
+    BOOL Collect_killing_defs(STACK<SC_NODE *> *, SC_NODE *, SC_NODE *);
+    BOOL Is_disjoint(STACK<SC_NODE *> *, SC_NODE *);
+    BOOL Do_hoist_next_siblings(SC_NODE *);
+    std::pair<SC_NODE *, SC_NODE *> Do_insert_defs(SC_NODE *, STACK<SC_NODE *> *);
+    void Do_push_nodes(SC_NODE *, SC_NODE *, SC_NODE *, SC_NODE *);
+    void Do_swap_if(SC_NODE *);
+    void Top_down_do_loop_unswitch(SC_NODE *);
+    void Hoist_killing_defs(SC_NODE *, SC_NODE *, int);
+    std::pair<INT, INT> Estimate_bounds(SC_NODE *, SC_NODE *);
+    void Top_down_do_precomp(SC_NODE *, SC_NODE *);
+    BOOL Collect_precomp_if_cond(SC_NODE *, STACK<SC_NODE *> *);
+    BOOL Collect_precomp_if_cond(BB_NODE *);
+    void Rewrite_shift_count(SC_NODE *, AUX_ID);
+    void Rewrite_shift_count(BB_NODE *, AUX_ID);
 
 protected:
     void Clear();
@@ -640,10 +371,10 @@ class PRO_LOOP_EXT_TRANS : virtual public IF_MERGE_TRANS {
 private:
     IF_CMP_VAL _next_valnum;
     STACK<IF_CMP_VAL> *  _if_cmp_vals[MAX_IF_CMP_LEVEL]; // A stack of if-compare values at each level
-    MAP * _val_to_sc_map; // Map a IF_CMP_VAL to a SC_NODE *
-    MAP * _wn_to_val_num_map; // Map a WN * to a value number
+    std::map<IF_CMP_VAL, SC_NODE *> _val_to_sc_map; // Map a IF_CMP_VAL to a SC_NODE *
+    std::map<WN *, IF_CMP_VAL> _wn_to_val_num_map; // Map a WN * to a value number
     STACK<WN *> * _key_to_wn_hash[IF_CMP_HASH_SIZE]; // Hash a key to a STACK<WN *> *
-    MAP * _wn_to_wn_map; // Map a WN * to a WN *.
+    std::map<WN *, WN *> _wn_to_wn_map; // Map a WN * to a WN *.
     STACK<WN *> * _wn_list; // a stack of wns.
 private:
     void Get_val(WN *, IF_CMP_VAL *);
@@ -677,15 +408,13 @@ public:
 // Proactive loop transformations.
 class PRO_LOOP_TRANS :  public PRO_LOOP_FUSION_TRANS, 
                         public PRO_LOOP_INTERCHANGE_TRANS,
-                        public PRO_LOOP_EXT_TRANS 
+                        public PRO_LOOP_EXT_TRANS
 {
 private:
     void Clear();
 public:
     PRO_LOOP_TRANS(void) { Clear(); }
     PRO_LOOP_TRANS(COMP_UNIT * i) { Clear(); Set_cu(i); }
-    void Delete();
     void Do_ext_trans(SC_NODE *);
 };
-
 #endif /*opt_proactive_INCLUDED*/

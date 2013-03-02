@@ -82,7 +82,6 @@
 #include "erglob.h"
 #include "printsrc.h"
 
-#include "import.h"
 #include "opt_alias_interface.h"        /* for Print_alias_info */
 #include "cg.h"                         /* for Alias_Manager */
 
@@ -2103,16 +2102,10 @@ static Top_Trans_Group Top_SSE_To_Vex_Mode_Group_Table[] = {
     {TOP_stss_n32,          TOP_vstss_n32},
     {TOP_stssx,             TOP_vstssx},
     {TOP_stssxx,            TOP_vstssxx},
-    {TOP_stntss,            TOP_vstntss},
-    {TOP_stntssx,           TOP_vstntssx},
-    {TOP_stntssxx,          TOP_vstntssxx},
     {TOP_stsd,              TOP_vstsd},
     {TOP_stsd_n32,          TOP_vstsd_n32},
     {TOP_stsdx,             TOP_vstsdx},
     {TOP_stsdxx,            TOP_vstsdxx},
-    {TOP_stntsd,            TOP_vstntsd},
-    {TOP_stntsdx,           TOP_vstntsdx},
-    {TOP_stntsdxx,          TOP_vstntsdxx},
     {TOP_maxss,             TOP_vfmaxss},
     {TOP_maxsd,             TOP_vfmaxsd},
     {TOP_minss,             TOP_vfminss},

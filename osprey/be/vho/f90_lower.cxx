@@ -63,8 +63,6 @@
 #include "cxx_template.h" 
 #include "cxx_memory.h"
 #include "pu_info.h"
-#include "prompf.h"
-#include "anl_driver.h" 
 #include "wb_f90_lower.h"
 
 #include "intrn_info.h"
@@ -76,7 +74,6 @@
 
 #ifdef __GNUC__
 #if ! defined(BUILD_OS_DARWIN)
-#pragma weak Anl_File_Path
 #pragma weak New_Construct_Id
 #endif /* defined(BUILD_OS_DARWIN) */
 #endif
@@ -117,7 +114,6 @@ typedef struct f90lower_aux_data_s {
   mINT16  ndim;   /* Dimensionality of the construct */
   COPY_FLAG_T copy_flag:4;
   BOOL    known_independent:2; /* If we know that we don't need to do dependence analysis */
-  BOOL    no_prompf_info:2;    /* If we should not generate prompf_info for this loop nest */
 } F90_LOWER_AUX_DATA;
 
 
@@ -150,7 +146,6 @@ typedef struct f90_dep_info_s {
 #define NDIM(x) ((x)->ndim)
 #define COPY_FLAG(x) ((x)->copy_flag)
 #define KNOWN_INDEPENDENT(x) ((x)->known_independent)
-#define NO_PROMPF_INFO(x) ((x)->no_prompf_info)
 
 #define SET_PRELIST(x,y) (x)->prelist = (y)
 #define SET_POSTLIST(x,y) (x)->postlist = (y)
@@ -162,7 +157,6 @@ typedef struct f90_dep_info_s {
 #define SET_NDIM(x,y) (x)->ndim = (y) 
 #define SET_COPY_FLAG(x,y) (x)->copy_flag = (COPY_FLAG_T) (y)
 #define SET_KNOWN_INDEPENDENT(x,y) (x)->known_independent = (y)
-#define SET_NO_PROMPF_INFO(x,y) (x)->no_prompf_info = (y)
 
 /* To be used mainly when initializing the structures */
 #define SET_ITER_COUNT_P(x,y) (x)->iter_count = (y)
@@ -210,37 +204,6 @@ static PU *current_pu;
 #ifdef DRAGON
 extern  BOOL  Dragon_CFG_Phase;   // HL ++
 #endif
-//-----------------------------------------------------------------------
-// NAME: OMP_Prompf_Init
-// FUNCTION: Initialize PROMPF processing for current function.
-//-----------------------------------------------------------------------
-
-static void F90_Lower_Prompf_Init(PU_Info* pu_info)
-{
-  if (Run_prompf 
-      && !Is_Set_PU_Info_flags(pu_info, PU_IS_COMPILER_GENERATED)) {
-    Prompf_Info->Enable();
-    Prompf_Info->Mark_F90_Lower();
-    WB_F90_Lower_Set_Prompf_Info(Prompf_Info);
-  }
-}
-
-//-----------------------------------------------------------------------
-// NAME: OMP_Prompf_Finish
-// FUNCTION: Finish off PROMPF processing for current function.
-//-----------------------------------------------------------------------
-
-static void F90_Lower_Prompf_Finish(PU_Info* pu_info)
-{
-  if (Run_prompf
-      && !Is_Set_PU_Info_flags(pu_info, PU_IS_COMPILER_GENERATED)) {
-    const char *path = Anl_File_Path();
-    FILE *fp_anl = fopen(path, "a");
-    Prompf_Info->Print_Compact(fp_anl, PTL_F90_LOWER);
-    fclose(fp_anl);
-    Prompf_Info->Disable();
-  }
-}
 
 /* This grabs the assignment statement from an array syntax statement.
  *  If the statement is a WHERE, it looks underneath for the assignment.
@@ -1132,7 +1095,6 @@ static F90_LOWER_AUX_DATA * F90_Lower_New_Aux_Data(INT ndim)
    r = TYPE_MEM_POOL_ALLOC( F90_LOWER_AUX_DATA,f90_lower_pool);
    SET_NDIM(r,ndim);
    SET_KNOWN_INDEPENDENT(r,FALSE);
-   SET_NO_PROMPF_INFO(r,FALSE);
    SET_COPY_FLAG(r,COPY_NONE);
 
    /* allocate the arrays */
@@ -2125,7 +2087,7 @@ static BOOL F90_Lower_Intrinsic_Fixup(WN *stmt, WN *block)
  *
  *================================================================
  */
-static WN * F90_Lower_Copy_Expr_to_Temp(WN *expr, WN *stmt, WN *block, BOOL no_prompf_info=FALSE) 
+static WN * F90_Lower_Copy_Expr_to_Temp(WN *expr, WN *stmt, WN *block) 
 {
    INT ndim,i;
    WN *sizes[MAX_NDIM];
@@ -2143,7 +2105,6 @@ static WN * F90_Lower_Copy_Expr_to_Temp(WN *expr, WN *stmt, WN *block, BOOL no_p
    if (F90_Size_Walk(expr,&ndim,sizes)) {
       /* Array temporary */
       adatatemp = F90_Lower_New_Aux_Data(ndim);
-      SET_NO_PROMPF_INFO(adatatemp,no_prompf_info);
       /* Fill in the iteration counts */
       for (i=0; i <ndim ; i++) {
 	 SET_ITER_COUNT(adatatemp,i,sizes[i]);
@@ -4008,25 +3969,12 @@ static WN * F90_Move_Transformational_Walk(WN *t, WN *stmt, WN *block, WN *paren
       
     case INTRN_PACK:
     case INTRN_UNPACK:
+    case INTRN_EOSHIFT:
       if (!OPCODE_is_stmt(WN_opcode(parent)) || in_where) {
 	temp = F90_Lower_Copy_Expr_to_Temp(t,stmt,block);
 	return(temp);
       } else {
 	/* Don't move if of form LHS = FUNCTION(...) */
-	return (t);
-      }
-
-    case INTRN_EOSHIFT:
-      /* Like PACK and UNPACK, but also set no_prompf_info */
-      if (!OPCODE_is_stmt(WN_opcode(parent)) || in_where) {
-	temp = F90_Lower_Copy_Expr_to_Temp(t,stmt,block,TRUE);
-	return(temp);
-      } else {
-	/* Don't move if of form LHS = FUNCTION(...) */
-	adata = GET_F90_MAP(parent);
-	if (adata) {
-	  SET_NO_PROMPF_INFO(adata,TRUE);
-	}
 	return (t);
       }
 
@@ -4052,10 +4000,10 @@ static BOOL F90_Move_Transformationals(WN *stmt, WN *block)
 
 /***********************************************
 * 
-* Helper routine, creates a DO loop and add the appropriate PROMPF information
+* Helper routine, creates a DO loop node
 */
 static WN * create_doloop_node(WN *index_id, WN *start, WN *end,
-			       WN *step, WN *body, BOOL add_prompf=TRUE)
+			       WN *step, WN *body)
 {
   WN *temp;
   WN_Set_Linenum(start,current_srcpos);
@@ -4063,18 +4011,6 @@ static WN * create_doloop_node(WN *index_id, WN *start, WN *end,
   temp = WN_CreateDO(index_id, start, end, step, body, NULL);
   WN_Set_Linenum(temp,current_srcpos);
 
-  if (add_prompf && Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT new_id = New_Construct_Id();
-    WN_MAP32_Set(Prompf_Id_Map, temp, new_id);
-    PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(temp, &PROMPF_pool),
-			       &PROMPF_pool);
-    WN* wn_symbol = WN_index(temp);
-    const char* name = ST_class(WN_st(wn_symbol)) != CLASS_PREG
-    ? ST_name(WN_st(wn_symbol)) :
-      WN_offset(wn_symbol) > Last_Dedicated_Preg_Offset
-    ? Preg_Name(WN_offset(wn_symbol)) : "DEDICATED PREG";
-    Prompf_Info->F90_Array_Stmt(new_id, pl, (char*) name);
-  } 
   return (temp);
 }
 
@@ -4092,8 +4028,7 @@ static WN * create_doloop_node(WN *index_id, WN *start, WN *end,
 * body - the loop body
 ****************************************************************/
 
-static WN * create_doloop(PREG_NUM *index, char *index_name, WN *count, DIR_FLAG dir, WN *body, 
-			  BOOL prompf_info = TRUE)
+static WN * create_doloop(PREG_NUM *index, char *index_name, WN *count, DIR_FLAG dir, WN *body)
 {
    WN *index_id, *count_expr, *start, *end, *step, *doloop;
    OPCODE intconst_op;
@@ -4147,7 +4082,7 @@ static WN * create_doloop(PREG_NUM *index, char *index_name, WN *count, DIR_FLAG
       temp = body;
    }
 
-   doloop = create_doloop_node(index_id, start, end, step, temp, prompf_info);
+   doloop = create_doloop_node(index_id, start, end, step, temp);
    return (doloop);
 }
 
@@ -4161,8 +4096,7 @@ static WN * create_doloop(PREG_NUM *index, char *index_name, WN *count, DIR_FLAG
  * returns pointer to the block node in the loopnest
  */
  
-static WN * create_doloop_nest(PREG_NUM indices[], WN **doloop, WN *sizes[], INT ndim, 
-			       BOOL prompf_info=TRUE)
+static WN * create_doloop_nest(PREG_NUM indices[], WN **doloop, WN *sizes[], INT ndim)
 {
    INT i;
    WN *loopnest, *stlist;
@@ -4176,7 +4110,7 @@ static WN * create_doloop_nest(PREG_NUM indices[], WN **doloop, WN *sizes[], INT
       sprintf(tempname,"@f90li_%d_%d",i,num_temps);
       
       /* Create the DO loop node */
-      loopnest = create_doloop(&index,tempname,sizes[i],DIR_POSITIVE,loopnest,prompf_info);
+      loopnest = create_doloop(&index,tempname,sizes[i],DIR_POSITIVE,loopnest);
       indices[i] = index;
    }
    *doloop = loopnest;
@@ -5134,7 +5068,7 @@ static WN *lower_eoshift(WN *kids[],PREG_NUM indices[],INT ndim,WN *block, WN *i
    
 
    body = WN_CreateBlock();
-   temp = create_doloop_node(index_id, start, end, step, body, TRUE);
+   temp = create_doloop_node(index_id, start, end, step, body);
 
    WN_INSERT_BlockLast(stlist,temp);
 
@@ -5173,7 +5107,7 @@ static WN *lower_eoshift(WN *kids[],PREG_NUM indices[],INT ndim,WN *block, WN *i
 				    WN_Intconst(doloop_ty,1)));
 
    body = WN_CreateBlock();
-   temp = create_doloop_node(WN_COPY_Tree(index_id), start, end, step, body, TRUE);
+   temp = create_doloop_node(WN_COPY_Tree(index_id), start, end, step, body);
    WN_INSERT_BlockLast(stlist,temp);
    WN_INSERT_BlockLast(body,lhs);
 
@@ -5758,7 +5692,6 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
    WN *count;
    WN *loopnest,*stlist;
    char tempname[32]; /* This isn't going to overflow */
-   BOOL add_prompf;
 
 #ifndef KEY // bug 8567
    /* Don't walk I/O statements */
@@ -5770,7 +5703,6 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
    adata = GET_F90_MAP(stmt);
    if (adata) {
       ndim = NDIM(adata);
-      add_prompf = !NO_PROMPF_INFO(adata);
    } else {
       ndim = 0;
    }
@@ -5797,7 +5729,7 @@ static BOOL F90_Generate_Loops(WN *stmt, WN *block)
 	 sprintf(tempname,"@f90li_%d_%d",i,num_temps);
 	 
 	 /* Create the DO loop node */
-	 loopnest = create_doloop(&index,tempname,count,dir,loopnest,add_prompf);
+	 loopnest = create_doloop(&index,tempname,count,dir,loopnest);
 	 indices[i] = index;
       }
       
@@ -6002,7 +5934,6 @@ void Strip_OMP_Workshare(WN * pu)
 WN * F90_Lower (PU_Info* pu_info, WN *pu) {
 
    current_pu = &Get_Current_PU();
-   F90_Lower_Prompf_Init(pu_info);
 
    /* See if we are actually processing an F90 pu */
    if (!PU_f90_lang(*current_pu)){
@@ -6097,7 +6028,6 @@ WN * F90_Lower (PU_Info* pu_info, WN *pu) {
    }
    
    F90_Lower_Term();
-   F90_Lower_Prompf_Finish(pu_info);
    
    return (pu);
 }

@@ -62,8 +62,6 @@
 #include "small_trips.h"
 #include "sxlimit.h"
 #include "ir_reader.h"
-#include "prompf.h"
-#include "anl_driver.h"
 
 //-----------------------------------------------------------------------
 // NAME: Scalar_Expansion_Tile
@@ -445,15 +443,6 @@ static void SNL_INV_Scalar_Expand_Tile(WN* wn_outer,
     WN* loop_one = stack.Bottom_nth(first_in_stack + ti->Iloop(i));
     WN* new_outer_loop = Tile_Loop(loop_one, ti->Stripsz(i), ti->Striplevel(i),
       ti->Reason(i), NULL, &LNO_local_pool); 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT new_id = New_Construct_Id(); 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, loop_one); 
-      WN_MAP32_Set(Prompf_Id_Map, new_outer_loop, new_id);  
-      if (ti->Reason(i) == SNL_INV_SE_ONLY)  
-	Prompf_Info->Se_Tile(old_id, new_id); 
-      else if (ti->Reason(i) == SNL_INV_TILE_SE) 
-	Prompf_Info->Se_Cache_Tile(old_id, new_id); 
-    } 
     compressed_tile_loops[i] = SNL_INV_Get_Next_Outermost_Loop(loop_one);
   }
   for (i = 0; i < ti->Strips(); i++)

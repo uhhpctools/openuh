@@ -417,6 +417,7 @@ static void Mark_Code(WN *wn, WN *func_nd, DOLOOP_STACK *stack,
       if (loop_info) {
         dli->Multiversion_Alias = (WN_Loop_Multiversion_Alias(loop_info) != 0);
         dli->Loop_Vectorized = (WN_Loop_Vectorized(loop_info) != 0);
+        dli->Loop_Align_Peeled = (WN_Loop_Align_Peeled(loop_info) != 0);
       }
       WN_MAP_Set(LNO_Info_Map,wn,(void *)dli);
     } else {

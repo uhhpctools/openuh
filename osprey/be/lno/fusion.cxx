@@ -68,8 +68,6 @@
 #include "glob.h"
 #include "fission.h"
 #include "tlog.h"
-#include "prompf.h" 
-#include "anl_driver.h"
 #include "parallel.h"
 #include "bitset.h"
 
@@ -2796,12 +2794,6 @@ BOOL unrolled, BOOL preserve_loop_index, BOOL precom_map)
                           new_iter[1], Current_Func_Node, &LNO_local_pool);
     Is_True(all_internal, ("external labels renamed"));
 
-    // Assign Prompf Ids for all loops but outermost 
-    STACK<WN*> st_old(&LNO_local_pool); 
-    STACK<WN*> st_new(&LNO_local_pool); 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())  
-      Prompf_Assign_Ids(new_iter[0], new_iter[1], &st_old, &st_new, FALSE);
-
                     // copy access vector
     if (!adg->Add_Deps_To_Copy_Block(new_iter[0],new_iter[1], FALSE)) {
                     // do not copy internal edges
@@ -2829,26 +2821,6 @@ BOOL unrolled, BOOL preserve_loop_index, BOOL precom_map)
     }
     Separate_And_Update(in_loop, loop, 1);
     WN* new_loop=WN_next(in_loop);
-
-    // Assign Prompf Ids for outermost loop
-    // Add Prompf transaction record for pre-loop peeling 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT old_outer_id = WN_MAP32_Get(Prompf_Id_Map, in_loop); 
-      INT new_outer_id = New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, new_loop, new_outer_id); 
-      INT nloops = st_old.Elements(); 
-      if (nloops >= 0) { 
-	INT* old_ids = CXX_NEW_ARRAY(INT, nloops + 1, &LNO_local_pool); 
-	INT* new_ids = CXX_NEW_ARRAY(INT, nloops + 1, &LNO_local_pool); 
-	old_ids[0] = old_outer_id; 
-	new_ids[0] = new_outer_id; 
-	for (INT i = 1; i < nloops + 1; i++) {
-	  old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i-1));  
-	  new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i-1));  
-	}
-	Prompf_Info->Pre_Peel(old_ids, new_ids, nloops + 1); 
-      } 
-    }
 
     // at this point, we have created two loops 'in_loop' and
     // 'new_loop' which is right after 'in_loop'
@@ -3004,28 +2976,6 @@ BOOL unrolled, BOOL preserve_loop_index, BOOL precom_map)
       }
     }
     
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      STACK<WN*> st_old(&LNO_local_pool);
-      STACK<WN*> st_new(&LNO_local_pool);
-      for (INT i = 1; i <= iter_count; i++) { 
-	st_old.Clear(); 
-	st_new.Clear(); 
-	Prompf_Assign_Ids(new_iter[0], new_iter[i], &st_old, &st_new, FALSE);
-        INT nloops = st_old.Elements(); 
-	if (nloops > 0) { 
-	  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	  INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	  for (INT i = 0; i < nloops; i++) {
-	    old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i)); 
-	    new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i)); 
-	  }
-	  Prompf_Info->Pre_Peel(old_ids, new_ids, nloops); 
-	  CXX_DELETE_ARRAY(old_ids, &LNO_local_pool);
-	  CXX_DELETE_ARRAY(new_ids, &LNO_local_pool);
-	}
-      } 
-    } 
-
     if (out_of_edge) {
       DevWarn("Array dependence graph overflowed in Pre_loop_peeling()");
       LNO_Erase_Dg_From_Here_In(LWN_Get_Parent(in_loop),adg);
@@ -3274,12 +3224,6 @@ BOOL unrolled, BOOL preserve_loop_index)
                           new_iter[1], Current_Func_Node, &LNO_local_pool);
     Is_True(all_internal, ("external labels renamed"));
 
-    // Assign Prompf Ids for all loops but outermost
-    STACK<WN*> st_old(&LNO_local_pool);
-    STACK<WN*> st_new(&LNO_local_pool);
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-      Prompf_Assign_Ids(new_iter[0], new_iter[1], &st_old, &st_new, FALSE);
-
                     // copy access vector
     if (!adg->Add_Deps_To_Copy_Block(new_iter[0],new_iter[1], FALSE)) {
                     // do not copy internal edges
@@ -3306,26 +3250,6 @@ BOOL unrolled, BOOL preserve_loop_index)
     }
     Separate_And_Update(in_loop, loop, 1, FALSE);
     WN* new_loop=WN_next(in_loop);
-
-    // Assign Prompf Ids for outermost loop
-    // Add Prompf transaction record for post-loop peeling
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT old_outer_id = WN_MAP32_Get(Prompf_Id_Map, in_loop);
-      INT new_outer_id = New_Construct_Id();
-      WN_MAP32_Set(Prompf_Id_Map, new_loop, new_outer_id); 
-      INT nloops = st_old.Elements();
-      if (nloops >= 0) { 
-	INT* old_ids = CXX_NEW_ARRAY(INT, nloops + 1, &LNO_local_pool);
-	INT* new_ids = CXX_NEW_ARRAY(INT, nloops + 1, &LNO_local_pool);
-	old_ids[0] = old_outer_id;
-	new_ids[0] = new_outer_id;
-	for (INT i = 1; i < nloops + 1; i++) {
-	  old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i-1));
-	  new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i-1));
-	}
-	Prompf_Info->Post_Peel(old_ids, new_ids, nloops + 1);
-      } 
-    }
 
     scalar_rename(WN_start(new_loop));
     Get_Do_Loop_Info(new_loop)->Est_Num_Iterations= -1;
@@ -3398,28 +3322,6 @@ BOOL unrolled, BOOL preserve_loop_index)
           !adg->Add_Deps_To_Copy_Block(new_iter[0],new_iter[i], FALSE)) {
         out_of_edge=TRUE;
         LWN_Update_Dg_Delete_Tree(new_iter[i], adg);
-      }
-    }
-
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      STACK<WN*> st_old(&LNO_local_pool);
-      STACK<WN*> st_new(&LNO_local_pool);
-      for (INT i = 1; i <= iter_count; i++) {
-        st_old.Clear();
-        st_new.Clear();
-        Prompf_Assign_Ids(new_iter[0], new_iter[i], &st_old, &st_new, FALSE);
-        INT nloops = st_old.Elements();
-	if (nloops > 0) { 
-	  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	  INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-	  for (INT i = 0; i < nloops; i++) {
-	    old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i));
-	    new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i));
-	  }
-	  Prompf_Info->Post_Peel(old_ids, new_ids, nloops);
-	  CXX_DELETE_ARRAY(old_ids, &LNO_local_pool);
-	  CXX_DELETE_ARRAY(new_ids, &LNO_local_pool);
-        } 
       }
     }
 
@@ -4189,24 +4091,6 @@ static void Fusion_Loop_Stmt_Update(
   }
 
   MEM_POOL_Pop(&FUSION_default_pool);
-}
-
-static void Prompf_Record_Eliminations(WN* wn_tree)
-{
-  if (wn_tree == NULL)
-    return;
-  INT map_id = WN_MAP32_Get(Prompf_Id_Map, wn_tree);
-  if (WN_opcode(wn_tree) == OPC_DO_LOOP && map_id != 0) {
-    Prompf_Info->Elimination(map_id);
-    WN_MAP32_Set(Prompf_Id_Map, wn_tree, 0);
-  }
-  if (WN_operator(wn_tree) == OPR_BLOCK) {
-    for (WN* wn = WN_first(wn_tree); wn != NULL; wn = WN_next(wn))
-      Prompf_Record_Eliminations(wn);
-  } else {
-    for (INT i = 0; i < WN_kid_count(wn_tree); i++)
-      Prompf_Record_Eliminations(WN_kid(wn_tree, i));
-  }
 }
 
 // Remove conditional branches in the given WHIRL tree whose condition expressions can be
@@ -5348,18 +5232,6 @@ WN** epilog_loop_out, mINT32 offset_out[])
   // and put the inner loop of in_loop2 right after the inner loop
   // of in_loop1
     
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT old_ids[2]; 
-    for (i = fusion_level - 2; i >= 0; i--) {
-      old_ids[0] = WN_MAP32_Get(Prompf_Id_Map, loop_nest1[i]); 
-      old_ids[1] = WN_MAP32_Get(Prompf_Id_Map, loop_nest2[i]);
-      INT new_id = WN_MAP32_Get(Prompf_Id_Map, loop_nest1[i]); 
-      // Avoid generating a separate ELIMINATION transaction. 
-      WN_MAP32_Set(Prompf_Id_Map, loop_nest2[i], 0); 
-      Prompf_Info->Fusion(old_ids, new_id); 
-    }
-  }
-    
   for (i=fusion_level-2; i>=0; i--) {
     //LWN_Extract_From_Block(WN_do_body(loop_nest2[i]));
     LWN_Insert_Block_Before(LWN_Get_Parent(loop_nest1[i+1]),
@@ -5496,16 +5368,6 @@ WN** epilog_loop_out, mINT32 offset_out[])
   DO_LOOP_INFO *loop_info2 = 
 	        (DO_LOOP_INFO *)WN_MAP_Get(LNO_Info_Map, inner_loop2);
 
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT old_ids[2]; 
-    old_ids[0] = WN_MAP32_Get(Prompf_Id_Map, inner_loop1);
-    old_ids[1] = WN_MAP32_Get(Prompf_Id_Map, inner_loop2);
-    INT new_id = WN_MAP32_Get(Prompf_Id_Map, inner_loop1); 
-    // Avoid generating a separate ELIMINATION transaction. 
-    WN_MAP32_Set(Prompf_Id_Map, inner_loop2, 0); 
-    Prompf_Info->Fusion(old_ids, new_id);  
-  }
-
   // TODO: find proper way to delete inner_loop2
   LWN_Delete_Tree(WN_start(inner_loop2));
   LWN_Delete_Tree(WN_step(inner_loop2));
@@ -5521,9 +5383,6 @@ WN** epilog_loop_out, mINT32 offset_out[])
       LWN_Copy_Tree(WN_kid0(WN_start(inner_loop1))),
       LWN_Copy_Tree(WN_kid1(WN_end(inner_loop1))))) {
 	if (WN_opcode(wn) == OPC_U4INTCONST && WN_const_val(wn) == 0) {
-
-	  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-	    Prompf_Record_Eliminations(inner_loop1); 
 
 	  WN* tmp=LWN_Copy_Tree(WN_start(inner_loop1),TRUE,LNO_Info_Map);
           if (!Array_Dependence_Graph->

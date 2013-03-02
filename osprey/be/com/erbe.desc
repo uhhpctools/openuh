@@ -274,7 +274,7 @@ ERROR_DESC EDESC_BE[] = {
     3, ET_STRING, ET_INT, ET_STRING, 0,0,0 },
 
   { EC_Uninitialized,	EM_User | ES_WARNING, RAG_EN_NONE,
-    "Variable %s in fucntion %s might be used uninitialized",
+    "Variable %s in function %s might be used uninitialized",
     2, ET_STRING, ET_STRING, 0,0,0,0 },
 
   /* DRA cloning errors */

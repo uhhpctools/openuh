@@ -1267,8 +1267,8 @@ Exp_Ldst (
 	                        STB_section(base_sym) /* bug 10097 */)) ){
 	  FmtAssert(!ST_is_thread_local(base_sym),
 		    ("Exp_Ldst: thread-local storage NYI under PIC"));
-	  TN* tmp = base_ofst == 0 ? tn : Build_TN_Like(tn);
-	  Build_OP( TOP_ld32, tmp, Ebx_TN(),
+          TN* tmp = base_ofst == 0 ? tn : Build_TN_Like(tn);
+          Build_OP( TOP_ld32, tmp, Ebx_TN(),
 		    Gen_Symbol_TN( base_sym, 0, TN_RELOC_IA32_GOT ),
 		    &newops );
 	  // got address should not alias
@@ -1664,8 +1664,9 @@ void Exp_Deposit_Bits2(TYPE_ID rtype, TYPE_ID desc, UINT bit_offset, UINT bit_si
     		  FALSE, ops );
   }
 
-  Expand_Binary_And( tgt_tn, tmp2_tn, src1_tn, rtype, ops );
-  Expand_Binary_Or( tgt_tn, tgt_tn, tmp1_tn, rtype, ops );
+  TN* tmp = Build_TN_Like(tgt_tn);
+  Expand_Binary_And( tmp, tmp2_tn, src1_tn, rtype, ops );
+  Expand_Binary_Or( tgt_tn, tmp, tmp1_tn, rtype, ops );
 }
 
 /* ======================================================================

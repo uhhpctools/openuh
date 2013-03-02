@@ -44,12 +44,12 @@
 ***
 ***  Exported functions: 
 ***
-***   void WB_OMP_Initialize(WN* global_fd, INT sanity_check_level)
+***   void WB_LNO_Initialize(WN* global_fd, INT sanity_check_level)
 ***
 ***	Initializes the whirl browser to operated on the program unit 
 ***     'global_fd' and sets the 'sanity_check_level'. 
 ***
-***   void WB_OMP_Terminate();
+***   void WB_LNO_Terminate();
 ***
 ***     Makes the whirl browser inoperative. 
 ***

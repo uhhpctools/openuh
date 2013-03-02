@@ -99,8 +99,6 @@ static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.inner_
 #include "tlog.h" 
 #include "sxlist.h"
 #include "sxlimit.h"
-#include "prompf.h"
-#include "anl_driver.h"
 
 typedef HASH_TABLE<WN*,VINDEX16> WN2VINDEX;
 typedef HASH_TABLE<WN*,UINT> WN2UINT;
@@ -1000,14 +998,6 @@ static void separate_loop_and_scalar_expand(
     WN* tile_loop = NULL; 
     if (need_expansion && !Get_Trace(TP_LNOPT, TT_LNO_BIG_SCALAR_TILES)) {
       tile_loop = SE_Tile_Inner_Loop(loop, &LNO_default_pool);
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-	if (tile_loop != NULL) { 
-	  INT old_id = WN_MAP32_Get(Prompf_Id_Map, loop); 
-	  INT new_id = New_Construct_Id(); 
-	  WN_MAP32_Set(Prompf_Id_Map, tile_loop, new_id); 
-	  Prompf_Info->Se_Tile(old_id, new_id); 
-	} 
-      }
     }
 
     while (!se_stack.Is_Empty()) {
@@ -1044,7 +1034,6 @@ static void separate_loop_and_scalar_expand(
     wn_steps[0]=WN_kid0(WN_step(tmp_loop1));
     new_loops[0]=loop;
     WN* stmt=WN_first(body);
-    PROMPF_LINES* old_lines = NULL; 
     for (i=0; i<total_loops-1; i++) {
   
       INT size=loop_size[i];
@@ -1070,24 +1059,6 @@ static void separate_loop_and_scalar_expand(
 
       tmp_loop1=tmp_loop2;
     }
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-      INT old_id = WN_MAP32_Get(Prompf_Id_Map, new_loops[0]); 
-      PROMPF_LINES* old_lines = CXX_NEW(PROMPF_LINES(new_loops[0], 
-	&PROMPF_pool), &PROMPF_pool); 
-      INT* new_ids = CXX_NEW_ARRAY(INT, total_loops - 1, &PROMPF_pool); 
-      PROMPF_LINES** new_lines = CXX_NEW_ARRAY(PROMPF_LINES*, total_loops - 1,
-	&PROMPF_pool); 
-      INT i;
-      for (i = 0; i < total_loops - 1; i++) {
- 	new_ids[i] = New_Construct_Id(); 	
-	WN_MAP32_Set(Prompf_Id_Map, new_loops[i + 1], new_ids[i]); 
-      }
-      for (i = 0; i < total_loops - 1; i++) 
-        new_lines[i] = CXX_NEW(PROMPF_LINES(new_loops[i + 1], &PROMPF_pool), 
-	  &PROMPF_pool);  
-      Prompf_Info->Inner_Fission(old_id, old_lines, new_ids, new_lines, 
-        total_loops - 1);  
-    } 
 
     Fission_DU_Update(Du_Mgr,red_manager,wn_starts,wn_ends,wn_steps,
       total_loops,new_loops);

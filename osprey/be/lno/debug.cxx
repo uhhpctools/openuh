@@ -94,7 +94,6 @@
 #include "snl_dist.h"
 #include "mat.h"
 #include "lu_mat.h"
-#include "prompf.h"
 #include "wb_util.h"
 #include "wb_carray.h"
 #include "wb_buffer.h"
@@ -481,8 +480,6 @@ static void WB_Set_Map_Id();
 static void WB_Map_Id(); 
 static void WB_private(); 
 static void WB_vset_node(); 
-static void WB_Prompf_Map(); 
-static void WB_Prompf_Info(); 
 static void WB_davinci(); 
 static void WB_help(); 
 
@@ -525,8 +522,6 @@ static WB_CHAR_FUNCPTR Command_List[] =
   'B', FALSE, "Print the scratch register with this number", 	WB_scratch, 
   '.', TRUE,  "Execute the previous command", 			WB_last_command,
   'Y', TRUE,  "Print the reshaped-ref map for array nodes",     WB_RR_Map,
-  'i', TRUE,  "Print the PROMPF ids for tree at this node",     WB_Prompf_Map, 
-  'I', TRUE,  "Print the PROMPF_INFO",				WB_Prompf_Info,
   'M', TRUE,  "Set the current node to node with this map id",  WB_Set_Map_Id, 
   'm', TRUE,  "Print the map-id at this node", 			WB_Map_Id, 
   'p', TRUE,  "Print the privatization info at this node",      WB_private, 
@@ -659,8 +654,6 @@ static void this_node(WN* wn,
   if (fancy >= 3) 
     if (OPCODE_has_next_prev(WN_opcode(wn)))
       fprintf(stdout, "(%d) ", Srcpos_To_Line(WN_linenum(wn))); 
-  if (fancy >= 3 && Prompf_Info != NULL) 
-    fprintf(stdout, "<%d> ", WN_MAP32_Get(Prompf_Id_Map, wn));
   if (WN_operator(wn) == OPR_INTCONST) {
     fprintf(stdout, "%lld ", WN_const_val(wn)); 
   } else { 
@@ -1895,48 +1888,6 @@ static void WB_RR_Map()
 } 
 
 //-----------------------------------------------------------------------
-// NAME: WB_Prompf_Map
-// WHIRL BROWSER COMMAND: 'i'
-// FUNCTION: Print the PROMPF ids for tree at this node            
-//-----------------------------------------------------------------------
-
-static void WB_Prompf_Map()  
-{ 
-  if (Prompf_Id_Map == WN_MAP_UNDEFINED) { 
-    Error_Cleanup();
-    return; 
-  } 
-  INT node_count = 0; 
-  LWN_ITER* itr = LWN_WALK_TreeIter(cnode); 
-  for (; itr != NULL; itr = LWN_WALK_TreeNext(itr)) {
-    WN* wn = itr->wn; 
-    INT32 map_id = WN_MAP32_Get(Prompf_Id_Map, wn); 
-    if (map_id != 0) { 
-      fprintf(stdout, "[%d] %3d ", node_count, map_id); 
-      print_this_node(wn);   
-      if (node_count < MAX_SAVED_NODES)
-        carray[node_count++] = wn;  
-    }
-  }
-  carray_max = node_count; 
-} 
-
-//-----------------------------------------------------------------------
-// NAME: WB_Prompf_Info
-// WHIRL BROWSER COMMAND: 'I'
-// FUNCTION: Print the PROMPF_INFO
-//-----------------------------------------------------------------------
-
-static void WB_Prompf_Info()
-{
-  if (!(Prompf_Info != NULL)) {
-    Error_Cleanup();
-    return;
-  }
-  Prompf_Info->Print(stdout);  
-}
-
-//-----------------------------------------------------------------------
 // NAME: WB_node_deps
 // WHIRL BROWSER COMMAND: 'G'
 // FUNCTION: Print the node dep graph info at the current node
@@ -2818,23 +2769,12 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
 	? Get_Do_Loop_Info(wn, TRUE) : NULL;
       if (dli == NULL) {
 	const char *name = WB_Whirl_Symbol(wn);
-	if (Prompf_Id_Map != WN_MAP_UNDEFINED) { 
-	  fprintf(fp, "[%d] 0x%p DOLOOP (%d) <%d> %s\n", loop_count, wn,  
-	    Srcpos_To_Line(WN_linenum(wn)), WN_MAP32_Get(Prompf_Id_Map, wn), name);
-	} else { 
-	  fprintf(fp, "[%d] 0x%p DOLOOP (%d) %s\n", loop_count, wn,  
-	    Srcpos_To_Line(WN_linenum(wn)), name);
-	} 
+        fprintf(fp, "[%d] 0x%p DOLOOP (%d) %s\n", loop_count, wn,
+          Srcpos_To_Line(WN_linenum(wn)), name);
       } else {  
 	const char *name = WB_Whirl_Symbol(wn); 
-	if (Prompf_Info != NULL) {
-	  fprintf(fp, "[%d] 0x%p DOLOOP %d (%d) <%d> %s\n", loop_count, wn,  
-	    dli->Depth, Srcpos_To_Line(WN_linenum(wn)), WN_MAP32_Get(Prompf_Id_Map, wn), 
-	    name);
-	} else { 
-	  fprintf(fp, "[%d] 0x%p DOLOOP %d (%d) %s\n", loop_count, 
-	    wn, dli->Depth, Srcpos_To_Line(WN_linenum(wn)), name);
-	} 
+        fprintf(fp, "[%d] 0x%p DOLOOP %d (%d) %s\n", loop_count,
+          wn, dli->Depth, Srcpos_To_Line(WN_linenum(wn)), name);
       } 
       if (loop_count < MAX_SAVED_NODES) 
 	carray[loop_count++] = wn; 
@@ -2843,13 +2783,8 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
     break; 
   case OPC_FUNC_ENTRY: 
     dump_spaces(fp, spaces);
-    if (Prompf_Info != NULL) { 
-      fprintf(fp, "[%d] 0x%p FUNC_ENTRY <%d> %s\n", loop_count, wn, 
-	WN_MAP32_Get(Prompf_Id_Map, wn), WB_Whirl_Symbol(wn));
-    } else { 
-      fprintf(fp, "[%d] 0x%p FUNC_ENTRY %s\n", loop_count, wn, 
-	WB_Whirl_Symbol(wn));
-    } 
+    fprintf(fp, "[%d] 0x%p FUNC_ENTRY %s\n", loop_count, wn,
+      WB_Whirl_Symbol(wn));
     if (loop_count < MAX_SAVED_NODES) 
       carray[loop_count++] = wn; 
     dump_loops(WN_func_body(wn), fp, spaces + increment, increment);
@@ -2901,12 +2836,7 @@ extern void dump_loops(WN* wn, FILE* fp, INT spaces, INT increment)
   case OPC_REGION:
     if (fancy >= 3) {
       dump_spaces(fp, spaces);
-      if (Prompf_Info != NULL) { 
-        fprintf(fp, "[%d] 0x%p REGION <%d>\n", loop_count, wn, 
-          WN_MAP32_Get(Prompf_Id_Map, wn));
-      } else { 
-        fprintf(fp, "[%d] 0x%p REGION \n", loop_count, wn);
-      } 
+      fprintf(fp, "[%d] 0x%p REGION \n", loop_count, wn);
       if (loop_count < MAX_SAVED_NODES)
 	carray[loop_count++] = wn;
       for (INT i = 0; i < WN_kid_count(wn); i++) 

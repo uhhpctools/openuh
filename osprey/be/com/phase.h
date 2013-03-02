@@ -64,7 +64,6 @@ typedef enum {
     PHASE_W2C,	                    /* whirl2c */
     PHASE_W2F,	                    /* whirl2f */
     PHASE_IPL,			    /* ipl */
-    PHASE_PROMPF,	            /* writing a prompf analysis file */
     PHASE_COUNT
 } BE_PHASES;
 

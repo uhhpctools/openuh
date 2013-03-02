@@ -886,7 +886,8 @@ if test $gcc_cv_prog_makeinfo_modern = no; then
 *** Info documentation will not be built.])
   BUILD_INFO=
 else
-  BUILD_INFO=info
+  # KEY: Don't build doc.
+  BUILD_INFO= #info
 fi
 AC_SUBST(BUILD_INFO)
 
@@ -894,7 +895,8 @@ AC_SUBST(BUILD_INFO)
 AC_MSG_CHECKING([for recent Pod::Man])
 if (perl -e 'use 1.10 Pod::Man') >/dev/null 2>&1; then
   AC_MSG_RESULT(yes)
-  GENERATED_MANPAGES=generated-manpages
+  # KEY: Don't build man pages.
+  GENERATED_MANPAGES= #generated-manpages
 else
   AC_MSG_RESULT(no)
   GENERATED_MANPAGES=
@@ -2081,6 +2083,7 @@ gcc_GAS_CHECK_FEATURE([.hidden], gcc_cv_as_hidden,
 [	.hidden foobar
 foobar:])
 
+ld_ver_gold=
 AC_CACHE_CHECK(linker for .hidden support, gcc_cv_ld_hidden,
 [if test $in_tree_ld = yes ; then
   gcc_cv_ld_hidden=no
@@ -2105,7 +2108,12 @@ changequote(,)dnl
     ld_vers_major=`expr "$ld_vers" : '\([0-9]*\)'`
     ld_vers_minor=`expr "$ld_vers" : '[0-9]*\.\([0-9]*\)'`
     ld_vers_patch=`expr "$ld_vers" : '[0-9]*\.[0-9]*\.\([0-9]*\)'`
-    if test 0"$ld_date" -lt 20020404; then
+    ld_ver_gold=`expr "$ld_ver" : '.* \(gold\) '`
+    if test "$ld_ver_gold" = gold; then
+	# The above patterns do not correctly parse the version string of the Gold linker.
+	# We assume that Gold linker supports the .hidden attribute.
+	gcc_cv_ld_hidden=yes
+    elif test 0"$ld_date" -lt 20020404; then
       if test -n "$ld_date"; then
 	# If there was date string, but was earlier than 2002-04-04, fail
 	gcc_cv_ld_hidden=no
@@ -2135,6 +2143,9 @@ changequote([,])dnl
     esac
   fi
 fi])
+if test "$ld_ver_gold" = gold; then
+  AC_MSG_WARN(assuming gold linker supports hidden attribute)
+fi
 libgcc_visibility=no
 AC_SUBST(libgcc_visibility)
 GCC_TARGET_TEMPLATE([HAVE_GAS_HIDDEN])

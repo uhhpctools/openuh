@@ -831,10 +831,16 @@ GS_LOOKUP_BITS (GS_DECL_FLAG2, gs_decl_visibility, GS_DECL_VISIBILITY, GS_DECL_V
 GS_UPDATE_BITS (GS_DECL_FLAG2, gs_set_decl_visibility, GS_DECL_VISIBILITY, GS_DECL_VISIBILITY_BITS)
 
 static inline gs_string_t gs_decl_source_file (gs_t t) {
+  if (gs_operand (t, GS_DECL_SOURCE_FILE) != NULL)
   return gs_s (gs_operand (t, GS_DECL_SOURCE_FILE));
+  else
+    return NULL;
 }
 static inline gs_int_t gs_decl_source_line (gs_t t) {
+  if (gs_operand (t, GS_DECL_SOURCE_LINE) != NULL)
   return gs_n (gs_operand (t, GS_DECL_SOURCE_LINE));
+  else
+    return -1;
 }
 GS_LOOKUP (gs_type_size, GS_TYPE_SIZE)
 GS_LOOKUP (gs_type_size_unit, GS_TYPE_SIZE_UNIT)

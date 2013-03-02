@@ -503,18 +503,21 @@ DST_end_PU(void)
 DST_INFO_IDX 
 DST_mk_inlined_subroutine(ST_IDX	low_pc,    /* ptr to front-end label */
 			  ST_IDX	high_pc,   /* ptr to front-end label */
-			  DST_INFO_IDX   abstract_origin)
+			  DST_INFO_IDX  abstract_origin,
+			  DST_TYPE      abstract_dst)
 {
    DST_INFO_IDX            info_idx;
    DST_ATTR_IDX            attr_idx;
    DST_flag                flag = DST_no_flag;
    DST_INLINED_SUBROUTINE *attr;
-   
+   DST_TYPE old_dst = Current_DST;
 
 #if !(defined(_SUPPORT_IPA) || defined(_STANDALONE_INLINER))
    DST_enter_mk(DST_making_dbg_info, last_info_idx);
 #endif
+   Current_DST = abstract_dst;
    DST_check_info_idx(DW_TAG_subprogram, abstract_origin);
+   Current_DST = old_dst;
    
    info_idx = DST_mk_info();
    attr_idx = DST_mk_attr(DST_INLINED_SUBROUTINE);
@@ -523,6 +526,7 @@ DST_mk_inlined_subroutine(ST_IDX	low_pc,    /* ptr to front-end label */
    DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_low_pc (attr)) = low_pc;
    DST_ASSOC_INFO_st_idx(DST_INLINED_SUBROUTINE_high_pc(attr)) = high_pc;
    DST_INLINED_SUBROUTINE_abstract_origin(attr) = abstract_origin;
+   DST_INLINED_SUBROUTINE_abstract_dst(attr) = abstract_dst;
    DST_INLINED_SUBROUTINE_first_child(attr) = DST_INVALID_IDX;
    DST_INLINED_SUBROUTINE_last_child(attr) = DST_INVALID_IDX;
 
@@ -583,7 +587,7 @@ DST_get_ordinal_num(DST_DIR_IDX dir_idx, char *dir_name)
 }
 
 /* get the include directory name of a given ordinal */
-static char *
+char *
 DST_get_dirname(mUINT16 ordinal)
 {
     DST_DIR_IDX d_idx = DST_get_include_dirs();
@@ -694,7 +698,9 @@ DST_mk_cross_inlined_subroutine(
 			  UINT64	fmod_time,	    /* Last file mod time */
    			  USRCPOS      	inl_decl,  	    /* inline routine's source position */
 			  char		*filename,	    /* ptr to filename of the inlined routine */
-			  char 		*dirname)	    /* ptr to directory path of the inlined routine */
+			  char 		*dirname,	    /* ptr to directory path of the inlined routine */
+			  DST_INFO_IDX  abstract_origin,    /* The abstract version of this subroutine */
+			  DST_TYPE      abstract_dst)       /* dst where abstract_origin is located */ 
 		
 {
    DST_INFO_IDX            info_idx;
@@ -702,7 +708,6 @@ DST_mk_cross_inlined_subroutine(
    DST_flag                flag = DST_no_flag;
    DST_INLINED_SUBROUTINE *attr;
    USRCPOS      	   decl;  	/* source position */
-   DST_INFO_IDX  	   abstract_origin = DST_FOREIGN_INIT;
    mUINT16 file_id = 0;
    
    USRCPOS_clear(decl);
@@ -734,6 +739,7 @@ DST_mk_cross_inlined_subroutine(
 
    DST_INLINED_SUBROUTINE_decl(attr) = decl;
    DST_INLINED_SUBROUTINE_abstract_origin(attr) = abstract_origin;;
+   DST_INLINED_SUBROUTINE_abstract_dst(attr) = abstract_dst;
    DST_INLINED_SUBROUTINE_first_child(attr) = DST_INVALID_IDX;
    DST_INLINED_SUBROUTINE_last_child(attr) = DST_INVALID_IDX;
 

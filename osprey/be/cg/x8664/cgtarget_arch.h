@@ -193,7 +193,7 @@ inline BOOL
 CGTARG_Is_OP_Addr_Incr(OP *op)
 {
   const TOP top = OP_code(op);
-  return( (top == TOP_addi32 || top == TOP_addi64 ) &&
+  return( ((Is_Target_32bit() && top == TOP_addi32) || top == TOP_addi64 ) &&
 	  TN_has_value(OP_opnd(op, 1))              &&
 	  (OP_result(op, 0) == OP_opnd(op, 0)));
 }

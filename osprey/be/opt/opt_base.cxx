@@ -158,6 +158,14 @@ MAP::Add_map(POINTER k, POINTER v)
   FmtAssert(map_lst->Val() == v, ("MAP::Add_map: key %d is not unique", k));
 }
 
+// Add value to the map, override existing values.
+void
+MAP::Override_add_map(POINTER k, POINTER v)
+{
+  MAP_LIST *map_lst = Find_map_list(k);
+  map_lst->Set_val(v);
+}
+
 POINTER
 MAP::Get_val(POINTER k)
 {

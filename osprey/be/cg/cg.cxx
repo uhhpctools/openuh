@@ -156,6 +156,11 @@
 #include "edge_profile.h"
 #include "config_opt.h"
 #endif
+#include "cg_cfg.h"
+#include "cgssa_core.h"
+#include "gpo.h"
+
+using namespace CGSSA_NAME;
 
 MEM_POOL MEM_local_region_pool; /* allocations local to processing a region */
 MEM_POOL MEM_local_region_nz_pool;
@@ -1018,6 +1023,11 @@ extern void Generate_Return_Address(void);
     Check_for_Dump ( TP_FIND_GLOB, NULL );
   }
 
+  CFLOW_Optimize(CFLOW_UNREACHABLE, "CFLOW (GPO pass)");
+  CG_PerformGPO(CG_GPO::GPO_Before_RA);
+  GRA_LIVE_Recalc_Liveness(region ? REGION_get_rid( rwn) : NULL);	
+  GRA_LIVE_Rename_TNs();
+
   if (Enable_CG_Peephole) {
     Set_Error_Phase("Extended Block Optimizer");
     Start_Timer(T_EBO_CU);
@@ -1722,7 +1732,7 @@ extern void Generate_Return_Address(void);
 #endif
   IGLS_Schedule_Region (FALSE /* after register allocation */);
   // use cflow to handle branch fusing cmp/jcc for Orochi and greater.
-  if (Is_Target_Orochi() && CG_branch_fuse && !CG_dispatch_schedule) {
+  if (Is_Target_Orochi() && CG_branch_fuse ) {
     CFLOW_Optimize(CFLOW_BR_FUSE, "CFLOW (fifth pass)");
   }
 #endif
@@ -1975,7 +1985,10 @@ extern void Generate_Return_Address(void);
     if (Is_Target_Orochi() == TRUE)
     {
       extern void CG_Sched( MEM_POOL*, BOOL );
-      CG_Sched( &MEM_local_pool, Get_Trace( TP_SCHED, 1 ) );
+      Set_Error_Phase("Dispatch Scheduling");
+      Start_Timer(T_Dispatch_Sched_CU);
+      CG_Sched( &MEM_local_pool, Get_Trace( TP_DSCHED, 1 ) );
+      Stop_Timer(T_Dispatch_Sched_CU);
     }
 #endif
 

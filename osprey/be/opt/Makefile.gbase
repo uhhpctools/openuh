@@ -168,6 +168,7 @@ BE_OPT_CXX_SRCS = \
   opt_reasso.cxx     \
   opt_cfg_trans.cxx	\
   opt_proactive.cxx     \
+  opt_sc.cxx            \
   opt_combine.cxx	\
   opt_cond_const.cxx	\
   opt_count.cxx	        \

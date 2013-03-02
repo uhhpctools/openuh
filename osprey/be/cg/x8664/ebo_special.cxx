@@ -1481,6 +1481,7 @@ Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val,
 #if Is_True_On
   if (!(EBO_Opt_Mask & EBO_CONVERT_IMM_ADD)) return FALSE;
 #endif
+  OP *pred_op = (tninfo) ? tninfo->in_op : NULL;
   OP *new_op = NULL;
   TOP new_opcode;
   BOOL is_64bit = (TN_size(tnr) == 8);
@@ -1557,6 +1558,14 @@ Convert_Imm_Add (OP *op, TN *tnr, TN *tn, INT64 imm_val,
         valid_inc_dec = false;
 
       if (valid_inc_dec == false)
+        return FALSE;
+    }
+
+    if ( simplify_iadd ) {
+      // valid inc/dec conversion with like type input are fold opportunities
+      if ( pred_op && 
+           ( OP_code(op) == OP_code(pred_op) ) && 
+           ( tninfo->reference_count == 1 ) )
         return FALSE;
     }
 
@@ -2728,6 +2737,30 @@ static BOOL move_ext_is_replaced( OP* op, const EBO_TN_INFO* tninfo )
   if( new_op == NULL )
     return FALSE;
 
+  // open64.net bug949. When we do OP changes, we don't
+  // miss the check for movext ops on a byte register.
+  // If the byte register is not addressable under -m32,
+  // We cancel this change.
+
+  if ( Is_Target_32bit() &&
+       EBO_in_peep && 
+       TOP_is_move_ext( OP_code(new_op ))) {
+
+    const TOP check_top = OP_code(new_op);
+    if (check_top == TOP_movsbl ||
+        check_top == TOP_movzbl ||
+        check_top == TOP_movsbq ||
+        check_top == TOP_movzbq ) {
+      const REGISTER reg = TN_register(OP_opnd(new_op, 0));
+      const REGISTER_SET regs =
+        REGISTER_SUBCLASS_members(ISA_REGISTER_SUBCLASS_m32_8bit_regs);
+    
+    if( !REGISTER_SET_MemberP( regs, reg ) )
+      return FALSE;
+    }
+  }
+
+
   Set_OP_unrolling( new_op, OP_unrolling(op) );
   Set_OP_orig_idx( new_op, OP_map_idx(op) );
   Set_OP_unroll_bb( new_op, OP_unroll_bb(op) );
@@ -3507,6 +3540,22 @@ BOOL ICMP_Is_Replaced ( OP *op, TN **opnd_tn, EBO_TN_INFO **opnd_tninfo )
     return FALSE;
   }
 
+  // open64.net bug941. under m32, at ebo post process phase
+  // if the new_top is set to 8bit operator and the GPR is not 8byte addressable 
+  // we disable the change of op.
+  if ( Is_Target_32bit() &&
+       EBO_in_peep &&
+       ( new_top == TOP_cmpi8 ||
+         new_top == TOP_test8 || 
+         new_top == TOP_testi8 ||
+         new_top == TOP_cmp8)) {
+    const REGISTER_SET regs = REGISTER_SUBCLASS_members(ISA_REGISTER_SUBCLASS_m32_8bit_regs);
+    if ( TN_is_register(new_src0) && !REGISTER_SET_MemberP(regs, TN_register(new_src0) )) 
+        return FALSE;
+    if ( TN_is_register(new_src1) && !REGISTER_SET_MemberP(regs, TN_register(new_src1) ))
+        return FALSE;
+  }         
+
   OP* new_op = Mk_OP( new_top, Rflags_TN(), new_src0, new_src1 );
   Set_OP_unrolling( new_op, OP_unrolling ( op ) );
   Set_OP_orig_idx( new_op, OP_map_idx ( op ) );
@@ -3848,7 +3897,7 @@ void Redundancy_Elimination()
       BOOL done = FALSE;
       INT copy_operand = CGTARG_Copy_Operand(op);
       if (copy_operand >= 0) {
-	// Other ops could be rendered uselesss by the shift removal.
+	// Other ops could be rendered useless by the shift removal.
 	// Example:
 	//   TN969 :- srl TN1($0) (0x3) ;
 	//   TN969 :- xor TN969<defopnd> TN916 ; 
@@ -4793,6 +4842,7 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_comisd,	TOP_comixsd,	TOP_comixxsd,	TOP_comixxxsd, 	TOP_UNDEFINED},
   {TOP_vcomiss,	TOP_vcomixss,	TOP_vcomixxss,	TOP_vcomixxxss,	TOP_UNDEFINED},
   {TOP_vcomisd,	TOP_vcomixsd,	TOP_vcomixxsd,	TOP_vcomixxxsd,	TOP_UNDEFINED},
+  // FMA4
   {TOP_vfmaddss,       TOP_vfmaddxss,	    TOP_vfmaddxxss,	  TOP_vfmaddxxxss,          TOP_UNDEFINED},
   {TOP_vfmaddsd,       TOP_vfmaddxsd,	    TOP_vfmaddxxsd,	  TOP_vfmaddxxxsd,          TOP_UNDEFINED},
   {TOP_vfmaddps,       TOP_vfmaddxps,	    TOP_vfmaddxxps,	  TOP_vfmaddxxxps,          TOP_UNDEFINED},
@@ -4833,6 +4883,70 @@ static Addr_Mode_Group Addr_Mode_Group_Table[] = {
   {TOP_UNDEFINED,      TOP_vfnmsubxrsd,     TOP_vfnmsubxxrsd,     TOP_vfnmsubxxxrsd,        TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfnmsubxrps,     TOP_vfnmsubxxrps,     TOP_vfnmsubxxxrps,        TOP_UNDEFINED},
   {TOP_UNDEFINED,      TOP_vfnmsubxrpd,     TOP_vfnmsubxxrpd,     TOP_vfnmsubxxxrpd,        TOP_UNDEFINED},
+  // FMA3: form1
+  {TOP_xfmadd132ss,       TOP_xfmadd132xss,	    TOP_xfmadd132xxss,	  TOP_xfmadd132xxxss,          TOP_UNDEFINED},
+  {TOP_xfmadd132sd,       TOP_xfmadd132xsd,	    TOP_xfmadd132xxsd,	  TOP_xfmadd132xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmadd132ps,       TOP_xfmadd132xps,	    TOP_xfmadd132xxps,	  TOP_xfmadd132xxxps,          TOP_UNDEFINED},
+  {TOP_xfmadd132pd,       TOP_xfmadd132xpd,  	    TOP_xfmadd132xxpd,	  TOP_xfmadd132xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmaddsub132ps,    TOP_xfmaddsub132xps,      TOP_xfmaddsub132xxps, TOP_xfmaddsub132xxxps,       TOP_UNDEFINED},
+  {TOP_xfmaddsub132pd,    TOP_xfmaddsub132xpd,      TOP_xfmaddsub132xxpd, TOP_xfmaddsub132xxxpd,       TOP_UNDEFINED},
+  {TOP_xfmsub132ss,       TOP_xfmsub132xss,	    TOP_xfmsub132xxss,	  TOP_xfmsub132xxxss,          TOP_UNDEFINED},
+  {TOP_xfmsub132sd,       TOP_xfmsub132xsd,	    TOP_xfmsub132xxsd,	  TOP_xfmsub132xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmsub132ps,       TOP_xfmsub132xps,	    TOP_xfmsub132xxps,	  TOP_xfmsub132xxxps,          TOP_UNDEFINED},
+  {TOP_xfmsub132pd,       TOP_xfmsub132xpd,  	    TOP_xfmsub132xxpd, 	  TOP_xfmsub132xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmsubadd132ps,    TOP_xfmsubadd132xps,      TOP_xfmsubadd132xxps, TOP_xfmsubadd132xxxps,       TOP_UNDEFINED},
+  {TOP_xfmsubadd132pd,    TOP_xfmsubadd132xpd,      TOP_xfmsubadd132xxpd, TOP_xfmsubadd132xxxpd,       TOP_UNDEFINED},
+  {TOP_xfnmadd132ss,      TOP_xfnmadd132xss,	    TOP_xfnmadd132xxss,	  TOP_xfnmadd132xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmadd132sd,      TOP_xfnmadd132xsd,	    TOP_xfnmadd132xxsd,	  TOP_xfnmadd132xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmadd132ps,      TOP_xfnmadd132xps,	    TOP_xfnmadd132xxps,	  TOP_xfnmadd132xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmadd132pd,      TOP_xfnmadd132xpd,        TOP_xfnmadd132xxpd,	  TOP_xfnmadd132xxxpd,         TOP_UNDEFINED},
+  {TOP_xfnmsub132ss,      TOP_xfnmsub132xss,	    TOP_xfnmsub132xxss,	  TOP_xfnmsub132xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmsub132sd,      TOP_xfnmsub132xsd,	    TOP_xfnmsub132xxsd,	  TOP_xfnmsub132xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmsub132ps,      TOP_xfnmsub132xps,	    TOP_xfnmsub132xxps,	  TOP_xfnmsub132xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmsub132pd,      TOP_xfnmsub132xpd,        TOP_xfnmsub132xxpd,   TOP_xfnmsub132xxxpd,         TOP_UNDEFINED},
+  // FMA3: form2
+  {TOP_xfmadd213ss,       TOP_xfmadd213xss,	    TOP_xfmadd213xxss,	  TOP_xfmadd213xxxss,          TOP_UNDEFINED},
+  {TOP_xfmadd213sd,       TOP_xfmadd213xsd,	    TOP_xfmadd213xxsd,	  TOP_xfmadd213xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmadd213ps,       TOP_xfmadd213xps,	    TOP_xfmadd213xxps,	  TOP_xfmadd213xxxps,          TOP_UNDEFINED},
+  {TOP_xfmadd213pd,       TOP_xfmadd213xpd,  	    TOP_xfmadd213xxpd,	  TOP_xfmadd213xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmaddsub213ps,    TOP_xfmaddsub213xps,      TOP_xfmaddsub213xxps, TOP_xfmaddsub213xxxps,       TOP_UNDEFINED},
+  {TOP_xfmaddsub213pd,    TOP_xfmaddsub213xpd,      TOP_xfmaddsub213xxpd, TOP_xfmaddsub213xxxpd,       TOP_UNDEFINED},
+  {TOP_xfmsub213ss,       TOP_xfmsub213xss,	    TOP_xfmsub213xxss,	  TOP_xfmsub213xxxss,          TOP_UNDEFINED},
+  {TOP_xfmsub213sd,       TOP_xfmsub213xsd,	    TOP_xfmsub213xxsd,	  TOP_xfmsub213xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmsub213ps,       TOP_xfmsub213xps,	    TOP_xfmsub213xxps,	  TOP_xfmsub213xxxps,          TOP_UNDEFINED},
+  {TOP_xfmsub213pd,       TOP_xfmsub213xpd,  	    TOP_xfmsub213xxpd, 	  TOP_xfmsub213xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmsubadd213ps,    TOP_xfmsubadd213xps,      TOP_xfmsubadd213xxps, TOP_xfmsubadd213xxxps,       TOP_UNDEFINED},
+  {TOP_xfmsubadd213pd,    TOP_xfmsubadd213xpd,      TOP_xfmsubadd213xxpd, TOP_xfmsubadd213xxxpd,       TOP_UNDEFINED},
+  {TOP_xfnmadd213ss,      TOP_xfnmadd213xss,	    TOP_xfnmadd213xxss,	  TOP_xfnmadd213xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmadd213sd,      TOP_xfnmadd213xsd,	    TOP_xfnmadd213xxsd,	  TOP_xfnmadd213xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmadd213ps,      TOP_xfnmadd213xps,	    TOP_xfnmadd213xxps,	  TOP_xfnmadd213xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmadd213pd,      TOP_xfnmadd213xpd,        TOP_xfnmadd213xxpd,	  TOP_xfnmadd213xxxpd,         TOP_UNDEFINED},
+  {TOP_xfnmsub213ss,      TOP_xfnmsub213xss,	    TOP_xfnmsub213xxss,	  TOP_xfnmsub213xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmsub213sd,      TOP_xfnmsub213xsd,	    TOP_xfnmsub213xxsd,	  TOP_xfnmsub213xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmsub213ps,      TOP_xfnmsub213xps,	    TOP_xfnmsub213xxps,	  TOP_xfnmsub213xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmsub213pd,      TOP_xfnmsub213xpd,        TOP_xfnmsub213xxpd,   TOP_xfnmsub213xxxpd,         TOP_UNDEFINED},
+  // FMA3: form3
+  {TOP_xfmadd231ss,       TOP_xfmadd231xss,	    TOP_xfmadd231xxss,	  TOP_xfmadd231xxxss,          TOP_UNDEFINED},
+  {TOP_xfmadd231sd,       TOP_xfmadd231xsd,	    TOP_xfmadd231xxsd,	  TOP_xfmadd231xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmadd231ps,       TOP_xfmadd231xps,	    TOP_xfmadd231xxps,	  TOP_xfmadd231xxxps,          TOP_UNDEFINED},
+  {TOP_xfmadd231pd,       TOP_xfmadd231xpd,  	    TOP_xfmadd231xxpd,	  TOP_xfmadd231xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmaddsub231ps,    TOP_xfmaddsub231xps,      TOP_xfmaddsub231xxps, TOP_xfmaddsub231xxxps,       TOP_UNDEFINED},
+  {TOP_xfmaddsub231pd,    TOP_xfmaddsub231xpd,      TOP_xfmaddsub231xxpd, TOP_xfmaddsub231xxxpd,       TOP_UNDEFINED},
+  {TOP_xfmsub231ss,       TOP_xfmsub231xss,	    TOP_xfmsub231xxss,	  TOP_xfmsub231xxxss,          TOP_UNDEFINED},
+  {TOP_xfmsub231sd,       TOP_xfmsub231xsd,	    TOP_xfmsub231xxsd,	  TOP_xfmsub231xxxsd,          TOP_UNDEFINED},
+  {TOP_xfmsub231ps,       TOP_xfmsub231xps,	    TOP_xfmsub231xxps,	  TOP_xfmsub231xxxps,          TOP_UNDEFINED},
+  {TOP_xfmsub231pd,       TOP_xfmsub231xpd,  	    TOP_xfmsub231xxpd, 	  TOP_xfmsub231xxxpd,          TOP_UNDEFINED},
+  {TOP_xfmsubadd231ps,    TOP_xfmsubadd231xps,      TOP_xfmsubadd231xxps, TOP_xfmsubadd231xxxps,       TOP_UNDEFINED},
+  {TOP_xfmsubadd231pd,    TOP_xfmsubadd231xpd,      TOP_xfmsubadd231xxpd, TOP_xfmsubadd231xxxpd,       TOP_UNDEFINED},
+  {TOP_xfnmadd231ss,      TOP_xfnmadd231xss,	    TOP_xfnmadd231xxss,	  TOP_xfnmadd231xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmadd231sd,      TOP_xfnmadd231xsd,	    TOP_xfnmadd231xxsd,	  TOP_xfnmadd231xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmadd231ps,      TOP_xfnmadd231xps,	    TOP_xfnmadd231xxps,	  TOP_xfnmadd231xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmadd231pd,      TOP_xfnmadd231xpd,        TOP_xfnmadd231xxpd,	  TOP_xfnmadd231xxxpd,         TOP_UNDEFINED},
+  {TOP_xfnmsub231ss,      TOP_xfnmsub231xss,	    TOP_xfnmsub231xxss,	  TOP_xfnmsub231xxxss,         TOP_UNDEFINED},
+  {TOP_xfnmsub231sd,      TOP_xfnmsub231xsd,	    TOP_xfnmsub231xxsd,	  TOP_xfnmsub231xxxsd,         TOP_UNDEFINED},
+  {TOP_xfnmsub231ps,      TOP_xfnmsub231xps,	    TOP_xfnmsub231xxps,	  TOP_xfnmsub231xxxps,         TOP_UNDEFINED},
+  {TOP_xfnmsub231pd,      TOP_xfnmsub231xpd,        TOP_xfnmsub231xxpd,   TOP_xfnmsub231xxxpd,         TOP_UNDEFINED},
+  // end FMA3
   {TOP_icall,	       TOP_icallx,	    TOP_icallxx,	  TOP_icallxxx,	            TOP_UNDEFINED},
   {TOP_ijmp,	       TOP_ijmpx,	    TOP_ijmpxx,	          TOP_ijmpxxx,	            TOP_UNDEFINED},
   {TOP_cvtsd2ss,       TOP_cvtsd2ss_x,	    TOP_cvtsd2ss_xx,	  TOP_cvtsd2ss_xxx,	    TOP_UNDEFINED},
@@ -6036,7 +6150,7 @@ static ST *get_addr_symbol(OP *op)
   WN *mem_wn = (WN*) OP_MAP_Get(OP_to_WN_map, op);
   if (mem_wn) {
     POINTS_TO *pt = Points_to(Alias_Manager, mem_wn);
-    if (pt->Expr_kind() == EXPR_IS_ADDR && pt->Base_kind() == BASE_IS_FIXED) {
+    if (pt->Expr_kind() == EXPR_IS_ADDR && pt->Base_is_fixed()) {
       st = pt->Base();
     } else if (pt->F_param() && pt->Based_sym() != NULL) {
       st = pt->Based_sym();
@@ -7509,6 +7623,8 @@ static void fix_compare_binding (LOOP_DESCR* loop,
 void Counter_Merge (char *Cur_PU_Name) {
   GRA_LIVE_Recalc_Liveness (NULL);
   MEM_POOL loop_descr_pool;
+
+  memset(&loop_descr_pool, 0, sizeof loop_descr_pool);
   MEM_POOL_Initialize(&loop_descr_pool, "loop_descriptors", TRUE);
   MEM_POOL_Push (&loop_descr_pool);
   Calculate_Dominators();
@@ -7540,9 +7656,14 @@ void Counter_Merge (char *Cur_PU_Name) {
       // 
       GTN_SET* otherliveins;
       otherliveins = NULL;
-      MEM_POOL merge_counter_pool;
-      MEM_POOL_Initialize(&merge_counter_pool, 
-            "loop_descriptors", TRUE);
+      static MEM_POOL merge_counter_pool;
+      static BOOL merge_counter_pool_init;
+
+      if (! merge_counter_pool_init) {
+        merge_counter_pool_init = TRUE;
+        MEM_POOL_Initialize(&merge_counter_pool, 
+                            "loop_descriptors", TRUE);
+      }
       MEM_POOL_Push (&merge_counter_pool);
 
       // We collect the live-ins of successors of the loop BBs
@@ -8760,7 +8881,7 @@ BOOL EBO_Opt_Const_Array( OP* mem_op,
     return ret_val;
   }
 
-  if (load_data && load_data->Base()) {
+  if (load_data && load_data->Base_is_fixed()) {
     ST *load_sym = load_data->Base();
 
     // we can only proceed when processing vars
@@ -9055,7 +9176,7 @@ BOOL EBO_Process_SSE5_Load_Execute(TOP new_top,
                                    EBO_TN_INFO** actual_tninfo)
 {
   // use the mul memopnd form if the add form is not present
-  if (idx != 2) {
+  if ((idx != 2) && EBO_Is_FMA4(OP_code(alu_op))) {
     Addr_Mode_Group *group = Top_To_Addr_Mode_Group[new_top];
     new_top = EBO_Reset_Top(group->base_mode, mode);
   }
@@ -9123,6 +9244,186 @@ BOOL EBO_Process_SSE5_Load_Execute(TOP new_top,
   case TOP_vfnmsubxpd:
   case TOP_vfnmsubxxpd:
   case TOP_vfnmsubxxxpd:
+  // FMA3: form1
+  case TOP_xfmadd132xss:
+  case TOP_xfmadd132xxss:
+  case TOP_xfmadd132xxxss:
+  case TOP_xfmadd132xsd:
+  case TOP_xfmadd132xxsd:
+  case TOP_xfmadd132xxxsd:
+  case TOP_xfnmadd132xss:
+  case TOP_xfnmadd132xxss:
+  case TOP_xfnmadd132xxxss:
+  case TOP_xfnmadd132xsd:
+  case TOP_xfnmadd132xxsd:
+  case TOP_xfnmadd132xxxsd:
+  case TOP_xfmadd132xps:
+  case TOP_xfmadd132xxps:
+  case TOP_xfmadd132xxxps:
+  case TOP_xfmadd132xpd:
+  case TOP_xfmadd132xxpd:
+  case TOP_xfmadd132xxxpd:
+  case TOP_xfmaddsub132xps:
+  case TOP_xfmaddsub132xxps:
+  case TOP_xfmaddsub132xxxps:
+  case TOP_xfmaddsub132xpd:
+  case TOP_xfmaddsub132xxpd:
+  case TOP_xfmaddsub132xxxpd:
+  case TOP_xfnmadd132xps:
+  case TOP_xfnmadd132xxps:
+  case TOP_xfnmadd132xxxps:
+  case TOP_xfnmadd132xpd:
+  case TOP_xfnmadd132xxpd:
+  case TOP_xfnmadd132xxxpd:
+  case TOP_xfmsub132xss:
+  case TOP_xfmsub132xxss:
+  case TOP_xfmsub132xxxss:
+  case TOP_xfmsub132xsd:
+  case TOP_xfmsub132xxsd:
+  case TOP_xfmsub132xxxsd:
+  case TOP_xfnmsub132xss:
+  case TOP_xfnmsub132xxss:
+  case TOP_xfnmsub132xxxss:
+  case TOP_xfnmsub132xsd:
+  case TOP_xfnmsub132xxsd:
+  case TOP_xfnmsub132xxxsd:
+  case TOP_xfmsub132xps:
+  case TOP_xfmsub132xxps:
+  case TOP_xfmsub132xxxps:
+  case TOP_xfmsub132xpd:
+  case TOP_xfmsub132xxpd:
+  case TOP_xfmsub132xxxpd:
+  case TOP_xfmsubadd132xps:
+  case TOP_xfmsubadd132xxps:
+  case TOP_xfmsubadd132xxxps:
+  case TOP_xfmsubadd132xpd:
+  case TOP_xfmsubadd132xxpd:
+  case TOP_xfmsubadd132xxxpd:
+  case TOP_xfnmsub132xps:
+  case TOP_xfnmsub132xxps:
+  case TOP_xfnmsub132xxxps:
+  case TOP_xfnmsub132xpd:
+  case TOP_xfnmsub132xxpd:
+  // FMA3: form2
+  case TOP_xfmadd213xss:
+  case TOP_xfmadd213xxss:
+  case TOP_xfmadd213xxxss:
+  case TOP_xfmadd213xsd:
+  case TOP_xfmadd213xxsd:
+  case TOP_xfmadd213xxxsd:
+  case TOP_xfnmadd213xss:
+  case TOP_xfnmadd213xxss:
+  case TOP_xfnmadd213xxxss:
+  case TOP_xfnmadd213xsd:
+  case TOP_xfnmadd213xxsd:
+  case TOP_xfnmadd213xxxsd:
+  case TOP_xfmadd213xps:
+  case TOP_xfmadd213xxps:
+  case TOP_xfmadd213xxxps:
+  case TOP_xfmadd213xpd:
+  case TOP_xfmadd213xxpd:
+  case TOP_xfmadd213xxxpd:
+  case TOP_xfmaddsub213xps:
+  case TOP_xfmaddsub213xxps:
+  case TOP_xfmaddsub213xxxps:
+  case TOP_xfmaddsub213xpd:
+  case TOP_xfmaddsub213xxpd:
+  case TOP_xfmaddsub213xxxpd:
+  case TOP_xfnmadd213xps:
+  case TOP_xfnmadd213xxps:
+  case TOP_xfnmadd213xxxps:
+  case TOP_xfnmadd213xpd:
+  case TOP_xfnmadd213xxpd:
+  case TOP_xfnmadd213xxxpd:
+  case TOP_xfmsub213xss:
+  case TOP_xfmsub213xxss:
+  case TOP_xfmsub213xxxss:
+  case TOP_xfmsub213xsd:
+  case TOP_xfmsub213xxsd:
+  case TOP_xfmsub213xxxsd:
+  case TOP_xfnmsub213xss:
+  case TOP_xfnmsub213xxss:
+  case TOP_xfnmsub213xxxss:
+  case TOP_xfnmsub213xsd:
+  case TOP_xfnmsub213xxsd:
+  case TOP_xfnmsub213xxxsd:
+  case TOP_xfmsub213xps:
+  case TOP_xfmsub213xxps:
+  case TOP_xfmsub213xxxps:
+  case TOP_xfmsub213xpd:
+  case TOP_xfmsub213xxpd:
+  case TOP_xfmsub213xxxpd:
+  case TOP_xfmsubadd213xps:
+  case TOP_xfmsubadd213xxps:
+  case TOP_xfmsubadd213xxxps:
+  case TOP_xfmsubadd213xpd:
+  case TOP_xfmsubadd213xxpd:
+  case TOP_xfmsubadd213xxxpd:
+  case TOP_xfnmsub213xps:
+  case TOP_xfnmsub213xxps:
+  case TOP_xfnmsub213xxxps:
+  case TOP_xfnmsub213xpd:
+  case TOP_xfnmsub213xxpd:
+  // FMA3: form3
+  case TOP_xfmadd231xss:
+  case TOP_xfmadd231xxss:
+  case TOP_xfmadd231xxxss:
+  case TOP_xfmadd231xsd:
+  case TOP_xfmadd231xxsd:
+  case TOP_xfmadd231xxxsd:
+  case TOP_xfnmadd231xss:
+  case TOP_xfnmadd231xxss:
+  case TOP_xfnmadd231xxxss:
+  case TOP_xfnmadd231xsd:
+  case TOP_xfnmadd231xxsd:
+  case TOP_xfnmadd231xxxsd:
+  case TOP_xfmadd231xps:
+  case TOP_xfmadd231xxps:
+  case TOP_xfmadd231xxxps:
+  case TOP_xfmadd231xpd:
+  case TOP_xfmadd231xxpd:
+  case TOP_xfmadd231xxxpd:
+  case TOP_xfmaddsub231xps:
+  case TOP_xfmaddsub231xxps:
+  case TOP_xfmaddsub231xxxps:
+  case TOP_xfmaddsub231xpd:
+  case TOP_xfmaddsub231xxpd:
+  case TOP_xfmaddsub231xxxpd:
+  case TOP_xfnmadd231xps:
+  case TOP_xfnmadd231xxps:
+  case TOP_xfnmadd231xxxps:
+  case TOP_xfnmadd231xpd:
+  case TOP_xfnmadd231xxpd:
+  case TOP_xfnmadd231xxxpd:
+  case TOP_xfmsub231xss:
+  case TOP_xfmsub231xxss:
+  case TOP_xfmsub231xxxss:
+  case TOP_xfmsub231xsd:
+  case TOP_xfmsub231xxsd:
+  case TOP_xfmsub231xxxsd:
+  case TOP_xfnmsub231xss:
+  case TOP_xfnmsub231xxss:
+  case TOP_xfnmsub231xxxss:
+  case TOP_xfnmsub231xsd:
+  case TOP_xfnmsub231xxsd:
+  case TOP_xfnmsub231xxxsd:
+  case TOP_xfmsub231xps:
+  case TOP_xfmsub231xxps:
+  case TOP_xfmsub231xxxps:
+  case TOP_xfmsub231xpd:
+  case TOP_xfmsub231xxpd:
+  case TOP_xfmsub231xxxpd:
+  case TOP_xfmsubadd231xps:
+  case TOP_xfmsubadd231xxps:
+  case TOP_xfmsubadd231xxxps:
+  case TOP_xfmsubadd231xpd:
+  case TOP_xfmsubadd231xxpd:
+  case TOP_xfmsubadd231xxxpd:
+  case TOP_xfnmsub231xps:
+  case TOP_xfnmsub231xxps:
+  case TOP_xfnmsub231xxxps:
+  case TOP_xfnmsub231xpd:
+  case TOP_xfnmsub231xxpd:
     return EBO_Process_SSE5_Load_Exectute_FMA_p1(new_top, mode, base, 
                                                  scale, index, offset, 
                                                  result, ld_op,
@@ -9204,9 +9505,169 @@ BOOL EBO_Process_SSE5_Load_Execute(TOP new_top,
 }
 
 
-BOOL EBO_Is_FMA4( OP* alu_op)
+BOOL EBO_Is_FMA3( TOP top )
+{
+  BOOL ret_val;
+
+  switch (top) {
+  // form1
+  case TOP_xfmadd132ss:
+  case TOP_xfmadd132sd:
+  case TOP_xfmadd132ps:
+  case TOP_xfmadd132pd:
+  case TOP_xfmaddsub132ps:
+  case TOP_xfmaddsub132pd:
+  case TOP_xfmsub132ss:
+  case TOP_xfmsub132sd:
+  case TOP_xfmsub132ps:
+  case TOP_xfmsub132pd:
+  case TOP_xfmsubadd132ps:
+  case TOP_xfmsubadd132pd:
+  // form2
+  case TOP_xfmadd213ss:
+  case TOP_xfmadd213sd:
+  case TOP_xfmadd213ps:
+  case TOP_xfmadd213pd:
+  case TOP_xfmaddsub213ps:
+  case TOP_xfmaddsub213pd:
+  case TOP_xfmsub213ss:
+  case TOP_xfmsub213sd:
+  case TOP_xfmsub213ps:
+  case TOP_xfmsub213pd:
+  case TOP_xfmsubadd213ps:
+  case TOP_xfmsubadd213pd:
+  // form3
+  case TOP_xfmadd231ss:
+  case TOP_xfmadd231sd:
+  case TOP_xfmadd231ps:
+  case TOP_xfmadd231pd:
+  case TOP_xfmaddsub231ps:
+  case TOP_xfmaddsub231pd:
+  case TOP_xfmsub231ss:
+  case TOP_xfmsub231sd:
+  case TOP_xfmsub231ps:
+  case TOP_xfmsub231pd:
+  case TOP_xfmsubadd231ps:
+  case TOP_xfmsubadd231pd:
+    ret_val = TRUE;
+    break;
+  // form1
+  case TOP_xfnmadd132ss:
+  case TOP_xfnmadd132sd:
+  case TOP_xfnmadd132ps:
+  case TOP_xfnmadd132pd:
+  case TOP_xfnmsub132ss:
+  case TOP_xfnmsub132sd:
+  case TOP_xfnmsub132ps:
+  case TOP_xfnmsub132pd:
+  // form2
+  case TOP_xfnmadd213ss:
+  case TOP_xfnmadd213sd:
+  case TOP_xfnmadd213ps:
+  case TOP_xfnmadd213pd:
+  case TOP_xfnmsub213ss:
+  case TOP_xfnmsub213sd:
+  case TOP_xfnmsub213ps:
+  case TOP_xfnmsub213pd:
+  // form3
+  case TOP_xfnmadd231ss:
+  case TOP_xfnmadd231sd:
+  case TOP_xfnmadd231ps:
+  case TOP_xfnmadd231pd:
+  case TOP_xfnmsub231ss:
+  case TOP_xfnmsub231sd:
+  case TOP_xfnmsub231ps:
+  case TOP_xfnmsub231pd:
+    ret_val = TRUE;
+    break;
+
+  default:
+    ret_val = FALSE;
+    break;
+  }
+
+  return ret_val;
+}
+
+
+TOP EBO_Translate_FMA_4_to_3( OP* alu_op )
 {
   const TOP top = OP_code(alu_op);
+  TOP new_top;
+
+  switch (top) {
+  case TOP_vfmaddss:
+    new_top = TOP_xfmadd213ss;
+    break;
+  case TOP_vfmaddsd:
+    new_top = TOP_xfmadd213sd;
+    break;
+  case TOP_vfmaddps:
+    new_top = TOP_xfmadd213ps;
+    break;
+  case TOP_vfmaddpd:
+    new_top = TOP_xfmadd213pd;
+    break;
+  case TOP_vfmaddsubps:
+    new_top = TOP_xfmaddsub213ps;
+    break;
+  case TOP_vfmaddsubpd:
+    new_top = TOP_xfmaddsub213pd;
+    break;
+  case TOP_vfmsubss:
+    new_top = TOP_xfmsub213ss;
+    break;
+  case TOP_vfmsubsd:
+    new_top = TOP_xfmsub213sd;
+    break;
+  case TOP_vfmsubps:
+    new_top = TOP_xfmsub213ps;
+    break;
+  case TOP_vfmsubpd:
+    new_top = TOP_xfmsub213pd;
+    break;
+  case TOP_vfmsubaddps:
+    new_top = TOP_xfmsubadd213ps;
+    break;
+  case TOP_vfmsubaddpd:
+    new_top = TOP_xfmsubadd213pd;
+    break;
+  case TOP_vfnmaddss:
+    new_top = TOP_xfnmadd213ss;
+    break;
+  case TOP_vfnmaddsd:
+    new_top = TOP_xfnmadd213sd;
+    break;
+  case TOP_vfnmaddps:
+    new_top = TOP_xfnmadd213ps;
+    break;
+  case TOP_vfnmaddpd:
+    new_top = TOP_xfnmadd213pd;
+    break;
+  case TOP_vfnmsubss:
+    new_top = TOP_xfnmsub213ss;
+    break;
+  case TOP_vfnmsubsd:
+    new_top = TOP_xfnmsub213sd;
+    break;
+  case TOP_vfnmsubps:
+    new_top = TOP_xfnmsub213ps;
+    break;
+  case TOP_vfnmsubpd:
+    new_top = TOP_xfnmsub213pd;
+    break;
+
+  default:
+    new_top = TOP_UNDEFINED;
+    break;
+  }
+
+  return new_top;
+}
+
+
+BOOL EBO_Is_FMA4( TOP top )
+{
   BOOL ret_val;
 
   switch (top) {
@@ -9243,9 +9704,51 @@ BOOL EBO_Is_FMA4( OP* alu_op)
   return ret_val;
 }
 
-BOOL EBO_Is_FMA4_NEG( OP* alu_op)
+BOOL EBO_Is_FMA3_NEG( TOP top )
 {
-  const TOP top = OP_code(alu_op);
+  BOOL ret_val;
+
+  switch (top) {
+  // form1
+  case TOP_xfnmadd132ss:
+  case TOP_xfnmadd132sd:
+  case TOP_xfnmadd132ps:
+  case TOP_xfnmadd132pd:
+  case TOP_xfnmsub132ss:
+  case TOP_xfnmsub132sd:
+  case TOP_xfnmsub132ps:
+  case TOP_xfnmsub132pd:
+  // form2
+  case TOP_xfnmadd213ss:
+  case TOP_xfnmadd213sd:
+  case TOP_xfnmadd213ps:
+  case TOP_xfnmadd213pd:
+  case TOP_xfnmsub213ss:
+  case TOP_xfnmsub213sd:
+  case TOP_xfnmsub213ps:
+  case TOP_xfnmsub213pd:
+  // form3
+  case TOP_xfnmadd231ss:
+  case TOP_xfnmadd231sd:
+  case TOP_xfnmadd231ps:
+  case TOP_xfnmadd231pd:
+  case TOP_xfnmsub231ss:
+  case TOP_xfnmsub231sd:
+  case TOP_xfnmsub231ps:
+  case TOP_xfnmsub231pd:
+    ret_val = TRUE;
+    break;
+
+  default:
+    ret_val = FALSE;
+    break;
+  }
+
+  return ret_val;
+}
+
+BOOL EBO_Is_FMA4_NEG( TOP top )
+{
   BOOL ret_val;
 
   switch (top) {
@@ -9274,7 +9777,7 @@ static BOOL EBO_Allowable_Unaligned_Vector( OP *alu_op )
   BOOL ret_val;
 
   // no alignment constraint on orochi targets for vector ops
-  if (Is_Target_Orochi() && OP_sse5(alu_op))
+  if (EBO_Is_FMA3(top) || OP_sse5(alu_op))
     return TRUE;
 
   switch (top) {
@@ -9319,50 +9822,64 @@ static void Get_Disassociated_FMA_TOP_Codes( OP *alu_op,
 
   switch (top) {
   // fused multiply-adds
+  case TOP_xfmadd213ss:
   case TOP_vfmaddss:
     new_mul_top = TOP_vmulss; 
     new_arith_top = TOP_vfaddss; 
     break;
+  case TOP_xfmadd213sd:
   case TOP_vfmaddsd:
     new_mul_top = TOP_vmulsd; 
     new_arith_top = TOP_vfaddsd; 
     break;
+  case TOP_xfmadd213ps:
   case TOP_vfmaddps:
     new_mul_top = TOP_vfmul128v32; 
     new_arith_top = TOP_vfadd128v32; 
     break;
+  case TOP_xfmadd213pd:
   case TOP_vfmaddpd:
     new_mul_top = TOP_vfmul128v64; 
     new_arith_top = TOP_vfadd128v64; 
     break;
 
   // fused multiply-addsubs
+  case TOP_xfmaddsub213ps:
   case TOP_vfmaddsubps:
     new_mul_top = TOP_vfmul128v32; 
     new_arith_top = TOP_vfaddsub128v32; 
     break;
+  case TOP_xfmaddsub213pd:
   case TOP_vfmaddsubpd:
     new_mul_top = TOP_vfmul128v64; 
     new_arith_top = TOP_vfaddsub128v64; 
     break;
 
   // fused multiply-subs
+  case TOP_xfnmadd213ss:
   case TOP_vfnmaddss:
+  case TOP_xfmsub213ss:
   case TOP_vfmsubss:
     new_mul_top = TOP_vmulss; 
     new_arith_top = TOP_vsubss; 
     break;
+  case TOP_xfnmadd213sd:
   case TOP_vfnmaddsd:
+  case TOP_xfmsub213sd:
   case TOP_vfmsubsd:
     new_mul_top = TOP_vmulsd; 
     new_arith_top = TOP_vsubsd; 
     break;
+  case TOP_xfnmadd213ps:
   case TOP_vfnmaddps:
+  case TOP_xfmsub213ps:
   case TOP_vfmsubps:
     new_mul_top = TOP_vfmul128v32; 
     new_arith_top = TOP_vfsub128v32; 
     break;
+  case TOP_xfnmadd213pd:
   case TOP_vfnmaddpd:
+  case TOP_xfmsub213pd:
   case TOP_vfmsubpd:
     new_mul_top = TOP_vfmul128v64; 
     new_arith_top = TOP_vfsub128v64; 
@@ -9402,9 +9919,13 @@ static BOOL Is_Benefitial_To_Load_Exec_Float_OP( OP *ld_op, OP *alu_op )
     INT *regs_in_use = (INT*)alloca(sizeof(INT) * (len+1));
     mINT8 fatpoint[ISA_REGISTER_CLASS_MAX+1];
     TN_MAP conflict_map;
+    static MEM_POOL load_exe_pool;
+    static BOOL load_exe_pool_init;
 
-    MEM_POOL load_exe_pool;
-    MEM_POOL_Initialize(&load_exe_pool, "live_range_info", TRUE);
+    if (! load_exe_pool_init) {
+      load_exe_pool_init = TRUE;
+      MEM_POOL_Initialize(&load_exe_pool, "live_range_info", TRUE);
+    }
 
     MEM_POOL_Push(&load_exe_pool);
     LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, &load_exe_pool);
@@ -9430,6 +9951,131 @@ static BOOL Is_Benefitial_To_Load_Exec_Float_OP( OP *ld_op, OP *alu_op )
     }
   }
 
+  return ret_val;
+}
+
+BOOL EBO_Associate_FMA( OP* op, EBO_TN_INFO** actual_tninfo )
+{
+  BOOL ret_val = FALSE;
+  TOP top = OP_code(op);
+
+  if ((EBO_in_peep == FALSE) || 
+      (CG_load_execute == 0) ||
+      (OP_flop(op) == FALSE) ||
+      EBO_Is_FMA3(top) || 
+      EBO_Is_FMA4(top))
+    return ret_val;
+
+  // After register allocation, we have opportunities
+  // to claim back some fma operations if lra did a good
+  // job. We made this easy when disassociation ran, as 
+  // we marked the candidates with the fma top code in the auxcode
+  // field.
+  if (TOP_is_load_exe(top) == FALSE) {
+    TOP aux_top = (TOP)OP_auxcode(op);
+    if (EBO_Is_FMA3(aux_top) || EBO_Is_FMA4(aux_top)) {
+      mUINT8 op_idx = OP_auxidx(op);
+      OP* mul_op = actual_tninfo[op_idx]->in_op;
+      BOOL is_fma3 = EBO_Is_FMA3(aux_top);
+      if(mul_op && OP_fmul(mul_op) &&
+         (actual_tninfo[op_idx]->reference_count == 1) &&
+         (TOP_is_load_exe(OP_code(mul_op)) == FALSE)) {
+        BB *bb = OP_bb(op);
+        TN *mul_opnd1 = OP_opnd(mul_op, 0);
+        TN *mul_opnd2 = OP_opnd(mul_op, 1);
+        TN *arith_opnd;
+        TN *result = OP_result(op, 0);
+        OP *fma_op;
+        BOOL reg_defined = FALSE;
+         
+	// Now check for defs on the mul opnds
+        for (INT i = 0; i< 2; i++) {
+          TN *mul_tn = OP_opnd(mul_op, i);
+          ISA_REGISTER_CLASS reg_cl = TN_register_class(mul_tn);
+          REGISTER reg = TN_register(mul_tn);
+          for( OP *next_op = OP_next(mul_op); next_op != NULL && next_op != op; 
+	       next_op = OP_next( next_op ) ){
+            if (OP_Defs_Reg(next_op, reg_cl, reg)) {
+              reg_defined = TRUE;
+              break;
+            }
+          }
+        }
+
+        // If we found a def on the mul opnds, we cannot proceed
+        if (reg_defined)
+          return ret_val;
+
+        // The mul result and the arith opnd are in different opnds
+        switch(op_idx) {
+        case 0: arith_opnd = OP_opnd(op, 1); break;
+        case 1: arith_opnd = OP_opnd(op, 0); break;
+        }
+
+        // Add a register transfer if mul_opnd1
+        // does not have the same register as the fma result.
+        // We need to preserve destructive dest for fma3.
+        if (is_fma3) {
+          TN *mulresult_tn = OP_result(mul_op,0);
+          REGISTER opnd0_reg = TN_register(mul_opnd1);
+          REGISTER result_reg = TN_register(result);
+          if (opnd0_reg != result_reg) {
+            BOOL swap_needed = FALSE;
+            REGISTER arith_reg = TN_register(arith_opnd);
+            REGISTER opnd1_reg = TN_register(mul_opnd2);
+	    OP *mov_op;
+            // If arith_opnd and result are the same the mul result 
+            // will be different.
+            if (arith_reg == result_reg) {
+              // If mulresult_tn and mul_opnds are the same, we cannot reunify,
+              // register allocation left us nothing to use.
+              if ((TN_register(mulresult_tn) == opnd0_reg) ||
+                  (TN_register(mulresult_tn) == opnd1_reg))
+                return ret_val;
+
+              mov_op = Mk_OP(TOP_movaps, mulresult_tn, arith_opnd);
+              Set_OP_unrolling(mov_op, OP_unrolling(op));
+              Set_OP_orig_idx(mov_op, OP_map_idx(op));
+              Set_OP_unroll_bb(mov_op, OP_unroll_bb(op));
+
+              OP_srcpos( mov_op ) = OP_srcpos( op );
+              BB_Insert_Op_Before( bb, op, mov_op );
+              arith_opnd = mulresult_tn;
+            } else if (opnd1_reg == result_reg) {
+              TN *temp = mul_opnd1;
+              mul_opnd1 = mul_opnd2;
+              mul_opnd2 = temp;
+              swap_needed = TRUE;
+            }
+
+            if (swap_needed == FALSE) {
+              mov_op = Mk_OP(TOP_movaps, result, mul_opnd1);
+              Set_OP_unrolling(mov_op, OP_unrolling(op));
+              Set_OP_orig_idx(mov_op, OP_map_idx(op));
+              Set_OP_unroll_bb(mov_op, OP_unroll_bb(op));
+
+              OP_srcpos( mov_op ) = OP_srcpos( op );
+              BB_Insert_Op_Before( bb, op, mov_op );
+              mul_opnd1 = result;
+            }
+          }
+        }
+
+        fma_op = Mk_OP(aux_top, result, mul_opnd1, mul_opnd2, arith_opnd);
+        Set_OP_unrolling(fma_op, OP_unrolling(op));
+        Set_OP_orig_idx(fma_op, OP_map_idx(op));
+        Set_OP_unroll_bb(fma_op, OP_unroll_bb(op));
+
+        OP_srcpos( fma_op ) = OP_srcpos( op );
+        BB_Insert_Op_After( bb, op, fma_op );
+        OP_Change_Aux_Opcode( op, (mUINT16)OP_auxcode(mul_op), op_idx );
+
+        // Now mark the arith op for deletion and delete the mul op
+        BB_Remove_Op(bb, mul_op);
+        ret_val = TRUE;
+      }
+    }
+  }
   return ret_val;
 }
 
@@ -9463,9 +10109,13 @@ BOOL EBO_Disassociate_FMA( OP* alu_op )
     TN_MAP conflict_map;
     TOP mul_top;
     TOP arith_top;
+    static MEM_POOL fma_exe_pool;
+    static BOOL fma_exe_pool_init;
 
-    MEM_POOL fma_exe_pool;
-    MEM_POOL_Initialize(&fma_exe_pool, "live_range_info", TRUE);
+    if (! fma_exe_pool_init) {
+      fma_exe_pool_init = TRUE;
+      MEM_POOL_Initialize(&fma_exe_pool, "live_range_info", TRUE);
+    }
 
     MEM_POOL_Push(&fma_exe_pool);
     LRA_Estimate_Fat_Points(bb, fatpoint, regs_in_use, &fma_exe_pool);
@@ -9476,53 +10126,71 @@ BOOL EBO_Disassociate_FMA( OP* alu_op )
     INT P_x = REGISTER_CLASS_register_count(ISA_REGISTER_CLASS_float);
     INT local_conflicts = Find_Degree_For_TN(result, regs_in_use);
 
-    TN_MAP_Delete(conflict_map);
-    MEM_POOL_Pop(&fma_exe_pool);
-
     Get_Disassociated_FMA_TOP_Codes( alu_op, &mul_top, &arith_top );
 
     // Chained single use fma instructions produce simple live ranges
     // which are better left in this form.
+    BOOL is_fma3 = EBO_Is_FMA3( OP_code(alu_op) );
     if( Is_TN_Sdsu( result ) ){
       OP *use_op = Find_UseOp_For_TN( result );
-      if( use_op && EBO_Is_FMA4( use_op ) )
-        fma_chained = TRUE;
+      if( use_op ) {
+        TOP use_top = OP_code(use_op);
+        if( EBO_Is_FMA4( use_top ) || EBO_Is_FMA3( use_top ) )
+          fma_chained = TRUE;
+      }
     }
 
     // Now if we successfully mapped a translation, add the new code
-    // for scenarios where we have at least 2 live ranges greater
+    // for scenarios where we have at least 2(5 for fma3) live ranges greater
     // than the number of fp registers, as we will be giving potentially
     // two back from the load exec forms for the new insns.
-    if( ( local_conflicts > ( P_x + 2 ) ) && 
+    INT pressure_seed = is_fma3 ? 5 : 2; 
+    if( ( local_conflicts > ( P_x + pressure_seed ) ) && 
         ( fma_chained == FALSE ) &&
         ( mul_top != TOP_UNDEFINED ) &&
         ( arith_top != TOP_UNDEFINED ) ){
-      TN *mul_result = Build_TN_Like(result);
-      OP *mul_op = Mk_OP( mul_top, mul_result, mul_opnd1, mul_opnd2 );
-      OP *arith_op;
-      if( EBO_Is_FMA4_NEG( alu_op ) )
-        arith_op = Mk_OP( arith_top, result, arith_opnd, mul_result );
-      else
-        arith_op = Mk_OP( arith_top, result, mul_result, arith_opnd );
+      TOP alu_top = OP_code(alu_op);
+      if ( EBO_Is_FMA4( alu_top ) &&
+           Is_Target_FMA() &&
+           ( local_conflicts <= ( P_x + 6) ) ){
+        TOP new_top = EBO_Translate_FMA_4_to_3( alu_op );
+        OP_Change_Opcode( alu_op, new_top );
+        ret_val = FALSE; // we are only changing this op, do not delete it
+      } else {
+        TN *mul_result = Build_TN_Like(result);
+        OP *mul_op = Mk_OP( mul_top, mul_result, mul_opnd1, mul_opnd2 );
+        OP *arith_op;
+        mUINT8 mul_res_idx;
+        if( EBO_Is_FMA4_NEG( alu_top ) || EBO_Is_FMA3_NEG( alu_top) ) {
+          arith_op = Mk_OP( arith_top, result, arith_opnd, mul_result );
+          mul_res_idx = 1;
+        } else {
+          arith_op = Mk_OP( arith_top, result, mul_result, arith_opnd );
+          mul_res_idx = 0;
+        }
 
-      // Add the mul component of the fma
-      Set_OP_unrolling( mul_op, OP_unrolling(alu_op) );
-      Set_OP_orig_idx( mul_op, OP_map_idx(alu_op) );
-      Set_OP_unroll_bb( mul_op, OP_unroll_bb(alu_op) );
+        // Add the mul component of the fma
+        Set_OP_unrolling( mul_op, OP_unrolling(alu_op) );
+        Set_OP_orig_idx( mul_op, OP_map_idx(alu_op) );
+        Set_OP_unroll_bb( mul_op, OP_unroll_bb(alu_op) );
 
-      OP_srcpos( mul_op ) = OP_srcpos( alu_op );
-      BB_Insert_Op_After( bb, alu_op, mul_op );
+        OP_srcpos( mul_op ) = OP_srcpos( alu_op );
+        BB_Insert_Op_After( bb, alu_op, mul_op );
 
-      // Now add the arithmetic (add, sub, addsub or subadd part)
-      Set_OP_unrolling( arith_op, OP_unrolling(alu_op) );
-      Set_OP_orig_idx( arith_op, OP_map_idx(alu_op) );
-      Set_OP_unroll_bb( arith_op, OP_unroll_bb(alu_op) );
+        // Now add the arithmetic (add, sub, addsub or subadd part)
+        Set_OP_unrolling( arith_op, OP_unrolling(alu_op) );
+        Set_OP_orig_idx( arith_op, OP_map_idx(alu_op) );
+        Set_OP_unroll_bb( arith_op, OP_unroll_bb(alu_op) );
+        OP_Change_Aux_Opcode( arith_op, (mUINT16)OP_code(alu_op), mul_res_idx );
 
-      OP_srcpos( arith_op ) = OP_srcpos( alu_op );
-      BB_Insert_Op_After( bb, mul_op, arith_op );
-
-      ret_val = TRUE;
+        OP_srcpos( arith_op ) = OP_srcpos( alu_op );
+        BB_Insert_Op_After( bb, mul_op, arith_op );
+        ret_val = TRUE;
+      }
     }
+
+    TN_MAP_Delete(conflict_map);
+    MEM_POOL_Pop(&fma_exe_pool);
   }
 
   return ret_val;
@@ -9570,7 +10238,7 @@ BOOL EBO_Load_Execution( OP* alu_op,
       opnd0_indx = OP_opnds(alu_op) - 1 - i;
       Is_True( opnd0_indx >= 0, ("NYI") );
     }
-  } else if ( EBO_Is_FMA4(alu_op) ) {
+  } else if( EBO_Is_FMA4( OP_code(alu_op) ) ){
     int i;
     OP *mul_in_op = actual_tninfo[1]->in_op;
     OP *add_sub_in_op2 = actual_tninfo[2]->in_op;
@@ -9611,6 +10279,11 @@ BOOL EBO_Load_Execution( OP* alu_op,
       Is_True( opnd0_indx >= 0, ("NYI") );
     }
   } else {
+    // FMA3 operand selection follows general rules
+    if ( EBO_Is_FMA3(OP_code(alu_op)) ){
+      if (CG_fma3_load_exec == FALSE)
+        return FALSE;
+    }
     for( int i = OP_opnds(alu_op) - 1; i >= 0; i-- ){
       if( TN_is_register( OP_opnd( alu_op, i ) ) ){
         tninfo = actual_tninfo[i];
@@ -9795,6 +10468,11 @@ BOOL EBO_Load_Execution( OP* alu_op,
     return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
   }
 
+  // we only want one reaching use in this block for a cmp peep
+  if( EBO_flow_safe && ( load_uses > 1 ) ) {
+    return Process_Side_Effects(opnd_tn, actual_tninfo, rval, opnds_swapped);
+  }
+
   // If load is volatile, replace with exactly one load-exe OP, in order to
   // maintain the same number of memory accesses.
   if (OP_volatile(ld_op) &&
@@ -9821,7 +10499,8 @@ BOOL EBO_Load_Execution( OP* alu_op,
 
   OP* new_op = NULL;
 
-  if (OP_sse5(alu_op) && EBO_Is_FMA4(alu_op)) {
+  TOP alu_top = OP_code(alu_op);
+  if ((OP_sse5(alu_op) && EBO_Is_FMA4(alu_top)) || EBO_Is_FMA3(alu_top)) {
     // succeed or fail based on layout match
     rval = EBO_Process_SSE5_Load_Execute(new_top, mode, alu_cmp_idx, base,
                                            scale, index, offset,
@@ -11261,7 +11940,7 @@ void expand_strcmp_bb(BB * call_bb) {
 
   set_result = Mk_OP(TOP_sbb32, result, result, result);
   BB_Append_Op(diff_bb, set_result);
-  set_result = Mk_OP(TOP_or32, result, Gen_Literal_TN(1, 8));
+  set_result = Mk_OP(TOP_ori32, result, result, Gen_Literal_TN(1, 8));
   BB_Append_Op(diff_bb, set_result);
   ld_byte1 = Mk_OP(TOP_ld32,arg1,stack_arg1/*arg1*/,Gen_Literal_TN(0, 4));
   ld_byte2 = Mk_OP(TOP_ld32,arg2,stack_arg2/*arg1*/,Gen_Literal_TN(4, 8));

@@ -53,7 +53,6 @@
 #include "dep_graph.h"
 #include "targ_const.h"
 #include "wb_util.h"
-#include "prompf.h"
 #include "lnopt_main.h"
 #include "wb_buffer.h" 
 #include "wb_carray.h" 

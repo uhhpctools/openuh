@@ -416,7 +416,7 @@ next_def:
 	  break;
       }
       if (i == _scalar_def.Elements()) { // is not always defined
-	if (Run_prompf || LNO_Prompl) { 
+	if (LNO_Prompl) { 
           INT j;
 	  for (j = 0; j < _scalar_no_final.Elements(); j++) 
 	    if (_scalar_no_final.Bottom_nth(j) == s_pri->_scalar)
@@ -462,7 +462,7 @@ next_def:
     break_point1:
       
       if (need_last_value) {
-	if (Run_prompf || LNO_Prompl) { 
+	if (LNO_Prompl) { 
           INT j;
 	  for (j = 0; j < _scalar_no_final.Elements(); j++) 
 	    if (_scalar_no_final.Bottom_nth(j) == sn->_scalar)
@@ -723,7 +723,7 @@ void ARA_LOOP_INFO::Determine_Peel()
         INT local_peel = Convex_Peeling_Depth(wn, _loop);
         if (local_peel == -1) { 
 	  peel = -1; 
-	  if (Run_prompf || LNO_Prompl) {  
+	  if (LNO_Prompl) {  
 	    SYMBOL* sym = CXX_NEW(SYMBOL(wn), &ARA_memory_pool); 
 	    Scalar_Bad_Peel().Push(*sym); 
 	    Ln_Scalar_Bad_Peel().Push(WN_Whirl_Linenum(wn)); 
@@ -748,7 +748,7 @@ void ARA_LOOP_INFO::Determine_Peel()
         INT local_peel = Convex_Peeling_Depth(wn, _loop);
         if (local_peel == -1) {
 	  peel = -1; 
-	  if (Run_prompf || LNO_Prompl) {
+	  if (LNO_Prompl) {
 	    Dep_Bad_Peel().Push(SYMBOL(WN_Array_Symbol(wn))); 
 	    Ln_Dep_Bad_Peel().Push(WN_Whirl_Linenum(wn));
 	  } else 

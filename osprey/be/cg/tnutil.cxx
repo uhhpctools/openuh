@@ -181,6 +181,8 @@ TN_NUM Last_TN = 0;
 
 /* TN_number of the last dedicated TN */
 TN_NUM Last_Dedicated_TN = 0;
+/* TN_number of the last distinct dedicated TN*/
+TN_NUM Last_Distinct_Dedicated_TN = 0;
 /* TN_number of the first non-dedicated TN. */
 TN_NUM First_Regular_TN = 0;
 /* TN_number of the first non-dedicated TN in the current REGION. */
@@ -512,6 +514,8 @@ Init_Dedicated_TNs (void)
       ded_tns[rclass][reg] = Create_Dedicated_TN(rclass, reg);
     }
   }
+
+  Last_Distinct_Dedicated_TN = tnum;
 
   /* Initialize the dedicated integer register TNs: */
   Zero_TN = ded_tns[REGISTER_CLASS_zero][REGISTER_zero];

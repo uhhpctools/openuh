@@ -490,7 +490,7 @@ public:
       mUINT32           kid_count   :14; /* gives kid_count for free */
       mINT64            map_id      :30;
       TYPE_ID           desc        : 6;  /* descriptor type */
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
       UINT32            wn_id;            /* unique id for the whirl node */
 #endif
    } common;
@@ -587,7 +587,7 @@ public:
   friend void Check_Traced_Wn_Node(WN *);
   void set_unique_id() {
      the_unique_id++;
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
      common.wn_id = the_unique_id;
 #endif
      Check_Traced_Wn_Node(this);
@@ -688,7 +688,7 @@ public:
   friend inline TYPE_ID     WN_desc (const WN *);
   friend inline void        WN_set_desc (WN *, TYPE_ID);
   friend inline INT32       WN_map_id (const WN *);
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
   friend inline UINT32      WN_id (const WN *);
 #endif
   friend inline TY_IDX      WN_ty (const WN *, const int);
@@ -842,7 +842,7 @@ inline void       WN_set_map_id (WN* wn, INT32 m)
    Check_Traced_Wn_Node(wn);
 #endif
 }
-#ifdef USE_UNIQUE_MAP_ID_FOR_DEBUG
+#ifdef WHIRL_USE_UNIQUE_ID_FOR_DEBUG
 inline UINT32      WN_id (const WN *wn) { return wn->common.wn_id; }
 #endif
 
@@ -1402,6 +1402,9 @@ inline INT64 WN_Get_Linenum(const WN *wn)
 /* Is the loop vectorized in Simd */
 #define WN_LOOP_VECTORIZED	0x10000
 
+/* Is the loop align peeled in Simd */
+#define WN_LOOP_ALIGN_PEELED	0x20000
+
 /* Is the loop an innermost loop */
 #define WN_Loop_Innermost(x)		(WN_loop_flag(x) & WN_LOOP_INNERMOST)
 #define WN_Set_Loop_Innermost(x)	(WN_loop_flag(x) |= WN_LOOP_INNERMOST)
@@ -1474,6 +1477,16 @@ inline INT64 WN_Get_Linenum(const WN *wn)
   (WN_loop_flag(x) |= WN_LOOP_VECTORIZED)
 #define WN_Reset_Vectorized(x) \
   (WN_loop_flag(x) &= ~WN_LOOP_VECTORIZED)
+
+/* Mark the fact that we peeled a loop for alignment so that the optimizer
+ * and code generator can make use it.
+ */
+#define WN_Loop_Align_Peeled(x) \
+  (WN_loop_flag(x) & WN_LOOP_ALIGN_PEELED)
+#define WN_Set_Align_Peeled(x) \
+  (WN_loop_flag(x) |= WN_LOOP_ALIGN_PEELED)
+#define WN_Reset_Align_Peeled(x) \
+  (WN_loop_flag(x) &= ~WN_LOOP_ALIGN_PEELED)
 
 #define WN_LABEL_HANDLER_BEGIN 0x2
 #define WN_Label_Is_Handler_Begin(x)	   (WN_label_flag(x) & \

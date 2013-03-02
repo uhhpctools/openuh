@@ -89,9 +89,17 @@ static char *rcs_id = "$Source: be/lno/SCCS/s.simd.cxx $ $Revision: 1.244 $";
 #include "region_main.h" 	   // for creating new region id.
 #include "lego_util.h"             // for AWN_StidIntoSym, AWN_Add
 #include "minvariant.h"            // for Minvariant_Removal
-#include "prompf.h"
 #include "simd_util.h"
 #include "small_trips.h"           // for Remove_Unity_Trip_Loop
+
+#define simd_util_INCLUDED
+//#include "simd_util.h"
+
+#include <vector>
+#include <set>
+#include <map>
+#include <list>
+#include <deque>
 
 #define ABS(a) ((a<0)?-(a):(a))
 #define BINARY_OP(opr) (opr == OPR_ADD || opr == OPR_SUB || opr == OPR_MPY || opr == OPR_SHL)
@@ -3183,11 +3191,6 @@ static WN* Version_Loop(WN* wn_loop)
   REDUCTION_MANAGER* rm = red_manager;
   WN_MAP version_map = WN_MAP_Create(&LNO_local_pool);
   WN* wn_copy = LWN_Copy_Tree(wn_loop, TRUE, LNO_Info_Map, TRUE, version_map);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    STACK<WN*> st_old(&LNO_local_pool);
-    STACK<WN*> st_new(&LNO_local_pool);
-    Prompf_Assign_Ids(wn_loop, wn_copy, &st_old, &st_new, TRUE);
-  } 
   BOOL all_internal = WN_Rename_Duplicate_Labels(wn_loop, wn_copy,
     Current_Func_Node, &LNO_local_pool);
   Is_True(all_internal, ("external labels renamed"));
@@ -3232,11 +3235,6 @@ static WN* Version_Region(WN* region, WN *wn_loop)
   REDUCTION_MANAGER* rm = red_manager;
   WN_MAP version_map = WN_MAP_Create(&LNO_local_pool);
   WN* region_copy = LWN_Copy_Tree(region, TRUE, LNO_Info_Map, TRUE, version_map);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    STACK<WN*> st_old(&LNO_local_pool);
-    STACK<WN*> st_new(&LNO_local_pool);
-    Prompf_Assign_Ids(region, region_copy, &st_old, &st_new, TRUE);
-  } 
   BOOL all_internal = WN_Rename_Duplicate_Labels(region, region_copy,
     Current_Func_Node, &LNO_local_pool);
   Is_True(all_internal, ("external labels renamed"));
@@ -4300,6 +4298,38 @@ static void Simd_Update_Loop_Info(WN *loop, WN *orig_loop,DO_LOOP_INFO *dli, BOO
     }
 }
 
+static WN *Simd_Align_Generate_Peel_MV_Loops(WN *vloop, DO_LOOP_INFO *dli, ST *first_st)
+{
+  WN *wn_if = NULL;
+  if (first_st &&
+      LNO_Simd_peel_align) {
+    SYMBOL symbol(WN_index(vloop));
+    OPCODE ld_opc = WN_opcode(UBvar(WN_end(vloop)));
+    OPCODE op_lda = OPCODE_make_op(OPR_LDA, Pointer_type, MTYPE_V);
+    WN *wn_lda = WN_CreateLda(op_lda, 0,
+                              Make_Pointer_Type(ST_type(first_st)),
+                              first_st);
+
+    TYPE_ID exp_type = OPCODE_rtype(ld_opc);
+    WN *align_cond = NULL;
+    WN *wn_align_val = LWN_Make_Icon(exp_type, 15);
+    OPCODE and_opc = OPCODE_make_op(OPR_BAND, exp_type, MTYPE_V);
+    WN *wn_and = LWN_CreateExp2(and_opc, wn_lda, wn_align_val);
+    WN *wn_zero = LWN_Make_Icon(exp_type, 0);
+    OPCODE  opeq = OPCODE_make_op(OPR_NE, exp_type, exp_type); 
+    align_cond = LWN_CreateExp2(opeq, wn_and, wn_zero);
+
+    WN *stmt_before_loop = WN_prev(vloop);
+    WN *parent_block = LWN_Get_Parent(vloop);
+    wn_if = Version_Loop(vloop);
+    WN_if_test(wn_if) = align_cond;
+    LWN_Insert_Block_After(parent_block, stmt_before_loop, wn_if);
+    LWN_Parentize(wn_if);
+  }
+
+  return wn_if;
+}
+
 //generate peeled loop for alignment
 static void Simd_Align_Generate_Peel_Loop(WN *vloop, INT best_peel, DO_LOOP_INFO *dli)
 {
@@ -4354,6 +4384,10 @@ static void Simd_Align_Generate_Peel_Loop(WN *vloop, INT best_peel, DO_LOOP_INFO
     Add_Vertices(WN_do_body(ploop));
     adg->Fission_Dep_Update(ploop, 1);
     adg->Fission_Dep_Update(vloop, 1);
+
+    dli->Loop_Align_Peeled = TRUE;
+    DO_LOOP_INFO* peel_dli = Get_Do_Loop_Info (ploop);
+    peel_dli->Loop_Align_Peeled = TRUE;
 }
 
 static INT Simd_Count_Good_Vector(STACK_OF_WN *vec_simd_ops, SIMD_KIND *simd_op_kind)
@@ -6461,9 +6495,101 @@ static void Simd_Finalize_Loops(WN *innerloop, WN *remainderloop, INT vect, WN *
     }
 }
 
+static ST *Build_Sym_Queues( STACK_OF_WN *vec_simd_ops,
+                             std::set<ST*>& counted_load_store_sts,
+                             std::map<ST*,std::deque<WN*> >& symbol_wn_map )
+{
+  INT num_loads = 0;
+
+  if (!LNO_Simd_peel_align)
+    return NULL;
+
+  for (INT i=0; i<vec_simd_ops->Elements(); i++){
+    SIMD_KIND simd_kind = simd_op_kind[i];
+
+    if (simd_kind == INVALID)
+      continue;
+
+    WN *simd_op = vec_simd_ops->Top_nth(i);
+    if ((simd_kind == V16I8) && (WN_rtype(simd_op) == MTYPE_F8)) {
+      for (INT kid = 0; kid < WN_kid_count(simd_op); kid ++) {
+        WN *wn = WN_kid(simd_op, kid);
+        if ((WN_operator(wn) == OPR_LDID) || (WN_operator(wn) == OPR_STID)) {
+          ST *st = WN_st(wn);
+          if ((st != NULL) && (ST_class(st) != CLASS_PREG)) {
+            if (symbol_wn_map[st].empty()) {
+              counted_load_store_sts.insert(st);
+            } 
+            symbol_wn_map[st].push_front(wn);
+          }
+        }
+      }
+    }
+  }
+
+  // Next stop: Prune the sym queues down to a single entry or no entries.
+  ST *largest_st = NULL;
+  std::set<ST*>::const_iterator counted_load_store_sts_it;
+  for (counted_load_store_sts_it = counted_load_store_sts.begin();
+       counted_load_store_sts_it != counted_load_store_sts.end();
+       ++counted_load_store_sts_it) {
+    ST *st = *counted_load_store_sts_it;
+    num_loads += symbol_wn_map[st].size();
+    if (largest_st == NULL)    
+      largest_st = st;
+    else if (symbol_wn_map[largest_st].size() > symbol_wn_map[st].size())
+      largest_st = st;
+  }
+
+  // now remove all the smaller st maps, and do not worry about the race
+  // on the largest, it is sufficient to take the first one
+  for (counted_load_store_sts_it = counted_load_store_sts.begin();
+       counted_load_store_sts_it != counted_load_store_sts.end();
+       ++counted_load_store_sts_it) {
+    ST *st = *counted_load_store_sts_it;
+    if (st != largest_st)
+      symbol_wn_map[st].clear();
+  }
+
+  // Now the final check, what is the ratio of our chosen syms loads vs the total
+  if (largest_st != NULL) {
+    INT best_size = symbol_wn_map[largest_st].size();
+    if (best_size < 3) {
+      // Heuristic: Do not multiversion a vector loop with fewer than 3 
+      // alignable loads.
+      symbol_wn_map[largest_st].clear();
+      largest_st = 0;
+    } else if ((num_loads / best_size) > 3) {
+      // Hueristic: If alignable loads are less than 1/3 of all loads, do
+      // not multiversion the vector loop.
+      symbol_wn_map[largest_st].clear();
+      largest_st = 0;
+    }
+  } else {
+    largest_st = 0;
+  }
+  return largest_st;
+}
+
+static void Clear_Sym_Queues( STACK_OF_WN *vec_simd_ops,
+                              std::set<ST*>& counted_load_store_sts,
+                              std::map<ST*,std::deque<WN*> >& symbol_wn_map )
+{
+  std::set<ST*>::const_iterator counted_load_store_sts_it;
+  for (counted_load_store_sts_it = counted_load_store_sts.begin();
+       counted_load_store_sts_it != counted_load_store_sts.end();
+       ++counted_load_store_sts_it) {
+    ST *st = *counted_load_store_sts_it;
+    symbol_wn_map[st].clear();
+  }
+}
+
 // Vectorize an innerloop
 static INT Simd(WN* innerloop)
 {
+  std::map<ST*,std::deque<WN*> > sym_wn_map;
+  std::set<ST*> counted_load_store_sts;
+
   if (!Simd_vect_conf.Arch_Has_Vect ())
     return 0;
 
@@ -6515,6 +6641,16 @@ static INT Simd(WN* innerloop)
     simd_op_best_align[k] = 
       CXX_NEW_ARRAY(INT,vec_simd_ops->Elements(),&SIMD_default_pool);
   BOOL ubound_variable = Simd_Align_UB_Variable(innerloop);
+
+  INT num_loads = 0;
+  ST *first_st = NULL;
+  if(dli->Loop_Align_Peeled == FALSE){
+    first_st = Build_Sym_Queues(vec_simd_ops, 
+                                 counted_load_store_sts, 
+                                 sym_wn_map);
+    if (first_st)
+      num_loads = sym_wn_map[first_st].size();
+  }
   
   for (INT i=vec_simd_ops->Elements()-1; i >= 0; i--) {
     simd_op=vec_simd_ops->Top_nth(i);
@@ -6577,6 +6713,36 @@ static INT Simd(WN* innerloop)
      Simd_Align_Array_References(vec_simd_ops,simd_op_kind, //align iloads and istores
                      simd_op_best_align,best_peel,innerloop);
   }
+
+  // Emit multiversion loops for peeled alignment
+  if (LNO_Simd_peel_align && (dli->Loop_Align_Peeled == FALSE)) {
+    if (num_loads) {
+      WN *wn_if = Simd_Align_Generate_Peel_MV_Loops(innerloop, dli, first_st);
+      WN *peel_loop = WN_first(WN_then(wn_if));
+
+      Simd_Align_Generate_Peel_Loop(peel_loop, 1, dli);
+      innerloop = WN_first(WN_else(wn_if));
+      dli = Get_Do_Loop_Info (innerloop);
+      // prevent processing this loop complex again the same way
+      dli->Loop_Align_Peeled = TRUE;
+
+      // now simd-ize the new mv loop pair
+      if (Simd(peel_loop)) {
+        WN *loop_info = WN_do_loop_info(peel_loop);
+        WN_Set_Vectorized(loop_info);
+        WN_Set_Align_Peeled(loop_info);
+        if (Simd(innerloop)) {
+          loop_info = WN_do_loop_info(innerloop);
+          WN_Set_Vectorized(loop_info);
+        }
+      }
+      dli->Loop_Align_Peeled = FALSE;
+      Clear_Sym_Queues(vec_simd_ops, counted_load_store_sts, sym_wn_map);
+      MEM_POOL_Pop(&SIMD_default_pool);
+      return 1;
+    }
+  }
+
 //END: Alignment Module
 
 #ifdef Is_True_On //internal debug purpose

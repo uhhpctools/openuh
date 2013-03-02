@@ -39,13 +39,14 @@
 #include <stdint.h>
 
 
-class KEY_SCH {
+class DSP_SCH {
 private:
   MEM_POOL* mem_pool;
   BB* bb;
 
   VECTOR _ready_vector;
-  BOOL trace;
+  bool trace;
+  bool can_sched;
 
   OP* defop_by_reg[ISA_REGISTER_CLASS_MAX+1][REGISTER_MAX+1];
   int Addr_Generation( OP* );
@@ -60,7 +61,7 @@ private:
   OP* Winner( OP*, OP*, int );
   OP* Select_Variable( int );
 
-  void Init( BOOL );
+  void Init();
   void Compute_Insn_Size( OP* );
   void Build_OPR();
   void Build_Ready_Vector();
@@ -71,8 +72,8 @@ private:
   REGISTER_SET avail_reg_set[ISA_REGISTER_CLASS_MAX+1];
 
 public:
-  KEY_SCH( BB*, MEM_POOL*, BOOL, BOOL );
-  ~KEY_SCH() {};
+  DSP_SCH( BB*, MEM_POOL*, bool );
+  ~DSP_SCH() {};
   VECTOR _sched_vector;
 }; 
 

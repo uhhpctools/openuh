@@ -439,6 +439,11 @@ add_targ_options ( string_list_t *args )
   else
     add_string(args, "-TARG:xop=off");
 
+  if (fma == TRUE)
+    add_string(args, "-TARG:fma=on");
+  else
+    add_string(args, "-TARG:fma=off");
+
   if (fma4 == TRUE)
     add_string(args, "-TARG:fma4=on");
   else
@@ -1571,6 +1576,10 @@ add_file_args (string_list_t *args, phases_t index)
 #endif
 		  add_string(args, "-g");	// bug 5990
 		}
+#if defined(TARG_X8664)
+                if (strcmp(target_cpu,"bdver1") == 0 )
+                  add_string(args, "-Wa,-mtune=bdver1");
+#endif
 		if (dashdash_flag)
 		  add_string(args,"--");
 		if (show_but_not_run)
@@ -3099,9 +3108,11 @@ run_ld (void)
 
 	    // Tell ipa_link about the LD_LIBRARY_PATH that was in effect
 	    // before the compiler was run.
-	    str = "-INTERNAL:old_ld_lib_path=";
-	    if (old_ld_library_path)
+	    str = "-INTERNAL:old_ld_lib_path=\"";
+	    if (old_ld_library_path) {
 	      str = concat_strings (str, old_ld_library_path);
+	    }
+	    str = concat_strings (str, "\"");
 	    add_string(args, str);
 
         char *root_prefix = directory_path(get_executable_dir());

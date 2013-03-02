@@ -313,19 +313,9 @@ static const char *W2C_Cite_Extension[W2C_NUM_FILES] =
    //TODO   ".global_data.c", /* initialization input file */
 };
 
-/* ProMPF extensions for input/outfile files: */
-static const char *W2C_Prompf_Extension[W2C_NUM_FILES] = 
-{
-   ".c",	 /* original input file */
-   ".mh",	 /* transformed header file */
-   ".m",	 /* transformed source file */
-   ".anl_srcpos" /* srcpos mapping (temporary) output file */
-};
-
 /* Get the right extension: */
 #define W2C_Extension(i) \
-	(W2C_Prompf_Emission? W2C_Prompf_Extension[i] : \
-	 (List_Cite ? W2C_Cite_Extension[i] : W2C_File_Extension[i]))
+        (List_Cite ? W2C_Cite_Extension[i] : W2C_File_Extension[i])
 
 
 /* statements that can be skipped in w2c translation
@@ -365,8 +355,6 @@ BOOL  W2C_Emit_Omp = FALSE;         /* Force OMP pragmas wherever possible */
 INT32 W2C_Line_Length = 0;   /* Max output line length; zero==default */
 
 /* External data set through the API or otherwise */
-BOOL          W2C_Prompf_Emission = FALSE; /* Emitting prompf xformed sources */
-const WN_MAP *W2C_Construct_Map = NULL;    /* Construct id mapping for prompf */
 WN_MAP        W2C_Frequency_Map = WN_MAP_UNDEFINED; /* Frequency mapping */
 BOOL          W2C_Cplus_Initializer = FALSE; /* Whether to call C++ init */
 
@@ -484,7 +472,7 @@ Process_Filename_Options(const char *src_filename, const char *irb_filename)
    }
    if (W2C_File_Name[W2C_LOC_FILE] == NULL)
    {
-      if (List_Cite || W2C_Prompf_Emission)
+      if (List_Cite)
       {
 	 W2C_File_Name[W2C_LOC_FILE] =
 	    New_Extension(fname, W2C_Extension(W2C_LOC_FILE));
@@ -613,18 +601,9 @@ Begin_New_Locations_File(void)
       /* Need to do this before writing to a file for which a 
        * SRCPOS mapping should be maintained.
        */
-      if (W2C_Prompf_Emission)
-      {
-	 Open_W2c_Output_File(W2C_LOC_FILE);
-	 Write_String(W2C_File[W2C_LOC_FILE], NULL/* No srcpos map */,
-		      "SRCPOS_MAP_BEGIN\n");
-      }
-      else
-      {
-	 Open_W2c_Output_File(W2C_LOC_FILE);
-	 Write_String(W2C_File[W2C_LOC_FILE], NULL/* No srcpos map */,
-		      "(SRCPOS-MAP\n");
-      }
+      Open_W2c_Output_File(W2C_LOC_FILE);
+      Write_String(W2C_File[W2C_LOC_FILE], NULL/* No srcpos map */,
+                   "(SRCPOS-MAP\n");
     }
 } /* Begin_New_Locations_File */
 
@@ -640,18 +619,8 @@ End_Locations_File(void)
       /* Need to do this before writing to a file for which a 
        * SRCPOS mapping should be maintained.
        */
-      if (W2C_Prompf_Emission)
-      {
-	 Open_W2c_Output_File(W2C_LOC_FILE);
-	 Write_String(W2C_File[W2C_LOC_FILE],
-		      NULL/* No srcpos map */,
-		      "SRCPOS_MAP_END\n");
-      }
-      else
-      {
-	 Open_W2c_Output_File(W2C_LOC_FILE);
-	 Write_String(W2C_File[W2C_LOC_FILE], NULL/* No srcpos map */, ")\n");
-      }
+      Open_W2c_Output_File(W2C_LOC_FILE);
+      Write_String(W2C_File[W2C_LOC_FILE], NULL/* No srcpos map */, ")\n");
       Terminate_Token_Buffer(W2C_File[W2C_LOC_FILE]);
       Close_W2c_Output_File(W2C_LOC_FILE);
    }
@@ -669,43 +638,6 @@ Continue_Locations_File(void)
       Open_W2c_Output_File(W2C_LOC_FILE);
    }
 } /* Continue_Locations_File */
-
-
-static void
-Move_Locations_To_Anl_File(const char *loc_fname)
-{
-#define MAX_ANL_FNAME_LENGTH 256-5 /* allow for suffix ".anl\0" */
-   char        cbuf[MAX_ANL_FNAME_LENGTH+1];
-   INT         i, next_ch;
-   FILE       *anl_file;
-   FILE       *loc_file;
-   const char *anl_fname;
-   static char fname[MAX_ANL_FNAME_LENGTH+5];
-
-   strncpy(fname, loc_fname, MAX_ANL_FNAME_LENGTH);
-   anl_fname = Last_Pathname_Component(fname);
-   anl_fname = New_Extension(anl_fname, ".anl");
-   anl_file = Open_Append_File(anl_fname);
-   loc_file = Open_Read_File(loc_fname);
-
-   next_ch = getc(loc_file);
-   while (next_ch != EOF)
-   {
-      for (i = 0; (next_ch != EOF && i < MAX_ANL_FNAME_LENGTH); i++)
-      {
-	 cbuf[i] = next_ch;
-	 next_ch = getc(loc_file);
-      }
-      if (i > 0)
-      {
-	 cbuf[i] = '\0';
-	 fputs(cbuf, anl_file);
-      }
-   }
-   Close_File(anl_fname, anl_file);
-   Close_File(loc_fname, loc_file);
-   unlink(loc_fname);
-} /* Move_Locations_To_Anl_File */
 
 
 /* ====================================================================
@@ -903,7 +835,7 @@ W2C_Init(void)
 
    /* Always do this first!
     */
-   Initialize_Token_Buffer(FREE_FORMAT, W2C_Prompf_Emission);
+   Initialize_Token_Buffer(FREE_FORMAT);
    if (W2C_Line_Length > 0)
       Set_Maximum_Linelength(W2C_Line_Length);
 
@@ -997,14 +929,6 @@ W2C_Pop_PU(void)
 
    W2C_Frequency_Map = WN_MAP_UNDEFINED;
 } /* W2C_Pop_PU */
-
-
-void 
-W2C_Set_Prompf_Emission(const WN_MAP *construct_map)
-{
-   W2C_Prompf_Emission = TRUE;
-   W2C_Construct_Map = construct_map; /* Construct id mapping for prompf */
-} /* W2C_Set_Prompf_Emission */
 
 
 void 
@@ -1283,7 +1207,7 @@ W2C_Outfile_Init(BOOL emit_global_decls)
    W2C_Outfile_Initialized = TRUE;
    if (W2C_Verbose)
    {
-      if (W2C_Prompf_Emission || W2C_File_Name[W2C_LOC_FILE] == NULL)
+      if (W2C_File_Name[W2C_LOC_FILE] == NULL)
 	 fprintf(stderr, 
 		 "%s translates %s into %s and %s, based on source %s\n", 
 		 W2C_Progname,
@@ -1583,13 +1507,6 @@ W2C_Outfile_Fini(BOOL emit_global_decls)
     */
    W2C_Outfile_Initialized = FALSE;
    W2C_Fini(); /* Sets W2C_Initialized to FALSE */
-
-   if (W2C_Prompf_Emission && loc_fname != NULL)
-   {
-      /* Copy the locations file to the .anl file and remove it 
-       */
-      Move_Locations_To_Anl_File(loc_fname);
-   }
 } /* W2C_Outfile_Fini */
 
 

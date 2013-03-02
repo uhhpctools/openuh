@@ -151,8 +151,6 @@
 #include "lego_affinity.h"
 #include "region_util.h"
 #include <alloca.h>
-#include "prompf.h"
-#include "anl_driver.h"
 #include "tile.h"
 #include "be_symtab.h"
 
@@ -3179,16 +3177,6 @@ static WN* Thread_Affinity_Lower (WN* do_wn, SYMBOL* thread_sym, WN* stid_wn) {
                               compare_wn,
                               step_def,
                               WN_CreateBlock());
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, do_wn); 
-    INT new_id = New_Construct_Id();  
-    WN_MAP32_Set(Prompf_Id_Map, do_wn, new_id); 
-    WN_MAP32_Set(Prompf_Id_Map, newdo_wn, old_id); 
-    INT new_ids[1]; 
-    new_ids[0] = new_id; 
-    Prompf_Info->Mp_Tile(old_id, new_ids, 1); 
-  }
 
   LWN_Copy_Linenumber(do_wn, newdo_wn);
   LWN_Copy_Linenumber(do_wn, WN_do_body(newdo_wn));

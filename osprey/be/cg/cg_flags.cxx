@@ -120,6 +120,7 @@ BOOL CG_skip_local_sched = FALSE;
 BOOL CG_skip_local_swp = FALSE;
 #ifdef TARG_X8664
 BOOL CG_cmp_load_exec = FALSE;
+BOOL CG_fma3_load_exec = FALSE;
 BOOL CG_fma4_load_exec = FALSE;
 BOOL CG_128bitstore = TRUE;
 BOOL CG_branch_fuse = TRUE;
@@ -290,7 +291,7 @@ BOOL CG_use_setcc = TRUE;
 BOOL CG_use_short_form = FALSE;
 UINT64 CG_p2align_freq = 10000;
 UINT32 CG_p2align_max_skip_bytes = 3;
-UINT32 CG_movnti = 1000;
+INT32 CG_movnti = 1000;
 BOOL CG_use_incdec = TRUE;
 BOOL CG_use_xortozero = TRUE; // bug 8592
 BOOL CG_use_xortozero_Set = FALSE;
@@ -517,6 +518,7 @@ INT32 CG_p2align = 2;
 #else
 INT32 CG_p2align = 0;
 #endif
+BOOL CG_p2align_split = FALSE;
 BOOL CG_loop32 = FALSE;
 BOOL CG_compute_to = FALSE;
 BOOL CG_valgrind_friendly = TRUE;

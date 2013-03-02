@@ -1,4 +1,5 @@
 # -*- Makefile -*-
+#  Copyright (C) 2010, 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
 #
 #  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
 #
@@ -109,7 +110,7 @@ endif
 # need to define _LONGLONG and _SVR4_SOURCE to allow compilation with -ansi.
 HOSTDEFS += -D_LONGLONG -D_SVR4_SOURCE 
 
-ifeq ($(BUILD_VARIANT), DEBUG)
+ifeq ($(BUILD_FFE_OPTIMIZE), DEBUG)
 HOSTDEFS += -DIs_True_On
 HOSTDEFS += -DInsist_On 
 endif
@@ -170,6 +171,7 @@ TRANS_SRCS = \
 	cwh_pdgcs.cxx  \
 	cwh_preg.cxx   \
 	cwh_types.cxx  \
+	cwh_targ_info.cxx \
 	cwh_stab.cxx   \
 	cwh_stmt.cxx   \
 	cwh_stk.cxx    \
@@ -253,7 +255,7 @@ LCOPTS += $(STD_COMPILE_OPTS) $(STD_C_OPTS)
 LCXXOPTS += $(STD_COMPILE_OPTS)
 
 
-ifeq ($(BUILD_VARIANT), DEBUG)
+ifeq ($(BUILD_FFE_OPTIMIZE), DEBUG)
 LCDEFS += -D_DEBUG
 LCXXDEFS += -D_DEBUG
 endif

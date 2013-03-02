@@ -101,10 +101,6 @@ const static char *rcs_id = "$Source$ $Revision$";
 #include "small_trips.h"
 #include "soe.h"
 #include "cond.h"
-#include "prompf.h"
-#include "anl_driver.h"
-
-#pragma weak New_Construct_Id
 
 static void Transform_Expression(BIT_VECTOR *bv, WN *exp, DOLOOP_STACK *do_stack, INT num_loops, 
 		INT outer_reg_tile, BOOL can_tile);
@@ -895,23 +891,6 @@ static WN *Fission_Statement(WN *statement, DOLOOP_STACK *do_stack, INT num_loop
       }
       Separate_And_Update(fission_loop,loop_list,1,1);
       WN* new_loop = WN_next(fission_loop); 
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-	INT new_id = New_Construct_Id(); 
-        WN_MAP32_Set(Prompf_Id_Map, new_loop, new_id); 
-        INT old_ids[1]; 
-        old_ids[0] = WN_MAP32_Get(Prompf_Id_Map, fission_loop); 
-        INT new_ids[1];
-        new_ids[0] = WN_MAP32_Get(Prompf_Id_Map, new_loop); 
-	PROMPF_LINES** old_lines = CXX_NEW_ARRAY(PROMPF_LINES*, 1, 
-          &PROMPF_pool); 
-        old_lines[0] = CXX_NEW(PROMPF_LINES(fission_loop, &PROMPF_pool),
-	  &PROMPF_pool); 
-	PROMPF_LINES** new_lines = CXX_NEW_ARRAY(PROMPF_LINES*, 1, 
-          &PROMPF_pool); 
-        new_lines[0] = CXX_NEW(PROMPF_LINES(new_loop, &PROMPF_pool),
-	  &PROMPF_pool); 
-        Prompf_Info->Fission(old_ids, old_lines, new_ids, new_lines, 1); 
-      } 
     }
     MEM_POOL_Pop(&LNO_local_pool);
 
@@ -1091,29 +1070,11 @@ static void Scalar_Expansion_Tile(DOLOOP_STACK *do_stack,INT num_loops,
 				&LNO_default_pool);
 	  WN* newloop = Tile_Loop(loop,tile_size,0,SNL_INV_SE_ONLY,sym_pid,
 		&LNO_local_pool);
-          if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-	    INT old_id = WN_MAP32_Get(Prompf_Id_Map, loop); 
-            INT new_id = New_Construct_Id(); 
-	    WN_MAP32_Set(Prompf_Id_Map, newloop, new_id);
-	    Prompf_Info->Se_Tile(old_id, new_id);  
-          } 
 	  permutation[0] = i;
           for (INT j=1; j<=i; j++) {
 	    permutation[j] = j-1;
 	  }
           SNL_INV_Permute_Loops(outer_loop,permutation,i+1,TRUE);
-	  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-            INT* old_ids = CXX_NEW_ARRAY(INT, i+1, &PROMPF_pool); 
-            INT* new_ids = CXX_NEW_ARRAY(INT, i+1, &PROMPF_pool); 
-            INT k;
-	    for (k = 1; k <= i+1; k++) {
-	      WN* wn_loop = SNL_Get_Inner_Snl_Loop(outer_loop, k); 
-              old_ids[k-1] = WN_MAP32_Get(Prompf_Id_Map, wn_loop); 
-            }
-	    for (k = 0; k < i+1; k++) 
-	      new_ids[k] = old_ids[permutation[k]]; 
-	    Prompf_Info->Interchange(old_ids, new_ids, i+1);
-	  }
         }
       }
     }

@@ -286,6 +286,11 @@ COMP_UNIT::Pro_loop_trans()
       if (do_pro_loop_fusion || do_pro_loop_interchange) {
 	pro_loop_trans->Hash_def_cnt_map(sc_root);
 
+	if (dump) {
+	  fprintf(TFile, "\b Before proactive loop transformation\n");
+	  _cfg->Print(TFile, false, (unsigned) -1);
+	}
+
 	if (do_pro_loop_fusion) {
 	  // Start a top-down if-merging.
 	  pro_loop_trans->Set_pass(PASS_GLOBAL);
@@ -320,6 +325,13 @@ COMP_UNIT::Pro_loop_trans()
 	      printf("\n\t Proactive Loop Fusion total:%d\n", 
 		     pro_loop_trans->Transform_count());
 	  }
+
+	  if (dump) {
+	    if (pro_loop_trans_count > 0) {
+	      fprintf(TFile, "\b After proactive loop fusion\n");
+	      _cfg->Print(TFile, false, (unsigned) -1);
+	    }
+	  }
 	}
 
 	if (do_pro_loop_interchange) {
@@ -339,6 +351,13 @@ COMP_UNIT::Pro_loop_trans()
 	  if (trace) {
 	    if (count_delta > 0)
 	      printf("\n\t Proactive Loop Interchange total:%d\n",  count_delta);
+	  }
+
+	  if (dump) {
+	    if (count_delta > 0) {
+	      fprintf(TFile, "\b After proactive loop interchange\n");
+	      _cfg->Print(TFile, false, (unsigned) -1);
+	    }
 	  }
 	}
 
@@ -360,9 +379,14 @@ COMP_UNIT::Pro_loop_trans()
 	    if (count_delta > 0)
 	      printf("\n\t Extended Proactive Loop Fusion total:%d\n",  count_delta);
 	  }
+
+	  if (dump) {
+	    if (count_delta > 0) {
+	      fprintf(TFile, "\b After extended proactive loop fusion\n");
+	      _cfg->Print(TFile, false, (unsigned) -1);
+	    }
+	  }
 	}
-	
-	pro_loop_trans->Delete();
       }
     }
     

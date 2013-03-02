@@ -22,9 +22,6 @@ ipl.so \
 inline.so \
 		:st = $range 0x0d400000, 0x00200000:
 
-prompf_anl.so \
-		:st = $range 0x0d200000, 0x00200000:
-
 be.so \
 		:st = $range 0x0ca00000, 0x00800000:
 

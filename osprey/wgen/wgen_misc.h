@@ -170,6 +170,8 @@ Get_Srcpos (void)
   return s;
 }
 
+#define TVAR_PREFIX ".anon_"
+
 #endif
 
 #endif

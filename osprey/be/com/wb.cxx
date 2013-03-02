@@ -52,7 +52,6 @@
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h" 
 #include "wb_util.h"
 #include "wb_browser.h" 
 #include "wb.h"
@@ -75,7 +74,6 @@ extern void s_f90_lower_debug(const char init_buffer[]);
 extern void s_omp_debug(const char init_buffer[]); 
 extern void s_lno_debug(const char init_buffer[]); 
 extern void s_lwr_debug(const char init_buffer[]); 
-extern void s_anl_debug(const char init_buffer[]); 
 extern void s_ipl_debug(const char init_buffer[]);
 extern void cg_sdebug(const char init_buffer[]);
 
@@ -141,8 +139,6 @@ static WB_COMMAND WB_Command_List[] =
   'a', WBR_ALIAS,   NULL, "Print the alias info for this node",        
   'E', WBR_NONE,    NULL, "Go to the parent of the current node",
   'e', WBR_NONE,    NULL, "Print the ancestors of this node",
-  'i', WBR_MPFMAP,  NULL, "Print the PROMPF ids for tree at this node",
-  'I', WBR_MPFINFO, NULL, "Print the PROMPF_INFO",   
   'A', WBR_AAMAP,   NULL, "Print the access info at the current node",
   'r', WBR_REDMAP,  NULL, "Print the reduction in this subtree",
   'W', WBR_NONE,    NULL, "Print tree in whirl2[fc] format at current node",
@@ -163,14 +159,12 @@ extern void WB_Initialize(WB_BROWSER* wb,
 			  WN* wn_global, 
 			  PU* pu, 
 			  DU_MANAGER* du,
-                          ALIAS_MANAGER* alias_mgr,
-			  WN_MAP prompf_id_map)
+                          ALIAS_MANAGER* alias_mgr)
 {
   wb->Set_Global_Fd(wn_global); 
   wb->Set_Pu(pu);
   wb->Set_Du(du); 
   wb->Set_Alias_Manager(alias_mgr); 
-  wb->Set_Prompf_Id_Map(prompf_id_map); 
   wb->Set_Command_List(WB_Command_List); 
 } 
 
@@ -198,9 +192,6 @@ extern void sdebug(const char init_buffer[])
   case WBP_F90_LOWER: 
     s_f90_lower_debug(init_buffer);
     break;
-  case WBP_PROMPF_SA: 
-    s_anl_debug(init_buffer);
-    break; 
   case WBP_OMP_PRELOWER: 
     s_omp_debug(init_buffer); 
     break;
@@ -240,7 +231,7 @@ extern void wb()
 extern void debug_root(WN* wn_root) 
 { 
   WB_BROWSER wb;
-  WB_Initialize(&wb, wn_root, NULL, NULL, NULL, -1);
+  WB_Initialize(&wb, wn_root, NULL, NULL, NULL);
   wb.Sdebug("");
   WB_Terminate(&wb);
 }

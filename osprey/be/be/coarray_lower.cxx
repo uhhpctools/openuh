@@ -54,8 +54,6 @@
 #include "strtab.h"
 #include "region_util.h"
 #include "config.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "cxx_memory.h"
 #include "wb_buffer.h"
 #include "wb_carray.h"

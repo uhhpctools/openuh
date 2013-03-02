@@ -2837,8 +2837,16 @@ Print_Directives_For_All_Files(void) {
 	      file_table[count].filename);
     else 
 #endif
-    fprintf(Asm_File, "\t%s\t%d\t\"%s\"\n", AS_FILE, count,
-            file_table[count].filename);
+    {
+      int include_idx = file_table[count].incl_index;
+      if (incl_table[include_idx].path_name)
+         fprintf(Asm_File, "\t%s\t\%d\t\"%s/%s\"\n", AS_FILE,count, 
+                                incl_table[include_idx].path_name,
+                                file_table[count].filename);
+      else
+         fprintf(Asm_File, "\t%s\t%d\t\"%s\"\n", AS_FILE, count,
+               file_table[count].filename);
+    }
     count++;
   }
   fputc ('\n', Asm_File);
@@ -3698,8 +3706,16 @@ Cg_Dwarf_Output_Asm_Bytes_Sym_Relocs (FILE                 *asm_file,
 #ifdef TARG_X8664
       // don't want to affect other sections, although they may also need
       // to be updated under fPIC
+      
+      // open64.net bug783.
+      // Since ".debug_frame" also use PC relative addressing
+      // R_X86_64_PC32/R_386_PC32
+      // in the relocating for symbols, we should not miss them.
+      // Otherwise, wrong relocation generated.
+
       bool gen_pic = ((Gen_PIC_Call_Shared || Gen_PIC_Shared) &&
-      		       !strcmp (section_name, EH_FRAME_SECTNAME));
+                      (!strcmp (section_name, EH_FRAME_SECTNAME) ||
+                       !strcmp (section_name, DEBUG_FRAME_SECTNAME)));
 #endif
       switch (reloc_buffer[k].drd_type) {
       case dwarf_drt_none:

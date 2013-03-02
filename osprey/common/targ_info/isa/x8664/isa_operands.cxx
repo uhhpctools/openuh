@@ -993,48 +993,6 @@ int main()
   Operand(2, uimm8, scale);
   Operand(3, simm32, offset);
 
-  Instruction_Group( "vector arithmetic special",
-                     TOP_vfsqrtsd,
-                     TOP_vfsqrtss,
-                     TOP_vfrsqrtss,
-                     TOP_vfrcpss,
-		     TOP_UNDEFINED);
-  Result(0, fp128);
-  Operand(0, fp128, opnd1);
-
-  Instruction_Group( "vector arithmetic special mem opnd",
-                     TOP_vfsqrtxsd,
-                     TOP_vfsqrtxss,
-                     TOP_vfrsqrtxss,
-                     TOP_vfrcpxss,
-		     TOP_UNDEFINED);
-  Result(0, fp128);
-  Operand(0, int64, base);
-  Operand(1, simm32, offset);
-
-  Instruction_Group( "vector arithmetic special mem opnd w/ scaled index",
-                     TOP_vfsqrtxxsd,
-                     TOP_vfsqrtxxss,
-                     TOP_vfrsqrtxxss,
-                     TOP_vfrcpxxss,
-		     TOP_UNDEFINED);
-  Result(0, fp128);
-  Operand(0, int64, base);
-  Operand(1, int64, index);
-  Operand(2, uimm8, scale);
-  Operand(3, simm32, offset);
-
-  Instruction_Group( "vector arithmetic special mem opnd w/ scaled index w/o base",
-                     TOP_vfsqrtxxxsd,
-                     TOP_vfsqrtxxxss,
-                     TOP_vfrsqrtxxxss,
-                     TOP_vfrcpxxxss,
-		     TOP_UNDEFINED);
-  Result(0, fp128);
-  Operand(0, int64, index);
-  Operand(1, uimm8, scale);
-  Operand(2, simm32, offset);
-
   Instruction_Group( "vector arithmetic",
 		     TOP_add128v8,
 		     TOP_add128v16,
@@ -1165,6 +1123,10 @@ int main()
                      TOP_vfadd128v32,
                      TOP_vfaddsd,
                      TOP_vfaddss,
+                     TOP_vfsqrtsd,
+                     TOP_vfsqrtss,
+                     TOP_vfrsqrtss,
+                     TOP_vfrcpss,
                      TOP_vand128v8,
                      TOP_vand128v16,
                      TOP_vand128v32,
@@ -1232,6 +1194,7 @@ int main()
                      TOP_vfminsd,
                      TOP_vfminss,
                      TOP_vmovhlps,
+                     TOP_vmovlhps,
                      TOP_vfmul128v64,
                      TOP_vfmul128v32,
                      TOP_vmulsd,
@@ -1413,6 +1376,10 @@ int main()
                            TOP_vfaddx128v32,
                            TOP_vfaddxsd,
                            TOP_vfaddxss,
+                           TOP_vfsqrtxsd,
+                           TOP_vfsqrtxss,
+                           TOP_vfrsqrtxss,
+                           TOP_vfrcpxss,
                            TOP_vfandx128v64,
                            TOP_vfandx128v32,
                            TOP_vfandnx128v64,
@@ -1657,6 +1624,10 @@ int main()
                            TOP_vfaddxx128v32,
                            TOP_vfaddxxsd,
                            TOP_vfaddxxss,
+                           TOP_vfsqrtxxsd,
+                           TOP_vfsqrtxxss,
+                           TOP_vfrsqrtxxss,
+                           TOP_vfrcpxxss,
                            TOP_vandxx128v8,
                            TOP_vandxx128v16,
                            TOP_vandxx128v32,
@@ -1901,6 +1872,10 @@ int main()
                            TOP_vfaddxxx128v32,
                            TOP_vfaddxxxsd,
                            TOP_vfaddxxxss,
+                           TOP_vfsqrtxxxsd,
+                           TOP_vfsqrtxxxss,
+                           TOP_vfrsqrtxxxss,
+                           TOP_vfrcpxxxss,
                            TOP_vfaddsubxxx128v64,
                            TOP_vfaddsubxxx128v32,
                            TOP_vfandxxx128v32,
@@ -4596,7 +4571,6 @@ int main()
   Operand(3, uimm8, opnd2);
 
   Instruction_Group("move-high-low",
-                    TOP_vmovlhps,
 		    TOP_movlhps,
 		    TOP_movhlps,
 		    TOP_UNDEFINED);

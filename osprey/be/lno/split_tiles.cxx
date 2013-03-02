@@ -45,7 +45,6 @@
 #include "pu_info.h"
 #include "lwn_util.h"
 #include "lnoutils.h"
-#include "prompf.h"
 #include "config.h"
 #include "debug.h"
 #include "glob.h"
@@ -563,38 +562,6 @@ static void SNL_SPL_Propagate_Tiled_Lower_Bound(WN* outer_tile_loop,
 }
 
 //-----------------------------------------------------------------------
-// NAME: Prompf_Tile_Split
-// FUNCTION: Record for prompf that tile splitting has been performed 
-//   on 'outer_tile_loop' to create 'cp_outer_tile_loop'.  If 'cache_
-//   annotate' is TRUE, indicate that this is a cache winddown loop, 
-//   otherwise indicate that it is a winddown loop produced to optimize
-//   an MP interleave scheduled loops.  If 'cache_annotate' is TRUE, 
-//   mark this as a cache winddown loop, otherwise mark it as a winddown
-//   loop for an MP loop with interleaved scheduling. 
-//-----------------------------------------------------------------------
-
-static void Prompf_Tile_Split(WN* outer_tile_loop, 
-			      WN* cp_outer_tile_loop,
-			      BOOL cache_annotate) 
-{ 
-  STACK<WN*> st_old(&PROMPF_pool);
-  STACK<WN*> st_new(&PROMPF_pool);
-  Prompf_Assign_Ids(outer_tile_loop, cp_outer_tile_loop, &st_old, &st_new,
-    FALSE); 
-  INT nloops = st_old.Elements(); 
-  INT* old_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-  INT* new_ids = CXX_NEW_ARRAY(INT, nloops, &LNO_local_pool);
-  for (INT i = 0; i < nloops; i++) { 
-    old_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_old.Bottom_nth(i)); 
-    new_ids[i] = WN_MAP32_Get(Prompf_Id_Map, st_new.Bottom_nth(i)); 
-  } 
-  if (cache_annotate) 
-    Prompf_Info->Cache_Winddown(old_ids, new_ids, nloops);
-  else 
-    Prompf_Info->Interleaved_Winddown(old_ids, new_ids, nloops);
-} 
-
-//-----------------------------------------------------------------------
 // NAME: SNL_SPL_Split_Tile_Sets 
 // FUNCTION: Given an outer tile loop 'outer_tile_loop' and its corres- 
 //   ponding iner tile loops on 'inner_tile_stack', change the original: 
@@ -626,10 +593,6 @@ static BOOL SNL_SPL_Split_Tile_Sets(WN* outer_tile_loop,
    SNL_SPL_Copy_Inner_Tile_Stack(outer_tile_loop, inner_tile_stack, 
      cp_outer_tile_loop, &cp_inner_tile_stack); 
    
-   // Indicate that this happened to prompf
-   if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) 
-     Prompf_Tile_Split(outer_tile_loop, cp_outer_tile_loop, cache_annotate); 
-
    // Adjust the frequency
    if (Cur_PU_Feedback) {
      INT64 size = tile_size;

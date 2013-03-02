@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -1264,6 +1268,8 @@ char		*operator_str[]		= {
 			"Nofusion_Star_Opr",
 			"Noblocking_Dir_Opr",
 			"Opaque_Star_Opr",
+			"Purpleconditional_Star_Opr",
+			"Purpleunconditional_Star_Opr",
 
 			"Redistribute_Dollar_Opr",
 			"Doacross_Dollar_Opr",

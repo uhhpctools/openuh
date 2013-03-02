@@ -138,12 +138,6 @@ extern "C" {
 char *Targ_Print( const char *fmt, TCON cvalue );
 }
 
-#ifdef Is_True_On
-// Accessing Prompf_Id_Map defined in be/be/driver.c.
-// no header file is available!
-extern WN_MAP Prompf_Id_Map;
-#endif // Is_True_On
-
 #ifdef KEY
 static BOOL in_parallel_region = FALSE;
 #endif

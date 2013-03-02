@@ -74,6 +74,15 @@ else
   BUILD_CAF_RUNTIME=$5
 fi 
 
+if [ -z "$6" ]; then
+	CROSS_TARGET=""
+	if [ $1 = "PPC32" ]; then
+		ARCH="ppc"
+	fi
+else
+    CROSS_TARGET=$6
+fi
+
 # set the build host
 case $ARCH in 
 ia64 )
@@ -103,10 +112,20 @@ x86_64 )
 ppc )
     BUILD_HOST="ppc32"
     TARG_HOST="ppc32"
+    INSTALL_FORTRAN="NO"
     AREA="osprey/targppc32_ppc32"
     PHASE_DIR_PREFIX="ppc32"
     PREBUILD_INTERPOS="ppc32-linux"
     INSTALL_TYPE="ppc32-native"
+    ;;
+PPC32 )			
+    BUILD_HOST="ia32"
+    TARG_HOST="ppc32"
+    INSTALL_FORTRAN="NO"
+    AREA="osprey/targia32_ppc32"
+    PHASE_DIR_PREFIX="ppc32"
+    PREBUILD_INTERPOS="ppc32-linux"
+    INSTALL_TYPE="ppc32-cross"
     ;;
 cross )
     BUILD_HOST="ia32"
@@ -201,6 +220,10 @@ INSTALL_DRIVER () {
     fi
 
     [ ! -d ${BIN_DIR}       ] && mkdir -p ${BIN_DIR}
+    if [ "$ARCH" = "PPC32" ]; then
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/powercc
+    INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/powercc-${VERSION}
+    else
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhcc
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhCC
     INSTALL_EXEC_SUB ${AREA}/driver/driver  ${BIN_DIR}/uhf90
@@ -228,6 +251,7 @@ INSTALL_DRIVER () {
     if [ "$TARG_HOST" = "ppc32" ]; then
       INSTALL_EXEC_SUB ${TOP_SRCDIR}/osprey/targdir/driver/kdriver ${BIN_DIR}/kopencc
     fi
+	fi
 
     return 0
 }
@@ -288,7 +312,11 @@ INSTALL_FE () {
     # GNU 4.2.0 based FE
     if [ "$INSTALL_GNU4" = "YES"  ]; then
       INSTALL_EXEC_SUB ${AREA}/wgen/wgen42 ${PHASEPATH}/wgen42
+      if [ "$TARG_HOST" = "ppc32" ]; then
+      LIBEXEC=libexec/gcc/powerpc-redhat-linux/4.2.0
+      else
       LIBEXEC=libexec/gcc/${PHASE_DIR_PREFIX}-redhat-linux/4.2.0
+      fi
       (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1 cc142)
       (cd $PHASEPATH; ln -sf ../../../../open64-gcc-4.2.0/${LIBEXEC}/cc1plus cc1plus42)
     fi

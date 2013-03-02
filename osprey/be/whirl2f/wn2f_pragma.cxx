@@ -73,8 +73,6 @@ static char *rcs_id = "$Source: /depot/CVSROOT/javi/src/sw/cmplr/be/whirl2f/wn2f
 #include "wn2f_pragma.h"
 
 extern BOOL    Run_w2fc_early;      /* Defined in be.so */
-extern WN_MAP *W2F_Construct_Map;   /* Defined in w2f_driver.c */
-extern BOOL    W2F_Prompf_Emission; /* Defined in w2f_driver.c */
 extern BOOL    W2F_Emit_Omp;        /* Emitting OMP spellings of pragmas */
 
 
@@ -128,10 +126,7 @@ typedef struct Local_Preg /* Used in Get_Implicit_Locals() */
 } LOCAL_PREG;
 
 
-static WN * WN2F_Prompf_Subsection = NULL;
-
-
-/* ======================= Prompf utilities ======================= */
+/* ======================= Omp utilities ======================= */
 /* ================================================================ */
 
 inline BOOL
@@ -141,26 +136,8 @@ WN2F_is_omp(const WN *pragma)
 	   (W2F_Emit_Omp && WN_pragma_compiler_generated(pragma)));
 }
 
-static void 
-WN2F_Start_Prompf_Construct(TOKEN_BUFFER tokens, WN *pragma)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2F_Construct_Map, pragma);
-
-   Append_F77_Directive_Newline(tokens, sgi_comment_str);
-   Append_Token_String(tokens, "start");
-   Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-} /* WN2F_End_Prompf_Construct */
-
-
-static void 
-WN2F_End_Prompf_Construct(TOKEN_BUFFER tokens, WN *pragma)
-{
-   INT32 construct_id = WN_MAP32_Get(*W2F_Construct_Map, pragma);
-
-   Append_F77_Directive_Newline(tokens, sgi_comment_str);
-   Append_Token_String(tokens, "end");
-   Append_Token_String(tokens, Number_as_String(construct_id, "%llu"));
-} /* WN2F_End_Prompf_Construct */
+/* ======================= Static Functions ======================= */
+/* ================================================================ */
 
 
 static void 
@@ -172,10 +149,6 @@ WN2F_Directive_Newline(TOKEN_BUFFER tokens,
    if (W2F_File[W2F_LOC_FILE] != NULL)
       Append_Srcpos_Map(tokens, srcpos);
 } /* WN2F_Directive_Newline */
-
-
-/* ======================= Static Functions ======================= */
-/* ================================================================ */
 
 
 static void 
@@ -290,8 +263,6 @@ Put_Pragma_Start_With_Caveats(TOKEN_BUFFER tokens, WN *apragma, BOOL warn)
 
   if (Is_Valid_Doacross(apragma))
     WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
-  else if (W2F_Prompf_Emission)
-    WN2F_Directive_Newline(tokens, "CC$", WN_Get_Linenum(apragma));
   else
     {
       WN2F_Directive_Newline(tokens,"C<misplaced>$", WN_Get_Linenum(apragma));
@@ -1584,13 +1555,9 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
       break;
 
    case WN_PRAGMA_BARRIER:
-      if (W2F_Prompf_Emission)
-	 WN2F_Start_Prompf_Construct(tokens, apragma);
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma) ;
       Append_Token_String(tokens, "BARRIER");
-      if (W2F_Prompf_Emission)
-	 WN2F_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_COPYIN:
@@ -1612,8 +1579,6 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
       break;
 
    case WN_PRAGMA_CRITICAL_SECTION_BEGIN:
-      if (W2F_Prompf_Emission)
-	 WN2F_Start_Prompf_Construct(tokens, apragma);
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma) ;
       if (WN2F_is_omp(apragma))
@@ -1633,13 +1598,9 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
 	  Append_Token_String(tokens, "END CRITICAL");
       else
 	  Append_Token_String(tokens, "END CRITICAL SECTION");
-      if (W2F_Prompf_Emission)
-	 WN2F_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_ORDERED_BEGIN:
-      if (W2F_Prompf_Emission)
-	 WN2F_Start_Prompf_Construct(tokens, apragma);
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma) ;
       Append_Token_String(tokens, "ORDERED");
@@ -1653,13 +1614,9 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma) ;
       Append_Token_String(tokens, "END ORDERED");
-      if (W2F_Prompf_Emission)
-	 WN2F_End_Prompf_Construct(tokens, apragma);
       break;
 
    case WN_PRAGMA_ATOMIC:
-      if (W2F_Prompf_Emission)
-	 WN2F_Start_Prompf_Construct(tokens, apragma);
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma) ;
       Append_Token_String(tokens, "ATOMIC");
@@ -1667,8 +1624,6 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
 	 Append_Clause_Expressions(tokens,
 				   (WN_PRAGMA_ID)WN_pragma(apragma),
                                    &apragma);
-      if (W2F_Prompf_Emission)
-	 WN2F_End_Prompf_Construct(tokens, this_pragma);
       break;
 
    case WN_PRAGMA_PARALLEL_BEGIN:
@@ -1779,17 +1734,6 @@ WN2F_process_pragma(TOKEN_BUFFER tokens, WN **next, WN2F_CONTEXT context)
       break;
 
    case WN_PRAGMA_SECTION:
-      if (W2F_Prompf_Emission)
-      {
-	 if (WN2F_Prompf_Subsection != NULL)
-	 {
-	    // End a the previous SECTION directive seen!
-	    //
-	    WN2F_End_Prompf_Construct(tokens, WN2F_Prompf_Subsection);
-	 }
-	 WN2F_Prompf_Subsection = apragma;
-	 WN2F_Start_Prompf_Construct(tokens, apragma);
-      }
       WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(apragma));
       WN2F_Append_Pragma_Preamble(tokens,apragma);
       Append_Token_String(tokens, "SECTION");
@@ -2055,16 +1999,6 @@ WN2F_pragma_list_end(TOKEN_BUFFER tokens,
          WN2F_Directive_Newline(tokens, "C$", WN_Get_Linenum(first_pragma));
 	 WN2F_Append_Pragma_Preamble(tokens,first_pragma);
          Append_Token_String(tokens, "END PSECTION");
-	 if (WN2F_is_omp(first_pragma))
-	 {
-	    if (WN2F_Prompf_Subsection != NULL)
-	    {
-	       // End a the last SECTION directive seen!
-	       //
-	       WN2F_End_Prompf_Construct(tokens, WN2F_Prompf_Subsection);
-	       WN2F_Prompf_Subsection = NULL;
-	    }
-	 }
          break;
 
       case WN_PRAGMA_SINGLE_PROCESS_BEGIN:
@@ -2106,7 +2040,7 @@ Ignore_Synchronized_Construct(WN          *construct_pragma,
 {
    /* This can be TRUE for DOACROSS, PARALLEL, and any paralellization
     * related construct that may occur within a parallel region.
-    * It only applies for prompf/mplist (i.e. when Run_w2fc_early).
+    * It only applies for mplist (i.e. when Run_w2fc_early).
     */
    BOOL ignore_construct;
 

@@ -70,7 +70,6 @@
 #include "tlog.h"
 #include "fiz_fuse.h"
 #include "forward.h"
-#include "prompf.h"
 #include "small_trips.h"
 
 #include "ir_reader.h"
@@ -411,13 +410,6 @@ extern void Remove_Unity_Trip_Loop(WN* wn_loop,
     if (*wn_last == NULL) 
       *wn_last = lb; 
   }
-
-  // Let prompf know the loop is being deleted. 
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, wn_loop);
-    Prompf_Info->Remove_Unity_Trip(old_id); 
-    WN_MAP32_Set(Prompf_Id_Map, wn_loop, 0); 
-  }  
 
   // Delete loop. 
   LWN_Delete_Tree(wn_loop);
@@ -1321,10 +1313,6 @@ extern void
 Unroll_Loop_By_Trip_Count(WN* outerloop, INT u)
 {
   INT i;
-
-  //if (Prompf_Info && Prompf_Info->Is_Enabled()) {
-  //  Prompf_Info->Register_Tile(WN_MAP32_Get(Prompf_Id_Map, outerloop));
-  //} 
 
   // ctor does not set Type correctly for loop index variable
   SYMBOL indexsym(WN_index(outerloop));

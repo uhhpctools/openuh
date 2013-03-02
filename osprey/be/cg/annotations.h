@@ -178,6 +178,7 @@ typedef struct loopinfo {
  SRCPOS srcpos;			/* source position of start of body */
  BOOL   is_multiversion;
  BOOL   is_vectorized;          /* loop is vectorized (yes/no) */
+ BOOL   is_align_peeled;        /* loop is peeled for alignment (yes/no) */
 } LOOPINFO;
 
 #define LOOPINFO_wn(x)			((x)->wn)
@@ -186,6 +187,7 @@ typedef struct loopinfo {
 #define LOOPINFO_trip_count_tn(x)	((x)->trip_count_tn)
 #define LOOPINFO_multiversion(x)	((x)->is_multiversion)
 #define LOOPINFO_vectorized(x)          ((x)->is_vectorized)
+#define LOOPINFO_align_peeled(x)        ((x)->is_align_peeled)
 
 
 typedef	struct entryinfo {

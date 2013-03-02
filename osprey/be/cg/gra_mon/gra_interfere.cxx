@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
 
   Copyright (C) 2000, 2001 Silicon Graphics, Inc.  All Rights Reserved.
 
@@ -173,7 +177,24 @@ INTERFERE
 INTERFERE_MGR::Create_End( void )
 {
   INTERFERE result;
+#ifndef TARG_X8664  
   size_t v_size = neighbor_count * sizeof(LRANGE*);
+#else
+  /* This change was made to ensure that register allocation is
+   * the same independent of the compiler being built -m32 or -m64.
+   * Note that the change may waste memory when the compiler is built
+   * -m64, but given the larger memory space this is less of an issue.
+   * TODO:
+   *    Determine whether LRANGE_NEIGHBOR_ITER can be made to generate
+   *    the same edge list independent of the storage medium (vector
+   *    or bitset).
+   *
+   *    For debugging purposes, add a CG option that will force the
+   *    interference information to be stored as a bitset or vector.
+   */
+   
+  size_t v_size = neighbor_count * 4;
+#endif
   size_t s_size = LRANGE_SET_Size_Alloc_Size(neighbor_id_max + 1);
 
   //  Decide whether to represent it with a bitset or with a vector based on

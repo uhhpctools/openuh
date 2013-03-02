@@ -759,24 +759,15 @@ VN_BINARY_EXPR::_canonicalize()
    // use LT or LE and never GT or GE.
    //
    OPCODE opc1 = OPCODE_commutative_op(_opc);
-   if (opc1 != OPCODE_UNKNOWN && _vn[0] > _vn[1])
+   const OPERATOR opr = OPCODE_operator(_opc);
+   if (opc1 == _opc && _vn[0] > _vn[1])
+   {
+      Switch_Vn_Opnd(_vn[0], _vn[1]);
+   }
+   else if (opr == OPR_GE ||  opr == OPR_GT )
    {
       Switch_Vn_Opnd(_vn[0], _vn[1]);
       _opc = opc1;
-   }
-   else
-   {
-      const OPERATOR opr = OPCODE_operator(_opc);
-      if (opr == OPR_GE)
-      {
-	 Switch_Vn_Opnd(_vn[0], _vn[1]);
-	 _opc = OPCODE_make_op(OPR_LE, OPCODE_rtype(_opc), OPCODE_desc(_opc));
-      }
-      else if (opr == OPR_GT)
-      {
-	 Switch_Vn_Opnd(_vn[0], _vn[1]);
-	 _opc = OPCODE_make_op(OPR_LT, OPCODE_rtype(_opc), OPCODE_desc(_opc));
-      }
    }
 } // VN_BINARY_EXPR::_canonicalize
 

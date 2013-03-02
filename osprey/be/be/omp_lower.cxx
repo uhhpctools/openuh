@@ -85,8 +85,6 @@
 #include "strtab.h"
 #include "region_util.h"
 #include "config.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "cxx_memory.h"
 #include "wb_buffer.h"
 #include "wb_carray.h"
@@ -97,11 +95,6 @@
 #include "targ_const.h"
 #include "dra_export.h"
 #include "be_symtab.h"
-
-#if !defined(BUILD_OS_DARWIN) && !defined(BUILD_SKIP_PROMPF)
-#pragma weak Anl_File_Path
-#pragma weak New_Construct_Id
-#endif /* ! defined(BUILD_OS_DARWIN) */
 
 /***********************************************************************
  * Local constants, types, etc.
@@ -227,40 +220,6 @@ static WN *Is_SL2_Section_Begin(WN *wn);
 static void Convert_SL2_Section_To_Pdo(WN *sections, WN *pragma);
 #endif 
 
-//-----------------------------------------------------------------------
-// NAME: OMP_Prompf_Init
-// FUNCTION: Initialize PROMPF processing for current function.
-//-----------------------------------------------------------------------
-
-static void OMP_Prompf_Init(WN* func_nd)
-{
-#ifndef BUILD_SKIP_PROMPF
-  if (Run_prompf) {
-    Prompf_Info->Enable();
-    Prompf_Info->Mark_Omp();
-    WB_OMP_Set_Prompf_Info(Prompf_Info);
-  }
-#endif
-}
-
-//-----------------------------------------------------------------------
-// NAME: OMP_Prompf_Finish
-// FUNCTION: Finish off PROMPF processing for current function.
-//-----------------------------------------------------------------------
-
-static void OMP_Prompf_Finish()
-{
-#ifndef BUILD_SKIP_PROMPF
-  if (Run_prompf) {
-    const char *path = Anl_File_Path();
-    FILE *fp_anl = fopen(path, "a");
-    Prompf_Info->Print_Compact(fp_anl, PTL_OMP);
-    fclose(fp_anl);
-    Prompf_Info->Disable();
-  }
-#endif
-}
-
 
 /***********************************************************************
  * Given a PU_Info and a WN for a program unit, perform the first step of
@@ -335,7 +294,6 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
   Set_Parent(pu, NULL); // since we can't determine it
   Parentize(pu);  
   WB_OMP_Set_Parent_Map(Omp_Parent_Map); 
-  OMP_Prompf_Init(pu); 
 
   critical_st.Set_Mem_Pool (&omp_pool);
 
@@ -376,7 +334,6 @@ WN *OMP_Prelower(PU_Info *current_pu, WN *pu)
 	   "Privatize_Index_Vars_And_Check_Final_Scopes()"));
 
   WN_MAP_Delete(Omp_Parent_Map);
-  OMP_Prompf_Finish(); 
 
   return pu;
 }
@@ -1365,8 +1322,6 @@ static void Convert_Section_To_Pdo(WN *sections, WN *pragma)
   }
   WN_pragma_arg1(pragma) = 0;
   WN_pragma_arg2(pragma) = 1;
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())
-    WN_MAP32_Set(Prompf_Id_Map, pragma, 0);
 
   // delete the end sections if it exists
   WN *end_sec = WN_last(WN_region_body(sections));
@@ -1400,10 +1355,6 @@ static void Convert_Section_To_Pdo(WN *sections, WN *pragma)
     WN *next = WN_next(tmp);
     if (WN_opcode(tmp) == OPC_PRAGMA &&
         ((WN_PRAGMA_ID)WN_pragma(tmp) == WN_PRAGMA_SECTION)) {
-      if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-        INT section_id = WN_MAP32_Get(Prompf_Id_Map, tmp);
-        Prompf_Info->OMPL_Eliminate_Section(section_id);
-      }
       WN *label = New_Label();
       WN_INSERT_BlockBefore(WN_region_body(sections),tmp,label);
       Set_Parent(label,WN_region_body(sections));
@@ -1521,14 +1472,6 @@ static void Convert_Section_To_Pdo(WN *sections, WN *pragma)
   WN *local_pragma = WN_CreatePragma(WN_PRAGMA_LOCAL, index_st,index_offset,0);
   WN_INSERT_BlockAfter(WN_region_pragmas(sections),pragma,local_pragma);
   Set_Parent(local_pragma,WN_region_pragmas(sections));
-
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT loop_id = WN_MAP32_Get(Prompf_Id_Map, sections);
-    FmtAssert(loop_id != 0,
-      ("Convert_Section_To_Pdo: Expected id on sections"));
-    WN_MAP32_Set(Prompf_Id_Map, new_do, loop_id);
-    Prompf_Info->OMPL_Sections_To_Loop(loop_id); 
-  } 
 }
 
 // Is this a p section begin
@@ -1882,13 +1825,6 @@ static void Atomic_Using_Critical(WN *atomic, WN *store)
   WN_Set_Linenum(critical2,line);
   WN_CopyMap(critical2, WN_MAP_FEEDBACK,atomic);
   
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, atomic);
-    WN_MAP32_Set(Prompf_Id_Map, critical1, old_id);
-    WN_MAP32_Set(Prompf_Id_Map, critical2, old_id);
-    Prompf_Info->OMPL_Atomic_To_Critical_Section(old_id);
-  }
-
   WN_DELETE_FromBlock(parent,atomic);
 }
 
@@ -2513,15 +2449,6 @@ Insert_Lowered_Atomic(WN *parent, WN *atomic, WN *atomic_block,
     WN_INSERT_BlockBefore(parent, atomic, wn);
     wn = wn2;
   }
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, atomic);
-    if (alclass == ALCLASS_SWAP)
-      Prompf_Info->OMPL_Atomic_To_Swap(old_id);
-    else if (alclass == ALCLASS_DIRECT)
-      Prompf_Info->OMPL_Atomic_To_FetchAndOp(old_id);
-    else
-      Fail_FmtAssertion("bad alclass == %d", (INT) alclass);
-  }
 
   WN_Delete(atomic_block);
   WN_DELETE_FromBlock(parent, WN_next(atomic));
@@ -2789,10 +2716,6 @@ static WN *Lower_Master(WN *region)
     Set_Parent(wn,WN_then(if_wn));
   }
   RID_Delete(Current_Map_Tab, region);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) { 
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, region);
-    Prompf_Info->OMPL_Master_To_If(old_id); 
-  } 
   WN_DELETE_FromBlock(Get_Parent(region),region);
 
   // Add barriers
@@ -3840,15 +3763,6 @@ static void Lower_Fetch_And_Op(WN *intrinsic)
   ST *return_st = Create_Local_Symbol("return_val",type);
 
   WN *atomic_pragma = WN_CreatePragma(WN_PRAGMA_ATOMIC, (ST*) 0, 0, 0);
-#ifndef BUILD_SKIP_PROMPF
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT new_id = New_Construct_Id();
-    WN_MAP32_Set(Prompf_Id_Map, atomic_pragma, new_id);
-    PROMPF_LINES* pl = CXX_NEW(PROMPF_LINES(&PROMPF_pool), &PROMPF_pool);
-    pl->Add_Lines(intrinsic);
-    Prompf_Info->OMPL_Fetchop_Atomic(new_id, pl);
-  }
-#endif
   WN_set_pragma_omp(atomic_pragma);
   WN_INSERT_BlockBefore(parent,intrinsic,atomic_pragma);
   Set_Parent(atomic_pragma,parent);

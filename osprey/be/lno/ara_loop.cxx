@@ -74,8 +74,6 @@
 #include "targ_const.h"
 #include "parmodel.h"
 #include "config.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "stab.h"
 #include <alloca.h>
 #include "fiz_fuse.h"
@@ -90,8 +88,6 @@
 #include "ipa_lno_cost.h" 
 // Laks: use UH utils for retrieving the line number
 #include "uh_util.h"
-
-#pragma weak New_Construct_Id 
 
 extern INT Parallel_Debug_Level; 
 extern ARRAY_DIRECTED_GRAPH16 *Array_Dependence_Graph; 
@@ -2326,7 +2322,7 @@ ARA_LOOP_INFO::Walk_Loop()
       SYMBOL & use_sym = _scalar_use.Bottom_nth(i)->_scalar;
       for (INT j = 0; j < _scalar_may_def.Elements(); ++j) {
 	if (use_sym == _scalar_may_def.Bottom_nth(j)->_scalar) {
-	  if (Run_prompf || LNO_Prompl) {
+	  if (LNO_Prompl) {
             INT k;
 	    for (k = 0; k < _scalar_vars.Elements(); k++) 
               if (_scalar_vars.Bottom_nth(k) == use_sym)
@@ -2337,7 +2333,7 @@ ARA_LOOP_INFO::Walk_Loop()
 	  Set_To_Sequential();
 	  if (Get_Trace(TP_LNOPT2,TT_LNO_ARA_DEBUG)) {
 	    this->Print(stdout);
-	  } else if (!Run_prompf && !LNO_Prompl)
+	  } else if (!LNO_Prompl)
 	    break;
 	}
       }
@@ -2357,7 +2353,7 @@ ARA_LOOP_INFO::Walk_Loop()
 	      if (red_manager->Which_Reduction(def_scalar) != 
 		  red_manager->Which_Reduction(red)) {
 		Set_To_Sequential();
-		if (Run_prompf || LNO_Prompl) {
+		if (LNO_Prompl) {
                   INT k;
 		  for (k = 0; k < _scalar_vars.Elements(); k++) 
 		    if (_scalar_vars.Bottom_nth(k) == sym)
@@ -2383,7 +2379,7 @@ ARA_LOOP_INFO::Walk_Loop()
       ARA_REF *ref = _use.Bottom_nth(j);
       if (sym == ref->Array()) {
 	Set_To_Sequential();
-	if (Run_prompf || LNO_Prompl) {
+	if (LNO_Prompl) {
           INT k;
 	  for (k = 0; k < _scalar_vars.Elements(); k++) 
 	    if (_scalar_vars.Bottom_nth(k) == sym)
@@ -2398,7 +2394,7 @@ ARA_LOOP_INFO::Walk_Loop()
       ARA_REF *ref = _def.Bottom_nth(j);
       if (sym == ref->Array()) {
 	Set_To_Sequential();
-	if (Run_prompf || LNO_Prompl) {
+	if (LNO_Prompl) {
           INT k;
 	  for (k = 0; k < _scalar_vars.Elements(); k++) 
 	    if (_scalar_vars.Bottom_nth(k) == sym)
@@ -2413,7 +2409,7 @@ ARA_LOOP_INFO::Walk_Loop()
       ARA_REF *ref = _pri.Bottom_nth(j);
       if (sym == ref->Array()) {
 	Set_To_Sequential();
-	if (Run_prompf || LNO_Prompl) {
+	if (LNO_Prompl) {
           INT k;
 	  for (k = 0; k < _scalar_vars.Elements(); k++) 
 	    if (_scalar_vars.Bottom_nth(k) == sym)
@@ -2431,7 +2427,7 @@ ARA_LOOP_INFO::Walk_Loop()
 
   for (i = 0; i < _bad_alias.Elements(); ++i) {
     if (_bad_alias.Bottom_nth(i)) {
-      if (Run_prompf || LNO_Prompl){ 
+      if (LNO_Prompl){ 
 	SYMBOL use_sym = _scalar_pri.Bottom_nth(i)->_scalar; 
         INT j;
 	for (j = 0; j < _scalar_alias.Elements(); j++) 
@@ -2443,7 +2439,7 @@ ARA_LOOP_INFO::Walk_Loop()
       Set_To_Sequential();
       if (Get_Trace(TP_LNOPT2,TT_LNO_ARA_DEBUG)) {
 	fprintf(stdout,"Loop is sequential because bad alias for scalars\n");
-      } else if (!Run_prompf && !LNO_Prompl) 
+      } else if (!!LNO_Prompl) 
 	break;
     }
   }
@@ -2499,7 +2495,7 @@ ARA_LOOP_INFO::Walk_Loop()
     if (_def.Bottom_nth(i)->Is_Loop_Invariant()   
         && Overlap_Exposed_Array(_def.Bottom_nth(i)->Array())) { 
       Set_To_Sequential(); 
-      if (Run_prompf || LNO_Prompl) { 
+      if (LNO_Prompl) { 
 	const SYMBOL& sym_array = _def.Bottom_nth(i)->Array();
         INT j;
 	for (j = 0; j < Partial_Array_Sec().Elements(); j++) 
@@ -2527,7 +2523,7 @@ ARA_LOOP_INFO::Walk_Loop()
 void ARA_LOOP_INFO::Bad_Array_Dependence(WN* wn_source, 
 			                 WN* wn_sink)
 {
-  if (!LNO_Analysis && !Run_prompf && !LNO_Prompl) 
+  if (!LNO_Analysis && !LNO_Prompl) 
     return;
 /*
  * Laks: We need to avoid to use WN_Whirl_Linenum since it returns wrong line number
@@ -2618,7 +2614,7 @@ void Parallelization_Process_Deps(WN *wn)
 	  ARA_LOOP_INFO* ali = dli->ARA_Info;
 	  Is_True(ali,
 		  ("Parallelization_Process_Deps: No ARA_LOOP_INFO for reduction"));
-	  if (!Run_prompf && !LNO_Prompl && (!ali->Dep_Is_Good() || ali->Dep_Dist() != 0) ) continue;
+	  if (!LNO_Prompl && (!ali->Dep_Is_Good() || ali->Dep_Dist() != 0) ) continue;
 
 	  BOOL is_invariant;
           if (s_array == NULL) {
@@ -2707,7 +2703,7 @@ void Parallelization_Process_Deps(WN *wn)
 	ARA_LOOP_INFO* ali = dli->ARA_Info;
 	Is_True(ali,("Walk_Loop_Dependence: No ARA_LOOP_INFO"));
 
-	if (!Run_prompf && !LNO_Prompl && (!ali->Dep_Is_Good() || ali->Dep_Dist() != 0) ) continue;
+	if (!LNO_Prompl && (!ali->Dep_Is_Good() || ali->Dep_Dist() != 0) ) continue;
 
 	// OK, one final check to see if the array caused the dependence
 	// is privatizable.
@@ -2763,7 +2759,7 @@ extern void Walk_Loop_Dependence(WN * func_nd)
 	    Is_True(dli,("Walk_Loop_Dependence: No DO_LOOP_INFO")); 
 	    ARA_LOOP_INFO* ali = dli->ARA_Info;
 	    Is_True(ali,("Walk_Loop_Dependence: No ARA_LOOP_INFO")); 
-	    if (Run_prompf || LNO_Prompl) {
+	    if (LNO_Prompl) {
               // INT ln = WN_Whirl_Linenum(wn);
               INT ln = UH_GetLineNumber(wn);    // Laks: temp solution, we call UH util
 
@@ -3604,20 +3600,12 @@ ARA_LOOP_INFO::Generate_Parallel_Pragma()
     // create a new parallel region around the parallel loop
     WN * region = WN_CreateRegion(REGION_KIND_MP,do_loop,NULL,NULL,
 				  RID_CREATE_NEW_ID,(INITO_IDX) NULL);
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT loop_id = WN_MAP32_Get(Prompf_Id_Map, do_loop); 
-      WN_MAP32_Set(Prompf_Id_Map, region, loop_id); 
-    }
     REGION_INFO* rgi = CXX_NEW(REGION_INFO(TRUE), &LNO_default_pool);
     WN_MAP_Set(LNO_Info_Map, region, (void *) rgi);
     
     // Create the pragmas
     WN *prag = WN_CreatePragma(WN_PRAGMA_PARALLEL_DO, ST_IDX_ZERO, 0, 1);
     WN_set_pragma_compiler_generated(prag); 
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT loop_id = WN_MAP32_Get(Prompf_Id_Map, do_loop); 
-      WN_MAP32_Set(Prompf_Id_Map, prag, loop_id);
-    }
 
     WN_Set_Linenum(prag, WN_Get_Linenum(_loop));
     LWN_Insert_Block_Before(WN_region_pragmas(region),NULL,prag);
@@ -3962,12 +3950,6 @@ ARA_LOOP_INFO::Generate_Copyout_Loop()
   WN * region = WN_CreateRegion(REGION_KIND_MP,do_loop,NULL,NULL,
 				RID_CREATE_NEW_ID,
                                 (INITO_IDX) NULL);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT old_id = WN_MAP32_Get(Prompf_Id_Map, do_loop); 
-    INT new_id = New_Construct_Id();
-    WN_MAP32_Set(Prompf_Id_Map, region, new_id);
-    Prompf_Info->Parallel_Region(old_id, new_id); 
-  }
   REGION_INFO* rgi = CXX_NEW(REGION_INFO(TRUE), &LNO_default_pool); 
   WN_MAP_Set(LNO_Info_Map, region, (void *) rgi); 
     
@@ -3976,8 +3958,6 @@ ARA_LOOP_INFO::Generate_Copyout_Loop()
   WN_set_pragma_compiler_generated(prag);
   WN_Set_Linenum(prag, WN_Get_Linenum(_loop));
   LWN_Insert_Block_Before(WN_region_pragmas(region),NULL,prag);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled())  
-    WN_MAP32_Set(Prompf_Id_Map, prag, WN_MAP32_Get(Prompf_Id_Map, region)); 
     
   if (if_cond != NULL) {
     prag = WN_CreateXpragma(WN_PRAGMA_IF, ST_IDX_ZERO, 1);
@@ -4145,19 +4125,11 @@ ARA_LOOP_INFO::Generate_Copyout_Loop()
   region = WN_CreateRegion(REGION_KIND_MP,do_loop,NULL,NULL,
 			   RID_CREATE_NEW_ID,
                            (INITO_IDX) NULL);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT loop_id = WN_MAP32_Get(Prompf_Id_Map, do_loop);
-    WN_MAP32_Set(Prompf_Id_Map, region, loop_id);
-  }
   rgi = CXX_NEW(REGION_INFO(TRUE), &LNO_default_pool);
   WN_MAP_Set(LNO_Info_Map, region, (void *) rgi);
     
   // Create the pragmas
   prag = WN_CreatePragma(WN_PRAGMA_PDO_BEGIN, ST_IDX_ZERO, 0, 0);
-  if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-    INT loop_id = WN_MAP32_Get(Prompf_Id_Map, do_loop);
-    WN_MAP32_Set(Prompf_Id_Map, prag, loop_id);
-  }
   WN_set_pragma_compiler_generated(prag); 
   WN_Set_Linenum(prag, WN_Get_Linenum(_loop));
   LWN_Insert_Block_Before(WN_region_pragmas(region),NULL,prag);

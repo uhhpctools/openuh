@@ -126,7 +126,6 @@ BE_BE_DIR		= $(BE_DIR)/be
 BE_CG_DIR 		= $(BE_DIR)/cg
 BE_COM_DIR 		= $(BE_DIR)/com
 BE_REGION_DIR		= $(BE_DIR)/region
-BE_PROMPF_DIR		= $(BE_DIR)/prompf_anl
 ifndef BE_OPT_DIR
 BE_OPT_DIR 		= $(BE_DIR)/opt
 endif
@@ -169,7 +168,6 @@ HEADER_DIRS = \
   $(BE_CG_DIR)          \
   $(BE_BE_DIR)		\
   $(IPA_IPL_DIR)	\
-  $(BE_PROMPF_DIR)	\
   $(BUILD_TOT)/include  \
   $(TARGDIR)/be
 
@@ -183,7 +181,7 @@ BE_COM_CXX_SRCS = \
 
 BE_LNOPT_SRCS = 
 
-BE_LNOPT_NLX_CXX_SRCS = \
+BE_LNOPT_CXX_SRCS = \
   lnodriver.cxx			\
   lnopt_main.cxx		\
   lnoutils.cxx			\
@@ -298,26 +296,9 @@ BE_LNOPT_NLX_CXX_SRCS = \
 
 
 ifeq ($(BUILD_TARGET), X8664)
-BE_LNOPT_NLX_CXX_SRCS += simd.cxx
-BE_LNOPT_NLX_CXX_SRCS += simd_util.cxx
+BE_LNOPT_CXX_SRCS += simd.cxx
+BE_LNOPT_CXX_SRCS += simd_util.cxx
 endif
-
-ifneq ($(BUILD_SKIP_PROMPF), TRUE)
-BE_LNOPT_LX_CXX_SRCS = \
-  lx_ipl_lno_util.cxx		\
-  lx_ipa_cost_util.cxx		\
-  lx_ipa_lno_util.cxx		\
-  lx_ipa_section.cxx		\
-  lx_ipa_section_main.cxx	\
-  lx_ipa_section_print.cxx	\
-  lx_prompf_anl.cxx		\
-  lx_reshape.cxx		\
-  lx_wb_summary.cxx		
-
-BE_LNOPT_LX_CXX_SRCS = lx_prompf_anl.cxx
-endif
-
-BE_LNOPT_CXX_SRCS = $(BE_LNOPT_NLX_CXX_SRCS) $(BE_LNOPT_LX_CXX_SRCS)
 
 ifeq ($(BUILD_PCH), USE_PCH)
 LNOPT_PCH_OBJS = $(BE_LNOPT_CXX_SRCS:.cxx=.o)

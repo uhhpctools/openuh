@@ -1502,6 +1502,10 @@ IPO_INLINE::IPO_INLINE (IPA_NODE *caller_node,
 
 #if (!defined(_STANDALONE_INLINER) && !defined(_LIGHTWEIGHT_INLINER))
   if (IPA_Enable_DST) {
+      // Enter the files in callee dst to caller dst, 
+      DST_Enter_Callee_File_Dst(Caller_file_dst(), Callee_file_dst());
+
+      // Set cross file id
       Set_callee_cross_file_id(DST_get_cross_file_id (Caller_dst(),
 						      Callee_dst(),
 						      Caller_file_dst(),
@@ -4534,7 +4538,8 @@ IPO_INLINE::Post_Process_Caller (IPO_INLINE_AUX& aux)
         {
           dst1 = DST_mk_inlined_subroutine(stidx,
                                            stidx+ST_index(cp),
-                                           get_abstract_origin(Callee_dst()));
+                                           get_abstract_origin(Callee_dst()),
+                                           Callee_file_dst());
           DST_RESET_assoc_fe (DST_INFO_flag(DST_INFO_IDX_TO_PTR(dst1)));
           DST_append_child (Caller_dst(), dst1);       
         }

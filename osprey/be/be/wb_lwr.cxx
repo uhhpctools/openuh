@@ -53,7 +53,6 @@
 #include "opt_du.h"
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"
@@ -68,7 +67,7 @@ extern void WB_LWR_Initialize(WN* wn_global,
                               ALIAS_MANAGER* alias_mgr)
 { 
   WB_Set_Phase(WBP_LOWER); 
-  WB_Initialize(&wb_lwr, wn_global, &Get_Current_PU(), NULL, alias_mgr, -1); 
+  WB_Initialize(&wb_lwr, wn_global, &Get_Current_PU(), NULL, alias_mgr);
 } 
 
 extern void WB_LWR_Terminate()

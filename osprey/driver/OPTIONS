@@ -371,8 +371,6 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 
 % Basic option groups:
 % See opt_actions.c::Process_Ofast if you change the -OPT: item.
--OPTIONS    ;       ALL be  "-OPTIONS"
-    "print out all be option usage"
 -OPT:%s		Process_Opt_Group(optargs); 	ALL	CMP,ipap "-OPT:%s"
 	"option group to control optimization"
 -OPT:unroll_level=n ;		ALL	be	""
@@ -421,8 +419,8 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 	"equivalent to -HP:"
 -HUGEPAGE	Process_Hugepage_Default();		ALL	be	""
 	"equivalent to -HP"
--DRIVER:%s ;    ALL be "-DRIVER:%s"
-    "options for internal use in driver"
+-COMP-%s   ;   All be "-COMP-%s"
+    "options for internal use in each component"
 -VHO:%s		;		ALL	ffe,be,ipl	"-VHO:%s"
 	"option group to control vho lowering"
 
@@ -436,10 +434,6 @@ I-cpp_pic	;		ALL	NONE	"-D_PIC -D__DSO__"
 -flist	;		FTN	be	"-PHASE:flist -FLIST:=ON"
 	""
 -mplist		;		FTN,cc	be	"-mplist"
-	""
--PROMP:next_id=%d ;		FTN,Cc	be	"-PROMP:next_id=%d"
-	""
--PROMP:%s	;		FTN,Cc	be	"-PHASE:prompf -PROMP:%s"
 	""
 
 -IPA:%s	toggle(&ipa,TRUE);		ALL	ipl,ipap	"-IPA:%s"
@@ -1008,14 +1002,14 @@ I-xall		;	FTN	ffe	self
 	""
 -apo*list	auto_parallelize=TRUE;keep_list=TRUE;		Cc,FTN	be	"-pfa -LNO:prompl"
 	""
--apo*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;Process_Promp();		Cc,FTN	be	"-pfa -LNO:prompl"
+-apo*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;		Cc,FTN	be	"-pfa -LNO:prompl"
 	""
 % invoke pfa  - which discovers parallelism
 -pfa		auto_parallelize=TRUE;		Cc,FTN	be	"-pfa"
 	""
 -pfa*list	auto_parallelize=TRUE;keep_list=TRUE; 	Cc,FTN	be	"-pfa -LNO:prompl"
 	""
--pfa*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;Process_Promp();		Cc,FTN	be	"-pfa -LNO:prompl"
+-pfa*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;		Cc,FTN	be	"-pfa -LNO:prompl"
 	""
 % Because of limitation on derived flags, we repeat the -pfa,%s in the 
 % implied list.  This is to find the parent flag so action is done.
@@ -1148,7 +1142,7 @@ I-scan%s		;		FTN	PFA	self
 	""
 -pca*list	auto_parallelize=TRUE;keep_list=TRUE; 	Cc,FTN be "-pfa -LNO:prompl"
 	""
--pca*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;Process_Promp();	 cc,FTN be	"-pfa -LNO:prompl"
+-pca*keep	auto_parallelize=TRUE;keep_list=keep_mp=TRUE;	 cc,FTN be	"-pfa -LNO:prompl"
 	""
 -pca,%s		{auto_parallelize=TRUE; warning("options after -pca, are ignored; should just use -pca");}	Cc,FTN	be	"-pfa"
 	""
@@ -1247,8 +1241,6 @@ I-u%s		;		Cc	ld	"-u %s"
 -ar	;		ALL	NONE	""
 	"create an archive (instead of a shared object or executable) using ar"
 
--promp	;	 	FTN,Cc	 be	"-PHASE:prompf -PROMP:=on"
-	""
 
 %%% gcc compiler options
 
@@ -2148,6 +2140,10 @@ I-u%s		;		Cc	ld	"-u %s"
 	"Enable XOP extensions"
 -mno-xop	toggle(&xop,FALSE);	ALL	CPP,cfe		self
 	"Disable XOP extensions"
+-mfma	toggle(&sse2,TRUE);toggle(&fma,TRUE);	ALL	CPP,cfe		self
+	"Enable FMA3 extensions"
+-mno-fma	toggle(&fma,FALSE);	ALL	CPP,cfe		self
+	"Disable FMA3 extensions"
 -mfma4	toggle(&sse2,TRUE);toggle(&fma4,TRUE);	ALL	CPP,cfe		self
 	"Enable FMA4 extensions"
 -mno-fma4	toggle(&fma4,FALSE);	ALL	CPP,cfe		self

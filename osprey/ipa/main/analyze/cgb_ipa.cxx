@@ -60,7 +60,6 @@
 #include "opt_du.h"
 #include "opt_alias_interface.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "wb.h"
 
 CG_BROWSER cgb_ipa; 

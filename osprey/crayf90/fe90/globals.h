@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
+ */
+
+/*
  *  Copyright (C) 2006. QLogic Corporation. All Rights Reserved.
  */
 
@@ -1400,6 +1404,8 @@ enum    operator_values      {  Null_Opr,
 				Opaque_Star_Opr,
 				Redistribute_Dollar_Opr,
 				Doacross_Dollar_Opr,
+				Purpleconditional_Star_Opr,
+				Purpleunconditional_Star_Opr,
 				Pdo_Par_Opr,
 				Parallel_Do_Par_Opr,
 				Parallel_Par_Opr,

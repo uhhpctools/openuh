@@ -180,10 +180,12 @@ static LNO_FLAGS Default_LNO = {
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
   1,		/* Iter_threshold */
+  FALSE,        /* Simd_peel_align */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
   1,		/* Iter_threshold */
+  FALSE,        /* Simd_peel_align */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -404,10 +406,12 @@ LNO_FLAGS Initial_LNO = {
   0,		/* Fission */
   TRUE,		/* Serial_distribute */
   1,		/* Iter_threshold */
+  FALSE,        /* Simd_peel_align */
 #else
   1,		/* Fission */
   FALSE,	/* Serial_distribute */
   1,		/* Iter_threshold */
+  FALSE,	/* Simd_peel_align */
 #endif
   0,		/* Fission_inner_register_limit */
   TRUE,		/* Forward_substitution */
@@ -732,10 +736,12 @@ static OPTION_DESC Options_LNO[] = {
   LNOPT_U32  ( "fission",		"fis",	0,0,2,	Fission ),
   LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
   LNOPT_U32  ( "iter_threshold",	NULL,	0,0,16, Iter_threshold ),
+  LNOPT_BOOL ( "simd_peel_align",	NULL,	Simd_peel_align ),
 #else
   LNOPT_U32  ( "fission",		"fis",	1,0,2,	Fission ),
   LNOPT_BOOL ( "distribute",		NULL,	Serial_distribute ),
   LNOPT_U32  ( "iter_threshold",	NULL,	0,0,16, Iter_threshold ),
+  LNOPT_BOOL ( "simd_peel_align",	NULL,	Simd_peel_align ),
 #endif
   LNOPT_U32  ( "fission_inner_register_limit",	NULL,	32,0,99999,
 					Fission_inner_register_limit ),
@@ -1239,6 +1245,13 @@ LNO_Configure ( void )
 			Mhd_Options.L[i].TLB_Miss_Penalty;
       Mhd_Options.L[i].TLB_Dirty_Miss_Penalty =
 			Mhd_Options.L[i].TLB_Miss_Penalty;
+    }
+  }
+
+  if(LNO_Simd_peel_align) {
+    // Do not align peel when unity rem transforms are on
+    if(LNO_Simd_Rm_Unity_Remainder) {
+      LNO_Simd_peel_align = 0;
     }
   }
 }

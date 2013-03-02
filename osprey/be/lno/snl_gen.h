@@ -63,7 +63,7 @@ extern SNL_REGION SNL_GEN_Distribution(WN* wn_outer, IMAT* unimodular,
 
 extern SNL_REGION SNL_GEN_U_Ctiling(WN* wn_outer, INT nloops, IMAT* u,
   SNL_TILE_INFO* t, SNL_BOUNDS_INFO* bi, SX_PLIST* plist,
-  EST_REGISTER_USAGE est_register_usage, BOOL warn_lexneg, BOOL from_genperm);
+  EST_REGISTER_USAGE est_register_usage, BOOL warn_lexneg);
 
 extern WN* SNL_GEN_Permute_Loops(WN* wn_outer, INT permutation[], INT nloops,
   BOOL warn_lexneg);

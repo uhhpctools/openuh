@@ -67,7 +67,6 @@
 #include "opt_du.h"
 #include "opt_alias_interface.h"
 #include "dep_graph.h"
-#include "prompf.h"
 #include "wb_util.h"
 #include "wb_browser.h"
 #include "wb.h"

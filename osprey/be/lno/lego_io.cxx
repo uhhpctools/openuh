@@ -114,11 +114,7 @@ const static char *rcs_id = "$Source: /home/bos/bk/kpro64-pending/be/lno/SCCS/s.
 #include "scalar_expand.h"
 #include "wio.h"          // From "common/com"
 #include "lego_affinity.h"
-#include "prompf.h"
-#include "anl_driver.h"
 #include "debug.h"
-
-#pragma weak New_Construct_Id
 
 enum REF_TYPE {SINGLE_ELEMENT_REF,IMPLIED_DO_REF,TOTAL_REF,OTHER_REF};
 
@@ -789,12 +785,6 @@ static void Copy_Array(WN *orig_array, ST* local_st, WN *IO_node,
     LWN_Copy_Linenumber(IO_node,step);
     loop_steps[i] = start;
     do_loop = LWN_CreateDO(index,start,end,step,WN_CreateBlock());
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT new_id = New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, do_loop, new_id); 
-      Prompf_Info->Dsm_Io(new_id, WN_Whirl_Linenum(IO_node),
-	(char*) WB_Whirl_Symbol(do_loop)); 
-    } 
     loops[i] = do_loop;
     LWN_Copy_Linenumber(IO_node,do_loop);
     LWN_Copy_Linenumber(IO_node,WN_do_body(do_loop));
@@ -1005,12 +995,6 @@ static void Copy_Array_Section(WN *orig_array, ST* local_st, WN *IO_node,
     LWN_Copy_Linenumber(IO_node,step);
     loop_steps[i] = start;
     do_loop = LWN_CreateDO(index,start,end,step,WN_CreateBlock());
-    if (Prompf_Info != NULL && Prompf_Info->Is_Enabled()) {
-      INT new_id = New_Construct_Id(); 
-      WN_MAP32_Set(Prompf_Id_Map, do_loop, new_id); 
-      Prompf_Info->Dsm_Io(new_id, WN_Whirl_Linenum(IO_node),
-	(char*) WB_Whirl_Symbol(do_loop)); 
-    } 
     loops[i] = do_loop;
     LWN_Copy_Linenumber(IO_node,do_loop);
     LWN_Copy_Linenumber(IO_node,WN_do_body(do_loop));

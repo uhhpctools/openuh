@@ -60,8 +60,6 @@
 #include "lwn_util.h"
 #include "config.h" 
 #include "config_lno.h"
-#include "anl_driver.h"
-#include "prompf.h"
 #include "glob.h"
 #include "fiz_fuse.h" 
 #include "lego_util.h"
@@ -72,10 +70,6 @@
 // Laks 07.03.07 add UH additional feature
 #include "uh_ara.h"
 #include "uh_lno.h"
-
-#if ! defined(BUILD_OS_DARWIN)
-#pragma weak Anl_File_Path
-#endif /* ! defined(BUILD_OS_DARWIN) */
 
 MEM_POOL ARA_memory_pool;
 static BOOL ara_mem_pool_initialized=FALSE;
@@ -277,14 +271,6 @@ void Perform_ARA_and_Parallelization(PU_Info* current_pu,
 
   // Annotate loops with information about what the lowerer will name them.   
   Annotate_For_Mp_Lowering(current_pu, func_nd); 
-
-  if (Run_prompf) {  
-    Print_Prompf_Transaction_Log(FALSE);
-    Print_Prompf_Parallelization_Log(func_nd); 
-    Print_Prompf_Doacross_Log(current_pu, func_nd, FALSE); 
-    Print_Prompf_Parallel_Region_Log(current_pu, func_nd, FALSE);
-    Print_Prompf_Nest_Log(func_nd, FALSE);
-  } 
 
   if (LNO_Prompl)
     Print_Prompl_Msgs(current_pu, func_nd); 

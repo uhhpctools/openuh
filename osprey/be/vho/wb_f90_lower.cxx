@@ -53,7 +53,6 @@
 #include "opt_alias_mgr.h"
 #include "dep_graph.h"
 #include "cxx_template.h"
-#include "prompf.h"
 #include "ir_reader.h"
 #include "wb_util.h"
 #include "wb_buffer.h"
@@ -64,22 +63,15 @@
 
 WB_BROWSER wb_f90_lower; 
 
-extern void WB_F90_Lower_Initialize(WN* wn_global, 
-			      WN_MAP Prompf_Id_Map)
+extern void WB_F90_Lower_Initialize(WN* wn_global)
 { 
   WB_Set_Phase(WBP_F90_LOWER); 
-  WB_Initialize(&wb_f90_lower, wn_global, &Get_Current_PU(), 
-    NULL, NULL, Prompf_Id_Map); 
+  WB_Initialize(&wb_f90_lower, wn_global, &Get_Current_PU(), NULL, NULL);
 } 
 
 extern void WB_F90_Lower_Set_Parent_Map(WN_MAP Parent_Map)
 {
   wb_f90_lower.Set_Parent_Map(Parent_Map); 
-} 
-
-extern void WB_F90_Lower_Set_Prompf_Info(PROMPF_INFO* prompf_info)
-{
-  wb_f90_lower.Set_Prompf_Info(prompf_info); 
 } 
 
 extern void WB_F90_Lower_Terminate()
