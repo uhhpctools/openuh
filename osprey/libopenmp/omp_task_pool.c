@@ -241,7 +241,6 @@ omp_task_t *__ompc_remove_task_from_pool_default(omp_task_pool_t *pool)
   if (task == NULL)
     task = __ompc_task_queue_get(&per_thread->task_queue[UNTIED_IDX(myid)]);
 
-
   /* check if there are any untied tasks available in the other task queues */
   if (task == NULL) {
     int first_victim, victim = 0;
@@ -254,31 +253,29 @@ omp_task_t *__ompc_remove_task_from_pool_default(omp_task_pool_t *pool)
     if (victim >= myid) victim++;
     /* cycle through to find a queue with work to steal */
     first_victim = victim;
-    while (1) {
-      while (__ompc_queue_lockless_is_empty(
-                     &per_thread->task_queue[UNTIED_IDX(victim)])) {
+    while (__ompc_queue_is_empty(
+                &per_thread->task_queue[UNTIED_IDX(victim)])) {
         victim++;
         if (victim == myid)
-          victim++;
+            victim++;
         if (victim == team_size)
-          victim = 0;
+            victim = 0;
         if (victim == first_victim)
-         goto CHECK_TIED_TASK_QUEUES;
-      }
-      task = __ompc_task_queue_steal(
-                     &per_thread->task_queue[UNTIED_IDX(victim)]);
-      if ( task != NULL ) {
+            goto CHECK_TIED_TASK_QUEUES;
+    }
+    task = __ompc_task_queue_steal(
+            &per_thread->task_queue[UNTIED_IDX(victim)]);
+    if ( task != NULL ) {
         /*
         if (!__ompc_task_state_is_unscheduled(task)) {
-          // Is_True(0, ("state of task from queue was not unscheduled"));
-          printf("\n... (1) skipping over a task with state %s; queue size is %d \n",
-                  __ompc_task_get_state_string(task),
-         __ompc_queue_num_used_slots(&per_thread->task_queue[UNTIED_IDX(victim)]));
-          task = NULL;
+            // Is_True(0, ("state of task from queue was not unscheduled"));
+            printf("\n... (1) skipping over a task with state %s; queue size is %d \n",
+                    __ompc_task_get_state_string(task),
+                    __ompc_queue_num_used_slots(&per_thread->task_queue[UNTIED_IDX(victim)]));
+            task = NULL;
         }
         */
         return task;
-      }
     }
   }
 
@@ -290,41 +287,41 @@ CHECK_TIED_TASK_QUEUES:
   if (task == NULL && !current_thread->num_suspended_tied_tasks &&
       (__ompc_task_state_is_in_barrier(current_task) ||
        !__ompc_task_is_tied(current_task))) {
-    int first_victim, victim = 0;
-    int team_size = pool->team_size;
+      int first_victim, victim = 0;
+      int team_size = pool->team_size;
 
-    victim = (rand_r(&__omp_seed) % (team_size - 1));
-    if (victim >= myid) victim++;
-    /* cycle through to find a queue with work to steal */
-    first_victim = victim;
-    while (1) {
+      victim = (rand_r(&__omp_seed) % (team_size - 1));
+      if (victim >= myid) victim++;
+      /* cycle through to find a queue with work to steal */
+      first_victim = victim;
+
       while (__ompc_queue_is_empty(
-                         &per_thread->task_queue[TIED_IDX(victim)])) {
-        victim++;
-        if (victim == myid)
+                  &per_thread->task_queue[TIED_IDX(victim)])) {
           victim++;
-        if (victim == team_size)
-          victim = 0;
-        if (victim == first_victim)
-          return NULL;
+          if (victim == myid)
+              victim++;
+          if (victim == team_size)
+              victim = 0;
+          if (victim == first_victim)
+              return NULL;
       }
       /* Always steal from the head for tied tasks. Note also that by not
        * using the task_queue API, CFIFO implementation will not be used */
-      task = __ompc_queue_steal_head(
-                         &per_thread->task_queue[TIED_IDX(victim)]);
+      task = __ompc_queue_steal_head( &per_thread->task_queue[TIED_IDX(victim)]);
+
+      /*
       if ( task != NULL ) {
-        /*
-        if (!__ompc_task_state_is_unscheduled(task)) {
-          // Is_True(0, ("state of task from queue was not unscheduled"));
-          printf("\n... (2) skipping over a task with state %s; queue size is %d \n",
-                  __ompc_task_get_state_string(task),
-         __ompc_queue_num_used_slots(&per_thread->task_queue[TIED_IDX(victim)]));
-          task = NULL;
-        }
-        */
-        return task;
+          if (!__ompc_task_state_is_unscheduled(task)) {
+              // Is_True(0, ("state of task from queue was not unscheduled"));
+              printf("\n... (2) skipping over a task with state %s; queue size is %d \n",
+                      __ompc_task_get_state_string(task),
+                      __ompc_queue_num_used_slots(&per_thread->task_queue[TIED_IDX(victim)]));
+              task = NULL;
+          }
       }
-    }
+      */
+
+      return task;
   }
 
   /*

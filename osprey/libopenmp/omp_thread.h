@@ -325,11 +325,13 @@ void __ompc_barrier_wait(omp_team_t *team)
   int *bar_count;
   int barrier_flag;
   int new_count;
-  int i;
+  int i,j,k;
   volatile int *barrier_flag_p;
   omp_task_t *next, *current_task;
   omp_task_pool_t *pool;
 
+  j = 0;
+  k = 0;
   barrier_flag_p = &(team->barrier_flag);
   barrier_flag = *barrier_flag_p;
 
@@ -339,25 +341,28 @@ void __ompc_barrier_wait(omp_team_t *team)
   __ompc_task_set_state(current_task, OMP_TASK_IN_BARRIER);
 
   bar_count = &team->barrier_count;
-  __ompc_atomic_inc(bar_count);
-  pthread_mutex_lock(&pool->pool_lock);
-  pthread_cond_broadcast(&pool->pool_cond);
-  pthread_mutex_unlock(&pool->pool_lock);
+  new_count = __ompc_atomic_inc(bar_count);
 
   for (counter = 0; (*bar_count < team->team_size) ||
           __ompc_task_pool_num_pending_tasks(pool); counter++ ) {
+
+      while (__ompc_task_pool_num_pending_tasks(pool) &&
+             (next = __ompc_remove_task_from_pool(pool))) {
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
       if (counter > __omp_spin_count) {
           pthread_mutex_lock(&pool->pool_lock);
           if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
-                  *bar_count < team->team_size) {
-              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+                  *bar_count <  team->team_size) {
+              struct timespec ts;
+              clock_gettime(CLOCK_REALTIME, &ts);
+              ts.tv_nsec += 5000; /* +5 microsec */
+              pthread_cond_timedwait(&pool->pool_cond,
+                                &pool->pool_lock,
+                                &ts);
           }
           pthread_mutex_unlock(&pool->pool_lock);
-      }
-      while (__ompc_task_pool_num_pending_tasks(pool)) {
-          next = __ompc_remove_task_from_pool(pool);
-          if (next != NULL)
-              __ompc_task_switch(next);
       }
   }
 
@@ -379,6 +384,7 @@ void __ompc_barrier_wait(omp_team_t *team)
      * signal */
     for (i = 0; i < __omp_spin_count; i++)
       if ((*barrier_flag_p) != barrier_flag) {
+        __ompc_task_set_state(current_task, OMP_TASK_RUNNING);
         return;
       }
     pthread_mutex_lock(&(team->barrier_lock));

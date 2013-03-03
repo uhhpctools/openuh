@@ -2059,8 +2059,10 @@ add_final_ld_args (string_list_t *args, phases_t ld_phase)
                     ((strcmp(use_pcl_omp, "yes") == 0) ||
                     (strcmp(use_pcl_omp, "YES") == 0)))
                   add_string(args, "-lopenmp-pcl");
-                else
+                else {
                   add_string(args, "-lopenmp");
+                  add_string(args, "-lrt");
+                }
                 add_string(args, "-lstdc++");
             }
 

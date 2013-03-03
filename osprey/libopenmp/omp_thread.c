@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 #include <malloc.h>
 #include "omp_thread.h"
 #include "omp_sys.h"
@@ -823,7 +824,7 @@ __ompc_task_configure()
 
 
 /* Used for level_1 team end parallel barrier,
- * Not for Normal use. Using __ompc_barrier instead 
+ * Not for Normal use. Using __ompc_barrier instead
  * */
 void
 __ompc_level_1_barrier(const int vthread_id)
@@ -851,24 +852,26 @@ __ompc_level_1_barrier(const int vthread_id)
   bar_count = &__omp_level_1_team_manager.barrier_count;
   __ompc_atomic_inc(bar_count);
 
-  pthread_mutex_lock(&pool->pool_lock);
-  pthread_cond_broadcast(&pool->pool_cond);
-  pthread_mutex_unlock(&pool->pool_lock);
-
   for (counter = 0; (*bar_count < team_size) ||
           __ompc_task_pool_num_pending_tasks(pool); counter++) {
+
+      while (__ompc_task_pool_num_pending_tasks(pool) &&
+             (next = __ompc_remove_task_from_pool(pool))) {
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
       if (counter > max_count) {
           pthread_mutex_lock(&pool->pool_lock);
           if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
                   *bar_count < team_size) {
-              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+              struct timespec ts;
+              clock_gettime(CLOCK_REALTIME, &ts);
+              ts.tv_nsec += 5000;  /* +5 microsec */
+              pthread_cond_timedwait(&pool->pool_cond,
+                                     &pool->pool_lock,
+                                     &ts);
           }
           pthread_mutex_unlock(&pool->pool_lock);
-      }
-      while (__ompc_task_pool_num_pending_tasks(pool)) {
-          next = __ompc_remove_task_from_pool(pool);
-          if (next != NULL)
-              __ompc_task_switch(next);
       }
   }
 
@@ -936,24 +939,27 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
 
   bar_count = &vthread->team->barrier_count;
   __ompc_atomic_inc(bar_count);
-  pthread_mutex_lock(&pool->pool_lock);
-  pthread_cond_broadcast(&pool->pool_cond);
-  pthread_mutex_unlock(&pool->pool_lock);
 
   for (counter = 0; (*bar_count < team_size) ||
           __ompc_task_pool_num_pending_tasks(pool); counter++) {
+
+      while (__ompc_task_pool_num_pending_tasks(pool) &&
+             (next = __ompc_remove_task_from_pool(pool))) {
+          if (next != NULL)
+              __ompc_task_switch(next);
+      }
       if (counter > max_count) {
           pthread_mutex_lock(&pool->pool_lock);
           if (__ompc_task_pool_num_pending_tasks(pool) == 0 &&
                   *bar_count < team_size) {
-              pthread_cond_wait(&pool->pool_cond, &pool->pool_lock);
+              struct timespec ts;
+              clock_gettime(CLOCK_REALTIME, &ts);
+              ts.tv_nsec += 5000; /* +5 microsec */
+              pthread_cond_timedwait(&pool->pool_cond,
+                                     &pool->pool_lock,
+                                     &ts);
           }
           pthread_mutex_unlock(&pool->pool_lock);
-      }
-      while (__ompc_task_pool_num_pending_tasks(pool)) {
-          next = __ompc_remove_task_from_pool(pool);
-          if (next != NULL)
-              __ompc_task_switch(next);
       }
   }
 
