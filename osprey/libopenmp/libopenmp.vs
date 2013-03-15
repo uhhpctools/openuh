@@ -1,5 +1,6 @@
 LIBOPENMP_1.0 {
  global:
+    __omp_collector_api;
     __ompc_barrier;
     __ompc_can_fork;
     __ompc_copyin_thdprv;
