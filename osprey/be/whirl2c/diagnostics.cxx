@@ -63,7 +63,8 @@
 #include "common_include.h"
 #include "file_util.h"
 
-static char        Diag_Phase_Name[80] = "";
+static const int   Diag_Phase_Len = 80;
+static char        Diag_Phase_Name[Diag_Phase_Len] = "";
 static FILE       *Diag_File = NULL;
 static INT         Diag_Max_Diags = 10;  /* Default */
 static INT         Diag_Warn_Count = 0;
@@ -190,7 +191,15 @@ void Diag_Exit(void)
 void Diag_Set_Phase(const char *phase_name)
 {
    Set_Error_Phase(phase_name); /* Initiate the common error handler */
-   (void)strcpy(Diag_Phase_Name, phase_name);
+
+   /* shorten the phase name in case the length exceeds Diag_Phase_Len */
+   if (strlen(phase_name) > Diag_Phase_Len) {
+       (void)strcpy(Diag_Phase_Name,
+                    phase_name + strlen(phase_name)-Diag_Phase_Len);
+       fprintf(stderr, "Using truncated phase name (%s)\n", Diag_Phase_Name);
+   } else {
+       (void)strcpy(Diag_Phase_Name, phase_name);
+   }
 } /* Diag_Set_Phase */
 
 
