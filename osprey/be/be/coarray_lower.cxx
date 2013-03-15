@@ -213,10 +213,10 @@ static DOPEVEC_FIELD_INFO dopevec_fldinfo[DV_LAST+1] = {
 #define Get_Parent(wn) ((WN*) WN_MAP_Get(Caf_Parent_Map, (WN*) wn))
 
 #define Set_LCB_Stmt(wn) (WN_MAP_Set(Caf_LCB_Map, wn, (void*)  1))
-#define Is_LCB_Stmt(wn) ((BOOL) WN_MAP_Get(Caf_LCB_Map, (WN*) wn))
+#define Is_LCB_Stmt(wn) ((void *) WN_MAP_Get(Caf_LCB_Map, (WN*) wn))
 
 #define Set_Visited(wn) (WN_MAP_Set(Caf_Visited_Map, wn, (void*)  1))
-#define Was_Visited(wn) ((BOOL) WN_MAP_Get(Caf_Visited_Map, (WN*) wn))
+#define Was_Visited(wn) ((void *) WN_MAP_Get(Caf_Visited_Map, (WN*) wn))
 
 #define Set_Coarray_Sync(wn, access_handle) \
         (WN_MAP_Set(Caf_Coarray_Sync_Map, wn, (ACCESS_HDL*) access_handle))
