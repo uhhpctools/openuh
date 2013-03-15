@@ -382,16 +382,16 @@ install_fe:
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-headers $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-cpp
+	    install-cpp $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-driver	    
+	    install-driver $(GNUFE_PREFIX_OVERRIDE)
 else
 install_fe:
 ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-common
+	    install-common $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-headers
+	    install-headers $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
 	    install-libgcc $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
@@ -412,17 +412,17 @@ install-cross:
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
 ifeq ($(BUILD_GNU4), YES)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-common
+	    install-common $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-headers
+	    install-headers $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-libgcc
+	    install-libgcc $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-cpp
+	    install-cpp $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/gcc \
-	    install-driver
+	    install-driver $(GNUFE_PREFIX_OVERRIDE)
 	$(MAKE) -C $(GNUFE_BUILD_SUBDIR)/$(GNUFE_BUILD_HOST)/libstdc++-v3 \
-	    install
+	    install $(GNUFE_PREFIX_OVERRIDE)
 endif
 	export TOOLROOT=@prefix@; $(TOP_SRCDIR)/install_compiler.sh ia64-cross $(if $(BUILD_FORTRAN),"YES","NO")
 
