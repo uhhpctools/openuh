@@ -55,6 +55,7 @@ endif
 ifeq ($(CAFRT_ENABLE_TRACES), YES)
 LCDEFS += -DTRACE
 endif
+LCDEFS += -DNB_COMM
 LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
 LCINCS += -I$(BUILD_BASE)/../uthash

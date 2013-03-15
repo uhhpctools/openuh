@@ -1612,6 +1612,10 @@ enum    operator_values      {  Null_Opr,
 				Endtask_Open_Mp_Opr,
 				Task_Open_Mp_Opr,
 				Taskwait_Open_Mp_Opr,
+#ifdef _UH_COARRAYS
+				Defer_Sync_Dir_Opr,
+                Sync_Dir_Opr,
+#endif
 
                                 /* PLACE NEW OPERATORS ABOVE THIS LINE. */
                                 /* DO NOT PUT ANY OPRS AFTER THIS ONE */

@@ -1001,6 +1001,10 @@ extern void  fei_barrier                  ( void );
 extern void  fei_psection	          ( void );
 extern void  fei_regionend	          ( void );
 extern void  fei_regionbegin	          ( void );
+#ifdef _UH_COARRAYS
+extern void  fei_defer_sync                ( INTPTR sym_idx );
+extern void  fei_sync                      ( INTPTR sym_idx );
+#endif
 extern void  fei_interchange	          ( INT32 expressions );
 extern void  fei_blockable	          ( INT32 expressions );
 extern void  fei_fuse                     ( INT32 level );

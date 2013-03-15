@@ -696,6 +696,18 @@ void directive_stmt_semantics(void)
          cdir_switches.vsearch = TRUE;
          break;
 
+      /* -------------------------------------------------------------------- */
+      /*                                                                      */
+      /*            			 UHCAF directives                             */
+      /*                                                                      */
+      /* -------------------------------------------------------------------- */
+      case Defer_Sync_Dir_Opr:
+         //printf("in Defer_Sync_Dir_Opr\n");
+         break;
+
+      case Sync_Dir_Opr:
+         //printf("in Sync_Dir_Opr\n");
+         break;
 
       /* -------------------------------------------------------------------- */
       /*								      */

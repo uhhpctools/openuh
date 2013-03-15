@@ -74,8 +74,14 @@ static unsigned short *this_image_stopped = NULL;
  * writes to finish when a new read/write adrress overlaps any one of
  * them.  */
 static int enable_nbput;        /* 0=disabled. set by env var UHCAF_NBPUT */
+
+/*
 static void **min_nbwrite_address;
 static void **max_nbwrite_address;
+*/
+
+static struct nb_handle_manager nb_mgr[2];
+
 
 /* GET CACHE OPTIMIZATION */
 static int enable_get_cache;    /* set by env variable */
@@ -105,15 +111,32 @@ static void cache_check_and_get_strided(void *remote_src,
 static void update_cache(size_t node, void *remote_address, size_t nbytes,
                          void *local_address);
 
-/* NONBLOCKING PUT OPTIMIZATION */
-static int address_in_nbwrite_address_block(void *remote_addr,
-                                            size_t proc, size_t size);
-static void update_nbwrite_address_block(void *remote_addr,
-                                         size_t proc, size_t size);
-static void check_wait_on_pending_puts(size_t proc, void *remote_address,
-                                       size_t size);
-static void wait_on_pending_puts(size_t proc);
-static void wait_on_all_pending_puts();
+static struct handle_list *get_next_handle(unsigned long proc,
+                                           void *remote_address,
+                                           void *local_buf,
+                                           unsigned long size,
+                                           access_type_t access_type);
+static void reset_min_nb_address(unsigned long proc,
+                                 access_type_t access_type);
+static void reset_max_nb_address(unsigned long proc,
+                                 access_type_t access_type);
+static void delete_node(unsigned long proc, struct handle_list *node,
+                        access_type_t access_type);
+static int address_in_handle(struct handle_list *handle_node,
+                             void *address, unsigned long size);
+static int address_in_nb_address_block(void *remote_addr, size_t proc,
+                                       size_t size,
+                                       access_type_t access_type);
+static void update_nb_address_block(void *remote_addr, size_t proc,
+                                    size_t size,
+                                    access_type_t access_type);
+static void check_wait_on_pending_accesses(size_t proc,
+                                           void *remote_address,
+                                           size_t size,
+                                           access_type_t access_type);
+static void wait_on_pending_accesses(size_t proc,
+                                     access_type_t access_type);
+static void wait_on_all_pending_accesses();
 
 
 
@@ -335,12 +358,25 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                                  + sizeof(void *)) + sizeof(void *);
 
     if (enable_nbput) {
-        min_nbwrite_address = malloc(num_procs * sizeof(void *));
-        max_nbwrite_address = malloc(num_procs * sizeof(void *));
+        nb_mgr[PUTS].handles = (struct handle_list **) malloc
+            (num_procs * sizeof(struct handle_list *));
+        nb_mgr[PUTS].num_handles = 0;
+        nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
+        nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
+        nb_mgr[GETS].handles = (struct handle_list **) malloc
+            (num_procs * sizeof(struct handle_list *));
+        nb_mgr[GETS].num_handles = 0;
+        nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
+        nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
+
         /* initialize data structures to 0 */
         for (i = 0; i < num_procs; i++) {
-            min_nbwrite_address[i] = 0;
-            max_nbwrite_address[i] = 0;
+            nb_mgr[PUTS].handles[i] = 0;
+            nb_mgr[PUTS].min_nb_address[i] = 0;
+            nb_mgr[PUTS].max_nb_address[i] = 0;
+            nb_mgr[GETS].handles[i] = 0;
+            nb_mgr[GETS].min_nb_address[i] = 0;
+            nb_mgr[GETS].max_nb_address[i] = 0;
         }
     }
     if (enable_get_cache) {
@@ -640,66 +676,275 @@ static void update_cache_strided(void *remote_dest_address,
 
 
 /*
- * static functions for non-blocking put
+ * static functions for non-blocking PUT/GET
  */
-static int address_in_nbwrite_address_block(void *remote_addr,
-                                            size_t proc, size_t size)
+static int address_in_nb_address_block(void *remote_addr,
+                                       size_t proc, size_t size,
+                                       access_type_t access_type)
 {
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
-                 remote_addr, min_nbwrite_address[proc],
-                 max_nbwrite_address[proc], remote_addr + size);
-    if (min_nbwrite_address[proc] == 0)
+                 remote_addr, min_nb_address[proc],
+                 max_nb_address[proc], remote_addr + size);
+    if (min_nb_address[proc] == 0)
         return 0;
-    if (((remote_addr + size) >= min_nbwrite_address[proc])
-        && (remote_addr <= max_nbwrite_address[proc]))
+    if (((remote_addr + size) >= min_nb_address[proc])
+        && (remote_addr <= max_nb_address[proc]))
         return 1;
     else
         return 0;
 }
 
-static void update_nbwrite_address_block(void *remote_addr,
-                                         size_t proc, size_t size)
+static void update_nb_address_block(void *remote_addr, size_t proc,
+                                    size_t size, access_type_t access_type)
 {
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
-                 remote_addr, min_nbwrite_address[proc],
-                 max_nbwrite_address[proc], remote_addr + size);
-    if (min_nbwrite_address[proc] == 0) {
-        min_nbwrite_address[proc] = remote_addr;
-        max_nbwrite_address[proc] = remote_addr + size;
+                 remote_addr, min_nb_address[proc],
+                 max_nb_address[proc], remote_addr + size);
+    if (min_nb_address[proc] == 0) {
+        min_nb_address[proc] = remote_addr;
+        max_nb_address[proc] = remote_addr + size;
         return;
     }
-    if (remote_addr < min_nbwrite_address[proc])
-        min_nbwrite_address[proc] = remote_addr;
-    if ((remote_addr + size) > max_nbwrite_address[proc])
-        max_nbwrite_address[proc] = remote_addr + size;
+    if (remote_addr < min_nb_address[proc])
+        min_nb_address[proc] = remote_addr;
+    if ((remote_addr + size) > max_nb_address[proc])
+        max_nb_address[proc] = remote_addr + size;
 }
 
-static void check_wait_on_pending_puts(size_t proc, void *remote_address,
-                                       size_t size)
+static struct handle_list *get_next_handle(unsigned long proc,
+                                           void *remote_address,
+                                           void *local_buf,
+                                           unsigned long size,
+                                           access_type_t access_type)
 {
-    if (address_in_nbwrite_address_block(remote_address, proc, size)) {
-        ARMCI_Fence(proc);
-        min_nbwrite_address[proc] = 0;
-        max_nbwrite_address[proc] = 0;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    struct handle_list *handle_node;
+    if (handles[proc] == 0) {
+        handles[proc] = (struct handle_list *)
+            comm_malloc(sizeof(struct handle_list));
+        handle_node = handles[proc];
+        handle_node->prev = 0;
+    } else {
+        handle_node = handles[proc];
+        while (handle_node->next) {
+            handle_node = handle_node->next;
+        }
+        handle_node->next = (struct handle_list *)
+            comm_malloc(sizeof(struct handle_list));
+        handle_node->next->prev = handle_node;
+        handle_node = handle_node->next;
+    }
+    ARMCI_INIT_HANDLE(&handle_node->handle);
+    handle_node->address = remote_address;
+    handle_node->local_buf = local_buf;
+    handle_node->size = size;
+    handle_node->proc = proc;
+    handle_node->access_type = access_type;
+    handle_node->next = 0;      //Just in case there is a sync before the put
+    nb_mgr[access_type].num_handles++;
+    return handle_node;
+}
+
+static void reset_min_nb_address(unsigned long proc,
+                                 access_type_t access_type)
+{
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    struct handle_list *handle_node;
+    handle_node = handles[proc];
+    if (handle_node) {
+        min_nb_address[proc] = handle_node->address;
+        handle_node = handle_node->next;
+    } else
+        min_nb_address[proc] = 0;
+    while (handle_node) {
+        if (handle_node->address < min_nb_address[proc])
+            min_nb_address[proc] = handle_node->address;
+        handle_node = handle_node->next;
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "min:%p, max:%p",
+                 min_nb_address[proc], max_nb_address[proc]);
+}
+
+static void reset_max_nb_address(unsigned long proc,
+                                 access_type_t access_type)
+{
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    struct handle_list *handle_node;
+    void *end_address;
+    handle_node = handles[proc];
+    max_nb_address[proc] = 0;
+    while (handle_node) {
+        end_address = handle_node->address + handle_node->size;
+        if (end_address > max_nb_address[proc])
+            max_nb_address[proc] = end_address;
+        handle_node = handle_node->next;
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
+                 min_nb_address[proc], max_nb_address[proc]);
+}
+
+static void delete_node(unsigned long proc, struct handle_list *node,
+                        access_type_t access_type)
+{
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    void *node_address;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
+                 min_nb_address[proc], max_nb_address[proc]);
+
+    nb_mgr[access_type].num_handles--;
+
+    if (node->prev) {
+        if (node->next) {
+            node->prev->next = node->next;
+            node->next->prev = node->prev;
+        } else                  // last node in the list
+            node->prev->next = 0;
+    } else if (node->next)      // this is the first node in the list
+    {
+        handles[proc] = node->next;
+        node->next->prev = 0;
+    } else                      // this is the only node in the list
+    {
+        handles[proc] = 0;
+        min_nb_address[proc] = 0;
+        max_nb_address[proc] = 0;
+        if (access_type = PUTS)
+            comm_free_lcb(node->local_buf);
+        comm_free(node);
+        return;
+    }
+    node_address = node->address;
+    if (access_type == PUTS)
+        comm_free_lcb(node->local_buf);
+    comm_free(node);
+    if (node_address == min_nb_address[proc])
+        reset_min_nb_address(proc, access_type);
+    if ((node_address + node->size) == max_nb_address[proc])
+        reset_max_nb_address(proc, access_type);
+}
+
+static int address_in_handle(struct handle_list *handle_node,
+                             void *address, unsigned long size)
+{
+    if (((address + size) > handle_node->address)
+        && (address < (handle_node->address + handle_node->size)))
+        return 1;
+    else
+        return 0;
+}
+
+
+/* check that all pending accesses of access_type that may conflict with the
+ * remote address have completed */
+static void check_wait_on_pending_accesses(size_t proc,
+                                           void *remote_address,
+                                           size_t size,
+                                           access_type_t access_type)
+{
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    struct handle_list *handle_node, *node_to_delete;
+    handle_node = handles[proc];
+    if (address_in_nb_address_block
+        (remote_address, proc, size, access_type)) {
+        if (access_type == PUTS) {
+            /* ARMCI provides no way to wait on a specific PUT to complete
+             * remotely, so just wait on all of them to complete */
+            wait_on_pending_accesses(proc, PUTS);
+        } else {                /* GETS */
+            while (handle_node) {
+                if (address_in_handle(handle_node, remote_address, size)) {
+                    ARMCI_Wait(&handle_node->handle);
+                    delete_node(proc, handle_node, GETS);
+                    return;
+                } else if (ARMCI_Test(&handle_node->handle) == 0) {
+                    /* has completed */
+                    node_to_delete = handle_node;
+                    handle_node = handle_node->next;
+                    delete_node(proc, node_to_delete, GETS);
+                } else {
+                    handle_node = handle_node->next;
+                }
+            }
+        }
     }
 }
 
-static void wait_on_pending_puts(size_t proc)
+/* wait on all pending accesses to proc to complete */
+static void wait_on_pending_accesses(size_t proc,
+                                     access_type_t access_type)
 {
-    ARMCI_Fence(proc);
-    min_nbwrite_address[proc] = 0;
-    max_nbwrite_address[proc] = 0;
+    void **min_nb_address = nb_mgr[access_type].min_nb_address;
+    void **max_nb_address = nb_mgr[access_type].max_nb_address;
+    struct handle_list **handles = nb_mgr[access_type].handles;
+    struct handle_list *handle_node, *node_to_delete;
+    handle_node = handles[proc];
+    if (access_type == PUTS)
+        ARMCI_Fence(proc);
+    else
+        ARMCI_WaitProc(proc);
+    /* clear out entire handle list */
+    while (handle_node) {
+        node_to_delete = handle_node;
+        handle_node = handle_node->next;
+        if (access_type == PUTS)
+            comm_free_lcb(node_to_delete->local_buf);
+        comm_free(node_to_delete);
+    }
+    handles[proc] = 0;
+    min_nb_address[proc] = 0;
+    max_nb_address[proc] = 0;
 }
 
-static void wait_on_all_pending_puts()
+/* wait on all pending accesses to complete */
+static void wait_on_all_pending_accesses()
 {
     int i;
+    struct handle_list *handle_node, *node_to_delete;
+
+    /* ensures all non-blocking puts have completed */
     ARMCI_AllFence();
+
     for (i = 0; i < num_procs; i++) {
-        min_nbwrite_address[i] = 0;
-        max_nbwrite_address[i] = 0;
+        handle_node = nb_mgr[PUTS].handles[i];
+        /* clear out entire handle list */
+        while (handle_node) {
+            node_to_delete = handle_node;
+            handle_node = handle_node->next;
+            /* for puts */
+            comm_free_lcb(node_to_delete->local_buf);
+            comm_free(node_to_delete);
+            nb_mgr[PUTS].num_handles--;
+        }
+        nb_mgr[PUTS].handles[i] = 0;
+        nb_mgr[PUTS].min_nb_address[i] = 0;
+        nb_mgr[PUTS].max_nb_address[i] = 0;
+
+        handle_node = nb_mgr[GETS].handles[i];
+        /* clear out entire handle list */
+        while (handle_node) {
+            ARMCI_Wait(&handle_node->handle);
+            node_to_delete = handle_node;
+            handle_node = handle_node->next;
+            comm_free(node_to_delete);
+            nb_mgr[PUTS].num_handles--;
+        }
+        nb_mgr[GETS].handles[i] = 0;
+        nb_mgr[GETS].min_nb_address[i] = 0;
+        nb_mgr[GETS].max_nb_address[i] = 0;
     }
 }
 
@@ -809,8 +1054,9 @@ void comm_exit(int status)
      */
 
     for (p = 0; p < num_procs; p++) {
-        comm_write(p, stopped_image_exists, stopped_image_exists,
-                   sizeof(*stopped_image_exists));
+        comm_write_unbuffered(p, stopped_image_exists,
+                              stopped_image_exists,
+                              sizeof(*stopped_image_exists));
     }
 
 
@@ -844,8 +1090,9 @@ void comm_finalize(int exit_code)
      * barriers.
      */
     for (p = 0; p < num_procs; p++) {
-        comm_write(p, stopped_image_exists, stopped_image_exists,
-                   sizeof(*stopped_image_exists));
+        comm_write_unbuffered(p, stopped_image_exists,
+                              stopped_image_exists,
+                              sizeof(*stopped_image_exists));
     }
 
     comm_barrier_all();
@@ -861,12 +1108,30 @@ void comm_finalize(int exit_code)
 
 void comm_barrier_all()
 {
-    if (enable_nbput)
-        wait_on_all_pending_puts();
-    ARMCI_WaitAll();
+    if (enable_nbput) {
+        wait_on_all_pending_accesses();
+    }
     ARMCI_Barrier();
     if (enable_get_cache)
         refetch_all_cache();
+}
+
+void comm_sync(comm_handle_t hdl)
+{
+    unsigned long i;
+
+    if (!enable_nbput)
+        return;
+
+    if (hdl == NULL) {          /* wait on all non-blocking communication */
+        wait_on_all_pending_accesses();
+    } else {                    /* wait on specified handle */
+        ARMCI_Wait(&((struct handle_list *) hdl)->handle);
+        delete_node(((struct handle_list *) hdl)->proc,
+                    (struct handle_list *) hdl,
+                    ((struct handle_list *) hdl)->access_type);
+    }
+
 }
 
 void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
@@ -879,10 +1144,10 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    if (enable_nbput)
-        wait_on_all_pending_puts();
+    if (enable_nbput) {
+        wait_on_all_pending_accesses();
+    }
 
-    ARMCI_WaitAll();
     LOAD_STORE_FENCE();
     if (status != NULL && *stopped_image_exists == 1) {
         *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -908,10 +1173,10 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    if (enable_nbput)
-        wait_on_all_pending_puts();
+    if (enable_nbput) {
+        wait_on_all_pending_accesses();
+    }
 
-    ARMCI_WaitAll();
 
     if (enable_get_cache)
         refetch_all_cache();
@@ -939,10 +1204,10 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Syncing with"
                  " %d images", image_count);
 
-    if (enable_nbput)
-        wait_on_all_pending_puts();
+    if (enable_nbput) {
+        wait_on_all_pending_accesses();
+    }
 
-    ARMCI_WaitAll();
 
     for (i = 0; i < image_count; i++) {
         int q = image_list[i] - 1;
@@ -951,13 +1216,15 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         }
         remote_img = q;
 
-        if (enable_nbput) {
-            wait_on_pending_puts(remote_img);
-            LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Finished waiting for"
-                         " all pending puts on image %lu. Min:%p, Max:%p",
-                         remote_img, min_nbwrite_address[remote_img],
-                         max_nbwrite_address[remote_img]);
-        }
+        /*
+           if (enable_nbput) {
+           wait_on_pending_puts(remote_img);
+           LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Finished waiting for"
+           " all pending puts on image %lu. Min:%p, Max:%p",
+           remote_img, min_nbwrite_address[remote_img],
+           max_nbwrite_address[remote_img]);
+           }
+         */
 
         if (remote_img < 0 || remote_img >= num_procs) {
             LIBCAF_TRACE(LIBCAF_LOG_SYNC, "sync_images called with "
@@ -969,11 +1236,13 @@ void comm_sync_images(int *image_list, int image_count, int *status,
 
         dest_flag = ((int *) syncptr[remote_img]) + my_proc;
 
-        ARMCI_Lock(my_proc, remote_img);
+        /* using ARMCI_Lock should not be necessary here, but need to
+         * double check ... */
+        //ARMCI_Lock(my_proc, remote_img);
         ARMCI_Rmw
             (ARMCI_FETCH_AND_ADD, (void *) &whatever, (void *) dest_flag,
              1, remote_img);
-        ARMCI_Unlock(my_proc, remote_img);
+        //ARMCI_Unlock(my_proc, remote_img);
     }
 
     for (i = 0; i < image_count; i++) {
@@ -992,7 +1261,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         if (status != NULL) {
             image_has_stopped = 0;
             comm_read(q, this_image_stopped, &image_has_stopped,
-                    sizeof(image_has_stopped));
+                      sizeof(image_has_stopped), NULL);
             LOAD_STORE_FENCE();
             if (image_has_stopped && !(*check_flag)) {
                 *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -1122,10 +1391,13 @@ void comm_free(void *ptr)       //To make it sync with gasnet
 
 void comm_free_lcb(void *ptr)   //To make it sync with gasnet
 {
+    if (!ptr)
+        return;
     free(ptr);
 }
 
-void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
+               comm_handle_t * hdl)
 {
     void *remote_src;
     remote_src = get_remote_address(src, proc);
@@ -1136,21 +1408,42 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
     if (enable_nbput) {
-        check_wait_on_pending_puts(proc, remote_src, nbytes);
+        check_wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Finished waiting for"
                      " pending puts on %p on image %lu. Min:%p, Max:%p",
-                     remote_src, proc + 1, min_nbwrite_address[proc],
-                     max_nbwrite_address[proc]);
+                     remote_src, proc + 1,
+                     nb_mgr[PUTS].min_nb_address[proc],
+                     nb_mgr[PUTS].max_nb_address[proc]);
     }
     if (enable_get_cache)
         cache_check_and_get(proc, remote_src, nbytes, dest);
     else {
+#ifdef NB_COMM
+        int in_progress = 0;
+        armci_hdl_t handle;
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Before ARMCI_Get from %p on"
                      " image %lu to %p size %lu",
                      remote_src, proc + 1, dest, nbytes);
+        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc,
+                    &handle);
+
+        in_progress = ARMCI_Test(&handle);
+
+        if (in_progress == 1) {
+            struct handle_list *handle_node =
+                get_next_handle(proc, remote_src, dest, nbytes, GETS);
+
+            memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+
+            if (hdl != NULL) *hdl = handle_node;
+        } else if (hdl != NULL) {
+            *hdl = NULL;
+        }
+#else
         ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
+#endif
     }
 }
 
@@ -1159,17 +1452,51 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
     void *remote_dest;
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
-        armci_hdl_t handle;
-        ARMCI_INIT_HANDLE(&handle);
-        check_wait_on_pending_puts(proc, remote_dest, nbytes);
-        ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle);
-        ARMCI_Wait(&handle);    // This ensures local completion only
-        update_nbwrite_address_block(remote_dest, proc, nbytes);
+        check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        struct handle_list *handle_node =
+            get_next_handle(proc, remote_dest, src, nbytes, PUTS);
+        ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
+        handle_node->next = 0;
+        update_nb_address_block(remote_dest, proc, nbytes, PUTS);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "After ARMCI_NbPut to %p on image %lu. Min:%p, Max:%p",
                      remote_dest,
-                     proc + 1, min_nbwrite_address[proc],
-                     max_nbwrite_address[proc]);
+                     proc + 1,
+                     nb_mgr[PUTS].min_nb_address[proc],
+                     nb_mgr[PUTS].max_nb_address[proc]);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Before ARMCI_Put to %p on"
+                     " image %lu from %p size %lu",
+                     remote_dest, proc + 1, src, nbytes);
+        ARMCI_Put(src, remote_dest, (int) nbytes, (int) proc);
+    }
+    if (enable_get_cache)
+        update_cache(proc, remote_dest, nbytes, src);
+}
+
+/* the only different between this and comm_write is that we don't have to
+ * free the src buffer here */
+void comm_write_unbuffered(size_t proc, void *dest, void *src,
+                           size_t nbytes)
+{
+    void *remote_dest;
+    remote_dest = get_remote_address(dest, proc);
+    if (enable_nbput) {
+        check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        struct handle_list *handle_node =
+            get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
+        ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
+        handle_node->next = 0;
+        update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "After ARMCI_NbPut to %p on image %lu. Min:%p, Max:%p",
+                     remote_dest,
+                     proc + 1,
+                     nb_mgr[PUTS].min_nb_address[proc],
+                     nb_mgr[PUTS].max_nb_address[proc]);
     } else {
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Before ARMCI_Put to %p on"
@@ -1185,7 +1512,8 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
 void comm_strided_read(size_t proc,
                        void *src, const size_t src_strides_[],
                        void *dest, const size_t dest_strides_[],
-                       const size_t count_[], size_t stride_levels)
+                       const size_t count_[], size_t stride_levels,
+                       comm_handle_t * hdl)
 {
     void *remote_src;
     int src_strides[stride_levels];
@@ -1209,18 +1537,19 @@ void comm_strided_read(size_t proc,
     } else
 #endif
     {
+        size_t size;
+        /* calculate max size (very conservative!) */
+        size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
+            + count[0];
         remote_src = get_remote_address(src, proc);
         if (enable_nbput) {
-            size_t size;
-            /* calculate max size (very conservative!) */
-            size =
-                src_strides[stride_levels - 1] * (count[stride_levels] - 1)
-                + count[0];
-            check_wait_on_pending_puts(proc, remote_src, size);
+            check_wait_on_pending_accesses(proc, remote_src, size, PUTS);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
                          " pending puts on %p on image %lu. Min:%p,Max:%p",
-                         remote_src, proc + 1, min_nbwrite_address[proc],
-                         max_nbwrite_address[proc]);
+                         remote_src, proc + 1,
+                         nb_mgr[PUTS].min_nb_address[proc],
+                         nb_mgr[PUTS].max_nb_address[proc]);
         }
 
         if (enable_get_cache) {
@@ -1231,11 +1560,32 @@ void comm_strided_read(size_t proc,
 
         } else {
 
+#ifdef NB_COMM
+            int in_progress = 0;
+            armci_hdl_t handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
+            ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
+                    count, stride_levels, proc, &handle);
+
+            in_progress = ARMCI_Test(&handle);
+
+            if (in_progress == 1) {
+                struct handle_list *handle_node =
+                    get_next_handle(proc, remote_src, dest, size, GETS);
+
+                memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+
+                if (hdl != NULL) *hdl = handle_node;
+            } else if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
+#else
             ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
                        stride_levels, proc);
+#endif
         }
     }
 }
@@ -1271,24 +1621,25 @@ void comm_strided_write(size_t proc,
         remote_dest = get_remote_address(dest, proc);
 
         if (enable_nbput) {
-            armci_hdl_t handle;
-            ARMCI_INIT_HANDLE(&handle);
             size_t size;
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
-            check_wait_on_pending_puts(proc, remote_dest, size);
+            check_wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            check_wait_on_pending_accesses(proc, remote_dest, size, GETS);
+            struct handle_list *handle_node =
+                get_next_handle(proc, remote_dest, src, size, PUTS);
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
-                         count, stride_levels, proc, &handle);
-            ARMCI_Wait(&handle);        // This ensures local completion only
-            update_nbwrite_address_block(remote_dest, proc, size);
+                         count, stride_levels, proc, &handle_node->handle);
+            handle_node->next = 0;
+            update_nb_address_block(remote_dest, proc, size, PUTS);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu. Min:%p, Max:%p",
-                         remote_dest, proc + 1, min_nbwrite_address[proc],
-                         max_nbwrite_address[proc]);
+                         remote_dest, proc + 1,
+                         nb_mgr[PUTS].min_nb_address[proc],
+                         nb_mgr[PUTS].max_nb_address[proc]);
         } else {
-
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "before ARMCI_PutS"
                          " to %p on image %lu from %p (stride_levels= %u)",
                          remote_dest, proc + 1, src, stride_levels);

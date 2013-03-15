@@ -8313,9 +8313,37 @@ CONTINUE:
       break;
 
 
+#ifdef _UH_COARRAYS
+   case Defer_Sync_Dir_Opr:
 
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_defer_sync");
+        PDG_DBG_PRINT_LD("(1) PDG_AT_IDX", PDG_AT_IDX(IR_IDX_L(ir_idx)));
+        PDG_DBG_PRINT_END
 
+# ifdef _ENABLE_FEI
+        if (IR_IDX_L(ir_idx) == NULL_IDX)
+            fei_defer_sync(0);
+        else
+            fei_defer_sync(PDG_AT_IDX(IR_IDX_L(ir_idx)));
+# endif
+        break;
 
+   case Sync_Dir_Opr:
+
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_sync");
+        PDG_DBG_PRINT_LD("(1) PDG_AT_IDX", PDG_AT_IDX(IR_IDX_L(ir_idx)));
+        PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+        if (IR_IDX_L(ir_idx) == NULL_IDX)
+            fei_sync(0);
+        else
+            fei_sync(PDG_AT_IDX(IR_IDX_L(ir_idx)));
+# endif
+        break;
+#endif
 
 
 

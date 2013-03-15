@@ -43,7 +43,7 @@
 #define ENV_SHARED_MEMORY_SIZE        "UHCAF_IMAGE_HEAP_SIZE"
 
 #define DEFAULT_ENABLE_GETCACHE           0
-#define DEFAULT_ENABLE_NBPUT              0
+#define DEFAULT_ENABLE_NBPUT              1
 #define DEFAULT_ENABLE_PROGRESS_THREAD    0
 #define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
 /* these will be overridden by the defaults in cafrun script */
@@ -81,14 +81,18 @@ size_t comm_get_proc_id();
 size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
-void comm_read(size_t proc, void *src, void *dest, size_t nbytes);
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
+               comm_handle_t * hdl);
 void comm_write(size_t proc, void *dest, void *src, size_t nbytes);
+void comm_write_unbuffered(size_t proc, void *dest, void *src,
+                           size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
 void comm_strided_read(size_t proc,
                        void *src, const size_t src_strides[],
                        void *dest, const size_t dest_strides[],
-                       const size_t count[], size_t stride_levels);
+                       const size_t count[], size_t stride_levels,
+                       comm_handle_t * hdl);
 
 void comm_strided_write(size_t proc,
                         void *dest, const size_t dest_strides[],
@@ -127,8 +131,11 @@ void comm_sync_images(int *image_list, int image_count, int *status,
                       int stat_len, char *errmsg, int errmsg_len);
 void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len);
+
 /* like comm_sync_all, but without the status return */
 void comm_barrier_all();
+
+void comm_sync(comm_handle_t hdl);
 
 /* atomics */
 void comm_swap_request(void *target, void *value, size_t nbytes,

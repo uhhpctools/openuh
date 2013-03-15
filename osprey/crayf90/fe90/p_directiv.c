@@ -3713,6 +3713,53 @@ static void parse_dir_directives(void)
          parse_auxiliary_dir();
          goto EXIT;
 
+#ifdef _UH_COARRAYS
+      case Tok_Dir_Defer_Sync:
+         ir_idx	     = gen_directive_ir(Defer_Sync_Dir_Opr);
+         if (LA_CH_VALUE == LPAREN) {
+             NEXT_LA_CH;
+             if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                 parse_deref(&opnd, NULL_IDX);
+
+                 COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+                 if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                 } else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                 }
+             } else {
+                 parse_err_flush(Find_Comma_Rparen, "IDENTIFIER");
+                 goto EXIT;
+             }
+         }
+         NEXT_LA_CH;
+         goto EXIT;
+
+      case Tok_Dir_Sync:
+         ir_idx	     = gen_directive_ir(Sync_Dir_Opr);
+         if (LA_CH_VALUE == LPAREN) {
+             NEXT_LA_CH;
+             if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
+                 parse_deref(&opnd, NULL_IDX);
+
+                 COPY_OPND(IR_OPND_L(ir_idx), opnd);
+
+                 if (LA_CH_VALUE == RPAREN) {
+                     NEXT_LA_CH;
+                 } else {
+                     parse_err_flush(Find_EOS, ")");
+                     goto EXIT;
+                 }
+             } else {
+                 parse_err_flush(Find_Comma_Rparen, "IDENTIFIER");
+                 goto EXIT;
+             }
+         }
+         NEXT_LA_CH;
+         goto EXIT;
+#endif
 
       case Tok_Dir_Bl:
 

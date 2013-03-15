@@ -1458,6 +1458,10 @@ char		*operator_str[]		= {
             "Endtask_Open_Mp_Opr",
             "Task_Open_Mp_Opr",
             "Taskwait_Open_Mp_Opr",
+#ifdef _UH_COARRAYS
+            "Defer_Sync_Dir_Opr",
+            "Sync_Dir_Opr",
+#endif
 
                         "The_Last_Opr"
 		};

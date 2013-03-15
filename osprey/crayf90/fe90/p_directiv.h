@@ -83,6 +83,9 @@ dir_info_type	cdir_info[Tok_Dir_End - Tok_Dir_Start] = {
    {0,			0,  790,    0,	0,	0,  "CONTROL"},
    {CDIR_COPY_ASSUMED_SHAPE, 0,801, 0,	1,	0,  "COPY_ASSUMED_SHAPE"},
    {TRUE,		0,    0,    0,	0,	0,  "CRITICAL"},
+#ifdef _UH_COARRAYS
+   {TRUE,		0,    0,    0,	0,	0,  "DEFER_SYNC"},
+#endif
    {TRUE,		0,    0,    0,	0,	0,  "DOSHARED"},
    {0,			0,  801,    0,	0,	0,  "DYNAMIC"},
    {TRUE,		0,  801,    0,	0,	0,  "EJECT"},
@@ -158,6 +161,9 @@ dir_info_type	cdir_info[Tok_Dir_End - Tok_Dir_Start] = {
    {CDIR_STREAM,	0,  801,    0,	1,	0,  "STREAM"},
    {CDIR_SUPPRESS,	0,  801,    0,	1,	0,  "SUPPRESS"},
    {CDIR_SYMMETRIC,	0,  801,    0,	1,	1,  "SYMMETRIC"},
+#ifdef _UH_COARRAYS
+   {TRUE,		0,    0,    0,	0,	0,  "SYNC"},
+#endif
    {TRUE,		0,    0,    0,	1,	1,  "SYSTEM_MODULE"},
    {CDIR_TASK,		0,  801,    0,	1,	0,  "TASK"},
    {CDIR_TASKCOMMON,	0,  801,    0,	1,	1,  "TASKCOMMON"},

@@ -66,7 +66,7 @@ void __libcaf_error(const char *file, const char *func, int line,
     vsnprintf(tmp, MSG_BUF_SIZE, error_msg, ap);
     va_end(ap);
 #if defined(CAFRT_DEBUG)
-    fprintf(stderr, "-- LIBCAF WARNING (%s:%d::%s): %s \n\n",
+    fprintf(stderr, "-- LIBCAF ERROR (%s:%d::%s): %s \n\n",
             file, line, func, tmp);
 #else
     fprintf(stderr, "** LIBCAF ERROR: %s \n\n", tmp);

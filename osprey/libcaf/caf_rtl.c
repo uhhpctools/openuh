@@ -144,13 +144,24 @@ void __release_lcb(void **ptr)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "freed lcb %p", *ptr);
 }
 
-void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
+void __coarray_sync(comm_handle_t hdl)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_sync with hdl=%p",
+                 hdl);
+    START_TIMER();
+    comm_sync(hdl);
+    STOP_TIMER(SYNC);
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync");
+}
+
+void __coarray_read(size_t image, void *src, void *dest, size_t nbytes,
+                    comm_handle_t * hdl)
 {
     check_remote_image(image);
 
     START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
-    comm_read(image - 1, src, dest, nbytes);
+    comm_read(image - 1, src, dest, nbytes, hdl);
 
     STOP_TIMER(READ);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read ");
@@ -177,7 +188,8 @@ void __coarray_write(size_t image, void *dest, void *src, size_t nbytes)
 void __coarray_strided_read(size_t image,
                             void *src, const size_t src_strides[],
                             void *dest, const size_t dest_strides[],
-                            const size_t count[], int stride_levels)
+                            const size_t count[], int stride_levels,
+                            comm_handle_t * hdl)
 {
     int remote_is_contig = 0;
     int local_is_contig = 0;
@@ -196,11 +208,11 @@ void __coarray_strided_read(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_read(image, src, dest, nbytes);
+            __coarray_read(image, src, dest, nbytes, hdl);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            __coarray_read(image, src, buf, nbytes);
+            __coarray_read(image, src, buf, nbytes, hdl);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
             __release_lcb(&buf);
@@ -216,7 +228,7 @@ void __coarray_strided_read(size_t image,
                  "from %p on Img %lu to %p using %d stride_levels ",
                  src, image, dest, stride_levels);
     comm_strided_read(image - 1, src, src_strides, dest, dest_strides,
-                      count, stride_levels);
+                      count, stride_levels, hdl);
     STOP_TIMER(READ);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read_strided ");
 
@@ -251,6 +263,8 @@ void __coarray_strided_write(size_t image,
             __coarray_write(image, dest, src, nbytes);
         } else {
             void *buf;
+            Error
+                ("local buffer for coarray_strided_write should be contiguous");
             __acquire_lcb(nbytes, &buf);
             local_src_strided_copy(src, src_strides, buf, count,
                                    stride_levels);
@@ -779,11 +793,13 @@ void _COARRAY_LOCK(lock_t * lock, const int *image, char *success,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_lock");
     START_TIMER();
 
-    if (*image == 0 ) img = _this_image;
-    else img = *image;
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
-    comm_lock(lock,  img, success, success_len, status, stat_len,
-             errmsg, errmsg_len);
+    comm_lock(lock, img, success, success_len, status, stat_len,
+              errmsg, errmsg_len);
     STOP_TIMER(SYNC);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_lock ");
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_lock");
@@ -797,8 +813,10 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_unlock");
     START_TIMER();
 
-    if (*image == 0 ) img = _this_image;
-    else img = *image;
+    if (*image == 0)
+        img = _this_image;
+    else
+        img = *image;
 
 #if defined(GASNET)
     comm_unlock(lock, img, status, stat_len, errmsg, errmsg_len);
@@ -814,7 +832,7 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
 void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
 {
     LIBCAF_TRACE(LIBCAF_LOG_SYNC,
-                 "before call to comm_write, "
+                 "before call to comm_write_unbuffered, "
                  "atom=%p, value=%p, image_idx=%d", atom, value, *image);
 
     if (*image == 0) {
@@ -824,18 +842,18 @@ void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
         atomic_t t = (atomic_t) * value;
         check_remote_image(*image);
         check_remote_address(*image, atom);
-        /* atomic variables are always of size sizeof(atomic_t) bytes.
-         * Call to comm_write will block until the variable is defined on the
-         * remote image. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t));
+        /* atomic variables are always of size sizeof(atomic_t) bytes.  Call
+         * to comm_write_unbuffered will block until the variable is defined
+         * on the remote image. */
+        comm_write_unbuffered(*image - 1, atom, &t, sizeof(atomic_t));
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write_unbuffered");
 }
 
 void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_write, "
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_write_unbuffered, "
                  "atom=%p, value=%p, image_idx=%d", atom, value, *image);
 
     if (*image == 0) {
@@ -845,10 +863,10 @@ void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
         atomic_t t = (atomic_t) * value;
         check_remote_image(*image);
         check_remote_address(*image, atom);
-        /* atomic variables are always of size sizeof(atomic_t) bytes.
-         * Call to comm_write will block until the variable is defined on the
-         * remote image. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t));
+        /* atomic variables are always of size sizeof(atomic_t) bytes.  Call
+         * to comm_write_unbuffered will block until the variable is defined
+         * on the remote image. */
+        comm_write_unbuffered(*image - 1, atom, &t, sizeof(atomic_t));
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
@@ -869,7 +887,7 @@ void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_write will block until the variable is defined on the
          * remote image. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_write_unbuffered(*image - 1, atom, &t, sizeof(atomic_t));
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
@@ -890,7 +908,7 @@ void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_write will block until the variable is defined on the
          * remote image. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_write_unbuffered(*image - 1, atom, &t, sizeof(atomic_t));
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
@@ -911,7 +929,7 @@ void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
         *value = (INT1) t;
     }
 
@@ -933,7 +951,7 @@ void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
         *value = (INT2) t;
     }
 
@@ -955,7 +973,7 @@ void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
         *value = (INT4) t;
     }
 
@@ -977,7 +995,7 @@ void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
         *value = (INT8) t;
     }
 
@@ -1052,7 +1070,7 @@ void _EVENT_WAIT(event_t * event, int *image)
         check_remote_image(*image);
         check_remote_address(*image, event);
         do {
-            comm_read(*image - 1, event, &state, sizeof(event_t));
+            comm_read(*image - 1, event, &state, sizeof(event_t), NULL);
             if (state > 0) {
                 INT4 dec = -1;
                 INT4 inc = 1;

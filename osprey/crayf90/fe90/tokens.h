@@ -294,6 +294,9 @@ enum	token_values {
 		Tok_Dir_Control,	/* CONTROL			      */
                 Tok_Dir_Copy_Assumed_Shape,     /* COPY_ASSUMED_SHAPE         */
 		Tok_Dir_Critical,	/* CRITICAL			      */
+#ifdef _UH_COARRAYS
+		Tok_Dir_Defer_Sync,	/* DEFER_SYNC		      */
+#endif
 		Tok_Dir_Doshared,	/* DOSHARED			      */
 		Tok_Dir_Dynamic,	/* DYNAMIC			      */
 		Tok_Dir_Eject,		/* EJECT			      */
@@ -369,6 +372,9 @@ enum	token_values {
 		Tok_Dir_Stream,		/* STREAM			      */
 		Tok_Dir_Suppress,	/* SUPPRESS			      */
 		Tok_Dir_Symmetric,	/* SYMMETRIC			      */
+#ifdef _UH_COARRAYS
+		Tok_Dir_Sync,	    /* SYNC */
+#endif
 		Tok_Dir_System_Module,	/* SYSTEM_MODULE		      */
 		Tok_Dir_Task,		/* TASK      			      */
 		Tok_Dir_Taskcommon,	/* TASKCOMMON			      */

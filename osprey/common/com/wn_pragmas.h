@@ -378,6 +378,10 @@ typedef enum {
   WN_PRAGMA_TASKWAIT, /*by cca, 11/20/2007 */
   WN_PRAGMA_UNTIED, /*by cca, 11/20/2007 */
   WN_PRAGMA_COLLAPSE,
+#ifdef _UH_COARRAYS
+  WN_PRAGMA_DEFER_SYNC,		/* defer_sync directive */
+  WN_PRAGMA_SYNC,		    /* sync directive */
+#endif
   MAX_WN_PRAGMA			/* last one in enum			*/
 } WN_PRAGMA_ID;
 

@@ -74,9 +74,10 @@ this_usage_env()
 
 Environment Variables:
 
-   LAUNCHER           Underlying launcher to use for the specified program
+   UHCAF_LAUNCHER     Underlying launcher to use for the specified program
 
-   LAUNCHER_OPTS      Additional options to pass to underlying launcher
+   UHCAF_LAUNCHER_OPTS
+                      Additional options to pass to underlying launcher
 
    UHCAF_IMAGE_NUM_IMAGES
                       Specifies number of images to launch.
@@ -156,8 +157,8 @@ _EOT_
 
 launcher_usage()
 {
-  if [ -n "$LAUNCHER" ]; then
-      eval "$LAUNCHER --help"
+  if [ -n "$UHCAF_LAUNCHER" ]; then
+      eval "$UHCAF_LAUNCHER --help"
   else
       echo "No separate launcher program is used for the executable $prog_name"
   fi
@@ -208,12 +209,12 @@ armci_launcher=`which mpirun 2> /dev/null`
 
 ############################################################
 # set default launcher if its not already set
-if [ -z "$LAUNCHER" ]; then
+if [ -z "$UHCAF_LAUNCHER" ]; then
   # find a suitable, default launcher
   if [ "$default_comm" = "gasnet" ]; then
-    LAUNCHER=$gasnet_launcher
+    UHCAF_LAUNCHER=$gasnet_launcher
   else
-    LAUNCHER=$armci_launcher
+    UHCAF_LAUNCHER=$armci_launcher
   fi
 fi
 
@@ -359,8 +360,8 @@ prog_name=`echo ${program_cmd%% *}`
 prog_args=`echo ${program_cmd#$prog_name}`
 if [ -z "$prog_name" ]; then
     if [ $display_help2 = yes ]; then
-        if [ -n "$LAUNCHER"  ]; then
-            print_warning "Guessing that the launcher is $LAUNCHER"
+        if [ -n "$UHCAF_LAUNCHER"  ]; then
+            print_warning "Guessing that the launcher is $UHCAF_LAUNCHER"
             launcher_usage
         else
             print_error "Don't know what launcher to use."
@@ -414,7 +415,7 @@ fi
 if [ $display_help2 = yes ]; then
     if [ "$GASNET_CONDUIT" = "smp" ]; then
         # no launcher used for GASNet's SMP conduit
-        unset LAUNCHER
+        unset UHCAF_LAUNCHER
     fi
     launcher_usage
     exit 0
@@ -469,7 +470,7 @@ fi
 
 ###########################################
 # set launcher information
-LAUNCHER_OPTS+=$all_args
+UHCAF_LAUNCHER_OPTS+=$all_args
 
 COMM_NETWORK=""
 
@@ -503,32 +504,32 @@ if [ "$GASNET_CONDUIT" = "smp" ]; then
   command="$program_cmd"  # just throw away $all_args?
 else
 
-  if [ -z "`which $LAUNCHER 2> /dev/null`" ]; then
-    print_error "Could not locate a launcher program. Specify with LAUNCHER variable"
+  if [ -z "`which $UHCAF_LAUNCHER 2> /dev/null`" ]; then
+    print_error "Could not locate a launcher program. Specify with UHCAF_LAUNCHER variable"
   fi
 
-  add_to_env_list "LAUNCHER"
+  add_to_env_list "UHCAF_LAUNCHER"
 
-  launcher_name=`basename $LAUNCHER`
+  launcher_name=`basename $UHCAF_LAUNCHER`
 
   if [ \( $launcher_name = mpirun -o $launcher_name = mpiexec -o \
           $launcher_name = aprun \) ]; then
     if [ $num_images -gt 1 ]; then
-      LAUNCHER_OPTS=" -n $num_images $LAUNCHER_OPTS"
+      UHCAF_LAUNCHER_OPTS=" -n $num_images $UHCAF_LAUNCHER_OPTS"
     else
-      LAUNCHER_OPTS=" -n 1 $LAUNCHER_OPTS"
+      UHCAF_LAUNCHER_OPTS=" -n 1 $UHCAF_LAUNCHER_OPTS"
     fi
   fi
 
-  add_to_env_list "LAUNCHER_OPTS"
+  add_to_env_list "UHCAF_LAUNCHER_OPTS"
 
   if [ "$GASNET_CONDUIT" = "udp" ]; then
     set_env GASNET_SPAWNFN "C"
-    set_env GASNET_CSPAWN_CMD "$LAUNCHER $LAUNCHER_OPTS -n %N %C"
+    set_env GASNET_CSPAWN_CMD "$UHCAF_LAUNCHER $UHCAF_LAUNCHER_OPTS -n %N %C"
     command="$prog_name $num_images $prog_args"
   else
     # rest of gasnet conduits and armci layer
-    command="$LAUNCHER $LAUNCHER_OPTS $program_cmd"
+    command="$UHCAF_LAUNCHER $UHCAF_LAUNCHER_OPTS $program_cmd"
   fi
 
 fi

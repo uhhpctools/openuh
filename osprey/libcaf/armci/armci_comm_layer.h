@@ -33,6 +33,29 @@
 #include "mpi.h"
 #include "armci.h"
 
+typedef enum {
+    PUTS = 0,
+    GETS = 1
+} access_type_t;
+
+struct handle_list {
+    armci_hdl_t handle;
+    void *address;
+    void *local_buf;
+    unsigned long size;
+    unsigned long proc;
+    access_type_t access_type;
+    struct handle_list *prev;
+    struct handle_list *next;
+};
+
+struct nb_handle_manager {
+    struct handle_list **handles;
+    unsigned long num_handles;
+    void **min_nb_address;
+    void **max_nb_address;
+};
+
 /* GET CACHE OPTIMIZATION */
 struct cache {
     void *remote_address;

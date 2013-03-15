@@ -142,7 +142,7 @@ void comm_lock(lock_t * lock, int image, char *success,
         /* ARMCI doesn't support compare-and-swap. So, for now we do an
          * initial check and if it isn't locked then we try to acquire the
          * lock as normal */
-        comm_read(image - 1, lock, &p, sizeof(p));
+        comm_read(image - 1, lock, &p, sizeof(p), NULL);
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
@@ -183,9 +183,13 @@ void comm_lock(lock_t * lock, int image, char *success,
         LOAD_STORE_FENCE();
 
         /* p->address now points to predecessor's request descriptor */
-        comm_write(p.image - 1,
-                   ((int *) get_heap_address_from_offset(p.ofst, p.image))
-                   + 1, ((int *) &r) + 1, sizeof(r) - sizeof(int));
+        comm_write_unbuffered(p.image - 1, ((int *)
+                                            get_heap_address_from_offset(p.
+                                                                         ofst,
+                                                                         p.
+                                                                         image))
+                              + 1, ((int *) &r) + 1,
+                              sizeof(r) - sizeof(int));
 
         do {
             /* do something useful here! */
@@ -232,7 +236,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
          * isn't being held by this image */
         if (status != NULL) {
             lock_t p;
-            comm_read(image - 1, lock, &p, sizeof(p));
+            comm_read(image - 1, lock, &p, sizeof(p), NULL);
             if (p.locked != 0) {
                 *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
             } else {
@@ -278,7 +282,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
     /* reset locked on successor */
     s = get_heap_address_from_offset(req->ofst, req->image);
     i = 0;
-    comm_write(req->image - 1, s, &i, sizeof(i));
+    comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
@@ -319,7 +323,7 @@ void comm_unlock2(lock_t * lock, int image, int *status,
          * isn't being held by this image */
         if (status != NULL) {
             lock_t p;
-            comm_read(image - 1, lock, &p, sizeof(p));
+            comm_read(image - 1, lock, &p, sizeof(p), NULL);
             if (p.locked != 0) {
                 *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
             } else {
@@ -360,23 +364,23 @@ void comm_unlock2(lock_t * lock, int image, int *status,
         if (u.image != 0) {
             /* link victim(s) to the usurper(s) */
             lock_request_t r;
-            comm_write(u.image - 1, ((int *)
-                                     get_heap_address_from_offset(u.ofst,
-                                                                  u.
-                                                                  image)) +
-                       1, ((int *) req) + 1, sizeof(*req) - sizeof(int));
+            comm_write_unbuffered(u.image - 1, ((int *)
+                                                get_heap_address_from_offset
+                                                (u.ofst, u.image)) + 1,
+                                  ((int *) req) + 1,
+                                  sizeof(*req) - sizeof(int));
         } else {
             /* reset locked on successor */
             s = get_heap_address_from_offset(req->ofst, req->image);
             i = 0;
-            comm_write(req->image - 1, s, &i, sizeof(i));
+            comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
         }
 
     } else {
         /* reset locked on successor */
         s = get_heap_address_from_offset(req->ofst, req->image);
         i = 0;
-        comm_write(req->image - 1, s, &i, sizeof(i));
+        comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
     }
 
     /* delete request item from request table */

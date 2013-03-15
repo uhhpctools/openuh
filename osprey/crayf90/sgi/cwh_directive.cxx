@@ -1364,6 +1364,64 @@ void  fei_blockable             ( int expressions )
   cwh_reorder(expressions,WN_PRAGMA_BLOCKABLE);
 } 
 
+#ifdef _UH_COARRAYS
+/*===============================================
+ *
+ * fei_defer_sync
+ *
+ *===============================================
+*/
+void  fei_defer_sync               (INTPTR sym_idx)
+{
+  STB_pkt *p;
+  WN *wn;
+  ST *st;
+
+  if (sym_idx == 0) {
+      st = NULL;
+  } else {
+      p = cast_to_STB(sym_idx);
+      DevAssert((p->form == is_ST),("Odd object ref"));
+      st = cast_to_ST(p->item);
+  }
+
+  if (st == NULL || ST_sym_class(st) == CLASS_VAR) {
+
+    wn = WN_CreatePragma ( WN_PRAGMA_DEFER_SYNC, (ST*)st,0,0 );
+    cwh_block_append(wn);
+  }
+
+} /* fei_defer_sync */
+
+/*===============================================
+ *
+ * fei_sync
+ *
+ *===============================================
+*/
+void  fei_sync               (INTPTR sym_idx)
+{
+  STB_pkt *p;
+  WN *wn;
+  ST *st;
+
+  if (sym_idx == 0) {
+      st = NULL;
+  } else {
+      p = cast_to_STB(sym_idx);
+      DevAssert((p->form == is_ST),("Odd object ref"));
+      st = cast_to_ST(p->item);
+  }
+
+  if (st == NULL || ST_sym_class(st) == CLASS_VAR) {
+
+    wn = WN_CreatePragma ( WN_PRAGMA_SYNC, (ST*)st,0,0 );
+    cwh_block_append(wn);
+  }
+
+} /* fei_sync */
+#endif
+
 /*===============================================
  *
  * fei_fission
