@@ -1626,10 +1626,12 @@ static void wait_on_pending_accesses(unsigned long proc,
     void **min_nb_address = nb_mgr[access_type].min_nb_address;
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
     struct handle_list **handles = nb_mgr[access_type].handles;
-    if (address_in_nb_address_block
-        (remote_address, proc, size, access_type)) {
-        struct handle_list *handle_node, *node_to_delete;
-        handle_node = handles[proc];
+    struct handle_list *handle_node = handles[proc];
+
+    if (handle_node &&
+        address_in_nb_address_block(remote_address, proc, size,
+                                    access_type)) {
+        struct handle_list *node_to_delete;
         while (handle_node) {
             if (address_in_handle(handle_node, remote_address, size)) {
                 gasnet_wait_syncnb(handle_node->handle);
@@ -1912,12 +1914,13 @@ void comm_sync(comm_handle_t hdl)
     if (!enable_nbput)
         return;
 
-    if (hdl == NULL) {          /* wait on all non-blocking communication */
+    if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         for (i = 0; i < num_procs; i++) {
             wait_on_all_pending_accesses(i);
         }
         gasnet_wait_syncnbi_all();
-    } else {                    /* wait on specified handle */
+    } else if (hdl != NULL) {   /* wait on specified handle */
+        check_remote_image(((struct handle_list *) hdl)->proc + 1);
         gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
@@ -2028,7 +2031,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         if (status != NULL) {
             image_has_stopped = 0;
             comm_read(q, this_image_stopped, &image_has_stopped,
-                      sizeof(image_has_stopped), NULL);
+                      sizeof(image_has_stopped));
             LOAD_STORE_FENCE();
             if (image_has_stopped && !sync_images_flag[q]) {
                 *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -2165,8 +2168,8 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
 }
 
 
-void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
-               comm_handle_t * hdl)
+void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
+                 comm_handle_t * hdl)
 {
     void *remote_src;
 
@@ -2177,20 +2180,18 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
     }
 
     remote_src = get_remote_address(src, proc);
-    if (enable_nbput)
+    if (enable_nbput && nb_mgr[PUTS].handles[proc])
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
 
     if (enable_get_cache) {
         cache_check_and_get(proc, remote_src, nbytes, dest);
     } else {
-#ifdef NB_COMM
         gasnet_handle_t handle;
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                "gasnet_get_nb_bulk from %p on image %lu"
-                " to %p size %lu", remote_src, proc + 1, dest,
-                nbytes);
-        handle =
-            gasnet_get_nb_bulk(dest, proc, remote_src, nbytes);
+                     "gasnet_get_nb_bulk from %p on image %lu"
+                     " to %p size %lu", remote_src, proc + 1, dest,
+                     nbytes);
+        handle = gasnet_get_nb_bulk(dest, proc, remote_src, nbytes);
 
         if (handle != GASNET_INVALID_HANDLE) {
             struct handle_list *handle_node =
@@ -2202,13 +2203,32 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
                          " to %p size %lu, handle = %p", remote_src,
                          proc + 1, dest, nbytes, handle_node->handle);
 
-            if (hdl != NULL) *hdl = handle_node;
+            if (hdl != NULL)
+                *hdl = handle_node;
         } else if (hdl != NULL) {
             *hdl = NULL;
         }
-#else
+    }
+}
+
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
+{
+    void *remote_src;
+
+    if (!remote_address_in_shared_mem(proc, src)) {
+        comm_read_outside_shared_mem(proc, src, dest, nbytes);
+        return;
+        /* does not reach */
+    }
+
+    remote_src = get_remote_address(src, proc);
+    if (enable_nbput && nb_mgr[PUTS].handles[proc])
+        wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
+
+    if (enable_get_cache) {
+        cache_check_and_get(proc, remote_src, nbytes, dest);
+    } else {
         gasnet_get(dest, proc, remote_src, nbytes);
-#endif
     }
 }
 
@@ -2296,8 +2316,10 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
-        wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        if (nb_mgr[PUTS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        if (nb_mgr[GETS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, src, nbytes, PUTS);
         handle_node->handle =
@@ -2331,8 +2353,10 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
-        wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        if (nb_mgr[PUTS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        if (nb_mgr[GETS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
         handle_node->handle =
@@ -2351,11 +2375,11 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
 }
 
 
-void comm_strided_read(size_t proc,
-                       void *src, const size_t src_strides[],
-                       void *dest, const size_t dest_strides[],
-                       const size_t count[], size_t stride_levels,
-                       comm_handle_t * hdl)
+void comm_strided_nbread(size_t proc,
+                         void *src, const size_t src_strides[],
+                         void *dest, const size_t dest_strides[],
+                         const size_t count[], size_t stride_levels,
+                         comm_handle_t * hdl)
 {
     void *remote_src;
 
@@ -2372,7 +2396,7 @@ void comm_strided_read(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (enable_nbput) {
+        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_src, size, PUTS);
         }
 
@@ -2384,17 +2408,15 @@ void comm_strided_read(size_t proc,
 
         } else {
 
-#ifdef NB_COMM
             gasnet_handle_t handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             handle = gasnet_gets_nb_bulk(dest,
-                        dest_strides,
-                        proc, remote_src,
-                        src_strides,
-                        count,
-                        stride_levels);
+                                         dest_strides,
+                                         proc, remote_src,
+                                         src_strides,
+                                         count, stride_levels);
 
             if (handle != NULL) {
                 struct handle_list *handle_node =
@@ -2402,26 +2424,60 @@ void comm_strided_read(size_t proc,
 
                 handle_node->handle = handle;
                 LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"
-                        " %p on image %lu to %p (stride_levels= %u)"
-                        " handle = %p",
-                        remote_src, proc + 1, dest, stride_levels,
-                        handle_node->handle);
+                             " %p on image %lu to %p (stride_levels= %u)"
+                             " handle = %p",
+                             remote_src, proc + 1, dest, stride_levels,
+                             handle_node->handle);
 
-                if (hdl != NULL) *hdl = handle_node;
+                if (hdl != NULL)
+                    *hdl = handle_node;
             } else if (hdl != NULL) {
                 *hdl = NULL;
             }
-#else
+        }
+    }
+}
+
+void comm_strided_read(size_t proc,
+                       void *src, const size_t src_strides[],
+                       void *dest, const size_t dest_strides[],
+                       const size_t count[], size_t stride_levels)
+{
+    void *remote_src;
+
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc) {
+        /* local copy */
+        local_strided_copy(src, src_strides, dest, dest_strides,
+                           count, stride_levels);
+    } else
+#endif
+    {
+        size_t size;
+        /* calculate max size (very conservative!) */
+        size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
+            + count[0];
+        remote_src = get_remote_address(src, proc);
+        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
+            wait_on_pending_accesses(proc, remote_src, size, PUTS);
+        }
+
+        if (enable_get_cache) {
+
+            cache_check_and_get_strided(remote_src, src_strides,
+                                        dest, dest_strides, count,
+                                        stride_levels, proc);
+
+        } else {
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_bulk from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             gasnet_gets_bulk(dest, dest_strides, proc, remote_src,
                              src_strides, count, stride_levels);
-#endif
         }
     }
 }
-
 
 void comm_strided_write(size_t proc,
                         void *dest, const size_t dest_strides[],
@@ -2449,8 +2505,10 @@ void comm_strided_write(size_t proc,
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
                          remote_dest, proc + 1, src, size);
-            wait_on_pending_accesses(proc, remote_dest, size, PUTS);
-            wait_on_pending_accesses(proc, remote_dest, size, GETS);
+            if (nb_mgr[PUTS].handles[proc])
+                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            if (nb_mgr[GETS].handles[proc])
+                wait_on_pending_accesses(proc, remote_dest, size, GETS);
 
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, size, PUTS);

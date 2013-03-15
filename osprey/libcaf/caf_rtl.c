@@ -154,14 +154,34 @@ void __coarray_sync(comm_handle_t hdl)
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync");
 }
 
-void __coarray_read(size_t image, void *src, void *dest, size_t nbytes,
-                    comm_handle_t * hdl)
+void __coarray_nbread(size_t image, void *src, void *dest, size_t nbytes,
+                      comm_handle_t * hdl)
+{
+    check_remote_image(image);
+
+    /* initialize to NULL */
+    if (hdl)
+        *hdl = NULL;
+
+    START_TIMER();
+    /* reads nbytes from src on proc 'image-1' into local dest */
+    comm_nbread(image - 1, src, dest, nbytes, hdl);
+
+    STOP_TIMER(READ);
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_nbread ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "Finished read from %p on Img %lu to %p"
+                 " data of size %lu ", src, image, dest, nbytes);
+}
+
+void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 {
     check_remote_image(image);
 
     START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
-    comm_read(image - 1, src, dest, nbytes, hdl);
+    comm_read(image - 1, src, dest, nbytes);
 
     STOP_TIMER(READ);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read ");
@@ -185,11 +205,67 @@ void __coarray_write(size_t image, void *dest, void *src, size_t nbytes)
                  " size %lu ", dest, image, src, nbytes);
 }
 
+void __coarray_strided_nbread(size_t image,
+                              void *src, const size_t src_strides[],
+                              void *dest, const size_t dest_strides[],
+                              const size_t count[], int stride_levels,
+                              comm_handle_t * hdl)
+{
+    int remote_is_contig = 0;
+    int local_is_contig = 0;
+    int i;
+
+    check_remote_image(image);
+
+    /* initialize to NULL */
+    if (hdl)
+        *hdl = NULL;
+
+    /* runtime check if it is contiguous transfer */
+    remote_is_contig =
+        is_contiguous_access(src_strides, count, stride_levels);
+    if (remote_is_contig) {
+        local_is_contig =
+            is_contiguous_access(dest_strides, count, stride_levels);
+        size_t nbytes = 1;
+        for (i = 0; i <= stride_levels; i++)
+            nbytes = nbytes * count[i];
+
+        if (local_is_contig) {
+            __coarray_nbread(image, src, dest, nbytes, hdl);
+        } else {
+            void *buf;
+            __acquire_lcb(nbytes, &buf);
+            __coarray_nbread(image, src, buf, nbytes, hdl);
+            local_dest_strided_copy(buf, dest, dest_strides, count,
+                                    stride_levels);
+            __release_lcb(&buf);
+        }
+
+        return;
+        /* not reached */
+    }
+
+    START_TIMER();
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "Starting read(strided) "
+                 "from %p on Img %lu to %p using %d stride_levels ",
+                 src, image, dest, stride_levels);
+    comm_strided_nbread(image - 1, src, src_strides, dest, dest_strides,
+                        count, stride_levels, hdl);
+    STOP_TIMER(READ);
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_nbread_strided ");
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "Finished read(strided) "
+                 "from %p on Img %lu to %p using %d stride_levels ",
+                 src, image, dest, stride_levels);
+}
+
 void __coarray_strided_read(size_t image,
                             void *src, const size_t src_strides[],
                             void *dest, const size_t dest_strides[],
-                            const size_t count[], int stride_levels,
-                            comm_handle_t * hdl)
+                            const size_t count[], int stride_levels)
 {
     int remote_is_contig = 0;
     int local_is_contig = 0;
@@ -208,11 +284,11 @@ void __coarray_strided_read(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_read(image, src, dest, nbytes, hdl);
+            __coarray_read(image, src, dest, nbytes);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            __coarray_read(image, src, buf, nbytes, hdl);
+            __coarray_read(image, src, buf, nbytes);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
             __release_lcb(&buf);
@@ -228,7 +304,7 @@ void __coarray_strided_read(size_t image,
                  "from %p on Img %lu to %p using %d stride_levels ",
                  src, image, dest, stride_levels);
     comm_strided_read(image - 1, src, src_strides, dest, dest_strides,
-                      count, stride_levels, hdl);
+                      count, stride_levels);
     STOP_TIMER(READ);
     LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read_strided ");
 
@@ -929,7 +1005,7 @@ void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
         *value = (INT1) t;
     }
 
@@ -951,7 +1027,7 @@ void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
         *value = (INT2) t;
     }
 
@@ -973,7 +1049,7 @@ void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
         *value = (INT4) t;
     }
 
@@ -995,7 +1071,7 @@ void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image)
         /* atomic variables are always of size sizeof(atomic_t) bytes.
          * Call to comm_read will block until the variable is defined on the
          * remote image. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t), NULL);
+        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
         *value = (INT8) t;
     }
 
@@ -1070,7 +1146,7 @@ void _EVENT_WAIT(event_t * event, int *image)
         check_remote_image(*image);
         check_remote_address(*image, event);
         do {
-            comm_read(*image - 1, event, &state, sizeof(event_t), NULL);
+            comm_read(*image - 1, event, &state, sizeof(event_t));
             if (state > 0) {
                 INT4 dec = -1;
                 INT4 inc = 1;

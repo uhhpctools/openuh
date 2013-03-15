@@ -30,15 +30,15 @@
 #define _TRACE_H
 
 #ifdef TRACE
-# define LIBCAF_TRACE_INIT __libcaf_tracers_init
-# define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
-# define START_TIMER  __start_timer
-# define STOP_TIMER  __stop_timer
+#define LIBCAF_TRACE_INIT __libcaf_tracers_init
+#define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
+#define START_TIMER  __start_timer
+#define STOP_TIMER  __stop_timer
 #else
-# define LIBCAF_TRACE_INIT() ((void) 1)
-# define LIBCAF_TRACE(arg1, arg2, ...) ((void) 1)
-# define START_TIMER() ((void) 1)
-# define STOP_TIMER(arg1) ((void) 1)
+#define LIBCAF_TRACE_INIT() ((void) 1)
+#define LIBCAF_TRACE(arg1, arg2, ...) ((void) 1)
+#define START_TIMER() ((void) 1)
+#define STOP_TIMER(arg1) ((void) 1)
 #endif
 
 typedef enum {

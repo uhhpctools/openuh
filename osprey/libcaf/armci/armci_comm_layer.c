@@ -858,8 +858,9 @@ static void check_wait_on_pending_accesses(size_t proc,
     struct handle_list **handles = nb_mgr[access_type].handles;
     struct handle_list *handle_node, *node_to_delete;
     handle_node = handles[proc];
-    if (address_in_nb_address_block
-        (remote_address, proc, size, access_type)) {
+    if (handle_node &&
+        address_in_nb_address_block(remote_address, proc, size,
+                                    access_type)) {
         if (access_type == PUTS) {
             /* ARMCI provides no way to wait on a specific PUT to complete
              * remotely, so just wait on all of them to complete */
@@ -1123,9 +1124,10 @@ void comm_sync(comm_handle_t hdl)
     if (!enable_nbput)
         return;
 
-    if (hdl == NULL) {          /* wait on all non-blocking communication */
+    if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
-    } else {                    /* wait on specified handle */
+    } else if (hdl != NULL) {   /* wait on specified handle */
+        check_remote_image(((struct handle_list *) hdl)->proc + 1);
         ARMCI_Wait(&((struct handle_list *) hdl)->handle);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
@@ -1261,7 +1263,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         if (status != NULL) {
             image_has_stopped = 0;
             comm_read(q, this_image_stopped, &image_has_stopped,
-                      sizeof(image_has_stopped), NULL);
+                      sizeof(image_has_stopped));
             LOAD_STORE_FENCE();
             if (image_has_stopped && !(*check_flag)) {
                 *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -1396,8 +1398,8 @@ void comm_free_lcb(void *ptr)   //To make it sync with gasnet
     free(ptr);
 }
 
-void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
-               comm_handle_t * hdl)
+void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
+                 comm_handle_t * hdl)
 {
     void *remote_src;
     remote_src = get_remote_address(src, proc);
@@ -1407,7 +1409,7 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
                  src, remote_src, comm_address_translation_offset(proc),
                  coarray_start_all_images[proc],
                  coarray_start_all_images[my_proc]);
-    if (enable_nbput) {
+    if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
         check_wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Finished waiting for"
@@ -1419,15 +1421,13 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
     if (enable_get_cache)
         cache_check_and_get(proc, remote_src, nbytes, dest);
     else {
-#ifdef NB_COMM
         int in_progress = 0;
         armci_hdl_t handle;
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Before ARMCI_Get from %p on"
                      " image %lu to %p size %lu",
                      remote_src, proc + 1, dest, nbytes);
-        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc,
-                    &handle);
+        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, &handle);
 
         in_progress = ARMCI_Test(&handle);
 
@@ -1437,13 +1437,37 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
 
             memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
 
-            if (hdl != NULL) *hdl = handle_node;
+            if (hdl != NULL)
+                *hdl = handle_node;
         } else if (hdl != NULL) {
             *hdl = NULL;
         }
-#else
+    }
+}
+
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
+{
+    void *remote_src;
+    remote_src = get_remote_address(src, proc);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                 "src: %p, remote_src: %p, offset: %p "
+                 "start_all_images[proc]: %p, start_all_images[my_proc]: %p",
+                 src, remote_src, comm_address_translation_offset(proc),
+                 coarray_start_all_images[proc],
+                 coarray_start_all_images[my_proc]);
+    if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
+        check_wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "Finished waiting for"
+                     " pending puts on %p on image %lu. Min:%p, Max:%p",
+                     remote_src, proc + 1,
+                     nb_mgr[PUTS].min_nb_address[proc],
+                     nb_mgr[PUTS].max_nb_address[proc]);
+    }
+    if (enable_get_cache)
+        cache_check_and_get(proc, remote_src, nbytes, dest);
+    else {
         ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
-#endif
     }
 }
 
@@ -1452,8 +1476,10 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
     void *remote_dest;
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
-        check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        if (nb_mgr[PUTS].handles[proc])
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        if (nb_mgr[GETS].handles[proc])
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, src, nbytes, PUTS);
         ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
@@ -1484,8 +1510,10 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
     void *remote_dest;
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
-        check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+        if (nb_mgr[PUTS].handles[proc])
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+        if (nb_mgr[GETS].handles[proc])
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
         ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
@@ -1509,11 +1537,11 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
 }
 
 
-void comm_strided_read(size_t proc,
-                       void *src, const size_t src_strides_[],
-                       void *dest, const size_t dest_strides_[],
-                       const size_t count_[], size_t stride_levels,
-                       comm_handle_t * hdl)
+void comm_strided_nbread(size_t proc,
+                         void *src, const size_t src_strides_[],
+                         void *dest, const size_t dest_strides_[],
+                         const size_t count_[], size_t stride_levels,
+                         comm_handle_t * hdl)
 {
     void *remote_src;
     int src_strides[stride_levels];
@@ -1542,7 +1570,7 @@ void comm_strided_read(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (enable_nbput) {
+        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
             check_wait_on_pending_accesses(proc, remote_src, size, PUTS);
 
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
@@ -1560,14 +1588,13 @@ void comm_strided_read(size_t proc,
 
         } else {
 
-#ifdef NB_COMM
             int in_progress = 0;
             armci_hdl_t handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
-                    count, stride_levels, proc, &handle);
+                         count, stride_levels, proc, &handle);
 
             in_progress = ARMCI_Test(&handle);
 
@@ -1577,15 +1604,68 @@ void comm_strided_read(size_t proc,
 
                 memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
 
-                if (hdl != NULL) *hdl = handle_node;
+                if (hdl != NULL)
+                    *hdl = handle_node;
             } else if (hdl != NULL) {
                 *hdl = NULL;
             }
 
-#else
+        }
+    }
+}
+
+void comm_strided_read(size_t proc,
+                       void *src, const size_t src_strides_[],
+                       void *dest, const size_t dest_strides_[],
+                       const size_t count_[], size_t stride_levels)
+{
+    void *remote_src;
+    int src_strides[stride_levels];
+    int dest_strides[stride_levels];
+    int count[stride_levels + 1];
+
+    /* ARMCI uses int for strides and count arrays */
+    int i;
+    for (i = 0; i < stride_levels; i++) {
+        src_strides[i] = src_strides_[i];
+        dest_strides[i] = dest_strides_[i];
+        count[i] = count_[i];
+    }
+    count[stride_levels] = count_[stride_levels];
+
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc) {
+        /* local copy */
+        local_strided_copy(src, src_strides, dest, dest_strides,
+                           count, stride_levels);
+    } else
+#endif
+    {
+        size_t size;
+        /* calculate max size (very conservative!) */
+        size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
+            + count[0];
+        remote_src = get_remote_address(src, proc);
+        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
+            check_wait_on_pending_accesses(proc, remote_src, size, PUTS);
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Finished waiting for"
+                         " pending puts on %p on image %lu. Min:%p,Max:%p",
+                         remote_src, proc + 1,
+                         nb_mgr[PUTS].min_nb_address[proc],
+                         nb_mgr[PUTS].max_nb_address[proc]);
+        }
+
+        if (enable_get_cache) {
+
+            cache_check_and_get_strided(remote_src, src_strides,
+                                        dest, dest_strides, count,
+                                        stride_levels, proc);
+
+        } else {
+
             ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
                        stride_levels, proc);
-#endif
         }
     }
 }
@@ -1625,9 +1705,10 @@ void comm_strided_write(size_t proc,
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
-
-            check_wait_on_pending_accesses(proc, remote_dest, size, PUTS);
-            check_wait_on_pending_accesses(proc, remote_dest, size, GETS);
+            if (nb_mgr[PUTS].handles[proc])
+                check_wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+            if (nb_mgr[GETS].handles[proc])
+                check_wait_on_pending_accesses(proc, remote_dest, size, GETS);
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, size, PUTS);
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,

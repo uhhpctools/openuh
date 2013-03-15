@@ -81,18 +81,24 @@ size_t comm_get_proc_id();
 size_t comm_get_num_procs();
 
 /* non-strided (contiguous) read and write operations */
-void comm_read(size_t proc, void *src, void *dest, size_t nbytes,
-               comm_handle_t * hdl);
+void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
+                 comm_handle_t * hdl);
+void comm_read(size_t proc, void *src, void *dest, size_t nbytes);
 void comm_write(size_t proc, void *dest, void *src, size_t nbytes);
 void comm_write_unbuffered(size_t proc, void *dest, void *src,
                            size_t nbytes);
 
 /* strided, non-contiguous read and write operations */
+void comm_strided_nbread(size_t proc,
+                         void *src, const size_t src_strides[],
+                         void *dest, const size_t dest_strides[],
+                         const size_t count[], size_t stride_levels,
+                         comm_handle_t * hdl);
+
 void comm_strided_read(size_t proc,
                        void *src, const size_t src_strides[],
                        void *dest, const size_t dest_strides[],
-                       const size_t count[], size_t stride_levels,
-                       comm_handle_t * hdl);
+                       const size_t count[], size_t stride_levels);
 
 void comm_strided_write(size_t proc,
                         void *dest, const size_t dest_strides[],

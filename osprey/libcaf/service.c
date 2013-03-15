@@ -58,7 +58,7 @@
  */
 
 #ifndef _POSIX_C_SOURCE
-# define _POSIX_C_SOURCE 199309
+#define _POSIX_C_SOURCE 199309
 #endif                          /* _POSIX_C_SOURCE */
 
 extern unsigned long _this_image;
