@@ -701,13 +701,15 @@ void directive_stmt_semantics(void)
       /*            			 UHCAF directives                             */
       /*                                                                      */
       /* -------------------------------------------------------------------- */
+#ifdef _UH_COARRAYS
       case Defer_Sync_Dir_Opr:
-         //printf("in Defer_Sync_Dir_Opr\n");
+         /* TODO: */
          break;
 
       case Sync_Dir_Opr:
-         //printf("in Sync_Dir_Opr\n");
+         /* TODO: */
          break;
+#endif
 
       /* -------------------------------------------------------------------- */
       /*								      */
