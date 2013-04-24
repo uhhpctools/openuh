@@ -85,6 +85,11 @@ extern int __trace_is_enabled(libcaf_trace_t level);
 void __start_timer();
 void __stop_timer(__timer_type_t type);
 
+void uhcaf_tracedump_shared_mem_alloc(char *str);
+
+void uhcaf_trace_suspend();
+void uhcaf_trace_resume();
+
 #endif                          /* TRACE */
 
 #endif                          /* _TRACE_H */

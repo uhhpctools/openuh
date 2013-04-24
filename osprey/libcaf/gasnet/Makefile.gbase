@@ -67,10 +67,13 @@ CFILES = \
 	caf_collectives.c \
 	gasnet_comm_layer.c  \
 	service.c \
-	trace.c \
 	lock.c \
 	env.c \
 	util.c
+
+ifeq ($(CAFRT_ENABLE_TRACES), YES)
+CFILES += trace.c
+endif
 
 LCINCS += -I$(GASNET_HOME)/include 
 LCINCS += -I$(GASNET_HOME)/include/$(GASNET_CONDUIT)-conduit

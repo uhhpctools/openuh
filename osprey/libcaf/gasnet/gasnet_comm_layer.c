@@ -1032,6 +1032,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _this_image = my_proc + 1;
     _num_images = num_procs;
 
+    LIBCAF_TRACE_INIT();
+
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
             Error("Number of images must not exceed %lu", MAX_NUM_IMAGES);
@@ -1112,7 +1114,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     uintptr_t max_local = gasnet_getMaxLocalSegmentSize();
 
     if (my_proc == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
+        LIBCAF_TRACE(LIBCAF_LOG_INIT,
                      "gasnet max local segment size: %lu, "
                      "requested caf_shared_memory_size: %lu",
                      max_local, caf_shared_memory_size);
@@ -1226,7 +1228,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     /* start progress thread */
     comm_service_init();
 
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
+    LIBCAF_TRACE(LIBCAF_LOG_INIT,
                  "Finished. Waiting for global barrier. Gasnet_Everything is %d. "
                  "common_slot->addr=%p, common_slot->size=%lu",
                  gasnet_everything, common_shared_memory_slot->addr,
@@ -2271,7 +2273,7 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     if (enable_get_cache) {
         cache_check_and_get(proc, remote_src, nbytes, dest);
     } else {
-        gasnet_get(dest, proc, remote_src, nbytes);
+        gasnet_get_bulk(dest, proc, remote_src, nbytes);
     }
 }
 
@@ -2366,14 +2368,14 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, src, nbytes, PUTS);
         handle_node->handle =
-            gasnet_put_nb(proc, remote_dest, src, nbytes);
+            gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
         handle_node->next = 0;
         update_nb_address_block(remote_dest, proc, nbytes, PUTS);
     } else {
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_put to %p on image %lu"
                      " from %p size %lu", remote_dest, proc + 1, src,
                      nbytes);
-        gasnet_put(proc, remote_dest, src, nbytes);
+        gasnet_put_bulk(proc, remote_dest, src, nbytes);
     }
 
     if (enable_get_cache)
@@ -2403,14 +2405,14 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
         handle_node->handle =
-            gasnet_put_nb(proc, remote_dest, src, nbytes);
+            gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
         handle_node->next = 0;
         update_nb_address_block(remote_dest, proc, nbytes, PUTS);
     } else {
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_put to %p on image %lu"
                      " from %p size %lu", remote_dest, proc + 1, src,
                      nbytes);
-        gasnet_put(proc, remote_dest, src, nbytes);
+        gasnet_put_bulk(proc, remote_dest, src, nbytes);
     }
 
     if (enable_get_cache)

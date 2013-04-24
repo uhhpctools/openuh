@@ -60,6 +60,7 @@ size_t get_env_size(const char *var_name, size_t default_size)
 {
     char *p;
     char *val;
+
     if (var_name == NULL)
         return default_size;
 
@@ -68,7 +69,7 @@ size_t get_env_size(const char *var_name, size_t default_size)
     if (val == NULL)
         return default_size;
 
-    strtod(val, &p);
+    double dummy = strtod(val, &p);
 
     if (*p != '\0') {
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE,

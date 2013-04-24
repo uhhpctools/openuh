@@ -166,7 +166,6 @@ int check_remote_address(size_t, void *);
 int check_remote_image(size_t);
 
 /* UHCAF library routines */
-void uhcaf_print_shared_mem_alloc(char *str);
 void uhcaf_check_comms(void);
 
 #endif

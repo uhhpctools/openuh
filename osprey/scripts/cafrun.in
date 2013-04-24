@@ -90,8 +90,8 @@ Environment Variables:
    UHCAF_TRACE        Specifies trace levels for runtime.
                          Can be set with --trace
 
-   UHCAF_TRACE_FILE   Specifies file to store runtime trace
-                         Can be set with --trace-file
+   UHCAF_TRACE_DIR    Specifies dir to store runtime traces
+                         Can be set with --trace-dir
 
    UHCAF_PROGRESS_THREAD
                       Set to 1 to enable progress thread in CAF runtime
@@ -135,7 +135,7 @@ Where OPTIONS are:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
                         COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE
 
-  --trace-file=F      F is name of file to store trace
+  --trace-dir=D       D is name of directory to store traces
 
   --verbose,-v        Verbose output
 
@@ -295,9 +295,9 @@ for arg in "$@" ; do
           print_warning "Tracing disabled in CAF runtime"
         fi
         ;;
-      --trace-file=*)
-        trace_file=`echo UhCaf$arg | sed -e 's/UhCaf--trace-file=//g'`
-        set_env UHCAF_TRACE_FILE $trace_file
+      --trace-dir=*)
+        trace_dir=`echo UhCaf$arg | sed -e 's/UhCaf--trace-dir=//g'`
+        set_env UHCAF_TRACE_DIR $trace_dir
         if [ "${tracing_enabled}" = "NO" ]; then
           print_warning "Tracing disabled in CAF runtime"
         fi
@@ -526,6 +526,14 @@ else
 
 fi
 
+# if traces specified, then create directory for traces.
+if [ -n "$UHCAF_TRACE" ]; then
+    if [ -n "$UHCAF_TRACE_DIR" -a ! -d "$UHCAF_TRACE_DIR" ]; then
+        mkdir $UHCAF_TRACE_DIR
+    elif [ ! -d "uhcaf.traces" ]; then
+        mkdir uhcaf.traces
+    fi
+fi
 
 ENVIRONMENT+="-----------------------\n"
 case $verbose in

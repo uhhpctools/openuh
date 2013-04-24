@@ -106,8 +106,6 @@ void __caf_init()
     else
         return;
 
-    LIBCAF_TRACE_INIT();
-
     common_slot = (struct shared_memory_slot *)
         malloc(sizeof(struct shared_memory_slot));
     START_TIMER();
@@ -740,120 +738,6 @@ void coarray_translate_remote_addr(void **remote_addr, int image)
 }
 
 
-/* print shared memory allocation info */
-static void print_mem_slot(char *mem_str, char *start_address,
-                           char *end_address)
-{
-    const int width = 70;
-    int i, j;
-    char label[width];
-
-    memset(label, 0, width);
-
-    printf("|");
-    for (i = 0; i < width; i++)
-        printf("=");
-    printf("|\n");
-
-    sprintf(label, "%s", mem_str);
-    j = (width - strlen(label)) / 2;
-    printf("|");
-    for (i = 0; i < j; i++)
-        printf(" ");
-    printf("%s", label);
-    for (i = 0; i < width - (j + strlen(label)); i++)
-        printf(" ");
-    printf("|\n");
-
-    printf("|");
-    for (i = 0; i < width; i++)
-        printf("-");
-    printf("|\n");
-
-    sprintf(label, "%p ... %p", start_address, end_address);
-    j = (width - strlen(label)) / 2;
-    printf("|");
-    for (i = 0; i < j; i++)
-        printf(" ");
-    printf("%s", label);
-    for (i = 0; i < width - (j + strlen(label)); i++)
-        printf(" ");
-    printf("|\n");
-
-    printf("|");
-    for (i = 0; i < width; i++)
-        printf("-");
-    printf("|\n");
-
-    sprintf(label, "SIZE: %lu",
-            (unsigned long) (end_address - start_address));
-    j = (width - strlen(label)) / 2;
-    printf("|");
-    for (i = 0; i < j; i++)
-        printf(" ");
-    printf("%s", label);
-    for (i = 0; i < width - (j + strlen(label)); i++)
-        printf(" ");
-    printf("|\n");
-}
-
-#pragma weak uhcaf_print_shared_mem_alloc_ = uhcaf_print_shared_mem_alloc
-void uhcaf_print_shared_mem_alloc(char *str)
-{
-    const int width = 70;
-    int i, j;
-    char label[width];
-
-    memset(label, 0, width);
-
-    /* print header */
-    printf("|");
-    for (i = 0; i < width; i++)
-        printf("=");
-    printf("|\n");
-    sprintf(label, "CAF RUNTIME SHARED MEMORY ALLOCATIONS");
-    j = (width - strlen(label)) / 2;
-    printf("|");
-    for (i = 0; i < j; i++)
-        printf(" ");
-    printf("%s", label);
-    for (i = 0; i < width - (j + strlen(label)); i++)
-        printf(" ");
-    printf("|\n");
-    if (str != NULL) {
-        sprintf(label, "(%lu) %s", _this_image, str);
-        j = (width - strlen(label)) / 2;
-        printf("|");
-        for (i = 0; i < j; i++)
-            printf(" ");
-        printf("%s", label);
-        for (i = 0; i < width - (j + strlen(label)); i++)
-            printf(" ");
-        printf("|\n");
-    }
-
-    /* print memory slots */
-    print_mem_slot("save coarrays",
-                   comm_start_save_coarrays(_this_image - 1),
-                   comm_end_save_coarrays(_this_image - 1));
-
-    print_mem_slot("allocatable coarrays",
-                   comm_start_allocatable_heap(_this_image - 1),
-                   comm_end_allocatable_heap(_this_image - 1));
-
-    print_mem_slot("unused",
-                   comm_end_allocatable_heap(_this_image - 1),
-                   comm_start_asymmetric_heap(_this_image - 1));
-
-    print_mem_slot("asymmetric data",
-                   comm_start_asymmetric_heap(_this_image - 1),
-                   comm_end_asymmetric_heap(_this_image - 1));
-
-    printf("|");
-    for (i = 0; i < width; i++)
-        printf("=");
-    printf("|\n\n");
-}
 
 #pragma weak uhcaf_check_comms_ = uhcaf_check_comms
 void uhcaf_check_comms(void)

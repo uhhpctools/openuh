@@ -299,6 +299,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _this_image = my_proc + 1;
     _num_images = num_procs;
 
+    LIBCAF_TRACE_INIT();
+
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
             Error("Number of images may not exceed %lu", MAX_NUM_IMAGES);
@@ -442,7 +444,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     *this_image_stopped = 0;
 
 
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished. Waiting for global barrier."
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "Finished. Waiting for global barrier."
                  "common_slot->addr=%p, common_slot->size=%lu",
                  common_shared_memory_slot->addr,
                  common_shared_memory_slot->size);

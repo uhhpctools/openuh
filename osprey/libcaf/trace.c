@@ -36,6 +36,7 @@
 #include <sys/time.h>
 
 #include "caf_rtl.h"
+#include "comm.h"
 #include "trace.h"
 
 #define BUF_SIZE 512
@@ -75,6 +76,10 @@ __trace_table_t tracers[] = {
     INIT_LEVEL(SERVICE, OFF),
     INIT_LEVEL(MEMORY_SUMMARY, OFF)
 };
+
+
+static FILE *trace_log_stream;
+static int tracing_suspended = 0;
 
 static int __trace_enable(libcaf_trace_t level)
 {
@@ -134,13 +139,11 @@ static void show_trace_levels(void)
 
 int __trace_is_enabled(libcaf_trace_t level)
 {
-    if (level < NUM_TRACERS)
+    if (level < NUM_TRACERS && !tracing_suspended)
         return tracers[level].state;
     else
         return 0;
 }
-
-static FILE *trace_log_stream;
 
 /*
  * default log to stderr. If env variable set, try to append to that file
@@ -148,16 +151,21 @@ static FILE *trace_log_stream;
  */
 static void logging_filestream_init(void)
 {
-    char *logfile;
+    char trace_filename[BUF_SIZE];
+    char *trace_dir;
     FILE *fp;
 
     trace_log_stream = stderr;
 
-    logfile = getenv("UHCAF_TRACE_FILE");
-    if (logfile == (char *) NULL)
-        return;
+    trace_dir = getenv("UHCAF_TRACE_DIR");
+    if (trace_dir == (char *) NULL) {
+        trace_dir = "uhcaf.traces";
+    }
 
-    fp = fopen(logfile, "a");
+    snprintf(trace_filename, BUF_SIZE, "%s/trace.%lu",
+             trace_dir, (long unsigned int)_this_image);
+
+    fp = fopen(trace_filename, "w");
     if (fp != (FILE *) NULL) {
         trace_log_stream = fp;
     }
@@ -365,4 +373,131 @@ void __libcaf_trace(const char *file, const char *func, int line,
         __caf_exit(1);
     }
 
+}
+
+/* print shared memory allocation info */
+static void print_mem_slot(char *mem_str, char *start_address,
+                           char *end_address)
+{
+    const int width = 70;
+    int i, j;
+    char label[width];
+
+    memset(label, 0, width);
+
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < width; i++)
+        fprintf(trace_log_stream, "=");
+    fprintf(trace_log_stream, "|\n");
+
+    sprintf(label, "%s", mem_str);
+    j = (width - strlen(label)) / 2;
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < j; i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "%s", label);
+    for (i = 0; i < width - (j + strlen(label)); i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "|\n");
+
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < width; i++)
+        fprintf(trace_log_stream, "-");
+    fprintf(trace_log_stream, "|\n");
+
+    sprintf(label, "%p ... %p", start_address, end_address);
+    j = (width - strlen(label)) / 2;
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < j; i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "%s", label);
+    for (i = 0; i < width - (j + strlen(label)); i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "|\n");
+
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < width; i++)
+        fprintf(trace_log_stream, "-");
+    fprintf(trace_log_stream, "|\n");
+
+    sprintf(label, "SIZE: %lu",
+            (unsigned long) (end_address - start_address));
+    j = (width - strlen(label)) / 2;
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < j; i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "%s", label);
+    for (i = 0; i < width - (j + strlen(label)); i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "|\n");
+}
+
+#pragma weak uhcaf_tracedump_shared_mem_alloc_ = uhcaf_tracedump_shared_mem_alloc
+void uhcaf_tracedump_shared_mem_alloc(char *str)
+{
+    const int width = 70;
+    int i, j;
+    char label[width];
+
+    memset(label, 0, width);
+
+    /* print header */
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < width; i++)
+        fprintf(trace_log_stream, "=");
+    fprintf(trace_log_stream, "|\n");
+    sprintf(label, "CAF RUNTIME SHARED MEMORY ALLOCATIONS");
+    j = (width - strlen(label)) / 2;
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < j; i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "%s", label);
+    for (i = 0; i < width - (j + strlen(label)); i++)
+        fprintf(trace_log_stream, " ");
+    fprintf(trace_log_stream, "|\n");
+    if (str != NULL) {
+        sprintf(label, "(%lu) %s", _this_image, str);
+        j = (width - strlen(label)) / 2;
+        fprintf(trace_log_stream, "|");
+        for (i = 0; i < j; i++)
+            fprintf(trace_log_stream, " ");
+        fprintf(trace_log_stream, "%s", label);
+        for (i = 0; i < width - (j + strlen(label)); i++)
+            fprintf(trace_log_stream, " ");
+        fprintf(trace_log_stream, "|\n");
+    }
+
+    /* print memory slots */
+    print_mem_slot("save coarrays",
+                   comm_start_save_coarrays(_this_image - 1),
+                   comm_end_save_coarrays(_this_image - 1));
+
+    print_mem_slot("allocatable coarrays",
+                   comm_start_allocatable_heap(_this_image - 1),
+                   comm_end_allocatable_heap(_this_image - 1));
+
+    print_mem_slot("unused",
+                   comm_end_allocatable_heap(_this_image - 1),
+                   comm_start_asymmetric_heap(_this_image - 1));
+
+    print_mem_slot("asymmetric data",
+                   comm_start_asymmetric_heap(_this_image - 1),
+                   comm_end_asymmetric_heap(_this_image - 1));
+
+    fprintf(trace_log_stream, "|");
+    for (i = 0; i < width; i++)
+        fprintf(trace_log_stream, "=");
+    fprintf(trace_log_stream, "|\n\n");
+}
+
+#pragma weak uhcaf_trace_suspend_ = uhcaf_trace_suspend
+void uhcaf_trace_suspend()
+{
+    tracing_suspended = 1;
+}
+
+#pragma weak uhcaf_trace_resume_ = uhcaf_trace_resume
+void uhcaf_trace_resume()
+{
+    tracing_suspended = 0;
 }

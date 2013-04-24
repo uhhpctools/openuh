@@ -64,10 +64,13 @@ CFILES = \
    caf_rtl.c \
    caf_collectives.c \
    armci_comm_layer.c \
-   trace.c \
    lock.c \
    env.c \
    util.c
+
+ifeq ($(CAFRT_ENABLE_TRACES), YES)
+CFILES += trace.c
+endif
 
 LCINCS += -I$(ARMCI_HOME)/include
 LCDEFS += -DARMCI
