@@ -33,7 +33,7 @@
 
 #include "trace.h"
 
-#define MSG_BUF_SIZE 256
+#define MSG_BUF_SIZE 512
 
 void __caf_exit(int status);
 

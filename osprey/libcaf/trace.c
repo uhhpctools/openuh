@@ -163,7 +163,7 @@ static void logging_filestream_init(void)
     }
 
     snprintf(trace_filename, BUF_SIZE, "%s/trace.%lu",
-             trace_dir, (long unsigned int)_this_image);
+             trace_dir, (long unsigned int) _this_image);
 
     fp = fopen(trace_filename, "w");
     if (fp != (FILE *) NULL) {
@@ -488,6 +488,8 @@ void uhcaf_tracedump_shared_mem_alloc(char *str)
     for (i = 0; i < width; i++)
         fprintf(trace_log_stream, "=");
     fprintf(trace_log_stream, "|\n\n");
+
+    fflush(trace_log_stream);
 }
 
 #pragma weak uhcaf_trace_suspend_ = uhcaf_trace_suspend

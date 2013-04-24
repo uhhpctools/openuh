@@ -85,7 +85,12 @@ void __release_lcb(void **ptr);
 void __coarray_nbread(size_t image, void *src, void *dest, size_t nbytes,
                       comm_handle_t * hdl);
 void __coarray_read(size_t image, void *src, void *dest, size_t nbytes);
-void __coarray_write(size_t image, void *dest, void *src, size_t nbytes);
+
+void __coarray_write_from_lcb(size_t image, void *dest, void *src,
+                              size_t nbytes, int ordered,
+                              comm_handle_t * hdl);
+void __coarray_write(size_t image, void *dest, void *src, size_t nbytes,
+                     int ordered, comm_handle_t * hdl);
 
 /* strided, non-contiguous read and write operations */
 void __coarray_strided_nbread(size_t image,
@@ -99,10 +104,23 @@ void __coarray_strided_read(size_t image,
                             void *dest, const size_t dest_strides[],
                             const size_t count[], int stride_levels);
 
+void __coarray_strided_write_from_lcb(size_t image,
+                                      void *dest,
+                                      const size_t dest_strides[],
+                                      void *src,
+                                      const size_t src_strides[],
+                                      const size_t count[],
+                                      int stride_levels,
+                                      int ordered, comm_handle_t * hdl);
+
 void __coarray_strided_write(size_t image,
-                             void *dest, const size_t dest_strides[],
-                             void *src, const size_t src_strides[],
-                             const size_t count[], int stride_levels);
+                             void *dest,
+                             const size_t dest_strides[],
+                             void *src,
+                             const size_t src_strides[],
+                             const size_t count[],
+                             int stride_levels, int ordered,
+                             comm_handle_t * hdl);
 
 /* TODO: vector, non-contiguous read and write operations  */
 

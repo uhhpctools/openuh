@@ -163,9 +163,9 @@ void _CO_BCAST_I8(DopeVectorType * source, INTEGER8 * src_img_p)
                 if (stride_levels > 0) {
                     __coarray_strided_write(i, dest, dest_strides,
                                             src, src_strides, count,
-                                            stride_levels);
+                                            stride_levels, 0, NULL);
                 } else {
-                    __coarray_write(i, dest, src, count[0]);
+                    __coarray_write(i, dest, src, count[0], 0, NULL);
                 }
 
             }

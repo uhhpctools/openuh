@@ -184,11 +184,11 @@ void comm_lock(lock_t * lock, int image, char *success,
         LOAD_STORE_FENCE();
 
         /* p->address now points to predecessor's request descriptor */
-        comm_write_unbuffered(p.image - 1, ((int *)
-                                            get_shared_mem_address_from_offset
-                                            (p.ofst, p.image))
-                              + 1, ((int *) &r) + 1,
-                              sizeof(r) - sizeof(int));
+        comm_write(p.image - 1, ((int *)
+                                 get_shared_mem_address_from_offset
+                                 (p.ofst, p.image))
+                   + 1, ((int *) &r) + 1, sizeof(r) - sizeof(int), 1,
+                   NULL);
 
         do {
             /* do something useful here! */
@@ -281,7 +281,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
     /* reset locked on successor */
     s = get_shared_mem_address_from_offset(req->ofst, req->image);
     i = 0;
-    comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
+    comm_write(req->image - 1, s, &i, sizeof(i), 1, NULL);
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
@@ -363,23 +363,23 @@ void comm_unlock2(lock_t * lock, int image, int *status,
         if (u.image != 0) {
             /* link victim(s) to the usurper(s) */
             lock_request_t r;
-            comm_write_unbuffered(u.image - 1, ((int *)
-                                                get_shared_mem_address_from_offset
-                                                (u.ofst, u.image)) + 1,
-                                  ((int *) req) + 1,
-                                  sizeof(*req) - sizeof(int));
+            comm_write(u.image - 1, ((int *)
+                                     get_shared_mem_address_from_offset
+                                     (u.ofst, u.image)) + 1,
+                       ((int *) req) + 1, sizeof(*req) - sizeof(int), 1,
+                       NULL);
         } else {
             /* reset locked on successor */
             s = get_shared_mem_address_from_offset(req->ofst, req->image);
             i = 0;
-            comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
+            comm_write(req->image - 1, s, &i, sizeof(i), 1, NULL);
         }
 
     } else {
         /* reset locked on successor */
         s = get_shared_mem_address_from_offset(req->ofst, req->image);
         i = 0;
-        comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
+        comm_write(req->image - 1, s, &i, sizeof(i), 1, NULL);
     }
 
     /* delete request item from request table */

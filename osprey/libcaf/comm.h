@@ -36,14 +36,12 @@
 /* environment */
 
 #define ENV_GETCACHE                  "UHCAF_GETCACHE"
-#define ENV_NBPUT                     "UHCAF_NBPUT"
 #define ENV_PROGRESS_THREAD           "UHCAF_PROGRESS_THREAD"
 #define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
 #define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
 #define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
 
 #define DEFAULT_ENABLE_GETCACHE           0
-#define DEFAULT_ENABLE_NBPUT              1
 #define DEFAULT_ENABLE_PROGRESS_THREAD    0
 #define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
 /* these will be overridden by the defaults in cafrun script */
@@ -84,9 +82,10 @@ size_t comm_get_num_procs();
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl);
 void comm_read(size_t proc, void *src, void *dest, size_t nbytes);
-void comm_write(size_t proc, void *dest, void *src, size_t nbytes);
-void comm_write_unbuffered(size_t proc, void *dest, void *src,
-                           size_t nbytes);
+void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
+                         int ordered, comm_handle_t * hdl);
+void comm_write(size_t proc, void *dest, void *src,
+                size_t nbytes, int ordered, comm_handle_t * hdl);
 
 /* strided, non-contiguous read and write operations */
 void comm_strided_nbread(size_t proc,
@@ -100,10 +99,19 @@ void comm_strided_read(size_t proc,
                        void *dest, const size_t dest_strides[],
                        const size_t count[], size_t stride_levels);
 
+void comm_strided_write_from_lcb(size_t proc,
+                                 void *dest, const size_t dest_strides[],
+                                 void *src, const size_t src_strides[],
+                                 const size_t count[],
+                                 size_t stride_levels, int ordered,
+                                 comm_handle_t * hdl);
+
 void comm_strided_write(size_t proc,
                         void *dest, const size_t dest_strides[],
                         void *src, const size_t src_strides[],
-                        const size_t count[], size_t stride_levels);
+                        const size_t count[],
+                        size_t stride_levels, int ordered,
+                        comm_handle_t * hdl);
 
 /* TODO: vector, non-contiguous read and write operations  */
 
@@ -128,7 +136,9 @@ void *comm_end_shared_mem(size_t proc);
 /* malloc & free */
 void *comm_malloc(size_t size);
 void comm_free(void *ptr);
-void comm_free_lcb(void *ptr);
+
+void *comm_lcb_malloc(size_t size);
+void comm_lcb_free(void *ptr);
 
 /* barriers */
 void comm_sync_all(int *status, int stat_len, char *errmsg,

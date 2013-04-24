@@ -100,9 +100,6 @@ Environment Variables:
                       Set the time interval (ns) between AM serving by progress
                       thread.
 
-   UHCAF_NBPUT
-                      Set to 1 to enable Nonblocking put runtime optimization.
-
    UHCAF_GETCACHE
                       Set to 1 to enable getcache runtime optimization.
 
@@ -133,7 +130,7 @@ Where OPTIONS are:
                       L=all or trace levels delimited by ':'.
                         Available trace levels:
                         FATAL:DEBUG:TIME:NOTICE:TIME_SUMMARY:INIT:EXIT:
-                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE
+                        COMM:MEMORY:CACHE:SYNC:COLLECTIVE:SERVICE:MEMORY_SUMMARY
 
   --trace-dir=D       D is name of directory to store traces
 

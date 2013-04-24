@@ -52,17 +52,19 @@ extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 #include "symtab.h"
 #endif
 
-#define CAF_INIT                    "__caf_init"
-#define CAF_FINALIZE                "__caf_finalize"
-#define ACQUIRE_LCB                 "__acquire_lcb"
-#define RELEASE_LCB                 "__release_lcb"
-#define COARRAY_NBREAD              "__coarray_nbread"
-#define COARRAY_READ                "__coarray_read"
-#define COARRAY_WRITE               "__coarray_write"
-#define COARRAY_STRIDED_NBREAD      "__coarray_strided_nbread"
-#define COARRAY_STRIDED_READ        "__coarray_strided_read"
-#define COARRAY_STRIDED_WRITE       "__coarray_strided_write"
-#define COARRAY_SYNC                "__coarray_sync"
+#define CAF_INIT                            "__caf_init"
+#define CAF_FINALIZE                        "__caf_finalize"
+#define ACQUIRE_LCB                         "__acquire_lcb"
+#define RELEASE_LCB                         "__release_lcb"
+#define COARRAY_NBREAD                      "__coarray_nbread"
+#define COARRAY_READ                        "__coarray_read"
+#define COARRAY_WRITE_FROM_LCB              "__coarray_write_from_lcb"
+#define COARRAY_WRITE                       "__coarray_write"
+#define COARRAY_STRIDED_NBREAD              "__coarray_strided_nbread"
+#define COARRAY_STRIDED_READ                "__coarray_strided_read"
+#define COARRAY_STRIDED_WRITE_FROM_LCB      "__coarray_strided_write_from_lcb"
+#define COARRAY_STRIDED_WRITE               "__coarray_strided_write"
+#define COARRAY_SYNC                        "__coarray_sync"
 
 #endif /* caf_lower_h_included */
 

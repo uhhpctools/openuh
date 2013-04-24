@@ -88,6 +88,12 @@
 #include "trace.h"
 #include "util.h"
 
+const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
+
+const size_t SMALL_XFER_SIZE = 200;     /* size for which local mem copy would be
+                                           advantageous */
+
+
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern mem_usage_info_t *mem_info;
@@ -96,7 +102,6 @@ extern mem_usage_info_t *mem_info;
  * of available memory that can used for both allocatable coarrays and
  * asymmetric data. It is the only handle to access the link-list.*/
 extern struct shared_memory_slot *common_slot;
-
 
 /*
  * Static variable declarations
@@ -144,10 +149,6 @@ static unsigned short *sync_images_flag = NULL;
 static gasnet_hsl_t sync_lock = GASNET_HSL_INITIALIZER;
 
 /*non-blocking put*/
-static int enable_nbput;        /* 0-disabled, set by env var UHCAF_NBPUT */
-static struct local_buffer *lcb_list;
-static struct local_buffer *lcb_tail;
-
 static struct nb_handle_manager nb_mgr[2];
 
 
@@ -325,13 +326,16 @@ inline void *comm_end_allocatable_heap(size_t proc)
 
 inline void *comm_end_symmetric_mem(size_t proc)
 {
-    return get_remote_address(common_slot->addr, proc);
+    /* we can't directly use common_slot->addr as the argument, because the
+     * translation algorithm will treat it as part of the asymmetric memory
+     * space */
+    return get_remote_address(common_slot->addr - 1, proc) + 1;
 }
 
 inline void *comm_start_asymmetric_heap(size_t proc)
 {
     if (proc != my_proc) {
-        return comm_end_symmetric_mem(proc);
+        return get_remote_address(common_slot->addr, proc);
     } else {
         return (char *) common_slot->addr + common_slot->size;
     }
@@ -339,20 +343,19 @@ inline void *comm_start_asymmetric_heap(size_t proc)
 
 inline void *comm_end_asymmetric_heap(size_t proc)
 {
-    return get_remote_address(comm_end_shared_mem(proc), proc);
+    return comm_end_shared_mem(proc);
 }
 
 inline void *comm_end_shared_mem(size_t proc)
 {
-    return get_remote_address(coarray_start_all_images[my_proc].addr, proc)
-        + shared_memory_size;
+    return comm_start_shared_mem(proc) + shared_memory_size;
 }
 
 
 static inline int remote_address_in_shared_mem(size_t proc, void *address)
 {
     return !((address < comm_start_symmetric_mem(my_proc) ||
-              address > comm_end_symmetric_mem(my_proc)) &&
+              address >= comm_end_symmetric_mem(my_proc)) &&
              (address < comm_start_asymmetric_heap(proc) ||
               address >= comm_end_asymmetric_heap(proc)));
 }
@@ -399,7 +402,6 @@ static gasnet_handlerentry_t handlers[] = {
 };
 
 static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
-
 
 typedef struct {
     size_t nbytes;              /* size of read/write */
@@ -1044,24 +1046,21 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     enable_get_cache = get_env_flag(ENV_GETCACHE, DEFAULT_ENABLE_GETCACHE);
     getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
                                       DEFAULT_GETCACHE_LINE_SIZE);
-    enable_nbput = get_env_flag(ENV_NBPUT, DEFAULT_ENABLE_NBPUT);
 
     /* malloc data structures for sync_images, nb-put, get-cache */
     sync_images_flag = (unsigned short *) malloc
         (num_procs * sizeof(unsigned short));
-    if (enable_nbput) {
-        nb_mgr[PUTS].handles = (struct handle_list **) malloc
-            (num_procs * sizeof(struct handle_list *));
-        nb_mgr[PUTS].num_handles = 0;
-        nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
-        nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
-        nb_mgr[GETS].handles = (struct handle_list **) malloc
-            (num_procs * sizeof(struct handle_list *));
-        nb_mgr[GETS].num_handles = 0;
-        nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
-        nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
+    nb_mgr[PUTS].handles = (struct handle_list **) malloc
+        (num_procs * sizeof(struct handle_list *));
+    nb_mgr[PUTS].num_handles = 0;
+    nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
+    nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
+    nb_mgr[GETS].handles = (struct handle_list **) malloc
+        (num_procs * sizeof(struct handle_list *));
+    nb_mgr[GETS].num_handles = 0;
+    nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
+    nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
 
-    }
 
     if (enable_get_cache) {
         cache_all_images =
@@ -1073,17 +1072,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     for (i = 0; i < num_procs; i++) {
         sync_images_flag[i] = 0;
 
-        if (enable_nbput) {
-            nb_mgr[PUTS].handles[i] = 0;
-            nb_mgr[PUTS].min_nb_address[i] = 0;
-            nb_mgr[PUTS].max_nb_address[i] = 0;
-            nb_mgr[GETS].handles[i] = 0;
-            nb_mgr[GETS].min_nb_address[i] = 0;
-            nb_mgr[GETS].max_nb_address[i] = 0;
-            lcb_list = 0;
-            lcb_tail = 0;
-        }
-
+        nb_mgr[PUTS].handles[i] = 0;
+        nb_mgr[PUTS].min_nb_address[i] = 0;
+        nb_mgr[PUTS].max_nb_address[i] = 0;
+        nb_mgr[GETS].handles[i] = 0;
+        nb_mgr[GETS].min_nb_address[i] = 0;
+        nb_mgr[GETS].max_nb_address[i] = 0;
 
         if (enable_get_cache) {
             cache_all_images[i] =
@@ -1198,16 +1192,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     shared_memory_size = caf_shared_memory_size;
 
     /* allocate space in symmetric heap for memory usage info */
-#ifdef TRACE
-    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
-        mem_info = (mem_usage_info_t *)
-            coarray_allocatable_allocate_(sizeof(*mem_info));
-        mem_info->current_heap_usage = sizeof(*mem_info);
-        mem_info->max_heap_usage = sizeof(*mem_info);
-        mem_info->reserved_heap_usage =
-            caf_shared_memory_size - save_coarray_total_size;
-    }
-#endif
+    mem_info = (mem_usage_info_t *)
+        coarray_allocatable_allocate_(sizeof(*mem_info));
+    mem_info->current_heap_usage = sizeof(*mem_info);
+    mem_info->max_heap_usage = sizeof(*mem_info);
+    mem_info->reserved_heap_usage =
+        caf_shared_memory_size - save_coarray_total_size;
 
     /* create a symmetric lock variable for guarding critical sections.
      * What's really needed is a distinct lock variable created for each
@@ -1640,13 +1630,13 @@ static void delete_node(unsigned long proc, struct handle_list *node,
         min_nb_address[proc] = 0;
         max_nb_address[proc] = 0;
         if (access_type == PUTS)
-            comm_free_lcb(node->local_buf);
+            comm_lcb_free(node->local_buf);
         comm_free(node);
         return;
     }
     node_address = node->address;
     if (access_type == PUTS)
-        comm_free_lcb(node->local_buf);
+        comm_lcb_free(node->local_buf);
     comm_free(node);
     if (node_address == min_nb_address[proc])
         reset_min_nb_address(proc, access_type);
@@ -1709,14 +1699,19 @@ static void wait_on_all_pending_accesses(unsigned long proc)
         node_to_delete = handle_node;
         handle_node = handle_node->next;
         /* for puts */
-        comm_free_lcb(node_to_delete->local_buf);
+        comm_lcb_free(node_to_delete->local_buf);
         comm_free(node_to_delete);
         nb_mgr[PUTS].num_handles--;
     }
     handle_node = nb_mgr[GETS].handles[proc];
     while (handle_node) {
-        if (handle_node->handle != GASNET_INVALID_HANDLE)
+        if (handle_node->handle != GASNET_INVALID_HANDLE) {
+            LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before gasnet_wait_syncnb"
+                         " (handle_node=%p)", handle_node);
             gasnet_wait_syncnb(handle_node->handle);
+        }
+        LIBCAF_TRACE(LIBCAF_LOG_SYNC, "about to delete handle_node %p",
+                     handle_node);
         node_to_delete = handle_node;
         handle_node = handle_node->next;
         comm_free(node_to_delete);
@@ -1731,19 +1726,6 @@ static void wait_on_all_pending_accesses(unsigned long proc)
     nb_mgr[GETS].max_nb_address[proc] = 0;
 }
 
-static void free_lcb()
-{
-    struct local_buffer *lcb, *lcb_next;
-    lcb = lcb_list;
-    while (lcb) {
-        lcb_next = lcb->next;
-        comm_free(lcb->addr);
-        comm_free(lcb);
-        lcb = lcb_next;
-    }
-    lcb_list = 0;
-    lcb_tail = 0;
-}
 
 /*
  * End of static functions for non-blocking put
@@ -1775,10 +1757,14 @@ void comm_translate_remote_addr(void **remote_addr, int proc)
     start_symm_mem = comm_start_symmetric_mem(proc);
     end_symm_mem = comm_end_symmetric_mem(proc);
 
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "start_symm = %p, end_symm = %p, "
+                 "*remote_addr = %p", start_symm_mem, end_symm_mem,
+                 *remote_addr);
+
     /* subtract the offset if remote address falls within the symmetric memory
      * of the remote image
      */
-    if (*remote_addr >= start_symm_mem && *remote_addr <= end_symm_mem) {
+    if (*remote_addr >= start_symm_mem && *remote_addr < end_symm_mem) {
         *remote_addr = (char *) (*remote_addr) -
             comm_address_translation_offset(proc);
     }
@@ -1850,14 +1836,13 @@ void comm_memory_free()
         comm_free(coarray_start_all_images);
     }
 
-    if (enable_nbput) {
-        comm_free(nb_mgr[PUTS].handles);
-        comm_free(nb_mgr[PUTS].min_nb_address);
-        comm_free(nb_mgr[PUTS].max_nb_address);
-        comm_free(nb_mgr[GETS].handles);
-        comm_free(nb_mgr[GETS].min_nb_address);
-        comm_free(nb_mgr[GETS].max_nb_address);
-    }
+    comm_free(nb_mgr[PUTS].handles);
+    comm_free(nb_mgr[PUTS].min_nb_address);
+    comm_free(nb_mgr[PUTS].max_nb_address);
+    comm_free(nb_mgr[GETS].handles);
+    comm_free(nb_mgr[GETS].min_nb_address);
+    comm_free(nb_mgr[GETS].max_nb_address);
+
     if (enable_get_cache) {
         int i;
         for (i = 0; i < num_procs; i++) {
@@ -1886,9 +1871,9 @@ void comm_finalize(int exit_code)
      * barriers.
      */
     for (p = 0; p < num_procs; p++) {
-        comm_write_unbuffered(p, stopped_image_exists,
-                              stopped_image_exists,
-                              sizeof(*stopped_image_exists));
+        comm_write(p, stopped_image_exists,
+                   stopped_image_exists, sizeof(*stopped_image_exists), 1,
+                   NULL);
     }
 
     comm_barrier_all();
@@ -1918,9 +1903,9 @@ void comm_exit(int status)
      * barriers.
      */
     for (p = 0; p < num_procs; p++) {
-        comm_write_unbuffered(p, stopped_image_exists,
-                              stopped_image_exists,
-                              sizeof(*stopped_image_exists));
+        comm_write(p, stopped_image_exists,
+                   stopped_image_exists, sizeof(*stopped_image_exists), 1,
+                   NULL);
     }
 
     LOAD_STORE_FENCE();
@@ -1936,11 +1921,8 @@ void comm_exit(int status)
 void comm_barrier_all()
 {
     unsigned long i;
-    if (enable_nbput) {
-        for (i = 0; i < num_procs; i++) {
-            wait_on_all_pending_accesses(i);
-        }
-        // free_lcb();
+    for (i = 0; i < num_procs; i++) {
+        wait_on_all_pending_accesses(i);
     }
     gasnet_wait_syncnbi_all();
     gasnet_barrier_notify(barcount, barflag);
@@ -1955,9 +1937,6 @@ void comm_barrier_all()
 void comm_sync(comm_handle_t hdl)
 {
     unsigned long i;
-
-    if (!enable_nbput)
-        return;
 
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         for (i = 0; i < num_procs; i++) {
@@ -1986,11 +1965,8 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    if (enable_nbput) {
-        for (i = 0; i < num_procs; i++) {
-            wait_on_all_pending_accesses(i);
-        }
-        //free_lcb();
+    for (i = 0; i < num_procs; i++) {
+        wait_on_all_pending_accesses(i);
     }
 
     gasnet_wait_syncnbi_all();
@@ -2022,11 +1998,8 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    if (enable_nbput) {
-        for (i = 0; i < num_procs; i++) {
-            wait_on_all_pending_accesses(i);
-        }
-        // free_lcb();
+    for (i = 0; i < num_procs; i++) {
+        wait_on_all_pending_accesses(i);
     }
 
     gasnet_wait_syncnbi_all();
@@ -2065,9 +2038,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         } else {
             sync_images_flag[my_proc] = 1;
         }
-        if (enable_nbput) {
-            wait_on_all_pending_accesses(q);
-        }
+        wait_on_all_pending_accesses(q);
     }
     for (i = 0; i < image_count; i++) {
         short image_has_stopped;
@@ -2095,6 +2066,51 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     }
 }
 
+void *comm_lcb_malloc(size_t size)
+{
+    void *ptr;
+    size_t reserved_heap, current_heap;
+    gasnet_hold_interrupts();
+    /* allocate out of asymmetric heap if there is sufficient enough room */
+    reserved_heap = mem_info->reserved_heap_usage;
+    current_heap = mem_info->current_heap_usage;
+    if (size <= ((reserved_heap - current_heap) / 2))
+        ptr = coarray_asymmetric_allocate_(size);
+    else {
+        if (size >= LARGE_COMM_BUF_SIZE) {
+            Warning("Attempting to allocate a large buffer (%.1lfKB) "
+                    "from system memory (available space in reserved "
+                    "image heap only %.1lfKB). If used for communication, "
+                    "GASNet's memory registration policy may not handle "
+                    "large system memory malloc's correctly. Consider "
+                    "increasing the image heap size.",
+                    ((double) size) / 1024,
+                    ((double) (reserved_heap - current_heap)) / 1024);
+        }
+        ptr = malloc(size);
+    }
+    gasnet_resume_interrupts();
+    return ptr;
+}
+
+void comm_lcb_free(void *ptr)
+{
+    if (!ptr)
+        return;
+
+    gasnet_hold_interrupts();
+    if (ptr < coarray_start_all_images[my_proc].addr &&
+        ptr >=
+        (coarray_start_all_images[my_proc].addr + shared_memory_size))
+        free(ptr);
+    else {
+        /* in shared memory segment, which means it was allocated using
+           coarray_asymmetric_allocate_ */
+        coarray_deallocate_(ptr);
+    }
+    gasnet_resume_interrupts();
+}
+
 void *comm_malloc(size_t size)
 {
     void *ptr;
@@ -2107,43 +2123,12 @@ void *comm_malloc(size_t size)
 
 void comm_free(void *ptr)
 {
-    gasnet_hold_interrupts();
-    free(ptr);
-    gasnet_resume_interrupts();
-}
-
-
-void comm_free_lcb(void *ptr)
-{
     if (!ptr)
         return;
 
     gasnet_hold_interrupts();
     free(ptr);
     gasnet_resume_interrupts();
-#if 0
-    if (enable_nbput) {
-        /* Can not free the memory as strided nonblocking calls are
-         * not locally complete. Will free during barrier_all */
-        if (lcb_tail) {
-            lcb_tail->next = (struct local_buffer *) comm_malloc
-                (sizeof(struct local_buffer));
-            lcb_tail->next->addr = ptr;
-            lcb_tail = lcb_tail->next;
-            lcb_tail->next = 0;
-        } else {
-            lcb_tail = (struct local_buffer *) comm_malloc
-                (sizeof(struct local_buffer));
-            lcb_tail->addr = ptr;
-            lcb_tail->next = 0;
-            lcb_list = lcb_tail;
-        }
-    } else {
-        gasnet_hold_interrupts();
-        free(ptr);
-        gasnet_resume_interrupts();
-    }
-#endif
 }
 
 
@@ -2217,15 +2202,30 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl)
 {
     void *remote_src;
+    int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
 
-    if (!remote_address_in_shared_mem(proc, src)) {
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc
+        && (!src_in_shared_mem || nbytes <= SMALL_XFER_SIZE)) {
+        memcpy(dest, src, nbytes);
+        if (hdl != NULL)
+            *hdl = NULL;
+        return;
+        /* does not reach */
+    }
+#endif
+
+    if (!src_in_shared_mem) {
+        /* TODO: make this non-blocking */
         comm_read_outside_shared_mem(proc, src, dest, nbytes);
+        if (hdl != NULL)
+            *hdl = NULL;
         return;
         /* does not reach */
     }
 
     remote_src = get_remote_address(src, proc);
-    if (enable_nbput && nb_mgr[PUTS].handles[proc])
+    if (nb_mgr[PUTS].handles[proc])
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
 
     if (enable_get_cache) {
@@ -2260,6 +2260,14 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
 
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc) {
+        memcpy(dest, src, nbytes);
+        return;
+        /* does not reach */
+    }
+#endif
+
     if (!remote_address_in_shared_mem(proc, src)) {
         comm_read_outside_shared_mem(proc, src, dest, nbytes);
         return;
@@ -2267,7 +2275,7 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     }
 
     remote_src = get_remote_address(src, proc);
-    if (enable_nbput && nb_mgr[PUTS].handles[proc])
+    if (nb_mgr[PUTS].handles[proc])
         wait_on_pending_accesses(proc, remote_src, nbytes, PUTS);
 
     if (enable_get_cache) {
@@ -2346,73 +2354,194 @@ comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
 }
 
 
-void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
+void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
+                         int ordered, comm_handle_t * hdl)
 {
     void *remote_dest;
+    int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
-    if (!remote_address_in_shared_mem(proc, dest)) {
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc
+        && (!dest_in_shared_mem || nbytes <= SMALL_XFER_SIZE)) {
+        memcpy(dest, src, nbytes);
+        comm_lcb_free(src);
+
+        if (hdl != NULL && hdl != (void *) -1)
+            *hdl = NULL;
+        return;
+        /* does not reach */
+    }
+#endif
+
+    if (!dest_in_shared_mem) {
+        /* TODO: consider a non-blocking version */
         comm_write_outside_shared_mem(proc, dest, src, nbytes);
+        comm_lcb_free(src);
+
+        if (hdl != NULL && hdl != (void *) -1)
+            *hdl = NULL;
         return;
         /* does not reach */
     }
 
     remote_dest = get_remote_address(dest, proc);
-    if (enable_nbput) {
+    if (ordered) {
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
+
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        if (nb_mgr[GETS].handles[proc])
-            wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
-        struct handle_list *handle_node =
-            get_next_handle(proc, remote_dest, src, nbytes, PUTS);
-        handle_node->handle =
-            gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
-        handle_node->next = 0;
-        update_nb_address_block(remote_dest, proc, nbytes, PUTS);
-    } else {
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_put to %p on image %lu"
-                     " from %p size %lu", remote_dest, proc + 1, src,
-                     nbytes);
-        gasnet_put_bulk(proc, remote_dest, src, nbytes);
+
+        gasnet_handle_t handle;
+        handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
+
+        if (handle != NULL && hdl != (void *) -1) {
+            struct handle_list *handle_node =
+                get_next_handle(proc, remote_dest, src, nbytes, PUTS);
+            handle_node->handle = handle;
+            handle_node->next = 0;
+            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+
+            if (hdl != NULL)
+                *hdl = handle_node;
+        } else if (hdl == (void *) -1) {
+            /* block until it remotely completes */
+            gasnet_wait_syncnb(handle);
+        } else if (hdl != NULL) {
+            *hdl = NULL;
+        }
+
+    } else {                    /* ordered == 0 */
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
+                     "image %lu from %p size %lu",
+                     remote_dest, proc + 1, src, nbytes);
+
+        if (nb_mgr[PUTS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+
+        gasnet_handle_t handle;
+        handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
+
+        if (handle != NULL && hdl != (void *) -1) {
+            struct handle_list *handle_node =
+                get_next_handle(proc, NULL, src, 0, PUTS);
+            handle_node->handle = handle;
+            handle_node->next = 0;
+
+            if (hdl != NULL)
+                *hdl = handle_node;
+            gasnet_wait_syncnb(handle);
+        } else if (hdl == (void *) -1) {
+            /* block until it remotely completes */
+            gasnet_wait_syncnb(handle);
+        } else if (hdl != NULL) {
+            *hdl = NULL;
+        }
+
     }
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
 }
 
-void comm_write_unbuffered(size_t proc, void *dest, void *src,
-                           size_t nbytes)
+/* like comm_write_from_lcb, except we don't need to "release" the source
+ * buffer upon completion and guarantees local completion
+ */
+char tmp_aligned_buffer[8] __attribute__ ((aligned(8)));
+void comm_write(size_t proc, void *dest, void *src,
+                size_t nbytes, int ordered, comm_handle_t * hdl)
 {
     void *remote_dest;
+    int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
-    if (!remote_address_in_shared_mem(proc, dest)) {
+#if defined(ENABLE_LOCAL_MEMCPY)
+    if (my_proc == proc
+        && (!dest_in_shared_mem || nbytes <= SMALL_XFER_SIZE)) {
+        memcpy(dest, src, nbytes);
+
+        if (hdl != NULL && hdl != (void *) -1)
+            *hdl = NULL;
+        return;
+        /* does not reach */
+    }
+#endif
+
+    if (!dest_in_shared_mem) {
+        /* TODO: consider a non-blocking version */
         comm_write_outside_shared_mem(proc, dest, src, nbytes);
+
+        if (hdl != NULL && hdl != (void *) -1)
+            *hdl = NULL;
         return;
         /* does not reach */
     }
 
     remote_dest = get_remote_address(dest, proc);
-    if (enable_nbput) {
+    if (ordered) {
+        /* use gasnet_put_nb to ensure local completion. If 2-, 4-, or
+         * 8-bytes, it needs to be aligned */
+        void *aligned_src = src;
+        if (nbytes == 2 && ((unsigned long) src % 2) == 0 ||
+            nbytes == 4 && ((unsigned long) src % 4) == 0 ||
+            nbytes == 8 && ((unsigned long) src % 8) == 0) {
+            memset(tmp_aligned_buffer, 0, 8);
+            memcpy(&tmp_aligned_buffer, src, nbytes);
+            aligned_src = &tmp_aligned_buffer;
+        }
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
+                     "image %lu from %p size %lu",
+                     remote_dest, proc + 1, aligned_src, nbytes);
+        if (nb_mgr[PUTS].handles[proc])
+            wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+
+        gasnet_handle_t handle;
+        handle = gasnet_put_nb(proc, remote_dest, aligned_src, nbytes);
+
+        if (handle != NULL && hdl != (void *) -1) {
+            /* pass NULL for source buf argument */
+            struct handle_list *handle_node =
+                get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
+            handle_node->handle = handle;
+            handle_node->next = 0;
+            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+
+            if (hdl != NULL)
+                *hdl = handle_node;
+        } else if (hdl == (void *) -1) {
+            /* block until it remotely completes */
+            gasnet_wait_syncnb(handle);
+        } else if (hdl != NULL) {
+            *hdl = NULL;
+        }
+    } else {                    /* ordered == 0 */
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
                      "image %lu from %p size %lu",
                      remote_dest, proc + 1, src, nbytes);
+
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
-        if (nb_mgr[GETS].handles[proc])
-            wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
-        struct handle_list *handle_node =
-            get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
-        handle_node->handle =
-            gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
-        handle_node->next = 0;
-        update_nb_address_block(remote_dest, proc, nbytes, PUTS);
-    } else {
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_put to %p on image %lu"
-                     " from %p size %lu", remote_dest, proc + 1, src,
-                     nbytes);
-        gasnet_put_bulk(proc, remote_dest, src, nbytes);
+
+        gasnet_handle_t handle;
+        handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
+
+        if (handle != NULL && hdl != (void *) -1) {
+            /* pass NULL for source buf argument */
+            struct handle_list *handle_node =
+                get_next_handle(proc, NULL, NULL, 0, PUTS);
+            handle_node->handle = handle;
+            handle_node->next = 0;
+            update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+
+            if (hdl != NULL)
+                *hdl = handle_node;
+        } else if (hdl == (void *) -1) {
+            /* block until it remotely completes */
+            gasnet_wait_syncnb(handle);
+        } else if (hdl != NULL) {
+            *hdl = NULL;
+        }
+
     }
 
     if (enable_get_cache)
@@ -2427,13 +2556,23 @@ void comm_strided_nbread(size_t proc,
                          comm_handle_t * hdl)
 {
     void *remote_src;
-
 #if defined(ENABLE_LOCAL_MEMCPY)
+    int i;
+    size_t nbytes = 1;
     if (my_proc == proc) {
-        /* local copy */
-        local_strided_copy(src, src_strides, dest, dest_strides,
-                           count, stride_levels);
-    } else
+        for (i = 0; i <= stride_levels; i++) {
+            nbytes = nbytes * count[i];
+        }
+        if (nbytes <= SMALL_XFER_SIZE) {
+            /* local copy */
+            local_strided_copy(src, src_strides, dest, dest_strides,
+                               count, stride_levels);
+            if (hdl != NULL)
+                *hdl = NULL;
+            return;
+            /* does not reach */
+        }
+    }
 #endif
     {
         size_t size;
@@ -2441,7 +2580,7 @@ void comm_strided_nbread(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
+        if (nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_src, size, PUTS);
         }
 
@@ -2495,7 +2634,9 @@ void comm_strided_read(size_t proc,
         /* local copy */
         local_strided_copy(src, src_strides, dest, dest_strides,
                            count, stride_levels);
-    } else
+        return;
+        /* does not reach */
+    }
 #endif
     {
         size_t size;
@@ -2503,7 +2644,7 @@ void comm_strided_read(size_t proc,
         size = src_strides[stride_levels - 1] * (count[stride_levels] - 1)
             + count[0];
         remote_src = get_remote_address(src, proc);
-        if (enable_nbput && nb_mgr[PUTS].handles[proc]) {
+        if (nb_mgr[PUTS].handles[proc]) {
             wait_on_pending_accesses(proc, remote_src, size, PUTS);
         }
 
@@ -2524,54 +2665,241 @@ void comm_strided_read(size_t proc,
     }
 }
 
-void comm_strided_write(size_t proc,
-                        void *dest, const size_t dest_strides[],
-                        void *src, const size_t src_strides[],
-                        const size_t count[], size_t stride_levels)
+void comm_strided_write_from_lcb(size_t proc,
+                                 void *dest, const size_t dest_strides[],
+                                 void *src, const size_t src_strides[],
+                                 const size_t count[],
+                                 size_t stride_levels, int ordered,
+                                 comm_handle_t * hdl)
 {
     void *remote_dest;
 
 #if defined(ENABLE_LOCAL_MEMCPY)
+    int i;
+    size_t nbytes = 1;
     if (my_proc == proc) {
-        /* local copy */
-        local_strided_copy(src, src_strides, dest, dest_strides,
-                           count, stride_levels);
-    } else
+        for (i = 0; i <= stride_levels; i++) {
+            nbytes = nbytes * count[i];
+        }
+        if (nbytes <= SMALL_XFER_SIZE) {
+            /* local copy */
+            local_strided_copy(src, src_strides, dest, dest_strides,
+                               count, stride_levels);
+            comm_lcb_free(src);
+
+            if (hdl != NULL && hdl != (void *) -1)
+                *hdl = NULL;
+            return;
+            /* does not reach */
+        }
+    }
 #endif
     {
         remote_dest = get_remote_address(dest, proc);
 
-        if (enable_nbput) {
+        if (ordered) {
             size_t size;
             /* calculate max size (very conservative!) */
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
 
+            if (nb_mgr[PUTS].handles[proc])
+                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
                          remote_dest, proc + 1, src, size);
+
+            gasnet_handle_t handle;
+            handle = gasnet_puts_nb_bulk(proc, remote_dest,
+                                         dest_strides, src,
+                                         src_strides, count,
+                                         stride_levels);
+
+            if (handle != NULL && hdl != (void *) -1) {
+                struct handle_list *handle_node =
+                    get_next_handle(proc, remote_dest, src, size, PUTS);
+                handle_node->handle = handle;
+                handle_node->next = 0;
+                update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                if (hdl != NULL)
+                    *hdl = handle_node;
+            } else if (hdl == (void *) -1) {
+                /* block until it remotely completes */
+                gasnet_wait_syncnb(handle);
+            } else if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
+        } else {                /* ordered == 0 */
+            size_t size;
+
+            /* calculate max size (very conservative!) */
+            size = (src_strides[stride_levels - 1] * count[stride_levels])
+                + count[0];
+
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
-            if (nb_mgr[GETS].handles[proc])
-                wait_on_pending_accesses(proc, remote_dest, size, GETS);
 
-            struct handle_list *handle_node =
-                get_next_handle(proc, remote_dest, src, size, PUTS);
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
+                         " gasnet_puts_nb_bulk to %p on image %lu from %p",
+                         remote_dest, proc + 1, src);
 
-            handle_node->handle = gasnet_puts_nb_bulk(proc, remote_dest,
-                                                      dest_strides, src,
-                                                      src_strides, count,
-                                                      stride_levels);
-            handle_node->next = 0;
+            gasnet_handle_t handle;
+            handle = gasnet_puts_nb_bulk(proc, remote_dest,
+                                         dest_strides, src,
+                                         src_strides, count,
+                                         stride_levels);
 
-            update_nb_address_block(remote_dest, proc, size, PUTS);
-        } else {
+            if (handle != NULL && hdl != (void *) -1) {
+                struct handle_list *handle_node =
+                    get_next_handle(proc, NULL, src, 0, PUTS);
+                handle_node->handle = handle;
+                handle_node->next = 0;
 
-            LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_put_bulk"
-                         " to %p on image %lu from %p (stride_levels= %u)",
-                         remote_dest, proc + 1, src, stride_levels);
-            gasnet_puts_bulk(proc, remote_dest, dest_strides, src,
-                             src_strides, count, stride_levels);
+                if (hdl != NULL)
+                    *hdl = handle_node;
+            } else if (hdl == (void *) -1) {
+                /* block until it remotely completes */
+                gasnet_wait_syncnb(handle);
+            } else if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
+        }
+
+        if (enable_get_cache) {
+            update_cache_strided(remote_dest, dest_strides,
+                                 src, src_strides, count, stride_levels,
+                                 proc);
+        }
+    }
+}
+
+
+/* like comm_strided_write_from_lcb, except we don't need to "release" the
+ * source buffer upon completion and local completion guaranteed
+ */
+void comm_strided_write(size_t proc,
+                        void *dest, const size_t dest_strides[],
+                        void *src, const size_t src_strides[],
+                        const size_t count[],
+                        size_t stride_levels, int ordered,
+                        comm_handle_t * hdl)
+{
+    void *remote_dest;
+
+#if defined(ENABLE_LOCAL_MEMCPY)
+    int i;
+    size_t nbytes = 1;
+    if (my_proc == proc) {
+        for (i = 0; i <= stride_levels; i++) {
+            nbytes = nbytes * count[i];
+        }
+        if (nbytes <= SMALL_XFER_SIZE) {
+            /* local copy */
+            local_strided_copy(src, src_strides, dest, dest_strides,
+                               count, stride_levels);
+
+            if (hdl != NULL && hdl != (void *) -1)
+                *hdl = NULL;
+            return;
+            /* does not reach */
+        }
+    }
+#endif
+    {
+        remote_dest = get_remote_address(dest, proc);
+
+        if (ordered) {
+            size_t size;
+            /* calculate max size (very conservative!) */
+            size = (src_strides[stride_levels - 1] * count[stride_levels])
+                + count[0];
+
+            if (nb_mgr[PUTS].handles[proc])
+                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+
+            /* GASNet doesn't provide non-contiguous, non-blocking PUT that
+             * guarantees local completion. It may be cheaper to do
+             * this LCB creation and mem copy with the compiler instead. */
+
+            void *new_src;
+            size_t new_src_strides[stride_levels];
+            size_t nbytes = 1;
+            int i;
+            for (i = 0; i < stride_levels; i++) {
+                nbytes = nbytes * count[i];
+                new_src_strides[i] = nbytes;
+            }
+            nbytes = nbytes * count[stride_levels];
+            new_src = comm_lcb_malloc(nbytes);
+            /* local copy */
+            local_strided_copy(src, src_strides, new_src, new_src_strides,
+                               count, stride_levels);
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
+                         " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
+                         remote_dest, proc + 1, new_src, size);
+
+            gasnet_handle_t handle;
+            handle = gasnet_puts_nb_bulk(proc, remote_dest,
+                                         dest_strides,
+                                         new_src,
+                                         new_src_strides,
+                                         count, stride_levels);
+            if (handle != NULL && hdl != (void *) -1) {
+                struct handle_list *handle_node =
+                    get_next_handle(proc, remote_dest, new_src, size,
+                                    PUTS);
+                handle_node->handle = handle;
+                handle_node->next = 0;
+                update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                if (hdl != NULL)
+                    *hdl = handle_node;
+            } else if (hdl == (void *) -1) {
+                /* block until it remotely completes */
+                gasnet_wait_syncnb(handle);
+            } else if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
+        } else {                /* ordered == 0 */
+            size_t size;
+            /* calculate max size (very conservative!) */
+            size = (src_strides[stride_levels - 1] * count[stride_levels])
+                + count[0];
+
+            if (nb_mgr[PUTS].handles[proc])
+                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
+                         " gasnet_puts_nb_bulk to %p on image %lu from %p",
+                         remote_dest, proc + 1, src);
+
+            gasnet_handle_t handle;
+            handle = gasnet_puts_nb_bulk(proc, remote_dest,
+                                         dest_strides, src,
+                                         src_strides, count,
+                                         stride_levels);
+
+            if (handle != NULL && hdl != (void *) -1) {
+                struct handle_list *handle_node =
+                    get_next_handle(proc, NULL, src, 0, PUTS);
+                handle_node->handle = handle;
+                handle_node->next = 0;
+
+                if (hdl != NULL)
+                    *hdl = handle_node;
+            } else if (hdl == (void *) -1) {
+                /* block until it remotely completes */
+                gasnet_wait_syncnb(handle);
+            } else if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
         }
 
         if (enable_get_cache) {
