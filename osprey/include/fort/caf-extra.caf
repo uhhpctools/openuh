@@ -25,6 +25,13 @@
 !  http://www.cs.uh.edu/~hpctools
 !
 
+module caf_types
+  type :: caf_sync_handle
+    private
+    integer, pointer :: hdl_ptr => NULL()
+  end type
+end module
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !  CAF Broadcasts Module
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

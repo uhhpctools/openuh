@@ -21985,5 +21985,14 @@ Error : The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no  more tha
 .PP
 The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no more than once.
 .ME
-$ LAST NUMBER USED : 1719
+$
+$ Error : 1720
+$msg  1720 This argument to the %s directive must be of type CAF_SYNC_HANDLE
+$nexp 1720
+Error : This argument to the %s directive must be of type CAF_SYNC_HANDLE
+.PP
+The argument for the DEFER_SYNC and SYNC directives, if given, is a variable
+of type CAF_SYNC_HANDLE, defined in the intrinsic module CAF_TYPES.
+.ME
+$ LAST NUMBER USED : 1720
 
