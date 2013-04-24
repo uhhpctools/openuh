@@ -601,8 +601,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     if (WN_st(wn) == NULL) {
                         hdl = WN_Intconst(Pointer_type, -1);
                     } else {
-                        hdl = WN_Ldid(TY_mtype(WN_type(wn)), 0,
-                                WN_st(wn), WN_type(wn));
+                        hdl = WN_Ldid(Pointer_type, 0, WN_st(wn),
+                                      WN_type(wn));
                     }
                     insert_wnx = Generate_Call_coarray_sync(hdl, TRUE);
                     WN_INSERT_BlockAfter(blk_node, wn, insert_wnx);
@@ -845,7 +845,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                 if (handle_st == NULL) {
                                     sync_hdl = WN_Intconst(Pointer_type,0);
                                 } else {
-                                    sync_hdl = WN_Ldid( MTYPE_U8, 0,
+                                    sync_hdl = WN_Ldid( Pointer_type, 0,
                                       handle_st, ST_type(handle_st));
                                 }
                                 insert_sync =
@@ -1242,7 +1242,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             if (handle_st == NULL) {
                                 sync_hdl = WN_Intconst(Pointer_type,0);
                             } else {
-                                sync_hdl = WN_Ldid( MTYPE_U8, 0,
+                                sync_hdl = WN_Ldid( Pointer_type, 0,
                                         handle_st, ST_type(handle_st));
                             }
                             insert_sync =
@@ -1582,7 +1582,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                                 if (handle_st == NULL) {
                                     sync_hdl = WN_Intconst(Pointer_type,0);
                                 } else {
-                                    sync_hdl = WN_Ldid( MTYPE_U8, 0,
+                                    sync_hdl = WN_Ldid( Pointer_type, 0,
                                       handle_st, ST_type(handle_st));
                                 }
                                 insert_sync =
@@ -1807,7 +1807,7 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                             if (handle_st == NULL) {
                                 sync_hdl = WN_Intconst(Pointer_type,0);
                             } else {
-                                sync_hdl = WN_Ldid( MTYPE_U8, 0,
+                                sync_hdl = WN_Ldid( Pointer_type, 0,
                                         handle_st, ST_type(handle_st));
                             }
                             insert_sync =
