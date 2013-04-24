@@ -238,9 +238,13 @@ struct omp_team {
   volatile int barrier_count2;
   volatile int exit_count;
 
-  /* Still need a flag to indicate there are new tasks for level_1 team,
+  /* Still need a way to indicate there are new tasks for level_1 team.
+   * For level-1 team, new_task will function as a counter -- the number of
+   * "new tasks" signaled by the master.
    * To avoid pthread allowed spurious wake up, and for nested teams,
-   * use this as a semphore to synchronize all thread before they really start*/
+   * use this as a semphore to synchronize all thread before they really
+   * start.
+   */
   volatile int new_task;
   pthread_mutex_t ordered_mutex;
 
