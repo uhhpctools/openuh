@@ -396,6 +396,7 @@ if [ $COMM_LAYER == gasnet ]; then
   if [ -z "$GASNET_CONDUIT" ]; then
     print_error "Cannot determine which GASNet conduit ot use"
   fi
+  UHCAF_LAUNCHER=$gasnet_launcher
 fi
 
 if [ $COMM_LAYER == armci ]; then
@@ -408,6 +409,7 @@ if [ $COMM_LAYER == armci ]; then
 #     print_error "Cannot determine which ARMCI network to use"
 #   fi
   ARMCI_NETWORK=unknown
+  UHCAF_LAUNCHER=$armci_launcher
 fi
 
 ###########################################
@@ -480,19 +482,9 @@ if [ $COMM_LAYER == gasnet ]; then
   # enable packing of non-contiguous put/get
   set_env GASNET_VIS_AMPIPE 1
 
-  # set collectives scratch space to 2MB (the usual default)
-  set_env GASNET_COLL_SCRATCH_SIZE $((2*1024*1024))
+  # CAF runtime will set this variable to a sufficient value
+  unset GASNET_MAX_SEGSIZE
 
-  image_heap=$UHCAF_IMAGE_HEAP_SIZE
-  # The default MAX_SEGSIZE in GASNet is 2GB. So, if user is requesting
-  # thereabouts, increase GASNET_MAX_SEGSIZE
-  if [ $image_heap -gt 2000000000 ]; then
-    # Assume the GASNET segment should be in page-size (4K) multiples. Also,
-    # GASNet will reserve at least GASNET_COLL_SCRATCH_SIZE per node for
-    # scratch space
-    gasnet_max_size=$((($image_heap/4096+1)*4096 + $GASNET_COLL_SCRATCH_SIZE*8))
-    set_env GASNET_MAX_SEGSIZE $gasnet_max_size
-  fi
   COMM_NETWORK=$GASNET_CONDUIT
 elif [ $COMM_LAYER == armci ]; then
   COMM_NETWORK=$ARMCI_NETWORK

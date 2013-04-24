@@ -40,7 +40,7 @@
 #define ENV_PROGRESS_THREAD           "UHCAF_PROGRESS_THREAD"
 #define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
 #define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
-#define ENV_SHARED_MEMORY_SIZE        "UHCAF_IMAGE_HEAP_SIZE"
+#define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
 
 #define DEFAULT_ENABLE_GETCACHE           0
 #define DEFAULT_ENABLE_NBPUT              1
@@ -48,10 +48,10 @@
 #define DEFAULT_PROGRESS_THREAD_INTERVAL  1000L /* ns */
 /* these will be overridden by the defaults in cafrun script */
 #define DEFAULT_GETCACHE_LINE_SIZE        65536L
-#define DEFAULT_SHARED_MEMORY_SIZE        31457280L
+#define DEFAULT_IMAGE_HEAP_SIZE           31457280L
 
 #define MAX_NUM_IMAGES                    0x100000
-#define MAX_IMAGE_HEAP_SIZE               0x1000000000
+#define MAX_SHARED_MEMORY_SIZE            0x1000000000
 
 
 /* status codes for synchronization statements */
@@ -109,21 +109,21 @@ void comm_strided_write(size_t proc,
 
 
 /* shared memory management */
-unsigned long allocate_static_coarrays();
+void allocate_static_coarrays();
 
 /* returns addresses ranges for shared heap */
 void comm_translate_remote_addr(void **remote_addr, int proc);
 ssize_t comm_address_translation_offset(size_t proc);
-void *comm_start_heap(size_t proc);
-void *comm_end_heap(size_t proc);
-void *comm_start_symmetric_heap(size_t proc);
-void *comm_end_symmetric_heap(size_t proc);
-void *comm_start_asymmetric_heap(size_t proc);
-void *comm_end_asymmetric_heap(size_t proc);
-void *comm_start_static_heap(size_t proc);
-void *comm_end_static_heap(size_t proc);
+void *comm_start_shared_mem(size_t proc);
+void *comm_start_symmetric_mem(size_t proc);
+void *comm_start_save_coarrays(size_t proc);
+void *comm_end_save_coarrays(size_t proc);
 void *comm_start_allocatable_heap(size_t proc);
 void *comm_end_allocatable_heap(size_t proc);
+void *comm_end_symmetric_mem(size_t proc);
+void *comm_start_asymmetric_heap(size_t proc);
+void *comm_end_asymmetric_heap(size_t proc);
+void *comm_end_shared_mem(size_t proc);
 
 /* malloc & free */
 void *comm_malloc(size_t size);

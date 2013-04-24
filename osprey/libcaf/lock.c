@@ -60,15 +60,15 @@ typedef struct lock_req_tbl_item lock_req_tbl_item_t;
 
 lock_req_tbl_item_t *req_table = NULL;
 
-static inline void *get_heap_address_from_offset(unsigned long ofst,
-                                                 size_t image)
+static inline void *get_shared_mem_address_from_offset(unsigned long ofst,
+                                                       size_t image)
 {
-    return comm_start_heap(image - 1) + ofst;
+    return comm_start_shared_mem(image - 1) + ofst;
 }
 
-static inline unsigned long get_offset_from_heap_address(void *addr)
+static inline unsigned long get_offset_from_shared_mem_address(void *addr)
 {
-    return addr - comm_start_heap(_this_image - 1);
+    return addr - comm_start_shared_mem(_this_image - 1);
 }
 
 void comm_lock(lock_t * lock, int image, char *success,
@@ -78,7 +78,8 @@ void comm_lock(lock_t * lock, int image, char *success,
     /*
      *  Check that lock isn't already being held. If so, just return.
      *
-     *   (1) create request for lock, allocated within non-symmetric RMA heap.
+     *   (1) create request for lock, allocated within non-symmetric RMA
+     *   memory.
      *   (2) atomically swap request node into lock@image.
      *          request -> predecessor
      *   (3) if predecessor is set (i.e. locked != 0), then set
@@ -87,7 +88,7 @@ void comm_lock(lock_t * lock, int image, char *success,
     lock_req_tbl_item_t check, *new_item;
     lock_t p, q;
     lock_request_t *lock_req;
-    size_t lock_ofst = get_offset_from_heap_address(lock);
+    size_t lock_ofst = get_offset_from_shared_mem_address(lock);
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -133,7 +134,7 @@ void comm_lock(lock_t * lock, int image, char *success,
 
     q.locked = 1;
     q.image = _this_image;
-    q.ofst = get_offset_from_heap_address(lock_req);
+    q.ofst = get_offset_from_shared_mem_address(lock_req);
 
     LOAD_STORE_FENCE();
 
@@ -184,7 +185,7 @@ void comm_lock(lock_t * lock, int image, char *success,
 
         /* p->address now points to predecessor's request descriptor */
         comm_write_unbuffered(p.image - 1, ((int *)
-                                            get_heap_address_from_offset
+                                            get_shared_mem_address_from_offset
                                             (p.ofst, p.image))
                               + 1, ((int *) &r) + 1,
                               sizeof(r) - sizeof(int));
@@ -214,7 +215,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
     lock_request_t *s;
     lock_req_tbl_item_t *request_item;
     int i = 0;
-    size_t lock_ofst = get_offset_from_heap_address(lock);
+    size_t lock_ofst = get_offset_from_shared_mem_address(lock);
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -250,7 +251,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
         lock_t reset;
         q.locked = 1;
         q.image = _this_image;
-        q.ofst = get_offset_from_heap_address(req);
+        q.ofst = get_offset_from_shared_mem_address(req);
         reset.locked = 0;
         reset.image = 0;
         reset.ofst = 0;
@@ -278,7 +279,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
     LOAD_STORE_FENCE();
 
     /* reset locked on successor */
-    s = get_heap_address_from_offset(req->ofst, req->image);
+    s = get_shared_mem_address_from_offset(req->ofst, req->image);
     i = 0;
     comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
 
@@ -301,7 +302,7 @@ void comm_unlock2(lock_t * lock, int image, int *status,
     lock_request_t *req, *s;
     lock_req_tbl_item_t *request_item;
     int i = 0;
-    size_t lock_ofst = get_offset_from_heap_address(lock);
+    size_t lock_ofst = get_offset_from_shared_mem_address(lock);
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -363,20 +364,20 @@ void comm_unlock2(lock_t * lock, int image, int *status,
             /* link victim(s) to the usurper(s) */
             lock_request_t r;
             comm_write_unbuffered(u.image - 1, ((int *)
-                                                get_heap_address_from_offset
+                                                get_shared_mem_address_from_offset
                                                 (u.ofst, u.image)) + 1,
                                   ((int *) req) + 1,
                                   sizeof(*req) - sizeof(int));
         } else {
             /* reset locked on successor */
-            s = get_heap_address_from_offset(req->ofst, req->image);
+            s = get_shared_mem_address_from_offset(req->ofst, req->image);
             i = 0;
             comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
         }
 
     } else {
         /* reset locked on successor */
-        s = get_heap_address_from_offset(req->ofst, req->image);
+        s = get_shared_mem_address_from_offset(req->ofst, req->image);
         i = 0;
         comm_write_unbuffered(req->image - 1, s, &i, sizeof(i));
     }

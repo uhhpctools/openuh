@@ -90,11 +90,13 @@
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
+extern mem_usage_info_t *mem_info;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
  * asymmetric data. It is the only handle to access the link-list.*/
 extern struct shared_memory_slot *common_slot;
+
 
 /*
  * Static variable declarations
@@ -102,6 +104,10 @@ extern struct shared_memory_slot *common_slot;
 
 static unsigned long my_proc;
 static unsigned long num_procs;
+
+static unsigned long save_coarray_total_size_ = 0;
+#pragma weak save_coarray_total_size = save_coarray_total_size_
+extern unsigned long save_coarray_total_size;
 
 static unsigned short gasnet_everything = 0;    /* flag */
 
@@ -154,7 +160,6 @@ static size_t getCache_line_size;       /* set by env var. */
  * to add more cache lines in the future by making it 2D array */
 static struct cache **cache_all_images;
 static size_t shared_memory_size;
-static size_t static_heap_size;
 
 /* mutex for critical sections */
 lock_t *critical_lock;
@@ -164,7 +169,7 @@ gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 
 /* forward declarations */
 
-static inline int address_on_symmetric_heap(void *addr);
+static inline int address_in_symmetric_mem(void *addr);
 
 static void handler_put_request(gasnet_token_t token, void *buf,
                                 size_t bufsiz, gasnet_handlerarg_t unused);
@@ -257,18 +262,18 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
-static inline int address_on_symmetric_heap(void *addr)
+static inline int address_in_symmetric_mem(void *addr)
 {
-    void *start_heap;
-    void *end_heap;
+    void *start_symm_mem;
+    void *end_symm_mem;
 
     if (gasnet_everything)
         return 1;
 
-    start_heap = coarray_start_all_images[my_proc].addr;
-    end_heap = common_slot->addr;
+    start_symm_mem = coarray_start_all_images[my_proc].addr;
+    end_symm_mem = common_slot->addr;
 
-    return (addr >= start_heap && addr <= end_heap);
+    return (addr >= start_symm_mem && addr < end_symm_mem);
 }
 
 
@@ -287,24 +292,38 @@ inline ssize_t comm_address_translation_offset(size_t proc)
         (char *) coarray_start_all_images[my_proc].addr;
 }
 
-inline void *comm_start_heap(size_t proc)
+inline void *comm_start_shared_mem(size_t proc)
 {
     return get_remote_address(coarray_start_all_images[my_proc].addr,
                               proc);
 }
 
-inline void *comm_end_heap(size_t proc)
+inline void *comm_start_symmetric_mem(size_t proc)
 {
-    return get_remote_address(coarray_start_all_images[my_proc].addr, proc)
-        + shared_memory_size;
+    return comm_start_shared_mem(proc);
 }
 
-inline void *comm_start_symmetric_heap(size_t proc)
+inline void *comm_start_save_coarrays(size_t proc)
 {
-    return comm_start_heap(proc);
+    return comm_start_shared_mem(proc);
 }
 
-inline void *comm_end_symmetric_heap(size_t proc)
+inline void *comm_end_save_coarrays(size_t proc)
+{
+    return (char *) comm_start_shared_mem(proc) + save_coarray_total_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_save_coarrays(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_mem(proc);
+}
+
+inline void *comm_end_symmetric_mem(size_t proc)
 {
     return get_remote_address(common_slot->addr, proc);
 }
@@ -312,7 +331,7 @@ inline void *comm_end_symmetric_heap(size_t proc)
 inline void *comm_start_asymmetric_heap(size_t proc)
 {
     if (proc != my_proc) {
-        return comm_end_symmetric_heap(proc);
+        return comm_end_symmetric_mem(proc);
     } else {
         return (char *) common_slot->addr + common_slot->size;
     }
@@ -320,35 +339,22 @@ inline void *comm_start_asymmetric_heap(size_t proc)
 
 inline void *comm_end_asymmetric_heap(size_t proc)
 {
-    return get_remote_address(comm_end_heap(proc), proc);
+    return get_remote_address(comm_end_shared_mem(proc), proc);
 }
 
-inline void *comm_start_static_heap(size_t proc)
+inline void *comm_end_shared_mem(size_t proc)
 {
-    return get_remote_address(comm_start_heap(proc), proc);
+    return get_remote_address(coarray_start_all_images[my_proc].addr, proc)
+        + shared_memory_size;
 }
 
-inline void *comm_end_static_heap(size_t proc)
-{
-    return (char *) comm_start_heap(proc) + static_heap_size;
-}
-
-inline void *comm_start_allocatable_heap(size_t proc)
-{
-    return comm_end_static_heap(proc);
-}
-
-inline void *comm_end_allocatable_heap(size_t proc)
-{
-    return comm_end_symmetric_heap(proc);
-}
 
 static inline int remote_address_in_shared_mem(size_t proc, void *address)
 {
-    return !((address < comm_start_symmetric_heap(my_proc) ||
-              address > comm_end_symmetric_heap(my_proc)) &&
+    return !((address < comm_start_symmetric_mem(my_proc) ||
+              address > comm_end_symmetric_mem(my_proc)) &&
              (address < comm_start_asymmetric_heap(proc) ||
-              address > comm_end_asymmetric_heap(proc)));
+              address >= comm_end_asymmetric_heap(proc)));
 }
 
 
@@ -565,7 +571,7 @@ comm_swap_request(void *target, void *value, size_t nbytes,
          * with respect to the address space of target image. Otherwise, we
          * assume it is with respect to the local address space.
          */
-        if (!address_on_symmetric_heap(target)) {
+        if (!address_in_symmetric_mem(target)) {
             ssize_t ofst = node_info->offset;
             new_target = (void *) ((uintptr_t) target + ofst);
         } else {
@@ -727,7 +733,7 @@ comm_cswap_request(void *target, void *cond, void *value,
          * with respect to the address space of target image. Otherwise, we
          * assume it is with respect to the local address space.
          */
-        if (!address_on_symmetric_heap(target)) {
+        if (!address_in_symmetric_mem(target)) {
             ssize_t ofst = node_info->offset;
             new_target = (void *) ((uintptr_t) target + ofst);
         } else {
@@ -895,7 +901,7 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
          * with respect to the address space of target image. Otherwise, we
          * assume it is with respect to the local address space.
          */
-        if (!address_on_symmetric_heap(target)) {
+        if (!address_in_symmetric_mem(target)) {
             ssize_t ofst = node_info->offset;
             new_target = (void *) ((uintptr_t) target + ofst);
         } else {
@@ -989,6 +995,21 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     const int gasnet_pagesize = GASNET_PAGESIZE;
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
+    unsigned long image_heap_size;
+
+    /* Get total shared memory size, per image, requested by program (enough
+     * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
+     * accordingly.
+     */
+    caf_shared_memory_size = save_coarray_total_size;
+    image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
+                                   DEFAULT_IMAGE_HEAP_SIZE);
+    caf_shared_memory_size += image_heap_size;
+
+    gasnet_max_segsize = 2 * caf_shared_memory_size;
+    /* at minimum, make this  1 GB */
+    if (gasnet_max_segsize < (1 << 30))
+        gasnet_max_segsize = 1 << 30;
 
     argc = ARGC;
     argv = ARGV;
@@ -998,13 +1019,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     }
     __f90_set_args(argc, argv);
 
-    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
-                                          DEFAULT_SHARED_MEMORY_SIZE);
+#ifdef GASNET_SEGMENT_EVERYTHING
+    gasnet_everything = 1;
+#endif
 
-    uintptr_t max_local = gasnet_getMaxLocalSegmentSize();
-
-    if (max_local == -1)
-        gasnet_everything = 1;
 
     my_proc = gasnet_mynode();
     num_procs = gasnet_nodes();
@@ -1026,7 +1044,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                                       DEFAULT_GETCACHE_LINE_SIZE);
     enable_nbput = get_env_flag(ENV_NBPUT, DEFAULT_ENABLE_NBPUT);
 
-    /* malloc dataStructures for sync_images, nb-put, get-cache */
+    /* malloc data structures for sync_images, nb-put, get-cache */
     sync_images_flag = (unsigned short *) malloc
         (num_procs * sizeof(unsigned short));
     if (enable_nbput) {
@@ -1084,23 +1102,38 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         (num_procs * sizeof(gasnet_nodeinfo_t));
 
 
-
-    if (caf_shared_memory_size / 1024 >= MAX_IMAGE_HEAP_SIZE / 1024) {
+    if (caf_shared_memory_size / 1024 >= MAX_SHARED_MEMORY_SIZE / 1024) {
         if (my_proc == 0) {
-            Error("Image heap size must not exceed %lu GB",
-                  MAX_IMAGE_HEAP_SIZE / (1024 * 1024 * 1024));
+            Error("Image shared memory size must not exceed %lu GB",
+                  MAX_SHARED_MEMORY_SIZE / (1024 * 1024 * 1024));
         }
     }
 
+    uintptr_t max_local = gasnet_getMaxLocalSegmentSize();
+
+    if (my_proc == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
+                     "gasnet max local segment size: %lu, "
+                     "requested caf_shared_memory_size: %lu",
+                     max_local, caf_shared_memory_size);
+    }
+
+    /* We observed that when using ibv conduit with FAST segment
+     * configuration, the max size reported by getMaxLocalSegmentSize is still
+     * too large. To be safe, we set max_local to 75% of what it returns.
+     */
+#if (defined(GASNET_CONDUIT_IBV) || defined(GASNET_CONDUIT_VAPI)) && \
+     defined(GASNET_SEGMENT_FAST)
+    max_local = 0.75 * max_local;
+#endif
 
     /* caf_shared_memory_size = MIN ( caf_shared_memory_size, max_local ) */
-    if (max_local < caf_shared_memory_size) {
-        char warning_msg[255];
+    if (caf_shared_memory_size > max_local) {
         /* let the first process issue a warning to the user */
         if (my_proc == 0) {
-            Warning("Requested image heap size (%lu bytes) "
+            Warning("Requested shared memory size (%lu bytes) "
                     "exceeds system's resources by %lu bytes. Setting to %lu "
-                    "bytes intead.",
+                    "bytes instead.",
                     (unsigned long) caf_shared_memory_size,
                     (unsigned long) caf_shared_memory_size - max_local,
                     (unsigned long) max_local);
@@ -1112,11 +1145,11 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     caf_shared_memory_pages = caf_shared_memory_size / GASNET_PAGESIZE;
     if (caf_shared_memory_size % GASNET_PAGESIZE)
         caf_shared_memory_pages++;
+    caf_shared_memory_size = caf_shared_memory_pages * GASNET_PAGESIZE;
 
     /* gasnet everything ignores the last 2 params
      * note that attach is a collective operation */
-    ret = gasnet_attach(handlers, nhandlers,
-                        caf_shared_memory_pages * GASNET_PAGESIZE, 0);
+    ret = gasnet_attach(handlers, nhandlers, caf_shared_memory_size, 0);
     if (ret != GASNET_OK) {
         Error("GASNET attach failed");
     }
@@ -1145,8 +1178,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
             caf_shared_memory_pages * GASNET_PAGESIZE;
     }
 
-    static_heap_size =
-        allocate_static_coarrays(coarray_start_all_images[my_proc].addr);
+    allocate_static_coarrays(coarray_start_all_images[my_proc].addr);
 
     if (gasnet_everything) {
         everything_heap_start = coarray_start_all_images[my_proc].addr;
@@ -1154,14 +1186,26 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr =
-        coarray_start_all_images[my_proc].addr + static_heap_size;
+        coarray_start_all_images[my_proc].addr + save_coarray_total_size;
     common_shared_memory_slot->size =
-        caf_shared_memory_size - static_heap_size;
+        caf_shared_memory_size - save_coarray_total_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next = 0;
     common_shared_memory_slot->prev = 0;
 
     shared_memory_size = caf_shared_memory_size;
+
+    /* allocate space in symmetric heap for memory usage info */
+#ifdef TRACE
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
+        mem_info = (mem_usage_info_t *)
+            coarray_allocatable_allocate_(sizeof(*mem_info));
+        mem_info->current_heap_usage = sizeof(*mem_info);
+        mem_info->max_heap_usage = sizeof(*mem_info);
+        mem_info->reserved_heap_usage =
+            caf_shared_memory_size - save_coarray_total_size;
+    }
+#endif
 
     /* create a symmetric lock variable for guarding critical sections.
      * What's really needed is a distinct lock variable created for each
@@ -1707,33 +1751,32 @@ static void free_lcb()
  * Shared Memory Management
  */
 
-
 /* It should allocate memory to all static coarrays from the pinned-down
  * memory created during init */
-unsigned long set_save_coarrays_(void *base_address)
+void set_save_coarrays_(void *base_address)
 {
-    return 0;
+    /* do nothing */
 }
 
 #pragma weak set_save_coarrays = set_save_coarrays_
-unsigned long set_save_coarrays(void *base_address);
+void set_save_coarrays(void *base_address);
 
-unsigned long allocate_static_coarrays(void *base_address)
+void allocate_static_coarrays(void *base_address)
 {
-    return set_save_coarrays(base_address);
+    set_save_coarrays(base_address);
 }
 
 
 void comm_translate_remote_addr(void **remote_addr, int proc)
 {
-    void *start_symm_heap, *end_symm_heap;
-    start_symm_heap = comm_start_symmetric_heap(proc);
-    end_symm_heap = comm_end_symmetric_heap(proc);
+    void *start_symm_mem, *end_symm_mem;
+    start_symm_mem = comm_start_symmetric_mem(proc);
+    end_symm_mem = comm_end_symmetric_mem(proc);
 
-    /* subtract the offset if remote address falls within the symmetric heap
+    /* subtract the offset if remote address falls within the symmetric memory
      * of the remote image
      */
-    if (*remote_addr >= start_symm_heap && *remote_addr <= end_symm_heap) {
+    if (*remote_addr >= start_symm_mem && *remote_addr <= end_symm_mem) {
         *remote_addr = (char *) (*remote_addr) -
             comm_address_translation_offset(proc);
     }
@@ -1752,7 +1795,7 @@ static void *get_remote_address(void *src, size_t proc)
 {
     size_t offset;
     void *remote_start_address;
-    if ((proc == my_proc) || !address_on_symmetric_heap(src))
+    if ((proc == my_proc) || !address_in_symmetric_mem(src))
         return src;
     if (gasnet_everything) {
         if (src >= coarray_start_all_images[my_proc].addr && src <=

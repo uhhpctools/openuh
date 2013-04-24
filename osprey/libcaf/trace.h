@@ -29,17 +29,19 @@
 #ifndef _TRACE_H
 #define _TRACE_H
 
-#ifdef TRACE
-#define LIBCAF_TRACE_INIT __libcaf_tracers_init
-#define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
-#define START_TIMER  __start_timer
-#define STOP_TIMER  __stop_timer
-#else
+#ifndef TRACE
+
 #define LIBCAF_TRACE_INIT() ((void) 1)
 #define LIBCAF_TRACE(arg1, arg2, ...) ((void) 1)
 #define START_TIMER() ((void) 1)
 #define STOP_TIMER(arg1) ((void) 1)
-#endif
+
+#else
+
+#define LIBCAF_TRACE_INIT __libcaf_tracers_init
+#define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
+#define START_TIMER  __start_timer
+#define STOP_TIMER  __stop_timer
 
 typedef enum {
     LIBCAF_LOG_FATAL = 0,       /* unrecoverable problem */
@@ -55,7 +57,8 @@ typedef enum {
     LIBCAF_LOG_SYNC,            /* synchronization */
     LIBCAF_LOG_COLLECTIVE,      /* collective operations */
     LIBCAF_LOG_SERVICE,         /* show progress service */
-    NUM_TRACERS = LIBCAF_LOG_SERVICE
+    LIBCAF_LOG_MEMORY_SUMMARY,  /* print summary of memory usage */
+    NUM_TRACERS = LIBCAF_LOG_MEMORY_SUMMARY + 1
 } libcaf_trace_t;
 
 typedef enum {
@@ -81,5 +84,7 @@ extern void __libcaf_trace(const char *file, const char *func, int line,
 extern int __trace_is_enabled(libcaf_trace_t level);
 void __start_timer();
 void __stop_timer(__timer_type_t type);
+
+#endif                          /* TRACE */
 
 #endif                          /* _TRACE_H */

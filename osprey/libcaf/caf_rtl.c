@@ -50,6 +50,8 @@ extern int __ompc_init_rtl(int num_threads);
 unsigned long _this_image;
 unsigned long _num_images;
 
+mem_usage_info_t *mem_info;
+
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
  * asymmetric data. It is the only handle to access the link-list.*/
@@ -124,6 +126,7 @@ void __caf_init()
 void __caf_finalize(int exit_code)
 {
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to comm_finalize");
     comm_finalize(exit_code);
 
@@ -491,20 +494,32 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
                                                      var_size);
     if (empty_slot == 0)
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "No more shared Memory Space available for allocatable coarray. "
-                     "Set environment variable %s or cafrun option for more space.",
-                     ENV_SHARED_MEMORY_SIZE);
+        Error
+            ("No more shared memory space available for allocatable coarray. "
+             "Set environment variable %s or cafrun option for more space.",
+             ENV_IMAGE_HEAP_SIZE);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "caf_rtl.c:coarray_coarray_allocate"
                  "-> Found empty slot %p. About to split it from top.",
                  empty_slot->addr);
+
+#ifdef TRACE
+    /* update heap usage info if MEMORY_SUMMARY trace is enabled */
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY) && mem_info) {
+        size_t current_size = mem_info->current_heap_usage + var_size;
+        mem_info->current_heap_usage = current_size;
+        if (mem_info->max_heap_usage < current_size)
+            mem_info->max_heap_usage = current_size;
+    }
+#endif
 
     comm_barrier_all();         // implicit barrier in case of allocatable.
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
         return empty_slot->addr;
     }
+
+
     return split_empty_shared_memory_slot_from_top(empty_slot, var_size);
 }
 
@@ -519,14 +534,23 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
     if (empty_slot == 0)
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "No more shared memory space available for asymmetric data. "
-                     "Set environment variable %s or cafrun option for more space.",
-                     ENV_SHARED_MEMORY_SIZE);
+        Error("No more shared memory space available for asymmetric data. "
+              "Set environment variable %s or cafrun option for more space.",
+              ENV_IMAGE_HEAP_SIZE);
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "caf_rtl.c:coarray_asymmetric_allocate"
                  "-> Found empty slot %p. About to split it from bottom. ",
                  empty_slot->addr);
+
+#ifdef TRACE
+    /* update heap usage info if MEMORY_SUMMARY trace is enabled */
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
+        size_t current_size = mem_info->current_heap_usage + var_size;
+        mem_info->current_heap_usage = current_size;
+        if (mem_info->max_heap_usage < current_size)
+            mem_info->max_heap_usage = current_size;
+    }
+#endif
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
@@ -648,8 +672,15 @@ void coarray_deallocate_(void *var_address)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
                  "caf_rtl.c:coarray_deallocate_->before deallocating %p.",
                  var_address);
-    empty_shared_memory_slot(slot);
 
+#ifdef TRACE
+    /* update heap usage info if MEMORY_SUMMARY trace is enabled */
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
+        mem_info->current_heap_usage -= slot->size;
+    }
+#endif
+
+    empty_shared_memory_slot(slot);
 }
 
 /* Static function called from coarray_free_all_shared_memory_slots()
@@ -684,13 +715,19 @@ void coarray_free_all_shared_memory_slots()
 {
     free_prev_slots_recursively(common_slot->prev);
     free_next_slots_recursively(common_slot);
+
+#ifdef TRACE
+    /* update heap usage info if MEMORY_SUMMARY trace is enabled */
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
+        mem_info->current_heap_usage = 0;
+    }
+#endif
 }
 
 /* Translate a remote address from a given image to the local address space
  */
 void coarray_translate_remote_addr(void **remote_addr, int image)
 {
-    void *start_symm_heap, *end_symm_heap;
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "(start) - "
                  "remote_addr: %p, image: %d ", remote_addr, image);
@@ -703,7 +740,7 @@ void coarray_translate_remote_addr(void **remote_addr, int image)
 }
 
 
-/* print map of shared memory heap */
+/* print shared memory allocation info */
 static void print_mem_slot(char *mem_str, char *start_address,
                            char *end_address)
 {
@@ -760,8 +797,8 @@ static void print_mem_slot(char *mem_str, char *start_address,
     printf("|\n");
 }
 
-#pragma weak uhcaf_print_heap_map_ = uhcaf_print_heap_map
-void uhcaf_print_heap_map(char *str)
+#pragma weak uhcaf_print_shared_mem_alloc_ = uhcaf_print_shared_mem_alloc
+void uhcaf_print_shared_mem_alloc(char *str)
 {
     const int width = 70;
     int i, j;
@@ -774,7 +811,7 @@ void uhcaf_print_heap_map(char *str)
     for (i = 0; i < width; i++)
         printf("=");
     printf("|\n");
-    sprintf(label, "CAF RUNTIME SHARED MEMORY HEAP");
+    sprintf(label, "CAF RUNTIME SHARED MEMORY ALLOCATIONS");
     j = (width - strlen(label)) / 2;
     printf("|");
     for (i = 0; i < j; i++)
@@ -784,7 +821,7 @@ void uhcaf_print_heap_map(char *str)
         printf(" ");
     printf("|\n");
     if (str != NULL) {
-        sprintf(label, "(%s)", str);
+        sprintf(label, "(%lu) %s", _this_image, str);
         j = (width - strlen(label)) / 2;
         printf("|");
         for (i = 0; i < j; i++)
@@ -797,8 +834,8 @@ void uhcaf_print_heap_map(char *str)
 
     /* print memory slots */
     print_mem_slot("save coarrays",
-                   comm_start_static_heap(_this_image - 1),
-                   comm_end_static_heap(_this_image - 1));
+                   comm_start_save_coarrays(_this_image - 1),
+                   comm_end_save_coarrays(_this_image - 1));
 
     print_mem_slot("allocatable coarrays",
                    comm_start_allocatable_heap(_this_image - 1),
@@ -828,6 +865,8 @@ void uhcaf_check_comms(void)
 
 void __caf_exit(int status)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time: ");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Exiting with error code %d", status);
     comm_exit(status);
 
@@ -1522,8 +1561,8 @@ int check_remote_address(size_t image, void *address)
     char error_msg[error_len];
     memset(error_msg, 0, error_len);
 
-    if ((address < comm_start_symmetric_heap(_this_image - 1) ||
-         address > comm_end_symmetric_heap(_this_image - 1)) &&
+    if ((address < comm_start_symmetric_mem(_this_image - 1) ||
+         address > comm_end_symmetric_mem(_this_image - 1)) &&
         (address < comm_start_asymmetric_heap(image - 1) ||
          address > comm_end_asymmetric_heap(image - 1))) {
         sprintf(error_msg,
@@ -1533,8 +1572,8 @@ int check_remote_address(size_t image, void *address)
                 address,
                 (char *) address + comm_address_translation_offset(image -
                                                                    1),
-                comm_start_heap(image - 1), comm_end_heap(image - 1),
-                (unsigned long) image);
+                comm_start_shared_mem(image - 1),
+                comm_end_shared_mem(image - 1), (unsigned long) image);
         Error(error_msg);
         /* should not reach */
     }

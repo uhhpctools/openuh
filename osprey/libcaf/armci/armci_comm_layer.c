@@ -41,6 +41,7 @@
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
+extern mem_usage_info_t *mem_info;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
@@ -53,6 +54,10 @@ extern struct shared_memory_slot *common_slot;
 static unsigned long my_proc;
 static unsigned long num_procs;
 
+static unsigned long save_coarray_total_size_ = 0;
+#pragma weak save_coarray_total_size = save_coarray_total_size_
+extern unsigned long save_coarray_total_size;
+
 /* sync images */
 static void **syncptr = NULL;   /* sync flags */
 
@@ -60,7 +65,7 @@ static void **syncptr = NULL;   /* sync flags */
  * coarray_start_all_images stores the shared memory start address of all
  * images */
 static void **coarray_start_all_images = NULL;  /* local address space */
-static void **start_heap_address = NULL;        /* different address spaces */
+static void **start_shared_mem_address = NULL;  /* different address spaces */
 
 /* image stoppage info */
 static unsigned short *stopped_image_exists = NULL;
@@ -91,7 +96,6 @@ static unsigned long getCache_line_size;        /* set by env var. */
  * to add more cache lines in the future by making it 2D array */
 static struct cache **cache_all_images;
 static unsigned long shared_memory_size;
-static unsigned long static_heap_size;
 
 /* Mutexes */
 static int critical_mutex;
@@ -155,15 +159,15 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
-static inline int address_on_symmetric_heap(void *addr)
+static inline int address_in_symmetric_mem(void *addr)
 {
-    void *start_heap;
-    void *end_heap;
+    void *start_symm_mem;
+    void *end_symm_mem;
 
-    start_heap = coarray_start_all_images[my_proc];
-    end_heap = common_slot->addr;
+    start_symm_mem = coarray_start_all_images[my_proc];
+    end_symm_mem = common_slot->addr;
 
-    return (addr >= start_heap && addr <= end_heap);
+    return (addr >= start_symm_mem && addr < end_symm_mem);
 }
 
 /* returns addresses ranges for shared heap */
@@ -174,23 +178,37 @@ inline ssize_t comm_address_translation_offset(size_t proc)
         (char *) coarray_start_all_images[my_proc];
 }
 
-inline void *comm_start_heap(size_t proc)
+inline void *comm_start_shared_mem(size_t proc)
 {
     return get_remote_address(coarray_start_all_images[my_proc], proc);
 }
 
-inline void *comm_end_heap(size_t proc)
+inline void *comm_start_symmetric_mem(size_t proc)
 {
-    return get_remote_address((char *) coarray_start_all_images[my_proc] +
-                              shared_memory_size, proc);
+    return comm_start_shared_mem(proc);
 }
 
-inline void *comm_start_symmetric_heap(size_t proc)
+inline void *comm_start_save_coarrays(size_t proc)
 {
-    return comm_start_heap(proc);
+    return comm_start_shared_mem(proc);
 }
 
-inline void *comm_end_symmetric_heap(size_t proc)
+inline void *comm_end_save_coarrays(size_t proc)
+{
+    return (char *) comm_start_shared_mem(proc) + save_coarray_total_size;
+}
+
+inline void *comm_start_allocatable_heap(size_t proc)
+{
+    return comm_end_save_coarrays(proc);
+}
+
+inline void *comm_end_allocatable_heap(size_t proc)
+{
+    return comm_end_symmetric_mem(proc);
+}
+
+inline void *comm_end_symmetric_mem(size_t proc)
 {
     return get_remote_address(common_slot->addr, proc);
 }
@@ -198,7 +216,7 @@ inline void *comm_end_symmetric_heap(size_t proc)
 inline void *comm_start_asymmetric_heap(size_t proc)
 {
     if (proc != my_proc) {
-        return comm_end_symmetric_heap(proc);
+        return comm_end_symmetric_mem(proc);
     } else {
         return (char *) common_slot->addr + common_slot->size;
     }
@@ -206,27 +224,13 @@ inline void *comm_start_asymmetric_heap(size_t proc)
 
 inline void *comm_end_asymmetric_heap(size_t proc)
 {
-    return get_remote_address(comm_end_heap(proc), proc);
+    return get_remote_address(comm_end_shared_mem(proc), proc);
 }
 
-inline void *comm_start_static_heap(size_t proc)
+inline void *comm_end_shared_mem(size_t proc)
 {
-    return get_remote_address(comm_start_heap(proc), proc);
-}
-
-inline void *comm_end_static_heap(size_t proc)
-{
-    return (char *) comm_start_heap(proc) + static_heap_size;
-}
-
-inline void *comm_start_allocatable_heap(size_t proc)
-{
-    return comm_end_static_heap(proc);
-}
-
-inline void *comm_end_allocatable_heap(size_t proc)
-{
-    return comm_end_symmetric_heap(proc);
+    return get_remote_address((char *) coarray_start_all_images[my_proc] +
+                              shared_memory_size, proc);
 }
 
 
@@ -263,12 +267,25 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     int argc = 1;
     char **argv;
     unsigned long caf_shared_memory_size;
+    unsigned long image_heap_size;
+
+    /* Get total shared memory size, per image, requested by program (enough
+     * space for save coarrays + heap).
+     *
+     * We reserve sizeof(void*) bytes at the beginning of the shared memory
+     * segment for storing the start address of every proc's shared memory, so
+     * add that as well (treat is as part of save coarray memory).
+     */
+    save_coarray_total_size += sizeof(void *);
+    caf_shared_memory_size = save_coarray_total_size;
+    image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
+                                   DEFAULT_IMAGE_HEAP_SIZE);
+    caf_shared_memory_size += image_heap_size;
 
     argc = ARGC;
     argv = ARGV;
     MPI_Init(&argc, &argv);
     __f90_set_args(argc, argv);
-
 
     ret = ARMCI_Init();
     if (ret != 0) {
@@ -309,53 +326,52 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     critical_mutex = num_procs; /* last mutex reserved for critical sections */
 
-    caf_shared_memory_size = get_env_size(ENV_SHARED_MEMORY_SIZE,
-                                          DEFAULT_SHARED_MEMORY_SIZE);
-
-    if (caf_shared_memory_size / 1024 >= MAX_IMAGE_HEAP_SIZE / 1024) {
+    if (caf_shared_memory_size / 1024 >= MAX_SHARED_MEMORY_SIZE / 1024) {
         if (my_proc == 0) {
-            Error("Image heap size must not exceed %lu GB",
-                  MAX_IMAGE_HEAP_SIZE / (1024 * 1024 * 1024));
+            Error("Image shared memory size must not exceed %lu GB",
+                  MAX_SHARED_MEMORY_SIZE / (1024 * 1024 * 1024));
         }
     }
 
     /* Create pinned/registered memory (Shared Memory) */
     coarray_start_all_images = malloc(num_procs * sizeof(void *));
-    start_heap_address = malloc(num_procs * sizeof(void *));
+    start_shared_mem_address = malloc(num_procs * sizeof(void *));
 
+
+    /* TODO: where's the check for maximum allowable segment by system? */
     ret = ARMCI_Malloc((void **) coarray_start_all_images,
                        caf_shared_memory_size);
-
-    start_heap_address[my_proc] = coarray_start_all_images[my_proc];
-
-    /* write start heap address to beginning of heap */
-    *((void **) start_heap_address[my_proc]) = start_heap_address[my_proc];
-    ARMCI_Barrier();
-
-    for (i = 0; i < num_procs; i++) {
-        int domain_id = armci_domain_id(ARMCI_DOMAIN_SMP, i);
-        if (armci_domain_same_id(ARMCI_DOMAIN_SMP, i)) {
-            start_heap_address[i] =
-                *((void **) coarray_start_all_images[i]);
-        } else if (i ==
-                   armci_domain_glob_proc_id(ARMCI_DOMAIN_SMP, domain_id,
-                                             0)) {
-            start_heap_address[i] = coarray_start_all_images[i];
-        } else {
-            /* will be updated on demand */
-            start_heap_address[i] = NULL;
-        }
-    }
-
 
     if (ret != 0) {
         Error("ARMCI_Malloc failed when allocating %lu bytes.",
               caf_shared_memory_size);
     }
 
-    static_heap_size =
-        allocate_static_coarrays((char *) coarray_start_all_images[my_proc]
-                                 + sizeof(void *)) + sizeof(void *);
+
+    start_shared_mem_address[my_proc] = coarray_start_all_images[my_proc];
+
+    /* write start shared memory address to beginning of shared memory */
+    *((void **) start_shared_mem_address[my_proc]) =
+        start_shared_mem_address[my_proc];
+    ARMCI_Barrier();
+
+    for (i = 0; i < num_procs; i++) {
+        int domain_id = armci_domain_id(ARMCI_DOMAIN_SMP, i);
+        if (armci_domain_same_id(ARMCI_DOMAIN_SMP, i)) {
+            start_shared_mem_address[i] =
+                *((void **) coarray_start_all_images[i]);
+        } else if (i ==
+                   armci_domain_glob_proc_id(ARMCI_DOMAIN_SMP, domain_id,
+                                             0)) {
+            start_shared_mem_address[i] = coarray_start_all_images[i];
+        } else {
+            /* will be updated on demand */
+            start_shared_mem_address[i] = NULL;
+        }
+    }
+
+    allocate_static_coarrays((char *) coarray_start_all_images[my_proc]
+                             + sizeof(void *));
 
     if (enable_nbput) {
         nb_mgr[PUTS].handles = (struct handle_list **) malloc
@@ -395,14 +411,26 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr = coarray_start_all_images[my_proc]
-        + static_heap_size;
+        + save_coarray_total_size;
     common_shared_memory_slot->size = caf_shared_memory_size
-        - static_heap_size;
+        - save_coarray_total_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next = 0;
     common_shared_memory_slot->prev = 0;
 
     shared_memory_size = caf_shared_memory_size;
+
+    /* allocate space in symmetric heap for memory usage info */
+#ifdef TRACE
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY_SUMMARY)) {
+        mem_info = (mem_usage_info_t *)
+            coarray_allocatable_allocate_(sizeof(*mem_info));
+        mem_info->current_heap_usage = sizeof(*mem_info);
+        mem_info->max_heap_usage = sizeof(*mem_info);
+        mem_info->reserved_heap_usage =
+            caf_shared_memory_size - save_coarray_total_size;
+    }
+#endif
 
     /* allocate space for recording image termination */
     stopped_image_exists =
@@ -965,11 +993,11 @@ unsigned long set_save_coarrays_(void *base_address)
 }
 
 #pragma weak set_save_coarrays = set_save_coarrays_
-unsigned long set_save_coarrays(void *base_address);
+void set_save_coarrays(void *base_address);
 
-unsigned long allocate_static_coarrays(void *base_address)
+void allocate_static_coarrays(void *base_address)
 {
-    return set_save_coarrays(base_address);
+    set_save_coarrays(base_address);
 }
 
 
@@ -978,15 +1006,16 @@ void comm_translate_remote_addr(void **remote_addr, int proc)
     ssize_t offset;
     void *local_address;
 
-    if (start_heap_address[proc] == NULL) {
+    if (start_shared_mem_address[proc] == NULL) {
         ARMCI_Get(coarray_start_all_images[proc],
-                  &start_heap_address[proc], sizeof(void *), proc);
+                  &start_shared_mem_address[proc], sizeof(void *), proc);
     }
 
-    offset = start_heap_address[my_proc] - start_heap_address[proc];
+    offset =
+        start_shared_mem_address[my_proc] - start_shared_mem_address[proc];
     local_address = *remote_addr + offset;
 
-    if (!address_on_symmetric_heap(local_address)) {
+    if (!address_in_symmetric_mem(local_address)) {
         local_address = (char *) local_address +
             comm_address_translation_offset(proc);
     }
@@ -1005,7 +1034,7 @@ static void *get_remote_address(void *src, size_t img)
 {
     size_t offset;
     void *remote_address;
-    if ((img == my_proc) || !address_on_symmetric_heap(src))
+    if ((img == my_proc) || !address_in_symmetric_mem(src))
         return src;
     offset = src - coarray_start_all_images[my_proc];
     remote_address = coarray_start_all_images[img] + offset;
@@ -1423,6 +1452,7 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
     else {
         int in_progress = 0;
         armci_hdl_t handle;
+        ARMCI_INIT_HANDLE(&handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Before ARMCI_Get from %p on"
                      " image %lu to %p size %lu",
@@ -1477,9 +1507,11 @@ void comm_write(size_t proc, void *dest, void *src, size_t nbytes)
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
         if (nb_mgr[PUTS].handles[proc])
-            check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes,
+                                           PUTS);
         if (nb_mgr[GETS].handles[proc])
-            check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes,
+                                           GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, src, nbytes, PUTS);
         ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
@@ -1511,9 +1543,11 @@ void comm_write_unbuffered(size_t proc, void *dest, void *src,
     remote_dest = get_remote_address(dest, proc);
     if (enable_nbput) {
         if (nb_mgr[PUTS].handles[proc])
-            check_wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes,
+                                           PUTS);
         if (nb_mgr[GETS].handles[proc])
-            check_wait_on_pending_accesses(proc, remote_dest, nbytes, GETS);
+            check_wait_on_pending_accesses(proc, remote_dest, nbytes,
+                                           GETS);
         struct handle_list *handle_node =
             get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
         ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle_node->handle);
@@ -1590,6 +1624,7 @@ void comm_strided_nbread(size_t proc,
 
             int in_progress = 0;
             armci_hdl_t handle;
+            ARMCI_INIT_HANDLE(&handle);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
@@ -1706,9 +1741,11 @@ void comm_strided_write(size_t proc,
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
             if (nb_mgr[PUTS].handles[proc])
-                check_wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+                check_wait_on_pending_accesses(proc, remote_dest, size,
+                                               PUTS);
             if (nb_mgr[GETS].handles[proc])
-                check_wait_on_pending_accesses(proc, remote_dest, size, GETS);
+                check_wait_on_pending_accesses(proc, remote_dest, size,
+                                               GETS);
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, size, PUTS);
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,

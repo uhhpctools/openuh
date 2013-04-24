@@ -30,11 +30,6 @@
 #define GASNET_COMM_LAYER_H
 
 #define GASNET_PAR 1
-#ifdef IB
-#define GASNET_CONDUIT_IBV 1
-#else
-#define GASNET_CONDUIT_MPI 1
-#endif
 #define GASNET_VIS_AMPIPE 1
 #define GASNET_VIS_MAXCHUNK 512
 #define GASNET_VIS_REMOTECONTIG 1

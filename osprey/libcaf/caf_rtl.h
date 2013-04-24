@@ -43,6 +43,13 @@ struct shared_memory_slot {
     struct shared_memory_slot *prev;
 };
 
+
+typedef struct {
+    size_t current_heap_usage;
+    size_t max_heap_usage;
+    size_t reserved_heap_usage;
+} mem_usage_info_t;
+
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
 #define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)
@@ -159,7 +166,7 @@ int check_remote_address(size_t, void *);
 int check_remote_image(size_t);
 
 /* UHCAF library routines */
-void uhcaf_print_heap_map(char *str);
+void uhcaf_print_shared_mem_alloc(char *str);
 void uhcaf_check_comms(void);
 
 #endif

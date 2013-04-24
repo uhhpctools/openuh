@@ -38,11 +38,12 @@
 #include "caf_rtl.h"
 #include "trace.h"
 
-#define BUF_SIZE 256
+#define BUF_SIZE 512
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern struct shared_memory_slot *common_slot;
+extern mem_usage_info_t *mem_info;
 
 typedef enum {
     OFF = 0,
@@ -71,7 +72,8 @@ __trace_table_t tracers[] = {
     INIT_LEVEL(CACHE, OFF),
     INIT_LEVEL(SYNC, OFF),
     INIT_LEVEL(COLLECTIVE, OFF),
-    INIT_LEVEL(SERVICE, OFF)
+    INIT_LEVEL(SERVICE, OFF),
+    INIT_LEVEL(MEMORY_SUMMARY, OFF)
 };
 
 static int __trace_enable(libcaf_trace_t level)
@@ -179,12 +181,33 @@ void __libcaf_tracers_init(void)
         }
     }
 
-    /*It TIME is enabled, TIME_SUMMARY should also be enabled by default */
+    /* It TIME is enabled, TIME_SUMMARY should also be enabled by default */
     if (__trace_is_enabled(LIBCAF_LOG_TIME)) {
         (void) __trace_enable_text("TIME_SUMMARY");
     }
 
+    /* It MEMORY is enabled, MEMORY_SUMMARY should also be enabled by default
+     * */
+    if (__trace_is_enabled(LIBCAF_LOG_MEMORY)) {
+        (void) __trace_enable_text("MEMORY_SUMMARY");
+    }
+
     show_trace_levels();
+}
+
+static void __print_memory_summary(char *mem_usg_str)
+{
+    if (mem_info) {
+        snprintf(mem_usg_str, BUF_SIZE,
+                 " current usage: %lu bytes (%.2lf%%), "
+                 " max usage: %lu bytes (%.2lf%%)\n",
+                 (unsigned long) mem_info->current_heap_usage,
+                 100 * mem_info->current_heap_usage /
+                 ((double) mem_info->reserved_heap_usage),
+                 (unsigned long) mem_info->max_heap_usage,
+                 100 * mem_info->max_heap_usage /
+                 ((double) mem_info->reserved_heap_usage));
+    }
 }
 
 static void __trace_time(__timer_start_stop_t event, __timer_type_t type,
@@ -227,9 +250,9 @@ static void __trace_time(__timer_start_stop_t event, __timer_type_t type,
     } else {                    /* Accumulate */
 
         snprintf(tmp, BUF_SIZE,
-                 "\nTotal time for INIT: wall-clock=%lf, CPU= %lf\n"
-                 "Total time for READ: wall-clock=%lf, CPU= %lf\n"
-                 "Total time for WRITE: wall-clock=%lf, CPU= %lf\n"
+                 "\n\tTotal time for INIT: wall-clock=%lf, CPU= %lf\n\t"
+                 "Total time for READ: wall-clock=%lf, CPU= %lf\n\t"
+                 "Total time for WRITE: wall-clock=%lf, CPU= %lf\n\t"
                  "Total time for SYNC: wall-clock=%lf, CPU= %lf\n",
                  rolled_up_wall_time[INIT], rolled_up_cpu_time[INIT],
                  rolled_up_wall_time[READ], rolled_up_cpu_time[READ],
@@ -288,6 +311,7 @@ static void __print_shared_memory_slots()
     fflush(trace_log_stream);
 }
 
+
 void __libcaf_trace(const char *file, const char *func, int line,
                     libcaf_trace_t msg_type, char *fmt, ...)
 {
@@ -322,15 +346,16 @@ void __libcaf_trace(const char *file, const char *func, int line,
             strncat(tmp1, time_str, BUF_SIZE - strlen(tmp1) - 1);
         }
 
+        if (msg_type == LIBCAF_LOG_MEMORY_SUMMARY) {
+            char mem_usg_str[BUF_SIZE];
+            __print_memory_summary(mem_usg_str);
+            strncat(tmp1, mem_usg_str, BUF_SIZE - strlen(tmp1) - 1);
+        }
+
         strncat(tmp1, "\n", BUF_SIZE - strlen(tmp1) - 1);
 
         fputs(tmp1, trace_log_stream);
         fflush(trace_log_stream);
-
-        /* Print shared memory slots only for image 1 */
-        if (msg_type == LIBCAF_LOG_MEMORY && _this_image == 1) {
-            __print_shared_memory_slots();
-        }
 
     }
 

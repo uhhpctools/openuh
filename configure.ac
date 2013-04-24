@@ -173,7 +173,8 @@ if test "${BUILD_CAF_RUNTIME}" = "YES" -a -n "${ARMCI_HOME}"; then
         if test -n "`which mpicc 2>/dev/null`"; then
             d=`which mpicc 2>/dev/null`
             MPI_INCLUDE=`dirname $d`/../include
-        else
+        fi
+        if test ! -f "${MPI_INCLUDE}/mpi.h"; then
             AC_MSG_ERROR([Environment variable MPI_INCLUDE must be set to valid MPI include directory when enabling coarrays with ARMCI])
         fi
     fi
