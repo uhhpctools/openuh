@@ -69,8 +69,8 @@ without 32-bit compatible libraries:
 Known Limitations
 ------------------
 
-* Accessing a pointer component of a remote coarray of derived type is not
-  supported when using the ARMCI communication layer.
+Please report incorrect or unsupported Fortran 2008 coarray functionality to
+openuh@cs.uh.edu.
 
 
 Using OpenUH CAF compiler

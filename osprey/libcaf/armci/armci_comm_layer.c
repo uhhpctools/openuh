@@ -914,7 +914,7 @@ static void wait_on_pending_accesses(size_t proc,
                     ARMCI_Wait(&handle_node->handle);
                     delete_node(proc, handle_node, GETS);
                     return;
-                } else if (ARMCI_Test(&handle_node->handle) == 0) {
+                } else if (ARMCI_Test(&handle_node->handle) != 0) {
                     /* has completed */
                     node_to_delete = handle_node;
                     handle_node = handle_node->next;
@@ -1484,12 +1484,12 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         armci_hdl_t handle;
         ARMCI_INIT_HANDLE(&handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                     "Before ARMCI_Get from %p on"
+                     "Before ARMCI_NbGet from %p on"
                      " image %lu to %p size %lu",
                      remote_src, proc + 1, dest, nbytes);
         ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, &handle);
 
-        in_progress = ARMCI_Test(&handle);
+        in_progress = (ARMCI_Test(&handle) == 0);
 
         if (in_progress == 1) {
             struct handle_list *handle_node =
@@ -1502,6 +1502,11 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         } else if (hdl != NULL) {
             *hdl = NULL;
         }
+        LIBCAF_TRACE(LIBCAF_LOG_COMM,
+                     "After ARMCI_NbGet from %p on"
+                     " image %lu to %p size %lu *hdl=%p",
+                     remote_src, proc + 1, dest, nbytes,
+                     *hdl);
     }
 }
 
@@ -1667,7 +1672,7 @@ void comm_write(size_t proc, void *dest, void *src,
                      "After ARMCI_Put to %p on image %lu.",
                      remote_dest, proc + 1);
 
-        in_progress = ARMCI_Test(&handle);
+        in_progress = (ARMCI_Test(&handle) == 0);
 
         if (in_progress == 1) {
             struct handle_list *handle_node =
@@ -1761,7 +1766,7 @@ void comm_strided_nbread(size_t proc,
             ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
                          count, stride_levels, proc, &handle);
 
-            in_progress = ARMCI_Test(&handle);
+            in_progress = (ARMCI_Test(&handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =
@@ -1926,7 +1931,7 @@ void comm_strided_write_from_lcb(size_t proc,
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu.", remote_dest, proc + 1);
 
-            in_progress = ARMCI_Test(&handle);
+            in_progress = (ARMCI_Test(&handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =
@@ -2039,7 +2044,7 @@ void comm_strided_write(size_t proc,
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu. ", remote_dest, proc + 1);
 
-            in_progress = ARMCI_Test(&handle);
+            in_progress = (ARMCI_Test(&handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =

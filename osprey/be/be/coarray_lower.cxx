@@ -518,8 +518,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     UINT32 i;
     FOREACH_SYMBOL(CURRENT_SYMTAB, sym, i) {
         if (sym->sym_class == CLASS_VAR && is_coarray_type(ST_type(sym))) {
-            set_coarray_tsize(ST_type(sym));
             if (ST_sclass(sym) == SCLASS_PSTATIC) {
+                set_coarray_tsize(ST_type(sym));
                 gen_save_coarray_symbol(sym);
                 /* don't allot space for this symbol in global memory */
                 //Set_TY_size(ST_type(sym), 0);
@@ -814,7 +814,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             &LHS_coarray_type)) {
                             LHS_is_coindexed = TRUE;
                         }
-                        LHS_has_arrsection = (BOOL) get_inner_arrsection(LHS_wn);
+                        LHS_has_arrsection = get_inner_arrsection(LHS_wn) != NULL;
                         LHS_is_vector_access = (BOOL) is_vector_access(LHS_wn);
                     }
 

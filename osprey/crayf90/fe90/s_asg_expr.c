@@ -14571,13 +14571,61 @@ static void translate_uh_dv_component(opnd_type           *result_opnd,
 
    /* get the cosubscripts */
    pe_bd_list_idx = OPND_IDX(exp_desc->bias_opnd);
+
+   /* iterate through PE subscript list, and adjust any statement expansion
+    * nodes (necessary to avoid creation of duplicates)
+    */
+   if (pe_bd_list_idx != NULL_IDX) {
+       int new_idx;
+       int old_idx = OPND_IDX(IL_OPND(pe_bd_list_idx));
+       if (OPND_FLD(IL_OPND(pe_bd_list_idx)) == IR_Tbl_Idx &&
+           IR_OPR(old_idx) == Stmt_Expansion_Opr ) {
+
+           NTR_IR_TBL(new_idx);
+           IR_OPR(new_idx) = Plus_Opr;
+           IR_TYPE_IDX(new_idx) = INTEGER_DEFAULT_TYPE;
+           IR_LINE_NUM(new_idx) = IR_LINE_NUM(old_idx);
+           IR_COL_NUM(new_idx) = IR_COL_NUM(old_idx);
+           IR_FLD_L(new_idx) = IR_Tbl_Idx;
+           IR_IDX_L(new_idx) = old_idx;
+           IR_FLD_R(new_idx) = CN_Tbl_Idx;
+           IR_IDX_R(new_idx) = CN_INTEGER_ZERO_IDX;
+           IR_LINE_NUM_R(new_idx) = IR_LINE_NUM(old_idx);
+           IR_COL_NUM_R(new_idx) = IR_COL_NUM(old_idx);
+           OPND_IDX(IL_OPND(pe_bd_list_idx)) = new_idx;
+       }
+
+       pe_bd_list_idx = IL_NEXT_LIST_IDX(pe_bd_list_idx);
+       old_idx = OPND_IDX(IL_OPND(pe_bd_list_idx));
+       while (pe_bd_list_idx != NULL_IDX) {
+           if (OPND_FLD(IL_OPND(pe_bd_list_idx)) == IR_Tbl_Idx &&
+               IR_OPR(old_idx) == Stmt_Expansion_Opr ) {
+               NTR_IR_TBL(new_idx);
+               IR_OPR(new_idx) = Plus_Opr;
+               IR_TYPE_IDX(new_idx) = INTEGER_DEFAULT_TYPE;
+               IR_LINE_NUM(new_idx) = IR_LINE_NUM(old_idx);
+               IR_COL_NUM(new_idx) = IR_COL_NUM(old_idx);
+               IR_FLD_L(new_idx) = IR_Tbl_Idx;
+               IR_IDX_L(new_idx) = old_idx;
+               IR_FLD_R(new_idx) = CN_Tbl_Idx;
+               IR_IDX_R(new_idx) = CN_INTEGER_ZERO_IDX;
+               IR_LINE_NUM_R(new_idx) = IR_LINE_NUM(old_idx);
+               IR_COL_NUM_R(new_idx) = IR_COL_NUM(old_idx);
+               OPND_IDX(IL_OPND(pe_bd_list_idx)) = new_idx;
+           }
+           pe_bd_list_idx = IL_NEXT_LIST_IDX(pe_bd_list_idx);
+       }
+   }
+
+   pe_bd_list_idx = OPND_IDX(exp_desc->bias_opnd);
+
+
    COPY_OPND(opnd, (*result_opnd));
 
    io_item_must_flatten = TRUE;
 
    if (OPND_FLD(opnd) == IR_Tbl_Idx &&
        IR_OPR(OPND_IDX(opnd)) == Dv_Deref_Opr) {
-
       COPY_OPND(opnd, IR_OPND_L(OPND_IDX(opnd)));
    }
 
