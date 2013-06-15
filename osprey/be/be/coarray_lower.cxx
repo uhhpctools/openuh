@@ -574,18 +574,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
           stmt_node = wn;
           wn_arrayexp = NULL;
           if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
-          if (defer_sync_just_seen) {
-              ACCESS_HDL *access_handle = (ACCESS_HDL*)malloc(
-                                             sizeof(ACCESS_HDL));
-              access_handle->handle_st = handle_var;
-              access_handle->deferred = TRUE;
-              Set_Coarray_Sync(stmt_node, (ACCESS_HDL*)access_handle);
-              handle_var = NULL;
-          }
         }
 
-
-        defer_sync_just_seen = FALSE;
 
         /* stores most recently encountered ARRAYEXP in wn_arrayexp */
         if (WN_operator(wn) == OPR_ARRAYEXP)
@@ -644,6 +634,16 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 if (Was_Visited(coindexed_arr_ref)) break;
 
+                if (defer_sync_just_seen) {
+                    ACCESS_HDL *access_handle = (ACCESS_HDL*)malloc(
+                            sizeof(ACCESS_HDL));
+                    access_handle->handle_st = handle_var;
+                    access_handle->deferred = TRUE;
+                    Set_Coarray_Sync(stmt_node, (ACCESS_HDL*)access_handle);
+                    handle_var = NULL;
+                    defer_sync_just_seen = FALSE;
+                }
+
                 temp_wipre = wipre;
                 while ( temp_wipre.Wn() != coindexed_arr_ref )
                     temp_wipre++;
@@ -659,16 +659,37 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         elem_type = Ty_Table[coarray_type].u2.etype;
                     }
                     WN *RHS_wn = WN_kid0(stmt_node);
-                    if ( !is_lvalue(RHS_wn)
-                         || is_convert_operation(RHS_wn)
-                         || ( !is_load_operation(RHS_wn)&&
-                         is_vector_access(WN_kid1(stmt_node))) ) {
 
+                    if ( is_lvalue(RHS_wn) && !is_convert_operation(RHS_wn) &&
+                        (!get_inner_arrsection(coindexed_arr_ref) ||
+                         get_inner_arrsection(RHS_wn)) &&
+                          (is_vector_access(coindexed_arr_ref) ||
+                           !is_vector_access(RHS_wn))) {
+
+                        /* a source LCB is not required */
+                        if (is_load_operation(RHS_wn)) {
+                            while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
+                                RHS_wn = WN_kid0(RHS_wn);
+                            }
+                            if (WN_operator(RHS_wn) == OPR_LDID) {
+                                WN *new_RHS_wn;
+                                /* replace the LDID expression with an Iload
+                                 * to an array ref */
+                                TY_IDX elem_ty = WN_ty(RHS_wn);
+                                new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+                                        WN_offset(RHS_wn),
+                                        Make_Pointer_Type(elem_ty, FALSE),
+                                        make_array_ref(WN_st(RHS_wn)));
+                                WN_Delete(RHS_wn);
+                                WN_kid0(stmt_node) = new_RHS_wn;
+                            }
+                        }
+                    } else {
                         WN *new_stmt_node;
                         ST *LCB_st;
                         WN *xfer_sz_node;
 
-                        /* create LCB for RHS */
+                        /* create source LCB for co-indexed term */
                         LCB_st = gen_lcbptr_symbol(
                                Make_Pointer_Type(elem_type,FALSE),
                                "LCB" );
@@ -696,22 +717,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         temp_wipre.Replace(replace_wn);
                         wipre = temp_wipre;
 
-                    } else if (is_load_operation(RHS_wn)) {
-                        if (WN_operator(RHS_wn) == OPR_LDID) {
-                            WN *new_RHS_wn;
-                            /* replace the LDID expression with an Iload to an
-                             * array ref */
-                            TY_IDX elem_ty = WN_ty(RHS_wn);
-                            new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
-                                    WN_offset(RHS_wn),
-                                    Make_Pointer_Type(elem_ty, FALSE),
-                                    make_array_ref(WN_st(RHS_wn)));
-                            WN_Delete(RHS_wn);
-                            WN_kid0(stmt_node) = new_RHS_wn;
-                        }
-                    } else {
-                    /* handle indirection ... */
                     }
+
                 } else if ( array_ref_on_RHS(coindexed_arr_ref, &elem_type) ) {
                     /* coarray read ... */
 
@@ -724,6 +731,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     WN *LHS_img;
                     TY_IDX LHS_coarray_type;
                     BOOL LHS_is_coindexed  = FALSE;
+                    BOOL LHS_has_arrsection = FALSE;
+                    BOOL LHS_is_vector_access = FALSE;
 
                     if (WN_operator(stmt_node) == OPR_ISTORE ||
                         WN_operator(stmt_node) == OPR_MSTORE) {
@@ -732,12 +741,38 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             &LHS_coarray_type)) {
                             LHS_is_coindexed = TRUE;
                         }
+                        LHS_has_arrsection = (BOOL) get_inner_arrsection(LHS_wn);
+                        LHS_is_vector_access = (BOOL) is_vector_access(LHS_wn);
                     }
 
-                    if ( !is_lvalue(RHS_wn) || LHS_is_coindexed
-                         || is_convert_operation(RHS_wn)
-                         || ( !is_load_operation(RHS_wn)&&
-                         is_vector_access(WN_kid1(stmt_node))) ) {
+                    if ( is_lvalue(RHS_wn) && !is_convert_operation(RHS_wn) &&
+                         (!LHS_has_arrsection ||
+                          get_inner_arrsection(coindexed_arr_ref)) &&
+                         !LHS_is_coindexed &&
+                         (is_vector_access(coindexed_arr_ref) ||
+                          !LHS_is_vector_access) ) {
+
+                        /* no LCB created */
+
+                        if (is_load_operation(RHS_wn)) {
+                            if (WN_operator(stmt_node) == OPR_STID) {
+                                /* replace the STID statement with an Istore to an
+                                 * array ref */
+                                TY_IDX elem_ty = WN_ty(stmt_node);
+                                insert_wnx = WN_Istore( TY_mtype(elem_ty),
+                                        WN_offset(stmt_node),
+                                        Make_Pointer_Type(elem_ty, FALSE),
+                                        make_array_ref(WN_st(stmt_node)),
+                                        WN_COPY_Tree(RHS_wn));
+                                WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
+                                Set_Coarray_Sync(insert_wnx, Coarray_Sync(stmt_node));
+
+                                add_caf_stmt_to_delete_list(stmt_node, blk_node);
+                            }
+                        }
+                    } else {
+                        /* create destination LCB for co-indexed term */
+
                         WN *new_stmt_node;
                         ST *LCB_st;
                         WN *xfer_sz_node;
@@ -778,25 +813,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                 WN_Lda(Pointer_type, 0, LCB_st));
                         WN_INSERT_BlockAfter(blk_node, stmt_node, insert_wnx);
 
-                    } else if (is_load_operation(RHS_wn)) {
-
-                        if (WN_operator(stmt_node) == OPR_STID) {
-                            /* replace the STID statement with an Istore to an
-                             * array ref */
-                            TY_IDX elem_ty = WN_ty(stmt_node);
-                            insert_wnx = WN_Istore( TY_mtype(elem_ty),
-                                    WN_offset(stmt_node),
-                                    Make_Pointer_Type(elem_ty, FALSE),
-                                    make_array_ref(WN_st(stmt_node)),
-                                    WN_COPY_Tree(RHS_wn));
-                            WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
-                            Set_Coarray_Sync(insert_wnx, Coarray_Sync(stmt_node));
-
-                            add_caf_stmt_to_delete_list(stmt_node, blk_node);
-                        }
-                    } else {
-                    /* handle indirection ... */
                     }
+
                 } else if ( array_ref_in_parm(coindexed_arr_ref, &elem_type) ) {
                     WN *new_stmt_node;
                     ST *LCB_st;
@@ -1145,8 +1163,11 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         WN *xfer_sz_node;
                         WN *local_access;
 
-                        if (is_vector_access(RHS_wn)) break;
+                        while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
+                            RHS_wn = WN_kid0(RHS_wn);
+                        }
 
+                        if (is_vector_access(RHS_wn)) break;
 
                         if (WN_operator(RHS_wn) == OPR_ARRAYEXP &&
                             (WN_operator(WN_kid0(RHS_wn)) == OPR_ILOAD) ||
@@ -1435,6 +1456,9 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         wipre = temp_wipre;
 
                     } else if (is_load_operation(RHS_wn)) {
+                        while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
+                            RHS_wn = WN_kid0(RHS_wn);
+                        }
                         if (WN_operator(RHS_wn) == OPR_LDID) {
                             WN *new_RHS_wn;
                             /* replace the LDID expression with an Iload to an
@@ -1735,15 +1759,41 @@ WN * Coarray_Lower(PU_Info *current_pu, WN *pu)
                         Set_Coarray_Sync(stmt_node, (ACCESS_HDL*)access_handle);
                     }
 
-                    ST *LCB_st;
-                    WN *xfer_sz_node;
+                    if (Is_LCB_Stmt(stmt_node)) {
+                        ST *LCB_st;
+                        WN *xfer_sz_node;
 
-                    LCB_st = get_lcb_sym(RHS_wn);
-                    xfer_sz_node = get_transfer_size(RHS_wn, elem_type);
-                    insert_blk = gen_coarray_access_stmt( wn,
-                            NULL, LCB_st,
-                            xfer_sz_node, WRITE_FROM_LCB,
-                            Coarray_Sync(stmt_node));
+                        LCB_st = get_lcb_sym(RHS_wn);
+                        xfer_sz_node = get_transfer_size(RHS_wn, elem_type);
+                        insert_blk = gen_coarray_access_stmt( wn,
+                                NULL, LCB_st,
+                                xfer_sz_node, WRITE_FROM_LCB,
+                                Coarray_Sync(stmt_node));
+                    } else {
+                        WN *xfer_sz_node;
+                        WN *local_access;
+
+                        while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
+                            RHS_wn = WN_kid0(RHS_wn);
+                        }
+
+                        if (WN_operator(RHS_wn) == OPR_ILOAD ||
+                                   WN_operator(RHS_wn) == OPR_MLOAD) {
+                          local_access = WN_kid0(RHS_wn);
+                          Is_True(WN_operator(local_access) == OPR_ARRAY,
+                              ("expecting the operator for local_access "
+                               "to be ARRAY"));
+                        } else {
+                          /* should not reach */
+                          Is_True(0, ("bad WHIRL node encountered in RHS"));
+                        }
+
+                        xfer_sz_node = get_transfer_size(RHS_wn, elem_type);
+
+                        insert_blk = gen_coarray_access_stmt( wn, local_access,
+                                             NULL, xfer_sz_node, WRITE_DIRECT,
+                                             Coarray_Sync(stmt_node));
+                    }
 
                     if (Coarray_Sync(stmt_node))
                         free(Coarray_Sync(stmt_node));
@@ -3085,16 +3135,18 @@ static BOOL is_contiguous_access(WN *array_ref, INT8 rank)
             WN *sub = WN_array_index(array_ref, num_dim-i-1);
             /* TODO: handle other aggregate operators as well */
             if (WN_operator(sub) == OPR_TRIPLET) {
-                /* no static bounds, assume non-contiguous */
+                if (WN_operator(WN_kid1(sub)) != OPR_INTCONST ||
+                    (WN_operator(WN_kid1(sub)) == OPR_INTCONST &&
+                    WN_const_val(WN_kid1(sub)) != 1))
+                    return FALSE;
+
                 if (WN_operator(WN_kid2(sub)) != OPR_INTCONST ||
-                    WN_operator(WN_kid1(sub)) != OPR_INTCONST)
-                    return FALSE;
-
-                if (WN_operator(WN_kid1(sub)) == OPR_INTCONST &&
-                    WN_const_val(WN_kid1(sub)) != 1)
-                    return FALSE;
-
-                access_range[i] = WN_const_val(WN_kid2(sub));
+                    WN_operator(WN_kid0(sub)) != OPR_INTCONST) {
+                    /* always less than extent for this dim */
+                    access_range[i] = -1;
+                } else {
+                    access_range[i] = WN_const_val(WN_kid2(sub));
+                }
             } else {
                 access_range[i] = 1;
             }
@@ -3111,7 +3163,7 @@ static BOOL is_contiguous_access(WN *array_ref, INT8 rank)
 
             if ((access_range[i] < extent[i]) && requires_complete_access)
                 return FALSE;
-            else if (access_range[i] > 1)  {
+            else if (access_range[i] != 1)  {
                 requires_complete_access = TRUE;
             }
             else continue;
@@ -3132,6 +3184,8 @@ static BOOL is_vector_access(WN *array_ref)
     BOOL is_vector = FALSE;
 
 
+    /* find inner-most ARRSECTION node, if it exists */
+
     wn = wcpost.begin().Wn();
     while (wn && WN_operator(wn) != OPR_ARRSECTION) {
         wn = Get_Parent(wn);
@@ -3139,11 +3193,6 @@ static BOOL is_vector_access(WN *array_ref)
 
     if (wn == NULL) return FALSE;
     array_ref = wn;
-
-    if (WN_operator(array_ref) != OPR_ARRAY ||
-            WN_operator(array_ref) != OPR_ARRSECTION)  {
-    }
-
 
     TY_IDX arr_type = get_array_type_from_tree(array_ref);
     if ( is_dope(arr_type) || TY_kind(arr_type) == KIND_POINTER)
@@ -3162,6 +3211,7 @@ static BOOL is_vector_access(WN *array_ref)
 
     num_dim = WN_num_dim(array_ref);
 
+    /* its a vector access if one of the subscript nodes is ARRAYEXP */
     if (WN_operator(array_ref) == OPR_ARRSECTION) {
         for (INT8 i = rank-1; i >= 0; i--) {
             WN *sub = WN_array_index(array_ref, num_dim-i-1);
@@ -4017,7 +4067,7 @@ static BOOL is_lvalue(WN *expr)
 {
     BOOL ret;
 
-    if (WN_operator(expr) == OPR_CVT) {
+    if (WN_operator(expr) == OPR_CVT || WN_operator(expr) == OPR_CVTL) {
         ret = is_lvalue(WN_kid0(expr));
     } else {
         ret = (WN_operator(expr) == OPR_ARRAYEXP &&
@@ -4757,7 +4807,7 @@ static void gen_global_save_coarray_symbol(ST *sym)
  */
 static BOOL is_load_operation(WN *node)
 {
-    if (WN_operator(node) == OPR_CVT)
+    if (WN_operator(node) == OPR_CVT || WN_operator(node) == OPR_CVTL)
         return is_load_operation(WN_kid0(node));
 
     return WN_operator(node) == OPR_LDID ||

@@ -175,6 +175,7 @@ void _END_CRITICAL();
 /* shared memory management */
 void *coarray_allocatable_allocate_(unsigned long var_size);
 void *coarray_asymmetric_allocate_(unsigned long var_size);
+void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
 void coarray_translate_remote_addr(void **remote_addr, int image);

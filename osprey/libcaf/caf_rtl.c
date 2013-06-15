@@ -637,6 +637,39 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
                                                       var_size);
 }
 
+/* Memory allocation function for asymmetric data. It is invoked
+ * from fortran allocation function _ALLOCATE in
+ * osprey/libf/fort/allocation.c
+ * It finds empty slot from the shared memory list (common_slot & below)
+ * and then splits the slot from bottom */
+void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
+{
+    struct shared_memory_slot *empty_slot;
+    empty_slot = find_empty_shared_memory_slot_below(common_slot,
+                                                     var_size);
+    if (empty_slot == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Couldn't find empty slot." );
+        return 0;
+    }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
+            "Found empty slot %p. About to split it from bottom. ",
+                 empty_slot->addr);
+
+    /* update heap usage info */
+    size_t current_size = mem_info->current_heap_usage + var_size;
+    mem_info->current_heap_usage = current_size;
+    if (mem_info->max_heap_usage < current_size)
+        mem_info->max_heap_usage = current_size;
+
+    if (empty_slot != common_slot && empty_slot->size == var_size) {
+        empty_slot->feb = 1;
+        return empty_slot->addr;
+    }
+    return split_empty_shared_memory_slot_from_bottom(empty_slot,
+                                                      var_size);
+}
+
 /* Static function called from coarray_deallocate.
  * It finds the slot with the address (passed in param) by searching
  * the shared memory link-list starting from the slot(passed in param)

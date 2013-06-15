@@ -531,7 +531,7 @@ INSTALL_CAF_EXTRA_LIB () {
     fi 
 
     # Create the Fortran module files for the CAF Extra Library interface
-    (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -c -coarray -fe caf-extra.caf)
+    (cd ${ROOT}/include/${VERSION}; ${ROOT}/bin/uhf90 -ftpp -c -coarray -fe caf-extra.caf)
 }
 
 

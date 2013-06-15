@@ -151,6 +151,7 @@ static gasnet_hsl_t sync_lock = GASNET_HSL_INITIALIZER;
 /*non-blocking put*/
 static struct nb_handle_manager nb_mgr[2];
 
+static size_t nb_xfer_limit;
 
 
 /* get cache */
@@ -171,6 +172,8 @@ gasnet_hsl_t atomics_mutex = GASNET_HSL_INITIALIZER;
 /* forward declarations */
 
 static inline int address_in_symmetric_mem(void *addr);
+static inline int address_in_shared_mem(void *addr);
+static inline void sync_on_handle(struct handle_list *handle);
 
 static void handler_put_request(gasnet_token_t token, void *buf,
                                 size_t bufsiz, gasnet_handlerarg_t unused);
@@ -234,7 +237,8 @@ static void wait_on_pending_accesses(unsigned long proc,
                                      void *remote_address,
                                      unsigned long size,
                                      access_type_t access_type);
-static void wait_on_all_pending_accesses(unsigned long proc);
+static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
+static inline void wait_on_all_pending_accesses();
 
 static void clear_all_cache();
 static void clear_cache(unsigned long node);
@@ -275,6 +279,20 @@ static inline int address_in_symmetric_mem(void *addr)
     end_symm_mem = common_slot->addr;
 
     return (addr >= start_symm_mem && addr < end_symm_mem);
+}
+
+static inline int address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_shared_mem = coarray_start_all_images[my_proc].addr;
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
 }
 
 
@@ -1047,6 +1065,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     getCache_line_size = get_env_size(ENV_GETCACHE_LINE_SIZE,
                                       DEFAULT_GETCACHE_LINE_SIZE);
 
+    nb_xfer_limit = get_env_size(ENV_NB_XFER_LIMIT, DEFAULT_NB_XFER_LIMIT);
+
     /* malloc data structures for sync_images, nb-put, get-cache */
     sync_images_flag = (unsigned short *) malloc
         (num_procs * sizeof(unsigned short));
@@ -1497,10 +1517,10 @@ static int address_in_nb_address_block(void *remote_addr,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
                  remote_addr, min_nb_address[proc],
                  max_nb_address[proc], remote_addr + size);
-    if (min_nb_address[proc] == 0)
+    if (max_nb_address[proc] == 0)
         return 0;
-    if (((remote_addr + size) >= min_nb_address[proc])
-        && (remote_addr <= max_nb_address[proc]))
+    if (((remote_addr+size) > min_nb_address[proc])
+        && (remote_addr < max_nb_address[proc]))
         return 1;
     else
         return 0;
@@ -1515,7 +1535,7 @@ static void update_nb_address_block(void *remote_addr, size_t proc,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
                  remote_addr, min_nb_address[proc],
                  max_nb_address[proc], remote_addr + size);
-    if (min_nb_address[proc] == 0) {
+    if (max_nb_address[proc] == 0) {
         min_nb_address[proc] = remote_addr;
         max_nb_address[proc] = remote_addr + size;
         return;
@@ -1534,6 +1554,16 @@ static struct handle_list *get_next_handle(unsigned long proc,
 {
     struct handle_list **handles = nb_mgr[access_type].handles;
     struct handle_list *handle_node;
+
+    /* don't allow too many outstanding non-blocking transfers to accumulate.
+     * If the number exceeds a specified threshold, then block until all have
+     * completed.
+     */
+    if ((nb_mgr[PUTS].num_handles+nb_mgr[GETS].num_handles) >=
+         nb_xfer_limit) {
+        wait_on_all_pending_accesses();
+    }
+
     if (handles[proc] == 0) {
         handles[proc] = (struct handle_list *)
             comm_malloc(sizeof(struct handle_list));
@@ -1555,6 +1585,7 @@ static struct handle_list *get_next_handle(unsigned long proc,
     handle_node->size = size;
     handle_node->proc = proc;
     handle_node->access_type = access_type;
+    handle_node->final_dest = NULL;
     handle_node->next = 0;      //Just in case there is a sync before the put
     nb_mgr[access_type].num_handles++;
     return handle_node;
@@ -1664,13 +1695,18 @@ static void wait_on_pending_accesses(unsigned long proc,
     struct handle_list **handles = nb_mgr[access_type].handles;
     struct handle_list *handle_node = handles[proc];
 
+
     if (handle_node &&
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
         struct handle_list *node_to_delete;
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "conflict detected: %p, %ld, %p, %p",
+                remote_address, size, min_nb_address[proc],
+                max_nb_address[proc]);
         while (handle_node) {
             if (address_in_handle(handle_node, remote_address, size)) {
-                gasnet_wait_syncnb(handle_node->handle);
+                //gasnet_wait_syncnb(handle_node->handle);
+                sync_on_handle(handle_node);
                 delete_node(proc, handle_node, access_type);
                 return;
             } else if (gasnet_try_syncnb(handle_node->handle) == GASNET_OK) {
@@ -1688,7 +1724,7 @@ static void wait_on_pending_accesses(unsigned long proc,
                  min_nb_address[proc], max_nb_address[proc]);
 }
 
-static void wait_on_all_pending_accesses(unsigned long proc)
+static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
 {
     struct handle_list *handle_node, *node_to_delete;
 
@@ -1708,7 +1744,8 @@ static void wait_on_all_pending_accesses(unsigned long proc)
         if (handle_node->handle != GASNET_INVALID_HANDLE) {
             LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before gasnet_wait_syncnb"
                          " (handle_node=%p)", handle_node);
-            gasnet_wait_syncnb(handle_node->handle);
+            //gasnet_wait_syncnb(handle_node->handle);
+            sync_on_handle(handle_node);
         }
         LIBCAF_TRACE(LIBCAF_LOG_SYNC, "about to delete handle_node %p",
                      handle_node);
@@ -1724,6 +1761,14 @@ static void wait_on_all_pending_accesses(unsigned long proc)
     nb_mgr[GETS].handles[proc] = 0;
     nb_mgr[GETS].min_nb_address[proc] = 0;
     nb_mgr[GETS].max_nb_address[proc] = 0;
+}
+
+static inline void wait_on_all_pending_accesses()
+{
+    int i;
+    for (i = 0; i < num_procs; i++) {
+        wait_on_all_pending_accesses_to_proc(i);
+    }
 }
 
 
@@ -1921,9 +1966,7 @@ void comm_exit(int status)
 void comm_barrier_all()
 {
     unsigned long i;
-    for (i = 0; i < num_procs; i++) {
-        wait_on_all_pending_accesses(i);
-    }
+    wait_on_all_pending_accesses();
     gasnet_wait_syncnbi_all();
     gasnet_barrier_notify(barcount, barflag);
     gasnet_barrier_wait(barcount, barflag);
@@ -1934,18 +1977,29 @@ void comm_barrier_all()
     barcount += 1;
 }
 
+static inline void sync_on_handle(struct handle_list *hdl)
+{
+    gasnet_wait_syncnb(hdl->handle);
+
+    if (hdl->access_type == GETS && hdl->final_dest != NULL) {
+        /* assume if final_dest isn't NULL that destination buffer is
+         * contiguous */
+        memcpy(hdl->final_dest, hdl->local_buf, hdl->size);
+        coarray_deallocate_( hdl->local_buf );
+    }
+}
+
 void comm_sync(comm_handle_t hdl)
 {
     unsigned long i;
 
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
-        for (i = 0; i < num_procs; i++) {
-            wait_on_all_pending_accesses(i);
-        }
+        wait_on_all_pending_accesses();
         gasnet_wait_syncnbi_all();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
-        gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
+        //gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
+        sync_on_handle( hdl );
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
                     ((struct handle_list *) hdl)->access_type);
@@ -1965,9 +2019,7 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    for (i = 0; i < num_procs; i++) {
-        wait_on_all_pending_accesses(i);
-    }
+    wait_on_all_pending_accesses();
 
     gasnet_wait_syncnbi_all();
     LOAD_STORE_FENCE();
@@ -1998,9 +2050,7 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    for (i = 0; i < num_procs; i++) {
-        wait_on_all_pending_accesses(i);
-    }
+    wait_on_all_pending_accesses();
 
     gasnet_wait_syncnbi_all();
 
@@ -2038,7 +2088,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         } else {
             sync_images_flag[my_proc] = 1;
         }
-        wait_on_all_pending_accesses(q);
+        wait_on_all_pending_accesses_to_proc(q);
     }
     for (i = 0; i < image_count; i++) {
         short image_has_stopped;
@@ -2069,23 +2119,16 @@ void comm_sync_images(int *image_list, int image_count, int *status,
 void *comm_lcb_malloc(size_t size)
 {
     void *ptr;
-    size_t reserved_heap, current_heap;
     gasnet_hold_interrupts();
-    /* allocate out of asymmetric heap if there is sufficient enough room */
-    reserved_heap = mem_info->reserved_heap_usage;
-    current_heap = mem_info->current_heap_usage;
-    if (size <= ((reserved_heap - current_heap) / 2))
-        ptr = coarray_asymmetric_allocate_(size);
-    else {
+    ptr = coarray_asymmetric_allocate_if_possible_(size);
+    if (!ptr) {
         if (size >= LARGE_COMM_BUF_SIZE) {
-            Warning("Attempting to allocate a large buffer (%.1lfKB) "
-                    "from system memory (available space in reserved "
-                    "image heap only %.1lfKB). If used for communication, "
+            Warning("Could not allocate a large buffer (%.1lfKB) "
+                    "from system memory. If used for communication, "
                     "GASNet's memory registration policy may not handle "
                     "large system memory malloc's correctly. Consider "
                     "increasing the image heap size.",
-                    ((double) size) / 1024,
-                    ((double) (reserved_heap - current_heap)) / 1024);
+                    ((double) size) / 1024 );
         }
         ptr = malloc(size);
     }
@@ -2201,6 +2244,7 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl)
 {
+    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     void *remote_src;
     int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
 
@@ -2231,22 +2275,37 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
     if (enable_get_cache) {
         cache_check_and_get(proc, remote_src, nbytes, dest);
     } else {
+        /* do a non-blocking read */
+        void *temp_dest = dest;
         gasnet_handle_t handle;
+
+        if (node_info->supernode != nodeinfo_table[my_proc].supernode &&
+            !address_in_shared_mem(dest)) {
+            /* allocate out of asymmetric heap if there is sufficient enough
+             * room */
+            temp_dest = coarray_asymmetric_allocate_if_possible_(nbytes);
+            if (!temp_dest) temp_dest = dest;
+        }
+
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "gasnet_get_nb_bulk from %p on image %lu"
-                     " to %p size %lu", remote_src, proc + 1, dest,
+                     " to %p size %lu", remote_src, proc + 1, temp_dest,
                      nbytes);
-        handle = gasnet_get_nb_bulk(dest, proc, remote_src, nbytes);
+        handle = gasnet_get_nb_bulk(temp_dest, proc, remote_src, nbytes);
 
         if (handle != GASNET_INVALID_HANDLE) {
             struct handle_list *handle_node =
-                get_next_handle(proc, remote_src, dest, nbytes, GETS);
-
+                get_next_handle(proc, remote_src, temp_dest, nbytes, GETS);
+            /* final_dest is only set if temp_dest != dest. Otherwise, it
+             * should be NULL. */
+            if (temp_dest != dest)
+                handle_node->final_dest = dest;
             handle_node->handle = handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM,
                          "gasnet_get_nb_bulk from %p on image %lu"
-                         " to %p size %lu, handle = %p", remote_src,
-                         proc + 1, dest, nbytes, handle_node->handle);
+                         " to %p size %lu, handle = %p, final_dest = %p",
+                         remote_src, proc + 1, temp_dest, nbytes,
+                         handle_node->handle, dest);
 
             if (hdl != NULL)
                 *hdl = handle_node;
@@ -2431,7 +2490,6 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-            gasnet_wait_syncnb(handle);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);

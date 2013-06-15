@@ -106,6 +106,7 @@ struct handle_list {
     unsigned long size;
     unsigned long proc;
     access_type_t access_type;
+    void *final_dest;
     struct handle_list *prev;
     struct handle_list *next;
 };

@@ -40,6 +40,7 @@
 #define ENV_PROGRESS_THREAD_INTERVAL  "UHCAF_PROGRESS_THREAD_INTERVAL"
 #define ENV_GETCACHE_LINE_SIZE        "UHCAF_GETCACHE_LINE_SIZE"
 #define ENV_IMAGE_HEAP_SIZE           "UHCAF_IMAGE_HEAP_SIZE"
+#define ENV_NB_XFER_LIMIT             "UHCAF_NB_XFER_LIMIT"
 
 #define DEFAULT_ENABLE_GETCACHE           0
 #define DEFAULT_ENABLE_PROGRESS_THREAD    0
@@ -47,6 +48,7 @@
 /* these will be overridden by the defaults in cafrun script */
 #define DEFAULT_GETCACHE_LINE_SIZE        65536L
 #define DEFAULT_IMAGE_HEAP_SIZE           31457280L
+#define DEFAULT_NB_XFER_LIMIT             16
 
 #define MAX_NUM_IMAGES                    0x100000
 #define MAX_SHARED_MEMORY_SIZE            0x1000000000

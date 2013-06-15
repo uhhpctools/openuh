@@ -25,10 +25,18 @@
 !  http://www.cs.uh.edu/~hpctools
 !
 
+#if defined(TARG_IA32) || (_MIPS_SZPTR==32)
+#define PTR_KIND 4
+#elif defined(TARG_X8664) || (_MIPS_SZPTR==64)
+#define PTR_KIND 8
+#else
+#define PTR_KIND 8
+#endif
+
 module caf_types
   type :: caf_sync_handle
     private
-    integer, pointer :: hdl_ptr => NULL()
+    integer (kind=PTR_KIND) :: hdl_ptr = 0
   end type
 end module
 

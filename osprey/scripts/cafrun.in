@@ -104,8 +104,12 @@ Environment Variables:
                       Set to 1 to enable getcache runtime optimization.
 
    UHCAF_GETCACHE_LINE_SIZE
-                      Spefies the size (in bytes) of the cache line used by
+                      Specifies the size (in bytes) of the cache line used by
                       getcache optimizer. By default it is 64KB.
+
+   UHCAF_NB_XFER_LIMIT
+                      Specifies the maximum number of outstanding non-blocking
+                      PUT or GET transfers. By default it is 16.
 
 _EOT_
 }
@@ -374,6 +378,10 @@ fi
 
 if [ -z "$prog_name" ]; then
     echo "Need to specify the program you want to run." >&2
+    this_usage_short
+    exit 1
+elif [ ! -f "$prog_name" ]; then
+    echo "cafrun was unable find the executable $prog_name." >&2
     this_usage_short
     exit 1
 fi
