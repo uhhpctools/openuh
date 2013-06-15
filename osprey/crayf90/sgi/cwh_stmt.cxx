@@ -980,6 +980,7 @@ cwh_stmt_call_helper(INT32 num_args, TY_IDX ty, INT32 inline_state, INT64 flags)
        }
      }
 
+
   } else {
 
      opc = OPCODE_make_op (OPR_ICALL,TY_mtype(ts),MTYPE_V);
@@ -994,8 +995,12 @@ cwh_stmt_call_helper(INT32 num_args, TY_IDX ty, INT32 inline_state, INT64 flags)
   }
 
 
-  WN_Set_Call_Default_Flags(wn);  
+  WN_Set_Call_Default_Flags(wn);
   WN_Set_Call_Fortran_Pointer_Rule(wn);
+
+  if (!strcmp(ST_name(st), "_ALLOCATE")) {
+      WN_Set_Call_Does_Mem_Alloc(wn);
+  }
 
   if (FE_Call_Never_Return &&
       test_flag(flags, FEI_CALL_DOES_NOT_RETURN)) {

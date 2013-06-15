@@ -1952,6 +1952,11 @@ cwh_addr_istore(WN * lhs, OFFSET_64 off, TY_IDX ty, WN * rhs)
   TY_IDX tp ;
   OPCODE op ;
 
+  if (WN_operator(rhs) == OPR_LDA) {
+      ST *lda_st = WN_st(rhs);
+      Set_ST_addr_saved(lda_st);
+  }
+
   if (cwh_addr_f90_pointer_reference(lhs)) {
      tp = cwh_types_mk_f90_pointer_ty(ty);
   } else {
