@@ -29,6 +29,8 @@
 #include <string.h>
 #include "omp_queue.h"
 
+queue_storage_t __omp_queue_storage;
+
 int (*__ompc_queue_is_empty)(omp_queue_t *q);
 void (*__ompc_queue_init)(omp_queue_t *q, int num_slots);
 void (*__ompc_queue_free_slots)(omp_queue_t *q);

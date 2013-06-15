@@ -44,6 +44,8 @@
 #include <unistd.h>
 #include "omp_util.h"
 
+extern volatile int __omp_verbose; // declared in omp_thead.c
+
 void
 Not_Valid (char *error_message)
 {
@@ -179,7 +181,7 @@ Get_Affinity_Map(int **list, int total_cores)
 
 static void get_ordered_corelist_error_message(const char *file, int line)
 {
-  if (getenv("O64_OMP_VERBOSE") != NULL) {
+  if (__omp_verbose == 1) {
     fprintf (stderr, "Get_Ordered_Corelist: error in generating affinity map "
              "at %s, line %d.\n", file, line);
     fprintf (stderr, "Get_Ordered_Corelist: generating a default affinity map\n");
@@ -351,7 +353,7 @@ Get_Ordered_Corelist(int *list, int total_cores)
   free(thread_count);
 
  done:
-  if (getenv("O64_OMP_VERBOSE") != NULL) {
+  if (__omp_verbose == 1) {
     fprintf(stderr, "Get_Ordered_Corelist: affinity map: ");
     for (i = 0; i < total_cores; i++) {
       fprintf(stderr, "%s%d", i > 0 ? "," : "", list[i]);

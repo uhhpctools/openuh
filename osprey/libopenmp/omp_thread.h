@@ -315,6 +315,7 @@ inline omp_team_t * __ompc_get_current_team(void)
 
 extern __thread int total_tasks;
 extern long int __omp_spin_count; // defined in omp_thread.c
+extern long int __omp_wait_time;  // defined in omp_thread.c
 extern __thread int total_tasks;
 
 /* Should not be called directly, use __ompc_barrier instead*/
@@ -357,7 +358,7 @@ void __ompc_barrier_wait(omp_team_t *team)
                   *bar_count <  team->team_size) {
               struct timespec ts;
               clock_gettime(CLOCK_REALTIME, &ts);
-              ts.tv_nsec += 5000; /* +5 microsec */
+              ts.tv_nsec += __omp_wait_time;
               pthread_cond_timedwait(&pool->pool_cond,
                                 &pool->pool_lock,
                                 &ts);

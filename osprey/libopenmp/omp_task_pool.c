@@ -62,6 +62,11 @@
 int __omp_task_queue_num_slots = 0;
 int __omp_task_chunk_size = 1;
 
+/* task pool setting */
+char __omp_task_pool[40];
+char __omp_task_queue[40];
+
+
 /* these will point to appropriate implementation at runtime */
 omp_task_pool_t *(*__ompc_create_task_pool)(int team_size);
 omp_task_pool_t *(*__ompc_expand_task_pool)(omp_task_pool_t *pool,

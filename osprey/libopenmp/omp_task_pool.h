@@ -74,6 +74,9 @@ extern int __omp_task_queue_num_slots;
 extern int __omp_task_chunk_size;
 extern short __omp_task_pool_greedval;
 
+extern char __omp_task_pool[40];
+extern char __omp_task_queue[40];
+
 extern omp_task_pool_t *(*__ompc_create_task_pool)(int team_size);
 extern omp_task_pool_t *(*__ompc_expand_task_pool)(omp_task_pool_t *pool,
                                             int new_team_size);

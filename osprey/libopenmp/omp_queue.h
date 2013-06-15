@@ -32,6 +32,15 @@
 #include "omp_lock.h"
 #include "omp_sys.h"
 
+typedef enum {
+  ARRAY_QUEUE_STORAGE,
+  DYN_ARRAY_QUEUE_STORAGE,
+  LIST_QUEUE_STORAGE,
+  LOCKLESS_QUEUE_STORAGE
+} queue_storage_t;
+
+extern queue_storage_t __omp_queue_storage;
+
 typedef void * omp_queue_item_t;
 
 struct omp_queue_slot {

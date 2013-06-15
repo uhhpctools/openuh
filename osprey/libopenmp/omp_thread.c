@@ -53,6 +53,7 @@
 #include "omp_xbarrier.h"
 
 #define SPIN_COUNT_DEFAULT 20000
+#define WAIT_TIME_DEFAULT 5000
 #include "pcl.h"
 #include "omp_collector_util.h"
 #include "omp_collector_validation.h"
@@ -65,6 +66,7 @@ unsigned long current_parent_id = 0;
 #define debug 0
 __thread int __omp_myid;
 __thread int __omp_seed;
+volatile int __omp_verbose = 0;
 volatile int __omp_nested = OMP_NESTED_DEFAULT;          /* nested enable/disable */
 volatile int __omp_dynamic = OMP_DYNAMIC_DEFAULT;         /* dynamic enable/disable */
 /* max num of thread available*/
@@ -124,6 +126,8 @@ int              __omp_rtl_initialized = 0;
 // control variable for spin lock, it can be set by O64_OMP_SPIN_COUNT
 long int __omp_spin_count = SPIN_COUNT_DEFAULT;
 
+long int __omp_wait_time = WAIT_TIME_DEFAULT;
+
 // control variable for whether binding thread to cpu
 // it can be reset by O64_OMP_SET_AFFINITY
 int             __omp_set_affinity = 1;
@@ -151,6 +155,7 @@ int ompc_req_start = 0;
 
 /* prototype */
 void __ompc_environment_variables();
+void __ompc_print_environment();
 void __ompc_task_configure();
 void __ompc_level_1_barrier(const int vthread_id);
 void __ompc_exit_barrier(omp_v_thread_t *_v_thread);
@@ -188,6 +193,22 @@ __ompc_environment_variables()
 {
   char *env_var_str;
   int  env_var_val;
+
+  env_var_str = getenv("O64_OMP_VERBOSE");
+  if (env_var_str != NULL) {
+    env_var_val = strncasecmp(env_var_str, "true", 4);
+
+    if (env_var_val == 0) {
+      __omp_verbose = 1;
+    } else {
+      env_var_val = strncasecmp(env_var_str, "false", 4);
+      if (env_var_val == 0)  {
+        __omp_verbose = 0;
+      } else {
+	Not_Valid("O64_OMP_VERBOSE should be set to: true/false");
+      }
+    }
+  }
 	
   env_var_str = getenv("OMP_NUM_THREADS");
   if (env_var_str != NULL) {
@@ -300,6 +321,14 @@ __ompc_environment_variables()
     __omp_stack_size = stack_size;
   }
 
+  env_var_str = getenv("O64_OMP_WAIT_TIME");
+  if (env_var_str != NULL) {
+    long int wait_time;
+    sscanf(env_var_str, "%ld", &wait_time);
+    Is_Valid(wait_time > 0, ("wait time must be positive"));
+    __omp_wait_time = wait_time;
+  }
+
   env_var_str = getenv("O64_OMP_SPIN_COUNT");
   if (env_var_str != NULL) {
     long int spin_count;
@@ -370,6 +399,113 @@ __ompc_environment_variables()
   __ompc_set_xbarrier_wait();
 
   __ompc_task_configure();
+
+  if (__omp_verbose == 1) __ompc_print_environment();
+}
+
+static void __ompc_print_env_tag(char *env_name)
+{
+  int i,j;
+  const int max_len = 36;
+  char env_name_tag[max_len];
+  snprintf(env_name_tag, max_len, "[%s]", env_name);
+  j = strlen(env_name_tag);
+  for (i = 0; i < (max_len-j); i++) strcat(env_name_tag, " ");
+  fprintf(stderr, "%s", env_name_tag);
+}
+
+void __ompc_print_environment()
+{
+  /* OMP_NUM_THREADS */
+  __ompc_print_env_tag("OMP_NUM_THREADS");
+  fprintf(stderr, "__omp_nthreads_var = %d\n",
+          __omp_nthreads_var);
+  /* OMP_DYNAMIC */
+  __ompc_print_env_tag("OMP_DYNAMIC");
+  fprintf(stderr, "__omp_dynamic = %d\n",
+          __omp_dynamic);
+  /* OMP_NESTED */
+  __ompc_print_env_tag("OMP_NESTED");
+  fprintf(stderr, "__omp_nested = %d\n",
+          __omp_nested);
+  /* OMP_SCHEDULE */
+  char chunk_size_str[10];
+  sprintf(chunk_size_str, ",%d", __omp_rt_sched_size);
+  __ompc_print_env_tag("OMP_SCHEDULE");
+  fprintf(stderr, "__omp_rt_sched_type = %s%s\n",
+          __omp_rt_sched_type == OMP_SCHED_STATIC ? "static" :
+          __omp_rt_sched_type == OMP_SCHED_DYNAMIC ? "dynamic" :
+          __omp_rt_sched_type == OMP_SCHED_GUIDED ? "guided" :
+          __omp_rt_sched_type == OMP_SCHED_STATIC ? "static" :
+          __omp_rt_sched_type == OMP_SCHED_STATIC_EVEN ? "static_even" : "unknown",
+          __omp_rt_sched_type == OMP_SCHED_STATIC_EVEN ? "" : chunk_size_str);
+  /* OMP_STACKSIZE */
+  __ompc_print_env_tag("OMP_STACKSIZE");
+  fprintf(stderr, "__omp_stack_size = %ld\n",
+          __omp_stack_size);
+  /* O64_OMP_WAIT_TIME */
+  __ompc_print_env_tag("O64_OMP_WAIT_TIME");
+  fprintf(stderr, "__omp_wait_time = %ld\n",
+          __omp_wait_time);
+  /* O64_OMP_SPIN_COUNT */
+  __ompc_print_env_tag("O64_OMP_SPIN_COUNT");
+  fprintf(stderr, "__omp_spin_count = %ld\n",
+          __omp_spin_count);
+  /* O64_OMP_SPIN_USER_LOCK */
+  __ompc_print_env_tag("O64_OMP_SPIN_USER_LOCK");
+  fprintf(stderr, "__omp_spin_user_lock = %d\n",
+          __omp_spin_user_lock);
+  /* O64_OMP_SET_AFFINITY */
+  __ompc_print_env_tag("O64_OMP_SET_AFFINITY");
+  fprintf(stderr, "__omp_set_affinity = %d\n",
+          __omp_set_affinity);
+  /* O64_OMP_XBARRIER_TYPE */
+  __ompc_print_env_tag("O64_OMP_XBARRIER_TYPE");
+  fprintf(stderr, "__omp_xbarrier_type = %s\n",
+          __omp_xbarrier_type == DISSEM_XBARRIER ? "dissem" :
+          __omp_xbarrier_type == TREE_XBARRIER ? "tree" :
+          __omp_xbarrier_type == TOUR_XBARRIER ? "tour" :
+          __omp_xbarrier_type == SIMPLE_XBARRIER ? "simple" :
+          __omp_xbarrier_type == LINEAR_XBARRIER ? "linear" : "unknown");
+  /* O64_OMP_QUEUE_STORAGE */
+  __ompc_print_env_tag("O64_OMP_QUEUE_STORAGE");
+  fprintf(stderr, "__omp_queue_storage = %s\n",
+          __omp_queue_storage == LIST_QUEUE_STORAGE ? "list" :
+          __omp_queue_storage == DYN_ARRAY_QUEUE_STORAGE ? "dyn_array" :
+          __omp_queue_storage == ARRAY_QUEUE_STORAGE ? "array" :
+          __omp_queue_storage == LOCKLESS_QUEUE_STORAGE ? "lockless" : "unknown");
+  /* O64_OMP_TASK_QUEUE */
+  __ompc_print_env_tag("O64_OMP_TASK_QUEUE");
+  fprintf(stderr, "__omp_task_queue = %s\n",
+          __omp_task_queue);
+  /* O64_OMP_TASK_QUEUE_NUM_SLOTS */
+  __ompc_print_env_tag("O64_OMP_TASK_QUEUE_NUM_SLOTS");
+  fprintf(stderr, "__omp_task_queue_num_slots = %d\n",
+          __omp_task_queue_num_slots);
+  /* O64_OMP_TASK_CHUNK_SIZE */
+  __ompc_print_env_tag("O64_OMP_TASK_CHUNK_SIZE");
+  fprintf(stderr, "__omp_task_chunk_size = %d\n",
+          __omp_task_chunk_size);
+  /* O64_OMP_TASK_POOL_GREEDVAL */
+  __ompc_print_env_tag("O64_OMP_TASK_POOL_GREEDVAL");
+  fprintf(stderr, "__omp_task_pool_greedval = %d\n",
+          __omp_task_pool_greedval);
+  /* O64_OMP_TASK_POOL */
+  __ompc_print_env_tag("O64_OMP_TASK_POOL");
+  fprintf(stderr, "__omp_task_pool = %s\n",
+          __omp_task_pool);
+  /* O64_OMP_TASK_CUTOFF */
+  char cutoff_settings[128];
+  sprintf(cutoff_settings, "num_threads:%d,switch:%d,depth:%d,num_children:%d",
+          __omp_task_cutoff_num_threads_min,
+          __omp_task_cutoff_switch_max,
+          __omp_task_cutoff_depth_max,
+          __omp_task_cutoff_num_children_max);
+  __ompc_print_env_tag("O64_OMP_TASK_CUTOFF");
+  fprintf(stderr, "__omp_task_cutoff = %s\n",
+          __ompc_task_cutoff == __ompc_task_cutoff_always ? "always" :
+          __ompc_task_cutoff == __ompc_task_cutoff_never ? "never" :
+          cutoff_settings);
 }
 
 /* configuration for OpenMP Tasking implementation */
@@ -418,6 +554,7 @@ __ompc_task_configure()
   queue_storage_str = getenv("O64_OMP_QUEUE_STORAGE");
   if (queue_storage_str != NULL) {
     if (strncasecmp(queue_storage_str, "LIST", 4) == 0) {
+      __omp_queue_storage = LIST_QUEUE_STORAGE;
       __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
       __ompc_queue_init = &__ompc_queue_list_init;
       __ompc_queue_free_slots = &__ompc_queue_list_free_slots;
@@ -447,6 +584,7 @@ __ompc_task_configure()
     } else if (strncasecmp(queue_storage_str, "DYN_ARRAY", 9) == 0) {
       /* mostly the same as ARRAY implementation, except for functions that
        * add new items to the queue */
+      __omp_queue_storage = DYN_ARRAY_QUEUE_STORAGE;
       __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
       __ompc_queue_init = &__ompc_queue_array_init;
       __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
@@ -468,6 +606,7 @@ __ompc_task_configure()
       __ompc_queue_cfifo_transfer_chunk =
                  &__ompc_queue_cfifo_array_transfer_chunk_to_empty;
     } else if (strncasecmp(queue_storage_str, "ARRAY", 5) == 0) {
+      __omp_queue_storage = ARRAY_QUEUE_STORAGE;
       __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
       __ompc_queue_init = &__ompc_queue_array_init;
       __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
@@ -489,6 +628,7 @@ __ompc_task_configure()
       __ompc_queue_cfifo_transfer_chunk =
                  &__ompc_queue_cfifo_array_transfer_chunk_to_empty;
     } else if (strncasecmp(queue_storage_str, "LOCKLESS", 8) == 0) {
+      __omp_queue_storage = LOCKLESS_QUEUE_STORAGE;
       using_queue_lockless = 1;
       __ompc_queue_is_empty = &__ompc_queue_lockless_is_empty;
       __ompc_queue_init = &__ompc_queue_lockless_init;
@@ -513,6 +653,7 @@ __ompc_task_configure()
     }
   } else {
     /* ARRAY */
+      __omp_queue_storage = ARRAY_QUEUE_STORAGE;
       __ompc_queue_is_empty = &__ompc_queue_check_is_empty;
     __ompc_queue_init = &__ompc_queue_array_init;
     __ompc_queue_free_slots = &__ompc_queue_array_free_slots;
@@ -546,11 +687,13 @@ __ompc_task_configure()
         Warning("O64_OMP_TASK_QUEUE=CFIFO not supported if "
                 "O64_OMP_QUEUE_STORAGE=LIST. Using FIFO instead.");
         /* same as FIFO if queue storage is LIST */
+        strcpy(__omp_task_queue, "fifo");
         __ompc_task_queue_get    = __ompc_queue_get_head;
         __ompc_task_queue_put    = __ompc_queue_put_tail;
         __ompc_task_queue_steal  = __ompc_queue_steal_head;
         __ompc_task_queue_donate = __ompc_queue_put_tail;
       }  else {
+        strcpy(__omp_task_queue, "cfifo");
         __ompc_task_queue_get    = __ompc_queue_cfifo_get;
         __ompc_task_queue_put    = __ompc_queue_cfifo_put;
         __ompc_task_queue_steal  = __ompc_queue_cfifo_get;
@@ -560,6 +703,7 @@ __ompc_task_configure()
         __ompc_task_queue_steal_chunk = __ompc_queue_cfifo_transfer_chunk;
       }
     } else if (strncasecmp(task_queue_str, "FIFO", 4) == 0) {
+      strcpy(__omp_task_queue, "fifo");
       __ompc_task_queue_get    = __ompc_queue_get_head;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
       __ompc_task_queue_steal  = __ompc_queue_steal_head;
@@ -569,6 +713,7 @@ __ompc_task_configure()
         Not_Valid("O64_OMP_TASK_QUEUE=LIFO not supported if "
             "O64_OMP_QUEUE_STORAGE=LOCKLESS.");
       }
+      strcpy(__omp_task_queue, "lifo");
       __ompc_task_queue_get    = __ompc_queue_get_tail;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
       __ompc_task_queue_steal  = __ompc_queue_steal_tail;
@@ -578,11 +723,13 @@ __ompc_task_configure()
         Not_Valid("O64_OMP_TASK_QUEUE=INV_DEQUE not supported if "
             "O64_OMP_QUEUE_STORAGE=LOCKLESS.");
       }
+      strcpy(__omp_task_queue, "inv_deque");
       __ompc_task_queue_get    = __ompc_queue_get_head;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
       __ompc_task_queue_steal  = __ompc_queue_steal_tail;
       __ompc_task_queue_donate = __ompc_queue_put_head;
     } else if (strncasecmp(task_queue_str, "DEQUE", 5) == 0) {
+      strcpy(__omp_task_queue, "deque");
       __ompc_task_queue_get    = __ompc_queue_get_tail;
       __ompc_task_queue_put    = __ompc_queue_put_tail;
       __ompc_task_queue_steal  = __ompc_queue_steal_head;
@@ -593,6 +740,7 @@ __ompc_task_configure()
     }
   } else {
     /* DEQUE */
+    strcpy(__omp_task_queue, "deque");
     __ompc_task_queue_get    = __ompc_queue_get_tail;
     __ompc_task_queue_put    = __ompc_queue_put_tail;
     __ompc_task_queue_steal  = __ompc_queue_steal_head;
@@ -647,12 +795,14 @@ __ompc_task_configure()
   if (env_var_str != NULL) {
     if (strncasecmp(env_var_str, "PUBLIC_PRIVATE", 14) == 0) {
       /* added 7/28/2011 Jim LaGrone */
+      strcpy(__omp_task_pool, "public_private");
       __ompc_create_task_pool    = &__ompc_create_task_pool_public_private;
       __ompc_expand_task_pool    = &__ompc_expand_task_pool_public_private;
       __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_public_private;
       __ompc_remove_task_from_pool = &__ompc_remove_task_from_pool_public_private;
       __ompc_destroy_task_pool   = &__ompc_destroy_task_pool_public_private;
     } else if (strncasecmp(env_var_str, "DEFAULT", 7) == 0) {
+      strcpy(__omp_task_pool, "default");
       __ompc_create_task_pool    = &__ompc_create_task_pool_default;
       __ompc_expand_task_pool    = &__ompc_expand_task_pool_default;
       __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_default;
@@ -678,6 +828,7 @@ __ompc_task_configure()
                   "O64_OMP_QUEUE_STORAGE=LIST");
         /* not reached */
       }
+      strcpy(__omp_task_pool, "simple_2level");
       /* each thread gets a queue, plus a global "community" queue */
       __ompc_create_task_pool    = &__ompc_create_task_pool_simple_2level;
       __ompc_expand_task_pool    = &__ompc_expand_task_pool_simple_2level;
@@ -687,12 +838,15 @@ __ompc_task_configure()
       /* for SIMPLE_2LEVEL, a "donate" is the same as a put */
       __ompc_task_queue_donate = __ompc_task_queue_put;
     } else if  (strncasecmp(env_var_str, "MULTILEVEL", 10) == 0) {
+      strcpy(__omp_task_pool, "multilevel");
       Not_Valid("O64_OMP_TASK_POOL does not yet support MULTILEVEL, "
                 "try DEFAULT|SIMPLE|SIMPLE_2LEVEL|PUBLIC_PRIVATE instead");
     } else if  (strncasecmp(env_var_str, "2LEVEL", 6) == 0) {
+      strcpy(__omp_task_pool, "2level");
       Not_Valid("O64_OMP_TASK_POOL does not yet support 2LEVEL, "
                 "try DEFAULT|SIMPLE|SIMPLE_2LEVEL|PUBLIC_PRIVATE instead");
     } else if (strncasecmp(env_var_str, "SIMPLE", 6) == 0) {
+      strcpy(__omp_task_pool, "simple");
       if (task_queue_str != NULL &&
           strncasecmp(task_queue_str, "DEQUE", 5) &&
           strncasecmp(task_queue_str, "LIFO", 4)) {
@@ -712,6 +866,7 @@ __ompc_task_configure()
     }
   } else {
     /* DEFAULT */
+    strcpy(__omp_task_pool, "default");
     __ompc_create_task_pool    = &__ompc_create_task_pool_default;
     __ompc_expand_task_pool    = &__ompc_expand_task_pool_default;
     __ompc_add_task_to_pool    = &__ompc_add_task_to_pool_default;
@@ -866,7 +1021,7 @@ __ompc_level_1_barrier(const int vthread_id)
                   *bar_count < team_size) {
               struct timespec ts;
               clock_gettime(CLOCK_REALTIME, &ts);
-              ts.tv_nsec += 5000;  /* +5 microsec */
+              ts.tv_nsec += __omp_wait_time;
               pthread_cond_timedwait(&pool->pool_cond,
                                      &pool->pool_lock,
                                      &ts);
@@ -954,7 +1109,7 @@ __ompc_exit_barrier(omp_v_thread_t * vthread)
                   *bar_count < team_size) {
               struct timespec ts;
               clock_gettime(CLOCK_REALTIME, &ts);
-              ts.tv_nsec += 5000; /* +5 microsec */
+              ts.tv_nsec += __omp_wait_time;
               pthread_cond_timedwait(&pool->pool_cond,
                                      &pool->pool_lock,
                                      &ts);
@@ -1000,7 +1155,9 @@ __ompc_level_1_slave(void * _uthread_index)
   long uthread_index;
   long int counter;
   int new_tasks = __omp_level_1_team_manager.new_task;
+  __omp_seed = uthread_index;
   uthread_index = (long) _uthread_index;
+  __omp_myid = uthread_index;
 
   __ompc_set_state(THR_IDLE_STATE);
   __ompc_event_callback(OMP_EVENT_THR_BEGIN_IDLE);
