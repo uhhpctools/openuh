@@ -304,6 +304,7 @@ static int stmt_in_delete_list(WN *stmt);
 static void delete_caf_stmts_in_delete_list();
 
 static WN* make_array_ref(ST *base);
+static WN* make_array_ref(WN *base);
 
 static WN * Generate_Call_acquire_lcb(WN *, WN *);
 static WN * Generate_Call_release_lcb(WN *);
@@ -671,17 +672,32 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
                                 RHS_wn = WN_kid0(RHS_wn);
                             }
-                            if (WN_operator(RHS_wn) == OPR_LDID) {
-                                WN *new_RHS_wn;
-                                /* replace the LDID expression with an Iload
-                                 * to an array ref */
-                                TY_IDX elem_ty = WN_ty(RHS_wn);
-                                new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
-                                        WN_offset(RHS_wn),
-                                        Make_Pointer_Type(elem_ty, FALSE),
-                                        make_array_ref(WN_st(RHS_wn)));
-                                WN_Delete(RHS_wn);
-                                WN_kid0(stmt_node) = new_RHS_wn;
+                            if (get_innermost_array(RHS_wn) == NULL) {
+                                if (WN_operator(RHS_wn) == OPR_LDID) {
+                                    WN *new_RHS_wn;
+                                    /* replace the LDID expression with an Iload
+                                     * to an array ref */
+                                    TY_IDX elem_ty = WN_ty(RHS_wn);
+                                    new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+                                            WN_offset(RHS_wn),
+                                            Make_Pointer_Type(elem_ty, FALSE),
+                                            make_array_ref(WN_st(RHS_wn)));
+                                    WN_Delete(RHS_wn);
+                                    WN_kid0(stmt_node) = new_RHS_wn;
+                                } else if (WN_operator(RHS_wn) == OPR_ILOAD) {
+                                    WN *new_RHS_wn;
+                                    /* replace the ILOAD expression with an Iload
+                                     * to an array ref */
+                                    TY_IDX elem_ty = WN_ty(RHS_wn);
+                                    new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+                                            WN_offset(RHS_wn),
+                                            Make_Pointer_Type(elem_ty, FALSE),
+                                            make_array_ref(WN_kid0(RHS_wn)) );
+                                    WN_Delete(RHS_wn);
+                                    WN_kid0(stmt_node) = new_RHS_wn;
+                                } else if (WN_operator(RHS_wn) == OPR_MLOAD) {
+                                    WN_kid0(RHS_wn) = make_array_ref(WN_kid0(RHS_wn));
+                                }
                             }
                         }
                     } else {
@@ -768,6 +784,11 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                 Set_Coarray_Sync(insert_wnx, Coarray_Sync(stmt_node));
 
                                 add_caf_stmt_to_delete_list(stmt_node, blk_node);
+                            } else if ((WN_operator(stmt_node) == OPR_ISTORE ||
+                                       WN_operator(stmt_node) == OPR_MSTORE) &&
+                                       get_innermost_array(WN_kid1(stmt_node)) == NULL) {
+                                //Is_True(0, (" shouldn't have reached here. "));
+                                WN_kid1(stmt_node) = make_array_ref(WN_kid1(stmt_node));
                             }
                         }
                     } else {
@@ -4858,6 +4879,16 @@ static WN* make_array_ref(ST *base)
     WN *arr_ref = WN_Create( OPCODE_make_op(OPR_ARRAY,Pointer_Mtype,MTYPE_V),3);
     WN_element_size(arr_ref) = TY_size(ST_type(base));
     WN_array_base(arr_ref) = WN_Lda(Pointer_type, 0, base);
+    WN_array_index(arr_ref,0) = WN_Intconst(MTYPE_U4, 0);
+    WN_array_dim(arr_ref,0) = WN_Intconst(MTYPE_U4, 1);
+    return arr_ref;
+} /* make_array_ref */
+
+static WN* make_array_ref(WN *base)
+{
+    WN *arr_ref = WN_Create( OPCODE_make_op(OPR_ARRAY,Pointer_Mtype,MTYPE_V),3);
+    WN_element_size(arr_ref) = TY_size(WN_ty(base));
+    WN_array_base(arr_ref) = base;
     WN_array_index(arr_ref,0) = WN_Intconst(MTYPE_U4, 0);
     WN_array_dim(arr_ref,0) = WN_Intconst(MTYPE_U4, 1);
     return arr_ref;

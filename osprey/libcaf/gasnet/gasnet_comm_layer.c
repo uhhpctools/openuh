@@ -2119,7 +2119,6 @@ void comm_sync_images(int *image_list, int image_count, int *status,
 void *comm_lcb_malloc(size_t size)
 {
     void *ptr;
-    gasnet_hold_interrupts();
     ptr = coarray_asymmetric_allocate_if_possible_(size);
     if (!ptr) {
         if (size >= LARGE_COMM_BUF_SIZE) {
@@ -2130,9 +2129,10 @@ void *comm_lcb_malloc(size_t size)
                     "increasing the image heap size.",
                     ((double) size) / 1024 );
         }
+        gasnet_hold_interrupts();
         ptr = malloc(size);
+        gasnet_resume_interrupts();
     }
-    gasnet_resume_interrupts();
     return ptr;
 }
 
@@ -2141,17 +2141,17 @@ void comm_lcb_free(void *ptr)
     if (!ptr)
         return;
 
-    gasnet_hold_interrupts();
     if (ptr < coarray_start_all_images[my_proc].addr &&
         ptr >=
-        (coarray_start_all_images[my_proc].addr + shared_memory_size))
+        (coarray_start_all_images[my_proc].addr + shared_memory_size)) {
+        gasnet_hold_interrupts();
         free(ptr);
-    else {
+        gasnet_resume_interrupts();
+    } else {
         /* in shared memory segment, which means it was allocated using
            coarray_asymmetric_allocate_ */
         coarray_deallocate_(ptr);
     }
-    gasnet_resume_interrupts();
 }
 
 void *comm_malloc(size_t size)
