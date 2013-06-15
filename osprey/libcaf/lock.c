@@ -147,7 +147,7 @@ void comm_lock(lock_t * lock, int image, char *success,
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
-            coarray_deallocate_(new_item->req);
+            coarray_asymmetric_deallocate_(new_item->req);
             free(new_item);
             return;
         }
@@ -164,7 +164,7 @@ void comm_lock(lock_t * lock, int image, char *success,
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
-            coarray_deallocate_(new_item->req);
+            coarray_asymmetric_deallocate_(new_item->req);
             free(new_item);
             return;
         }
@@ -261,7 +261,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
         if (q.image == _this_image) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
-            coarray_deallocate_(request_item->req);
+            coarray_asymmetric_deallocate_(request_item->req);
             free(request_item);
             return;
         }
@@ -285,7 +285,7 @@ void comm_unlock(lock_t * lock, int image, int *status,
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
-    coarray_deallocate_(request_item->req);
+    coarray_asymmetric_deallocate_(request_item->req);
     free(request_item);
 }
 
@@ -345,7 +345,7 @@ void comm_unlock2(lock_t * lock, int image, int *status,
         if (v.image == _this_image) {
             /* no successor, and lock was reset */
             HASH_DELETE(hh, req_table, request_item);
-            coarray_deallocate_(request_item->req);
+            coarray_asymmetric_deallocate_(request_item->req);
             free(request_item);
             return;
         }
@@ -384,6 +384,6 @@ void comm_unlock2(lock_t * lock, int image, int *status,
 
     /* delete request item from request table */
     HASH_DELETE(hh, req_table, request_item);
-    coarray_deallocate_(request_item->req);
+    coarray_asymmetric_deallocate_(request_item->req);
     free(request_item);
 }

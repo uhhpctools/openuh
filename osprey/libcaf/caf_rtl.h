@@ -77,6 +77,10 @@ void __caf_exit(int status);
 /* ensures local/remote completion of communication */
 void __coarray_sync(comm_handle_t hdl);
 
+void __target_alloc(unsigned long buf_size, void **ptr);
+void __target_dealloc(void **ptr);
+void *__target_alloc2(unsigned long buf_size, void *orig_ptr);
+
 /* management of local communication buffers */
 void __acquire_lcb(unsigned long buf_size, void **ptr);
 void __release_lcb(void **ptr);
@@ -176,6 +180,7 @@ void _END_CRITICAL();
 void *coarray_allocatable_allocate_(unsigned long var_size);
 void *coarray_asymmetric_allocate_(unsigned long var_size);
 void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size);
+void coarray_asymmetric_deallocate_(void *var_address);
 void coarray_deallocate_(void *var_address);
 void coarray_free_all_shared_memory_slots();
 void coarray_translate_remote_addr(void **remote_addr, int image);

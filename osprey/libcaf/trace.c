@@ -468,11 +468,11 @@ void uhcaf_tracedump_shared_mem_alloc(char *str)
     }
 
     /* print memory slots */
-    print_mem_slot("save coarrays",
-                   comm_start_save_coarrays(_this_image - 1),
-                   comm_end_save_coarrays(_this_image - 1));
+    print_mem_slot("static data (symmetric)",
+                   comm_start_static_data(_this_image - 1),
+                   comm_end_static_data(_this_image - 1));
 
-    print_mem_slot("allocatable coarrays",
+    print_mem_slot("allocatable data (symmetric)",
                    comm_start_allocatable_heap(_this_image - 1),
                    comm_end_allocatable_heap(_this_image - 1));
 

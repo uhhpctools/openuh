@@ -54,6 +54,8 @@ extern WN* Coarray_Prelower(PU_Info *current_pu, WN* pu);
 
 #define CAF_INIT                            "__caf_init"
 #define CAF_FINALIZE                        "__caf_finalize"
+#define TARGET_ALLOC                        "__target_alloc"
+#define TARGET_DEALLOC                      "__target_dealloc"
 #define ACQUIRE_LCB                         "__acquire_lcb"
 #define RELEASE_LCB                         "__release_lcb"
 #define COARRAY_NBREAD                      "__coarray_nbread"

@@ -5692,6 +5692,23 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
 # endif
         break;
 
+#ifdef _UH_COARRAYS
+   case AllocTarget_Opr :
+        cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
+                        IR_FLD_L(ir_idx));
+        cvrt_exp_to_pdg(IR_IDX_R(ir_idx),
+                        IR_FLD_R(ir_idx));
+
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_alloc_target");
+        PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+        fei_alloc_target();
+# endif
+        break;
+
+#endif /* defined(_UH_COARRAYS) */
 
 
 
@@ -5759,6 +5776,22 @@ static void	cvrt_exp_to_pdg(int         ir_idx,
         fei_free();
 # endif
         break;
+
+#ifdef _UH_COARRAYS
+   case DeallocTarget_Opr :
+        cvrt_exp_to_pdg(IR_IDX_L(ir_idx),
+                        IR_FLD_L(ir_idx));
+
+        PDG_DBG_PRINT_START
+        PDG_DBG_PRINT_C("fei_free_target");
+        PDG_DBG_PRINT_END
+
+# ifdef _ENABLE_FEI
+        fei_free_target();
+# endif
+        break;
+
+#endif
 
 
 

@@ -4316,10 +4316,17 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
 
    a_type = get_act_arg_type(exp_desc);
 
+#ifndef _UH_COARRAYS
    if (a_type == Array_Ptr ||
        a_type == Array_Tmp_Ptr ||
        a_type == Whole_Ass_Shape ||
        a_type == Dv_Contig_Section) {
+#else
+   if (dope_idx != NULL_IDX && (a_type == Array_Ptr ||
+       a_type == Array_Tmp_Ptr ||
+       a_type == Whole_Ass_Shape ||
+       a_type == Dv_Contig_Section)) {
+#endif
 
       NTR_IR_TBL(dv2_idx);
       IR_OPR(dv2_idx) = Dv_Access_A_Contig;

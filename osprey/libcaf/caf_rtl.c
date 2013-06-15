@@ -131,6 +131,33 @@ void __caf_finalize(int exit_code)
     /* does not reach */
 }
 
+void __target_alloc(unsigned long buf_size, void **ptr)
+{
+    *ptr = coarray_asymmetric_allocate_(buf_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "allocated target %p of size %lu",
+                 *ptr, buf_size);
+}
+
+void *__target_alloc2(unsigned long buf_size, void *orig_ptr)
+{
+    void *ret_ptr;
+
+    if (comm_address_in_shared_mem(orig_ptr))
+        return orig_ptr;
+
+    ret_ptr = coarray_asymmetric_allocate_(buf_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "allocated target %p of size %lu",
+                 ret_ptr, buf_size);
+
+    return ret_ptr;
+}
+
+void __target_dealloc(void **ptr)
+{
+    coarray_asymmetric_deallocate_(*ptr);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "freed target %p", *ptr);
+}
+
 
 void __acquire_lcb(unsigned long buf_size, void **ptr)
 {
@@ -648,12 +675,12 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
     if (empty_slot == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Couldn't find empty slot." );
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Couldn't find empty slot.");
         return 0;
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
-            "Found empty slot %p. About to split it from bottom. ",
+                 "Found empty slot %p. About to split it from bottom. ",
                  empty_slot->addr);
 
     /* update heap usage info */
@@ -774,13 +801,29 @@ void coarray_deallocate_(void *var_address)
     else
         slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
-        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
-                     "caf_rtl.c:coarray_deallocate_->Address%p not coarray.",
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
                      var_address);
         return;
     }
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY,
-                 "caf_rtl.c:coarray_deallocate_->before deallocating %p.",
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "before deallocating %p.",
+                 var_address);
+
+    /* update heap usage info if MEMORY_SUMMARY trace is enabled */
+    mem_info->current_heap_usage -= slot->size;
+
+    empty_shared_memory_slot(slot);
+}
+
+void coarray_asymmetric_deallocate_(void *var_address)
+{
+    struct shared_memory_slot *slot;
+    slot = find_shared_memory_slot_below(common_slot, var_address);
+    if (slot == 0) {
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
+                     var_address);
+        return;
+    }
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "before deallocating %p.",
                  var_address);
 
     /* update heap usage info if MEMORY_SUMMARY trace is enabled */

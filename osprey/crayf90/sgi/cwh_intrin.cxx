@@ -1386,6 +1386,39 @@ fei_alloc (void)
   cwh_stk_push(wn,WN_item);
 }
 
+#ifdef _UH_COARRAYS
+void
+fei_alloc_target (void)
+{
+  WN * k[2];
+  WN * wn  ;
+
+  k[1] = cwh_expr_operand(NULL);
+  k[0] = cwh_expr_operand(NULL);
+
+  OPCODE opc = cwh_make_typed_opcode(OPR_INTRINSIC_OP, Pointer_Mtype, MTYPE_V);
+
+  k[1] = cwh_intrin_wrap_ref_parm(k[1], (TY_IDX)NULL);
+  k[0] = cwh_intrin_wrap_value_parm(k[0]);
+
+  wn = WN_Create_Intrinsic(opc,INTRN_F08_TARG_ALLOC,2,k);
+
+  cwh_stk_push(wn,WN_item);
+}
+
+void
+fei_free_target (void)
+{
+  WN * k[1];
+  WN * sz  = NULL ;
+  BOOL val = TRUE;
+
+  k[0] = cwh_expr_operand(NULL);
+  cwh_intrin_call(INTRN_F08_TARG_FREE,1,k,&sz,&val,Pointer_Mtype);
+}
+
+#endif
+
 /*===============================================
  *
  * fei_free, fei_mfree

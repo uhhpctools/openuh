@@ -119,15 +119,16 @@ void comm_strided_write(size_t proc,
 
 
 /* shared memory management */
-void allocate_static_coarrays();
+void allocate_static_symm_data(void *base_address);
 
 /* returns addresses ranges for shared heap */
+int comm_address_in_shared_mem(void *addr);
 void comm_translate_remote_addr(void **remote_addr, int proc);
 ssize_t comm_address_translation_offset(size_t proc);
 void *comm_start_shared_mem(size_t proc);
 void *comm_start_symmetric_mem(size_t proc);
-void *comm_start_save_coarrays(size_t proc);
-void *comm_end_save_coarrays(size_t proc);
+void *comm_start_static_data(size_t proc);
+void *comm_end_static_data(size_t proc);
 void *comm_start_allocatable_heap(size_t proc);
 void *comm_end_allocatable_heap(size_t proc);
 void *comm_end_symmetric_mem(size_t proc);

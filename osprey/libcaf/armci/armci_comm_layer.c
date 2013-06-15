@@ -60,9 +60,9 @@ extern struct shared_memory_slot *common_slot;
 static unsigned long my_proc;
 static unsigned long num_procs;
 
-static unsigned long save_coarray_total_size_ = 0;
-#pragma weak save_coarray_total_size = save_coarray_total_size_
-extern unsigned long save_coarray_total_size;
+static unsigned long static_symm_data_total_size_ = 0;
+#pragma weak static_symm_data_total_size = static_symm_data_total_size_
+extern unsigned long static_symm_data_total_size;
 
 /* sync images */
 static void **syncptr = NULL;   /* sync flags */
@@ -136,9 +136,9 @@ static void update_nb_address_block(void *remote_addr, size_t proc,
                                     size_t size,
                                     access_type_t access_type);
 static void wait_on_pending_accesses(size_t proc,
-                                           void *remote_address,
-                                           size_t size,
-                                           access_type_t access_type);
+                                     void *remote_address,
+                                     size_t size,
+                                     access_type_t access_type);
 static void wait_on_pending_puts(size_t proc);
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
 static void wait_on_all_pending_accesses();
@@ -189,19 +189,20 @@ inline void *comm_start_symmetric_mem(size_t proc)
     return comm_start_shared_mem(proc);
 }
 
-inline void *comm_start_save_coarrays(size_t proc)
+inline void *comm_start_static_data(size_t proc)
 {
     return comm_start_shared_mem(proc);
 }
 
-inline void *comm_end_save_coarrays(size_t proc)
+inline void *comm_end_static_data(size_t proc)
 {
-    return (char *) comm_start_shared_mem(proc) + save_coarray_total_size;
+    return (char *) comm_start_shared_mem(proc) +
+        static_symm_data_total_size;
 }
 
 inline void *comm_start_allocatable_heap(size_t proc)
 {
-    return comm_end_save_coarrays(proc);
+    return comm_end_static_data(proc);
 }
 
 inline void *comm_end_allocatable_heap(size_t proc)
@@ -279,8 +280,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      * segment for storing the start address of every proc's shared memory, so
      * add that as well (treat is as part of save coarray memory).
      */
-    save_coarray_total_size += sizeof(void *);
-    caf_shared_memory_size = save_coarray_total_size;
+    static_symm_data_total_size += sizeof(void *);
+    caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
                                    DEFAULT_IMAGE_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
@@ -376,8 +377,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
         }
     }
 
-    allocate_static_coarrays((char *) coarray_start_all_images[my_proc]
-                             + sizeof(void *));
+    allocate_static_symm_data((char *) coarray_start_all_images[my_proc]
+                              + sizeof(void *));
 
     nb_mgr[PUTS].handles = (struct handle_list **) malloc
         (num_procs * sizeof(struct handle_list *));
@@ -416,9 +417,9 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr = coarray_start_all_images[my_proc]
-        + save_coarray_total_size;
+        + static_symm_data_total_size;
     common_shared_memory_slot->size = caf_shared_memory_size
-        - save_coarray_total_size;
+        - static_symm_data_total_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next = 0;
     common_shared_memory_slot->prev = 0;
@@ -431,7 +432,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     mem_info->current_heap_usage = sizeof(*mem_info);
     mem_info->max_heap_usage = sizeof(*mem_info);
     mem_info->reserved_heap_usage =
-        caf_shared_memory_size - save_coarray_total_size;
+        caf_shared_memory_size - static_symm_data_total_size;
 
     /* allocate space for recording image termination */
     stopped_image_exists =
@@ -719,7 +720,7 @@ static int address_in_nb_address_block(void *remote_addr,
                  max_nb_address[proc], remote_addr + size);
     if (max_nb_address[proc] == 0)
         return 0;
-    if (((remote_addr+size) > min_nb_address[proc])
+    if (((remote_addr + size) > min_nb_address[proc])
         && (remote_addr < max_nb_address[proc]))
         return 1;
     else
@@ -900,9 +901,9 @@ static void wait_on_pending_accesses(size_t proc,
     if (handle_node &&
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "conflict detected: %p, %ld, %p, %p",
-                remote_address, size, min_nb_address[proc],
-                max_nb_address[proc]);
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                     "conflict detected: %p, %ld, %p, %p", remote_address,
+                     size, min_nb_address[proc], max_nb_address[proc]);
         if (access_type == PUTS) {
             /* ARMCI provides no way to wait on a specific PUT to complete
              * remotely, so just wait on all of them to complete */
@@ -994,19 +995,20 @@ static void wait_on_all_pending_accesses()
  * Shared Memory Management
  */
 
-/* It should allocate memory to all static coarrays from the pinned-down
- * memory created during init */
-unsigned long set_save_coarrays_(void *base_address)
+/* It should allocate memory to all static coarrays/targets from the
+ * pinned-down memory created during init */
+void set_static_symm_data_(void *base_address)
 {
-    return 0;
+    /* do nothing */
 }
 
-#pragma weak set_save_coarrays = set_save_coarrays_
-void set_save_coarrays(void *base_address);
+#pragma weak set_static_symm_data = set_static_symm_data_
+void set_static_symm_data(void *base_address);
 
-void allocate_static_coarrays(void *base_address)
+
+void allocate_static_symm_data(void *base_address)
 {
-    set_save_coarrays(base_address);
+    set_static_symm_data(base_address);
 }
 
 
@@ -1048,6 +1050,17 @@ static void *get_remote_address(void *src, size_t img)
     offset = src - coarray_start_all_images[my_proc];
     remote_address = coarray_start_all_images[img] + offset;
     return remote_address;
+}
+
+int comm_address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    start_shared_mem = coarray_start_all_images[my_proc];
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
 }
 
 /*
@@ -1417,7 +1430,7 @@ void comm_lcb_free(void *ptr)
     else {
         /* in shared memory segment, which means it was allocated using
            coarray_asymmetric_allocate_ */
-        coarray_deallocate_(ptr);
+        coarray_asymmetric_deallocate_(ptr);
     }
 }
 
@@ -2015,8 +2028,7 @@ void comm_strided_write(size_t proc,
             size = (src_strides[stride_levels - 1] * count[stride_levels])
                 + count[0];
             if (nb_mgr[PUTS].handles[proc])
-                wait_on_pending_accesses(proc, remote_dest, size,
-                                               PUTS);
+                wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
             int in_progress = 0;
             armci_hdl_t handle;

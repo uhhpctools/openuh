@@ -110,9 +110,9 @@ extern struct shared_memory_slot *common_slot;
 static unsigned long my_proc;
 static unsigned long num_procs;
 
-static unsigned long save_coarray_total_size_ = 0;
-#pragma weak save_coarray_total_size = save_coarray_total_size_
-extern unsigned long save_coarray_total_size;
+static unsigned long static_symm_data_total_size_ = 0;
+#pragma weak static_symm_data_total_size = static_symm_data_total_size_
+extern unsigned long static_symm_data_total_size;
 
 static unsigned short gasnet_everything = 0;    /* flag */
 
@@ -295,6 +295,20 @@ static inline int address_in_shared_mem(void *addr)
     return (addr >= start_shared_mem && addr < end_shared_mem);
 }
 
+int comm_address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_shared_mem = coarray_start_all_images[my_proc].addr;
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
+}
+
 
 /* returns addresses ranges for shared heap */
 
@@ -322,19 +336,20 @@ inline void *comm_start_symmetric_mem(size_t proc)
     return comm_start_shared_mem(proc);
 }
 
-inline void *comm_start_save_coarrays(size_t proc)
+inline void *comm_start_static_data(size_t proc)
 {
     return comm_start_shared_mem(proc);
 }
 
-inline void *comm_end_save_coarrays(size_t proc)
+inline void *comm_end_static_data(size_t proc)
 {
-    return (char *) comm_start_shared_mem(proc) + save_coarray_total_size;
+    return (char *) comm_start_shared_mem(proc) +
+        static_symm_data_total_size;
 }
 
 inline void *comm_start_allocatable_heap(size_t proc)
 {
-    return comm_end_save_coarrays(proc);
+    return comm_end_static_data(proc);
 }
 
 inline void *comm_end_allocatable_heap(size_t proc)
@@ -1021,7 +1036,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
      * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
      * accordingly.
      */
-    caf_shared_memory_size = save_coarray_total_size;
+    caf_shared_memory_size = static_symm_data_total_size;
     image_heap_size = get_env_size(ENV_IMAGE_HEAP_SIZE,
                                    DEFAULT_IMAGE_HEAP_SIZE);
     caf_shared_memory_size += image_heap_size;
@@ -1194,7 +1209,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
             caf_shared_memory_pages * GASNET_PAGESIZE;
     }
 
-    allocate_static_coarrays(coarray_start_all_images[my_proc].addr);
+    allocate_static_symm_data(coarray_start_all_images[my_proc].addr);
 
     if (gasnet_everything) {
         everything_heap_start = coarray_start_all_images[my_proc].addr;
@@ -1202,9 +1217,10 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     /* initialize common shared memory slot */
     common_shared_memory_slot->addr =
-        coarray_start_all_images[my_proc].addr + save_coarray_total_size;
+        coarray_start_all_images[my_proc].addr +
+        static_symm_data_total_size;
     common_shared_memory_slot->size =
-        caf_shared_memory_size - save_coarray_total_size;
+        caf_shared_memory_size - static_symm_data_total_size;
     common_shared_memory_slot->feb = 0;
     common_shared_memory_slot->next = 0;
     common_shared_memory_slot->prev = 0;
@@ -1217,7 +1233,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     mem_info->current_heap_usage = sizeof(*mem_info);
     mem_info->max_heap_usage = sizeof(*mem_info);
     mem_info->reserved_heap_usage =
-        caf_shared_memory_size - save_coarray_total_size;
+        caf_shared_memory_size - static_symm_data_total_size;
 
     /* create a symmetric lock variable for guarding critical sections.
      * What's really needed is a distinct lock variable created for each
@@ -1519,7 +1535,7 @@ static int address_in_nb_address_block(void *remote_addr,
                  max_nb_address[proc], remote_addr + size);
     if (max_nb_address[proc] == 0)
         return 0;
-    if (((remote_addr+size) > min_nb_address[proc])
+    if (((remote_addr + size) > min_nb_address[proc])
         && (remote_addr < max_nb_address[proc]))
         return 1;
     else
@@ -1559,8 +1575,8 @@ static struct handle_list *get_next_handle(unsigned long proc,
      * If the number exceeds a specified threshold, then block until all have
      * completed.
      */
-    if ((nb_mgr[PUTS].num_handles+nb_mgr[GETS].num_handles) >=
-         nb_xfer_limit) {
+    if ((nb_mgr[PUTS].num_handles + nb_mgr[GETS].num_handles) >=
+        nb_xfer_limit) {
         wait_on_all_pending_accesses();
     }
 
@@ -1700,9 +1716,9 @@ static void wait_on_pending_accesses(unsigned long proc,
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
         struct handle_list *node_to_delete;
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "conflict detected: %p, %ld, %p, %p",
-                remote_address, size, min_nb_address[proc],
-                max_nb_address[proc]);
+        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
+                     "conflict detected: %p, %ld, %p, %p", remote_address,
+                     size, min_nb_address[proc], max_nb_address[proc]);
         while (handle_node) {
             if (address_in_handle(handle_node, remote_address, size)) {
                 //gasnet_wait_syncnb(handle_node->handle);
@@ -1780,19 +1796,20 @@ static inline void wait_on_all_pending_accesses()
  * Shared Memory Management
  */
 
-/* It should allocate memory to all static coarrays from the pinned-down
- * memory created during init */
-void set_save_coarrays_(void *base_address)
+/* It should allocate memory to all static coarrays/targets from the
+ * pinned-down memory created during init */
+void set_static_symm_data_(void *base_address)
 {
     /* do nothing */
 }
 
-#pragma weak set_save_coarrays = set_save_coarrays_
-void set_save_coarrays(void *base_address);
+#pragma weak set_static_symm_data = set_static_symm_data_
+void set_static_symm_data(void *base_address);
 
-void allocate_static_coarrays(void *base_address)
+
+void allocate_static_symm_data(void *base_address)
 {
-    set_save_coarrays(base_address);
+    set_static_symm_data(base_address);
 }
 
 
@@ -1985,7 +2002,7 @@ static inline void sync_on_handle(struct handle_list *hdl)
         /* assume if final_dest isn't NULL that destination buffer is
          * contiguous */
         memcpy(hdl->final_dest, hdl->local_buf, hdl->size);
-        coarray_deallocate_( hdl->local_buf );
+        coarray_asymmetric_deallocate_(hdl->local_buf);
     }
 }
 
@@ -1999,7 +2016,7 @@ void comm_sync(comm_handle_t hdl)
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
         //gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
-        sync_on_handle( hdl );
+        sync_on_handle(hdl);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
                     ((struct handle_list *) hdl)->access_type);
@@ -2127,7 +2144,7 @@ void *comm_lcb_malloc(size_t size)
                     "GASNet's memory registration policy may not handle "
                     "large system memory malloc's correctly. Consider "
                     "increasing the image heap size.",
-                    ((double) size) / 1024 );
+                    ((double) size) / 1024);
         }
         gasnet_hold_interrupts();
         ptr = malloc(size);
@@ -2150,7 +2167,7 @@ void comm_lcb_free(void *ptr)
     } else {
         /* in shared memory segment, which means it was allocated using
            coarray_asymmetric_allocate_ */
-        coarray_deallocate_(ptr);
+        coarray_asymmetric_deallocate_(ptr);
     }
 }
 
@@ -2284,7 +2301,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
             /* allocate out of asymmetric heap if there is sufficient enough
              * room */
             temp_dest = coarray_asymmetric_allocate_if_possible_(nbytes);
-            if (!temp_dest) temp_dest = dest;
+            if (!temp_dest)
+                temp_dest = dest;
         }
 
         LIBCAF_TRACE(LIBCAF_LOG_COMM,

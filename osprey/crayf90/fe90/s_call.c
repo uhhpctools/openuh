@@ -2840,6 +2840,13 @@ static int common_create_tmp_asg(opnd_type *r_opnd, expr_arg_type *exp_desc,
   opnd_type *left_opnd, int intent, boolean stmt_tmp,
   boolean save_where_dealloc_stmt, boolean call);
 
+#ifdef _UH_COARRAYS
+static int
+create_tmp_for_target_asg(opnd_type *r_opnd, expr_arg_type *exp_desc,
+ opnd_type *left_opnd, int intent, boolean stmt_tmp,
+ boolean save_where_dealloc_stmt, boolean call, boolean copy_check);
+#endif
+
 /*
  * Wrap an Aloc_Opr around the specified operand, so as to pass it by
  * reference
@@ -3184,6 +3191,8 @@ boolean final_arg_work(opnd_type	*list_opnd,
 # ifdef KEY
    int                 dim;
 # endif
+   int            copy_check;
+   int            target_realloc;
 
 
    TRACE (Func_Entry, "final_arg_work", NULL);
@@ -4233,6 +4242,57 @@ boolean final_arg_work(opnd_type	*list_opnd,
                   PRINTMSG(line_tmp, 1714, Error, col_tmp);
               }
       }
+
+      /* In Fortran 2008, we need to specially handle dummy arguments with the
+       * TARGET attribute when the effective argument may or may not be
+       * allocated in a remote-access memory segment. We (conservatively)
+       * generate copyin/copyout code which allocate/deallocate a contiguous
+       * buffer rom this memory segment. A further optimization may consider
+       * also whether there are coarrays in the scope of the called routine,
+       * and if not avoid this copyin/copyout code. */
+      copy_check = 0;
+      target_realloc = cmd_line_flags.co_array_fortran && ATD_TARGET(dummy) &&
+                      !ATD_TARGET(attr_idx) && !ATD_POINTER(attr_idx) &&
+                      !ATD_PE_ARRAY_IDX(attr_idx);
+
+      if (target_realloc) {
+          switch (association) {
+              case COPY_IN:
+                  association = COPY_IN_COPY_OUT;
+                  break;
+              case COPY_IN_MAKE_DV:
+                  association = COPY_INOUT_MAKE_DV;
+                  break;
+              case CHECK_CONTIG_FLAG:
+                  if (d_type == Sequence_Array_Dummy)
+                      association = COPY_IN_COPY_OUT;
+                  copy_check = ATD_CLASS(attr_idx) == Dummy_Argument ||
+                               ATD_CLASS(attr_idx) == Atd_Unknown ||
+                               ATD_CLASS(attr_idx) == CRI__Pointee;
+                  break;
+              case PASS_ADDRESS:
+              case PASS_SECTION_ADDRESS:
+                  association = COPY_IN_COPY_OUT_FOR_TARG;
+                  copy_check = ATD_CLASS(attr_idx) == Dummy_Argument ||
+                               ATD_CLASS(attr_idx) == Atd_Unknown ||
+                               ATD_CLASS(attr_idx) == CRI__Pointee;
+                  break;
+              case PASS_DV:
+              case PASS_DV_COPY:
+              case MAKE_DV:
+              case MAKE_NEW_DV:
+                  if (ATD_INTENT(dummy) == Intent_In)
+                      association = COPY_IN_MAKE_DV_FOR_TARG;
+                  else
+                      association = COPY_INOUT_MAKE_DV_FOR_TARG;
+                  copy_check = ATD_CLASS(attr_idx) == Dummy_Argument ||
+                               ATD_CLASS(attr_idx) == Atd_Unknown ||
+                               ATD_CLASS(attr_idx) == CRI__Pointee;
+                  break;
+
+          }
+      }
+
 #endif
 
       switch (association) {
@@ -4660,6 +4720,10 @@ boolean final_arg_work(opnd_type	*list_opnd,
             break;
 
          case COPY_IN              :
+#ifdef _UH_COARRAYS
+         case COPY_IN_FOR_TARG     :
+#endif
+
 #ifdef _DEBUG
 	    copy_in_count += 1;
 #endif /* _DEBUG */
@@ -4760,13 +4824,24 @@ boolean final_arg_work(opnd_type	*list_opnd,
                }
 
 #ifdef KEY /* Bug 8117 */
-               tmp_idx = create_tmp_asg_or_call(&opnd,
-                                        &exp_desc,
-                                        &l_opnd, 
-			       		Intent_In,
-                                        TRUE, 
-                                        FALSE,
-					info_idx, a_type, d_type);
+#ifdef _UH_COARRAYS
+               if (target_realloc)
+                   tmp_idx = create_tmp_for_target_asg(&opnd,
+                                            &exp_desc,
+                                            &l_opnd,
+                                        Intent_In,
+                                            TRUE,
+                                            FALSE,
+                                            TRUE, copy_check);
+               else
+#endif
+                   tmp_idx = create_tmp_asg_or_call(&opnd,
+                                            &exp_desc,
+                                            &l_opnd, 
+                            Intent_In,
+                                            TRUE, 
+                                            FALSE,
+                        info_idx, a_type, d_type);
 #else /* KEY Bug 8117 */
                tmp_idx = create_tmp_asg(&opnd,
                                         &exp_desc,
@@ -4940,6 +5015,10 @@ boolean final_arg_work(opnd_type	*list_opnd,
             break;
 
          case COPY_IN_COPY_OUT     :
+#ifdef _UH_COARRAYS
+         case COPY_IN_COPY_OUT_FOR_TARG :
+#endif
+
 #ifdef _DEBUG
             copy_in_copy_out_count += 1;
 #endif /* _DEBUG */
@@ -4981,6 +5060,16 @@ boolean final_arg_work(opnd_type	*list_opnd,
             }
 
             COPY_OPND(opnd, IL_OPND(list_idx));
+#ifdef _UH_COARRAYS
+            if (target_realloc)
+            tmp_idx = create_tmp_for_target_asg(&opnd,
+                              (expr_arg_type *)&(arg_info_list[info_idx].ed),
+                              &l_opnd,
+                              intent,
+                              TRUE,
+                              FALSE, FALSE, copy_check);
+            else
+#endif
             tmp_idx = create_tmp_asg(&opnd,
                               (expr_arg_type *)&(arg_info_list[info_idx].ed),
                               &l_opnd, 
@@ -5215,6 +5304,10 @@ boolean final_arg_work(opnd_type	*list_opnd,
             break;
 
          case COPY_IN_MAKE_DV      :
+#ifdef _UH_COARRAYS
+         case COPY_IN_MAKE_DV_FOR_TARG :
+         case COPY_INOUT_MAKE_DV_FOR_TARG :
+#endif
 # if defined(KEY) /* Bug 3230 */
          case COPY_INOUT_MAKE_DV      :
 	    {
@@ -5243,9 +5336,23 @@ boolean final_arg_work(opnd_type	*list_opnd,
 	       * change during execution. */
 	      boolean move = (association == COPY_INOUT_MAKE_DV) &&
 		safe_to_move_copyinout_alloc(&opnd);
+
+#ifdef _UH_COARRAYS
+          if (target_realloc) {
+              copyin |= (association == COPY_IN_MAKE_DV_FOR_TARG);
+              move |= (association == COPY_INOUT_MAKE_DV_FOR_TARG);
+              tmp_idx = create_tmp_for_target_asg(&opnd,
+                    (expr_arg_type *)&(arg_info_list[info_idx].ed),
+                    &l_opnd,
+                    copyin ? Intent_In : Intent_Inout,
+                    copyin,
+                    /* Dealloc unneeded if alloc occurs in prolog */
+                    move, FALSE, copy_check);
+          } else
+#endif
 	      tmp_idx = create_tmp_asg(&opnd,
-				(expr_arg_type *)&(arg_info_list[info_idx].ed), 
-				&l_opnd, 
+				(expr_arg_type *)&(arg_info_list[info_idx].ed),
+				&l_opnd,
 				copyin ? Intent_In : Intent_Inout,
 				copyin,
 				/* Dealloc unneeded if alloc occurs in prolog */
@@ -5524,6 +5631,18 @@ boolean final_arg_work(opnd_type	*list_opnd,
             COPY_OPND(opnd, IL_OPND(list_idx));
             exp_desc = arg_info_list[info_idx].ed;
 #ifdef KEY /* Bug 8117 */
+#ifdef _UH_COARRAYS
+            if (target_realloc)
+                tmp_idx = create_tmp_for_target_asg(&opnd,
+                                         &exp_desc,
+                                         &r_opnd,
+                                         intent,
+                                         TRUE,
+                                         FALSE,
+                                         TRUE,
+                                         copy_check);
+            else
+#endif
             tmp_idx = create_tmp_asg_or_call(&opnd, 
                                      &exp_desc, 
                                      &r_opnd, 
@@ -6446,6 +6565,412 @@ common_create_tmp_asg(opnd_type *r_opnd, expr_arg_type *exp_desc,
    return(tmp_idx);
 
 }  /* create_tmp_asg */
+
+#ifdef _UH_COARRAYS
+/*
+ * Perform the work common to create_tmp_asg() and create_tmp_asg_or_call()
+ */
+static int
+create_tmp_for_target_asg(opnd_type *r_opnd, expr_arg_type *exp_desc,
+ opnd_type *left_opnd, int intent, boolean stmt_tmp,
+ boolean save_where_dealloc_stmt, boolean call, boolean copy_check)
+{
+   int                  alloc_idx;
+   int                  asg_idx;
+   int                  base_asg_idx;
+   int                  base_tmp_idx;
+   int                  bd_idx;
+   int                  col;
+   boolean              constant_shape = TRUE;
+   int                  dealloc_idx    = NULL_IDX;
+   int                  ir_idx;
+   int                  line;
+   int                  list_idx;
+   int                  max_idx;
+   boolean              ok = TRUE;
+   opnd_type            opnd;
+   opnd_type            base_opnd;
+   int                  unused1, unused2;
+   int                  save_curr_stmt_sh_idx;
+   boolean		save_defer_stmt_expansion;
+   opnd_type            size_opnd;
+   int                  tmp_idx;
+   int			true_start_sh_idx;
+   int			true_end_sh_idx;
+
+
+   TRACE (Func_Entry, "create_tmp_for_target_asg", NULL);
+
+   find_opnd_line_and_column(r_opnd, &line, &col);
+
+   stmt_expansion_control_start();
+   save_defer_stmt_expansion = defer_stmt_expansion;
+   defer_stmt_expansion = FALSE;
+
+   save_curr_stmt_sh_idx = curr_stmt_sh_idx;
+
+   if (exp_desc->rank) {
+      constant_shape = gen_bd_entry(r_opnd, exp_desc, &bd_idx, line, col);
+   }
+   else if (exp_desc->type == Character) {
+      ok = validate_char_len(r_opnd, exp_desc);
+
+      if (TYP_FLD(exp_desc->type_idx) != CN_Tbl_Idx) {
+         constant_shape = FALSE;
+      }
+   }
+
+   tmp_idx = NULL_IDX;
+
+   if (stmt_tmp &&
+       constant_shape) {
+      tmp_idx = get_stmt_tmp(exp_desc->type_idx,
+                             FALSE,
+                             exp_desc->rank);
+   }
+
+   /* sjc: generate "contig_array = noncontig_array" before call;
+    * tmp_idx is the contig_array */
+   int copyin_dest = NULL_IDX;
+   fld_type copyin_fld;
+   int copyin_src = get_variable_reference(r_opnd, &copyin_fld);
+   if (NULL_IDX == copyin_src) {
+     call = FALSE;
+   }
+   if (call) {
+     /* Here we replace either the NTR_IR_TBL(asg_idx) sequence or
+      * GEN_COMPILER_TMP_ASG with code to emit a call on a library procedure.
+      * The (NULL_IDX == tmp_idx) code imitates part of GEN_COMPILER_TMP_ASG */
+     if (NULL_IDX == tmp_idx) {
+       tmp_idx = gen_compiler_tmp(line, col, Priv, TRUE);
+       AT_SEMANTICS_DONE(tmp_idx)    = TRUE;
+       ATD_TYPE_IDX(tmp_idx)         = exp_desc->type_idx;
+       /*ATD_TMP_IDX(tmp_idx)          = asg_idx;*/
+       ATD_FLD(tmp_idx)              = IR_Tbl_Idx;
+       ATD_STOR_BLK_IDX(tmp_idx)     = SCP_SB_STACK_IDX(curr_scp_idx);
+       AT_DEFINED(tmp_idx)           = TRUE;
+     }
+     copyin_dest = tmp_idx;
+     asg_idx = build_copyinout_call(Copyin_Attr_Idx, COPYIN_ENTRY,
+       AT_Tbl_Idx, copyin_dest, copyin_fld, copyin_src, line, col);
+   }
+   else {
+     if (tmp_idx) {
+	NTR_IR_TBL(asg_idx);
+	IR_OPR(asg_idx)           = Asg_Opr;
+
+	IR_TYPE_IDX(asg_idx)	= exp_desc->type_idx;
+	IR_FLD_L(asg_idx)         = AT_Tbl_Idx;
+	IR_IDX_L(asg_idx)         = tmp_idx;
+	IR_LINE_NUM_L(asg_idx)    = line;
+	IR_LINE_NUM(asg_idx)      = line;
+	IR_COL_NUM_L(asg_idx)     = col;
+	IR_COL_NUM(asg_idx)       = col;
+	ATD_TMP_IDX(tmp_idx)      = asg_idx;
+	ATD_FLD(tmp_idx)          = IR_Tbl_Idx;
+	AT_DEFINED(tmp_idx)       = TRUE;
+     }
+     else {
+	GEN_COMPILER_TMP_ASG(asg_idx,
+			     tmp_idx,
+			     TRUE,	/* Semantics done */
+			     line,
+			     col,
+			     exp_desc->type_idx,
+			     Priv);
+     }
+   }
+
+   ATD_ASG_TMP(tmp_idx) = TRUE;
+
+   if (1 /*!constant_shape*/) {
+      ATD_STOR_BLK_IDX(tmp_idx) =  SCP_SB_BASED_IDX(curr_scp_idx);
+   }
+
+   if (exp_desc->rank) {
+
+      if (1 /*!constant_shape*/) {
+         /* initialize size_opnd to the number of elements for */
+         /* determine_tmp_size.                                */
+
+         OPND_FLD(size_opnd)	= BD_LEN_FLD(bd_idx);
+         OPND_IDX(size_opnd)	= BD_LEN_IDX(bd_idx);
+         OPND_LINE_NUM(size_opnd) = line;
+         OPND_COL_NUM(size_opnd)  = col;
+      }
+
+      ATD_ARRAY_IDX(tmp_idx) = bd_idx;
+   }
+   else if (1 /*!constant_shape*/) {
+      /* initialize size_opnd to constant one for scalar for */
+      /* determine_tmp_size.                                 */
+
+      OPND_FLD(size_opnd) = CN_Tbl_Idx;
+      OPND_IDX(size_opnd) = CN_INTEGER_ONE_IDX;
+      OPND_LINE_NUM(size_opnd) = line;
+      OPND_COL_NUM(size_opnd)  = col;
+   }
+
+   /* gen whole subscript or whole substring for tmp_idx */
+
+   if (!call) {
+     COPY_OPND((*left_opnd), IR_OPND_L(asg_idx));
+
+   if (exp_desc->rank) {
+      ok = gen_whole_subscript(left_opnd, exp_desc);
+   }
+   else if (exp_desc->type == Character) {
+      ok = gen_whole_substring(left_opnd, 0);
+   }
+
+   COPY_OPND(IR_OPND_L(asg_idx), (*left_opnd));
+
+
+   IR_RANK(asg_idx)          = exp_desc->rank;
+   }
+
+   /* now for the alloc and dealloc stmts */
+
+   ATD_AUTOMATIC(tmp_idx)      = TRUE;
+
+   GEN_COMPILER_TMP_ASG(base_asg_idx,
+           base_tmp_idx,
+           TRUE,	/* Semantics done */
+           line,
+           col,
+           SA_INTEGER_DEFAULT_TYPE,
+           Priv);
+
+   ATD_AUTO_BASE_IDX(tmp_idx)	= base_tmp_idx;
+
+   determine_tmp_size(&size_opnd, exp_desc->type_idx);
+
+   NTR_IR_TBL(max_idx);
+   IR_OPR(max_idx) = Max_Opr;
+   IR_TYPE_IDX(max_idx) = SA_INTEGER_DEFAULT_TYPE;
+   IR_LINE_NUM(max_idx) = line;
+   IR_COL_NUM(max_idx)  = col;
+   IR_FLD_L(max_idx) = IL_Tbl_Idx;
+   IR_LIST_CNT_L(max_idx) = 2;
+
+   NTR_IR_LIST_TBL(list_idx);
+   IR_IDX_L(max_idx) = list_idx;
+
+   IL_FLD(list_idx) = CN_Tbl_Idx;
+   IL_IDX(list_idx) = CN_INTEGER_ZERO_IDX;
+   IL_LINE_NUM(list_idx) = line;
+   IL_COL_NUM(list_idx)  = col;
+
+   NTR_IR_LIST_TBL(IL_NEXT_LIST_IDX(list_idx));
+   IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
+   list_idx = IL_NEXT_LIST_IDX(list_idx);
+
+   COPY_OPND(IL_OPND(list_idx), size_opnd);
+
+   OPND_FLD(size_opnd) = IR_Tbl_Idx;
+   OPND_IDX(size_opnd) = max_idx;
+
+   /* generate "alloc(contig_array)" before call */
+   NTR_IR_TBL(alloc_idx);
+   if (copy_check) {
+       opnd_type loc_opnd;
+       int loc_idx;
+       COPY_OPND(opnd, *r_opnd);
+       unused1 = NULL_IDX;
+       unused2 = NULL_IDX;
+       make_base_subtree(&opnd, &base_opnd, &unused1, &unused2);
+       NTR_IR_TBL(loc_idx);
+       IR_OPR(loc_idx) = Loc_Opr;
+       IR_LINE_NUM(loc_idx) = line;
+       IR_COL_NUM(loc_idx) = col;
+       IR_TYPE_IDX(loc_idx) = CRI_Ptr_8;
+       COPY_OPND(IR_OPND_L(loc_idx), base_opnd);
+       gen_opnd(&loc_opnd, loc_idx, IR_Tbl_Idx, line, col);
+
+       IR_OPR(alloc_idx) = AllocTarget_Opr;
+       IR_TYPE_IDX(alloc_idx) = TYPELESS_DEFAULT_TYPE;
+       IR_LINE_NUM(alloc_idx) = line;
+       IR_COL_NUM(alloc_idx)  = col;
+       COPY_OPND(IR_OPND_L(alloc_idx), size_opnd);
+       COPY_OPND(IR_OPND_R(alloc_idx), loc_opnd);
+       IR_FLD_R(base_asg_idx) = IR_Tbl_Idx;
+       IR_IDX_R(base_asg_idx) = alloc_idx;
+   } else {
+       IR_OPR(alloc_idx) = AllocTarget_Opr;
+       IR_TYPE_IDX(alloc_idx) = TYPELESS_DEFAULT_TYPE;
+       IR_LINE_NUM(alloc_idx) = line;
+       IR_COL_NUM(alloc_idx)  = col;
+       COPY_OPND(IR_OPND_L(alloc_idx), size_opnd);
+       IR_FLD_R(alloc_idx) = CN_Tbl_Idx;
+       IR_IDX_R(alloc_idx) = CN_INTEGER_ZERO_IDX;
+       IR_LINE_NUM_R(alloc_idx) = line;
+       IR_COL_NUM_R(alloc_idx) = col;
+       IR_FLD_R(base_asg_idx) = IR_Tbl_Idx;
+       IR_IDX_R(base_asg_idx) = alloc_idx;
+   }
+
+   gen_sh(Before, Assignment_Stmt, line,
+           col, FALSE, FALSE, TRUE);
+
+   SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = base_asg_idx;
+   SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+   /* sjc: generate dealloc(contig_array) */
+   NTR_IR_TBL(dealloc_idx);
+   IR_OPR(dealloc_idx) = DeallocTarget_Opr;
+   IR_TYPE_IDX(dealloc_idx) = TYPELESS_DEFAULT_TYPE;
+   IR_LINE_NUM(dealloc_idx) = line;
+   IR_COL_NUM(dealloc_idx)  = col;
+   COPY_OPND(IR_OPND_L(dealloc_idx), IR_OPND_L(base_asg_idx));
+
+
+   save_curr_stmt_sh_idx = curr_stmt_sh_idx;
+
+   gen_sh(After, Assignment_Stmt, line,
+           col, FALSE, FALSE, TRUE);
+
+   SH_IR_IDX(curr_stmt_sh_idx) = dealloc_idx;
+   SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+
+   curr_stmt_sh_idx = save_curr_stmt_sh_idx;
+
+
+   if (!call) {
+     COPY_OPND(IR_OPND_R(asg_idx), (*r_opnd));
+
+# ifdef _TRANSFORM_CHAR_SEQUENCE
+   if (exp_desc->type == Structure &&
+       ATT_CHAR_SEQ(TYP_IDX(exp_desc->type_idx))) {
+
+      COPY_OPND(opnd, IR_OPND_L(asg_idx));
+      transform_char_sequence_ref(&opnd, exp_desc->type_idx);
+      COPY_OPND(IR_OPND_L(asg_idx), opnd);
+
+      COPY_OPND(opnd, IR_OPND_R(asg_idx));
+      transform_char_sequence_ref(&opnd, exp_desc->type_idx);
+      COPY_OPND(IR_OPND_R(asg_idx), opnd);
+   }
+# endif
+   }
+
+   if (intent == Intent_In || intent == Intent_Inout) {
+       gen_sh(Before, call ? Call_Stmt : Assignment_Stmt, line, col, FALSE,
+               FALSE, TRUE);
+
+       SH_IR_IDX(SH_PREV_IDX(curr_stmt_sh_idx)) = asg_idx;
+       SH_P2_SKIP_ME(SH_PREV_IDX(curr_stmt_sh_idx)) = TRUE;
+
+       if (copy_check) {
+           opnd_type cond_opnd;
+           int true_start_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+           int true_end_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+           int loc_idx;
+           int cond_idx;
+
+           COPY_OPND(opnd, *r_opnd);
+           unused1 = NULL_IDX;
+           unused2 = NULL_IDX;
+           make_base_subtree(&opnd, &base_opnd, &unused1, &unused2);
+
+           NTR_IR_TBL(loc_idx);
+           IR_OPR(loc_idx) = Loc_Opr;
+           IR_LINE_NUM(loc_idx) = line;
+           IR_COL_NUM(loc_idx) = col;
+           IR_TYPE_IDX(loc_idx) = CRI_Ptr_8;
+           COPY_OPND(IR_OPND_L(loc_idx), base_opnd);
+
+
+           cond_idx  = gen_ir(AT_Tbl_Idx, base_tmp_idx, Ne_Opr, LOGICAL_DEFAULT_TYPE,
+                                 line, col, IR_Tbl_Idx, loc_idx);
+
+
+           gen_opnd(&cond_opnd, cond_idx, IR_Tbl_Idx, line, col);
+           gen_if_stmt(&cond_opnd, true_start_sh_idx, true_end_sh_idx,
+                       0, 0, line, col);
+       }
+   }
+
+   if (intent == Intent_Out || intent == Intent_Inout) {
+      /* sjc: Generate noncontig_array = contig_array */
+      if (call) {
+        asg_idx = build_copyinout_call(Copyout_Attr_Idx, COPYOUT_ENTRY,
+	  copyin_fld, copyin_src, /* copyout reverses src and dest */
+	  AT_Tbl_Idx, copyin_dest, line, col);
+	gen_sh(After, Call_Stmt, stmt_start_line,
+	       stmt_start_col, FALSE, FALSE, TRUE);
+      }
+      else {
+	NTR_IR_TBL(asg_idx);
+	IR_OPR(asg_idx)   = Asg_Opr;
+	IR_TYPE_IDX(asg_idx) = exp_desc->type_idx;
+	IR_LINE_NUM(asg_idx) = line;
+	IR_COL_NUM(asg_idx)  = col;
+	IR_RANK(asg_idx)  = exp_desc->rank;
+	COPY_OPND(IR_OPND_R(asg_idx), (*left_opnd));
+	COPY_OPND(IR_OPND_L(asg_idx), (*r_opnd));
+
+	gen_sh(After, Assignment_Stmt, stmt_start_line,
+	       stmt_start_col, FALSE, FALSE, TRUE);
+      }
+
+      SH_IR_IDX(curr_stmt_sh_idx)     = asg_idx;
+      SH_P2_SKIP_ME(curr_stmt_sh_idx) = TRUE;
+      curr_stmt_sh_idx = SH_PREV_IDX(curr_stmt_sh_idx);
+
+       if (copy_check) {
+           opnd_type cond_opnd;
+           int true_start_sh_idx = SH_NEXT_IDX(curr_stmt_sh_idx);
+           int true_end_sh_idx = SH_NEXT_IDX(true_start_sh_idx);
+           int loc_idx;
+           int cond_idx;
+
+           COPY_OPND(opnd, *r_opnd);
+           unused1 = NULL_IDX;
+           unused2 = NULL_IDX;
+           make_base_subtree(&opnd, &base_opnd, &unused1, &unused2);
+
+           NTR_IR_TBL(loc_idx);
+           IR_OPR(loc_idx) = Loc_Opr;
+           IR_LINE_NUM(loc_idx) = line;
+           IR_COL_NUM(loc_idx) = col;
+           IR_TYPE_IDX(loc_idx) = CRI_Ptr_8;
+           COPY_OPND(IR_OPND_L(loc_idx), base_opnd);
+
+
+           cond_idx  = gen_ir(AT_Tbl_Idx, base_tmp_idx, Ne_Opr, LOGICAL_DEFAULT_TYPE,
+                                 line, col, IR_Tbl_Idx, loc_idx);
+
+
+           gen_opnd(&cond_opnd, cond_idx, IR_Tbl_Idx, line, col);
+           gen_if_stmt(&cond_opnd, true_start_sh_idx, true_end_sh_idx,
+                       0, 0, line, col);
+       }
+   }
+
+   /* change the flags in the expression descriptor to show it's now a tmp */
+
+   exp_desc->constant = FALSE;
+   exp_desc->foldable = FALSE;
+   exp_desc->will_fold_later = FALSE;
+
+   exp_desc->tmp_reference = TRUE;
+   exp_desc->section = FALSE;
+
+   if (exp_desc->rank > 0) {
+      exp_desc->contig_array = TRUE;
+   }
+
+   defer_stmt_expansion = save_defer_stmt_expansion;
+   stmt_expansion_control_end(left_opnd);
+
+   TRACE (Func_Exit, "create_tmp_for_target_asg", NULL);
+
+   return(tmp_idx);
+
+}
+
+#endif /* defined(_UH_COARRAYS) */
+
 
 /******************************************************************************\
 |*                                                                            *|

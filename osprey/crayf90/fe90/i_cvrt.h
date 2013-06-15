@@ -1429,6 +1429,10 @@ extern void  fei_esc             	  ( void );
 extern void  fei_dsc             	  ( void );
 extern void  fei_alloc           	  ( void );
 extern void  fei_free            	  ( void );
+#ifdef _UH_COARRAYS
+extern void  fei_alloc_target         ( void );
+extern void  fei_free_target          ( void );
+#endif
 extern void  fei_allocate        	  ( INT32 nargs );
 extern void  fei_deallocate      	  ( INT32 nargs );
 extern void  fei_ssd_alloc       	  ( void );

@@ -63,6 +63,11 @@
 # define CHECK_CONTIG_FLAG		11
 # define COPY_INOUT_MAKE_DV             12
 
+# define COPY_IN_FOR_TARG             13
+# define COPY_IN_COPY_OUT_FOR_TARG    14
+# define COPY_IN_MAKE_DV_FOR_TARG     15
+# define COPY_INOUT_MAKE_DV_FOR_TARG  16
+
 /********************\
 |* SIZES AND LIMITS *|
 \********************/
