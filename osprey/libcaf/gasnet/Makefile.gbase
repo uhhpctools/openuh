@@ -37,9 +37,17 @@ GASNET_CONDUIT ?=mpi
 LIBRARY := libcaf-gasnet-$(GASNET_CONDUIT).a
 TARGETS = $(LIBRARY)
 SRC_DIRS    = $(BUILD_BASE)
+dso_version := 1
+DSO = libcaf-gasnet-$(GASNET_CONDUIT).so.$(dso_version)
 
 # Makefile setup
 include $(COMMONDEFS)
+
+ifeq ($(BUILD_TYPE), NONSHARED)
+TARGETS = $(LIBRARY)
+else
+TARGETS = $(LIBRARY) $(DSO)
+endif
 
 VPATH    =  $(SRC_DIRS)
 
@@ -85,6 +93,9 @@ endif
 ifeq ($(GASNET_CONDUIT),vapi)
 LCDEFS += -DGASNET_CONDUIT_VAPI
 endif
+ifeq ($(GASNET_CONDUIT),gemini)
+LCDEFS += -DGASNET_CONDUIT_GEMINI
+endif
 ifeq ($(GASNET_CONDUIT),mpi)
 LCDEFS += -DGASNET_CONDUIT_MPI
 LCINCS += -I$(MPI_INCLUDE)
@@ -94,5 +105,14 @@ default: $(TARGETS)
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^
+
+$(DSO): $(OBJECTS:%.o=%.pg.o)
+ifeq ($(BUILD_OS), DARWIN)
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -o $@ $^
+else
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -Wl,-soname=$(DSO) -o $@ $^
+endif
+	$(ln) -sf $(DSO) $(basename $(DSO))
+
 
 include $(COMMONRULES)

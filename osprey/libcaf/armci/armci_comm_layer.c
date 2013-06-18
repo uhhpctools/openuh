@@ -85,6 +85,8 @@ static unsigned short *this_image_stopped = NULL;
  * writes to finish when a new read/write adrress overlaps any one of
  * them.  */
 static struct nb_handle_manager nb_mgr[2];
+static armci_handle_x_t *armci_nbput_handles;
+static armci_handle_x_t *armci_nbget_handles;
 
 static size_t nb_xfer_limit;
 
@@ -142,6 +144,10 @@ static void wait_on_pending_accesses(size_t proc,
 static void wait_on_pending_puts(size_t proc);
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
 static void wait_on_all_pending_accesses();
+
+static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type);
+static inline void return_armci_handle(armci_handle_x_t *handle,
+                                access_type_t access_type);
 
 
 
@@ -238,6 +244,25 @@ inline void *comm_end_shared_mem(size_t proc)
 }
 
 
+/* TODO: make this thread safe */
+static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type)
+{
+    armci_handle_x_t *freed_handle = nb_mgr[access_type].free_armci_handles;
+    nb_mgr[access_type].free_armci_handles = freed_handle->next;
+
+    return &(freed_handle->handle);
+}
+
+/* TODO: make this thread safe */
+static inline void return_armci_handle(armci_handle_x_t *handle,
+                                access_type_t access_type)
+{
+    armci_handle_x_t *free_list = nb_mgr[access_type].free_armci_handles;
+    nb_mgr[access_type].free_armci_handles = handle;
+    handle->next = free_list;
+}
+
+
 /* TODO: Right now, for every critical section we simply acquire a mutex on
  * process 0. Instead, we should define a mutex for each critical section in
  * order to allow execution of different critical sections at the same time.
@@ -272,6 +297,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     char **argv;
     unsigned long caf_shared_memory_size;
     unsigned long image_heap_size;
+    armci_handle_x_t *p;
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap).
@@ -379,17 +405,31 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
 
     allocate_static_symm_data((char *) coarray_start_all_images[my_proc]
                               + sizeof(void *));
-
     nb_mgr[PUTS].handles = (struct handle_list **) malloc
         (num_procs * sizeof(struct handle_list *));
     nb_mgr[PUTS].num_handles = 0;
     nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
+    armci_nbput_handles = malloc(nb_xfer_limit*sizeof(armci_handle_x_t));
+    p = armci_nbput_handles;
+    for (i = 0; i < nb_xfer_limit-1; i++) {
+        p[i].next = &p[i+1];
+    }
+    p[nb_xfer_limit-1].next = NULL;
+    nb_mgr[PUTS].free_armci_handles = armci_nbput_handles;
+
     nb_mgr[GETS].handles = (struct handle_list **) malloc
         (num_procs * sizeof(struct handle_list *));
     nb_mgr[GETS].num_handles = 0;
     nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
+    armci_nbget_handles = malloc(nb_xfer_limit*sizeof(armci_handle_x_t));
+    p = armci_nbget_handles;
+    for (i = 0; i < nb_xfer_limit-1; i++) {
+        p[i].next = &p[i+1];
+    }
+    p[nb_xfer_limit-1].next = NULL;
+    nb_mgr[GETS].free_armci_handles = armci_nbget_handles;
 
     /* initialize data structures to 0 */
     for (i = 0; i < num_procs; i++) {
@@ -779,7 +819,8 @@ static struct handle_list *get_next_handle(unsigned long proc,
         handle_node->next->prev = handle_node;
         handle_node = handle_node->next;
     }
-    ARMCI_INIT_HANDLE(&handle_node->handle);
+    handle_node->handle = NULL; /* should be initialized after call
+                                   to this function */
     handle_node->address = remote_address;
     handle_node->local_buf = local_buf;
     handle_node->size = size;
@@ -844,6 +885,9 @@ static void delete_node(unsigned long proc, struct handle_list *node,
 
     nb_mgr[access_type].num_handles--;
 
+    /* return armci handle to free list */
+    return_armci_handle( (armci_handle_x_t *) node->handle, access_type);
+
     if (node->prev) {
         if (node->next) {
             node->prev->next = node->next;
@@ -867,6 +911,7 @@ static void delete_node(unsigned long proc, struct handle_list *node,
     node_address = node->address;
     if (access_type == PUTS)
         comm_lcb_free(node->local_buf);
+
     comm_free(node);
     if (node_address == min_nb_address[proc])
         reset_min_nb_address(proc, access_type);
@@ -911,10 +956,10 @@ static void wait_on_pending_accesses(size_t proc,
         } else {                /* GETS */
             while (handle_node) {
                 if (address_in_handle(handle_node, remote_address, size)) {
-                    ARMCI_Wait(&handle_node->handle);
+                    ARMCI_Wait(handle_node->handle);
                     delete_node(proc, handle_node, GETS);
                     return;
-                } else if (ARMCI_Test(&handle_node->handle) != 0) {
+                } else if (ARMCI_Test(handle_node->handle) != 0) {
                     /* has completed */
                     node_to_delete = handle_node;
                     handle_node = handle_node->next;
@@ -938,6 +983,9 @@ static void wait_on_pending_puts(size_t proc)
     ARMCI_Fence(proc);
     /* clear out entire handle list */
     while (handle_node) {
+        /* return armci handle to free list */
+        return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                            PUTS);
         node_to_delete = handle_node;
         handle_node = handle_node->next;
         comm_lcb_free(node_to_delete->local_buf);
@@ -961,6 +1009,9 @@ static void wait_on_all_pending_accesses()
         handle_node = nb_mgr[PUTS].handles[i];
         /* clear out entire handle list */
         while (handle_node) {
+            /* return armci handle to free list */
+            return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                                PUTS);
             node_to_delete = handle_node;
             handle_node = handle_node->next;
             /* for puts */
@@ -975,11 +1026,14 @@ static void wait_on_all_pending_accesses()
         handle_node = nb_mgr[GETS].handles[i];
         /* clear out entire handle list */
         while (handle_node) {
-            ARMCI_Wait(&handle_node->handle);
+            ARMCI_Wait(handle_node->handle);
+            /* return armci handle to free list */
+            return_armci_handle((armci_handle_x_t *) handle_node->handle,
+                                GETS);
             node_to_delete = handle_node;
             handle_node = handle_node->next;
             comm_free(node_to_delete);
-            nb_mgr[PUTS].num_handles--;
+            nb_mgr[GETS].num_handles--;
         }
         nb_mgr[GETS].handles[i] = 0;
         nb_mgr[GETS].min_nb_address[i] = 0;
@@ -1174,7 +1228,7 @@ void comm_sync(comm_handle_t hdl)
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
-        ARMCI_Wait(&((struct handle_list *) hdl)->handle);
+        ARMCI_Wait(((struct handle_list *) hdl)->handle);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
                     ((struct handle_list *) hdl)->access_type);
@@ -1481,21 +1535,22 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         cache_check_and_get(proc, remote_src, nbytes, dest);
     else {
         int in_progress = 0;
-        armci_hdl_t handle;
-        ARMCI_INIT_HANDLE(&handle);
+        armci_hdl_t *handle;
+        handle = get_next_armci_handle(GETS);
+        ARMCI_INIT_HANDLE(handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "Before ARMCI_NbGet from %p on"
                      " image %lu to %p size %lu",
                      remote_src, proc + 1, dest, nbytes);
-        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, &handle);
+        ARMCI_NbGet(remote_src, dest, (int) nbytes, (int) proc, handle);
 
-        in_progress = (ARMCI_Test(&handle) == 0);
+        in_progress = (ARMCI_Test(handle) == 0);
 
         if (in_progress == 1) {
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_src, dest, nbytes, GETS);
 
-            memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+            handle_node->handle = handle;
 
             if (hdl != NULL)
                 *hdl = handle_node;
@@ -1568,10 +1623,14 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
         if (hdl != (void *) -1) {
+            armci_hdl_t *handle;
+            handle = get_next_armci_handle(PUTS);
+            ARMCI_INIT_HANDLE(handle);
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, nbytes, PUTS);
+            handle_node->handle = handle;
             ARMCI_NbPut(src, remote_dest, nbytes, proc,
-                        &handle_node->handle);
+                        handle_node->handle);
             handle_node->next = 0;
             update_nb_address_block(remote_dest, proc, nbytes, PUTS);
             LIBCAF_TRACE(LIBCAF_LOG_COMM,
@@ -1591,18 +1650,21 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
         int in_progress = 0;
-        armci_hdl_t handle;
-        ARMCI_INIT_HANDLE(&handle);
+        armci_hdl_t *handle;
+        handle = get_next_armci_handle(PUTS);
+        ARMCI_INIT_HANDLE(handle);
 
-        ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle);
+        ARMCI_NbPut(src, remote_dest, nbytes, proc, handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "After ARMCI_NbPut to %p on image %lu.",
                      remote_dest, proc + 1);
 
+        in_progress = (ARMCI_Test(handle) == 0);
+
         if (in_progress == 1) {
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
-            memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+            handle_node->handle = handle;
             handle_node->next = 0;
 
             if (hdl != NULL)
@@ -1664,20 +1726,21 @@ void comm_write(size_t proc, void *dest, void *src,
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
         int in_progress = 0;
-        armci_hdl_t handle;
-        ARMCI_INIT_HANDLE(&handle);
+        armci_hdl_t *handle;
+        handle = get_next_armci_handle(PUTS);
+        ARMCI_INIT_HANDLE(handle);
 
-        ARMCI_NbPut(src, remote_dest, nbytes, proc, &handle);
+        ARMCI_NbPut(src, remote_dest, nbytes, proc, handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "After ARMCI_Put to %p on image %lu.",
                      remote_dest, proc + 1);
 
-        in_progress = (ARMCI_Test(&handle) == 0);
+        in_progress = (ARMCI_Test(handle) == 0);
 
         if (in_progress == 1) {
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
-            memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+            handle_node->handle = handle;
             handle_node->next = 0;
 
             if (hdl != NULL)
@@ -1758,21 +1821,22 @@ void comm_strided_nbread(size_t proc,
         } else {
 
             int in_progress = 0;
-            armci_hdl_t handle;
-            ARMCI_INIT_HANDLE(&handle);
+            armci_hdl_t *handle;
+            handle = get_next_armci_handle(GETS);
+            ARMCI_INIT_HANDLE(handle);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "ARMCI_GetS from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             ARMCI_NbGetS(remote_src, src_strides, dest, dest_strides,
-                         count, stride_levels, proc, &handle);
+                         count, stride_levels, proc, handle);
 
-            in_progress = (ARMCI_Test(&handle) == 0);
+            in_progress = (ARMCI_Test(handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, remote_src, dest, size, GETS);
 
-                memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+                handle_node->handle = handle;
 
                 if (hdl != NULL)
                     *hdl = handle_node;
@@ -1895,11 +1959,15 @@ void comm_strided_write_from_lcb(size_t proc,
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
             if (hdl != (void *) -1) {
+                armci_hdl_t *handle;
+                handle = get_next_armci_handle(PUTS);
+                ARMCI_INIT_HANDLE(handle);
                 struct handle_list *handle_node =
                     get_next_handle(proc, remote_dest, src, size, PUTS);
+                handle_node->handle = handle;
                 ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
                              count, stride_levels, proc,
-                             &handle_node->handle);
+                             handle_node->handle);
                 handle_node->next = 0;
                 update_nb_address_block(remote_dest, proc, size, PUTS);
             } else {
@@ -1923,20 +1991,21 @@ void comm_strided_write_from_lcb(size_t proc,
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
             int in_progress = 0;
-            armci_hdl_t handle;
-            ARMCI_INIT_HANDLE(&handle);
+            armci_hdl_t *handle;
+            handle = get_next_armci_handle(PUTS);
+            ARMCI_INIT_HANDLE(handle);
 
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
-                         count, stride_levels, proc, &handle);
+                         count, stride_levels, proc, handle);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu.", remote_dest, proc + 1);
 
-            in_progress = (ARMCI_Test(&handle) == 0);
+            in_progress = (ARMCI_Test(handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
-                memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+                handle_node->handle = handle;
                 handle_node->next = 0;
 
                 if (hdl != NULL)
@@ -2036,20 +2105,21 @@ void comm_strided_write(size_t proc,
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
             int in_progress = 0;
-            armci_hdl_t handle;
-            ARMCI_INIT_HANDLE(&handle);
+            armci_hdl_t *handle;
+            handle = get_next_armci_handle(PUTS);
+            ARMCI_INIT_HANDLE(handle);
 
             ARMCI_NbPutS(src, src_strides, remote_dest, dest_strides,
-                         count, stride_levels, proc, &handle);
+                         count, stride_levels, proc, handle);
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
                          " to %p on image %lu. ", remote_dest, proc + 1);
 
-            in_progress = (ARMCI_Test(&handle) == 0);
+            in_progress = (ARMCI_Test(handle) == 0);
 
             if (in_progress == 1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
-                memcpy(&handle_node->handle, &handle, sizeof(armci_hdl_t));
+                handle_node->handle = handle;
                 handle_node->next = 0;
 
                 if (hdl != NULL)

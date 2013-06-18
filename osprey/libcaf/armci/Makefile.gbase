@@ -35,9 +35,17 @@
 LIBRARY = libcaf-armci.a
 TARGETS = $(LIBRARY)
 SRC_DIRS    = $(BUILD_BASE)
+dso_version := 1
+DSO = libcaf-armci.so.$(dso_version)
 
 # Makefile setup
 include $(COMMONDEFS)
+
+ifeq ($(BUILD_TYPE), NONSHARED)
+TARGETS = $(LIBRARY)
+else
+TARGETS = $(LIBRARY) $(DSO)
+endif
 
 VPATH    =  $(SRC_DIRS)
 
@@ -79,5 +87,13 @@ default: $(TARGETS)
 
 $(LIBRARY): $(OBJECTS)
 	$(ar) cru $@ $^
+
+$(DSO): $(OBJECTS:%.o=%.pg.o)
+ifeq ($(BUILD_OS), DARWIN)
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -o $@ $^
+else
+	$(ld) $(STD_DSO_LOADOPTS) -Wl,-x -Wl,-soname=$(DSO) -o $@ $^
+endif
+	$(ln) -sf $(DSO) $(basename $(DSO))
 
 include $(COMMONRULES)

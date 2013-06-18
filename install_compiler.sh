@@ -476,15 +476,19 @@ INSTALL_CAF_LIB () {
     #install cafrun script
     INSTALL_EXEC_SUB osprey/scripts/cafrun ${BIN_DIR}/cafrun
     chmod +x ${BIN_DIR}/uhcaf ${BIN_DIR}/cafrun
-  
+
     if [ "$TARG_HOST" = "ia64" ] ; then
     LIBAREA="osprey/targdir_lib"
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a     ${PHASEPATH}/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/libcaf-armci.so.1
+        (cd ${PHASEPATH}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
         gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
-          lib_name=libcaf-gasnet-$gasnet_conduit.a
-          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/$lib_name
+          lib_name=libcaf-gasnet-$gasnet_conduit
+          INSTALL_DATA_SUB ${gb}/$lib_name.a   ${PHASEPATH}/$lib_name.a
+          INSTALL_DATA_SUB ${gb}/$lib_name.so.1   ${PHASEPATH}/$lib_name.so.1
+          (cd ${PHASEPATH}; ln -sf $lib_name.so.1 $lib_name.so)
         done
     elif [ "$TARG_HOST" = "ppc32" ] ; then
     LIBAREA="osprey/targdir_lib"
@@ -494,22 +498,30 @@ INSTALL_CAF_LIB () {
     LIB32AREA="osprey/targdir_lib"
         # 64bit libraries
         INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.a    ${PHASEPATH}/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIBAREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/libcaf-armci.so.1
+        (cd ${PHASEPATH}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
         gasnet_builds=`ls -d ${LIBAREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
-          lib_name=libcaf-gasnet-$gasnet_conduit.a
-          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/$lib_name
+          lib_name=libcaf-gasnet-$gasnet_conduit
+          INSTALL_DATA_SUB ${gb}/$lib_name.a   ${PHASEPATH}/$lib_name.a
+          INSTALL_DATA_SUB ${gb}/$lib_name.so.1   ${PHASEPATH}/$lib_name.so.1
+          (cd ${PHASEPATH}; ln -sf $lib_name.so.1 $lib_name.so)
         done
 
         # 32bit libraries
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/32/libcaf-armci.so.1
+        (cd ${PHASEPATH/32}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
         gasnet_builds=`ls -d ${LIB32AREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
-          lib_name=libcaf-gasnet-$gasnet_conduit.a
-          INSTALL_DATA_SUB ${gb}/$lib_name   ${PHASEPATH}/32/$lib_name
+          lib_name=libcaf-gasnet-$gasnet_conduit
+          INSTALL_DATA_SUB ${gb}/$lib_name.a   ${PHASEPATH}/32/$lib_name.a
+          INSTALL_DATA_SUB ${gb}/$lib_name.so.1 ${PHASEPATH}/32/$lib_name.so.1
+          (cd ${PHASEPATH/32}; ln -sf $lib_name.so.1 $lib_name.so)
         done
-    fi 
+    fi
 }
 
 # Install the CAF Extra library

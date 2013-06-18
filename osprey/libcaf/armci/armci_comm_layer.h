@@ -39,7 +39,7 @@ typedef enum {
 } access_type_t;
 
 struct handle_list {
-    armci_hdl_t handle;
+    armci_hdl_t *handle;
     void *address;
     void *local_buf;
     unsigned long size;
@@ -49,12 +49,19 @@ struct handle_list {
     struct handle_list *next;
 };
 
+typedef struct armci_handle_x {
+    armci_hdl_t handle;
+    struct armci_handle_x *next;
+} armci_handle_x_t;
+
 struct nb_handle_manager {
     struct handle_list **handles;
     unsigned long num_handles;
     void **min_nb_address;
     void **max_nb_address;
+    armci_handle_x_t *free_armci_handles;
 };
+
 
 /* GET CACHE OPTIMIZATION */
 struct cache {

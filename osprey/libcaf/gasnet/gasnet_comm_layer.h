@@ -80,20 +80,6 @@ typedef enum {
 } memory_segment_type;
 
 
-/* NON-BLOCKING PUT OPTIMIZATION */
-struct write_handle_list {
-    gasnet_handle_t handle;
-    void *address;
-    void *local_buf;
-    unsigned long size;
-    struct write_handle_list *prev;
-    struct write_handle_list *next;
-};
-struct local_buffer {
-    void *addr;
-    struct local_buffer *next;
-};
-
 typedef enum {
     PUTS = 0,
     GETS = 1

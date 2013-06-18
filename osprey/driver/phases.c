@@ -3144,6 +3144,34 @@ run_ld (void)
 	      init_stdc_plus_plus_path(!option_was_seen(O_static));
 	    }
 	}
+#ifdef _UH_COARRAYS
+    if (coarray == TRUE && ipa != TRUE) {
+        char *linker_args;
+        char *linker = getenv("OPENUH_CAF_EXT_LINKER");
+        if (linker != NULL) {
+            ldpath = linker;
+            /* add any thing after first space to args */
+            if (has_blank(ldpath)) {
+                char *p;
+                for (p = ldpath; *p != 0; p++) {
+                    if (*p == ' ') {
+                        *p = '\0';
+                        p++;
+                        break;
+                    }
+                }
+                add_multi_strings(args, p, FALSE);
+            }
+        } else {
+            ldpath = get_full_phase_name(ldphase);
+        }
+
+        linker_args = getenv("OPENUH_CAF_EXT_LINKER_ARGS");
+        if (linker_args != NULL) {
+            add_multi_strings(args, linker_args, FALSE);
+        }
+    } else
+#endif
 	ldpath = get_full_phase_name(ldphase);
 
 	/* for ld, we first have options, then files, then objects,
