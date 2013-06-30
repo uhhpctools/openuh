@@ -241,6 +241,12 @@ Process_Command_Line (INT argc, char **argv)
                   ErrMsg ( EC_Unknown_Flag, argv[i][0], argv[i] );
 		break;
 
+	    case 'u':
+        /* accept uhinstr flag without stopping */
+        if (strcmp (argv[i]+1, "uhinstr") != 0)
+		i = argc;	    /* stop processing */
+		break;
+
             default:     /* What's this? */
                 ErrMsg ( EC_Unknown_Flag, argv[i][0], argv[i] );
                 break;

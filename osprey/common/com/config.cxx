@@ -1000,7 +1000,7 @@ ofstream cfg_file;
 /* UH additional flags */
 BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
 BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
-BOOL Epilog_Flag = FALSE;
+BOOL Use_UH_Instrumentation = FALSE;
 #ifdef _UH_COARRAYS
 BOOL Enable_Coarray = FALSE; /* -deepak */
 #endif

@@ -111,6 +111,7 @@ boolean expand_ftpp_macros = TRUE;	// bug 2258
 int     fortran_line_length = 72; /* Fortran line length */
 char roundoff=0;
 extern boolean Epilog_Flag;
+extern boolean Use_UH_Instrumentation;
 boolean nocpp_flag = FALSE;
 #ifdef DRAGON
 extern boolean Dragon_Flag;     /* Lei Huang 10/24/02 */
@@ -2762,64 +2763,85 @@ check_existence_of_phases (void)
 static void
 add_instr_archive (string_list_t* args)
 {
-  extern int profile_type;
+    extern int profile_type;
 
-  /* Add instrumentation archives */
-  if (instrumentation_invoked != UNDEFINED && instrumentation_invoked) {
+    /* Add instrumentation archives */
+    if (instrumentation_invoked != UNDEFINED && instrumentation_invoked) {
 
-    unsigned long f = WHIRL_PROFILE | CG_EDGE_PROFILE | CG_VALUE_PROFILE |
-      CG_STRIDE_PROFILE ;
-    if (!(profile_type & ~f)) {
-      if (profile_type & (CG_EDGE_PROFILE |
-			  CG_VALUE_PROFILE | CG_STRIDE_PROFILE)) {
-	add_library (args,"cginstr");
-      }
+        unsigned long f = WHIRL_PROFILE | CG_EDGE_PROFILE | CG_VALUE_PROFILE |
+            CG_STRIDE_PROFILE ;
+        if (!(profile_type & ~f)) {
+            if (profile_type & (CG_EDGE_PROFILE |
+                        CG_VALUE_PROFILE | CG_STRIDE_PROFILE)) {
+                add_library (args,"cginstr");
+            }
 
-      #ifndef TAU_INSTRUMENT
-        add_library(args, "instr");
-      #endif /*TAU_INSTRUMENT*/
 
-           if (profile_type & WHIRL_PROFILE) {
-              if (!Epilog_Flag) {
-               add_library (args, "instr");
-              }
-              else
-              {   char buff[300];
-                  char buff2[300];
-                  tau_path = getenv("TAU_ROOT");
-                  papi_path =getenv("PAPI_ROOT");
-             //     add_string(args,"/home/oscarh/local/lib/libpfm.a");
-             //     add_library(args,"epilog");
-             //     add_string(args,"/home/oscarh/local/lib/libpfm.a");
-             //     add_string(args,"/home/oscarh/local/lib/libpapi.a");
-               //   strcpy(buff,"-L");
-               //   strcat(buff,papi_path);
-               //   strcat(buff,"/lib");
+            if (profile_type & WHIRL_PROFILE) {
+                if (!Use_UH_Instrumentation)
+                    add_library(args, "instr");
+#ifdef BUILD_LIBUHINSTR
+                else {
+                   /**************************************************
+                    * For now, user should explicitly link in libraries which
+                    * implement the UH Instrumentation API (e.g.
+                    *   -luhinstr -ltau-xxx -lpfm -lpapi )
+                    **************************************************/
 
-                //  add_string(args,buff);
-                 // add_library (args,"pfm");
-                //  add_library (args,"papi");
+                   char *use_libuhinstr = getenv("OPENUH_USE_LIBUHINSTR");
+                   if (use_libuhinstr != NULL &&
+                        ((strcmp(use_libuhinstr, "yes") == 0) ||
+                        (strcmp(use_libuhinstr, "YES") == 0)))
+                   {
+                       add_library(args, "uhinstr");
+                       char *tau_libs = getenv("OPENUH_TAU_LIBS");
+                       if (tau_libs != NULL) {
+                           add_multi_strings(args, tau_libs, FALSE);
+                       } else {
+                           add_multi_strings(args, TAU_LIBS, FALSE);
+                       }
+                   }
 
-                 // strcpy(buff2,"-L");
-                 // strcat(buff2,tau_path);
-                 // strcat(buff2,"/ia64/lib");
 
-                 // add_string(args,buff2);
-               //  add_string(args,"/home/oscarh/local/tau/ia64/lib/libtau-callpath-linuxtimers-papiwallclock-multiplecounters-papivirtual-orcc-mpi-compensate-papi-openmp-opari.a");
+                   /*
+                   char buff[300];
+                   char buff2[300];
+                   tau_path = getenv("TAU_ROOT");
+                   papi_path =getenv("PAPI_ROOT");
 
-              }
+                   add_string(args,"/home/oscarh/local/lib/libpfm.a");
+                   add_library(args,"epilog");
+                   add_string(args,"/home/oscarh/local/lib/libpfm.a");
+                   add_string(args,"/home/oscarh/local/lib/libpapi.a");
+                   strcpy(buff,"-L");
+                   strcat(buff,papi_path);
+                   strcat(buff,"/lib");
+
+                   add_string(args,buff);
+                   add_library (args,"pfm");
+                   add_library (args,"papi");
+
+                   strcpy(buff2,"-L");
+                   strcat(buff2,tau_path);
+                   strcat(buff2,"/ia64/lib");
+
+                   add_string(args,buff2);
+                   add_string(args,"/home/oscarh/local/tau/ia64/lib/libtau-callpath-linuxtimers-papiwallclock-multiplecounters-papivirtual-orcc-mpi-compensate-papi-openmp-opari.a");
+                   */
+               }
+#endif
 
             }
-     add_library (args, "stdc++");
+            add_library (args, "stdc++");
 
 #ifndef TARG_IA64
-      if (!option_was_seen(O_static))
-	add_libgcc_s (args);
+            if (!option_was_seen(O_static))
+                add_libgcc_s (args);
 #endif
-    } else {
-      fprintf (stderr, "Unknown profile types %#lx\n", profile_type & ~f);
+        } else {
+            fprintf (stderr, "Unknown profile types %#lx\n", profile_type & ~f);
+        }
     }
-  }
 }
 
 

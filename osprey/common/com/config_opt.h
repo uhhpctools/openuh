@@ -200,8 +200,6 @@ extern BOOL Instrumentation_Gotos;
 extern BOOL Instrumentation_Multiplies;
 extern BOOL Instrumentation_Reminder_Division_Modulus;
 extern BOOL Instrumentation_All;
-extern BOOL Instrumentation_Tau;
-extern BOOL Instrumentation_Epilog;
 extern INT32 Instrumentation_Nesting_Level;
 #ifdef KEY
 extern INT32 OPT_Cyg_Instrument;

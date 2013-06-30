@@ -78,6 +78,7 @@
 #include "wn_lower.h"
 #include "wn_fio.h"
 #include "wn_instrument.h"
+#include "wn_uhinstrument.h"
 #include "driver_util.h"
 #include "comp_decl.h"
 
@@ -115,7 +116,7 @@ extern BOOL Dragon_Flag;        /* Lei Huang 09/16/02 */
 extern BOOL Dragon_CFG_Phase;   /* Lei Huang 10/23/02 */
 #endif
 
-extern BOOL Epilog_Flag;
+extern BOOL Use_UH_Instrumentation;
 
 #ifdef _UH_COARRAYS
 extern BOOL Enable_Coarray;
@@ -299,7 +300,10 @@ Process_Command_Line (INT argc, char **argv)
 			Feedback_File_Name = cp + 2;
 			break;
 		    case 'i':
-			Set_Instrumentation_File_Name(cp + 2);
+            if (!Use_UH_Instrumentation)
+                Set_Instrumentation_File_Name(cp + 2);
+            else
+                Set_UH_Instrumentation_File_Name(cp + 2);
 			break;
 		    case 'o':
 			Obj_File_Name = cp + 2;
@@ -329,11 +333,11 @@ Process_Command_Line (INT argc, char **argv)
 		    case 'G':	    /* WHIRL file */
 			Global_File_Name = cp + 2;
 			break;
-#ifdef TAU_INSTRUMENT
-                    case 'z':
-                        Set_Selective_Instrumentation_File_Name(cp + 2);
-                        break;
-#endif /*TAU_INSTRUMENT*/
+
+            case 'z':
+            if (Use_UH_Instrumentation)
+                Set_UH_Selective_Instrumentation_File_Name(cp + 2);
+            break;
 
 		    default:
 			ErrMsg ( EC_File_Flag, *cp, argv[i] );
@@ -395,8 +399,6 @@ Process_Command_Line (INT argc, char **argv)
 		if (!strcmp( cp, "xceptions" )) {
 		  CXX_Exceptions_On = TRUE;
 		}
-                else if (strcmp (cp, "pilog") == 0)
-                    Epilog_Flag = TRUE;
 		else {
 		  ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );
 		}
@@ -468,6 +470,16 @@ Process_Command_Line (INT argc, char **argv)
 		} else 
 		  ErrMsg (EC_Unknown_Flag, *(cp-1), argv[i]); 
                 break;
+
+	    case 'u':
+		if (!strcmp( cp, "hinstr" )) {
+		  Use_UH_Instrumentation = TRUE;
+		}
+		else {
+		  ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );
+		}
+
+		break;
               
 	    default:		    /* What's this? */
 		ErrMsg ( EC_Unknown_Flag, *(cp-1), argv[i] );

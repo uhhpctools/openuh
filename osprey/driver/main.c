@@ -123,6 +123,8 @@ boolean link_with_mathlib;
 #endif
 
 boolean Epilog_Flag;
+boolean Use_UH_Instrumentation;
+
 const char compiler_version[] = INCLUDE_STAMP;
 static void set_executable_dir (void);
 
@@ -241,8 +243,8 @@ main (int argc, char *argv[])
             if(strcasecmp(argv[i],"-dragon") == 0)
                 warning("-dragon option is not supported. Configure using --enable-dragon-support");
 #endif
-            if(strcasecmp(argv[i],"-epilog") == 0)
-                Epilog_Flag = TRUE;
+            if(strcasecmp(argv[i],"-uhinstr") == 0)
+                Use_UH_Instrumentation = TRUE;
 			flag = get_option(&i, argv);
 			if (flag == O_Unrecognized) { 
 				if (print_warnings) {

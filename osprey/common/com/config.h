@@ -733,7 +733,7 @@ extern BOOL Dragon_CFG_Phase;   /* HL 11/12/03 */
 /* Laks: UH additional flags */
 extern BOOL UH_Autoscope_Flag; /* Laks 08/11/06 */
 extern BOOL UH_Apocost_Flag; /* Laks 08/11/06 */
-extern BOOL Epilog_Flag;
+extern BOOL Use_UH_Instrumentation;
 
 #ifdef _UH_COARRAYS
 extern BOOL Enable_Coarray; /* -deepak */

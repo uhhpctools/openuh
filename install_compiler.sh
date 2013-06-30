@@ -396,7 +396,7 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
         # instrument archieves.
         INSTALL_DATA_SUB ${LIBAREA}/libcginstr/libcginstr.a  ${PHASEPATH}/libcginstr.a  
         INSTALL_DATA_SUB ${LIBAREA}/libinstr/libinstr.a      ${PHASEPATH}/libinstr.a 
-        INSTALL_DATA_SUB $d/libepilog/libepilog.a    ${PHASEPATH}/libepilog.a
+        INSTALL_DATA_SUB ${LIBAREA}/libuhinstr/libuhinstr.a ${PHASEPATH}/libuhinstr.a
 
 
         #  SGI implementation for turning on FLUSH to ZERO
@@ -424,6 +424,9 @@ INSTALL_PHASE_SPECIFIC_ARCHIVES () {
 
         INSTALL_DATA_SUB ${LIBAREA}/libinstr2/libinstr.a      ${PHASEPATH}/libinstr.a
         INSTALL_DATA_SUB ${LIB32AREA}/libinstr2/libinstr.a      ${PHASEPATH}/32/libinstr.a
+
+        INSTALL_DATA_SUB ${LIBAREA}/libuhinstr/libuhinstr.a ${PHASEPATH}/libuhinstr.a
+        INSTALL_DATA_SUB ${LIB32AREA}/libuhinstr/libuhinstr.a ${PHASEPATH}/32/libuhinstr.a
 
         INSTALL_DATA_SUB ${LIBAREA}/libopen64rt/libopen64rt.a      ${PHASEPATH}/libopen64rt.a
         INSTALL_DATA_SUB ${LIB32AREA}/libopen64rt/libopen64rt.a      ${PHASEPATH}/32/libopen64rt.a

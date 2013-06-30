@@ -90,6 +90,11 @@ LCDEFS += -DOPEN64_BUILD_DATE='$(psc_build_date)'
 # Remove the following line to disable the PathScale subscription checking software
 LCDEFS += -DOPSCSUB
 
+ifeq ($(BUILD_LIBUHINSTR), YES)
+LCDEFS += -DBUILD_LIBUHINSTR
+LCDEFS += -DTAU_ROOT=\"${TAU_ROOT}\" -DTAU_LIBS="\"${TAU_LIBS}\""
+endif
+
 ifeq ($(BUILD_HOST), IA32)
  ifeq ($(BUILD_VARIANT), NUE)
  # NUE is special environment built on ia32 but looks like ia64
