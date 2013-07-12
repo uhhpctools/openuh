@@ -31,6 +31,7 @@
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "dopevec.h"
 #include "caf_rtl.h"
@@ -40,6 +41,7 @@
 
 #include "lock.h"
 #include "trace.h"
+#include "profile.h"
 
 
 extern int __ompc_init_rtl(int num_threads);
@@ -100,46 +102,61 @@ static void local_dest_strided_copy(void *src, void *dest,
 
 void __caf_init()
 {
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "entry");
+
     static int libcaf_initialized = 0;
     if (libcaf_initialized == 0)
         libcaf_initialized = 1;
     else
         return;
 
+    PROFILE_INIT();
+    PROFILE_FUNC_ENTRY(__caf_init, 0);
+
     common_slot = (struct shared_memory_slot *)
         malloc(sizeof(struct shared_memory_slot));
-    START_TIMER();
-    comm_init(common_slot);     /* common slot is initialized in comm_init */
-    STOP_TIMER(INIT);
 
-    LIBCAF_TRACE(LIBCAF_LOG_INIT, "initialized,"
-                 " num_images = %lu", _num_images);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_init ");
+    /* common slot is initialized in comm_init */
+    CALLSITE_TIMED_TRACE(INIT, INIT, comm_init, common_slot);
 
     /* initialize the openmp runtime library, if it exists */
     if (__ompc_init_rtl)
         __ompc_init_rtl(0);
+
+    PROFILE_FUNC_EXIT(__caf_init);
+
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "exit");
 }
 
 void __caf_finalize(int exit_code)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
+    PROFILE_FUNC_ENTRY(__caf_finalize, 0);
+
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time:");
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
-    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to comm_finalize");
-    comm_finalize(exit_code);
+
+    CALLSITE_TRACE(EXIT, comm_finalize, exit_code);
+
+    PROFILE_FUNC_EXIT(__caf_finalize);
+
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
 
     /* does not reach */
 }
 
 void __target_alloc(unsigned long buf_size, void **ptr)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     *ptr = coarray_asymmetric_allocate_(buf_size);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "allocated target %p of size %lu",
                  *ptr, buf_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void *__target_alloc2(unsigned long buf_size, void *orig_ptr)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     void *ret_ptr;
 
     if (comm_address_in_shared_mem(orig_ptr))
@@ -149,115 +166,165 @@ void *__target_alloc2(unsigned long buf_size, void *orig_ptr)
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "allocated target %p of size %lu",
                  ret_ptr, buf_size);
 
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return ret_ptr;
 }
 
 void __target_dealloc(void **ptr)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     coarray_asymmetric_deallocate_(*ptr);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "freed target %p", *ptr);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 
 void __acquire_lcb(unsigned long buf_size, void **ptr)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     *ptr = comm_lcb_malloc(buf_size);
+
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "acquired lcb %p of size %lu",
                  *ptr, buf_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void __release_lcb(void **ptr)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     comm_lcb_free(*ptr);
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "freed lcb %p", *ptr);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void __coarray_sync(comm_handle_t hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(__coarray_sync, 0);
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_sync with hdl=%p",
                  hdl);
-    START_TIMER();
-    comm_sync(hdl);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync");
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync, hdl);
+
+    PROFILE_FUNC_EXIT(__coarray_sync);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void __coarray_nbread(size_t image, void *src, void *dest, size_t nbytes,
                       comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    PROFILE_FUNC_ENTRY(__coarray_nbread, 0);
+
+    PROFILE_RMA_LOAD_BEGIN(image, nbytes);
+
     check_remote_image(image);
 
     /* initialize to NULL */
     if (hdl)
         *hdl = NULL;
 
-    START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
-    comm_nbread(image - 1, src, dest, nbytes, hdl);
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src, dest,
+                         nbytes, hdl);
 
-    STOP_TIMER(READ);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_nbread ");
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Finished read from %p on Img %lu to %p"
-                 " data of size %lu ", src, image, dest, nbytes);
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_LOAD_END(image);
+    } else {
+        profile_save_nbload(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_nbread);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_read(size_t image, void *src, void *dest, size_t nbytes)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    PROFILE_FUNC_ENTRY(__coarray_read, 0);
+
+    PROFILE_RMA_LOAD_BEGIN(image, nbytes);
+
     check_remote_image(image);
 
-    START_TIMER();
     /* reads nbytes from src on proc 'image-1' into local dest */
-    comm_read(image - 1, src, dest, nbytes);
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src, dest,
+                         nbytes);
 
-    STOP_TIMER(READ);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read ");
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Finished read from %p on Img %lu to %p"
-                 " data of size %lu ", src, image, dest, nbytes);
+    PROFILE_RMA_LOAD_END(image);
+
+    PROFILE_FUNC_EXIT(__coarray_read);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_write_from_lcb(size_t image, void *dest, void *src,
                               size_t nbytes, int ordered,
                               comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(__coarray_write_from_lcb, 0);
+
+    PROFILE_RMA_STORE_BEGIN(image, nbytes);
+
     check_remote_image(image);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
         *hdl = NULL;
 
-    START_TIMER();
-    comm_write_from_lcb(image - 1, dest, src, nbytes, ordered, hdl);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_write_from_lcb ");
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb, image - 1, dest,
+                         src, nbytes, ordered, hdl);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Wrote to %p on Img %lu from %p data of"
-                 " size %lu, ordered = %d ", dest, image, src, nbytes,
-                 ordered);
+
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_STORE_END(image);
+    } else {
+        profile_save_nbstore(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_write_from_lcb);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_write(size_t image, void *dest, void *src,
                      size_t nbytes, int ordered, comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+    PROFILE_FUNC_ENTRY(__coarray_write, 0);
+
+    PROFILE_RMA_STORE_BEGIN(image, nbytes);
+
     check_remote_image(image);
 
     /* initialize to NULL */
     if (hdl && hdl != (void *) -1)
         *hdl = NULL;
 
-    START_TIMER();
-    comm_write(image - 1, dest, src, nbytes, ordered, hdl);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_write ");
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest, src,
+                         nbytes, ordered, hdl);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Wrote to %p on Img %lu from %p data of"
-                 " size %lu, ordered=%d ", dest, image, src, nbytes,
-                 ordered);
+
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_STORE_END(image);
+    } else {
+        profile_save_nbstore(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_write);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_strided_nbread(size_t image,
@@ -266,9 +333,14 @@ void __coarray_strided_nbread(size_t image,
                               const size_t count[], int stride_levels,
                               comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    PROFILE_FUNC_ENTRY(__coarray_strided_nbread, 0);
+
+    PROFILE_RMA_LOAD_STRIDED_BEGIN(image, stride_levels, count);
 
     check_remote_image(image);
 
@@ -287,34 +359,48 @@ void __coarray_strided_nbread(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_nbread(image, src, dest, nbytes, hdl);
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src,
+                                 dest, nbytes, hdl);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            __coarray_nbread(image, src, buf, nbytes, hdl);
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src,
+                                 buf, nbytes, hdl);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
             __release_lcb(&buf);
         }
 
+#ifdef PCAF_INSTRUMENT
+        if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+            PROFILE_RMA_LOAD_END(image);
+        } else {
+            profile_save_nbload(image);
+        }
+        profile_unset_in_prof_region();
+#endif
+        PROFILE_FUNC_EXIT(__coarray_strided_nbread);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* not reached */
     }
 
-    START_TIMER();
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Starting read(strided) "
-                 "from %p on Img %lu to %p using %d stride_levels ",
-                 src, image, dest, stride_levels);
-    comm_strided_nbread(image - 1, src, src_strides, dest, dest_strides,
-                        count, stride_levels, hdl);
-    STOP_TIMER(READ);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_nbread_strided ");
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_nbread, image - 1, src,
+                         src_strides, dest, dest_strides, count,
+                         stride_levels, hdl);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Finished read(strided) "
-                 "from %p on Img %lu to %p using %d stride_levels ",
-                 src, image, dest, stride_levels);
+
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_LOAD_END(image);
+    } else {
+        profile_save_nbload(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_strided_nbread);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_strided_read(size_t image,
@@ -322,9 +408,14 @@ void __coarray_strided_read(size_t image,
                             void *dest, const size_t dest_strides[],
                             const size_t count[], int stride_levels)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    PROFILE_FUNC_ENTRY(__coarray_strided_read, 0);
+
+    PROFILE_RMA_LOAD_STRIDED_BEGIN(image, stride_levels, count);
 
     check_remote_image(image);
 
@@ -339,34 +430,34 @@ void __coarray_strided_read(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_read(image, src, dest, nbytes);
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+                                 dest, nbytes);
         } else {
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            __coarray_read(image, src, buf, nbytes);
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+                                 buf, nbytes);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
             __release_lcb(&buf);
         }
 
+        PROFILE_RMA_LOAD_END(image);
+
+        PROFILE_FUNC_EXIT(__coarray_strided_read);
         return;
         /* not reached */
     }
 
-    START_TIMER();
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Starting read(strided) "
-                 "from %p on Img %lu to %p using %d stride_levels ",
-                 src, image, dest, stride_levels);
-    comm_strided_read(image - 1, src, src_strides, dest, dest_strides,
-                      count, stride_levels);
-    STOP_TIMER(READ);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_read_strided ");
+    CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_read, image - 1, src,
+                         src_strides, dest, dest_strides, count,
+                         stride_levels);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                 "Finished read(strided) "
-                 "from %p on Img %lu to %p using %d stride_levels ",
-                 src, image, dest, stride_levels);
+
+    PROFILE_RMA_LOAD_END(image);
+
+    PROFILE_FUNC_EXIT(__coarray_strided_read);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_strided_write_from_lcb(size_t image,
@@ -378,9 +469,14 @@ void __coarray_strided_write_from_lcb(size_t image,
                                       int stride_levels, int ordered,
                                       comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    PROFILE_FUNC_ENTRY(__coarray_strided_write_from_lcb, 0);
+
+    PROFILE_RMA_STORE_STRIDED_BEGIN(image, stride_levels, count);
 
     check_remote_image(image);
 
@@ -399,29 +495,50 @@ void __coarray_strided_write_from_lcb(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_write_from_lcb(image, dest, src, nbytes, ordered,
-                                     hdl);
+            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write_from_lcb,
+                                 image - 1, dest, src, nbytes, ordered,
+                                 hdl);
         } else {
             Error
                 ("local buffer for coarray_strided_write_from_lcb should be contiguous");
             /* should not reach */
         }
 
+#ifdef PCAF_INSTRUMENT
+        if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+            PROFILE_RMA_STORE_END(image);
+        } else {
+            profile_save_nbstore(image);
+        }
+        profile_unset_in_prof_region();
+#endif
+
+        PROFILE_FUNC_EXIT(__coarray_strided_write_from_lcb);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* not reached */
     }
 
-    START_TIMER();
-    comm_strided_write_from_lcb(image - 1, dest, dest_strides, src,
-                                src_strides, count, stride_levels,
-                                ordered, hdl);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_strided_write_from_lcb ");
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_strided_write_from_lcb,
+                         image - 1, dest, dest_strides, src, src_strides,
+                         count, stride_levels, ordered, hdl);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "Finished write(strided) to %p"
                  " on Img %lu from %p using stride_levels %d, ordered=%d",
                  dest, image, src, stride_levels, ordered);
+
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_STORE_END(image);
+    } else {
+        profile_save_nbstore(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_strided_write_from_lcb);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void __coarray_strided_write(size_t image,
@@ -433,9 +550,14 @@ void __coarray_strided_write(size_t image,
                              int stride_levels, int ordered,
                              comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     int remote_is_contig = 0;
     int local_is_contig = 0;
     int i;
+
+    PROFILE_FUNC_ENTRY(__coarray_strided_write, 0);
+
+    PROFILE_RMA_STORE_STRIDED_BEGIN(image, stride_levels, count);
 
     check_remote_image(image);
 
@@ -454,7 +576,8 @@ void __coarray_strided_write(size_t image,
             nbytes = nbytes * count[i];
 
         if (local_is_contig) {
-            __coarray_write(image, dest, src, nbytes, ordered, hdl);
+            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest,
+                                 src, nbytes, ordered, hdl);
         } else {
             Error
                 ("local buffer for coarray_strided_write "
@@ -462,20 +585,48 @@ void __coarray_strided_write(size_t image,
             /* should not reach ... */
         }
 
+#ifdef PCAF_INSTRUMENT
+        if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+            PROFILE_RMA_STORE_END(image);
+        } else {
+            profile_save_nbstore(image);
+        }
+        profile_unset_in_prof_region();
+#endif
+
+        PROFILE_FUNC_EXIT(__coarray_strided_write);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* not reached */
     }
 
-    START_TIMER();
-    comm_strided_write(image - 1, dest, dest_strides, src,
-                       src_strides, count, stride_levels, ordered, hdl);
-    STOP_TIMER(WRITE);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_write_strided ");
+    CALLSITE_TIMED_TRACE(COMM, WRITE, comm_strided_write, image - 1, dest,
+                         dest_strides, src, src_strides, count,
+                         stride_levels, ordered, hdl);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "Finished write(strided) to %p"
                  " on Img %lu from %p using stride_levels %d, ordered=%d ",
                  dest, image, src, stride_levels, ordered);
+
+#ifdef PCAF_INSTRUMENT
+    if (hdl == (void *) -1 || (hdl != NULL && *hdl == NULL)) {
+        PROFILE_RMA_STORE_END(image);
+    } else {
+        profile_save_nbstore(image);
+    }
+    profile_unset_in_prof_region();
+#endif
+
+    PROFILE_FUNC_EXIT(__coarray_strided_write);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+
+#pragma weak uhcaf_check_comms_ = uhcaf_check_comms
+void uhcaf_check_comms(void)
+{
+    comm_service();
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -536,11 +687,16 @@ void __coarray_strided_write(size_t image,
  * memory for allocatable coarrays */
 static struct shared_memory_slot *find_empty_shared_memory_slot_above
     (struct shared_memory_slot *slot, unsigned long var_size) {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     while (slot) {
-        if (slot->feb == 0 && slot->size >= var_size)
+        if (slot->feb == 0 && slot->size >= var_size) {
+            LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
             return slot;
+        }
         slot = slot->prev;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return 0;
 }
 
@@ -548,11 +704,15 @@ static struct shared_memory_slot *find_empty_shared_memory_slot_above
  * memory for assymetric coarrays */
 static struct shared_memory_slot *find_empty_shared_memory_slot_below
     (struct shared_memory_slot *slot, unsigned long var_size) {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     while (slot) {
-        if (slot->feb == 0 && slot->size >= var_size)
+        if (slot->feb == 0 && slot->size >= var_size) {
+            LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
             return slot;
+        }
         slot = slot->next;
     }
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return 0;
 }
 
@@ -560,6 +720,7 @@ static struct shared_memory_slot *find_empty_shared_memory_slot_below
  * for allocatable coarrays. Returns the memory address allocated */
 static void *split_empty_shared_memory_slot_from_top
     (struct shared_memory_slot *slot, unsigned long var_size) {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     struct shared_memory_slot *new_empty_slot;
     new_empty_slot = (struct shared_memory_slot *) malloc
         (sizeof(struct shared_memory_slot));
@@ -573,6 +734,8 @@ static void *split_empty_shared_memory_slot_from_top
     slot->next = new_empty_slot;
     if (common_slot == slot)
         common_slot = new_empty_slot;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return slot->addr;
 }
 
@@ -581,6 +744,7 @@ static void *split_empty_shared_memory_slot_from_top
 static void *split_empty_shared_memory_slot_from_bottom
     (struct shared_memory_slot *slot, unsigned long var_size) {
     struct shared_memory_slot *new_full_slot;
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     new_full_slot = (struct shared_memory_slot *) malloc
         (sizeof(struct shared_memory_slot));
     new_full_slot->addr = slot->addr + slot->size - var_size;
@@ -590,6 +754,8 @@ static void *split_empty_shared_memory_slot_from_bottom
     new_full_slot->prev = slot;
     slot->size = slot->size - var_size;
     slot->next = new_full_slot;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return new_full_slot->addr;
 }
 
@@ -602,6 +768,8 @@ static void *split_empty_shared_memory_slot_from_bottom
 void *coarray_allocatable_allocate_(unsigned long var_size)
 {
     struct shared_memory_slot *empty_slot;
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     empty_slot = find_empty_shared_memory_slot_above(common_slot,
                                                      var_size);
     if (empty_slot == 0)
@@ -610,7 +778,7 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
              "Set environment variable %s or cafrun option for more space.",
              ENV_IMAGE_HEAP_SIZE);
 
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "caf_rtl.c:coarray_coarray_allocate"
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "caf_rtl.c:coarray_coarray_allocate"
                  "-> Found empty slot %p. About to split it from top.",
                  empty_slot->addr);
 
@@ -620,15 +788,20 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
         if (mem_info->max_heap_usage < current_size)
             mem_info->max_heap_usage = current_size;
     }
+    // implicit barrier in case of allocatable.
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_barrier_all);
 
-    comm_barrier_all();         // implicit barrier in case of allocatable.
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return empty_slot->addr;
     }
 
+    void *retval =
+        split_empty_shared_memory_slot_from_top(empty_slot, var_size);
 
-    return split_empty_shared_memory_slot_from_top(empty_slot, var_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+    return retval;
 }
 
 /* Memory allocation function for asymmetric data. It is invoked
@@ -639,6 +812,9 @@ void *coarray_allocatable_allocate_(unsigned long var_size)
 void *coarray_asymmetric_allocate_(unsigned long var_size)
 {
     struct shared_memory_slot *empty_slot;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
     if (empty_slot == 0)
@@ -658,10 +834,15 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
 
     if (empty_slot != common_slot && empty_slot->size == var_size) {
         empty_slot->feb = 1;
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return empty_slot->addr;
     }
-    return split_empty_shared_memory_slot_from_bottom(empty_slot,
-                                                      var_size);
+
+    void *retval = split_empty_shared_memory_slot_from_bottom(empty_slot,
+                                                              var_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+
+    return retval;
 }
 
 /* Memory allocation function for asymmetric data. It is invoked
@@ -672,6 +853,9 @@ void *coarray_asymmetric_allocate_(unsigned long var_size)
 void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
 {
     struct shared_memory_slot *empty_slot;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     empty_slot = find_empty_shared_memory_slot_below(common_slot,
                                                      var_size);
     if (empty_slot == 0) {
@@ -693,8 +877,12 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
         empty_slot->feb = 1;
         return empty_slot->addr;
     }
-    return split_empty_shared_memory_slot_from_bottom(empty_slot,
-                                                      var_size);
+
+    void *retval = split_empty_shared_memory_slot_from_bottom(empty_slot,
+                                                              var_size);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
+
+    return retval;
 }
 
 /* Static function called from coarray_deallocate.
@@ -703,11 +891,15 @@ void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size)
  * and above it. Used for finding slots containing allocatable coarrays*/
 static struct shared_memory_slot *find_shared_memory_slot_above
     (struct shared_memory_slot *slot, void *address) {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     while (slot) {
         if (slot->feb == 1 && slot->addr == address)
             return slot;
         slot = slot->prev;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return 0;
 }
 
@@ -717,11 +909,15 @@ static struct shared_memory_slot *find_shared_memory_slot_above
  * and below it. Used for finding slots containing asymmetric data*/
 static struct shared_memory_slot *find_shared_memory_slot_below
     (struct shared_memory_slot *slot, void *address) {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     while (slot) {
         if (slot->feb == 1 && slot->addr == address)
             return slot;
         slot = slot->next;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return 0;
 }
 
@@ -730,6 +926,8 @@ static struct shared_memory_slot *find_shared_memory_slot_below
  * common-slot, the common-slot points to the merged slot */
 static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     slot->prev->size = slot->prev->size + slot->size + slot->next->size;
     slot->prev->next = slot->next->next;
     if (slot->next->next)
@@ -738,13 +936,18 @@ static void join_3_shared_memory_slots(struct shared_memory_slot *slot)
         common_slot = slot->prev;
     comm_free(slot->next);
     comm_free(slot);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Static function called from empty_shared_memory_slot (used in dealloc).
  * Merge slot with the slot above it. If any of these slots is the
  * common-slot, the common-slot points to the merged slot */
-static void join_with_prev_shared_memory_slot
-    (struct shared_memory_slot *slot) {
+static void join_with_prev_shared_memory_slot(struct shared_memory_slot
+                                              *slot)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     slot->prev->size += slot->size;
     slot->prev->next = slot->next;
     if (slot->next)
@@ -752,13 +955,18 @@ static void join_with_prev_shared_memory_slot
     if (common_slot == slot)
         common_slot = slot->prev;
     comm_free(slot);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Static function called from empty_shared_memory_slot (used in dealloc).
  * Merge slot with the slot below it. If any of these slots is the
  * common-slot, the common-slot points to the merged slot */
-static void join_with_next_shared_memory_slot
-    (struct shared_memory_slot *slot) {
+static void join_with_next_shared_memory_slot(struct shared_memory_slot
+                                              *slot)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     struct shared_memory_slot *tmp;
     tmp = slot->next;
     slot->size += slot->next->size;
@@ -768,6 +976,8 @@ static void join_with_next_shared_memory_slot
     if (common_slot == tmp)
         common_slot = slot;
     comm_free(tmp);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Static function called from coarray_deallocate.
@@ -776,6 +986,8 @@ static void join_with_next_shared_memory_slot
  * 2) merge the slot with neighboring empty slots (if found) */
 static void empty_shared_memory_slot(struct shared_memory_slot *slot)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     slot->feb = 0;
     if (slot->prev && (slot->prev->feb == 0) && slot->next
         && (slot->next->feb == 0))
@@ -784,6 +996,8 @@ static void empty_shared_memory_slot(struct shared_memory_slot *slot)
         join_with_prev_shared_memory_slot(slot);
     else if (slot->next && (slot->next->feb == 0))
         join_with_next_shared_memory_slot(slot);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Memory deallocation function for allocatable coarrays and asymmetric
@@ -795,10 +1009,14 @@ static void empty_shared_memory_slot(struct shared_memory_slot *slot)
 void coarray_deallocate_(void *var_address)
 {
     struct shared_memory_slot *slot;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     slot = find_shared_memory_slot_above(common_slot, var_address);
-    if (slot)
-        comm_barrier_all();     //implicit barrier for allocatable
-    else
+    if (slot) {
+        // implicit barrier for allocatable
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_barrier_all);
+    } else
         slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
@@ -812,24 +1030,30 @@ void coarray_deallocate_(void *var_address)
     mem_info->current_heap_usage -= slot->size;
 
     empty_shared_memory_slot(slot);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void coarray_asymmetric_deallocate_(void *var_address)
 {
     struct shared_memory_slot *slot;
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     slot = find_shared_memory_slot_below(common_slot, var_address);
     if (slot == 0) {
         LIBCAF_TRACE(LIBCAF_LOG_NOTICE, "Address%p not coarray.",
                      var_address);
         return;
     }
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "before deallocating %p.",
-                 var_address);
+
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG, "before deallocating %p.", var_address);
 
     /* update heap usage info if MEMORY_SUMMARY trace is enabled */
     mem_info->current_heap_usage -= slot->size;
 
     empty_shared_memory_slot(slot);
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Static function called from coarray_free_all_shared_memory_slots()
@@ -862,44 +1086,50 @@ static void free_next_slots_recursively(struct shared_memory_slot *slot)
  */
 void coarray_free_all_shared_memory_slots()
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     free_prev_slots_recursively(common_slot->prev);
     free_next_slots_recursively(common_slot);
 
     /* update heap usage info */
     mem_info->current_heap_usage = 0;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 /* Translate a remote address from a given image to the local address space
  */
 void coarray_translate_remote_addr(void **remote_addr, int image)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "(start) - "
                  "remote_addr: %p, image: %d ", *remote_addr, image);
 
-    comm_translate_remote_addr(remote_addr, image - 1);
+    CALLSITE_TRACE(COMM, comm_translate_remote_addr, remote_addr,
+                   image - 1);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM,
                  "(end) - "
                  "remote_addr: %p, image: %d ", *remote_addr, image);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
-
-#pragma weak uhcaf_check_comms_ = uhcaf_check_comms
-void uhcaf_check_comms(void)
-{
-    comm_service();
-}
 
 /* end shared memory management functions*/
 
 void __caf_exit(int status)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
+
     LIBCAF_TRACE(LIBCAF_LOG_TIME_SUMMARY, "Accumulated Time: ");
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY_SUMMARY, "\n\tHEAP USAGE: ");
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Exiting with error code %d", status);
-    comm_exit(status);
+
+    CALLSITE_TRACE(EXIT, comm_exit, status);
 
     /* does not reach */
 }
@@ -907,24 +1137,30 @@ void __caf_exit(int status)
 
 void _SYNC_ALL(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_barrier_all");
-    START_TIMER();
-    comm_sync_all(status, stat_len, errmsg, errmsg_len);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_all ");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_SYNC_ALL, 0);
 
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_all, status, stat_len,
+                         errmsg, errmsg_len);
+
+    PROFILE_FUNC_EXIT(_SYNC_ALL);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 /*************CRITICAL SUPPORT **************/
 
 void _CRITICAL()
 {
-    comm_critical();
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_critical);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _END_CRITICAL()
 {
-    comm_end_critical();
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_end_critical);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 /*************END CRITICAL SUPPORT **************/
@@ -936,28 +1172,33 @@ void _COARRAY_LOCK(lock_t * lock, const int *image, char *success,
 {
     int img;
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_lock");
-    START_TIMER();
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_COARRAY_LOCK, 0);
 
     if (*image == 0)
         img = _this_image;
     else
         img = *image;
 
-    comm_lock(lock, img, success, success_len, status, stat_len,
-              errmsg, errmsg_len);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_lock ");
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_lock");
+    if (success == NULL && status == NULL) {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_lock, lock, img, errmsg,
+                             errmsg_len);
+    } else {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_lock_stat, lock, img,
+                             success, success_len, status, stat_len,
+                             errmsg, errmsg_len);
+    }
+
+    PROFILE_FUNC_EXIT(_COARRAY_LOCK);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
                      int stat_len, char *errmsg, int errmsg_len)
 {
     int img;
-
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_unlock");
-    START_TIMER();
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_COARRAY_UNLOCK, 0);
 
     if (*image == 0)
         img = _this_image;
@@ -965,21 +1206,31 @@ void _COARRAY_UNLOCK(lock_t * lock, const int *image, int *status,
         img = *image;
 
 #if defined(GASNET)
-    comm_unlock(lock, img, status, stat_len, errmsg, errmsg_len);
+    if (status == NULL) {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock, lock, img, errmsg,
+                             errmsg_len);
+    } else {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock_stat, lock, img,
+                             status, stat_len, errmsg, errmsg_len);
+    }
 #elif defined(ARMCI)
-    /* the version uses fetch-and-store instead of compare-and-swap */
-    comm_unlock2(lock, img, status, stat_len, errmsg, errmsg_len);
+    /* this version uses fetch-and-store instead of compare-and-swap */
+    if (status == NULL) {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock2, lock, img, errmsg,
+                             errmsg_len);
+    } else {
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_unlock2_stat, lock, img,
+                             status, stat_len, errmsg, errmsg_len);
+    }
 #endif
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_unlock ");
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_lock");
+
+    PROFILE_FUNC_EXIT(_COARRAY_UNLOCK);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC,
-                 "before call to comm_write, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -989,16 +1240,16 @@ void _ATOMIC_DEFINE_1(atomic_t * atom, INT1 * value, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t), 1, (void *) -1);
+        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
+                       sizeof(atomic_t), 1, (void *) -1);
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_write, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1008,16 +1259,16 @@ void _ATOMIC_DEFINE_2(atomic_t * atom, INT2 * value, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t), 1, (void *) -1);
+        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
+                       sizeof(atomic_t), 1, (void *) -1);
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_write, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1027,16 +1278,16 @@ void _ATOMIC_DEFINE_4(atomic_t * atom, INT4 * value, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t), 1, (void *) -1);
+        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
+                       sizeof(atomic_t), 1, (void *) -1);
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_write, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1046,16 +1297,16 @@ void _ATOMIC_DEFINE_8(atomic_t * atom, INT8 * value, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_write(*image - 1, atom, &t, sizeof(atomic_t), 1, (void *) -1);
+        CALLSITE_TRACE(COMM, comm_write, *image - 1, atom, &t,
+                       sizeof(atomic_t), 1, (void *) -1);
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_write");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_read, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1065,17 +1316,17 @@ void _ATOMIC_REF_1(INT1 * value, atomic_t * atom, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
+                       sizeof(atomic_t));
         *value = (INT1) t;
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_read");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_read, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1085,17 +1336,17 @@ void _ATOMIC_REF_2(INT2 * value, atomic_t * atom, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
+                       sizeof(atomic_t));
         *value = (INT2) t;
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_read");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_read, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1105,17 +1356,17 @@ void _ATOMIC_REF_4(INT4 * value, atomic_t * atom, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
+                       sizeof(atomic_t));
         *value = (INT4) t;
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_read");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before call to comm_read, "
-                 "atom=%p, value=%p, image_idx=%d", atom, value, *image);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     if (*image == 0) {
         /* local reference */
@@ -1125,31 +1376,38 @@ void _ATOMIC_REF_8(INT8 * value, atomic_t * atom, int *image)
         check_remote_image(*image);
         check_remote_address(*image, atom);
         /* atomic variables are always of size sizeof(atomic_t) bytes. */
-        comm_read(*image - 1, atom, &t, sizeof(atomic_t));
+        CALLSITE_TRACE(COMM, comm_read, *image - 1, atom, &t,
+                       sizeof(atomic_t));
         *value = (INT8) t;
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "after call to comm_read");
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void _EVENT_POST(event_t * event, int *image)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     if (*image == 0) {
         /* local reference */
         event_t result, inc = 1;
-        comm_fadd_request(event, &inc, sizeof(event_t), _this_image - 1,
-                          &result);
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fadd_request, event, &inc,
+                             sizeof(event_t), _this_image - 1, &result);
     } else {
         event_t result, inc = 1;
         check_remote_image(*image);
         check_remote_address(*image, event);
-        comm_fadd_request(event, &inc, sizeof(event_t), *image - 1,
-                          &result);
+        CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_fadd_request, event, &inc,
+                             sizeof(event_t), *image - 1, &result);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     memset(state, 0, state_len);
     if (*image == 0) {
         *state = (int) (*event) != 0;
@@ -1158,16 +1416,20 @@ void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
         check_remote_address(*image, event);
         switch (state_len) {
         case 1:
-            _ATOMIC_REF_1((INT1 *) & state, event, image);
+            CALLSITE_TIMED_TRACE(SYNC, SYNC, _ATOMIC_REF_1,
+                                 (INT1 *) & state, event, image);
             break;
         case 2:
-            _ATOMIC_REF_2((INT2 *) & state, event, image);
+            CALLSITE_TIMED_TRACE(SYNC, SYNC, _ATOMIC_REF_2,
+                                 (INT2 *) & state, event, image);
             break;
         case 4:
-            _ATOMIC_REF_4((INT4 *) & state, event, image);
+            CALLSITE_TIMED_TRACE(SYNC, SYNC, _ATOMIC_REF_4,
+                                 (INT4 *) & state, event, image);
             break;
         case 8:
-            _ATOMIC_REF_8((INT8 *) & state, event, image);
+            CALLSITE_TIMED_TRACE(SYNC, SYNC, _ATOMIC_REF_8,
+                                 (INT8 *) & state, event, image);
             break;
         default:
             LIBCAF_TRACE(LIBCAF_LOG_FATAL, "_EVENT_QUERY called "
@@ -1175,11 +1437,17 @@ void _EVENT_QUERY(event_t * event, int *image, char *state, int state_len)
                          state_len);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _EVENT_WAIT(event_t * event, int *image)
 {
     event_t state;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    START_TIMER();
+
     if (*image == 0) {
         int done = 0;
         do {
@@ -1199,6 +1467,10 @@ void _EVENT_WAIT(event_t * event, int *image)
     } else {
         check_remote_image(*image);
         check_remote_address(*image, event);
+
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                     "suspending tracing while polling remote event");
+        LIBCAF_TRACE_SUSPEND();
         do {
             comm_read(*image - 1, event, &state, sizeof(event_t));
             if (state > 0) {
@@ -1217,35 +1489,44 @@ void _EVENT_WAIT(event_t * event, int *image)
             }
             comm_service();
         } while (1);
+        LIBCAF_TRACE_RESUME();
+        LIBCAF_TRACE(LIBCAF_LOG_NOTICE,
+                     "resuming tracing after polling remote event");
     }
+
+    STOP_TIMER(SYNC);
+
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "_EVENT_WAIT");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 
 void _SYNC_MEMORY(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "in sync memory");
-    START_TIMER();
-    comm_sync_memory(status, stat_len, errmsg, errmsg_len);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_memory");
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_SYNC_MEMORY, 0);
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_memory, status, stat_len,
+                         errmsg, errmsg_len);
+    PROFILE_FUNC_EXIT(_SYNC_MEMORY);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _SYNC_IMAGES(int images[], int image_count, int *status, int stat_len,
                   char *errmsg, int errmsg_len)
 {
     int i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_SYNC_IMAGES, 0);
     for (i = 0; i < image_count; i++) {
-        LIBCAF_TRACE(LIBCAF_LOG_SYNC,
-                     "call to comm_sync_images for sync with img%d",
-                     images[i]);
         check_remote_image(images[i]);
         images[i];
     }
-    START_TIMER();
-    comm_sync_images(images, image_count, status, stat_len, errmsg,
-                     errmsg_len);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_images");
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, images, image_count,
+                         status, stat_len, errmsg, errmsg_len);
+
+    PROFILE_FUNC_EXIT(_SYNC_IMAGES);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
@@ -1254,18 +1535,21 @@ void _SYNC_IMAGES_ALL(int *status, int stat_len, char *errmsg,
     int i;
     int image_count = _num_images;
     int *images;
-    LIBCAF_TRACE(LIBCAF_LOG_SYNC,
-                 "before call to comm_sync_images for sync with all images");
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+    PROFILE_FUNC_ENTRY(_SYNC_IMAGES_ALL, 0);
+
     images = (int *) comm_malloc(_num_images * sizeof(int));
     for (i = 0; i < image_count; i++)
         images[i] = i + 1;
-    START_TIMER();
-    comm_sync_images(images, image_count, status, stat_len, errmsg,
-                     errmsg_len);
-    STOP_TIMER(SYNC);
-    LIBCAF_TRACE(LIBCAF_LOG_TIME, "comm_sync_image_all");
+
+    CALLSITE_TIMED_TRACE(SYNC, SYNC, comm_sync_images, images, image_count,
+                         status, stat_len, errmsg, errmsg_len);
 
     comm_free(images);
+
+    PROFILE_FUNC_EXIT(_SYNC_IMAGES_ALL);
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub)

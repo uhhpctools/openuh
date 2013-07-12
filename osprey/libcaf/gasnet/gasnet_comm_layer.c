@@ -87,6 +87,7 @@
 #include "service.h"
 #include "trace.h"
 #include "util.h"
+#include "profile.h"
 
 const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
 
@@ -97,6 +98,8 @@ const size_t SMALL_XFER_SIZE = 200;     /* size for which local mem copy would b
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern mem_usage_info_t *mem_info;
+
+extern int rma_prof_rid;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
@@ -252,9 +255,6 @@ static void local_strided_copy(void *src, const size_t src_strides[],
                                const size_t count[], size_t stride_levels);
 
 
-/*
- * Inline functions
- */
 /* must call comm_init() first */
 inline size_t comm_get_proc_id()
 {
@@ -267,50 +267,10 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
-static inline int address_in_symmetric_mem(void *addr)
-{
-    void *start_symm_mem;
-    void *end_symm_mem;
 
-    if (gasnet_everything)
-        return 1;
-
-    start_symm_mem = coarray_start_all_images[my_proc].addr;
-    end_symm_mem = common_slot->addr;
-
-    return (addr >= start_symm_mem && addr < end_symm_mem);
-}
-
-static inline int address_in_shared_mem(void *addr)
-{
-    void *start_shared_mem;
-    void *end_shared_mem;
-
-    if (gasnet_everything)
-        return 1;
-
-    start_shared_mem = coarray_start_all_images[my_proc].addr;
-    end_shared_mem = start_shared_mem + shared_memory_size;
-
-    return (addr >= start_shared_mem && addr < end_shared_mem);
-}
-
-int comm_address_in_shared_mem(void *addr)
-{
-    void *start_shared_mem;
-    void *end_shared_mem;
-
-    if (gasnet_everything)
-        return 1;
-
-    start_shared_mem = coarray_start_all_images[my_proc].addr;
-    end_shared_mem = start_shared_mem + shared_memory_size;
-
-    return (addr >= start_shared_mem && addr < end_shared_mem);
-}
-
-
-/* returns addresses ranges for shared heap */
+/**************************************************************
+ *       Shared (RMA) Memory Segment Address Ranges
+ **************************************************************/
 
 inline ssize_t comm_address_translation_offset(size_t proc)
 {
@@ -368,7 +328,7 @@ inline void *comm_end_symmetric_mem(size_t proc)
 inline void *comm_start_asymmetric_heap(size_t proc)
 {
     if (proc != my_proc) {
-        return get_remote_address(common_slot->addr, proc);
+        return comm_end_symmetric_mem(proc);
     } else {
         return (char *) common_slot->addr + common_slot->size;
     }
@@ -384,6 +344,48 @@ inline void *comm_end_shared_mem(size_t proc)
     return comm_start_shared_mem(proc) + shared_memory_size;
 }
 
+static inline int address_in_symmetric_mem(void *addr)
+{
+    void *start_symm_mem;
+    void *end_symm_mem;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_symm_mem = coarray_start_all_images[my_proc].addr;
+    end_symm_mem = common_slot->addr;
+
+    return (addr >= start_symm_mem && addr < end_symm_mem);
+}
+
+static inline int address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_shared_mem = coarray_start_all_images[my_proc].addr;
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
+}
+
+int comm_address_in_shared_mem(void *addr)
+{
+    void *start_shared_mem;
+    void *end_shared_mem;
+
+    if (gasnet_everything)
+        return 1;
+
+    start_shared_mem = coarray_start_all_images[my_proc].addr;
+    end_shared_mem = start_shared_mem + shared_memory_size;
+
+    return (addr >= start_shared_mem && addr < end_shared_mem);
+}
+
 
 static inline int remote_address_in_shared_mem(size_t proc, void *address)
 {
@@ -394,31 +396,9 @@ static inline int remote_address_in_shared_mem(size_t proc, void *address)
 }
 
 
-static inline void allocate_transfer_buf(void **buf, size_t siz)
-{
-    int r = posix_memalign(buf, GASNET_PAGESIZE, siz);
-    switch (r) {
-    case 0:
-        break;
-    case EINVAL:
-        Error("outside-shared-mem payload not aligned correctly");
-        /* not reached */
-        break;
-    case ENOMEM:
-        Error("no memory to allocate outside-shared-mem payload");
-        /* not reached */
-        break;
-    default:
-        Error("unknown error with outside-shared-mem-payload"
-              " (posix_memalign returned %d)", r);
-        /* not reached */
-        break;
-    }
-}
-
-
-/*************************************************************/
-/* start of handlers */
+/*************************************************************
+ *                    GASNET HANDLERS
+ *************************************************************/
 
 static gasnet_handlerentry_t handlers[] = {
     {GASNET_HANDLER_SYNC_REQUEST, handler_sync_request},
@@ -435,6 +415,14 @@ static gasnet_handlerentry_t handlers[] = {
 };
 
 static const int nhandlers = sizeof(handlers) / sizeof(handlers[0]);
+
+/* handler funtion for  sync images */
+static void handler_sync_request(gasnet_token_t token, int imageIndex)
+{
+    gasnet_hsl_lock(&sync_lock);
+    sync_images_flag[imageIndex]++;
+    gasnet_hsl_unlock(&sync_lock);
+}
 
 typedef struct {
     size_t nbytes;              /* size of read/write */
@@ -495,16 +483,6 @@ static void handler_get_reply(gasnet_token_t token, void *buf,
 
     *(pp->completed_addr) = 1;
 }
-
-
-/* handler funtion for  sync images */
-static void handler_sync_request(gasnet_token_t token, int imageIndex)
-{
-    gasnet_hsl_lock(&sync_lock);
-    sync_images_flag[imageIndex]++;
-    gasnet_hsl_unlock(&sync_lock);
-}
-
 
 /* the following handlers for atomic operations come mostly from the OpenSHMEM
  * implementation. Also, a single mutex is used, per image, for any atomic
@@ -569,6 +547,142 @@ handler_swap_reply(gasnet_token_t token,
 
 }
 
+typedef struct {
+    void *local_store;          /* sender saves here */
+    void *r_symm_addr;          /* recipient symmetric var */
+    volatile int completed;     /* transaction end marker */
+    volatile int *completed_addr;       /* addr of marker */
+    size_t nbytes;              /* how big the value is */
+    long long value;            /* value to be swapped */
+    long long cond;             /* conditional value */
+} cswap_payload_t;
+
+
+/*
+ * called by remote PE to do the swap.  Store new value if cond
+ * matches, send back old value in either case
+ */
+static void handler_cswap_request(gasnet_token_t token,
+                                  void *buf, size_t bufsiz,
+                                  gasnet_handlerarg_t unused)
+{
+    void *old;
+    cswap_payload_t *pp = (cswap_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        pp->value = SYNC_CSWAP((INT4 *) pp->r_symm_addr,
+                               (INT4) pp->cond, (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        pp->value = SYNC_CSWAP((INT8 *) pp->r_symm_addr,
+                               (INT8) pp->cond, (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        pp->value = SYNC_CSWAP((INT1 *) pp->r_symm_addr,
+                               (INT1) pp->cond, (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        pp->value = SYNC_CSWAP((INT2 *) pp->r_symm_addr,
+                               (INT2) pp->cond, (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_cswap_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+    /* return updated payload */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_CSWAP_REPLY, buf, bufsiz,
+                          unused);
+}
+
+/*
+ * called by swap invoker when old value returned by remote PE
+ * (same as swap_bak for now)
+ */
+static void
+handler_cswap_reply(gasnet_token_t token,
+                    void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    cswap_payload_t *pp = (cswap_payload_t *) buf;
+
+    /* save returned value */
+    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
+
+    LOAD_STORE_FENCE();
+
+    /* done it */
+    *(pp->completed_addr) = 1;
+
+}
+
+/*
+ * fetch/add
+ */
+
+typedef struct {
+    void *local_store;          /* sender saves here */
+    void *r_symm_addr;          /* recipient symmetric var */
+    volatile int completed;     /* transaction end marker */
+    volatile int *completed_addr;       /* addr of marker */
+    size_t nbytes;              /* how big the value is */
+    long long value;            /* value to be added & then return old */
+} fadd_payload_t;
+
+/*
+ * called by remote PE to do the fetch and add.  Store new value, send
+ * back old value
+ */
+static void
+handler_fadd_request(gasnet_token_t token,
+                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    long long old = 0;
+    long long plus = 0;
+    fadd_payload_t *pp = (fadd_payload_t *) buf;
+
+    if (pp->nbytes == sizeof(INT4)) {
+        pp->value = SYNC_FETCH_AND_ADD((INT4 *) pp->r_symm_addr,
+                                       (INT4) pp->value);
+    } else if (pp->nbytes == sizeof(INT8)) {
+        pp->value = SYNC_FETCH_AND_ADD((INT8 *) pp->r_symm_addr,
+                                       (INT8) pp->value);
+    } else if (pp->nbytes == sizeof(INT1)) {
+        pp->value = SYNC_FETCH_AND_ADD((INT1 *) pp->r_symm_addr,
+                                       (INT1) pp->value);
+    } else if (pp->nbytes == sizeof(INT2)) {
+        pp->value = SYNC_FETCH_AND_ADD((INT2 *) pp->r_symm_addr,
+                                       (INT2) pp->value);
+    } else {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "comm_fadd_request doesn't allow nbytes = %d",
+                     pp->nbytes);
+    }
+
+    /* return updated payload */
+    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FADD_REPLY, buf, bufsiz,
+                          unused);
+}
+
+/*
+ * called by fadd invoker when old value returned by remote PE
+ */
+static void
+handler_fadd_reply(gasnet_token_t token,
+                   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
+{
+    fadd_payload_t *pp = (fadd_payload_t *) buf;
+
+    /* save returned value */
+    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
+
+    LOAD_STORE_FENCE();
+
+    /* done it */
+    *(pp->completed_addr) = 1;
+
+}
+
+/***************************************************************
+ *                        ATOMICS
+ ***************************************************************/
+
 /*
  * perform the swap
  */
@@ -576,6 +690,8 @@ void
 comm_swap_request(void *target, void *value, size_t nbytes,
                   int proc, void *retval)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
 
@@ -659,73 +775,11 @@ comm_swap_request(void *target, void *value, size_t nbytes,
     memmove(retval, value, nbytes);
 
     free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
-typedef struct {
-    void *local_store;          /* sender saves here */
-    void *r_symm_addr;          /* recipient symmetric var */
-    volatile int completed;     /* transaction end marker */
-    volatile int *completed_addr;       /* addr of marker */
-    size_t nbytes;              /* how big the value is */
-    long long value;            /* value to be swapped */
-    long long cond;             /* conditional value */
-} cswap_payload_t;
-
-
-/*
- * called by remote PE to do the swap.  Store new value if cond
- * matches, send back old value in either case
- */
-static void handler_cswap_request(gasnet_token_t token,
-                                  void *buf, size_t bufsiz,
-                                  gasnet_handlerarg_t unused)
-{
-    void *old;
-    cswap_payload_t *pp = (cswap_payload_t *) buf;
-
-    if (pp->nbytes == sizeof(INT4)) {
-        pp->value = SYNC_CSWAP((INT4 *) pp->r_symm_addr,
-                               (INT4) pp->cond, (INT4) pp->value);
-    } else if (pp->nbytes == sizeof(INT8)) {
-        pp->value = SYNC_CSWAP((INT8 *) pp->r_symm_addr,
-                               (INT8) pp->cond, (INT8) pp->value);
-    } else if (pp->nbytes == sizeof(INT1)) {
-        pp->value = SYNC_CSWAP((INT1 *) pp->r_symm_addr,
-                               (INT1) pp->cond, (INT1) pp->value);
-    } else if (pp->nbytes == sizeof(INT2)) {
-        pp->value = SYNC_CSWAP((INT2 *) pp->r_symm_addr,
-                               (INT2) pp->cond, (INT2) pp->value);
-    } else {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "comm_cswap_request doesn't allow nbytes = %d",
-                     pp->nbytes);
-    }
-
-    /* return updated payload */
-    gasnet_AMReplyMedium1(token, GASNET_HANDLER_CSWAP_REPLY, buf, bufsiz,
-                          unused);
-}
-
-/*
- * called by swap invoker when old value returned by remote PE
- * (same as swap_bak for now)
- */
-static void
-handler_cswap_reply(gasnet_token_t token,
-                    void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
-{
-    cswap_payload_t *pp = (cswap_payload_t *) buf;
-
-    /* save returned value */
-    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
-
-    LOAD_STORE_FENCE();
-
-    /* done it */
-    *(pp->completed_addr) = 1;
-
-}
 
 /*
  * perform the conditional swap
@@ -734,6 +788,8 @@ void
 comm_cswap_request(void *target, void *cond, void *value,
                    size_t nbytes, int proc, void *retval)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
 
@@ -757,6 +813,7 @@ comm_cswap_request(void *target, void *cond, void *value,
                          nbytes);
         }
 
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
     }
 #if GASNET_PSHM
@@ -797,6 +854,7 @@ comm_cswap_request(void *target, void *cond, void *value,
         }
 
 
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
     }
 #endif
@@ -827,74 +885,10 @@ comm_cswap_request(void *target, void *cond, void *value,
     GASNET_BLOCKUNTIL(cp->completed);
 
     free(cp);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-/*
- * fetch/add
- */
-
-typedef struct {
-    void *local_store;          /* sender saves here */
-    void *r_symm_addr;          /* recipient symmetric var */
-    volatile int completed;     /* transaction end marker */
-    volatile int *completed_addr;       /* addr of marker */
-    size_t nbytes;              /* how big the value is */
-    long long value;            /* value to be added & then return old */
-} fadd_payload_t;
-
-/*
- * called by remote PE to do the fetch and add.  Store new value, send
- * back old value
- */
-static void
-handler_fadd_request(gasnet_token_t token,
-                     void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
-{
-    long long old = 0;
-    long long plus = 0;
-    fadd_payload_t *pp = (fadd_payload_t *) buf;
-
-    if (pp->nbytes == sizeof(INT4)) {
-        pp->value = SYNC_FETCH_AND_ADD((INT4 *) pp->r_symm_addr,
-                                       (INT4) pp->value);
-    } else if (pp->nbytes == sizeof(INT8)) {
-        pp->value = SYNC_FETCH_AND_ADD((INT8 *) pp->r_symm_addr,
-                                       (INT8) pp->value);
-    } else if (pp->nbytes == sizeof(INT1)) {
-        pp->value = SYNC_FETCH_AND_ADD((INT1 *) pp->r_symm_addr,
-                                       (INT1) pp->value);
-    } else if (pp->nbytes == sizeof(INT2)) {
-        pp->value = SYNC_FETCH_AND_ADD((INT2 *) pp->r_symm_addr,
-                                       (INT2) pp->value);
-    } else {
-        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
-                     "comm_fadd_request doesn't allow nbytes = %d",
-                     pp->nbytes);
-    }
-
-    /* return updated payload */
-    gasnet_AMReplyMedium1(token, GASNET_HANDLER_FADD_REPLY, buf, bufsiz,
-                          unused);
-}
-
-/*
- * called by fadd invoker when old value returned by remote PE
- */
-static void
-handler_fadd_reply(gasnet_token_t token,
-                   void *buf, size_t bufsiz, gasnet_handlerarg_t unused)
-{
-    fadd_payload_t *pp = (fadd_payload_t *) buf;
-
-    /* save returned value */
-    (void) memmove(pp->local_store, &(pp->value), pp->nbytes);
-
-    LOAD_STORE_FENCE();
-
-    /* done it */
-    *(pp->completed_addr) = 1;
-
-}
 
 /*
  * perform the fetch-and-add
@@ -903,6 +897,8 @@ void
 comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                   void *retval)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     check_remote_address(proc + 1, target);
 
@@ -926,6 +922,7 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                          nbytes);
         }
 
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
     }
 #if GASNET_PSHM
@@ -964,6 +961,7 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                          nbytes);
         }
 
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
     }
 #endif
@@ -990,30 +988,72 @@ comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
     GASNET_BLOCKUNTIL(p->completed);
 
     free(p);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void
 comm_fstore_request(void *target, void *value, size_t nbytes, int proc,
                     void *retval)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     long long old;
 
     memmove(&old, value, nbytes);
     comm_swap_request(target, value, nbytes, proc, retval);
     memmove(value, &old, nbytes);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
-/* end of handlers */
-/*************************************************************/
+/**************************************************************
+ *                Memory Copy Helper Routines
+ **************************************************************/
 
-void comm_service()
+/* naive implementation of strided copy
+ * TODO: improve by finding maximal blocksize
+ */
+static void local_strided_copy(void *src, const size_t src_strides[],
+                               void *dest, const size_t dest_strides[],
+                               const size_t count[], size_t stride_levels)
 {
-    GASNET_Safe(gasnet_AMPoll());
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    for (i = 1; i <= num_blks; i++) {
+        memcpy(dest_ptr, src_ptr, blk_size);
+        for (j = 1; j <= stride_levels; j++) {
+            if (i % cnt_strides[j])
+                break;
+            src_ptr -= (count[j] - 1) * src_strides[j - 1];
+            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+        }
+        src_ptr += src_strides[j - 1];
+        dest_ptr += dest_strides[j - 1];
+    }
 }
+
+/*****************************************************************
+ *                      INITIALIZATION
+ *****************************************************************/
 
 /*
- * INIT:
+ * comm_init:
  * 1) Initialize GASNet
  * 2) Allocate memory and initialize data-structures used for sync and
  *    non-blocking puts.
@@ -1068,6 +1108,8 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _num_images = num_procs;
 
     LIBCAF_TRACE_INIT();
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "after gasnet_init");
+
 
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
@@ -1260,59 +1302,21 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                  gasnet_everything, common_shared_memory_slot->addr,
                  common_shared_memory_slot->size);
 
-    comm_barrier_all();         /* barrier */
+    comm_barrier_all();
+
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "exit");
 }
 
-/*
- * End Init
- */
 
-/*
- * Static Functions for GET CACHE
- */
-
-/* naive implementation of strided copy
- * TODO: improve by finding maximal blocksize
- */
-static void local_strided_copy(void *src, const size_t src_strides[],
-                               void *dest, const size_t dest_strides[],
-                               const size_t count[], size_t stride_levels)
-{
-    int i, j;
-    size_t num_blks;
-    size_t cnt_strides[stride_levels + 1];
-    size_t blockdim_size[stride_levels];
-    void *dest_ptr = dest;
-    void *src_ptr = src;
-
-    /* assuming src_elem_size=dst_elem_size */
-    size_t blk_size = count[0];
-    num_blks = 1;
-    cnt_strides[0] = 1;
-    blockdim_size[0] = count[0];
-    for (i = 1; i <= stride_levels; i++) {
-        cnt_strides[i] = cnt_strides[i - 1] * count[i];
-        blockdim_size[i] = blk_size * cnt_strides[i];
-        num_blks *= count[i];
-    }
-
-    for (i = 1; i <= num_blks; i++) {
-        memcpy(dest_ptr, src_ptr, blk_size);
-        for (j = 1; j <= stride_levels; j++) {
-            if (i % cnt_strides[j])
-                break;
-            src_ptr -= (count[j] - 1) * src_strides[j - 1];
-            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
-        }
-        src_ptr += src_strides[j - 1];
-        dest_ptr += dest_strides[j - 1];
-    }
-}
-
+/*****************************************************************
+ *                      GET CACHE Support
+ *****************************************************************/
 
 static void refetch_all_cache()
 {
     int i;
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     for (i = 0; i < num_procs; i++) {
         if (cache_all_images[i]->remote_address) {
             cache_all_images[i]->handle =
@@ -1321,11 +1325,13 @@ static void refetch_all_cache()
                                    getCache_line_size);
         }
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get");
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 static void refetch_cache(size_t node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     if (cache_all_images[node]->remote_address) {
         cache_all_images[node]->handle =
             gasnet_get_nb_bulk(cache_all_images[node]->cache_line_address,
@@ -1333,13 +1339,15 @@ static void refetch_cache(size_t node)
                                cache_all_images[node]->remote_address,
                                getCache_line_size);
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get from image %lu",
-                 node + 1);
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 static void cache_check_and_get(size_t node, void *remote_address,
                                 size_t nbytes, void *local_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -1373,6 +1381,8 @@ static void cache_check_and_get(size_t node, void *remote_address,
                      " image %lu NOT found in cache.", remote_address,
                      node + 1);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
@@ -1384,6 +1394,8 @@ static void cache_check_and_get_strided(void *remote_src,
                                         const size_t count[],
                                         size_t stride_levels, size_t node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -1437,6 +1449,8 @@ static void cache_check_and_get_strided(void *remote_src,
                              src_strides, count, stride_levels);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
@@ -1444,6 +1458,8 @@ static void cache_check_and_get_strided(void *remote_src,
 static void update_cache(size_t node, void *remote_address,
                          size_t nbytes, void *local_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -1474,6 +1490,8 @@ static void update_cache(size_t node, void *remote_address,
                      " image %lu partially updated in cache (write conflict).",
                      remote_address, node + 1);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 static void update_cache_strided(void *remote_dest_address,
@@ -1483,6 +1501,8 @@ static void update_cache_strided(void *remote_dest_address,
                                  const size_t count[],
                                  unsigned int stride_levels, size_t node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -1517,12 +1537,15 @@ static void update_cache_strided(void *remote_dest_address,
         //make it invalid
         cache_all_images[node]->remote_address = 0;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
-/*
- * static functions for non-blocking PUT/GET
- */
+/*****************************************************************
+ *      Helper Routines for Non-blocking Support
+ *****************************************************************/
+
 static int address_in_nb_address_block(void *remote_addr,
                                        size_t proc, size_t size,
                                        access_type_t access_type)
@@ -1600,6 +1623,11 @@ static struct handle_list *get_next_handle(unsigned long proc,
     handle_node->local_buf = local_buf;
     handle_node->size = size;
     handle_node->proc = proc;
+#ifdef PCAF_INSTRUMENT
+    handle_node->rmaid = rma_prof_rid;
+#else
+    handle_node->rmaid = 0;
+#endif
     handle_node->access_type = access_type;
     handle_node->final_dest = NULL;
     handle_node->next = 0;      //Just in case there is a sync before the put
@@ -1625,8 +1653,6 @@ static void reset_min_nb_address(unsigned long proc,
             min_nb_address[proc] = handle_node->address;
         handle_node = handle_node->next;
     }
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
 }
 
 static void reset_max_nb_address(unsigned long proc,
@@ -1645,8 +1671,6 @@ static void reset_max_nb_address(unsigned long proc,
             max_nb_address[proc] = end_address;
         handle_node = handle_node->next;
     }
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
 }
 
 static void delete_node(unsigned long proc, struct handle_list *node,
@@ -1656,8 +1680,6 @@ static void delete_node(unsigned long proc, struct handle_list *node,
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
     struct handle_list **handles = nb_mgr[access_type].handles;
     void *node_address;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
 
     nb_mgr[access_type].num_handles--;
 
@@ -1706,6 +1728,8 @@ static void wait_on_pending_accesses(unsigned long proc,
                                      unsigned long size,
                                      access_type_t access_type)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     void **min_nb_address = nb_mgr[access_type].min_nb_address;
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
     struct handle_list **handles = nb_mgr[access_type].handles;
@@ -1716,9 +1740,6 @@ static void wait_on_pending_accesses(unsigned long proc,
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
         struct handle_list *node_to_delete;
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "conflict detected: %p, %ld, %p, %p", remote_address,
-                     size, min_nb_address[proc], max_nb_address[proc]);
         while (handle_node) {
             if (address_in_handle(handle_node, remote_address, size)) {
                 //gasnet_wait_syncnb(handle_node->handle);
@@ -1726,6 +1747,7 @@ static void wait_on_pending_accesses(unsigned long proc,
                 delete_node(proc, handle_node, access_type);
                 return;
             } else if (gasnet_try_syncnb(handle_node->handle) == GASNET_OK) {
+                PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
                 node_to_delete = handle_node;
                 handle_node = handle_node->next;
                 delete_node(proc, node_to_delete, access_type);
@@ -1734,20 +1756,21 @@ static void wait_on_pending_accesses(unsigned long proc,
             }
         }
     }
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "remote_address:%p, size:%lu "
-                 "min:%p, max:%p",
-                 remote_address, size,
-                 min_nb_address[proc], max_nb_address[proc]);
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
 {
     struct handle_list *handle_node, *node_to_delete;
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     handle_node = nb_mgr[PUTS].handles[proc];
     while (handle_node) {
         if (handle_node->handle != GASNET_INVALID_HANDLE)
             gasnet_wait_syncnb(handle_node->handle);
+        PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
         node_to_delete = handle_node;
         handle_node = handle_node->next;
         /* for puts */
@@ -1777,24 +1800,27 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
     nb_mgr[GETS].handles[proc] = 0;
     nb_mgr[GETS].min_nb_address[proc] = 0;
     nb_mgr[GETS].max_nb_address[proc] = 0;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static inline void wait_on_all_pending_accesses()
 {
     int i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     for (i = 0; i < num_procs; i++) {
         wait_on_all_pending_accesses_to_proc(i);
     }
+    gasnet_wait_syncnbi_all();
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 
-/*
- * End of static functions for non-blocking put
- */
-
-/*
- * Shared Memory Management
- */
+/*****************************************************************
+ *                  Shared Memory Management
+ ****************************************************************/
 
 /* It should allocate memory to all static coarrays/targets from the
  * pinned-down memory created during init */
@@ -1809,7 +1835,9 @@ void set_static_symm_data(void *base_address);
 
 void allocate_static_symm_data(void *base_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     set_static_symm_data(base_address);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 
@@ -1819,9 +1847,6 @@ void comm_translate_remote_addr(void **remote_addr, int proc)
     start_symm_mem = comm_start_symmetric_mem(proc);
     end_symm_mem = comm_end_symmetric_mem(proc);
 
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, "start_symm = %p, end_symm = %p, "
-                 "*remote_addr = %p", start_symm_mem, end_symm_mem,
-                 *remote_addr);
 
     /* subtract the offset if remote address falls within the symmetric memory
      * of the remote image
@@ -1857,9 +1882,6 @@ static void *get_remote_address(void *src, size_t proc)
             if (remote_start_address == (void *) 0) {
                 gasnet_get(&remote_start_address, proc,
                            &everything_heap_start, sizeof(void *));
-                LIBCAF_TRACE(LIBCAF_LOG_COMM,
-                             "Read image%lu allocatable base address%p",
-                             proc + 1, remote_start_address);
                 coarray_start_all_images[proc].addr = remote_start_address;
             }
             return remote_start_address + offset;
@@ -1870,23 +1892,14 @@ static void *get_remote_address(void *src, size_t proc)
     return coarray_start_all_images[proc].addr + offset;
 }
 
-/*
- * End Shared Memory Management
- */
-
-void comm_critical()
-{
-    comm_lock(critical_lock, 1, NULL, 0, NULL, 0, NULL, 0);
-}
-
-void comm_end_critical()
-{
-    comm_unlock(critical_lock, 1, NULL, 0, NULL, 0);
-}
-
+/****************************************************************
+ *                         FINALIZATION
+ ****************************************************************/
 
 void comm_memory_free()
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     if (gasnet_everything)
         comm_free(coarray_start_all_images[my_proc].addr);
 
@@ -1914,13 +1927,14 @@ void comm_memory_free()
         comm_free(cache_all_images);
     }
 
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished.");
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 
 void comm_finalize(int exit_code)
 {
     int p;
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
     comm_service();
 
@@ -1945,6 +1959,7 @@ void comm_finalize(int exit_code)
 
     comm_service_finalize();
 
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
     gasnet_exit(exit_code);
 
     /* does not reach */
@@ -1953,6 +1968,7 @@ void comm_finalize(int exit_code)
 void comm_exit(int status)
 {
     int p;
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
     comm_service();
 
@@ -1976,15 +1992,44 @@ void comm_exit(int status)
                  " with status %d.", status);
 
     comm_service_finalize();
+
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
     gasnet_exit(status);
+}
+
+/***************************************************************
+ *                      SYNCHRONIZATION
+ ***************************************************************/
+
+/* TODO: Right now, for every critical section we simply acquire a mutex on
+ * process 0. Instead, we should define a mutex for each critical section in
+ * order to allow execution of different critical sections at the same time.
+ */
+
+void comm_critical()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    comm_lock(critical_lock, 1, NULL, 0);
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+void comm_end_critical()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    comm_unlock(critical_lock, 1, NULL, 0);
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 
 void comm_barrier_all()
 {
-    unsigned long i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     wait_on_all_pending_accesses();
-    gasnet_wait_syncnbi_all();
     gasnet_barrier_notify(barcount, barflag);
     gasnet_barrier_wait(barcount, barflag);
 
@@ -1992,11 +2037,15 @@ void comm_barrier_all()
         refetch_all_cache();
 
     barcount += 1;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 static inline void sync_on_handle(struct handle_list *hdl)
 {
     gasnet_wait_syncnb(hdl->handle);
+
+    PROFILE_COMM_HANDLE_END((comm_handle_t) hdl);
 
     if (hdl->access_type == GETS && hdl->final_dest != NULL) {
         /* assume if final_dest isn't NULL that destination buffer is
@@ -2008,11 +2057,10 @@ static inline void sync_on_handle(struct handle_list *hdl)
 
 void comm_sync(comm_handle_t hdl)
 {
-    unsigned long i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
-        gasnet_wait_syncnbi_all();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
         //gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
@@ -2022,11 +2070,12 @@ void comm_sync(comm_handle_t hdl)
                     ((struct handle_list *) hdl)->access_type);
     }
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
-    unsigned long i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -2038,7 +2087,6 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 
     wait_on_all_pending_accesses();
 
-    gasnet_wait_syncnbi_all();
     LOAD_STORE_FENCE();
     if (status != NULL && *stopped_image_exists == 1) {
         *((INT2 *) status) = STAT_STOPPED_IMAGE;
@@ -2052,12 +2100,14 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
         refetch_all_cache();
 
     barcount += 1;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len)
 {
-    unsigned long i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -2069,13 +2119,12 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
 
     wait_on_all_pending_accesses();
 
-    gasnet_wait_syncnbi_all();
-
     if (enable_get_cache)
         refetch_all_cache();
 
     LOAD_STORE_FENCE();
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 
@@ -2085,6 +2134,8 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     int i, ret;
     int this_image;
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
         *((INT2 *) status) = STAT_SUCCESS;
@@ -2093,7 +2144,8 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         memset(errmsg, 0, (size_t) errmsg_len);
     }
 
-    gasnet_wait_syncnbi_all();
+    wait_on_all_pending_accesses();
+
     for (i = 0; i < image_count; i++) {
         int q = image_list[i] - 1;
         if (my_proc != q) {
@@ -2131,11 +2183,20 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         if (enable_get_cache)
             refetch_cache(q);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
+
+/***************************************************************
+ *                    Local memory allocations
+ ***************************************************************/
 
 void *comm_lcb_malloc(size_t size)
 {
     void *ptr;
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     ptr = coarray_asymmetric_allocate_if_possible_(size);
     if (!ptr) {
         if (size >= LARGE_COMM_BUF_SIZE) {
@@ -2150,13 +2211,19 @@ void *comm_lcb_malloc(size_t size)
         ptr = malloc(size);
         gasnet_resume_interrupts();
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return ptr;
 }
 
 void comm_lcb_free(void *ptr)
 {
-    if (!ptr)
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
+    if (!ptr) {
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
+    }
 
     if (ptr < coarray_start_all_images[my_proc].addr &&
         ptr >=
@@ -2169,6 +2236,8 @@ void comm_lcb_free(void *ptr)
            coarray_asymmetric_allocate_ */
         coarray_asymmetric_deallocate_(ptr);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void *comm_malloc(size_t size)
@@ -2191,8 +2260,32 @@ void comm_free(void *ptr)
     gasnet_resume_interrupts();
 }
 
+/***************************************************************
+ *           (out of segment) Read/Write Communication
+ ***************************************************************/
 
-/* 1-sided GET/PUT implementation */
+
+static inline void allocate_transfer_buf(void **buf, size_t siz)
+{
+    int r = posix_memalign(buf, GASNET_PAGESIZE, siz);
+    switch (r) {
+    case 0:
+        break;
+    case EINVAL:
+        Error("outside-shared-mem payload not aligned correctly");
+        /* not reached */
+        break;
+    case ENOMEM:
+        Error("no memory to allocate outside-shared-mem payload");
+        /* not reached */
+        break;
+    default:
+        Error("unknown error with outside-shared-mem-payload"
+              " (posix_memalign returned %d)", r);
+        /* not reached */
+        break;
+    }
+}
 
 static void
 comm_read_chunk_outside_shared_mem(outside_shared_mem_payload_t * p,
@@ -2200,6 +2293,8 @@ comm_read_chunk_outside_shared_mem(outside_shared_mem_payload_t * p,
                                    void *source, size_t offset,
                                    size_t bytes_to_send, size_t proc)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     /* build payload to send */
     p->nbytes = bytes_to_send;
     p->source = source + offset;
@@ -2211,12 +2306,16 @@ comm_read_chunk_outside_shared_mem(outside_shared_mem_payload_t * p,
                             0);
 
     GASNET_BLOCKUNTIL(p->completed);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 static void
 comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
                              size_t nbytes)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     /* get the buffer size and chop off control structure */
     const size_t max_req = gasnet_AMMaxMedium();
     const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
@@ -2255,12 +2354,102 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
     }
 
     free(get_buf);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+static void
+comm_write_chunk_outside_shared_mem(void *buf, size_t bufsize,
+                                    void *target, void *source,
+                                    size_t offset, size_t bytes_to_send,
+                                    size_t proc)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    outside_shared_mem_payload_t *p = buf;
+    void *data = buf + sizeof(*p);
+
+    /* build payload to send */
+    p->nbytes = bytes_to_send;
+    p->source = NULL;
+    p->target = target + offset;
+    p->completed = 0;
+    p->completed_addr = &(p->completed);
+
+    /* data added after control structure */
+    memmove(data, source + offset, bytes_to_send);
+    LOAD_STORE_FENCE();
+
+    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_PUT_REQUEST, p,
+                            bufsize, 0);
+
+    GASNET_BLOCKUNTIL(p->completed);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+static void
+comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
+                              size_t nbytes)
+{
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    /* get the buffer size and chop off control structure */
+    const size_t max_req = gasnet_AMMaxMedium();
+    const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
+    /* how to split up transfers */
+    const size_t nchunks = nbytes / max_data;
+    const size_t rem_size = nbytes % max_data;
+    /* track size and progress of transfers */
+    size_t payload_size;
+    size_t alloc_size;
+    size_t offset = 0;
+    void *put_buf;
+
+    alloc_size = max_req;
+    payload_size = max_data;
+
+    allocate_transfer_buf(&put_buf, alloc_size);
+
+    if (nchunks > 0) {
+        size_t t;
+        int i;
+
+        for (i = 0; i < nchunks; i++) {
+            comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest,
+                                                src, offset, payload_size,
+                                                proc);
+            offset += payload_size;
+        }
+    }
+
+    if (rem_size > 0) {
+        payload_size = rem_size;
+        comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest, src,
+                                            offset, payload_size, proc);
+    }
+
+    free(put_buf);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+}
+
+
+/***************************************************************
+ *                  Read/Write Communication
+ ***************************************************************/
+
+void comm_service()
+{
+    GASNET_Safe(gasnet_AMPoll());
 }
 
 
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     void *remote_src;
     int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
@@ -2271,6 +2460,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         memcpy(dest, src, nbytes);
         if (hdl != NULL)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2281,6 +2472,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         comm_read_outside_shared_mem(proc, src, dest, nbytes);
         if (hdl != NULL)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2331,15 +2524,19 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
             *hdl = NULL;
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
         memcpy(dest, src, nbytes);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2347,6 +2544,7 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 
     if (!remote_address_in_shared_mem(proc, src)) {
         comm_read_outside_shared_mem(proc, src, dest, nbytes);
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2360,74 +2558,8 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     } else {
         gasnet_get_bulk(dest, proc, remote_src, nbytes);
     }
-}
 
-static void
-comm_write_chunk_outside_shared_mem(void *buf, size_t bufsize,
-                                    void *target, void *source,
-                                    size_t offset, size_t bytes_to_send,
-                                    size_t proc)
-{
-    outside_shared_mem_payload_t *p = buf;
-    void *data = buf + sizeof(*p);
-
-    /* build payload to send */
-    p->nbytes = bytes_to_send;
-    p->source = NULL;
-    p->target = target + offset;
-    p->completed = 0;
-    p->completed_addr = &(p->completed);
-
-    /* data added after control structure */
-    memmove(data, source + offset, bytes_to_send);
-    LOAD_STORE_FENCE();
-
-    gasnet_AMRequestMedium1(proc, GASNET_HANDLER_PUT_REQUEST, p,
-                            bufsize, 0);
-
-    GASNET_BLOCKUNTIL(p->completed);
-}
-
-static void
-comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
-                              size_t nbytes)
-{
-    /* get the buffer size and chop off control structure */
-    const size_t max_req = gasnet_AMMaxMedium();
-    const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
-    /* how to split up transfers */
-    const size_t nchunks = nbytes / max_data;
-    const size_t rem_size = nbytes % max_data;
-    /* track size and progress of transfers */
-    size_t payload_size;
-    size_t alloc_size;
-    size_t offset = 0;
-    void *put_buf;
-
-    alloc_size = max_req;
-    payload_size = max_data;
-
-    allocate_transfer_buf(&put_buf, alloc_size);
-
-    if (nchunks > 0) {
-        size_t t;
-        int i;
-
-        for (i = 0; i < nchunks; i++) {
-            comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest,
-                                                src, offset, payload_size,
-                                                proc);
-            offset += payload_size;
-        }
-    }
-
-    if (rem_size > 0) {
-        payload_size = rem_size;
-        comm_write_chunk_outside_shared_mem(put_buf, alloc_size, dest, src,
-                                            offset, payload_size, proc);
-    }
-
-    free(put_buf);
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
@@ -2435,6 +2567,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                          int ordered, comm_handle_t * hdl)
 {
     void *remote_dest;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
     int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
 #if defined(ENABLE_LOCAL_MEMCPY)
@@ -2445,6 +2579,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2457,6 +2593,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2519,7 +2657,10 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
+
 
 /* like comm_write_from_lcb, except we don't need to "release" the source
  * buffer upon completion and guarantees local completion
@@ -2528,6 +2669,9 @@ char tmp_aligned_buffer[8] __attribute__ ((aligned(8)));
 void comm_write(size_t proc, void *dest, void *src,
                 size_t nbytes, int ordered, comm_handle_t * hdl)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
+    size_t dummy = proc;
     void *remote_dest;
     int dest_in_shared_mem = remote_address_in_shared_mem(proc, dest);
 
@@ -2538,6 +2682,8 @@ void comm_write(size_t proc, void *dest, void *src,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2549,6 +2695,8 @@ void comm_write(size_t proc, void *dest, void *src,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2622,6 +2770,8 @@ void comm_write(size_t proc, void *dest, void *src,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
@@ -2632,6 +2782,9 @@ void comm_strided_nbread(size_t proc,
                          comm_handle_t * hdl)
 {
     void *remote_src;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;
     size_t nbytes = 1;
@@ -2645,6 +2798,8 @@ void comm_strided_nbread(size_t proc,
                                count, stride_levels);
             if (hdl != NULL)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -2696,6 +2851,8 @@ void comm_strided_nbread(size_t proc,
             }
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_strided_read(size_t proc,
@@ -2704,12 +2861,15 @@ void comm_strided_read(size_t proc,
                        const size_t count[], size_t stride_levels)
 {
     void *remote_src;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
         /* local copy */
         local_strided_copy(src, src_strides, dest, dest_strides,
                            count, stride_levels);
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -2739,6 +2899,8 @@ void comm_strided_read(size_t proc,
                              src_strides, count, stride_levels);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_strided_write_from_lcb(size_t proc,
@@ -2749,6 +2911,7 @@ void comm_strided_write_from_lcb(size_t proc,
                                  comm_handle_t * hdl)
 {
     void *remote_dest;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;
@@ -2765,6 +2928,8 @@ void comm_strided_write_from_lcb(size_t proc,
 
             if (hdl != NULL && hdl != (void *) -1)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -2851,6 +3016,8 @@ void comm_strided_write_from_lcb(size_t proc,
                                  proc);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
@@ -2865,6 +3032,7 @@ void comm_strided_write(size_t proc,
                         comm_handle_t * hdl)
 {
     void *remote_dest;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     int i;
@@ -2880,6 +3048,8 @@ void comm_strided_write(size_t proc,
 
             if (hdl != NULL && hdl != (void *) -1)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -2984,4 +3154,29 @@ void comm_strided_write(size_t proc,
                                  proc);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
+
+#ifdef PCAF_INSTRUMENT
+
+/***************************************************************
+ *                      Profiling Support
+ ***************************************************************/
+
+void profile_comm_handle_end(comm_handle_t hdl)
+{
+    if (hdl == (comm_handle_t) - 1) {
+        PROFILE_RMA_END_ALL();
+    } else if (hdl != NULL) {
+        struct handle_list *handle_node = hdl;
+        if (handle_node->access_type == PUTS) {
+            profile_rma_nbstore_end(handle_node->proc + 1,
+                                    handle_node->rmaid);
+        } else {
+            profile_rma_nbload_end(handle_node->proc + 1,
+                                   handle_node->rmaid);
+        }
+    }
+}
+#endif

@@ -273,7 +273,7 @@ PACKAGE_BUGREPORT=''
 
 ac_subdirs_all="$ac_subdirs_all osprey/cygnus"
 ac_subdirs_all="$ac_subdirs_all osprey-gcc-4.2.0"
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES DEFAULT_CAF_HEAP_SIZE BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os MACHINE_TYPE CROSS_TARGET BUILD_ABI BUILD_ARCH BUILD_HOST BUILD_TARGET BUILD_VENDOR BUILD_OPTIMIZE BUILD_FFE_OPTIMIZE BUILD_LIB_OPTIMIZE BUILD_COMPILER BUILD_BOTH LIB_MACHINE_TYPE LIB_BUILD_TARGET LIB_BUILD_ABI LIB_BUILD_ARCH LIB_BUILD_HOST LIB2_MACHINE_TYPE LIB2_BUILD_TARGET LIB2_BUILD_ABI LIB2_BUILD_ARCH LIB2_BUILD_HOST BUILD_MULTILIB COMPILER_TARG_DIR TARG_INFO_NAME BUILD_GNU3 BUILD_FORTRAN WHIRL_HAS_ID_FIELD BUILD_SKIP_IPA BUILD_TYPE DRAGON_SUPPORT GCC_CONFIGURE_TARG GCC_DIR BUILD_GNU4 ENABLE_COARRAYS BUILD_CAF_RUNTIME GASNET_HOME ARMCI_HOME ARMCI_NETWORK_LIBS GASNET_CONDUITS DEFAULT_COMM BASH_PATH MPI_INCLUDE CAFRT_ENABLE_TRACES CAFRT_ENABLE_PROFILES DEFAULT_CAF_HEAP_SIZE BUILD_LIBUHINSTR TAU_ROOT TAU_LIBS EPIK_ROOT OPENUH_VERSION LIBLIST subdirs LIBOBJS LTLIBOBJS uh_config_arguments'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -794,6 +794,7 @@ Optional Features:
   --enable-coarrays       Enables UH Coarray Fortran (CAF) Implementation
   --disable-caf-runtime   Disable CAF Runtime
   --enable-cafrt-traces   Enable CAF Runtime Tracing Functionality
+  --enable-cafrt-profiles Enable CAF Runtime Profiling Functionality
   --enable-dragon-support Supports UH Dragon Analysis Tool
   --enable-gnu3           Enable GNU3-based C/C++ frontend
   --disable-fortran       Disable Fortran language support
@@ -829,6 +830,8 @@ Optional Packages:
   --with-tau-makefile=<path to TAU makefile>
                           Path to a TAU Makefile (assumed to be in
                           $TAU_ROOT/$ARCH/lib/
+  --with-epik=<path to EPIK>
+                          Path to EPIK installation
 
 _ACEOF
 fi
@@ -1451,6 +1454,18 @@ if test "x$enable_cafrt_traces" != "xyes"; then
 fi
 
 
+# Set whether CAF runtime will be built
+# Check whether --enable-cafrt-profiles or --disable-cafrt-profiles was given.
+if test "${enable_cafrt_profiles+set}" = set; then
+  enableval="$enable_cafrt_profiles"
+  CAFRT_ENABLE_PROFILES="YES"
+fi;
+
+if test "x$enable_cafrt_profiles" != "xyes"; then
+   CAFRT_ENABLE_PROFILES="NO"
+fi
+
+
 # enable GASNet for Coarrays
 
 # Check whether --with-gasnet-root or --without-gasnet-root was given.
@@ -1538,6 +1553,13 @@ if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xyes"; then
   { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --enable-cafrt-traces
    " >&5
 echo "$as_me: error: --enable-coarrays option is expected with --enable-cafrt-traces
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_profiles" = "xyes"; then
+  { { echo "$as_me:$LINENO: error: --enable-coarrays option is expected with --enable-cafrt-profiles
+   " >&5
+echo "$as_me: error: --enable-coarrays option is expected with --enable-cafrt-profiles
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -1840,10 +1862,27 @@ else
   TAU_MAKEFILE=""
 fi;
 
+
+# Check whether --with-epik or --without-epik was given.
+if test "${with_epik+set}" = set; then
+  withval="$with_epik"
+  EPIK_ROOT="$with_epik"
+else
+  EPIK_ROOT=""
+fi;
+
 if test "${BUILD_LIBUHINSTR}" = "YES" -a -z "${TAU_MAKEFILE}"; then
   { { echo "$as_me:$LINENO: error: --with-tau-makefile= should be specified along with --enable-libuhinstr
    " >&5
 echo "$as_me: error: --with-tau-makefile= should be specified along with --enable-libuhinstr
+   " >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
+if test "${CAFRT_ENABLE_PROFILES}" = "YES" -a -z "${EPIK_ROOT}"; then
+  { { echo "$as_me:$LINENO: error: --with-epik= should be specified along with --enable-cafrt-profiles
+   " >&5
+echo "$as_me: error: --with-epik= should be specified along with --enable-cafrt-profiles
    " >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -2084,6 +2123,8 @@ export GCC_CONFIGURE_TARG
 export GCC_CONFIGURE_CFLAGS
 
 # Variables to replace in the configurable files.
+
+
 
 
 
@@ -3041,10 +3082,12 @@ s,@DEFAULT_COMM@,$DEFAULT_COMM,;t t
 s,@BASH_PATH@,$BASH_PATH,;t t
 s,@MPI_INCLUDE@,$MPI_INCLUDE,;t t
 s,@CAFRT_ENABLE_TRACES@,$CAFRT_ENABLE_TRACES,;t t
+s,@CAFRT_ENABLE_PROFILES@,$CAFRT_ENABLE_PROFILES,;t t
 s,@DEFAULT_CAF_HEAP_SIZE@,$DEFAULT_CAF_HEAP_SIZE,;t t
 s,@BUILD_LIBUHINSTR@,$BUILD_LIBUHINSTR,;t t
 s,@TAU_ROOT@,$TAU_ROOT,;t t
 s,@TAU_LIBS@,$TAU_LIBS,;t t
+s,@EPIK_ROOT@,$EPIK_ROOT,;t t
 s,@OPENUH_VERSION@,$OPENUH_VERSION,;t t
 s,@LIBLIST@,$LIBLIST,;t t
 s,@subdirs@,$subdirs,;t t
@@ -3570,6 +3613,15 @@ if test "${BUILD_CAF_RUNTIME}" = "YES"; then
 
 { echo "$as_me:$LINENO:    CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES" >&5
 echo "$as_me:    CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES" >&6;}
+{ echo "$as_me:$LINENO:    CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES" >&5
+echo "$as_me:    CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES" >&6;}
+if test "${CAFRT_ENABLE_PROFILES}" = "YES"; then
+
+{ echo "$as_me:$LINENO:    EPIK_ROOT                      = $EPIK_ROOT" >&5
+echo "$as_me:    EPIK_ROOT                      = $EPIK_ROOT" >&6;}
+
+fi
+
 { echo "$as_me:$LINENO:    DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE" >&5
 echo "$as_me:    DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE" >&6;}
 { echo "$as_me:$LINENO:    DEFAULT_COMM                   = $DEFAULT_COMM" >&5

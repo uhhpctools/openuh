@@ -38,6 +38,7 @@
 #include "armci_comm_layer.h"
 #include "trace.h"
 #include "util.h"
+#include "profile.h"
 
 const size_t LARGE_COMM_BUF_SIZE = 120 * 1024;
 
@@ -48,6 +49,8 @@ const size_t SMALL_XFER_SIZE = 200;     /* size for which local mem copy would b
 extern unsigned long _this_image;
 extern unsigned long _num_images;
 extern mem_usage_info_t *mem_info;
+
+extern int rma_prof_rid;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
@@ -118,6 +121,10 @@ static void cache_check_and_get_strided(void *remote_src,
 static void update_cache(size_t node, void *remote_address, size_t nbytes,
                          void *local_address);
 
+static void local_strided_copy(void *src, const int src_strides[],
+                               void *dest, const int dest_strides[],
+                               const int count[], size_t stride_levels);
+
 static struct handle_list *get_next_handle(unsigned long proc,
                                            void *remote_address,
                                            void *local_buf,
@@ -145,15 +152,14 @@ static void wait_on_pending_puts(size_t proc);
 static void wait_on_all_pending_accesses_to_proc(unsigned long proc);
 static void wait_on_all_pending_accesses();
 
-static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type);
-static inline void return_armci_handle(armci_handle_x_t *handle,
-                                access_type_t access_type);
+static inline armci_hdl_t *get_next_armci_handle(access_type_t
+                                                 access_type);
+static inline void return_armci_handle(armci_handle_x_t * handle,
+                                       access_type_t access_type);
 
 
 
-/*
- * Inline functions
- */
+
 /* must call comm_init() first */
 inline size_t comm_get_proc_id()
 {
@@ -166,18 +172,10 @@ inline size_t comm_get_num_procs()
     return num_procs;
 }
 
-static inline int address_in_symmetric_mem(void *addr)
-{
-    void *start_symm_mem;
-    void *end_symm_mem;
+/**************************************************************
+ *       Shared (RMA) Memory Segment Address Ranges
+ **************************************************************/
 
-    start_symm_mem = coarray_start_all_images[my_proc];
-    end_symm_mem = common_slot->addr;
-
-    return (addr >= start_symm_mem && addr < end_symm_mem);
-}
-
-/* returns addresses ranges for shared heap */
 inline ssize_t comm_address_translation_offset(size_t proc)
 {
     char *remote_base_address = coarray_start_all_images[proc];
@@ -243,47 +241,69 @@ inline void *comm_end_shared_mem(size_t proc)
     return comm_start_shared_mem(proc) + shared_memory_size;
 }
 
-
-/* TODO: make this thread safe */
-static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type)
+static inline int address_in_symmetric_mem(void *addr)
 {
-    armci_handle_x_t *freed_handle = nb_mgr[access_type].free_armci_handles;
-    nb_mgr[access_type].free_armci_handles = freed_handle->next;
+    void *start_symm_mem;
+    void *end_symm_mem;
 
-    return &(freed_handle->handle);
-}
+    start_symm_mem = coarray_start_all_images[my_proc];
+    end_symm_mem = common_slot->addr;
 
-/* TODO: make this thread safe */
-static inline void return_armci_handle(armci_handle_x_t *handle,
-                                access_type_t access_type)
-{
-    armci_handle_x_t *free_list = nb_mgr[access_type].free_armci_handles;
-    nb_mgr[access_type].free_armci_handles = handle;
-    handle->next = free_list;
+    return (addr >= start_symm_mem && addr < end_symm_mem);
 }
 
 
-/* TODO: Right now, for every critical section we simply acquire a mutex on
- * process 0. Instead, we should define a mutex for each critical section in
- * order to allow execution of different critical sections at the same time.
+
+/**************************************************************
+ *                Memory Copy Helper Routines
+ **************************************************************/
+
+/* naive implementation of strided copy
+ * TODO: improve by finding maximal blocksize
  */
-void comm_critical()
+static void local_strided_copy(void *src, const int src_strides[],
+                               void *dest, const int dest_strides[],
+                               const int count[], size_t stride_levels)
 {
-    ARMCI_Lock(critical_mutex, 0);
+    int i, j;
+    size_t num_blks;
+    size_t cnt_strides[stride_levels + 1];
+    size_t blockdim_size[stride_levels];
+    void *dest_ptr = dest;
+    void *src_ptr = src;
+
+    /* assuming src_elem_size=dst_elem_size */
+    size_t blk_size = count[0];
+    num_blks = 1;
+    cnt_strides[0] = 1;
+    blockdim_size[0] = count[0];
+    for (i = 1; i <= stride_levels; i++) {
+        cnt_strides[i] = cnt_strides[i - 1] * count[i];
+        blockdim_size[i] = blk_size * cnt_strides[i];
+        num_blks *= count[i];
+    }
+
+    for (i = 1; i <= num_blks; i++) {
+        memcpy(dest_ptr, src_ptr, blk_size);
+        for (j = 1; j <= stride_levels; j++) {
+            if (i % cnt_strides[j])
+                break;
+            src_ptr -= (count[j] - 1) * src_strides[j - 1];
+            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
+        }
+        src_ptr += src_strides[j - 1];
+        dest_ptr += dest_strides[j - 1];
+    }
 }
 
-void comm_end_critical()
-{
-    ARMCI_Unlock(critical_mutex, 0);
-}
 
-void comm_service()
-{
-    /* TODO */
-}
+
+/*****************************************************************
+ *                      INITIALIZATION
+ *****************************************************************/
 
 /*
- * INIT:
+ * comm_init:
  * 1) Initialize ARMCI
  * 2) Create flags and mutexes for sync_images
  * 3) Create pinned memory and populates coarray_start_all_images.
@@ -330,6 +350,7 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     _num_images = num_procs;
 
     LIBCAF_TRACE_INIT();
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "after ARMCI_Init");
 
     if (_num_images >= MAX_NUM_IMAGES) {
         if (my_proc == 0) {
@@ -410,12 +431,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     nb_mgr[PUTS].num_handles = 0;
     nb_mgr[PUTS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[PUTS].max_nb_address = malloc(num_procs * sizeof(void *));
-    armci_nbput_handles = malloc(nb_xfer_limit*sizeof(armci_handle_x_t));
+    armci_nbput_handles = malloc(nb_xfer_limit * sizeof(armci_handle_x_t));
     p = armci_nbput_handles;
-    for (i = 0; i < nb_xfer_limit-1; i++) {
-        p[i].next = &p[i+1];
+    for (i = 0; i < nb_xfer_limit - 1; i++) {
+        p[i].next = &p[i + 1];
     }
-    p[nb_xfer_limit-1].next = NULL;
+    p[nb_xfer_limit - 1].next = NULL;
     nb_mgr[PUTS].free_armci_handles = armci_nbput_handles;
 
     nb_mgr[GETS].handles = (struct handle_list **) malloc
@@ -423,12 +444,12 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
     nb_mgr[GETS].num_handles = 0;
     nb_mgr[GETS].min_nb_address = malloc(num_procs * sizeof(void *));
     nb_mgr[GETS].max_nb_address = malloc(num_procs * sizeof(void *));
-    armci_nbget_handles = malloc(nb_xfer_limit*sizeof(armci_handle_x_t));
+    armci_nbget_handles = malloc(nb_xfer_limit * sizeof(armci_handle_x_t));
     p = armci_nbget_handles;
-    for (i = 0; i < nb_xfer_limit-1; i++) {
-        p[i].next = &p[i+1];
+    for (i = 0; i < nb_xfer_limit - 1; i++) {
+        p[i].next = &p[i + 1];
     }
-    p[nb_xfer_limit-1].next = NULL;
+    p[nb_xfer_limit - 1].next = NULL;
     nb_mgr[GETS].free_armci_handles = armci_nbget_handles;
 
     /* initialize data structures to 0 */
@@ -490,54 +511,19 @@ void comm_init(struct shared_memory_slot *common_shared_memory_slot)
                  common_shared_memory_slot->size);
 
     ARMCI_Barrier();
+
+    LIBCAF_TRACE(LIBCAF_LOG_INIT, "exit");
 }
 
-/*
- * Static Functions for GET CACHE
- */
-
-/* naive implementation of strided copy
- * TODO: improve by finding maximal blocksize
- */
-void local_strided_copy(void *src, const int src_strides[],
-                        void *dest, const int dest_strides[],
-                        const int count[], size_t stride_levels)
-{
-    int i, j;
-    size_t num_blks;
-    size_t cnt_strides[stride_levels + 1];
-    size_t blockdim_size[stride_levels];
-    void *dest_ptr = dest;
-    void *src_ptr = src;
-
-    /* assuming src_elem_size=dst_elem_size */
-    size_t blk_size = count[0];
-    num_blks = 1;
-    cnt_strides[0] = 1;
-    blockdim_size[0] = count[0];
-    for (i = 1; i <= stride_levels; i++) {
-        cnt_strides[i] = cnt_strides[i - 1] * count[i];
-        blockdim_size[i] = blk_size * cnt_strides[i];
-        num_blks *= count[i];
-    }
-
-    for (i = 1; i <= num_blks; i++) {
-        memcpy(dest_ptr, src_ptr, blk_size);
-        for (j = 1; j <= stride_levels; j++) {
-            if (i % cnt_strides[j])
-                break;
-            src_ptr -= (count[j] - 1) * src_strides[j - 1];
-            dest_ptr -= (count[j] - 1) * dest_strides[j - 1];
-        }
-        src_ptr += src_strides[j - 1];
-        dest_ptr += dest_strides[j - 1];
-    }
-}
-
+/*****************************************************************
+ *                      GET CACHE Support
+ *****************************************************************/
 
 static void refetch_all_cache()
 {
     int i;
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     for (i = 0; i < num_procs; i++) {
         if (cache_all_images[i]->remote_address) {
             ARMCI_NbGet(cache_all_images[i]->remote_address,
@@ -546,24 +532,28 @@ static void refetch_all_cache()
                         cache_all_images[i]->handle);
         }
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get");
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 static void refetch_cache(unsigned long node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     if (cache_all_images[node]->remote_address) {
         ARMCI_NbGet(cache_all_images[node]->remote_address,
                     cache_all_images[node]->cache_line_address,
                     getCache_line_size, node,
                     cache_all_images[node]->handle);
     }
-    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "Finished nb get from image %lu",
-                 node + 1);
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 static void cache_check_and_get(size_t node, void *remote_address,
                                 size_t nbytes, void *local_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -597,6 +587,8 @@ static void cache_check_and_get(size_t node, void *remote_address,
                      " image %lu NOT found in cache.", remote_address,
                      node + 1);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
@@ -607,6 +599,8 @@ static void cache_check_and_get_strided(void *remote_src,
                                         int dest_strides[], int count[],
                                         size_t stride_levels, size_t node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -661,6 +655,8 @@ static void cache_check_and_get_strided(void *remote_src,
                        count, stride_levels, node);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
@@ -668,6 +664,8 @@ static void cache_check_and_get_strided(void *remote_src,
 static void update_cache(size_t node, void *remote_address,
                          size_t nbytes, void *local_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -698,6 +696,8 @@ static void update_cache(size_t node, void *remote_address,
                      " image %lu partially updated in cache (write conflict).",
                      remote_address, node + 1);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
@@ -708,6 +708,8 @@ static void update_cache_strided(void *remote_dest_address,
                                  const int count[], size_t stride_levels,
                                  size_t node)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "entry");
+
     void *cache_address = cache_all_images[node]->remote_address;
     size_t start_offset;
     void *cache_line_address = cache_all_images[node]->cache_line_address;
@@ -742,19 +744,43 @@ static void update_cache_strided(void *remote_dest_address,
         //make it invalid
         cache_all_images[node]->remote_address = 0;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_CACHE, "exit");
 }
 
 
-/*
- * static functions for non-blocking PUT/GET
- */
+/*****************************************************************
+ *      Helper Routines for Non-blocking Support
+ *****************************************************************/
+
+
+/* TODO: make this thread safe */
+static inline armci_hdl_t *get_next_armci_handle(access_type_t access_type)
+{
+    armci_handle_x_t *freed_handle =
+        nb_mgr[access_type].free_armci_handles;
+    nb_mgr[access_type].free_armci_handles = freed_handle->next;
+
+    return &(freed_handle->handle);
+}
+
+/* TODO: make this thread safe */
+static inline void return_armci_handle(armci_handle_x_t * handle,
+                                       access_type_t access_type)
+{
+    armci_handle_x_t *free_list = nb_mgr[access_type].free_armci_handles;
+    nb_mgr[access_type].free_armci_handles = handle;
+    handle->next = free_list;
+}
+
+
 static int address_in_nb_address_block(void *remote_addr,
                                        size_t proc, size_t size,
                                        access_type_t access_type)
 {
     void **min_nb_address = nb_mgr[access_type].min_nb_address;
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
                  remote_addr, min_nb_address[proc],
                  max_nb_address[proc], remote_addr + size);
@@ -772,7 +798,7 @@ static void update_nb_address_block(void *remote_addr, size_t proc,
 {
     void **min_nb_address = nb_mgr[access_type].min_nb_address;
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM,
+    LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
                  "remote address:%p, min:%p, max:%p, addr+size:%p",
                  remote_addr, min_nb_address[proc],
                  max_nb_address[proc], remote_addr + size);
@@ -822,6 +848,11 @@ static struct handle_list *get_next_handle(unsigned long proc,
     handle_node->handle = NULL; /* should be initialized after call
                                    to this function */
     handle_node->address = remote_address;
+#ifdef PCAF_INSTRUMENT
+    handle_node->rmaid = rma_prof_rid;
+#else
+    handle_node->rmaid = 0;
+#endif
     handle_node->local_buf = local_buf;
     handle_node->size = size;
     handle_node->proc = proc;
@@ -869,8 +900,6 @@ static void reset_max_nb_address(unsigned long proc,
             max_nb_address[proc] = end_address;
         handle_node = handle_node->next;
     }
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
 }
 
 static void delete_node(unsigned long proc, struct handle_list *node,
@@ -880,13 +909,11 @@ static void delete_node(unsigned long proc, struct handle_list *node,
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
     struct handle_list **handles = nb_mgr[access_type].handles;
     void *node_address;
-    LIBCAF_TRACE(LIBCAF_LOG_COMM, " min:%p, max:%p",
-                 min_nb_address[proc], max_nb_address[proc]);
 
     nb_mgr[access_type].num_handles--;
 
     /* return armci handle to free list */
-    return_armci_handle( (armci_handle_x_t *) node->handle, access_type);
+    return_armci_handle((armci_handle_x_t *) node->handle, access_type);
 
     if (node->prev) {
         if (node->next) {
@@ -937,6 +964,8 @@ static void wait_on_pending_accesses(size_t proc,
                                      size_t size,
                                      access_type_t access_type)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     void **min_nb_address = nb_mgr[access_type].min_nb_address;
     void **max_nb_address = nb_mgr[access_type].max_nb_address;
     struct handle_list **handles = nb_mgr[access_type].handles;
@@ -946,9 +975,6 @@ static void wait_on_pending_accesses(size_t proc,
     if (handle_node &&
         address_in_nb_address_block(remote_address, proc, size,
                                     access_type)) {
-        LIBCAF_TRACE(LIBCAF_LOG_DEBUG,
-                     "conflict detected: %p, %ld, %p, %p", remote_address,
-                     size, min_nb_address[proc], max_nb_address[proc]);
         if (access_type == PUTS) {
             /* ARMCI provides no way to wait on a specific PUT to complete
              * remotely, so just wait on all of them to complete */
@@ -957,10 +983,12 @@ static void wait_on_pending_accesses(size_t proc,
             while (handle_node) {
                 if (address_in_handle(handle_node, remote_address, size)) {
                     ARMCI_Wait(handle_node->handle);
+                    PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
                     delete_node(proc, handle_node, GETS);
                     return;
                 } else if (ARMCI_Test(handle_node->handle) != 0) {
                     /* has completed */
+                    PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
                     node_to_delete = handle_node;
                     handle_node = handle_node->next;
                     delete_node(proc, node_to_delete, GETS);
@@ -970,11 +998,15 @@ static void wait_on_pending_accesses(size_t proc,
             }
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 /* wait on all pending PUTS to proc to complete */
 static void wait_on_pending_puts(size_t proc)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     void **min_nb_address = nb_mgr[PUTS].min_nb_address;
     void **max_nb_address = nb_mgr[PUTS].max_nb_address;
     struct handle_list **handles = nb_mgr[PUTS].handles;
@@ -983,6 +1015,8 @@ static void wait_on_pending_puts(size_t proc)
     ARMCI_Fence(proc);
     /* clear out entire handle list */
     while (handle_node) {
+        PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
+
         /* return armci handle to free list */
         return_armci_handle((armci_handle_x_t *) handle_node->handle,
                             PUTS);
@@ -994,6 +1028,8 @@ static void wait_on_pending_puts(size_t proc)
     handles[proc] = 0;
     min_nb_address[proc] = 0;
     max_nb_address[proc] = 0;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 /* wait on all pending accesses to complete */
@@ -1002,8 +1038,11 @@ static void wait_on_all_pending_accesses()
     int i;
     struct handle_list *handle_node, *node_to_delete;
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     /* ensures all non-blocking puts have completed */
     ARMCI_AllFence();
+    PROFILE_RMA_END_ALL_STORES();
 
     for (i = 0; i < num_procs; i++) {
         handle_node = nb_mgr[PUTS].handles[i];
@@ -1027,6 +1066,8 @@ static void wait_on_all_pending_accesses()
         /* clear out entire handle list */
         while (handle_node) {
             ARMCI_Wait(handle_node->handle);
+            PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
+
             /* return armci handle to free list */
             return_armci_handle((armci_handle_x_t *) handle_node->handle,
                                 GETS);
@@ -1039,15 +1080,14 @@ static void wait_on_all_pending_accesses()
         nb_mgr[GETS].min_nb_address[i] = 0;
         nb_mgr[GETS].max_nb_address[i] = 0;
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
-/*
- * End of static functions for non-blocking put
- */
 
-/*
- * Shared Memory Management
- */
+/*****************************************************************
+ *                  Shared Memory Management
+ ****************************************************************/
 
 /* It should allocate memory to all static coarrays/targets from the
  * pinned-down memory created during init */
@@ -1062,7 +1102,9 @@ void set_static_symm_data(void *base_address);
 
 void allocate_static_symm_data(void *base_address)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     set_static_symm_data(base_address);
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 
@@ -1117,12 +1159,14 @@ int comm_address_in_shared_mem(void *addr)
     return (addr >= start_shared_mem && addr < end_shared_mem);
 }
 
-/*
- * End Shared Memory Management
- */
+/****************************************************************
+ *                         FINALIZATION
+ ****************************************************************/
 
 void comm_memory_free()
 {
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
     if (syncptr != NULL)
         comm_free(syncptr);
 
@@ -1140,12 +1184,15 @@ void comm_memory_free()
         }
         comm_free(cache_all_images);
     }
-    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "Finished.");
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void comm_exit(int status)
 {
     int p;
+
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
     comm_service();
 
@@ -1173,6 +1220,7 @@ void comm_exit(int status)
     if (status == 0) {
         ARMCI_Cleanup();
         MPI_Finalize();
+        LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
         exit(0);
     } else {
         ARMCI_Error("", status);
@@ -1184,6 +1232,8 @@ void comm_exit(int status)
 void comm_finalize(int exit_code)
 {
     int p;
+
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "entry");
 
     comm_service();
 
@@ -1207,37 +1257,77 @@ void comm_finalize(int exit_code)
     ARMCI_Finalize();
     LIBCAF_TRACE(LIBCAF_LOG_EXIT, "Before call to MPI_Finalize");
     MPI_Finalize();
+
+    LIBCAF_TRACE(LIBCAF_LOG_EXIT, "exit");
     exit(exit_code);
 
     /* does not reach */
 }
 
+/***************************************************************
+ *                      SYNCHRONIZATION
+ ***************************************************************/
+
+
+/* TODO: Right now, for every critical section we simply acquire a mutex on
+ * process 0. Instead, we should define a mutex for each critical section in
+ * order to allow execution of different critical sections at the same time.
+ */
+
+void comm_critical()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    ARMCI_Lock(critical_mutex, 0);
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
+void comm_end_critical()
+{
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
+    ARMCI_Unlock(critical_mutex, 0);
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+}
+
 void comm_barrier_all()
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     wait_on_all_pending_accesses();
     ARMCI_Barrier();
     if (enable_get_cache)
         refetch_all_cache();
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync(comm_handle_t hdl)
 {
-    unsigned long i;
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (hdl == (comm_handle_t) - 1) {   /* wait on all non-blocking communication */
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
         ARMCI_Wait(((struct handle_list *) hdl)->handle);
+
+        PROFILE_COMM_HANDLE_END(hdl);
+
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
                     ((struct handle_list *) hdl)->access_type);
     }
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
+
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
         *((INT2 *) status) = STAT_SUCCESS;
@@ -1258,12 +1348,16 @@ void comm_sync_all(int *status, int stat_len, char *errmsg, int errmsg_len)
 
     if (enable_get_cache)
         refetch_all_cache();
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync_memory(int *status, int stat_len, char *errmsg,
                       int errmsg_len)
 {
     unsigned long i;
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -1280,6 +1374,7 @@ void comm_sync_memory(int *status, int stat_len, char *errmsg,
 
     LOAD_STORE_FENCE();
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
 }
 
 void comm_sync_images(int *image_list, int image_count, int *status,
@@ -1289,6 +1384,8 @@ void comm_sync_images(int *image_list, int image_count, int *status,
     int *dest_flag;             /* remote flag to set */
     volatile int *check_flag;   /* flag to wait on locally */
     int whatever;               /* to store remote value for ARMCI_Rmw */
+
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "entry");
 
     if (status != NULL) {
         memset(status, 0, (size_t) stat_len);
@@ -1350,6 +1447,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
                 *((INT2 *) status) = STAT_STOPPED_IMAGE;
                 LOAD_STORE_FENCE();
                 LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Sync image over");
+                LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
                 return;
             }
         }
@@ -1379,12 +1477,18 @@ void comm_sync_images(int *image_list, int image_count, int *status,
         LIBCAF_TRACE(LIBCAF_LOG_SYNC, "Sync image over");
     }
 
+    LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
+
 }
 
-/* atomics */
+/***************************************************************
+ *                        ATOMICS
+ ***************************************************************/
+
 void comm_swap_request(void *target, void *value, size_t nbytes,
                        int proc, void *retval)
 {
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     check_remote_address(proc + 1, target);
     if (nbytes == sizeof(int)) {
         void *remote_address = get_remote_address(target, proc);
@@ -1401,6 +1505,7 @@ void comm_swap_request(void *target, void *value, size_t nbytes,
                 (unsigned long) nbytes);
         Error(msg);
     }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void
@@ -1416,6 +1521,7 @@ void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                        void *retval)
 {
     long long old;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     check_remote_address(proc + 1, target);
     memmove(&old, value, nbytes);
     if (nbytes == sizeof(int)) {
@@ -1436,12 +1542,14 @@ void comm_fadd_request(void *target, void *value, size_t nbytes, int proc,
                 (unsigned long) nbytes);
         Error(msg);
     }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_fstore_request(void *target, void *value, size_t nbytes,
                          int proc, void *retval)
 {
     long long old;
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
     check_remote_address(proc + 1, target);
     memmove(&old, value, nbytes);
     if (nbytes == sizeof(int)) {
@@ -1460,23 +1568,35 @@ void comm_fstore_request(void *target, void *value, size_t nbytes,
                 (unsigned long) nbytes);
         Error(msg);
     }
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
+
+/***************************************************************
+ *                    Local memory allocations
+ ***************************************************************/
 
 void *comm_lcb_malloc(size_t size)
 {
     void *ptr;
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
     /* allocate out of asymmetric heap if there is sufficient enough room */
     ptr = coarray_asymmetric_allocate_if_possible_(size);
     if (!ptr) {
         ptr = malloc(size);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
     return ptr;
 }
 
 void comm_lcb_free(void *ptr)
 {
-    if (!ptr)
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
+
+    if (!ptr) {
+        LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
         return;
+    }
 
     if (ptr < coarray_start_all_images[my_proc] &&
         ptr >= (coarray_start_all_images[my_proc] + shared_memory_size))
@@ -1486,6 +1606,7 @@ void comm_lcb_free(void *ptr)
            coarray_asymmetric_allocate_ */
         coarray_asymmetric_deallocate_(ptr);
     }
+    LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "exit");
 }
 
 void *comm_malloc(size_t size)  //To make it sync with gasnet
@@ -1500,16 +1621,30 @@ void comm_free(void *ptr)       //To make it sync with gasnet
     free(ptr);
 }
 
+/***************************************************************
+ *                  Read/Write Communication
+ ***************************************************************/
+
+void comm_service()
+{
+    /* does nothing currently */
+}
+
+
 void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
                  comm_handle_t * hdl)
 {
     void *remote_src;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc && nbytes <= SMALL_XFER_SIZE) {
         memcpy(dest, src, nbytes);
         if (hdl != NULL)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -1560,18 +1695,23 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "After ARMCI_NbGet from %p on"
                      " image %lu to %p size %lu *hdl=%p",
-                     remote_src, proc + 1, dest, nbytes,
-                     *hdl);
+                     remote_src, proc + 1, dest, nbytes, *hdl);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
 {
     void *remote_src;
 
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
+
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc) {
         memcpy(dest, src, nbytes);
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -1598,12 +1738,16 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     else {
         ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                          int ordered, comm_handle_t * hdl)
 {
     void *remote_dest;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc && nbytes <= SMALL_XFER_SIZE) {
@@ -1612,6 +1756,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -1680,15 +1826,19 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
-/* like comm_write, except we don't need to "release" the source buffer upon
- * completion and guarantees local completion
+/* like comm_write_from_lcb, except we don't need to "release" the source
+ * buffer upon completion and guarantees local completion
  */
 void comm_write(size_t proc, void *dest, void *src,
                 size_t nbytes, int ordered, comm_handle_t * hdl)
 {
     void *remote_dest;
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
 #if defined(ENABLE_LOCAL_MEMCPY)
     if (my_proc == proc && nbytes <= SMALL_XFER_SIZE) {
@@ -1696,6 +1846,8 @@ void comm_write(size_t proc, void *dest, void *src,
 
         if (hdl != NULL && hdl != (void *) -1)
             *hdl = NULL;
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -1756,6 +1908,8 @@ void comm_write(size_t proc, void *dest, void *src,
 
     if (enable_get_cache)
         update_cache(proc, remote_dest, nbytes, src);
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
@@ -1769,6 +1923,8 @@ void comm_strided_nbread(size_t proc,
     int src_strides[stride_levels];
     int dest_strides[stride_levels];
     int count[stride_levels + 1];
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* ARMCI uses int for strides and count arrays */
     int i;
@@ -1791,6 +1947,8 @@ void comm_strided_nbread(size_t proc,
                                count, stride_levels);
             if (hdl != NULL)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -1846,6 +2004,8 @@ void comm_strided_nbread(size_t proc,
 
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 void comm_strided_read(size_t proc,
@@ -1857,6 +2017,8 @@ void comm_strided_read(size_t proc,
     int src_strides[stride_levels];
     int dest_strides[stride_levels];
     int count[stride_levels + 1];
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* ARMCI uses int for strides and count arrays */
     int i;
@@ -1872,6 +2034,8 @@ void comm_strided_read(size_t proc,
         /* local copy */
         local_strided_copy(src, src_strides, dest, dest_strides,
                            count, stride_levels);
+
+        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
         return;
         /* does not reach */
     }
@@ -1904,6 +2068,8 @@ void comm_strided_read(size_t proc,
                        stride_levels, proc);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 
@@ -1918,6 +2084,8 @@ void comm_strided_write_from_lcb(size_t proc,
     int src_strides[stride_levels];
     int dest_strides[stride_levels];
     int count[stride_levels + 1];
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* ARMCI uses int for strides and count arrays */
     int i;
@@ -1942,6 +2110,8 @@ void comm_strided_write_from_lcb(size_t proc,
 
             if (hdl != NULL && hdl != (void *) -1)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -2024,6 +2194,8 @@ void comm_strided_write_from_lcb(size_t proc,
                                  proc);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
 /* like comm_strided_write_from_lcb, except we don't need to "release" the
@@ -2041,6 +2213,8 @@ void comm_strided_write(size_t proc,
     int src_strides[stride_levels];
     int dest_strides[stride_levels];
     int count[stride_levels + 1];
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
     /* ARMCI uses int for strides and count arrays */
     int i;
@@ -2064,6 +2238,8 @@ void comm_strided_write(size_t proc,
 
             if (hdl != NULL && hdl != (void *) -1)
                 *hdl = NULL;
+
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
             return;
             /* does not reach */
         }
@@ -2139,4 +2315,29 @@ void comm_strided_write(size_t proc,
                                  proc);
         }
     }
+
+    LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
+
+#ifdef PCAF_INSTRUMENT
+
+/***************************************************************
+ *                      Profiling Support
+ ***************************************************************/
+
+void profile_comm_handle_end(comm_handle_t hdl)
+{
+    if (hdl == (comm_handle_t) - 1) {
+        PROFILE_RMA_END_ALL();
+    } else if (hdl != NULL) {
+        struct handle_list *handle_node = hdl;
+        if (handle_node->access_type == PUTS) {
+            profile_rma_nbstore_end(handle_node->proc + 1,
+                                    handle_node->rmaid);
+        } else {
+            profile_rma_nbload_end(handle_node->proc + 1,
+                                   handle_node->rmaid);
+        }
+    }
+}
+#endif

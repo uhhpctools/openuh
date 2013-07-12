@@ -26,22 +26,56 @@
  http://www.cs.uh.edu/~hpctools
 */
 
+#include <stdio.h>
+
 #ifndef _TRACE_H
 #define _TRACE_H
 
 #ifndef TRACE
 
-#define LIBCAF_TRACE_INIT() ((void) 1)
+#define LIBCAF_TRACE_INIT()   {\
+    if (_this_image == 1 && getenv("UHCAF_TRACE") != NULL) \
+       Warning("Tracing support is not enabled"); \
+}
+
 #define LIBCAF_TRACE(arg1, arg2, ...) ((void) 1)
 #define START_TIMER() ((void) 1)
 #define STOP_TIMER(arg1) ((void) 1)
+#define CALLSITE_TRACE(level, f, ...)  f(__VA_ARGS__);
+#define CALLSITE_TIMED_TRACE(level, timer, f, ...)  f(__VA_ARGS__);
+
+#define LIBCAF_TRACE_SUSPEND() ((void) 1)
+#define LIBCAF_TRACE_RESUME() ((void) 1)
 
 #else
 
+extern int trace_callstack_level;
+
 #define LIBCAF_TRACE_INIT __libcaf_tracers_init
 #define LIBCAF_TRACE(...) __libcaf_trace(drop_path(__FILE__), __func__, __LINE__, __VA_ARGS__)
+
 #define START_TIMER  __start_timer
 #define STOP_TIMER  __stop_timer
+
+#define CALLSITE_TRACE(level, f, ...) \
+    LIBCAF_TRACE(LIBCAF_LOG_##level, "ENTERING " #f);\
+    trace_callstack_level++; \
+    f(__VA_ARGS__); \
+    trace_callstack_level--; \
+    LIBCAF_TRACE(LIBCAF_LOG_##level, "LEFT " #f);
+
+#define CALLSITE_TIMED_TRACE(level, timer, f, ...) \
+    LIBCAF_TRACE(LIBCAF_LOG_##level, "ENTERING (timed) " #f);\
+    trace_callstack_level++; \
+    START_TIMER(); \
+    f(__VA_ARGS__); \
+    STOP_TIMER(timer); \
+    LIBCAF_TRACE(LIBCAF_LOG_TIME, "(" #f ") " ); \
+    trace_callstack_level--; \
+    LIBCAF_TRACE(LIBCAF_LOG_##level, "LEFT " #f);
+
+#define LIBCAF_TRACE_SUSPEND  uhcaf_trace_suspend
+#define LIBCAF_TRACE_RESUME   uhcaf_trace_resume
 
 typedef enum {
     LIBCAF_LOG_FATAL = 0,       /* unrecoverable problem */
@@ -84,6 +118,8 @@ extern void __libcaf_trace(const char *file, const char *func, int line,
 extern int __trace_is_enabled(libcaf_trace_t level);
 void __start_timer();
 void __stop_timer(__timer_type_t type);
+
+FILE *__trace_log_stream();
 
 void uhcaf_tracedump_shared_mem_alloc(char *str);
 

@@ -40,6 +40,7 @@ typedef enum {
 
 struct handle_list {
     armci_hdl_t *handle;
+    int rmaid;
     void *address;
     void *local_buf;
     unsigned long size;

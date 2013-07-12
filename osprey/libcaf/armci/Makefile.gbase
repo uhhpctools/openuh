@@ -59,10 +59,14 @@ endif
 ifeq ($(CAFRT_ENABLE_TRACES), YES)
 LCDEFS += -DTRACE
 endif
+ifeq ($(CAFRT_ENABLE_PROFILES), YES)
+LCDEFS += -DPCAF_INSTRUMENT -DEPIK
+endif
 LCDEFS += -DNB_COMM
 LCINCS = -I$(BUILD_BASE)/../../clibinc
 LCINCS += -I$(BUILD_BASE)/../../clibinc/cray
 LCINCS += -I$(BUILD_BASE)/../uthash
+LCINCS += -I$(EPIK_ROOT)/include
 
 LCINCS += -I$(MPI_INCLUDE)
 
@@ -78,6 +82,10 @@ CFILES = \
 
 ifeq ($(CAFRT_ENABLE_TRACES), YES)
 CFILES += trace.c
+endif
+
+ifeq ($(CAFRT_ENABLE_PROFILES), YES)
+CFILES += profile.c
 endif
 
 LCINCS += -I$(ARMCI_HOME)/include

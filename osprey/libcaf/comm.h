@@ -174,4 +174,8 @@ void comm_memory_free();
 void comm_exit(int status);
 void comm_finalize(int exit_code);
 
+#ifdef PCAF_INSTRUMENT
+void profile_comm_handle_end(comm_handle_t hdl);
+#endif
+
 #endif                          /* _COMM_H */

@@ -2235,9 +2235,6 @@ WN2F_call(TOKEN_BUFFER tokens, WN *wn, WN2F_CONTEXT context)
       if (WN_operator(wn) == OPR_CALL)
       {
 
-     //shilpa - added this condition to eliminate call to the _END() subroutine   
-     if(! strcmp(ST_name(WN_st(wn)), "_END") )
-         return EMPTY_WN2F_STATUS;
      
 	 ST2F_use_translate(call_tokens, WN_st(wn));
 	 func_ty = ST_pu_type(WN_st(wn));
