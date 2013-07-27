@@ -76,6 +76,7 @@ CFILES = \
    caf_rtl.c \
    caf_collectives.c \
    armci_comm_layer.c \
+   alloc.c \
    lock.c \
    env.c \
    util.c
