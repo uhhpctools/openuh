@@ -1386,7 +1386,7 @@ Process_fb_selective(char *fname)
 void 
 Process_fb_phase(char *phase)
 {
-  char str[10];
+  char str[11];
   int flag;
   fb_phase = string_copy(phase);
   sprintf(str,"fb_phase=%s",fb_phase);
