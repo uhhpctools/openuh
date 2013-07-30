@@ -1,7 +1,7 @@
 /*
  GASNet Communication runtime library to be used with OpenUH
 
- Copyright (C) 2009-2012 University of Houston.
+ Copyright (C) 2009-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -1754,7 +1754,6 @@ static void wait_on_pending_accesses(unsigned long proc,
         struct handle_list *node_to_delete;
         while (handle_node) {
             if (address_in_handle(handle_node, remote_address, size)) {
-                //gasnet_wait_syncnb(handle_node->handle);
                 sync_on_handle(handle_node);
                 delete_node(proc, handle_node, access_type);
                 return;
@@ -1795,7 +1794,6 @@ static void wait_on_all_pending_accesses_to_proc(unsigned long proc)
         if (handle_node->handle != GASNET_INVALID_HANDLE) {
             LIBCAF_TRACE(LIBCAF_LOG_SYNC, "before gasnet_wait_syncnb"
                          " (handle_node=%p)", handle_node);
-            //gasnet_wait_syncnb(handle_node->handle);
             sync_on_handle(handle_node);
         }
         LIBCAF_TRACE(LIBCAF_LOG_SYNC, "about to delete handle_node %p",
@@ -2075,7 +2073,6 @@ void comm_sync(comm_handle_t hdl)
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
-        //gasnet_wait_syncnb(((struct handle_list *) hdl)->handle);
         sync_on_handle(hdl);
         delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
@@ -2328,6 +2325,8 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
+
     /* get the buffer size and chop off control structure */
     const size_t max_req = gasnet_AMMaxMedium();
     const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
@@ -2366,6 +2365,8 @@ comm_read_outside_shared_mem(size_t proc, void *dest, void *src,
     }
 
     free(get_buf);
+
+    PROFILE_RMA_LOAD_END(proc);
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
@@ -2406,6 +2407,8 @@ comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
+    PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
     /* get the buffer size and chop off control structure */
     const size_t max_req = gasnet_AMMaxMedium();
     const size_t max_data = max_req - sizeof(outside_shared_mem_payload_t);
@@ -2443,6 +2446,7 @@ comm_write_outside_shared_mem(size_t proc, void *dest, void *src,
 
     free(put_buf);
 
+    PROFILE_RMA_STORE_END(proc);
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
 }
 
@@ -2501,6 +2505,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         void *temp_dest = dest;
         gasnet_handle_t handle;
 
+        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
+
         if (node_info->supernode != nodeinfo_table[my_proc].supernode &&
             !address_in_shared_mem(dest)) {
             /* allocate out of asymmetric heap if there is sufficient enough
@@ -2517,6 +2523,8 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
         handle = gasnet_get_nb_bulk(temp_dest, proc, remote_src, nbytes);
 
         if (handle != GASNET_INVALID_HANDLE) {
+            /* get is not yet complete */
+
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_src, temp_dest, nbytes, GETS);
             /* final_dest is only set if temp_dest != dest. Otherwise, it
@@ -2532,8 +2540,16 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-        } else if (hdl != NULL) {
-            *hdl = NULL;
+
+            PROFILE_RMA_LOAD_DEFERRED_END(proc);
+        } else {
+            /* get has completed */
+
+            if (hdl != NULL) {
+                *hdl = NULL;
+            }
+
+            PROFILE_RMA_LOAD_END(proc);
         }
     }
 
@@ -2568,7 +2584,9 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     if (enable_get_cache) {
         cache_check_and_get(proc, remote_src, nbytes, dest);
     } else {
+        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
         gasnet_get_bulk(dest, proc, remote_src, nbytes);
+        PROFILE_RMA_LOAD_END(proc);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -2620,10 +2638,12 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         gasnet_handle_t handle;
         handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
 
-        if (handle != NULL && hdl != (void *) -1) {
+        if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* put hasn't completed, and we don't want to block */
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, nbytes, PUTS);
@@ -2633,15 +2653,21 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-        } else if (handle == NULL) {
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
+        } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             comm_lcb_free(src);
             if (hdl != NULL)
                 *hdl = NULL;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
             comm_lcb_free(src);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     } else {                    /* ordered == 0 */
@@ -2652,10 +2678,12 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         gasnet_handle_t handle;
         handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
 
-        if (handle != NULL && hdl != (void *) -1) {
+        if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* put hasn't completed, and we don't want to block */
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
@@ -2664,16 +2692,22 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-        } else if (handle == NULL) {
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
+        } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             comm_lcb_free(src);
             if (hdl != NULL)
                 *hdl = NULL;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (hdl == (void *) -1) {
             /* put has not have completed, and block until it remotely
              * completes */
             gasnet_wait_syncnb(handle);
             comm_lcb_free(src);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     }
@@ -2742,10 +2776,12 @@ void comm_write(size_t proc, void *dest, void *src,
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         gasnet_handle_t handle;
         handle = gasnet_put_nb(proc, remote_dest, aligned_src, nbytes);
 
-        if (handle != NULL && hdl != (void *) -1) {
+        if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* pass NULL for source buf argument */
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, NULL, nbytes, PUTS);
@@ -2755,13 +2791,19 @@ void comm_write(size_t proc, void *dest, void *src,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-        } else if (handle == NULL) {
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
+        } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             if (hdl != NULL)
                 *hdl = NULL;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     } else {                    /* ordered == 0 */
@@ -2772,10 +2814,12 @@ void comm_write(size_t proc, void *dest, void *src,
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         gasnet_handle_t handle;
         handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
 
-        if (handle != NULL && hdl != (void *) -1) {
+        if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
             /* pass NULL for source buf argument */
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, NULL, 0, PUTS);
@@ -2785,13 +2829,19 @@ void comm_write(size_t proc, void *dest, void *src,
 
             if (hdl != NULL)
                 *hdl = handle_node;
-        } else if (handle == NULL) {
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
+        } else if (handle == GASNET_INVALID_HANDLE) {
             /* put has completed */
             if (hdl != NULL)
                 *hdl = NULL;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     }
@@ -2851,6 +2901,8 @@ void comm_strided_nbread(size_t proc,
 
         } else {
 
+            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
             gasnet_handle_t handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"
                          " %p on image %lu to %p (stride_levels= %u)",
@@ -2861,7 +2913,9 @@ void comm_strided_nbread(size_t proc,
                                          src_strides,
                                          count, stride_levels);
 
-            if (handle != NULL) {
+            if (handle != GASNET_INVALID_HANDLE) {
+                /* get is not yet complete */
+
                 struct handle_list *handle_node =
                     get_next_handle(proc, remote_src, dest, size, GETS);
 
@@ -2874,8 +2928,14 @@ void comm_strided_nbread(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+
+                PROFILE_RMA_LOAD_DEFERRED_END(proc);
             } else if (hdl != NULL) {
+                /* get has completed */
+
                 *hdl = NULL;
+
+                PROFILE_RMA_LOAD_END(proc);
             }
         }
     }
@@ -2920,11 +2980,15 @@ void comm_strided_read(size_t proc,
 
         } else {
 
+            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_bulk from"
                          " %p on image %lu to %p (stride_levels= %u)",
                          remote_src, proc + 1, dest, stride_levels);
             gasnet_gets_bulk(dest, dest_strides, proc, remote_src,
                              src_strides, count, stride_levels);
+
+            PROFILE_RMA_LOAD_END(proc);
         }
     }
 
@@ -2975,6 +3039,8 @@ void comm_strided_write_from_lcb(size_t proc,
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
                          remote_dest, proc + 1, src, size);
@@ -2985,7 +3051,8 @@ void comm_strided_write_from_lcb(size_t proc,
                                          src_strides, count,
                                          stride_levels);
 
-            if (handle != NULL && hdl != (void *) -1) {
+            if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
+                /* put has not yet completed */
                 struct handle_list *handle_node =
                     get_next_handle(proc, remote_dest, src, size, PUTS);
                 handle_node->handle = handle;
@@ -2994,15 +3061,21 @@ void comm_strided_write_from_lcb(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
-            } else if (handle == NULL) {
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
+            } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 comm_lcb_free(src);
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
                 comm_lcb_free(src);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
         } else {                /* ordered == 0 */
@@ -3015,6 +3088,8 @@ void comm_strided_write_from_lcb(size_t proc,
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p",
                          remote_dest, proc + 1, src);
@@ -3025,7 +3100,8 @@ void comm_strided_write_from_lcb(size_t proc,
                                          src_strides, count,
                                          stride_levels);
 
-            if (handle != NULL && hdl != (void *) -1) {
+            if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
+                /* put has not yet completed */
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
                 handle_node->handle = handle;
@@ -3033,15 +3109,21 @@ void comm_strided_write_from_lcb(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
-            } else if (handle == NULL) {
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
+            } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 comm_lcb_free(src);
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
                 comm_lcb_free(src);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
         }
@@ -3121,6 +3203,8 @@ void comm_strided_write(size_t proc,
             local_strided_copy(src, src_strides, new_src, new_src_strides,
                                count, stride_levels);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p size %lu",
                          remote_dest, proc + 1, new_src, size);
@@ -3131,7 +3215,8 @@ void comm_strided_write(size_t proc,
                                          new_src,
                                          new_src_strides,
                                          count, stride_levels);
-            if (handle != NULL && hdl != (void *) -1) {
+            if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
+                /* put has not yet completed */
                 struct handle_list *handle_node =
                     get_next_handle(proc, remote_dest, new_src, size,
                                     PUTS);
@@ -3141,13 +3226,19 @@ void comm_strided_write(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
-            } else if (handle == NULL) {
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
+            } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
         } else {                /* ordered == 0 */
@@ -3159,6 +3250,8 @@ void comm_strided_write(size_t proc,
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before"
                          " gasnet_puts_nb_bulk to %p on image %lu from %p",
                          remote_dest, proc + 1, src);
@@ -3169,7 +3262,7 @@ void comm_strided_write(size_t proc,
                                          src_strides, count,
                                          stride_levels);
 
-            if (handle != NULL && hdl != (void *) -1) {
+            if (handle != GASNET_INVALID_HANDLE && hdl != (void *) -1) {
                 struct handle_list *handle_node =
                     get_next_handle(proc, NULL, src, 0, PUTS);
                 handle_node->handle = handle;
@@ -3177,13 +3270,19 @@ void comm_strided_write(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
-            } else if (handle == NULL) {
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
+            } else if (handle == GASNET_INVALID_HANDLE) {
                 /* put has completed */
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
         }
@@ -3211,10 +3310,10 @@ void profile_comm_handle_end(comm_handle_t hdl)
     } else if (hdl != NULL) {
         struct handle_list *handle_node = hdl;
         if (handle_node->access_type == PUTS) {
-            profile_rma_nbstore_end(handle_node->proc + 1,
+            profile_rma_nbstore_end(handle_node->proc,
                                     handle_node->rmaid);
         } else {
-            profile_rma_nbload_end(handle_node->proc + 1,
+            profile_rma_nbload_end(handle_node->proc,
                                    handle_node->rmaid);
         }
     }

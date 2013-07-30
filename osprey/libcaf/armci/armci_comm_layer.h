@@ -1,7 +1,7 @@
 /*
  ARMCI Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2012 University of Houston.
+ Copyright (C) 2009-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
