@@ -32,7 +32,7 @@
 #ifndef PCAF_INSTRUMENT
 
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)                        ((void) 1)
-#define PROFILE_FUNC_ENTRY(,grp)                                     ((void) 1)
+#define PROFILE_FUNC_ENTRY(grp)                                      ((void) 1)
 
 #define PROFILE_REGION_EXIT(rname)                                   ((void) 1)
 #define PROFILE_FUNC_EXIT()                                          ((void) 1)

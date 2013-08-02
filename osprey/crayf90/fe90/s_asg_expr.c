@@ -1029,6 +1029,13 @@ CK_WHERE:
                               IR_COL_NUM(OPND_IDX(r_opnd)));
                      ok = FALSE;
                   }
+               } else if (exp_desc_r.pe_dim_ref != 0) {
+                     /* RHS target of pointer assignment can not be coindexed
+                      * */
+
+                     PRINTMSG(IR_LINE_NUM(OPND_IDX(r_opnd)), 1721, Error,
+                              IR_COL_NUM(OPND_IDX(r_opnd)));
+                     ok = FALSE;
                }
 
                if (IR_OPR(OPND_IDX(r_opnd)) == Dv_Deref_Opr &&

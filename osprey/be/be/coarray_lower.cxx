@@ -1062,7 +1062,10 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
      * TODO: Try to integrate this into the previous pass if possible
      */
     if (!save_coarray_symbol_map.empty() ||
-        !common_save_coarray_symbol_map.empty() ) {
+        !common_save_coarray_symbol_map.empty() ||
+        !save_target_symbol_map.empty() ||
+        !common_save_target_symbol_map.empty() ||
+        !auto_target_symbol_map.empty() ) {
         WN_TREE_CONTAINER<POST_ORDER> wcpost(func_body);
         WN_TREE_CONTAINER<POST_ORDER> ::iterator wipost;
         for (wipost = wcpost.begin(); wipost != wcpost.end(); ++wipost) {
@@ -1145,8 +1148,8 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         ("New symbol for save coarray was not created yet"));
                       wipost.Replace(
                               WN_IloadLdid(WN_desc(wn),
-                                  0, ty,
-                                  save_coarray_replace, offset)
+                                  offset, ty,
+                                  save_coarray_replace, 0)
                               );
                       WN_Delete(wn);
                   } else if (st1 && ST_is_f90_target(st1)) {
@@ -1169,7 +1172,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                       wipost.Replace(
                               WN_IloadLdid(WN_desc(wn),
-                                  0, ty, targptr_replace, offset)
+                                  offset, ty, targptr_replace, 0)
                               );
                       WN_Delete(wn);
                   }
@@ -2698,7 +2701,7 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
     BOOL local_ref_is_contig = TRUE;
 
     if (access != READ_TO_LCB && access != WRITE_FROM_LCB &&
-        local_array_is_lcb) {
+        !local_array_is_lcb) {
         if (local_arrsection) {
             local_arrsection_first_sm = WN_const_val(
                                 local_arrsection->stride_mult[0]);
