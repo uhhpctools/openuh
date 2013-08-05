@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2009-2012 University of Houston.
+ Copyright (C) 2009-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -37,12 +37,8 @@
 #include "caf_collectives.h"
 #include "caf_rtl.h"
 
-#if defined(ARMCI)
-#include "armci_comm_layer.h"
-#elif defined(GASNET)
-#include "gasnet_comm_layer.h"
-#endif
-
+#include "comm.h"
+#include "alloc.h"
 #include "util.h"
 #include "trace.h"
 

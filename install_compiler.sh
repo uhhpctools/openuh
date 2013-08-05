@@ -1,5 +1,6 @@
 #!/bin/bash
 #
+#  Copyright (C) 2011-2013 University of Houston.
 #
 #  Copyright (C) 2008-2010 Advanced Micro Devices, Inc.  All Rights Reserved.
 #

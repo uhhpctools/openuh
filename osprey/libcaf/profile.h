@@ -32,30 +32,34 @@
 #ifndef PCAF_INSTRUMENT
 
 #define PROFILE_REGION_ENTRY(rname,grp,rtype)                        ((void) 1)
-#define PROFILE_FUNC_ENTRY(rname,grp)                                ((void) 1)
+#define PROFILE_FUNC_ENTRY(,grp)                                     ((void) 1)
 
 #define PROFILE_REGION_EXIT(rname)                                   ((void) 1)
-#define PROFILE_FUNC_EXIT(rname)                                     ((void) 1)
+#define PROFILE_FUNC_EXIT()                                          ((void) 1)
 
 
 
 #define PROFILE_INIT()                                               ((void) 1)
 
-#define PROFILE_RMA_STORE_STRIDED_BEGIN(dest, stride_levels, count)  ((void) 1)
-#define PROFILE_RMA_STORE_BEGIN(dest, nelem)                         ((void) 1)
-#define PROFILE_RMA_STORE_END(dest)                                  ((void) 1)
-#define PROFILE_RMA_STORE(dest, nelem)                               ((void) 1)
+#define PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count)  ((void) 1)
+#define PROFILE_RMA_STORE_BEGIN(proc, nelem)                         ((void) 1)
+#define PROFILE_RMA_STORE_END(proc)                                  ((void) 1)
+#define PROFILE_RMA_STORE_DEFERRED_END(proc)                         ((void) 1)
+#define PROFILE_RMA_STORE(proc, nelem)                               ((void) 1)
 
-#define PROFILE_RMA_LOAD_STRIDED_BEGIN(src, stride_levels, count)    ((void) 1)
-#define PROFILE_RMA_LOAD_BEGIN(src, nelem)                           ((void) 1)
-#define PROFILE_RMA_LOAD_END(src)                                    ((void) 1)
-#define PROFILE_RMA_LOAD(src, nelem)                                 ((void) 1)
+#define PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count)   ((void) 1)
+#define PROFILE_RMA_LOAD_BEGIN(proc, nelem)                          ((void) 1)
+#define PROFILE_RMA_LOAD_END(proc)                                   ((void) 1)
+#define PROFILE_RMA_LOAD_DEFERRED_END(proc)                          ((void) 1)
+#define PROFILE_RMA_LOAD(proc, nelem)                                ((void) 1)
 
 #define PROFILE_COMM_HANDLE_END(hdl)                                 ((void) 1)
 
 #define PROFILE_RMA_END_ALL()                                        ((void) 1)
 #define PROFILE_RMA_END_ALL_STORES()                                 ((void) 1)
+#define PROFILE_RMA_END_ALL_STORES_TO_PROC(proc)                     ((void) 1)
 #define PROFILE_RMA_END_ALL_LOADS()                                  ((void) 1)
+#define PROFILE_RMA_END_ALL_LOADS_TO_PROC(proc)                      ((void) 1)
 
 #else
 
@@ -96,58 +100,77 @@ extern void esd_exit(elg_ui4);
         esd_enter(_##rname##_rid); \
     }
 
-//#define PROFILE_FUNC_ENTRY(rname,grp) EPIK_FUNC_START()
-//#define PROFILE_FUNC_ENTRY(rname,grp)  ((void) 1)
-#define PROFILE_FUNC_ENTRY(rname,grp) PROFILE_REGION_ENTRY(rname,grp,ELG_FUNCTION)
+#define PROFILE_FUNC_ENTRY(grp) \
+    static int _prof_func_init = 0; \
+    static elg_ui4 _prof_func_rid; \
+    if (profiling_enabled) { \
+        if (!_prof_func_init) { \
+            int fid = esd_def_file(__FILE__); \
+            _prof_func_rid = esd_def_region(__func__ , fid, __LINE__, ELG_NO_LNO, \
+                    "CAF" , ELG_FUNCTION); \
+            _prof_func_init = 1; \
+        } \
+        esd_enter(_prof_func_rid); \
+    }
 
 #define PROFILE_REGION_EXIT(rname)  \
     if (profiling_enabled) { \
         esd_exit(_##rname##_rid); \
     }
 
-//#define PROFILE_FUNC_EXIT(rname) EPIK_FUNC_END()
-//#define PROFILE_FUNC_EXIT(rname)  ((void) 1)
-#define PROFILE_FUNC_EXIT(rname) PROFILE_REGION_EXIT(rname)
+#define PROFILE_FUNC_EXIT()  \
+    if (profiling_enabled) { \
+        esd_exit(_prof_func_rid); \
+    }
 
 #define PROFILE_INIT() { profile_init();  }
 
-#define PROFILE_RMA_STORE_STRIDED_BEGIN(dest, stride_levels, count)  { \
+#define PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count)  { \
     int i; int nbytes = 1;  \
     if (profiling_enabled) \
-    for (i = 0; i < stride_levels; i++) nbytes = nbytes * count[i]; \
-        profile_rma_store_begin( dest, nbytes); \
+    for (i = 0; i <= stride_levels; i++) nbytes = nbytes * count[i]; \
+    profile_rma_store_begin( proc, nbytes); \
 }
 
-#define PROFILE_RMA_STORE_BEGIN(dest, nelem ) { \
-    profile_rma_store_begin(dest, nelem ); \
+#define PROFILE_RMA_STORE_BEGIN(proc, nelem ) { \
+    profile_rma_store_begin(proc, nelem ); \
 }
 
-#define PROFILE_RMA_STORE_END(dest)  { \
-    profile_rma_store_end(dest); \
+#define PROFILE_RMA_STORE_END(proc)  { \
+    profile_rma_store_end(proc); \
 }
 
-
-#define PROFILE_RMA_STORE(dest, nelem) { \
-    profile_rma_store(dest, nelem); \
+#define PROFILE_RMA_STORE_DEFERRED_END(proc)  { \
+    profile_save_nbstore(proc); \
+    profile_unset_in_prof_region(); \
 }
 
-#define PROFILE_RMA_LOAD_STRIDED_BEGIN(src, stride_levels, count)  { \
+#define PROFILE_RMA_STORE(proc, nelem) { \
+    profile_rma_store(proc, nelem); \
+}
+
+#define PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count)  { \
     int i; int nbytes = 1;  \
     if (profiling_enabled) \
-    for (i = 0; i < stride_levels; i++) nbytes = nbytes * count[i]; \
-        profile_rma_load_begin( src, nbytes); \
+    for (i = 0; i <= stride_levels; i++) nbytes = nbytes * count[i]; \
+    profile_rma_load_begin( proc, nbytes); \
 }
 
-#define PROFILE_RMA_LOAD_BEGIN(src, nelem ) { \
-    profile_rma_load_begin(src, nelem); \
+#define PROFILE_RMA_LOAD_BEGIN(proc, nelem ) { \
+    profile_rma_load_begin(proc, nelem); \
 }
 
-#define PROFILE_RMA_LOAD_END(src)  { \
-    profile_rma_load_end(src); \
+#define PROFILE_RMA_LOAD_END(proc)  { \
+    profile_rma_load_end(proc); \
 }
 
-#define PROFILE_RMA_LOAD(src, nelem) { \
-    profile_rma_load(src, nelem); \
+#define PROFILE_RMA_LOAD_DEFERRED_END(proc)  { \
+    profile_save_nbload(proc); \
+    profile_unset_in_prof_region(); \
+}
+
+#define PROFILE_RMA_LOAD(proc, nelem) { \
+    profile_rma_load(proc, nelem); \
 }
 
 #define PROFILE_COMM_HANDLE_END(hdl) {\
@@ -157,28 +180,37 @@ extern void esd_exit(elg_ui4);
 #define PROFILE_RMA_END_ALL        profile_rma_end_all
 
 #define PROFILE_RMA_END_ALL_STORES profile_rma_end_all_nbstores
+
+#define PROFILE_RMA_END_ALL_STORES_TO_PROC(proc) \
+                                   profile_rma_end_all_nbstores_to_proc
+
 #define PROFILE_RMA_END_ALL_LOADS  profile_rma_end_all_nbloads
+
+#define PROFILE_RMA_END_ALL_LOADS_TO_PROC(proc) \
+                                   profile_rma_end_all_nbloads_to_proc
 
 void profile_init();
 
-void profile_rma_store_begin(int dest, int nelem);
-void profile_rma_store_end(int dest);
-void profile_rma_store(int dest, int nelem);
-void profile_rma_load_begin(int src, int nelem);
-void profile_rma_load_end(int src);
-void profile_rma_load(int src, int nelem);
+void profile_rma_store_begin(int proc, int nelem);
+void profile_rma_store_end(int proc);
+void profile_rma_store(int proc, int nelem);
+void profile_rma_load_begin(int proc, int nelem);
+void profile_rma_load_end(int proc);
+void profile_rma_load(int proc, int nelem);
 
-void profile_rma_nbstore_end(int dest, int rid);
-void profile_save_nbstore(int dest);
-void profile_save_nbstore_rmaid(int dest, int rid);
+void profile_rma_nbstore_end(int proc, int rid);
+void profile_save_nbstore(int proc);
+void profile_save_nbstore_rmaid(int proc, int rid);
 
-void profile_rma_nbload_end(int src, int rid);
-void profile_save_nbload(int src);
-void profile_save_nbload_rmaid(int src, int rid);
+void profile_rma_nbload_end(int proc, int rid);
+void profile_save_nbload(int proc);
+void profile_save_nbload_rmaid(int proc, int rid);
 
 void profile_rma_end_all();
 void profile_rma_end_all_nbstores();
+void profile_rma_end_all_nbstores_to_proc(int proc);
 void profile_rma_end_all_nbloads();
+void profile_rma_end_all_nbloads_to_proc(int proc);
 
 void profile_set_in_prof_region();
 void profile_unset_in_prof_region();

@@ -63,7 +63,7 @@ void profile_init()
     }
 }
 
-void profile_rma_store_begin(int dest, int nelem)
+void profile_rma_store_begin(int proc, int nelem)
 {
     if (!profiling_enabled)
         return;
@@ -72,28 +72,28 @@ void profile_rma_store_begin(int dest, int nelem)
 
     rma_prof_rid = rma_prof_rid + 1;
 
-    elg_put_1ts(dest - 1, rma_prof_rid, nelem);
+    elg_put_1ts(proc, rma_prof_rid, nelem);
 
     in_rma_region = 1;
 }
 
-void profile_rma_store_end(int dest)
+void profile_rma_store_end(int proc)
 {
     if (!profiling_enabled)
         return;
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
 
-    elg_put_1te_remote(dest - 1, rma_prof_rid);
+    elg_put_1te_remote(proc, rma_prof_rid);
     in_rma_region = 0;
 }
 
-void profile_rma_store(int dest, int nelem)
+void profile_rma_store(int proc, int nelem)
 {
 }
 
 
-void profile_rma_load_begin(int src, int nelem)
+void profile_rma_load_begin(int proc, int nelem)
 {
     if (!profiling_enabled)
         return;
@@ -102,34 +102,34 @@ void profile_rma_load_begin(int src, int nelem)
 
     rma_prof_rid = rma_prof_rid + 1;
 
-    elg_get_1ts_remote(src - 1, rma_prof_rid, nelem);
+    elg_get_1ts_remote(proc, rma_prof_rid, nelem);
     in_rma_region = 1;
 }
 
-void profile_rma_load_end(int src)
+void profile_rma_load_end(int proc)
 {
     if (!profiling_enabled)
         return;
     if (!in_rma_region)
         Error("profile_rma_load_end called outside of active rma region");
 
-    elg_get_1te(src - 1, rma_prof_rid);
+    elg_get_1te(proc, rma_prof_rid);
     in_rma_region = 0;
 }
 
-void profile_rma_load(int src, int nelem)
+void profile_rma_load(int proc, int nelem)
 {
 }
 
 /* compiler and internal API */
 
-void profile_rma_nbstore_end(int dest, int rid)
+void profile_rma_nbstore_end(int proc, int rid)
 {
     rma_node_t *rma_node, tmp;
     if (!profiling_enabled)
         return;
 
-    elg_put_1te_remote(dest - 1, rid);
+    elg_put_1te_remote(proc, rid);
 
     /* remove this RMA from the save list */
     tmp.rmaid = rid;
@@ -140,14 +140,14 @@ void profile_rma_nbstore_end(int dest, int rid)
 
 }
 
-void profile_save_nbstore(int dest)
+void profile_save_nbstore(int proc)
 {
     if (!profiling_enabled)
         return;
-    profile_save_nbstore_rmaid(dest, rma_prof_rid);
+    profile_save_nbstore_rmaid(proc, rma_prof_rid);
 }
 
-void profile_save_nbstore_rmaid(int dest, int rid)
+void profile_save_nbstore_rmaid(int proc, int rid)
 {
     if (!profiling_enabled)
         return;
@@ -156,19 +156,19 @@ void profile_save_nbstore_rmaid(int dest, int rid)
         Error("malloc failed to allocate memory");
 
     new_rma->rmaid = rid;
-    new_rma->target = dest;
+    new_rma->target = proc;
 
     DL_APPEND(saved_store_rma_list, new_rma);
 }
 
 
-void profile_rma_nbload_end(int src, int rid)
+void profile_rma_nbload_end(int proc, int rid)
 {
     if (!profiling_enabled)
         return;
     rma_node_t *rma_node, tmp;
 
-    elg_get_1te(src - 1, rid);
+    elg_get_1te(proc, rid);
 
     /* remove this RMA from the save list */
     tmp.rmaid = rid;
@@ -179,14 +179,14 @@ void profile_rma_nbload_end(int src, int rid)
 
 }
 
-void profile_save_nbload(int src)
+void profile_save_nbload(int proc)
 {
     if (!profiling_enabled)
         return;
-    profile_save_nbload_rmaid(src, rma_prof_rid);
+    profile_save_nbload_rmaid(proc, rma_prof_rid);
 }
 
-void profile_save_nbload_rmaid(int src, int rid)
+void profile_save_nbload_rmaid(int proc, int rid)
 {
     if (!profiling_enabled)
         return;
@@ -195,7 +195,7 @@ void profile_save_nbload_rmaid(int src, int rid)
         Error("malloc failed to allocate memory");
 
     new_rma->rmaid = rid;
-    new_rma->target = src;
+    new_rma->target = proc;
 
     DL_APPEND(saved_load_rma_list, new_rma);
 }
@@ -216,8 +216,22 @@ void profile_rma_end_all_nbstores()
         return;
 
     DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
-        elg_put_1te_remote(rma_node->target - 1, rma_node->rmaid);
+        elg_put_1te_remote(rma_node->target, rma_node->rmaid);
         DL_DELETE(saved_store_rma_list, rma_node);
+    }
+}
+
+void profile_rma_end_all_nbstores_to_proc(int proc)
+{
+    rma_node_t *rma_node, *tmp;
+    if (!profiling_enabled)
+        return;
+
+    DL_FOREACH_SAFE(saved_store_rma_list, rma_node, tmp) {
+        if (rma_node->target == proc) {
+            elg_put_1te_remote(proc, rma_node->rmaid);
+            DL_DELETE(saved_store_rma_list, rma_node);
+        }
     }
 }
 
@@ -228,8 +242,22 @@ void profile_rma_end_all_nbloads()
         return;
 
     DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
-        elg_put_1te(rma_node->target - 1, rma_node->rmaid);
+        elg_put_1te(rma_node->target, rma_node->rmaid);
         DL_DELETE(saved_load_rma_list, rma_node);
+    }
+}
+
+void profile_rma_end_all_nbloads_to_proc(int proc)
+{
+    rma_node_t *rma_node, *tmp;
+    if (!profiling_enabled)
+        return;
+
+    DL_FOREACH_SAFE(saved_load_rma_list, rma_node, tmp) {
+        if (rma_node->target == proc) {
+            elg_put_1te(proc, rma_node->rmaid);
+            DL_DELETE(saved_load_rma_list, rma_node);
+        }
     }
 }
 

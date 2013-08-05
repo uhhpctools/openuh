@@ -1,4 +1,7 @@
 Copyright 2010 Hewlett Packard Company
+
+Copyright 2011-2013 University of Houston
+
 Copyright (C) 2012 Advanced Micro Devices, Inc.  All Rights Reserved.
 
 This file is free software: you can redistribute it and/or modify

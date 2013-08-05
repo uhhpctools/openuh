@@ -1,7 +1,7 @@
 /*
  Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2012 University of Houston.
+ Copyright (C) 2012-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -38,6 +38,7 @@
 #include "uthash.h"
 #include "trace.h"
 #include "util.h"
+#include "profile.h"
 
 
 extern unsigned long _this_image;
@@ -123,7 +124,6 @@ void comm_lock(lock_t * lock, int image, char *errmsg, int errmsg_len)
 
     LOAD_STORE_FENCE();
 
-
     /* p = FETCH-and-STORE(lock, q, image-1) */
     comm_fstore_request(lock, &q, sizeof(q), image - 1, &p);
 
@@ -143,7 +143,6 @@ void comm_lock(lock_t * lock, int image, char *errmsg, int errmsg_len)
                                                                     p.image))
                    + 1, ((int *) &r) + 1, sizeof(r) - sizeof(int), 1,
                    (comm_handle_t *) 0);
-
 
         /* wait for locked flag to be reset */
         do {
@@ -424,6 +423,7 @@ void comm_lock_stat(lock_t * lock, int image, char *success,
          * initial check and if it isn't locked then we try to acquire the
          * lock as normal */
         comm_read(image - 1, lock, &p, sizeof(p));
+
         if (p.locked != 0) {
             *success = 0;
             HASH_DELETE(hh, req_table, new_item);
@@ -475,7 +475,6 @@ void comm_lock_stat(lock_t * lock, int image, char *success,
                    + 1, ((int *) &r) + 1, sizeof(r) - sizeof(int), 1,
                    (comm_handle_t *) NULL);
 
-
         /* wait for locked flag to be reset */
         do {
             comm_service();
@@ -524,6 +523,7 @@ void comm_unlock_stat(lock_t * lock, int image, int *status,
         if (status != NULL) {
             lock_t p;
             comm_read(image - 1, lock, &p, sizeof(p));
+
             if (p.locked != 0) {
                 *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
             } else {
@@ -624,6 +624,7 @@ void comm_unlock2_stat(lock_t * lock, int image, int *status,
         if (status != NULL) {
             lock_t p;
             comm_read(image - 1, lock, &p, sizeof(p));
+
             if (p.locked != 0) {
                 *((INT2 *) status) = STAT_LOCKED_OTHER_IMAGE;
             } else {

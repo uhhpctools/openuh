@@ -3,7 +3,7 @@
 #
 #  CAF compiler wrapper for OpenUH
 #
-#  Copyright (C) 2010-2012 University of Houston.
+#  Copyright (C) 2010-2013 University of Houston.
 #
 #  This program is free software; you can redistribute it and/or modify it
 #  under the terms of version 2 of the GNU General Public License as
@@ -621,16 +621,18 @@ else
 
           # link command
           execute $FC $CAF_LDFLAGS $keep_option $OBJECTS1 \
-                  $OBJECTS2 $LIBCAF -lcaf-extra $compiler_args   \
+                  $OBJECTS2 $compiler_args   \
                   $link_instructions.o $set_static_symm_data.o  \
-                  $output_file $COMM_LIBS $AUX_LD_LIBS
+                  $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
+                  $AUX_LD_LIBS
           stat=$?
       else
           # link command
           execute $FC $CAF_LDFLAGS $keep_option $OBJECTS1 \
-                $OBJECTS2 $LIBCAF -lcaf-extra $compiler_args   \
-                $link_instructions.o $output_file $COMM_LIBS  \
-                $AUX_LD_LIBS
+                  $OBJECTS2 $compiler_args   \
+                  $link_instructions.o  \
+                  $output_file $LIBCAF -lcaf-extra $COMM_LIBS \
+                  $AUX_LD_LIBS
           stat=$?
       fi
   else

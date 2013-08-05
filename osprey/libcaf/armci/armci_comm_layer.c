@@ -1,7 +1,7 @@
 /*
  ARMCI Communication Layer for supporting Coarray Fortran
 
- Copyright (C) 2009-2012 University of Houston.
+ Copyright (C) 2009-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -1020,10 +1020,10 @@ static void wait_on_pending_puts(size_t proc)
     struct handle_list *handle_node, *node_to_delete;
     handle_node = handles[proc];
     ARMCI_Fence(proc);
+    PROFILE_RMA_END_ALL_STORES_TO_PROC(proc);
+
     /* clear out entire handle list */
     while (handle_node) {
-        PROFILE_COMM_HANDLE_END((comm_handle_t) handle_node);
-
         /* return armci handle to free list */
         return_armci_handle((armci_handle_x_t *) handle_node->handle,
                             PUTS);
@@ -1326,13 +1326,18 @@ void comm_sync(comm_handle_t hdl)
         wait_on_all_pending_accesses();
     } else if (hdl != NULL) {   /* wait on specified handle */
         check_remote_image(((struct handle_list *) hdl)->proc + 1);
-        ARMCI_Wait(((struct handle_list *) hdl)->handle);
 
-        PROFILE_COMM_HANDLE_END(hdl);
+        if (((struct handle_list *)hdl)->access_type == PUTS) {
+            wait_on_pending_puts(((struct handle_list *)hdl)->proc);
+        } else {
+            ARMCI_Wait(((struct handle_list *) hdl)->handle);
 
-        delete_node(((struct handle_list *) hdl)->proc,
+            PROFILE_COMM_HANDLE_END(hdl);
+
+            delete_node(((struct handle_list *) hdl)->proc,
                     (struct handle_list *) hdl,
                     ((struct handle_list *) hdl)->access_type);
+        }
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_SYNC, "exit");
@@ -1685,6 +1690,9 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
     else {
         int in_progress = 0;
         armci_hdl_t *handle;
+
+        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
+
         handle = get_next_armci_handle(GETS);
         ARMCI_INIT_HANDLE(handle);
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
@@ -1703,10 +1711,14 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+
+            PROFILE_RMA_LOAD_DEFERRED_END(proc);
         } else if (hdl != NULL) {
             /* get has completed */
             *hdl = NULL;
             return_armci_handle((armci_handle_x_t *) handle, GETS);
+
+            PROFILE_RMA_LOAD_END(proc);
         }
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "After ARMCI_NbGet from %p on"
@@ -1752,7 +1764,9 @@ void comm_read(size_t proc, void *src, void *dest, size_t nbytes)
     if (enable_get_cache)
         cache_check_and_get(proc, remote_src, nbytes, dest);
     else {
+        PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
         ARMCI_Get(remote_src, dest, (int) nbytes, (int) proc);
+        PROFILE_RMA_LOAD_END(proc);
     }
 
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
@@ -1784,6 +1798,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
 
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
+
         if (hdl != (void *) -1) {
             armci_hdl_t *handle;
             handle = get_next_armci_handle(PUTS);
@@ -1801,16 +1817,22 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                          proc + 1,
                          nb_mgr[PUTS].min_nb_address[proc],
                          nb_mgr[PUTS].max_nb_address[proc]);
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else {
             /* block until remote completion */
             ARMCI_Put(src, remote_dest, nbytes, proc);
             comm_lcb_free(src);
             wait_on_pending_puts(proc);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     } else {                    /* ordered == 0 */
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         int in_progress = 0;
         armci_hdl_t *handle;
@@ -1832,17 +1854,23 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (handle == NULL) {
             /* put has completed */
             comm_lcb_free(src);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
             if (hdl != NULL)
                 *hdl = NULL;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             wait_on_pending_puts(proc);
             comm_lcb_free(src);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     }
@@ -1879,14 +1907,20 @@ void comm_write(size_t proc, void *dest, void *src,
     if (ordered) {
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
         /* guarantees local completion */
         ARMCI_Put(src, remote_dest, nbytes, proc);
 
         if (hdl != (void *) -1) {
             update_nb_address_block(remote_dest, proc, nbytes, PUTS);
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else {
             /* block until remote completion */
             wait_on_pending_puts(proc);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
@@ -1898,6 +1932,8 @@ void comm_write(size_t proc, void *dest, void *src,
     } else {                    /* ordered == 0 */
         if (nb_mgr[PUTS].handles[proc])
             wait_on_pending_accesses(proc, remote_dest, nbytes, PUTS);
+
+        PROFILE_RMA_STORE_BEGIN(proc, nbytes);
 
         int in_progress = 0;
         armci_hdl_t *handle;
@@ -1919,15 +1955,21 @@ void comm_write(size_t proc, void *dest, void *src,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+
+            PROFILE_RMA_STORE_END(proc);
         } else if (handle == NULL) {
             /* put has completed */
             if (hdl != NULL)
                 *hdl = NULL;
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+            PROFILE_RMA_STORE_DEFERRED_END(proc);
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             wait_on_pending_puts(proc);
             return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+            PROFILE_RMA_STORE_END(proc);
         }
 
     }
@@ -2004,6 +2046,8 @@ void comm_strided_nbread(size_t proc,
 
         } else {
 
+            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
             int in_progress = 0;
             armci_hdl_t *handle;
             handle = get_next_armci_handle(GETS);
@@ -2024,9 +2068,13 @@ void comm_strided_nbread(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+
+                PROFILE_RMA_LOAD_DEFERRED_END(proc);
             } else if (hdl != NULL) {
                 *hdl = NULL;
                 return_armci_handle((armci_handle_x_t *) handle, GETS);
+
+                PROFILE_RMA_LOAD_END(proc);
             }
 
         }
@@ -2091,8 +2139,12 @@ void comm_strided_read(size_t proc,
 
         } else {
 
+            PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
             ARMCI_GetS(remote_src, src_strides, dest, dest_strides, count,
                        stride_levels, proc);
+
+            PROFILE_RMA_LOAD_END(proc);
         }
     }
 
@@ -2155,6 +2207,8 @@ void comm_strided_write_from_lcb(size_t proc,
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             if (hdl != (void *) -1) {
                 armci_hdl_t *handle;
                 handle = get_next_armci_handle(PUTS);
@@ -2167,12 +2221,16 @@ void comm_strided_write_from_lcb(size_t proc,
                              handle_node->handle);
                 handle_node->next = 0;
                 update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else {
                 /* block until remote completion */
                 ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                            count, stride_levels, proc);
                 comm_lcb_free(src);
                 wait_on_pending_puts(proc);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_NbPutS"
@@ -2187,6 +2245,8 @@ void comm_strided_write_from_lcb(size_t proc,
                 + count[0];
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
             int in_progress = 0;
             armci_hdl_t *handle;
@@ -2208,17 +2268,23 @@ void comm_strided_write_from_lcb(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == NULL) {
                 /* put has completed */
                 comm_lcb_free(src);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 wait_on_pending_puts(proc);
                 comm_lcb_free(src);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+                PROFILE_RMA_STORE_END(proc);
             }
         }
 
@@ -2290,15 +2356,21 @@ void comm_strided_write(size_t proc,
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
 
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
+
             /* guarantees local completion */
             ARMCI_PutS(src, src_strides, remote_dest, dest_strides,
                        count, stride_levels, proc);
 
             if (hdl != (void *) -1) {
                 update_nb_address_block(remote_dest, proc, size, PUTS);
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else {
                 /* block until it remotely completes */
                 wait_on_pending_puts(proc);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "After ARMCI_PutS"
@@ -2313,6 +2385,8 @@ void comm_strided_write(size_t proc,
                 + count[0];
             if (nb_mgr[PUTS].handles[proc])
                 wait_on_pending_accesses(proc, remote_dest, size, PUTS);
+
+            PROFILE_RMA_STORE_STRIDED_BEGIN(proc, stride_levels, count);
 
             int in_progress = 0;
             armci_hdl_t *handle;
@@ -2334,15 +2408,21 @@ void comm_strided_write(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+
+                PROFILE_RMA_STORE_DEFERRED_END(proc);
             } else if (handle == NULL) {
                 /* put has completed */
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
                 if (hdl != NULL)
                     *hdl = NULL;
+
+                PROFILE_RMA_STORE_END(proc);
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 wait_on_pending_puts(proc);
                 return_armci_handle((armci_handle_x_t *) handle, PUTS);
+
+                PROFILE_RMA_STORE_END(proc);
             }
 
         }
@@ -2370,10 +2450,10 @@ void profile_comm_handle_end(comm_handle_t hdl)
     } else if (hdl != NULL) {
         struct handle_list *handle_node = hdl;
         if (handle_node->access_type == PUTS) {
-            profile_rma_nbstore_end(handle_node->proc + 1,
+            profile_rma_nbstore_end(handle_node->proc,
                                     handle_node->rmaid);
         } else {
-            profile_rma_nbload_end(handle_node->proc + 1,
+            profile_rma_nbload_end(handle_node->proc,
                                    handle_node->rmaid);
         }
     }

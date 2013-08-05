@@ -1,7 +1,7 @@
 /*
- Runtime library for supporting Coarray Fortran 
+ Runtime library for supporting Coarray Fortran
 
- Copyright (C) 2011-2012 University of Houston.
+ Copyright (C) 2011-2013 University of Houston.
 
  This program is free software; you can redistribute it and/or modify it
  under the terms of version 2 of the GNU General Public License as
@@ -9,20 +9,20 @@
 
  This program is distributed in the hope that it would be useful, but
  WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
  Further, this software is distributed without any warranty that it is
- free of the rightful claim of any third person regarding infringement 
- or the like.  Any license provided herein, whether implied or 
- otherwise, applies only to this software file.  Patent licenses, if 
- any, provided herein do not apply to combinations of this program with 
- other software, or any other product whatsoever.  
+ free of the rightful claim of any third person regarding infringement
+ or the like.  Any license provided herein, whether implied or
+ otherwise, applies only to this software file.  Patent licenses, if
+ any, provided herein do not apply to combinations of this program with
+ other software, or any other product whatsoever.
 
  You should have received a copy of the GNU General Public License along
  with this program; if not, write the Free Software Foundation, Inc., 59
  Temple Place - Suite 330, Boston MA 02111-1307, USA.
 
- Contact information: 
+ Contact information:
  http://www.cs.uh.edu/~hpctools
 */
 
@@ -42,11 +42,11 @@ extern void __f90_set_args(int argc, char **argv);
 #define Error(...)    __libcaf_error(drop_path(__FILE__),__func__,__LINE__,__VA_ARGS__)
 
 #if defined(CAFRT_DEBUG)
-#define DEBUG_PRINT_ARR_INT  __libcaf_debug_print_array_int
-#define DEBUG_PRINT_ARR_LONG __libcaf_debug_print_array_long
+#define DEBUG_PRINT_ARR_INT(name,arr,n)  __libcaf_debug_print_array_int(name,arr,n)
+#define DEBUG_PRINT_ARR_LONG(name,arr,n) __libcaf_debug_print_array_long(name,arr,n)
 #else
-#define DEBUG_PRINT_ARR_INT()  ((void) 1)
-#define DEBUG_PRINT_ARR_LONG() ((void) 1)
+#define DEBUG_PRINT_ARR_INT(name,arr,n)  ((void) 1)
+#define DEBUG_PRINT_ARR_LONG(name,arr,n) ((void) 1)
 #endif
 
 void __libcaf_warning(const char *file, const char *func, int line,
