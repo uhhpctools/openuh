@@ -30,8 +30,6 @@
 
 this="`basename $0`"
 
-tracing_enabled=@CAFRT_ENABLE_TRACES@
-
 default_heap_size=@DEFAULT_CAF_HEAP_SIZE@
 
 version_num=@OPENUH_VERSION@
@@ -292,16 +290,10 @@ for arg in "$@" ; do
         levels=`echo UhCaf$arg | sed -e 's/UhCaf--trace=//g'`
         levels=`echo $levels | tr '[:lower:]' '[:upper:]'`
         set_env UHCAF_TRACE $levels
-        if [ "${tracing_enabled}" = "NO" ]; then
-          print_warning "Tracing disabled in CAF runtime"
-        fi
         ;;
       --trace-dir=*)
         trace_dir=`echo UhCaf$arg | sed -e 's/UhCaf--trace-dir=//g'`
         set_env UHCAF_TRACE_DIR $trace_dir
-        if [ "${tracing_enabled}" = "NO" ]; then
-          print_warning "Tracing disabled in CAF runtime"
-        fi
         ;;
       --image-heap=*)
         image_heap=`echo UhCaf$arg | sed -e 's/UhCaf--image-heap=//g'`

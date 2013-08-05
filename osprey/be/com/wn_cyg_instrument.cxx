@@ -164,6 +164,19 @@ Generate_cyg_profile_func( BOOL is_exit, ST *st_func,
   }
 }
 
+#define NAME_IS( st, name ) \
+        strlen( &Str_Table[(st)->u1.name_idx]) == strlen(name) \
+        && !strncmp( &Str_Table[(st)->u1.name_idx], name, strlen(name))
+
+static BOOL
+Is_Fortran_End_Call(WN *wn)
+{
+    return ( ((PU_src_lang(Get_Current_PU()) == PU_F90_LANG) ||
+              (PU_src_lang(Get_Current_PU()) == PU_F77_LANG)) &&
+             (WN_operator(wn) == OPR_CALL) &&
+             NAME_IS(WN_st(wn), "_END"));
+}
+
 
 // CYG_Instrument_Block traverse the statements in the given BLOCK, and
 // insert calls to __cyg_profile_func_enter/exit before RETURN and
@@ -177,6 +190,7 @@ static WN *
 CYG_Instrument_Block( WN *block, WN *wn_first )
 {
   WN *wn, *wn_next, *wn_label;
+  BOOL fortran_end_call_encountered = FALSE;
   LABEL_IDX exit_label;
   BOOL do_inline_inst;
 
@@ -189,14 +203,17 @@ CYG_Instrument_Block( WN *block, WN *wn_first )
     OPERATOR opr = WN_operator(wn);
     if (! OPERATOR_is_leaf(opr)) CYG_Traverse( wn );
 
-    if ( opr == OPR_RETURN || opr == OPR_RETURN_VAL 
+    if (!fortran_end_call_encountered &&
+      ( opr == OPR_RETURN || opr == OPR_RETURN_VAL 
 #ifdef KEY
   	 || opr ==  OPR_GOTO_OUTER_BLOCK
 #endif
+     || Is_Fortran_End_Call(wn) )
        ) {
       if ( Do_cyg_instrument_p( Get_Current_PU_ST() ) ) {
-	Generate_cyg_profile_func( TRUE, Get_Current_PU_ST(),
-				   LABEL_IDX_ZERO, wn, block );
+          Generate_cyg_profile_func( TRUE, Get_Current_PU_ST(),
+                  LABEL_IDX_ZERO, wn, block );
+          if ( Is_Fortran_End_Call(wn) ) fortran_end_call_encountered = TRUE;
       }
     } else if ( opr == OPR_PRAGMA ) {
 

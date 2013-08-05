@@ -50,6 +50,7 @@ typedef struct {
     size_t reserved_heap_usage;
 } mem_usage_info_t;
 
+
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
 #define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)

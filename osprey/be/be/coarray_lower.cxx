@@ -134,6 +134,7 @@ static WN_MAP Caf_LCB_Map;
 static WN_MAP Caf_Visited_Map;
 static WN_MAP Caf_Coarray_Sync_Map;
 
+static std::vector<CAF_STMT_NODE> caf_initializer_list;
 static std::vector<CAF_STMT_NODE> caf_delete_list;
 static std::map<ST *, ST *> save_coarray_symbol_map;
 static std::map<ST *, ST *> save_target_symbol_map;
@@ -312,6 +313,10 @@ static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty);
 static int add_caf_stmt_to_delete_list(WN *stmt, WN *blk);
 static int stmt_in_delete_list(WN *stmt);
 static void delete_caf_stmts_in_delete_list();
+
+static int add_caf_stmt_to_initializer_list(WN *stmt, WN *blk);
+static int stmt_in_initializer_list(WN *stmt);
+static void move_stmts_from_initializer_list(WN *wn, WN *blk);
 
 static WN* make_array_ref(ST *base);
 static WN* make_array_ref(WN *base);
@@ -492,11 +497,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     is_main  = currentpu_ismain();
     func_body = WN_func_body( pu );
     func_exit_stmts = WN_CreateBlock();
-    if ( is_main ) {
-        WN *first_wn = WN_first(func_body);
-        WN *call_caf_init = Generate_Call( CAF_INIT );
-        WN_INSERT_BlockFirst( func_body, call_caf_init );
-    }
 
     /* create extern symbols _this_image and _num_images. Should be
      * initialized by runtime library
@@ -588,6 +588,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     WN_TREE_CONTAINER<PRE_ORDER> ::iterator wipre, curr_wipre=NULL, temp_wipre = NULL;
     BOOL defer_sync_just_seen = FALSE;
     ST *handle_var = NULL;
+    BOOL pragma_preamble_done = FALSE;
     for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
         WN *insert_blk;
         WN *wn = wipre.Wn();
@@ -626,6 +627,27 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
           if (WN_operator(parent) == OPR_BLOCK) blk_node = parent;
         }
 
+        /* need to move static initializers to coarray data past the call to
+         * caf_init(). */
+        if (is_main && !pragma_preamble_done) {
+            if (WN_operator(wn) == OPR_STID) {
+                if ( is_coarray_type(ST_type(WN_st(wn))) ) {
+                    add_caf_stmt_to_initializer_list(wn, func_body);
+                }
+            } else if (WN_operator(wn) == OPR_ISTORE ||
+                    WN_operator(wn) == OPR_MSTORE) {
+                WN *find_lda = WN_kid1(wn);
+                while (find_lda && WN_operator(find_lda) != OPR_LDA) {
+                    find_lda = WN_kid0(find_lda);
+                }
+                if ( find_lda &&
+                        is_coarray_type(ST_type(WN_st(find_lda))) ) {
+                    add_caf_stmt_to_initializer_list(wn, func_body);
+                }
+
+            }
+        }
+
 
         /* stores most recently encountered ARRAYEXP in wn_arrayexp */
         if (WN_operator(wn) == OPR_ARRAYEXP)
@@ -646,6 +668,13 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     }
                     insert_wnx = Generate_Call_coarray_sync(hdl, TRUE);
                     WN_INSERT_BlockAfter(blk_node, wn, insert_wnx);
+                } else if (is_main && WN_pragma(wn) == WN_PRAGMA_PREAMBLE_END) {
+                    pragma_preamble_done = TRUE;
+                    insert_wnx = Generate_Call( CAF_INIT );
+                    WN_INSERT_BlockAfter(blk_node, wn, insert_wnx);
+
+                    /* move initializers for static coarrays here */
+                    move_stmts_from_initializer_list(insert_wnx, blk_node);
                 }
                 break;
             case OPR_RETURN:
@@ -3536,6 +3565,68 @@ static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty)
   free(wn_costr_m);
   return image;
 }
+
+static int stmt_in_initializer_list(WN *stmt)
+{
+    int i;
+
+    /* check if statement is already in the delete list */
+    for (i = 0; i != caf_initializer_list.size(); ++i) {
+        if (caf_initializer_list[i].stmt == stmt) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void move_stmts_from_initializer_list(WN *wn, WN *blk)
+{
+  for (int i = 0; i != caf_initializer_list.size(); ++i) {
+    CAF_STMT_NODE stmt_to_init = caf_initializer_list[i];
+    Is_True(stmt_to_init.stmt && stmt_to_init.blk,
+        ("invalid CAF_STMT_NODE object in caf_initializer_list"));
+    WN *stmt = WN_EXTRACT_FromBlock(stmt_to_init.blk, stmt_to_init.stmt);
+    WN_INSERT_BlockAfter(blk, wn, stmt);
+    wn = stmt;
+  }
+
+  caf_initializer_list.clear();
+}
+
+static int add_caf_stmt_to_initializer_list(WN *stmt, WN *blk)
+{
+  int i;
+  CAF_STMT_NODE init_stmt;
+  int ok = 1;
+
+  /* check if statement is already in the initializer list */
+  ok = ! (stmt_in_initializer_list(stmt));
+
+  /* traverse up tree until we find node who's parent is blk */
+  WN *p = stmt;
+  while (p && Get_Parent(p) != blk) {
+      p = Get_Parent(p);
+  }
+
+  Is_True(p && Get_Parent(p) == blk,
+          ("can't figure out what to do with this statement"));
+
+  if (p == NULL) return 0;
+
+  /* check (again) if statement is already in the initializer list */
+  ok = ! (stmt_in_initializer_list(p));
+
+  if (ok) {
+    init_stmt.stmt = p;
+    init_stmt.blk = blk;
+    caf_initializer_list.push_back(init_stmt);
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 
 static int stmt_in_delete_list(WN *stmt)
 {

@@ -163,6 +163,33 @@ ifndef WHIRL_HAS_ID_FIELD
      WHIRL_HAS_ID_FIELD = @WHIRL_HAS_ID_FIELD@
 endif
 
+######################################################
+#### OPENUH CONFIG ####
+
+## TOOLS INTEGRATION ##
+
+ifndef DRAGON_SUPPORT
+	DRAGON_SUPPORT = @DRAGON_SUPPORT@
+endif
+
+ifndef BUILD_LIBUHINSTR
+	BUILD_LIBUHINSTR = @BUILD_LIBUHINSTR@
+endif
+
+ifndef TAU_ROOT
+	TAU_ROOT = @TAU_ROOT@
+endif
+
+ifndef TAU_LIBS
+	TAU_LIBS = @TAU_LIBS@
+endif
+
+ifndef EPIK_ROOT
+	EPIK_ROOT = @EPIK_ROOT@
+endif
+
+## CAF SUPPORT ##
+
 ifndef ENABLE_COARRAYS
 	ENABLE_COARRAYS = @ENABLE_COARRAYS@
 endif
@@ -179,10 +206,6 @@ ifndef GASNET_CONDUITS
 	GASNET_CONDUITS=@GASNET_CONDUITS@
 endif
 
-ifndef DRAGON_SUPPORT
-	DRAGON_SUPPORT = @DRAGON_SUPPORT@
-endif
-
 ifndef MPI_INCLUDE
 	MPI_INCLUDE = @MPI_INCLUDE@
 endif
@@ -191,17 +214,12 @@ ifndef CAFRT_ENABLE_TRACES
 	CAFRT_ENABLE_TRACES = @CAFRT_ENABLE_TRACES@
 endif
 
-ifndef BUILD_LIBUHINSTR
-	BUILD_LIBUHINSTR = @BUILD_LIBUHINSTR@
+ifndef CAFRT_ENABLE_PROFILES
+	CAFRT_ENABLE_PROFILES = @CAFRT_ENABLE_PROFILES@
 endif
 
-ifndef TAU_ROOT
-	TAU_ROOT = @TAU_ROOT@
-endif
-
-ifndef TAU_LIBS
-	TAU_LIBS = @TAU_LIBS@
-endif
+#### END OPENUH CONFIG ####
+######################################################
 
 #  For cross compilers, there are really 3 separate variables:
 #  the build host (machine you are building on), 

@@ -91,6 +91,14 @@ AC_ARG_ENABLE([cafrt-traces],
 
 AS_IF([test "x$enable_cafrt_traces" != "xyes"], [ CAFRT_ENABLE_TRACES="NO" ])
 
+# Set whether CAF runtime will be built
+AC_ARG_ENABLE([cafrt-profiles],
+  AS_HELP_STRING([--enable-cafrt-profiles],
+                 [Enable CAF Runtime Profiling Functionality]),
+                  CAFRT_ENABLE_PROFILES="YES")
+
+AS_IF([test "x$enable_cafrt_profiles" != "xyes"], [ CAFRT_ENABLE_PROFILES="NO" ])
+
 # enable GASNet for Coarrays
 AC_ARG_WITH(gasnet-root,
 AS_HELP_STRING([--with-gasnet-root=<gasnet path>],
@@ -157,6 +165,11 @@ fi
 if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_traces" = "xyes"; then
   AC_MSG_ERROR(
    [--enable-coarrays option is expected with --enable-cafrt-traces]
+   )
+fi
+if test "${ENABLE_COARRAYS}" = "NO" -a "x$enable_cafrt_profiles" = "xyes"; then
+  AC_MSG_ERROR(
+   [--enable-coarrays option is expected with --enable-cafrt-profiles]
    )
 fi
 if test "${ENABLE_COARRAYS}" = "NO" -a -n "$with_default_caf_heap_size"; then
@@ -365,9 +378,21 @@ AS_HELP_STRING([--with-tau-makefile=<path to TAU makefile>],
 TAU_MAKEFILE="$with_tau_makefile",
 TAU_MAKEFILE="")
 
+AC_ARG_WITH([epik],
+AS_HELP_STRING([--with-epik=<path to EPIK>],
+[Path to EPIK installation]),
+EPIK_ROOT="$with_epik",
+EPIK_ROOT="")
+
 if test "${BUILD_LIBUHINSTR}" = "YES" -a -z "${TAU_MAKEFILE}"; then
   AC_MSG_ERROR(
    [--with-tau-makefile= should be specified along with --enable-libuhinstr]
+   )
+fi
+
+if test "${CAFRT_ENABLE_PROFILES}" = "YES" -a -z "${EPIK_ROOT}"; then
+  AC_MSG_ERROR(
+   [--with-epik= should be specified along with --enable-cafrt-profiles]
    )
 fi
 
@@ -641,10 +666,12 @@ AC_SUBST([DEFAULT_COMM])
 AC_SUBST([BASH_PATH])
 AC_SUBST([MPI_INCLUDE])
 AC_SUBST([CAFRT_ENABLE_TRACES])
+AC_SUBST([CAFRT_ENABLE_PROFILES])
 AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
 AC_SUBST([BUILD_LIBUHINSTR])
 AC_SUBST([TAU_ROOT])
 AC_SUBST([TAU_LIBS])
+AC_SUBST([EPIK_ROOT])
 AC_SUBST([OPENUH_VERSION])
 
 # List of configurable files to create in object directory.
@@ -917,6 +944,10 @@ AC_MSG_NOTICE([   BUILD_CAF_RUNTIME              = $BUILD_CAF_RUNTIME])
 ])
 AS_IF([test "${BUILD_CAF_RUNTIME}" = "YES"], [
 AC_MSG_NOTICE([   CAFRT_ENABLE_TRACES            = $CAFRT_ENABLE_TRACES])
+AC_MSG_NOTICE([   CAFRT_ENABLE_PROFILES          = $CAFRT_ENABLE_PROFILES])
+AS_IF([test "${CAFRT_ENABLE_PROFILES}" = "YES"], [
+AC_MSG_NOTICE([   EPIK_ROOT                      = $EPIK_ROOT])
+])
 AC_MSG_NOTICE([   DEFAULT_CAF_HEAP_SIZE          = $DEFAULT_CAF_HEAP_SIZE])
 AC_MSG_NOTICE([   DEFAULT_COMM                   = $DEFAULT_COMM])
 AC_MSG_NOTICE([   GASNET_HOME                    = $GASNET_HOME])

@@ -62,6 +62,8 @@ Where options are
   --armci-path=A    A is the path to a specified ARMCI source directory
                           Currently set to: $ARMCI_HOME
 
+  --static-libcaf   Force use of the static libcaf-* archive
+
   --help, -h        Displays this menu
 
   --help2, -H       Displays available options for OpenUH compiler
@@ -133,7 +135,6 @@ print_compile_link_info()
   LAYER_INSTALLATION_PATH="unknown"
   UHCAF_NETWORK="unknown"
   MSG_LAYER="N/A"
-  #LIB_LIST=`echo $COMM_LIBS | sed -e 's/ -/\n\t\t\t -/g'`
   LIB_LIST=`echo "$COMM_LIBS" | fmt -w 50  | awk '{print (NR==1?$0:"\t\t\t " $0)}'`
   if [ "$COMM_LAYER" == "gasnet" ]; then
       LAYER_INSTALLATION_PATH=$GASNET_HOME
@@ -168,7 +169,8 @@ print_compile_link_info()
         default options: $OPENUH_DEFAULT_OPTIONS
   ---------------------------------------------------------------------------
   Linker:
-        libraries:       $LIB_LIST
+        libcaf:          $LIBCAF
+        comm libraries:  $LIB_LIST
   ---------------------------------------------------------------------------
   Communication Layer:
         layer:           $COMM_LAYER ($LAYER_INSTALLATION_PATH)
@@ -305,6 +307,10 @@ for arg in "$@" ;  do
           fi
           pass_arg=no
           ;;
+        --static-libcaf)
+          use_static_libcaf='y'
+          pass_arg=no
+          ;;
         --show|--show-info)
           show_info='y'
           pass_arg=no
@@ -396,7 +402,11 @@ if [ $COMM_LAYER == gasnet ]; then
       CAF_LDFLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
   fi
 
-  COMM_LIBS="-lcaf-gasnet-$GASNET_CONDUIT $COMM_LIBS"
+  if [ "$use_static_libcaf" == "y" ]; then
+      LIBCAF="-l:libcaf-gasnet-$GASNET_CONDUIT.a"
+  else
+      LIBCAF="-lcaf-gasnet-$GASNET_CONDUIT"
+  fi
 
 elif [ $COMM_LAYER == armci ]; then
   # TODO: ideally, we should use same MPI used for ARMCI installation
@@ -436,7 +446,11 @@ elif [ $COMM_LAYER == armci ]; then
   # need to link in ARMCI and MPI libs as well.
   COMM_LIBS="-L$ARMCI_HOME/lib -Wl,-rpath,$ARMCI_HOME/lib -larmci $ARMCI_NETWORK_LIBS"
   COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
-  COMM_LIBS="-lcaf-armci $COMM_LIBS"
+  if [ "$use_static_libcaf" == "y" ]; then
+      LIBCAF="-l:libcaf-armci.a"
+  else
+      LIBCAF="-lcaf-armci"
+  fi
 
   add_to_env_list "MPI_LIB"
   add_to_env_list "MPI_LD_LIBS"
@@ -578,6 +592,7 @@ else
                 ;;
               *.o)
                 OBJECTS2+="$arg "
+                unset all_args[$arg_num]
                 ;;
           esac
           arg_num=$((arg_num+1))
@@ -605,14 +620,16 @@ else
           $CC -c $set_static_symm_data.c
 
           # link command
-          execute $FC $CAF_LDFLAGS $keep_option $compiler_args $OBJECTS1 \
-                $link_instructions.o $set_static_symm_data.o  \
-                $output_file $COMM_LIBS -lcaf-extra $AUX_LD_LIBS
+          execute $FC $CAF_LDFLAGS $keep_option $OBJECTS1 \
+                  $OBJECTS2 $LIBCAF -lcaf-extra $compiler_args   \
+                  $link_instructions.o $set_static_symm_data.o  \
+                  $output_file $COMM_LIBS $AUX_LD_LIBS
           stat=$?
       else
           # link command
-          execute $FC $CAF_LDFLAGS $keep_option $compiler_args $OBJECTS1 \
-                $link_instructions.o $output_file $COMM_LIBS -lcaf-extra \
+          execute $FC $CAF_LDFLAGS $keep_option $OBJECTS1 \
+                $OBJECTS2 $LIBCAF -lcaf-extra $compiler_args   \
+                $link_instructions.o $output_file $COMM_LIBS  \
                 $AUX_LD_LIBS
           stat=$?
       fi
