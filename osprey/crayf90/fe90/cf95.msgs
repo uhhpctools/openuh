@@ -21994,5 +21994,13 @@ Error : This argument to the %s directive must be of type CAF_SYNC_HANDLE
 The argument for the DEFER_SYNC and SYNC directives, if given, is a variable
 of type CAF_SYNC_HANDLE, defined in the intrinsic module CAF_TYPES.
 .ME
-$ LAST NUMBER USED : 1720
+$
+$ Error : 1721
+$msg  1721 A pointer target can not be coindexed
+$nexp 1721
+Error : A pointer target can not be coindexed
+.PP
+A pointer target can not be coindexed.
+.ME
+$ LAST NUMBER USED : 1721
 

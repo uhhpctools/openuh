@@ -285,20 +285,32 @@ void __coarray_strided_nbread(size_t image,
         if (local_is_contig) {
             CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src,
                                  dest, nbytes, hdl);
+            PROFILE_FUNC_EXIT();
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+            return;
+            /* not reached */
         } else {
+            /* We use a blocking comm_read, rather than than comm_nbread. For
+             * the non-blocking caes, it would require saving the actual
+             * destination and its stride info, and doing a local strided mem
+             * copy upon detecting its completion in the future.  Its unclear
+             * whether there is a significant performance advantage to doing
+             * this, versus just using a blocking read in this case.
+             * Alternatively, we could use the non-blocking strided
+             * interfaces, for which we simply can skip the code in this else
+             * block. */
             void *buf;
             __acquire_lcb(nbytes, &buf);
-            CALLSITE_TIMED_TRACE(COMM, READ, comm_nbread, image - 1, src,
-                                 buf, nbytes, hdl);
+            CALLSITE_TIMED_TRACE(COMM, READ, comm_read, image - 1, src,
+                                 buf, nbytes);
             local_dest_strided_copy(buf, dest, dest_strides, count,
                                     stride_levels);
             __release_lcb(&buf);
+            PROFILE_FUNC_EXIT();
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+            return;
+            /* not reached */
         }
-
-        PROFILE_FUNC_EXIT();
-        LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
-        return;
-        /* not reached */
     }
 
     CALLSITE_TIMED_TRACE(COMM, READ, comm_strided_nbread, image - 1, src,
