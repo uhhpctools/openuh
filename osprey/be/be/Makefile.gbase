@@ -515,14 +515,15 @@ BE_COM_CXX_SRCS = \
   wssa_du.cxx           \
   wssa_wn.cxx           \
   wssa_io.cxx           \
-  comp_driver.cxx
+  comp_driver.cxx       \
+  wn_instrument.cxx     \
+  wn_uhinstrument.cxx
 
-ifeq ($(BUILD_TAU_INSTR), YES)
-BE_COM_CXX_SRCS += wn_instrument_tau.cxx
-HOSTDEFS += -DTAU_INSTRUMENT
-else
-BE_COM_CXX_SRCS += wn_instrument.cxx
-endif
+# ifeq ($(BUILD_TAU_INSTR), YES)
+# BE_COM_CXX_SRCS += wn_instrument_tau.cxx
+# else
+# BE_COM_CXX_SRCS += wn_instrument.cxx
+# endif
 
 ifneq ($(BUILD_SKIP_LNO), TRUE)
 BE_COM_CXX_SRCS += \

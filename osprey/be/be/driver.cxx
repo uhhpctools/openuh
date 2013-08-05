@@ -137,6 +137,7 @@
 #include "wb_omp.h"		    /* whirl browser for omp prelowerer */
 #include "wb_lwr.h"		    /* whirl browser for lowerer */ 
 #include "wn_instrument.h"          /* whirl instrumenter */
+#include "wn_uhinstrument.h"        /* UH whirl instrumenter */
 #include "mem_ctr.h"
 #ifndef ipl_reorder_INCLUDED // for Preprocess_struct_access()
 #include "ipl_reorder.h"
@@ -1076,12 +1077,22 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
 			RID_id(REGION_get_rid(rwn)));
 
       /* Add instrumentation here for wopt. */
-      if (Instrumentation_Enabled
-	  && (Instrumentation_Type_Num & WHIRL_PROFILE)
-	  && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_WOPT)) {
-	WN_Instrument(rwn, PROFILE_PHASE_BEFORE_WOPT); 
-      } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_WOPT]) {
-	WN_Annotate(rwn, PROFILE_PHASE_BEFORE_WOPT, &MEM_pu_pool);
+      if (!Use_UH_Instrumentation) {
+          if (Instrumentation_Enabled
+              && (Instrumentation_Type_Num & WHIRL_PROFILE)
+              && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_WOPT)) {
+            WN_Instrument(rwn, PROFILE_PHASE_BEFORE_WOPT);
+          } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_WOPT]) {
+            WN_Annotate(rwn, PROFILE_PHASE_BEFORE_WOPT, &MEM_pu_pool);
+          }
+      } else {
+          if (Instrumentation_Enabled
+              && (Instrumentation_Type_Num & WHIRL_PROFILE)
+              && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_WOPT)) {
+            WN_UH_Instrument(rwn, PROFILE_PHASE_BEFORE_WOPT);
+          } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_WOPT]) {
+            WN_UH_Annotate(rwn, PROFILE_PHASE_BEFORE_WOPT, &MEM_pu_pool);
+          }
       }
       Set_Error_Phase ( "Before WOPT" );
 
@@ -1110,16 +1121,30 @@ Do_WOPT_and_CG_with_Regions (PU_Info *current_pu, WN *pu)
 		RID_id(REGION_get_rid(rwn)));
 
       /* Add instrumentation here for cg. */
-      if (Instrumentation_Enabled
-	  && (Instrumentation_Type_Num & WHIRL_PROFILE)
-	  && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_CG)) {
-	rwn = WN_Lower(rwn, LOWER_SCF, NULL, 
-		       "Lower structured control flow");
-	WN_Instrument(rwn, PROFILE_PHASE_BEFORE_CG);
-      } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_CG]) {
-	rwn = WN_Lower(rwn, LOWER_SCF, NULL, 
-		       "Lower structured control flow");
-	WN_Annotate(rwn, PROFILE_PHASE_BEFORE_CG, &MEM_pu_pool);
+      if (!Use_UH_Instrumentation) {
+          if (Instrumentation_Enabled
+              && (Instrumentation_Type_Num & WHIRL_PROFILE)
+              && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_CG)) {
+            rwn = WN_Lower(rwn, LOWER_SCF, NULL,
+                      "Lower structured control flow");
+            WN_Instrument(rwn, PROFILE_PHASE_BEFORE_CG);
+          } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_CG]) {
+            rwn = WN_Lower(rwn, LOWER_SCF, NULL,
+                      "Lower structured control flow");
+            WN_Annotate(rwn, PROFILE_PHASE_BEFORE_CG, &MEM_pu_pool);
+          }
+      } else {
+          if (Instrumentation_Enabled
+              && (Instrumentation_Type_Num & WHIRL_PROFILE)
+              && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_CG)) {
+            rwn = WN_Lower(rwn, LOWER_SCF, NULL,
+                      "Lower structured control flow");
+            WN_UH_Instrument(rwn, PROFILE_PHASE_BEFORE_CG);
+          } else if (Feedback_Enabled[PROFILE_PHASE_BEFORE_CG]) {
+            rwn = WN_Lower(rwn, LOWER_SCF, NULL,
+                      "Lower structured control flow");
+            WN_UH_Annotate(rwn, PROFILE_PHASE_BEFORE_CG, &MEM_pu_pool);
+          }
       }
       Set_Error_Phase ( "Before CG" );
 
@@ -1424,12 +1449,22 @@ Backend_Processing (PU_Info *current_pu, WN *pu)
     WN_MEMOP_ANNOT_MGR_Constructor mem_annot_mgr;
 
     /* Add instrumentation here for lno. */
-    if( Instrumentation_Enabled
-	&& (Instrumentation_Type_Num & WHIRL_PROFILE)
-	&& (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_LNO)) {
-	WN_Instrument(pu, PROFILE_PHASE_BEFORE_LNO); 
-    } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_LNO] ) {
-      WN_Annotate(pu, PROFILE_PHASE_BEFORE_LNO, &MEM_pu_pool);   
+    if (!Use_UH_Instrumentation) {
+        if(Instrumentation_Enabled
+            && (Instrumentation_Type_Num & WHIRL_PROFILE)
+            && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_LNO)) {
+          WN_Instrument(pu, PROFILE_PHASE_BEFORE_LNO);
+        } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_LNO] ) {
+          WN_Annotate(pu, PROFILE_PHASE_BEFORE_LNO, &MEM_pu_pool);
+        }
+    } else {
+        if(Instrumentation_Enabled
+            && (Instrumentation_Type_Num & WHIRL_PROFILE)
+            && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_LNO)) {
+          WN_UH_Instrument(pu, PROFILE_PHASE_BEFORE_LNO);
+        } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_LNO] ) {
+          WN_UH_Annotate(pu, PROFILE_PHASE_BEFORE_LNO, &MEM_pu_pool);
+        }
     }
     Set_Error_Phase ( "LNO Processing" );
 
@@ -1771,14 +1806,26 @@ Preprocess_PU (PU_Info *current_pu)
 #endif
 
   /* Add instrumentation here for vho lower. */
-  if ( Instrumentation_Enabled
-       && (Instrumentation_Type_Num & WHIRL_PROFILE)
-       && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_VHO)) {
-    if (!is_mp_nested_pu )
-      WN_Instrument(pu, PROFILE_PHASE_BEFORE_VHO); 
-  } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_VHO] ) {
-    WN_Annotate(pu, PROFILE_PHASE_BEFORE_VHO, &MEM_pu_pool);
+  if (!Use_UH_Instrumentation) {
+      if (Instrumentation_Enabled
+           && (Instrumentation_Type_Num & WHIRL_PROFILE)
+           && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_VHO)) {
+        if (!is_mp_nested_pu )
+            WN_Instrument(pu, PROFILE_PHASE_BEFORE_VHO);
+      } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_VHO] ) {
+        WN_Annotate(pu, PROFILE_PHASE_BEFORE_VHO, &MEM_pu_pool);
+      }
+  } else {
+      if (Instrumentation_Enabled
+           && (Instrumentation_Type_Num & WHIRL_PROFILE)
+           && (Instrumentation_Phase_Num == PROFILE_PHASE_BEFORE_VHO)) {
+        if (!is_mp_nested_pu )
+            WN_UH_Instrument(pu, PROFILE_PHASE_BEFORE_VHO);
+      } else if ( Feedback_Enabled[PROFILE_PHASE_BEFORE_VHO] ) {
+        WN_UH_Annotate(pu, PROFILE_PHASE_BEFORE_VHO, &MEM_pu_pool);
+      }
   }
+
 #ifdef KEY
   /* Insert __cyg_profile_func_enter/exit instrumentation (Bug 570) */
   if ( OPT_Cyg_Instrument > 0 && ! Run_ipl &&

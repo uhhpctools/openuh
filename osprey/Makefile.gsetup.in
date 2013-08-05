@@ -159,9 +159,6 @@ endif
 ifndef GCC_DIR
      GCC_DIR = @GCC_DIR@
 endif
-ifndef BUILD_TAU_INSTR
-     BUILD_TAU_INSTR = @BUILD_TAU_INSTR@
-endif
 ifndef WHIRL_HAS_ID_FIELD
      WHIRL_HAS_ID_FIELD = @WHIRL_HAS_ID_FIELD@
 endif
@@ -192,6 +189,18 @@ endif
 
 ifndef CAFRT_ENABLE_TRACES
 	CAFRT_ENABLE_TRACES = @CAFRT_ENABLE_TRACES@
+endif
+
+ifndef BUILD_LIBUHINSTR
+	BUILD_LIBUHINSTR = @BUILD_LIBUHINSTR@
+endif
+
+ifndef TAU_ROOT
+	TAU_ROOT = @TAU_ROOT@
+endif
+
+ifndef TAU_LIBS
+	TAU_LIBS = @TAU_LIBS@
 endif
 
 #  For cross compilers, there are really 3 separate variables:
@@ -709,6 +718,7 @@ endif
 ifeq ($(ENABLE_COARRAYS), YES)
 STD_COMPILE_OPTS += -D_UH_COARRAYS
 endif
+
 
 #
 #  Assign STD_C++_OPTS here

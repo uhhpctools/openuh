@@ -136,6 +136,7 @@ if test -z "${BASH_PATH}"; then
   AC_MSG_ERROR([Could not find bash on system])
 fi
 
+
 # check CAF configuration options ...
 
 if test "${ENABLE_COARRAYS}" = "NO" -a -n "${GASNET_HOME}"; then
@@ -350,13 +351,38 @@ if test "${BUILD_TYPE}" = "NONSHARED"; then
   BUILD_SKIP_IPA=YES
 fi
 
-# enable TAU instrumentation
-AC_ARG_ENABLE([tau-instrumentation],
-  AS_HELP_STRING([--enable-tau-instrumentation], [Enable TAU instrumentation (EXPERIMENTAL)]))
+# build libuhinstr library
+AC_ARG_ENABLE([libuhinstr],
+  AS_HELP_STRING([--enable-libuhinstr], [Enable UH Instrumentation Library (EXPERIMENTAL)]))
 
-AS_IF([test "x$enable_tau_instrumentation" = "xyes"], [
-  BUILD_TAU_INSTR=YES
+AS_IF([test "x$enable_libuhinstr" = "xyes"], [
+  BUILD_LIBUHINSTR=YES
 ])
+
+AC_ARG_WITH([tau-makefile],
+AS_HELP_STRING([--with-tau-makefile=<path to TAU makefile>],
+[Path to a TAU Makefile (assumed to be in $TAU_ROOT/$ARCH/lib/]),
+TAU_MAKEFILE="$with_tau_makefile",
+TAU_MAKEFILE="")
+
+if test "${BUILD_LIBUHINSTR}" = "YES" -a -z "${TAU_MAKEFILE}"; then
+  AC_MSG_ERROR(
+   [--with-tau-makefile= should be specified along with --enable-libuhinstr]
+   )
+fi
+
+if test -n "${TAU_MAKEFILE}"; then
+  if test ! -f "${TAU_MAKEFILE}"; then
+      AC_MSG_ERROR([File does not exist: $TAU_MAKEFILE])
+  fi
+  TAU_ROOT="`dirname $TAU_MAKEFILE`/../.."
+  tau_bin="`dirname $TAU_MAKEFILE`/../bin/"
+  TAU_LIBS=`TAU_MAKEFILE=${TAU_MAKEFILE} ${tau_bin}/tau_cc.sh -tau:showlibs`
+else
+  TAU_ROOT=""
+  TAU_LIBS=""
+fi
+
 
 # Set whether GNU front-end will be built
 AC_ARG_ENABLE([gnu4],
@@ -602,7 +628,6 @@ AC_SUBST([BUILD_TYPE])
 AC_SUBST([DRAGON_SUPPORT])
 AC_SUBST([GCC_CONFIGURE_TARG])
 AC_SUBST([GCC_DIR])
-AC_SUBST([BUILD_TAU_INSTR])
 AC_SUBST([BUILD_GNU4])
 AC_SUBST([ENABLE_COARRAYS])
 AC_SUBST([BUILD_CAF_RUNTIME])
@@ -617,6 +642,9 @@ AC_SUBST([BASH_PATH])
 AC_SUBST([MPI_INCLUDE])
 AC_SUBST([CAFRT_ENABLE_TRACES])
 AC_SUBST([DEFAULT_CAF_HEAP_SIZE])
+AC_SUBST([BUILD_LIBUHINSTR])
+AC_SUBST([TAU_ROOT])
+AC_SUBST([TAU_LIBS])
 AC_SUBST([OPENUH_VERSION])
 
 # List of configurable files to create in object directory.
@@ -766,7 +794,14 @@ if test "${BUILD_TARGET}" = "IA64" ; then
   AC_CONFIG_FILES([
     osprey/targdir_lib/init/Makefile:osprey/targdir_lib/init/Makefile.in
   ])
-fi   
+fi
+if test "${BUILD_LIBUHINSTR}" == "YES"; then
+  LIBLIST="$LIBLIST libuhinstr"
+  AC_CONFIG_FILES([
+    osprey/targdir_lib/libuhinstr/Makefile
+  ])
+fi
+
 
 if test $BUILD_MULTILIB = "YES"; then
   AC_CONFIG_FILES([
@@ -802,6 +837,11 @@ if test $BUILD_MULTILIB = "YES"; then
       osprey/targdir_lib2/libopen64rt/Makefile:osprey/targdir_lib/libopen64rt/Makefile.in
       osprey/targdir_lib2/libinstr2/Makefile:osprey/targdir_lib/libinstr2/Makefile.in
       osprey/targdir_lib2/libacml_mv/Makefile:osprey/targdir_lib/libacml_mv/Makefile.in
+    ])
+  fi
+  if test "${BUILD_LIBUHINSTR}" == "YES"; then
+    AC_CONFIG_FILES([
+      osprey/targdir_lib2/libuhinstr/Makefile:osprey/targdir_lib/libuhinstr/Makefile.in
     ])
   fi
 fi
@@ -885,7 +925,11 @@ AC_MSG_NOTICE([   ARMCI_HOME                     = $ARMCI_HOME])
 AC_MSG_NOTICE([   ARMCI_NETWORK_LIBS             = $ARMCI_NETWORK_LIBS])
 AC_MSG_NOTICE([   MPI_INCLUDE                    = $MPI_INCLUDE])
 ])
-AC_MSG_NOTICE([   BUILD_TAU_INSTR (experimental) = $BUILD_TAU_INSTR])
+AS_IF([test "${BUILD_LIBUHINSTR}" = "YES"], [
+AC_MSG_NOTICE([   BUILD_LIBUHINSTR               = $BUILD_LIBUHINSTR])
+AC_MSG_NOTICE([   TAU_ROOT                       = $TAU_ROOT])
+AC_MSG_NOTICE([   TAU_LIBS                       = $TAU_LIBS])
+])
 AC_MSG_NOTICE([])
 AC_MSG_NOTICE([********************************************************************])
 AC_MSG_NOTICE([])

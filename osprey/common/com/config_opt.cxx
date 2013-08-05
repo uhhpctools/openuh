@@ -300,8 +300,6 @@ BOOL Instrumentation_Reminder_Division_Modulus = FALSE;
 BOOL Instrumentation_All = FALSE;
 BOOL Instrumentation_Selective = FALSE;
 INT32 Instrumentation_Nesting_Level = -1;
-BOOL Instrumentation_Tau = FALSE;
-BOOL Instrumentation_Epilog = FALSE;
 
 INT32  Optimize_exception_ranges = 1;
 BOOL   Optimize_exception_ranges_set = FALSE;
@@ -897,6 +895,7 @@ static OPTION_DESC Options_OPT[] = {
   { OVK_BOOL,	OV_INTERNAL,	FALSE,	"instr_unique_output",	"",
     0, 0, 0,	&Instrumentation_Unique_Output,	NULL,
     "Always create a unique name for the profile data file" },
+
   { OVK_BOOL,   OV_VISIBLE,     TRUE,   "instr_proc",   "",
     0, 0, 0,    &Instrumentation_Procedures,    NULL,
     "Allow instrumentation of procedures/program units entries/exits" },

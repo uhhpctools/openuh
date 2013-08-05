@@ -156,8 +156,8 @@
         "Print the cost model of the parallelism in each parallelizable loops"
 -autoscope                  ;   ALL     bij    self
         "Run the autoscope module to verify the data scope of variables"
--epilog                     ;   ALL     bij    self
-        "epilog flag used to instrument and link with KOJAK"
+-uhinstr                  ;   ALL     bij    self
+        "uhinstr flag specifies usage of OpenUH's modified instrumentation API"
 -show	{show_flag = TRUE; }	ALL	GRP	self
 	"show phases as they are being invoked"
 -show1	{show_flag = TRUE; }	ALL	NONE	""

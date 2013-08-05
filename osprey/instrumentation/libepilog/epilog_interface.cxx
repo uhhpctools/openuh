@@ -57,7 +57,7 @@
 #include <vector>
 #include <Profile/Profiler.h>
 // using namespace tau;
-#include <omp.h>
+//#include <omp.h>
 using std::vector;
 
 #include "profile.h"
@@ -65,7 +65,7 @@ using std::vector;
 #include "profile_errors.h"
 #include "dump.h"
 
-omp_lock_t tau_regdescr_lock;
+//omp_lock_t tau_regdescr_lock;
 // ====================================================================
 
 
@@ -90,7 +90,7 @@ void __profile_init(struct profile_init_struct *d)
     first_called=FALSE;
 
  //    omp_init_lock(&tau_regdescr_lock);
- //   TAU_PROFILE_SET_NODE(0);
+    //TAU_PROFILE_SET_NODE(0);
   }
   
 
