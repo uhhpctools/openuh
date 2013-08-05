@@ -67,8 +67,7 @@ enum {
 } status_codes;
 
 /* init */
-void comm_init(struct shared_memory_slot *common_shared_memory_slot);
-
+void comm_init();
 
 /* critical support */
 void comm_get_signal(int **signal);
@@ -88,6 +87,8 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
                          int ordered, comm_handle_t * hdl);
 void comm_write(size_t proc, void *dest, void *src,
                 size_t nbytes, int ordered, comm_handle_t * hdl);
+void comm_write_TEST(size_t proc, void *dest, void *src,
+                     size_t nbytes, int ordered, comm_handle_t * hdl);
 
 /* strided, non-contiguous read and write operations */
 void comm_strided_nbread(size_t proc,

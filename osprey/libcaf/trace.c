@@ -37,6 +37,7 @@
 
 #include "caf_rtl.h"
 #include "comm.h"
+#include "alloc.h"
 #include "trace.h"
 
 #define BUF_SIZE 512
@@ -44,7 +45,7 @@
 
 extern unsigned long _this_image;
 extern unsigned long _num_images;
-extern struct shared_memory_slot *common_slot;
+extern shared_memory_slot_t *common_slot;
 extern mem_usage_info_t *mem_info;
 
 typedef enum {
@@ -84,7 +85,7 @@ static int tracing_suspended = 0;
 
 int trace_callstack_level = 0;
 
-FILE * __trace_log_stream()
+FILE *__trace_log_stream()
 {
     return trace_log_stream;
 }
@@ -346,16 +347,15 @@ void __libcaf_trace(const char *file, const char *func, int line,
 
         int i;
         for (i = 0; (i < trace_callstack_level) &&
-                    (i < (TRACE_MAX_CALLSTACK_LEVELS));
-             i++) {
+             (i < (TRACE_MAX_CALLSTACK_LEVELS)); i++) {
             tmp2[i] = '\t';
         }
         tmp2[i] = '\0';
 
         snprintf(tmp1, BUF_SIZE,
                  "%s%lu: [%s] %s, at %s:%d\n%s\t***\t",
-                 tmp2, _this_image, __level_to_string(msg_type), func, file,
-                 line, tmp2);
+                 tmp2, _this_image, __level_to_string(msg_type), func,
+                 file, line, tmp2);
 
         va_start(ap, fmt);
         vsnprintf(tmp2, BUF_SIZE, fmt, ap);
@@ -401,8 +401,8 @@ void __libcaf_trace(const char *file, const char *func, int line,
 
 
 
-static void fprint_mem_area(FILE *f, char *mem_str, char *start_address,
-                           char *end_address)
+static void fprint_mem_area(FILE * f, char *mem_str, char *start_address,
+                            char *end_address)
 {
     const int width = 70;
     int i, j;
@@ -457,7 +457,7 @@ static void fprint_mem_area(FILE *f, char *mem_str, char *start_address,
     fprintf(f, "|\n");
 }
 
-static void uhcaf_tracefdump_shared_mem_alloc(FILE *f, char *str)
+static void uhcaf_tracefdump_shared_mem_alloc(FILE * f, char *str)
 {
     const int width = 70;
     int i, j;
@@ -493,20 +493,20 @@ static void uhcaf_tracefdump_shared_mem_alloc(FILE *f, char *str)
 
     /* print memory slots */
     fprint_mem_area(f, "static data (symmetric)",
-                   comm_start_static_data(_this_image - 1),
-                   comm_end_static_data(_this_image - 1));
+                    comm_start_static_data(_this_image - 1),
+                    comm_end_static_data(_this_image - 1));
 
     fprint_mem_area(f, "allocatable data (symmetric)",
-                   comm_start_allocatable_heap(_this_image - 1),
-                   comm_end_allocatable_heap(_this_image - 1));
+                    comm_start_allocatable_heap(_this_image - 1),
+                    comm_end_allocatable_heap(_this_image - 1));
 
     fprint_mem_area(f, "unused",
-                   comm_end_allocatable_heap(_this_image - 1),
-                   comm_start_asymmetric_heap(_this_image - 1));
+                    comm_end_allocatable_heap(_this_image - 1),
+                    comm_start_asymmetric_heap(_this_image - 1));
 
     fprint_mem_area(f, "asymmetric data",
-                   comm_start_asymmetric_heap(_this_image - 1),
-                   comm_end_asymmetric_heap(_this_image - 1));
+                    comm_start_asymmetric_heap(_this_image - 1),
+                    comm_end_asymmetric_heap(_this_image - 1));
 
     fprintf(f, "|");
     for (i = 0; i < width; i++)

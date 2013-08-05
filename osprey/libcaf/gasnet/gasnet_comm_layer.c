@@ -80,6 +80,7 @@
 #include <math.h>
 #include <stdint.h>
 #include "caf_rtl.h"
+#include "alloc.h"
 #include "comm.h"
 #include "gasnet_comm_layer.h"
 #include "lock.h"
@@ -103,8 +104,8 @@ extern int rma_prof_rid;
 
 /* common_slot is a node in the shared memory link-list that keeps track
  * of available memory that can used for both allocatable coarrays and
- * asymmetric data. It is the only handle to access the link-list.*/
-extern struct shared_memory_slot *common_slot;
+ * asymmetric data.  */
+extern shared_memory_slot_t *common_slot;
 
 /*
  * Static variable declarations
@@ -1059,18 +1060,29 @@ static void local_strided_copy(void *src, const size_t src_strides[],
  *    non-blocking puts.
  * 3) Create pinned memory and populate coarray_start_all_images(except
  *    for EVERYTHING config.
- * 4) Populates common_shared_memory_slot with the pinned memory data
- *    which is used by caf_rtl.c to allocate/deallocate coarrays.
+ * 4) Populates common_slot with the pinned memory data which is used by
+ *    alloc.c to allocate/deallocate coarrays.
  */
-void comm_init(struct shared_memory_slot *common_shared_memory_slot)
+
+void comm_init()
 {
     int ret, i;
-    int argc = 1;
+    int argc;
     char **argv;
     const int gasnet_pagesize = GASNET_PAGESIZE;
     unsigned long caf_shared_memory_size;
     unsigned long caf_shared_memory_pages;
     unsigned long image_heap_size;
+
+    shared_memory_slot_t *common_shared_memory_slot;
+
+    if (common_slot != NULL) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "common_slot has already been initialized");
+    }
+
+    common_slot = malloc(sizeof(shared_memory_slot_t));
+    common_shared_memory_slot = common_slot;
 
     /* Get total shared memory size, per image, requested by program (enough
      * space for save coarrays + heap) and adjust GASNET_MAX_SEGSIZE
@@ -2612,6 +2624,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
 
         if (handle != NULL && hdl != (void *) -1) {
+            /* put hasn't completed, and we don't want to block */
             struct handle_list *handle_node =
                 get_next_handle(proc, remote_dest, src, nbytes, PUTS);
             handle_node->handle = handle;
@@ -2620,11 +2633,15 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+        } else if (handle == NULL) {
+            /* put has completed */
+            comm_lcb_free(src);
+            if (hdl != NULL)
+                *hdl = NULL;
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
-        } else if (hdl != NULL) {
-            *hdl = NULL;
+            comm_lcb_free(src);
         }
 
     } else {                    /* ordered == 0 */
@@ -2639,6 +2656,7 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
         handle = gasnet_put_nb_bulk(proc, remote_dest, src, nbytes);
 
         if (handle != NULL && hdl != (void *) -1) {
+            /* put hasn't completed, and we don't want to block */
             struct handle_list *handle_node =
                 get_next_handle(proc, NULL, src, 0, PUTS);
             handle_node->handle = handle;
@@ -2646,11 +2664,16 @@ void comm_write_from_lcb(size_t proc, void *dest, void *src, size_t nbytes,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+        } else if (handle == NULL) {
+            /* put has completed */
+            comm_lcb_free(src);
+            if (hdl != NULL)
+                *hdl = NULL;
         } else if (hdl == (void *) -1) {
-            /* block until it remotely completes */
+            /* put has not have completed, and block until it remotely
+             * completes */
             gasnet_wait_syncnb(handle);
-        } else if (hdl != NULL) {
-            *hdl = NULL;
+            comm_lcb_free(src);
         }
 
     }
@@ -2732,12 +2755,15 @@ void comm_write(size_t proc, void *dest, void *src,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+        } else if (handle == NULL) {
+            /* put has completed */
+            if (hdl != NULL)
+                *hdl = NULL;
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
-        } else if (hdl != NULL) {
-            *hdl = NULL;
         }
+
     } else {                    /* ordered == 0 */
         LIBCAF_TRACE(LIBCAF_LOG_COMM, "Before gasnet_put_nb to %p on "
                      "image %lu from %p size %lu",
@@ -2759,11 +2785,13 @@ void comm_write(size_t proc, void *dest, void *src,
 
             if (hdl != NULL)
                 *hdl = handle_node;
+        } else if (handle == NULL) {
+            /* put has completed */
+            if (hdl != NULL)
+                *hdl = NULL;
         } else if (hdl == (void *) -1) {
             /* block until it remotely completes */
             gasnet_wait_syncnb(handle);
-        } else if (hdl != NULL) {
-            *hdl = NULL;
         }
 
     }
@@ -2966,11 +2994,15 @@ void comm_strided_write_from_lcb(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+            } else if (handle == NULL) {
+                /* put has completed */
+                comm_lcb_free(src);
+                if (hdl != NULL)
+                    *hdl = NULL;
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
-            } else if (hdl != NULL) {
-                *hdl = NULL;
+                comm_lcb_free(src);
             }
 
         } else {                /* ordered == 0 */
@@ -3001,11 +3033,15 @@ void comm_strided_write_from_lcb(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+            } else if (handle == NULL) {
+                /* put has completed */
+                comm_lcb_free(src);
+                if (hdl != NULL)
+                    *hdl = NULL;
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
-            } else if (hdl != NULL) {
-                *hdl = NULL;
+                comm_lcb_free(src);
             }
 
         }
@@ -3105,11 +3141,13 @@ void comm_strided_write(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+            } else if (handle == NULL) {
+                /* put has completed */
+                if (hdl != NULL)
+                    *hdl = NULL;
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
-            } else if (hdl != NULL) {
-                *hdl = NULL;
             }
 
         } else {                /* ordered == 0 */
@@ -3139,11 +3177,13 @@ void comm_strided_write(size_t proc,
 
                 if (hdl != NULL)
                     *hdl = handle_node;
+            } else if (handle == NULL) {
+                /* put has completed */
+                if (hdl != NULL)
+                    *hdl = NULL;
             } else if (hdl == (void *) -1) {
                 /* block until it remotely completes */
                 gasnet_wait_syncnb(handle);
-            } else if (hdl != NULL) {
-                *hdl = NULL;
             }
 
         }

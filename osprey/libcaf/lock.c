@@ -34,6 +34,7 @@
 #include "caf_rtl.h"
 
 #include "comm.h"
+#include "alloc.h"
 #include "uthash.h"
 #include "trace.h"
 #include "util.h"
@@ -336,10 +337,6 @@ void comm_unlock2(lock_t * lock, int image, char *errmsg, int errmsg_len)
         }
 
         /* req->image should now point to the successor */
-
-        /* hack for ARMCI-layer bug (unsets any high-order bits) */
-#if defined(ARMCI)
-#endif
 
         /* unset locked on successor */
         s = get_shared_mem_address_from_offset(req->ofst, req->image);

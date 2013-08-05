@@ -78,6 +78,7 @@ CFILES = \
 	caf_rtl.c \
 	caf_collectives.c \
 	gasnet_comm_layer.c  \
+	alloc.c \
 	service.c \
 	lock.c \
 	env.c \

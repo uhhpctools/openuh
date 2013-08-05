@@ -34,23 +34,6 @@
 #include "lock.h"
 #include "dopevec.h"
 
-/* SHARED MEMORY MANAGEMENT */
-struct shared_memory_slot {
-    void *addr;
-    unsigned long size;
-    unsigned short feb;         //full empty bit. 1=full
-    struct shared_memory_slot *next;
-    struct shared_memory_slot *prev;
-};
-
-
-typedef struct {
-    size_t current_heap_usage;
-    size_t max_heap_usage;
-    size_t reserved_heap_usage;
-} mem_usage_info_t;
-
-
 #define LOAD_STORE_FENCE() __sync_synchronize()
 #define SYNC_FETCH_AND_ADD(t,v) __sync_fetch_and_add(t,v)
 #define SYNC_SWAP(t,v) __sync_lock_test_and_set(t,v)
@@ -176,14 +159,6 @@ void _CRITICAL();
 void _END_CRITICAL();
 
 /* OTHER PUBLIC INTERFACES */
-
-/* shared memory management */
-void *coarray_allocatable_allocate_(unsigned long var_size);
-void *coarray_asymmetric_allocate_(unsigned long var_size);
-void *coarray_asymmetric_allocate_if_possible_(unsigned long var_size);
-void coarray_asymmetric_deallocate_(void *var_address);
-void coarray_deallocate_(void *var_address);
-void coarray_free_all_shared_memory_slots();
 void coarray_translate_remote_addr(void **remote_addr, int image);
 
 /* runtime checks */
