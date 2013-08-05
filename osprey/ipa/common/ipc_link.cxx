@@ -116,6 +116,19 @@ static const char* get_linker_name(int argc, char** argv)
     if (!toolroot) { toolroot = "" ; }
 
     char* linker_name;
+
+#ifdef _UH_COARRAYS
+    /* Really we should only do this when compiling coarray programs. Assuming
+     * that this environment variable will only be set in this case.  */
+    linker_name = getenv("OPENUH_CAF_EXT_LINKER");
+    if (linker_name != NULL) {
+        if (file_exists(linker_name))
+            return linker_name;
+
+        free (linker_name);
+    }
+#endif
+
     char *where_am_i = getenv("COMPILER_BIN");
 
     if (where_am_i) {
@@ -193,6 +206,15 @@ ipa_init_link_line (int argc, char** argv)
 
 #else
     ld_flags_part1->push_back (arg_vector[0]);
+#endif
+
+#ifdef _UH_COARRAYS
+    /* Really we should only do this when compiling coarray programs. Assuming
+     * that this environment variable will only be set in this case.  */
+    char *linker_args = getenv("OPENUH_CAF_EXT_LINKER_ARGS");
+    if (linker_args != NULL) {
+        ld_flags_part1->push_back(linker_args);
+    }
 #endif
 
     // Copy the arguments that have been saved

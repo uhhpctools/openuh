@@ -40,6 +40,7 @@ ARMCI_NETWORK_LIBS="@ARMCI_NETWORK_LIBS@"
 CC=uhcc
 FC=uhf90
 CAF_FLAGS="-coarray -fno-second-underscore"
+CAF_LDFLAGS="-coarray"
 ENVIRONMENT="-----------------------\n"
 
 uhcaf_usage()
@@ -372,50 +373,27 @@ if [ $COMM_LAYER == gasnet ]; then
     ##############################################################
     # Try to figure out appropriate MPI_LIB and MPI_LD_LIBS from
     # GASNet makefiles.
-    get_ld="echo -e \"uhcaf-rule:\n\t@echo \\\$(GASNET_LD)\"  \
+
+    mak="echo -e \"get-gasnet-ld:\n\t@echo \\\$(GASNET_LD)\"  \
     | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-    | make uhcaf-rule --no-print-directory -sf -"
-    mpi_ld=`eval $get_ld`
-    gasnet_mpi_lib=${mpi_ld%/bin*}/lib
+    | make get-gasnet-ld --no-print-directory -sf -"
+    GASNET_LD=`eval $mak`
+    GASNET_LD_ARGS=`echo $GASNET_LD | cut -s -d" " -f2-`
+    GASNET_LD=`echo $GASNET_LD | cut -d" " -f1`
+    mak="echo -e \"get-gasnet-libs:\n\t@echo \\\$(GASNET_LIBS)\"  \
+    | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+    | make get-gasnet-libs --no-print-directory -sf -"
+    GASNET_LIBS=`eval $mak`
 
-    if [ -d "$gasnet_mpi_lib" ]; then
-        MPI_LIB=$gasnet_mpi_lib
-    elif [ ! -d "$MPI_LIB" ]; then
-        print_error "MPI_LIB needs to be set"
-    fi
-
-    if [ -z "$MPI_LD_LIBS" ]; then
-        # MPI lib path was given, but can we figure out the necessary linker
-        # args?
-        if [ ! -f $MPI_LIB/../bin/mpicc ]; then
-            print_error "Can't determine what to link in from $MPI_LIB"
-        fi
-
-        mpi_ld=$MPI_LIB/../bin/mpicc
-
-        # does -showme:link work ?
-        MPI_LD_LIBS=`eval $mpi_ld -showme:link 2> /dev/null`
-        if [ "$?" != "0" ]; then
-            # does -link-info work?
-            ld_opt=`eval $mpi_ld -link-info 2> /dev/null`
-            if [ "$?" != "0" ]; then
-                print_error "MPI_LD_LIBS needs to be set"
-            fi
-            MPI_LD_LIBS=${ld_opt#*-L* }
-        fi
-        MPI_LD_LIBS="-L$MPI_LIB $MPI_LD_LIBS"
-    fi
-
-    # need to link in MPI libs as well.
-    COMM_LIBS="$COMM_LIBS -Wl,-rpath,$MPI_LIB $MPI_LD_LIBS"
-
-    add_to_env_list "MPI_LIB"
-    add_to_env_list "MPI_LD_LIBS"
+    COMM_LIBS=$GASNET_LIBS
+    set_env OPENUH_CAF_EXT_LINKER $GASNET_LD
+    set_env OPENUH_CAF_EXT_LINKER_ARGS $GASNET_LD_ARGS
+    CAF_LDFLAGS+=" -Wl,--no-as-needed "
 
   fi
 
   if [ $GASNET_CONDUIT == udp ]; then
-      CAF_FLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
+      CAF_LDFLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
   fi
 
   COMM_LIBS="-lcaf-gasnet-$GASNET_CONDUIT $COMM_LIBS"
@@ -627,13 +605,13 @@ else
           $CC -c $set_static_symm_data.c
 
           # link command
-          execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
+          execute $FC $CAF_LDFLAGS $keep_option $compiler_args $OBJECTS1 \
                 $link_instructions.o $set_static_symm_data.o  \
                 $output_file $COMM_LIBS -lcaf-extra $AUX_LD_LIBS
           stat=$?
       else
           # link command
-          execute $FC $CAF_FLAGS $keep_option $compiler_args $OBJECTS1 \
+          execute $FC $CAF_LDFLAGS $keep_option $compiler_args $OBJECTS1 \
                 $link_instructions.o $output_file $COMM_LIBS -lcaf-extra \
                 $AUX_LD_LIBS
           stat=$?

@@ -63,6 +63,7 @@
 #include "dra_export.h"
 #include "be_symtab.h"
 #include "f90_utils.h"
+#include "limits.h"
 
 #include <vector>
 #include <map>
@@ -3338,9 +3339,9 @@ static BOOL is_contiguous_access(WN *array_ref, INT8 rank)
             if (WN_operator(size) == OPR_INTCONST) {
                 extent[i] = WN_const_val(size);
             } else {
-                /* assume non-contiguous if array shape is not statically
-                 * known */
-                return FALSE;
+                /* conservatively set extent to maximum size if bounds aren't
+                 * statically known */
+                extent[i] = INT_MAX;
             }
 
             if ((access_range[i] < extent[i]) && requires_complete_access)
