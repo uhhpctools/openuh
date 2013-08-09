@@ -1291,8 +1291,8 @@ int check_remote_image(size_t image)
 {
     const int error_len = 255;
     char error_msg[error_len];
-    memset(error_msg, 0, error_len);
     if (image < 1 || image > _num_images) {
+        memset(error_msg, 0, error_len);
         sprintf(error_msg,
                 "Image %lu is out of range. Should be in [ %u ... %lu ].",
                 (unsigned long) image, 1, (unsigned long) _num_images);
@@ -1310,12 +1310,12 @@ int check_remote_address(size_t image, void *address)
 {
     const int error_len = 255;
     char error_msg[error_len];
-    memset(error_msg, 0, error_len);
 
     if ((address < comm_start_symmetric_mem(_this_image - 1) ||
          address > comm_end_symmetric_mem(_this_image - 1)) &&
         (address < comm_start_asymmetric_heap(image - 1) ||
          address > comm_end_asymmetric_heap(image - 1))) {
+        memset(error_msg, 0, error_len);
         sprintf(error_msg,
                 "Address %p (translates to %p) is out of range. "
                 "Should fall within [ %p ... %p ] "

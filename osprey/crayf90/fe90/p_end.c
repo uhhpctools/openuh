@@ -791,6 +791,13 @@ void parse_end_stmt (void)
             stmt_type				= End_Critical_Stmt;
             SH_STMT_TYPE(curr_stmt_sh_idx)	= End_Critical_Stmt;
 
+            if (!cmd_line_flags.co_array_fortran) {
+                PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+                        "end critical");
+                NEXT_LA_CH;
+                goto EXIT;
+            }
+
             /* The FORTRAN 2008 standard does not explicitly mention whether
              * the CRITICAL construct can have a construct name or not.
              * As of now, it is assumed that the CRITICAL construct cant be named. 

@@ -4919,6 +4919,9 @@ void parse_sync_stmt (void)
    boolean      has_paren = FALSE;
    boolean      has_stat = FALSE;
    boolean      has_errmsg = FALSE;
+   char sync_stmt_name[15];
+   memset(sync_stmt_name, 0, 15);
+   strcpy(sync_stmt_name, "sync ");
 
    TRACE (Func_Entry, "parse_sync_stmt", NULL);
 
@@ -4929,7 +4932,9 @@ void parse_sync_stmt (void)
    IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
 
    if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+
        if (TOKEN_VALUE(token) == Tok_Kwd_All) {
+           strcat( sync_stmt_name, "all");
            IR_FLD_L(ir_idx) = IR_Tbl_Idx;
            NTR_IR_TBL(IR_IDX_L(ir_idx));
            IR_OPR(IR_IDX_L(ir_idx)) =  All_Opr;
@@ -4944,6 +4949,7 @@ void parse_sync_stmt (void)
            }
 
        } else if (TOKEN_VALUE(token) == Tok_Kwd_Images) {
+           strcat( sync_stmt_name, "images");
 
            if (LA_CH_VALUE != LPAREN) {
                parse_err_flush(Find_EOS, "(");
@@ -4997,6 +5003,7 @@ void parse_sync_stmt (void)
            /* handle the reset (e.g. STAT= or ERRMSG=) below */
 
        } else if (TOKEN_VALUE(token) == Tok_Kwd_Memory) {
+           strcat( sync_stmt_name, "memory");
            IR_FLD_L(ir_idx) = IR_Tbl_Idx;
            NTR_IR_TBL(IR_IDX_L(ir_idx));
            IR_OPR(IR_IDX_L(ir_idx)) =  Memory_Opr;
@@ -5015,6 +5022,8 @@ void parse_sync_stmt (void)
            PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
                    TOKEN_STR(token));
        }
+
+
    } else {
        /* should have seen ALL, IMAGES, or MEMORY identifier */
        PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
@@ -5149,7 +5158,13 @@ EXIT:
       parse_err_flush(Find_EOS, EOS_STR);
    }
 
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               sync_stmt_name);
+   }
+
    matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
 
    TRACE (Func_Exit, "parse_sync_stmt", NULL);
 
@@ -5405,9 +5420,15 @@ void parse_lock_stmt (void)
    IR_LINE_NUM_R(ir_idx) = IR_LINE_NUM(ir_idx2);
 
 
+
 EXIT:
    if (LA_CH_VALUE != EOS) {
       parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               "lock");
    }
 
    matched_specific_token(Tok_EOS, Tok_Class_Punct);
@@ -5442,6 +5463,9 @@ void parse_event_stmt (void)
    opnd_type		opnd;
    int			save_curr_stmt_sh_idx;
    int      blk_idx;
+   char event_stmt_name[15];
+   memset(event_stmt_name, 0, 15);
+   strcpy(event_stmt_name, "event ");
 
    TRACE (Func_Entry, "parse_event_stmt", NULL);
 
@@ -5452,11 +5476,14 @@ void parse_event_stmt (void)
 
    if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
        if (TOKEN_VALUE(token) == Tok_Kwd_Post) {
+           strcat(event_stmt_name, "post");
            IR_OPR(ir_idx) = Eventpost_Opr;
        } else if (TOKEN_VALUE(token) == Tok_Kwd_Query) {
+           strcat(event_stmt_name, "query");
            IR_OPR(ir_idx) = Eventquery_Opr;
            is_query_stmt = TRUE;
        } else if (TOKEN_VALUE(token) == Tok_Kwd_Wait) {
+           strcat(event_stmt_name, "wait");
            IR_OPR(ir_idx) = Eventwait_Opr;
        } else {
            /* should have seen POST, QUERY, or WAIT keyword */
@@ -5523,6 +5550,12 @@ EXIT:
       parse_err_flush(Find_EOS, EOS_STR);
    }
 
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               event_stmt_name);
+   }
+
+
    matched_specific_token(Tok_EOS, Tok_Class_Punct);
 
    TRACE (Func_Exit, "parse_event_stmt", NULL);
@@ -5543,21 +5576,26 @@ void parse_critical_stmt(void)
 
    TRACE (Func_Entry, "parse_critical_stmt", NULL);
 
-  // if (MATCHED_TOKEN_CLASS(Tok_Class_Keyword)) {
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               "critical");
+       goto EXIT;
+   }
+
    if(LA_CH_VALUE != EOS){
       /* should not have seen any constructs  */
       PRINTMSG(TOKEN_LINE(token), 1704, Error, TOKEN_COLUMN(token),
       TOKEN_STR(token));
    }
     if ( ! SH_ERR_FLG(curr_stmt_sh_idx) ) {
-    
+
      NTR_IR_TBL(ir_idx);
      SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
      IR_OPR(ir_idx) = Critical_Opr;
      IR_COL_NUM(ir_idx) = TOKEN_COLUMN(token);
      IR_LINE_NUM(ir_idx) = TOKEN_LINE(token);
-    
-    } 
+
+    }
 
   /* Check whether Critical_Stmt lies inside a another CRITICAL block
    * (which will be wrong !)
@@ -5572,20 +5610,23 @@ void parse_critical_stmt(void)
 
     /* Generate a block stack entry. */
 
-    // gen_sh(After, Then_Stmt, TOKEN_LINE(token), TOKEN_COLUMN(token),
-    //SH_ERR_FLG(curr_stmt_sh_idx), FALSE, FALSE);
- 
     PUSH_BLK_STK(Critical_Blk);
-    //blk_stk[blk_stk_idx]	      = blk_stk[blk_stk_idx - 1];
-    CURR_BLK			      = Critical_Blk;
-    CURR_BLK_FIRST_SH_IDX             = curr_stmt_sh_idx;
+    CURR_BLK_FIRST_SH_IDX    = curr_stmt_sh_idx;
     LINK_TO_PARENT_BLK;
-  
-    NEXT_LA_CH;
+
+EXIT:
+
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   matched_specific_token(Tok_EOS, Tok_Class_Punct);
+
+   TRACE (Func_Exit, "parse_critical_stmt", NULL);
 
    return;
 
-  
+
 }  /*parse_critical_stmt*/
 
 /*parse_end_critical_stmt*/
@@ -5601,6 +5642,7 @@ void parse_end_critical_stmt(void)
 
    TRACE (Func_Entry, "parse_end_critical_stmt", NULL);
 
+
    NTR_IR_TBL(ir_idx);
    SH_IR_IDX(curr_stmt_sh_idx) = ir_idx;
    IR_OPR(ir_idx) = Sync_Opr;
@@ -5615,8 +5657,8 @@ void parse_end_critical_stmt(void)
            IR_COL_NUM_L(ir_idx) = TOKEN_COLUMN(token);
            IR_LINE_NUM_L(ir_idx) = TOKEN_LINE(token);
            IR_TYPE_IDX(IR_IDX_L(ir_idx)) = TYPELESS_DEFAULT_TYPE;
-       
-       }  else {         
+
+       }  else {
            /* should have seen CRITICAL */
            PRINTMSG(TOKEN_LINE(token), 1703, Error, TOKEN_COLUMN(token),
                    TOKEN_STR(token));
@@ -5628,6 +5670,18 @@ void parse_end_critical_stmt(void)
    }
 
    NEXT_LA_CH;
+EXIT:
+   if (LA_CH_VALUE != EOS) {
+      parse_err_flush(Find_EOS, EOS_STR);
+   }
+
+   if (!cmd_line_flags.co_array_fortran) {
+       PRINTMSG(TOKEN_LINE(token), 1723, Error, TOKEN_COLUMN(token),
+               "end critical");
+   }
+
+   TRACE (Func_Exit, "parse_end_critical_stmt", NULL);
+
 
    return;
 } /* parse_end_critical_stmt */

@@ -6179,6 +6179,20 @@ static	void	attr_semantics(int	attr_idx,
             ATD_EQUIV_LIST(attr_idx) = NULL_IDX;
          }
 
+#ifdef _UH_COARRAYS
+         /* ensure save attribute is specified for coarrays that are not
+          * dummy, allocatable, or implicitly save */
+         if ((ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) &&
+             !(ATD_ALLOCATABLE(attr_idx)) && !(ATD_SAVED(attr_idx)) &&
+             !(ATP_PGM_UNIT(pgm_attr_idx) == Program) &&
+             !(ATP_PGM_UNIT(pgm_attr_idx) == Module)) {
+               PRINTMSG(AT_DEF_LINE(attr_idx), 1722, Error,
+                        AT_DEF_COLUMN(attr_idx),
+                        AT_OBJ_NAME_PTR(attr_idx));
+               AT_DCL_ERR(attr_idx) = TRUE;
+         }
+#endif
+
          /* Intentional fall through */
 
       case Compiler_Tmp:

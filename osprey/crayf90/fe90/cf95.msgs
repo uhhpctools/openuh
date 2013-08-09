@@ -16553,8 +16553,8 @@ Error : Procedure "%s" is %s at line %s.  It must have an explicit interface spe
    A procedure other than a statement function shall have an explicit interface
    if the procedure is elemental or the procedure has
        (a) An optional or volatile dummy argument
-       (b) A dummy argument that is an assumed-shape array, a pointer or a
-           target
+       (b) A dummy argument that is an assumed-shape array, a pointer, a
+           target, an allocatable, or a coarray
        (c) An array-valued result (functions only.)
        (d) A result that is a pointer (functions only)
        (e) A result whose character length parameter value is not assumed and
@@ -22002,5 +22002,21 @@ Error : A pointer target can not be coindexed
 .PP
 A pointer target can not be coindexed.
 .ME
-$ LAST NUMBER USED : 1721
+$
+$ Error : 1722
+$msg  1722 A non-dummy coarray must have the ALLOCATABLE or SAVE attribute
+$nexp 1722
+Error : A non-dummy coarray must have the ALLOCATABLE or SAVE attribute
+.PP
+A non-dummy coarray must have the ALLOCATABLE or SAVE attribute. 
+$
+$ Error : 1723
+$msg  1723 The %s statement is not supported unless coarrays are enabled
+$nexp 1722
+Error : The %s statement is not supported unless coarrays are enabled
+.PP
+This is for language features that require coarrays to be enabled, since they
+are implemented using libcaf runtime.
+.ME
+$ LAST NUMBER USED : 1723
 
