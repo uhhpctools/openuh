@@ -999,8 +999,13 @@ int _IMAGE_INDEX(DopeVectorType * diminfo, DopeVectorType * sub)
     int *codim = (int *) sub->base_addr.a.ptr;
     int str_m = 1;
 
-    if (sub->dimension[0].extent != corank)
-        return 0;
+    if (sub->dimension[0].extent != corank) {
+        LIBCAF_TRACE(LIBCAF_LOG_FATAL,
+                     "image_index failed due to corank mismatch "
+                     " (was %d, should be %d)",
+                      corank, sub->dimension[0].extent);
+        exit(1);
+    }
 
     for (i = 0; i < corank; i++) {
         int extent;

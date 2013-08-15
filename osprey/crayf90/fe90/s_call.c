@@ -4064,9 +4064,11 @@ boolean final_arg_work(opnd_type	*list_opnd,
       /*  This is a hack to make association PASS_DV if its a coscalar
        *  and d_type is Intrin_Dope_Dummy */
 
-      if (a_type == Scalar_Var && ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX
+      int base_attr_idx = find_base_attr(&IL_OPND(list_idx), &line, &col);
+
+      if (a_type == Scalar_Var && ATD_PE_ARRAY_IDX(base_attr_idx) != NULL_IDX
           && d_type == Intrin_Dope_Dummy) {
-          if (ATD_IM_A_DOPE(attr_idx))
+          if (ATD_IM_A_DOPE(base_attr_idx))
               association = PASS_DV;
           else
               association = MAKE_DV;
@@ -4172,8 +4174,13 @@ boolean final_arg_work(opnd_type	*list_opnd,
          if (arg_info_list[info_idx].ed.reference) {
             attr_idx = find_left_attr(&IL_OPND(list_idx));
 
+#ifndef _UH_COARRAYS
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+#else
+            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
+                ATD_PE_ARRAY_IDX(base_attr_idx) == NULL_IDX) {
+#endif
 
                PRINTMSG(line, 1584, Error, col);
             }
@@ -5272,7 +5279,7 @@ boolean final_arg_work(opnd_type	*list_opnd,
                }
 #ifdef _UH_COARRAYS
                   ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
-                                          BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
+                                          BD_RANK(ATD_PE_ARRAY_IDX(base_attr_idx)) :
                                           BD_RANK(ATD_PE_ARRAY_IDX(dummy));
 #endif
                ATD_IM_A_DOPE(tmp_idx)    = TRUE;
@@ -5427,7 +5434,7 @@ boolean final_arg_work(opnd_type	*list_opnd,
             }
 #ifdef _UH_COARRAYS
               ATD_PE_ARRAY_IDX(tmp_idx) = (d_type == Intrin_Dope_Dummy) ?
-                                      BD_RANK(ATD_PE_ARRAY_IDX(attr_idx)) :
+                                      BD_RANK(ATD_PE_ARRAY_IDX(base_attr_idx)) :
                                       BD_RANK(ATD_PE_ARRAY_IDX(dummy));
 #endif
             ATD_IM_A_DOPE(tmp_dv_idx)    = TRUE;

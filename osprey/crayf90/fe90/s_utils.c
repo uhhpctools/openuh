@@ -4492,6 +4492,23 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
       IL_PREV_LIST_IDX(IL_NEXT_LIST_IDX(list_idx)) = list_idx;
       list_idx = IL_NEXT_LIST_IDX(list_idx);
 
+#ifdef _UH_COARRAYS
+      if ((i > rank) && exp_desc->rank == rank) {
+          if (i <= (rank+corank_orig)) {
+              IL_FLD(list_idx) = BD_LB_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+              IL_IDX(list_idx) = BD_LB_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
+          } else {
+              IL_FLD(list_idx) = CN_Tbl_Idx;
+              IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
+          }
+          IL_LINE_NUM(list_idx) = line;
+          IL_COL_NUM(list_idx)  = col;
+
+          if (IL_FLD(list_idx) == AT_Tbl_Idx) {
+              ADD_TMP_TO_SHARED_LIST(IL_IDX(list_idx));
+          }
+      } else
+#endif
       if (whole_array) {
          /* need arrays low bound */
          if (ATD_IM_A_DOPE(attr_idx) &&
@@ -4506,23 +4523,6 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
             IL_FLD(list_idx)   = IR_Tbl_Idx;
             IL_IDX(list_idx)   = dv2_idx;
          }
-#ifdef _UH_COARRAYS
-         else if ((i > rank) && exp_desc->rank == rank) {
-           if (i <= (rank+corank_orig)) {
-             IL_FLD(list_idx) = BD_LB_FLD(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
-             IL_IDX(list_idx) = BD_LB_IDX(ATD_PE_ARRAY_IDX(attr_idx), i-rank);
-           } else {
-             IL_FLD(list_idx) = CN_Tbl_Idx;
-             IL_IDX(list_idx) = CN_INTEGER_ONE_IDX;
-           }
-           IL_LINE_NUM(list_idx) = line;
-           IL_COL_NUM(list_idx)  = col;
-
-           if (IL_FLD(list_idx) == AT_Tbl_Idx) {
-             ADD_TMP_TO_SHARED_LIST(IL_IDX(list_idx));
-           }
-         }
-#endif
          else {
             IL_FLD(list_idx) = BD_LB_FLD(ATD_ARRAY_IDX(attr_idx), i);
             IL_IDX(list_idx) = BD_LB_IDX(ATD_ARRAY_IDX(attr_idx), i);
@@ -4611,7 +4611,7 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
           IL_LINE_NUM(list_idx) = line;
           IL_COL_NUM(list_idx) = col;
         }
-      } else {
+      } else
 #endif
 
       if (whole_array) {
@@ -4623,7 +4623,7 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
                              i,
                              line,
                              col);
-                            
+
          COPY_OPND(IL_OPND(list_idx), stride_opnd);
 
       }
@@ -4655,9 +4655,6 @@ void gen_dv_whole_def(opnd_type		*dv_opnd,
          subscript_idx = IL_NEXT_LIST_IDX(subscript_idx);
          dim++;
       }
-#ifdef _UH_COARRAYS
-      }
-#endif
    }
 
 #ifdef KEY /* Bug 6845 */

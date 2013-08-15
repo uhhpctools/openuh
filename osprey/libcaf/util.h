@@ -60,6 +60,7 @@ char *drop_path(char *s);
 /* debug utility functions */
 
 #if defined(CAFRT_DEBUG)
+extern void uhcaf_debug_dope(DopeVectorType *dopev);
 extern void __libcaf_debug_print_array_int(char *name, int *arr, int n);
 extern void __libcaf_debug_print_array_long(char *name, long *arr, int n);
 #endif
