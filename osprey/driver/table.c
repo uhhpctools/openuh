@@ -69,7 +69,6 @@
 
 /* dummy for option referenced in lang_defs.c */
 int external_gcc = 0;
-int link_gcpp = 0;
 
 typedef enum {
 	normal, 

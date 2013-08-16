@@ -284,6 +284,7 @@ static void handle_caf_call_stmts(WN_TREE_CONTAINER<PRE_ORDER>::iterator wipre,
                                   WN **wn_next_p);
 static WN *expr_is_coindexed(WN *expr, WN **image, TY_IDX *coarray_type,
                              WN **direct_coarray_ref = NULL);
+static void uncoindex_expr(WN *expr);
 static WN *get_containing_arrayexp(WN *wn);
 static BOOL is_dope(const TY_IDX tyi);
 static BOOL currentpu_ismain();
@@ -303,12 +304,14 @@ static ST* gen_lcbptr_symbol(TY_IDX tyi, const char *rootname);
 static WN* gen_coarray_access_stmt(WN *remote_access, WN *local_access,
                                    ST *lcbtemp, WN *xfer_size,
                                    ACCESS_TYPE access,
-                                   ACCESS_HDL *access_handle = NULL);
+                                   ACCESS_HDL *access_handle = NULL,
+                                   ST *image_idx_st = NULL);
 static void substitute_lcb(WN *remote_access, ST *lcbtemp,
                            WN *wn_arrayexp, WN **replace_wn);
 
 static BOOL stmt_rhs_is_addressable(WN *stmt_node);
 static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty);
+static void array_ref_remove_cosubscripts(WN *arr_parent, WN *arr, TY_IDX ty);
 
 static int add_caf_stmt_to_delete_list(WN *stmt, WN *blk);
 static int stmt_in_delete_list(WN *stmt);
@@ -320,6 +323,8 @@ static void move_stmts_from_initializer_list(WN *wn, WN *blk);
 
 static WN* make_array_ref(ST *base);
 static WN* make_array_ref(WN *base);
+
+static WN* gen_local_image_condition(WN *image, WN *orig_stmt_copy, BOOL is_write);
 
 static WN * Generate_Call_target_alloc(WN *, WN *);
 static WN * Generate_Call_target_dealloc(WN *);
@@ -767,39 +772,25 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                           (is_vector_access(coindexed_arr_ref) ||
                            !is_vector_access(RHS_wn))) {
 
-                        /* a source LCB is not required */
-                        if (is_load_operation(RHS_wn)) {
-                            while (RHS_wn && WN_operator(RHS_wn) == OPR_CVTL) {
-                                RHS_wn = WN_kid0(RHS_wn);
-                            }
-                            if (get_innermost_array(RHS_wn) == NULL) {
-                                if (WN_operator(RHS_wn) == OPR_LDID) {
-                                    WN *new_RHS_wn;
-                                    /* replace the LDID expression with an Iload
-                                     * to an array ref */
-                                    TY_IDX elem_ty = WN_ty(RHS_wn);
-                                    new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
-                                            WN_offset(RHS_wn),
-                                            Make_Pointer_Type(elem_ty, FALSE),
-                                            make_array_ref(WN_st(RHS_wn)));
-                                    WN_Delete(RHS_wn);
-                                    WN_kid0(stmt_node) = new_RHS_wn;
-                                } else if (WN_operator(RHS_wn) == OPR_ILOAD) {
-                                    WN *new_RHS_wn;
-                                    /* replace the ILOAD expression with an Iload
-                                     * to an array ref */
-                                    TY_IDX elem_ty = WN_ty(RHS_wn);
-                                    new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
-                                            WN_offset(RHS_wn),
-                                            Make_Pointer_Type(elem_ty, FALSE),
-                                            make_array_ref(WN_kid0(RHS_wn)) );
-                                    WN_Delete(RHS_wn);
-                                    WN_kid0(stmt_node) = new_RHS_wn;
-                                } else if (WN_operator(RHS_wn) == OPR_MLOAD) {
-                                    WN_kid0(RHS_wn) = make_array_ref(WN_kid0(RHS_wn));
-                                }
-                            }
-                        }
+                        WN *if_local_wn = gen_local_image_condition(
+                                                  image,
+                                                  WN_COPY_Tree(stmt_node),
+                                                  TRUE);
+
+
+                        /* setup else block for if-local statement */
+                        WN *new_stmt_node = WN_COPY_Tree(stmt_node);
+                        Set_Coarray_Sync(new_stmt_node, Coarray_Sync(stmt_node));
+                        WN_INSERT_BlockFirst( WN_else(if_local_wn),
+                                              new_stmt_node);
+
+                        WN_INSERT_BlockBefore(blk_node, stmt_node, if_local_wn);
+
+                        /* defer deletion of the old statment so that we can continue
+                         * to traverse the tree */
+                        add_caf_stmt_to_delete_list(stmt_node, blk_node);
+
+
                     } else {
                         WN *new_stmt_node;
                         ST *LCB_st;
@@ -820,9 +811,19 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         new_stmt_node = WN_COPY_Tree(stmt_node);
                         replace_RHS_with_LCB(new_stmt_node,
                                              LCB_st);
+
+                        WN *if_local_wn = gen_local_image_condition(
+                                                image,
+                                                WN_COPY_Tree(new_stmt_node),
+                                                TRUE);
+
                         Set_LCB_Stmt(new_stmt_node);
                         Set_Coarray_Sync(new_stmt_node, Coarray_Sync(stmt_node));
-                        WN_INSERT_BlockAfter(blk_node, stmt_node, new_stmt_node);
+
+                        WN_INSERT_BlockFirst( WN_else(if_local_wn),
+                                              new_stmt_node);
+
+                        WN_INSERT_BlockAfter(blk_node, stmt_node, if_local_wn);
 
                         /* replace LHS */
                         WN *store = get_store_parent(coindexed_arr_ref);
@@ -867,29 +868,63 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                          !LHS_is_coindexed &&
                          (is_vector_access(coindexed_arr_ref) ||
                           !LHS_is_vector_access) ) {
-
                         /* no LCB created */
 
-                        if (is_load_operation(RHS_wn)) {
-                            if (WN_operator(stmt_node) == OPR_STID) {
-                                /* replace the STID statement with an Istore to an
-                                 * array ref */
-                                TY_IDX elem_ty = WN_ty(stmt_node);
-                                insert_wnx = WN_Istore( TY_mtype(elem_ty),
-                                        WN_offset(stmt_node),
-                                        Make_Pointer_Type(elem_ty, FALSE),
-                                        make_array_ref(WN_st(stmt_node)),
-                                        WN_COPY_Tree(RHS_wn));
-                                WN_INSERT_BlockBefore(blk_node, stmt_node, insert_wnx);
-                                Set_Coarray_Sync(insert_wnx, Coarray_Sync(stmt_node));
+                        WN *if_local_wn = gen_local_image_condition(
+                                                  image,
+                                                  WN_COPY_Tree(stmt_node),
+                                                  FALSE);
 
-                                add_caf_stmt_to_delete_list(stmt_node, blk_node);
-                            } else if ((WN_operator(stmt_node) == OPR_ISTORE ||
-                                       WN_operator(stmt_node) == OPR_MSTORE) &&
-                                       get_innermost_array(WN_kid1(stmt_node)) == NULL) {
-                                WN_kid1(stmt_node) = make_array_ref(WN_kid1(stmt_node));
-                            }
+                        /* if no sync handle specified for this read, then
+                         * create a temporary one */
+                        if (!Coarray_Sync(stmt_node)) {
+                            ACCESS_HDL *access_handle = (ACCESS_HDL*)malloc(
+                                    sizeof(ACCESS_HDL));
+                            access_handle->handle_st =
+                                Gen_Temp_Named_Symbol(MTYPE_To_TY(MTYPE_U8),
+                                        "hdl", CLASS_VAR, SCLASS_AUTO);
+                            access_handle->deferred = FALSE;
+                            Set_ST_is_temp_var(access_handle->handle_st);
+                            Set_Coarray_Sync(stmt_node, (ACCESS_HDL*)access_handle);
                         }
+
+                        /* setup else block for if-local statement */
+                        WN *new_stmt_node = WN_COPY_Tree(stmt_node);
+                        Set_Coarray_Sync(new_stmt_node, Coarray_Sync(stmt_node));
+
+                        WN_INSERT_BlockFirst( WN_else(if_local_wn),
+                                new_stmt_node);
+                        WN_INSERT_BlockBefore(blk_node, stmt_node, if_local_wn);
+
+
+                        /* insert sync for remote read if not deferred*/
+                        if (Coarray_Sync(stmt_node)->deferred == FALSE) {
+                            WN *sync_hdl;
+                            ST *handle_st;
+                            handle_st =
+                                Coarray_Sync(stmt_node)->handle_st;
+                            if (handle_st == NULL) {
+                                sync_hdl = WN_Intconst(Pointer_type,0);
+                            } else {
+                                sync_hdl = WN_Ldid( Pointer_type, 0,
+                                        handle_st, ST_type(handle_st));
+                            }
+                            insert_sync =
+                                Generate_Call_coarray_sync(sync_hdl, TRUE);
+
+                            WN *insert_sync_init = WN_Stid(Pointer_type, 0,
+                                                    handle_st,
+                                                    ST_type(handle_st),
+                                                    WN_Intconst(Pointer_type,0));
+                            WN_INSERT_BlockBefore(blk_node, if_local_wn,
+                                                  insert_sync_init);
+                            WN_INSERT_BlockLast(sync_blk, insert_sync);
+                        }
+
+
+                        /* defer deletion of the old statment so that we can continue
+                         * to traverse the tree */
+                        add_caf_stmt_to_delete_list(stmt_node, blk_node);
                     } else {
                         /* create destination LCB for co-indexed term */
 
@@ -917,7 +952,15 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                 num_codim,
                                 LCB_st);
 
-                        WN_INSERT_BlockBefore(blk_node, stmt_node, new_stmt_node);
+                        WN *if_local_wn = gen_local_image_condition(
+                                                image,
+                                                WN_COPY_Tree(new_stmt_node),
+                                                FALSE);
+
+                        WN_INSERT_BlockFirst( WN_else(if_local_wn),
+                                              new_stmt_node);
+
+                        WN_INSERT_BlockBefore(blk_node, stmt_node, if_local_wn);
 
                         /* if no sync handle specified for this read, then
                          * create a temporary one */
@@ -945,34 +988,28 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                         wipre = temp_wipre;
 
                         /* insert sync for remote read if not deferred*/
-                        if (Coarray_Sync(new_stmt_node)) {
-                            if (Coarray_Sync(new_stmt_node)->deferred == FALSE) {
-                                WN *sync_hdl;
-                                ST *handle_st;
-                                handle_st =
-                                    Coarray_Sync(new_stmt_node)->handle_st;
-                                if (handle_st == NULL) {
-                                    sync_hdl = WN_Intconst(Pointer_type,0);
-                                } else {
-                                    sync_hdl = WN_Ldid( Pointer_type, 0,
-                                            handle_st, ST_type(handle_st));
-                                }
-                                insert_sync =
-                                    Generate_Call_coarray_sync(sync_hdl, TRUE);
-
-                                WN_INSERT_BlockLast(sync_blk, insert_sync);
+                        if (Coarray_Sync(new_stmt_node)->deferred == FALSE) {
+                            WN *sync_hdl;
+                            ST *handle_st;
+                            handle_st =
+                                Coarray_Sync(new_stmt_node)->handle_st;
+                            if (handle_st == NULL) {
+                                sync_hdl = WN_Intconst(Pointer_type,0);
+                            } else {
+                                sync_hdl = WN_Ldid( Pointer_type, 0,
+                                        handle_st, ST_type(handle_st));
                             }
+                            insert_sync =
+                                Generate_Call_coarray_sync(sync_hdl, TRUE);
 
-                        } else {
-                            /* should not reach */
-
-                            Is_True( 0,
-                                    ("Coarray_Sync not created for coarray read statement"));
-                            insert_sync = Generate_Call_coarray_sync(
-                                    WN_Intconst(Pointer_type,-1));
-                            WN_INSERT_BlockLast(insert_blk, insert_sync);
+                            WN *insert_sync_init =
+                                            WN_Stid(Pointer_type, 0,
+                                                    handle_st,
+                                                    ST_type(handle_st),
+                                                    WN_Intconst(Pointer_type,0));
+                            WN_INSERT_BlockBefore(blk_node, if_local_wn, insert_sync_init);
+                            WN_INSERT_BlockLast(sync_blk, insert_sync);
                         }
-
 
                         /* call to release LCB */
                         insert_wnx = Generate_Call_release_lcb(
@@ -1266,6 +1303,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                       ST_type(save_coarray_replace)),
                                   WN_COPY_Tree(WN_kid0(wn)), 0)
                               );
+                      Set_Coarray_Sync(wipost.Wn(), Coarray_Sync(wn));
                       WN_Delete(wn);
                   } else if (st1 && ST_is_f90_target(st1)) {
                       ST *targptr_replace;
@@ -1293,6 +1331,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                       ST_type(targptr_replace)),
                                   WN_COPY_Tree(WN_kid0(wn)), 0)
                               );
+                      Set_Coarray_Sync(wipost.Wn(), Coarray_Sync(wn));
                       WN_Delete(wn);
                   }
                   break;
@@ -1345,6 +1384,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
     /* reconstruct parent map */
     Parentize(func_body);
     for (wipre = wcpre.begin(); wipre != wcpre.end(); ++wipre) {
+        ST *image_st = NULL;
         WN *insert_blk = NULL;
         WN *wn = wipre.Wn();
         WN *insert_sync;
@@ -1434,6 +1474,41 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                         if (is_vector_access(RHS_wn)) break;
 
+                        /* if RHS is not an array, temporarily turn it into
+                         * one */
+                        if (get_innermost_array(RHS_wn) == NULL) {
+                            if (WN_operator(RHS_wn) == OPR_LDID) {
+                                WN *new_RHS_wn;
+                                /* replace the LDID expression with an Iload
+                                 * to an array ref */
+                                TY_IDX elem_ty = WN_ty(RHS_wn);
+                                new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+                                        WN_offset(RHS_wn),
+                                        Make_Pointer_Type(elem_ty, FALSE),
+                                        make_array_ref(WN_st(RHS_wn)));
+                                WN_Delete(RHS_wn);
+                                WN_kid0(stmt_node) = new_RHS_wn;
+                                RHS_wn = new_RHS_wn;
+                            } else if (WN_operator(RHS_wn) == OPR_ILOAD) {
+                                WN *new_RHS_wn;
+                                /* replace the ILOAD expression with an Iload
+                                 * to an array ref */
+                                TY_IDX elem_ty = WN_ty(RHS_wn);
+                                new_RHS_wn = WN_Iload( TY_mtype(elem_ty),
+                                        WN_offset(RHS_wn),
+                                        Make_Pointer_Type(elem_ty, FALSE),
+                                        make_array_ref(WN_kid0(RHS_wn)) );
+                                WN_Delete(RHS_wn);
+                                WN_kid0(stmt_node) = new_RHS_wn;
+                                RHS_wn = new_RHS_wn;
+                            } else if (WN_operator(RHS_wn) == OPR_MLOAD) {
+                                WN_kid0(RHS_wn) = make_array_ref(WN_kid0(RHS_wn));
+                            }
+
+                            Parentize(RHS_wn);
+                        }
+
+
                         if (WN_operator(RHS_wn) == OPR_ARRAYEXP &&
                             (WN_operator(WN_kid0(RHS_wn)) == OPR_ILOAD) ||
                             (WN_operator(WN_kid0(RHS_wn)) == OPR_MLOAD)) {
@@ -1465,6 +1540,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
 
                 } else  if ( array_ref_on_RHS(coindexed_arr_ref, &elem_type) ) {
+                    WN *new_stmt_node = NULL;
 
                     /* coarray read */
 
@@ -1476,19 +1552,6 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                     WN *RHS_wn = WN_kid0(stmt_node);
                     Is_True(is_lvalue(RHS_wn),
                             ("Unexpected coarray ref found in RHS"));
-
-                    /* if no sync handle specified for this read statement, then
-                     * create a temporary one */
-                    if (!Coarray_Sync(stmt_node)) {
-                        ACCESS_HDL *access_handle = (ACCESS_HDL*)malloc(
-                                sizeof(ACCESS_HDL));
-                        access_handle->handle_st =
-                          Gen_Temp_Named_Symbol(MTYPE_To_TY(MTYPE_U8),
-                                              "hdl", CLASS_VAR, SCLASS_AUTO);
-                        access_handle->deferred = FALSE;
-                        Set_ST_is_temp_var(access_handle->handle_st);
-                        Set_Coarray_Sync(stmt_node, (ACCESS_HDL*)access_handle);
-                    }
 
 
                     if (Is_LCB_Stmt(stmt_node)) {
@@ -1505,9 +1568,43 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                     } else {
                         WN *xfer_sz_node;
-                        WN *LHS_wn = WN_kid1(stmt_node);
+                        WN *LHS_wn;
 
-                        if (is_vector_access(LHS_wn)) break;
+                        if (is_load_operation(RHS_wn)) {
+                            if (WN_operator(stmt_node) == OPR_STID) {
+                                /* replace the STID statement with an Istore to an
+                                 * array ref */
+                                TY_IDX elem_ty = WN_ty(stmt_node);
+                                new_stmt_node = WN_Istore( TY_mtype(elem_ty),
+                                        WN_offset(stmt_node),
+                                        Make_Pointer_Type(elem_ty, FALSE),
+                                        make_array_ref(WN_st(stmt_node)),
+                                        WN_COPY_Tree(RHS_wn));
+
+                            } else if ((WN_operator(stmt_node) == OPR_ISTORE ||
+                                       WN_operator(stmt_node) == OPR_MSTORE) &&
+                                       get_innermost_array(WN_kid1(stmt_node)) == NULL) {
+                                new_stmt_node = WN_COPY_Tree(stmt_node);
+                                WN_kid1(new_stmt_node) =
+                                    make_array_ref(WN_kid1(new_stmt_node));
+                            } else {
+                                new_stmt_node = WN_COPY_Tree(stmt_node);
+                            }
+                        } else {
+                            new_stmt_node = WN_COPY_Tree(stmt_node);
+                        }
+                        LHS_wn = WN_kid1(new_stmt_node);
+
+                        if (is_vector_access(LHS_wn)) {
+                            WN_DELETE_Tree(new_stmt_node);
+                            /* done with this statement for this pass, so free
+                             * the sync map */
+                            free(Coarray_Sync(stmt_node));
+                            break;
+                        }
+
+                        Parentize(new_stmt_node);
+                        Set_Coarray_Sync(new_stmt_node, Coarray_Sync(stmt_node));
 
                         xfer_sz_node = get_transfer_size(wn, elem_type);
                         insert_blk = gen_coarray_access_stmt( wn,
@@ -1515,30 +1612,11 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                              WN_kid0(LHS_wn) : LHS_wn,
                                             NULL,
                                             xfer_sz_node, READ_DIRECT,
-                                            Coarray_Sync(stmt_node));
+                                            Coarray_Sync(new_stmt_node));
+                        WN_DELETE_Tree(new_stmt_node);
                     }
 
-                    /* insert sync for remote reads if not deferred. Sync for
-                     * LCB reads already taken care of in Pass 1 */
-                    if (!Is_LCB_Stmt(stmt_node) && Coarray_Sync(stmt_node)) {
-                        if (Coarray_Sync(stmt_node)->deferred == FALSE) {
-                            WN *sync_hdl;
-                            ST *handle_st;
-                            handle_st =
-                                Coarray_Sync(stmt_node)->handle_st;
-                            if (handle_st == NULL) {
-                                sync_hdl = WN_Intconst(Pointer_type,0);
-                            } else {
-                                sync_hdl = WN_Ldid( Pointer_type, 0,
-                                        handle_st, ST_type(handle_st));
-                            }
-                            insert_sync =
-                                Generate_Call_coarray_sync(sync_hdl, TRUE);
-                            WN_INSERT_BlockLast(insert_blk, insert_sync);
-                        }
-
-                        free(Coarray_Sync(stmt_node));
-                    } else if (Coarray_Sync(stmt_node)) {
+                    if (Coarray_Sync(stmt_node)) {
                         free(Coarray_Sync(stmt_node));
                     } else {
                         /* should not reach */
@@ -1552,7 +1630,9 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
 
                 }
 
-                /* replace with runtime call for remote coarray access */
+
+                /* replace with runtime call for remote coarray access, if
+                 * coarray access statement has been lowered  */
                 if (insert_blk) {
                     insert_wnx = WN_first(insert_blk);
                     while (insert_wnx) {
@@ -2324,7 +2404,8 @@ static ST* gen_lcbptr_symbol(TY_IDX tyi, const char *rootname)
 static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
                                    ST *LCB_st, WN *xfer_size,
                                    ACCESS_TYPE access,
-                                   ACCESS_HDL *access_handle)
+                                   ACCESS_HDL *access_handle,
+                                   ST *image_st)
 {
     WN *return_blk;
     TY_IDX remote_array_type;
@@ -2354,6 +2435,12 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
 
     coarray_ref = expr_is_coindexed(coarray_ref, &image, &coarray_type,
                                     &direct_coarray_ref);
+
+
+    if (image_st) {
+        WN_DELETE_Tree(image);
+        image = WN_Ldid(MTYPE_U8, 0, image_st, ST_type(image_st));
+    }
 
 
     /* get enclosing assignment stmt node */
@@ -2420,19 +2507,17 @@ static WN* gen_coarray_access_stmt(WN *coarray_ref, WN *local_ref,
             }
 
             /* stride multipliers */
-            if (rank > 0) {
-                stride_mult = WN_Intconst(Integer_type, elem_size);
-                remote_access[i].stride_mult[0] = stride_mult;
-            }
             BOOL noncontig = (WN_element_size(wp) < 0);
             if (noncontig) {
-                for (int j = 1; j < rank; j++) {
+                for (int j = 0; j < rank; j++) {
                     stride_mult = WN_Mpy( MTYPE_U8,
                                     WN_Intconst(Integer_type, elem_size),
                                     WN_COPY_Tree(WN_kid(wp, totalrank-j)) );
                     remote_access[i].stride_mult[j] = stride_mult;
                 }
-            } else {
+            } else if (rank > 0) {
+                stride_mult = WN_Intconst(Integer_type, elem_size);
+                remote_access[i].stride_mult[0] = stride_mult;
                 for (int j = 1; j < rank; j++) {
                     stride_mult = WN_Mpy( MTYPE_U8,
                                     WN_COPY_Tree(stride_mult),
@@ -3558,6 +3643,77 @@ static BOOL stmt_rhs_is_addressable(WN *stmt_node)
           WN_operator(WN_kid0(rhs)) == OPR_MLOAD));
 }
 
+static void array_ref_remove_cosubscripts(WN *arr_parent, WN *arr, TY_IDX ty)
+{
+  ST *array_st;
+  INT8 rank, corank, totalrank;
+
+  if ((WN_operator(arr) != OPR_ARRAY) &&
+      (WN_operator(arr) != OPR_ARRSECTION))
+    return;
+
+  if ( is_dope(ty) ) {
+    ty = TY_pointed(FLD_type(TY_fld(ty)));
+    if (!is_coarray_type(ty))
+      return;
+    rank = get_coarray_rank(ty);
+    corank = get_coarray_corank(ty);
+  } else  {
+    /* break if not coarray */
+    if (!is_coarray_type(ty))
+      return;
+
+    rank = get_coarray_rank(ty);
+    corank = get_coarray_corank(ty);
+  }
+
+  /* check array depth matches in case its a coscalar of array type */
+  if (rank == 0)  {
+      TY_IDX ty1 = Ty_Table[ty].u2.etype;
+      WN *p = Get_Parent(arr);
+      while (TY_kind(ty1) == KIND_ARRAY) {
+          ty1 = Ty_Table[ty1].u2.etype;
+          if (!p || (WN_operator(p) != OPR_ARRAY &&
+              WN_operator(p) != OPR_ARRSECTION)) {
+              return;
+          }
+          p = Get_Parent(p);
+      }
+  }
+
+
+  /* break if not cosubscripted */
+  if (WN_kid_count(arr) == (1+2*rank))
+    return;
+
+  /* if it is rank 0, then replace the array reference with kid 0 */
+  if (rank == 0) {
+      if (WN_kid1(arr_parent) == arr) {
+          WN_kid1(arr_parent) = WN_COPY_Tree(WN_kid0(arr));
+      } else if (WN_kid0(arr_parent) == arr) {
+          WN_kid0(arr_parent) = WN_COPY_Tree(WN_kid0(arr));
+      } else {
+          Is_True(0, ("unexpected parent tree in array_ref_remove_cosubscripts"));
+      }
+      WN_DELETE_Tree(arr);
+      return;
+  }
+
+  /* confirmed that this is a image-selecting array reference. now remove the
+   * cosubscripts. Remove kids 1...corank and totalrank+1...totalrank+corank */
+  totalrank = rank + corank;
+  for (INT8 i=0; i < rank; i++) {
+      WN_kid(arr,i+1) = WN_kid(arr,i+corank+1);
+  }
+  for (INT8 i=0; i < rank; i++) {
+      WN_kid(arr,i+rank+1) = WN_kid(arr,i+totalrank+1+corank);
+  }
+  WN_set_kid_count(arr,1+2*rank);
+  for (INT8 i=1+2*rank; i < 1+2*totalrank; i++) {
+      WN_kid(arr,i) = NULL;
+  }
+}
+
 static WN * array_ref_is_coindexed(WN *arr, TY_IDX ty)
 {
   WN *base_addr;
@@ -4117,6 +4273,69 @@ dump_ty (TY_IDX ty_idx)
 {
 	TY& ty = Ty_Table[ty_idx];
 	ty.Print(stdout);
+}
+
+static void uncoindex_expr(WN *expr)
+{
+    WN_TREE_CONTAINER<POST_ORDER> wcpost(expr);
+    WN *uncoindexed_expr = NULL;
+    WN *wn;
+    TY_IDX type;
+    WN_OFFSET ofst = 0;
+    WN *img = NULL;
+
+    /* start from left most leaf and search up the tree for a coarray access
+     * */
+    wn = wcpost.begin().Wn();
+    type = TY_IDX_ZERO;
+    while (wn) {
+        WN *parent = Get_Parent(wn);
+
+        switch (WN_operator(wn)) {
+            case OPR_ARRAY:
+            case OPR_ARRSECTION:
+                if (type == TY_IDX_ZERO)
+                    break;
+
+                type = get_type_at_offset(type, ofst, TRUE, TRUE);
+
+                while (TY_kind(type) == KIND_POINTER)
+                    type = TY_pointed(type);
+
+                if ( is_coarray_type(type) ) {
+                    array_ref_remove_cosubscripts(parent, wn, type);
+                    return;
+                }
+
+                break;
+
+            case OPR_LDA:
+            case OPR_LDID:
+                type = WN_ty(wn);
+                while (TY_kind(type) == KIND_POINTER)
+                    type = TY_pointed(type);
+
+                ofst = 0;
+                break;
+
+            case OPR_ILOAD:
+                type = WN_ty(wn);
+                while (TY_kind(type) == KIND_POINTER)
+                    type = TY_pointed(type);
+
+                ofst = 0;
+                break;
+
+            case OPR_ADD:
+                ofst += WN_const_val(WN_kid1(wn));
+                break;
+        }
+        /* if back at original expression node, break */
+        if (wn == expr) break;
+
+        wn = parent;
+    }
+
 }
 
 /*
@@ -4705,11 +4924,12 @@ static WN *get_lcb_assignment(WN *coarray_deref, INT num_codim,
     }
 
     rtype = TY_mtype(elem_type);
-    desc = TY_mtype(elem_type);
+    desc = rtype;
+
     if (desc == MTYPE_I1 || desc == MTYPE_I2)
-        rtype = MTYPE_I4;
+        desc = MTYPE_I4;
     else if (desc == MTYPE_U1 || desc == MTYPE_U2)
-        rtype = MTYPE_U4;
+        desc = MTYPE_U4;
 
     if (WN_operator(coarray_ref) == OPR_ARRSECTION) {
         WN *new_arrsection;
@@ -4770,26 +4990,26 @@ static WN *get_lcb_assignment(WN *coarray_deref, INT num_codim,
                         ST_type(LCB_st));
     }
 
-    switch (desc) {
+    WN *val = F90_Wrap_ARREXP(coarray_deref);
+    switch (rtype) {
         case MTYPE_I1:
-            addr = WN_CreateCvtl(OPC_I4CVTL, 8, addr);
+            val = WN_CreateCvtl(OPC_I4CVTL, 8, val);
             break;
         case MTYPE_I2:
-            addr = WN_CreateCvtl(OPC_I4CVTL, 16, addr);
+            val = WN_CreateCvtl(OPC_I4CVTL, 16, val);
             break;
         case MTYPE_U1:
-            addr = WN_CreateCvtl(OPC_U4CVTL, 8, addr);
+            val = WN_CreateCvtl(OPC_U4CVTL, 8, val);
             break;
         case MTYPE_U2:
-            addr = WN_CreateCvtl(OPC_U4CVTL, 16, addr);
+            val = WN_CreateCvtl(OPC_U4CVTL, 16, val);
             break;
     }
 
-    WN *val = F90_Wrap_ARREXP(coarray_deref);
-    TYPE_ID val_desc = WN_rtype(val);
+    TYPE_ID val_rtype = WN_rtype(val);
 
-    if (val_desc != rtype) {
-        val = WN_Cvt(val_desc, rtype, val);
+    if (val_rtype != desc) {
+        val = WN_Cvt(val_rtype, desc, val);
     }
 
     new_stmt = WN_Istore(rtype, 0, ST_type(LCB_st),
@@ -5309,3 +5529,25 @@ static WN* make_array_ref(WN *base)
     WN_array_dim(arr_ref,0) = WN_Intconst(MTYPE_U4, 1);
     return arr_ref;
 } /* make_array_ref */
+
+/* generates an if statement, where an "uncoindexed" version of orig_stmt_copy
+ * is inserted into the then block. */
+static WN* gen_local_image_condition(WN *image, WN *orig_stmt_copy, BOOL is_write)
+{
+    Parentize(orig_stmt_copy);
+
+    uncoindex_expr( WN_kid(orig_stmt_copy,is_write?1:0) );
+
+    WN *if_local_wn, *test;
+    test = WN_EQ(MTYPE_U8,
+            WN_COPY_Tree(image),
+            WN_Ldid(MTYPE_U8, 0, this_image_st,
+                ST_type(this_image_st)));
+
+    if_local_wn = WN_CreateIf(test,
+            WN_CreateBlock(),
+            WN_CreateBlock());
+    WN_INSERT_BlockLast( WN_then(if_local_wn), orig_stmt_copy );
+
+    return if_local_wn;
+} /* gen_local_image_condition */

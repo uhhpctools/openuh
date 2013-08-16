@@ -253,8 +253,6 @@ I-include=%D  ;		FTN     ffe,PFA     "-include=%D"
 	"Do not use faster versions of standard library functions"
 -nolibopen64rt	;	LINK	ld	""
 	"Do not link with libopen64rt"
--link-gcpp	toggle(&link_gcpp,TRUE);	LINK	ipap	""
-    "Override usual linker and use g++"
 -external-gcc	toggle(&external_gcc,TRUE);	ALL	ipap	self
 	"Do not use internal gcc to preprocess and link"
 %I-split_common	;		LINK	ld	"-split_common"

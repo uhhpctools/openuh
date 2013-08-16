@@ -124,8 +124,6 @@ static const char* get_linker_name(int argc, char** argv)
     if (linker_name != NULL) {
         if (file_exists(linker_name))
             return linker_name;
-
-        free (linker_name);
     }
 #endif
 

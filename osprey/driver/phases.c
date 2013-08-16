@@ -3094,9 +3094,6 @@ run_ld (void)
 	else if (invoked_lang == L_CC) {
 		ldphase = P_ldplus;
 	}
-	else if (link_gcpp == 1) {
-		ldphase = P_ldplus;
-	}
 	else {
 		ldphase = P_ld;
 	}
