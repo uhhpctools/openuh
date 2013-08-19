@@ -34,7 +34,7 @@
 #endif
 
 module caf_types
-  type :: caf_sync_handle
+  type :: caf_wait_handle
     private
     integer (kind=PTR_KIND) :: hdl_ptr = 0
   end type

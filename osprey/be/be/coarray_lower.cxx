@@ -904,7 +904,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             handle_st =
                                 Coarray_Sync(stmt_node)->handle_st;
                             if (handle_st == NULL) {
-                                sync_hdl = WN_Intconst(Pointer_type,0);
+                                Is_True(0, ("handle_st not set for non-deferred sync"));
                             } else {
                                 sync_hdl = WN_Ldid( Pointer_type, 0,
                                         handle_st, ST_type(handle_st));
@@ -919,6 +919,20 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             WN_INSERT_BlockBefore(blk_node, if_local_wn,
                                                   insert_sync_init);
                             WN_INSERT_BlockLast(sync_blk, insert_sync);
+                        } else {
+                            /* for deferred sync, need to initialize the
+                             * handle, if available, to 0 */
+                            ST *handle_st;
+                            handle_st =
+                                Coarray_Sync(stmt_node)->handle_st;
+                            if (handle_st != NULL) {
+                                WN *insert_sync_init = WN_Stid(Pointer_type, 0,
+                                        handle_st,
+                                        ST_type(handle_st),
+                                        WN_Intconst(Pointer_type,0));
+                                WN_INSERT_BlockBefore(blk_node, if_local_wn,
+                                        insert_sync_init);
+                            }
                         }
 
 
@@ -994,7 +1008,7 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                             handle_st =
                                 Coarray_Sync(new_stmt_node)->handle_st;
                             if (handle_st == NULL) {
-                                sync_hdl = WN_Intconst(Pointer_type,0);
+                                Is_True(0, ("handle_st not set for non-deferred sync"));
                             } else {
                                 sync_hdl = WN_Ldid( Pointer_type, 0,
                                         handle_st, ST_type(handle_st));
@@ -1009,6 +1023,20 @@ WN * Coarray_Prelower(PU_Info *current_pu, WN *pu)
                                                     WN_Intconst(Pointer_type,0));
                             WN_INSERT_BlockBefore(blk_node, if_local_wn, insert_sync_init);
                             WN_INSERT_BlockLast(sync_blk, insert_sync);
+                        } else {
+                            /* for deferred sync, need to initialize the
+                             * handle, if available, to 0 */
+                            ST *handle_st;
+                            handle_st =
+                                Coarray_Sync(stmt_node)->handle_st;
+                            if (handle_st != NULL) {
+                                WN *insert_sync_init = WN_Stid(Pointer_type, 0,
+                                        handle_st,
+                                        ST_type(handle_st),
+                                        WN_Intconst(Pointer_type,0));
+                                WN_INSERT_BlockBefore(blk_node, if_local_wn,
+                                        insert_sync_init);
+                            }
                         }
 
                         /* call to release LCB */

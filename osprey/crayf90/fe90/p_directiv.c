@@ -3714,8 +3714,8 @@ static void parse_dir_directives(void)
          goto EXIT;
 
 #ifdef _UH_COARRAYS
-      case Tok_Dir_Defer_Sync:
-         ir_idx	     = gen_directive_ir(Defer_Sync_Dir_Opr);
+      case Tok_Dir_Caf_Nowait:
+         ir_idx	     = gen_directive_ir(Caf_Nowait_Dir_Opr);
          if (LA_CH_VALUE == LPAREN) {
              NEXT_LA_CH;
              if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {
@@ -3737,8 +3737,8 @@ static void parse_dir_directives(void)
          NEXT_LA_CH;
          goto EXIT;
 
-      case Tok_Dir_Sync:
-         ir_idx	     = gen_directive_ir(Sync_Dir_Opr);
+      case Tok_Dir_Caf_Wait:
+         ir_idx	     = gen_directive_ir(Caf_Wait_Dir_Opr);
          if (LA_CH_VALUE == LPAREN) {
              NEXT_LA_CH;
              if (MATCHED_TOKEN_CLASS(Tok_Class_Id)) {

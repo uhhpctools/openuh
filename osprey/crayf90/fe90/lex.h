@@ -407,6 +407,10 @@ static	kwd_type	kwd_dir[] = {
 			"CACHE_NOALLOCATE",		Tok_Dir_Cache_Noalloc,
 			"CACHE_BYPASS",		   	Tok_Dir_Cache_Bypass,
 			"CACHE_ALIGN",		   	Tok_Dir_Cache_Align,
+#ifdef _UH_COARRAYS
+			"CAF_NOWAIT",	   	Tok_Dir_Caf_Nowait,
+			"CAF_WAIT",		   	    Tok_Dir_Caf_Wait,
+#endif
 			"CONCURRENT",		   	Tok_Dir_Concurrent,
 			"CHUNKSIZE",		   	Tok_Dir_Chunksize,
 			"CRITICAL",		   	Tok_Dir_Critical,
@@ -415,9 +419,6 @@ static	kwd_type	kwd_dir[] = {
 			"COMMON",		   	Tok_Dir_Common,
 			"CODE",			   	Tok_Dir_Code,
 
-#ifdef _UH_COARRAYS
-			"DEFER_SYNC",	   	Tok_Dir_Defer_Sync,
-#endif
 			"DOSHARED",		  	Tok_Dir_Doshared,
 			"DYNAMIC",		  	Tok_Dir_Dynamic,
 
@@ -504,9 +505,6 @@ static	kwd_type	kwd_dir[] = {
 			"SINGLE",		   	Tok_Dir_Single,
 			"SPLIT",		   	Tok_Dir_Split,
 			"STACK",		   	Tok_Dir_Stack,
-#ifdef _UH_COARRAYS
-			"SYNC",		   	    Tok_Dir_Sync,
-#endif
 
 			"TASKCOMMON",		   	Tok_Dir_Taskcommon,
 			"TASKHEAD",		   	Tok_Dir_Taskhead,

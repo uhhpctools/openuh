@@ -8347,7 +8347,7 @@ CONTINUE:
 
 
 #ifdef _UH_COARRAYS
-   case Defer_Sync_Dir_Opr:
+   case Caf_Nowait_Dir_Opr:
 
         PDG_DBG_PRINT_START
         PDG_DBG_PRINT_C("fei_defer_sync");
@@ -8362,7 +8362,7 @@ CONTINUE:
 # endif
         break;
 
-   case Sync_Dir_Opr:
+   case Caf_Wait_Dir_Opr:
 
         PDG_DBG_PRINT_START
         PDG_DBG_PRINT_C("fei_sync");

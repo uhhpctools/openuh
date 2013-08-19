@@ -21987,12 +21987,12 @@ The STAT=, ERRMSG=, or ACQUIRED_LOCK= specifer should occur no more than once.
 .ME
 $
 $ Error : 1720
-$msg  1720 This argument to the %s directive must be of type CAF_SYNC_HANDLE
+$msg  1720 This argument to the %s directive must be of type CAF_WAIT_HANDLE
 $nexp 1720
-Error : This argument to the %s directive must be of type CAF_SYNC_HANDLE
+Error : This argument to the %s directive must be of type CAF_WAIT_HANDLE
 .PP
-The argument for the DEFER_SYNC and SYNC directives, if given, is a variable
-of type CAF_SYNC_HANDLE, defined in the intrinsic module CAF_TYPES.
+The argument for the CAF_NOWAIT and CAF_WAIT directives, if given, is a variable
+of type CAF_WAIT_HANDLE, defined in the intrinsic module CAF_TYPES.
 .ME
 $
 $ Error : 1721

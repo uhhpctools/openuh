@@ -1613,8 +1613,8 @@ enum    operator_values      {  Null_Opr,
 				Task_Open_Mp_Opr,
 				Taskwait_Open_Mp_Opr,
 #ifdef _UH_COARRAYS
-				Defer_Sync_Dir_Opr,
-                Sync_Dir_Opr,
+				Caf_Nowait_Dir_Opr,
+                Caf_Wait_Dir_Opr,
                 AllocTarget_Opr,
                 DeallocTarget_Opr,
 #endif
