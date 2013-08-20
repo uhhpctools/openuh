@@ -702,33 +702,33 @@ void directive_stmt_semantics(void)
       /*                                                                      */
       /* -------------------------------------------------------------------- */
 #ifdef _UH_COARRAYS
-      case Defer_Sync_Dir_Opr:
+      case Caf_Nowait_Dir_Opr:
          /* check that, if there is an argument, it is a single left opnd that
-          * is AT_Tbl_Idx and type is type(caf_sync_handle)
+          * is AT_Tbl_Idx and type is type(caf_wait_handle)
           */
          if (IR_IDX_L(ir_idx) != NO_Tbl_Idx) {
              opnd_type op = IR_OPND_L(ir_idx);
              if ((OPND_FLD(op) != AT_Tbl_Idx) || strcmp(
                      AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(OPND_IDX(op)))),
-                     "CAF_SYNC_HANDLE") ) {
+                     "CAF_WAIT_HANDLE") ) {
                  find_opnd_line_and_column(&op, &line, &column);
-                 PRINTMSG(line, 1720, Error, column, "DEFER_SYNC");
+                 PRINTMSG(line, 1720, Error, column, "CAF_NOWAIT");
              }
          }
 
          break;
 
-      case Sync_Dir_Opr:
+      case Caf_Wait_Dir_Opr:
          /* check that, if there is an argument, it is a single left opnd that
-          * is AT_Tbl_Idx and type is type(caf_sync_handle)
+          * is AT_Tbl_Idx and type is type(caf_wait_handle)
           */
          if (IR_IDX_L(ir_idx) != NO_Tbl_Idx) {
              opnd_type op = IR_OPND_L(ir_idx);
              if ((OPND_FLD(op) != AT_Tbl_Idx) || strcmp(
                      AT_OBJ_NAME_PTR(TYP_IDX(ATD_TYPE_IDX(OPND_IDX(op)))),
-                     "CAF_SYNC_HANDLE") ) {
+                     "CAF_WAIT_HANDLE") ) {
                  find_opnd_line_and_column(&op, &line, &column);
-                 PRINTMSG(line, 1720, Error, column, "SYNC");
+                 PRINTMSG(line, 1720, Error, column, "CAF_WAIT");
              }
          }
          break;

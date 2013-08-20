@@ -184,6 +184,10 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 							"BOUNDS",
 							"CACHE_ALIGN",
 							"CACHE_BYPASS",
+#ifdef _UH_COARRAYS
+							"CAF_NOWAIT",
+							"CAF_WAIT",
+#endif
 							"CHUNKSIZE",
 							"CNCALL",
 							"CODE",
@@ -192,9 +196,6 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 							"CONTROL",
 							"COPY_ASSUMED_SHAPE",
 							"CRITICAL",
-#ifdef _UH_COARRAYS
-							"DEFER_SYNC",
-#endif
 							"DOSHARED",
 							"DYNAMIC",
 							"EJECT",
@@ -263,9 +264,6 @@ enum    language        {Pdgcs_Ansi_C = 1,      Pdgcs_Fortran_77,
 							"STATIC",
 							"SUPPRESS",
 							"SYMMETRIC",
-#ifdef _UH_COARRAYS
-							"SYNC",
-#endif
 							"SYSTEM_MODULE",
 							"TASK",
 							"TASKCOMMON",
