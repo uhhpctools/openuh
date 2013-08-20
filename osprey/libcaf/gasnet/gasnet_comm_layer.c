@@ -2202,7 +2202,7 @@ void comm_sync_images(int *image_list, int image_count, int *status,
 
 void *comm_lcb_malloc(size_t size)
 {
-    void *ptr;
+    void *ptr = NULL;
 
     LIBCAF_TRACE(LIBCAF_LOG_MEMORY, "entry");
 
@@ -2466,13 +2466,12 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 {
     LIBCAF_TRACE(LIBCAF_LOG_COMM, "entry");
 
-    const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
     void *remote_src;
     int src_in_shared_mem = remote_address_in_shared_mem(proc, src);
 
 #if defined(ENABLE_LOCAL_MEMCPY)
-    if (my_proc == proc
-        && (!src_in_shared_mem || nbytes <= SMALL_XFER_SIZE)) {
+    int try_local_copy = (!src_in_shared_mem || nbytes <= SMALL_XFER_SIZE);
+    if (my_proc == proc && try_local_copy) {
         memcpy(dest, src, nbytes);
         if (hdl != NULL)
             *hdl = NULL;
@@ -2507,7 +2506,13 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
 
         PROFILE_RMA_LOAD_BEGIN(proc, nbytes);
 
-        if (node_info->supernode != nodeinfo_table[my_proc].supernode &&
+#if GASNET_PSHM
+        const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+#endif
+        if (
+#if GASNET_PSHM
+            node_info->supernode != nodeinfo_table[my_proc].supernode &&
+#endif
             !address_in_shared_mem(dest)) {
             /* allocate out of asymmetric heap if there is sufficient enough
              * room */
@@ -2515,6 +2520,22 @@ void comm_nbread(size_t proc, void *src, void *dest, size_t nbytes,
             if (!temp_dest)
                 temp_dest = dest;
         }
+
+#if GASNET_PSHM
+        if (node_info->supernode == nodeinfo_table[my_proc].supernode
+            && try_local_copy) {
+            ssize_t ofst = node_info->offset;
+            remote_src = (void *) ((uintptr_t) remote_src + ofst);
+            memcpy(temp_dest, remote_src, nbytes);
+            if (hdl != NULL)
+                *hdl = NULL;
+
+            PROFILE_RMA_LOAD_END(proc);
+            LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+            return;
+            /* does not reach */
+        }
+#endif
 
         LIBCAF_TRACE(LIBCAF_LOG_COMM,
                      "gasnet_get_nb_bulk from %p on image %lu"
@@ -2902,6 +2923,31 @@ void comm_strided_nbread(size_t proc,
         } else {
 
             PROFILE_RMA_LOAD_STRIDED_BEGIN(proc, stride_levels, count);
+
+#if GASNET_PSHM && !(defined(GASNET_CONDUIT_UDP))
+            const gasnet_nodeinfo_t *node_info = &nodeinfo_table[proc];
+            /* NOTE: doing a strided local copy instead of using GASNet's VIS
+             * interface seems to have a performance benefit for the SMP/MPI
+             * conduits, but not the UDP conduit with local spawn. */
+            if (node_info->supernode == nodeinfo_table[my_proc].supernode) {
+
+                ssize_t ofst = node_info->offset;
+                remote_src = (void *) ((uintptr_t) remote_src + ofst);
+
+                /* local copy */
+                local_strided_copy(remote_src, src_strides, dest, dest_strides,
+                        count, stride_levels);
+                if (hdl != NULL)
+                    *hdl = NULL;
+
+                PROFILE_RMA_LOAD_END(proc);
+
+                LIBCAF_TRACE(LIBCAF_LOG_COMM, "exit");
+                return;
+                /* does not reach */
+            }
+#endif
+
 
             gasnet_handle_t handle;
             LIBCAF_TRACE(LIBCAF_LOG_COMM, "gasnet_gets_nb_bulk from"

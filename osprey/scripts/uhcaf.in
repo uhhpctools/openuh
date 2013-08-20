@@ -359,6 +359,8 @@ if [ $COMM_LAYER == gasnet ]; then
      print_error "No gasnet conduit set."
   fi
 
+  # get necessary linker args from appropriate GASNet *.mak file
+
   if [ "$keep" == "y" ]; then
       temp_name=`$mktemp_cmd`
       mv $temp_name $temp_name.mak
@@ -373,34 +375,24 @@ if [ $COMM_LAYER == gasnet ]; then
   | make uhcaf-rule --no-print-directory -sf -"
   COMM_LIBS=`eval $get_libs`
 
+  mak="echo -e \"get-gasnet-ld:\n\t@echo \\\$(GASNET_LD)\"  \
+  | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+  | make get-gasnet-ld --no-print-directory -sf -"
 
-  if [ $GASNET_CONDUIT != smp -a $GASNET_CONDUIT != udp ]; then
+  GASNET_LD=`eval $mak`
+  GASNET_LD_ARGS=`echo $GASNET_LD | cut -s -d" " -f2-`
+  GASNET_LD=`echo $GASNET_LD | cut -d" " -f1`
 
-    ##############################################################
-    # Try to figure out appropriate MPI_LIB and MPI_LD_LIBS from
-    # GASNet makefiles.
+  mak="echo -e \"get-gasnet-libs:\n\t@echo \\\$(GASNET_LIBS)\"  \
+  | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
+  | make get-gasnet-libs --no-print-directory -sf -"
 
-    mak="echo -e \"get-gasnet-ld:\n\t@echo \\\$(GASNET_LD)\"  \
-    | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-    | make get-gasnet-ld --no-print-directory -sf -"
-    GASNET_LD=`eval $mak`
-    GASNET_LD_ARGS=`echo $GASNET_LD | cut -s -d" " -f2-`
-    GASNET_LD=`echo $GASNET_LD | cut -d" " -f1`
-    mak="echo -e \"get-gasnet-libs:\n\t@echo \\\$(GASNET_LIBS)\"  \
-    | cat ${GASNET_HOME}/include/$GASNET_CONDUIT-conduit/$GASNET_CONDUIT-par.mak -  \
-    | make get-gasnet-libs --no-print-directory -sf -"
-    GASNET_LIBS=`eval $mak`
+  GASNET_LIBS=`eval $mak`
 
-    COMM_LIBS=$GASNET_LIBS
-    set_env OPENUH_CAF_EXT_LINKER $GASNET_LD
-    set_env OPENUH_CAF_EXT_LINKER_ARGS $GASNET_LD_ARGS
-    CAF_LDFLAGS+=" -Wl,--no-as-needed "
-
-  fi
-
-  if [ $GASNET_CONDUIT == udp ]; then
-      CAF_LDFLAGS+=" -link-gcpp"  # use g++ for link if layer is gasnet-udp
-  fi
+  COMM_LIBS=$GASNET_LIBS
+  set_env OPENUH_CAF_EXT_LINKER $GASNET_LD
+  set_env OPENUH_CAF_EXT_LINKER_ARGS $GASNET_LD_ARGS
+  CAF_LDFLAGS+=" -Wl,--no-as-needed "
 
   if [ "$use_static_libcaf" == "y" ]; then
       LIBCAF="-l:libcaf-gasnet-$GASNET_CONDUIT.a"
