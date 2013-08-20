@@ -32,6 +32,7 @@
 #include <stdarg.h>
 
 #include "trace.h"
+#include "dopevec.h"
 
 #define MSG_BUF_SIZE 512
 
@@ -139,6 +140,42 @@ void __libcaf_debug_print_array_long(char *name, long *arr, int n)
     sprintf(&str[strlen(str)], "}");
 
     LIBCAF_TRACE(LIBCAF_LOG_DEBUG, str);
+}
+
+#pragma weak uhcaf_debug_dope_ = uhcaf_debug_dope
+void uhcaf_debug_dope(DopeVectorType *dopev)
+{
+    FILE *f = stderr;
+    char str[800];
+
+
+    memset(str, 0, 800);
+
+    sprintf(str, "dope vector: \n");
+    sprintf(&str[strlen(str)], "  base address: %p\n", dopev->base_addr.a.ptr);
+    sprintf(&str[strlen(str)], "         assoc: %d\n", dopev->assoc);
+    sprintf(&str[strlen(str)], "     ptr_alloc: %d\n", dopev->ptr_alloc);
+    sprintf(&str[strlen(str)], "        p_or_a: %d\n", dopev->p_or_a);
+    sprintf(&str[strlen(str)], "      a_contig: %d\n", dopev->a_contig);
+    sprintf(&str[strlen(str)], "    alloc_cpnt: %d\n", dopev->alloc_cpnt);
+    sprintf(&str[strlen(str)], "    is_coarray: %d\n", dopev->is_coarray);
+    sprintf(&str[strlen(str)], "       n_codim: %d\n", dopev->n_codim);
+    sprintf(&str[strlen(str)], "         n_dim: %d\n", dopev->n_dim);
+    sprintf(&str[strlen(str)], "          type: %d\n", dopev->type_lens.type);
+    sprintf(&str[strlen(str)], "        dpflag: %d\n", dopev->type_lens.dpflag);
+    sprintf(&str[strlen(str)], "  kind_or_star: %d\n", dopev->type_lens.kind_or_star);
+    sprintf(&str[strlen(str)], "       int_len: %d\n", dopev->type_lens.int_len);
+    sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
+    sprintf(&str[strlen(str)], "       dec_len: %d\n", dopev->type_lens.dec_len);
+    sprintf(&str[strlen(str)], "     orig_base: %p\n", dopev->orig_base);
+    sprintf(&str[strlen(str)], "     orig_size: %d\n", dopev->orig_size);
+    for (int i = 0; i < (dopev->n_dim + dopev->n_codim); i++) {
+    sprintf(&str[strlen(str)], "        lb[%d]: %d\n", i, dopev->dimension[i].low_bound);
+    sprintf(&str[strlen(str)], "       ext[%d]: %d\n", i, dopev->dimension[i].extent);
+    sprintf(&str[strlen(str)], "        sm[%d]: %d\n", i, dopev->dimension[i].stride_mult);
+    }
+
+    fprintf(f, "%s", str);
 }
 
 #endif                          /* DEBUG */

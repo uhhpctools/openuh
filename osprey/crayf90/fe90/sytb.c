@@ -4014,6 +4014,9 @@ size_offset_type	stor_bit_size_of(int		 attr_idx,
       if (ATD_IM_A_DOPE(attr_idx)) {
 #ifdef KEY /* Bug 6845 */
 	 boolean is_array = (ATD_ARRAY_IDX(attr_idx) != NULL_IDX);
+#ifdef _UH_COARRAYS
+     is_array |= (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX);
+#endif
 	 num = DV_HD_WORD_SIZE;
          if (is_array) {
       long rank = ATD_ARRAY_IDX(attr_idx) ?
