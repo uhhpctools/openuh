@@ -22012,11 +22012,20 @@ A non-dummy coarray must have the ALLOCATABLE or SAVE attribute.
 $
 $ Error : 1723
 $msg  1723 The %s statement is not supported unless coarrays are enabled
-$nexp 1722
+$nexp 1723
 Error : The %s statement is not supported unless coarrays are enabled
 .PP
 This is for language features that require coarrays to be enabled, since they
 are implemented using libcaf runtime.
 .ME
-$ LAST NUMBER USED : 1723
+$
+$ Error : 1724
+$msg  1724 This allocatable is to the right of a part-ref with nonzero rank.
+$nexp 1724
+Error : This allocatable is to the right of a part-ref with nonzero rank.
+.PP
+A part_ref with a nonzero rank cannot have another part_ref to the right
+with the ALLOCATABLE attribute.
+.ME
+$ LAST NUMBER USED : 1724
 

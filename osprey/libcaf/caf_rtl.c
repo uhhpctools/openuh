@@ -468,10 +468,11 @@ void __coarray_strided_write(size_t image,
             CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest,
                                  src, nbytes, ordered, hdl);
         } else {
-            Error
-                ("local buffer for coarray_strided_write "
-                 "should be contiguous");
-            /* should not reach ... */
+            void *buf;
+            __acquire_lcb(nbytes, &buf);
+            local_src_strided_copy(src, src_strides, buf, count, stride_levels);
+            CALLSITE_TIMED_TRACE(COMM, WRITE, comm_write, image - 1, dest,
+                                 buf, nbytes, ordered, hdl);
         }
 
         PROFILE_FUNC_EXIT();

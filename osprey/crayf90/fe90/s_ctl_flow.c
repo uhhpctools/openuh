@@ -592,7 +592,14 @@ void allocate_stmt_semantics (void)
             }
 
 
-            if (i == 1) {
+            if (i == 1
+#ifdef _UH_COARRAYS
+                /* if the first dimension is a codimension, then the first
+                 * stride multipler should be set to 1 (see else if ...), not
+                 * set using set_stride_for_first_dim */
+                && BD_RANK(bd_idx) != 0
+#endif
+                    ) {
 # ifdef _WHIRL_HOST64_TARGET64
                double_stride = 1;
 # endif /* _WHIRL_HOST64_TARGET64 */

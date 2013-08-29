@@ -3193,6 +3193,7 @@ boolean final_arg_work(opnd_type	*list_opnd,
 # endif
    int            copy_check;
    int            target_realloc;
+   int                 base_attr_idx;
 
 
    TRACE (Func_Entry, "final_arg_work", NULL);
@@ -4008,6 +4009,8 @@ boolean final_arg_work(opnd_type	*list_opnd,
 
       a_type = get_act_arg_type(&arg_info_list[info_idx].ed);
 
+      base_attr_idx = find_base_attr(&IL_OPND(list_idx), &line, &col);
+
       find_opnd_line_and_column((opnd_type *) &IL_OPND(list_idx),
                                 &line,
                                 &col);
@@ -4063,15 +4066,31 @@ boolean final_arg_work(opnd_type	*list_opnd,
 #ifdef _UH_COARRAYS
       /*  This is a hack to make association PASS_DV if its a coscalar
        *  and d_type is Intrin_Dope_Dummy */
-
-      int base_attr_idx = find_base_attr(&IL_OPND(list_idx), &line, &col);
-
       if (a_type == Scalar_Var && ATD_PE_ARRAY_IDX(base_attr_idx) != NULL_IDX
           && d_type == Intrin_Dope_Dummy) {
           if (ATD_IM_A_DOPE(base_attr_idx))
               association = PASS_DV;
           else
               association = MAKE_DV;
+      }
+
+      /* If passing a coarray actual argument that is a dope into the
+       * lcobound, ucobound, or image_index intrinsic, then always pass the
+       * dope rather than make a new one, and if its subscripted treat it as a
+       * whole subscript operator as well. */
+      if ((i == 1) && ATD_IM_A_DOPE(base_attr_idx) &&
+          ATD_PE_ARRAY_IDX(base_attr_idx) != NULL_IDX &&
+          d_type == Intrin_Dope_Dummy &&
+          (ATP_INTRIN_ENUM(spec_idx) == Lcobound_Intrinsic ||
+           ATP_INTRIN_ENUM(spec_idx) == Ucobound_Intrinsic ||
+           ATP_INTRIN_ENUM(spec_idx) == Image_Index_Intrinsic)) {
+          if (IR_OPR(IL_IDX(list_idx)) == Subscript_Opr ||
+              IR_OPR(IL_IDX(list_idx)) == Section_Subscript_Opr) {
+              IR_OPR(IL_IDX(list_idx)) = Whole_Subscript_Opr;
+          } else if (IR_OPR(IL_IDX(list_idx)) == Substring_Opr) {
+              IR_OPR(IL_IDX(list_idx)) = Whole_Substring_Opr;
+          }
+          association = PASS_DV;
       }
 
       /* if dummy is intent(in), don't do copy out for coindexed actuals */
@@ -4083,6 +4102,13 @@ boolean final_arg_work(opnd_type	*list_opnd,
               association = COPY_IN_MAKE_DV;
       }
 
+      /* if its the uhcaf_debug_dope routine, then pass the dope vector */
+      if (i==1 && strcmp(AT_OBJ_NAME_PTR(spec_idx),"UHCAF_DEBUG_DOPE")==0) {
+          if (ATD_IM_A_DOPE(base_attr_idx))
+              association = PASS_DV;
+          else
+              association = MAKE_DV;
+      }
 #endif
 
 
@@ -4166,29 +4192,25 @@ boolean final_arg_work(opnd_type	*list_opnd,
           AT_OBJ_CLASS(dummy) == Data_Obj &&
           ATD_PE_ARRAY_IDX(dummy) != NULL_IDX) {
 
-#ifdef _UH_COARRAYS
-         if (arg_info_list[info_idx].ed.pe_dim_ref) {
-            PRINTMSG(line, 1584, Error, col);
-         } else
-#endif
+#ifndef _UH_COARRAYS
          if (arg_info_list[info_idx].ed.reference) {
             attr_idx = find_left_attr(&IL_OPND(list_idx));
 
-#ifndef _UH_COARRAYS
             if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
                 ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
-#else
-            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-                ATD_PE_ARRAY_IDX(base_attr_idx) == NULL_IDX) {
-#endif
-
                PRINTMSG(line, 1584, Error, col);
             }
-         }
-         else {
+         } else {
             PRINTMSG(line, 1584, Error, col);
          }
+#else
+         if (!arg_info_list[info_idx].ed.reference ||
+             !arg_info_list[info_idx].ed.is_coarray) {
+            PRINTMSG(line, 1584, Error, col);
+         }
+#endif
       }
+
 # endif
 //Bug 3230
 # if  defined(KEY)
@@ -4202,6 +4224,9 @@ boolean final_arg_work(opnd_type	*list_opnd,
           d_type == Assumed_Shape_Dummy &&
           !ATD_ALLOCATABLE(attr_idx) &&
           !ATD_POINTER(attr_idx) &&  
+#ifdef _UH_COARRAYS
+          !arg_info_list[info_idx].ed.is_coarray &&
+#endif
           arg_info_list[info_idx].ed.rank > 0 &&
           stride_access_greater_than_1(&opnd, dim) &&
 	  ((LANG_Copy_Inout_Level > 0) ||
