@@ -516,14 +516,14 @@ INSTALL_CAF_LIB () {
         # 32bit libraries
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.a ${PHASEPATH}/32/libcaf-armci.a
         INSTALL_DATA_SUB ${LIB32AREA}/libcaf/armci/libcaf-armci.so.1 ${PHASEPATH}/32/libcaf-armci.so.1
-        (cd ${PHASEPATH/32}; ln -sf libcaf-armci.so.1 libcaf-armci.so)
+        (cd ${PHASEPATH}/32; ln -sf libcaf-armci.so.1 libcaf-armci.so)
         gasnet_builds=`ls -d ${LIB32AREA}/libcaf/gasnet-* 2> /dev/null`
         for gb in $gasnet_builds; do
           gasnet_conduit=`basename $gb | sed 's/gasnet-//'`
           lib_name=libcaf-gasnet-$gasnet_conduit
           INSTALL_DATA_SUB ${gb}/$lib_name.a   ${PHASEPATH}/32/$lib_name.a
           INSTALL_DATA_SUB ${gb}/$lib_name.so.1 ${PHASEPATH}/32/$lib_name.so.1
-          (cd ${PHASEPATH/32}; ln -sf $lib_name.so.1 $lib_name.so)
+          (cd ${PHASEPATH}/32; ln -sf $lib_name.so.1 $lib_name.so)
         done
     fi
 }

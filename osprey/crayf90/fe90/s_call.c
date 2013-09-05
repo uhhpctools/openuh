@@ -4074,25 +4074,6 @@ boolean final_arg_work(opnd_type	*list_opnd,
               association = MAKE_DV;
       }
 
-      /* If passing a coarray actual argument that is a dope into the
-       * lcobound, ucobound, or image_index intrinsic, then always pass the
-       * dope rather than make a new one, and if its subscripted treat it as a
-       * whole subscript operator as well. */
-      if ((i == 1) && ATD_IM_A_DOPE(base_attr_idx) &&
-          ATD_PE_ARRAY_IDX(base_attr_idx) != NULL_IDX &&
-          d_type == Intrin_Dope_Dummy &&
-          (ATP_INTRIN_ENUM(spec_idx) == Lcobound_Intrinsic ||
-           ATP_INTRIN_ENUM(spec_idx) == Ucobound_Intrinsic ||
-           ATP_INTRIN_ENUM(spec_idx) == Image_Index_Intrinsic)) {
-          if (IR_OPR(IL_IDX(list_idx)) == Subscript_Opr ||
-              IR_OPR(IL_IDX(list_idx)) == Section_Subscript_Opr) {
-              IR_OPR(IL_IDX(list_idx)) = Whole_Subscript_Opr;
-          } else if (IR_OPR(IL_IDX(list_idx)) == Substring_Opr) {
-              IR_OPR(IL_IDX(list_idx)) = Whole_Substring_Opr;
-          }
-          association = PASS_DV;
-      }
-
       /* if dummy is intent(in), don't do copy out for coindexed actuals */
       if ( ATD_INTENT(dummy) == Intent_In && (a_type == Coindexed_Array_Elt ||
           a_type == Coindexed_Array_Section) ) {

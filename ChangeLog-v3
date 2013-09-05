@@ -1,0 +1,455 @@
+-----------------------
+OpenUH 3.x.x ChangeLog
+-----------------------
+
+This ChangeLog describes the history of changes to the OpenUH compiler, major
+version 3. For more specific details on changes in the implementation at each
+revision, please refer to the version control commit history for OpenUH.
+
+----------------------------------------------------------------------------
+
+2013-09-11: (3.0.32)
+
+* misc. improvements/fixes for CAF
+  * adds some compile-time checks for correct usage of lcobound and ucobound
+  * fixes a runtime bug which did not allow writing a non-contiguous array
+    section to a contiguous remote array section
+  * fixes some bugs in passing coarray arguments to a procedure
+
+* other improvements
+  * adds compiler check for illegal allocatable component selection to the
+    right of a nonzero rank part-ref (Fortran)
+
+2013-08-20: (3.0.31)
+
+* misc. improvements/fixes for CAF
+  * changing name of directives introduced in 3.0.27 --
+      defer_sync -> caf_nowait, sync -> caf_wait
+    changing name of type introduced in 3.0.28 --
+      caf_sync_handle -> caf_wait_handle
+  * improve accesses of local coarrays (same image) so that they no longer
+    require a runtime call
+  * improve read access to objects residing in the same SMP node, for some
+    cases, by using memory copy directly rather than a call to GASNet
+  * adds check for save attribute on non-dummy coarrays
+  * adds check for explicit interface if the dummy argument is a coarray
+  * improve handling of assignment statements with multiple co-indexed
+    variables on the RHS
+  * various bug fixes for compiling co-indexed variables
+  * fixes some bugs pertaining to use of scalar coarrays and coarray
+    components
+
+----------------------------------------------------------------------------
+
+2013-08-05: (3.0.30)
+
+* misc. improvements/fixes for CAF
+  * adds instrumentation to CAF runtime to generate Epilog performance
+    profiles (configure compiler or CAF runtime with --enable-cafrt-profiles)
+  * static and dynamic shared CAF runtime libraris are now installed
+  * adds OPENUH_CAF_EXT_LINKER variable for specifying which linker to use for
+    CAF programs
+  * adds compiler check for illegal pointer assignment where target is
+    co-indexed
+  * improve compiler detection of certain co-indexed array section accesses
+    that are contiguous
+  * improved output of diagnostic traces
+  * support use of GASNet gemini conduit
+  * fixes compiler back-end bug in handling save coarray and target variables
+  * fixes bug in runtime support for unlock statement
+  * various runtime fixes for non-blocking communication support
+  * fixes bug in CAF runtime's remote-access memory allocator
+
+* other improvements
+  * adds an alternative instrumentation phase, invoked using the -uhinstr
+    compiler option
+  * adds sample instrumentation library that uses TAU underneath, which is
+    available by building the compiler with --enable-libuhinstr
+
+----------------------------------------------------------------------------
+
+2013-06-15: (3.0.29)
+
+* misc. improvements/fixes for CAF
+  * implementation now allocates Fortran target objects in remote-access
+    segment, as they may be potentially accessed by another image via a
+	pointer component of a co-indexed coarray
+  * adds UHCAF_NB_XFER_LIMIT environment variable to control number of
+    outstanding non-blocking PUT or GET operations issued by CAF runtime
+  * fixes a front-end bug in handling allocatable coarray components
+  * fixes a front-end bug resulting in compiler allotting arbitrary stack
+    frame sizes for program units
+  * fixes compile-time detection of whether an array access is contiguous
+  * various fixes for non-blocking PUT/GET runtime support
+  * fixes bug in compiling assignment of scalar variable to co-indexed array
+    section, or assignment of a co-indexed scalar variable to a local array
+	section
+  * fixes illegal usage of ARMCI_Test in runtime
+  * fixes illegal usage of gasnet_hold_interrupts routine in runtime
+
+* misc. improvements/fixes for OpenMP
+  * adds O64_OMP_VERBOSE environment variable which, when set to true, will
+    print various OMP runtime settings
+  * fixes a bug in OpenMP runtime which was accidentally introduced in 3.0.28
+
+* other improvements
+  * fixes a bug in handling of ALLOCATE statement that resulted in an unsafe
+    back-end optimization
+  * fix for building OpenUH on Linux distros with more recent perl versions
+    (e.g. Fedora 18)
+
+----------------------------------------------------------------------------
+
+2013-04-24: (3.0.28)
+
+* misc. improvements/fixes for CAF
+  * allow use of defer_sync directive for remote write operations (co-indexed
+    variable on LHS of assignment statement)
+  * various improvements/fixes for allocating and managing RMA memory in CAF
+    runtime
+  * adds new caf_sync_handle type in caf_types module which may (only) be used
+    in conjunction with the defer_sync and sync compiler directives
+  * diagnostic traces now emitted for each image into a separate file under,
+    by default, the uhcaf.traces directory (another directory may be specified
+	with UHCAF_TRACE_DIR)
+  * fix communication for unaligned buffers by using GASNet's 'bulk' get and
+    put routines.
+  * communciation buffers are now allocated out of the RMA memory segment to
+    avoid unpredictable behavior in GASNet (memory registration issue in
+    Firehose)
+
+* misc fixes for OpenMP
+  * fixes bug in the handling of slave threads that could result in deadlock
+    (bug also present in Open64 OpenMP runtime)
+
+* other fixes
+  * fix to support some versions of glibc (2.16+)
+
+----------------------------------------------------------------------------
+
+2013-03-15: (3.0.27)
+
+* misc. additions/improvements/fixes for CAF
+  * adds support for defer_sync and sync compiler directives to explicitly
+    control communication/computation overlap
+  * fixes various bugs in compiler back-end for handling co-indexed variables
+    and generating one-sided communication
+
+* misc. improvements for OpenMP
+  * improvement to barrier implementation to reduce overhead (esp. when
+    over-subscribing the threads)
+  * minor modification to work-stealing algorithm in runtime tasking
+    implementation to reduce contention on task queues
+  * export the __omp_collector_api symbol to allow OpenMP program to be run
+    with TAU for performance collection
+
+* other improvements/fixes
+  * merges new changes from Open64 5.x into OpenUH (see open64 svn commit log
+    for r3826 through r4037)
+  * fixes a bug in whirl2f phase that could cause compiler to crash if the
+    path location of be.so exceeds 80 characters
+
+----------------------------------------------------------------------------
+
+2012-11-04: (3.0.26)
+
+* misc. improvements for OpenMP
+  * uses condition variable instead of busy wait at barriers to improve thread
+    utilization
+  * various improvements/fixes for runtime support of nested parallel regions
+
+----------------------------------------------------------------------------
+
+2012-10-29: (3.0.25)
+
+* misc. improvements/fixes for OpenMP
+  * improvements for compiler checks/warnings relating to placement and
+    nesting of OpenMP constructs
+  * support for OMP WORKSHARE construct (Open64 implementation was broken)
+  * fix Fortran front-end handling of tasks
+  * fixes determination of scope for sequential loop index variables in
+    parallel regions
+  * fix back-end support for copyin clause for Fortran programs
+  * avoid potentially unsafe if-conversion optimization in parallel regions
+    that can result in a data race
+
+----------------------------------------------------------------------------
+
+2012-10-20: (3.0.24)
+
+* misc. fixes for CAF
+  * some fixes for lock and unlock statement
+  * fix bug in handling non-contiguous array variables used as source or
+    destination for a remote memory access
+  * fix runtime support for event post statement
+
+----------------------------------------------------------------------------
+
+2012-10-04: (3.0.23)
+
+* fix for Fortran pointer assignment (bug introduced in 3.0.20)
+
+----------------------------------------------------------------------------
+
+2012-10-03: (3.0.22)
+
+* fixes support for self-referencing derived types in Fortran
+
+----------------------------------------------------------------------------
+
+2012-10-02: (3.0.21)
+
+* misc. fixes for OpenMP
+  * fixes temporary variables created in parallel regions (needed to be
+    privatized)
+  * fixes for OpenMP runtime bugs in task and barrier implementation which
+    could cause double free memory error or hanging
+
+----------------------------------------------------------------------------
+
+2012-09-17: (3.0.20)
+
+* misc. improvements for CAF
+  * adding support for new DWARF attributes corresponding to DWARF extension
+    for expressing coshape
+  * changes CAF runtime configure options for using ARMCI; user should provide
+    ARMCI installation directory and, optionally, a list of network-specific
+    libraries that need to be linked in (e.g. -libverbs)
+
+----------------------------------------------------------------------------
+
+2012-09-10: (3.0.19)
+
+* misc. improvements/fixes for CAF
+  * adds support for stat= and errsg= specificiers on synchronization
+    statements
+  * adds check that array subscripts are given coindexed variable with nonzero
+    rank  (e.g. should be a(:)[i], not a[i])
+  * fix for atomic_define of logical type variables
+
+----------------------------------------------------------------------------
+
+2012-09-01: (3.0.18)
+
+* misc. fixes for CAF
+  * fix for runtime support of sync images statement
+  * adjusting GASNet segment size allocated by runtime
+
+----------------------------------------------------------------------------
+
+2012-08-21: (3.0.16)
+
+* misc. improvements/fixes for CAF
+  * updates CAF implementation to use the latest ARMCI runtime rather than the
+    (now obsolete) ARMCI 1.4.
+  * some improvements to CAF trace output
+  * CAF runtimes traces now disabled by default (enable by building CAF
+    runtime with --enable-cafrt-traces configure option)
+  * fix for remote address calculation when using ARMCI runtime
+
+----------------------------------------------------------------------------
+
+2012-08-14: (3.0.15)
+
+* misc. improvements/fixes for CAF
+  * support use of allocatable and pointer components in coarrays
+  * support for co-subscripted coarray components (e.g. a%c(:)[i])
+  * adds compiler check for associating non-contiguous coarray actual argument
+    with an explicit shape coarray dummy argument (not allowed)
+  * fix hanging during startup for CAF+OMP hybrid codes
+  * uhcaf fix when compiling with GASNet UDP conduit library
+
+----------------------------------------------------------------------------
+
+2012-07-30: (3.0.14)
+
+* misc. additions/improvements/fixes for CAF
+  * adds support for event post, event wait, and event query statements for
+    allowing point-to-point synchronization (non-standard, but similar to
+	features discussed for upcoming Technical Specification)
+  * some runtime fixes for determining the size of the RMA segment that needs
+    to be allocated by each image
+  * various improvements to uhcaf and cafrun scripts
+  * fixes bug for handling coarrays of character type in compiler back-end
+
+----------------------------------------------------------------------------
+
+2012-07-27: (3.0.13)
+
+* misc. additions/improvements/fixes for CAF
+  * adds support for ERROR STOP statement
+  * adds support for atomic_define and atomic_ref intrinsic subroutines
+  * progress thread now disabled by default; to enable, use
+	environment variables UHCAF_PROGRESS_THREAD and (optionally)
+	UHCAF_PROGRESS_THREAD_INTERVAL.
+  * performance improvement for atomics runtime support via GASNet, utilizing
+    POSIX shared memory within a node.
+  * fixes command line argument handling when utilizing GASNet UDP conduit for
+    CAF runtime
+  *	some minor improvements for cafrun launcher script
+
+----------------------------------------------------------------------------
+
+2012-07-19: (3.0.12)
+
+* misc. improvements/fixes for CAF
+  * supports use of vector subscripts for co-indexed variables
+  * new environment variables UHCAF_DISABLE_PROGRESS_THREAD which, when set to
+    1, will disable use of a separate progress thread
+  * fixes bug in runtime support for atomic swap operation
+
+----------------------------------------------------------------------------
+
+2012-07-15: (3.0.11)
+
+* misc. fixes for CAF
+  * fix for supporting references to coarrays declared in modules
+  * fix for typo in uhcaf compiler wrapper
+
+----------------------------------------------------------------------------
+
+2012-07-14: (3.0.10)
+
+* misc. additions/improvements/fixes for CAF
+  * adds support for co_bcast subroutine for broadcasts (non-standard)
+  * adds support for lock and unlock statements
+  * adds some Fortran checks for explicit interface when it is required
+  * fixes support for non-allocatable coarrays declared in modules
+  * uhcaf now does not append a second underscore for symbols ending with an
+    underscore (consistent with how, for instance, GNU, Intel, and PGI Fortran
+    compilers behave)
+  * renames 'log_info' to 'trace' and 'log_file' to 'trace_file' for various
+    cafrun options and environment variables
+  * various build improvements/fixes
+  * adds a configure option (--with-default-caf-heap-size=) when building the
+    CAF runtime for setting 'heap' size per image (by default, it is 30M)
+
+* OpenMP fix
+  * allows omp_lib.h to be included in F90 source files
+
+
+----------------------------------------------------------------------------
+
+2012-06-18: (3.0.9)
+
+* misc. additions/improvements/fixes for CAF
+  * provides unoptimized support for co_sum, co_product, co_maxval, and
+    co_minval reductions (non-standard)
+  * allow use of scalar coarrays as coarray argument to this_image,
+    image_index, lcobound, and ucobound intrinsic procedures
+  * adds a --disable-cafrt-traces configure option to optionally turn off
+    tracing support (enabled by default)
+  * fix to allow building CAF runtime with gcc > 4.5
+
+* OpenMP fix
+  * allows unsigned int for loop index variable in omp for loops, as allowed in
+    OpenMP 3.0
+
+* other improvements
+  * merges various fixes/improvements from Open64 5.0 (see open64 svn commits
+    r3774 through r3826)
+
+----------------------------------------------------------------------------
+
+2012-06-11: (3.0.8)
+
+* misc. fixes for CAF
+  * fixes uhcaf compiler wrapper to support various source, IR, and object
+    files as input
+  * fix when compiling CAF program with GASNet runtime configured using
+    'everything' segment type
+
+----------------------------------------------------------------------------
+
+2012-06-09: (3.0.7)
+
+* misc. additions/fixes for CAF
+  * supports save coarrays (before, this only worked when using GASNet with
+	'everything' segment configuration)
+  * fixes bug when assigning a scalar variable to co-indexed array section
+  * back-end fix for coarrays involving implicit type conversion operations
+  * fix for co-indexed variables occuring in conditional of control flow
+    statements.
+  * front-end fix for setting up dope vector corresponding to assumed shape
+    coarray dummy argument
+  * uhcaf compiler wrapper bug fix
+
+----------------------------------------------------------------------------
+
+2012-06-01: (3.0.6)
+
+* misc. improvements for CAF
+  * a number of improvements for uhcaf compiler wrapper
+  * new reduction routines added in libcaf-extra
+  * refactored back-end compiler phase for CAF into two distinct passes to
+    enable future implementation of transformations
+  * improvements/fixes for supporting strided coarray accesses without
+    introducing a temporary buffer
+  * better recognition of contiguous vs strided accesses at runtime
+  * fix for assigment statements with coindexed variables on LHS and RHS
+
+----------------------------------------------------------------------------
+
+2012-04-20: (3.0.5)
+
+* misc. fixes for CAF
+  * fix for command line argument processing in CAF runtime
+  * fix dope vector bug for allocatable scalar coarrays
+  * fix for calculating remote address of objects that reside outside of
+    managed RMA heap
+
+* other improvements
+  * fix for building OpenUH in Linux Mint (from Open64)
+  * adds support for macro __OPENUH__ which indicates version of OpenUH
+    used to compile the source code
+
+----------------------------------------------------------------------------
+2012-03-27: (3.0.4)
+
+* misc. fixes for CAF
+  * just a few minor fixes for compiler build files
+
+----------------------------------------------------------------------------
+
+2012-03-25: (3.0.3)
+
+* misc. fixes for CAF
+  * fixed handling of a strided coarray access which caused back-end crash
+  * fixed a few bugs for handling scalar coarrays in front-end
+
+* other fixes
+  * fixes support for allocatable components in derived types
+  * fix for compiling out-of-directory source files with -g
+
+----------------------------------------------------------------------------
+
+2012-03-15: (3.0.2)
+
+* misc. fixes for CAF
+  * fix to allow use of uhcaf compiler wrapper in makefiles
+
+----------------------------------------------------------------------------
+
+2012-03-14: (3.0.1)
+
+* misc. additions/fixes for CAF
+  * prelim. support for coarray components in derived types
+  * other compiler fixes relating to CAF (see commit log for details)
+
+----------------------------------------------------------------------------
+
+2012-03-12: (3.0.0)
+
+* misc. additions/fixes for CAF
+  * coarrays of character type
+  * support for critical and end critical statements
+  * adds support for allocatable scalar coarrays
+  * improved support for assumed shape coarray declarations
+
+* misc. fixes for OpenMP
+  * prevent LNO scalar renaming for OpenMP firsprivate variables
+  * link in OpenMP runtime if -pfa option is given
+
+* other improvements
+  * configure arguments for OpenUH shown when user compiles with -v
+  * adds support for srand and rand routines (Fortran)

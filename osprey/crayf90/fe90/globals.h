@@ -494,7 +494,7 @@ enum    intrinsic_values       {Unknown_Intrinsic,
 				Iisign_Intrinsic,
 				Ilen_Intrinsic,
 				Imag_Intrinsic,
-#if _UH_COARRAYS
+#ifdef _UH_COARRAYS
 				Image_Index_Intrinsic,
 #endif
 				Imod_Intrinsic,

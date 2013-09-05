@@ -76,6 +76,12 @@ extern void	gen_dv_stride_mult(opnd_type *, int, opnd_type *,
 static void	linearize_pe_dims(int, int, int, int,
                               opnd_type *, int, expr_arg_type *);
 
+#ifdef _UH_COARRAYS
+static void convert_to_whole_coarray(opnd_type *result_opnd,
+                                     expr_arg_type *exp_desc);
+static int get_corank(opnd_type *opnd);
+#endif
+
 extern boolean has_present_opr;
 #ifdef KEY /* Bug 5089 */
 #ifdef TARG_X8664
@@ -3745,8 +3751,7 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                 attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
-            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-                ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+            if (!arg_info_list[info_idx1].ed.is_coarray) {
                /* error, not a co-array */
                PRINTMSG(opnd_line, 1575, Error, opnd_col);
             }
@@ -3765,9 +3770,21 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
 #endif
             }
          }
+
+#ifdef _UH_COARRAYS
+         /* convert coarray arg to a whole coarray  */
+         COPY_OPND(opnd, IL_OPND(list_idx1));
+         convert_to_whole_coarray(&opnd, &loc_exp_desc);
+         COPY_OPND(IL_OPND(list_idx1), opnd);
+         arg_info_list[info_idx1].ed = loc_exp_desc;
+#endif
+
       }
    }
 #ifdef _UH_COARRAYS
+   /* image_index, lcobound, and ucobound only support in UH coarray
+    * implementation */
+
    else if (ATP_INTRIN_ENUM(*spec_idx) == Image_Index_Intrinsic) {
       if (IR_LIST_CNT_R(ir_idx) > 0) {
 
@@ -3840,11 +3857,12 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                   arg_info_list[arg_info_list_top].col = column;
                }
             } else if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
-                ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX &&
+                arg_info_list[info_idx1].ed.is_coarray  &&
                 IR_LIST_CNT_R(ir_idx) == 2) {
                 /* check that extent of array expression in second argument
                  * matches the corank of the coarray */
-                int corank = BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+                int corank = get_corank(&IL_OPND(list_idx1));
+
                 int arg2_idx = IL_IDX(list_idx2);
 
                 if ( (IR_OPR(arg2_idx) == Whole_Subscript_Opr ||
@@ -3894,24 +3912,18 @@ void    num_images_intrinsic(opnd_type     *result_opnd,
                 attr_idx = AT_ATTR_LINK(attr_idx);
             }
 
-            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-              ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+            if (!arg_info_list[info_idx1].ed.is_coarray) {
+                /* error, not a co-array */
                 PRINTMSG(opnd_line, 1708, Error, opnd_col, "IMAGE_INDEX");
             }
-            else {
-#ifndef _UH_COARRAYS
-               if (ATD_ALLOCATABLE(attr_idx)) {
-                  attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
-               }
-               COPY_OPND(opnd, IL_OPND(list_idx1));
-               generate_bounds_list(ATD_PE_ARRAY_IDX(attr_idx),
-                                    &opnd,
-                                    &loc_exp_desc);
-               COPY_OPND(IL_OPND(list_idx1), opnd);
-               arg_info_list[info_idx1].ed = loc_exp_desc;
-#endif
-            }
          }
+
+         /* convert coarray arg to a whole coarray  */
+         COPY_OPND(opnd, IL_OPND(list_idx1));
+         convert_to_whole_coarray(&opnd, &loc_exp_desc);
+         COPY_OPND(IL_OPND(list_idx1), opnd);
+         arg_info_list[info_idx1].ed = loc_exp_desc;
+
       }
    }
 
@@ -3993,6 +4005,31 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
                   arg_info_list[arg_info_list_top].col = column;
                }
             }
+
+            if (AT_OBJ_CLASS(attr_idx) == Data_Obj &&
+                arg_info_list[info_idx1].ed.is_coarray &&
+                IR_LIST_CNT_R(ir_idx) == 1) {
+
+                /* if this is an array assignment statement, check that both
+                 * sides are conformable arrays */
+                if (SH_STMT_TYPE(curr_stmt_sh_idx) == Assignment_Stmt &&
+                    IR_OPR(SH_IR_IDX(curr_stmt_sh_idx)) == Asg_Opr) {
+                    opnd_type *LHS_opnd;
+                    expr_arg_type left_exp_desc;
+                    int corank = get_corank(&IL_OPND(list_idx1));
+
+                    LHS_opnd = &(IR_OPND_L(SH_IR_IDX(curr_stmt_sh_idx)));
+                    expr_semantics(LHS_opnd, &left_exp_desc);
+                    if (left_exp_desc.rank == 1 &&
+                        OPND_FLD(left_exp_desc.shape[0]) == CN_Tbl_Idx &&
+                        !compare_cn_and_value(OPND_IDX(left_exp_desc.shape[0]),
+                                              corank, Eq_Opr)) {
+                        PRINTMSG(IR_LINE_NUM(OPND_IDX(*LHS_opnd)), 253, Error,
+                                             IR_COL_NUM(OPND_IDX(*LHS_opnd)));
+                    }
+
+                }
+            }
          }
 
          if (! arg_info_list[info_idx1].ed.reference) {
@@ -4011,29 +4048,19 @@ else if ((ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic) ||
                     !AT_IGNORE_ATTR_LINK(attr_idx) ) {
                 attr_idx = AT_ATTR_LINK(attr_idx);
             }
-
-            if (AT_OBJ_CLASS(attr_idx) != Data_Obj ||
-                ATD_PE_ARRAY_IDX(attr_idx) == NULL_IDX) {
+            if (!arg_info_list[info_idx1].ed.is_coarray) {
                /* error, not a co-array */
                 PRINTMSG(opnd_line, 1708, Error, opnd_col,
                        ATP_INTRIN_ENUM(*spec_idx) == Lcobound_Intrinsic ?
                        "LCOBOUND" : "UCOBOUND" );
             }
-            else {
-#ifndef _UH_COARRAYS
-               if (ATD_ALLOCATABLE(attr_idx)) {
-                  attr_idx = ATD_VARIABLE_TMP_IDX(attr_idx);
-               }
-
-               COPY_OPND(opnd, IL_OPND(list_idx1));
-               generate_bounds_list(ATD_PE_ARRAY_IDX(attr_idx),
-                                    &opnd,
-                                    &loc_exp_desc);
-               COPY_OPND(IL_OPND(list_idx1), opnd);
-               arg_info_list[info_idx1].ed = loc_exp_desc;
-#endif
-            }
          }
+
+         /* convert coarray arg to a whole coarray  */
+         COPY_OPND(opnd, IL_OPND(list_idx1));
+         convert_to_whole_coarray(&opnd, &loc_exp_desc);
+         COPY_OPND(IL_OPND(list_idx1), opnd);
+         arg_info_list[info_idx1].ed = loc_exp_desc;
        }
     }
 #endif
@@ -20922,3 +20949,161 @@ static void linearize_pe_dims(int	pe_dim_list_idx,
 
 }  /* linearize_pe_dims */
 
+#ifdef _UH_COARRAYS
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      converts operand to whole coarray reference                           *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+static void convert_to_whole_coarray(opnd_type *result_opnd,
+                                     expr_arg_type *exp_desc)
+
+{
+    int ir_idx;
+    int list_idx;
+    opnd_type *curr_opnd;
+    opnd_type opnd;
+
+    curr_opnd = result_opnd;
+
+    TRACE (Func_Entry, "convert_to_whole_coarray", NULL);
+
+    while (OPND_FLD((*curr_opnd)) == IR_Tbl_Idx) {
+        ir_idx = OPND_IDX((*curr_opnd));
+
+        switch (IR_OPR(ir_idx)) {
+            case Struct_Opr:
+               if (IR_FLD_R(ir_idx) == AT_Tbl_Idx) {
+                   int attr_idx = IR_IDX_R(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto EXIT;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+            case Subscript_Opr:
+            case Section_Subscript_Opr:
+            case Substring_Opr:
+               if (IR_FLD_L(ir_idx) == AT_Tbl_Idx) {
+                   int attr_idx = IR_IDX_L(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto EXIT;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+            default:
+               if (IR_FLD_L(ir_idx) == AT_Tbl_Idx) {
+                   int attr_idx = IR_IDX_L(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto EXIT;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+        }
+    }
+
+EXIT:
+    COPY_OPND(*result_opnd, *curr_opnd);
+
+    expr_semantics(result_opnd, exp_desc);
+
+    TRACE (Func_Exit, "convert_to_whole_coarray", NULL);
+}
+
+/******************************************************************************\
+|*                                                                            *|
+|* Description:                                                               *|
+|*      returns the corank of the operand (> 0 if it is a coarray)            *|
+|*                                                                            *|
+|* Input parameters:                                                          *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Output parameters:                                                         *|
+|*      NONE                                                                  *|
+|*                                                                            *|
+|* Returns:                                                                   *|
+|*      NOTHING                                                               *|
+|*                                                                            *|
+\******************************************************************************/
+static int get_corank(opnd_type *opnd)
+{
+    int ir_idx;
+    int list_idx;
+    int corank;
+    int attr_idx;
+    opnd_type *curr_opnd;
+
+    curr_opnd = opnd;
+
+    TRACE (Func_Entry, "get_corank", NULL);
+
+    attr_idx = 0;
+    corank = 0;
+
+    while (OPND_FLD((*curr_opnd)) == IR_Tbl_Idx) {
+        ir_idx = OPND_IDX((*curr_opnd));
+
+        switch (IR_OPR(ir_idx)) {
+            case Struct_Opr:
+               if (IR_FLD_R(ir_idx) == AT_Tbl_Idx) {
+                   attr_idx = IR_IDX_R(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto DONE;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+            case Subscript_Opr:
+            case Section_Subscript_Opr:
+            case Substring_Opr:
+               if (IR_FLD_L(ir_idx) == AT_Tbl_Idx) {
+                   attr_idx = IR_IDX_L(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto DONE;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+            default:
+               if (IR_FLD_L(ir_idx) == AT_Tbl_Idx) {
+                   attr_idx = IR_IDX_L(ir_idx);
+                   if (ATD_PE_ARRAY_IDX(attr_idx) != NULL_IDX) {
+                       /* found coarray part-ref */
+                       goto DONE;
+                   }
+               }
+               curr_opnd = &(IR_OPND_L(ir_idx));
+               break;
+        }
+    }
+
+    if (OPND_FLD((*curr_opnd)) == AT_Tbl_Idx) {
+        attr_idx = OPND_IDX((*curr_opnd));
+    }
+
+DONE:
+    if (attr_idx && ATD_PE_ARRAY_IDX(attr_idx))
+        corank =  BD_RANK(ATD_PE_ARRAY_IDX(attr_idx));
+
+    TRACE (Func_Exit, "get_corank", NULL);
+
+    return corank;
+}
+#endif

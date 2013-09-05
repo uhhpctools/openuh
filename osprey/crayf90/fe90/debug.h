@@ -335,6 +335,10 @@ char		*intrin_str[]		= {
 				"Atan2_Intrinsic",
 				"Atan2d_Intrinsic",
 				"Atand_Intrinsic",
+#ifdef _UH_COARRAYS
+                "Atomic_Define_Intrinsic",
+                "Atomic_Ref_Intrinsic",
+#endif
 				"Bitest_Intrinsic",
 				"Bit_Size_Intrinsic",
 				"Bjtest_Intrinsic",

@@ -108,6 +108,9 @@ endif
 ifeq ($(GASNET_CONDUIT),mpi)
 LCDEFS += -DGASNET_CONDUIT_MPI
 LCINCS += -I$(MPI_INCLUDE)
+ifneq ($(BUILD_TYPE), NONSHARED)
+LCOPTS += -fPIC
+endif
 endif
 
 default: $(TARGETS)
